@@ -83,14 +83,15 @@ Agent/UDP instproc connect {dst} {
     $node set osid "SEND"
     
     set interval [$application set interval_]
+    set packetsize [$application set packetSize_]
     if {$interval != {}} {
-	set rate [expr 1.0/$interval]
+	set pktrate [expr int(1.0/$interval)]
     } else {
 	set rate [parse_bw [$application set rate_]]
+	set pktrate [expr int(($rate*1024*1024) / (8*$packetsize))]
     }
-    set packetsize [$application set packetSize_]
-
-    $node set cmdline "DST_NAME=$dest GATE_NAME=$gate PKT_SIZE=$packetsize PKT_RATE=$rate"
+    
+    $node set cmdline "DST_NAME=$dest GATE_NAME=$gate PKT_SIZE=$packetsize PKT_RATE=$pktrate"
 }
 
 # Agent/Null
