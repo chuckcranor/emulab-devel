@@ -280,9 +280,9 @@ foreach $lan (keys(%lans)) {
 	$lannodes{"lan/$lan"} = 1;
 	if (&isdelayed($lan)) {
 	    foreach $member (@members) {
-		($node) = (split(":",$member))[0];
 		($delay,$bw,$loss) = @{$delayinfo{"$lan:$member"}};
 		$bandwidth = &getbandwidth($bw);
+		($node) = (split(":",$member))[0];
 		$delayname = "tbdelay$delayid";
 		$delaynodes{"linkdelaysrc/$lan/$member"} = [$delay,$bw,$loss];
 		printdb "Delay node linkdelaysrc/$lan/$member ($delayname) " .
@@ -296,6 +296,8 @@ foreach $lan (keys(%lans)) {
 	    }
 	} else {
 	    foreach $member (@members) {
+		($delay,$bw,$loss) = @{$delayinfo{"$lan:$member"}};
+		$bandwidth = &getbandwidth($bw);
 		($node) = (split(":",$member))[0];
 		print TOPFILE "link linklan/$lan/$member $node lan/$lan" .
 		    " $bandwidth\n";

@@ -1,0 +1,167 @@
+#!/usr/bin/perl -w
+
+# tbprerun
+
+# This is the first program in the
+# tbprerun/tbswapin/tbswapout/.../tbend sequences.  It's main purpose
+# is to interpret the NS file and create the appropriate entries in
+# virt_nodes and virt_lans.  After this script ends successfully the
+# NS file is no longer necessary.
+
+use DBI;
+
+# Set up paths
+$TBDB = "@TBDBNAME@";
+$TBROOT = "@prefix@";
+$TBSETUPLIB = "$TBROOT/lib";
+$ENV{'PATH'} = "/usr/bin:$TBROOT/libexec:$TBROOT/libexec/ns2ir" . 
+    ":$TBROOT/sbin:$TBROOT/bin";
+push(@INC,$TBSETUPLIB);
+
+# This is the average number of delay links that can go through a
+# delay node.  To calculate this number take 1/2 the interfaces
+# rounded down on every node capable node in the testbed and average
+# them.
+$DELAYCAPACITY = @DELAYCAPACITY@;
+
+# Turn off line buffering.
+$| = 1; 
+
+require libtbsetup;
+
+if ($#ARGV < 2 || $#ARGV > 3 ||
+    ($#ARGV == 3 && $ARGV[0] ne "-nologfile")) {
+    print STDERR "Syntax: $0 [-nologfile] pid eid ns_file\n";
+    exit(1);
+}
+
+if ($#ARGV == 3) {
+    shift;
+    $dolog = 0;
+}
+else {
+    $dolog = 1;
+}
+($pid,$eid,$nsfile) = @ARGV;
+
+$dbh=&tbs_initdbi($TBDB);
+
+$prefix = &tbs_prefix($nsfile);
+$logfile = "$prefix.log";
+
+if ($dolog) {
+    &tbs_initlog($logfile);
+    &tbs_out("Log:    $logfile\n");
+}
+
+&tbs_out("Input:  $nsfile\n");
+&tbs_out("\n");
+&tbs_out("Beginning pre run for $pid-$eid ($nsfile). " 
+	 . &ctime(time) . "\n");
+
+if (! -r $nsfile) {
+    &tbs_out("$nsfile does not exist or is not readable.\n");
+    exit(1);
+}
+
+&tbs_out("Checking sanity.\n");
+$sth = $dbh->prepare("SELECT state from experiments where pid = \"$pid\"" . 
+		   " and eid = \"$eid\"");
+$sth->execute();
+if (! (($state) = $sth->fetchrow_array())) {
+    &tbs_out("No entry in experiments table.  Insane.\n");
+    exit(1);
+}
+$sth->finish();
+if ($state ne "new") {
+    &tbs_out("Experiment is not in the proper state: $state\n");
+    exit(1);
+}
+
+$sth = $dbh->prepare("UPDATE experiments set state = \"prerunning\"" . 
+		     "where pid = \"$pid\" and eid = \"$eid\"");
+if (! $sth->execute()) {
+    &tbs_out("Failed to set intermediate state.\n");
+    exit(1);
+}
+$sth->finish();
+
+sub cleanup {
+    &tbs_out("Cleaning up\n");
+    &tbs_out("Clearing virtual state.\n");
+    if (! $dbh->do("DELETE from virt_nodes where pid = \"$pid\"" . 
+		   " and eid = \"$eid\"")) {
+	
+	&tbs_out("Could not clear virt_nodes table.\n");
+    }
+    if (! $dbh->do("DELETE from virt_lans where pid = \"$pid\"" . 
+		   " and eid = \"$eid\"")) {
+	&tbs_out("Could not clear virt_lans table.\n");
+    }
+    if (! $dbh->do("UPDATE experiments set state = \"new\"" . 
+		   "where pid = \"$pid\" and eid = \"$eid\"")) {
+	&tbs_out("Could not reset experiment state.\n");
+    }
+};
+
+# This setups virt_nodes, virt_names including all IP address calculation
+# and tb-* handling.
+&tbs_out("Running parser.\n");
+if (&tbs_exec("parse.tcl $pid $eid $nsfile")) {
+    &tbs_out("Parsing failed.\n");
+    exit(1);
+}
+
+
+&tbs_out("Estimating resource usage.\n");
+$numnodes = $dbh->do("SELECT * from virt_nodes where pid=\"$pid\"" .
+		     " and eid=\"$eid\"");
+$min = $max = $numnodes;
+$bw_query = "";
+$sth = $dbh->prepare("SELECT max_speed from interface_types");
+$sth->execute();
+($speed) = $sth->fetchrow_array();
+$bw_query .= "bandwidth != $speed";
+while (($speed) = $sth->fetchrow_array()) {
+    $bw_query .= " and bandwidth != $speed";
+}
+$numdelays = $dbh->do("SELECT * from virt_lans where (delay != 0" . 
+		      " or lossrate != 0 or ($bw_query))" .
+		      " and pid=\"$pid\" and eid=\"$eid\"");
+$min += $numdelays/$DELAYCAPACITY;
+$max += $numdelays;
+$min = ceil($min);
+$max = ceil($max);
+
+# Shark hack
+$numsharks = $dbh->do("SELECT * from virt_nodes where type = \"shark\"" .
+		      " and pid=\"$pid\" and eid=\"$eid\"");
+$min -= $numsharks;
+$max -= $numsharks;
+# End Shark Hack
+
+&tbs_out("  Minimum $min  Maximum $max\n");
+$sth = $dbh->prepare("UPDATE experiments set minimum_nodes = $min," . 
+		     "maximum_nodes = $max where pid = \"$pid\"" . 
+		     "and eid = \"$eid\"");
+if (! $sth->execute()) {
+    &tbs_out("Failed to set estimates.\n");
+    cleanup;
+    exit(1);
+}
+$sth->finish(); 
+
+&tbs_out("Marking as prerunned.\n");
+$sth = $dbh->prepare("UPDATE experiments set state = \"swapped\"" . 
+		     "where pid = \"$pid\" and eid = \"$eid\"");
+if (! $sth->execute()) {
+    &tbs_out("Failed to set state.\n");
+    cleanup;
+    exit(1);
+}
+$sth->finish();
+
+&tbs_out("Pre run finished - " . &ctime(time) . "\n");
+
+0;
+
