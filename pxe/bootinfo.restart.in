@@ -1,7 +1,0 @@
-#!/bin/sh
-
-DIR=@prefix@/sbin
-
-killall bootinfo
-${DIR}/bootinfo
-
