@@ -27,7 +27,7 @@ require libtbsetup;
 
 if ($#ARGV < 1 || $#ARGV > 2 ||
     ($#ARGV == 2 && $ARGV[0] ne "-nologfile")) {
-    print STDERR "Syntax: $0 [-nologfile] pid eid ns_file\n";
+    print STDERR "Syntax: $0 [-nologfile] pid eid\n";
     exit(1);
 }
 
