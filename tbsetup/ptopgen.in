@@ -64,3 +64,9 @@ foreach $node (keys(%nodes)) {
 	$sth->finish;
     }
 }
+
+# Add a bunch of LANs
+for ($i = 0;$i <= 100;$i++) {
+    print "node lan$i lan:1\n";
+    print "link link-lan$i lan$i cisco 100000 1000\n";
+}

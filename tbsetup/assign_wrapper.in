@@ -85,6 +85,7 @@ sub printdb {
 #  delayinfo is indexed by virtual lan and is a list of delay,
 #    bandwidth, lossrate.
 #  okbandwidths is indexed by bandwidth and is just a set.
+#  lannodes is indexed by physical name is the set of lan nodes.
 #
 # Delay node names:
 #  delay nodes are named delay/<virtual lan>/<node>:<port> for N > 2
@@ -133,7 +134,7 @@ while (($vname,$members,$delay,$bandwidth,$lossrate) = $sth->fetchrow_array) {
 	$ports{$nodeport} = $vname;
 	($node,$port) = split(":",$nodeport);
 	push(@{$nodelans{$node}},"$port:$vname");
-	printdb "Added $port:$vname to nodelans of $node\n";
+	printdb "    Added $port:$vname to nodelans of $node\n";
     }
 }
 $sth->finish;
@@ -197,18 +198,20 @@ foreach $lan (keys(%lans)) {
 	}
     } else {
 	print TOPFILE "node lan/$lan lan\n";
+	$lannodes{"lan/$lan"} = 1;
 	if (&isdelayed($lan)) {
 	    foreach $member (@members) {
-		$node = (split(":",$member))[0];
+		($node) = (split(":",$member))[0];
 		print TOPFILE "node delay/$lan/$member delay\n";
-		print TOPFILE "link linkdelaysrc/$lan/$member $member" .
-		    " delay/$lan/$member $bandwidth\n";
+		print TOPFILE "link linkdelaysrc/$lan/$member" .
+		    " $node delay/$lan/$member $bandwidth\n";
 		print TOPFILE "link linkdelaydst/$lan/$member" .
-		    " lan/$lan:$lan/0 delay/$lan/$member  $bandwidth\n";
+		    " lan/$lan delay/$lan/$member $bandwidth\n";
 	    }
 	} else {
-	    foreach $members (@members) {
-		print TOPFILE "link linklan/$lan/$member $member lan/$lan" .
+	    foreach $member (@members) {
+		($node) = (split(":",$member))[0];
+		print TOPFILE "link linklan/$lan/$member $node lan/$lan" .
 		    " $bandwidth\n";
 	    }
 	}
@@ -272,8 +275,9 @@ while (1) {
 
     # Snapshot
     system("ptopgen > $ptopfile");
-
+   
     # Run assign
+    $fail = 0;
     print "assign -b -t $ptopfile $topfile\n";
     open(ASSIGNFP,"assign -b -t $ptopfile $topfile | tee assign.log |");
     $violations = 0;
@@ -373,17 +377,27 @@ while (1) {
 	    if (/^Nodes:/) {last;}
 	    print "$_";
 	}
+	$fail = 1;
     }
     while (<ASSIGNFP>) { } # Read anything left in the pipe before closing
     close(ASSIGNFP);
 
     # Reserve resources
-    print "Reserving resources.\n";
-    if (system("nalloc $pid $eid " . join(" ",keys(%p2vmap)))) {
-	print "Failed to reserve resources.  Trying again.\n";
-    } else {
-	print "Successfully reserved resources.  Finishing setup.\n";
-	last;
+    if ($fail == 0) {
+	print "Reserving resources.\n";
+	@toreserve = ();
+	# We don't reserve LAN nodes.
+	foreach $node (keys(%p2vmap)) { 
+	    if (! defined($lannodes{$p2vmap{$node}})) {
+		push(@toreserve,$node);
+	    }
+	}
+	if (system("nalloc $pid $eid " . join(" ",@toreserve))) {
+	    print "Failed to reserve resources.  Trying again.\n";
+	} else {
+	    print "Successfully reserved resources.  Finishing setup.\n";
+	    last;
+	}
     }
     $currentrun++;
 }
@@ -484,13 +498,13 @@ foreach $plink (keys(%plinks)) {
 	printdb "  Portmap:\n";
 	printdb "    $p2vmap{$nodeA}:$virtA = $portA\n";
 	printdb "    $p2vmap{$nodeC}:$virtC = $portC\n";
-    } elsif (($lan,$node) = ($plink =~ m|^linkdelaysrc/([^/]+)/(.+)$|)) {
+    } elsif (($lan,$member) = ($plink =~ m|^linkdelaysrc/([^/]+)/(.+)$|)) {
 	# Node may have multiple entries in lan.
 	# Delay node is nodeB and portB.
 	# Other end of delay node will be given by plink
 	#  linkdelaydst/lan/node where nodeportA will the LAN node and
 	#  nodeportB will be the other end of the delay node.
-	($nodeportC,$nodeportD) = @{$plinks{"linksdelaydst/$lan/$node"}};
+	($nodeportC,$nodeportD) = @{$plinks{"linksdelaydst/$lan/$member"}};
 	($nodeC,$portC) = split(":",$nodeportC);
 	($nodeD,$portD) = split(":",$nodeportD);
 	printdb "LAN delay src: other end = $nodeportC $nodeportD\n";
@@ -532,7 +546,7 @@ foreach $plink (keys(%plinks)) {
 	printdb "  Portmap:\n";
 	printdb "    $p2vmap{$nodeA}:$virtA = $portA\n";
 	printdb "    $p2vmap{$nodeB}:$virtB = $portB\n";
-    } elsif (($lan,$node) = ($plink =~ m|^linklan/([^/]+)/(.+)$|)) {
+    } elsif (($lan) = ($plink =~ m|^linklan/([^/]+)/.+$|)) {
 	# node may be the LAN multiple times.
 	# nodeportA is the node.
 	# nodeportB is the LAN
