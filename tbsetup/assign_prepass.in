@@ -177,10 +177,9 @@ sub parse_top($) {
 	    (/fix-node/) && do {
 		my ($vnode, $pnode) = @tokens;;
 		if (!$nodes{$vnode}) {
-		    die "Tried to fix to a non existent node: $line\n";
+		    die "Tried to fix a non existent node: $line\n";
 		}
-		# XXX
-		#$nodes{$vnode}{fixed} = $pnode;
+		$nodes{$vnode}{fixed} = $pnode;
 		last;
 	    };
 	    (/node-hint/) && do {
@@ -644,6 +643,19 @@ sub make_conglomerates(@) {
 
 	    # Add to the nodes list
 	    push @{$conglomerate->{'nodes'}}, $node;
+
+	    # Handle fixed nodes
+	    if ($conglomerate->{'fixed'}) {
+		if ($node->{'fixed'} && ($node->{'fixed'} ne
+			$conglomerate->{'fixed'})){
+		    die "ERROR - tried to combine two fixed nodes!\n";
+		}
+	    }
+	    if ($node->{'fixed'}) {
+		if (!$conglomerate->{'fixed'}) {
+		    $conglomerate->{'fixed'} = $node->{'fixed'};
+		}
+	    }
 	}
 
     }
@@ -678,8 +690,11 @@ sub node_fits_in_conglomerate($$) {
 	'?virtpercent' => 100
     );
 
-    # Can't conglomerate fixed nodes unless they are fixed to the same place
-    if (($node->{'fixed'} || $conglomerate->{'fixed'}) &&
+    # We can conglomerate nodes that are:
+    # 1) Not fixed
+    # 2) One is fixed, but the other is not
+    # 3) Both are fixed to the same place
+    if (($node->{'fixed'} && $conglomerate->{'fixed'}) &&
 	($node->{'fixed'} ne $conglomerate->{'fixed'})) {
 	return 0;
     }
