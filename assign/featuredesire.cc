@@ -210,7 +210,7 @@ score_and_violations tb_node_featuredesire::add_local(double amount) {
  */
 score_and_violations tb_node_featuredesire::subtract_local(double amount) {
     double oldvalue = used_local_capacity;
-    used_local_capacity += amount;
+    used_local_capacity -= amount;
     if ((oldvalue > weight) && (used_local_capacity <= weight)) {
 	// Back down to below capacity, remove a violation
 	return score_and_violations(SCORE_OVERUSED_LOCAL_FEATURE,1);
@@ -259,7 +259,7 @@ void tb_featuredesire_set_iterator::operator++(int) {
      * Advance the iterator(s)
      */
     // Make sure they don't try to go off the end of the list
-    assert((it1 != end1) || (it2 != end2));
+    assert(!done());
     // If one iterator has gone off the end of its list, advance the other one
     // - otherwise, go with the smaller one. Or, if they are equal,  increment
     // both.
@@ -279,7 +279,7 @@ void tb_featuredesire_set_iterator::operator++(int) {
     // First check to see if we've hit the end of both lists
     if ((it1 == end1) && (it2 == end2)) {
 	current = end1;
-    } else if ((it2 == end2) || (*it1 < *it2)) {
+    } else if ((it2 == end2) || ((it1 != end1) && (*it1 < *it2))) {
 	// If one has hit the end of the list, go with the other - otherwise,
 	// go with the smaller of the two.
 	current_membership = FIRST_ONLY;

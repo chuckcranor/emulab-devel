@@ -63,17 +63,6 @@ bool find_best_link(pvertex pv,pvertex switch_pv,tb_vlink *vlink,
 int find_interswitch_path(pvertex src_pv,pvertex dest_pv,
 			  int bandwidth,pedge_path &out_path,
 			  pvertex_list &out_switches);
-/*
-inline double fd_score(tb_vnode *vnode,tb_pnode *pnode,int &out_fd_violated,
-	bool include_violations);
-inline void add_global_fds(tb_vnode *vnode,tb_pnode *pnode);
-inline void remove_global_fds(tb_vnode *vnode,tb_pnode *pnode);
-inline double add_stateful_fds(tb_vnode *vnode, tb_pnode *pnode,
-			       int &out_fd_violated);
-inline double remove_stateful_fds(tb_vnode *vnode, tb_pnode *pnode,
-				  int &out_fd_violated);
-*/
-
 score_and_violations score_fds(tb_vnode *vnode, tb_pnode *pnode, bool add);
 
 void score_link_info(vedge ve, tb_pnode *src_pnode, tb_pnode *dst_pnode,
@@ -1148,11 +1137,11 @@ int add_node(vvertex vv,pvertex pv, bool deterministic, bool is_fixed)
   violated--;
 
   // features/desires
-  score_and_violations sv = score_fds(vnode,pnode,false);
+  score_and_violations sv = score_fds(vnode,pnode,true);
   SADD(sv.first);
   if (!is_fixed) {
-      violated -= sv.second;
-      vinfo.desires -= sv.second;
+      violated += sv.second;
+      vinfo.desires += sv.second;
   }
 
   // pclass
@@ -1585,8 +1574,8 @@ score_and_violations score_fds(tb_vnode *vnode, tb_pnode *pnode, bool add) {
 
     for (;!fdit.done();fdit++) {
 	node_fd_set::iterator fit, dit;
-	fit = fdit.first_iterator();
-	dit = fdit.second_iterator();
+	dit = fdit.first_iterator();
+	fit = fdit.second_iterator();
 	// What we do here depends on whether it's a feature of the vnode, a desire
 	// of the pnode, or both
 	switch (fdit.membership()) {
@@ -1644,6 +1633,8 @@ score_and_violations score_fds(tb_vnode *vnode, tb_pnode *pnode, bool add) {
 		    } else {
 			delta = fdit->remove_global_user();
 		    }
+		    score_delta += delta.first;
+		    violations_delta += delta.second;
 		} else {
 		    // Regular feature - score the sucker
 		    score_delta += fdit->cost();
@@ -1659,6 +1650,8 @@ score_and_violations score_fds(tb_vnode *vnode, tb_pnode *pnode, bool add) {
     }
 
     // Okay, return the score and violations
+    //cerr << "Returning (" << score_delta << "," << violations_delta << ")" <<
+    //   endl;
     return score_and_violations(score_delta,violations_delta);
 }
 

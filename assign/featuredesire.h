@@ -129,6 +129,7 @@ class tb_node_featuredesire {
 	 */
 	inline const bool   is_violateable() const { return violateable; }
 	inline const double cost()           const { return weight;      }
+	inline const double used()	     const { return used_local_capacity; }
 
 	/*
 	 * Proxy functions for the stuff in tb_featuredesire
@@ -145,7 +146,6 @@ class tb_node_featuredesire {
 
 	/*
 	 * Functions for tracking local features/desires
-	 * XXX - Write these
 	 */
 	score_and_violations add_local(double amount);
 	score_and_violations subtract_local(double amount);
@@ -162,9 +162,6 @@ class tb_node_featuredesire {
  * Types to hold virtual nodes' sets of desires and physical nodes' sets of
  * features
  */
-//typedef set<tb_node_featuredesire> node_feature_set;
-//typedef set<tb_node_featuredesire> node_desire_set;
-//typedef set<tb_node_featuredesire> node_fd_set;
 typedef slist<tb_node_featuredesire> node_feature_set;
 typedef slist<tb_node_featuredesire> node_desire_set;
 typedef slist<tb_node_featuredesire> node_fd_set;

@@ -167,13 +167,12 @@ void print_solution_summary()
       node_feature_set::iterator feature_it;
       for (feature_it = pnode->features.begin();
 	  feature_it != pnode->features.end();++feature_it) {
-	// XXX - fix
-	/*
-	if ((feature_it->first[0] == '?') && (feature_it->first[1] == '+')) {
-	  double remaining = feature_it->second; 
-	  cout << "    " << feature_it->first << ":" << remaining << endl;
+	if (feature_it->is_local() && feature_it->is_l_additive()) {
+	    double total = feature_it->cost();
+	    double used = feature_it->used();
+	  cout << "    " << feature_it->name() << ": used=" << used <<
+	      " total=" << total << endl;
 	}
-	*/
       }
     }
   }
