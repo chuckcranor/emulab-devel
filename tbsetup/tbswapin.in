@@ -103,7 +103,7 @@ if ($state eq "active") {
     &tbs_out("Experiment is already running. Must be swapped out first.\n");
     exit(1);
 } elsif ($state ne "swapped") {
-    &tbs_out("Experiment us not in the swapped state: $state.\n");
+    &tbs_out("Experiment is not in the swapped state: $state.\n");
     exit(1);
 }
 

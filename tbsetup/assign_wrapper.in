@@ -787,9 +787,22 @@ if ($portswap) {
 printdb "Uploading to DB\n";
 foreach $vlan (keys(%vlans)) {
     ($lan,$members) = @{$vlans{$vlan}};
+    @realmembers = ();
+    foreach $member (@$members) {
+	($node,$port) = split(":",$member);
+	if (defined($sharkshelves{$p2vmap{$node}})) {
+	    $i = 1;
+	    foreach $shark (@{$sharkshelves{$p2vmap{$node}}}) {
+		push(@realmembers,"$node-$i:$port");
+		$i++;
+	    }
+	} else {
+	    push(@realmembers,$member);
+	}
+    }
     $dbh->do("insert into vlans (id,pid,eid,virtual,members) values" .
 	     " (0,\"$pid\",\"$eid\",\"$lan\",\"" .
-	     join(" ",@$members) . "\")") || do {
+	     join(" ",@realmembers) . "\")") || do {
 		 print STDERR "Could not update vlans table.  Giving up.\n";
 		 exit(1);
 	     };
@@ -869,7 +882,6 @@ foreach $pnode (keys(%p2vmap)) {
 }
 foreach $pair (@nodepairs) {
     ($pnode,$vnode) = @$pair;
-    printdb "$pnode - $vnode\n";
     $sth = $dbh->prepare("SELECT osid,cmd_line,rpms,deltas,startupcmd," .
 			  "tarfiles from virt_nodes where pid=\"$pid\"" .
 			  " and eid=\"$eid\" and vname=\"$vnode\"");
