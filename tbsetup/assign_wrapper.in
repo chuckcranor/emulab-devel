@@ -95,6 +95,16 @@ sub printdb {
 #  lan nodes are named lan/<virtual lan>
 ######################################################################
 
+# Shark Hack
+# For each LAN we replace all the sharks in the LAN with a single
+# shark shelf node.  After this goes through assign we pull them
+# all back out.
+#
+# sharkshelves is indexed by virtual shelf name and is a list of
+# the virtual nodes in it.
+# sharkshelfid is used to generate ids for shark shelves.
+$sharkshelfid = 0;
+
 printdb "Generating TOP file.\n";
 
 # Let's figure out what kind of links we have.
@@ -128,13 +138,40 @@ $sth = $dbh->prepare("SELECT vname,members,delay,bandwidth,lossrate" .
 		     " from virt_lans");
 $sth->execute;
 while (($vname,$members,$delay,$bandwidth,$lossrate) = $sth->fetchrow_array) {
-    $lans{$vname} = [split(" ",$members)];
+    # Shark hack
+    $realmembers = [];
+    $sharks = [];
+    $hassharks = 0;
+    foreach $member (split(" ",$members)) {
+	($node) = (split(":",$member))[0];
+	if ($nodes{$node} eq "shark") {
+	    push(@$sharks,$member);
+	    $hassharks = 1;
+	} else {
+	    push(@$realmembers,$member);
+	}
+    }
+    if ($hassharks) {
+	$shelfid = "sharkshelf$sharkshelfid";
+	printdb "  Creating shark shelf: $shelfid (" . 
+	    join(" ",@$sharks) . ")\n";
+	$sharkshelfid++;
+	$sharkshelves{$shelfid} = $sharks;
+	push(@$realmembers,"$shelfid:uplink");
+	$nodes{$shelfid} = "shark-shelf";
+    }
+    $lans{$vname} = $realmembers;
+    # End shark hack
+
     $delayinfo{$vname} = [$delay,$bandwidth,$lossrate];
-    printdb "  $vname $members ($delay, $bandwidth, $lossrate)\n";
+    printdb "  $vname " . join(" ",@{$lans{$vname}}) 
+	. " ($delay, $bandwidth, $lossrate)\n";
     foreach $nodeport (@{$lans{$vname}}) {
 	($node,$port) = split(":",$nodeport);
-	push(@{$nodelans{$node}},"$port:$vname");
-	printdb "    Added $port:$vname to nodelans of $node\n";
+	if ($nodes{$node} ne "shark-shelf") {
+	    push(@{$nodelans{$node}},"$port:$vname");
+	    printdb "    Added $port:$vname to nodelans of $node\n";
+	}
     }
 }
 $sth->finish;
@@ -178,7 +215,11 @@ open(TOPFILE,"> $topfile") || do {
 };
 
 foreach $node (keys(%nodes)) {
-    print TOPFILE "node $node $nodes{$node}\n";
+    # Shark hack
+    if ($nodes{$node} ne "shark") {
+	print TOPFILE "node $node $nodes{$node}\n";
+    }
+    # End Shark hack
 }
 
 foreach $lan (keys(%lans)) {
@@ -415,6 +456,11 @@ sub find_vport {
     my $portlan;
     my $vport;
     my $lan;
+    # Shark Hack
+    if ($nodes{$vnode} eq "shark-shelf") {
+	return "0";
+    }
+    # End Shark Hack
     foreach $portlan (@{$nodelans{$vnode}}) {
 	($vport,$lan) = split(":",$portlan);
 	if (($virtlan eq $lan) &&
@@ -569,6 +615,7 @@ sub keys_equal {
     my ($ARef,$BRef) = @_;
     my @AKeys = sort keys(%$ARef);
     my @BKeys = sort keys(%$BRef);
+    printdb join(" ",@AKeys) . " vs. " . join(" ",@BKeys) . "\n";
     if ($#AKeys != $#BKeys) {
 	return 0;
     }
@@ -596,7 +643,7 @@ $sth->finish;
 if (keys(%prevportmap) == 0) {
     $portswap = 0;
 } elsif (! &keys_equal(\%portmap,\%prevportmap)){
-    print STDERR "WARNING: Portmap is database is incompatible with current portmap.\n";
+    print STDERR "WARNING: Portmap in database is incompatible with current portmap.\n";
     print STDERR "   Perhaps a previous version of the experiment did not get cleared?\n";
     $portswap = 0;
 } else {
@@ -708,18 +755,33 @@ foreach $vnodeport (keys(%portmap)) {
 		 print STDERR "Could not update portmap table.  Giving up.\n";
 		 exit(1);
 	     };
-    $dbh->do("update interfaces set IP=\"$ips{$vnodeport}\" where" .
-	     " node_id = \"$v2pmap{$vnode}\" and iface = \"$pport\"") || do {
-		 print STDERR "Could not update interfaces table.\n" .
-		     "  Giving up.\n";
-		 exit(1);
-	     }
+    # Shark Hack
+    if ($nodes{$vnode} eq "shark-shelf") {
+	$shelf = $v2pmap{$vnode};
+	$i = 1;
+	foreach $shark (@{$sharkshelves{$vnode}}) {
+	    $dbh->do("update interfaces set IPalias=\"$ips{$shark}\" where" .
+		     " node_id = \"$shelf-$i\"") || do {
+			 print STDERR "Could not update IPalias for $shelf-$i.\n";
+			 exit(1);
+		     };
+	    $i++;
+	}
+    } else {
+	$dbh->do("update interfaces set IP=\"$ips{$vnodeport}\" where" .
+		 " node_id = \"$v2pmap{$vnode}\" and iface = \"$pport\"") || do {
+		     print STDERR "Could not update interfaces table.\n" .
+			 "  Giving up.\n";
+		     exit(1);
+		 };
+    }
+    # End Shark Hack
 }
 foreach $pnode (keys(%p2vmap)) {
     $dbh->do("update reserved set vname=\"$p2vmap{$pnode}\"" .
 	     " where node_id = \"$pnode\"") || do {
 		 print STDERR "Could not update reserved table. Giving up.\n";
 		 exit(1);
-	     }
+	     };
 }
 

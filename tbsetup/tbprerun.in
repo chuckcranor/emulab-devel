@@ -105,6 +105,13 @@ $min += $numdelays/$DELAYCAPACITY;
 $max += $numdelays;
 $min = ceil($min);
 $max = ceil($max);
+
+# Shark hack
+$numsharks = $dbh->do("SELECT * from virt_nodes where type = \"shark\"");
+$min -= $numsharks;
+$max -= $numsharks;
+# End Shark Hack
+
 &tbs_out("  Minimum $min  Maximum $max\n");
 $sth = $dbh->prepare("UPDATE experiments set minimum_nodes = $min," . 
 		     "maximum_nodes = $max where pid = \"$pid\"" . 
