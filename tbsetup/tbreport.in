@@ -89,18 +89,15 @@ print "\n";
 
 # Display link info
 if ($state eq "swapped") {
-    $sth=$dbh->prepare("SELECT vname,members,delay,bandwidth,lossrate" .
+    $sth=$dbh->prepare("SELECT vname,member,delay,bandwidth,lossrate" .
 		       " from virt_lans where pid=\"$pid\" and eid=\"$eid\"");
     $sth->execute();
     print "Lan/Link Info:\n";
-    printf "%-15s %-10s %-10s %-10s\n", "ID", "Delay", "Bandwidth", "Loss Rate";
-    print "--------------- ---------- ---------- ----------\n";
-    while (($vname,$members,$delay,$bandwidth,$lossrate) 
+    printf "%-15s %-10s %-15s %-10s %-10s %-10s\n", "ID", "Member", "IP", "Delay", "Bandwidth", "Loss Rate";
+    print "--------------- ---------- --------------- ---------- ---------- ----------\n";
+    while (($vname,$member,$delay,$bandwidth,$lossrate) 
 	   = $sth->fetchrow_array()) {
-	printf "%-15s %-10s %-10s %-10s\n", $vname, $delay, $bandwidth, $lossrate;
-	foreach $nodeport (split(" ",$members)) {
-	    printf "\t%-15s (%s)\n", $nodeport, $ipmap{$nodeport};
-	}
+	printf "%-15s %-10s %-15s %-10s %-10s %-10s\n", $vname, $member, $ipmap{$member}, $delay, $bandwidth, $lossrate;
     }
     $sth->finish();
     print "\n";
@@ -130,19 +127,15 @@ if ($state eq "active") {
     }
     $sth->finish();
 
-    $sth=$dbh->prepare("SELECT vname,members,delay,bandwidth,lossrate" .
+    $sth=$dbh->prepare("SELECT vname,member,delay,bandwidth,lossrate" .
 		       " from virt_lans where pid=\"$pid\" and eid=\"$eid\"");
     $sth->execute();
     print "Lan/Link Info:\n";
-    printf "%-15s %-10s %-10s %-10s\n", "ID", "Delay", "Bandwidth", "Loss Rate";
-    print "--------------- ---------- ---------- ----------\n";
-    while (($vname,$members,$delay,$bandwidth,$lossrate) 
+    printf "%-15s %-10s %-15s %-10s %-10s %-10s\n", "ID", "Member", "IP", "Delay", "Bandwidth", "Loss Rate";
+    print "--------------- ---------- --------------- ---------- ---------- ----------\n";
+    while (($vname,$member,$delay,$bandwidth,$lossrate) 
 	   = $sth->fetchrow_array()) {
-	printf "%-15s %-10s %-10s %-10s\n", $vname, $delay, $bandwidth, $lossrate;
-	foreach $nodeport (split(" ",$members)) {
-	    $pport = $portmap{$nodeport};
-	    printf "\t%-15s (%s)\n", $nodeport, $ipmap{$nodeport};
-	}
+	printf "%-15s %-10s %-15s %-10s %-10s %-10s\n", $vname, $member, $ipmap{$member}, $delay, $bandwidth, $lossrate;
     }
     $sth->finish();
 }
