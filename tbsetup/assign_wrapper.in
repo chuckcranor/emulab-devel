@@ -560,7 +560,15 @@ sub RunAssign ($)
     my $cmdargs = "$ptopfile $topfile";
     $cmdargs = "-uPod -c .75 $cmdargs"
 	if ($virtcount);
-    print "assign $cmdargs\n";
+
+    # If doing an experiment with virtnodes, use the prepass wrapper for assign
+    my $cmd;
+    if ($virtcount) {
+	$cmd = "assign_prepass";
+    } else {
+	$cmd = "assign";
+    }
+    print "$cmd $cmdargs\n";
 
     #
     # Fork a child to run assign. Parent spins watching the cancel flag
@@ -595,7 +603,7 @@ sub RunAssign ($)
 	# the parent. 
 	#
         POSIX::setsid();
-	exec("nice assign $cmdargs > assign.log");
+	exec("nice $cmd $cmdargs > assign.log");
 	die("*** $0:\n".
 	    "    Could not start assign!\n");
     }
