@@ -631,14 +631,6 @@ sub SetupReloadUISP($$$)
     my ($node, $imageid, $osid) = @_;
 
     #
-    # Tell stated that we're about to start reloading
-    # XXX - Maybe this should be done in tbuisp instead?
-    #
-    TBSetNodeOpMode($node,"RELOAD");
-    TBSetNodeEventState($node,TBDB_NODESTATE_BOOTING);
-    TBSetNodeEventState($node,TBDB_NODESTATE_RELOADSETUP);
-
-    #
     # Get the path to the image
     #
     my $query_result = DBQueryFatal("select path from images " .
@@ -649,7 +641,17 @@ sub SetupReloadUISP($$$)
     }
     my ($path) = $query_result->fetchrow();
 
+    #
+    # Tell stated that we're about to start reloading
+    #
+    TBSetNodeNextOpMode($node,TBDB_NODEOPMODE_RELOADMOTE);
+
+    #
+    # The mote goes 'down', then starts to reload
+    #
+    TBSetNodeEventState($node,TBDB_NODESTATE_SHUTDOWN);
     TBSetNodeEventState($node,TBDB_NODESTATE_RELOADING);
+
     #
     # Okay, just run tbuisp with that path
     #
@@ -664,20 +666,17 @@ sub SetupReloadUISP($$$)
     #
     TBSetNodeEventState($node,TBDB_NODESTATE_RELOADDONE);
 
-    #
-    # We've gotta fake out the event system a bit for now - tell it the node
-    # has been shutdown, so that the os_select will take effect
-    #
-    TBSetNodeEventState($node,TBDB_NODESTATE_SHUTDOWN);
-
-    #
-    # Gotta tell the state machine system what OS we're running now
-    #
     system("$osselect $osid $node");
     if ($?) {
 	print STDERR "*** osload ($node): os_select $osid failed!\n";
-	return -1;
+	goto failednode;
     }
+
+    #
+    # 'Reboot' the node (from stated's perspective, anyway)
+    # has been shutdown, so that the os_select will take effect
+    #
+    TBSetNodeEventState($node,TBDB_NODESTATE_SHUTDOWN);
 
     return 0;
 }
