@@ -5,22 +5,9 @@
 
 #include <stdio.h>
 #include <stdlib.h>
-
-#include "config.h"
-
-/*
 #include <string.h>
-#include <assert.h>
-
-#include <sys/types.h>
-#include <netinet/in_systm.h>
-#include <netinet/in.h>
-#include <arpa/inet.h>
-#include <netinet/in.h>
 
 #include "config.h"
-#include "tgenlib.h"
-*/
   
 /*
  * Dumb as a stump config for options that the test program supports
@@ -42,7 +29,7 @@ int
 config_parse(char **args, struct config_param cparams[], int nparams)
 {
   int i, j, len;
-  char *arg, *bp, *var, *val, buf[256];
+  char *arg, *var, *val, buf[256];
 
   for (i = 0, arg = args[i]; arg != 0; i++, arg = args[i]) {
     len = sizeof(buf) - 1;

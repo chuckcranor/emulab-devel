@@ -1,32 +1,39 @@
-#include <LEDA/graph_alg.h>
-#include <LEDA/graphwin.h>
-#include <LEDA/ugraph.h>
-#include <LEDA/dictionary.h>
-#include <LEDA/map.h>
-#include <LEDA/graph_iterator.h>
-#include <LEDA/node_pq.h>
-#include <LEDA/sortseq.h>
+#include <limits.h>
+
+// XXX - This needs to be replaced by something more generic, wchar is
+// not always an integer.
+#define WCHAR_MIN INT_MIN
+#define WCHAR_MAX INT_MAX
+
+#include <hash_map>
+#include <slist>
+#include <rope>
+#include <queue>
+
+#include <boost/config.hpp>
+#include <boost/utility.hpp>
+#include <boost/property_map.hpp>
+#include <boost/graph/graph_traits.hpp>
+#include <boost/graph/adjacency_list.hpp>
+#include <boost/graph/dijkstra_shortest_paths.hpp>
+
+#include <fstream.h>
 #include <iostream.h>
-#include <stdio.h>
+#include <time.h>
 #include <stdlib.h>
+#include <math.h>
 #include <sys/types.h>
-#include <unistd.h>
 #include <sys/time.h>
-#include <string.h>
-#include <assert.h>
+#include <sys/resource.h>
+
+using namespace boost;
 
 #include "common.h"
 #include "physical.h"
-#include "vclass.h"
 #include "virtual.h"
-#include "score.h"
+#include "vclass.h"
 #include "pclass.h"
-
-void parse_options(char **argv, struct config_param options[], int nopt);
-int config_parse(char **args, struct config_param cparams[], int nparams);
-void dump_options(const char *str, struct config_param cparams[], int nparams);
-
-// Purely heuristic
+#include "score.h"
 
 #ifdef USE_OPTIMAL
 #define OPTIMAL_SCORE(edges,nodes) (nodes*SCORE_PNODE + \
@@ -38,80 +45,91 @@ void dump_options(const char *str, struct config_param cparams[], int nparams);
 #define OPTIMAL_SCORE(edges,nodes) 0
 #endif
 
-tb_sgraph SG;
-edge_array<int> edge_costs;
-typedef node_array<int> switch_distance_array;
-typedef node_array<edge> switch_pred_array;
 
-node_array<switch_distance_array> switch_distances;
-node_array<switch_pred_array> switch_preds;
+// Here we set up all our graphs.  Need to create the graphs
+// themselves and then setup the property maps.
 tb_pgraph PG;
-tb_vgraph G;
-dictionary<tb_pnode*,node> pnode2node;
-dictionary<tb_pnode*,int> pnode2posistion;
+tb_pgraph_vertex_pmap pvertex_pmap = get(vertex_data, PG);
+tb_pgraph_edge_pmap pedge_pmap = get(edge_data, PG);
+tb_sgraph SG;
+tb_sgraph_vertex_pmap svertex_pmap = get(vertex_data, SG);
+tb_sgraph_edge_pmap sedge_pmap = get(edge_data, SG);
+tb_vgraph VG;
+tb_vgraph_vertex_pmap vvertex_pmap = get(vertex_data, VG);
+tb_vgraph_edge_pmap vedge_pmap = get(edge_data, VG);
+
+// Map of physical node name to its vertex descriptor.
+name_pvertex_map pname2vertex;
+
+// A simple list of physical types.
+name_slist ptypes;
+
+// Map of virtual node name to its vertex descriptor.
+name_vvertex_map vname2vertex;
+
+// Map of virtual node name to the physical node name it's fixed too.
+// The domain is the set of all fixed virtual nodes and the range is
+// the set of all fixed physical nodes.
+name_name_map fixed_nodes;
+
+// List of virtual types by name.
+name_slist vtypes;
+
+// Priority queue of unassigned virtual nodes.  Basically a fancy way
+// of randomly choosing a unassigned virtual node.  When nodes become
+// unassigned they are placed in the queue with a random priority.
+vvertex_int_priority_queue unassigned_nodes;
+
+// Map from a pnode* to the the corresponding pvertex.
+pnode_pvertex_map pnode2vertex;
+
+// A list of all pclasses.
 pclass_list pclasses;
+
+// Map of a type to a tt_entry, a vector of pclasses and the size of
+// the vector.
 pclass_types type_table;
 
-dictionary<string,node> pname2node;
-dictionary<string,node> vname2node;
-dictionary<string,string> fixed_nodes;
+// This datastructure contains all the information needed to calculate
+// the shortest path between any two switches.  Indexed by svertex,
+// the value will be a predicate map (indexed by svertex as well) of
+// the shortest paths for the given vertex.
+switch_pred_map_map switch_preds;
 
-/* How can we chop things up? */
-#define PARTITION_BY_ANNEALING 0
+// A hash function for graph edges.
+struct hashedge {
+  size_t operator()(vedge const &A) const {
+    return (size_t) (10000*target(A,VG)+source(A,VG));
+  }
+};
 
-#define MAX_DELAYS 64
+typedef hash_map<vvertex,pvertex> node_map;
+typedef hash_map<vvertex,bool> assigned_map;
+typedef hash_map<pvertex,crope> type_map;
+typedef hash_map<vedge,tb_link_info,hashedge> link_map;
 
-int nparts = 0;     /* DEFAULTS */
-int accepts = 0;
-int nnodes = 0;
-int partition_mechanism;
-int on_line = 0;
-int cycles_to_best = 0;
-int batch_mode = 0;
+// A scaling constant for the temperature in determining whether to
+// accept a change.
+static double sensitivity = 0.1;
 
-float sensitivity = .1;
+// The number of accepts of increase that took place during the annealing.
+int accepts;
 
-int refreshed = 0;
+// The number of iterations that took place.
+int iters;
 
-node_array<int> absnodes;
-node_array<string> abstypes;
-float bestscore, absbest;
+// These variables store the best solution.
+node_map absassignment;		// assignment field of vnode
+assigned_map absassigned;	// assigned field of vnode
+type_map abstypes;		// type field of vnode
+link_map abslinks;		// link_info field of vnode
+violated_info absvinfo;		// vinfo
+double absbest;			// score
+int absbestviolated;		// violated
+int iters_to_best = 0;		// iters
 
-extern node pnodes[MAX_PNODES];
-extern node_array<int> switch_index;
-node_pq<int> unassigned_nodes(G);
-
-int parse_top(tb_vgraph &G, istream& i);
-int parse_ptop(tb_pgraph &PG, tb_sgraph &SG, istream& i);
-
-/* The following two sets hold all the virtual and physical types.  These
- * are compared to make sure that every member of vtypes is in ptypes.
- * Both are filled by the parse_* routines.  I'd love to use LEDA sets
- * to implement this but LEDA, an otherwise profession work, did a lousy
- * job when it came to sets.  They clash with graph iterators!  Since
- * we only use these once we'll use a much less efficient linked list
- * <shudder>
- */
-list<string> vtypes;
-list<string> ptypes;
-
-// Makes LEDA happy
-
-int compare(tb_pnode *const &a, tb_pnode *const &b)
-{
-  if (a==b) return 0;
-  if (a < b) return -1;
-  return 1;
-}
-
-/*
- * Basic simulated annealing parameters:
- *
- * Make changes proportional to T
- * Accept worse solution with p = e^(change/Temperature*sensitivity)
- *
- */
-
+// Determines whether to accept a change of score difference 'change' at
+// temperature 'temperature'.
 inline int accept(float change, float temperature)
 {
   float p;
@@ -122,7 +140,7 @@ inline int accept(float change, float temperature)
   } else {
     p = expf(change/(temperature*sensitivity)) * 1000;
   }
-  r = random() % 1000;
+  r = std::random() % 1000;
   if (r < p) {
     accepts++;
     return 1;
@@ -130,595 +148,511 @@ inline int accept(float change, float temperature)
   return 0;
 }
 
-// This routine chooses randomly chooses a pclass based on the weights
-// and *removes that pclass from the weights*.  Total is the total of
-// all weights and is adjusted when a pclass is removed.
-tb_pnode *choose_pnode(dictionary<tb_pclass*,double> &weights,double &total,
-		       string vtype)
+float used_time()
 {
-  tb_pnode *pnode;
-  dic_item dit=nil;
-
-  double r = random()/(double)RAND_MAX*total;
-  forall_items(dit,weights) {
-    r -= weights.inf(dit);
-    if (r <= 0) break;
-  }
-  if (dit == nil) return NULL;
-
-  tb_pclass *chosen_class = weights.key(dit);
-
-  // Take the first node of the correct type from the class.
-  pnode = chosen_class->members.access(vtype)->front();
-  
-  total -= weights.inf(dit);
-  weights.del_item(dit);
-  
-#ifdef PCLASS_DEBUG_MORE
-  cout << "choose_pnode = [" << chosen_class->name << "] = "
-       << ((pnode == NULL) ? string("NULL"):pnode->name) << endl;
-#endif
-  
-  return pnode;
+  struct rusage ru;
+  getrusage(RUSAGE_SELF,&ru);
+  return ru.ru_utime.tv_sec+ru.ru_utime.tv_usec/1000000.0+
+    ru.ru_stime.tv_sec+ru.ru_stime.tv_usec/1000000.0;
 }
-/*
- * The workhorse of our program.
- *
- * Assign performs an assignment of the virtual nodes (vnodes) to
- * nodes in the physical topology.
- *
- * The input virtual topology is the graph G (global)
- * the input physical topology is the topology topo (global).
- *
- * The simulated annealing logic is contained herein,
- * except for the "accept a bad change" computation,
- * which is performed in accept().
- */
 
-int assign()
+void read_physical_topology(char *filename)
 {
-  float newscore, bestscore;
-  node n;
-  int iters = 0;
+  ifstream ptopfile;
+  ptopfile.open(filename);
+  cout << "Physical Graph: " << parse_ptop(PG,SG,ptopfile) << endl;
 
-  float timestart = used_time();
-  float timeend;
+#ifdef DUMP_GRAPH
+  {
+    cout << "Physical Graph:" << endl;
+    
+    pvertex_iterator vit,vendit;
+    tie(vit,vendit) = vertices(PG);
+    
+    for (;vit != vendit;vit++) {
+      tb_pnode *p = get(pvertex_pmap,*vit);
+      cout << *vit << "\t" << *p;
+    }
+    
+    pedge_iterator eit,eendit;
+    tie(eit,eendit) = edges(PG);
+
+    for (;eit != eendit;eit++) {
+      tb_plink *p = get(pedge_pmap,*eit);
+      cout << *eit << " (" << source(*eit,PG) << " <-> " <<
+	target(*eit,PG) << ")\t" << *p;
+    }
+  }
+#endif
+
+#ifdef GRAPH_DEBUG
+  {
+    cout << "Switch Graph:" << endl;
+    
+
+    svertex_iterator vit,vendit;
+    tie(vit,vendit) = vertices(SG);
+    
+    for (;vit != vendit;vit++) {
+      tb_switch *p = get(svertex_pmap,*vit);
+      cout << *vit << "\t" << *p;
+    }
+    
+    sedge_iterator eit,eendit;
+    tie(eit,eendit) = edges(SG);
+
+    for (;eit != eendit;eit++) {
+      tb_slink *p = get(sedge_pmap,*eit);
+      cout << *eit << " (" << source(*eit,SG) << " <-> " <<
+	target(*eit,SG) << ")\t" << *p;
+    }
+  }
+#endif
+
+  // Set up pnode2vertex
+  pvertex_iterator pvit,pvendit;
+  tie(pvit,pvendit) = vertices(PG);
+  for (;pvit != pvendit;pvit++) {
+    pnode2vertex[get(pvertex_pmap,*pvit)]=*pvit;
+  }
+
+}
+
+void calculate_switch_MST()
+{
+  // Calculute MST
+  cout << "Calculating shortest paths on switch fabric." << endl;
+  tb_sgraph_weight_pmap sweight_pmap = get(edge_weight, SG);
+  sedge_iterator seit,seendit;
+  tie(seit,seendit) = edges(SG);
+  for (;seit != seendit;seit++) {
+    tb_slink *slink = get(sedge_pmap,*seit);
+    put(sweight_pmap,*seit,
+	100000000-get(pedge_pmap,slink->mate)->bandwidth);
+  }
+  svertex_iterator svit,svendit;
+  tie(svit,svendit) = vertices(SG);
+  for (;svit != svendit;svit++) {
+    switch_preds[*svit] = new switch_pred_map(num_vertices(SG));
+    dijkstra_shortest_paths(SG,*svit,
+    			    predecessor_map(&((*switch_preds[*svit])[0])));
+  }
+
+#ifdef GRAPH_DEBUG
+  cout << "Shortest paths" << endl;
+  tie(svit,svendit) = vertices(SG);
+  for (;svit != svendit;svit++) {
+    cout << *svit << ":" << endl;
+    for (unsigned int i = 0;i<num_vertices(SG);++i) {
+      cout << i << " " << (*switch_preds[*svit])[i] << endl;
+    }
+  }
+#endif
+}
+
+void read_virtual_topology(char *filename)
+{
+  ifstream topfile;
+  topfile.open(filename);
+  cout << "Virtual Graph: " << parse_top(VG,topfile) << endl;
+ 
+#ifdef DUMP_GRAPH
+  {
+    cout << "Virtual Graph:" << endl;
+    
+
+    vvertex_iterator vit,vendit;
+    tie(vit,vendit) = vertices(VG);
+    
+    for (;vit != vendit;vit++) {
+      tb_vnode *p = get(vvertex_pmap,*vit);
+      cout << *vit << "\t" << *p;
+    }
+    
+    vedge_iterator eit,eendit;
+    tie(eit,eendit) = edges(VG);
+
+    for (;eit != eendit;eit++) {
+      tb_vlink *p = get(vedge_pmap,*eit);
+      cout << *eit << " (" << source(*eit,VG) << " <-> " <<
+	target(*eit,VG) << ")\t" << *p;
+    }
+  }  
+#endif
+}
+
+void anneal()
+{
+  cout << "Annealing." << endl;
+
+  double newscore = 0;
+  double bestscore = 0;
+  
+  iters = 0;
+  iters_to_best =0;
+  accepts = 0;
+  
   float scorediff;
 
-  nnodes = G.number_of_nodes();
- 
-  float cycles = CYCLES*(float)(nnodes + G.number_of_edges());
-
-  float optimal = OPTIMAL_SCORE(G.number_of_edges(),nnodes);
+  int nnodes = num_vertices(VG);
+  
+  float cycles = CYCLES*(float)(nnodes + num_edges(VG));
+  float optimal = OPTIMAL_SCORE(num_edges(VG),nnodes);
+    
 #ifdef STATS
   cout << "STATS_OPTIMAL = " << optimal << endl;
 #endif
-  
+
   int mintrans = (int)cycles;
   int trans;
   int naccepts = 20*nnodes;
-  int accepts = 0;
-  int oldpos;
-
+  pvertex oldpos;
+  bool oldassigned;
   int bestviolated;
-  int absbestv;
-  
   int num_fixed=0;
-
   float temp = init_temp;
 
 #ifdef VERBOSE
   cout << "Initialized to cycles="<<cycles<<" optimal="<<optimal<<" mintrans="
-       << mintrans<<" naccepts="<<naccepts<<" nnodes="<<nnodes<<"\n";
+       << mintrans<<" naccepts="<<naccepts<< endl;
 #endif
-  
-  
+
   /* Set up the initial counts */
   init_score();
 
   /* Set up fixed nodes */
-  dic_item fixed_it;
-  
-  forall_items(fixed_it,fixed_nodes) {
-    if (vname2node.lookup(fixed_nodes.key(fixed_it)) == nil) {
-      cerr << "Fixed node: " << fixed_nodes.key(fixed_it)
-	   << " does not exist.\n",
+  for (name_name_map::iterator fixed_it=fixed_nodes.begin();
+       fixed_it!=fixed_nodes.end();++fixed_it) {
+    if (vname2vertex.find((*fixed_it).first) == vname2vertex.end()) {
+      cerr << "Fixed node: " << (*fixed_it).first <<
+	"does not exist." << endl;
       exit(1);
     }
-    node vn = vname2node.access(fixed_nodes.key(fixed_it));
-    if (pname2node.lookup(fixed_nodes.inf(fixed_it)) == nil) {
-      cerr << "Fixed node: " << fixed_nodes.inf(fixed_it)
-	   << " does not exist.\n",
+    vvertex vv = vname2vertex[(*fixed_it).first];
+    pvertex pv = pname2vertex[(*fixed_it).second];
+    tb_vnode *vn = get(vvertex_pmap,vv);
+    tb_pnode *pn = get(pvertex_pmap,pv);
+    if (vn->vclass != NULL) {
+      cerr << "Can not have fixed nodes be in a vclass!.\n";
       exit(1);
     }
-    node pn = pname2node.access(fixed_nodes.inf(fixed_it));
-    int ppos = pnode2posistion.access(&PG[pn]);
-    if (G[vn].vclass != NULL) {
-      cerr << "Can not have fixed nodes be in a vclass!\n";
+    int old_violated = violated;
+    if ((add_node(vv,pv) == 1) || (violated >= old_violated)) {
+      cerr << "Fixed node: Could not map " << vn->name <<
+	" to " << pn->name << endl;
       exit(1);
     }
-    if (add_node(vn,ppos) == 1) {
-      cerr << "Fixed node: Could not map " << fixed_nodes.key(fixed_it)
-	   << " to " << fixed_nodes.inf(fixed_it) << ".\n";
-      exit(1);
-    }
-    unassigned_nodes.del(vn);
-    G[vn].fixed=true;
+    vn->fixed = true;
     num_fixed++;
   }
-  
+
   bestscore = get_score();
   bestviolated = violated;
+
 #ifdef VERBOSE
   cout << "Problem started with score "<<bestscore<<" and "<< violated
-       << " violations.\n";
+       << " violations." << endl;
 #endif
-  absbest = bestscore;
-  absbestv = bestviolated;
-  node n3;
-  forall_nodes(n3, G) {
-    absnodes[n3] = G[n3].posistion;
-    abstypes[n3] = G[n3].type;
-  }
 
+  absbest = bestscore;
+  absbestviolated = bestviolated;
+
+  vvertex_iterator vit,veit;
+  tie(vit,veit) = vertices(VG);
+  for (;vit!=veit;++vit) {
+    tb_vnode *vn = get(vvertex_pmap,*vit);
+    absassigned[*vit] = vn->assigned;
+    if (vn->assigned) {
+      assert(vn->fixed);
+      absassignment[*vit] = vn->assignment;
+      absvinfo = vinfo;
+      voedge_iterator eit,eeit;
+      tie(eit,eeit) = out_edges(*vit,VG);
+      for (;eit != eeit;++eit) {
+	abslinks[*eit] = get(vedge_pmap,*eit)->link_info;
+      }
+      abstypes[*vit] = vn->type;
+    } else {
+      unassigned_nodes.push(vvertex_int_pair(*vit,std::random()));
+    }
+  }
 
   if (num_fixed == nnodes) {
     cout << "All nodes are fixed.  No annealing." << endl;
     goto DONE;
   }
-
+  
+  // Annealing loop!
+  vvertex vv;
+  tb_vnode *vn;
   while (temp >= temp_stop) {
 #ifdef VERBOSE
-    cout << "Temperature:  " << temp << " AbsBest: " << absbest << " (" << absbestv << ")" << endl;
+    cout << "Temperature:  " << temp << " AbsBest: " << absbest <<
+      " (" << absbestviolated << ")" << endl;
 #endif
     trans = 0;
     accepts = 0;
-
+    
     while (trans < mintrans && accepts < naccepts) {
 #ifdef STATS
       cout << "STATS temp:" << temp << " score:" << get_score() <<
 	" violated:" << violated << " trans:" << trans <<
 	" accepts:" << accepts << endl;
 #endif STATS
-      int newpos=0;
+      pvertex newpos;
       trans++;
       iters++;
-
-      n = unassigned_nodes.find_min();
-      while (n == nil) {
-	n = G.choose_node();
-	if (G[n].fixed) n=nil;
-      }
-
-      // Note: we have a lot of +1's here because of the first
-      // node loc in pnodes is 1 not 0.
-      oldpos = G[n].posistion;
-
-      if (oldpos != 0) {
-	remove_node(n);
-	unassigned_nodes.insert(n,random());
-      }
-
-      tb_vnode &vn=G[n];
-
-      if (vn.vclass != NULL) {
-	vn.type = vn.vclass->choose_type();
-#ifdef SCORE_DEBUG
-	cerr << "vclass " << vn.vclass->name  << ": choose type = "
-	     << vn.type << " dominant = " << vn.vclass->dominant << endl;
-#endif
+      
+      if (! unassigned_nodes.empty()) {
+	vv = unassigned_nodes.top().first;
+	unassigned_nodes.pop();
+      } else {
+	vv = std::random()%nnodes;
+	while (get(vvertex_pmap,vv)->fixed) {
+	  vv = std::random()%nnodes;
+	}
       }
       
-      tt_entry tt = type_table.access(vn.type);
-      int num_types = tt.first();
-      pclass_array &acceptable_types = *(tt.second());
-
-      // Loop will break eventually.
+      vn = get(vvertex_pmap,vv);
+      oldassigned = vn->assigned;
+      oldpos = vn->assignment;
+      
+      if (oldassigned) {
+	remove_node(vv);
+      }
+      
+      if (vn->vclass != NULL) {
+	vn->type = vn->vclass->choose_type();
+#ifdef SCORE_DEBUG
+	cerr << "vclass " << vn->vclass->name  << ": choose type = "
+	     << vn->type << " dominant = " << vn->vclass->dominant << endl;
+#endif
+      }
+      tt_entry tt = type_table[vn->type];
+      int num_types = tt.first;
+      pclass_vector *acceptable_types = tt.second;
+      
+      // Loop will break eventually
       tb_pnode *newpnode;
-      int i = random()%num_types;
+      int i = std::random()%num_types;
       int first = i;
       bool found_pclass = true;
-      for (;;) {		// breaks loop in a number of places
+      for (;;) {
 	i = (i+1)%num_types;
-	newpnode = acceptable_types[i]->members.access(vn.type)->front();
+	newpnode = (*acceptable_types)[i]->members[vn->type]->front();
 #ifdef PCLASS_DEBUG
 	cerr << "Found pclass: " <<
-	  acceptable_types[i]->name << " and node " <<
-	  (newpnode == NULL ? string("NULL") : newpnode->name) << "\n";
+	  (*acceptable_types)[i]->name << " and node " <<
+	  (newpnode == NULL ? "NULL" : newpnode->name) << "\n";
 #endif	
 	if (newpnode != NULL) {
-	  newpos = pnode2posistion.access(newpnode);
-	  if (add_node(n,newpos) == 0) break; // main exit condition
+	  newpos = pnode2vertex[newpnode];
+	  if (add_node(vv,newpos) == 0) {
+	    if (vinfo.no_connection == 0) {
+	      // HACK: We do this to avoid searching areas with
+	      // invalid connections.  Empircally this results in
+	      // significantly better performance in most casers.
+	      break; // main exit condition
+	    } else {
+	      remove_node(vv);
+	    }
+	  }
 	}
 	
 	if (i == first) {
 	  // no available nodes
-	  // need to free up a node and recalculate weights.
-	  int pos = 0;
-	  node ntor;
-	  while (pos == 0) {
-	    ntor=nil;
-	    while (ntor == nil) {
-	      ntor = G.choose_node();
-	      if (G[ntor].fixed) ntor=nil;
-	    }
-	    pos = G[ntor].posistion;
+	  // need to free up a node.
+	  vvertex toremove = std::random()%nnodes;
+	  while (get(vvertex_pmap,toremove)->fixed ||
+		 (! get(vvertex_pmap,toremove)->assigned)) {
+	    toremove = std::random()%nnodes;
 	  }
-	  remove_node(ntor);
-	  unassigned_nodes.insert(ntor,random());
-	  found_pclass = false;
+	  remove_node(toremove);
+	  unassigned_nodes.push(vvertex_int_pair(toremove,std::random()));
+	  found_pclass=false;
 	  break;
 	}
-      } 
-
-      // This occurs when no pclass could be found.
-      if (found_pclass == false) continue;
-
-      unassigned_nodes.del(n);
+      }
+      
+      if (! found_pclass) {
+	unassigned_nodes.push(vvertex_int_pair(vv,std::random()));
+	continue;
+      }
       
       newscore = get_score();
       
       // Negative means bad
       scorediff = bestscore - newscore;
       
-      // tinkering aournd witht his.
+      // Complicated expression that no one really understands
       if ((newscore < optimal) || (violated < bestviolated) ||
 	  ((violated == bestviolated) && (newscore < bestscore)) ||
 	  accept(scorediff*((bestviolated - violated)/2), temp)) {
 	bestscore = newscore;
 	bestviolated = violated;
 	accepts++;
-	if ((violated < absbestv) ||
-	    ((violated == absbestv) &&
+	if ((violated < absbestviolated) ||
+	    ((violated == absbestviolated) &&
 	     (newscore < absbest))) {
-	  node n2;
-	  forall_nodes(n2, G) {
-	    absnodes[n2] = G[n2].posistion;
-	    abstypes[n2] = G[n2].type;
+	  tie(vit,veit) = vertices(VG);
+	  for (;vit!=veit;++vit) {
+	    absassignment[*vit] = get(vvertex_pmap,*vit)->assignment;
+	    absvinfo = vinfo;
+	    voedge_iterator eit,eeit;
+	    tie(eit,eeit) = out_edges(*vit,VG);
+	    for (;eit != eeit;++eit) {
+	      abslinks[*eit] = get(vedge_pmap,*eit)->link_info;
+	    }
+	    absassigned[*vit] = get(vvertex_pmap,*vit)->assigned;
+	    abstypes[*vit] = get(vvertex_pmap,*vit)->type;
 	  }
 	  absbest = newscore;
-	  absbestv = violated;
-	  cycles_to_best = iters;
+	  absbestviolated = violated;
+	  iters_to_best = iters;
 	}
 	if (newscore < optimal) {
-	  timeend = used_time(timestart);
-	  cout << "OPTIMAL ( " << optimal << ") in "
-	       << iters << " iters, "
-	       << timeend << " seconds" << endl;
+	  cout << "OPTIMAL ( " << optimal << ")" << endl;
 	  goto DONE;
 	}
 	// Accept change
       } else {
 	// Reject change
-	remove_node(n);
-	if (oldpos != 0) {
-	  add_node(n,oldpos);
+	remove_node(vv);
+	if (oldassigned) {
+	  add_node(vv,oldpos);
 	}
       }
     }
     temp *= temp_rate;
   }
-  cout << "Done.\n";
-  
  DONE:
-  bestscore = absbest;
-
-  forall_nodes(n, G) {
-    if (G[n].posistion != 0)
-      remove_node(n);
-  }
-	
-  forall_nodes(n, G) {
-    if (absnodes[n] != 0) {
-      if (G[n].vclass != NULL) {
-	G[n].type = abstypes[n];
-      }
-      assert(G[n].type == abstypes[n]);
-      if (add_node(n,absnodes[n]) != 0) {
-	cerr << "Invalid assumption.  Tell calfeld that reseting to best configuration doesn't work" << endl;
-      }
-    } else {
-      cout << "Unassigned node: " << G[n].name << endl;
-    }
-  }
-  
-  timeend = used_time(timestart);
-  printf("   BEST SCORE:  %.2f",get_score());
-  cout << " in " << iters << " iters and " << timeend << " seconds" << endl;
-  cout << "With " << violated << " violations" << endl;
-  cout << "With " << accepts << " accepts of increases\n";
-  cout << "Iters to find best score:  " << cycles_to_best << endl;
-  cout << "Violations: " << violated << endl;
-  cout << "  unassigned: " << vinfo.unassigned << endl;
-  cout << "  pnode_load: " << vinfo.pnode_load << endl;
-  cout << "  no_connect: " << vinfo.no_connection << endl;
-  cout << "  link_users: " << vinfo.link_users << endl;
-  cout << "  bandwidth:  " << vinfo.bandwidth << endl;
-  cout << "  desires:    " << vinfo.desires << endl;
-
-  return 0;
-}
-
-/*
- * A legacy function from a less general version of the program.
- *
- * Now simply resets the node assignment, performs a new assignment,
- * and prints out the results.
- *
- */
-void loopassign()
-{
-  node_array<int> nodestorage;
-  int optimal = 0;
-  float timestart = used_time();
-  float totaltime;
-
-  nodestorage.init(G, 0);
-  absnodes.init(G, 0);
-  abstypes.init(G, "");
-    
-  nnodes = G.number_of_nodes();
-  optimal = assign();
-  totaltime = used_time(timestart);
-
-  if (violated > 0) {
-    cout << "violations: " << violated << endl;
-  }
-  cout << "Total time to find solution "
-       << totaltime << " seconds" << endl;
-}
-
-/*
- * If we have more ways of partitioning the graph other than just
- * simulated annealing, throw them in here.
- */
-
-void chopgraph() {
-  switch(partition_mechanism) {
-  case PARTITION_BY_ANNEALING:
-    loopassign();
-    break;
-  default:
-    cerr << "Unknown partition mechanism.  eeeek." << endl;
-    exit(-1);
-  }
-}
-
-void batch()
-{
-  absnodes.init(G, 0);
-  abstypes.init(G, "");
-  chopgraph();
-}
-
-
-void usage() {
-  fprintf(stderr,
-	  "usage:  assign [-h] [-bao] [-s <switches>] [-n nodes/switch] [-c cap] [file]\n"
-	  "           -h ...... brief help listing\n"
-	  //	  "           -s #  ... number of switches in cluster\n"
-	  //	  "           -n #  ... number of nodes per switch\n"
-	  "           -a ...... Use simulated annealing (default)\n"
-	  "           -o ...... Update on-line (vs batch, default)\n"
-	  "           -t <file> Input topology desc. from <file>\n"
-	  "           -b ...... batch mode (no gui)\n"
-	  );
-}
-
-int mst_comp(const edge &A,const edge &B)
-{
-  edge pA,pB;
-  pA = SG[A].mate;
-  pB = SG[B].mate;
-  // Highbandwidth = low score
-  if (PG[pA].bandwidth > PG[pB].bandwidth) return -1;
-  if (PG[pA].bandwidth < PG[pB].bandwidth) return 1;
-  return 0;
+  cout << "Done" << endl;
 }
 
 void print_solution()
 {
-  node n;
-  cout << "Best solution: " << absbest << endl;
+  vvertex_iterator vit,veit;
+  tb_vnode *vn;
+  
   cout << "Nodes:" << endl;
-  forall_nodes(n,G) {
-    if (!G[n].posistion) {
-      cout << "unassigned: " << G[n].name << endl;
+  tie(vit,veit) = vertices(VG);
+  for (;vit != veit;++vit) {
+    vn = get(vvertex_pmap,*vit);
+    if (! absassigned[*vit]) {
+      cout << "unassigned: " << vn->name << endl;
     } else {
-      node pnode = pnodes[G[n].posistion];
-      tb_pnode &pnoder = PG[pnode];
-      cout << G[n].name << " ";
-      if (pnoder.the_switch) {
-	cout << PG[pnoder.the_switch].name;
-      } else {
-	cout << "NO_SWITCH";
-      }
-      cout << " " << pnoder.name << endl;
+      cout << vn->name << " "
+	   << get(pvertex_pmap,absassignment[*vit])->name << endl;
     }
   }
   cout << "End Nodes" << endl;
   cout << "Edges:" << endl;
-  edge e;
-  forall_edges(e,G) {
-    tb_vlink &v = G[e];
-    cout << G[e].name;
-    if (v.type == tb_vlink::LINK_DIRECT) {
-      tb_plink &p = PG[v.plink];
-      cout << " direct " << p.name << " (" <<
-	p.srcmac << "," << p.dstmac << ")" << endl;
-    } else if (v.type == tb_vlink::LINK_INTRASWITCH) {
-      tb_plink &p = PG[v.plink];
-      tb_plink &p2 = PG[v.plink_two];
-      cout << " intraswitch " << p.name << " (" <<
-	p.srcmac << "," << p.dstmac << ") " <<
-	p2.name << " (" << p2.srcmac << "," << p2.dstmac <<
+  vedge_iterator eit,eendit;
+  tie(eit,eendit) = edges(VG);
+  for (;eit!=eendit;++eit) {
+    tb_vlink *vlink = get(vedge_pmap,*eit);
+    cout << vlink->name;
+    if (abslinks[*eit].type == tb_link_info::LINK_DIRECT) {
+      tb_plink *p = get(pedge_pmap,abslinks[*eit].plinks.front());
+      cout << " direct " << p->name << " (" <<
+	p->srcmac << "," << p->dstmac << ")" << endl;
+    } else if (abslinks[*eit].type == tb_link_info::LINK_INTRASWITCH) {
+      tb_plink *p = get(pedge_pmap,abslinks[*eit].plinks.front());
+      tb_plink *p2 = get(pedge_pmap,abslinks[*eit].plinks.back());
+      cout << " intraswitch " << p->name << " (" <<
+	p->srcmac << "," << p->dstmac << ") " <<
+	p2->name << " (" << p2->srcmac << "," << p2->dstmac <<
 	")" << endl;
-    } else if (v.type == tb_vlink::LINK_INTERSWITCH) {
+    } else if (abslinks[*eit].type == tb_link_info::LINK_INTERSWITCH) {
       cout << " interswitch ";
-      edge e;
-      tb_plink &lp = PG[v.plink_local_one];
-      tb_plink &lp2 = PG[v.plink_local_two];
-      cout << lp.name << " (" << lp.srcmac << "," << lp.dstmac << ")";
-      forall(e,v.path) {
-	tb_plink &p = PG[e];
-	cout << " " << p.name << " (" << p.srcmac << "," << p.dstmac << ")";
+      for (pedge_path::iterator it=abslinks[*eit].plinks.begin();
+	   it != abslinks[*eit].plinks.end();++it) {
+	tb_plink *p = get(pedge_pmap,*it);
+	cout << " " << p->name << " (" << p->srcmac << "," <<
+	  p->dstmac << ")";
       }
-      cout << " " << lp2.name << " (" << lp2.srcmac << "," <<
-	lp2.dstmac << ")" << endl;
-    } else if (v.type == tb_vlink::LINK_TRIVIAL) {
+      cout << endl;
+    } else if (abslinks[*eit].type == tb_link_info::LINK_TRIVIAL) {
       cout << " trivial" << endl;
     } else {
-      cout << "Unknown link type" << endl;
+      cout << " Unknown link type" << endl;
     }
   }
   cout << "End Edges" << endl;
   cout << "End solution" << endl;
 }
 
-int main(int argc, char **argv)
+#ifndef ASSIGN_LIBRARY
+int main(int argc,char **argv)
 {
-  extern char *optarg;
-  extern int optind;
-  char *topofile = NULL;
-    
-  int ch;
-
-  partition_mechanism = PARTITION_BY_ANNEALING;
-
-  while ((ch = getopt(argc, argv, "boas:n:t:h")) != -1)
-    switch(ch) {
-    case 'h': usage(); exit(0);
-      //		case 's': nparts = atoi(optarg); break;
-    case 'a': partition_mechanism = PARTITION_BY_ANNEALING; break;
-    case 'o': on_line = 1; break;
-    case 't': topofile = optarg; break;
-    case 'b': batch_mode = 1; break;
-    default: usage(); exit(-1);
-    }
-
-  argc -= optind;
-  argv += optind;
-
-  /* newbold@cs
-     These relate to the globals defined in common.h
-     It reads in all the parameters for the program that were formerly
-     all hardcoded constants.
-  */
+  // Convert options to the common.h parameters.
   parse_options(argv, options, noptions);
 #ifdef SCORE_DEBUG
   dump_options("Configuration options:", options, noptions);
 #endif
 
+  // Get a seed
   int seed;
   if (getenv("ASSIGN_SEED") != NULL) {
     sscanf(getenv("ASSIGN_SEED"),"%d",&seed);
   } else {
     seed = time(NULL)+getpid();
   }
-  printf("seed = %d\n",seed);
-  srandom(seed);
+  cout << "seed = " << seed << endl;
+  std::srandom(seed);
 
-  /*
-   * Allow the user to specify a topology in ".top" format.
-   */
-
-  if (argc >= 1) {
-    ifstream infile;
-    infile.open(argv[0]);
-    if (!infile || !infile.good()) {
-      cerr << "Error opening file: " << argv[0] << endl;
-      exit(-11);
-    }
-    cout << "Parsing top\n";
-    parse_top(G, infile);
+  if (argc != 3) {
+    cerr << argv[0] << " ptopfile topfile" << endl;
+    exit(0);
   }
 
-  /*
-   * Allow the user to specify a physical topology
-   * in .phys format.  Fills in the "topo" global variable.
-   * Make no mistake:  This is actually mandatory now.
-   */
-  if (topofile != NULL) {
-    cout << "Parsing ptop\n";
-    ifstream ptopfile;
-    ptopfile.open(topofile);
-    if (!ptopfile || !ptopfile.good()) {
-      cerr << "Error opening file: " << topofile << endl;
-      exit(-1);
-    }
-    nparts = parse_ptop(PG,SG,ptopfile);
-    cout << "Nparts: " << nparts << endl;
-
-    cout << "Type Precheck" << endl;
-    string curtype;
-    int ok=1;
-    forall (curtype,vtypes) {
-      if (ptypes.search(curtype) == nil) {
-	cout << "  No physical nodes of type " << curtype << endl;
-	ok=0;
-      }
-    }
-    if (! ok) exit(-1);
-    
-    cout << "Initializing data structures." << endl;
-    edge_costs.init(SG);
-    switch_distances.init(SG);
-    switch_preds.init(SG);
-    cout << "Calculating shortest paths on switch fabric." << endl;
-    edge ed;
-    forall_edges(ed,SG) {
-      edge_costs[ed] = 100000000-PG[SG[ed].mate].bandwidth;
-#ifdef SCORE_DEBUG
-      cerr << "  " << PG[SG[ed].mate].name << " " << edge_costs[ed] << endl;
-#endif
-
-    }
-    node sw;
-    forall_nodes(sw,SG) {
-      switch_distances[sw].init(SG);
-      switch_preds[sw].init(SG);
-      DIJKSTRA_T(SG,sw,edge_costs,
-		 switch_distances[sw],switch_preds[sw]);
-#ifdef SCORE_DEBUG
-      cerr << "Source " << PG[SG[sw].mate].name << endl;
-      node dsw;
-      forall_nodes(dsw,SG) {
-	cerr << "  " << PG[SG[dsw].mate].name;
-	int dist = switch_distances[sw][dsw];
-	cerr << "  dist " << dist;
-	edge de = switch_preds[sw][dsw];
-	if (de == nil) {
-	  cerr << "  pred nil" << endl;
-	} else {
-	  cerr << "  pred " << PG[SG[de].mate].name << endl;
-	}
-      }
-#endif
-    }
-  }
-
-  node pn;
-  forall_nodes(pn,PG) {
-    pnode2node.insert(&PG[pn],pn);
-  }
-  for (int i=0;i<MAX_PNODES;++i) {
-    if (pnodes[i] != nil) {
-      pnode2posistion.insert(&PG[pnodes[i]],i);
-    }
-  }
-
-  cout << "Generating physical classes\n";
+  read_physical_topology(argv[1]);
+  calculate_switch_MST();
+  
+  cout << "Generating physical equivalence classes:";
   generate_pclasses(PG);
-  cout << "Nclasses: " << pclasses.length() << endl;
+  cout << pclasses.size() << endl;
 
 #ifdef PCLASS_DEBUG
   pclass_debug();
 #endif
+
+  read_virtual_topology(argv[2]);
+
+  cout << "Type preecheck." << endl;
+  // Type precheck
+  bool ok=true;
+  for (name_slist::iterator it=vtypes.begin();
+       it != vtypes.end();++it) {
+    if (find(ptypes.begin(),ptypes.end(),*it) == ptypes.end()) {
+      cout << "  No physical nodes of type " << *it << endl;
+      ok=false;
+    }
+  }
+  if (! ok) exit(-1);
+
+
+  double timestart,timeend;
+  timestart = used_time();
+  anneal();
+  timeend = used_time();
   
-  cout << "Annealing!" << endl;
-  batch();
+  cout << "   BEST SCORE:  " << absbest << " in " << iters <<
+    " iters and " << timeend-timestart << " seconds" << endl;
+  cout << "With " << absbestviolated << " violations" << endl;
+  cout << "With " << accepts << " accepts of increases" << endl;
+  cout << "Iters to find best score:  " << iters_to_best << endl;
+  cout << "Violations: " << absbestviolated << endl;
+  cout << "  unassigned: " << absvinfo.unassigned << endl;
+  cout << "  pnode_load: " << absvinfo.pnode_load << endl;
+  cout << "  no_connect: " << absvinfo.no_connection << endl;
+  cout << "  link_users: " << absvinfo.link_users << endl;
+  cout << "  bandwidth:  " << absvinfo.bandwidth << endl;
+  cout << "  desires:    " << absvinfo.desires << endl;
 
   print_solution();
-    
+  
   return 0;
 }
+#endif
+

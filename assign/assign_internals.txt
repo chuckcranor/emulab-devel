@@ -68,7 +68,8 @@ can not be matched then add_node returns an invalid condition,
 otherwise it continues on.
 
 Each type of a pnode also has a limit.  This is the number of vnodes
-of that type that can fit in the pnode.  A vnode can not be placed in a pnode unless there is room left.
+of that type that can fit in the pnode.  A vnode can not be placed in
+a pnode unless there is room left.
 
 Under no conditions is a vnode mapped to a switch.
 
@@ -181,12 +182,12 @@ correct pnode during initialization.  From then on it can never be
 unmapped.
 
 
-LEDA
-----
+STL/BGL
+-------
 
-Assign makes heavy use of LEDA.  Before getting deeply into the code
-it would be a good idea to become familiar with LEDA's parameterized
-GRAPHs and other basic data structures.
+Assign makes heavy use of the standard C++ library (STL) and the Boost
+Graph Library (BGL).  Before getting deeply into the code it would be
+a good idea to become familiar both.
 
 
 Overview of the Code
@@ -230,29 +231,6 @@ pclass.h - Defines the pclass class.
 vclass.h - Defines the vclass class.
 
 
-Important Globals
------------------
-
-switch_pred_array - The predecessor array to represent the shortest
-path between any two switches.
-
-PG - The physical topology.
-
-G - The virtual topology.
-
-bestscore, absbest - The bestscore this iteration and the absolute
-best score.
-
-absnodes - Contains the absolute best solution.
-
-unassigned_nodes - Priority queue of nodes to be assigned.
-
-type_table - Indexed by type, contains a list of pclasses that can
-satisfy that type.
-
-fixed_nodes - Indexed by vname, contains the pname the node is fixed
-to.
-
 Initialization
 --------------
 
@@ -266,8 +244,8 @@ The SG graph contains slinks and snodes which exists in one-to-one
 correspondence to the switches and interswitch links in PG.  Each
 slink and snode has a field, mate, which contains the corresponding
 edge or node in PG.  Assign determines edge costs as 10000 minus the
-bandwidth of the interswitch link and then uses the DIJKSTRA_T
-algorithm from LEDA to compute the shortest paths between all
+bandwidth of the interswitch link and then uses the a Dijkstra MST
+algorithm from the BGL to compute the shortest paths between all
 switches.  These paths are stored in switch_distances.  For a given
 switch sw, switch_distances[sw] is a node_array (indexed by node) of
 the predecessor node.  This is used by the scoring code to calculate
@@ -318,16 +296,12 @@ Foreach vlink in vnode
 	If destination is mapped
 		# We assign links when both ends are mapped.  Otherwise we leave
 		# them unassigned.
-		If direct_link exists then map vlink to single direct plink
-		Else if vnode and destination are on same switch then
-			Find links from vnode to switch to destination and map to them.
+		Find all possible routes to destination.
+		If none are found then mark as a violation
 		Else
-			If interswitch path exists
-				Map vlink to interswitch path
-			Else
-				Fail
-				# It's possible to score this as a violation instead of
-				# a failure however it was found to do better when we failed.
+				# Direct better than intra better than inter
+				Weight them accordingly 
+				Choose one randomly
 
 # We now have all links set up we just need to do the last few things:
 # increment the load, features and desires, count a pnode used if this
@@ -364,11 +338,6 @@ find_link_to_switch(A)
 
 Very similar to direct link except is going from A to the switch A is
 connected to rather than from A to B.
-
-
-find_intraswitch_path(src,dst)
-
-Extremely basic.  Just calls find_link_to_switch on both src and dst.
 
 
 find_interswitch_path(src,dst)

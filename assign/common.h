@@ -22,18 +22,25 @@ static float opt_nodes_per_sw = 5.0;
 static float SCORE_DIRECT_LINK = 0.01;/* Cost of a direct link */
 static float SCORE_DIRECT_LINK_PENALTY = 0.5;/* Cost of overused direct link*/
 static float SCORE_INTRASWITCH_LINK = 0.02;/* Cost of an intraswitch link*/
-static float SCORE_INTERSWITCH_LINK = 0.05;/* Cost of an interswitch link*/
+static float SCORE_INTERSWITCH_LINK = 0.2;/* Cost of an interswitch link*/
 static float SCORE_NO_CONNECTION = 0.5;/* Cost of not filling a virt. link*/
-static float SCORE_PNODE = 0.05;/* Cost of using a pnode*/
+static float SCORE_PNODE = 0.2;/* Cost of using a pnode*/
 static float SCORE_PNODE_PENALTY = 0.5;/* Cost of overusing a pnode*/
 static float SCORE_SWITCH = 0.5;/* Cost of using a switch.*/
-static float SCORE_UNASSIGNED = 1;/* Cost of an unassigned node*/
+static float SCORE_UNASSIGNED = 1.0;/* Cost of an unassigned node*/
 static float SCORE_OVER_BANDWIDTH = 0.5;/* Cost of going over bandwidth*/
-static float SCORE_DESIRE = 1;/* Multiplier for desire costs*/
-static float SCORE_FEATURE = 1;/* Multiplier for feature weights*/
+static float SCORE_DESIRE = 1.0;/* Multiplier for desire costs*/
+static float SCORE_FEATURE = 1.0;/* Multiplier for feature weights*/
 static float SCORE_PCLASS = 0.5; /* Cost of each pclass */
-static float SCORE_VCLASS = 1;	/* vclass score multiplier */
+static float SCORE_VCLASS = 1.0; /* vclass score multiplier */
 static float SCORE_EMULATED_LINK = 0.01; /* cost of an emualted link */
+
+// The following are used to weight possible link resolutions.  Higher
+// numbers mean a more likely resolution.  Trivial resolutions are always
+// used if possible.
+static float LINK_RESOLVE_DIRECT = 4.0;
+static float LINK_RESOLVE_INTRASWITCH = 2.0;
+static float LINK_RESOLVE_INTERSWITCH = 1.0;
 
 static struct config_param options[] = {
   { "IT",	CONFIG_INT,	&init_temp,			0 },
@@ -57,12 +64,39 @@ static struct config_param options[] = {
   { "SW",	CONFIG_FLOAT,	&SCORE_SWITCH,			0 },
   { "EL",	CONFIG_FLOAT,	&SCORE_EMULATED_LINK,		0 },
   { "ON",	CONFIG_FLOAT,	&opt_nodes_per_sw,		0 },
-  { "TR",	CONFIG_FLOAT,	&temp_rate,			0 }
+  { "TR",	CONFIG_FLOAT,	&temp_rate,			0 },
+  { "LD",       CONFIG_FLOAT,   &LINK_RESOLVE_DIRECT,           0 },
+  { "LI",       CONFIG_FLOAT,   &LINK_RESOLVE_INTRASWITCH,      0 },
+  { "LT",       CONFIG_FLOAT,   &LINK_RESOLVE_INTERSWITCH,      0 }
 };
 
 static int noptions = sizeof(options) / sizeof(options[0]);
 
+void parse_options(char **argv, struct config_param options[], int nopt);
+
+struct eqstr
+{
+  bool operator()(const char* A, const char* B) const
+  {
+    return (! strcmp(A, B));
+  }
+};
+
+enum edge_data_t {edge_data};
+enum vertex_data_t {vertex_data};
+
+namespace boost {
+  BOOST_INSTALL_PROPERTY(edge,data);
+  BOOST_INSTALL_PROPERTY(vertex,data);
+}
+
+typedef hash_map<crope,crope> name_name_map;
+typedef slist<crope> name_slist;
+
+template <class T> struct hashptr {
+  size_t operator()(T const &A) const {
+    return (size_t) A;
+  }
+};
+
 #endif
-
-
-

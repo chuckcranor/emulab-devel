@@ -3,10 +3,7 @@ running
 -------
 
 Typically assign is run in the following method:
-	assign -t <ptop> <top>
-
--h provides a brief help listing.  -a does nothing.  -b does nothing.
--t specifies a ptop file and is mandatory.  -o does very little of use.
+	assign <ptop> <top>
 
 
 ptop format
@@ -116,10 +113,15 @@ compile time options
 -DSCORE_DEBUG adds a large amount of output detailing in great detail
 what is going on.
 
--DSCORE_DEBUG_MORE adds even more output.
+-DSCORE_DEBUG_MORE adds a line for every score change.
+
+-DSCORE_DEBUG_LOTS adds output of node info for every add and remove
+operation.
 
 -DSCORE_PCLASS spits out the equivalence classes at the beginning.
 
--DSCORE_PCLASS_MORE spits out lots of output during the assign loop.
-It works best with -DSCORE_DEBUG but does not require
--DSCORE_DEBUG_MORE.
+-DDUMP_GRAPH causes the virtual, physical, and switch graphs to be
+output during initialization.
+
+
+
