@@ -1,8 +1,0 @@
-#!/bin/sh
-
-#
-# Start the watchdog daemon
-#
-echo "Starting the Emulab watchdog  ..."
-/usr/local/etc/testbed/watchdog
-
