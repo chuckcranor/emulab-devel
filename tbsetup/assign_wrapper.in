@@ -120,7 +120,8 @@ $sth->finish;
 printdb "\n";
 
 printdb "Loading virt_nodes.\n";
-$sth = $dbh->prepare("SELECT vname,ips,type from virt_nodes");
+$sth = $dbh->prepare("SELECT vname,ips,type from virt_nodes" .
+		     " where pid=\"$pid\" and eid=\"$eid\"");
 $sth->execute;
 while (($vname,$ips,$type) = $sth->fetchrow_array) {
     printdb "  $vname $type $ips\n";
@@ -135,7 +136,7 @@ $sth->finish;
 
 printdb "Loading virt_lans.\n";
 $sth = $dbh->prepare("SELECT vname,members,delay,bandwidth,lossrate" .
-		     " from virt_lans");
+		     " from virt_lans where pid=\"$pid\" and eid=\"$eid\"");
 $sth->execute;
 while (($vname,$members,$delay,$bandwidth,$lossrate) = $sth->fetchrow_array) {
     # Shark hack
