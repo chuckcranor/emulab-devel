@@ -21,7 +21,7 @@
  * Desc: Dewarp the blobs (i.e. transform form image -> world cs)
  * Author: Andrew Howard
  * Date: 17 Apr 2002
- * CVS: $Id: dewarp.c,v 1.1 2004-12-12 23:36:33 johnsond Exp $
+ * CVS: $Id: dewarp.c,v 1.1.1.1.8.1 2005-03-18 17:17:34 stack Exp $
  ***************************************************************************/
 
 #include <assert.h>
@@ -32,6 +32,10 @@
 #include <gsl/gsl_multifit.h>
 #include "opt.h"
 #include "mezzanine.h"
+
+
+#define WARP_SCALE
+#define WARP_COS
 
 // Update the coordinate transforms
 void dewarp_update_trans();
@@ -77,6 +81,23 @@ int dewarp_init(mezz_mmap_t *mmap)
     dewarp->def->points++;
   }
 
+  dewarp->def->warpFactor = opt_get_double("dewarp","warpFactor",1.414);
+  dewarp->def->ocHeight = opt_get_double("dewarp","ocHeight",2.500);
+
+  dewarp->def->scaleFactorX = (dewarp->mmap->width - 1)/2.0;
+  dewarp->def->scaleFactorY = (dewarp->mmap->height - 1)/2.0;
+
+  i = opt_get_double2("dewarp","scaleFactor",
+		      &dewarp->def->scaleFactorX,
+		      &dewarp->def->scaleFactorY);
+
+  dewarp->def->ocX = (dewarp->mmap->width - 1)/2;
+  dewarp->def->ocY = (dewarp->mmap->height - 1)/2;
+
+  i = opt_get_double2("dewarp","cameraCenter",
+		      &dewarp->def->ocX,
+		      &dewarp->def->ocY);
+  
   // Generate the transfomr values
   dewarp_update_trans();
   
@@ -119,9 +140,13 @@ mezz_bloblist_t *dewarp_update(mezz_bloblist_t *bloblist)
   for (i = 0; i < bloblist->count; i++)
   {
     blob = bloblist->blobs + i;
+    //printf("blob %d %d %d\n",i,blob->ox,blob->oy);
     dewarp_image2world(blob->ox, blob->oy,
                        &blob->wox, &blob->woy);
   }
+
+  dewarp->mmap->bloblist = *bloblist;
+
   return bloblist;
 }
 
@@ -248,34 +273,56 @@ void dewarp_update_trans()
 }
 
 
+
 // Convert point from image to world coords
 void dewarp_image2world(double i, double j, double *x, double *y)
 {
+
+#ifdef WARP_IDENTITY
+  // World coords are the same as pixel coords.
+  *x = i;
+  *y = j;
+
+#elif defined(WARP_SCALE)
+  // Pixels are  to [0 ... 639, 0 ... 479], with the origin in the upper-left.
+  // World coordinates are [-1 ... 1, -1 ... 1], with the origin in the center.
+  *x = (i - dewarp->def->ocX) / dewarp->def->scaleFactorX;
+  *y = -(j - dewarp->def->ocY) / dewarp->def->scaleFactorY;
+
+# if defined(WARP_COS)
+  // Dewarp by the cosine of the off-axis angle.
+  double f = cos(dewarp->def->warpFactor *
+		 atan2(hypot(*x,*y), dewarp->def->ocHeight));
+  *x /= f;
+  *y /= f;
+# endif
+
+#else
   *x = dewarp->def->iwtrans[0][0] + dewarp->def->iwtrans[0][1] * i +
     + dewarp->def->iwtrans[0][2] * j + dewarp->def->iwtrans[0][3] * i * i
     + dewarp->def->iwtrans[0][4] * j * j + dewarp->def->iwtrans[0][5] * i * j
-    + dewarp->def->iwtrans[0][6] * i * fabs(i) + dewarp->def->iwtrans[0][7] * i * j * j;
+    + dewarp->def->iwtrans[0][6] * i * fabs(i) + dewarp->def->iwtrans[0][7] * i\
+ * j * j;
 
   *y = dewarp->def->iwtrans[1][0] + dewarp->def->iwtrans[1][1] * j
     + dewarp->def->iwtrans[1][2] * i + dewarp->def->iwtrans[1][3] * j * j
     + dewarp->def->iwtrans[1][4] * i * i + dewarp->def->iwtrans[1][5] * j * i
-    + dewarp->def->iwtrans[1][6] * j * fabs(j) + dewarp->def->iwtrans[1][7] * j * i * i;
+    + dewarp->def->iwtrans[1][6] * j * fabs(j) + dewarp->def->iwtrans[1][7] * j\
+ * i * i;
+#endif
+
+/*   *x = dewarp->def->iwtrans[0][0] + dewarp->def->iwtrans[0][1] * i + */
+/*     + dewarp->def->iwtrans[0][2] * j + dewarp->def->iwtrans[0][3] * i * i */
+/*     + dewarp->def->iwtrans[0][4] * j * j + dewarp->def->iwtrans[0][5] * i * j */
+/*     + dewarp->def->iwtrans[0][6] * i * fabs(i) + dewarp->def->iwtrans[0][7] * i * j * j; */
+
+/*   *y = dewarp->def->iwtrans[1][0] + dewarp->def->iwtrans[1][1] * j */
+/*     + dewarp->def->iwtrans[1][2] * i + dewarp->def->iwtrans[1][3] * j * j */
+/*     + dewarp->def->iwtrans[1][4] * i * i + dewarp->def->iwtrans[1][5] * j * i */
+/*     + dewarp->def->iwtrans[1][6] * j * fabs(j) + dewarp->def->iwtrans[1][7]
+       * j * i * i; */
+
+  //*x = i;
+  //*y = j;
+
 }
-
-
-// Convert point from world to image coords
-void dewarp_world2image(double x, double y, double *i, double *j)
-{
-  *i = dewarp->def->witrans[0][0] + dewarp->def->witrans[0][1] * x +
-    + dewarp->def->witrans[0][2] * y + dewarp->def->witrans[0][3] * x * x
-    + dewarp->def->witrans[0][4] * y * y + dewarp->def->witrans[0][5] * x * y
-    + dewarp->def->witrans[0][6] * x * fabs(x) + dewarp->def->witrans[0][7] * x * y * y;
-
-  *j = dewarp->def->witrans[1][0] + dewarp->def->witrans[1][1] * y
-    + dewarp->def->witrans[1][2] * x + dewarp->def->witrans[1][3] * y * y
-    + dewarp->def->witrans[1][4] * x * x + dewarp->def->witrans[1][5] * y * x
-    + dewarp->def->witrans[1][6] * y * fabs(y) + dewarp->def->witrans[1][7] * y * x * x;
-}
-
-
-

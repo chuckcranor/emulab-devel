@@ -21,7 +21,7 @@
  * Desc: Assign identities to blobs
  * Author: Andrew Howard
  * Date: 21 Apr 2002
- * CVS: $Id: ident.c,v 1.2 2004-12-15 07:28:29 johnsond Exp $
+ * CVS: $Id: ident.c,v 1.2.8.1 2005-03-18 17:17:34 stack Exp $
  ***************************************************************************/
 
 #include <assert.h>
@@ -31,7 +31,7 @@
 #include "geom.h"
 #include "opt.h"
 #include "mezzanine.h"
-
+#include <stdio.h>
 
 // Find the nearest blob
 mezz_blob_t *ident_get_nearest(mezz_bloblist_t *bloblist, int class,
@@ -40,6 +40,7 @@ mezz_blob_t *ident_get_nearest(mezz_bloblist_t *bloblist, int class,
 // Ident information
 typedef struct
 {
+    mezz_mmap_t *mmap;
   mezz_objectlist_t *objectlist;     // List of objects in the current frame
 } ident_t;
 
@@ -54,9 +55,11 @@ int ident_init(mezz_mmap_t *mmap)
   //char key[64];
   //const char *value;
   mezz_object_t *object;
-  
+
   ident = malloc(sizeof(ident_t));
   memset(ident, 0, sizeof(ident_t));
+
+  ident->mmap = mmap;
 
   // Use the mmap'ed object list
   ident->objectlist = &mmap->objectlist;
@@ -120,6 +123,13 @@ mezz_objectlist_t *ident_update(mezz_bloblist_t *bloblist)
     dx = (bblob->wox - ablob->wox);
     dy = (bblob->woy - ablob->woy);
 
+#if 1
+    printf("a(%f,%f) b(%f,%f) -- %f %f\n",
+	   ablob->ox, ablob->oy,
+	   bblob->ox, bblob->oy,
+	   mx,my);
+#endif
+
 	object->valid = 1;
 
     object->missed = 0;
@@ -132,8 +142,18 @@ mezz_objectlist_t *ident_update(mezz_bloblist_t *bloblist)
     }
 
     // Assign the blobs to this object
+    //printf("assigned %d to a/b blobs; bloblist == 0x%x\n",i,bloblist);
     ablob->object = i;
     bblob->object = i;
+  }
+
+  // copy the bloblist to ipc seg
+  // this saves the blobs
+  if (bloblist == NULL) {
+      //printf("bloblist == null\n");
+  }
+  else {
+      ident->mmap->bloblist = *bloblist;
   }
 
   return ident->objectlist;

@@ -21,7 +21,7 @@
  * Desc: Dewarping interface
  * Author: Andrew Howard
  * Date: 11 Apr 2002
- * CVS: $Id: dewarp.c,v 1.1 2004-12-12 23:36:34 johnsond Exp $
+ * CVS: $Id: dewarp.c,v 1.1.1.1.8.1 2005-03-18 17:17:35 stack Exp $
  ***************************************************************************/
 
 #include <assert.h>
@@ -29,7 +29,10 @@
 #include <string.h>
 #include <stdlib.h>
 #include "mezzcal.h"
+#include "opt.h"
 
+#define WARP_SCALE
+#define WARP_COS
 
 // Generate a warped grid over the field
 void dewarp_update_grid();
@@ -42,6 +45,10 @@ typedef struct
   mezz_dewarpdef_t *mmap;  // Pointer to dewarp mmap
   rtk_fig_t *figs[MEZZ_MAX_DEWARP];  // Figures denoting the calibration points.
   rtk_fig_t *gridfig;     // Figure for displaying the warped grid.
+
+  rtk_tableitem_t *oc[3];
+  rtk_tableitem_t *scalers[2];
+  rtk_tableitem_t *warp;
 } dewarp_t;
 
 
@@ -49,14 +56,29 @@ typedef struct
 static dewarp_t *dewarp;
 
 // Initialise the dewarping interface
-int dewarp_init(imagewnd_t *imagewnd, mezz_mmap_t *mmap)
+int dewarp_init(imagewnd_t *imagewnd, tablewnd_t *tablewnd, mezz_mmap_t *mmap)
 {
   int i;
   char text[64];
-  
+
   dewarp = malloc(sizeof(dewarp_t));
   dewarp->imagewnd = imagewnd;
   dewarp->mmap = &mmap->dewarpdef;
+
+  dewarp->oc[0] = rtk_tableitem_create_int(tablewnd->table, "Opt. Center X", 0, mmap->width);
+  rtk_tableitem_set_int(dewarp->oc[0], dewarp->mmap->ocX);
+  dewarp->oc[1] = rtk_tableitem_create_int(tablewnd->table, "Opt. Center Y", 0, mmap->height);
+  rtk_tableitem_set_int(dewarp->oc[1], dewarp->mmap->ocY);
+  dewarp->oc[2] = rtk_tableitem_create_float(tablewnd->table, "Opt. Center Z", 0, 1000, 0.10);
+  rtk_tableitem_set_float(dewarp->oc[2], dewarp->mmap->ocHeight);
+  
+  dewarp->scalers[0] = rtk_tableitem_create_float(tablewnd->table, "Scale X", 0, 1000, 1.0);
+  rtk_tableitem_set_float(dewarp->scalers[0], dewarp->mmap->scaleFactorX);
+  dewarp->scalers[1] = rtk_tableitem_create_float(tablewnd->table, "Scale Y", 0, 1000, 1.0);
+  rtk_tableitem_set_float(dewarp->scalers[1], dewarp->mmap->scaleFactorY);
+  
+  dewarp->warp = rtk_tableitem_create_float(tablewnd->table, "Warp", 0, 10, 0.01);
+  rtk_tableitem_set_float(dewarp->warp, dewarp->mmap->warpFactor);
 
   // Create the figures we will use to calibrate the dewarp.
   for (i = 0; i < dewarp->mmap->points; i++)
@@ -67,7 +89,7 @@ int dewarp_init(imagewnd_t *imagewnd, mezz_mmap_t *mmap)
     rtk_fig_movemask(dewarp->figs[i], RTK_MOVE_TRANS);
     rtk_fig_color(dewarp->figs[i], COLOR_DEWARP);
     rtk_fig_rectangle(dewarp->figs[i], 0, 0, 0, 10, 10, 0);
-    snprintf(text, sizeof(text), "(%.3f, %0.3f)",
+    snprintf(text, sizeof(text), "(%.1f, %0.1f)",
              dewarp->mmap->wpos[i][0], dewarp->mmap->wpos[i][1]);
     rtk_fig_text(dewarp->figs[i], 20, 0, 0, text);
   }
@@ -90,6 +112,15 @@ void dewarp_update()
     dewarp->mmap->ipos[i][0] = ox;
     dewarp->mmap->ipos[i][1] = oy;
   }
+
+  dewarp->mmap->ocX = rtk_tableitem_get_int(dewarp->oc[0]);
+  dewarp->mmap->ocY = rtk_tableitem_get_int(dewarp->oc[1]);
+  dewarp->mmap->ocHeight = rtk_tableitem_get_float(dewarp->oc[2]);
+
+  dewarp->mmap->scaleFactorX = rtk_tableitem_get_float(dewarp->scalers[0]);
+  dewarp->mmap->scaleFactorY = rtk_tableitem_get_float(dewarp->scalers[1]);
+  
+  dewarp->mmap->warpFactor = rtk_tableitem_get_float(dewarp->warp);
 
   // Now draw the grid
   dewarp_update_grid();
@@ -146,15 +177,59 @@ void dewarp_update_grid()
 // Convert point from world to image coords
 void dewarp_world2image(double x, double y, double *i, double *j)
 {
-  *i = dewarp->mmap->witrans[0][0] + dewarp->mmap->witrans[0][1] * x +
-    + dewarp->mmap->witrans[0][2] * y + dewarp->mmap->witrans[0][3] * x * x
-    + dewarp->mmap->witrans[0][4] * y * y + dewarp->mmap->witrans[0][5] * x * y
-    + dewarp->mmap->witrans[0][6] * x * fabs(x) + dewarp->mmap->witrans[0][7] * x * y * y;
 
-  *j = dewarp->mmap->witrans[1][0] + dewarp->mmap->witrans[1][1] * y
-    + dewarp->mmap->witrans[1][2] * x + dewarp->mmap->witrans[1][3] * y * y
-    + dewarp->mmap->witrans[1][4] * x * x + dewarp->mmap->witrans[1][5] * y * x
-    + dewarp->mmap->witrans[1][6] * y * fabs(y) + dewarp->mmap->witrans[1][7] * y * x * x;
+#ifdef WARP_IDENTITY
+    *i = x;
+    *j = y;
+
+#elif defined(WARP_SCALE) || defined(WARP_COS)
+
+# if defined(WARP_COS)
+    // Warp by the cosine of the off-axis angle.
+    double f = cos(dewarp->mmap->warpFactor * atan2(hypot(x,y), dewarp->mmap->ocHeight));
+# else
+    const double f = 1.0;
+# endif
+
+    // World coordinates are [-1 ... 1, -1 ... 1], with the origin in the
+    // center.
+    // Pixels are  to [0 ... 639, 0 ... 479], with the origin in the
+    // upper-left.
+    *i = ( (x * f * dewarp->mmap->scaleFactorX) + dewarp->mmap->ocX );
+    *j = ( -(y * f * dewarp->mmap->scaleFactorY) + dewarp->mmap->ocY );
+
+#else
+  *i = dewarp->def->witrans[0][0] + dewarp->def->witrans[0][1] * x +
+    + dewarp->def->witrans[0][2] * y + dewarp->def->witrans[0][3] * x * x
+    + dewarp->def->witrans[0][4] * y * y + dewarp->def->witrans[0][5] * x * y
+      + dewarp->def->witrans[0][6] * x * fabs(x) + dewarp->def->witrans[0][7] * x\
+      * y * y;
+
+  *j = dewarp->def->witrans[1][0] + dewarp->def->witrans[1][1] * y
+    + dewarp->def->witrans[1][2] * x + dewarp->def->witrans[1][3] * y * y
+    + dewarp->def->witrans[1][4] * x * x + dewarp->def->witrans[1][5] * y * x
+      + dewarp->def->witrans[1][6] * y * fabs(y) + dewarp->def->witrans[1][7] * y\
+      * x * x;
+#endif
+
+  /*   *i = dewarp->def->witrans[0][0] + dewarp->def->witrans[0][1] * x + */
+  /*     + dewarp->def->witrans[0][2] * y + dewarp->def->witrans[0][3] * x * x
+	 */
+  /*     + dewarp->def->witrans[0][4] * y * y + dewarp->def->witrans[0][5] * x
+   * y */
+  /*     + dewarp->def->witrans[0][6] * x * fabs(x) +
+	 dewarp->def->witrans[0][7] * x * y * y; */
+
+  /*   *j = dewarp->def->witrans[1][0] + dewarp->def->witrans[1][1] * y */
+  /*     + dewarp->def->witrans[1][2] * x + dewarp->def->witrans[1][3] * y * y
+	 */
+  /*     + dewarp->def->witrans[1][4] * x * x + dewarp->def->witrans[1][5] * y
+   * x */
+  /*     + dewarp->def->witrans[1][6] * y * fabs(y) +
+	 dewarp->def->witrans[1][7]
+	 * y * x * x; */
+
+  //    *i = x;
+  //    *j = y;
+
 }
-
-

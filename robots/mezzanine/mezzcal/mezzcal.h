@@ -21,7 +21,7 @@
  * Desc: Public strutures, functions
  * Author: Andrew Howard
  * Date: 28 Mar 2002
- * CVS: $Id: mezzcal.h,v 1.1 2004-12-12 23:36:34 johnsond Exp $
+ * CVS: $Id: mezzcal.h,v 1.1.1.1.8.1 2005-03-18 17:17:35 stack Exp $
  ***************************************************************************/
 
 #ifndef MEZZCAL_H
@@ -38,7 +38,7 @@
 #define COLOR_MASK   1, 1, 0
 #define COLOR_DEWARP 0, 1, 0
 #define COLOR_DEWARP_GRID 0, 0.7, 0
-#define COLOR_IDENT  0, 0, 0.7
+#define COLOR_IDENT  0.5, 0.5, 0.9
 
 
 /***************************************************************************
@@ -125,7 +125,7 @@ int blobfind_init(imagewnd_t *imagewnd, tablewnd_t *tablewnd, mezz_mmap_t *mmap)
 void blobfind_update();
 
 // Initialise the dewarping interface
-int dewarp_init(imagewnd_t *imagewnd, mezz_mmap_t *mmap);
+int dewarp_init(imagewnd_t *imagewnd, tablewnd_t *tablewnd, mezz_mmap_t *mmap);
 
 // Update the dewarp interface
 void dewarp_update();

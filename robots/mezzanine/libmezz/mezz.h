@@ -21,7 +21,7 @@
  * Desc: Mezzanine IPC interface
  * Author: Andrew Howard
  * Date: 28 Mar 2002
- * CVS: $Id: mezz.h,v 1.2 2005-01-20 15:07:43 johnsond Exp $
+ * CVS: $Id: mezz.h,v 1.2.8.1 2005-03-18 17:17:33 stack Exp $
  * Notes:
  *
  *  This library sets up a shared, memory-mapped object for exchanging
@@ -66,6 +66,13 @@ typedef struct
   double wpos[MEZZ_MAX_DEWARP][2]; // The world coords of the calibration points.
   double iwtrans[2][8];   // Parameters for the image-to-world transform.
   double witrans[2][8];   // Parameters for the world-to-image transform.
+
+  double warpFactor;
+  double ocHeight;        // Height of the optical center of the lens in meters
+  double scaleFactorX;
+  double scaleFactorY;
+  double ocX;
+  double ocY;
 } mezz_dewarpdef_t;
 
 

@@ -21,7 +21,7 @@
  * Desc: Display identified objects and set object definitions.
  * Author: Andrew Howard
  * Date: 11 Apr 2002
- * CVS: $Id: ident.c,v 1.1 2004-12-12 23:36:34 johnsond Exp $
+ * CVS: $Id: ident.c,v 1.1.1.1.8.1 2005-03-18 17:17:35 stack Exp $
  ***************************************************************************/
 
 #include <assert.h>
@@ -83,7 +83,8 @@ void ident_update()
     rtk_fig_color(ident->fig, COLOR_IDENT);
     rtk_fig_arrow_ex(ident->fig, ax, ay, bx, by, 5);        
 
-    snprintf(text, sizeof(text), "object [%d]", i);    
+    snprintf(text, sizeof(text), "obj [%d] (%.2f, %.2f)",
+	     i, object->px, object->py);
     rtk_fig_text(ident->fig, ax + 10, ay, 0, text);
 
     for (j = 0; j < 4; j++)
