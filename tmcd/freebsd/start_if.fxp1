@@ -1,5 +1,0 @@
-#!/bin/sh
-
-if [ `/etc/testbed/control_interface` = 'fxp1' ]; then
-	dhcp_interfaces="$dhcp_interfaces fxp1";
-fi
