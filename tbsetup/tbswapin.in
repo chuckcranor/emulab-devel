@@ -65,7 +65,11 @@ if ($state eq "running") {
 }
 
 # This does all the virtual to physical mapping and updatin the DB state.
-# XXX assign_wrapper
+&tbs_out("Mapping to physical reality\n");
+if (&tbs_exec("assign_wrapper $pid $eid")) {
+    &tbs_out("Failed to map to reality.\n");
+    exit(1);
+}
 
 # Everything from now on sets up switch and node state.
 
