@@ -6,37 +6,38 @@
 #
 TBDBNAME=tbdb
 TBADMINGROUP=tbadmin
-TBOPSEMAIL=testbed-ops@changeme
-TBLOGSEMAIL=testbed-logs@changeme
-TBWWWEMAIL=testbed-www@changeme
-TBAPPROVALEMAIL=testbed-approval@changeme
-TBAUDITEMAIL=testbed-audit@changeme
-TBSTATEDEMAIL=testbed-stated@changeme
-TBTESTSUITEEMAIL=testbed-testsuite@changeme
-TBAUTOMAILEMAIL=testbed-automail@changeme
-TBACTIVEARCHIVE=testbed-active-users-archive@changeme
-TBUSERSARCHIVE=testbed-users-archive@changeme
+TBOPSEMAIL=testbed-ops@myops.myemulab.utahstud.emulab.net
+TBLOGSEMAIL=testbed-logs@myops.myemulab.utahstud.emulab.net
+TBWWWEMAIL=testbed-www@myops.myemulab.utahstud.emulab.net
+TBAPPROVALEMAIL=testbed-approval@myops.myemulab.utahstud.emulab.net
+TBAUDITEMAIL=testbed-audit@myops.myemulab.utahstud.emulab.net
+TBSTATEDEMAIL=testbed-stated@myops.myemulab.utahstud.emulab.net
+TBTESTSUITEEMAIL=testbed-testsuite@myops.myemulab.utahstud.emulab.net
+TBAUTOMAILEMAIL=testbed-automail@myops.myemulab.utahstud.emulab.net
+TBACTIVEARCHIVE=testbed-active-users-archive@myops.myemulab.utahstud.emulab.net
+TBUSERSARCHIVE=testbed-users-archive@myops.myemulab.utahstud.emulab.net
 JAILIPBASE=172.17.0.0
 JAILIPMASK=255.240.0.0
 DELAYCAPACITY=1
-BOSSNODE=changeme
-USERNODE=changeme
-FSNODE=changeme
-OURDOMAIN=changeme
+BOSSNODE=myboss.myemulab.utahstud.emulab.net
+USERNODE=myops.myemulab.utahstud.emulab.net
+FSNODE=myops.myemulab.utahstud.emulab.net
+OURDOMAIN=myemulab.utahstud.emulab.net
 FSDIR_GROUPS=/q/groups
 FSDIR_PROJ=/q/proj
 FSDIR_USERS=/q/users
 FSDIR_SHARE=/share
-WWWHOST=changeme
+WWWHOST=myboss.myemulab.utahstud.emulab.net
 TBMAINSITE=0
-THISHOMEBASE=changeme
+THISHOMEBASE=MyEmulab.Net
 PLABSUPPORT=0
 SFSSUPPORT=0
 DISABLE_NSE=1
 # This means it is an inner elab!
 ELABINELAB=1
 # The name of the outer boss for inner boss to request services from.
-OUTERBOSS_NODENAME=changeme
+OUTERBOSS_NODENAME=boss.emulab.net
+OUTERBOSS_SSLCERTNAME=/usr/testbed/etc/outer_emulab.pem
 #
 # SSL Certificate stuff. Used to customize config files in ssl directory.
 # Note that OrganizationalUnit is set in the cnf file.
@@ -49,22 +50,23 @@ SSLCERT_ORGNAME="Utah Network ElabInElab"
 #
 # Network config stuff. Used to generate initial named and dhcpd config files.
 #
-TESTBED_NETWORK=changeme
-TESTBED_NETMASK=changeme
-BOSSNODE_IP=changeme
-USERNODE_IP=changeme
-CONTROL_ROUTER_IP=changeme
-CONTROL_NETWORK=changeme
-CONTROL_NETMASK=changeme
-PRIVATE_NETWORK=changeme
-PRIVATE_ROUTER=changeme
-PRIVATE_NETMASK=changeme
-PUBLIC_NETWORK=changeme
-PUBLIC_ROUTER=changeme
-PUBLIC_NETMASK=changeme
-DHCPD_DYNRANGE=changeme
-NAMED_FORWARDERS=changeme
+TESTBED_NETWORK=10.200.1.0
+TESTBED_NETMASK=255.255.255.0
+BOSSNODE_IP=10.200.1.70
+USERNODE_IP=10.200.1.74
+CONTROL_ROUTER_IP=10.200.1.70
+CONTROL_NETWORK=10.200.1.0
+CONTROL_NETMASK=255.255.255.0
+PRIVATE_NETWORK=10.200.1.0
+PRIVATE_ROUTER=10.200.1.70
+PRIVATE_NETMASK=255.255.255.0
+PUBLIC_NETWORK=10.200.1.0
+PUBLIC_ROUTER=10.200.1.70
+PUBLIC_NETMASK=255.255.255.0
+DHCPD_DYNRANGE="10.200.1.200 10.200.1.249"
+NAMED_FORWARDERS="155.98.32.70"
 #
 # Must localize to avoid conflict with outer emulab frisbeed.
 #
-FRISEBEEMCASTADDR=changeme
+FRISEBEEMCASTADDR="235.70.1"
+FRISEBEEMCASTPORT="6000"

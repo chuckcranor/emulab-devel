@@ -10,6 +10,13 @@ use English;
 use Getopt::Std;
 
 #
+# Testbed Support libraries
+#
+use lib "@prefix@/lib";
+use libdb;
+use libtestbed;
+
+#
 # This gets invoked from the Web interface. CD into the proper directory
 # and do the tb stuff. This script cannot do any damage since it can
 # only create directories where the caller has the permission to do so.
@@ -19,6 +26,7 @@ sub usage()
     print STDOUT "Usage: mkexpdir <pid> <gid> <eid>\n";
     exit(-1);
 }
+sub fatal($);
 
 #
 # Configure variables
@@ -28,15 +36,9 @@ my $TBOPS    = "@TBOPSEMAIL@";
 #
 # Should be configured.
 # 
+# FIXME: Where are PROJROOT() and GROUPROOT() defined -- kevina
 my $projroot = PROJROOT();
 my $grouproot= GROUPROOT();
-
-#
-# Testbed Support libraries
-#
-use lib "@prefix@/lib";
-use libdb;
-use libtestbed;
 
 my $tbdata   = "tbdata";
 my @dirlist  = ($tbdata, "bin", "tmp", "logs", "tftpboot");

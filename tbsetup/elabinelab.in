@@ -10,6 +10,11 @@
 use English;
 use Getopt::Std;
 
+# Load the Testbed support stuff.
+use lib "@prefix@/lib";
+use libdb;
+use libtestbed;
+
 #
 # Do things necessary for setting up inner elab experiment. 
 #
@@ -20,6 +25,9 @@ sub usage()
  
     exit(-1);
 }
+
+sub DumpDBGoo();
+
 my $optlist  = "dgkf";
 my $debug    = 1;
 my $killmode = 0;
@@ -61,11 +69,6 @@ if ($EUID != 0) {
     die("*** $0:\n".
 	"    Must be root! Maybe its a development version?\n");
 }
-
-# Load the Testbed support stuff.
-use lib "@prefix@/lib";
-use libdb;
-use libtestbed;
 
 # Be careful not to exit on transient error
 $libdb::DBQUERY_MAXTRIES = 30;

@@ -64,6 +64,15 @@ use libdb;
 use libtestbed;
 
 #
+# Function prototypes
+#
+sub ParseKey($);
+sub InitUser();
+sub GenerateKeyFiles();
+sub GenerateKeyFile($$);
+sub fatal($);
+
+#
 # Turn off line buffering on output
 #
 $| = 1;

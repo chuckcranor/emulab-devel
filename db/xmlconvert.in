@@ -185,6 +185,8 @@ use lib "@prefix@/lib";
 use libdb;
 use libtestbed;
 
+sub fatal($);
+
 #
 # Parse command arguments. Once we return from getopts, all that should
 # left are the required arguments.
@@ -243,6 +245,10 @@ while (my ($idx,$type) = $query_result->fetchrow_array()) {
 }
 
 # Do it
+
+sub readXML($$$$);
+sub writeXML_XML($$);
+
 if ($fromxml) {
     readXML($pid, $eid, $xmlfile, $fromparser);
 }
