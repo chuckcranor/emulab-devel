@@ -149,7 +149,9 @@ int parse_top(tb_vgraph &VG, istream& i)
 		      gweight = 0;
 		  }
 		  // XXX - memory leak?
-		  v->desires.insert(*(new tb_node_featuredesire(desirename,gweight)));
+		  v->desires.push_front(*(new tb_node_featuredesire(desirename,gweight)));
+		  // Could wait and do this later when the whole list is full.
+		  v->desires.sort();
 	      }
 	  }
 	}

@@ -511,7 +511,12 @@ int mapping_precheck() {
 		    if (fdit.either_violateable()) {
 			// We look for violateable desires on vnodes so that we
 			// can report them to the user
-			if (v->desires.find(*fdit)->is_violateable() &&
+			// XXX - b0rken, fix
+			if (fdit.membership() ==
+				tb_featuredesire_set_iterator::BOTH &&
+				fdit.membership() ==
+				tb_featuredesire_set_iterator::FIRST_ONLY &&
+				fdit.first_iterator()->is_violateable() &&
 				matched_desires.find(fdit->name())
 				== matched_desires.end()) {
 			    matched_desires[fdit->name()] = 0;

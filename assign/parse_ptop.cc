@@ -130,7 +130,10 @@ int parse_ptop(tb_pgraph &PG, tb_sgraph &SG, istream& i)
 	  }
 
 	  // XXX - memory leak?
-	  p->features.insert(*(new tb_node_featuredesire(feature,gcost)));
+	  p->features.push_front(*(new tb_node_featuredesire(feature,gcost)));
+	  // I could make this faster by doing it only once at the end. But
+	  // why?
+	  p->features.sort();
 
 	    /*
 	  p->features[feature] = gcost;

@@ -7,9 +7,12 @@
 #ifndef __FEATUREDESIRE_H
 #define __FEATUREDESIRE_H
 
+#include "common.h"
+
 #include <rope>
 #include <map>
 #include <set>
+#include <slist>
 
 /*
  * Base class for features and desires - not intended to be used directly, only
@@ -35,6 +38,9 @@ class tb_featuredesire {
 	 */
 	inline bool  is_global()        const { return global;          }
 	inline bool  is_local()         const { return local;           }
+	inline bool  is_l_additive()	const { return l_additive;	}
+	inline bool  is_g_one()		const { return g_one_is_okay;	}
+	inline bool  is_g_more()	const { return g_more_than_one; }
 	inline int   global_use_count() const { return in_use_globally; }
 	inline crope name()             const { return my_name;         }
 
@@ -56,8 +62,6 @@ class tb_featuredesire {
 	 */
 	void add_global_user(int howmany = 1);
 	void remove_global_user(int howmany = 1);
-
-
 
     private:
 	/*
@@ -132,29 +136,38 @@ class tb_node_featuredesire {
 	const crope name()      const { return featuredesire_obj->name();      }
 	const bool  is_local()  const { return featuredesire_obj->is_local();  }
 	const bool  is_global() const { return featuredesire_obj->is_global(); }
-
-	void add_global_user() const {
-	    featuredesire_obj->add_global_user();
+	const bool  is_l_additive() const {
+	    return featuredesire_obj->is_l_additive();
 	}
 
-	void remove_global_user() const {
-	    featuredesire_obj->remove_global_user();
-	}
+	score_and_violations add_global_user() const;
+	score_and_violations remove_global_user() const;
+
+	/*
+	 * Functions for tracking local features/desires
+	 * XXX - Write these
+	 */
+	score_and_violations add_local(double amount);
+	score_and_violations subtract_local(double amount);
 
     protected:
 
 	double weight;
 	bool violateable;
 	tb_featuredesire *featuredesire_obj;
+	double used_local_capacity;
 };
 
 /*
  * Types to hold virtual nodes' sets of desires and physical nodes' sets of
  * features
  */
-typedef set<tb_node_featuredesire> node_feature_set;
-typedef set<tb_node_featuredesire> node_desire_set;
-typedef set<tb_node_featuredesire> node_fd_set;
+//typedef set<tb_node_featuredesire> node_feature_set;
+//typedef set<tb_node_featuredesire> node_desire_set;
+//typedef set<tb_node_featuredesire> node_fd_set;
+typedef slist<tb_node_featuredesire> node_feature_set;
+typedef slist<tb_node_featuredesire> node_desire_set;
+typedef slist<tb_node_featuredesire> node_fd_set;
 
 /*
  * Kind of like an iterator, but not quite - used for going through a virtual
@@ -202,6 +215,11 @@ class tb_featuredesire_set_iterator {
 	    return current_membership;
 	}
 
+	// Give out the iterators to the two elements, so that they can be
+	// operated upon
+	node_fd_set::iterator &first_iterator()  { return it1; }
+	node_fd_set::iterator &second_iterator() { return it2; }
+	
     private:
 	node_fd_set::iterator it1, end1;
 	node_fd_set::iterator it2, end2;

@@ -9,7 +9,6 @@
  */
 
 #include "featuredesire.h"
-#include "common.h"
 
 /*********************************************************************
  * tb_featuredesire
@@ -120,7 +119,7 @@ void tb_featuredesire::remove_global_user(int howmany) {
  * Constructor
  */
 tb_node_featuredesire::tb_node_featuredesire(crope _name, double _weight) :
-	weight(_weight), violateable(false) {
+	weight(_weight), violateable(false), used_local_capacity(0.0f) {
     // We'll want to change in the in the future to seperate out the notions of
     // score and violations
     if (weight >= FD_VIOLATION_WEIGHT) {
@@ -128,6 +127,98 @@ tb_node_featuredesire::tb_node_featuredesire(crope _name, double _weight) :
     }
     featuredesire_obj = tb_featuredesire::get_featuredesire_obj(_name);
     assert(featuredesire_obj != NULL);
+}
+
+/*
+ * Add a global user of this feature, and return the score and violations
+ * induced by this
+ */
+score_and_violations tb_node_featuredesire::add_global_user() const {
+    featuredesire_obj->add_global_user();
+
+    double score = 0.0f;
+    int violations = 0;
+
+    // Handle the scoring and violations from this change
+    if (featuredesire_obj->is_g_one() &&
+	    (featuredesire_obj->global_use_count() >= 2)) {
+	// Have to penalize this one, it's not the first
+	score += weight;
+	if (violateable) {
+	    violations += 1;
+	}
+    } else if (featuredesire_obj->is_g_more() &&
+	    (featuredesire_obj->global_use_count() == 1)) {
+	// Only penalize the first one
+	score += weight;
+	if (violateable) {
+	    violations += 1;
+	}
+    }
+    return score_and_violations(score,violations);
+}
+
+
+/*
+ * Remove a global user of this feature, and return the score and violations
+ * induced by this
+ */
+score_and_violations tb_node_featuredesire::remove_global_user() const {
+    featuredesire_obj->remove_global_user();
+
+    double score = 0.0f;
+    int violations = 0;
+
+    // Handle the scoring and violations from this change
+    if (featuredesire_obj->is_g_one() &&
+	    (featuredesire_obj->global_use_count() >= 1)) {
+	// We're not removing the final one, so we count it
+	score += weight;
+	if (violateable) {
+	    violations += 1;
+	}
+    } else if (featuredesire_obj->is_g_more() &&
+	    (featuredesire_obj->global_use_count() == 0)) {
+	// Only count it if we just removed the final one
+	score += weight;
+	if (violateable) {
+	    violations += 1;
+	}
+    }
+    return score_and_violations(score,violations);
+}
+
+/*
+ * Add a local user of a feature
+ * XXX - Should we add more violations if we hit multiples of the capacity?
+ * XXX - These are always assumed to be violatable
+ */
+score_and_violations tb_node_featuredesire::add_local(double amount) {
+    double oldvalue = used_local_capacity;
+    used_local_capacity += amount;
+    if ((oldvalue <= weight) && (used_local_capacity > weight)) {
+	// This one pushed us over the edge, violation!
+	return score_and_violations(SCORE_OVERUSED_LOCAL_FEATURE,1);
+    } else {
+	// We're good, doesn't cost anything;
+	return score_and_violations(0.0f,0);
+    }
+}
+
+/*
+ * Subtract a local user of a feature
+ */
+score_and_violations tb_node_featuredesire::subtract_local(double amount) {
+    double oldvalue = used_local_capacity;
+    used_local_capacity += amount;
+    if ((oldvalue > weight) && (used_local_capacity <= weight)) {
+	// Back down to below capacity, remove a violation
+	return score_and_violations(SCORE_OVERUSED_LOCAL_FEATURE,1);
+    } else {
+	// We're good, doesn't cost anything;
+	return score_and_violations(0.0f,0);
+    }
+
 }
 
 /*********************************************************************
