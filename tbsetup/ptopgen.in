@@ -99,23 +99,15 @@ $result =
 		 "        m.pid!='$DEADPID' or m.eid!='$DEADEID')))");
 
 while (($node,$type) = $result->fetchrow_array) {
-    # Shark hack
-    if (($shelf,$number) = ($node =~ /^sh(\d+)-(\d+)/)) {
-	if ($number == 1) {
-	    $nodes{"sh$shelf"} = "shark-shelf";
-	}
-    } else {
+    if (! ($node =~ /^sh/)) {
 	$nodes{$node} = $type;
     }
 }
 $result->finish;
 
 
-$sharklinks = "";
 foreach $node (keys(%nodes)) {
-    if ($node =~ /^sh/) {
-	print "node $node shark-shelf:1\n";
-    } elsif (! ($node =~ /ron/)) {
+    if ((! ($node =~ /^sh/)) && (! ($node =~ /ron/))) {
 	$text = "node $node $nodes{$node}:1 $classes{$nodes{$node}}:1";
 	$delay_capacity = $nodetypes{$nodes{$node}};
 	if ($delay_capacity > 0) {
@@ -194,7 +186,7 @@ while (($node1,$card1,$port1,$node2,$card2,$port2) =
 	    # !!! - Here we use our knowledge that in the wires table links
 	    # to the switch always come as node2.
 	    print "link link-$node1:$iface1-$node2:$iface2 $node1:$node1/$iface1" .
-		" $node2:$iface2 $bw 0 0 1\n";
+		" $node2:$iface2 $bw 0 0\n";
 	}
     } 
 }
@@ -251,10 +243,8 @@ if ($TRACK_INTERSWITCH_BANDWIDTH) {
 
 foreach $interconnect (keys(%interconnects)) {
     ($src,$dst) = split(":",$interconnect);
-    print "link link-$interconnect $src $dst $interconnects{$interconnect} 0 0 1\n";
+    print "link link-$interconnect $src $dst $interconnects{$interconnect} 0 0\n";
 }
-
-print $sharklinks;
 
 # Print out links
 sub get_iface {
