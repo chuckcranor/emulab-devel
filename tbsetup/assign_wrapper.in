@@ -11,7 +11,9 @@ $maxrun = 30;
 # This is the minimum number of times to run assign.  The $minrun times 
 # used to establish an optimal score.  Any run after the first $minrun's 
 # that scores equal or better than the best of those runs is used.
-$minrun = 5;
+
+# XXX change this to 5 when done testing
+$minrun = 1;
 
 my $S100Mbs = 100;
 
@@ -294,7 +296,13 @@ while (1) {
 	    $violations = $1;
 	    last;
 	};
+	/^[ \t]+BEST SCORE: [ \t]+0/ && ($score=0);
 	/^[ \t]+BEST SCORE: [ \t]+([0-9]+\.[0-9]+)/ && ($score=$1);
+    }
+    if ($score == 0) {
+	# trivial
+	print "Trivial Experiment.\n";
+	exit(0);
     }
     if ($score == -2) {
 	# Type error
@@ -341,7 +349,7 @@ while (1) {
 	      /^interswitch$/ && do {
 		  ($vlink,$rawA,$rawB) = @info[0,3,$#info];
 		  $switch_links = [];
-		  for ($i = 5;$i <= $info-1;$i = $i + 2) {
+		  for ($i = 5;$i <= $#info-1;$i = $i + 2) {
 		      push(@$switch_links,$info[$i]);
 		  }
 		  $switchlinks{$vlink} = $switch_links;
@@ -535,17 +543,17 @@ foreach $plink (keys(%plinks)) {
     if ($B =~ m|/|) {
 	push(@nodes,$B);
     } elsif (defined($v2pmap{$B}) && ($v2pmap{$B} =~ /^lan_/)) {
-	$lannode = $A;
+	$lannode = $B;
     }
     if ($C =~ m|/|) {
 	push(@nodes,$C);
     } elsif (defined($v2pmap{$C}) && ($v2pmap{$C} =~ /^lan_/)) {
-	$lannode = $A;
+	$lannode = $C;
     }
     if ($D =~ m|/|) {
 	push(@nodes,$D);
     } elsif (defined($v2pmap{$D}) && ($v2pmap{$D} =~ /^lan_/)) {
-	$lannode = $A;
+	$lannode = $D;
     }
     if ($#nodes == 1) {
 	# simple link
@@ -953,3 +961,38 @@ if ($query_result->numrows) {
 TBDebugTimeStamp("uploading finished");
 
 TBDebugTimeStamp("assign_wrapper finished");
+
+#
+# Bump and return the IP port number for a physical node. This is
+# required for multiplexing virtual nodes on a physical node. It has
+# to be done after node assignment of course.
+#
+# port,-1 on success/failure.
+# 
+sub nextipportnum($) {
+    my ($node) = @_;
+
+    DBQueryFatal("lock tables nodeipportnum write");
+
+    my $query_result =
+	DBQueryFatal("select port from nodeipportnum where node_id='$node'");
+    
+    if (! $query_result->numrows) {
+	DBQueryFatal("insert into nodeipportnum (node_id) values ('$node')");
+	DBQueryFatal("unlock tables");
+	return nextipportnum($node, $pport);
+    }
+    my ($port) = $query_result->fetchrow_array;
+
+    if ($port < 1024 || $port > 60000) {
+	DBQueryFatal("replace into nodeipportnum (node_id) values ('$node')");
+	DBQueryFatal("unlock tables");
+	return nextipportnum($node, $pport);
+    }
+    
+    DBQueryFatal("update nodeipportnum set port=${port}+1 ".
+		 "where node_id='$node'");
+    DBQueryFatal("unlock tables");
+    
+    return $port;
+}
