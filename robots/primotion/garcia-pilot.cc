@@ -41,6 +41,8 @@
  * The default port to listen for client connections.
  */
 #define PILOT_PORT 2531
+#define DEFAULT_WHEELSPEED 0.2
+#define DEFAULT_STALL_THRESHOLD 3.0
 
 static const char *DEFAULT_LOG_PATH = "/tmp/garcia-pilot.log";
 
@@ -128,7 +130,9 @@ static void usage(void)
 	    "  -i pidfile\tWrite the process ID to the given file\n"
 	    "  -p port\tListen on the given port for MTP messages\n"
 	    "  -b battery-log\tAppend battery log data to the given file\n"
-	    "    \t\t(Default: %s)\n",
+	    "    \t\t(Default: %s)\n"
+            "  -s wheelspeed (units/second)\n"
+            "  -t stall threshold (ticks per PID loop interval)",
 	    BATTERY_LOG_PATH);
 }
 
@@ -142,8 +146,11 @@ int main(int argc, char *argv[])
     FILE *batterylog;
     aIOLib ioRef;
     aErr err;
+    
+    float wspeed = DEFAULT_WHEELSPEED;
+    int wstall = DEFAULT_STALL_THRESHOLD;
 
-    while ((c = getopt(argc, argv, "hdp:l:i:b:")) != -1) {
+    while ((c = getopt(argc, argv, "hdp:l:i:b:s:t:")) != -1) {
 	switch (c) {
 	case 'h':
 	    usage();
@@ -170,6 +177,24 @@ int main(int argc, char *argv[])
 	case 'b':
 	    batteryfile = optarg;
 	    break;
+ 	case 's':
+            if (sscanf(optarg, "%f", &wspeed) != 1) {
+              fprintf(stderr,
+                      "error: -s option is not a number: %s\n",
+                      optarg);
+              usage();
+              exit(1);
+            }
+            break;
+         case 't':
+             if (sscanf(optarg, "%f", &wstall) != 1) {
+               fprintf(stderr,
+               	       "error: -t option is not a number: %s\n",
+                       optarg);
+               usage();
+               exit(1);
+             }
+             break;
 	}
     }
 
@@ -247,6 +272,20 @@ int main(int argc, char *argv[])
 	av.set("meters");
 	garcia.setNamedValue("distance-units-string", &av);
 
+ 	/* set wheelspeed in units/second */
+        av.set(wspeed);
+ 	garcia.setNamedValue("speed", &av);
+  
+  	/* set whell stall threshold in ticks/PID iteration */
+  	av.set(wstall);
+   	garcia.setNamedValue("stall-threshold", &av);
+ 
+    	/* turn off fall sensors */
+    	av.set(0);
+     	garcia.setNamedValue("down-ranger-enable", &av);
+      
+      
+ 
 	memset(&saddr, 0, sizeof(saddr));
 #if !defined(linux)
 	saddr.sin_len = sizeof(saddr);
