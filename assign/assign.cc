@@ -288,6 +288,35 @@ void read_virtual_topology(char *filename)
 #endif
 }
 
+tb_pnode *find_pnode(tb_vnode *vn)
+{
+  tt_entry tt = type_table[vn->type];
+  int num_types = tt.first;
+  pclass_vector *acceptable_types = tt.second;
+  
+  tb_pnode *newpnode;
+  
+  int i = std::random()%num_types;
+  int first = i;
+  for (;;) {
+    i = (i+1)%num_types;
+    newpnode = (*acceptable_types)[i]->members[vn->type]->front();
+#ifdef PCLASS_DEBUG
+    cerr << "Found pclass: " <<
+      (*acceptable_types)[i]->name << " and node " <<
+      (newpnode == NULL ? "NULL" : newpnode->name) << "\n";
+#endif
+    if (newpnode != NULL) {
+      return newpnode;
+    }
+    
+    if (i == first) {
+      // couldn't find one
+      return NULL;
+    }
+  }
+}
+
 /* When this is finished the state will reflect the best solution found. */
 void anneal()
 {
@@ -349,7 +378,7 @@ void anneal()
       cerr << "Can not have fixed nodes be in a vclass!.\n";
       exit(1);
     }
-    if ((add_node(vv,pv,false) == 1) || (violated > 0)) {
+    if (add_node(vv,pv,false) == 1) {
       cerr << "Fixed node: Could not map " << vn->name <<
 	" to " << pn->name << endl;
       exit(1);
@@ -403,7 +432,8 @@ void anneal()
 #ifdef STATS
       cout << "STATS temp:" << temp << " score:" << get_score() <<
 	" violated:" << violated << " trans:" << trans <<
-	" accepts:" << accepts << endl;
+	" accepts:" << accepts << " current_time:" <<
+	used_time() << endl;
 #endif STATS
       pvertex newpos;
       trans++;
@@ -440,58 +470,31 @@ void anneal()
 	pvertex lanv = make_lan_node(vv);
 	if (add_node(vv,lanv,false) != 0) {
 	  delete_lan_node(lanv);
-	}
-	if (! vn->assigned) {
 	  unassigned_nodes.push(vvertex_int_pair(vv,std::random()));
 	  continue;
 	}
       } else {
-	tt_entry tt = type_table[vn->type];
-	int num_types = tt.first;
-	pclass_vector *acceptable_types = tt.second;
-	
-	// Loop will break eventually
-	tb_pnode *newpnode;
-	int i = std::random()%num_types;
-	int first = i;
-	bool found_pclass = true;
-	for (;;) {
-	  i = (i+1)%num_types;
-	  newpnode = (*acceptable_types)[i]->members[vn->type]->front();
-#ifdef PCLASS_DEBUG
-	  cerr << "Found pclass: " <<
-	    (*acceptable_types)[i]->name << " and node " <<
-	    (newpnode == NULL ? "NULL" : newpnode->name) << "\n";
-#endif	
-	  if (newpnode != NULL) {
-	    newpos = pnode2vertex[newpnode];
-	    if (add_node(vv,newpos,false) == 0) {
-	      break; // main exit condition
-	    }
+	tb_pnode *newpnode = find_pnode(vn);
+	if (newpnode == NULL) {
+	  // need to free up nodes
+	  int toremove = std::random()%nnodes;
+	  while (get(vvertex_pmap,virtual_nodes[toremove])->fixed ||
+		 (! get(vvertex_pmap,virtual_nodes[toremove])->assigned)) {
+	    toremove = std::random()%nnodes;
 	  }
-	  
-	  if (i == first) {
-	    // no available nodes
-	    // need to free up a node.
-	    int toremove = std::random()%nnodes;
-	    while (get(vvertex_pmap,virtual_nodes[toremove])->fixed ||
-		   (! get(vvertex_pmap,virtual_nodes[toremove])->assigned)) {
-	      toremove = std::random()%nnodes;
-	    }
-	    remove_node(virtual_nodes[toremove]);
-	    unassigned_nodes.push(vvertex_int_pair(virtual_nodes[toremove],
-						   std::random()));
-	    found_pclass=false;
-	    break;
-	  }
-	}
-      
-	if (! found_pclass) {
+	  remove_node(virtual_nodes[toremove]);
+	  unassigned_nodes.push(vvertex_int_pair(virtual_nodes[toremove],
+						 std::random()));
 	  unassigned_nodes.push(vvertex_int_pair(vv,std::random()));
 	  continue;
+	} else {
+	  newpos = pnode2vertex[newpnode];
+	  if (add_node(vv,newpos,false) != 0) {
+	    continue;
+	  }
 	}
       }
-      
+
       newscore = get_score();
       
       // Negative means bad
@@ -507,6 +510,9 @@ void anneal()
 	if ((violated < absbestviolated) ||
 	    ((violated == absbestviolated) &&
 	     (newscore < absbest))) {
+#ifdef SCORE_DEBUG
+	  cerr << "New best solution." << endl;
+#endif
 	  tie(vit,veit) = vertices(VG);
 	  for (;vit!=veit;++vit) {
 	    absassignment[*vit] = get(vvertex_pmap,*vit)->assignment;
@@ -548,6 +554,10 @@ void anneal()
       if (vnode->assigned) {
 	remove_node(*vvertex_it);
       }
+    }
+    tie(vvertex_it,end_vvertex_it) = vertices(VG);
+    for (;vvertex_it!=end_vvertex_it;++vvertex_it) {
+      tb_vnode *vnode = get(vvertex_pmap,*vvertex_it);
       if (absassigned[*vvertex_it]) {
 	if (vnode->type.compare("lan") == 0) {
 	  lan_nodes.push_front(*vvertex_it);
@@ -880,14 +890,16 @@ int main(int argc,char **argv)
   timeend = used_time();
 
   if ((score > absbest) || (violated > absbestviolated)) {
-    cerr << "Internal error: Invalid migration assumptions." << endl; 
+    cerr << "Internal error: Invalid migration assumptions." << endl;
+    cerr << "score:" << score << " absbest:" << absbest <<
+      " violated:" << violated << " absbestviolated:" <<
+      absbestviolated << endl;
     cerr << "  Contact calfeld" << endl;
   }
   
   cout << "   BEST SCORE:  " << score << " in " << iters <<
     " iters and " << timeend-timestart << " seconds" << endl;
   cout << "With " << violated << " violations" << endl;
-  cout << "With " << accepts << " accepts of increases" << endl;
   cout << "Iters to find best score:  " << iters_to_best << endl;
   cout << "Violations: " << violated << endl;
   cout << "  unassigned: " << vinfo.unassigned << endl;
