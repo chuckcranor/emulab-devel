@@ -148,7 +148,8 @@ int parse_top(tb_vgraph &VG, istream& i)
 		      top_error("Bad desire, bad weight.");
 		      gweight = 0;
 		  }
-		  v->desires[desirename] = gweight;
+		  // XXX - memory leak?
+		  v->desires.insert(*(new tb_node_featuredesire(desirename,gweight)));
 	      }
 	  }
 	}

@@ -27,6 +27,7 @@
 #include <signal.h>
 #include <sys/signal.h>
 #include <queue>
+#include <algorithm>
 
 using namespace boost;
 
@@ -496,22 +497,18 @@ int mapping_precheck() {
 		//
 		// Check features and desires
 		//
-
-		// Desires first
-		for (tb_vnode::desires_map::iterator desire_it = v->desires.begin();
+		
+		for (node_desire_set::iterator desire_it = v->desires.begin();
 			desire_it != v->desires.end();
 			desire_it++) {
-		    crope name = (*desire_it).first;
-		    float value = (*desire_it).second;
+		    crope name = desire_it->name();
 		    // Only check for desires that would result in a violation if
 		    // unsatisfied
-		    if (value >= FD_VIOLATION_WEIGHT) {
+		    if (desire_it->is_violateable()) {
 			if (matched_desires.find(name) == matched_desires.end()) {
 			    matched_desires[name] = 0;
 			}
-			tb_pnode::features_map::iterator feature_it =
-			    pnode->features.find(name);
-			if (feature_it != pnode->features.end()) {
+			if (pnode->features.find(*desire_it) != pnode->features.end()) {
 			    matched_desires[name]++;
 			} else {
 			    potential_match = false;
@@ -520,20 +517,17 @@ int mapping_precheck() {
 		}
 
 		// Next, features
-		for (tb_pnode::features_map::iterator feature_it = pnode->features.begin();
+		for (node_feature_set::iterator feature_it = pnode->features.begin();
 			feature_it != pnode->features.end(); feature_it++) {
-		    crope name = (*feature_it).first;
-		    float value = (*feature_it).second;
+		    crope name = feature_it->name();
 		    // Skip 'local' and 'global' features
-		    if (name[0] == '*' || name[0] == '?') {
+		    if (feature_it->is_global() || feature_it->is_local()) {
 			continue;
 		    }
 		    // Only check for feature that would result in a violation if
 		    // undesired
-		    if (value >= FD_VIOLATION_WEIGHT) {
-			tb_vnode::desires_map::iterator desire_it =
-			    v->desires.find(name);
-			if (desire_it == v->desires.end()) {
+		    if (feature_it->is_violateable()) {
+			if (v->desires.find(*feature_it) == v->desires.end()) {
 			    potential_match = false;
 			}
 		    }

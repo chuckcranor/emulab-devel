@@ -101,30 +101,24 @@ int pclass_equiv(tb_pgraph &PG, tb_pnode *a,tb_pnode *b)
       return 0;
   }
 
-  // check features
-  for (tb_pnode::features_map::iterator it=a->features.begin();
+  // check features - we have to do this 'manually' rather than with the set
+  // comparison, because we have to catch differing weights
+  for (node_feature_set::iterator it=a->features.begin();
        it != a->features.end();++it) {
-    const crope &a_feature = (*it).first;
-    const double a_weight = (*it).second;
-    
-    tb_pnode::features_map::iterator bit;
-    bit = b->features.find(a_feature);
-    if ((bit == b->features.end()) || ((*bit).second != a_weight)) 
+    node_feature_set::iterator bit;
+    bit = b->features.find(*it);
+    if ((bit == b->features.end()) || (!bit->equivalent(*it))) 
       return 0;
   }
 
   // have to go both ways in case the second node has a feature the first
   // doesn't
-  for (tb_pnode::features_map::iterator it=b->features.begin();
+  for (node_feature_set::iterator it=b->features.begin();
        it != b->features.end();++it) {
-    const crope &b_feature = (*it).first;
-    const double b_weight = (*it).second;
-    
-    tb_pnode::features_map::iterator ait;
-    ait = a->features.find(b_feature);
-    if (ait == a->features.end()) {
+    node_feature_set::iterator ait;
+    ait = a->features.find(*it);
+    if (ait == a->features.end())
       return 0;
-    }
   }
 
   // Check links

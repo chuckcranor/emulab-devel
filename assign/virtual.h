@@ -21,6 +21,7 @@
 #include <list>
 using namespace std;
 
+#include "featuredesire.h"
 
 class tb_plink;
 class tb_vnode;
@@ -88,10 +89,12 @@ public:
   {
     o << "tb_vnode: " << node.name << " (" << &node << ")" << endl;
     o << "  Type: " << node.type <<  " Count: " << node.typecount << endl;
+    /* XXX - fix
     o << "  Desires:" << endl;
     for (desires_map::const_iterator it = node.desires.begin();
 	 it!=node.desires.end();it++) 
       o << "    " << (*it).first << " -> " << (*it).second << endl;
+    */
     o << " vclass=" << node.vclass << " fixed=" <<
       node.fixed << endl;
     return o;
@@ -101,7 +104,8 @@ public:
   typedef hash_map<crope,int> desires_count_map;
 
   // contains weight of each desire
-  desires_map desires;
+  //desires_map desires;
+  node_desire_set desires;
 
   crope type;			// the current type of the node
   int typecount;		// How many slots of the type this vnode takes up

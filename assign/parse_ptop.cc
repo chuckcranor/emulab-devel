@@ -128,7 +128,13 @@ int parse_ptop(tb_pgraph &PG, tb_sgraph &SG, istream& i)
 	    ptop_error("Bad node line, bad cost: " << gcost << ".");
 	    gcost = 0;
 	  }
+
+	  // XXX - memory leak?
+	  p->features.insert(*(new tb_node_featuredesire(feature,gcost)));
+
+	    /*
 	  p->features[feature] = gcost;
+	  */
 	}
 	/*
 	 * Parse any other node options or flags

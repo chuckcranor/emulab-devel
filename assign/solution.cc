@@ -164,13 +164,16 @@ void print_solution_summary()
       }
 
       // Print out used local additive features
-      tb_pnode::features_map::iterator feature_it;
+      node_feature_set::iterator feature_it;
       for (feature_it = pnode->features.begin();
 	  feature_it != pnode->features.end();++feature_it) {
+	// XXX - fix
+	/*
 	if ((feature_it->first[0] == '?') && (feature_it->first[1] == '+')) {
 	  double remaining = feature_it->second; 
 	  cout << "    " << feature_it->first << ":" << remaining << endl;
 	}
+	*/
       }
     }
   }

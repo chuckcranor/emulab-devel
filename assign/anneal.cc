@@ -125,6 +125,7 @@ inline bool pnode_is_match(tb_vnode *vn, tb_pnode *pn) {
 
   // Check for 'local' desires - the reason we take the time to do this here is
   // that they are actually, in many ways, like types with vn->typecount > 1.
+#if 0 // XXX fix
   if (matched && !vn->desires.empty()) {
     tb_vnode::desires_map::iterator desire_it;
     for (desire_it = vn->desires.begin();
@@ -159,6 +160,7 @@ inline bool pnode_is_match(tb_vnode *vn, tb_pnode *pn) {
       }
     }
   }
+#endif
 
   return matched;
 }

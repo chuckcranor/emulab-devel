@@ -38,6 +38,7 @@ using namespace boost;
 #include "virtual.h"
 #include "pclass.h"
 #include "score.h"
+#include "featuredesire.h"
 
 #include "math.h"
 
@@ -99,12 +100,6 @@ void score_link_endpoints(pedge pe);
 
 #define MIN(a,b) (((a) < (b))? (a) : (b))
 #define MAX(a,b) (((a) > (b))? (a) : (b))
-
-/*
- * For features and desires that have a some sort of global impact
- */
-typedef hash_map<crope,unsigned int> fd_count_map;
-fd_count_map global_fd_set;
 
 /*
  * score()
@@ -1586,8 +1581,8 @@ double fd_score(tb_vnode *vnode,tb_pnode *pnode,int &fd_violated,
   fd_violated=0;
 
   double value;
-  tb_vnode::desires_map::iterator desire_it;
-  tb_pnode::features_map::iterator feature_it;
+  node_desire_set::iterator desire_it;
+  node_feature_set::iterator feature_it;
 
   // Optimize the case where the vnode has no desires
   if (!vnode->desires.empty()) {
@@ -1596,25 +1591,27 @@ double fd_score(tb_vnode *vnode,tb_pnode *pnode,int &fd_violated,
 	desire_it++) {
       // We ignore local desires, which are handled by add_stateful_fds() and
       // remove_stateful_fds()
-      if (desire_it->first[0] == '?') {
+      if (desire_it->is_local()) {
 	continue;
       }
-      feature_it = pnode->features.find((*desire_it).first);
+      feature_it = pnode->features.find(*desire_it);
       SDEBUG(cerr << "  desire = " << (*desire_it).first << " " <<
 	  (*desire_it).second << endl);
 
       if (feature_it == pnode->features.end()) {
 	// Unmatched desire.  Add cost.
 	SDEBUG(cerr << "    unmatched" << endl);
-	value = (*desire_it).second;
+	value = desire_it->cost();
 	fd_score += SCORE_DESIRE*value;
-	if ((value >= FD_VIOLATION_WEIGHT) && (!ignore_violations)) {
+	if ((desire_it->is_violateable()) && (!ignore_violations)) {
 	  fd_violated++;
 	}
       } else {
 	// Features/desires with a '+' at the front are additive - rather than
 	// 'cancelling out' if both have it, they add together, possibly
 	// resulting in a violation
+	// XXX - fix
+	/*
 	if (((*desire_it).first)[0] == '+') {
 	  value = (*desire_it).second + (*feature_it).second;
 	  SDEBUG(cerr << "    additive - total " << value << endl);
@@ -1623,6 +1620,7 @@ double fd_score(tb_vnode *vnode,tb_pnode *pnode,int &fd_violated,
 	    fd_violated++;
 	  }
 	}
+	*/
       }
     }
   }
@@ -1633,19 +1631,20 @@ double fd_score(tb_vnode *vnode,tb_pnode *pnode,int &fd_violated,
 	feature_it != pnode->features.end();++feature_it) {
       // We ignore local features, which are handled by add_stateful_fds() and
       // remove_stateful_fds()
-      if (feature_it->first[0] == '?') {
+      if (desire_it->is_local()) {
 	continue;
       }
-      crope feature_name = (*feature_it).first;
-      value = (*feature_it).second;
+      crope feature_name = desire_it->name();
+      value = desire_it->cost();
       SDEBUG(cerr << "  feature = " << feature_name
 	  << " " << (*feature_it).second << endl);
 
-      if (feature_name[0] == '*') {
+      if (desire_it->is_global()) {
 	SDEBUG(cerr << "    global" << endl);
 	// Handle features with global scope - for now, these don't have
 	// desires to go with them, but we may want to change that at some
 	// point
+	  /* XXX - fix
 	  switch (feature_name[1]) {
 	    case '&': // A 'one is okay' feature - only score if we have more
 	              // than one pnode with this feature
@@ -1674,13 +1673,14 @@ double fd_score(tb_vnode *vnode,tb_pnode *pnode,int &fd_violated,
 	      cout << "Bad global feature " << (*feature_it).first << endl;
 	      exit(EXIT_FATAL);
 	  }
+	  */
       } else {
-	desire_it = vnode->desires.find(feature_name);
+	desire_it = vnode->desires.find(*desire_it);
 	if (desire_it == vnode->desires.end()) {
 	  // Unused feature.  Add weight
 	  SDEBUG(cerr << "    unused" << endl);
 	  fd_score+=SCORE_FEATURE*value;
-	  if ((value >= FD_VIOLATION_WEIGHT) && (!ignore_violations)) {
+	  if (desire_it->is_violateable() && !ignore_violations) {
 	    fd_violated++;
 	  }
 	}
@@ -1701,20 +1701,23 @@ double fd_score(tb_vnode *vnode,tb_pnode *pnode,int &fd_violated,
  */
 double add_stateful_fds(tb_vnode *vnode, tb_pnode *pnode,
                         int &out_fd_violated) {
-  tb_vnode::desires_map::iterator desire_it;
+
+  node_desire_set::iterator desire_it;
   double score = 0.0f;
   if (!vnode->desires.empty()) {
     for (desire_it = vnode->desires.begin();
 	desire_it != pnode->features.end();++desire_it) {
-      if (desire_it->first[0] == '?') {
+      if (desire_it->is_local()) {
 	// Found a local desire - does the pnode have it?
-	tb_pnode::features_map::iterator feature_it;
-	feature_it = pnode->features.find(desire_it->first);
+        node_desire_set::iterator feature_it;
+	feature_it = pnode->features.find(*desire_it);
 	if (feature_it == pnode->features.end()) {
 	  // Didn't find the feature - violation!
 	  score += SCORE_MISSING_LOCAL_FEATURE;
 	  out_fd_violated++;
 	} else {
+#if 0 
+	  // XXX - FIX
 	  // Found the feature, score it
 	  switch (((*desire_it).first)[1]) {
 	    case '+':
@@ -1737,6 +1740,7 @@ double add_stateful_fds(tb_vnode *vnode, tb_pnode *pnode,
 	      cout << "Bad local desire " << (*desire_it).first << endl;
 	      exit(EXIT_FATAL);
 	    }
+#endif
 	}
       }
     }
@@ -1747,15 +1751,15 @@ double add_stateful_fds(tb_vnode *vnode, tb_pnode *pnode,
 
 double remove_stateful_fds(tb_vnode *vnode, tb_pnode *pnode,
                            int &out_fd_violated) {
-  tb_vnode::desires_map::iterator desire_it;
+  node_desire_set::iterator desire_it;
   double score = 0.0f;
   if (!vnode->desires.empty()) {
     for (desire_it = vnode->desires.begin();
 	desire_it != pnode->features.end();++desire_it) {
-      if (desire_it->first[0] == '?') {
+      if (desire_it->is_local()) {
 	// Found a local desire - does the pnode have it?
-	tb_pnode::features_map::iterator feature_it;
-	feature_it = pnode->features.find(desire_it->first);
+	node_feature_set::iterator feature_it;
+	feature_it = pnode->features.find(*desire_it);
 	if (feature_it == pnode->features.end()) {
 	  // Didn't find the feature, so we just removed a violation (note -
 	  // out_fd_violted gets subtracted from the total violation count, so
@@ -1764,6 +1768,7 @@ double remove_stateful_fds(tb_vnode *vnode, tb_pnode *pnode,
 	  out_fd_violated++;
 	} else {
 	  // Found the feature, score it
+#if 0 // XXX FIX THIS
 	  switch (((*desire_it).first)[1]) {
 	    case '+':
 	      /*
@@ -1788,6 +1793,7 @@ double remove_stateful_fds(tb_vnode *vnode, tb_pnode *pnode,
 	      cout << "Bad local desire " << (*desire_it).first << endl;
 	      exit(EXIT_FATAL);
 	    }
+#endif
 	}
       }
     }
@@ -1803,24 +1809,23 @@ double remove_stateful_fds(tb_vnode *vnode, tb_pnode *pnode,
  * purpose
  */
 void add_global_fds(tb_vnode *vnode,tb_pnode *pnode) {
-  tb_pnode::features_map::iterator feature_it;
+  node_feature_set::iterator feature_it;
   if (!pnode->features.empty()) {
     for (feature_it = pnode->features.begin();
 	feature_it != pnode->features.end();++feature_it) {
-      if (feature_it->first[0] == '*') {
-	global_fd_set[feature_it->first]++;
+      if (feature_it->is_global()) {
+	feature_it->add_global_user();
       }
     }
   }
 }
 void remove_global_fds(tb_vnode *vnode,tb_pnode *pnode) {
-  tb_pnode::features_map::iterator feature_it;
+  node_feature_set::iterator feature_it;
   if (!pnode->features.empty()) {
     for (feature_it = pnode->features.begin();
 	feature_it != pnode->features.end();++feature_it) {
-      if (feature_it->first[0] == '*') {
-	global_fd_set[feature_it->first]--;
-	assert(global_fd_set[feature_it->first] >= 0);
+      if (feature_it->is_global()) {
+	feature_it->remove_global_user();
       }
     }
   }
