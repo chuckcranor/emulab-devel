@@ -21,7 +21,6 @@ push(@INC,$TBSETUPLIB);
 $| = 1; 
 
 require libtbsetup;
-require 'ctime.pl';
 
 $dolog = 1;
 $force = 0;
@@ -51,7 +50,7 @@ if ($dolog) {
     &tbs_out("Log:    $logfile\n");
 }
 
-&tbs_out("Beginning cleanup for $pid-$eid ($nsfile). " 
+&tbs_out("Beginning cleanup for $pid-$eid. "
 	 . &ctime(time) . "\n");
 
 $errors = 0;
