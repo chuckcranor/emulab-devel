@@ -214,7 +214,7 @@ foreach my $n (@freed_nodes) {
 	DBQueryFatal("select control_net,nt.osid,nt.pxe_boot_path, " .
 		     " n.def_boot_osid,n.def_boot_path, ".
 		     " nt.isvirtnode ".
-		     " from node_types as nt" .
+		     " from node_types as nt " .
 		     "left join nodes as n on n.type=nt.type " .
 		     "where node_id='$n'");
     my ($control,$osid,$pxe_boot_path,$def_boot_osid,$def_boot_path,$isvirt) =
