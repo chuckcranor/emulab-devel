@@ -11,12 +11,13 @@
 
 sub usage() {
     print <<"EOF";
-Usage: os_select [-h] [-d] [-v] [-p] [-1] <osid> <node> [<node> ...]
+Usage: os_select [-h] [-d] [-v] [-1] [-p | -m] <osid> <node> [<node> ...]
  -h    Display this help message
  -d    Debug mode
  -v    Verbose mode
  -p    Path mode: osid is really a path to a kernel
  -1    Set up one-time boot to OS instead of changing default OS
+ -m    MFS mode: osid={"freebsd","frisbee","default","host:/tftpboot/file"}
  osid  OS identifier for the selected OS (see web interface for listing)
  node  Node identifiers (ie pcXX)
 EOF
@@ -42,16 +43,35 @@ use libtestbed;
 use English;
 
 # Constants
+my $osidbootwhat = "_BOOTWHAT_";
 my $kernelosid = "_KERNEL_";
+my %osidmap = # Map some magic OSIDs to ops_modes
+    ("_KERNEL_" => "MINIMAL",
+     "_NORMAL_" => "NORMALv1",
+     "_RELOAD_" => "RELOAD");
 
 # Global vars
 my $d=0; # debug/verbose
 my $oneshot=0; # is this a one-shot OS boot?
 my $pathmode=0; # is osid really a path instead of an osid?
+my $mfs=0; # is this for a pxe_boot_path change?
+my $bossnode="@BOSSNODE@";
+
+# If you update this list, make sure to update the usage message above
+my %pxeboot = 
+    ("default" => "$bossnode:/tftpboot/pxeboot",
+     "freebsd" => "$bossnode:/tftpboot/pxeboot.freebsd",
+     "frisbee" => "$bossnode:/tftpboot/pxeboot.frisbee");
+my $pxebootpath= $pxeboot{"default"};
+my $defpxepath = $pxeboot{"default"};
+my %pxeosid = 
+    (# Important: we don't want an entry for default
+     $pxeboot{"freebsd"} => "_NORMAL_",
+     $pxeboot{"frisbee"} => "_RELOAD_");
 
 # Parse command arguments. Once we return from getopts, all that should be
 # left are the required arguments.
-my  $optlist = "hdvp1";
+my  $optlist = "hdvp1m";
 %options = ();
 if (! getopts($optlist, \%options)) { usage(); }
 if (defined($options{"h"})) { usage(); }
@@ -59,17 +79,45 @@ if (defined($options{"d"})) { $d++; }
 if (defined($options{"v"})) { $d++; }
 if (defined($options{"p"})) { $pathmode=1; }
 if (defined($options{"1"})) { $oneshot=1; }
+if (defined($options{"m"})) { $mfs=1; }
 print "DEBUG LEVEL $d\n" if $d;
 
 print "ARGV= ".join(" ",@ARGV)."\n" if $d>1;
-if (@ARGV < 2) { usage(); }
+if (@ARGV < 2) { warn("An osid and a node list are required.\n"); usage(); }
 
 my $osid = shift;
 my @nodes = @ARGV;
 
-# Untaint args.
-if ($osid =~ /^([-\@\w\/]+)$/) { $osid = $1; }
-else { die("Bad data in osid: '$osid'\n"); }
+if ($mfs) {
+    print "Checking MFS osid '$osid'\n" if $d>1;
+    if (!defined($pxeboot{$osid}) ) {
+	if ($osid =~ /^[0-9a-z\.]+:\/tftpboot\/[-0-9a-z\.]+$/) {
+	    print "MFS osid '$osid' is a PXE path\n" if $d>1;
+	    $pxebootpath=$osid;
+	    if ((!defined($pxeosid{$osid})) && ($osid ne $defpxepath)) {
+		$pxeosid{$osid}=$kernelosid;
+	    }
+	} else {
+	    die("Invalid osid for use with -m: '$osid'\n");
+	}
+    } else {
+	$pxebootpath = $pxeboot{$osid};
+	print "MFS osid '$osid' has path '$pxebootpath'\n" if $d>1;
+    }
+    $osid = $pxeosid{$pxebootpath};
+    if (!defined($osid)) {
+	# It was the default osid, so the osid we care about is the
+	# one returned by bootwhat, so set a special OSID here
+	$osid=$osidbootwhat;
+    }
+    print "Internal osid for '$pxebootpath' is '$osid'\n" if $d>1;
+} else {
+    # Untaint args.
+    if ($osid =~ /^([-\@\w\/]+)$/) { $osid = $1; }
+    else { die("Bad data in osid: '$osid'\n"); }
+}
+
+
 
 my @temp;
 foreach $n (@nodes) {
@@ -90,20 +138,31 @@ if ($UID && !TBAdmin($UID)) {
         die("os_select: You do not have permission to modify ".
 	    "one or more of the nodes.\n");
     }
+    print "Access granted to all nodes requested.\n" if $d>1;
 } else { print "Running as an admin.\n" if $d>1; }
 
+my $pernodeopmode=0;
 my $opmode = os_opmode($osid);
 print "Found opmode '$opmode' for osid '$osid'.\n" if $d;
+if ($opmode eq $osidbootwhat) { $pernodeopmode=1; }
 
 foreach $n (@nodes) {
-    my $boot = bootwhat($n);
-    if (!$boot) { next; }
-    print "Bootwhat says: $n => $boot\n" if $d>1;
     my $curmode = node_opmode($n);
+    if (!$curmode) { next; }
     print "Current opmode for node '$n' is '$curmode'.\n" if $d;
+    if ($mfs) { set_pxe_path($n); } 
+    else { set_boot_osid($n); }
+    my $boot = bootwhat($n);
+    if (!$boot) { die("***Bootwhat query failed. Contact testbed-ops.\n"); }
+    print "Bootwhat says: $n => $boot\n" if $d>1;
+    if ($pernodeopmode) { 
+	# in per-node mode, opmode is the mode for the os that we're going 
+	# to boot, whatever that may be on each node
+	$opmode= os_opmode($boot); 
+	print "Desired opmode for node '$n' is '$opmode'.\n" if $d;
+    }
     if (!$curmode || ($curmode ne $opmode)) { set_nextmode($n); } 
     else { set_nextmode($n,""); } # Make sure it is clear
-    set_boot_osid($n);
 }
 
 exit();
@@ -140,12 +199,29 @@ sub set_boot_osid() {
     return 0;
 }
 
+sub set_pxe_path() {
+    my $node = shift || "";
+    my $field = ($oneshot?"next_":"")."pxe_boot_path";
+    my $cmd = "update nodes set $field='$pxebootpath'";
+    # Clear out the next_pxe_boot_path if we're not going to set it
+    foreach $f ("next_pxe_boot_path") {
+	if ($f ne $field) { $cmd .= ", $f=''"; }
+    }
+    $cmd .= " where node_id='$node';";
+    print "cmd=$cmd\n" if $d>1;
+    print "Setting $field for node '$node' to '$pxebootpath'.\n" if $d;
+    my $q = DBQueryFatal($cmd);
+    return 0;
+}
+    
+
 sub node_opmode() {
     my $node = shift || "";
     my $cmd = "select op_mode from nodes where node_id='$node';";
     my $q = DBQueryFatal($cmd);
     if ($q->numrows() < 1) {
-	die("Invalid node '$node' is non-existent.\n");
+	warn("Ignoring invalid node '$node' (non-existent)\n");
+	return 0;
     }
     my @r = $q->fetchrow_array();
     my $opmode=$r[0];
@@ -156,12 +232,10 @@ sub node_opmode() {
 
 sub os_opmode() {
     my $osid = shift || "";
+    if ($osid eq $osidbootwhat) { return $osid; }
+    if ($pathmode) { return $osidmap{$kernelosid}; }
+    if (defined($osidmap{$osid})) { return $osidmap{$osid}; }
     my $cmd = "select op_mode from os_info where osid='$osid';";
-    if ($osid eq $kernelosid || $pathmode) {
-	# This is either the magic osid or a kernel path.
-	# Use minimal mode.
-	return "MINIMAL";
-    }
     my $q = DBQueryFatal($cmd);
     if ($q->numrows() < 1) {
 	die("Invalid osid '$osid' is non-existent.\n");
@@ -177,7 +251,11 @@ sub os_opmode() {
 # DO NOT change this function without making corresponding changes to
 # the perl version of this code in the os_select script. They MUST
 # ALWAYS return exactly the same resulting OSID given the same inputs.
+# [The only exception is that here we must take into account 
+# *pxe_boot_path since that can specify an OS as well.]
 
+# NEXT_PXE_BOOT_PATH
+# PXE_BOOT_PATH
 # NEXT_BOOT_PATH        multiboot kernel
 # DEF_BOOT_PATH         multiboot kernel
 # NEXT_BOOT_OSID        osid from os_info
@@ -185,21 +263,47 @@ sub os_opmode() {
 # if all the above are null, error
 
 sub bootwhat() {
+    # Take a node_id, look up what it will boot next time it comes up.
+    # Return the osid it will boot, or a magic OSID token that isn't 
+    # really in the database.
     my $node = shift || return 0;
-    my $cmd = "select n.next_boot_path, n.def_boot_path, 
-n.next_boot_osid, n.def_boot_osid from nodes as n 
-where n.node_id = '$node'";
+    my $cmd = "select next_pxe_boot_path, pxe_boot_path, 
+next_boot_path, def_boot_path, next_boot_osid, def_boot_osid 
+from nodes where node_id = '$node'";
     my $q = DBQueryFatal($cmd);
     if ($q->numrows() < 1) {
-	warn("Ignoring invalid node '$node'.\n");
+	warn("Ignoring invalid node '$node' (non-existent)\n");
 	return 0;
     }
     my @r = $q->fetchrow_array();
-    $nextpath=$r[0];
-    $defpath=$r[1];
-    $nextosid=$r[2];
-    $defosid=$r[3];
-    print "node $node => ($nextpath, $defpath, $nextosid, $defosid)\n" if $d>1;
+    $nextpxepath=$r[0];
+    $pxepath=$r[1];
+    $nextpath=$r[2];
+    $defpath=$r[3];
+    $nextosid=$r[4];
+    $defosid=$r[5];
+    print "node $node => (".($nextpxepath?"nextpxe=$nextpxepath, ":"").
+	( $pxepath ne $defpxepath ? "pxe=$pxepath, ":"") .
+	    "$nextpath, $defpath, $nextosid, $defosid)\n" if $d>1;
+    # With PXE paths, look up the osid for the path. If none, use 
+    # the kernelosid. If it is the default pxe path, just go on like normal.
+    if (defined($nextpxepath) && $nextpxepath) {
+	if (! ($nextpxepath eq $defpxepath)) {
+	    if ($pxeosid{$nextpxepath}) {
+		return $pxeosid{$nextpxepath};
+	    } else {
+		return $kernelosid;
+	    }
+	} # else go on as normal
+    } else {
+	if ($pxepath ne $defpxepath) {
+	    if ($pxeosid{$nextpxepath}) {
+		return $pxeosid{$nextpxepath};
+	    } else {
+		return $kernelosid;
+	    }
+	} # else go on as normal
+    }	
     if ((defined($nextpath) && $nextpath) || 
 	(defined($defpath) && $defpath)) {
 	# No OSID. Return a magic one.
@@ -207,6 +311,6 @@ where n.node_id = '$node'";
     }
     if (defined($nextosid) && $nextosid) { return $nextosid; }
     if (defined($defosid) && $defosid) { return $defosid; }
-    warn("Ignoring node '$node': All boot info was null!\n");
-    return 0;
-}   
+    warn("***Warning: node '$node': All boot info was null!\n");
+    return $kernelosid;
+}
