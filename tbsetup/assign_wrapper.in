@@ -491,7 +491,7 @@ while (1) {
 # vlans is indexed by an internal ID contains:
 #  [vname, members]
 # delays is indexed by an internal ID and contains:
-#  [pnode, int0, int1, virtual lan]
+#  [pnode, int0, int1, vname, delay, bandwidth, lossrate]
 # portmap is indexed by <virtual node>:<virtual port> and contains
 #  the physical port.
 # nodevlans is indexed by physical node and contains the VLANs
@@ -569,8 +569,11 @@ foreach $plink (keys(%plinks)) {
 	printdb "    $vlanid = $lan, \[$nodeportC, $nodeportD\]\n";
 	$vlanid++;
 
-	$delays{$delayid} = [$nodeB,$portB,$portD,$lan];
-	printdb "  Delays: $delayid = \[$nodeB,$portB,$portD,$lan\]\n";
+	($delay,$bandwidth,$lossrate) = @{$delayinfo{$lan}};
+	$delays{$delayid} = [$nodeB,$portB,$portD,$lan,
+			     $delay,$bandwidth,$lossrate];
+	printdb "  Delays: $delayid = \[$nodeB,$portB,$portD,$lan" .
+	    ",$delay,$bandwidth,$lossrate\]\n";
 	$delayid++;
 
 	$virtA = &find_vport($p2vmap{$nodeA},$lan);
@@ -604,8 +607,14 @@ foreach $plink (keys(%plinks)) {
 	push(@$members,$nodeportD);
 	printdb "    $lan = $lan, \[" . join(" ",@$members) . "\]\n"; 
 
-	$delays{$delayid} = [$nodeB,$portB,$portD,$lan];
-	printdb "  Delays: $delayid = \[$nodeB,$portB,$portD,$lan\]\n";
+	# The strange formula for loss rate comes from that all 
+	# packets will traverse two delay nodes in this delayed LAN.
+	($delay,$bandwidth,$lossrate) = @{$delayinfo{$lan}};
+	$loss = 1-sqrt(1-$lossrate);
+	$delays{$delayid} = [$nodeB,$portB,$portD,$lan,
+			     $delay/2,$bandwidth,$loss];
+	printdb "  Delays: $delayid = \[$nodeB,$portB,$portD,$lan," .
+	    $delay/2 . ",$loss\]\n";
 	$delayid++;
 
 	$virt = &find_vport($p2vmap{$nodeA},$lan);
@@ -786,8 +795,8 @@ foreach $vlan (keys(%vlans)) {
 	     };
 }
 foreach $delay (keys(%delays)) {
-    ($pnode,$int0,$int1,$virtlan) = @{$delays{$delay}};
-    ($delay,$bandwidth,$lossrate) = @{$delayinfo{$virtlan}};
+    ($pnode,$int0,$int1,$vname,$delay,$bandwidth,$lossrate) = 
+	@{$delays{$delay}};
     # XXX - card0/card1 will eventually vanish.  This is just a temporary
     # hack for things to work at the same time as the previous generation
     # of software.
@@ -798,7 +807,7 @@ foreach $delay (keys(%delays)) {
 	     ",delay,bandwidth,lossrate,vname)" .
 	     " values (\"$pid\",\"$eid\",\"$pnode\",\"$int0\",\"$int1\"".
 	     ",$card0,$card1,$delay,$bandwidth" .
-	     ",$lossrate,\"$virtlan\")") || do {
+	     ",$lossrate,\"$vname\")") || do {
 		 print STDERR "Could not update delays table.  Giving up.\n";
 		 exit(1);
 	     };
