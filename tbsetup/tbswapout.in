@@ -83,21 +83,11 @@ if (! $dbh->do("UPDATE experiments set state=\"swapping\" " .
 
 $errors = 0;
 
-$sth = $dbh->prepare("SELECT node_id from reserved where pid = \"$pid\"" . 
-		   " and eid = \"$eid\"");
-$sth->execute();
-@nodes = ();
-while (($node) = $sth->fetchrow_array()) {
-    push(@nodes,$node);
+&tbs_out("Clearing VLANs\n");
+if (&tbs_exec("snmpit -reset $pid $eid")) {
+    &tbs_out("Failed to reset VLANs\n");
+    $errors = 1;
 }
-if ($#nodes != -1) {
-    &tbs_out("Resetting VLANs\n");
-    if (&tbs_exec("resetvlans " . join(" ",@nodes))) {
-	&tbs_out("Failed to reset VLANs\n");
-	$errors = 1;
-    }
-}
-
 
 &tbs_out("Backing up VLAN configuration\n");
 if (&tbs_exec("savevlans")) {
