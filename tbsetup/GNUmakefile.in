@@ -22,7 +22,8 @@ SBIN_STUFF	= resetvlans console_setup.proxy sched_reload named_setup \
 
 LIBEXEC_STUFF	= mkprojdir rmproj mkacct-ctrl rmacct-ctrl \
 		  os_setup mkexpdir console_setup webnscheck \
-		  webstartexp webendexp webbatchexp webkillbatchexp
+		  webstartexp webendexp webbatchexp webkillbatchexp \
+		  assign_wrapper ptopgen
 
 LIB_STUFF       = libtbsetup.pm libtestbed.pm snmpit_intel.pm \
                   snmpit_cisco.pm snmpit_lib.pm
