@@ -13,8 +13,9 @@
 
 static int pp_point_in_bounds(float x, float y)
 {
-    int lpc, boxes_len, retval = 0;
+    int lpc, occ = 0, oc_length, boxes_len, retval = 0;
     struct box *boxes;
+    struct obstacle_config *oc_list;
 
     boxes = pc_data.pcd_config->bounds.bounds_val;
     boxes_len = pc_data.pcd_config->bounds.bounds_len;
@@ -26,6 +27,19 @@ static int pp_point_in_bounds(float x, float y)
 	    retval = 1;
 	    break;
 	}
+    }
+    
+    oc_list = pc_data.pcd_config->obstacles.obstacles_val;
+    oc_length = pc_data.pcd_config->obstacles.obstacles_len;
+    
+    if (1 == retval) {
+      for (occ = 0; occ < oc_length; occ++) {
+        if (x > oc_list[occ].xmin && y > oc_list[occ].ymin &&
+            x < oc_list[occ].xmax && y < oc_list[occ].ymax) {
+          retval = 0;
+          break;
+        }
+      }
     }
 
     return retval;
@@ -94,6 +108,8 @@ pp_plot_code_t pp_plot_waypoint(struct robot_position *actual,
     oc = pc_data.pcd_config->obstacles.obstacles_val;
     oc_length = pc_data.pcd_config->obstacles.obstacles_len;
     
+    printf("pp_plot_waypoint: sending robot to %f, %f\n", waypoint_temp.x, waypoint_temp.y);
+    printf("pp_plot_waypoint: currently at %f, %f\n", actual->x, actual->y);
     
     if (oc_length > 0) {
       /* hellish nightmare (obstacles exist!) */
@@ -114,6 +130,7 @@ pp_plot_code_t pp_plot_waypoint(struct robot_position *actual,
 	if (rc_compute_code(goal->x, goal->y, &oc[incr_o]) == 0) {
             /* can not get to final point */
             printf("pp_plot_waypoint: goal is inside this obstacle! [%d]\n", incr_o);
+            printf("Obstacle at: %f/%f, %f/%f\n", oc->xmin, oc->ymin, oc->xmax, oc->ymax);
 	    /* retval = PPC_GOAL_IN_OBSTACLE; */
             /* don't give up here */
 	}
@@ -128,6 +145,7 @@ pp_plot_code_t pp_plot_waypoint(struct robot_position *actual,
           /* intersection detected -- assign a new waypoint */
 //           printf("pp_plot_waypoint: intersection detected.\n");
           printf("pp_plot_waypoint: intersection detected for this obstacle. [%d]\n", incr_o);
+          printf("Obstacle at: %f/%f, %f/%f\n", oc->xmin, oc->ymin, oc->xmax, oc->ymax);
           
 
           
@@ -335,8 +353,8 @@ pp_plot_code_t pp_plot_waypoint(struct robot_position *actual,
            (retval == PPC_WAYPOINT) ? waypoint_out : goal,
            &distance,
            &theta);
- if (distance > MAX_DISTANCE) {
-   mtp_cartesian(actual, MAX_DISTANCE, theta, waypoint_out);
+ if (distance > pc_data.pcd_max_distance) {
+   mtp_cartesian(actual, pc_data.pcd_max_distance, theta, waypoint_out);
    retval = PPC_WAYPOINT;
  }
 
@@ -396,15 +414,17 @@ pp_point_type_t pp_point_identify(struct robot_position *rpoint,
 
 
   /* is this point in bounds? */
-  if (!(pp_point_in_bounds(rpoint->x, rpoint->y))) {
+  if (!(pp_point_in_bounds(rpoint->x, rpoint->y)) && PPT_CORNERPOINT != retval) {
+    /* if this is already determined to be a corner point, ignore
+     * out-of-bounds identification for now */
     retval = PPT_OUTOFBOUNDS;
-    printf("pp_point_identify says this point is out of bounds\n");
+    printf("pp_point_identify: %f, %f is out of bounds\n", rpoint->x, rpoint->y);
   }
 
 
   /* debugging output */
   if (PPT_CORNERPOINT == retval) {
-    printf("pp_point_identify says this point is a corner point\n");
+    printf("pp_point_identify: %f, %f is a corner point\n", rpoint->x, rpoint->y);
   }
 
 
@@ -425,28 +445,40 @@ int pp_next_cornerpoint(struct robot_position *actual,
 
   float bl_dist, br_dist, tl_dist, tr_dist;
   float bl_distg, br_distg, tl_distg, tr_distg;
-  float min_dist;
+  float min_dist = 0;
 
-  robot_position this_cp;
+  robot_position cp_bl; /* bottom left corner point */
+  robot_position cp_tl; /* top left corner point */
+  robot_position cp_br; /* bottom right corner point */
+  robot_position cp_tr; /* top right corner point */
 
+  /* corner points of this obstacle */
+  /* SWAP ymin/ymax because of y coord system is AFU */
+  cp_bl.x = oc->xmin;
+  cp_bl.y = oc->ymax;
+  
+  cp_tl.x = oc->xmin;
+  cp_tl.y = oc->ymin;
+  
+  cp_br.x = oc->xmax;
+  cp_br.y = oc->ymax;
+  
+  cp_tr.x = oc->xmax;
+  cp_tr.y = oc->ymin;
+  
+  /* get the distances to each CP from the IP, and FP */
+  bl_dist = pp_point_distance(actual, &cp_bl);
+  bl_distg = pp_point_distance(goal, &cp_bl);
 
-  /* determine the distnace to each corner point from the IP and FP */
-  this_cp.x = oc->xmin;
-  this_cp.y = oc->ymin;
-  bl_dist = pp_point_distance(actual, &this_cp);
-  bl_distg = pp_point_distance(goal, &this_cp);
+  tl_dist = pp_point_distance(actual, &cp_tl);
+  tl_distg = pp_point_distance(goal, &cp_tl);
 
-  this_cp.y = oc->ymax;
-  tl_dist = pp_point_distance(actual, &this_cp);
-  tl_distg = pp_point_distance(goal, &this_cp);
+  br_dist = pp_point_distance(actual, &cp_br);
+  br_distg = pp_point_distance(goal, &cp_br);
+  
+  tr_dist = pp_point_distance(actual, &cp_tr);
+  tr_distg = pp_point_distance(goal, &cp_tr);
 
-  this_cp.x = oc->xmax;
-  tr_dist = pp_point_distance(actual, &this_cp);
-  tr_distg = pp_point_distance(goal, &this_cp);
-
-  this_cp.y = oc->ymin;
-  br_dist = pp_point_distance(actual, &this_cp);
-  br_distg = pp_point_distance(goal, &this_cp);
 
 
 
@@ -458,36 +490,97 @@ int pp_next_cornerpoint(struct robot_position *actual,
       /* This is the bottom left or top right corner point */
       /* the next corner point is BR or TL, find the closest */
 
-      if (br_distg < tl_distg) {
-        /* bottom right is closer, go there */
-        cp_out->x = oc->xmax;
-        cp_out->y = oc->ymin;
+      printf("pp_next_corner_point: currently at bottom-left or top-right, going to next corner point.\n");
+      
+      if (!pp_point_in_bounds(cp_br.x, cp_br.y) &&
+          !pp_point_in_bounds(cp_tl.x, cp_tl.y)) {
+        /* neither CP is in bounds -- CAN'T GO ANYWHERE */
+        printf("pp_next_corner_point: No corner points are in bounds\n");
+      }
+      
+      if (pp_point_in_bounds(cp_br.x, cp_br.y) &&
+          !pp_point_in_bounds(cp_tl.x, cp_tl.y)) {
+        /* bottom right CP is in bounds, but top left is not */
+        cp_out = &cp_br; /* must go to bottom right */
+        printf("pp_next_corner_point: must go to bottom right\n");
         retval = 1;
       }
-      else {
-        /* top left is closer, OR EQUAL, go there */
-        cp_out->x = oc->xmin;
-        cp_out->y = oc->ymax;
+      
+      if (!pp_point_in_bounds(cp_br.x, cp_br.y) &&
+          pp_point_in_bounds(cp_tl.x, cp_tl.y)) {
+        /* top left CP is in bounds, but bottom right is not */
+        cp_out = &cp_tl; /* must go to top left */
+        printf("pp_next_corner_point: must go to top left\n");
         retval = 1;
       }
+      
+      if (pp_point_in_bounds(cp_br.x, cp_br.y) &&
+          pp_point_in_bounds(cp_tl.x, cp_tl.y)) {
+        /* both CPs are in bounds
+         * go to the closest CP to the FP
+         */
+        
+        if (br_distg < tl_distg) {
+          /* bottom right is closer */
+          cp_out = &cp_br;
+          printf("pp_next_corner_point: going to bottom right\n");
+          retval = 1;
+        }
+        else {
+          /* top left is closer, or EQUAL */
+          cp_out = &cp_tl;
+          printf("pp_next_corner_point: going to top left\n");
+          retval = 1;
+        }
+      }  
     }
     else {
       /* This is the top left or bottom right corner point */
       /* the next corner point is BL or TR, find the closest */
 
-      if (bl_distg < tr_distg) {
-        /* bottom left is closer, go there */
-        cp_out->x = oc->xmin;
-        cp_out->y = oc->ymin;
+      printf("pp_next_corner_point: currently at top left or bottom right, going to next corner point.\n");
+      
+      if (!pp_point_in_bounds(cp_bl.x, cp_bl.y) &&
+          !pp_point_in_bounds(cp_tr.x, cp_tr.y)) {
+        /* neither CP is in bounds -- CAN'T GO ANYWHERE */
+        printf("pp_next_corner_point: No corner points are in bounds\n");
+      }
+      
+      if (pp_point_in_bounds(cp_bl.x, cp_bl.y) &&
+          !pp_point_in_bounds(cp_tr.x, cp_tr.y)) {
+        /* bottom left CP is in bounds, but top right is not */
+        cp_out = &cp_bl; /* must go to bottom left */
+        printf("pp_next_corner_point: must go to bottom left\n");
         retval = 1;
       }
-      else {
-        /* top right is closer, OR EQUAL, go there */
-        cp_out->x = oc->xmax;
-        cp_out->y = oc->ymax;
+      
+      if (!pp_point_in_bounds(cp_bl.x, cp_bl.y) &&
+          pp_point_in_bounds(cp_tr.x, cp_tr.y)) {
+        /* top right CP is in bounds, but bottom left is not */
+        cp_out = &cp_tr; /* must go to top right */
+        printf("pp_next_corner_point: must go to top right\n");
         retval = 1;
       }
-
+      
+      if (pp_point_in_bounds(cp_bl.x, cp_bl.y) &&
+          pp_point_in_bounds(cp_tr.x, cp_tr.y)) {
+        /* both CPs are in bounds
+         * go to the closest CP to the FP
+         */
+        
+        if (bl_distg < tr_distg) {
+          /* bottom left is closer */
+          cp_out = &cp_bl;
+          printf("pp_next_corner_point: going to bottom left\n");
+          retval = 1;
+        }
+        else {
+          /* top right is closer, or EQUAL */
+          cp_out = &cp_tr;
+          printf("pp_next_corner_point: going to top right\n");
+          retval = 1;
+        }
+      }
     }
 
   }
@@ -495,31 +588,53 @@ int pp_next_cornerpoint(struct robot_position *actual,
   if (PPT_DETACHED == pp_point_identify(actual, oc)) {
     /* actual point is detached from obstacle boundary */
     /* proceed to the CP nearest the IP */
-
-    min_dist = bl_dist;
-    cp_out->x = oc->xmin;
-    cp_out->y = oc->ymin;
-
-    if (br_dist < min_dist) {
+    /* CHANGE HERE TO ADD OPTIMIZATION */
+    
+    printf("pp_next_corner_point: not current at a corner point, going to nearest corner point in bounds.\n");
+    
+    if (pp_point_in_bounds(cp_bl.x, cp_bl.y)) {
+      min_dist = bl_dist;
+      cp_out = &cp_bl;
+      retval = 1;
+    } else if (pp_point_in_bounds(cp_br.x, cp_br.y)) {
       min_dist = br_dist;
-      cp_out->x = oc->xmax;
-      cp_out->y = oc->ymin;
-    }
-
-    if (tl_dist < min_dist) {
+      cp_out = &cp_br;
+      retval = 1;
+    } else if (pp_point_in_bounds(cp_tl.x, cp_tl.y)) {
       min_dist = tl_dist;
-      cp_out->x = oc->xmin;
-      cp_out->y = oc->ymax;
-    }
-
-    if (tr_dist < min_dist) {
+      cp_out = &cp_tl;
+      retval = 1;
+    } else if (pp_point_in_bounds(cp_tr.x, cp_tr.y)) {
       min_dist = tr_dist;
-      cp_out->x = oc->xmax;
-      cp_out->y = oc->ymax;
+      cp_out = &cp_tr;
+      retval = 1;
+    } else {
+      /* no corner points are in bounds!! */
+      printf("pp_next_corner_point: All corner points for this obstacle are out of bounds!\n");
     }
-
-    retval = 1;
+    
+    /* find the minimum
+     * (don't need to look at bottom left
+     */
+    
+    if (br_dist < min_dist && pp_point_in_bounds(cp_br.x, cp_br.y)) {
+      min_dist = br_dist;
+      cp_out = &cp_br;
+    }
+    
+    if (tl_dist < min_dist && pp_point_in_bounds(cp_tl.x, cp_tl.y)) {
+      min_dist = tl_dist;
+      cp_out = &cp_tl;
+    }
+    
+    if (tr_dist < min_dist && pp_point_in_bounds(cp_tr.x, cp_tr.y)) {
+      min_dist = tr_dist;
+      cp_out = &cp_tr;
+    }
   }
+
+
+  
 
 
   return retval;

@@ -4,7 +4,8 @@
 
 #include "mtp.h"
 
-#define MAX_DISTANCE 1.5f
+// #define MAX_DISTANCE 1.5f
+// Now defined in pc_data, by argument in rmcd.c
 
 typedef enum {
     PPC_NO_WAYPOINT,

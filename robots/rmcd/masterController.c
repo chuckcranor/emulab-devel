@@ -33,7 +33,7 @@ static int mc_set_goal(struct master_controller *mc, mtp_packet_t *mp)
 
     mc->mc_pause_time = 0;
     mc->mc_flags &= ~(MCF_HAS_WAYPOINT|MCF_HAS_OBSTACLE|MCF_CONTACT);
-    mc->mc_tries_remaining = MAX_REFINE_RETRIES;
+    mc->mc_tries_remaining = pc_data.pcd_max_refine_retries;
     mc->mc_goal_pos = mp->data.mtp_payload_u.command_goto.position;
 
     if (mc->mc_pilot->pc_control_mode == PCM_MASTER) {
@@ -100,11 +100,11 @@ static int mc_plot(struct master_controller *mc, mtp_packet_t *mp)
     assert(mp != NULL);
 
     mtp_polar(&mc->mc_actual_pos, &mc->mc_goal_pos, &distance, &theta);
-    if ((mc->mc_tries_remaining <= 0) || (distance < 0.03)) {
+    if ((mc->mc_tries_remaining <= 0) || (distance < pc_data.pcd_meter_tolerance)) {
       /* done moving */
 	if (cmp_fuzzy(mc->mc_actual_pos.theta,
 		      mc->mc_goal_pos.theta,
-		      RADIAN_TOLERANCE)) {
+		      pc_data.pcd_radian_tolerance)) {
             /* made it */
 	    mtp_packet_t ump;
 	    
@@ -147,7 +147,7 @@ static int mc_plot(struct master_controller *mc, mtp_packet_t *mp)
 	case PPC_WAYPOINT:
 	    info("waypoint\n");
 	    rp = mtp_world2local(&_rp, &mc->mc_actual_pos, &mc->mc_waypoint);
-	    mc->mc_tries_remaining = MAX_REFINE_RETRIES;
+	    mc->mc_tries_remaining = pc_data.pcd_max_refine_retries;
 	    break;
 	case PPC_BLOCKED:
 	case PPC_GOAL_IN_OBSTACLE:

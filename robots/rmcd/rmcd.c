@@ -49,6 +49,14 @@
 
 #define OBSTACLE_BUFFER 0.25
 
+#define DEFAULT_MAX_REFINE_RETRIES 4
+#define DEFAULT_METER_TOLERANCE 0.02f
+#define DEFAULT_RADIAN_TOLERANCE 0.09f
+#define DEFAULT_MAX_DISTANCE 1.5f
+
+
+
+
 /**
  * Do a fuzzy comparison of two values.
  *
@@ -69,7 +77,7 @@ static struct mtp_config_rmc *rmc_config = NULL;
 static void usage(void)
 {
     fprintf(stderr,
-	    "Usage: rmcd [-hd] [-l logfile] [-i pidfile] [-e emchost] [-p emcport]\n");
+	    "Usage: rmcd [-hd] [-l logfile] [-i pidfile] [-e emchost] [-p emcport]\n [-t max refine tries] [-m meter tolerance] [-r radian tolerance] [-a max distance]\n");
 }
 
 #if defined(SIGINFO)
@@ -220,7 +228,14 @@ int main(int argc, char *argv[])
 #else
     FD_ZERO(&readfds);
 
-    while ((c = getopt(argc, argv, "hdp:l:i:e:c:U:")) != -1) {
+    /* set default tolerances */
+    pc_data.pcd_max_refine_retries = DEFAULT_MAX_REFINE_RETRIES;
+    pc_data.pcd_meter_tolerance = DEFAULT_METER_TOLERANCE;
+    pc_data.pcd_radian_tolerance = DEFAULT_RADIAN_TOLERANCE;
+    pc_data.pcd_max_distance = DEFAULT_MAX_DISTANCE;
+    
+    
+    while ((c = getopt(argc, argv, "hdp:l:i:e:c:U:t:m:r:a:")) != -1) {
 	switch (c) {
 	case 'h':
 	    usage();
@@ -245,6 +260,35 @@ int main(int argc, char *argv[])
 		exit(1);
 	    }
 	    break;
+     	case 't':
+            if (sscanf(optarg, "%d", &pc_data.pcd_max_refine_retries) != 1) {
+		error("-t option is not a number: %s\n", optarg);
+		usage();
+		exit(1);
+	    }
+     	    break;
+        case 'm':
+            if (sscanf(optarg, "%f", &pc_data.pcd_meter_tolerance) != 1) {
+		error("-m option is not a float: %s\n", optarg);
+		usage();
+		exit(1);
+	    }
+     	    break;
+        case 'r':
+            if (sscanf(optarg, "%f", &pc_data.pcd_radian_tolerance) != 1) {
+		error("-r option is not a float: %s\n", optarg);
+		usage();
+		exit(1);
+	    }
+     	    break;
+        case 'a':
+            if (sscanf(optarg, "%f", &pc_data.pcd_max_distance) != 1) {
+		error("-a option is not a float: %s\n", optarg);
+		usage();
+		exit(1);
+	    }
+     	    break;                    
+          
 	case 'U':
 	    emc_path = optarg;
 	    break;

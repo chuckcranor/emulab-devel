@@ -56,7 +56,7 @@ void pc_handle_timeout(struct timeval *current_time);
  * How close does the robot have to be before it is considered at the intended
  * position.  Measurement is in meters(?).
  */
-#define METER_TOLERANCE 0.025
+// #define METER_TOLERANCE 0.025
 
 #define WAYPOINT_TOLERANCE 0.25
 
@@ -64,12 +64,12 @@ void pc_handle_timeout(struct timeval *current_time);
  * How close does the angle have to be before it is considered at the intended
  * angle.
  */
-#define RADIAN_TOLERANCE 0.09
+// #define RADIAN_TOLERANCE 0.09
 
 /**
  * Maximum number of times to try and refine the position before giving up.
  */
-#define MAX_REFINE_RETRIES 4
+// #define MAX_REFINE_RETRIES 4
 
 #define MAX_PILOT_CONNECTIONS 128
 
@@ -80,6 +80,13 @@ struct pilot_connection_data {
     unsigned int pcd_connection_count;
     struct mtp_config_rmc *pcd_config;
     mtp_handle_t pcd_emc_handle;
+    
+    unsigned int pcd_max_refine_retries;
+    
+    float pcd_meter_tolerance;
+    float pcd_radian_tolerance; 
+    
+    float pcd_max_distance;
 };
 
 extern struct pilot_connection_data pc_data;
