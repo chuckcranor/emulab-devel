@@ -21,7 +21,7 @@
  * Desc: Mezzanine IPC interface
  * Author: Andrew Howard
  * Date: 28 Mar 2002
- * CVS: $Id: mezz.h,v 1.2.8.2 2005-03-18 17:52:00 stack Exp $
+ * CVS: $Id: mezz.h,v 1.2.8.3 2005-03-18 18:04:54 johnsond Exp $
  * Notes:
  *
  *  This library sets up a shared, memory-mapped object for exchanging
@@ -140,6 +140,9 @@ typedef struct
   int max_missed;     // Max frames we can miss before we look for a new match.
   int missed;         // Number of missed frames (object not seen)
   double px, py, pa;  // Object pose (world cs).
+    // additional info to make reporting blob pixel positions easier
+    mezz_blob_t ablob;
+    mezz_blob_t bblob;
 } mezz_object_t;
 
 /* // structure describing a "track" -- essentially, this just does a higher-level */
