@@ -847,6 +847,13 @@ foreach $vnodeport (keys(%portmap)) {
     }
     # End Shark Hack
 }
+# Load delay_osids for types
+$sth = $dbh->prepare("SELECT type,delay_osid from node_types");
+$sth->execute;
+while (($type,$delayosid) = $sth->fetchrow_array) {
+    $delayosids{$type} = $delayosid;
+}
+$sth->finish;
 foreach $pnode (keys(%p2vmap)) {
     $vnode = $p2vmap{$pnode};
     $sth = $dbh->prepare("SELECT osid,cmd_line,rpms,deltas,startupcmd," .
@@ -870,9 +877,16 @@ foreach $pnode (keys(%p2vmap)) {
 		"  Giving up.\n";
 	    exit(1);
 	} 
-    } else {
-	# delay node
-	if (! $dbh->do("UPDATE nodes set def_boot_osid=\"FBSD40-STD\"," .
+    } elsif (!(defined($lannodes{$p2vmap{$pnode}}))) {
+	# Delay node
+	# Figure out delay osid
+	$sth2 = $dbh->prepare("SELECT type from nodes" .
+			      " where node_id=\"$pnode\"");
+	$sth2->execute;
+	($type) = $sth2->fetchrow_array;
+	$sth2->finish;
+	if (! $dbh->do("UPDATE nodes set def_boot_osid=\"" .
+		       $delayosids{$type} . "\"," .
 		       " startstatus=\"none\"," .
 		       " ready=0" .
 		       " where node_id=\"$pnode\"")) {
