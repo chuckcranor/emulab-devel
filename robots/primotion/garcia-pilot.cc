@@ -274,6 +274,7 @@ int main(int argc, char *argv[])
 	    perror("listen");
 	}
 	else {
+	    int rmc_telemetry_timeout = 60;
 	    pilotClient::list clients;
 	    fd_set readfds, writefds;
 	    
@@ -335,6 +336,21 @@ int main(int argc, char *argv[])
 					MA_Role, MTP_ROLE_RMC,
 					MA_GarciaTelemetry, db.getTelemetry(),
 					MA_TAG_DONE);
+
+			if (pilotClient::pc_rmc_client != NULL) {
+			    rmc_telemetry_timeout -= 1;
+			    if (rmc_telemetry_timeout <= 0) {
+				pilotClient *pc = pilotClient::pc_rmc_client;
+				
+				rmc_telemetry_timeout = 60;
+				if (mtp_send_packet(pc->getHandle(), &tmp) !=
+				    MTP_PP_SUCCESS) {
+				    fprintf(stderr,
+					    "error: cannot send telemetry to "
+					    "rmcd\n");
+				}
+			    }
+			}
 		    }
 
 		    for (i = clients.begin(); i != clients.end(); ) {
@@ -357,7 +373,8 @@ int main(int argc, char *argv[])
 			    } while (pc && pc->getHandle()->mh_remaining);
 			}
 
-			if ((pc->getRole() == MTP_ROLE_EMULAB) &&
+			if (!bad_client &&
+			    (pc->getRole() == MTP_ROLE_EMULAB) &&
 			    pc->isFDSet(&wreadyfds)) {
 			    if (do_telem &&
 				mtp_send_packet(pc->getHandle(), &tmp) !=

@@ -282,6 +282,7 @@ bool pilotClient::handlePacket(mtp_packet_t *mp, list &notify_list)
 	{
 	    struct mtp_garcia_telemetry *mgt;
 	    struct contact_point points[8];
+	    pilotClient::iterator i;
 	    struct mtp_packet cmp;
 	    int count = 0;
 	    
@@ -356,8 +357,13 @@ bool pilotClient::handlePacket(mtp_packet_t *mp, list &notify_list)
 			    MA_ContactPointCount, count,
 			    MA_ContactPoints, points,
 			    MA_TAG_DONE);
-	    mtp_send_packet(this->getHandle(), &cmp);
+	    
+	    for (i = notify_list.begin(); i != notify_list.end(); i++) {
+		pilotClient *pc = *i;
 
+		mtp_send_packet(pc->getHandle(), &cmp);
+	    }
+	    
 	    retval = true;
 	}
 	break;
