@@ -21,7 +21,7 @@
  * Desc: Dewarp the blobs (i.e. transform form image -> world cs)
  * Author: Andrew Howard
  * Date: 17 Apr 2002
- * CVS: $Id: dewarp.c,v 1.1.1.1.8.1 2005-03-18 17:17:34 stack Exp $
+ * CVS: $Id: dewarp.c,v 1.1.1.1.8.2 2005-03-18 17:52:01 stack Exp $
  ***************************************************************************/
 
 #include <assert.h>
@@ -97,6 +97,13 @@ int dewarp_init(mezz_mmap_t *mmap)
   i = opt_get_double2("dewarp","cameraCenter",
 		      &dewarp->def->ocX,
 		      &dewarp->def->ocY);
+  
+  dewarp->def->gridX = 0.0;
+  dewarp->def->gridY = 0.0;
+
+  i = opt_get_double2("dewarp","gridoff",
+		      &dewarp->def->gridX,
+		      &dewarp->def->gridY);
   
   // Generate the transfomr values
   dewarp_update_trans();

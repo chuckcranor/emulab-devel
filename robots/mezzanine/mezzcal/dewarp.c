@@ -21,7 +21,7 @@
  * Desc: Dewarping interface
  * Author: Andrew Howard
  * Date: 11 Apr 2002
- * CVS: $Id: dewarp.c,v 1.1.1.1.8.1 2005-03-18 17:17:35 stack Exp $
+ * CVS: $Id: dewarp.c,v 1.1.1.1.8.2 2005-03-18 17:52:02 stack Exp $
  ***************************************************************************/
 
 #include <assert.h>
@@ -49,6 +49,8 @@ typedef struct
   rtk_tableitem_t *oc[3];
   rtk_tableitem_t *scalers[2];
   rtk_tableitem_t *warp;
+  
+  rtk_tableitem_t *grid[2];
 } dewarp_t;
 
 
@@ -80,6 +82,11 @@ int dewarp_init(imagewnd_t *imagewnd, tablewnd_t *tablewnd, mezz_mmap_t *mmap)
   dewarp->warp = rtk_tableitem_create_float(tablewnd->table, "Warp", 0, 10, 0.01);
   rtk_tableitem_set_float(dewarp->warp, dewarp->mmap->warpFactor);
 
+  dewarp->grid[0] = rtk_tableitem_create_float(tablewnd->table, "Grid X", -5, 5, 0.01);
+  rtk_tableitem_set_float(dewarp->grid[0], dewarp->mmap->gridX);
+  dewarp->grid[1] = rtk_tableitem_create_float(tablewnd->table, "Grid Y", -5, 5, 0.01);
+  rtk_tableitem_set_float(dewarp->grid[1], dewarp->mmap->gridY);
+  
   // Create the figures we will use to calibrate the dewarp.
   for (i = 0; i < dewarp->mmap->points; i++)
   {
@@ -122,6 +129,9 @@ void dewarp_update()
   
   dewarp->mmap->warpFactor = rtk_tableitem_get_float(dewarp->warp);
 
+  dewarp->mmap->gridX = rtk_tableitem_get_float(dewarp->grid[0]);
+  dewarp->mmap->gridY = rtk_tableitem_get_float(dewarp->grid[1]);
+  
   // Now draw the grid
   dewarp_update_grid();
 }
@@ -155,8 +165,10 @@ void dewarp_update_grid()
   {
     for (ax = -sx / 2; ax < +sx / 2; ax += dx)
     {
-      dewarp_world2image(ax, ay, &ai, &aj);
-      dewarp_world2image(ax + dx, ay, &bi, &bj);
+      dewarp_world2image(dewarp->mmap->gridX + ax,
+			 dewarp->mmap->gridY + ay, &ai, &aj);
+      dewarp_world2image(dewarp->mmap->gridX + ax + dx,
+			 dewarp->mmap->gridY + ay, &bi, &bj);
       rtk_fig_line(dewarp->gridfig, ai, aj, bi, bj);
     }
   }
@@ -166,8 +178,10 @@ void dewarp_update_grid()
   {
     for (ay = -sy / 2; ay < +sy / 2; ay += dy)
     {
-      dewarp_world2image(ax, ay, &ai, &aj);
-      dewarp_world2image(ax, ay + dy, &bi, &bj);
+      dewarp_world2image(dewarp->mmap->gridX + ax,
+			 dewarp->mmap->gridY + ay, &ai, &aj);
+      dewarp_world2image(dewarp->mmap->gridX + ax,
+			 dewarp->mmap->gridY + ay + dy, &bi, &bj);
       rtk_fig_line(dewarp->gridfig, ai, aj, bi, bj);
     }
   }

@@ -21,7 +21,7 @@
  * Desc: Mezzanine IPC interface
  * Author: Andrew Howard
  * Date: 28 Mar 2002
- * CVS: $Id: mezz.h,v 1.2.8.1 2005-03-18 17:17:33 stack Exp $
+ * CVS: $Id: mezz.h,v 1.2.8.2 2005-03-18 17:52:00 stack Exp $
  * Notes:
  *
  *  This library sets up a shared, memory-mapped object for exchanging
@@ -73,6 +73,9 @@ typedef struct
   double scaleFactorY;
   double ocX;
   double ocY;
+
+  double gridX;
+  double gridY;
 } mezz_dewarpdef_t;
 
 
