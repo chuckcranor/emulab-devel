@@ -107,6 +107,26 @@ else {
 }
 
 #
+# Are we doing Static routing?
+#
+my $query_result =
+    DBQueryFatal("select routertype from virt_nodes ".
+		 "where pid='$pid' and eid='$eid' limit 1");
+
+if (!$query_result->numrows) {
+    warn("*** $0:\n".
+	 "    No nodes in experiment $pid/$eid!\n");
+    exit(0);
+} else {
+    my $routertype = $query_result->fetchrow_array;
+    if (!$force && $routertype ne "static") {
+        warn("Static routing not requested in $pid/$eid. This is okay!\n");
+        exit(0);
+    }
+}
+
+
+#
 # Grab virtual lan configuration from the DB
 #
 $query_result =
@@ -120,6 +140,8 @@ if (!$query_result->numrows) {
 
 my $vindex = 0;
 my %lans = ();
+my %costs = ();
+my %masks = ();
 my %lan2iface = ();
 while (my ($vlan,$member,$cost,$mask) = $query_result->fetchrow_array) {
     if (! defined($lans{$vlan})) {
@@ -134,10 +156,8 @@ while (my ($vlan,$member,$cost,$mask) = $query_result->fetchrow_array) {
 
     push(@{$lans{$vlan}},$vnode2index{$vnode});
     $lan2iface{$vlan}->{$vnode} = $iface;
-
-#    $nodeport2lan{$member} = $vname;
-#    $costs{$vname} = $cost;
-#    $masks{$vname} = $mask;
+    $costs{$vlan} = int($cost);
+    $masks{$vlan} = inet_aton($mask);
 }
 
 #
@@ -179,9 +199,9 @@ while (my ($vlan, $membptr) = each %lans) {
     $lan2index{$vlan} = $lindex;
     $lindex++;
 
-    print CHILD "8 1 @members\n";
+    print CHILD "8 $costs{$vlan} @members\n";
     if ($debug) {
-        print "8 1 @members\n";
+        print "8 $costs{$vlan} @members\n";
     }
 }
 
@@ -211,9 +231,11 @@ while(<CHILD>) {
 
     if ($mode eq "ip") {
         my ($lindex, $vindex, $ip) = /^\s*(\d+)\s+(\d+)\s+([\d\.]+)/;
-        push (@{$vnodetab{$index2vnode{$vindex}}->{'IPS'}}, 
-              $lan2iface{$index2lan{$lindex}}->{$index2vnode{$vindex}} . 
-              ":$ip" );
+        my $lan = $index2lan{$lindex};
+        my $vn = $index2vnode{$vindex};
+
+        push (@{$vnodetab{$vn}->{'IPS'}}, 
+              [$ip, $masks{$lan}, $lan2iface{$lan}->{$vn}]);
     }
 
     elsif ($mode eq "route") {
@@ -259,24 +281,36 @@ if (! $impotent) {
 
 while (my ($vnode, $valhash) = each %vnodetab) {
 
-    my @ipaddrs = @{$valhash->{'IPS'}};
+    my @ipinfo = @{$valhash->{'IPS'}};
     my @routes =  @{$valhash->{'routes'}};
+
+    my @ipifaces = map { @{$_}[2] . ":" . @{$_}[0] } @ipinfo;
     
     if (!$impotent) {
-        DBQueryFatal("update virt_nodes set ips='@ipaddrs' ".
-                     "where vname='$vnode'");
+        DBQueryFatal("update virt_nodes set ips='@ipifaces' ".
+                     "where vname='$vnode' and pid='$pid' and eid='$eid'");
     }
 
     if ($debug) {
         print "Info for $vnode:\n".
-            "IPS: @ipaddrs\n";
+            "IPS: @ipifaces\n";
     }
 
     foreach $routeptr (@routes) {
         my ($type, $dstip, $mask, $hopip) = @{$routeptr};
+        my $srcip;
+
+        foreach my $ipdatum (@ipinfo) {
+            my ($src, $srcmask, $iface) = @{$ipdatum};
+            if ((inet_aton($src) & $srcmask) eq 
+                (inet_aton($hopip) & $srcmask)) {
+                $srcip = $src;
+                last;
+            }
+        }
 
         if ($debug) {
-            print "route: type: $type dst: $dstip mask: $mask ". 
+            print "route: type: $type src: $srcip dst: $dstip mask: $mask ". 
                 "nexthop: $hopip\n";
         }
      
@@ -300,11 +334,10 @@ while (my ($vnode, $valhash) = each %vnodetab) {
             }
         }
         else {
-            # XXX: What to do about srcip? Set to '0.0.0.0' for now.
             DBQueryFatal("insert into virt_routes ".
                          " (pid,eid,vname,src,dst,nexthop,dst_type,".
                          "  dst_mask) ".
-                         " values ('$pid', '$eid', '$vnode', '0.0.0.0', ".
+                         " values ('$pid', '$eid', '$vnode', '$srcip', ".
                          "         '$dstip', '$hopip', '$type', '$mask')");
         }
     }
