@@ -117,16 +117,6 @@ if ($state eq "active") {
     $sth->finish();
     print "\n";
 
-    # Read portmap
-    $sth=$dbh->prepare("SELECT vnode,vport,pport from portmap" .
-		       " where pid=\"$pid\" and eid=\"$eid\"");
-    $sth->execute;
-
-    while (($vname,$vport,$pport) = $sth->fetchrow_array()) {
-	$portmap{"$vname:$vport"} = $pport;
-    }
-    $sth->finish();
-
     $sth=$dbh->prepare("SELECT vname,member,delay,bandwidth,lossrate" .
 		       " from virt_lans where pid=\"$pid\" and eid=\"$eid\"");
     $sth->execute();
