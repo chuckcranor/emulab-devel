@@ -21,7 +21,7 @@
  * Desc: Display identified objects and set object definitions.
  * Author: Andrew Howard
  * Date: 11 Apr 2002
- * CVS: $Id: ident.c,v 1.1.1.1.8.2 2005-03-21 17:24:28 stack Exp $
+ * CVS: $Id: ident.c,v 1.1.1.1.8.3 2005-03-29 18:21:12 johnsond Exp $
  ***************************************************************************/
 
 #include <assert.h>
@@ -80,8 +80,8 @@ void ident_update()
     r = object->max_sep;
     
     dewarp_world2image(object->px, object->py, &ax, &ay);
-    dewarp_world2image(object->px + r * cos(object->pa),
-                       object->py + r * sin(object->pa), &bx, &by);
+    dewarp_world2image(object->px + r * cos(object->pa+M_PI_2),
+                       object->py + r * sin(object->pa+M_PI_2), &bx, &by);
 
     rtk_fig_color(ident->fig, COLOR_IDENT);
     rtk_fig_arrow_ex(ident->fig, ax, ay, bx, by, 5);
