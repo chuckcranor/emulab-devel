@@ -106,4 +106,4 @@ if ($errors == 0) {
 &tbs_out("Cleanup finished - " . &ctime(time) . "\n");
 
 # We exit with whether we had errors or not.
-$errors;
+exit $errors;
