@@ -1,0 +1,188 @@
+#!/usr/bin/perl -wT
+
+#
+# EMULAB-COPYRIGHT
+# Copyright (c) 2000-2002 University of Utah and the Flux Group.
+# All rights reserved.
+#
+
+# os_select sets the os that should boot next on a node, and sets
+# next_op_mode accordingly. 
+
+# If you give it the -1 flag, it will set
+# up a one-time reboot to a different OS, but leave the default
+# untouched.
+
+sub usage() {
+    print <<"EOF";
+Usage: os_select [-h] [-d] [-v] <osid> <node> [<node> ...]
+ -h    Display this help message
+ -d    Debug mode
+ -v    Verbose mode
+ osid  OS identifier for the selected OS (see web interface for listing)
+ node  Node identifiers (ie pcXX)
+EOF
+    exit(-1);
+}
+
+# XXX
+# todo:
+# - make func to lookup state machine for given osid
+# - core: find state for osid, set osid/next_state for all the nodes
+# - *** think about locking. necessary?
+
+use Getopt::Std;
+
+# un-taint path
+$ENV{'PATH'} = '/bin:/usr/bin:/usr/local/bin';
+delete @ENV{'IFS', 'CDPATH', 'ENV', 'BASH_ENV'};
+
+$| = 1; #Turn off line buffering on output
+
+# Configure variables
+my $TB          = "@prefix@";
+my $TBOPS       = "@TBOPSEMAIL@";
+
+# Testbed Support libraries
+use lib "@prefix@/lib";
+use libdb;
+use libtestbed;
+use English;
+
+my $d=0; # debug/verbose
+
+# Parse command arguments. Once we return from getopts, all that should be
+# left are the required arguments.
+my  $optlist = "hdv";
+%options = ();
+if (! getopts($optlist, \%options)) { usage(); }
+if (defined($options{"h"})) { usage(); }
+if (defined($options{"d"})) { $d++; }
+if (defined($options{"v"})) { $d++; }
+print "DEBUG LEVEL $d\n" if $d;
+
+print "ARGV= ".join(" ",@ARGV)."\n" if $d>1;
+if (@ARGV < 2) { usage(); }
+
+my $osid = shift;
+my @nodes = @ARGV;
+
+# Untaint args.
+if ($osid =~ /^([-\@\w]+)$/) { $osid = $1; }
+else { die("Bad data in osid: '$osid'\n"); }
+
+my @temp;
+foreach $n (@nodes) {
+    if ($n =~ /^([-\@\w]+)$/) { push(@temp,$1); }
+    else { warn("Ignoring bad data in node_id: '$n'\n"); }
+}
+@nodes=@temp;
+
+if (@nodes < 1) { die("No valid nodes supplied.\n"); }
+
+# Figure out who called us. Only root, people with admin status
+# in the DB, or the owner of the experiment can run this script.
+if ($UID && !TBAdmin($UID)) {
+    my ($me) = getpwuid($UID)
+        or die "$UID not in passwd file";
+    print "Not an admin.\n" if $d>1;
+    if (! TBNodeAccessCheck($UID,TB_NODEACCESS_MODIFYINFO,@nodes)) {
+        die("os_select: You do not have permission to modify ".
+	    "one or more of the nodes.\n");
+    }
+} else { print "Running as an admin.\n" if $d>1; }
+
+my $opmode = os_opmode($osid);
+print "Found opmode '$opmode' for osid '$osid'.\n" if $d;
+
+foreach $n (@nodes) {
+    my $boot = bootwhat($n);
+    if (!$boot) { next; }
+    print "Bootwhat says: $n => $boot\n" if $d>1;
+    my $curmode = node_opmode($n);
+    print "Current opmode for node '$n' is '$curmode'.\n" if $d;
+    if (!$curmode || ($curmode ne $opmode)) {
+	set_nextmode($n);
+    }
+}
+
+exit();
+
+#
+# Subroutines
+#
+
+sub set_nextmode() {
+    my $node = shift || "";
+    my $cmd = "update nodes set next_op_mode='$opmode' where node_id='$node';";
+    print "Setting next_op_mode for node '$node' to '$opmode'.\n" if $d;
+    my $q = DBQueryFatal($cmd);
+    return 0;
+}
+
+sub node_opmode() {
+    my $node = shift || "";
+    my $cmd = "select op_mode from nodes where node_id='$node';";
+    my $q = DBQueryFatal($cmd);
+    if ($q->numrows() < 1) {
+	die("Invalid node '$node' is non-existent.\n");
+    }
+    my @r = $q->fetchrow_array();
+    my $opmode=$r[0];
+    if (defined($opmode) && $opmode) { return $opmode; }
+    warn("Invalid opmode '$opmode' for node '$node'.\n");
+    return 0;
+}
+
+sub os_opmode() {
+    my $osid = shift || "";
+    my $cmd = "select op_mode from os_info where osid='$osid';";
+    my $q = DBQueryFatal($cmd);
+    if ($q->numrows() < 1) {
+	die("Invalid osid '$osid' is non-existent.\n");
+    }
+    my @r = $q->fetchrow_array();
+    my $opmode=$r[0];
+    if (defined($opmode) && $opmode) { return $opmode; }
+    die("Invalid opmode '$opmode' for osid '$osid'.\n");
+}
+
+# WARNING!!!
+#
+# DO NOT change this function without making corresponding changes to
+# the perl version of this code in the os_select script. They MUST
+# ALWAYS return exactly the same resulting OSID given the same inputs.
+
+# NEXT_BOOT_PATH        multiboot kernel
+# DEF_BOOT_PATH         multiboot kernel
+# NEXT_BOOT_OSID        osid from os_info
+# DEF_BOOT_OSID         osid from os_info
+# if all the above are null, error
+
+sub bootwhat() {
+    my $node = shift || return 0;
+    my $cmd = "select n.next_boot_path, n.def_boot_path, 
+n.next_boot_osid, n.def_boot_osid from nodes as n 
+where n.node_id = '$node'";
+    my $q = DBQueryFatal($cmd);
+    if ($q->numrows() < 1) {
+	warn("Ignoring invalid node '$node'.\n");
+	return 0;
+    }
+    my @r = $q->fetchrow_array();
+    $nextpath=$r[0];
+    $defpath=$r[1];
+    $nextosid=$r[2];
+    $defosid=$r[3];
+    print "node $node => ($nextpath, $defpath, $nextosid, $defosid)\n" if $d>1;
+    if ((defined($nextpath) && $nextpath) || 
+	(defined($defpath) && $defpath)) {
+	warn("Ignoring node '$node': will not boot from an OSID\n");
+	return 0;
+    }
+    if (defined($nextosid) && $nextosid) { return $nextosid; }
+    if (defined($defosid) && $defosid) { return $defosid; }
+    warn("Ignoring node '$node': All boot info was null!\n");
+    return 0;
+}   
+
