@@ -612,7 +612,6 @@ sub RunAssign ()
     	$cmd = "assign";
     }
 
-    $cmd = "assign";
     print "$cmd $cmdargs\n";
 
     #
