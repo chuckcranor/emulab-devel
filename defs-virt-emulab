@@ -1,0 +1,25 @@
+#
+# This is the definitions file for Virt development tree on Emulab.Net.
+#
+TBDBNAME=tbdb
+TBOPSEMAIL=tbres-users@emulab-net
+TBLOGSEMAIL=tbres-users@emulab.net
+TBWWWEMAIL=tbres-users@emulab.net
+tbapprOVALEMAIL=tbres-users@emulab.net
+TBACTIVEARCHIVE=tbres-users@emulab.net
+TBUSERSARCHIVE=tbres-users@emulab.net
+BOSSNODE=boss.emulab.net
+USERNODE=users.emulab.net
+FSNODE=fs.emulab.net
+OURDOMAIN=emulab.net
+DELAYCAPACITY=2
+FSDIR_GROUPS=/q/groups
+FSDIR_PROJ=/q/proj
+FSDIR_USERS=/users
+TBSTATEDEMAIL=tbres-users@emulab.net
+TBTESTSUITEEMAIL=tbres-users@emulab.net
+WWWHOST=www.emulab.net
+WWW=www.emulab.net/dev/virt
+THISHOMEBASE=Virt.Emulab.Net
+FS_WITH_QUOTAS="/q /users"
+PLABSUPPORT=1
