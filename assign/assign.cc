@@ -918,7 +918,7 @@ int main(int argc,char **argv)
   anneal();
   timeend = used_time();
 
-  if ((score > absbest) || (violated > absbestviolated)) {
+  if ((score > (absbest+0.01)) || (violated > absbestviolated)) {
     cerr << "Internal error: Invalid migration assumptions." << endl;
     cerr << "score:" << score << " absbest:" << absbest <<
       " violated:" << violated << " absbestviolated:" <<
