@@ -765,8 +765,6 @@ while (1) {
 	}
 
 	# read Edges
-	# By convention, in plinks, the delay node is always the second
-	# entry.
 	while (<ASSIGNFP> !~ /^Edges:/) {}
 	printdb "Edges:\n";
 	EDGEWHILE: while (<ASSIGNFP>) {
@@ -799,11 +797,7 @@ while (1) {
 	    $nodeportB = &getnodeport($rawB);
 	    $nodeportA =~ s/\//:/;
 	    $nodeportB =~ s/\//:/;
-            if (&isdelay($nodeportB)) {
-		$plinks{$vlink} = [$nodeportA,$nodeportB];
-	    } else {
-		$plinks{$vlink} = [$nodeportB,$nodeportA];
-	    }
+	    $plinks{$vlink} = [$nodeportA,$nodeportB];
 	    printdb "  $vlink " . join(" ",@{$plinks{$vlink}}) . "\n";
 	}
     } else {
