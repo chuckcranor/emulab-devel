@@ -123,6 +123,7 @@ while (($pnode,$vnode) = $sth->fetchrow_array) {
 	if (! $dbh->do("UPDATE nodes set def_boot_osid=\"$osid\"," .
 		       " def_boot_cmd_line=\"$cmdline\"," .
 		       " startstatus=\"none\"," .
+		       " ready=0," .
 		       " rpms=\"$rpms\"," .
 		       " deltas=\"$deltas\"," .
 		       " tarballs=\"$tarfiles\"," .
