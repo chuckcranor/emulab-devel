@@ -1,2 +1,0 @@
-#!/bin/sh
-exec @SSH@ @SSH_ARGS@ $*
