@@ -1310,11 +1310,24 @@ pvertex make_lan_node(vvertex vv)
     pedge pe = (add_edge(pv,largest_switch,PG)).first;
     tb_plink *pl = new tb_plink();
     put(pedge_pmap,pe,pl);
-    pl->name = crope("lanlink_");
+
+    // Build a link name that looks like the ones we used to supply in the top
+    // file
+    pl->name = crope("link-");
+    pl->name += get(pvertex_pmap,largest_switch)->name;
+    pl->name += ":";
+    pl->name += get(pvertex_pmap,largest_switch)->name;
+    pl->name += "-";
     pl->name += vnode->name;
+
     pl->type = tb_plink::PLINK_LAN;
-    pl->srcmac = vnode->name;
-    pl->dstmac = get(pvertex_pmap,largest_switch)->name;
+
+    // Again, compatability with older output, instead of more useful output
+    //pl->srcmac = vnode->name;
+    //pl->dstmac = get(pvertex_pmap,largest_switch)->name;
+    pl->srcmac = "(null)";
+    pl->dstmac = "(null)";
+
     pl->bw_used = 0;
     pl->emulated = pl->nonemulated = 0;
     p->switches.insert(largest_switch);
