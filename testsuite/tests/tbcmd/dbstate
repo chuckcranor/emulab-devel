@@ -1,1 +1,0 @@
-replace into os_info (osname,osid,description,version,pid) values ("MYOS","testbed-MYOS","Test OS","0","testbed");

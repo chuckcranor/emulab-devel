@@ -1,4 +1,0 @@
-Basic test of the traffic generation code.
-
-Note: this file is designed to run with NS as well and includes some 'at' 
-statements that cause parser warnings.
