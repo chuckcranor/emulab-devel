@@ -1168,7 +1168,7 @@ foreach my $pnode (keys(%virtnodes)) {
 	# Run avail to get the list of virtnodes on the phys node. We
 	# already know there are enough, since assign knows that.
 	#
-	print "Asking avail for $numvs vnodes: @vlist on $pnode\n";
+	print "Asking avail for $numvs for vnodes: @vlist on $pnode\n";
     
 	open(AVAIL,"$TBROOT/sbin/avail virtonly=$pnode rand limit=$numvs |")
 	    or fatal($WRAPPER_FAILED, "avail failed");
@@ -1191,6 +1191,7 @@ foreach my $pnode (keys(%virtnodes)) {
 
 	# Sanity check.
 	if (scalar(@vlist) != scalar(@plist)) {
+	    print STDERR "avail gave ", scalar(@plist) vnodes: @plist on $pnode\n";
 	    fatal($WRAPPER_FAILED,
 		  "Could not map some virtual nodes on $pnode");
 	}
