@@ -216,7 +216,7 @@ bool dashboard::update(unsigned long now)
     if (now > this->db_next_short_tick) {
 	float lo, ro;
 
-#if 0
+
 	this->db_telemetry.left_instant_odometer = lo =
 	    this->db_garcia.getNamedValue("distance-left")->getFloatVal();
 	this->db_telemetry.right_instant_odometer = ro =
@@ -272,7 +272,7 @@ bool dashboard::update(unsigned long now)
 	this->db_next_short_tick = now + SHORT_UPDATE_INTERVAL;
 
 	this->db_telemetry_updated = true;
-#endif
+
         
     }
 
