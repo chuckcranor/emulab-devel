@@ -231,6 +231,7 @@ foreach $vlan (keys(%lans)) {
 	($node2,undef) = split(":",$member2);
 	print TOPFILE "link simplelink-$vlan $node1 $node2 " .
 	    "$bw $d $lr $rbw $rd $rlr $flags\n";
+	$vnamemap{"simplelink-$vlan"} = $vlan;
     } else {
 	if (! defined($vlannodes{$vlan})) {
 	    print TOPFILE "node $vlan lan\n";
@@ -242,6 +243,7 @@ foreach $vlan (keys(%lans)) {
 	    ($node,$port) = split(":",$member);
 	    print TOPFILE "link lanlink-$vlan-$member $vlan $node " .
 		join(" ",@data[1..$#data]) . "\n";
+	    $vnamemap{"lanlink-$vlan-$member"} = $vlan;
 	}
     }
 }
@@ -612,7 +614,9 @@ foreach $delayedlink (keys(%delayed)) {
     $portA = extractport($srclink,$dnode);
     $portB = extractport($dstlink,$dnode);
     
-    $delaynodes{$dnode} = [$v2pmap{$dnode},$portA,$portB,$delayedlink];
+    $vname = $vnamemap{$delayedlink};
+
+    $delaynodes{$dnode} = [$v2pmap{$dnode},$portA,$portB,$vname];
     push(@{$delaynodes{$dnode}},@{$delays{$dnode}});
     
     printdb "delay: $dnode -> " . join(" ",@{$delaynodes{$dnode}}) . "\n";
@@ -633,11 +637,11 @@ foreach $vlan (keys(%vlans)) {
 }
 my $pipeid = 100;
 
-foreach $delay (keys(%delaynodess)) {
+foreach $delaynode (keys(%delaynodes)) {
     # So r* indicates int1->int0 and others are int0->int1
     ($pnode,$int0,$int1,$vname,$bandwidth,$delay,$lossrate,
-     $rbandwidth,$delay,$rlossrate,$np0,$np1) = 
-	@{$delaynodess{$delay}};
+     $rbandwidth,$rdelay,$rlossrate) = 
+	@{$delaynodes{$delaynode}};
     my $pipe0 = $pipeid;
     my $pipe1 = $pipeid + 10;
     $pipeid += 100;
@@ -648,38 +652,18 @@ foreach $delay (keys(%delaynodess)) {
     #
     my @members = @{$lans{$vname}};
     if (@members == 2) {
-	my ($nodeport0,$nodeport1) = @members;
-
-	$np0node = (split(":",$np0))[0];
-	$np1node = (split(":",$np1))[0];
-	$np0vnode = $p2vmap{$np0node};
-	$np1vnode = $p2vmap{$np1node};
-
-	$node0 = (split(":",$np0))[0];
-	$node1 = (split(":",$np1))[0];
-
-	printdb("np0 = $np0, np0vnode = $np0vnode, np1 = $np1, ".
-		"np1vnode = $np1vnode, nodeport0 = $nodeport0, ".
-		"nodeport1 = $nodeport1\n");
-
-	# This is pretty hackish
-	if ($node0 eq $np0node) {
-	    $vnp0 = $nodeport0;
-	    $vnp1 = $nodeport1;
-	} else {
-	    $vnp0 = $nodeport1;
-	    $vnp1 = $nodeport0;
-	}
+	my ($raw0,$raw1) = @members;
+	my ($np0,$np1) = ((split(" ",$raw0))[0],(split(" ",$raw1))[0]);
 
 	my ($q0_limit,$q0_maxthresh,$q0_minthresh,$q0_weight,$q0_linterm,
 	    $q0_qinbytes,$q0_bytes,$q0_meanpsize,$q0_wait,$q0_setbit,
 	    $q0_droptail,$q0_red,$q0_gentle) =
-		@{$queueinfo{"$vname:$vnp0"}};
+		@{$queueinfo{"$vname:$np0"}};
 
 	my ($q1_limit,$q1_maxthresh,$q1_minthresh,$q1_weight,$q1_linterm,
 	    $q1_qinbytes,$q1_bytes,$q1_meanpsize,$q1_wait,$q1_setbit,
 	    $q1_droptail,$q1_red,$q1_gentle) =
-		          @{$queueinfo{"$vname:$vnp1"}};
+		          @{$queueinfo{"$vname:$np1"}};
     
 	DBQueryFatal("insert into delays " .
 	     " (pid,eid,node_id,vname,iface0,iface1" .
@@ -927,7 +911,7 @@ foreach $delay (keys(%delaynodes)) {
     ($pnode,undef,undef,$vname) = @{$delays{$delay}};
     $vnode = $p2vmap{$pnode};
 
-    ($vname) = ($dnode =~ /^delay-([\w+])/);
+    ($vname) = ($dnode =~ /^delay-(\w+)/);
     DBQueryFatal("replace into virt_agents ".
 		 " (pid, eid, vname, vnode, objecttype) ".
 		 " select '$pid', '$eid', '$vname', '$delay', ".
