@@ -46,6 +46,7 @@ use libtestbed;
 my $nodereboot	= "$TB/bin/node_reboot";
 my $os_load	= "$TB/bin/os_load";
 my $vnode_setup = "$TB/sbin/vnode_setup";
+my $osselect    = "$TB/bin/os_select";
 my $dbg		= 0;
 my $failed      = 0;
 my @nodes       = ();
@@ -314,9 +315,9 @@ while (my %row = $db_result->fetchhash()) {
 			    SetupReload($node, $n_osid, $type);
 			}
 			else {
-			    DBQueryFatal("update nodes ".
-					 "set def_boot_osid='$n_osid' ".
-					 "where node_id='$node'");
+			    system("$ossetup $n_osid $node") and
+				die("*** Could not set boot OS to ".
+				    "$n_osid for $node\n");
 			}
 			$osids{$node} = $n_osid;
 		    }
