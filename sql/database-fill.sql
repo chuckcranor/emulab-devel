@@ -293,6 +293,7 @@ REPLACE INTO state_timeouts VALUES ('PXEFBSD','REBOOTED',60,'NOTIFY');
 REPLACE INTO state_timeouts VALUES ('PXEFBSD','BOOTING',180,'REBOOT');
 REPLACE INTO state_timeouts VALUES ('NORMALv2','TBSETUP',600,'NOTIFY');
 REPLACE INTO state_timeouts VALUES ('NORMALv2','BOOTING',180,'REBOOT');
+REPLACE INTO state_timeouts VALUES ('GARCIA-STARGATEv1','TBSETUP',600,'NOTIFY');
 REPLACE INTO state_timeouts VALUES ('PXEKERNEL','PXEWAKEUP',20,'REBOOT');
 
 --
@@ -462,6 +463,19 @@ REPLACE INTO state_transitions VALUES ('NORMALv2','TBSETUP','TBFAILED','BootFail
 REPLACE INTO state_transitions VALUES ('NORMALv2','TBFAILED','SHUTDOWN','RebootAfterFail');
 REPLACE INTO state_transitions VALUES ('PCVM','TBSETUP','TBFAILED','BootError');
 REPLACE INTO state_transitions VALUES ('PCVM','TBFAILED','SHUTDOWN','Reboot');
+REPLACE INTO state_transitions VALUES ('GARCIA-STARGATEv1','SHUTDOWN','SHUTDOWN','Retry');
+REPLACE INTO state_transitions VALUES ('GARCIA-STARGATEv1','SHUTDOWN','TBSETUP','DHCP');
+REPLACE INTO state_transitions VALUES ('GARCIA-STARGATEv1','SHUTDOWN','POWEROFF','PowerOff');
+REPLACE INTO state_transitions VALUES ('GARCIA-STARGATEv1','POWEROFF','TBSETUP','PowerOn');
+REPLACE INTO state_transitions VALUES ('GARCIA-STARGATEv1','RECONFIG','SHUTDOWN','ReConfigFail');
+REPLACE INTO state_transitions VALUES ('GARCIA-STARGATEv1','ISUP','SHUTDOWN','Reboot');
+REPLACE INTO state_transitions VALUES ('GARCIA-STARGATEv1','TBSETUP','SHUTDOWN','Error');
+REPLACE INTO state_transitions VALUES ('GARCIA-STARGATEv1','ISUP','RECONFIG','DoReConfig');
+REPLACE INTO state_transitions VALUES ('GARCIA-STARGATEv1','RECONFIG','TBSETUP','ReConfig');
+REPLACE INTO state_transitions VALUES ('GARCIA-STARGATEv1','TBSETUP','ISUP','BootDone');
+REPLACE INTO state_transitions VALUES ('GARCIA-STARGATEv1','TBSETUP','TBSETUP','LongSetup');
+REPLACE INTO state_transitions VALUES ('GARCIA-STARGATEv1','TBSETUP','TBFAILED','BootFail');
+REPLACE INTO state_transitions VALUES ('GARCIA-STARGATEv1','TBFAILED','SHUTDOWN','RebootAfterFail');
 
 --
 -- Dumping data for table `state_triggers`
@@ -503,7 +517,6 @@ REPLACE INTO table_regex VALUES ('experiments','wa_plr_solverweight','float','re
 REPLACE INTO table_regex VALUES ('experiments','cpu_usage','int','redirect','default:tinyint',0,5,NULL);
 REPLACE INTO table_regex VALUES ('experiments','mem_usage','int','redirect','default:tinyint',0,5,NULL);
 REPLACE INTO table_regex VALUES ('experiments','sync_server','text','redirect','virt_nodes:vname',0,0,NULL);
-REPLACE INTO table_regex VALUES ('experiments','delay_capacity','int','redirect','default:tinyint',1,10,NULL);
 REPLACE INTO table_regex VALUES ('groups','gid','text','regex','^[a-zA-Z][-\\w]+$',2,12,NULL);
 REPLACE INTO table_regex VALUES ('nodes','node_id','text','regex','^[-\\w]+$',1,12,NULL);
 REPLACE INTO table_regex VALUES ('nseconfigs','pid','text','redirect','projects:pid',0,0,NULL);
@@ -692,6 +705,7 @@ REPLACE INTO table_regex VALUES ('virt_node_startloc','loc_x','float','redirect'
 REPLACE INTO table_regex VALUES ('virt_node_startloc','loc_y','float','redirect','default:float',0,0,NULL);
 REPLACE INTO table_regex VALUES ('virt_node_startloc','orientation','float','redirect','default:float',0,0,NULL);
 REPLACE INTO table_regex VALUES ('eventlist','parent','text','regex','^[-\\w\\(\\)]+$',1,64,NULL);
+REPLACE INTO table_regex VALUES ('experiments','delay_capacity','int','redirect','default:tinyint',1,10,NULL);
 
 --
 -- Dumping data for table `testsuite_preentables`
