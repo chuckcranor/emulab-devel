@@ -1,5 +1,11 @@
 // Partition.h
 
+/*
+ * EMULAB-COPYRIGHT
+ * Copyright (c) 2004 University of Utah and the Flux Group.
+ * All rights reserved.
+ */
+
 #ifndef PARTITION_H_IP_ASSIGN_2
 #define PARTITION_H_IP_ASSIGN_2
 
