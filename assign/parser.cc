@@ -13,7 +13,7 @@ string_vector split_line(crope line,char split_char)
   crope::const_iterator next_space,prev_space;
   prev_space = line.begin();
 
-  while ((next_space = find(prev_space,line.end(),' ')) != line.end()) {
+  while ((next_space = find(prev_space,line.end(),split_char)) != line.end()) {
     parsed.push_back(line.substr(prev_space,next_space));
     prev_space = ++next_space;
   }
