@@ -1191,7 +1191,7 @@ foreach my $pnode (keys(%virtnodes)) {
 
 	# Sanity check.
 	if (scalar(@vlist) != scalar(@plist)) {
-	    print STDERR "avail gave ", scalar(@plist) vnodes: @plist on $pnode\n";
+	    print STDERR "avail gave ", scalar(@plist), "vnodes: @plist on $pnode\n";
 	    fatal($WRAPPER_FAILED,
 		  "Could not map some virtual nodes on $pnode");
 	}
