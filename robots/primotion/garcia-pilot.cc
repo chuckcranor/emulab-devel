@@ -41,8 +41,8 @@
  * The default port to listen for client connections.
  */
 #define PILOT_PORT 2531
-#define DEFAULT_WHEELSPEED 0.2
-#define DEFAULT_STALL_THRESHOLD 3.0
+#define DEFAULT_WHEELSPEED 0.2f
+#define DEFAULT_STALL_THRESHOLD 3
 
 static const char *DEFAULT_LOG_PATH = "/tmp/garcia-pilot.log";
 
@@ -187,7 +187,7 @@ int main(int argc, char *argv[])
             }
             break;
          case 't':
-             if (sscanf(optarg, "%f", &wstall) != 1) {
+             if (sscanf(optarg, "%d", &wstall) != 1) {
                fprintf(stderr,
                	       "error: -t option is not a number: %s\n",
                        optarg);
@@ -376,6 +376,7 @@ int main(int argc, char *argv[])
 					MA_GarciaTelemetry, db.getTelemetry(),
 					MA_TAG_DONE);
 
+#if 0
 			if (pilotClient::pc_rmc_client != NULL) {
 			    rmc_telemetry_timeout -= 1;
 			    if (rmc_telemetry_timeout <= 0) {
@@ -390,6 +391,7 @@ int main(int argc, char *argv[])
 				}
 			    }
 			}
+#endif
 		    }
 
 		    for (i = clients.begin(); i != clients.end(); ) {
