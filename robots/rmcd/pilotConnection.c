@@ -6,13 +6,117 @@
 #include <assert.h>
 #include <string.h>
 
+// new
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <fcntl.h>
+
 #include "log.h"
 #include "obstacles.h"
 #include "pilotConnection.h"
 
+char *statsfile = NULL;
+int statsfile_fd = -1;
+FILE *statsfile_FILE = NULL;
+
 extern int debug;
 
 struct pilot_connection_data pc_data;
+
+
+// new 
+void pc_zero_stats(struct pilot_connection *pc) {
+    assert(pc != NULL);
+
+    // new
+    pc->stats.num_retries = 0;
+    pc->stats.msg = PC_STATS_MSG_UNDEF;
+    bzero(&(pc->stats.command_issue),sizeof(struct timeval));
+    bzero(&(pc->stats.command_finish),sizeof(struct timeval));
+    bzero(&(pc->stats.start_pos),sizeof(struct timeval));
+    bzero(&(pc->stats.end_pos),sizeof(struct timeval));
+
+    return;
+}
+void pc_stats_start_time(struct pilot_connection *pc) {
+    assert(pc != NULL);
+
+    gettimeofday(&(pc->stats.command_issue),NULL);
+}
+void pc_stats_stop_time(struct pilot_connection *pc) {
+    assert(pc != NULL);
+
+    gettimeofday(&(pc->stats.command_finish),NULL);
+}
+void pc_stats_msg(struct pilot_connection *pc,char *msg) {
+    assert(pc != NULL);
+
+    pc->stats.msg = msg;
+}
+void pc_stats_add_retry(struct pilot_connection *pc) {
+    assert(pc != NULL);
+    
+    ++(pc->stats.num_retries);
+}
+void pc_stats_start_pos(struct pilot_connection *pc,
+			struct robot_position *rp) {
+    assert(pc != NULL);
+    assert(rp != NULL);
+    
+    pc->stats.start_pos = *rp;
+}
+void pc_stats_end_pos(struct pilot_connection *pc,
+		      struct robot_position *rp) {
+    assert(pc != NULL);
+    assert(rp != NULL);
+
+    pc->stats.end_pos = *rp;
+}
+void pc_print_stats(struct pilot_connection *pc) {
+    struct timeval diff;
+
+    if (statsfile_fd < 0 && statsfile != NULL) {
+	// open it
+	statsfile_fd = open(statsfile,
+			    O_WRONLY | O_CREAT | O_TRUNC,
+			    S_IRWXU | S_IRGRP);
+	if (statsfile_fd == -1) {
+	    statsfile_fd = 0;
+	}
+	else {
+	    statsfile_FILE = fdopen(statsfile_fd,"w");
+	    if (statsfile_FILE == NULL) {
+		statsfile_fd = 0;
+	    }
+	}
+    }
+    else if (statsfile_fd == 0) {
+	// noop -- can't open file ever
+	;
+    }
+    else {
+	timersub(&(pc->stats.command_finish),
+		 &(pc->stats.command_issue),
+		 &diff);
+	fprintf(statsfile_FILE,
+		"%s: %s => time=%f,num_retries=%d,"
+		"start_pos(x=%f,y=%f,theta=%f,time=%f),"
+		"end_pos=(x=%f,y=%f,theta=%f,time=%f)\n",
+		pc->pc_robot->hostname,
+		pc->stats.msg,
+		(float)(diff.tv_sec)+diff.tv_usec/1000000.0f,
+		pc->stats.num_retries,
+		pc->stats.start_pos.x,
+		pc->stats.start_pos.y,
+		pc->stats.start_pos.theta,
+		pc->stats.start_pos.timestamp,
+		pc->stats.end_pos.x,
+		pc->stats.end_pos.y,
+		pc->stats.end_pos.theta,
+		pc->stats.end_pos.timestamp);
+    }
+}
+		
 
 struct pilot_connection *pc_add_robot(struct robot_config *rc)
 {
@@ -27,6 +131,9 @@ struct pilot_connection *pc_add_robot(struct robot_config *rc)
     retval->pc_robot = rc;
     retval->pc_slave.sc_pilot = retval;
     retval->pc_master.mc_pilot = retval;
+
+    // new 
+    pc_zero_stats(retval);
 
     if (debug > 1) {
 	info("debug: connecting to %s\n", rc->hostname);

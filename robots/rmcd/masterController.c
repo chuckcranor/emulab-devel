@@ -46,6 +46,12 @@ static int mc_set_goal(struct master_controller *mc, mtp_packet_t *mp)
 			MA_CommandID, MASTER_COMMAND_ID,
 			MA_TAG_DONE);
 	mtp_send_packet(mc->mc_pilot->pc_handle, &smp);
+
+	pc_stats_stop_time(mc->mc_pilot);
+	pc_print_stats(mc->mc_pilot);
+	pc_zero_stats(mc->mc_pilot);
+	pc_stats_start_pos(mc->mc_pilot,&(mc->mc_goal_pos));
+
     }
     else {
 	mtp_packet_t rmp;
@@ -56,6 +62,12 @@ static int mc_set_goal(struct master_controller *mc, mtp_packet_t *mp)
 			MA_RobotID, mc->mc_pilot->pc_robot->id,
 			MA_TAG_DONE);
 	mtp_send_packet(pc_data.pcd_emc_handle, &rmp);
+
+	// don't print here -- cause the previous move, if any, finished 
+	// more or less successfully...
+        pc_zero_stats(mc->mc_pilot);
+        pc_stats_start_pos(mc->mc_pilot,&(mc->mc_goal_pos));
+
     }
     
     return retval;
@@ -69,6 +81,9 @@ static int mc_set_actual(struct master_controller *mc, mtp_packet_t *mp)
     assert(mp != NULL);
 
     mc->mc_actual_pos = mp->data.mtp_payload_u.update_position.position;
+
+    // set the current "final" stats pos
+    pc_stats_end_pos(mc->mc_pilot,&(mc->mc_actual_pos));
     
     return retval;
 }
@@ -100,7 +115,12 @@ static int mc_plot(struct master_controller *mc, mtp_packet_t *mp)
     assert(mp != NULL);
 
     mtp_polar(&mc->mc_actual_pos, &mc->mc_goal_pos, &distance, &theta);
-    if ((mc->mc_tries_remaining <= 0) || (distance < pc_data.pcd_meter_tolerance)) {
+    if ((mc->mc_tries_remaining <= 0) || (distance <
+					  pc_data.pcd_meter_tolerance)) {
+
+	// new: take the finish timestamp and dump data
+	pc_stats_stop_time(mc->mc_pilot);
+
       /* done moving */
 	if (cmp_fuzzy(mc->mc_actual_pos.theta,
 		      mc->mc_goal_pos.theta,
@@ -116,6 +136,9 @@ static int mc_plot(struct master_controller *mc, mtp_packet_t *mp)
 			    MA_Status, MTP_POSITION_STATUS_COMPLETE,
 			    MA_TAG_DONE);
 	    mtp_send_packet(pc_data.pcd_emc_handle, &ump);
+
+	    pc_stats_msg(mc->mc_pilot,PC_STATS_MSG_SUCCESS);
+
 	}
 	else {
             /* failed */
@@ -130,7 +153,15 @@ static int mc_plot(struct master_controller *mc, mtp_packet_t *mp)
 				       mc->mc_actual_pos.theta),
 			    MA_TAG_DONE);
 	    mtp_send_packet(mc->mc_pilot->pc_handle, &gmp);
+
+	    pc_stats_msg(mc->mc_pilot,PC_STATS_MSG_FAILURE);
+
 	}
+
+	pc_print_stats(mc->mc_pilot);
+	pc_zero_stats(mc->mc_pilot);
+
+
     }
     else {
 	/* still moving */
@@ -143,6 +174,9 @@ static int mc_plot(struct master_controller *mc, mtp_packet_t *mp)
 	    info("no waypoint\n");
 	    rp = mtp_world2local(&_rp, &mc->mc_actual_pos, &mc->mc_goal_pos);
 	    mc->mc_tries_remaining -= 1;
+
+	    pc_stats_add_retry(mc->mc_pilot);
+
 	    break;
 	case PPC_WAYPOINT:
 	    info("waypoint\n");

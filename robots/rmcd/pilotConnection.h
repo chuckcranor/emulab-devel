@@ -32,6 +32,19 @@ enum {
     PCF_CONNECTED = (1L << PCB_CONNECTED),
 };
 
+#define PC_STATS_MSG_SUCCESS "Success"
+#define PC_STATS_MSG_FAILURE "Failure"
+#define PC_STATS_MSG_UNDEF   "Undef"
+
+struct pc_stats {
+    char *msg;
+    struct timeval command_issue;
+    struct timeval command_finish;
+    int num_retries;
+    struct robot_position start_pos;
+    struct robot_position end_pos;
+};
+
 struct pilot_connection {
     struct robot_config *pc_robot;
     mtp_handle_t pc_handle;
@@ -39,6 +52,8 @@ struct pilot_connection {
     pilot_control_mode_t pc_control_mode;
     struct slave_controller pc_slave;
     struct master_controller pc_master;
+    // new for logging
+    struct pc_stats stats;
 };
 
 struct pilot_connection *pc_add_robot(struct robot_config *rc);
@@ -51,6 +66,18 @@ void pc_handle_emc_packet(struct pilot_connection *pc, mtp_packet_t *mp);
 void pc_handle_pilot_packet(struct pilot_connection *pc, mtp_packet_t *mp);
 void pc_handle_signal(fd_set *rready, fd_set *wready);
 void pc_handle_timeout(struct timeval *current_time);
+
+// new
+void pc_print_stats(struct pilot_connection *pc);
+void pc_zero_stats(struct pilot_connection *pc);
+void pc_stats_start_time(struct pilot_connection *pc);
+void pc_stats_stop_time(struct pilot_connection *pc);
+void pc_stats_add_retry(struct pilot_connection *pc);
+void pc_stats_start_pos(struct pilot_connection *pc,
+			struct robot_position *rp);
+void pc_stats_end_pos(struct pilot_connection *pc,
+		      struct robot_position *rp);
+void pc_stats_msg(struct pilot_connection *pc,char *msg);
 
 /**
  * How close does the robot have to be before it is considered at the intended
