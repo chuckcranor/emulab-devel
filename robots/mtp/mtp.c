@@ -631,10 +631,14 @@ void mtp_polar(struct robot_position *current,
 	       float *r_out,
 	       float *theta_out)
 {
-    assert(current != NULL);
+    static struct robot_position rp_zero;
+    
     assert(dest != NULL);
     assert(r_out != NULL);
     assert(theta_out != NULL);
+    
+    if (current == NULL)
+	current = &rp_zero;
 
     *r_out = hypotf(current->x - dest->x, current->y - dest->y);
     *theta_out = atan2f(current->y - dest->y, dest->x - current->x);
