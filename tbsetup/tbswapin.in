@@ -1,0 +1,106 @@
+#!/usr/bin/perl -w
+
+# tbswapin
+
+# This is the second program in the
+# tbprerun/tbswapin/tbswapout/.../tbend sequences.  It's purpose is
+# to setup the testbed for experimental use.  The first part centers
+# around assign and converting the virtual topology to a physical
+# actuality and setting up the vlans and delays table.  The second
+# part calls a number of scripts to set up switch, node, and 
+# nameserver state.
+
+# Set up paths
+$TBROOT = "@prefix@";
+$TBSETUPLIB = "$TBROOT/lib";
+$ENV{'PATH'} = "/usr/bin:$TBROOT/libexec:$TBROOT/libexec/ns2ir" . 
+    ":$TBROOT/sbin:$TBROOT/bin";
+push(@INC,$TBSETUPLIB);
+
+# Turn off line buffering.
+$| = 1; 
+
+require libtbsetup;
+require 'ctime.pl';
+
+if ($#ARGV < 1 || $#ARGV > 2 ||
+    ($#ARGV == 2 && $ARGV[0] ne "-nologfile")) {
+    print STDERR "Syntax: $0 [-nologfile] pid eid ns_file\n";
+    exit(1);
+}
+
+if ($#ARGV == 2) {
+    shift;
+    $dolog = 0;
+}
+else {
+    $dolog = 1;
+}
+($pid,$eid) = @ARGV;
+
+$logfile = "$pid-$eid.log";
+
+if ($dolog) {
+    &tbs_initlog($logfile);
+    &tbs_out("Log:    $logfile\n");
+}
+
+&tbs_out("Beginning swap in for $pid-$eid ($nsfile). " 
+	 . &ctime(time) . "\n");
+
+&tbs_out("Checking sanity.\n");
+$sth = $dbh->prepare("SELECT state from experiments where pid = \"$pid\"" .
+		     " and eid = \"$eid\"");
+$sth->execute();
+if (! ($state) = $sth->fetchrow_array()) {
+    &tbs_out("No entry in experiments table.  Insane.\n");
+    exit(1);
+}
+if ($state eq "running") {
+    &tbs_out("Experiment already running.  Try swapping out first.\n");
+    exit(1);
+} elsif ($state ne "dormant") {
+    &tbs_out("Experiment in strange state.  Try pre running.\n");
+    exit(1);
+}
+
+# This does all the virtual to physical mapping and updatin the DB state.
+# XXX assign_wrapper
+
+# Everything from now on sets up switch and node state.
+
+&tbs_out("Setting up VLANs\n");
+if (&tbs_exec("snmpit -t $pid $eid")) {
+    &tbs_out("Failed to set up VLANs\n");
+    exit(1);
+}
+
+&tbs_out("Backing up VLAN configuration\n");
+if (&tbs_exec("savevlans")) {
+    &tbs_out("WARNING: Failed to back up VLAN configuration\n");
+}
+
+&tbs_out("Setting up mountpoints\n");
+if (&tbs_exec("exports_setup")) {
+    &tbs_out("Failed to setup mountpoints.\n");
+    exit(1);
+}
+
+&tbs_out("Resetting OS and rebooting.\n");
+if (&tbs_exec("os_setup $pid $eid")) {
+    &tbs_out("Failed to reset OS and reboot nodes.\n");
+    exit(1);
+}
+
+&tbs_out("Setting up named maps.\n");
+if (&tbs_exec("named_setup")) {
+    &tbs_out("Failed to add node names to named map.\n");
+    #
+    # This is a non-fatal error.
+    # 
+}
+
+&tbs_out("Swap in finished - " . &ctime(time) . "\n");
+
+0;
+
