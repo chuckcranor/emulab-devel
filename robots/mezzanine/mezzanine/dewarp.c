@@ -21,7 +21,7 @@
  * Desc: Dewarp the blobs (i.e. transform form image -> world cs)
  * Author: Andrew Howard
  * Date: 17 Apr 2002
- * CVS: $Id: dewarp.c,v 1.1.1.1.8.2 2005-03-18 17:52:01 stack Exp $
+ * CVS: $Id: dewarp.c,v 1.1.1.1.8.3 2005-03-21 17:24:27 stack Exp $
  ***************************************************************************/
 
 #include <assert.h>
@@ -279,7 +279,10 @@ void dewarp_update_trans()
   gsl_vector_free(b[1]);
 }
 
-
+double dewarp_cos(double x, double y, mezz_dewarpdef_t *mmap)
+{
+    return cos(mmap->warpFactor * atan2(hypot(x,y), mmap->ocHeight));
+}
 
 // Convert point from image to world coords
 void dewarp_image2world(double i, double j, double *x, double *y)
@@ -297,9 +300,13 @@ void dewarp_image2world(double i, double j, double *x, double *y)
   *y = -(j - dewarp->def->ocY) / dewarp->def->scaleFactorY;
 
 # if defined(WARP_COS)
-  // Dewarp by the cosine of the off-axis angle.
-  double f = cos(dewarp->def->warpFactor *
-		 atan2(hypot(*x,*y), dewarp->def->ocHeight));
+  double f = 1.0;
+  int lpc;
+  
+  for (lpc = 0; lpc < 8; lpc++) {
+      f = dewarp_cos(*x / f, *y / f, dewarp->def);
+  }
+
   *x /= f;
   *y /= f;
 # endif

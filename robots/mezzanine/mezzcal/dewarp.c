@@ -21,7 +21,7 @@
  * Desc: Dewarping interface
  * Author: Andrew Howard
  * Date: 11 Apr 2002
- * CVS: $Id: dewarp.c,v 1.1.1.1.8.2 2005-03-18 17:52:02 stack Exp $
+ * CVS: $Id: dewarp.c,v 1.1.1.1.8.3 2005-03-21 17:24:28 stack Exp $
  ***************************************************************************/
 
 #include <assert.h>
@@ -37,6 +37,12 @@
 // Generate a warped grid over the field
 void dewarp_update_grid();
 
+
+// Convert point from image to world coords
+void dewarp_image2world(double i, double j, double *x, double *y);
+
+// Convert point from world to image coords
+void dewarp_world2image(double x, double y, double *i, double *j);
 
 // Dewarping info
 typedef struct
@@ -136,13 +142,14 @@ void dewarp_update()
   dewarp_update_grid();
 }
 
+#define WASH_POINTS
 
 // Generate a warped grid over the field
 void dewarp_update_grid()
 {
   int i;
   int showdewarp;
-  double ax, ay;
+  double ax, ay, tx, ty;
   double ai, aj, bi, bj;
   double sx, sy;
   double dx, dy;
@@ -167,8 +174,18 @@ void dewarp_update_grid()
     {
       dewarp_world2image(dewarp->mmap->gridX + ax,
 			 dewarp->mmap->gridY + ay, &ai, &aj);
+#ifdef WASH_POINTS
+      dewarp_image2world(ai, aj, &tx, &ty);
+      dewarp_world2image(tx, ty, &ai, &aj);
+#endif
+      
       dewarp_world2image(dewarp->mmap->gridX + ax + dx,
 			 dewarp->mmap->gridY + ay, &bi, &bj);
+#ifdef WASH_POINTS
+      dewarp_image2world(bi, bj, &tx, &ty);
+      dewarp_world2image(tx, ty, &bi, &bj);
+#endif
+      
       rtk_fig_line(dewarp->gridfig, ai, aj, bi, bj);
     }
   }
@@ -180,13 +197,27 @@ void dewarp_update_grid()
     {
       dewarp_world2image(dewarp->mmap->gridX + ax,
 			 dewarp->mmap->gridY + ay, &ai, &aj);
+#ifdef WASH_POINTS
+      dewarp_image2world(ai, aj, &tx, &ty);
+      dewarp_world2image(tx, ty, &ai, &aj);
+#endif
+      
       dewarp_world2image(dewarp->mmap->gridX + ax,
 			 dewarp->mmap->gridY + ay + dy, &bi, &bj);
+#ifdef WASH_POINTS
+      dewarp_image2world(bi, bj, &tx, &ty);
+      dewarp_world2image(tx, ty, &bi, &bj);
+#endif
+      
       rtk_fig_line(dewarp->gridfig, ai, aj, bi, bj);
     }
   }
 }
 
+double dewarp_cos(double x, double y, mezz_dewarpdef_t *mmap)
+{
+    return cos(mmap->warpFactor * atan2(hypot(x,y), mmap->ocHeight));
+}
 
 // Convert point from world to image coords
 void dewarp_world2image(double x, double y, double *i, double *j)
@@ -200,7 +231,7 @@ void dewarp_world2image(double x, double y, double *i, double *j)
 
 # if defined(WARP_COS)
     // Warp by the cosine of the off-axis angle.
-    double f = cos(dewarp->mmap->warpFactor * atan2(hypot(x,y), dewarp->mmap->ocHeight));
+    double f = dewarp_cos(x, y, dewarp->mmap);
 # else
     const double f = 1.0;
 # endif
@@ -245,5 +276,62 @@ void dewarp_world2image(double x, double y, double *i, double *j)
 
   //    *i = x;
   //    *j = y;
+
+}
+
+// Convert point from image to world coords
+void dewarp_image2world(double i, double j, double *x, double *y)
+{
+
+#ifdef WARP_IDENTITY
+  // World coords are the same as pixel coords.
+  *x = i;
+  *y = j;
+
+#elif defined(WARP_SCALE)
+  // Pixels are  to [0 ... 639, 0 ... 479], with the origin in the upper-left.
+  // World coordinates are [-1 ... 1, -1 ... 1], with the origin in the center.
+  *x = (i - dewarp->mmap->ocX) / dewarp->mmap->scaleFactorX;
+  *y = -(j - dewarp->mmap->ocY) / dewarp->mmap->scaleFactorY;
+
+# if defined(WARP_COS)
+  double f = 1.0;
+  int lpc;
+  
+  for (lpc = 0; lpc < 8; lpc++) {
+      f = dewarp_cos(*x / f, *y / f, dewarp->mmap);
+  }
+
+  *x /= f;
+  *y /= f;
+# endif
+
+#else
+  *x = dewarp->mmap->iwtrans[0][0] + dewarp->mmap->iwtrans[0][1] * i +
+    + dewarp->mmap->iwtrans[0][2] * j + dewarp->mmap->iwtrans[0][3] * i * i
+    + dewarp->mmap->iwtrans[0][4] * j * j + dewarp->mmap->iwtrans[0][5] * i * j
+    + dewarp->mmap->iwtrans[0][6] * i * fabs(i) + dewarp->mmap->iwtrans[0][7] * i\
+ * j * j;
+
+  *y = dewarp->mmap->iwtrans[1][0] + dewarp->mmap->iwtrans[1][1] * j
+    + dewarp->mmap->iwtrans[1][2] * i + dewarp->mmap->iwtrans[1][3] * j * j
+    + dewarp->mmap->iwtrans[1][4] * i * i + dewarp->mmap->iwtrans[1][5] * j * i
+    + dewarp->mmap->iwtrans[1][6] * j * fabs(j) + dewarp->mmap->iwtrans[1][7] * j\
+ * i * i;
+#endif
+
+/*   *x = dewarp->def->iwtrans[0][0] + dewarp->def->iwtrans[0][1] * i + */
+/*     + dewarp->def->iwtrans[0][2] * j + dewarp->def->iwtrans[0][3] * i * i */
+/*     + dewarp->def->iwtrans[0][4] * j * j + dewarp->def->iwtrans[0][5] * i * j */
+/*     + dewarp->def->iwtrans[0][6] * i * fabs(i) + dewarp->def->iwtrans[0][7] * i * j * j; */
+
+/*   *y = dewarp->def->iwtrans[1][0] + dewarp->def->iwtrans[1][1] * j */
+/*     + dewarp->def->iwtrans[1][2] * i + dewarp->def->iwtrans[1][3] * j * j */
+/*     + dewarp->def->iwtrans[1][4] * i * i + dewarp->def->iwtrans[1][5] * j * i */
+/*     + dewarp->def->iwtrans[1][6] * j * fabs(j) + dewarp->def->iwtrans[1][7]
+       * j * i * i; */
+
+  //*x = i;
+  //*y = j;
 
 }

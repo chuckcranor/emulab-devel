@@ -21,7 +21,7 @@
  * Desc: Public strutures, functions
  * Author: Andrew Howard
  * Date: 28 Mar 2002
- * CVS: $Id: mezzcal.h,v 1.1.1.1.8.1 2005-03-18 17:17:35 stack Exp $
+ * CVS: $Id: mezzcal.h,v 1.1.1.1.8.2 2005-03-21 17:24:28 stack Exp $
  ***************************************************************************/
 
 #ifndef MEZZCAL_H
@@ -36,9 +36,9 @@
 
 #define COLOR_SAMPLE 1, 0, 0
 #define COLOR_MASK   1, 1, 0
-#define COLOR_DEWARP 0, 1, 0
+#define COLOR_DEWARP 0, 0.7, 0
 #define COLOR_DEWARP_GRID 0, 0.7, 0
-#define COLOR_IDENT  0.5, 0.5, 0.9
+#define COLOR_IDENT  0.7, 0.7, 1.0
 
 
 /***************************************************************************
