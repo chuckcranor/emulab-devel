@@ -140,8 +140,6 @@ if ($state eq "active") {
 	   = $sth->fetchrow_array()) {
 	printf "%-15s %-10s %-10s %-10s\n", $vname, $delay, $bandwidth, $lossrate;
 	foreach $nodeport (split(" ",$members)) {
-	    @info = split(":",$nodeport);
-	    $node = $info[0];
 	    $pport = $portmap{$nodeport};
 	    printf "\t%-15s (%s)\n", $nodeport, $ipmap{$nodeport};
 	}
