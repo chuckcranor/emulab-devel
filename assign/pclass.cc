@@ -120,8 +120,6 @@ int pclass_equiv(tb_pgraph &PG, tb_pnode *a,tb_pnode *b)
       fdit++;
   }
 
-  cerr << "Checking links" << endl;
-
   // Check links
   pvertex an = pnode2vertex[a];
   pvertex bn = pnode2vertex[b];

@@ -148,13 +148,12 @@ int parse_top(tb_vgraph &VG, istream& i)
 		      top_error("Bad desire, bad weight.");
 		      gweight = 0;
 		  }
-		  // XXX - memory leak?
-		  v->desires.push_front(*(new tb_node_featuredesire(desirename,gweight)));
-		  // Could wait and do this later when the whole list is full.
-		  v->desires.sort();
+		  v->desires.push_front(
+			  tb_node_featuredesire(desirename,gweight));
 	      }
 	  }
 	}
+	v->desires.sort();
       }
     } else if (command.compare("link") == 0) {
       if (parsed_line.size() < 8) {

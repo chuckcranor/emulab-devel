@@ -430,7 +430,7 @@ int mapping_precheck() {
 	int matched_bw = 0;
 	// Keep track of desires had how many 'hits', so that we can tell
 	// if any simply were not matched
-	tb_vnode::desires_count_map matched_desires;
+	map<crope,int> matched_desires;
 
 	// Keep track of which link types had how many 'hits', so that we can
 	// tell which type(s) caused this node to fail
@@ -511,7 +511,6 @@ int mapping_precheck() {
 		    if (fdit.either_violateable()) {
 			// We look for violateable desires on vnodes so that we
 			// can report them to the user
-			// XXX - b0rken, fix
 			if (fdit.membership() ==
 				tb_featuredesire_set_iterator::BOTH &&
 				fdit.membership() ==
@@ -595,7 +594,7 @@ int mapping_precheck() {
 		cout << "      Too much bandwidth on emulated links!" << endl;
 	    }
 
-	    for (tb_vnode::desires_count_map::iterator dit = matched_desires.begin();
+	    for (map<crope,int>::iterator dit = matched_desires.begin();
 		    dit != matched_desires.end();
 		    dit++) {
 		if (dit->second == 0) {

@@ -194,7 +194,7 @@ class tb_featuredesire_set_iterator {
 	// Is either of the two elements violateable?
 	bool either_violateable() const;
 
-	// XXX - proper function protype
+	// Iterate to the next element of the set
 	void operator++(int);
 
 	// Return the member of the set we're currently iterating to

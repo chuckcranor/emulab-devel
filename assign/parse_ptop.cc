@@ -54,12 +54,12 @@ int parse_ptop(tb_pgraph &PG, tb_sgraph &SG, istream& i)
 {
   int num_nodes = 0;
   int line=0,errors=0;
-  char inbuf[1024];
+  char inbuf[4096];
   string_vector parsed_line;
 
   while (!i.eof()) {
     line++;
-    i.getline(inbuf,1024);
+    i.getline(inbuf,4096);
     parsed_line = split_line(inbuf,' ');
     if (parsed_line.size() == 0) {continue;}
 
@@ -129,15 +129,8 @@ int parse_ptop(tb_pgraph &PG, tb_sgraph &SG, istream& i)
 	    gcost = 0;
 	  }
 
-	  // XXX - memory leak?
-	  p->features.push_front(*(new tb_node_featuredesire(feature,gcost)));
-	  // I could make this faster by doing it only once at the end. But
-	  // why?
-	  p->features.sort();
+	  p->features.push_front(tb_node_featuredesire(feature,gcost));
 
-	    /*
-	  p->features[feature] = gcost;
-	  */
 	}
 	/*
 	 * Parse any other node options or flags
@@ -172,6 +165,7 @@ int parse_ptop(tb_pgraph &PG, tb_sgraph &SG, istream& i)
 		ptop_error("Bad flag given: " << flag << ".");
 	    }
 	}
+	p->features.sort();
 	pname2vertex[name] = pv;
       }
     } else if (command.compare("link") == 0) {
