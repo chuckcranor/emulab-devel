@@ -10,14 +10,15 @@
 #
 
 use strict;
+use POSIX;
 
-#my $TBROOT     = '@prefix@';
-#my $assign_bin = "$TBROOT/libexec/assign";
-my $assign_bin = "/usr/testbed/devel/ricci/libexec/assign";
+my $TBROOT     = '@prefix@';
+my $assign_bin = "$TBROOT/libexec/assign";
 
 $| = 1;
 
 my $MAX_DESIRE_WEIGHT = 0.99;
+my $METIS             = "/usr/local/bin/kmetis";
 
 #
 # Figure out assign args
@@ -513,13 +514,13 @@ sub read_metis_partfile($$) {
 	chomp $partno;
 	$partitions[$lineno++] = $partno;
     }
+    close(FH);
 
     my @nodelists;
     while (my ($name, $node) = each %$nodes) {
 	my $partno = $partitions[$node->{'metis_id'}];
 	push @{$nodelists[$partno]}, $node;
     }
-    close(FH);
 
     #print "Gonna return " . scalar(@nodelists) . " node lists\n";
 
@@ -533,7 +534,7 @@ sub run_metis($$$$) {
     my ($metisfile,$nodes,$metisfilename,$metislogfile) = @_;
 
     # XXX - should not be hard-coded
-    my $npart = scalar(keys %$nodes) /10;
+    my $npart = POSIX::ceil(scalar(keys %$nodes) /10);
 
     open (FH,">$metisfilename") or die "Unable to open $metisfilename for " .
 	    "writing\n";
@@ -541,7 +542,8 @@ sub run_metis($$$$) {
     close FH;
 
     print "Partitioning with kmets into $npart partitions\n";
-    if (!system "kmetis $metisfilename $npart > $metislogfile 2>&1") {
+    print "$METIS $metisfilename $npart > $metislogfile 2>&1\n";
+    if (!system "$METIS $metisfilename $npart > $metislogfile 2>&1") {
 	die "kmetis failed!\n";
     }
 
@@ -662,7 +664,8 @@ sub node_fits_in_conglomerate($$) {
 	'pc' => 1,
 	'delay' => 2,
 	'pc850' => 1,
-	'pc600' => 1
+	'pc600' => 1,
+	'lan'   => 100
     );
 
     my %additive_features = (
