@@ -129,6 +129,9 @@ class LocationInfoUpdater(EventClient):
                         pass
                     pass
 
+                if not (update.has_key("loc_x") and update.has_key("loc_y")):
+                    return
+
                 if event.getEventType() == "SETDEST":
                     table_name = "nodes"
                     

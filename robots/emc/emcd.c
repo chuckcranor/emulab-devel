@@ -874,24 +874,28 @@ void ev_callback(event_handle_t handle,
   }
   else {
     char *value, args[BUFSIZ];
-    float x, y, orientation;
+    float x, y, orientation = 0.0f;
     struct mtp_packet mp;
     
     event_notification_get_arguments(handle, notification, args, sizeof(args));
 
     /* XXX copy the current X, Y, and orientation! */
-    if (event_arg_get(args, "X", &value) > 0) {
-      if (sscanf(value, "%f", &x) != 1) {
-	error("X argument in event is not a float: %s\n", value);
-	return;
-      }
+    if (event_arg_get(args, "X", &value) <= 0) {
+      error("no X coordinate specified\n");
+      return;
+    }
+    else if (sscanf(value, "%f", &x) != 1) {
+      error("X argument in event is not a float: %s\n", value);
+      return;
     }
     
-    if (event_arg_get(args, "Y", &value) > 0) {
-      if (sscanf(value, "%f", &y) != 1) {
-	error("Y argument in event is not a float: %s\n", value);
-	return;
-      }
+    if (event_arg_get(args, "Y", &value) <= 0) {
+      error("no X coordinate specified\n");
+      return;
+    }
+    else if (sscanf(value, "%f", &y) != 1) {
+      error("Y argument in event is not a float: %s\n", value);
+      return;
     }
     
     if (event_arg_get(args, "ORIENTATION", &value) > 0) {
@@ -1288,7 +1292,8 @@ int rmc_callback(elvin_io_handler_t handler,
 	  /* actually, we'll also ack it back to rmc */
 	  mp->role = MTP_ROLE_EMC;
 	  
-	  if (mtp_send_packet(vmc_data.handle,mp) != MTP_PP_SUCCESS) {
+	  if (vmc_data.handle == NULL ||
+	      (mtp_send_packet(vmc_data.handle,mp) != MTP_PP_SUCCESS)) {
 	      error("vmc unavailable; cannot forward wiggle-status\n");
 	  }
 	  
@@ -1767,7 +1772,7 @@ int update_callback(elvin_timeout_t timeout, void *rock, elvin_error_t eerror)
       float orientation;
       
       erc = robot_list_search(hostname_list, mup->robot_id);
-      orientation = mup->position.theta * 180.0 / M_PI;
+      orientation = mtp_theta(mup->position.theta) * 180.0 / M_PI;
       if (!cmp_fuzzy(erc->last_update_pos.x, mup->position.x, 0.02) ||
 	  !cmp_fuzzy(erc->last_update_pos.y, mup->position.y, 0.02) ||
 	  !cmp_fuzzy(erc->last_update_pos.theta, mup->position.theta, 0.04)) {
