@@ -22,6 +22,8 @@ if test ! -d $EXP_DIR; then
     exit 2
 fi
 
+rm -f $EXP_DIR/logs/*/slothd.log
+
 # Get our logs back and
 ${prefix}/libexec/pull-logs $PID $EID
 
