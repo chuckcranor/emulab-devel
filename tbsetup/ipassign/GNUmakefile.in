@@ -12,18 +12,16 @@ UNIFIED         = @UNIFIED_BOSS_AND_OPS@
 
 include $(OBJDIR)/Makeconf
 
-SUBDIRS		=
-# src
-
 #
 # Force dependencies on the scripts so that they will be rerun through
 # configure if the .in file is changed.
 # 
-all:	$(SUBDIRS)
+all:	src
 
 include $(TESTBED_SRCDIR)/GNUmakerules
 
 .PHONY:	src
+
 src:
 	@$(MAKE) -C src all
 
