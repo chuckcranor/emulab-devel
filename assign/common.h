@@ -11,18 +11,51 @@ const int MAX_PNODES = 1024;	/* maximum # of physical nodes */
   Here we declare them all and give them defaults.
 */
 
-static int init_temp = 100;
+//static int init_temp = 100;
+static int init_temp = 10;
 static int USE_OPTIMAL = 1;
 static int temp_prob = 130;
-static int temp_stop = 20;
+#ifdef LOW_TEMP_STOP
+//static int temp_stop = 1;
+static float temp_stop = .005;
+#else
+static float temp_stop = 2;
+//static int temp_stop = 20;
+#endif
 static int CYCLES = 20;
+
+// The following are basically arbitrary constants
+// Initial acceptance ratio for melting
+static float X0 = .95;
+//static float epsilon = 0.1;
+#ifdef LOCAL_DERIVATIVE
+static float epsilon = 0.0001;
+#else
+static float epsilon = 0.01;
+#endif
+static float delta = 2;
+//static float delta = 1;
+//static float min_temp_end = 0.01;
+//static float min_temp_end = 10000000.0;
+
+
+// Number of runs to spend melting
+static int melt_trans = 500;
+static int min_neighborhood_size = 500;
+
 
 static float temp_rate = 0.9;
 static float opt_nodes_per_sw = 5.0;
+#ifdef PENALIZE_BANDWIDTH
+static float SCORE_DIRECT_LINK = 0.0;/* Cost of a direct link */
+static float SCORE_INTRASWITCH_LINK = 0.0;/* Cost of an intraswitch link*/
+static float SCORE_INTERSWITCH_LINK = 0.0;/* Cost of an interswitch link*/
+#else
 static float SCORE_DIRECT_LINK = 0.01;/* Cost of a direct link */
-static float SCORE_DIRECT_LINK_PENALTY = 0.5;/* Cost of overused direct link*/
 static float SCORE_INTRASWITCH_LINK = 0.02;/* Cost of an intraswitch link*/
 static float SCORE_INTERSWITCH_LINK = 0.2;/* Cost of an interswitch link*/
+#endif
+static float SCORE_DIRECT_LINK_PENALTY = 0.5;/* Cost of overused direct link*/
 static float SCORE_NO_CONNECTION = 0.5;/* Cost of not filling a virt. link*/
 static float SCORE_PNODE = 0.2;/* Cost of using a pnode*/
 static float SCORE_PNODE_PENALTY = 0.5;/* Cost of overusing a pnode*/
@@ -30,12 +63,19 @@ static float SCORE_SWITCH = 0.5;/* Cost of using a switch.*/
 static float SCORE_UNASSIGNED = 1.0;/* Cost of an unassigned node*/
 static float SCORE_DESIRE = 1.0;/* Multiplier for desire costs*/
 static float SCORE_FEATURE = 1.0;/* Multiplier for feature weights*/
+#ifdef NO_PCLASS_PENALTY
+static float SCORE_PCLASS = 0.0; /* Cost of each pclass */
+#else
 static float SCORE_PCLASS = 0.5; /* Cost of each pclass */
+#endif
 static float SCORE_VCLASS = 1.0; /* vclass score multiplier */
 static float SCORE_EMULATED_LINK = 0.01; /* cost of an emualted link */
 static float SCORE_OUTSIDE_DELAY = 0.5;	/* penalty for going out of delay
 					   requirements */
 static float SCORE_DELAY = 10.0; /* multiplier to distance for delay scoring */
+#ifdef PENALIZE_UNUSED_INTERFACES
+static float SCORE_UNUSED_INTERFACE = 0.04;
+#endif
 
 // The following are used to weight possible link resolutions.  Higher
 // numbers mean a more likely resolution.  Trivial resolutions are always

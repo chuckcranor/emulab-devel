@@ -68,6 +68,9 @@ int parse_top(tb_vgraph &VG, istream& i)
 	  vtypes.push_front(v->type);
 	}
 	v->fixed = false;	// this may get set to true later
+#ifdef PER_VNODE_TT
+	v->num_links = 0;
+#endif
 	
 	for (unsigned int i = 3;i < parsed_line.size();++i) {
 	  crope desirename,desireweight;
@@ -153,6 +156,13 @@ int parse_top(tb_vgraph &VG, istream& i)
 	tb_vlink *l = new tb_vlink();
 	put(vedge_pmap,e,l);
 	
+#ifdef PER_VNODE_TT
+	tb_vnode *vnode1 = get(vvertex_pmap,node1);
+	vnode1->num_links++;
+	tb_vnode *vnode2 = get(vvertex_pmap,node2);
+	vnode2->num_links++;
+#endif
+
 	if ((sscanf(bw.c_str(),"%d",&(l->delay_info.bandwidth)) != 1) ||
 	    (sscanf(bwunder.c_str(),"%d",&(l->delay_info.bw_under)) != 1) ||
 	    (sscanf(bwover.c_str(),"%d",&(l->delay_info.bw_over)) != 1) ||

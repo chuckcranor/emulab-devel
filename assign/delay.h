@@ -34,6 +34,8 @@ public:
   double bw_weight,delay_weight,loss_weight;
 
   double distance(tb_delay_info &target) {
+      // ricci - hack to try to remove this behavior
+      return 0;
     if (((bw_under != -1) && (target.bandwidth < bandwidth-bw_under)) ||
 	((bw_over != -1) && (target.bandwidth > bandwidth+bw_over)) ||
 	((delay_under != -1) && (target.delay < delay-delay_under)) ||

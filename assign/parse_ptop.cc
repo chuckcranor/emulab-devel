@@ -57,6 +57,9 @@ int parse_ptop(tb_pgraph &PG, tb_sgraph &SG, istream& i)
 	p->max_load = 0;
 	p->current_load = 0;
 	p->pnodes_used = 0;
+//#ifdef PENALIZE_UNUSED_INTERFACES
+	p->total_interfaces = 0;
+//#endif
 	
 	unsigned int i;
 	for (i = 2;
@@ -104,15 +107,35 @@ int parse_ptop(tb_pgraph &PG, tb_sgraph &SG, istream& i)
 	ptop_error("Bad link line, too few arguments.");
       }
       int num = 1;
+#ifdef PENALIZE_BANDWIDTH
+      float penalty;
+      if (parsed_line.size() == 8) {
+	if (sscanf(parsed_line[7].c_str(),"%f",&penalty) != 1) {
+	  ptop_error("Bad number argument: " << parsed_line[7] << ".");
+	  penalty=1.0;
+	}
+      }
+#else
       if (parsed_line.size() == 8) {
 	if (sscanf(parsed_line[7].c_str(),"%d",&num) != 1) {
 	  ptop_error("Bad number argument: " << parsed_line[7] << ".");
 	  num=1;
 	}
       }
+#endif
+
+#ifdef FIX_PLINK_ENDPOINTS
+      bool fixends = false;
+      if (parsed_line.size() == 9) {
+	  if (parsed_line[8].compare("fixends") == 0) {
+	      fixends = true;
+	  }
+      }
+#else
       if (parsed_line.size() > 8) {
 	ptop_error("Bad link line, too many arguments.");
       }
+#endif
       crope name = parsed_line[1];
       crope src,srcmac;
       split_two(parsed_line[2],':',src,srcmac,"(null)");
@@ -148,6 +171,12 @@ int parse_ptop(tb_pgraph &PG, tb_sgraph &SG, istream& i)
 	pl->name = name;
 	pl->emulated = 0;
 	pl->nonemulated = 0;
+#ifdef FIX_PLINK_ENDPOINTS
+	pl->fixends = fixends;
+#endif
+#ifdef PENALIZE_BANDWIDTH
+	pl->penalty = penalty;
+#endif
 	pl->type = tb_plink::PLINK_NORMAL;
 	pl->srcmac = srcmac;
 	pl->dstmac = dstmac;
@@ -167,11 +196,19 @@ int parse_ptop(tb_pgraph &PG, tb_sgraph &SG, istream& i)
 	  }
 	}
 	if (ISSWITCH(srcnode) &&
-	    ! ISSWITCH(dstnode)) 
+	    ! ISSWITCH(dstnode)) {
 	  dstnode->switches.insert(srcv);
+//#ifdef PENALIZE_UNUSED_INTERFACES
+	  dstnode->total_interfaces++;
+//#endif
+	}
 	else if (ISSWITCH(dstnode) &&
-		 ! ISSWITCH(srcnode))
+		 ! ISSWITCH(srcnode)) {
 	  srcnode->switches.insert(dstv);
+//#ifdef PENALIZE_UNUSED_INTERFACES
+	  srcnode->total_interfaces++;
+//#endif
+	}
       }
     } else {
       ptop_error("Unknown directive: " << command << ".");

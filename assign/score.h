@@ -11,6 +11,9 @@ typedef struct {
   int desires;
   int vclass;
   int delay;
+#ifdef FIX_PLINK_ENDPOINTS
+  int incorrect_endpoints;
+#endif
 } violated_info;
 
 extern double score;

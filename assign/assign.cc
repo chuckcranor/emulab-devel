@@ -42,6 +42,30 @@ using namespace boost;
 #define OPTIMAL_SCORE(edges,nodes) 0
 #endif
 
+#ifdef ROB_DEBUG
+#define RDEBUG(a) a
+#else
+#define RDEBUG(a)
+#endif
+
+// Some defaults for #defines
+#ifndef NO_REVERT
+#define NO_REVERT 0
+#endif
+
+#ifndef REVERT_VIOLATIONS
+#define REVERT_VIOLATIONS 1
+#endif
+
+#ifndef REVERT_LAST
+#define REVERT_LAST 0
+#endif
+
+#ifdef PHYS_CHAIN_LEN
+#define PHYSICAL(x) x
+#else
+#define PHYSICAL(x) 0
+#endif
 
 // Here we set up all our graphs.  Need to create the graphs
 // themselves and then setup the property maps.
@@ -90,12 +114,25 @@ pclass_list pclasses;
 // Map of a type to a tt_entry, a vector of pclasses and the size of
 // the vector.
 pclass_types type_table;
+#ifdef PER_VNODE_TT
+pclass_types vnode_type_table;
+#endif
 
 // This datastructure contains all the information needed to calculate
 // the shortest path between any two switches.  Indexed by svertex,
 // the value will be a predicate map (indexed by svertex as well) of
 // the shortest paths for the given vertex.
 switch_pred_map_map switch_preds;
+
+// Same, but for distances 
+switch_dist_map_map switch_dist;
+
+// Time started, finished, and the time limit
+double timestart, timeend, timelimit, timetarget;
+
+#ifdef GNUPLOT_OUTPUT
+FILE *scoresout, *tempout, *deltaout;
+#endif
 
 // A hash function for graph edges.
 struct hashedge {
@@ -112,7 +149,8 @@ typedef hash_map<vedge,tb_link_info,hashedge> link_map;
 
 // A scaling constant for the temperature in determining whether to
 // accept a change.
-static double sensitivity = 0.1;
+//static double sensitivity = 0.1;
+static double sensitivity = 1;
 
 // The number of accepts of increase that took place during the annealing.
 int accepts;
@@ -128,11 +166,13 @@ double absbest;			// score
 int absbestviolated;		// violated
 int iters_to_best = 0;		// iters
 
+int npnodes;
+
 // Determines whether to accept a change of score difference 'change' at
 // temperature 'temperature'.
-inline int accept(float change, float temperature)
+inline int accept(double change, double temperature)
 {
-  float p;
+  double p;
   int r;
 
   if (change == 0) {
@@ -142,7 +182,7 @@ inline int accept(float change, float temperature)
   }
   r = std::random() % 1000;
   if (r < p) {
-    accepts++;
+    //accepts++;
     return 1;
   }
   return 0;
@@ -232,12 +272,16 @@ void calculate_switch_MST()
     put(sweight_pmap,*seit,
 	100000000-get(pedge_pmap,slink->mate)->delay_info.bandwidth);
   }
+
+  // ricci - add distance map
   svertex_iterator svit,svendit;
   tie(svit,svendit) = vertices(SG);
   for (;svit != svendit;svit++) {
     switch_preds[*svit] = new switch_pred_map(num_vertices(SG));
+    switch_dist[*svit] = new switch_dist_map(num_vertices(SG));
     dijkstra_shortest_paths(SG,*svit,
-    			    predecessor_map(&((*switch_preds[*svit])[0])));
+    			    predecessor_map(&((*switch_preds[*svit])[0])).
+			    distance_map(&((*switch_dist[*svit])[0])));
   }
 
 #ifdef GRAPH_DEBUG
@@ -246,7 +290,7 @@ void calculate_switch_MST()
   for (;svit != svendit;svit++) {
     cout << *svit << ":" << endl;
     for (unsigned int i = 0;i<num_vertices(SG);++i) {
-      cout << i << " " << (*switch_preds[*svit])[i] << endl;
+      cout << i << " " << (*switch_dist[*svit])[i] << endl;
     }
   }
 #endif
@@ -285,7 +329,11 @@ void read_virtual_topology(char *filename)
 
 tb_pnode *find_pnode(tb_vnode *vn)
 {
+#ifdef PER_VNODE_TT
+  tt_entry tt = vnode_type_table[vn->name];
+#else
   tt_entry tt = type_table[vn->type];
+#endif
   int num_types = tt.first;
   pclass_vector *acceptable_types = tt.second;
   
@@ -295,20 +343,92 @@ tb_pnode *find_pnode(tb_vnode *vn)
   int first = i;
   for (;;) {
     i = (i+1)%num_types;
+#ifdef PCLASS_SIZE_BALANCE
+    int acceptchance = 1000 * (*acceptable_types)[i]->size * 1.0 /
+	npnodes;
+    //cout << "Chance was " << acceptchance << endl;
+    if ((std::rand() % 1000) < acceptchance) {
+	continue;
+    }
+#endif
+#ifdef LOAD_BALANCE
+REDO_SEARCH:
+    tb_pnode* firstmatch = NULL;
+#endif
+#ifdef FIND_PNODE_SEARCH
+    list<tb_pnode*>::iterator it = (*acceptable_types)[i]->members[vn->type]->L.begin();
+#ifdef LOAD_BALANCE
+    int skip = std::rand() % (*acceptable_types)[i]->members[vn->type]->L.size();
+    // Skip the begging of the list
+    for (int j = 0; j < skip; j++) {
+	it++;
+    }
+#endif
+    while (it != (*acceptable_types)[i]->members[vn->type]->L.end()) {
+#ifdef LOAD_BALANCE
+	if ((*it)->typed) {
+	    if ((*it)->current_type.compare(vn->type)) {
+		it++;
+	    } else {
+		if (firstmatch == NULL) {
+		    firstmatch = *it;
+		}
+		double acceptchance = 1 - (*it)->current_load * 1.0
+		    / (*it)->max_load;
+		//double acceptchance = 1.0 / (*acceptable_types)[i]->members[vn->type]->L.size();
+
+	        int p = 1000 * acceptchance;
+		if ((std::random() % 1000) < (1000 * acceptchance)) {
+		    break;
+		} else {
+		    it++;
+		}
+	    }
+	} else {
+	    break;
+	}
+#else
+	if ((*it)->typed && ((*it)->current_type.compare(vn->type) ||
+			     ((*it)->current_load >= (*it)->max_load))) {
+	    it++;
+	} else {
+	    break;
+	}
+#endif
+    }
+    if (it == (*acceptable_types)[i]->members[vn->type]->L.end()) {
+#ifdef LOAD_BALANCE
+	if (firstmatch) {
+	    //newpnode = firstmatch;
+	    goto REDO_SEARCH;
+	} else {
+	    newpnode = NULL;
+	}
+#else
+	newpnode = NULL;
+#endif
+    } else {
+	newpnode = *it;
+    }
+#else
     newpnode = (*acceptable_types)[i]->members[vn->type]->front();
+#endif
 #ifdef PCLASS_DEBUG
     cerr << "Found pclass: " <<
       (*acceptable_types)[i]->name << " and node " <<
       (newpnode == NULL ? "NULL" : newpnode->name) << "\n";
 #endif
     if (newpnode != NULL) {
+      RDEBUG(cout << " to " << newpnode->name << endl;)
       return newpnode;
     }
     
+#ifndef PCLASS_SIZE_BALANCE
     if (i == first) {
-      // couldn't find one
-      return NULL;
+	// couldn't find one
+	return NULL;
     }
+#endif
   }
 }
 
@@ -324,11 +444,13 @@ void anneal()
   iters_to_best =0;
   accepts = 0;
   
-  float scorediff;
+  double scorediff;
 
   int nnodes = num_vertices(VG);
+  npnodes = num_vertices(PG);
+  int npclasses = pclasses.size();
   
-  float cycles = CYCLES*(float)(nnodes + num_edges(VG));
+  float cycles = CYCLES*(float)(nnodes + num_edges(VG) + PHYSICAL(npnodes));
   float optimal = OPTIMAL_SCORE(num_edges(VG),nnodes);
     
 #ifdef STATS
@@ -337,12 +459,14 @@ void anneal()
 
   int mintrans = (int)cycles;
   int trans;
-  int naccepts = 20*nnodes;
+  int naccepts = 20*(nnodes + PHYSICAL(npnodes));
   pvertex oldpos;
   bool oldassigned;
   int bestviolated;
   int num_fixed=0;
-  float temp = init_temp;
+  double meltedtemp;
+  double temp = init_temp;
+  double deltatemp, deltaavg;
 
 #ifdef VERBOSE
   cout << "Initialized to cycles="<<cycles<<" optimal="<<optimal<<" mintrans="
@@ -407,6 +531,15 @@ void anneal()
     }
   }
 
+  int neighborsize;
+  neighborsize = nnodes * npclasses;
+  if (neighborsize < min_neighborhood_size) {
+    neighborsize = min_neighborhood_size;
+  }
+#ifdef CHILL
+  double scores[neighborsize];
+#endif
+
   if (num_fixed == nnodes) {
     cout << "All nodes are fixed.  No annealing." << endl;
     goto DONE;
@@ -415,43 +548,137 @@ void anneal()
   // Annealing loop!
   vvertex vv;
   tb_vnode *vn;
+
+  // Crap added by ricci
+  bool melting;
+  int nincreases, ndecreases;
+  double avgincrease;
+  double avgscore;
+//  float avgscoresquared;
+  double initialavg;
+  double stddev;
+  bool finished;
+  bool forcerevert;
+  finished = forcerevert = false;
+  int tsteps;
+  int mintsteps;
+  double meltstart;
+
+#define MAX_AVG_HIST 16
+  double avghist[MAX_AVG_HIST];
+  int hstart, nhist;
+  hstart = nhist = 0;
+  double lasttemp;
+  double smoothedavg, lastsmoothed;
+  lastsmoothed = 500000.0f;
+  lasttemp = 5000.0f;
+  int melttrials;
+  melttrials = 0;
+
+  bool finishedonce;
+  finishedonce = false;
+
+  tsteps = 0;
+  mintsteps = MAX_AVG_HIST;
+  tsteps = 0;
+  mintsteps = MAX_AVG_HIST;
+  tsteps = 0;
+  mintsteps = MAX_AVG_HIST;
+
+  // Make sure the last two don't prevent us from running!
+  avgscore = initialavg = 1.0;
+
+  stddev = 0;
+
+#ifdef MELT
+  melting = true;
+#ifdef TIME_TARGET
+  meltstart = used_time();
+#endif
+#else
+  melting = false;
+#endif
+
+  melt_trans = neighborsize;
+#ifdef EPSILON_TERMINATE
+//  while ((initialavg) && ((temp * avgscore / initialavg) >= epsilon)) {
+  while(1) {
+#else
   while (temp >= temp_stop) {
+#endif
 #ifdef VERBOSE
     cout << "Temperature:  " << temp << " AbsBest: " << absbest <<
       " (" << absbestviolated << ")" << endl;
 #endif
     trans = 0;
     accepts = 0;
-    
-    while (trans < mintrans && accepts < naccepts) {
+    nincreases = ndecreases = 0;
+    avgincrease = 0.0;
+    avgscore = bestscore;
+#ifdef CHILL
+    scores[0] = bestscore;
+#endif
+
+    if (melting) {
+      cout << "Doing melting run" << endl;
+    }
+
+    while ((melting && (trans < melt_trans))
+#ifdef NEIGHBOR_LENGTH
+	    || (trans < neighborsize)) {
+#else
+	    || (!melting && (trans < mintrans && accepts < naccepts))) {
+#endif
+
 #ifdef STATS
       cout << "STATS temp:" << temp << " score:" << get_score() <<
 	" violated:" << violated << " trans:" << trans <<
 	" accepts:" << accepts << " current_time:" <<
 	used_time() << endl;
-#endif STATS
+#endif 
       pvertex newpos;
       trans++;
       iters++;
 
+      bool freednode = false;
       if (! unassigned_nodes.empty()) {
 	vv = unassigned_nodes.top().first;
+	assert(!get(vvertex_pmap,vv)->assigned);
 	unassigned_nodes.pop();
       } else {
-	int choice = std::random()%nnodes;
+	int start = std::random()%nnodes;
+	int choice = start;
+#if defined(FIX_LAN_NODES) || defined(AUTO_MIGRATE)
+	while (get(vvertex_pmap,virtual_nodes[choice])->fixed ||
+		!get(vvertex_pmap,virtual_nodes[choice])->type.compare("lan")) {
+#else
 	while (get(vvertex_pmap,virtual_nodes[choice])->fixed) {
-	  choice = std::random()%nnodes;
+#endif
+	  choice = (choice +1) % nnodes;
+	  if (choice == start) {
+	      choice = -1;
+	      break;
+	  }
 	}
-	vv = virtual_nodes[choice];
+	if (choice >= 0) {
+	    vv = virtual_nodes[choice];
+	} else {
+	    cout << "All nodes are fixed or LANs.  No annealing." << endl;
+	    goto DONE;
+	}
       }
       
       vn = get(vvertex_pmap,vv);
+      RDEBUG(cout << "Reassigning " << vn->name << endl;)
       oldassigned = vn->assigned;
       oldpos = vn->assignment;
       
+#ifdef FREE_IMMEDIATELY
       if (oldassigned) {
 	remove_node(vv);
+	RDEBUG(cout << "Freeing up " << vn->name << endl;)
       }
+#endif
       
       if (vn->vclass != NULL) {
 	vn->type = vn->vclass->choose_type();
@@ -463,6 +690,12 @@ void anneal()
       if (vn->type.compare("lan") == 0) {
 	// LAN node
 	pvertex lanv = make_lan_node(vv);
+#ifndef FREE_IMMEDIATELY
+	if (oldassigned) {
+	  RDEBUG(cout << "removing: lan,oldassigned" << endl;)
+	  remove_node(vv);
+	}
+#endif
 	if (add_node(vv,lanv,false) != 0) {
 	  delete_lan_node(lanv);
 	  unassigned_nodes.push(vvertex_int_pair(vv,std::random()));
@@ -470,41 +703,314 @@ void anneal()
 	}
       } else {
 	tb_pnode *newpnode = find_pnode(vn);
+#ifndef FREE_IMMEDIATELY
+	if (oldassigned) {
+	  RDEBUG(cout << "removing: !lan, oldassigned" << endl;)
+	  remove_node(vv);
+	  //unassigned_nodes.push(vvertex_int_pair(vv,std::random()));
+	}
+#endif
 	if (newpnode == NULL) {
+	  // We're not going to be re-assigning this one
+#ifndef SMART_UNMAP
+	  unassigned_nodes.push(vvertex_int_pair(vv,std::random()));
+#endif
 	  // need to free up nodes
-	  int toremove = std::random()%nnodes;
+#ifdef SMART_UNMAP
+     	  // XXX: Should probably randomize this
+	  // XXX: Add support for not using PER_VNODE_TT
+	  // XXX: Not very robust
+
+	  freednode = true;
+
+	  //cout << "Finding a replacement node for " << vn->name << endl;
+
+	  //cerr << "Starting" << endl;
+	  tt_entry tt = vnode_type_table[vn->name];
+	  //cerr << "Got TT" << endl;
+	  int size = tt.first;
+	  pclass_vector *acceptable_types = tt.second;
+	  //cerr << "Got AT" << endl;
+	  // Find a node to kick out
+	  bool foundnode = false;
+	  int offi = std::rand();
+	  int index;
+	  //cerr << "Starting " << size << endl;
+	  for (int i = 0; i < size; i++) {
+	      index = (i + offi) % size;
+	      //cout << "On " << index << endl;
+	      if ((*acceptable_types)[index]->used_members.find(vn->type) ==
+		      (*acceptable_types)[index]->used_members.end()) {
+		  //cout << "Can't find type" << endl;
+		  continue;
+	      }
+	      if ((*acceptable_types)[index]->used_members[vn->type]->size() == 0) {
+		  //cout << "used_members empty" << endl;
+		  continue;
+	      }
+	      //cerr << "Works!" << endl;
+	      foundnode = true;
+	      break;
+	  }
+
+	  //cerr << "Got i " << i << endl;
+	  if (foundnode) {
+	      assert((*acceptable_types)[index]->used_members[vn->type]->size());
+	      tb_pclass::tb_pnodeset::iterator it = (*acceptable_types)[index]->used_members[vn->type]->begin();
+	      int j = std::rand() % (*acceptable_types)[index]->used_members[vn->type]->size();
+	      //cerr << "Used members: " << (*acceptable_types)[i]->used_members[vn->type]->size() << endl;
+	      while (j > 0) {
+		  it++;
+		  j--;
+		  //cerr << "Skipping" << endl;
+	      }
+	      //cerr << "Got it" << endl;
+	      tb_vnode_set::iterator it2 = (*it)->assigned_nodes.begin();
+	      int k = std::rand() % (*it)->assigned_nodes.size();
+	      while (k > 0) {
+		  it2++;
+		  k--;
+		  //cerr << "Skipping" << endl;
+	      }
+	      //cerr << "Got it2" << endl;
+	      tb_vnode *kickout = *it2;
+	      //cerr << "Kicking out " << kickout->name << " on " << (*it)->name <<  endl;
+	      assert(kickout->assigned);
+	      vvertex toremove = vname2vertex[kickout->name];
+	      newpnode = *it;
+	      //cerr << "Got vvertex" << endl;
+	      remove_node(toremove);
+	      unassigned_nodes.push(vvertex_int_pair(toremove,
+			  std::random()));
+	  } else {
+	      cerr << "Failed to find a replacement!" << endl;
+	  }
+
+	  //cerr << "Done" << endl;
+#else
+	  int start = std::random()%nnodes;
+	  int toremove = start;
+#if defined(FIX_LAN_NODES) || defined(AUTO_MIGRATE)
+	  while (get(vvertex_pmap,virtual_nodes[toremove])->fixed ||
+		 (!get(vvertex_pmap,virtual_nodes[toremove])->assigned) ||
+		 (get(vvertex_pmap,virtual_nodes[toremove])->type.compare("lan"))) {
+#else
+#ifdef SMART_UNMAP
+
+#ifdef PER_VNODE_TT
+          tt_entry tt = vnode_type_table[vn->name];
+#else
+	  tt_entry tt = type_table[vn->type];
+#endif
+	  pclass_vector *acceptable_types = tt.second;
+
+	  while (1) {
+	      bool keepgoing = false;
+	      if (get(vvertex_pmap,virtual_nodes[toremove])->fixed) {
+		  keepgoing = true;
+		  //cout << "keepgoing: fixed" << endl;
+	      } else if (! get(vvertex_pmap,virtual_nodes[toremove])->assigned) {
+		  keepgoing = true;
+		  //cout << "keepgoing: !assigned" << endl;
+	      } else {
+		  pvertex pv = get(vvertex_pmap,virtual_nodes[toremove])->assignment;
+		  tb_pnode *pn = get(pvertex_pmap,pv);
+		  int j;
+		  for (j = 0; j < acceptable_types->size(); j++) {
+		      if ((*acceptable_types)[j] == pn->my_class) {
+			  break;
+		      }
+		  }
+		  if (j == acceptable_types->size()) {
+		      keepgoing = true;
+		      //cout << "keepgoing: wrongtype" << endl;
+		  }
+	      }
+
+	      if (!keepgoing) {
+		  break;
+	      }
+		  
+#else
 	  while (get(vvertex_pmap,virtual_nodes[toremove])->fixed ||
 		 (! get(vvertex_pmap,virtual_nodes[toremove])->assigned)) {
-	    toremove = std::random()%nnodes;
+#endif
+#endif
+	      toremove = (toremove +1) % nnodes;
+	      if (toremove == start) {
+		  toremove = -1;
+		  break;
+	      }
 	  }
-	  remove_node(virtual_nodes[toremove]);
-	  unassigned_nodes.push(vvertex_int_pair(virtual_nodes[toremove],
-						 std::random()));
-	  unassigned_nodes.push(vvertex_int_pair(vv,std::random()));
+	  if (toremove >= 0) {
+	      RDEBUG(cout << "removing: freeing up nodes" << endl;)
+	      remove_node(virtual_nodes[toremove]);
+	      unassigned_nodes.push(vvertex_int_pair(virtual_nodes[toremove],
+						     std::random()));
+	  }
 	  continue;
+#endif /* SMART_UNMAP */
+#ifndef SMART_UNMAP
 	} else {
-	  newpos = pnode2vertex[newpnode];
-	  if (add_node(vv,newpos,false) != 0) {
-	    continue;
-	  }
+	  //printf("Found an old node!\n");
+#else
 	}
+#endif
+	  if (newpnode != NULL) {
+	      newpos = pnode2vertex[newpnode];
+	      if (add_node(vv,newpos,false) != 0) {
+		  unassigned_nodes.push(vvertex_int_pair(vv,std::random()));
+		  continue;
+	      }
+	  } else {
+#ifdef SMART_UNMAP
+		  unassigned_nodes.push(vvertex_int_pair(vv,std::random()));
+#endif
+	      if (freednode) {
+		  continue;
+	      }
+	  }
+#ifndef SMART_UNMAP
+	}
+#endif
       }
 
+	/*
+#ifdef FREE_IMMEDIATELY
+      if (oldassigned) {
+	remove_node(vv);
+      }
+#endif
+*/
+
+#ifdef FIX_LAN_NODES
+      // OK, we're going to do something silly here: Migrate LAN nodes!
+      //cout << "Migrating: " << unassigned_nodes.size() << " nodes free" << endl;
+      vvertex_iterator lanvertex_it,end_lanvertex_it;
+      vvertex_list migrate_lan_nodes;
+      tie(lanvertex_it,end_lanvertex_it) = vertices(VG);
+      for (;lanvertex_it!=end_lanvertex_it;++lanvertex_it) {
+	  tb_vnode *vnode = get(vvertex_pmap,*lanvertex_it);
+	  if (vnode->assigned) {
+	      if (vnode->type.compare("lan") == 0) {
+		  migrate_lan_nodes.push_front(*lanvertex_it);
+	      }
+	  }
+      }
+      while (migrate_lan_nodes.size() > 0) {
+	  vvertex lanv = migrate_lan_nodes.front();
+	  migrate_lan_nodes.pop_front();
+	  RDEBUG(cout << "removing: migration" << endl;)
+	  remove_node(lanv);
+	  pvertex lanpv = make_lan_node(lanv);
+	  add_node(lanv,lanpv,true);
+      }
+
+#endif
+
       newscore = get_score();
+      /*
+      if (melting) {
+        printf("Melting: Adding %f to avgscore\n",newscore);
+	melttrials++;
+	avgscore += newscore;
+      }
+      */
+      assert(newscore >= 0);
+
+//      avgscore = avgscore * (trans -1) / trans + newscore / trans;
+//      avgscoresquared = avgscoresquared * (trans -1) / trans
+//	+ (newscore * newscore) / trans;
+      //avgscore = avgscore + newscore / neighborsize;
+//      avgscoresquared = avgscoresquared + (newscore * newscore) / neighborsize;
       
       // Negative means bad
       scorediff = bestscore - newscore;
+      // This looks funny, because < 0 means worse, which means an increase in
+      // score
+      if (scorediff < 0) {
+	nincreases++;
+	avgincrease = avgincrease * (nincreases -1) / nincreases +
+	  (-scorediff)  / nincreases;
+      } else {
+	ndecreases++;
+      }
       
-      // Complicated expression that no one really understands
-      if ((newscore < optimal) || (violated < bestviolated) ||
-	  ((violated == bestviolated) && (newscore < bestscore)) ||
-	  accept(scorediff*((bestviolated - violated)/2), temp)) {
+      bool accepttrans = false;
+      if (newscore < optimal) {
+	  accepttrans = true;
+	  RDEBUG(cout << "accept: optimal (" << newscore << "," << optimal
+		  << ")" << endl;)
+      } else if (melting) {
+	  accepttrans = true;
+	  RDEBUG(cout << "accept: melting" << endl;)
+      } else
+#ifdef NO_VIOLATIONS
+	  if (newscore < bestscore) {
+	      accepttrans = true;
+	      RDEBUG(cout << "accept: better (" << newscore << "," << bestscore
+		      << ")" << endl;)
+	  } else if (accept(scorediff,temp)) {
+	      accepttrans = true;
+	      RDEBUG(cout << "accept: metropolis (" << newscore << ","
+		      << bestscore << "," << expf(scorediff/(temp*sensitivity))
+		      << ")" << endl;)
+	  }
+#else
+          if ((violated == bestviolated) && (newscore < bestscore)) {
+	      accepttrans = true;
+	      RDEBUG(cout << "accept: better (" << newscore << "," << bestscore
+		      << ")" << endl;)
+	  } else if (violated < bestviolated) {
+	      accepttrans = true;
+	      RDEBUG(cout << "accept: better (violations) (" << newscore << ","
+		      << bestscore << "," << violated << "," << bestviolated
+		      << ")" << endl;
+	          cout << "Violations: (new) " << violated << endl;
+		  cout << "  unassigned: " << vinfo.unassigned << endl;
+		  cout << "  pnode_load: " << vinfo.pnode_load << endl;
+		  cout << "  no_connect: " << vinfo.no_connection << endl;
+		  cout << "  link_users: " << vinfo.link_users << endl;
+		  cout << "  bandwidth:  " << vinfo.bandwidth << endl;
+		  cout << "  desires:    " << vinfo.desires << endl;
+		  cout << "  vclass:     " << vinfo.vclass << endl;
+		  cout << "  delay:      " << vinfo.delay << endl;)
+	  } else if (accept(scorediff,temp)) {
+	      accepttrans = true;
+	      RDEBUG(cout << "accept: metropolis (" << newscore << ","
+		      << bestscore << "," << expf(scorediff/(temp*sensitivity))
+		      << ")" << endl;)
+	  }
+#endif
+
+      if (accepttrans) {
 	bestscore = newscore;
 	bestviolated = violated;
+#ifdef GNUPLOT_OUTPUT
+	fprintf(tempout,"%f\n",temp);
+	fprintf(scoresout,"%f\n",newscore);
+	fprintf(deltaout,"%f\n",-scorediff);
+#endif
+	//if (!melting) {
+	    //printf("Adding %f to avgscore\n",newscore);
+	avgscore += newscore;
+	//}
+
 	accepts++;
+
+#ifdef CHILL
+	 if (!melting) {
+	     scores[accepts] = newscore;
+	 }
+#endif
+
+#ifdef NO_VIOLATIONS
+	if (newscore < absbest) {
+#else
 	if ((violated < absbestviolated) ||
 	    ((violated == absbestviolated) &&
 	     (newscore < absbest))) {
+#endif
 #ifdef SCORE_DEBUG
 	  cerr << "New best solution." << endl;
 #endif
@@ -517,6 +1023,9 @@ void anneal()
 	  absbest = newscore;
 	  absbestviolated = violated;
 	  iters_to_best = iters;
+#ifdef SCORE_DEBUG
+	  cerr << "New best recorded" << endl;
+#endif
 	}
 	if (newscore < optimal) {
 	  cout << "OPTIMAL ( " << optimal << ")" << endl;
@@ -525,6 +1034,7 @@ void anneal()
 	// Accept change
       } else {
 	// Reject change
+	RDEBUG(cout << "removing: rejected change" << endl;)
 	remove_node(vv);
 	if (oldassigned) {
 	  if (vn->type.compare("lan") == 0) {
@@ -533,42 +1043,265 @@ void anneal()
 	  add_node(vv,oldpos,false);
 	}
       }
-    }
-    temp *= temp_rate;
 
+      if (melting) {
+	//cout << "Melt: avgi " << avgincrease << " nin " << nincreases << " ndec "
+	// << ndecreases << " X0 " << X0 << endl;
+	temp = avgincrease /
+	  log(nincreases/ (nincreases * X0 - ndecreases * (1 - X0)));
+	if (!(temp > 0.0)) {
+	    temp = 0.0;
+	}
+	//cout << "New melting temp is " << temp << endl;
+      }
+#ifdef TIME_TERMINATE
+      if (timelimit && ((used_time() - timestart) > timelimit)) {
+	printf("Reached end of run time, finishing\n");
+	forcerevert = true;
+	finished = true;
+	goto NOTQUITEDONE;
+      }
+#endif
+
+    }
+
+#ifdef RANDOM_ASSIGNMENT
+      if (violated == 0) {
+	  finished = true;
+      }
+#endif
+
+#ifdef REALLY_RANDOM_ASSIGNMENT
+      if (unassigned_nodes.size() == 0) {
+	  finished = true;
+      }
+#endif
+
+NOTQUITEDONE:
+   /* if (melting) {
+	printf("Melting: avgscore: %f = %f / %i\n",avgscore / melttrials,avgscore,melttrials);
+      avgscore = avgscore / melttrials;
+    } else {
+    */
+      RDEBUG(printf("avgscore: %f = %f / %i\n",avgscore / (accepts +1),avgscore,accepts+1);)
+      avgscore = avgscore / (accepts +1);
+      /*
+    }
+    */
+
+    if (melting) {
+      melting = false;
+      initialavg = avgscore;
+      meltedtemp = temp;
+      RDEBUG(cout << "Melting finished with a temperature of " << temp
+	<< " avg score was " << initialavg << endl;)
+      if (!(meltedtemp > 0.0)) { // This backwards expression to catch NaNs
+	cout << "Finished annealing while melting!" << endl;
+	finished = true;
+	forcerevert = true;
+      }
+#ifdef TIME_TARGET
+      if (timetarget) {
+	double melttime = used_time() - meltstart;
+	double timeleft = timetarget - melttime;
+	double stepsleft = timeleft / melttime;
+	cout << "Melting took " << melttime << " seconds, will try for "
+	  << stepsleft << " temperature steps" << endl;
+	temp_rate = pow(temp_stop/temp,1/stepsleft);
+	cout << "Timelimit: " << timelimit << " Timeleft: " << timeleft
+	  << " temp_rate: " << temp_rate << endl;
+      }
+#endif
+    } else {
+#ifdef CHILL
+      if (!melting) {
+	  stddev = 0;
+	  for (int i = 0; i <= accepts; i++) {
+	    stddev += pow(scores[i] - avgscore,2);
+	  }
+	  stddev /= (accepts +1);
+	  stddev = sqrt(stddev);
+	  temp = temp / (1 + (temp * log(1 + delta))/(3  * stddev));
+      }
+#else
+      temp *= temp_rate;
+#endif
+    }
+
+
+#ifdef DEBUG_TSTEP
+#ifdef EPSILON_TERMINATE
+#ifdef CHILL
+    RDEBUG(printf("temp_end: %f %f %f\n",temp,temp * avgscore / initialavg,stddev);)
+#else
+    RDEBUG(printf("temp_end: %f %f\n",temp,temp * avgscore / initialavg);)
+#endif
+#else
+    printf("temp_end: %f ",temp);
+    if (trans >= mintrans) {
+	if (accepts >= naccepts) {
+	    printf("both");
+	} else {
+	    printf("trans %f",accepts*1.0/naccepts);
+	}
+    } else {
+	printf("accepts %f",trans*1.0/mintrans);
+    }
+    printf("\n");
+#endif
+#endif
+    
     // Revert to best found so far - do link/lan migration as well
 #ifdef SCORE_DEBUG
     cerr << "Reverting to best known solution." << endl;
 #endif
+
+
+    // Add this to the history, and computed a smoothed average
+    smoothedavg = avgscore / (nhist + 1);
+    for (int j = 0; j < nhist; j++) {
+      smoothedavg += avghist[(hstart + j) % MAX_AVG_HIST] / (nhist + 1);
+    }
+    /*
+    printf("smooth: avgscore %f, smoothedavg %f, hstart %i, nhist %i\n",avgscore,
+	smoothedavg,hstart,nhist);
+    */
+
+    avghist[(hstart + nhist) % MAX_AVG_HIST] = avgscore;
+    if (nhist < MAX_AVG_HIST) {
+      nhist++;
+    } else {
+      hstart = (hstart +1) % MAX_AVG_HIST;
+    }
+
+#ifdef LOCAL_DERIVATIVE
+    deltaavg = lastsmoothed - smoothedavg;
+    deltatemp = lasttemp - temp;
+#else
+    deltaavg = initialavg - smoothedavg;
+    deltatemp = meltedtemp - temp;
+#endif
+
+    lastsmoothed = smoothedavg;
+    lasttemp = temp;
+
+#ifdef EPSILON_TERMINATE
+    RDEBUG(
+       printf("avgs: real: %f, smoothed %f, initial: %f\n",avgscore,smoothedavg,initialavg);
+       printf("epsilon: (%f) %f / %f * %f / %f < %f (%f)\n", fabs(deltaavg), temp, initialavg,
+	   deltaavg, deltatemp, epsilon,(temp / initialavg) * (deltaavg/ deltatemp));
+    )
+    if ((tsteps >= mintsteps) && // (temp <= min_temp_end) &&
+#ifdef ALLOW_NEGATIVE_DELTA
+	((fabs(deltaavg) < 0.0000001)
+	 || (fabs((temp / initialavg) * (deltaavg/ deltatemp)) < epsilon))) {
+#else
+	(deltaavg > 0) && ((temp / initialavg) * (deltaavg/ deltatemp) < epsilon)) {
+#endif
+#ifdef FINISH_HILLCLIMB
+        if (!finishedonce && ((absbestviolated <= violated) && (absbest < bestscore))) {
+	    // We don't actually stop, we just go do a hill-climb (basically) at the best
+	    // one we previously found
+	    finishedonce = true;
+	    printf("Epsilon Terminated, but going back to a better solution\n");
+	} else {
+	    finished = true;
+	}
+#else
+	finished = true;
+#endif
+	forcerevert = true;
+    }
+#endif
+
+    bool revert = false;
+    if (forcerevert) {
+	cout << "Reverting: forced" << endl;
+	revert = true;
+    }
+
+#ifndef NO_REVERT
+    if (REVERT_VIOLATIONS && (absbestviolated < violated)) {
+	cout << "Reverting: REVERT_VIOLATIONS" << endl;
+	revert = true;
+    }
+    if (absbest < bestscore) {
+	cout << "Reverting: best score" << endl;
+	revert = true;
+    }
+#endif
+
+    if (REVERT_LAST && (temp < temp_stop)) {
+	cout << "Reverting: REVERT_LAST" << endl;
+	revert = true;
+    }
+
+    // Only revert if the best configuration has better violations
+    /*
+    if ((NO_REVERT || (REVERT_LAST && (temp >= temp_stop)) ||
+	(REVERT_VIOLATIONS && (absbestviolated > violated))) && !forcerevert) {
+	*/
     vvertex_list lan_nodes;
     vvertex_iterator vvertex_it,end_vvertex_it;
-    tie(vvertex_it,end_vvertex_it) = vertices(VG);
-    for (;vvertex_it!=end_vvertex_it;++vvertex_it) {
-      tb_vnode *vnode = get(vvertex_pmap,*vvertex_it);
-      if (vnode->fixed) continue;
-      if (vnode->assigned) {
-	remove_node(*vvertex_it);
-      }
-    }
-    tie(vvertex_it,end_vvertex_it) = vertices(VG);
-    for (;vvertex_it!=end_vvertex_it;++vvertex_it) {
-      tb_vnode *vnode = get(vvertex_pmap,*vvertex_it);
-      if (absassigned[*vvertex_it]) {
-	if (vnode->type.compare("lan") == 0) {
-	  lan_nodes.push_front(*vvertex_it);
-	} else {
-	  if (vnode->vclass != NULL) {
-	    vnode->type = abstypes[*vvertex_it];
+    if (!revert) {
+      // Just find LAN nodes, for migration
+      tie(vvertex_it,end_vvertex_it) = vertices(VG);
+      for (;vvertex_it!=end_vvertex_it;++vvertex_it) {
+	tb_vnode *vnode = get(vvertex_pmap,*vvertex_it);
+	if (vnode->assigned) {
+	  if (vnode->type.compare("lan") == 0) {
+	    lan_nodes.push_front(*vvertex_it);
 	  }
-	  add_node(*vvertex_it,absassignment[*vvertex_it],true);
+	}
+      } 
+    } else {
+      cout << "Reverting to best solution\n";
+      // Do a full revert
+      tie(vvertex_it,end_vvertex_it) = vertices(VG);
+      for (;vvertex_it!=end_vvertex_it;++vvertex_it) {
+	tb_vnode *vnode = get(vvertex_pmap,*vvertex_it);
+	if (vnode->fixed) continue;
+	if (vnode->assigned) {
+	  RDEBUG(cout << "removing: revert " << vnode->name << endl;)
+	  remove_node(*vvertex_it);
+	} else {
+	  RDEBUG(cout << "not removing: revert " << vnode->name << endl;)
+	}
+      }
+      tie(vvertex_it,end_vvertex_it) = vertices(VG);
+      for (;vvertex_it!=end_vvertex_it;++vvertex_it) {
+	tb_vnode *vnode = get(vvertex_pmap,*vvertex_it);
+	if (vnode->fixed) continue;
+	if (absassigned[*vvertex_it]) {
+	  if (vnode->type.compare("lan") == 0) {
+	    lan_nodes.push_front(*vvertex_it);
+	  } else {
+	    if (vnode->vclass != NULL) {
+	      vnode->type = abstypes[*vvertex_it];
+	    }
+	    assert(!add_node(*vvertex_it,absassignment[*vvertex_it],true));
+	  }
 	}
       }
     }
+
+    // Do LAN migration
+    RDEBUG(cout << "Doing LAN migration" << endl;)
     while (lan_nodes.size() > 0) {
       vvertex lanv = lan_nodes.front();
       lan_nodes.pop_front();
+      if (!revert) { // If reverting, we've already done this
+	  RDEBUG(cout << "removing: migration" << endl;)
+	  remove_node(lanv);
+      }
       pvertex lanpv = make_lan_node(lanv);
       add_node(lanv,lanpv,true);
+    }
+
+    tsteps++;
+
+    if (finished) {
+      goto DONE;
     }
   }
  DONE:
@@ -778,6 +1511,9 @@ void print_help()
 {
   cerr << "assign [options] ptopfile topfile [config params]" << endl;
   cerr << "Options: " << endl;
+#ifdef TIME_TERMINATE
+  cerr << "  -l <time>   - Limit runtime." << endl;
+#endif
   cerr << "  -s <seed>   - Set the seed." << endl;
   cerr << "  -v <viz>    - Produce graphviz files with given prefix." <<
     endl;
@@ -791,7 +1527,9 @@ int main(int argc,char **argv)
   
   // Handle command line
   char ch;
-  while ((ch = getopt(argc,argv,"s:v:")) != -1) {
+  timelimit = 0.0;
+  timetarget = 0.0;
+  while ((ch = getopt(argc,argv,"s:v:l:t:")) != -1) {
     switch (ch) {
     case 's':
       if (sscanf(optarg,"%d",&seed) != 1) {
@@ -801,6 +1539,20 @@ int main(int argc,char **argv)
     case 'v':
       viz_prefix = optarg;
       break;
+#ifdef TIME_TERMINATE
+    case 'l':
+      if (sscanf(optarg,"%lf",&timelimit) != 1) {
+	print_help();
+      }
+      break;
+#endif
+#ifdef TIME_TARGET
+    case 't':
+      if (sscanf(optarg,"%lf",&timetarget) != 1) {
+	print_help();
+      }
+      break;
+#endif
     default:
       print_help();
     }
@@ -832,6 +1584,12 @@ int main(int argc,char **argv)
   dump_options("Configuration options:", options, noptions);
 #endif
 
+#ifdef GNUPLOT_OUTPUT
+  scoresout = fopen("scores.out","w");
+  tempout = fopen("temp.out","w");
+  deltaout = fopen("delta.out","w");
+#endif
+
   cout << "seed = " << seed << endl;
   std::srandom(seed);
 
@@ -847,6 +1605,62 @@ int main(int argc,char **argv)
 #endif
 
   read_virtual_topology(argv[1]);
+ 
+  cout << "Type preecheck." << endl;
+  ptypes.push_front("lan");
+  // Type precheck
+  bool ok=true;
+  for (name_slist::iterator it=vtypes.begin();
+       it != vtypes.end();++it) {
+    if (find(ptypes.begin(),ptypes.end(),*it) == ptypes.end()) {
+      cout << "  No physical nodes of type " << *it << endl;
+      ok=false;
+    }
+  }
+  if (! ok) exit(-1);
+
+
+#ifdef PER_VNODE_TT
+  vvertex_iterator vit,vendit;
+  tie(vit,vendit) = vertices(VG);
+
+  for (;vit != vendit;vit++) {
+      tb_vnode *v = get(vvertex_pmap,*vit);
+      int size = type_table[v->type].first;
+      pclass_vector *vec = new pclass_vector(size); // Could be an over-estimate
+      vnode_type_table[v->name] = tt_entry(size,vec);
+      pclass_vector::iterator it;
+      int i = 0;
+      // No reason to look for these for LAN nodes!
+      if (!v->type.compare("lan")) {
+	  continue;
+      }
+      for (it = type_table[v->type].second->begin();
+	      it != type_table[v->type].second->end(); it++) {
+	  tb_pnode *first = *((*it)->members[v->type]->L.begin());
+	  //cout << "Checking " << first->total_interfaces << " >= " <<
+	  //    v->num_links << " ";
+	  if ((first->total_interfaces >= v->num_links) ||
+		  (first->types[v->type] > 1)) {
+	      (*vec)[i++] = *it;
+	      //cout << "Allowing!" << endl;
+	  } else {
+	      //cout << "Skipping!" << endl;
+	      vnode_type_table[v->name].first--;
+	  }
+      }
+      assert(vnode_type_table[v->name].first >= 0);
+      if (vnode_type_table[v->name].first == 0) {
+	  cerr << "No possible mapping for " << v->name;
+	  exit(1);
+      }
+#ifdef PCLASS_DEBUG
+      cerr << v->name << " can map to " << vnode_type_table[v->name].first << " pclasses"
+	  << endl;
+#endif
+
+  }
+#endif
 
   // Output graphviz if necessary
   if (viz_prefix.size() != 0) {
@@ -864,25 +1678,15 @@ int main(int argc,char **argv)
     write_graphviz(sfile,SG,svertex_writer(),sedge_writer(),graph_writer());
     sfile.close();
   }
-  
-  cout << "Type preecheck." << endl;
-  ptypes.push_front("lan");
-  // Type precheck
-  bool ok=true;
-  for (name_slist::iterator it=vtypes.begin();
-       it != vtypes.end();++it) {
-    if (find(ptypes.begin(),ptypes.end(),*it) == ptypes.end()) {
-      cout << "  No physical nodes of type " << *it << endl;
-      ok=false;
-    }
-  }
-  if (! ok) exit(-1);
-
-
-  double timestart,timeend;
+ 
   timestart = used_time();
   anneal();
   timeend = used_time();
+#ifdef GNUPLOT_OUTPUT
+  fclose(scoresout);
+  fclose(tempout);
+  fclose(deltaout);
+#endif
 
   if ((score > absbest) || (violated > absbestviolated)) {
     cerr << "Internal error: Invalid migration assumptions." << endl;
@@ -903,6 +1707,11 @@ int main(int argc,char **argv)
   cout << "  link_users: " << vinfo.link_users << endl;
   cout << "  bandwidth:  " << vinfo.bandwidth << endl;
   cout << "  desires:    " << vinfo.desires << endl;
+  cout << "  vclass:     " << vinfo.vclass << endl;
+  cout << "  delay:      " << vinfo.delay << endl;
+#ifdef FIX_PLINK_ENDPOINTS
+  cout << "  endpoints:  " << vinfo.incorrect_endpoints << endl;
+#endif
 
   print_solution();
 
@@ -915,6 +1724,10 @@ int main(int argc,char **argv)
     afile.close();
   }
   
-  return 0;
+  if (violated > 0) {
+      return 2;
+  } else {
+      return 0;
+  }
 }
 

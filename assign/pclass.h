@@ -57,6 +57,8 @@ public:
   tb_pclass() : size(0), used(0) {;}
 
   typedef hash_map<crope,tb_pnodelist*> pclass_members_map;
+  typedef hash_set<tb_pnode*,hashptr<tb_pnode*> > tb_pnodeset;
+  typedef hash_map<crope,tb_pnodeset*> pclass_members_set;
 
   int add_member(tb_pnode *p);
 
@@ -64,6 +66,9 @@ public:
   int size;
   double used;
   pclass_members_map members;
+#ifdef SMART_UNMAP
+  pclass_members_set used_members;
+#endif
 
   friend ostream &operator<<(ostream &o, const tb_pclass& p)
   {

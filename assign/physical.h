@@ -1,6 +1,11 @@
 #ifndef __PHYSICAL_H
 #define __PHYSICAL_H
 
+#include "common.h"
+// Icky, but I can't include virtual.h here
+class tb_vnode;
+typedef hash_set<tb_vnode*,hashptr<tb_vnode*> > tb_vnode_set;
+
 class tb_pclass;
 class tb_pnode;
 class tb_switch;
@@ -41,6 +46,8 @@ typedef hash_map<tb_pnode*,pvertex,hashptr<tb_pnode*> > pnode_pvertex_map;
 typedef hash_map<crope,pvertex> name_pvertex_map;
 typedef vector<svertex> switch_pred_map;
 typedef hash_map<svertex,switch_pred_map*>switch_pred_map_map;
+typedef vector<svertex> switch_dist_map;
+typedef hash_map<svertex,switch_dist_map*>switch_dist_map_map;
 typedef list<pedge> pedge_path;
 typedef list<pvertex> pvertex_list;
 
@@ -97,8 +104,16 @@ public:
 				// sgraph switch.
   int switch_used_links;	// only for switches, how many links are
 				// in use.  Switch is in use whenever > 0
+  int total_interfaces;
+#ifdef PENALIZE_UNUSED_INTERFACES
+  int used_interfaces;
+#endif
 
   tb_pclass *my_class;
+
+#ifdef SMART_UNMAP
+  tb_vnode_set assigned_nodes;
+#endif
 };
 
 class tb_switch {
@@ -114,9 +129,26 @@ public:
   pvertex mate;			// match in PG
 };
 
+#ifdef FIX_PLINK_ENDPOINTS
+// Hasher for pairs
+template <class T> struct pairhash { 
+    size_t operator()(pair<T,T> const &A) const {
+	hash<T> H;
+	return (H(A.first) | H(A.second));
+    }
+};
+
+typedef pair<crope,crope> nodepair;
+typedef hash_map<nodepair,int,pairhash<crope> > nodepair_count_map;
+#endif
+
 class tb_plink {
 public:
+#ifdef FIX_PLINK_ENDPOINTS
+  tb_plink():current_count(0) {;}
+#else
   tb_plink() {;}
+#endif
 
   friend ostream &operator<<(ostream &o, const tb_plink& link)
   {
@@ -151,6 +183,15 @@ public:
   int emulated;			// number of emulated vlinks
   int nonemulated;		// number of nonemulated vlinks
   bool interswitch;		// is this an interswitch link
+#ifdef PENALIZE_BANDWIDTH
+  float penalty;
+#endif
+#ifdef FIX_PLINK_ENDPOINTS
+  bool fixends;                 // If using as a emulated link, fix endpoints
+  nodepair_count_map vedge_counts;
+  nodepair current_endpoints;
+  int current_count;
+#endif
 };
 
 class tb_slink {

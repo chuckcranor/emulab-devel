@@ -1,6 +1,8 @@
 #ifndef __VIRTUAL_H
 #define __VIRTUAL_H
 
+#include <hash_set>
+
 class tb_plink;
 class tb_vnode;
 class tb_vlink;
@@ -8,7 +10,6 @@ class tb_vclass;
 
 typedef property<vertex_data_t,tb_vnode*> VNodeProperty;
 typedef property<edge_data_t,tb_vlink*> VEdgeProperty;
-
 
 typedef adjacency_list<listS,listS,undirectedS,
   VNodeProperty,VEdgeProperty> tb_vgraph;
@@ -85,6 +86,11 @@ public:
   bool fixed;			// is this node fixed
   bool assigned;		// is this node assigned?
   pvertex assignment;		// the physical vertex assigned to
+
+#ifdef PER_VNODE_TT
+  int num_links;
+#endif
+
 };
 
 class tb_vlink {

@@ -6,6 +6,7 @@
 #include <rope>
 #include <queue>
 #include <slist>
+#include <algorithm>
 
 #include <boost/config.hpp>
 #include <boost/utility.hpp>
@@ -53,6 +54,9 @@ struct hashlinkinfo {
 // mapping between links that preserves bw, and destination.
 int pclass_equiv(tb_pgraph &PG, tb_pnode *a,tb_pnode *b)
 {
+#ifdef NO_PCLASSES
+  return 0;
+#else
   typedef hash_multiset<link_info,hashlinkinfo> link_set;
   
   // check type information
@@ -107,6 +111,7 @@ int pclass_equiv(tb_pgraph &PG, tb_pnode *a,tb_pnode *b)
   }
   if (b_links.size() != 0) return 0;
   return 1;
+#endif
 }
 
 /* This function takes a physical graph and generates the set of
@@ -211,12 +216,27 @@ int pclass_set(tb_vnode *v,tb_pnode *p)
       // same class - only remove if node is full
       if (p->current_load == p->max_load) {
 	(*dit).second->remove(p);
+//#ifdef SMART_UNMAP
+//	c->used_members[(*dit).first]->push_back(p);
+//#endif
       }
     } else {
       // If it's not in the list then this fails quietly.
       (*dit).second->remove(p);
     }
+#ifdef SMART_UNMAP
+    if (c->used_members.find((*dit).first) == c->used_members.end()) {
+	c->used_members[(*dit).first] = new tb_pclass::tb_pnodeset;
+    }
+
+    // XXX: bogus? Maybe we're only supposed to insert if it was in the
+    // other list?
+    //if (find((*dit).second->L.begin(),(*dit).second->L.end(),p) != (*dit).second->L.end()) {
+    c->used_members[(*dit).first]->insert(p);
+    //}
+#endif
   }
+
   
   c->used += 1.0/(p->max_load);
   
@@ -228,24 +248,44 @@ int pclass_unset(tb_pnode *p)
   // add pnode to all lists in equivalence class.
   tb_pclass *c = p->my_class;
 
+  //cout << "Unassigning " << p->name << ": ";
+
   tb_pclass::pclass_members_map::iterator dit;
   for (dit=c->members.begin();dit!=c->members.end();++dit) {
+    //cout << " Type " << dit->first << ": ";
     if ((*dit).first == p->current_type) {
       // If it's not in the list then we need to add it to the back if it's
       // empty and the front if it's not.  Since unset is called before
       // remove_node empty means only one user.
       if (! (*dit).second->exists(p)) {
 	assert(p->current_load > 0);
+#ifdef PNODE_ALWAYS_FRONT
+	(*dit).second->push_front(p);
+#else
+#ifdef PNODE_SWITCH_LOAD
+	if (p->current_load == 0) {
+#else
 	if (p->current_load == 1) {
+#endif
+	  //cout << "Pushing back: " << p->current_load << " ";
 	  (*dit).second->push_back(p);
 	} else {
+	  //cout << "Pushing front: " << p->current_load << " ";
 	  (*dit).second->push_front(p);
 	}
+#endif
       }
     } else {
+      //cout << "Pushing back (2) ";
       (*dit).second->push_back(p);
     }
+
+#ifdef SMART_UNMAP
+      c->used_members[(*dit).first]->erase(p);
+#endif
   }
+
+  //cout << endl;
 
   c->used -= 1.0/(p->max_load);
   
