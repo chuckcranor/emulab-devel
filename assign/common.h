@@ -15,7 +15,8 @@ static int init_temp = 100;
 static int USE_OPTIMAL = 1;
 static int temp_prob = 130;
 static int temp_stop = 20;
-static int CYCLES = 20;
+static int CYCLES = 40;
+static int ACCEPTS = 30;
 
 static float temp_rate = 0.9;
 static float opt_nodes_per_sw = 5.0;
@@ -55,6 +56,7 @@ static struct config_param options[] = {
   { "TP",	CONFIG_INT,	&temp_prob,			0 },
   { "TS",	CONFIG_INT,	&temp_stop,			0 },
   { "CY",	CONFIG_INT,	&CYCLES,			0 },
+  { "AC",       CONFIG_INT,     &ACCEPTS,                       0 },
   { "UN",	CONFIG_FLOAT,	&SCORE_UNASSIGNED,     		0 },
   { "DE",	CONFIG_FLOAT,	&SCORE_DESIRE,			0 },
   { "FE",	CONFIG_FLOAT,	&SCORE_FEATURE,			0 },

@@ -26,6 +26,7 @@ public:
   pvertex assignment;
   typedef hash_map<crope,tb_removal_link_record> link_record_map;
   link_record_map links;
+  pvertex lan_switch;		// only for lan nodes
 };
 
 extern double score;
@@ -38,7 +39,8 @@ int add_node(vvertex vv,pvertex pv,bool deterministic,
 	     name2pnode_map *delays,tb_removal_record *removal);
 double get_score();
 double fd_score(tb_vnode &vnoder,tb_pnode &pnoder,int *fd_violated);
-pvertex make_lan_node(vvertex vv);
+pvertex make_lan_node(vvertex vv,name2pnode_map *delay_map,
+		      pvertex *the_switch);
 void delete_lan_node(pvertex pv);
 
 #endif

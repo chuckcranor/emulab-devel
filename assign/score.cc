@@ -1,5 +1,6 @@
 #include "port.h"
 
+#include <stdlib.h>
 #include <iostream.h>
 #include <float.h>
 
@@ -306,6 +307,13 @@ void remove_node(vvertex vv,tb_removal_record *removal)
   // remove lan node if necessary
   if (vnode->type.compare("lan") == 0) {
     SDEBUG(cerr << "Deleting lan node." << endl);
+    if (removal != NULL) {
+      if (pnode->switches.begin() != pnode->switches.end()) {
+	removal->lan_switch = *(pnode->switches.begin());
+      } else {
+	removal->lan_switch = (pvertex)NULL;
+      }
+    }
     delete_lan_node(pv);
   }
   
@@ -623,7 +631,7 @@ int add_node(vvertex vv,pvertex pv, bool deterministic,
 	    }
 	  } else {
 	    // Deterministic
-	    int bestindex;
+	    int bestindex=0;
 	    int bestviolated = 10000;
 	    double bestscore=10000.0;
 	    int i;
@@ -692,8 +700,8 @@ bool direct_link(pvertex a,pvertex b,tb_vlink *vlink,pedge &edge)
   tb_plink *plink;
   tb_plink *best_plink = NULL;
   poedge_iterator pedge_it,end_pedge_it;
-  int best_users;
-  double best_distance;
+  int best_users=0;
+  double best_distance=0;
   tie(pedge_it,end_pedge_it) = out_edges(a,PG);
   for (;pedge_it!=end_pedge_it;++pedge_it) {
     dest_pv = target(*pedge_it,PG);
@@ -999,47 +1007,72 @@ double fd_score(tb_vnode *vnode,tb_pnode *pnode,int &fd_violated)
   return fd_score;
 }
 
-/* make_lan_node(vvertex vv)
+/* make_lan_node(vvertex vv,name2pnode_map *delay_map,pvertex *switch)
  * This routines create a physical lan node and connects it to a switch
  * with a LAN plink.  Most of the code is in determining which switch to
  * connect the LAN node to.  Specifically, it connects it to the switch
  * which will maximize the number of intra (rather than inter) links for
  * assigned adjancent nodes of vv.
+ *
+ * If delay_map is non-null then make_lan_node will look in there for
+ * delay nodes and use the delay nodes as the adjacent nodes.  This is to
+ * make lan migration work.
+ *
+ * If switch is non null then it override the lan nodes attempt to find
+ * a switch.  This is a dirty hack to make the removal record work
+ * correctly.
  */
-pvertex make_lan_node(vvertex vv)
+pvertex make_lan_node(vvertex vv,name2pnode_map *delay_map,pvertex *the_switch)
 {
   typedef hash_map<pvertex,int,hashptr<void *> > switch_int_map;
   switch_int_map switch_counts;
 
   tb_vnode *vnode = get(vvertex_pmap,vv);
 
-  SDEBUG(cerr << "make_lan_node(" << vnode->name << ")" << endl);
+  SDEBUG(cerr << "make_lan_node(" << vnode->name << "," <<
+	 delay_map << ")" << endl);
   
   // Choose switch
   pvertex largest_switch;
   int largest_switch_count=0;
-  voedge_iterator vedge_it,end_vedge_it;
-  tie(vedge_it,end_vedge_it) = out_edges(vv,VG);
-  for (;vedge_it!=end_vedge_it;++vedge_it) {
-    vvertex dest_vv = target(*vedge_it,VG);
-    if (dest_vv == vv)
-      dest_vv = source(*vedge_it,VG);
-    tb_vnode *dest_vnode = get(vvertex_pmap,dest_vv);
-    if (dest_vnode->assigned) {
-      pvertex dest_pv = dest_vnode->assignment;
-      tb_pnode *dest_pnode = get(pvertex_pmap,dest_pv);
-      for (pvertex_set::iterator switch_it = dest_pnode->switches.begin();
-	   switch_it != dest_pnode->switches.end();switch_it++) {
-	if (switch_counts.find(*switch_it) != switch_counts.end()) {
-	  switch_counts[*switch_it]++;
+  if (the_switch == NULL) {
+    voedge_iterator vedge_it,end_vedge_it;
+    tie(vedge_it,end_vedge_it) = out_edges(vv,VG);
+    for (;vedge_it!=end_vedge_it;++vedge_it) {
+      tb_vlink *vlink = get(vedge_pmap,*vedge_it);
+      vvertex dest_vv = target(*vedge_it,VG);
+      if (dest_vv == vv)
+	dest_vv = source(*vedge_it,VG);
+      tb_vnode *dest_vnode = get(vvertex_pmap,dest_vv);
+      if (dest_vnode->assigned) {
+	tb_pnode *dest_pnode;
+	if ((! delay_map) ||
+	    (delay_map->find(crope("delay-") + vlink->name)
+	     == delay_map->end())) {
+	  dest_pnode = get(pvertex_pmap,dest_vnode->assignment);
 	} else {
-	  switch_counts[*switch_it]=1;
+	  dest_pnode = (*(delay_map->find(crope("delay-") + vlink->name))).second;
 	}
-	if (switch_counts[*switch_it] > largest_switch_count) {
-	  largest_switch = *switch_it;
-	  largest_switch_count = switch_counts[*switch_it];
+	for (pvertex_set::iterator switch_it = dest_pnode->switches.begin();
+	     switch_it != dest_pnode->switches.end();switch_it++) {
+	  if (switch_counts.find(*switch_it) != switch_counts.end()) {
+	    switch_counts[*switch_it]++;
+	  } else {
+	    switch_counts[*switch_it]=1;
+	  }
+	  if (switch_counts[*switch_it] > largest_switch_count) {
+	    largest_switch = *switch_it;
+	    largest_switch_count = switch_counts[*switch_it];
+	  }
 	}
       }
+    }
+  } else {
+    if (*the_switch != NULL) {
+      largest_switch = *the_switch;
+      largest_switch_count = -1;
+    } else {
+      largest_switch_count = 0;
     }
   }
 

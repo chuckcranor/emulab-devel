@@ -146,7 +146,6 @@ inline int accept(float change, float temperature)
   }
   r = std::random() % 1000;
   if (r < p) {
-    accepts++;
     return 1;
   }
   return 0;
@@ -316,6 +315,94 @@ tb_pnode *find_pnode(tb_vnode *vn)
   }
 }
 
+void add_delays(tb_link_info &info,tb_delay_info &sum)
+{
+  for (pedge_path::iterator pedge_it = info.plinks.begin();
+       pedge_it != info.plinks.end();++pedge_it) {
+    tb_plink *plink = get(pedge_pmap,*pedge_it);
+    sum.delay += plink->delay_info.delay;
+    sum.loss = 1-(1-sum.loss)*(1-plink->delay_info.loss);
+  }
+}
+
+void print_solution(ostream &o)
+{
+  vvertex_iterator vit,veit;
+  vvertex_list delay_nodes;
+  tb_vnode *vn;
+  
+  o << "Nodes:" << endl;
+  tie(vit,veit) = vertices(VG);
+  for (;vit != veit;++vit) {
+    vn = get(vvertex_pmap,*vit);
+    if (! vn->assigned) {
+      o << "unassigned: " << vn->name << endl;
+    } else {
+      o << vn->name << " "
+	   << get(pvertex_pmap,vn->assignment)->name << endl;
+    }
+    if (vn->type.compare("delay") == 0) {
+      delay_nodes.push_back(*vit);
+    }
+  }
+  o << "End Nodes" << endl;
+  o << "Edges:" << endl;
+  vedge_iterator eit,eendit;
+  tie(eit,eendit) = edges(VG);
+  for (;eit!=eendit;++eit) {
+    tb_vlink *vlink = get(vedge_pmap,*eit);
+    o << vlink->name;
+    if (vlink->link_info.type == tb_link_info::LINK_DIRECT) {
+      tb_plink *p = get(pedge_pmap,vlink->link_info.plinks.front());
+      o << " direct " << p->name << " (" <<
+	p->srcmac << "," << p->dstmac << ")" << endl;
+    } else if (vlink->link_info.type == tb_link_info::LINK_INTRASWITCH) {
+      tb_plink *p = get(pedge_pmap,vlink->link_info.plinks.front());
+      tb_plink *p2 = get(pedge_pmap,vlink->link_info.plinks.back());
+      o << " intraswitch " << p->name << " (" <<
+	p->srcmac << "," << p->dstmac << ") " <<
+	p2->name << " (" << p2->srcmac << "," << p2->dstmac <<
+	")" << endl;
+    } else if (vlink->link_info.type == tb_link_info::LINK_INTERSWITCH) {
+      o << " interswitch ";
+      for (pedge_path::iterator it=vlink->link_info.plinks.begin();
+	   it != vlink->link_info.plinks.end();++it) {
+	tb_plink *p = get(pedge_pmap,*it);
+	o << " " << p->name << " (" << p->srcmac << "," <<
+	  p->dstmac << ")";
+      }
+      o << endl;
+    } else if (vlink->link_info.type == tb_link_info::LINK_DELAYED) {
+      o << " delayed ";
+      tb_vnode *delaynode = get(vvertex_pmap,vlink->delay_node);
+      o << delaynode->name << " " <<
+	get(vedge_pmap,delaynode->src_edge)->name << " " <<
+	get(vedge_pmap,delaynode->dst_edge)->name << endl;
+    } else if (vlink->link_info.type == tb_link_info::LINK_TRIVIAL) {
+      o << " trivial" << endl;
+    } else {
+      o << " Unknown link type" << endl;
+    }
+  }
+  o << "End Edges" << endl;
+  o << "Begin Delays" << endl;
+  for (vvertex_list::iterator delay_it = delay_nodes.begin();
+       delay_it != delay_nodes.end();++delay_it) {
+    tb_vnode *delay = get(vvertex_pmap,*delay_it);
+    o << delay->name << " ";
+    o << delay->delayed_link->delay_info.bandwidth << " ";
+    tb_delay_info natural_delay;
+    natural_delay.loss = natural_delay.delay = 0;
+    add_delays(get(vedge_pmap,delay->src_edge)->link_info,natural_delay);
+    add_delays(get(vedge_pmap,delay->dst_edge)->link_info,natural_delay);
+    o << delay->delayed_link->delay_info.delay - natural_delay.delay << " ";
+    o << 1-(1-delay->delayed_link->delay_info.loss)*
+      (1-natural_delay.loss) << endl;
+  }
+  o << "End Delays" << endl;
+  o << "End solution" << endl;
+}
+
 /* When this is finished the state will reflect the best solution found. */
 void anneal()
 {
@@ -341,7 +428,7 @@ void anneal()
 
   int mintrans = (int)cycles;
   int trans;
-  int naccepts = 20*nnodes;
+  int naccepts = ACCEPTS*nnodes;
   pvertex oldpos;
   bool oldassigned;
   int bestviolated;
@@ -472,7 +559,7 @@ void anneal()
       }
       if (vn->type.compare("lan") == 0) {
 	// LAN node
-	pvertex lanv = make_lan_node(vv);
+	pvertex lanv = make_lan_node(vv,NULL,NULL);
 	if (add_node(vv,lanv,false,NULL,NULL) != 0) {
 	  delete_lan_node(lanv);
 	  unassigned_nodes.push(vvertex_int_pair(vv,std::random()));
@@ -511,19 +598,20 @@ void anneal()
       // Complicated expression that no one really understands
       if ((newscore < optimal) || (violated < bestviolated) ||
 	  ((violated == bestviolated) && (newscore < bestscore)) ||
-	  accept(scorediff*((bestviolated - violated)/2), temp)) {
+	  accept(scorediff, temp)) {
 #ifdef SCORE_DEBUG
 	cerr << "accept" << endl;
 #endif
+	// Accept change
 	bestscore = newscore;
 	bestviolated = violated;
 	accepts++;
 	if ((violated < absbestviolated) ||
 	    ((violated == absbestviolated) &&
 	     (newscore < absbest))) {
-	  // Accept change
 #ifdef SCORE_DEBUG
 	  cerr << "New best solution." << endl;
+	  print_solution(cerr);
 #endif
 	  tie(vit,veit) = vertices(VG);
 	  for (;vit!=veit;++vit) {
@@ -552,8 +640,8 @@ void anneal()
 	remove_node(vv,NULL);
 	if (oldassigned) {
 	  if (vn->type.compare("lan") == 0) {
-	    oldpos = make_lan_node(vv);
-	  }
+	    oldpos = make_lan_node(vv,NULL,&(last_remove.lan_switch));
+	  } 
 	  add_node(vv,oldpos,false,NULL,&last_remove);
 	}
       }
@@ -592,102 +680,18 @@ void anneal()
     while (lan_nodes.size() > 0) {
       vvertex lanv = lan_nodes.front();
       lan_nodes.pop_front();
-      pvertex lanpv = make_lan_node(lanv);
+      pvertex lanpv = make_lan_node(lanv,&absdelays,NULL);
       add_node(lanv,lanpv,true,&absdelays,NULL);
     }
+
+    bestscore = get_score();
+    bestviolated = violated;
   }
  DONE:
   cout << "Done" << endl;
 }
 
-void add_delays(tb_link_info &info,tb_delay_info &sum)
-{
-  for (pedge_path::iterator pedge_it = info.plinks.begin();
-       pedge_it != info.plinks.end();++pedge_it) {
-    tb_plink *plink = get(pedge_pmap,*pedge_it);
-    sum.delay += plink->delay_info.delay;
-    sum.loss = 1-(1-sum.loss)*(1-plink->delay_info.loss);
-  }
-}
 		
-void print_solution()
-{
-  vvertex_iterator vit,veit;
-  vvertex_list delay_nodes;
-  tb_vnode *vn;
-  
-  cout << "Nodes:" << endl;
-  tie(vit,veit) = vertices(VG);
-  for (;vit != veit;++vit) {
-    vn = get(vvertex_pmap,*vit);
-    if (! vn->assigned) {
-      cout << "unassigned: " << vn->name << endl;
-    } else {
-      cout << vn->name << " "
-	   << get(pvertex_pmap,vn->assignment)->name << endl;
-    }
-    if (vn->type.compare("delay") == 0) {
-      delay_nodes.push_back(*vit);
-    }
-  }
-  cout << "End Nodes" << endl;
-  cout << "Edges:" << endl;
-  vedge_iterator eit,eendit;
-  tie(eit,eendit) = edges(VG);
-  for (;eit!=eendit;++eit) {
-    tb_vlink *vlink = get(vedge_pmap,*eit);
-    cout << vlink->name;
-    if (vlink->link_info.type == tb_link_info::LINK_DIRECT) {
-      tb_plink *p = get(pedge_pmap,vlink->link_info.plinks.front());
-      cout << " direct " << p->name << " (" <<
-	p->srcmac << "," << p->dstmac << ")" << endl;
-    } else if (vlink->link_info.type == tb_link_info::LINK_INTRASWITCH) {
-      tb_plink *p = get(pedge_pmap,vlink->link_info.plinks.front());
-      tb_plink *p2 = get(pedge_pmap,vlink->link_info.plinks.back());
-      cout << " intraswitch " << p->name << " (" <<
-	p->srcmac << "," << p->dstmac << ") " <<
-	p2->name << " (" << p2->srcmac << "," << p2->dstmac <<
-	")" << endl;
-    } else if (vlink->link_info.type == tb_link_info::LINK_INTERSWITCH) {
-      cout << " interswitch ";
-      for (pedge_path::iterator it=vlink->link_info.plinks.begin();
-	   it != vlink->link_info.plinks.end();++it) {
-	tb_plink *p = get(pedge_pmap,*it);
-	cout << " " << p->name << " (" << p->srcmac << "," <<
-	  p->dstmac << ")";
-      }
-      cout << endl;
-    } else if (vlink->link_info.type == tb_link_info::LINK_DELAYED) {
-      cout << " delayed ";
-      tb_vnode *delaynode = get(vvertex_pmap,vlink->delay_node);
-      cout << delaynode->name << " " <<
-	get(vedge_pmap,delaynode->src_edge)->name << " " <<
-	get(vedge_pmap,delaynode->dst_edge)->name << endl;
-    } else if (vlink->link_info.type == tb_link_info::LINK_TRIVIAL) {
-      cout << " trivial" << endl;
-    } else {
-      cout << " Unknown link type" << endl;
-    }
-  }
-  cout << "End Edges" << endl;
-  cout << "Begin Delays" << endl;
-  for (vvertex_list::iterator delay_it = delay_nodes.begin();
-       delay_it != delay_nodes.end();++delay_it) {
-    tb_vnode *delay = get(vvertex_pmap,*delay_it);
-    cout << delay->name << " ";
-    cout << delay->delayed_link->delay_info.bandwidth << " ";
-    tb_delay_info natural_delay;
-    natural_delay.loss = natural_delay.delay = 0;
-    add_delays(get(vedge_pmap,delay->src_edge)->link_info,natural_delay);
-    add_delays(get(vedge_pmap,delay->dst_edge)->link_info,natural_delay);
-    cout << delay->delayed_link->delay_info.delay - natural_delay.delay << " ";
-    cout << 1-(1-delay->delayed_link->delay_info.loss)*
-      (1-natural_delay.loss) << endl;
-  }
-  cout << "End Delays" << endl;
-  cout << "End solution" << endl;
-}
-
 struct pvertex_writer {
   void operator()(ostream &out,const pvertex &p) const {
     tb_pnode *pnode = get(pvertex_pmap,p);
@@ -968,7 +972,7 @@ int main(int argc,char **argv)
   cout << "  desires:    " << vinfo.desires << endl;
   cout << "  delay:      " << vinfo.delay << endl;
 
-  print_solution();
+  print_solution(cout);
 
   if (viz_prefix.size() != 0) {
     crope aviz = viz_prefix + "_solution.viz";
