@@ -841,7 +841,7 @@ void score_link(pedge pe,vedge ve)
   tb_plink *plink = get(pedge_pmap,pe);
   tb_vlink *vlink = get(vedge_pmap,ve);
 
-  SDEBUG(cerr << "  score_link(" << pe << ") - " << plink->name << " / " <<
+  SDEBUG(cerr << "  score_link(" << pe << "," << ve << ") - " << plink->name << " / " <<
 	 vlink->name << endl);
 
 #ifdef SCORE_DEBUG_LOTS
@@ -910,7 +910,7 @@ void unscore_link(pedge pe,vedge ve)
   tb_plink *plink = get(pedge_pmap,pe);
   tb_vlink *vlink = get(vedge_pmap,ve);
 
-  SDEBUG(cerr << "  unscore_link(" << pe << ") - " << plink->name << " / " <<
+  SDEBUG(cerr << "  unscore_link(" << pe << "," << ve << ") - " << plink->name << " / " <<
 	 vlink->name << endl);
 
 #ifdef SCORE_DEBUG_LOTS
@@ -1136,19 +1136,13 @@ void delete_lan_node(pvertex pv)
   SDEBUG(cerr << "delete_lan_node(" << pnode->name << ")" << endl);
 
   // delete LAN link
-  typedef list<pedge> pedge_list;
-  pedge_list to_free;
-  
   poedge_iterator pedge_it,end_pedge_it;
   tie(pedge_it,end_pedge_it) = out_edges(pv,PG);
-  // We need to copy because removing edges invalidates out iterators.
-  for (;pedge_it != end_pedge_it;++pedge_it) {
-    to_free.push_front(*pedge_it);
-  }
-  for (pedge_list::iterator free_it = to_free.begin();
-       free_it != to_free.end();++free_it) {
-    delete(get(pedge_pmap,*free_it));
-    remove_edge(*free_it,PG);
+  // we don't need to worry about invalidating out iterators because
+  // we'll never advance them.  I.e. there is at most one link.
+  if (pedge_it != end_pedge_it) {
+    delete(get(pedge_pmap,*pedge_it));
+    remove_edge(*pedge_it,PG);
   }
 
   remove_vertex(pv,PG);

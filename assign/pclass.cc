@@ -230,7 +230,7 @@ int pclass_unset(tb_pnode *p)
 {
   // add pnode to all lists in equivalence class.
   tb_pclass *c = p->my_class;
-
+  
   tb_pclass::pclass_members_map::iterator dit;
   for (dit=c->members.begin();dit!=c->members.end();++dit) {
     if ((*dit).first == p->current_type) {
@@ -246,12 +246,14 @@ int pclass_unset(tb_pnode *p)
 	}
       }
     } else {
-      (*dit).second->push_back(p);
+      // only if it's empty
+      if (p->current_load == 1) 
+	(*dit).second->push_back(p);
     }
   }
 
   c->used -= 1.0/(p->max_load);
-  
+
   return 0;
 }
 
