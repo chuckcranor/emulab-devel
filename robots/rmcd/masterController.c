@@ -26,6 +26,7 @@
 
 static int mc_set_goal(struct master_controller *mc, mtp_packet_t *mp)
 {
+
     int retval = 0;
     
     assert(mc != NULL);
