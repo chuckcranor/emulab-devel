@@ -70,10 +70,13 @@ if (defined($options{"e"})) {
 }
 
 # Read class/type maps
-my $result = DBQueryFatal("select class,type,delay_capacity from node_types");
-while (($class,$type,$delaycapacity) = $result->fetchrow_array) {
+my $result =
+    DBQueryFatal("select class,type,delay_capacity,virtnode_capacity ".
+		 "from node_types");
+while (($class,$type,$delaycapacity,$vcap) = $result->fetchrow_array) {
     $classes{$type} = $class;
     $nodetypes{$type} = $delaycapacity;
+    $virtcapacity{$type} = $vcap;
 }
 $result->finish;
 
@@ -156,20 +159,29 @@ foreach $node (keys(%nodes)) {
     } else {
 	$text = "node $node $nodes{$node}:1 $classes{$nodes{$node}}:1";
 	$delay_capacity = $nodetypes{$nodes{$node}};
+	$virtnode_capacity = $virtcapacity{$nodes{$node}};
 	if ($delay_capacity > 0) {
 	    $text .= " delay:$delay_capacity";
-##################################################################################
-### NSE Node hack. Instead of adding sim nodes into the database schema,
-### I'm just adding it here for now untill we can figure out how to add sim nodes
-### into the nodes table.
-### One assumption is that if we the node type can support delay nodes,
-### then it is a local node and therefore we can support sim nodes
-#################################################################################
+	    
+            #################################################################
+            ### NSE Node hack. Instead of adding sim nodes into the
+            ### database schema, I'm just adding it here for now
+            ### untill we can figure out how to add sim nodes into the
+            ### nodes table.  One assumption is that if we the node
+            ### type can support delay nodes, then it is a local node
+            ### and therefore we can support sim nodes
+            #################################################################
             $text .= " sim:100000";
 	    #
 	    # Ditto for jailed nodes
 	    #
             $text .= " pcvm:10";
+	}
+	if ($virtnode_capacity > 0) {
+	    #
+	    # Ditto for jailed nodes
+	    #
+            $text .= " pcvm:$virtnode_capacity";
 	}
 	print "$text\n";
     }
