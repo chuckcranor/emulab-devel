@@ -428,7 +428,7 @@ if ($showdelays &&
     $result_delays =
 	DBQueryFatal("select d.*,r.vname as delayvname from delays as d ".
 		     "left join reserved as r on d.node_id=r.node_id ".
-		     "where d.pid='testbed' and d.eid='plainlandelay'");
+		     "where d.pid='$pid' and d.eid='$eid'");
 
     $result_linkdelays =
 	DBQueryFatal("select * from linkdelays ".
@@ -464,7 +464,7 @@ if ($showdelays &&
     if ($result_linkdelays->numrows) {
 	while (my %row = $result_linkdelays->fetchhash()) {
 	    printf("%-15s %-15s %-12s %-8s %-8s %-6s %-9s\n",
-		   $row{vlan}, $row{vnode}, $row{delayvname},
+		   $row{vlan}, $row{vnode}, $row{node_id},
 		   $row{delay}, $row{bandwidth}, $row{lossrate},
 		   $row{pipe});
 
