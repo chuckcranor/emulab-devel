@@ -35,7 +35,7 @@ while {[gets stdin line] >= 0} {
 	if {$trans < $mintrans} {set mintrans $trans}
 	if {$accepts > $maxaccepts} {set maxaccepts $accepts}
 	if {$accepts < $minaccepts} {set minaccepts $accepts}
-    } elseif {[regexp {^SCORE: add_node\(([\w/-]+),([\w/]+)\)} $line \
+    } elseif {[regexp {^SCORE: add_node\(([\w/-]+),([\w/]+)} $line \
 		   match virtual physical]} {
 
 	set active($virtual) [list $time $physical]

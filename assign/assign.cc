@@ -348,6 +348,8 @@ void anneal()
   int num_fixed=0;
   float temp = init_temp;
 
+  tb_removal_record last_remove;
+  
 #ifdef VERBOSE
   cout << "Initialized to cycles="<<cycles<<" optimal="<<optimal<<" mintrans="
        << mintrans<<" naccepts="<<naccepts<< endl;
@@ -377,7 +379,7 @@ void anneal()
       cerr << "Can not have fixed nodes be in a vclass!.\n";
       exit(1);
     }
-    if (add_node(vv,pv,false,NULL) == 1) {
+    if (add_node(vv,pv,false,NULL,NULL) == 1) {
       cerr << "Fixed node: Could not map " << vn->name <<
 	" to " << pn->name << endl;
       exit(1);
@@ -458,7 +460,7 @@ void anneal()
       oldpos = vn->assignment;
       
       if (oldassigned) {
-	remove_node(vv);
+	remove_node(vv,&last_remove);
       }
       
       if (vn->vclass != NULL) {
@@ -471,7 +473,7 @@ void anneal()
       if (vn->type.compare("lan") == 0) {
 	// LAN node
 	pvertex lanv = make_lan_node(vv);
-	if (add_node(vv,lanv,false,NULL) != 0) {
+	if (add_node(vv,lanv,false,NULL,NULL) != 0) {
 	  delete_lan_node(lanv);
 	  unassigned_nodes.push(vvertex_int_pair(vv,std::random()));
 	  continue;
@@ -485,14 +487,14 @@ void anneal()
 		 (! get(vvertex_pmap,virtual_nodes[toremove])->assigned)) {
 	    toremove = std::random()%nnodes;
 	  }
-	  remove_node(virtual_nodes[toremove]);
+	  remove_node(virtual_nodes[toremove],NULL);
 	  unassigned_nodes.push(vvertex_int_pair(virtual_nodes[toremove],
 						 std::random()));
 	  unassigned_nodes.push(vvertex_int_pair(vv,std::random()));
 	  continue;
 	} else {
 	  newpos = pnode2vertex[newpnode];
-	  if (add_node(vv,newpos,false,NULL) != 0) {
+	  if (add_node(vv,newpos,false,NULL,NULL) != 0) {
 	    continue;
 	  }
 	}
@@ -502,17 +504,24 @@ void anneal()
       
       // Negative means bad
       scorediff = bestscore - newscore;
-      
+
+#ifdef SCORE_DEBUG
+      cerr << "scorediff=" << scorediff << endl;
+#endif
       // Complicated expression that no one really understands
       if ((newscore < optimal) || (violated < bestviolated) ||
 	  ((violated == bestviolated) && (newscore < bestscore)) ||
 	  accept(scorediff*((bestviolated - violated)/2), temp)) {
+#ifdef SCORE_DEBUG
+	cerr << "accept" << endl;
+#endif
 	bestscore = newscore;
 	bestviolated = violated;
 	accepts++;
 	if ((violated < absbestviolated) ||
 	    ((violated == absbestviolated) &&
 	     (newscore < absbest))) {
+	  // Accept change
 #ifdef SCORE_DEBUG
 	  cerr << "New best solution." << endl;
 #endif
@@ -535,15 +544,17 @@ void anneal()
 	  cout << "OPTIMAL ( " << optimal << ")" << endl;
 	  goto DONE;
 	}
-	// Accept change
       } else {
 	// Reject change
-	remove_node(vv);
+#ifdef SCORE_DEBUG
+	cerr << "reject" << endl;
+#endif
+	remove_node(vv,NULL);
 	if (oldassigned) {
 	  if (vn->type.compare("lan") == 0) {
 	    oldpos = make_lan_node(vv);
 	  }
-	  add_node(vv,oldpos,false,NULL);
+	  add_node(vv,oldpos,false,NULL,&last_remove);
 	}
       }
     }
@@ -560,7 +571,7 @@ void anneal()
       tb_vnode *vnode = get(vvertex_pmap,vv);
       if (vnode->fixed) continue;
       if (vnode->assigned) {
-	remove_node(vv);
+	remove_node(vv,NULL);
       }
     }
     for (assigned_map::iterator vvertex_it = absassigned.begin();
@@ -574,7 +585,7 @@ void anneal()
 	  if (vnode->vclass != NULL) {
 	    vnode->type = abstypes[vv];
 	  }
-	  add_node(vv,absassignment[vv],true,&absdelays);
+	  add_node(vv,absassignment[vv],true,&absdelays,NULL);
 	}
       }
     }
@@ -582,7 +593,7 @@ void anneal()
       vvertex lanv = lan_nodes.front();
       lan_nodes.pop_front();
       pvertex lanpv = make_lan_node(lanv);
-      add_node(lanv,lanpv,true,&absdelays);
+      add_node(lanv,lanpv,true,&absdelays,NULL);
     }
   }
  DONE:

@@ -183,8 +183,10 @@ void unscore_link_info(vedge ve)
 }
 /*
  * This removes a virtual node from the assignments, adjusting
- * the score appropriately.  */
-void remove_node(vvertex vv)
+ * the score appropriately.  If removal is non NULL then it stores
+ * a record of the removal in removal.
+ */
+void remove_node(vvertex vv,tb_removal_record *removal)
 {
   /* Find pnode assigned to */
   tb_vnode *vnode = get(vvertex_pmap,vv);
@@ -199,12 +201,22 @@ void remove_node(vvertex vv)
 #endif
 
   assert(pnode != NULL);
+
+  if (removal) {
+    removal->assignment = pv;
+  }
   
   // remove the scores associated with each edge
   voedge_iterator vedge_it,end_vedge_it;
   tie(vedge_it,end_vedge_it) = out_edges(vv,VG);
   for (;vedge_it!=end_vedge_it;++vedge_it) {
     tb_vlink *vlink = get(vedge_pmap,*vedge_it);
+
+    if (removal) {
+      tb_removal_link_record &link_record = removal->links[vlink->name];
+      link_record.link_info = vlink->link_info;
+    }
+    
     vvertex dest_vv = target(*vedge_it,VG);
     if (dest_vv == vv)
       dest_vv = source(*vedge_it,VG);
@@ -225,7 +237,15 @@ void remove_node(vvertex vv)
     
     if (vlink->link_info.type == tb_link_info::LINK_DELAYED) {
       SDEBUG(cerr << "  delayed link! removing delay node." << endl);
-      remove_node(vlink->delay_node);
+      if (removal) {
+	tb_removal_link_record &link_record = removal->links[vlink->name];
+	if (! link_record.delay_record) {
+	  link_record.delay_record = new tb_removal_record();
+	}
+	remove_node(vlink->delay_node,link_record.delay_record);
+      } else {
+	remove_node(vlink->delay_node,NULL);
+      }
       remove_delay_node(vlink->delay_node);
     }
     
@@ -350,7 +370,8 @@ void score_link_info(vedge ve)
  * is true then it deterministically solves the link problem for best
  * score.  Note: deterministic takes considerably longer.
  */
-int add_node(vvertex vv,pvertex pv, bool deterministic,name2pnode_map *delays)
+int add_node(vvertex vv,pvertex pv, bool deterministic,
+	     name2pnode_map *delays,tb_removal_record *removal)
 {
   tb_vnode *vnode = get(vvertex_pmap,vv);
   tb_pnode *pnode = get(pvertex_pmap,pv);
@@ -468,11 +489,11 @@ int add_node(vvertex vv,pvertex pv, bool deterministic,name2pnode_map *delays)
 	// select one randomly.
 	typedef vector<tb_link_info> resolution_vector;
 	typedef vector<pvertex_list> switchlist_vector;
-
+	
 	resolution_vector resolutions(10);
 	int resolution_index = 0;
 	float total_weight = 0;
-
+	
 	// Direct link
 	if (direct_link(dest_pv,pv,vlink,pe)) {
 	  resolutions[resolution_index].type = tb_link_info::LINK_DIRECT;
@@ -507,8 +528,8 @@ int add_node(vvertex vv,pvertex pv, bool deterministic,name2pnode_map *delays)
 	       ++dest_switch_it) {
 	    if (*source_switch_it == *dest_switch_it) continue;
 	    if ((find_interswitch_path(*source_switch_it,*dest_switch_it,vlink->delay_info.bandwidth,
-				      resolutions[resolution_index].plinks,
-				      resolutions[resolution_index].switches) != 0) &&
+				       resolutions[resolution_index].plinks,
+				       resolutions[resolution_index].switches) != 0) &&
 		find_link_to_switch(pv,*source_switch_it,vlink,first) &&
 		find_link_to_switch(dest_pv,*dest_switch_it,vlink,second)) {
 	      resolutions[resolution_index].type = tb_link_info::LINK_INTERSWITCH;
@@ -522,7 +543,7 @@ int add_node(vvertex vv,pvertex pv, bool deterministic,name2pnode_map *delays)
 	    }
 	  }
 	}
-
+	
 	// check for no link
 	if ((resolution_index == 0) && vlink->allow_delayed) {
 	  SDEBUG(cerr << "   DELAYING" << endl);
@@ -531,14 +552,22 @@ int add_node(vvertex vv,pvertex pv, bool deterministic,name2pnode_map *delays)
 	  vvertex delayv = make_delay_node(*vedge_it);
 	  tb_pnode *delaypnode;
 	  if (delays == NULL) {
-	    delaypnode = find_pnode(get(vvertex_pmap,delayv));
+	    if (removal == NULL) {
+	      delaypnode = find_pnode(get(vvertex_pmap,delayv));
+	    } else {
+	      delaypnode = get(pvertex_pmap,removal->links[vlink->name].delay_record->assignment);
+	    }
 	  } else {
 	    delaypnode = (*delays)[get(vvertex_pmap,delayv)->name];
 	  }
+
+	  tb_removal_record *delay_removal = NULL;
+	  if (removal)
+	    delay_removal = removal->links[vlink->name].delay_record;
 	  
 	  // Assign delay node
 	  if (add_node(delayv,pname2vertex[delaypnode->name],
-		       deterministic,NULL) == 0) {
+		       deterministic,NULL,delay_removal) == 0) {
 	    resolutions[0].type = tb_link_info::LINK_DELAYED;
 	    resolution_index++;
 	    total_weight = 0;
@@ -566,29 +595,31 @@ int add_node(vvertex vv,pvertex pv, bool deterministic,name2pnode_map *delays)
 	  // Choose a link
 	  int index;
 	  if (!deterministic) {
-	    float choice;
-	    if (total_weight > 0) {
-	      choice = std::random()%(int)total_weight;
-	    } else {
-	      choice = 0;
-	    }
-	    for (index = 0;index < resolution_index;++index) {
-	      switch (resolutions[index].type) {
-	      case tb_link_info::LINK_DIRECT:
-		choice -= LINK_RESOLVE_DIRECT; break;
-	      case tb_link_info::LINK_INTRASWITCH:
-		choice -= LINK_RESOLVE_INTRASWITCH; break;
-	      case tb_link_info::LINK_INTERSWITCH:
-		choice -= LINK_RESOLVE_INTERSWITCH; break;
-	      case tb_link_info::LINK_DELAYED:
-		choice -= 1; break;
-	      case tb_link_info::LINK_UNKNOWN:
-	      case tb_link_info::LINK_TRIVIAL:
-		cerr << "Internal error: Should not be here." << endl;
-		exit(1);
-		break;
+	    if (removal == NULL) {
+	      float choice;
+	      if (total_weight > 0) {
+		choice = std::random()%(int)total_weight;
+	      } else {
+		choice = 0;
 	      }
-	      if (choice < 0) break;
+	      for (index = 0;index < resolution_index;++index) {
+		switch (resolutions[index].type) {
+		case tb_link_info::LINK_DIRECT:
+		  choice -= LINK_RESOLVE_DIRECT; break;
+		case tb_link_info::LINK_INTRASWITCH:
+		  choice -= LINK_RESOLVE_INTRASWITCH; break;
+		case tb_link_info::LINK_INTERSWITCH:
+		  choice -= LINK_RESOLVE_INTERSWITCH; break;
+		case tb_link_info::LINK_DELAYED:
+		  choice -= 1; break;
+		case tb_link_info::LINK_UNKNOWN:
+		case tb_link_info::LINK_TRIVIAL:
+		  cerr << "Internal error: Should not be here." << endl;
+		  exit(1);
+		  break;
+		}
+		if (choice < 0) break;
+	      }
 	    }
 	  } else {
 	    // Deterministic
@@ -609,7 +640,11 @@ int add_node(vvertex vv,pvertex pv, bool deterministic,name2pnode_map *delays)
 	    }
 	    index = bestindex;
 	  }
-	  vlink->link_info = resolutions[index];
+	  if (removal != NULL) {
+	    vlink->link_info = removal->links[vlink->name].link_info;
+	  } else {
+	    vlink->link_info = resolutions[index];
+	  }
 	  SDEBUG(cerr << "  choice:" << vlink->link_info);
 	  score_link_info(*vedge_it);
 	}
