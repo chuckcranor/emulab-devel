@@ -25,6 +25,14 @@ open_bootinfo_db(void)
 	return 0;
 }
 
+/*
+  WARNING!!!
+  
+  DO NOT change this function without making corresponding changes to
+  the perl version of this code in the os_select script. They MUST
+  ALWAYS return exactly the same result given the same inputs.
+*/
+
 int
 query_bootinfo_db(struct in_addr ipaddr, boot_what_t *info)
 {
@@ -69,8 +77,7 @@ query_bootinfo_db(struct in_addr ipaddr, boot_what_t *info)
 	}
 
 	/* Debug message into log:
-	syslog(LOG_ERR, "USING QUERY: %s", querybuf);
-	*/
+	syslog(LOG_ERR, "USING QUERY: %s", querybuf); */
 	
 	if (mysql_real_query(&db, querybuf, n) != 0) {
 		syslog(LOG_ERR, "%s: query failed: %s",
