@@ -94,6 +94,12 @@ int parse_top(tb_vgraph &VG, istream& i)
 	crope loss,lossunder,lossover;
 	crope bwweight,delayweight,lossweight;
 	string_vector parsed_delay,parsed_bw,parsed_loss;
+	crope rbw,rbwunder,rbwover;
+	crope rdelay,rdelayunder,rdelayover;
+	crope rloss,rlossunder,rlossover;
+	crope rbwweight,rdelayweight,rlossweight;
+	string_vector rparsed_delay,rparsed_bw,rparsed_loss;
+	
 	parsed_bw = split_line(parsed_line[4],':');
 	bw = parsed_bw[0];
 	if (parsed_bw.size() == 1) {
@@ -146,6 +152,74 @@ int parse_top(tb_vgraph &VG, istream& i)
 	  top_error("Bad link line, bad loss specifier.");
 	}
 
+	int next_arg = 7;
+	if (parsed_line.size() > 9) {
+	  next_arg = 10;
+	  rparsed_bw = split_line(parsed_line[7],':');
+	  rbw = rparsed_bw[0];
+	  if (rparsed_bw.size() == 1) {
+	    rbwunder = "0";
+	    rbwover = "0";
+	    rbwweight = "1";
+	  } else if (rparsed_bw.size() == 3) {
+	    rbwunder = rparsed_bw[1];
+	    rbwover = rparsed_bw[2];
+	    rbwweight = "1";
+	  } else if (rparsed_bw.size() == 4) {
+	    rbwunder = rparsed_bw[1];
+	    rbwover = rparsed_bw[2];
+	    rbwweight = rparsed_bw[3];
+	  } else {
+	    top_error("Bad link line, bad rbandwidth specifier.");
+	  }
+	  rparsed_delay = split_line(parsed_line[8],':');
+	  rdelay = rparsed_delay[0];
+	  if (rparsed_delay.size() == 1) {
+	    rdelayunder = "0";
+	    rdelayover = "0";
+	    rdelayweight = "1";
+	  } else if (rparsed_delay.size() == 3) {
+	    rdelayunder = rparsed_delay[1];
+	    rdelayover = rparsed_delay[2];
+	    rdelayweight = "1";
+	  } else if (rparsed_delay.size() == 4) {
+	    rdelayunder = rparsed_delay[1];
+	    rdelayover = rparsed_delay[2];
+	    rdelayweight = rparsed_delay[3];
+	  } else {
+	    top_error("Bad link line, bad delay specifier.");
+	  }
+	  rparsed_loss = split_line(parsed_line[9],':');
+	  rloss = rparsed_loss[0];
+	  if (rparsed_loss.size() == 1) {
+	    rlossunder = "0";
+	    rlossover = "0";
+	    rlossweight = "1";
+	  } else if (rparsed_loss.size() == 3) {
+	    rlossunder = rparsed_loss[1];
+	    rlossover = rparsed_loss[2];
+	    rlossweight = "1";
+	  } else if (rparsed_loss.size() == 4) {
+	    rlossunder = rparsed_loss[1];
+	    rlossover = rparsed_loss[2];
+	    rlossweight = rparsed_loss[4];
+	  } else {
+	    top_error("Bad link line, bad rloss specifier.");
+	  }
+	} else {
+	  rbw = bw;
+	  rbwunder = bwunder;
+	  rbwover = bwover;
+	  rbwweight = bwweight;
+	  rdelay = delay;
+	  rdelayunder = delayunder;
+	  rdelayover = delayover;
+	  rdelayweight = delayweight;
+	  rloss = loss;
+	  rlossunder = lossunder;
+	  rlossover = lossover;
+	  rlossweight = lossweight;
+	}
 	vedge e;
 	vvertex node1 = vname2vertex[src];
 	vvertex node2 = vname2vertex[dst];
@@ -167,16 +241,41 @@ int parse_top(tb_vgraph &VG, istream& i)
 	    (sscanf(lossweight.c_str(),"%lg",&(l->delay_info.loss_weight)) != 1)) {
 	  top_error("Bad line line, bad delay characteristics.");
 	}
+
+	if ((sscanf(rbw.c_str(),"%d",&(l->rdelay_info.bandwidth)) != 1) ||
+	    (sscanf(rbwunder.c_str(),"%d",&(l->rdelay_info.bw_under)) != 1) ||
+	    (sscanf(rbwover.c_str(),"%d",&(l->rdelay_info.bw_over)) != 1) ||
+	    (sscanf(rbwweight.c_str(),"%lg",&(l->rdelay_info.bw_weight)) != 1) ||
+	    (sscanf(rdelay.c_str(),"%d",&(l->rdelay_info.delay)) != 1) ||
+	    (sscanf(rdelayunder.c_str(),"%d",&(l->rdelay_info.delay_under)) != 1) ||
+	    (sscanf(rdelayover.c_str(),"%d",&(l->rdelay_info.delay_over)) != 1) ||
+	    (sscanf(rdelayweight.c_str(),"%lg",&(l->rdelay_info.delay_weight)) != 1) ||
+	    (sscanf(rloss.c_str(),"%lg",&(l->rdelay_info.loss)) != 1) ||
+	    (sscanf(rlossunder.c_str(),"%lg",&(l->rdelay_info.loss_under)) != 1) ||
+	    (sscanf(rlossover.c_str(),"%lg",&(l->rdelay_info.loss_over)) != 1) ||
+	    (sscanf(rlossweight.c_str(),"%lg",&(l->rdelay_info.loss_weight)) != 1)) {
+	  top_error("Bad line line, bad reverse delay characteristics.");
+	}
+      
 	l->no_connection = false;
 	l->name = name;
 	l->allow_delayed = true;
 	l->emulated = false;
+	l->must_delayed = false;
 	
-	for (unsigned int i = 7;i < parsed_line.size();++i) {
+	for (unsigned int i = next_arg;i < parsed_line.size();++i) {
 	  if (parsed_line[i].compare("nodelay") == 0) {
+	    if (l->must_delayed) {
+	      top_error("Can not have both mustdelay and nodelay.");
+	    }
 	    l->allow_delayed = false;
 	  } else if (parsed_line[i].compare("emulated") == 0) {
 	    l->emulated = true;
+	  } else if (parsed_line[i].compare("mustdelay") == 0) {
+	    if (l->allow_delayed == false) {
+	      top_error("Can not have both mustdelay and nodelay.");
+	    }
+	    l->must_delayed = true;
 	  } else {
 	    top_error("bad link line, unknown tag: " <<
 		      parsed_line[i] << ".");

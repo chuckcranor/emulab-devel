@@ -106,6 +106,7 @@ public:
     o << " emulated=" << link.emulated << " allow_delayed=" <<
       link.allow_delayed << " no_connection=" << link.no_connection << endl;
     o << "delay_info: " << link.delay_info;
+    o << "rdelay_info: " << link.rdelay_info;
     o << link.link_info;
     if (link.link_info.type == tb_link_info::LINK_DELAYED) {
       o << "Delay node: " << endl;
@@ -115,6 +116,7 @@ public:
   }
 
   tb_delay_info delay_info;	// the delay characteristics of the link
+  tb_delay_info rdelay_info;	// the reverse delay characteristics
   tb_link_info link_info;	// what it's mapped to
   crope name;			// name
   bool emulated;		// is this an emulated link, i.e. can it
@@ -122,6 +124,7 @@ public:
   bool no_connection;		// true if this link should be satisfied
 				// but isn't.
   bool allow_delayed;		// can this vlink by a delayed link
+  bool must_delayed;		// if this link must be delayed
 
   // the follwing are only for delayed links
   vvertex delay_node;

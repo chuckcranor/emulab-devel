@@ -62,16 +62,18 @@ node <node> <type> [<desires>]
 
 OR
 
-link <link> <src> <dst> <bw>[:<underbw>:<overbw>[:<weight>]] <delay>[:<underdelay>:<overdelay>[:<weight>]] <loss>[:<underloss>:<overloss>[:<weight>]] [nodelay] [emulated]
+link <link> <src> <dst> <bw>[:<underbw>:<overbw>[:<weight>]] <delay>[:<underdelay>:<overdelay>[:<weight>]] <loss>[:<underloss>:<overloss>[:<weight>]] [<rbw>[:<underbw>:<overbw>[:<weight>]] <rdelay>[:<underdelay>:<overdelay>[:<weight>]] <rloss>[:<underloss>:<overloss>[:<weight>]]] [nodelay|mustdelay] [emulated]
 
 <bw>,<delay>,<loss> are the characteristics of the link.  The optional
 delta arguments describe how far off the assignment can be (under and
 over).  A vaule of 0 is default, and a vaule of -1 indicates that best
 effort is fine.  The weights are optional floating points that allow
 the user to specify the relative importance of the parameters.  They
-default to 1.
+default to 1.  One can also specify reverse delay characteristics.  If
+these are ommitted they default to the normal delay characteristics.
 
 nodelay if present indicates that this link should not be delayed.
+mustdelay indicates that link must be delayed.
 
 OR
 

@@ -322,6 +322,7 @@ void add_delays(tb_link_info &info,tb_delay_info &sum)
   }
 }
 
+
 void print_solution(ostream &o)
 {
   vvertex_iterator vit,veit;
@@ -394,7 +395,19 @@ void print_solution(ostream &o)
     add_delays(get(vedge_pmap,delay->dst_edge)->link_info,natural_delay);
     o << delay->delayed_link->delay_info.delay - natural_delay.delay << " ";
     o << 1-(1-delay->delayed_link->delay_info.loss)*
-      (1-natural_delay.loss) << endl;
+      (1-natural_delay.loss);
+
+    o << " ";
+    
+    o << delay->delayed_link->rdelay_info.bandwidth << " ";
+    natural_delay.loss = natural_delay.delay = 0;
+    add_delays(get(vedge_pmap,delay->src_edge)->link_info,natural_delay);
+    add_delays(get(vedge_pmap,delay->dst_edge)->link_info,natural_delay);
+    o << delay->delayed_link->rdelay_info.delay - natural_delay.delay << " ";
+    o << 1-(1-delay->delayed_link->rdelay_info.loss)*
+      (1-natural_delay.loss);
+
+    o << endl;
   }
   o << "End Delays" << endl;
   o << "End solution" << endl;
