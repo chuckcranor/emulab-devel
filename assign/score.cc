@@ -1,23 +1,7 @@
-
-int debug_count=0;
-
-/*
- * ASSUMPTIONS:
- *  1. Any switch can get to any other switch either directly
- *     or via at most one other switch (star formation).
- */
-
-// Note on variable names: BGL has generic 'edge' and 'vertex'.  When
-// these are translated to 'tb_*' structures the variables end in
-// r.  I.e. dst -> dstr.  dst is a node, and dstr is a tb_pnode or similar.
-#include <limits.h>
-
-// XXX - This needs to be replaced by something more generic, wchar is
-// not always an integer.
-#define WCHAR_MIN INT_MIN
-#define WCHAR_MAX INT_MAX
+#include "port.h"
 
 #include <iostream.h>
+#include <float.h>
 
 #include <hash_map>
 #include <rope>
@@ -53,10 +37,11 @@ extern tb_vgraph VG;		// virtual graph
 extern tb_pgraph PG;		// physical grpaph
 extern tb_sgraph SG;		// switch fabric
 
-bool direct_link(pvertex a,pvertex b,pedge *edge);
+bool direct_link(pvertex a,pvertex b,tb_vlink *vlink,pedge &edge);
 void score_link(pedge pe,vedge ve);
 void unscore_link(pedge pe,vedge ve);
-bool find_link_to_switch(pvertex pv,pvertex switch_pv,pedge &out_edge);
+bool find_link_to_switch(pvertex pv,pvertex switch_pv,tb_vlink *vlink,
+			 pedge &out_edge);
 int find_interswitch_path(pvertex src_pv,pvertex dest_pv,
 			  int bandwidth,pedge_path &out_path,
 			  pvertex_list &out_switches);
@@ -432,9 +417,9 @@ int add_node(vvertex vv,pvertex pv, bool deterministic)
 	resolution_vector resolutions(10);
 	int resolution_index = 0;
 	float total_weight = 0;
-	
+
 	// Direct link
-	if (direct_link(dest_pv,pv,&pe)) {
+	if (direct_link(dest_pv,pv,vlink,pe)) {
 	  resolutions[resolution_index].type = tb_link_info::LINK_DIRECT;
 	  resolutions[resolution_index].plinks.push_back(pe);
 	  resolution_index++;
@@ -446,8 +431,8 @@ int add_node(vvertex vv,pvertex pv, bool deterministic)
 	for (pvertex_set::iterator switch_it = pnode->switches.begin();
 	     switch_it != pnode->switches.end();++switch_it) {
 	  if (dest_pnode->switches.find(*switch_it) != dest_pnode->switches.end()) {
-	    find_link_to_switch(pv,*switch_it,first);
-	    find_link_to_switch(dest_pv,*switch_it,second);
+	    find_link_to_switch(pv,*switch_it,vlink,first);
+	    find_link_to_switch(dest_pv,*switch_it,vlink,second);
 	    resolutions[resolution_index].type = tb_link_info::LINK_INTRASWITCH;
 	    resolutions[resolution_index].plinks.push_back(first);
 	    resolutions[resolution_index].plinks.push_back(second);
@@ -469,8 +454,8 @@ int add_node(vvertex vv,pvertex pv, bool deterministic)
 				      resolutions[resolution_index].plinks,
 				      resolutions[resolution_index].switches) != 0) {
 	      resolutions[resolution_index].type = tb_link_info::LINK_INTERSWITCH;
-	      find_link_to_switch(pv,*source_switch_it,first);
-	      find_link_to_switch(dest_pv,*dest_switch_it,second);
+	      find_link_to_switch(pv,*source_switch_it,vlink,first);
+	      find_link_to_switch(dest_pv,*dest_switch_it,vlink,second);
 	      resolutions[resolution_index].plinks.push_front(first);
 	      resolutions[resolution_index].plinks.push_back(second);
 	      resolution_index++;
@@ -484,11 +469,25 @@ int add_node(vvertex vv,pvertex pv, bool deterministic)
 
 	// check for no link
 	if (resolution_index == 0) {
-	  SDEBUG(cerr << "  Could not find any resolutions." << endl);
-	  SADD(SCORE_NO_CONNECTION);
-	  vlink->no_connection=true;
-	  vinfo.no_connection++;
-	  violated++;
+	  SDEBUG(cerr << "  Could not find any resolutions. Trying delay." <<
+		 endl);
+
+#ifdef 0
+	  // Create virtual delay node and link with special free vlinks.
+	  vvertex delayv = make_delay_node(vlink);
+	  tb_pnode *delaypnode = find_pnode(get(vvertex_pmap,delayv));
+	  
+	  // Assign delay node
+	  if (add_node(delayv,pnode2vertex[delaypnode],false) == 1) {
+#endif
+	    SDEBUG(cerr << "Failed to delay." << endl);
+	    SADD(SCORE_NO_CONNECTION);
+	    vlink->no_connection=true;
+	    vinfo.no_connection++;
+	    violated++;
+#ifdef 0
+	  }
+#endif
 	} else {
 	  // Check to see if we are fixing a violation
 	  if (vlink->no_connection) {
@@ -607,13 +606,15 @@ int add_node(vvertex vv,pvertex pv, bool deterministic)
 // returns "best" direct link between a and b.
 // best = less users
 //        break ties with minimum bw_used
-bool direct_link(pvertex a,pvertex b,pedge *edge)
+bool direct_link(pvertex a,pvertex b,tb_vlink *vlink,pedge &edge)
 {
   pvertex dest_pv;
   pedge best_pedge;
   tb_plink *plink;
   tb_plink *best_plink = NULL;
   poedge_iterator pedge_it,end_pedge_it;
+  int best_users;
+  double best_distance;
   tie(pedge_it,end_pedge_it) = out_edges(a,PG);
   for (;pedge_it!=end_pedge_it;++pedge_it) {
     dest_pv = target(*pedge_it,PG);
@@ -621,28 +622,41 @@ bool direct_link(pvertex a,pvertex b,pedge *edge)
       dest_pv = source(*pedge_it,PG);
     if (dest_pv == b) {
       plink = get(pedge_pmap,*pedge_it);
-      if (! best_plink ||
-	  ((plink->emulated+plink->nonemulated <
-	    best_plink->emulated+best_plink->nonemulated) ||
-	   (plink->emulated+plink->nonemulated ==
-	    best_plink->emulated+best_plink->nonemulated) &&
-	   (plink->bw_used < best_plink->bw_used))) {
+      int users = plink->nonemulated;
+      if (! vlink->emulated) {
+	users += plink->emulated;
+      }
+      tb_delay_info physical_delay;
+      physical_delay.bandwidth = plink->delay_info.bandwidth - plink->bw_used;
+      physical_delay.delay = plink->delay_info.delay;
+      physical_delay.loss = plink->delay_info.loss;
+      double distance = vlink->delay_info.distance(physical_delay);
+      if (distance == -1) {distance = DBL_MAX;}
+      
+      if ((! best_plink) ||
+	  (users < best_users) ||
+	  ((users == best_users) && (distance < best_distance))) {
+	best_users = users;
+	best_distance = distance;
 	best_pedge = *pedge_it;
 	best_plink = plink;
       }
     }
   }
-  if (best_plink == NULL) return false;
-  *edge = best_pedge;
-  return true;
+  if (best_plink == NULL) {
+    return false;
+  } else {
+    edge = best_pedge;
+    return true;
+  }
 }
 
-bool find_link_to_switch(pvertex pv,pvertex switch_pv,pedge &out_edge)
+bool find_link_to_switch(pvertex pv,pvertex switch_pv,tb_vlink *vlink,
+			 pedge &out_edge)
 {
   pvertex dest_pv;
-  float best_bw=1000.0;
+  double best_distance = 1000.0;
   int best_users = 1000;
-  float bw;
   pedge best_pedge;
   bool found_best=false;
   poedge_iterator pedge_it,end_pedge_it;
@@ -653,13 +667,28 @@ bool find_link_to_switch(pvertex pv,pvertex switch_pv,pedge &out_edge)
       dest_pv = source(*pedge_it,PG);
     if (dest_pv == switch_pv) {
       tb_plink *plink = get(pedge_pmap,*pedge_it);
-      bw = plink->bw_used / plink->delay_info.bandwidth;
-      if ((plink->emulated+plink->nonemulated < best_users) ||
-	  ((plink->emulated+plink->nonemulated == best_users) &&
-	   (bw < best_bw))) {
+      tb_delay_info physical_delay;
+      physical_delay.bandwidth = plink->delay_info.bandwidth - plink->bw_used;
+      physical_delay.delay = plink->delay_info.delay;
+      physical_delay.loss = plink->delay_info.loss;
+      double distance = vlink->delay_info.distance(physical_delay);
+      int users;
+
+      // For sticking emulated links in emulated links we only care
+      // about the distance.
+      users = plink->nonemulated;
+      if (! vlink->emulated) {
+	users += plink->emulated;
+      }
+      if (distance == -1) {
+	// -1 == infinity
+	distance = DBL_MAX;
+      }
+      if ((users < best_users) ||
+	  ((users  == best_users) && (distance < best_distance))) {
 	best_pedge = *pedge_it;
+	best_distance = distance;
 	found_best = true;
-	best_bw = bw;
 	best_users = plink->emulated+plink->nonemulated;
       }
     }
@@ -749,15 +778,23 @@ void score_link(pedge pe,vedge ve)
   }
 
   if (plink->type != tb_plink::PLINK_LAN) {
-    int prev_bw = plink->bw_used;
+    tb_delay_info physical_delay;
+    physical_delay.bandwidth = plink->delay_info.bandwidth - plink->bw_used;
+    physical_delay.delay = plink->delay_info.delay;
+    physical_delay.loss = plink->delay_info.loss;
+    
+    double distance = vlink->delay_info.distance(physical_delay);
+
     plink->bw_used += vlink->delay_info.bandwidth;
-    if ((plink->bw_used > plink->delay_info.bandwidth) &&
-	(prev_bw <= plink->delay_info.bandwidth)) {
-      SDEBUG(cerr << "    went over bandwidth (" << plink->bw_used << " > " <<
-	     plink->delay_info.bandwidth << ")" << endl);
+
+    if (distance == -1) {
+      // violation
+      SDEBUG(cerr << "    outside delay requirements." << endl);
       violated++;
-      vinfo.bandwidth++;
-      SADD(SCORE_OVER_BANDWIDTH);
+      vinfo.delay++;
+      SADD(SCORE_OUTSIDE_DELAY);
+    } else {
+      SADD(distance * SCORE_DELAY);
     }
   }
 }
@@ -802,15 +839,22 @@ void unscore_link(pedge pe,vedge ve)
   
   // bandwidth check
   if (plink->type != tb_plink::PLINK_LAN) {
-    int prev_bw = plink->bw_used;
     plink->bw_used -= vlink->delay_info.bandwidth;
-    if ((plink->bw_used <= plink->delay_info.bandwidth) &&
-	(prev_bw > plink->delay_info.bandwidth)) {
-      SDEBUG(cerr << "   went under bandwidth (" << plink->bw_used << " <= " <<
-	     plink->delay_info.bandwidth << ")" << endl);
+
+    tb_delay_info physical_delay;
+    physical_delay.bandwidth = plink->delay_info.bandwidth - plink->bw_used;
+    physical_delay.delay = plink->delay_info.delay;
+    physical_delay.loss = plink->delay_info.loss;
+    double distance = vlink->delay_info.distance(physical_delay);
+
+    if (distance == -1) {
+      // violation
+      SDEBUG(cerr << "    removing delay violation." << endl);
       violated--;
-      vinfo.bandwidth--;
-      SSUB(SCORE_OVER_BANDWIDTH);
+      vinfo.delay--;
+      SSUB(SCORE_OUTSIDE_DELAY);
+    } else {
+      SSUB(distance * SCORE_DELAY);
     }
   }
 
@@ -931,6 +975,8 @@ pvertex make_lan_node(vvertex vv)
     pl->type = tb_plink::PLINK_LAN;
     pl->srcmac = vnode->name;
     pl->dstmac = get(pvertex_pmap,largest_switch)->name;
+    pl->bw_used = 0;
+    pl->emulated = pl->nonemulated = 0;
     p->switches.insert(largest_switch);
     p->name += pl->dstmac;
   } else {

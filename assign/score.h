@@ -10,6 +10,7 @@ typedef struct {
   int bandwidth;
   int desires;
   int vclass;
+  int delay;
 } violated_info;
 
 extern double score;

@@ -1,10 +1,4 @@
-
-#include <limits.h>
-
-// XXX - This needs to be replaced by something more generic, wchar is
-// not always an integer.
-#define WCHAR_MIN INT_MIN
-#define WCHAR_MAX INT_MAX
+#include "port.h"
 
 #include <hash_map>
 #include <slist>
@@ -127,54 +121,57 @@ int parse_ptop(tb_pgraph &PG, tb_sgraph &SG, istream& i)
       crope bw = parsed_line[4];
       crope delay = parsed_line[5];
       crope loss = parsed_line[6];
-      int ibw;
-      double gdelay,gloss;
+      int ibw,idelay;
+      double gloss;
 
+      
       if ((sscanf(bw.c_str(),"%d",&ibw) != 1) ||
-	  (sscanf(delay.c_str(),"%lg",&gdelay) != 1) ||
+	  (sscanf(delay.c_str(),"%d",&idelay) != 1) ||
 	  (sscanf(loss.c_str(),"%lg",&gloss) != 1)) {
 	ptop_error("Bad link line, bad delay characteristics.");
-      } else {
+      }
+
 #define ISSWITCH(n) (n->types.find("switch") != n->types.end())
-	pvertex srcv = pname2vertex[src];
-	pvertex dstv = pname2vertex[dst];
-	tb_pnode *srcnode = get(pvertex_pmap,srcv);
-	tb_pnode *dstnode = get(pvertex_pmap,dstv);
-		
-	for (int cur = 0;cur<num;++cur) {
-	  pedge pe = (add_edge(srcv,dstv,PG)).first;
-	  tb_plink *pl = new tb_plink();
-	  put(pedge_pmap,pe,pl);
-	  pl->delay_info = tb_delay_info(ibw,gdelay,gloss);
-	  pl->bw_used = 0;
-	  pl->name = name;
-	  pl->emulated = 0;
-	  pl->nonemulated = 0;
-	  pl->type = tb_plink::PLINK_NORMAL;
-	  pl->srcmac = srcmac;
-	  pl->dstmac = dstmac;
-	  if (ISSWITCH(srcnode) && ISSWITCH(dstnode)) {
-	    if (cur != 0) {
-	      cout <<
-		"Warning: Extra links between switches will be ignored. (" <<
-		name << ")" << endl;
-	    } else {
-	      svertex src_switch = get(pvertex_pmap,srcv)->sgraph_switch;
-	      svertex dst_switch = get(pvertex_pmap,dstv)->sgraph_switch;
-	      sedge swedge = add_edge(src_switch,dst_switch,SG).first;
-	      tb_slink *sl = new tb_slink();
-	      put(sedge_pmap,swedge,sl);
-	      sl->mate = pe;
-	      pl->type = tb_plink::PLINK_INTERSWITCH;
-	    }
+      pvertex srcv = pname2vertex[src];
+      pvertex dstv = pname2vertex[dst];
+      tb_pnode *srcnode = get(pvertex_pmap,srcv);
+      tb_pnode *dstnode = get(pvertex_pmap,dstv);
+      
+      for (int cur = 0;cur<num;++cur) {
+	pedge pe = (add_edge(srcv,dstv,PG)).first;
+	tb_plink *pl = new tb_plink();
+	put(pedge_pmap,pe,pl);
+	pl->delay_info.bandwidth = ibw;
+	pl->delay_info.delay = idelay;
+	pl->delay_info.loss = gloss;
+	pl->bw_used = 0;
+	pl->name = name;
+	pl->emulated = 0;
+	pl->nonemulated = 0;
+	pl->type = tb_plink::PLINK_NORMAL;
+	pl->srcmac = srcmac;
+	pl->dstmac = dstmac;
+	if (ISSWITCH(srcnode) && ISSWITCH(dstnode)) {
+	  if (cur != 0) {
+	    cout <<
+	      "Warning: Extra links between switches will be ignored. (" <<
+	      name << ")" << endl;
+	  } else {
+	    svertex src_switch = get(pvertex_pmap,srcv)->sgraph_switch;
+	    svertex dst_switch = get(pvertex_pmap,dstv)->sgraph_switch;
+	    sedge swedge = add_edge(src_switch,dst_switch,SG).first;
+	    tb_slink *sl = new tb_slink();
+	    put(sedge_pmap,swedge,sl);
+	    sl->mate = pe;
+	    pl->type = tb_plink::PLINK_INTERSWITCH;
 	  }
-	  if (ISSWITCH(srcnode) &&
-	      ! ISSWITCH(dstnode)) 
-	    dstnode->switches.insert(srcv);
-	  else if (ISSWITCH(dstnode) &&
-		   ! ISSWITCH(srcnode))
-	    srcnode->switches.insert(dstv);
 	}
+	if (ISSWITCH(srcnode) &&
+	    ! ISSWITCH(dstnode)) 
+	  dstnode->switches.insert(srcv);
+	else if (ISSWITCH(dstnode) &&
+		 ! ISSWITCH(srcnode))
+	  srcnode->switches.insert(dstv);
       }
     } else {
       ptop_error("Unknown directive: " << command << ".");

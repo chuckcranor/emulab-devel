@@ -28,12 +28,14 @@ static float SCORE_PNODE = 0.2;/* Cost of using a pnode*/
 static float SCORE_PNODE_PENALTY = 0.5;/* Cost of overusing a pnode*/
 static float SCORE_SWITCH = 0.5;/* Cost of using a switch.*/
 static float SCORE_UNASSIGNED = 1.0;/* Cost of an unassigned node*/
-static float SCORE_OVER_BANDWIDTH = 0.5;/* Cost of going over bandwidth*/
 static float SCORE_DESIRE = 1.0;/* Multiplier for desire costs*/
 static float SCORE_FEATURE = 1.0;/* Multiplier for feature weights*/
 static float SCORE_PCLASS = 0.5; /* Cost of each pclass */
 static float SCORE_VCLASS = 1.0; /* vclass score multiplier */
 static float SCORE_EMULATED_LINK = 0.01; /* cost of an emualted link */
+static float SCORE_OUTSIDE_DELAY = 0.5;	/* penalty for going out of delay
+					   requirements */
+static float SCORE_DELAY = 10.0; /* multiplier to distance for delay scoring */
 
 // The following are used to weight possible link resolutions.  Higher
 // numbers mean a more likely resolution.  Trivial resolutions are always
@@ -54,7 +56,6 @@ static struct config_param options[] = {
   { "1S",	CONFIG_FLOAT,	&SCORE_INTERSWITCH_LINK,	0 },
   { "2S",	CONFIG_FLOAT,	&SCORE_INTRASWITCH_LINK,	0 },
   { "NC",	CONFIG_FLOAT,	&SCORE_NO_CONNECTION,		0 },
-  { "OB",	CONFIG_FLOAT,	&SCORE_OVER_BANDWIDTH,		0 },
   { "DL",	CONFIG_FLOAT,	&SCORE_DIRECT_LINK,		0 },
   { "DP",	CONFIG_FLOAT,	&SCORE_DIRECT_LINK_PENALTY,	0 },
   { "PN",	CONFIG_FLOAT,	&SCORE_PNODE,			0 },
@@ -67,7 +68,9 @@ static struct config_param options[] = {
   { "TR",	CONFIG_FLOAT,	&temp_rate,			0 },
   { "LD",       CONFIG_FLOAT,   &LINK_RESOLVE_DIRECT,           0 },
   { "LI",       CONFIG_FLOAT,   &LINK_RESOLVE_INTRASWITCH,      0 },
-  { "LT",       CONFIG_FLOAT,   &LINK_RESOLVE_INTERSWITCH,      0 }
+  { "LT",       CONFIG_FLOAT,   &LINK_RESOLVE_INTERSWITCH,      0 },
+  { "OD",       CONFIG_FLOAT,   &SCORE_OUTSIDE_DELAY,           0 },
+  { "DM",       CONFIG_FLOAT,   &SCORE_DELAY,                   0 }
 };
 
 static int noptions = sizeof(options) / sizeof(options[0]);

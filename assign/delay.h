@@ -3,45 +3,62 @@
 
 class tb_pnode;
 
+
+template <class T> inline double basic_distance(T a,T b) {
+  if (b == 0) {
+    if (a == 0)
+      return 0;
+    else
+      return DBL_MAX;
+  }
+  return fabs((double)a/(double)b - 1.0);
+}
+inline double delay_distance(int a, int b) {
+  return basic_distance(a,b);
+}
+inline double bandwidth_distance(int a,int b) {
+  return basic_distance(a,b);
+}
+inline double loss_distance(double a,double b) {
+  return basic_distance(a,b);
+}
+
 class tb_delay_info {
 public:
-  tb_delay_info(int bw,int d,double l) : bandwidth(bw), delay(d), loss(l) {;}
-  tb_delay_info() : bandwidth(100), delay(0), loss(0) {;}
-  tb_delay_info(int bw) : bandwidth(bw), delay(0), loss(0) {;}
-  tb_delay_info(tb_delay_info &o) {
-    bandwidth=o.bandwidth;delay=o.delay;loss=o.loss;
-  }
-
   int bandwidth;
   int delay;
   double loss;
+  int bw_under,bw_over;
+  int delay_under,delay_over;
+  double loss_under,loss_over;
+  double bw_weight,delay_weight,loss_weight;
 
-  double distance(tb_delay_info &o) {
-    return (fabs((double)o.bandwidth/(double)bandwidth-1)+
-	    fabs(o.loss/loss-1)+
-	    fabs((double)o.delay/(double)delay-1))/3;
+  double distance(tb_delay_info &target) {
+    if (((bw_under != -1) && (target.bandwidth < bandwidth-bw_under)) ||
+	((bw_over != -1) && (target.bandwidth > bandwidth+bw_over)) ||
+	((delay_under != -1) && (target.delay < delay-delay_under)) ||
+	((delay_over != -1) && (target.delay > delay+delay_over)) ||
+	((loss_under != -1) && (target.loss < loss-loss_under)) ||
+	((loss_over != -1) && (target.loss > loss+loss_over))) {
+      return -1;
+    }
+    return bandwidth_distance(target.bandwidth,bandwidth)*bw_weight+
+      delay_distance(target.delay,delay)*delay_weight+
+      loss_distance(target.loss,loss)*loss_weight;
   }
-
+  
   friend ostream &operator<<(ostream &o, const tb_delay_info& delay)
   {
-    o << "tb_delay_info: bw=" << delay.bandwidth << " delay=" <<
-      delay.delay  << " loss=" << delay.loss << endl;
-    return o;
-  }
-};
-
-class tb_delay_node {
-public:
-  tb_pnode *pnode;		// which pnode we're in
-  tb_delay_info delay;		// how much this delay node delays
-
-  friend ostream &operator<<(ostream &o, const tb_delay_node& delay)
-  {
-    o << "TO BE IMPLEMENTED!" << endl;
+    o << "tb_delay_info: bw=" << delay.bandwidth << "+" <<
+      delay.bw_over << "-" << delay.bw_under << "/" << delay.bw_weight;
+    o << " delay=" << delay.delay << "+" << delay.delay_over <<
+      "-" << delay.delay_under << "/" << delay.delay_weight;
+    o << " loss=" << delay.loss << "+" << delay.loss_over << "-" <<
+      delay.loss_under << "/" << delay.loss_weight;
+    o << endl;
     return o;
   }
 };
 
 #endif __DELAY_H
-
 

@@ -145,7 +145,6 @@ public:
 
   plinkType type;
   tb_delay_info delay_info;	// the delay characteristics of this link
-				// this has bw_used substracted from it's bandwidth
   int bw_used;			// how much is used
   crope srcmac,dstmac;		// source and destination MAC addresses.
   crope name;			// The name

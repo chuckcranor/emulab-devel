@@ -1,9 +1,4 @@
-#include <limits.h>
-
-// XXX - This needs to be replaced by something more generic, wchar is
-// not always an integer.
-#define WCHAR_MIN INT_MIN
-#define WCHAR_MAX INT_MAX
+#include "port.h"
 
 #include <stdlib.h>
 

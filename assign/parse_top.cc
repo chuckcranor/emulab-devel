@@ -1,9 +1,4 @@
-#include <limits.h>
-
-// XXX - This needs to be replaced by something more generic, wchar is
-// not always an integer.
-#define WCHAR_MIN INT_MIN
-#define WCHAR_MAX INT_MAX
+#include "port.h"
 
 #include <hash_map>
 #include <slist>
@@ -97,15 +92,22 @@ int parse_top(tb_vgraph &VG, istream& i)
 	crope bw,bwunder,bwover;
 	crope delay,delayunder,delayover;
 	crope loss,lossunder,lossover;
+	crope bwweight,delayweight,lossweight;
 	string_vector parsed_delay,parsed_bw,parsed_loss;
 	parsed_bw = split_line(parsed_line[4],':');
 	bw = parsed_bw[0];
 	if (parsed_bw.size() == 1) {
 	  bwunder = "0";
 	  bwover = "0";
+	  bwweight = "1";
 	} else if (parsed_bw.size() == 3) {
 	  bwunder = parsed_bw[1];
 	  bwover = parsed_bw[2];
+	  bwweight = "1";
+	} else if (parsed_bw.size() == 4) {
+	  bwunder = parsed_bw[1];
+	  bwover = parsed_bw[2];
+	  bwweight = parsed_bw[3];
 	} else {
 	  top_error("Bad link line, bad bandwidth specifier.");
 	}
@@ -114,9 +116,15 @@ int parse_top(tb_vgraph &VG, istream& i)
 	if (parsed_delay.size() == 1) {
 	  delayunder = "0";
 	  delayover = "0";
+	  delayweight = "1";
 	} else if (parsed_delay.size() == 3) {
 	  delayunder = parsed_delay[1];
 	  delayover = parsed_delay[2];
+	  delayweight = "1";
+	} else if (parsed_delay.size() == 4) {
+	  delayunder = parsed_delay[1];
+	  delayover = parsed_delay[2];
+	  delayweight = parsed_delay[3];
 	} else {
 	  top_error("Bad link line, bad delay specifier.");
 	}
@@ -125,9 +133,15 @@ int parse_top(tb_vgraph &VG, istream& i)
 	if (parsed_loss.size() == 1) {
 	  lossunder = "0";
 	  lossover = "0";
+	  lossweight = "1";
 	} else if (parsed_loss.size() == 3) {
 	  lossunder = parsed_loss[1];
 	  lossover = parsed_loss[2];
+	  lossweight = "1";
+	} else if (parsed_loss.size() == 4) {
+	  lossunder = parsed_loss[1];
+	  lossover = parsed_loss[2];
+	  lossweight = parsed_loss[4];
 	} else {
 	  top_error("Bad link line, bad loss specifier.");
 	}
@@ -139,23 +153,19 @@ int parse_top(tb_vgraph &VG, istream& i)
 	tb_vlink *l = new tb_vlink();
 	put(vedge_pmap,e,l);
 	
-	int ibw,ibwunder,ibwover,idelay,idelayunder,idelayover;
-	double gloss,glossunder,glossover;
-
-	if ((sscanf(bw.c_str(),"%d",&ibw) != 1) ||
-	    (sscanf(bwunder.c_str(),"%d",&ibwunder) != 1) ||
-	    (sscanf(bwover.c_str(),"%d",&ibwover) != 1) ||
-	    (sscanf(delay.c_str(),"%d",&idelay) != 1) ||
-	    (sscanf(delayunder.c_str(),"%d",&idelayunder) != 1) ||
-	    (sscanf(delayover.c_str(),"%d",&idelayover) != 1) ||
-	    (sscanf(loss.c_str(),"%lg",&gloss) != 1) ||
-	    (sscanf(lossunder.c_str(),"%lg",&glossunder) != 1) ||
-	    (sscanf(lossover.c_str(),"%lg",&glossover) != 1)) {
+	if ((sscanf(bw.c_str(),"%d",&(l->delay_info.bandwidth)) != 1) ||
+	    (sscanf(bwunder.c_str(),"%d",&(l->delay_info.bw_under)) != 1) ||
+	    (sscanf(bwover.c_str(),"%d",&(l->delay_info.bw_over)) != 1) ||
+	    (sscanf(bwweight.c_str(),"%lg",&(l->delay_info.bw_weight)) != 1) ||
+	    (sscanf(delay.c_str(),"%d",&(l->delay_info.delay)) != 1) ||
+	    (sscanf(delayunder.c_str(),"%d",&(l->delay_info.delay_under)) != 1) ||
+	    (sscanf(delayover.c_str(),"%d",&(l->delay_info.delay_over)) != 1) ||
+	    (sscanf(delayweight.c_str(),"%lg",&(l->delay_info.delay_weight)) != 1) ||
+	    (sscanf(loss.c_str(),"%lg",&(l->delay_info.loss)) != 1) ||
+	    (sscanf(lossunder.c_str(),"%lg",&(l->delay_info.loss_under)) != 1) ||
+	    (sscanf(lossover.c_str(),"%lg",&(l->delay_info.loss_over)) != 1) ||
+	    (sscanf(lossweight.c_str(),"%lg",&(l->delay_info.loss_weight)) != 1)) {
 	  top_error("Bad line line, bad delay characteristics.");
-	} else {
-	  l->delay_info = tb_delay_info(ibw,idelay,gloss);
-	  l->delay_under = tb_delay_info(ibwunder,idelayunder,glossunder);
-	  l->delay_over = tb_delay_info(ibwover,idelayover,glossover);
 	}
 	l->no_connection = false;
 	l->name = name;

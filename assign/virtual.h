@@ -31,7 +31,6 @@ public:
   linkType type;
   pedge_path plinks;		// the path of pedges
   pvertex_list switches;	// what switches were used
-  tb_delay_node *delay;		// what delay node is being used
 
   friend ostream &operator<<(ostream &o, const tb_link_info& link)
   {
@@ -42,10 +41,6 @@ public:
     case LINK_INTRASWITCH : o << "LINK_INTRASWITCH"; break;
     case LINK_INTERSWITCH : o << "LINK_INTERSWITCH"; break;
     case LINK_TRIVIAL : o << "LINK_TRIVIAL"; break;
-    case LINK_DELAYED : o << "LINK_DELAYED"; break;
-    }
-    if (link.type == LINK_DELAYED) {
-      o << *(link.delay);
     }
     o << " Path: ";
     for (pedge_path::const_iterator it=link.plinks.begin();
@@ -102,15 +97,11 @@ public:
     o << " emulated=" << link.emulated << " allow_delayed=" <<
       link.allow_delayed << " no_connection=" << link.no_connection << endl;
     o << "delay_info: " << link.delay_info;
-    o << "delay_under: " << link.delay_under;
-    o << "delay_over: " << link.delay_over;
     o << link.link_info;
     return o;
   }
 
   tb_delay_info delay_info;	// the delay characteristics of the link
-  tb_delay_info delay_under;	// how much under we can go
-  tb_delay_info delay_over;	// how far over we can go
   tb_link_info link_info;	// what it's mapped to
   crope name;			// name
   bool emulated;		// is this an emulated link, i.e. can it
