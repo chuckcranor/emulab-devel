@@ -3519,6 +3519,13 @@ sub CreateTopFile()
 	    }
 	    if ($updating) {
 		$desirestr .= " already_reserved:.2";
+
+		# Try to keep this on the same physical node where it was
+		# before
+		my $oldmapping = $reserved_v2pmap{$node};
+		if ($oldmapping) {
+		    $desirestr .= " $oldmapping:.2";
+		}
 	    }
 	    my $typestr = $type;
 	    if (virtnodeisvirt($vname)) {
