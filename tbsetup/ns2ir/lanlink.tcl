@@ -19,16 +19,32 @@ LanLink instproc init {s nodes bw d} {
     # The simulator
     $self set sim $s
 
-    # Delay node characteristics
-    $self set bandwidth $bw
-    $self set delay $d
-    $self set loss 0.0
-
     # Now we need to fill out the nodelist
     $self instvar nodelist
+    $self instvar bandwidth
+    $self instvar delay
+    $self instvar loss
     foreach node $nodes {
-	lappend nodelist [list $node [$node add_lanlink $self]]
+	set nodepair [list $node [$node add_lanlink $self]]
+	set bandwidth($nodepair) $bw
+	set delay($nodepair) [expr $d / 2]
+	set loss($nodepair) 0
+	lappend nodelist $nodepair
     }
+}
+
+# get_port <node>
+# This takes a node and returns the port that the node is connected
+# to the LAN with.  If a node is in a LAN multiple times for some
+# reason then this only returns the first.
+LanLink instproc get_port {node} {
+    $self instvar nodelist
+    foreach pair $nodelist {
+	set n [lindex $pair 0]
+	set p [lindex $pair 1]
+	if {$n == $node} {return $p}
+    }
+    return {}
 }
 
 # fill_ips
@@ -93,15 +109,25 @@ LanLink instproc rename {old new} {
 }
 LanLink instproc rename_node {old new} {
     $self instvar nodelist
+    $self instvar bandwidth
+    $self instvar delay
+    $self instvar loss
     set newnodelist {}
     foreach nodeport $nodelist {
 	set node [lindex $nodeport 0]
 	set port [lindex $nodeport 1]
+	set newnodeport [list $new $port]
 	if {$node == $old} {
-	    lappend newnodelist [list $new $port]
+	    lappend newnodelist $newnodeport
 	} else {
 	    lappend newnodelist $nodeport
 	}
+	set bandwidth($newnodeport) $bandwidth($nodeport)
+	set delay($newnodeport) $delay($nodeport)
+	set loss($newnodeport) $loss($nodeport)
+	unset bandwidth($nodeport)
+	unset delay($nodeport)
+	unset loss($nodeport)
     }
     set nodelist $newnodelist
 }
@@ -116,11 +142,9 @@ LanLink instproc updatedb {DB} {
     var_import ::GLOBALS::pid
     var_import ::GLOBALS::eid
 
-    set membersraw {}
     foreach nodeport $nodelist {
-	lappend membersraw [join $nodeport :]
+	set nodeportraw [join $nodeport ":"]
+	sql exec $DB "insert into virt_lans (pid,eid,vname,member,delay,bandwidth,lossrate) values (\"$pid\",\"$eid\",\"$self\",\"$nodeportraw\",$delay($nodeport),$bandwidth($nodeport),$loss($nodeport))"
     }
-    
-    sql exec $DB "insert into virt_lans (pid,eid,vname,members,delay,bandwidth,lossrate) values (\"$pid\",\"$eid\",\"$self\",\"$membersraw\",$delay,$bandwidth,$loss)"
 }
 
