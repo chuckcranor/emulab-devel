@@ -154,5 +154,59 @@ class tb_node_featuredesire {
  */
 typedef set<tb_node_featuredesire> node_feature_set;
 typedef set<tb_node_featuredesire> node_desire_set;
+typedef set<tb_node_featuredesire> node_fd_set;
+
+/*
+ * Kind of like an iterator, but not quite - used for going through a virtual
+ * node's desires and a physical node's features, and deterimining which are
+ * only in one set, and which are in both
+ */
+class tb_featuredesire_set_iterator {
+    public:
+	/*
+	 * Constructors
+	 */
+	tb_featuredesire_set_iterator(node_fd_set::iterator _begin1,
+		node_fd_set::iterator _end1,
+		node_fd_set::iterator _begin2,
+		node_fd_set::iterator _end2);
+
+	// Enum for indicating which set(s) an element belongs to
+	typedef enum { FIRST_ONLY, SECOND_ONLY, BOTH } set_membership;
+
+	// Return whether or not we've iterated to the end of both sets
+	bool done() const;
+
+	// If we have a membership() of BOTH, do they pass the equivalence
+	// test?
+	bool both_equiv() const;
+
+	// Is either of the two elements violateable?
+	bool either_violateable() const;
+
+	// XXX - proper function protype
+	void operator++(int);
+
+	// Return the member of the set we're currently iterating to
+	const tb_node_featuredesire &operator*() const {
+	    return *current;
+	}
+	
+	// Return the member of the set we're currently iterating to
+	const tb_node_featuredesire *operator->() const {
+	    return &*current;
+	}
+
+	// Return the set membership of the current element
+	const set_membership membership() const {
+	    return current_membership;
+	}
+
+    private:
+	node_fd_set::iterator it1, end1;
+	node_fd_set::iterator it2, end2;
+	node_fd_set::iterator current;
+	set_membership current_membership;
+};
 
 #endif

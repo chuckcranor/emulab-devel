@@ -127,4 +127,91 @@ tb_node_featuredesire::tb_node_featuredesire(crope _name, double _weight) :
 	violateable = true;
     }
     featuredesire_obj = tb_featuredesire::get_featuredesire_obj(_name);
+    assert(featuredesire_obj != NULL);
+}
+
+/*********************************************************************
+ * tb_featuredesire_set_iterator
+ *********************************************************************/
+
+tb_featuredesire_set_iterator::tb_featuredesire_set_iterator(
+	node_fd_set::iterator _begin1, node_fd_set::iterator _end1,
+	node_fd_set::iterator _begin2, node_fd_set::iterator _end2) :
+	    it1(_begin1), end1(_end1), it2(_begin2), end2(_end2) {
+    /*
+     * Figure out what the next element of the set is
+     */
+    // First check to see if we've hit the end of both lists
+    if ((it1 == end1) && (it2 == end2)) {
+	current = end1;
+    } else if ((it1 != end1) && ((it2 == end2) || (*it1 < *it2))) {
+	// If one has hit the end of the list, go with the other - otherwise,
+	// go with the smaller of the two.
+	current_membership = FIRST_ONLY;
+	current = it1;
+    } else if ((it1 == end1) || (*it2 < *it1)) {
+	current_membership = SECOND_ONLY;
+	current = it2;
+    } else {
+	// If neither is smaller, they must be equal
+	current = it1;
+	current_membership = BOTH;
+    }
+}
+
+bool tb_featuredesire_set_iterator::done() const {
+    return((it1 == end1) && (it2 == end2));
+}
+
+void tb_featuredesire_set_iterator::operator++(int) {
+    /*
+     * Advance the iterator(s)
+     */
+    // Make sure they don't try to go off the end of the list
+    assert((it1 != end1) || (it2 != end2));
+    // If one iterator has gone off the end of its list, advance the other one
+    // - otherwise, go with the smaller one. Or, if they are equal,  increment
+    // both.
+    if ((it1 != end1) && ((it2 == end2) ||  (*it1 < *it2))) {
+	it1++;
+    } else if ((it1 == end1) || (*it2 < *it1)) {
+	it2++;
+    } else {
+	// If neither was smaller, they must be equal - advance both
+	it1++;
+	it2++;
+    }
+
+    /*
+     * Figure out what the next element of the set is
+     */
+    // First check to see if we've hit the end of both lists
+    if ((it1 == end1) && (it2 == end2)) {
+	current = end1;
+    } else if ((it2 == end2) || (*it1 < *it2)) {
+	// If one has hit the end of the list, go with the other - otherwise,
+	// go with the smaller of the two.
+	current_membership = FIRST_ONLY;
+	current = it1;
+    } else if ((it1 == end1) || (*it2 < *it1)) {
+	current_membership = SECOND_ONLY;
+	current = it2;
+    } else {
+	// If neither is smaller, they must be equal
+	current = it1;
+	current_membership = BOTH;
+    }
+}
+
+bool tb_featuredesire_set_iterator::both_equiv() const {
+    assert(current_membership == BOTH);
+    return (it1->equivalent(*it2));
+}
+
+bool tb_featuredesire_set_iterator::either_violateable() const {
+    if (current_membership == BOTH) {
+	return (it1->is_violateable() || it2->is_violateable());
+    } else {
+	return current->is_violateable();
+    }
 }

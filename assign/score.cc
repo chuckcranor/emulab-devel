@@ -1584,6 +1584,9 @@ double fd_score(tb_vnode *vnode,tb_pnode *pnode,int &fd_violated,
   node_desire_set::iterator desire_it;
   node_feature_set::iterator feature_it;
 
+  desire_it = vnode->desires.begin();
+  feature_it = pnode->features.end();
+
   // Optimize the case where the vnode has no desires
   if (!vnode->desires.empty()) {
     for (desire_it = vnode->desires.begin();

@@ -101,25 +101,26 @@ int pclass_equiv(tb_pgraph &PG, tb_pnode *a,tb_pnode *b)
       return 0;
   }
 
-  // check features - we have to do this 'manually' rather than with the set
-  // comparison, because we have to catch differing weights
-  for (node_feature_set::iterator it=a->features.begin();
-       it != a->features.end();++it) {
-    node_feature_set::iterator bit;
-    bit = b->features.find(*it);
-    if ((bit == b->features.end()) || (!bit->equivalent(*it))) 
-      return 0;
+  // check features
+  tb_featuredesire_set_iterator fdit(a->features.begin(),a->features.end(),
+	  b->features.begin(),b->features.end());
+
+  while (!fdit.done()) {
+      if (fdit.membership() == tb_featuredesire_set_iterator::BOTH) {
+	  // Great, we've got a feature that's in both, just make sure that
+	  // the two are equivalent (score, etc.)
+	  if (!fdit.both_equiv()) {
+	      return 0;
+	  }
+      } else {
+	  // Got a feature that's in one but not the other
+	  return 0;
+      }
+
+      fdit++;
   }
 
-  // have to go both ways in case the second node has a feature the first
-  // doesn't
-  for (node_feature_set::iterator it=b->features.begin();
-       it != b->features.end();++it) {
-    node_feature_set::iterator ait;
-    ait = a->features.find(*it);
-    if (ait == a->features.end())
-      return 0;
-  }
+  cerr << "Checking links" << endl;
 
   // Check links
   pvertex an = pnode2vertex[a];

@@ -494,45 +494,37 @@ int mapping_precheck() {
 		    }
 		}
 
-		//
-		// Check features and desires
-		//
-		
-		for (node_desire_set::iterator desire_it = v->desires.begin();
-			desire_it != v->desires.end();
-			desire_it++) {
-		    crope name = desire_it->name();
-		    // Only check for desires that would result in a violation if
-		    // unsatisfied
-		    if (desire_it->is_violateable()) {
-			if (matched_desires.find(name) == matched_desires.end()) {
-			    matched_desires[name] = 0;
+		/*
+		 * Check features and desires
+		*/
+
+		tb_featuredesire_set_iterator
+		    fdit(v->desires.begin(),v->desires.end(),
+			 pnode->features.begin(),pnode->features.end());
+		for (;!fdit.done();fdit++) {
+		    // Skip 'local' and 'global' features
+		    if (fdit->is_global() || fdit->is_local()) {
+			continue;
+		    }
+		    // Only check for FDs that would result in a violation if
+		    // unmatched.
+		    if (fdit.either_violateable()) {
+			// We look for violateable desires on vnodes so that we
+			// can report them to the user
+			if (v->desires.find(*fdit)->is_violateable() &&
+				matched_desires.find(fdit->name())
+				== matched_desires.end()) {
+			    matched_desires[fdit->name()] = 0;
 			}
-			if (pnode->features.find(*desire_it) != pnode->features.end()) {
-			    matched_desires[name]++;
+			if (fdit.membership() ==
+				tb_featuredesire_set_iterator::BOTH) {
+			    matched_desires[fdit->name()]++;
 			} else {
 			    potential_match = false;
 			}
 		    }
 		}
-
-		// Next, features
-		for (node_feature_set::iterator feature_it = pnode->features.begin();
-			feature_it != pnode->features.end(); feature_it++) {
-		    crope name = feature_it->name();
-		    // Skip 'local' and 'global' features
-		    if (feature_it->is_global() || feature_it->is_local()) {
-			continue;
-		    }
-		    // Only check for feature that would result in a violation if
-		    // undesired
-		    if (feature_it->is_violateable()) {
-			if (v->desires.find(*feature_it) == v->desires.end()) {
-			    potential_match = false;
-			}
-		    }
-		}
-
+		
 		// Check link types
 		tb_vnode::link_counts_map::iterator vit;
 		for (vit = v->link_counts.begin(); vit != v->link_counts.end();
