@@ -735,9 +735,10 @@ foreach $delay (keys(%delays)) {
     ($card1) = ($int1 =~ /^eth(\d+)$/);
     $dbh->do("insert into delays" .
 	     " (pid,eid,node_id,iface0,iface1,card0,card1" .
-	     ",delay,bandwidth,lossrate)" .
+	     ",delay,bandwidth,lossrate,vname)" .
 	     " values (\"$pid\",\"$eid\",\"$pnode\",\"$int0\",\"$int1\"".
-	     ",$card0,$card1,$delay,$bandwidth,$lossrate)") || do {
+	     ",$card0,$card1,$delay,$bandwidth" .
+	     ",$lossrate,\"$virtlan\")") || do {
 		 print STDERR "Could not update delays table.  Giving up.\n";
 		 exit(1);
 	     };
