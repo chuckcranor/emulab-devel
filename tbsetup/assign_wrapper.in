@@ -278,11 +278,13 @@ foreach $lan (keys(%lans)) {
     } else {
 	print TOPFILE "node lan/$lan lan\n";
 	$lannodes{"lan/$lan"} = 1;
-	if (&isdelayed($lan)) {
-	    foreach $member (@members) {
-		($delay,$bw,$loss) = @{$delayinfo{"$lan:$member"}};
-		$bandwidth = &getbandwidth($bw);
-		($node) = (split(":",$member))[0];
+	foreach $member (@members) {
+	    ($delay,$bw,$loss) = @{$delayinfo{"$lan:$member"}};
+	    $bandwidth = &getbandwidth($bw);
+	    ($node) = (split(":",$member))[0];
+	    if (($delay > $delaythresh) ||
+		(! defined($okbandwidths{$bw})) ||
+		($loss != 0)) {
 		$delayname = "tbdelay$delayid";
 		$delaynodes{"linkdelaysrc/$lan/$member"} = [$delay,$bw,$loss];
 		printdb "Delay node linkdelaysrc/$lan/$member ($delayname) " .
@@ -293,12 +295,7 @@ foreach $lan (keys(%lans)) {
 		    " $node $delayname $bandwidth\n";
 		print TOPFILE "link linkdelaydst/$lan/$member" .
 		    " lan/$lan $delayname $bandwidth\n";
-	    }
-	} else {
-	    foreach $member (@members) {
-		($delay,$bw,$loss) = @{$delayinfo{"$lan:$member"}};
-		$bandwidth = &getbandwidth($bw);
-		($node) = (split(":",$member))[0];
+	    } else {
 		print TOPFILE "link linklan/$lan/$member $node lan/$lan" .
 		    " $bandwidth\n";
 	    }
