@@ -5,17 +5,17 @@
 
 <h2>Contents</h2>
 <ul>
-  <li><a href=#INTRO>Introduction</a>
-  <li><a href=#TCL>TCL, NS, and node names</a>
-  <li><a href=#HARD>Hardware Commands</a>
-  <li><a href=#IP>IP Commands</a>
-  <li><a href=#OS>OS Commands</a>
-  <li><a href=#LOSS>Link Loss Commands</a>
+  <li><a href="#INTRO">Introduction</a>
+  <li><a href="#TCL">TCL, NS, and node names</a>
+  <li><a href="#HARD">Hardware Commands</a>
+  <li><a href="#IP">IP Commands</a>
+  <li><a href="#OS">OS Commands</a>
+  <li><a href="#LOSS">Link Loss Commands</a>
 </ul>
 
 <hr>
 
-<a name=INTRO></a><h3>Introduction</h3>
+<a name="INTRO"></a><h3>Introduction</h3>
 
 <p>In order to use the testbed specific commands you must include the
 following line near the top of your NS file (before any testbed
@@ -33,7 +33,7 @@ to parse your file.
 
 <hr>
 
-<a name=TCL></a><h3>TCL, NS, and node names</h3>
+<a name="TCL"></a><h3>TCL, NS, and node names</h3>
 
 In your file you will be creating nodes with something like:
 
@@ -80,13 +80,17 @@ for {set i 0} {$i < 4} {incr i} {
 </pre>
 
 <p>In this case the names of the node will be <code>nodes-0</code>,
-<code>nodes-1</code>, <code>nodes-2</code>, <code>nodes-3</code>.
-This slightly ugly syntax comes is to avoid any problems that
-<code>()</code> may cause in later scripts.
+<code>nodes-1</code>, <code>nodes-2</code>, <code>nodes-3</code>. (In
+other words, the <code>(</code> character is replaced with
+<code>-</code>, and <code>)</code> is removed.)  This slightly
+different syntax comes is to avoid any problems that <code>()</code>
+may cause later in the process. For example, the <code>()</code>
+characters cannot appear in DNS entries.
 
 <p>As a final note, everything said above for nodes applies equally to
 lans.  I.e.:
 
+<!-- FIX HERE! Deprecated and now illegal syntax! 
 <pre>
 set lan0 [$ns make-lan "$node0 $node1" 100Mb .1ms]
 tb-set-lan-loss $lan0 .02
@@ -99,6 +103,7 @@ $ns duplex-link $lan0 $node3 100Mb 100ms DropTail
 then be used to set loss rates or IP addresses.  This technique is the
 only way to set such attributes when their are multiple links between
 two nodes.
+-->
 
 <pre>
 set link1 [$ns duplex-link $node0 $node1 100Mb .1ms DropTail]
@@ -108,7 +113,7 @@ tb-set-ip-link $node0 $link1 192.0.0.128
 
 <hr>
 
-<a name=HARD></a><h3>Hardware Commands</h3>
+<a name="HARD"></a><h3>Hardware Commands</h3>
 
 <h4>tb-set-hardware</h4>
 
@@ -134,19 +139,21 @@ supported types.  <code>pc</code> is the default type.
 
 <hr>
 
-<a name=IP></a><h3>IP Commands</h3>
+<a name="IP"></a><h3>IP Commands</h3>
 
-<p>Each node will be assigned an IP address.  The following commands
-will allow you to explicitly set those IP addresses.  IP addresses
-will be automatically generated for all nodes that you do not
-explicitly set IP addresses.
+<p>Each node will be assigned an IP address for each interface that is
+in use.  The following commands will allow you to explicitly set those
+IP addresses.  IP addresses will be automatically generated for all
+nodes that you do not explicitly set IP addresses.
 
 <p>In the common case the IP addresses on either side of a link must
 be in the same subnet.  Likewise, all IP addresses on a LAN should be
-in the same subnet.  Automatically generated IP addresses will conform
-to this requirement.  If part of a link or lan is explicitly specified
-with the commands below then the remainder will be automatically
-generated under the same subnet.
+in the same subnet. Generally the same subnet should not be used for
+more than one link or LAN in a given experiment, nor should one node
+have multiple interfaces in the same subnet. Automatically generated
+IP addresses will conform to these requirements.  If part of a link or
+lan is explicitly specified with the commands below then the remainder
+will be automatically generated under the same subnet.
 
 <p>IP address assignment is deterministic and tries to fill lower IP's
 first, starting at 2.  Except in the partial specification case (see
@@ -253,7 +260,7 @@ tb-set-ip-interface $node2 $node1 142.3.4.6
 
 <hr>
 
-<a name=OS></a><h3>OS Commands</h3>
+<a name="OS"></a><h3>OS Commands</h3>
 
 <h4>tb-set-node-os</h4>
 
@@ -295,8 +302,9 @@ tb-set-node-rpms $node0 rpm1 rpm2 rpm3
 <p>Notes:
 
 <ul>
+  <li>This command sets which rpms are to be installed on the node.
   <li>This command sets which rpms are to be installed on the node
-  first boots after being assigned to an experiment. 
+  when it first boots after being assigned to an experiment. 
   <li>See the <a href="tutorial/tutorial.php3#RPMS">tutorial</a> for more
   information.
 </ul>
@@ -355,17 +363,17 @@ tb-set-node-tarfiles $node0 /bin mybinmods.tar /sbin mysbinmods.tar
 	
 <hr>
 
-<a name=LOSS></a><h3>Link Loss Commands</h3>
+<a name="LOSS"></a><h3>Link Loss Commands</h3>
 
-<p>The NS syntax for creating a link:
+<p>This is the NS syntax for creating a link:
 
 <pre>
 $ns duplex-link $node1 $node2 100Mb 150ms DropTail
 </pre>
 
-<p>Does not allow for specifying link loss rates.  Emulab does,
-however, support link loss.  The following commands can be used to
-specify link loss rates.
+<p>Note that it does not allow for specifying link loss rates.  Emulab
+does, however, support link loss.  The following commands can be used
+to specify link loss rates.
 
 <h4>tb-set-link-loss</h4>
 
@@ -410,6 +418,8 @@ tb-set-lan-loss $lan1 0.3
 
 <p>Notes:
 <ul>
+<!-- FIX HERE: This talks about the now deprecated node-to-lan link,
+so we'll need to figure this out as well... -->
   <li>This command sets the loss rate for the entire LAN.  If you want
       to have a different loss rate for a node in the LAN you'll need
       to link the node to the lan (rather than include in the
