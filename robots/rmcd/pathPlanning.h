@@ -22,7 +22,6 @@ typedef enum {
 } pp_point_type_t;
 
 pp_plot_code_t pp_plot_waypoint(struct robot_position *actual,
-				struct obstacle_config *oc,
 				struct robot_position *goal,
 				struct robot_position *waypoint_out);
 

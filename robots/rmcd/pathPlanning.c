@@ -10,6 +10,7 @@
 
 #define PP_TOL 0.1
 
+
 static int pp_point_in_bounds(float x, float y)
 {
     int lpc, boxes_len, retval = 0;
@@ -52,7 +53,6 @@ static int pp_point_in_obstacle(float x, float y)
 #endif
 
 pp_plot_code_t pp_plot_waypoint(struct robot_position *actual,
-				struct obstacle_config *oc,
 				struct robot_position *goal,
 				struct robot_position *waypoint_out)
 {
@@ -60,47 +60,81 @@ pp_plot_code_t pp_plot_waypoint(struct robot_position *actual,
     pp_plot_code_t retval;
 
 
+    /* refer to masterController.c, line 290 */
+    /* in ob_find_obstacle.c */
 
-
-
-
+    /* pc_data.pcd_config->obstacles.obstacles_len */
+    /* pc_data.pcd_config->obstacles.obstacles_val[] */
+    
+    int incr_o, oc_length;
+    float cp_dist;
+    float cp_mindist;
+    
+    struct robot_position waypoint_temp;   
+    struct obstacle_config *oc;
+    
+    struct rc_line rl;
+    rc_code_t rc;
+    
+    
     assert(actual != NULL);
     assert(goal != NULL);
     assert(waypoint_out != NULL);
 
-    if (oc == NULL) {
-	retval = PPC_NO_WAYPOINT;
-    }
-    else {
-	struct rc_line rl;
-	rc_code_t rc;
+    retval = PPC_NO_WAYPOINT; /* if nothing else */
+    
+    /* set waypoints */
+    *waypoint_out = *goal;
+    waypoint_temp = *goal;
+    
+    cp_dist = 0.0f;
+    cp_mindist = pp_point_distance(actual, goal);
+   
+    
+    oc = pc_data.pcd_config->obstacles.obstacles_val;
+    oc_length = pc_data.pcd_config->obstacles.obstacles_len;
+    
+    
+    if (oc_length > 0) {
+      /* hellish nightmare (obstacles exist!) */
+      printf("pp_plot_waypoint: checking obstacles\n");
+      
+      /* go through every obstacle in the list */
+      for (incr_o = 0; incr_o < oc_length; incr_o++) {
 
 	rl.x0 = actual->x;
 	rl.y0 = actual->y;
 	rl.x1 = goal->x;
 	rl.y1 = goal->y;
 
-	rc = rc_compute_closest(&rl.x0, &rl.y0, oc);
-	if (rc_compute_code(goal->x, goal->y, oc) == 0) {
+ 
+
+        
+	rc = rc_compute_closest(&rl.x0, &rl.y0, &oc[incr_o]);
+	if (rc_compute_code(goal->x, goal->y, &oc[incr_o]) == 0) {
             /* can not get to final point */
-            printf("pp_plot_waypoint: goal is in obstacle.\n");
-	    retval = PPC_GOAL_IN_OBSTACLE;
+            printf("pp_plot_waypoint: goal is inside this obstacle! [%d]\n", incr_o);
+	    /* retval = PPC_GOAL_IN_OBSTACLE; */
+            /* don't give up here */
 	}
-	else if ((rc_clip_line(&rl, oc) == 0) ||
+ 
+ 	
+	if ((rc_clip_line(&rl, &oc[incr_o]) == 0) ||
 		 (hypotf(rl.x0 - rl.x1, rl.y0 - rl.y1) < 0.20)) {
-            /* no intersection */
-            printf("pp_plot_waypoint: no intersection detected.\n");
-	    retval = PPC_NO_WAYPOINT;
+            /* no intersection -- DO NOTHING */
+//             printf("pp_plot_waypoint: no intersection detected for this obstacle. [%d]\n", incr_o);
 	}
 	else {
-            /* intersection detected */
-   	    /* assign a new waypoint */
-            printf("pp_plot_waypoint: intersection detected.\n");
+          /* intersection detected -- assign a new waypoint */
+//           printf("pp_plot_waypoint: intersection detected.\n");
+          printf("pp_plot_waypoint: intersection detected for this obstacle. [%d]\n", incr_o);
+          
 
-	    /* int new_rc = 0, alt_rc = 0; */
+          
+#if 0
+          /* int new_rc = 0, alt_rc = 0; */
 
-
-/* compass heading stuff */
+          /* compass heading stuff */
 /*
 	    float bearing;
 	    int compass;
@@ -162,7 +196,7 @@ pp_plot_code_t pp_plot_waypoint(struct robot_position *actual,
 		    alt_rc = ~new_rc & RCF_ALL;
 		}
 		else if (compass & MCF_WEST) {
-		    new_rc = RCF_TOP|RCF_LEFT;
+		    new_rc = RCF_TOP|RCF_LEdata.pcd_configFT;
 		    alt_rc = ~new_rc & RCF_ALL;
 		}
 		else {
@@ -244,7 +278,7 @@ pp_plot_code_t pp_plot_waypoint(struct robot_position *actual,
 	    }
 */
 
-/* corner point stuff */
+	  /* corner point stuff */
 /*
 	    rc_corner(new_rc, waypoint_out, oc);
 
@@ -258,35 +292,69 @@ pp_plot_code_t pp_plot_waypoint(struct robot_position *actual,
 	    }
 */
 
-            if (1 == pp_next_cornerpoint(actual, oc, goal, waypoint_out)) {
-              /* corner point assigned */
-              printf("pp_plot_waypoint: new waypoint assigned.\n");
-              retval = PPC_WAYPOINT;
-            }
-            else {
-              /* ERROR */
-              retval = PPC_BLOCKED;
-              printf("pp_plot_waypoint: error assigning waypoint.\n");
-            }
+#endif
+          
+          /* get next corner point */
+	  if (0 == pp_next_cornerpoint(actual, &oc[incr_o], goal, &waypoint_temp)) {
+            /* blocked -- GIVE UP */
+            printf("pp_plot_waypoint: ERROR: failed to find next corner point!\n");
+            return PPC_BLOCKED;
+          }
 	} /* intersection detected */
 
+ 	cp_dist = pp_point_distance(actual, &waypoint_temp);
+ 
 
+ 	printf("pp_plot_waypoint: this waypoint [%d] distance: %f\n", incr_o, cp_dist);
+  	printf("pp_plot_waypoint: ** current minimum waypoint distance: %f\n", cp_mindist);
+  
+  
+        if (cp_dist < cp_mindist) {
+          /* choose the closest waypoint to the actual [current] position */
+          printf("pp_plot_waypoint: new waypoint set. [%d]\n", incr_o);
+          *waypoint_out = waypoint_temp;
+          cp_mindist = pp_point_distance(actual, waypoint_out);
+          retval = PPC_WAYPOINT;
+        }
+ 
+  
+  
+    } /* obstacle list iteration */
+ } /* obstacles exist */
+ 
+ 
 
+ 
+   
+ 
+ 
+ 
+ 
+ /* restrict final waypoint to MAX_DISTANCE */
+ mtp_polar(actual,
+           (retval == PPC_WAYPOINT) ? waypoint_out : goal,
+           &distance,
+           &theta);
+ if (distance > MAX_DISTANCE) {
+   mtp_cartesian(actual, MAX_DISTANCE, theta, waypoint_out);
+   retval = PPC_WAYPOINT;
+ }
 
-    }
+ 
+ if (PPC_WAYPOINT == retval) {
+   printf("pp_plot_waypoint finished: WAYPOINT SET\n");
+ }
+ 
+ if (PPC_NO_WAYPOINT == retval) {
+   printf("pp_plot_waypoint finished: NO WAYPOINT\n");
+ }
+ 
+ if (PPC_BLOCKED == retval) {
+   printf("pp_plot_waypoint finished: *** BLOCKED ***\n");
+ }
+    
+ return retval;
 
-    /* restrict final waypoint to MAX_DISTANCE */
-    mtp_polar(actual,
-	      (retval == PPC_WAYPOINT) ? waypoint_out : goal,
-	      &distance,
-	      &theta);
-    if (distance > MAX_DISTANCE) {
-	mtp_cartesian(actual, MAX_DISTANCE, theta, waypoint_out);
-
-	retval = PPC_WAYPOINT;
-    }
-
-    return retval;
 }
 
 

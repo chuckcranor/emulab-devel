@@ -337,6 +337,11 @@ int main(int argc, char *argv[])
 		oc->ymin -= OBSTACLE_BUFFER;
 		oc->xmax += OBSTACLE_BUFFER;
 		oc->ymax += OBSTACLE_BUFFER;
+  
+  /* obstacle config */
+  /* refer to visiontrack.h */
+  /* and vmcd line 151) */
+  
 	    }
 	}
     }

@@ -101,9 +101,11 @@ static int mc_plot(struct master_controller *mc, mtp_packet_t *mp)
 
     mtp_polar(&mc->mc_actual_pos, &mc->mc_goal_pos, &distance, &theta);
     if ((mc->mc_tries_remaining <= 0) || (distance < 0.03)) {
+      /* done moving */
 	if (cmp_fuzzy(mc->mc_actual_pos.theta,
 		      mc->mc_goal_pos.theta,
 		      RADIAN_TOLERANCE)) {
+            /* made it */
 	    mtp_packet_t ump;
 	    
 	    mtp_init_packet(&ump,
@@ -116,6 +118,7 @@ static int mc_plot(struct master_controller *mc, mtp_packet_t *mp)
 	    mtp_send_packet(pc_data.pcd_emc_handle, &ump);
 	}
 	else {
+            /* failed */
 	    mtp_packet_t gmp;
 
 	    mtp_init_packet(&gmp,
@@ -130,11 +133,10 @@ static int mc_plot(struct master_controller *mc, mtp_packet_t *mp)
 	}
     }
     else {
+	/* still moving */
 	struct robot_position *rp = NULL, _rp;
 	
 	switch (pp_plot_waypoint(&mc->mc_actual_pos,
-				 (mc->mc_flags & MCF_HAS_OBSTACLE) ?
-				 &mc->mc_obstacle : NULL,
 				 &mc->mc_goal_pos,
 				 &mc->mc_waypoint)) {
 	case PPC_NO_WAYPOINT:
