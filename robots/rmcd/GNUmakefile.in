@@ -45,5 +45,9 @@ install: all
 	-mkdir -p $(INSTALL_DIR)/opsdir/sbin
 	$(INSTALL_PROGRAM) rmcd $(INSTALL_DIR)/opsdir/sbin/rmcd
 
+control-install: all
+	-mkdir -p $(INSTALL_DIR)/sbin
+	$(INSTALL_PROGRAM) rmcd $(INSTALL_DIR)/sbin/rmcd
+
 clean:
 	rm -f *.o

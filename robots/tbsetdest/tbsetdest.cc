@@ -818,8 +818,10 @@ Node::Update()
 			}
 		}
 
-		fprintf(stdout, NODE_FORMAT,
-			TIME, index, destination.X, destination.Y, speed);
+		if (speed > 0) {
+			fprintf(stdout, NODE_FORMAT,
+				TIME, index, destination.X, destination.Y, speed);
+		}
 	
 	}
 
