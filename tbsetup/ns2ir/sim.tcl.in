@@ -160,12 +160,12 @@ Simulator instproc run {} {
     # Check node names.
     foreach node [lsort [array names node_list]] {
 	if {! [regexp {^[-0-9A-Za-z]+$} $node]} {
-	    perror "Invalid node name: $node.  Can only contain \[-0-9A-Za-z\]."
+	    perror "Invalid node name: $node.  Can only contain \[-0-9A-Za-z\] due to DNS limitations."
 	}
     }
     foreach lan [lsort [array names lanlink_list]] {
 	if {! [regexp {^[-0-9A-Za-z]+$} $lan]} {
-	    perror "Invalid lan/link name: $lan.  Can only contain \[-0-9A-Za-z\]."
+	    perror "Invalid lan/link name: $lan.  Can only contain \[-0-9A-Za-z\] for symmetry with node DNS limitations."
 	}
     }
 
