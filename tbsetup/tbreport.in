@@ -6,6 +6,11 @@
 my $TBROOT = "@prefix@";
 my $DBNAME = "tbdb";
 
+#
+# Turn off line buffering on output
+#
+$| = 1;
+
 use DBI;
 $dbh = DBI->connect("DBI:mysql:database=$DBNAME;host=localhost") 
     || die "Could not connect to DB.\n";
@@ -39,7 +44,7 @@ print "Experiment: $eid\n";
 print "State: $state\n";
 print "\n";
 
-if (($state ne "dormant") && ($state ne "running")) {
+if (($state ne "swapped") && ($state ne "active")) {
     # nothing to do
     print "No more information available.\n";
     exit(0);
@@ -83,7 +88,7 @@ $sth->finish();
 print "\n";
 
 # Display link info
-if ($state eq "dormant") {
+if ($state eq "swapped") {
     $sth=$dbh->prepare("SELECT vname,members,delay,bandwidth,lossrate" .
 		       " from virt_lans where pid=\"$pid\" and eid=\"$eid\"");
     $sth->execute();
@@ -102,7 +107,7 @@ if ($state eq "dormant") {
 }
 
 # Mapping
-if ($state eq "running") {
+if ($state eq "active") {
     print "Node Mapping:\n";
     printf "%-15s %-15s %s\n", "Virtual", "Physical", "Qualified Name";
     print "--------------- --------------- --------------------\n";
@@ -120,10 +125,6 @@ if ($state eq "running") {
 		       " where pid=\"$pid\" and eid=\"$eid\"");
     $sth->execute;
 
-    # Display link info
-    $sth=$dbh->prepare("SELECT vname,members,delay,bandwidth,lossrate" .
-		       " from virt_lans where pid=\"$pid\" and eid=\"$eid\"");
-    $sth->execute();
     while (($vname,$vport,$pport) = $sth->fetchrow_array()) {
 	$portmap{"$vname:$vport"} = $pport;
     }
@@ -142,7 +143,7 @@ if ($state eq "running") {
 	    @info = split(":",$nodeport);
 	    $node = $info[0];
 	    $pport = $portmap{$nodeport};
-	    print "\t$node:$pport ($ips{$nodeport})\n";
+	    print "\t$node:$pport ($ipmap{$nodeport})\n";
 	}
     }
     $sth->finish();
