@@ -14,19 +14,37 @@ typedef struct {
 } violated_info;
 
 class tb_removal_record;
+ostream &operator<<(ostream &o,const tb_removal_record &r);
 
 class tb_removal_link_record {
 public:
   tb_removal_link_record() : delay_record(NULL) {;}
   tb_link_info link_info;
   tb_removal_record *delay_record;
+  friend ostream &operator<<(ostream &o,const tb_removal_link_record &r) {
+    o << r.link_info;
+    if (r.delay_record)
+      o << *(r.delay_record);
+    return o;
+  }
 };
+
 class tb_removal_record {
 public:
   pvertex assignment;
   typedef hash_map<crope,tb_removal_link_record> link_record_map;
   link_record_map links;
   pvertex lan_switch;		// only for lan nodes
+
+  friend ostream &operator<<(ostream &o,const tb_removal_record &r) {
+    o << "tb_removal_record:  assignment=" << r.assignment <<
+      " lan_switch=" << r.lan_switch << endl;
+    for (link_record_map::const_iterator it=r.links.begin();
+	 it != r.links.end();++it) {
+      o << (*it).first << " -> " << (*it).second;
+    }
+    return o;
+  }
 };
 
 extern double score;

@@ -194,7 +194,8 @@ void remove_node(vvertex vv,tb_removal_record *removal)
   pvertex pv = vnode->assignment;
   tb_pnode *pnode = get(pvertex_pmap,pv);
 
-  SDEBUG(cerr <<  "SCORE: remove_node(" << vnode->name << ")" << endl);
+  SDEBUG(cerr <<  "SCORE: remove_node(" << vnode->name << "," << removal <<
+	 ")" << endl);
   SDEBUG(cerr <<  "  assignment=" << pnode->name << endl);
 #ifdef SCORE_DEBUG_LOTS
   cerr << *vnode;
@@ -391,6 +392,12 @@ int add_node(vvertex vv,pvertex pv, bool deterministic,
   cerr << *pnode;
 #endif
   SDEBUG(cerr << "  vnode type = " << vnode->type << endl);
+
+#ifdef SCORE_DEBUG
+  if (removal) {
+    cerr << *removal;
+  }
+#endif
   
   // set up pnode
   // figure out type
@@ -486,7 +493,10 @@ int add_node(vvertex vv,pvertex pv, bool deterministic,
       tb_pnode *dest_pnode = get(pvertex_pmap,dest_pv);
 
       SDEBUG(cerr << "   goes to " << dest_pnode->name << endl);
-
+      bool is_lan_link = ((dest_pnode->types.find("lan") !=
+			   dest_pnode->types.end()) ||
+			  (pnode->types.find("lan") != pnode->types.end()));
+      
       if (dest_pv == pv) {
 	SDEBUG(cerr << "  trivial link" << endl);
 	vlink->link_info.type = tb_link_info::LINK_TRIVIAL;
@@ -605,7 +615,7 @@ int add_node(vvertex vv,pvertex pv, bool deterministic,
 	  // Choose a link
 	  int index;
 	  if (!deterministic) {
-	    if (removal == NULL) {
+	    if ((removal == NULL) || is_lan_link) {
 	      float choice;
 	      if (total_weight > 0) {
 		choice = std::random()%(int)total_weight;
@@ -650,7 +660,7 @@ int add_node(vvertex vv,pvertex pv, bool deterministic,
 	    }
 	    index = bestindex;
 	  }
-	  if (removal != NULL) {
+	  if ((removal != NULL) && (! is_lan_link)) {
 	    vlink->link_info = removal->links[vlink->name].link_info;
 	  } else {
 	    vlink->link_info = resolutions[index];

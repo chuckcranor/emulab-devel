@@ -1,0 +1,6 @@
+
+1. Migration - Migration sometimes results in a solution with a
+slightly higher score than the optimal.  On inspection the solution is
+isomorphic.  Since when reverting we do end up with an initial score
+of num_vnodes which is correct it doesn't appear to be an asymmetry in
+the scoring code.  Very confusing but so far harmless.
