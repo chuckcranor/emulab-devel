@@ -163,6 +163,11 @@ Simulator instproc run {} {
 	    perror "Invalid node name: $node.  Can only contain \[-0-9A-Za-z\]."
 	}
     }
+    foreach lan [lsort [array names lanlink_list]] {
+	if {! [regexp {^[-0-9A-Za-z]+$} $lan]} {
+	    perror "Invalid lan/link name: $lan.  Can only contain \[-0-9A-Za-z\]."
+	}
+    }
 
     # If any errors occur stop here.
     if {$errors == 1} {return}
