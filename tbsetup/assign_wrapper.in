@@ -270,6 +270,10 @@ my $mem_usage;
 # before doing a swapmod
 my $fix_current_resources;
 
+# Allow override of jail/delay osids.
+my $jail_osid;
+my $delay_osid;
+
 ######################################################################
 
 # ips is indexed by node:port and contains the IP address for the port.
@@ -2162,7 +2166,15 @@ sub InitPnode($pnode, $vnode)
 
     # XXX NSE hack: 
     if (virtnodeisvnode($vnode) && virtnodeissim($vnode)) {
-	$osid = TBOSID(TB_OPSPID, "FBSD-NSE" );
+	#
+	# We can use the Jail hosting OSID for NSE now, but allow override.
+	#
+	if (defined($jail_osid)) {
+	    $osid = $jail_osid;
+	}
+	else {
+	    $osid = nodejailosid(physnodetype($pnode));
+	}
 	
 	DBQueryFatal("UPDATE nodes set def_boot_cmd_line='/kernel.jail'," .
 		     " startstatus='none'," .
@@ -2198,7 +2210,12 @@ sub InitPnode($pnode, $vnode)
 	    #
 	    # A delay node.
 	    #
-	    $osid = nodedelayosid(physnodetype($pnode));
+	    if (defined($delay_osid)) {
+		$osid = $delay_osid;
+	    }
+	    else {
+		$osid = nodedelayosid(physnodetype($pnode));
+	    }
 	    $expt_stats{"delaynodes"} += 1;
 	    $vname = $vnode;
 	    $role  = TBDB_RSRVROLE_DELAYNODE;
@@ -2209,7 +2226,12 @@ sub InitPnode($pnode, $vnode)
 	    #
 	    # A node hosting jails
 	    #
-	    $osid = nodejailosid(physnodetype($pnode));
+	    if (defined($jail_osid)) {
+		$osid = $jail_osid;
+	    }
+	    else {
+		$osid = nodejailosid(physnodetype($pnode));
+	    }
 	    $expt_stats{"jailnodes"} += 1;
 	    #
 	    # Set the vname to something useful.
@@ -3396,11 +3418,13 @@ sub LoadExperiment()
     my $query_result =
 	DBQueryFatal("select uselinkdelays,forcelinkdelays,".
 		     "       multiplex_factor,usewatunnels, ".
-		     "       cpu_usage,mem_usage,allowfixnode ".
+		     "       cpu_usage,mem_usage,allowfixnode, ".
+		     "       jail_osname,delay_osname ".
 		     " from experiments ".
 		     "where pid='$pid' and eid='$eid'");
     
-    my ($o1,$o2,$o3,$o4,$o5,$o6,$o7) = $query_result->fetchrow_array();
+    my ($o1,$o2,$o3,$o4,$o5,$o6,$o7,$jail_osname,$delay_osname) =
+	$query_result->fetchrow_array();
 
     # Do not override settings if already defined above. 
     $uselinkdelays = $o1
@@ -3417,6 +3441,20 @@ sub LoadExperiment()
 	if (!defined($mem_usage));
     $fix_current_resources = $o7
 	if (!defined($fix_current_resources));
+    if (!defined($jail_osid) && defined($jail_osname)) {
+	if (! ($jail_osid = TBOSID($pid, $jail_osname)) &&
+	    ! ($jail_osid = TBOSID(TB_OPSPID, $jail_osname))) {
+	    fatal($WRAPPER_FAILED|$WRAPPER_FAILED_CANRECOVER,
+		  "Invalid OS $jail_osname in project $pid!");
+	}
+    }
+    if (!defined($delay_osid) && defined($delay_osname)) {
+	if (! ($delay_osid = TBOSID($pid, $delay_osname)) &&
+	    ! ($delay_osid = TBOSID(TB_OPSPID, $delay_osname))) {
+	    fatal($WRAPPER_FAILED|$WRAPPER_FAILED_CANRECOVER,
+		  "Invalid OS $delay_osname in project $pid!");
+	}
+    }
 
     printdb "Not fixing current resources during this swapin\n"
 	if (! $fix_current_resources);
