@@ -28,11 +28,23 @@ $TBDB = "@TBDBNAME@";
 $dbh = DBI->connect("DBI:mysql:database=$TBDB;host=localhost") || 
     die "Could not connect to DB.\n";
 
-if ($#ARGV != 1) {
+$verbose = 0;
+if (($#ARGV == 2) && ($ARGV[0] eq "-v")) {
+    $verbose = 1;
+    shift;
+} elsif ($#ARGV != 1) {
     print STDERR "Syntax: $0 pid eid\n";
     exit(1);
 }
 ($pid,$eid) = @ARGV;
+
+$ptopfile = "$pid-$eid-$$.ptop";
+
+sub printdb {
+    if ($verbose) {
+	print $_[0];
+    }
+};
 
 ######################################################################
 # Step 1 - Setup virtual topology
@@ -82,17 +94,24 @@ if ($#ARGV != 1) {
 #  lan nodes are named lan/<virtual lan>
 ######################################################################
 
+printdb "Generating TOP file.\n";
+
 # Let's figure out what kind of links we have.
+printdb "Finding interface speeds:";
 $sth=$dbh->prepare("SELECT max_speed from interface_types");
 $sth->execute;
 while (($bandwidth) = $sth->fetchrow_array) {
     $okbandwidths{$bandwidth} = 1;
+    printdb " $bandwidth";
 }
 $sth->finish;
+printdb "\n";
 
+printdb "Loading virt_nodes.\n";
 $sth = $dbh->prepare("SELECT vname,ips,type from virt_nodes");
 $sth->execute;
 while (($vname,$ips,$type) = $sth->fetchrow_array) {
+    printdb "  $vname $type $ips\n";
     $nodes{$vname} = $type;
     $nodelans{$vname} = [];
     foreach $ipinfo (split(" ",$ips)) {
@@ -101,16 +120,20 @@ while (($vname,$ips,$type) = $sth->fetchrow_array) {
     }
 }
 $sth->finish;
+
+printdb "Loading virt_lans.\n";
 $sth = $dbh->prepare("SELECT vname,members,delay,bandwidth,lossrate" .
 		     " from virt_lans");
 $sth->execute;
 while (($vname,$members,$delay,$bandwidth,$lossrate) = $sth->fetchrow_array) {
     $lans{$vname} = [split(" ",$members)];
     $delayinfo{$vname} = [$delay,$bandwidth,$lossrate];
+    printdb "  $vname $members ($delay, $bandwidth, $lossrate)\n";
     foreach $nodeport (@{$lans{$vname}}) {
 	$ports{$nodeport} = $vname;
 	($node,$port) = split(":",$nodeport);
 	push(@{$nodelans{$node}},"$port:$vname");
+	printdb "Added $port:$vname to nodelans of $node\n";
     }
 }
 $sth->finish;
@@ -177,7 +200,7 @@ foreach $lan (keys(%lans)) {
 	if (&isdelayed($lan)) {
 	    foreach $member (@members) {
 		$node = (split(":",$member))[0];
-		print TOPFILE "node delay/$lan/$member delay\n"
+		print TOPFILE "node delay/$lan/$member delay\n";
 		print TOPFILE "link linkdelaysrc/$lan/$member $member" .
 		    " delay/$lan/$member $bandwidth\n";
 		print TOPFILE "link linkdelaydst/$lan/$member" .
@@ -205,7 +228,8 @@ close TOPFILE;
 # v2pmap is indexed by virtual and contains the physical node.
 # p2vmap is indexed by physical and contains the virtual node
 # plinks is indexed by virtual name and contains 
-#  (type,pnodeportA,pnodeportB) 
+#  (pnodeportA,pnodeportB) .  If one is a delay node it is always
+#  the second.
 #######################################################################
 
 # getnodeport(s)
@@ -221,8 +245,24 @@ sub getnodeport {
     }
 };
 
+# isdelay(pnodeport)
+# Takes a physical nodeport and retruns 1 if the node is a delay node.
+sub isdelay {
+    my $pnodeport = $_[0];
+    my $node = (split(":",$pnodeport))[0];
+    if (($p2vmap{$node} =~ m|^delay/|) ||
+	($p2vmap{$node} =~ m|^sdelay.|)) {
+	return 1;
+    } 
+    return 0;
+};
+
 $currentrun = 1;
 while (1) {
+    if ($currentrun > $maxrun) {
+	print "Reached run limit.  Giving up.\n";
+	exit(1);
+    }
     print "Assign Run $currentrun\n";
 
     # Clear v2pmap, p2vmap, and plinks
@@ -231,15 +271,17 @@ while (1) {
     undef %plinks;
 
     # Snapshot
-    system("ptopgen > $pid-$eid-$$.ptop");
+    system("ptopgen > $ptopfile");
 
     # Run assign
+    print "assign -b -t $ptopfile $topfile\n";
     open(ASSIGNFP,"assign -b -t $ptopfile $topfile | tee assign.log |");
     $violations = 0;
     $score = -1;
 
     # read output
     # Header
+    printdb "Reading assign results.\n";
     while (<ASSIGNFP>) {
 	chop;
 	/^With ([0-9]+) violations$/ && do {
@@ -248,10 +290,13 @@ while (1) {
 	};
 	/^[ \t]+BEST SCORE: [ \t]+([0-9]+\.[0-9]+)/ && ($score=$1);
     }
+    printdb "Found score $score, violations $violations.\n";
+
     # We don't bother reading anything else if violations occured.
     if (($violations == 0) && ($score != -1)) {
 	# read nodes section
 	while (<ASSIGNFP> !~ /^Nodes:/) {}
+	printdb "Nodes:\n";
 	while (<ASSIGNFP>) {
 	    chop;
 	    /^End Nodes$/ && last;
@@ -259,9 +304,14 @@ while (1) {
 	    ($virtual,$physical) = @info[0,2];
 	    $v2pmap{$virtual} = $physical;
 	    $p2vmap{$physical} = $virtual;
+	    printdb "  $virtual $physical\n";
 	}
+
 	# read Edges
+	# By convention, in plinks, the delay node is always the second
+	# entry.
 	while (<ASSIGNFP> !~ /^Edges:/) {}
+	printdb "Edges:\n";
 	while (<ASSIGNFP>) {
 	    /^End Edges$/ && last;
 	    @info = split;
@@ -269,27 +319,35 @@ while (1) {
 	    $_ = $info[1]; # type
 	  SWITCH1: {
 	      /^intraswitch$/ && do {
-		  ($vlink,$nodeportA,$nodeportB) = @info[0,3,5];
+		  ($vlink,$rawA,$rawB) = @info[0,3,5];
+		  $nodeportA = &getnodeport($rawA);
+		  $nodeportB = &getnodeport($rawB);
 		  $nodeportA =~ s/\//:/;
 		  $nodeportB =~ s/\//:/;
-		  $plinks{$vlink} = ["intraswitch",
-				     &getnodeport($nodeportA),
-				     &getnodeport($nodeportB)];
+		  if (&isdelay($nodeportB)) {
+		      $plinks{$vlink} = [$nodeportA,$nodeportB];
+		  } else {
+		      $plinks{$vlink} = [$nodeportB,$nodeportA];
+		  }
 		  last SWITCH1;
 	      };
 	      /^interswitch$/ && do {
 		  # ??? Do we really need two cases?  Wouldn't it
 		  # always be the first case.
 		  if ($#info == 7) {
-		      ($vlink,$nodeportA,$nodeportB) = @info[0,3,7];
+		      ($vlink,$rawA,$rawB) = @info[0,3,7];
 		  } else {
-		      ($vlink,$nodeportA,$nodeportB) = @info[0,3,5];
+		      ($vlink,$rawA,$rawB) = @info[0,3,5];
 		  }
+		  $nodeportA = &getnodeport($rawA);
+		  $nodeportB = &getnodeport($rawB);
 		  $nodeportA =~ s/\//:/;
 		  $nodeportB =~ s/\//:/;
-		  $plinks{$vlink} = ["interswitch",
-				     &getnodeport($nodeportA),
-				     &getnodeport($nodeportB)];
+		  if (&isdelay($nodeportB)) {
+		      $plinks{$vlink} = [$nodeportA,$nodeportB];
+		  } else {
+		      $plinks{$vlink} = [$nodeportB,$nodeportA];
+		  }
 		  last SWITCH1;
 	      };
 	      /^direct$/ && do {
@@ -297,11 +355,16 @@ while (1) {
 		  ($nodeportA,$nodeportB) = ($nodeports =~ /^\(([^,]+),([^,]+)\)$/);
 		  $nodeportA =~ s/\//:/;
 		  $nodeportB =~ s/\//:/;
-		  $plinks{$vlink} = ["direct",$nodeportA,$nodeportB];
+		  if (&isdelay($nodeportB)) {
+		      $plinks{$vlink} = [$nodeportA,$nodeportB];
+		  } else {
+		      $plinks{$vlink} = [$nodeportB,$nodeportA];
+		  }
 		  last SWITCH1;
 	      };
 	      print "Found garbage: $line\n";
 	  }
+	    printdb "  $vlink " . join(" ",@{$plinks{$vlink}}) . "\n";
 	}
     } else {
 	# spit out up to nodes
@@ -315,12 +378,14 @@ while (1) {
     close(ASSIGNFP);
 
     # Reserve resources
+    print "Reserving resources.\n";
     if (system("nalloc $pid $eid " . join(" ",keys(%p2vmap)))) {
 	print "Failed to reserve resources.  Trying again.\n";
     } else {
 	print "Successfully reserved resources.  Finishing setup.\n";
 	last;
     }
+    $currentrun++;
 }
 
 
@@ -356,27 +421,32 @@ while (1) {
 # This finds and returns the virtual port of vnode that it is
 # virtlan and not in portmap.
 sub find_vport {
-    my (vnode,virtlan) = @_;
+    my ($vnode,$virtlan) = @_;
     my $portlan;
-    my $vport, $lan;
+    my $vport;
+    my $lan;
     foreach $portlan (@{$nodelans{$vnode}}) {
 	($vport,$lan) = split(":",$portlan);
-	if (($virtlan == $lan) &&
+	if (($virtlan eq $lan) &&
 	    (! defined($portmap{"$vnode:$vport"}))) {
 	    return $vport;
 	}
     }
+    return "";
 };
 
 $vlanid = 0;
 $delayid = 0;
-foreach $pnode (keys($p2vmap)) {
+foreach $pnode (keys(%p2vmap)) {
     $nodevlans{$pnode} = [];
 }
+
+printdb "Interpreting results.\n";
 foreach $plink (keys(%plinks)) {
-    ($nodeportA,$nodeportB) = @{$plinks{$plink}}[1,2];
+    ($nodeportA,$nodeportB) = @{$plinks{$plink}};
     ($nodeA,$portA) = split(":",$nodeportA);
     ($nodeB,$portB) = split(":",$nodeportB);
+    printdb "plink $plink - $nodeportA $nodeportB\n";
     if (($lan) = ($plink =~ m|^linksdelaysrc/(.+)$|)) {
 	# Node has a single entry in lan.
 	# Node is nodeportA
@@ -385,22 +455,35 @@ foreach $plink (keys(%plinks)) {
 	#   linksdelaydst/lan where nodeportA will be the other node in
 	#   the virtual LAN and nodeportB will be the other end of the
 	#   delay node.
+
 	($nodeportC,$nodeportD) = @{$plinks{"linksdelaydst/$lan"}};
 	($nodeC,$portC) = split(":",$nodeportC);
 	($nodeD,$portD) = split(":",$nodeportD);
+	printdb "LINK delay: other end = $nodeportC $nodeportD\n";
+
 	# assert nodeB == nodeD
-					
-	$vlans{$vlanid++} = [$lan,[$nodeportA, $nodeportB]];
-	push(@{$nodevlans{$nodeA}},$vlanid-1);
-	$vlans{$vlanid++} = [$lan,[$nodeportC, $nodeportD]];
-	push(@{$nodevlans{$nodeC}},$vlanid-1);
-	
-	$delays{$delayid++} = [$nodeB,$portB,$portD,$lan];
+
+	printdb "  VLANS:\n";
+	$vlans{$vlanid} = [$lan,[$nodeportA, $nodeportB]];
+	push(@{$nodevlans{$nodeA}},$vlanid);
+	printdb "    $vlanid = $lan, \[$nodeportA, $nodeportB\]\n";
+	$vlanid++;
+	$vlans{$vlanid} = [$lan,[$nodeportC, $nodeportD]];
+	push(@{$nodevlans{$nodeC}},$vlanid);
+	printdb "    $vlanid = $lan, \[$nodeportC, $nodeportD\]\n";
+	$vlanid++;
+
+	$delays{$delayid} = [$nodeB,$portB,$portD,$lan];
+	printdb "  Delays: $delayid = \[$nodeB,$portB,$portD,$lan\]\n";
+	$delayid++;
 
 	$virtA = &find_vport($p2vmap{$nodeA},$lan);
-	$virtB = &find_vport($p2vmap{$nodeC},$lan);
-	$portmap{$p2vmap{$nodeA} . $virtA} = $portA;
-	$portmap{$p2vmap{$nodeC} . $virtC} = $portC;
+	$virtC = &find_vport($p2vmap{$nodeC},$lan);
+	$portmap{"$p2vmap{$nodeA}:$virtA"} = $portA;
+	$portmap{"$p2vmap{$nodeC}:$virtC"} = $portC;
+	printdb "  Portmap:\n";
+	printdb "    $p2vmap{$nodeA}:$virtA = $portA\n";
+	printdb "    $p2vmap{$nodeC}:$virtC = $portC\n";
     } elsif (($lan,$node) = ($plink =~ m|^linkdelaysrc/([^/]+)/(.+)$|)) {
 	# Node may have multiple entries in lan.
 	# Delay node is nodeB and portB.
@@ -410,45 +493,61 @@ foreach $plink (keys(%plinks)) {
 	($nodeportC,$nodeportD) = @{$plinks{"linksdelaydst/$lan/$node"}};
 	($nodeC,$portC) = split(":",$nodeportC);
 	($nodeD,$portD) = split(":",$nodeportD);
+	printdb "LAN delay src: other end = $nodeportC $nodeportD\n";
 	
-	$vlans{$vlanid++} = [$lan,[$nodeportA, $nodeportB]];
-	push(@{$nodevlans{$nodeA}},$vlanid-1);
+	$vlans{$vlanid} = [$lan,[$nodeportA, $nodeportB]];
+	push(@{$nodevlans{$nodeA}},$vlanid);
+	printdb "  VLANS:\n";
+	printdb "    $vlanid-1 = $lan, \[$nodeportA $nodeportB\]\n";
+	$vlanid++;
 	
 	if (! defined($vlans{$lan})) {
 	    $vlans{$lan} = [$lan,[]];
 	}
 	$members = (@{$vlans{$lan}})[1];
 	push(@$members,$nodeportD);
+	printdb "    $lan = $lan, \[" . join(" ",@$members) . "\]\n"; 
 
-	$delays{$delayid++} = [$nodeB,$portB,$portD,$lan];
+	$delays{$delayid} = [$nodeB,$portB,$portD,$lan];
+	printdb "  Delays: $delayid = \[$nodeB,$portB,$portD,$lan\]\n";
+	$delayid++;
 
 	$virt = &find_vport($p2vmap{$nodeA},$lan);
-	$portmap{$p2vmap{$nodeA} . $virt} = $portA;
+	$portmap{"$p2vmap{$nodeA}:$virt"} = $portA;
+	printdb "  Portmap: $p2vmap{$nodeA}:$virt = $portA\n";
     } elsif (($lan) = ($plink =~ m|^linksimple/(.+)$|)) {
 	# nodeportA and nodeportB are the only two nodes in the
 	# virtual LAN and there are no delays.
+	printdb "Simple Link\n";
 	$vlans{$lan} = [$lan,[$nodeportA,$nodeportB]];
+	printdb "  VLANS: $lan = $lan, \[$nodeportA $nodeportB\]\n";
 	
 	push(@{$nodevlans{$nodeA}},$lan);
 	push(@{$nodevlans{$nodeB}},$lan);
 	
 	$virtA = &find_vport($p2vmap{$nodeA},$lan);
 	$virtB = &find_vport($p2vmap{$nodeB},$lan);
-	$portmap{$p2vmap{$nodeA} . $virtA} = $portA;
-	$portmap{$p2vmap{$nodeB} . $virtB} = $portB;
-    } elsif (($lan,$node) = ($plink =! m|^linklan/([^/]+)/(.+)$|)) {
+	$portmap{"$p2vmap{$nodeA}:$virtA"} = $portA;
+	$portmap{"$p2vmap{$nodeB}:$virtB"} = $portB;
+	printdb "  Portmap:\n";
+	printdb "    $p2vmap{$nodeA}:$virtA = $portA\n";
+	printdb "    $p2vmap{$nodeB}:$virtB = $portB\n";
+    } elsif (($lan,$node) = ($plink =~ m|^linklan/([^/]+)/(.+)$|)) {
 	# node may be the LAN multiple times.
 	# nodeportA is the node.
 	# nodeportB is the LAN
 	# No delays
+	printdb "LAN\n";
 	if (! defined($vlans{$lan})) {
 	    $vlans{$lan} = [$lan,[]];
 	}
 	$members = (@{$vlans{$lan}})[1];
 	push(@$members,$nodeportA);
+	printdb "  VLANS: $lan = $lan,\[" . join(" ",@$members) . "\]\n";
 
-	$virt = &find_vport{$p2vmap{$nodeA},$lan};
-	$portmap{$p2vmap{$nodeA} . $virt} = $portA;
+	$virt = &find_vport($p2vmap{$nodeA},$lan);
+	$portmap{"$p2vmap{$nodeA}:$virt"} = $portA;
+	printdb "  Portmap: $p2vmap{$nodeA}:$virt = $portA\n";
     }
     # Else delaysrc case, will be handled by one of the other cases.
 }
@@ -474,7 +573,27 @@ foreach $plink (keys(%plinks)) {
 # clear the previous portmap out of the DB, display a warning, and
 # skip as if there was no portmap.
 
+# keys_equal A B
+# Returns 1 if hashs A and B have the same keys.
+sub keys_equal {
+    my ($ARef,$BRef) = @_;
+    my @AKeys = sort keys(%$ARef);
+    my @BKeys = sort keys(%$BRef);
+    if ($#AKeys != $#BKeys) {
+	return 0;
+    }
+    my $i;
+    for ($i=0;$i<=$#AKeys;++$i) {
+	if ($AKeys[$i] ne $BKeys[$i]) {
+	    return 0;
+	}
+    }
+    return 1;
+};
 
+printdb "Considering Port Swapping\n";
+
+%prevportmap = ();
 $sth = $dbh->prepare("SELECT vnode,vport,pport from portmap" .
 		     " where pid = \"$pid\" and eid = \"$eid\"");
 $sth->execute;
@@ -484,11 +603,11 @@ while (($vnode,$vport,$pport) = $sth->fetchrow_array) {
 $sth->finish;
 
 # Compare portmaps
-if (keys(%prevportmap) == ()) {
+if (keys(%prevportmap) == 0) {
     $portswap = 0;
-} elsif (keys(%portmap) != keys(%prevportmap)) {
-    print stderr "WARNING: Portmap is database is incompatible with current portmap.\n";
-    print stderr "   Perhaps a previous version of the experiment did not get cleared?\n";
+} elsif (! &keys_equal(\%portmap,\%prevportmap)){
+    print STDERR "WARNING: Portmap is database is incompatible with current portmap.\n";
+    print STDERR "   Perhaps a previous version of the experiment did not get cleared?\n";
     $portswap = 0;
 } else {
     $portswap = 1;
@@ -503,49 +622,57 @@ if ($portswap) {
 #
 # Nothing fancy.
 ######################################################################
+printdb "Uploading to DB\n";
 foreach $vlan (keys(%vlans)) {
     ($lan,$members) = @{$vlans{$vlan}};
-    $sth->do("insert into vlans (id,pid,eid,virtual,members) values" .
-	     " (0,\"$pid\",\"$eid\",\"$lan\",\"".
+    $dbh->do("insert into vlans (id,pid,eid,virtual,members) values" .
+	     " (0,\"$pid\",\"$eid\",\"$lan\",\"" .
 	     join(" ",@$members) . "\")") || do {
-		 print stderr "Could not update vlans table.  Giving up.\n";
+		 print STDERR "Could not update vlans table.  Giving up.\n";
 		 exit(1);
 	     };
 }
-foreach delay (keys(%delays)) {
+foreach $delay (keys(%delays)) {
     ($pnode,$int0,$int1,$virtlan) = @{$delays{$delay}};
     ($delay,$bandwidth,$lossrate) = @{$delayinfo{$virtlan}};
-    $sth->do("insert into delays" .
-	     " (node_id,iface0,iface11,delay,bandwidth,lossrate)" .
-	     " values (\"$pnode\",\"$int0\",\"$int1\"," .
-	     "$delay,$bandwidth,$lossrate)") || do {
-		 print stderr "Could not update delays table.  Giving up.\n";
+    # XXX - card0/card1 will eventually vanish.  This is just a temporary
+    # hack for things to work at the same time as the previous generation
+    # of software.
+    ($card0) = ($int0 =~ /^eth(\d+)$/);
+    ($card1) = ($int1 =~ /^eth(\d+)$/);
+    $dbh->do("insert into delays" .
+	     " (pid,eid,node_id,iface0,iface1,card0,card1" .
+	     ",delay,bandwidth,lossrate)" .
+	     " values (\"$pid\",\"$eid\",\"$pnode\",\"$int0\",\"$int1\"".
+	     ",$card0,$card1,$delay,$bandwidth,$lossrate)") || do {
+		 print STDERR "Could not update delays table.  Giving up.\n";
 		 exit(1);
 	     };
 }
-$sth->do("delete from portmap where pid=\"$pid\" and eid=\"$eid\"") || do {
-    print stderr "Could not clear portmap table.  Giving up.\n";
+$dbh->do("delete from portmap where pid=\"$pid\" and eid=\"$eid\"") || do {
+    print STDERR "Could not clear portmap table.  Giving up.\n";
     exit(1);
 };
-foreach vnodeport (keys(%portmap)) {
+foreach $vnodeport (keys(%portmap)) {
     ($vnode,$vport) = split(":",$vnodeport);
-    $sth->do("insert into portmap (pid,eid,vnode,vport,pport)" .
+    $pport = $portmap{$vnodeport};
+    $dbh->do("insert into portmap (pid,eid,vnode,vport,pport)" .
 	     " values (\"$pid\",\"$eid\",\"$vnode\"" .
-	     ",\"$vport\",\"$pport\"") || do {
-		 print stderr "Could not update portmap table.  Giving up.\n";
+	     ",\"$vport\",\"$pport\")") || do {
+		 print STDERR "Could not update portmap table.  Giving up.\n";
 		 exit(1);
 	     };
-    $sth->do("update interfaces set IP=\"$ips{$vnodeport}\" where" .
+    $dbh->do("update interfaces set IP=\"$ips{$vnodeport}\" where" .
 	     " node_id = \"$v2pmap{$vnode}\" and iface = \"$pport\"") || do {
-		 print stderr "Could not update interfaces table.\n" .
+		 print STDERR "Could not update interfaces table.\n" .
 		     "  Giving up.\n";
 		 exit(1);
 	     }
 }
-foreach pnode (keys($p2vmap)) {
-    $sth->do("update reserved set vname=\"$p2vmap{$pnode}\"" .
+foreach $pnode (keys(%p2vmap)) {
+    $dbh->do("update reserved set vname=\"$p2vmap{$pnode}\"" .
 	     " where node_id = \"$pnode\"") || do {
-		 print stderr "Could not update reserved table. Giving up.\n";
+		 print STDERR "Could not update reserved table. Giving up.\n";
 		 exit(1);
 	     }
 }

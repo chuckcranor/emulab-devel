@@ -40,10 +40,12 @@ while (($type,$bw) = $sth->fetchrow_array) {
 }
 $sth->finish;
 
+print "node cisco switch:1\n";
+
 foreach $node (keys(%nodes)) {
     if ($node =~ /^sh/) {
 	print "node $node shark-shelf:1\n";
-	print "link $node:$node/0 cisco 100 1\n";
+	print "link link-$node $node:$node/0 cisco 100 1\n";
     } else {
 	$sth = $dbh->prepare("SELECT iface,interface_type from interfaces" .
 			     " where node_id = \"$node\"");
@@ -56,7 +58,7 @@ foreach $node (keys(%nodes)) {
 	print "$text\n";
 	while (($interface,$itype) = $sth->fetchrow_array) {
 	    if ($interface ne $control_net) {
-		print "link $node:$node/$interface cisco $itypes{$itype} 1\n";
+		print "link link-$node $node:$node/$interface cisco $itypes{$itype} 1\n";
 	    }
 	}
 	$sth->finish;

@@ -9,7 +9,10 @@
 # When this script succesfully completes the testbed will be in
 # a state for tbswapin or tbend to be run.
 
+use DBI;
+
 # Set up paths
+$TBDB = "@TBDBNAME@";
 $TBROOT = "@prefix@";
 $TBSETUPLIB = "$TBROOT/lib";
 $ENV{'PATH'} = "/usr/bin:$TBROOT/libexec:$TBROOT/libexec/ns2ir" . 
@@ -20,22 +23,27 @@ push(@INC,$TBSETUPLIB);
 $| = 1; 
 
 require libtbsetup;
-require 'ctime.pl';
 
-if ($#ARGV < 1 || $#ARGV > 2 ||
-    ($#ARGV == 2 && $ARGV[0] ne "-nologfile")) {
-    print STDERR "Syntax: $0 [-nologfile] pid eid ns_file\n";
+$dolog = 1;
+$force = 0;
+while ($#ARGV > 1) {
+    $arg = shift;
+    if ($arg eq "-nologfile") {
+	$dolog = 0;
+    } elsif ($arg eq "-force") {
+	$force = 1;
+    } else {
+	print STDERR "Syntax: $0 [-nologfile] [-force] pid eid\n";
+	exit(1);
+    }
+}
+if ($#ARGV < 1) {
+    print STDERR "Syntax: $0 [-nologfile] [-force] pid eid\n";
     exit(1);
 }
-
-if ($#ARGV == 2) {
-    shift;
-    $dolog = 0;
-}
-else {
-    $dolog = 1;
-}
 ($pid,$eid) = @ARGV;
+
+$dbh = &tbs_initdbi($TBDB);
 
 $logfile = "$pid-$eid.log";
 
@@ -44,37 +52,44 @@ if ($dolog) {
     &tbs_out("Log:    $logfile\n");
 }
 
-&tbs_out("Beginning swap out for $pid-$eid ($nsfile). " 
-	 . &ctime(time) . "\n");
+&tbs_out("Beginning swap out for $pid-$eid. " 	 . &ctime(time) . "\n");
 
 
 &tbs_out("Checking sanity.\n");
 $sth = $dbh->prepare("SELECT state from experiments where pid = \"$pid\"" .
 		     " and eid = \"$eid\"");
 $sth->execute();
-if (! ($state) = $sth->fetchrow_array()) {
+if (! (($state) = $sth->fetchrow_array())) {
     &tbs_out("No entry in experiments table.  Insane.\n");
     exit(1);
 }
-if ($state eq "dormant") {
-    &tbs_out("Experiment already swapped.  Try swapping in first.\n");
-    exit(1);
+if ($force == 0) {
+    if ($state eq "dormant") {
+	&tbs_out("Experiment already swapped.  Try swapping in first or use -force.\n");
+	exit(1);
+    } elsif ($state ne "running") {
+	&tbs_out("Experiment in strange state.  Try pre running or use -force.\n");
+	exit(1);
+    }
 } elsif ($state ne "running") {
-    &tbs_out("Experiment in strange state.  Try pre running.\n");
-    exit(1);
+    &tbs_out("WARNING: Ignoring experimental state of $state.\n");
 }
 
-$sth = $dbh->query("SELECT node_id from reserved where pid = \"$pid\"" . 
+$errors = 0;
+
+$sth = $dbh->prepare("SELECT node_id from reserved where pid = \"$pid\"" . 
 		   " and eid = \"$eid\"");
 $sth->execute();
 @nodes = ();
 while (($node) = $sth->fetchrow_array()) {
     push(@nodes,$node);
 }
-&tbs_out("Resetting VLANs\n");
-if (@nodes && &tbs_exec("resetvlans " . join(" ",@nodes))) {
-    &tbs_out("Failed to reset VLANs\n");
-    exit(1);
+if ($#nodes != -1) {
+    &tbs_out("Resetting VLANs\n");
+    if (&tbs_exec("resetvlans " . join(" ",@nodes))) {
+	&tbs_out("Failed to reset VLANs\n");
+	$errors = 1;
+    }
 }
 
 
@@ -86,16 +101,16 @@ if (&tbs_exec("savevlans")) {
 &tbs_out("Freeing resources\n");
 if (&tbs_exec("nfree $pid $eid")) {
     &tbs_out("Failed to free resources.\n");
-    exit(1);
+    $errors=1;
 }
 
 &tbs_out("Resetting up mountpoints\n");
 if (&tbs_exec("exports_setup")) {
     &tbs_out("Failed to setup mountpoints.\n");
-    exit(1);
+    $errors=1;
 }
 
-&tbs_out("Reetting up named maps.\n");
+&tbs_out("Resetting up named maps.\n");
 if (&tbs_exec("named_setup")) {
     &tbs_out("Failed to add node names to named map.\n");
     #
@@ -103,7 +118,27 @@ if (&tbs_exec("named_setup")) {
     # 
 }
 
+&tbs_out("Resetting DB.\n");
+
+if (! $dbh->do("DELETE from delays where pid = \"$pid\" and eid=\"$eid\"")) {
+    &tbs_out("Could not clear delays table.\n");
+    $errors = 1;
+}
+if (! $dbh->do("DELETE from vlans where pid = \"$pid\" and eid = \"$eid\"")) {
+    &tbs_out("Could not clear vlans table.\n");
+    $errors = 1;
+}
+
+if ($errors == 0) {
+    &tbs_out("Marking as dormant.\n");
+    if (! $dbh->do("UPDATE experiments set state=\"dormant\"" .
+		   " where pid=\"$pid\" and eid=\"$eid\"")) {
+	&tbs_out("Could not set experiment state.\n");
+	$errors = 1;
+    }
+}
+
 &tbs_out("Swap out finished - " . &ctime(time) . "\n");
 
-0;
+exit $errors;
 
