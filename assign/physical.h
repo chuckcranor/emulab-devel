@@ -13,7 +13,7 @@ typedef property<vertex_data_t,tb_switch*> SNodeProperty;
 typedef property<edge_data_t,tb_slink*,
   property<edge_weight_t,long> > SEdgeProperty;
 
-typedef adjacency_list<listS,vecS,undirectedS,
+typedef adjacency_list<listS,listS,undirectedS,
   PNodeProperty,PEdgeProperty> tb_pgraph;
 typedef adjacency_list<listS,vecS,undirectedS,
   SNodeProperty,SEdgeProperty> tb_sgraph;
@@ -36,11 +36,11 @@ typedef graph_traits<tb_sgraph>::vertex_iterator svertex_iterator;
 typedef graph_traits<tb_sgraph>::edge_iterator sedge_iterator;
 typedef graph_traits<tb_sgraph>::out_edge_iterator soedge_iterator;
 
-typedef hash_set<pvertex> pvertex_set;
+typedef hash_set<pvertex,hashptr<void*> > pvertex_set;
 typedef hash_map<tb_pnode*,pvertex,hashptr<tb_pnode*> > pnode_pvertex_map;
 typedef hash_map<crope,pvertex> name_pvertex_map;
 typedef vector<svertex> switch_pred_map;
-typedef hash_map<svertex,switch_pred_map*> switch_pred_map_map;
+typedef hash_map<svertex,switch_pred_map*>switch_pred_map_map;
 typedef list<pedge> pedge_path;
 typedef list<pvertex> pvertex_list;
 
@@ -121,14 +121,31 @@ public:
   friend ostream &operator<<(ostream &o, const tb_plink& link)
   {
     o << "tb_plink: " << link.name << " (" << &link << ")" << endl;
-    o << "  bandwidth=" << link.bandwidth << " bw_used=" << link.bw_used <<
+    o << "  type: ";
+    switch (link.type) {
+    case tb_plink::PLINK_NORMAL:
+      o << "normal" << endl;
+      break;
+    case tb_plink::PLINK_INTERSWITCH:
+      o << "interswitch" << endl;
+      break;
+    case tb_plink::PLINK_LAN:
+      o << "lan" << endl;
+      break;
+    }
+    o << "  bw_used=" << link.bw_used <<
       " srcmac=" << link.srcmac << " dstmac=" << link.dstmac <<
       " emulated=" << link.emulated << " nonemulated=" <<
       link.nonemulated << endl;
+    o << link.delay_info;
     return o;
   }
-  
-  int bandwidth;		// maximum bandwidth of this link
+
+  typedef enum {PLINK_NORMAL,PLINK_INTERSWITCH,PLINK_LAN} plinkType;
+
+  plinkType type;
+  tb_delay_info delay_info;	// the delay characteristics of this link
+				// this has bw_used substracted from it's bandwidth
   int bw_used;			// how much is used
   crope srcmac,dstmac;		// source and destination MAC addresses.
   crope name;			// The name
@@ -150,8 +167,6 @@ public:
   pedge mate;			// match in PG
 };
 
-
 int parse_ptop(tb_pgraph &PG, tb_sgraph &SG, istream& i);
-void dump_ptop(ostream &o);
 
 #endif

@@ -37,6 +37,5 @@ Things to do to assign.
 
 5. robust parser or top and ptop
 
-   The parsing code is extremely intolerant of input errors (it often
-   crashes).
+   DONE June, 2002 - calfeld
 

@@ -26,7 +26,7 @@ switch.
 
 OR
 
-link <link> <src>[:<smac>] <dst>[:<dmac>] <bw> <numb>
+link <link> <src>[:<smac>] <dst>[:<dmac>] <bw> <delay> <loss> [<num>]
 
 <link> is a string identifier for the link.
 
@@ -36,11 +36,12 @@ link <link> <src>[:<smac>] <dst>[:<dmac>] <bw> <numb>
 	other string to distinguish the ports of the nodes.  If committed
 	the string "(null)" is used instead.
 
-<bw> is the bandwidth, an integer.
+<bw>,<delay>,<loss> are the characteristics of the link.
 
 <num> is the number of links between those two pairs.
 
 Note: <smac> and <dmac> should not be present on switch<->switch links.
+
 
 top format
 ----------
@@ -61,7 +62,14 @@ node <node> <type> [<desires>]
 
 OR
 
-link <src> <dst> <bw> [emulated]
+link <link> <src> <dst> <bw>[:<underbw>:<overbw>] <delay>[:<underdelay>:<overdelay>] <loss>[:<underloss>:<overloss>] [nodelay] [emulated]
+
+<bw>,<delay>,<loss> are the characteristics of the link.  The optional
+delta arguments describe how far off the assignment can be (under and
+over).  A vaule of 0 is default, and a vaule of -1 indicates that best
+effort is fine.
+
+nodelay if present indicates that this link should not be delayed.
 
 OR
 

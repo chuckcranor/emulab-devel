@@ -21,6 +21,7 @@
 using namespace boost;
 
 #include "common.h"
+#include "delay.h"
 #include "physical.h"
 #include "virtual.h"
 #include "pclass.h"
@@ -47,7 +48,8 @@ typedef pair<pvertex,int> link_info; // dst, bw
 
 struct hashlinkinfo {
   size_t operator()(link_info const &A) const {
-    return 10*A.first+A.second;
+    hashptr<void *> ptrhash;
+    return ptrhash(A.first)/2+A.second;
   }
 };
 
@@ -95,14 +97,14 @@ int pclass_equiv(tb_pgraph &PG, tb_pnode *a,tb_pnode *b)
     pvertex dst = target(*eit,PG);
     if (dst == bn)
       dst = source(*eit,PG);
-    b_links.insert(link_info(dst,get(pedge_pmap,*eit)->bandwidth));
+    b_links.insert(link_info(dst,get(pedge_pmap,*eit)->delay_info.bandwidth));
   }
   tie(eit,eendit) = out_edges(an,PG);
   for (;eit != eendit;++eit) {
     pvertex dst = target(*eit,PG);
     if (dst == an)
       dst = source(*eit,PG);
-    int bw = get(pedge_pmap,*eit)->bandwidth;
+    int bw = get(pedge_pmap,*eit)->delay_info.bandwidth;
     link_info tomatch = link_info(dst,bw);
     link_set::iterator found = b_links.find(tomatch);
     if (found == b_links.end()) return 0;

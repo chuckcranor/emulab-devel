@@ -22,6 +22,7 @@ using namespace boost;
 
 #include "common.h"
 #include "vclass.h"
+#include "delay.h"
 #include "physical.h"
 #include "virtual.h"
 

@@ -24,7 +24,7 @@ struct config_param {
 /* types */
 #define CONFIG_INT	0
 #define CONFIG_FLOAT	1
-
+  
 void parse_options(char **argv, struct config_param options[], int nopt);
 int config_parse(char **args, struct config_param cparams[], int nparams);
 void dump_options(const char *str, struct config_param cparams[], int nparams);

@@ -10,7 +10,7 @@ typedef property<vertex_data_t,tb_vnode*> VNodeProperty;
 typedef property<edge_data_t,tb_vlink*> VEdgeProperty;
 
 
-typedef adjacency_list<listS,vecS,undirectedS,
+typedef adjacency_list<listS,listS,undirectedS,
   VNodeProperty,VEdgeProperty> tb_vgraph;
 
 typedef property_map<tb_vgraph,vertex_data_t>::type tb_vgraph_vertex_pmap;
@@ -27,10 +27,11 @@ class tb_link_info {
 public:
   typedef enum {LINK_UNKNOWN, LINK_DIRECT,
 		LINK_INTRASWITCH, LINK_INTERSWITCH,
-		LINK_TRIVIAL} linkType;
+		LINK_TRIVIAL, LINK_DELAYED} linkType;
   linkType type;
   pedge_path plinks;		// the path of pedges
   pvertex_list switches;	// what switches were used
+  tb_delay_node *delay;		// what delay node is being used
 
   friend ostream &operator<<(ostream &o, const tb_link_info& link)
   {
@@ -41,15 +42,17 @@ public:
     case LINK_INTRASWITCH : o << "LINK_INTRASWITCH"; break;
     case LINK_INTERSWITCH : o << "LINK_INTERSWITCH"; break;
     case LINK_TRIVIAL : o << "LINK_TRIVIAL"; break;
+    case LINK_DELAYED : o << "LINK_DELAYED"; break;
     }
-    o << endl;
-    o << "  Path: ";
+    if (link.type == LINK_DELAYED) {
+      o << *(link.delay);
+    }
+    o << " Path: ";
     for (pedge_path::const_iterator it=link.plinks.begin();
 	 it!=link.plinks.end();it++) {
       o << *it << " ";
     }
-    o << endl;
-    o << "  Switches: ";
+    o << " Switches: ";
     for (pvertex_list::const_iterator it=link.switches.begin();
 	 it!=link.switches.end();it++) {
       o << *it << " ";
@@ -96,27 +99,33 @@ public:
   friend ostream &operator<<(ostream &o, const tb_vlink& link)
   {
     o << "tb_vnode: " << link.name << " (" << &link << ")" << endl;
-    o << "  bandwidth=" << link.bandwidth << " emulated=" <<
-      link.emulated << " no_connection=" << link.no_connection << endl;
+    o << " emulated=" << link.emulated << " allow_delayed=" <<
+      link.allow_delayed << " no_connection=" << link.no_connection << endl;
+    o << "delay_info: " << link.delay_info;
+    o << "delay_under: " << link.delay_under;
+    o << "delay_over: " << link.delay_over;
     o << link.link_info;
     return o;
   }
-  
+
+  tb_delay_info delay_info;	// the delay characteristics of the link
+  tb_delay_info delay_under;	// how much under we can go
+  tb_delay_info delay_over;	// how far over we can go
   tb_link_info link_info;	// what it's mapped to
-  int bandwidth;		// how much bandwidth this uses
   crope name;			// name
   bool emulated;		// is this an emulated link, i.e. can it
 				// share a plink withouter emulated vlinks
   bool no_connection;		// true if this link should be satisfied
 				// but isn't.
+  bool allow_delayed;		// can this vlink by a delayed link
 };
-
 
 extern tb_vgraph_vertex_pmap vvertex_pmap;
 extern tb_vgraph_edge_pmap vedge_pmap;
 
 typedef hash_map<crope,vvertex> name_vvertex_map;
 typedef pair<vvertex,int> vvertex_int_pair;
+typedef vector<vvertex> vvertex_vector;
 
 struct ltnodepq {
   bool operator()(const vvertex_int_pair &A,const vvertex_int_pair &B) const {
@@ -126,9 +135,9 @@ struct ltnodepq {
 
 typedef priority_queue<vvertex_int_pair,
   vector<vvertex_int_pair>, ltnodepq> vvertex_int_priority_queue;
+typedef list<vvertex> vvertex_list;
 
 int parse_top(tb_vgraph &G, istream& i);
-void dump_top(ostream &o);
 
 #endif
 

@@ -16,6 +16,7 @@
 #include <boost/graph/graph_traits.hpp>
 #include <boost/graph/adjacency_list.hpp>
 #include <boost/graph/dijkstra_shortest_paths.hpp>
+#include <boost/graph/graphviz.hpp>
 
 #include <fstream.h>
 #include <iostream.h>
@@ -29,6 +30,7 @@
 using namespace boost;
 
 #include "common.h"
+#include "delay.h"
 #include "physical.h"
 #include "virtual.h"
 #include "vclass.h"
@@ -67,6 +69,10 @@ name_slist ptypes;
 // Map of virtual node name to its vertex descriptor.
 name_vvertex_map vname2vertex;
 
+// This is a vector of all the nodes in the top file.  It's used
+// to randomly choose nodes.
+vvertex_vector virtual_nodes;
+
 // Map of virtual node name to the physical node name it's fixed too.
 // The domain is the set of all fixed virtual nodes and the range is
 // the set of all fixed physical nodes.
@@ -99,13 +105,14 @@ switch_pred_map_map switch_preds;
 // A hash function for graph edges.
 struct hashedge {
   size_t operator()(vedge const &A) const {
-    return (size_t) (10000*target(A,VG)+source(A,VG));
+    hashptr<void *> ptrhash;
+    return ptrhash(target(A,VG))/2+ptrhash(source(A,VG))/2;
   }
 };
 
-typedef hash_map<vvertex,pvertex> node_map;
-typedef hash_map<vvertex,bool> assigned_map;
-typedef hash_map<pvertex,crope> type_map;
+typedef hash_map<vvertex,pvertex,hashptr<void *> > node_map;
+typedef hash_map<vvertex,bool,hashptr<void *> > assigned_map;
+typedef hash_map<pvertex,crope,hashptr<void *> > type_map;
 typedef hash_map<vedge,tb_link_info,hashedge> link_map;
 
 // A scaling constant for the temperature in determining whether to
@@ -122,8 +129,6 @@ int iters;
 node_map absassignment;		// assignment field of vnode
 assigned_map absassigned;	// assigned field of vnode
 type_map abstypes;		// type field of vnode
-link_map abslinks;		// link_info field of vnode
-violated_info absvinfo;		// vinfo
 double absbest;			// score
 int absbestviolated;		// violated
 int iters_to_best = 0;		// iters
@@ -227,8 +232,10 @@ void calculate_switch_MST()
   tie(seit,seendit) = edges(SG);
   for (;seit != seendit;seit++) {
     tb_slink *slink = get(sedge_pmap,*seit);
+    // XXX should we make this more complicated depending on
+    // latency/loss as well?
     put(sweight_pmap,*seit,
-	100000000-get(pedge_pmap,slink->mate)->bandwidth);
+	100000000-get(pedge_pmap,slink->mate)->delay_info.bandwidth);
   }
   svertex_iterator svit,svendit;
   tie(svit,svendit) = vertices(SG);
@@ -255,7 +262,7 @@ void read_virtual_topology(char *filename)
   ifstream topfile;
   topfile.open(filename);
   cout << "Virtual Graph: " << parse_top(VG,topfile) << endl;
- 
+
 #ifdef DUMP_GRAPH
   {
     cout << "Virtual Graph:" << endl;
@@ -281,6 +288,7 @@ void read_virtual_topology(char *filename)
 #endif
 }
 
+/* When this is finished the state will reflect the best solution found. */
 void anneal()
 {
   cout << "Annealing." << endl;
@@ -329,6 +337,11 @@ void anneal()
       exit(1);
     }
     vvertex vv = vname2vertex[(*fixed_it).first];
+    if (pname2vertex.find((*fixed_it).second) == pname2vertex.end()) {
+      cerr << "Fixed node: " << (*fixed_it).second <<
+	" not available." << endl;
+      exit(1);
+    }
     pvertex pv = pname2vertex[(*fixed_it).second];
     tb_vnode *vn = get(vvertex_pmap,vv);
     tb_pnode *pn = get(pvertex_pmap,pv);
@@ -336,8 +349,7 @@ void anneal()
       cerr << "Can not have fixed nodes be in a vclass!.\n";
       exit(1);
     }
-    int old_violated = violated;
-    if ((add_node(vv,pv) == 1) || (violated >= old_violated)) {
+    if ((add_node(vv,pv,false) == 1) || (violated > 0)) {
       cerr << "Fixed node: Could not map " << vn->name <<
 	" to " << pn->name << endl;
       exit(1);
@@ -365,12 +377,6 @@ void anneal()
     if (vn->assigned) {
       assert(vn->fixed);
       absassignment[*vit] = vn->assignment;
-      absvinfo = vinfo;
-      voedge_iterator eit,eeit;
-      tie(eit,eeit) = out_edges(*vit,VG);
-      for (;eit != eeit;++eit) {
-	abslinks[*eit] = get(vedge_pmap,*eit)->link_info;
-      }
       abstypes[*vit] = vn->type;
     } else {
       unassigned_nodes.push(vvertex_int_pair(*vit,std::random()));
@@ -402,15 +408,16 @@ void anneal()
       pvertex newpos;
       trans++;
       iters++;
-      
+
       if (! unassigned_nodes.empty()) {
 	vv = unassigned_nodes.top().first;
 	unassigned_nodes.pop();
       } else {
-	vv = std::random()%nnodes;
-	while (get(vvertex_pmap,vv)->fixed) {
-	  vv = std::random()%nnodes;
+	int choice = std::random()%nnodes;
+	while (get(vvertex_pmap,virtual_nodes[choice])->fixed) {
+	  choice = std::random()%nnodes;
 	}
+	vv = virtual_nodes[choice];
       }
       
       vn = get(vvertex_pmap,vv);
@@ -428,55 +435,61 @@ void anneal()
 	     << vn->type << " dominant = " << vn->vclass->dominant << endl;
 #endif
       }
-      tt_entry tt = type_table[vn->type];
-      int num_types = tt.first;
-      pclass_vector *acceptable_types = tt.second;
-      
-      // Loop will break eventually
-      tb_pnode *newpnode;
-      int i = std::random()%num_types;
-      int first = i;
-      bool found_pclass = true;
-      for (;;) {
-	i = (i+1)%num_types;
-	newpnode = (*acceptable_types)[i]->members[vn->type]->front();
+      if (vn->type.compare("lan") == 0) {
+	// LAN node
+	pvertex lanv = make_lan_node(vv);
+	if (add_node(vv,lanv,false) != 0) {
+	  delete_lan_node(lanv);
+	}
+	if (! vn->assigned) {
+	  unassigned_nodes.push(vvertex_int_pair(vv,std::random()));
+	  continue;
+	}
+      } else {
+	tt_entry tt = type_table[vn->type];
+	int num_types = tt.first;
+	pclass_vector *acceptable_types = tt.second;
+	
+	// Loop will break eventually
+	tb_pnode *newpnode;
+	int i = std::random()%num_types;
+	int first = i;
+	bool found_pclass = true;
+	for (;;) {
+	  i = (i+1)%num_types;
+	  newpnode = (*acceptable_types)[i]->members[vn->type]->front();
 #ifdef PCLASS_DEBUG
-	cerr << "Found pclass: " <<
-	  (*acceptable_types)[i]->name << " and node " <<
-	  (newpnode == NULL ? "NULL" : newpnode->name) << "\n";
+	  cerr << "Found pclass: " <<
+	    (*acceptable_types)[i]->name << " and node " <<
+	    (newpnode == NULL ? "NULL" : newpnode->name) << "\n";
 #endif	
-	if (newpnode != NULL) {
-	  newpos = pnode2vertex[newpnode];
-	  if (add_node(vv,newpos) == 0) {
-	    if (vinfo.no_connection == 0) {
-	      // HACK: We do this to avoid searching areas with
-	      // invalid connections.  Empircally this results in
-	      // significantly better performance in most casers.
+	  if (newpnode != NULL) {
+	    newpos = pnode2vertex[newpnode];
+	    if (add_node(vv,newpos,false) == 0) {
 	      break; // main exit condition
-	    } else {
-	      remove_node(vv);
 	    }
 	  }
-	}
-	
-	if (i == first) {
-	  // no available nodes
-	  // need to free up a node.
-	  vvertex toremove = std::random()%nnodes;
-	  while (get(vvertex_pmap,toremove)->fixed ||
-		 (! get(vvertex_pmap,toremove)->assigned)) {
-	    toremove = std::random()%nnodes;
+	  
+	  if (i == first) {
+	    // no available nodes
+	    // need to free up a node.
+	    int toremove = std::random()%nnodes;
+	    while (get(vvertex_pmap,virtual_nodes[toremove])->fixed ||
+		   (! get(vvertex_pmap,virtual_nodes[toremove])->assigned)) {
+	      toremove = std::random()%nnodes;
+	    }
+	    remove_node(virtual_nodes[toremove]);
+	    unassigned_nodes.push(vvertex_int_pair(virtual_nodes[toremove],
+						   std::random()));
+	    found_pclass=false;
+	    break;
 	  }
-	  remove_node(toremove);
-	  unassigned_nodes.push(vvertex_int_pair(toremove,std::random()));
-	  found_pclass=false;
-	  break;
 	}
-      }
       
-      if (! found_pclass) {
-	unassigned_nodes.push(vvertex_int_pair(vv,std::random()));
-	continue;
+	if (! found_pclass) {
+	  unassigned_nodes.push(vvertex_int_pair(vv,std::random()));
+	  continue;
+	}
       }
       
       newscore = get_score();
@@ -497,12 +510,6 @@ void anneal()
 	  tie(vit,veit) = vertices(VG);
 	  for (;vit!=veit;++vit) {
 	    absassignment[*vit] = get(vvertex_pmap,*vit)->assignment;
-	    absvinfo = vinfo;
-	    voedge_iterator eit,eeit;
-	    tie(eit,eeit) = out_edges(*vit,VG);
-	    for (;eit != eeit;++eit) {
-	      abslinks[*eit] = get(vedge_pmap,*eit)->link_info;
-	    }
 	    absassigned[*vit] = get(vvertex_pmap,*vit)->assigned;
 	    abstypes[*vit] = get(vvertex_pmap,*vit)->type;
 	  }
@@ -519,11 +526,45 @@ void anneal()
 	// Reject change
 	remove_node(vv);
 	if (oldassigned) {
-	  add_node(vv,oldpos);
+	  if (vn->type.compare("lan") == 0) {
+	    oldpos = make_lan_node(vv);
+	  }
+	  add_node(vv,oldpos,false);
 	}
       }
     }
     temp *= temp_rate;
+
+    // Revert to best found so far - do link/lan migration as well
+#ifdef SCORE_DEBUG
+    cerr << "Reverting to best known solution." << endl;
+#endif
+    vvertex_list lan_nodes;
+    vvertex_iterator vvertex_it,end_vvertex_it;
+    tie(vvertex_it,end_vvertex_it) = vertices(VG);
+    for (;vvertex_it!=end_vvertex_it;++vvertex_it) {
+      tb_vnode *vnode = get(vvertex_pmap,*vvertex_it);
+      if (vnode->fixed) continue;
+      if (vnode->assigned) {
+	remove_node(*vvertex_it);
+      }
+      if (absassigned[*vvertex_it]) {
+	if (vnode->type.compare("lan") == 0) {
+	  lan_nodes.push_front(*vvertex_it);
+	} else {
+	  if (vnode->vclass != NULL) {
+	    vnode->type = abstypes[*vvertex_it];
+	  }
+	  add_node(*vvertex_it,absassignment[*vvertex_it],true);
+	}
+      }
+    }
+    while (lan_nodes.size() > 0) {
+      vvertex lanv = lan_nodes.front();
+      lan_nodes.pop_front();
+      pvertex lanpv = make_lan_node(lanv);
+      add_node(lanv,lanpv,true);
+    }
   }
  DONE:
   cout << "Done" << endl;
@@ -538,11 +579,11 @@ void print_solution()
   tie(vit,veit) = vertices(VG);
   for (;vit != veit;++vit) {
     vn = get(vvertex_pmap,*vit);
-    if (! absassigned[*vit]) {
+    if (! vn->assigned) {
       cout << "unassigned: " << vn->name << endl;
     } else {
       cout << vn->name << " "
-	   << get(pvertex_pmap,absassignment[*vit])->name << endl;
+	   << get(pvertex_pmap,vn->assignment)->name << endl;
     }
   }
   cout << "End Nodes" << endl;
@@ -552,27 +593,27 @@ void print_solution()
   for (;eit!=eendit;++eit) {
     tb_vlink *vlink = get(vedge_pmap,*eit);
     cout << vlink->name;
-    if (abslinks[*eit].type == tb_link_info::LINK_DIRECT) {
-      tb_plink *p = get(pedge_pmap,abslinks[*eit].plinks.front());
+    if (vlink->link_info.type == tb_link_info::LINK_DIRECT) {
+      tb_plink *p = get(pedge_pmap,vlink->link_info.plinks.front());
       cout << " direct " << p->name << " (" <<
 	p->srcmac << "," << p->dstmac << ")" << endl;
-    } else if (abslinks[*eit].type == tb_link_info::LINK_INTRASWITCH) {
-      tb_plink *p = get(pedge_pmap,abslinks[*eit].plinks.front());
-      tb_plink *p2 = get(pedge_pmap,abslinks[*eit].plinks.back());
+    } else if (vlink->link_info.type == tb_link_info::LINK_INTRASWITCH) {
+      tb_plink *p = get(pedge_pmap,vlink->link_info.plinks.front());
+      tb_plink *p2 = get(pedge_pmap,vlink->link_info.plinks.back());
       cout << " intraswitch " << p->name << " (" <<
 	p->srcmac << "," << p->dstmac << ") " <<
 	p2->name << " (" << p2->srcmac << "," << p2->dstmac <<
 	")" << endl;
-    } else if (abslinks[*eit].type == tb_link_info::LINK_INTERSWITCH) {
+    } else if (vlink->link_info.type == tb_link_info::LINK_INTERSWITCH) {
       cout << " interswitch ";
-      for (pedge_path::iterator it=abslinks[*eit].plinks.begin();
-	   it != abslinks[*eit].plinks.end();++it) {
+      for (pedge_path::iterator it=vlink->link_info.plinks.begin();
+	   it != vlink->link_info.plinks.end();++it) {
 	tb_plink *p = get(pedge_pmap,*it);
 	cout << " " << p->name << " (" << p->srcmac << "," <<
 	  p->dstmac << ")";
       }
       cout << endl;
-    } else if (abslinks[*eit].type == tb_link_info::LINK_TRIVIAL) {
+    } else if (vlink->link_info.type == tb_link_info::LINK_TRIVIAL) {
       cout << " trivial" << endl;
     } else {
       cout << " Unknown link type" << endl;
@@ -582,31 +623,214 @@ void print_solution()
   cout << "End solution" << endl;
 }
 
-#ifndef ASSIGN_LIBRARY
+struct pvertex_writer {
+  void operator()(ostream &out,const pvertex &p) const {
+    tb_pnode *pnode = get(pvertex_pmap,p);
+    out << "[label=\"" << pnode->name << "\"";
+    crope style;
+    if (pnode->types.find("switch") != pnode->types.end()) {
+      out << " style=dashed";
+    } else if (pnode->types.find("lan") != pnode->types.end()) {
+      out << " style=invis";
+    }
+    out << "]";
+  }
+};
+
+struct vvertex_writer {
+  void operator()(ostream &out,const vvertex &v) const {
+    tb_vnode *vnode = get(vvertex_pmap,v);
+    out << "[label=\"" << vnode->name << " ";
+    if (vnode->vclass == NULL) {
+      out << vnode->type;
+    } else {
+      out << vnode->vclass->name;
+    }
+    out << "\"";
+    if (vnode->fixed) {
+      out << " style=dashed";
+    }
+    out << "]";
+  }
+};
+
+struct pedge_writer {
+  void operator()(ostream &out,const pedge &p) const {
+    out << "[";
+    tb_plink *plink = get(pedge_pmap,p);
+#ifdef VIZ_LINK_LABELS
+    out << "label=\"" << plink->name << " ";
+    out << plink->delay_info.bandwidth << "/" <<
+      plink->delay_info.delay << "/" << plink->delay_info.loss << "\"";
+#endif
+    if (plink->type == tb_plink::PLINK_INTERSWITCH) {
+      out << " style=dashed";
+    }
+    tb_pnode *src = get(pvertex_pmap,source(p,PG));
+    tb_pnode *dst = get(pvertex_pmap,target(p,PG));
+    if ((src->types.find("lan") != src->types.end()) ||
+	(dst->types.find("lan") != dst->types.end())) {
+      out << " style=invis";
+    }
+    out << "]";
+  }
+};
+
+struct sedge_writer {
+  void operator()(ostream &out,const sedge &s) const {
+    tb_slink *slink = get(sedge_pmap,s);
+    pedge_writer pwriter;
+    pwriter(out,slink->mate);
+  }
+};
+struct svertex_writer {
+  void operator()(ostream &out,const svertex &s) const {
+    tb_switch *snode = get(svertex_pmap,s);
+    pvertex_writer pwriter;
+    pwriter(out,snode->mate);
+  }
+};
+
+struct vedge_writer {
+  void operator()(ostream &out,const vedge &v) const {
+    tb_vlink *vlink = get(vedge_pmap,v);
+    out << "[";
+#ifdef VIZ_LINK_LABELS
+    out << "label=\"" << vlink->name << " ";
+    out << vlink->delay_info.bandwidth << "/" <<
+      vlink->delay_info.delay << "/" << vlink->delay_info.loss << "\"";
+#endif
+    if (vlink->emulated) {
+      out << "style=dashed";
+    }
+    out <<"]";
+  }
+};
+
+struct graph_writer {
+  void operator()(ostream &out) const {
+    out << "graph [size=\"1000,1000\" overlap=\"false\" sep=0.1]" << endl;
+  }
+};
+
+struct solution_edge_writer {
+  void operator()(ostream &out,const vedge &v) const {
+    tb_link_info &linfo = get(vedge_pmap,v)->link_info;
+    out << "[";
+    crope style;
+    crope color;
+    crope label;
+    switch (linfo.type) {
+    case tb_link_info::LINK_UNKNOWN: style="dotted";color="red"; break;
+    case tb_link_info::LINK_DIRECT: style="dashed";color="black"; break;
+    case tb_link_info::LINK_INTRASWITCH:
+      style="solid";color="black";
+      label=get(pvertex_pmap,linfo.switches.front())->name;
+      break;
+    case tb_link_info::LINK_INTERSWITCH:
+      style="solid";color="blue";
+      label="";
+      for (pvertex_list::const_iterator it=linfo.switches.begin();
+	   it!=linfo.switches.end();++it) {
+	label += get(pvertex_pmap,*it)->name;
+	label += " ";
+      }
+      break;
+    case tb_link_info::LINK_TRIVIAL: style="dashed";color="blue"; break;
+    }
+    out << "style=" << style << " color=" << color;
+    if (label.size() != 0) {
+      out << " label=\"" << label << "\"";
+    }
+    out << "]";
+  }
+};
+
+struct solution_vertex_writer {
+  void operator()(ostream &out,const vvertex &v) const {
+    tb_vnode *vnode = get(vvertex_pmap,v);
+    crope label=vnode->name;
+    crope color;
+    if (absassigned[v]) {
+      label += " ";
+      label += get(pvertex_pmap,absassignment[v])->name;
+      color = "black";
+    } else {
+      color = "red";
+    }
+    crope style;
+    if (vnode->fixed) {
+      style="dashed";
+    } else {
+      style="solid";
+    }
+    out << "[label=\"" << label << "\" color=" << color <<
+      " style=" << style << "]";
+  }
+};
+
+void print_help()
+{
+  cerr << "assign [options] ptopfile topfile [config params]" << endl;
+  cerr << "Options: " << endl;
+  cerr << "  -s <seed>   - Set the seed." << endl;
+  cerr << "  -v <viz>    - Produce graphviz files with given prefix." <<
+    endl;
+  exit(0);
+}
+  
 int main(int argc,char **argv)
 {
+  int seed = 0;
+  crope viz_prefix;
+  
+  // Handle command line
+  char ch;
+  while ((ch = getopt(argc,argv,"s:v:")) != -1) {
+    switch (ch) {
+    case 's':
+      if (sscanf(optarg,"%d",&seed) != 1) {
+	print_help();
+      }
+      break;
+    case 'v':
+      viz_prefix = optarg;
+      break;
+    default:
+      print_help();
+    }
+  }
+  argc -= optind;
+  argv += optind;
+  
+  if (seed == 0) {
+    if (getenv("ASSIGN_SEED") != NULL) {
+      sscanf(getenv("ASSIGN_SEED"),"%d",&seed);
+    } else {
+      seed = time(NULL)+getpid();
+    }
+  }
+
+  if (viz_prefix.size() == 0) {
+    if (getenv("ASSIGN_GRAPHVIZ") != NULL) {
+      viz_prefix = getenv("ASSIGN_GRAPHVIZ");
+    }
+  }
+
+  if (argc == 0) {
+    print_help();
+  }
+
   // Convert options to the common.h parameters.
   parse_options(argv, options, noptions);
 #ifdef SCORE_DEBUG
   dump_options("Configuration options:", options, noptions);
 #endif
 
-  // Get a seed
-  int seed;
-  if (getenv("ASSIGN_SEED") != NULL) {
-    sscanf(getenv("ASSIGN_SEED"),"%d",&seed);
-  } else {
-    seed = time(NULL)+getpid();
-  }
   cout << "seed = " << seed << endl;
   std::srandom(seed);
 
-  if (argc != 3) {
-    cerr << argv[0] << " ptopfile topfile" << endl;
-    exit(0);
-  }
-
-  read_physical_topology(argv[1]);
+  read_physical_topology(argv[0]);
   calculate_switch_MST();
   
   cout << "Generating physical equivalence classes:";
@@ -617,9 +841,27 @@ int main(int argc,char **argv)
   pclass_debug();
 #endif
 
-  read_virtual_topology(argv[2]);
+  read_virtual_topology(argv[1]);
 
+  // Output graphviz if necessary
+  if (viz_prefix.size() != 0) {
+    crope vviz = viz_prefix + "_virtual.viz";
+    crope pviz = viz_prefix + "_physical.viz";
+    crope sviz = viz_prefix + "_switch.viz";
+    ofstream vfile,pfile,sfile;
+    vfile.open(vviz.c_str());
+    write_graphviz(vfile,VG,vvertex_writer(),vedge_writer(),graph_writer());
+    vfile.close();
+    pfile.open(pviz.c_str());
+    write_graphviz(pfile,PG,pvertex_writer(),pedge_writer(),graph_writer());
+    pfile.close();
+    sfile.open(sviz.c_str());
+    write_graphviz(sfile,SG,svertex_writer(),sedge_writer(),graph_writer());
+    sfile.close();
+  }
+  
   cout << "Type preecheck." << endl;
+  ptypes.push_front("lan");
   // Type precheck
   bool ok=true;
   for (name_slist::iterator it=vtypes.begin();
@@ -636,23 +878,37 @@ int main(int argc,char **argv)
   timestart = used_time();
   anneal();
   timeend = used_time();
+
+  if ((score > absbest) || (violated > absbestviolated)) {
+    cerr << "Internal error: Invalid migration assumptions." << endl; 
+    cerr << "  Contact calfeld" << endl;
+  }
   
-  cout << "   BEST SCORE:  " << absbest << " in " << iters <<
+  cout << "   BEST SCORE:  " << score << " in " << iters <<
     " iters and " << timeend-timestart << " seconds" << endl;
-  cout << "With " << absbestviolated << " violations" << endl;
+  cout << "With " << violated << " violations" << endl;
   cout << "With " << accepts << " accepts of increases" << endl;
   cout << "Iters to find best score:  " << iters_to_best << endl;
-  cout << "Violations: " << absbestviolated << endl;
-  cout << "  unassigned: " << absvinfo.unassigned << endl;
-  cout << "  pnode_load: " << absvinfo.pnode_load << endl;
-  cout << "  no_connect: " << absvinfo.no_connection << endl;
-  cout << "  link_users: " << absvinfo.link_users << endl;
-  cout << "  bandwidth:  " << absvinfo.bandwidth << endl;
-  cout << "  desires:    " << absvinfo.desires << endl;
+  cout << "Violations: " << violated << endl;
+  cout << "  unassigned: " << vinfo.unassigned << endl;
+  cout << "  pnode_load: " << vinfo.pnode_load << endl;
+  cout << "  no_connect: " << vinfo.no_connection << endl;
+  cout << "  link_users: " << vinfo.link_users << endl;
+  cout << "  bandwidth:  " << vinfo.bandwidth << endl;
+  cout << "  desires:    " << vinfo.desires << endl;
 
   print_solution();
+
+  if (viz_prefix.size() != 0) {
+    crope aviz = viz_prefix + "_solution.viz";
+    ofstream afile;
+    afile.open(aviz.c_str());
+    write_graphviz(afile,VG,solution_vertex_writer(),
+		   solution_edge_writer(),graph_writer());
+    afile.close();
+  }
   
   return 0;
 }
-#endif
+
 

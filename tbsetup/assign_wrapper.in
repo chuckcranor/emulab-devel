@@ -452,9 +452,9 @@ foreach $lan (keys(%lans)) {
 	    print TOPFILE "node $delayname delay\n";
 	    $delaynodes++;
 	    print TOPFILE "link linksdelaysrc/$lan $node0 $delayname"
-		. " $bandwidth\n";
+		. " $bandwidth 0 0\n";
 	    print TOPFILE "link linksdelaydst/$lan $node1 $delayname"
-		. " $bandwidth\n";
+		. " $bandwidth 0 0\n";
 	    #
 	    # Ports are set to 100Mbs when a link gets a delay node.
 	    # This can override initialization above cause we could not
@@ -464,7 +464,7 @@ foreach $lan (keys(%lans)) {
 	    $portbw{$nodeport0} = $S100Mbs;	    
 	    $portbw{$nodeport1} = $S100Mbs;	    
 	} else {
-	    print TOPFILE "link linksimple/$lan $node0 $node1 $bandwidth\n";
+	    print TOPFILE "link linksimple/$lan $node0 $node1 $bandwidth 0 0\n";
 	}
     } elsif ($#members != 0) {
 	print TOPFILE "node lan/$lan lan\n";
@@ -499,9 +499,9 @@ foreach $lan (keys(%lans)) {
 		print TOPFILE "node $delayname delay\n";
 		$delaynodes++;
 		print TOPFILE "link linkdelaysrc/$lan/$member" .
-		    " $node $delayname $bandwidth\n";
+		    " $node $delayname $bandwidth 0 0\n";
 		print TOPFILE "link linkdelaydst/$lan/$member" .
-		    " lan/$lan $delayname $bandwidth\n";
+		    " lan/$lan $delayname $bandwidth 0 0\n";
 		#
 		# Port is set to 100Mbs when the link gets a delay node.
 		# This can override initialization above cause we could not
@@ -511,7 +511,7 @@ foreach $lan (keys(%lans)) {
 		$portbw{$member} = $S100Mbs;	    
 	    } else {
 		print TOPFILE "link linklan/$lan/$member $node lan/$lan" .
-		    " $bandwidth\n";
+		    " $bandwidth 0 0\n";
 	    }
 	}
     }
