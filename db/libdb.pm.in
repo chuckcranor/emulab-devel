@@ -765,9 +765,9 @@ sub TBImageIDAccessCheck($$$)
     }
 
     #
-    # Admins do whatever they want!
+    # Admins and root do whatever they want!
     # 
-    if (TBAdmin($uid)) {
+    if (TBAdmin($uid) || !$UID || $UID eq "root" || $uid eq "root") {
 	return 1;
     }
     $uid = MapNumericUID($uid);
