@@ -854,8 +854,22 @@ while (($type,$delayosid) = $sth->fetchrow_array) {
     $delayosids{$type} = $delayosid;
 }
 $sth->finish;
+@nodepairs = ();
 foreach $pnode (keys(%p2vmap)) {
-    $vnode = $p2vmap{$pnode};
+    if (defined($sharkshelves{$p2vmap{$pnode}})) {
+	$i = 1;
+	foreach $sharknodeport (@{$sharkshelves{$p2vmap{$pnode}}}) {
+	    $shark = (split(":",$sharknodeport))[0];
+	    push(@nodepairs,["$pnode-$i",$shark]);
+	    $i++;
+	}
+    } else {
+	push(@nodepairs,[$pnode,$p2vmap{$pnode}]);
+    }
+}
+foreach $pair (@nodepairs) {
+    ($pnode,$vnode) = @$pair;
+    printdb "$pnode - $vnode\n";
     $sth = $dbh->prepare("SELECT osid,cmd_line,rpms,deltas,startupcmd," .
 			  "tarfiles from virt_nodes where pid=\"$pid\"" .
 			  " and eid=\"$eid\" and vname=\"$vnode\"");
@@ -877,7 +891,7 @@ foreach $pnode (keys(%p2vmap)) {
 		"  Giving up.\n";
 	    exit(1);
 	} 
-    } elsif (!(defined($lannodes{$p2vmap{$pnode}}))) {
+    } elsif (! defined($lannodes{$p2vmap{$pnode}})) {
 	# Delay node
 	# Figure out delay osid
 	$sth2 = $dbh->prepare("SELECT type from nodes" .
