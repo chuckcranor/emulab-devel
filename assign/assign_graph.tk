@@ -1,0 +1,267 @@
+#!/usr/local/bin/wish8.4
+
+set barheight 15
+set timewidth 5
+
+set maxscore 0
+set minscore 1000000
+set minvios 0
+set maxvios 0
+set minctime 0
+set maxctime 0
+set mintrans 100000
+set maxtrans 0
+set minaccepts 100000
+set maxaccepts 0
+set firsttime {}
+
+set reverttimes {}
+set besttimes {}
+
+set windowwidth 1000
+
+set time 0
+while {[gets stdin line] >= 0} {
+    if {[regexp {^STATS temp:([\d.]+) score:([\d.]+) violated:(\d+) trans:(\d+) accepts:(\d+) current_time:([\d.]+)} \
+	     $line match temp score violations trans accepts ctime]} {
+	if {$firsttime == {}} {set firsttime $time}
+	set timelog($time) [list $temp $score $violations \
+				$trans $accepts $ctime]
+	if {$score > $maxscore} {set maxscore $score}
+	if {$score < $minscore} {set minscore $score}
+	if {$violations > $maxvios} {set maxvios $violations}
+	if {$ctime > $maxctime} {set maxctime $ctime}
+	if {$trans > $maxtrans} {set maxtrans $trans}
+	if {$trans < $mintrans} {set mintrans $trans}
+	if {$accepts > $maxaccepts} {set maxaccepts $accepts}
+	if {$accepts < $minaccepts} {set minaccepts $accepts}
+    } elseif {[regexp {^SCORE: add_node\(([\w/]+),([\w/]+)\)} $line \
+		   match virtual physical]} {
+
+	set active($virtual) [list $time $physical]
+	incr time
+    } elseif {[regexp {^SCORE: remove_node\(([\w/]+)\)} $line \
+		   match virtual]} {
+	set starttime [lindex $active($virtual) 0]
+	set physical [lindex $active($virtual) 1]
+	set active($virtual) {}
+	lappend bars($virtual) [list $starttime $time $physical]
+	incr time
+    } elseif {[regexp {^Reverting} $line match]} {
+	lappend reverttimes $time
+    } elseif {[regexp {^New best} $line match]} {
+	lappend besttimes $time
+    }
+}
+foreach virtual [array names active] {
+    if {$active($virtual) != {}} {
+	set starttime [lindex $active($virtual) 0]
+	set physical [lindex $active($virtual) 1]
+	lappend bars($virtual) [list $starttime $time $physical]
+    }
+}
+
+set endtime $time
+
+set height [expr $barheight * [llength [array names bars]]]
+set startx 100
+set width $windowwidth
+set realheight [expr 4+($height+4) * int(($startx+$time*$timewidth)/$windowwidth+1)]
+
+frame .info
+foreach var {temp score vios trans accepts ctime phys} {
+    label .info.$var -text "${var}:" -width 5 -anchor e
+    if {$var != "phys"} {
+	label .info._$var -textvariable info_$var -width 10 -anchor w
+    } else {
+	label .info._$var -textvariable info_$var -width 30 -anchor w
+    }
+    pack .info.$var .info._$var -side left
+}
+pack .info -side top -fill x
+	
+scrollbar .sb -orient vertical -command ".c yview"
+pack .sb -side right -fill y
+
+if {$realheight < 1000} {
+    set windowheight $realheight
+} else {
+    set windowheight 1000
+}
+
+canvas .c -height $windowheight \
+    -width [expr $width + 2] -bg white \
+    -yscrollcommand ".sb set" -scrollregion [list 0 0 [expr $width + 2] \
+						 $realheight]
+pack .c -fill both
+
+proc gety {min max value time} {
+    global height 
+    return [expr ($height-($value-$min)*(1.0*$height/($max-$min)))\
+		+[getlevel $time] + 2]
+}
+proc getlevel {time} {
+    global startx timewidth height windowwidth
+    return [expr int(($startx+$time*$timewidth)/$windowwidth)*($height + 4)+4]
+}
+proc getx {time} {
+    global startx timewidth windowwidth
+    
+    return [expr ($startx + $time * $timewidth)%$windowwidth]
+}
+
+# draw bars
+set y 2
+foreach virtual [lsort [array names bars]] {
+    .c create text 2 [expr $y + 2]  -anchor nw -text $virtual
+    foreach bar $bars($virtual) {
+	set starttime [lindex $bar 0]
+	set endtime [lindex $bar 1]
+	set physical [lindex $bar 2]
+	for {set t $starttime} {$t < $endtime} {incr t} {
+	    lappend infoboxes($t) [list $y $physical]
+	}
+    }
+    incr y $barheight
+}
+
+foreach time $reverttimes {
+    set x [getx $time]
+    set level [getlevel $time]
+    
+    .c create line $x [expr $level + 2] $x [expr $level + $height + 2] \
+	-fill green -width 2
+}
+
+foreach time $besttimes {
+    set x [getx $time]
+    set level [getlevel $time]
+    
+    .c create line $x [expr $level + 2] $x [expr $level + $height + 2] \
+	-fill orange -width 3
+}
+
+# time stuff
+set prevtemp [lindex $timelog($firsttime) 0]
+set prevscore [lindex $timelog($firsttime) 1]
+set prevvios [lindex $timelog($firsttime) 2]
+set prevtrans [lindex $timelog($firsttime) 3]
+set prevaccepts [lindex $timelog($firsttime) 4]
+set prevctime [lindex $timelog($firsttime) 5]
+set prevtime $firsttime
+foreach time [lsort -integer [array names timelog]] {
+    if {$time == $firsttime} {continue}
+    set temp [lindex $timelog($time) 0]
+    set score [lindex $timelog($time) 1]
+    set vios [lindex $timelog($time) 2]
+    set trans [lindex $timelog($time) 3]
+    set accepts [lindex $timelog($time) 4]
+    set ctime [lindex $timelog($time) 5]
+
+    for {set t $prevtime} {$t < $time} {incr t} {
+	set timeinfo($t) [list $temp $score $vios $trans $accepts $ctime]
+    }
+    
+    set x [getx $time]
+    set prevx [getx $prevtime]
+    set level [getlevel $time]
+    set prevlevel [getlevel $prevtime]
+    if {$prevtemp == $temp} {
+	.c create line $x [expr $level + 2] $x [expr $level + $height + 2] \
+	    -fill yellow
+    } else {
+	.c create line $x [expr $level + 2] $x [expr $level + $height + 2] \
+	    -fill blue \
+	    -width 2
+    }
+    if {$level == $prevlevel} {
+	.c create line $prevx [gety $minscore $maxscore $prevscore $prevtime] \
+	    $x [gety $minscore $maxscore $score $time] -fill black
+	.c create line $prevx [gety 0 $maxvios $prevvios $prevtime] $x \
+	    [gety 0 $maxvios $vios $time] -fill red
+	.c create line $prevx [gety 0 $maxtrans $prevtrans $prevtime] $x \
+	    [gety 0 $maxtrans $trans $time] -fill grey
+	.c create line $prevx [gety 0 $maxaccepts $prevaccepts $prevtime] $x \
+	    [gety 0 $maxaccepts $accepts $time] -fill green
+	.c create line $prevx [gety 0 $maxctime $prevctime $prevtime] $x \
+	    [gety 0 $maxctime $ctime $time] -fill violet
+    } else {
+	set bordertime [expr ($time*$timewidth-$x)/$timewidth]
+	set portion [expr 1.0*[getx $time]/(1.0*($time-$prevtime)*$timewidth)]
+
+	set bvalue [expr $portion*$prevscore+(1-$portion)*$score]
+	.c create line $prevx [gety $minscore $maxscore $prevscore $prevtime] \
+	    $windowwidth [gety $minscore $maxscore $bvalue $prevtime] \
+	    -fill black
+	.c create line 0 [gety $minscore $maxscore $bvalue $time] \
+	    $x [gety $minscore $maxscore $score $time] -fill black
+
+	set bvalue [expr $portion*$prevvios+(1-$portion)*$vios]
+	.c create line $prevx [gety $minvios $maxvios $prevvios $prevtime] \
+	    $windowwidth [gety $minvios $maxvios $bvalue $prevtime] \
+	    -fill red
+	.c create line 0 [gety $minvios $maxvios $bvalue $time] \
+	    $x [gety $minvios $maxvios $vios $time] -fill red
+
+	set bvalue [expr $portion*$prevtrans+(1-$portion)*$trans]
+	.c create line $prevx [gety $mintrans $maxtrans $prevtrans $prevtime] \
+	    $windowwidth [gety $mintrans $maxtrans $bvalue $prevtime] \
+	    -fill red
+	.c create line 0 [gety $mintrans $maxtrans $bvalue $time] \
+	    $x [gety $mintrans $maxtrans $trans $time] -fill grey
+
+	set bvalue [expr $portion*$prevaccepts+(1-$portion)*$accepts]
+	.c create line $prevx [gety $minaccepts $maxaccepts $prevaccepts $prevtime] \
+	    $windowwidth [gety $minaccepts $maxaccepts $bvalue $prevtime] \
+	    -fill red
+	.c create line 0 [gety $minaccepts $maxaccepts $bvalue $time] \
+	    $x [gety $minaccepts $maxaccepts $accepts $time] -fill green
+
+	set bvalue [expr $portion*$prevctime+(1-$portion)*$ctime]
+	.c create line $prevx [gety $minctime $maxctime $prevctime $prevtime] \
+	    $windowwidth [gety $minctime $maxctime $bvalue $prevtime] \
+	    -fill red
+	.c create line 0 [gety $minctime $maxctime $bvalue $time] \
+	    $x [gety $minctime $maxctime $ctime $time] -fill violet
+    }
+    
+    set prevtemp $temp
+    set prevscore $score
+    set prevvios $vios
+    set prevtime $time
+    set prevtrans $trans
+    set prevaccepts $accepts
+    set prevctime $ctime
+}
+for {set t $prevtime} {$t <= $endtime} {incr t} {
+    set timeinfo($t) [list $temp $score $vios $trans $accepts $ctime]
+}
+
+for {set t $firsttime} {$t <= $endtime} {incr t} {
+    set temp [lindex $timeinfo($t) 0]
+    set score [lindex $timeinfo($t) 1]
+    set vios [lindex $timeinfo($t) 2]
+    set trans [lindex $timeinfo($t) 3]
+    set accepts [lindex $timeinfo($t) 4]
+    set ctime [lindex $timeinfo($t) 5]
+
+    if {[info exists infoboxes($t)]} {
+	foreach infobox $infoboxes($t) {
+	    set y [lindex $infobox 0]
+	    set phys [lindex $infobox 1]
+	    set id [.c create rectangle [getx $t] [expr [getlevel $t] + $y] \
+			[expr [getx $t]+$timewidth] \
+			[expr [getlevel $t] + $y + $barheight] \
+			-fill LightBlue -outline {}]
+	    .c bind $id <Enter> "set info_phys $phys;set info_score $score;set info_temp $temp;set info_vios $vios;set info_trans $trans;set info_accepts $accepts;set info_ctime $ctime"
+	    .c lower $id
+	}
+    }
+    set id [.c create rectangle [getx $t] [getlevel $t] \
+		[expr [getx $t] + $timewidth] \
+		[expr [getlevel $t] + $height + 2] \
+		-fill {} -outline {}]
+    .c bind $id <Enter> "set info_phys {};set info_score $score;set info_temp $temp;set info_vios $vios;set info_trans $trans;set info_accepts $accepts;set info_ctime $ctime"
+    .c lower $id
+}
+
