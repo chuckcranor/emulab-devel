@@ -7,85 +7,48 @@
 #include <unistd.h>
 
 #include "mtp.h"
+#include "slaveController.h"
+#include "masterController.h"
+
+enum {
+    UNUSED_COMMAND_ID,
+
+    MASTER_COMMAND_ID,
+    SLAVE_COMMAND_ID,
+};
 
 typedef enum {
-    PS_ARRIVED,
-    PS_PENDING_POSITION,
-    PS_REFINING_POSITION,
-    PS_REFINING_ORIENTATION,
-
-    PS_START_WIGGLING,
-    PS_WIGGLING,
-
-    PS_MAX
-} pilot_state_t;
+    PCM_MASTER,
+    PCM_SLAVE,
+} pilot_control_mode_t;
 
 enum {
     PCB_CONNECTING,
     PCB_CONNECTED,
-    PCB_VISION_POSITION,
-    PCB_WAYPOINT,
-    PCB_CONTACT,
-    PCB_WIGGLE_REVERSE,
-    PCB_IN_PROGRESS,
 };
 
 enum {
     PCF_CONNECTING = (1L << PCB_CONNECTING),
     PCF_CONNECTED = (1L << PCB_CONNECTED),
-    PCF_VISION_POSITION = (1L << PCB_VISION_POSITION),
-    PCF_WAYPOINT = (1L << PCB_WAYPOINT),
-    PCF_CONTACT = (1L << PCB_CONTACT),
-    PCF_WIGGLE_REVERSE = (1L << PCB_WIGGLE_REVERSE),
-    PCF_IN_PROGRESS = (1L << PCB_IN_PROGRESS),
 };
 
 struct pilot_connection {
-    unsigned long pc_flags;
-    pilot_state_t pc_state;
     struct robot_config *pc_robot;
     mtp_handle_t pc_handle;
-    struct robot_position pc_actual_pos;
-    struct robot_position pc_last_pos;
-    struct robot_position pc_waypoint;
-    int pc_tries_remaining;
-    struct robot_position pc_goal_pos;
-
-    struct obstacle_config pc_obstacles[32];
-    unsigned int pc_obstacle_count;
-    unsigned int pc_waypoint_tries;
-    struct timeval pc_waypoint_timestamp;
+    unsigned long pc_flags;
+    pilot_control_mode_t pc_control_mode;
+    struct slave_controller pc_slave;
+    struct master_controller pc_master;
 };
-
-#define REL2ABS(_dst, _theta, _rpoint, _apoint) { \
-    float _ct, _st; \
-    \
-    _ct = cosf(_theta); \
-    _st = sinf(_theta); \
-    (_dst)->x = _ct * (_rpoint)->x - _st * -(_rpoint)->y + (_apoint)->x; \
-    (_dst)->y = _ct * (_rpoint)->y + _st * -(_rpoint)->x + (_apoint)->y; \
-}
 
 struct pilot_connection *pc_add_robot(struct robot_config *rc);
 
 void pc_dump_info(void);
 
-/**
- * Map the robot ID to a gorobot_conn object.
- *
- * @param robot_id The robot identifier to search for.
- * @return The gorobot_conn that matches the given ID or NULL if no match was
- * found.
- */
 struct pilot_connection *pc_find_pilot(int robot_id);
 
-void pc_plot_waypoint(struct pilot_connection *pc);
-void pc_wiggle(struct pilot_connection *pc, mtp_wiggle_t mw);
-void pc_set_goal(struct pilot_connection *pc, struct robot_position *rp);
-void pc_set_actual(struct pilot_connection *pc, struct robot_position *rp);
-void pc_override_state(struct pilot_connection *pc, pilot_state_t ps);
-void pc_change_state(struct pilot_connection *pc, pilot_state_t ps);
-void pc_handle_packet(struct pilot_connection *pc, struct mtp_packet *mp);
+void pc_handle_emc_packet(struct pilot_connection *pc, mtp_packet_t *mp);
+void pc_handle_pilot_packet(struct pilot_connection *pc, mtp_packet_t *mp);
 void pc_handle_signal(fd_set *rready, fd_set *wready);
 void pc_handle_timeout(struct timeval *current_time);
 
@@ -96,8 +59,6 @@ void pc_handle_timeout(struct timeval *current_time);
 #define METER_TOLERANCE 0.025
 
 #define WAYPOINT_TOLERANCE 0.25
-
-#define OBSTACLE_BUFFER 0.25
 
 /**
  * How close does the angle have to be before it is considered at the intended
@@ -122,8 +83,5 @@ struct pilot_connection_data {
 };
 
 extern struct pilot_connection_data pc_data;
-
-int pc_point_in_bounds(float x,float y);
-int pc_point_in_obstacle(float x,float y);
 
 #endif

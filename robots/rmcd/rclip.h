@@ -49,7 +49,7 @@ typedef struct rc_line {
 
 void rc_corner(rc_code_t rc, struct robot_position *rp, rc_rectangle_t r);
 rc_code_t rc_compute_code(float x, float y, rc_rectangle_t r);
-rc_code_t rc_compute_closest(float x, float y, rc_rectangle_t r);
+rc_code_t rc_compute_closest(float *x, float *y, rc_rectangle_t r);
 rc_code_t rc_closest_corner(float x, float y, rc_rectangle_t r);
 int rc_clip_line(rc_line_t line, rc_rectangle_t clip);
 

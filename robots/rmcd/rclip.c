@@ -29,15 +29,15 @@ rc_code_t rc_compute_code(float x, float y, rc_rectangle_t r)
 #define min(a, b) ((a < b) ? a : b)
 #endif
 
-rc_code_t rc_compute_closest(float x, float y, rc_rectangle_t r)
+rc_code_t rc_compute_closest(float *x, float *y, rc_rectangle_t r)
 {
     float left, top, bottom, right, closest;
     rc_code_t retval = 0;
 
-    left = x - r->xmin;
-    top = y - r->ymin;
-    bottom = r->ymax - y;
-    right = r->xmax - x;
+    left = *x - r->xmin;
+    top = *y - r->ymin;
+    bottom = r->ymax - *y;
+    right = r->xmax - *x;
 
     closest = min(left, min(top, min(bottom, right)));
 
@@ -58,8 +58,37 @@ rc_code_t rc_compute_closest(float x, float y, rc_rectangle_t r)
 	retval |= RCF_BOTTOM;
     if (right < 0.20)
 	retval |= RCF_RIGHT;
-
-    printf("closest %x\n", retval);
+    
+    switch (retval) {
+    case RCF_LEFT:
+	*x = r->xmin;
+	break;
+    case RCF_TOP:
+	*y = r->ymin;
+	break;
+    case RCF_BOTTOM:
+	*y = r->ymax;
+	break;
+    case RCF_RIGHT:
+	*x = r->xmax;
+	break;
+    case RCF_TOP|RCF_LEFT:
+	*x = r->xmin;
+	*y = r->ymin;
+	break;
+    case RCF_TOP|RCF_RIGHT:
+	*x = r->xmax;
+	*y = r->ymin;
+	break;
+    case RCF_BOTTOM|RCF_LEFT:
+	*x = r->xmin;
+	*y = r->ymax;
+	break;
+    case RCF_BOTTOM|RCF_RIGHT:
+	*x = r->xmax;
+	*y = r->ymax;
+	break;
+    }
     
     return retval;
 }

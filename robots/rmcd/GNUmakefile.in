@@ -29,7 +29,14 @@ LIBS	 += -lmtp -ltb -lm
 
 test_rmcd.sh: rmcd
 
-OBJS = rclip.o obstacles.o pilotConnection.o rmcd.o
+OBJS = \
+	rclip.o \
+	obstacles.o \
+	pilotConnection.o \
+	rmcd.o \
+	pathPlanning.o \
+	slaveController.o \
+	masterController.o
 
 rmcd: $(OBJS) ../mtp/libmtp.a
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(OBJS) $(LIBS)

@@ -111,7 +111,7 @@ static void handle_emc_packet(mtp_handle_t emc_handle)
 	struct mtp_update_position *mup =
 	    &mp.data.mtp_payload_u.update_position;
 	struct mtp_wiggle_request *mwr = &mp.data.mtp_payload_u.wiggle_request;
-	struct pilot_connection *pc;
+	struct pilot_connection *pc = NULL;
 	
 	if (debug > 1) {
 	    fprintf(stderr, "emc packet: ");
@@ -120,48 +120,25 @@ static void handle_emc_packet(mtp_handle_t emc_handle)
 	
 	switch (mp.data.opcode) {
 	case MTP_COMMAND_GOTO:
-	    if ((pc = pc_find_pilot(mcg->robot_id)) == NULL) {
-		error("uknnown robot %d\n", mcg->robot_id);
-	    }
-	    else {
-		pc_set_goal(pc, &mcg->position);
-	    }
+	    pc = pc_find_pilot(mcg->robot_id);
 	    break;
-
 	case MTP_WIGGLE_REQUEST:
-	    if ((pc = pc_find_pilot(mwr->robot_id)) == NULL) {
-		error("unknown robot %d\n", mwr->robot_id);
-		// also need to send crap back to VMCD so that it doesn't
-		// wait for a valid wiggle complete msg
-		
-		mtp_init_packet(&mp,
-				MA_Opcode, MTP_WIGGLE_STATUS,
-				MA_Role, MTP_ROLE_RMC,
-				MA_RobotID, mwr->robot_id,
-				MA_Status, MTP_POSITION_STATUS_ERROR,
-				MA_TAG_DONE);
-		if (mtp_send_packet(emc_handle, &mp) != MTP_PP_SUCCESS) {
-		    error("cannot send reply packet\n");
-		}
-	    }
-	    else {
-		pc_wiggle(pc, mwr->wiggle_type);
-	    }
-	    break;
-	case MTP_COMMAND_STOP:
-	    assert(0);
+	    pc = pc_find_pilot(mwr->robot_id);
 	    break;
 	case MTP_UPDATE_POSITION:
-	    if ((pc = pc_find_pilot(mup->robot_id)) == NULL) {
-		error("uknnown robot %d\n", mup->robot_id);
-	    }
-	    else {
-		pc_set_actual(pc, &mup->position);
-	    }
+	    pc = pc_find_pilot(mup->robot_id);
+	    break;
+	    
+	case MTP_COMMAND_STOP:
+	    assert(0);
 	    break;
 	default:
 	    warning("unhandled emc packet %d\n", mp.data.opcode);
 	    break;
+	}
+
+	if (pc != NULL) {
+	    pc_handle_emc_packet(pc, &mp);
 	}
     }
     
