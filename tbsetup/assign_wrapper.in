@@ -1154,8 +1154,10 @@ foreach my $pnode (keys(%virtnodes)) {
         printdb "On pnode $pnode: curvlist: @curvlist\n";
 
 	foreach my $vnode (@curvlist) {
-	    push( @oplist, $reserved_v2vmap{$vnode} );
-	    push( @ovlist, $vnode );
+	    if( defined($reserved_v2vmap{$vnode}) ) {
+		push( @oplist, $reserved_v2vmap{$vnode} );
+		push( @ovlist, $vnode );
+	    }
 	}
 
 	# delvlist = elements in oldvlist not in vlist
@@ -1166,10 +1168,12 @@ foreach my $pnode (keys(%virtnodes)) {
 
 	while( scalar(@newvlist) && scalar(@delvlist) ) {
 	    my $del_vnode = pop(@delvlist);
-	    my $reserved_node = $reserved_v2vmap{$del_vnode};
-	    push( @oplist, $reserved_node );
-	    my $new_vnode = pop(@newvlist);
-	    push( @ovlist, $new_vnode );
+	    if ( defined($reserved_v2vmap{$del_vnode}) ) {
+		my $reserved_node = $reserved_v2vmap{$del_vnode};
+		push( @oplist, $reserved_node );
+		my $new_vnode = pop(@newvlist);
+		push( @ovlist, $new_vnode );
+	    }
 	}
 	
 	# These are the new nodes we need to allocate
@@ -1272,9 +1276,11 @@ foreach my $pnode (keys(%virtnodes)) {
     # we will let tbswap tear them down
     while (@delvlist) {
 	my $del_vnode = pop(@delvlist);
-	my $reserved_node = $reserved_v2vmap{$del_vnode};
-	TBSetNodeAllocState($reserved_node,
-			    TBDB_ALLOCSTATE_RES_TEARDOWN());
+	if ( defined($reserved_v2vmap{$del_vnode}) ) {
+	    my $reserved_node = $reserved_v2vmap{$del_vnode};
+	    TBSetNodeAllocState($reserved_node,
+				TBDB_ALLOCSTATE_RES_TEARDOWN());
+	}		
     }
 }
 
