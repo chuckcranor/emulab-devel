@@ -1362,7 +1362,10 @@ foreach $delayid (keys(%nodedelays)) {
 
 	#
 	# Obviously, its implied that the q0 params are towards the lan,
-	# For the reverse side, force the queue to 1 slot. 
+	# For the reverse side, force the queue to 2 slots (should be 1
+	# but dummynet not quite precise enough) to avoid excess queuing
+	# delay since the traffic should already be at the proper bandwidth
+	# when it gets to the node.
 	#
 	DBQueryFatal("insert into delays" .
 	     " (pid,eid,node_id,vname,iface0,iface1," .
@@ -1376,7 +1379,7 @@ foreach $delayid (keys(%nodedelays)) {
 	     "  '$vnode1',$pipe1,$rdelay,$rbandwidth,$rlossrate,".
 	     "  $q0_limit,$q0_maxthresh,$q0_minthresh,$q0_weight,$q0_linterm,".
 	     "  $q0_qinbytes,$q0_bytes,$q0_meanpsize,$q0_wait,$q0_setbit,".
-	     "  $q0_droptail,$q0_red,$q0_gentle,1,0)");
+	     "  $q0_droptail,$q0_red,$q0_gentle,2,0)");
     }
 
     #
