@@ -772,7 +772,8 @@ outfiles="$outfiles Makeconf GNUmakefile \
 	robots/mezzanine/libfg/GNUmakefile \
 	robots/mezzanine/libmezz/GNUmakefile \
 	robots/mezzanine/mezzanine/GNUmakefile \
-	robots/mezzanine/mezzcal/GNUmakefile robots/robomonitord "
+	robots/mezzanine/mezzcal/GNUmakefile robots/robomonitord \
+	daikon/GNUmakefile daikon/daikonize"
 
 #
 # Do this for easy distclean.
