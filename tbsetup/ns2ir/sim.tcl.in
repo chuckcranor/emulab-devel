@@ -82,12 +82,22 @@ Simulator instproc duplex-link {n1 n2 bw delay type args} {
     if {$verbose && ($type != "DropTail")} {
 	puts stderr "Unsupported: Link type $type, using DropTail"
     }
+    set error 0
+    if {! [$n1 info class Node]} {
+	perror "duplex-link $n1 $n2: $n1 is not a node."
+	set error 1
+    }
+    if {! [$n2 info class Node]} {
+	perror "duplex-link $n1 $n2: $n2 is not a node."
+	set error 1
+    }
+    if {$error} {return}
 
     set curlink l[incr id_counter]
 
     # Convert bandwidth and delay
-    set rbw [$self parse_bw $bw]
-    set rdelay [$self parse_delay $delay]
+    set rbw [parse_bw $bw]
+    set rdelay [parse_delay $delay]
     
     Link $curlink $self "$n1 $n2" $rbw $rdelay
     set lanlink_list($curlink) {}
@@ -115,8 +125,8 @@ Simulator instproc make-lan {nodelist bw delay args} {
     set curlan lan[incr id_counter]
     
     # Convert bandwidth and delay
-    set rbw [$self parse_bw $bw]
-    set rdelay [$self parse_delay $delay]
+    set rbw [parse_bw $bw]
+    set rdelay [parse_delay $delay]
     
     Lan $curlan $self $nodelist $rbw $rdelay
     set lanlink_list($curlan) {}
@@ -160,6 +170,37 @@ Simulator instproc run {} {
     foreach lan [concat [array names lanlink_list]] {
 	$lan updatedb $DB
     }
+}
+
+# attach-agent <node> <agent>
+# This creates an attachment between <node> and <agent>.
+Simulator instproc attach-agent {node agent} {
+    if {! [$agent info class Agent]} {
+	perror "$agent is not an Agent."
+	return
+    }
+    if {! [$node info class Node]} {
+	perror "$node is not a Node."
+	return
+    }
+    $agent set_node $node
+}
+
+# connect <src> <dst>
+# Connects two agents together.
+Simulator instproc connect {src dst} {
+    set error 0
+    if {! [$src info class Agent]} {
+	perror "$src is not an Agent."
+	set error 1
+    }
+    if {! [$dst info class Agent]} {
+	perror "$dst is not an Agent."
+	set error 1
+    }
+    if {$error} {return}
+    $src connect $dst
+    $dst connect $src
 }
 
 # unknown 
@@ -210,55 +251,6 @@ Simulator instproc find_link {src dst} {
 	return $link_map($src:$dst)
     } else {
 	return ""
-    }
-}
-
-# Useful internal routines.
-
-# parse_bw bspec 
-# This takes a bandwidth specifier in the form of <amt><unit> where
-# <unit> is any of b, bps, kb, kbps, Mb, Mbps, Gb, or Gbps.  If no
-# unit is given then bytes (b) is assumed.  It returns the bandwidth
-# in Mbps.
-Simulator instproc parse_bw {bspec} {
-    # Default to bytes
-    if {[scan $bspec "%f%s" bw unit] == 1} {
-	unit b
-    }
-    
-    switch -- $unit {
-	b {return [expr int($bw/1000000)]} 
-	bps {return [expr int($bw/1000000)]} 
-	kb {return [expr int($bw/1000)]}
-	kbps {return [expr int($bw/1000)]}
-	Mb {return [expr int($bw)]}
-	Mbps {return [expr int($bw)]}
-	Gb {return [expr int($bw*1000)]}
-	Gbps {return [expr int($bw*1000)]}
-	default {
-	    puts stderr "ERROR: Unknown bandwidth unit $unit."
-	    exit 1
-	}
-    }
-}
-
-# parse_delay dspec
-# This takes a delay specifier in the form of <amt><unit> where <unit>
-# is any of s, ms, ns.  If no unit is given then seconds (s) is
-# assumed.  It returns the delay in ms.
-Simulator instproc parse_delay {dspec} {
-    # Default to seconds
-    if {[scan $dspec "%f%s" delay unit] == 1} {
-	set unit s
-    }
-    switch $unit {
-	s {return [expr int($delay*1000)]}
-	ms {return [expr int($delay)]}
-	ns {return [expr int($delay/1000)]}
-	default {
-	    puts "ERROR: Unknown delay unit $unit."
-	    exit 1
-	}
     }
 }
 

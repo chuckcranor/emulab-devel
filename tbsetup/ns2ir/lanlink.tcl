@@ -8,7 +8,7 @@
 # bandwidth, delay, and loss rate.
 ######################################################################
 
-Class LanLink
+Class LanLink -superclass NSObject
 Class Link -superclass LanLink
 Class Lan -superclass LanLink
 
@@ -124,13 +124,3 @@ LanLink instproc updatedb {DB} {
     sql exec $DB "insert into virt_lans (pid,eid,vname,members,delay,bandwidth,lossrate) values (\"$pid\",\"$eid\",\"$self\",\"$membersraw\",$delay,$bandwidth,$loss)"
 }
 
-# unknown 
-# This is invoked whenever any method is called on the simulator
-# object that is not defined.  We display a warning message and
-# otherwise ignore it.
-LanLink instproc unknown {m args} {
-    global ::GLOBALS::verbose
-    if {${::GLOBALS::verbose}} {
-	puts stderr "Unsupported: lan $m"
-    }
-}

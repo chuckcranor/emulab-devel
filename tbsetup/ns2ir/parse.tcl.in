@@ -145,11 +145,12 @@ set GLOBALS::DB [sql conn]
 sql selectdb ${GLOBALS::DB} @TBDBNAME@
 
 # Load all our classes
+source ${GLOBALS::libdir}/nsobject.tcl
 source ${GLOBALS::libdir}/sim.tcl
 source ${GLOBALS::libdir}/lanlink.tcl
 source ${GLOBALS::libdir}/node.tcl
 source ${GLOBALS::libdir}/null.tcl
-
+source ${GLOBALS::libdir}/traffic.tcl
 
 ##################################################
 # Redifing Assignment
@@ -213,24 +214,86 @@ proc set {args} {
 # for an object we know about we create and return an instance.  For 
 # any classes we do not know about we create a null class and return it
 # as well as display an unsupported message.
+#
+# new_classes is an array in globals that defines the classes
+# new should support.  The index is the class name and the value
+# is the argument list.
+#
+# TODO: Implement support for classes that take arguments.  None yet
+# in supported NS subset.
 ###
+namespace eval GLOBALS {
+    variable new_classes
+    set new_classes(Simulator) {}
+}
 proc new {class args} {
     var_import GLOBALS::new_counter
     var_import GLOBALS::verbose
-    if {$class != "Simulator"} {
+    var_import GLOBALS::new_classes
+    if {! [info exists new_classes($class)]} {
 	if {$verbose} {
 	    puts stderr "Unsupported object: $class"
 	}
 	set id null[incr new_counter]
 	NullClass $id
 	return $id
-    } else {
-	if {$verbose && ($args != {})} {
-	    puts stderr "Unsupported args for Simulator: $args"
+    }
+    if {$args != {}} {
+	if {$verbose} {
+	    puts stderr "Unsupported args for $class."
 	}
-	set id sim[incr new_counter]
-	Simulator $id
-	return $id
+    }
+    set id $class[incr new_counter]
+    eval $class $id 
+    return $id
+}
+
+# Useful routines.
+
+# parse_bw bspec 
+# This takes a bandwidth specifier in the form of <amt><unit> where
+# <unit> is any of b, bps, kb, kbps, Mb, Mbps, Gb, or Gbps.  If no
+# unit is given then bytes (b) is assumed.  It returns the bandwidth
+# in Mbps.
+proc parse_bw {bspec} {
+    # Default to bytes
+    if {[scan $bspec "%f%s" bw unit] == 1} {
+	set unit b
+    }
+    
+    switch -- $unit {
+	b {return [expr int($bw/1000000)]} 
+	bps {return [expr int($bw/1000000)]} 
+	kb {return [expr int($bw/1000)]}
+	kbps {return [expr int($bw/1000)]}
+	Mb {return [expr int($bw)]}
+	Mbps {return [expr int($bw)]}
+	Gb {return [expr int($bw*1000)]}
+	Gbps {return [expr int($bw*1000)]}
+	default {
+	    puts stderr "ERROR: Unknown bandwidth unit $unit."
+	    exit 1
+	}
+    }
+}
+
+# parse_delay dspec
+# This takes a delay specifier in the form of <amt><unit> where <unit>
+# is any of s, ms, ns.  If no unit is given then seconds (s) is
+# assumed.  It returns the delay in ms.
+proc parse_delay {dspec} {
+    # Default to seconds
+    if {[scan $dspec "%f%s" delay unit] == 1} {
+	set unit s
+    }
+    switch $unit {
+	s {return [expr int($delay*1000)]}
+	ms {return [expr int($delay)]}
+	ns {return [expr int($delay/1000)]}
+	default {
+	    puts "ERROR: Unknown delay unit $unit."
+	    exit 1
+	}
     }
 }
 
