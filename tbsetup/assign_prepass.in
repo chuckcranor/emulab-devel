@@ -535,6 +535,10 @@ sub run_metis($$$$) {
 
     # XXX - should not be hard-coded
     my $npart = POSIX::ceil(scalar(keys %$nodes) /10);
+    if ($npart <= 1) {
+	# No point in running METIS, just give the list of nodes back
+	return map {[$_]} values(%$nodes);
+    }
 
     open (FH,">$metisfilename") or die "Unable to open $metisfilename for " .
 	    "writing\n";
