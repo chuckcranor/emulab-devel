@@ -36,6 +36,7 @@ my $MAXRETRIES  = 1;
 
 my $FRISBEELAUNCHER = "$TB/sbin/frisbeelauncher";
 my $osselect	    = "$TB/bin/os_select";
+my $TBUISP	    = "$TB/bin/tbuisp";
 my $FRISBEEOSID     = TB_OSID_FRISBEE_MFS();
 
 # Locals
@@ -143,6 +144,12 @@ sub osload ($$) {
 	close(PARENT_READER);
 	TBdbfork();
     }
+
+    # This will store information about each node, so that if we have to try
+    # again later, we'll have it all.
+    # XXX - This contains some of the same data as %imageids - I should fix
+    # this!
+    my %reload_info;
 
     # Loop for each node.
     foreach my $node (@nodes) {
@@ -308,11 +315,39 @@ sub osload ($$) {
 	    }
 	}
 
-	print "Setting up reload for $node\n";
+	#
+	# Determine which mode to use for reloading this node (note: this may
+	# become an entry in node_capabilities or something like that in the
+	# future - that would be cleaner)
+	#
+	my ($type, $class) = TBNodeType($node);
+	my $reload_mode;
+	my $reload_func;
+	if ($class eq "mote") {
+	    $reload_mode = "UISP";
+	    $reload_func = \&SetupReloadUISP;
+	} else {
+	    $reload_mode = "Frisbee";
+	    $reload_func = \&SetupReloadFrisbee;
+	}
+
+	#
+	# Remember this stuff so that if we have to retry this node again
+	# later, we'll know how to handle it
+	#
+	$reload_info{$node} = {
+	    'mode'    => $reload_mode,
+	    'func'    => $reload_func,
+	    'imageid' => $imageid,
+	    'osid'    => $defosid
+	};
+
+	print "Setting up reload for $node (mode: $reload_mode)\n";
+
 	if (!$TESTMODE) {
-	    if (SetupReload($node, $imageid) < 0) {
+	    if (&$reload_func($node, $imageid,$defosid) < 0) {
 		print STDERR
-		    "*** osload ($node): Could not set up reload. Skipping.\n";
+		"*** osload ($node): Could not set up reload. Skipping.\n";
 		goto failednode;
 	    }
 	}
@@ -419,8 +454,11 @@ sub osload ($$) {
 	    if ($retries{$node}) {
 		print "*** osload ($node): Trying again ...\n";
 
+		my $reload_info = $reload_info{$node};
+
 		# Possible race with reboot?
-		if (SetupReload($node, $imageids{$node}) < 0) {
+		if (&{$reload_info->{'func'}}($node, $reload_info->{'imageid'},
+		    $reload_info->{'osid'}) < 0) {
 		    print(STDERR
 			  "*** osload ($node): ".
 			  "Could not set up reload. Skipping.\n");
@@ -538,9 +576,9 @@ sub WaitTillReloadDone($$@)
 }
 
 # Setup a reload. 
-sub SetupReload($$)
+sub SetupReloadFrisbee($$$)
 {
-    my ($node, $imageid) = @_;
+    my ($node, $imageid, $osid_notused) = @_;
     my $osid = $FRISBEEOSID;
 
     #
@@ -576,6 +614,51 @@ sub SetupReload($$)
 	print STDERR "*** osload ($node): Frisbee Launcher ($imageid) failed!\n";
 	return -1;
     }
+    return 0;
+}
+
+#
+# Setup a reload, using USIP (for motes), rather than Frisbee. Note that
+# this differs from a Frisbee reload in one key way - it does the reload
+# right here in this code, rather than setting up a reload for later.
+#
+sub SetupReloadUISP($$$)
+{
+    my ($node, $imageid, $osid) = @_;
+
+    #
+    # Get the path to the image
+    #
+    my $query_result = DBQueryFatal("select path from images " .
+	"where imageid='$imageid'");
+    if ($query_result->num_rows() != 1) {
+	print STDERR "*** osload ($node): Failed to get path for $imageid!\n";
+	return -1;
+    }
+    my ($path) = $query_result->fetchrow();
+
+    #
+    # Okay, just run tbuisp with that path
+    #
+    my $rv = system("$TBUISP upload $path $node");
+    if ($rv) {
+	print STDERR "*** osload ($node): tbuisp failed\n";
+	return -1;
+    }
+
+    #
+    # Gotta tell the state machine system what OS we're running now
+    #
+    system("$osselect $osid $node");
+    if ($?) {
+	print STDERR "*** osload ($node): os_select $osid failed!\n";
+	return -1;
+    }
+
+    #
+    # XXX - not sure how to handle rebooting the node right now
+    #
+
     return 0;
 }
 
