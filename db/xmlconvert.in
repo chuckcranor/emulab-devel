@@ -230,7 +230,7 @@ sub readXML($$$) {
 	$count += scalar(@{$virtual_tables{$table}})
 	    if (defined($virtual_tables{$table}));
     }
-    if ($count > 10000) {
+    if ($count > 100000) {
 	fatal("Too many rows of data!");
     }
 
