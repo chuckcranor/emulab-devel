@@ -49,6 +49,22 @@ if ($dolog) {
     &tbs_out("Log:    $logfile\n");
 }
 
+sub cleanup {
+    &tbs_out("Cleaning up\n");
+    if (&tbs_exec("nfree $pid $eid")) {
+	&tbs_out("Could not free resources.\n");
+    }
+    &tbs_out("Resetting DB.\n");
+    if (! $dbh->do("DELETE from delays where pid = \"$pid\" and eid=\"$eid\"")) {
+	&tbs_out("Could not clear delays table.\n");
+	$errors = 1;
+    }
+    if (! $dbh->do("DELETE from vlans where pid = \"$pid\" and eid = \"$eid\"")) {
+	&tbs_out("Could not clear vlans table.\n");
+	$errors = 1;
+    }
+};
+
 &tbs_out("Beginning swap in for $pid-$eid." .  &ctime(time) . "\n");
 
 &tbs_out("Checking sanity.\n");
@@ -69,9 +85,11 @@ if ($state eq "running") {
 
 # This does all the virtual to physical mapping and updatin the DB state.
 &tbs_out("Mapping to physical reality\n");
-if (&tbs_exec("assign_wrapper $pid $eid")) {
+if ($exitcode = &tbs_exec("assign_wrapper $pid $eid")) {
     &tbs_out("Failed to map to reality.\n");
-    exit(1);
+    cleanup;
+    # Past exit code through
+    exit($exitcode >> 8);
 }
 
 # We now need to copy the virt_nodes state to the nodes table.
@@ -92,9 +110,11 @@ while (($pnode,$vnode) = $sth->fetchrow_array) {
 		       " def_boot_cmd_line=\"$cmdline\"," .
 		       " rpms=\"$rpms\"," .
 		       " deltas=\"$deltas\"," .
-		       " tarballs=\"$tarfiles\"" .
+		       " tarballs=\"$tarfiles\"," .
+		       " startupcmd=\"$startupcmd\"" .
 		       " where node_id=\"$pnode\"")) {
 	    &tbs_out("Could not copy state for $vnode <-> $pnode.\n");
+	    cleanup;
 	    exit(1);
 	}
     }
@@ -107,6 +127,7 @@ $sth->finish;
 &tbs_out("Setting up VLANs\n");
 if (&tbs_exec("snmpit -t $pid $eid")) {
     &tbs_out("Failed to set up VLANs\n");
+    cleanup;
     exit(1);
 }
 
@@ -118,12 +139,14 @@ if (&tbs_exec("savevlans")) {
 &tbs_out("Setting up mountpoints\n");
 if (&tbs_exec("exports_setup")) {
     &tbs_out("Failed to setup mountpoints.\n");
+    cleanup;
     exit(1);
 }
 
 &tbs_out("Resetting OS and rebooting.\n");
 if (&tbs_exec("os_setup $pid $eid")) {
     &tbs_out("Failed to reset OS and reboot nodes.\n");
+    cleanup;
     exit(1);
 }
 
@@ -139,6 +162,7 @@ if (&tbs_exec("named_setup")) {
 if (! $dbh->do("UPDATE experiments set state=\"running\"" .
 	       " where pid=\"$pid\" and eid=\"$eid\"")) {
     &tbs_out("Could not set experiment state.\n");
+    cleanup;
     exit(1);
 }
 

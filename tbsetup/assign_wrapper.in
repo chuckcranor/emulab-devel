@@ -46,6 +46,13 @@ sub printdb {
     }
 };
 
+# Let's read the minimum requirements for this experiment.
+$sth = $dbh->prepare("SELECT minimum_nodes from experiments" .
+		     " where pid=\"$pid\" and eid=\"$eid\"");
+$sth->execute;
+($minimum_nodes) = $sth->fetchrow_array;
+$sth->finish;
+
 ######################################################################
 # Step 1 - Setup virtual topology
 #
@@ -318,7 +325,20 @@ while (1) {
 
     # Snapshot
     system("ptopgen > $ptopfile");
-   
+
+    # Get number of nodes
+    $numnodes = $dbh->do("select a.node_id,a.type from" .
+		     " nodes as a left join reserved as b" .
+		     " on a.node_id=b.node_id" .
+		     " where b.node_id is null" .
+		     " and a.type != \"cisco\" and a.type != \"APC\"" .
+		     " and a.type != \"shark\"");
+    
+    if ($numnodes < $minimum_nodes) {
+	print STDERR "Insufficient nodes available.\n";
+	exit(2);
+    }
+
     # Run assign
     $fail = 0;
     print "assign -b -t $ptopfile $topfile\n";

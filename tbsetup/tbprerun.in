@@ -78,6 +78,20 @@ if (($state eq "dormant") || ($state eq "running")) {
     exit(1);
 }
 
+sub cleanup {
+    &tbs_out("Cleaning up\n");
+    &tbs_out("Clearing virtual state.\n");
+    if (! $dbh->do("DELETE from virt_nodes where pid = \"$pid\"" . 
+		   " and eid = \"$eid\"")) {
+	
+	&tbs_out("Could not clear virt_nodes table.\n");
+    }
+    if (! $dbh->do("DELETE from virt_lans where pid = \"$pid\"" . 
+		   " and eid = \"$eid\"")) {
+	&tbs_out("Could not clear virt_lans table.\n");
+    }
+};
+
 # This setups virt_nodes, virt_names including all IP address calculation
 # and tb-* handling.
 &tbs_out("Running parser.\n");
@@ -118,6 +132,7 @@ $sth = $dbh->prepare("UPDATE experiments set minimum_nodes = $min," .
 		     "and eid = \"$eid\"");
 if (! $sth->execute()) {
     &tbs_out("Failed to set estimates.\n");
+    cleanup;
     exit(1);
 }
 $sth->finish(); 
@@ -127,6 +142,7 @@ $sth = $dbh->prepare("UPDATE experiments set state = \"dormant\"" .
 		     "where pid = \"$pid\" and eid = \"$eid\"");
 if (! $sth->execute()) {
     &tbs_out("Failed to set state.\n");
+    cleanup;
     exit(1);
 }
 $sth->finish();
