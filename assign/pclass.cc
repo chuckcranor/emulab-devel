@@ -28,7 +28,7 @@ using namespace boost;
 // fill out the pclass structure.  Then two routines pclass_set, and
 // pclass_unset are used to maintaing the structure during annealing.
 
-
+extern name_name_map rfixed_nodes;
 extern pnode_pvertex_map pnode2vertex;
 
 // pclasses - A list of all pclasses.
@@ -125,6 +125,9 @@ int generate_pclasses(tb_pgraph &PG) {
   tie(vit,vendit) = vertices(PG);
   for (;vit != vendit;++vit) {
     cur = *vit;
+    if (rfixed_nodes.find(get(pvertex_pmap,cur)->name) != rfixed_nodes.end()) {
+      continue;
+    }
     tb_pclass *curclass;
     bool found_class = 0;
     tb_pnode *curP = get(pvertex_pmap,cur);

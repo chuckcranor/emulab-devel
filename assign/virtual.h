@@ -72,8 +72,7 @@ public:
     for (desires_map::const_iterator it = node.desires.begin();
 	 it!=node.desires.end();it++) 
       o << "    " << (*it).first << " -> " << (*it).second << endl;
-    o << " vclass=" << node.vclass << " fixed=" <<
-      node.fixed << endl;
+    o << " vclass=" << node.vclass << endl;
     if (node.type.compare("delay") == 0) {
       o << "  src_edge=" << node.src_edge << " dst_edge="
 	<< node.dst_edge << endl;
@@ -89,7 +88,6 @@ public:
   crope type;			// the current type of the node
   tb_vclass *vclass;		// the virtual class of the node, if any
   crope name;			// string name of the node
-  bool fixed;			// is this node fixed
   bool assigned;		// is this node assigned?
   pvertex assignment;		// the physical vertex assigned to
 

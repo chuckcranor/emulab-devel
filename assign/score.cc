@@ -1158,7 +1158,6 @@ vvertex make_delay_node(vedge ve)
   delay->name = "delay-";
   delay->name += vlink->name;
   delay->type = "delay";
-  delay->fixed = false;
   delay->assigned = false;
   delay->delayed_link = vlink;
   delay->vclass = NULL;

@@ -14,9 +14,12 @@ const int MAX_PNODES = 1024;	/* maximum # of physical nodes */
 static int init_temp = 100;
 static int USE_OPTIMAL = 1;
 static int temp_prob = 130;
-static int temp_stop = 20;
+static int temp_stop = 5;
 static int CYCLES = 40;
 static int ACCEPTS = 30;
+// A scaling constant for the temperature in determining whether to
+// accept a change.
+static double sensitivity = 0.3;
 
 static float temp_rate = 0.9;
 static float opt_nodes_per_sw = 5.0;
@@ -79,7 +82,8 @@ static struct config_param options[] = {
   { "OD",       CONFIG_FLOAT,   &SCORE_OUTSIDE_DELAY,           0 },
   { "DM",       CONFIG_FLOAT,   &SCORE_DELAY,                   0 },
   { "DL",       CONFIG_FLOAT,   &SCORE_DELAYED_LINK,            0 },
-  { "OB",       CONFIG_FLOAT,   &SCORE_OVER_BANDWIDTH,          0 }
+  { "OB",       CONFIG_FLOAT,   &SCORE_OVER_BANDWIDTH,          0 },
+  { "SE",       CONFIG_FLOAT,   &sensitivity,                   0 }
 };
 
 static int noptions = sizeof(options) / sizeof(options[0]);

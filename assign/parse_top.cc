@@ -24,6 +24,7 @@ using namespace boost;
 
 extern name_vvertex_map vname2vertex;
 extern name_name_map fixed_nodes;
+extern name_name_map rfixed_nodes;
 extern name_slist vtypes;
 extern vvertex_vector virtual_nodes;
 
@@ -67,7 +68,6 @@ int parse_top(tb_vgraph &VG, istream& i)
 	  v->vclass=NULL;
 	  vtypes.push_front(v->type);
 	}
-	v->fixed = false;	// this may get set to true later
 	
 	for (unsigned int i = 3;i < parsed_line.size();++i) {
 	  crope desirename,desireweight;
@@ -209,6 +209,7 @@ int parse_top(tb_vgraph &VG, istream& i)
 	crope virtualnode = parsed_line[1];
 	crope physicalnode = parsed_line[2];
 	fixed_nodes[virtualnode] = physicalnode;
+	rfixed_nodes[physicalnode] = virtualnode;
       }
     } else {
       top_error("Unknown directive: " << command << ".");

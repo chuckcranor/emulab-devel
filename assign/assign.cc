@@ -70,8 +70,9 @@ vvertex_vector virtual_nodes;
 
 // Map of virtual node name to the physical node name it's fixed too.
 // The domain is the set of all fixed virtual nodes and the range is
-// the set of all fixed physical nodes.
+// the set of all fixed physical nodes.  Also have a reverse map.
 name_name_map fixed_nodes;
+name_name_map rfixed_nodes;
 
 // List of virtual types by name.
 name_slist vtypes;
@@ -112,10 +113,6 @@ typedef hash_map<vvertex,pvertex,hashptr<void *> > node_map;
 typedef hash_map<vvertex,bool,hashptr<void *> > assigned_map;
 typedef hash_map<pvertex,crope,hashptr<void *> > type_map;
 typedef hash_map<vedge,tb_link_info,hashedge> link_map;
-
-// A scaling constant for the temperature in determining whether to
-// accept a change.
-static double sensitivity = 0.1;
 
 // The number of accepts of increase that took place during the annealing.
 int accepts;
@@ -432,7 +429,7 @@ void anneal()
   pvertex oldpos;
   bool oldassigned;
   int bestviolated;
-  int num_fixed=0;
+
   float temp = init_temp;
 
   tb_removal_record last_remove;
@@ -444,36 +441,6 @@ void anneal()
 
   /* Set up the initial counts */
   init_score();
-
-  /* Set up fixed nodes */
-  for (name_name_map::iterator fixed_it=fixed_nodes.begin();
-       fixed_it!=fixed_nodes.end();++fixed_it) {
-    if (vname2vertex.find((*fixed_it).first) == vname2vertex.end()) {
-      cerr << "Fixed node: " << (*fixed_it).first <<
-	"does not exist." << endl;
-      exit(1);
-    }
-    vvertex vv = vname2vertex[(*fixed_it).first];
-    if (pname2vertex.find((*fixed_it).second) == pname2vertex.end()) {
-      cerr << "Fixed node: " << (*fixed_it).second <<
-	" not available." << endl;
-      exit(1);
-    }
-    pvertex pv = pname2vertex[(*fixed_it).second];
-    tb_vnode *vn = get(vvertex_pmap,vv);
-    tb_pnode *pn = get(pvertex_pmap,pv);
-    if (vn->vclass != NULL) {
-      cerr << "Can not have fixed nodes be in a vclass!.\n";
-      exit(1);
-    }
-    if (add_node(vv,pv,false,NULL,NULL) == 1) {
-      cerr << "Fixed node: Could not map " << vn->name <<
-	" to " << pn->name << endl;
-      exit(1);
-    }
-    vn->fixed = true;
-    num_fixed++;
-  }
 
   bestscore = get_score();
   bestviolated = violated;
@@ -495,20 +462,10 @@ void anneal()
       continue;
     }
     absassigned[*vit] = vn->assigned;
-    if (vn->assigned) {
-      assert(vn->fixed);
-      absassignment[*vit] = vn->assignment;
-      abstypes[*vit] = vn->type;
-    } else {
-      unassigned_nodes.push(vvertex_int_pair(*vit,std::random()));
-    }
+    assert(! vn->assigned);
+    unassigned_nodes.push(vvertex_int_pair(*vit,std::random()));
   }
 
-  if (num_fixed == nnodes) {
-    cout << "All nodes are fixed.  No annealing." << endl;
-    goto DONE;
-  }
-  
   // Annealing loop!
   vvertex vv;
   tb_vnode *vn;
@@ -536,9 +493,6 @@ void anneal()
 	unassigned_nodes.pop();
       } else {
 	int choice = std::random()%nnodes;
-	while (get(vvertex_pmap,virtual_nodes[choice])->fixed) {
-	  choice = std::random()%nnodes;
-	}
 	vv = virtual_nodes[choice];
       }
       
@@ -565,13 +519,17 @@ void anneal()
 	  unassigned_nodes.push(vvertex_int_pair(vv,std::random()));
 	  continue;
 	}
+      } else if (fixed_nodes.find(vn->name) != fixed_nodes.end()) {
+	pvertex pv = pname2vertex[fixed_nodes[vn->name]];
+	if (add_node(vv,pv,false,NULL,NULL) == 1) {
+	  unassigned_nodes.push(vvertex_int_pair(vv,std::random()));
+	}
       } else {
 	tb_pnode *newpnode = find_pnode(vn);
 	if (newpnode == NULL) {
 	  // need to free up nodes
 	  int toremove = std::random()%nnodes;
-	  while (get(vvertex_pmap,virtual_nodes[toremove])->fixed ||
-		 (! get(vvertex_pmap,virtual_nodes[toremove])->assigned)) {
+	  while (! get(vvertex_pmap,virtual_nodes[toremove])->assigned) {
 	    toremove = std::random()%nnodes;
 	  }
 	  remove_node(virtual_nodes[toremove],NULL);
@@ -657,7 +615,6 @@ void anneal()
 	     vvertex_it != absassigned.end();++vvertex_it) {
       vvertex vv = (*vvertex_it).first;
       tb_vnode *vnode = get(vvertex_pmap,vv);
-      if (vnode->fixed) continue;
       if (vnode->assigned) {
 	remove_node(vv,NULL);
       }
@@ -716,9 +673,6 @@ struct vvertex_writer {
       out << vnode->vclass->name;
     }
     out << "\"";
-    if (vnode->fixed) {
-      out << " style=dashed";
-    }
     out << "]";
   }
 };
@@ -831,11 +785,6 @@ struct solution_vertex_writer {
       color = "red";
     }
     crope style;
-    if (vnode->fixed) {
-      style="dashed";
-    } else {
-      style="solid";
-    }
     out << "[label=\"" << label << "\" color=" << color <<
       " style=" << style << "]";
   }
