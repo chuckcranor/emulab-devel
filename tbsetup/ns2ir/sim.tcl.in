@@ -157,6 +157,13 @@ Simulator instproc run {} {
     # Mark that a run statement exists
     set ran 1
 
+    # Check node names.
+    foreach node [lsort [array names node_list]] {
+	if {! [regexp {^[-0-9A-Za-z]+$} $node]} {
+	    perror "Invalid node name: $node.  Can only contain \[-0-9A-Za-z\]."
+	}
+    }
+
     # If any errors occur stop here.
     if {$errors == 1} {return}
 
