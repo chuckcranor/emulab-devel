@@ -417,3 +417,122 @@ tb-set-lan-loss $lan1 0.3
 <ul>
   <li>This command sets the loss rate for the entire LAN.
 </ul>
+
+<h4>tb-set-node-lan-delay</h4>
+
+<pre>
+tb-set-node-lan-delay <i>node</i> <i>lan</i> <i>delay</i>
+
+tb-set-node-lan-delay $lan0 $node0 40ms
+</pre>
+
+<dl>
+  <dt><i>node</i> - The node we are modifying the delay for.
+  <dt><i>lan</i> - Which LAN the node is in that we are affecting.
+  <dt><i>delay</i> - The new node to switch delay (see below).
+</dl>
+
+<p>Notes:
+<ul>
+  <li>This commands changes to the delay between the node and the
+      switch of the LAN.  This is only half of the trip a packet must
+      take.  The packet will also traverse the switch to the
+      destination node, possibly incurring additional latency from any
+      delay parameters there.
+  <li>If this command is not used to overwrite the delay, then the
+      delay for a given node to switch link is taken as one half of
+      the delay passed to <code>make-lan</code>.  Thus in a LAN where
+      no <code>tb-set-node-delay</code> calls are made the node to
+      node latency will be the latency passed to
+      <code>make-lan</code>.
+  <li>The behavior of this command is not defined when used with nodes
+      that are in the same LAN multiple times.
+</ul>
+
+<h4>tb-set-node-lan-bandwidth</h4>
+
+<pre>
+tb-set-node-lan-bandwidth <i>node</i> <i>lan</i> <i>bandwidth</i>
+
+tb-set-node-lan-bandwidth $lan0 $node0 20Mb
+</pre>
+
+<dl>
+  <dt><i>node</i> - The node we are modifying the bandwidth for.
+  <dt><i>lan</i> - Which LAN the node is in that we are affecting.
+  <dt><i>bandwidth</i> - The new node to switch bandwidth (see below).
+</dl>
+
+<p>Notes:
+<ul>
+  <li>This commands changes to the bandwidth between the node and the
+      switch of the LAN.  This is only half of the trip a packet must
+      take.  The packet will also traverse the switch to the
+      destination node which may have a lower bandwidth.
+  <li>If this command is not used to overwrite the bandwidth, then the
+      bandwidth for a given node to switch link is taken directly from
+      the bandwidth passed to <code>make-lan</code>.
+  <li>The behavior of this command is not defined when used with nodes
+      that are in the same LAN multiple times.
+</ul>
+
+<h4>tb-set-node-lan-loss</h4>
+
+<pre>
+tb-set-node-lan-loss <i>node</i> <i>lan</i> <i>loss</i>
+
+tb-set-node-lan-loss $lan0 $node0 0.05
+</pre>
+
+<dl>
+  <dt><i>node</i> - The node we are modifying the loss for.
+  <dt><i>lan</i> - Which LAN the node is in that we are affecting.
+  <dt><i>loss</i> - The new node to switch loss (see below).
+</dl>
+
+<p>Notes:
+<ul>
+  <li>This commands changes to the loss between the node and the
+      switch of the LAN.  This is only half of the trip a packet must
+      take.  The packet will also traverse the switch to the
+      destination node which may also have a loss chance.  Thus for
+      packet going to switch with loss chance <var>A</var> and then
+      going on the destination with loss chance <var>B</var> the node
+      to node loss chance is
+      <code>(1-(1-<var>A</var>)(1-<var>B</var>))</code>.
+  <li>If this command is not used to overwrite the loss, then the
+      loss for a given node to switch link is taken from the loss rate
+      passed to the <code>make-lan<code> command.  If a loss rate of
+      <var>L</var> is passed to <code>make-lan<code> then the node to
+      switch loss rate for each node is set to
+      <code>(1-sqrt(1-<var>L</var>))</code>.  Thus as each packet will
+      have two such chances to be lost the node to loss rate comes out
+      as the desired <var>L</var>.
+  <li>The behavior of this command is not defined when used with nodes
+      that are in the same LAN multiple times.
+</ul>
+
+<h4>tb-set-node-lan-params</h4>
+
+<pre>
+tb-set-node-lan-params <i>node</i> <i>lan</i> <i>delay</i> <i>bandwidth</i> <i>loss</i>
+
+tb-set-node-lan-params $lan0 $node0 40ms 20Mb 0.05
+</pre>
+
+<dl>
+  <dt><i>node</i> - The node we are modifying the loss for.
+  <dt><i>lan</i> - Which LAN the node is in that we are affecting.
+  <dt><i>delay</i> - The new node to switch delay.
+  <dt><i>bandwidth</i> - The new node to switch bandwidth.
+  <dt><i>loss</i> - The new node to switch loss.
+</dl>
+
+<p>Notes:
+<ul>
+  <li>This command is exactly equivalent to calling each of the above
+      three commands appropriately.  See above for more information.
+  </li>
+</ul>
+
+ 
