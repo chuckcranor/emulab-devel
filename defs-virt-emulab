@@ -2,7 +2,7 @@
 # This is the definitions file for Virt development tree on Emulab.Net.
 #
 TBDBNAME=tbdb
-TBOPSEMAIL=tbres-users@emulab-net
+TBOPSEMAIL=tbres-users@emulab.net
 TBLOGSEMAIL=tbres-users@emulab.net
 TBWWWEMAIL=tbres-users@emulab.net
 tbapprOVALEMAIL=tbres-users@emulab.net
