@@ -39,7 +39,7 @@ static float SCORE_VCLASS = 1.0; /* vclass score multiplier */
 static float SCORE_EMULATED_LINK = 0.01; /* cost of an emualted link */
 static float SCORE_OUTSIDE_DELAY = 0.5;	/* penalty for going out of delay
 					   requirements */
-static float SCORE_DELAY = 10.0; /* multiplier to distance for delay scoring */
+static float SCORE_DELAY = 1.0; /* multiplier to distance for delay scoring */
 static float SCORE_DELAYED_LINK = 0; /* cost of a delayed link in addition to
 					the cost of the resources needed to
 					fulfill it. */

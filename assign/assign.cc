@@ -383,7 +383,7 @@ void print_solution(ostream &o)
     }
   }
   o << "End Edges" << endl;
-  o << "Begin Delays" << endl;
+  o << "Delays:" << endl;
   for (vvertex_list::iterator delay_it = delay_nodes.begin();
        delay_it != delay_nodes.end();++delay_it) {
     tb_vnode *delay = get(vvertex_pmap,*delay_it);
@@ -533,6 +533,11 @@ void anneal()
 	  continue;
 	}
       } else if (fixed_nodes.find(vn->name) != fixed_nodes.end()) {
+	if (pname2vertex.find(fixed_nodes[vn->name]) == pname2vertex.end()) {
+	  cout << "Could not map fixed node: " << vn->name << ".  " << 
+	    fixed_nodes[vn->name] << " not available." << endl;
+	  exit(-1);
+	}
 	pvertex pv = pname2vertex[fixed_nodes[vn->name]];
 	if (add_node(vv,pv,false,NULL,NULL) == 1) {
 	  unassigned_nodes.push(vvertex_int_pair(vv,std::random()));

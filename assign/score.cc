@@ -729,10 +729,15 @@ bool direct_link(pvertex a,pvertex b,tb_vlink *vlink,pedge &edge)
       physical_delay.bandwidth = plink->delay_info.bandwidth - plink->bw_used;
       physical_delay.delay = plink->delay_info.delay;
       physical_delay.loss = plink->delay_info.loss;
-      double distance = (vlink->delay_info.distance(physical_delay) +
-			 vlink->rdelay_info.distance(physical_delay))/2;
-      if ((distance == -1) || (vlink->must_delayed)) {distance = DBL_MAX;}
-      
+      double distance1 = vlink->delay_info.distance(physical_delay);
+      double distance2 = vlink->rdelay_info.distance(physical_delay);
+      double distance;
+      if ((distance1 == -1) || (distance2 == -1) || (vlink->must_delayed)) {
+	distance = 10000.0;
+      } else {
+	distance = (distance1+distance2)/2;
+      }
+
       if ((! best_plink) ||
 	  (users < best_users) ||
 	  ((users == best_users) && (distance < best_distance))) {
@@ -774,8 +779,13 @@ bool find_link_to_switch(pvertex pv,pvertex switch_pv,tb_vlink *vlink,
 	physical_delay.bandwidth = plink->delay_info.bandwidth - plink->bw_used;
 	physical_delay.delay = plink->delay_info.delay;
 	physical_delay.loss = plink->delay_info.loss;
-	distance = (vlink->delay_info.distance(physical_delay) +
-		    vlink->rdelay_info.distance(physical_delay))/2;
+	double distance1 = vlink->delay_info.distance(physical_delay);
+	double distance2 = vlink->rdelay_info.distance(physical_delay);
+	if ((distance1 == -1) || (distance2 == -1) || (vlink->must_delayed)) {
+	  distance = -1;
+	} else {
+	  distance = (distance1+distance2)/2;
+	}
       } else {
 	distance = 0;
       }
@@ -787,7 +797,7 @@ bool find_link_to_switch(pvertex pv,pvertex switch_pv,tb_vlink *vlink,
       if (! vlink->emulated) {
 	users += plink->emulated;
       }
-      if ((distance == -1) || (vlink->must_delayed)) {
+      if (distance == -1) {
 	// -1 == infinity
 	continue;
       }
@@ -888,13 +898,16 @@ void score_link(pedge pe,vedge ve)
     physical_delay.delay = plink->delay_info.delay;
     physical_delay.loss = plink->delay_info.loss;
     
-    double distance = (vlink->delay_info.distance(physical_delay)+
-		       vlink->rdelay_info.distance(physical_delay))/2;
+    double distance1 = vlink->delay_info.distance(physical_delay);
+    double distance2 = vlink->rdelay_info.distance(physical_delay);
+    double distance;
+    if ((distance1 == -1) || (distance2 == -1) || (vlink->must_delayed)) {
+      distance = -1;
+    } else {
+      distance = (distance1+distance2)/2;
+    }
 
-    plink->bw_used += max(vlink->delay_info.bandwidth,
-			  vlink->rdelay_info.bandwidth);
-
-    if ((distance == -1) || (vlink->must_delayed)) {
+    if (distance == -1) {
       // violation
       SDEBUG(cerr << "    outside delay requirements." << endl);
       violated++;
@@ -903,6 +916,9 @@ void score_link(pedge pe,vedge ve)
     } else {
       SADD(distance * SCORE_DELAY);
     }
+
+    plink->bw_used += max(vlink->delay_info.bandwidth,
+			  vlink->rdelay_info.bandwidth);
   } else if (plink->type == tb_plink::PLINK_INTERSWITCH) {
     plink->bw_used += max(vlink->delay_info.bandwidth,
 			  vlink->rdelay_info.bandwidth);
@@ -959,10 +975,17 @@ void unscore_link(pedge pe,vedge ve)
     physical_delay.bandwidth = plink->delay_info.bandwidth - plink->bw_used;
     physical_delay.delay = plink->delay_info.delay;
     physical_delay.loss = plink->delay_info.loss;
-    double distance = (vlink->delay_info.distance(physical_delay)+
-		       vlink->rdelay_info.distance(physical_delay))/2;
 
-    if ((distance == -1) || (vlink->must_delayed)) {
+    double distance1 = vlink->delay_info.distance(physical_delay);
+    double distance2 = vlink->rdelay_info.distance(physical_delay);
+    double distance;
+    if ((distance1 == -1) || (distance2 == -1) || (vlink->must_delayed)) {
+      distance = -1;
+    } else {
+      distance = (distance1+distance2)/2;
+    }
+
+    if (distance == -1) {
       // violation
       SDEBUG(cerr << "    removing delay violation." << endl);
       violated--;
@@ -1191,21 +1214,27 @@ vvertex make_delay_node(vedge ve)
   src_vlink->delay_info.bandwidth = vlink->delay_info.bandwidth;
   src_vlink->delay_info.bw_under = 0;
   src_vlink->delay_info.bw_over = -1;
+  src_vlink->delay_info.bw_weight = 1;
   src_vlink->delay_info.delay = vlink->delay_info.delay;
   src_vlink->delay_info.delay_under = -1;
   src_vlink->delay_info.delay_over = 0;
+  src_vlink->delay_info.delay_weight = 1;
   src_vlink->delay_info.loss = vlink->delay_info.loss;
   src_vlink->delay_info.loss_under = -1;
   src_vlink->delay_info.loss_over = 0;
+  src_vlink->delay_info.loss_weight = 1;
   src_vlink->rdelay_info.bandwidth = vlink->rdelay_info.bandwidth;
   src_vlink->rdelay_info.bw_under = 0;
   src_vlink->rdelay_info.bw_over = -1;
+  src_vlink->rdelay_info.bw_weight = 1;
   src_vlink->rdelay_info.delay = vlink->rdelay_info.delay;
   src_vlink->rdelay_info.delay_under = -1;
   src_vlink->rdelay_info.delay_over = 0;
+  src_vlink->rdelay_info.delay_weight = 1;
   src_vlink->rdelay_info.loss = vlink->rdelay_info.loss;
   src_vlink->rdelay_info.loss_under = -1;
   src_vlink->rdelay_info.loss_over = 0;
+  src_vlink->rdelay_info.loss_weight = 1;
 
   src_vlink->name = vlink->name;
   src_vlink->name += "-delaysrc";
@@ -1217,21 +1246,27 @@ vvertex make_delay_node(vedge ve)
   dst_vlink->delay_info.bandwidth = vlink->delay_info.bandwidth;
   dst_vlink->delay_info.bw_under = 0;
   dst_vlink->delay_info.bw_over = -1;
+  dst_vlink->delay_info.bw_weight = 1;
   dst_vlink->delay_info.delay = vlink->delay_info.delay;
   dst_vlink->delay_info.delay_under = -1;
   dst_vlink->delay_info.delay_over = 0;
+  dst_vlink->delay_info.delay_weight = 1;
   dst_vlink->delay_info.loss = vlink->delay_info.loss;
   dst_vlink->delay_info.loss_under = -1;
   dst_vlink->delay_info.loss_over = 0;
+  dst_vlink->delay_info.loss_weight = 1;
   dst_vlink->rdelay_info.bandwidth = vlink->rdelay_info.bandwidth;
   dst_vlink->rdelay_info.bw_under = 0;
   dst_vlink->rdelay_info.bw_over = -1;
+  dst_vlink->rdelay_info.bw_weight = 1;
   dst_vlink->rdelay_info.delay = vlink->rdelay_info.delay;
   dst_vlink->rdelay_info.delay_under = -1;
   dst_vlink->rdelay_info.delay_over = 0;
+  dst_vlink->rdelay_info.delay_weight = 1;
   dst_vlink->rdelay_info.loss = vlink->rdelay_info.loss;
   dst_vlink->rdelay_info.loss_under = -1;
   dst_vlink->rdelay_info.loss_over = 0;
+  dst_vlink->rdelay_info.loss_weight = 1;
 
   dst_vlink->name = vlink->name;
   dst_vlink->name += "-delaydst";

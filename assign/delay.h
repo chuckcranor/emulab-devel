@@ -1,16 +1,16 @@
 #ifndef __DELAY_H
 #define __DELAY_H
 
+#include <math.h>
+
 class tb_pnode;
 
 template <class T> inline double basic_distance(T a,T b) {
-  if (b == 0) {
-    if (a == 0)
-      return 0;
-    else
-      return DBL_MAX;
-  }
-  return fabs((double)a/(double)b - 1.0);
+  if ((a == 0) || (b == 0)) return 1;
+  if (a == b) return 0;
+  double ab;
+  if (a < b) {ab = b/a;} else {ab = a/b;}
+  return exp(-1/(3*(ab-1)));
 }
 inline double delay_distance(int a, int b) {
   return basic_distance(a,b);
@@ -46,9 +46,9 @@ public:
 	((loss_over != -1) && (target.loss > loss+loss_over))) {
       return -1;
     }
-    return bandwidth_distance(target.bandwidth,bandwidth)*bw_weight+
-      delay_distance(target.delay,delay)*delay_weight+
-      loss_distance(target.loss,loss)*loss_weight;
+    return (bandwidth_distance(target.bandwidth,bandwidth)*bw_weight+
+	    delay_distance(target.delay,delay)*delay_weight+
+	    loss_distance(target.loss,loss)*loss_weight)/3;
   }
   
   friend ostream &operator<<(ostream &o, const tb_delay_info& delay)
