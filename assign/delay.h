@@ -3,7 +3,6 @@
 
 class tb_pnode;
 
-
 template <class T> inline double basic_distance(T a,T b) {
   if (b == 0) {
     if (a == 0)
@@ -33,6 +32,11 @@ public:
   double loss_under,loss_over;
   double bw_weight,delay_weight,loss_weight;
 
+  tb_delay_info() : bandwidth(0), delay(0), loss(0), bw_under(0),
+		    bw_over(0), delay_under(0), delay_over(0),
+		    loss_under(0), loss_over(0), bw_weight(0),
+		    delay_weight(0), loss_weight(0) {;}
+  
   double distance(tb_delay_info &target) {
     if (((bw_under != -1) && (target.bandwidth < bandwidth-bw_under)) ||
 	((bw_over != -1) && (target.bandwidth > bandwidth+bw_over)) ||
@@ -59,6 +63,7 @@ public:
     return o;
   }
 };
+
 
 #endif __DELAY_H
 

@@ -203,7 +203,7 @@ int tb_pclass::add_member(tb_pnode *p)
 int pclass_set(tb_vnode *v,tb_pnode *p)
 {
   tb_pclass *c = p->my_class;
-  
+
   // remove p node from correct lists in equivalence class.
   tb_pclass::pclass_members_map::iterator dit;
   for (dit=c->members.begin();dit!=c->members.end();dit++) {

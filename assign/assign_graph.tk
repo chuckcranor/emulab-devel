@@ -35,12 +35,12 @@ while {[gets stdin line] >= 0} {
 	if {$trans < $mintrans} {set mintrans $trans}
 	if {$accepts > $maxaccepts} {set maxaccepts $accepts}
 	if {$accepts < $minaccepts} {set minaccepts $accepts}
-    } elseif {[regexp {^SCORE: add_node\(([\w/]+),([\w/]+)\)} $line \
+    } elseif {[regexp {^SCORE: add_node\(([\w/-]+),([\w/]+)\)} $line \
 		   match virtual physical]} {
 
 	set active($virtual) [list $time $physical]
 	incr time
-    } elseif {[regexp {^SCORE: remove_node\(([\w/]+)\)} $line \
+    } elseif {[regexp {^SCORE: remove_node\(([\w/-]+)\)} $line \
 		   match virtual]} {
 	set starttime [lindex $active($virtual) 0]
 	set physical [lindex $active($virtual) 1]

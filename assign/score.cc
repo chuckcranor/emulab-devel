@@ -26,6 +26,8 @@ using namespace boost;
 #include "score.h"
 
 extern switch_pred_map_map switch_preds;
+extern name_pvertex_map pname2vertex;
+extern name_vvertex_map vname2vertex;
 
 double score;			// The score of the current mapping
 int violated;			// How many times the restrictions
@@ -36,6 +38,8 @@ violated_info vinfo;		// specific info on violations
 extern tb_vgraph VG;		// virtual graph
 extern tb_pgraph PG;		// physical grpaph
 extern tb_sgraph SG;		// switch fabric
+
+extern vvertex_set delay_nodes;	// What delay nodes exist
 
 bool direct_link(pvertex a,pvertex b,tb_vlink *vlink,pedge &edge);
 void score_link(pedge pe,vedge ve);
@@ -48,7 +52,12 @@ int find_interswitch_path(pvertex src_pv,pvertex dest_pv,
 double fd_score(tb_vnode *vnode,tb_pnode *pnoder,int &out_fd_violated);
 void score_link_info(vedge ve);
 void unscore_link_info(vedge ve);
+void remove_delay_node(vvertex delayv);
+vvertex make_delay_node(vedge ve);
 
+// defined in assign.cc
+tb_pnode *find_pnode(tb_vnode *vn);
+  
 #ifdef SCORE_DEBUG_MORE
 #define SADD(amount) cerr << "SADD: " << #amount << "=" << amount << " from " << score;score+=amount;cerr << " to " << score << endl
 #define SSUB(amount)  cerr << "SSUB: " << #amount << "=" << amount << " from " << score;score-=amount;cerr << " to " << score << endl
@@ -166,7 +175,11 @@ void unscore_link_info(vedge ve)
       SSUB(SCORE_SWITCH);
     }
     vlink->link_info.switches.clear();
+  } else if (vlink->link_info.type == tb_link_info::LINK_DELAYED) {
+    SDEBUG(cerr << "    delayed link" << endl);
+    SSUB(SCORE_DELAYED_LINK);
   }
+  vlink->link_info.type = tb_link_info::LINK_UNKNOWN;
 }
 /*
  * This removes a virtual node from the assignments, adjusting
@@ -186,12 +199,43 @@ void remove_node(vvertex vv)
 #endif
 
   assert(pnode != NULL);
+  
+  // remove the scores associated with each edge
+  voedge_iterator vedge_it,end_vedge_it;
+  tie(vedge_it,end_vedge_it) = out_edges(vv,VG);
+  for (;vedge_it!=end_vedge_it;++vedge_it) {
+    tb_vlink *vlink = get(vedge_pmap,*vedge_it);
+    vvertex dest_vv = target(*vedge_it,VG);
+    if (dest_vv == vv)
+      dest_vv = source(*vedge_it,VG);
+    tb_vnode *dest_vnode = get(vvertex_pmap,dest_vv);
+    SDEBUG(cerr << "  edge to " << dest_vnode->name << endl);
 
-  if (pnode->my_class) {
-    pclass_unset(pnode);
+    if (dest_vnode->type.compare("delay") == 0) {continue;}
+
+    if (! dest_vnode->assigned) continue;
+
+    if (vlink->no_connection) {
+      SDEBUG(cerr << "  link no longer in violation.\n";)
+      SSUB(SCORE_NO_CONNECTION);
+      vlink->no_connection=false;
+      vinfo.no_connection--;
+      violated--;
+    }
+    
+    if (vlink->link_info.type == tb_link_info::LINK_DELAYED) {
+      SDEBUG(cerr << "  delayed link! removing delay node." << endl);
+      remove_node(vlink->delay_node);
+      remove_delay_node(vlink->delay_node);
+    }
+    
+    unscore_link_info(*vedge_it);
   }
 
   // pclass
+  if (pnode->my_class) {
+    pclass_unset(pnode);
+  }
   if (pnode->my_class && (pnode->my_class->used == 0)) {
     SDEBUG(cerr << "  freeing pclass" << endl);
     SSUB(SCORE_PCLASS);
@@ -208,31 +252,7 @@ void remove_node(vvertex vv)
     }
     SSUB(-score_delta*SCORE_VCLASS);
   }
-  
-  // remove the scores associated with each edge
-  voedge_iterator vedge_it,end_vedge_it;
-  tie(vedge_it,end_vedge_it) = out_edges(vv,VG);
-  for (;vedge_it!=end_vedge_it;++vedge_it) {
-    tb_vlink *vlink = get(vedge_pmap,*vedge_it);
-    vvertex dest_vv = target(*vedge_it,VG);
-    if (dest_vv == vv)
-      dest_vv = source(*vedge_it,VG);
-    tb_vnode *dest_vnode = get(vvertex_pmap,dest_vv);
-    SDEBUG(cerr << "  edge to " << dest_vnode->name << endl);
 
-    if (vlink->no_connection) {
-      SDEBUG(cerr << "  link no longer in violation.\n";)
-      SSUB(SCORE_NO_CONNECTION);
-      vlink->no_connection=false;
-      vinfo.no_connection--;
-      violated--;
-    }
-    
-    if (! dest_vnode->assigned) continue;
-    
-    unscore_link_info(*vedge_it);
-  }
-  
   // adjust pnode scores
   pnode->current_load--;
   vnode->assigned = false;
@@ -312,6 +332,9 @@ void score_link_info(vedge ve)
       }
     }
     break;
+  case tb_link_info::LINK_DELAYED:
+    SADD(SCORE_DELAYED_LINK);
+    break;
   case tb_link_info::LINK_UNKNOWN:
   case tb_link_info::LINK_TRIVIAL:
     cerr << "Internal error: Should not be here either." << endl;
@@ -327,7 +350,7 @@ void score_link_info(vedge ve)
  * is true then it deterministically solves the link problem for best
  * score.  Note: deterministic takes considerably longer.
  */
-int add_node(vvertex vv,pvertex pv, bool deterministic)
+int add_node(vvertex vv,pvertex pv, bool deterministic,name2pnode_map *delays)
 {
   tb_vnode *vnode = get(vvertex_pmap,vv);
   tb_pnode *pnode = get(pvertex_pmap,pv);
@@ -382,7 +405,37 @@ int add_node(vvertex vv,pvertex pv, bool deterministic)
       }
     }
   }
+
+  // Set up pclass, we do this early so that if we need to add a delay
+  // node it finds the right node.
+  // pclass
+  pnode->current_load++;
+  if (pnode->my_class && (pnode->my_class->used == 0)) {
+    SDEBUG(cerr << "  new pclass" << endl);
+    SADD(SCORE_PCLASS);
+  }
   
+  if (pnode->my_class) {
+    pclass_set(vnode,pnode);
+  }
+
+  // more setting up pnode
+  vnode->assignment = pv;
+  vnode->assigned = true;
+  if (pnode->current_load > pnode->max_load) {
+    SDEBUG(cerr << "  load to high - penalty (" << pnode->current_load <<
+	   ")" << endl);
+    SADD(SCORE_PNODE_PENALTY);
+    vinfo.pnode_load++;
+    violated++;
+  } else {
+    SDEBUG(cerr << "  load is fine" << endl);
+  }
+  if (pnode->current_load == 1) {
+    SDEBUG(cerr << "  new pnode" << endl);
+    SADD(SCORE_PNODE);
+  }
+
   // set up links
   voedge_iterator vedge_it,end_vedge_it;
   tie(vedge_it,end_vedge_it) = out_edges(vv,VG);	    
@@ -397,6 +450,8 @@ int add_node(vvertex vv,pvertex pv, bool deterministic)
     
     SDEBUG(cerr << "  edge to " << dest_vnode->name << endl);
 
+    if (dest_vnode->type.compare("delay") == 0) {continue;}
+		
     if (dest_vnode->assigned) {
       pvertex dest_pv = dest_vnode->assignment;
       tb_pnode *dest_pnode = get(pvertex_pmap,dest_pv);
@@ -431,15 +486,16 @@ int add_node(vvertex vv,pvertex pv, bool deterministic)
 	for (pvertex_set::iterator switch_it = pnode->switches.begin();
 	     switch_it != pnode->switches.end();++switch_it) {
 	  if (dest_pnode->switches.find(*switch_it) != dest_pnode->switches.end()) {
-	    find_link_to_switch(pv,*switch_it,vlink,first);
-	    find_link_to_switch(dest_pv,*switch_it,vlink,second);
-	    resolutions[resolution_index].type = tb_link_info::LINK_INTRASWITCH;
-	    resolutions[resolution_index].plinks.push_back(first);
-	    resolutions[resolution_index].plinks.push_back(second);
-	    resolutions[resolution_index].switches.push_front(*switch_it);
-	    resolution_index++;
-	    total_weight += LINK_RESOLVE_INTRASWITCH;
-	    SDEBUG(cerr << "    intraswitch " << first << " and " << second << endl);
+	    if (find_link_to_switch(pv,*switch_it,vlink,first) &&
+		find_link_to_switch(dest_pv,*switch_it,vlink,second)) {
+	      resolutions[resolution_index].type = tb_link_info::LINK_INTRASWITCH;
+	      resolutions[resolution_index].plinks.push_back(first);
+	      resolutions[resolution_index].plinks.push_back(second);
+	      resolutions[resolution_index].switches.push_front(*switch_it);
+	      resolution_index++;
+	      total_weight += LINK_RESOLVE_INTRASWITCH;
+	      SDEBUG(cerr << "    intraswitch " << first << " and " << second << endl);
+	    }
 	  }
 	}
 	// Interswitch paths
@@ -450,12 +506,12 @@ int add_node(vvertex vv,pvertex pv, bool deterministic)
 	       dest_switch_it != dest_pnode->switches.end();
 	       ++dest_switch_it) {
 	    if (*source_switch_it == *dest_switch_it) continue;
-	    if (find_interswitch_path(*source_switch_it,*dest_switch_it,vlink->delay_info.bandwidth,
+	    if ((find_interswitch_path(*source_switch_it,*dest_switch_it,vlink->delay_info.bandwidth,
 				      resolutions[resolution_index].plinks,
-				      resolutions[resolution_index].switches) != 0) {
+				      resolutions[resolution_index].switches) != 0) &&
+		find_link_to_switch(pv,*source_switch_it,vlink,first) &&
+		find_link_to_switch(dest_pv,*dest_switch_it,vlink,second)) {
 	      resolutions[resolution_index].type = tb_link_info::LINK_INTERSWITCH;
-	      find_link_to_switch(pv,*source_switch_it,vlink,first);
-	      find_link_to_switch(dest_pv,*dest_switch_it,vlink,second);
 	      resolutions[resolution_index].plinks.push_front(first);
 	      resolutions[resolution_index].plinks.push_back(second);
 	      resolution_index++;
@@ -468,26 +524,35 @@ int add_node(vvertex vv,pvertex pv, bool deterministic)
 	}
 
 	// check for no link
-	if (resolution_index == 0) {
-	  SDEBUG(cerr << "  Could not find any resolutions. Trying delay." <<
-		 endl);
-
-#ifdef 0
+	if ((resolution_index == 0) && vlink->allow_delayed) {
+	  SDEBUG(cerr << "   DELAYING" << endl);
+	  
 	  // Create virtual delay node and link with special free vlinks.
-	  vvertex delayv = make_delay_node(vlink);
-	  tb_pnode *delaypnode = find_pnode(get(vvertex_pmap,delayv));
+	  vvertex delayv = make_delay_node(*vedge_it);
+	  tb_pnode *delaypnode;
+	  if (delays == NULL) {
+	    delaypnode = find_pnode(get(vvertex_pmap,delayv));
+	  } else {
+	    delaypnode = (*delays)[get(vvertex_pmap,delayv)->name];
+	  }
 	  
 	  // Assign delay node
-	  if (add_node(delayv,pnode2vertex[delaypnode],false) == 1) {
-#endif
-	    SDEBUG(cerr << "Failed to delay." << endl);
-	    SADD(SCORE_NO_CONNECTION);
-	    vlink->no_connection=true;
-	    vinfo.no_connection++;
-	    violated++;
-#ifdef 0
+	  if (add_node(delayv,pname2vertex[delaypnode->name],
+		       deterministic,NULL) == 0) {
+	    resolutions[0].type = tb_link_info::LINK_DELAYED;
+	    resolution_index++;
+	    total_weight = 0;
+	    vlink->delay_node = delayv;
+	    SDEBUG(cerr << "   delay success" << endl);
 	  }
-#endif
+	  SDEBUG(cerr << "    DELAY DONE" << endl);
+	}
+	if (resolution_index == 0) {
+	  SDEBUG(cerr << "    Could not find any resolutions." << endl);
+	  SADD(SCORE_NO_CONNECTION);
+	  vlink->no_connection=true;
+	  vinfo.no_connection++;
+	  violated++;
 	} else {
 	  // Check to see if we are fixing a violation
 	  if (vlink->no_connection) {
@@ -501,7 +566,12 @@ int add_node(vvertex vv,pvertex pv, bool deterministic)
 	  // Choose a link
 	  int index;
 	  if (!deterministic) {
-	    float choice = std::random()%(int)total_weight;
+	    float choice;
+	    if (total_weight > 0) {
+	      choice = std::random()%(int)total_weight;
+	    } else {
+	      choice = 0;
+	    }
 	    for (index = 0;index < resolution_index;++index) {
 	      switch (resolutions[index].type) {
 	      case tb_link_info::LINK_DIRECT:
@@ -510,6 +580,8 @@ int add_node(vvertex vv,pvertex pv, bool deterministic)
 		choice -= LINK_RESOLVE_INTRASWITCH; break;
 	      case tb_link_info::LINK_INTERSWITCH:
 		choice -= LINK_RESOLVE_INTERSWITCH; break;
+	      case tb_link_info::LINK_DELAYED:
+		choice -= 1; break;
 	      case tb_link_info::LINK_UNKNOWN:
 	      case tb_link_info::LINK_TRIVIAL:
 		cerr << "Internal error: Should not be here." << endl;
@@ -545,25 +617,6 @@ int add_node(vvertex vv,pvertex pv, bool deterministic)
     }
   }
   
-  // finish setting up pnode
-  pnode->current_load++;
-
-  vnode->assignment = pv;
-  vnode->assigned = true;
-  if (pnode->current_load > pnode->max_load) {
-    SDEBUG(cerr << "  load to high - penalty (" << pnode->current_load <<
-	   ")" << endl);
-    SADD(SCORE_PNODE_PENALTY);
-    vinfo.pnode_load++;
-    violated++;
-  } else {
-    SDEBUG(cerr << "  load is fine" << endl);
-  }
-  if (pnode->current_load == 1) {
-    SDEBUG(cerr << "  new pnode" << endl);
-    SADD(SCORE_PNODE);
-  }
-
   // node no longer unassigned
   SSUB(SCORE_UNASSIGNED);
   vinfo.unassigned--;
@@ -576,11 +629,6 @@ int add_node(vvertex vv,pvertex pv, bool deterministic)
   violated += fd_violated;
   vinfo.desires += fd_violated;
 
-  // pclass
-  if (pnode->my_class && (pnode->my_class->used == 0)) {
-    SDEBUG(cerr << "  new pclass" << endl);
-    SADD(SCORE_PCLASS);
-  }
 
   // vclass
   if (vnode->vclass != NULL) {
@@ -595,10 +643,6 @@ int add_node(vvertex vv,pvertex pv, bool deterministic)
 
   SDEBUG(cerr << "  assignment=" << vnode->assignment << endl);
   SDEBUG(cerr << "  new score=" << score << " new violated=" << violated << endl);
-
-  if (pnode->my_class) {
-    pclass_set(vnode,pnode);
-  }
   
   return 0;
   }
@@ -667,11 +711,17 @@ bool find_link_to_switch(pvertex pv,pvertex switch_pv,tb_vlink *vlink,
       dest_pv = source(*pedge_it,PG);
     if (dest_pv == switch_pv) {
       tb_plink *plink = get(pedge_pmap,*pedge_it);
-      tb_delay_info physical_delay;
-      physical_delay.bandwidth = plink->delay_info.bandwidth - plink->bw_used;
-      physical_delay.delay = plink->delay_info.delay;
-      physical_delay.loss = plink->delay_info.loss;
-      double distance = vlink->delay_info.distance(physical_delay);
+
+      double distance;
+      if (plink->type != tb_plink::PLINK_LAN) {
+	tb_delay_info physical_delay;
+	physical_delay.bandwidth = plink->delay_info.bandwidth - plink->bw_used;
+	physical_delay.delay = plink->delay_info.delay;
+	physical_delay.loss = plink->delay_info.loss;
+	distance = vlink->delay_info.distance(physical_delay);
+      } else {
+	distance = 0;
+      }
       int users;
 
       // For sticking emulated links in emulated links we only care
@@ -682,7 +732,7 @@ bool find_link_to_switch(pvertex pv,pvertex switch_pv,tb_vlink *vlink,
       }
       if (distance == -1) {
 	// -1 == infinity
-	distance = DBL_MAX;
+	continue;
       }
       if ((users < best_users) ||
 	  ((users  == best_users) && (distance < best_distance))) {
@@ -775,9 +825,7 @@ void score_link(pedge pe,vedge ve)
 	violated++;
       }
     }
-  }
 
-  if (plink->type != tb_plink::PLINK_LAN) {
     tb_delay_info physical_delay;
     physical_delay.bandwidth = plink->delay_info.bandwidth - plink->bw_used;
     physical_delay.delay = plink->delay_info.delay;
@@ -795,6 +843,14 @@ void score_link(pedge pe,vedge ve)
       SADD(SCORE_OUTSIDE_DELAY);
     } else {
       SADD(distance * SCORE_DELAY);
+    }
+  } else if (plink->type == tb_plink::PLINK_INTERSWITCH) {
+    plink->bw_used += vlink->delay_info.bandwidth;
+    if (plink->bw_used > plink->delay_info.bandwidth) {
+      // interswitch over bandwidth
+      vinfo.bandwidth++;
+      violated++;
+      SADD(SCORE_OVER_BANDWIDTH);
     }
   }
 }
@@ -835,10 +891,7 @@ void unscore_link(pedge pe,vedge ve)
 	violated--;
       }
     }
-  }
-  
-  // bandwidth check
-  if (plink->type != tb_plink::PLINK_LAN) {
+    
     plink->bw_used -= vlink->delay_info.bandwidth;
 
     tb_delay_info physical_delay;
@@ -856,9 +909,17 @@ void unscore_link(pedge pe,vedge ve)
     } else {
       SSUB(distance * SCORE_DELAY);
     }
+  } else if (plink->type == tb_plink::PLINK_INTERSWITCH) {
+    int oldbw = plink->bw_used;
+    plink->bw_used -= vlink->delay_info.bandwidth;
+    if ((oldbw > plink->delay_info.bandwidth) &&
+	(plink->bw_used < plink->delay_info.bandwidth)) {
+      //interswitch udner bandwidth
+      vinfo.bandwidth--;
+      violated--;
+      SSUB(SCORE_OVER_BANDWIDTH);
+    }
   }
-
-  vlink->link_info.type = tb_link_info::LINK_UNKNOWN;
 }
 
 double fd_score(tb_vnode *vnode,tb_pnode *pnode,int &fd_violated)
@@ -1014,4 +1075,106 @@ void delete_lan_node(pvertex pv)
 
   remove_vertex(pv,PG);
   delete pnode;
+}
+
+vvertex make_delay_node(vedge ve)
+{
+  tb_vlink *vlink = get(vedge_pmap,ve);
+
+  vvertex delayv;
+  vedge src_edge,dst_edge;
+  tb_vlink *src_vlink,*dst_vlink;
+
+  tb_vnode *delay = new tb_vnode;
+
+  delay->name = "delay-";
+  delay->name += vlink->name;
+  delay->type = "delay";
+  delay->fixed = false;
+  delay->assigned = false;
+  delay->delayed_link = vlink;
+  delay->vclass = NULL;
+    
+  delayv = add_vertex(VG);
+  vname2vertex[delay->name] = delayv;
+  put(vvertex_pmap,delayv,delay);
+
+  src_vlink = new tb_vlink;
+  dst_vlink = new tb_vlink;
+
+  src_edge = add_edge(source(ve,VG),delayv,VG).first;
+  put(vedge_pmap,src_edge,src_vlink);
+  dst_edge = add_edge(target(ve,VG),delayv,VG).first;
+  put(vedge_pmap,dst_edge,dst_vlink);
+
+  src_vlink->delay_info.bandwidth = vlink->delay_info.bandwidth;
+  src_vlink->delay_info.bw_under = 0;
+  src_vlink->delay_info.bw_over = -1;
+  src_vlink->delay_info.delay = vlink->delay_info.delay;
+  src_vlink->delay_info.delay_under = -1;
+  src_vlink->delay_info.delay_over = 0;
+  src_vlink->delay_info.loss = vlink->delay_info.loss;
+  src_vlink->delay_info.loss_under = -1;
+  src_vlink->delay_info.loss_over = 0;
+
+  src_vlink->name = vlink->name;
+  src_vlink->name += "-delaysrc";
+  src_vlink->emulated = false;
+  src_vlink->no_connection = 0;
+  src_vlink->allow_delayed = false; // IMPORTANT!
+    
+  dst_vlink->delay_info.bandwidth = vlink->delay_info.bandwidth;
+  dst_vlink->delay_info.bw_under = 0;
+  dst_vlink->delay_info.bw_over = -1;
+  dst_vlink->delay_info.delay = vlink->delay_info.delay;
+  dst_vlink->delay_info.delay_under = -1;
+  dst_vlink->delay_info.delay_over = 0;
+  dst_vlink->delay_info.loss = vlink->delay_info.loss;
+  dst_vlink->delay_info.loss_under = -1;
+  dst_vlink->delay_info.loss_over = 0;
+
+  dst_vlink->name = vlink->name;
+  dst_vlink->name += "-delaydst";
+  dst_vlink->emulated = false;
+  dst_vlink->no_connection = 0;
+  dst_vlink->allow_delayed = false; // IMPORTANT!
+
+  delay->src_edge = src_edge;
+  delay->dst_edge = dst_edge;
+
+  vinfo.unassigned++;
+  violated++;
+  SADD(SCORE_UNASSIGNED);
+
+  delay_nodes.insert(delayv);
+  return delayv;
+}
+
+void remove_delay_node(vvertex delayv)
+{
+  tb_vnode *delay = get(vvertex_pmap,delayv);
+  tb_vlink *src_vlink,*dst_vlink;
+
+  assert(!delay->assigned);
+
+  src_vlink = get(vedge_pmap,delay->src_edge);
+  dst_vlink = get(vedge_pmap,delay->dst_edge);
+
+  delete src_vlink;
+  delete dst_vlink;
+
+  vname2vertex.erase(delay->name);
+  
+  remove_edge(delay->src_edge,VG);
+  remove_edge(delay->dst_edge,VG);
+
+  remove_vertex(delayv,VG);
+  
+  vinfo.unassigned--;
+  violated--;
+  SSUB(SCORE_UNASSIGNED);
+
+  delay_nodes.erase(delayv);
+  
+  delete delay;
 }

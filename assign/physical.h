@@ -43,6 +43,7 @@ typedef vector<svertex> switch_pred_map;
 typedef hash_map<svertex,switch_pred_map*>switch_pred_map_map;
 typedef list<pedge> pedge_path;
 typedef list<pvertex> pvertex_list;
+typedef hash_map<crope,tb_pnode*> name2pnode_map;
 
 extern tb_pgraph_vertex_pmap pvertex_pmap;
 extern tb_pgraph_edge_pmap pedge_pmap;

@@ -36,6 +36,11 @@ static float SCORE_EMULATED_LINK = 0.01; /* cost of an emualted link */
 static float SCORE_OUTSIDE_DELAY = 0.5;	/* penalty for going out of delay
 					   requirements */
 static float SCORE_DELAY = 10.0; /* multiplier to distance for delay scoring */
+static float SCORE_DELAYED_LINK = 0; /* cost of a delayed link in addition to
+					the cost of the resources needed to
+					fulfill it. */
+static float SCORE_OVER_BANDWIDTH = 0.5; /* penalty for going over
+					    bandwidth in an interswitch link */
 
 // The following are used to weight possible link resolutions.  Higher
 // numbers mean a more likely resolution.  Trivial resolutions are always
@@ -70,7 +75,9 @@ static struct config_param options[] = {
   { "LI",       CONFIG_FLOAT,   &LINK_RESOLVE_INTRASWITCH,      0 },
   { "LT",       CONFIG_FLOAT,   &LINK_RESOLVE_INTERSWITCH,      0 },
   { "OD",       CONFIG_FLOAT,   &SCORE_OUTSIDE_DELAY,           0 },
-  { "DM",       CONFIG_FLOAT,   &SCORE_DELAY,                   0 }
+  { "DM",       CONFIG_FLOAT,   &SCORE_DELAY,                   0 },
+  { "DL",       CONFIG_FLOAT,   &SCORE_DELAYED_LINK,            0 },
+  { "OB",       CONFIG_FLOAT,   &SCORE_OVER_BANDWIDTH,          0 }
 };
 
 static int noptions = sizeof(options) / sizeof(options[0]);
