@@ -163,14 +163,18 @@ if ($expstate == $TB_EXPTSTATE_ACTIVE) {
     if (STUDLY()) {
 	WRITESUBMENUBUTTON("Run Linktest",
 			   "linktest.php3?pid=$exp_pid&eid=$exp_eid");
+	
+	WRITESUBMENUBUTTON("Record Feedback Data",
+			   "feedback.php3?pid=$exp_pid&eid=$exp_eid&mode=record");
     }
-
-    WRITESUBMENUBUTTON("Record Feedback Data",
-		       "feedback.php3?pid=$exp_pid&eid=$exp_eid");
 }
 
-if ($expstate == $TB_EXPTSTATE_ACTIVE ||
-    $expstate == $TB_EXPTSTATe_SWAPPED) {
+if (($expstate == $TB_EXPTSTATE_ACTIVE ||
+     $expstate == $TB_EXPTSTATE_SWAPPED) &&
+    STUDLY()) {
+    WRITESUBMENUBUTTON("Clear Feedback Data",
+		       "feedback.php3?pid=$exp_pid&eid=$exp_eid&mode=clear");
+    
     WRITESUBMENUBUTTON("Remap Virtual Nodes",
 		       "remapexp.php3?pid=$exp_pid&eid=$exp_eid");
 }

@@ -338,6 +338,20 @@ if ($showlinks) {
     }
 
     $result =
+	DBQueryFatal("select i.IP,i.mac,i.iface from reserved as r ".
+		     "left join veth_interfaces as i on r.node_id=i.node_id ".
+		     "where r.pid='$pid' and r.eid='$eid' and ".
+		     "      i.IP is not NULL and i.IP!=''");
+
+    while (($ip,$mac,$iface) = $result->fetchrow_array()) {
+	if ($mac =~ /^(\w{2})(\w{2})(\w{2})(\w{2})(\w{2})(\w{2})$/) {
+	    $mac = "$1:$2:$3:$4:$5:$6";
+	}
+	$macmap{$ip}->{"MAC"}   = $mac;
+	$macmap{$ip}->{"IFACE"} = $iface;
+    }
+
+    $result =
 	DBQueryFatal("select vname,member,mask,delay,bandwidth,lossrate, ".
 		     "       rdelay,rbandwidth,rlossrate,protocol ".
 		     "  from virt_lans as v ".

@@ -179,11 +179,6 @@ namespace eval GLOBALS {
     # 'source tb_compat.tcl' statement succeeds.
     variable tbcompat "$libdir/tb_compat.tcl"
 
-    # This is the location of the tbx_feedback.tcl file.  It is copied
-    # into the same directory is the ns file so that the optional
-    # 'source tbx_feedback.tcl' statement succeeds.
-    variable tbxfeedback "$libdir/tbx_feedback.tcl"
-
     # This is used in running the script through nse for syntax errors
     variable nstbcompat "$libdir/nstb_compat.tcl"
 
@@ -439,7 +434,6 @@ proc parse_delay {dspec} {
 
 if { ${GLOBALS::errors} != 1 } {
     file copy -force ${GLOBALS::tbcompat} .
-    file copy -force ${GLOBALS::tbxfeedback} .
     source ${GLOBALS::nsfile}
 
     if {${GLOBALS::ran} == 0} {

@@ -94,7 +94,7 @@ TBExptGroup($pid, $eid, $gid);
 TBGroupUnixInfo($pid, $gid, $unix_gid, $unix_name);
 
 echo "<center>";
-echo "<h2>Starting experiment modify. Please wait a moment ...
+echo "<h2>Starting experiment remap. Please wait a moment ...
       </h2></center>";
 
 flush();
@@ -104,12 +104,35 @@ flush();
 # 
 set_time_limit(0);
 
-# XXX Hack
+$query_result = DBQueryFatal("SELECT nsfile from nsfiles ".
+			     "where pid='$pid' and eid='$eid'");
+if (mysql_num_rows($query_result)) {
+    $row    = mysql_fetch_array($query_result);
+    $nsdata = stripslashes($row[nsfile]);
+}
+else {
+    $nsdata = ""; # XXX what to do...
+}
+
+list($usec, $sec) = explode(' ', microtime());
+srand((float) $sec + ((float) $usec * 100000));
+$foo = rand();
+$nsfile = "/tmp/$uid-$foo.nsfile";
+
+if (! ($fp = fopen($nsfile, "w"))) {
+    TBERROR("Could not create temporary file $nsfile", 1);
+}
+fwrite($fp, $nsdata);
+fclose($fp);
+chmod($nsfile, 0666);
+
 $retval = SUEXEC($uid, $unix_gid,
 		 "webswapexp " . ($reboot ? "-r " : "") .
 		 ($eventrestart ? "-e " : "") .
-  		 "-s modify $pid $eid /proj/$pid/exp/$eid/tbdata/$eid.ns",
+  		 "-s modify $pid $eid $nsfile",
 		 SUEXEC_ACTION_IGNORE);
+
+unlink($nsfile);
 
 #
 # Fatal Error. Report to the user, even though there is not much he can

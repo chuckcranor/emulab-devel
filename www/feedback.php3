@@ -23,10 +23,10 @@ LOGGEDINORDIE($uid);
 if (isset($pid) && strcmp($pid, "") &&
     isset($eid) && strcmp($eid, "")) {
     if (! TBvalid_eid($eid)) {
-	PAGEARGERROR("$eid is contains invalid characters!");
+	PAGEARGERROR("$eid contains invalid characters!");
     }
     if (! TBvalid_pid($pid)) {
-	PAGEARGERROR("$pid is contains invalid characters!");
+	PAGEARGERROR("$pid contains invalid characters!");
     }
     if (! TBValidExperiment($pid, $eid)) {
 	USERERROR("$pid/$eid is not a valid experiment!", 1);
@@ -40,20 +40,39 @@ else {
     PAGEARGERROR("Must specify pid and eid!");
 }
 
-$query_result = DBQueryFatal("select gid,linktest_level from experiments ".
-				 "where pid='$pid' and eid='$eid'");
+if (isset($mode) && strcmp($mode, "")) {
+    if (strcmp($mode, "record") && strcmp($mode, "clear")) {
+	PAGEARGERROR("Mode value, $mode, is not 'record' or 'clear'!");
+    }
+}
+else {
+    PAGEARGERROR("Must specify mode!");
+}
+
+$query_result = DBQueryFatal("select gid from experiments ".
+			     "where pid='$pid' and eid='$eid'");
 $row = mysql_fetch_array($query_result);
 $gid = $row[0];
 
+#
+# Get the duration of the feedback run, default to 30 seconds if nothing was
+# given.
+#
 if (!isset($duration) || $duration == "") {
-	$duration = 30;
+	$duration = 30; # seconds
 }
-elseif (! TBvalid_tinyint($duration) || $duration < 0) {
-	PAGEARGERROR("Duration must be an integer > 0");
+elseif (! TBvalid_tinyint($duration) || $duration < 3) {
+	PAGEARGERROR("Duration must be an integer >= 3");
 }
 
+#
+# We run this twice. The first time we are checking for a confirmation
+# by putting up a form. The next time through the confirmation will be
+# set. Or, the user can hit the cancel button, in which case we should
+# probably redirect the browser back up a level.
+#
 if ($canceled) {
-    PAGEHEADER("Record Feedback");
+    PAGEHEADER("$mode Feedback");
 	
     echo "<center><h3><br>
           Operation canceled!
@@ -64,44 +83,49 @@ if ($canceled) {
 }
 
 if (!$confirmed) {
-    PAGEHEADER("Record feedback");
+    PAGEHEADER("$mode feedback");
 
     echo "<font size=+2>Experiment <b>".
 	"<a href='showproject.php3?pid=$pid'>$pid</a>/".
 	"<a href='showexp.php3?pid=$pid&eid=$eid'>$eid</a></b></font>\n";
 
-    echo "<center><font size=+2><br>
-              How much feedback data should be recorded?
-              </font>\n";
-
+    if(strcmp($mode, "record") == 0) {
+	echo "<center><font size=+2><br>
+                      How much feedback data should be recorded?<br>
+                      Must be atleast 3 seconds.
+                      </font>\n";
+    }
+    else if(strcmp($mode, "clear") == 0) {
+	echo "<center><font size=+2><br>
+                      Really clear feedback data?
+                      </font>\n";
+    }
+    
     SHOWEXP($pid, $eid, 1);
-
+    
     echo "<form action=feedback.php3 method=post>";
     echo "<input type=hidden name=pid value=$pid>\n";
     echo "<input type=hidden name=eid value=$eid>\n";
+    echo "<input type=hidden name=mode value=$mode>\n";
 
-    echo "<table align=center border=1>\n";
-    echo "<tr>
-              <td>
-              <input type='text' name='duration' value='$duration'> seconds
-              </td>
-          </tr>
-          </table><br>\n";
+    if(strcmp($mode, "record") == 0) {
+	echo "<table align=center border=1>\n";
+	echo "<tr>
+                  <td>
+                  <input type='text' name='duration' value='$duration'> seconds
+                  </td>
+              </tr>
+              </table><br>\n";
+    }
 
     echo "<b><input type=submit name=confirmed value=Confirm></b>\n";
     echo "<b><input type=submit name=canceled value=Cancel></b>\n";
     echo "</form>\n";
     echo "</center>\n";
-
+    
     PAGEFOOTER();
     return;
 }
-
-#
-# A cleanup function to keep the child from becoming a zombie, since
-# the script is terminated, but the children are left to roam.
-#
-$fp = 0;
 
 function SPEWCLEANUP()
 {
@@ -112,38 +136,61 @@ function SPEWCLEANUP()
     }
     exit();
 }
-register_shutdown_function("SPEWCLEANUP");
-ignore_user_abort(1);
 
 # For backend.
 TBGroupUnixInfo($pid, $gid, $unix_gid, $unix_name);
 
-$fp = popen("$TBSUEXEC_PATH $uid $unix_gid webfeedback $pid $eid $duration",
-	    "r");
-if (! $fp) {
-    USERERROR("Feedback failed!", 1);
-}
+if (strcmp($mode, "record") == 0) {
+    #
+    # A cleanup function to keep the child from becoming a zombie, since
+    # the script is terminated, but the children are left to roam.
+    #
+    $fp = 0;
+    
+    register_shutdown_function("SPEWCLEANUP");
+    ignore_user_abort(1);
+    
+    # Start the script and pipe its output to the user.
+    $fp = popen("$TBSUEXEC_PATH $uid $unix_gid webfeedback -d $duration $pid $gid $eid",
+		"r");
+    if (! $fp) {
+	USERERROR("Feedback failed!", 1);
+    }
 
-header("Content-Type: text/plain");
-header("Expires: Mon, 26 Jul 1997 05:00:00 GMT");
-header("Cache-Control: no-cache, must-revalidate");
-header("Pragma: no-cache");
-flush();
-
-echo date("D M d G:i:s T");
-echo "\n";
-echo "Recording feedback for $duration seconds\n";
-flush();
-while (!feof($fp)) {
-    $string = fgets($fp, 1024);
-    echo "$string";
+    header("Content-Type: text/plain");
+    header("Expires: Mon, 26 Jul 1997 05:00:00 GMT");
+    header("Cache-Control: no-cache, must-revalidate");
+    header("Pragma: no-cache");
     flush();
+    
+    echo date("D M d G:i:s T");
+    echo "\n";
+    echo "Recording feedback for $duration seconds\n";
+    flush();
+    while (!feof($fp)) {
+	$string = fgets($fp, 1024);
+	echo "$string";
+	flush();
+    }
+    $retval = pclose($fp);
+    $fp = 0;
+    if ($retval == 0)
+	echo "Feedback run was successful!\n";
+    echo date("D M d G:i:s T");
+    echo "\n";
+    return;
 }
-$retval = pclose($fp);
-$fp = 0;
-if ($retval == 0)
-    echo "Feedback run was successful!\n";
-echo date("D M d G:i:s T");
-echo "\n";
+else if (strcmp($mode, "clear") == 0) {
+    PAGEHEADER("Clearing feedback");
+
+    $retval = SUEXEC($uid, $unix_gid,
+		     "webfeedback -c $pid $gid $eid",
+		     SUEXEC_ACTION_USERERROR);
+    
+    echo "<center><h3><br>Done!</h3></center>\n";
+
+    PAGEFOOTER();
+    return;
+}
 
 ?>
