@@ -29,6 +29,8 @@ using namespace boost;
 
 extern switch_pred_map_map switch_preds;
 
+extern bool use_pclasses;
+
 double score;			// The score of the current mapping
 int violated;			// How many times the restrictions
 				// have been violated.
@@ -247,7 +249,7 @@ void remove_node(vvertex vv)
 #endif
 
   // pclass
-  if (pnode->my_class && (pnode->my_class->used == 0)) {
+  if (use_pclasses && pnode->my_class && (pnode->my_class->used == 0)) {
     SDEBUG(cerr << "  freeing pclass" << endl);
     SSUB(SCORE_PCLASS);
   }
@@ -509,8 +511,19 @@ int add_node(vvertex vv,pvertex pv, bool deterministic)
   for (;vedge_it!=end_vedge_it;++vedge_it) {
     tb_vlink *vlink = get(vedge_pmap,*vedge_it);
     vvertex dest_vv = target(*vedge_it,VG);
-    if (dest_vv == vv)
+
+   if (dest_vv == vv) {
       dest_vv = source(*vedge_it,VG);
+    }
+
+    bool flipped = false; // Indicates that we've assigned the nodes in reverse
+    			  // order compared to what's in the vlink, so we need
+			  // to reverse the ordering in the pedge_path
+    
+    if (vlink->src != vv) {
+	flipped = true;
+    }
+
     tb_vnode *dest_vnode = get(vvertex_pmap,dest_vv);
 
     pedge pe;
@@ -525,13 +538,14 @@ int add_node(vvertex vv,pvertex pv, bool deterministic)
 
       if (dest_pv == pv) {
 	SDEBUG(cerr << "  trivial link" << endl);
-	if (!allow_trivial_links) {
+	if (allow_trivial_links) {
+	    vlink->link_info.type = tb_link_info::LINK_TRIVIAL;
+	} else {
 	    SADD(SCORE_NO_CONNECTION);
 	    vlink->no_connection=true;
 	    vinfo.no_connection++;
 	    violated++;
 	}
-	vlink->link_info.type = tb_link_info::LINK_TRIVIAL;
       } else {
 	SDEBUG(cerr << "   finding link resolutions" << endl);
 	// We need to calculate all possible link resolutions, stick them
@@ -568,8 +582,13 @@ int add_node(vvertex vv,pvertex pv, bool deterministic)
 	    find_link_to_switch(dest_pv,*switch_it,vlink,second);
 #endif
 	    resolutions[resolution_index].type = tb_link_info::LINK_INTRASWITCH;
-	    resolutions[resolution_index].plinks.push_back(first);
-	    resolutions[resolution_index].plinks.push_back(second);
+	    if (flipped) { // Order these need to go in depends on flipped bit
+	      resolutions[resolution_index].plinks.push_back(second);
+	      resolutions[resolution_index].plinks.push_back(first);
+	    } else { 
+	      resolutions[resolution_index].plinks.push_back(first);
+	      resolutions[resolution_index].plinks.push_back(second);
+	    }
 	    resolutions[resolution_index].switches.push_front(*switch_it);
 	    resolution_index++;
 	    total_weight += LINK_RESOLVE_INTRASWITCH;
@@ -608,8 +627,13 @@ int add_node(vvertex vv,pvertex pv, bool deterministic)
 #endif
 
 	      resolutions[resolution_index].type = tb_link_info::LINK_INTERSWITCH;
-	      resolutions[resolution_index].plinks.push_front(first);
-	      resolutions[resolution_index].plinks.push_back(second);
+	      if (flipped) { // Order these need to go in depends on flipped bit
+	        resolutions[resolution_index].plinks.push_back(second);
+	        resolutions[resolution_index].plinks.push_front(first);
+	      } else {
+	        resolutions[resolution_index].plinks.push_front(first);
+	        resolutions[resolution_index].plinks.push_back(second);
+	      }
 	      resolution_index++;
 	      total_weight += LINK_RESOLVE_INTERSWITCH;
 	      SDEBUG(cerr << "    interswitch " <<
@@ -770,7 +794,7 @@ int add_node(vvertex vv,pvertex pv, bool deterministic)
   vinfo.desires += fd_violated;
 
   // pclass
-  if (pnode->my_class && (pnode->my_class->used == 0)) {
+  if (use_pclasses && pnode->my_class && (pnode->my_class->used == 0)) {
     SDEBUG(cerr << "  new pclass" << endl);
     SADD(SCORE_PCLASS);
   }
