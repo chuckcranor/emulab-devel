@@ -54,10 +54,10 @@ my ($pid,$eid,$tempfile) = @ARGV;
 if ($tempfile =~ /^([-\@\w.\/]+)$/) {
     $tempfile = $1;
 }
-if ($pid =~ /^([-\@\w.\/]+)$/) {
+if ($pid =~ /^([-\@\w.]+)$/) {
     $pid = $1;
 }
-if ($eid =~ /^([-\@\w.\/]+)$/) {
+if ($eid =~ /^([-\@\w.]+)$/) {
     $eid = $1;
 }
 
