@@ -3521,7 +3521,9 @@ sub CreateTopFile()
 {
     my $physnode_count = 0;
     my $virtnode_count = 0;
-    my $simnode_count = 0;
+    my $simnode_count  = 0;
+    my %osdoesveth     = ();
+    my %osdoesmlink    = ();
     
     # Open the TOP file
     open(TOPFILE,"> $topfile") or
@@ -3626,14 +3628,23 @@ sub CreateTopFile()
 		    $virtnodes++;
 		} else {
 		    $nonvirtnodes++;
-		    # We check against the standard FBSD and declare the node
-		    # to be a nonbsd one even if it is actually running FBSD
-		    # via a user-specific FBSD image. Thats coz there is no
-		    # way of determining if the FBSD image is actually running
-		    # our kernel that can do veths
-		    if (defined(virtnodeosid($node)) &&
-			virtnodeosid($node) ne TBOSID(TB_OPSPID, "FBSD-STD")) {
-			$nonbsdnodes++;
+		    #
+		    # Check os feature list emulated/veth support.
+		    #
+		    if (defined(virtnodeosid($node))) {
+			my $osid = virtnodeosid($node);
+			
+			if (!exists($osdoesmlink{$osid})) {
+			    $osdoesmlink{$osid} =
+				OSFeatureSupported($osid, 'mlinks');
+			    $osdoesveth{$osid} =
+				OSFeatureSupported($osid, 'veths');
+			}
+			# For simplicity, lets just say that a node needs
+			# both set.
+			if (! ($osdoesmlink{$osid} && $osdoesveth{$osid})) {
+			    $nonbsdnodes++;
+			}
 		    }
 		}
 		$realnodes++;
