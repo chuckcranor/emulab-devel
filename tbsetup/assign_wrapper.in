@@ -327,11 +327,12 @@ sub isdelay {
 
 $currentrun = 1;
 while (1) {
-    if ($currentrun > $maxrun) {
-	print "Reached run limit.  Giving up.\n";
-	exit(1);
-    }
     print "Assign Run $currentrun\n";
+
+    # Violation counts
+    $linkusers = -1;
+    $bandwidth = -1;
+    $desires = -1;
 
     # Clear v2pmap, p2vmap, and plinks
     undef %v2pmap;
@@ -425,8 +426,15 @@ while (1) {
 	}
     } else {
 	# spit out up to nodes
-	print "ASSIGN FAILED:\n";
+	print "ASSIGN FAILED:\n";       
 	while (<ASSIGNFP>) {
+	    if (/link_users: (\d+)$/) {
+		$linkusers = $1;
+	    } elsif (/bandwidth: (\d+)$/) {
+		$bandwidth = $1;
+	    } elsif (/desires: (\d+)$/) {
+		$desires = $1;
+	    }
 	    if (/^Nodes:/) {last;}
 	    print "$_";
 	}
@@ -451,6 +459,22 @@ while (1) {
 	    print "Successfully reserved resources.  Finishing setup.\n";
 	    last;
 	}
+    }
+
+    # Check for exit
+    if ($currentrun >= $maxrun) {
+	$exitcode = 1;
+	if ($bandwidth > 0) {
+	    $exitcode += 4;
+	} 
+	if ($linkusers > 0) {
+	    $exitcode += 8;
+	}
+	if ($desires > 0) {
+	    $exitcode += 16;
+	}
+	print "Reached run limit.  Giving up.\n";
+	exit($exitcode);
     }
     $currentrun++;
 }
