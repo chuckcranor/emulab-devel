@@ -208,6 +208,14 @@ my %node_types = ();
 my %interface_types = ();
 
 #
+# XXX Hack table for determining if a delay node is required. We store
+# the native link speeds for each type,class. Indexed by type and class,
+# the value is a list of link hardware speeds for which no delay node is
+# required. This is an awful way to do this, and quite wrong.
+#
+my %node_type_linkbw = ();
+
+#
 # phys_nodes: The equiv of virt_nodes above, except that these are pulled
 # from the DB once the physical resources have been allocated. Indexed
 # by physname, but there is a pointer from the virt_nodes table entry
@@ -2131,35 +2139,6 @@ sub getbandwidth {
     return $best;
 }
 
-# requires_delay(bw)
-# Returns 1 if the given bandwidth requires that a delay node be inserted, 0
-# if it can be handled by some interface in the testbed
-#
-# XXX - This is not totally correct. Just because such an interface exists does
-# not necessarily mean we can use it, for a variety of reasons. Eventually,
-# assign needs to handle delay nodes, because, really, only it knows what
-# interfaces it can use.
-sub requires_delay {
-    my $targetbandwidth = $_[0];
-    my $bestbandwidth = getbandwidth($targetbandwidth);
-    printdb "Checking $bestbandwidth against $targetbandwidth\n";
-    # XXX temporary hack: && $bestbandwidth >= $S100Kbs
-    # A delay node is not being added for the 10Mb 0ms link
-    # Permanent fix required
-    if ($bestbandwidth == $targetbandwidth && $bestbandwidth >= $S100Kbs) {
-	return 0;
-    }
-
-    # XXX - This assumes that all interfaces/switch ports can be slowed down,
-    # which is not true
-    if ($delaywithswitch && (($targetbandwidth == $S100Kbs) ||
-	    ($targetbandwidth == $S10Kbs))) {
-	return 0;
-    }
-
-    return 1;
-}
-
 # getnodeport(s)
 # Takes a ports result from assign (mac0,mac1) and returns the
 # first non-null one.
@@ -2181,12 +2160,11 @@ sub InitPnode($pnode, $vnode)
     my $role;
     my $simhost_violation;
 
-    # XXX NSE hack: if the vnode is simulated, we just
-    # choose FBSD-NSE and static routing
+    # XXX NSE hack: 
     if (virtnodeisvnode($vnode) && virtnodeissim($vnode)) {
 	$osid = TBOSID(TB_OPSPID, "FBSD-NSE" );
 	
-	DBQueryFatal("UPDATE nodes set def_boot_cmd_line=''," .
+	DBQueryFatal("UPDATE nodes set def_boot_cmd_line='/kernel.jail'," .
 		     " startstatus='none'," .
 		     " bootstatus='unknown'," .
 		     " ready=0," .
@@ -2214,6 +2192,7 @@ sub InitPnode($pnode, $vnode)
 	# almost the same no matter what type.
 	#
 	my $routertype;
+	my $cmdline = "";	# XXX Gross hack. 
 
 	if (exists($delaynodes{$vnode})) {
 	    #
@@ -2224,6 +2203,7 @@ sub InitPnode($pnode, $vnode)
 	    $vname = $vnode;
 	    $role  = TBDB_RSRVROLE_DELAYNODE;
 	    $routertype = TBDB_ROUTERTYPE_NONE;
+	    $cmdline = "/kernel.delay";
 	}
 	elsif (exists($virtnodes{$pnode})) {
 	    #
@@ -2237,12 +2217,14 @@ sub InitPnode($pnode, $vnode)
 	    $vname = newvname($pnode, "vhost");
 	    $role  = TBDB_RSRVROLE_VIRTHOST;
 	    $routertype = TBDB_ROUTERTYPE_MANUAL;
+	    $cmdline = "/kernel.jail";
 	}
 	fatal($WRAPPER_FAILED,
 	      "No OSID is defined for internal node $vname!")
 	    if (!defined($osid));
 	
 	DBQueryFatal("UPDATE nodes set ".
+		     " def_boot_cmd_line='$cmdline'," .
 		     " startstatus=0, ".
 		     " bootstatus='unknown', ".
 		     " routertype='$routertype', ".
@@ -2808,12 +2790,79 @@ sub LoadPhysInfo()
 
 	$node_types{$auxtype}  = $node_types{$type};
     }
+
+    #
+    # Now get interface speeds for each type/class. We use this for determining
+    # if a delay node is required. Very hacky, quite wrong.
+    #
+    $query_result =
+	DBQueryFatal("select distinct i.interface_type,n.type ".
+		     " from interfaces as i ".
+		     "left join nodes as n on n.node_id=i.node_id ".
+		     "where i.role='" . TBDB_IFACEROLE_EXPERIMENT . "'");
+
+    # XXX Special hack for sim nodes.
+    $node_type_linkbw{"sim"} = {};
+
+    while (my ($iface_type, $node_type) = $query_result->fetchrow()) {
+	my $node_class = nodetypeclass($node_type);
+
+	$node_type_linkbw{$node_type} = {}
+	    if (!defined($node_type_linkbw{$node_type}));
+	$node_type_linkbw{$node_class} = {}
+	    if (!defined($node_type_linkbw{$node_class}));
+
+	$node_type_linkbw{$node_type}->{interfacespeed($iface_type)} = 1;
+	$node_type_linkbw{$node_class}->{interfacespeed($iface_type)} = 1;
+
+	#
+	# If the type/class has a non-zero simnode capacity, then add
+	# entries for the interface speed so that requires_delay can
+	# figure out interface speeds the underlying node type supports.
+	#
+	if (nodetypesimcap($node_type) || nodetypesimcap($node_class)) {
+	    $node_type_linkbw{"sim"}->{interfacespeed($iface_type)} = 1;
+	}
+    }
+
+    #
+    # Ug, it just gets worse and worse. We also need to map between the
+    # auxtypes that a node (its physical type) can take on. For example,
+    # a link between two pcvm nodes is really a link between a pc600 and
+    # pc850.
+    #
+    $query_result =
+	DBQueryFatal("select distinct n.type,at.type from node_auxtypes as at ".
+		     "left join nodes as n on n.node_id=at.node_id");
+
+    while (my ($phystype, $auxtype) = $query_result->fetchrow()) {
+	next
+	    if (!exists($node_type_linkbw{$phystype}));
+	
+	$node_type_linkbw{$auxtype} = {}
+	    if (!defined($node_type_linkbw{$auxtype}));
+
+	my @list = keys(%{ $node_type_linkbw{$phystype} });
+	foreach my $speed (@list) {
+	    $node_type_linkbw{"$auxtype"}->{$speed} = 1;
+	}
+    }
+
+    if ($verbose) {
+	printdb("Interface Speeds:\n");
+	foreach my $type (keys(%node_type_linkbw)) {
+	    my @list = keys(%{ $node_type_linkbw{$type} });
+
+	    printdb(" $type: @list\n");
+	}
+    }
 }
 sub interfacespeed($)	{ return $interface_types{$_[0]}->{"max_speed"}; }
 sub interfacespeedmbps($) {
     return $interface_types{$_[0]}->{"max_speed"} / 1000.0;
 }
 sub nodetypeistype($)   { return exists($node_types{$_[0]}); }
+sub nodetypeclass($)    { return $node_types{$_[0]}->{"class"}; }
 sub nodedelayosid($)    { return $node_types{$_[0]}->{"delay_osid"}; }
 sub nodejailosid($)     { return $node_types{$_[0]}->{"jail_osid"}; }
 sub nodedefaultosid($)  { return $node_types{$_[0]}->{"osid"}; }
@@ -2822,6 +2871,45 @@ sub nodetypeisvirt($)   { return $node_types{$_[0]}->{"isvirtnode"}; }
 sub nodetypeissub($)    { return $node_types{$_[0]}->{"issubnode"}; }
 sub nodetypeisplab($)   { return $node_types{$_[0]}->{"isplabdslice"}; }
 sub nodetypeissim($)    { return $node_types{$_[0]}->{"issimnode"}; }
+sub nodetypesimcap($)   { return $node_types{$_[0]}->{"simnode_capacity"}; }
+
+# requires_delay(bw)
+# Returns 1 if the given bandwidth requires that a delay node be inserted, 0
+# if it can be handled by some interface in the testbed
+#
+# Way bogus! We have to guess if we need to insert a delay node (assign should
+# really be doing this). We need a delay node if the desired bw does not
+# match the native hardware link speed. Of course, we do not know what assign
+# will map the node too, but we do know generally what interface speeds are
+# supported on each type/class of hardware that the user might request. If
+# a 50Mb link on a "pc" is requested, we know we need a delay node cause
+# pcs support just 100Mb and 1000Mb links. assign might pick either one, but
+# we know we need a delay node no matter what. The problem is what happens if
+# the user asks for 100Mb (no delay node), but assign maps it to a 1000Mb link?
+# Well, we are screwed since we needed a delay node. We are ignoring that
+# problem for now since no one has access to 1gig interfaces at the moment.
+# 
+sub requires_delay($$)
+{
+    my ($node, $targetbw) = @_;
+    my $node_type  = virtnodetype($node);
+    my $node_class = nodetypeclass($node_type);
+
+    fatal($WRAPPER_FAILED|$WRAPPER_FAILED_CANRECOVER,
+	  "requires_delay(): $node - invalid type/class $node_type/$node_class!")
+	if (!exists($node_type_linkbw{$node_type}) &&
+	    !exists($node_type_linkbw{$node_class}));
+
+    foreach my $bw (keys(%{ $node_type_linkbw{$node_type} })) {
+	return 0
+	    if ($targetbw == $bw);
+    }
+    foreach my $bw (keys(%{ $node_type_linkbw{$node_class} })) {
+	return 0
+	    if ($targetbw == $bw);
+    }
+    return 1;
+}
 
 #
 # Load up the virt_nodes info, which includes the type info for each
@@ -3532,10 +3620,12 @@ sub CreateTopFile()
 	    $bandwidth = &getbandwidth(&min($bw0,$rbw1));
 	    $rbandwidth = &getbandwidth(&min($rbw0,$bw1));
 	    if (((($delay >= $delaythresh) ||
-		  (!$nobwshaping && &requires_delay($bw)) ||
+		  (!$nobwshaping && (requires_delay($node0, $bw) ||
+				     requires_delay($node1, $bw))) ||
 		  ($loss != 0)) ||
 		 (($rdelay >= $delaythresh) ||
-		  (!$nobwshaping && &requires_delay($rbw)) ||
+		  (!$nobwshaping && (requires_delay($node0, $rbw) ||
+				     requires_delay($node1, $rbw))) ||
 		  ($rloss != 0)) ||
 		 # Link must be shaped for other reasons (q_red).
 		 $mustdelay ||
@@ -3634,10 +3724,10 @@ sub CreateTopFile()
                 # better bandwidth support.  Probably needs to happen
                 # post assign somehow.
 		if (((($delay >= $delaythresh) ||
-		      &requires_delay($bw) ||
+		      &requires_delay($node, $bw) ||
 		      ($loss != 0)) || 
 		     (($rdelay >= $delaythresh) ||
-		      &requires_delay($rbw) ||
+		      &requires_delay($node, $rbw) ||
 		      ($rloss != 0)) ||
 		     # Link must be shaped for other reasons (q_red).
 		     $mustdelay ||
