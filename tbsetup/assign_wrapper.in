@@ -95,8 +95,8 @@ $sth->finish;
 #  interfacespeed is indexed by type and contains the bandwidth.
 #
 # Delay node names:
-#  delay nodes are named delay/<virtual lan>/<node>:<port> for N > 2
-#   and delay/<virtual lan> for N == 2.
+#  delay nodes are named tbdelayXX N > 2
+#   and tbsdelayXX for N == 2.
 # 
 # Lan node nameS:
 #  lan nodes are named lan/<virtual lan>
@@ -111,6 +111,9 @@ $sth->finish;
 # the virtual nodes in it.
 # sharkshelfid is used to generate ids for shark shelves.
 $sharkshelfid = 0;
+
+# delayid is used to generate ids for delay nodes.
+$delayid = 0;
 
 printdb "Generating TOP file.\n";
 
@@ -132,6 +135,14 @@ $sth = $dbh->prepare("SELECT vname,ips,type from virt_nodes" .
 $sth->execute;
 while (($vname,$ips,$type) = $sth->fetchrow_array) {
     printdb "  $vname $type $ips\n";
+    # We need to check the names to make sure they won't clash with
+    # our internal delay node names.
+    if (($vname =~ /^tbdelay\d+/) ||
+	($vname =~ /^tbsdelay\d+/)) {
+	print STDERR "Warning: $vname is a reserved name.  Working around.\n";
+	($num) = ($vname =~ /(\d+)/);
+	$delayid = $num + 1;
+    }
     $nodes{$vname} = $type;
     $nodelans{$vname} = [];
     foreach $ipinfo (split(" ",$ips)) {
@@ -237,10 +248,12 @@ foreach $lan (keys(%lans)) {
 	$node0 = (split(":",$members[0]))[0];
 	$node1 = (split(":",$members[1]))[0];
 	if (&isdelayed($lan)) {
-	    print TOPFILE "node sdelay/$lan delay\n";
-	    print TOPFILE "link linksdelaysrc/$lan $node0 sdelay/$lan"
+	    $delayname = "tbsdelay$delayid";
+	    $delayid++;
+	    print TOPFILE "node $delayname delay\n";
+	    print TOPFILE "link linksdelaysrc/$lan $node0 $delayname"
 		. " $bandwidth\n";
-	    print TOPFILE "link linksdelaydst/$lan $node1 sdelay/$lan"
+	    print TOPFILE "link linksdelaydst/$lan $node1 $delayname"
 		. " $bandwidth\n";
 	} else {
 	    print TOPFILE "link linksimple/$lan $node0 $node1 $bandwidth\n";
@@ -251,11 +264,13 @@ foreach $lan (keys(%lans)) {
 	if (&isdelayed($lan)) {
 	    foreach $member (@members) {
 		($node) = (split(":",$member))[0];
-		print TOPFILE "node delay/$lan/$member delay\n";
+		$delayname = "tbdelay$delayid";
+		$delayid++;
+		print TOPFILE "node $delayname delay\n";
 		print TOPFILE "link linkdelaysrc/$lan/$member" .
-		    " $node delay/$lan/$member $bandwidth\n";
+		    " $node $delayname $bandwidth\n";
 		print TOPFILE "link linkdelaydst/$lan/$member" .
-		    " lan/$lan delay/$lan/$member $bandwidth\n";
+		    " lan/$lan $delayname $bandwidth\n";
 	    }
 	} else {
 	    foreach $member (@members) {
@@ -799,6 +814,43 @@ foreach $vnodeport (keys(%portmap)) {
     }
     # End Shark Hack
 }
+foreach $pnode (keys(%p2vmap)) {
+    $vnode = $p2vmap{$pnode};
+    $sth = $dbh->prepare("SELECT osid,cmd_line,rpms,deltas,startupcmd," .
+			  "tarfiles from virt_nodes where pid=\"$pid\"" .
+			  " and eid=\"$eid\" and vname=\"$vnode\"");
+    $sth->execute;
+    # The if statement will cause us to skip nodes that belong to
+    # the experiment but aren't virtual.  I.e. delay nodes.
+    if (($osid,$cmdline,$rpms,$deltas,$startupcmd,$tarfiles) = 
+	$sth->fetchrow_array) {
+	if (! $dbh->do("UPDATE nodes set def_boot_osid=\"$osid\"," .
+		       " def_boot_cmd_line=\"$cmdline\"," .
+		       " startstatus=\"none\"," .
+		       " ready=0," .
+		       " rpms=\"$rpms\"," .
+		       " deltas=\"$deltas\"," .
+		       " tarballs=\"$tarfiles\"," .
+		       " startupcmd=\"$startupcmd\"" .
+		       " where node_id=\"$pnode\"")) {
+	    print STDERR "Could not update nodes table.\n" .
+		"  Giving up.\n";
+	    exit(1);
+	} 
+    } else {
+	# delay node
+	if (! $dbh->do("UPDATE nodes set def_boot_osid=\"FBSD40-STD\"," .
+		       " startstatus=\"none\"," .
+		       " ready=0" .
+		       " where node_id=\"$pnode\"")) {
+	    print STDERR "Could not update nodes table.\n" .
+		"  Giving up.\n";
+	    exit(1);
+	}
+    }
+    $sth->finish;
+}
+
 foreach $pnode (keys(%p2vmap)) {
     $dbh->do("update reserved set vname=\"$p2vmap{$pnode}\"" .
 	     " where node_id = \"$pnode\"") || do {
