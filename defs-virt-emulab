@@ -3,9 +3,9 @@
 #
 TBDBNAME=tbdb
 TBOPSEMAIL=tbres-users@emulab.net
-TBLOGSEMAIL=tbres-users@emulab.net
+TBLOGSEMAIL=tbres-logs@flux.utah.edu
 TBWWWEMAIL=tbres-users@emulab.net
-tbapprOVALEMAIL=tbres-users@emulab.net
+TBAPPROVALEMAIL=tbres-users@emulab.net
 TBACTIVEARCHIVE=tbres-users@emulab.net
 TBUSERSARCHIVE=tbres-users@emulab.net
 BOSSNODE=boss.emulab.net
