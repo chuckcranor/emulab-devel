@@ -68,11 +68,15 @@ if (! -r $nsfile) {
 $sth = $dbh->prepare("SELECT state from experiments where pid = \"$pid\"" . 
 		   " and eid = \"$eid\"");
 $sth->execute();
-if (! $sth->fetchrow_array()) {
+if (! (($state) = $sth->fetchrow_array())) {
     &tbs_out("No entry in experiments table.  Insane.\n");
     exit(1);
 }
 $sth->finish();
+if (($state eq "dormant") || ($state eq "running")) {
+    &tbs_out("Experiment already pre runned.\n");
+    exit(1);
+}
 
 # This setups virt_nodes, virt_names including all IP address calculation
 # and tb-* handling.
