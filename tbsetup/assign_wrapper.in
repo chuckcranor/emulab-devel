@@ -80,12 +80,12 @@ sub printdb {
 #  nodelans is indexed by virtual node and contains a list of
 #    <port>:<lan> that it is connected to.
 #  ips is indexed by nodeport and contains the IP addresses.
-#  ports is indexed by nodeport and contains the virtual lan.
 #  lans is indexed by virtual lan and is a list of nodeport members.
 #  delayinfo is indexed by virtual lan and is a list of delay,
 #    bandwidth, lossrate.
 #  okbandwidths is indexed by bandwidth and is just a set.
 #  lannodes is indexed by physical name is the set of lan nodes.
+#  interfacespeed is indexed by type and contains the bandwidth.
 #
 # Delay node names:
 #  delay nodes are named delay/<virtual lan>/<node>:<port> for N > 2
@@ -99,10 +99,11 @@ printdb "Generating TOP file.\n";
 
 # Let's figure out what kind of links we have.
 printdb "Finding interface speeds:";
-$sth=$dbh->prepare("SELECT max_speed from interface_types");
+$sth=$dbh->prepare("SELECT type,max_speed from interface_types");
 $sth->execute;
-while (($bandwidth) = $sth->fetchrow_array) {
+while (($type,$bandwidth) = $sth->fetchrow_array) {
     $okbandwidths{$bandwidth} = 1;
+    $interfacespeed{$type} = $bandwidth;
     printdb " $bandwidth";
 }
 $sth->finish;
@@ -131,7 +132,6 @@ while (($vname,$members,$delay,$bandwidth,$lossrate) = $sth->fetchrow_array) {
     $delayinfo{$vname} = [$delay,$bandwidth,$lossrate];
     printdb "  $vname $members ($delay, $bandwidth, $lossrate)\n";
     foreach $nodeport (@{$lans{$vname}}) {
-	$ports{$nodeport} = $vname;
 	($node,$port) = split(":",$nodeport);
 	push(@{$nodelans{$node}},"$port:$vname");
 	printdb "    Added $port:$vname to nodelans of $node\n";
@@ -337,35 +337,10 @@ while (1) {
 		  last SWITCH1;
 	      };
 	      /^interswitch$/ && do {
-		  # ??? Do we really need two cases?  Wouldn't it
-		  # always be the first case.
-		  if ($#info == 7) {
-		      ($vlink,$rawA,$rawB) = @info[0,3,7];
-		  } else {
-		      ($vlink,$rawA,$rawB) = @info[0,3,5];
-		  }
-		  $nodeportA = &getnodeport($rawA);
-		  $nodeportB = &getnodeport($rawB);
-		  $nodeportA =~ s/\//:/;
-		  $nodeportB =~ s/\//:/;
-		  if (&isdelay($nodeportB)) {
-		      $plinks{$vlink} = [$nodeportA,$nodeportB];
-		  } else {
-		      $plinks{$vlink} = [$nodeportB,$nodeportA];
-		  }
-		  last SWITCH1;
+		  print STDERR "Unsupported link type: interswitch.\n";
 	      };
 	      /^direct$/ && do {
-		  ($vlink,$nodeports) = @info[0,3];
-		  ($nodeportA,$nodeportB) = ($nodeports =~ /^\(([^,]+),([^,]+)\)$/);
-		  $nodeportA =~ s/\//:/;
-		  $nodeportB =~ s/\//:/;
-		  if (&isdelay($nodeportB)) {
-		      $plinks{$vlink} = [$nodeportA,$nodeportB];
-		  } else {
-		      $plinks{$vlink} = [$nodeportB,$nodeportA];
-		  }
-		  last SWITCH1;
+		  print STDERR "Unsupported link type: direct.\n";
 	      };
 	      print "Found garbage: $line\n";
 	  }
@@ -628,8 +603,64 @@ if (keys(%prevportmap) == 0) {
     $portswap = 1;
 }
 
+# swapok(pnode,portA,nodeportB)
+# This returns 1 if it is ok to swap portA and portB on node pnode
+# and 0 otherwise.
+sub swapok {
+    my ($pnode,$portA,$portB) = @_;
+    # For the Utah testbed we just check to make sure they have
+    # the same bandwidth.  In other testbeds we'd also want to make
+    # sure they went to the same destination.
+    my $sth = $dbh->prepare("SELECT interface_type FROM interfaces" .
+			     " where node_id = \"$pnode\"" .
+			     " and iface = \"$portA\"");
+    $sth->execute;
+    my ($Atype) = $sth->fetchrow_array;
+    $sth->finish;
+    $sth = $dbh->prepare("SELECT interface_type FROM interfaces" .
+			     " where node_id = \"$pnode\"" .
+			     " and iface = \"$portB\"");
+    $sth->execute;
+    my ($Btype) = $sth->fetchrow_array;
+    $sth->finish;
+
+    return ($interfacespeed{$Atype} == $interfacespeed{$Btype});
+};
+
 if ($portswap) {
-    print "Port Swapping - Have yet to write this part\n"
+    foreach $vnodeport (keys(%portmap)) {
+	($vnode,$vport) = split(":",$vnodeport);
+	$pnode = $v2pmap{$vnode};
+	$pport = $portmap{$vnodeport};
+	$prevpport = $prevportmap{$vnodeport};
+	printdb "Looking at $pnode - $pport vs. $prevpport\n";
+	if ($pport ne $prevpport) {
+	    $okswap = 1;
+	    printdb "  Want to swap.\n";
+	    # We want to swap.
+	    if (&swapok($pnode,$pport,$prevpport)) {
+		printdb "  Swap ok.\n";
+		foreach $vlan (@{$nodevlans{$pnode}}) {
+		    $members = @{$vlans{$vlan}}[1];
+		    grep {
+			if (/^$pnode:$pport$/) {
+			    $_ = "$pnode:$prevpport";
+			} elsif (/^$pnode:$prevpport$/) {
+			    $_ = "$pnode:$pport";
+			}
+		    } @$members;
+		    printdb "  $vlan: " . join(" ",@$members) . "\n";
+		}
+	    } else {
+		print "Warning: Could not swap $pport and $prevpport.\n";
+		print "  Port mapping is not consistent with last swap.\n";
+		$okswap = 0;
+	    }
+	    if ($okswap) {
+		$portmap{$vnodeport} = $prevpport;
+	    }
+	}
+    }
 }
 
 ######################################################################
