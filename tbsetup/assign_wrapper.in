@@ -236,6 +236,7 @@ my %v2vmap = ();
 # 
 my %reserved_v2pmap  = ();
 my %reserved_v2vmap  = ();
+my %oldreservednodes = ();
 
 #
 # Experiment wide options. See below. They come from the experiments table.
@@ -254,6 +255,12 @@ my $multiplex_factor;
 # For admission control. Not well defined yet.
 my $cpu_usage;
 my $mem_usage;
+
+# Flag that tells us whether to fix-node current
+# resources or not during a swap modify. This is
+# useful when vnode weights are tweaked by the experimenter
+# before doing a swapmod
+my $fix_current_resources;
 
 ######################################################################
 
@@ -849,6 +856,52 @@ sub RunAssign ($)
     if ($impotent) {
 	print "Skipping physical reservation, as directed.\n";
 	return 0;
+    }
+
+    # From here, we can't recover anymore, coz we move
+    # previously reserved pnodes/vnodes to the holding reservation
+    # and back. By doing this, we will avoid any UNIQUE key issues
+    # when a virt_node in the topology moves from one pnode to another
+    # from previous to new mapping.
+    # Another reason to do this just before nalloc of a new toreserve
+    # nodes is that, we can get into name clashes
+    # For example, lets say the user called his node pc2 and it was
+    # actually mapped to pc99 in the initial swapin. If this was a
+    # swapmod where the user asked for another node node0 which got 
+    # mapped to pc2. nalloc of pc2 will result in UNIQUE key problems
+    # since there exists a reserved vname pc2 (virtual name). By 
+    # having this operation of moving the nodes into 
+    # OLDRESERVED_PID/OLDRESERVED_EID and back before a new nalloc,
+    # avoid this UNIQUE key problem. Also note that simply updating
+    # the vname to be the same as the node_id field also won't
+    # work all the time i.e. in the example discussed above
+    my $oldreserved_pid = OLDRESERVED_PID;	
+    my $oldreserved_eid = OLDRESERVED_EID;
+    if (scalar(keys %oldreservednodes)) {
+	# We can't recover after this coz we are making changes to
+	# the DB
+	$NoRecover = 1;
+	TBDebugTimeStamp("Moving Old Reserved nodes to ".
+	    		 "$oldreserved_pid/$oldreserved_eid ".
+			 "and back started");
+	system("nfree -o $pid $eid " . join(" ", keys(%oldreservednodes)) );
+	system("nalloc $pid $eid " . join(" ", keys(%oldreservednodes)) );
+	my $exitval  = $? >> 8;
+	TBDebugTimeStamp("Moving Old Reserved nodes to ".
+	    		 "$oldreserved_pid/$oldreserved_eid ".
+			 "and back finished");
+	#
+	# If nalloc failed with a fatal error, lets give it up. No retry.
+	# 
+	if ($exitval != 0) {
+	    fatal($WRAPPER_FAILED,
+	    	  "Failed to move back Old Reserved nodes back to reserved\n");
+	}
+	# We need to move this back and forth the holding reservation only
+	# once i.e. in the first call to RunAssign(). If it gets repeatedly
+	# called coz only some pnode resources got nalloc'ed, we don't have
+	# to do the above again.
+	undef %oldreservednodes;
     }
 
     TBDebugTimeStamp("reserving started");
@@ -3249,11 +3302,11 @@ sub LoadExperiment()
     my $query_result =
 	DBQueryFatal("select uselinkdelays,forcelinkdelays,".
 		     "       multiplex_factor,usewatunnels, ".
-		     "       cpu_usage,mem_usage ".
+		     "       cpu_usage,mem_usage,allowfixnode ".
 		     " from experiments ".
 		     "where pid='$pid' and eid='$eid'");
     
-    my ($o1,$o2,$o3,$o4,$o5,$o6) = $query_result->fetchrow_array();
+    my ($o1,$o2,$o3,$o4,$o5,$o6,$o7) = $query_result->fetchrow_array();
 
     # Do not override settings if already defined above. 
     $uselinkdelays = $o1
@@ -3268,7 +3321,11 @@ sub LoadExperiment()
 	if (!defined($cpu_usage));
     $mem_usage = $o6
 	if (!defined($mem_usage));
+    $fix_current_resources = $o7
+	if (!defined($fix_current_resources));
 
+    printdb "Not fixing current resources during this swapin\n"
+	if (! $fix_current_resources);
     LoadVirtTypes();
     LoadVirtNodes();
     LoadVirtLans();
@@ -3893,10 +3950,12 @@ sub LoadCurrent()
 
 	    # Allow for the user to "move" a node. Yuck!
 	    $fixed_nodes{$vname} = $physnode
-		if (!defined($fixed_nodes{$vname}));
+		if (!defined($fixed_nodes{$vname}) && $fix_current_resources);
 	    $reserved_vcount++;
+	    $oldreservednodes{$reserved} = 1;
 	} 
 	else {
+	    $oldreservednodes{$physnode} = 1;
 	    if ($erole eq TBDB_RSRVROLE_SIMHOST) {
 		printdb "simhost:$reserved has vname:$vname with ".
 		         "simhost_violation:$simhost_violation\n";
@@ -3916,7 +3975,8 @@ sub LoadCurrent()
 		    printdb " simnodes\n";
 		    while (my ($simnode) = $query_result2->fetchrow_array()) {
 			$fixed_nodes{$simnode} = $reserved 
-				if (!defined($fixed_nodes{$simnode})); 
+				if (!defined($fixed_nodes{$simnode}) &&
+				    $fix_current_resources); 
 			$reserved_v2pmap{$simnode} = $reserved;
 			printdb "Fixing simnode:$simnode -> $reserved\n";
 			$reserved_simcount++;
@@ -3930,7 +3990,7 @@ sub LoadCurrent()
 
 		# Allow for the user to "move" a node. Yuck!
 		$fixed_nodes{$vname} = $reserved
-		    if (!defined($fixed_nodes{$vname}));
+		    if (!defined($fixed_nodes{$vname}) && $fix_current_resources);
 		$reserved_pcount++;
 	    }
 	}
@@ -3941,4 +4001,5 @@ sub LoadCurrent()
 	if ($reserved_vcount);
     print "Reserved simnodes = $reserved_simcount\n"
 	if ($reserved_simcount);
+    printdb "Old Reserved Nodes: " . join(" ", keys %oldreservednodes) . "\n";
 }

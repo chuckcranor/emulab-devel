@@ -230,6 +230,9 @@ namespace eval GLOBALS {
     variable cpu_usage 3
     variable mem_usage 0
 
+    # Flag to disable doing a fix-node
+    variable fix_current_resources 1
+
     # Control veth encapsulation
     variable veth_encapsulate 1
 }
