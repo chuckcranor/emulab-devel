@@ -790,8 +790,11 @@ while (1) {
     TBDebugTimeStamp("assign started");
     # Run assign
     $fail = 0;
-    print "assign -r -p $ptopfile $topfile\n";
-    open(ASSIGNFP,"assign -r -p $ptopfile $topfile | tee assign.log |");
+    my $cmdargs = "$ptopfile $topfile";
+    $cmdargs = "-r -p $cmdargs"
+	if (scalar(keys(%isremotenode)));
+    print "assign $cmdargs\n";
+    open(ASSIGNFP,"assign $cmdargs | tee assign.log |");
     $violations = 0;
     $score = -1;
 
