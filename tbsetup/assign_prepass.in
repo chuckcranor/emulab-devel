@@ -589,7 +589,6 @@ sub make_conglomerates(@) {
 
     # If there is only one node, just give it back
     if (@nodes == 1) {
-	print "Only one node, just giving it back\n";
 	return @nodes;
     }
 
@@ -713,7 +712,7 @@ sub node_fits_in_conglomerate($$) {
     );
 
     my %additive_features = (
-	'?+mem'        => 512,
+	'?+ram'        => 512,
 	'?+cpu'        => 850,
 	'?virtpercent' => 100
     );
@@ -749,15 +748,18 @@ sub node_fits_in_conglomerate($$) {
     #
     # Check to see if we're going over for any additive local features
     #
-    while (my ($new_name, $new_weight) =
+    
+    # This is some astonishingly bad perl magic - somehow the internal iterator
+    # for this hash isn't getting reset, so sometimes the each() statement
+    # below is starting halfway through the list. Calling keys() resets it.
+    keys %{$node->{'desires'}};
+    while (my ($name, $new_weight) =
 		each %{$node->{'desires'}}) {
-	next unless exists $conglomerate->{'desires'}{$new_name};
-	my $old_weight = $conglomerate->{'desires'}{$new_name};
-	if (exists $additive_features{$new_name} && 
-	    (($old_weight + $new_weight) > $additive_features{$new_name})) {
+	next unless exists $conglomerate->{'desires'}{$name};
+	my $old_weight = $conglomerate->{'desires'}{$name};
+	if (exists $additive_features{$name} && 
+	    (($old_weight + $new_weight) > $additive_features{$name})) {
 		return 0;
-	} else {
-	    next;
 	}
     }
 
@@ -779,7 +781,7 @@ sub new_conglomerate($) {
     # Initialize most values from the node
     $conglomerate{'type'}    = $node->{'type'};
     $conglomerate{'count'}   = $node->{'count'};
-    $conglomerate{'desires'} = $node->{'desires'};
+    $conglomerate{'desires'} = \%{$node->{'desires'}};
     $conglomerate{'flags'}   = $node->{'flags'};
 
     $conglomerate{'slinks'}  = [];
