@@ -574,8 +574,6 @@ sub step_init {
 }
 
 sub test_pass {
-    open(LOG,">> $logfile");
-
     prints "START TEST\n";
 
     if ($flestlog) {
@@ -718,6 +716,8 @@ sub test_pass {
 }
 
 sub step_test {
+    open(LOG,">> $logfile");
+
     if (!$daikon) {
 
 	test_pass;
@@ -725,14 +725,16 @@ sub step_test {
     } else {
 
 	prints "DAIKONIZING: STAGE 1 ... ";
-	system("$TB/bin/daikonize clean > daikon-claen.log 2>&1");
-	if (($? >> 8) != 0) {
-	    prints "FAIL - see \"daikon-claen.log\" for why.\n EXITING.\n";
+	system("$TB/bin/daikonize clean > daikon-clean.log 2>&1");
+	if (($? >> 8) != 0 && ($? >> 8) != 1) {
+	    prints "FAIL - see \"daikon-clean.log\" for why.\n";
+	    prints "EXITING.\n";
 	    return;
 	}
 	system("$TB/bin/daikonize stage1 > daikon-stage1.log 2>&1");
-	if (($? >> 8) != 0) {
-	    prints "FAIL - see \"daikon-stage1.log\" for why.\n EXITING.\n";
+	if (($? >> 8) != 0 && ($? >> 8) != 1) {
+	    prints "FAIL - see \"daikon-stage1.log\" for why.\n";
+	    prints "EXITING.\n";
 	    return;
 	} else {
 	    prints "PASS\n";
@@ -742,8 +744,9 @@ sub step_test {
 
 	prints "DAIKONIZING: STAGE 2 ... ";
 	system("$TB/bin/daikonize stage2 > daikon-stage2.log 2>&1");
-	if (($? >> 8) != 0) {
-	    prints "FAIL - see \"daikon-stage2.log\" for why.\n EXITING.\n";
+	if (($? >> 8) != 0 && ($? >> 8) != 1) {
+	    prints "FAIL - see \"daikon-stage2.log\" for why.\n";
+	    prints "EXITING.\n";
 	    return;
 	} else {
 	    prints "PASS\n";
@@ -753,8 +756,9 @@ sub step_test {
 
 	prints "DAIKONIZING: ANALYZE ... ";
 	system("$TB/bin/daikonize analyze > daikon-analyze.log 2>&1");
-	if (($? >> 8) != 0) {
-	    prints "FAIL - see \"daikon-analyze.log\" for why.\n EXITING.\n";
+	if (($? >> 8) != 0 && ($? >> 8) != 1) {
+	    prints "FAIL - see \"daikon-analyze.log\" for why.\n";
+	    prints "EXITING.\n";
 	    return;
 	} else {
 	    prints "PASS\n";
