@@ -1293,9 +1293,7 @@ pvertex make_lan_node(vvertex vv)
   pvertex pv = add_vertex(PG);
   tb_pnode *p = new tb_pnode();
   put(pvertex_pmap,pv,p);
-  p->name = "lan_";
-  p->name += vnode->name;
-  p->name += "_";
+  p->name += vnode->name; // Just in case - this gets reset below
   p->typed = true;
   p->current_type = "lan";
   p->max_load = 1;
@@ -1331,7 +1329,9 @@ pvertex make_lan_node(vvertex vv)
     pl->bw_used = 0;
     pl->emulated = pl->nonemulated = 0;
     p->switches.insert(largest_switch);
-    p->name += pl->dstmac;
+    p->name = get(pvertex_pmap,largest_switch)->name;
+    p->name += "-";
+    p->name += vnode->name;
   } else {
     p->name += "orphin";
   }
