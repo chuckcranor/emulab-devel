@@ -1,4 +1,0 @@
-set ns [new Simulator]
-set node [$ns node]
-$ns run
-
