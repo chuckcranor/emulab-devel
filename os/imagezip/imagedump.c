@@ -353,18 +353,9 @@ dumpchunk(char *name, char *buf, int chunkno, int checkindex)
 					       "lastsect value (%u<%u)\n",
 					       chunkno, hdr->lastsect,
 					       reg->start + reg->size);
-				else {
-					if (count > 0) {
-						sectfree += count;
-						if (count < fmin)
-							fmin = count;
-						if (count > fmax)
-							fmax = count;
-						franges++;
-					}
+				else
 					count = hdr->lastsect -
 						(reg->start+reg->size);
-				}
 			}
 		} else
 			count = reg->start - nextsector;
@@ -372,7 +363,7 @@ dumpchunk(char *name, char *buf, int chunkno, int checkindex)
 			sectfree += count;
 			if (count < fmin)
 				fmin = count;
-			if (count > fmax)
+			else if (count > fmax)
 				fmax = count;
 			franges++;
 		}
@@ -381,7 +372,7 @@ dumpchunk(char *name, char *buf, int chunkno, int checkindex)
 		sectinuse += count;
 		if (count < amin)
 			amin = count;
-		if (count > amax)
+		else if (count > amax)
 			amax = count;
 		if (count < 8)
 			adist[0]++;
