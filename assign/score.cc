@@ -464,7 +464,7 @@ int add_node(vvertex vv,pvertex pv, bool deterministic)
     if (pnode->max_load == 0) {
       // didn't find a type
       SDEBUG(cerr << "  no matching type" << endl);
-      cerr << "add_node FAILED! (no matching type)" << endl;
+      //cerr << "add_node FAILED! (no matching type)" << endl;
       return 1;
     }
     
@@ -477,7 +477,7 @@ int add_node(vvertex vv,pvertex pv, bool deterministic)
     SDEBUG(cerr << "  pnode already has type" << endl);
     if (pnode->current_type != vnode->type) {
       SDEBUG(cerr << "  incompatible types" << endl);
-      cerr << "add_node FAILED! (incompatible types)" << endl;
+      //cerr << "add_node FAILED! (incompatible types)" << endl;
       return 1;
     } else {
       SDEBUG(cerr << "  compatible types" << endl);
@@ -489,7 +489,7 @@ int add_node(vvertex vv,pvertex pv, bool deterministic)
 	// XXX is this a bug?  do we need to revert the pnode/vnode to
 	// it's initial state.
 	SDEBUG(cerr << "  node is full" << endl);
-	cerr << "add_node FAILED! (node is full)" << endl;
+	//cerr << "add_node FAILED! (node is full)" << endl;
 	return 1;
       }
     }
