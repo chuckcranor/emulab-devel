@@ -42,7 +42,8 @@ else {
 
 $dbh = &tbs_initdbi($TBDB);
 
-$logfile = "$pid-$eid.log";
+$cleanvlans = 0;
+$logfile    = "$pid-$eid.log";
 
 if ($dolog) {
     &tbs_initlog($logfile);
@@ -51,9 +52,25 @@ if ($dolog) {
 
 sub cleanup {
     &tbs_out("Cleaning up\n");
+
+    if ($cleanvlans) {
+	&tbs_out("Removing VLANs\n");
+	if (&tbs_exec("snmpit -reset $pid $eid")) {
+	    &tbs_out("Failed to clean up VLANs\n");
+	    $errors = 1;
+	}
+
+	&tbs_out("Backing up VLAN configuration\n");
+	if (&tbs_exec("savevlans")) {
+	    &tbs_out("WARNING: Failed to back up VLAN configuration\n");
+	}
+    }
+    
+    &tbs_out("Freeing up nodes.\n");
     if (&tbs_exec("nfree $pid $eid")) {
 	&tbs_out("Could not free resources.\n");
     }
+    
     &tbs_out("Resetting DB.\n");
     if (! $dbh->do("DELETE from delays where ".
 		   "pid = \"$pid\" and eid=\"$eid\"")) {
@@ -114,6 +131,11 @@ if (&tbs_exec("snmpit -t $pid $eid")) {
     cleanup;
     exit(1);
 }
+
+#
+# An error now means that the VLANS need to be cleaned up.
+#
+$cleanvlans = 1;
 
 &tbs_out("Backing up VLAN configuration\n");
 if (&tbs_exec("savevlans")) {
