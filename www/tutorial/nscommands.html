@@ -1,0 +1,400 @@
+<center>
+<h1>Emulab - NS Testbed Commands</h1>
+</center>
+
+
+<h2>Contents</h2>
+<ul>
+  <li><a href=#INTRO>Introduction</a>
+  <li><a href=#TCL>TCL, NS, and node names</a>
+  <li><a href=#HARD>Hardware Commands</a>
+  <li><a href=#IP>IP Commands</a>
+  <li><a href=#OS>OS Commands</a>
+  <li><a href=#LOSS>Link Loss Commands</a>
+</ul>
+
+<hr>
+
+<a name=INTRO></a><h3>Introduction</h3>
+
+<p>In order to use the testbed specific commands you must include the
+following line near the top of your NS file (before any testbed
+commands are used):
+
+<pre>
+source tb_compat.tcl
+</pre>
+
+<p>If you wish to use your file under NS you can use download this <a
+href=http://www.emulab.net/tutorial/tb_compat.tcl>tb_compat.tcl</a>.
+Place it in the same directory as your NS file.  When run in this way
+under NS the testbed commands will have no effect, but NS will be able
+to parse your file.
+
+<hr>
+
+<a name=TCL></a><h3>TCL, NS, and node names</h3>
+
+In your file you will be creating nodes with something like:
+
+<pre>
+set node1 [$ns node]
+</pre>
+
+What is really going on is that the simulator, represented by
+<code>$ns</code> is creating a new node, involving a bunch of internal
+data changes, and returning a reference to it which is stored in the
+variable <code>node1</code>.  In almost all cases, when you need to
+refer to a node you will do it as <code>$node1</code>, the
+<code>$</code> indicating that you want the value the variable
+<code>node1</code>, i.e. the reference to the node.  Thus you will be
+issuing commands like:
+
+<pre>
+$ns duplex-link $node1 $node2 100Mb 150ms DropTail
+tb-set-ip $node1 192.0.0.2
+</pre>
+
+<p>(Note the <code>$</code>'s)
+
+<p>You will notice that when your experiment is setup the node names
+and such will be <code>node1</code>.  This happens because the parser
+detects what variable you are using to store the node reference and
+uses that as the node name.  In the case that you do something like:
+
+<pre>
+set node1 [$ns node2]
+set A $node1
+</pre>
+
+<p>The node will still be called <code>node1</code> as that was the first
+variable to contain the reference.
+
+<p>If you are dealing with many nodes you may store them in array,
+perhaps like this:
+
+<pre>
+for {set i 0} {$i < 4} {incr i} {
+   set nodes($i) [$ns node]
+}
+</pre>
+
+<p>In this case the names of the node will be <code>nodes-0</code>,
+<code>nodes-1</code>, <code>nodes-2</code>, <code>nodes-3</code>.
+This slightly ugly syntax comes is to avoid any problems that
+<code>()</code> may cause in later scripts.
+
+<p>As a final note, everything said above for nodes applies equally to
+lans.  I.e.:
+
+<pre>
+set lan0 [$ns make-lan "$node0 $node1" 100Mb .1ms]
+tb-set-lan-loss $lan0 .02
+$ns duplex-link $lan0 $node3 100Mb 100ms DropTail
+</pre>
+
+<p>(Again, note the <code>$</code>'s)
+
+<p>Links can also be named just like nodes and lans.  The names can
+then be used to set loss rates or IP addresses.  This technique is the
+only way to set such attributes when their are multiple links between
+two nodes.
+
+<pre>
+set link1 [$ns duplex-link $node0 $node1 100Mb .1ms DropTail]
+tb-set-link-loss $link1 0.05
+tb-set-ip-link $node0 $link1 192.0.0.128
+</pre>
+
+<hr>
+
+<a name=HARD></a><h3>Hardware Commands</h3>
+
+<h4>tb-set-hardware</h4>
+
+<pre>
+tb-set-hardware <i>node</i> <i>type</i> [<i>args</i>].
+
+tb-set-hardware $node3 pc
+tb-set-hardware $node4 shark
+</pre>
+
+<dl>
+  <dt><i>node</i> - The name of the node.
+  <dt><i>type</i> - The type of the node.
+</dl>
+
+<p>Notes:
+
+<ul>
+  <li>Currently only <code>pc</code> and <code>shark</code> are
+supported types.  <code>pc</code> is the default type.
+  <li>No current types have any additional arguments.
+</dl>
+
+<hr>
+
+<a name=IP></a><h3>IP Commands</h3>
+
+<p>Each node will be assigned an IP address.  The following commands
+will allow you to explicitly set those IP addresses.  IP addresses
+will be automatically generated for all nodes that you do not
+explicitly set IP addresses.
+
+<p>In the common case the IP addresses on either side of a link must
+be in the same subnet.  Likewise, all IP addresses on a LAN should be
+in the same subnet.  Automatically generated IP addresses will conform
+to this requirement.  If part of a link or lan is explicitly specified
+with the commands below then the remainder will be automatically
+generated under the same subnet.
+
+<p>IP address assignment is deterministic and tries to fill lower IP's
+first, starting at 2.  Except in the partial specification case (see
+above), all automatic IP addresses are in the network
+<code>192.168</code>.
+
+<h4>tb-set-ip</h4>
+
+<pre>
+tb-set-ip <i>node</i> <i>ip</i>
+
+tb-set-ip $node1 142.3.4.5
+</pre>
+
+<dl>
+  <dt><i>node</i> - The node to assign the IP address to.
+  <dt><i>ip</i> - The IP address.
+</dl>
+
+<p>Notes:
+
+<ul>
+  <li>This command should only be used for nodes that have a single
+      link.  For nodes with multiple links the next commands should be
+      used.  Mixing <code>tb-set-ip</code> and any other IP command on
+      the same node will result in an error.
+</ul>
+
+<hr>
+
+<h4>tb-set-ip-link</h4>
+
+<pre>
+tb-set-ip-link <i>node</i> <i>link</i> <i>ip</i>
+
+tb-set-ip-link $node0 $link0 142.3.4.6
+</pre>
+
+<dl>
+  <dt><i>node</i> - The node to set the IP for.
+  <dt><i>link</i> - The link to set the IP for.
+  <dt><i>ip</i> - The IP address.
+</dl>
+
+<p>Notes:
+<ul>
+  <li>One way to think of the arguments is a link with the node
+      specifying which side of the link to set the IP for.
+  <li>This command can not be mixed with <code>tb-set-ip</code> on the
+      same node.
+</ul>
+
+<hr>
+
+<h4>tb-set-ip-lan</h4>
+
+<pre>
+tb-set-ip-lan <i>node</i> <i>lan</i> <i>ip</i>
+
+tb-set-ip-lan $node1 $lan0 142.3.4.6
+</pre>
+
+<dl>
+  <dt><i>node</i> - The node to set the IP for.
+  <dt><i>lan</i> - The lan the IP is on.
+  <dt><i>ip</i> - The IP address.
+</dl>
+
+<p>Notes:
+<ul>
+  <li>One way to think of the arguments is a node with the LAN
+      specifying which port to set the IP address for.
+  <li>This command can not be mixed with <code>tb-set-ip</code> on the
+same node.
+</ul>
+
+<hr>
+
+<h4>tb-set-ip-interface</h4>
+
+<pre>
+tb-set-ip-interface <i>node</i> <i>dst</i> <i>ip</i>
+
+tb-set-ip-interface $node2 $node1 142.3.4.6
+</pre>
+
+<dl>
+  <dt><i>node</i> - The node to set the IP for.
+  <dt><i>dst</i> - The destination of the link to set the IP for.
+  <dt><i>IP</i> - The IP address.
+</dl>
+
+<p>Notes:
+<ul>
+  <li>This commands can not be mixed on the same node with
+      <code>tb-set-ip</code>.  (See above)
+  <li>In the case of multiple links between the same pair of nodes
+      there is no way to distinguish which link to the set the IP
+      for.  This should be fixed soon.
+  <li>This command is converted internally to either tb-set-ip-link or
+      tb-set-ip-lan.  It is possible that error messages will report
+      either of those commands instead of tb-set-ip-interface.
+</ul>
+
+<hr>
+
+<a name=OS></a><h3>OS Commands</h3>
+
+<h4>tb-set-node-os</h4>
+
+<pre>
+tb-set-node-os <i>node</i> <i>os</i>
+
+tb-set-node-os $node1 FBSD40-STD
+tb-set-node-os $node1 MY_OS
+</pre>
+
+<dl>
+  <dt><i>node</i> - The node to set the OS for.
+  <dt><i>os</i> - The id of the OS for that node.
+</dl>
+
+<p>Notes:
+
+<ul>
+  <li>The OS ID can either by one of the standard OS's we provide or
+      a custom OS ID, created via the web interface.
+  <li>If no OS is specified for a node a default OS is chosen based on
+      the nodes type.  This is currently RHL62-STD for PCs.
+  <li>The currently available standard OS types are: FBSD40-STD,
+      RHL62-STD, NBSD14-STD (should not be used on PC nodes), and
+      NETBOOT.  NETBOOT is the oskit netboot kernel for loading other
+      operating systems over the network.
+</ul>
+
+<h4>tb-set-node-rpms</h4>
+
+<pre>
+tb-set-node-rpms <i>node</i> <i>rpms...</i>
+
+tb-set-node-rpms $node0 rpm1 rpm2 rpm3
+</pre>
+
+<p>Notes:
+
+<ul>
+  <li>This command sets which rpms are to be installed on the node.
+  <li>Not fully supported.
+</ul>
+
+<h4>tb-set-node-startup</h4>
+
+<pre>
+tb-set-node-startup <i>node</i> <i>startupcmd</i>
+
+tb-set-node-startup $node0 {mystart.sh -a}
+</pre>
+
+<p>Notes:
+<ul>
+  <li>This sets a script to run on node boot.
+  <li>Not fully supported.
+</ul>
+
+<h4>tb-set-node-cmdline</h4>
+
+<pre>
+tb-set-node-cmdline <i>node</i> <i>cmdline</i>
+
+tb-set-node-cmdline $node0 {???}
+</pre>
+
+<p>Notes:
+<ul>
+  <li>Ask Mike
+</ul>
+
+<h4>tb-set-node-tarfiles</h4>
+
+<pre>
+tb-set-node-tarfiles <i>node</i> <i>dir</i> <i>tarfile</i>
+
+tb-set-node-tarfiles $node0 /bin mybinmods.tar /sbin mysbinmods.tar
+</pre>
+
+<p>Notes:
+<ul>
+  <li>This installs tarfiles in specified directories.
+</ul>
+	
+<hr>
+
+<a name=LOSS></a><h3>Link Loss Commands</h3>
+
+<p>The NS syntax for creating a link:
+
+<pre>
+$ns duplex-link $node1 $node2 100Mb 150ms DropTail
+</pre>
+
+<p>Does not allow for specifying link loss rates.  Emulab does,
+however, support link loss.  The following commands can be used to
+specify link loss rates.
+
+<h4>tb-set-link-loss</h4>
+
+<pre>
+tb-set-link-loss <i>src</i> <i>dst</i> <i>loss</i>
+tb-set-link-loss <i>link</i> <i>loss</i>
+
+tb-set-link-loss $node1 $node2 0.05
+tb-set-link-loss $link1 0.02
+</pre>
+
+<dl>
+  <dt><i>src</i>, <i>dst</i> - Two nodes to describe the link.
+  <dt><i>link</i> - The link to set the rate for.
+  <dt><i>loss</i> - The loss rate (between 0 and 1).
+</dl>
+
+<p>Notes:
+<ul>
+  <li>There are two syntax's available.  The first specifies a link by
+      a source/destination pair.  The second explicitly specifies the
+      link.
+  <li>The source/destination pair is incapable of describing an
+      individual link in the case of multiple links between two
+      nodes.  Use the second syntax for this case.
+</ul>
+
+<h4>tb-set-lan-loss</h4>
+
+<pre>
+tb-set-lan-loss <i>lan</i> <i>loss</i>
+
+tb-set-lan-loss $lan1 0.3
+</pre>
+
+<dl>
+  <dt><i>lan</i> - The lan to set the loss rate for.
+  <dt><i>loss</i> - The loss rate (between 0 and 1).
+</dl>
+
+<p>Notes:
+<ul>
+  <li>This command sets the loss rate for the entire LAN.  If you want
+      to have a different loss rate for a node in the LAN you'll need
+      to link the node to the lan (rather than include in the
+      <code>make-lan</code> command) and set the loss rate of the link
+      appropriately (contact testbed-ops).
+</ul>
