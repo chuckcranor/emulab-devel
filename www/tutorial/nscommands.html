@@ -272,15 +272,17 @@ tb-set-node-os $node1 MY_OS
 <p>Notes:
 
 <ul>
-  <li>The OS ID can either by one of the standard OS's we provide or
-      a custom OS ID, created via the web interface.
+  <li>The OSID can either by one of the standard OS's we provide or
+      a custom OSID, created via the web interface.
   <li>If no OS is specified for a node a default OS is chosen based on
       the nodes type.  This is currently RHL62-STD for PCs.
   <li>The currently available standard OS types are: FBSD40-STD,
       RHL62-STD, NBSD14-STD (should not be used on PC nodes), and
-      NETBOOT.  NETBOOT is the oskit netboot kernel for loading other
-      operating systems over the network.
+      NETBOOT-STD (oskit netboot kernel for loading other
+      operating systems over the network).
 </ul>
+
+<hr>
 
 <h4>tb-set-node-rpms</h4>
 
@@ -293,9 +295,13 @@ tb-set-node-rpms $node0 rpm1 rpm2 rpm3
 <p>Notes:
 
 <ul>
-  <li>This command sets which rpms are to be installed on the node.
-  <li>Not fully supported.
+  <li>This command sets which rpms are to be installed on the node
+  first boots after being assigned to an experiment. 
+  <li>See the <a href="tutorial/tutorial.php3#RPMS">tutorial</a> for more
+  information.
 </ul>
+
+<hr>
 
 <h4>tb-set-node-startup</h4>
 
@@ -307,9 +313,12 @@ tb-set-node-startup $node0 {mystart.sh -a}
 
 <p>Notes:
 <ul>
-  <li>This sets a script to run on node boot.
-  <li>Not fully supported.
+  <li>Specify a script or program to be run when the node is booted.
+  <li>See the <a href="tutorial/tutorial.php3#Startupcmd">tutorial</a> for more
+  information.
 </ul>
+
+<hr>
 
 <h4>tb-set-node-cmdline</h4>
 
@@ -321,8 +330,12 @@ tb-set-node-cmdline $node0 {???}
 
 <p>Notes:
 <ul>
-  <li>Ask Mike
+  <li>Set the command line, to be passed to the <i>kernel<i> when it
+  is booted.
+  <li>Currently, this is supported on OSKit kernels only. 
 </ul>
+
+<hr>
 
 <h4>tb-set-node-tarfiles</h4>
 
@@ -334,7 +347,10 @@ tb-set-node-tarfiles $node0 /bin mybinmods.tar /sbin mysbinmods.tar
 
 <p>Notes:
 <ul>
-  <li>This installs tarfiles in specified directories.
+  <li>This installs tarfiles in specified directories when the node
+  first boots after being assigned to an experiment. 
+  <li>Each tar file is installed just one. Tarfiles that have been
+  loaded, are not reloaded after subsequent reboots.
 </ul>
 	
 <hr>
@@ -376,6 +392,8 @@ tb-set-link-loss $link1 0.02
       individual link in the case of multiple links between two
       nodes.  Use the second syntax for this case.
 </ul>
+
+<hr>
 
 <h4>tb-set-lan-loss</h4>
 
