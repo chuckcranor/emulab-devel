@@ -245,6 +245,9 @@ my %v2vmap = ();
 my %reserved_v2pmap  = ();
 my %reserved_v2vmap  = ();
 my %oldreservednodes = ();
+# reserved_p2vmap is indexed by physical and contains one or more virtual
+# nodes
+my %reserved_p2vmap  = ();
 
 #
 # Experiment wide options. See below. They come from the experiments table.
@@ -1117,6 +1120,8 @@ foreach my $pnode (keys(%virtnodes)) {
     my @oplist = ();
     my @ovlist = ();
 
+    printdb "On pnode $pnode: vnodes @vlist\n";
+
     # Check cancel flag before continuing. 
     TBGetCancelFlag($pid, $eid, \$canceled);
     fatal($WRAPPER_FAILED,
@@ -1129,28 +1134,44 @@ foreach my $pnode (keys(%virtnodes)) {
     # avail, of just the nodes we need in this run. 
     #
     if ($updating) {
-	my @newvlist = ();
-	my @delvlist = ();
-	
-	foreach my $vnode (@vlist) {
-	    if (!defined($reserved_v2vmap{$vnode})) {
-		# A new vnode on pnode to allocate.
-		push(@newvlist, $vnode);
-		next;
-	    }
-	    if ($reserved_v2pmap{$vnode} ne $pnode) {
-		# A vnode moved. Its new to this pnode.
-		print "$vnode has moved from $reserved_v2pmap{$vnode} ".
-		    "to $pnode!\n";
-		
-		push(@newvlist, $vnode);
-		next;
-	    }
+	my @oldvlist = ();
+	if ( defined($reserved_p2vmap{$pnode}) ) {
+	    @oldvlist = @{$reserved_p2vmap{$pnode}};
+	} 
+        printdb "On pnode $pnode: oldvlist: @oldvlist\n";
 
-	    # Push already allocated p/v onto lists for later.
-	    push(@oplist, $reserved_v2vmap{$vnode});
-	    push(@ovlist, $vnode);
+	# newvlist = elements in vlist but not in oldvlist
+	#            i.e. newly mapped to this pnode
+	my @newvlist = array_diff( \@vlist, \@oldvlist );
+        printdb "On pnode $pnode: newvlist: @newvlist\n";
+
+	# curvlist = elements in both vlist and oldvlist
+	#            i.e. vnodes mapped the same way from previous
+	#            to current
+	# This is the same as @vlist intersection @oldvlist
+	# since the lists have no duplicates
+	my @curvlist = array_diff( \@vlist, \@newvlist );
+        printdb "On pnode $pnode: curvlist: @curvlist\n";
+
+	foreach my $vnode (@curvlist) {
+	    push( @oplist, $reserved_v2vmap{$vnode} );
+	    push( @ovlist, $vnode );
 	}
+
+	# delvlist = elements in oldvlist not in vlist
+	#            i.e. vnodes that moved to another pnode or
+	#            went away
+	my @delvlist = array_diff( \@oldvlist, \@vlist );
+        printdb "On pnode $pnode: delvlist: @delvlist\n";
+
+	while( scalar(@newvlist) && scalar(@delvlist) ) {
+	    my $del_vnode = pop(@delvlist);
+	    my $reserved_node = $reserved_v2vmap{$del_vnode};
+	    push( @oplist, $reserved_node );
+	    my $new_vnode = pop(@newvlist);
+	    push( @ovlist, $new_vnode );
+	}
+	
 	# These are the new nodes we need to allocate
 	@vlist = @newvlist;
 	$numvs = scalar(@vlist);
@@ -1168,7 +1189,7 @@ foreach my $pnode (keys(%virtnodes)) {
 	# Run avail to get the list of virtnodes on the phys node. We
 	# already know there are enough, since assign knows that.
 	#
-	print "Asking avail for $numvs for vnodes: @vlist on $pnode\n";
+	printdb "Asking avail for $numvs for vnodes: @vlist on $pnode\n";
     
 	open(AVAIL,"$TBROOT/sbin/avail virtonly=$pnode rand limit=$numvs |")
 	    or fatal($WRAPPER_FAILED, "avail failed");
@@ -1191,7 +1212,7 @@ foreach my $pnode (keys(%virtnodes)) {
 
 	# Sanity check.
 	if (scalar(@vlist) != scalar(@plist)) {
-	    print STDERR "avail gave ", scalar(@plist), "vnodes: @plist on $pnode\n";
+	    printdb "avail gave " . scalar(@plist) . " vnodes: @plist on $pnode\n";
 	    fatal($WRAPPER_FAILED,
 		  "Could not map some virtual nodes on $pnode");
 	}
@@ -1245,6 +1266,15 @@ foreach my $pnode (keys(%virtnodes)) {
 				    TBDB_ALLOCSTATE_RES_INIT_DIRTY());
 	    }
 	}
+    }
+
+    # Since we have some extra physical vnode reserved on this pnode,
+    # we will let tbswap tear them down
+    while (@delvlist) {
+	my $del_vnode = pop(@delvlist);
+	my $reserved_node = $reserved_v2vmap{$del_vnode};
+	TBSetNodeAllocState($reserved_node,
+			    TBDB_ALLOCSTATE_RES_TEARDOWN());
     }
 }
 
@@ -4062,6 +4092,22 @@ sub getrtabid($$) {
     return $rtabid;
 }
 
+sub array_diff($$) {
+    my ($a, $b) = @_;
+
+    my %seen; # lookup table
+    my @aonly;# answer
+    
+    # build lookup table
+    @seen{@$b} = ();
+
+    foreach my $item (@$a) {
+	push(@aonly, $item) unless exists $seen{$item};
+    }
+
+    return @aonly;
+}
+
 #
 # Load current resources. We pull in the phys node entries now.
 # 
@@ -4088,6 +4134,10 @@ sub LoadCurrent()
 	    if ($isremote && !$isplab);
 	
 	LoadPhysNode($reserved);
+
+	if( ! defined($reserved_p2vmap{$physnode}) ) {
+	    $reserved_p2vmap{$physnode} = [];
+	}
 	
 	#
 	# If a virtnode, we need the underlying physnode, since thats
@@ -4100,6 +4150,7 @@ sub LoadCurrent()
 	    physnodesetreuse($physnode, "unused");
 	    $reserved_v2vmap{$vname} = $reserved;
 	    $reserved_v2pmap{$vname} = $physnode;
+	    push(@{$reserved_p2vmap{$physnode}}, $vname);
 
 	    # Allow for the user to "move" a node. Yuck!
 	    $fixed_nodes{$vname} = $physnode
@@ -4131,6 +4182,7 @@ sub LoadCurrent()
 				if (!defined($fixed_nodes{$simnode}) &&
 				    $fix_current_resources); 
 			$reserved_v2pmap{$simnode} = $reserved;
+			push(@{$reserved_p2vmap{$reserved}}, $simnode);
 			printdb "Fixing simnode:$simnode -> $reserved\n";
 			$reserved_simcount++;
 		    }
@@ -4138,6 +4190,7 @@ sub LoadCurrent()
 	    }
 	    else {
 		$reserved_v2pmap{$vname} = $reserved;
+		push(@{$reserved_p2vmap{$reserved}}, $vname);
 		physnodesetreuse($reserved, "unused");
 		printdb "non simhost:$reserved has vname:$vname\n";
 
