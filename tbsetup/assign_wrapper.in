@@ -566,7 +566,7 @@ sub RunAssign ($)
 
     # If doing an experiment with virtnodes, use the prepass wrapper for assign
     my $cmd;
-    if ($virtcount) {
+    if ($virtcount && 0) {
 	$cmd = "assign_prepass";
 	$cmdargs = "-m $multiplex_factor $cmdargs"
 	    if ($multiplex_factor);
