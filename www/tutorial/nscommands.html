@@ -90,11 +90,9 @@ characters cannot appear in DNS entries.
 <p>As a final note, everything said above for nodes applies equally to
 lans.  I.e.:
 
-<!-- FIX HERE! Deprecated and now illegal syntax! 
 <pre>
 set lan0 [$ns make-lan "$node0 $node1" 100Mb .1ms]
 tb-set-lan-loss $lan0 .02
-$ns duplex-link $lan0 $node3 100Mb 100ms DropTail
 </pre>
 
 <p>(Again, note the <code>$</code>'s)
@@ -103,7 +101,6 @@ $ns duplex-link $lan0 $node3 100Mb 100ms DropTail
 then be used to set loss rates or IP addresses.  This technique is the
 only way to set such attributes when their are multiple links between
 two nodes.
--->
 
 <pre>
 set link1 [$ns duplex-link $node0 $node1 100Mb .1ms DropTail]
@@ -418,11 +415,5 @@ tb-set-lan-loss $lan1 0.3
 
 <p>Notes:
 <ul>
-<!-- FIX HERE: This talks about the now deprecated node-to-lan link,
-so we'll need to figure this out as well... -->
-  <li>This command sets the loss rate for the entire LAN.  If you want
-      to have a different loss rate for a node in the LAN you'll need
-      to link the node to the lan (rather than include in the
-      <code>make-lan</code> command) and set the loss rate of the link
-      appropriately (contact testbed-ops).
+  <li>This command sets the loss rate for the entire LAN.
 </ul>
