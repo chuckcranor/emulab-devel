@@ -9,27 +9,19 @@
 # os_select sets the os that should boot next on a node, and sets
 # next_op_mode accordingly. 
 
-# If you give it the -1 flag, it will set
-# up a one-time reboot to a different OS, but leave the default
-# untouched.
-
 sub usage() {
     print <<"EOF";
-Usage: os_select [-h] [-d] [-v] <osid> <node> [<node> ...]
+Usage: os_select [-h] [-d] [-v] [-p] [-1] <osid> <node> [<node> ...]
  -h    Display this help message
  -d    Debug mode
  -v    Verbose mode
+ -p    Path mode: osid is really a path to a kernel
+ -1    Set up one-time boot to OS instead of changing default OS
  osid  OS identifier for the selected OS (see web interface for listing)
  node  Node identifiers (ie pcXX)
 EOF
     exit(-1);
 }
-
-# XXX
-# todo:
-# - make func to lookup state machine for given osid
-# - core: find state for osid, set osid/next_state for all the nodes
-# - *** think about locking. necessary?
 
 use Getopt::Std;
 
@@ -49,16 +41,24 @@ use libdb;
 use libtestbed;
 use English;
 
+# Constants
+my $kernelosid = "_KERNEL_";
+
+# Global vars
 my $d=0; # debug/verbose
+my $oneshot=0; # is this a one-shot OS boot?
+my $pathmode=0; # is osid really a path instead of an osid?
 
 # Parse command arguments. Once we return from getopts, all that should be
 # left are the required arguments.
-my  $optlist = "hdv";
+my  $optlist = "hdvp1";
 %options = ();
 if (! getopts($optlist, \%options)) { usage(); }
 if (defined($options{"h"})) { usage(); }
 if (defined($options{"d"})) { $d++; }
 if (defined($options{"v"})) { $d++; }
+if (defined($options{"p"})) { $pathmode=1; }
+if (defined($options{"1"})) { $oneshot=1; }
 print "DEBUG LEVEL $d\n" if $d;
 
 print "ARGV= ".join(" ",@ARGV)."\n" if $d>1;
@@ -68,12 +68,12 @@ my $osid = shift;
 my @nodes = @ARGV;
 
 # Untaint args.
-if ($osid =~ /^([-\@\w]+)$/) { $osid = $1; }
+if ($osid =~ /^([-\@\w\/]+)$/) { $osid = $1; }
 else { die("Bad data in osid: '$osid'\n"); }
 
 my @temp;
 foreach $n (@nodes) {
-    if ($n =~ /^([-\@\w]+)$/) { push(@temp,$1); }
+    if ($n =~ /^([\w]+)$/) { push(@temp,$1); }
     else { warn("Ignoring bad data in node_id: '$n'\n"); }
 }
 @nodes=@temp;
@@ -101,9 +101,9 @@ foreach $n (@nodes) {
     print "Bootwhat says: $n => $boot\n" if $d>1;
     my $curmode = node_opmode($n);
     print "Current opmode for node '$n' is '$curmode'.\n" if $d;
-    if (!$curmode || ($curmode ne $opmode)) {
-	set_nextmode($n);
-    }
+    if (!$curmode || ($curmode ne $opmode)) { set_nextmode($n); } 
+    else { set_nextmode($n,""); } # Make sure it is clear
+    set_boot_osid($n);
 }
 
 exit();
@@ -114,8 +114,28 @@ exit();
 
 sub set_nextmode() {
     my $node = shift || "";
-    my $cmd = "update nodes set next_op_mode='$opmode' where node_id='$node';";
-    print "Setting next_op_mode for node '$node' to '$opmode'.\n" if $d;
+    my $mode = shift;
+    if (!defined($mode)) { $mode = $opmode; }
+    my $cmd = "update nodes set next_op_mode='$mode' where node_id='$node';";
+    print "Setting next_op_mode for node '$node' to '$mode'.\n" if $d;
+    my $q = DBQueryFatal($cmd);
+    return 0;
+}
+
+sub set_boot_osid() {
+    my $node = shift || "";
+    my $field = ($oneshot?"next":"def")."_boot_".($pathmode?"path":"osid");
+    my $cmd = "update nodes set $field='$osid'";
+    # Clear out the paths and the next_boot_osid except for possibly
+    # one that we're going to set. Never clear def_boot_osid, since it
+    # won't ever get in the way of what we really want to boot, and we
+    # want something to fall back on.
+    foreach $f ("next_boot_path", "def_boot_path", "next_boot_osid") {
+	if ($f ne $field) { $cmd .= ", $f=''"; }
+    }
+    $cmd .= " where node_id='$node';";
+    print "cmd=$cmd\n" if $d>1;
+    print "Setting $field for node '$node' to '$osid'.\n" if $d;
     my $q = DBQueryFatal($cmd);
     return 0;
 }
@@ -137,6 +157,11 @@ sub node_opmode() {
 sub os_opmode() {
     my $osid = shift || "";
     my $cmd = "select op_mode from os_info where osid='$osid';";
+    if ($osid eq $kernelosid || $pathmode) {
+	# This is either the magic osid or a kernel path.
+	# Use minimal mode.
+	return "MINIMAL";
+    }
     my $q = DBQueryFatal($cmd);
     if ($q->numrows() < 1) {
 	die("Invalid osid '$osid' is non-existent.\n");
@@ -177,12 +202,11 @@ where n.node_id = '$node'";
     print "node $node => ($nextpath, $defpath, $nextosid, $defosid)\n" if $d>1;
     if ((defined($nextpath) && $nextpath) || 
 	(defined($defpath) && $defpath)) {
-	warn("Ignoring node '$node': will not boot from an OSID\n");
-	return 0;
+	# No OSID. Return a magic one.
+	return $kernelosid;
     }
     if (defined($nextosid) && $nextosid) { return $nextosid; }
     if (defined($defosid) && $defosid) { return $defosid; }
     warn("Ignoring node '$node': All boot info was null!\n");
     return 0;
 }   
-
