@@ -3,22 +3,22 @@
 # Dan Flickinger
 #
 # 2004/10/04
-# 2004/12/15
+# 2005/01/04
 
 
 HOSTPATH=/z/garcia/brainstem
 
 # Build for Stargate:
-ARCH=ARM
-CC=/usr/local/arm/3.4.1/bin/arm-linux-gcc
-CXX=/usr/local/arm/3.4.1/bin/arm-linux-g++
-CXXFLAGS = -DaUNIX -s -static
+# ARCH=ARM
+# CC=/usr/local/arm/3.4.1/bin/arm-linux-gcc
+# CXX=/usr/local/arm/3.4.1/bin/arm-linux-g++
+# CXXFLAGS = -DaUNIX -s -static
 
 # Build for i386:
-#ARCH=i686
-#CC=g++
-#CXX=g++
-#CXXFLAGS=-DaUNIX -g
+ARCH=i686
+CC=g++
+CXX=g++
+CXXFLAGS=-DaUNIX -g
 
 
 CXXFLAGS += -I$(HOSTPATH)/aCommon \
@@ -51,7 +51,7 @@ OBJECTSREQ=grobot gcallbacks gbehaviors simplepath
 OBJECTS=grobot.o gcallbacks.o gbehaviors.o simplepath.o mtp.o
 OBJECTS_GOROBOTC=grobot.o gcallbacks.o gbehaviors.o simplepath.o
 
-all: commotion pathmotion circle gorobot gorobotc
+all: commotion pathmotion circle gorobot gorobotc test_grobot
 
 
 commotion: $(OBJECTSREQ)
@@ -71,6 +71,10 @@ mtp_send: mtp.o
 
 gorobotc: $(OBJECTSREQ)
 	$(CC) -o gorobotc $(OBJECTS_GOROBOTC) $(CXXFLAGS) $(LDFLAGS) gorobotc.cc $(LIBRARIES)
+        
+test_grobot: $(OBJECTSREQ)
+	$(CXX) -o test_grobot $(OBJECTS_GOROBOTC) $(CXXFLAGS) $(LDFLAGS) test_grobot.cc $(LIBRARIES)
+
 
 # %.o : %.c
 # 	$(CC) $(CFLAGS) -c -o $@ $< $(INCLUDES)
@@ -120,3 +124,4 @@ clean :
 	rm -f batt
 	rm -f gorobot
 	rm -f gorobotc
+	rm -f test_grobot
