@@ -1213,8 +1213,12 @@ from nodes where node_id = '$node'";
     if (defined($nextpxepath) && $nextpxepath) {
 	if ($nextpxepath ne $defpxepath) {
 	    print "TBBootWhat: Using next_pxe_boot_path $nextpxepath\n" if $d;
-	    if ($pxeosid{$nextpxepath}) {
-		return $pxeosid{$nextpxepath};
+	    my $cmd = "select osid from os_info where path='$nextpxepath'";
+	    my $q = DBQueryFatal($cmd);
+	    if ($q->numrows() > 0) {
+		my @r = $q->fetchrow_array();
+		my $osid = $r[0];
+		return $osid;
 	    } else {
 		return TB_OSID_MBKERNEL;
 	    }
@@ -1222,8 +1226,12 @@ from nodes where node_id = '$node'";
     } else {
 	if ($pxepath ne $defpxepath) {
 	    print "TBBootWhat: Using pxe_boot_path $pxepath\n" if $d;
-	    if ($pxeosid{$nextpxepath}) {
-		return $pxeosid{$nextpxepath};
+	    my $cmd = "select osid from os_info where path='$pxepath'";
+	    my $q = DBQueryFatal($cmd);
+	    if ($q->numrows() > 0) {
+		my @r = $q->fetchrow_array();
+		my $osid = $r[0];
+		return $osid;
 	    } else {
 		return TB_OSID_MBKERNEL;
 	    }

@@ -367,7 +367,13 @@ sub stateTransition($$) {
 	foreach ( @trigs ) {
 	    my $trig = $_;
 	    /^RESET$/ && do {
-		handleCtrlEvent($node,$trig);
+		# Check if we really need to do a reset
+		my $r = DBQueryWarn("select osid,def_boot_osid from nodes ".
+				    "where node_id='$node'");
+		my ($osid,$defosid) = $r->fetchrow();
+		if ($osid ne $defosid) {
+		    handleCtrlEvent($node,$trig);
+		}
 		next;
 	    };
 	    notify("Unknown trigger '$trig' in $mode/$newstate!\n");
@@ -410,10 +416,10 @@ sub opModeTransition($$) {
     if (defined($modeTrans{"$mode:$oldstate"})) {
 	debug("Mode Transition check:\n");
 	my $translist = join(",",@{$modeTrans{"$mode:$oldstate"}});
-	debug("translist=$translist\n");
-	debug("splitlist=".join(", ",split(/[:,]/,$translist))."\n");
+	#debug("translist=$translist\n");
+	#debug("splitlist=".join(", ",split(/[:,]/,$translist))."\n");
 	my %trans = split(/[:,]/,$translist);
-	debug("Valid transitions from $mode:$oldstate are:\n");
+	debug("Valid transitions from $mode/$oldstate are:\n");
 	foreach my $k (sort keys %trans) { debug("$k => $trans{$k}\n"); }
 	if (defined($trans{$newmode})) {
 	    $nextstate=$trans{$newmode};

@@ -85,6 +85,12 @@ if ($mfs) {
     if ($osid =~ /^[-0-9a-z\.]+:\/tftpboot\/[-0-9a-z\.]+$/) {
 	print "MFS osid '$osid' is a PXE path\n" if $d>1;
 	$pxebootpath=$osid;
+	my $cmd = "select osid from os_info where path='$osid';";
+	my $q = DBQueryFatal($cmd);
+	if ($q->numrows() > 0) {
+	    my @r = $q->fetchrow_array();
+	    $osid=$r[0];
+	} else { $pathmode=1; }
     } else {
 	my $cmd = "select path from os_info where osid='$osid';";
 	my $q = DBQueryFatal($cmd);
