@@ -1,4 +1,0 @@
-#
-# Make sure this matches the server!
-#
-WIDE base=/var/emulab prefix=/ use-rel-suffix preserve delete release=current
