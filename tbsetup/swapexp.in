@@ -1,0 +1,388 @@
+#!/usr/bin/perl -wT
+
+#
+# EMULAB-COPYRIGHT
+# Copyright (c) 2000-2002 University of Utah and the Flux Group.
+# All rights reserved.
+#
+
+use English;
+use Getopt::Std;
+
+#
+# This gets invoked from the Web interface. Swap an experiment in or out.
+#
+# Note about exit value. -1 means error. 0 means backgrounded. 1 means
+# somthing else. The web page uses this to decide what kind of message
+# to give the user. 
+#
+sub usage()
+{
+    print STDOUT "Usage: swapexp <-s in | out> <pid> <eid>\n";
+    exit(-1);
+}
+my  $optlist = "s:";
+
+#
+# Configure variables
+#
+my $TB     = "@prefix@";
+my $DBNAME = "@TBDBNAME@";
+my $TBOPS  = "@TBOPSEMAIL@";
+my $TBLOGS = "@TBLOGSEMAIL@";
+my $TBINFO = "$TB/expinfo";
+
+#
+# Testbed Support libraries
+#
+use lib "@prefix@/lib";
+use libdb;
+use libtestbed;
+
+my $tbdir    = "$TB/bin/";
+my $tbdata   = "tbdata";
+my $batch    = 0;
+my $inout;
+my $logname;
+my $dbuid;
+my $user_name;
+my $user_email;
+my @row;
+    
+#
+# Untaint the path
+# 
+$ENV{'PATH'} = '/bin:/usr/bin';
+delete @ENV{'IFS', 'CDPATH', 'ENV', 'BASH_ENV'};
+
+#
+# Turn off line buffering on output
+#
+$| = 1;
+
+#
+# Set umask for start/swap. We want other members in the project to be
+# able to swap/end experiments, so the log and intermediate files need
+# to be 664 since some are opened for append.
+#
+umask(0002);
+
+#
+# Parse command arguments. Once we return from getopts, all that should
+# left are the required arguments.
+#
+%options = ();
+if (! getopts($optlist, \%options)) {
+    usage();
+}
+if (@ARGV != 2) {
+    usage();
+}
+my $pid   = $ARGV[0];
+my $eid   = $ARGV[1];
+if (defined($options{"b"})) {
+    $batch = $options{"b"};
+}
+if (defined($options{"s"})) {
+    $inout = $options{"s"};
+
+    if ($inout ne "out" && $inout ne "in") {
+	usage();
+    }
+}
+else {
+    usage();
+}
+
+#
+# Untaint the arguments.
+#
+if ($pid =~ /^([-\@\w.]+)$/) {
+    $pid = $1;
+}
+else {
+    die("Tainted argument $pid!\n");
+}
+if ($eid =~ /^([-\@\w.]+)$/) {
+    $eid = $1;
+}
+else {
+    die("Tainted argument $eid!\n");
+}
+my $repfile = "$eid.report";
+my $workdir = TBExptWorkDir($pid, $eid);
+my $userdir = TBExptUserDir($pid, $eid);
+
+#
+# Verify user and get his DB uid.
+#
+if (! UNIX2DBUID($UID, \$dbuid)) {
+    die("*** $0:\n".
+	"    You do not exist in the Emulab Database.\n");
+}
+
+#
+# Get email info for user.
+#
+if (! UserDBInfo($dbuid, \$user_name, \$user_email)) {
+    die("*** $0:\n".
+	"    Cannot determine your name and email address.\n");
+}
+
+#
+# Verify that this person is allowed to end the experiment.
+# Note that any script down the line has to do an admin check also. 
+#
+if ($UID && !TBAdmin($UID) &&
+    !TBExptAccessCheck($dbuid, $pid, $eid, TB_EXPT_DESTROY)) {
+    die("*** $0:\n".
+	"    You do not have permission to end this experiment!\n");
+}
+
+#
+# We have to protect against trying to end an experiment that is currently
+# in the process of being terminated. We use a "wrapper" state (actually
+# a timestamp so we can say when termination was requested) since
+# terminating consists of a couple of different experiment states down inside
+# the tb scripts. 
+#
+DBQueryFatal("lock tables experiments write");
+
+$query_result =
+    DBQueryFatal("SELECT * FROM experiments WHERE eid='$eid' and pid='$pid'");
+
+if (! $query_result->numrows) {
+    die("*** $0:\n".
+	"    No such experiment $pid/$eid exists!\n");
+}
+my %hashrow = $query_result->fetchhash();
+my $expt_head_login = $hashrow{'expt_head_uid'};
+my $estate          = $hashrow{'state'};
+my $expt_path       = $hashrow{'path'};
+my $isbatchexpt     = $hashrow{'batchmode'};
+my $ebatchstate     = $hashrow{'batchstate'};
+
+if (! chdir($workdir)) {
+    die("*** $0:\n".
+	"    Could not chdir to $workdir: $!\n");
+}
+
+if (defined($hashrow{'expt_locked'})) {
+    $val = $hashrow{'expt_locked'};
+    
+    die("*** $0:\n".
+	"    It appears that $pid/$eid went into transition at $val.\n".
+	"    You will be notified via email when experiment transition ".
+	"    is complete.\n");
+}
+
+#
+# Disallow batch experiment swaps for now.
+#
+if ($isbatchexpt) {
+    die("*** $0:\n".
+	"    Batch experiments cannot be swapped yet!");
+}
+
+#
+# Okay, check state. We do not allow swapping to start when the
+# experiment is in transition. A future task would be to allow this,
+# but for now the experiment must be in one of a few states to proceed
+#
+# Seems like too many states!
+#
+if ($estate ne EXPTSTATE_ACTIVE && $estate ne EXPTSTATE_SWAPPED) {
+    die("*** $0:\n".
+	"    It appears that experiment $pid/$eid is in transition.\n".
+	"    The user that created the experiment will be notified via\n".
+        "    email when the experiment is no longer in transition.\n");
+}
+
+if ($inout eq "in" && $estate eq EXPTSTATE_ACTIVE) {
+    die("*** $0:\n".
+	"    It appears that experiment $pid/$eid is already swapped in!");
+}
+if ($inout eq "out" && $estate eq EXPTSTATE_SWAPPED) {
+    die("*** $0:\n".
+	"    It appears that experiment $pid/$eid is already swapped out!");
+}
+
+#
+# Set the timestamp now, and unlock the experiments table.
+#
+DBQueryFatal("UPDATE experiments SET expt_locked=now() ".
+	     "WHERE eid='$eid' and pid='$pid'");
+
+DBQueryFatal("unlock tables");
+
+#
+# XXX - At this point a failure is going to leave things in an
+# inconsistent state.
+#
+
+#
+# Get email address of the experiment head, which may be different than
+# the person who is actually terminating the experiment, since its polite
+# to let the original creator know whats going on. 
+#
+my $expt_head_name;
+my $expt_head_email;
+
+if (! UserDBInfo($expt_head_login, \$expt_head_name, \$expt_head_email)) {
+    print STDERR "*** WARNING: ".
+	         "Could not determine name/email for $expt_head_login.\n";
+    $expt_head_name  = "TBOPS";
+    $expt_head_email = $TBOPS;
+}
+
+#
+# If not in batch mode, go into the background. Parent exits.
+#
+if (! $batch) {
+    $logname = TBExptCreateLogFile($pid, $eid, "swapexp");
+    TBExptSetLogFile($pid, $eid, $logname);
+    TBExptOpenLogFile($pid, $eid);
+    
+    if (TBBackGround($logname)) {
+	#
+	# Parent exits normally
+	#
+	print STDOUT
+	    "Experiment $pid/$eid is now swapping $inout.\n".
+	    "You will be notified via email when the experiment has ".
+	    "finished swapping.\n";
+	exit(0);
+    }
+}
+
+#
+# Remove old report file since its contents are going to be invalid.
+#
+if (-e $repfile) {
+    unlink("$repfile");
+}
+
+#
+# Sanity check states in case someone changes something.
+#
+if ($inout eq "out") {
+    print STDOUT "Running tbswapout with arguments: $pid $eid\n";
+    if (system("$tbdir/tbswapout $pid $eid") != 0) {
+	fatal("tbswapout failed!\n");
+    }
+    
+    $estate = ExpState($pid,$eid);
+    if ($estate ne EXPTSTATE_SWAPPED) {
+	fatal("Experiment is in the wrong state: $estate\n");
+    }
+}
+else {
+    print STDOUT "Running tbswapin with arguments: $pid $eid\n";
+    if (system("$tbdir/tbswapin $pid $eid") != 0) {
+	fatal("tbswapin failed!\n");
+    }
+    
+    $estate = ExpState($pid,$eid);
+    if ($estate ne EXPTSTATE_ACTIVE) {
+	fatal("Experiment is in the wrong state: $estate\n");
+    }
+
+    system("$tbdir/tbreport -b $pid $eid 2>&1 > $repfile");
+}
+
+#
+# Try to copy off the files for testbed information gathering.
+#
+TBSaveExpLogFiles($pid, $eid);
+
+#
+# Make a copy of the work dir in the user visible space so the user
+# can see the log files. This overwrites existing files of course,
+# but thats okay.
+#
+system("cp -Rfp $workdir/ $userdir/tbdata");
+
+#
+# Must unlock before exit.
+#
+TBUnLockExp($pid, $eid);
+
+print "Swap Success\n";
+
+#
+# In batch mode, just exit without sending email.
+#
+if ($batch) {
+    exit(0);
+}
+
+#
+# Clear the log file so the web page stops spewing. 
+#
+if (defined($logname)) {
+    TBExptCloseLogFile($pid, $eid);
+}
+
+#
+# Send email notification to user.
+#
+my $message =
+    "Experiment `$eid' in project `$pid' has been swapped $inout.\n\n" .
+    "Appended below is the output of the experiment swap${inout}. If you\n" .
+    "have any questions or comments, please include the output below\n" .
+    "in your message to $TBOPS\n";
+
+SENDMAIL("$user_name <$user_email>",
+	 "Experiment $pid/$eid Swapped $inout",
+	 $message,
+	 "$user_name <$user_email>",
+	 "Cc:  $expt_head_name <$expt_head_email>\n".
+	 "Bcc: $TBLOGS",
+	 ($repfile, $logname));
+
+exit 0;
+
+sub fatal($)
+{
+    my($mesg) = $_[0];
+    
+    print STDOUT $mesg;
+
+    #
+    # Kill this for convenience later.
+    # 
+    DBQueryWarn("update experiments set expt_locked=NULL ".
+		"WHERE eid='$eid' and pid='$pid'");
+
+    # Copy over the log files so the user can see them.
+    system("/bin/cp -Rfp $workdir/ $userdir/tbdata");
+
+    #
+    # In batch mode, exit without sending the email. 
+    #
+    if ($batch) {
+	TBUnLockExp($pid, $eid);
+	exit(-1);
+    }
+
+    #
+    # Clear the log file so the web page stops spewing. 
+    #
+    if (defined($logname)) {
+	TBExptCloseLogFile($pid, $eid);
+    }
+
+    #
+    # Send a message to the testbed list. Append the logfile.
+    #
+    SENDMAIL("$user_name <$user_email>",
+	     "Swap${inout} Failure: $pid/$eid",
+	     $mesg,
+	     "$user_name <$user_email>",
+	     "Cc:  $expt_head_name <$expt_head_email>\n".
+	     "Cc:  $TBOPS",
+	     ($logname));
+
+    exit(-1);
+}
+

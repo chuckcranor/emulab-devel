@@ -1,0 +1,266 @@
+#!/usr/bin/perl -wT
+
+#
+# EMULAB-COPYRIGHT
+# Copyright (c) 2000-2002 University of Utah and the Flux Group.
+# All rights reserved.
+#
+
+use English;
+use Getopt::Std;
+use POSIX ":sys_wait_h";
+
+#
+# Start/Stop the event scheduler for an experiment. This script is
+# setuid so that the stop function can send a signal regardless of
+# who is running the script (must have appropriate permission of course).
+# This is temporary; we eventually want to use the event system to control
+# the event system, but lets see how well this event stuff works first.
+#
+sub usage()
+{
+    print STDOUT
+	"Usage: eventsys_control [-f] <start|stop|replay> <pid> <eid>\n";
+    exit(-1);
+}
+my  $optlist = "df";
+
+#
+# Configure variables
+#
+my $TB		= "@prefix@";
+my $TBOPS       = "@TBOPSEMAIL@";
+my $BOSSADDR	= "@BOSSNODE@";
+my $EVENTSYS    = @EVENTSYS@;
+my $TESTMODE    = @TESTMODE@;
+
+#
+# The event system is currently optional.
+#
+if (! $EVENTSYS) {
+    exit(0);
+}
+
+#
+# Do nothing when testing.
+#
+if ($TESTMODE) {
+    print "Testing run - no event system.\n";
+    exit(0);
+}
+
+#
+# Testbed Support libraries
+#
+use lib "@prefix@/lib";
+use libdb;
+use libtestbed;
+
+#
+# Turn off line buffering on output
+#
+$| = 1;
+
+# un-taint path
+$ENV{'PATH'} = '/bin:/usr/bin:/usr/local/bin';
+delete @ENV{'IFS', 'CDPATH', 'ENV', 'BASH_ENV'};
+
+my $evsched	= "$TB/sbin/event-sched";
+my $debug	= 0;
+my $force       = 0;
+my $expstate;
+
+#
+# Parse command arguments. Once we return from getopts, all that should be
+# left are the required arguments.
+#
+%options = ();
+if (! getopts($optlist, \%options)) {
+    usage();
+}
+if (@ARGV != 3) {
+    usage();
+}
+if (defined($options{"d"})) {
+    $debug = 1;
+}
+if (defined($options{"f"})) {
+    $force = 1;
+}
+my $action = $ARGV[0];
+my $pid    = $ARGV[1];
+my $eid    = $ARGV[2];
+
+#
+# Untaint args.
+#
+if ($action ne "start" &&
+    $action ne "replay" &&
+    $action ne "stop") {
+    usage();
+}
+if ($pid =~ /^([-\@\w]+)$/) {
+    $pid = $1;
+}
+else {
+    die("Bad data in pid: $pid.");
+}
+if ($eid =~ /^([-\@\w]+)$/) {
+    $eid = $1;
+}
+else {
+    die("Bad data in eid: $eid.");
+}
+
+if (! ($expstate = ExpState($pid, $eid))) {
+    die("*** $0:\n".
+	"    No such experiment $pid/$eid!\n");
+}
+
+#
+# Do not allow an event system to be controlled if the experiment is not
+# active (or swapping). We will eventually give the user the ability
+# to control the event system directly.
+#
+if ($expstate ne EXPTSTATE_ACTIVE &&
+    $expstate ne EXPTSTATE_ACTIVATING &&
+    $expstate ne EXPTSTATE_SWAPPING) {
+    die("*** $0:\n".
+	"    Experiment $pid/$eid must active (or swapping)!\n");
+}
+
+#
+# Check permission. Only people with permission to destroy the experiment
+# can do this.
+#
+if ($UID &&
+    ! TBExptAccessCheck($UID, $pid, $eid, TB_EXPT_DESTROY)) {
+    die("*** $0:\n".
+	"    You do not have permission to control the event system!\n");
+}
+
+#
+# If stopping, find the pid from the DB and send it a kill.
+#
+if ($action eq "stop" ||
+    $action eq "replay") {
+    #
+    # Simple protocol to prevent concurrent manipulation; If there is a pid
+    # set it to -pid to prevent another start/stop operation. The event
+    # scheduler itself will catch the signal and clear the pid to 0 when it
+    # exits, thus releasing the scheduler. 
+    # 
+    DBQueryFatal("lock tables experiments write");
+
+    $query_result =
+	DBQueryFatal("select event_sched_pid from experiments ".
+		     "where pid='$pid' and eid='$eid'");
+    
+    DBQueryFatal("update experiments set ".
+		 "event_sched_pid=-event_sched_pid ".
+		 "where pid='$pid' and eid='$eid'");
+		 
+    DBQueryWarn("unlock tables");
+
+    my @row    = $query_result->fetchrow_array();
+    my $procid = $row[0];
+
+    if ($procid > 0 &&
+	! kill('TERM', $procid)) {
+	DBQueryFatal("update experiments set ".
+		     "event_sched_pid=-event_sched_pid ".
+		     "where pid='$pid' and eid='$eid'");
+	
+	SENDMAIL($TBOPS,
+		 "Failed to stop event system for $pid/$eid",
+		 "Could not kill(TERM) process $procid: $? $!");
+
+	die("*** $0:\n".
+	    "Failed to stop event system for $pid/$eid!\n");
+    }
+    
+    if ($action eq "stop") {
+	if ($procid <= 0) {
+	    print "There is no event scheduler running for $pid/$eid!\n";
+	}
+	exit(0);
+    }
+    # replay continues below, but give exiting scheduler a chance to react!
+    sleep(1);
+}
+
+#
+# Otherwise, flip back to actual UID since no special privilege is
+# needed to start/run the event scheduler.
+#
+$EUID=$UID;
+
+#
+# Check for a running scheduler, This is a loose check since its the users 
+# responsibility to make sure that they don't try and do two things
+# at the same time. All that *really* matters is that we do not start two
+# at a time, and that we make sure we kill off existing ones (making sure
+# the pid is not cleared from the DB unless it really does die). This is
+# handled by the stop code above. For start, just check for zero pid.
+# The scheduler itself will lock the table to prevent concurrent startup.
+# 
+$query_result =
+    DBQueryFatal("select event_sched_pid,path from experiments ".
+		 "where pid='$pid' and eid='$eid'");
+my @row    = $query_result->fetchrow_array();
+my $procid = $row[0];
+my $path   = $row[1];
+
+if ($procid != 0) {
+    die("*** $0:\n".
+	"There is already an event scheduler running for $pid/$eid!\n");
+}
+
+#
+# Do not start an event system for experiments with no nodes
+#
+if (! ExpNodes($pid, $eid)) {
+    print("*** There are no nodes in $pid/$eid. ".
+	  "Not starting a scheduler.\n");
+    exit(0);
+}
+
+#
+# For now, lets not start an event system if there are no events.
+#
+if (0) {
+    $query_result =
+	DBQueryFatal("select distinct pid,eid from eventlist ".
+		     "where pid='$pid' and eid='$eid'");
+
+    if (! $query_result->numrows) {
+	print("*** There are no events for $pid/$eid. ".
+	      "Not starting a scheduler.\n");
+	exit(0);
+    }
+}
+
+#
+# start the event scheduler, redirecting output to the experiment
+# directory. 
+#
+if (my $childpid = TBBackGround("$path/logs/event-sched.log")) {
+    #
+    # Delay just in case. The event scheduler needs to be turned into
+    # a proper daemon so we can avoid this sillyness (wanting to report
+    # startup error immediately to caller).
+    #
+    sleep(1);
+    my $foo = waitpid($childpid, &WNOHANG);
+    if ($foo) {
+	print STDERR "Failed to start event system for $pid/$eid: $foo $?!\n";
+	SENDMAIL($TBOPS,
+		 "Event System Failure: $pid/$eid!\n",
+		 "Failed to start event system for $pid/$eid",
+		 undef, undef, "$path/logs/event-sched.log");
+	exit(-1);
+    }
+    exit(0);
+}
+system("$evsched -dd -s $BOSSADDR $pid $eid");
+exit($? >> 0);
