@@ -210,6 +210,8 @@ sub parse_top($) {
 	}
    }
 
+   close TOP;
+
    return (\%nodes, \%links);
 
 }
@@ -717,6 +719,8 @@ sub node_fits_in_conglomerate($$) {
 	'?virtpercent' => 100
     );
 
+    my $max_self_link_bandwidth = 400000;
+
     # We can conglomerate nodes that are:
     # 1) Not fixed
     # 2) One is fixed, but the other is not
@@ -762,6 +766,30 @@ sub node_fits_in_conglomerate($$) {
 		return 0;
 	}
     }
+
+    #
+    # Check for self-links, to see if this would make us go over a limit
+    #
+    my $self_link_bandwidth = 0;
+    foreach my $link (@{$conglomerate->{'slinks'}}) {
+	print "Checking $link->{'dst'} against $conglomerate->{'name'} and $node->{'name'}\n";
+	if (($link->{'dst'} eq $conglomerate->{'name'}) ||
+	    ($link->{'dst'} eq $node->{'name'})) {
+	    $self_link_bandwidth += $link->{'bw'};
+	}
+    }
+    foreach my $link (@{$node->{'slinks'}}) {
+	print "Checking $link->{'dst'} against $conglomerate->{'name'} and $node->{'name'}\n";
+	if (($link->{'dst'} eq $conglomerate->{'name'}) ||
+	    ($link->{'dst'} eq $node->{'name'})) {
+	    $self_link_bandwidth += $link->{'bw'};
+	}
+    }
+
+    if ($self_link_bandwidth > $max_self_link_bandwidth) {
+	return 0;
+    }
+
 
     return 1;
 }
