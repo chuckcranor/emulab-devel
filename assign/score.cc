@@ -615,31 +615,29 @@ int add_node(vvertex vv,pvertex pv, bool deterministic,
 	  // Choose a link
 	  int index;
 	  if (!deterministic) {
-	    if ((removal == NULL) || is_lan_link) {
-	      float choice;
-	      if (total_weight > 0) {
-		choice = std::random()%(int)total_weight;
-	      } else {
-		choice = 0;
+	    float choice;
+	    if (total_weight > 0) {
+	      choice = std::random()%(int)total_weight;
+	    } else {
+	      choice = 0;
+	    }
+	    for (index = 0;index < resolution_index;++index) {
+	      switch (resolutions[index].type) {
+	      case tb_link_info::LINK_DIRECT:
+		choice -= LINK_RESOLVE_DIRECT; break;
+	      case tb_link_info::LINK_INTRASWITCH:
+		choice -= LINK_RESOLVE_INTRASWITCH; break;
+	      case tb_link_info::LINK_INTERSWITCH:
+		choice -= LINK_RESOLVE_INTERSWITCH; break;
+	      case tb_link_info::LINK_DELAYED:
+		choice -= 1; break;
+	      case tb_link_info::LINK_UNKNOWN:
+	      case tb_link_info::LINK_TRIVIAL:
+		cerr << "Internal error: Should not be here." << endl;
+		exit(1);
+		break;
 	      }
-	      for (index = 0;index < resolution_index;++index) {
-		switch (resolutions[index].type) {
-		case tb_link_info::LINK_DIRECT:
-		  choice -= LINK_RESOLVE_DIRECT; break;
-		case tb_link_info::LINK_INTRASWITCH:
-		  choice -= LINK_RESOLVE_INTRASWITCH; break;
-		case tb_link_info::LINK_INTERSWITCH:
-		  choice -= LINK_RESOLVE_INTERSWITCH; break;
-		case tb_link_info::LINK_DELAYED:
-		  choice -= 1; break;
-		case tb_link_info::LINK_UNKNOWN:
-		case tb_link_info::LINK_TRIVIAL:
-		  cerr << "Internal error: Should not be here." << endl;
-		  exit(1);
-		  break;
-		}
-		if (choice < 0) break;
-	      }
+	      if (choice < 0) break;
 	    }
 	  } else {
 	    // Deterministic
@@ -660,7 +658,9 @@ int add_node(vvertex vv,pvertex pv, bool deterministic,
 	    }
 	    index = bestindex;
 	  }
-	  if ((removal != NULL) && (! is_lan_link)) {
+	  if ((removal != NULL) && (! is_lan_link) &&
+	      (removal->links[vlink->name].link_info.type !=
+	       tb_link_info::LINK_UNKNOWN)) {
 	    vlink->link_info = removal->links[vlink->name].link_info;
 	  } else {
 	    vlink->link_info = resolutions[index];
