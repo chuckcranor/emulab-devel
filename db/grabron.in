@@ -37,7 +37,7 @@ if (@ARGV != 1) {
     die "Usage: $0 <url>\n";
 }
 my ($url) = @ARGV;
-if (! ($url =~ /^http:\/\/([\w-.]+)\/(.*)$/) ) {
+if (! ($url =~ /^http:\/\/([\w.-]+)\/(.*)$/) ) {
     die "URL must be in the form http://host/path\n";
 }
 my ($host,$path) = ($1,$2);
