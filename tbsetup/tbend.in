@@ -64,15 +64,20 @@ if (! (($state) = $sth->fetchrow_array())) {
     exit(1);
 }
 if ($force == 0) {
-    if ($state eq "running") {
+    if ($state eq "active") {
 	&tbs_out("Experiment already running.  Try swapping out first.\n");
 	exit(1);
-    } elsif ($state ne "dormant") {
-	&tbs_out("Experiment in strange state.  Are you sure it needs ending?.\n");
+    } elsif ($state ne "swapped") {
+	&tbs_out("Experiment in strange state: $state.\n");
 	exit(1);
     }
-} elsif ($state ne "dormant") {
+} elsif ($state ne "swapped") {
     &tbs_out("WARNING: Ignoring experimental state of $state.\n");
+}
+
+if (! $dbh->do("UPDATE experiments set state = \"terminating\" " . 
+	       "where pid=\"$pid\" and eid=\"$eid\"")) {
+    &tbs_out("Could not set intermediate experiment state.\n");
 }
 
 &tbs_out("Clearing virtual state.\n");

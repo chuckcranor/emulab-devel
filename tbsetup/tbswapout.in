@@ -64,15 +64,21 @@ if (! (($state) = $sth->fetchrow_array())) {
     exit(1);
 }
 if ($force == 0) {
-    if ($state eq "dormant") {
-	&tbs_out("Experiment already swapped.  Try swapping in first or use -force.\n");
+    if ($state eq "swapped") {
+	&tbs_out("Experiment already swapped. ".
+		 "Try swapping in first or use -force.\n");
 	exit(1);
-    } elsif ($state ne "running") {
-	&tbs_out("Experiment in strange state.  Try pre running or use -force.\n");
+    } elsif ($state ne "active") {
+	&tbs_out("Experiment is not running: $state. Try -force option\n");
 	exit(1);
     }
-} elsif ($state ne "running") {
+} elsif ($state ne "active") {
     &tbs_out("WARNING: Ignoring experimental state of $state.\n");
+}
+
+if (! $dbh->do("UPDATE experiments set state=\"swapping\" " .
+	       "where pid=\"$pid\" and eid=\"$eid\"")) {
+    &tbs_out("Could not set intermediate experiment state.\n");
 }
 
 $errors = 0;
@@ -104,13 +110,13 @@ if (&tbs_exec("nfree $pid $eid")) {
     $errors=1;
 }
 
-&tbs_out("Resetting up mountpoints\n");
+&tbs_out("Resetting mountpoints\n");
 if (&tbs_exec("exports_setup")) {
     &tbs_out("Failed to setup mountpoints.\n");
     $errors=1;
 }
 
-&tbs_out("Resetting up named maps.\n");
+&tbs_out("Resetting named maps.\n");
 if (&tbs_exec("named_setup")) {
     &tbs_out("Failed to add node names to named map.\n");
     #
@@ -131,7 +137,7 @@ if (! $dbh->do("DELETE from vlans where pid = \"$pid\" and eid = \"$eid\"")) {
 
 if ($errors == 0) {
     &tbs_out("Marking as dormant.\n");
-    if (! $dbh->do("UPDATE experiments set state=\"dormant\"" .
+    if (! $dbh->do("UPDATE experiments set state=\"swapped\"" .
 		   " where pid=\"$pid\" and eid=\"$eid\"")) {
 	&tbs_out("Could not set experiment state.\n");
 	$errors = 1;

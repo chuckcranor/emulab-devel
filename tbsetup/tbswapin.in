@@ -55,12 +55,19 @@ sub cleanup {
 	&tbs_out("Could not free resources.\n");
     }
     &tbs_out("Resetting DB.\n");
-    if (! $dbh->do("DELETE from delays where pid = \"$pid\" and eid=\"$eid\"")) {
+    if (! $dbh->do("DELETE from delays where ".
+		   "pid = \"$pid\" and eid=\"$eid\"")) {
 	&tbs_out("Could not clear delays table.\n");
 	$errors = 1;
     }
-    if (! $dbh->do("DELETE from vlans where pid = \"$pid\" and eid = \"$eid\"")) {
+    if (! $dbh->do("DELETE from vlans where ".
+		   "pid = \"$pid\" and eid = \"$eid\"")) {
 	&tbs_out("Could not clear vlans table.\n");
+	$errors = 1;
+    }
+    if (! $dbh->do("UPDATE experiments set state = \"swapped\"" . 
+		   "where pid = \"$pid\" and eid = \"$eid\"")) {
+	&tbs_out("Could not reset experiment state.\n");
 	$errors = 1;
     }
 };
@@ -75,20 +82,27 @@ if (! (($state) = $sth->fetchrow_array())) {
     &tbs_out("No entry in experiments table.  Insane.\n");
     exit(1);
 }
-if ($state eq "running") {
-    &tbs_out("Experiment already running.  Try swapping out first.\n");
+if ($state eq "active") {
+    &tbs_out("Experiment is already running. Must be swapped out first.\n");
     exit(1);
-} elsif ($state ne "dormant") {
-    &tbs_out("Experiment in strange state.  Try pre running.\n");
+} elsif ($state ne "swapped") {
+    &tbs_out("Experiment us not in the swapped state: $state.\n");
     exit(1);
 }
+
+$sth = $dbh->prepare("UPDATE experiments set state = \"activating\"" . 
+		     "where pid = \"$pid\" and eid = \"$eid\"");
+if (! $sth->execute()) {
+    &tbs_out("Failed to set intermediate state.\n");
+}
+$sth->finish();
 
 # This does all the virtual to physical mapping and updatin the DB state.
 &tbs_out("Mapping to physical reality\n");
 if ($exitcode = &tbs_exec("assign_wrapper $pid $eid")) {
     &tbs_out("Failed to map to reality.\n");
     cleanup;
-    # Past exit code through
+    # Pass exit code through
     exit($exitcode >> 8);
 }
 
@@ -108,6 +122,7 @@ while (($pnode,$vnode) = $sth->fetchrow_array) {
 	$sth2->fetchrow_array) {
 	if (! $dbh->do("UPDATE nodes set def_boot_osid=\"$osid\"," .
 		       " def_boot_cmd_line=\"$cmdline\"," .
+		       " startstatus=\"none\"," .
 		       " rpms=\"$rpms\"," .
 		       " deltas=\"$deltas\"," .
 		       " tarballs=\"$tarfiles\"," .
@@ -159,7 +174,7 @@ if (&tbs_exec("named_setup")) {
 }
 
 &tbs_out("Marking as running.\n");
-if (! $dbh->do("UPDATE experiments set state=\"running\"" .
+if (! $dbh->do("UPDATE experiments set state=\"active\"" .
 	       " where pid=\"$pid\" and eid=\"$eid\"")) {
     &tbs_out("Could not set experiment state.\n");
     cleanup;

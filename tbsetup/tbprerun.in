@@ -73,10 +73,18 @@ if (! (($state) = $sth->fetchrow_array())) {
     exit(1);
 }
 $sth->finish();
-if (($state eq "dormant") || ($state eq "running")) {
-    &tbs_out("Experiment already pre runned.\n");
+if ($state ne "new") {
+    &tbs_out("Experiment is not in the proper state: $state\n");
     exit(1);
 }
+
+$sth = $dbh->prepare("UPDATE experiments set state = \"prerunning\"" . 
+		     "where pid = \"$pid\" and eid = \"$eid\"");
+if (! $sth->execute()) {
+    &tbs_out("Failed to set intermediate state.\n");
+    exit(1);
+}
+$sth->finish();
 
 sub cleanup {
     &tbs_out("Cleaning up\n");
@@ -89,6 +97,10 @@ sub cleanup {
     if (! $dbh->do("DELETE from virt_lans where pid = \"$pid\"" . 
 		   " and eid = \"$eid\"")) {
 	&tbs_out("Could not clear virt_lans table.\n");
+    }
+    if (! $dbh->do("UPDATE experiments set state = \"new\"" . 
+		   "where pid = \"$pid\" and eid = \"$eid\"")) {
+	&tbs_out("Could not reset experiment state.\n");
     }
 };
 
@@ -138,7 +150,7 @@ if (! $sth->execute()) {
 $sth->finish(); 
 
 &tbs_out("Marking as prerunned.\n");
-$sth = $dbh->prepare("UPDATE experiments set state = \"dormant\"" . 
+$sth = $dbh->prepare("UPDATE experiments set state = \"swapped\"" . 
 		     "where pid = \"$pid\" and eid = \"$eid\"");
 if (! $sth->execute()) {
     &tbs_out("Failed to set state.\n");
