@@ -23,7 +23,6 @@ extern int debug;
 
 struct pilot_connection_data pc_data;
 
-
 // new 
 void pc_zero_stats(struct pilot_connection *pc) {
     assert(pc != NULL);
@@ -99,11 +98,11 @@ void pc_print_stats(struct pilot_connection *pc) {
 		 &(pc->stats.command_issue),
 		 &diff);
 	fprintf(statsfile_FILE,
-		"%s: %s => time=%f,num_retries=%d,"
-		"start_pos(x=%f,y=%f,theta=%f,time=%f),"
+		"%s: time=%f,num_retries=%d,"
+		"goal_pos(x=%f,y=%f,theta=%f,time=%f),"
 		"end_pos=(x=%f,y=%f,theta=%f,time=%f)\n",
 		pc->pc_robot->hostname,
-		pc->stats.msg,
+		//pc->stats.msg,
 		(float)(diff.tv_sec)+diff.tv_usec/1000000.0f,
 		pc->stats.num_retries,
 		pc->stats.start_pos.x,
@@ -114,10 +113,10 @@ void pc_print_stats(struct pilot_connection *pc) {
 		pc->stats.end_pos.y,
 		pc->stats.end_pos.theta,
 		pc->stats.end_pos.timestamp);
+	fflush(statsfile_FILE);
     }
 }
 		
-
 struct pilot_connection *pc_add_robot(struct robot_config *rc)
 {
     struct pilot_connection *retval;

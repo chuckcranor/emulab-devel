@@ -47,10 +47,12 @@ static int mc_set_goal(struct master_controller *mc, mtp_packet_t *mp)
 			MA_TAG_DONE);
 	mtp_send_packet(mc->mc_pilot->pc_handle, &smp);
 
-	pc_stats_stop_time(mc->mc_pilot);
-	pc_print_stats(mc->mc_pilot);
+	//pc_stats_stop_time(mc->mc_pilot);
+	//pc_stats_msg("fp");
+	//pc_print_stats(mc->mc_pilot);
 	pc_zero_stats(mc->mc_pilot);
 	pc_stats_start_pos(mc->mc_pilot,&(mc->mc_goal_pos));
+	pc_stats_start_time(mc->mc_pilot);
 
     }
     else {
@@ -115,11 +117,12 @@ static int mc_plot(struct master_controller *mc, mtp_packet_t *mp)
     assert(mp != NULL);
 
     mtp_polar(&mc->mc_actual_pos, &mc->mc_goal_pos, &distance, &theta);
+
     if ((mc->mc_tries_remaining <= 0) || (distance <
 					  pc_data.pcd_meter_tolerance)) {
 
 	// new: take the finish timestamp and dump data
-	pc_stats_stop_time(mc->mc_pilot);
+      //pc_stats_stop_time(mc->mc_pilot);
 
       /* done moving */
 	if (cmp_fuzzy(mc->mc_actual_pos.theta,
@@ -137,7 +140,10 @@ static int mc_plot(struct master_controller *mc, mtp_packet_t *mp)
 			    MA_TAG_DONE);
 	    mtp_send_packet(pc_data.pcd_emc_handle, &ump);
 
-	    pc_stats_msg(mc->mc_pilot,PC_STATS_MSG_SUCCESS);
+	    pc_stats_stop_time(mc->mc_pilot);
+	    pc_print_stats(mc->mc_pilot);
+
+	    //pc_stats_msg(mc->mc_pilot,PC_STATS_MSG_SUCCESS);
 
 	}
 	else {
@@ -154,13 +160,12 @@ static int mc_plot(struct master_controller *mc, mtp_packet_t *mp)
 			    MA_TAG_DONE);
 	    mtp_send_packet(mc->mc_pilot->pc_handle, &gmp);
 
-	    pc_stats_msg(mc->mc_pilot,PC_STATS_MSG_FAILURE);
+	    //pc_stats_msg(mc->mc_pilot,PC_STATS_MSG_FAILURE);
 
 	}
 
-	pc_print_stats(mc->mc_pilot);
-	pc_zero_stats(mc->mc_pilot);
-
+	//pc_print_stats(mc->mc_pilot);
+	//pc_zero_stats(mc->mc_pilot);
 
     }
     else {

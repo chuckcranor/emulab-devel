@@ -74,6 +74,8 @@ static volatile int looping = 1;
 
 static struct mtp_config_rmc *rmc_config = NULL;
 
+extern char *statsfile;
+
 static void usage(void)
 {
     fprintf(stderr,
@@ -235,7 +237,7 @@ int main(int argc, char *argv[])
     pc_data.pcd_max_distance = DEFAULT_MAX_DISTANCE;
     
     
-    while ((c = getopt(argc, argv, "hdp:l:i:e:c:U:t:m:r:a:")) != -1) {
+    while ((c = getopt(argc, argv, "hdp:l:i:e:c:U:t:m:r:a:s:")) != -1) {
 	switch (c) {
 	case 'h':
 	    usage();
@@ -292,6 +294,9 @@ int main(int argc, char *argv[])
 	case 'U':
 	    emc_path = optarg;
 	    break;
+	case 's':
+	  statsfile = optarg;
+	  break;
 	}
     }
   
