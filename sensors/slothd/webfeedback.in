@@ -1,0 +1,33 @@
+#! /bin/sh
+
+prefix=@prefix@
+
+usage()
+{
+    echo "Compute feedback data from slothd logs using digest-slothd."
+    echo "Usage: $0 <PID> <EID> <duration>"
+}
+
+if test $# -ne 3; then
+    usage
+    exit 2
+fi
+
+PID="$1"
+EID="$2"
+DURATION="$3"
+EXP_DIR="/proj/${PID}/exp/${EID}"
+
+echo "Starting tracers..."
+
+${prefix}/libexec/start-trace $PID $EID $DURATION
+
+echo "Sleeping for `expr $DURATION + 5` seconds..."
+
+sleep `expr $DURATION + 5`
+
+echo "Computing feedback data set:"
+
+${prefix}/libexec/expfeedback $PID $EID
+
+cat ${EXP_DIR}/tbdata/feedback_data.tcl

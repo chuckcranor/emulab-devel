@@ -1,0 +1,31 @@
+#! /bin/sh
+
+prefix=@prefix@
+
+usage()
+{
+    echo "Compute feedback data from slothd logs using digest-slothd."
+    echo "Usage: $0 <PID> <EID>"
+}
+
+if test $# -ne 2; then
+    usage
+    exit 2
+fi
+
+PID="$1"
+EID="$2"
+EXP_DIR="/proj/${PID}/exp/${EID}"
+
+if test ! -d $EXP_DIR; then
+    echo "error: experiment ${PID}/${EID} does not exist."
+    exit 2
+fi
+
+# Get our logs back and
+${prefix}/libexec/pull-logs $PID $EID
+
+# ... digest the data,
+${prefix}/libexec/digest-slothd \
+    $EXP_DIR/logs/*/slothd.log $EXP_DIR/tbdata/$EID.report \
+    > $EXP_DIR/tbdata/feedback_data.tcl

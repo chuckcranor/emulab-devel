@@ -1,0 +1,29 @@
+#! /bin/sh
+
+usage()
+{
+    echo "Pull emulab log files from the vnodes"
+    echo "Usage: $0 <PID> <EID>"
+}
+
+if test $# -ne 2; then
+    usage
+    exit 2
+fi
+
+PID="$1"
+EID="$2"
+EXP_DIR="/proj/${PID}/exp/${EID}"
+
+if test ! -d $EXP_DIR; then
+    echo "error: experiment ${PID}/${EID} does not exist."
+    exit 2
+fi
+
+PNODE_LIST=`awk -- '/vhost-/ { printf(" %s", $4); }' $EXP_DIR/tbdata/$EID.report`
+
+for pnode in $PNODE_LIST; do
+    rsync -az --rsh="sudo sshtb -host" \
+	${pnode}:/var/emulab/logs/ \
+	${EXP_DIR}/logs/${pnode}/
+done

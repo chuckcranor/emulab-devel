@@ -1,0 +1,32 @@
+#! /bin/sh
+
+prefix=@prefix@
+
+usage()
+{
+    echo "Start slothd tracers on vnodes"
+    echo "Usage: start-trace <PID> <EID> <duration>"
+}
+
+if test $# -ne 3; then
+    usage
+    exit 2
+fi
+
+PID="$1"
+EID="$2"
+DURATION="$3"
+EXP_DIR="/proj/$PID/exp/$EID"
+
+SLOTHD_BIN="/proj/tbres/kwebb/slothd"
+export SLOTHD_BIN
+
+PNODE_LIST=`awk -- '/vhost-/ { printf(" %s", $4); }' $EXP_DIR/tbdata/$EID.report`
+
+# Clean out old logs,
+rm -f $EXP_DIR/logs/vhost-*/slothd.log
+
+for pnode in $PNODE_LIST; do
+    sudo ${prefix}/bin/sshtb -host ${pnode} "rm -f /var/run/slothd.pid"
+    sudo ${prefix}/bin/sshtb -host ${pnode} "${SLOTHD_BIN} -e -i 1 -t ${DURATION}"
+done

@@ -1,0 +1,212 @@
+#! /usr/bin/awk -f
+
+#
+# Digest slothd logs and generate a TCL file that contains feedback data.
+#
+# Usage: digest-slothd <slothd-log1> [<slothd-log2> ...] <tbreport>
+#
+# <slothd-logN> - The output of slothd when it is run in high resolution
+#   tracing mode.
+# <tbreport> - The testbed report file, used to map link IPs to names.
+#
+
+BEGIN {
+    error = 0;
+    if( ARGC < 2 )
+    {
+	printf("Convert slothd output to a TCL feedback file.\n");
+	printf("Usage: digest-slothd <file1> [<file2> ...] <tbreport>\n");
+	printf("\n");
+	printf("Required arguments:\n");
+	printf("  file1 - A file containing the output of slothd.\n");
+	printf("  tbreport - The testbed report file.\n");
+	printf("\n");
+	printf("Example:\n");
+	printf("  $ digest-slothd vhost-0.slothd foo.report\n");
+	printf("\n");
+	error = -1;
+	exit error;
+    }
+    
+    low_index = -1;
+    high_index = -1;
+}
+
+#
+# Process slothd output.  This will digest the "vnode" and "iface" attributes
+# and store the values in the following variables:
+#
+#   vnodes_cpu[<vnode_name>,<instance>] - The vnode percent of CPU used per
+#     second.
+#   vnodes_ram[<vnode_name>,<instance>] - The vnode percent of RAM used per
+#     second.
+#   links_bw[<link_name>] - The peak kilobits per second used on this link.
+#   links_pkts[<link_name>] - The peak number of packets per second used on
+#     this link.
+#
+# Example input:
+#
+# vers=3 mis=1084907941 lave=0.0000000000,0.0000000000,0.0000000000 abits=0x5 page=0,0 ints=1134,693,82 cpu=0,1,98 iface=00:02:b3:3f:7a:20,18804,3352,14047137,457522 iface=00:03:47:73:a2:42,9079,125118,3428409,60045802 iface=00:00:00:00:00:00,0,0,0,0 iface=00:00:0a:01:08:03,2846,125780,385828,58014417 iface=00:00:0a:01:12:03,125782,2843,58015462,385822 iface=00:00:0a:01:0d:02,6285,152,2896485,19985 iface=00:00:0a:01:12:02,2845,125781,385780,58015462 vnode=dslclient-11.testdssvm.tbres.emulab.net,0.0,1.8 vnode=server.testdssvm.tbres.emulab.net,2.1,2.5 vnode=corerouter.testdssvm.tbres.emulab.net,0.0,1.2
+#
+/vers=3/ {
+    for( lpc = 2; lpc <= NF; lpc++ )
+    {
+	if( low_index == -1 )
+	{
+	    low_index = NR;
+	}
+	high_index = NR;
+#       Determine the field type and
+	split($lpc, field, /=/);
+#       ... handle it.
+	if( field[1] == "iface" )
+	{
+#           Split the data values and
+	    split(field[2], data, /,/);
+#           ... the ethernet MAC address.
+	    split(data[1], eth, /:/);
+#           Convert the MAC address, which is just the IP address, into decimal
+#           from hexadecimal.
+	    for( lpc2 = 3; lpc2 <= 6; lpc2++ )
+	    {
+		a = tolower(substr(eth[lpc2], 1, 1));
+		b = tolower(substr(eth[lpc2], 2, 1));
+		c = (index("0123456789abcdef",a) - 1);
+		d = (index("0123456789abcdef",b) - 1);
+		e = (c * 16) + d;
+		if( lpc2 == 3 )
+		    link_ip = sprintf("%d", e);
+		else
+		    link_ip = sprintf("%s.%d", link_ip, e);		
+	    }
+#           Record that we have seen this IP,
+	    links_ip[link_ip] = 1;
+#           ... the input bandwidth/packets for this second, and
+	    if( link_ip in links_last_in )
+	    {
+		last_pkt_value = links_last_pkt_in[link_ip];
+		links_last_pkt_in[link_ip] = data[2];
+		in_pkts = data[2] - last_pkt_value;
+
+		last_value = links_last_in[link_ip];
+		links_last_in[link_ip] = data[4];
+		in_bw = data[4] - last_value;
+	    }
+	    else
+	    {
+		links_last_pkt_in[link_ip] = data[2];
+		links_last_in[link_ip] = data[4];
+
+		in_pkts = 0;
+		in_bw = 0;
+	    }
+#           ... the output bandwidth/packets for this second.
+	    if( link_ip in links_last_out )
+	    {
+		last_pkt_value = links_last_pkt_out[link_ip];
+		links_last_pkt_out[link_ip] = data[3];
+		out_pkts = data[3] - last_pkt_value;
+
+		last_value = links_last_out[link_ip];
+		links_last_out[link_ip] = data[5];
+		out_bw = data[5] - last_value;
+	    }
+	    else
+	    {
+		links_last_pkt_out[link_ip] = data[3];
+		links_last_out[link_ip] = data[5];
+
+		out_pkts = 0;
+		out_bw = 0;
+	    }
+#           Find the maximum of bandwidth/packets of the data seen so far.
+	    if( in_pkts > links_ip_pkts[link_ip] )
+	    {
+		links_ip_pkts[link_ip] = in_pkts;
+	    }
+	    if( in_bw > links_ip_bw[link_ip] )
+	    {
+		links_ip_bw[link_ip] = in_bw;
+	    }
+	    if( out_pkts > links_ip_pkts[link_ip] )
+	    {
+		links_ip_pkts[link_ip] = out_pkts;
+	    }
+	    if( out_bw > links_ip_bw[link_ip] )
+	    {
+		links_ip_bw[link_ip] = out_bw;
+	    }
+	}
+	else if( field[1] == "vnode" )
+	{
+	    split(field[2], data, /,/);
+	    split(data[1], name, /\./);
+	    vnode_name = name[1];
+	    vnodes_name[vnode_name] = 1;
+	    vnodes_cpu[vnode_name,NR] = data[2];
+	    vnodes_ram[vnode_name,NR] = data[3];
+	}
+	
+    }
+}
+
+#
+# Process the report file lines so we can find the mapping of IP addresses to
+# symbolic link names.
+#
+# Example input:
+#
+# dclink          corerouter:1    10.1.8.3        0.00      100000    0.000
+#
+// {
+    if( $3 in links_ip )
+    {
+	links_ip[$3] = $1;
+	links_name[$1] = 1;
+	if( links_ip_bw[$3] > links_bw[$1] )
+	    links_bw[$1] = links_ip_bw[$3];
+	if( links_ip_pkts[$3] > links_pkts[$1] )
+	    links_pkts[$1] = links_ip_pkts[$3];
+    }
+}
+
+END {
+    if( error )
+    {
+	exit error;
+    }
+    
+    printf("# Begin Nodes\n");
+    for( vnode_name in vnodes_name )
+    {
+	vnode_cpu = 0.001;
+	vnode_ram = 0.001;
+	for( lpc = low_index; lpc < high_index; lpc++ )
+	{
+	    if( vnodes_cpu[vnode_name,lpc] > vnode_cpu )
+	    {
+		vnode_cpu = vnodes_cpu[vnode_name,lpc];
+	    }
+	    if( vnodes_ram[vnode_name,lpc] > vnode_ram )
+	    {
+		vnode_ram = vnodes_ram[vnode_name,lpc];
+	    }
+	}
+	printf("set Reservations(%s,cpu) %f\n",
+	       vnode_name,
+	       (vnode_cpu / 100.0) * 850.0); # XXX HACK
+	printf("set Reservations(%s,ram) %f\n",
+	       vnode_name,
+	       (vnode_ram / 100.0) * 256.0); # XXX HACK
+    }
+    printf("# Begin Links\n");
+    for( link_name in links_name )
+    {
+	printf("set Reservations(%s,bw) %f\n",
+	       link_name,
+	       (links_bw[link_name] * 8) / 1000.0);
+	printf("set Reservations(%s,pkts) %f\n",
+	       link_name,
+	       links_pkts[link_name]);
+    }
+}
