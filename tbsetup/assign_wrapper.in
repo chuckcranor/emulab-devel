@@ -3470,6 +3470,9 @@ sub CreateTopFile()
 		# Yuck
 		$desirestr .= " +load:" . (($cpu_usage - 1) / 5.0);
 	    }
+	    if ($updating) {
+		$desirestr .= " already_reserved:.2";
+	    }
 	    my $typestr = $type;
 	    if (virtnodeisvirt($vname)) {
 		$virtnode_count++;
@@ -3813,6 +3816,22 @@ sub CreateTopFile()
 	    my $pnode = $fixed_nodes{$node};
 
 	    print TOPFILE "fix-node $node $pnode\n";
+	}
+    }
+
+    #
+    # When updating, give assign hints about where it could try to start nodes
+    # for its mapping. Hopefully, this will make it run faster and get a better
+    # solution. If, for whatever reason, assign cannot obey the hint, that's
+    # okay - it will just print out a warning and ignore it.
+    #
+    if ($updating) {
+	foreach $node (keys(%reserved_v2pmap)) {
+	    if (!$fixed_nodes{$node}) {
+		# No point in giving a hint for a fixed node
+		my $pnode = $reserved_v2pmap{$node};
+		print TOPFILE "node-hint $node $pnode\n";
+	    }
 	}
     }
 
