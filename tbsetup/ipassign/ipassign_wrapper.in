@@ -22,21 +22,29 @@ sub usage()
 	  "       Use -b (with -n) to print routes in Freebsd format.\n".
 	  "       Use -l (with -n) to print routes in Linux format.\n".
 	  "       Use -d to turn on debugging output.\n".
-	  "       Use -f to force route calculation; ignore 'static' flag.\n");
+	  "       Use -f to force route calculation; ignore 'static' flag.\n".
+          "       Use -H to specift host-host routing in ipassign\n".
+          "       Use -L to specift host-lan routing in ipassign\n".
+          "       Use -N to specift host-net routing in ipassign\n".
+          "       Use -p to specify the # of partitions\n");
+
     exit(-1);
 }
-my  $optlist = "nsbldf";
+my  $optlist = "nsbldfHLNp:";
 
 #
 # Configure variables
 #
-my $TB		= "@prefix@";
+my $TB		  = "@prefix@";
 
-my $debug       = 0;
-my $ipassign    = "$TB/libexec/ipassign -c -s -n";
-my $impotent    = 0;
-my $force	= 0;
-my $format      = "";
+my $debug         = 0;
+my $ipassign      = "$TB/libexec/ipassign";
+my $ipassign_args = " -c";
+my $impotent      = 0;
+my $force	  = 0;
+my $format        = "";
+my $routetype     = "host2net";
+my $partitions    = 0;
 
 #
 # Testbed Support libraries
@@ -82,6 +90,24 @@ if (defined($options{"b"})) {
 }
 if (defined($options{"l"})) {
     $format = "suxs";
+}
+if (defined($options{"p"})) {
+    $partitions = $options{"p"};
+    $ipassign_args .= " -p$partitions";
+} else {
+    $ipassign_args .= " -s";
+}
+if (defined($options{"H"})) {
+    $routetype = "host2host";
+    $ipassign_args .= " -h";
+}
+if (defined($options{"L"})) {
+    $routetype = "host2lan";
+    $ipassign_args .= " -l";
+}
+if (defined($options{"N"})) {
+    $routetype = "host2net";
+    $ipassign_args .= " -n";
 }
 if ($format && !$impotent) {
     usage();
@@ -184,9 +210,9 @@ if (! $childpid) {
     open(STDOUT, ">&PARENT") || die "Can't redirect stdout";
     open(STDERR, ">/dev/null") || die "Can't redirect stderr";
 
-    exec($ipassign);
+    exec($ipassign . $ipassign_args);
     die("*** $0:\n".
-	"    exec $ipassign failed: $!\n");
+	"    exec $ipassign $ipassign_args failed: $!\n");
 }
 close PARENT;
 
@@ -265,10 +291,11 @@ close CHILD;
 if (wait() != $childpid) {
     die "problem encountered in wait()";
 }
-my $retval = $? >> 8;
+my $childstatus = $?;
+my $retval = $childstatus >> 8;
 
-if ($retval) {
-    die "ipassign returned an error: $retval.  No routes or IPs have been added to the DB.";
+if ($childstatus) {
+    die "ipassign failed.  No routes or IPs have been added to the DB.";
 }
 
 #
