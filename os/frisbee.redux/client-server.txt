@@ -1,0 +1,160 @@
+Here are the current plans for modifying Frisbee to be both a client and a 
+server.  Feedback welcome:
+
+Current Design:
+
+  Server:
+    Main Data Structures
+      1) Work queue
+    Two Threads
+      1) Receives requests and enqueues them
+      2) Dequeues requests, read data from disk and
+           sends them
+  
+  Client:
+    Main Data Structures
+      2) Cache for compressed chunks
+      3) Disk IO Queue
+    Three Threads
+      3) Receives chunks and requests new ones
+      4) Decompression complete chunks and enqueues them to be written
+      5) Dequeues disk requests and writes decompressed chunks to disk
+
+  
+Client-Server:
+
+PHASE 1)
+
+This phase will still use multicast so I can focus on being both
+a client and a server and not changing the underlying network code.
+
+3 Main Data Structures, combine the server and client ones.
+
+The Two Queues (1 and 3) are unmodified.
+
+The cache (2) will behave differently: Full chunks will not be removed
+from the cache after being committed from disk as they may still be
+needed by clients.
+
+Each cached chunk will be annotated with two additional fields:
+  1) If the chunk is still needed by the client.  A chunk is still
+     needed unless the chunk had either been committed to disk or is
+     decompressed and waiting to be committed.
+  2) The status of the chunk in regards to other clients needs.
+     Has two fields:
+       1) List of all pending requests for this chunk (ie requests
+          that are in the work queue)
+       2) Timestamp of when the last chunk was sent.
+This information will be used to determine which chunk to remove from
+the cache when it is full.
+
+
+5 threads, combine the server and client ones.
+
+Thread 1 is modified as follows:
+
+  When it receives a request it will check if the chunk is in the cache
+  and if so modify its state appropriately.
+
+Thread 2 modified as follows:
+
+  Dequeues requests and see what part of the data is in the cache.
+
+  Send what is in the cache and remove those blocks from the request.
+
+  If there are any remaining blocks in the request:
+
+    If the chunk is not in cache at all than check that there will be
+    room to store the chunk in the cache.  That is if the cache is not
+    full are chunks that are no longer needed by itself or other
+    clients.
+
+    If there is room in the cache for the results of the request.
+    Send a request for the chunk unless a request has already been
+    sent recently using the same criteria that the client uses for
+    requesting incomplete chunks in its cache.
+
+    Push the request at the end of the queue.
+
+  Update the cache data appropriately.
+
+Thread 3 is modified as follows:
+
+  1)
+  Since other clients may need blocks that it itself does not need it
+  will NOT ignore incoming blocks based on this.
+
+  When it receives a block it will check to see if it the associated chunk
+  is in the cache. If so it will simply store the block in the cache.
+
+  If not than it will see if it can add the chunk to the cache.  If 
+  the cache is not full than it will simply add the chunk.
+
+  If the cache is full (the common case) than it will see if there are
+  any chunks that are no longer needed by itself or other clients.  If
+  so it will remove the one with the earliest time stamp.  The time
+  stamp is the time in which the last block was sent.
+
+  When adding a new chunk it will check the work queue for any
+  pending requests on this chunk and if so add them to the list.
+
+  If it was unable to cache the incoming block it will simply ignore
+  it.
+
+  2)
+  The requests it send out for the its own data is unmodified 
+  except that it will only consider chunks that have not already
+  been decompressed or committed to disk.
+  
+Thread 4 is unmodified.
+
+Thread 5 is modified so that instead of removing the chunk once
+committed to disk it will simply flag it as being committed.
+
+POSSIBLE IMPROVEMENT:
+
+When requesting a chunk not already in the cache reserve space for it.
+This will avoid requesting data and then not being able to store the
+results of the request, thus wasting bandwidth.  Checking that there
+is room is not always sufficient since by the time the request get
+satisfied there may no longer be remove.  This can happen if 1) when
+using multicast data that others nodes requested is cached or 2)
+requests for n chunks of data were made when there is only space for n
+- 1 chunks.  
+   
+PHASE 2)
+
+Be able to handle requests from from multiple clients without using
+multicast.  As I see it there are three options:
+
+1) Send all outgoing packets to all clients.  This will be the easiest
+to implement and probably not all that inefficient.
+
+2) Only send the clients what they ask for.  This has the problem that
+a client may ask for a chunk that was in its cache but is not any more.
+Thus the server has to rerequest the chunk from the boss server.  This
+solution will save bandwidth from the client to the server but will
+greatly increase bandwidth between the server and the boss server,
+when the cache is not large enough to hold the entire disk image.
+
+3) Have the client tell the server what it needs and let the server
+figure out what to send it.  This solution is the most complicated
+but will avoid the problems of the previous two solutions.
+
+For an initial implementation I think the first solution is the best.
+
+---
+
+RANDOM NOTES, ignore for now:
+
+This will involve keeping track of which client requested
+what.  The main area this complicates is how to handle the merging of
+requests.
+
+The cache is in one of several states.  The state it is considered to
+be in is the first of the following:
+  1) Has chunks committed to disk and which all blocks have been sent
+  2) Has chunks committed to disk
+  3) Has chunks pending a commit to disk
+  4) None of the above
+
