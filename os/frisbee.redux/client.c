@@ -37,33 +37,29 @@ static int exitstatus;
 #endif
 
 /* Tunable constants */
-int		maxchunkbufs = MAXCHUNKBUFS;
-int		maxwritebufmem = MAXWRITEBUFMEM;
-int		maxmem = 0;
-int		pkttimeout = PKTRCV_TIMEOUT;
-int		idletimer = CLIENT_IDLETIMER_COUNT;
-int		maxreadahead = MAXREADAHEAD;
-int		maxinprogress = MAXINPROGRESS;
-int		redodelay = CLIENT_REQUEST_REDO_DELAY;
-int		idledelay = CLIENT_WRITER_IDLE_DELAY;
-int		startdelay = 0, startat = 0;
+static int	maxchunkbufs = MAXCHUNKBUFS;
+static int	maxwritebufmem = MAXWRITEBUFMEM;
+static int	maxmem = 0;
+static int	pkttimeout = PKTRCV_TIMEOUT;
+static int	idletimer = CLIENT_IDLETIMER_COUNT;
+static int	maxreadahead = MAXREADAHEAD;
+static int	maxinprogress = MAXINPROGRESS;
+static int	redodelay = CLIENT_REQUEST_REDO_DELAY;
+static int	idledelay = CLIENT_WRITER_IDLE_DELAY;
+static int	startdelay = 0, startat = 0;
 
-int		nothreads = 0;
-int		nodecompress = 0;
-int		debug = 0;
-int		tracing = 0;
-char		traceprefix[64];
-int		randomize = 1;
-int		portnum;
-struct in_addr	mcastaddr;
-struct in_addr	mcastif;
+static int		nothreads = 0;
+static int		nodecompress = 0;
+static int		tracing = 0;
+static char		traceprefix[64];
+static int		randomize = 1;
 static struct timeval stamp;
 static struct in_addr serverip;
 
 /* Forward Decls */
-static void	PlayFrisbee(void);
-static void	GotBlock(Packet_t *p);
-static void	RequestChunk(int timedout);
+static void	PlayFrisbee(NetInfo_t *ni);
+static void	GotBlock(NetInfo_t *ni, Packet_t *p);
+static void	RequestChunk(NetInfo_t *ni, int timedout);
 static void	RequestStamp(int chunk, int block, int count, void *arg);
 static int	RequestRedoTime(int chunk, unsigned long long curtime);
 extern int	ImageUnzipInit(char *filename, int slice, int debug, int zero,
@@ -117,13 +113,13 @@ int		IdleCounter;		/* Countdown to request more data */
 
 #ifdef STATS
 extern unsigned long decompblocks, writeridles;	/* XXX imageunzip.c */
-ClientStats_t	Stats;
+static ClientStats_t	Stats;
 #define DOSTAT(x)	(Stats.u.v1.x)
 #else
 #define DOSTAT(x)
 #endif
 
-char *usagestr = 
+static char *usagestr = 
  "usage: frisbee [-drzbn] [-s #] <-p #> <-m ipaddr> <output filename>\n"
  " -d              Turn on debugging. Multiple -d options increase output.\n"
  " -r              Randomly delay first request by up to one second.\n"
@@ -146,7 +142,7 @@ char *usagestr =
  " -O              Make chunk requests in increasing order (default is random order).\n"
  "\n";
 
-void
+static void
 usage()
 {
 	fprintf(stderr, usagestr);
@@ -160,14 +156,17 @@ WriterIdleCallback(int isidle)
 	CLEVENT(1, EV_CLIWRSTATUS, isidle, 0, 0, 0);
 }
 
+int StartClient(NetInfo_t * ni);
+
 int
-main(int argc, char **argv)
+client_main(int argc, char **argv)
 {
 	int	ch, mem;
 	char   *filename;
 	int	zero = 0;
 	int	dostype = -1;
-	int	slice = 0;
+        int     slice = 0;
+	NetInfo_t ni;
 
 	while ((ch = getopt(argc, argv, "dhp:m:s:i:tbznT:r:E:D:C:W:S:M:R:I:ON")) != -1)
 		switch(ch) {
@@ -176,7 +175,7 @@ main(int argc, char **argv)
 			break;
 			
 		case 'b':
-			broadcast++;
+			ni.broadcast = 1;
 			break;
 			
 #ifdef DOEVENTS
@@ -186,11 +185,11 @@ main(int argc, char **argv)
 #endif
 
 		case 'p':
-			portnum = atoi(optarg);
+			ni.portnum = atoi(optarg);
 			break;
 			
 		case 'm':
-			inet_aton(optarg, &mcastaddr);
+			inet_aton(optarg, &ni.mcastaddr);
 			break;
 
 		case 'n':
@@ -198,7 +197,7 @@ main(int argc, char **argv)
 			break;
 
 		case 'i':
-			inet_aton(optarg, &mcastif);
+			inet_aton(optarg, &ni.mcastif);
 			break;
 
 		case 'r':
@@ -296,11 +295,12 @@ main(int argc, char **argv)
 		usage();
 	filename = argv[0];
 
-	if (!portnum || ! mcastaddr.s_addr)
+	if (!ni.portnum || ! ni.mcastaddr.s_addr)
 		usage();
 
+	
 	ClientLogInit();
-	ClientNetInit();
+	ClientNetInit(&ni);
 
 #ifdef DOEVENTS
 	if (eventserver != NULL && EventInit(eventserver) != 0) {
@@ -432,7 +432,7 @@ main(int argc, char **argv)
 			DiskIdleCallback = WriterIdleCallback;
 	}
 
-	PlayFrisbee();
+	PlayFrisbee(&ni);
 
 	if (tracing) {
 		TraceStop();
@@ -467,6 +467,7 @@ main(int argc, char **argv)
 void *
 ClientRecvThread(void *arg)
 {
+	NetInfo_t      *ni = (NetInfo_t *)arg;
 	Packet_t	packet, *p = &packet;
 	int		BackOff;
 	static int	gotone;
@@ -515,7 +516,7 @@ ClientRecvThread(void *arg)
 		 * see that block for longer than our timeout period,
 		 * leading us to issue another request, etc.
 		 */
-		if (PacketReceive(p) != 0) {
+		if (PacketReceive(ni, p) != 0) {
 			pthread_testcancel();
 			if (--IdleCounter <= 0) {
 				if (gotone)
@@ -525,7 +526,7 @@ ClientRecvThread(void *arg)
 #ifdef NEVENTS
 				needstamp = 1;
 #endif
-				RequestChunk(1);
+				RequestChunk(ni, 1);
 				IdleCounter = idletimer;
 
 				if (BackOff++) {
@@ -539,7 +540,7 @@ ClientRecvThread(void *arg)
 		pthread_testcancel();
 		gotone = 1;
 
-		if (! PacketValid(p, TotalChunkCount)) {
+		if (! PacketValid(ni, p, TotalChunkCount)) {
 			log("received bad packet %d/%d, ignored",
 			    p->hdr.type, p->hdr.subtype);
 			continue;
@@ -565,7 +566,7 @@ ClientRecvThread(void *arg)
 			needstamp = 1;
 #endif
 			BackOff = 0;
-			GotBlock(p);
+			GotBlock(ni, p);
 			/*
 			 * We may have missed the request for this chunk/block
 			 * so treat the arrival of a block as an indication
@@ -604,7 +605,7 @@ ClientRecvThread(void *arg)
  * The heart of the game.
  */
 static void
-ChunkerStartup(void)
+ChunkerStartup(NetInfo_t *ni)
 {
 	pthread_t	child_pid;
 	void		*ignored;
@@ -657,7 +658,7 @@ ChunkerStartup(void)
 	}
 
 	if (pthread_create(&child_pid, NULL,
-			   ClientRecvThread, (void *)0)) {
+			   ClientRecvThread, (void *)ni)) {
 		fatal("Failed to create pthread!");
 	}
 
@@ -853,7 +854,7 @@ RequestRedoTime(int chunk, unsigned long long curtime)
  * indicates the chunk buffer is not big enough, and should be increased.
  */
 static void
-GotBlock(Packet_t *p)
+GotBlock(NetInfo_t *ni, Packet_t *p)
 {
 	int	chunk = p->msg.block.chunk;
 	int	block = p->msg.block.block;
@@ -979,7 +980,7 @@ GotBlock(Packet_t *p)
 		 * by the time the main thread finishes the chunk we just
 		 * released.
 		 */
-		RequestChunk(0);
+		RequestChunk(ni, 0);
 	}
 }
 
@@ -987,7 +988,7 @@ GotBlock(Packet_t *p)
  * Request a chunk/block/range we do not have.
  */
 static void
-RequestMissing(int chunk, BlockMap_t *map, int count)
+RequestMissing(NetInfo_t *ni, int chunk, BlockMap_t *map, int count)
 {
 	Packet_t	packet, *p = &packet;
 
@@ -1000,7 +1001,7 @@ RequestMissing(int chunk, BlockMap_t *map, int count)
 	p->msg.prequest.chunk = chunk;
 	p->msg.prequest.retries = Chunks[chunk].ours;
 	BlockMapInvert(map, &p->msg.prequest.blockmap);
-	PacketSend(p, 0);
+	PacketSend(ni, p, 0);
 #ifdef STATS
 	assert(count == BlockMapIsAlloc(&p->msg.prequest.blockmap,0,CHUNKSIZE));
 	if (count == 0)
@@ -1025,7 +1026,7 @@ RequestMissing(int chunk, BlockMap_t *map, int count)
  * Request a chunk/block/range we do not have.
  */
 static void
-RequestRange(int chunk, int block, int count)
+RequestRange(NetInfo_t *ni, int chunk, int block, int count)
 {
 	Packet_t	packet, *p = &packet;
 
@@ -1039,7 +1040,7 @@ RequestRange(int chunk, int block, int count)
 	p->msg.request.chunk = chunk;
 	p->msg.request.block = block;
 	p->msg.request.count = count;
-	PacketSend(p, 0);
+	PacketSend(ni, p, 0);
 	CLEVENT(1, EV_CLIREQ, chunk, block, count, 0);
 	DOSTAT(requests++);
 
@@ -1048,7 +1049,7 @@ RequestRange(int chunk, int block, int count)
 }
 
 static void
-RequestChunk(int timedout)
+RequestChunk(NetInfo_t *ni, int timedout)
 {
 	int		   i, j, k;
 	int		   emptybufs, fillingbufs;
@@ -1094,7 +1095,8 @@ RequestChunk(int timedout)
 		 * Request all the missing blocks
 		 */
 		DOSTAT(prequests++);
-		RequestMissing(ChunkBuffer[i].thischunk,
+		RequestMissing(ni,
+			       ChunkBuffer[i].thischunk,
 			       &ChunkBuffer[i].blockmap,
 			       ChunkBuffer[i].blockcount);
 	}
@@ -1129,7 +1131,7 @@ RequestChunk(int timedout)
 		 * is considered a read-ahead to us.
 		 */
 		if (timedout || RequestRedoTime(chunk, stamp))
-			RequestRange(chunk, 0, CHUNKSIZE);
+			RequestRange(ni, chunk, 0, CHUNKSIZE);
 
 		j++;
 	}
@@ -1139,7 +1141,7 @@ RequestChunk(int timedout)
  * Join the Frisbee team, and then go into the main loop above.
  */
 static void
-PlayFrisbee(void)
+PlayFrisbee(NetInfo_t *ni)
 {
 	Packet_t	packet, *p = &packet;
 	struct timeval  estamp, timeo;
@@ -1213,7 +1215,7 @@ PlayFrisbee(void)
 			p->hdr.subtype    = PKTSUBTYPE_JOIN;
 			p->hdr.datalen    = sizeof(p->msg.join);
 			p->msg.join.clientid = myid;
-			PacketSend(p, 0);
+			PacketSend(ni, p, 0);
 			timeo.tv_sec = 0;
 			timeo.tv_usec = 500000;
 			timeradd(&timeo, &now, &timeo);
@@ -1223,7 +1225,7 @@ PlayFrisbee(void)
 		 * Throw away any data packets. We cannot start until
 		 * we get a reply back.
 		 */
-		if (PacketReceive(p) == 0 &&
+		if (PacketReceive(ni, p) == 0 &&
 		    p->hdr.subtype == PKTSUBTYPE_JOIN &&
 		    p->hdr.type == PKTTYPE_REPLY) {
 			CLEVENT(1, EV_CLIJOINREP,
@@ -1258,7 +1260,7 @@ PlayFrisbee(void)
 	    timeo.tv_sec - stamp.tv_sec,
 	    myid, TotalChunkCount, p->msg.join.blockcount);
 
-	ChunkerStartup();
+	ChunkerStartup(ni);
 
 	gettimeofday(&estamp, 0);
 	timersub(&estamp, &stamp, &estamp);
@@ -1290,7 +1292,7 @@ PlayFrisbee(void)
 	Stats.u.v1.redodelay     = redodelay;
 	Stats.u.v1.randomize     = randomize;
 	p->msg.leave2.stats      = Stats;
-	PacketSend(p, 0);
+	PacketSend(ni, p, 0);
 
 	log("");
 	ClientStatsDump(myid, &Stats);

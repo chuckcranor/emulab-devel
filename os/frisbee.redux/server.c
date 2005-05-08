@@ -30,26 +30,23 @@
 #include "trace.h"
 
 /* Globals */
-int		debug = 0;
-int		tracing = 0;
-int		dynburst = 0;
-int		timeout = SERVER_INACTIVE_SECONDS;
-int		readsize = SERVER_READ_SIZE;
-volatile int	burstsize = SERVER_BURST_SIZE;
-int		maxburstsize = SERVER_DYNBURST_SIZE;
-int		burstinterval = SERVER_BURST_GAP;
-unsigned long	bandwidth;
-int		portnum;
-int		killme;
-int		blockslost;
-int		clientretries;
-char		*lostmap;
-int		sendretries;
-struct in_addr	mcastaddr;
-struct in_addr	mcastif;
-char	       *filename;
-struct timeval  IdleTimeStamp, FirstReq, LastReq;
-volatile int	activeclients;
+static char	       *filename;
+
+static int		tracing = 0;
+static int		dynburst = 0;
+static int		timeout = SERVER_INACTIVE_SECONDS;
+static int		readsize = SERVER_READ_SIZE;
+static volatile int	burstsize = SERVER_BURST_SIZE;
+static int		maxburstsize = SERVER_DYNBURST_SIZE;
+static int		burstinterval = SERVER_BURST_GAP;
+static unsigned long	bandwidth;
+static int		killme;
+static int		blockslost;
+static int		clientretries;
+static char		*lostmap;
+static int		sendretries;
+static struct timeval  IdleTimeStamp, FirstReq, LastReq;
+static volatile int	activeclients;
 
 /* Forward decls */
 void		quit(int);
@@ -73,7 +70,7 @@ struct {
 /*
  * Stats gathering.
  */
-struct {
+static struct {
 	unsigned long	msgin;
 	unsigned long	joins;
 	unsigned long	leaves;
@@ -163,7 +160,7 @@ WorkQueueInit(void)
 static int
 WorkQueueEnqueue(int chunk, BlockMap_t *map, int count)
 {
-	WQelem_t	*wqel;
+        WQelem_t	*wqel;
 	int		elt, blocks;
 
 	if (count == 0)
@@ -176,7 +173,7 @@ WorkQueueEnqueue(int chunk, BlockMap_t *map, int count)
 	 * currently sending.  Don't queue.
 	 */
 	if (count == CHUNKSIZE && chunk == WorkChunk && count == WorkCount) {
-		EVENT(1, EV_WORKMERGE, mcastaddr, chunk, count, count, ~0);
+		EVENT(1, EV_WORKMERGE, ni->mcastaddr, chunk, count, count, ~0);
 		pthread_mutex_unlock(&WorkQLock);
 		return 0;
 	}
@@ -204,7 +201,7 @@ WorkQueueEnqueue(int chunk, BlockMap_t *map, int count)
 				blocks = 0;
 			else
 				blocks = BlockMapMerge(map, &wqel->blockmap);
-			EVENT(1, EV_WORKMERGE, mcastaddr,
+			EVENT(1, EV_WORKMERGE, ni->mcastaddr,
 			      chunk, wqel->nblocks, blocks, elt);
 			wqel->nblocks += blocks;
 			assert(wqel->nblocks <= CHUNKSIZE);
@@ -230,7 +227,7 @@ WorkQueueEnqueue(int chunk, BlockMap_t *map, int count)
 
 	pthread_mutex_unlock(&WorkQLock);
 
-	EVENT(1, EV_WORKENQ, mcastaddr, chunk, count, WorkQSize, 0);
+	EVENT(1, EV_WORKENQ, ni->mcastaddr, chunk, count, WorkQSize, 0);
 	return 1;
 }
 
@@ -277,7 +274,7 @@ WorkQueueDequeue(int *chunkp, int *blockp, int *countp)
 	*blockp = block;
 	*countp = count;
 
-	EVENT(1, EV_WORKDEQ, mcastaddr, chunk, block, count, WorkQSize);
+	EVENT(1, EV_WORKDEQ, ni->mcastaddr, chunk, block, count, WorkQSize);
 	return 1;
 }
 
@@ -300,7 +297,7 @@ ClientEnqueueMap(int chunk, BlockMap_t *map, int count, int isretry)
 		if (chunkmap[chunk]) {
 			if (debug > 1)
 				log("Duplicate chunk request: %d", chunk);
-			EVENT(1, EV_DUPCHUNK, mcastaddr, chunk, 0, 0, 0);
+			EVENT(1, EV_DUPCHUNK, ni->mcastaddr, chunk, 0, 0, 0);
 			DOSTAT(dupsent++);
 		} else
 			chunkmap[chunk] = 1;
@@ -334,7 +331,7 @@ ClientEnqueueMap(int chunk, BlockMap_t *map, int count, int isretry)
  * reply are harmless.
  */
 static void
-ClientJoin(Packet_t *p)
+ClientJoin(NetInfo_t *ni, Packet_t *p)
 {
 	struct in_addr	ipaddr   = { p->hdr.srcip };
 	unsigned int    clientid = p->msg.join.clientid;
@@ -346,7 +343,7 @@ ClientJoin(Packet_t *p)
 	p->hdr.type            = PKTTYPE_REPLY;
 	p->hdr.datalen         = sizeof(p->msg.join);
 	p->msg.join.blockcount = FileInfo.blocks;
-	PacketReply(p);
+	PacketReply(ni, p);
 #ifdef STATS
 	{
 		int i, j = -1;
@@ -541,6 +538,7 @@ ClientPartialRequest(Packet_t *p)
 void *
 ServerRecvThread(void *arg)
 {
+  	NetInfo_t      *ni = (NetInfo_t *)arg;
 	Packet_t	packet, *p = &packet;
 	static int	gotone;
 
@@ -549,12 +547,12 @@ ServerRecvThread(void *arg)
 	
 	while (1) {
 		pthread_testcancel();
-		if (PacketReceive(p) != 0) {
+		if (PacketReceive(ni, p) != 0) {
 			continue;
 		}
 		DOSTAT(msgin++);
 
-		if (! PacketValid(p, FileInfo.chunks)) {
+		if (! PacketValid(ni, p, FileInfo.chunks)) {
 			struct in_addr ipaddr = { p->hdr.srcip };
 			DOSTAT(badpackets++);
 			log("bad packet %d/%d from %s, ignored",
@@ -576,7 +574,7 @@ ServerRecvThread(void *arg)
 		switch (p->hdr.subtype) {
 		case PKTSUBTYPE_JOIN:
 			DOSTAT(joins++);
-			ClientJoin(p);
+			ClientJoin(ni, p);
 			break;
 		case PKTSUBTYPE_LEAVE:
 			DOSTAT(leaves++);
@@ -605,7 +603,7 @@ ServerRecvThread(void *arg)
  * NOTES: Perhaps use readv into a vector of packet buffers?
  */
 static void
-PlayFrisbee(void)
+PlayFrisbee(NetInfo_t *ni)
 {
 	int		chunk, block, blockcount, cc, j, idlelastloop = 0;
 	int		startblock, lastblock, throttle = 0;
@@ -705,7 +703,7 @@ PlayFrisbee(void)
 			}
 			DOSTAT(filereads++);
 			DOSTAT(filebytes += cc);
-			EVENT(2, EV_READFILE, mcastaddr,
+			EVENT(2, EV_READFILE, ni->mcastaddr,
 			      offset, readbytes, rstamp.tv_sec, rstamp.tv_usec);
 			if (cc != readbytes)
 				fatal("Short read: %d!=%d", cc, readbytes);
@@ -720,10 +718,10 @@ PlayFrisbee(void)
 				       &databuf[j * BLOCKSIZE],
 				       BLOCKSIZE);
 
-				PacketSend(p, &resends);
+				PacketSend(ni, p, &resends);
 				sendretries += resends;
 				DOSTAT(blockssent++);
-				EVENT(resends ? 1 : 3, EV_BLOCKMSG, mcastaddr,
+				EVENT(resends ? 1 : 3, EV_BLOCKMSG, ni->mcastaddr,
 				      chunk, block+j, resends, 0);
 
 				/*
@@ -740,7 +738,7 @@ PlayFrisbee(void)
 					 * accumulate error.
 					 */
 					if (!sleeptil(&startnext)) {
-						EVENT(1, EV_OVERRUN, mcastaddr,
+						EVENT(1, EV_OVERRUN, ni->mcastaddr,
 						      startnext.tv_sec,
 						      startnext.tv_usec,
 						      chunk, block+j);
@@ -749,7 +747,7 @@ PlayFrisbee(void)
 					} else {
 						if (thisburst > burstsize)
 							EVENT(1, EV_LONGBURST,
-							      mcastaddr,
+							      ni->mcastaddr,
 							      thisburst,
 							      burstsize,
 							      chunk, block+j);
@@ -770,7 +768,7 @@ PlayFrisbee(void)
 	free(databuf);
 }
 
-char *usagestr = 
+static char *usagestr = 
  "usage: frisbeed [-d] <-p #> <-m mcastaddr> <filename>\n"
  " -d              Turn on debugging. Multiple -d options increase output.\n"
  " -p portnum      Specify a port number to listen on.\n"
@@ -779,7 +777,7 @@ char *usagestr =
  " -b              Use broadcast instead of multicast\n"
  "\n";
 
-void
+static void
 usage()
 {
 	fprintf(stderr, usagestr);
@@ -787,17 +785,18 @@ usage()
 }
 
 int
-main(int argc, char **argv)
+server_main(int argc, char **argv)
 {
 	int		ch, fd;
 	pthread_t	child_pid;
 	off_t		fsize;
 	void		*ignored;
+	NetInfo_t	ni;
 
 	while ((ch = getopt(argc, argv, "dhp:m:i:tbDT:R:B:G:L:W:")) != -1)
 		switch(ch) {
 		case 'b':
-			broadcast++;
+			ni.broadcast++;
 			break;
 			
 		case 'd':
@@ -805,15 +804,15 @@ main(int argc, char **argv)
 			break;
 			
 		case 'p':
-			portnum = atoi(optarg);
+			ni.portnum = atoi(optarg);
 			break;
 			
 		case 'm':
-			inet_aton(optarg, &mcastaddr);
+			inet_aton(optarg, &ni.mcastaddr);
 			break;
 
 		case 'i':
-			inet_aton(optarg, &mcastif);
+			inet_aton(optarg, &ni.mcastif);
 			break;
 		case 't':
 			tracing++;
@@ -846,8 +845,10 @@ main(int argc, char **argv)
 	if (argc != 1)
 		usage();
 
-	if (!portnum || ! mcastaddr.s_addr)
+	if (!ni.portnum || ! ni.mcastaddr.s_addr)
 		usage();
+
+	filename = argv[0];
 
 	signal(SIGINT, quit);
 	signal(SIGTERM, quit);
@@ -855,7 +856,6 @@ main(int argc, char **argv)
 
 	ServerLogInit();
 	
-	filename = argv[0];
 	if (access(filename, R_OK) < 0)
 		pfatal("Cannot read %s", filename);
 
@@ -882,7 +882,7 @@ main(int argc, char **argv)
 	/*
 	 * Everything else done, now init the network.
 	 */
-	ServerNetInit();
+	ServerNetInit(&ni);
 
 	if (tracing) {
 		ServerTraceInit("frisbeed");
@@ -892,12 +892,12 @@ main(int argc, char **argv)
 	/*
 	 * Create the subthread to listen for packets.
 	 */
-	if (pthread_create(&child_pid, NULL, ServerRecvThread, (void *)0)) {
+	if (pthread_create(&child_pid, NULL, ServerRecvThread, (void *)&ni)) {
 		fatal("Failed to create pthread!");
 	}
 	gettimeofday(&IdleTimeStamp, 0);
 	
-	PlayFrisbee();
+	PlayFrisbee(&ni);
 	pthread_cancel(child_pid);
 	pthread_join(child_pid, &ignored);
 

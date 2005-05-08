@@ -26,7 +26,7 @@ endif
 
 include $(OBJDIR)/Makeconf
 
-all:	frisbee frisbeed
+all:	frisbee frisbeed frisbee2
 
 include $(TESTBED_SRCDIR)/GNUmakerules
 
@@ -48,11 +48,23 @@ endif
 
 CLIENTFLAGS	= $(CFLAGS)
 CLIENTLIBS	= -lz $(PTHREADLIBS)
-CLIENTOBJS	= client.o frisbee.o $(SHAREDOBJS)
+CLIENTOBJS	= client.o imageunzip.o $(SHAREDOBJS)
 
 SERVERFLAGS	= $(CFLAGS)
 SERVERLIBS	= $(PTHREADLIBS)
 SERVEROBJS	= server.o $(SHAREDOBJS)
+
+FRISBEEFLAGS	= $(CLIENTFLAGS)
+FRISBEELIBS	= $(CLIENTLIBS)
+FRISBEEOBJS	= frisbee.o $(CLIENTOBJS)
+
+FRISBEEDFLAGS	= $(SERVERFLAGS)
+FRISBEEDLIBS	= $(SERVERLIBS)
+FRISBEEDOBJS	= frisbeed.o $(SERVEROBJS)
+
+FRISBEE2FLAGS	= $(CLIENTFLAGS)
+FRISBEE2LIBS	= $(CLIENTLIBS)
+FRISBEE2OBJS	= frisbee2.o server.o $(CLIENTOBJS)
 
 CFLAGS		= -O2 -g -Wall -fno-builtin-log -static $(PTHREADCFLAGS) -DSTATS
 LDFLAGS		= -static
@@ -73,16 +85,20 @@ LDFLAGS		= -static
 #CLIENTLIBS	+= `elvin-config --libs vin4c`
 #EVENTFLAGS	= $(CFLAGS) `elvin-config --cflags vin4c` -I$(TESTBED_SRCDIR)
 
-frisbee: $(CLIENTOBJS)
-	$(CC) $(LDFLAGS) $(CLIENTFLAGS) $(CLIENTOBJS) $(CLIENTLIBS) -o frisbee
+frisbee: $(FRISBEEOBJS)
+	$(CC) $(LDFLAGS) $(FRISBEEFLAGS) $(FRISBEEOBJS) $(FRISBEELIBS) -o frisbee
 	cp frisbee frisbee.debug
 	strip frisbee
 
-frisbeed: $(SERVEROBJS)
-	$(CC) $(LDFLAGS) $(SERVERFLAGS) $(SERVEROBJS) $(SERVERLIBS) -o frisbeed
+frisbeed: $(FRISBEEDOBJS)
+	$(CC) $(LDFLAGS) $(FRISBEEDFLAGS) $(FRISBEEDOBJS) $(FRISBEEDLIBS) -o frisbeed
 	cp frisbeed frisbeed.debug
 	strip frisbeed
 
+frisbee2: $(FRISBEE2OBJS)
+	$(CC) $(LDFLAGS) $(FRISBEE2FLAGS) $(FRISBEE2OBJS) $(FRISBEE2LIBS) -o frisbee2
+	cp frisbee2 frisbee2.debug
+	strip frisbee2
 
 log.o:		$(SRCDIR)/log.c decls.h log.h
 	$(CC) $(CFLAGS) -DLOG_TESTBED=$(LOG_TESTBED) -c $(SRCDIR)/log.c
@@ -92,8 +108,8 @@ event.o:	$(SRCDIR)/event.c decls.h log.h event.h
 
 $(FRISBEEDIR)/imageunzip.c: $(FRISBEEDIR)/imagehdr.h $(FRISBEEDIR)/queue.h
 
-frisbee.o:	$(FRISBEEDIR)/imageunzip.c
-	$(CC) -c $(CFLAGS) -DFRISBEE -I$(FRISBEEDIR) -o frisbee.o $<
+imageunzip.o:	$(FRISBEEDIR)/imageunzip.c
+	$(CC) -c $(CFLAGS) -DFRISBEE -I$(FRISBEEDIR) -o imageunzip.o $<
 
 client.o:	decls.h log.h utils.h trace.h
 server.o:	decls.h log.h utils.h trace.h

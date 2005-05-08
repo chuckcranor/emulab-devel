@@ -35,87 +35,87 @@ unsigned long nonetbufs;
 /* Max number of hops multicast hops. */
 #define MCAST_TTL		5
 
-static int		sock;
-struct in_addr		myipaddr;
-static int		nobufdelay = -1;
-int			broadcast = 0;
-
 static void
-CommonInit(void)
+CommonInit(NetInfo_t *ni)
 {
 	struct sockaddr_in	name;
 	struct timeval		timeout;
 	int			i;
 	char			buf[BUFSIZ];
 	struct hostent		*he;
+
+	/* FIXME: Is this the right place to initilize these vars */
+
+	ni->nobufdelay = -1;
+	ni->broadcast = 0;
 	
-	if ((sock = socket(PF_INET, SOCK_DGRAM, IPPROTO_UDP)) < 0)
+	if ((ni->sock = socket(PF_INET, SOCK_DGRAM, IPPROTO_UDP)) < 0)
 		pfatal("Could not allocate a socket");
 
 	i = SOCKBUFSIZE;
-	if (setsockopt(sock, SOL_SOCKET, SO_SNDBUF, &i, sizeof(i)) < 0)
+	if (setsockopt(ni->sock, SOL_SOCKET, SO_SNDBUF, &i, sizeof(i)) < 0)
 		pwarning("Could not increase send socket buffer size to %d",
 			 SOCKBUFSIZE);
     
 	i = SOCKBUFSIZE;
-	if (setsockopt(sock, SOL_SOCKET, SO_RCVBUF, &i, sizeof(i)) < 0)
+	if (setsockopt(ni->sock, SOL_SOCKET, SO_RCVBUF, &i, sizeof(i)) < 0)
 		pwarning("Could not increase recv socket buffer size to %d",
 			 SOCKBUFSIZE);
 
 	name.sin_family      = AF_INET;
-	name.sin_port	     = htons(portnum);
+	name.sin_port	     = htons(ni->portnum);
 	name.sin_addr.s_addr = htonl(INADDR_ANY);
 
 	i = MAXBINDATTEMPTS;
 	while (i) {
-		if (bind(sock, (struct sockaddr *)&name, sizeof(name)) == 0)
+		if (bind(ni->sock, (struct sockaddr *)&name, sizeof(name)) == 0)
 			break;
 
 		if (--i == 0)
-			pfatal("Could not bind to port %d!", portnum);
+			pfatal("Could not bind to port %d!", ni->portnum);
 
 		pwarning("Bind to port %d failed. Will try %d more times!",
-			 portnum, i);
+			 ni->portnum, i);
 		sleep(5);
 	}
-	log("Bound to port %d", portnum);
+	log("Bound to port %d", ni->portnum);
 
 	/*
 	 * At present, we use a multicast address in both directions.
 	 */
-	if ((ntohl(mcastaddr.s_addr) >> 28) == 14) {
+	if ((ntohl(ni->mcastaddr.s_addr) >> 28) == 14) {
 		unsigned int loop = 0, ttl = MCAST_TTL;
 		struct ip_mreq mreq;
 
 		log("Using Multicast");
 
-		mreq.imr_multiaddr.s_addr = mcastaddr.s_addr;
+		mreq.imr_multiaddr.s_addr = ni->mcastaddr.s_addr;
 
-		if (mcastif.s_addr)
-			mreq.imr_interface.s_addr = mcastif.s_addr;
+		if (ni->mcastif.s_addr)
+			mreq.imr_interface.s_addr = ni->mcastif.s_addr;
 		else
 			mreq.imr_interface.s_addr = htonl(INADDR_ANY);
 
-		if (setsockopt(sock, IPPROTO_IP, IP_ADD_MEMBERSHIP,
+		if (setsockopt(ni->sock, IPPROTO_IP, IP_ADD_MEMBERSHIP,
 			       &mreq, sizeof(mreq)) < 0)
 			pfatal("setsockopt(IPPROTO_IP, IP_ADD_MEMBERSHIP)");
 
-		if (setsockopt(sock, IPPROTO_IP, IP_MULTICAST_TTL,
+		if (setsockopt(ni->sock, IPPROTO_IP, IP_MULTICAST_TTL,
 			       &ttl, sizeof(ttl)) < 0) 
 			pfatal("setsockopt(IPPROTO_IP, IP_MULTICAST_TTL)");
 
 		/* Disable local echo */
-		if (setsockopt(sock, IPPROTO_IP, IP_MULTICAST_LOOP,
+		if (setsockopt(ni->sock, IPPROTO_IP, IP_MULTICAST_LOOP,
 			       &loop, sizeof(loop)) < 0)
 			pfatal("setsockopt(IPPROTO_IP, IP_MULTICAST_LOOP)");
 
-		if (mcastif.s_addr &&
-		    setsockopt(sock, IPPROTO_IP, IP_MULTICAST_IF,
-			       &mcastif, sizeof(mcastif)) < 0) {
+		if (ni->mcastif.s_addr &&
+		    setsockopt(ni->sock, IPPROTO_IP, IP_MULTICAST_IF,
+			       &ni->mcastif, sizeof(ni->mcastif)) < 0) {
 			pfatal("setsockopt(IPPROTO_IP, IP_MULTICAST_IF)");
 		}
 	}
-	else if (broadcast) {
+	else if (ni->broadcast) {
 		/*
 		 * Otherwise, we use a broadcast addr. 
 		 */
@@ -123,7 +123,7 @@ CommonInit(void)
 
 		log("Setting broadcast mode\n");
 		
-		if (setsockopt(sock, SOL_SOCKET, SO_BROADCAST,
+		if (setsockopt(ni->sock, SOL_SOCKET, SO_BROADCAST,
 			       &i, sizeof(i)) < 0)
 			pfatal("setsockopt(SOL_SOCKET, SO_BROADCAST)");
 	}
@@ -134,7 +134,7 @@ CommonInit(void)
 	timeout.tv_sec  = 0;
 	timeout.tv_usec = PKTRCV_TIMEOUT;
 	
-	if (setsockopt(sock, SOL_SOCKET, SO_RCVTIMEO,
+	if (setsockopt(ni->sock, SOL_SOCKET, SO_RCVTIMEO,
 		       &timeout, sizeof(timeout)) < 0)
 		pfatal("setsockopt(SOL_SOCKET, SO_RCVTIMEO)");
 
@@ -143,8 +143,8 @@ CommonInit(void)
 	 * tag our outgoing packets.  Otherwise we use the IP address
 	 * associated with our hostname.
 	 */
-	if (mcastif.s_addr)
-		myipaddr.s_addr = mcastif.s_addr;
+	if (ni->mcastif.s_addr)
+		ni->myipaddr.s_addr = ni->mcastif.s_addr;
 	else {
 		if (gethostname(buf, sizeof(buf)) < 0)
 			pfatal("gethostname failed");
@@ -152,34 +152,34 @@ CommonInit(void)
 		if ((he = gethostbyname(buf)) == 0)
 			fatal("gethostbyname: %s", hstrerror(h_errno));
 
-		memcpy((char *)&myipaddr, he->h_addr, sizeof(myipaddr));
+		memcpy((char *)&ni->myipaddr, he->h_addr, sizeof(ni->myipaddr));
 	}
 
 	/*
 	 * Compute the out of buffer space delay.
 	 */
-	if (nobufdelay < 0)
-		nobufdelay = sleeptime(100, NULL, 1);
+	if (ni->nobufdelay < 0)
+		ni->nobufdelay = sleeptime(100, NULL, 1);
 }
 
 int
-ClientNetInit(void)
+ClientNetInit(NetInfo_t *ni)
 {
-	CommonInit();
+	CommonInit(ni);
 	
 	return 1;
 }
 
 unsigned long
-ClientNetID(void)
+ClientNetID(NetInfo_t *ni)
 {
-	return ntohl(myipaddr.s_addr);
+	return ntohl(ni->myipaddr.s_addr);
 }
 
 int
-ServerNetInit(void)
+ServerNetInit(NetInfo_t *ni)
 {
-	CommonInit();
+	CommonInit(ni);
 
 	return 1;
 }
@@ -195,14 +195,14 @@ ServerNetInit(void)
  * Returns 0 for a good packet, 1 for a back packet, -1 on timeout.
  */
 int
-PacketReceive(Packet_t *p)
+PacketReceive(NetInfo_t *ni, Packet_t *p)
 {
 	struct sockaddr_in from;
 	int		   mlen, alen;
 
 	alen = sizeof(from);
 	bzero(&from, alen);
-	if ((mlen = recvfrom(sock, p, sizeof(*p), 0,
+	if ((mlen = recvfrom(ni->sock, p, sizeof(*p), 0,
 			     (struct sockaddr *)&from, &alen)) < 0) {
 		if (errno == EWOULDBLOCK)
 			return -1;
@@ -234,20 +234,20 @@ PacketReceive(Packet_t *p)
  * All packets are actually the same size/structure. 
  */
 void
-PacketSend(Packet_t *p, int *resends)
+PacketSend(NetInfo_t *ni, Packet_t *p, int *resends)
 {
 	struct sockaddr_in to;
 	int		   len, delays;
 
 	len = sizeof(p->hdr) + p->hdr.datalen;
-	p->hdr.srcip = myipaddr.s_addr;
+	p->hdr.srcip = ni->myipaddr.s_addr;
 
 	to.sin_family      = AF_INET;
-	to.sin_port        = htons(portnum);
-	to.sin_addr.s_addr = mcastaddr.s_addr;
+	to.sin_port        = htons(ni->portnum);
+	to.sin_addr.s_addr = ni->mcastaddr.s_addr;
 
 	delays = 0;
-	while (sendto(sock, (void *)p, len, 0, 
+	while (sendto(ni->sock, (void *)p, len, 0, 
 		      (struct sockaddr *)&to, sizeof(to)) < 0) {
 		if (errno != ENOBUFS)
 			pfatal("PacketSend(sendto)");
@@ -257,7 +257,7 @@ PacketSend(Packet_t *p, int *resends)
 		 * to let things drain.
 		 */
 		delays++;
-		fsleep(nobufdelay);
+		fsleep(ni->nobufdelay);
 	}
 
 	DOSTAT(nonetbufs += delays);
@@ -272,7 +272,7 @@ PacketSend(Packet_t *p, int *resends)
  * multicast packets that are not destined for us, but for someone else.
  */
 void
-PacketReply(Packet_t *p)
+PacketReply(NetInfo_t *ni, Packet_t *p)
 {
 	struct sockaddr_in to;
 	int		   len;
@@ -280,11 +280,11 @@ PacketReply(Packet_t *p)
 	len = sizeof(p->hdr) + p->hdr.datalen;
 
 	to.sin_family      = AF_INET;
-	to.sin_port        = htons(portnum);
+	to.sin_port        = htons(ni->portnum);
 	to.sin_addr.s_addr = p->hdr.srcip;
-	p->hdr.srcip       = myipaddr.s_addr;
+	p->hdr.srcip       = ni->myipaddr.s_addr;
 
-	while (sendto(sock, (void *)p, len, 0, 
+	while (sendto(ni->sock, (void *)p, len, 0, 
 		      (struct sockaddr *)&to, sizeof(to)) < 0) {
 		if (errno != ENOBUFS)
 			pfatal("PacketSend(sendto)");
@@ -294,12 +294,12 @@ PacketReply(Packet_t *p)
 		 * to let things drain.
 		 */
 		DOSTAT(nonetbufs++);
-		fsleep(nobufdelay);
+		fsleep(ni->nobufdelay);
 	}
 }
 
 int
-PacketValid(Packet_t *p, int nchunks)
+PacketValid(NetInfo_t *ni, Packet_t *p, int nchunks)
 {
 	switch (p->hdr.type) {
 	case PKTTYPE_REQUEST:

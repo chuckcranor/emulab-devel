@@ -9,6 +9,7 @@
  */
 
 #include <limits.h>	/* CHAR_BIT */
+#include <netinet/in.h>
 #include "log.h"
 
 /*
@@ -278,24 +279,34 @@ typedef struct {
 #define PKTSUBTYPE_PREQUEST	6
 
 /*
+ * Struct to hold Network information.
+ */
+typedef struct {
+	int		portnum;
+	int		broadcast;
+	struct in_addr	mcastaddr;
+	struct in_addr	mcastif;
+	int		sock;
+	struct in_addr	myipaddr;
+	int		nobufdelay;
+} NetInfo_t;
+
+/*
  * Protos.
  */
-int	ClientNetInit(void);
-int	ServerNetInit(void);
-unsigned long ClientNetID(void);
-int	PacketReceive(Packet_t *p);
-void	PacketSend(Packet_t *p, int *resends);
-void	PacketReply(Packet_t *p);
-int	PacketValid(Packet_t *p, int nchunks);
-void	dump_network(void);
+int	ClientNetInit(NetInfo_t *ni);
+int	ServerNetInit(NetInfo_t *ni);
+unsigned long ClientNetID(NetInfo_t *ni);
+int	PacketReceive(NetInfo_t *ni, Packet_t *p);
+void	PacketSend(NetInfo_t *ni, Packet_t *p, int *resends);
+void	PacketReply(NetInfo_t *ni, Packet_t *p);
+int	PacketValid(NetInfo_t *ni, Packet_t *p, int nchunks);
+void	dump_network(NetInfo_t *ni);
+
 
 /*
  * Globals
  */
+
 extern int		debug;
-extern int		portnum;
-extern int		broadcast;
-extern struct in_addr	mcastaddr;
-extern struct in_addr	mcastif;
-extern char	       *filename;
 extern int		clockres;
