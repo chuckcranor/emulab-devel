@@ -1,3 +1,0 @@
-# Device		Mountpoint	FStype	Options		Dump	Pass#
-/dev/md0c		/		ufs	rw		0	0
-proc			/proc		procfs	rw		0	0

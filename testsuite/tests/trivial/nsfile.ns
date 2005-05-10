@@ -1,3 +1,0 @@
-set ns [new Simulator]
-$ns run
-
