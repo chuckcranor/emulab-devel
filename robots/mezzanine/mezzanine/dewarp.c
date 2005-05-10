@@ -21,7 +21,7 @@
  * Desc: Dewarp the blobs (i.e. transform form image -> world cs)
  * Author: Andrew Howard
  * Date: 17 Apr 2002
- * CVS: $Id: dewarp.c,v 1.1.1.1.8.4 2005-04-07 16:27:23 fish Exp $
+ * CVS: $Id: dewarp.c,v 1.1.1.1.8.5 2005-05-10 17:02:08 fish Exp $
  ***************************************************************************/
 
 #include <assert.h>
@@ -147,7 +147,7 @@ int dewarp_init(mezz_mmap_t *mmap)
   
 # if defined(WARP_CANCEL)
 
-  // Calculate error between nominal and actual world coords of calibration points.
+  // Calculate error between nominal and actual world coords of calibration pts.
   double iwpos[N_CAL_PTS][2], epos[N_CAL_PTS][2];
   for ( i = 0; i < N_CAL_PTS; i++ )
   {
@@ -162,29 +162,35 @@ int dewarp_init(mezz_mmap_t *mmap)
   // Create triangles for piecewise linear blending of error corrections.
   for ( i = 0; i < N_BLEND_TRIS; i++ )
   {
-    int validPt = 0;
+    int validTri = 0;
     for ( j = 0; j < 3; j++ )
     {
+      int validPt = 0;
       for ( k = 0; k < 2; k++ )
       {
-	// Assumption: valid points have at least one non-zero image (pixel) coordinate.
+	// Assumption: valid points have >= one non-zero image (pixel) coord.
 	int pixCoord;
-	triangles[i].verts[j][k] =  pixCoord = dewarp->def->ipos[ tri_pattern[i][j] ][k];
+	triangles[i].verts[j][k] =  
+	  pixCoord = dewarp->def->ipos[ tri_pattern[i][j] ][k];
 	validPt |= pixCoord;
 
 	triangles[i].target[j][k] = dewarp->def->wpos[ tri_pattern[i][j] ][k];
 	triangles[i].error[j][k] =  epos[ tri_pattern[i][j] ][k];
       }
+      if ( validPt ) validTri++;
 
       // XXX Horrid Hack Warning - We need right-handed coordinates, but the
       // image Y coordinate goes down from 0 at the top.  Negate it internally.
       triangles[i].verts[j][1] *= -1.0;
     }
-    if ( validPt ) gotTris++;
+    if ( validTri ) gotTris++;
 
-    initBlendTri(&triangles[i]);	// Fill in the rest of the blend triangle.
+    initBlendTri(&triangles[i]);    // Fill in the rest of the blend triangle.
   }
 
+  if ( gotTris != N_BLEND_TRIS )
+    printf("*** Only %d valid triangles, error cancellation is turned off.\n"
+	   gotTris);
 # endif
 
   // Generate the transform values
