@@ -1,3 +1,8 @@
+/*
+ * EMULAB-COPYRIGHT
+ * Copyright (c) 2005 University of Utah and the Flux Group.
+ * All rights reserved.
+ */
 
 #include "config.h"
 
@@ -6,6 +11,21 @@
 #include <assert.h>
 
 #include "rclip.h"
+
+int rc_rect_intersects(rc_rectangle_t r1, rc_rectangle_t r2)
+{
+    int retval = 0;
+
+    assert(r1 != NULL);
+    assert(r2 != NULL);
+
+    retval = !((r1->xmin > (r2->xmax)) ||
+	       (r1->ymin > (r2->ymax)) ||
+	       (r2->xmin > (r1->xmax)) ||
+	       (r2->ymin > (r1->ymax)));
+    
+    return retval;
+}
 
 rc_code_t rc_compute_code(float x, float y, rc_rectangle_t r)
 {
@@ -25,104 +45,7 @@ rc_code_t rc_compute_code(float x, float y, rc_rectangle_t r)
     return c;
 }
 
-#ifndef min
-#define min(a, b) ((a < b) ? a : b)
-#endif
-
-rc_code_t rc_compute_closest(float *x, float *y, rc_rectangle_t r)
-{
-    float left, top, bottom, right, closest;
-    rc_code_t retval = 0;
-
-    left = *x - r->xmin;
-    top = *y - r->ymin;
-    bottom = r->ymax - *y;
-    right = r->xmax - *x;
-
-    closest = min(left, min(top, min(bottom, right)));
-
-    if (left == closest)
-	retval |= RCF_LEFT;
-    else if (top == closest)
-	retval |= RCF_TOP;
-    else if (bottom == closest)
-	retval |= RCF_BOTTOM;
-    else if (right == closest)
-	retval |= RCF_RIGHT;
-
-    if (left < 0.20)
-	retval |= RCF_LEFT;
-    if (top < 0.20)
-	retval |= RCF_TOP;
-    if (bottom < 0.20)
-	retval |= RCF_BOTTOM;
-    if (right < 0.20)
-	retval |= RCF_RIGHT;
-    
-    switch (retval) {
-    case RCF_LEFT:
-	*x = r->xmin;
-	break;
-    case RCF_TOP:
-	*y = r->ymin;
-	break;
-    case RCF_BOTTOM:
-	*y = r->ymax;
-	break;
-    case RCF_RIGHT:
-	*x = r->xmax;
-	break;
-    case RCF_TOP|RCF_LEFT:
-	*x = r->xmin;
-	*y = r->ymin;
-	break;
-    case RCF_TOP|RCF_RIGHT:
-	*x = r->xmax;
-	*y = r->ymin;
-	break;
-    case RCF_BOTTOM|RCF_LEFT:
-	*x = r->xmin;
-	*y = r->ymax;
-	break;
-    case RCF_BOTTOM|RCF_RIGHT:
-	*x = r->xmax;
-	*y = r->ymax;
-	break;
-    }
-    
-    return retval;
-}
-
-rc_code_t rc_closest_corner(float x, float y, rc_rectangle_t r)
-{
-    float tl, tr, bl, br, closest;
-    rc_code_t retval = 0;
-    
-    assert(r != NULL);
-
-    tl = hypotf(x - r->xmin, y - r->ymin);
-    tr = hypotf(x - r->xmax, y - r->ymin);
-    bl = hypotf(x - r->xmin, y - r->ymax);
-    br = hypotf(x - r->xmax, y - r->ymax);
-
-    closest = min(tl, min(tr, min(bl, br)));
-
-    if (tl == closest)
-	retval = RCF_TOP|RCF_LEFT;
-    else if (tr == closest)
-	retval = RCF_TOP|RCF_RIGHT;
-    else if (bl == closest)
-	retval = RCF_BOTTOM|RCF_LEFT;
-    else if (br == closest)
-	retval = RCF_BOTTOM|RCF_RIGHT;
-    else {
-	assert(0);
-    }
-    
-    return retval;
-}
-
-void rc_corner(rc_code_t rc, struct robot_position *rp, rc_rectangle_t r)
+rc_point_t rc_corner(rc_code_t rc, rc_point_t rp, rc_rectangle_t r)
 {
     assert(rc != 0);
     assert(rp != NULL);
@@ -145,7 +68,13 @@ void rc_corner(rc_code_t rc, struct robot_position *rp, rc_rectangle_t r)
 	rp->x = r->xmax;
 	rp->y = r->ymax;
 	break;
+
+    default:
+	assert(0);
+	break;
     }
+
+    return rp;
 }
 
 int rc_clip_line(rc_line_t line, rc_rectangle_t clip)
@@ -200,4 +129,5 @@ int rc_clip_line(rc_line_t line, rc_rectangle_t clip)
     }
     
     /* notreached */
+    assert(0);
 }

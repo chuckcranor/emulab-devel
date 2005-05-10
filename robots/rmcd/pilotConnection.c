@@ -1,12 +1,17 @@
+/*
+ * EMULAB-COPYRIGHT
+ * Copyright (c) 2005 University of Utah and the Flux Group.
+ * All rights reserved.
+ */
 
 #include "config.h"
 
+#include <fcntl.h>
 #include <math.h>
 #include <stdio.h>
 #include <assert.h>
 #include <string.h>
 
-// new
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <fcntl.h>
@@ -15,6 +20,18 @@
 #include "obstacles.h"
 #include "pilotConnection.h"
 
+static char *pc_control_mode_strings[] = {
+    "none",
+    "master",
+    "slave",
+};
+
+static char *pc_connection_state_strings[] = {
+    "disconnected",
+    "connecting",
+    "connected",
+};
+
 char *statsfile = NULL;
 int statsfile_fd = -1;
 FILE *statsfile_FILE = NULL;
@@ -22,6 +39,80 @@ FILE *statsfile_FILE = NULL;
 extern int debug;
 
 struct pilot_connection_data pc_data;
+
+static void pc_disconnected(struct pilot_connection *pc)
+{
+    assert(pc != NULL);
+    assert(pc->pc_state != PCS_DISCONNECTED);
+
+    pc->pc_state = PCS_DISCONNECTED;
+    sc_disconnected(&pc->pc_slave);
+    close(pc->pc_handle->mh_fd);
+    FD_CLR(pc->pc_handle->mh_fd, &pc_data.pcd_read_fds);
+    FD_CLR(pc->pc_handle->mh_fd, &pc_data.pcd_write_fds);
+    mtp_delete_handle(pc->pc_handle);
+    pc->pc_handle = NULL;
+    pc->pc_connection_timeout = RECONNECT_TIMEOUT;
+    pc->pc_control_mode = PCM_NONE;
+    pc->pc_flags &= ~PCF_EXPECTING_RESPONSE;
+}
+
+static void pc_start_connect(struct pilot_connection *pc)
+{
+    int fd;
+    
+    assert(pc != NULL);
+    assert(pc->pc_state == PCS_DISCONNECTED);
+
+    info("start connect for %s\n", pc->pc_robot->hostname);
+
+    if ((pc->pc_handle = mtp_create_handle3(pc->pc_robot->hostname,
+					    PILOT_SERVERPORT,
+					    NULL,
+					    1)) == NULL) {
+	fatal("robot mtp_create_handle");
+    }
+
+    fd = pc->pc_handle->mh_fd;
+    FD_SET(fd, &pc_data.pcd_write_fds);
+    pc->pc_state = PCS_CONNECTING;
+    pc->pc_connection_timeout = CONNECT_TIMEOUT;
+}
+
+static void pc_finish_connect(struct pilot_connection *pc)
+{
+    int rc;
+    
+    assert(pc != NULL);
+    assert(pc->pc_state == PCS_CONNECTING);
+    
+    info("finish connect for %s\n", pc->pc_robot->hostname);
+    
+    fcntl(pc->pc_handle->mh_fd, F_SETFL, 0);
+    FD_CLR(pc->pc_handle->mh_fd, &pc_data.pcd_write_fds);
+    
+    if ((rc = mtp_send_packet2(pc->pc_handle,
+			       MA_Opcode, MTP_CONTROL_INIT,
+			       MA_Role, MTP_ROLE_RMC,
+			       MA_Message, "rmcd v0.1",
+			       MA_TAG_DONE)) != MTP_PP_SUCCESS) {
+	error("could not send init packet to %s %d\n",
+	      pc->pc_robot->hostname, rc);
+	pc_disconnected(pc);
+    }
+    else {
+	mtp_send_packet2(pc->pc_handle,
+			 MA_Opcode, MTP_COMMAND_STOP,
+			 MA_Role, MTP_ROLE_RMC,
+			 MA_RobotID, pc->pc_robot->id,
+			 MA_CommandID, MASTER_COMMAND_ID,
+			 MA_TAG_DONE);
+
+	pc->pc_control_mode = PCM_MASTER;
+	pc->pc_state = PCS_CONNECTED;
+	FD_SET(pc->pc_handle->mh_fd, &pc_data.pcd_read_fds);
+    }
+}
 
 // new 
 void pc_zero_stats(struct pilot_connection *pc) {
@@ -89,7 +180,7 @@ void pc_print_stats(struct pilot_connection *pc) {
 	    }
 	}
     }
-    else if (statsfile_fd == 0) {
+    else if (statsfile_fd < 0) {
 	// noop -- can't open file ever
 	;
     }
@@ -116,20 +207,25 @@ void pc_print_stats(struct pilot_connection *pc) {
 	fflush(statsfile_FILE);
     }
 }
-		
+
 struct pilot_connection *pc_add_robot(struct robot_config *rc)
 {
     struct pilot_connection *retval;
-    struct mtp_packet imp;
 
     assert(rc != NULL);
+    assert(rc->id >= 0);
+    assert(rc->hostname != NULL);
+    assert(strlen(rc->hostname) > 0);
 
     retval = &pc_data.pcd_connections[pc_data.pcd_connection_count];
     pc_data.pcd_connection_count += 1;
-    
+
+    retval->pc_state = PCS_DISCONNECTED;
+    retval->pc_control_mode = PCM_NONE;
     retval->pc_robot = rc;
     retval->pc_slave.sc_pilot = retval;
     retval->pc_master.mc_pilot = retval;
+    retval->pc_master.mc_plan.pp_robot = rc;
 
     // new 
     pc_zero_stats(retval);
@@ -138,24 +234,7 @@ struct pilot_connection *pc_add_robot(struct robot_config *rc)
 	info("debug: connecting to %s\n", rc->hostname);
     }
 
-#if 1
-    mtp_init_packet(&imp,
-		    MA_Opcode, MTP_CONTROL_INIT,
-		    MA_Role, MTP_ROLE_RMC,
-		    MA_Message, "rmcd v0.1",
-		    MA_TAG_DONE);
-    if ((retval->pc_handle = mtp_create_handle2(rc->hostname,
-						PILOT_SERVERPORT,
-						NULL)) == NULL) {
-	fatal("robot mtp_create_handle");
-    }
-    else if (mtp_send_packet(retval->pc_handle, &imp) != MTP_PP_SUCCESS) {
-	fatal("could not send init packet");
-    }
-    else {
-	retval->pc_flags |= PCF_CONNECTED;
-    }
-#endif
+    pc_start_connect(retval);
     
     return retval;
 }
@@ -169,12 +248,29 @@ void pc_dump_info(void)
 	struct pilot_connection *pc;
 	
 	pc = &pc_data.pcd_connections[lpc];
-	info("  %s: flags=0x%x; state=%s; tries=%d\n"
+	info("  %s: state=%s; flags=0x%x; mode=%s; timeout=%d\n"
+	     "    pause: %lu\n"
 	     "    actual: %.2f %.2f %.2f\tlast:  %.2f %.2f %.2f\n"
-	     "    waypt:  %.2f %.2f %.2f %s\n"
+	     "    waypt:  %.2f %.2f %.2f\n"
 	     "    goal:   %.2f %.2f %.2f\n",
 	     pc->pc_robot->hostname,
-	     pc->pc_flags);
+	     pc_connection_state_strings[pc->pc_state],
+	     pc->pc_flags,
+	     pc_control_mode_strings[pc->pc_control_mode],
+	     pc->pc_connection_timeout,
+	     pc->pc_master.mc_pause_time,
+	     pc->pc_master.mc_plan.pp_actual_pos.x,
+	     pc->pc_master.mc_plan.pp_actual_pos.y,
+	     pc->pc_master.mc_plan.pp_actual_pos.theta,
+	     pc->pc_master.mc_plan.pp_last_pos.x,
+	     pc->pc_master.mc_plan.pp_last_pos.y,
+	     pc->pc_master.mc_plan.pp_last_pos.theta,
+	     pc->pc_master.mc_plan.pp_waypoint.x,
+	     pc->pc_master.mc_plan.pp_waypoint.y,
+	     pc->pc_master.mc_plan.pp_waypoint.theta,
+	     pc->pc_master.mc_plan.pp_goal_pos.x,
+	     pc->pc_master.mc_plan.pp_goal_pos.y,
+	     pc->pc_master.mc_plan.pp_goal_pos.theta);
     }
 }
 
@@ -196,18 +292,39 @@ struct pilot_connection *pc_find_pilot(int robot_id)
     return retval;
 }
 
+struct pilot_connection *
+pc_find_pilot_by_location(struct robot_position *rp,
+			  float tolerance,
+			  struct pilot_connection *pc_ignore)
+{
+    struct pilot_connection *retval = NULL;
+    int lpc;
+    
+    assert(rp != NULL);
+    assert(tolerance > 0.0);
+
+    for (lpc = 0; (lpc < pc_data.pcd_connection_count) && !retval; lpc++) {
+	struct pilot_connection *pc = &pc_data.pcd_connections[lpc];
+	float r, theta;
+	
+	mtp_polar(rp, &pc->pc_master.mc_plan.pp_actual_pos, &r, &theta);
+	if ((r < tolerance) && (pc != pc_ignore))
+	    retval = pc;
+    }
+    
+    return retval;
+}
+
 void pc_handle_emc_packet(struct pilot_connection *pc, struct mtp_packet *mp)
 {
     assert(pc != NULL);
     assert(mp != NULL);
 
     sc_handle_emc_packet(&pc->pc_slave, mp);
-    if (pc->pc_slave.sc_state == SS_IDLE) {
+    if (pc->pc_slave.sc_state == SS_IDLE)
 	mc_handle_emc_packet(&pc->pc_master, mp);
-    }
-    else {
+    else
 	pc->pc_control_mode = PCM_SLAVE;
-    }
 }
 
 void pc_handle_pilot_packet(struct pilot_connection *pc, struct mtp_packet *mp)
@@ -216,11 +333,14 @@ void pc_handle_pilot_packet(struct pilot_connection *pc, struct mtp_packet *mp)
     assert(mp != NULL);
     
     if (debug > 1) {
-	fprintf(stderr, "%s pilot packet: ", pc->pc_robot->hostname);
+	info("%s pilot packet: ", pc->pc_robot->hostname);
 	mtp_print_packet(stderr, mp);
     }
 
     switch (pc->pc_control_mode) {
+    case PCM_NONE:
+	assert(0);
+	break;
     case PCM_SLAVE:
 	sc_handle_pilot_packet(&pc->pc_slave, mp);
 	if (pc->pc_slave.sc_state == SS_IDLE) {
@@ -239,26 +359,32 @@ void pc_handle_signal(fd_set *rready, fd_set *wready)
     int lpc;
     
     assert(rready != NULL);
-    // assert(wready != NULL);
+    assert(wready != NULL);
 
     for (lpc = 0; lpc < pc_data.pcd_connection_count; lpc++) {
 	struct pilot_connection *pc = &pc_data.pcd_connections[lpc];
 	mtp_handle_t mh = pc->pc_handle;
 
 	if ((mh != NULL) && FD_ISSET(mh->mh_fd, rready)) {
+	    assert(pc->pc_state == PCS_CONNECTED);
+	    
 	    do {
 		struct mtp_packet mp;
 
 		if (mtp_receive_packet(mh, &mp) != MTP_PP_SUCCESS) {
-		    pc->pc_flags &= ~PCF_CONNECTED;
-		    pc->pc_flags |= PCF_CONNECTING;
-
-		    fatal("lost pilot connection");
+		    pc_disconnected(pc);
+		    mh = NULL;
 		}
 		else {
 		    pc_handle_pilot_packet(pc, &mp);
 		}
-	    } while ((pc->pc_flags & PCF_CONNECTED) && (mh->mh_remaining > 0));
+	    } while ((pc->pc_state == PCS_CONNECTED) &&
+		     (mh != NULL) && (mh->mh_remaining > 0));
+	}
+	if ((mh != NULL) && FD_ISSET(mh->mh_fd, wready)) {
+	    assert(pc->pc_state == PCS_CONNECTING);
+	    
+	    pc_finish_connect(pc);
 	}
     }
 }
@@ -272,7 +398,46 @@ void pc_handle_timeout(struct timeval *current_time)
     for (lpc = 0; lpc < pc_data.pcd_connection_count; lpc++) {
 	struct pilot_connection *pc = &pc_data.pcd_connections[lpc];
 
-	if (pc->pc_control_mode == PCM_MASTER)
+	switch (pc->pc_state) {
+	case PCS_DISCONNECTED:
+	    pc->pc_connection_timeout -= 1;
+	    info("check %d\n", pc->pc_connection_timeout);
+	    if (pc->pc_connection_timeout == 0) {
+		info("retrying connection for %s\n", pc->pc_robot->hostname);
+		pc_start_connect(pc);
+	    }
+	    break;
+	case PCS_CONNECTING:
+	    pc->pc_connection_timeout -= 1;
+	    info("ccheck %d\n", pc->pc_connection_timeout);
+	    if (pc->pc_connection_timeout == 0) {
+		info("dropping connection for %s\n", pc->pc_robot->hostname);
+		pc_disconnected(pc);
+	    }
+	    break;
+	case PCS_CONNECTED:
+	    if (pc->pc_flags & PCF_EXPECTING_RESPONSE) {
+		info("dcheck %d\n", pc->pc_connection_timeout);
+		pc->pc_connection_timeout -= 1;
+		if (pc->pc_connection_timeout == 0) {
+		    info("dropping connection for %s\n",
+			 pc->pc_robot->hostname);
+		    pc_disconnected(pc);
+		}
+	    }
+	    break;
+	}
+	
+	switch (pc->pc_control_mode) {
+	case PCM_NONE:
+	    break;
+	case PCM_SLAVE:
+	    break;
+	case PCM_MASTER:
 	    mc_handle_tick(&pc->pc_master);
+	    break;
+	}
     }
+
+    ob_tick();
 }
