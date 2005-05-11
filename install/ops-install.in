@@ -33,6 +33,7 @@ my $BOSSNODE    = '@BOSSNODE@';
 my $BOSSNODE_IP = '@BOSSNODE_IP@';
 my $USERNODE_IP = '@USERNODE_IP@';
 my $LOGFACIL    = '@TBLOGFACIL@';
+my $ELABINELAB  = @ELABINELAB@;
 my $WINSUPPORT  = @WINSUPPORT@;
 
 # For /share export below.
@@ -130,12 +131,13 @@ my $SMBCONF_HEAD    = "$SMBCONF_FILE.head";
 #
 # Some directories we care about
 #
-my $LIST_DIR   = "/etc/mail/lists";
-my $TIPLOG_DIR = "/var/log/tiplogs";
-my $PORTSDIR   = "/usr/ports/misc";
-my $SRCDIR     = '@srcdir@';
-my $TOP_SRCDIR = "@top_srcdir@";
-my $RCDIR      = "/usr/local/etc/rc.d";
+my $LIST_DIR      = "/etc/mail/lists";
+my $TIPLOG_DIR    = "/var/log/tiplogs";
+my $PORTSDIR      = "/usr/ports";
+my $PORTSMISCDIR  = "$PORTSDIR/misc";
+my $SRCDIR        = '@srcdir@';
+my $TOP_SRCDIR    = "@top_srcdir@";
+my $RCDIR         = "/usr/local/etc/rc.d";
 
 #
 # And some lists that we use
@@ -227,7 +229,7 @@ Phase "ports", "Installing ports", sub {
 	if ($packagedir) {
 	    PhaseSkip("Package directory provided");
 	}
-	DoneIfExists("$PORTSDIR/emulab-ops");
+	DoneIfExists("$PORTSMISCDIR/emulab-ops");
 	ExecQuietFatal("$SH $SRCDIR/ports/ports-install");
     };
     Phase "pinstall", "Installing ports (may take a while)", sub {
@@ -243,11 +245,47 @@ Phase "ports", "Installing ports", sub {
 	#
 	my $pwd = `$PWD`;
 	chomp $pwd;
-	chdir "$PORTSDIR/emulab-ops" or
-		PhaseFail "Unable to change to $PORTSDIR/emulab-ops: $!";
+	chdir "$PORTSMISCDIR/emulab-ops" or
+		PhaseFail "Unable to change to $PORTSMISCDIR/emulab-ops: $!";
 	ExecQuietFatal("make -DBATCH install");
 	chdir $pwd;
     };
+};
+
+# XXX Temporary.
+Phase "portfixup", "Fixing up packages", sub {
+    Phase "rsync", "Looking for rsync and installing", sub {
+	if (!ExecQuiet("$PKG_INFO -x rsync")) {
+	    PhaseSkip("rsync already installed");
+	}
+
+	PhaseFail("Must have a PKG_PATH variable set in your environment")
+	    if (!exists($ENV{"PKG_PATH"}));
+	
+	ExecQuietFatal("$PKG_ADD rsync-2.6.3_1");
+    };
+    if ($WINSUPPORT) {
+	Phase "samba", "Looking for Samba and installing", sub {
+	    if (!ExecQuiet("$PKG_INFO -x samba")) {
+		PhaseSkip("samba already installed");
+	    }
+	    
+	    PhaseFail("Must have a PKG_PATH variable set in your environment")
+		if (!exists($ENV{"PKG_PATH"}));
+	
+	    ExecQuietFatal("$PKG_ADD samba-3.0.7,1");
+	};
+	Phase "gcc30", "Looking for GCC 3.0 and installing", sub {
+	    if (!ExecQuiet("$PKG_INFO -x gcc30")) {
+		PhaseSkip("GCC 3.0 already installed");
+	    }
+	    
+	    PhaseFail("Must have a PKG_PATH variable set in your environment")
+		if (!exists($ENV{"PKG_PATH"}));
+	
+	    ExecQuietFatal("$PKG_ADD gcc30-3.0.4_1");
+	};
+    }
 };
 
 Phase "patches", "Applying patches", sub {
@@ -264,7 +302,7 @@ Phase "rc.conf", "Adding testbed content to rc.conf", sub {
     AppendToFileFatal($RCCONF,
 		      qq|sendmail_enable="YES"|,
 		      qq|nfs_server_enable="YES"|,
-		      ($WINSUPPORT ? qq|enable_smbd="YES"| : ()),
+		      ($WINSUPPORT ? qq|smbd_enable="YES"| : ()),
 		      qq|nfs_server_flags="-u -t -n 16"|,
 		      qq|syslogd_flags=""|);
 };
@@ -502,6 +540,11 @@ if ($WINSUPPORT) {
 	    DoneIfDoesntExist("$RCDIR/samba.sh.sample");
 	    ExecQuietFatal("$MV -f $RCDIR/samba.sh.sample $RCDIR/samba.sh");
 	};
+	if ($ELABINELAB) {	
+	    Phase "starting", "Starting Samba", sub {
+		ExecQuietFatal("$RCDIR/samba.sh start");
+	    };
+	}
     };
 }
 

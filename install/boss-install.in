@@ -25,6 +25,7 @@ my $SRCDIR     = '@srcdir@';
 my $TOP_SRCDIR = '@top_srcdir@';
 my $DBNAME     = "@TBDBNAME@";
 my $ELABINELAB = @ELABINELAB@;
+my $WINSUPPORT = @WINSUPPORT@;
 
 my $OURDOMAIN  = '@OURDOMAIN@';
 
@@ -125,7 +126,8 @@ my $MYSQL_LOGDIR  = "$LOGDIR/mysql";
 my $RCDIR         = "/usr/local/etc/rc.d";
 my $USERSVAR_DIR  = "$PREFIX/usersvar";
 my $OPSDIR_DIR    = "$PREFIX/opsdir";
-my $PORTSDIR      = "/usr/ports/misc";
+my $PORTSDIR      = "/usr/ports";
+my $PORTSMISCDIR  = "$PORTSDIR/misc";
 my $MIBPATH       = "/usr/local/share/snmp/mibs";
 my $TFTP_DIR      = "$PREFIX/tftpboot";
 my $TFTP_PROJ_DIR = "$TFTP_DIR/proj";
@@ -343,7 +345,7 @@ Phase "ports", "Installing ports", sub {
 	PhaseSkip("Packages installed okay");
     }
     Phase "pcopy", "Copying ports into place", sub {
-	DoneIfExists("$PORTSDIR/emulab-boss");
+	DoneIfExists("$PORTSMISCDIR/emulab-boss");
 	ExecQuietFatal("$SH $SRCDIR/ports/ports-install");
     };
     # Ick. The php4 port is broken with SSL, so we have to patch it - hopefully
@@ -356,8 +358,34 @@ Phase "ports", "Installing ports", sub {
     };
     PhaseFail("Please install ports manually, since some\n of them are " .
 	      "interactive. Run: \n" .
-	      "cd $PORTSDIR/emulab-boss && make install\n" .
+	      "cd $PORTSMISCDIR/emulab-boss && make install\n" .
 	      "then re-run this script.");
+};
+
+# XXX Temporary.
+Phase "portfixup", "Fixing up packages", sub {
+    Phase "rsync", "Looking for rsync", sub {
+	if (!ExecQuiet("$PKG_INFO -x rsync")) {
+	    PhaseSkip("rsync already installed");
+	}
+
+	PhaseFail("Must have a PKG_PATH variable set in your environment")
+	    if (!exists($ENV{"PKG_PATH"}));
+	
+	ExecQuietFatal("$PKG_ADD rsync-2.6.3_1");
+    };
+    if ($WINSUPPORT) {
+	Phase "gcc30", "Looking for GCC 3.0 and installing", sub {
+	    if (!ExecQuiet("$PKG_INFO -x gcc30")) {
+		PhaseSkip("GCC 3.0 already installed");
+	    }
+	    
+	    PhaseFail("Must have a PKG_PATH variable set in your environment")
+		if (!exists($ENV{"PKG_PATH"}));
+	
+	    ExecQuietFatal("$PKG_ADD gcc30-3.0.4_1");
+	};
+    }
 };
 
 Phase "patches", "Applying patches", sub {
@@ -889,15 +917,16 @@ Phase "named", "Setting up initial named configuration", sub {
     Phase "starting", "Starting named", sub {
 	ExecQuietFatal("$RCDIR/1.named.sh start");
     };
+    Phase "copying", "Copying resolv.conf over to ops", sub {
+ 	ExecQuietFatal("$SCP $TOP_OBJDIR/named/resolv.conf.ops ".
+		       "     ${USERNODE}:/etc/resolv.conf");
+    };
 };
 
 Phase "firstuser", "Setting up initial user (elabman)", sub {
     PhaseSkip("elabman already created")
 	if (-d "/users/elabman");
-    PhaseSkip("Not needed unless in batch mode")
-	if (!$batchmode);
-    ExecQuietFatal("perl $TOP_OBJDIR/utils/firstuser ".
-		   ($batchmode ? " -b" : "") .
+    ExecQuietFatal("perl $TOP_OBJDIR/utils/firstuser -b ".
 		   (defined($password) ? " -p $password" : ""));
 };
 
