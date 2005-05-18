@@ -88,13 +88,13 @@ static char	 chunkbuf[SUBBLOCKSIZE];
 int		 readmbr(int slice);
 int		 fixmbr(int slice, int dtype);
 #ifdef FRISBEE
-static int	 write_subblock(int, char *);
+static int	 write_subblock(int, const char *);
 #endif
-static int	 inflate_subblock(char *);
+static int	 inflate_subblock(const char *);
 void		 writezeros(off_t offset, off_t zcount);
 void		 writedata(off_t offset, size_t count, void *buf);
 
-static void	getrelocinfo(blockhdr_t *hdr);
+static void	getrelocinfo(const blockhdr_t *hdr);
 static void	applyrelocs(off_t offset, size_t cc, void *buf);
 
 static int	 seekable;
@@ -999,7 +999,7 @@ DiskWriter(void *arg)
  * Just write the raw, compressed chunk data to disk
  */
 static int
-write_subblock(int chunkno, char *chunkbufp)
+write_subblock(int chunkno, const char *chunkbufp)
 {
 	writebuf_t	*wbuf;
 	off_t		offset, size, bytesleft;
@@ -1024,11 +1024,12 @@ write_subblock(int chunkno, char *chunkbufp)
 #endif
 
 static int
-inflate_subblock(char *chunkbufp)
+inflate_subblock(const char *chunkbufp)
 {
 	int		cc, err, count, ibsize = 0, ibleft = 0;
 	z_stream	d_stream; /* inflation stream */
-	blockhdr_t	*blockhdr;
+	const blockhdr_t *blockhdr; /* this should NOT be modified */
+	int		regioncount, csize;
 	struct region	*curregion;
 	off_t		offset, size;
 	int		chunkbytes = SUBBLOCKSIZE;
@@ -1049,7 +1050,7 @@ inflate_subblock(char *chunkbufp)
 	 * Grab the header. It is uncompressed, and holds the real
 	 * image size and the magic number. Advance the pointer too.
 	 */
-	blockhdr    = (blockhdr_t *) chunkbufp;
+	blockhdr    = (const blockhdr_t *) chunkbufp;
 	chunkbufp  += DEFAULTREGIONSIZE;
 	chunkbytes -= DEFAULTREGIONSIZE;
 	
@@ -1106,19 +1107,25 @@ inflate_subblock(char *chunkbufp)
 	offset = sectobytes(curregion->start);
 	size   = sectobytes(curregion->size);
 	assert(size > 0);
+
+	regioncount = blockhdr->regioncount;
+	csize       = blockhdr->size;
+	assert(csize > 0);
+
 	curregion++;
-	blockhdr->regioncount--;
+	regioncount--;
 
 	if (debug == 1)
-		fprintf(stderr, "Decompressing: %14lld --> ", offset);
+		fprintf(stderr, "Decompressing chunk %04d: %14lld --> ", 
+			blockhdr->blockindex, offset);
 
 	wbuf = NULL;
 	while (1) {
 		/*
 		 * Read just up to the end of compressed data.
 		 */
-		count              = blockhdr->size;
-		blockhdr->size     = 0;
+		count              = csize;
+		csize     = 0;
 		d_stream.next_in   = (Bytef *)chunkbufp;
 		d_stream.avail_in  = count;
 		chunkbufp	  += count;
@@ -1230,14 +1237,14 @@ inflate_subblock(char *chunkbufp)
 				/*
 				 * No more regions. Must be done.
 				 */
-				if (!blockhdr->regioncount)
+				if (!regioncount)
 					break;
 
 				newoffset = sectobytes(curregion->start);
 				size      = sectobytes(curregion->size);
 				assert(size);
 				curregion++;
-				blockhdr->regioncount--;
+				regioncount--;
 				assert((newoffset-offset) > 0);
 				if (dofill) {
 					wbzero = alloc_writebuf(offset,
@@ -1277,9 +1284,9 @@ inflate_subblock(char *chunkbufp)
 	CHECK_ERR(err, "inflateEnd");
 
 	assert(wbuf == NULL);
-	assert(blockhdr->regioncount == 0);
+	assert(regioncount == 0);
 	assert(size == 0);
-	assert(blockhdr->size == 0);
+	assert(csize == 0);
 
 	/*
 	 * Handle any trailing free space
@@ -1491,9 +1498,9 @@ static void reloc_lilo(void *addr, int reloctype, uint32_t size);
 static void reloc_lilocksum(void *addr, uint32_t off, uint32_t size);
 
 static void
-getrelocinfo(blockhdr_t *hdr)
+getrelocinfo(const blockhdr_t *hdr)
 {
-	struct blockreloc *relocs;
+	const struct blockreloc *relocs;
 
 	if (reloctable) {
 		free(reloctable);
@@ -1509,8 +1516,8 @@ getrelocinfo(blockhdr_t *hdr)
 		exit(1);
 	}
 
-	relocs = (struct blockreloc *)
-		((char *)&hdr[1] + hdr->regioncount * sizeof(struct region));
+	relocs = (const struct blockreloc *)
+		((const char *)&hdr[1] + hdr->regioncount * sizeof(struct region));
 	memcpy(reloctable, relocs, numrelocs * sizeof(struct blockreloc));
 }
 
