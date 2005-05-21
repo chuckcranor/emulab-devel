@@ -1,5 +1,4 @@
-Here are the current plans for modifying Frisbee to be both a client and a 
-server.  Feedback welcome:
+Current design of Frisbee Proxy.
 
 Current Design:
 
