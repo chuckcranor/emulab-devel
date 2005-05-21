@@ -32,6 +32,9 @@
 /* Globals */
 static char	       *filename;
 
+int			killme = 0;
+int			ServerDone = 0;
+
 static int		tracing = 0;
 static int		dynburst = 0;
 static int		timeout = SERVER_INACTIVE_SECONDS;
@@ -40,7 +43,6 @@ static volatile int	burstsize = SERVER_BURST_SIZE;
 static int		maxburstsize = SERVER_DYNBURST_SIZE;
 static int		burstinterval = SERVER_BURST_GAP;
 static unsigned long	bandwidth;
-static int		killme;
 static int		blockslost;
 static int		clientretries;
 static char		*lostmap;
@@ -103,7 +105,13 @@ struct FileInfo {
 	int	blocks;		/* Number of BLOCKSIZE blocks */
 	int	chunks;		/* Number of CHUNKSIZE chunks */
 };
-static struct FileInfo FileInfo;
+static struct FileInfo FileInfo = {-1,-1,-1};
+
+void ServerSetFileInfo(int blocks)
+{
+	FileInfo.blocks = blocks;
+	FileInfo.chunks = blocks / CHUNKSIZE;
+}
 
 /*
  * The work queue of regions a client has requested.
@@ -115,7 +123,6 @@ typedef struct {
 	BlockMap_t	blockmap;	/* Which blocks of the chunk */
 } WQelem_t;
 static queue_head_t     WorkQ;
-static pthread_mutex_t	WorkQLock;
 static int		WorkQDelay = -1;
 static int		WorkQSize = 0;
 static int		WorkChunk, WorkBlock, WorkCount;
@@ -142,7 +149,6 @@ static int		WorkQMax = 0;
 static void
 WorkQueueInit(void)
 {
-	pthread_mutex_init(&WorkQLock, NULL);
 	queue_init(&WorkQ);
 
 	if (WorkQDelay < 0)
@@ -158,35 +164,48 @@ WorkQueueInit(void)
  * If map==NULL, then we want the entire chunk.
  */
 static int
-WorkQueueEnqueue(int chunk, BlockMap_t *map, int count)
+WorkQueueEnqueue(int chunk, BlockMap_t *map, int count,
+		 int uncond,
+		 int origlocked)
 {
         WQelem_t	*wqel;
 	int		elt, blocks;
 
 	if (count == 0)
 		return 0;
-
-	pthread_mutex_lock(&WorkQLock);
+	
+	if (!origlocked)
+		GetGlobalLock();
 
 	/*
 	 * Common case: a full chunk request for the full block we are
-	 * currently sending.  Don't queue.
+	 * currently sending.  Or any request for a chunk in which we
+	 * are sending all that we have (ie dequeued the entire
+	 * blockmap rather than just a range)
 	 */
-	if (count == CHUNKSIZE && chunk == WorkChunk && count == WorkCount) {
+	if (!uncond 
+	    && chunk == WorkChunk 
+	    && ((count == CHUNKSIZE && count == WorkCount) 
+		|| (WorkCount == -1)))
+	{
 		EVENT(1, EV_WORKMERGE, ni->mcastaddr, chunk, count, count, ~0);
-		pthread_mutex_unlock(&WorkQLock);
+		if (!origlocked)
+			ReleaseGlobalLock();
 		return 0;
 	}
 
 	elt = WorkQSize - 1;
-	queue_riterate(&WorkQ, wqel, WQelem_t *, chain) {
+ 	queue_riterate(&WorkQ, wqel, WQelem_t *, chain) {
 		if (wqel->chunk == chunk) {
 			/*
-			 * If this is the head element of the queue
-			 * we can only merge if the request is beyond
-			 * the range being currently processed.
+			 * If this is the head element of the queue we
+			 * can only merge if the request is beyond the
+			 * range being currently processed.  However,
+			 * this only apples when we are dequeuing ranges
+			 * and not the entire map.
 			 */
-			if ((WQelem_t *)queue_first(&WorkQ) == wqel &&
+			if (WorkCount != -1 &&
+			    (WQelem_t *)queue_first(&WorkQ) == wqel &&
 			    chunk == WorkChunk &&
 			    BlockMapFirst(map) < WorkBlock + WorkCount) {
 				elt--;
@@ -205,7 +224,8 @@ WorkQueueEnqueue(int chunk, BlockMap_t *map, int count)
 			      chunk, wqel->nblocks, blocks, elt);
 			wqel->nblocks += blocks;
 			assert(wqel->nblocks <= CHUNKSIZE);
-			pthread_mutex_unlock(&WorkQLock);
+			if (!origlocked)
+				ReleaseGlobalLock();
 			return 0;
 		}
 		elt--;
@@ -225,7 +245,15 @@ WorkQueueEnqueue(int chunk, BlockMap_t *map, int count)
 		WorkQMax = WorkQSize;
 #endif
 
-	pthread_mutex_unlock(&WorkQLock);
+	if (FrisbeeMode & FRISBEE_PROXY) {
+		ChunkBuffer_t * cached;
+		cached = GetCachedChunk(chunk);
+		if (cached)
+			cached->pending++;
+	}
+
+	if (!origlocked)
+		ReleaseGlobalLock();
 
 	EVENT(1, EV_WORKENQ, ni->mcastaddr, chunk, count, WorkQSize, 0);
 	return 1;
@@ -237,7 +265,7 @@ WorkQueueDequeue(int *chunkp, int *blockp, int *countp)
 	WQelem_t	*wqel;
 	int		chunk, block, count;
 
-	pthread_mutex_lock(&WorkQLock);
+	GetGlobalLock();
 
 	/*
 	 * Condvars broken in linux threads impl, so use this rather bogus
@@ -245,7 +273,7 @@ WorkQueueDequeue(int *chunkp, int *blockp, int *countp)
 	 */
 	if (queue_empty(&WorkQ)) {
 		WorkChunk = -1;
-		pthread_mutex_unlock(&WorkQLock);
+		ReleaseGlobalLock();
 		fsleep(WorkQDelay);
 		return 0;
 	}
@@ -268,13 +296,56 @@ WorkQueueDequeue(int *chunkp, int *blockp, int *countp)
 	WorkBlock = block;
 	WorkCount = count;
 
-	pthread_mutex_unlock(&WorkQLock);
+	ReleaseGlobalLock();
 
 	*chunkp = chunk;
 	*blockp = block;
 	*countp = count;
 
 	EVENT(1, EV_WORKDEQ, ni->mcastaddr, chunk, block, count, WorkQSize);
+	return 1;
+}
+
+/* Note: will uncondationaly release the lock if it returns 0 */
+static int
+WorkQueueDequeueMap(int *chunkp, BlockMap_t *map, int origlocked)
+{
+	WQelem_t	*wqel;
+	int		chunk;
+
+	if (!origlocked)
+		GetGlobalLock();
+
+	/*
+	 * Condvars broken in linux threads impl, so use this rather bogus
+	 * sleep to keep from churning cycles. 
+	 */
+	if (queue_empty(&WorkQ)) {
+		WorkChunk = -1;
+		ReleaseGlobalLock();
+		fsleep(WorkQDelay);
+		return 0;
+	}
+	
+	wqel = (WQelem_t *) queue_first(&WorkQ);
+	chunk = wqel->chunk;
+	memcpy(map, &wqel->blockmap, sizeof(BlockMap_t));
+
+	queue_remove(&WorkQ, wqel, WQelem_t *, chain);
+	free(wqel);
+	WorkQSize--;
+
+	WorkChunk = chunk;
+	WorkBlock = 0;
+	WorkCount = -1;
+
+	if (!origlocked)
+		ReleaseGlobalLock();
+
+	*chunkp = chunk;
+	
+	/* FIXME: This should probably be a new event */
+	EVENT(1, EV_WORKDEQ, ni->mcastaddr, chunk, 0, CHUNKSIZE, WorkQSize);
 	return 1;
 }
 
@@ -289,7 +360,7 @@ ClientEnqueueMap(int chunk, BlockMap_t *map, int count, int isretry)
 		DOSTAT(partialreq++);
 	}
 
-	enqueued = WorkQueueEnqueue(chunk, map, count);
+	enqueued = WorkQueueEnqueue(chunk, map, count, 0, UNLOCKED);
 	if (!enqueued)
 		DOSTAT(qmerges++);
 #ifdef STATS
@@ -320,6 +391,20 @@ ClientEnqueueMap(int chunk, BlockMap_t *map, int count, int isretry)
 	}
 }
 
+int
+WorkQueueCount(int chunk)
+{
+	WQelem_t	*wqel;
+	int		c = 0;
+
+	queue_iterate(&WorkQ, wqel, WQelem_t *, chain) {
+		if (wqel->chunk == chunk)
+			c++;
+	}
+	
+	return c;
+}
+
 /*
  * A client joins. We print out the time at which the client joins, and
  * return a reply packet with the number of chunks in the file so that
@@ -335,6 +420,14 @@ ClientJoin(NetInfo_t *ni, Packet_t *p)
 {
 	struct in_addr	ipaddr   = { p->hdr.srcip };
 	unsigned int    clientid = p->msg.join.clientid;
+
+	/*
+	 * In proxy mode ignore until we connect to the server and get
+	 * the file size.   The client will resend ClientJoin messages
+	 * until it gets a reply so there is no harm in dropping the
+	 * message.
+	 */
+	if (FileInfo.blocks == -1) return;
 
 	/*
 	 * Return fileinfo. Duplicates are harmless.
@@ -602,15 +695,125 @@ ServerRecvThread(void *arg)
  *
  * NOTES: Perhaps use readv into a vector of packet buffers?
  */
+
+typedef struct {
+	int idlelastloop;
+	int throttle;
+	struct timeval startnext;
+	int thisburst;
+} PlayFrisbeeStats_t;
+
+/* Returns true if the thread should terminate */
+static int
+HandleEmptyQueue(PlayFrisbeeStats_t * s)
+{
+	struct timeval stamp;
+
+	gettimeofday(&stamp, 0);
+
+	/*
+	 * Restart an interval on every idle
+	 */
+	if (burstinterval > 0) {
+		addusec(&s->startnext, &stamp, burstinterval);
+		s->throttle = 0;
+	}
+
+	/* If zero, never exit */
+	if (timeout == 0)
+		return 0;
+			
+#ifdef STATS
+	/* If less than zero, exit when last cilent leaves */
+	if (timeout < 0 &&
+	    Stats.joins > 0 && activeclients == 0) {
+		fsleep(2000000);
+		log("Last client left!");
+		return 1;
+	}
+#endif
+
+	if (s->idlelastloop) {
+		if (timeout > 0 &&
+		    stamp.tv_sec - IdleTimeStamp.tv_sec >
+		    timeout) {
+			log("No requests for %d seconds!",
+			    timeout);
+			return 1;
+		}
+	} else {
+		DOSTAT(goesidle++);
+		IdleTimeStamp = stamp;
+		s->idlelastloop = 1;
+	}
+	return 0;
+}
+
+static void
+SendBlock(NetInfo_t *ni, PlayFrisbeeStats_t * s, int chunk, int block, char * data)
+{
+	Packet_t	packet, *p = &packet;
+	int resends;
+
+	p->hdr.type    = PKTTYPE_REQUEST;
+	p->hdr.subtype = PKTSUBTYPE_BLOCK;
+	p->hdr.datalen = sizeof(p->msg.block);
+	p->msg.block.chunk = chunk;
+	p->msg.block.block = block;
+	memcpy(p->msg.block.buf, data, BLOCKSIZE);
+
+	PacketSend(ni, p, &resends);
+	sendretries += resends;
+	DOSTAT(blockssent++);
+	EVENT(resends ? 1 : 3, EV_BLOCKMSG, ni->mcastaddr,
+	      chunk, block, resends, 0);
+
+	/*
+	 * Completed a burst.  Adjust the busrtsize
+	 * if necessary and delay as required.
+	 */
+	if (burstinterval > 0 &&
+	    ++s->throttle >= burstsize) {
+		s->thisburst += s->throttle;
+
+		/*
+		 * XXX if we overran our interval, we
+		 * reset the base time so we don't
+		 * accumulate error.
+		 */
+		if (!sleeptil(&s->startnext)) {
+			EVENT(1, EV_OVERRUN, ni->mcastaddr,
+			      s->startnext.tv_sec,
+			      s->startnext.tv_usec,
+			      chunk, block+j);
+			gettimeofday(&s->startnext, 0);
+			DOSTAT(missed++);
+		} else {
+			if (s->thisburst > burstsize)
+				EVENT(1, EV_LONGBURST,
+				      ni->mcastaddr,
+				      thisburst,
+				      burstsize,
+				      chunk, block+j);
+			s->thisburst = 0;
+		}
+		if (dynburst)
+			calcburst();
+		addusec(&s->startnext, &s->startnext,
+			burstinterval);
+		s->throttle = 0;
+		DOSTAT(intervals++);
+	}
+}
+
 static void
 PlayFrisbee(NetInfo_t *ni)
 {
-	int		chunk, block, blockcount, cc, j, idlelastloop = 0;
-	int		startblock, lastblock, throttle = 0;
-	Packet_t	packet, *p = &packet;
+	PlayFrisbeeStats_t s = {0};
+	int		chunk, block, blockcount, cc, j;
+	int		startblock, lastblock;
 	char		*databuf;
 	off_t		offset;
-	struct timeval	startnext;
 
 	if ((databuf = malloc(readsize * BLOCKSIZE)) == NULL)
 		fatal("could not allocate read buffer");
@@ -627,48 +830,14 @@ PlayFrisbee(NetInfo_t *ni)
 		 * spin.
 		 */
 		if (! WorkQueueDequeue(&chunk, &startblock, &blockcount)) {
-			struct timeval stamp;
-
-			gettimeofday(&stamp, 0);
-
-			/*
-			 * Restart an interval on every idle
-			 */
-			if (burstinterval > 0) {
-				addusec(&startnext, &stamp, burstinterval);
-				throttle = 0;
-			}
-
-			/* If zero, never exit */
-			if (timeout == 0)
-				continue;
-			
-#ifdef STATS
-			/* If less than zero, exit when last cilent leaves */
-			if (timeout < 0 &&
-			    Stats.joins > 0 && activeclients == 0) {
-				fsleep(2000000);
-				log("Last client left!");
+			int quit;
+			quit = HandleEmptyQueue(&s);
+			if (quit)
 				break;
-			}
-#endif
-
-			if (idlelastloop) {
-				if (timeout > 0 &&
-				    stamp.tv_sec - IdleTimeStamp.tv_sec >
-				    timeout) {
-					log("No requests for %d seconds!",
-					    timeout);
-					break;
-				}
-			} else {
-				DOSTAT(goesidle++);
-				IdleTimeStamp = stamp;
-				idlelastloop = 1;
-			}
-			continue;
+			else
+				continue;
 		}
-		idlelastloop = 0;
+		s.idlelastloop = 0;
 		
 		lastblock = startblock + blockcount;
 
@@ -679,12 +848,11 @@ PlayFrisbee(NetInfo_t *ni)
 		for (block = startblock; block < lastblock; ) {
 			int	readcount;
 			int	readbytes;
-			int	resends;
-			int	thisburst = 0;
 #ifdef NEVENTS
 			struct timeval rstamp;
 			gettimeofday(&rstamp, 0);
 #endif
+			s.thisburst = 0;
 
 			/*
 			 * Read blocks of data from disk.
@@ -709,57 +877,8 @@ PlayFrisbee(NetInfo_t *ni)
 				fatal("Short read: %d!=%d", cc, readbytes);
 
 			for (j = 0; j < readcount; j++) {
-				p->hdr.type    = PKTTYPE_REQUEST;
-				p->hdr.subtype = PKTSUBTYPE_BLOCK;
-				p->hdr.datalen = sizeof(p->msg.block);
-				p->msg.block.chunk = chunk;
-				p->msg.block.block = block + j;
-				memcpy(p->msg.block.buf,
-				       &databuf[j * BLOCKSIZE],
-				       BLOCKSIZE);
-
-				PacketSend(ni, p, &resends);
-				sendretries += resends;
-				DOSTAT(blockssent++);
-				EVENT(resends ? 1 : 3, EV_BLOCKMSG, ni->mcastaddr,
-				      chunk, block+j, resends, 0);
-
-				/*
-				 * Completed a burst.  Adjust the busrtsize
-				 * if necessary and delay as required.
-				 */
-				if (burstinterval > 0 &&
-				    ++throttle >= burstsize) {
-					thisburst += throttle;
-
-					/*
-					 * XXX if we overran our interval, we
-					 * reset the base time so we don't
-					 * accumulate error.
-					 */
-					if (!sleeptil(&startnext)) {
-						EVENT(1, EV_OVERRUN, ni->mcastaddr,
-						      startnext.tv_sec,
-						      startnext.tv_usec,
-						      chunk, block+j);
-						gettimeofday(&startnext, 0);
-						DOSTAT(missed++);
-					} else {
-						if (thisburst > burstsize)
-							EVENT(1, EV_LONGBURST,
-							      ni->mcastaddr,
-							      thisburst,
-							      burstsize,
-							      chunk, block+j);
-						thisburst = 0;
-					}
-					if (dynburst)
-						calcburst();
-					addusec(&startnext, &startnext,
-						burstinterval);
-					throttle = 0;
-					DOSTAT(intervals++);
-				}
+				SendBlock(ni, &s, 
+					  chunk, block + j, &databuf[j * BLOCKSIZE]);
 			}
 			offset   += readbytes;
 			block    += readcount;
@@ -767,6 +886,77 @@ PlayFrisbee(NetInfo_t *ni)
 	}
 	free(databuf);
 }
+
+static void
+PlayFrisbeeProxy(NetInfo_t *ni)
+{
+	PlayFrisbeeStats_t s = {0};
+	int		chunk, i;
+	BlockMap_t	map, map2, *m;
+	ChunkBuffer_t * cached;
+
+	BlockMapClear(&map);
+
+	while (1) {
+		int unsent_blocks = 0;
+		if (killme)
+			return;
+		
+		/*
+		 * Look for a WorkQ item to process. When there is nothing
+		 * to process, check for being idle too long, and exit if
+		 * no one asks for anything for a long time. Note that
+		 * WorkQueueDequeue will delay for a while, so this will not
+		 * spin.
+		 */
+		GetGlobalLock();
+
+		if (! WorkQueueDequeueMap(&chunk, &map, LOCKED)) {
+			/* The GlobalLock is unlocked now */
+			int quit;
+			quit = HandleEmptyQueue(&s);
+			if (quit)
+				break;
+			else
+				continue;
+		}
+		s.idlelastloop = 0;
+
+		/* Send what we have in the cache */
+		cached = GetCachedChunk(chunk);
+
+		if (cached) {
+			BlockMapSubstract(&map2, &map, &cached->blockmap);
+			m = &map2;
+		} else {
+			m = &map;
+		}
+		unsent_blocks = BlockMapCount(m);
+		if (unsent_blocks)
+			WorkQueueEnqueue(chunk, m, unsent_blocks, 1, LOCKED);
+
+		ReleaseGlobalLock();
+
+		if (cached) {
+			assert(cached->pending > 0);
+			for (i = 0; i < CHUNKSIZE; i++) {
+				if (BlockMapHave(&map, i) && !BlockMapHave(&map2, i))
+					SendBlock(ni, &s, chunk, i, cached->blocks[i].data);
+			}
+		}
+
+		if (unsent_blocks) {
+			AddNeededForOthers(chunk, unsent_blocks, m);
+		}
+
+		if (cached) {
+			GetGlobalLock();
+			cached->pending--;
+			ReleaseGlobalLock();
+		}
+	}
+}
+
 
 static char *usagestr = 
  "usage: frisbeed [-d] <-p #> <-m mcastaddr> <filename>\n"
@@ -789,18 +979,21 @@ server_main(int argc, char **argv)
 {
 	int		ch, fd;
 	pthread_t	child_pid;
-	off_t		fsize;
+	off_t		fsize = 0;
 	void		*ignored;
-	NetInfo_t	ni;
+	NetInfo_t	ni = NETINFO_INIT;
+	int		_debug = 0;
 
+	optreset = 1;
+	optind = 1;
 	while ((ch = getopt(argc, argv, "dhp:m:i:tbDT:R:B:G:L:W:")) != -1)
 		switch(ch) {
 		case 'b':
-			ni.broadcast++;
+			ni.broadcast = 1;
 			break;
 			
 		case 'd':
-			debug++;
+			_debug++;
 			break;
 			
 		case 'p':
@@ -840,39 +1033,52 @@ server_main(int argc, char **argv)
 		default:
 			usage();
 		}
+
+	if (_debug > debug) 
+		debug = _debug;
+
 	argc -= optind;
 	argv += optind;
-	if (argc != 1)
-		usage();
 
 	if (!ni.portnum || ! ni.mcastaddr.s_addr)
 		usage();
 
-	filename = argv[0];
+	if (FrisbeeMode & FRISBEE_PROXY) {
+		fprintf(stderr, "PROXY MODE\n");
+		filename = NULL;
+	} else {
+		if (argc != 1)
+			usage();
+		filename = argv[0];
+	}
 
 	signal(SIGINT, quit);
 	signal(SIGTERM, quit);
 	signal(SIGHUP, reinit);
 
 	ServerLogInit();
+
+	if (!(FrisbeeMode & FRISBEE_PROXY)) {
 	
-	if (access(filename, R_OK) < 0)
-		pfatal("Cannot read %s", filename);
+		if (access(filename, R_OK) < 0)
+			pfatal("Cannot read %s", filename);
 
-	/*
-	 * Open the file and get its size so that we can tell clients how
-	 * much to expect/require.
-	 */
-	if ((fd = open(filename, O_RDONLY)) < 0)
-		pfatal("Cannot open %s", filename);
+		/*
+		 * Open the file and get its size so that we can tell clients how
+		 * much to expect/require.
+		 */
+		if ((fd = open(filename, O_RDONLY)) < 0)
+			pfatal("Cannot open %s", filename);
 
-	if ((fsize = lseek(fd, (off_t)0, SEEK_END)) < 0)
-		pfatal("Cannot lseek to end of file");
+		if ((fsize = lseek(fd, (off_t)0, SEEK_END)) < 0)
+			pfatal("Cannot lseek to end of file");
 
-	FileInfo.fd     = fd;
-	FileInfo.blocks = (int) (roundup(fsize, (off_t)BLOCKSIZE) / BLOCKSIZE);
-	FileInfo.chunks = FileInfo.blocks / CHUNKSIZE;
-	log("Opened %s: %d blocks", filename, FileInfo.blocks);
+		FileInfo.fd     = fd;
+		FileInfo.blocks = (int) (roundup(fsize, (off_t)BLOCKSIZE) / BLOCKSIZE);
+		FileInfo.chunks = FileInfo.blocks / CHUNKSIZE;
+		log("Opened %s: %d blocks", filename, FileInfo.blocks);
+
+	}
 
 	compute_sendrate();
 
@@ -897,7 +1103,11 @@ server_main(int argc, char **argv)
 	}
 	gettimeofday(&IdleTimeStamp, 0);
 	
-	PlayFrisbee(&ni);
+	if (FrisbeeMode & FRISBEE_PROXY)
+		PlayFrisbeeProxy(&ni);
+	else
+		PlayFrisbee(&ni);
+		
 	pthread_cancel(child_pid);
 	pthread_join(child_pid, &ignored);
 
@@ -917,8 +1127,9 @@ server_main(int argc, char **argv)
 		log("  chunk/block size    %d/%d", CHUNKSIZE, BLOCKSIZE);
 		log("  burst size/interval %d/%d", burstsize, burstinterval);
 		log("  file read size      %d", readsize);
-		log("  file:size           %s:%qd",
-		    filename, (long long)fsize);
+		if (!(FrisbeeMode & FRISBEE_PROXY))
+			log("  file:size           %s:%qd",
+			    filename, (long long)fsize);
 		log("Stats:");
 		log("  service time:      %d.%03d sec",
 		    LastReq.tv_sec, LastReq.tv_usec/1000);
@@ -953,8 +1164,10 @@ server_main(int argc, char **argv)
 	/*
 	 * Exit from main thread will kill all the children.
 	 */
-	log("Exiting!");
-	exit(0);
+	log("Exiting Server!");
+	ServerDone = 1;
+        return 0; /* Don't use exit since server_main may need to
+                     return */
 }
 
 /*

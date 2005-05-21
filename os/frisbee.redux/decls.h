@@ -8,8 +8,14 @@
  * Shared for defintions for frisbee client/server code.
  */
 
+#include <stdlib.h>
+#include <stdio.h>
 #include <limits.h>	/* CHAR_BIT */
+#include <pthread.h>
+#include <string.h>
 #include <netinet/in.h>
+#include <errno.h>
+
 #include "log.h"
 
 /*
@@ -197,7 +203,7 @@ typedef struct {
 } ClientStats_t;
 
 typedef struct {
-	char	map[CHUNKSIZE/CHAR_BIT];
+	char		map[CHUNKSIZE/CHAR_BIT];
 } BlockMap_t;
 
 /*
@@ -291,6 +297,8 @@ typedef struct {
 	int		nobufdelay;
 } NetInfo_t;
 
+#define NETINFO_INIT {0,0,{},{},0,{},-1}
+
 /*
  * Protos.
  */
@@ -303,10 +311,149 @@ void	PacketReply(NetInfo_t *ni, Packet_t *p);
 int	PacketValid(NetInfo_t *ni, Packet_t *p, int nchunks);
 void	dump_network(NetInfo_t *ni);
 
-
 /*
  * Globals
  */
 
 extern int		debug;
-extern int		clockres;
+
+#define FRISBEE_CLIENT		1
+#define FRISBEE_SERVER		2
+#define FRISBEE_PROXY		4
+extern int		FrisbeeMode;
+
+/*
+ *
+ */
+
+
+typedef unsigned long long stamp_t;
+
+static inline stamp_t
+GetStamp()
+{
+	struct timeval tv;
+
+	gettimeofday(&tv, 0);
+	return (unsigned long long)tv.tv_sec * 1000000 + tv.tv_usec;
+}
+
+/*
+ * Global lock protecting all the main data structures.  Should only
+ * be held for a very short time.  And never when the thread may
+ * block.  Use a single lock to avoid having to deal with deadlock
+ * issues.
+ */
+/*#define GLOBAL_LOCK_STATS 1*/
+/*#define GLOBAL_LOCK_TIME  1*/
+
+extern pthread_mutex_t GlobalLock;
+
+static inline void
+GlobalLockCheck(int res, const char * str)
+{
+	if (res != 0) {
+		char buf[256];
+		strerror_r(res, buf, 256);
+		fprintf(stderr, "%s: %s", str, buf);
+		abort();
+	}
+}
+
+#ifndef GLOBAL_LOCK_STATS
+
+static inline void
+GetGlobalLock() 
+{
+	int res = pthread_mutex_lock(&GlobalLock);
+	GlobalLockCheck(res, "pthread_mutex_lock");
+}
+
+static inline void
+ReleaseGlobalLock() 
+{
+	int res = pthread_mutex_unlock(&GlobalLock);
+	GlobalLockCheck(res, "pthread_mutex_unlock");
+}
+
+#else
+
+static inline void Dummy() {}
+#define GetGlobalLock (_GetGlobalLock(__FILE__, __LINE__), Dummy)
+
+void _GetGlobalLock(const char * file, int lineno);
+void ReleaseGlobalLock();
+
+#endif
+
+void PrintGlobalLockStats();
+
+#define UNLOCKED 0
+#define LOCKED   1
+
+/*
+ * Client
+ */
+
+/*
+ * The chunker data structure. For each chunk in progress, we maintain this
+ * array of blocks (plus meta info). This serves as a cache to receive
+ * blocks from the server while we write completed chunks to disk. The child
+ * thread reads packets and updates this cache, while the parent thread
+ * simply looks for completed blocks and writes them. The "inprogress" slot
+ * serves a free/allocated flag, while the ready bit indicates that a chunk
+ * is complete and ready to write to disk.
+ *
+ * If !neededself && !lastsent then a chunk may disappear at any time.
+ * So be sure to use proper locking in this case.
+ */
+
+typedef struct {
+	int	   thischunk;		/* Which chunk in progress */
+	int	   state;		/* State of chunk */
+	int	   neededself;		/* If the chunk is needed by
+					 * the client itself */
+	int	   pending;		/* Number of pending requests
+					 * in the work queue */
+	stamp_t    lastrecv;
+	int	   blockcount;		/* Number of blocks not received yet */
+	BlockMap_t blockmap;		/* Which blocks have been received */
+	struct {
+		char	data[BLOCKSIZE];
+	} blocks[CHUNKSIZE];		/* Actual block data */
+} ChunkBuffer_t;
+#define CHUNK_EMPTY	0
+#define CHUNK_FILLING	1
+#define CHUNK_FULL	2
+
+ChunkBuffer_t * GetCachedChunk(int chunkno);
+int CalcFreeBufs();
+int PossiblyRequestMissing(NetInfo_t *ni, int timedout, stamp_t stamp,
+			   int chunk, BlockMap_t *map, int count,
+			   int locked);
+int PossiblyRequestNeeded(NetInfo_t *ni, int timedout, stamp_t stamp,
+			  int chunk, BlockMap_t *map, int count,
+			  int locked);
+
+/*
+ * Server
+ */
+
+extern int killme;
+extern int ServerDone;
+int WorkQueueCount(int chunk);
+void ServerSetFileInfo(int blocks);
+
+/*
+ * Proxy
+ */
+
+int AnyNeededForOthers();
+
+/* Will lock */
+void AddNeededForOthers(int chunk, int nblocks, BlockMap_t *blockmap);
+
+/* RequestNeededForOthers returns the number of chunks it requested which were
+ * not already in the cache */
+/* Will lock */
+int RequestNeededForOthers(NetInfo_t *ni, int timedout, stamp_t stamp);

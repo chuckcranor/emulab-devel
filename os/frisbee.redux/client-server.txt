@@ -28,7 +28,8 @@ PHASE 1)
 This phase will still use multicast so I can focus on being both
 a client and a server and not changing the underlying network code.
 
-3 Main Data Structures, combine the server and client ones.
+4 Main Data Structures, combine the server and client ones, and add
+one additional.
 
 The Two Queues (1 and 3) are unmodified.
 
@@ -36,18 +37,19 @@ The cache (2) will behave differently: Full chunks will not be removed
 from the cache after being committed from disk as they may still be
 needed by clients.
 
-Each cached chunk will be annotated with two additional fields:
+Each cached chunk will be annotated with three additional fields:
   1) If the chunk is still needed by the client.  A chunk is still
      needed unless the chunk had either been committed to disk or is
      decompressed and waiting to be committed.
-  2) The status of the chunk in regards to other clients needs.
-     Has two fields:
-       1) List of all pending requests for this chunk (ie requests
-          that are in the work queue)
-       2) Timestamp of when the last chunk was sent.
+  2) Number of pending requests for this chunk (ie requests
+     that are in the work queue)
+  3) Timestamp of when the last block was received
 This information will be used to determine which chunk to remove from
 the cache when it is full.
 
+Also add a 4th data structure the "Needed for Others list" which is a
+list of blockes needed by other clients.  This is implemented as a
+linked list of blockmaps.
 
 5 threads, combine the server and client ones.
 
@@ -62,19 +64,9 @@ Thread 2 modified as follows:
 
   Send what is in the cache and remove those blocks from the request.
 
-  If there are any remaining blocks in the request:
-
-    If the chunk is not in cache at all than check that there will be
-    room to store the chunk in the cache.  That is if the cache is not
-    full are chunks that are no longer needed by itself or other
-    clients.
-
-    If there is room in the cache for the results of the request.
-    Send a request for the chunk unless a request has already been
-    sent recently using the same criteria that the client uses for
-    requesting incomplete chunks in its cache.
-
-    Push the request at the end of the queue.
+  If there are any remaining blocks in the request than add those to 
+  the "needed for others list".  And push the request back onto the
+  end of he queue
 
   Update the cache data appropriately.
 
@@ -93,23 +85,40 @@ Thread 3 is modified as follows:
   If the cache is full (the common case) than it will see if there are
   any chunks that are no longer needed by itself or other clients.  If
   so it will remove the one with the earliest time stamp.  The time
-  stamp is the time in which the last block was sent.
+  stamp is the time in which the last block was received.
 
   When adding a new chunk it will check the work queue for any
-  pending requests on this chunk and if so add them to the list.
+  pending requests on this chunk and if so update the count.
 
   If it was unable to cache the incoming block it will simply ignore
   it.
 
   2)
-  The requests it send out for the its own data is unmodified 
-  except that it will only consider chunks that have not already
-  been decompressed or committed to disk.
+  It will send out requets for blocks for other clients at the same
+  time it requests.  That is when it doesn't recive any packets for a
+  while.
+
+  It will first send out requests for any incomplete chunks needed by
+  itself as that is always profitable [a]
+
+  It will then send out any requests in the "Needed for Others list".
+  Before sending a request it will remove any blocks that are now in
+  the cache or have just been sent by (a).  It will than attempt to
+  send what's left in the list.  When sending requets for new chunks
+  not already in the cache it will check that there is room before
+  sending.  If the request was send it will remove those blocks from
+  the list also.  Any unsent blocks will remain in the list for the
+  next round. [b]
+  
+  Finally it will only send out requests for new chunks needed by
+  itself if the "Needed for Others list" is empty.  The idea here is
+  that when acting as a proxy the clients will request all the needed
+  chunks eventually.
   
 Thread 4 is unmodified.
 
 Thread 5 is modified so that instead of removing the chunk once
-committed to disk it will simply flag it as being committed.
+uncompressed it will simply flag it as being committed.
 
 POSSIBLE IMPROVEMENT:
 

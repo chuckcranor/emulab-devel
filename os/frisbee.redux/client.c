@@ -83,28 +83,6 @@ typedef struct {
 	unsigned long long done:1;
 } Chunk_t;
 
-/*
- * The chunker data structure. For each chunk in progress, we maintain this
- * array of blocks (plus meta info). This serves as a cache to receive
- * blocks from the server while we write completed chunks to disk. The child
- * thread reads packets and updates this cache, while the parent thread
- * simply looks for completed blocks and writes them. The "inprogress" slot
- * serves a free/allocated flag, while the ready bit indicates that a chunk
- * is complete and ready to write to disk.
- */
-typedef struct {
-	int	   thischunk;		/* Which chunk in progress */
-	int	   state;		/* State of chunk */
-	int	   blockcount;		/* Number of blocks not received yet */
-	BlockMap_t blockmap;		/* Which blocks have been received */
-	struct {
-		char	data[BLOCKSIZE];
-	} blocks[CHUNKSIZE];		/* Actual block data */
-} ChunkBuffer_t;
-#define CHUNK_EMPTY	0
-#define CHUNK_FILLING	1
-#define CHUNK_FULL	2
-
 Chunk_t		*Chunks;		/* Chunk descriptors */
 ChunkBuffer_t   *ChunkBuffer;		/* The cache */
 int		*ChunkRequestList;	/* Randomized chunk request order */
@@ -166,12 +144,15 @@ client_main(int argc, char **argv)
 	int	zero = 0;
 	int	dostype = -1;
         int     slice = 0;
-	NetInfo_t ni;
+	NetInfo_t ni = NETINFO_INIT;
+	int	_debug = 0;
 
+        optreset = 1;
+        optind = 1;
 	while ((ch = getopt(argc, argv, "dhp:m:s:i:tbznT:r:E:D:C:W:S:M:R:I:ON")) != -1)
 		switch(ch) {
 		case 'd':
-			debug++;
+                        _debug++;
 			break;
 			
 		case 'b':
@@ -288,6 +269,10 @@ client_main(int argc, char **argv)
 		default:
 			usage();
 		}
+
+	if (_debug > debug) 
+		debug = _debug;
+
 	argc -= optind;
 	argv += optind;
 
@@ -454,11 +439,13 @@ client_main(int argc, char **argv)
 	done:
 		if (event.type == EV_STOP && event.data.stop.exitstatus >= 0)
 			exitstatus = event.data.stop.exitstatus;
-		exit(exitstatus);
+		return exitstatus; /* Don't use exit since client_main
+                                      may need to return */
 	}
 #endif
 
-	exit(0);
+        return 0; /* Don't use exit since client_main may need to
+                     return */
 }
 
 /*
@@ -526,6 +513,7 @@ ClientRecvThread(void *arg)
 #ifdef NEVENTS
 				needstamp = 1;
 #endif
+				
 				RequestChunk(ni, 1);
 				IdleCounter = idletimer;
 
@@ -631,8 +619,12 @@ ChunkerStartup(NetInfo_t *ni)
 	/*
 	 * Set all the buffers to "free"
 	 */
-	for (i = 0; i < maxchunkbufs; i++)
-		ChunkBuffer[i].state = CHUNK_EMPTY;
+	for (i = 0; i < maxchunkbufs; i++) {
+		ChunkBuffer[i].thischunk = -1;
+		ChunkBuffer[i].neededself = 0;
+		ChunkBuffer[i].pending = 0;
+		ChunkBuffer[i].lastrecv = 0;
+	}
 
 	for (i = 0; i < TotalChunkCount; i++)
 		ChunkRequestList[i] = i;
@@ -665,12 +657,15 @@ ChunkerStartup(NetInfo_t *ni)
 	/*
 	 * Loop until all chunks have been received and written to disk.
 	 */
-	while (chunkcount) {
+	while (chunkcount && !killme) {
 		/*
 		 * Search the chunk cache for a chunk that is ready to write.
+		 * If CHUNK_FULL is set than the chunk is garnateed not to
+		 * be modified, so no need to lock.
 		 */
 		for (i = 0; i < maxchunkbufs; i++)
-			if (ChunkBuffer[i].state == CHUNK_FULL)
+			if (ChunkBuffer[i].neededself && 
+			    ChunkBuffer[i].state == CHUNK_FULL)
 				break;
 
 		/*
@@ -703,6 +698,8 @@ ChunkerStartup(NetInfo_t *ni)
 		/*
 		 * We have a completed chunk. Write it to disk.
 		 */
+
+
 		if (debug)
 			log("Writing chunk %d (buffer %d) after idle=%d.%03d",
 			    ChunkBuffer[i].thischunk, i,
@@ -725,20 +722,14 @@ ChunkerStartup(NetInfo_t *ni)
 
 		/*
 		 * Okay, free the slot up for another chunk.
+		 *
 		 */
-		ChunkBuffer[i].state = CHUNK_EMPTY;
+		ChunkBuffer[i].neededself = 0;
 		chunkcount--;
 		CLEVENT(1, EV_CLIDCDONE,
 			ChunkBuffer[i].thischunk, chunkcount,
 			decompblocks, writeridles);
 	}
-	/*
-	 * Kill the child and wait for it before returning. We do not
-	 * want the child absorbing any more packets, cause that would
-	 * mess up the termination handshake with the server. 
-	 */
-	pthread_cancel(child_pid);
-	pthread_join(child_pid, &ignored);
 
 	/*
 	 * Make sure any asynchronous writes are done
@@ -755,6 +746,25 @@ ChunkerStartup(NetInfo_t *ni)
 		Stats.u.v1.rbyteswritten = totalrdata;
 	}
 #endif
+
+	/*
+	 * Kill the child and wait for it before returning when not
+	 * running as a proxy.. We do not want the child absorbing any
+	 * more packets, cause that would mess up the termination
+	 * handshake with the server.
+	 */
+	log("CHUNKER DONE");
+
+	if (killme || !(FrisbeeMode & FRISBEE_PROXY)) {
+		pthread_cancel(child_pid);
+		pthread_join(child_pid, &ignored);
+	} else {
+		while (!(killme || ServerDone)) {
+			fsleep(100000);
+		}
+		pthread_cancel(child_pid);
+		pthread_join(child_pid, &ignored);
+	}
 
 	free(ChunkBuffer);
 	free(ChunkRequestList);
@@ -852,6 +862,8 @@ RequestRedoTime(int chunk, unsigned long long curtime)
  * If the block is the first of some chunk, then try to allocate a new chunk.
  * If the chunk buffer is full, then drop the block. If this happens, it
  * indicates the chunk buffer is not big enough, and should be increased.
+ *
+ * Will lock 
  */
 static void
 GotBlock(NetInfo_t *ni, Packet_t *p)
@@ -859,21 +871,25 @@ GotBlock(NetInfo_t *ni, Packet_t *p)
 	int	chunk = p->msg.block.chunk;
 	int	block = p->msg.block.block;
 	int	i, free = -1;
+	stamp_t mindate = (unsigned long long)-1;
 	static int lastnoroomchunk = -1, lastnoroomblocks, inprogress;
+
+	GetGlobalLock();
 
 	/*
 	 * Search the chunk buffer for a match (or a free one).
 	 */
 	for (i = 0; i < maxchunkbufs; i++) {
-		if (ChunkBuffer[i].state == CHUNK_EMPTY) {
-			if (free == -1)
+		if (ChunkBuffer[i].thischunk == chunk)
+			break;
+
+		if (!ChunkBuffer[i].neededself && !ChunkBuffer[i].pending) {
+			if (ChunkBuffer[i].lastrecv < mindate) {
 				free = i;
+				mindate = ChunkBuffer[i].lastrecv;
+			}
 			continue;
 		}
-		
-		if (ChunkBuffer[i].state == CHUNK_FILLING &&
-		    ChunkBuffer[i].thischunk == chunk)
-			break;
 	}
 	if (i == maxchunkbufs) {
 		/*
@@ -892,6 +908,7 @@ GotBlock(NetInfo_t *ni, Packet_t *p)
 			}
 			lastnoroomblocks++;
 			DOSTAT(nofreechunks++);
+			ReleaseGlobalLock();
 			return;
 		}
 		lastnoroomchunk = -1;
@@ -900,24 +917,34 @@ GotBlock(NetInfo_t *ni, Packet_t *p)
 		/*
 		 * Was this chunk already processed? 
 		 */
-		if (Chunks[chunk].done) {
+		if (Chunks[chunk].done && !(FrisbeeMode & FRISBEE_PROXY)) {
 			CLEVENT(3, EV_CLIDUPCHUNK, chunk, block, 0, 0);
 			DOSTAT(dupchunk++);
 			if (debug > 2)
 				log("Duplicate chunk %d ignored!", chunk);
+			ReleaseGlobalLock();
 			return;
 		}
-		Chunks[chunk].done = 1;
 
 		if (debug)
 			log("Starting chunk %d (buffer %d)", chunk, free);
 
 		i = free;
+
 		ChunkBuffer[i].state      = CHUNK_FILLING;
 		ChunkBuffer[i].thischunk  = chunk;
 		ChunkBuffer[i].blockcount = CHUNKSIZE;
-		bzero(&ChunkBuffer[i].blockmap,
-		      sizeof(ChunkBuffer[i].blockmap));
+		BlockMapClear(&ChunkBuffer[i].blockmap);
+
+		ChunkBuffer[i].neededself = !Chunks[chunk].done;
+		if (FrisbeeMode & FRISBEE_PROXY) {
+			ChunkBuffer[i].pending = WorkQueueCount(chunk);
+		} else {
+			ChunkBuffer[i].pending = 0;
+		}
+
+		Chunks[chunk].done = 1;
+
 		inprogress++;
 		CLEVENT(1, EV_CLISCHUNK, chunk, block, inprogress, 0);
 	}
@@ -927,16 +954,23 @@ GotBlock(NetInfo_t *ni, Packet_t *p)
 	 * duplicate blocks in the same chunk since another client may
 	 * issue a request for a lost block, and we will see that even if
 	 * we do not need it (cause of broadcast/multicast).
+	 *
+	 * We update the metadata after the block is copied to avoid a
+	 * race condition as the data in the block may be read without
+	 * getting a lock.
 	 */
-	if (BlockMapAlloc(&ChunkBuffer[i].blockmap, block)) {
+	if (BlockMapHave(&ChunkBuffer[i].blockmap, block)) {
 		CLEVENT(3, EV_CLIDUPBLOCK, chunk, block, 0, 0);
 		DOSTAT(dupblock++);
 		if (debug > 2)
 			log("Duplicate block %d in chunk %d", block, chunk);
+		ReleaseGlobalLock();
 		return;
 	}
-	ChunkBuffer[i].blockcount--;
 	memcpy(ChunkBuffer[i].blocks[block].data, p->msg.block.buf, BLOCKSIZE);
+	BlockMapSet(&ChunkBuffer[i].blockmap, block, 1);
+	ChunkBuffer[i].blockcount--;
+	ChunkBuffer[i].lastrecv = GetStamp();
 
 #ifdef NEVENTS
 	/*
@@ -967,7 +1001,7 @@ GotBlock(NetInfo_t *ni, Packet_t *p)
 	/*
 	 * Is the chunk complete? If so, then release it to the main thread.
 	 */
-	if (ChunkBuffer[i].blockcount == 0) {
+	if (ChunkBuffer[i].neededself && ChunkBuffer[i].blockcount == 0) {
 		inprogress--;
 		CLEVENT(1, EV_CLIECHUNK, chunk, block, inprogress, 0);
 		if (debug)
@@ -980,17 +1014,37 @@ GotBlock(NetInfo_t *ni, Packet_t *p)
 		 * by the time the main thread finishes the chunk we just
 		 * released.
 		 */
+		ReleaseGlobalLock();
 		RequestChunk(ni, 0);
+	} else {
+		ReleaseGlobalLock();
 	}
 }
 
 /*
  * Request a chunk/block/range we do not have.
  */
-static void
-RequestMissing(NetInfo_t *ni, int chunk, BlockMap_t *map, int count)
+int
+PossiblyRequestMissing(NetInfo_t *ni, int timedout, unsigned long long stamp,
+		       int chunk, BlockMap_t *map, int count,
+		       int origlocked)
 {
 	Packet_t	packet, *p = &packet;
+
+	/*
+	 * Make sure this chunk is eligible for re-request.
+	 */
+	if (! timedout && ! RequestRedoTime(chunk, stamp)) {
+		return 0;
+	}
+	
+	if (origlocked)
+		ReleaseGlobalLock();
+
+	/*
+	 * Request all the missing blocks
+	 */
+	DOSTAT(prequests++);
 
 	if (debug)
 		log("Requesting missing blocks of chunk:%d", chunk);
@@ -1020,7 +1074,24 @@ RequestMissing(NetInfo_t *ni, int chunk, BlockMap_t *map, int count)
 	 */
 	RequestStamp(chunk, 0, CHUNKSIZE, (void *)1);
 	Chunks[chunk].ours = 1;
+
+	if (origlocked)
+		GetGlobalLock();
+	
+	return 1;
 }
+
+int PossiblyRequestNeeded(NetInfo_t *ni, int timedout, unsigned long long stamp,
+			  int chunk, BlockMap_t *need, int count,
+			  int locked)
+{
+	BlockMap_t map;
+	BlockMapInvert(need, &map);
+	return PossiblyRequestMissing(ni, timedout, stamp,
+				      chunk, &map, count,
+				      locked);
+}
+
 
 /*
  * Request a chunk/block/range we do not have.
@@ -1052,8 +1123,9 @@ static void
 RequestChunk(NetInfo_t *ni, int timedout)
 {
 	int		   i, j, k;
-	int		   emptybufs, fillingbufs;
+	int		   availbufs, fillingbufs;
 	unsigned long long stamp = 0;
+	int		   any_needed_for_others;
 
 	CLEVENT(1, EV_CLIREQCHUNK, timedout, 0, 0, 0);
 
@@ -1067,41 +1139,33 @@ RequestChunk(NetInfo_t *ni, int timedout)
 	/*
 	 * Look for unfinished chunks.
 	 */
-	emptybufs = fillingbufs = 0;
+
 	for (i = 0; i < maxchunkbufs; i++) {
-		/*
-		 * Skip empty and full buffers
-		 */
-		if (ChunkBuffer[i].state == CHUNK_EMPTY) {
-			/*
-			 * Keep track of empty chunk buffers while we are here
-			 */
-			emptybufs++;
-			continue;
-		}
-		if (ChunkBuffer[i].state == CHUNK_FULL)
-			continue;
-
-		fillingbufs++;
 
 		/*
-		 * Make sure this chunk is eligible for re-request.
+		 * Skip avail or full buffers or chunks not needed by
+		 * the client itself.
 		 */
-		if (! timedout &&
-		    ! RequestRedoTime(ChunkBuffer[i].thischunk, stamp))
+		if (!ChunkBuffer[i].neededself || ChunkBuffer[i].state == CHUNK_FULL)
 			continue;
 
-		/*
-		 * Request all the missing blocks
-		 */
-		DOSTAT(prequests++);
-		RequestMissing(ni,
-			       ChunkBuffer[i].thischunk,
-			       &ChunkBuffer[i].blockmap,
-			       ChunkBuffer[i].blockcount);
+		PossiblyRequestMissing(ni, timedout, stamp,
+				       ChunkBuffer[i].thischunk,
+				       &ChunkBuffer[i].blockmap,
+				       ChunkBuffer[i].blockcount,
+				       UNLOCKED);
 	}
 
-	CLEVENT(2, EV_CLIREQRA, emptybufs, fillingbufs, 0, 0);
+	any_needed_for_others = AnyNeededForOthers();
+
+	RequestNeededForOthers(ni, timedout, stamp);
+
+	availbufs = CalcFreeBufs(&fillingbufs);
+
+	CLEVENT(2, EV_CLIREQRA, availbufs, fillingbufs, 0, 0);
+
+	if (any_needed_for_others)
+		return;
 
 	/*
 	 * Issue read-ahead requests.
@@ -1109,13 +1173,13 @@ RequestChunk(NetInfo_t *ni, int timedout)
 	 * If we already have enough unfinished chunks on our plate
 	 * or we have no room for read-ahead, don't do it.
 	 */
-	if (emptybufs == 0 || fillingbufs >= maxinprogress)
+	if (availbufs <= 0 || fillingbufs >= maxinprogress)
 		return;
 
 	/*
 	 * Scan our request list looking for candidates.
 	 */
-	k = (maxreadahead > emptybufs) ? emptybufs : maxreadahead;
+	k = (maxreadahead > availbufs) ? availbufs : maxreadahead;
 	for (i = 0, j = 0; i < TotalChunkCount && j < k; i++) {
 		int chunk = ChunkRequestList[i];
 		
@@ -1236,7 +1300,8 @@ PlayFrisbee(NetInfo_t *ni)
 	gettimeofday(&timeo, 0);
 	TotalChunkCount = p->msg.join.blockcount / CHUNKSIZE;
 	ImageUnzipSetChunkCount(TotalChunkCount);
-	
+	ServerSetFileInfo(p->msg.join.blockcount);
+
 	/*
 	 * If we have partitioned up the memory and have allocated
 	 * more chunkbufs than chunks in the file, reallocate the
@@ -1306,3 +1371,47 @@ PlayFrisbee(NetInfo_t *ni)
 #endif
 	log("\nLeft the team after %ld seconds on the field!", estamp.tv_sec);
 }
+
+
+int CalcFreeBufs(int *filling)
+{
+	int i, avail = 0;
+	if (filling) *filling = 0;
+	for (i = 0; i < maxchunkbufs; i++) {
+		if (!ChunkBuffer[i].neededself && !ChunkBuffer[i].pending)
+			avail++;
+		else if (filling)
+			(*filling)++;
+	}
+	return avail;
+}
+
+ChunkBuffer_t * 
+GetCachedChunk(int chunkno)
+{
+	int i;
+	for (i = 0; i < maxchunkbufs; i++) {
+		if (ChunkBuffer[i].thischunk == chunkno)
+			return &ChunkBuffer[i];
+	}
+	return NULL;
+}
+
+
+#if 0
+void GetChunk(NetInfo_t * ni, int chunkno, ChunkBuffer_t * res)
+{
+	/* Set up the environment so that there is only one chunk to
+	   request.  And only one chunk to save the results to. */
+	Chunks = 0; /* Should not be used */
+	maxchunks = 1;
+	ChunkBuffer = res;
+	ChunkBuffer->thischunk = chunkno;
+	ChunkBuffer->state = CHUNK_EMPTY;
+	ChunkRequestListSize = 1;
+	ChunkRequestList = &chunkno;
+	ClientRecvThread(&ni);
+}
+
+#endif
+

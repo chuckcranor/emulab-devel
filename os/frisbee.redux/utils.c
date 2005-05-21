@@ -255,7 +255,7 @@ BlockMapExtract(BlockMap_t *blockmap, int *blockp)
  * Return the number of blocks allocated in the range specified
  */
 int
-BlockMapIsAlloc(BlockMap_t *blockmap, int block, int count)
+BlockMapIsAlloc(const BlockMap_t *blockmap, int block, int count)
 {
 	int i, off, did = 0;
 	char val;
@@ -292,7 +292,7 @@ BlockMapIsAlloc(BlockMap_t *blockmap, int block, int count)
 }
 
 void
-BlockMapInvert(BlockMap_t *oldmap, BlockMap_t *newmap)
+BlockMapInvert(const BlockMap_t *oldmap, BlockMap_t *newmap)
 {
 	int i;
 
@@ -301,7 +301,7 @@ BlockMapInvert(BlockMap_t *oldmap, BlockMap_t *newmap)
 }
 
 int
-BlockMapMerge(BlockMap_t *frommap, BlockMap_t *tomap)
+BlockMapMerge(const BlockMap_t *frommap, BlockMap_t *tomap)
 {
 	int i, bit, mask, did = 0;
 
@@ -320,6 +320,26 @@ BlockMapMerge(BlockMap_t *frommap, BlockMap_t *tomap)
 
 	return did;
 }
+
+int
+BlockMapSubstract(BlockMap_t *dest, const BlockMap_t *x, const BlockMap_t *y)
+{
+	int i, bit, mask, count = 0;
+	BlockMapClear(dest);
+
+	for (i = 0; i < sizeof(x->map); i++) {
+		for (bit = 0; bit < CHAR_BIT; bit++) {
+			mask = 1 << bit;
+			if ((x->map[i] & mask) != 0 && (y->map[i] & mask) == 0) {
+				dest->map[i] |= mask;
+				count++;
+			}
+		}
+	}
+
+	return count;
+}
+
 
 static void
 bmfirstfunc(int chunk, int block, int count, void *arg)

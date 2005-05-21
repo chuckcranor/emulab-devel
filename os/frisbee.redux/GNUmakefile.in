@@ -14,15 +14,6 @@ DISTFILES	= TODO client.c decls.h event.c event.h log.c log.h \
 EXPANDCOPYRIGHT	= /usr/site/lib/copyright/expand-copyr
 
 SYSTEM	:= $(shell uname -s)
-ifeq ($(SYSTEM),FreeBSD)
-FBSDREL	:= $(shell uname -r | sed -e 's/\([^-][^-]*\)-.*/\1/')
-# XXX 5.3 and linuxthreads don't see to get along
-ifeq ($(FBSDREL),5.3)
-WITH_LTHREADS	= 0
-else
-WITH_LTHREADS	= 1
-endif
-endif
 
 include $(OBJDIR)/Makeconf
 
@@ -32,19 +23,47 @@ include $(TESTBED_SRCDIR)/GNUmakerules
 
 FRISBEEDIR	= $(OBJDIR)/os/imagezip
 
-SHAREDOBJS	= log.o network.o trace.o utils.o
+SHAREDOBJS	= log.o network.o trace.o utils.o common.o
+
+#
+# Get the right thread library
+#
 
 ifeq ($(SYSTEM),Linux)
-PTHREADCFLAGS	+= -D_FILE_OFFSET_BITS=64 -D_GNU_SOURCE -D_THREAD_SAFE -pthread
+
+PTHREADCFLAGS	= -D_FILE_OFFSET_BITS=64 -D_GNU_SOURCE -D_THREAD_SAFE
+PTHREADLIBS     = -pthread
+STATIC		= -static
+
 else
-ifeq ($(WITH_LTHREADS),1)
+ifeq ($(SYSTEM),FreeBSD)
+FBSDMREL := $(shell uname -r | sed -e 's/\([^.-][^.-]*\)[.-].*/\1/')
+ifeq ($(FBSDMREL),5)
+
+PTHREADCFLAGS	= -DCONDVARS_WORK
+PTHREADLIBS	= -lthr # 1:1 thread package has better performance with frisbee than the
+                        # default m:n thread package
+STATIC          =	# Static causes problems with FrerBSD threads, so don't use it
+
+else # FreeBSD 4.* or below
+
 PTHREADCFLAGS	= -D_THREAD_SAFE -I/usr/local/include/pthread/linuxthreads
 PTHREADLIBS	= -L/usr/local/lib -llthread -llgcc_r
-else
+STATIC          = -static
+
+endif
+else # Non FreeBSD, non Linux
+
 PTHREADCFLAGS	= -DCONDVARS_WORK
 PTHREADLIBS	= -lpthread
+STATIC          = -static
+
 endif
 endif
+
+#
+#
+#
 
 CLIENTFLAGS	= $(CFLAGS)
 CLIENTLIBS	= -lz $(PTHREADLIBS)
@@ -64,10 +83,10 @@ FRISBEEDOBJS	= frisbeed.o $(SERVEROBJS)
 
 FRISBEE2FLAGS	= $(CLIENTFLAGS)
 FRISBEE2LIBS	= $(CLIENTLIBS)
-FRISBEE2OBJS	= frisbee2.o server.o $(CLIENTOBJS)
+FRISBEE2OBJS	= frisbee2.o proxy.o server.o $(CLIENTOBJS)
 
-CFLAGS		= -O2 -g -Wall -fno-builtin-log -static $(PTHREADCFLAGS) -DSTATS
-LDFLAGS		= -static
+CFLAGS		= -O2 -g -Wall -fno-builtin-log $(STATIC) $(PTHREADCFLAGS) -DSTATS
+LDFLAGS		= $(STATIC)
 
 #
 # Define this if your implementation of cond_vars works well

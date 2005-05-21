@@ -5,6 +5,7 @@
  */
 
 #include <time.h>
+#include <string.h>
 
 static inline int
 pasttime(struct timeval *cur, struct timeval *next)
@@ -56,11 +57,42 @@ int	sleeptil(struct timeval *nexttime);
 void	BlockMapInit(BlockMap_t *blockmap, int block, int count);
 void	BlockMapAdd(BlockMap_t *blockmap, int block, int count);
 int	BlockMapAlloc(BlockMap_t *blockmap, int block);
-int	BlockMapIsAlloc(BlockMap_t *blockmap, int block, int count);
+int	BlockMapIsAlloc(const BlockMap_t *blockmap, int block, int count);
 int	BlockMapExtract(BlockMap_t *blockmap, int *blockp);
-void	BlockMapInvert(BlockMap_t *oldmap, BlockMap_t *newmap);
-int	BlockMapMerge(BlockMap_t *frommap, BlockMap_t *tomap);
+void	BlockMapInvert(const BlockMap_t *oldmap, BlockMap_t *newmap);
+int	BlockMapMerge(const BlockMap_t *frommap, BlockMap_t *tomap);
+int     BlockMapSubstract(BlockMap_t *dest, const BlockMap_t *x, const BlockMap_t *y);
 int	BlockMapFirst(BlockMap_t *blockmap);
 int	BlockMapApply(BlockMap_t *blockmap, int chunk,
 		      void (*func)(int, int, int, void *), void *farg);
 void	ClientStatsDump(unsigned int id, ClientStats_t *stats);
+
+static inline void
+BlockMapClear(BlockMap_t *blockmap)
+{
+	memset(blockmap, 0, sizeof(BlockMap_t));
+}
+
+static inline int
+BlockMapHave(const BlockMap_t *blockmap, int block)
+{
+	return blockmap->map[block/CHAR_BIT] & (1 << (block % CHAR_BIT));
+}
+
+static inline int
+BlockMapSet(BlockMap_t *blockmap, int block, int val)
+{
+	int prev = BlockMapHave(blockmap, block);
+	if (val)
+		blockmap->map[block/CHAR_BIT] |= (1 << (block % CHAR_BIT));
+	else
+		blockmap->map[block/CHAR_BIT] &= ~(1 << (block % CHAR_BIT));
+	return prev;
+}
+
+static inline int
+BlockMapCount(const BlockMap_t *blockmap)
+{
+	return BlockMapIsAlloc(blockmap, 0, BLOCKSIZE);
+}
+

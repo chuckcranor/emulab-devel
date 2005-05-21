@@ -44,11 +44,6 @@ CommonInit(NetInfo_t *ni)
 	char			buf[BUFSIZ];
 	struct hostent		*he;
 
-	/* FIXME: Is this the right place to initilize these vars */
-
-	ni->nobufdelay = -1;
-	ni->broadcast = 0;
-	
 	if ((ni->sock = socket(PF_INET, SOCK_DGRAM, IPPROTO_UDP)) < 0)
 		pfatal("Could not allocate a socket");
 
@@ -114,8 +109,8 @@ CommonInit(NetInfo_t *ni)
 			       &ni->mcastif, sizeof(ni->mcastif)) < 0) {
 			pfatal("setsockopt(IPPROTO_IP, IP_MULTICAST_IF)");
 		}
-	}
-	else if (ni->broadcast) {
+
+	} else if (ni->broadcast) {
 		/*
 		 * Otherwise, we use a broadcast addr. 
 		 */
@@ -179,6 +174,8 @@ ClientNetID(NetInfo_t *ni)
 int
 ServerNetInit(NetInfo_t *ni)
 {
+	log("ServerNetInit");
+  
 	CommonInit(ni);
 
 	return 1;
