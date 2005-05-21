@@ -48,7 +48,7 @@ This information will be used to determine which chunk to remove from
 the cache when it is full.
 
 Also add a 4th data structure the "Needed for Others list" which is a
-list of blockes needed by other clients.  This is implemented as a
+list of blocks needed by other clients.  This is implemented as a
 linked list of blockmaps.
 
 5 threads, combine the server and client ones.
@@ -94,8 +94,8 @@ Thread 3 is modified as follows:
   it.
 
   2)
-  It will send out requets for blocks for other clients at the same
-  time it requests.  That is when it doesn't recive any packets for a
+  It will send out requests for blocks for other clients at the same
+  time it requests.  That is when it doesn't receive any packets for a
   while.
 
   It will first send out requests for any incomplete chunks needed by
@@ -104,7 +104,7 @@ Thread 3 is modified as follows:
   It will then send out any requests in the "Needed for Others list".
   Before sending a request it will remove any blocks that are now in
   the cache or have just been sent by (a).  It will than attempt to
-  send what's left in the list.  When sending requets for new chunks
+  send what's left in the list.  When sending requests for new chunks
   not already in the cache it will check that there is room before
   sending.  If the request was send it will remove those blocks from
   the list also.  Any unsent blocks will remain in the list for the
