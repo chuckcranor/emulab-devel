@@ -31,6 +31,7 @@ test_rmcd.sh: rmcd
 
 DEPS = \
 	../mtp/mtp.h \
+	../mtp/mtp_xdr.h \
 	masterController.h \
 	obstacles.h \
 	pathPlanning.h \
@@ -56,22 +57,27 @@ OBJS = \
 	slaveController.o \
 	masterController.o
 
+TEST_PATH_OBJS = \
+	pathPlanning.o \
+	obstacles.o \
+	rclip.o
+
 rmcd-version.c: $(OBJS)
 
 rmcd: $(OBJS) rmcd-version.c ../mtp/libmtp.a
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(OBJS) rmcd-version.c $(LIBS)
 
-simple_path.o: test_path.c
-	$(CC) -c $(CFLAGS) -DSIMPLE_PATH -o $@ $^
+simple_path.o: test_path.c $(DEPS)
+	$(CC) -c $(CFLAGS) -DSIMPLE_PATH -o $@ $<
 
-multi_path.o: test_path.c
-	$(CC) -c $(CFLAGS) -DMULTI_PATH -o $@ $^
+multi_path.o: test_path.c $(DEPS)
+	$(CC) -c $(CFLAGS) -DMULTI_PATH -o $@ $<
 
-simple_path: pathPlanning.o obstacles.o rclip.o simple_path.o
-	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $^ $(LIBS)
+simple_path: simple_path.o $(TEST_PATH_OBJS) ../mtp/libmtp.a
+	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $< $(TEST_PATH_OBJS) $(LIBS)
 
-multi_path: pathPlanning.o obstacles.o rclip.o multi_path.o
-	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $^ $(LIBS)
+multi_path: multi_path.o $(TEST_PATH_OBJS) ../mtp/libmtp.a
+	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $< $(TEST_PATH_OBJS) $(LIBS)
 
 install: all
 	-mkdir -p $(INSTALL_DIR)/opsdir/sbin

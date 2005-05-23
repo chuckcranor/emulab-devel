@@ -44,9 +44,10 @@ struct master_controller {
     int mc_tries_remaining;
     unsigned int mc_waypoint_tries;
     struct path_plan mc_plan;
+    struct obstacle_node *mc_self_obstacle;
 };
 
-#define DEFAULT_PAUSE_TIME 15
+#define DEFAULT_PAUSE_TIME 10
 
 /**
  * Dispatch a packet received from the pilot.  We expect to only receive

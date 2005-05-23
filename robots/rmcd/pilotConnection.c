@@ -248,29 +248,34 @@ void pc_dump_info(void)
 	struct pilot_connection *pc;
 	
 	pc = &pc_data.pcd_connections[lpc];
-	info("  %s: state=%s; flags=0x%x; mode=%s; timeout=%d\n"
-	     "    pause: %lu\n"
-	     "    actual: %.2f %.2f %.2f\tlast:  %.2f %.2f %.2f\n"
+	info("  %s: state=%s; flags=0x%x; mode=%s; timeout=%d;\n"
+	     "    flags: %x; pause: %lu; self_obst: %d\n"
+	     "    actual: %.2f %.2f %.2f\n"
 	     "    waypt:  %.2f %.2f %.2f\n"
-	     "    goal:   %.2f %.2f %.2f\n",
+	     "    goal:   %.2f %.2f %.2f\n"
+	     "    obst:   %.2f %.2f %.2f %.2f\n",
 	     pc->pc_robot->hostname,
 	     pc_connection_state_strings[pc->pc_state],
 	     pc->pc_flags,
 	     pc_control_mode_strings[pc->pc_control_mode],
 	     pc->pc_connection_timeout,
+	     pc->pc_master.mc_flags,
 	     pc->pc_master.mc_pause_time,
+	     pc->pc_master.mc_self_obstacle != NULL ?
+	     pc->pc_master.mc_self_obstacle->on_expanded.id : -1,
 	     pc->pc_master.mc_plan.pp_actual_pos.x,
 	     pc->pc_master.mc_plan.pp_actual_pos.y,
 	     pc->pc_master.mc_plan.pp_actual_pos.theta,
-	     pc->pc_master.mc_plan.pp_last_pos.x,
-	     pc->pc_master.mc_plan.pp_last_pos.y,
-	     pc->pc_master.mc_plan.pp_last_pos.theta,
 	     pc->pc_master.mc_plan.pp_waypoint.x,
 	     pc->pc_master.mc_plan.pp_waypoint.y,
 	     pc->pc_master.mc_plan.pp_waypoint.theta,
 	     pc->pc_master.mc_plan.pp_goal_pos.x,
 	     pc->pc_master.mc_plan.pp_goal_pos.y,
-	     pc->pc_master.mc_plan.pp_goal_pos.theta);
+	     pc->pc_master.mc_plan.pp_goal_pos.theta,
+	     pc->pc_master.mc_plan.pp_obstacle.xmin,
+	     pc->pc_master.mc_plan.pp_obstacle.ymin,
+	     pc->pc_master.mc_plan.pp_obstacle.xmax,
+	     pc->pc_master.mc_plan.pp_obstacle.ymax);
     }
 }
 

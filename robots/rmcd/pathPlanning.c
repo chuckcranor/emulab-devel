@@ -21,12 +21,41 @@
 
 struct path_planning_data pp_data;
 
+/**
+ * Classify a position relative to an obstacle.
+ *
+ * @param rpoint The point to classify.
+ * @param oc The obstacle to compare the point against.
+ * @return The classification of the point.
+ */
 static pp_point_type_t pp_point_identify(struct robot_position *rpoint,
 					 struct obstacle_config *oc);
-static int pp_next_cornerpoint(struct path_plan *pp, rc_line_t rl);
+
+/**
+ * Compute the next corner point to go to.
+ *
+ * @param pp The plan to operate on.  The pp_obstacle field should hold the
+ * obstacle whose corners should be considered.  On a successful return, the
+ * pp_waypoint field will hold the chosen corner point.
+ * @return True if a reachable point was found.
+ */
+static int pp_next_cornerpoint(struct path_plan *pp);
+
+/**
+ * @param pt1 The first position.
+ * @param pt2 The second position.
+ * @return The distance between the two points.
+ */
 static float pp_point_distance(struct robot_position *pt1,
 			       struct robot_position *pt2);
 
+/**
+ * Check that a point is in the camera bounds and not in an obstacle.
+ *
+ * @param x The X coordinate of the point.
+ * @param y The Y coordinate of the point.
+ * @return True if the point is valid, false otherwise.
+ */
 static int pp_point_in_bounds(float x, float y)
 {
     int lpc, retval = 0;
@@ -53,6 +82,17 @@ static int pp_point_in_bounds(float x, float y)
     return retval;
 }
 
+/**
+ * Check that a point is not only in bounds, but also reachable by the robot.
+ * A point is not reachable if it is out of bounds or if the robot would have
+ * to travel through the center of the obstacle to reach it.
+ *
+ * @param pp A plan with the pp_actual_pos and pp_obstacle fields initialized.
+ * The pp_obstacle field should contain the obstacle that must be navigated
+ * around.
+ * @param rp The point to check.
+ * @return True if the point is reachable, false otherwise.
+ */
 static int pp_point_reachable(struct path_plan *pp, struct robot_position *rp)
 {
     int retval = 0;
@@ -70,6 +110,10 @@ static int pp_point_reachable(struct path_plan *pp, struct robot_position *rp)
 	rl.y1 = rp->y;
 	oc = pp->pp_obstacle;
 	if (rc_compute_code(rl.x0, rl.y0, &oc) == 0) {
+	    /*
+	     * The point is inside the obstacle, shrink the size of the
+	     * obstacle so the point is on the outside.
+	     */
 	    if (abs(rl.x0 - pp->pp_obstacle.xmin) <
 		abs(rl.x0 - pp->pp_obstacle.xmax)) {
 		oc.xmin = rl.x0 + 0.01;
@@ -89,6 +133,16 @@ static int pp_point_reachable(struct path_plan *pp, struct robot_position *rp)
 		oc.ymax = rl.y0 - 0.01;
 	    }
 	}
+	
+	if (debug > 1) {
+	    info("reachable %.2f %.2f %.2f %.2f\n",
+		 oc.xmin, oc.ymin, oc.xmax, oc.ymax);
+	}
+
+	/*
+	 * Check if the path to the point is completely outside the obstacle
+	 * or intersects just at one of the corners.
+	 */
 	if ((rc_clip_line(&rl, &oc) == 0) ||
 	    ((rl.x0 == rl.x1) && (rl.y0 == rl.y1))) {
 	    retval = 1;
@@ -101,8 +155,7 @@ static int pp_point_reachable(struct path_plan *pp, struct robot_position *rp)
 pp_plot_code_t pp_plot_waypoint(struct path_plan *pp)
 {
     float distance, min_distance = FLT_MAX, cross, theta;
-    struct obstacle_node *on, *min_on = NULL;
-    struct lnMinList extra, intersections;
+    struct lnMinList dextra, sextra, intersections;
     pp_plot_code_t retval;
     
     assert(pp != NULL);
@@ -113,24 +166,44 @@ pp_plot_code_t pp_plot_waypoint(struct path_plan *pp)
 	     pp->pp_goal_pos.x, pp->pp_goal_pos.y);
     }
     
+    lnNewList(&dextra);
+    lnNewList(&sextra);
+    lnNewList(&intersections);
+    
     retval = PPC_NO_WAYPOINT; /* if nothing else */
     
-    /* Initial waypoint is the goal point. */
+    /*
+     * We have to iterate over one or more waypoints, so we start with the
+     * Initial waypoint is the goal point.
+     */
     pp->pp_waypoint = pp->pp_goal_pos;
     
-    lnNewList(&extra);
-    lnNewList(&intersections);
     do {
+	struct obstacle_node *on, *min_on = NULL;
+	
+	/*
+	 * First we find all of the obstacles that intersect with this path
+	 * and locate the minimum distance to an obstacle.
+	 */
 	while ((on = ob_find_intersect2(&pp->pp_actual_pos,
 					&pp->pp_waypoint,
 					&distance,
 					&cross)) != NULL) {
 	    lnRemove(&on->on_link);
 	    if (cross < 0.20) {
-		lnAddTail(&extra, &on->on_link);
+		/*
+		 * The path doesn't cross enough of the obstacle box for us to
+		 * worry about it so we dump it on the extra list so the
+		 * intersect doesn't return it again.  XXX The number is
+		 * partially a guess and empirically derived.
+		 */
+		lnAddTail(on->on_type == OBT_STATIC ? &sextra : &dextra,
+			  &on->on_link);
 	    }
 	    else {
+		/* Record the intersection and */
 		lnAddTail(&intersections, &on->on_link);
+		/* ... check if this is the closest obstacle. */
 		if (distance < min_distance) {
 		    min_distance = distance;
 		    min_on = on;
@@ -138,47 +211,58 @@ pp_plot_code_t pp_plot_waypoint(struct path_plan *pp)
 	    }
 	}
 	
+	/* Check if there was an actual intersection. */
 	if (min_on != NULL) {
-	    struct rc_line rl;
-	    
 	    if (debug > 1)
 		info("closest %d\n", min_on->on_natural.id);
-	    lnRemove(&min_on->on_link);
+	    
+	    pp->pp_flags |= PPF_HAS_OBSTACLE;
+	    lnRemove(&min_on->on_link); // from the intersections list
+	    lnAddTail(min_on->on_type == OBT_STATIC ? &sextra : &dextra,
+		      &min_on->on_link);
 	    pp->pp_obstacle = min_on->on_expanded;
+
+	    /*
+	     * Find all obstacles that the path intersects with and overlap the
+	     * closest one.  The rest of the obstacles will be dealt with after
+	     * we get around the closest one.
+	     */
 	    while ((on = (struct obstacle_node *)
 		    lnRemHead(&intersections)) != NULL) {
 		if (rc_rect_intersects(&pp->pp_obstacle, &on->on_expanded)) {
 		    if (debug > 1)
 			info("merging %d\n", on->on_natural.id);
+		    
 		    ob_merge_obstacles(&pp->pp_obstacle, &on->on_expanded);
 		}
-		lnAddTail(&extra, &on->on_link);
+		lnAddTail(on->on_type == OBT_STATIC ? &sextra : &dextra,
+			  &on->on_link);
 	    }
-	    lnAddTail(&extra, &min_on->on_link);
-	    pp->pp_flags |= PPF_HAS_OBSTACLE;
 	    
-	    rl.x0 = pp->pp_actual_pos.x;
-	    rl.y0 = pp->pp_actual_pos.y;
-	    rl.x1 = pp->pp_goal_pos.x;
-	    rl.y1 = pp->pp_goal_pos.y;
-	    rc_clip_line(&rl, &pp->pp_obstacle);
 	    if (rc_compute_code(pp->pp_goal_pos.x,
 				pp->pp_goal_pos.y,
 				&pp->pp_obstacle) == 0)
 		retval = PPC_GOAL_IN_OBSTACLE;
-	    else if (pp_next_cornerpoint(pp, &rl))
+	    else if (pp_next_cornerpoint(pp))
 		retval = PPC_WAYPOINT;
 	    else
 		retval = PPC_BLOCKED;
 	}
+
+	/* Check for obstacles on the path to our new waypoint. */
     } while ((retval == PPC_WAYPOINT) &&
-	     ob_find_intersect2(&pp->pp_actual_pos,
-				&pp->pp_waypoint,
-				&distance,
-				&cross) != NULL);
+	     (ob_find_intersect2(&pp->pp_actual_pos,
+				 &pp->pp_waypoint,
+				 &distance,
+				 &cross) != NULL));
 
-    lnAppendList(&ob_data.od_active, &extra);
+    /* Restore the active obstacle list.  XXX Shouldn't do this here. */
+    lnPrependList(&ob_data.od_active, &dextra); // dynamics first
+    lnAppendList(&ob_data.od_active, &sextra); // statics last
 
+    /* And make sure it is still sane. */
+    assert(ob_data_invariant());
+    
     /* restrict final waypoint to MAX_DISTANCE */
     mtp_polar(&pp->pp_actual_pos,
 	      (retval == PPC_WAYPOINT) ? &pp->pp_waypoint : &pp->pp_goal_pos,
@@ -223,8 +307,11 @@ pp_point_type_t pp_point_identify(struct robot_position *rpoint,
 
     assert(rpoint != NULL);
     assert(oc != NULL);
-    
-    retval = PPT_DETACHED;
+
+    if (rc_compute_code(rpoint->x, rpoint->y, oc) == 0)
+	retval = PPT_INTERNAL;
+    else
+	retval = PPT_DETACHED;
     
     /* is this a corner point? Check each corner of this obstacle */
     if (PP_TOL > pp_point_distance(
@@ -260,7 +347,7 @@ pp_point_type_t pp_point_identify(struct robot_position *rpoint,
     return retval;
 }
 
-int pp_next_cornerpoint(struct path_plan *pp, rc_line_t rl)
+int pp_next_cornerpoint(struct path_plan *pp)
 {
     int retval = 0;
 
@@ -274,7 +361,6 @@ int pp_next_cornerpoint(struct path_plan *pp, rc_line_t rl)
     robot_position cp_tr; /* top right corner point */
 
     assert(pp != NULL);
-    assert(rl != NULL);
     
     /* corner points of this obstacle */
     /* SWAP ymin/ymax because of y coord system is AFU */
@@ -433,6 +519,10 @@ int pp_next_cornerpoint(struct path_plan *pp, rc_line_t rl)
 	tl_dist += tl_distg;
 	br_dist += br_distg;
 	tr_dist += tr_distg;
+
+	/* FALLTHROUGH */
+	
+    case PPT_INTERNAL:
 
 	if (pp_point_reachable(pp, &cp_bl)) {
 	    min_dist = bl_dist;

@@ -58,6 +58,9 @@ static int mc_set_goal(struct master_controller *mc, mtp_packet_t *mp)
     mc->mc_plan.pp_goal_pos = mp->data.mtp_payload_u.command_goto.position;
     mc->mc_plan.pp_speed = mp->data.mtp_payload_u.command_goto.speed;
 
+    ob_rem_obstacle(mc->mc_self_obstacle);
+    mc->mc_self_obstacle = NULL;
+    
     switch (mc->mc_pilot->pc_control_mode) {
     case PCM_NONE:
 	break;
@@ -156,6 +159,8 @@ static int mc_plot(struct master_controller *mc, mtp_packet_t *mp)
 		      mc->mc_plan.pp_goal_pos.theta,
 		      mc_data.mcd_radian_tolerance)) {
 	    mc->mc_pause_time = ~0;
+	    assert(mc->mc_self_obstacle == NULL);
+	    mc->mc_self_obstacle = ob_add_robot(&mc->mc_plan.pp_actual_pos);
 	    mtp_send_packet2(pc_data.pcd_emc_handle,
 			     MA_Opcode, MTP_UPDATE_POSITION,
 			     MA_Role, MTP_ROLE_RMC,
@@ -203,6 +208,8 @@ static int mc_plot(struct master_controller *mc, mtp_packet_t *mp)
 	case PPC_BLOCKED:
 	case PPC_GOAL_IN_OBSTACLE:
 	    mc->mc_pause_time = DEFAULT_PAUSE_TIME;
+	    assert(mc->mc_self_obstacle == NULL);
+	    mc->mc_self_obstacle = ob_add_robot(&mc->mc_plan.pp_actual_pos);
 	    break;
 	}
 
@@ -292,6 +299,8 @@ static int mc_pause(struct master_controller *mc, mtp_packet_t *mp)
 
     mc->mc_pilot->pc_flags &= ~PCF_EXPECTING_RESPONSE;
     mc->mc_pause_time = DEFAULT_PAUSE_TIME;
+    if (mc->mc_self_obstacle == NULL)
+	mc->mc_self_obstacle = ob_add_robot(&mc->mc_plan.pp_actual_pos);
     
     return retval;
 }
@@ -304,6 +313,8 @@ static int mc_request_position(struct master_controller *mc, mtp_packet_t *mp)
     assert(mc_invariant(mc));
 
     mc->mc_pause_time = 0;
+    ob_rem_obstacle(mc->mc_self_obstacle);
+    mc->mc_self_obstacle = NULL;
     mc->mc_pilot->pc_flags &= ~PCF_EXPECTING_RESPONSE;
     mtp_send_packet2(pc_data.pcd_emc_handle,
 		     MA_Opcode, MTP_REQUEST_POSITION,
@@ -342,16 +353,19 @@ static int mc_process_report(struct master_controller *mc, mtp_packet_t *mp)
 	rp.y = cp.y;
 	pc = pc_find_pilot_by_location(&rp, 0.40, mc->mc_pilot);
 	info("loc %p %u\n", pc, pc != NULL ? pc->pc_master.mc_pause_time : 0);
-	if ((pc == NULL) || (pc->pc_master.mc_pause_time > 0))
+	if (pc == NULL) {
 	    ob_found_obstacle(&mc->mc_plan.pp_actual_pos, &cp);
-	else
+	}
+	else if (pc->pc_master.mc_self_obstacle == NULL) {
 	    compass = MCF_EAST|MCF_WEST;
+	}
     }
 
     switch (compass) {
     case MCF_EAST|MCF_WEST:
 	info("%s cannot move!\n", mc->mc_pilot->pc_robot->hostname);
 	mc->mc_pause_time = DEFAULT_PAUSE_TIME;
+	mc->mc_self_obstacle = ob_add_robot(&mc->mc_plan.pp_actual_pos);
 	break;
     case MCF_EAST:
     case MCF_WEST:
@@ -369,6 +383,7 @@ static int mc_process_report(struct master_controller *mc, mtp_packet_t *mp)
 	break;
     case 0:
 	info("%s's obstacle disappeared\n", mc->mc_pilot->pc_robot->hostname);
+	mc->mc_flags &= ~MCF_CONTACT;
 	mc_request_position(mc, NULL);
 	break;
 
@@ -435,9 +450,8 @@ int mc_handle_tick(struct master_controller *mc)
     if (mc->mc_pause_time > 0) {
 	mc->mc_pause_time -= 1;
 
-	if (mc->mc_pause_time == 0) {
+	if (mc->mc_pause_time == 0)
 	    retval = mc_request_position(mc, NULL);
-	}
     }
 
     return retval;

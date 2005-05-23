@@ -1,3 +1,9 @@
+/*
+ * EMULAB-COPYRIGHT
+ * Copyright (c) 2005 University of Utah and the Flux Group.
+ * All rights reserved.
+ */
+
 /* Robot Master Control Daemon
  *
  * Dan Flickinger
@@ -321,6 +327,8 @@ int main(int argc, char *argv[])
 
 	    FD_SET(emc_handle->mh_fd, &pc_data.pcd_read_fds);
 	    rmc_config = &rmp.data.mtp_payload_u.config_rmc;
+
+	    ob_data.od_emc_handle = emc_handle;
 
 	    pc_data.pcd_emc_handle = emc_handle;
 	    pc_data.pcd_config = rmc_config;
