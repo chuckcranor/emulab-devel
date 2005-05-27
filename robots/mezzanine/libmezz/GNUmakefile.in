@@ -2,7 +2,7 @@
 # Desc: Makefile for Mezzanine IPC library
 # Author: Andrew Howard
 # Date: 21 Mar 2001
-# CVS: $Id: GNUmakefile.in,v 1.1.8.1 2005-04-07 16:27:22 fish Exp $
+# CVS: $Id: GNUmakefile.in,v 1.1.8.2 2005-05-27 21:42:47 stack Exp $
 ###########################################################################
 
 SRCDIR		= @srcdir@
@@ -36,7 +36,7 @@ MAKEDEP = makedepend
 # Build section
 ###########################################################################
 
-all: $(LIB)
+all: $(LIB) mezzdump fauxmezz
 
 include $(TESTBED_SRCDIR)/GNUmakerules
 
@@ -50,6 +50,10 @@ dep:
 clean:
 	rm -f $(LIB) *~ *.o
 
+mezzdump: mezzdump.o
+	$(LINKER) $^ $(LFLAGS) -o $@
+fauxmezz: fauxmezz.o
+	$(LINKER) $^ $(LFLAGS) -L. -lmezz -o $@
 test_geom: test_geom.o geom.o
 	$(LINKER) $^ $(LFLAGS) -o $@
 test_blend_tris: test_blend_tris.o blend_tris.o geom.o
@@ -63,6 +67,9 @@ test_blend_tris: test_blend_tris.o blend_tris.o geom.o
 install:
 	mkdir -p $(INSTALL_INCDIR)
 	mkdir -p $(INSTALL_LIBDIR)
+	mkdir -p $(INSTALL_BINDIR)
+	$(INSTALL) -m 755 mezzdump $(INSTALL_BINDIR)
+	$(INSTALL) -m 755 fauxmezz $(INSTALL_BINDIR)
 	$(INSTALL) -m 644 libmezz.a $(INSTALL_LIBDIR)
 	$(INSTALL) -m 644 $(SRCDIR)/mezz.h $(INSTALL_INCDIR)
 
