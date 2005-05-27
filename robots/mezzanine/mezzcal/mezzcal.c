@@ -21,7 +21,7 @@
  * Desc: Mezzanine calibration tool.
  * Author: Andrew Howard
  * Date: 28 Mar 2002
- * CVS: $Id: mezzcal.c,v 1.2.8.1 2005-03-18 17:17:35 stack Exp $
+ * CVS: $Id: mezzcal.c,v 1.2.8.2 2005-05-27 21:43:45 stack Exp $
  ***************************************************************************/
 
 #include <signal.h>
@@ -94,10 +94,12 @@ int main(int argc, char **argv)
   mmap = mezz_mmap();
 
   // Make sure the IPC is running before we do anything else
-  mezz_wait_event();
+  if (mmap->calibrate != -1) {
+      mezz_wait_event();
   
   // Enable the vision stuff in the ipc
-  mmap->calibrate++;
+      mmap->calibrate++;
+  }
 
   // Create gui
   app = rtk_app_create();
@@ -143,8 +145,15 @@ int main(int argc, char **argv)
   
   while (!quit)
   {
-    mezz_wait_event();
+    if (mmap->calibrate == -1) {
+      struct timespec ts = { 0, 500 * 1000 * 1000 };
 
+      nanosleep(&ts, NULL);
+    }
+    else {
+      mezz_wait_event();
+    }
+    
     imagewnd_update(imagewnd); 
     
     image_update();
