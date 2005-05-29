@@ -496,9 +496,6 @@ extern int SendCacheHints;
 int WorkQueueCount(int chunk);
 void ServerSetFileInfo(int blocks);
 
-/* Assume locked */
-int WorkQueueEnqueueBlock(int chunk, int block);
-
 /*
  * Proxy
  */
