@@ -58,8 +58,10 @@ log(const char *fmt, ...)
 	va_end(args);
 
 	if (!usesyslog) {
+		flockfile(stderr);
 		fputs(buf, stderr);
 		fputc('\n', stderr);
+		funlockfile(stderr);
 	}
 	else
 		syslog(LOG_INFO, "%s", buf);
@@ -72,9 +74,11 @@ warning(const char *fmt, ...)
 
 	va_start(args, fmt);
 	if (!usesyslog) {
+		flockfile(stderr);
 		vfprintf(stderr, fmt, args);
 		fputc('\n', stderr);
 		fflush(stderr);
+		funlockfile(stderr);
 	}
 	else
 		vsyslog(LOG_WARNING, fmt, args);
@@ -89,8 +93,11 @@ error(const char *fmt, ...)
 
 	va_start(args, fmt);
 	if (!usesyslog) {
+		flockfile(stderr);
 		vfprintf(stderr, fmt, args);
 		fflush(stderr);
+		funlockfile(stderr);
+
 	}
 	else
 		vsyslog(LOG_ERR, fmt, args);
@@ -105,9 +112,11 @@ fatal(const char *fmt, ...)
 
 	va_start(args, fmt);
 	if (!usesyslog) {
+		flockfile(stderr);
 		vfprintf(stderr, fmt, args);
 		fputc('\n', stderr);
 		fflush(stderr);
+		funlockfile(stderr);
 	}
 	else
 		vsyslog(LOG_ERR, fmt, args);

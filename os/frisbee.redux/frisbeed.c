@@ -32,4 +32,8 @@ AddNeededForOthers(int chunk, int nblocks, BlockMap_t *blockmap)
 	/* Nothing to do */
 }
 
-
+int
+StartAuxThread(NetInfo_t * ni, pthread_t * t)
+{
+	return 0;
+}

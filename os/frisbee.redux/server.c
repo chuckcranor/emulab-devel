@@ -34,6 +34,7 @@ static char	       *filename;
 
 int			killme = 0;
 int			ServerDone = 0;
+int			SendCacheHints = 0;
 
 static int		tracing = 0;
 static int		dynburst = 0;
@@ -245,7 +246,7 @@ WorkQueueEnqueue(int chunk, BlockMap_t *map, int count,
 		WorkQMax = WorkQSize;
 #endif
 
-	if (FrisbeeMode & FRISBEE_PROXY) {
+	if (PROXY_MODE) {
 		ChunkBuffer_t * cached;
 		cached = GetCachedChunk(chunk);
 		if (cached)
@@ -257,6 +258,15 @@ WorkQueueEnqueue(int chunk, BlockMap_t *map, int count,
 
 	EVENT(1, EV_WORKENQ, ni->mcastaddr, chunk, count, WorkQSize, 0);
 	return 1;
+}
+
+/* Assume locked */
+int
+WorkQueueEnqueueBlock(int chunk, int block) 
+{
+	BlockMap_t map = {{0}};
+	BlockMapSet(&map, block, 1);
+	return WorkQueueEnqueue(chunk, &map, 1, 0, 1);
 }
 
 static int
@@ -838,6 +848,8 @@ PlayFrisbee(NetInfo_t *ni)
 				continue;
 		}
 		s.idlelastloop = 0;
+		if (debug > 1)
+			log("Dequeued: %d blocks of chunk:%d starting at %d", blockcount, chunk, startblock);
 		
 		lastblock = startblock + blockcount;
 
@@ -926,7 +938,7 @@ PlayFrisbeeProxy(NetInfo_t *ni)
 		cached = GetCachedChunk(chunk);
 
 		if (cached) {
-			BlockMapSubstract(&map2, &map, &cached->blockmap);
+			BlockMapSubstract(&map2, &map, &cached->d->blockmap);
 			m = &map2;
 		} else {
 			m = &map;
@@ -941,7 +953,7 @@ PlayFrisbeeProxy(NetInfo_t *ni)
 			assert(cached->pending > 0);
 			for (i = 0; i < CHUNKSIZE; i++) {
 				if (BlockMapHave(&map, i) && !BlockMapHave(&map2, i))
-					SendBlock(ni, &s, chunk, i, cached->blocks[i].data);
+					SendBlock(ni, &s, chunk, i, cached->d->blocks[i].data);
 			}
 		}
 
@@ -978,15 +990,19 @@ int
 server_main(int argc, char **argv)
 {
 	int		ch, fd;
-	pthread_t	child_pid;
+	pthread_t	child_pid, aux_pid;
+	int		aux_thread; /* boolean */
 	off_t		fsize = 0;
 	void		*ignored;
 	NetInfo_t	ni = NETINFO_INIT;
 	int		_debug = 0;
 
+	if (PROXY_MODE)
+		MutexLock(&StartupLock);
+
 	optreset = 1;
 	optind = 1;
-	while ((ch = getopt(argc, argv, "dhp:m:i:tbDT:R:B:G:L:W:")) != -1)
+	while ((ch = getopt(argc, argv, "dhp:m:i:tbDT:R:B:G:L:W:H")) != -1)
 		switch(ch) {
 		case 'b':
 			ni.broadcast = 1;
@@ -1028,6 +1044,9 @@ server_main(int argc, char **argv)
 		case 'W':
 			bandwidth = atol(optarg);
 			break;
+		case 'H':
+			SendCacheHints = 1;
+			break;
 		case 'h':
 		case '?':
 		default:
@@ -1043,7 +1062,7 @@ server_main(int argc, char **argv)
 	if (!ni.portnum || ! ni.mcastaddr.s_addr)
 		usage();
 
-	if (FrisbeeMode & FRISBEE_PROXY) {
+	if (PROXY_MODE) {
 		fprintf(stderr, "PROXY MODE\n");
 		filename = NULL;
 	} else {
@@ -1058,7 +1077,7 @@ server_main(int argc, char **argv)
 
 	ServerLogInit();
 
-	if (!(FrisbeeMode & FRISBEE_PROXY)) {
+	if (!(PROXY_MODE)) {
 	
 		if (access(filename, R_OK) < 0)
 			pfatal("Cannot read %s", filename);
@@ -1094,19 +1113,31 @@ server_main(int argc, char **argv)
 		ServerTraceInit("frisbeed");
 		TraceStart(tracing);
 	}
-
+	
+	if (PROXY_MODE) {
+		StartupState |= STARTUP_SERVER_READY;
+		MutexUnlock(&StartupLock);
+		pthread_cond_broadcast(&StartupCond);
+	}
 	/*
 	 * Create the subthread to listen for packets.
 	 */
 	if (pthread_create(&child_pid, NULL, ServerRecvThread, (void *)&ni)) {
 		fatal("Failed to create pthread!");
 	}
+	aux_thread = StartAuxThread(&ni, &aux_pid);
+
 	gettimeofday(&IdleTimeStamp, 0);
 	
-	if (FrisbeeMode & FRISBEE_PROXY)
+	if (PROXY_MODE)
 		PlayFrisbeeProxy(&ni);
 	else
 		PlayFrisbee(&ni);
+
+	if (aux_thread) {
+		pthread_cancel(aux_pid);
+		pthread_join(aux_pid, &ignored);
+	}
 		
 	pthread_cancel(child_pid);
 	pthread_join(child_pid, &ignored);
@@ -1127,7 +1158,7 @@ server_main(int argc, char **argv)
 		log("  chunk/block size    %d/%d", CHUNKSIZE, BLOCKSIZE);
 		log("  burst size/interval %d/%d", burstsize, burstinterval);
 		log("  file read size      %d", readsize);
-		if (!(FrisbeeMode & FRISBEE_PROXY))
+		if (!PROXY_MODE)
 			log("  file:size           %s:%qd",
 			    filename, (long long)fsize);
 		log("Stats:");

@@ -114,22 +114,28 @@ main(int argc, char **argv)
 		FrisbeeMode |= FRISBEE_PROXY;
 
         if (FrisbeeMode & FRISBEE_PROXY) {
-                pthread_t server_pid;
+		pthread_t server_pid;
                 void * server_res;
+
 		fprintf(stderr, "Starting Server\n");
                 res = pthread_create(&server_pid, NULL, ServerThread, &server_args);
                 if (res != 0) fatal("Unable to start Server Thread");
-                sleep(5); /* This is a cheap hack to avoid having to
-                           * use a lock around getarg */
+
+		MutexLock(&StartupLock);
+		while (!(StartupState & STARTUP_SERVER_READY))
+		  pthread_cond_wait(&StartupCond, &StartupLock);
+
 		fprintf(stderr, "Starting Client\n");
                 res = client_main(client_args.argc, client_args.argv);
 		if (debug)
-		  fprintf(stderr, "CLIENT DONE");
+			fprintf(stderr, "CLIENT DONE");
                 if (res != 0) goto exit;
+
                 pthread_join(server_pid, &server_res);
 		if (debug)
-		  fprintf(stderr, "SERVER DONE");
+			fprintf(stderr, "SERVER DONE");
                 res = (int)server_res;
+
         } else if (FrisbeeMode & FRISBEE_CLIENT) {
                 res = client_main(client_args.argc, client_args.argv);
         } else if (FrisbeeMode & FRISBEE_SERVER) {

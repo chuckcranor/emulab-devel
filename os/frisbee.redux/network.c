@@ -52,6 +52,7 @@ CommonInit(NetInfo_t *ni)
 		pwarning("Could not increase send socket buffer size to %d",
 			 SOCKBUFSIZE);
     
+	//i = PROXY_MODE ? 2000 * 1024 : SOCKBUFSIZE;
 	i = SOCKBUFSIZE;
 	if (setsockopt(ni->sock, SOL_SOCKET, SO_RCVBUF, &i, sizeof(i)) < 0)
 		pwarning("Could not increase recv socket buffer size to %d",
@@ -199,13 +200,14 @@ PacketReceive(NetInfo_t *ni, Packet_t *p)
 
 	alen = sizeof(from);
 	bzero(&from, alen);
+
 	if ((mlen = recvfrom(ni->sock, p, sizeof(*p), 0,
 			     (struct sockaddr *)&from, &alen)) < 0) {
 		if (errno == EWOULDBLOCK)
 			return -1;
 		pfatal("PacketReceive(recvfrom)");
 	}
-
+	
 	/*
 	 * Basic integrity checks
 	 */
@@ -228,7 +230,7 @@ PacketReceive(NetInfo_t *ni, Packet_t *p)
  * go to the same place, whether client or server.
  *
  * The amount of data sent is determined from the datalen of the packet hdr.
- * All packets are actually the same size/structure. 
+ * All packets are actually the same size/structure.
  */
 void
 PacketSend(NetInfo_t *ni, Packet_t *p, int *resends)
@@ -244,7 +246,8 @@ PacketSend(NetInfo_t *ni, Packet_t *p, int *resends)
 	to.sin_addr.s_addr = ni->mcastaddr.s_addr;
 
 	delays = 0;
-	while (sendto(ni->sock, (void *)p, len, 0, 
+	if (ni->lock) pthread_mutex_lock(ni->lock);
+	while (sendto(ni->sock, (void *)p, len, 0,
 		      (struct sockaddr *)&to, sizeof(to)) < 0) {
 		if (errno != ENOBUFS)
 			pfatal("PacketSend(sendto)");
@@ -256,6 +259,7 @@ PacketSend(NetInfo_t *ni, Packet_t *p, int *resends)
 		delays++;
 		fsleep(ni->nobufdelay);
 	}
+	if (ni->lock) pthread_mutex_unlock(ni->lock);
 
 	DOSTAT(nonetbufs += delays);
 	if (resends != 0)
@@ -281,6 +285,7 @@ PacketReply(NetInfo_t *ni, Packet_t *p)
 	to.sin_addr.s_addr = p->hdr.srcip;
 	p->hdr.srcip       = ni->myipaddr.s_addr;
 
+	if (ni->lock) pthread_mutex_lock(ni->lock);
 	while (sendto(ni->sock, (void *)p, len, 0, 
 		      (struct sockaddr *)&to, sizeof(to)) < 0) {
 		if (errno != ENOBUFS)
@@ -293,6 +298,7 @@ PacketReply(NetInfo_t *ni, Packet_t *p)
 		DOSTAT(nonetbufs++);
 		fsleep(ni->nobufdelay);
 	}
+	if (ni->lock) pthread_mutex_unlock(ni->lock);
 }
 
 int
@@ -344,6 +350,10 @@ PacketValid(NetInfo_t *ni, Packet_t *p, int nchunks)
 		break;
 	case PKTSUBTYPE_LEAVE2:
 		if (p->hdr.datalen < sizeof(p->msg.leave2))
+			return 0;
+		break;
+	case PKTSUBTYPE_INCACHE:
+		if (p->hdr.datalen < sizeof(p->msg.incache))
 			return 0;
 		break;
 	default:

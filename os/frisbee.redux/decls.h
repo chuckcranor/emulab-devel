@@ -31,6 +31,10 @@
 #define CHUNKSIZE	1024
 #define BLOCKSIZE	1024
 
+/* This will allow for 2^16 chunks which allow for compressed images
+ * to be up to 2^15*2^10*2^10 = 2^35 = 32 Terabytes */
+typedef short ChunkId_t;
+
 /*
  * Make sure we can represent a bitmap of blocks in a single packet.
  * Make sure we can fit a block in a single ethernet MTU.
@@ -209,6 +213,7 @@ typedef struct {
 /*
  * Packet defs.
  */
+#define MAX_CHUNKLST_SIZE ((MAXBLOCKSIZE - sizeof(int)*8)/sizeof(ChunkId_t))
 typedef struct {
 	struct {
 		int		type;
@@ -272,6 +277,26 @@ typedef struct {
 			int		elapsed;
 			ClientStats_t	stats;
 		} leave2;
+
+		/*
+		 * Report what is in the cache to the clients.
+		 */
+
+		struct {
+			int		size;
+			ChunkId_t	chunklst[MAX_CHUNKLST_SIZE];
+		} incache;
+
+
+		/*
+		 * Reply to incache with what is needed by client.
+		 */
+
+		struct {
+			int		size;
+			ChunkId_t	chunklst[MAX_CHUNKLST_SIZE];
+		} need;
+
 	} msg;
 } Packet_t;
 #define PKTTYPE_REQUEST		1
@@ -283,6 +308,8 @@ typedef struct {
 #define PKTSUBTYPE_REQUEST	4
 #define PKTSUBTYPE_LEAVE2	5
 #define PKTSUBTYPE_PREQUEST	6
+#define PKTSUBTYPE_INCACHE	7
+#define PKTSUBTYPE_NEED		8
 
 /*
  * Struct to hold Network information.
@@ -295,9 +322,10 @@ typedef struct {
 	int		sock;
 	struct in_addr	myipaddr;
 	int		nobufdelay;
+	pthread_mutex_t * lock;
 } NetInfo_t;
 
-#define NETINFO_INIT {0,0,{},{},0,{},-1}
+#define NETINFO_INIT {0,0,{0},{0},0,{0},-1,NULL}
 
 /*
  * Protos.
@@ -322,6 +350,8 @@ extern int		debug;
 #define FRISBEE_PROXY		4
 extern int		FrisbeeMode;
 
+#define PROXY_MODE (FrisbeeMode & FRISBEE_PROXY)
+
 /*
  *
  */
@@ -338,19 +368,9 @@ GetStamp()
 	return (unsigned long long)tv.tv_sec * 1000000 + tv.tv_usec;
 }
 
-/*
- * Global lock protecting all the main data structures.  Should only
- * be held for a very short time.  And never when the thread may
- * block.  Use a single lock to avoid having to deal with deadlock
- * issues.
- */
-/*#define GLOBAL_LOCK_STATS 1*/
-/*#define GLOBAL_LOCK_TIME  1*/
-
-extern pthread_mutex_t GlobalLock;
 
 static inline void
-GlobalLockCheck(int res, const char * str)
+MutexCheck(int res, const char * str)
 {
 	if (res != 0) {
 		char buf[256];
@@ -360,26 +380,40 @@ GlobalLockCheck(int res, const char * str)
 	}
 }
 
+static inline void
+MutexLock(pthread_mutex_t * l)
+{
+	int res = pthread_mutex_lock(l);
+	MutexCheck(res, "pthread_mutex_lock");
+}
+
+static inline void
+MutexUnlock(pthread_mutex_t * l)
+{
+	int res = pthread_mutex_unlock(l);
+	MutexCheck(res, "pthread_mutex_unlock");
+}
+
+/*
+ * Global lock protecting all the main data structures.  Should only
+ * be held for a very short time.  And never when the thread may
+ * block.  Use a single lock to avoid having to deal with deadlock
+ * issues.
+ */
+/* #define GLOBAL_LOCK_STATS 1 */
+/* #define GLOBAL_LOCK_TIME  1 */
+
+extern pthread_mutex_t GlobalLock;
+
 #ifndef GLOBAL_LOCK_STATS
 
-static inline void
-GetGlobalLock() 
-{
-	int res = pthread_mutex_lock(&GlobalLock);
-	GlobalLockCheck(res, "pthread_mutex_lock");
-}
-
-static inline void
-ReleaseGlobalLock() 
-{
-	int res = pthread_mutex_unlock(&GlobalLock);
-	GlobalLockCheck(res, "pthread_mutex_unlock");
-}
-
+static inline void GetGlobalLock() {MutexLock(&GlobalLock);}
+static inline void ReleaseGlobalLock() {MutexUnlock(&GlobalLock);}
+	
 #else
 
 static inline void Dummy() {}
-#define GetGlobalLock (_GetGlobalLock(__FILE__, __LINE__), Dummy)
+#define GetGlobalLock _GetGlobalLock(__FILE__, __LINE__), Dummy
 
 void _GetGlobalLock(const char * file, int lineno);
 void ReleaseGlobalLock();
@@ -390,6 +424,13 @@ void PrintGlobalLockStats();
 
 #define UNLOCKED 0
 #define LOCKED   1
+
+extern pthread_mutex_t  StartupLock;
+extern pthread_cond_t   StartupCond;
+extern int		StartupState;
+
+#define STARTUP_CLIENT_READY 1
+#define STARTUP_SERVER_READY 2
 
 /*
  * Client
@@ -409,19 +450,28 @@ void PrintGlobalLockStats();
  */
 
 typedef struct {
+	stamp_t    stamp;
+
+	struct ChunkBufferData_t * d;
+
 	int	   thischunk;		/* Which chunk in progress */
-	int	   state;		/* State of chunk */
-	int	   neededself;		/* If the chunk is needed by
+	short	   state;		/* State of chunk */
+	short	   neededself;		/* If the chunk is needed by
 					 * the client itself */
-	int	   pending;		/* Number of pending requests
+	short	   pending;		/* Number of pending requests
 					 * in the work queue */
-	stamp_t    lastrecv;
+	short	   hold;		/* Hold onto since other
+ 					 * clients may need */
+} ChunkBuffer_t;
+
+typedef struct ChunkBufferData_t {
 	int	   blockcount;		/* Number of blocks not received yet */
 	BlockMap_t blockmap;		/* Which blocks have been received */
 	struct {
 		char	data[BLOCKSIZE];
 	} blocks[CHUNKSIZE];		/* Actual block data */
-} ChunkBuffer_t;
+} ChunkBufferData_t;
+
 #define CHUNK_EMPTY	0
 #define CHUNK_FILLING	1
 #define CHUNK_FULL	2
@@ -434,6 +484,7 @@ int PossiblyRequestMissing(NetInfo_t *ni, int timedout, stamp_t stamp,
 int PossiblyRequestNeeded(NetInfo_t *ni, int timedout, stamp_t stamp,
 			  int chunk, BlockMap_t *map, int count,
 			  int locked);
+int GetChunklst(ChunkId_t chunklst[]);
 
 /*
  * Server
@@ -441,8 +492,12 @@ int PossiblyRequestNeeded(NetInfo_t *ni, int timedout, stamp_t stamp,
 
 extern int killme;
 extern int ServerDone;
+extern int SendCacheHints;
 int WorkQueueCount(int chunk);
 void ServerSetFileInfo(int blocks);
+
+/* Assume locked */
+int WorkQueueEnqueueBlock(int chunk, int block);
 
 /*
  * Proxy
@@ -457,3 +512,5 @@ void AddNeededForOthers(int chunk, int nblocks, BlockMap_t *blockmap);
  * not already in the cache */
 /* Will lock */
 int RequestNeededForOthers(NetInfo_t *ni, int timedout, stamp_t stamp);
+
+int StartAuxThread(NetInfo_t * ni, pthread_t * t);

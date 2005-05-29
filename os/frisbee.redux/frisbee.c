@@ -41,3 +41,9 @@ int AnyNeededForOthers()
 {
 	return 0;
 }
+
+int
+StartAuxThread(NetInfo_t * ni, pthread_t * t)
+{
+	return 0;
+}

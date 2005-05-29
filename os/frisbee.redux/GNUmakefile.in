@@ -132,6 +132,8 @@ imageunzip.o:	$(FRISBEEDIR)/imageunzip.c
 
 client.o:	decls.h log.h utils.h trace.h
 server.o:	decls.h log.h utils.h trace.h
+proxy.o:	decls.h log.h utils.h trace.h
+common.o:	decls.h log.h
 log.o:		decls.h log.h
 network.o:	decls.h utils.h
 trace.o:	decls.h trace.h log.h
