@@ -119,7 +119,7 @@ struct obstacle_node *ob_add_obstacle(struct obstacle_config *oc)
     return retval;
 }
 
-struct obstacle_node *ob_add_robot(struct robot_position *rp)
+struct obstacle_node *ob_add_robot(struct robot_position *rp, int id)
 {
     struct obstacle_node *retval;
     
@@ -148,6 +148,7 @@ struct obstacle_node *ob_add_robot(struct robot_position *rp)
 	mtp_send_packet2(ob_data.od_emc_handle,
 			 MA_Opcode, MTP_CREATE_OBSTACLE,
 			 MA_Role, MTP_ROLE_RMC,
+			 MA_RobotID, id,
 			 MA_ObstacleVal, &retval->on_expanded,
 			 MA_TAG_DONE);
     }
@@ -176,19 +177,28 @@ void ob_rem_obstacle(struct obstacle_node *on)
     }
 }
 
-struct obstacle_node *ob_find_intersect(rc_line_t rl_inout)
+struct obstacle_node *ob_find_intersect(rc_line_t rl_inout, float *cross_inout)
 {
     struct obstacle_node *on, *retval = NULL;
-    struct rc_line rl;
-
+    float _cross = FLT_MAX;
+    
     assert(rl_inout != NULL);
 
+    if (cross_inout == NULL)
+	cross_inout = &_cross;
+    
     on = (struct obstacle_node *)ob_data.od_active.lh_Head;
     while ((retval == NULL) && (on->on_link.ln_Succ != NULL)) {
-	rl = *rl_inout;
+	struct rc_line rl = *rl_inout;
+	
 	if (rc_clip_line(&rl, &on->on_expanded)) {
-	    *rl_inout = rl;
-	    retval = on;
+	    float cross = hypotf(rl.x0 - rl.x1, rl.y0 - rl.y1);
+	    
+	    if (cross > *cross_inout) {
+		*cross_inout = cross;
+		*rl_inout = rl;
+		retval = on;
+	    }
 	}
 	on = (struct obstacle_node *)on->on_link.ln_Succ;
     }
@@ -199,7 +209,7 @@ struct obstacle_node *ob_find_intersect(rc_line_t rl_inout)
 struct obstacle_node *ob_find_intersect2(struct robot_position *actual,
 					 struct robot_position *goal,
 					 float *distance_out,
-					 float *cross_out)
+					 float *cross_inout)
 {
     struct obstacle_node *retval;
     struct rc_line rl;
@@ -207,7 +217,7 @@ struct obstacle_node *ob_find_intersect2(struct robot_position *actual,
     assert(actual != NULL);
     assert(goal != NULL);
     assert(distance_out != NULL);
-    assert(cross_out != NULL);
+    assert(cross_inout != NULL);
     
     rl.x0 = actual->x;
     rl.y0 = actual->y;
@@ -215,9 +225,8 @@ struct obstacle_node *ob_find_intersect2(struct robot_position *actual,
     rl.y1 = goal->y;
 
     *distance_out = FLT_MAX; // "infinity"
-    if ((retval = ob_find_intersect(&rl)) != NULL)
+    if ((retval = ob_find_intersect(&rl, cross_inout)) != NULL)
 	*distance_out = hypotf(actual->x - rl.x0, actual->y - rl.y0);
-    *cross_out = hypotf(rl.x0 - rl.x1, rl.y0 - rl.y1);
     
     return retval;
 }
@@ -302,7 +311,7 @@ struct obstacle_node *ob_found_obstacle(struct robot_position *actual,
     ob_expand_obstacle(&oc, &oc, DYNAMIC_OBSTACLE_SIZE + OBSTACLE_BUFFER);
     
     if (((retval = ob_find_overlap(&oc)) != NULL) &&
-	(retval->on_type != OBT_STATIC)) {
+	(retval->on_type == OBT_DYNAMIC)) {
 	opcode = MTP_UPDATE_OBSTACLE;
 	retval->on_decay_seconds = OB_DECAY_START;
 	ob_merge_obstacles(&retval->on_expanded, &oc);

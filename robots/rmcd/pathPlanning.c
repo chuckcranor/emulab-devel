@@ -75,7 +75,7 @@ static int pp_point_in_bounds(float x, float y)
     if (retval) {
 	rl.x0 = rl.x1 = x;
 	rl.y0 = rl.y1 = y;
-	if (ob_find_intersect(&rl) != NULL)
+	if (ob_find_intersect(&rl, NULL) != NULL)
 	    retval = 0;
     }
     
@@ -110,27 +110,37 @@ static int pp_point_reachable(struct path_plan *pp, struct robot_position *rp)
 	rl.y1 = rp->y;
 	oc = pp->pp_obstacle;
 	if (rc_compute_code(rl.x0, rl.y0, &oc) == 0) {
+	    float xlen, ylen;
+
 	    /*
 	     * The point is inside the obstacle, shrink the size of the
 	     * obstacle so the point is on the outside.
 	     */
-	    if (abs(rl.x0 - pp->pp_obstacle.xmin) <
-		abs(rl.x0 - pp->pp_obstacle.xmax)) {
-		oc.xmin = rl.x0 + 0.01;
-		oc.xmax = pp->pp_obstacle.xmax;
+	    xlen = min(fabs(rl.x0 - pp->pp_obstacle.xmin),
+		       fabs(rl.x0 - pp->pp_obstacle.xmax));
+	    ylen = min(fabs(rl.y0 - pp->pp_obstacle.ymin),
+		       fabs(rl.y0 - pp->pp_obstacle.ymax));
+	    if (xlen < ylen) {
+		if (fabs(rl.x0 - pp->pp_obstacle.xmin) <
+		    fabs(rl.x0 - pp->pp_obstacle.xmax)) {
+		    oc.xmin = rl.x0 + 0.01;
+		    oc.xmax = pp->pp_obstacle.xmax;
+		}
+		else {
+		    oc.xmin = pp->pp_obstacle.xmin;
+		    oc.xmax = rl.x0 - 0.01;
+		}
 	    }
 	    else {
-		oc.xmin = pp->pp_obstacle.xmin;
-		oc.xmax = rl.x0 - 0.01;
-	    }
-	    if (abs(rl.y0 - pp->pp_obstacle.ymin) <
-		abs(rl.y0 - pp->pp_obstacle.ymax)) {
-		oc.ymin = rl.y0 + 0.01;
-		oc.ymax = pp->pp_obstacle.ymax;
-	    }
-	    else {
-		oc.ymin = pp->pp_obstacle.ymin;
-		oc.ymax = rl.y0 - 0.01;
+		if (fabs(rl.y0 - pp->pp_obstacle.ymin) <
+		    fabs(rl.y0 - pp->pp_obstacle.ymax)) {
+		    oc.ymin = rl.y0 + 0.01;
+		    oc.ymax = pp->pp_obstacle.ymax;
+		}
+		else {
+		    oc.ymin = pp->pp_obstacle.ymin;
+		    oc.ymax = rl.y0 - 0.01;
+		}
 	    }
 	}
 	
@@ -182,6 +192,13 @@ pp_plot_code_t pp_plot_waypoint(struct path_plan *pp)
 	struct obstacle_node *on, *min_on = NULL;
 	
 	/*
+	 * The path doesn't cross enough of the obstacle box for us to worry
+	 * about it so we dump it on the extra list so the intersect doesn't
+	 * return it again.  XXX The number is partially a guess and
+	 * empirically derived.
+	 */
+	cross = PP_MIN_OBSTACLE_CROSS;
+	/*
 	 * First we find all of the obstacles that intersect with this path
 	 * and locate the minimum distance to an obstacle.
 	 */
@@ -190,25 +207,15 @@ pp_plot_code_t pp_plot_waypoint(struct path_plan *pp)
 					&distance,
 					&cross)) != NULL) {
 	    lnRemove(&on->on_link);
-	    if (cross < 0.20) {
-		/*
-		 * The path doesn't cross enough of the obstacle box for us to
-		 * worry about it so we dump it on the extra list so the
-		 * intersect doesn't return it again.  XXX The number is
-		 * partially a guess and empirically derived.
-		 */
-		lnAddTail(on->on_type == OBT_STATIC ? &sextra : &dextra,
-			  &on->on_link);
+	    /* Record the intersection and */
+	    lnAddTail(&intersections, &on->on_link);
+	    /* ... check if this is the closest obstacle. */
+	    if (distance < min_distance) {
+		min_distance = distance;
+		min_on = on;
 	    }
-	    else {
-		/* Record the intersection and */
-		lnAddTail(&intersections, &on->on_link);
-		/* ... check if this is the closest obstacle. */
-		if (distance < min_distance) {
-		    min_distance = distance;
-		    min_on = on;
-		}
-	    }
+	    
+	    cross = PP_MIN_OBSTACLE_CROSS;
 	}
 	
 	/* Check if there was an actual intersection. */
@@ -250,6 +257,7 @@ pp_plot_code_t pp_plot_waypoint(struct path_plan *pp)
 	}
 
 	/* Check for obstacles on the path to our new waypoint. */
+	cross = PP_MIN_OBSTACLE_CROSS;
     } while ((retval == PPC_WAYPOINT) &&
 	     (ob_find_intersect2(&pp->pp_actual_pos,
 				 &pp->pp_waypoint,
@@ -507,6 +515,8 @@ int pp_next_cornerpoint(struct path_plan *pp)
 	break;
 
     case PPT_DETACHED:
+    case PPT_INTERNAL:
+    case PPT_OUTOFBOUNDS:
 	/* actual point is detached from obstacle boundary */
 	/* proceed to the CP nearest the IP */
 	/* CHANGE HERE TO ADD OPTIMIZATION */
@@ -519,10 +529,6 @@ int pp_next_cornerpoint(struct path_plan *pp)
 	tl_dist += tl_distg;
 	br_dist += br_distg;
 	tr_dist += tr_distg;
-
-	/* FALLTHROUGH */
-	
-    case PPT_INTERNAL:
 
 	if (pp_point_reachable(pp, &cp_bl)) {
 	    min_dist = bl_dist;
@@ -563,10 +569,6 @@ int pp_next_cornerpoint(struct path_plan *pp)
 	    min_dist = tr_dist;
 	    pp->pp_waypoint = cp_tr;
 	}
-	break;
-
-    case PPT_OUTOFBOUNDS:
-	assert(0);
 	break;
     }
 

@@ -17,6 +17,8 @@
 #include "listNode.h"
 #include "mtp.h"
 
+#define PP_MIN_OBSTACLE_CROSS 0.20f
+
 /**
  * Return codes for pp_plot_waypoint.
  */

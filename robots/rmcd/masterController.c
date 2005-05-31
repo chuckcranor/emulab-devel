@@ -160,7 +160,8 @@ static int mc_plot(struct master_controller *mc, mtp_packet_t *mp)
 		      mc_data.mcd_radian_tolerance)) {
 	    mc->mc_pause_time = ~0;
 	    assert(mc->mc_self_obstacle == NULL);
-	    mc->mc_self_obstacle = ob_add_robot(&mc->mc_plan.pp_actual_pos);
+	    mc->mc_self_obstacle = ob_add_robot(&mc->mc_plan.pp_actual_pos,
+						mc->mc_pilot->pc_robot->id);
 	    mtp_send_packet2(pc_data.pcd_emc_handle,
 			     MA_Opcode, MTP_UPDATE_POSITION,
 			     MA_Role, MTP_ROLE_RMC,
@@ -209,7 +210,8 @@ static int mc_plot(struct master_controller *mc, mtp_packet_t *mp)
 	case PPC_GOAL_IN_OBSTACLE:
 	    mc->mc_pause_time = DEFAULT_PAUSE_TIME;
 	    assert(mc->mc_self_obstacle == NULL);
-	    mc->mc_self_obstacle = ob_add_robot(&mc->mc_plan.pp_actual_pos);
+	    mc->mc_self_obstacle = ob_add_robot(&mc->mc_plan.pp_actual_pos,
+						mc->mc_pilot->pc_robot->id);
 	    break;
 	}
 
@@ -300,7 +302,8 @@ static int mc_pause(struct master_controller *mc, mtp_packet_t *mp)
     mc->mc_pilot->pc_flags &= ~PCF_EXPECTING_RESPONSE;
     mc->mc_pause_time = DEFAULT_PAUSE_TIME;
     if (mc->mc_self_obstacle == NULL)
-	mc->mc_self_obstacle = ob_add_robot(&mc->mc_plan.pp_actual_pos);
+	mc->mc_self_obstacle = ob_add_robot(&mc->mc_plan.pp_actual_pos,
+					    mc->mc_pilot->pc_robot->id);
     
     return retval;
 }
@@ -365,7 +368,8 @@ static int mc_process_report(struct master_controller *mc, mtp_packet_t *mp)
     case MCF_EAST|MCF_WEST:
 	info("%s cannot move!\n", mc->mc_pilot->pc_robot->hostname);
 	mc->mc_pause_time = DEFAULT_PAUSE_TIME;
-	mc->mc_self_obstacle = ob_add_robot(&mc->mc_plan.pp_actual_pos);
+	mc->mc_self_obstacle = ob_add_robot(&mc->mc_plan.pp_actual_pos,
+					    mc->mc_pilot->pc_robot->id);
 	break;
     case MCF_EAST:
     case MCF_WEST:

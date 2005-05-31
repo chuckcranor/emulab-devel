@@ -193,6 +193,7 @@ int main(int argc, char *argv[])
     mtp_handle_t emc_handle = NULL;
     struct timeval tv, next_time;
     struct mtp_packet rmp;
+    time_t start_time;
 
     ob_init();
     
@@ -292,12 +293,15 @@ int main(int argc, char *argv[])
 
     signal(SIGPIPE, SIG_IGN);
 
+    time(&start_time);
     info("RMCD %s\n"
+	 "  start:\t%s"
 	 "  max_refine_retries:\t%d\n"
 	 "  meter_tolerance:\t%.2f\n"
 	 "  radian_tolerance:\t%.2f\n"
 	 "  max_distance:\t%.2f\n",
 	 build_info,
+	 ctime(&start_time),
 	 mc_data.mcd_max_refine_retries,
 	 mc_data.mcd_meter_tolerance,
 	 mc_data.mcd_radian_tolerance,

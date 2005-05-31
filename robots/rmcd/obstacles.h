@@ -109,9 +109,10 @@ struct obstacle_node *ob_add_obstacle(struct obstacle_config *oc);
  * position.
  *
  * @param rp The current position of the robot.
+ * @param id The integer ID of the robot.
  * @return The obstacle_node created to represent the robot.
  */
-struct obstacle_node *ob_add_robot(struct robot_position *rp);
+struct obstacle_node *ob_add_robot(struct robot_position *rp, int id);
 
 /**
  * Remove a dynamic obstacle from the active list.
@@ -128,10 +129,15 @@ void ob_rem_obstacle(struct obstacle_node *on);
  * @param rl_inout An initialized line object that specifies the starting and
  * goal positions of the robot.  On return, this value will be set to the two
  * points where the path intersects the obstacle.
+ * @param cross_inout Specifies the minimum distance the path must cross the
+ * obstacle for it to be considered an intersection.  If the path intersects an
+ * obstacle, this is set to the length of the line that goes through the
+ * obstacle.
  * @return The first obstacle found to intersect the given line or NULL if none
  * could be found.
  */
-struct obstacle_node *ob_find_intersect(rc_line_t rl_inout);
+struct obstacle_node *ob_find_intersect(rc_line_t rl_inout,
+					float *cross_inout);
 
 /**
  * Alternative version of ob_find_intersect that does not take an inout
@@ -144,15 +150,17 @@ struct obstacle_node *ob_find_intersect(rc_line_t rl_inout);
  * @param goal The goal position of the robot.
  * @param distance_out If the path intersects an obstacle, this is set to the
  * distance from the actual position to the intersected obstacle.
- * @param cross_out If the path intersects an obstacle, this is set to the
- * length of the line that goes through the obstacle.
+ * @param cross_inout Specifies the minimum distance the path must cross the
+ * obstacle for it to be considered an intersection.  If the path intersects an
+ * obstacle, this is set to the length of the line that goes through the
+ * obstacle.
  * @return The first obstacle found to intersect the given line or NULL if none
  * could be found.
  */
 struct obstacle_node *ob_find_intersect2(struct robot_position *actual,
 					 struct robot_position *goal,
 					 float *distance_out,
-					 float *cross_out);
+					 float *cross_inout);
 
 /**
  * Find the first obstacle in the active list that overlaps with the given one.
