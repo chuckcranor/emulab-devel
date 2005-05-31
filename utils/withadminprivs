@@ -1,6 +1,0 @@
-#!/bin/sh
-#
-# Simple script to run a command with testbed admin privs turned on
-#
-
-exec /usr/bin/env WITH_TB_ADMIN_PRIVS=1 "$@"
