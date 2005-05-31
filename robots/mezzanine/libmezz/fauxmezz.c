@@ -64,7 +64,7 @@ int main(int argc, char *argv[])
 	argv += 2;
 	argc -= 2;
 
-	printf("hit return to load the next frame\n");
+	printf("Hit return to load the next frame\n");
 	mm = mezz_mmap();
 	read_mmap(mm, argv[lpc]);
 	while (!feof(stdin)) {
@@ -72,6 +72,7 @@ int main(int argc, char *argv[])
 
 	    printf("reading %s\n", argv[lpc % argc]);
 	    read_mmap(mm, argv[lpc % argc]);
+	    printf("Time: %f  Frame: %d\n", mm->time, mm->count);
 	    mezz_raise_event();
 
 	    lpc += 1;
