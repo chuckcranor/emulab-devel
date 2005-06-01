@@ -52,7 +52,7 @@ CommonInit(NetInfo_t *ni)
 		pwarning("Could not increase send socket buffer size to %d",
 			 SOCKBUFSIZE);
     
-	//i = PROXY_MODE ? 2000 * 1024 : SOCKBUFSIZE;
+	/* i = PROXY_MODE ? 2000 * 1024 : SOCKBUFSIZE; */
 	i = SOCKBUFSIZE;
 	if (setsockopt(ni->sock, SOL_SOCKET, SO_RCVBUF, &i, sizeof(i)) < 0)
 		pwarning("Could not increase recv socket buffer size to %d",
@@ -353,7 +353,8 @@ PacketValid(NetInfo_t *ni, Packet_t *p, int nchunks)
 			return 0;
 		break;
 	case PKTSUBTYPE_INCACHE:
-		if (p->hdr.datalen < sizeof(p->msg.incache))
+	case PKTSUBTYPE_NEED:
+		if (p->hdr.datalen < sizeof(p->msg.chunklst))
 			return 0;
 		break;
 	default:

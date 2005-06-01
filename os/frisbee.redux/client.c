@@ -62,6 +62,14 @@ static void	GotBlock(NetInfo_t *ni, Packet_t *p);
 static void	RequestChunk(NetInfo_t *ni, int timedout);
 static void	RequestStamp(int chunk, int block, int count, void *arg);
 static int	RequestRedoTime(int chunk, unsigned long long curtime);
+static void	UseChunklst(ChunkId_t chunklst[], int * size);
+
+#define FIND_AVAIL 0
+#define FIND_FREE  1
+int		PreAllocChunk(int chunk, int mode);
+static void	SetupChunk(int i, int chunk);
+static void	StartChunk(int i, int chunk);
+
 extern int	ImageUnzipInit(char *filename, int slice, int debug, int zero,
 			       int nothreads, int dostype, int dodots,
 			       unsigned long writebufmem);
@@ -90,6 +98,14 @@ ChunkId_t         *ChunkBufferIdx;      /* Index into the Cache */
 int		  TotalChunkCount;	/* Total number of chunks in file */
 int		  IdleCounter;		/* Countdown to request more data */
 
+static inline void
+InitHold(ChunkBuffer_t * p) 
+{
+	if (UseCacheHints)
+		p->hold = CACHE_HINT_TRIES + 1;
+	else
+		UpdateHold(p);
+}
 
 /* The ChunkRequestList is the order in which new chunks are
  * requested.  The first list is a given to by the server and is a
@@ -595,13 +611,12 @@ ClientRecvThread(void *arg)
 			break;
 
 		case PKTSUBTYPE_INCACHE:
-			MutexLock(ChunkRequestLists[0].lock);
-			memcpy(ChunkRequestLists[0].data, p->msg.incache.chunklst,
-			       sizeof(ChunkId_t) * p->msg.incache.size);
-			ChunkRequestLists[0].size = p->msg.incache.size;
 			if (debug)
-				log("Received cache hint: %d .. ", ChunkRequestLists[0].data[0]);
-			MutexUnlock(ChunkRequestLists[0].lock);
+				log("Received cache hint: %d .. ", p->msg.chunklst.data[0]);
+			UseChunklst(p->msg.chunklst.data, &p->msg.chunklst.size);
+			p->hdr.type = PKTTYPE_REPLY;
+			p->hdr.subtype = PKTSUBTYPE_NEED;
+			PacketSend(ni, p, NULL);
 			break;
 
 		case PKTSUBTYPE_JOIN:
@@ -656,6 +671,7 @@ ChunkerStartup(NetInfo_t *ni)
 		ChunkBuffer[i].thischunk = -1;
 		ChunkBuffer[i].neededself = 0;
 		ChunkBuffer[i].pending = 0;
+		ChunkBuffer[i].hold = 0;
 		ChunkBuffer[i].stamp = 0;
 		ChunkBuffer[i].d = &ChunkBufferData[i];
 	}
@@ -768,6 +784,7 @@ ChunkerStartup(NetInfo_t *ni)
 		 *
 		 */
 		ChunkBuffer[i].neededself = 0;
+		UpdateHold(&ChunkBuffer[i]);
 		chunkcount--;
 		CLEVENT(1, EV_CLIDCDONE,
 			ChunkBuffer[i].thischunk, chunkcount,
@@ -914,8 +931,7 @@ GotBlock(NetInfo_t *ni, Packet_t *p)
 {
 	int	chunk = p->msg.block.chunk;
 	int	block = p->msg.block.block;
-	int	i, free = -1;
-	stamp_t mindate = (unsigned long long)-1;
+	int	i;
 	static int lastnoroomchunk = -1, lastnoroomblocks, inprogress;
 
 	GetGlobalLock();
@@ -923,29 +939,20 @@ GotBlock(NetInfo_t *ni, Packet_t *p)
 	/*
 	 * Search the chunk buffer for a match (or a free one).
 	 */
-	if (ChunkBufferIdx[chunk] != -1)
-		i = ChunkBufferIdx[chunk];
-	else for (i = 0; i < maxchunkbufs; i++) {
-		if (!ChunkBuffer[i].neededself && !ChunkBuffer[i].pending) {
-			if (ChunkBuffer[i].stamp < mindate) {
-				free = i;
-				mindate = ChunkBuffer[i].stamp;
-			}
-			continue;
-		}
-	}
-	if (i == maxchunkbufs) {
+	i = ChunkBufferIdx[chunk];
+	if (i == -1) {
 		/*
 		 * Did not find it. Allocate the free one, or drop the
 		 * packet if there is no free chunk.
 		 */
-		if (free == -1) {
+		i = PreAllocChunk(chunk, FIND_FREE);
+		if (i == -1) {
 			if (chunk != lastnoroomchunk) {
 				CLEVENT(1, EV_CLINOROOM, chunk, block,
 					lastnoroomblocks, 0);
 				lastnoroomchunk = chunk;
 				lastnoroomblocks = 0;
-				if (debug)
+				if (1 || debug)
 					log("No free buffer for chunk %d!",
 					    chunk);
 			}
@@ -969,30 +976,18 @@ GotBlock(NetInfo_t *ni, Packet_t *p)
 			return;
 		}
 
+		SetupChunk(i, chunk);
+	}
+
+	if (ChunkBuffer[i].state == CHUNK_EMPTY) {
+
 		if (debug)
-			log("Starting chunk %d (buffer %d)", chunk, free);
+			log("Starting chunk %d (buffer %d)", chunk, i);
 
-		i = free;
-		if (ChunkBuffer[i].thischunk != -1)
-			ChunkBufferIdx[ChunkBuffer[i].thischunk] = -1;
-
-		ChunkBuffer[i].state      = CHUNK_FILLING;
-		ChunkBuffer[i].thischunk  = chunk;
-		ChunkBufferData[i].blockcount = CHUNKSIZE;
-		BlockMapClear(&ChunkBufferData[i].blockmap);
-
-		ChunkBuffer[i].neededself = !Chunks[chunk].done;
-		if (PROXY_MODE) {
-			ChunkBuffer[i].pending = WorkQueueCount(chunk);
-		} else {
-			ChunkBuffer[i].pending = 0;
-		}
-
-		ChunkBufferIdx[chunk] = i;
-
-		Chunks[chunk].done = 1;
+		StartChunk(i, chunk);
 
 		inprogress++;
+
 		CLEVENT(1, EV_CLISCHUNK, chunk, block, inprogress, 0);
 	}
 
@@ -1239,7 +1234,6 @@ RequestChunk(NetInfo_t *ni, int timedout)
 			MutexLock(lst->lock);
 		for (i = 0; i < lst->size && j < k; i++) {
 			ChunkId_t chunk = lst->data[i];
-			
 			/* If already working on this chunk, skip it. */
 			if (Chunks[chunk].done)
 				continue;
@@ -1443,7 +1437,7 @@ int CalcFreeBufs(int *filling)
 	int i, avail = 0;
 	if (filling) *filling = 0;
 	for (i = 0; i < maxchunkbufs; i++) {
-		if (!ChunkBuffer[i].neededself && !ChunkBuffer[i].pending)
+		if (!ChunkBuffer[i].hold)
 			avail++;
 		else if (filling)
 			(*filling)++;
@@ -1456,27 +1450,98 @@ GetCachedChunk(int chunkno)
 {
 	int i;
 	i = ChunkBufferIdx[chunkno];
-	if (i == -1) return NULL;
+	if (i == -1 || ChunkBuffer[i].state == CHUNK_EMPTY) return NULL;
 	else return &ChunkBuffer[i];
 }
 
-
-#if 0
-void GetChunk(NetInfo_t * ni, int chunkno, ChunkBuffer_t * res)
+/* Assume the chunk in not already in the cache.  Returns -1 if a
+ * avail or free (depending on the mode) is not available */
+int
+PreAllocChunk(int chunk, int mode)
 {
-	/* Set up the environment so that there is only one chunk to
-	   request.  And only one chunk to save the results to. */
-	Chunks = 0; /* Should not be used */
-	maxchunks = 1;
-	ChunkBuffer = res;
-	ChunkBuffer->thischunk = chunkno;
-	ChunkBuffer->state = CHUNK_EMPTY;
-	ChunkRequestListSize = 1;
-	ChunkRequestList = &chunkno;
-	ClientRecvThread(&ni);
+	int i;
+	stamp_t minavail = (unsigned long long)-1;
+	int avail = -1;
+	stamp_t minfree = (unsigned long long)-1;
+	int free = -1;
+
+	for (i = 0; i < maxchunkbufs; i++) {
+		if (!ChunkBuffer[i].hold) {
+			if (!ChunkBuffer[i].reserved 
+			    && ChunkBuffer[i].stamp < minavail) {
+				avail = i;
+				minavail = ChunkBuffer[i].stamp;
+			}
+			if (ChunkBuffer[i].stamp < minfree) {
+				free = i;
+				minfree = ChunkBuffer[i].stamp;
+			}
+			continue;
+		}
+	}
+	if (avail >= 0)
+		i = avail;
+	else if (mode == FIND_AVAIL) 
+		return i = -1;
+	else if (free >= 0)
+		i = free;
+	else
+		i = -1;
+	return i;
 }
 
-#endif
+static void
+SetupChunk(int i, int chunk)
+{
+	if (ChunkBuffer[i].thischunk != -1)
+		ChunkBufferIdx[ChunkBuffer[i].thischunk] = -1;
+
+	ChunkBuffer[i].state      = CHUNK_EMPTY;
+	ChunkBuffer[i].thischunk  = chunk;
+	ChunkBufferData[i].blockcount = CHUNKSIZE;
+	BlockMapClear(&ChunkBufferData[i].blockmap);
+
+	ChunkBuffer[i].hold = 0;
+	ChunkBuffer[i].neededself = 0;
+	ChunkBuffer[i].pending = 0;
+	ChunkBuffer[i].reserved = 0;
+	
+	ChunkBufferIdx[chunk] = i;
+}
+
+static void
+StartChunk(int i, int chunk)
+{
+	ChunkBuffer[i].state      = CHUNK_FILLING;
+	ChunkBuffer[i].neededself = !Chunks[chunk].done;
+	if (PROXY_MODE) {
+		ChunkBuffer[i].pending = WorkQueueCount(chunk);
+	} else {
+		ChunkBuffer[i].pending = 0;
+	}
+	
+	InitHold(&ChunkBuffer[i]);
+	
+	Chunks[chunk].done = 1;
+}
+
+
+ChunkBuffer_t *
+ReserveChunk(int chunk)
+{
+	int i;
+	i = ChunkBufferIdx[chunk];
+	if (i == -1) {
+		i = PreAllocChunk(chunk, FIND_AVAIL);
+		if (i == -1)
+			return NULL;
+		SetupChunk(i, chunk);
+	}
+
+	ChunkBuffer[i].stamp = GetStamp();
+	ChunkBuffer[i].reserved = 1;
+	return &ChunkBuffer[i];
+}
 
 int
 GetChunklst(ChunkId_t chunklst[])
@@ -1493,14 +1558,17 @@ GetChunklst(ChunkId_t chunklst[])
 	j = 0;
 	GetGlobalLock();
 	for (i = 0; i < maxchunkbufs; ++i) {
-		if (ChunkBuffer[i].neededself 
-		    || ChunkBuffer[i].pending  
+		if (ChunkBuffer[i].neededself
+		    || ChunkBuffer[i].pending
+		    || !ChunkBuffer[i].hold
 		    || ChunkBuffer[i].thischunk == -1)
 			continue;
-		data[j].stamp = ChunkBuffer[i].stamp;
-		data[j].chunk = ChunkBuffer[i].thischunk;
-		++j;
-		if (j == MAX_CHUNKLST_SIZE) break;
+		ChunkBuffer[i].hold--;
+		if (j < MAX_CHUNKLST_SIZE) {
+			data[j].stamp = ChunkBuffer[i].stamp;
+			data[j].chunk = ChunkBuffer[i].thischunk;
+			++j;
+		}
 	}
 	ReleaseGlobalLock();
 	size = j;
@@ -1529,7 +1597,62 @@ GetChunklst(ChunkId_t chunklst[])
 	for (; i < MAX_CHUNKLST_SIZE; i++)
 		chunklst[i] = 0;
 
-	
-
 	return size;
 }
+
+static void
+UseChunklst(ChunkId_t chunklst[], int * size)
+{
+	int i, j, s = *size;
+	MutexLock(ChunkRequestLists[0].lock);
+	/* flockfile(stderr); */
+	/* fprintf(stderr, "Chunklst:\n"); */
+	j = 0;
+	for (i = 0; i < s; i++) {
+		ChunkId_t chunk = chunklst[i];
+		if (Chunks[chunk].done) 
+			continue;
+		/* fprintf(stderr, "  %d\n", chunk); */
+		ChunkRequestLists[0].data[j] = chunk;
+		chunklst[j]                  = chunk;
+		j++;
+	}
+	/* funlockfile(stderr); */
+	ChunkRequestLists[0].size = j;
+	MutexUnlock(ChunkRequestLists[0].lock);
+	memset(chunklst + j, 0, sizeof(ChunkId_t)*(MAX_CHUNKLST_SIZE - j));
+	*size = j;
+}
+
+void
+HandleNeed(ChunkId_t chunklst[], int size)
+{
+	int i, j;
+	GetGlobalLock();
+	for (i = 0; i < size; i++) {
+		j = ChunkBufferIdx[chunklst[i]];
+		if (j == -1) continue;
+		ChunkBuffer[j].hold = CACHE_HINT_TRIES + 1;
+	}
+	ReleaseGlobalLock();
+}
+
+void
+DumpCache()
+{
+	int i;
+	flockfile(stderr);
+	fprintf(stderr, "Chunk:\n");
+	for (i = 0; i < maxchunkbufs; i++) {
+		ChunkBuffer_t * p = &ChunkBuffer[i];
+		if (p->thischunk != -1)
+			fprintf(stderr, "  %d: %d (%f%%) hold:%d neededself:%d pending:%d reserved:%d\n",
+				i, p->thischunk, 
+				100.0 * (CHUNKSIZE - p->d->blockcount) / (double)CHUNKSIZE,
+				p->hold, p->neededself, p->pending, p->reserved);
+		else
+			fprintf(stderr, "  %d: <unused>", i);
+	}
+	funlockfile(stderr);
+}
+

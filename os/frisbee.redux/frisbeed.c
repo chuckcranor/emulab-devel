@@ -37,3 +37,9 @@ StartAuxThread(NetInfo_t * ni, pthread_t * t)
 {
 	return 0;
 }
+
+void
+HandleNeed(ChunkId_t chunklst[], int size)
+{
+	/* Nothing to do */
+}

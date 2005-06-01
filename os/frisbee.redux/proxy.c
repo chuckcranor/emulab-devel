@@ -73,7 +73,7 @@ RequestNeededForOthers(NetInfo_t *ni, int timedout, stamp_t stamp)
 {
 	Needed_t * ths = &Needed;
 	NeededNode_t *cur = NULL, *unsent = NULL;
-	ChunkBuffer_t *cached;
+	ChunkBuffer_t *cached,*avail;
 	BlockMap_t need;
 	int need_c = -1;
 	int sent;
@@ -94,17 +94,18 @@ RequestNeededForOthers(NetInfo_t *ni, int timedout, stamp_t stamp)
 			cached = GetCachedChunk(cur->chunk);
 			/* If needed by self don't request as it has
 			 * already been done. */
-			if (cached && cached->neededself) {
+			if (cached && cached->neededself)
 				continue;
-			} else if (cached) {
+			avail = ReserveChunk(cur->chunk);
+			if (!avail)
+				continue;
+			if (cached) {
 				need_c = BlockMapSubstract(&need, 
 							   &cur->blockmap, 
 							   &cached->d->blockmap);
-			} else if (availbufs) {
+			} else {
 				need = cur->blockmap;
 				need_c = cur->nblocks;
-			} else { // cached && cached->neededself
-				continue;
 			}
 			
 			if (need_c == 0)
@@ -123,7 +124,6 @@ RequestNeededForOthers(NetInfo_t *ni, int timedout, stamp_t stamp)
 			free(cur);
 			if (!cached) {
 				add_req_chunks++;
-				availbufs--;
 			}
 		} else {
 			cur->next = unsent;
@@ -143,6 +143,15 @@ RequestNeededForOthers(NetInfo_t *ni, int timedout, stamp_t stamp)
 	return add_req_chunks;
 }
 
+static void
+SigInfoHandler(int sig)
+{
+	/* This is used for debugging, I'm not sure if is 100% safe to
+	   use in a signal handler since it writes to stdout --
+	   kevina */
+	DumpCache();
+}
+
 void *
 AuxThread(void * arg)
 {
@@ -158,15 +167,15 @@ AuxThread(void * arg)
 	log("Aux Thread Starting");
 
 	while (1) {
-		fsleep(1000000);
+		fsleep(CACHE_HINT_SEND_INTERVAL);
 		p->hdr.type = PKTTYPE_REQUEST;
 		p->hdr.subtype = PKTSUBTYPE_INCACHE;
-		p->hdr.datalen = sizeof(p->msg.incache);
-		p->msg.incache.size = GetChunklst(p->msg.incache.chunklst);
-		if (p->msg.incache.size < 0) 
+		p->hdr.datalen = sizeof(p->msg.chunklst);
+		p->msg.chunklst.size = GetChunklst(p->msg.chunklst.data);
+		if (p->msg.chunklst.size < 0) 
 			continue;
 		if (debug)
-			log("Sending cache hint: %d ...", p->msg.incache.chunklst[0]);
+			log("Sending cache hint: %d ...", p->msg.chunklst.data[0]);
 		PacketSend(ni, p, 0);
 	}
 	return NULL;
@@ -176,7 +185,7 @@ int
 StartAuxThread(NetInfo_t * ni, pthread_t * t)
 {
 	int res;
-	if (PROXY_MODE && SendCacheHints) {
+	if (UseCacheHints) {
 		res = pthread_create(t, NULL, AuxThread, ni);
 		if (res)
 			fatal("Failed to create pthread!");

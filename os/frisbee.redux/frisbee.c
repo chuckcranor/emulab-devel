@@ -10,6 +10,7 @@ int		FrisbeeMode = FRISBEE_CLIENT;
 
 int		killme = 0;
 int		ServerDone = 0;
+int		UseCacheHints = 0;
 
 int client_main(int argc, char **argv);
 

@@ -29,7 +29,6 @@ int		GlobalLockMaxLineNo = 0;
 void
 _GetGlobalLock(const char * file, int lineno) 
 {
-	//fprintf(stderr, "GETTING LOCK\n");
 	int res = pthread_mutex_trylock(&GlobalLock);
 	if (res == EBUSY) {
 		res = pthread_mutex_lock(&GlobalLock);
@@ -42,13 +41,11 @@ _GetGlobalLock(const char * file, int lineno)
 	GlobalLockFile   = file;
 	GlobalLockLineNo = lineno;
 #endif
-	//fprintf(stderr, "GOT LOCK\n");
 }
 
 void
 ReleaseGlobalLock() 
 {
-	//fprintf(stderr, "RELEASING LOCK\n");
 #ifdef GLOBAL_LOCK_TIME
 	stamp_t stop, t;
 	stop = GetStamp();
@@ -64,7 +61,6 @@ ReleaseGlobalLock()
 #endif
 	int res = pthread_mutex_unlock(&GlobalLock);
 	MutexCheck(res, "pthread_mutex_unlock");
-	//fprintf(stderr, "RELEASED LOCK\n");
 }
 
 

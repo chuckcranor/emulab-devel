@@ -34,7 +34,7 @@ static char	       *filename;
 
 int			killme = 0;
 int			ServerDone = 0;
-int			SendCacheHints = 0;
+int			UseCacheHints = 0;
 
 static int		tracing = 0;
 static int		dynburst = 0;
@@ -249,8 +249,10 @@ WorkQueueEnqueue(int chunk, BlockMap_t *map, int count,
 	if (PROXY_MODE) {
 		ChunkBuffer_t * cached;
 		cached = GetCachedChunk(chunk);
-		if (cached)
+		if (cached) {
 			cached->pending++;
+			UpdateHold(cached);
+		}
 	}
 
 	if (!origlocked)
@@ -695,7 +697,9 @@ ServerRecvThread(void *arg)
 			DOSTAT(requests++);
 			ClientPartialRequest(p);
 			break;
-
+		case PKTSUBTYPE_NEED:
+			HandleNeed(p->msg.chunklst.data, 
+				   p->msg.chunklst.size);
 		}
 	}
 }
@@ -953,7 +957,8 @@ PlayFrisbeeProxy(NetInfo_t *ni)
 			assert(cached->pending > 0);
 			for (i = 0; i < CHUNKSIZE; i++) {
 				if (BlockMapHave(&map, i) && !BlockMapHave(&map2, i))
-					SendBlock(ni, &s, chunk, i, cached->d->blocks[i].data);
+					SendBlock(ni, &s, chunk, i, 
+						  cached->d->blocks[i].data);
 			}
 		}
 
@@ -964,6 +969,9 @@ PlayFrisbeeProxy(NetInfo_t *ni)
 		if (cached) {
 			GetGlobalLock();
 			cached->pending--;
+			if (cached->pending <= 0)
+				cached->reserved = 0;
+			UpdateHold(cached);
 			ReleaseGlobalLock();
 		}
 	}
@@ -1045,7 +1053,8 @@ server_main(int argc, char **argv)
 			bandwidth = atol(optarg);
 			break;
 		case 'H':
-			SendCacheHints = 1;
+			if (PROXY_MODE)
+				UseCacheHints = 1;
 			break;
 		case 'h':
 		case '?':

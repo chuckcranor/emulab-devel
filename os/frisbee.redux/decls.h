@@ -15,6 +15,7 @@
 #include <string.h>
 #include <netinet/in.h>
 #include <errno.h>
+#include <inttypes.h>
 
 #include "log.h"
 
@@ -33,7 +34,7 @@
 
 /* This will allow for 2^16 chunks which allow for compressed images
  * to be up to 2^15*2^10*2^10 = 2^35 = 32 Terabytes */
-typedef short ChunkId_t;
+typedef int16_t ChunkId_t;
 
 /*
  * Make sure we can represent a bitmap of blocks in a single packet.
@@ -167,6 +168,12 @@ typedef short ChunkId_t;
 #define CLIENT_WRITER_IDLE_DELAY	1000
 
 /*
+ * Paramaters for cache hints
+ */
+#define CACHE_HINT_SEND_INTERVAL	1000000 /* In usecs */
+#define CACHE_HINT_TRIES		2
+
+/*
  * Client parameters and statistics.
  */
 #define CLIENT_STATS_VERSION	1
@@ -280,22 +287,13 @@ typedef struct {
 
 		/*
 		 * Report what is in the cache to the clients.
+		 * & Reply to incache with what is needed by client.
 		 */
 
 		struct {
 			int		size;
-			ChunkId_t	chunklst[MAX_CHUNKLST_SIZE];
-		} incache;
-
-
-		/*
-		 * Reply to incache with what is needed by client.
-		 */
-
-		struct {
-			int		size;
-			ChunkId_t	chunklst[MAX_CHUNKLST_SIZE];
-		} need;
+			ChunkId_t	data[MAX_CHUNKLST_SIZE];
+		} chunklst;
 
 	} msg;
 } Packet_t;
@@ -454,14 +452,15 @@ typedef struct {
 
 	struct ChunkBufferData_t * d;
 
-	int	   thischunk;		/* Which chunk in progress */
-	short	   state;		/* State of chunk */
-	short	   neededself;		/* If the chunk is needed by
+	ChunkId_t  thischunk;		/* Which chunk in progress */
+	int8_t	   state;		/* State of chunk */
+	int8_t	   hold;		/* Hold onto the chunk for one
+ 					 * reason or another */
+	int8_t	   neededself;		/* If the chunk is needed by
 					 * the client itself */
-	short	   pending;		/* Number of pending requests
+	int8_t	   pending;		/* Number of pending requests
 					 * in the work queue */
-	short	   hold;		/* Hold onto since other
- 					 * clients may need */
+	int8_t     reserved;
 } ChunkBuffer_t;
 
 typedef struct ChunkBufferData_t {
@@ -485,6 +484,10 @@ int PossiblyRequestNeeded(NetInfo_t *ni, int timedout, stamp_t stamp,
 			  int chunk, BlockMap_t *map, int count,
 			  int locked);
 int GetChunklst(ChunkId_t chunklst[]);
+void HandleNeed(ChunkId_t chunklst[], int size);
+ChunkBuffer_t * ReserveChunk(int chunk);
+void DumpCache();
+
 
 /*
  * Server
@@ -492,7 +495,7 @@ int GetChunklst(ChunkId_t chunklst[]);
 
 extern int killme;
 extern int ServerDone;
-extern int SendCacheHints;
+extern int UseCacheHints;
 int WorkQueueCount(int chunk);
 void ServerSetFileInfo(int blocks);
 
@@ -511,3 +514,19 @@ void AddNeededForOthers(int chunk, int nblocks, BlockMap_t *blockmap);
 int RequestNeededForOthers(NetInfo_t *ni, int timedout, stamp_t stamp);
 
 int StartAuxThread(NetInfo_t * ni, pthread_t * t);
+
+/*
+ * CacheHelper
+ */
+
+static inline void
+UpdateHold(ChunkBuffer_t * p)
+{
+	if (UseCacheHints)
+		return;
+	if (p->neededself || p->pending)
+		p->hold = 1;
+	else
+		p->hold = 0;
+}
+
