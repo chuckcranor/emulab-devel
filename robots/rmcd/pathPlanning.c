@@ -17,7 +17,7 @@
 #include "pilotConnection.h"
 #include "pathPlanning.h"
 
-#define PP_TOL 0.1
+#define PP_TOL 0.2
 
 struct path_planning_data pp_data;
 
@@ -190,6 +190,7 @@ pp_plot_code_t pp_plot_waypoint(struct path_plan *pp)
     
     do {
 	struct obstacle_node *on, *min_on = NULL;
+	int robot_ob = 0;
 	
 	/*
 	 * The path doesn't cross enough of the obstacle box for us to worry
@@ -206,6 +207,9 @@ pp_plot_code_t pp_plot_waypoint(struct path_plan *pp)
 					&pp->pp_waypoint,
 					&distance,
 					&cross)) != NULL) {
+	    if (on->on_type == OBT_ROBOT)
+		robot_ob = 1;
+	    
 	    lnRemove(&on->on_link);
 	    /* Record the intersection and */
 	    lnAddTail(&intersections, &on->on_link);
@@ -248,12 +252,41 @@ pp_plot_code_t pp_plot_waypoint(struct path_plan *pp)
 	    
 	    if (rc_compute_code(pp->pp_goal_pos.x,
 				pp->pp_goal_pos.y,
-				&pp->pp_obstacle) == 0)
-		retval = PPC_GOAL_IN_OBSTACLE;
-	    else if (pp_next_cornerpoint(pp))
+				&pp->pp_obstacle) == 0) {
+		struct robot_position rp;
+		struct rc_line rl;
+		float r, theta;
+		
+		mtp_polar(&pp->pp_goal_pos, &pp->pp_actual_pos, &r, &theta);
+		if (robot_ob)
+		    theta += M_PI_2;
+		mtp_cartesian(&pp->pp_goal_pos, r + 1000.0, theta, &rp);
+		rl.x0 = pp->pp_goal_pos.x;
+		rl.y0 = pp->pp_goal_pos.y;
+		rl.x1 = rp.x;
+		rl.y1 = rp.y;
+		rc_clip_line(&rl, &pp->pp_obstacle);
+		pp->pp_waypoint.x = rl.x1;
+		pp->pp_waypoint.y = rl.y1;
+		if (pp_point_distance(&pp->pp_waypoint,
+				      &pp->pp_actual_pos) > 0.075) {
+		    if (pp_point_reachable(pp, &pp->pp_waypoint))
+			retval = PPC_WAYPOINT;
+		    else if (pp_next_cornerpoint(pp))
+			retval = PPC_WAYPOINT;
+		    else
+			retval = PPC_BLOCKED;
+		}
+		else {
+		    retval = PPC_GOAL_IN_OBSTACLE;
+		}
+	    }
+	    else if (pp_next_cornerpoint(pp)) {
 		retval = PPC_WAYPOINT;
-	    else
+	    }
+	    else {
 		retval = PPC_BLOCKED;
+	    }
 	}
 
 	/* Check for obstacles on the path to our new waypoint. */

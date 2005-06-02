@@ -18,14 +18,6 @@
 #include "listNode.h"
 
 /**
- * The size of the buffer zone around the obstacles, in meters.
- *
- * XXX This is for the garcia's only.  Other robots will require different
- * buffer sizes.
- */
-#define OBSTACLE_BUFFER 0.25f
-
-/**
  * Our guesstimate of the size of an obstacle detected by the robot's sensors.
  * The object is assumed to be square, so the number is the length in meters
  * for one side.
