@@ -86,6 +86,7 @@ static void pc_finish_connect(struct pilot_connection *pc)
     assert(pc != NULL);
     assert(pc->pc_state == PCS_CONNECTING);
     
+
     info("finish connect for %s\n", pc->pc_robot->hostname);
     
     fcntl(pc->pc_handle->mh_fd, F_SETFL, 0);
@@ -375,8 +376,10 @@ void pc_handle_signal(fd_set *rready, fd_set *wready)
 	    
 	    do {
 		struct mtp_packet mp;
-
-		if (mtp_receive_packet(mh, &mp) != MTP_PP_SUCCESS) {
+		int rc;
+  
+		if ((rc = mtp_receive_packet(mh, &mp)) != MTP_PP_SUCCESS) {
+                    info("fuck you %d\n", rc);
 		    pc_disconnected(pc);
 		    mh = NULL;
 		}
