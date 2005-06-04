@@ -164,8 +164,8 @@ static int pp_point_reachable(struct path_plan *pp, struct robot_position *rp)
 
 pp_plot_code_t pp_plot_waypoint(struct path_plan *pp)
 {
-    float distance, min_distance = FLT_MAX, cross, theta;
     struct lnMinList dextra, sextra, intersections;
+    float distance, cross, theta;
     pp_plot_code_t retval;
     
     assert(pp != NULL);
@@ -190,8 +190,9 @@ pp_plot_code_t pp_plot_waypoint(struct path_plan *pp)
     
     do {
 	struct obstacle_node *on, *min_on = NULL;
+	float min_distance = FLT_MAX;
 	int robot_ob = 0;
-	
+
 	/*
 	 * The path doesn't cross enough of the obstacle box for us to worry
 	 * about it so we dump it on the extra list so the intersect doesn't
@@ -255,7 +256,7 @@ pp_plot_code_t pp_plot_waypoint(struct path_plan *pp)
 				&pp->pp_obstacle) == 0) {
 		struct robot_position rp;
 		struct rc_line rl;
-		float r, theta;
+		float r;
 		
 		mtp_polar(&pp->pp_goal_pos, &pp->pp_actual_pos, &r, &theta);
 		if (robot_ob)
