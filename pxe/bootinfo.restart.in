@@ -1,9 +1,0 @@
-#!/bin/sh
-
-DIR=@prefix@/sbin
-
-if [ -e /var/run/bootinfo.pid ]; then
-    kill `cat /var/run/bootinfo.pid`;
-fi
-${DIR}/bootinfo
-
