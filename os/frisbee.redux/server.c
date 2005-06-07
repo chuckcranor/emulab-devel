@@ -48,7 +48,7 @@ static int		blockslost;
 static int		clientretries;
 static char		*lostmap;
 static int		sendretries;
-static struct timeval  IdleTimeStamp, FirstReq, LastReq;
+struct timeval		IdleTimeStamp, FirstReq, LastReq;
 static volatile int	activeclients;
 
 /* Forward decls */
@@ -121,9 +121,14 @@ typedef struct {
 	queue_chain_t	chain;
 	int		chunk;		/* Which chunk */
 	int		nblocks;	/* Number of blocks in map */
+	int             ncache;	        /* Number of blocks in cache
+					 * when we last checked */
+	stamp_t		lastreq;	/* When we last requested any
+					 * blocks -- unused*/
 	BlockMap_t	blockmap;	/* Which blocks of the chunk */
 } WQelem_t;
 static queue_head_t     WorkQ;
+static pthread_mutex_t  WorkQLock;
 static int		WorkQDelay = -1;
 static int		WorkQSize = 0;
 static int		WorkChunk, WorkBlock, WorkCount;
@@ -160,43 +165,47 @@ WorkQueueInit(void)
 #endif
 }
 
+/* NOTE: This is used to help find tune the lock beahavior and should
+ * be removed before merging with the trunk */
+static int Case[3] = {0,0,0};
+
 /*
  * Enqueue a work request.
  * If map==NULL, then we want the entire chunk.
  */
 static int
-WorkQueueEnqueue(int chunk, BlockMap_t *map, int count,
-		 int uncond,
-		 int origlocked)
+WorkQueueEnqueue(int chunk, BlockMap_t *map, int count)
 {
         WQelem_t	*wqel;
 	int		elt, blocks;
-
+	int		c = 0;
+	
 	if (count == 0)
 		return 0;
-	
-	if (!origlocked)
-		GetGlobalLock();
 
+	GetChunkBufferLock();
+	MutexLock(&WorkQLock);
+	
 	/*
 	 * Common case: a full chunk request for the full block we are
 	 * currently sending.  Or any request for a chunk in which we
 	 * are sending all that we have (ie dequeued the entire
 	 * blockmap rather than just a range)
 	 */
-	if (!uncond 
-	    && chunk == WorkChunk 
+	if (chunk == WorkChunk 
 	    && ((count == CHUNKSIZE && count == WorkCount) 
 		|| (WorkCount == -1)))
 	{
+		ReleaseChunkBufferLock();
+		Case[0]++;
 		EVENT(1, EV_WORKMERGE, ni->mcastaddr, chunk, count, count, ~0);
-		if (!origlocked)
-			ReleaseGlobalLock();
+		MutexUnlock(&WorkQLock);
 		return 0;
 	}
 
 	elt = WorkQSize - 1;
  	queue_riterate(&WorkQ, wqel, WQelem_t *, chain) {
+		c++;
 		if (wqel->chunk == chunk) {
 			/*
 			 * If this is the head element of the queue we
@@ -212,6 +221,8 @@ WorkQueueEnqueue(int chunk, BlockMap_t *map, int count,
 				elt--;
 				continue;
 			}
+			ReleaseChunkBufferLock();
+			Case[1]++;
 
 			/*
 			 * We have a queued request for the entire chunk
@@ -224,21 +235,35 @@ WorkQueueEnqueue(int chunk, BlockMap_t *map, int count,
 			EVENT(1, EV_WORKMERGE, ni->mcastaddr,
 			      chunk, wqel->nblocks, blocks, elt);
 			wqel->nblocks += blocks;
+			wqel->lastreq = 0;
 			assert(wqel->nblocks <= CHUNKSIZE);
-			if (!origlocked)
-				ReleaseGlobalLock();
+			MutexUnlock(&WorkQLock);
 			return 0;
 		}
 		elt--;
 	}
 
+	if (PROXY_MODE) {
+		ChunkBuffer_t * cached;
+		cached = GetCachedChunk(chunk);
+		if (cached) {
+			assert(cached->pending >= 0);
+			cached->pending++;
+			UpdateHold(cached);
+		}
+	}
+	ReleaseChunkBufferLock();
+
 	wqel = calloc(1, sizeof(WQelem_t));
 	if (wqel == NULL)
 		fatal("WorkQueueEnqueue: No more memory");
 
+	Case[2]++;
+
 	wqel->chunk = chunk;
 	wqel->nblocks = count;
 	wqel->blockmap = *map;
+
 	queue_enter(&WorkQ, wqel, WQelem_t *, chain);
 	WorkQSize++;
 #ifdef STATS
@@ -246,29 +271,55 @@ WorkQueueEnqueue(int chunk, BlockMap_t *map, int count,
 		WorkQMax = WorkQSize;
 #endif
 
-	if (PROXY_MODE) {
-		ChunkBuffer_t * cached;
-		cached = GetCachedChunk(chunk);
-		if (cached) {
-			cached->pending++;
-			UpdateHold(cached);
-		}
-	}
-
-	if (!origlocked)
-		ReleaseGlobalLock();
+	MutexUnlock(&WorkQLock);
 
 	EVENT(1, EV_WORKENQ, ni->mcastaddr, chunk, count, WorkQSize, 0);
 	return 1;
 }
 
-/* Assume locked */
 int
 WorkQueueEnqueueBlock(int chunk, int block) 
 {
 	BlockMap_t map = {{0}};
 	BlockMapSet(&map, block, 1);
-	return WorkQueueEnqueue(chunk, &map, 1, 0, 1);
+	return WorkQueueEnqueue(chunk, &map, 1);
+}
+
+static void
+WorkQueueRequeue(WQelem_t * orig, 
+		 const BlockMap_t * still_need, int unsent_blocks,
+		 ChunkBuffer_t * cached)
+{
+	WQelem_t	*wqel;
+	int		chunk = orig->chunk;
+
+	MutexLock(&WorkQLock);
+
+	queue_iterate(&WorkQ, wqel, WQelem_t *, chain) {
+		if (wqel->chunk == chunk) break;
+	}
+	
+	if (!queue_end(&WorkQ, (queue_entry_t)wqel)) {
+		int blocks = BlockMapMerge(still_need, &wqel->blockmap);
+		wqel->nblocks += blocks;
+		MutexUnlock(&WorkQLock);
+		if (cached) {
+			GetChunkBufferLock();
+			cached->pending--;
+			assert(cached->pending > 0);
+			ReleaseChunkBufferLock();
+		}
+		free(orig);
+	} else {
+		wqel = orig;
+		if (&wqel->blockmap != still_need) {
+			wqel->blockmap = *still_need;
+			wqel->nblocks = unsent_blocks;
+		}
+		queue_enter(&WorkQ, wqel, WQelem_t *, chain);
+		MutexUnlock(&WorkQLock);
+	}
+
 }
 
 static int
@@ -277,7 +328,7 @@ WorkQueueDequeue(int *chunkp, int *blockp, int *countp)
 	WQelem_t	*wqel;
 	int		chunk, block, count;
 
-	GetGlobalLock();
+	MutexLock(&WorkQLock);
 
 	/*
 	 * Condvars broken in linux threads impl, so use this rather bogus
@@ -285,7 +336,7 @@ WorkQueueDequeue(int *chunkp, int *blockp, int *countp)
 	 */
 	if (queue_empty(&WorkQ)) {
 		WorkChunk = -1;
-		ReleaseGlobalLock();
+		MutexUnlock(&WorkQLock);
 		fsleep(WorkQDelay);
 		return 0;
 	}
@@ -308,7 +359,7 @@ WorkQueueDequeue(int *chunkp, int *blockp, int *countp)
 	WorkBlock = block;
 	WorkCount = count;
 
-	ReleaseGlobalLock();
+	MutexUnlock(&WorkQLock);
 
 	*chunkp = chunk;
 	*blockp = block;
@@ -318,15 +369,13 @@ WorkQueueDequeue(int *chunkp, int *blockp, int *countp)
 	return 1;
 }
 
-/* Note: will uncondationaly release the lock if it returns 0 */
-static int
-WorkQueueDequeueMap(int *chunkp, BlockMap_t *map, int origlocked)
+static WQelem_t	*
+WorkQueueDequeueEl(int pause_at)
 {
 	WQelem_t	*wqel;
 	int		chunk;
 
-	if (!origlocked)
-		GetGlobalLock();
+	MutexLock(&WorkQLock);
 
 	/*
 	 * Condvars broken in linux threads impl, so use this rather bogus
@@ -334,31 +383,34 @@ WorkQueueDequeueMap(int *chunkp, BlockMap_t *map, int origlocked)
 	 */
 	if (queue_empty(&WorkQ)) {
 		WorkChunk = -1;
-		ReleaseGlobalLock();
+		MutexUnlock(&WorkQLock);
 		fsleep(WorkQDelay);
 		return 0;
 	}
 	
 	wqel = (WQelem_t *) queue_first(&WorkQ);
 	chunk = wqel->chunk;
-	memcpy(map, &wqel->blockmap, sizeof(BlockMap_t));
 
+	if (wqel->chunk == pause_at) {
+		WorkChunk = -1;
+		MutexUnlock(&WorkQLock);
+		fsleep(WorkQDelay);
+		MutexLock(&WorkQLock);
+		/* wqel should still be at the head */
+	}
+		
 	queue_remove(&WorkQ, wqel, WQelem_t *, chain);
-	free(wqel);
 	WorkQSize--;
 
 	WorkChunk = chunk;
 	WorkBlock = 0;
 	WorkCount = -1;
 
-	if (!origlocked)
-		ReleaseGlobalLock();
+	MutexUnlock(&WorkQLock);
 
-	*chunkp = chunk;
-	
 	/* FIXME: This should probably be a new event */
 	EVENT(1, EV_WORKDEQ, ni->mcastaddr, chunk, 0, CHUNKSIZE, WorkQSize);
-	return 1;
+	return wqel;
 }
 
 static void
@@ -372,7 +424,7 @@ ClientEnqueueMap(int chunk, BlockMap_t *map, int count, int isretry)
 		DOSTAT(partialreq++);
 	}
 
-	enqueued = WorkQueueEnqueue(chunk, map, count, 0, UNLOCKED);
+	enqueued = WorkQueueEnqueue(chunk, map, count);
 	if (!enqueued)
 		DOSTAT(qmerges++);
 #ifdef STATS
@@ -409,10 +461,14 @@ WorkQueueCount(int chunk)
 	WQelem_t	*wqel;
 	int		c = 0;
 
+	MutexLock(&WorkQLock);
+	if (chunk == WorkChunk)
+		c++;
 	queue_iterate(&WorkQ, wqel, WQelem_t *, chain) {
 		if (wqel->chunk == chunk)
 			c++;
 	}
+	MutexUnlock(&WorkQLock);
 	
 	return c;
 }
@@ -670,10 +726,17 @@ ServerRecvThread(void *arg)
 				    FileInfo.chunks, p->msg.request.block);
 			continue;
 		}
-		gettimeofday(&LastReq, 0);
-		if (!gotone) {
-			FirstReq = LastReq;
-			gotone = 1;
+		
+		/* Don't count leave messages towards service time
+		   since when the client is a proxy the leave message will
+		   be delayed until it times out. */
+	        if (p->hdr.subtype != PKTSUBTYPE_LEAVE
+		    && p->hdr.subtype != PKTSUBTYPE_LEAVE2) {
+			gettimeofday(&LastReq, 0);
+			if (!gotone) {
+				FirstReq = LastReq;
+				gotone = 1;
+			}
 		}
 
 		switch (p->hdr.subtype) {
@@ -907,11 +970,12 @@ static void
 PlayFrisbeeProxy(NetInfo_t *ni)
 {
 	PlayFrisbeeStats_t s = {0};
-	int		chunk, i;
-	BlockMap_t	map, map2, *m;
-	ChunkBuffer_t * cached;
-
-	BlockMapClear(&map);
+	int		chunk, i, pause_at = -1;
+	int		ncache;
+	BlockMap_t     *orig,*still_need,m;
+	ChunkBuffer_t  *cached;
+	WQelem_t       *wqel; 
+	stamp_t		now;
 
 	while (1) {
 		int unsent_blocks = 0;
@@ -925,10 +989,9 @@ PlayFrisbeeProxy(NetInfo_t *ni)
 		 * WorkQueueDequeue will delay for a while, so this will not
 		 * spin.
 		 */
-		GetGlobalLock();
 
-		if (! WorkQueueDequeueMap(&chunk, &map, LOCKED)) {
-			/* The GlobalLock is unlocked now */
+		wqel = WorkQueueDequeueEl(pause_at);
+		if (! wqel ) {
 			int quit;
 			quit = HandleEmptyQueue(&s);
 			if (quit)
@@ -936,43 +999,63 @@ PlayFrisbeeProxy(NetInfo_t *ni)
 			else
 				continue;
 		}
+		now = GetStamp();
+
+		chunk = wqel->chunk;
+		orig = &wqel->blockmap;
+
 		s.idlelastloop = 0;
 
 		/* Send what we have in the cache */
+		GetChunkBufferLock();
 		cached = GetCachedChunk(chunk);
-
-		if (cached) {
-			BlockMapSubstract(&map2, &map, &cached->d->blockmap);
-			m = &map2;
-		} else {
-			m = &map;
-		}
-		unsent_blocks = BlockMapCount(m);
-		if (unsent_blocks)
-			WorkQueueEnqueue(chunk, m, unsent_blocks, 1, LOCKED);
-
-		ReleaseGlobalLock();
-
 		if (cached) {
 			assert(cached->pending > 0);
+			ncache = CHUNKSIZE - cached->d->blockcount;
+		} else {
+			ncache = 0;
+		}
+		ReleaseChunkBufferLock();
+
+		if (ncache != wqel->ncache) {
+			assert(cached);
+			still_need = &m;
+			BlockMapSubstract(still_need, &wqel->blockmap, &cached->d->blockmap);
+			unsent_blocks = BlockMapCount(still_need);
+		} else {
+			still_need = &wqel->blockmap;
+			unsent_blocks = wqel->nblocks;
+		}
+		if (unsent_blocks && now - wqel->lastreq >= redodelay) {
+			AddNeededForOthers(chunk, unsent_blocks, still_need);
+			wqel->lastreq = now;
+		}
+
+		if (ncache != wqel->ncache) {
 			for (i = 0; i < CHUNKSIZE; i++) {
-				if (BlockMapHave(&map, i) && !BlockMapHave(&map2, i))
+				if (BlockMapHave(orig, i) && !BlockMapHave(still_need, i))
 					SendBlock(ni, &s, chunk, i, 
 						  cached->d->blocks[i].data);
 			}
+			wqel->ncache = ncache;
+			pause_at = -1;
+		} else {
+			if (pause_at == -1)
+				pause_at = chunk;
 		}
 
 		if (unsent_blocks) {
-			AddNeededForOthers(chunk, unsent_blocks, m);
-		}
-
-		if (cached) {
-			GetGlobalLock();
-			cached->pending--;
-			if (cached->pending <= 0)
-				cached->reserved = 0;
-			UpdateHold(cached);
-			ReleaseGlobalLock();
+			WorkQueueRequeue(wqel, still_need, unsent_blocks, cached);
+		} else {
+			free(wqel);
+			if (cached) {
+				GetChunkBufferLock();
+				cached->pending--;
+				if (cached->pending <= 0)
+					cached->reserved = 0;
+				UpdateHold(cached);
+				ReleaseChunkBufferLock();
+			}
 		}
 	}
 }
@@ -1004,6 +1087,7 @@ server_main(int argc, char **argv)
 	void		*ignored;
 	NetInfo_t	ni = NETINFO_INIT;
 	int		_debug = 0;
+	struct timeval	ServiceTime;
 
 	if (PROXY_MODE)
 		MutexLock(&StartupLock);
@@ -1155,7 +1239,7 @@ server_main(int argc, char **argv)
 		TraceStop();
 		TraceDump();
 	}
-	subtime(&LastReq, &LastReq, &FirstReq);
+	subtime(&ServiceTime, &LastReq, &FirstReq);
 
 #ifdef  STATS
 	{
@@ -1172,7 +1256,7 @@ server_main(int argc, char **argv)
 			    filename, (long long)fsize);
 		log("Stats:");
 		log("  service time:      %d.%03d sec",
-		    LastReq.tv_sec, LastReq.tv_usec/1000);
+		    ServiceTime.tv_sec, ServiceTime.tv_usec/1000);
 		log("  user/sys CPU time: %d.%03d/%d.%03d",
 		    ru.ru_utime.tv_sec, ru.ru_utime.tv_usec/1000,
 		    ru.ru_stime.tv_sec, ru.ru_stime.tv_usec/1000);
@@ -1204,6 +1288,7 @@ server_main(int argc, char **argv)
 	/*
 	 * Exit from main thread will kill all the children.
 	 */
+	log("Q Stats: %d %d %d", Case[0], Case[1], Case[2]);
 	log("Exiting Server!");
 	ServerDone = 1;
         return 0; /* Don't use exit since server_main may need to

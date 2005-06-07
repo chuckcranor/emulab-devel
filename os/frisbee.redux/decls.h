@@ -367,58 +367,61 @@ GetStamp()
 }
 
 
-static inline void
-MutexCheck(int res, const char * str)
-{
-	if (res != 0) {
-		char buf[256];
-		strerror_r(res, buf, 256);
-		fprintf(stderr, "%s: %s", str, buf);
-		abort();
-	}
-}
+void MutexFail(int res, const char * str, const char * file, int lineno);
 
 static inline void
-MutexLock(pthread_mutex_t * l)
+_MutexLock(pthread_mutex_t * l, const char * file, int lineno)
 {
 	int res = pthread_mutex_lock(l);
-	MutexCheck(res, "pthread_mutex_lock");
+	if (res != 0)
+		MutexFail(res, "pthread_mutex_lock", file, lineno);
 }
+
+static inline int
+_MutexTryLock(pthread_mutex_t * l, const char * file, int lineno)
+{
+	int res = pthread_mutex_trylock(l);
+	if (res != 0 && res != EBUSY)
+		MutexFail(res, "pthread_mutex_trylock", file, lineno);
+	return res;
+}
+
 
 static inline void
-MutexUnlock(pthread_mutex_t * l)
+_MutexUnlock(pthread_mutex_t * l, const char * file, int lineno)
 {
 	int res = pthread_mutex_unlock(l);
-	MutexCheck(res, "pthread_mutex_unlock");
+	if (res != 0)
+		MutexFail(res, "pthread_mutex_unlock", file, lineno);
 }
 
-/*
- * Global lock protecting all the main data structures.  Should only
- * be held for a very short time.  And never when the thread may
- * block.  Use a single lock to avoid having to deal with deadlock
- * issues.
- */
-/* #define GLOBAL_LOCK_STATS 1 */
-/* #define GLOBAL_LOCK_TIME  1 */
+#define MutexLock(l)    _MutexLock(l, __FILE__, __LINE__)
+#define MutexTryLock(l) _MutexTryLock(l, __FILE__, __LINE__)
+#define MutexUnlock(l)  _MutexUnlock(l, __FILE__, __LINE__)
 
-extern pthread_mutex_t GlobalLock;
+/* #define CHUNKBUFFER_LOCK_STATS 1 */
+/* #define CHUNKBUFFER_LOCK_TIME  1 */
 
-#ifndef GLOBAL_LOCK_STATS
+extern pthread_mutex_t ChunkBufferLock;
 
-static inline void GetGlobalLock() {MutexLock(&GlobalLock);}
-static inline void ReleaseGlobalLock() {MutexUnlock(&GlobalLock);}
-	
+#ifndef CHUNKBUFFER_LOCK_STATS
+
+#define GetChunkBufferLock() MutexLock(&ChunkBufferLock)
+#define TryChunkBufferLock() MutexTryLock(&ChunkBufferLock)
+#define ReleaseChunkBufferLock() MutexUnlock(&ChunkBufferLock);
+
 #else
 
-static inline void Dummy() {}
-#define GetGlobalLock _GetGlobalLock(__FILE__, __LINE__), Dummy
+#define GetChunkBufferLock() _GetChunkBufferLock(__FILE__, __LINE__, 0)
+#define TryChunkBufferLock()  _GetChunkBufferLock(__FILE__, __LINE__, 1)
+#define ReleaseChunkBufferLock() _ReleaseChunkBufferLock(__FILE__, __LINE__)
 
-void _GetGlobalLock(const char * file, int lineno);
-void ReleaseGlobalLock();
+int _GetChunkBufferLock(const char * file, int lineno, int tryonly);
+void _ReleaseChunkBufferLock(const char * file, int lineno);
 
 #endif
 
-void PrintGlobalLockStats();
+void PrintChunkBufferLockStats();
 
 #define UNLOCKED 0
 #define LOCKED   1
@@ -433,6 +436,8 @@ extern int		StartupState;
 /*
  * Client
  */
+
+extern int redodelay;
 
 /*
  * The chunker data structure. For each chunk in progress, we maintain this
@@ -496,6 +501,7 @@ void DumpCache();
 extern int killme;
 extern int ServerDone;
 extern int UseCacheHints;
+extern struct timeval LastReq;
 int WorkQueueCount(int chunk);
 void ServerSetFileInfo(int blocks);
 

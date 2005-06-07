@@ -145,7 +145,7 @@ exit:
         free(client_args.argv);
         free(server_args.argv);
 
-	PrintGlobalLockStats();
+	PrintChunkBufferLockStats();
 
         return res;
 }

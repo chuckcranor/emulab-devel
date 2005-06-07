@@ -13,6 +13,7 @@
 #include "utils.h"
 
 typedef struct {
+	pthread_mutex_t		lock;
 	struct NeededNode	*head;
 } Needed_t;
 
@@ -23,7 +24,7 @@ typedef struct NeededNode {
 	struct NeededNode * next;
 } NeededNode_t;
 
-Needed_t Needed = {NULL};
+Needed_t Needed = {PTHREAD_MUTEX_INITIALIZER, NULL};
 
 int 
 AnyNeededForOthers()
@@ -63,9 +64,9 @@ void
 AddNeededForOthers(int chunk, int nblocks, BlockMap_t *blockmap)
 {
 	Needed_t * ths = &Needed;
-	GetGlobalLock();
+	MutexLock(&ths->lock);
 	AddNeededI(ths, chunk, nblocks, blockmap, NULL);
-	ReleaseGlobalLock();
+	MutexUnlock(&ths->lock);
 }
 
 int
@@ -78,27 +79,27 @@ RequestNeededForOthers(NetInfo_t *ni, int timedout, stamp_t stamp)
 	int need_c = -1;
 	int sent;
 	int add_req_chunks = 0;
-	int availbufs;
-
-	if (!ths->head)
-		return 0;
-
-	GetGlobalLock();
-
-	availbufs = CalcFreeBufs(NULL);
 
 	while (1) {
+		MutexLock(&ths->lock);
 		if (ths->head) {
 			cur = ths->head;
 			ths->head = ths->head->next;
+			GetChunkBufferLock();
 			cached = GetCachedChunk(cur->chunk);
 			/* If needed by self don't request as it has
 			 * already been done. */
-			if (cached && cached->neededself)
+			if (cached && cached->neededself) {
+				ReleaseChunkBufferLock();
+				MutexUnlock(&ths->lock);
 				continue;
+			}
 			avail = ReserveChunk(cur->chunk);
-			if (!avail)
+			if (!avail) {
+				ReleaseChunkBufferLock();
+				MutexUnlock(&ths->lock);
 				continue;
+			}
 			if (cached) {
 				need_c = BlockMapSubstract(&need, 
 							   &cur->blockmap, 
@@ -107,16 +108,21 @@ RequestNeededForOthers(NetInfo_t *ni, int timedout, stamp_t stamp)
 				need = cur->blockmap;
 				need_c = cur->nblocks;
 			}
+			ReleaseChunkBufferLock();
 			
-			if (need_c == 0)
+			if (need_c == 0) {
+				MutexUnlock(&ths->lock);
 				continue;
+			}
 		} else {
 			cur = NULL;
+			MutexUnlock(&ths->lock);
 			break;
 		}
+		MutexUnlock(&ths->lock);
 		sent = PossiblyRequestNeeded(ni, timedout, stamp,
 					     cur->chunk, &need, need_c, 
-					     LOCKED);
+					     UNLOCKED);
 		if (sent) {
 			if (debug)
 				log("Requested %d blocks of chunk:%d for clients.",
@@ -129,17 +135,18 @@ RequestNeededForOthers(NetInfo_t *ni, int timedout, stamp_t stamp)
 			cur->next = unsent;
 			unsent = cur;
 		}
+		continue;
 	}
-
 	if (unsent) {
+		MutexLock(&ths->lock);
 		while (unsent) {
 			cur = unsent;
 			unsent = unsent->next;
 			AddNeededI(ths, cur->chunk, cur->nblocks, &cur->blockmap, cur);
 		}
+		MutexUnlock(&ths->lock);
 	}
 
-	ReleaseGlobalLock();
 	return add_req_chunks;
 }
 

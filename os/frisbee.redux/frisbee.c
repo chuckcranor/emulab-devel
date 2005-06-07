@@ -12,6 +12,8 @@ int		killme = 0;
 int		ServerDone = 0;
 int		UseCacheHints = 0;
 
+struct timeval  LastReq;
+
 int client_main(int argc, char **argv);
 
 int

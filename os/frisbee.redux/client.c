@@ -44,7 +44,6 @@ static int	pkttimeout = PKTRCV_TIMEOUT;
 static int	idletimer = CLIENT_IDLETIMER_COUNT;
 static int	maxreadahead = MAXREADAHEAD;
 static int	maxinprogress = MAXINPROGRESS;
-static int	redodelay = CLIENT_REQUEST_REDO_DELAY;
 static int	idledelay = CLIENT_WRITER_IDLE_DELAY;
 static int	startdelay = 0, startat = 0;
 
@@ -55,6 +54,8 @@ static char		traceprefix[64];
 static int		randomize = 1;
 static struct timeval stamp;
 static struct in_addr serverip;
+
+static struct timeval	ChunkerDone;
 
 /* Forward Decls */
 static void	PlayFrisbee(NetInfo_t *ni);
@@ -564,7 +565,7 @@ ClientRecvThread(void *arg)
 			    p->hdr.type, p->hdr.subtype);
 			continue;
 		}
-
+		
 		switch (p->hdr.subtype) {
 		case PKTSUBTYPE_BLOCK:
 			/*
@@ -813,6 +814,8 @@ ChunkerStartup(NetInfo_t *ni)
 	 * more packets, cause that would mess up the termination
 	 * handshake with the server.
 	 */
+	
+	gettimeofday(&ChunkerDone, NULL);
 	log("CHUNKER DONE");
 
 	if (!killme && PROXY_MODE) {
@@ -934,7 +937,7 @@ GotBlock(NetInfo_t *ni, Packet_t *p)
 	int	i;
 	static int lastnoroomchunk = -1, lastnoroomblocks, inprogress;
 
-	GetGlobalLock();
+	GetChunkBufferLock();
 
 	/*
 	 * Search the chunk buffer for a match (or a free one).
@@ -958,7 +961,7 @@ GotBlock(NetInfo_t *ni, Packet_t *p)
 			}
 			lastnoroomblocks++;
 			DOSTAT(nofreechunks++);
-			ReleaseGlobalLock();
+			ReleaseChunkBufferLock();
 			return;
 		}
 		lastnoroomchunk = -1;
@@ -972,7 +975,7 @@ GotBlock(NetInfo_t *ni, Packet_t *p)
 			DOSTAT(dupchunk++);
 			if (debug > 2)
 				log("Duplicate chunk %d ignored!", chunk);
-			ReleaseGlobalLock();
+			ReleaseChunkBufferLock();
 			return;
 		}
 
@@ -1006,7 +1009,7 @@ GotBlock(NetInfo_t *ni, Packet_t *p)
 		DOSTAT(dupblock++);
 		if (debug > 2)
 			log("Duplicate block %d in chunk %d", block, chunk);
-		ReleaseGlobalLock();
+		ReleaseChunkBufferLock();
 		return;
 	}
 	memcpy(ChunkBufferData[i].blocks[block].data, p->msg.block.buf, BLOCKSIZE);
@@ -1056,10 +1059,10 @@ GotBlock(NetInfo_t *ni, Packet_t *p)
 		 * by the time the main thread finishes the chunk we just
 		 * released.
 		 */
-		ReleaseGlobalLock();
+		ReleaseChunkBufferLock();
 		RequestChunk(ni, 0);
 	} else {
-		ReleaseGlobalLock();
+		ReleaseChunkBufferLock();
 	}
 }
 
@@ -1081,7 +1084,7 @@ PossiblyRequestMissing(NetInfo_t *ni, int timedout, unsigned long long stamp,
 	}
 	
 	if (origlocked)
-		ReleaseGlobalLock();
+		ReleaseChunkBufferLock();
 
 	/*
 	 * Request all the missing blocks
@@ -1118,7 +1121,7 @@ PossiblyRequestMissing(NetInfo_t *ni, int timedout, unsigned long long stamp,
 	Chunks[chunk].ours = 1;
 
 	if (origlocked)
-		GetGlobalLock();
+		GetChunkBufferLock();
 	
 	return 1;
 }
@@ -1266,7 +1269,7 @@ static void
 PlayFrisbee(NetInfo_t *ni)
 {
 	Packet_t	packet, *p = &packet;
-	struct timeval  estamp, timeo;
+	struct timeval  estamp, timeo, runtime;
 	unsigned int	myid;
 	int		delay;
 
@@ -1388,13 +1391,26 @@ PlayFrisbee(NetInfo_t *ni)
 
 	gettimeofday(&estamp, 0);
 	timersub(&estamp, &stamp, &estamp);
+
+	if (!PROXY_MODE) {
+		runtime = estamp;
+	} else {
+		if (cmptime(&LastReq, &ChunkerDone) > 0) {
+			log("USING LastReq");
+			runtime = LastReq;
+		} else { 
+			log("USING ChunkerDone");
+			runtime = ChunkerDone;
+		}
+		timersub(&runtime, &stamp, &runtime);
+	}
 	
 	/*
 	 * Done! Send off a leave message, but do not worry about whether
 	 * the server gets it. All the server does with it is print a
 	 * timestamp, and that is not critical to operation.
 	 */
-	CLEVENT(1, EV_CLILEAVE, myid, estamp.tv_sec,
+	CLEVENT(1, EV_CLILEAVE, myid, runtime.tv_sec,
 		(Stats.u.v1.rbyteswritten >> 32), Stats.u.v1.rbyteswritten);
 #ifdef STATS
 	p->hdr.type       = PKTTYPE_REQUEST;
@@ -1403,8 +1419,8 @@ PlayFrisbee(NetInfo_t *ni)
 	p->msg.leave2.clientid = myid;
 	p->msg.leave2.elapsed  = estamp.tv_sec;
 	Stats.version            = CLIENT_STATS_VERSION;
-	Stats.u.v1.runsec        = estamp.tv_sec;
-	Stats.u.v1.runmsec       = estamp.tv_usec / 1000;
+	Stats.u.v1.runsec        = runtime.tv_sec;
+	Stats.u.v1.runmsec       = runtime.tv_usec / 1000;
 	Stats.u.v1.chunkbufs     = maxchunkbufs;
 	Stats.u.v1.writebufmem   = maxwritebufmem;
 	Stats.u.v1.maxreadahead  = maxreadahead;
@@ -1428,7 +1444,7 @@ PlayFrisbee(NetInfo_t *ni)
 	p->msg.leave.elapsed  = estamp.tv_sec;
 	PacketSend(ni, p, 0);
 #endif
-	log("\nLeft the team after %ld seconds on the field!", estamp.tv_sec);
+	log("\nLeft the team after %ld seconds on the field!", runtime.tv_sec);
 }
 
 
@@ -1512,6 +1528,7 @@ SetupChunk(int i, int chunk)
 static void
 StartChunk(int i, int chunk)
 {
+        
 	ChunkBuffer[i].state      = CHUNK_FILLING;
 	ChunkBuffer[i].neededself = !Chunks[chunk].done;
 	if (PROXY_MODE) {
@@ -1556,7 +1573,7 @@ GetChunklst(ChunkId_t chunklst[])
 	struct data_t tmp;
 	struct data_t *p,*q,*m,*end;
 	j = 0;
-	GetGlobalLock();
+	GetChunkBufferLock();
 	for (i = 0; i < maxchunkbufs; ++i) {
 		if (ChunkBuffer[i].neededself
 		    || ChunkBuffer[i].pending
@@ -1570,7 +1587,7 @@ GetChunklst(ChunkId_t chunklst[])
 			++j;
 		}
 	}
-	ReleaseGlobalLock();
+	ReleaseChunkBufferLock();
 	size = j;
 	if (size == 0) return 0;
 	end = data + size;
@@ -1628,13 +1645,13 @@ void
 HandleNeed(ChunkId_t chunklst[], int size)
 {
 	int i, j;
-	GetGlobalLock();
+	GetChunkBufferLock();
 	for (i = 0; i < size; i++) {
 		j = ChunkBufferIdx[chunklst[i]];
 		if (j == -1) continue;
 		ChunkBuffer[j].hold = CACHE_HINT_TRIES + 1;
 	}
-	ReleaseGlobalLock();
+	ReleaseChunkBufferLock();
 }
 
 void

@@ -49,6 +49,16 @@ addusec(struct timeval *next, struct timeval *cur, unsigned long usec)
 	}
 }
 
+static inline long
+cmptime(const struct timeval * x, const struct timeval * y)
+{
+	long d;
+	d = x->tv_sec - y->tv_sec;
+	if (d != 0) return d;
+	d = x->tv_usec - y->tv_usec;
+	return d;
+}
+
 /* Prototypes */
 char   *CurrentTimeString(void);
 int	sleeptime(unsigned int usecs, char *str, int doround);

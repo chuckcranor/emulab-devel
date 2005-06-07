@@ -21,6 +21,8 @@
 #define LOG_TESTBED	LOG_USER
 #endif
 
+/* #define TIMESTAMP_LOG_ENTRIES */
+
 static int usesyslog = 1;
 
 /*
@@ -52,15 +54,28 @@ log(const char *fmt, ...)
 {
 	va_list args;
 	char	buf[BUFSIZ];
+#ifdef TIMESTAMP_LOG_ENTRIES
+	char    timebuf[20];
+	time_t	  t;
+	struct tm bt;
+#endif
 
 	va_start(args, fmt);
 	vsnprintf(buf, sizeof(buf), fmt, args);
 	va_end(args);
+#ifdef TIMESTAMP_LOG_ENTRIES
+	time(&t);
+	localtime_r(&t, &bt);
+	strftime(timebuf, 20, "%T: ", &bt);
+#endif
 
 	if (!usesyslog) {
 		flockfile(stderr);
+#ifdef TIMESTAMP_LOG_ENTRIES
+		fputs(timebuf, stderr);
+#endif
 		fputs(buf, stderr);
-		fputc('\n', stderr);
+		putc_unlocked('\n', stderr);
 		funlockfile(stderr);
 	}
 	else
