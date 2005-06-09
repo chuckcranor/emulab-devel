@@ -27,11 +27,12 @@ struct pilot_connection;
 
 enum {
   MCB_CONTACT,
+  MCB_HAS_PATH_PLAN,
 };
 
 enum {
-  MCF_CONTACT = (1L << MCB_CONTACT),	/*< Robot made contact with an
-					  obstacle. */
+  MCF_CONTACT = (1L << MCB_CONTACT),	/*< Robot made contact with an obstacle. */
+  MCF_HAS_PATH_PLAN = (1L << MCB_HAS_PATH_PLAN),
 };
 
 /**
@@ -44,6 +45,7 @@ struct master_controller {
   int mc_tries_remaining;
   unsigned int mc_waypoint_tries;
   struct path_plan mc_plan;
+  struct path_plan mc_plan_lookahead;
   struct obstacle_node *mc_self_obstacle;
 };
 
@@ -87,13 +89,13 @@ struct master_controller_data {
    * Maximum number of times to try and refine the position before giving up.
    */
   unsigned int mcd_max_refine_retries;
-    
+
   /**
    * How close does the angle have to be before it is considered at the
    * intended angle.
    */
-  float mcd_radian_tolerance; 
-    
+  float mcd_radian_tolerance;
+
   /**
    * How close does the robot have to be before it is considered at the
    * intended position.  Measurement is in meters(?).

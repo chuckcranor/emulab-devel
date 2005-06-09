@@ -24,6 +24,8 @@
 #include "pilotConnection.h"
 #include "masterController.h"
 
+
+
 struct master_controller_data mc_data;
 
 /**
@@ -39,18 +41,18 @@ struct master_controller_data mc_data;
 
 #define STATE_TOL 0.04f
 #define STATE_ATOL 0.5f
-    
+
 int mc_invariant(struct master_controller *mc)
 {
     assert(mc != NULL);
-    
+
     return 1;
 }
 
 static int mc_set_goal(struct master_controller *mc, mtp_packet_t *mp)
 {
     int retval = 0;
-    
+
     assert(mc != NULL);
     assert(mc_invariant(mc));
     assert(mp != NULL);
@@ -63,7 +65,7 @@ static int mc_set_goal(struct master_controller *mc, mtp_packet_t *mp)
 
     ob_rem_obstacle(mc->mc_self_obstacle);
     mc->mc_self_obstacle = NULL;
-    
+
     switch (mc->mc_pilot->pc_control_mode) {
     case PCM_NONE:
 	break;
@@ -74,10 +76,10 @@ static int mc_set_goal(struct master_controller *mc, mtp_packet_t *mp)
 			 MA_RobotID, mc->mc_pilot->pc_robot->id,
 			 MA_CommandID, MASTER_COMMAND_ID,
 			 MA_TAG_DONE);
-	
+
 	mc->mc_pilot->pc_flags |= PCF_EXPECTING_RESPONSE;
 	mc->mc_pilot->pc_connection_timeout = STOP_RESPONSE_TIMEOUT;
-	
+
 	pc_zero_stats(mc->mc_pilot);
 	pc_stats_start_pos(mc->mc_pilot,&(mc->mc_plan.pp_goal_pos));
 	pc_stats_start_time(mc->mc_pilot);
@@ -87,27 +89,27 @@ static int mc_set_goal(struct master_controller *mc, mtp_packet_t *mp)
 	    info("%s is wiggling, waiting for new position\n",
 		 mc->mc_pilot->pc_robot->hostname);
 	}
-	
+
 	mtp_send_packet2(pc_data.pcd_emc_handle,
 			 MA_Opcode, MTP_REQUEST_POSITION,
 			 MA_Role, MTP_ROLE_RMC,
 			 MA_RobotID, mc->mc_pilot->pc_robot->id,
 			 MA_TAG_DONE);
-	
-	// don't print here -- cause the previous move, if any, finished 
+
+	// don't print here -- cause the previous move, if any, finished
 	// more or less successfully...
 	pc_zero_stats(mc->mc_pilot);
 	pc_stats_start_pos(mc->mc_pilot,&(mc->mc_plan.pp_goal_pos));
 	break;
     }
-    
+
     return retval;
 }
 
 static int mc_set_actual(struct master_controller *mc, mtp_packet_t *mp)
 {
     int retval = 0;
-    
+
     assert(mc != NULL);
     assert(mc_invariant(mc));
     assert(mp != NULL);
@@ -117,14 +119,14 @@ static int mc_set_actual(struct master_controller *mc, mtp_packet_t *mp)
 
     // set the current "final" stats pos
     pc_stats_end_pos(mc->mc_pilot,&(mc->mc_plan.pp_actual_pos));
-    
+
     return retval;
 }
 
 static int mc_request_report(struct master_controller *mc, mtp_packet_t *mp)
 {
     int retval = 0;
-    
+
     assert(mc != NULL);
     assert(mc_invariant(mc));
     assert(mp != NULL);
@@ -134,10 +136,10 @@ static int mc_request_report(struct master_controller *mc, mtp_packet_t *mp)
 		     MA_Role, MTP_ROLE_RMC,
 		     MA_RobotID, mc->mc_pilot->pc_robot->id,
 		     MA_TAG_DONE);
-    
+
     mc->mc_pilot->pc_flags |= PCF_EXPECTING_RESPONSE;
     mc->mc_pilot->pc_connection_timeout = REPORT_RESPONSE_TIMEOUT;
-    
+
     return retval;
 }
 
@@ -145,7 +147,7 @@ static int mc_plot(struct master_controller *mc, mtp_packet_t *mp)
 {
     float distance, theta;
     int retval = 0;
-    
+
     assert(mc != NULL);
     assert(mc_invariant(mc));
     assert(mp != NULL);
@@ -185,14 +187,15 @@ static int mc_plot(struct master_controller *mc, mtp_packet_t *mp)
 			     MA_Theta, (mc->mc_plan.pp_goal_pos.theta -
 					mc->mc_plan.pp_actual_pos.theta),
 			     MA_TAG_DONE);
-	    
+
 	    mc->mc_pilot->pc_flags |= PCF_EXPECTING_RESPONSE;
 	    mc->mc_pilot->pc_connection_timeout = WIGGLE_RESPONSE_TIMEOUT;
 	}
     }
     else {
 	struct robot_position *rp = NULL, _rp;
- 
+
+    /* call path planner */
 	switch (pp_plot_waypoint(&mc->mc_plan)) {
 	case PPC_NO_WAYPOINT:
 	    rp = mtp_world2local(&_rp,
@@ -219,7 +222,7 @@ static int mc_plot(struct master_controller *mc, mtp_packet_t *mp)
 	}
 
 	if (rp != NULL) {
-   
+
 	    mtp_send_packet2(mc->mc_pilot->pc_handle,
 			     MA_Opcode, MTP_COMMAND_GOTO,
 			     MA_Role, MTP_ROLE_RMC,
@@ -228,7 +231,7 @@ static int mc_plot(struct master_controller *mc, mtp_packet_t *mp)
 			     MA_Position, rp,
 			     MA_Speed, mc->mc_plan.pp_speed,
 			     MA_TAG_DONE);
-	    
+
 	    mc->mc_pilot->pc_flags |= PCF_EXPECTING_RESPONSE;
 	    mc->mc_pilot->pc_connection_timeout = MOVE_RESPONSE_TIMEOUT;
 	}
@@ -240,68 +243,177 @@ static int mc_plot(struct master_controller *mc, mtp_packet_t *mp)
 
 static int mc_nlwrapper(struct master_controller *mc, mtp_packet_t *mp) {
     /* DAN */
-  
+
     float Vleft, Vright;
+    int send_wheels = 1;
     robot_position_states rstates;
-    
-    
-    /* get states from position data */
-    mc_nlctr_getstates(&rstates,
-		       &mc->mc_plan.pp_goal_pos,
-		       &mc->mc_plan.pp_actual_pos);
-      
-    if (debug > 1) {  
-	info("Current states (e,alpha,theta): %f %f %f\n",
-	     rstates.e,
-	     rstates.alpha,
-	     rstates.theta);
+    robot_position_states rstates_goal;
+
+    info("mc_nlwrapper: \n");
+
+    if (mc->mc_flags & MCF_HAS_PATH_PLAN) {
+        /* Already have a path plan */
+
+
+        /* get states from position data for waypoint */
+        mc_nlctr_getstates(&rstates,
+                           &mc->mc_plan.pp_waypoint,
+                           &mc->mc_plan.pp_actual_pos);
+
+        /* get states from position data for goal point */
+        mc_nlctr_getstates(&rstates_goal,
+                           &mc->mc_plan.pp_goal_pos,
+                           &mc->mc_plan.pp_actual_pos);
+
+        if (debug > 1) {
+            info("Current states (e,alpha,theta): %f %f %f\n",
+                 rstates.e,
+                 rstates.alpha,
+	             rstates.theta);
+            info("Current position: %f %f %f\n",
+                 mc->mc_plan.pp_actual_pos.x,
+                 mc->mc_plan.pp_actual_pos.y,
+                 mc->mc_plan.pp_actual_pos.theta);
+            info("Current goal point: %f %f %f\n",
+                 mc->mc_plan.pp_waypoint.x,
+                 mc->mc_plan.pp_waypoint.y,
+                 mc->mc_plan.pp_waypoint.theta);
+        }
+
+        /* if states for goal position are close to zero,
+         * send MTP_POSITION_STATUS_COMPLETE
+         */
+        if ((fabsf(rstates_goal.alpha) < STATE_ATOL &&
+             fabsf(rstates_goal.theta) < STATE_ATOL) &&
+            fabsf(rstates_goal.e) < STATE_TOL) {
+
+            info("Robot is at destination (%f)\n", rstates_goal.e);
+
+            /* tell EMCD */
+            mtp_send_packet2(pc_data.pcd_emc_handle,
+                             MA_Opcode, MTP_UPDATE_POSITION,
+                             MA_Role, MTP_ROLE_RMC,
+                             MA_Position, &mc->mc_plan.pp_actual_pos,
+                             MA_RobotID, mc->mc_pilot->pc_robot->id,
+                             MA_Status, MTP_POSITION_STATUS_COMPLETE,
+                             MA_TAG_DONE);
+
+            /* tell robot to STOP */
+            mtp_send_packet2(mc->mc_pilot->pc_handle,
+                             MA_Opcode, MTP_COMMAND_STOP,
+                             MA_Role, MTP_ROLE_RMC,
+                             MA_RobotID, mc->mc_pilot->pc_robot->id,
+                             MA_CommandID, MASTER_COMMAND_ID,
+                             MA_TAG_DONE);
+
+            send_wheels = 0;
+        }
+        else {
+
+            /* if states for waypoint are close to zero,
+             * need another waypoint
+             */
+            if ((fabsf(rstates.alpha) < STATE_ATOL &&
+                 fabsf(rstates.theta) < STATE_ATOL) &&
+                fabsf(rstates.e) < STATE_TOL) {
+
+                info("Robot is at waypoint (%f)\n", rstates.e);
+
+                /* unset mc->mc_flags MCF_HAS_PATH_PLAN flag */
+                mc->mc_flags &= ~MCF_HAS_PATH_PLAN;
+
+                send_wheels = 0;
+            }
+        }
+
+        if (1 == send_wheels) {
+            /* run controller */
+            mc_nlctr_controller(&Vleft, &Vright, &rstates);
+
+            if (debug > 1) {
+                info("Wheel speeds (L/R): %f %f\n", Vleft, Vright);
+            }
+
+            /* send to robot */
+            mtp_send_packet2(mc->mc_pilot->pc_handle,
+                             MA_Opcode, MTP_COMMAND_WHEELS,
+                             MA_Role, MTP_ROLE_RMC,
+                             MA_CommandID, MASTER_COMMAND_ID,
+                             MA_RobotID, mc->mc_pilot->pc_robot->id,
+                             MA_vleft, (double)(Vleft),
+                             MA_vright, (double)(Vright),
+                             MA_TAG_DONE);
+        }
     }
-    
-    /* if states are close to zero, send MTP_POSITION_STATUS_COMPLETE */
-    if ((fabsf(rstates.alpha) < STATE_ATOL && fabsf(rstates.theta)) &&
-	fabsf(rstates.e) < STATE_TOL) {
-      
-	info("Robot is at destination (%f)\n", rstates.e);
-        
-    /* tell EMCD */
-	mtp_send_packet2(pc_data.pcd_emc_handle,
-			 MA_Opcode, MTP_UPDATE_POSITION,
-			 MA_Role, MTP_ROLE_RMC,
-			 MA_Position, &mc->mc_plan.pp_actual_pos,
-			 MA_RobotID, mc->mc_pilot->pc_robot->id,
-			 MA_Status, MTP_POSITION_STATUS_COMPLETE,
-			 MA_TAG_DONE);
-        
-	/* tell robot to STOP */
-	mtp_send_packet2(mc->mc_pilot->pc_handle,
-			 MA_Opcode, MTP_COMMAND_STOP,
-			 MA_Role, MTP_ROLE_RMC,
-			 MA_RobotID, mc->mc_pilot->pc_robot->id,
-			 MA_CommandID, MASTER_COMMAND_ID,
-			 MA_TAG_DONE);
-      
-    } else {
-	/* run controller */
-	mc_nlctr_controller(&Vleft, &Vright, &rstates);
-    
-	if (debug > 1) {
-	    info("Wheel speeds (L/R): %f %f\n", Vleft, Vright);
-	}
-    
-	/* send to robot */
-	mtp_send_packet2(mc->mc_pilot->pc_handle,
-			 MA_Opcode, MTP_COMMAND_WHEELS,
-			 MA_Role, MTP_ROLE_RMC,
-			 MA_CommandID, MASTER_COMMAND_ID,
-			 MA_RobotID, mc->mc_pilot->pc_robot->id,
-			 MA_vleft, (double)(Vleft),
-			 MA_vright, (double)(Vright),
-			 MA_TAG_DONE);
+
+
+
+    if (!(mc->mc_flags & MCF_HAS_PATH_PLAN)) {
+        /* need a path plan, call path planner */
+
+        if (debug > 1) {
+            info("Need a path plan before sending wheelspeeds\n");
+        }
+
+        switch (pp_plot_waypoint(&mc->mc_plan)) {
+            case PPC_NO_WAYPOINT:
+                mc->mc_flags |= MCF_HAS_PATH_PLAN;
+                break;
+
+            case PPC_WAYPOINT:
+                /* get next waypoint, to get orientation */
+
+                if (debug > 1) {
+                    info("Calling path planner to look ahead\n");
+                }
+
+                mc->mc_plan_lookahead = mc->mc_plan;
+                mc->mc_plan_lookahead.pp_actual_pos = mc->mc_plan.pp_waypoint;
+
+                switch (pp_plot_waypoint(&mc->mc_plan_lookahead)) {
+                    case PPC_NO_WAYPOINT:
+                    case PPC_WAYPOINT:
+                        if (debug > 1) {
+                            info("Waypoint orientation established\n");
+                            info("Intermediate goal point is %f %f %f\n",
+                                 mc->mc_plan.pp_waypoint.x,
+                                 mc->mc_plan.pp_waypoint.y,
+                                 mc->mc_plan.pp_waypoint.theta);
+                        }
+
+                        mc->mc_plan.pp_waypoint.theta =
+                            atan2(mc->mc_plan_lookahead.pp_waypoint.y -
+                                  mc->mc_plan.pp_waypoint.y,
+                                  mc->mc_plan_lookahead.pp_waypoint.x -
+                                  mc->mc_plan.pp_waypoint.x);
+                        break;
+                    default:
+                        mc->mc_plan.pp_waypoint.theta = 0.0f;
+                        break;
+                }
+
+                /* set mc->mc_flags &= MCF_HAS_PATH_PLAN flag */
+                mc->mc_flags |= MCF_HAS_PATH_PLAN;
+
+
+                break;
+            case PPC_BLOCKED:
+            case PPC_GOAL_IN_OBSTACLE:
+                /* do what? */
+//                 mc->mc_pause_time = DEFAULT_PAUSE_TIME;
+//                 assert(mc->mc_self_obstacle == NULL);
+//                 mc->mc_self_obstacle = ob_add_robot(&mc->mc_plan.pp_actual_pos,
+//                                                     mc->mc_pilot->pc_robot->id);
+                printf("ERROR: Can not set waypoint.\n");
+                break;
+        }
+
+
     }
-   
-    
+
+
     return 0;
-  
+
 }
 
 
@@ -310,7 +422,7 @@ static int mc_nlwrapper(struct master_controller *mc, mtp_packet_t *mp) {
 int mc_handle_emc_packet(struct master_controller *mc, mtp_packet_t *mp)
 {
     int rc, retval = 0;
-    
+
     assert(mc != NULL);
     assert(mc_invariant(mc));
     assert(mp != NULL);
@@ -349,13 +461,13 @@ static int mc_update_flags(struct master_controller *mc, mtp_packet_t *mp)
 {
     mtp_status_t ms;
     int retval = 0;
-    
+
     assert(mc != NULL);
     assert(mc_invariant(mc));
     assert(mp != NULL);
 
     ms = mp->data.mtp_payload_u.update_position.status;
-    
+
     switch (ms) {
     case MTP_POSITION_STATUS_CONTACT:
 	mc->mc_flags |= MCF_CONTACT;
@@ -372,7 +484,7 @@ static int mc_update_flags(struct master_controller *mc, mtp_packet_t *mp)
 static int mc_pause(struct master_controller *mc, mtp_packet_t *mp)
 {
     int retval = 0;
-    
+
     assert(mc != NULL);
     assert(mc_invariant(mc));
     assert(mp != NULL);
@@ -382,14 +494,14 @@ static int mc_pause(struct master_controller *mc, mtp_packet_t *mp)
     if (mc->mc_self_obstacle == NULL)
 	mc->mc_self_obstacle = ob_add_robot(&mc->mc_plan.pp_actual_pos,
 					    mc->mc_pilot->pc_robot->id);
-    
+
     return retval;
 }
 
 static int mc_request_position(struct master_controller *mc, mtp_packet_t *mp)
 {
     int retval = 0;
-    
+
     assert(mc != NULL);
     assert(mc_invariant(mc));
 
@@ -402,7 +514,7 @@ static int mc_request_position(struct master_controller *mc, mtp_packet_t *mp)
 		     MA_Role, MTP_ROLE_RMC,
 		     MA_RobotID, mc->mc_pilot->pc_robot->id,
 		     MA_TAG_DONE);
-    
+
     return retval;
 }
 
@@ -410,7 +522,7 @@ static int mc_process_report(struct master_controller *mc, mtp_packet_t *mp)
 {
     int lpc, compass = 0, retval = 0;
     struct mtp_contact_report *mcr;
-    
+
     assert(mc != NULL);
     assert(mc_invariant(mc));
     assert(mp != NULL);
@@ -480,7 +592,7 @@ static int mc_process_report(struct master_controller *mc, mtp_packet_t *mp)
 int mc_handle_pilot_packet(struct master_controller *mc, mtp_packet_t *mp)
 {
     int rc, retval = 0;
-    
+
     assert(mc != NULL);
     assert(mc_invariant(mc));
     assert(mp != NULL);
@@ -513,7 +625,7 @@ int mc_handle_pilot_packet(struct master_controller *mc, mtp_packet_t *mp)
 int mc_handle_switch(struct master_controller *mc)
 {
     int retval = 0;
-    
+
     assert(mc != NULL);
     assert(mc_invariant(mc));
 
@@ -525,7 +637,7 @@ int mc_handle_switch(struct master_controller *mc)
 int mc_handle_tick(struct master_controller *mc)
 {
     int retval = 0;
-    
+
     assert(mc != NULL);
     assert(mc_invariant(mc));
 
@@ -549,56 +661,56 @@ void mc_nlctr_getstates(struct robot_position_states *robotcp,
     /* calculate robot polar position states from current and goal positions
    * The goal position is the origin, with the current position offset
    */
-  
+
     struct robot_position_states robotcp_out;
     float theta0;
     float xdiff, ydiff;
-   
-    
+
+
     assert(robotcp != NULL);
     assert(goalpos != NULL);
     assert(robotpos != NULL);
-     
-    
-    
+
+
+
     xdiff = goalpos->x - robotpos->x;
     ydiff = -(goalpos->y - robotpos->y);
-    
+
     theta0 = atan2(ydiff, xdiff);
-    
-     
-     
+
+
+
     robotcp_out.e = sqrt(pow(xdiff,2) + pow(ydiff,2));
     robotcp_out.theta = theta0  - goalpos->theta;
     robotcp_out.alpha = theta0 - robotpos->theta;
     robotcp_out.timestamp = robotpos->timestamp;
-      
+
     *robotcp = robotcp_out;
-     
+
 }
 
 
 void mc_nlctr_controller(float *Vl, float *Vr, struct robot_position_states *robotcp) {
-  
-    
-  
+
+
+
     float u_max = 0.4f; /* u saturation */
     float C_u, C_omega; /* controller outputs */
-          
+
     /* controller parameters: */
     float K_gamma = 1.0f, K_h = 1.0f, K_k = 1.0f;
-          
+
     float K_radius = 0.0889f;
     // float C_max = 26.25f;
     float C_max = 13.125f;
-  
-    
+
+
     assert(robotcp != NULL);
-    
-    
+
+
     /* controller: */
     C_u = u_max * tanh(K_gamma * cos(robotcp->alpha) * robotcp->e);
-            
+
     if (0 == robotcp->alpha) {
 	C_omega = 0.0f;
     }
@@ -606,7 +718,7 @@ void mc_nlctr_controller(float *Vl, float *Vr, struct robot_position_states *rob
 	C_omega = K_k * robotcp->alpha + K_gamma *
 	    ((cos(robotcp->alpha)*sin(robotcp->alpha)) / robotcp->alpha) *
 	    (robotcp->alpha + K_h * robotcp->theta);
-        
+
 	if (C_omega > C_max) {
 	    C_omega = C_max;
 	}
@@ -615,10 +727,10 @@ void mc_nlctr_controller(float *Vl, float *Vr, struct robot_position_states *rob
 	}
     }
     /* end controller */
-            
+
     /* wheel velocity translator: */
     *Vl = C_u - K_radius * C_omega;
     *Vr = C_u + K_radius * C_omega;
     /* end wheel velocity translator */
-  
+
 }
