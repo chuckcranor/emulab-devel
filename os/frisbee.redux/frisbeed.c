@@ -43,3 +43,15 @@ HandleNeed(ChunkId_t chunklst[], int size)
 {
 	/* Nothing to do */
 }
+
+int
+ChunkOnDisk(int chunk)
+{
+	return 1;
+}
+
+ChunkBuffer_t * 
+GetChunkFromDisk(int chunk, ChunkBuffer_t * d)
+{
+	return NULL;
+}
