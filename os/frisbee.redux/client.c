@@ -13,6 +13,7 @@
  */
 #include <sys/types.h>
 #include <sys/socket.h>
+#include <sys/stat.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
 #include <stdio.h>
@@ -24,6 +25,7 @@
 #include <stdarg.h>
 #include <pthread.h>
 #include <assert.h>
+#include <fcntl.h>
 #include "decls.h"
 #include "utils.h"
 #include "trace.h"
@@ -57,6 +59,8 @@ static struct in_addr serverip;
 
 static struct timeval	ChunkerDone;
 
+/* */
+
 /* Forward Decls */
 static void	PlayFrisbee(NetInfo_t *ni);
 static void	GotBlock(NetInfo_t *ni, Packet_t *p);
@@ -88,8 +92,9 @@ extern int	ImageUnzipQuit(void);
  */
 typedef struct {
 	unsigned long long lastreq:62;
-	unsigned long long ours:1;
-	unsigned long long done:1;
+	unsigned ondisk:1; /* True is uncompressed chunk is saved to disk */
+	unsigned ours:1;
+	unsigned done:1;
 } Chunk_t;
 
 Chunk_t		  *Chunks;		/* Chunk descriptors */
@@ -98,6 +103,19 @@ ChunkBufferData_t *ChunkBufferData;	/* The cache */
 ChunkId_t         *ChunkBufferIdx;      /* Index into the Cache */
 int		  TotalChunkCount;	/* Total number of chunks in file */
 int		  IdleCounter;		/* Countdown to request more data */
+
+typedef struct {
+	char *	filename;
+	int	fd;
+} CompressedImage_t;
+
+
+CompressedImage_t CompressedImage = {NULL, -1};
+
+static void	CompressedImageInit(CompressedImage_t * ths, const char * filename);
+static void	CompressedImageClose(CompressedImage_t * ths);
+static void	WriteCompressedChunk(CompressedImage_t * ths, Chunk_t *cs,
+				       ChunkBuffer_t * d);
 
 static inline void
 InitHold(ChunkBuffer_t * p) 
@@ -173,7 +191,7 @@ int
 client_main(int argc, char **argv)
 {
 	int	ch, mem;
-	char   *filename;
+	char   *filename, *cfilename = NULL;
 	int	zero = 0;
 	int	dostype = -1;
         int     slice = 0;
@@ -182,7 +200,7 @@ client_main(int argc, char **argv)
 
         optreset = 1;
         optind = 1;
-	while ((ch = getopt(argc, argv, "dhp:m:s:i:tbznT:r:E:D:C:W:S:M:R:I:ON")) != -1)
+	while ((ch = getopt(argc, argv, "dhp:m:s:i:tbznT:r:E:D:C:W:S:M:R:I:ONc:")) != -1)
 		switch(ch) {
 		case 'd':
                         _debug++;
@@ -295,6 +313,10 @@ client_main(int argc, char **argv)
 
 		case 'N':
 			nodecompress = 1;
+			break;
+
+		case 'c':
+			cfilename = optarg;
 			break;
 
 		case 'h':
@@ -442,6 +464,9 @@ client_main(int argc, char **argv)
 
 	ImageUnzipInit(filename, slice, debug, zero, nothreads, dostype, 3,
 		       maxwritebufmem*1024*1024);
+
+	if (cfilename)
+		CompressedImageInit(&CompressedImage, cfilename);
 
 	if (tracing) {
 		ClientTraceInit(traceprefix);
@@ -779,6 +804,8 @@ ChunkerStartup(NetInfo_t *ni)
 			if (ImageUnzipChunk(ChunkBufferData[i].blocks[0].data))
 				pfatal("ImageUnzipChunk failed");
 		}
+
+		WriteCompressedChunk(&CompressedImage, Chunks, &ChunkBuffer[i]);
 
 		/*
 		 * Okay, free the slot up for another chunk.
@@ -1672,4 +1699,96 @@ DumpCache()
 	}
 	funlockfile(stderr);
 }
+
+static void
+CompressedImageInit(CompressedImage_t * ths, const char * filename)
+{
+	ths->filename = strdup(filename);
+	ths->fd = open(filename, O_CREAT|O_RDWR, 00666);
+	if (ths->fd == -1) 
+		pfatal("%s : open", filename);
+	ftruncate(ths->fd, 0); /* Ignore errors */
+}
+
+static void
+CompressedImageClose(CompressedImage_t * ths)
+{
+	close(ths->fd);
+	ths->fd = -1;
+	free(ths->filename);
+	ths->filename = NULL;
+}
+
+
+/* This function should only be used by a single thread */
+static void
+WriteCompressedChunk(CompressedImage_t * ths, Chunk_t * cs, ChunkBuffer_t * d)
+{
+	int chunk = d->thischunk;
+	int res;
+	if (ths->fd < 0) return;
+	assert(d->state == CHUNK_FULL);
+	//assert(d->neededself > 0);
+	//log("Writing Compressed Chunk %d to disk", d->thischunk);
+	assert(!cs[chunk].ondisk);
+	res = pwrite(ths->fd, d->d->blocks, CHUNKSIZE * BLOCKSIZE, 
+		     chunk * CHUNKSIZE * BLOCKSIZE);
+	if (res != CHUNKSIZE * BLOCKSIZE)
+		pfatal("%s : pwrite", ths->filename);
+	cs[chunk].ondisk = 1;
+	//GetChunkBufferLock();
+	//d->neededself--;
+	//ReleaseChunkBufferLock();
+}
+
+/* Assumes that the d won't go anywhere */
+static void
+ReadCompressedChunk(CompressedImage_t * ths, ChunkBuffer_t * d)
+{
+	int chunk = d->thischunk;
+	int res;
+	stamp_t stamp;
+	res = pread(ths->fd, d->d->blocks, CHUNKSIZE * BLOCKSIZE,
+		    chunk * CHUNKSIZE * BLOCKSIZE);
+	if (res != CHUNKSIZE * BLOCKSIZE)
+		pfatal("%s : pwrite", ths->filename);
+	stamp = GetStamp();
+	BlockMapSetAll(&d->d->blockmap);
+	GetChunkBufferLock();
+	d->stamp = stamp;
+	d->state = CHUNK_FULL;
+	d->d->blockcount = 0;
+	ReleaseChunkBufferLock();
+}
+
+int
+ChunkOnDisk(int chunk)
+{
+	return Chunks[chunk].ondisk;
+}
+
+ChunkBuffer_t * 
+GetChunkFromDisk(int chunk, ChunkBuffer_t * d)
+{
+	CompressedImage_t * ths = &CompressedImage;
+	assert(ChunkOnDisk(chunk));
+	if (!d) {
+		int i;
+		GetChunkBufferLock();
+		i = PreAllocChunk(chunk, FIND_FREE);
+		if (i == -1) {
+			log("No Room To Read Chunk %d from disk.", chunk);
+			ReleaseChunkBufferLock();
+			return NULL;
+		}
+		SetupChunk(i, chunk);
+		StartChunk(i, chunk);
+		ReleaseChunkBufferLock();
+		d = &ChunkBuffer[i];
+	}
+	assert(d->hold);
+	ReadCompressedChunk(ths, d);
+	return d;
+}
+
 

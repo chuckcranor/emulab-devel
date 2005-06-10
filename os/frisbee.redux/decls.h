@@ -493,6 +493,8 @@ void HandleNeed(ChunkId_t chunklst[], int size);
 ChunkBuffer_t * ReserveChunk(int chunk);
 void DumpCache();
 
+int ChunkOnDisk(int chunk);
+ChunkBuffer_t * GetChunkFromDisk(int chunk, ChunkBuffer_t * d);
 
 /*
  * Server

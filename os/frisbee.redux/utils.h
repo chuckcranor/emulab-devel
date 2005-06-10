@@ -83,6 +83,12 @@ BlockMapClear(BlockMap_t *blockmap)
 	memset(blockmap, 0, sizeof(BlockMap_t));
 }
 
+static inline void
+BlockMapSetAll(BlockMap_t *blockmap)
+{
+	memset(blockmap, 0xFF, sizeof(BlockMap_t));
+}
+
 static inline int
 BlockMapHave(const BlockMap_t *blockmap, int block)
 {

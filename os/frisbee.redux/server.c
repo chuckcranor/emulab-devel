@@ -301,6 +301,7 @@ WorkQueueRequeue(WQelem_t * orig,
 	
 	if (!queue_end(&WorkQ, (queue_entry_t)wqel)) {
 		int blocks = BlockMapMerge(still_need, &wqel->blockmap);
+		//log("!queue_end");
 		wqel->nblocks += blocks;
 		MutexUnlock(&WorkQLock);
 		if (cached) {
@@ -1026,6 +1027,22 @@ PlayFrisbeeProxy(NetInfo_t *ni)
 			still_need = &wqel->blockmap;
 			unsent_blocks = wqel->nblocks;
 		}
+
+		if (unsent_blocks && ChunkOnDisk(chunk)) {
+			if (unsent_blocks != CHUNKSIZE)
+				log("Fetching Chunk %d from disk but only need %d blocks",
+				    chunk, unsent_blocks);
+			else 
+				log("Fetching Chunk %d from disk", chunk);
+
+			cached = GetChunkFromDisk(chunk, cached);
+			if (cached) {
+				still_need = &m;
+				BlockMapClear(still_need);
+				unsent_blocks = 0;
+			}
+		}
+
 		if (unsent_blocks && now - wqel->lastreq >= redodelay) {
 			AddNeededForOthers(chunk, unsent_blocks, still_need);
 			wqel->lastreq = now;
