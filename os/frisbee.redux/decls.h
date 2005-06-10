@@ -480,6 +480,10 @@ typedef struct ChunkBufferData_t {
 #define CHUNK_FILLING	1
 #define CHUNK_FULL	2
 
+#define NEEDED_EXPN 1
+#define NEEDED_COMP 2
+
+
 ChunkBuffer_t * GetCachedChunk(int chunkno);
 int CalcFreeBufs();
 int PossiblyRequestMissing(NetInfo_t *ni, int timedout, stamp_t stamp,

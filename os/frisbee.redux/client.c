@@ -103,6 +103,7 @@ ChunkBufferData_t *ChunkBufferData;	/* The cache */
 ChunkId_t         *ChunkBufferIdx;      /* Index into the Cache */
 int		  TotalChunkCount;	/* Total number of chunks in file */
 int		  IdleCounter;		/* Countdown to request more data */
+int		  NeededSelfInitVal;	/* Initial value for ChunkBuffer::NeededSelf field */
 
 typedef struct {
 	char *	filename;
@@ -115,7 +116,7 @@ CompressedImage_t CompressedImage = {NULL, -1};
 static void	CompressedImageInit(CompressedImage_t * ths, const char * filename);
 static void	CompressedImageClose(CompressedImage_t * ths);
 static void	WriteCompressedChunk(CompressedImage_t * ths, Chunk_t *cs,
-				       ChunkBuffer_t * d);
+				     ChunkBuffer_t * d);
 
 static inline void
 InitHold(ChunkBuffer_t * p) 
@@ -462,11 +463,15 @@ client_main(int argc, char **argv)
 		maxwritebufmem = maxmem/2;
 	}
 
+	NeededSelfInitVal = NEEDED_EXPN;
+
 	ImageUnzipInit(filename, slice, debug, zero, nothreads, dostype, 3,
 		       maxwritebufmem*1024*1024);
 
-	if (cfilename)
+	if (cfilename) {
+		NeededSelfInitVal |= NEEDED_COMP;
 		CompressedImageInit(&CompressedImage, cfilename);
+	}
 
 	if (tracing) {
 		ClientTraceInit(traceprefix);
@@ -655,13 +660,48 @@ ClientRecvThread(void *arg)
 	}
 }
 
+static void *
+CompressedImageWriterThread(void * arg)
+{
+	int		i;
+	int		chunkcount = TotalChunkCount;
+	log ("CompressedImageWriterThread Starting");
+	while (chunkcount && !killme) {
+		/*
+		 * Search the chunk cache for a chunk that is ready to write.
+		 * If CHUNK_FULL is set than the chunk is garnateed not to
+		 * be modified, so no need to lock.
+		 */
+		for (i = 0; i < maxchunkbufs; i++)
+			if (ChunkBuffer[i].neededself & NEEDED_COMP && 
+			    ChunkBuffer[i].state == CHUNK_FULL)
+				break;
+
+		/* If nothing to do, then get out of the way for a while. */
+		if (i == maxchunkbufs) {
+			fsleep(idledelay);
+			continue;
+		}
+
+		WriteCompressedChunk(&CompressedImage, Chunks, &ChunkBuffer[i]);
+
+		GetChunkBufferLock();
+		ChunkBuffer[i].neededself &= ~NEEDED_COMP;
+		UpdateHold(&ChunkBuffer[i]);
+		ReleaseChunkBufferLock();
+		chunkcount--;
+	}
+	return NULL;
+}
+
 /*
  * The heart of the game.
  */
 static void
 ChunkerStartup(NetInfo_t *ni)
 {
-	pthread_t	child_pid;
+	pthread_t	recv_pid, writer_pid;
+	int		writer_used;
 	void		*ignored;
 	int		chunkcount = TotalChunkCount;
 	int		i, wasidle = 0;
@@ -734,9 +774,16 @@ ChunkerStartup(NetInfo_t *ni)
 		pthread_cond_broadcast(&StartupCond);
 	}
 
-	if (pthread_create(&child_pid, NULL,
+	if (pthread_create(&recv_pid, NULL,
 			   ClientRecvThread, (void *)ni)) {
 		fatal("Failed to create pthread!");
+	}
+	writer_used = CompressedImage.fd >= 0;
+	if (writer_used) {
+		if (pthread_create(&writer_pid, NULL,
+				   CompressedImageWriterThread, NULL)) {
+			fatal("Failed to create pthread!");
+		}
 	}
 
 	/*
@@ -749,7 +796,7 @@ ChunkerStartup(NetInfo_t *ni)
 		 * be modified, so no need to lock.
 		 */
 		for (i = 0; i < maxchunkbufs; i++)
-			if (ChunkBuffer[i].neededself && 
+			if (ChunkBuffer[i].neededself & NEEDED_EXPN && 
 			    ChunkBuffer[i].state == CHUNK_FULL)
 				break;
 
@@ -805,14 +852,14 @@ ChunkerStartup(NetInfo_t *ni)
 				pfatal("ImageUnzipChunk failed");
 		}
 
-		WriteCompressedChunk(&CompressedImage, Chunks, &ChunkBuffer[i]);
-
 		/*
 		 * Okay, free the slot up for another chunk.
 		 *
 		 */
-		ChunkBuffer[i].neededself = 0;
+		GetChunkBufferLock();
+		ChunkBuffer[i].neededself &= ~NEEDED_EXPN;
 		UpdateHold(&ChunkBuffer[i]);
+		ReleaseChunkBufferLock();
 		chunkcount--;
 		CLEVENT(1, EV_CLIDCDONE,
 			ChunkBuffer[i].thischunk, chunkcount,
@@ -851,9 +898,13 @@ ChunkerStartup(NetInfo_t *ni)
 		}
 	}
 
-	pthread_cancel(child_pid);
-	pthread_join(child_pid, &ignored);
+	pthread_cancel(recv_pid);
+	pthread_join(recv_pid, &ignored);
 
+	if (writer_used) {
+		pthread_cancel(writer_pid);
+		pthread_join(writer_pid, &ignored);
+	}
 
 	free(ChunkBuffer);
 	free(ChunkBufferData);
@@ -1073,12 +1124,14 @@ GotBlock(NetInfo_t *ni, Packet_t *p)
 	/*
 	 * Is the chunk complete? If so, then release it to the main thread.
 	 */
+	if (ChunkBufferData[i].blockcount == 0)
+		ChunkBuffer[i].state = CHUNK_FULL;
+
 	if (ChunkBuffer[i].neededself && ChunkBufferData[i].blockcount == 0) {
 		inprogress--;
 		CLEVENT(1, EV_CLIECHUNK, chunk, block, inprogress, 0);
 		if (debug)
 			log("Releasing chunk %d to main thread", chunk);
-		ChunkBuffer[i].state = CHUNK_FULL;
 
 		/*
 		 * Send off a request for a chunk we do not have yet. This
@@ -1557,7 +1610,7 @@ StartChunk(int i, int chunk)
 {
         
 	ChunkBuffer[i].state      = CHUNK_FILLING;
-	ChunkBuffer[i].neededself = !Chunks[chunk].done;
+	ChunkBuffer[i].neededself = Chunks[chunk].done ? 0 : NeededSelfInitVal;
 	if (PROXY_MODE) {
 		ChunkBuffer[i].pending = WorkQueueCount(chunk);
 	} else {
@@ -1719,7 +1772,6 @@ CompressedImageClose(CompressedImage_t * ths)
 	ths->filename = NULL;
 }
 
-
 /* This function should only be used by a single thread */
 static void
 WriteCompressedChunk(CompressedImage_t * ths, Chunk_t * cs, ChunkBuffer_t * d)
@@ -1728,7 +1780,7 @@ WriteCompressedChunk(CompressedImage_t * ths, Chunk_t * cs, ChunkBuffer_t * d)
 	int res;
 	if (ths->fd < 0) return;
 	assert(d->state == CHUNK_FULL);
-	//assert(d->neededself > 0);
+	assert(d->neededself > 0);
 	//log("Writing Compressed Chunk %d to disk", d->thischunk);
 	assert(!cs[chunk].ondisk);
 	res = pwrite(ths->fd, d->d->blocks, CHUNKSIZE * BLOCKSIZE, 
@@ -1736,9 +1788,6 @@ WriteCompressedChunk(CompressedImage_t * ths, Chunk_t * cs, ChunkBuffer_t * d)
 	if (res != CHUNKSIZE * BLOCKSIZE)
 		pfatal("%s : pwrite", ths->filename);
 	cs[chunk].ondisk = 1;
-	//GetChunkBufferLock();
-	//d->neededself--;
-	//ReleaseChunkBufferLock();
 }
 
 /* Assumes that the d won't go anywhere */
