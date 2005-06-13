@@ -24,8 +24,6 @@
 #include "pilotConnection.h"
 #include "masterController.h"
 
-
-
 struct master_controller_data mc_data;
 
 /**
@@ -39,8 +37,11 @@ struct master_controller_data mc_data;
 #define cmp_fuzzy(x1, x2, tol)				\
   ((((x1) - (tol)) < (x2)) && (x2 < ((x1) + (tol))))
 
-#define STATE_TOL 0.04f
+#define STATE_TOL 0.015f
 #define STATE_ATOL 0.5f
+
+#define STATE_WAYPOINT_TOL 0.19f
+#define STATE_WAYPOINT_ATOL 0.75f
 
 int mc_invariant(struct master_controller *mc)
 {
@@ -195,7 +196,7 @@ static int mc_plot(struct master_controller *mc, mtp_packet_t *mp)
     else {
 	struct robot_position *rp = NULL, _rp;
 
-    /* call path planner */
+	/* call path planner */
 	switch (pp_plot_waypoint(&mc->mc_plan)) {
 	case PPC_NO_WAYPOINT:
 	    rp = mtp_world2local(&_rp,
@@ -240,16 +241,17 @@ static int mc_plot(struct master_controller *mc, mtp_packet_t *mp)
     return retval;
 }
 
-
-static int mc_nlwrapper(struct master_controller *mc, mtp_packet_t *mp) {
+static int mc_nlwrapper(struct master_controller *mc, mtp_packet_t *mp)
+{
     /* DAN */
 
     float Vleft, Vright;
-    int send_wheels = 1;
     robot_position_states rstates;
     robot_position_states rstates_goal;
-
-    info("mc_nlwrapper: \n");
+    int at_goal = 0;
+    
+    if (debug > 1)
+	info("mc_nlwrapper: \n");
 
     if (mc->mc_flags & MCF_HAS_PATH_PLAN) {
         /* Already have a path plan */
@@ -289,131 +291,132 @@ static int mc_nlwrapper(struct master_controller *mc, mtp_packet_t *mp) {
 
             info("Robot is at destination (%f)\n", rstates_goal.e);
 
-            /* tell EMCD */
-            mtp_send_packet2(pc_data.pcd_emc_handle,
-                             MA_Opcode, MTP_UPDATE_POSITION,
-                             MA_Role, MTP_ROLE_RMC,
-                             MA_Position, &mc->mc_plan.pp_actual_pos,
-                             MA_RobotID, mc->mc_pilot->pc_robot->id,
-                             MA_Status, MTP_POSITION_STATUS_COMPLETE,
-                             MA_TAG_DONE);
-
-            /* tell robot to STOP */
-            mtp_send_packet2(mc->mc_pilot->pc_handle,
-                             MA_Opcode, MTP_COMMAND_STOP,
-                             MA_Role, MTP_ROLE_RMC,
-                             MA_RobotID, mc->mc_pilot->pc_robot->id,
-                             MA_CommandID, MASTER_COMMAND_ID,
-                             MA_TAG_DONE);
-
-            send_wheels = 0;
+	    mc->mc_flags &= ~MCF_HAS_PATH_PLAN;
+	    at_goal = 1;
         }
-        else {
-
-            /* if states for waypoint are close to zero,
-             * need another waypoint
-             */
-            if ((fabsf(rstates.alpha) < STATE_ATOL &&
-                 fabsf(rstates.theta) < STATE_ATOL) &&
-                fabsf(rstates.e) < STATE_TOL) {
-
-                info("Robot is at waypoint (%f)\n", rstates.e);
-
-                /* unset mc->mc_flags MCF_HAS_PATH_PLAN flag */
-                mc->mc_flags &= ~MCF_HAS_PATH_PLAN;
-
-                send_wheels = 0;
-            }
-        }
-
-        if (1 == send_wheels) {
-            /* run controller */
-            mc_nlctr_controller(&Vleft, &Vright, &rstates);
-
-            if (debug > 1) {
-                info("Wheel speeds (L/R): %f %f\n", Vleft, Vright);
-            }
-
-            /* send to robot */
-            mtp_send_packet2(mc->mc_pilot->pc_handle,
-                             MA_Opcode, MTP_COMMAND_WHEELS,
-                             MA_Role, MTP_ROLE_RMC,
-                             MA_CommandID, MASTER_COMMAND_ID,
-                             MA_RobotID, mc->mc_pilot->pc_robot->id,
-                             MA_vleft, (double)(Vleft),
-                             MA_vright, (double)(Vright),
-                             MA_TAG_DONE);
+	/* if states for waypoint are close to zero,
+	 * need another waypoint
+	 */
+        else if ((mc->mc_plot_code == PPC_WAYPOINT) &&
+		 (fabsf(rstates.alpha) < STATE_WAYPOINT_ATOL &&
+		  fabsf(rstates.theta) < STATE_WAYPOINT_ATOL) &&
+		 fabsf(rstates.e) < STATE_WAYPOINT_TOL) {
+	    
+	    info("Robot is at waypoint (%f)\n", rstates.e);
+	    
+	    /* unset mc->mc_flags MCF_HAS_PATH_PLAN flag */
+	    mc->mc_flags &= ~MCF_HAS_PATH_PLAN;
         }
     }
 
-
-
-    if (!(mc->mc_flags & MCF_HAS_PATH_PLAN)) {
+    if (at_goal) {
+	/* tell EMCD */
+	mtp_send_packet2(pc_data.pcd_emc_handle,
+			 MA_Opcode, MTP_UPDATE_POSITION,
+			 MA_Role, MTP_ROLE_RMC,
+			 MA_Position, &mc->mc_plan.pp_actual_pos,
+			 MA_RobotID, mc->mc_pilot->pc_robot->id,
+			 MA_Status, MTP_POSITION_STATUS_COMPLETE,
+			 MA_TAG_DONE);
+	
+	/* tell robot to STOP */
+	mtp_send_packet2(mc->mc_pilot->pc_handle,
+			 MA_Opcode, MTP_COMMAND_STOP,
+			 MA_Role, MTP_ROLE_RMC,
+			 MA_RobotID, mc->mc_pilot->pc_robot->id,
+			 MA_CommandID, MASTER_COMMAND_ID,
+			 MA_TAG_DONE);
+    }
+    else if (!(mc->mc_flags & MCF_HAS_PATH_PLAN)) {
         /* need a path plan, call path planner */
 
         if (debug > 1) {
             info("Need a path plan before sending wheelspeeds\n");
         }
 
-        switch (pp_plot_waypoint(&mc->mc_plan)) {
-            case PPC_NO_WAYPOINT:
-                mc->mc_flags |= MCF_HAS_PATH_PLAN;
-                break;
-
-            case PPC_WAYPOINT:
-                /* get next waypoint, to get orientation */
-
-                if (debug > 1) {
-                    info("Calling path planner to look ahead\n");
-                }
-
-                mc->mc_plan_lookahead = mc->mc_plan;
-                mc->mc_plan_lookahead.pp_actual_pos = mc->mc_plan.pp_waypoint;
-
-                switch (pp_plot_waypoint(&mc->mc_plan_lookahead)) {
-                    case PPC_NO_WAYPOINT:
-                    case PPC_WAYPOINT:
-                        if (debug > 1) {
-                            info("Waypoint orientation established\n");
-                            info("Intermediate goal point is %f %f %f\n",
-                                 mc->mc_plan.pp_waypoint.x,
-                                 mc->mc_plan.pp_waypoint.y,
-                                 mc->mc_plan.pp_waypoint.theta);
-                        }
-
-                        mc->mc_plan.pp_waypoint.theta =
-                            atan2(mc->mc_plan_lookahead.pp_waypoint.y -
-                                  mc->mc_plan.pp_waypoint.y,
-                                  mc->mc_plan_lookahead.pp_waypoint.x -
-                                  mc->mc_plan.pp_waypoint.x);
-                        break;
-                    default:
-                        mc->mc_plan.pp_waypoint.theta = 0.0f;
-                        break;
-                }
-
-                /* set mc->mc_flags &= MCF_HAS_PATH_PLAN flag */
-                mc->mc_flags |= MCF_HAS_PATH_PLAN;
-
-
-                break;
-            case PPC_BLOCKED:
-            case PPC_GOAL_IN_OBSTACLE:
-                /* do what? */
-//                 mc->mc_pause_time = DEFAULT_PAUSE_TIME;
-//                 assert(mc->mc_self_obstacle == NULL);
-//                 mc->mc_self_obstacle = ob_add_robot(&mc->mc_plan.pp_actual_pos,
-//                                                     mc->mc_pilot->pc_robot->id);
-                printf("ERROR: Can not set waypoint.\n");
-                break;
+	mc->mc_plot_code = pp_plot_waypoint(&mc->mc_plan);
+        switch (mc->mc_plot_code) {
+	case PPC_NO_WAYPOINT:
+	    mc->mc_flags |= MCF_HAS_PATH_PLAN;
+	    break;
+	    
+	case PPC_WAYPOINT:
+	    /* get next waypoint, to get orientation */
+	    
+	    if (debug > 1) {
+		info("Calling path planner to look ahead\n");
+	    }
+	    
+	    mc->mc_plan_lookahead = mc->mc_plan;
+	    mc->mc_plan_lookahead.pp_actual_pos = mc->mc_plan.pp_waypoint;
+	    
+	    switch (pp_plot_waypoint(&mc->mc_plan_lookahead)) {
+	    case PPC_NO_WAYPOINT:
+	    case PPC_WAYPOINT:
+		if (debug) {
+		    info("Waypoint orientation established\n");
+		    info("Intermediate goal point is %f %f %f\n",
+			 mc->mc_plan.pp_waypoint.x,
+			 mc->mc_plan.pp_waypoint.y,
+			 mc->mc_plan.pp_waypoint.theta);
+		    info("Lookahead point is %f %f %f\n",
+			 mc->mc_plan_lookahead.pp_waypoint.x,
+			 mc->mc_plan_lookahead.pp_waypoint.y,
+			 mc->mc_plan_lookahead.pp_waypoint.theta);
+		}
+		
+		mc->mc_plan.pp_waypoint.theta =
+		    atan2(mc->mc_plan.pp_waypoint.y -
+			  mc->mc_plan_lookahead.pp_waypoint.y,
+			  mc->mc_plan_lookahead.pp_waypoint.x -
+			  mc->mc_plan.pp_waypoint.x);
+		break;
+	    default:
+		mc->mc_plan.pp_waypoint.theta = 0.0f;
+		break;
+	    }
+	    
+	    /* set mc->mc_flags &= MCF_HAS_PATH_PLAN flag */
+	    mc->mc_flags |= MCF_HAS_PATH_PLAN;
+	    break;
+	    
+	case PPC_BLOCKED:
+	case PPC_GOAL_IN_OBSTACLE:
+	    mc->mc_pause_time = DEFAULT_PAUSE_TIME;
+	    assert(mc->mc_self_obstacle == NULL);
+	    mc->mc_self_obstacle = ob_add_robot(&mc->mc_plan.pp_actual_pos,
+						mc->mc_pilot->pc_robot->id);
+	    /* tell robot to STOP */
+	    mtp_send_packet2(mc->mc_pilot->pc_handle,
+			     MA_Opcode, MTP_COMMAND_STOP,
+			     MA_Role, MTP_ROLE_RMC,
+			     MA_RobotID, mc->mc_pilot->pc_robot->id,
+			     MA_CommandID, MASTER_COMMAND_ID,
+			     MA_TAG_DONE);
+	    break;
         }
-
-
     }
 
+    if (mc->mc_flags & MCF_HAS_PATH_PLAN) {
+	/* run controller */
+	mc_nlctr_controller(&Vleft, &Vright, &rstates);
+	
+	if (debug > 1) {
+	    info("Wheel speeds (L/R): %f %f\n", Vleft, Vright);
+	}
+	
+	/* send to robot */
+	mtp_send_packet2(mc->mc_pilot->pc_handle,
+			 MA_Opcode, MTP_COMMAND_WHEELS,
+			 MA_Role, MTP_ROLE_RMC,
+			 MA_CommandID, MASTER_COMMAND_ID,
+			 MA_RobotID, mc->mc_pilot->pc_robot->id,
+			 MA_vleft, (double)(Vleft),
+			 MA_vright, (double)(Vright),
+			 MA_TAG_DONE);
+    }
 
     return 0;
-
 }
 
 
@@ -703,7 +706,6 @@ void mc_nlctr_controller(float *Vl, float *Vr, struct robot_position_states *rob
     float K_radius = 0.0889f;
     // float C_max = 26.25f;
     float C_max = 13.125f;
-
 
     assert(robotcp != NULL);
 
