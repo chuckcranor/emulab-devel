@@ -45,6 +45,7 @@ struct master_controller {
   int mc_tries_remaining;
   unsigned int mc_waypoint_tries;
   struct path_plan mc_plan;
+  pp_plot_code_t mc_plot_code;
   struct path_plan mc_plan_lookahead;
   struct obstacle_node *mc_self_obstacle;
 };
