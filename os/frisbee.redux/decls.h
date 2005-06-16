@@ -486,12 +486,12 @@ typedef struct ChunkBufferData_t {
 
 ChunkBuffer_t * GetCachedChunk(int chunkno);
 int CalcFreeBufs();
-int PossiblyRequestMissing(NetInfo_t *ni, int timedout, stamp_t stamp,
-			   int chunk, BlockMap_t *map, int count,
-			   int locked);
-int PossiblyRequestNeeded(NetInfo_t *ni, int timedout, stamp_t stamp,
-			  int chunk, BlockMap_t *map, int count,
-			  int locked);
+void RequestRange(NetInfo_t *ni, int chunk, int block, int count, 
+		  const char * forwho);
+void RequestMissing(NetInfo_t *ni, int chunk, BlockMap_t *map, int count,
+		    const char * forwho);
+void RequestNeeded(NetInfo_t *ni, int chunk, BlockMap_t *map, int count,
+		   const char * forwho);
 int GetChunklst(ChunkId_t chunklst[]);
 void HandleNeed(ChunkId_t chunklst[], int size);
 ChunkBuffer_t * ReserveChunk(int chunk);
@@ -532,13 +532,15 @@ int StartAuxThread(NetInfo_t * ni, pthread_t * t);
  */
 
 static inline void
-UpdateHold(ChunkBuffer_t * p)
+SyncMetaData(ChunkBuffer_t * p)
 {
-	if (UseCacheHints)
-		return;
-	if (p->neededself || p->pending)
+	if (UseCacheHints);
+	else if (p->neededself || p->pending)
 		p->hold = 1;
 	else
 		p->hold = 0;
+	if (p->pending <= 0)
+		p->reserved = 0;
 }
+
 

@@ -73,11 +73,10 @@ int
 RequestNeededForOthers(NetInfo_t *ni, int timedout, stamp_t stamp)
 {
 	Needed_t * ths = &Needed;
-	NeededNode_t *cur = NULL, *unsent = NULL;
+	NeededNode_t *cur = NULL;
 	ChunkBuffer_t *cached,*avail;
 	BlockMap_t need;
 	int need_c = -1;
-	int sent;
 	int add_req_chunks = 0;
 
 	while (1) {
@@ -108,43 +107,25 @@ RequestNeededForOthers(NetInfo_t *ni, int timedout, stamp_t stamp)
 				need = cur->blockmap;
 				need_c = cur->nblocks;
 			}
-			ReleaseChunkBufferLock();
-			
+
 			if (need_c == 0) {
+				avail->reserved--;	
+				ReleaseChunkBufferLock();	
 				MutexUnlock(&ths->lock);
 				continue;
 			}
+
+			ReleaseChunkBufferLock();	
 		} else {
 			cur = NULL;
 			MutexUnlock(&ths->lock);
 			break;
 		}
 		MutexUnlock(&ths->lock);
-		sent = PossiblyRequestNeeded(ni, timedout, stamp,
-					     cur->chunk, &need, need_c, 
-					     UNLOCKED);
-		if (sent) {
-			if (debug)
-				log("Requested %d blocks of chunk:%d for clients.",
-				    need_c, cur->chunk);
-			free(cur);
-			if (!cached) {
-				add_req_chunks++;
-			}
-		} else {
-			cur->next = unsent;
-			unsent = cur;
-		}
-		continue;
-	}
-	if (unsent) {
-		MutexLock(&ths->lock);
-		while (unsent) {
-			cur = unsent;
-			unsent = unsent->next;
-			AddNeededI(ths, cur->chunk, cur->nblocks, &cur->blockmap, cur);
-		}
-		MutexUnlock(&ths->lock);
+		RequestNeeded(ni, cur->chunk, &need, need_c, "clients");
+		free(cur);
+		if (!cached)
+			add_req_chunks++;
 	}
 
 	return add_req_chunks;
@@ -173,8 +154,11 @@ AuxThread(void * arg)
 
 	log("Aux Thread Starting");
 
+	/* signal(SIGINFO, SigInfoHandler); */
+
 	while (1) {
 		fsleep(CACHE_HINT_SEND_INTERVAL);
+		/* DumpCache(); */
 		p->hdr.type = PKTTYPE_REQUEST;
 		p->hdr.subtype = PKTSUBTYPE_INCACHE;
 		p->hdr.datalen = sizeof(p->msg.chunklst);
@@ -185,6 +169,7 @@ AuxThread(void * arg)
 			log("Sending cache hint: %d ...", p->msg.chunklst.data[0]);
 		PacketSend(ni, p, 0);
 	}
+
 	return NULL;
 }
 

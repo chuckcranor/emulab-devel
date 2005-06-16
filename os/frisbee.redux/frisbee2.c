@@ -46,6 +46,7 @@ static char *usagestr =
  " -i mcastif      Specify a multicast interface in dotted notation.\n"
  " -s slice        Output to DOS slice (DOS numbering 1-4)\n"
  "                 NOTE: Must specify a raw disk device for output filename.\n"
+ "Set the filename to \".\" to avoid saving an image to disk when in proxy mode.\n"
  "\n"
  "client tuning options (if you don't know what they are, don't use em!):\n"
  " -C MB           Max MB of memory to use for network chunk buffering.\n"
@@ -128,12 +129,12 @@ main(int argc, char **argv)
 		fprintf(stderr, "Starting Client\n");
                 res = client_main(client_args.argc, client_args.argv);
 		if (debug)
-			fprintf(stderr, "CLIENT DONE");
+			fprintf(stderr, "CLIENT DONE\n");
                 if (res != 0) goto exit;
 
                 pthread_join(server_pid, &server_res);
 		if (debug)
-			fprintf(stderr, "SERVER DONE");
+			fprintf(stderr, "SERVER DONE\n");
                 res = (int)server_res;
 
         } else if (FrisbeeMode & FRISBEE_CLIENT) {

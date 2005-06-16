@@ -59,11 +59,17 @@ static struct in_addr serverip;
 
 static struct timeval	ChunkerDone;
 
+int	chunker_used = 0, writer_used = 0;
+
+
 /* */
 
 /* Forward Decls */
 static void	PlayFrisbee(NetInfo_t *ni);
 static void	GotBlock(NetInfo_t *ni, Packet_t *p);
+static int	PossiblyRequestMissing(NetInfo_t *ni, int timedout, stamp_t stamp,
+				       int chunk, BlockMap_t *map, int count,
+				       const char *forwho, int origlocked);
 static void	RequestChunk(NetInfo_t *ni, int timedout);
 static void	RequestStamp(int chunk, int block, int count, void *arg);
 static int	RequestRedoTime(int chunk, unsigned long long curtime);
@@ -84,6 +90,8 @@ extern int	ImageWriteChunk(int chunkno, char *chunkdata);
 extern int	ImageUnzipChunk(char *chunkdata);
 extern void	ImageUnzipFlush(void);
 extern int	ImageUnzipQuit(void);
+
+/* */
 
 /*
  * Chunk descriptor, one for each CHUNKSIZE*BLOCKSIZE bytes of an image file.
@@ -124,7 +132,7 @@ InitHold(ChunkBuffer_t * p)
 	if (UseCacheHints)
 		p->hold = CACHE_HINT_TRIES + 1;
 	else
-		UpdateHold(p);
+		SyncMetaData(p);
 }
 
 /* The ChunkRequestList is the order in which new chunks are
@@ -335,6 +343,8 @@ client_main(int argc, char **argv)
 	if (argc != 1)
 		usage();
 	filename = argv[0];
+	if (strcmp(filename,".") == 0)
+		filename = NULL;
 
 	if (!ni.portnum || ! ni.mcastaddr.s_addr)
 		usage();
@@ -463,12 +473,18 @@ client_main(int argc, char **argv)
 		maxwritebufmem = maxmem/2;
 	}
 
-	NeededSelfInitVal = NEEDED_EXPN;
+	NeededSelfInitVal = 0;
 
-	ImageUnzipInit(filename, slice, debug, zero, nothreads, dostype, 3,
-		       maxwritebufmem*1024*1024);
-
+	if (filename) {
+		chunker_used = 1;
+		NeededSelfInitVal |= NEEDED_EXPN;
+		ImageUnzipInit(filename, slice, debug, zero, nothreads, 
+			       dostype, 3,
+			       maxwritebufmem*1024*1024);
+	}
+		
 	if (cfilename) {
+		writer_used = 1;
 		NeededSelfInitVal |= NEEDED_COMP;
 		CompressedImageInit(&CompressedImage, cfilename);
 	}
@@ -487,7 +503,9 @@ client_main(int argc, char **argv)
 		TraceDump();
 	}
 
-	ImageUnzipQuit();
+	if (chunker_used) {
+		ImageUnzipQuit();
+	}
 
 #ifdef DOEVENTS
 	if (eventserver != NULL) {
@@ -567,7 +585,8 @@ ClientRecvThread(void *arg)
 		 * leading us to issue another request, etc.
 		 */
 		if (PacketReceive(ni, p) != 0) {
-		        pthread_testcancel();
+			pthread_testcancel();
+
 			if (--IdleCounter <= 0) {
 				if (gotone)
 					DOSTAT(recvidles++);
@@ -588,6 +607,7 @@ ClientRecvThread(void *arg)
 			continue;
 		}
 		pthread_testcancel();
+
 		gotone = 1;
 		
 		if (! PacketValid(ni, p, TotalChunkCount)) {
@@ -658,6 +678,7 @@ ClientRecvThread(void *arg)
 			break;
 		}
 	}
+	return NULL;
 }
 
 static void *
@@ -666,7 +687,7 @@ CompressedImageWriterThread(void * arg)
 	int		i;
 	int		chunkcount = TotalChunkCount;
 	log ("CompressedImageWriterThread Starting");
-	while (chunkcount && !killme) {
+	while (chunkcount) {
 		/*
 		 * Search the chunk cache for a chunk that is ready to write.
 		 * If CHUNK_FULL is set than the chunk is garnateed not to
@@ -687,105 +708,19 @@ CompressedImageWriterThread(void * arg)
 
 		GetChunkBufferLock();
 		ChunkBuffer[i].neededself &= ~NEEDED_COMP;
-		UpdateHold(&ChunkBuffer[i]);
+		SyncMetaData(&ChunkBuffer[i]);
 		ReleaseChunkBufferLock();
 		chunkcount--;
 	}
 	return NULL;
 }
 
-/*
- * The heart of the game.
- */
-static void
-ChunkerStartup(NetInfo_t *ni)
+void 
+Chunker()
 {
-	pthread_t	recv_pid, writer_pid;
-	int		writer_used;
-	void		*ignored;
-	int		chunkcount = TotalChunkCount;
 	int		i, wasidle = 0;
+	int		chunkcount = TotalChunkCount;
 	static int	gotone;
-
-	/*
-	 * Allocate the chunk descriptors, request list and cache buffers.
-	 */
-	Chunks = calloc(chunkcount, sizeof(*Chunks));
-	if (Chunks == NULL)
-		fatal("Chunks: No more memory");
-
-	ChunkRequestLists[0].data = calloc(MAX_CHUNKLST_SIZE, sizeof(ChunkId_t));
-	ChunkRequestLists[1].data = calloc(chunkcount, sizeof(ChunkId_t));
-	if (ChunkRequestLists[0].data == NULL || ChunkRequestLists[1].data == NULL)
-		fatal("ChunkRequestList: No more memory");
-	ChunkRequestLists[0].size = 0;
-	ChunkRequestLists[1].size = chunkcount;
-
-	ChunkBuffer = malloc(maxchunkbufs * sizeof(ChunkBuffer_t));
-	ChunkBufferData = malloc(maxchunkbufs * sizeof(ChunkBufferData_t));
-	if (ChunkBuffer == NULL || ChunkBufferData == NULL)
-		fatal("ChunkBuffer: No more memory");
-
-	ChunkBufferIdx = malloc(chunkcount * sizeof(ChunkId_t));
-	if (ChunkBufferIdx == NULL)
-		fatal("ChunkBufferIdx: No more memory");
-		
-	/*
-	 * Initilize ChunkBuffer and set all the buffers to "free"
-	 */
-	for (i = 0; i < maxchunkbufs; i++) {
-		ChunkBuffer[i].thischunk = -1;
-		ChunkBuffer[i].neededself = 0;
-		ChunkBuffer[i].pending = 0;
-		ChunkBuffer[i].hold = 0;
-		ChunkBuffer[i].stamp = 0;
-		ChunkBuffer[i].d = &ChunkBufferData[i];
-	}
-
-	for (i = 0; i < chunkcount; i++)
-		ChunkBufferIdx[i] = -1;
-
-	for (i = 0; i < TotalChunkCount; i++)
-		ChunkRequestLists[1].data[i] = i;
-	
-	/*
-	 * We randomize the block selection so that multiple clients
-	 * do not end up getting stalled by each other. That is, if
-	 * all the clients were requesting blocks in order, then all
-	 * the clients would end up waiting until the last client was
-	 * done (since the server processes client requests in FIFO
-	 * order).
-	 */
-	if (randomize) {
-		for (i = 0; i < 50 * TotalChunkCount; i++) {
-			int c1 = random() % TotalChunkCount;
-			int c2 = random() % TotalChunkCount;
-			int t1 = ChunkRequestLists[1].data[c1];
-			int t2 = ChunkRequestLists[1].data[c2];
-
-			ChunkRequestLists[1].data[c2] = t1;
-			ChunkRequestLists[1].data[c1] = t2;
-		}
-	}
-
-	if (PROXY_MODE) {
-		StartupState |= STARTUP_CLIENT_READY;
-		MutexUnlock(&StartupLock);
-		pthread_cond_broadcast(&StartupCond);
-	}
-
-	if (pthread_create(&recv_pid, NULL,
-			   ClientRecvThread, (void *)ni)) {
-		fatal("Failed to create pthread!");
-	}
-	writer_used = CompressedImage.fd >= 0;
-	if (writer_used) {
-		if (pthread_create(&writer_pid, NULL,
-				   CompressedImageWriterThread, NULL)) {
-			fatal("Failed to create pthread!");
-		}
-	}
-
 	/*
 	 * Loop until all chunks have been received and written to disk.
 	 */
@@ -858,7 +793,7 @@ ChunkerStartup(NetInfo_t *ni)
 		 */
 		GetChunkBufferLock();
 		ChunkBuffer[i].neededself &= ~NEEDED_EXPN;
-		UpdateHold(&ChunkBuffer[i]);
+		SyncMetaData(&ChunkBuffer[i]);
 		ReleaseChunkBufferLock();
 		chunkcount--;
 		CLEVENT(1, EV_CLIDCDONE,
@@ -870,6 +805,7 @@ ChunkerStartup(NetInfo_t *ni)
 	 * Make sure any asynchronous writes are done
 	 * and collect stats from the unzipper.
 	 */
+
 	ImageUnzipFlush();
 #ifdef STATS
 	{
@@ -882,34 +818,142 @@ ChunkerStartup(NetInfo_t *ni)
 	}
 #endif
 
+	gettimeofday(&ChunkerDone, NULL);
+	log("CHUNKER DONE");
+}
+
+/*
+ * The heart of the game.
+ */
+static void
+ClinetStartup(NetInfo_t *ni)
+{
+	pthread_t	recv_pid, writer_pid;
+	void		*ignored;
+	int		i;
+	int		chunkcount = TotalChunkCount;
+
 	/*
-	 * Kill the child and wait for it before returning when not
+	 * Allocate the chunk descriptors, cache buffers.
+	 */
+	Chunks = calloc(chunkcount, sizeof(*Chunks));
+	if (Chunks == NULL)
+		fatal("Chunks: No more memory");
+	
+	ChunkBuffer = malloc(maxchunkbufs * sizeof(ChunkBuffer_t));
+	ChunkBufferData = malloc(maxchunkbufs * sizeof(ChunkBufferData_t));
+	if (ChunkBuffer == NULL || ChunkBufferData == NULL)
+		fatal("ChunkBuffer: No more memory");
+	
+	ChunkBufferIdx = malloc(chunkcount * sizeof(ChunkId_t));
+	if (ChunkBufferIdx == NULL)
+		fatal("ChunkBufferIdx: No more memory");
+
+	/*
+	 * Initilize ChunkBuffer and set all the buffers to "free"
+	 */
+	for (i = 0; i < maxchunkbufs; i++) {
+		ChunkBuffer[i].thischunk = -1;
+		ChunkBuffer[i].neededself = 0;
+		ChunkBuffer[i].pending = 0;
+		ChunkBuffer[i].hold = 0;
+		ChunkBuffer[i].stamp = 0;
+		ChunkBuffer[i].d = &ChunkBufferData[i];
+	}
+
+	for (i = 0; i < chunkcount; i++)
+		ChunkBufferIdx[i] = -1;
+
+	if (PROXY_MODE) {
+		StartupState |= STARTUP_CLIENT_READY;
+		MutexUnlock(&StartupLock);
+		pthread_cond_broadcast(&StartupCond);
+	}
+
+	/* 
+	 * Set up the Request Lists if necessary 
+	 */
+	
+	if (chunker_used || writer_used) {
+
+		ChunkRequestLists[0].data = calloc(MAX_CHUNKLST_SIZE, 
+						   sizeof(ChunkId_t));
+		ChunkRequestLists[1].data = calloc(chunkcount, 
+						   sizeof(ChunkId_t));
+		if (ChunkRequestLists[0].data == NULL 
+		    || ChunkRequestLists[1].data == NULL)
+			fatal("ChunkRequestList: No more memory");
+		ChunkRequestLists[0].size = 0;
+		ChunkRequestLists[1].size = chunkcount;
+		
+		for (i = 0; i < TotalChunkCount; i++)
+			ChunkRequestLists[1].data[i] = i;
+	
+		/*
+		 * We randomize the block selection so that multiple clients
+		 * do not end up getting stalled by each other. That is, if
+		 * all the clients were requesting blocks in order, then all
+		 * the clients would end up waiting until the last client was
+		 * done (since the server processes client requests in FIFO
+		 * order).
+		 */
+		if (randomize) {
+			for (i = 0; i < 50 * TotalChunkCount; i++) {
+				int c1 = random() % TotalChunkCount;
+				int c2 = random() % TotalChunkCount;
+				int t1 = ChunkRequestLists[1].data[c1];
+				int t2 = ChunkRequestLists[1].data[c2];
+				
+				ChunkRequestLists[1].data[c2] = t1;
+				ChunkRequestLists[1].data[c1] = t2;
+			}
+		}
+	}
+
+	/* Begin */
+
+	if (pthread_create(&recv_pid, NULL,
+			   ClientRecvThread, ni))
+		fatal("Failed to create ClinetRecvThread!");
+
+	if (writer_used) {
+		if (pthread_create(&writer_pid, NULL,
+				   CompressedImageWriterThread, NULL)) {
+			fatal("Failed to create CompressedImageWriterThread!");
+		}
+	}
+
+	if (chunker_used) {
+		Chunker();
+	}
+
+	/*
+	 * Kill the children and wait for it before returning when not
 	 * running as a proxy.. We do not want the child absorbing any
 	 * more packets, cause that would mess up the termination
 	 * handshake with the server.
 	 */
 	
-	gettimeofday(&ChunkerDone, NULL);
-	log("CHUNKER DONE");
-
 	if (!killme && PROXY_MODE) {
 		while (!(killme || ServerDone)) {
 			fsleep(100000);
 		}
 	}
 
-	pthread_cancel(recv_pid);
-	pthread_join(recv_pid, &ignored);
-
 	if (writer_used) {
 		pthread_cancel(writer_pid);
 		pthread_join(writer_pid, &ignored);
 	}
 
+	pthread_cancel(recv_pid);
+	pthread_join(recv_pid, &ignored);
+
 	free(ChunkBuffer);
 	free(ChunkBufferData);
-	free(ChunkRequestLists[0].data);
-	free(ChunkRequestLists[1].data);
+	if (ChunkRequestLists[0].data)
+		free(ChunkRequestLists[0].data);
+	if (ChunkRequestLists[1].data)
+		free(ChunkRequestLists[1].data);
 	free(Chunks);
 }
 
@@ -1147,15 +1191,13 @@ GotBlock(NetInfo_t *ni, Packet_t *p)
 }
 
 /*
- * Request a chunk/block/range we do not have.
+ * Possibly request a chunk/block/range we do not have.
  */
-int
+static int
 PossiblyRequestMissing(NetInfo_t *ni, int timedout, unsigned long long stamp,
 		       int chunk, BlockMap_t *map, int count,
-		       int origlocked)
+		       const char * forwho, int origlocked)
 {
-	Packet_t	packet, *p = &packet;
-
 	/*
 	 * Make sure this chunk is eligible for re-request.
 	 */
@@ -1166,13 +1208,70 @@ PossiblyRequestMissing(NetInfo_t *ni, int timedout, unsigned long long stamp,
 	if (origlocked)
 		ReleaseChunkBufferLock();
 
-	/*
-	 * Request all the missing blocks
-	 */
+	RequestMissing(ni, chunk, map, count, forwho);
+
+	if (origlocked)
+		GetChunkBufferLock();
+	
+	return 1;
+}
+
+/*
+ * Request a chunk/block/range we do not have.
+ */
+void
+RequestRange(NetInfo_t *ni, int chunk, int block, int count, 
+	     const char * forwho)
+{
+	Packet_t	packet, *p = &packet;
+
+	if (debug)
+		log("Requesting chunk:%d block:%d count:%d for %s.",
+		    chunk, block, count, forwho);
+	
+	p->hdr.type       = PKTTYPE_REQUEST;
+	p->hdr.subtype    = PKTSUBTYPE_REQUEST;
+	p->hdr.datalen    = sizeof(p->msg.request);
+	p->msg.request.chunk = chunk;
+	p->msg.request.block = block;
+	p->msg.request.count = count;
+	PacketSend(ni, p, 0);
+	CLEVENT(1, EV_CLIREQ, chunk, block, count, 0);
+	DOSTAT(requests++);
+
+	RequestStamp(chunk, block, count, (void *)1);
+	Chunks[chunk].ours = 1;
+}
+
+/*
+ * Request a chunk/block/range we need 
+ */
+void 
+RequestNeeded(NetInfo_t *ni, int chunk, BlockMap_t *need, int count,
+	      const char * forwho)
+{
+	if (count == CHUNKSIZE) {
+		RequestRange(ni, chunk, 0, CHUNKSIZE, forwho);
+	} else {
+		BlockMap_t map;
+		BlockMapInvert(need, &map);
+		RequestMissing(ni, chunk, &map, count, forwho);
+	}
+}
+
+/*
+ * Request a chunk/block/range we do not have.
+ */
+void
+RequestMissing(NetInfo_t *ni, int chunk, BlockMap_t *map, int count,
+	       const char * forwho)
+{
+	Packet_t	packet, *p = &packet;
+
 	DOSTAT(prequests++);
 
 	if (debug)
-		log("Requesting %d missing blocks of chunk:%d", count, chunk);
+		log("Requesting %d missing blocks of chunk:%d for %s.", count, chunk, forwho);
 	
 	p->hdr.type       = PKTTYPE_REQUEST;
 	p->hdr.subtype    = PKTSUBTYPE_PREQUEST;
@@ -1198,49 +1297,6 @@ PossiblyRequestMissing(NetInfo_t *ni, int timedout, unsigned long long stamp,
 	 * we can just unconditionally stamp the chunk.
 	 */
 	RequestStamp(chunk, 0, CHUNKSIZE, (void *)1);
-	Chunks[chunk].ours = 1;
-
-	if (origlocked)
-		GetChunkBufferLock();
-	
-	return 1;
-}
-
-int PossiblyRequestNeeded(NetInfo_t *ni, int timedout, unsigned long long stamp,
-			  int chunk, BlockMap_t *need, int count,
-			  int locked)
-{
-	BlockMap_t map;
-	BlockMapInvert(need, &map);
-	return PossiblyRequestMissing(ni, timedout, stamp,
-				      chunk, &map, count,
-				      locked);
-}
-
-
-/*
- * Request a chunk/block/range we do not have.
- */
-static void
-RequestRange(NetInfo_t *ni, int chunk, int block, int count)
-{
-	Packet_t	packet, *p = &packet;
-
-	if (debug)
-		log("Requesting chunk:%d block:%d count:%d",
-		    chunk, block, count);
-	
-	p->hdr.type       = PKTTYPE_REQUEST;
-	p->hdr.subtype    = PKTSUBTYPE_REQUEST;
-	p->hdr.datalen    = sizeof(p->msg.request);
-	p->msg.request.chunk = chunk;
-	p->msg.request.block = block;
-	p->msg.request.count = count;
-	PacketSend(ni, p, 0);
-	CLEVENT(1, EV_CLIREQ, chunk, block, count, 0);
-	DOSTAT(requests++);
-
-	RequestStamp(chunk, block, count, (void *)1);
 	Chunks[chunk].ours = 1;
 }
 
@@ -1279,7 +1335,7 @@ RequestChunk(NetInfo_t *ni, int timedout)
 				       ChunkBuffer[i].thischunk,
 				       &ChunkBufferData[i].blockmap,
 				       ChunkBufferData[i].blockcount,
-				       UNLOCKED);
+				       "self", UNLOCKED);
 	}
 
 	any_needed_for_others = AnyNeededForOthers();
@@ -1328,8 +1384,8 @@ RequestChunk(NetInfo_t *ni, int timedout)
 		if (lst->lock)
 			MutexUnlock(lst->lock);
 	}
-	if (debug && PROXY_MODE && j > 0)
-		log("Requesting %d chunks for self", j);
+	if (!chunker_used && !writer_used)
+		return;
 	for (i = 0; i < j; ++i) {
 		int chunk = toreq[i];
 		/*
@@ -1338,7 +1394,7 @@ RequestChunk(NetInfo_t *ni, int timedout)
 		 * is considered a read-ahead to us.
 		 */
 		if (timedout || RequestRedoTime(chunk, stamp))
-			RequestRange(ni, chunk, 0, CHUNKSIZE);
+			RequestRange(ni, chunk, 0, CHUNKSIZE, "self");
 	}
 }
 
@@ -1467,7 +1523,7 @@ PlayFrisbee(NetInfo_t *ni)
 	    timeo.tv_sec - stamp.tv_sec,
 	    myid, TotalChunkCount, p->msg.join.blockcount);
 
-	ChunkerStartup(ni);
+	ClinetStartup(ni);
 
 	gettimeofday(&estamp, 0);
 	timersub(&estamp, &stamp, &estamp);
@@ -1476,10 +1532,8 @@ PlayFrisbee(NetInfo_t *ni)
 		runtime = estamp;
 	} else {
 		if (cmptime(&LastReq, &ChunkerDone) > 0) {
-			log("USING LastReq");
 			runtime = LastReq;
 		} else { 
-			log("USING ChunkerDone");
 			runtime = ChunkerDone;
 		}
 		timersub(&runtime, &stamp, &runtime);
@@ -1524,9 +1578,8 @@ PlayFrisbee(NetInfo_t *ni)
 	p->msg.leave.elapsed  = estamp.tv_sec;
 	PacketSend(ni, p, 0);
 #endif
-	log("\nLeft the team after %ld seconds on the field!", runtime.tv_sec);
+	log("\nLeft the team after %ld seconds on the field!", estamp.tv_sec);
 }
-
 
 int CalcFreeBufs(int *filling)
 {
@@ -1608,7 +1661,6 @@ SetupChunk(int i, int chunk)
 static void
 StartChunk(int i, int chunk)
 {
-        
 	ChunkBuffer[i].state      = CHUNK_FILLING;
 	ChunkBuffer[i].neededself = Chunks[chunk].done ? 0 : NeededSelfInitVal;
 	if (PROXY_MODE) {
@@ -1627,16 +1679,17 @@ ChunkBuffer_t *
 ReserveChunk(int chunk)
 {
 	int i;
+	int was_in_cache = 0;
 	i = ChunkBufferIdx[chunk];
 	if (i == -1) {
+		was_in_cache = 1;
 		i = PreAllocChunk(chunk, FIND_AVAIL);
 		if (i == -1)
 			return NULL;
 		SetupChunk(i, chunk);
 	}
-
 	ChunkBuffer[i].stamp = GetStamp();
-	ChunkBuffer[i].reserved = 1;
+	ChunkBuffer[i].reserved++;
 	return &ChunkBuffer[i];
 }
 
@@ -1701,6 +1754,10 @@ static void
 UseChunklst(ChunkId_t chunklst[], int * size)
 {
 	int i, j, s = *size;
+
+	if (!ChunkRequestLists[0].data) 
+		return;
+
 	MutexLock(ChunkRequestLists[0].lock);
 	/* flockfile(stderr); */
 	/* fprintf(stderr, "Chunklst:\n"); */
@@ -1739,7 +1796,7 @@ DumpCache()
 {
 	int i;
 	flockfile(stderr);
-	fprintf(stderr, "Chunk:\n");
+	fprintf(stderr, "ChunkBuffer:\n");
 	for (i = 0; i < maxchunkbufs; i++) {
 		ChunkBuffer_t * p = &ChunkBuffer[i];
 		if (p->thischunk != -1)
@@ -1748,7 +1805,7 @@ DumpCache()
 				100.0 * (CHUNKSIZE - p->d->blockcount) / (double)CHUNKSIZE,
 				p->hold, p->neededself, p->pending, p->reserved);
 		else
-			fprintf(stderr, "  %d: <unused>", i);
+			fprintf(stderr, "  %d: <unused>\n", i);
 	}
 	funlockfile(stderr);
 }
@@ -1781,7 +1838,8 @@ WriteCompressedChunk(CompressedImage_t * ths, Chunk_t * cs, ChunkBuffer_t * d)
 	if (ths->fd < 0) return;
 	assert(d->state == CHUNK_FULL);
 	assert(d->neededself > 0);
-	//log("Writing Compressed Chunk %d to disk", d->thischunk);
+	if (debug > 1)
+		log("Writing Compressed Chunk %d to disk", d->thischunk);
 	assert(!cs[chunk].ondisk);
 	res = pwrite(ths->fd, d->d->blocks, CHUNKSIZE * BLOCKSIZE, 
 		     chunk * CHUNKSIZE * BLOCKSIZE);
@@ -1839,5 +1897,4 @@ GetChunkFromDisk(int chunk, ChunkBuffer_t * d)
 	ReadCompressedChunk(ths, d);
 	return d;
 }
-
 

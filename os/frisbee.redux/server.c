@@ -92,6 +92,11 @@ static struct {
 	unsigned long	wakeups;
 	unsigned long	intervals;
 	unsigned long	missed;
+	struct {
+		unsigned ignored;
+		unsigned merged;
+		unsigned new;
+	} q;
 } Stats;
 #define DOSTAT(x)	(Stats.x)
 #else
@@ -165,10 +170,6 @@ WorkQueueInit(void)
 #endif
 }
 
-/* NOTE: This is used to help find tune the lock beahavior and should
- * be removed before merging with the trunk */
-static int Case[3] = {0,0,0};
-
 /*
  * Enqueue a work request.
  * If map==NULL, then we want the entire chunk.
@@ -197,7 +198,7 @@ WorkQueueEnqueue(int chunk, BlockMap_t *map, int count)
 		|| (WorkCount == -1)))
 	{
 		ReleaseChunkBufferLock();
-		Case[0]++;
+		DOSTAT(q.ignored++);
 		EVENT(1, EV_WORKMERGE, ni->mcastaddr, chunk, count, count, ~0);
 		MutexUnlock(&WorkQLock);
 		return 0;
@@ -211,18 +212,17 @@ WorkQueueEnqueue(int chunk, BlockMap_t *map, int count)
 			 * If this is the head element of the queue we
 			 * can only merge if the request is beyond the
 			 * range being currently processed.  However,
-			 * this only apples when we are dequeuing ranges
-			 * and not the entire map.
+			 * this only apples when we are dequeuing
+			 * ranges and not the entire map.  
 			 */
-			if (WorkCount != -1 &&
+			if (chunk == WorkChunk && WorkCount != -1 &&
 			    (WQelem_t *)queue_first(&WorkQ) == wqel &&
-			    chunk == WorkChunk &&
 			    BlockMapFirst(map) < WorkBlock + WorkCount) {
 				elt--;
 				continue;
 			}
 			ReleaseChunkBufferLock();
-			Case[1]++;
+			DOSTAT(q.merged++);
 
 			/*
 			 * We have a queued request for the entire chunk
@@ -249,7 +249,7 @@ WorkQueueEnqueue(int chunk, BlockMap_t *map, int count)
 		if (cached) {
 			assert(cached->pending >= 0);
 			cached->pending++;
-			UpdateHold(cached);
+			SyncMetaData(cached);
 		}
 	}
 	ReleaseChunkBufferLock();
@@ -258,7 +258,7 @@ WorkQueueEnqueue(int chunk, BlockMap_t *map, int count)
 	if (wqel == NULL)
 		fatal("WorkQueueEnqueue: No more memory");
 
-	Case[2]++;
+	DOSTAT(q.new++);
 
 	wqel->chunk = chunk;
 	wqel->nblocks = count;
@@ -285,42 +285,22 @@ WorkQueueEnqueueBlock(int chunk, int block)
 	return WorkQueueEnqueue(chunk, &map, 1);
 }
 
+/* Requeue.  The case when the chunk is already in the queue should
+ * not happen */
 static void
-WorkQueueRequeue(WQelem_t * orig, 
+WorkQueueRequeue(WQelem_t * wqel, 
 		 const BlockMap_t * still_need, int unsent_blocks,
 		 ChunkBuffer_t * cached)
 {
-	WQelem_t	*wqel;
-	int		chunk = orig->chunk;
-
 	MutexLock(&WorkQLock);
 
-	queue_iterate(&WorkQ, wqel, WQelem_t *, chain) {
-		if (wqel->chunk == chunk) break;
+	if (&wqel->blockmap != still_need) {
+	  wqel->blockmap = *still_need;
+	  wqel->nblocks = unsent_blocks;
 	}
-	
-	if (!queue_end(&WorkQ, (queue_entry_t)wqel)) {
-		int blocks = BlockMapMerge(still_need, &wqel->blockmap);
-		//log("!queue_end");
-		wqel->nblocks += blocks;
-		MutexUnlock(&WorkQLock);
-		if (cached) {
-			GetChunkBufferLock();
-			cached->pending--;
-			assert(cached->pending > 0);
-			ReleaseChunkBufferLock();
-		}
-		free(orig);
-	} else {
-		wqel = orig;
-		if (&wqel->blockmap != still_need) {
-			wqel->blockmap = *still_need;
-			wqel->nblocks = unsent_blocks;
-		}
-		queue_enter(&WorkQ, wqel, WQelem_t *, chain);
-		MutexUnlock(&WorkQLock);
-	}
+	queue_enter(&WorkQ, wqel, WQelem_t *, chain);
 
+	MutexUnlock(&WorkQLock);
 }
 
 static int
@@ -1029,12 +1009,13 @@ PlayFrisbeeProxy(NetInfo_t *ni)
 		}
 
 		if (unsent_blocks && ChunkOnDisk(chunk)) {
-			if (unsent_blocks != CHUNKSIZE)
-				log("Fetching Chunk %d from disk but only need %d blocks",
-				    chunk, unsent_blocks);
-			else 
-				log("Fetching Chunk %d from disk", chunk);
-
+			if (debug) {
+				if (unsent_blocks != CHUNKSIZE)
+					log("Fetching Chunk %d from disk but only need %d blocks",
+					    chunk, unsent_blocks);
+				else 
+					log("Fetching Chunk %d from disk", chunk);
+			}
 			cached = GetChunkFromDisk(chunk, cached);
 			if (cached) {
 				still_need = &m;
@@ -1049,11 +1030,15 @@ PlayFrisbeeProxy(NetInfo_t *ni)
 		}
 
 		if (ncache != wqel->ncache) {
+			int sent = 0;
 			for (i = 0; i < CHUNKSIZE; i++) {
-				if (BlockMapHave(orig, i) && !BlockMapHave(still_need, i))
-					SendBlock(ni, &s, chunk, i, 
-						  cached->d->blocks[i].data);
+				if (BlockMapHave(orig, i) && !BlockMapHave(still_need, i)) {
+					sent++;
+					SendBlock(ni, &s, chunk, i, cached->d->blocks[i].data);
+				}
 			}
+			if (debug > 2)
+				log("PlayFrisbeeProxy: Sent %f%% of chunk %d.", (sent * 100.0)/CHUNKSIZE, chunk);
 			wqel->ncache = ncache;
 			pause_at = -1;
 		} else {
@@ -1062,15 +1047,18 @@ PlayFrisbeeProxy(NetInfo_t *ni)
 		}
 
 		if (unsent_blocks) {
+			if (debug > 3)
+				log("PlayFrisbeeProxy: Requeueing %f%% of chunk %d.", 
+				    (unsent_blocks * 100.0)/CHUNKSIZE, chunk);
 			WorkQueueRequeue(wqel, still_need, unsent_blocks, cached);
 		} else {
+			if (debug > 1)
+				log("PlayFrisbeeProxy: Done with chunk %d.", chunk);
 			free(wqel);
 			if (cached) {
 				GetChunkBufferLock();
 				cached->pending--;
-				if (cached->pending <= 0)
-					cached->reserved = 0;
-				UpdateHold(cached);
+				SyncMetaData(cached);
 				ReleaseChunkBufferLock();
 			}
 		}
@@ -1282,6 +1270,8 @@ server_main(int argc, char **argv)
 		log("  joins/leaves:      %d/%d", Stats.joins, Stats.leaves);
 		log("  requests:          %d (%d merged in queue)",
 		    Stats.requests, Stats.qmerges);
+		log("  queue stats:       %d new, %d merged, %d ignored",
+		    Stats.q.new, Stats.q.merged, Stats.q.ignored);
 		log("  partial req/blks:  %d/%d",
 		    Stats.partialreq, Stats.blockslost);
 		log("  duplicate req:     %d",
@@ -1305,7 +1295,6 @@ server_main(int argc, char **argv)
 	/*
 	 * Exit from main thread will kill all the children.
 	 */
-	log("Q Stats: %d %d %d", Case[0], Case[1], Case[2]);
 	log("Exiting Server!");
 	ServerDone = 1;
         return 0; /* Don't use exit since server_main may need to
