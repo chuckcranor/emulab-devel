@@ -1097,7 +1097,9 @@ server_main(int argc, char **argv)
 	if (PROXY_MODE)
 		MutexLock(&StartupLock);
 
+#ifdef __FreeBSD__
 	optreset = 1;
+#endif
 	optind = 1;
 	while ((ch = getopt(argc, argv, "dhp:m:i:tbDT:R:B:G:L:W:H")) != -1)
 		switch(ch) {

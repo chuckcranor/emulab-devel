@@ -207,7 +207,9 @@ client_main(int argc, char **argv)
 	NetInfo_t ni = NETINFO_INIT;
 	int	_debug = 0;
 
+#ifdef __FreeBSD__
         optreset = 1;
+#endif
         optind = 1;
 	while ((ch = getopt(argc, argv, "dhp:m:s:i:tbznT:r:E:D:C:W:S:M:R:I:ONc:")) != -1)
 		switch(ch) {
@@ -1347,6 +1349,7 @@ RequestChunk(NetInfo_t *ni, int timedout)
 	CLEVENT(2, EV_CLIREQRA, availbufs, fillingbufs, 0, 0);
 
 	if (any_needed_for_others)
+	//if (PROXY_MODE)
 		return;
 	/*
 	 * Issue read-ahead requests.
@@ -1420,7 +1423,7 @@ PlayFrisbee(NetInfo_t *ni)
 #ifdef __FreeBSD__
 	srandomdev();
 #else
-	srandom(ClientNetID() ^ stamp.tv_sec ^ stamp.tv_usec ^ getpid());
+	srandom(ClientNetID(ni) ^ stamp.tv_sec ^ stamp.tv_usec ^ getpid());
 #endif
 
 	/*

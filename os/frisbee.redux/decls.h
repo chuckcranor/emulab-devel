@@ -16,6 +16,7 @@
 #include <netinet/in.h>
 #include <errno.h>
 #include <inttypes.h>
+#include <sys/time.h>
 
 #include "log.h"
 

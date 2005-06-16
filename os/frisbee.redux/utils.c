@@ -57,6 +57,7 @@ CurrentTimeString(void)
 int
 sleeptime(unsigned int usecs, char *str, int doround)
 {
+	static const unsigned int def_hz = 100;
 	static unsigned int clockres_us;
 	int nusecs;
 
@@ -72,8 +73,8 @@ sleeptime(unsigned int usecs, char *str, int doround)
 		else
 #endif
 		{
-			warning("cannot get clock resolution, assuming 100HZ");
-			clockres_us = 10000;
+			warning("cannot get clock resolution, assuming %dHZ", def_hz);
+			clockres_us = 1000000/def_hz;
 		}
 
 		if (debug)
