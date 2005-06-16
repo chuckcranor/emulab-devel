@@ -25,6 +25,7 @@
 #include "masterController.h"
 
 struct master_controller_data mc_data;
+extern FILE *slogfilep;
 
 /**
  * Do a fuzzy comparison of two values.
@@ -249,7 +250,7 @@ static int mc_nlwrapper(struct master_controller *mc, mtp_packet_t *mp)
     robot_position_states rstates;
     robot_position_states rstates_goal;
     int at_goal = 0;
-    
+
     if (debug > 1)
 	info("mc_nlwrapper: \n");
 
@@ -301,9 +302,9 @@ static int mc_nlwrapper(struct master_controller *mc, mtp_packet_t *mp)
 		 (fabsf(rstates.alpha) < STATE_WAYPOINT_ATOL &&
 		  fabsf(rstates.theta) < STATE_WAYPOINT_ATOL) &&
 		 fabsf(rstates.e) < STATE_WAYPOINT_TOL) {
-	    
+
 	    info("Robot is at waypoint (%f)\n", rstates.e);
-	    
+
 	    /* unset mc->mc_flags MCF_HAS_PATH_PLAN flag */
 	    mc->mc_flags &= ~MCF_HAS_PATH_PLAN;
         }
@@ -318,7 +319,7 @@ static int mc_nlwrapper(struct master_controller *mc, mtp_packet_t *mp)
 			 MA_RobotID, mc->mc_pilot->pc_robot->id,
 			 MA_Status, MTP_POSITION_STATUS_COMPLETE,
 			 MA_TAG_DONE);
-	
+
 	/* tell robot to STOP */
 	mtp_send_packet2(mc->mc_pilot->pc_handle,
 			 MA_Opcode, MTP_COMMAND_STOP,
@@ -339,17 +340,17 @@ static int mc_nlwrapper(struct master_controller *mc, mtp_packet_t *mp)
 	case PPC_NO_WAYPOINT:
 	    mc->mc_flags |= MCF_HAS_PATH_PLAN;
 	    break;
-	    
+
 	case PPC_WAYPOINT:
 	    /* get next waypoint, to get orientation */
-	    
+
 	    if (debug > 1) {
 		info("Calling path planner to look ahead\n");
 	    }
-	    
+
 	    mc->mc_plan_lookahead = mc->mc_plan;
 	    mc->mc_plan_lookahead.pp_actual_pos = mc->mc_plan.pp_waypoint;
-	    
+
 	    switch (pp_plot_waypoint(&mc->mc_plan_lookahead)) {
 	    case PPC_NO_WAYPOINT:
 	    case PPC_WAYPOINT:
@@ -364,7 +365,7 @@ static int mc_nlwrapper(struct master_controller *mc, mtp_packet_t *mp)
 			 mc->mc_plan_lookahead.pp_waypoint.y,
 			 mc->mc_plan_lookahead.pp_waypoint.theta);
 		}
-		
+
 		mc->mc_plan.pp_waypoint.theta =
 		    atan2(mc->mc_plan.pp_waypoint.y -
 			  mc->mc_plan_lookahead.pp_waypoint.y,
@@ -372,14 +373,14 @@ static int mc_nlwrapper(struct master_controller *mc, mtp_packet_t *mp)
 			  mc->mc_plan.pp_waypoint.x);
 		break;
 	    default:
-		mc->mc_plan.pp_waypoint.theta = 0.0f;
+		mc->mc_plan.pp_waypoint.theta = mc->mc_plan.pp_goal_pos.theta;
 		break;
 	    }
-	    
+
 	    /* set mc->mc_flags &= MCF_HAS_PATH_PLAN flag */
 	    mc->mc_flags |= MCF_HAS_PATH_PLAN;
 	    break;
-	    
+
 	case PPC_BLOCKED:
 	case PPC_GOAL_IN_OBSTACLE:
 	    mc->mc_pause_time = DEFAULT_PAUSE_TIME;
@@ -400,11 +401,24 @@ static int mc_nlwrapper(struct master_controller *mc, mtp_packet_t *mp)
     if (mc->mc_flags & MCF_HAS_PATH_PLAN) {
 	/* run controller */
 	mc_nlctr_controller(&Vleft, &Vright, &rstates);
-	
+
 	if (debug > 1) {
 	    info("Wheel speeds (L/R): %f %f\n", Vleft, Vright);
 	}
-	
+
+    if (slogfilep != NULL) {
+        fprintf(slogfilep, "%f %f %f %f %f %f %f %f %f\n",
+                mc->mc_plan.pp_actual_pos.timestamp,
+                mc->mc_plan.pp_actual_pos.x,
+                mc->mc_plan.pp_actual_pos.y,
+                mc->mc_plan.pp_actual_pos.theta,
+                rstates.e,
+                rstates.alpha,
+                rstates.theta,
+                Vleft,
+                Vright);
+    }
+
 	/* send to robot */
 	mtp_send_packet2(mc->mc_pilot->pc_handle,
 			 MA_Opcode, MTP_COMMAND_WHEELS,

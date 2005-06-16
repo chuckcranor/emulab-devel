@@ -60,6 +60,7 @@ static struct mtp_config_rmc *rmc_config = NULL;
 extern char *statsfile;
 
 FILE *plogfilep = NULL;
+FILE *slogfilep = NULL;
 
 /**
  * Print the usage message for rmcd.
@@ -74,6 +75,7 @@ static void usage(void)
 	    "  -n enable nonlinear controller for posture regulation\n"
 	    "  -l logfile\tLog file name\n"
 	    "  -k packet logfile\tPacket Log file name\n"
+        "  -j state/wheel logfile\tLog file name\n"
 	    "  -i pidfile\tPid file name\n"
 	    "  -s statsfile\tStatistics file name\n"
 	    "  -e host\tThe hostname where emcd is running\n"
@@ -202,7 +204,7 @@ int main(int argc, char *argv[])
 {
     char *emc_hostname = NULL, *emc_path = NULL;
     int c, emc_port = 0, retval = EXIT_SUCCESS;
-    char *logfile = NULL, *plogfile = NULL, *pidfile = NULL;
+    char *logfile = NULL, *plogfile = NULL, *slogfile = NULL, *pidfile = NULL;
     mtp_handle_t emc_handle = NULL;
     struct timeval tv, next_time;
     struct mtp_packet rmp;
@@ -216,7 +218,7 @@ int main(int argc, char *argv[])
     mc_data.mcd_radian_tolerance = DEFAULT_RADIAN_TOLERANCE;
     pp_data.ppd_max_distance = DEFAULT_MAX_DISTANCE;
 
-    while ((c = getopt(argc, argv, "hdnp:l:k:i:e:c:U:t:m:r:a:s:")) != -1) {
+    while ((c = getopt(argc, argv, "hdnp:l:k:j:i:e:c:U:t:m:r:a:s:")) != -1) {
 	switch (c) {
 	case 'h':
 	    usage();
@@ -234,6 +236,9 @@ int main(int argc, char *argv[])
 	case 'k':
 	    plogfile = optarg;
 	    break;
+    case 'j':
+        slogfile = optarg;
+        break;
 	case 'i':
 	    pidfile = optarg;
 	    break;
@@ -311,6 +316,13 @@ int main(int argc, char *argv[])
 	    fprintf(stderr, "ERROR: could not open packet log file, %s\n", plogfile);
 	}
     }
+
+    if (slogfile) {
+    if ((slogfilep = fopen(slogfile, "w")) == NULL) {
+        fprintf(stderr, "ERROR: could not open state log file, %s\n", slogfile);
+    }
+    }
+
 
 #if defined(SIGINFO)
     signal(SIGINFO, siginfo);
