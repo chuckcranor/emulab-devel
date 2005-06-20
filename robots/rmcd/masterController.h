@@ -113,7 +113,8 @@ extern struct master_controller_data mc_data;
 
 
 
-void mc_nlctr_getstates(struct robot_position_states *robotcp,
+void mc_nlctr_getstates(struct master_controller *mc,
+			struct robot_position_states *robotcp,
 			struct robot_position *goalpos,
 			struct robot_position *robotpos);
 void mc_nlctr_controller(float *Vl, float *Vr, struct robot_position_states *robotcp);
