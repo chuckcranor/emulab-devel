@@ -117,7 +117,8 @@ static int mc_set_actual(struct master_controller *mc, mtp_packet_t *mp)
     assert(mc != NULL);
     assert(mc_invariant(mc));
     assert(mp != NULL);
-    
+
+    mc->mc_plan.pp_last_pos = mc->mc_plan.pp_actual_pos;
     mc->mc_plan.pp_actual_pos =
 	mp->data.mtp_payload_u.update_position.position;
 
@@ -264,12 +265,14 @@ static int mc_nlwrapper(struct master_controller *mc, mtp_packet_t *mp)
         mc_nlctr_getstates(mc,
 			   &rstates,
                            &mc->mc_plan.pp_waypoint,
+			   &mc->mc_plan.pp_last_pos,
                            &mc->mc_plan.pp_actual_pos);
 
         /* get states from position data for goal point */
         mc_nlctr_getstates(mc,
 			   &rstates_goal,
                            &mc->mc_plan.pp_goal_pos,
+			   &mc->mc_plan.pp_last_pos,
                            &mc->mc_plan.pp_actual_pos);
 
         if (debug > 1) {
@@ -292,7 +295,7 @@ static int mc_nlwrapper(struct master_controller *mc, mtp_packet_t *mp)
          */
         if ((fabsf(rstates_goal.alpha) < STATE_ATOL &&
              fabsf(rstates_goal.theta) < STATE_ATOL) &&
-            fabsf(rstates_goal.e) < STATE_TOL) {
+            rstates_goal.e == 0.0f) {
 
             info("Robot is at destination (%f)\n", rstates_goal.e);
 
@@ -305,9 +308,17 @@ static int mc_nlwrapper(struct master_controller *mc, mtp_packet_t *mp)
         else if ((mc->mc_plot_code == PPC_WAYPOINT) &&
 		 (fabsf(rstates.alpha) < STATE_WAYPOINT_ATOL &&
 		  fabsf(rstates.theta) < STATE_WAYPOINT_ATOL) &&
+
+		 /*
+		  * XXX This is kind of a hack for waypoints that are the same
+		  * position as the goal, but not the right orientation (which
+		  * happens when the heading is -pi, but the final orientation
+		  * is 0.  So, we need to get right on top of the position
+		  * before we switch to refining the orientation.
+		  */
 		 (((mc->mc_plan.pp_goal_pos.x == mc->mc_plan.pp_waypoint.x) &&
 		   (mc->mc_plan.pp_goal_pos.y == mc->mc_plan.pp_waypoint.y)) ?
-		  (fabsf(rstates.e) < STATE_TOL) :
+		  (rstates.e == 0.0f) :
 		  (fabsf(rstates.e) < STATE_WAYPOINT_TOL))) {
 
 	    info("Robot is at waypoint (%f)\n", rstates.e);
@@ -411,9 +422,14 @@ static int mc_nlwrapper(struct master_controller *mc, mtp_packet_t *mp)
 	    mc_nlctr_getstates(mc,
 			       &rstates,
 			       &mc->mc_plan.pp_waypoint,
+			       &mc->mc_plan.pp_last_pos,
 			       &mc->mc_plan.pp_actual_pos);
 	    info("in %f %f %f\n", rstates.e, rstates.alpha, rstates.theta);
-	    if ((rstates.e > STATE_TOL) &&
+
+	    /*
+	     * If distance and alpha are large, we want to pivot before moving.
+	     */
+	    if ((fabsf(rstates.e) > STATE_TOL) &&
 		(fabsf(rstates.alpha) > M_PI_2)) {
 		mc->mc_plot_code = PPC_WAYPOINT;
 		mc->mc_plan.pp_waypoint = mc->mc_plan.pp_actual_pos;
@@ -421,9 +437,14 @@ static int mc_nlwrapper(struct master_controller *mc, mtp_packet_t *mp)
 		mc_nlctr_getstates(mc,
 				   &rstates,
 				   &mc->mc_plan.pp_waypoint,
+				   &mc->mc_plan.pp_last_pos,
 				   &mc->mc_plan.pp_actual_pos);
 	    }
-	    else if ((rstates.e > STATE_TOL) &&
+	    /*
+	     * If distance and theta are large, we want to pivot after the
+	     * move.
+	     */
+	    else if ((fabsf(rstates.e) > STATE_TOL) &&
 		     fabsf(rstates.theta) > M_PI_2) {
 		mc->mc_plot_code = PPC_WAYPOINT;
 		mc->mc_plan.pp_waypoint.theta =
@@ -431,6 +452,7 @@ static int mc_nlwrapper(struct master_controller *mc, mtp_packet_t *mp)
 		mc_nlctr_getstates(mc,
 				   &rstates,
 				   &mc->mc_plan.pp_waypoint,
+				   &mc->mc_plan.pp_last_pos,
 				   &mc->mc_plan.pp_actual_pos);
 	    }
 	    info("in %f %f %f\n", rstates.e, rstates.alpha, rstates.theta);
@@ -714,39 +736,65 @@ int mc_handle_tick(struct master_controller *mc)
 void mc_nlctr_getstates(struct master_controller *mc,
 			struct robot_position_states *robotcp,
                         struct robot_position *goalpos,
+			struct robot_position *lastpos,
                         struct robot_position *robotpos) {
     /* calculate robot polar position states from current and goal positions
    * The goal position is the origin, with the current position offset
    */
 
     struct robot_position_states robotcp_out;
-    float theta0;
-    float xdiff, ydiff;
-
+    float lr, ltheta0;
+    float r, theta0;
 
     assert(mc != NULL);
     assert(robotcp != NULL);
     assert(goalpos != NULL);
+    assert(lastpos != NULL);
     assert(robotpos != NULL);
 
+    mtp_polar(lastpos, goalpos, &lr, &ltheta0);
+    mtp_polar(robotpos, goalpos, &r, &theta0);
 
-    xdiff = goalpos->x - robotpos->x;
-    ydiff = -(goalpos->y - robotpos->y);
-    robotcp_out.e = hypotf(xdiff, ydiff);
-    
-    if ((robotcp_out.e < STATE_TOL)) {
+    /*
+     * Check if we're:
+     *   1. Close to the goal.
+     *   2. Making some amount of progress compared to our last position.
+     *   3. Really close...
+     */
+    if ((r < STATE_TOL) && ((fabsf(r - lr) > 0.005) || (r < 0.0075))) {
+	/*
+	 * Position is as close as its gonna get, switch to refining the
+	 * orientation.
+	 */
 	robotcp_out.e = 0.0f;
 	robotcp_out.theta = goalpos->theta - robotpos->theta;
 	robotcp_out.alpha = 0.0f;
 	robotcp_out.timestamp = robotpos->timestamp;
     }
     else {
-	theta0 = atan2(ydiff, xdiff);
-
+	robotcp_out.e = r;
 	robotcp_out.theta = mtp_theta(theta0  - goalpos->theta);
 	robotcp_out.alpha = mtp_theta(theta0 - robotpos->theta);
 	robotcp_out.timestamp = robotpos->timestamp;
+
+	/*
+	 * Check if it would be easier to move the robot backwards instead of
+	 * pivoting to get it going forwards.
+	 */
+	if ((robotcp_out.e < BASS_ACKWARDS_DIST) &&
+	    (fabsf(robotcp_out.alpha) > M_PI_2) ) {
+	    if (robotcp_out.alpha >= 0.0)
+		robotcp_out.alpha -= M_PI;
+	    else
+		robotcp_out.alpha += M_PI;
+	    if (robotcp_out.theta >= 0.0)
+		robotcp_out.theta -= M_PI;
+	    else
+		robotcp_out.theta += M_PI;
+	    robotcp_out.e *= -1.0;
+	}
     }
+
     *robotcp = robotcp_out;
 }
 
@@ -773,24 +821,18 @@ void mc_nlctr_controller(float *Vl,
     
     // info("in %f %f %f\n", robotcp->e, robotcp->alpha, robotcp->theta);
 
-    if ((robotcp->e < BASS_ACKWARDS_DIST) &&
-	(fabsf(robotcp->alpha) > M_PI_2) ) {
-	if (robotcp->alpha >= 0.0)
-	    robotcp->alpha -= M_PI;
-	else
-	    robotcp->alpha += M_PI;
-	if (robotcp->theta >= 0.0)
-	    robotcp->theta -= M_PI;
-	else
-	    robotcp->theta += M_PI;
-	reverse = -1.0;
+    if (robotcp->e < 0.0) {
+	/* We're moving backwards... */
+	robotcp->e *= -1.0f;
+	reverse = -1.0f;
     }
-
+    
     /* controller: */
     C_u = reverse * u_max * tanh(K_gamma * cos(robotcp->alpha) * robotcp->e);
 
     if (0 == robotcp->alpha) {
 	// C_omega = 0.0f;
+	/* XXX I just made this up... -tss */
 	C_omega = C_max * tanh(K_gamma * K_h * robotcp->theta);
     }
     else {

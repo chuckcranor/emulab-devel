@@ -54,6 +54,7 @@ struct path_plan {
     struct lnMinNode pp_link;		 /*< List node header. (unused) */
     unsigned long pp_flags;		 /*< Holds the PPF flags. */
     struct robot_config *pp_robot;	 /*< The robot this plan is for. */
+    struct robot_position pp_last_pos;	 /*< Last position. */
     struct robot_position pp_actual_pos; /*< Current position. */
     struct robot_position pp_waypoint;	 /*< Current waypoint. */
     struct robot_position pp_goal_pos;	 /*< Current goal. */

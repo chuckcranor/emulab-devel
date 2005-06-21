@@ -304,7 +304,9 @@ pp_plot_code_t pp_plot_waypoint(struct path_plan *pp)
 
     /* And make sure it is still sane. */
     assert(ob_data_invariant());
-    
+
+#if 0
+    /* XXX Not needed for continous motion. */
     /* restrict final waypoint to MAX_DISTANCE */
     mtp_polar(&pp->pp_actual_pos,
 	      (retval == PPC_WAYPOINT) ? &pp->pp_waypoint : &pp->pp_goal_pos,
@@ -317,6 +319,7 @@ pp_plot_code_t pp_plot_waypoint(struct path_plan *pp)
 		      &pp->pp_waypoint);
 	retval = PPC_WAYPOINT;
     }
+#endif
 
     switch (retval) {
     case PPC_WAYPOINT:
