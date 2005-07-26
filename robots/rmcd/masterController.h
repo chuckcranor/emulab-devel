@@ -119,7 +119,10 @@ void mc_nlctr_getstates(struct master_controller *mc,
 			struct robot_position *goalpos,
 			struct robot_position *lastpos,
 			struct robot_position *robotpos);
-void mc_nlctr_controller(float *Vl, float *Vr, struct robot_position_states *robotcp);
+void mc_nlctr_controller(struct master_controller *mc,
+                         float *Vl,
+                         float *Vr,
+                         struct robot_position_states *robotcp);
 
 
 
