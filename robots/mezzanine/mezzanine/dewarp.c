@@ -21,7 +21,7 @@
  * Desc: Dewarp the blobs (i.e. transform form image -> world cs)
  * Author: Andrew Howard
  * Date: 17 Apr 2002
- * CVS: $Id: dewarp.c,v 1.1.1.1.8.5 2005-05-10 17:02:08 fish Exp $
+ * CVS: $Id: dewarp.c,v 1.1.1.1.8.6 2005-07-28 21:13:14 stack Exp $
  ***************************************************************************/
 
 #include <assert.h>
@@ -189,7 +189,7 @@ int dewarp_init(mezz_mmap_t *mmap)
   }
 
   if ( gotTris != N_BLEND_TRIS )
-    printf("*** Only %d valid triangles, error cancellation is turned off.\n"
+    printf("*** Only %d valid triangles, error cancellation is turned off.\n",
 	   gotTris);
 # endif
 
