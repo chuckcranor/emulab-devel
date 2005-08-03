@@ -80,6 +80,7 @@ ifeq ($(EVENTSYS),1)
 endif
 	@$(MAKE) -C xmlrpc control-install
 	@$(MAKE) -C tmcd control-install
+	@$(MAKE) -C accounts control-install
 
 install-mkdirs:
 	-mkdir -p $(INSTALL_TOPDIR)/opsdir
