@@ -141,7 +141,7 @@ static int mc_request_report(struct master_controller *mc, mtp_packet_t *mp)
     assert(mc != NULL);
     assert(mc_invariant(mc));
     assert(mp != NULL);
-
+    
     mtp_send_packet2(mc->mc_pilot->pc_handle,
 		     MA_Opcode, MTP_REQUEST_REPORT,
 		     MA_Role, MTP_ROLE_RMC,
@@ -263,6 +263,18 @@ static int mc_nlwrapper(struct master_controller *mc, mtp_packet_t *mp)
     if (debug > 1)
 	info("mc_nlwrapper: \n");
 
+    if (!(mc->mc_flags & MCF_NULL_STARTED)) {
+	mtp_send_packet2(mc->mc_pilot->pc_handle,
+			 MA_Opcode, MTP_COMMAND_STARTNULL,
+			 MA_Role, MTP_ROLE_RMC,
+			 MA_RobotID, mc->mc_pilot->pc_robot->id,
+			 MA_CommandID, MASTER_COMMAND_ID,
+			 MA_Acceleration, 0.2,
+			 MA_TAG_DONE);
+
+	mc->mc_flags |= MCF_NULL_STARTED;
+    }
+
     if (mc->mc_flags & MCF_HAS_PATH_PLAN) {
         /* Already have a path plan */
 
@@ -285,7 +297,7 @@ static int mc_nlwrapper(struct master_controller *mc, mtp_packet_t *mp)
             info("Current states (e,alpha,theta): %f %f %f\n",
                  rstates.e,
                  rstates.alpha,
-	             rstates.theta);
+		 rstates.theta);
             info("Current position: %f %f %f\n",
                  mc->mc_plan.pp_actual_pos.x,
                  mc->mc_plan.pp_actual_pos.y,
@@ -435,8 +447,6 @@ static int mc_nlwrapper(struct master_controller *mc, mtp_packet_t *mp)
 			       &mc->mc_plan.pp_waypoint,
 			       &mc->mc_plan.pp_last_pos,
 			       &mc->mc_plan.pp_actual_pos);
-	    info("in %f %f %f\n", rstates.e, rstates.alpha, rstates.theta);
-
 	    /*
 	     * If distance and alpha are large, we want to pivot before moving.
 	     */
@@ -479,16 +489,18 @@ static int mc_nlwrapper(struct master_controller *mc, mtp_packet_t *mp)
 	}
 
     if (slogfilep != NULL) {
-        fprintf(slogfilep, "%f %f %f %f  %f %f %f  %f %f\n",
+        fprintf(slogfilep,
+		" %f x=%f y=%f th=%f  l=%f r=%f\n"
+		"  e=%f a=%f th=%f\n",
                 mc->mc_plan.pp_actual_pos.timestamp,
                 mc->mc_plan.pp_actual_pos.x,
                 mc->mc_plan.pp_actual_pos.y,
                 mc->mc_plan.pp_actual_pos.theta,
+                Vleft,
+                Vright,
                 rstates.e,
                 rstates.alpha,
-                rstates.theta,
-                Vleft,
-                Vright);
+                rstates.theta);
     }
 
 	/* send to robot */
@@ -518,6 +530,7 @@ int mc_handle_emc_packet(struct master_controller *mc, mtp_packet_t *mp)
 
     rc = mtp_dispatch(mc, mp,
 		      MD_Integer, mc->mc_flags,
+		      MD_Integer, mc->mc_pause_time,
 
 		      MD_OnOpcode, MTP_COMMAND_GOTO,
 		      MD_Call, mc_set_goal,
@@ -531,15 +544,23 @@ int mc_handle_emc_packet(struct master_controller *mc, mtp_packet_t *mp)
 
 		      MD_OnOpcode, MTP_UPDATE_POSITION,
 		      MD_OnStatus, MTP_POSITION_STATUS_MOVING,
+		      MD_OnClearedFlags, MCF_CONTACT,
+		      MD_OnInteger /* mc_pause_time */, 0,
 		      MD_Call, mc_nlwrapper,
 
 		      /* The sensors fired, get a report before moving. */
 		      MD_OnFlags, MCF_CONTACT,
 		      MD_OnOpcode, MTP_UPDATE_POSITION,
+		      MD_OnStatus, MTP_POSITION_STATUS_UNKNOWN,
 		      MD_Call, mc_request_report,
 
 		      MD_OnOpcode, MTP_UPDATE_POSITION,
+		      MD_OnStatus, MTP_POSITION_STATUS_UNKNOWN,
 		      MD_Call, mc_plot,
+
+		      MD_OnOpcode, MTP_UPDATE_POSITION,
+		      MD_OnStatus, MTP_POSITION_STATUS_MOVING,
+		      MD_Return,
 
 		      MD_TAG_DONE);
 
@@ -564,6 +585,7 @@ static int mc_update_flags(struct master_controller *mc, mtp_packet_t *mp)
 
     default:
 	mc->mc_flags &= ~MCF_CONTACT;
+	mc->mc_flags &= ~MCF_NULL_STARTED;
 	break;
     }
 
@@ -616,6 +638,7 @@ static int mc_process_report(struct master_controller *mc, mtp_packet_t *mp)
     assert(mc_invariant(mc));
     assert(mp != NULL);
 
+    mc->mc_flags &= ~MCF_HAS_PATH_PLAN;
     mc->mc_pilot->pc_flags &= ~PCF_EXPECTING_RESPONSE;
     mcr = &mp->data.mtp_payload_u.contact_report;
 
@@ -666,7 +689,7 @@ static int mc_process_report(struct master_controller *mc, mtp_packet_t *mp)
 	break;
     case 0:
 	info("%s's obstacle disappeared\n", mc->mc_pilot->pc_robot->hostname);
-	mc->mc_flags &= ~MCF_CONTACT;
+	mc->mc_flags &= ~(MCF_CONTACT|MCF_NULL_STARTED);
 	mc_request_position(mc, NULL);
 	break;
 
@@ -687,10 +710,16 @@ int mc_handle_pilot_packet(struct master_controller *mc, mtp_packet_t *mp)
     assert(mp != NULL);
 
     rc = mtp_dispatch(mc, mp,
+		      MD_Integer, mc->mc_flags,
 
 		      /* Ignore any packets not sent by this controller. */
 		      MD_OnCommandID, SLAVE_COMMAND_ID,
 		      MD_Return,
+
+		      MD_OnOpcode, MTP_UPDATE_POSITION,
+		      MD_OnStatus, MTP_POSITION_STATUS_CONTACT,
+		      MD_OnFlags, MCF_NULL_STARTED,
+		      MD_AlsoCall, mc_request_report,
 
 		      /* Always update some flags before other calls. */
 		      MD_OnOpcode, MTP_UPDATE_POSITION,
@@ -739,9 +768,6 @@ int mc_handle_tick(struct master_controller *mc)
 
     return retval;
 }
-
-
-
 
 
 void mc_nlctr_getstates(struct master_controller *mc,

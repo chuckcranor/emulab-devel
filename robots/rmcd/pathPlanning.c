@@ -305,13 +305,16 @@ pp_plot_code_t pp_plot_waypoint(struct path_plan *pp)
     /* And make sure it is still sane. */
     assert(ob_data_invariant());
 
-#if 0
     /* XXX Not needed for continous motion. */
     /* restrict final waypoint to MAX_DISTANCE */
     mtp_polar(&pp->pp_actual_pos,
 	      (retval == PPC_WAYPOINT) ? &pp->pp_waypoint : &pp->pp_goal_pos,
-	      &distance,
-	      &theta);
+	      &pp->pp_waypoint_distance,
+	      &pp->pp_waypoint_theta);
+    pp->pp_waypoint_theta =
+	mtp_theta(pp->pp_waypoint_theta - pp->pp_actual_pos.theta);
+    
+#if 0
     if (distance > pp_data.ppd_max_distance) {
 	mtp_cartesian(&pp->pp_actual_pos,
 		      pp_data.ppd_max_distance,

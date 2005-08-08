@@ -57,6 +57,8 @@ struct path_plan {
     struct robot_position pp_last_pos;	 /*< Last position. */
     struct robot_position pp_actual_pos; /*< Current position. */
     struct robot_position pp_waypoint;	 /*< Current waypoint. */
+    float pp_waypoint_distance;		 /*< Distance to waypoint. */
+    float pp_waypoint_theta;		 /*< Distance to waypoint. */
     struct robot_position pp_goal_pos;	 /*< Current goal. */
     struct obstacle_config pp_obstacle;	 /*< First obstacle in the path. */
     float pp_speed;			 /*< Last set speed for the robot. */

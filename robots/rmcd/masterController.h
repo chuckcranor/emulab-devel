@@ -26,29 +26,30 @@
 struct pilot_connection;
 
 enum {
-  MCB_CONTACT,
-  MCB_HAS_PATH_PLAN,
+    MCB_CONTACT,
+    MCB_HAS_PATH_PLAN,
+    MCB_NULL_STARTED,
 };
 
 enum {
-  MCF_CONTACT = (1L << MCB_CONTACT),	/*< Robot made contact with an obstacle. */
-  MCF_HAS_PATH_PLAN = (1L << MCB_HAS_PATH_PLAN),
+    MCF_CONTACT = (1L << MCB_CONTACT),	/*< Robot made contact with an obstacle. */
+    MCF_HAS_PATH_PLAN = (1L << MCB_HAS_PATH_PLAN),
+    MCF_NULL_STARTED = (1L << MCB_NULL_STARTED),
 };
 
 /**
  *
  */
 struct master_controller {
-  struct pilot_connection *mc_pilot;
-  unsigned long mc_flags;
-  unsigned long mc_pause_time;
-  int mc_tries_remaining;
-  unsigned int mc_waypoint_tries;
-  struct path_plan mc_plan;
-  pp_plot_code_t mc_plot_code;
-  struct path_plan mc_plan_lookahead;
-  struct obstacle_node *mc_self_obstacle;
-  struct robot_position_states mc_tolerances;
+    struct pilot_connection *mc_pilot;
+    unsigned long mc_flags;
+    unsigned long mc_pause_time;
+    int mc_tries_remaining;
+    struct path_plan mc_plan;
+    pp_plot_code_t mc_plot_code;
+    struct path_plan mc_plan_lookahead;
+    struct obstacle_node *mc_self_obstacle;
+    struct robot_position_states mc_tolerances;
 };
 
 #define DEFAULT_PAUSE_TIME 10
