@@ -12,14 +12,14 @@
 
 // blendTri - Piecewise triangular linear blending using barycentric coordinates.
 //
-//                             Barycentric coordinate of vertex 0 / edge 0.
-//          v0  --------- 1.0  100% of v0 data at v0.
+//                        Barycentric coordinate of vertex 0 / edge 0.
+//          v0  --------- 1.0  100% of v0 distance from edge e0 at v0.
 //         /^ \         |
 //        / |  \        |
-//      e1  e1  e2      | 0.5   50% of v0 data halfway down the triangle.
+//      e1  e0  e2      | 0.5   50% of v0 distance halfway down the triangle.
 //      /  dist  \      |
 //     /    |     \     |
-//   v2<--- e0 --- v1 --- 0.0    0% of v0 data on edge e0 from v1 to v2.
+//   v2<--- e0 --- v1 --- 0.0    0% of v0 distance on edge e0 from v1 to v2.
 //
 struct blendTriStruct  // There are three of everything here.
 {
