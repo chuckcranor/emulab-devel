@@ -1,2 +1,0 @@
-This directory contains meta-ports that install the various ports needed for
-boss and ops nodes. Copy these directories to /usr/ports/misc .

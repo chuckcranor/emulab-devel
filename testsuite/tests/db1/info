@@ -1,3 +1,0 @@
-This is the first test that checks the sanity of the database.
-It only checks the virt_lans and virt_nodes tables.
-
