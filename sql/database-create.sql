@@ -821,14 +821,14 @@ CREATE TABLE location_info (
 --
 
 CREATE TABLE log (
-  seq bigint(20) NOT NULL auto_increment,
-  stamp timestamp(14) NOT NULL,
+  seq int(10) unsigned NOT NULL auto_increment,
+  stamp int(10) unsigned NOT NULL default '0',
   pidx int(11) NOT NULL default '0',
   uid int(11) default NULL,
-  session bigint(20) NOT NULL default '0',
-  invok bigint(20) NOT NULL default '0',
-  parent bigint(20) NOT NULL default '0',
-  script int(3) NOT NULL default '0',
+  session int(10) unsigned NOT NULL default '0',
+  invocation int(10) unsigned NOT NULL default '0',
+  parent int(10) unsigned NOT NULL default '0',
+  script smallint(3) NOT NULL default '0',
   level smallint(2) NOT NULL default '0',
   priority smallint(3) NOT NULL default '0',
   inferred tinyint(1) NOT NULL default '0',
@@ -1501,7 +1501,7 @@ CREATE TABLE portmap (
 --
 
 CREATE TABLE priorities (
-  priority int(3) NOT NULL default '0',
+  priority smallint(3) NOT NULL default '0',
   name varchar(8) NOT NULL default '',
   PRIMARY KEY  (priority),
   UNIQUE KEY name (name)
@@ -1632,7 +1632,7 @@ CREATE TABLE scheduled_reloads (
 --
 
 CREATE TABLE scripts (
-  script int(3) NOT NULL auto_increment,
+  script smallint(3) NOT NULL auto_increment,
   name varchar(24) NOT NULL default '',
   PRIMARY KEY  (script),
   UNIQUE KEY id (name)

@@ -57,7 +57,7 @@ use libdb;
 
 my $SCRIPTNAME = basename($PROGRAM_NAME);
 my $SCRIPTNUM = 0;
-my $PARENT_INVOK = 0;
+my $PARENT_INVOCATION = 0;
 
 my %PRIORITY_MAP_TO_NUM;
 my %PRIORITY_MAP_TO_STR;
@@ -109,7 +109,7 @@ sub check_env ()
     check_env_num 'TBLOG_LEVEL';
     check_env_num 'TBLOG_SESSION';
     check_env_num 'TBLOG_PIDX';
-    check_env_num 'TBLOG_INVOK';
+    check_env_num 'TBLOG_INVOCATION';
     check_env_num 'TBLOG_UID';
 }
 
@@ -184,15 +184,15 @@ sub tblog_init() {
     if (defined $ENV{'TBLOG_SESSION'}) {
 	check_env();
 	$ENV{'TBLOG_LEVEL'}++;
-	$PARENT_INVOK = $ENV{'TBLOG_INVOK'};
+	$PARENT_INVOCATION = $ENV{'TBLOG_INVOCATION'};
 	dblog($NOTICE, {type => 'entering'},
 	      'Entering "', join(' ', $SCRIPTNAME, @ARGV), '"') or die;
 	my $id = DBQuerySingleFatal 'select LAST_INSERT_ID()';
-	$ENV{'TBLOG_INVOK'} = $id;
-	DBQueryFatal("update log set invok=$id where seq=$id");
+	$ENV{'TBLOG_INVOCATION'} = $id;
+	DBQueryFatal("update log set invocation=$id where seq=$id");
     } else {
 	$ENV{TBLOG_SESSION} = 0;
-	$ENV{TBLOG_INVOK} = 0;
+	$ENV{TBLOG_INVOCATION} = 0;
 	$ENV{TBLOG_LEVEL} = 0;
 	$ENV{TBLOG_PIDX} = 0;
 	$ENV{TBLOG_UID} = 0;
@@ -201,8 +201,8 @@ sub tblog_init() {
 	my $id = DBQuerySingleFatal 'select LAST_INSERT_ID()';
 	# set SESSION in database
 	$ENV{TBLOG_SESSION} = $id;
-	$ENV{TBLOG_INVOK} = $id;
-	DBQueryFatal("update log set session=$id,invok=$id where seq=$id");
+	$ENV{TBLOG_INVOCATION} = $id;
+	DBQueryFatal("update log set session=$id,invocation=$id where seq=$id");
     }
 }
 
@@ -254,13 +254,13 @@ sub dblog( $@ ) {
     eval {
 	check_env();
 	my $query = 
-	  sprintf('insert into log (pidx,uid,session,parent,invok,script,level,priority,inferred,cause,type,mesg) '. 
-		  'VALUES (%d,%d,%d,%d,%d,%d,%d,%d,%d,%s,%s,%s)',
+	  sprintf('insert into log (stamp,pidx,uid,session,parent,invocation,script,level,priority,inferred,cause,type,mesg) '. 
+		  'VALUES (UNIX_TIMESTAMP(now()),%d,%d,%d,%d,%d,%d,%d,%d,%d,%s,%s,%s)',
 		  $ENV{TBLOG_PIDX}, 
 		  $ENV{TBLOG_UID},
 		  $ENV{TBLOG_SESSION}, 
-		  $PARENT_INVOK, 
-		  $ENV{TBLOG_INVOK},
+		  $PARENT_INVOCATION, 
+		  $ENV{TBLOG_INVOCATION},
 		  $SCRIPTNUM, 
 		  $ENV{TBLOG_LEVEL},
 		  $priority,
@@ -338,13 +338,27 @@ sub tbdie( @ ) {
 }
 
 #
-# tblog_find_error([session],[store]): attempts to find the relevant
-#   error.  With no parameters will find the relevant error for the
-#   current session and log the results into the database.  If an
-#   explicit session id is given than print the results to STDOUT unless
-#   "store" is set to true.  When called with store set, it is safe to use
-#   in an END block as it is garanteed to not (1) not die, (2) not modify
-#   the exit code.
+# tblog_find_error([session],[store]): attempts to find the relevant error.  
+# 
+# Parameters:
+#   session: Session id to use. Defaults to the current as given by 
+#       $ENV{TVLOG_SESSION}.
+#   store: If set store the results into the database and act in
+#       a way that is safe to use in an END block, that is 
+#       (1) never die, (2) don't modify the exit code,  Will also
+#       print the results to and some additional info to STDERR
+#       for diagnosis purposed.  If not set simply print the results to
+#       STDERR.  Defaults to true unless the "session" parameter is also
+#       given, in which case default to false.
+#
+# Format of the result:
+#   <seq>: <script name>: <error msg>
+# for each relevent error
+#
+# To retrieve the results from the database:
+#   select ... where session = <Session ID> AND type = 'thecause' form log
+# The relevant errors are also flagged using "relevant" flag:
+#   select ... where session = <Session ID> AND relevant != 0 form log
 #
 sub tblog_find_error ( ;$$ ) {
 
@@ -365,28 +379,28 @@ sub tblog_find_error ( ;$$ ) {
 	# Build the Tree
 	#
 	# Tree data structure:
-	# invok = {invok => INT, parent => INT, [{seq => int ...} || {seq => int, child => invox}]
+	# invocation = {invocation => INT, parent => INT, [{seq => int ...} || {seq => int, child => invox}]
 	
-	my $root = {invok => 0, log => []};
+	my $root = {invocation => 0, log => []};
 	my %lookup = (0 => $root);
 	my @log;
 	
-	my $query_result = DBQueryFatal "select seq,parent,invok,priority,mesg,scripts.name from log natural join scripts where session = $session and priority <= $NOTICE order by seq";
+	my $query_result = DBQueryFatal "select seq,parent,invocation,priority,mesg,scripts.name from log natural join scripts where session = $session and priority <= $NOTICE order by seq";
 	
 	for (my $i = 0; $i < $query_result->num_rows; $i++) {
 	    
-	    my ($seq, $parent, $invok, $priority, $mesg, $script) = $query_result->fetchrow;
+	    my ($seq, $parent, $invocation, $priority, $mesg, $script) = $query_result->fetchrow;
 	    
-	    if (not exists $lookup{$invok}) {
+	    if (not exists $lookup{$invocation}) {
 		
 		my $p = $lookup{$parent};
 		die "Parent Doesn't Exists!" unless defined $p;
-		$lookup{$invok} = {invok => $invok, parent => $parent, script=>$script, log => []};
-		push @{$p->{log}}, {seq => $invok, child => $lookup{$invok}};
+		$lookup{$invocation} = {invocation => $invocation, parent => $parent, script=>$script, log => []};
+		push @{$p->{log}}, {seq => $invocation, child => $lookup{$invocation}};
 		
 	    }
 	    
-	    push @{$lookup{$invok}{log}}, {seq => $seq, invok=>$invok, priority => $priority, mesg => $mesg};
+	    push @{$lookup{$invocation}{log}}, {seq => $seq, invocation=>$invocation, priority => $priority, mesg => $mesg};
 	    
 	}
 	
@@ -429,11 +443,16 @@ sub tblog_find_error ( ;$$ ) {
 	my $error = '';
 	
 	foreach (@relevant) {
-	    $error .= "$_->{seq}: $lookup{$_->{invok}}->{script}: $_->{mesg}\n";
+	    $error .= "$_->{seq}: $lookup{$_->{invocation}}->{script}: $_->{mesg}\n";
 	}
 	$error = "No clue as to what went wrong!\n" unless length $error > 0;
 	
 	if ($store) {
+	    print SERR "**** Experimental information, please ignore ****\n";
+	    print SERR "Session ID = $ENV{TBLOG_SESSION}\n";
+	    print SERR "Likely Cause of the Problem:\n";
+	    print SERR $error;
+	    print SERR "**** End experimental information ****\n";
 	    chop $error;
 	    dblog $NOTICE, {type=>'thecause'}, $error;
 	    DBQueryFatal(sprintf("update log set relevant=1 where seq in (%s)",
@@ -578,76 +597,5 @@ END {
 
 1;
 
-__END__
 
--- MYSQL TABLES:
 
-CREATE TABLE log (
-  seq bigint(20) NOT NULL auto_increment,
-  stamp timestamp(14) NOT NULL,
-  pidx int NOT NULL,             -- unique project id
-  uid  int default NULL,         -- numeric user id
-  session bigint NOT NULL,       -- session id (1)
-  invok bigint NOT NULL,         -- invocation id - unique id for a 
-                                 --   particular execution of a script (1)
-  parent bigint NOT NULL,        -- invocation id of the parent script
-  script int(3) NOT NULL,        -- numeric id for the script name
-  level smallint(2) NOT NULL   , -- depth of the script in the call chain
-  priority smallint(3) NOT NULL, -- syslog priority
-  inferred tinyint(1) NOT NULL,  -- 0 - log created with tblog
-                                 -- 1 - log created by catching a die or warn
-				 -- 2 - log created with a normal print and
-                                 --     given the non-default priority
-                                 -- 3 - log created with a normal print and
-                                 --     given the default priority
-  cause varchar(32) NOT NULL,    -- string identifying the "cause" of the error
-  type enum('normal','entering','exiting','thecause') 
-       NOT NULL default 'normal',-- type of error:
-                                 -- normal: normal error generated by tblog
-                                 -- entering: auto gen when a script starts
-				 -- exiting:  auto gen when a script exists (2)
-                                 -- thecause: created by tblog_find_error
-  relevant tinyint(1) NOT NULL,  -- if the error was considered relevent
-                                 -- by tblog_find_error
-  mesg text NOT NULL,            -- the text of the message
-  PRIMARY KEY (seq),
-  KEY (session)
-);
-
--- (1) These ids are equal to the sequence number of the "entering" log
---     message
--- (2) Due to a number of factors every "exiting" message in not 
---     garanteed to have a 1-1 relation with the "entering" message.
---     The two major ones are
---     (1) A Fork not followed by a "exec" will most likely to cause
---     multiple exiting messages.  (2) If "exec" is used the script
---     will not have an exiting message.
-
--- NOTE: It may be beneficial to split this table into three:
---   session pidx uid
---   invok session parent script level 
---   seq stamp [session] invok priority inferred cause type relevant mesg
--- ...
-
-CREATE TABLE scripts (
-  script int(3) NOT NULL auto_increment,
-  name varchar(24) NOT NULL default '',
-  PRIMARY KEY  (script),
-  UNIQUE KEY id (name)
-);
-
-CREATE TABLE priorities (
-  priority int(3) NOT NULL,
-  name varchar(8) NOT NULL,
-  primary key (priority),
-  unique key (name)
-);
-
-insert into priorities values (000, 'EMERG');
-insert into priorities values (100, 'ALERT');
-insert into priorities values (200, 'CRIT');
-insert into priorities values (300, 'ERR');
-insert into priorities values (400, 'WARNING');
-insert into priorities values (500, 'NOTICE');
-insert into priorities values (600, 'INFO');
-insert into priorities values (700, 'DEBUG');
