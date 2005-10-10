@@ -2827,47 +2827,4 @@ last_net_act,last_cpu_act,last_ext_act);
 
 ??: Add new tables for the logging subsystem (libdblog)
 
-	CREATE TABLE log (
-	  seq bigint(20) NOT NULL auto_increment,
-	  stamp timestamp(14) NOT NULL,
-	  pidx int(11) NOT NULL default '0',
-	  uid int(11) default NULL,
-	  session bigint(20) NOT NULL default '0',
-	  invok bigint(20) NOT NULL default '0',
-	  parent bigint(20) NOT NULL default '0',
-	  script int(3) NOT NULL default '0',
-	  level smallint(2) NOT NULL default '0',
-	  priority smallint(3) NOT NULL default '0',
-	  inferred tinyint(1) NOT NULL default '0',
-	  cause varchar(32) NOT NULL default '',
-	  type enum('normal','entering','exiting','thecause') 
-	                                       NOT NULL default 'normal',
-	  relevant tinyint(1) NOT NULL default '0',
-	  mesg text NOT NULL,
-	  PRIMARY KEY  (seq),
-	  KEY session (session)
-	) TYPE=MyISAM;
-
-	CREATE TABLE scripts (
-	  script int(3) NOT NULL auto_increment,
-	  name varchar(24) NOT NULL default '',
-	  PRIMARY KEY  (script),
-	  UNIQUE KEY id (name)
-	) TYPE=MyISAM;
-
-	CREATE TABLE priorities (
-	  priority int(3) NOT NULL default '0',
-	  name varchar(8) NOT NULL default '',
-	  PRIMARY KEY  (priority),
-	  UNIQUE KEY name (name)
-	) TYPE=MyISAM;
-
-	INSERT INTO priorities VALUES (0,'EMERG');
-	INSERT INTO priorities VALUES (100,'ALERT');
-	INSERT INTO priorities VALUES (200,'CRIT');
-	INSERT INTO priorities VALUES (300,'ERR');
-	INSERT INTO priorities VALUES (400,'WARNING');
-	INSERT INTO priorities VALUES (500,'NOTICE');
-	INSERT INTO priorities VALUES (600,'INFO');
-	INSERT INTO priorities VALUES (700,'DEBUG');
-
+	mysql tbdb < tbsetup/libtblog.sql
