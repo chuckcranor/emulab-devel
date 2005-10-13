@@ -1,0 +1,66 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE ptop SYSTEM "ptop.dtd">
+<ptop testbed="emulab">
+    <node name="pc1">
+        <node_type>
+            <type_name name="pc650" />
+            <limit slots="1" />
+        </node_type>
+        <node_type>
+            <type_name name="delay" />
+            <limit slots="2" />
+        </node_type>
+        <node_type is_static="yes">
+            <type_name name="delayinfo" />
+            <limit slots="2" />
+        </node_type>
+        <node_feature>
+            <feature_name name="feature1" />
+            <feature_weight weight="1.0" />
+        </node_feature>
+        <node_feature type="local-additive" violatable="yes">
+            <feature_name name="feature2" />
+            <feature_weight weight="0.5" />
+        </node_feature>
+        <node_option>
+            <option_name name="trivial_bw" />
+            <option_value value="400" />
+        </node_option>
+    </node>
+    <node name="pc2">
+        <node_type>
+            <type_name name="pc650" />
+            <limit slots="1" />
+        </node_type>
+        <node_type>
+            <type_name name="delay" />
+            <limit slots="2" />
+        </node_type>
+        <node_type is_static="yes">
+            <type_name name="delayinfo" />
+            <limit slots="2" />
+        </node_type>
+        <node_feature>
+            <feature_name name="feature1" />
+            <feature_weight weight="1.0" />
+        </node_feature>
+        <node_feature type="local-additive" violatable="yes">
+            <feature_name name="feature2" />
+            <feature_weight weight="0.5" />
+        </node_feature>
+        <node_option>
+            <option_name name="trivial_bw" />
+            <option_value value="400" />
+        </node_option>
+    </node>
+    <link name="link1">
+        <endpoint node="pc1" interface="eth0" />
+        <endpoint node="pc2" interface="eth0" />
+        <delay_spec>
+            <bandwidth value="100Mbps" />
+            <delay value="0ms" />
+            <loss value="0.00" />
+        </delay_spec>
+        <link_type type="ethernet" />
+    </link>
+</ptop>
