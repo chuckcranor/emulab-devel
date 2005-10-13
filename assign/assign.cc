@@ -16,8 +16,8 @@
 #include <boost/graph/graphviz.hpp>
 #endif
 
-#include <fstream.h>
-#include <iostream.h>
+#include <fstream>
+#include <iostream>
 #include <time.h>
 #include <stdlib.h>
 #include <math.h>
@@ -351,7 +351,7 @@ int type_precheck() {
     // First, check the regular types
     for (name_count_map::iterator vtype_it=vtypes.begin();
 	    vtype_it != vtypes.end();++vtype_it) {
-    
+
 	// Check to see if there were any pnodes of the type at all
 	tb_ptype_map::iterator ptype_it = ptypes.find(vtype_it->first);
 	if (ptype_it == ptypes.end()) {
@@ -380,8 +380,9 @@ int type_precheck() {
     // Check the vclasses, too
     for (name_list_map::iterator vclass_it = vclasses.begin();
 	    vclass_it != vclasses.end(); ++vclass_it) {
+	bool found_match = false;
         // Make sure we actually use this vclass
-	name_vclass_map::iterator dit = vclass_map.find(vclass_it->first);
+        name_vclass_map::iterator dit = vclass_map.find(vclass_it->first);
         if (dit == vclass_map.end()) {
             cout << "***: Internal error - unable to find vtype " <<
                 vclass_it->first << endl;
@@ -393,8 +394,7 @@ int type_precheck() {
             }
         }
 
-	bool found_match = false;
-	for (vector<crope>::iterator vtype_it = vclass_it->second.begin();
+	for (vector<fstring>::iterator vtype_it = vclass_it->second.begin();
 		vtype_it != vclass_it->second.end(); vtype_it++) {
 	    tb_ptype_map::iterator mit = ptypes.find(*vtype_it);
 	    if ((mit != ptypes.end()) && (mit->second->pnode_slots() != 0)) {
@@ -452,12 +452,12 @@ int mapping_precheck() {
 	int matched_bw = 0;
 	// Keep track of desires had how many 'hits', so that we can tell
 	// if any simply were not matched
-	map<crope,int> matched_desires;
+	map<fstring,int> matched_desires;
 
 	// Keep track of which link types had how many 'hits', so that we can
 	// tell which type(s) caused this node to fail
 	tb_vnode::link_counts_map matched_link_counts;
-	map<crope,bool> matched_links;
+	map<fstring,bool> matched_links;
 
 	tb_vclass *vclass = v->vclass;
 	tb_vclass::members_map::iterator mit;
@@ -467,7 +467,7 @@ int mapping_precheck() {
 	for (;;) {
 	    // Loop over all types this node can take on, which might be only
 	    // one, if it's not part of a vclass
-	    crope this_type;
+	    fstring this_type;
 	    if (vclass) {
 		this_type = mit->first;
 	    } else {
@@ -553,7 +553,7 @@ int mapping_precheck() {
 		tb_vnode::link_counts_map::iterator vit;
 		for (vit = v->link_counts.begin(); vit != v->link_counts.end();
 		    vit++) {
-		  crope type = vit->first;
+		  fstring type = vit->first;
 		  int count = vit->second;
 		  if (pnode->link_counts.find(type) !=
 			pnode->link_counts.end()) {
@@ -600,7 +600,7 @@ nosuchtype:
 	    tb_vnode::link_counts_map::iterator lit;
 	    for (lit = v->link_counts.begin(); lit != v->link_counts.end();
 		lit++) {
-	      crope type = lit->first;
+	      fstring type = lit->first;
 	      if (!matched_links[type]) {
 		cout << "      No links of type " << type << " found!" << endl;
 	      } else {
@@ -615,7 +615,7 @@ nosuchtype:
 		cout << "      Too much bandwidth on emulated links!" << endl;
 	    }
 
-	    for (map<crope,int>::iterator dit = matched_desires.begin();
+	    for (map<fstring,int>::iterator dit = matched_desires.begin();
 		    dit != matched_desires.end();
 		    dit++) {
 		if (dit->second == 0) {
@@ -665,7 +665,7 @@ int main(int argc,char **argv)
 {
   int seed = 0;
 #ifdef GRAPHVIZ_SUPPORT
-  crope viz_prefix;
+  fstring viz_prefix;
 #endif
   bool scoring_selftest = false;
   bool prechecks_only = false;
@@ -778,8 +778,10 @@ int main(int argc,char **argv)
   action2.sa_handler = status_report;
   sigemptyset(&action2.sa_mask);
   action2.sa_flags = 0;
+#ifdef __FreeBSD__
   sigaction(SIGINFO,&action2,NULL);
-
+#endif 
+  
   // Convert options to the common.h parameters.
   parse_options(argv, options, noptions);
 #ifdef SCORE_DEBUG
@@ -835,9 +837,9 @@ int main(int argc,char **argv)
   // Output graphviz if necessary
 #ifdef GRAPHVIZ_SUPPORT
   if (viz_prefix.size() != 0) {
-    crope vviz = viz_prefix + "_virtual.viz";
-    crope pviz = viz_prefix + "_physical.viz";
-    crope sviz = viz_prefix + "_switch.viz";
+    fstring vviz = viz_prefix + "_virtual.viz";
+    fstring pviz = viz_prefix + "_physical.viz";
+    fstring sviz = viz_prefix + "_switch.viz";
     ofstream vfile,pfile,sfile;
     vfile.open(vviz.c_str());
     write_graphviz(vfile,VG,vvertex_writer(),vedge_writer(),graph_writer());
@@ -893,7 +895,7 @@ int main(int argc,char **argv)
 
 #ifdef GRAPHVIZ_SUPPORT
   if (viz_prefix.size() != 0) {
-    crope aviz = viz_prefix + "_solution.viz";
+    fstring aviz = viz_prefix + "_solution.viz";
     ofstream afile;
     afile.open(aviz.c_str());
     write_graphviz(afile,VG,solution_vertex_writer(),

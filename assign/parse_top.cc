@@ -12,7 +12,7 @@
 #include <boost/graph/graph_traits.hpp>
 #include <boost/graph/adjacency_list.hpp>
 
-#include <iostream.h>
+#include <iostream>
 
 using namespace boost;
 
@@ -23,6 +23,7 @@ using namespace boost;
 #include "virtual.h"
 #include "parser.h"
 #include "anneal.h"
+#include "string.h"
 
 extern name_vvertex_map vname2vertex;
 extern name_name_map fixed_nodes;
@@ -77,18 +78,18 @@ int parse_top(tb_vgraph &VG, istream& i)
     parsed_line = split_line(inbuf,' ');
     if (parsed_line.size() == 0) {continue;}
 
-    crope command = parsed_line[0];
+    string command = parsed_line[0];
 
-    if (command.compare("node") == 0) {
+    if (command == string("node")) {
       if (parsed_line.size() < 3) {
 	top_error("Bad node line, too few arguments.");
       } else {
-	crope name = parsed_line[1];
-	crope unparsed_type = parsed_line[2];
+	string name = parsed_line[1];
+	string unparsed_type = parsed_line[2];
 
 	// Type might now a have a 'number of slots' assoicated with it
-	crope type;
-	crope typecount_str;
+	string type;
+	string typecount_str;
 	split_two(unparsed_type,':',type,typecount_str,"1");
 
 	int typecount;
@@ -126,16 +127,16 @@ int parse_top(tb_vgraph &VG, istream& i)
 	v->nontrivial_links = v->trivial_links = 0;
 	
 	for (unsigned int i = 3;i < parsed_line.size();++i) {
-	  crope desirename,desireweight;
+	  string desirename,desireweight;
 	  if (split_two(parsed_line[i],':',desirename,desireweight,"0") == 1) {
 	      // It must be a flag?
-	      if (parsed_line[i].compare("disallow_trivial_mix") == 0) {
+	      if (parsed_line[i] == string("disallow_trivial_mix")) {
 		  v->disallow_trivial_mix = true;
 	      } else {
 		  top_error("Unknown flag or bad desire (missing weight)");
 	      }
 	  } else {
-	      if (desirename.compare("subnode_of") == 0) {
+	      if (desirename == string("subnode_of")) {
 		  // Okay, it's not a desire, it's a subnode declaration
 		  if (!v->subnode_of_name.empty()) {
 		      top_error("Can only be a subnode of one node");
@@ -156,18 +157,18 @@ int parse_top(tb_vgraph &VG, istream& i)
 	}
 	v->desires.sort();
       }
-    } else if (command.compare("link") == 0) {
+    } else if (command == string("link")) {
       if (parsed_line.size() < 8) {
 	top_error("Bad link line, too few arguments.");
       } else {
-	crope name = parsed_line[1];
-	crope src = parsed_line[2];
-	crope dst = parsed_line[3];
-	crope link_type = parsed_line[7];
-	crope bw,bwunder,bwover;
-	crope delay,delayunder,delayover;
-	crope loss,lossunder,lossover;
-	crope bwweight,delayweight,lossweight;
+	string name = parsed_line[1];
+	string src = parsed_line[2];
+	string dst = parsed_line[3];
+	string link_type = parsed_line[7];
+	string bw,bwunder,bwover;
+	string delay,delayunder,delayover;
+	string loss,lossunder,lossover;
+	string bwweight,delayweight,lossweight;
 	string_vector parsed_delay,parsed_bw,parsed_loss;
 	parsed_bw = split_line(parsed_line[4],':');
 	bw = parsed_bw[0];
@@ -266,11 +267,11 @@ int parse_top(tb_vgraph &VG, istream& i)
 	l->emulated = false;
 	
 	for (unsigned int i = 8;i < parsed_line.size();++i) {
-	  if (parsed_line[i].compare("nodelay") == 0) {
+	  if (parsed_line[i] == string("nodelay")) {
 	    l->allow_delayed = false;
-	  } else if (parsed_line[i].compare("emulated") == 0) {
+	  } else if (parsed_line[i] == string("emulated")) {
 	    l->emulated = true;
-	  } else if (parsed_line[i].compare("trivial_ok") == 0) {
+	  } else if (parsed_line[i] == string("trivial_ok")) {
 	    l->allow_trivial = true;
 	  } else {
 	    top_error("bad link line, unknown tag: " <<
@@ -294,12 +295,12 @@ int parse_top(tb_vgraph &VG, istream& i)
 	}
 #endif
       }
-    } else if (command.compare("make-vclass") == 0) {
+    } else if (command == string("make-vclass")) {
       if (parsed_line.size() < 4) {
 	top_error("Bad vclass line, too few arguments.");
       } else {
-	crope name = parsed_line[1];
-	crope weight = parsed_line[2];
+	string name = parsed_line[1];
+	string weight = parsed_line[2];
 	double gweight;
 	if (sscanf(weight.c_str(),"%lg",&gweight) != 1) {
 	  top_error("Bad vclass line, invalid weight.");
@@ -313,20 +314,20 @@ int parse_top(tb_vgraph &VG, istream& i)
 	  vclasses[name].push_back(parsed_line[i]);
 	}
       }
-    } else if (command.compare("fix-node") == 0) {
+    } else if (command == string("fix-node")) {
       if (parsed_line.size() != 3) {
 	top_error("Bad fix-node line, wrong number of arguments.");
       } else {
-	crope virtualnode = parsed_line[1];
-	crope physicalnode = parsed_line[2];
+	string virtualnode = parsed_line[1];
+	string physicalnode = parsed_line[2];
 	fixed_nodes[virtualnode] = physicalnode;
       }
-    } else if (command.compare("node-hint") == 0) {
+    } else if (command == string("node-hint")) {
       if (parsed_line.size() != 3) {
 	top_error("Bad node-hint line, wrong number of arguments.");
       } else {
-	crope virtualnode = parsed_line[1];
-	crope physicalnode = parsed_line[2];
+	string virtualnode = parsed_line[1];
+	string physicalnode = parsed_line[2];
 	node_hints[virtualnode] = physicalnode;
       }
     } else {

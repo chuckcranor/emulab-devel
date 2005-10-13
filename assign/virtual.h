@@ -12,7 +12,8 @@
  * we're compiling with
  */
 #if __GNUC__ == 3 && __GNUC_MINOR__ > 0
-#include <backward/queue.h>
+#include <queue>
+using namespace std;
 #else
 #include <queue>
 #endif
@@ -22,6 +23,7 @@
 using namespace std;
 
 #include "featuredesire.h"
+#include "fstring.h"
 
 class tb_plink;
 class tb_vnode;
@@ -101,10 +103,10 @@ public:
   // contains weight of each desire
   node_desire_set desires;
 
-  crope type;			// the current type of the node
+  fstring type;			// the current type of the node
   int typecount;		// How many slots of the type this vnode takes up
   tb_vclass *vclass;		// the virtual class of the node, if any
-  crope name;			// string name of the node
+  fstring name;			// string name of the node
   bool fixed;			// is this node fixed
   bool assigned;		// is this node assigned?
   pvertex assignment;		// the physical vertex assigned to
@@ -126,10 +128,10 @@ public:
   tb_vnode *subnode_of;
   typedef list<tb_vnode*> subnode_list;
   subnode_list subnodes;
-  crope subnode_of_name;
+  fstring subnode_of_name;
 
   // Counts how many links of each type this virtual node has
-  typedef hash_map<crope,int> link_counts_map;
+  typedef hash_map<fstring,int> link_counts_map;
   link_counts_map link_counts;
 
 };
@@ -150,8 +152,8 @@ public:
 
   tb_delay_info delay_info;	// the delay characteristics of the link
   tb_link_info link_info;	// what it's mapped to
-  crope name;			// name
-  crope type;			// type of this link
+  fstring name;			// name
+  fstring type;			// type of this link
   bool emulated;		// is this an emulated link, i.e. can it
 				// share a plink withouter emulated vlinks
   bool no_connection;		// true if this link should be satisfied
@@ -164,7 +166,7 @@ public:
 extern tb_vgraph_vertex_pmap vvertex_pmap;
 extern tb_vgraph_edge_pmap vedge_pmap;
 
-typedef hash_map<crope,vvertex> name_vvertex_map;
+typedef hash_map<fstring,vvertex> name_vvertex_map;
 typedef pair<vvertex,int> vvertex_int_pair;
 typedef vector<vvertex> vvertex_vector;
 

@@ -95,7 +95,7 @@ inline bool pnode_is_match(tb_vnode *vn, tb_pnode *pn) {
     }
   } else { // the type is not static
     if (pn->typed) {
-      if (pn->current_type.compare(vn->type)) {
+      if (pn->current_type != vn->type) {
 	// Failure - the pnode has a type, and it isn't ours
 	matched = false;
       } else {
@@ -927,8 +927,8 @@ void anneal(bool scoring_selftest, double scale_neighborhood,
 #endif
 
       if (accepttrans) {
-	bestscore = newscore;
-	bestviolated = violated;
+		bestscore = newscore;
+		bestviolated = violated;
 
 #ifdef GNUPLOT_OUTPUT
 	fprintf(tempout,"%f\n",temp);

@@ -13,16 +13,19 @@
  */
 #if __GNUC__ == 3 && __GNUC_MINOR__ > 0
 #include <ext/hash_map>
+#include <ext/hash_fun.h>
 using namespace __gnu_cxx;
 #define RANDOM() random()
 #else
 #include <hash_map>
+#include <ext/hash_fun.h>
 #define RANDOM() std::random()
 #endif
 
 #include "config.h"
 #include <utility>
-#include <rope>
+#include "port.h"
+#include "fstring.h"
 
 #include <boost/graph/adjacency_list.hpp>
 
@@ -182,6 +185,18 @@ struct eqstr
   }
 };
 
+namespace __gnu_cxx
+{
+    template<> struct hash< std::string >
+    {
+        size_t operator()( const std::string& x ) const
+        {
+            return hash< const char* >()( x.c_str() );
+        }
+    };
+};
+
+
 enum edge_data_t {edge_data};
 enum vertex_data_t {vertex_data};
 
@@ -193,8 +208,8 @@ namespace boost {
 /*
  * Used to count the number of nodes in each ptype and vtype
  */
-typedef hash_map<crope,int> name_count_map;
-typedef hash_map<crope,vector<crope> > name_list_map;
+typedef hash_map<fstring,int> name_count_map;
+typedef hash_map<fstring,vector<fstring> > name_list_map;
 
 /*
  * A hash function for pointers

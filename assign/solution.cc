@@ -6,6 +6,8 @@
 
 #include "solution.h"
 #include "vclass.h"
+#include <string>
+using namespace std;
 
 bool compare_scores(double score1, double score2) {
     if ((score1 < (score2 + ITTY_BITTY)) && (score1 > (score2 - ITTY_BITTY))) {
@@ -184,7 +186,7 @@ void print_solution_summary()
 void pvertex_writer::operator()(ostream &out,const pvertex &p) const {
     tb_pnode *pnode = get(pvertex_pmap,p);
     out << "[label=\"" << pnode->name << "\"";
-    crope style;
+    fstring style;
     if (pnode->types.find("switch") != pnode->types.end()) {
 	out << " style=dashed";
     } else if (pnode->types.find("lan") != pnode->types.end()) {
@@ -261,22 +263,22 @@ void graph_writer::operator()(ostream &out) const {
 void solution_edge_writer::operator()(ostream &out,const vedge &v) const {
     tb_link_info &linfo = get(vedge_pmap,v)->link_info;
     out << "[";
-    crope style;
-    crope color;
-    crope label;
+    string style;
+    string color;
+    string label;
     switch (linfo.type_used) {
 	case tb_link_info::LINK_UNMAPPED: style="dotted";color="red"; break;
 	case tb_link_info::LINK_DIRECT: style="dashed";color="black"; break;
 	case tb_link_info::LINK_INTRASWITCH:
 	    style="solid";color="black";
-	    label=get(pvertex_pmap,linfo.switches.front())->name;
+	    label=get(pvertex_pmap,linfo.switches.front())->name.c_str();
 	    break;
 	case tb_link_info::LINK_INTERSWITCH:
 	    style="solid";color="blue";
 	    label="";
 	    for (pvertex_list::const_iterator it=linfo.switches.begin();
 		    it!=linfo.switches.end();++it) {
-		label += get(pvertex_pmap,*it)->name;
+		label += get(pvertex_pmap,*it)->name.c_str();
 		label += " ";
 	    }
 	    break;
@@ -291,16 +293,16 @@ void solution_edge_writer::operator()(ostream &out,const vedge &v) const {
 
 void solution_vertex_writer::operator()(ostream &out,const vvertex &v) const {
     tb_vnode *vnode = get(vvertex_pmap,v);
-    crope label=vnode->name;
-    crope color;
+    string label = vnode->name.c_str();
+    string color;
     if (absassigned[v]) {
 	label += " ";
-	label += get(pvertex_pmap,absassignment[v])->name;
+	label += get(pvertex_pmap,absassignment[v])->name.c_str();
 	color = "black";
     } else {
 	color = "red";
     }
-    crope style;
+    string style;
     if (vnode->fixed) {
 	style="dashed";
     } else {
