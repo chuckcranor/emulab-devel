@@ -6,26 +6,24 @@
 <!ELEMENT node (node_type+,node_feature*,node_option*)>
 <!ATTLIST node name ID #REQUIRED>
 
-<!ELEMENT node_type (type_name,(limit|unlimited))>
-<!ATTLIST node_type is_static (yes | no) "no">
+<!ELEMENT node_type ((limit|unlimited),static?)>
+<!ATTLIST node_type name CDATA #REQUIRED>
 <!-- Include something about 'switch' or 'transit' -->
 
-<!ELEMENT type_name EMPTY>
-<!ATTLIST type_name name CDATA #REQUIRED>
+<!ELEMENT static EMPTY>
 
 <!ELEMENT limit EMPTY>
 <!ATTLIST limit slots CDATA #REQUIRED>
 
 <!ELEMENT unlimited EMPTY>
 
-<!ELEMENT node_feature (feature_name,feature_weight)>
+<!ELEMENT node_feature (feature_weight, violatable?)>
 <!ATTLIST node_feature type (normal | local-additive | global-exclusive |
-                             global-inclusitve) "normal"
-                       violatable (yes | no) "no">
-<!ELEMENT feature_name EMPTY>
-<!ATTLIST feature_name name CDATA #REQUIRED>
+                             global-inclusitve) "normal"                     
+                       name CDATA #REQUIRED>
 <!ELEMENT feature_weight EMPTY>
 <!ATTLIST feature_weight weight CDATA #REQUIRED>
+<!ELEMENT violatable EMPTY>
 
 <!ELEMENT node_option (option_name,option_value)>
 <!-- Stronger 'typing'? -->

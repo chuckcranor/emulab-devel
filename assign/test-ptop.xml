@@ -2,25 +2,22 @@
 <!DOCTYPE ptop SYSTEM "ptop.dtd">
 <ptop testbed="emulab">
     <node name="pc1">
-        <node_type>
-            <type_name name="pc650" />
+        <node_type name="pc">
             <limit slots="1" />
         </node_type>
-        <node_type>
-            <type_name name="delay" />
+        <node_type name="delay">
             <limit slots="2" />
         </node_type>
-        <node_type is_static="yes">
-            <type_name name="delayinfo" />
+        <node_type name="delayinfo">
             <limit slots="2" />
+	    <static/>
         </node_type>
-        <node_feature>
-            <feature_name name="feature1" />
+        <node_feature name="feature1">
             <feature_weight weight="1.0" />
         </node_feature>
-        <node_feature type="local-additive" violatable="yes">
-            <feature_name name="feature2" />
+        <node_feature type="local-additive" name="feature2">
             <feature_weight weight="0.5" />
+	    <violatable />
         </node_feature>
         <node_option>
             <option_name name="trivial_bw" />
@@ -28,25 +25,22 @@
         </node_option>
     </node>
     <node name="pc2">
-        <node_type>
-            <type_name name="pc650" />
+        <node_type name="pc">
             <limit slots="1" />
         </node_type>
-        <node_type>
-            <type_name name="delay" />
+        <node_type name="delay">
             <limit slots="2" />
         </node_type>
-        <node_type is_static="yes">
-            <type_name name="delayinfo" />
+        <node_type name="delayinfo">
             <limit slots="2" />
+	    <static/>
         </node_type>
-        <node_feature>
-            <feature_name name="feature1" />
+        <node_feature name="feature1">
             <feature_weight weight="1.0" />
         </node_feature>
-        <node_feature type="local-additive" violatable="yes">
-            <feature_name name="feature2" />
+        <node_feature name="features2" type="local-additive">
             <feature_weight weight="0.5" />
+    	    <violatable/>
         </node_feature>
         <node_option>
             <option_name name="trivial_bw" />
