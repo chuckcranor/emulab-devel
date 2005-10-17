@@ -1,0 +1,114 @@
+#
+# EMULAB-COPYRIGHT
+# Copyright (c) 2000-2005 University of Utah and the Flux Group.
+# All rights reserved.
+#
+SRCDIR		= ../../testbed/assign
+TESTBED_SRCDIR	= ../../testbed
+OBJDIR		= ..
+SUBDIR		= assign
+MAKEFILE_IN	= ../../testbed/assign/GNUmakefile.in
+
+#include $(OBJDIR)/Makeconf
+
+#
+# Uncomment these to build with gcc3.3
+#
+CC=gcc34
+CPP=cpp34
+CXX=g++34	
+
+all: assign 
+
+fstringtest: fstringtest.cc fstring.o
+	${CXX} -g -o fstringtest fstring.o fstringtest.cc
+
+#include $(TESTBED_SRCDIR)/GNUmakerules
+
+OBJS=parse_top.o parse_ptop.o assign.o pclass.o vclass.o config.o score.o \
+     parser.o solution.o anneal.o featuredesire.o fstring.o parse_ptop_xml.o
+LIBS+= -lm -L/usr/pkg/lib -lxerces-c
+LDFLAGS+= -pipe -O3
+CXXFLAGS = -pipe -I/usr/local/include -ftemplate-depth-40 -I/usr/pkg/include 
+
+# Pick either this
+CXXFLAGS += -O3 
+# or this
+#CXXFLAGS += -O0 -g -pg
+# and then zero or more of these
+#CXXFLAGS += -DSCORE_DEBUG
+#CXXFLAGS += -DSCORE_DEBUG_MORE
+#CXXFLAGS += -DPCLASS_DEBUG
+#CXXFLAGS += -DDUMP_GRAPH
+#CXXFLAGS += -DSCORE_DEBUG_LOTS
+
+# And then, regardless, you can also have this
+#CXXFLAGS += -DSTATS
+
+# assign now supports a dizzing array of defines, which are as-yet undocumented
+# Here are the ones used for a typical build:
+# Pick cooling schedule
+CXXFLAGS += -DMELT -DEPSILON_TERMINATE -DCHILL -DNEIGHBOR_LENGTH \
+    -DLOCAL_DERIVATIVE -DALLOW_NEGATIVE_DELTA
+# Bug/scoring fixes
+CXXFLAGS += -DINTERSWITCH_LENGTH -DPNODE_SWITCH_LOAD -DFIX_SHARED_INTERFACES 
+# Various tweaks to the simulated annealing behavior
+CXXFLAGS += -DFIND_PNODE_SEARCH -DNO_REVERT
+# Keeps information about which pclasses are potential mappings for vnodes on a
+# per-vnode basis, not a per-type basis
+CXXFLAGS += -DPER_VNODE_TT
+# Should be on by default, but not well tested enough
+#CXXFLAGS += -DSMART_UNMAP
+# Make sure that all emulated links that are assigned to a plink have the same
+# endpoints
+CXXFLAGS += -DFIX_PLINK_ENDPOINTS
+# Allow pnodes to cap the amount of trivial link bandwidth they can handle
+CXXFLAGS += -DTRIVIAL_LINK_BW
+# Use the old acceptance criteria, which gives special treatment to violations
+CXXFLAGS += -DSPECIAL_VIOLATION_TREATMENT
+
+# If you're looking to turn on or off USE_OPTIMAL, its now a cmdline
+# option. Use OP={0,1} on the command line at run time... :)
+
+DEPLIBS=$(OBJS)
+
+assign: ${MAKEFILE_IN} ${DEPLIBS} ${OBJS}
+	${CXX} -o assign ${LIBS} $(OBJS) ${LDFLAGS}
+
+install: $(INSTALL_LIBEXECDIR)/assign 
+
+clean:
+	-${RM} *.o assign 
+
+#
+# All this crap generated with 'g++ -MM' - don't want to do all the makefile goo
+# to make this automatic, since none of it ever changes
+#
+anneal.o: anneal.cc anneal.h port.h featuredesire.h pclass.h \
+  virtual.h maps.h score.h solution.h vclass.h
+assign.o: assign.cc port.h common.h config.h fstring.h \
+  delay.h physical.h featuredesire.h virtual.h vclass.h pclass.h score.h \
+  solution.h maps.h anneal.h
+config.o: config.cc config.h
+featuredesire.o: featuredesire.cc featuredesire.h common.h config.h \
+  port.h fstring.h 
+fstring.o: fstring.cc fstring.h
+fstringtest.o: fstringtest.cc fstring.h
+parse_ptop.o: parse_ptop.cc delay.h physical.h \
+  common.h config.h fstring.h featuredesire.h parser.h
+parse_ptop_xml.o: parse_ptop_xml.cc port.h delay.h physical.h \
+  common.h config.h fstring.h xmlhelpers.h featuredesire.h parse_ptop_xml.h 
+parse_top.o: parse_top.cc port.h common.h config.h \
+  fstring.h vclass.h delay.h physical.h featuredesire.h virtual.h \
+  parser.h anneal.h pclass.h
+parser.o: parser.cc parser.h port.h
+pclass.o: pclass.cc port.h common.h config.h \
+  fstring.h delay.h physical.h featuredesire.h virtual.h pclass.h
+score.o: score.cc port.h common.h config.h \
+  fstring.h vclass.h delay.h physical.h featuredesire.h virtual.h \
+  pclass.h score.h
+solution.o: solution.cc solution.h port.h delay.h physical.h common.h \
+  config.h fstring.h \
+  vclass.h
+vclass.o: vclass.cc port.h \
+  fstring.h vclass.h delay.h physical.h featuredesire.h virtual.h
