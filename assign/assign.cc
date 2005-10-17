@@ -41,6 +41,7 @@ using namespace boost;
 #include "solution.h"
 #include "maps.h"
 #include "anneal.h"
+#include "parse_ptop_xml.h"
 
 // Here we set up all our graphs.  Need to create the graphs
 // themselves and then setup the property maps.
@@ -119,6 +120,9 @@ bool print_summary = false;
 
 // Use the 'connected' find algorithm
 double use_connected_pnode_find = 0.0f;
+
+// Use XML for file input
+bool xml_input = false;
   
 // XXX - shouldn't be in this file
 double absbest;
@@ -132,8 +136,7 @@ tb_ptype_map ptypes;
  */
 
 // Return the CPU time (in seconds) used by this process
-float used_time()
-{
+float used_time() {
   struct rusage ru;
   getrusage(RUSAGE_SELF,&ru);
   return ru.ru_utime.tv_sec+ru.ru_utime.tv_usec/1000000.0+
@@ -141,15 +144,19 @@ float used_time()
 }
 
 // Read in the .ptop file
-void read_physical_topology(char *filename)
-{
+void read_physical_topology(char *filename) {
   ifstream ptopfile;
   ptopfile.open(filename);
   if (!ptopfile.is_open()) {
       cout << "*** Unable to open ptop file " << filename << endl;
       exit(EXIT_FATAL);
   }
-  cout << "Physical Graph: " << parse_ptop(PG,SG,ptopfile) << endl;
+  
+  if (!xml_input) {
+      cout << "Physical Graph: " << parse_ptop(PG,SG,ptopfile) << endl;
+  } else {
+      cout << "Physical Graph: " << parse_ptop_xml(PG,SG,filename) << endl;
+  }
 
 #ifdef DUMP_GRAPH
   {
@@ -210,8 +217,7 @@ void read_physical_topology(char *filename)
 
 // Calculate the minimum spanning tree for the switches - we only consider one
 // potential path between each pair of switches.
-void calculate_switch_MST()
-{
+void calculate_switch_MST() {
   cout << "Calculating shortest paths on switch fabric." << endl;
 
   // Set up the weight map for Dijkstra's
@@ -250,14 +256,14 @@ void calculate_switch_MST()
 }
 
 // Read in the .top file
-void read_virtual_topology(char *filename)
-{
+void read_virtual_topology(char *filename) {
   ifstream topfile;
   topfile.open(filename);
   if (!topfile.is_open()) {
       cout << "*** Unable to open top file " << filename << endl;
       exit(EXIT_FATAL);
   }
+  
   cout << "Virtual Graph: " << parse_top(VG,topfile) << endl;
 
 #ifdef DUMP_GRAPH
@@ -310,8 +316,7 @@ void prune_unusable_pclasses() {
 	pclasses.size() << " remain." << endl;
 }
 
-void print_help()
-{
+void print_help() {
   cout << "assign [options] ptopfile topfile [config params]" << endl;
   cout << "Options: " << endl;
 #ifdef TIME_TERMINATE
@@ -337,6 +342,7 @@ void print_help()
   cout << "  -c <float>  - Use the 'connected' pnode finding algorithm " <<
       "<float>*100% of the time." << endl;
   cout << "  -n          - Don't anneal - just do the prechecks." << endl;
+  cout << "  -x          - Use XML top and ptop files (still incomplete)" << endl;
   exit(EXIT_FATAL);
 }
  
@@ -661,8 +667,7 @@ void status_report(int signal) {
     << endl;
 }
 
-int main(int argc,char **argv)
-{
+int main(int argc,char **argv) {
   int seed = 0;
 #ifdef GRAPHVIZ_SUPPORT
   fstring viz_prefix;
@@ -674,7 +679,7 @@ int main(int argc,char **argv)
   char ch;
   timelimit = 0.0;
   timetarget = 0.0;
-  while ((ch = getopt(argc,argv,"s:v:l:t:rpPTdH:oguc:n")) != -1) {
+  while ((ch = getopt(argc,argv,"s:v:l:t:rpPTdH:oguc:nx")) != -1) {
     switch (ch) {
     case 's':
       if (sscanf(optarg,"%d",&seed) != 1) {
@@ -736,6 +741,9 @@ int main(int argc,char **argv)
     case 'n':
       prechecks_only = true;
       cout << "Doing only prechecks, exiting early" << endl;
+      break;
+    case 'x':
+      xml_input = true;
       break;
     default:
       print_help();
