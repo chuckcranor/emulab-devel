@@ -20,8 +20,7 @@ bool compare_scores(double score1, double score2) {
 /*
  * Print out the current solution
  */
-void print_solution()
-{
+void print_solution(const solution &s) {
     vvertex_iterator vit,veit;
     tb_vnode *vn;
 
@@ -32,11 +31,11 @@ void print_solution()
     tie(vit,veit) = vertices(VG);
     for (;vit != veit;++vit) {
 	vn = get(vvertex_pmap,*vit);
-	if (! vn->assigned) {
+	if (! s.is_assigned(*vit)) {
 	    cout << "unassigned: " << vn->name << endl;
 	} else {
 	    cout << vn->name << " "
-		<< get(pvertex_pmap,vn->assignment)->name << endl;
+		<< get(pvertex_pmap,s.get_assignment(*vit))->name << endl;
 	}
     }
     cout << "End Nodes" << endl;
@@ -69,7 +68,7 @@ void print_solution()
 		p2->name << " (" << p2->srcmac << "," << p2->dstmac << ")";
 	} else if (vlink->link_info.type_used ==
 		tb_link_info::LINK_INTERSWITCH) {
-	    // Interswitch link - interate through each intermediate link
+	    // Interswitch link - iterate through each intermediate link
 	    cout << " interswitch ";
 	    for (pedge_path::iterator it=vlink->link_info.plinks.begin();
 		    it != vlink->link_info.plinks.end();++it) {
@@ -107,7 +106,7 @@ void print_solution()
  * the physical perspective. For example, now many vnodes are assigned to each
  * pnode, and how much total bandwidth each pnode is handling.
  */
-void print_solution_summary()
+void print_solution_summary(const solution &s)
 {
   // First, print the number of vnodes on each pnode, and the total number of
   // pnodes used
@@ -295,9 +294,9 @@ void solution_vertex_writer::operator()(ostream &out,const vvertex &v) const {
     tb_vnode *vnode = get(vvertex_pmap,v);
     string label = vnode->name.c_str();
     string color;
-    if (absassigned[v]) {
+    if (my_solution.is_assigned(v)) {
 	label += " ";
-	label += get(pvertex_pmap,absassignment[v])->name.c_str();
+	label += get(pvertex_pmap,my_solution.get_assignment(v))->name.c_str();
 	color = "black";
     } else {
 	color = "red";

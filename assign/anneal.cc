@@ -18,9 +18,10 @@
  * Internal variables
  */
 // These variables store the best solution.
-node_map absassignment;		// assignment field of vnode
-assigned_map absassigned;	// assigned field of vnode
-type_map abstypes;		// type field of vnode
+//node_map absassignment;		// assignment field of vnode
+//assigned_map absassigned;	// assigned field of vnode
+//type_map abstypes;		// type field of vnode
+solution best_solution;
 
 // Map of virtual node name to its vertex descriptor.
 name_vvertex_map vname2vertex;
@@ -346,12 +347,15 @@ void anneal(bool scoring_selftest, double scale_neighborhood,
   tie(vit,veit) = vertices(VG);
   for (;vit!=veit;++vit) {
     tb_vnode *vn = get(vvertex_pmap,*vit);
-    absassigned[*vit] = vn->assigned;
     if (vn->assigned) {
-      absassignment[*vit] = vn->assignment;
-      abstypes[*vit] = vn->type;
+	// XXX
+//      absassignment[*vit] = vn->assignment;
+//      abstypes[*vit] = vn->type;
+	best_solution.set_assignment(*vit,vn->assignment);
+	best_solution.set_vtype_assignment(*vit,vn->type);
     } else {
-      unassigned_nodes.push(vvertex_int_pair(*vit,RANDOM()));
+	best_solution.clear_assignment(*vit);
+	unassigned_nodes.push(vvertex_int_pair(*vit,RANDOM()));
     }
   }
 
@@ -668,7 +672,7 @@ void anneal(bool scoring_selftest, double scale_neighborhood,
 		<< violated << " tempviolated was " << tempviolated << endl;
 	    cerr << "I was tring to map " << vn->name << " to " <<
 		newpnode->name << endl;
-	    print_solution();
+	    print_solution(best_solution);
 	    cerr << vinfo;
 	    abort();
           }
@@ -838,9 +842,16 @@ void anneal(bool scoring_selftest, double scale_neighborhood,
 #endif // SCORE_DEBUG
 	  tie(vit,veit) = vertices(VG);
 	  for (;vit!=veit;++vit) {
-	    absassignment[*vit] = get(vvertex_pmap,*vit)->assignment;
-	    absassigned[*vit] = get(vvertex_pmap,*vit)->assigned;
-	    abstypes[*vit] = get(vvertex_pmap,*vit)->type;
+	      tb_vnode *vn = get(vvertex_pmap,*vit);
+	      if (vn->assigned) {
+		  best_solution.set_assignment(*vit,vn->assignment);
+		  best_solution.set_vtype_assignment(*vit,vn->type);
+	      } else {
+		  best_solution.clear_assignment(*vit);
+	      }
+	    //absassignment[*vit] = get(vvertex_pmap,*vit)->assignment;
+	    //absassigned[*vit] = get(vvertex_pmap,*vit)->assigned;
+	    //abstypes[*vit] = get(vvertex_pmap,*vit)->type;
 	  }
 	  absbest = newscore;
 	  absbestviolated = violated;
@@ -1183,11 +1194,11 @@ NOTQUITEDONE:
       for (;vvertex_it!=end_vvertex_it;++vvertex_it) {
 	tb_vnode *vnode = get(vvertex_pmap,*vvertex_it);
 	if (vnode->fixed) continue;
-	if (absassigned[*vvertex_it]) {
+	if (best_solution.is_assigned(*vvertex_it)) {
 	  if (vnode->vclass != NULL) {
-	    vnode->type = abstypes[*vvertex_it];
+	    vnode->type = best_solution.get_vtype_assignment(*vvertex_it);
 	  }
-	  assert(!add_node(*vvertex_it,absassignment[*vvertex_it],true,false));
+	  assert(!add_node(*vvertex_it,best_solution.get_assignment(*vvertex_it),true,false));
 	}
       }
     } // End of reverting code

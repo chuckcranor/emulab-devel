@@ -672,6 +672,9 @@ void status_report(int signal) {
     << endl;
 }
 
+// From anneal.cc - the best solution found
+extern solution best_solution;
+
 int main(int argc,char **argv) {
   int seed = 0;
 #ifdef GRAPHVIZ_SUPPORT
@@ -900,10 +903,10 @@ int main(int argc,char **argv) {
   cout << "Violations: " << violated << endl;
   cout << vinfo;
 
-  print_solution();
+  print_solution(best_solution);
 
   if (print_summary) {
-    print_solution_summary();
+    print_solution_summary(best_solution);
   }
 
 #ifdef GRAPHVIZ_SUPPORT
