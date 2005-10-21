@@ -25,6 +25,13 @@ using namespace std;
 #include "featuredesire.h"
 #include "fstring.h"
 
+#include <boost/config.hpp>
+#include <boost/utility.hpp>
+#include <boost/property_map.hpp>
+#include <boost/graph/graph_traits.hpp>
+#include <boost/graph/adjacency_list.hpp>
+using namespace boost;
+
 class tb_plink;
 class tb_vnode;
 class tb_vlink;

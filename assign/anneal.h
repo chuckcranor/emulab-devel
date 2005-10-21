@@ -74,7 +74,7 @@ extern pclass_types vnode_type_table;
 #endif
 
 /* Decides based on the temperature if a new score should be accepted or not */
-inline int accept(double change, double temperature);
+inline bool accept(double change, double temperature);
 
 /* Find a pnode that can satisfy the give vnode */
 tb_pnode *find_pnode(tb_vnode *vn);

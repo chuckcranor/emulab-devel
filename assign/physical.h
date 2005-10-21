@@ -8,6 +8,7 @@
 #define __PHYSICAL_H
 
 #include "common.h"
+#include "delay.h"
 
 #include <set>
 #include <list>
