@@ -42,6 +42,7 @@ using namespace boost;
 #include "maps.h"
 #include "anneal.h"
 #include "parse_ptop_xml.h"
+#include "parse_top_xml.h"
 
 // Here we set up all our graphs.  Need to create the graphs
 // themselves and then setup the property maps.
@@ -264,7 +265,11 @@ void read_virtual_topology(char *filename) {
       exit(EXIT_FATAL);
   }
   
-  cout << "Virtual Graph: " << parse_top(VG,topfile) << endl;
+  if (!xml_input) {
+      cout << "Virtual Graph: " << parse_top(VG,topfile) << endl;
+  } else {
+      cout << "Virtual Graph: " << parse_top_xml(VG,filename) << endl;
+  }
 
 #ifdef DUMP_GRAPH
   {
