@@ -64,6 +64,11 @@ public:
   pedge_path plinks;		// the path of pedges
   pvertex_list switches;	// what switches were used
 
+  tb_link_info() { ; };
+  tb_link_info(linkType _type_used) : type_used(_type_used), plinks(), switches() { ; };
+  tb_link_info(linkType _type_used, pedge_path _plinks) : type_used(_type_used), plinks(_plinks), switches() { ; };
+  tb_link_info(linkType _type_used, pedge_path _plinks, pvertex_list _switches) : type_used(_type_used), plinks(_plinks), switches(_switches) { ; };
+  
   friend ostream &operator<<(ostream &o, const tb_link_info& link)
   {
     o << "  Type: ";
