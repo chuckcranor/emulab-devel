@@ -1,0 +1,42 @@
+#!/usr/bin/perl -w
+#
+# EMULAB-COPYRIGHT
+# Copyright (c) 2000-2005 University of Utah and the Flux Group.
+# All rights reserved.
+#
+
+#
+# Hack to get assign error messages into the database correctly.  Will
+# be removed once the API is ported to other languages besides perl
+#
+
+BEGIN {$FAKE_SCRIPTNAME = $ARGV[0];}
+
+use lib "@prefix@/lib";
+use libtblog;
+use libtblog qw(dblog *SOUT);
+
+open P, join(' ', @ARGV, ' |');
+
+my @out;
+
+while (<P>) {
+  print SOUT $_;
+  push @out, $_;
+}
+close P;
+
+my $exitcode = $? >> 8;
+
+if ($exitcode) {
+  foreach (@out) {
+    if (/^( *\*\*\* *)?warning: +(.+)/i) {
+      dblog TBLOG_WARNING, $2;
+    } elsif (/^( *)\*\*\* +(.+)/) {
+      my $sublevel = length($1) > 0 ? 0 : 1;
+      dblog TBLOG_ERR, {sublevel=>$sublevel}, $2;
+    }
+  }
+}
+
+exit $exitcode;
