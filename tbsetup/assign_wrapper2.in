@@ -14,7 +14,7 @@ BEGIN {$FAKE_SCRIPTNAME = $ARGV[0];}
 
 use lib "@prefix@/lib";
 use libtblog;
-use libtblog qw(dblog *SOUT);
+use libtblog qw(dblog *SOUT *SERR);
 
 open P, join(' ', @ARGV, ' |');
 
@@ -31,9 +31,9 @@ my $exitcode = $? >> 8;
 if ($exitcode) {
   foreach (@out) {
     if (/^( *\*\*\* *)?warning: +(.+)/i) {
-      dblog TBLOG_WARNING, $2;
+      dblog TBLOG_WARNING, {}, $2;
     } elsif (/^( *)\*\*\* +(.+)/) {
-      my $sublevel = length($1) > 0 ? 0 : 1;
+      my $sublevel = length($1) > 0 ? 1 : 0;
       dblog TBLOG_ERR, {sublevel=>$sublevel}, $2;
     }
   }

@@ -187,11 +187,9 @@ TBDebugTimeStampsOn();
 #
 # All exits happen via this function!
 #
-sub fatal ($)
+sub fatal (@)
 {
-    my($message) = @_;
-
-    tberror $message;
+    &tberror(@_);
 
     # We next go to the END block below.
     exit($WRAPPER_FAILED);
@@ -751,7 +749,7 @@ while (1) {
 	$precheck = 1;
 	my $retval = RunAssign();
 	if ($retval != 0) {
-	    fatal("Experiment can not be run on an empty testbed.  Please fix the experiment.");
+	    fatal({type=>'extra'}, "Experiment can not be run on an empty testbed.  Please fix the experiment.");
 	}
 	print("Assign succeeded on an empty testbed.\n");
 	$precheck = 0;

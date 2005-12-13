@@ -45,6 +45,7 @@ use English;
 use POSIX qw(isatty setsid);
 use File::Basename;
 use IO::Handle;
+use Text::Wrap;
 
 use strict;
 
@@ -56,14 +57,6 @@ use libtestbed;
 use libdb;
 
 sub if_defined($$);
-
-my $SCRIPTNAME = if_defined($main::FAKE_SCRIPTNAME, basename($PROGRAM_NAME));
-my $REAL_SCRIPTNAME 
-    = defined $main::FAKE_SCRIPTNAME 
-    ? basename($PROGRAM_NAME).'('.$main::FAKE_SCRIPTNAME.')'
-    : $SCRIPTNAME;
-my $SCRIPTNUM = 0;
-my $PARENT_INVOCATION = 0;
 
 my %PRIORITY_MAP_TO_NUM;
 my %PRIORITY_MAP_TO_STR;
@@ -116,7 +109,11 @@ sub check_env ()
     check_env_num 'TBLOG_SESSION';
     check_env_num 'TBLOG_PIDX';
     check_env_num 'TBLOG_INVOCATION';
+    check_env_num 'TBLOG_PARENT_INVOCATION';
     check_env_num 'TBLOG_UID';
+    check_env_num 'TBLOG_SCRIPTNUM';
+    check_env_def 'TBLOG_SCRIPTNAME';
+    check_env_def 'TBLOG_REAL_SCRIPTNAME';
 }
 
 sub if_defined ($$) {
@@ -148,7 +145,7 @@ sub DBQuerySingleFatal ( $ )
 # Forward Decals
 #
 
-sub dblog ( $@ );
+sub dblog ( $$@ );
 sub tblog ( $@ );
 
 #
@@ -158,21 +155,29 @@ sub tblog ( $@ );
 # priority mapping (string -> int) from the database, (3) Creating an
 # "entring" log message in the database, (4) get the session id and
 # set up the environmental variables if they are not already set, 
-# 5) Get the invocation id, and 6) increment the level
+# (5) Get the invocation id, and (6) increment the level
 #
 sub tblog_init() {
+    # Get script name
+
+    $ENV{TBLOG_SCRIPTNAME} = if_defined($main::FAKE_SCRIPTNAME, 
+					basename($PROGRAM_NAME));
+    $ENV{TBLOG_REAL_SCRIPTNAME} = defined $main::FAKE_SCRIPTNAME 
+	? basename($PROGRAM_NAME).'('.$main::FAKE_SCRIPTNAME.')'
+	    : basename($PROGRAM_NAME);
+
     # Get script number
 
     my $query_result = DBQueryFatal
-	sprintf("select script from scripts where name=%s",
-		DBQuoteSpecial $SCRIPTNAME);
+	sprintf("select script from scripts where script_name=%s",
+		DBQuoteSpecial $ENV{TBLOG_SCRIPTNAME});
     if ($query_result->num_rows > 0) {
-	$SCRIPTNUM = ($query_result->fetchrow_array())[0];
+	$ENV{TBLOG_SCRIPTNUM} = ($query_result->fetchrow_array())[0];
     } else {
 	DBQueryFatal 
-	    sprintf("insert into scripts (name) values (%s)",
-		    DBQuoteSpecial $SCRIPTNAME);
-	$SCRIPTNUM = DBQuerySingleFatal 'select LAST_INSERT_ID()';
+	    sprintf("insert into scripts (script_name) values (%s)",
+		    DBQuoteSpecial $ENV{TBLOG_SCRIPTNAME});
+	$ENV{TBLOG_SCRIPTNUM} = DBQuerySingleFatal 'select LAST_INSERT_ID()';
     }
 
     # Get priority mapping
@@ -189,21 +194,22 @@ sub tblog_init() {
 
     if (defined $ENV{'TBLOG_SESSION'}) {
 	check_env();
-	$ENV{'TBLOG_LEVEL'}++;
-	$PARENT_INVOCATION = $ENV{'TBLOG_INVOCATION'};
+	$ENV{TBLOG_LEVEL}++;
+	$ENV{TBLOG_PARENT_INVOCATION} = $ENV{TBLOG_INVOCATION};
 	dblog($NOTICE, {type => 'entering'},
-	      'Entering "', join(' ', $REAL_SCRIPTNAME, @ARGV), '"') or die;
+	      'Entering "', join(' ', $ENV{TBLOG_REAL_SCRIPTNAME}, @ARGV), '"') or die;
 	my $id = DBQuerySingleFatal 'select LAST_INSERT_ID()';
-	$ENV{'TBLOG_INVOCATION'} = $id;
+	$ENV{TBLOG_INVOCATION} = $id;
 	DBQueryFatal("update log set invocation=$id where seq=$id");
     } else {
 	$ENV{TBLOG_SESSION} = 0;
 	$ENV{TBLOG_INVOCATION} = 0;
+	$ENV{TBLOG_PARENT_INVOCATION} = 0;
 	$ENV{TBLOG_LEVEL} = 0;
 	$ENV{TBLOG_PIDX} = 0;
 	$ENV{TBLOG_UID} = 0;
 	dblog($NOTICE, {type => 'entering'},
-	      'Entering "', join(' ', $REAL_SCRIPTNAME, @ARGV), '"') or die;
+	      'Entering "', join(' ', $ENV{TBLOG_REAL_SCRIPTNAME}, @ARGV), '"') or die;
 	my $id = DBQuerySingleFatal 'select LAST_INSERT_ID()';
 	# set SESSION in database
 	$ENV{TBLOG_SESSION} = $id;
@@ -227,7 +233,6 @@ sub tblog_set_info ( $$$ )
     DBQueryFatal
 	sprintf('update log set pidx=%d,uid=%s where session=%s',
 		$ENV{TBLOG_PIDX}, $ENV{TBLOG_UID}, $ENV{TBLOG_SESSION});
-    print SERR "Session ID = $ENV{TBLOG_SESSION}\n";
 }
 
 #
@@ -236,11 +241,11 @@ sub tblog_set_info ( $$$ )
 sub tblog_exit() {
     return unless defined $ENV{'TBLOG_SESSION'};
     check_env();
-    dblog($INFO, {type=>'exiting'}, "Leaving \"$REAL_SCRIPTNAME ...\"");
+    dblog($INFO, {type=>'exiting'}, "Leaving \"$ENV{TBLOG_REAL_SCRIPTNAME} ...\"");
 }
 
 #
-# dblog(priority, [{parm=>value,...},] mesg, ...)
+# dblog(priority, {parm=>value,...}, mesg, ...)
 #   Internal function.  Logs a message to the database.  Doesn't print
 #   anything. Will not die, instead return 0 on error, with the error
 #   message in $@.
@@ -250,25 +255,24 @@ my $in_dblog = 0; # Used to avoid an infinite recursion when
                   # DBQueryFatal fails as a log entry is made to
                   # record the failure, which will than likely cause
                   # another failure and so on
-sub dblog( $@ ) {
-    my ($priority, @mesg) = @_;
-    my $parms = {};
-    $parms = shift @mesg if ref $mesg[0];
+sub dblog( $$@ ) {
+    my ($priority, $parms, @mesg) = @_;
     my $mesg = join('',@mesg);
     return if $ENV{TBLOG_OFF} || $in_dblog;
     $in_dblog = 1;
     eval {
 	check_env();
 	my $query = 
-	  sprintf('insert into log (stamp,pidx,uid,session,parent,invocation,script,level,priority,inferred,cause,type,mesg) '. 
-		  'VALUES (UNIX_TIMESTAMP(now()),%d,%d,%d,%d,%d,%d,%d,%d,%d,%s,%s,%s)',
+	  sprintf('insert into log (stamp,pidx,uid,session,parent,invocation,script,level,sublevel,priority,inferred,cause,type,mesg) '. 
+		  'VALUES (UNIX_TIMESTAMP(now()),%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%s,%s,%s)',
 		  $ENV{TBLOG_PIDX}, 
 		  $ENV{TBLOG_UID},
 		  $ENV{TBLOG_SESSION}, 
-		  $PARENT_INVOCATION, 
+		  $ENV{TBLOG_PARENT_INVOCATION}, 
 		  $ENV{TBLOG_INVOCATION},
-		  $SCRIPTNUM, 
+		  $ENV{TBLOG_SCRIPTNUM}, 
 		  $ENV{TBLOG_LEVEL},
+		  if_defined($parms->{sublevel}, 0),
 		  $priority,
 		  if_defined($parms->{inferred}, 0),
 		  DBQuoteSpecial if_defined($parms->{cause}, ''),
@@ -299,7 +303,10 @@ sub dblog( $@ ) {
 #   Useful parms: sublevel, cause, type
 #
 sub tblog( $@ ) {
-    my ($priority, @rest) = @_;
+    my ($priority) = shift;
+    my $parms = {};
+    $parms = shift if ref $_[0] eq 'HASH';
+    my $mesg = join('',@_);
 
     if (exists $PRIORITY_MAP_TO_STR{$priority}) {
       # $priority already a valid priority number
@@ -310,11 +317,10 @@ sub tblog( $@ ) {
       die "Unknown Priority \"$priority\"" unless defined $priority;
     }
 
-    my $mesg = join('', @rest);
-    my $res = dblog($priority, @rest) unless $mesg =~ /^\s+$/;
+    my $res = dblog($priority, $parms, $mesg) unless $mesg =~ /^\s+$/;
 
     if ($priority <= $ERR ) {
-	print SERR "*** $SCRIPTNAME:\n"."    $mesg\n";
+	print SERR "*** $ENV{TBLOG_SCRIPTNAME}:\n"."    $mesg\n";
     } elsif ($priority == $WARNING) {
 	print SERR "*** WARNING: $mesg\n";
     } else {
@@ -339,7 +345,7 @@ sub tbdebug( @ ) {&tblog($DEBUG, @_)}
 sub tbdie( @ ) {
     dblog($ERR, @_);
     tblog_stop_capture();
-    die ("*** $SCRIPTNAME:\n".
+    die ("*** $ENV{TBLOG_SCRIPTNAME}:\n".
 	 "    $_[0]\n");
 }
 
@@ -356,10 +362,6 @@ sub tbdie( @ ) {
 #       for diagnosis purposed.  If not set simply print the results to
 #       STDERR.  Defaults to true unless the "session" parameter is also
 #       given, in which case default to false.
-#
-# Format of the result:
-#   <seq>: <script name>: <error msg>
-# for each relevent error
 #
 # To retrieve the results from the database:
 #   select ... where session = <Session ID> AND type = 'thecause' form log
@@ -392,11 +394,11 @@ sub tblog_find_error ( ;$$ ) {
 	my %lookup = (0 => $root);
 	my @log;
 	
-	my $query_result = DBQueryFatal "select seq,parent,invocation,priority,mesg,scripts.name from log natural join scripts where session = $session and priority <= $NOTICE order by seq";
+	my $query_result = DBQueryFatal "select seq,parent,invocation,sublevel,priority,mesg,script_name,type from log natural join scripts where session = $session and priority <= $NOTICE order by seq";
 	
 	for (my $i = 0; $i < $query_result->num_rows; $i++) {
 	    
-	    my ($seq, $parent, $invocation, $priority, $mesg, $script) 
+	    my ($seq, $parent, $invocation, $sublevel, $priority, $mesg, $script, $type) 
 		= $query_result->fetchrow;
 	    
 	    if (not exists $lookup{$invocation}) {
@@ -414,10 +416,50 @@ sub tblog_find_error ( ;$$ ) {
 	    
 	    push @{$lookup{$invocation}{log}}, {seq => $seq, 
 						invocation=>$invocation, 
-						priority => $priority, 
+						sublevel=> $sublevel,
+						priority => $priority,
+						type => $type,
 						mesg => $mesg};
 	    
 	}
+
+	my $handle_sublevels;
+	$handle_sublevels = sub {
+
+	    my ($tree) = @_;
+
+	    my $log = $tree->{log};
+	    return unless defined $log;
+	    
+	    for (my $i = 0; $i < @$log; $i++) {
+		
+		local $_ = $log->[$i];
+
+		if (exists $_->{sublevel} && $_->{sublevel} > 0) {
+
+		    my @sublog = ($_);
+		    my $j = $i + 1;
+		    while ($j < @$log && $log->[$j]->{sublevel} > 0) {
+			push @sublog, $log->[$j];
+			$j++;
+		    }
+		    my $repl = {
+			child => {log => [@sublog]}
+		    };
+		    splice(@$log, $i, $j - $i, $repl);
+		    $handle_sublevels->($repl)
+
+		} elsif (exists $_->{child}) {
+
+		    $handle_sublevels->($_->{child});
+
+		}
+	    }
+
+	};
+
+	$handle_sublevels->($root);
+
 
 	#
 	# Now find the relevant errors.
@@ -429,6 +471,7 @@ sub tblog_find_error ( ;$$ ) {
 	    my ($tree) = @_;
 
 	    my @posib_errs;
+	    my @extra_info;
 
 	    foreach (reverse @{$tree->{log}}) {
 
@@ -436,12 +479,18 @@ sub tblog_find_error ( ;$$ ) {
 		    
 		    my @errs = $find_relevant->($_->{child});
 		    if (@errs) {
-			return @errs;
+			return (reverse(@extra_info),@errs);
 		    } 
 		    
 		} elsif ($_->{priority} <= $ERR) {
 		    
 		    push @posib_errs, $_;
+
+		    if ($_->{type} eq 'summary') {
+			last;
+		    } elsif ($_->{type} eq 'extra') {
+			push @extra_info, $_;
+		    }
 		    
 		}
 		
@@ -458,8 +507,15 @@ sub tblog_find_error ( ;$$ ) {
 	
 	my $error = '';
 	
+	my $prev = undef;
 	foreach (@relevant) {
-	    $error .= "$_->{seq}: $lookup{$_->{invocation}}->{script}: $_->{mesg}\n";
+	    $error .= "\n"
+		if (defined $prev && $prev->{invocation} != $_->{invocation});
+	    $error .= wrap('','',
+			   $_->{mesg}, 
+			   "($lookup{$_->{invocation}}->{script})",
+			   "\n");
+	    $prev = $_;
 	}
 	$error = "No clue as to what went wrong!\n" unless length $error > 0;
 	
@@ -484,7 +540,7 @@ sub tblog_find_error ( ;$$ ) {
 		       "Experiment: $ENV{TBLOG_PIDX}\n".
 		       "User: $ENV{TBLOG_UID}\n".
 		       "Session: $ENV{TBLOG_SESSION}\n".
-		       "Script: $SCRIPTNAME\n".
+		       "Script: $ENV{TBLOG_SCRIPTNAME}\n".
 		       "\n".
 		       "$err\n")};
 	if ($store) {
@@ -612,6 +668,3 @@ END {
 }
 
 1;
-
-
-
