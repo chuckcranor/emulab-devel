@@ -2893,6 +2893,88 @@ last_net_act,last_cpu_act,last_ext_act);
        PRIMARY KEY  (node_id)
      ) TYPE=MyISAM;
 
+4.19: Infrastructure for disk state saving.  Add imageid and imagepid
+      fields to partitions table to track what image is loaded on the disk
+      and savedisk field in experiments table.
+
+      alter table partitions add imageid varchar(45) default NULL \
+             after osid; 
+      alter table partitions add imagepid varchar(12) NOT NULL default '' \
+             after imageid; 
+      alter table experiments add savedisk tinyint(1) NOT NULL default 0 \
+             after delay_capacity;	
+
+4.20: Add more digits to display when retrieving the lossrate from
+      virt_lans.
+
+     alter table virt_lans change lossrate lossrate float(10,5) default NULL;
+     alter table virt_lans change rlossrate rlossrate float(10,5) default NULL;
+
+4.21: Add a slot to nodes table to be used for reserving a node for
+      use in the emulab-ops project only, so that we can more easily take
+      nodes out of the general pool, but still be able to use them.
+      This slot actually takes a pid, so we could potentially use it more
+      generally for reserving nodes to particular projects, but I am
+      not sure that is the best approach yet.
+
+      alter table nodes add reserved_pid varchar(12) default NULL \
+                  after destination_orientation;
+
+4.22: Experimental archiving code. Sure to change!
+
+        CREATE TABLE archive_tags (
+          idx int(10) unsigned NOT NULL auto_increment,
+          tag varchar(64) NOT NULL default '',
+          archive_idx int(10) unsigned NOT NULL default '0',
+          date_created int(10) unsigned NOT NULL default '0',
+          PRIMARY KEY (idx),
+          UNIQUE KEY (tag,archive_idx)
+        ) TYPE=MyISAM;
+        
+        CREATE TABLE archive_views (
+          view varchar(64) NOT NULL default '',
+          archive_idx int(10) unsigned NOT NULL default '0',
+          current_tag varchar(64) NOT NULL default '',
+          previous_tag varchar(64) default NULL,
+          date_created int(10) unsigned NOT NULL default '0',
+          PRIMARY KEY  (view,archive_idx)
+        ) TYPE=MyISAM;
+        
+        CREATE TABLE archives (
+          idx int(10) unsigned NOT NULL auto_increment,
+          directory tinytext,
+          date_created int(10) unsigned NOT NULL default '0',
+          PRIMARY KEY  (idx)
+        ) TYPE=MyISAM;
+        
+        alter table experiment_stats add
+             archive_idx int(10) unsigned default NULL
+             after security_level;
+        
+        alter table experiment_resources add
+             archive_tag varchar(32) NOT NULL default ''
+             after delay_capacity;
+
+4.23: [TENTATIVE]
+      Add tables to store the set of files accessed by an experiment.
+
+	CREATE TABLE fs_resources (
+	  rsrcidx int(10) unsigned NOT NULL default '0',
+	  fileidx int(11) unsigned NOT NULL default '0',
+	  exptidx int(10) unsigned NOT NULL default '0',
+	  type enum('r','w','rw','l') default 'r',
+	  size int(11) unsigned default '0',
+	  PRIMARY KEY  (rsrcidx,fileidx),
+	  KEY rsrcidx (rsrcidx),
+	  KEY fileidx (fileidx)
+	) TYPE=MyISAM;
+
+	CREATE TABLE accessed_files (
+	  fn text NOT NULL,
+	  idx int(11) unsigned NOT NULL auto_increment,
+	  PRIMARY KEY  (fn(255)),
+	  KEY idx (idx)
+	) TYPE=MyISAM;
 
 ??: Modify tables for the logging subsystem
 
@@ -2906,6 +2988,3 @@ last_net_act,last_cpu_act,last_ext_act);
   alter table scripts change name script_name varchar(24) NOT NULL default '';
 
   alter table priorities change name priority_name varchar(8) NOT NULL;
-
-
-
