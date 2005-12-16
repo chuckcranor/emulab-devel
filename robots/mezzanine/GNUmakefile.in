@@ -1,0 +1,30 @@
+#
+# EMULAB-COPYRIGHT
+# Copyright (c) 2004 University of Utah and the Flux Group.
+# All rights reserved.
+#
+
+SRCDIR		= @srcdir@
+TESTBED_SRCDIR	= @top_srcdir@
+OBJDIR		= ../..
+SUBDIR		= robots/mezzanine
+
+include $(OBJDIR)/Makeconf
+
+SUBDIRS	= rtk2 libfg libmezz mezzanine mezzcal
+
+all:		all-subdirs
+
+include $(TESTBED_SRCDIR)/GNUmakerules
+
+check:		check-subdirs
+install:	install-subdirs
+clean:		clean-subdirs
+
+# How to recursively descend into subdirectories to make general
+# targets such as `all'.
+%.MAKE:
+	@$(MAKE) -C $(dir $@) $(basename $(notdir $@))
+%-subdirs: $(addsuffix /%.MAKE,$(SUBDIRS)) ;
+
+.PHONY:	$(SUBDIRS)

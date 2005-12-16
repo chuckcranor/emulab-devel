@@ -1,0 +1,71 @@
+<?php
+#
+# EMULAB-COPYRIGHT
+# Copyright (c) 2004 University of Utah and the Flux Group.
+# All rights reserved.
+#
+include("defs.php3");
+
+#
+# This script generates the contents of an image. No headers or footers,
+# just spit back an image. 
+#
+
+#
+# Only logged in people at the moment; might open up at some point.
+#
+$uid = GETLOGIN();
+LOGGEDINORDIE($uid);
+$isadmin = ISADMIN($uid);
+
+#
+# Verify arguments.
+# 
+if (!isset($prefix) ||
+    strcmp($prefix, "") == 0) {
+    PAGEARGERROR("You must provide a prefix argument.");
+}
+if (!preg_match("/^floormap[-\w]+$/", $prefix)) {
+    PAGEARGERROR("Invalid prefix argument.");
+}
+$prefix = "/tmp/$prefix";
+
+#
+# Need cleanup "handler" to make sure temp files get deleted! 
+#
+function CLEANUP()
+{
+    global $prefix, $uid;
+
+    #
+    # The backend script (vis/floormap.in) removes all the temp files
+    # with the -c option. Yucky, but file perms and owners make this
+    # the easiest way to do it.
+    # 
+    if (isset($prefix)) {
+	SUEXEC($uid, "nobody", "webfloormap -o $prefix -k ");
+	# This file does belong to the web server.
+	unlink($prefix);
+    }
+    exit();
+}
+register_shutdown_function("CLEANUP");
+
+#
+# Spit the areamap contained in the file out; it is fully formatted and
+# called "floormap".
+#
+if (($fp = fopen("${prefix}.jpg", "r"))) {
+    header("Content-type: image/jpg");
+    fpassthru($fp);
+}
+else {
+    # No Data. Spit back a stub image.
+    header("Content-type: image/gif");
+    readfile("coming-soon-thumb.gif");
+}
+
+#
+# No Footer!
+# 
+?>

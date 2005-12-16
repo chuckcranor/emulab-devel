@@ -1,0 +1,44 @@
+#!/bin/sh
+#
+# EMULAB-COPYRIGHT
+# Copyright (c) 2000-2002, 2004 University of Utah and the Flux Group.
+# All rights reserved.
+#
+. /etc/emulab/paths.sh
+
+NODETYPE=`${BINDIR}/nodetype`
+
+case "$1" in
+	start)
+	case "$NODETYPE" in
+	    pc850)
+		#
+		# Nothing special to do
+		#
+		;;
+	    *)
+	    	#
+		# Not supported
+		#
+		echo "Health monitoring not supported on nodetype: $NODETYPE"
+		exit 1
+		;;
+	esac
+
+		[ -x ${BINDIR}/healthd ] \
+                && ${BINDIR}/healthd -f ${BINDIR}/healthd.conf -S -q -p boss 180 \
+                && echo -n ' healthd'
+		;;
+	stop)
+		/usr/bin/killall healthd > /dev/null 2>&1 && echo -n ' healthd'
+		;;
+	reload)
+		/usr/bin/killall -HUP healthd > /dev/null 2>&1 && echo -n ' healthd'
+		;;
+	*)
+		echo ""
+		echo "Usage: `basename $0` { start | stop | reload }"
+		echo ""
+		exit 1
+		;;
+esac

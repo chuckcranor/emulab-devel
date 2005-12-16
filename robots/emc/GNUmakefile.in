@@ -1,0 +1,55 @@
+#
+# EMULAB-COPYRIGHT
+# Copyright (c) 2004, 2005 University of Utah and the Flux Group.
+# All rights reserved.
+#
+
+SRCDIR		= @srcdir@
+TESTBED_SRCDIR	= @top_srcdir@
+OBJDIR		= ../..
+SUBDIR		= robots/emc
+
+include $(OBJDIR)/Makeconf
+
+PROGS = locpiper emcd
+TESTS = test_emcd.sh
+
+all: $(PROGS)
+client client-install:
+
+include $(TESTBED_SRCDIR)/GNUmakerules
+
+OBJS		= emcd.o robot_list.o
+CFLAGS	       += -O -g -Wall -I${OBJDIR} -I/usr/local/include
+CFLAGS	       += -I${SRCDIR}/../mtp -I../mtp -I${SRCDIR}/../../event/lib
+CFLAGS	       += -I${SRCDIR}/../../lib/libtb
+CFLAGS	       += `$(ELVIN_CONFIG) --cflags vin4c`
+LDFLAGS		= -L../mtp -L${OBJDIR}/lib/libtb -L${OBJDIR}/event/lib
+
+LIBS	 += -levent -lcrypto -lmtp -ltb
+LIBS     += `$(ELVIN_CONFIG) --libs vin4c`
+
+test_emcd.sh: emcd
+
+emcd: $(OBJS) ../mtp/libmtp.a emcd.h ../mtp/mtp_xdr.h ../mtp/mtp.h
+	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(OBJS) $(LIBS)
+
+install: all
+	-mkdir -p $(INSTALL_DIR)/opsdir/sbin
+	$(INSTALL_PROGRAM) emcd $(INSTALL_DIR)/opsdir/sbin/emcd
+	$(INSTALL_PROGRAM) locpiper $(INSTALL_SBINDIR)/locpiper
+	@echo "Don't forget to do a post-install as root"
+
+post-install: 
+	chmod 775 $(INSTALL_SBINDIR)
+	chown root $(INSTALL_SBINDIR)/locpiper
+	chmod u+s $(INSTALL_SBINDIR)/locpiper
+
+control-install: all
+	-mkdir -p $(INSTALL_DIR)/sbin
+	$(INSTALL_PROGRAM) emcd $(INSTALL_DIR)/sbin/emcd
+
+boss-install: install
+
+clean:
+	rm -f *.o

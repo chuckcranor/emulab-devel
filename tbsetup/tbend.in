@@ -1,0 +1,85 @@
+#!/usr/bin/perl -w
+
+#
+# EMULAB-COPYRIGHT
+# Copyright (c) 2000-2003 University of Utah and the Flux Group.
+# All rights reserved.
+#
+
+use English;
+
+# tbend
+
+# This is the fourth and final program in the
+# tbprerun/tbswapin/tbswapout/.../tbend sequences.  It's purpose is to
+# reverse what tbprerun did.  I.e. clear the virt_nodes and virt_lans
+# tables.
+sub usage()
+{
+    print STDERR "Usage: $0 [-force] pid eid\n";
+    exit(-1);
+}
+
+#
+# Configure variables
+#
+my $TBROOT   = "@prefix@";
+
+# Untaint the path
+$ENV{'PATH'} = "/usr/bin:$TBROOT/libexec:$TBROOT/libexec/ns2ir" . 
+    ":$TBROOT/libexec/vis:$TBROOT/sbin:$TBROOT/bin";
+
+#
+# Testbed Support libraries
+#
+use lib "@prefix@/lib";
+use libdb;
+use libtestbed;
+require exitonwarn; # exitonwarn isn't really a module, so just require it
+
+#
+# Turn off line buffering on output
+#
+$| = 1;
+
+my $force  = 0;
+my $errors = 0;
+my $state;
+
+while ($#ARGV > 1) {
+    $arg = shift;
+    if ($arg eq "-force") {
+	$force = 1;
+    } else {
+	usage();
+    }
+}
+if ($#ARGV < 1) {
+    usage();
+}
+my ($pid,$eid) = @ARGV;
+
+print "Beginning cleanup for $pid/$eid. " . TBTimeStamp() . "\n";
+
+if (! ($state = ExpState($pid, $eid))) {
+    die("*** $0:\n".
+	"    No such experiment $pid/$eid\n");
+}
+# Sanity check the state.
+if (!$force && $state ne EXPTSTATE_TERMINATING) {
+    die("*** $0:\n".
+	"    Experiment is in the wrong state: $state.\n");
+}
+
+print "Clearing out virtual state.\n";
+$errors += TBExptRemoveVirtualState( $pid, $eid );
+
+# This will kill a running prerender.
+print "Removing visualization data...\n";
+system("prerender -r $pid $eid");
+
+print "Cleanup finished! " . TBTimeStamp() . "\n";
+
+# We exit with whether we had errors or not.
+exit $errors;
+

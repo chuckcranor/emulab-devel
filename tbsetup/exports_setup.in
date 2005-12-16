@@ -1,0 +1,419 @@
+#!/usr/bin/perl -wT
+
+#
+# EMULAB-COPYRIGHT
+# Copyright (c) 2000-2005 University of Utah and the Flux Group.
+# All rights reserved.
+#
+
+use English;
+
+#
+# Create an /etc/exports.tail file based on current reserved table and project
+# members. Fire that tail over to the fileserver where it is concatenated with
+# the head file to become the new /etc/exports
+#
+# This script always does the right thing, so it does not matter who calls it. 
+#
+# usage: exports_setup
+#
+
+#
+# Function phototypes
+#
+
+sub fsinit();
+sub fsof($);
+
+#
+# Configure variables
+#
+my $TB		= "@prefix@";
+my $TBOPS       = "@TBOPSEMAIL@";
+my $TESTMODE    = @TESTMODE@;
+my $FSNODE      = "@FSNODE@";
+my $projdir     = "@FSDIR_PROJ@";
+my $usersdir    = "@FSDIR_USERS@";
+my $groupdir    = "@FSDIR_GROUPS@";
+my $DISABLED	= "@DISABLE_EXPORTS_SETUP@";
+my $WINSUPPORT  = @WINSUPPORT@;
+
+# Note no -n option. We redirect stdin from the new exports file below.
+my $SSH		= "$TB/bin/sshtb -l root -host $FSNODE";
+my $PROG	= "$TB/sbin/exports_setup.proxy";
+my $exportstail = "/var/tmp/exports.tail";
+my $smbconftail = "/var/tmp/smbconf.tail";
+my $dbg		= 1;
+my @row; 
+
+# For determining file server mountpoints (XXX BSD specific)
+my $MOUNTPROG	= "/sbin/mount";
+my $EXPORT_PAT	= q(on ([\S]+)\s\(.*NFS exported.*\));
+
+#
+# Testbed doesn't support changing exports file
+#
+if ($DISABLED) {
+    exit(0);
+}
+
+#
+# We don't want to run this script unless its the real version.
+#
+if ($EUID != 0) {
+    die("*** $0:\n".
+	"    Must be root! Maybe its a development version?\n");
+}
+# XXX Hacky!
+if (0 && $TB ne "/usr/testbed") {
+    print STDERR "*** $0:\n".
+	         "    Wrong version. Maybe its a development version?\n";
+    #
+    # Let experiment continue setting up.
+    # 
+    exit(0);
+}
+
+# un-taint path
+$ENV{'PATH'} = '/bin:/usr/bin:/usr/sbin:/usr/local/bin';
+delete @ENV{'IFS', 'CDPATH', 'ENV', 'BASH_ENV'};
+
+#
+# Turn off line buffering on output
+#
+$| = 1;
+
+#
+# Testbed Support libraries
+# 
+use lib "@prefix@/lib";
+use libdb;
+use libtestbed;
+
+my $PROJROOT  = PROJROOT();
+my $GROUPROOT = GROUPROOT();
+my $USERROOT  = USERROOT();
+
+#
+# We need to serialize this script to avoid a trashed map file.
+#
+if (!$TESTMODE) {
+    if ((my $locked = TBScriptLock("exports", 1)) != TBSCRIPTLOCK_OKAY()) {
+	exit(0)
+	    if ($locked == TBSCRIPTLOCK_IGNORE);
+	fatal("Could not get the lock after a long time!\n");
+    }
+}
+
+#
+# We stick the new map entries into the tail file. First zero it out.
+#
+if (!$TESTMODE) {
+  open(MAP, ">$exportstail") || fatal("Couldn't open $exportstail\n");
+  if ($WINSUPPORT) {
+      open(SMBMAP, ">$smbconftail") || fatal("Couldn't open $smbconftail\n");
+  }
+} else {
+  open(MAP, ">/dev/null") || fatal("Couldn't open /dev/null\n");
+  if ($WINSUPPORT) {
+      open(SMBMAP, ">/dev/null") || fatal("Couldn't open /dev/null\n");
+  }
+}
+
+my $maphdr = 
+    "\n".
+    "#\n".
+    "# DO NOT EDIT below this point. Auto generated entries!\n".
+    "#\n".
+    "\n";
+
+print MAP $maphdr;
+if ($WINSUPPORT) {
+    print SMBMAP $maphdr;
+}
+
+#
+# First gather up all the nodes that are reserved and the required info.
+# Order by pid,gid first so that they're all grouped together and we avoid
+# extra db queries.
+#
+# VIRTNODE HACK: Virtual nodes are special, so do not export. (isvirtnode).
+#
+$nodes_result =
+    DBQueryFatal("select r.node_id,r.pid,r.eid,e.gid,i.IP from reserved as r ".
+		 "left join experiments as e on r.pid=e.pid and r.eid=e.eid ".
+		 "left join nodes on r.node_id=nodes.node_id ".
+		 "left join node_types on node_types.type=nodes.type ".
+		 "left join interfaces as i on r.node_id=i.node_id ".
+		 " where i.IP!='NULL' and ".
+		 "       i.role='" . TBDB_IFACEROLE_CONTROL() . "' ".
+		 "       and nodes.role='testnode' ".
+		 "       and node_types.isvirtnode=0 ".
+		 "       and node_types.isremotenode=0 ".
+		 "order by r.pid,e.gid,r.eid,nodes.priority");
+
+my %ipgroups    = ();
+my %globalsmbshares   = ();
+my %lastfslist  = ();
+my @lastsmbshares = ();
+my $lastpid     = "";
+my $lastgid     = "";
+
+my @mountpoints = fsinit();
+
+# For each node:
+#	determine the list of directories accessible
+#	split the list into sublists based on filesystems
+#	  (i.e., all directories in the same FS are in the same sublist)
+#	add the node to each sublist
+#
+# Note that we could do this per experiment rather than per node,
+# adding all nodes from an experiment to the sublists created.
+while (@row = $nodes_result->fetchrow_array) {
+    my $node_id = $row[0];
+    my $pid     = $row[1];
+    my $eid     = $row[2];
+    my $gid     = $row[3];
+    my $ip      = $row[4];
+    my %fslist = ();
+    my @dirlist = ();
+    my @smbshares = ();
+
+    # Sanity check - don't try this if any of the above are not defined - we
+    # may end up with a bad line in exports
+    if ((!defined($node_id)) || (!defined($pid)) || (!defined($eid)) ||
+        (!defined($gid)) || (!defined($ip))) {
+        print "WARNING: exports_setup: Skipping database row with undefined values\n";
+	next;
+    }
+
+    if ($lastpid eq $pid && $lastgid eq $gid) {
+
+	# If this is for the same proj and group again, don't requery the db 
+	# and don't recompute everything.
+	%fslist    = %lastfslist;
+        @smbshares = @lastsmbshares;
+
+    } else {
+
+	$lastpid=$pid;
+	$lastgid=$gid;
+
+	# Construct a list of directories accessible from this node.
+	# First the project and group directories.
+	# XXX needs to be fixed for shared experiments?
+	if (-d "$PROJROOT/$pid") {
+	    push(@dirlist, "$projdir/$pid");
+            push(@smbshares, ["proj-$pid", "$projdir/$pid"]);
+	}
+	else {
+	    print STDERR "*** exports_setup: $PROJROOT/$pid does not exist!\n";
+	}
+	
+	if ($gid ne $pid) {
+	    if (-d "$GROUPROOT/$pid/$gid") {
+		push(@dirlist, "$groupdir/$pid/$gid");
+                push(@smbshares, ["${pid}-${gid}", "$groupdir/$pid/$gid"]);
+	    }
+	    else {
+		print STDERR "*** exports_setup: ".
+		    "$GROUPROOT/$pid/$gid does not exist!\n";
+	    }
+	}
+
+	# Determine the users that can access this node, and add those
+	# users' directories to the list.
+	# XXX needs to be fixed for shared experiments?
+	$users_result =
+	    DBQueryFatal("select distinct g.uid from group_membership as g ".
+			 "left join users as u on u.uid=g.uid ".
+			 "where g.pid='$pid' and g.gid='$gid' and ".
+			 "      (g.trust!='none' and ".
+			 "       u.webonly=0 and ".
+			 "       u.status='" . USERSTATUS_ACTIVE() . "')");
+
+	while (@usersrow = $users_result->fetchrow_array) {
+	    my $uid = $usersrow[0];
+
+	    if (-d "$USERROOT/$uid") {
+		push(@dirlist, "$usersdir/$uid");
+		push(@smbshares, [$uid, "$usersdir/$uid"]);
+	    }
+	    else {
+		print STDERR "*** exports_setup: ".
+		    "$USERROOT/$uid does not exist!\n";
+	    }
+	}
+
+	# Build up filesystem sub-lists.
+	# Iterate through directory list dividing it according to filesystem.
+	foreach my $dir ( @dirlist ) {
+	    my $fs = fsof($dir);
+
+	    if (! defined($fslist{$fs})) {
+		$fslist{$fs} = [ $dir ];
+	    }
+	    else {
+		push(@{ $fslist{$fs} }, $dir);
+	    }
+
+	}
+
+	%lastfslist    = %fslist;
+        @lastsmbshares = @smbshares;
+    }
+
+    # For each FS directory list, create a hash key out of its directory list.
+    foreach my $fs ( keys(%fslist) ) {
+	#
+	# Convert dirlist to a string and use that as a hash index to group
+	# IPs together with the same set of mounts.
+	#
+	my $str = join(" ", sort(@{ $fslist{$fs} }));
+
+	if (! defined($ipgroups{$str})) {
+	    $ipgroups{$str} = [ $ip ];
+	}
+	else {
+	    push(@{ $ipgroups{$str} }, $ip);
+	}
+    }
+
+    # Build up Samba share permissions hash
+    if ($WINSUPPORT) {
+        foreach my $shareptr ( @smbshares ) {
+            my ($share, $path) = @{$shareptr};
+            if (! defined($globalsmbshares{$share}->{iplist})) {
+                $globalsmbshares{$share}->{path}   = $path;
+                $globalsmbshares{$share}->{iplist} = [ $ip ];
+            }
+            else {
+                # Make sure there are no share name collisions first!
+                if ($globalsmbshares{$share}->{path} ne $path) {
+                    fatal("Share name collision!\n".
+                          "sharename:     $share\n".
+                          "original path: $globalsmbshares{$share}->{path}\n".
+                          "new path:      $path\n");
+                }
+                push(@{ $globalsmbshares{$share}->{iplist} }, $ip);
+            }
+        }
+    }
+}
+
+#
+# Now spit out each group!
+#
+foreach my $str ( keys(%ipgroups) ) {
+    my @iplist = @{ $ipgroups{$str} };    
+
+    print MAP "$str -maproot=root @iplist\n";
+}
+
+print MAP "\n";
+close(MAP);
+
+#
+# Spit out smb shares!
+#
+if ($WINSUPPORT) {
+    foreach my $share ( keys(%globalsmbshares) ) {
+        my @iplist = @{ $globalsmbshares{$share}->{iplist} };
+        my $path   = $globalsmbshares{$share}->{path};
+
+        print SMBMAP "[$share]\n";
+        print SMBMAP "\tpath        = $path\n";
+        print SMBMAP "\tbrowsable   = no\n";
+        print SMBMAP "\twritable    = yes\n";
+        print SMBMAP "\thosts allow = @iplist\n\n";
+    }
+
+    print SMBMAP "\n";
+    close(SMBMAP);
+}
+
+#
+# Fire the new tail file over to the fileserver to finish. We cat the file
+# right into it.
+#
+if (!$TESTMODE) {
+  $UID = 0;
+  #
+  # Temp Hack! Save a copy of the exports file for debugging.
+  #
+  if ($dbg) {
+      my $backup = "$TB/log/exports/" . TBDateTimeFSSafe();
+      system("cp $exportstail $backup");
+      if ($WINSUPPORT) {
+          system("cp $smbconftail $backup");
+      }
+  }
+
+  # First do the NFS exports
+  system("$SSH $PROG < $exportstail") == 0 or
+    fatal("Failed: $SSH $PROG < $exportstail: $?");
+  unlink("$exportstail");
+
+  # Next the SMB shares
+  if ($WINSUPPORT) {
+      system("$SSH $PROG -S < $smbconftail") == 0 or
+          fatal("Failed: $SSH $PROG < $smbconftail: $?");
+      unlink("$smbconftail");
+  }
+
+  #
+  # Release the lock!
+  #
+  TBScriptUnlock();
+}
+
+exit(0);
+
+sub fatal {
+    local($msg) = $_[0];
+
+    TBScriptUnlock()
+	if (!$TESTMODE);
+    
+    SENDMAIL($TBOPS, "Exports Setup Failed", $msg);
+    die($msg);
+}
+
+#
+# Get mount info from the FS node and use that to determine actual mount
+# points for exported filesystems.  We generate a list of mount points from
+# longest to shortest so that we will match the most specific one in fsof.
+#
+sub fsinit() {
+    my @rawmounts;
+
+    my $saveuid = $UID;
+    $UID = 0;
+    my $mountinfo = `$SSH $MOUNTPROG`;
+    $UID = $saveuid;
+
+    foreach my $mount (split('\n', $mountinfo)) {
+	if ($mount =~ /$EXPORT_PAT/) {
+	    push(@rawmounts, $1);
+	}
+    }
+
+    sub revlen { length($b) <=> length($a) };
+    return sort revlen @rawmounts;
+}
+
+#
+# Return a unique (per-FS) string identifying the filesystem of
+# the given path.
+#
+sub fsof($) {
+    my($path) = @_;
+
+    foreach my $mount (@mountpoints) {
+	if ($path =~ /^$mount/) {
+	    return $mount;
+	}
+    }
+    print "WARNING: exports_setup: could not find FS for $path\n";
+    return "";
+}

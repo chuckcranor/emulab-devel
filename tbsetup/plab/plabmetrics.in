@@ -1,0 +1,284 @@
+#!/usr/bin/perl -w
+#
+# EMULAB-COPYRIGHT
+# Copyright (c) 2000-2004 University of Utah and the Flux Group.
+# All rights reserved.
+#
+use English;
+use Getopt::Std;
+use XML::Parser;
+
+#
+# Drift to allow between our clock and the gmond nodes
+#
+my $STALESLOP = 1 * 60;
+
+#
+# Age (in seconds) at which we consider metric data stale
+# Configured via site variable.
+#
+my $STALEAGE;
+
+sub usage()
+{
+    print STDOUT
+	"Usage: plabmetrics [-d] [-n]\n";
+    exit(-1);
+}
+
+sub InsertMetrics($%);
+
+my $optlist = "dn";
+my $debug   = 0;
+my $impotent= 0;
+my $mailit  = 1;
+
+#
+# Only real root can call this.
+# 
+if ($UID != 0) {
+    print STDERR "You must be root to run this script!\n";
+    exit(-1);
+}
+
+#
+# Configure variables
+#
+my $TB		= "@prefix@";
+my $TBOPS       = "@TBOPSEMAIL@";
+
+#
+# Turn off line buffering on output
+#
+$| = 1;
+
+#
+# Untaint the path
+# 
+$ENV{'PATH'} = '/bin:/usr/bin';
+delete @ENV{'IFS', 'CDPATH', 'ENV', 'BASH_ENV'};
+
+#
+# Testbed Support libraries
+#
+use lib "@prefix@/lib";
+use libdb;
+use libtestbed;
+
+# Locals
+my $LOADMETRIC;
+my $MAXLOAD;
+my $MINDISK;
+
+my $metricsage;
+my %metrics;
+
+# Be careful not to exit on transient error
+$libdb::DBQUERY_MAXTRIES = 5;
+
+#
+# Parse command arguments. Once we return from getopts, all that should
+# left are the required arguments.
+#
+%options = ();
+if (! getopts($optlist, \%options)) {
+    usage();
+}
+if (@ARGV) {
+    usage();
+}
+if (defined($options{"d"})) {
+    $debug = 1;
+}
+if (defined($options{"n"})) {
+    $impotent = 1;
+}
+
+#
+# Set default values
+#
+if (TBSiteVarExists("plab/load_metric")) {
+    $LOADMETRIC = TBGetSiteVar("plab/load_metric");
+    if ($LOADMETRIC !~ /^load_(one|five|fifteen)$/) {
+	undef $LOADMETRIC;
+    }
+    else {
+	if ($LOADMETRIC eq "load_one") {
+	    $LOADMETRIC = "load_1min";
+	}
+	if ($LOADMETRIC eq "load_five") {
+	    $LOADMETRIC = "load_5min";
+	}
+	if ($LOADMETRIC eq "load_fifteen") {
+	    $LOADMETRIC = "load_15min";
+	}
+    }
+}
+if (!defined($LOADMETRIC)) {
+    $LOADMETRIC = "load_15min";
+}
+
+if (TBSiteVarExists("plab/max_load")) {
+    $MAXLOAD = TBGetSiteVar("plab/max_load");
+    $MAXLOAD = 0.0 if $MAXLOAD <= 0.0;
+    $MAXLOAD = 1000.0 if $MAXLOAD > 1000.0;
+} else {
+    $MAXLOAD = 5.0;
+}
+
+if (TBSiteVarExists("plab/min_disk")) {
+    $MINDISK = TBGetSiteVar("plab/min_disk");
+    $MINDISK = 0 if $MINDISK < 0;
+    $MINDISK = 100 if $MINDISK > 100;
+} else {
+    $MINDISK = 10;
+}
+
+if (TBSiteVarExists("plab/stale_age")) {
+    $STALEAGE = TBGetSiteVar("plab/stale_age");
+    $STALEAGE = 0 if $STALEAGE < 0;
+} else {
+    $STALEAGE = 60;
+}
+$STALEAGE *= 60;
+
+print "\n=== plabmetrics ".
+    "(metric=$LOADMETRIC, maxload=$MAXLOAD, mindisk=$MINDISK) ".
+    "running at " . `date`
+    if $debug;
+
+#
+# Grab the node list from the DB in one query, which we use later to
+# map from the IP we get from the XML output, to our node_id. 
+#
+my $query_result =
+    DBQueryFatal("select n.node_id as plabnode, nr.*, ".
+		 "       unix_timestamp()-unix_timestamp(nr.status_timestamp) ".
+		 "       as metricsage ".
+		 " from nodes as n ".
+		 "left join node_types as nt on n.type=nt.type ".
+		 "left join node_rusage as nr on nr.node_id=n.node_id ".
+		 "where nt.isremotenode=1 and nt.isvirtnode=0 ".
+    		 "and nt.class='pcplabphys'");
+
+#
+# Loop through and insert metrics.
+# 
+while (my %row = $query_result->fetchhash()) {
+    my $nodeid = $row{'plabnode'};
+
+    InsertMetrics($nodeid, %row);
+}
+exit(0);
+
+#
+# Insert the metrics we care about. Called for each node.
+#
+sub InsertMetrics($%)
+{
+    my ($nodeid)   = shift;
+    my (%metrics)  = @_;
+    my $metricsage = $metrics{'metricsage'};
+    my $localdebug = $debug;
+    my $scaled;
+    my $load;
+    my $disk;
+
+    #
+    # See if we got any metric data.  If so, then check for stale data.
+    # In the case where metric data appears to be in the future,
+    # it may be clock skew, so allow a little slop.
+    #
+    if (!defined($metricsage)) {
+	print "WARNING: $nodeid: no metric data, ignoring\n"
+	    if $localdebug;
+	$metrics{$LOADMETRIC} = 999;
+	$localdebug = 0;
+    } elsif ($metricsage < 0) {
+	if (-$metricsage > $STALESLOP) {
+	    print "WARNING: $nodeid: metric data in the future, ignoring\n"
+		if $localdebug;
+	    $metrics{$LOADMETRIC} = 999;
+	}
+    } elsif ($STALEAGE == 0) {
+	if ($metricsage > 4 * 60 * 60) {
+	    print "WARNING: $nodeid: metric data older than 4 hours, ".
+		"using anyway\n"
+		if $localdebug;
+	}
+    } elsif ($metricsage > $STALEAGE) {
+	print "WARNING: $nodeid: stale metric data, ignoring\n"
+	    if $localdebug;
+	$metrics{$LOADMETRIC} = 999;
+    }
+
+    #
+    # Make sure all the metrics we might need are defined
+    #
+    if (!defined($metrics{$LOADMETRIC})) {
+	print "WARNING: $nodeid: no $LOADMETRIC metric\n"
+	    if $localdebug;
+	$metrics{$LOADMETRIC} = 999;
+    }
+    if (!defined($metrics{disk_used})) {
+	print "WARNING: $nodeid: no disk_used metrics, assuming enough\n"
+	    if $localdebug;
+	$metrics{disk_used} = 0;
+    }
+
+    #
+    # Load must be under MAXLOAD, favor those with lower load
+    #
+    $load = $metrics{$LOADMETRIC};
+    if ($MAXLOAD == 1000) {
+	$scaled = 0;
+    } else {
+	$scaled = $load / $MAXLOAD;
+    }
+		
+    #
+    # Plab people request that we not start jobs on nodes
+    # with less than a certain amount of available disk space
+    #
+    if ((100.0 - $metrics{disk_used}) >= $MINDISK) {
+	$disk = 0;
+    } else {
+	$disk = 1;
+    }
+
+    if ($debug || $impotent) {
+	print STDERR "$nodeid $load $scaled $disk\n";
+    }
+
+    if (!$impotent) {
+	DBQueryWarn("replace delayed into node_features ".
+		    " (node_id, feature, weight) ".
+		    " values ('$nodeid', '+load', $scaled)");
+	DBQueryWarn("replace delayed into node_features ".
+		    " (node_id, feature, weight) ".
+		    " values ('$nodeid', '+disk', $disk)");
+    }
+}
+
+sub fatal {
+    my $msg = $_[0];
+    my $quiet = (defined($_[1]) ? $_[1] : 0);
+
+    if ($mailit) {
+	SENDMAIL($TBOPS, "plabmetrics Failed", $msg);
+    }
+    print "$msg\n"
+	if $debug;
+
+    die($msg);
+}
+
+sub nonfatal {
+    my $msg = $_[0];
+
+    SENDMAIL($TBOPS, "plabmetrics Failed", $msg);
+    print "Would send mail\n";
+
+    print "$msg\n"
+	if $debug;
+}

@@ -1,0 +1,112 @@
+#!/usr/bin/perl -w
+
+#
+# EMULAB-COPYRIGHT
+# Copyright (c) 2000-2002, 2005 University of Utah and the Flux Group.
+# All rights reserved.
+#
+use Getopt::Std;
+use strict;
+
+use lib "@prefix@/lib";
+use libdb;
+
+#
+# if2port - Given an interface (specified as node[:card]), find the
+# port on the switches that it's connected to. With the -v switch, gives
+# some human-readable information to help in following wires and diagnosing
+# problems.
+#
+
+#
+# IMPORTANT: This file contains some information specific to the Utah
+# Network Testbed! If you want to use it in another enviroment, change
+# the information below (%switches, %cards, %wires)
+
+#
+# Describes the location of each of the switches that nodes may be connected
+# to
+#
+my %switches = ( cisco1 => 'top right', cisco2 => 'bottom right',
+		 cisco3 => 'top left', cisco4 => 'bottom left');
+
+#
+# Description of the location of each chard on the back of a machine.
+# A hash, indexed by node type. Each value is an array reference, ordered
+# by the card order in the database 
+#
+my %cards = ( 'pc600' => [ 'second from left','third from left',
+                          'second from right','rightmost','leftmost' ],
+	      'pc850' => [ 'left port of dual card', 'right port of dual card',
+	      		   'bottom builtin port', 'top builtin port',
+			   'single port card' ] );
+
+# Colors of wires, indexed by wire type
+my %wires = ( Node => 'yellow', Control => 'red', Power => 'green',
+	Serial => 'white' );
+
+# Options: v = verbose, d = debug, m = show mac
+my %opt = ( v => 0, d => 0, m => 0, I => 0);
+
+getopts('vdmI',\%opt);
+$opt{m} = 0 if ($opt{v});
+
+
+if (@ARGV < 1) {
+	exit &usage;
+}
+
+while (my $arg = shift @ARGV) {
+	my ($node,$card) = split /:/,$arg;
+	&debug("Node is $node");
+	&debug("Card is $card") if (defined $card);
+
+	my $query;
+	if ($opt{m} || $opt{I}) {
+	    $query = "SELECT w.node_id1,w.card1,";
+	    $query .= "i.IP,"
+		if ($opt{I});
+	    $query .= "i.mac,"
+		if ($opt{m});
+	    $query .= "w.node_id2,w.card2,w.port2,w.cable,w.len,w.type,n.type".
+		     " FROM wires AS w,nodes AS n,interfaces AS i".
+		     " WHERE w.node_id1=n.node_id AND".
+		     " w.node_id1=i.node_id AND w.card1=i.card";
+	} else {
+	    $query = "SELECT w.node_id1,w.card1,w.node_id2,w.card2,w.port2,".
+		     "w.cable,w.len,w.type,n.type ".
+		     "FROM wires AS w,nodes AS n WHERE w.node_id1=n.node_id";
+	}
+	$query .= " AND node_id1='$node'";
+	if (defined $card) {
+		$query .= " AND card1='$card'";
+	}
+
+	&debug("Sending query $query\n");
+
+	my $result = DBQueryFatal($query);
+
+	if ($opt{v}) {
+		while (my @row = $result->fetchrow) {
+			my $cardinfo = ${$cards{$row[8]}}[$row[1]];
+			my $switchinfo = $switches{$row[2]};
+			my $wireinfo = $wires{$row[7]};
+			print "$row[0] port $row[1] ($cardinfo) connects to $row[2] " .
+				"($switchinfo), module $row[3], port $row[4] via wire #" .
+				"$row[5] (length $row[6], color $wireinfo)\n";
+		}
+	} else {
+		print $result->as_string;
+	}
+}
+
+sub debug { warn @_,"\n" if $opt{d}; }
+
+sub usage {
+	print "Usage: $0 [-vdm] <node | node:if> ... \n";
+	print "-v: Verbose, prose, output\n";
+	print "-d: Enable debugging output\n";
+	print "-m: Show MAC addresses\n";
+	print "-I: Show any assigned IP addresses\n";
+	return -1;
+}

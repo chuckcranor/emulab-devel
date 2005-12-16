@@ -1,0 +1,90 @@
+#
+# EMULAB-COPYRIGHT
+# Copyright (c) 2000-2005 University of Utah and the Flux Group.
+# All rights reserved.
+#
+
+SRCDIR		= @srcdir@
+TESTBED_SRCDIR	= @top_srcdir@
+OBJDIR		= ..
+SUBDIR		= named
+
+ETCDIR          = /etc
+NAMEDB_DIR	= $(ETCDIR)/namedb
+OURDOMAIN       = @OURDOMAIN@
+
+# This is silly. Needs to be done properly.
+TESTBED_NETWORK          = @TESTBED_NETWORK@
+EXTERNAL_TESTBED_NETWORK = @EXTERNAL_TESTBED_NETWORK@
+
+REVERSE_MAPNAME          = \
+		$(shell echo @TESTBED_NETWORK@ | sed -e 's,.0$$,,')
+EXTERNAL_REVERSE_MAPNAME = \
+		$(shell echo @EXTERNAL_TESTBED_NETWORK@ | sed -e 's,.0$$,,')
+
+REVFILES                 = $(REVERSE_MAPNAME).db.head
+ifneq ($(REVERSE_MAPNAME), $(EXTERNAL_REVERSE_MAPNAME))
+    REVFILES            .= $(REVFILES) $(EXTERNAL_REVERSE_MAPNAME).db.head
+endif
+
+BOSSTOKEN       = $(shell echo @BOSSNODE@ | sed -e 's/\..*//')
+USERTOKEN       = $(shell echo @USERNODE@ | sed -e 's/\..*//')
+
+NAMED_FILES	= named.conf.template named_makeconf named_makerev reverse.head \
+		 resolv.conf localhost.rev forward.head named_makeforw \
+		 $(REVFILES) $(OURDOMAIN).db.head $(OURDOMAIN).internal.db.head \
+		 named.conf resolv.conf.ops
+
+include $(OBJDIR)/Makeconf
+
+#
+# Force dependencies on the scripts so that they will be rerun through
+# configure if the .in file is changed.
+# 
+all: $(NAMED_FILES)
+	echo $(REVFILES)
+
+include $(TESTBED_SRCDIR)/GNUmakerules
+
+$(OURDOMAIN).db.head: forward.head named_makeforw
+	perl named_makeforw -external forward.head > $@
+
+$(OURDOMAIN).internal.db.head: forward.head named_makeforw
+	perl named_makeforw -internal forward.head > $@
+
+named.conf:	named.conf.template named_makeconf
+	perl named_makeconf named.conf.template > named.conf
+
+$(REVFILES):	reverse.head named_makerev
+	perl named_makerev reverse.head
+
+# This is not a safe install target after initial install!
+install:
+	echo "Are you sure you want to reinstall the namedb files!"
+
+install-real:	resolv.conf \
+		$(NAMEDB_DIR)/named.conf \
+		$(NAMEDB_DIR)/localhost.rev \
+		$(NAMEDB_DIR)/$(OURDOMAIN).db.head \
+		$(NAMEDB_DIR)/$(OURDOMAIN).internal.db.head \
+		$(addprefix $(NAMEDB_DIR)/reverse/, $(REVFILES))
+	$(INSTALL_DATA) resolv.conf $(ETCDIR)/resolv.conf
+
+clean: 
+	rm -f $(NAMED_FILES)
+
+$(ETCDIR)/%: %
+	@echo "Installing $<"
+	-mkdir -p $(ETCDIR)
+	$(INSTALL) $< $@
+
+$(NAMEDB_DIR)/%: %
+	@echo "Installing $<"
+	-mkdir -p $(NAMEDB_DIR)
+	$(INSTALL) $< $@
+
+$(NAMEDB_DIR)/reverse/%: %
+	@echo "Installing $<"
+	-mkdir -p $(NAMEDB_DIR)/reverse
+	$(INSTALL) $< $@
+

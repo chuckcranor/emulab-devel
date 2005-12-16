@@ -1,0 +1,52 @@
+# New ports collection makefile for: emulab-ops
+# Date created:         28 January 2003
+# Whom:                 ricci@cs.utah.edu
+
+PORTNAME=	emulab-ops
+PORTVERSION=	1.5
+CATEGORIES=	misc
+MASTER_SITES=	#none
+DISTFILES=	#none
+EXTRACT_ONLY=	#none
+COMMENT=	"Meta-port for an emulab ops node"
+
+MAINTAINER=	ricci@cs.utah.edu
+
+#
+# For SWIG, so that it doesn't feel the need to suck in php and apache
+#
+.MAKEFLAGS+=	SWIG_LANGUAGES="perl python tcl"
+
+#
+# For samba, so that it doesn't suck in everything under the sun
+#
+.MAKEFLAGS+=	-DWITHOUT_WINBIND -DWITHOUT_LDAP -DWITHOUT_POPT
+
+#
+# This prevents any ports from trying to run interactively - some, ask silly
+# questions without this option.
+#
+.MAKEFLAGS+=	-DBATCH
+
+LIB_DEPENDS= lthread.2:${PORTSDIR}/devel/linuxthreads \
+	vin4.2:${PORTSDIR}/misc/libelvin \
+	ulsshxmlrpcpp.0:${PORTSDIR}/misc/ulsshxmlrpcpp
+
+RUN_DEPENDS= gmake:${PORTSDIR}/devel/gmake \
+	sudo:${PORTSDIR}/security/sudo \
+	rsync:${PORTSDIR}/net/rsync \
+	otclsh:${PORTSDIR}/lang/otcl \
+	${LOCALBASE}/lib/perl5/site_perl/${PERL_VER}/${PERL_ARCH}/BSD/Resource.pm:${PORTSDIR}/devel/p5-BSD-Resource \
+	${LOCALBASE}/lib/perl5/site_perl/${PERL_VER}/${PERL_ARCH}/Time/HiRes.pm:${PORTSDIR}/devel/p5-Time-HiRes \
+	wget:${PORTSDIR}/ftp/wget \
+	${LOCALBASE}/libexec/elvind:${PORTSDIR}/misc/elvind \
+	${PYTHON_SITELIBDIR}/M2Crypto/ASN1.py:${PORTSDIR}/security/py-m2crypto \
+	smbd:${PORTSDIR}/net/samba3
+
+
+NO_BUILD=	yes
+USE_PYTHON=	yes
+
+do-install:	# empty
+
+.include <bsd.port.mk>

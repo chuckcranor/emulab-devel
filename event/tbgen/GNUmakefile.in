@@ -1,0 +1,75 @@
+#
+# EMULAB-COPYRIGHT
+# Copyright (c) 2000-2005 University of Utah and the Flux Group.
+# All rights reserved.
+#
+
+SRCDIR		= @srcdir@
+TESTBED_SRCDIR	= @top_srcdir@
+OBJDIR		= ../..
+SUBDIR		= event/tbgen
+
+SYSTEM	       := $(shell uname -s)
+PROGRAMS	= tevc
+
+include $(OBJDIR)/Makeconf
+
+all:	$(PROGRAMS)
+
+include $(TESTBED_SRCDIR)/GNUmakerules
+
+LIBTBDIR    = $(OBJDIR)/lib/libtb
+LIBEVENTDIR = ../lib
+
+# Rules to make sure that some libraries we need from other directories get
+# built first
+$(LIBTBDIR)/%.o:
+	@$(MAKE) -C $(LIBTBDIR) $(@F)
+
+$(LIBEVENTDIR)/%.a:
+	@$(MAKE) -C $(LIBEVENTDIR) $(@F)
+
+CFLAGS   += -DDEBUG
+CFLAGS	 += -O -g -Wall
+CFLAGS   += -I. -I${OBJDIR} -I$(SRCDIR)/../lib -I$(TESTBED_SRCDIR)/lib/libtb
+CFLAGS   += `$(ELVIN_CONFIG) --cflags vin4c`
+
+LDFLAGS  += -L$(OBJDIR)/lib -L$(OBJDIR)/lib/libtb -L../lib
+LIBS     += -levent -lcrypto
+LIBS     += `$(ELVIN_CONFIG) --libs vin4c`
+
+ifeq ($(host_cpu),arm)
+else
+LDFLAGS  += -static
+ifeq ($(SYSTEM),Linux)
+NEEDKERB := $(shell nm /usr/lib/libssl.a | grep -q krb; echo $$?)
+ifeq ($(NEEDKERB),0)
+ CFLAGS   += `/usr/kerberos/bin/krb5-config --cflags`
+ LIBS     += `/usr/kerberos/bin/krb5-config --libs krb5`
+endif
+LIBS     += -ldl
+endif
+endif
+
+# Link against some of the object files from libtb, instead of the
+# whole library, since the latter cannot be built on clients (without mysql)
+tevc-debug:	tevc.o $(LIBTBDIR)/log.o $(LIBTBDIR)/tbdefs.o ../lib/libevent.a ../lib/event.h
+	$(CC) $(LDFLAGS) -o $@ tevc.o $(LIBTBDIR)/log.o \
+		$(LIBTBDIR)/tbdefs.o $(LIBS)
+
+install:	$(INSTALL_BINDIR)/tevc \
+		$(INSTALL_DIR)/opsdir/bin/tevc
+
+control-install:	$(INSTALL_BINDIR)/tevc
+
+client: tevc
+client-install: client
+	$(INSTALL_PROGRAM) tevc$(EXE) $(DESTDIR)$(CLIENT_BINDIR)/tevc$(EXE)
+
+clean:
+	rm -f *.o $(PROGRAMS)
+
+$(INSTALL_DIR)/opsdir/bin/%: %
+	@echo "Installing $<"
+	-mkdir -p $(INSTALL_DIR)/opsdir/bin
+	$(INSTALL) $< $@
