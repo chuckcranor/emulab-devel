@@ -37,7 +37,7 @@ char buf[BUFSIZ];
 /* This holds the mapping between links as relevant to the event system,
    and the physical interfaces and pipe numbers
  */
-structlink_map link_map[MAX_LINKS];
+structlink_map *link_map;
 
 /* holds the number of entries in the link_map*/
 int link_index = 0;
@@ -54,9 +54,11 @@ char *myexp  = NULL;
 /* The list of linknames in tuple format, for the event subscription */
 char myobjects[1024];
 
+structlink_map *old_map;
+int old_length;
+
 int debug = 0;
 
-char buf_link [MAX_LINKS][MAX_LINE_LENGTH];
 /************************GLOBALS*****************************************/
 
 
@@ -66,6 +68,20 @@ char buf_link [MAX_LINKS][MAX_LINE_LENGTH];
 /************************* main **************************************
 
  ************************* main **************************************/
+void realloc_map(void)
+{
+  link_map = realloc(link_map, sizeof(structlink_map) * (link_index + 1));
+  if (link_map == NULL) {
+    error("out of memory\n");
+    exit(1);
+  }
+
+  memset(&link_map[link_index], 0, sizeof(structlink_map));
+  if ((link_map[link_index].line = malloc(MAX_LINE_LENGTH)) == NULL) {
+    error("out of memory\n");
+    exit(1);
+  }
+}
 
 int main(int argc, char **argv)
 {
@@ -148,8 +164,9 @@ int main(int argc, char **argv)
     char * temp = NULL;
     char *sep = " \n";
 
-    while(fgets(buf_link[link_index], MAX_LINE_LENGTH, mp)){
-      temp = buf_link[link_index];
+    realloc_map();
+    while(fgets(link_map[link_index].line, MAX_LINE_LENGTH, mp)){
+      temp = link_map[link_index].line;
       link_map[link_index].linkname = strsep(&temp, sep);
       link_map[link_index].linktype = strsep(&temp, sep);
 
@@ -184,7 +201,7 @@ int main(int argc, char **argv)
 		link_map[link_index].linkname, link_map[link_index].vnodes[0]);
 	link_map[link_index].numpipes = 1;
       }
-      
+
       /*
        * Form the comma separated list of linkname for the subscription
        * There are two objects, one for the lan, and one for lan-vnode.
@@ -203,9 +220,12 @@ int main(int argc, char **argv)
 		link_map[link_index].linkvnodes[1]);
       }
       link_index++;
+      realloc_map();
     }
   }
 
+  old_map = link_map;
+  old_length = link_index;
 
   /* close the map-file*/
   fclose(mp);
@@ -370,12 +390,14 @@ void dump_link_map(){
     info("linkstatus = %d \n", link_map[i].stat);
     info("numpipes   = %d \n", link_map[i].numpipes);
     info("islan      = %d \n", link_map[i].islan);
+    info("dest       = %s \n", link_map[i].dest);
 
     for (j = 0; j < link_map[i].numpipes; j++) {
       info("Pipe params:\n");
       info("interface = %s\n", link_map[i].interfaces[j]);
       info("pipe num  = %d\n", link_map[i].pipes[j]);
       info("vnode     = %s\n", link_map[i].vnodes[j]);
+      info("linkvnode = %s\n", link_map[i].linkvnodes[j]);
 
       info("delay = %d, bw = %d plr = %f\n",  link_map[i].params[j].delay,
 	   link_map[i].params[j].bw, link_map[i].params[j].plr);

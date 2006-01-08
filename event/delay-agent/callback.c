@@ -1,6 +1,6 @@
 /*
  * EMULAB-COPYRIGHT
- * Copyright (c) 2000-2003 University of Utah and the Flux Group.
+ * Copyright (c) 2000-2003, 2006 University of Utah and the Flux Group.
  * All rights reserved.
  */
 
@@ -14,19 +14,21 @@
 
 /******************************* INCLUDES **************************/
 #include "main.h"
+#include "systemf.h"
 /******************************* INCLUDES **************************/
 
 
 /******************************* EXTERNS **************************/
-extern structlink_map link_map[MAX_LINKS];
+extern structlink_map *link_map;
 extern int link_index;
+extern structlink_map *old_map;
+extern int old_length;
 extern int s_dummy; 
 extern int debug;
 /******************************* EXTERNS **************************/
 
 
 /********************************FUNCTION DEFS *******************/
-
 
 /*************************** agent_callback **********************
  This function is called from the event system when an event
@@ -42,7 +44,9 @@ void agent_callback(event_handle_t handle,
 
   char objname[MAX_LEN];
   char eventtype[MAX_LEN];
-  int i;
+  char args[BUFSIZ];
+  char *dest;
+  int i, dest_len;
 
     /* get the name of the object, eg. link0 or link1*/
   if(event_notification_get_string(handle,
@@ -59,6 +63,64 @@ void agent_callback(event_handle_t handle,
     error("could not get the eventtype \n");
     return;
   }
+  
+  event_notification_get_arguments(handle,
+				   notification, args, sizeof(args));
+  
+  dest_len = event_arg_get(args, "DEST", &dest);
+
+  if (strcmp(eventtype, TBDB_EVENTTYPE_CLEAR) == 0) {
+    
+    for (i = 0; i < link_index; i++) {
+      int j;
+
+      system("ipfw flush");
+      for (j = 0; j < link_map[i].numpipes; j++) {
+	systemf("ipfw pipe delete %d", link_map[i].pipes[j]);
+      }
+    }
+    link_map = NULL;
+    link_index = 0;
+    return;
+  }
+
+  if (strcmp(eventtype, TBDB_EVENTTYPE_CREATE) == 0) {
+    static int rule_no = 100;
+    extern void dump_link_map();
+    
+    for (i = 0; i < old_length; i++) {
+      struct hostent *he;
+
+      while ((he = gethostent()) != NULL) {
+	realloc_map();
+	link_map[link_index] = old_map[i];
+	link_map[link_index].islan = 0;
+	link_map[link_index].numpipes = 1;
+	inet_ntop(he->h_addrtype,
+		  he->h_addr,
+		  link_map[link_index].dest,
+		  sizeof(link_map[link_index].dest));
+	link_map[link_index].pipes[0] = rule_no;
+
+	if (strcmp(link_map[link_index].dest, "127.0.0.1") == 0)
+	  continue;
+	
+	systemf("ipfw add %d pipe %d ip from any to %s in recv %s",
+		rule_no,
+		rule_no,
+		link_map[link_index].dest,
+		old_map[i].interfaces[0]);
+	systemf("ipfw pipe %d config queue 50", rule_no);
+	
+	link_index += 1;
+	rule_no += 1;
+      }
+      endhostent();
+    }
+
+    dump_link_map();
+    return;
+  }
 
   /*
    * We could be an agent for several nodes on the same lan, so need to
@@ -68,8 +130,13 @@ void agent_callback(event_handle_t handle,
   for(i = 0; i < link_index; i++){
     if(!strcmp(link_map[i].linkname, objname) ||
        !strcmp(link_map[i].linkvnodes[0], objname) ||
-       !strcmp(link_map[i].linkvnodes[1], objname))
-      handle_pipes(objname, eventtype, notification, handle, i);
+       !strcmp(link_map[i].linkvnodes[1], objname)) {
+      if (dest_len < 0 ||
+	  ((strncmp(link_map[i].dest, dest, dest_len) == 0) &&
+	   dest_len == strlen(link_map[i].dest))) {
+	handle_pipes(objname, eventtype, notification, handle, i);
+      }
+    }
   }
 }
 
@@ -705,6 +772,8 @@ int get_new_link_params(int l_index, event_handle_t handle,
 	   error("unrecognized pipe argument\n");
 	   return -1;
 	 }
+       }
+       else if(strcmp(argtype,"DEST")== 0){
        }
        else {
 	 error("unrecognized argument\n");

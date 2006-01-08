@@ -1,6 +1,6 @@
 /*
  * EMULAB-COPYRIGHT
- * Copyright (c) 2000-2003 University of Utah and the Flux Group.
+ * Copyright (c) 2000-2003, 2006 University of Utah and the Flux Group.
  * All rights reserved.
  */
 
@@ -80,7 +80,6 @@
 /**************************DEFINES******************************************/
 
 #define MAX_LINE_LENGTH 512
-#define MAX_LINKS       256 /* Virtual interfaces */
 /**************************DEFINES******************************************/
 
 
@@ -128,12 +127,14 @@ typedef struct {
  */
 
 typedef struct {
+char		  *line;
 char              *linkname; /*link0, link1 etc*/
 int		  islan;  /* 1 if a lan, 0 if a duplex link */
 int		  numpipes;  /* 1 if a simplex pipe, 2 if a duplex pipe */
 char              *interfaces[2];/* fxp0, fxp1 etc*/
 char		  *vnodes[2]; /* nodeA, nodeB*/
 char		  linkvnodes[2][256]; /* link0-nodeA, link0-nodeB*/
+char		  dest[32];
 char              *linktype; /*simplex, duplex */
 int               pipes[2]; /* array of pipe numbers*/
 structpipe_params params[2]; /* params for the two pipes*/
@@ -167,6 +168,7 @@ int  get_new_link_params(int l_index, event_handle_t handle,
 			 int *);
 void dump_link_map();
 int  get_link_info();
+void realloc_map(void);
 /******************************Function prototypes******************************/
 
 #endif /*__AGENT_MAIN_H*/
