@@ -168,8 +168,27 @@ float find_link_resolutions(resolution_vector &resolutions, pvertex pv,
 
   float total_weight = 0;
 
-  // Make sure there's space for at least a few resolutions
-  //resolutions.reserve(1);
+  // Trivial link
+  if (dest_pv == pv) {
+    SDEBUG(cerr << "  trivial link" << endl);
+
+    /*
+     * Sometimes, we might not want to let a vlink be resolved as a
+     * trivial link
+     */
+    if (allow_trivial_links && vlink->allow_trivial) {
+      tb_link_info info(tb_link_info::LINK_TRIVIAL);
+      resolutions.push_back(info);
+      total_weight += LINK_RESOLVE_TRIVIAL;
+    }
+
+    /*
+     * This is to preserve some old behaviour - if we see a trivial link, that's
+     * the only one we consider using. Need to revisit this to see if it's always
+     * desirable.
+     */
+    return total_weight;
+  }
 
   pedge pe;
   // Direct link
@@ -331,7 +350,7 @@ float find_link_resolutions(resolution_vector &resolutions, pvertex pv,
       }
     }
   }
-
+      
   return total_weight;
 
 }
@@ -340,8 +359,7 @@ float find_link_resolutions(resolution_vector &resolutions, pvertex pv,
  * Resolve an individual vlink
  */
 void resolve_link(vvertex vv, pvertex pv, tb_vnode *vnode, tb_pnode *pnode,
-    bool deterministic, hash_set<const tb_vlink*, 
-    hashptr<const tb_vlink*> > &seen_loopback_links, vedge edge) {
+    bool deterministic, vedge edge) {
   tb_vlink *vlink = get(vedge_pmap,edge);
   vvertex dest_vv = target(edge,VG);
 
@@ -377,16 +395,8 @@ void resolve_link(vvertex vv, pvertex pv, tb_vnode *vnode, tb_pnode *pnode,
 
     if (dest_pv == pv) {
       SDEBUG(cerr << "  trivial link" << endl);
-      /*
-       * We have to be careful with 'loopback' links, because we can
-       * see them twice - bail out if this is the second time
-       */
-      if (seen_loopback_links.find(vlink) != seen_loopback_links.end()) {
-        SDEBUG(cerr << "    seen before - skipping" << endl);
-        return;
-      } else {
-        seen_loopback_links.insert(vlink);
-      }
+
+      // XXX!!!!!
       if (allow_trivial_links && vlink->allow_trivial) {
         vlink->link_info.type_used = tb_link_info::LINK_TRIVIAL;
         /*
@@ -508,9 +518,22 @@ void resolve_links(vvertex vv, pvertex pv, tb_vnode *vnode, tb_pnode *pnode,
    */
   voedge_iterator vedge_it,end_vedge_it;
   tie(vedge_it,end_vedge_it) = out_edges(vv,VG);
-  hash_set<const tb_vlink*, hashptr<const tb_vlink*> > seen_loopback_links;
+  hash_set<const tb_vlink*, hashptr<const tb_vlink*> > seen_links;
   for (;vedge_it!=end_vedge_it;++vedge_it) {
-    resolve_link(vv,pv,vnode,pnode,deterministic,seen_loopback_links,*vedge_it);
+    /*
+     * We have to be careful, because we can see loopback links twice, since
+     * both endpoints are on the same vnode and the same pnode. If we've seen
+     * this link before, just go onto the next
+     */
+    // XXX: Seems silly to do this here, then again at the top of resolve_link
+    tb_vlink *vlink = get(vedge_pmap,*vedge_it);
+    if (seen_links.find(vlink) != seen_links.end()) {
+      SDEBUG(cerr << "    seen before - skipping" << endl);
+      continue;
+    } else {
+      seen_links.insert(vlink);      
+      resolve_link(vv,pv,vnode,pnode,deterministic,*vedge_it);
+    }
   }
 }
 
@@ -1178,11 +1201,11 @@ int add_node(vvertex vv,pvertex pv, bool deterministic, bool is_fixed, bool skip
   vnode->assignment = pv;
   vnode->assigned = true;
 
-  // XXX Fix indendation?
+  /* Links */
   if (!skip_links) {
       resolve_links(vv,pv,vnode,pnode,deterministic);
-  }// skip_links
-
+  }
+  
   int old_load = tr->current_load;
   int old_total_load = pnode->total_load;
 

@@ -266,7 +266,7 @@ void anneal(bool scoring_selftest, double scale_neighborhood,
           << vn->type << "\n";
       }
     }
-    if (add_node(vv,pv,false,true) == 1) {
+    if (add_node(vv,pv,false,true,false) == 1) {
       cout << "*** Fixed node: Could not map " << vn->name <<
 	" to " << pn->name << endl;
       exit(EXIT_UNRETRYABLE);
@@ -319,7 +319,7 @@ void anneal(bool scoring_selftest, double scale_neighborhood,
 	<< "fixed in place" << endl;
       continue;
     }
-    if (add_node(vv,pv,false,false) == 1) {
+    if (add_node(vv,pv,false,false,false) == 1) {
       cout << "Warning: Hinted node: Could not map " << vn->name <<
 	" to " << pn->name << endl;
       continue;
@@ -357,6 +357,18 @@ void anneal(bool scoring_selftest, double scale_neighborhood,
 	best_solution.clear_assignment(*vit);
 	unassigned_nodes.push(vvertex_int_pair(*vit,RANDOM()));
     }
+  }
+  
+  /*
+   * Set any links that have been assigned
+   */
+  vedge_iterator eit, eeit;
+  tie(eit, eeit) = edges(VG);
+  for (;eit!=eeit;++eit) {
+      tb_vlink *vlink = get(vedge_pmap, *eit);
+      if (vlink->link_info.type_used != tb_link_info::LINK_UNMAPPED) {
+	  best_solution.set_link_assignment(*eit,vlink->link_info);
+      }
   }
 
   /*
@@ -659,7 +671,7 @@ void anneal(bool scoring_selftest, double scale_neighborhood,
 	  int oldviolated = violated;
 	  double tempscore;
 	  int tempviolated;
-	  if (!add_node(vv,newpos,false,false)) {
+	  if (!add_node(vv,newpos,false,false,false)) {
 	    tempscore = get_score();
 	    tempviolated = violated;
 	    remove_node(vv);
@@ -682,7 +694,7 @@ void anneal(bool scoring_selftest, double scale_neighborhood,
          * Actually try the new mapping - if it fails, the node is still
          * unassigned, and we go back and try with another
          */
-        if (add_node(vv,newpos,false,false) != 0) {
+        if (add_node(vv,newpos,false,false,false) != 0) {
 	  unassigned_nodes.push(vvertex_int_pair(vv,RANDOM()));
 	  continue;
         }
@@ -853,6 +865,18 @@ void anneal(bool scoring_selftest, double scale_neighborhood,
 	    //absassigned[*vit] = get(vvertex_pmap,*vit)->assigned;
 	    //abstypes[*vit] = get(vvertex_pmap,*vit)->type;
 	  }
+	  
+	  vedge_iterator eit, eeit;
+	  tie(eit, eeit) = edges(VG);
+	  for (;eit!=eeit;++eit) {
+	      tb_vlink *vlink = get(vedge_pmap, *eit);
+	      if (vlink->link_info.type_used != tb_link_info::LINK_UNMAPPED) {
+		  best_solution.set_link_assignment(*eit,vlink->link_info);
+	      } else {
+		  best_solution.clear_link_assignment(*eit);
+	      }
+	  }	
+	  
 	  absbest = newscore;
 	  absbestviolated = violated;
 	  iters_to_best = iters;
@@ -870,7 +894,7 @@ void anneal(bool scoring_selftest, double scale_neighborhood,
 	RDEBUG(cout << "removing: rejected change" << endl;)
 	remove_node(vv);
 	if (oldassigned) {
-	  add_node(vv,oldpos,false,false);
+	  add_node(vv,oldpos,false,false,false);
 	}
       }
 
@@ -998,7 +1022,6 @@ NOTQUITEDONE:
     RDEBUG(
     printf("temp_end: temp: %f ratio: %f stddev: %f\n",temp,temp * avgscore / initialavg,stddev);
     );
-
 
     /*
      * The next section of code deals with termination conditions - how do we
@@ -1151,6 +1174,7 @@ NOTQUITEDONE:
      * discrepancies (ie. now we have violations, when before we had none.)
      */
     vvertex_iterator vvertex_it,end_vvertex_it;
+    vedge_iterator vedge_it,end_vedge_it;
     if (revert) {
       cout << "Reverting to best solution\n";
       /*
@@ -1198,8 +1222,41 @@ NOTQUITEDONE:
 	  if (vnode->vclass != NULL) {
 	    vnode->type = best_solution.get_vtype_assignment(*vvertex_it);
 	  }
-	  assert(!add_node(*vvertex_it,best_solution.get_assignment(*vvertex_it),true,false));
+	  assert(!add_node(*vvertex_it,best_solution.get_assignment(*vvertex_it),true,false,true));
 	}
+      }
+      
+      /*
+       * Add back in the old link resolutions
+       */
+      tie(vedge_it,end_vedge_it) = edges(VG);
+      for (;vedge_it != end_vedge_it; ++vedge_it) {
+	  if (best_solution.link_is_assigned(*vedge_it)) {
+	      // XXX: It's crappy that I have to do all this work here - something
+	      // needs re-organzing
+	      tb_vlink *vlink = get(vedge_pmap,*vedge_it);
+	      
+	      /*
+	       * This line does the actual link mapping revert
+		*/
+	      vlink->link_info = best_solution.get_link_assignment(*vedge_it);
+	      
+	      tb_vnode *src_vnode = get(vvertex_pmap,vlink->src);
+	      tb_vnode *dst_vnode = get(vvertex_pmap,vlink->dst);
+	      if (!dst_vnode->assigned || !src_vnode->assigned) {
+		  // This shouldn't happen, but don't try to score links which
+		  // don't have both endpoints assigned.
+		  continue;
+	      }
+	      tb_pnode *src_pnode = get(pvertex_pmap,src_vnode->assignment);
+	      tb_pnode *dst_pnode = get(pvertex_pmap,dst_vnode->assignment);
+	      
+	      /*
+	       * Okay, now that we've jumped through enough hoops, we can actually
+	       * do the scoring
+	       */
+	      score_link_info(*vedge_it, src_pnode, dst_pnode, src_vnode, dst_vnode);
+          }
       }
     } // End of reverting code
 

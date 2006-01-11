@@ -25,7 +25,8 @@
  */
 class solution {
     public:
-    solution() : vnode_assignments(), vtype_assignments() { ; };
+    solution() : vnode_assignments(), vtype_assignments(),
+	vlink_assignments() { ; };
     ~solution() {;};
     
     // Copy constructor and operator
@@ -47,6 +48,15 @@ class solution {
 	    return true;
 	}
     };
+    inline bool link_is_assigned(const vedge &ve) const {
+	link_map::const_iterator it = vlink_assignments.find(ve);
+	if (it == vlink_assignments.end()) {
+	    return false;
+	} else {
+	    return true;
+	}
+    };
+    
     inline pvertex get_assignment(const vvertex &vv) const {
 	node_map::const_iterator it = vnode_assignments.find(vv);
 	return it->second;
@@ -56,6 +66,10 @@ class solution {
 	return it->second;
 	//return vtype_assignments[vv];
     };
+    inline tb_link_info get_link_assignment(const vedge &ve) const {
+	link_map::const_iterator it = vlink_assignments.find(ve);
+	return it->second;
+    };
     
     inline void set_assignment(const vvertex &vv, const pvertex &pv) {
 	vnode_assignments[vv] = pv;
@@ -63,6 +77,14 @@ class solution {
     
     inline void clear_assignment(const vvertex &vv) {
 	vnode_assignments.erase(vv);
+    }
+    
+    inline void set_link_assignment(const vedge &ve, const tb_link_info &info) {
+	vlink_assignments[ve] = info;
+    }
+    
+    inline void clear_link_assignment(const vedge &ve) {
+	vlink_assignments.erase(ve);
     }
     
     inline void set_vtype_assignment(const vvertex &vv, const fstring t) {
@@ -79,6 +101,8 @@ class solution {
     //assigned_map vnode_is_assigned;
     // vtype -> ptype : what type has the ptype taken on?
     type_map vtype_assignments;
+    // vedge -> link_info
+    link_map vlink_assignments;
 };
 
 /* 

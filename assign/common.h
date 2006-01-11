@@ -135,8 +135,8 @@ static float SCORE_MAX_TYPES = 0.15; /* Cost of going over type limits - low
 				      * over leaving a node unassigned */
 
 // The following are used to weight possible link resolutions.  Higher
-// numbers mean a more likely resolution.  Trivial resolutions are always
-// used if possible.
+// numbers mean a more likely resolution.
+static float LINK_RESOLVE_TRIVIAL = 8.0;
 static float LINK_RESOLVE_DIRECT = 4.0;
 static float LINK_RESOLVE_INTRASWITCH = 2.0;
 static float LINK_RESOLVE_INTERSWITCH = 1.0;

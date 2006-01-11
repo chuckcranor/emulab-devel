@@ -26,7 +26,8 @@ fstringtest: fstringtest.cc fstring.o
 #include $(TESTBED_SRCDIR)/GNUmakerules
 
 OBJS=parse_top.o parse_ptop.o assign.o pclass.o vclass.o config.o score.o \
-     parser.o solution.o anneal.o featuredesire.o fstring.o parse_ptop_xml.o
+     parser.o solution.o anneal.o featuredesire.o fstring.o parse_ptop_xml.o \
+     parse_top_xml.o neighborhood.o
 LIBS+= -lm -L/usr/pkg/lib -lxerces-c
 LDFLAGS+= -pipe -O3
 CXXFLAGS = -pipe -I/usr/local/include -ftemplate-depth-40 -I/usr/pkg/include 
