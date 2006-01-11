@@ -220,6 +220,7 @@ int parse_ptop(tb_pgraph &PG, tb_sgraph &SG, istream& i)
       split_two(parsed_line[2],':',ssrc,ssrcmac,"(null)");
       fstring src = ssrc;
       fstring srcmac = ssrcmac;
+      cout << "src: " << src << ", srcmac = " << srcmac << endl;
       string sdst,sdstmac;
       split_two(parsed_line[3],':',sdst,sdstmac,"(null)");
       fstring dst(sdst), dstmac(sdstmac);

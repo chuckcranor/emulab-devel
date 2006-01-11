@@ -355,6 +355,18 @@ float find_link_resolutions(resolution_vector &resolutions, pvertex pv,
 
 }
 
+
+/*
+ * Mark a vlink as unassigned
+ */
+void mark_vlink_unassigned(tb_vlink *vlink) {
+    SADD(SCORE_NO_CONNECTION);
+    vlink->no_connection=true;
+    vinfo.no_connection++;
+    vlink->link_info.type_used = tb_link_info::LINK_UNMAPPED;
+    violated++;
+}
+
 /*
  * Resolve an individual vlink
  */
@@ -407,10 +419,7 @@ void resolve_link(vvertex vv, pvertex pv, tb_vnode *vnode, tb_pnode *pnode,
          */
         score_link_info(edge,pnode,dest_pnode,vnode,dest_vnode);
       } else {
-        SADD(SCORE_NO_CONNECTION);
-        vlink->no_connection=true;
-        vinfo.no_connection++;
-        violated++;
+	  mark_vlink_unassigned(vlink);
       }
     } else {
       //assert(resolution_index <= 1)
@@ -426,12 +435,7 @@ void resolve_link(vvertex vv, pvertex pv, tb_vnode *vnode, tb_pnode *pnode,
        */
       if (resolution_index == 0) {
         SDEBUG(cerr << "  Could not find any resolutions" << endl;)
-
-          SADD(SCORE_NO_CONNECTION);
-        vlink->no_connection=true;
-        vinfo.no_connection++;
-        vlink->link_info.type_used = tb_link_info::LINK_UNMAPPED;
-        violated++;
+        mark_vlink_unassigned(vlink);
       } else {
         /*
          * Check to see if we are fixing a violation

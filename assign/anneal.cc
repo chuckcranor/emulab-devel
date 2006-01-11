@@ -1231,11 +1231,10 @@ NOTQUITEDONE:
        */
       tie(vedge_it,end_vedge_it) = edges(VG);
       for (;vedge_it != end_vedge_it; ++vedge_it) {
+	  tb_vlink *vlink = get(vedge_pmap,*vedge_it);
 	  if (best_solution.link_is_assigned(*vedge_it)) {
 	      // XXX: It's crappy that I have to do all this work here - something
 	      // needs re-organzing
-	      tb_vlink *vlink = get(vedge_pmap,*vedge_it);
-	      
 	      /*
 	       * This line does the actual link mapping revert
 		*/
@@ -1256,7 +1255,9 @@ NOTQUITEDONE:
 	       * do the scoring
 	       */
 	      score_link_info(*vedge_it, src_pnode, dst_pnode, src_vnode, dst_vnode);
-          }
+	  } else {
+	      mark_vlink_unassigned(vlink);
+	  }
       }
     } // End of reverting code
 

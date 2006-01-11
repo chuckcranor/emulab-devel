@@ -109,4 +109,5 @@ void resolve_link(vvertex vv, pvertex pv, tb_vnode *vnode, tb_pnode *pnode,
     hashptr<const tb_vlink*> > &seen_loopback_links, vedge edge);
 void resolve_links(vvertex vv, pvertex pv, tb_vnode *vnode, tb_pnode *pnode,
     bool deterministic);
+void mark_vlink_unassigned(tb_vlink *vlink);
 #endif
