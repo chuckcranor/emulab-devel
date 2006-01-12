@@ -1,6 +1,6 @@
 /*
  * EMULAB-COPYRIGHT
- * Copyright (c) 2000-2005 University of Utah and the Flux Group.
+ * Copyright (c) 2000-2006 University of Utah and the Flux Group.
  * All rights reserved.
  */
 
@@ -357,6 +357,25 @@ float find_link_resolutions(resolution_vector &resolutions, pvertex pv,
 
 
 /*
+ * Return the cost of a resolution
+ */
+inline float resolution_cost(tb_link_info::linkType res_type) {
+    switch (res_type) {
+	case tb_link_info::LINK_DIRECT:
+	    return LINK_RESOLVE_DIRECT; break;
+	case tb_link_info::LINK_INTRASWITCH:
+	    return LINK_RESOLVE_INTRASWITCH; break;
+	case tb_link_info::LINK_INTERSWITCH:
+	    return LINK_RESOLVE_INTERSWITCH; break;
+	case tb_link_info::LINK_UNMAPPED:
+	case tb_link_info::LINK_TRIVIAL:
+	    cerr << "*** Internal error: Should not be here. (resolution_cost)" << endl;
+   	    exit(EXIT_FATAL);
+	break;
+    }
+}
+
+/*
  * Mark a vlink as unassigned
  */
 void mark_vlink_unassigned(tb_vlink *vlink) {
@@ -407,8 +426,7 @@ void resolve_link(vvertex vv, pvertex pv, tb_vnode *vnode, tb_pnode *pnode,
 
     if (dest_pv == pv) {
       SDEBUG(cerr << "  trivial link" << endl);
-
-      // XXX!!!!!
+      
       if (allow_trivial_links && vlink->allow_trivial) {
         vlink->link_info.type_used = tb_link_info::LINK_TRIVIAL;
         /*
@@ -426,10 +444,48 @@ void resolve_link(vvertex vv, pvertex pv, tb_vnode *vnode, tb_pnode *pnode,
       resolution_vector resolutions;
       float total_weight = find_link_resolutions(resolutions, pv, dest_pv,
           vlink,pnode,dest_pnode,flipped);
+      
+      /*
+       * If they have asked for a specific interface, filter out any
+       * resolutions that don't have it
+       */
+      if (vlink->fix_src_iface) {
+	  resolution_vector::iterator rit;
+	  for (rit = resolutions.begin(); rit != resolutions.end();) {
+	      pedge link = (*rit).plinks.front();
+	      tb_plink *plink = get(pedge_pmap,link);
+	      if (plink->srciface != vlink->src_iface) {
+		  // Doesn't match, remove it!
+		   total_weight -= resolution_cost(rit->type_used);
+		   rit = resolutions.erase(rit);
+	       } else {
+		   rit++;
+	       }
+	  }
+      }
+      
+      if (vlink->fix_dst_iface) {
+	  resolution_vector::iterator rit;
+	  for (rit = resolutions.begin(); rit != resolutions.end();) {
+	      pedge link = (*rit).plinks.back();
+	      tb_plink *plink = get(pedge_pmap,link);
+	      // Yes, this really is srciface
+	      // XXX: This only works because we always have the node as the 'source'
+	      // of a plink! Shouldn't depend on this!
+	      if (plink->srciface != vlink->dst_iface) {
+		  // Doesn't match, remove it!
+		  total_weight -= resolution_cost(rit->type_used);
+		  rit = resolutions.erase(rit);
+	      } else {
+		  rit++;
+	      }
+	  }
+      }
+      
       int n_resolutions = resolutions.size();
       //int resolution_index = n_resolutions - 1;
       int resolution_index = n_resolutions;
-
+      
       /*
        * check for no link
        */

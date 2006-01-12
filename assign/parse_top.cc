@@ -265,14 +265,24 @@ int parse_top(tb_vgraph &VG, istream& i)
 	l->allow_trivial = false;
 #endif
 	l->emulated = false;
-	
+	l->fix_src_iface = false;
+	l->fix_dst_iface = false;
+		
 	for (unsigned int i = 8;i < parsed_line.size();++i) {
+	  string stag, svalue;
+	  split_two(parsed_line[i],':',stag,svalue,"");
 	  if (parsed_line[i] == string("nodelay")) {
 	    l->allow_delayed = false;
 	  } else if (parsed_line[i] == string("emulated")) {
 	    l->emulated = true;
 	  } else if (parsed_line[i] == string("trivial_ok")) {
 	    l->allow_trivial = true;
+	  } else if (stag == string("fixsrciface")) {
+            l->fix_src_iface = true;
+	    l->src_iface = svalue;
+    	  } else if (stag == string("fixdstiface")) {
+            l->fix_dst_iface = true;
+	    l->dst_iface = svalue;
 	  } else {
 	    top_error("bad link line, unknown tag: " <<
 		      parsed_line[i] << ".");

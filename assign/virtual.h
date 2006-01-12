@@ -1,6 +1,6 @@
 /*
  * EMULAB-COPYRIGHT
- * Copyright (c) 2000-2003 University of Utah and the Flux Group.
+ * Copyright (c) 2000-2006 University of Utah and the Flux Group.
  * All rights reserved.
  */
 
@@ -166,6 +166,11 @@ public:
   tb_link_info link_info;	// what it's mapped to
   fstring name;			// name
   fstring type;			// type of this link
+  bool fix_src_iface;		// Did the user fix the name of the iface (src)?
+  fstring src_iface;		// If so, this is what it must be named
+  bool fix_dst_iface;		// Did the user fix the name of the iface (dst)?
+  fstring dst_iface;		// If so, this is what it must be named
+
   bool emulated;		// is this an emulated link, i.e. can it
 				// share a plink withouter emulated vlinks
   bool no_connection;		// true if this link should be satisfied

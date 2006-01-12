@@ -1,6 +1,6 @@
 /*
  * EMULAB-COPYRIGHT
- * Copyright (c) 2000-2003 University of Utah and the Flux Group.
+ * Copyright (c) 2000-2006 University of Utah and the Flux Group.
  * All rights reserved.
  */
 
@@ -318,8 +318,9 @@ public:
   typedef hash_set<fstring> type_set;
 
   tb_plink(fstring _name, plinkType _is_type, fstring _type, fstring _srcmac, fstring
-      _dstmac)
+      _dstmac, fstring _srciface, fstring _dstiface)
     : name(_name), srcmac(_srcmac), dstmac(_dstmac), is_type(_is_type),
+      srciface(_srciface), dstiface(_dstiface),
       delay_info(), bw_used(0), emulated(0), nonemulated(0),
       penalty(0.0), fixends(false), current_endpoints(), current_count(0),
       vedge_counts() {
@@ -327,7 +328,8 @@ public:
       }
 
   fstring name;			// the name
-  fstring srcmac,dstmac;		// source and destination MAC addresses.
+  fstring srcmac,dstmac;	// source and destination MAC addresses.
+  fstring srciface, dstiface;	// source and destination interface names
 
   plinkType is_type;		// inter-switch type of the link
   type_set types;		// type (ie. ethernet) of the link

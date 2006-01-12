@@ -25,7 +25,7 @@
  */
 class solution {
     public:
-    solution() : vnode_assignments(), vtype_assignments(),
+    explicit solution() : vnode_assignments(), vtype_assignments(),
 	vlink_assignments() { ; };
     ~solution() {;};
     

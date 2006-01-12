@@ -1,6 +1,6 @@
 /*
  * EMULAB-COPYRIGHT
- * Copyright (c) 2000-2003 University of Utah and the Flux Group.
+ * Copyright (c) 2000-2006 University of Utah and the Flux Group.
  * All rights reserved.
  */
 
@@ -218,12 +218,16 @@ int parse_ptop(tb_pgraph &PG, tb_sgraph &SG, istream& i)
       fstring name = parsed_line[1];
       string ssrc,ssrcmac;
       split_two(parsed_line[2],':',ssrc,ssrcmac,"(null)");
+      string ssrcn, ssrciface;
+      split_two(ssrcmac,'/',ssrcn,ssrciface,"(null)");
       fstring src = ssrc;
       fstring srcmac = ssrcmac;
-      cout << "src: " << src << ", srcmac = " << srcmac << endl;
+      fstring srciface = ssrciface;
       string sdst,sdstmac;
       split_two(parsed_line[3],':',sdst,sdstmac,"(null)");
-      fstring dst(sdst), dstmac(sdstmac);
+      string sdstn, sdstiface;
+      split_two(sdstmac,'/',sdstn,sdstiface,"(null)");
+      fstring dst(sdst), dstmac(sdstmac), dstiface(sdstiface);
       string bw = parsed_line[4];
       string delay = parsed_line[5];
       string loss = parsed_line[6];
@@ -257,7 +261,8 @@ int parse_ptop(tb_pgraph &PG, tb_sgraph &SG, istream& i)
       for (int cur = 0;cur<num;++cur) {
 	pedge pe = (add_edge(srcv,dstv,PG)).first;
 	tb_plink *pl = new
-	    tb_plink(name,tb_plink::PLINK_NORMAL,link_type,srcmac,dstmac);
+	    tb_plink(name,tb_plink::PLINK_NORMAL,link_type,srcmac,dstmac,
+		     srciface,dstiface);
 	put(pedge_pmap,pe,pl);
 	pl->delay_info.bandwidth = ibw;
 	pl->delay_info.delay = idelay;
