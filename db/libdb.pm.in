@@ -224,6 +224,7 @@ use vars qw(@ISA @EXPORT);
 
 # Must come after package declaration!
 use lib '@prefix@/lib';
+use libtblog_simple;
 use English;
 use File::Basename;
 use POSIX qw(strftime);
@@ -4422,16 +4423,8 @@ sub DBQueryWarn($)
 sub DBWarn($;$)
 {
     my($message, $nomail) = @_;
-    my($text);
-
-    $text = "$message - In $SCRIPTNAME\n" .
-  	    "$DBErrorString\n";
-
-    print STDERR "*** $text";
-
-    if (! defined($nomail)) {
-      libtestbed::SENDMAIL($TBOPS, "DBError - $message", $text);
-    }
+    
+    DBError(\&tbwarn, $message, $nomail);
 }
 
 #
@@ -4442,10 +4435,26 @@ sub DBWarn($;$)
 sub DBFatal($)
 {
     my($message) = $_[0];
+    
+    DBError(\&tbdie, $message);
+}
 
-    DBWarn($message);
+#
+# DBError, common parts of DBWarn and DBFatal
+#
+# usage: DBError(log function, message, nomail)
+#
+sub DBError($$;$) 
+{
+    my($f, $message, $nomail) = @_;
+    
+    if (! defined($nomail)) {
+	libtestbed::SENDMAIL($TBOPS, "DBError - $message",
+			     "$message - In $SCRIPTNAME\n".
+			     "$DBErrorString\n");
+    }
 
-    die("\n");
+    $f->({cause=>'software'}, "$message:\n$DBErrorString");
 }
 
 #
@@ -5306,4 +5315,3 @@ sub TBSetNodeHistory($$$$$)
 # _Always_ make sure that this 1 is at the end of the file...
 
 1;
-
