@@ -179,6 +179,7 @@ sub tbdie( @ ) {
 # Format the message based on $priority
 #
 sub format_message ( $$$ ) {
+
     my ($scriptname, $priority, $mesg) = @_;
 
     $mesg =~ s/\s+$//;
@@ -186,45 +187,44 @@ sub format_message ( $$$ ) {
     my $header;
 
     if ($mesg =~ /\s*\*\*\*/) {
-	# do nothing
+        # do nothing
     } elsif ($priority <= $ERR ) {
-	$header = "$scriptname";
+        $header = "ERROR: $scriptname";
     } elsif ($priority == $WARNING) {
-	$header = "$scriptname: WARNING";
+        $header = "WARNING: $scriptname";
     } elsif ($priority == $NOTICE) {
-	$header = "$scriptname";
-    } 
-    
+        $header = "$scriptname";
+    }
     my $text;
 
     my @mesg = split /\n/, $mesg;
     if (@mesg == 1) {
-	$mesg[0] =~ s/^\s+//;
-	$mesg = $mesg[0];
+        $mesg[0] =~ s/^\s+//;
+        $mesg = $mesg[0];
     }
     if ($header) {
-	my $line = "*** $header: $mesg[0]";
-	if (@mesg > 1 || length($line) > $Text::Wrap::columns) {
-	    $line = "*** $header:\n";
-	    if (@mesg == 1) { # NOTE: $mesg[0] eq $mesg
-		$mesg =~ s/^\s+//;
-		$line .= wrap('    ','    ', $mesg, "\n");
-	    } else {
-		foreach (@mesg) {
-		    s/\s+$//;
-		    $line .= "    $_\n";
-		}
-	    }
-	    return $line;
-	} else {
-	    return "$line\n";
-	}
+        my $line = "*** $header: $mesg[0]";
+        if (@mesg > 1 || length($line) > $Text::Wrap::columns) {
+            $line = "*** $header:\n";
+            if (@mesg == 1) { # NOTE: $mesg[0] eq $mesg
+                $mesg =~ s/^\s+//;
+                $line .= wrap('***   ','***   ', $mesg, "\n");
+            } else {
+                foreach (@mesg) {
+                    s/\s+$//;
+                    $line .= "***   $_\n";
+                }
+            }
+            return $line;
+        } else {
+            return "$line\n";
+        }
     } else {
-	if (@mesg == 1) {
-	    return wrap ('', '    ', $mesg, "\n");
-	} else {
-	    return "$mesg\n";
-	}
+        if (@mesg == 1) {
+            return wrap ('', '    ', $mesg, "\n");
+        } else {
+            return "$mesg\n";
+        }
     }
 }
 
