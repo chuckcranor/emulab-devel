@@ -56,18 +56,19 @@ $exptidx = TBExptIndex($pid, $eid);
 if ($exptidx < 0) {
     TBERROR("Could not get experiment index for $pid/$eid!", 1);
 }
-$url = "cvsweb/cvsweb.php3?exptidx=$exptidx";
+$url = "cvsweb/cvsweb.php3/${exptidx}?exptidx=$exptidx";
 
 echo "<center>\n";
 echo "This is the Subversion archive for your experiment.<br>";
-echo "<form action='archive_control.php3' method=get>\n";
-echo "<b><input type=submit name=commit value='Force Commit'></b>\n";
+echo "<form action='archive_tag.php3' method=get>\n";
+echo "<b><input type=submit name=tag value='Tag Archive'></b>";
 echo "<input type=hidden name=pid value='$pid'>";
 echo "<input type=hidden name=eid value='$eid'>";
-echo "</form>\n";
-if (isset($commit)) {
-    echo "<b>Archive sucessfully committed.</b><br>";
-}
+echo "</form>";
+echo "<form action='archive_tags.php3' method=get>";
+echo "<b><input type=submit name=tag value='Show Tags'></b>";
+echo "<input type=hidden name=which value='$exptidx'>";
+echo "</form>";
 echo "</center>\n";
 
 echo "<iframe width=100% height=800 scrolling=yes src='$url' border=2>".
