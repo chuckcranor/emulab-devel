@@ -58,11 +58,14 @@ use strict;
 #
 use lib "@prefix@/lib";
 use libtestbed;
-use libdb;
+use libdb qw(NewTBDBHandle DBQueryN DBQueryWarnN DBQueryFatalN
+	     DBQuoteSpecial $DBQUERY_MAXTRIES DBWarn DBFatal);
 use libtblog_simple;
 
 my $REAL_SCRIPTNAME = $SCRIPTNAME;
 undef $SCRIPTNAME; # signal to use $ENV{TBLOG_SCRIPTNAME}
+
+my $DB;
 
 #
 # Internal Utility Functions
@@ -109,12 +112,24 @@ sub normalize_cause ( $ ) {
 }
 
 #
+#
+#
+
+
+#
+# Standard DBQuery functions from dblog but use private database handle
+#
+sub DBQuery ( $ )      {return DBQueryN($DB, $_[0]);}
+sub DBQueryFatal ( $ ) {return DBQueryFatalN($DB, $_[0]);}
+sub DBQueryWarn ( $ )  {return DBQueryWarnN($DB, $_[0]);}
+
+#
 # Like DBQueryFatal but also fail if the query didn't return any results
 #
 sub DBQuerySingleFatal ( $ )
 {
     my ($query) = @_;
-    my $query_result = DBQueryFatal $query;
+    my $query_result = DBQueryFatalN($DB, $query);
     DBFatal("DB Query \"$query\" didn't return any results") 
 	unless $query_result->numrows > 0;
     my @row = $query_result->fetchrow_array();
@@ -138,6 +153,10 @@ sub informative_scriptname();
 # than call tblog_new_process
 #
 sub tblog_init() {
+    # Connect to database
+
+    $DB = NewTBDBHandle();
+
     # Reset default cause
 
     $ENV{TBLOG_CAUSE} = '';
@@ -175,6 +194,7 @@ sub tblog_new_process(@) {
 #
 sub tblog_init_process(@) {
     my ($script, @argv) = @_;
+    local $DBQUERY_MAXTRIES = 3;
 
     # Get script name
 
@@ -262,6 +282,7 @@ sub tblog_set_info ( $$$ )
 {
     check_env();
     my ($pid, $eid, $uid) = @_;
+    local $DBQUERY_MAXTRIES = 3;
     $ENV{'TBLOG_PIDX'} = 
 	DBQuerySingleFatal("select idx from experiments where pid='$pid' and eid='$eid'");
     $ENV{'TBLOG_UID'} = $uid;
@@ -345,12 +366,15 @@ sub dblog_real ( $$@ ) {
 		  DBQuoteSpecial $cause,
 		  DBQuoteSpecial if_defined($parms->{type}, 'normal'),
 		  DBQuoteSpecial $mesg);
-	my $result = DBQuery($query);
-	if (!$result && DBErr() == 1100) {
-	    DBQueryFatal("LOCK TABLE log WRITE");
-	    $result = DBQuery($query)
+
+	if ($priority <= $NOTICE) {
+	    local $DBQUERY_MAXTRIES = 3;
+	    my $result = DBQuery($query);
+	    DBWarn("Could not log entry to DB, tblog_find_error may report incorrect results") unless $result;
+	} else {
+	    my $result = DBQuery($query);
+	    DBWarn("Could not log entry to DB", 1) unless $result;
 	}
-	DBFatal("DB Query failed") unless $result;
     };
     $in_dblog = 0;
     # Print a warning on failure but don't log the results to the database
@@ -387,6 +411,8 @@ sub tblog_find_error ( ;$$ ) {
 
     my ($session,$store) = @_;
     my $saved_exitcode = $?;
+
+    local $DBQUERY_MAXTRIES = 3;
 
     if (not defined $session) {
         check_env();
@@ -542,7 +568,7 @@ sub tblog_find_error ( ;$$ ) {
 	    $confidence = 0.9;
 	} elsif ($script =~ /^(os_setup)/) {
 	    $confidence = 0.2;
-	};
+	}
 
 	#
 	# Figure out the cause;
