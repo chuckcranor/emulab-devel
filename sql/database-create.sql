@@ -36,9 +36,12 @@ CREATE TABLE archive_tags (
   idx int(10) unsigned NOT NULL auto_increment,
   tag varchar(64) NOT NULL default '',
   archive_idx int(10) unsigned NOT NULL default '0',
+  view varchar(64) NOT NULL default '',
   date_created int(10) unsigned NOT NULL default '0',
+  tagtype enum('user','commit','savepoint','internal') NOT NULL default 'internal',
+  description text,
   PRIMARY KEY  (idx),
-  UNIQUE KEY tag (tag,archive_idx)
+  UNIQUE KEY tag (tag,archive_idx,view)
 ) TYPE=MyISAM;
 
 --
@@ -51,7 +54,9 @@ CREATE TABLE archive_views (
   current_tag varchar(64) NOT NULL default '',
   previous_tag varchar(64) default NULL,
   date_created int(10) unsigned NOT NULL default '0',
-  PRIMARY KEY  (view,archive_idx)
+  branch_tag varchar(64) default NULL,
+  parent_view varchar(64) default NULL,
+  PRIMARY KEY (view,archive_idx)
 ) TYPE=MyISAM;
 
 --
@@ -954,6 +959,7 @@ CREATE TABLE location_info (
   loc_z float default NULL,
   orientation float default NULL,
   contact tinytext,
+  email tinytext,
   phone tinytext,
   room varchar(32) default NULL,
   stamp int(10) unsigned default NULL,
@@ -1526,12 +1532,12 @@ CREATE TABLE os_info (
   creator varchar(8) default NULL,
   created datetime default NULL,
   description tinytext NOT NULL,
-  OS enum('Unknown','Linux','FreeBSD','NetBSD','OSKit','Windows','TinyOS','Other') default 'Unknown',
+  OS enum('Unknown','Linux','Fedora','FreeBSD','NetBSD','OSKit','Windows','TinyOS','Other') default 'Unknown',
   version varchar(12) default '',
   path tinytext,
   magic tinytext,
   machinetype varchar(30) NOT NULL default '',
-  osfeatures set('ping','ssh','ipod','isup','veths','mlinks','linktest') default NULL,
+  osfeatures set('ping','ssh','ipod','isup','veths','mlinks','linktest','linkdelays') default NULL,
   ezid tinyint(4) NOT NULL default '0',
   shared tinyint(4) NOT NULL default '0',
   mustclean tinyint(4) NOT NULL default '1',

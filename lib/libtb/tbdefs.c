@@ -1,6 +1,6 @@
 /*
  * EMULAB-COPYRIGHT
- * Copyright (c) 2000-2005 University of Utah and the Flux Group.
+ * Copyright (c) 2000-2006 University of Utah and the Flux Group.
  * All rights reserved.
  */
 
@@ -30,6 +30,7 @@ char *tbdb_objecttypes[] = {
         TBDB_OBJECTTYPE_CONSOLE,
         TBDB_OBJECTTYPE_TOPOGRAPHY,
         TBDB_OBJECTTYPE_LINKTRACE,
+        TBDB_OBJECTTYPE_EVPROXY,
 	/*
 	 * NOTE: Add the object type and any events that send back COMPLETEs to
 	 * the objtype2complete array in event-sched.c:sends_complete().
@@ -45,6 +46,7 @@ char *tbdb_eventtypes[] = {
 	TBDB_EVENTTYPE_REBOOT,
 	TBDB_EVENTTYPE_UP,
 	TBDB_EVENTTYPE_DOWN,
+	TBDB_EVENTTYPE_UPDATE,
 	TBDB_EVENTTYPE_MODIFY,
 	TBDB_EVENTTYPE_SET,
 	TBDB_EVENTTYPE_RESET,
