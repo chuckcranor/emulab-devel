@@ -1,6 +1,6 @@
 /*
  * EMULAB-COPYRIGHT
- * Copyright (c) 2000-2004 University of Utah and the Flux Group.
+ * Copyright (c) 2000-2004, 2006 University of Utah and the Flux Group.
  * All rights reserved.
  */
 
@@ -89,7 +89,7 @@ int main(int argc, char **argv)
   char *server = "localhost";
   char * port  = NULL;
   char *map_file = NULL;
-  char *log_file = "/tmp/agentlog";
+  char *log_file = NULL;
   char *pid_file = NULL;
   char *keyfile = NULL;
   FILE *mp = NULL;
@@ -399,8 +399,8 @@ void dump_link_map(){
       info("vnode     = %s\n", link_map[i].vnodes[j]);
       info("linkvnode = %s\n", link_map[i].linkvnodes[j]);
 
-      info("delay = %d, bw = %d plr = %f\n",  link_map[i].params[j].delay,
-	   link_map[i].params[j].bw, link_map[i].params[j].plr);
+      info("delay = %d, bw = %d plr = %f\n",  link_map[i].params[j].delay.delay,
+	   link_map[i].params[j].bw.bandwidth, link_map[i].params[j].loss.plr);
       info("q_size = %d buckets = %d n_qs = %d flags_p = %d\n",
 	   link_map[i].params[j].q_size, link_map[i].params[j].buckets,
 	   link_map[i].params[j].n_qs, link_map[i].params[j].flags_p);

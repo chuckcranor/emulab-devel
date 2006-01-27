@@ -108,9 +108,9 @@ typedef enum {
 
 /* Pipe parameter structures*/
 typedef struct {
-  int delay;  /* pipe delay*/
-  int bw;  /* pipe bw*/
-  double plr; /* queue loss rate*/
+  struct dn_delay delay;  /* pipe delay*/
+  struct dn_bw bw;  /* pipe bw*/
+  struct dn_loss loss; /* queue loss rate*/
   int q_size; /* queuq size in slots/bytes*/
   structRed_params red_gred_params; /* red/gred params*/
   struct ipfw_flow_id id ; /* flow mask of the pipe*/

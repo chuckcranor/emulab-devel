@@ -15,6 +15,8 @@
 /******************************* INCLUDES **************************/
 #include "main.h"
 #include "systemf.h"
+#include <assert.h>
+#include <math.h>
 /******************************* INCLUDES **************************/
 
 
@@ -272,6 +274,26 @@ void handle_link_modify(char * linkname, int l_index,
     get_new_link_params(l_index, handle, notification, &p_which);
 }
 
+int *copy_table(int entries, int **tables)
+{
+  int *retval = NULL;
+
+  if (entries > 0) {
+    size_t len = entries * sizeof(int);
+    
+    if ((retval = malloc(len)) != NULL) {
+      bcopy(*tables, retval, len);
+    }
+    else {
+      error("copy_table: can't allocate memory for table\n");
+    }
+
+    *tables += entries;
+  }
+  
+  return retval;
+}
+
 /****************** get_link_params ***************************
 for both the pipes of the duplex link, get the pipe params
 sing getsockopt and store these params in the link map
@@ -325,7 +347,7 @@ int get_link_params(int l_index)
     void *next = data ;
     struct dn_pipe *p = (struct dn_pipe *) data;
     struct dn_flow_queue *q ;
-    int l ;
+    int l, *tables ;
 
     for ( ; num_bytes >= sizeof(*p) ; p = (struct dn_pipe *)next ) {
        
@@ -333,17 +355,32 @@ int get_link_params(int l_index)
        if ( p->next != (struct dn_pipe *)DN_IS_PIPE )
 	  break ;
 
-       l = sizeof(*p) + p->fs.rq_elements * sizeof(*q) ;
+       l = sizeof(*p) + p->fs.rq_elements * sizeof(*q) +
+	 p->delay.entries * sizeof(int) +
+	 p->bandwidth.entries * sizeof(int) +
+	 p->loss.entries * sizeof(int) ;
        next = (void *)p  + l ;
        num_bytes -= l ;
        q = (struct dn_flow_queue *)(p+1) ;
+       tables = (int *)(q + p->fs.rq_elements);
 
        if (pipe_num != p->pipe_nr)
 	   continue;
 
+       free(link_map[l_index].params[p_index].delay.table);
+       free(link_map[l_index].params[p_index].bw.table);
+       free(link_map[l_index].params[p_index].loss.table);
+
        /* grab pipe delay and bandwidth */
        link_map[l_index].params[p_index].delay = p->delay;
+       link_map[l_index].params[p_index].delay.table =
+	 copy_table(p->delay.entries, &tables);
        link_map[l_index].params[p_index].bw = p->bandwidth;
+       link_map[l_index].params[p_index].bw.table =
+	 copy_table(p->bandwidth.entries, &tables);
+       link_map[l_index].params[p_index].loss = p->loss;
+       link_map[l_index].params[p_index].loss.table =
+	 copy_table(p->loss.entries, &tables);
 
        /* get flow set parameters*/
        get_flowset_params( &(p->fs), l_index, p_index);
@@ -391,7 +428,9 @@ void get_flowset_params(struct dn_flow_set *fs, int l_index,
     p_params->plr = fs->plr;
    #endif
 
-    p_params->plr = 1.0*fs->plr/(double)(0x7fffffff);
+#if 0
+    p_params->loss.plr = 1.0*fs->plr/(double)(0x7fffffff);
+#endif
     
     /* hash table/bucket size */
     p_params->buckets = fs->rq_size;
@@ -483,6 +522,7 @@ void set_link_params(int l_index, int blackhole, int p_which)
 	    /* set the bandwidth and delay*/
 	    pipe.bandwidth = p_params->bw;
 	    pipe.delay = p_params->delay;
+	    pipe.loss = p_params->loss;
 
 	    /* set the pipe number*/
 	    pipe.pipe_nr = link_map[l_index].pipes[p_index];
@@ -492,12 +532,12 @@ void set_link_params(int l_index, int blackhole, int p_which)
 	       plr to 1.0
 	       */
 	    {
-	      double d = p_params->plr;
+	      if (blackhole) {
+		pipe.loss.plr = 0x7fffffff;
+		pipe.loss.dist = DN_DIST_CONST_RATE;
+	      }
 
-	      if (blackhole)
-		d = 1.0;
-	      
-	      pipe.fs.plr = (int)(d*0x7fffffff);
+	      pipe.fs.plr = pipe.loss.plr;
 	    }
 
 	    /* set the queue size*/
@@ -546,7 +586,7 @@ void set_link_params(int l_index, int blackhole, int p_which)
 	      if(p_params->flags_p & PIPE_Q_IS_GRED)
 		pipe.fs.flags_fs |= DN_IS_GENTLE_RED;
 
-	      if(pipe.bandwidth){
+	      if(pipe.bandwidth.bandwidth){
 		size_t len ; 
 		int lookup_depth, avg_pkt_size ;
 		double s, idle, weight, w_q ;
@@ -588,7 +628,7 @@ void set_link_params(int l_index, int blackhole, int p_which)
 	   
 
 		/* ticks needed for sending a medium-sized packet */
-		s = clock.hz * avg_pkt_size * 8 / pipe.bandwidth;
+		s = clock.hz * avg_pkt_size * 8 / pipe.bandwidth.bandwidth;
 
 		/*
 		 * max idle time (in ticks) before avg queue size becomes 0. 
@@ -618,6 +658,211 @@ void set_link_params(int l_index, int blackhole, int p_which)
     }
 }
 
+/*
+ * NOTE: The ln_gamma and build_poisson functions were taken out of the
+ * patched ipfw2.c
+ */
+
+static double
+ln_gamma(double xx)
+{
+	/* log gamma function adapted from numerical recipes in C */
+
+	if (xx<1.0)                           /* Use reflection formula */
+	{
+		double piz = 3.14159265359 * (1.0-xx);
+		return log(piz/sin(piz))-ln_gamma(2.0-xx);
+	}
+	else
+	{
+		static double cof[6]={76.18009173,-86.50532033,24.01409822,
+				      -1.231739516,0.120858003e-2,-0.536382e-5};
+		double x,tmp,ser;
+		int j;
+
+		x=xx-1.0; tmp=x+5.5;
+		tmp -= (x+0.5)*log(tmp);  ser=1.0;
+		for (j=0;j<=5;j++) { x += 1.0; ser += cof[j]/x; }
+		return -tmp+log(2.50662827465*ser);
+	}
+}
+
+/*
+ * build_poisson()
+ * given a mean, build a table for poisson distribution.
+ *
+ * remember calculus long, long ago, estimating the area under the function by 
+ * calculating f(1) + f(2) + f(3) + ... ? Well, that is sort of what we are
+ * doing here. if f(1)=1, we put one 1 in the table. if f(7)=3, we put three 
+ * 7's in the table.  When the table is complete, one can randomly choose
+ * values from this table, with the results following a poisson distribution.
+ */
+static int *
+build_poisson(int mean, int *entries)
+{
+	int p, x, i;
+	int *table;
+	double probability;
+
+	if (mean <= 0)
+		errx(EX_USAGE,"invalid mean %d\n",mean);
+
+	x = *entries = 0;
+
+	if ( ! ( table = malloc(sizeof(int)*0x8200)))
+		err(1,"poisson table ate all of the memory\n");
+
+	do {
+		/* P(x) =  e^-mean * mean^x
+		 *         ----------------
+		 *              x!
+		 *
+		 * we will have approximately 0x8000 entries in our table.
+		 * there is no deep meaning to 0x8000. arbitrary.
+		 *
+		 */
+		probability = log(mean) * x - mean - ln_gamma(1.0 + x);
+		probability = (probability < -40.0) ? 0.0 : exp(probability);
+		probability *= 0x8000;
+		for(p= (int)probability ;p;p--) {
+			table[(*entries)++]=x;
+			/* since we truncate when casting to int, I don't even think
+			 * we need any more than 0x8000 entries. However, I do not
+			 * feel confident enough to chance it.
+			 */
+			if (*entries == 0x8200)
+				return table;
+		}
+		x++;
+	} while(x < mean || probability >= 1);
+
+	info("%d  - ", mean);
+	for (i = 0; i < *entries; i++) {
+	  info(" %d", table[i]);
+	}
+	info("\n");
+	
+	return table;
+}
+
+int dist_name_to_enum(char *name, int defval)
+{
+  int retval = defval;
+  
+  if (strcasecmp(name, "uniform") == 0)
+    retval = DN_DIST_UNIFORM;
+  else if (strcasecmp(name, "poisson") == 0)
+    retval = DN_DIST_POISSON;
+  else if (strcasecmp(name, "random") == 0)
+    retval = DN_DIST_TABLE_RANDOM;
+  else if (strcasecmp(name, "determ") == 0)
+    retval = DN_DIST_TABLE_DETERM;
+
+  return retval;
+}
+
+int table_size(char *table)
+{
+  int lpc, retval = 1;
+
+  assert(table != NULL);
+  
+  for (lpc = 0; table[lpc] != '\0'; lpc++) {
+    if (table[lpc] == '/')
+      retval += 1;
+  }
+
+  return retval;
+}
+
+int *parse_int_table(char *table, int *count)
+{
+  int err = 0, *retval = NULL;
+
+  *count = table_size(table);
+  if ((retval = malloc(sizeof(int) * *count)) != NULL) {
+    int lpc = 0;
+    
+    do {
+      if (*table == '/')
+	table += 1;
+      if (sscanf(table, "%d", &retval[lpc]) != 1)
+	err = 1;
+      lpc += 1;
+    } while (!err && (table = strchr(table, '/')) != NULL);
+  }
+  else {
+    error("parse_int_table: can't allocate memory for table.\n");
+  }
+
+  if (err) {
+    free(retval);
+    retval = NULL;
+    *count = 0;
+  }
+
+  return retval;
+}
+
+int *parse_double_table(char *table, int *count)
+{
+  int err = 0, *retval = NULL;
+
+  *count = table_size(table);
+  if ((retval = malloc(sizeof(int) * *count)) != NULL) {
+    int lpc = 0;
+    
+    do {
+      double dval;
+
+      if (*table == '/')
+	table += 1;
+      if (sscanf(table, "%lf", &dval) == 1) {
+	if (dval < 0.0)
+	  dval = 0.0;
+	else if (dval > 1.0)
+	  dval = 1.0;
+	retval[lpc] = (dval * 0x7fffffff);
+      }
+      else {
+	info("invalid table entry: %s\n", table);
+	err = 1;
+      }
+      lpc += 1;
+    } while (!err && (table = strchr(table, '/')) != NULL);
+  }
+  else {
+    error("parse_double_table: can't allocate memory for table.\n");
+  }
+
+  if (err) {
+    free(retval);
+    retval = NULL;
+    *count = 0;
+  }
+  
+  return retval;
+}
+
+int *tabledup(int *table, int count)
+{
+  int *retval = NULL;
+
+  assert(table != NULL);
+  assert(count >= 0);
+  
+  if (count > 0) {
+    if ((retval = malloc(sizeof(int) * count)) != NULL) {
+      bcopy(table, retval, sizeof(int) * count);
+    }
+    else {
+      error("tabledup: can't allocate memory for table.\n");
+    }
+  }
+  
+  return retval;
+}
+
 /********* get_new_link_params ***************************
   For a modify event, this function gets the parameters
   from the event notification
@@ -636,6 +881,7 @@ int get_new_link_params(int l_index, event_handle_t handle,
   int p_num = 0;
   int gotpipe = 0;
   int islan = link_map[l_index].islan;
+  int dobpois = 0, dodpois = 0, dolpois = 0;
   char *temp = NULL;
 
   /* Allow upper level to init the pipe */
@@ -655,28 +901,199 @@ int get_new_link_params(int l_index, event_handle_t handle,
 
       if(strcmp(argtype,"BANDWIDTH")== 0){
 	info("Bandwidth = %d\n", atoi(argvalue) * 1000);
-	link_map[l_index].params[p_num].bw = atoi(argvalue) * 1000;
+	link_map[l_index].params[p_num].bw.bandwidth = atoi(argvalue) * 1000;
+	link_map[l_index].params[p_num].bw.dist = DN_DIST_CONST_RATE;
 	if (! gotpipe) {
 	  link_map[l_index].params[1].bw = link_map[l_index].params[0].bw;
 	}
       }
+      else if (strcmp(argtype,"BWQUANTUM")== 0){
+	 info("Bandwidthq = %d\n", atoi(argvalue));
+	 link_map[l_index].params[p_num].bw.quantum = atoi(argvalue);
+	 if (! gotpipe) {
+	   link_map[l_index].params[1].bw.quantum =
+	     link_map[l_index].params[0].bw.quantum;
+	 }
+      }
+      else if (strcmp(argtype,"BWMEAN")== 0){
+	 info("Bandwidth mean = %d\n", atoi(argvalue) * 1000);
+	 link_map[l_index].params[p_num].bw.mean = atoi(argvalue) * 1000;
+	 if (! gotpipe) {
+	   link_map[l_index].params[1].bw.mean =
+	     link_map[l_index].params[0].bw.mean;
+	 }
+      }
+      else if (strcmp(argtype,"BWSTDDEV")== 0){
+	 info("Bandwidth stddev = %d\n", atoi(argvalue));
+	 link_map[l_index].params[p_num].bw.stddev = atoi(argvalue);
+	 if (! gotpipe) {
+	   link_map[l_index].params[1].bw.stddev =
+	     link_map[l_index].params[0].bw.stddev;
+	 }
+      }
+      else if (strcmp(argtype,"BWDIST")== 0){
+	 info("bwdist = %s\n", argvalue);
 
+	 link_map[l_index].params[p_num].bw.dist =
+	   dist_name_to_enum(argvalue,
+			     link_map[l_index].params[p_num].bw.dist);
+	 if (link_map[l_index].params[p_num].bw.dist == DN_DIST_POISSON)
+	     dobpois = 1;
+	 if (! gotpipe) {
+	   link_map[l_index].params[1].bw.dist =
+	     link_map[l_index].params[0].bw.dist;
+	 }
+      }
+      else if (strcmp(argtype,"BWTABLE")== 0){
+	 int lpc;
+
+	 info("bwtable = %s\n", argvalue);
+
+	 free(link_map[l_index].params[p_num].bw.table);
+	 link_map[l_index].params[p_num].bw.table =
+	   parse_int_table(argvalue,
+			   &link_map[l_index].params[p_num].bw.entries);
+	 for (lpc = 0;
+	      lpc < link_map[l_index].params[p_num].bw.entries;
+	      lpc++) {
+	     link_map[l_index].params[p_num].bw.table[lpc] *= 1000;
+	 }
+	 if (! gotpipe) {
+	   link_map[l_index].params[1].bw.entries =
+	     link_map[l_index].params[0].bw.entries;
+	   free(link_map[l_index].params[1].bw.table);
+	   link_map[l_index].params[1].bw.table =
+	     tabledup(link_map[l_index].params[0].bw.table,
+		      link_map[l_index].params[0].bw.entries);
+	 }
+      }
+      
       else if (strcmp(argtype,"DELAY")== 0){
 	 info("Delay = %d\n", atoi(argvalue));
-	 link_map[l_index].params[p_num].delay = atoi(argvalue);
+	 link_map[l_index].params[p_num].delay.delay = atoi(argvalue);
+	 link_map[l_index].params[p_num].delay.dist = DN_DIST_CONST_TIME;
 	 if (! gotpipe) {
-	   link_map[l_index].params[1].delay =
-		   link_map[l_index].params[0].delay;
+	   link_map[l_index].params[1].delay.delay =
+	     link_map[l_index].params[0].delay.delay;
+	   link_map[l_index].params[1].delay.dist =
+	     link_map[l_index].params[0].delay.dist;
 	 }
       }
+      else if (strcmp(argtype,"DELAYMEAN")== 0){
+	 info("Delay mean = %d\n", atoi(argvalue));
+	 link_map[l_index].params[p_num].delay.mean = atoi(argvalue);
+	 if (! gotpipe) {
+	   link_map[l_index].params[1].delay.mean =
+	     link_map[l_index].params[0].delay.mean;
+	 }
+      }
+      else if (strcmp(argtype,"DELAYSTDDEV")== 0){
+	 info("Delay stddev = %d\n", atoi(argvalue));
+	 link_map[l_index].params[p_num].delay.stddev = atoi(argvalue);
+	 if (! gotpipe) {
+	   link_map[l_index].params[1].delay.stddev =
+	     link_map[l_index].params[0].delay.stddev;
+	 }
+      }
+      else if (strcmp(argtype,"DELAYDIST")== 0){
+	 info("delaydist = %s\n", argvalue);
+
+	 link_map[l_index].params[p_num].delay.dist =
+	   dist_name_to_enum(argvalue,
+			     link_map[l_index].params[p_num].delay.dist);
+	 if (link_map[l_index].params[p_num].delay.dist == DN_DIST_POISSON)
+	     dodpois = 1;
+	 if (! gotpipe) {
+	   link_map[l_index].params[1].delay.dist =
+	     link_map[l_index].params[0].delay.dist;
+	 }
+      }
+      else if (strcmp(argtype,"DELAYTABLE")== 0){
+	 info("delaytable = %s\n", argvalue);
+
+	 free(link_map[l_index].params[p_num].delay.table);
+	 link_map[l_index].params[p_num].delay.table =
+	   parse_int_table(argvalue,
+			   &link_map[l_index].params[p_num].delay.entries);
+	 if (! gotpipe) {
+	   link_map[l_index].params[1].delay.entries =
+	     link_map[l_index].params[0].delay.entries;
+	   free(link_map[l_index].params[1].delay.table);
+	   link_map[l_index].params[1].delay.table =
+	     tabledup(link_map[l_index].params[0].delay.table,
+		      link_map[l_index].params[0].delay.entries);
+	 }
+      }
+      
       else if (strcmp(argtype,"PLR")== 0){
 	 info("Plr = %f\n", atof(argvalue));
-	 link_map[l_index].params[p_num].plr = atof(argvalue);
+	 link_map[l_index].params[p_num].loss.plr =
+	   (int)(atof(argvalue) * 0x7fffffff);
+	 link_map[l_index].params[p_num].loss.dist = DN_DIST_CONST_RATE;
 	 if (! gotpipe) {
-	   link_map[l_index].params[1].plr = link_map[l_index].params[0].plr;
+	   link_map[l_index].params[1].loss.plr =
+	     link_map[l_index].params[0].loss.plr;
+	   link_map[l_index].params[1].loss.dist =
+	     link_map[l_index].params[0].loss.dist;
+	 }
+	 info("plr = %x\n", link_map[l_index].params[p_num].loss.plr);
+      }
+      else if (strcmp(argtype,"PLRQUANTUM")== 0){
+	 info("plrq = %d\n", atoi(argvalue));
+	 link_map[l_index].params[p_num].loss.quantum = atoi(argvalue);
+	 if (! gotpipe) {
+	   link_map[l_index].params[1].loss.quantum =
+		   link_map[l_index].params[0].loss.quantum;
 	 }
       }
+      else if (strcmp(argtype,"PLRMEAN")== 0){
+	 info("plr mean = %f\n", atof(argvalue));
+	 link_map[l_index].params[p_num].loss.mean = 
+	   (int)(atof(argvalue) * 0x7fffffff);
+	 if (! gotpipe) {
+	   link_map[l_index].params[1].loss.mean =
+	     link_map[l_index].params[0].loss.mean;
+	 }
+      }
+      else if (strcmp(argtype,"PLRSTDDEV")== 0){
+	 info("plr stddev = %f\n", atof(argvalue));
+	 link_map[l_index].params[p_num].loss.stddev =
+	   (int)(atof(argvalue) * 0x7fffffff);
+	 if (! gotpipe) {
+	   link_map[l_index].params[1].loss.stddev =
+	     link_map[l_index].params[0].loss.stddev;
+	 }
+      }
+      else if (strcmp(argtype,"PLRDIST")== 0){
+	 info("plrdist = %s\n", argvalue);
 
+	 link_map[l_index].params[p_num].loss.dist =
+	   dist_name_to_enum(argvalue,
+			     link_map[l_index].params[p_num].loss.dist);
+	 if (link_map[l_index].params[p_num].loss.dist == DN_DIST_POISSON)
+	     dolpois = 1;
+	 if (! gotpipe) {
+	   link_map[l_index].params[1].loss.dist =
+	     link_map[l_index].params[0].loss.dist;
+	 }
+      }
+      else if (strcmp(argtype,"PLRTABLE")== 0){
+	 info("plrtable = %s\n", argvalue);
+
+	 free(link_map[l_index].params[p_num].loss.table);
+	 link_map[l_index].params[p_num].loss.table =
+	   parse_double_table(argvalue,
+			      &link_map[l_index].params[p_num].loss.entries);
+	 if (! gotpipe) {
+	   link_map[l_index].params[1].loss.entries =
+	     link_map[l_index].params[0].loss.entries;
+	   free(link_map[l_index].params[1].loss.table);
+	   link_map[l_index].params[1].loss.table =
+	     tabledup(link_map[l_index].params[0].loss.table,
+		      link_map[l_index].params[0].loss.entries);
+	 }
+      }
+      
        /* Queue parameters. Slightly different since we do not want
 	  to set the queue params for a lan node in the from-switch
 	  direction. Note, by convention the 0 pipe is to the switch
@@ -784,6 +1201,51 @@ int get_new_link_params(int l_index, event_handle_t handle,
   }
   if (gotpipe)
     *pipe_which = p_num;
+
+  if (dobpois) {
+    free(link_map[l_index].params[p_num].bw.table);
+    link_map[l_index].params[p_num].bw.table =
+      build_poisson(link_map[l_index].params[p_num].bw.mean,
+		    &link_map[l_index].params[p_num].bw.entries);
+    if (! gotpipe) {
+      free(link_map[l_index].params[1].bw.table);
+      link_map[l_index].params[1].bw.table =
+	build_poisson(link_map[l_index].params[1].bw.mean,
+		      &link_map[l_index].params[1].bw.entries);
+    }
+  }
+  if (dodpois) {
+    free(link_map[l_index].params[p_num].delay.table);
+    link_map[l_index].params[p_num].delay.table =
+      build_poisson(link_map[l_index].params[p_num].delay.mean,
+		    &link_map[l_index].params[p_num].delay.entries);
+    if (! gotpipe) {
+      free(link_map[l_index].params[1].delay.table);
+      link_map[l_index].params[1].delay.table =
+	build_poisson(link_map[l_index].params[1].delay.mean,
+		      &link_map[l_index].params[1].delay.entries);
+    }
+  }
+  if (dolpois) {
+    int i;
+    
+    free(link_map[l_index].params[p_num].loss.table);
+    link_map[l_index].params[p_num].loss.table =
+      build_poisson(link_map[l_index].params[p_num].loss.mean>>0x10,
+		    &link_map[l_index].params[p_num].loss.entries);
+    for (i = 0; i < link_map[l_index].params[p_num].loss.entries; i++) {
+      link_map[l_index].params[p_num].loss.table[i] <<= 0x10;
+    }
+    if (! gotpipe) {
+      free(link_map[l_index].params[1].loss.table);
+      link_map[l_index].params[1].loss.table =
+	build_poisson(link_map[l_index].params[1].loss.mean>>0x10,
+		      &link_map[l_index].params[1].loss.entries);
+      for (i = 0; i < link_map[l_index].params[1].loss.entries; i++) {
+	link_map[l_index].params[1].loss.table[i] <<= 0x10;
+      }
+    }
+  }
   
   return 1;
 }
@@ -797,8 +1259,8 @@ int get_link_info(){
   while(l_index < link_index){
     if(get_link_params(l_index) == 0)
       return 0;
-    if((int)(link_map[l_index].params[0].plr) == 1
-       || (int)(link_map[l_index].params[1].plr) == 1)
+    if((int)(link_map[l_index].params[0].loss.plr) == 1
+       || (int)(link_map[l_index].params[1].loss.plr) == 1)
       link_map[l_index].stat = LINK_DOWN;
     else
       link_map[l_index].stat = LINK_UP;
