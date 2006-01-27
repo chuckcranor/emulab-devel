@@ -736,11 +736,13 @@ build_poisson(int mean, int *entries)
 		x++;
 	} while(x < mean || probability >= 1);
 
-	info("%d  - ", mean);
-	for (i = 0; i < *entries; i++) {
-	  info(" %d", table[i]);
+	if (0) {
+		info("%d  - ", mean);
+		for (i = 0; i < *entries; i++) {
+			info(" %d", table[i]);
+		}
+		info("\n");
 	}
-	info("\n");
 	
 	return table;
 }
