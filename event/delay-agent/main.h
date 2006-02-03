@@ -126,6 +126,16 @@ typedef struct {
    be modified
  */
 
+/**
+ * Flow specification structure, used for per-flow delays.
+ */
+struct flowspec {
+  char		dest[32]; /* destination IP address */
+  char		protocol[8]; /* protocol (e.g. tcp, udp) */
+  int		srcport; /* source port for ipfw rule */
+  int		dstport; /* destination port for ipfw rule */
+};
+
 typedef struct {
 char		  *line;
 char              *linkname; /*link0, link1 etc*/
@@ -134,7 +144,7 @@ int		  numpipes;  /* 1 if a simplex pipe, 2 if a duplex pipe */
 char              *interfaces[2];/* fxp0, fxp1 etc*/
 char		  *vnodes[2]; /* nodeA, nodeB*/
 char		  linkvnodes[2][256]; /* link0-nodeA, link0-nodeB*/
-char		  dest[32];
+struct flowspec   fs; /* flow specification */
 char              *linktype; /*simplex, duplex */
 int               pipes[2]; /* array of pipe numbers*/
 structpipe_params params[2]; /* params for the two pipes*/

@@ -29,8 +29,66 @@ extern int s_dummy;
 extern int debug;
 /******************************* EXTERNS **************************/
 
-
 /********************************FUNCTION DEFS *******************/
+
+static struct flowspec blankfs = { "", "", 0, 0 };
+
+/**
+ * Compare two flowspecs for equality.
+ *
+ * @return Zero if the two flowspecs are equal.
+ */
+static
+int flowspeccmp(struct flowspec *fs1, struct flowspec *fs2)
+{
+  int retval = 1;
+  
+  assert(fs1 != NULL);
+  assert(fs2->srcport >= 0);
+  assert(fs2->dstport >= 0);
+  assert(fs2 != NULL);
+  assert(fs2->srcport >= 0);
+  assert(fs2->dstport >= 0);
+
+  if (strcmp(fs1->dest, fs2->dest) == 0 &&
+      strcmp(fs1->protocol, fs2->protocol) == 0 &&
+      fs1->srcport == fs2->srcport &&
+      fs1->dstport == fs2->dstport) {
+    retval = 0;
+  }
+  
+  return retval;
+}
+
+/**
+ * Find a structlink_map that matches the given object name and flow
+ * specification.
+ *
+ * @param objname The object name to search for.
+ * @param fs The flow specification to match.
+ * @return A structlink_map object that matches the given parameters or NULL.
+ */
+static
+structlink_map_t find_map(char *objname, struct flowspec *fs)
+{
+  structlink_map_t retval = NULL;
+  int i;
+  
+  assert(objname != NULL);
+  assert(strlen(objname) > 0);
+  assert(fs != NULL);
+  
+  for(i = 0; i < link_index && !retval; i++){
+    if(!strcmp(link_map[i].linkvnodes[0], objname) ||
+       !strcmp(link_map[i].linkvnodes[1], objname)) {
+      if (flowspeccmp(&link_map[i].fs, fs) == 0) {
+	retval = &link_map[i];
+      }
+    }
+  }
+
+  return retval;
+}
 
 /*************************** agent_callback **********************
  This function is called from the event system when an event
@@ -47,13 +105,15 @@ void agent_callback(event_handle_t handle,
   char objname[MAX_LEN];
   char eventtype[MAX_LEN];
   char args[BUFSIZ];
-  char *dest;
-  int i, dest_len;
+  struct flowspec fs = { "", "", 0, 0 };
+  char *dest, *srcport_str, *dstport_str, *protocol;
+  int i, dest_len, srcport_len, dstport_len, protocol_len;
 
     /* get the name of the object, eg. link0 or link1*/
   if(event_notification_get_string(handle,
                                    notification,
-                                   "OBJNAME", objname, MAX_LEN) == 0){
+                                   "OBJNAME", objname, MAX_LEN) == 0 ||
+     strlen(objname) == 0){
     error("could not get the objname \n");
     return;
   }
@@ -68,56 +128,176 @@ void agent_callback(event_handle_t handle,
   
   event_notification_get_arguments(handle,
 				   notification, args, sizeof(args));
-  
+
+  /*
+   * Get the flowspec parameters.  If there are none, the default
+   * initialization (all zeros) will be used.
+   */
   dest_len = event_arg_get(args, "DEST", &dest);
+  protocol_len = event_arg_get(args, "PROTOCOL", &protocol);
+  srcport_len = event_arg_get(args, "SRCPORT", &srcport_str);
+  dstport_len = event_arg_get(args, "DSTPORT", &dstport_str);
 
+  if (dest_len > (int)sizeof(fs.dest)) {
+    error("DEST is too large: (%d>%d) %s\n", dest_len, sizeof(fs.dest), dest);
+    return;
+  }
+  else if (dest_len > 0) {
+    strncpy(fs.dest, dest, dest_len);
+    fs.dest[dest_len] = '\0';
+  }
+  if (protocol_len > (int)sizeof(fs.protocol)) {
+    error("PROTOCOL is too large\n");
+    return;
+  }
+  else if (protocol_len > 0) {
+    strncpy(fs.protocol, protocol, protocol_len);
+    fs.protocol[protocol_len] = '\0';
+  }
+  if (srcport_len > 0 && sscanf(srcport_str, "%d", &fs.srcport) != 1) {
+    error("SRCPORT is not a number\n");
+    return;
+  }
+  if (dstport_len > 0 && sscanf(dstport_str, "%d", &fs.dstport) != 1) {
+    error("DSTPORT is not a number\n");
+    return;
+  }
+  
   if (strcmp(eventtype, TBDB_EVENTTYPE_CLEAR) == 0) {
+    /* Handle a CLEAR event. */
     
-    for (i = 0; i < link_index; i++) {
-      int j;
+    if (dest_len > 0 && srcport_len > 0 && dstport_len > 0 &&
+	protocol_len > 0) {
+      structlink_map_t lm;
 
-      system("ipfw flush");
-      for (j = 0; j < link_map[i].numpipes; j++) {
-	systemf("ipfw pipe delete %d", link_map[i].pipes[j]);
+      if ((lm = find_map(objname, &fs)) == NULL) {
+	error("unknown flow for agent %s\n", objname);
       }
+      else {
+	info("clearing pipe %d\n", lm->pipes[0]);
+
+	/* Delete the rule/pipe and */
+	systemf("ipfw delete %d", lm->pipes[0]);
+	systemf("ipfw pipe delete %d", lm->pipes[0]);
+	/* ... mark the structure as free for another use. */
+	strcpy(lm->linkvnodes[0], "__free");
+	strcpy(lm->linkvnodes[1], "__free");
+	lm->fs = blankfs;
+      }
+      
+      dump_link_map();
     }
-    link_map = NULL;
-    link_index = 0;
+    else {
+      info("clearing all pipes\n");
+      for (i = 0; i < link_index; i++) {
+	int j;
+	
+	system("ipfw flush");
+	for (j = 0; j < link_map[i].numpipes; j++) {
+	  systemf("ipfw pipe delete %d", link_map[i].pipes[j]);
+	}
+      }
+      link_map = NULL;
+      link_index = 0;
+    }
+
     return;
   }
 
   if (strcmp(eventtype, TBDB_EVENTTYPE_CREATE) == 0) {
-    static int rule_no = 100;
-    extern void dump_link_map();
+    static int lo_rule_no = 100;
+    static int hi_rule_no = 20000;
     
-    for (i = 0; i < old_length; i++) {
-      struct hostent *he;
+    if (dest_len == -1) {
+      extern void dump_link_map();
 
-      while ((he = gethostent()) != NULL) {
-	realloc_map();
-	link_map[link_index] = old_map[i];
-	link_map[link_index].islan = 0;
-	link_map[link_index].numpipes = 1;
-	inet_ntop(he->h_addrtype,
-		  he->h_addr,
-		  link_map[link_index].dest,
-		  sizeof(link_map[link_index].dest));
-	link_map[link_index].pipes[0] = rule_no;
-
-	if (strcmp(link_map[link_index].dest, "127.0.0.1") == 0)
-	  continue;
+      info("creating per-host pipes\n");
+      
+      /*
+       * For every link we were managing, create a separate pipe for that link
+       * and a particular destination.  The set of destinations are currently
+       * pulled from the /etc/hosts file.
+       */
+      for (i = 0; i < old_length; i++) {
+	struct hostent *he;
 	
-	systemf("ipfw add %d pipe %d ip from any to %s in recv %s",
-		rule_no,
-		rule_no,
-		link_map[link_index].dest,
-		old_map[i].interfaces[0]);
-	systemf("ipfw pipe %d config queue 50", rule_no);
-	
-	link_index += 1;
-	rule_no += 1;
+	while ((he = gethostent()) != NULL) {
+	  realloc_map();
+	  link_map[link_index] = old_map[i];
+	  link_map[link_index].islan = 0;
+	  link_map[link_index].numpipes = 1;
+	  inet_ntop(he->h_addrtype,
+		    he->h_addr,
+		    link_map[link_index].fs.dest,
+		    sizeof(link_map[link_index].fs.dest));
+	  link_map[link_index].pipes[0] = hi_rule_no;
+	  
+	  if (strcmp(link_map[link_index].fs.dest, "127.0.0.1") == 0)
+	    continue;
+	  
+	  systemf("ipfw add %d pipe %d ip from any to %s in recv %s",
+		  hi_rule_no,
+		  hi_rule_no,
+		  link_map[link_index].fs.dest,
+		  old_map[i].interfaces[0]);
+	  systemf("ipfw pipe %d config queue 50", hi_rule_no);
+	  
+	  link_index += 1;
+	  hi_rule_no += 1;
+	}
+	endhostent();
       }
-      endhostent();
+    }
+    else if (srcport_len <= 0 && dstport_len <= 0 && protocol_len <= 0) {
+      error("CREATE event missing SRCPORT, DSTPORT, and PROTOCOL args\n");
+    }
+    else {
+      struct flowspec mainfs = { "", "", 0, 0 };
+      structlink_map_t mainlm, lm;
+
+      strcpy(mainfs.dest, fs.dest);
+      mainlm = find_map(objname, &mainfs);
+      if (mainlm == NULL) {
+	error("No such agent: %s\n", objname);
+      }
+      else if ((lm = find_map(objname, &fs)) != NULL) {
+	info("%s flow already exists\n", objname);
+      }
+      else {
+	int rule_no;
+
+	info("creating per-flow pipe\n");
+	
+	if ((lm = find_map("__free", &blankfs)) == NULL) {
+	  /* No free structlink_map objects, allocate a new one. */
+	  realloc_map();
+	  
+	  lm = &link_map[link_index];
+	  link_index += 1;
+	  rule_no = lo_rule_no;
+	  lo_rule_no += 1;
+	}
+	else {
+	  /* Reuse an existing structlink_map object. */
+	  rule_no = lm->pipes[0];
+	}
+
+	*lm = *mainlm;
+	lm->islan = 0;
+	lm->numpipes = 1;
+	lm->fs = fs;
+	lm->pipes[0] = rule_no;
+	systemf("ipfw add %d pipe %d %s from any to %s "
+		"src-port %d dst-port %d in recv %s",
+		lm->pipes[0],
+		lm->pipes[0],
+		lm->fs.protocol,
+		lm->fs.dest,
+		lm->fs.srcport,
+		lm->fs.dstport,
+		lm->interfaces[0]);
+	systemf("ipfw pipe %d config queue 50", lm->pipes[0]);
+      }
     }
 
     dump_link_map();
@@ -133,9 +313,7 @@ void agent_callback(event_handle_t handle,
     if(!strcmp(link_map[i].linkname, objname) ||
        !strcmp(link_map[i].linkvnodes[0], objname) ||
        !strcmp(link_map[i].linkvnodes[1], objname)) {
-      if (dest_len < 0 ||
-	  ((strncmp(link_map[i].dest, dest, dest_len) == 0) &&
-	   dest_len == strlen(link_map[i].dest))) {
+      if (flowspeccmp(&link_map[i].fs, &fs) == 0) {
 	handle_pipes(objname, eventtype, notification, handle, i);
       }
     }
@@ -274,7 +452,16 @@ void handle_link_modify(char * linkname, int l_index,
     get_new_link_params(l_index, handle, notification, &p_which);
 }
 
-int *copy_table(int entries, int **tables)
+/**
+ * Copy a distribution table returned from dummynet into malloc'd memory.
+ *
+ * @param entries The number of entries in the table.
+ * @param table_inout Pointer to the table memory as returned by
+ * IP_DUMMYNET_GET.  On return, the pointer will be incremented to point to the
+ * memory following the table.
+ * @return The malloc'd table or NULL if the table size was zero.
+ */
+int *copy_table(int entries, int **table_inout)
 {
   int *retval = NULL;
 
@@ -282,13 +469,13 @@ int *copy_table(int entries, int **tables)
     size_t len = entries * sizeof(int);
     
     if ((retval = malloc(len)) != NULL) {
-      bcopy(*tables, retval, len);
+      bcopy(*table_inout, retval, len);
     }
     else {
       error("copy_table: can't allocate memory for table\n");
     }
 
-    *tables += entries;
+    *table_inout += entries;
   }
   
   return retval;
@@ -367,6 +554,7 @@ int get_link_params(int l_index)
        if (pipe_num != p->pipe_nr)
 	   continue;
 
+       /* Free the old tables. */
        free(link_map[l_index].params[p_index].delay.table);
        free(link_map[l_index].params[p_index].bw.table);
        free(link_map[l_index].params[p_index].loss.table);
@@ -747,6 +935,14 @@ build_poisson(int mean, int *entries)
 	return table;
 }
 
+/**
+ * Convert a distribution type given by name to an integer constant.
+ *
+ * @param name The distribution name.
+ * @param defval The default value to return if 'name' doesn't match a known
+ * type.
+ * @return A DN_DIST_ value.
+ */
 int dist_name_to_enum(char *name, int defval)
 {
   int retval = defval;
@@ -763,6 +959,11 @@ int dist_name_to_enum(char *name, int defval)
   return retval;
 }
 
+/**
+ * @param table The string form of a distribution table, where each entry is
+ * separated by a forward slash ('/').
+ * @return The number of entries in the table.
+ */
 int table_size(char *table)
 {
   int lpc, retval = 1;
@@ -777,12 +978,22 @@ int table_size(char *table)
   return retval;
 }
 
-int *parse_int_table(char *table, int *count)
+/**
+ * Parse the string form of a distribution table into an array of integers.
+ *
+ * @param table The string form of a distribution table, where each entry is
+ * separated by a forward slash ('/').
+ * @param count_out The number of elements in the table or zero if there was
+ * an error creating the table.
+ * @return An integer array containing the values given in 'table' or NULL if
+ * there was an error.
+ */
+int *parse_int_table(char *table, int *count_out)
 {
   int err = 0, *retval = NULL;
 
-  *count = table_size(table);
-  if ((retval = malloc(sizeof(int) * *count)) != NULL) {
+  *count_out = table_size(table);
+  if ((retval = malloc(sizeof(int) * *count_out)) != NULL) {
     int lpc = 0;
     
     do {
@@ -800,18 +1011,31 @@ int *parse_int_table(char *table, int *count)
   if (err) {
     free(retval);
     retval = NULL;
-    *count = 0;
+    *count_out = 0;
   }
 
   return retval;
 }
 
-int *parse_double_table(char *table, int *count)
+/**
+ * Parse the string form of a distribution table containing loss values into an
+ * array of integers.  Loss values are expected to be between 0.0 and 1.0,
+ * which are then converted to an integer value between 0 and 7fffffff, since
+ * that is what dummynet expects.
+ *
+ * @param table The string form of a distribution table, where each entry is
+ * separated by a forward slash ('/').
+ * @param count_out The number of elements in the table or zero if there was
+ * an error creating the table.
+ * @return An integer array containing the values given in 'table' or NULL if
+ * there was an error.  
+ */
+int *parse_loss_table(char *table, int *count_out)
 {
   int err = 0, *retval = NULL;
 
-  *count = table_size(table);
-  if ((retval = malloc(sizeof(int) * *count)) != NULL) {
+  *count_out = table_size(table);
+  if ((retval = malloc(sizeof(int) * *count_out)) != NULL) {
     int lpc = 0;
     
     do {
@@ -834,18 +1058,26 @@ int *parse_double_table(char *table, int *count)
     } while (!err && (table = strchr(table, '/')) != NULL);
   }
   else {
-    error("parse_double_table: can't allocate memory for table.\n");
+    error("parse_loss_table: can't allocate memory for table.\n");
   }
 
   if (err) {
     free(retval);
     retval = NULL;
-    *count = 0;
+    *count_out = 0;
   }
   
   return retval;
 }
 
+/**
+ * Duplicate an integer array.
+ *
+ * @param table The array to duplicate.
+ * @param count The number of entries in the table.
+ * @return The newly allocated table or NULL if count was zero or an error
+ * occurred.
+ */
 int *tabledup(int *table, int count)
 {
   int *retval = NULL;
@@ -901,6 +1133,7 @@ int get_new_link_params(int l_index, event_handle_t handle,
     
     while((argvalue = strsep(&temp," \n"))){
 
+      /* BANDWIDTH parameters. */
       if(strcmp(argtype,"BANDWIDTH")== 0){
 	info("Bandwidth = %d\n", atoi(argvalue) * 1000);
 	link_map[l_index].params[p_num].bw.bandwidth = atoi(argvalue) * 1000;
@@ -970,6 +1203,7 @@ int get_new_link_params(int l_index, event_handle_t handle,
 	 }
       }
       
+      /* DELAY parameters. */
       else if (strcmp(argtype,"DELAY")== 0){
 	 info("Delay = %d\n", atoi(argvalue));
 	 link_map[l_index].params[p_num].delay.delay = atoi(argvalue);
@@ -1027,6 +1261,7 @@ int get_new_link_params(int l_index, event_handle_t handle,
 	 }
       }
       
+      /* PLR parameters. */
       else if (strcmp(argtype,"PLR")== 0){
 	 info("Plr = %f\n", atof(argvalue));
 	 link_map[l_index].params[p_num].loss.plr =
@@ -1084,8 +1319,8 @@ int get_new_link_params(int l_index, event_handle_t handle,
 
 	 free(link_map[l_index].params[p_num].loss.table);
 	 link_map[l_index].params[p_num].loss.table =
-	   parse_double_table(argvalue,
-			      &link_map[l_index].params[p_num].loss.entries);
+	   parse_loss_table(argvalue,
+			    &link_map[l_index].params[p_num].loss.entries);
 	 if (! gotpipe) {
 	   link_map[l_index].params[1].loss.entries =
 	     link_map[l_index].params[0].loss.entries;
@@ -1192,7 +1427,10 @@ int get_new_link_params(int l_index, event_handle_t handle,
 	   return -1;
 	 }
        }
-       else if(strcmp(argtype,"DEST")== 0){
+       else if(strcmp(argtype,"DEST")== 0 ||
+	       strcmp(argtype,"SRCPORT") == 0 ||
+	       strcmp(argtype,"DSTPORT") == 0 ||
+	       strcmp(argtype,"PROTOCOL") == 0){
        }
        else {
 	 error("unrecognized argument\n");
@@ -1204,6 +1442,7 @@ int get_new_link_params(int l_index, event_handle_t handle,
   if (gotpipe)
     *pipe_which = p_num;
 
+  /* Poisson distribution tables are generated below. */
   if (dobpois) {
     free(link_map[l_index].params[p_num].bw.table);
     link_map[l_index].params[p_num].bw.table =

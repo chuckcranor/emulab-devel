@@ -81,6 +81,7 @@ void realloc_map(void)
     error("out of memory\n");
     exit(1);
   }
+  link_map[link_index].line[0] = '\0';
 }
 
 int main(int argc, char **argv)
@@ -390,7 +391,10 @@ void dump_link_map(){
     info("linkstatus = %d \n", link_map[i].stat);
     info("numpipes   = %d \n", link_map[i].numpipes);
     info("islan      = %d \n", link_map[i].islan);
-    info("dest       = %s \n", link_map[i].dest);
+    info("dest       = %s \n", link_map[i].fs.dest);
+    info("protocol   = %s \n", link_map[i].fs.protocol);
+    info("srcport    = %d \n", link_map[i].fs.srcport);
+    info("dstport    = %d \n", link_map[i].fs.dstport);
 
     for (j = 0; j < link_map[i].numpipes; j++) {
       info("Pipe params:\n");
