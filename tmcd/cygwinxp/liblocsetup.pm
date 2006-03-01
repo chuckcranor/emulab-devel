@@ -235,21 +235,13 @@ sub os_accounts_sync()
     return 0;
 }
 
-#
-# Generate and return an ifconfig line that is approriate for putting
-# into a shell script (invoked at bootup).
-#
+# Import the mapping from non-control interface names, e.g. "Local Area
+# Connection #4" to the Device Instance ID's used as devcon arguments, e.g.
+# "@PCI\VEN_8086&DEV_1010&SUBSYS_10128086&REV_01\5&2FA58B96&0&210030".
 my %dev_map = ();
-sub os_ifconfig_line($$$$$$$;$$)
+sub get_dev_map()
 {
-    my ($iface, $inet, $mask, $speed, $duplex, $aliases,
-	$iface_type, $settings, $rtabid) = @_;
-    my ($uplines, $downlines);
-
     if (! $dev_map) {
-	# Map from non-control interface names, e.g. "Local Area Connection #4"
-	# to the Device Instance ID's used as devcon arguments, e.g.
-	# "@PCI\VEN_8086&DEV_1010&SUBSYS_10128086&REV_01\5&2FA58B96&0&210030".
 	if (! open(DEVMAP, $XIMAP)) {
 	    warning("Cannot open $XIMAP $!\n");
 	}
@@ -262,14 +254,74 @@ sub os_ifconfig_line($$$$$$$;$$)
 	    close(DEVMAP);
 	}
     }
+}
+
+#
+# Generate and return an ifconfig line that is approriate for putting
+# into a shell script (invoked at bootup).
+#
+sub os_ifconfig_line($$$$$$$;$$)
+{
+    my ($iface, $inet, $mask, $speed, $duplex, $aliases,
+	$iface_type, $settings, $rtabid) = @_;
+    my ($uplines, $downlines);
+
+    # Handle interfaces missing from ipconfig.
+    get_dev_map();
+    if ( ! defined( $dev_map{$iface} ) ) {
+	# Try rc.cygwin again to disable/re-enable the interface object.
+	system("$BINDIR/rc/rc.cygwin");
+
+	# Reboot if it still fails, in hope that the interface comes back.
+	# 
+	# We dare not proceed, because using netsh to try to set the IP
+	# address on one of the missing addresses will blow away the IP on
+	# *another* interface, sometimes the control net interface.  Then
+	# we would really be in the soup...
+	get_dev_map();
+	if ( ! defined( $dev_map{$iface} ) ) {
+	    system("$BINDIR/rc/rc.reboot");
+	}
+    }
 
     if ($inet ne "") {
-	$uplines  .= sprintf($IFCONFIG, $iface, $inet, $mask);
-	$uplines  .= sprintf("\n    echo \"Enabling %s on %s\"", $iface, $inet);
-	$uplines  .= sprintf("\n    $DEVCON enable '%s'" , $dev_map{$iface});
+	# Startup.
+	$uplines   .= qq{\n    #================================\n    };
+	$uplines   .= qq{echo "Enabling $iface on $inet"\n    };
+	#
+	# Re-enable device if necessary (getmac Transport is "Disconnected".)
+	my $test   =  qq[getmac /v /fo csv | awk -F, '/^"$iface"/{print \$4}'];
+	$uplines   .= qq{if [ \`$test\` = '"Disconnected"' ]; then\n    };
+	$uplines   .=   "  $DEVCON enable '$dev_map{$iface}'\n    ";
+	$uplines   .= qq{  sleep 5\n    };
+	$uplines   .= qq{fi\n    };
+	#
+	# Configure.
+	$uplines   .= sprintf($IFCONFIG, $iface, $inet, $mask) . qq{\n    };
+	#
+	# Check that the configuration took!
+	my $showip =  qq[$NETSH interface ip show address name="$iface"];
+	$test      =  qq[$showip | awk '/IP Address:/{print \$NF}'];
+	$uplines   .= qq{if [ \`$test\` != $inet ]; then\n    };
+	#
+	# Re-do it if not.
+	$uplines   .= qq{  echo "    Config failed on $iface, retrying."\n    };
+	$uplines   .=   "  $DEVCON disable '$dev_map{$iface}'\n    ";
+	$uplines   .= qq{  sleep 5\n    };
+	$uplines   .=   "  $DEVCON enable '$dev_map{$iface}'\n    ";
+	$uplines   .= qq{  sleep 5\n    };
+	$uplines   .= sprintf($IFCONFIG, $iface, $inet, $mask) . qq{\n    };
+	#
+	# Re-check.
+	$uplines   .= qq{  if [ \`$test\` != $inet ]; then\n    };
+	$uplines   .= qq{    echo "    Reconfig still failed on $iface."\n    };
+	$uplines   .= qq{  else echo "    Reconfig succeeded on $iface."\n    };
+	$uplines   .= qq{  fi\n    };
+	$uplines   .= qq{fi};
 
-	$downlines  .= sprintf("echo \"Disabling %s from %s\"", $iface, $inet);
-	$downlines  .= sprintf("\n    $DEVCON disable '%s'" , $dev_map{$iface});
+	# Shutdown.
+	$downlines .= qq{echo "Disabling $iface from $inet"\n    };
+	$downlines .=   "$DEVCON disable '$dev_map{$iface}'\n";
     }
     
     return ($uplines, $downlines);
@@ -573,9 +625,12 @@ sub os_routing_add_manual($$$$$;$)
     #     the IP Address Table for the machine.
     # Re-doing the command later succeeds.
     # Wrap the route command in a loop to make sure it gets done.
-    $cmd = "while ! ( route print | grep -Fq $destip ); do \n
+    # Don't loop forever.
+    $cmd = "n=1; while ! ( $ROUTE print | grep -Fq $destip ); do \n
                 echo $cmd;\n
                 $cmd\n
+                let n++; if [[ \$n > 5 ]]; then break; fi
+                sleep 5\n
             done";
 
     return $cmd;

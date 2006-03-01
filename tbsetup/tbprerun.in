@@ -1,7 +1,7 @@
 #!/usr/bin/perl -w
 #
 # EMULAB-COPYRIGHT
-# Copyright (c) 2000-2005 University of Utah and the Flux Group.
+# Copyright (c) 2000-2006 University of Utah and the Flux Group.
 # All rights reserved.
 #
 use English;
@@ -31,6 +31,7 @@ my $state;
 #
 my $TBROOT   = "@prefix@";
 my $TESTMODE = @TESTMODE@;
+my $TBLOGS = "@TBLOGSEMAIL@";
 my $wrapper  = "$TBROOT/libexec/assign_wrapper";
 my $batchexp = "$TBROOT/bin/batchexp";
 my $template = "$TBROOT/lib/ns2ir/elabinelab.ns";
@@ -162,7 +163,7 @@ my $events_result =
 		 "where ev.pid='$pid' and ev.eid='$eid' and ".
 		 "  (vl.uselinkdelay!=0 or e.uselinkdelays!=0 or ".
 		 "   e.forcelinkdelays!=0) and ev_ob.type='LINK' and ".
-		 "  (o.os is NULL or o.os='Linux')");
+		 "  (o.os is NULL or o.os='Linux' or o.os='Fedora')");
 if ($events_result->num_rows) {
     fatal("Oops, cannot send static events to linkdelay agents on Linux!");
 }
@@ -275,6 +276,24 @@ print "Generating topomap ...\n";
 
 if (system("gentopofile $pid $eid")) {
     fatal("gentopofile failed!");
+}
+
+if (!$elabinelab) {
+    TBDebugTimeStamp("verify-ns started");
+    print "Verifying parse ...\n";
+    
+    if (system("verify-ns $pid $gid $eid $nsfile")) {
+	if (1) {
+	    SENDMAIL($TBLOGS,
+		     "NS Verify failure for $pid/$eid",
+		     "'verify-ns' failed for $pid/$eid\n".
+		     "\nIf it is not a user error nstb_compat.tcl is ".
+		     "probably out of date.\n");
+	}
+	else {
+	    fatal("verify-ns failed!");
+	}
+    }
 }
 
 #

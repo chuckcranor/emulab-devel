@@ -111,6 +111,8 @@ REPLACE INTO event_objecttypes VALUES (12,'TIMELINE');
 REPLACE INTO event_objecttypes VALUES (13,'CONSOLE');
 REPLACE INTO event_objecttypes VALUES (14,'TOPOGRAPHY');
 REPLACE INTO event_objecttypes VALUES (15,'LINKTRACE');
+REPLACE INTO event_objecttypes VALUES (16,'EVPROXY');
+REPLACE INTO event_objecttypes VALUES (17,'BGMON');
 
 --
 -- Dumping data for table `exported_tables`
@@ -760,6 +762,8 @@ REPLACE INTO table_regex VALUES ('mailman_listnames','listname','text','regex','
 REPLACE INTO table_regex VALUES ('default','fulltext','text','regex','^[\\040-\\176\\012\\015\\011]*$',0,20000,NULL);
 REPLACE INTO table_regex VALUES ('node_attributes','attrkey','text','regex','^[-\\w]+$',1,32,NULL);
 REPLACE INTO table_regex VALUES ('node_attributes','attrvalue','text','regex','^[-\\w\\.+,\\s]+$',0,255,NULL);
+REPLACE INTO table_regex VALUES ('archive_tags','description','text','redirect','projects:why',1,2048,NULL);
+REPLACE INTO table_regex VALUES ('archive_tags','tag','text','regex','^[a-zA-Z][-\\w\\.\\+]+$',3,64,NULL);
 
 --
 -- Dumping data for table `testsuite_preentables`

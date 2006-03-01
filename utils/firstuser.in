@@ -13,6 +13,7 @@ use Getopt::Std;
 
 use lib '@prefix@/lib';
 use libdb;
+use libtestbed;
 
 my $tbadmin    = '@TBADMINGROUP@';
 my $ELABINELAB = @ELABINELAB@;
@@ -37,6 +38,7 @@ my $trust           = "project_root";
 my $password;
 my $encpass;
 my %opts;
+my $mailman_password;
 
 my $CONTROL	= "@USERNODE@";
 my $BOSSNODE	= "@BOSSNODE@";
@@ -84,6 +86,9 @@ if (!defined($opts{u})) {
     print "meta-project.\n\n";
 }
 
+# Need this for mailman support; harmless.
+$mailman_password = substr(TBGenSecretKey(), 0, 10);
+
 # Get a password for the user
 if (!defined($password)) {
     #
@@ -108,6 +113,14 @@ if (!defined($encpass)) {
 }
 
 # Get uid for the user and a gid for the project
+
+# For non-initial users, get the next available index.
+$result = DBQueryFatal("select idx from emulab_indicies ".
+		       "where name='next_uid'");
+if ($result->numrows() > 0) {
+    ($MINUID) = $result->fetchrow_array();
+}
+
 my $uid = $MINUID;
 while (getpwuid($uid)) { $uid++; }
 
@@ -155,13 +168,14 @@ if ($CONTROL ne $BOSSNODE) {
 }
 
 # Initialize the index value;
-DBQueryFatal("replace into emulab_indicies set name='next_uid',idx=$uid");
+DBQueryFatal("replace into emulab_indicies set name='next_uid',idx=$uid+1");
 
 print "Creating user in database...\n";
 DBQueryFatal("insert into users set uid='$protouser', usr_created=now(), " .
 	"usr_name='$protouser_name', usr_pswd='$encpass', unix_uid=$uid, ".
 	"usr_modified=now(), admin=1, webonly=$webonly, status='active', ".
-	"usr_shell='$protouser_shell', usr_email='$protouser_email'");
+	"usr_shell='$protouser_shell', usr_email='$protouser_email', ".
+	"mailman_password='$mailman_password'");
 
 if (!defined($opts{u})) {
     

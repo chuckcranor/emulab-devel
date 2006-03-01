@@ -1,7 +1,7 @@
 #!/usr/bin/perl -w
 #
 # EMULAB-COPYRIGHT
-# Copyright (c) 2004, 2005 University of Utah and the Flux Group.
+# Copyright (c) 2004, 2005, 2006 University of Utah and the Flux Group.
 # All rights reserved.
 #
 # XXX I hardwire IPs into generated /etc/rc.conf and /etc/rc.resolv.
@@ -93,6 +93,9 @@ my $hostname = `hostname`;
 chomp($hostname);
 my ($bossname, $outer_bossip) = tmccbossinfo();
 
+# Outer FS node name. See below.
+my $fsname;
+
 # Cert stuff to give the inner emulab
 my $RPCCERT = "/usr/testbed/etc/outer_emulab.pem";
 #my $RPCPORT = 7778;
@@ -102,6 +105,18 @@ my $WINSUPPORT = 0;
 
 # This also gets turned on/off below
 my $NOSETUP    = 0;
+
+# This will not change ...
+my $PHP4_PKG = "php4-extensions-1.0";
+
+# Version of FreeBSD.
+my $FBSD_VERSION = 4;
+if (`uname -r` =~ /^(\d)/) {
+    $FBSD_VERSION = $1;
+}
+else {
+    die("Could not determine what version of FreeBSD you are running!\n");
+}
 
 #
 # Find out our domain name, so that we can qualify the localhost entry
@@ -233,6 +248,37 @@ sub doboot()
 	$NOSETUP = 1;
     }
 
+    # XXX Temporary
+    if ($FBSD_VERSION == 5) {    
+	$emulabconfig{FS_PKG_DIR}   = "/share/freebsd/5.4/packages";
+	$emulabconfig{OPS_PKG_DIR}  = "/share/freebsd/5.4/packages";
+	$emulabconfig{BOSS_PKG_DIR} = "/share/freebsd/5.4/packages";
+	$emulabconfig{FS_PKG}       = "emulab-fs-2.0";
+	$emulabconfig{OPS_PKG}      = "emulab-ops-2.0";
+	$emulabconfig{BOSS_PKG}     = "emulab-boss-2.0";
+    }
+    elsif ($FBSD_VERSION == 6) {
+	$emulabconfig{FS_PKG_DIR}   = "/share/freebsd/6.0/packages";
+	$emulabconfig{OPS_PKG_DIR}  = "/share/freebsd/6.0/packages";
+	$emulabconfig{BOSS_PKG_DIR} = "/share/freebsd/6.0/packages";
+	$emulabconfig{FS_PKG}       = "emulab-fs-2.0";
+	$emulabconfig{OPS_PKG}      = "emulab-ops-2.0";
+	$emulabconfig{BOSS_PKG}     = "emulab-boss-2.0";
+    }
+
+    # Figure out where /share is coming from (outer fs node). We need
+    # that below.
+    $fsname = `mount | grep /users | head -1`;
+    if ($?) {
+	fatal("Could not get mount information!");
+    }
+    if ($fsname =~ /^([-\w\.]+):/) {
+	$fsname = $1;
+    }
+    else {
+	fatal("Could not determine the name of the outer FS node!");
+    }
+
     if ($emulabconfig{"ROLE"} eq "fs") {
 	SetupFsNode();
     }
@@ -264,12 +310,6 @@ sub SetupFsNode()
     my ($os, $rel) = split " ", `uname -sr`;
     if ($os ne "FreeBSD") {
 	SetupFatal("FS node must run FreeBSD\n");
-    }
-    # XXXX brutal!
-    if ($rel =~ /^5\.4/) {
-	$emulabconfig{FS_PKG_DIR} =
-	    "/share/freebsd/packages/FreeBSD-5.4-20050508";
-	($emulabconfig{FS_PKG} = $emulabconfig{OPS_PKG}) =~ s/ops/fs/;
     }
 
     #
@@ -442,6 +482,8 @@ sub SetupFsNode()
     print RC "xntpd_enable=\"YES\"\n";
     print RC "linux_enable=\"YES\"\n";
 
+    print RC "rpcbind_enable=\"YES\"\n";
+    print RC "mountd_enable=\"YES\"\n";
     print RC "nfs_server_enable=\"YES\"\n";
     print RC "nfs_server_flags=\"-u -t -n 8\"\n";
     print RC "nfs_client_enable=\"YES\"\n";
@@ -671,6 +713,9 @@ sub SetupOpsNode($)
     unlink("/etc/rc.conf.d/dhclient")
 	if (-e "/etc/rc.conf.d/dhclient");
 
+    goto skippkg
+	if ($NOSETUP);
+    
     #
     # Do this as a separate step because PKG_DIR might be an NFS path,
     # but we must do the NFS unmounts before running ops-install. 
@@ -691,19 +736,15 @@ sub SetupOpsNode($)
 
     $ENV{"PKG_PATH"} = $emulabconfig{OPS_PKG_DIR};
     mysystem("pkg_add $emulabconfig{OPS_PKG} >/tmp/perrs 2>&1");
-    if ($WINSUPPORT) {
-	mysystem("pkg_add gcc30-3.0.4_1 >/tmp/perrs.gcc 2>&1");
-    }
+
     if ($isfs) {
 	# XXX if not set, derive from the OPS info
 	if (!$emulabconfig{FS_PKG_DIR} || !$emulabconfig{FS_PKG}) {
 	    $emulabconfig{FS_PKG_DIR} = $emulabconfig{OPS_PKG_DIR};
 	    ($emulabconfig{FS_PKG} = $emulabconfig{OPS_PKG}) =~ s/ops/fs/;
 	}
-	print "Installing the fs metaport.\n";
-	$ENV{"PKG_PATH"} = $emulabconfig{FS_PKG_DIR};
-	mysystem("pkg_add $emulabconfig{FS_PKG} >/tmp/fs-perrs 2>&1");
     }
+  skippkg:
 
     #
     # Clean up a few things on the image and create symlinks into ${TBDIR} for
@@ -731,6 +772,15 @@ sub SetupOpsNode($)
     } else {
 	mysystem("mkdir /users /proj /groups /share");
     }
+
+    #
+    # Lets mount the package dir so that we can pass off some stuff to
+    # the install scripts;
+    #
+    if (! -d "/packages") {
+	mysystem("mkdir /packages");
+    }
+    mysystem("mount ${fsname}:" . $emulabconfig{OPS_PKG_DIR} . " /packages");
 
     #
     # Need these for rc.conf.
@@ -763,6 +813,8 @@ sub SetupOpsNode($)
     print RC "linux_enable=\"YES\"\n";
     print RC "accounting_enable=\"YES\"\n";
 
+    print RC "rpcbind_enable=\"YES\"\n";
+    print RC "mountd_enable=\"YES\"\n";
     print RC "nfs_server_enable=\"YES\"\n";
     print RC "nfs_server_flags=\"-u -t -n 8\"\n";
     print RC "nfs_client_enable=\"YES\"\n";
@@ -818,9 +870,11 @@ sub SetupOpsNode($)
     #
     # Create the ops node.
     #
-    my $pkg = "-P $emulabconfig{OPS_PKG}";
+    $ENV{"PKG_PATH"} = "/packages";
+    my $pkg = "-P $emulabconfig{OPS_PKG} -p /packages " .
+	($isfs ? "-F $emulabconfig{FS_PKG}" : "");
     mysystem("cd ${TBDIR}/testbed/obj/testbed/install; ".
-	     "   perl ops-install $pkg -b");
+	     "   perl ops-install $pkg -b -w ElabInElab ");
 
     #
     # And install the ops side.
@@ -850,6 +904,16 @@ sub SetupOpsNode($)
     # prepare, or scale it back for inner elab. Needs more thought.
     #
     mysystem("killall mountd");
+    #
+    # Its worse on FreeBSD5! We lost the rpcbind socket too. Killing
+    # that means we have to restart nfsd so it can register.
+    #
+    if ($FBSD_VERSION >= 5) {
+	mysystem("/etc/rc.d/nfsd stop");
+	mysystem("killall rpcbind");
+	mysystem("rpcbind");
+	mysystem("/etc/rc.d/nfsd start");
+    }
     mysystem("mountd -r");
 
     #
@@ -872,10 +936,6 @@ sub SetupOpsNode($)
     # 
     mysystem("echo '/usr/local/etc/emulab/rc/rc.inelab' ".
 	     "   >> /etc/rc.local");
-
-    # Ack, still waiting for new images.
-    mysystem("cp ${TBDIR}/testbed/src/testbed/tmcd/common/rc.inelab ".
-	     "   /usr/local/etc/emulab/rc/rc.inelab");
 
     return
 	if ($NOSETUP);
@@ -1003,6 +1063,9 @@ sub SetupBossNode()
 	if (! -d "/var/db/mysql");
     mysystem("$BINDIR/mkextrafs.pl -f -s 2 /var/db/mysql");
 
+    goto skippkg
+	if ($NOSETUP);
+
     #
     # Do this as a separate step cause we need the NFS mounts, but
     # must do the unmounts before running ops-install. 
@@ -1022,22 +1085,24 @@ sub SetupBossNode()
     }
 
     $ENV{"PKG_PATH"} = $emulabconfig{BOSS_PKG_DIR};
-    mysystem("pkg_add -f -v $emulabconfig{BOSS_PKG} >/tmp/perrs 2>&1");
-    if ($WINSUPPORT) {
-	mysystem("pkg_add gcc30-3.0.4_1 >/tmp/perrs.gcc 2>&1");
-    }
+    mysystem("pkg_add -f $emulabconfig{BOSS_PKG} >/tmp/perrs 2>&1");
 
-    #
-    # Extra stuff to fix up php package stuff. Ask Rob!
-    #
-#    mysystem("tar xzf ${TBDIR}/testbed/stuff/extras.tar.gz -C /");
-
+  skippkg:
     #
     # We no longer need anything from NFS, and we need to unmount everything
     # so we can mount new NFS filesystems in their proper places. 
     # 
     mysystem("umount -A -t nfs");
-    
+
+    #
+    # Lets mount the package dir so that we can pass off some stuff to
+    # the install scripts.
+    #
+    if (! -d "/packages") {
+	mysystem("mkdir /packages");
+    }
+    mysystem("mount ${fsname}:" . $emulabconfig{BOSS_PKG_DIR} . " /packages");
+
     #
     # Need to create an /etc/rc.conf that is more suitable for boss.
     # I took most of this from our real ops node. It will be modified
@@ -1057,6 +1122,8 @@ sub SetupBossNode()
     print RC "linux_enable=\"YES\"\n";
     print RC "accounting_enable=\"YES\"\n";
 
+    print RC "rpcbind_enable=\"YES\"\n";
+    print RC "mountd_enable=\"YES\"\n";
     print RC "nfs_server_enable=\"YES\"\n";
     print RC "nfs_server_flags=\"-u -t -n 8\"\n";
     print RC "nfs_client_enable=\"YES\"\n";
@@ -1120,7 +1187,8 @@ sub SetupBossNode()
     #
     # Create the boss node. This will also install the software.
     #
-    my $pkg = "-P $emulabconfig{BOSS_PKG}";
+    $ENV{"PKG_PATH"} = "/packages";
+    my $pkg = "-P $emulabconfig{BOSS_PKG} -p /packages";
     mysystem("cd ${TBDIR}/testbed/obj/testbed/install; ".
 	     "   perl boss-install $pkg -b -w ElabInElab");
 
@@ -1238,10 +1306,6 @@ sub SetupBossNode()
     #
     mysystem("echo '/usr/local/etc/emulab/rc/rc.inelab' ".
 	     "   >> /etc/rc.local");
-
-    # Ack, still waiting for new images.
-    mysystem("cp ${TBDIR}/testbed/src/testbed/tmcd/common/rc.inelab ".
-	     "   /usr/local/etc/emulab/rc/rc.inelab");
 }
 
 #
@@ -1408,6 +1472,24 @@ sub CreateDefsFile($)
 		/^FRISEBEEMCASTADDR$/ && do {
 		    print OUTDEFS "FRISEBEEMCASTADDR=\"$frismcastaddr\"\n";
 		    print OUTDEFS "FRISEBEEMCASTPORT=\"6000\"\n";
+		    last SWITCH;
+		};
+		/^MAILMANSUPPORT$/ && do {
+		    if ($FBSD_VERSION == 6) {
+			print OUTDEFS "MAILMANSUPPORT=1\n";
+		    }
+		    else {
+			print OUTDEFS "MAILMANSUPPORT=0\n";
+		    }
+		    last SWITCH;
+		};
+		/^CVSSUPPORT$/ && do {
+		    if ($FBSD_VERSION == 6) {
+			print OUTDEFS "CVSSUPPORT=1\n";
+		    }
+		    else {
+			print OUTDEFS "CVSSUPPORT=0\n";
+		    }
 		    last SWITCH;
 		};
 		

@@ -1,6 +1,6 @@
 /*
  * EMULAB-COPYRIGHT
- * Copyright (c) 2000-2005 University of Utah and the Flux Group.
+ * Copyright (c) 2000-2006 University of Utah and the Flux Group.
  * All rights reserved.
  */
 
@@ -78,7 +78,13 @@ event_register(char *name, int threaded)
 }
 
 event_handle_t
-event_register_withkeyfile(char *name, int threaded, char *keyfile)
+event_register_withkeyfile(char *name, int threaded, char *keyfile) {
+  return event_register_withkeyfile_withretry(name, threaded, keyfile, -1);
+}
+
+event_handle_t
+event_register_withkeyfile_withretry(char *name, int threaded, 
+				     char *keyfile, int retrycount)
 {
     /* Grab the key data and stick it into the handle. */
     if (keyfile) {
@@ -101,14 +107,25 @@ event_register_withkeyfile(char *name, int threaded, char *keyfile)
 		return 0;
 	}
 	fclose(fp);
-	return event_register_withkeydata(name, threaded, buf, cc);
+	return event_register_withkeydata_withretry(name, threaded, 
+					  buf, cc, retrycount);
     }
-    return event_register_withkeydata(name, threaded, NULL, 0);
+    return event_register_withkeydata_withretry(name, threaded, NULL, 
+						0, retrycount);
 }
 
 event_handle_t
 event_register_withkeydata(char *name, int threaded,
-			   unsigned char *keydata, int keylen)
+			   unsigned char *keydata, int keylen){
+    return event_register_withkeydata_withretry(name, threaded, keydata,
+						keylen, -1);
+
+}
+
+event_handle_t
+event_register_withkeydata_withretry(char *name, int threaded,
+			   unsigned char *keydata, int keylen,
+			   int retrycount)
 {
     event_handle_t	handle;
     elvin_handle_t	server;
@@ -155,6 +172,7 @@ event_register_withkeydata(char *name, int threaded,
         handle->mainloop = NULL; /* no mainloop for mt programs */
         handle->notify = elvin_threaded_notify;
         handle->subscribe = elvin_threaded_add_subscription;
+        handle->unsubscribe = elvin_threaded_delete_subscription;
 #else
 	ERROR("Threaded API not linked in with the program!\n");
 	goto bad;
@@ -167,6 +185,7 @@ event_register_withkeydata(char *name, int threaded,
         handle->mainloop = elvin_sync_default_mainloop;
         handle->notify = elvin_sync_notify;
         handle->subscribe = elvin_sync_add_subscription;
+        handle->unsubscribe = elvin_sync_delete_subscription;
     }
 
     /* Initialize the elvin interface: */
@@ -198,6 +217,16 @@ event_register_withkeydata(char *name, int threaded,
             elvin_error_fprintf(stderr, status);
 	    goto bad;
         }
+    }
+
+    /* set connection retries */
+    if (retrycount >= 0) {
+      if (elvin_handle_set_connection_retries(server, retrycount, 
+					      status) == 0) {
+	ERROR("elvin_handle_set_connection_retries failed: ");
+	elvin_error_fprintf(stderr, status);
+	goto bad;
+      }
     }
 
     /* Connect to the elvin server: */
@@ -561,7 +590,7 @@ event_notification_alloc(event_handle_t handle, address_tuple_t tuple)
 	!EVPUT("OBJNAME", objname) ||
 	!EVPUT("EVENTTYPE", eventtype) ||
 	!EVPUT("TIMELINE", timeline) ||
-	! event_notification_put_int32(handle, notification, "SCHEDULER", 0)) {
+	! event_notification_put_int32(handle, notification, "SCHEDULER", tuple->scheduler)) {
 	ERROR("could not add attributes to notification %p\n", notification);
         return NULL;
     }
@@ -1028,12 +1057,25 @@ struct notify_callback_arg {
     event_notify_callback_t callback;
     void *data;
     event_handle_t handle;
+    int do_auth;
 };
 
 static void notify_callback(elvin_handle_t server,
                             elvin_subscription_t subscription,
                             elvin_notification_t notification, int is_secure,
                             void *rock, elvin_error_t status);
+
+struct subscription_callback_arg {
+    event_subscription_callback_t callback;
+    void *data;
+    event_handle_t handle;
+};
+
+static void subscription_callback(elvin_handle_t server,
+				  int result,
+				  elvin_subscription_t subscription,
+				  void *rock,
+				  elvin_error_t status);
 
 #define EXPRESSION_LENGTH 1024
 
@@ -1114,14 +1156,74 @@ addclause(char *tag, char *clause, char *exp, int size, int *index)
 	return 0;	
 }
 
+static char *
+tuple_expression(address_tuple_t tuple, char *expression, int elen)
+{
+    char *retval = expression;
+    int index = 0;
+
+    if (tuple->site &&
+	! addclause("SITE", tuple->site,
+		    &expression[index], elen - index, &index))
+	    return NULL;
+
+    if (tuple->expt &&
+	! addclause("EXPT", tuple->expt,
+		    &expression[index], elen - index, &index))
+	    return NULL;
+
+    if (tuple->group &&
+	! addclause("GROUP", tuple->group,
+		    &expression[index], elen - index, &index))
+	    return NULL;
+
+    if (tuple->host &&
+	! addclause("HOST", tuple->host,
+		    &expression[index], elen - index, &index))
+	    return NULL;
+	
+    if (tuple->objtype &&
+	! addclause("OBJTYPE", tuple->objtype,
+		    &expression[index], elen - index, &index))
+	    return NULL;
+
+    if (tuple->objname &&
+	! addclause("OBJNAME", tuple->objname,
+		    &expression[index], elen - index, &index))
+	    return NULL;
+
+    if (tuple->eventtype &&
+	! addclause("EVENTTYPE", tuple->eventtype,
+		    &expression[index], elen - index, &index))
+	    return NULL;
+    
+    if (tuple->timeline &&
+	! addclause("TIMELINE", tuple->timeline,
+		    &expression[index], elen - index, &index))
+	    return NULL;
+    
+    index += snprintf(&expression[index], elen - index,
+		     "%s SCHEDULER == %d ",
+		     (index ? "&&" : ""),
+		     tuple->scheduler);
+
+    return retval;
+}
+
 event_subscription_t
 event_subscribe(event_handle_t handle, event_notify_callback_t callback,
 		address_tuple_t tuple, void *data)
 {
+	return event_subscribe_auth(handle, callback, tuple, data, 1);
+}
+
+event_subscription_t
+event_subscribe_auth(event_handle_t handle, event_notify_callback_t callback,
+		     address_tuple_t tuple, void *data, int do_auth)
+{
     elvin_subscription_t subscription;
     struct notify_callback_arg *arg;
     char expression[EXPRESSION_LENGTH];
-    int index = 0;
 
     /* XXX: The declaration of expression has to go last, or the
        local variables on the stack after it get smashed.  Check
@@ -1132,51 +1234,9 @@ event_subscribe(event_handle_t handle, event_notify_callback_t callback,
         return NULL;
     }
 
-    if (tuple->site &&
-	! addclause("SITE", tuple->site,
-		    &expression[index], sizeof(expression) - index, &index))
-	    return NULL;
-
-    if (tuple->expt &&
-	! addclause("EXPT", tuple->expt,
-		    &expression[index], sizeof(expression) - index, &index))
-	    return NULL;
-
-    if (tuple->group &&
-	! addclause("GROUP", tuple->group,
-		    &expression[index], sizeof(expression) - index, &index))
-	    return NULL;
-
-    if (tuple->host &&
-	! addclause("HOST", tuple->host,
-		    &expression[index], sizeof(expression) - index, &index))
-	    return NULL;
-	
-    if (tuple->objtype &&
-	! addclause("OBJTYPE", tuple->objtype,
-		    &expression[index], sizeof(expression) - index, &index))
-	    return NULL;
-
-    if (tuple->objname &&
-	! addclause("OBJNAME", tuple->objname,
-		    &expression[index], sizeof(expression) - index, &index))
-	    return NULL;
-
-    if (tuple->eventtype &&
-	! addclause("EVENTTYPE", tuple->eventtype,
-		    &expression[index], sizeof(expression) - index, &index))
-	    return NULL;
+    if (tuple_expression(tuple, expression, sizeof(expression)) == NULL)
+	return NULL;
     
-    if (tuple->timeline &&
-	! addclause("TIMELINE", tuple->timeline,
-		    &expression[index], sizeof(expression) - index, &index))
-	    return NULL;
-    
-    index += snprintf(&expression[index], sizeof(expression) - index,
-		     "%s SCHEDULER == %d ",
-		     (index ? "&&" : ""),
-		     tuple->scheduler);
-
     TRACE("subscribing to event %s\n", expression);
 
     arg = xmalloc(sizeof(*arg));
@@ -1184,18 +1244,108 @@ event_subscribe(event_handle_t handle, event_notify_callback_t callback,
     arg->callback = callback;
     arg->data = data;
     arg->handle = handle;
+    arg->do_auth = do_auth;
 
     subscription = handle->subscribe(handle->server, expression, NULL, 1,
                                      notify_callback, arg, handle->status);
     if (subscription == NULL) {
         ERROR("could not subscribe to event %s: ", expression);
         elvin_error_fprintf(stderr, handle->status);
+	free(arg);
         return NULL;
     }
 
     return subscription;
 }
 
+int
+event_async_subscribe(event_handle_t handle, event_notify_callback_t callback,
+		      address_tuple_t tuple, void *data,
+		      event_subscription_callback_t scb, void *scb_data,
+		      int do_auth)
+{
+    struct notify_callback_arg *arg;
+    struct subscription_callback_arg *sarg;
+    char expression[EXPRESSION_LENGTH];
+    int retval;
+
+    /* XXX: The declaration of expression has to go last, or the
+       local variables on the stack after it get smashed.  Check
+       Elvin for buffer overruns. */
+
+    if (!handle || !callback || !tuple || !scb) {
+        ERROR("invalid parameter\n");
+        return 0;
+    }
+
+    if (tuple_expression(tuple, expression, sizeof(expression)) == NULL)
+	return 0;
+    
+    TRACE("subscribing to event %s\n", expression);
+
+    arg = xmalloc(sizeof(*arg));
+    /* XXX: Free this in an event_unsubscribe.. */
+    arg->callback = callback;
+    arg->data = data;
+    arg->handle = handle;
+    arg->do_auth = do_auth;
+
+    sarg = xmalloc(sizeof(*arg));
+    /* XXX: Free this in an event_unsubscribe.. */
+    sarg->callback = scb;
+    sarg->data = scb_data;
+    sarg->handle = handle;
+
+    retval = elvin_async_add_subscription(handle->server,
+					  expression,
+					  NULL,
+					  1,
+					  notify_callback,
+					  arg,
+					  subscription_callback,
+					  sarg,
+					  handle->status);
+    
+    if (retval == 0) {
+      free(arg);
+      free(sarg);
+    }
+
+    return retval;
+}
+
+int
+event_async_unsubscribe(event_handle_t handle, event_subscription_t es)
+{
+    int retval;
+    
+    if (!es) {
+      ERROR("invalid parameter\n");
+      return 0;
+    }
+
+    free(es->rock);
+    es->rock = NULL;
+    retval = elvin_async_delete_subscription(handle->server,
+					     es,
+					     NULL,
+					     NULL,
+					     handle->status);
+
+    return retval;
+}
+
+int
+event_unsubscribe(event_handle_t handle, event_subscription_t es)
+{
+    int retval;
+
+    free(es->rock);
+    es->rock = NULL;
+    retval = handle->unsubscribe(handle->server, es, handle->status);
+    
+    return retval;
+}
 
 /*
  * Callback passed to elvin_notification_traverse in
@@ -1246,7 +1396,8 @@ notify_callback(elvin_handle_t server,
     handle = arg->handle;
 
     /* If MAC does not match, throw it away */
-    if (handle->keydata &&
+    if (arg->do_auth &&
+	handle->keydata &&
 	event_notification_check_hmac(handle, &notification)) {
 	    ERROR("bad hmac\n");
         return;
@@ -1264,6 +1415,36 @@ notify_callback(elvin_handle_t server,
     data = arg->data;
 
     callback(handle, &notification, data);
+}
+
+/*
+ * Callback passed to handle->subscribe in event_subscribe. Used to
+ * provide our own callback above Elvin's.
+ */
+static void
+subscription_callback(elvin_handle_t server,
+		      int result,
+		      elvin_subscription_t subscription,
+		      void *rock,
+		      elvin_error_t status)
+{
+    struct subscription_callback_arg *arg =
+	(struct subscription_callback_arg *) rock;
+    event_handle_t handle;
+    event_subscription_callback_t callback;
+    void *data;
+
+    TRACE("received subscription notification\n");
+    assert(arg);
+
+    handle = arg->handle;
+    callback = arg->callback;
+    data = arg->data;
+
+    callback(handle, result, subscription, data);
+
+    /* free the sarg allocated in async_subscribe */
+    free(arg);
 }
 
 /*
@@ -1904,3 +2085,25 @@ int event_do(event_handle_t handle, ea_tag_t tag, ...)
 	
 	return retval;
 }
+
+
+int event_set_idle_period(event_handle_t handle, int seconds) {
+  int retval;
+
+  if (!handle) {
+    ERROR("invalid parameter\n");
+    return 0;
+  }
+
+  retval = elvin_handle_set_idle_period(handle->server, seconds,
+				     handle->status);
+  if (retval == 0) {
+    ERROR("could not set elvin idle period to %i", seconds);
+    elvin_error_fprintf(stderr, handle->status);
+  }
+
+  return retval;
+
+}
+
+		

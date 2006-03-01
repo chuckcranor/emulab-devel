@@ -2,7 +2,7 @@
 
 #
 # EMULAB-COPYRIGHT
-# Copyright (c) 2000-2005 University of Utah and the Flux Group.
+# Copyright (c) 2000-2006 University of Utah and the Flux Group.
 # All rights reserved.
 #
 use English;
@@ -410,7 +410,7 @@ sub doSwapout($) {
 	undef $os_setup_pid;
     }
 
-    if ($NFSTRACESUPPORT) {
+    if (0 && $NFSTRACESUPPORT && $type == REAL) {
 	print "Getting files accessed via NFS.\n";
 	TBDebugTimeStamp("nfstrace started");
 	system("nfstrace transfer $pid $eid");
@@ -722,7 +722,8 @@ sub doSwapin($) {
 			 "  (o.pid=vl.pid or o.pid='" . TBOPSPID() . "') ".
 			 "where (vl.uselinkdelay!=0 or e.uselinkdelays!=0 or ".
 			 "       e.forcelinkdelays!=0) and ".
-			 "     (o.os is NULL or o.os='Linux') and ".
+			 "     (o.os is NULL or o.os='Linux' or ".
+			 "      o.os='Fedora') and ".
 			 "     e.pid='$pid' and e.eid='$eid'");
 
 	    if ($db_result->numrows) {
@@ -1003,7 +1004,7 @@ sub doSwapin($) {
     TBDebugTimeStamp("gentopofile finished");
 
     # XXX fer now hack
-    if (!$firewalled && !$elabinelab &&
+    if (0 && !$firewalled && !$elabinelab &&
 	($pid eq "testbed" || $pid eq "tbres")) {
 	DBQueryWarn("update experiments set ".
 		    "    savedisk=1 where pid='$pid' and eid='$eid'");
@@ -1454,7 +1455,7 @@ sub undoFWNodes($$;@) {
     my @fwstate = ();
     my $zap = 1;
 
-    if (!defined(@nodes) || @nodes == 0) {
+    if (!@nodes || scalar(@nodes) == 0) {
 	@nodes = ExpNodes($pid, $eid, 1);
 	$doall = 1;
     }

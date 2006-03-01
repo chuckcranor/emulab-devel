@@ -1,7 +1,7 @@
 <?php
 #
 # EMULAB-COPYRIGHT
-# Copyright (c) 2000-2005 University of Utah and the Flux Group.
+# Copyright (c) 2000-2006 University of Utah and the Flux Group.
 # All rights reserved.
 #
 
@@ -266,7 +266,7 @@ function WRITESIDEBAR() {
 	}
     }
 
-    echo "<FORM method=get ACTION=$TBDOCBASE/search.php3>\n";
+    echo "<FORM method=get ACTION=$newsBase/search.php3>\n";
 ?>
   <script type='text/javascript' language='javascript' src='textbox.js'></script>
   <table class="menu" width=210 cellpadding="0" cellspacing="0">
@@ -300,7 +300,7 @@ function WRITESIDEBAR() {
 
     if ($rootEmulab) {
 	# Leave _NEW here about 2 weeks
-	WRITESIDEBARBUTTON_NEW("Papers (Dec 24)", $TBDOCBASE, "pubs.php3");
+	WRITESIDEBARBUTTON_NEW("Papers and Talks (Feb 22)", $TBDOCBASE, "pubs.php3");
 	WRITESIDEBARBUTTON("Software (Jul 18)",
 			       $TBDOCBASE, "software.php3");
 	#WRITESIDEBARBUTTON("Add Widearea Node (CD)",
@@ -967,14 +967,27 @@ function PAGEFOOTER($view = NULL) {
                 <br>
 		</center>\n";
     }
-    echo "
-                <p align=right>
-		  <font size=-2>
-                    Problems?
-	            Contact $TBMAILADDR.
-                  </font>
-                </p>
-                <!-- end copyright -->\n";
+    echo "      <table width='100%' cellpadding='0' cellspacing='0'
+                       class=stealth>
+                <tr>
+                 <td class=stealth align=left>\n";
+    if (! $TBMAINSITE) {
+	#
+	# It is a violation of Emulab licensing restrictions to remove
+	# this logo!
+	#
+	echo "       <a href='http://www.emulab.net'>
+                         <img src='$TBDOCBASE/builtwith.png'></a>";
+    }
+    else {
+	echo " &nbsp";
+    }
+    echo "       </td>
+                 <td class=stealth align=right>
+                    <font size=-2>Problems? Contact $TBMAILADDR
+                 </td>
+                </tr></table>\n";
+    echo " <!-- end copyright -->\n";
 
     ENDPAGE();
 

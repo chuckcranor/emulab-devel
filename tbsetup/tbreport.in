@@ -346,6 +346,7 @@ if ($showlinks) {
 			 "left join reserved as r on r.vname=v.vnode and ".
 			 "     r.pid=v.pid and r.eid=v.eid ".
 			 "left join interfaces as i on r.node_id=i.node_id ".
+			 "     and i.ip=v.ip ".
 			 "left join wires as w on i.node_id=w.node_id1 ".
 			 "     and i.card=w.card1 and i.port=w.port1 ".
 			 "where v.pid='$pid' and v.eid='$eid' and ".
@@ -425,7 +426,8 @@ if ($showlinks) {
 	    printf "%-15s %-15s %-15s %-20s %-9s\n", $vname,
 		   $member, $ipmap{$member}, $mac, $pnode;
 
-	    if (exists($portmap{$member})) {
+	    if (exists($portmap{$member}) &&
+		defined($portmap{$member}->{"SWITCH"})) {
 		my $node_card   = $portmap{$member}->{"NODECARD"};
 		my $node_port   = $portmap{$member}->{"NODEPORT"};
 		my $switch      = $portmap{$member}->{"SWITCH"};
@@ -824,7 +826,7 @@ if ($showdelays && $state eq EXPTSTATE_ACTIVE) {
 
 	    printf("%-15s %-15s %-12s %-9s %-9s %-9s\n", $vname, $vnode,
 		   $dname,
-		   "$node_card/$node_port", $switch,
+		   "$node_card/$node_port $iface", $switch,
 		   "$switch_card/$switch_port");
 	}
 	print "\n";

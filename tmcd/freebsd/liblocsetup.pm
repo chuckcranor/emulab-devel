@@ -2,7 +2,7 @@
 
 #
 # EMULAB-COPYRIGHT
-# Copyright (c) 2000-2005 University of Utah and the Flux Group.
+# Copyright (c) 2000-2006 University of Utah and the Flux Group.
 # All rights reserved.
 #
 
@@ -527,6 +527,21 @@ sub os_fwconfig_line($@)
     my $logreject = defined($fwinfo->{LOGREJECT}) ? $fwinfo->{LOGREJECT} : 0;
 
     #
+    # Convert MAC info to a useable form and filter out the firewall itself
+    #
+    my $href = $fwinfo->{MACS};
+    while (my ($node,$mac) = each(%$href)) {
+	if ($mac eq $fwinfo->{OUT_IF}) {
+	    delete($$href{$node});
+	} elsif ($mac =~ /^(\w{2})(\w{2})(\w{2})(\w{2})(\w{2})(\w{2})$/) {
+	    $$href{$node} = "$1:$2:$3:$4:$5:$6";
+	} else {
+	    warn "*** WARNING: Bad MAC returned for $node in fwinfo: $mac\n";
+	    return ("false", "false");
+	}
+    }
+
+    #
     # VLAN enforced layer2 firewall with FreeBSD/IPFW2
     #
     if ($fwinfo->{TYPE} eq "ipfw2-vlan") {
@@ -546,11 +561,45 @@ sub os_fwconfig_line($@)
 	$upline .= "    fi\n";
 	$upline .= "    sysctl net.link.ether.bridge_vlan=0\n";
 	$upline .= "    sysctl net.link.ether.bridge_ipfw=1\n";
+	$upline .= "    sysctl net.link.ether.ipfw=0\n";
 	$upline .= "    sysctl net.link.ether.bridge_cfg=$vlandev,$pdev\n";
 	$upline .= "    if [ -z \"`sysctl net.inet.ip.fw.enable 2>/dev/null`\" ]; then\n";
 	$upline .= "        kldload ipfw.ko >/dev/null 2>&1\n";
 	$upline .= "    fi\n";
 
+	#
+	# Setup proxy ARP entries.
+	#
+	# Since we want to control which entries are proxied on inside/outside
+	# we use our multiple routing table support and put the inside IF
+	# into a different routing domain.  Then we can enter entries into
+	# one routing table or the other.
+	#
+	# XXX this blows: in order to enter an ARP entry on the vlan0
+	# interface, it has to be configured with an address in the same
+	# subnet.  So we give vlan0 our same address (the beauty of separate
+	# routing tables).  This *shouldn't* confuse anything on the firewall.
+	#
+	if (defined($fwinfo->{MACS})) {
+	    my $myip = `cat /var/emulab/boot/myip`;
+	    chomp($myip);
+	    my $mymask = `cat /var/emulab/boot/mynetmask`;
+	    chomp($mymask);
+
+	    $upline .=
+		"    ifconfig $vlandev inet $myip netmask $mymask rtabid 2\n";
+
+	    # provide GW MAC to inside
+	    $upline .= "    arp -r 2 -s " .
+		$fwinfo->{GWIP} . " " . $fwinfo->{GWMAC} . " pub only\n";
+
+	    # provide node MACs to outside, and unpublished on inside for us
+	    my $href = $fwinfo->{MACS};
+	    while (my ($node,$mac) = each %$href) {
+		$upline .= "    arp -s $node $mac pub only\n";
+		$upline .= "    arp -r 2 -s $node $mac\n";
+	    }
+	}
 	foreach my $rule (sort { $a->{RULENO} <=> $b->{RULENO}} @fwrules) {
 	    my $rulestr = $rule->{RULE};
 	    if ($logaccept && $rulestr =~ /^(allow|accept|pass|permit)\s.*/) {
@@ -568,17 +617,42 @@ sub os_fwconfig_line($@)
 	    $upline .= "        exit 1\n";
 	    $upline .= "    }\n";
 	}
+	if ($logaccept || $logreject) {
+	    $upline .= "    sysctl net.inet.ip.fw.verbose=1\n";
+	}
 	$upline .= "    sysctl net.inet.ip.fw.enable=1 || {\n";
 	$upline .= "        echo 'WARNING: could not enable firewall'\n";
 	$upline .= "        exit 1\n";
 	$upline .= "    }\n";
 	$upline .= "    sysctl net.link.ether.bridge=1";
 
-	$downline  = "sysctl net.link.ether.bridge=0\n";
+	#
+	# XXX maybe we should be more careful to ensure that the bridge
+	# is really down before turning off the firewall.  OTOH, if
+	# someone has really hacked the firewall to the extent that they
+	# can prevent us from shutting down the bridge, then they should
+	# be quite capable of taking down the firewall on their own.
+	#
+	$downline  = "sysctl net.link.ether.bridge=0 || {\n";
+	$downline .= "        echo 'WARNING: could not disable bridge'\n";
+	$downline .= "        echo '         firewall left enabled'\n";
+	$downline .= "        exit 1\n";
+	$downline .= "    }\n";
+	$downline .= "    sysctl net.inet.ip.fw.enable=0\n";
+	if ($logaccept || $logreject) {
+	    $downline .= "    sysctl net.inet.ip.fw.verbose=0\n";
+	}
 	$downline .= "    ipfw -q flush\n";
 	$downline .= "    sysctl net.link.ether.bridge_cfg=\"\"\n";
 	$downline .= "    sysctl net.link.ether.bridge_ipfw=0\n";
 	$downline .= "    sysctl net.link.ether.bridge_vlan=1\n";
+	if (defined($fwinfo->{MACS})) {
+	    my $href = $fwinfo->{MACS};
+	    while (my ($node,$mac) = each %$href) {
+		$downline .= "    arp -d $node pub\n";
+		$downline .= "    arp -r 2 -d $node\n";
+	    }
+	}
 	$downline .= "    ifconfig $vlandev destroy";
 
 	return ($upline, $downline);

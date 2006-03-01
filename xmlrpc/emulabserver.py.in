@@ -2816,6 +2816,35 @@ class experiment:
             
             result.append((agent[0], agent[1], nodeid, ipaddr, agent[3]))
             pass
+
+        res = DBQuery("select n.phys_nodeid,i.IP from reserved as r "
+                      "left join nodes as n on n.node_id=r.node_id "
+                      "left join interfaces as i on i.node_id=n.phys_nodeid "
+                      "  and i.role='ctrl' "
+                      "where r.pid=%s and r.eid=%s and n.type='pcplab' "
+                      "group by n.phys_nodeid",
+                      (argdict["proj"], argdict["exp"]))
+
+        if len(res) > 0:
+            for plab in res:
+                result.append(("__%s_proxy" % plab[0],
+                               " ",
+                               plab[0],
+                               plab[1],
+                               "EVPROXY"))
+                pass
+
+            result.append(("__plab_setup",
+                           "*",
+                           "",
+                           "",
+                           "TIMELINE"))
+            result.append(("__plab_teardown",
+                           "*",
+                           "",
+                           "",
+                           "TIMELINE"))
+            pass
         
         return EmulabResponse(RESPONSE_SUCCESS, value=result)
     
@@ -2903,6 +2932,50 @@ class experiment:
         for event in res:
             result.append((str(event[0]), str(event[1]), event[2],
                            event[3], event[4], event[5], event[6]));
+            pass
+        
+        res = DBQuery("select n.phys_nodeid,i.IP from reserved as r "
+                      "left join nodes as n on n.node_id=r.node_id "
+                      "left join interfaces as i on i.node_id=n.phys_nodeid "
+                      "  and i.role='ctrl' "
+                      "where r.pid=%s and r.eid=%s and n.type='pcplab' "
+                      "group by n.phys_nodeid",
+                      (argdict["proj"], argdict["exp"]))
+
+        if len(res) > 0:
+            count = 0
+            for plab in res:
+                result.append((str(count),
+                               "0.0",
+                               "__%s_proxy" % plab[0],
+                               "EVPROXY",
+                               "UPDATE",
+                               "",
+                               "__plab_setup"))
+                result.append((str(count),
+                               "0.0",
+                               "__%s_proxy" % plab[0],
+                               "EVPROXY",
+                               "CLEAR",
+                               "",
+                               "__plab_teardown"))
+                count += 1
+                pass
+
+            result.append((str(count),
+                           "4.0",
+                           "ns", # XXX
+                           "SIMULATOR",
+                           "LOG",
+                           "Plab setup delay",
+                           "__plab_setup"))
+            result.append((str(count),
+                           "0.0",
+                           "__plab_setup",
+                           "TIMELINE",
+                           "RUN",
+                           "",
+                           "__ns_sequence"))
             pass
         
         return EmulabResponse(RESPONSE_SUCCESS, value=result)
@@ -3108,17 +3181,22 @@ class node:
             pass
 
         res = DBQueryFatal(
-            "SELECT a.node_id,a.type,b.node_id is null,"
+            "SELECT a.node_id,a.type,b.node_id is null or "
+            "  (b.pid=%s and b.eid=%s), "
             "  (a.eventstate='ISUP' or "
             "   a.eventstate='PXEWAIT' or "
-            "   a.eventstate='POWEROFF') "
+            "   a.eventstate='POWEROFF'),wn.site,nfcpu.weight "
             "FROM nodes AS a "
             "left join reserved as b on a.node_id=b.node_id "
             "left join node_types as nt on a.type=nt.type "
             "left join nodetypeXpid_permissions as p on a.type=p.type "
+            "left join widearea_nodeinfo as wn on wn.node_id=a.phys_nodeid "
+            "left join node_features as nfcpu on (nfcpu.node_id=a.phys_nodeid "
+            "  and nfcpu.feature='+load') "
             "WHERE a.role='testnode' "
             "  "+ class_test +" and "
-            "      (p.pid is null" + pid_clause + ") " + type_test)
+            "      (p.pid is null" + pid_clause + ") " + type_test,
+            (TBOPSPID, 'plabnodes'))
         
         if len(res) == 0:
             result = {}
@@ -3132,6 +3210,10 @@ class node:
                     "type" : row[1],
                     "free" : (row[2] == 1 and row[3] == 1),
                     }
+                if row[4]:
+                    result[row[0]]["site"] = row[4]
+                    result[row[0]]["cpu"] = row[5]
+                    pass
                 pass
             pass
 

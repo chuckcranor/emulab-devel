@@ -1,6 +1,6 @@
 /*
  * EMULAB-COPYRIGHT
- * Copyright (c) 2000-2005 University of Utah and the Flux Group.
+ * Copyright (c) 2000-2006 University of Utah and the Flux Group.
  * All rights reserved.
  */
 
@@ -46,6 +46,9 @@ struct event_handle {
                                       elvin_keys_t keys, int accept_insecure,
                                       elvin_notify_cb_t callback, void *rock,
                                       elvin_error_t error);
+    int (*unsubscribe)(elvin_handle_t handle,
+		       elvin_subscription_t subscription,
+		       elvin_error_t error);
 };
 typedef struct event_handle * event_handle_t;
 
@@ -156,6 +159,11 @@ typedef void (*event_notify_callback_t)(event_handle_t handle,
                                         event_notification_t notification,
                                         void *data);
 
+typedef void (*event_subscription_callback_t)(event_handle_t handle,
+					      int result,
+					      event_subscription_t es,
+					      void *data);
+
 /*
  * Function prototypes:
  */
@@ -166,6 +174,11 @@ event_handle_t event_register_withkeyfile(char *name, int threaded,
 					  char *keyfile);
 event_handle_t event_register_withkeydata(char *name, int threaded,
 					  unsigned char *keydata, int len);
+event_handle_t event_register_withkeyfile_withretry(char *name, int threaded,
+					  char *keyfile, int retrycount);
+event_handle_t event_register_withkeydata_withretry(char *name, int threaded,
+					  unsigned char *keydata, int len,
+					  int retrycount);
 int event_unregister(event_handle_t handle);
 int event_poll(event_handle_t handle);
 int event_poll_blocking(event_handle_t handle, unsigned int timeout);
@@ -200,7 +213,7 @@ int event_notification_put_double(event_handle_t handle,
                                   char *name, double value);
 int event_notification_put_int32(event_handle_t handle,
                                  event_notification_t notification,
-                                 char *name, int32_t value);
+                                 char *name, int value);
 int event_notification_put_int64(event_handle_t handle,
                                  event_notification_t notification,
                                  char *name, int64_t value);
@@ -215,6 +228,18 @@ int event_notification_remove(event_handle_t handle,
 event_subscription_t event_subscribe(event_handle_t handle,
                                      event_notify_callback_t callback,
                                      address_tuple_t tuple, void *data);
+event_subscription_t event_subscribe_auth(event_handle_t handle,
+					  event_notify_callback_t callback,
+					  address_tuple_t tuple, void *data,
+					  int do_auth);
+int event_async_subscribe(event_handle_t handle,
+			  event_notify_callback_t callback,
+			  address_tuple_t tuple, void *data,
+			  event_subscription_callback_t scb,
+			  void *scb_data,
+			  int do_auth);
+int event_unsubscribe(event_handle_t handle, event_subscription_t es);
+int event_async_unsubscribe(event_handle_t handle, event_subscription_t es);
 int event_notification_insert_hmac(event_handle_t handle,
 				   event_notification_t notification);
 int event_notification_pack(event_handle_t handle,
@@ -223,6 +248,7 @@ int event_notification_pack(event_handle_t handle,
 int event_notification_unpack(event_handle_t handle,
 			    event_notification_t *notification,
 			    unsigned char *data, int len);
+int event_set_idle_period(event_handle_t handle, int seconds) ;
 
 int event_arg_get(char *args, char *key, char **value);
 int event_arg_dup(char *args, char *key, char **value);

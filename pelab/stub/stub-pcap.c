@@ -1,16 +1,3 @@
-#include <pcap.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <errno.h>
-#include <sys/socket.h>
-#include <netinet/in.h>
-#include <arpa/inet.h>
-#include <netinet/if_ether.h> 
-#include <net/ethernet.h>
-#include <netinet/ether.h> 
-#include <netinet/ip.h> 
-#include <netinet/udp.h>
-#include <netinet/tcp.h>
 #include "stub.h"
 
 /* tcpdump header (ether.h) defines ETHER_HDRLEN) */
@@ -49,19 +36,141 @@ struct my_ip {
 	struct	in_addr ip_src,ip_dst;	/* source and dest address */
 };
 
-struct sniff_record {
-  struct timeval captime;
-  unsigned long  seq_start;
-  unsigned long  seq_end;
-};
-typedef struct sniff_record sniff_record;
-struct sniff_path {
-  sniff_record records[SNIFFWIN_SIZE];
-  short start; //circular buffer pointers
-  short end;
-};
-typedef struct sniff_path sniff_path;
+
 sniff_path sniff_rcvdb[CONCURRENT_RECEIVERS];
+pcap_t* descr;
+int pcapfd;
+
+ThroughputAckState throughput[CONCURRENT_RECEIVERS];
+
+// Returns true if sequence is between the firstUnknown and the
+// nextSequence. Takes account of wraparound.
+int throughputInWindow(ThroughputAckState * state, unsigned int sequence)
+{
+  return sequence >= state->firstUnknown
+         || (state->nextSequence < state->firstUnknown
+             && sequence < state->nextSequence);
+}
+
+// Reset the state of a connection completely.
+void throughputInit(ThroughputAckState * state, unsigned int sequence)
+{
+  if (state->isValid == 0)
+  {
+    state->firstUnknown = sequence;
+    state->nextSequence = sequence;
+    state->ackSize = 0;
+    state->repeatSize = 0;
+    gettimeofday(&state->lastTime, NULL);
+    state->isValid = 1;
+  }
+}
+
+// Notify the throughput monitor that a new packet has been sent
+// out. This updates the expected nextSequence number.
+void throughputProcessSend(ThroughputAckState * state, unsigned int sequence,
+     unsigned int size)
+{
+  if (sequence == state->nextSequence)
+  {
+    if (size == 0) {
+        size = 1;
+    }
+    state->nextSequence += size;
+  }
+  else if (throughputInWindow(state, sequence))
+  {
+    unsigned int maxRepeat = state->nextSequence - sequence;
+    if (size < maxRepeat)
+    {
+        state->repeatSize += size;
+    }
+    else
+    {
+        state->repeatSize += maxRepeat;
+        state->nextSequence += size - maxRepeat;
+    }
+  }
+}
+
+// Notify the throughput monitor that some bytes have been acknowledged.
+void throughputProcessAck(ThroughputAckState * state, unsigned int sequence)
+{
+  if (! state->isValid) {
+      printf("throughputProcessAck() called with invalid state\n");
+  }
+  if (throughputInWindow(state, sequence))
+  {
+    state->ackSize += sequence - state->firstUnknown + 1;
+    state->firstUnknown = sequence + 1;
+  }
+}
+
+// How many bytes have been acknowledged since the last call to
+// throughputTick()?
+unsigned int throughputTick(ThroughputAckState * state)
+{
+  double result = 0.0;
+  double divisor = 1.0;
+  struct timeval now;
+  gettimeofday(&now, NULL);
+  divisor = now.tv_sec - state->lastTime.tv_sec;
+  divisor += (now.tv_usec - state->lastTime.tv_usec)/1000000.0;
+  result = (state->ackSize * 8.0) / (divisor * 1000.0);
+//  printf("ByteCount: %u\n", state->ackSize);
+//  printf("UnAck ByteCount: %i (%i - %i)\n",
+//          state->nextSequence - state->firstUnknown,
+//          state->nextSequence, state->firstUnknown);
+  state->ackSize = 0;
+  state->repeatSize = 0;
+  state->lastTime = now;
+  return (unsigned int) result;
+}
+
+//A modulus function that returns only a non-negative remainder
+//precondition: modulus > 0
+int nnmod(int num, int modulus){
+  int remainder, tmpint;
+
+  if (modulus <=0){
+    printf("Error: modulus is not a positive number - %d", modulus);
+    exit(1);
+  }
+  remainder = num % modulus;
+  if (remainder >= 0) {
+    return remainder;
+  }
+  tmpint = remainder+modulus;
+  if (tmpint < 0){
+    printf("Error: remainder+modulus<0 - %d+%d", remainder, modulus);
+    exit(1);
+  }
+  return tmpint;
+}
+
+//Check if the seq is in the sequence block [seq_start, seq_end)
+//Take account of the seq wrap-arround
+int in_sequence_block(unsigned long seq_start, unsigned long seq_end, unsigned long seq) {
+  if (seq_start < seq_end) {
+    if (seq_start<=seq && seq<seq_end) 
+      return 1; //in range
+    else 
+      return 0; //out of range
+  }
+
+  if (seq_start > seq_end) {
+    if (seq_start<=seq || seq<seq_end) 
+      return 1; //in range
+    else 
+      return 0; //out of range
+  }
+
+  //seq_start == seq_end
+  if (seq_start == seq) 
+    return 1; //in range
+  else
+    return 0; //out of range 
+}
 
 void init_sniff_rcvdb(void) {
   int i;
@@ -69,6 +178,7 @@ void init_sniff_rcvdb(void) {
   for (i=0; i<CONCURRENT_RECEIVERS; i++){
     sniff_rcvdb[i].start = 0;
     sniff_rcvdb[i].end = 0;
+    throughput[i].isValid = 0;
   }
 }
 
@@ -78,29 +188,31 @@ int push_sniff_rcvdb(int path_id, u_long start_seq, u_long end_seq, const struct
   int next;
 
   path = &(sniff_rcvdb[path_id]);
-  next = (((path->end)+1)%SNIFFWIN_SIZE);
-  if ((next-(path->start))%SNIFFWIN_SIZE == 0){
+  next = path->end;
+  //The circular buffer is full when the start and end pointers are back to back
+  if (nnmod(next-(path->start), SNIFF_WINSIZE) == (SNIFF_WINSIZE-1)){
     addr.s_addr =rcvdb[path_id].ip;
-    printf("Error: circular buffer is full for the path to %s", inet_ntoa(addr));
+    printf("Error: circular buffer is full for the path to %s \n", inet_ntoa(addr));
     return -1;
   }
   path->records[next].seq_start = start_seq;
   path->records[next].seq_end   = end_seq;
   path->records[next].captime.tv_sec  = ts->tv_sec;
   path->records[next].captime.tv_usec = ts->tv_usec;
-  path->end=next;
+  path->end=nnmod(next+1, SNIFF_WINSIZE);
   return 0;
 }
+
 
 int search_sniff_rcvdb(int path_id, u_long seqnum) {
   sniff_path *path = &(sniff_rcvdb[path_id]);
   int next = path->start;
 
   while (next != (path->end)){
-    if ((path->records[next].seq_start)<=seqnum && (path->records[next].seq_end)>=seqnum) {
+    if (in_sequence_block(path->records[next].seq_start, path->records[next].seq_end, seqnum)){
       return next;
     }
-    next = ((next+1) % SNIFFWIN_SIZE);
+    next = nnmod(next+1, SNIFF_WINSIZE);
   }
   return -1;
 }
@@ -108,11 +220,13 @@ int search_sniff_rcvdb(int path_id, u_long seqnum) {
 void pop_sniff_rcvdb(int path_id, u_long to_seqnum){
   int to_index = search_sniff_rcvdb(path_id, to_seqnum);
   if (to_index != -1) {
-    if (sniff_rcvdb[path_id].records[to_index].seq_end == to_seqnum) {
-      sniff_rcvdb[path_id].start = to_index+1; //complete pop-up 
+    //if the packet has no payload or the last sent seqnum equals the pop number
+    if ((sniff_rcvdb[path_id].records[to_index].seq_end==sniff_rcvdb[path_id].records[to_index].seq_start) 
+      || (((unsigned long)(sniff_rcvdb[path_id].records[to_index].seq_end-1)) == to_seqnum)) {
+      sniff_rcvdb[path_id].start = nnmod(to_index+1, SNIFF_WINSIZE); //complete pop-up 
     } else {
       sniff_rcvdb[path_id].start = to_index; //partial pop-up
-      sniff_rcvdb[path_id].records[to_index].seq_start = to_seqnum+1;
+      sniff_rcvdb[path_id].records[to_index].seq_start = ((unsigned long)(to_seqnum+1));
     }
   }
 }
@@ -137,13 +251,14 @@ u_int16_t handle_IP(u_char *args, const struct pcap_pkthdr* pkthdr, const u_char
   const struct my_ip* ip;
   const struct tcphdr *tp;
   const struct udphdr *up;
-  struct in_addr addr_src, addr_dst;
   u_char *cp;
   u_int length = pkthdr->len;
   u_int caplen = pkthdr->caplen;
   u_short len, hlen, version, tcp_hlen, ack_bit;
   u_long  seq_start, seq_end, ack_seq, ip_src, ip_dst;
-  int path_id, record_id, msecs, end;
+  unsigned short source_port = 0;
+  unsigned short dest_port = 0;
+  int path_id, record_id, msecs, end, flag_resend=0;
   sniff_path *path;
 
   /* jump pass the ethernet header */
@@ -185,11 +300,10 @@ u_int16_t handle_IP(u_char *args, const struct pcap_pkthdr* pkthdr, const u_char
     ip_src = ip->ip_src.s_addr;
     ip_dst = ip->ip_dst.s_addr;
 
-    if (flag_debug){
-      addr_src.s_addr = ip_src;
-      addr_dst.s_addr = ip_dst;
-      fprintf(stdout,"src:%s dst:%s hlen:%d version:%d len:%d\n",
-	      inet_ntoa(addr_src),inet_ntoa(addr_dst),hlen,version,len);
+    if (flag_debug){    
+      //Note:inet_ntoa returns the same string if called twice in one line due to static string buffer
+      fprintf(stdout,"IP src:%s ", inet_ntoa(ip->ip_src));
+      fprintf(stdout,"dst:%s hlen:%d version:%d len:%d\n",inet_ntoa(ip->ip_dst),hlen,version,len);
     }
     /*jump pass the ip header */
     cp = (u_char *)ip + (hlen * 4);
@@ -207,36 +321,79 @@ u_int16_t handle_IP(u_char *args, const struct pcap_pkthdr* pkthdr, const u_char
       tcp_hlen  = ((tp)->doff & 0x000f);
       length   -= (tcp_hlen * 4); //jump pass the tcp header
       seq_start = ntohl(tp->seq);      
-      seq_end   = seq_start+length-1;
+      seq_end   = ((unsigned long)(seq_start+length));
+      ack_bit= ((tp)->ack & 0x0001);
+      source_port = htons(tp->source);
+      dest_port = htons(tp->dest);
 
-      path_id = search_rcvdb(ip_dst);
-      if (path_id != -1) { //a monitored outgoing packet  
+//      path_id = search_rcvdb(ip_dst);
+      // I contacted the receiver. Therefore, my port is unique and
+      // the receiver's port is fixed. The destination is the
+      // receiver, therefore my port is the one that is of interest.
+      path_id = find_by_stub_port(ip_dst, source_port);
+      if (path_id != -1) { //a monitored outgoing packet
+        //ignore the pure outgoing ack
+        if ((ack_bit==1) && (seq_end==seq_start)) {
+          return 0;
+        }
+
 	path = &(sniff_rcvdb[path_id]);
-	end  = path->end;
+	loss_records[path_id].total_counter++;
 
-	if (seq_start > path->records[end].seq_end) { //new packet
-	  return push_sniff_rcvdb(path_id, seq_start, seq_end, &(pkthdr->ts));
+	if (path->end == path->start){ //no previous packet
+	  throughputInit(&throughput[path_id], seq_start);
+	  throughputProcessSend(&throughput[path_id], seq_start, length);
+	  return push_sniff_rcvdb(path_id, seq_start, seq_end, &(pkthdr->ts)); //new packet	
 	} else {
-	  /* Note: we discard resent-packet records for the delay estimation because 
-           * TCP don't use them to calculate the sample RTT in the RTT estimation */
-	  if (seq_end > path->records[end].seq_end){ //partial resend
-	    pop_sniff_rcvdb(path_id, path->records[end].seq_end);
-	    return push_sniff_rcvdb(path_id, path->records[end].seq_end+1, seq_end, &(pkthdr->ts));
-	  } else { //pure resend
-	    pop_sniff_rcvdb(path_id, seq_end);
-	  }	  
-	}       
+	  throughputProcessSend(&throughput[path_id], seq_start, length);
+	  //find the real received end index
+	  end  = nnmod(path->end-1, SNIFF_WINSIZE);
+
+	  /* Note: we use flag_resend to igore resend-affected-packets in the delay estimation 
+	   * because TCP don't use them to calculate the sample RTT in the RTT estimation */
+
+	  //if the packet has no payload
+	  if (seq_end == seq_start) {
+	    if ((path->records[end].seq_end==path->records[end].seq_start) &&  (path->records[end].seq_end==seq_end)) {
+	      //the last packet also has no payload and has the same seqnum
+	      flag_resend = 1; //pure resent
+	      loss_records[path_id].loss_counter++;
+	    } else { 
+	      return push_sniff_rcvdb(path_id, seq_start, seq_end, &(pkthdr->ts)); //new packet
+	    }	  
+	  } else if (seq_start >= path->records[end].seq_end) { //new packet
+	    return push_sniff_rcvdb(path_id, seq_start, seq_end, &(pkthdr->ts));
+	  } else { //resend
+            flag_resend = 1;
+            loss_records[path_id].loss_counter++;
+	    if (seq_end > path->records[end].seq_end){ //partial resend
+	      return push_sniff_rcvdb(path_id, path->records[end].seq_end+1, seq_end, &(pkthdr->ts));
+	    }
+	  } // if has payload and resent   
+	}
+   
       } else {
-	path_id = search_rcvdb(ip_src);
+//	path_id = search_rcvdb(ip_src);
+	// I contacted the receiver, so my port is unique and their
+	// port is the same every time. This means that if a packet is
+	// coming from them, the destination port is the one of
+	// interest.
+        path_id = find_by_stub_port(ip_src, dest_port);
 	if (path_id != -1) { //a monitored incoming packet
-	  ack_bit= ((tp)->ack  & 0x0001);
 	  if (ack_bit == 1) { //has an acknowledgement
 	    ack_seq  = ntohl(tp->ack_seq);
-	    record_id = search_sniff_rcvdb(path_id, ack_seq);
-	    if (record_id != -1) {
-	      msecs = floor((pkthdr->ts.tv_usec-sniff_rcvdb[path_id].records[record_id].captime.tv_usec)/1000+0.5);
-	      delays[path_id] = (pkthdr->ts.tv_sec-sniff_rcvdb[path_id].records[record_id].captime.tv_sec)*1000 + msecs;
-	      pop_sniff_rcvdb(path_id, ack_seq);
+
+	    throughputProcessAck(&throughput[path_id], ack_seq);
+
+	    record_id = search_sniff_rcvdb(path_id, (unsigned long)(ack_seq-1));
+	    if (record_id != -1) { //new ack received
+	      if (flag_resend) { //if the ack is triggered by a resend, skip the delay calculation.
+		flag_resend = 0; 
+	      } else { //calculate the delay
+		msecs = floor((pkthdr->ts.tv_usec-sniff_rcvdb[path_id].records[record_id].captime.tv_usec)/1000.0+0.5);
+		delays[path_id] = (pkthdr->ts.tv_sec-sniff_rcvdb[path_id].records[record_id].captime.tv_sec)*1000 + msecs;
+	      }
+	      pop_sniff_rcvdb(path_id, (unsigned long)(ack_seq-1)); //advance the sniff window base
 	    } //ack in rcvdb
 	  } //has ack
 	} //if incoming
@@ -261,7 +418,9 @@ u_int16_t handle_IP(u_char *args, const struct pcap_pkthdr* pkthdr, const u_char
       if (flag_debug) printf("An unknow packet captured: %d \n", ip->ip_p);
       break;
     } //switch
-  } //if unfragmented or last fragment
+  } else { //if unfragmented or last fragment
+      printf("Got an incomplete fragment\n");
+  }
 
   return 0;
 }
@@ -305,23 +464,25 @@ u_int16_t handle_ethernet (u_char *args,const struct pcap_pkthdr* pkthdr,const u
     return ether_type;
 }
 
-
-void sniff(int to_ms) { 
+void init_pcap(int to_ms) {
     char *dev; 
     char errbuf[PCAP_ERRBUF_SIZE];
-    pcap_t* descr;
     struct bpf_program fp;      /* hold compiled program     */
     bpf_u_int32 maskp;          /* subnet mask               */
     bpf_u_int32 netp;           /* ip                        */
-    u_char* args = NULL;
-    char string_filter[25];
-    struct in_addr addr;
+    char string_filter[128];
+    //struct in_addr addr;
 
-    dev = "vnet";
+    dev = sniff_interface; //input parameter of stubd, should be "vnet" or "eth0"
+    if (flag_debug) {
+      printf("The sniff_interface: %s \n", sniff_interface);
+    }
+
     /* ask pcap for the network address and mask of the device */
     pcap_lookupnet(dev,&netp,&maskp,errbuf);
-    addr.s_addr = netp;
-    sprintf(string_filter, "host %s", inet_ntoa(addr));
+    //For an unknown reason, netp has the wrong 4th number
+    //addr.s_addr = netp;
+    sprintf(string_filter, "port %d and tcp", SENDER_PORT);
 
     /* open device for reading. 
      * NOTE: We use non-promiscuous */
@@ -331,16 +492,31 @@ void sniff(int to_ms) {
       exit(1); 
     }
 
-    /* Lets try and compile the program.. non-optimized */
-    if(pcap_compile(descr, &fp, string_filter, 0, netp) == -1) {
+ 
+    // Lets try and compile the program, optimized 
+    if(pcap_compile(descr, &fp, string_filter, 1, maskp) == -1) {
       fprintf(stderr,"Error: calling pcap_compile\n"); 
       exit(1); 
     }
-    /* set the compiled program as the filter */
+    // set the compiled program as the filter 
     if(pcap_setfilter(descr,&fp) == -1) {
       fprintf(stderr,"Error: setting filter\n"); 
       exit(1); 
     }
+
+    /*
+    if (pcap_setnonblock(descr, 1, errbuf) == -1){
+      printf("Error: pcap_setnonblock(): %s\n",errbuf); 
+      exit(1); 
+    }
+    */
+
+    pcapfd = pcap_fileno(descr);
+    init_sniff_rcvdb();
+}
+
+void sniff(void) { 
+    u_char* args = NULL;
 
     /* use dispatch here instead of loop 
      * Note: no max pkt num is specified */ 

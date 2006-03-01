@@ -2,7 +2,7 @@
 
 #
 # EMULAB-COPYRIGHT
-# Copyright (c) 2000-2005 University of Utah and the Flux Group.
+# Copyright (c) 2000-2006 University of Utah and the Flux Group.
 # All rights reserved.
 #
 
@@ -15,13 +15,15 @@ use File::Basename;
 # Tuneables:
 #
 # $maxwait	max wall clock time to allow, progress or not
+#		Empirically we have observed about 1.8MB/sec on a pc850,
+#		so 40 minutes should be sufficient for a 4GB image.
 # $idlewait	max time to wait between periods of progress
 # $checkwait	time between progress checks (must be int div of $idlewait)
 # $reportwait	time between progress reports (must be multiple of $checkwait)
 #
 # $maximagesize	max size in bytes of an image
 #
-my $maxwait      = (20 * 60);
+my $maxwait      = (40 * 60);
 my $idlewait     = ( 8 * 60);
 my $reportwait   = ( 2 * 60);
 my $checkwait    = 15;
@@ -301,11 +303,11 @@ close(FILE) or
 # Get the disktype for this node
 #
 $db_result =
-    DBQueryFatal("select disktype from nodes ".
+    DBQueryFatal("select disktype,bootdisk_unit from nodes ".
 		 "left join node_types on nodes.type=node_types.type ".
 		 "where node_id='$node'");
 if ($db_result->numrows == 1) {
-    ($devtype) = $db_result->fetchrow_array;
+    ($devtype,$devnum) = $db_result->fetchrow_array;
 }
 my $device = "/dev/${devtype}${devnum}";
 

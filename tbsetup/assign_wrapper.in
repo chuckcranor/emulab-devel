@@ -1,7 +1,7 @@
 #!/usr/bin/perl -w
 #
 # EMULAB-COPYRIGHT
-# Copyright (c) 2000-2005 University of Utah and the Flux Group.
+# Copyright (c) 2000-2006 University of Utah and the Flux Group.
 # All rights reserved.
 #
 use English;
@@ -199,6 +199,10 @@ sub fatal (@)
 # We want warnings to cause assign_wrapper to exit abnormally.
 # We will come through here no matter how we exit though.
 # 
+# FIXME: Is this still needed.  "warn" is only used once.  Also this
+#  will cause perl internal warnings (such as "Use of uninitialized
+#  value ..."  to cause assign_wrapper to fail. -- kevina
+#
 $SIG{__WARN__} = sub { tbwarn $_[0];$warnings++; };
 
 END {
@@ -291,6 +295,12 @@ sub virtnodedesires     {
     }
     return join(" ",@desires);
 }
+sub virtnodeneedslinkdelays($) {
+    return $virt_nodes{$_[0]}->{"__needslinkdelays"};
+}
+sub virtnodesetneedslinkdelays($) {
+    return $virt_nodes{$_[0]}->{"__needslinkdelays"} = 1;
+}
 
 #
 # virt_lans: The equivalent of virt_nodes; the virt_lans table in the DB.
@@ -362,6 +372,23 @@ sub nodetypeissub($)    { return $node_types{$_[0]}->{"issubnode"}; }
 sub nodetypeisplab($)   { return $node_types{$_[0]}->{"isplabdslice"}; }
 sub nodetypeissim($)    { return $node_types{$_[0]}->{"issimnode"}; }
 sub nodetypesimcap($)   { return $node_types{$_[0]}->{"simnode_capacity"}; }
+
+#
+# osids: Information from the os_info table from the DB, indexed by osid
+#
+my %osids = ();
+
+sub osidpath($)         { return $osids{$_[0]}->{"path"}; }
+sub osidhaspath($)      { my $path = osidpath($_[0]);
+                          return (defined $path) && ($path ne "")};
+sub osidnextosid($)     {
+    my $retval = $osids{$_[0]}->{"nextosid"};
+    
+    if (!defined($retval)) {
+	$retval = $_[0];
+    }
+    return $retval;
+}
 
 # 
 # interface_capabilities: We need this to find out the bandwidths of the devices
@@ -500,6 +527,7 @@ my $mem_usage;
 # Allow override of jail/delay osids.
 my $jail_osid;
 my $delay_osid;
+my $delay_osid_desire;
 
 # Flag that tells us whether to fix-node current
 # resources or not during a swap modify. This is
@@ -560,6 +588,9 @@ my $virtcount        = 0;
 my $plabcount        = 0;
 my $needwanassign    = 0;
 my $simcount         = 0;
+
+# for checks made during topfile creation.
+my $toperrors        = 0;
 
 #
 # This is for stats gathering. It might duplicate other stuff, but
@@ -692,6 +723,10 @@ CreateTopFile();
 
 TBDebugTimeStamp("TOP finished");
 
+# Stop if creating the top file generated errors.
+exit($WRAPPER_FAILED)
+    if ($toperrors);
+
 # Stop here ...
 if ($toponly) {
     print "Stopping after creating the TOP file, as directed.\n";
@@ -749,7 +784,8 @@ while (1) {
 	$precheck = 1;
 	my $retval = RunAssign();
 	if ($retval != 0) {
-	    fatal({type=>'extra'}, "Experiment can not be run on an empty testbed.  Please fix the experiment.");
+	    fatal({type=>'extra', cause=>'user'}, 
+		  "Experiment can not be run on an empty testbed.  Please fix the experiment.");
 	}
 	print("Assign succeeded on an empty testbed.\n");
 	$precheck = 0;
@@ -2161,7 +2197,8 @@ foreach $delayid (keys(%linkdelays)) {
 		     "where node_id='$pnode' and ".
 		     "      vlan='$lan' and vnode='$vnode'");
     }
-
+    
+    virtnodesetneedslinkdelays($vnode);
     $expt_stats{"linkdelays"} += 1;
 }
 
@@ -2641,8 +2678,12 @@ sub InitPnode($$)
 	else {
 	    $osid = nodejailosid(physnodetype($pnode));
 	}
+
+	my $cmdline = TBGetOSBootCmd(osidnextosid($osid),
+				     "vnodehost",
+				     "/kernel.jail");
 	
-	DBQueryFatal("UPDATE nodes set def_boot_cmd_line='/kernel.jail'," .
+	DBQueryFatal("UPDATE nodes set def_boot_cmd_line='$cmdline'," .
 		     " startstatus='none'," .
 		     " bootstatus='unknown'," .
 		     " ready=0," .
@@ -2670,7 +2711,8 @@ sub InitPnode($$)
 	# almost the same no matter what type.
 	#
 	my $routertype;
-	my $cmdline = "";	# XXX Gross hack. 
+	my $cmdline_role = "default";
+	my $cmdline = "";
 
 	if (exists($delaynodes{$vnode})) {
 	    #
@@ -2687,6 +2729,7 @@ sub InitPnode($$)
 	    $role  = TBDB_RSRVROLE_DELAYNODE;
 	    $routertype = TBDB_ROUTERTYPE_NONE;
 	    $cmdline = "/kernel.delay";
+	    $cmdline_role = "delay";
 	}
 	elsif (exists($virtnodes{$pnode})) {
 	    #
@@ -2707,10 +2750,15 @@ sub InitPnode($$)
 	    # XXX Must have routing on jail hosting nodes. Change me.
 	    $routertype = TBDB_ROUTERTYPE_MANUAL;
 	    $cmdline = "/kernel.jail";
+	    $cmdline_role = "vnodehost";
 	}
 	fatal("No OSID is defined for internal node $vname!")
 	    if (!defined($osid));
-	
+
+	$cmdline = TBGetOSBootCmd(osidnextosid($osid),
+				  $cmdline_role,
+				  $cmdline);
+
 	DBQueryFatal("UPDATE nodes set ".
 		     " def_boot_cmd_line='$cmdline'," .
 		     " startstatus=0, ".
@@ -2736,6 +2784,23 @@ sub InitPnode($$)
 	$vname = $vnode;
 	$role  = TBDB_RSRVROLE_NODE;
 	$inner_elab_role = virtnodeelabrole($vnode);
+
+	if ((!defined($cmdline) || $cmdline eq "")) {
+	    # If the user hasn't overridden the command line, try to find a
+	    # default for this OSID.
+	    if (virtnodeneedslinkdelays($vnode)) {
+		$cmdline = TBGetOSBootCmd(osidnextosid($osid),
+					  "linkdelay",
+					  "");
+	    }
+	    elsif (defined($inner_elab_role) &&
+		   ($inner_elab_role eq "boss" ||
+		    $inner_elab_role eq "boss+router")) {
+		$cmdline = TBGetOSBootCmd(osidnextosid($osid),
+					  "linkdelay",
+					  "");
+	    }
+	}
 
 	#
 	# NOTE: We no longer include tarballs and RPMs in this update, because
@@ -3117,7 +3182,15 @@ sub NewVethIface($$$;$)
 	my $newid = $query_result->insertid;
 	$newveth = "veth" . $newid;
 
-	if (!defined($pport)) {
+	if (defined($pport)) {
+	    my $speed = interfacespeedmbps(physinterfacetype($pnode, $pport),
+					   "ethernet");
+
+	    DBQueryFatal("update interfaces set " .
+			 "   current_speed='$speed' " .
+			 "where node_id='$pnode' and iface='$pport'");
+	}
+	else {
 	    if (!defined($veth_interfaces{$lan})) {
 		$veth_interfaces{$lan} = {};
 	    }
@@ -3422,6 +3495,21 @@ sub LoadPhysInfo()
 
 		printdb(" $type:$protocol - @list\n");
 	    }
+	}
+    }
+
+    #
+    # Get paths from os_info, so that we can identify OSKit/MFS OSes, basically
+    # those which do not load a disk image
+    #
+    $query_result = DBQueryFatal("select osid, path, nextosid from os_info");
+    while (my ($osid, $path, $nextosid) = $query_result->fetchrow()) {
+        $osids{$osid} = {};
+        if ($path) {
+            $osids{$osid}->{"path"} = $path;
+        }
+	if (defined($nextosid)) {
+	    $osids{$osid}->{"nextosid"} = TBResolveNextOSID($osid,$pid,$eid);
 	}
     }
 }
@@ -4015,6 +4103,13 @@ sub LoadExperiment()
 	    fatal("Invalid OS $delay_osname in project $pid!");
 	}
     }
+    # Keep a desire string we can use to make sure that the node type picked
+    # for the delay node can load the right OS
+    if ($delay_osid) {
+        $delay_osid_desire = "OS-$delay_osid:1";
+    } else {
+        $delay_osid_desire = "";
+    }
     if (defined($delay_capacity)) {
 	$DELAYCAPACITY     = $delay_capacity;
 	$delaycap_override = $delay_capacity;
@@ -4052,6 +4147,7 @@ sub CreateTopFile()
     my $simnode_count  = 0;
     my %osdoesveth     = ();
     my %osdoesmlink    = ();
+    my %osdoeslinkdelays = ();
     
     # Open the TOP file
     open(TOPFILE,"> $topfile") or
@@ -4100,10 +4196,12 @@ sub CreateTopFile()
 			       ":1");
 	    }
 
-	    # Require that this vnode be places onto a pnode that supports
-	    # the OS it is going to run
+	    # Require that this vnode be placed onto a pnode that supports
+	    # the OS it is going to run. However, if the OS is one with a
+            # 'path' (like an OSKit kernel), we don't have an entry in
+            # osidtoimageid for it, and thus we leave it off of the desire list
 	    my $os = virtnodeosid($vname);
-	    if ($os) {
+	    if ($os && !osidhaspath($os)) {
 		$desirestr .= " OS-${os}:1";
 	    }
 
@@ -4187,6 +4285,9 @@ sub CreateTopFile()
 				OSFeatureSupported($osid, 'mlinks');
 			    $osdoesveth{$osid} =
 				OSFeatureSupported($osid, 'veths');
+			    # Need this for phys nodes requesting lindelays.
+			    $osdoeslinkdelays{$osid} =
+				OSFeatureSupported($osid, 'linkdelays');
 			}
 			# For simplicity, lets just say that a node needs
 			# both set.
@@ -4196,7 +4297,7 @@ sub CreateTopFile()
 		    } else {
 			# XXX If the user doesn't explicitly set an OS on a PC,
 			# currently it defaults to Redhat. At this point, it is
-			# not possible to know untill mapping if the default OS
+			# not possible to know until mapping if the default OS
 			# is indeed Redhat. Due to lack of information at this 
 			# point in the code, it would safe to assume non-BSD
 			# regardless of whether a future or different emulab is
@@ -4344,6 +4445,40 @@ sub CreateTopFile()
 	    }
 
 	    #
+	    # Check to make sure that both nodes support linkdelays.  This
+	    # check is only made for links comprised of physical nodes,
+	    # since if the OS supports virtual nodes, it supports linkdelays.
+	    #
+	    if ($shaped && $virtnodes == 0 &&
+		virtlan_use_linkdelay($lan, $shaped)) {
+		#
+		# The user had to specify the OS.
+		#
+		if (! (defined(virtnodeosid($node0)) &&
+		       defined(virtnodeosid($node1)))) {
+		    tberror("You must specify the OSID for all nodes in ".
+			    "lan $lan, when using linkdelays ".
+			    "(endnode traffic shaping)\n");
+		    $toperrors++;
+		}
+		else {
+		    #
+		    # All the OS's have to support linkdelays.
+		    #
+		    foreach my $node ($node0, $node1) {
+			my $osid = virtnodeosid($node);
+
+			if (! $osdoeslinkdelays{$osid}) {
+			    tberror("$node in link $lan is running an OSID ".
+				    "($osid) that does not support linkdelays ".
+				    "(endnode traffic shaping)\n");
+			    $toperrors++;
+			}
+		    }
+		}
+	    }
+
+	    #
 	    # Get the bandwidth we're supposed to put into the top file, which
 	    # may be different that what we're limiting the link to
 	    #
@@ -4401,7 +4536,8 @@ sub CreateTopFile()
 					   $nodeport1,$rdelay,$rbw,$rloss,
 					   0];
 
-		    print TOPFILE "node $delayname delay\n";
+                    my $delayos = "";
+		    print TOPFILE "node $delayname delay $delay_osid_desire\n";
 		    print TOPFILE
 			"link linksdelaysrc/$lan/$nodeport0,$nodeport1 ".
 			"$node0 $delayname $top_bw 0 0 ethernet\n";
@@ -4490,6 +4626,38 @@ sub CreateTopFile()
 		    virtlansetshaped($lan, $member);
 		}
 
+		#
+		# Check to make sure that this node supports linkdelays.
+		# This check is only made for links comprised of physical
+		# nodes, since if the OS supports virtual nodes, it
+		# supports linkdelays.
+		#
+		if ($shaped && $virtnodes == 0 &&
+		    virtlan_use_linkdelay($lan, $shaped)) {
+		    #
+		    # The user had to specify the OS.
+		    #
+		    if (! defined(virtnodeosid($node))) {
+			tbwarn("You must specify the OSID for all nodes in ".
+			       "lan $lan, when using linkdelays ".
+			       "(endnode traffic shaping)\n");
+			$toperrors++;
+		    }
+		    else {
+			#
+			# All the OS's have to support linkdelays.
+			#
+			my $osid = virtnodeosid($node);
+
+			if (! $osdoeslinkdelays{$osid}) {
+			    tbwarn("$node in lan $lan is running an OSID ".
+				   "($osid) that does not support linkdelays ".
+				   "(endnode traffic shaping)\n");
+			    $toperrors++;
+			}
+		    }
+		}
+		
 		my ($top_bw, $top_rbw) = virtlantopbw($lan,$member);
 
 		$bandwidth = &getbandwidth($node,$lan,$bw);
@@ -4541,7 +4709,8 @@ sub CreateTopFile()
 			    [$member,$delay,$bw,$loss,
 			     $member,$rdelay,$rbw,$rloss,0];
 			
-			print TOPFILE "node $delayname delay\n";
+			print TOPFILE "node $delayname delay " .
+                            "$delay_osid_desire\n";
 			print TOPFILE "link linkdelaysrc/$lan/$member" .
 			    " $node $delayname $top_bw 0 0 ethernet\n";
 			print TOPFILE "link linkdelaydst/$lan/$member" .

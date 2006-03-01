@@ -48,6 +48,11 @@ function NLCBODYBEGIN()
 	echo "<td align=\"left\" valign=\"top\" class=\"stealth\">";
 }
 
+function NLCBODYLONGBEGIN($cols)
+{
+	echo "<td align=\"left\" valign=\"top\" class=\"stealth\" colspan=\"$cols\" style=\"padding: 0px; \" >";
+}
+
 function NLCBODYEND()
 {
 	echo "</td>";
@@ -216,11 +221,14 @@ function imageinfo(msg) {
 
 <?php NLCH1("Preface") ?>
 
-<?php NLCBODYBEGIN() ?>
+<?php NLCBODYLONGBEGIN(2) ?>
+
+<table class="stealth" cellpadding=0 cellspacing=0 style="padding: 0px; margin: 0px">
+ <tr><td class="stealth">
 
 We have deployed and opened to public external use a small version of
 what will grow into a large mobile robotic wireless testbed.  The
-small version (4 Motes and 4 Stargates on 4 robots, all remotely
+small version (6 Motes and 6 Stargates on 6 robots, all remotely
 controllable, plus 25 static Motes) is in an open area within our offices;
 the big one will be elsewhere.
 
@@ -230,17 +238,18 @@ This manual is broken up into the following sections:
 <ol>
 <li><a href="#INTRO">Introduction</a>
 <li><a href="#MOBILE">Mobile Experiments</a>
-<li><a href="#WIRELESS">Wireless Traffic</a>
+<li><a href="#WIRELESS">Wireless Traffic (Mobile motes and fixed motes)</a>
 <li><a href="#FAQ">Frequently Asked Questions</a>
 </ol>
 
 <p>
 If you are interested in how the mobile testbed works, you can read the
-following tech report:
+following paper (to appear at <a href="http://www.ieee-infocom.org/2006/">IEEE
+Infocom</a>, April 2006):
 
 <blockquote>
-<a href="http://www.cs.utah.edu/flux/papers/truemobile-ftn2005-02.pdf">A Mobile
-Robotic Wireless and Sensor Network Testbed</a>
+<a href="http://www.cs.utah.edu/flux/papers/robots-infocom06-base.html">
+Mobile Emulab: A Robotic Wireless and Sensor Network Testbed</a> 
 </blockquote>
 
 <p>
@@ -251,9 +260,42 @@ You can read a shorter overview of the mobile testbed in this article:
 Real Mobility, Real Wireless: A New Kind of Testbed</a>
 </blockquote>
 
+  </td>
+
+  <td valign="top" class="stealth">
+
+  <table class="stealth">
+  <tr><td style="padding: 5px; border: solid 2px #669; background-color: #F1FAFA;">
+
+<b>Tools:</b>
+
+<p style="text-indent: 0em;">
+
+<a href="<?php echo $TBBASE?>/robotrack/robotrack.php3">Real-time Robot Tracking Applet</a>
+<br>
+<a href="<?php echo $TBBASE ?>/webcam.php3">Live Webcams</a>
+<br>
+<a href="<?php echo $TBBASE ?>/robotmap.php3">Static Robot Map</a>
+<br>
+<a href="<?php echo $TBBASE ?>/newimageid_ez.php3?nodetype=mote">Mote Image
+Creation Page</a>
+<br>
+<a href="<?php echo $TBBASE ?>/wireless-stats/statsapp.php3">WSN Connectivity
+Statistics Applet</a>
+
+</ul>
+
+  </td></tr></table>
+
+  </td>
+  </tr
+
+</table>
+
+
 <?php NLCBODYEND() ?>
 
-<?php NLCEMPTY() ?>
+<!-- ?php NLCEMPTY() ? -->
 
 </tr>
 
@@ -272,7 +314,7 @@ around a small area.  These robots consist of a small body (shown on the right)
 with an <a href="http://www.xbow.com/Products/XScale.htm">Intel Stargate</a>
 that hosts a mote with a wireless network interface.  The goal of this "mobile
 wireless testbed" is to give users an opportunity to conduct experiments with
-wireless nodes that are truly mobile
+wireless nodes that are truly mobile. 
 <!-- in configurable physical locations and while in motion. -->
 For
 example, mobile nodes could be used to realistically test and evaluate an
@@ -322,6 +364,10 @@ board computers for each robot. (<b><a href="<?php echo $TBBASE?>/doc/docwrapper
 the robots in their habitat.
 <li>An <a href="<?php echo $TBBASE ?>/robotmap.php3">abstract map</a> of the
 current locations of the robots.
+<li>A <a href="<?php echo $TBBASE ?>/robotrack/robotrack.php3">live robot
+motion control applet</a> for drag and drop control and monitoring of robots.
+<li>An <a href="<?php echo $TBBASE ?>/wireless-stats/statsapp.php3">applet for
+viewing wireless link connectivity</a> in our WSN testbed.
 <li>Open for public use weekdays 8am-6pm MST, with operations support.
 </ul>
 
@@ -714,7 +760,7 @@ traffic and the other receiving.
 
 <tr>
 
-<?php NLCH2("Adding Motes") ?>
+<?php NLCH2("Adding Mobile Motes") ?>
 
 <?php NLCBODYBEGIN() ?>
 
@@ -761,7 +807,78 @@ away, to see the lights updating, or not.  You should also try running the
 nodes through the random motion created earlier and watching for the same
 effect on the lights.
 
+
+<?php NLCBODYEND() ?>
+
+<?php NLCEMPTY() ?>
+
+</tr>
+
+
+<tr>
+
+<?php NLCH2("Adding Fixed Motes") ?>
+
+<?php NLCBODYBEGIN() ?>
+
+Adding a fixed mote to your experiment is slightly simpler than adding mobile
+motes:
+
+<blockquote style="border-style:solid; border-color:#bbbbbb; border-width: thin">
+<pre>## BEGIN fixed mote nodes
+set fixed-receiver [$ns node]
+tb-set-hardware $fixed-receiver static-mica2
+tb-set-node-os $fixed-receiver TinyOS-RfmLed
+## END fixed mote nodes</pre>
+</blockquote>
+<center>
+<font size="-2">Figure 8: NS syntax used to add a fixed mote.</font>
+</center>
+<br>
+
+This code creates a single mote and loads the same TinyOS image as was
+previously loaded onto the mobile receiver mote.  Since the fixed
+motes are mounted on serial programming boards, you will not be able to access
+their LEDs as you did when adding mobile motes.
+
+If you want to choose a specific mote from the topology (view placement and
+positions by looking at the <a href="/robotmap.php3">robot map</a>), add the
+following NS code:
+
+<blockquote style="border-style:solid; border-color:#bbbbbb; border-width: thin">
+<pre>
+tb-fix-node $fixed-receiver mote107
+</pre>
+</blockquote>
+<center>
+<font size="-2">Figure 9: NS syntax used to select a specific fixed mote.</font>
+</center>
+<br>
+
+This code allows you to explicitly choose mote107, rather than allowing Emulab
+to select a mote on your behalf.  Those who require very specific wireless network
+topologies may wish to use this command.
+
 <p>
+You can use the 
+<a href="<?php echo $TBBASE?>/wireless-stats/statsapp.php3">WSN Connectivity
+Applet</a> to choose specific motes with desired 
+link quality.  Then, using the mechanism above, you can bind the specific mote
+you want to a node name in your experiment.
+
+<?php NLCBODYEND() ?>
+
+<?php NLCEMPTY() ?>
+
+</tr>
+
+
+<tr>
+
+<?php NLCH2("Custom Mote Applications") ?>
+
+<?php NLCBODYBEGIN() ?>
+
 Uploading your own code to run on the motes is easy. Just build your TinyOS app
 normally (ie. '<code>make mica2</code>').  Then, upload the binary that gets
 placed in <code>build/mica2/main.srec</code> to our
@@ -776,7 +893,7 @@ ours onto an Emulab PC in your experiment.  You can do this by setting the node
 operating system to <b>RHL90-TINYOS</b> using the <code>tb-set-node-os</code>
 command (as shown in the Emulab <a
 href="http://www.emulab.net/tutorial/docwrapper.php3?docname=tutorial.html">tutorial</a>).  This image is based off Emulab's
-default RedHat 9.0 image and has an installation of a TinyOS 1.1.13 CVS
+default RedHat 9.0 image and has an installation of a TinyOS 1.1.14 CVS
 snapshot.  When you log in to the node, the $TOSROOT and $TOSDIR environment
 variables will be set to /opt/tinyos-1.x and /opt/tinyos-1.x/tos,
 respectively.  Your $CLASSPATH variable will also include the TinyOS Java paths
@@ -821,6 +938,67 @@ our servers.
 <?php NLCEMPTY() ?>
 
 </tr>
+
+<tr>
+
+<?php NLCH2("Mote Serial Interfaces") ?>
+
+<?php NLCBODYBEGIN() ?>
+
+To facilitate mote interaction, logging, and evaluation, we provide easy
+access to each mote's serial programming board's serial interface.  By simply
+adding a PC node to your experiment, and adding some NS code, you can
+access each mote's serial port directly on that PC.  To access
+<code>mote107</code>'s serial interface, add the following NS code to your
+experiment: 
+
+<blockquote style="border-style:solid; border-color:#bbbbbb; border-width: thin">
+<pre>## BEGIN adding mote serial line access
+set manager [$ns node]
+tb-set-node-os $manager RHL-TINYOS
+
+$ns connect [$fixed-receiver console] $manager
+##END adding mote serial line access</pre>
+</blockquote>
+<center>
+<font size="-2">Figure 10: Accessing mote serial interface.</font>
+</center>
+<br>
+
+This code allocates a single PC, <code>manager</code>, which runs our
+<emph>RHL-TINYOS</emph> image for convenience.  Emulab software exports the
+serial port from the physical machine to the <code>manager</code> PC, where it
+is available as a pseudo tty device.  You can read and write to the ptty
+normally, except that some hardware-specific ioctl() syscalls may fail (this
+happens because you are not working with the physical serial port).  The pseudo
+tty will be available on your <code>manager</code> node as
+<b>/dev/tip/MOTE_NAME</b> (in this case,
+<b>/dev/tip/fixed-receiver</b>).  You can access other mote serial
+interfaces by duplicating the above code, and changing the mote variable.  If
+the software you are using to access the mote's serial interface insists on
+using <b>/dev/ttyS1</b> or similar, you can simply run the following command on
+your <code>manager</code> PC:
+
+<blockquote style="border-style:solid; border-color:#bbbbbb; border-width: thin">
+<pre>sudo rm /dev/ttyS1 && sudo ln -s /dev/tip/fixed-receiver /dev/ttyS1</pre>
+</blockquote>
+<center>
+<font size="-2">Figure 11: Easing the pain for applications that use a specific
+serial device.</font>
+</center>
+<br>
+
+If you need to use <b>/dev/ttyS0</b> on our RHL-TINYOS images, you may remove
+and relink the device as shown in Fig. 11, but background monitor scripts may
+decide to restart the serial port getty.  This will remove your link.  However,
+you should only need to relink /dev/ttyS0 when you restart your program.
+
+<?php NLCBODYEND() ?>
+
+<?php NLCEMPTY() ?>
+
+</tr>
+
 
 <tr><td colspan="3" class="stealth"><hr size=1></td></tr>
 

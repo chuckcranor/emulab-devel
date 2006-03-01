@@ -36,9 +36,12 @@ CREATE TABLE archive_tags (
   idx int(10) unsigned NOT NULL auto_increment,
   tag varchar(64) NOT NULL default '',
   archive_idx int(10) unsigned NOT NULL default '0',
+  view varchar(64) NOT NULL default '',
   date_created int(10) unsigned NOT NULL default '0',
+  tagtype enum('user','commit','savepoint','internal') NOT NULL default 'internal',
+  description text,
   PRIMARY KEY  (idx),
-  UNIQUE KEY tag (tag,archive_idx)
+  UNIQUE KEY tag (tag,archive_idx,view)
 ) TYPE=MyISAM;
 
 --
@@ -51,6 +54,8 @@ CREATE TABLE archive_views (
   current_tag varchar(64) NOT NULL default '',
   previous_tag varchar(64) default NULL,
   date_created int(10) unsigned NOT NULL default '0',
+  branch_tag varchar(64) default NULL,
+  parent_view varchar(64) default NULL,
   PRIMARY KEY  (view,archive_idx)
 ) TYPE=MyISAM;
 
@@ -413,6 +418,7 @@ CREATE TABLE experiment_resources (
   minlinks tinyint(3) unsigned default '0',
   maxlinks tinyint(3) unsigned default '0',
   delay_capacity tinyint(3) unsigned default NULL,
+  batchmode tinyint(1) unsigned default '0',
   archive_tag varchar(32) NOT NULL default '',
   thumbnail mediumblob,
   PRIMARY KEY  (idx),
@@ -954,6 +960,7 @@ CREATE TABLE location_info (
   loc_z float default NULL,
   orientation float default NULL,
   contact tinytext,
+  email tinytext,
   phone tinytext,
   room varchar(32) default NULL,
   stamp int(10) unsigned default NULL,
@@ -1516,6 +1523,18 @@ CREATE TABLE obstacles (
 ) TYPE=MyISAM;
 
 --
+-- Table structure for table `os_boot_cmd`
+--
+
+CREATE TABLE os_boot_cmd (
+  OS enum('Unknown','Linux','Fedora','FreeBSD','NetBSD','OSKit','Windows','TinyOS','Other') NOT NULL default 'Unknown',
+  version varchar(12) NOT NULL default '',
+  role enum('default','delay','linkdelay','vnodehost') NOT NULL default 'default',
+  boot_cmd_line text,
+  PRIMARY KEY  (OS,version,role)
+) TYPE=MyISAM;
+
+--
 -- Table structure for table `os_info`
 --
 
@@ -1526,12 +1545,12 @@ CREATE TABLE os_info (
   creator varchar(8) default NULL,
   created datetime default NULL,
   description tinytext NOT NULL,
-  OS enum('Unknown','Linux','FreeBSD','NetBSD','OSKit','Windows','TinyOS','Other') default 'Unknown',
+  OS enum('Unknown','Linux','Fedora','FreeBSD','NetBSD','OSKit','Windows','TinyOS','Other') default 'Unknown',
   version varchar(12) default '',
   path tinytext,
   magic tinytext,
   machinetype varchar(30) NOT NULL default '',
-  osfeatures set('ping','ssh','ipod','isup','veths','mlinks','linktest') default NULL,
+  osfeatures set('ping','ssh','ipod','isup','veths','mlinks','linktest','linkdelays') default NULL,
   ezid tinyint(4) NOT NULL default '0',
   shared tinyint(4) NOT NULL default '0',
   mustclean tinyint(4) NOT NULL default '1',
@@ -1606,6 +1625,18 @@ CREATE TABLE plab_mapping (
   mac varchar(17) NOT NULL default '',
   create_time datetime default NULL,
   PRIMARY KEY  (node_id)
+) TYPE=MyISAM;
+
+--
+-- Table structure for table `plab_site_mapping`
+--
+
+CREATE TABLE plab_site_mapping (
+  site_name varchar(255) NOT NULL default '',
+  site_idx smallint(5) unsigned NOT NULL auto_increment,
+  node_id varchar(32) NOT NULL default '',
+  node_idx tinyint(3) unsigned NOT NULL default '0',
+  PRIMARY KEY  (site_name,site_idx,node_idx)
 ) TYPE=MyISAM;
 
 --
@@ -2259,6 +2290,7 @@ CREATE TABLE virt_firewalls (
   fwname varchar(32) NOT NULL default '',
   type enum('ipfw','ipfw2','ipchains','ipfw2-vlan') NOT NULL default 'ipfw',
   style enum('open','closed','basic','emulab') NOT NULL default 'basic',
+  log tinytext NOT NULL,
   PRIMARY KEY  (pid,eid,fwname)
 ) TYPE=MyISAM;
 

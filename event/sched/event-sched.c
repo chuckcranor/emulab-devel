@@ -1,6 +1,6 @@
 /*
  * EMULAB-COPYRIGHT
- * Copyright (c) 2000-2005 University of Utah and the Flux Group.
+ * Copyright (c) 2000-2006 University of Utah and the Flux Group.
  * All rights reserved.
  */
 
@@ -379,6 +379,7 @@ main(int argc, char *argv[])
 	if (tuple == NULL) {
 		fatal("could not allocate an address tuple");
 	}
+	
 	tuple->scheduler = 1;
 	tuple->expt      = pideid;
 
@@ -563,6 +564,8 @@ int sends_complete(struct agent *agent, const char *evtype)
 		{ TBDB_OBJECTTYPE_CONSOLE, NULL },
 		{ TBDB_OBJECTTYPE_TOPOGRAPHY, NULL },
 		{ TBDB_OBJECTTYPE_LINKTRACE, NULL },
+		{ TBDB_OBJECTTYPE_EVPROXY, NULL },
+		{ TBDB_OBJECTTYPE_BGMON, NULL },
 		{ NULL, NULL }
 	};
 
@@ -665,7 +668,7 @@ enqueue(event_handle_t handle, event_notification_t notification, void *data)
 		warning("could not get timeline?\n");
 		/* Not fatal since we have to deal with legacy systems. */
 	}
-	
+
 	/* Get the event's firing time: */
 	if (! event_notification_get_int32(handle, notification, "time_usec",
 					   (int *) &event.time.tv_usec) ||
@@ -728,6 +731,19 @@ enqueue(event_handle_t handle, event_notification_t notification, void *data)
 						   "SCHEDULER",
 						   0)) {
 			error("could not clear scheduler attribute of "
+			      "notification %p\n", event.notification);
+			return;
+		}
+		
+		if (! notification->has_hmac &&
+		    (! event_notification_remove(handle,
+						 event.notification,
+						 "EXPT") ||
+		     ! event_notification_put_string(handle,
+						     event.notification,
+						     "EXPT",
+						     pideid))) {
+			error("could not clear expt attribute of "
 			      "notification %p\n", event.notification);
 			return;
 		}
@@ -965,6 +981,28 @@ AddAgent(event_handle_t handle,
 			agentp->name;
 		primary_simulator_agent->sa_local_agent.la_agent =agentp;
 		agentp->handler = &primary_simulator_agent->sa_local_agent;
+	}
+	else if (strcmp(type, TBDB_OBJECTTYPE_EVPROXY) == 0) {
+		static int evproxy_subscribed = 0;
+
+		if (!evproxy_subscribed) {
+			address_tuple_t tuple = address_tuple_alloc();
+			
+			if (tuple == NULL) {
+				fatal("could not allocate an address tuple");
+			}
+			tuple->scheduler = 1;
+			tuple->objtype = TBDB_OBJECTTYPE_EVPROXY;
+			tuple->eventtype = TBDB_EVENTTYPE_UPDATE;
+			
+			if (event_subscribe_auth(handle, enqueue,
+						 tuple, NULL, 0) == NULL) {
+				fatal("could not subscribe to EVENT_SCHEDULE "
+				      "event");
+			}
+			
+			evproxy_subscribed = 1;
+		}
 	}
 	else if ((strcmp(type, TBDB_OBJECTTYPE_TIMELINE) == 0) ||
 		 (strcmp(type, TBDB_OBJECTTYPE_SEQUENCE) == 0)) {

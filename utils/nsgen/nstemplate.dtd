@@ -1,0 +1,28 @@
+<!--
+
+EMULAB-COPYRIGHT
+Copyright (c) 2006 University of Utah and the Flux Group.
+All rights reserved.
+
+A DTD for Emulab NS template files
+-->
+
+<!ELEMENT nstemplate (description?,variable*,nstext)>
+<!ATTLIST nstemplate name CDATA #IMPLIED
+                     author CDATA #IMPLIED
+                     authormail CDATA #IMPLIED
+                     authoruid CDATA #IMPLIED>
+
+<!ELEMENT description (#PCDATA)>
+
+<!ELEMENT variable EMPTY>
+<!ATTLIST variable name CDATA #REQUIRED
+                   default CDATA #REQUIRED
+                   descr CDATA #IMPLIED>
+
+<!ELEMENT nstext (section+)>
+
+<!ELEMENT section (#PCDATA)>
+<!ATTLIST section depends_on CDATA #IMPLIED
+                  action (skip|comment) "skip">
+

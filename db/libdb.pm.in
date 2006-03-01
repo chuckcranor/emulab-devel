@@ -2,7 +2,7 @@
 
 #
 # EMULAB-COPYRIGHT
-# Copyright (c) 2000-2005 University of Utah and the Flux Group.
+# Copyright (c) 2000-2006 University of Utah and the Flux Group.
 # All rights reserved.
 #
 
@@ -155,6 +155,7 @@ use vars qw(@ISA @EXPORT);
 	 TBImageIDAccessCheck TBExptAccessCheck ExpLeader MarkNodeDown
 	 SetNodeBootStatus OSFeatureSupported IsShelved NodeidToExp NodeidToExpOldReserved
 	 UserDBInfo DBQuery DBQueryFatal DBQueryWarn DBWarn DBFatal DBErr
+	 NewTBDBHandle DBQueryN DBQueryFatalN DBQueryWarnN DBErrN
 	 DBQuoteSpecial UNIX2DBUID ExpState SetExpState ProjLeader
 	 ExpNodes ExpNodeVnames ExpNodesOldReserved
 	 DBDateTime DefaultImageID GroupLeader TBGroupUnixInfo
@@ -218,12 +219,17 @@ use vars qw(@ISA @EXPORT);
 	 TB_NODEHISTORY_OP_FREE TB_NODEHISTORY_OP_ALLOC TB_NODEHISTORY_OP_MOVE
 	 TBSetNodeHistory
 
+	 TBGetOSBootCmd
+
 	 TBRobotLabExpt
+
+	 TBExptContainsNodeCT
 
 	 );
 
 # Must come after package declaration!
 use lib '@prefix@/lib';
+use libtblog_simple;
 use English;
 use File::Basename;
 use POSIX qw(strftime);
@@ -262,13 +268,14 @@ else {
 # Set up for querying the database. Note that fork causes a reconnect
 # to the DB in the child.
 #
-my $DB;
+my @DB;
 $DBQUERY_MAXTRIES = 1;
 $DBCONN_MAXTRIES  = 5;
 @EXPORT_OK        = qw($DBQUERY_MAXTRIES $DBCONN_MAXTRIES);
 
-sub TBDBConnect()
+sub TBDBConnect($)
 {
+    my ($dbnum) = @_;
     my $maxtries = $DBCONN_MAXTRIES;
 
     #
@@ -282,28 +289,30 @@ sub TBDBConnect()
     my $dbuser = "$SCRIPTNAME:$name:$PID";
 
     while ($maxtries) {
-	$DB = Mysql->connect("localhost", $DBNAME, $dbuser, "none");
-	if (defined($DB)) {
+	$DB[$dbnum] = Mysql->connect("localhost", $DBNAME, $dbuser, "none");
+	if (defined($DB[$dbnum])) {
 	    last;
 	}
 	$maxtries--;
 	sleep(1);
     }
-    if (!defined($DB)) {
+    if (!defined($DB[$dbnum])) {
 	print STDERR "Cannot connect to DB after several attempts!\n";
 	# Ensure consistent error value. 
 	exit(-1);
     }
-    $DB->{'dbh'}->{'PrintError'} = 0;
+    $DB[$dbnum]->{'dbh'}->{'PrintError'} = 0;
     $Mysql::QUIET = 1;
 }
-TBDBConnect();
+TBDBConnect(0);
 
 sub TBdbfork()
 {
     select(undef, undef, undef, 0.3);
-    undef($DB);
-    TBDBConnect();
+    for (my $i = 0; $i < @DB; $i++) {
+	undef($DB[$i]);
+	TBDBConnect($i);
+    }
     if ($EVENTSYS) {
 	EventFork();
     }
@@ -312,8 +321,17 @@ sub TBdbfork()
 # To avoid keeping a mysql connection around.
 sub TBDBDisconnect()
 {
-    undef($DB);
+    for (my $i = 0; $i < @DB; $i++) {
+	undef($DB[$i]);
+    }
     select(undef, undef, undef, 0.3);
+}
+
+# Create a new DB handle and return the handle number
+sub NewTBDBHandle() {
+    my $dbnum = @DB;
+    TBDBConnect($dbnum);
+    return $dbnum;
 }
 
 #
@@ -3286,6 +3304,33 @@ sub TBRobotLabExpt($$)
 }
 
 #
+# is a certain type/class node present?
+# args: pid, eid, valid type/class
+# 
+sub TBExptContainsNodeCT($$$) 
+{
+    my ($pid,$eid,$ntc) = @_;
+
+    # find out if this is a valid class or type...
+    my $dbq = DBQueryWarn("select v.pid,v.eid,v.type from virt_nodes as v " .
+			  "left join node_types as nt on v.type=nt.type " .
+			  "where v.pid='$pid' and v.eid='$eid' and " .
+			  "(nt.class='$ntc' or nt.type='$ntc')");
+
+
+#"select r.pid,r.eid,r.node_id from reserved as r " .
+#"left join nodes as n on n.node_id=r.node_id " . 
+#"left join node_types as nt on nt.type=n.type " . 
+#"where r.pid='$pid' and r.eid='$eid' and " . 
+#"(nt.class='$ntc' or nt.type='$ntc')");
+
+    return 0 
+	if (!$dbq || !$dbq->numrows());
+
+    return 1;
+}
+
+#
 # List of tables used for experiment removal/backup/restore.
 #
 @virtualTables  = ("virt_nodes",
@@ -3406,8 +3451,9 @@ sub TBNodeAdminOSID($)
 {
     my ($node) = @_;
 
-    my $result = DBQueryFatal("SELECT nt.adminmfs_osid FROM node_types AS nt ".
-			      "LEFT JOIN nodes as n on nt.type = n.type ".
+    my $result = DBQueryFatal("SELECT nt.adminmfs_osid FROM nodes AS n ".
+			      "LEFT JOIN node_types as nt ".
+			      "on nt.type = n.type ".
 			      "WHERE n.node_id='$node'");
     if ($result->num_rows() != 1) {
 	return undef;
@@ -3424,8 +3470,9 @@ sub TBNodeDiskloadOSID($)
 {
     my ($node) = @_;
 
-    my $result = DBQueryFatal("SELECT nt.diskloadmfs_osid FROM node_types AS nt ".
-			      "LEFT JOIN nodes as n on nt.type = n.type ".
+    my $result = DBQueryFatal("SELECT nt.diskloadmfs_osid FROM nodes AS n ".
+			      "LEFT JOIN node_types as nt ".
+			      "on nt.type = n.type ".
 			      "WHERE n.node_id='$node'");
     if ($result->num_rows() != 1) {
 	return undef;
@@ -4337,21 +4384,22 @@ sub DBQueryOld($)
     my($query) = $_[0];
     my($result);
 
-    $result = $DB->query($query);
+    $result = $DB[0]->query($query);
 
     if (! $result) {
 	$DBErrorString =
 	    "  Query: $query\n".
-	    "  Error: " . $DB->errstr;
+	    "  Error: " . $DB[0]->errstr;
     }
     return $result;
 }
 
-sub DBQuery($)
+sub DBQueryN($$)
 {
-    my($query)   = $_[0];
+    my($dbnum, $query)   = @_;
     my $maxtries = $DBQUERY_MAXTRIES;
     my $result;
+    my $db = $DB[$dbnum];
 
     # Not really forever :-)
     if (!$maxtries) {
@@ -4359,17 +4407,17 @@ sub DBQuery($)
     }
 
     while ($maxtries) {
-	$result = $DB->query($query);
+	$result = $db->query($query);
 	if (! defined($result)) {
-	    my $err = $DB->err;
+	    my $err = $db->err;
 
 	    $DBErrorString =
 		"  Query: $query\n".
-		"  Error: " . $DB->errstr . " ($err)";
+		"  Error: " . $db->errstr . " ($err)";
 	}
 	if (defined($result) ||
-	    ($DB->err != 2006) && ($DB->err != 1053) && ($DB->err != 2013) &&
-	    ($DB->err != 1046)) {
+	    ($db->err != 2006) && ($db->err != 1053) && ($db->err != 2013) &&
+	    ($db->err != 1046)) {
 	    last;
 	}
 
@@ -4379,39 +4427,42 @@ sub DBQuery($)
     }
     return $result;
 }
+sub DBQuery($) {return DBQueryN(0,$_[0]);}
 
 #
 # Same as above, but die on error.
 #
-sub DBQueryFatal($)
+sub DBQueryFatalN($$)
 {
-    my($query) = $_[0];
+    my($dbnum, $query) = @_;
     my($result);
 
-    $result = DBQuery($query);
+    $result = DBQueryN($dbnum, $query);
 
     if (! $result) {
 	DBFatal("DB Query failed");
     }
     return $result;
 }
+sub DBQueryFatal($) {return DBQueryFatalN(0,$_[0]);}
 
 #
 # Same as above, but just send email on error. This info is useful
 # to the TB system, but the caller has to retain control.
 #
-sub DBQueryWarn($)
+sub DBQueryWarnN($$)
 {
-    my($query) = $_[0];
+    my($dbnum, $query) = @_;
     my($result);
 
-    $result = DBQuery($query);
+    $result = DBQueryN($dbnum, $query);
 
     if (! $result) {
 	DBWarn("DB Query failed");
     }
     return $result;
 }
+sub DBQueryWarn($) {return DBQueryWarnN(0,$_[0]);}
 
 #
 # Warn and send email after a failed DB query. First argument is the error
@@ -4422,16 +4473,8 @@ sub DBQueryWarn($)
 sub DBWarn($;$)
 {
     my($message, $nomail) = @_;
-    my($text);
-
-    $text = "$message - In $SCRIPTNAME\n" .
-  	    "$DBErrorString\n";
-
-    print STDERR "*** $text";
-
-    if (! defined($nomail)) {
-      libtestbed::SENDMAIL($TBOPS, "DBError - $message", $text);
-    }
+    
+    DBError(\&tbwarn, $message, $nomail);
 }
 
 #
@@ -4442,10 +4485,26 @@ sub DBWarn($;$)
 sub DBFatal($)
 {
     my($message) = $_[0];
+    
+    DBError(\&tbdie, $message);
+}
 
-    DBWarn($message);
+#
+# DBError, common parts of DBWarn and DBFatal
+#
+# usage: DBError(log function, message, nomail)
+#
+sub DBError($$;$) 
+{
+    my($f, $message, $nomail) = @_;
+    
+    if (! defined($nomail)) {
+	libtestbed::SENDMAIL($TBOPS, "DBError - $message",
+			     "$message - In $SCRIPTNAME\n".
+			     "$DBErrorString\n");
+    }
 
-    die("\n");
+    $f->({cause=>'software'}, "$message:\n$DBErrorString");
 }
 
 #
@@ -4457,7 +4516,7 @@ sub DBQuoteSpecial($)
 {
     my($string) = $_[0];
 
-    $string = $DB->quote($string);
+    $string = Mysql->quote($string);
 
     return $string;
 }
@@ -4465,9 +4524,13 @@ sub DBQuoteSpecial($)
 #
 # Get the Error From the Last Database query
 #
+sub DBErrN($)
+{
+    return $DB[$_[0]]->err;
+}
 sub DBErr()
 {
-    return $DB->err;
+    return $DB[0]->err;
 }
 
 #
@@ -4682,15 +4745,15 @@ sub GatherSwapStats($$$$$;$)
 
     my $query_result =
 	DBQueryWarn("select e.state,e.gid,e.idx,s.rsrcidx,s.lastrsrc, ".
-		    "       e.expt_swap_uid,s.swapin_count ".
+		    "       e.expt_swap_uid,s.swapin_count,e.batchmode ".
 		    "  from experiments as e ".
 		    "left join experiment_stats as s on e.idx=s.exptidx ".
 		    "where e.pid='$pid' and e.eid='$eid'");
     if (!$query_result || !$query_result->numrows) {
 	return;
     }
-    my ($curstate, $gid, $exptidx, $rsrcidx, $lastrsrc,
-	$lastswapuid, $swapin_count) = $query_result->fetchrow_array;
+    my ($curstate, $gid, $exptidx, $rsrcidx, $lastrsrc,	$lastswapuid,
+	$swapin_count, $batchmode) = $query_result->fetchrow_array;
     # This overrides when doing a swapmod.
     $lastswapuid = $TBDB_STATS_SAVEDSWAPUID
 	if (defined($TBDB_STATS_SAVEDSWAPUID));
@@ -4933,6 +4996,14 @@ sub GatherSwapStats($$$$$;$)
 			"where pid='$pid' and eid='$eid' and  ".
 			"      exptidx=$exptidx");
 	}
+
+	# Batch mode info.
+	if ($mode eq TBDB_STATS_SWAPIN ||
+	    $mode eq TBDB_STATS_START) {
+	    DBQueryWarn("update experiment_resources set ".
+			"    batchmode=$batchmode ".
+			"where idx=$rsrcidx");
+	}
     }
 
     #
@@ -5148,7 +5219,7 @@ sub TBFieldData($$;$)
     my $toplevel;
     my $fielddata;
 
-    if (! defined(%DBFieldData)) {
+    if (! %DBFieldData) {
 	TBGrabFieldData();
     }
     my $key = $table . ":" . $column;
@@ -5303,7 +5374,24 @@ sub TBSetNodeHistory($$$$$)
 		       "  exptidx=$exptidx");
 }
 
+sub TBGetOSBootCmd($$$)
+{
+    my ($osid, $role, $default_cmdline) = @_;
+    my $retval = $default_cmdline;
+    
+    my $query_result =
+	DBQueryFatal("SELECT ob.boot_cmd_line FROM os_info as oi ".
+		     "LEFT JOIN os_boot_cmd as ob on ob.OS=oi.OS and ".
+		     "  ob.version=oi.version ".
+		     "WHERE oi.osid='$osid' and ob.role='$role'");
+    
+    if ($query_result->num_rows == 1) {
+	($retval) = $query_result->fetchrow_array();
+    }
+    
+    return $retval;
+}
+
 # _Always_ make sure that this 1 is at the end of the file...
 
 1;
-

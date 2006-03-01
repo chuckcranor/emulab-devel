@@ -33,6 +33,8 @@ if ($EUID != 0) {
 # Script specific goo.
 my $RCDIR	 = "$BINDIR/rc";
 my $PLABCONFIG   = "$BOOTDIR/rc.plab";
+my $SVCFILE      = "$BOOTDIR/svcslice";
+my $TMPLPWDFILE  = "/etc/passwd.tmpl";
 
 #
 # Load the OS independent support library. It will load the OS dependent
@@ -111,6 +113,17 @@ sub doboot()
 	if ($?) {
 	    fatal("Error running $BINDIR/watchdog");
 	}
+    }
+
+    #
+    # Fire up elvin and evproxy if we are the service sliver on this node
+    #
+    if (-e $SVCFILE and -x "$BINDIR/runelvin") {
+        print("Starting elvind and evproxy");
+        system("$BINDIR/runelvin");
+        if ($?) {
+            fatal("Error starting up elvind and/or evproxy!");
+        }
     }
 
     #
@@ -198,6 +211,25 @@ sub doplabconfig()
     my $plabconfig;
     my @tmccresults;
 
+    # get the slice user from the passwd file, fix it, and replace file
+    # XXX: need to actually use the slice name, but we don't really have
+    #      it stored anywhere yet.
+    print "Fixing up the passwd file.\n";
+    my $sliceuserent = `grep "^utah_" /etc/passwd`;
+    chomp $sliceuserent;
+    defined($sliceuserent) and $sliceuserent or 
+        fatal("Can't find slice user entry!");
+    my @pwdfields = split /:/, $sliceuserent;
+    $pwdfields[1] = "*";
+    $sliceuserent = join(":", @pwdfields);
+    open(TMPLPWD, ">>$TMPLPWDFILE") or 
+        fatal("Can't open passwd template file");
+    print TMPLPWD "$sliceuserent\n";
+    close(TMPLPWD);
+    !system("cp -f /etc/passwd /etc/passwd.orig") and
+        !system("cp -f $TMPLPWDFILE /etc/passwd") or
+            fatal("Couldn't fix up passwd file!");
+
     if (tmcc(TMCCCMD_PLABCONFIG, undef, \@tmccresults) < 0) {
 	fatal("Could not get plabconfig from server!");
     }
@@ -205,12 +237,33 @@ sub doplabconfig()
 	if (! @tmccresults);
     $plabconfig = $tmccresults[0];
 
+    # plabconfig defaults
+    my $sshdport = 0;
+    my $svcslice = 0;
+
+    # parse the config line
+    PLCONFPARSE: for ($plabconfig) {
+        /SSHDPORT=(\d+)/ && do {
+            $sshdport = $1;
+        };
+
+        /SVCSLICE=(\d)/ && do {
+            $svcslice = $1;
+        };
+    }
+
+    # Create the svcslice file if this is the service sliver.
+    if ($svcslice) {
+        open(SVCFILE, ">$SVCFILE")
+            or fatal("Could not open $SVCFILE: $!");
+        print SVCFILE "$svcslice\n";
+        close(SVCFILE);
+    }
+
     open(RC, ">$PLABCONFIG")
 	or fatal("Could not open $PLABCONFIG: $!");
 
-    if ($plabconfig =~ /SSHDPORT=(\d+)/) {
-	my $sshdport = $1;
-
+    if ($sshdport) {
 	print RC "#!/bin/sh\n";
 
 	# Note that it's important to never directly modify the config

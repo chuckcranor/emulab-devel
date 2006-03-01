@@ -1,6 +1,6 @@
 /*
  * EMULAB-COPYRIGHT
- * Copyright (c) 2000-2005 University of Utah and the Flux Group.
+ * Copyright (c) 2000-2006 University of Utah and the Flux Group.
  * All rights reserved.
  */
 
@@ -22,6 +22,7 @@
 #include <sys/fcntl.h>
 #include <sys/syscall.h>
 #include <sys/stat.h>
+#include <sys/param.h>
 #include <paths.h>
 #include <setjmp.h>
 #include <pwd.h>
@@ -51,6 +52,7 @@
 #define USERDIR		"/users"
 #define NETBEDDIR	"/netbed"
 #define SHAREDIR	"/share"
+#define PLISALIVELOGDIR "/usr/testbed/log/plabisalive"
 #define RELOADPID	"emulab-ops"
 #define RELOADEID	"reloading"
 #define FSHOSTID	"/usr/testbed/etc/fshostid"
@@ -240,6 +242,8 @@ COMMAND_PROTOTYPE(dotiptunnels);
 COMMAND_PROTOTYPE(dorelayconfig);
 COMMAND_PROTOTYPE(dotraceconfig);
 COMMAND_PROTOTYPE(doltmap);
+COMMAND_PROTOTYPE(doelvindport);
+COMMAND_PROTOTYPE(doplabeventkeys);
 
 /*
  * The fullconfig slot determines what routines get called when pushing
@@ -324,7 +328,9 @@ struct command {
 	{ "userenv",      FULLCONFIG_ALL,  F_ALLOCATED, douserenv},
 	{ "tiptunnels",	  FULLCONFIG_ALL,  F_ALLOCATED, dotiptunnels},
 	{ "traceinfo",	  FULLCONFIG_ALL,  F_ALLOCATED, dotraceconfig },
-	{ "ltmap",        FULLCONFIG_NONE, F_MINLOG|F_ALLOCATED, doltmap},	
+	{ "ltmap",        FULLCONFIG_NONE, F_MINLOG|F_ALLOCATED, doltmap},
+	{ "elvindport",   FULLCONFIG_NONE, 0, doelvindport},
+	{ "plabeventkeys",FULLCONFIG_NONE, 0, doplabeventkeys},
 };
 static int numcommands = sizeof(command_array)/sizeof(struct command);
 
@@ -1793,6 +1799,7 @@ COMMAND_PROTOTYPE(doaccounts)
 				}
 				auxgids[gcount++] = newgid;
 			skipit:
+				;
 			}
 			nrows--;
 
@@ -4101,12 +4108,12 @@ int myevent_send(address_tuple_t tuple) {
 	}
 
 	notification = event_notification_alloc(event_handle,tuple);
-	if (notification == NULL) {
+	if (notification == (event_notification_t) NULL) {
 		error("myevent_send: Unable to allocate notification!");
 		return 1;
 	}
 
-	if (event_notify(event_handle, notification) == NULL) {
+	if (! event_notify(event_handle, notification)) {
 		event_notification_free(event_handle, notification);
 
 		error("myevent_send: Unable to send notification!");
@@ -4536,9 +4543,10 @@ COMMAND_PROTOTYPE(dojailconfig)
  */
 COMMAND_PROTOTYPE(doplabconfig)
 {
-	MYSQL_RES	*res;	
+	MYSQL_RES	*res, *res2;	
 	MYSQL_ROW	row;
 	char		buf[MYBUFSIZE];
+        char            *bufp = buf, *ebufp = &buf[MYBUFSIZE];
 
 	if (!reqp->isvnode) {
 		/* Silent error is fine */
@@ -4549,25 +4557,59 @@ COMMAND_PROTOTYPE(doplabconfig)
 	/*
 	 * Now need the sshdport for this node.
 	 */
-	res = mydb_query("select sshdport from nodes "
-			 "where node_id='%s'",
-			 1, reqp->nodeid);
-	
-	if (!res) {
+	res = mydb_query("select n.sshdport, ps.admin "
+                         " from reserved as r "
+                         " left join nodes as n " 
+                         "  on n.node_id=r.node_id "
+                         " left join plab_slices as ps "
+                         "  on r.pid=ps.pid and r.eid=ps.eid "
+                         " where r.node_id='%s'",
+			 2, reqp->nodeid);
+
+        /*
+         * .. And the elvind port.
+         */
+        res2 = mydb_query("select attrvalue from node_attributes "
+                          " where node_id='%s' and attrkey='elvind_port'",
+                          1, reqp->pnodeid);
+
+	if (!res || !res2) {
 		error("PLABCONFIG: %s: DB Error getting config!\n",
 		      reqp->nodeid);
+                if (res) {
+                    mysql_free_result(res);
+                }
+                if (res2) {
+                    mysql_free_result(res2);
+                }
 		return 1;
 	}
+	
+        /* Add the sshd port (if any) to the output */
+        if ((int)mysql_num_rows(res) > 0) {
+            row = mysql_fetch_row(res);
+            bufp += OUTPUT(bufp, ebufp-bufp, "SSHDPORT=%d SVCSLICE=%d ", 
+                           atoi(row[0]), atoi(row[1]));
+        }
+        mysql_free_result(res);
 
-	if ((int)mysql_num_rows(res) == 0) {
-		mysql_free_result(res);
-		return 0;
-	}
-	row   = mysql_fetch_row(res);
+        /* Add the elvind port to the output */
+        if ((int)mysql_num_rows(res2) > 0) {
+            row = mysql_fetch_row(res2);
+            bufp += OUTPUT(bufp, ebufp-bufp, "ELVIND_PORT=%d ", 
+                           atoi(row[0]));
+        }
+        else {
+            /*
+             * XXX: should not hardwire port number here, but what should
+             *      I reference for it?
+             */
+             bufp += OUTPUT(bufp, ebufp-bufp, "ELVIND_PORT=%d ", 2917);
+        }
+        mysql_free_result(res2);
 
-	OUTPUT(buf, sizeof(buf), "SSHDPORT=%d\n", atoi(row[0]));
-	client_writeback(sock, buf, strlen(buf), tcp);
-	mysql_free_result(res);
+        OUTPUT(bufp, ebufp-bufp, "\n");
+        client_writeback(sock, buf, strlen(buf), tcp);
 
 	/* XXX Anything else? */
 	
@@ -4984,6 +5026,9 @@ COMMAND_PROTOTYPE(dorusage)
 {
 	char		buf[MYBUFSIZE];
 	float		la1, la5, la15, dused;
+        int             plfd;
+        struct timeval  now;
+        char            pllogfname[MAXPATHLEN];
 
 	if (sscanf(rdata, "LA1=%f LA5=%f LA15=%f DUSED=%f",
 		   &la1, &la5, &la15, &dused) != 4) {
@@ -5025,6 +5070,23 @@ COMMAND_PROTOTYPE(dorusage)
 	 */
 	OUTPUT(buf, sizeof(buf), "UPDATE=%d\n", reqp->update_accounts);
 	client_writeback(sock, buf, strlen(buf), tcp);
+
+        /* We're going to store plab up/down data in a file for a while. */
+        if (reqp->isplabsvc) {
+            gettimeofday(&now, NULL);
+            snprintf(pllogfname, sizeof(pllogfname), 
+                     "%s/%s-isalive", PLISALIVELOGDIR, reqp->pnodeid);
+            snprintf(buf, sizeof(buf), "%ld %ld\n", 
+                     now.tv_sec, now.tv_usec);
+            plfd = open(pllogfname, O_WRONLY|O_APPEND|O_CREAT, 
+                        S_IRUSR|S_IWUSR|S_IRGRP|S_IROTH);
+            if (plfd < 0) {
+                errorc("Can't open log: %s", pllogfname);
+            } else {
+                write(plfd, buf, strlen(buf));
+                close(plfd);
+            }
+        }
 
 	return 0;
 }
@@ -5278,8 +5340,8 @@ COMMAND_PROTOTYPE(dofwinfo)
 	 *
 	 * XXX will only work if there is one firewall per experiment.
 	 */
-	res = mydb_query("select r.node_id,v.type,v.style,f.fwname,i.IP, "
-			 "  i.mac,f.vlan "
+	res = mydb_query("select r.node_id,v.type,v.style,v.log,f.fwname,"
+			 "  i.IP,i.mac,f.vlan "
 			 "from firewalls as f "
 			 "left join reserved as r on"
 			 "  f.pid=r.pid and f.eid=r.eid and f.fwname=r.vname "
@@ -5288,7 +5350,7 @@ COMMAND_PROTOTYPE(dofwinfo)
 			 "left join interfaces as i on r.node_id=i.node_id "
 			 "where f.pid='%s' and f.eid='%s' "
 			 "and i.role='ctrl'",	/* XXX */
-			 7, reqp->pid, reqp->eid);
+			 8, reqp->pid, reqp->eid);
 	
 	if (!res) {
 		error("FWINFO: %s: DB Error getting firewall info!\n",
@@ -5334,7 +5396,7 @@ COMMAND_PROTOTYPE(dofwinfo)
 		if (strcmp(row[1], "ipfw2-vlan") == 0)
 			fwip = "0.0.0.0";
 		else
-			fwip = row[4];
+			fwip = row[5];
 		OUTPUT(buf, sizeof(buf), "TYPE=remote FWIP=%s\n", fwip);
 		mysql_free_result(res);
 		client_writeback(sock, buf, strlen(buf), tcp);
@@ -5346,8 +5408,8 @@ COMMAND_PROTOTYPE(dofwinfo)
 	/*
 	 * Grab vlan info if available
 	 */
-	if (row[6] && row[6][0])
-		vlan = row[6];
+	if (row[7] && row[7][0])
+		vlan = row[7];
 	else
 		vlan = "0";
 
@@ -5359,20 +5421,52 @@ COMMAND_PROTOTYPE(dofwinfo)
 	 */
 	OUTPUT(buf, sizeof(buf),
 	       "TYPE=%s STYLE=%s IN_IF=%s OUT_IF=%s IN_VLAN=%s OUT_VLAN=%s\n",
-	       row[1], row[2], row[5], row[5], vlan, vlan);
+	       row[1], row[2], row[6], row[6], vlan, vlan);
 	client_writeback(sock, buf, strlen(buf), tcp);
 	if (verbose)
 		info("FWINFO: %s", buf);
 
+	/*
+	 * Put out info about firewall rule logging
+	 */
+	if (vers > 25 && row[3] && row[3][0]) {
+		OUTPUT(buf, sizeof(buf), "LOG=%s\n", row[3]);
+		client_writeback(sock, buf, strlen(buf), tcp);
+		if (verbose)
+			info("FWINFO: %s", buf);
+	}
+
 	strncpy(fwtype, row[1], sizeof(fwtype));
 	strncpy(fwstyle, row[2], sizeof(fwstyle));
-	strncpy(fwname, row[3], sizeof(fwname));
+	strncpy(fwname, row[4], sizeof(fwname));
 	mysql_free_result(res);
 
 	/*
 	 * Return firewall variables
 	 */
 	if (vers > 21) {
+		/*
+		 * Grab the node gateway MAC which is not currently part
+		 * of the firewall variables table.
+		 */
+		res = mydb_query("select value from sitevariables "
+				 "where name='node/gw_mac'", 1);
+		if (res && mysql_num_rows(res) > 0) {
+			row = mysql_fetch_row(res);
+			if (row[0]) {
+				OUTPUT(buf, sizeof(buf),
+				       "VAR=EMULAB_GWIP VALUE=\"%s\"\n",
+				       CONTROL_ROUTER_IP);
+				client_writeback(sock, buf, strlen(buf), tcp);
+				OUTPUT(buf, sizeof(buf),
+				       "VAR=EMULAB_GWMAC VALUE=\"%s\"\n",
+				       row[0]);
+				client_writeback(sock, buf, strlen(buf), tcp);
+			}
+		}
+		if (res)
+			mysql_free_result(res);
+
 		res = mydb_query("select name,value from default_firewall_vars",
 				 2);
 		if (!res) {
@@ -5452,12 +5546,16 @@ COMMAND_PROTOTYPE(dofwinfo)
 	 * along with their IP addresses.  The client code uses this to
 	 * construct a local hosts file so that symbolic host names can
 	 * be used in firewall rules.
+	 *
+	 * We also return the control net MAC address for each node so
+	 * that we can provide proxy ARP.
 	 */
 	if (vers > 24) {
-		res = mydb_query("select r.vname,i.IP from reserved as r "
+		res = mydb_query("select r.vname,i.IP,i.mac "
+			"from reserved as r "
 			"left join interfaces as i on r.node_id=i.node_id "
 			"where r.pid='%s' and r.eid='%s' and i.role='ctrl'",
-			 2, reqp->pid, reqp->eid);
+			 3, reqp->pid, reqp->eid);
 		if (!res) {
 			error("FWINFO: %s: DB Error getting host info!\n",
 			      reqp->nodeid);
@@ -5467,8 +5565,15 @@ COMMAND_PROTOTYPE(dofwinfo)
 
 		for (n = nrows; n > 0; n--) {
 			row = mysql_fetch_row(res);
-			OUTPUT(buf, sizeof(buf), "HOST=%s CNETIP=%s\n",
-			       row[0], row[1]);
+			if (vers > 25) {
+				OUTPUT(buf, sizeof(buf),
+				       "HOST=%s CNETIP=%s CNETMAC=%s\n",
+				       row[0], row[1], row[2]);
+			} else {
+				OUTPUT(buf, sizeof(buf),
+				       "HOST=%s CNETIP=%s\n",
+				       row[0], row[1]);
+			}
 			client_writeback(sock, buf, strlen(buf), tcp);
 		}
 
@@ -6189,3 +6294,81 @@ COMMAND_PROTOTYPE(dotraceconfig)
 	return 0;
 }
 
+/*
+ * Acquire plab node elvind port update.
+ *
+ * Since there is (currently) no way to hard reserve a port on a plab node
+ * we might bind to a non-default port, and so must track this so that
+ * client vservers on the plab node know where to connect.
+ *
+ * XXX: should make sure it's the service slice reporting this.
+ */
+COMMAND_PROTOTYPE(doelvindport)
+{
+	char		buf[MYBUFSIZE];
+	unsigned int	elvport = 0;
+
+	if (sscanf(rdata, "%u",
+		   &elvport) != 1) {
+		strncpy(buf, rdata, 64);
+		error("ELVIND_PORT: %s: Bad arguments: %s...\n", reqp->nodeid,
+                      buf);
+		return 1;
+	}
+
+	/*
+         * Now shove the elvin port # we got into the db.
+	 */
+	mydb_update("replace into node_attributes "
+                    " values ('%s', '%s', %u)",
+		    reqp->pnodeid, "elvind_port", elvport);
+
+	return 0;
+}
+
+/*
+ * Return all event keys on plab node to service slice.
+ */
+COMMAND_PROTOTYPE(doplabeventkeys)
+{
+	char		buf[MYBUFSIZE];
+        int             nrows = 0;
+	MYSQL_RES	*res;
+	MYSQL_ROW	row;
+        char            *exppid, *expeid;
+        char            *addclause = "";
+
+        if (!reqp->isplabsvc) {
+                error("PLABEVENTKEYS: Unauthorized request from node: %s\n", 
+                      reqp->vnodeid);
+                return 1;
+        }
+
+        res = mydb_query("select e.pid, e.eid, e.eventkey from reserved as r "
+                         " left join nodes as n on r.node_id = n.node_id "
+                         " left join experiments as e on r.pid = e.pid "
+                         "  and r.eid = e.eid "
+                         " where n.phys_nodeid = '%s' ",
+                         3, reqp->pnodeid);
+
+	if ((nrows = (int)mysql_num_rows(res)) == 0) {
+		mysql_free_result(res);
+		return 0;
+	}
+
+	while (nrows) {
+		row = mysql_fetch_row(res);
+
+		OUTPUT(buf, sizeof(buf),
+                       "PID=%s EID=%s KEY=%s\n",
+                       row[0], row[1], row[2]);
+
+		client_writeback(sock, buf, strlen(buf), tcp);
+		nrows--;
+		if (verbose)
+			info("PLABEVENTKEYS: %s\n", buf);
+	}
+	mysql_free_result(res);
+
+	return 0;
+}
