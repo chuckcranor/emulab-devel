@@ -37,7 +37,7 @@ let anonfunc (str : string) : unit =
 Arg.parse argspec anonfunc "TODO: Write a usage message";;
 
 let g = match !graphfile with
-Some(s) -> (let (g,_) = Graph.read_subgraph_file s in g)
+          Some(s) -> Graph.read_subgraph_file s
         | None -> raise NeedArg
 in
 let hops = Dijkstra.get_all_first_hops g in
