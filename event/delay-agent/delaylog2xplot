@@ -1,0 +1,136 @@
+#! /usr/bin/awk -f
+
+BEGIN {
+	lasttime = 0;
+	newtime = 0;
+	inmodify = 0;
+}
+
+/dump at / {
+	lasttime = $3;
+}
+
+/linkname = / {
+	fulllink = $3;
+}
+
+/linkvnode = / {
+	currlink = $3;
+	fulllinks[fulllink,currlink] = 1;
+	linklist[currlink] = 1;
+	links[currlink,"bw"] = 0;
+	links[currlink,"plr"] = 0;
+	links[currlink,"lat"] = 0;
+	linkfiles[currlink,"bw"] = dump_header(currlink, "bw");
+	linkfiles[currlink,"plr"] = dump_header(currlink, "plr");
+	linkfiles[currlink,"lat"] = dump_header(currlink, "lat");
+}
+
+/delay = / {
+	links[currlink,"lat"] = $3;
+	links[currlink,"bw"] = $6 / 8;
+	links[currlink,"plr"] = $9;
+}
+
+/recd\. MODIFY / {
+	inmodify = 1;
+	if (newtime)
+		lasttime = newtime;
+}
+
+/Bandwidth = / {
+	new["bw"] = $3 / 8;
+}
+
+/Bandwidth mean = / {
+	new["bw"] = $4 / 8;
+}
+
+/Delay = / {
+	new["lat"] = $3;
+}
+
+/Delay mean = / {
+	new["lat"] = $4;
+}
+
+/Plr = / {
+	new["plr"] = $3;
+}
+
+/plr mean = / {
+	new["plr"] = $4;
+}
+
+/setting at / {
+	newtime = $3;
+}
+
+/entered the loop/ {
+	currlink = $7;
+	modify_aspect("bw");
+	modify_aspect("lat");
+	modify_aspect("plr");
+}
+
+END {
+	lasttime = newtime;
+	split(newtime, stime, /\./);
+	newtime = sprintf("%d.%d", stime[1] + 10, stime[2]);
+	for (file in linkfiles) {
+		split(file, suba, SUBSEP);
+		currlink = suba[1];
+		aspect = suba[2];
+		new[aspect] = links[currlink,aspect];
+		modify_aspect(aspect);
+		dump_footer(linkfiles[currlink,aspect]);
+	}
+}
+
+function link_file(linkname, aspect) {
+	return sprintf("%s-%s.xpl", linkname, aspect);
+}
+
+function modify_aspect(aspect) {
+	printf("line %s %f %s %f\n",
+	       lasttime, links[currlink,aspect],
+	       newtime, links[currlink,aspect]) > linkfiles[currlink,aspect];
+	printf("line %s %f %s %f\n",
+	       newtime, links[currlink,aspect],
+	       newtime, new[aspect]) > linkfiles[currlink,aspect];
+	if (aspect == "lat") {
+		printf("red\n") > linkfiles[currlink,aspect];
+		printf("line %s %f %s %f\n",
+		       lasttime, links[currlink,aspect] * 2,
+		       newtime, links[currlink,aspect] * 2) > linkfiles[currlink,aspect];
+		printf("line %s %f %s %f\n",
+		       newtime, links[currlink,aspect] * 2,
+		       newtime, new[aspect] * 2) > linkfiles[currlink,aspect];
+		printf("pink\n") > linkfiles[currlink,aspect];
+	}
+	links[currlink,aspect] = new[aspect];
+}
+
+function dump_header(linkname, aspect,  file) {
+	file = link_file(linkname, aspect);
+	if (aspect == "bw")
+		type = "signed";
+	else if (aspect == "lat")
+		type = "signed";
+	else
+		type = "double";
+	printf("timeval %s\n", type) > file;
+	printf("title\n") > file;
+	printf("%s Delay Agent\n", linkname) > file;
+	printf("xlabel\n") > file;
+	printf("time\n") > file;
+	printf("ylabel\n") > file;
+	printf("%s\n", aspect) > file;
+	printf("pink\n") > file;
+
+	return file;
+}
+
+function dump_footer(file) {
+	printf("go\n") > file;
+}

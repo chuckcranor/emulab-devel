@@ -384,6 +384,10 @@ void fill_tuple(address_tuple_t at)
 /***************************dump_link_map******************************/
 void dump_link_map(){
   int i,j;
+  struct timeval tv;
+
+  gettimeofday(&tv, NULL);
+  info("dump at %ld.%d\n", tv.tv_sec, tv.tv_usec);
   for (i = 0; i < link_index; i++){
     info ("===============================================================\n");
     info("linkname = %s\n", link_map[i].linkname);
@@ -403,7 +407,7 @@ void dump_link_map(){
       info("vnode     = %s\n", link_map[i].vnodes[j]);
       info("linkvnode = %s\n", link_map[i].linkvnodes[j]);
 
-      info("delay = %d, bw = %d plr = %f\n",  link_map[i].params[j].delay.delay,
+      info("delay = %d bw = %d plr = %f\n",  link_map[i].params[j].delay.delay,
 	   link_map[i].params[j].bw.bandwidth, link_map[i].params[j].loss.plr);
       info("q_size = %d buckets = %d n_qs = %d flags_p = %d\n",
 	   link_map[i].params[j].q_size, link_map[i].params[j].buckets,

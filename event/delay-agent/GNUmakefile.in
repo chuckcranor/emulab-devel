@@ -36,5 +36,13 @@ client: delay-agent
 client-install: client
 	$(INSTALL_PROGRAM) -s delay-agent$(EXE) $(DESTDIR)$(CLIENT_BINDIR)/delay-agent$(EXE)
 
+install:
+	$(INSTALL_PROGRAM) $(SRCDIR)/delaylog2xplot \
+		$(INSTALL_DIR)/opsdir/bin/delaylog2xplot
+
+control-install:
+	$(INSTALL_PROGRAM) $(SRCDIR)/delaylog2xplot \
+		$(INSTALL_BINDIR)/delaylog2xplot
+
 clean:
 	/bin/rm -f *.o delay-agent

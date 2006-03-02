@@ -691,7 +691,10 @@ void set_link_params(int l_index, int blackhole, int p_which)
      set them into dummynet by calling setsockopt
    */
   int p_index;
+  struct timeval tv;
 
+  gettimeofday(&tv, NULL);
+  info("setting at %ld.%d\n", tv.tv_sec, tv.tv_usec);
   for (p_index = 0; p_index < link_map[l_index].numpipes; p_index++) {
       /*
        * Want to do all the pipes, or just the one pipe that was
@@ -703,7 +706,9 @@ void set_link_params(int l_index, int blackhole, int p_which)
 	    structpipe_params *p_params
 	      = &(link_map[l_index].params[p_index]);
 
-	    info("entered the loop, pindex = %d\n", p_index);
+	    info("entered the loop, pindex = %d %s %s\n", p_index,
+		 link_map[l_index].linkvnodes[p_index],
+		 link_map[l_index].fs.dest);
 	
 	    memset(&pipe, 0, sizeof pipe);
 
@@ -844,6 +849,7 @@ void set_link_params(int l_index, int blackhole, int p_which)
 	      error("IP_DUMMYNET_CONFIGURE setsockopt failed\n");
 	  }
     }
+  
 }
 
 /*
