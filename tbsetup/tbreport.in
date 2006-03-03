@@ -23,6 +23,7 @@ sub usage {
     print "-e		Show event listing\n";
     print "-f		Show firewall rules\n";
     print "-r		Show routes\n";
+    print "-s		Show scenarios\n";
     print "-b		Show most things\n";
     print "-v		Show everything!\n";
     return 1;
@@ -30,6 +31,7 @@ sub usage {
 
 my $TBROOT = "@prefix@";
 my $DOMAIN = "@OURDOMAIN@";
+my $USESCENARIOS = "@USESCENARIOS@";
 
 use lib '@prefix@/lib';
 use libtestbed;
@@ -54,6 +56,7 @@ my $showdelays = 0;
 my $showevents = 0;
 my $showroutes = 0;
 my $showfwinfo = 0;
+my $showscenarios = 0;
 my %v2pmap;
 my %p2type;
 my %p2osid;
@@ -77,12 +80,17 @@ if ($opt{v}) {
     $showevents = 1;
     $showroutes = 1;
     $showfwinfo = 1;
+    $showscenarios = 1;
 }
 if ($opt{b}) {
     $shownodes = 1;
     $showmap = 1;
     $showdelays = 1;
     $showlinks = 1;
+    $showscenarios = 1;
+}
+if ($opt{s}) {
+    $showscenarios = 1;
 }
 if ($opt{n}) {
     $shownodes = 1;
@@ -308,6 +316,43 @@ if ($showmap && $state eq EXPTSTATE_ACTIVE) {
 		$v2pmap{$v}->{ISREMOTE}) {
 		printf "%-15s %-10s %-20s", $v, $s, "ssh -p $s $q";
 		print  "\n";
+	    }
+	}
+	print "\n";
+    }
+}
+
+#
+# Scenarios
+#
+if ($USESCENARIOS && $showscenarios) {
+    $result = 
+	DBQueryFatal("SELECT vs.scenario_vname,vs.scenario_id," .
+		     "vs.resource_policy,es.scenario_instance," .
+		     "s.notes FROM virt_scenarios as vs " .
+		     "LEFT JOIN experiment_scenarios as es " .
+		     "ON es.scenario_id = vs.scenario_id AND " .
+		     "es.eid = vs.eid AND es.pid = vs.pid " .
+		     "LEFT JOIN scenarios as s " .
+		     "ON s.scenario_id = vs.scenario_id " .
+		     "AND s.scenario_instance = es.scenario_instance " .
+		     "WHERE vs.eid=\"$eid\" AND vs.pid=\"$pid\"");
+    if ($result->numrows) {
+	print "Scenario Info:\n";
+	printf "%-15s %-15s %-15s %-15s\n", "Vname", "ID", "Resource Policy",
+	       "Instance";
+	print "--------------- --------------- --------------- ---------------\n";
+	while (my ($vname,$id,$rp,$instance,$notes) = 
+	       $result->fetchrow_array()) {
+	    if (! defined($instance)) {
+		$instance="";
+	    }
+	    printf "%-15s %-15s %-15s %-15s\n",
+	            $vname,$id,$rp,$instance,$notes;
+	    if (defined($notes) && $notes ne "") {
+		foreach $line (split("\n",$notes)) {
+		    print "\t$line\n";
+		}
 	    }
 	}
 	print "\n";

@@ -1,0 +1,532 @@
+#!/usr/bin/perl -w
+
+#
+# Copyright (c) 2005 Paul Barford
+# 
+# We provide the Schooner testbed management software (below described 
+# as "Schooner") on an AS IS basis, and do not warrant its validity or 
+# performance.  We reserve the right to update, modify, or discontinue
+# this software at any time.  We shall have no obligation to supply such 
+# updates or modifications or any other form of support to you.
+# 
+# This license is for research uses.  For such uses, there is no
+# charge. We define "research use" to mean you may freely use it
+# inside your organization for whatever purposes you see fit. But you
+# may not re-distribute Schooner or parts of Schooner, in any form
+# source or binary (including derivatives), electronic or otherwise,
+# to any other organization or entity without our permission.
+# 
+# (for other uses, please contact us at wail@cs.wisc.edu)
+# 
+# All warranties, including without limitation, any warranty of
+# merchantability or fitness for a particular purpose, are hereby
+# excluded.
+# 
+# By your use of Schooner, you understand and agree that we (or any
+# other person or entity with proprietary rights in Schooner) are
+# under no obligation to provide either maintenance services,
+# update services, notices of latent defects, or correction of
+# defects for Schooner.
+# 
+# Even if advised of the possibility of such damages, under no
+# circumstances shall we (or any other person or entity with
+# proprietary rights in the software licensed hereunder) be liable
+# to you or any third party for direct, indirect, or consequential
+# damages of any character regardless of type of action, including,
+# without limitation, loss of profits, loss of use, loss of good
+# will, or computer failure or malfunction.  You agree to indemnify
+# us (and any other person or entity with proprietary rights in the
+# software licensed hereunder) for any and all liability it may
+# incur to third parties resulting from your use of Schooner.
+#
+
+package libscenario;
+use Exporter;
+
+@ISA = "Exporter";
+@EXPORT = 
+    qw ( SCListScenarios SCListInstances SCAvailableP
+	 SCSetup1 SCSetup2 SCTeardown);
+
+use lib '@prefix@/lib';
+use libdb;
+use libradius;
+use English;
+
+my $SCENCTR = "/usr/testbed/bin/scenctr";
+my $XMLDIR = "@prefix@/scenarios";
+
+sub SCListScenarios () {
+    my $qr = DBQueryFatal("select distinct scenario_id from scenarios");
+    my @ret;
+    while (my ($scenario) = $qr->fetchrow_array()) {	
+	push @ret, $scenario;
+    }	
+    return @ret;
+}
+
+# from the perl cookbook
+# fisher_yates_shuffle( \@array ) : generate a random permutation
+# of @array in place
+sub fisher_yates_shuffle {
+    my $array = shift;
+    my $i;
+    for ($i = @$array; --$i; ) {
+        my $j = int rand ($i+1);
+        next if $i == $j;
+        @$array[$i,$j] = @$array[$j,$i];
+    }
+}
+
+sub SCListInstances ($) {
+    my ($scenario_id) = @_;
+
+    my $qr = DBQueryFatal("select scenario_instance from scenarios " .
+			  "where scenario_id=\"$scenario_id\"");
+    my @ret;
+    while (my ($scenario_instance) = $qr->fetchrow_array()) {
+	push @ret, $scenario_instance;
+    }
+    fisher_yates_shuffle(\@ret);
+    return @ret;
+}
+
+sub SCAvailableP ($$$) {
+    my ($scenario_id,$scenario_instance,$exclusive) = @_;
+    my $query_result;
+
+    $query_result = 
+	DBQueryFatal("SELECT status from scenarios " .
+		     "WHERE scenario_id=\"$scenario_id\" " .
+		     "AND scenario_instance=\"$scenario_instance\"");
+    my ($status) = $query_result->fetchrow_array();
+    return 0 if $status ne "unloaded";
+
+    if ($exclusive) {
+	$query_result = 
+	    DBQueryFatal("SELECT SR.resource_id " .
+			 "FROM scenario_resources AS SR " .
+			 "LEFT JOIN scenario_resource_use AS SU " .
+			 "ON SU.resource_id = SR.resource_id WHERE " .
+			 "SR.scenario_id = \"$scenario_id\" AND " . 
+			 "SR.scenario_instance = \"$scenario_instance\" AND " .
+			 "SU.resource_id IS NOT NULL");
+    } else {
+	$query_result = 
+	    DBQueryFatal("SELECT SR.resource_id " .
+			 "FROM scenario_resources AS SR " .
+			 "LEFT JOIN scenario_resource_use AS SU " .
+			 "ON SU.resource_id = SR.resource_id " .
+		     "LEFT JOIN experiment_scenarios AS ES " .
+		     "ON ES.scenario_id = SU.scenario_id AND " .
+		     "ES.scenario_instance = SU.scenario_instance " .
+		     "WHERE SR.scenario_id = \"$scenario_id\" AND " .
+		     "SR.scenario_instance = \"$scenario_instance\" AND " .
+		     "SU.resource_id IS NOT NULL AND " .
+		     "((SR.resource_type = \"mutex\") OR " .
+		     "(SR.resource_type = \"sharable\" AND " .
+		     " ES.resource_policy = \"exclusive\"))");
+    }
+    if ($query_result->numrows()) {
+	return 0;
+    }
+    return 1;
+}
+
+# This should be called during swapin before assign_wrapper.  It
+# will attempt to instaniate all requested scenarios and fills in
+# the fixed fields in virt_nodes for access points.  Return is 0
+# on success and 1 on failure.
+sub SCSetup1 ($$) {
+    my ($pid,$eid) = @_;
+
+    my $qr = DBQueryFatal("select scenario_vname,scenario_id," .
+			  "resource_policy from " .
+			  "virt_scenarios where pid=\"$pid\" " .
+			  "and eid=\"$eid\"");
+
+    print "Setting up scenarios (phase 1).\n";
+    while (my ($scenario_vname,$scenario_id,$resource_policy) = 
+	   $qr->fetchrow_array()) {
+	print "Loading scenario $scenario_vname = $scenario_id " .
+	    "($resource_policy)\n";
+	my $exclusive = 0;
+	$exclusive = 1 if $resource_policy eq "exclusive";
+	my $scenario_instance = "";
+	foreach $instance (SCListInstances($scenario_id)) {
+	    if (SCAvailableP($scenario_id,$instance,$exclusive)) {
+		$scenario_instance = $instance;
+		last;
+	    }
+	}
+
+	if ($scenario_instance eq "") {
+	    print STDERR "*** Could not instantiate scenario $scenario_id\n";
+	    print STDERR "      Resources are unavailable.\n";
+	    print STDERR "      Please try again later.\n";
+	    return 1;
+	}
+
+	print "Using instance $scenario_id/$scenario_instance.\n";
+	
+	my $xmlfile = "";
+
+	###
+	# BEGIN SANITY CHECKS
+	###
+        # ensure scenario is unloaded (and grab the xmlfile)
+	$query_result =
+	    DBQueryFatal("select status, xml_file from scenarios " .
+			 "where scenario_id = \"$scenario_id\" " .
+			 "and scenario_instance = \"$scenario_instance\"");
+	if (@row = $query_result->fetchrow_array()) {
+	    if ($row[0] ne "unloaded") {
+		die("Scenario is not unloaded.\n");
+	    }
+	    $xmlfile = $row[1];
+	} else {
+	    print STDERR "SANITY FAILURE: Invalid scenario: " .
+		"$scenario_id - $scenario_instance.\n";
+	    return 1;
+	}
+
+        # ensure scenario isn't in experiment_scenarios
+	$query_result =
+	    DBQueryFatal("select pid,eid from experiment_scenarios where " . 
+			 "scenario_id=\"$scenario_id\" and " .
+			 "scenario_instance=\"$scenario_instance\"");
+	if (my ($opid,$oeid) = $query_result->fetchrow_array()) {
+	    print STDERR "SANITY FAILURE: Scenario already in use by " .
+		"$pid,$eid.\n";
+	    return 1;
+	}
+	
+        # ensure all access points are free 
+	$query_result = 
+	    DBQueryFatal("select SAP.node_id " .
+			 "from scenario_access_points as SAP " .
+			 "left join reserved as R " .
+			 "on SAP.node_id = R.node_id " .
+			 "where SAP.scenario_id=\"$scenario_id\" and " .
+			 "SAP.scenario_instance=\"$scenario_instance\" and " .
+			 "R.node_id is not null");
+	if ($query_result->numrows()) {
+	    my $message = "";
+	    while (my ($node_id) = $query_result->fetchrow_array()) {
+		$message .= "$node_id ";
+	    }
+	    print STDERR "SANITY FAILURE: Access points not free.\n";
+	    return 1;
+	}
+	###
+	# END SANITY CHECKS
+	###
+
+	# update status in case we get confused
+	DBQueryFatal("update scenarios set status=\"loading\" " .
+		     "where scenario_id=\"$scenario_id\" " .
+		     "and scenario_instance=\"$scenario_instance\"");
+	
+        # allocate resources
+	$query_result =
+	    DBQueryFatal("select resource_id from scenario_resources " .
+			 "where scenario_id=\"$scenario_id\" " .
+			 "and scenario_instance = \"$scenario_instance\"");
+	my @resources = ();
+	while (my $resource = $query_result->fetchrow_array()) {
+	    DBQueryFatal("insert into scenario_resource_use " .
+			 "set resource_id=\"$resource\", " .
+			 "scenario_id=\"$scenario_id\", " .
+			 "scenario_instance=\"$scenario_instance\"");
+	}
+
+	
+        # call scenctr and handle failure
+	if (system("$SCENCTR -s $scenario_id -a load " .
+		   "-f $XMLDIR/$scenario_id/$xmlfile")) {
+	    print STDERR "scenctr failure - rewinding.\n";
+	    DBQueryFatal("delete from scenario_resource_use " .
+			 "where scenario_id=\"$scenario_id\" " .
+			 "and scenario_instance=\"$scenario_instance\"");
+	    DBQueryFatal("update scenarios set status=\"unloaded\" " .
+			 "where scenario_id=\"$scenario_id\" " .
+			 "and scenario_instance=\"$scenario_instance\"");
+	    return 1;
+	}
+
+        # update experiment_scenarios
+	DBQueryFatal("insert into experiment_scenarios set " .
+		     "pid=\"$pid\",eid=\"$eid\"," .
+		     "scenario_vname=\"$scenario_vname\"," .
+		     "scenario_id=\"$scenario_id\"," .
+		     "scenario_instance=\"$scenario_instance\"," .
+		     "resource_policy=\"" . 
+		     ($exclusive ? "exclusive" : "shared") . 
+		     "\"");
+	
+	
+        # update status
+	DBQueryFatal("update scenarios set status=\"loaded\" " .
+		     "where scenario_id=\"$scenario_id\" " .
+		     "and scenario_instance=\"$scenario_instance\"");
+
+	my $qr2 = 
+	    DBQueryFatal("select vname, scenario_ap from virt_nodes " .
+			 "where pid=\"$pid\" and  eid=\"$eid\" " .
+			 "and scenario_vname=\"$scenario_vname\"");
+	while (my ($vname,$ap) = $qr2->fetchrow_array()) {
+	    my $qr3 = 
+		DBQueryFatal("select node_id from scenario_access_points " .
+			     "where scenario_id=\"$scenario_id\" " .
+			     "and scenario_instance=\"$scenario_instance\" " .
+			     "and apname=\"$ap\"");
+	    my ($apnode) = $qr3->fetchrow_array();
+	    if (!defined($apnode)) {
+		print STDERR "*** Invalid AP name: $ap\n";
+		return 1;
+	    }
+	    DBQueryFatal("update virt_nodes set fixed=\"$apnode\" " .
+			 "where pid=\"$pid\" and eid=\"$eid\" " .
+			 "and vname=\"$vname\"");
+	}
+	print "Scenario Loaded.\n";
+    }	
+
+
+    print "Setting up radius.\n";
+    radius_setup($pid,$eid);
+
+    return 0;
+}
+
+# This should be called during swapin after assign_wrapper.  It
+# handles any vlan subs.  Return is 0 on success and 1 on failure.
+sub SCSetup2 ($$) {
+    my ($pid,$eid) = @_;
+    
+    print "Setting up scenarios (phase 2).\n";
+
+    my $qr = DBQueryFatal("select scenario_id, scenario_instance from " .
+			  "experiment_scenarios where " .
+			  "pid=\"$pid\" and eid=\"$eid\"");
+    my @toreserve = ();
+    while (my ($scenario_id,$scenario_instance) = $qr->fetchrow_array()) {
+	# do any vlan subs
+#	print "Skipping VLAN subs - beta feature.\n";
+#	last;
+	my $qr2 = DBQueryFatal("select tag,replacement " .
+			 "from scenario_vlan_subs " .
+			 "where scenario_instance=\"$scenario_instance\" " .
+			 "and scenario_id=\"$scenario_id\"");
+	my %vlansubs;
+	my %subsfound;
+	while (my ($tag,$replacement) = $qr2->fetchrow_array()) {
+	    $vlansubs{$tag} = $replacement;
+	    $subsfound{$tag} = 0;
+	}
+	$qr2 = DBQueryFatal("select id,members from vlans " .
+			    "where pid=\"$pid\" and eid=\"$eid\"");
+	my %newvlans;
+	while (my ($id,$members) = $qr2->fetchrow_array()) {
+	    my @members_list = split(/ /,$members);
+	    my @newmembers_list;
+	    my $changed = 0;
+	    foreach $member (@members_list) {
+		if (defined($vlansubs{$member})) {
+		    push @newmembers_list, $vlansubs{$member};
+		    $changed = 1;
+		    $subsfound{$member} = 1;
+		} else {
+		    push @newmembers_list, $member;
+		}
+	    }
+	    if ($changed == 1) {
+		$newvlans{$id} = join(" ",@newmembers_list);
+	    }
+	}
+	foreach $id (keys(%newvlans)) {
+	    DBQueryFatal("update vlans set members=\"" .
+			 $newvlans{$id} . "\" where " .
+			 "id=$id");
+	}
+	foreach $tag (keys(%subsfound)) {
+	    if ($subsfound{$tag} == 0) {
+		DBQueryFatal("insert into vlans set pid=\"$pid\", " .
+			     "eid=\"$eid\", " .
+			     "members=\"" . $vlansubs{$tag} . "\"");
+	    }
+	}
+    }
+
+    return 0;
+}
+
+# This should be called during swapout after nodes are freed.  It will
+# teardown any scenarios in use.
+sub SCTeardown ($$) { 
+    my ($pid,$eid) = @_;
+
+    print "Tearing down scenarios.\n";
+
+    my $qr = 
+	DBQueryFatal("select scenario_vname, scenario_id, scenario_instance " .
+		     "from experiment_scenarios where " .
+		     "pid=\"$pid\" and eid=\"$eid\"");
+    
+    my $err = 0;
+    while (my ($scenario_vname, $scenario_id,$scenario_instance) = 
+	   $qr->fetchrow_array()) {
+	
+	print "Unloading scenario $scenario_id - $scenario_instance\n";
+	
+	my $xmlfile = "";
+
+	###
+	# BEGIN SANITY CHECKS
+	###
+        # ensure scenario loaded (and get xmlfile)
+	$query_result =
+	    DBQueryFatal("select status, xml_file from scenarios " .
+			 "where scenario_id = \"$scenario_id\" " .
+			 "and scenario_instance = \"$scenario_instance\"");
+	if (@row = $query_result->fetchrow_array()) {
+	    if ($row[0] ne "loaded") {
+		print STDERR "SANITY ERROR: Scenario is not loaded.\n";
+		return 1;
+	    }
+	    $xmlfile = $row[1];
+	} else {
+	    print STDERR "SANITY ERROR: Invalid scenario: $scenario_id - $scenario_instance.\n";
+	    $err = 1;
+	    next;
+	}
+	
+        # ensure we are in experiment_scenarios
+	$query_result =
+	    DBQueryFatal("select pid from experiment_scenarios where " . 
+			 "pid=\"$pid\" and eid=\"$eid\" and " .
+			 "scenario_id=\"$scenario_id\" and " .
+			 "scenario_instance=\"$scenario_instance\" and " .
+			 "scenario_vname=\"$scenario_vname\"");
+	if ($query_result->numrows != 1) {
+	    print STDERR "SANITY ERROR: Could not find us in experiment_scenarios.\n";
+	    $err = 1;
+	    next;
+	}
+	
+        # ensure access nodes are free 
+	$query_result = 
+	    DBQueryFatal("select SAP.node_id " .
+			 "from scenario_access_points as SAP " .
+			 "left join reserved as R " .
+			 "on SAP.node_id = R.node_id " .
+			 "where SAP.scenario_id=\"$scenario_id\" and " .
+			 "SAP.scenario_instance=\"$scenario_instance\" and " .
+			 "R.node_id is not null");
+	if ($query_result->numrows()) {
+	    my $message = "";
+	    while (my ($node_id) = $query_result->fetchrow_array()) {
+		$message .= "$node_id ";
+	    }
+	    print STDERR "SANITY ERROR: Access nodes not free: $message\n";
+	    $err = 1;
+	    next;
+	}
+	
+        # ensure resources are assigned to us
+	$query_result = DBQueryFatal("SELECT resource_policy " .
+				     "FROM experiment_scenarios " .
+				     "WHERE scenario_id=\"$scenario_id\" AND " .
+				     "scenario_instance=\"$scenario_instance\"");
+	my ($policy) = $query_result->fetchrow_array();
+	if ($policy eq "exclusive") {
+	    $query_result = 
+		DBQueryFatal("SELECT SR.resource_id " .
+			     "FROM scenario_resources AS SR " .
+			     "LEFT JOIN scenario_resource_use AS SU " .
+			     "ON SU.resource_id = SR.resource_id WHERE " .
+			     "SR.scenario_id = \"$scenario_id\" AND " . 
+			     "SR.scenario_instance = \"$scenario_instance\" AND " .
+			     "(SU.resource_id IS NULL OR " .
+			     "SU.scenario_id !=\"$scenario_id\" OR " .
+			     "SU.scenario_instance !=\"$scenario_instance\")");
+	} else {
+	    $query_result = 
+		DBQueryFatal("SELECT SR.resource_id " .
+			     "FROM scenario_resources AS SR " .
+			     "LEFT JOIN scenario_resource_use AS SU " .
+			     "ON SU.resource_id = SR.resource_id " .
+			     "LEFT JOIN experiment_scenarios AS ES " .
+			     "ON ES.scenario_id = SU.scenario_id AND " .
+			     "ES.scenario_instance = SU.scenario_instance " .
+			     "WHERE SR.scenario_id = \"$scenario_id\" AND " .
+			     "SR.scenario_instance = \"$scenario_instance\" AND " .
+			     "(SU.resource_id IS NULL OR " .
+			     "((SU.scenario_id != \"$scenario_id\") OR " .
+			     "(SU.scenario_instance != \"$scenario_instance\"))) AND " .
+			     "(SR.resource_type = \"mutex\" OR " .
+			     "(SR.resource_type = \"sharable\" AND " .
+			     " ES.resource_policy = \"exclusive\"))");
+	}
+	if ($query_result->numrows()) {
+	    my $message = "";
+	    while (my ($resource_id) = $query_result->fetchrow_array()) {
+		$message .= "$resource_id ";
+	    }
+	    print "SANITY ERROR: Resources do not belong to us: $message\n";
+	    $err = 1;
+	    next;
+	}
+	###
+	# END SANITY CHECKS
+	###
+	
+        # update status in case we get confused
+	DBQueryFatal("update scenarios set status=\"unloading\" " .
+		     "where scenario_id=\"$scenario_id\" " .
+		     "and scenario_instance=\"$scenario_instance\"");
+	
+        # call scenctr and handle failure
+	if (system("$SCENCTR -s $scenario_id -a shutdown -f $XMLDIR/$scenario_id/$xmlfile")) {
+	    # rewind 
+	    print STDERR "scenctr failed - rewinding.\n";
+	    DBQueryFatal("update scenarios set status=\"unloaded\" " .
+		 "where scenario_id=\"$scenario_id\" " .
+			 "and scenario_instance=\"$scenario_instance\"");
+	    $err = 1;
+	    next;
+	}
+	
+        # free resources
+	DBQueryFatal("delete from scenario_resource_use where " .
+		     "scenario_id=\"$scenario_id\" and " .
+		     "scenario_instance=\"$scenario_instance\"");
+	
+        # remove from experiment_scenarios
+	DBQueryFatal("delete from experiment_scenarios where " .
+		     "pid=\"$pid\" and eid=\"$eid\" and " .
+		     "scenario_id=\"$scenario_id\" and " .
+		     "scenario_instance=\"$scenario_instance\" and " .
+		     "scenario_vname=\"$scenario_vname\"");
+	
+        # update status
+	DBQueryFatal("update scenarios set status=\"unloaded\" " .
+	     "where scenario_id=\"$scenario_id\" " .
+		     "and scenario_instance=\"$scenario_instance\"");
+
+	DBQueryFatal("update virt_nodes set fixed=\"\" where " .
+		     "pid=\"$pid\" and eid=\"$eid\" " .
+		     "and scenario_vname=\"$scenario_vname\"");
+
+	print "Scenario unloaded.\n";
+    }
+
+    # Teardown radius
+    print "Tearing down radius.\n";
+    radius_teardown($pid,$eid);
+
+    return $err;
+}
+
+# _Always_ make sure that this 1 is at the end of the file...
+1;

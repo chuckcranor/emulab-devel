@@ -1,0 +1,373 @@
+How to set up scenarios.
+
+
+0: First time setup.
+
+0.0: What do you want to do?
+
+There are three basic approaches to take:
+
+(a) No LAN access points.  If you never need a LAN access points and
+want to manage VLANs internal to scenarios yourself then your setup
+will be relatively simple.  In particular you will not need to add any
+of your router hardware to the database.
+
+(b) As needed.  If you want LAN access points then you'll need to have
+at least the routers that are in those LANs to be in the database.
+Similarly, if you want the testbed to manage your interior VLANs then
+any of that hardware will also need to be in.
+
+(c) Everything. An intensive but nice solution is to add all the
+router hardware you will be using to the database.  Be aware that any
+hardware that is not used by the VLAN subs table (either for a LAN AP
+or internal VLAN) will never actually be looked at.  But it's nice ot
+have it in the database.
+
+Make a decision and keep it in mind.  You probably also want to list
+all the types of hardware you are going to add, that is, what new
+node_types you will be creating.
+
+0.1: Blackbox Support.
+
+You will need types, images, etc. for your access points and any
+hardware you want in the database.  These are blackbox based.
+
+0.1.1: images, os_info, and osidtoimageid.
+
+At the least you need a BLACKBOX-AP image.  If you want router
+hardware in your nodes table you will need images for them to.  You
+could create a generic BLACKBOX image but you probably at least want
+an IOS and non-IOS image.  In any case, all images will look similar:
+
+INSERT INTO images SET 
+       imagename='BLACKBOX-AP', 
+       pid='emulab-ops',
+       gid='emulab-ops', 
+       imageid='BLACKBOX-AP', 
+       creator = <MY LOGIN>,
+       description = 'Image for AP blackbox',
+       part1_osid = 'BLACKBOX-AP',
+       default_osid = 'BLACKBOX-AP',
+       global = 1;
+
+
+INSERT INTO os_info SET
+	osname = 'BLACKBOX-AP',
+	pid = 'emulab-ops',
+	osid = 'BLACKBOX-AP',
+	creator = <MY LOGIN>,
+	description = 'Osid for AP blackbox';
+
+INSERT INTO osidtoimageid SET
+       osid = 'BLACKBOX-AP',
+       type = <SEE BELOW>,
+       imageid = 'BLACKBOX-AP';
+
+For osidtoimageid you want to do an entry for every type in (ap-lan-e,
+ap-lan-g, ap-port-e, and ap-port-g).  For any other images you will
+want an entry for each appropriate node_type entry.
+
+0.1.2: node_types and interface_types
+
+First you will want to add the AP node_types, interface_types
+
+INSERT INTO node_types SET
+       class = 'ap',
+       type = 'ap-port-e',
+       osid = 'BLACKBOX-AP',
+       imageid = 'BLACKBOX-AP',
+       isrebootable = 0;
+INSERT INTO node_types SET
+       class = 'ap',
+       type = 'ap-port-g',
+       osid = 'BLACKBOX-AP',
+       imageid = 'BLACKBOX-AP',
+       isrebootable = 0;
+INSERT INTO node_types SET
+       class = 'ap',
+       type = 'ap-lan-e',
+       osid = 'BLACKBOX-AP',
+       imageid = 'BLACKBOX-AP',
+       isrebootable = 0;
+INSERT INTO node_types SET
+       class = 'ap',
+       type = 'ap-lan-g',
+       osid = 'BLACKBOX-AP',
+       imageid = 'BLACKBOX-AP',
+       isrebootable = 0;
+
+INSERT INTO interface_types SET
+       type = 'ap-port-e',
+       max_speed =  10000000;
+INSERT INTO interface_types SET
+       type = 'ap-port-g',
+       max_speed =  100000000;
+INSERT INTO interface_types SET
+       type = 'ap-lan-e',
+       max_speed =  10000000;
+INSERT INTO interface_types SET
+       type = 'ap-lan-g',
+       max_speed =  100000000;
+
+INSERT INTO interface_capabilities SET
+       type = 'ap-port-e',
+       capkey = 'protocol',
+       capval = 'ethernet';
+INSERT INTO interface_capabilities SET
+       type = 'ap-port-g',
+       capkey = 'protocol',
+       capval = 'ethernet';
+INSERT INTO interface_capabilities SET
+       type = 'ap-lan-e',
+       capkey = 'protocol',
+       capval = 'ethernet';
+INSERT INTO interface_capabilities SET
+       type = 'ap-lan-g',
+       capkey = 'protocol',
+       capval = 'ethernet';
+
+INSERT INTO interface_capabilities SET
+       type = 'ap-port-e',
+       capkey = 'ethernet_defspeed',
+       capval = '100000';
+INSERT INTO interface_capabilities SET
+       type = 'ap-port-g',
+       capkey = 'ethernet_defspeed',
+       capval = '1000000';
+INSERT INTO interface_capabilities SET
+       type = 'ap-lan-e',
+       capkey = 'ethernet_defspeed',
+       capval = '100000';
+INSERT INTO interface_capabilities SET
+       type = 'ap-lan-g',
+       capkey = 'ethernet_defspeed',
+       capval = '1000000';
+
+
+INSERT INTO interface_capabilities SET
+       type = 'ap-port-g',
+       capkey = 'ethernet_auxspeeds',
+       capval = '10000000';
+INSERT INTO interface_capabilities SET
+       type = 'ap-lan-g',
+       capkey = 'ethernet_auxspeeds',
+       capval = '10000000';
+
+
+Now insert appropriate types for any hardware you want to add.  The
+node_types should be similar to the AP ones but using the BLACKBOX
+images you created in the last step.  You can fill out whatever other
+fields you feel are meaningful.  Similar for interface_types.
+
+0.1.2: Add router hardware.
+
+You can now add all your router hardware to nodes, wires, and
+interfaces if you want.  Be sure to fill out the partitions table with
+your BLACKBOX images.  Most of this data is ignored, the *key*
+information you are adding here is what ports on the experimental
+switch your hardware connects to.
+
+0.1.3: Set up scenctr or your own backend.
+
+You need to set up a backend to configure your router.  If you aren't
+using scenctr you'll need to write something similar.  Talk to
+Wisconsin about this step.
+
+0.1.4: Set up the file system.
+
+You need to create /usr/testbed/scenarios which will store XML files
+with instance specific data for the backend.  You also want to glance
+at /usr/testbed/www/scenarios.
+
+0.1.5: Set up RADIUS support.
+
+If you want RADIUS support to allow console access to your routers
+then you need to do some extra steps.
+
+0.1.5.1: Set up a RADIUS server.
+
+You'll want this to run on boss so that it can see the database.  Make
+sure it uses SQL and sql.conf has the following lines (among others):
+
+radius_db = "tbdb"
+
+authcheck_table = "radius_check"
+authreply_table = "radius_reply"
+        
+authorize_check_query = " \
+           SELECT '0' as id,uid as Username,name as Attribute,Value,op \
+           FROM ${authcheck_table} \
+           WHERE uid = '%{SQL-User-Name}' AND \
+           (nisip = '%{NAS-IP-Address}' OR uid = 'wail')";
+
+authorize_reply_query = " \
+           SELECT '0' as id,uid as UserName,name as Attribute,Value,op \
+           FROM ${authreply_table} \
+           WHERE uid = '%{SQL-User-Name}' AND \
+           (nisip = '%{NAS-IP-Address}' OR uid='wail')";
+
+You probably want to change uid='wail' to something specific to you.
+This allows for an admin account that can be used on any piece of
+hardware in case you need to get in while the hardware is in use by an
+experiment. (See below)
+
+You also need to configure all the hardware you want accessible to
+authenticate with boss as a RADIUS server.
+
+0.1.5.2: scenario_router_replies
+
+Here you configure what attribute/value pairs are returned based on
+trust level.  You almost certainly want the defaults created by
+database-fill but it's worth glancing at.
+
+0.1.5.3: radius_check, radius_reply (OPTIONAL)
+
+Assuming you kept the uid='wail' or something similar from 0.1.5.1 you
+want to add appropriate entries to radius_check and radius_reply:
+
+INSERT INTO radius_check SET
+       uid='wail',
+       gid='emulab-ops',
+       eid='NA',
+       nisip = '',
+       name = 'Crypt-Password',
+       value = <SEE BELOW>,
+       op = '==';
+
+INSERT INTO radius_reply SET
+       uid='wail',
+       pid='emulab-ops',
+       eid='NA',
+       nisip='',
+       name='cisco-avpair',
+       value='shell:priv-lvl=15',
+       op=':=';
+INSERT INTO radius_reply SET
+       uid='wail',
+       pid='emulab-ops',
+       eid='NA',
+       nisip='',
+       name='service-type',
+       value='Login-user',
+       op=':=';
+
+Set the value for Crypt-Password to be a suitably encrypted password
+value.  Same type of thing as in the users table.
+
+1: Adding a scenario.
+
+1.1: Design it.
+
+First look on the Wisconsin Schooner site for examples of scenarios.
+You are going to be designing, in abstract, a topology.  The key part
+will be determining where it connects to your testbed.  These are the
+access points.  The best way to think of an access point is as a
+physical port on your experimental switch.  Thus the 'links' from your
+routers to the access points must correspond to physical wires
+connecting to a port on your experimental switch.  Give a meaningful
+name to each access point; the user will use these names to connect
+nodes to the scenario.
+
+Figure out the IP addresses and netmasks of your router interfaces and
+any router configuration involved.  Imagine, as an example user, a
+testbed PC connected to each access point and figure out what IPs,
+netmasks, and routing tables they'll need to make it all work.  
+
+Make a diagram, you'll need it later anyway.  You'll also need an
+example NS file later and this is a good point to write it.  Again,
+see the Wisconsin Schooner site.
+
+Now that you have a topology figure out how to implement it using
+hardware in your lab (that is connected to the experimental switch).
+Make a list of the specific hardware used, the config commands needed,
+the ports used, the IP addresses used, and which experimental switch
+ports correspond to your access points.  If you want to run multiple
+instances of this scenario simultaneously do this step multiple times.
+
+Now use your list to come up with a list of scenario resources needed.
+A scenario resource is (for the most part) just a string and a type
+(mutex or sharable).  In our experience you will want mutex's for each
+IP net/mask and each interface, and a sharable resource for each piece
+of hardware.
+
+1.2: scenarios
+
+INSERT INTO scenarios SET
+       scenario_id = <NAME OF SCENARIO>,
+       scenario_instance = '1',
+       xml_file = '<NAME OF SCENARIO>.xml'
+       notes = <SEE BELOW>,
+       category = <SEE BELOW>;
+
+Repeat for each instance with scenario_instance incremented each time.
+For bad reasons you will want to avoid - and _ in your scenario name.
+The notes field is instance specific information which is displayed to
+the user.  It is generally used to give the scenario virtual to
+physical mapping (see Wisconsin).  The category field can be used to
+separate your scenarios into separate tables on the web page.  All
+scenarios with the same category will be displayed in a table with
+that name.  All your instances should have the same category.
+       
+We name our instances with increasing numbers by convention.  You can
+use a different convention if you want.  Instance IDs are varchar(32).
+
+1.3: scenario_resources
+
+INSERT INTO scenario_resources SET
+       scenario_id = <NAME OF SCENARIO>,
+       scenario_instance = '1',
+       resource_id = <NAME OF RESOURCE>,
+       resource_type = <SEE BELOW>;
+
+Use the above command for each resource of each instance, changing
+scenario_instance as appropriate.  The resource_type is 'sharable' or
+'mutex' and defaults to 'mutex'.
+
+1.4: scenario_access_points
+
+INSERT INTO scenario_access_points SET
+       scenario_id = <NAME OF SCENARIO>,
+       scenario_instance = '1',
+       apname = <NAME OF ACCESS POINT>,
+       node_id = <SEE BELOW>;
+
+Use the above command for each access point of each instance, changing
+scenario_instance as appropriate.  The apname is what is used in the
+NS file.  The node_id must be unique to each
+scenario_id/scenario_instance/apname and will correspond to an entry
+in the nods table (see below).  We use the convention
+<scenario_id>-<scenario_instance>-<apname> but you can do whatever you
+want.
+
+1.5: scenario_router_access (OPTIONAL)
+
+If you are using a radius server to allow console access to your
+routers then you need to specify their IP addresses.
+
+INSERT INTO scenario_router_access SET
+       resource_id = <SEE BELOW>,
+       IP = <IP ADDRESS>;
+
+Here resource_id should be the *sharable* resource corresponding to
+the entire piece of hardware and IP should be the IP address of the
+console accessible from your ops node.  It is not necessary for this
+router to exist in the nodes table.
+
+1.6: /usr/testbed/www/scenarios
+
+For each scenario (not instance) you will need to place the following
+files in /usr/testbed/www/scenarios:
+
+* <scenario>.html - A description and example of the scenario.
+* <scenario_doc>.jpg - A diagram to be displayed with the documentation.
+* <scenario>.jpg - A thumbnail to be displayed on the scenarios page.
+* <scenario>.ns - A sample NS file.
+
+1.7: Backend
+
+Talk to us!
+
+2: Using VLAN subs.
+
+VLAN subs are mainly for exposing a LAN as an access point.  
+Talk to us!

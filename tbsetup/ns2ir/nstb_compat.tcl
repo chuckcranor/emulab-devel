@@ -59,6 +59,8 @@ proc tb-set-lan-protocol {lanlink protocol} {}
 proc tb-set-lan-accesspoint {lanlink node} {}
 proc tb-set-lan-setting {lanlink capkey capval} {}
 proc tb-set-node-lan-setting {lanlink node capkey capval} {}
+proc tb-scenario-attach {vname apname vnode} {}
+proc tb-scenario-load {scenario vname} {}
 proc tb-use-physnaming {onoff} {}
 proc tb-feedback-vnode {vnode hardware args} {}
 proc tb-feedback-vlan {vnode lan args} {}

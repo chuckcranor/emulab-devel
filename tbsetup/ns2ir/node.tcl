@@ -69,6 +69,10 @@ Node instproc init {s} {
     $self instvar desirelist
     array set desirelist {}
 
+    # Stores the scenario (by vname) and access point this vnode
+    # represents.  Empty means a normal (non-ap) node.
+    $self set scenario {}
+
     # These are just various strings that we pass through to the DB.
     $self set cmdline ""
     $self set rpms ""
@@ -145,6 +149,7 @@ Node instproc updatedb {DB} {
     $self instvar inner_elab_role
     $self instvar routertype
     $self instvar fixed
+    $self instvar scenario
     $self instvar agentlist
     $self instvar routelist
     $self instvar sim
@@ -255,8 +260,8 @@ Node instproc updatedb {DB} {
     $self add_routes_to_DB $DB
 
     # Update the DB
-    set fields [list "vname" "type" "ips" "osname" "cmd_line" "rpms" "startupcmd" "tarfiles" "failureaction" "routertype" "fixed" ]
-    set values [list $self $type $ipraw $osid $cmdline $rpms $startup $tarfiles $failureaction $default_ip_routing_type $fixed ]
+    set fields [list "vname" "type" "ips" "osname" "cmd_line" "rpms" "startupcmd" "tarfiles" "failureaction" "routertype" "fixed" "scenario_vname" "scenario_ap" ]
+    set values [list $self $type $ipraw $osid $cmdline $rpms $startup $tarfiles $failureaction $default_ip_routing_type $fixed [lindex $scenario 0] [lindex $scenario 1]]
 
     if { $inner_elab_role != "" } {
 	lappend fields "inner_elab_role"
@@ -439,6 +444,19 @@ Node instproc set_fixed {pnode} {
 	    }
 	}
     }
+}
+
+#
+# Attach a node to an access point.
+#
+Node instproc set_scenario {vname ap} {
+    $self instvar scenario
+
+    if {$scenario != {}} {
+	perror "\[set-scenario] Node already attached.!"
+	return
+    }
+    set scenario [list $vname $ap]
 }
 
 #

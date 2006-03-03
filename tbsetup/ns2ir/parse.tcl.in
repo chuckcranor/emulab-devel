@@ -26,6 +26,7 @@
 ######################################################################
 
 proc usage {} {
+    global argv0
     puts stderr "Syntax: $argv0 \[-q\] -a ns_file"    
     puts stderr "        $argv0 \[-q\] \[-p\] \[-n\] pid gid eid ns_file"
     exit 1
@@ -144,9 +145,9 @@ while {$argv != {}} {
 }
 
 if {${GLOBALS::anonymous} && ([llength $argv] != 1)} {
-    usage();
+    usage;
 } elseif {(! ${GLOBALS::anonymous}) && ([llength $argv] != 4)} {
-    usage();
+    usage;
 }
 
 # Now we can set up the rest of our global variables.

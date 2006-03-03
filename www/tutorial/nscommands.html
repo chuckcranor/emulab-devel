@@ -19,6 +19,7 @@
   <li><a href="#OS">OS Commands</a>
   <li><a href="#LOSS">Link Characteristic Commands</a>
   <li><a href="#VTYPE">Virtual Type Commands</a>
+  <li><a href="#SCENARIO">Scenario Commands</a>
   <li><a href="#MISC">Misc. Commands</a>
 </ul>
 
@@ -996,6 +997,52 @@ tb-make-weighted-vtype A 0.1 {pc600 pc850}
   <li>vtype commands must appear before <code>tb-set-hardware</code>
       commands that use them.
   <li>Do not used <code>tb-fix-node</code> with nodes that have a vtype.
+</ul>
+
+<a name="SCENARIO"></a><h3>Scenario Commands</h3>
+
+<pre>
+tb-scenario-load <i>scenario_id</i> <i>vname</i> <i>[resource_policy]</i>
+
+tb-scenario-load Dumbbell DB
+</pre>
+
+<dl>
+<dt><i>scenario_id</i> - The scenario to load.
+<dt><i>vname</i>  - A name chosen by the experimenter which will be used
+to reference this scenario instance in tb-scenario-attach.
+<dt><i>resource_policy</i> - shared or exclusive.  The resource policy to use. 
+Defaults to shared.
+</dl>
+
+<p>Notes:
+<ul>
+<li>Requests that a given scenario be loaded for use in the experiment.
+<li>The exclusive resource_policy guarantees that the experiment will
+be the only experiment running on each piece of router hardware. With
+a shared resource_policy multiple scenarios may simultaneously use the
+same router hardware.
+</ul>
+
+<pre>
+tb-scenario-attach <i>vname</i> <i>ap_name</i> <i>vnode</i>
+
+tb-scenario-attach DB east MyRouter1
+</pre>
+
+<dl>
+<dt><i>vname</i> - A name used previously in tb-scenario-load
+indicating which scenario instances we are referring to.
+
+<dl><dt><i>ap_name</i> - The name of the access point we want to attach to.
+
+<dl><dt><i>vnode</i> - An existing vnode which we want to associate with
+the access point.
+</dl>
+
+<p>Notes:
+<ul>
+<li>Causes the specified vnode to become the given access point.
 </ul>
 
 <a name="MISC"></a><h3>Misc. Commands</h3>

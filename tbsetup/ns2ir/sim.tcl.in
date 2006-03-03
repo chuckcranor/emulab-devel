@@ -380,6 +380,7 @@ Simulator instproc run {} {
     var_import ::GLOBALS::elabinelab_eid
     var_import ::GLOBALS::elabinelab_cvstag
     var_import ::GLOBALS::security_level
+    var_import ::GLOBALS::scenarios
     var_import ::GLOBALS::explicit_firewall
     var_import ::GLOBALS::sourcefile_list
     
@@ -643,6 +644,10 @@ Simulator instproc run {} {
 
     foreach sourcefile $sourcefile_list {
 	$self spitxml_data "external_sourcefiles" [list "pathname" ] [list $sourcefile ]
+    }
+
+    foreach scenario [lsort [array names scenarios]] {
+	$self spitxml_data "virt_scenarios" [list "scenario_vname" "scenario_id" "resource_policy"] [concat $scenario $scenarios($scenario)]
     }
 
     $self spitxml_finish

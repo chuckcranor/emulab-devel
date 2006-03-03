@@ -537,6 +537,7 @@ CREATE TABLE experiments (
   elabinelab_cvstag varchar(64) default NULL,
   elabinelab_nosetup tinyint(1) NOT NULL default '0',
   security_level tinyint(1) NOT NULL default '0',
+  delay_type varchar(32) default NULL,
   lockdown tinyint(1) NOT NULL default '0',
   paniced tinyint(1) NOT NULL default '0',
   panic_date datetime default NULL,
@@ -1326,6 +1327,7 @@ CREATE TABLE node_types (
   isplabdslice tinyint(4) NOT NULL default '0',
   isplabphysnode tinyint(4) NOT NULL default '0',
   issimnode tinyint(4) NOT NULL default '0',
+  isrebootable tinyint(1) default '1',
   simnode_capacity smallint(5) unsigned NOT NULL default '0',
   trivlink_maxspeed int(11) unsigned NOT NULL default '0',
   isrebootable tinyint(1) default '1',
@@ -1377,7 +1379,7 @@ CREATE TABLE nodes (
   node_id varchar(32) NOT NULL default '',
   type varchar(30) NOT NULL default '',
   phys_nodeid varchar(32) default NULL,
-  role enum('testnode','virtnode','ctrlnode','testswitch','ctrlswitch','powerctrl','unused') NOT NULL default 'unused',
+  role enum('testnode','virtnode','ctrlnode','testswitch','ctrlswitch','powerctrl','unused','scenarionode') NOT NULL default 'unused',
   def_boot_osid varchar(35) NOT NULL default '',
   def_boot_path text,
   def_boot_cmd_line text,
@@ -1912,7 +1914,7 @@ CREATE TABLE switch_paths (
 
 CREATE TABLE switch_stack_types (
   stack_id varchar(32) NOT NULL default '',
-  stack_type varchar(10) default NULL,
+  stack_type varchar(20) default NULL,
   supports_private tinyint(1) NOT NULL default '0',
   single_domain tinyint(1) NOT NULL default '1',
   snmp_community varchar(32) default NULL,
@@ -2435,6 +2437,8 @@ CREATE TABLE virt_nodes (
   failureaction enum('fatal','nonfatal','ignore') NOT NULL default 'fatal',
   routertype enum('none','ospf','static','manual','static-ddijk','static-old') NOT NULL default 'none',
   fixed text NOT NULL,
+  scenario_vname varchar(32) NOT NULL default '',
+  scenario_ap varchar(32) NOT NULL default '',
   inner_elab_role enum('boss','boss+router','router','ops','ops+fs','fs','node') default NULL,
   numeric_id int(11) default NULL,
   KEY pid (pid,eid,vname)
@@ -2736,3 +2740,141 @@ CREATE TABLE wires (
   KEY src (node_id1,card1,port1)
 ) TYPE=MyISAM;
 
+--
+-- Table structure for table `scenario_access_points`
+--
+
+CREATE TABLE scenario_access_points (
+  scenario_id varchar(32) NOT NULL default '',
+  scenario_instance varchar(32) NOT NULL default '',
+  apname varchar(32) NOT NULL default '',
+  node_id varchar(32) NOT NULL default '',
+  PRIMARY KEY  (scenario_id,scenario_instance,apname)
+) TYPE=MyISAM;
+--
+-- Table structure for table `scenario_resource_use`
+--
+
+CREATE TABLE scenario_resource_use (
+  resource_id varchar(32) NOT NULL default '',
+  scenario_id varchar(32) NOT NULL default '',
+  scenario_instance varchar(32) NOT NULL default '',
+  PRIMARY KEY  (resource_id,scenario_id,scenario_instance)
+) TYPE=MyISAM;
+
+--
+-- Table structure for table `scenario_resources`
+--
+
+CREATE TABLE scenario_resources (
+  scenario_id varchar(32) NOT NULL default '',
+  scenario_instance varchar(32) NOT NULL default '',
+  resource_id varchar(32) NOT NULL default '',
+  resource_type enum('sharable','mutex') NOT NULL default 'mutex',
+  PRIMARY KEY  (scenario_id,scenario_instance,resource_id)
+) TYPE=MyISAM;
+
+--
+-- Table structure for table `scenarios`
+--
+
+CREATE TABLE scenarios (
+  scenario_id varchar(32) NOT NULL default '',
+  scenario_instance varchar(32) NOT NULL default '',
+  status varchar(32) NOT NULL default 'unloaded',
+  xml_file varchar(32) NOT NULL default '',
+  notes text NOT NULL,
+  category varchar(32) NOT NULL default '',
+  PRIMARY KEY  (scenario_id,scenario_instance)
+) TYPE=MyISAM;
+
+--
+-- Table structure for table `experiment_scenarios`
+--
+
+CREATE TABLE experiment_scenarios (
+  eid varchar(32) NOT NULL default '',
+  pid varchar(12) NOT NULL default '',
+  scenario_vname varchar(32) NOT NULL default '',
+  scenario_id varchar(32) NOT NULL default '',
+  scenario_instance varchar(32) NOT NULL default '',
+  resource_policy enum('exclusive','shared') NOT NULL default 'shared',
+  PRIMARY KEY  (eid,pid,scenario_vname)
+) TYPE=MyISAM;
+
+--
+-- Table structure for table `virt_scenarios`
+--
+
+CREATE TABLE virt_scenarios (
+  eid varchar(32) NOT NULL default '',
+  pid varchar(12) NOT NULL default '',
+  scenario_vname varchar(32) NOT NULL default '',
+  scenario_id varchar(32) NOT NULL default '',
+  resource_policy enum('exclusive','shared') NOT NULL default 'shared',
+  PRIMARY KEY  (eid,pid,scenario_vname)
+) TYPE=MyISAM;
+
+--
+-- Table structure for table `scenario_vlan_subs`
+--
+
+CREATE TABLE scenario_vlan_subs (
+  scenario_id varchar(32) NOT NULL default '',
+  scenario_instance varchar(32) NOT NULL default '',
+  tag varchar(64) NOT NULL default '',
+  replacement text NOT NULL,
+  PRIMARY KEY  (scenario_id,scenario_instance,tag)
+) TYPE=MyISAM;
+
+--
+-- Table structure for table `radius_check`
+--
+
+CREATE TABLE radius_check (
+  uid varchar(8) NOT NULL default '',
+  pid varchar(12) NOT NULL default '',
+  eid varchar(32) NOT NULL default '',
+  nisip varchar(15) NOT NULL default '',
+  name varchar(32) NOT NULL default '',
+  value tinytext NOT NULL,
+  op varchar(4) NOT NULL default '',
+  PRIMARY KEY  (uid,pid,eid,nisip,name)
+) TYPE=MyISAM;
+
+--
+-- Table structure for table `radius_reply`
+--
+
+CREATE TABLE radius_reply (
+  uid varchar(8) NOT NULL default '',
+  pid varchar(12) NOT NULL default '',
+  eid varchar(32) NOT NULL default '',
+  nisip varchar(15) NOT NULL default '',
+  name varchar(32) NOT NULL default '',
+  value tinytext NOT NULL,
+  op varchar(4) NOT NULL default '',
+  PRIMARY KEY  (uid,pid,eid,nisip,name)
+) TYPE=MyISAM;
+
+
+--
+-- Table structure for table `scenario_router_access`
+--
+
+CREATE TABLE scenario_router_access (
+  resource_id varchar(32) NOT NULL default '',
+  IP varchar(15) default NULL,
+  PRIMARY KEY  (resource_id)
+) TYPE=MyISAM;
+
+--
+-- Table structure for table `scenario_router_replies`
+--
+
+CREATE TABLE scenario_router_replies (
+  trust enum('none','user','local_root','group_root','project_root') NOT NULL default 'none',
+  Attribute varchar(32) NOT NULL default '',
+  Value varchar(32) NOT NULL default '',
+  PRIMARY KEY (trust,Attribute,Value)
+) TYPE=MyISAM;

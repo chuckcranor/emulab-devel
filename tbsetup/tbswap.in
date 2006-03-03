@@ -38,6 +38,7 @@ my $THISHOMEBASE   = "@THISHOMEBASE@";
 my $TESTMODE       = @TESTMODE@;
 my $DISABLE_EVENTS = "@DISABLE_EVENT_SCHED@";
 my $piper          = "$TBROOT/sbin/locpiper";
+my $USESCENARIOS   = @USESCENARIOS@;
 my $NFSTRACESUPPORT= @NFSTRACESUPPORT@;
 
 # Untaint the path
@@ -50,12 +51,14 @@ $ENV{'PATH'} = "/usr/bin:$TBROOT/libexec:$TBROOT/libexec/ns2ir" .
 use lib "@prefix@/lib";
 use libdb;
 use libtestbed;
+use libscenario;
 use libadminctrl;
 use libadminmfs;
 use libtblog;
 use libArchive;
 
 #require exitonwarn; # exitonwarn isn't really a module, so just require it
+
 
 #
 # Actual swap-in and swap-out functions, defined below.
@@ -389,7 +392,7 @@ exit(0);
 #             this function will free all nodes for the 
 #             experiment.
 #
-#             If in RETRY or UDPATE,
+#             If in RETRY or UPDATE,
 #             only nodes not in RES_READY will be freed.
 #
 #             Returns 0 on success, >0 on failure.
@@ -533,6 +536,13 @@ sub doSwapout($) {
 	TBDebugTimeStamp("nfree finished");
 
 	#
+	# Teardown any scenarios.
+	#
+	if ($USESCENARIOS && SCTeardown($pid,$eid) != 0) {
+	    $swapout_errors = 1;
+	}
+
+	#
 	# Since this is an actual swapout, 
 	# reset our count of swap out nag emails sent.
 	#
@@ -597,6 +607,36 @@ sub doSwapout($) {
 		$swapout_errors = 1;
 	    }
 	    TBDebugTimeStamp("nfree finished");
+	}
+
+	# Scenario .  Need to release all access point nodes and unload
+	# scenarios.
+	my @apnodes;
+	$db_result =  
+	    DBQueryFatal("select rv.node_id ".
+                         "  from reserved as rv ".
+			 "left join nodes as n on n.node_id = rv.node_id ".
+			 "left join node_types as nt on nt.type=n.type ".
+			 "where rv.pid='$pid' and rv.eid='$eid' " .
+			 "and nt.class='ap'");
+	while (($node) = $db_result->fetchrow_array()) {
+	    push(@apnodes,$node);
+	}
+	if (@apnodes > 0) {
+	    print STDERR "Freeing AP nodes.\n";
+	    TBDebugTimeStamp("nfree started");
+	    if (system("nfree  $pid $eid " .
+		       join(" ", @apnodes))) {
+		print STDERR "*** Could not free nodes.\n";
+		$swapout_errors = 1;
+	    }
+	    TBDebugTimeStamp("nfree finished");
+	}
+	#
+	# Teardown scenarios.
+	#
+	if ($USESCENARIOS && SCTeardown($pid,$eid) != 0) {
+	    $swapout_errors = 1;
 	}
     }
 
@@ -706,6 +746,41 @@ sub doSwapin($) {
     #
     
     if ($type > UPDATE_RECOVER) {
+	# if we are doing an UPDATE then we need to unload any
+	# existing scenarios we're using.  It would be nice if we
+	# could do something more intelligent but this is simple
+	# and unloading/loading is cheap.
+	print "Unloading scenarios for update.\n";
+	if ($type == UPDATE) {
+	    my $db_result = DBQueryFatal("SELECT n.node_id from nodes as n," .
+					 "node_types as nt," .
+					 "reserved as r " .
+					 "where n.type=nt.type " .
+					 "and nt.class=\"ap\" and " .
+					 "r.node_id=n.node_id and " .
+					 "r.pid=\"$pid\" and r.eid=\"$eid\"");
+	    my @tofree = ();
+	    while (my ($node_id) = $db_result->fetchrow_array()) {
+		push @tofree,$node_id;
+	    }
+	    if (@tofree) {
+		if (system("nfree $pid $eid @tofree")) {
+		    print "Failed to nfree access points!\n";
+		    return 1;
+		}
+	    }
+	    if ($USESCENARIOS && SCTeardown($pid,$eid) != 0) {
+		return 1;
+	    }
+	}
+
+	#
+	# Do phase 1 of scenarios
+	#
+	if ($USESCENARIOS && SCSetup1($pid,$eid) != 0) {
+	    return 1;
+	}
+	
         #
         # Hacky test to allow disabling of linkdelays if the node is going
         # to run Linux. See sitevar above.
@@ -765,6 +840,13 @@ sub doSwapin($) {
 	TBDebugTimeStamp("assign_wrapper finished");
 
 	print "Mapped to physical reality!\n";
+
+	# 
+	# Do phase 2 of scenarios
+	#
+	if ($USESCENARIOS && SCSetup2($pid,$eid) != 0) {
+	    return 1;
+	}
     }
 
     # Check cancel flag before continuing. No retry, 

@@ -227,6 +227,7 @@ function WRITESIDEBAR() {
     global $BUGDBSUPPORT, $BUGDBURL, $CVSSUPPORT, $CHATSUPPORT;
     global $CHECKLOGIN_WIKINAME;
     global $THISHOMEBASE;
+    global $USESCENARIOS;
     $firstinitstate = TBGetFirstInitState();
 
     #
@@ -476,8 +477,13 @@ function WRITESIDEBAR() {
                 # user is allowed to do this.
                 #
  		WRITESIDEBARBUTTON("Begin an Experiment",
-				   $TBBASE, "beginexp_html.php3");
-	
+				   $TBBASE, "beginexp_html.php3");	
+
+		if ($USESCENARIOS == "1") {
+			WRITESIDEBARBUTTON("Scenarios",
+			   $TBBASE, "scenarios.php3");
+		}
+
 		# Put _NEW back when Plab is working again.
 		WRITESIDEBARBUTTON("Create a PlanetLab Slice",
 				       $TBBASE, "plab_ez.php3");

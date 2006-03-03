@@ -65,6 +65,10 @@ ROBOTRACKFILES  = $(wildcard $(SRCDIR)/robotrack/*.php3)
 ROBOTRACKFILES += $(wildcard $(SRCDIR)/robotrack/*.jpg)
 ROBOTRACKFILES += $(wildcard $(SRCDIR)/robotrack/*.jar)
 
+SCENARIOSFILES  = $(wildcard $(SRCDIR)/scenarios/*.jpg)
+SCENARIOSFILES += $(wildcard $(SRCDIR)/scenarios/*.gif)
+SCENARIOSFILES += $(wildcard $(SRCDIR)/scenarios/*.html)
+
 WIRELESSSTATSFILES = $(wildcard $(SRCDIR)/wireless-stats/*.php3)
 WIRELESSSTATSFILES += $(wildcard $(SRCDIR)/wireless-stats/*.jar)
 
@@ -154,6 +158,7 @@ endif
 ALLFILES  = $(notdir $(FILES))
 ALLFLOORMAPS  = $(notdir $(FLOORMAPFILES))
 ALLPIXES  = $(notdir $(PIXFILES))
+ALLSCENARIOS = $(notdir $(SCENARIOSFILES))
 ALLDOCS   = $(notdir $(DOCFILES))
 ALLTUTS   = $(notdir $(TUTFILES))
 ALLICONS  = $(notdir $(AUTOICONS))
@@ -172,6 +177,7 @@ INSTALLFILES = $(addprefix $(INSTALL_SBINDIR)/, htmlinstall) \
 	$(addprefix $(INSTALL_WWWDIR)/, $(ALLFILES)) \
 	$(addprefix $(INSTALL_WWWDIR)/floormap/, $(ALLFLOORMAPS)) \
 	$(addprefix $(INSTALL_WWWDIR)/pix/, $(ALLPIXES)) \
+	$(addprefix $(INSTALL_WWWDIR)/scenarios/, $(ALLSCENARIOS)) \
 	$(addprefix $(INSTALL_WWWDIR)/tutorial/, $(ALLTUTS)) \
 	$(addprefix $(INSTALL_WWWDIR)/doc/, $(ALLDOCS)) \
 	$(addprefix $(INSTALL_WWWDIR)/webdb/, $(ALLWEBDB)) \

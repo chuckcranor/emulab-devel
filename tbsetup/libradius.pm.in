@@ -1,0 +1,114 @@
+#!/usr/bin/perl -w
+
+#
+# Copyright (c) 2005 Paul Barford
+# 
+# We provide the Schooner testbed management software (below described 
+# as "Schooner") on an AS IS basis, and do not warrant its validity or 
+# performance.  We reserve the right to update, modify, or discontinue
+# this software at any time.  We shall have no obligation to supply such 
+# updates or modifications or any other form of support to you.
+# 
+# This license is for research uses.  For such uses, there is no
+# charge. We define "research use" to mean you may freely use it
+# inside your organization for whatever purposes you see fit. But you
+# may not re-distribute Schooner or parts of Schooner, in any form
+# source or binary (including derivatives), electronic or otherwise,
+# to any other organization or entity without our permission.
+# 
+# (for other uses, please contact us at wail@cs.wisc.edu)
+# 
+# All warranties, including without limitation, any warranty of
+# merchantability or fitness for a particular purpose, are hereby
+# excluded.
+# 
+# By your use of Schooner, you understand and agree that we (or any
+# other person or entity with proprietary rights in Schooner) are
+# under no obligation to provide either maintenance services,
+# update services, notices of latent defects, or correction of
+# defects for Schooner.
+# 
+# Even if advised of the possibility of such damages, under no
+# circumstances shall we (or any other person or entity with
+# proprietary rights in the software licensed hereunder) be liable
+# to you or any third party for direct, indirect, or consequential
+# damages of any character regardless of type of action, including,
+# without limitation, loss of profits, loss of use, loss of good
+# will, or computer failure or malfunction.  You agree to indemnify
+# us (and any other person or entity with proprietary rights in the
+# software licensed hereunder) for any and all liability it may
+# incur to third parties resulting from your use of Schooner.
+#
+
+package libradius;
+use Exporter;
+
+@ISA = "Exporter";
+@EXPORT = 
+    qw ( radius_setup radius_teardown );
+
+use lib '@prefix@/lib';
+use libdb;
+use English;
+
+sub radius_setup($$) {
+    my ($pid,$eid) = @_;
+
+    # we need entries for every user with trust greater than user
+    # and every access_ip for a resource belonging to an exclusively owned
+    # scenario instance.
+    my $qr = 
+	DBQueryFatal("select distinct " . 
+		     "sra.IP, gm.uid, gm.trust, u.usr_pswd " .
+		     "from group_membership as gm " .
+		     "left join experiments as e " .
+		     "on gm.gid=e.gid and gm.pid=e.pid " .
+		     "left join experiment_scenarios as es " .
+		     "on es.pid=e.pid and es.eid=e.eid " .
+		     "left join scenario_resources as sr " .
+		     "on sr.scenario_id=es.scenario_id " .
+		     "and sr.scenario_instance=es.scenario_instance " .
+		     "left join scenario_router_access as sra " .
+		     "on sra.resource_id = sr.resource_id " .
+		     "left join users as u " .
+		     "on u.uid=gm.uid " .
+		     "where e.eid=\"$eid\" and e.pid=\"$pid\" " .
+		     "and es.resource_policy='exclusive' " .
+		     "and sra.IP is not null " .
+		     "and trust in " .
+		     "('local_root', 'group_root', 'project_root', 'user')");
+    while (my ($ip,$uid,$trust,$pswd) = $qr->fetchrow_array()) {
+	DBQueryFatal("insert into radius_check set " .
+		     "pid=\"$pid\", eid=\"$eid\", uid=\"$uid\", " .
+		     "nisip=\"$ip\", name=\"Crypt-Password\", op=\"==\", " .
+		     "value=\"$pswd\"");
+	DBQueryFatal("insert into radius_check set " .
+		     "pid=\"$pid\", eid=\"$eid\", uid=\"$uid\", " .
+		     "nisip=\"$ip\", name=\"NAS-IP-Address\", op=\"==\", " .
+		     "value=\"$ip\"");
+#	DBQueryFatal("insert into radius_check set " .
+#		     "pid=\"$pid\", eid=\"$eid\", uid=\"$uid\", " .
+#		     "nisip=\"$ip\", name=\"Authentication-Type\", op=\"==\", " .
+#		     "value=\"Local\"");
+	DBQueryFatal("insert into radius_reply set " .
+		     "pid=\"$pid\", eid=\"$eid\", uid=\"$uid\", " .
+		     "nisip=\"$ip\", name=\"service-type\", op=\":=\", " .
+		     "value=\"Login-user\"");
+	DBQueryFatal("insert into radius_reply set " .
+		     "pid=\"$pid\", eid=\"$eid\", uid=\"$uid\", " .
+		     "nisip=\"$ip\", name=\"cisco-avpair\", op=\":=\", " .
+		     "value=\"shell:priv-lvl=" . 
+		     ($trust eq 'user' ? "1" : "15") . 
+		     "\"");
+    }
+};
+
+sub radius_teardown($$) {
+    my ($pid,$eid) = @_;
+
+    DBQueryFatal("delete from radius_check where pid=\"$pid\" and eid=\"$eid\"");
+    DBQueryFatal("delete from radius_reply where pid=\"$pid\" and eid=\"$eid\"");
+}
+
+# _Always_ make sure that this 1 is at the end of the file...
+1;

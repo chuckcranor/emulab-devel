@@ -3346,6 +3346,7 @@ sub TBExptContainsNodeCT($$$)
 		   "virt_node_desires",
 		   "virt_node_startloc",
 		   "virt_simnode_attributes",
+		   "virt_scenarios",
 		   "virt_user_environment",
 		   # vis_nodes is locked during update in prerender, so we
 		   # will get a consistent dataset when we backup.

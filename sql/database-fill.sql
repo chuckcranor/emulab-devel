@@ -2,7 +2,7 @@
 --
 -- Host: localhost    Database: tbdb
 ---------------------------------------------------------
--- Server version	3.23.58-log
+-- Server version	3.23.59-nightly-20050301-log
 
 --
 -- Dumping data for table `comments`
@@ -125,6 +125,7 @@ REPLACE INTO exported_tables VALUES ('event_objecttypes');
 REPLACE INTO exported_tables VALUES ('exported_tables');
 REPLACE INTO exported_tables VALUES ('foreign_keys');
 REPLACE INTO exported_tables VALUES ('mode_transitions');
+REPLACE INTO exported_tables VALUES ('scenario_router_replies');
 REPLACE INTO exported_tables VALUES ('priorities');
 REPLACE INTO exported_tables VALUES ('state_timeouts');
 REPLACE INTO exported_tables VALUES ('state_transitions');
@@ -261,6 +262,22 @@ REPLACE INTO mode_transitions VALUES ('ALWAYSUP','ISUP','RELOAD-MOTE','ISUP','Re
 REPLACE INTO mode_transitions VALUES ('RELOAD-MOTE','SHUTDOWN','ALWAYSUP','ISUP','ReloadDone');
 
 --
+-- Dumping data for table `scenario_router_replies`
+--
+
+
+REPLACE INTO scenario_router_replies VALUES ('none','service-type','Login-user');
+REPLACE INTO scenario_router_replies VALUES ('user','service-type','Login-user');
+REPLACE INTO scenario_router_replies VALUES ('local_root','service-type','Login-user');
+REPLACE INTO scenario_router_replies VALUES ('group_root','service-type','Login-user');
+REPLACE INTO scenario_router_replies VALUES ('project_root','service-type','Login-user');
+REPLACE INTO scenario_router_replies VALUES ('none','cisco-avpair','shell:priv-lvl=1');
+REPLACE INTO scenario_router_replies VALUES ('user','cisco-avpair','shell:priv-lvl=1');
+REPLACE INTO scenario_router_replies VALUES ('local_root','cisco-avpair','shell:priv-lvl=15');
+REPLACE INTO scenario_router_replies VALUES ('group_root','cisco-avpair','shell:priv-lvl=15');
+REPLACE INTO scenario_router_replies VALUES ('project_root','cisco-avpair','shell:priv-lvl=15');
+
+--
 -- Dumping data for table `priorities`
 --
 
@@ -362,7 +379,6 @@ REPLACE INTO state_transitions VALUES ('RELOAD','BOOTING','BOOTING','DHCPRetry')
 REPLACE INTO state_transitions VALUES ('RELOAD','BOOTING','RELOADSETUP','BootOK');
 REPLACE INTO state_transitions VALUES ('RELOAD','BOOTING','SHUTDOWN','Error');
 REPLACE INTO state_transitions VALUES ('RELOAD','RELOADING','RELOADDONE','ReloadDone');
-REPLACE INTO state_transitions VALUES ('RELOAD','RELOADING','RELOADDONEV2','ReloadDone');
 REPLACE INTO state_transitions VALUES ('RELOAD','RELOADING','SHUTDOWN','Error');
 REPLACE INTO state_transitions VALUES ('RELOAD','RELOADSETUP','RELOADING','ReloadReady');
 REPLACE INTO state_transitions VALUES ('RELOAD','RELOADSETUP','SHUTDOWN','Error');
@@ -490,6 +506,7 @@ REPLACE INTO state_transitions VALUES ('OPSNODEBSD','TBSETUP','ISUP','BootDone')
 REPLACE INTO state_transitions VALUES ('OPSNODEBSD','ISUP','TBSETUP','Crash');
 REPLACE INTO state_transitions VALUES ('RELOAD-MOTE','RELOADING','RELOADDONE','ReloadDone');
 REPLACE INTO state_transitions VALUES ('RELOAD-MOTE','SHUTDOWN','RELOADING','Booting');
+REPLACE INTO state_transitions VALUES ('RELOAD','RELOADING','RELOADDONEV2','ReloadDone');
 REPLACE INTO state_transitions VALUES ('NORMALv2','TBSETUP','TBFAILED','BootFail');
 REPLACE INTO state_transitions VALUES ('NORMALv2','TBFAILED','SHUTDOWN','RebootAfterFail');
 REPLACE INTO state_transitions VALUES ('PCVM','TBSETUP','TBFAILED','BootError');
@@ -764,6 +781,11 @@ REPLACE INTO table_regex VALUES ('node_attributes','attrkey','text','regex','^[-
 REPLACE INTO table_regex VALUES ('node_attributes','attrvalue','text','regex','^[-\\w\\.+,\\s]+$',0,255,NULL);
 REPLACE INTO table_regex VALUES ('archive_tags','description','text','redirect','projects:why',1,2048,NULL);
 REPLACE INTO table_regex VALUES ('archive_tags','tag','text','regex','^[a-zA-Z][-\\w\\.\\+]+$',3,64,NULL);
+REPLACE INTO table_regex VALUES ('virt_nodes','scenario_ap','text','regex','^[-\\w\\.]+$',0,32,NULL);
+REPLACE INTO table_regex VALUES ('virt_nodes','scenario_vname','text','regex','^[-\\w\\.]+$',0,32,NULL);
+REPLACE INTO table_regex VALUES ('virt_scenarios','scenario_vname','text','regex','^[-\\w\\.]+$',0,32,NULL);
+REPLACE INTO table_regex VALUES ('virt_scenarios','scenario_id','text','regex','^[-\\w\\.]+$',0,32,NULL);
+REPLACE INTO table_regex VALUES ('virt_scenarios','resource_policy','text','regex','^(shared|exclusive)$',0,32,NULL);
 
 --
 -- Dumping data for table `testsuite_preentables`

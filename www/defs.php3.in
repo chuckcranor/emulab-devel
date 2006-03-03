@@ -40,6 +40,8 @@ $TBMAILADDR_APPROVAL	= "@TBAPPROVALEMAIL_NOSLASH@";
 $TBMAILADDR_LOGS	= "@TBLOGSEMAIL_NOSLASH@";
 $TBMAILADDR_AUDIT	= "@TBAUDITEMAIL_NOSLASH@";
 
+$USESCENARIOS = "@USESCENARIOS@";
+
 # Can override this in the defs file. 
 $TBAUTHTIMEOUT  = "@TBAUTHTIMEOUT@";
 $TBMAINSITE     = "@TBMAINSITE@";
@@ -407,6 +409,49 @@ function ARRAY_PRINT($arr) {
       echo "End Sub-array $i.\n";
     }
   }
+}
+
+#
+# A function to check if a scenario instance is available or not.
+# Identical to SCAvailableP in libscenario.pm.
+#
+function SCAvailableP($scenario_id,$scenario_instance,$exclusive) {
+  $qr = DBQueryFatal("SELECT status from scenarios " .
+		     "WHERE scenario_id=\"$scenario_id\" " .
+		     "and scenario_instance = \"$scenario_instance\"");
+  list($status) = mysql_fetch_array($qr);
+  if ($status != "unloaded") {
+    return 0;
+  }
+  if ($exclusive == 1) {
+    $qr = 
+      DBQueryFatal("SELECT SR.resource_id " .
+		   "FROM scenario_resources AS SR " .
+		   "LEFT JOIN scenario_resource_use AS SU " .
+		   "ON SU.resource_id = SR.resource_id WHERE " .
+		   "SR.scenario_id = \"$scenario_id\" AND " . 
+		   "SR.scenario_instance = \"$scenario_instance\" AND " .
+		   "SU.resource_id IS NOT NULL");
+  } else {
+    $qr = 
+      DBQueryFatal("SELECT SR.resource_id " .
+		   "FROM scenario_resources AS SR " .
+		   "LEFT JOIN scenario_resource_use AS SU " .
+		   "ON SU.resource_id = SR.resource_id " .
+		   "LEFT JOIN experiment_scenarios AS ES " .
+		   "ON ES.scenario_id = SU.scenario_id AND " .
+		   "ES.scenario_instance = SU.scenario_instance " .
+		   "WHERE SR.scenario_id = \"$scenario_id\" AND " .
+		   "SR.scenario_instance = \"$scenario_instance\" AND " .
+		   "SU.resource_id IS NOT NULL AND " .
+		   "((SR.resource_type = \"mutex\") OR " .
+		   "(SR.resource_type = \"sharable\" AND " .
+		   " ES.resource_policy = \"exclusive\"))");
+  }
+  if (mysql_num_rows($qr) > 0) {
+    return 0;
+  }
+  return 1;
 }
 
 #

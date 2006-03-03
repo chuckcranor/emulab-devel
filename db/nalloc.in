@@ -120,6 +120,21 @@ foreach my $n (@node_names) {
         exit -1;
     }
 
+    # Access Point check - Can only allocate access points if we own
+    # the scenario instance (in experiment_scenarios) it belongs to.
+    my $ap_check = 
+	DBQueryFatal("select sap.node_id from scenario_access_points as sap " .
+		     "left join experiment_scenarios as es " .
+		     "on sap.scenario_id=es.scenario_id " .
+		     "and sap.scenario_instance=es.scenario_instance " .
+		     "where sap.node_id=\"$n\" ".
+		     "and (es.pid!=\"$pid\" or es.eid!=\"$eid\" " .
+		     "     or es.pid is null)");
+    if ($ap_check->numrows() != 0) {
+	die("*** $0:\n" .
+	    "    You are not allowed to use access point $n!\n");
+    }
+
     # XXX
     # If the node has a tipline, then indicate that we want to call
     # console_setup. We want to avoid calling console_setup if all we

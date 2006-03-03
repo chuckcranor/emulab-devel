@@ -681,6 +681,27 @@ proc tb-fix-node {vnode pnode} {
     $vnode set_fixed $pnode
 }
 
+proc tb-scenario-load {scenario vname {policy {shared}}} {
+    var_import ::GLOBALS::scenarios
+    if {[info exists scenarios($vname)]} {
+	perror "\[tb-scenario-load] $vname already in use."
+    }
+    if {($policy != "shared") && ($policy != "exclusive")} {
+	perror "\[tb-scenario-load] policy must be shared or exclusive."
+    }
+    set scenarios($vname) [list $scenario $policy]
+}
+
+proc tb-scenario-attach {vname apname vnode} {
+    var_import ::GLOBALS::scenarios
+    
+    if {! [info exists scenarios($vname)]} {
+	perror "\[tb-scenario-attach] no such scenario $vname.  Did you forget tb-scenario-load?"
+    }
+    $vnode set_scenario $vname $apname
+    $vnode set_hwtype "ap" 0 0 0
+}
+
 proc tb-make-soft-vtype {name types} {
     var_import ::TBCOMPAT::hwtypes
     var_import ::TBCOMPAT::isremote

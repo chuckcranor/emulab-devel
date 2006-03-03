@@ -3159,3 +3159,157 @@ last_net_act,last_cpu_act,last_ext_act);
 4.37: Add field to virt_firewalls to allow specification of rule logging.
 
       alter table virt_firewalls add log tinytext NOT NULL default '' after style;
+
+WAIL.1: Scenario Stuff
+
+        See scenario design document (doc/scenarios.txt) for full
+        explanation.
+        
+        create table virt_scenarios (
+               eid varchar(32) not null default '',
+               pid varchar(12) not null default '',
+               scenario_vname varchar(32) not null default '',
+               scenario_id varchar(32) not null default '',
+               primary key (eid,pid,scenario_vname)
+        ) TYPE=MyISAM;       
+
+        create table experiment_scenarios (
+               eid varchar(32) not null default '',
+               pid varchar(12) not null default '',
+               scenario_vname varchar(32) not null default '',
+               scenario_id varchar(32) not null default '',
+               scenario_instance varchar(32) not null default '',
+               primary key (eid,pid,scenario_vname)
+        ) TYPE=MyISAM;
+
+        CREATE TABLE scenarios (
+               scenario_id varchar(32) NOT NULL default '',
+               scenario_instance varchar(32) NOT NULL default '',
+               status varchar(32) NOT NULL default 'unloaded',
+               xml_file varchar(32) NOT NULL default '',
+               notes text NOT NULL,
+               PRIMARY KEY  (scenario_id,scenario_instance)
+        ) TYPE=MyISAM;
+
+        CREATE TABLE scenario_resources (
+               scenario_id varchar(32) NOT NULL default '',
+               scenario_instance varchar(32) NOT NULL default '',
+               resource_id varchar(32) NOT NULL default '',
+               PRIMARY KEY  (scenario_id,scenario_instance,resource_id)
+        ) TYPE=MyISAM;
+
+        CREATE TABLE scenario_resource_use      (
+               resource_id varchar(32) NOT NULL default '',
+               scenario_id varchar(32) NOT NULL default '',
+               scenario_instance varchar(32) NOT NULL default '',
+               PRIMARY KEY  (resource_id,scenario_id,scenario_instance)
+        ) TYPE=MyISAM;
+
+        CREATE TABLE scenario_access_points (
+               scenario_id varchar(32) NOT NULL default '',
+               scenario_instance varchar(32) NOT NULL default '',
+               apname varchar(32) NOT NULL default '',
+               node_id varchar(32) NOT NULL default '',
+               PRIMARY KEY  (scenario_id,scenario_instance,apname)
+        ) TYPE=MyISAM;
+
+        CREATE TABLE scenario_vlan_subs (
+               scenario_id varchar(32) not null default '',
+               scenario_instance varchar(32) not null default '',
+               tag varchar(64) not null default '',
+               replacement text not null default '',
+               primary key (scenario_id, scenario_instance, tag)
+        ) TYPE=MyISAM;
+
+
+        alter table virt_nodes 
+              add scenario_vname varchar(32) not null default '' after fixed,                 add scenario_ap varchar(32) not null default ''
+                 after scenario_vname;
+                
+        Alternately re run database-fill.sql
+  
+        insert into table_regex set table_name="virt_scenarios", 
+               column_name="scenario_vname", column_type='text',
+               check_type='regex', check='^[-\\w\\.]+$', min=0, max=32;
+
+        insert into table_regex set table_name="virt_scenarios", 
+               column_name="scenario_id", column_type='text', 
+               check_type='regex', check='^[-\\w\\.]+$', min=0, max=32;
+
+        insert into table_regex set table_name="virt_nodes", 
+               column_name="scenario_vname", column_type='text',
+               check_type='regex', check='^[-\\w\\.]+$', min=0, max=32;
+
+        insert into table_regex set table_name="virt_nodes", 
+               column_name="scenario_ap", column_type='text', 
+               check_type='regex', check='^[-\\w\\.]+$', min=0, max=32;
+
+
+WAIL.2: radius stuff.
+
+        Add tables for the radius server to lookup access in.
+
+        CREATE TABLE radius_check (
+          uid varchar(8) NOT NULL default '',
+          pid varchar(12) NOT NULL default '',
+          eid varchar(32) NOT NULL default '',
+          nisip varchar(15) NOT NULL default '',
+          name varchar(32) NOT NULL default '',
+          value tinytext NOT NULL,
+          op varchar(4) NOT NULL default '',
+          PRIMARY KEY  (uid,pid,eid,nisip,name)
+        ) TYPE=MyISAM;
+
+        CREATE TABLE radius_reply (
+          uid varchar(8) NOT NULL default '',
+          pid varchar(12) NOT NULL default '',
+          eid varchar(32) NOT NULL default '',
+          nisip varchar(15) NOT NULL default '',
+          name varchar(32) NOT NULL default '',
+          value tinytext NOT NULL,
+          op varchar(4) NOT NULL default '',
+          PRIMARY KEY  (uid,pid,eid,nisip,name)
+        ) TYPE=MyISAM;
+
+        scenario_router_replies defines what kind of service to allow for what
+        tesbted privaliges.  See database-fill.
+
+        CREATE TABLE scenario_router_replies (
+          trust enum('none','user','local_root','group_root',
+            'project_root') NOT NULL default 'none',
+            Attribute varchar(32) NOT NULL default '',
+            Value varchar(32) NOT NULL default '',
+            PRIMARY KEY (trust,Attribute,Value)
+        ) TYPE=MyISAM;
+
+        We need to know IPs of router to do so.  This is pretty bad and we
+        need to fix it up somehow.
+
+        CREATE TABLE scenario_router_access (
+          resource_id varchar(32) NOT NULL default '',
+          IP varchar(15) default NULL,
+          PRIMARY KEY  (resource_id)
+        ) TYPE=MyISAM;
+
+WAIL.3: wailnet
+
+       Add a column to experiments to store a delay_type for the experiment.
+
+       alter table experiments add delay_type varchar(32) not null \
+             after security_level;
+
+  
+       Also run
+       
+         mysql tbdb < sql/database-migrate.sql
+  
+       To add in new values to table_regex.
+
+WAIL.4: Add category for scenarios.
+
+       This is used only in the web page display.
+
+       alter table scenarios add column category varchar(32) not null \
+             default "";
+
+       And fill in appropriate categories for each scenario.

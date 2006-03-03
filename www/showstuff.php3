@@ -1176,6 +1176,54 @@ function SHOWEXPLIST($type,$fromuid,$id,$gid = "") {
 }
 
 #
+# Show scenario information for an experiment;
+#
+function SHOWSCENARIOS($pid,$eid) {
+  $scenario_info = array();
+  $query_result = 
+    DBQueryFatal("SELECT vs.scenario_vname,vs.scenario_id," .
+		 "vs.resource_policy,es.scenario_instance," .
+		 "s.notes FROM virt_scenarios as vs " .
+		 "LEFT JOIN experiment_scenarios as es " .
+		 "ON es.scenario_id = vs.scenario_id AND " .
+		 "es.eid = vs.eid AND es.pid = vs.pid " .
+		 "LEFT JOIN scenarios as s " .
+		 "ON s.scenario_id = es.scenario_id " .
+		 "AND s.scenario_instance = es.scenario_instance " .
+		 "WHERE vs.eid=\"$eid\" AND vs.pid=\"$pid\"");
+  while ($row = mysql_fetch_row($query_result)) {
+    $scenario_info[] = $row;
+  }
+  if (count($scenario_info)) {
+    print "<center><h3>Scenarios</h3></center>\n";
+    print "<table align=center border=1>\n";
+    print "<tr>\n";
+    print "<td>Vname</td>\n";
+    print "<td>Scenario ID</td>\n";
+    print "<td>Resource Policy</td>\n";
+    print "<td>Scenario Instance</td>\n";
+    print "<td>Notes</td>\n";
+    print "</tr>\n";
+    foreach ($scenario_info as $row) {
+      print "<tr>\n";
+      print "<td>$row[0]</td>\n";
+      print "<td><a href=scenario_doc.php3?scenario_id=$row[1]" .
+	">$row[1]</a></td>\n";
+      print "<td>$row[2]</td>\n";
+      if ($row[3] != "") {
+	print "<td><a href=scenario_resources.php3?scenario_id=$row[1]" .
+	  "&scenario_instance=$row[3]>$row[3]</a></td>\n";
+      } else {
+	print "<td></td>\n";
+      }
+      print "<td><pre>$row[4]</pre></td>\n";
+      print "</tr>\n";
+    }
+    print "</table>\n";
+  }
+}
+
+#
 # Show Node information for an experiment.
 #
 function SHOWNODES($pid, $eid, $sortby, $showclass) {

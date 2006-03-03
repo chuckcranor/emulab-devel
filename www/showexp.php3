@@ -366,6 +366,9 @@ SUBPAGEEND();
 # Dump the node information.
 #
 SHOWNODES($exp_pid, $exp_eid, $sortby, $showclass);
+if ($USESCENARIOS == "1") {
+  SHOWSCENARIOS($exp_pid, $exp_eid);
+}
 
 if ($isadmin) {
     echo "<center>
