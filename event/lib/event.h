@@ -246,12 +246,20 @@ int event_notification_pack(event_handle_t handle,
 			    event_notification_t notification,
 			    unsigned char *data, int *len);
 int event_notification_unpack(event_handle_t handle,
-			    event_notification_t *notification,
-			    unsigned char *data, int len);
+			      event_notification_t *notification,
+			      unsigned char *data, int len);
 int event_set_idle_period(event_handle_t handle, int seconds) ;
+int event_notification_insert_hmac_withkeydata(event_handle_t handle,
+					       event_notification_t notification,
+					       int keylen, char *keydata);
+int event_notification_check_hmac_withkeydata(event_handle_t handle,
+					      event_notification_t notification,
+					      int keylen, char *keydata);
+
 
 int event_arg_get(char *args, char *key, char **value);
 int event_arg_dup(char *args, char *key, char **value);
+
 
 typedef enum {
     EA_TAG_DONE,

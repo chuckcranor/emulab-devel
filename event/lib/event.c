@@ -1519,7 +1519,17 @@ hmac_traverse(void *rock, char *name, elvin_basetypes_t type,
 
 int
 event_notification_insert_hmac(event_handle_t handle,
-			       event_notification_t notification)
+			       event_notification_t notification) {
+  return event_notification_insert_hmac_withkeydata(handle, notification, 
+					     handle->keylen, handle->keydata);
+
+}
+
+
+int
+event_notification_insert_hmac_withkeydata(event_handle_t handle,
+					   event_notification_t notification,
+					   int keylen, char *keydata)
 {
 	HMAC_CTX	ctx;
 	unsigned char	mac[EVP_MAX_MD_SIZE];
@@ -1527,7 +1537,7 @@ event_notification_insert_hmac(event_handle_t handle,
 
 	if (0)
 	    INFO("event_notification_insert_hmac: %d %s\n",
-		 handle->keylen, handle->keydata);
+		 keylen, keydata);
 
 	if (notification->has_hmac) {
 		event_notification_remove(handle, notification, "__hmac__");
@@ -1536,10 +1546,10 @@ event_notification_insert_hmac(event_handle_t handle,
 
 	memset(&ctx, 0, sizeof(ctx));
 #if (OPENSSL_VERSION_NUMBER < 0x0090703f)
-	HMAC_Init(&ctx, handle->keydata, handle->keylen, EVP_sha1());
+	HMAC_Init(&ctx, keydata, keylen, EVP_sha1());
 #else	
 	HMAC_CTX_init(&ctx);
-	HMAC_Init_ex(&ctx, handle->keydata, handle->keylen, EVP_sha1(), NULL);
+	HMAC_Init_ex(&ctx, keydata, keylen, EVP_sha1(), NULL);
 #endif
 	if (!elvin_notification_traverse(notification->elvin_notification,
 				 hmac_traverse, &ctx, handle->status)) {
@@ -1570,12 +1580,23 @@ event_notification_insert_hmac(event_handle_t handle,
     	return 0;
 }
 
+
+static int
+event_notification_check_hmac(event_handle_t handle,
+			      event_notification_t notification) {
+  return event_notification_check_hmac_withkeydata(handle, notification,
+					    handle->keylen, handle->keydata);
+
+}
+
+
 /*
  * Check HMAC. Return 0 if equal, 1 if they are not, -1 if fatal error.
  */
-static int
-event_notification_check_hmac(event_handle_t handle,
-			      event_notification_t notification)
+int
+event_notification_check_hmac_withkeydata(event_handle_t handle,
+			      event_notification_t notification,
+                              int keylen, char *keydata)
 {
 	HMAC_CTX	ctx;
 	unsigned char	srcmac[EVP_MAX_MD_SIZE], mac[EVP_MAX_MD_SIZE];
@@ -1585,7 +1606,7 @@ event_notification_check_hmac(event_handle_t handle,
 
 	if (0)
 	    INFO("event_notification_check_hmac: %d %s\n",
-		 handle->keylen, handle->keydata);
+		  keylen, keydata);
 		
 	/*
 	 * Pull out the MAC from the notification so we can compare it.
@@ -1610,10 +1631,10 @@ event_notification_check_hmac(event_handle_t handle,
 	
 	memset(&ctx, 0, sizeof(ctx));
 #if (OPENSSL_VERSION_NUMBER < 0x0090703f)
-	HMAC_Init(&ctx, handle->keydata, handle->keylen, EVP_sha1());
+	HMAC_Init(&ctx, keydata, keylen, EVP_sha1());
 #else	
 	HMAC_CTX_init(&ctx);
-	HMAC_Init_ex(&ctx, handle->keydata, handle->keylen, EVP_sha1(), NULL);
+	HMAC_Init_ex(&ctx, keydata, keylen, EVP_sha1(), NULL);
 #endif
 	
 	/* Compute the MAC */
