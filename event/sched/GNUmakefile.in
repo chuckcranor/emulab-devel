@@ -1,6 +1,6 @@
 #
 # EMULAB-COPYRIGHT
-# Copyright (c) 2000-2002, 2004, 2005, 2006 University of Utah and the Flux Group.
+# Copyright (c) 2000-2002, 2004, 2005 University of Utah and the Flux Group.
 # All rights reserved.
 #
 
@@ -11,7 +11,14 @@ SUBDIR		= event/sched
 
 include $(OBJDIR)/Makeconf
 
-all: event-sched_rrpc
+SYSTEM         := $(shell uname -s)
+
+ifeq ($(SYSTEM),FreeBSD)
+all: 		event-sched_rrpc plab-sched
+else
+all: 		plab-sched
+endif
+
 
 include $(TESTBED_SRCDIR)/GNUmakerules
 
@@ -25,7 +32,7 @@ CFLAGS   += `elvin-config --cflags vin4mt`
 LDFLAGS  += -pthread
 LDFLAGS  += -L../lib -L${OBJDIR}/lib/libtb
 DBLIBS    = -L/usr/local/lib/mysql -lmysqlclient -lz
-LIBS     += -levent_r -ltb -lcipher -lz
+LIBS     += -levent_r -ltb -lz #-lcipher
 
 ULXRINC   = -I/usr/local/include -I/usr/local/include/ulxmlrpcpp
 CXXFLAGS += -pthread -O $(ULXRINC) -I$(OBJDIR) -I$(TESTBED_SRCDIR)/lib/libtb
@@ -39,6 +46,16 @@ ULXRLIBS  = -L/usr/local/lib  -lulsshxmlrpcpp -lulxmlrpcpp -lexpat
 #
 #LIBS     += `elvin-config --libs vin4mt`
 LIBS	 += -L/usr/local/lib -lvin4mt -lvin4c -lvin4 -lssl -lcrypto -lm
+
+ifeq ($(SYSTEM),Linux)
+LDFLAGS  += -static
+NEEDKERB := $(shell nm /usr/lib/libssl.a | grep -q krb; echo $$?)
+ifeq ($(NEEDKERB),0)
+ CFLAGS   += `/usr/kerberos/bin/krb5-config --cflags`
+ LIBS     += `/usr/kerberos/bin/krb5-config --libs krb5`
+endif
+LIBS     += -ldl
+endif
 
 OBJS	  = event-sched.o 
 
@@ -68,6 +85,8 @@ DEPS = \
 	../lib/event.h
 
 queue.o:		queue.c $(DEPS)
+	$(CC) $(CFLAGS)  -c $<
+
 listNode.o:		listNode.c $(DEPS)
 error-record.o:		error-record.c $(DEPS)
 local-agent.o:		local-agent.c $(DEPS)
@@ -89,15 +108,21 @@ install: event-sched_rrpc
 	-mkdir -p $(INSTALL_DIR)/opsdir/man/man8
 	$(INSTALL) -m 0644 $(SRCDIR)/event-sched.8 \
 		$(INSTALL_DIR)/opsdir/man/man8/event-sched.8
-	$(INSTALL_PROGRAM) $(SRCDIR)/elog2xplot \
-		$(INSTALL_DIR)/opsdir/bin/elog2xplot
+        $(INSTALL_PROGRAM) $(SRCDIR)/elog2xplot \
+                $(INSTALL_DIR)/opsdir/bin/elog2xplot
 
 control-install: event-sched_rrpc
 	$(INSTALL_PROGRAM) $< $(INSTALL_SBINDIR)/event-sched
+
+plab-sched.o: plab-sched.cc
+	$(CXX) $(CXXFLAGS)  -c $<
+
+plab-sched: queue.o plab-sched.o ../lib/libevent.a ../lib/event.h
+	$(CXX) $(LDFLAGS) -o $@ plab-sched.o queue.o $(LIBS)
 
 # not a client thing
 client:
 client-install: client
 
 clean:
-	/bin/rm -f *.o event-sched event-sched_rpc event-sched_rrpc version.c
+	/bin/rm -f *.o event-sched event-sched_rpc event-sched_rrpc version.c plab-sched

@@ -64,6 +64,11 @@ static int	get_static_events(event_handle_t handle);
 int	debug;
 const char *XMLRPC_ROOT = TBROOT;
 
+static int evproxy_subscribed = 0;
+static void plab_sched_reload(event_handle_t handle, 
+			      event_notification_t notification, 
+			      void *data);
+
 expt_state_t expt_state;
 
 struct lnList agents;
@@ -358,7 +363,7 @@ main(int argc, char *argv[])
 	ns_sequence_agent.handler = &ns_sequence->ta_local_agent;
 	lnAddTail(&sequences, &ns_sequence->ta_local_agent.la_link);
 	lnAddTail(&agents, &ns_sequence_agent.link);
-	
+
 	ns_teardown = create_timeline_agent(TA_SEQUENCE);
 	ns_teardown->ta_local_agent.la_link.ln_Name = ns_teardown_agent.name;
 	ns_teardown->ta_local_agent.la_handle = handle;
@@ -372,7 +377,7 @@ main(int argc, char *argv[])
 	ns_teardown_agent.handler = &ns_teardown->ta_local_agent;
 	lnAddTail(&sequences, &ns_teardown->ta_local_agent.la_link);
 	lnAddTail(&agents, &ns_teardown_agent.link);
-	
+
 	ns_timeline = create_timeline_agent(TA_TIMELINE);
 	ns_timeline->ta_local_agent.la_link.ln_Name = ns_timeline_agent.name;
 	ns_timeline->ta_local_agent.la_handle = handle;
@@ -803,8 +808,10 @@ enqueue(event_handle_t handle, event_notification_t notification, void *data)
 		sched_event_prepare(handle, &event);
 		if (ta != NULL)
 			timeline_agent_append(ta, &event);
-		else
-			sched_event_enqueue(event);
+		else {
+		        notify_plab_scheduler(handle, &event, NULL);
+		        sched_event_enqueue(event);
+		}
 	}
 }
 
@@ -999,8 +1006,6 @@ AddAgent(event_handle_t handle,
 		agentp->handler = &primary_simulator_agent->sa_local_agent;
 	}
 	else if (strcmp(type, TBDB_OBJECTTYPE_EVPROXY) == 0) {
-		static int evproxy_subscribed = 0;
-
 		if (!evproxy_subscribed) {
 			address_tuple_t tuple = address_tuple_alloc();
 			
@@ -1016,6 +1021,17 @@ AddAgent(event_handle_t handle,
 				fatal("could not subscribe to EVENT_SCHEDULE "
 				      "event");
 			}
+
+			tuple->scheduler = 1;
+			tuple->objtype = TBDB_OBJECTTYPE_PLABSCHED;
+			tuple->eventtype = TBDB_EVENTTYPE_RELOAD;
+			
+			if (event_subscribe_auth(handle, plab_sched_reload,
+                                                 tuple, NULL, 0) == NULL) {
+			  fatal("could not subscribe to EVENT_SCHEDULE "
+				"event");
+                        }
+
 			
 			evproxy_subscribed = 1;
 		}
@@ -1224,7 +1240,7 @@ AddEvent(event_handle_t handle, address_tuple_t tuple,
 	next_token += 1;
 	
 	sched_event_prepare(handle, &event);
-	if (ta != NULL)
+	if (ta != NULL) 
 		timeline_agent_append(ta, &event);
 	else
 		sched_event_enqueue(event);
@@ -1346,7 +1362,7 @@ get_static_events(event_handle_t handle)
 	
 		sched_event_prepare(handle, &event);
 		timeline_agent_append(ns_sequence, &event);
-		
+
 		/* Log when time has officially ended. */
 		event.notification = event_notification_create(
 			handle,
@@ -1551,3 +1567,123 @@ handle_completeevent(event_handle_t handle, sched_event_t *eventp)
 	
 	return 1;
 }
+
+/* Fires the events to plab scheduler for pre-staging 
+ * and Adds a new tuple field <PLABSCHED, 1> to the original event.
+ * If timeval t is NULL, it does not add timing info the event. 
+ */
+
+void 
+notify_plab_scheduler(event_handle_t handle,
+		      sched_event_t *event, struct timeval *t) {
+  event_notification_t notification;
+  int k;
+
+  if (!evproxy_subscribed) return;
+
+  if (debug) {
+    struct timeval now;
+    struct agent           *agentp;
+
+    gettimeofday(&now, NULL);
+
+    if (event->length == 1) agentp = event->agent.s;
+    else agentp = event->agent.m[0];
+    info("Plab sched: "
+	 "note:%p at:%ld:%d now:%ld:%d agent:%s \n",
+	 event->notification,
+	 event->time.tv_sec, event->time.tv_usec,
+	 now.tv_sec, now.tv_usec, agentp->name);
+  }
+
+  
+  /* clone notification */
+  notification = event_notification_clone(handle, event->notification);
+
+  if (!notification) {
+    error("event_notification_clone failed!\n");
+    return;
+  }
+
+  if (! event_notification_remove(handle, notification, "SCHEDULER") 
+      || ! event_notification_put_int32(handle, notification,
+					"SCHEDULER", 2)) {
+    error("could not clear scheduler attribute of "
+          "notification %p\n", notification);
+    return;
+  }
+
+  /* Tag the original event notification */
+  event_notification_put_int32(handle, event->notification,
+			       TBDB_PLABSCHED, 1);
+
+
+  /* Add the time this event should be fired to the notification
+     structure: */
+  if (t) {
+    
+    event_notification_put_int32(handle, notification, "time_sec",
+				 t->tv_sec);
+    
+    event_notification_put_int32(handle, notification, "time_usec",
+				 t->tv_usec);
+  }
+  
+  if (event->length == 1) {  
+    event_notification_insert_hmac(handle, notification);
+    if (event_notify(handle, notification) == 0) {
+      error("could not fire event\n");
+    }
+  } else   if (event->length > 1) {
+    /* It's a group event */
+    for (k = 1; k <= event->length; k++) {
+      event_notification_clear_objname(handle, notification);
+      event_notification_set_objname(handle, notification, event->agent.m[k]->name);
+      event_notification_insert_hmac(handle, notification);
+      if (event_notify(handle, notification) == 0) {
+	error("could not fire event\n");
+      }
+    } 
+  } 
+    
+  event_notification_free(handle, notification);
+}
+
+
+static void
+plab_sched_reload(event_handle_t handle, event_notification_t notification, void *data)
+{
+  char                    objname[TBDB_FLEN_EVOBJNAME];
+  char                    eventtype[TBDB_FLEN_EVEVENTTYPE];
+  char                    objtype[TBDB_FLEN_EVOBJTYPE];
+  struct agent           *agentp;
+  
+  if (! event_notification_get_objtype(handle, notification,
+				       objtype, sizeof(objtype))) {
+    error("could not get object type from notification %p\n",
+          notification);
+  }
+  else if (! event_notification_get_objname(handle, notification,
+					    objname, sizeof(objname))) {
+    error("could not get object name from notification %p\n",
+	  notification);
+  }
+  else if (! event_notification_get_eventtype(handle, notification,
+					      eventtype,
+					      sizeof(eventtype))) {
+    error("could not get event type from notification %p\n",
+	  notification);
+  }
+  else  if ((agentp = (struct agent *)
+	     lnFindName(&agents, objname)) == NULL) {
+    error("%s\n", eventtype);
+    error("Could not map object to an agent: %s\n", objname);
+  }
+  
+  if ( (strcmp(eventtype,TBDB_EVENTTYPE_RELOAD) == 0) &&
+       (strcmp(objtype, TBDB_OBJECTTYPE_PLABSCHED) == 0) ) {
+      plab_sched_event_queue_notify(handle, &notify_plab_scheduler);
+  }
+
+}
+

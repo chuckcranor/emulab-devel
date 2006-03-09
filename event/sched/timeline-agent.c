@@ -14,7 +14,7 @@
 
 #include "rpc.h"
 #include "timeline-agent.h"
-
+#include "group-agent.h"
 /**
  *
  */
@@ -337,6 +337,9 @@ static int timeline_agent_immediate(local_agent_t la, sched_event_t *se)
 			timeradd(&now,
 				 &ta->ta_events[lpc].time,
 				 &then);
+			notify_plab_scheduler(la->la_handle,
+					      &ta->ta_events[lpc],
+					      &then);
 			sched_event_enqueue_copy(la->la_handle,
 						 &ta->ta_events[lpc],
 						 &then);
