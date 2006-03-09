@@ -51,6 +51,13 @@ static void sched_event_queue_dump_node_and_descendents(FILE *fp,
 
 static void sched_event_queue_verify(void);
 
+#ifdef linux
+void TIMEVAL_TO_TIMESPEC(struct timeval *src, struct timespec *dst) {
+  dst->tv_sec  = src->tv_sec;
+  dst->tv_nsec = src->tv_usec * 1000;
+}
+#endif
+
 /* Returns non-zero if EVENT1 is more recent than EVENT2, 0 otherwise. */
 static inline int
 event_is_more_recent(sched_event_t event1, sched_event_t event2)
@@ -389,3 +396,28 @@ main(int argc, char **argv)
     return 0;
 }
 #endif /* TEST_EVENT_QUEUES */
+
+
+/* Sending the to-be-scheduled queue to the plab scheduler.
+ * func is passed as an argument to maintain indepedence
+ * of queue.c from event-sched.c.
+ */
+
+void
+plab_sched_event_queue_notify(event_handle_t handle,
+                              void (*func) (event_handle_t,
+                                            sched_event_t *,
+                                            struct timeval *)){
+  int i;
+
+  info("plab_sched_event_queue_notify: responding to a reload request \n");
+  pthread_mutex_lock(&event_queue_mutex);
+  
+  for (i = EVENT_QUEUE_HEAD; i <= event_queue_tail; i++) {
+    func(handle, &(event_queue[i]), &(event_queue[i].time));
+  }
+
+  pthread_mutex_unlock(&event_queue_mutex);
+
+}
+
