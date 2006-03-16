@@ -222,28 +222,32 @@ void agent_callback(event_handle_t handle,
 	struct hostent *he;
 	
 	while ((he = gethostent()) != NULL) {
-	  realloc_map();
-	  link_map[link_index] = old_map[i];
-	  link_map[link_index].islan = 0;
-	  link_map[link_index].numpipes = 1;
-	  inet_ntop(he->h_addrtype,
-		    he->h_addr,
+	  int j;
+	  
+	  for (j = 0; j < old_map[i].numpipes; j++) {
+	    realloc_map();
+	    link_map[link_index] = old_map[i];
+	    link_map[link_index].islan = 0;
+	    link_map[link_index].numpipes = 1;
+	    inet_ntop(he->h_addrtype,
+		      he->h_addr,
+		      link_map[link_index].fs.dest,
+		      sizeof(link_map[link_index].fs.dest));
+	    link_map[link_index].pipes[0] = hi_rule_no;
+	    
+	    if (strcmp(link_map[link_index].fs.dest, "127.0.0.1") == 0)
+	      continue;
+		  
+	    systemf("ipfw add %d pipe %d ip from any to %s in recv %s",
+		    hi_rule_no,
+		    hi_rule_no,
 		    link_map[link_index].fs.dest,
-		    sizeof(link_map[link_index].fs.dest));
-	  link_map[link_index].pipes[0] = hi_rule_no;
-	  
-	  if (strcmp(link_map[link_index].fs.dest, "127.0.0.1") == 0)
-	    continue;
-	  
-	  systemf("ipfw add %d pipe %d ip from any to %s in recv %s",
-		  hi_rule_no,
-		  hi_rule_no,
-		  link_map[link_index].fs.dest,
-		  old_map[i].interfaces[0]);
-	  systemf("ipfw pipe %d config queue 50", hi_rule_no);
-	  
-	  link_index += 1;
-	  hi_rule_no += 1;
+		    old_map[i].interfaces[j]);
+	    systemf("ipfw pipe %d config queue 50", hi_rule_no);
+	    
+	    link_index += 1;
+	    hi_rule_no += 1;
+	  }
 	}
 	endhostent();
       }
@@ -281,7 +285,7 @@ void agent_callback(event_handle_t handle,
 	  /* Reuse an existing structlink_map object. */
 	  rule_no = lm->pipes[0];
 	}
-
+	  
 	*lm = *mainlm;
 	lm->islan = 0;
 	lm->numpipes = 1;
