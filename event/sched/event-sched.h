@@ -1,6 +1,6 @@
 /*
  * EMULAB-COPYRIGHT
- * Copyright (c) 2000-2005 University of Utah and the Flux Group.
+ * Copyright (c) 2000-2006 University of Utah and the Flux Group.
  * All rights reserved.
  */
 
@@ -94,11 +94,20 @@ int sched_event_enqueue_copy(event_handle_t handle,
 			     sched_event_t *se,
 			     struct timeval *new_time);
 
+void notify_plab_scheduler(event_handle_t handle,
+			   sched_event_t *event, struct timeval *t);
+
 /* queue.c */
 void sched_event_init(void);
 int sched_event_enqueue(sched_event_t event);
 int sched_event_dequeue(sched_event_t *event, int wait);
 void sched_event_queue_dump(FILE *fp);
+
+void
+plab_sched_event_queue_notify(event_handle_t handle,
+                              void (*func) (event_handle_t,
+                                            sched_event_t *,
+                                            struct timeval *));
 
 extern char build_info[];
 
