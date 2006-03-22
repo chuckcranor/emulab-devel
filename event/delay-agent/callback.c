@@ -548,8 +548,11 @@ int get_link_params(int l_index)
 
        l = sizeof(*p) + p->fs.rq_elements * sizeof(*q) +
 	 p->delay.entries * sizeof(int) +
+	 p->delay.qentries * sizeof(int) +
 	 p->bandwidth.entries * sizeof(int) +
-	 p->loss.entries * sizeof(int) ;
+	 p->bandwidth.qentries * sizeof(int) +
+	 p->loss.entries * sizeof(int) +
+	 p->loss.qentries * sizeof(int) ;
        next = (void *)p  + l ;
        num_bytes -= l ;
        q = (struct dn_flow_queue *)(p+1) ;
@@ -560,17 +563,30 @@ int get_link_params(int l_index)
 
        /* Free the old tables. */
        free(link_map[l_index].params[p_index].delay.table);
+       free(link_map[l_index].params[p_index].delay.quantum);
+
        free(link_map[l_index].params[p_index].bw.table);
+       free(link_map[l_index].params[p_index].bw.quantum);
+       
        free(link_map[l_index].params[p_index].loss.table);
+       free(link_map[l_index].params[p_index].loss.quantum);
 
        /* grab pipe delay and bandwidth */
        link_map[l_index].params[p_index].delay = p->delay;
+       link_map[l_index].params[p_index].delay.quantum =
+	 copy_table(p->delay.qentries, &tables);
        link_map[l_index].params[p_index].delay.table =
 	 copy_table(p->delay.entries, &tables);
+       
        link_map[l_index].params[p_index].bw = p->bandwidth;
+       link_map[l_index].params[p_index].bw.quantum =
+	 copy_table(p->bandwidth.qentries, &tables);
        link_map[l_index].params[p_index].bw.table =
 	 copy_table(p->bandwidth.entries, &tables);
+       
        link_map[l_index].params[p_index].loss = p->loss;
+       link_map[l_index].params[p_index].loss.quantum =
+	 copy_table(p->loss.qentries, &tables);
        link_map[l_index].params[p_index].loss.table =
 	 copy_table(p->loss.entries, &tables);
 
@@ -956,7 +972,7 @@ build_poisson(int mean, int *entries)
 int dist_name_to_enum(char *name, int defval)
 {
   int retval = defval;
-  
+
   if (strcasecmp(name, "uniform") == 0)
     retval = DN_DIST_UNIFORM;
   else if (strcasecmp(name, "poisson") == 0)
@@ -1016,12 +1032,28 @@ int *parse_int_table(char *table, int *count_out)
   }
   else {
     error("parse_int_table: can't allocate memory for table.\n");
+    *count_out = 0;
   }
 
   if (err) {
     free(retval);
     retval = NULL;
     *count_out = 0;
+  }
+
+  return retval;
+}
+
+int *expand_int_table(int value, int count)
+{
+  int *retval = NULL;
+
+  if ((retval = malloc(sizeof(int) * count)) != NULL) {
+    int lpc = 0;
+
+    for (lpc = 0; lpc < count; lpc++) {
+      retval[lpc] = value;
+    }
   }
 
   return retval;
@@ -1136,6 +1168,8 @@ int get_new_link_params(int l_index, event_handle_t handle,
   
   if(event_notification_get_string(handle, notification,
                                    "ARGS", argstring, sizeof(argstring)) != 0){
+    unsigned long bq = -1, dq = -1, lq = -1;
+    
     info("ARGS = %s\n", argstring);
     temp = argstring;
     
@@ -1149,15 +1183,29 @@ int get_new_link_params(int l_index, event_handle_t handle,
 	link_map[l_index].params[p_num].bw.bandwidth = atoi(argvalue) * 1000;
 	link_map[l_index].params[p_num].bw.dist = DN_DIST_CONST_RATE;
 	if (! gotpipe) {
-	  link_map[l_index].params[1].bw = link_map[l_index].params[0].bw;
+	  link_map[l_index].params[1].bw.dist = DN_DIST_CONST_RATE;
+	  link_map[l_index].params[1].bw.bandwidth =
+		  link_map[l_index].params[0].bw.bandwidth;
 	}
       }
       else if (strcmp(argtype,"BWQUANTUM")== 0){
 	 info("Bandwidthq = %d\n", atoi(argvalue));
-	 link_map[l_index].params[p_num].bw.quantum = atoi(argvalue);
+	 bq = atoi(argvalue);
+      }
+      else if (strcmp(argtype,"BWQUANTABLE")== 0){
+	 info("Bandwidthqt = %s\n", argvalue);
+	 
+	 free(link_map[l_index].params[p_num].bw.quantum);
+	 link_map[l_index].params[p_num].bw.quantum =
+	   parse_int_table(argvalue,
+			   &link_map[l_index].params[p_num].bw.qentries);
 	 if (! gotpipe) {
+	   link_map[l_index].params[1].bw.qentries =
+	     link_map[l_index].params[0].bw.qentries;
+	   free(link_map[l_index].params[1].bw.quantum);
 	   link_map[l_index].params[1].bw.quantum =
-	     link_map[l_index].params[0].bw.quantum;
+	     tabledup(link_map[l_index].params[0].bw.quantum,
+		      link_map[l_index].params[0].bw.qentries);
 	 }
       }
       else if (strcmp(argtype,"BWMEAN")== 0){
@@ -1225,6 +1273,26 @@ int get_new_link_params(int l_index, event_handle_t handle,
 	     link_map[l_index].params[0].delay.dist;
 	 }
       }
+      else if (strcmp(argtype,"DELAYQUANTUM")== 0){
+	 info("Delayq = %d\n", atoi(argvalue));
+	 dq = atoi(argvalue);
+      }
+      else if (strcmp(argtype,"DELAYQUANTABLE")== 0){
+	 info("Delayqt = %s\n", argvalue);
+	 
+	 free(link_map[l_index].params[p_num].delay.quantum);
+	 link_map[l_index].params[p_num].delay.quantum =
+	   parse_int_table(argvalue,
+			   &link_map[l_index].params[p_num].delay.qentries);
+	 if (! gotpipe) {
+	   link_map[l_index].params[1].delay.qentries =
+	     link_map[l_index].params[0].delay.qentries;
+	   free(link_map[l_index].params[1].delay.quantum);
+	   link_map[l_index].params[1].delay.quantum =
+	     tabledup(link_map[l_index].params[0].delay.quantum,
+		      link_map[l_index].params[0].delay.qentries);
+	 }
+      }
       else if (strcmp(argtype,"DELAYMEAN")== 0){
 	 info("Delay mean = %d\n", atoi(argvalue));
 	 link_map[l_index].params[p_num].delay.mean = atoi(argvalue);
@@ -1277,20 +1345,38 @@ int get_new_link_params(int l_index, event_handle_t handle,
 	 link_map[l_index].params[p_num].loss.plr =
 	   (int)(atof(argvalue) * 0x7fffffff);
 	 link_map[l_index].params[p_num].loss.dist = DN_DIST_CONST_RATE;
+	 link_map[l_index].params[p_num].loss.qentries = 0;
+	 free(link_map[l_index].params[p_num].loss.quantum);
+	 link_map[l_index].params[p_num].loss.quantum = NULL;
 	 if (! gotpipe) {
 	   link_map[l_index].params[1].loss.plr =
 	     link_map[l_index].params[0].loss.plr;
 	   link_map[l_index].params[1].loss.dist =
 	     link_map[l_index].params[0].loss.dist;
+	   link_map[l_index].params[1].loss.qentries = 0;
+	   free(link_map[l_index].params[1].loss.quantum);
+	   link_map[l_index].params[1].loss.quantum = NULL;
 	 }
 	 info("plr = %x\n", link_map[l_index].params[p_num].loss.plr);
       }
       else if (strcmp(argtype,"PLRQUANTUM")== 0){
 	 info("plrq = %d\n", atoi(argvalue));
-	 link_map[l_index].params[p_num].loss.quantum = atoi(argvalue);
+	 lq = atoi(argvalue);
+      }
+      else if (strcmp(argtype,"PLRQUANTABLE")== 0){
+	 info("plrqt = %s\n", argvalue);
+	 
+	 free(link_map[l_index].params[p_num].loss.quantum);
+	 link_map[l_index].params[p_num].loss.quantum =
+	   parse_int_table(argvalue,
+			   &link_map[l_index].params[p_num].loss.qentries);
 	 if (! gotpipe) {
+	   link_map[l_index].params[1].loss.qentries =
+	     link_map[l_index].params[0].loss.qentries;
+	   free(link_map[l_index].params[1].loss.quantum);
 	   link_map[l_index].params[1].loss.quantum =
-		   link_map[l_index].params[0].loss.quantum;
+	     tabledup(link_map[l_index].params[0].loss.quantum,
+		      link_map[l_index].params[0].loss.qentries);
 	 }
       }
       else if (strcmp(argtype,"PLRMEAN")== 0){
@@ -1448,6 +1534,43 @@ int get_new_link_params(int l_index, event_handle_t handle,
        }
        argtype = strsep(&temp,"=");
      }
+
+    if (bq != -1) {
+      link_map[l_index].params[p_num].bw.qentries =
+	link_map[l_index].params[p_num].bw.entries;
+      link_map[l_index].params[p_num].bw.quantum =
+	expand_int_table(bq, link_map[l_index].params[p_num].bw.entries);
+      if (! gotpipe) {
+	link_map[l_index].params[1].bw.qentries =
+	  link_map[l_index].params[1].bw.entries;
+	link_map[l_index].params[1].bw.quantum =
+	  expand_int_table(bq, link_map[l_index].params[1].bw.entries);
+      }
+    }
+    if (dq != -1) {
+      link_map[l_index].params[p_num].delay.qentries =
+	link_map[l_index].params[p_num].delay.entries;
+      link_map[l_index].params[p_num].delay.quantum =
+	expand_int_table(dq, link_map[l_index].params[p_num].delay.entries);
+      if (! gotpipe) {
+	link_map[l_index].params[1].delay.qentries =
+	  link_map[l_index].params[1].delay.entries;
+	link_map[l_index].params[1].delay.quantum =
+	  expand_int_table(dq, link_map[l_index].params[1].delay.entries);
+      }
+    }
+    if (lq != -1) {
+      link_map[l_index].params[p_num].loss.qentries =
+	link_map[l_index].params[p_num].loss.entries;
+      link_map[l_index].params[p_num].loss.quantum =
+	expand_int_table(lq, link_map[l_index].params[p_num].loss.entries);
+      if (! gotpipe) {
+	link_map[l_index].params[1].loss.qentries =
+	  link_map[l_index].params[1].loss.entries;
+	link_map[l_index].params[1].loss.quantum =
+	  expand_int_table(lq, link_map[l_index].params[1].loss.entries);
+      }
+    }
   }
   if (gotpipe)
     *pipe_which = p_num;
