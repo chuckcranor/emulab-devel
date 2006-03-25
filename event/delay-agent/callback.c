@@ -1426,6 +1426,11 @@ int get_new_link_params(int l_index, event_handle_t handle,
 		      link_map[l_index].params[0].loss.entries);
 	 }
       }
+      else if (strcmp(argtype,"MAXINQ")== 0){
+	 info("maxinq = %s\n", argvalue);
+
+	 link_map[l_index].params[p_num].loss.maxinq = atoi(argvalue);
+      }
       
        /* Queue parameters. Slightly different since we do not want
 	  to set the queue params for a lan node in the from-switch
