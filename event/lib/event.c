@@ -2127,4 +2127,70 @@ int event_set_idle_period(event_handle_t handle, int seconds) {
 
 }
 
+/* Hack. Here goes a modified version of async_subscribe to handle
+ * SCHEDULER = 1 | 2 case 
+ */
 		
+int
+proxy_async_subscribe(event_handle_t handle, event_notify_callback_t callback,
+		      address_tuple_t tuple, void *data,
+		      event_subscription_callback_t scb, void *scb_data,
+		      int do_auth)
+{
+    int retval, index=0;
+    struct notify_callback_arg *arg;
+    struct subscription_callback_arg *sarg;
+    char expression[EXPRESSION_LENGTH];
+    
+
+    /* XXX: The declaration of expression has to go last, or the
+       local variables on the stack after it get smashed.  Check
+       Elvin for buffer overruns. */
+
+    if (!handle || !callback || !tuple || !scb) {
+        ERROR("invalid parameter\n");
+        return 0;
+    }
+
+    
+    if (tuple->expt &&
+        ! addclause("EXPT", tuple->expt, &expression[index], 
+		    sizeof(expression) - index, &index)) {
+      return 0;
+    }
+    index += snprintf(&expression[index], sizeof(expression) - index,
+		      "%s (SCHEDULER == 0 || SCHEDULER == 2)",
+		      (index ? "&&" : ""));
+ 
+    TRACE("subscribing to event %s\n", expression);
+
+    arg = xmalloc(sizeof(*arg));
+    /* XXX: Free this in an event_unsubscribe.. */
+    arg->callback = callback;
+    arg->data = data;
+    arg->handle = handle;
+    arg->do_auth = do_auth;
+
+    sarg = xmalloc(sizeof(*arg));
+    /* XXX: Free this in an event_unsubscribe.. */
+    sarg->callback = scb;
+    sarg->data = scb_data;
+    sarg->handle = handle;
+
+    retval = elvin_async_add_subscription(handle->server,
+					  expression,
+					  NULL,
+					  1,
+					  notify_callback,
+					  arg,
+					  subscription_callback,
+					  sarg,
+					  handle->status);
+    
+    if (retval == 0) {
+      free(arg);
+      free(sarg);
+    }
+
+    return retval;
+}

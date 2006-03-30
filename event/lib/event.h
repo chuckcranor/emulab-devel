@@ -255,6 +255,10 @@ int event_notification_insert_hmac_withkeydata(event_handle_t handle,
 int event_notification_check_hmac_withkeydata(event_handle_t handle,
 					      event_notification_t notification,
 					      int keylen, char *keydata);
+int proxy_async_subscribe(event_handle_t handle, event_notify_callback_t callback,
+			  address_tuple_t tuple, void *data,
+			  event_subscription_callback_t scb, void *scb_data,
+			  int do_auth);
 
 
 int event_arg_get(char *args, char *key, char **value);
