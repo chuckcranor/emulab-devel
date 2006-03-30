@@ -49,6 +49,7 @@
 
 #define EVENTKEYS_FILE "/var/emulab/boot/eventkeys"
 #define EVENTKEYS_SCRIPT "/usr/local/etc/emulab/eventkeysdump.pl"
+#define OFFSETFILE "/var/emulab/boot/offset"
 
 static void enqueue(event_handle_t handle,
 		    event_notification_t notification,
@@ -61,6 +62,8 @@ static void callback(event_handle_t handle,
 		     void *data);
 static bool is_expt_active(event_handle_t handle, 
 			   event_notification_t notification);
+void adjust_offset(sched_event_t *event);
+
 static char *progname;
 int debug;
 static char nodeidstr[BUFSIZ], ipaddr[32];
@@ -163,6 +166,11 @@ main(int argc, char *argv[])
 
 	if (log)
 		loginit(0, log);
+
+	if (!debug) {
+	  daemon(0, 0);
+	  loginit(0, "/var/emulab/logs/plabsched.log");
+        }
 
 	signal(SIGTERM, sigpass);
 	signal(SIGINT, sigpass);
@@ -311,6 +319,8 @@ enqueue(event_handle_t handle, event_notification_t notification, void *data)
 	  "notification %p\n", event.notification);
     return;
   }
+
+  adjust_offset(&event);
   
   if (debug) {
     struct timeval now;
@@ -512,5 +522,44 @@ is_expt_active(event_handle_t handle, event_notification_t notification) {
 }
 
 
+/* Adjusts the time of the event based on time offset between
+ * local clock and ntp1.emulab.net server
+ */
 
+void adjust_offset(sched_event_t *event) {
+  int num;
+  float offset;
 
+  FILE *fd = fopen(OFFSETFILE, "r");
+
+  if (fd  == NULL) {
+    error("Not able to open %s file\n", OFFSETFILE);
+    return;
+  }
+  num = fscanf(fd, "%f\n", &offset);
+  fclose(fd);
+
+  if (num == EOF) return;
+
+  /* update the event time */
+  if (offset > 0) {
+    int secs = floorf(offset);
+    int usecs = (offset - secs) * 1000000;
+    event->time.tv_sec = event->time.tv_sec - secs;
+   
+    if (event->time.tv_usec < usecs) {
+      event->time.tv_sec--;
+      event->time.tv_usec = event->time.tv_usec - usecs + 1000000;
+    }
+  } else {
+    int secs = ceilf(offset);
+    int usecs = (offset - secs) * 1000000;
+    event->time.tv_sec = event->time.tv_sec - secs;
+    event->time.tv_usec = event->time.tv_usec - usecs;
+    
+    if (event->time.tv_usec > 1000000) {
+      event->time.tv_sec++;
+      event->time.tv_usec = event->time.tv_usec - 1000000;
+    }
+  }
+}
