@@ -1,5 +1,5 @@
 /*-
- * Copyright (c) 1998-2002 Luigi Rizzo, Universita` di Pisa
+ * Copyright (c) 1998-2002, 2006 Luigi Rizzo, Universita` di Pisa
  * Portions Copyright (c) 2000 Akamba Corp.
  * All rights reserved
  *
@@ -125,6 +125,7 @@ struct dn_pkt_tag {
 #define DN_TO_ETH_DEMUX	4
 #define DN_TO_ETH_OUT	5
 
+    dn_key input_time;		/* when the pkt entered dummynet	*/
     dn_key output_time;		/* when the pkt is due for delivery	*/
     struct ifnet *ifp;		/* interface, for ip_output		*/
     int flags ;			/* flags, for ip_output (IPv6 ?)	*/
@@ -295,6 +296,20 @@ struct dn_flow_set {
     int max_pkt_size ;		/* max packet size */
 } ;
 
+
+/* distribution types */
+#define DN_DIST_CONST_TIME	0x01
+#define DN_DIST_CONST_RATE	0x02
+#define DN_DIST_UNIFORM		0x04
+#define DN_DIST_POISSON		0x08
+#define DN_DIST_TABLE_RANDOM	0x10
+#define DN_DIST_TABLE_DETERM	0x20
+
+#define DN_TABLE_DIST \
+	(DN_DIST_TABLE_RANDOM|DN_DIST_TABLE_DETERM|DN_DIST_POISSON)
+#define DN_CONST_DIST (DN_DIST_CONST_RATE|DN_DIST_CONST_TIME)
+
+
 /*
  * Pipe descriptor. Contains global parameters, delay-line queue,
  * and the flow_set used for fixed-rate queues.
@@ -309,12 +324,57 @@ struct dn_flow_set {
  *	operations during forwarding.
  *
  */
+
+/* delay, bandwidth, loss parameters for dn_pipe */
+
+struct dn_delay {
+	int	delay ;			/* really, ticks	*/
+	int	dist;		/* distribution type */
+	int	mean;
+	int	stddev;
+	int    *quantum;	/* how frequently to recalculate delay */
+	int	qentries;	/* entries in quantum table */
+	int	quantum_expire;	/* its expiration date  */
+	int    *table;		/* table of possible values */
+	int	entries;	/* entries in table */ 
+	int	tablepos;	/* current pos in table for deterministic */
+};
+
+struct dn_bw {
+	int	bandwidth;		/* bits/sec */
+	int	dist;			/* distribution type */
+	int	mean;
+	int	stddev;
+	int    *quantum;	/* how frequently to recalculate bw */
+	int	qentries;	/* entries in quantum table */
+	int	quantum_expire;	/* its expiration date  */
+	int    *table;		/* table of possible values */
+	int	entries;	/* entries in table */
+	int	tablepos;	/* current pos in table for deterministic */
+};
+
+struct dn_loss {
+	int	plr ;		/* pkt loss rate (2^31-1 means 100%) */
+	int	dist;		/* distribution type */
+	int	nextdroptime;	/* time to drop pkt at head of queue */
+	int	maxinq;		/* max time left in queue */
+	int	mean;
+	int	stddev;
+	int    *quantum;	/* how frequently to recalc loss rate */
+	int	qentries;	/* entries in quantum table */
+	int	quantum_expire;	/* its expiration date	*/
+	int    *table;		/* table of possible values */
+	int	entries;	/* entries in table */
+	int	tablepos;	/* current pos in table for deterministic */
+};
+
 struct dn_pipe {		/* a pipe */
     struct dn_pipe *next ;
 
     int	pipe_nr ;		/* number	*/
-    int bandwidth;		/* really, bytes/tick.	*/
-    int	delay ;			/* really, ticks	*/
+    struct dn_delay delay;
+    struct dn_bw bandwidth;
+    struct dn_loss loss;
 
     struct	mbuf *head, *tail ;	/* packets in delay line */
 
@@ -326,6 +386,8 @@ struct dn_pipe {		/* a pipe */
     dn_key V ;			/* virtual time */
     int sum;			/* sum of weights of all active sessions */
     int numbytes;		/* bits I can transmit (more or less). */
+
+    u_int32_t drops ;  /* statistics of packet dropped from this pipe ....Code changed */
 
     dn_key sched_time ;		/* time pipe was scheduled in ready_heap */
 

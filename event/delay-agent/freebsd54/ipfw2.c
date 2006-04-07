@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2002-2003 Luigi Rizzo
+ * Copyright (c) 2002-2003, 2006 Luigi Rizzo
  * Copyright (c) 1996 Alex Nash, Paul Traina, Poul-Henning Kamp
  * Copyright (c) 1994 Ugen J.S.Antsilevich
  *
@@ -43,6 +43,7 @@
 #include <timeconv.h>	/* XXX do we need this ? */
 #include <unistd.h>
 #include <sysexits.h>
+#include <math.h>
 
 #include <net/if.h>
 #include <netinet/in.h>
@@ -253,10 +254,24 @@ enum tokens {
 	TOK_DROPTAIL,
 	TOK_PROTO,
 	TOK_WEIGHT,
+	
+	TOK_CONST_TIME,
+	TOK_CONST_RATE,
+	TOK_LOSSDIST,
+	TOK_BWDIST,
+	TOK_CONSTANT,
+	TOK_UNIFORM,
+	TOK_POISSON,
+	TOK_RANDOM,
+	TOK_DETERM,
+	TOK_DELAYDIST,
 };
 
 struct _s_x dummynet_params[] = {
 	{ "plr",		TOK_PLR },
+	{ "consttime",		TOK_CONST_TIME },
+	{ "constrate",		TOK_CONST_RATE },
+	{ "lossdist",		TOK_LOSSDIST },
 	{ "noerror",		TOK_NOERROR },
 	{ "buckets",		TOK_BUCKETS },
 	{ "dst-ip",		TOK_DSTIP },
@@ -272,6 +287,14 @@ struct _s_x dummynet_params[] = {
 	{ "gred",		TOK_GRED },
 	{ "bw",			TOK_BW },
 	{ "bandwidth",		TOK_BW },
+	{ "bwdist",		TOK_BWDIST },
+	{ "constant",		TOK_CONSTANT },
+	{ "uniform",		TOK_UNIFORM },
+	{ "poisson",		TOK_POISSON },
+	{ "random",		TOK_RANDOM },
+	{ "determ",		TOK_DETERM },
+	{ "delay",		TOK_DELAY },
+	{ "delaydist",		TOK_DELAYDIST },
 	{ "delay",		TOK_DELAY },
 	{ "pipe",		TOK_PIPE },
 	{ "queue",		TOK_QUEUE },
@@ -1518,7 +1541,7 @@ list_pipes(void *data, uint nbytes, int ac, char *av[])
 	else
 		rulenum = 0;
 	for (; nbytes >= sizeof *p; p = (struct dn_pipe *)next) {
-		double b = p->bandwidth;
+		double b = (p->bandwidth).bandwidth;
 		char buf[30];
 		char prefix[80];
 
@@ -1528,7 +1551,13 @@ list_pipes(void *data, uint nbytes, int ac, char *av[])
 		/*
 		 * compute length, as pipe have variable size
 		 */
-		l = sizeof(*p) + p->fs.rq_elements * sizeof(*q);
+		l = sizeof(*p) + p->fs.rq_elements * sizeof(*q) +
+		    p->delay.entries * sizeof(int) +
+		    p->delay.qentries * sizeof(int) +
+		    p->bandwidth.entries * sizeof(int) +
+		    p->bandwidth.qentries * sizeof(int) +
+		    p->loss.entries * sizeof(int)+
+		    p->loss.qentries * sizeof(int);
 		next = (char *)p + l;
 		nbytes -= l;
 
@@ -1550,7 +1579,7 @@ list_pipes(void *data, uint nbytes, int ac, char *av[])
 			sprintf(buf, "%7.3f bit/s ", b);
 
 		sprintf(prefix, "%05d: %s %4d ms ",
-		    p->pipe_nr, buf, p->delay);
+		    p->pipe_nr, buf, (p->delay).delay);
 		print_flowset_parms(&(p->fs), prefix);
 		if (verbose)
 			printf("   V %20qd\n", p->V >> MY_M);
@@ -2232,6 +2261,194 @@ fill_iface(ipfw_insn_if *cmd, char *arg)
 		errx(EX_DATAERR, "bad ip address ``%s''", arg);
 }
 
+static double
+ln_gamma(double xx)
+{
+	/* log gamma function adapted from numerical recipes in C */
+
+	if (xx<1.0)                           /* Use reflection formula */
+	{
+		double piz = 3.14159265359 * (1.0-xx);
+		return log(piz/sin(piz))-ln_gamma(2.0-xx);
+	}
+	else
+	{
+		static double cof[6]={76.18009173,-86.50532033,24.01409822,
+				      -1.231739516,0.120858003e-2,-0.536382e-5};
+		double x,tmp,ser;
+		int j;
+
+		x=xx-1.0; tmp=x+5.5;
+		tmp -= (x+0.5)*log(tmp);  ser=1.0;
+		for (j=0;j<=5;j++) { x += 1.0; ser += cof[j]/x; }
+		return -tmp+log(2.50662827465*ser);
+	}
+}
+
+
+/*
+ * build_poisson()
+ * given a mean, build a table for poisson distribution.
+ *
+ * remember calculus long, long ago, estimating the area under the function by 
+ * calculating f(1) + f(2) + f(3) + ... ? Well, that is sort of what we are
+ * doing here. if f(1)=1, we put one 1 in the table. if f(7)=3, we put three 
+ * 7's in the table.  When the table is complete, one can randomly choose
+ * values from this table, with the results following a poisson distribution.
+ */
+static int *
+build_poisson(int mean, int *entries)
+{
+	int p, x;
+	int *table;
+	double probability;
+
+	if (mean <= 0)
+		errx(EX_USAGE,"invalid mean %d\n",mean);
+
+	x = *entries = 0;
+
+	if ( ! ( table = malloc(sizeof(int)*0x8200)))
+		err(1,"poisson table ate all of the memory\n");
+
+	do {
+		/* P(x) =  e^-mean * mean^x
+		 *         ----------------
+		 *              x!
+		 *
+		 * we will have approximately 0x8000 entries in our table.
+		 * there is no deep meaning to 0x8000. arbitrary.
+		 *
+		 */
+		probability = log(mean) * x - mean - ln_gamma(1.0 + x);
+		probability = (probability < -40.0) ? 0.0 : exp(probability);
+		probability *= 0x8000;
+		for(p= (int)probability ;p;p--) {
+			table[(*entries)++]=x;
+			/* since we truncate when casting to int, I don't even think
+			 * we need any more than 0x8000 entries. However, I do not
+			 * feel confident enough to chance it.
+			 */
+			if (*entries == 0x8200)
+				return table;
+		}
+		x++;
+	} while(x < mean || probability >= 1);
+	return table;
+}
+
+/*
+ * read a parameter and its value from cmdline
+ * luckily, we get to parse units on bw specifications. fun.
+ */
+static int
+readbwrate(char *av)
+{
+	int i;
+	char *end;
+
+	i = strtoul(av, &end, 0);
+	if (*end == 'K' || *end == 'k') {
+		end++;
+		i *= 1000;
+	} else if (*end == 'M') {
+		end++;
+		i *= 1000000;
+	}
+	if (*end == 'B' || !strncmp(end, "by", 2))
+		i *= 8;
+	if (i < 0)
+		errx(EX_DATAERR, "bandwidth too large");
+	return i;
+}
+
+
+
+
+/*
+ * read bw rate table
+ * ugh, parsing those dumb unit things every time
+ */
+static int
+readbwratetable(char *argv, int **tabptr)
+{
+	int entries=0, i=0;
+	int *table;
+	char *end;
+	char *argvcopy; //copy of the string so that it can be used to parse
+
+	argvcopy=(char *)malloc(strlen(argv));
+	bcopy(argv,argvcopy,strlen(argv)); //copy of the string
+
+	// used to calculate no. of entries so that memory can be allocated
+	while ((end = strsep(&argv, "/"))) {
+		entries++;
+	}
+
+	table = *tabptr = malloc(entries*sizeof(int));
+
+	//fill up the table
+	while ((end = strsep(&argvcopy, "/"))) {
+		table[i++] = readbwrate(end);
+	}
+	return entries;
+}
+
+readlossratetable(char *argv, int **tabptr)
+{
+	int entries=0, i=0;
+	int *table;
+	char *end;    
+	char *argvcopy; //copy of the string so that it can be used to parse
+
+	argvcopy=(char *)malloc(strlen(argv));
+	bcopy(argv,argvcopy,strlen(argv)); //copy of the string
+  
+	// used to calculate no. of entries so that memory can be allocated
+  
+	while ((end = strsep(&argv, "/"))) {
+		entries++;
+	}
+
+	table = *tabptr = malloc(entries*sizeof(int));
+
+	//fill up the table
+	while ((end = strsep(&argvcopy, "/"))) {
+		double d=strtod(end, NULL);
+		if(d>1) d=1;
+		else if(d<0) d=0;
+		table[i++] = (int)(d*0x7fffffff);
+	}
+	return entries;
+}
+
+
+readtable(char *argv, int **tabptr)
+{
+	int entries=0, i=0;
+	int *table;
+	char *end;
+	char *argvcopy; //copy of the string so that it can be used to parse
+
+	// used to calculate no. of entries so that memory can be allocated
+  
+	argvcopy=(char *)malloc(strlen(argv));
+	bcopy(argv,argvcopy,strlen(argv)); //copy of the string
+  
+	while ((end = strsep(&argv, "/"))) {
+		entries++;
+	}
+
+	table = *tabptr = malloc(entries*sizeof(int));
+
+	//fill up the table
+	while ((end = strsep(&argvcopy, "/"))) {
+		table[i++] = strtoul(end, NULL, 0);
+	}
+	return entries;
+}
+
+
 static void
 config_pipe(int ac, char **av)
 {
@@ -2270,6 +2487,142 @@ config_pipe(int ac, char **av)
 			else if (d < 0)
 				d = 0;
 			p.fs.plr = (int)(d*0x7fffffff);
+			p.loss.plr = (int)(d*0x7fffffff);
+			p.loss.dist=DN_DIST_CONST_RATE;
+			ac--; av++;
+			break;
+
+		case TOK_LOSSDIST:
+
+			NEED1("lossdist needs name of distribution\n");
+			if (do_pipe != 1)
+				errx(EX_DATAERR, "loss only valid for pipes");
+
+			tok = match_token(dummynet_params, *av);
+			ac--; av++;
+			switch(tok) {
+			case TOK_CONST_RATE:
+				NEED1("constant rate needs loss rate\n");
+				p.loss.dist=DN_DIST_CONST_RATE;
+				double d = strtod(av[0], NULL);
+				if (d > 1) d = 1;
+				else if (d < 0) d = 0;
+				p.fs.plr = (int)(d*0x7fffffff);
+				p.loss.plr = (int)(d*0x7fffffff);
+	
+				break;
+
+			case TOK_CONST_TIME:
+				NEED1("constant time needs mean\n");
+				p.loss.dist=DN_DIST_CONST_TIME;
+				p.loss.mean=strtoul(av[0],NULL,0);	
+				break;
+
+			case TOK_UNIFORM:
+
+				NEED1("uniform dist needs mean/stddev/quantum\n");
+				char *argvcopy;
+				p.loss.dist = DN_DIST_UNIFORM;
+				argvcopy=(char *)malloc(strlen(av[0]));
+				bcopy(av[0],argvcopy,strlen(av[0]));
+				if ((end = strsep(&argvcopy, "/"))) {
+					double d = strtod(end, NULL);
+					if (d > 1) d = 1;
+					else if (d < 0) d = 0;
+					p.loss.mean = (int)(d*0x7fffffff);
+				}    
+				if ((end = strsep(&argvcopy, "/"))) {
+					double d = strtod(end, NULL);
+					if (d > 1) d = 1;
+					else if (d < 0) d = 0;
+					p.loss.stddev = (int)(d*0x7fffffff);
+				}
+				if ((end = strsep(&argvcopy, "/"))) {
+					if ((p.loss.quantum =
+					     malloc(sizeof(int))) == NULL) {
+						err(1,"out of memory\n");
+					}
+					p.loss.quantum[0] =
+						strtoul(end, NULL, 0);
+					p.loss.qentries = 1;
+				}
+				break;
+
+			case TOK_POISSON:
+
+				NEED1(" Poisson dist needs mean/quantum\n");
+				char *argvcopy1;
+				p.loss.dist = DN_DIST_POISSON;
+				argvcopy1=(char *)malloc(strlen(av[0]));
+				bcopy(av[0],argvcopy1,strlen(av[0]));
+				if ((end = strsep(&argvcopy1, "/"))) {
+					double d = strtod(end, NULL);
+					if (d > 1) d = 1;
+					else if (d < 0) d = 0;
+					p.loss.mean = (int)(d*0x7fffffff);
+				}    
+				if ((end = strsep(&argvcopy1, "/"))) {
+					if ((p.loss.quantum =
+					     malloc(sizeof(int))) == NULL) {
+						err(1,"out of memory\n");
+					}
+					p.loss.quantum[0] =
+						strtoul(end, NULL, 0);
+					p.loss.qentries = 1;
+				}    
+				p.loss.table = build_poisson(p.loss.mean>>0x10,&(p.loss.entries));
+				for (i = 0; i < p.loss.entries; i++)
+					p.loss.table[i]<<=0x10;
+        
+				break;
+	
+			case TOK_RANDOM:
+				NEED1("Random dist needs quantum/entry1/entry2/...\n");
+				char *argvcopy2;
+				p.loss.dist = DN_DIST_TABLE_RANDOM;
+				argvcopy2=(char *)malloc(strlen(av[0]));
+				bcopy(av[0],argvcopy2,strlen(av[0]));
+				if ((end = strsep(&argvcopy2, "/"))) {
+					if ((p.loss.quantum =
+					     malloc(sizeof(int))) == NULL) {
+						err(1,"out of memory\n");
+					}
+					p.loss.quantum[0] =
+						strtoul(end, NULL, 0);
+					p.loss.qentries = 1;
+				}    
+	    
+				p.loss.entries = readlossratetable(av[0],&p.loss.table);
+
+	    
+				break;
+
+	
+			case TOK_DETERM:
+				NEED1("Determ dist needs quantum/entry1/entry2/...\n");
+				char *argvcopy3;
+				p.loss.dist = DN_DIST_TABLE_DETERM;
+				argvcopy3=(char *)malloc(strlen(av[0]));
+				bcopy(av[0],argvcopy3,strlen(av[0]));
+	    
+				if ((end = strsep(&argvcopy3, "/"))) {
+					if ((p.loss.quantum =
+					     malloc(sizeof(int))) == NULL) {
+						err(1,"out of memory\n");
+					}
+					p.loss.quantum[0] =
+						strtoul(end, NULL, 0);
+					p.loss.qentries = 1;
+				}    
+				p.loss.entries = readlossratetable(av[0],&p.loss.table);
+	    
+				break;
+
+			default:
+				errx(EX_DATAERR, "unrecognised loss distribution ``%s''", *(av-1));
+
+			}//end of switch
+
 			ac--; av++;
 			break;
 
@@ -2421,27 +2774,142 @@ end_mask:
 			/*
 			 * set clocking interface or bandwidth value
 			 */
+			p.bandwidth.dist=DN_DIST_CONST_RATE;
 			if (av[0][0] >= 'a' && av[0][0] <= 'z') {
 			    int l = sizeof(p.if_name)-1;
 			    /* interface name */
 			    strncpy(p.if_name, av[0], l);
 			    p.if_name[l] = '\0';
-			    p.bandwidth = 0;
+			    p.bandwidth.bandwidth = 0;
 			} else {
 			    p.if_name[0] = '\0';
-			    p.bandwidth = strtoul(av[0], &end, 0);
+			    p.bandwidth.bandwidth = strtoul(av[0], &end, 0);
 			    if (*end == 'K' || *end == 'k') {
 				end++;
-				p.bandwidth *= 1000;
+				p.bandwidth.bandwidth *= 1000;
 			    } else if (*end == 'M') {
 				end++;
-				p.bandwidth *= 1000000;
+				p.bandwidth.bandwidth *= 1000000;
 			    }
 			    if (*end == 'B' || !strncmp(end, "by", 2))
-				p.bandwidth *= 8;
-			    if (p.bandwidth < 0)
+				p.bandwidth.bandwidth *= 8;
+			    if (p.bandwidth.bandwidth < 0)
 				errx(EX_DATAERR, "bandwidth too large");
 			}
+			ac--; av++;
+			break;
+
+		case TOK_BWDIST:
+
+			NEED1("bwdist needs name of distribution\n");
+			if (do_pipe != 1)
+				errx(EX_DATAERR, "bandwidth only valid for pipes");
+
+			tok = match_token(dummynet_params, *av);
+			ac--; av++;
+			switch(tok) {
+			case TOK_CONSTANT:
+				NEED1("constant dist needs bandwidth\n");
+				p.bandwidth.dist=DN_DIST_CONST_RATE;
+				p.bandwidth.bandwidth =  readbwrate(av[0]);
+				break;
+
+			case TOK_UNIFORM:
+
+				NEED1("uniform dist needs mean/stddev/quantum\n");
+				char *argvcopy;
+				p.bandwidth.dist = DN_DIST_UNIFORM;
+				argvcopy=(char *)malloc(strlen(av[0]));
+				bcopy(av[0],argvcopy,strlen(av[0]));
+	    
+				if ((end = strsep(&argvcopy, "/"))) {
+					p.bandwidth.mean = readbwrate(end);
+				}    
+				if ((end = strsep(&argvcopy, "/"))) {
+					p.bandwidth.stddev = readbwrate(end);
+				}
+				if ((end = strsep(&argvcopy, "/"))) {
+					if ((p.bandwidth.quantum =
+					     malloc(sizeof(int))) == NULL) {
+						err(1,"out of memory\n");
+					}
+					p.bandwidth.quantum[0] =
+						strtoul(end, NULL, 0);
+					p.bandwidth.qentries = 1;
+				}
+				break;
+
+			case TOK_POISSON:
+				NEED1(" Poisson dist needs mean/quantum\n");
+				char *argvcopy1;
+				p.bandwidth.dist = DN_DIST_POISSON;
+				argvcopy1=(char *)malloc(strlen(av[0]));
+				bcopy(av[0],argvcopy1,strlen(av[0]));
+	    
+				if ((end = strsep(&argvcopy1, "/"))) {
+					p.bandwidth.mean = readbwrate(end);
+				}    
+				if ((end = strsep(&argvcopy1, "/"))) {
+					if ((p.bandwidth.quantum =
+					     malloc(sizeof(int))) == NULL) {
+						err(1,"out of memory\n");
+					}
+					p.bandwidth.quantum[0] =
+						strtoul(end, NULL, 0);
+					p.bandwidth.qentries = 1;
+				}
+				p.bandwidth.table = build_poisson(p.bandwidth.mean,&(p.bandwidth.entries));
+				break;
+	
+			case TOK_RANDOM:
+				NEED1("Random dist needs quantum/entry1/entry2/...\n");
+				char *argvcopy2;
+				p.bandwidth.dist = DN_DIST_TABLE_RANDOM;
+				argvcopy2=(char *)malloc(strlen(av[0]));
+				bcopy(av[0],argvcopy2,strlen(av[0]));
+	    
+				if ((end = strsep(&argvcopy2, "/"))) {
+					if ((p.bandwidth.quantum =
+					     malloc(sizeof(int))) == NULL) {
+						err(1,"out of memory\n");
+					}
+					p.bandwidth.quantum[0] =
+						strtoul(end, NULL, 0);
+					p.bandwidth.qentries = 1;
+				}
+				p.bandwidth.entries = readbwratetable(av[0],&p.bandwidth.table);
+	    
+				break;
+
+	
+			case TOK_DETERM:
+				NEED1("Determ dist needs quantum/entry1/entry2/...\n");
+				char *argvcopy3;
+				int qt;
+				p.bandwidth.dist = DN_DIST_TABLE_DETERM;
+				argvcopy3=(char *)malloc(strlen(av[0]));
+				bcopy(av[0],argvcopy3,strlen(av[0]));
+	    
+				if ((end = strsep(&argvcopy3, "/"))) {
+					qt = strtoul(end, NULL, 0);
+				}
+				p.bandwidth.entries = readbwratetable(av[0],&p.bandwidth.table);
+				p.bandwidth.qentries = p.bandwidth.entries;
+				if ((p.bandwidth.quantum =
+				     malloc(sizeof(int) *
+					    p.bandwidth.qentries)) == NULL) {
+					err(1,"out of memory\n");
+				}
+				for (i = 0; i < p.bandwidth.qentries; i++) {
+					p.bandwidth.quantum[i] = qt;
+				}
+				
+				break;
+
+			default:
+				errx(EX_DATAERR, "unrecognised bandwidth distribution ``%s''", *(av-1));
+			}//end of switch
+
 			ac--; av++;
 			break;
 
@@ -2449,7 +2917,79 @@ end_mask:
 			if (do_pipe != 1)
 				errx(EX_DATAERR, "delay only valid for pipes");
 			NEED1("delay needs argument 0..10000ms\n");
-			p.delay = strtoul(av[0], NULL, 0);
+			p.delay.dist=DN_DIST_CONST_TIME;
+			p.delay.delay = strtoul(av[0], NULL, 0);
+			ac--; av++;
+			break;
+
+		case TOK_DELAYDIST:
+
+			NEED1("delaydist needs name of distribution\n");
+			if (do_pipe != 1)
+				errx(EX_DATAERR, "delay only valid for pipes");
+
+			tok = match_token(dummynet_params, *av);
+			ac--; av++;
+			switch(tok) {
+			case TOK_CONSTANT:
+				NEED1("constant dist needs delay\n");
+				p.delay.dist=DN_DIST_CONST_TIME;
+				p.delay.delay =  strtoul(av[0], NULL, 0);
+				break;
+
+			case TOK_UNIFORM:
+
+				NEED1("uniform dist needs mean/stddev\n");
+				char *argvcopy;
+				p.delay.dist = DN_DIST_UNIFORM;
+				argvcopy=(char *)malloc(strlen(av[0]));
+				bcopy(av[0],argvcopy,strlen(av[0]));
+	    
+				if ((end = strsep(&argvcopy, "/"))) {
+					p.delay.mean = strtoul(end, NULL, 0);
+				}    
+				if ((end = strsep(&argvcopy, "/"))) {
+					p.delay.stddev = strtoul(end, NULL, 0);
+				}
+				break;
+
+			case TOK_POISSON:
+
+				NEED1(" Poisson dist needs mean\n");
+				char *argvcopy1;
+				p.delay.dist = DN_DIST_POISSON;
+				argvcopy1=(char *)malloc(strlen(av[0]));
+				bcopy(av[0],argvcopy1,strlen(av[0]));
+	    
+				if ((end = strsep(&argvcopy1, "/"))) {
+					p.delay.mean = strtoul(end, NULL, 0);
+				}    
+				p.delay.table = build_poisson(p.delay.mean,&(p.delay.entries));
+				break;
+	
+			case TOK_RANDOM:
+				NEED1("Random dist needs entry1/entry2/...\n");
+				p.delay.dist = DN_DIST_TABLE_RANDOM;
+	    
+				p.delay.entries = readtable(av[0],&p.delay.table);
+
+	    
+				break;
+
+	
+			case TOK_DETERM:
+				NEED1("Determ dist needs entry1/entry2/...\n");
+				p.delay.dist = DN_DIST_TABLE_DETERM;
+	    
+				p.delay.entries = readtable(av[0],&p.delay.table);
+	    
+				break;
+
+			default:
+				errx(EX_DATAERR, "unrecognised delay distribution ``%s''", *(av-1));
+
+			}//end of switch
+
 			ac--; av++;
 			break;
 
@@ -2476,7 +3016,7 @@ end_mask:
 	if (do_pipe == 1) {
 		if (p.pipe_nr == 0)
 			errx(EX_DATAERR, "pipe_nr must be > 0");
-		if (p.delay > 10000)
+		if (p.delay.delay > 10000)
 			errx(EX_DATAERR, "delay must be < 10000");
 	} else { /* do_pipe == 2, queue */
 		if (p.fs.parent_nr == 0)
@@ -2538,10 +3078,10 @@ end_mask:
 		 * correct. But on the other hand, why do we want RED with
 		 * WF2Q+ ?
 		 */
-		if (p.bandwidth==0) /* this is a WF2Q+ queue */
+		if (p.bandwidth.bandwidth==0) /* this is a WF2Q+ queue */
 			s = 0;
 		else
-			s = ck.hz * avg_pkt_size * 8 / p.bandwidth;
+			s = ck.hz * avg_pkt_size * 8 / p.bandwidth.bandwidth;
 
 		/*
 		 * max idle time (in ticks) before avg queue size becomes 0.
