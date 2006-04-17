@@ -291,15 +291,28 @@ void agent_callback(event_handle_t handle,
 	lm->numpipes = 1;
 	lm->fs = fs;
 	lm->pipes[0] = rule_no;
-	systemf("ipfw add %d pipe %d %s from any to %s "
-		"src-port %d dst-port %d in recv %s",
-		lm->pipes[0],
-		lm->pipes[0],
-		lm->fs.protocol,
-		lm->fs.dest,
-		lm->fs.srcport,
-		lm->fs.dstport,
-		lm->interfaces[0]);
+	if (lm->fs.srcport > 0 && lm->fs.destport > 0)
+	{
+	    systemf("ipfw add %d pipe %d %s from any to %s "
+		    "src-port %d dst-port %d in recv %s",
+		    lm->pipes[0],
+		    lm->pipes[0],
+		    lm->fs.protocol,
+		    lm->fs.dest,
+		    lm->fs.srcport,
+		    lm->fs.dstport,
+		    lm->interfaces[0]);
+	}
+	else
+	{
+	    systemf("ipfw add %d pipe %d %s from any to %s "
+		    "in recv %s",
+		    lm->pipes[0],
+		    lm->pipes[0],
+		    lm->fs.protocol,
+		    lm->fs.dest,
+		    lm->interfaces[0]);
+	}
 	systemf("ipfw pipe %d config queue 50", lm->pipes[0]);
       }
     }
