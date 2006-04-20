@@ -189,10 +189,9 @@ void agent_callback(event_handle_t handle,
     }
     else {
       info("clearing all pipes\n");
+      system("ipfw flush");
       for (i = 0; i < link_index; i++) {
 	int j;
-	
-	system("ipfw flush");
 	for (j = 0; j < link_map[i].numpipes; j++) {
 	  systemf("ipfw pipe delete %d", link_map[i].pipes[j]);
 	}
