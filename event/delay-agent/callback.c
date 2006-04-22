@@ -164,12 +164,12 @@ void agent_callback(event_handle_t handle,
   }
   
   if (strcmp(eventtype, TBDB_EVENTTYPE_CLEAR) == 0) {
+    structlink_map_t lm;
+
     /* Handle a CLEAR event. */
     
     if (dest_len > 0 && srcport_len > 0 && dstport_len > 0 &&
 	protocol_len > 0) {
-      structlink_map_t lm;
-
       if ((lm = find_map(objname, &fs)) == NULL) {
 	error("unknown flow for agent %s\n", objname);
       }
@@ -184,34 +184,55 @@ void agent_callback(event_handle_t handle,
 	strcpy(lm->linkvnodes[1], "__free");
 	lm->fs = blankfs;
       }
-      
-      dump_link_map();
     }
     else {
-      info("clearing all pipes\n");
-      system("ipfw flush");
-      for (i = 0; i < link_index; i++) {
-	int j;
-	for (j = 0; j < link_map[i].numpipes; j++) {
-	  systemf("ipfw pipe delete %d", link_map[i].pipes[j]);
-	}
+      /*
+       * We cannot just flush the world, because the delay node
+       * might be shared.  So, we find all pipes associated with
+       * the indicated object that have non-null flow info.
+       */
+      info("clearing all flow pipes for %s\n", objname);
+      for (lm = &link_map[0]; lm < &link_map[link_index]; lm++) {
+	if (strcmp(lm->linkname, objname) != 0 ||
+	    strcmp(lm->linkvnodes[0], "__free") == 0 ||
+	    lm->fs.dest[0] == '\0')
+	  continue;
+
+	info("clearing pipe %d\n", lm->pipes[0]);
+
+	/* Delete the rule/pipe and */
+	systemf("ipfw delete %d", lm->pipes[0]);
+	systemf("ipfw pipe delete %d", lm->pipes[0]);
+	/* ... mark the structure as free for another use. */
+	strcpy(lm->linkvnodes[0], "__free");
+	strcpy(lm->linkvnodes[1], "__free");
+	lm->fs = blankfs;
       }
-      link_map = NULL;
-      link_index = 0;
+      if (link_map != old_map) {
+	free(link_map);
+	link_map = old_map;
+	link_index = old_length;
+      }
     }
 
+    dump_link_map();
     return;
   }
 
   if (strcmp(eventtype, TBDB_EVENTTYPE_CREATE) == 0) {
     static int lo_rule_no = 100;
-    static int hi_rule_no = 20000;
+    static int hi_rule_no = 59999;
     
     if (dest_len == -1) {
       extern void dump_link_map();
 
       info("creating per-host pipes\n");
       
+      if (link_map == old_map) {
+	link_map = NULL;
+	link_index = 0;
+      }
+
       /*
        * For every link we were managing, create a separate pipe for that link
        * and a particular destination.  The set of destinations are currently
@@ -245,7 +266,7 @@ void agent_callback(event_handle_t handle,
 	    systemf("ipfw pipe %d config queue 50", hi_rule_no);
 	    
 	    link_index += 1;
-	    hi_rule_no += 1;
+	    hi_rule_no -= 1;
 	  }
 	}
 	endhostent();
