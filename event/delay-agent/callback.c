@@ -226,7 +226,7 @@ void agent_callback(event_handle_t handle,
     if (dest_len == -1) {
       extern void dump_link_map();
 
-      info("creating per-host pipes\n");
+      info("creating per-host pipes for %s\n", objname);
       
       if (link_map == old_map) {
 	link_map = NULL;
@@ -241,6 +241,12 @@ void agent_callback(event_handle_t handle,
       for (i = 0; i < old_length; i++) {
 	struct hostent *he;
 	
+	if (strcmp(old_map[i].linkname, objname) != 0) {
+	  realloc_map();
+	  link_map[link_index] = old_map[i];
+	  link_index++;
+	  continue;
+	}
 	while ((he = gethostent()) != NULL) {
 	  int j;
 	  
