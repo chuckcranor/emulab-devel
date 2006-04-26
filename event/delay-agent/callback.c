@@ -269,7 +269,12 @@ void agent_callback(event_handle_t handle,
 		    hi_rule_no,
 		    link_map[link_index].fs.dest,
 		    old_map[i].interfaces[j]);
-	    systemf("ipfw pipe %d config queue 50", hi_rule_no);
+	    systemf("ipfw pipe %d config bw %d delay %d plr %f queue %d",
+		    hi_rule_no,
+		    link_map[link_index].params[j].bw.bandwidth,
+		    link_map[link_index].params[j].delay.delay,
+		    (double)link_map[link_index].params[j].loss.plr/0x7fffffff,
+		    link_map[link_index].params[j].q_size);
 	    
 	    link_index += 1;
 	    hi_rule_no -= 1;
