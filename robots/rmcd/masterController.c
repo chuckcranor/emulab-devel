@@ -152,7 +152,7 @@ static int mc_maketraj(struct master_controller *mc, mtp_packet_t *mp) {
         kc_init_params(&(mc->kcp));
 
         // Initialize controller-related parameters in mc struct
-        mc->speedlimit = 0.2; // FIXME: define this somewhere else (check with rmcd flags -- it might already be there.)
+        mc->speedlimit = 2.0; // FIXME: define this somewhere else (check with rmcd flags -- it might already be there.)
 
         gettimeofday(&tv_current, NULL);
         mc->tf_start = (double)(tv_current.tv_sec) +

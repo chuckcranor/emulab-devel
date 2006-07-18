@@ -50,16 +50,16 @@
  *********/
 
 // Minimum path radius:
-#define K_R 0.1f
+#define K_R 0.02f
 
 // Epsilon, 'nudge'
-#define K_EPSILON 0.0001f
+#define K_EPSILON 0.001f
 
 // Dynamic extension 'v' gain:
-#define K_KV 0.5f
+#define K_KV 3.0f
 
 // Dynamic extension 'omega' gain:
-#define K_KC 2.0f
+#define K_KC 3.01f
 
 
 

@@ -83,8 +83,8 @@ struct master_controller {
 
 #define DEFAULT_PAUSE_TIME 10
 
-#define E_CUTOFF 0.2
-#define E_BUBBLE 0.02
+#define E_CUTOFF 0.75
+#define E_BUBBLE 0.1
 
 /**
  * Dispatch a packet received from the pilot.  We expect to only receive

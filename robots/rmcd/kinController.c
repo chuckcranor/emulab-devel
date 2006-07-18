@@ -581,7 +581,8 @@ void kc_gains(struct sgains *gains,
         l2 = tanh(1.0f / pst->e);
     }
 
-    gains->k2 = (0.3f / e0) * l1 + 0.3f * l2;
+//     gains->k2 = (0.3f / e0) * l1 + 0.3f * l2;
+    gains->k2 = (0.01f / e0) * l1 + 0.3f * l2;
 
 
     if (gains->k2 < 0.0f)
@@ -890,6 +891,9 @@ void kc_init_params(struct kc_params *kp) {
     kp->dv = 0.0f;
     kp->domega = 0.0f;
 
+
+    kp->v_last.v = 0.0f;
+    kp->v_last.omega = 0.0f;
 
 }
 
