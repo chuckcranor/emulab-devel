@@ -4,6 +4,7 @@
  * All rights reserved.
  */
 
+
 #ifndef _rmcd_master_controller_h
 #define _rmcd_master_controller_h
 
@@ -18,6 +19,10 @@
 
 #include "mtp.h"
 #include "pathPlanning.h"
+
+#include "cPaths.h"
+#include "kinController.h"
+
 
 /**
  * Forward declaration of the pilot_connection since the controller has a back
@@ -40,6 +45,7 @@ enum {
 /**
  *
  */
+
 struct master_controller {
     struct pilot_connection *mc_pilot;
     unsigned long mc_flags;
@@ -50,9 +56,35 @@ struct master_controller {
     struct path_plan mc_plan_lookahead;
     struct obstacle_node *mc_self_obstacle;
     struct robot_position_states mc_tolerances;
+
+    // *** added by dmf (2006/05/07):
+
+    struct robot_position wps[cp_MAX_WP];
+    int wp_size; // Number of waypoints
+
+    struct cPaths_cfg cf; // Path data configuration
+
+    struct tdata td[cp_MAX_TRAJ_POINTS]; // Trajectory
+    int tr_size; // Number of trajectory points
+
+    struct kc_params kcp; // Controller parameters
+
+    float speedlimit; // Wheel speed limit
+
+    double tf_start; // Ref. start time
+    double tf_cur; // Offset current ref. time
+    // ***
 };
 
+
+#include "wpPath.h"
+#include "cPaths.h"
+#include "kinController.h"
+
 #define DEFAULT_PAUSE_TIME 10
+
+#define E_CUTOFF 0.2
+#define E_BUBBLE 0.02
 
 /**
  * Dispatch a packet received from the pilot.  We expect to only receive
@@ -115,15 +147,7 @@ extern struct master_controller_data mc_data;
 
 
 
-void mc_nlctr_getstates(struct master_controller *mc,
-			struct robot_position_states *robotcp,
-			struct robot_position *goalpos,
-			struct robot_position *lastpos,
-			struct robot_position *robotpos);
-void mc_nlctr_controller(struct master_controller *mc,
-                         float *Vl,
-                         float *Vr,
-                         struct robot_position_states *robotcp);
+
 
 
 

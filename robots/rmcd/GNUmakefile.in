@@ -21,11 +21,11 @@ include $(TESTBED_SRCDIR)/GNUmakerules
 
 CFLAGS	       += -O -g -Wall -I${OBJDIR} -I/usr/local/include
 CFLAGS	       += -I${SRCDIR}/../mtp -I../mtp
-CFLAGS	       += -I${SRCDIR}/../../lib/libtb
+CFLAGS	       += -I${SRCDIR}/../../lib/libtb -static
 
-LDFLAGS		= -L../mtp -L${OBJDIR}/lib/libtb
+LDFLAGS		= -L../mtp -L${OBJDIR}/lib/libtb -L/usr/local/lib
 
-LIBS	 += -lmtp -ltb -lm
+LIBS	 += -lmtp -ltb -lm -lgsl -lgslcblas
 
 test_rmcd.sh: rmcd
 
@@ -38,7 +38,11 @@ DEPS = \
 	pilotConnection.h \
 	rclip.h \
 	rmcd.h \
-	slaveController.h
+	slaveController.h \
+	posController.h \
+	kinController.h \
+	wpPath.h \
+	cPaths.h
 
 masterController.o: $(DEPS)
 obstacles.o: $(DEPS)
@@ -55,7 +59,11 @@ OBJS = \
 	rmcd.o \
 	pathPlanning.o \
 	slaveController.o \
-	masterController.o
+	masterController.o \
+	posController.o \
+	kinController.o \
+	wpPath.o \
+	cPaths.o
 
 TEST_PATH_OBJS = \
 	pathPlanning.o \

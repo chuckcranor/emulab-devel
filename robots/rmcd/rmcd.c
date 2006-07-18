@@ -50,6 +50,9 @@
 
 int debug = 0;
 
+int nl_ctrlch = 0; // Choose a nonlinear controller
+char *wpfile; // Waypoint data file
+
 /**
  *
  */
@@ -62,6 +65,39 @@ extern char *statsfile;
 FILE *plogfilep = NULL;
 FILE *slogfilep = NULL;
 
+/* Log files for nonlinear controller evaluation and debugging */
+// Reference trajectory
+FILE *log_reftraj = NULL;
+char *lfile_reftraj = "kc_reftraj.log";
+
+// Actual trajectory
+FILE *log_traj = NULL;
+char *lfile_traj = "kc_traj.log";
+
+// Polar states: (t, e, theta, alpha, theta_dot)
+FILE *log_states = NULL;
+char *lfile_states = "kc_states.log";
+
+// Gains: (t, r, epsilon, k1, k2, kv, kc)
+FILE *log_gains = NULL;
+char *lfile_gains = "kc_gains.log";
+
+// Controller output (t, v, omega, v_dot, omega_dot)
+FILE *log_ctrl = NULL;
+char *lfile_ctrl = "kc_ctrl.log";
+
+// Dynamic extension output (t, v, omega)
+FILE *log_dynext = NULL;
+char *lfile_dynext = "kc_dynext.log";
+
+// Wheel speeds: (t, vl, vr)
+FILE *log_wheels = NULL;
+char *lfile_wheels = "kc_wheels.log";
+
+
+int ctrl_logging = 0;
+
+
 /**
  * Print the usage message for rmcd.
  */
@@ -72,7 +108,8 @@ static void usage(void)
 	    "Options:\n"
 	    "  -h\t\tPrint this message\n"
 	    "  -d\t\tIncrease debugging level and do not daemonize\n"
-	    "  -n enable nonlinear controller for posture regulation\n"
+	    "  -n enable nonlinear controllers [1,2] posreg, [3] traj tracker\n"
+        "  -x enable controller data logging\n"
 	    "  -l logfile\tLog file name\n"
 	    "  -k packet logfile\tPacket Log file name\n"
         "  -j state/wheel logfile\tLog file name\n"
@@ -218,7 +255,7 @@ int main(int argc, char *argv[])
     mc_data.mcd_radian_tolerance = DEFAULT_RADIAN_TOLERANCE;
     pp_data.ppd_max_distance = DEFAULT_MAX_DISTANCE;
 
-    while ((c = getopt(argc, argv, "hdnp:l:k:j:i:e:c:U:t:m:r:a:s:")) != -1) {
+    while ((c = getopt(argc, argv, "hdn:xw:p:l:k:j:i:e:c:U:t:m:r:a:s:")) != -1) {
 	switch (c) {
 	case 'h':
 	    usage();
@@ -228,8 +265,25 @@ int main(int argc, char *argv[])
 	    debug += 1;
 	    break;
 	case 'n':
-	    /* nonlinear posture regulator */
+	    /* choose a nonlinear controller:
+         * [0] NONE
+         * [1] posture regulator A
+         * [2] posture regulator B
+         * [3] trajectory tracker
+         */
+	    if (sscanf(optarg, "%d", &nl_ctrlch) != 1) {
+            error("-n option is not a number: %s\n", optarg);
+            usage();
+            exit(1);
+	    }
+
 	    break;
+    case 'x':
+        ctrl_logging += 1;
+        break;
+    case 'w':
+        wpfile = optarg;
+        break;
 	case 'l':
 	    logfile = optarg;
 	    break;
@@ -322,6 +376,67 @@ int main(int argc, char *argv[])
         fprintf(stderr, "ERROR: could not open state log file, %s\n", slogfile);
     }
     }
+
+
+    if (ctrl_logging > 0) {
+        if (debug) {
+            info("[rmcd]: Enabling controller data logging.\n");
+        }
+
+        if (lfile_reftraj) {
+            if ((log_reftraj = fopen(lfile_reftraj, "w")) == NULL) {
+                fprintf(stderr, "ERROR: Could not open reference trajectory logfile, %s\n",
+                        lfile_reftraj);
+            }
+        }
+
+        if (lfile_traj) {
+            if ((log_traj = fopen(lfile_traj, "w")) == NULL) {
+                fprintf(stderr, "ERROR: Could not open trajectory logfile, %s\n",
+                        lfile_traj);
+            }
+        }
+
+        if (lfile_states) {
+            if ((log_states = fopen(lfile_states, "w")) == NULL) {
+                fprintf(stderr, "ERROR: Could not open states logfile, %s\n",
+                        lfile_states);
+            }
+        }
+
+        if (lfile_gains) {
+            if ((log_gains = fopen(lfile_gains, "w")) == NULL) {
+                    fprintf(stderr, "ERROR: Could not open gains logfile, %s\n",
+                        lfile_gains);
+            }
+        }
+
+        if (lfile_ctrl) {
+            if ((log_ctrl = fopen(lfile_ctrl, "w")) == NULL) {
+                fprintf(stderr, "ERROR: Could not open controller output logfile, %s\n",
+                        lfile_ctrl);
+            }
+        }
+
+
+        if (lfile_dynext) {
+            if ((log_dynext = fopen(lfile_dynext, "w")) == NULL) {
+                fprintf(stderr, "ERROR: Could not open dynamic extension logfile, %s\n",
+                        lfile_dynext);
+            }
+        }
+
+        if (lfile_wheels) {
+            if ((log_wheels = fopen(lfile_wheels, "w")) == NULL) {
+                fprintf(stderr, "ERROR: Could not open wheel speeds logfile, %s\n",
+                        lfile_wheels);
+            }
+        }
+
+    }
+
+
+
 
 
 #if defined(SIGINFO)

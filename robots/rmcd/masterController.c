@@ -24,8 +24,20 @@
 #include "pilotConnection.h"
 #include "masterController.h"
 
+// Continuous paths:
+#include "cPaths.h"
+#include "wpPath.h"
+
+// Nonlinear controllers:
+#include "posController.h"
+#include "kinController.h"
+
+
 struct master_controller_data mc_data;
 extern FILE *slogfilep;
+
+extern int nl_ctrlch;
+extern char *wpfile;
 
 /**
  * Do a fuzzy comparison of two values.
@@ -38,19 +50,9 @@ extern FILE *slogfilep;
 #define cmp_fuzzy(x1, x2, tol)				\
   ((((x1) - (tol)) < (x2)) && (x2 < ((x1) + (tol))))
 
-#define STATE_TOL 0.015f
-#define STATE_ATOL 0.1f
 
-#define STATE_DIST_FAR 2.0f
-#define STATE_ANGLE_BIG M_PI_4
 
-#define STATE_WAYPOINT_TOL 0.19f
-#define STATE_WAYPOINT_ATOL 0.25f
 
-#define BASS_ACKWARDS_DIST 0.5f
-
-// use the 'B' posture regulator
-#define USE_POSTREG_B
 
 int mc_invariant(struct master_controller *mc)
 {
@@ -116,6 +118,66 @@ static int mc_set_goal(struct master_controller *mc, mtp_packet_t *mp)
     return retval;
 }
 
+
+
+static int mc_maketraj(struct master_controller *mc, mtp_packet_t *mp) {
+    int retval = 0;
+    struct timeval tv_current;
+
+
+    assert(mc != NULL);
+    assert(mc_invariant(mc));
+    assert(mp != NULL);
+
+    if (3 == nl_ctrlch) {
+    if (0 == mc->tr_size) {
+        // No current trajectory, call trajectory generator
+
+        // Get waypoints
+        wp_loadfile(mc->wps,
+                    &(mc->wp_size),
+                    &(mc->cf),
+                    wpfile);
+
+
+        // Generate a trajectory
+        cp_maketraj(&(mc->cf),
+                    mc->td,
+                    &(mc->tr_size),
+                    mc->wps,
+                    mc->wp_size);
+
+
+        // Initialize controller parameters
+        kc_init_params(&(mc->kcp));
+
+        // Initialize controller-related parameters in mc struct
+        mc->speedlimit = 0.2; // FIXME: define this somewhere else (check with rmcd flags -- it might already be there.)
+
+        gettimeofday(&tv_current, NULL);
+        mc->tf_start = (double)(tv_current.tv_sec) +
+                       (double)(tv_current.tv_usec) / 1000000.0;
+
+
+        if (debug) {
+            info("[mc_maketraj]: Created reference trajectory.\n");
+        }
+    }
+    else {
+        if (debug) {
+            info("[mc_maketraj]: Already have a reference trajectory.\n");
+        }
+    }
+    }
+
+
+
+    return retval;
+
+}
+
+
+
 static int mc_set_actual(struct master_controller *mc, mtp_packet_t *mp)
 {
     int retval = 0;
@@ -141,7 +203,7 @@ static int mc_request_report(struct master_controller *mc, mtp_packet_t *mp)
     assert(mc != NULL);
     assert(mc_invariant(mc));
     assert(mp != NULL);
-    
+
     mtp_send_packet2(mc->mc_pilot->pc_handle,
 		     MA_Opcode, MTP_REQUEST_REPORT,
 		     MA_Role, MTP_ROLE_RMC,
@@ -199,6 +261,11 @@ static int mc_plot(struct master_controller *mc, mtp_packet_t *mp)
 					mc->mc_plan.pp_actual_pos.theta),
 			     MA_TAG_DONE);
 
+        if (debug) {
+            info("[mc_plot]: Sending GOTO command to robot %d.\n",
+                 mc->mc_pilot->pc_robot->id);
+        }
+
 	    mc->mc_pilot->pc_flags |= PCF_EXPECTING_RESPONSE;
 	    mc->mc_pilot->pc_connection_timeout = WIGGLE_RESPONSE_TIMEOUT;
 	}
@@ -245,6 +312,13 @@ static int mc_plot(struct master_controller *mc, mtp_packet_t *mp)
 
 	    mc->mc_pilot->pc_flags |= PCF_EXPECTING_RESPONSE;
 	    mc->mc_pilot->pc_connection_timeout = MOVE_RESPONSE_TIMEOUT;
+
+        if (debug) {
+            info("[mc_plot]: Sending GOTO command to robot %d.\n",
+                 mc->mc_pilot->pc_robot->id);
+        }
+
+
 	}
     }
 
@@ -253,12 +327,19 @@ static int mc_plot(struct master_controller *mc, mtp_packet_t *mp)
 
 static int mc_nlwrapper(struct master_controller *mc, mtp_packet_t *mp)
 {
-    /* DAN */
+    /* Wrapper for the posture regulating nonlinear controller
+     * (dmf)
+     */
 
     float Vleft, Vright;
     robot_position_states rstates;
     robot_position_states rstates_goal;
     int at_goal = 0;
+
+    assert(mc != NULL);
+    assert(mc_invariant(mc));
+    assert(mp != NULL);
+
 
     if (debug > 1)
 	info("mc_nlwrapper: \n");
@@ -519,6 +600,302 @@ static int mc_nlwrapper(struct master_controller *mc, mtp_packet_t *mp)
 
 
 
+static int mc_kcwrapper(struct master_controller *mc, mtp_packet_t *mp)
+{
+    /* Wrapper for the nonlinear kinematic trajectory
+     * tracking controller
+     * (dmf)
+     */
+
+
+
+
+    struct tdata this_td; // Reference trajectory datum
+
+    struct vwheels wspeed; // Wheel speed data
+
+    struct robot_position tcur; // Current robot position
+    struct robot_position tref; // Reference robot position
+    struct vo vref; // Reference velocity
+
+
+    int kcgo = 1;
+    int refval;
+    int tstop = 0;
+
+    struct timeval tv_current;
+
+    float e_cur;
+
+
+
+    assert(mc != NULL);
+    assert(mc_invariant(mc));
+    assert(mp != NULL);
+
+    if (debug > 1)
+        info("=| Hello from mc_kcwrapper. |=\n");
+
+
+
+
+
+
+    // Start null primitive if needed
+    if (!(mc->mc_flags & MCF_NULL_STARTED)) {
+        mtp_send_packet2(mc->mc_pilot->pc_handle,
+                         MA_Opcode, MTP_COMMAND_STARTNULL,
+                         MA_Role, MTP_ROLE_RMC,
+                         MA_RobotID, mc->mc_pilot->pc_robot->id,
+                         MA_CommandID, MASTER_COMMAND_ID,
+                         MA_Acceleration, 0.2,
+                         MA_TAG_DONE);
+
+        mc->mc_flags |= MCF_NULL_STARTED;
+
+        // Set new start time
+        // FIXME: this is hacked
+        gettimeofday(&tv_current, NULL);
+        mc->tf_start = (double)(tv_current.tv_sec) +
+                       (double)(tv_current.tv_usec) / 1000000.0;
+
+    }
+
+
+
+    /* Set localized position */
+    tcur = mc->mc_plan.pp_actual_pos;
+
+
+    // Get current reference time:
+    gettimeofday(&tv_current, NULL);
+    mc->tf_cur = (double)(tv_current.tv_sec) +
+                 (double)(tv_current.tv_usec) / 1000000.0 -
+                 mc->tf_start;
+
+    if (debug > 2) {
+        printf("[mc_kcwrapper]: tf_start = %f, tf_current = %f\n",
+               mc->tf_start, mc->tf_cur);
+    }
+
+    /* Set reference position */
+    refval = cp_grabref(mc->td, mc->tr_size, &this_td, mc->tf_cur);
+
+    tref.timestamp = this_td.t;
+    tref.x = this_td.x;
+    tref.y = this_td.y;
+    tref.theta = this_td.phi;
+
+    vref.timestamp = this_td.t;
+    vref.v = this_td.v;
+    vref.omega = this_td.omega;
+
+    /* Set current position to local timestamp */
+    tcur.timestamp = this_td.t;
+
+    /* Set e current */
+    e_cur = sqrt(pow(tcur.x - tref.x, 2) +
+                 pow(tcur.y - tref.y, 2));
+
+
+    /* Stopping criteria */
+    if (refval != 0 && e_cur < E_BUBBLE) {
+        info("[mc_kcwrapper]: Trajectory tracking completed. (Success)\n");
+        tstop = 1;
+    }
+
+    if (e_cur > E_CUTOFF) {
+        if (debug) {
+            info("[mc_kcwrapper]: Aborting controller. Robot is too far away from reference trajectory.\n");
+            if (debug > 2) {
+            printf("[mc_kcwrapper]: e = %f, e_max = %f\n",
+                   e_cur, E_CUTOFF);
+            printf("[mc_kcwrapper]: xr = %f yr = %f, xc = %f yc = %f\n",
+                   tref.x, tref.y, tcur.x, tcur.y);
+            }
+        }
+        tstop = 1;
+    }
+
+
+    if (1 == tstop) {
+        /*
+         * send MTP_POSITION_STATUS_COMPLETE,
+         * and stop the robot.
+         */
+
+        if (debug) {
+            info("[mc_kcwrapper]: Stopping the robot.\n");
+        }
+
+        mc->mc_flags &= ~MCF_HAS_PATH_PLAN;
+        mc->mc_flags &= ~MCF_NULL_STARTED;
+
+        /* tell EMCD */
+        mtp_send_packet2(pc_data.pcd_emc_handle,
+                         MA_Opcode, MTP_UPDATE_POSITION,
+                         MA_Role, MTP_ROLE_RMC,
+                         MA_Position, &mc->mc_plan.pp_actual_pos,
+                         MA_RobotID, mc->mc_pilot->pc_robot->id,
+                         MA_Status, MTP_POSITION_STATUS_COMPLETE,
+                         MA_TAG_DONE);
+
+        /* tell robot to STOP */
+        mtp_send_packet2(mc->mc_pilot->pc_handle,
+                         MA_Opcode, MTP_COMMAND_STOP,
+                         MA_Role, MTP_ROLE_RMC,
+                         MA_RobotID, mc->mc_pilot->pc_robot->id,
+                         MA_CommandID, MASTER_COMMAND_ID,
+                         MA_TAG_DONE);
+
+        kcgo = 0;
+        mc->tr_size = 0;
+
+    }
+    else {
+        // Create a trajectory here if none exists
+        if (0 == mc->tr_size) {
+            if (debug) {
+                printf("[mc_kcwrapper]: No reference trajectory, creating new one.\n");
+            }
+            mc_maketraj(mc, mp);
+        }
+
+        // Recheck for existing trajectory
+        if (0 == mc->tr_size) {
+            // No reference trajectory
+            kcgo = 0;
+            if (debug) {
+                fprintf(stderr, "ERROR [mc_kcwrapper]: Still no reference trajectory.\n");
+            }
+        }
+    }
+
+
+
+
+
+
+    if (kcgo) {
+
+        // Flip the y values:
+        /* FUCKING BATSHIT INSANE STUPID BULLSHIT COORDINATE SYSTEM,
+         * FUCK YOU.
+         */
+        tref.y = -tref.y;
+        tcur.y = -tcur.y;
+
+        if (debug > 3) {
+            info("[mc_kcwrapper]: Ref = [%f %f %f] Cur = [%f %f %f]\n",
+                 tref.timestamp, tref.x, tref.y,
+                 tcur.timestamp, tcur.x, tcur.y);
+        }
+
+
+        /* Initialize wheel speeds */
+        wspeed.vl = 0.0f;
+        wspeed.vr = 0.0f;
+
+        /* Call controller */
+        kc_main(&wspeed, &tcur, &tref, &vref, &(mc->kcp));
+
+
+        /* Apply wheel speed limits */
+        if (wspeed.vl > mc->speedlimit)
+            wspeed.vl = mc->speedlimit;
+        if (wspeed.vl < -mc->speedlimit)
+            wspeed.vl = -mc->speedlimit;
+        if (wspeed.vr > mc->speedlimit)
+            wspeed.vr = mc->speedlimit;
+        if (wspeed.vr < -mc->speedlimit)
+            wspeed.vr = -mc->speedlimit;
+
+
+        /* send wheel speeds to robot */
+        mtp_send_packet2(mc->mc_pilot->pc_handle,
+                         MA_Opcode, MTP_COMMAND_WHEELS,
+                         MA_Role, MTP_ROLE_RMC,
+                         MA_CommandID, MASTER_COMMAND_ID,
+                         MA_RobotID, mc->mc_pilot->pc_robot->id,
+                         MA_vleft, (double)(wspeed.vl),
+                         MA_vright, (double)(wspeed.vr),
+                         MA_TAG_DONE);
+
+        if (debug > 2) {
+            printf("[mc_kcwrapper]: Wheel speeds L/R: %f %f\n",
+                   wspeed.vl, wspeed.vr);
+        }
+
+
+    }
+    else {
+        if (debug) {
+            printf("[mc_kcwrapper]: Controller aborted. Wheel speeds not sent.\n");
+        }
+    }
+
+    return 0;
+
+}
+
+
+
+
+static int mc_ctrl_wrapper(struct master_controller *mc, mtp_packet_t *mp) {
+    /* Call a nonlinear controller, based on runtime configuration
+     */
+
+    int retval = 0;
+
+
+    assert(mc != NULL);
+    assert(mc_invariant(mc));
+    assert(mp != NULL);
+
+
+    switch (nl_ctrlch) {
+    case 0:
+        // WTF: this should not be called, no controller chosen
+        if (debug) {
+            info("[mc_ctrl_wrapper]: No nonlinear controller chosen. Use the -n flag when starting RMCD.\n");
+        }
+        break;
+    case 1:
+        if (debug > 1) {
+            info("[mc_ctrl_wrapper]: Using posture regulator A.\n");
+        }
+        retval = mc_nlwrapper(mc, mp);
+        break;
+    case 2:
+        if (debug > 1) {
+            info("[mc_ctrl_wrapper]: Using posture regulator B.\n");
+        }
+        retval = mc_nlwrapper(mc, mp);
+        break;
+    case 3:
+        if (debug > 1) {
+            info("[mc_ctrl_wrapper]: Using kinematic TT controller.\n");
+        }
+        retval = mc_kcwrapper(mc, mp);
+        break;
+    default:
+        // Unknown controller
+        fatal("[mc_ctrl_wrapper]: unknown controller type.\n");
+    }
+
+    return retval;
+
+}
+
+
+
+
+
+
+
+
+
+
 
 int mc_handle_emc_packet(struct master_controller *mc, mtp_packet_t *mp)
 {
@@ -534,6 +911,8 @@ int mc_handle_emc_packet(struct master_controller *mc, mtp_packet_t *mp)
 
 		      MD_OnOpcode, MTP_COMMAND_GOTO,
 		      MD_Call, mc_set_goal,
+              MD_AlsoCall, mc_maketraj, /* create ref trajectory */
+
 
 		      /*
 		       * Always update the position before calling anything
@@ -542,11 +921,12 @@ int mc_handle_emc_packet(struct master_controller *mc, mtp_packet_t *mp)
 		      MD_OnOpcode, MTP_UPDATE_POSITION,
 		      MD_AlsoCall, mc_set_actual,
 
+              /* Call a nonlinear controller */
 		      MD_OnOpcode, MTP_UPDATE_POSITION,
 		      MD_OnStatus, MTP_POSITION_STATUS_MOVING,
 		      MD_OnClearedFlags, MCF_CONTACT,
 		      MD_OnInteger /* mc_pause_time */, 0,
-		      MD_Call, mc_nlwrapper,
+		      MD_Call, mc_ctrl_wrapper,
 
 		      /* The sensors fired, get a report before moving. */
 		      MD_OnFlags, MCF_CONTACT,
@@ -770,229 +1150,7 @@ int mc_handle_tick(struct master_controller *mc)
 }
 
 
-void mc_nlctr_getstates(struct master_controller *mc,
-			struct robot_position_states *robotcp,
-                        struct robot_position *goalpos,
-			struct robot_position *lastpos,
-                        struct robot_position *robotpos) {
-    /* calculate robot polar position states from current and goal positions
-   * The goal position is the origin, with the current position offset
-   */
-
-   /* SIMPLE METHOD:
-    *
-    * e = sqrt(x^2 + y^2)
-    * theta = atan2(-y, -x)
-    * (phi = orientation of robot in goal reference frame)
-    * alpha = theta - phi
-    */
-
-    struct robot_position_states robotcp_out;
-    float lr, ltheta0;
-    float r, theta0;
-
-    assert(mc != NULL);
-    assert(robotcp != NULL);
-    assert(goalpos != NULL);
-    assert(lastpos != NULL);
-    assert(robotpos != NULL);
-
-    mtp_polar(lastpos, goalpos, &lr, &ltheta0);
-    mtp_polar(robotpos, goalpos, &r, &theta0);
-
-#ifdef USE_POSTREG_B
-
-    robotcp_out.e = r;
-    robotcp_out.theta = mtp_theta(theta0 - goalpos->theta);
-    robotcp_out.alpha = mtp_theta(theta0 - robotpos->theta);
-    robotcp_out.timestamp = robotpos->timestamp;
-#endif
-
-#ifndef USE_POSTREG_B
-    /*
-     * Check if we're:
-     *   1. Close to the goal.
-     *   2. Making some amount of progress compared to our last position.
-     *   3. Really close...
-     */
-    if ((r < STATE_TOL) && ((fabsf(r - lr) > 0.005) || (r < 0.0075))) {
-	/*
-	 * Position is as close as its gonna get, switch to refining the
-	 * orientation.
-	 */
-	robotcp_out.e = 0.0f;
-	robotcp_out.theta = goalpos->theta - robotpos->theta;
-	robotcp_out.alpha = 0.0f;
-	robotcp_out.timestamp = robotpos->timestamp;
-    }
-    else {
-	robotcp_out.e = r;
-	robotcp_out.theta = mtp_theta(theta0  - goalpos->theta);
-	robotcp_out.alpha = mtp_theta(theta0 - robotpos->theta);
-	robotcp_out.timestamp = robotpos->timestamp;
-
-	/*
-	 * Check if it would be easier to move the robot backwards instead of
-	 * pivoting to get it going forwards.
-	 */
-	if ((robotcp_out.e < BASS_ACKWARDS_DIST) &&
-	    (fabsf(robotcp_out.alpha) > M_PI_4) ) {
-	    if (robotcp_out.alpha >= 0.0)
-		robotcp_out.alpha -= M_PI;
-	    else
-		robotcp_out.alpha += M_PI;
-	    if (robotcp_out.theta >= 0.0)
-		robotcp_out.theta -= M_PI;
-	    else
-		robotcp_out.theta += M_PI;
-	    robotcp_out.e *= -1.0;
-	}
-    }
-#endif
-
-    *robotcp = robotcp_out;
-}
 
 
-#ifdef USE_POSTREG_B
-void mc_nlctr_controller(struct master_controller *mc,
-                         float *Vl,
-                         float *Vr,
-                         struct robot_position_states *robotcp)
-{
-    /* ONLY MOVES FORWARD */
-
-    float C_u, C_omega; /* controller outputs */
-    float T_alpha; /* temporary alpha as divide-by-zero guard */
-
-    /* controller parameters: */
-    float K_gamma = 0.8f; /* 'aggressiveness' of forward velocity */
-    float K_h = 0.8f, K_beta = 1.0f; /* 'aggressiveness' of rotational velocity */
-
-    float K_radius = 0.0889f; /* meters */
-
-    float u_max = mc->mc_plan.pp_speed; /* u saturation (maximum speed) */
-    float omega_max = 2.5;
-
-    assert(Vl != NULL);
-    assert(Vr != NULL);
-    assert(robotcp != NULL);
-
-    T_alpha = robotcp->alpha;
-    if (0 == robotcp->alpha) {
-        T_alpha = 1;
-    }
 
 
-    /* controller: */
-    /***************/
-
-    /* Linear velocity: */
-    C_u = u_max * tanh(K_gamma * robotcp->e);
-
-    /* Rotational velocity: */
-    C_omega = sin(robotcp->alpha) * (1.0 + K_h * robotcp->theta / T_alpha) +
-        K_beta * robotcp->alpha;
-
-    /* 'hard' saturation */
-    if (C_omega > omega_max) {
-        C_omega = omega_max;
-    }
-    if (C_omega < -omega_max) {
-        C_omega = -omega_max;
-    }
-
-    /******************/
-    /* end controller */
-
-
-    /* wheel velocity translator: */
-    *Vl = C_u - K_radius * C_omega;
-    *Vr = C_u + K_radius * C_omega;
-    /* end wheel velocity translator */
-
-}
-#endif
-
-#ifndef USE_POSTREG_B
-void mc_nlctr_controller(struct master_controller *mc,
-                         float *Vl,
-                         float *Vr,
-                         struct robot_position_states *robotcp)
-{
-
-    float C_u, C_omega; /* controller outputs */
-
-    /* controller parameters: */
-    float K_gamma = 0.8f; /* 'aggressiveness' of forward velocity */
-    float K_h = 1.0f, K_k = 1.0f; /* 'aggressiveness' of rotational velocity */
-    /* (IRT alpha and theta) */
-
-    float K_radius = 0.0889f; /* meters */
-
-    float u_max = mc->mc_plan.pp_speed; /* u saturation (maximum speed) */
-    float omega_max = 2.5;
-    // float omega_max = 26.25f; /* wheels @ 2 m/s */
-    // float omega_max = 13.125f; /* wheels @ 1 m/s */
-
-
-//     float reverse = 1.0;
-
-    assert(Vl != NULL);
-    assert(Vr != NULL);
-    assert(robotcp != NULL);
-
-    // info("in %f %f %f\n", robotcp->e, robotcp->alpha, robotcp->theta);
-/* state 'e' only shows up in the linear velocity portion of the controller:
- * (so we don't need to negate it
- */
-
-/*
-    if (robotcp->e < 0.0) {
-// 	 We're moving backwards...
-	robotcp->e *= -1.0f;
-	reverse = -1.0f;
-    }*/
-
-    /* controller: */
-    /***************/
-
-    /* Linear velocity: */
-    C_u = u_max * tanh(K_gamma * cos(robotcp->alpha) * robotcp->e / u_max);
-
-    /* Rotational velocity: */
-    if (0 == robotcp->alpha) {
-	// C_omega = 0.0f;
-	/* XXX I just made this up... -tss */
-    /* modified by dmf: -- this should work to get the robot to refine theta
-     * while alpha is zero (but I don't like this discontinuity :-(  )
-     */
-	C_omega = K_h * robotcp->theta;
-    }
-    else {
-	C_omega = K_k * robotcp->alpha + K_gamma *
-	    ((cos(robotcp->alpha)*sin(robotcp->alpha)) / robotcp->alpha) *
-	    (robotcp->alpha + K_h * robotcp->theta);
-    }
-
-    /* 'hard' saturation */
-    if (C_omega > omega_max) {
-        C_omega = omega_max;
-    }
-    if (C_omega < -omega_max) {
-        C_omega = -omega_max;
-    }
-
-    /******************/
-    /* end controller */
-
-    /* wheel velocity translator: */
-    *Vl = C_u - K_radius * C_omega;
-    *Vr = C_u + K_radius * C_omega;
-
-    // info("out %f %f %f  %f %f\n", robotcp->e, robotcp->alpha, robotcp->theta, *Vl, *Vr);
-
-    /* end wheel velocity translator */
-
-}
-#endif
