@@ -83,8 +83,21 @@ struct master_controller {
 
 #define DEFAULT_PAUSE_TIME 10
 
-#define E_CUTOFF 0.75
-#define E_BUBBLE 0.1
+// Distance, in meters, at which the kinController gives up:
+#define E_CUTOFF 0.2f
+
+
+// Distance, in meters, at which the kinController terminates successfully:
+#define E_BUBBLE 0.05f
+
+// Distance, in meters, at which the kinController decides not to start:
+// FIXME: this value is ignored
+#define E_START 0.05f
+
+// Acceleration, in meters per second^2, for the null primitive
+#define NULL_ACCEL 0.6
+
+
 
 /**
  * Dispatch a packet received from the pilot.  We expect to only receive

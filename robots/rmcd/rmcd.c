@@ -68,31 +68,31 @@ FILE *slogfilep = NULL;
 /* Log files for nonlinear controller evaluation and debugging */
 // Reference trajectory
 FILE *log_reftraj = NULL;
-char *lfile_reftraj = "kc_reftraj.log";
+char *lfile_reftraj = "rlog/kc_reftraj.log";
 
 // Actual trajectory
 FILE *log_traj = NULL;
-char *lfile_traj = "kc_traj.log";
+char *lfile_traj = "rlog/kc_traj.log";
 
 // Polar states: (t, e, theta, alpha, theta_dot)
 FILE *log_states = NULL;
-char *lfile_states = "kc_states.log";
+char *lfile_states = "rlog/kc_states.log";
 
 // Gains: (t, r, epsilon, k1, k2, kv, kc)
 FILE *log_gains = NULL;
-char *lfile_gains = "kc_gains.log";
+char *lfile_gains = "rlog/kc_gains.log";
 
 // Controller output (t, v, omega, v_dot, omega_dot)
 FILE *log_ctrl = NULL;
-char *lfile_ctrl = "kc_ctrl.log";
+char *lfile_ctrl = "rlog/kc_ctrl.log";
 
 // Dynamic extension output (t, v, omega)
 FILE *log_dynext = NULL;
-char *lfile_dynext = "kc_dynext.log";
+char *lfile_dynext = "rlog/kc_dynext.log";
 
 // Wheel speeds: (t, vl, vr)
 FILE *log_wheels = NULL;
-char *lfile_wheels = "kc_wheels.log";
+char *lfile_wheels = "rlog/kc_wheels.log";
 
 
 int ctrl_logging = 0;

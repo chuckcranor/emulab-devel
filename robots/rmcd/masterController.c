@@ -350,7 +350,7 @@ static int mc_nlwrapper(struct master_controller *mc, mtp_packet_t *mp)
 			 MA_Role, MTP_ROLE_RMC,
 			 MA_RobotID, mc->mc_pilot->pc_robot->id,
 			 MA_CommandID, MASTER_COMMAND_ID,
-			 MA_Acceleration, 0.2,
+			 MA_Acceleration, NULL_ACCEL,
 			 MA_TAG_DONE);
 
 	mc->mc_flags |= MCF_NULL_STARTED;
@@ -648,13 +648,15 @@ static int mc_kcwrapper(struct master_controller *mc, mtp_packet_t *mp)
                          MA_Role, MTP_ROLE_RMC,
                          MA_RobotID, mc->mc_pilot->pc_robot->id,
                          MA_CommandID, MASTER_COMMAND_ID,
-                         MA_Acceleration, 0.2,
+                         MA_Acceleration, NULL_ACCEL,
                          MA_TAG_DONE);
 
         mc->mc_flags |= MCF_NULL_STARTED;
 
         // Set new start time
         // FIXME: this is hacked
+        // The trajectory should get created right before the move,
+        // but it gets created at the first goto.
         gettimeofday(&tv_current, NULL);
         mc->tf_start = (double)(tv_current.tv_sec) +
                        (double)(tv_current.tv_usec) / 1000000.0;
@@ -665,6 +667,13 @@ static int mc_kcwrapper(struct master_controller *mc, mtp_packet_t *mp)
 
     /* Set localized position */
     tcur = mc->mc_plan.pp_actual_pos;
+
+    // Flip the y values:
+    /* FUCKING BATSHIT INSANE STUPID BULLSHIT COORDINATE SYSTEM,
+     * FUCK YOU.
+     */
+//         tref.y = -tref.y;
+    tcur.y = -tcur.y;
 
 
     // Get current reference time:
@@ -778,12 +787,6 @@ static int mc_kcwrapper(struct master_controller *mc, mtp_packet_t *mp)
 
     if (kcgo) {
 
-        // Flip the y values:
-        /* FUCKING BATSHIT INSANE STUPID BULLSHIT COORDINATE SYSTEM,
-         * FUCK YOU.
-         */
-        tref.y = -tref.y;
-        tcur.y = -tcur.y;
 
         if (debug > 3) {
             info("[mc_kcwrapper]: Ref = [%f %f %f] Cur = [%f %f %f]\n",
@@ -810,6 +813,12 @@ static int mc_kcwrapper(struct master_controller *mc, mtp_packet_t *mp)
         if (wspeed.vr < -mc->speedlimit)
             wspeed.vr = -mc->speedlimit;
 
+        if (debug > 2) {
+            printf("[mc_kcwrapper]: Wheel speeds L/R: %f %f\n",
+                   wspeed.vl, wspeed.vr);
+        }
+
+
 
         /* send wheel speeds to robot */
         mtp_send_packet2(mc->mc_pilot->pc_handle,
@@ -821,10 +830,6 @@ static int mc_kcwrapper(struct master_controller *mc, mtp_packet_t *mp)
                          MA_vright, (double)(wspeed.vr),
                          MA_TAG_DONE);
 
-        if (debug > 2) {
-            printf("[mc_kcwrapper]: Wheel speeds L/R: %f %f\n",
-                   wspeed.vl, wspeed.vr);
-        }
 
 
     }

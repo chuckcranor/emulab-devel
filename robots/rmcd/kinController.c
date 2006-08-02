@@ -60,7 +60,7 @@ void kc_main(struct vwheels *wh,
                 cr->x, cr->y, cr->theta);
         fflush(log_reftraj);
         if (debug > 3)
-            info("[kc_main]: Writing reference trajectory data to file.\n");
+            printf("[kc_main]: Writing reference trajectory data to file.\n");
     }
 
     if (log_traj != NULL) {
@@ -70,7 +70,7 @@ void kc_main(struct vwheels *wh,
                 cs->x, cs->y, cs->theta);
         fflush(log_traj);
         if (debug > 3)
-            info("[kc_main]: Writing actual trajectory data to file.\n");
+            printf("[kc_main]: Writing actual trajectory data to file.\n");
     }
 
 
@@ -92,7 +92,7 @@ void kc_main(struct vwheels *wh,
                 pa->dtheta);
         fflush(log_states);
         if (debug > 3)
-            info("[kc_main]: Writing state data to file.\n");
+            printf("[kc_main]: Writing state data to file.\n");
     }
 
 
@@ -119,7 +119,7 @@ void kc_main(struct vwheels *wh,
                 gains.k1, gains.k2, gains.kv, gains.kc);
         fflush(log_gains);
         if (debug > 3)
-            info("[kc_main]: Writing gain data to file.\n");
+            printf("[kc_main]: Writing gain data to file.\n");
     }
 
 
@@ -170,7 +170,7 @@ void kc_main(struct vwheels *wh,
                 pa->dv, pa->domega);
         fflush(log_ctrl);
         if (debug > 3)
-            info("[kc_main]: Writing controller output data to file.\n");
+            printf("[kc_main]: Writing controller output data to file.\n");
     }
 
 
@@ -193,15 +193,16 @@ void kc_main(struct vwheels *wh,
                 vcom.timestamp, vcom.v, vcom.omega);
         fflush(log_dynext);
         if (debug > 3)
-            info("[kc_main]: Writing dynamic extension data to file.\n");
+            printf("[kc_main]: Writing dynamic extension data to file.\n");
     }
 
 
 
 
     /* Translate robot velocities into wheel velocities */
-    wh->vl = vcom.v - K_radius * vcom.omega;
-    wh->vr = vcom.v + K_radius * vcom.omega;
+    wh->timestamp = vcom.timestamp;
+    wh->vl = vcom.v - 0.5f * K_radius * vcom.omega;
+    wh->vr = vcom.v + 0.5f * K_radius * vcom.omega;
 
     /* Saturate wheel speeds */
     if (fabs(wh->vl) > K_w_max) {
@@ -212,6 +213,11 @@ void kc_main(struct vwheels *wh,
     }
 
 
+    /* Override wheel speeds to perform system identification: */
+//     wh->vl = 0.5f;
+//     wh->vr = 0.5f;
+
+
 
 
     if (log_wheels != NULL) {
@@ -220,7 +226,7 @@ void kc_main(struct vwheels *wh,
                 wh->timestamp, wh->vl, wh->vr);
         fflush(log_wheels);
         if (debug > 3)
-            info("[kc_main]: Writing wheel speed data to file.\n");
+            printf("[kc_main]: Writing wheel speed data to file.\n");
     }
 
 
@@ -374,7 +380,7 @@ int kc_dynamic_ext_solve(double *y_out,
     double h = 1e-6;
     double y[] = {y_in};
 
-    int status;
+    int status = 0;
 
     gsl_odeiv_system sys_de = {kc_dynamic_ext_func, NULL, 2, params};
 
@@ -559,6 +565,11 @@ void kc_gains(struct sgains *gains,
         gains->k1 = (k1_max - k1_min) * (1.0f - tanh(g1 / pst->e)) + k1_min;
     }
 
+#ifdef K_K1
+    gains->k1 = K_K1;
+#endif
+
+
 
     // Calculate k_2:
 
@@ -589,6 +600,12 @@ void kc_gains(struct sgains *gains,
         gains->k2 = 0.0f;
     if (gains->k2 > 0.95 * K_KC)
         gains->k2 = 0.95 * K_KC;
+
+
+#ifdef K_K2
+    gains->k2 = K_K2;
+#endif
+
 
 
 // OLD WAY:
@@ -666,7 +683,8 @@ void kc_d(float *dydt,
      * Chapman, S. C. and Camale, R. P. 1998
      */
 
-    // ugh, long!
+    /* 2nd order Lagrange interpolating polynomial */
+
 //     x = tlist[K_dlist_max - 1]; // x
     x_im1 = tlist[K_dlist_max - 3]; // x_{i-1}
     x_i = tlist[K_dlist_max - 2]; // x_i
@@ -835,6 +853,11 @@ void kc_IIRfilter(float *y_m,
     // FIXME: need to design filter
     // Filter parameters:
     a[0] = 1.0f; // IGNORED (see below)
+
+    // Direct pass-through (no filtering):
+//     b[0] = 1.0f;
+
+    // 23.87 Hz corner frequency:
     a[1] = -0.7374f;
 
 

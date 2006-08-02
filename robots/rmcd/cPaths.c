@@ -187,6 +187,11 @@ void cp_maketraj(struct cPaths_cfg *cfg,
                 // (curve)
 
                 phi_cur = t * pdata[incr_i].sign * pdata[incr_i].gamma + pdata[incr_i].start_angle;
+                if (debug > 4) {
+                    printf("[cp_maketraj]: sign = %d, gamma = %f\n",
+                           pdata[incr_i].sign,
+                           pdata[incr_i].gamma);
+                }
                 th = phi_cur - M_PI / 2.0f;
                 xy_cur[0] = pdata[incr_i].pt_center[0] +
                     pdata[incr_i].sign * pdata[incr_i].radius * cos(th);
@@ -396,6 +401,14 @@ void cp_build_pathdata(struct pathdata *pd,
             pd[current_segment].end_angle = this_angle;
             pd[current_segment].alpha = cpt.angle;
             pd[current_segment].type = 1;
+
+            if (debug > 3) {
+                printf("[cp_build_pathdata]: sign = %d, gamma = %f\n",
+                       pd[current_segment].sign,
+                       pd[current_segment].gamma);
+            }
+
+
 
             ++current_segment;
 

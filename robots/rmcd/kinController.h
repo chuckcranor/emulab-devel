@@ -46,20 +46,29 @@
 // Number of values to store for differentiation
 #define K_dlist_max 5
 
-/* GAINS:
- *********/
+/* CONTROLLER PARAMETERS:
+ ************************/
+/* 0.2 0.03 3.25 5.0 5.0 9.0 */
 
-// Minimum path radius:
-#define K_R 0.02f
+// Path manifold radius:
+#define K_R 0.05f
 
 // Epsilon, 'nudge'
-#define K_EPSILON 0.001f
+#define K_EPSILON 0.03f
+// Outside of noise envelope of vision system (0.02)
+
+// Controller gain k1
+#define K_K1 0.3f
+
+// Controller gain k2
+#define K_K2 0.5f
+
 
 // Dynamic extension 'v' gain:
 #define K_KV 3.0f
 
 // Dynamic extension 'omega' gain:
-#define K_KC 3.01f
+#define K_KC 3.0f
 
 
 
