@@ -244,15 +244,16 @@ void cp_maketraj(struct cPaths_cfg *cfg,
 
 
     // Postprocess theta
-    for (incr_i = 0; incr_i < s_count; ++incr_i) {
-        if (tr[incr_i].phi > M_PI) {
-            tr[incr_i].phi = tr[incr_i].phi - 2.0f * M_PI;
-        }
-
-        if (tr[incr_i].phi < -M_PI) {
-            tr[incr_i].phi = tr[incr_i].phi + 2.0f * M_PI;
-        }
-    }
+    // CUT OUT:
+//     for (incr_i = 0; incr_i < s_count; ++incr_i) {
+//         if (tr[incr_i].phi > M_PI) {
+//             tr[incr_i].phi = tr[incr_i].phi - 2.0f * M_PI;
+//         }
+//
+//         if (tr[incr_i].phi < -M_PI) {
+//             tr[incr_i].phi = tr[incr_i].phi + 2.0f * M_PI;
+//         }
+//     }
 
 
     *tr_size = s_count;

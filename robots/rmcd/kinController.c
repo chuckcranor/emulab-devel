@@ -449,7 +449,8 @@ void kc_cart2pol(struct robot_position_states *pst,
 
 
     double xdiff, ydiff;
-    float theta_delta;
+
+
     int incr_i;
 
 
@@ -459,30 +460,53 @@ void kc_cart2pol(struct robot_position_states *pst,
 
 
 
+
+
     xdiff = cst_act->x - cst_ref->x;
     ydiff = cst_act->y - cst_ref->y;
 
-
+    /* Polar state e:
+     ****************/
     pst->e = sqrt(pow(xdiff,2) + pow(ydiff,2));
 
+
+
+//     if (debug > 3) {
+//         printf("[kc_cart2pol]: theta_polar = %f\n", pst->theta);
+//         printf("[kc_cart2pol]: theta_act = %f\n", cst_act->theta);
+//         printf("[kc_cart2pol]: theta_ref = %f\n", cst_ref->theta);
+//     }
+
+
+    /* Polar state theta:
+     ********************/
     pst->theta = atan2(-ydiff, -xdiff) - cst_ref->theta;
 
-    /* Consider last theta: */
-    theta_delta = pst->theta - pa->theta_list[K_dlist_max - 1];
-
-    /* Deal with jumps */
-    if (fabs(theta_delta) >= M_PI) {
-        /* Discontinuity detected */
-
-        if (theta_delta > 0.0f) {
-            pst->theta = pst->theta - 2 * M_PI;
-        }
-        else {
-            pst->theta = pst->theta + 2 * M_PI;
-        }
+    if (0 == pa->theta_flag) {
+        pa->theta_last = kc_wrap(pst->theta);
+        pa->theta_flag = 1;
     }
 
-    pst->alpha = pst->theta - cst_act->theta + cst_ref->theta;
+    pst->theta = kc_unwrap(pst->theta, pa->theta_last);
+    pa->theta_last = pst->theta;
+
+
+
+
+    /* Polar state alpha:
+     ********************/
+    pst->alpha = kc_wrap(pst->theta) - kc_wrap(cst_act->theta) + kc_wrap(cst_ref->theta);
+
+    if (0 == pa->alpha_flag) {
+        pa->alpha_last = kc_wrap(pst->alpha);
+        pa->alpha_flag = 1;
+    }
+
+    pst->alpha = kc_unwrap(pst->alpha, pa->alpha_last);
+    pa->alpha_last = pst->alpha;
+
+
+
 
 
 
@@ -515,6 +539,95 @@ void kc_cart2pol(struct robot_position_states *pst,
                   pst->theta,
                   K_domega_max);
     }
+
+
+
+
+// OLD STUFF:
+#if 0
+
+    if (fabs(theta_delta) > M_PI) {
+        // Jump
+        if (debug > 3)
+            printf("[kc_cart2pol]: Correcting jump in polar state theta.\n");
+        if (theta_delta > 0.0f)
+            pa->theta_pst_wrap -= 1.0f;
+        if (theta_delta < 0.0f)
+            pa->theta_pst_wrap += 1.0f;
+    }
+    pst->theta -= pa->theta_pst_wrap * 2.0f * M_PI;
+
+
+
+
+    /* ACTUAL theta (from VMCD):
+     ***************************/
+    if (0 == pa->theta_act_flag) {
+        pa->theta_act_last = cst_act->theta;
+        pa->theta_act_flag = 1;
+    }
+
+    theta_delta = cst_act->theta - pa->theta_act_last;
+    pa->theta_act_last = cst_act->theta;
+
+    if (debug > 3)
+        printf("[kc_cart2pol]: Theta_act delta: %f\n", theta_delta);
+
+    if (fabs(theta_delta) > M_PI) {
+        // Jump
+        if (debug > 3)
+            printf("[kc_cart2pol]: Correcting jump in actual theta.\n");
+        if (theta_delta > 0.0f)
+            pa->theta_act_wrap -= 1.0f;
+        if (theta_delta < 0.0f)
+            pa->theta_act_wrap += 1.0f;
+    }
+    cst_act->theta -= pa->theta_act_wrap * 2.0f * M_PI;
+
+
+
+
+    /* REFERENCE theta (from cPaths):
+     ********************************/
+    if (0 == pa->theta_ref_flag) {
+        pa->theta_ref_last = cst_ref->theta;
+        pa->theta_ref_flag = 1;
+    }
+
+    theta_delta = cst_ref->theta - pa->theta_ref_last;
+    pa->theta_ref_last = cst_ref->theta;
+    if (debug > 3)
+        printf("[kc_cart2pol]: Theta_ref delta: %f\n", theta_delta);
+
+    if (fabs(theta_delta) > M_PI) {
+        // Jump
+        if (debug > 3)
+            printf("[kc_cart2pol]: Correcting jump in reference theta.\n");
+        if (theta_delta > 0.0f)
+            pa->theta_ref_wrap -= 1.0f;
+        if (theta_delta < 0.0f)
+            pa->theta_ref_wrap += 1.0f;
+    }
+    cst_ref->theta -= pa->theta_ref_wrap * 2.0f * M_PI;
+
+
+
+
+    /* Deal with jumps */
+    if (fabs(theta_delta) >= M_PI) {
+        /* Discontinuity detected */
+
+        if (theta_delta > 0.0f) {
+            pst->theta = pst->theta - 2 * M_PI;
+        }
+        else {
+            pst->theta = pst->theta + 2 * M_PI;
+        }
+    }
+#endif
+
+
+
 
 
 
@@ -629,20 +742,20 @@ void kc_gains(struct sgains *gains,
 //     gains->k2 = (0.3f / pa->e_init) * tanh_alpha + 0.3f * tanh_lambda;
 
 
-
-    if (debug) {
-        if (gains->k1 >= gains->kv) {
-            printf("kc_gains: WARNING: k1 >= kv (%f, %f)\n",
-                   gains->k1, gains->kv);
-            printf("**** THIS MAY CAUSE INSTABILITY ****\n");
-        }
-
-        if (gains->k2 >= gains->kc) {
-            printf("kc_gains: WARNING: k2 >= kc (%f, %f)\n",
-                   gains->k2, gains->kc);
-            printf("**** THIS MAY CAUSE INSTABILITY ****\n");
-        }
-    }
+// NOT QUITE TRUE:
+//     if (debug) {
+//         if (gains->k1 >= gains->kv) {
+//             printf("kc_gains: WARNING: k1 >= kv (%f, %f)\n",
+//                    gains->k1, gains->kv);
+//             printf("**** THIS MAY CAUSE INSTABILITY ****\n");
+//         }
+//
+//         if (gains->k2 >= gains->kc) {
+//             printf("kc_gains: WARNING: k2 >= kc (%f, %f)\n",
+//                    gains->k2, gains->kc);
+//             printf("**** THIS MAY CAUSE INSTABILITY ****\n");
+//         }
+//     }
 
 
 }
@@ -864,6 +977,11 @@ void kc_IIRfilter(float *y_m,
     b[0] = 0.1313f;
     b[1] = 0.1313f;
 
+    // 10.0 Hz corner frequency:
+//     a[1] = 0.02305f;
+//
+//     b[0] = 0.5115f;
+//     b[1] = 0.5115f;
 
 
     *y_m = b[0] * x_m_list[K_dlist_max - 1];
@@ -918,6 +1036,16 @@ void kc_init_params(struct kc_params *kp) {
     kp->v_last.v = 0.0f;
     kp->v_last.omega = 0.0f;
 
+
+
+
+    kp->theta_last = 0.0f;
+    kp->alpha_last = 0.0f;
+
+
+    kp->theta_flag = 0;
+    kp->alpha_flag = 0;
+
 }
 
 
@@ -940,3 +1068,63 @@ void kc_sat(struct vo *vs) {
 }
 
 
+
+float kc_wrap(float th) {
+
+    float th_out, th_turns;
+    float turns = 0.0f;
+
+
+
+    th_turns = th / (2.0 * M_PI);
+
+    if (th_turns > 0) {
+        turns = floor(th_turns);
+    }
+    if (th_turns < 0) {
+        turns = -floor(-th_turns);
+    }
+
+
+    th_out = th - (2.0f * M_PI * turns);
+
+
+    if (th_out > M_PI) {
+        th_out -= 2.0f * M_PI;
+    }
+    if (th_out < -M_PI) {
+        th_out += 2.0f * M_PI;
+    }
+
+
+    return th_out;
+
+}
+
+
+
+float kc_unwrap(float th, float thl) {
+
+    float thl_wrap, th_delta, th_offset, th_out;
+
+
+    th = kc_wrap(th);
+    thl_wrap = kc_wrap(thl);
+    th_delta = th - thl_wrap;
+    th_offset = th_delta;
+
+    if (th_delta > M_PI) {
+        // Discontinuity detected
+        if (th_delta < 0.0f) {
+            th_offset = (M_PI - thl_wrap) + (M_PI + th);
+        }
+        if (th_delta > 0.0f) {
+            th_offset = -((M_PI + thl_wrap) + (M_PI - th));
+        }
+    }
+
+    th_out = thl + th_offset;
+
+    return th_out;
+
+}

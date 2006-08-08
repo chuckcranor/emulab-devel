@@ -9,6 +9,7 @@
 #ifndef _rmcd_cpaths_h
 #define _rmcd_cpaths_h
 
+// #define info printf
 
 /**
  * @file cPaths.h

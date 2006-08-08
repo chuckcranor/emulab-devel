@@ -29,7 +29,7 @@
 // #include "mtp.h"
 
 
-// Robot wheel radius in meters
+// Robot wheel (axle) radius in meters
 #define K_radius 0.0889f
 
 // Maximum wheel speed
@@ -48,20 +48,20 @@
 
 /* CONTROLLER PARAMETERS:
  ************************/
-/* 0.2 0.03 3.25 5.0 5.0 9.0 */
+/* BEST: R = 0.02, eps = 0.003, k1 = 0.85, k2 = 0.3, kv = 3.0, kc = 3.0 */
 
 // Path manifold radius:
-#define K_R 0.05f
+#define K_R 0.02f
 
 // Epsilon, 'nudge'
-#define K_EPSILON 0.03f
+#define K_EPSILON 0.003f
 // Outside of noise envelope of vision system (0.02)
 
 // Controller gain k1
-#define K_K1 0.3f
+#define K_K1 0.85f
 
 // Controller gain k2
-#define K_K2 0.5f
+#define K_K2 0.3f
 
 
 // Dynamic extension 'v' gain:
@@ -195,6 +195,15 @@ struct kc_params {
     float domega_list_f[K_dlist_max]; // Filtered omega d list
 
     struct vo v_last;
+
+    // Previous states:
+    float theta_last;
+    float alpha_last;
+
+    // Initialization flags:
+    int theta_flag;
+    int alpha_flag;
+
 };
 
 
@@ -365,5 +374,23 @@ void kc_init_params(struct kc_params *kp);
  */
 void kc_sat(struct vo *vs);
 
+
+
+/**
+ * Wrap up a phase angle (-pi --> +pi)
+ *
+ * @param th Angle
+ */
+float kc_wrap(float th);
+
+
+
+/**
+ * Unwind a phase angle
+ *
+ * @param th Current angle
+ * @param thl Last angle
+ */
+float kc_unwrap(float th, float thl);
 
 #endif

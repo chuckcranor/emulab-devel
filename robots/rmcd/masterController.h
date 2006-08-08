@@ -95,7 +95,7 @@ struct master_controller {
 #define E_START 0.05f
 
 // Acceleration, in meters per second^2, for the null primitive
-#define NULL_ACCEL 0.6
+#define NULL_ACCEL 0.2
 
 
 
