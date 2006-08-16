@@ -263,6 +263,9 @@ void agent_callback(event_handle_t handle,
 	    
 	    if (strcmp(link_map[link_index].fs.dest, "127.0.0.1") == 0)
 	      continue;
+	    /* XXX ignore 0.0.0.0 addresses too */
+	    if (strcmp(link_map[link_index].fs.dest, "0.0.0.0") == 0)
+	      continue;
 		  
 	    systemf("ipfw add %d pipe %d ip from any to %s in recv %s",
 		    hi_rule_no,
