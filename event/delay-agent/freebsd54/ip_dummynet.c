@@ -587,9 +587,6 @@ transmit_event(struct dn_pipe *pipe)
 	     */
 	    if (pipe->loss.nextdroptime <= curr_time)/* drop it?  Code changed here*/
 		droppkt(pipe);
-	    else if (pipe->loss.maxinq &&
-		     ((curr_time - pkt->input_time) > pipe->loss.maxinq))
-		pipe->drops += 1;
 	    else if (BDG_LOADED) {
 		if (m->m_len < ETHER_HDR_LEN &&
 		    (m = m_pullup(m, ETHER_HDR_LEN)) == NULL) {
@@ -1278,6 +1275,32 @@ locate_flowset(int pipe_nr, struct ip_fw *rule)
 }
 
 /*
+ * Determine whether to drop packet based on its expected total delay
+ * (explicit delay + bandwidth throttling delay).
+ */
+static int
+qdelay_based_drop(struct dn_flow_queue *q, struct dn_pipe *p, u_int64_t plen)
+{
+    int d;
+
+    /*
+     * UNITS: 
+     *   pipe->loss.maxinq is in ticks
+     *   pipe->delay.delay is in ticks
+     *   q->len_bytes: current length of queue in bytes
+     *   pipe->bandwidth.bandwidth is in bits/second
+     */
+    d = p->delay.delay;
+
+    if (p->bandwidth.bandwidth > 0) {
+	/* from SET_TICKS */
+	d += ((q->len_bytes + plen) * 8 * hz + p->bandwidth.bandwidth - 1) /
+		p->bandwidth.bandwidth;
+    }
+    return (d > p->loss.maxinq);
+}
+
+/*
  * determine whether to drop packet based on loss rate parameters
  */
 static int
@@ -1380,17 +1403,22 @@ dummynet_io(struct mbuf *m, int pipe_nr, int dir, struct ip_fw_args *fwa)
      */
     q->tot_bytes += len ;
     q->tot_pkts++ ;
-    if (rate_based_drop(&(fs->pipe->loss)))
-	goto dropit ;		/* random pkt drop			*/
-    if ( fs->flags_fs & DN_QSIZE_IS_BYTES) {
-    	if (q->len_bytes > fs->qsize)
-	    goto dropit ;	/* queue size overflow			*/
+    if (fs->pipe->loss.maxinq) {
+	if (qdelay_based_drop(q, fs->pipe, len))
+	    goto dropit ;	/* total delay exceeded			*/
     } else {
-	if (q->len >= fs->qsize)
-	    goto dropit ;	/* queue count overflow			*/
+	if (rate_based_drop(&(fs->pipe->loss)))
+	    goto dropit ;	/* random pkt drop			*/
+	if ( fs->flags_fs & DN_QSIZE_IS_BYTES) {
+	    if (q->len_bytes > fs->qsize)
+		goto dropit ;	/* queue size overflow			*/
+	} else {
+	    if (q->len >= fs->qsize)
+		goto dropit ;	/* queue count overflow			*/
+	}
+	if ( fs->flags_fs & DN_IS_RED && red_drops(fs, q, len) )
+	    goto dropit ;
     }
-    if ( fs->flags_fs & DN_IS_RED && red_drops(fs, q, len) )
-	goto dropit ;
 
     /* XXX expensive to zero, see if we can remove it*/
     mtag = m_tag_get(PACKET_TAG_DUMMYNET,
@@ -1959,14 +1987,48 @@ dn_bw_conf(struct dn_bw *b)
  * loss configuration
  */
 static int
-dn_loss_conf(struct dn_loss *l)
+dn_loss_conf(struct dn_pipe *p)
 {
+    struct dn_loss *l = &(p->loss);
     int error = 0;
     if (l->dist & ~(DN_DIST_CONST_RATE|DN_DIST_CONST_TIME|
 		    DN_DIST_TABLE_DETERM|DN_DIST_UNIFORM|
 		    DN_DIST_POISSON|DN_DIST_TABLE_RANDOM)) {
 	printf("dummynet: invalid loss distribution %x\n", l->dist);
 	return EINVAL;
+    }
+
+    /*
+     * maxinq is a strange bird.  Loss is based on the expected total
+     * delay (explicit delay + bandwidth throttling delay) of the incoming
+     * packet.
+     *
+     * This obviously can only be done if the delay and bandwidth are
+     * constant.
+     */
+    if (l->maxinq > 0) {
+	if ((p->delay.dist & DN_DIST_CONST_TIME) == 0 ||
+	    (p->bandwidth.dist & DN_CONST_DIST) == 0) {
+	    printf("dummynet: maxinq requires constant delay and BW\n");
+	    return EINVAL;
+	}
+
+	/* ms -> ticks */
+	l->maxinq = (l->maxinq * hz) / 1000;
+	if (l->maxinq == 0) {
+	    printf("dummynet: maxinq must be at least %dms\n", 1000/hz);
+	    return EINVAL;
+	}
+
+	l->dist = DN_DIST_CONST_RATE;
+	l->quantum = NULL;
+	l->qentries = 0;
+	l->quantum_expire = 0x7fffffff;
+	l->nextdroptime = 0x7fffffff; 
+	l->plr = 0;
+	l->table = NULL;
+	l->entries = 0;
+	return 0;
     }
 
     if ((l->dist & DN_DIST_UNIFORM) && (2 * l->stddev > l->mean)) {
@@ -2069,7 +2131,7 @@ config_pipe(struct dn_pipe *p)
     error = dn_bw_conf(&(p->bandwidth));
     if (error)
 	return error;
-    error = dn_loss_conf(&(p->loss));
+    error = dn_loss_conf(p);
     if (error)
 	return error;
 
@@ -2465,12 +2527,14 @@ dummynet_get(struct sockopt *sopt)
 	struct dn_pipe *pipe_bp = (struct dn_pipe *)bp ;
 	
 	/*
-	 * copy pipe descriptor into *bp, convert delay back to ms,
+	 * copy pipe descriptor into *bp, convert values back to ms,
 	 * then copy the flow_set descriptor(s) one at a time.
 	 * After each flow_set, copy the queue descriptor it owns.
 	 */
 	bcopy(p, bp, sizeof( *p ) );
 	pipe_bp->delay.delay = (pipe_bp->delay.delay * 1000) / hz ;
+	pipe_bp->loss.maxinq = (pipe_bp->loss.maxinq * 1000) / hz ;
+
 	/*
 	 * XXX the following is a hack based on ->next being the
 	 * first field in dn_pipe and dn_flow_set. The correct
