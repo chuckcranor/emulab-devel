@@ -164,6 +164,7 @@ int main(int argc, char **argv)
 
     char * temp = NULL;
     char *sep = " \n";
+    char *lastname = NULL;
 
     realloc_map();
     while(fgets(link_map[link_index].line, MAX_LINE_LENGTH, mp)){
@@ -211,8 +212,14 @@ int main(int argc, char **argv)
       if (strlen(myobjects)) {
         strcat(myobjects, ",");
       }
-      sprintf(&myobjects[strlen(myobjects)], "%s,%s",
-	      link_map[link_index].linkname,
+      if (lastname == NULL || strcmp(lastname, link_map[link_index].linkname)){
+	sprintf(&myobjects[strlen(myobjects)], "%s,",
+		link_map[link_index].linkname);
+	if (lastname)
+	  free(lastname);
+	lastname = strdup(link_map[link_index].linkname);
+      }
+      sprintf(&myobjects[strlen(myobjects)], "%s",
 	      link_map[link_index].linkvnodes[0]);
 
       if(!strcmp(link_map[link_index].linktype,"duplex") &&

@@ -97,6 +97,9 @@ structlink_map_t find_map(char *objname, struct flowspec *fs)
  call handle_pipes which does the rest of thejob
  *************************** agent_callback **********************/
 
+#define LO_RULE_NO 100
+#define HI_RULE_NO 59999
+
 void agent_callback(event_handle_t handle,
 		    event_notification_t notification, void *data)
 {
@@ -108,6 +111,8 @@ void agent_callback(event_handle_t handle,
   struct flowspec fs = { "", "", 0, 0 };
   char *dest, *srcport_str, *dstport_str, *protocol;
   int i, dest_len, srcport_len, dstport_len, protocol_len;
+  static int lo_rule_no = LO_RULE_NO;
+  static int hi_rule_no = HI_RULE_NO;
 
     /* get the name of the object, eg. link0 or link1*/
   if(event_notification_get_string(handle,
@@ -128,6 +133,10 @@ void agent_callback(event_handle_t handle,
   
   event_notification_get_arguments(handle,
 				   notification, args, sizeof(args));
+
+#if 0
+  info("OBJ=%s, TYPE=%s, ARGS=%s\n", objname, eventtype, args);
+#endif
 
   /*
    * Get the flowspec parameters.  If there are none, the default
@@ -212,6 +221,8 @@ void agent_callback(event_handle_t handle,
 	free(link_map);
 	link_map = old_map;
 	link_index = old_length;
+	lo_rule_no = LO_RULE_NO;
+	hi_rule_no = HI_RULE_NO;
       }
     }
 
@@ -220,9 +231,6 @@ void agent_callback(event_handle_t handle,
   }
 
   if (strcmp(eventtype, TBDB_EVENTTYPE_CREATE) == 0) {
-    static int lo_rule_no = 100;
-    static int hi_rule_no = 59999;
-    
     if (dest_len == -1) {
       extern void dump_link_map();
 
@@ -241,36 +249,38 @@ void agent_callback(event_handle_t handle,
       for (i = 0; i < old_length; i++) {
 	struct hostent *he;
 	
-	if (strcmp(old_map[i].linkname, objname) != 0) {
-	  realloc_map();
-	  link_map[link_index] = old_map[i];
-	  link_index++;
+	/* preserve original rules */
+	realloc_map();
+	link_map[link_index] = old_map[i];
+	link_index++;
+
+	/* if not related to our link, we are done */
+	if (strcmp(old_map[i].linkname, objname) != 0)
 	  continue;
-	}
+
 	while ((he = gethostent()) != NULL) {
+	  char dest[32];
 	  int j;
-	  
+
+	  inet_ntop(he->h_addrtype, he->h_addr, dest, sizeof(dest));
+
+	  /* addresses we don't care about */
+	  if (strcmp(dest, "127.0.0.1") == 0 || strcmp(dest, "0.0.0.0") == 0)
+	    continue;
+		  
 	  for (j = 0; j < old_map[i].numpipes; j++) {
 	    realloc_map();
 	    link_map[link_index] = old_map[i];
 	    link_map[link_index].islan = 0;
 	    link_map[link_index].numpipes = 1;
-	    inet_ntop(he->h_addrtype,
-		      he->h_addr,
-		      link_map[link_index].fs.dest,
-		      sizeof(link_map[link_index].fs.dest));
+	    strncpy(link_map[link_index].fs.dest, dest,
+		    sizeof(link_map[link_index].fs.dest));
 	    link_map[link_index].pipes[0] = hi_rule_no;
 	    
-	    if (strcmp(link_map[link_index].fs.dest, "127.0.0.1") == 0)
-	      continue;
-	    /* XXX ignore 0.0.0.0 addresses too */
-	    if (strcmp(link_map[link_index].fs.dest, "0.0.0.0") == 0)
-	      continue;
-		  
 	    systemf("ipfw add %d pipe %d ip from any to %s in recv %s",
 		    hi_rule_no,
 		    hi_rule_no,
-		    link_map[link_index].fs.dest,
+		    dest,
 		    old_map[i].interfaces[j]);
 	    systemf("ipfw pipe %d config bw %d delay %d plr %f queue %d",
 		    hi_rule_no,
