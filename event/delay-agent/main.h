@@ -149,6 +149,8 @@ char              *linktype; /*simplex, duplex */
 int               pipes[2]; /* array of pipe numbers*/
 structpipe_params params[2]; /* params for the two pipes*/
 enumlinkstat      stat;      /* link status : UP/DOWN*/
+int		  clouddir;  /* 0: not a cloud, 1: out to, 2: in from */
+int		  inactive;  /* for clouds: is this path active */
 }structlink_map, * structlink_map_t;
 
 
@@ -173,9 +175,7 @@ int  get_link_params(int l_index);
 void get_flowset_params(struct dn_flow_set*, int, int);
 void get_queue_params(struct dn_flow_set*,int, int);
 void set_link_params(int l_index, int blackhole, int);
-int  get_new_link_params(int l_index, event_handle_t handle,
-			 event_notification_t notification,
-			 int *);
+int  get_new_link_params(int l_index, char *args, int *);
 void dump_link_map();
 int  get_link_info();
 void realloc_map(void);

@@ -90,6 +90,75 @@ structlink_map_t find_map(char *objname, struct flowspec *fs)
   return retval;
 }
 
+/*
+ * Enable pipes for a node-to-node path in a cloud.
+ * For every path there is an outgoing-from-the-delay-node (incoming to
+ * the node) pipe handling delay and PLR.  However, not every path will
+ * have a unique bandwidth pipe.  We allow for a node to have a shared,
+ * incoming-to-the-delay-node (outgoing from the node) BW pipe used for
+ * all destinations that do not have a unique pipe.
+ */
+static void
+activate_pipe(int mapix, char *args)
+{
+  structlink_map_t link = &link_map[mapix];
+
+  /*
+   * If not done already, create the delay pipe
+   */
+  if (link->inactive) {
+    if (link->clouddir == 3) {  
+      info("activating delay/BW pipe %d\n", link->pipes[0]);
+
+      systemf("ipfw add %d pipe %d ip from any to %s in recv %s",
+	      link->pipes[0],
+	      link->pipes[0],
+	      link->fs.dest,
+	      link->interfaces[0]);
+      systemf("ipfw pipe %d config bw %d delay %d plr 0 queue %d",
+	      link->pipes[0],
+	      link_map[link_index].params[0].bw.bandwidth,
+	      link_map[link_index].params[0].delay.delay,
+	      link_map[link_index].params[0].q_size);
+      link->inactive = 0;
+    }
+    else if (link->clouddir == 2) {
+      info("activating delay pipe %d\n", link->pipes[0]);
+
+      systemf("ipfw add %d pipe %d ip from %s to any in recv %s",
+	      link->pipes[0],
+	      link->pipes[0],
+	      link->fs.dest,
+	      link->interfaces[0]);
+      systemf("ipfw pipe %d config bw 0 delay %d plr %f queue %d",
+	      link->pipes[0],
+	      link_map[link_index].params[0].delay.delay,
+	      (double)link_map[link_index].params[0].loss.plr/0x7fffffff,
+	      link_map[link_index].params[0].q_size);
+      link->inactive = 0;
+    }
+    /*
+     * XXX determine if there is a flow spec involved, see if there is
+     * an explicit bandwidth provided.  If so, we may need to create a
+     * flow-specific BW shaping pipe.
+     */
+    else if (link->fs.dest[0] && strstr(args, "BANDWIDTH")) {
+      info("activating BW pipe %d\n", link->pipes[0]);
+
+      systemf("ipfw add %d pipe %d ip from any to %s in recv %s",
+	      link->pipes[0],
+	      link->pipes[0],
+	      link->fs.dest,
+	      link->interfaces[0]);
+      systemf("ipfw pipe %d config bw %d delay 0 plr 0 queue %d",
+	      link->pipes[0],
+	      link_map[link_index].params[0].bw.bandwidth,
+	      link_map[link_index].params[0].q_size);
+      link->inactive = 0;
+    }
+  }
+}
+
 /*************************** agent_callback **********************
  This function is called from the event system when an event
  notification is recd. from the server. It checks whether the 
@@ -184,7 +253,6 @@ void agent_callback(event_handle_t handle,
       }
       else {
 	info("clearing pipe %d\n", lm->pipes[0]);
-
 	/* Delete the rule/pipe and */
 	systemf("ipfw delete %d", lm->pipes[0]);
 	systemf("ipfw pipe delete %d", lm->pipes[0]);
@@ -207,11 +275,13 @@ void agent_callback(event_handle_t handle,
 	    lm->fs.dest[0] == '\0')
 	  continue;
 
-	info("clearing pipe %d\n", lm->pipes[0]);
+        if (!lm->inactive) {
+	  info("clearing pipe %d\n", lm->pipes[0]);
 
-	/* Delete the rule/pipe and */
-	systemf("ipfw delete %d", lm->pipes[0]);
-	systemf("ipfw pipe delete %d", lm->pipes[0]);
+	  /* Delete the rule/pipe and */
+	  systemf("ipfw delete %d", lm->pipes[0]);
+	  systemf("ipfw pipe delete %d", lm->pipes[0]);
+	}
 	/* ... mark the structure as free for another use. */
 	strcpy(lm->linkvnodes[0], "__free");
 	strcpy(lm->linkvnodes[1], "__free");
@@ -242,7 +312,7 @@ void agent_callback(event_handle_t handle,
       }
 
       /*
-       * For every link we were managing, create a separate pipe for that link
+       * For every link we were managing, create two pipes for that link
        * and a particular destination.  The set of destinations are currently
        * pulled from the /etc/hosts file.
        */
@@ -268,29 +338,38 @@ void agent_callback(event_handle_t handle,
 	  if (strcmp(dest, "127.0.0.1") == 0 || strcmp(dest, "0.0.0.0") == 0)
 	    continue;
 		  
+	  /* XXX can only handle duplex links/lans (need two pipes) */
+	  if (old_map[i].numpipes < 2)
+	    continue;    	  
+
+	  /*
+	   * Pipe 0 is for delay and will be created for all flows
+	   * Pipe 1 is for BW and will only created if a MODIFY (with DEST=)
+	   * event explicitly specifies a BW.
+	   */
 	  for (j = 0; j < old_map[i].numpipes; j++) {
 	    realloc_map();
 	    link_map[link_index] = old_map[i];
 	    link_map[link_index].islan = 0;
+	    if (old_map[i].islan) {
+	      link_map[link_index].clouddir = j ? 2 : 1;
+	    } else {
+	      /*
+	       * We don't have enough pipes to do the hybrid technique
+	       * for a link.  We just arrange to set delay and BW on the
+	       * same link.
+	       */
+	      link_map[link_index].clouddir = 3;
+	    }
 	    link_map[link_index].numpipes = 1;
 	    strncpy(link_map[link_index].fs.dest, dest,
 		    sizeof(link_map[link_index].fs.dest));
+	    link_map[link_index].inactive = 1;
 	    link_map[link_index].pipes[0] = hi_rule_no;
-	    
-	    systemf("ipfw add %d pipe %d ip from any to %s in recv %s",
-		    hi_rule_no,
-		    hi_rule_no,
-		    dest,
-		    old_map[i].interfaces[j]);
-	    systemf("ipfw pipe %d config bw %d delay %d plr %f queue %d",
-		    hi_rule_no,
-		    link_map[link_index].params[j].bw.bandwidth,
-		    link_map[link_index].params[j].delay.delay,
-		    (double)link_map[link_index].params[j].loss.plr/0x7fffffff,
-		    link_map[link_index].params[j].q_size);
-	    
-	    link_index += 1;
+	    link_map[link_index].interfaces[0] = old_map[i].interfaces[j];
+	    link_map[link_index].params[0] = old_map[i].params[j];
 	    hi_rule_no -= 1;
+	    link_index += 1;
 	  }
 	}
 	endhostent();
@@ -459,6 +538,8 @@ void handle_link_modify(char * linkname, int l_index,
 			event_handle_t handle,
 			event_notification_t notification)
 {
+  char argstring[256], *args;
+
   /* Get the new pipe params from the notification, and then
      update the new set of params by setting the params in
      dummynet
@@ -466,7 +547,15 @@ void handle_link_modify(char * linkname, int l_index,
   int i, p_which = -1;
 
   info("==========================================\n");
-  info("recd. MODIFY event for link = %s\n", linkname);
+  info("recd. MODIFY event for link = %s (%d)\n", linkname, l_index);
+
+  /* Grab the event ARGS= strings */
+  if (event_notification_get_string(handle, notification, "ARGS",
+				    argstring, sizeof(argstring)) != 0) {
+    args = argstring;
+    info("ARGS = %s\n", argstring);
+  } else
+    args = NULL;
 
   /*
    * As a convience to the user, we create virt_agents entries
@@ -487,17 +576,21 @@ void handle_link_modify(char * linkname, int l_index,
     }
   }
   
+  /* Create the pipe(s) if it hasn't been done already */
+  if (link_map[l_index].clouddir != 0)
+    activate_pipe(l_index, args);
+
   /* if the link is up, then get the params from dummynet,
      get the params from the notification and then merge
      and write back to dummynet
    */
   if(link_map[l_index].stat == LINK_UP){
     if(get_link_params(l_index) == 1)
-      if(get_new_link_params(l_index, handle, notification, &p_which) == 1)
+      if(get_new_link_params(l_index, args, &p_which) == 1)
 	set_link_params(l_index, 0, p_which);
   } else
     /* link is down, so just change in the link_map*/
-    get_new_link_params(l_index, handle, notification, &p_which);
+    get_new_link_params(l_index, args, &p_which);
 }
 
 /**
@@ -770,11 +863,26 @@ void set_link_params(int l_index, int blackhole, int p_which)
 	    structpipe_params *p_params
 	      = &(link_map[l_index].params[p_index]);
 
-	    info("entered the loop, pindex = %d %s %s\n", p_index,
+	    info("entered the loop, pindex = %d %s %s (%s)\n", p_index,
 		 link_map[l_index].linkvnodes[p_index],
-		 link_map[l_index].fs.dest);
+		 link_map[l_index].fs.dest,
+		 link_map[l_index].inactive ? "inactive" : "active");
 	
+	    if (link_map[l_index].inactive)
+	      continue;
+
 	    memset(&pipe, 0, sizeof pipe);
+
+	    switch (link_map[l_index].clouddir) {
+	    case 1:
+	      p_params->delay.delay = 0;
+	      break;
+	    case 2:
+	      p_params->bw.bandwidth = 0;
+	      break;
+	    default:
+	      break;
+	    }
 
 	    /* set the bandwidth and delay*/
 	    pipe.bandwidth = p_params->bw;
@@ -1188,14 +1296,11 @@ int *tabledup(int *table, int count)
   from the event notification
  ********************************************************/
 
-int get_new_link_params(int l_index, event_handle_t handle,
-			event_notification_t notification, int *pipe_which)
+int get_new_link_params(int l_index, char *argstring, int *pipe_which)
 {
   /* get the params of the pipe that were sent in the notification and
      store those values into the link_map table
    */
-
-  char argstring[256];
   char * argtype = NULL;
   char * argvalue = NULL;
   int p_num = 0;
@@ -1210,11 +1315,9 @@ int get_new_link_params(int l_index, event_handle_t handle,
       p_num   = *pipe_which;
   }
   
-  if(event_notification_get_string(handle, notification,
-                                   "ARGS", argstring, sizeof(argstring)) != 0){
+  if(argstring){
     unsigned long bq = -1, dq = -1, lq = -1;
     
-    info("ARGS = %s\n", argstring);
     temp = argstring;
     
     argtype = strsep(&temp,"=");
