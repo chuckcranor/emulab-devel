@@ -15,9 +15,9 @@ PAGEHEADER("Testbed Wide Stats");
 #
 # Only known and logged in users can end experiments.
 #
-$uid = GETLOGIN();
-LOGGEDINORDIE($uid);
-$isadmin = ISADMIN($uid);
+$this_user = CheckLoginOrDie();
+$uid       = $this_user->uid();
+$isadmin   = ISADMIN();
 
 if (!isset($verbose)) {
      $verbose = 0;
@@ -92,11 +92,14 @@ echo "<br>\n";
 
 # Determine what to do.
 if ($showby == "user") {
-    if ($which) {
-	if ($which != $uid &&
-	    ! TBUserInfoAccessCheck($uid, $which, $TB_USERINFO_READINFO)) {
-	    USERERROR("You do not have permission to view stats for ".
-		      "user $which!", 1);
+    if ($which && $which != $uid) {
+	if (! ($target_user = User::Lookup($which))) {
+	    USERERROR("The user $which is not a valid user", 1);
+	}
+	elseif (! $target_user->AccessCheck($this_user,
+					    $TB_USERINFO_READINFO)) {
+	    USERERROR("You do not have permission to view ${which}'s stats!",
+		      1);
 	}
     }
     else

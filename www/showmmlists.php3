@@ -15,10 +15,10 @@ PAGEHEADER("Mailman Lists");
 #
 # Only known and logged in users allowed.
 #
-$uid = GETLOGIN();
-LOGGEDINORDIE($uid);
-$isadmin = ISADMIN($uid);
-TBUserInfo($uid, $user_name, $user_email);
+$this_user = CheckLoginOrDie();
+$uid       = $this_user->uid();
+$isadmin   = ISADMIN();
+$user_email = $this_user->email();
 
 if (! isset($sortby)) {
     $sortby = "listname";
@@ -51,7 +51,9 @@ else {
 if (! TBvalid_uid($target_uid)) {
     PAGEARGERROR("Invalid characters in $target_uid");
 }
-
+if (! ($target_user = User::Lookup($target_uid))) {
+    USERERROR("The user $target_uid is not a valid user", 1);
+}
 
 SUBPAGESTART();
 SUBMENUSTART("More Options");
@@ -140,13 +142,11 @@ if (mysql_num_rows($query_result)) {
     echo "<table border=2 cellpadding=0 cellspacing=2
            align='center'>\n";
 
+    $showmmlists_url = CreateUrl("showmmlists", $target_user)
+
     echo "<tr>
-              <th><a href='showmmlists.php3?&sortby=listname".
-	           "&target_uid=$target_uid'>
-                  List Name</th>
-              <th><a href='showmmlists.php3?&sortby=uid'".
-	           "&target_uid=$target_uid'>
-                  Owner</th>
+              <th><a href='${showmmlists_url}&sortby=listname'>List Name</th>
+              <th><a href='${showmmlists_url}&sortby=uid'>Owner</th>
               <th>Admin Page</th>
               <th>Reset Password</th>
               <th>Delete List</th>
@@ -156,12 +156,16 @@ if (mysql_num_rows($query_result)) {
 	$listname  = $row['listname'];
 	$owner_uid = $row['owner_uid'];
 	$mmurl     = "gotommlist?listname=${listname}";
+
+	if (! ($owner_user = User::Lookup($owner_uid))) {
+	    TBERROR("Could not lookup object for user $owner_uid", 1);
+	}
+	$showuser_url = CreateURL("showuser", $owner_user);
 	
 	echo "<tr>
                   <td><a href='mailto:$listname@${OURDOMAIN}'>$listname</a>
                        </td>
-                  <td><A href='showuser.php3?target_uid=$owner_uid'>
-                            $owner_uid</A></td>
+                  <td><A href='$showuser_url'>$owner_uid</A></td>
                   <td align=center><A href='${mmurl}&wantadmin=1'>
                          <img src=\"arrow4.ico\"
                               border=0 alt='admin'></A></td>

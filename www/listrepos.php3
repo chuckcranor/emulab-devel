@@ -1,7 +1,7 @@
 <?php
 #
 # EMULAB-COPYRIGHT
-# Copyright (c) 2005 University of Utah and the Flux Group.
+# Copyright (c) 2005, 2006 University of Utah and the Flux Group.
 # All rights reserved.
 #
 include("defs.php3");
@@ -18,9 +18,9 @@ if (!$CVSSUPPORT) {
 #
 # Only known and logged in users.
 #
-$uid = GETLOGIN();
-LOGGEDINORDIE($uid);
-$isadmin = ISADMIN($uid);
+$this_user = CheckLoginOrDie();
+$uid       = $this_user->uid();
+$isadmin   = ISADMIN();
 
 #
 # Verify form arguments.
@@ -46,23 +46,19 @@ else {
 }
 
 #
-# Check to make sure thats this is a valid UID. Getting the status works,
-# and we need that later. 
+# Check to make sure thats this is a valid UID.
 #
-if (! ($userstatus = TBUserStatus($target_uid))) {
+if (! ($target_user = User::Lookup($target_uid))) {
     USERERROR("The user $target_uid is not a valid user", 1);
 }
+$userstatus = $target_user->status();
 
 #
 # Verify Permission.
 #
-if (!$isadmin &&
-    strcmp($uid, $target_uid)) {
-
-    if (! TBUserInfoAccessCheck($uid, $target_uid, $TB_USERINFO_READINFO)) {
-	USERERROR("You do not have permission to view this user's ".
-		  "information!", 1);
-    }
+if (!$isadmin && $uid != $target_uid &&
+    !$target_user->AccessCheck($this_user, $TB_USERINFO_READINFO)) {
+    USERERROR("You do not have permission to view ${uid}'s information!", 1);
 }
 
 #
@@ -101,7 +97,7 @@ while (list($pid) = each($projlist)) {
 }
 echo "</table>\n";
 
-if (TBCvswebAllowed($uid)) {
+if ($target_user->cvsweb()) {
     echo "<br><center>
           You also have CVSweb access to the
           <a href=cvsweb/cvswebwrap.php3>Emulab Source Repository</a>.

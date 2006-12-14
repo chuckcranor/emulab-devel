@@ -37,12 +37,25 @@ class Experiment
 	return !is_null($this->experiment);
     }
 
-    # Lookup by exptidx.
+    # Lookup by exptidx, but allow for lookup by pid,eid with variable args.
     function Lookup($exptidx) {
+	$args = func_get_args();
+
 	$foo = new Experiment($exptidx);
 
 	if ($foo->IsValid())
 	    return $foo;
+
+        # Try lookup with pid,eid.
+	if (count($args) == 2) {
+	    $pid = array_shift($args);
+	    $eid = array_shift($args);
+
+	    $foo = Experiment::LookupByPidEid($pid, $eid);
+
+	    if ($foo->IsValid())
+		return $foo;
+	}
 	return null;
     }
 
@@ -100,6 +113,16 @@ class Experiment
 	    TBERROR("Could not lookup group $pid/$gid!", 1);
 	}
 	return $this->group;
+    }
+
+    #
+    # Get the creator for a project.
+    #
+    function GetCreator() {
+	return User::Lookup($this->creator());
+    }
+    function GetSwapper() {
+	return User::Lookup($this->swapper());
     }
 
     # accessors

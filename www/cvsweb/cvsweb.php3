@@ -36,7 +36,7 @@ if (isset($pid) && $pid != "") {
     }
     # Redirect now, to avoid phishing.
     if ($uid) {
-	LOGGEDINORDIE($uid);
+	CheckLoginOrDie();
     }
     else {
 	$url = $OPSCVSURL . "?cvsroot=$pid";
@@ -109,7 +109,7 @@ elseif (isset($exptidx) && $exptidx != "") {
 
     # Must be logged in for this!
     if ($uid) {
-	LOGGEDINORDIE($uid);
+	CheckLoginOrDie();
     }
     
     # Need the pid/eid/gid. Access the stats table since we want to provide
@@ -146,8 +146,8 @@ elseif (isset($exptidx) && $exptidx != "") {
     $use_viewvc = 1;
 }
 else {
-    LOGGEDINORDIE($uid);
-    if (! TBCvswebAllowed($uid)) {
+    $this_user = CheckLoginOrDie();
+    if (! $this_user->cvsweb()) {
         USERERROR("You do not have permission to use cvsweb!", 1);
     }
     unset($pid);

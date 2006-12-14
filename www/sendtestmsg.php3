@@ -1,7 +1,7 @@
 <?php
 #
 # EMULAB-COPYRIGHT
-# Copyright (c) 2000-2003, 2005 University of Utah and the Flux Group.
+# Copyright (c) 2000-2003, 2005, 2006 University of Utah and the Flux Group.
 # All rights reserved.
 #
 include("defs.php3");
@@ -9,9 +9,9 @@ include("defs.php3");
 #
 # Only known and logged in users can do this.
 #
-$uid = GETLOGIN();
-LOGGEDINORDIE($uid);
-$isadmin = ISADMIN($uid);
+$this_user = CheckLoginOrDie();
+$uid       = $this_user->uid();
+$isadmin   = ISADMIN();
 
 #
 # Verify form arguments.
@@ -27,12 +27,13 @@ if (!$isadmin) {
     USERERROR("You do not have permission to view this page!", 1);
 }
 
-if (! TBCurrentUser($target_uid)) {
-    USERERROR("$target_uid is not a valid user ID!", 1);
+if (! ($target_user = User::Lookup($target_uid))) {
+    USERERROR("The user $target_uid is not a valid user", 1);
 }
 
-# Get email info and Key,
-TBUserInfo($target_uid, $usr_name, $usr_email);
+# Get email info.
+$usr_name  = $target_user->name();
+$usr_email = $target_user->email();
 
 # Send the email.
 TBMAIL("$usr_name '$target_uid' <$usr_email>",

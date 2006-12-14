@@ -15,14 +15,9 @@ PAGEHEADER("User List");
 #
 # Only known and logged in users allowed.
 #
-$uid = GETLOGIN();
-LOGGEDINORDIE($uid);
-
-#
-# Admin users can see all users, while normal users can only see
-# users in their projects.
-#
-$isadmin = ISADMIN($uid);
+$this_user = CheckLoginOrDie();
+$uid       = $this_user->uid();
+$isadmin   = ISADMIN();
 
 # For "recent" stuff below.
 $dorecent = 0;

@@ -1,7 +1,7 @@
 <?php
 #
 # EMULAB-COPYRIGHT
-# Copyright (c) 2000-2004 University of Utah and the Flux Group.
+# Copyright (c) 2000-2004, 2006 University of Utah and the Flux Group.
 # All rights reserved.
 #
 include("defs.php3");
@@ -9,9 +9,9 @@ include("defs.php3");
 #
 # Only known and logged in users can do this.
 #
-$uid = GETLOGIN();
-LOGGEDINORDIE($uid);
-$isadmin = ISADMIN($uid);
+$this_user = CheckLoginOrDie();
+$uid       = $this_user->uid();
+$isadmin   = ISADMIN();
 
 #
 # Verify page/form arguments.
@@ -29,7 +29,7 @@ if ($target_uid == "" || !TBvalid_uid($target_uid)) {
 #
 # Check to make sure thats this is a valid UID.
 #
-if (! TBCurrentUser($target_uid)) {
+if (! ($target_user = User::Lookup($target_uid))) {
     USERERROR("The user $target_uid is not a valid user", 1);
 }
 

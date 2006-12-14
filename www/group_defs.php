@@ -4,6 +4,11 @@
 # Copyright (c) 2006 University of Utah and the Flux Group.
 # All rights reserved.
 #
+#
+# A cache of groups to avoid lookups. Indexed by gid_idx;
+#
+$group_cache = array();
+
 class Group
 {
     var	$group;
@@ -23,8 +28,8 @@ class Group
 	    $this->group = NULL;
 	    return;
 	}
-	$this->group   = mysql_fetch_array($query_result);
-	$this->project = null;
+	$this->group   =& mysql_fetch_array($query_result);
+	$this->project =  null;
     }
 
     # Hmm, how does one cause an error in a php constructor?
@@ -34,11 +39,20 @@ class Group
 
     # Lookup by gid_idx.
     function Lookup($gid_idx) {
+	global $group_cache;
+
+        # Look in cache first
+	if (array_key_exists("$gid_idx", $group_cache))
+	    return $group_cache["$gid_idx"];
+	
 	$foo = new Group($gid_idx);
 
-	if ($foo->IsValid())
-	    return $foo;
-	return null;
+	if (! $foo->IsValid())
+	    return null;
+
+	# Insert into cache.
+	$group_cache["$gid_idx"] = $foo;
+	return $foo;
     }
 
     # Backwards compatable lookup by pid,gid. Will eventually flush this.
@@ -56,12 +70,7 @@ class Group
 	$row = mysql_fetch_array($query_result);
 	$idx = $row['gid_idx'];
 
-	$foo = new Group($idx); 
-
-	if ($foo->IsValid())
-	    return $foo;
-	
-	return null;
+	return Group::Lookup($idx);	
     }
     
     #
@@ -80,7 +89,7 @@ class Group
 	    $this->group = NULL;
 	    return -1;
 	}
-	$this->group = mysql_fetch_array($query_result);
+	$this->group =& mysql_fetch_array($query_result);
 	return 0;
     }
 
@@ -95,6 +104,33 @@ class Group
 	}
 	$this->project = $project;
 	return 0;
+    }
+    function Project() {
+	if (! $this->project) {
+	    $this->LoadProject();
+	}
+	return $this->project;
+    }
+    
+    #
+    # Return user object for leader.
+    #
+    function GetLeader() {
+	$head_uid = $this->leader();
+
+	if (! ($leader = User::Lookup($head_uid))) {
+	    TBERROR("Could not find user object for $head_uid", 1);
+	}
+	return $leader;
+    }
+
+    #
+    # Access Check, which for now uses the global function to avoid duplication
+    # until all code is changed.
+    #
+    function AccessCheck($user, $access_type) {
+	return TBProjAccessCheck($user->uid(), $this->pid(), $this->gid(),
+				 $access_type);
     }
 
     # accessors
@@ -210,7 +246,7 @@ class Group
 	    TBERROR("Group::Initialize: Could not find $TBOPSPID!", 1);
 	}
 
-	$user = User::LookupByUid($uid);
+	$user = User::Lookup($uid);
 
 	if (! $user) {
 	    TBERROR("Group::Initialize: Could not find user $uid!", 1);
@@ -251,6 +287,24 @@ class Group
 			 "        'none', now())")) {
 	    return -1;
 	}
+	return 0;
+    }
+
+    #
+    # And a delete function.
+    #
+    function DeleteMember($user) {
+	$uid     = $user->uid();
+	$uid_idx = $user->uid_idx();
+	$pid     = $this->pid();
+	$pid_idx = $this->pid_idx();
+	$gid     = $this->gid();
+	$gid_idx = $this->gid_idx();
+
+	DBQueryFatal("delete from group_membership ".
+		     "where uid_idx='$uid_idx' and pid_idx='$pid_idx' and ".
+		     "      gid_idx='$gid_idx'");
+	
 	return 0;
     }
 
@@ -320,7 +374,9 @@ class Group
     #
     # Check if user is a member of this group.
     #
-    function IsMember($user) {
+    function IsMember($user, &$approved) {
+	global $TBDB_TRUST_USER;
+	
 	$uid     = $user->uid();
 	$uid_idx = $user->uid_idx();
 	$gid     = $this->gid();
@@ -330,6 +386,64 @@ class Group
 	    DBQueryFatal("select trust from group_membership ".
 			 "where uid_idx='$uid_idx' and gid_idx='$gid_idx'");
 
-	return mysql_num_rows($query_result);
+	if (mysql_num_rows($query_result) == 0) {
+	    $approved = 0;
+	    return 0;
+	}
+
+	$row      = mysql_fetch_row($query_result);
+	$trust    = $row[0];
+	$approved = TBMinTrust($trust, $TBDB_TRUST_USER);
+
+	return 1;
+    }
+
+    #
+    # Change the leader for a group.
+    #
+    function ChangeLeader($leader) {
+	$idx   = $this->gid_idx();
+	$uid   = $leader->uid();
+
+	DBQueryFatal("update groups set leader='$uid' ".
+		     "where gid_idx='$idx'");
+
+	$this->group["leader"] = $uid;
+	return 0;
+    }
+
+    #
+    # Trust consistency.
+    #
+    function CheckGroupTrustConsistency($user, $trust, $fail) {
+	$uid = $user->uid();
+	$pid = $this->pid();
+	$gid = $this->gid();
+	
+	return TBCheckGroupTrustConsistency($uid, $pid, $gid, $trust, $fail);
+    }
+
+    #
+    # Hmm, this is really a grooup_membership query. Needs different treatment.
+    #
+    function MemberShipInfo($user, &$trust, &$date_applied, &$date_approved) {
+	$uid_idx = $user->uid_idx();
+	$gid_idx = $this->gid_idx();
+
+	$query_result =
+	    DBQueryFatal("select trust,date_applied,date_approved ".
+			 "  from group_membership ".
+			 "where uid_idx='$uid_idx' and gid_idx='$gid_idx'");
+
+	if (! mysql_num_rows($query_result)) {
+	    TBERROR("Group::MemberShipInfo: ".
+		    "Lookup failed for $uid_idx/$gid_idx", 1);
+	}
+	$row      = mysql_fetch_row($query_result);
+	$trust    = $row[0];
+	$date_applied  = $row[1];
+	$date_approved = $row[2];
+	
+	return 0;
     }
 }

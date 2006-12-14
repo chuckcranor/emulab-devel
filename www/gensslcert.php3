@@ -9,9 +9,9 @@ include("defs.php3");
 #
 # Only known and logged in users can do this.
 #
-$uid = GETLOGIN();
-LOGGEDINORDIE($uid);
-$isadmin = ISADMIN($uid);
+$this_user = CheckLoginOrDie();
+$uid       = $this_user->uid();
+$isadmin   = ISADMIN();
 
 #
 # The conclusion.
@@ -20,9 +20,14 @@ if (isset($_GET['finished'])) {
     PAGEHEADER("Generate SSL Certificate");
 
     $target_uid = $_GET['target_uid'];
+
+    if (! ($target_user = User::Lookup($target_uid))) {
+	USERERROR("The user $target_uid is not a valid user", 1);
+    }
+    $url = CreateURL("getsslcert", $target_user);
     
     echo "Your new SSL certificate has been created. You can
-          <a href=getsslcert.php3?target_uid=$target_uid>download</a> your 
+          <a href='$url'>download</a> your 
           certificate and private key in PEM format, and then save
           it to a file in your .ssl directory.\n";
 	    
@@ -60,7 +65,7 @@ if ($target_uid == "" || !TBvalid_uid($target_uid)) {
 #
 # Check to make sure thats this is a valid UID.
 #
-if (! TBCurrentUser($target_uid)) {
+if (! ($target_user = User::Lookup($target_uid))) {
     USERERROR("The user $target_uid is not a valid user", 1);
 }
 
@@ -195,7 +200,8 @@ $errors = array();
 #
 # Need this for checkpass.
 #
-TBUserInfo($target_uid, $user_name, $user_email);
+$user_name  = $target_user->name();
+$user_email = $target_user->email();
 
 #TBERROR("$target_uid, $user_name, $user_email, " .
 #	$formfields[passphrase1], 0); 
@@ -252,5 +258,6 @@ SUEXEC($target_uid, "nobody",
 #
 # Redirect back, avoiding a POST in the history.
 # 
-header("Location: gensslcert.php3?finished=1&target_uid=$target_uid");
+header("Location: ". CreateURL("getsslcert", $target_user, "finished", 1));
+
 ?>

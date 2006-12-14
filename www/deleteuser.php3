@@ -14,8 +14,9 @@ PAGEHEADER("Remove User");
 #
 # Only known and logged in users allowed.
 #
-$uid = GETLOGIN();
-LOGGEDINORDIE($uid);
+$this_user = CheckLoginOrDie();
+$uid       = $this_user->uid();
+$isadmin   = ISADMIN();
 
 #
 # Verify arguments.
@@ -28,20 +29,20 @@ if (isset($target_pid) &&
     strcmp($target_pid, "") == 0) {
     USERERROR("You must provide a valid project ID.", 1);
 }
-$isadmin = ISADMIN($uid);
 
 #
 # Confirm target is a real user.
 #
-if (! TBCurrentUser($target_uid)) {
-    USERERROR("No such user '$target_uid'", 1);
+if (! ($target_user = User::Lookup($target_uid))) {
+    USERERROR("The user $target_uid is not a valid user", 1);
 }
 
 #
 # Requesting? Fire off email and we are done. 
 # 
 if (isset($request) && $request) {
-    TBUserInfo($uid, $uid_name, $uid_email);
+    $uid_name  = $this_user->name();
+    $uid_email = $this_user->email();
 
     TBMAIL($TBMAIL_OPS,
 	   "Delete User Request: '$target_uid'",
@@ -63,21 +64,16 @@ if (isset($request) && $request) {
 }
 
 #
-# Confirm optional pid is a real pid.
+# Confirm optional pid is a real pid and check permission
 #
-if (isset($target_pid) && !TBValidProject($target_pid)) {
-    USERERROR("No such project '$target_pid'", 1);
-}
-
-#
-# Check user. Proj leaders can remove users from their project, but thats
-# all we allow. Deleting user accounts is left to admin people only.
-#
-if (!$isadmin) {
-    if (! isset($target_pid) ||
-	! TBProjAccessCheck($uid, $target_pid, 0, $TB_PROJECT_DELUSER)) {
-	USERERROR("You do not have permission to remove user '$target_uid'",
-		  1);
+if (isset($target_pid)) {
+    if (! ($target_project = Project::Lookup($target_pid))) {
+	USERERROR("No such project '$target_pid'", 1);
+    }
+    if (! $isadmin &&
+	! $target_project->AccessCheck($this_user, $TB_PROJECT_DELUSER)) {
+	USERERROR("You do not have permission to remove user ".
+		  "$target_uid from project $target_pid!", 1);
     }
 }
 
@@ -260,22 +256,23 @@ if (isset($target_pid)) {
 
     if (! mysql_num_rows($query_result)) {
 	echo "<b>User '$target_uid' is no longer a member of any projects.\n";
+
+	$url = CreateURL("deleteuser", URLARG_UID, $target_uid);
 	    
 	if ($isadmin) {
 	    echo "Do you want to
-                  <A href='deleteuser.php3?target_uid=$target_uid'>
-                     delete this user from the testbed?</a>\n";
+                  <A href='$url'>delete this user from the testbed?</a>\n";
 	}
 	else {
 	    echo "You can 
-                  <A href='deleteuser.php3?target_uid=$target_uid&request=1'>
-                     request</a>
+                  <A href='${url}&request=1'>request</a>
                      that we delete this user from the testbed</a></b>\n";
 	}
     }
     else {
 	if (isset($target_pid)) {
-	    PAGEREPLACE("showgroup.php3?pid=$target_pid&gid=$target_pid");
+	    PAGEREPLACE(CreateURL("showgroup", URLARG_PID, $target_pid,
+				  URLARG_GID, $target_pid));
 	}
     }
 }

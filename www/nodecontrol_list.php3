@@ -20,9 +20,9 @@ PAGEHEADER("Node Control Center");
 #
 # Only known and logged in users can do this.
 #
-$uid = GETLOGIN();
-LOGGEDINORDIE($uid);
-$isadmin = ISADMIN($uid);
+$this_user = CheckLoginOrDie();
+$uid       = $this_user->uid();
+$isadmin   = ISADMIN();
 
 #
 # Verify page arguments.
@@ -34,13 +34,16 @@ if (isset($target_uid)) {
     elseif (! TBvalid_uid($target_uid)) {
 	PAGEARGERROR("Invalid characters in '$target_uid'");
     }
-    elseif (! TBUserInfoAccessCheck($uid, $target_uid, $TB_USERINFO_READINFO)) {
-	USERERROR("You do not have permission to view this user's ".
-		  "information!", 1);
+    elseif (! ($target_user = User::Lookup($target_uid))) {
+	USERERROR("The user $target_uid is not a valid user", 1);
+    }
+    elseif (! $target_user->AccessCheck($this_user, $TB_USERINFO_READINFO)) {
+	USERERROR("You do not have permission to do this!", 1);
     }
 }
 else {
-    $target_uid = $uid;
+    $target_uid  = $uid;
+    $target_user = $this_user;
 }
 
 echo "<b>Show: <a href='nodecontrol_list.php3?showtype=summary'>summary</a>,

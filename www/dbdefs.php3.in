@@ -55,6 +55,14 @@ define("TBDB_USERSTATUS_UNVERIFIED",	"unverified");
 define("TBDB_USERSTATUS_FROZEN",	"frozen");
 
 #
+# Type of new account.
+#
+define("TBDB_NEWACCOUNT_REGULAR",	0x0);
+define("TBDB_NEWACCOUNT_PROJLEADER",	0x1);
+define("TBDB_NEWACCOUNT_WIKIONLY",	0x2);
+define("TBDB_NEWACCOUNT_WEBONLY",	0x4);
+
+#
 # Trust. Define the trust level as an increasing value. Then define a
 # function to return whether the given trust is high enough.
 #
@@ -855,91 +863,6 @@ function TBGroupUnixInfo($pid, $gid, &$unix_gid, &$unix_name)
 }
 
 #
-# Get name and email info for a uid. Args are pass by reference.
-#
-# usage: TBUserInfo($uid, $user_name, $user_email)
-#
-function TBUserInfo($uid, &$user_name, &$user_email)
-{
-    $query_result =
-	DBQueryFatal("select usr_name,usr_email from users where uid='$uid'");
-
-    if (mysql_num_rows($query_result) == 0) {
-	TBERROR("No such user $uid!", 1);
-    }
-    $row = mysql_fetch_array($query_result);
-    $user_name  = $row[usr_name];
-    $user_email = $row[usr_email];
-}
-
-#
-# Confirm a current user or not.
-#
-# usage TBCurrentUser($uid)
-#       returns 1 if a valid user.
-#       returns 0 if not a valid user.
-#
-function TBCurrentUser($uid)
-{
-    $current_result =
-	DBQueryFatal("SELECT usr_pswd FROM users WHERE uid='$uid'");
-
-    $deleted_result =
-	DBQueryFatal("SELECT usr_name FROM deleted_users WHERE uid='$uid'");
-
-    return mysql_num_rows($current_result) + mysql_num_rows($deleted_result);
-}
-
-#
-# Confirm a current WikiName or not.
-#
-# usage TBCurrentWikiName($uid)
-#       returns 1 if a current wikiname.
-#       returns 0 if not a current wikiname
-#
-function TBCurrentWikiName($wikiname)
-{
-    $query_result =
-	DBQueryFatal("SELECT usr_pswd FROM users WHERE wikiname='$wikiname'");
-
-    return mysql_num_rows($query_result);
-}
-
-#
-# Check to see if an email is being used twice.
-#
-# usage TBCurrentEmail($email)
-#       returns 1 if a valid email for someone.
-#       returns 0 if no such email address used by anyone.
-#
-function TBCurrentEmail($email)
-{
-    $query_result =
-	DBQueryFatal("SELECT uid FROM users WHERE usr_email='$email'");
-
-    return mysql_num_rows($query_result);
-}
-
-#
-# Get user status,
-#
-# usage TBUserStatus($uid)
-#       returns status if a valid user.
-#       returns 0 if not a valid user.
-#
-function TBUserStatus($uid)
-{
-    $query_result =
-	DBQueryFatal("SELECT status FROM users WHERE uid='$uid'");
-
-    if (! mysql_num_rows($query_result)) {
-	return 0;
-    }
-    $row = mysql_fetch_row($query_result);
-    return $row[0];
-}
-
-#
 # Confirm a valid pid/gid
 #
 # usage TBValidGroup($pid, $gid)
@@ -1596,30 +1519,6 @@ function TBExptLogFile($pid, $eid)
     return $row[0];
 }
 
-function TBWebdbAllowed($uid) {
-    $query_result =
-        DBQueryFatal("select dbedit from users ".
-		     "WHERE uid='$uid' and dbedit=1");
-
-    return mysql_num_rows($query_result);
-}
-
-function TBCvswebAllowed($uid) {
-    $query_result =
-        DBQueryFatal("select cvsweb from users ".
-		     "WHERE uid='$uid' and cvsweb=1");
-
-    return mysql_num_rows($query_result);
-}
-
-function TBWikiOnlyUser($uid) {
-    $query_result =
-        DBQueryFatal("select wikionly from users ".
-		     "WHERE uid='$uid' and wikionly=1");
-
-    return mysql_num_rows($query_result);
-}
-
 #
 # Returns > 0 if a node has a serial console, 0 if it does not
 #
@@ -1627,30 +1526,6 @@ function TBHasSerialConsole($node_id) {
     $query_result =
 	DBQueryFatal("select tipname from tiplines WHERE node_id='$node_id'");
     return mysql_num_rows($query_result);
-}
-
-#
-# Generate a verification key, and stash it in the database
-#
-function TBGenVerificationKey($name) {
-    $key = md5(uniqid(rand(),1));
-    DBQueryFatal("update users set verify_key='$key' where uid='$name'");
-    return $key;
-}
-
-#
-# Get a verification key from the database
-#
-function TBGetVerificationKey($name) {
-    $query_result =
-	DBQueryFatal("select verify_key from users where uid='$name'");
-
-    if (mysql_num_rows($query_result) == 0) {
-	# Can we signal error somehow?
-	return "";
-    }
-    $row   = mysql_fetch_array($query_result);
-    return $row[verify_key];
 }
 
 #
@@ -2118,20 +1993,6 @@ function NodeTypeAttribute($type, $key, &$value)
 
     $row = mysql_fetch_row($query_result);
     $value = $row[0];
-    return 1;
-}
-
-#
-# Is email address unique?
-#
-function TBUniqueEmail($uid, $email)
-{
-    $query_result =
-	DBQueryFatal("select usr_email from users where ".
-		     "usr_email='$email' and uid!='$uid'");
-
-    if (mysql_num_rows($query_result))
-	return 0;
     return 1;
 }
 

@@ -1,7 +1,7 @@
 <?php
 #
 # EMULAB-COPYRIGHT
-# Copyright (c) 2005 University of Utah and the Flux Group.
+# Copyright (c) 2005, 2006 University of Utah and the Flux Group.
 # All rights reserved.
 #
 include("defs.php3");
@@ -13,10 +13,11 @@ include("showstuff.php3");
 PAGEHEADER("Request info about possibly Idle experiment");
 
 #
-# Only known and logged in users can end experiments.
+# Only known and logged in users.
 #
-$uid = GETLOGIN();
-LOGGEDINORDIE($uid);
+$this_user = CheckLoginOrDie();
+$uid       = $this_user->uid();
+$isadmin   = ISADMIN();
 
 #
 # Verify page arguments.
@@ -34,7 +35,7 @@ if (!isset($eid) ||
 #
 # Only admins can do this!
 #
-if (! ISADMIN($uid)) {
+if (!$isadmin) {
     USERERROR("Only TB admins can do this!", 1);
 }
 
@@ -124,15 +125,20 @@ $pcs     = $row["pnodes"];
 $seconds = $row["swapseconds"];
 $hours   = intval($seconds / 3600);
 
+if (! ($creator_user = User::Lookup($creator))) {
+    TBERROR("Could not lookup object for user $creator!", 1);
+}
+if (! ($swapper_user = User::Lookup($swapper))) {
+    TBERROR("Could not lookup object for user $swapper!", 1);
+}
+
 # Lots of email addresses!
 $allleaders    = TBLeaderMailList($pid, $gid);
-$swapper_name  = "";
-$swapper_email = "";
-TBUserInfo($swapper, $swapper_name, $swapper_email);
-$creator_name  = "";
-$creator_email = "";
+$swapper_name  = $swapper_user->name();
+$swapper_email = $swapper_user->mail();
+$creator_name  = $creator_user->name();
+$creator_email = $creator_user->email();
 if ($swapper != $creator) {
-    TBUserInfo($creator, $creator_name, $creator_email);
     $allleaders .= ", \"$creator_name\" <$creator_email>";
 }
 

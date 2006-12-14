@@ -9,9 +9,9 @@ include("defs.php3");
 #
 # Only known and logged in users can do this.
 #
-$uid = GETLOGIN();
-LOGGEDINORDIE($uid, CHECKLOGIN_USERSTATUS|CHECKLOGIN_WEBONLY);
-$isadmin = ISADMIN($uid);
+$this_user = CheckLoginOrDie(CHECKLOGIN_USERSTATUS|CHECKLOGIN_WEBONLY);
+$uid       = $this_user->uid();
+$isadmin   = ISADMIN();
 
 #
 # Verify page/form arguments. Note that the target uid comes initially as a
@@ -43,7 +43,7 @@ if ($target_uid == "" || !TBvalid_uid($target_uid)) {
 #
 # Check to make sure thats this is a valid UID.
 #
-if (! TBCurrentUser($target_uid)) {
+if (! ($target_user = User::Lookup($target_uid))) {
     USERERROR("The user $target_uid is not a valid user", 1);
 }
 
@@ -51,12 +51,9 @@ if (! TBCurrentUser($target_uid)) {
 # Verify that this uid is a member of one of the projects that the
 # target_uid is in. Must have proper permission in that group too. 
 #
-if (!$isadmin &&
-    strcmp($uid, $target_uid)) {
-
-    if (! TBUserInfoAccessCheck($uid, $target_uid, $TB_USERINFO_READINFO)) {
-	USERERROR("You do not have permission to view ${user}'s keys!", 1);
-    }
+if (!$isadmin && $uid != $target_uid &&
+    !$target_user->AccessCheck($this_user, $TB_USERINFO_READINFO)) {
+    USERERROR("You do not have permission to view ${user}'s keys!", 1);
 }
 
 function SPITFORM($formfields, $errors)
@@ -103,10 +100,12 @@ function SPITFORM($formfields, $errors)
 	    }
 	    $chunky  = chunk_split("$pubkey $fnote", 75, "<br>\n");
 
+	    $delurl = CreateURL("deletepubkey", $target_user, "key", $idx);
+
 	    echo "<tr>
                      <td align=center>
-                       <A href='deletepubkey.php3?target_uid=$target_uid" .
-	                  "&key=$idx'><img alt=X src=redball.gif></A>
+                       <A href='$delurl'>
+                          <img alt='Delete Key' src=redball.gif></A>
                      </td>
                      <td>$chunky</td>
                   </tr>\n";
@@ -339,5 +338,5 @@ ADDPUBKEY($uid, "webaddpubkey -u $target_uid $addpubkeyargs");
 #
 # Redirect back, avoiding a POST in the history.
 # 
-header("Location: showpubkeys.php3?target_uid=$target_uid");
+header("Location: ". CreateURL("showpubkeys", $target_user));
 ?>

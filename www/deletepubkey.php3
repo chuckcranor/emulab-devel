@@ -1,7 +1,7 @@
 <?php
 #
 # EMULAB-COPYRIGHT
-# Copyright (c) 2000-2003 University of Utah and the Flux Group.
+# Copyright (c) 2000-2003, 2006 University of Utah and the Flux Group.
 # All rights reserved.
 #
 include("defs.php3");
@@ -14,9 +14,9 @@ include("showstuff.php3");
 #
 # Only known and logged in users can do this.
 #
-$uid = GETLOGIN();
-LOGGEDINORDIE($uid, CHECKLOGIN_USERSTATUS|CHECKLOGIN_WEBONLY);
-$isadmin = ISADMIN($uid);
+$this_user = CheckLoginOrDie(CHECKLOGIN_USERSTATUS|CHECKLOGIN_WEBONLY);
+$uid       = $this_user->uid();
+$isadmin   = ISADMIN();
 
 # Page arguments.
 $target_uid = $_GET['target_uid'];
@@ -31,7 +31,7 @@ if (!isset($target_uid) || $target_uid == "" || !TBvalid_uid($target_uid) ||
 #
 # Check to make sure thats this is a valid UID.
 #
-if (! TBCurrentUser($target_uid)) {
+if (! ($target_user = User::Lookup($target_uid))) {
     USERERROR("The user $target_uid is not a valid user", 1);
 }
 
@@ -39,12 +39,9 @@ if (! TBCurrentUser($target_uid)) {
 # Verify that this uid is a member of one of the projects that the
 # target_uid is in. Must have proper permission in that group too. 
 #
-if (!$isadmin &&
-    strcmp($uid, $target_uid)) {
-
-    if (! TBUserInfoAccessCheck($uid, $target_uid, $TB_USERINFO_MODIFYINFO)) {
-	USERERROR("You do not have permission to change ${user}'s keys!", 1);
-    }
+if (!$isadmin && $uid != $target_uid &&
+    !$target_user->AccessCheck($this_user, $TB_USERINFO_MODIFYINFO)) {
+    USERERROR("You do not have permission!", 1);
 }
 
 #
@@ -75,9 +72,10 @@ if ($canceled) {
           SSH Public Key deletion canceled!
           </h2></center>\n";
 
+    $url = CreateURL("showpubkeys", $target_user);
+
     echo "<br>
-          Back to <a href='showpubkeys.php3?target_uid=$target_uid'>
-                 ssh public keys</a> for user '$uid'.\n";
+          Back to <a href='$url'>ssh public keys</a> for user '$uid'.\n";
     
     PAGEFOOTER();
     return;
@@ -90,9 +88,10 @@ if (!$confirmed) {
           Are you <b>REALLY</b>
           sure you want to delete this SSH Public Key for user '$target_uid'?
           </h3>\n";
+
+    $url = CreateURL("deletepubkey", $target_user, "key", $key);
     
-    echo "<form action='deletepubkey.php3?target_uid=$target_uid&key=$key'
-                method=post>";
+    echo "<form action='$url' method=post>";
     echo "<b><input type=submit name=confirmed value=Confirm></b>\n";
     echo "<b><input type=submit name=canceled value=Cancel></b>\n";
     echo "</form>\n";
@@ -111,8 +110,11 @@ if (!$confirmed) {
 #
 # Audit
 #
-TBUserInfo($uid, $uid_name, $uid_email);
-TBUserInfo($target_uid, $targuid_name, $targuid_email);
+$uid_name  = $this_user->name();
+$uid_email = $this_user->email();
+
+$targuid_name  = $target_user->name();
+$targuid_email = $target_user->email();
 
 TBMAIL("$targuid_name <$targuid_email>",
      "SSH Public Key for '$target_uid' Deleted",
@@ -140,6 +142,6 @@ if (HASREALACCOUNT($target_uid)) {
     ADDPUBKEY($uid, "webaddpubkey -w $target_uid");
 }
 
-header("Location: showpubkeys.php3?target_uid=$target_uid");
+header("Location: " . CreateURL("showpubkeys", $target_user));
 
 ?>

@@ -14,8 +14,9 @@ PAGEHEADER("Freeze User Account");
 #
 # Only known and logged in users allowed.
 #
-$uid = GETLOGIN();
-LOGGEDINORDIE($uid);
+$this_user = CheckLoginOrDie();
+$uid       = $this_user->uid();
+$isadmin   = ISADMIN();
 
 #
 # Verify arguments.
@@ -41,19 +42,18 @@ else {
     $tag      = "frozen";
     $dbaction = TBDB_USERSTATUS_FROZEN;
 }
-$isadmin = ISADMIN($uid);
 
 #
 # Confirm target is a real user.
 #
-if (! TBCurrentUser($target_uid)) {
+if (! ($target_user = User::Lookup($target_uid))) {
     USERERROR("No such user '$target_uid'", 1);
 }
 
 #
 # Confirm a valid op.
 #
-$userstatus = TBUserStatus($target_uid);
+$userstatus = $target_user->status();
 if (!strcmp($action, "thaw") &&
      strcmp($userstatus, TBDB_USERSTATUS_FROZEN)) {
     USERERROR("You cannot thaw someone who is not frozen!", 1);
@@ -71,7 +71,8 @@ if (!strcmp($action, "freeze")) {
 # Requesting? Fire off email and we are done. 
 # 
 if (isset($request) && $request) {
-    TBUserInfo($uid, $uid_name, $uid_email);
+    $uid_name  = $this_user->name();
+    $uid_email = $this_user->email();
 
     TBMAIL($TBMAIL_OPS,
 	   "$action User Request: '$target_uid'",
@@ -146,8 +147,8 @@ if (!$confirmed_twice) {
     return;
 }
 
-DBQueryFatal("update users set status='$dbaction' ".
-	     "where uid='$target_uid'");
+# Change the DB first; backend requires it.
+$target_user->SetStatus($dbaction);
 
 STARTBUSY("User '$target_uid' is being ${tag}!");
 

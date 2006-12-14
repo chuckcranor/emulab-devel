@@ -650,7 +650,7 @@ if (! $returning) {
 	elseif (!TBvalid_uid($formfields[proj_head_uid])) {
 	    $errors["UserName"] = TBFieldErrorString();
 	}
-	elseif (TBCurrentUser($formfields[proj_head_uid]) ||
+	elseif (User::Lookup($formfields[proj_head_uid]) ||
 		posix_getpwnam($formfields[proj_head_uid])) {
 	    $errors["UserName"] = "Already in use. Pick another";
 	}
@@ -683,7 +683,7 @@ if (! $returning) {
 	elseif (! TBvalid_wikiname($formfields[wikiname])) {
 	    $errors["WikiName"] = TBFieldErrorString();
 	}
-	elseif (TBCurrentWikiName($formfields[wikiname])) {
+	elseif (User::LookupByWikiName($formfields[wikiname])) {
 	    $errors["WikiName"] = "Already in use. Pick another";
 	}
     }
@@ -701,7 +701,7 @@ if (! $returning) {
     elseif (! TBvalid_email($formfields[usr_email])) {
 	$errors["Email Address"] = TBFieldErrorString();
     }
-    elseif (TBCurrentEmail($formfields[usr_email])) {
+    elseif (User::LookupByEmail($formfields[usr_email])) {
         #
         # Treat this error separate. Not allowed.
         #
@@ -1000,7 +1000,8 @@ if (!$returning) {
     $args["usr_pswd"]      = crypt("$password1");
     $args["wikiname"]      = $wikiname;
 
-    if (! ($leader = User::NewUser($proj_head_uid, 1, 0, $args))) {
+    if (! ($leader = User::NewUser($proj_head_uid,
+				   TBDB_NEWACCOUNT_PROJLEADER, $args))) {
 	TBERROR("Could not create new user '$usr_email'!", 1);
     }
     # If null; used below
@@ -1012,7 +1013,7 @@ if (!$returning) {
     }
 }
 else {
-    if (! ($leader = User::LookupByUid($proj_head_uid))) {
+    if (! ($leader = User::Lookup($proj_head_uid))) {
 	TBERROR("Could not lookup project leader '$proj_head_uid'!", 1);
     }
 

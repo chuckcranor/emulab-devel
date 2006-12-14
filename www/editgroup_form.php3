@@ -1,7 +1,7 @@
 <?php
 #
 # EMULAB-COPYRIGHT
-# Copyright (c) 2000-2003, 2005 University of Utah and the Flux Group.
+# Copyright (c) 2000-2003, 2005, 2006 University of Utah and the Flux Group.
 # All rights reserved.
 #
 include("defs.php3");
@@ -15,8 +15,9 @@ PAGEHEADER("Edit Group Membership");
 #
 # Only known and logged in users.
 #
-$uid = GETLOGIN();
-LOGGEDINORDIE($uid);
+$this_user = CheckLoginOrDie();
+$uid       = $this_user->uid();
+$isadmin   = ISADMIN();
 
 #
 # First off, sanity check page args.
@@ -130,12 +131,16 @@ if (mysql_num_rows($curmembers_result)) {
 	$user  = $row[0];
 	$trust = $row[1];
 
+	if (! ($target_user = User::Lookup($user))) {
+	    TBERROR("Could not look up user object for $user", 1);
+	}
+	$showurl = CreateURL("showuser", $target_user);
+
 	if ($defaultgroup) {
 	    echo "<tr>
                      <td>
                        <input type=hidden name='change_$user' value=permit>
-                          <A href='showuser.php3?target_uid=$user'>
-                             $user &nbsp</A>
+                          <A href='$showurl'>$user &nbsp</A>
                      </td>\n";
 	}
 	else {
@@ -143,8 +148,7 @@ if (mysql_num_rows($curmembers_result)) {
                      <td>   
                        <input checked type=checkbox value=permit
                               name='change_$user'>
-                          <A href='showuser.php3?target_uid=$user'>
-                             $user &nbsp</A>
+                          <A href='$showurl'>$user &nbsp</A>
                      </td>\n";
 	}
 
@@ -193,10 +197,15 @@ if ($grabusers && mysql_num_rows($nonmembers_result)) {
 	$user  = $row[0];
 	$trust = $row[1];
 	
+	if (! ($target_user = User::Lookup($user))) {
+	    TBERROR("Could not look up user object for $user", 1);
+	}
+	$showurl = CreateURL("showuser", $target_user);
+
 	echo "<tr>
                  <td>
                    <input type=checkbox value=permit name='add_$user'>
-                      <A href='showuser.php3?target_uid=$user'>$user &nbsp</A>
+                      <A href='$showurl'>$user &nbsp</A>
                  </td>\n";
 
 	echo "   <td align=center>

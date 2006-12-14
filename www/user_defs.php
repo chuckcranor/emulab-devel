@@ -4,6 +4,12 @@
 # Copyright (c) 2006 University of Utah and the Flux Group.
 # All rights reserved.
 #
+
+#
+# A cache of users to avoid lookups. Indexed by uid_idx.
+#
+$user_cache = array();
+
 class User
 {
     var	$user;
@@ -11,7 +17,7 @@ class User
     #
     # Constructor by lookup on unique index.
     #
-    function User($uid_idx) {
+    function &User($uid_idx) {
 	$safe_uid_idx = addslashes($uid_idx);
 
 	$query_result =
@@ -21,7 +27,7 @@ class User
 	    $this->user = NULL;
 	    return;
 	}
-	$this->user = mysql_fetch_array($query_result);
+	$this->user =& mysql_fetch_array($query_result);
     }
 
     # Hmm, how does one cause an error in a php constructor?
@@ -30,16 +36,29 @@ class User
     }
 
     # Lookup by uid_idx.
-    function Lookup($uid_idx) {
-	$foo = new User($uid_idx);
+    function &Lookup($uid_idx) {
+	global $user_cache;
+	
+        # Look in cache first
+	if (array_key_exists("$uid_idx", $user_cache))
+	    return $user_cache["$uid_idx"];
+	
+	$foo =& new User($uid_idx);
 
-	if ($foo->IsValid())
-	    return $foo;
-	return null;
+	if (! $foo->IsValid()) {
+	    # Try lookup by plain uid.
+	    $foo =& User::LookupByUid($uid_idx);
+	    
+	    if (! $foo->IsValid())
+		return null;
+	}
+	# Insert into cache.
+	$user_cache["$uid_idx"] =& $foo;
+	return $foo;
     }
 
     # Backwards compatable lookup by uid. Will eventually flush this.
-    function LookupByUid($uid) {
+    function &LookupByUid($uid) {
 	$safe_uid = addslashes($uid);
 
 	$query_result =
@@ -51,12 +70,43 @@ class User
 	$row = mysql_fetch_array($query_result);
 	$idx = $row['uid_idx'];
 
-	$foo = new User($idx); 
+	return User::Lookup($idx);
+    }
 
-	if ($foo->IsValid())
-	    return $foo;
-	
-	return null;
+    # Used in the change password code and to make sure that emails are
+    # locally unique.
+    function &LookupByEmail($email) {
+	$safe_email = addslashes($email);
+
+	$query_result =
+	    DBQueryWarn("select uid_idx from users ".
+			"where LCASE(usr_email)=LCASE('$safe_email')");
+
+	if (!$query_result || !mysql_num_rows($query_result)) {
+	    return null;
+	}
+	$row = mysql_fetch_array($query_result);
+	$idx = $row['uid_idx'];
+
+	return User::Lookup($idx);
+    }
+    
+    # Used in new/join project code to make sure that wikinames are
+    # locally unique.
+    function &LookupByWikiName($wikiname) {
+	$safe_wikiname = addslashes($wikiname);
+
+	$query_result =
+	    DBQueryWarn("select uid_idx from users ".
+			"where wikiname='$safe_wikiname')");
+
+	if (!$query_result || !mysql_num_rows($query_result)) {
+	    return null;
+	}
+	$row = mysql_fetch_array($query_result);
+	$idx = $row['uid_idx'];
+
+	return User::Lookup($idx);
     }
     
     #
@@ -75,8 +125,23 @@ class User
 	    $this->user = NULL;
 	    return -1;
 	}
-	$this->user = mysql_fetch_array($query_result);
+	$this->user =& mysql_fetch_array($query_result);
 	return 0;
+    }
+
+    #
+    # Equality test.
+    #
+    function SameUser($user) {
+	return $user->uid_idx() == $this->uid_idx();
+    }
+
+    #
+    # At some point we will stop passing uid and start using uid_idx.
+    # Use this function to avoid having to change a bunch of code twice.
+    #
+    function URLParam() {
+	return $this->uid();
     }
 
     # accessors
@@ -85,6 +150,7 @@ class User
     }
     function uid_idx()		{ return $this->field("uid_idx"); }
     function uid()		{ return $this->field("uid"); }
+    function webid()		{ return $this->field("uid"); }
     function created()		{ return $this->field("usr_created"); }
     function expires()		{ return $this->field("usr_expires"); }
     function modified()		{ return $this->field("usr_modified"); }
@@ -133,9 +199,13 @@ class User
     #
     # Class function to create new user and return object.
     #
-    function NewUser($uid, $isleader, $wikionly, $args) {
+    function NewUser($uid, $flags, $args) {
 	global $TBBASE, $TBMAIL_APPROVAL, $TBMAIL_AUDIT, $TBMAIL_WWW;
 	global $MIN_UNIX_UID;
+
+	$isleader = ($flags & TBDB_NEWACCOUNT_PROJLEADER ? 1 : 0);
+	$wikionly = ($flags & TBDB_NEWACCOUNT_WIKIONLY   ? 1 : 0);
+	$webonly  = ($flags & TBDB_NEWACCOUNT_WEBONLY    ? 1 : 0);
 
 	#
 	# If no uid, we need to generate a unique one for the user.
@@ -245,7 +315,11 @@ class User
 	$verify_key = md5(uniqid(rand(),1));
 
 	# Now tack on other stuff we need.
-	$insert_data[] = "wikionly='$wikionly'";
+	if ($wikionly)
+	    $insert_data[] = "wikionly='1'";
+	if ($webonly)
+	    $insert_data[] = "webonly='1'";
+	
 	$insert_data[] = "usr_created=now()";
 	$insert_data[] = "usr_modified=now()";
 	$insert_data[] = "pswd_expires=date_add(now(), interval 1 year)";
@@ -297,6 +371,10 @@ class User
 	"Once you have verified your account, you will be able to access\n".
 	"the Wiki. You MUST verify your account first!"
 	:
+	($webonly ?
+	 "Once you have verified your account, Testbed Operations will be\n".
+	 "able to approve you. You MUST verify your account first!"
+	 :
 	($isleader ?
 	 "You will then be verified as a user. When you have been both\n".
 	 "verified and approved by Testbed Operations, you will be marked\n".
@@ -308,7 +386,7 @@ class User
 	 "You MUST verify your account before the project leader can ".
 	 "approve you\n".
 	 "After project approval, you will be marked as an active user, and\n".
-	 "will be granted full access to your user account.")) .
+	 "will be granted full access to your user account."))) .
        "\n\n".
        "Thanks,\n".
        "Testbed Operations\n",
@@ -317,6 +395,22 @@ class User
        "Errors-To: $TBMAIL_WWW");
 	
 	return $newuser;
+    }
+
+    #
+    # Delete a user, but JUST from the users table. 
+    #
+    function Delete() {
+	global $user_cache;
+
+	$uid_idx = $this->uid_idx();
+
+	DBQueryFatal("delete from users where uid_idx='$uid_idx'");
+
+	if (array_key_exists("$uid_idx", $user_cache))
+	    unset($user_cache["$uid_idx"]);
+	
+	return 0;
     }
 
     #
@@ -344,5 +438,312 @@ class User
 	}
 	$html .= "</table>\n";
 	return $html;
+    }
+
+    #
+    # Access Check, determines if $user can access $this record.
+    #
+    #	returns 0 if not allowed.
+    #   returns 1 if allowed.
+    # 
+    function AccessCheck($user, $access_type) {
+	global $TB_USERINFO_READINFO;
+	global $TB_USERINFO_MODIFYINFO;
+	global $TB_USERINFO_MIN;
+	global $TB_USERINFO_MAX;
+
+	$this_idx = $this->uid_idx();
+	$auth_idx = $user->uid_idx();
+
+	if ($access_type < $TB_USERINFO_MIN ||
+	    $access_type > $TB_USERINFO_MAX) {
+	    TBERROR("UserAccessCheck: Invalid access type $access_type!", 1);
+	}
+
+	if ($this->uid_idx() == $user->uid_idx()) {
+	    return 1;
+	}
+
+        #
+        # Admins do whatever they want.
+        # 
+        if (ISADMIN()) {
+	    return 1;
+	}
+
+        #
+        # This join will allow the operation if the current user is in the 
+        # same group (any group) as the target user, but with root permissions.
+        # 
+	$query_result =
+	    DBQueryFatal("select g.trust from group_membership as g ".
+			 "left join group_membership as authed on ".
+			 "     g.pid_idx=authed.pid_idx and ".
+			 "     g.gid_idx=authed.gid_idx and ".
+			 "     g.uid_idx='$uid_idx' ".
+			 "where authed.uid_idx='$auth_idx' and ".
+			 "      (authed.trust='group_root' or ".
+			 "       authed.trust='project_root')");
+
+	if (mysql_num_rows($query_result) == 0) {
+	    return 0;
+	}
+	return 1;
+    }
+
+    #
+    # How many PCs is user using. Again, use global function for now.
+    #
+    function PCsInUse() {
+	return TBUserPCs($this->uid());
+    }
+
+    #
+    # Functions to change various DB values.
+    #
+    function SetStatus($status) {
+	$idx = $this->uid_idx();
+
+	DBQueryFatal("update users set status='$status' ".
+		     "where uid_idx='$idx'");
+	$this->user["status"] = $status;
+	return 0;
+    }
+    function SetEmail($email) {
+	$idx = $this->uid_idx();
+
+	DBQueryFatal("update users set usr_email='$email' ".
+		     "where uid_idx='$idx'");
+	$this->user["usr_email"] = $email;
+	return 0;
+    }
+    function SetPassword($encoding, $expires) {
+	$idx = $this->uid_idx();
+
+	# Clear the chpasswd stuff anytime passwd is set.
+	DBQueryFatal("update users set ".
+		     "  usr_pswd='$encoding', pswd_expires=$expires, ".
+		     "  chpasswd_key=NULL,chpasswd_expires=0 ".
+		     "where uid_idx='$idx'");
+	$this->user["usr_pswd"] = $encoding;
+	return 0;
+    }
+    function SetChangePassword($key, $expires) {
+	$idx = $this->uid_idx();
+
+	DBQueryFatal("update users set ".
+		     "  chpasswd_key='$key',chpasswd_expires=$expires ".
+		     "where uid_idx='$idx'");
+	return 0;
+    }
+    function SetWindowsPassword($password) {
+	$idx = $this->uid_idx();
+
+	DBQueryFatal("update users set ".
+		     "  usr_w_pswd='$password' ".
+		     "where uid_idx='$idx'");
+	$this->user["usr_w_pswd"] = $password;
+	return 0;
+    }
+    function SetNotes($notes) {
+	$idx   = $this->uid_idx();
+	$notes = addslashes($notes);
+			    
+	DBQueryFatal("update users set ".
+		     "  notes='$notes' ".
+		     "where uid_idx='$idx'");
+	$this->user["notes"] = $notes;
+	return 0;
+    }
+    function SetUserInterface($interface) {
+	$idx   = $this->uid_idx();
+			    
+	DBQueryFatal("update users set ".
+		     "  user_interface='$interface' ".
+		     "where uid_idx='$idx'");
+	$this->user["user_interface"] = $interface;
+	return 0;
+    }
+    function SetWebFreeze($freeze) {
+	$idx   = $this->uid_idx();
+
+	$freeze = ($freeze ? 1 : 0);
+			    
+	DBQueryFatal("update users set ".
+		     "   weblogin_frozen='$freeze' ".
+		     "where uid_idx='$idx'");
+	$this->user["weblogin_frozen"] = $freeze;
+	return 0;
+    }
+    function SetCVSWeb($onoff) {
+	$idx   = $this->uid_idx();
+
+	$onoff = ($onoff ? 1 : 0);
+			    
+	DBQueryFatal("update users set ".
+		     "   cvsweb='$onoff' ".
+		     "where uid_idx='$idx'");
+	$this->user["cvsweb"] = $onoff;
+	return 0;
+    }
+    function UpdateWebLoginFail() {
+	$idx   = $this->uid_idx();
+
+	DBQueryFatal("update users set ".
+		     "       weblogin_failcount=weblogin_failcount+1, ".
+		     "       weblogin_failstamp='$now' ".
+		     "where uid_idx='$idx'");
+
+	return $this->Refresh();
+    }
+    function ChangeProfile($usr_name,  $usr_title,
+			   $usr_affil, $usr_addr,
+			   $usr_addr2, $usr_city,
+			   $usr_state, $usr_zip, $usr_country,
+			   $usr_phone, $usr_shell, $usr_URL) {
+
+	$idx          = $this->uid_idx();
+	$usr_name     = addslashes($usr_name);
+	$usr_title    = addslashes($usr_title);
+	$usr_affil    = addslashes($usr_affil);
+	$usr_addr     = addslashes($usr_addr);
+	$usr_addr2    = addslashes($usr_addr2);
+	$usr_city     = addslashes($usr_city);
+	$usr_state    = addslashes($usr_state);
+	$usr_zip      = addslashes($usr_zip);
+	$usr_country  = addslashes($usr_country);
+	$usr_phone    = addslashes($usr_phone);
+	$usr_shell    = addslashes($usr_shell);
+	$usr_URL      = addslashes($usr_URL);
+
+	$query_result =
+	    DBQueryFatal("UPDATE users SET ".
+			 "usr_name=\"$usr_name\",       ".
+			 "usr_URL=\"$usr_URL\",         ".
+			 "usr_addr=\"$usr_addr\",       ".
+			 "usr_addr2=\"$usr_addr2\",     ".
+			 "usr_city=\"$usr_city\",       ".
+			 "usr_state=\"$usr_state\",     ".
+			 "usr_zip=\"$usr_zip\",         ".
+			 "usr_country=\"$usr_country\", ".
+			 "usr_phone=\"$usr_phone\",     ".
+			 "usr_title=\"$usr_title\",     ".
+			 "usr_affil=\"$usr_affil\",     ".
+			 "usr_shell=\"$usr_shell\"      ".
+			 "WHERE uid_idx=\"$idx\"");
+
+	if (mysql_affected_rows()) {
+	    DBQueryFatal("update users set usr_modified=now() ".
+			 "where uid_idx='$idx'");
+	    
+	    return 1;
+	}
+	return 0;
+    }
+
+    #
+    # Return project list for a user.
+    #
+    function ProjectList() {
+	$uid_idx = $this->uid_idx();
+	$result  = array();
+
+	$query_result =
+	    DBQueryFatal("select pid_idx from group_membership ".
+			 "where pid_idx=gid_idx and ".
+			 "      uid_idx='$uid_idx'");
+
+	while ($row = mysql_fetch_array($query_result)) {
+	    $pid_idx = $row["pid_idx"];
+
+	    if (! ($project = Project::Lookup($pid_idx))) {
+		TBERROR("User::ProjectList: ".
+			"Could not load project $pid_idx!", 1);
+	    }
+	    $result[] = $project;
+	}
+	return $result;
+    }
+
+    #
+    # First approved project.
+    #
+    function FirstApprovedProject() {
+	$uid_idx = $this->uid_idx();
+
+	$query_result =
+	    DBQueryFatal("select pid_idx from group_membership ".
+			 "where uid_idx='$uid_idx' and pid=gid and ".
+			 "      trust!='". TBDB_TRUSTSTRING_NONE . "' ".
+			 "order by date_approved asc limit 1");
+	
+	if (mysql_num_rows($query_result) == 0) {
+	    return null;
+	}
+	$row = mysql_fetch_array($query_result);
+	$pid_idx = $row["pid_idx"];
+
+	if (! ($project = Project::Lookup($pid_idx))) {
+	    TBERROR("User::FirstApprovedProject: ".
+		    "Could not load project $pid_idx!", 1);
+	}
+	return $project;
+    }
+
+    #
+    # Are there users waiting to be approved by this user?
+    #
+    function ApprovalList($listify = 1) {
+	$uid_idx = $this->uid_idx();
+
+	#
+        # Find all of the groups that this person has project/group root in,
+	# and then in all of those groups, all of the people who are awaiting
+	# to be approved (status = none).
+	#
+        # Okay, so this operation sucks out the right people by joining the
+        # group_membership table with itself.
+	#
+	$query_result =
+	    DBQueryFatal("select g.uid_idx,g.gid_idx ".
+			 "   from group_membership as authed ".
+			 "left join group_membership as g on ".
+			 "    g.pid_idx=authed.pid_idx and ".
+			 "    g.gid_idx=authed.gid_idx ".
+			 "left join users as u on u.uid_idx=g.uid_idx ".
+			 "where u.status!='". TBDB_USERSTATUS_UNVERIFIED . "'".
+			 "  and u.status!='". TBDB_USERSTATUS_NEWUSER . "'".
+			 "  and g.uid_idx!='$uid_idx' and ".
+			 "      g.trust='". TBDB_TRUSTSTRING_NONE . "' ".
+			 "  and authed.uid_idx='$uid_idx' and ".
+			 "     (authed.trust='group_root' or ".
+			 "      authed.trust='project_root') ".
+			 "ORDER BY g.uid,g.pid,g.gid");
+
+	if (! $listify) {
+	    return mysql_num_rows($query_result);
+	}
+	
+	# Else, create a list of the groups.
+	$result  = array();
+
+	while ($row = mysql_fetch_array($query_result)) {
+	    $uid_idx = $row["uid_idx"];
+	    $gid_idx = $row["gid_idx"];
+
+	    if (! ($group = Group::Lookup($gid_idx))) {
+		TBERROR("User::ApprovalList: ".
+			"Could not load group $gid_idx!", 1);
+	    }
+	    if (! ($user = User::Lookup($uid_idx))) {
+		TBERROR("User::ApprovalList: ".
+			"Could not load user $uid_idx!", 1);
+	    }
+	    if (! array_key_exists("$uid_idx", $result)) {
+		$result["$uid_idx"] = array();
+	    }
+	    $result["$uid_idx"][] =& $group;
+	}
+	return $result;
     }
 }
