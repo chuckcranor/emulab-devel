@@ -20,56 +20,56 @@ $isadmin   = ISADMIN();
 #
 if (! isset($_POST['submit'])) {
     # First page load. Default to current user.
-    if (! isset($_GET['target_uid']))
-	$target_uid = $uid;
+    if (! isset($_GET['user']))
+	$user = $uid;
     else
-	$target_uid = $_GET['target_uid'];
+	$user = $_GET['user'];
 }
 else {
-    # Form submitted. Make sure we have a formfields array and a target_uid.
+    # Form submitted. Make sure we have a formfields array and a user.
     if (!isset($_POST['formfields']) ||
 	!is_array($_POST['formfields']) ||
-	!isset($_POST['formfields']['target_uid'])) {
+	!isset($_POST['formfields']['user'])) {
 	PAGEARGERROR("Invalid form arguments.");
     }
     $formfields = $_POST['formfields'];
-    $target_uid = $formfields['target_uid'];
+    $user       = $formfields['user'];
 }
 
 # Pedantic check of uid before continuing.
-if ($target_uid == "" || !TBvalid_uid($target_uid)) {
-    PAGEARGERROR("Invalid uid: '$target_uid'");
+if ($user == "" || !User::ValidWebID($user)) {
+    PAGEARGERROR("Invalid uid: '$user'");
 }
 
 #
 # Check to make sure thats this is a valid UID.
 #
-if (! ($target_user = User::Lookup($target_uid))) {
-    USERERROR("The user $target_uid is not a valid user", 1);
+if (! ($target_user = User::Lookup($user))) {
+    USERERROR("The user $user is not a valid user", 1);
 }
+$target_uid = $target_user->uid();
 
 #
 # Verify that this uid is a member of one of the projects that the
 # target_uid is in. Must have proper permission in that group too. 
 #
-if (!$isadmin && $uid != $target_uid &&
+if (!$isadmin && 
     !$target_user->AccessCheck($this_user, $TB_USERINFO_READINFO)) {
     USERERROR("You do not have permission to view ${uid}'s keys!", 1);
 }
 
 function SPITFORM($formfields, $errors)
 {
-    global $isadmin, $target_uid, $BOSSNODE;
+    global $isadmin, $target_user, $BOSSNODE;
+
+    $target_uid = $target_user->uid();
+    $uid_idx    = $target_user->uid_idx();
+    $webid      = $target_user->webid();
 
     #
     # Standard Testbed Header, now that we know what we want to say.
     #
-    if (strcmp($uid, $target_uid)) {
-	PAGEHEADER("SFS Public Keys for user: $target_uid");
-    }
-    else {
-	PAGEHEADER("My SFS Public Keys");
-    }
+    PAGEHEADER("SFS Public Keys for user: $target_uid");
 
     #
     # Get the list and show it.
@@ -155,8 +155,8 @@ function SPITFORM($formfields, $errors)
     echo "<table align=center border=1> 
           <form enctype=multipart/form-data
                 action=showsfskeys.php3 method=post>\n";
-    echo "<input type=hidden name=\"formfields[target_uid]\" ".
-	         "value=$target_uid>\n";
+    echo "<input type=hidden name=\"formfields[user]\" ".
+	         "value=$webid>\n";
 
     #
     # SFS public key

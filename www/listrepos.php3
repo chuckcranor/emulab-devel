@@ -25,20 +25,29 @@ $isadmin   = ISADMIN();
 #
 # Verify form arguments.
 # 
-if (!isset($target_uid) ||
-    strcmp($target_uid, "") == 0) {
+if (!isset($user) ||
+    strcmp($user, "") == 0) {
     PAGEARGERROR("You must provide a User ID!");
 }
 else {
-    if (! TBvalid_uid($target_uid)) {
-	PAGEARGERROR("Invalid characters in $target_uid!");
+    if (! User::ValidWebID($user)) {
+	PAGEARGERROR("Invalid characters in $user!");
     }
 }
 
 #
+# Check to make sure thats this is a valid UID.
+#
+if (! ($target_user = User::Lookup($user))) {
+    USERERROR("The user $user is not a valid user", 1);
+}
+$userstatus = $target_user->status();
+$target_uid = $target_user->uid();
+
+#
 # Standard Testbed Header, now that we know what we want to say.
 #
-if (strcmp($uid, $target_uid)) {
+if (strcmp($uid, $user)) {
     PAGEHEADER("CVS Repositories for: $target_uid");
 }
 else {
@@ -46,17 +55,9 @@ else {
 }
 
 #
-# Check to make sure thats this is a valid UID.
-#
-if (! ($target_user = User::Lookup($target_uid))) {
-    USERERROR("The user $target_uid is not a valid user", 1);
-}
-$userstatus = $target_user->status();
-
-#
 # Verify Permission.
 #
-if (!$isadmin && $uid != $target_uid &&
+if (!$isadmin && 
     !$target_user->AccessCheck($this_user, $TB_USERINFO_READINFO)) {
     USERERROR("You do not have permission to view ${uid}'s information!", 1);
 }

@@ -37,22 +37,25 @@ else {
 #
 # Allow admin users to view the lists for a specific uid.
 #
-if (isset($target_uid) && $target_uid != "") {
-    if ($target_uid != $uid && !$isadmin) {
+if (isset($user)) {
+    if ($user == "" || !User::ValidWebID($user)) {
+	PAGEARGERROR("Invalid characters in $target_uid");
+    }
+    if (! ($target_user = User::Lookup($user))) {
+	USERERROR("The user $user is not a valid user", 1);
+    }
+    if (!$isadmin &&
+	!$target_user->SameUser($this_user)) {
 	USERERROR("You do not have permission to list mailman lists for ".
 		  "other users!", 1);
     }
+    $target_uid   = $target_user->uid();
+    $target_dbuid = $target_user->uid();
 }
 else {
-    $target_uid = $uid;
-}
-
-# Sanity check the uid.
-if (! TBvalid_uid($target_uid)) {
-    PAGEARGERROR("Invalid characters in $target_uid");
-}
-if (! ($target_user = User::Lookup($target_uid))) {
-    USERERROR("The user $target_uid is not a valid user", 1);
+    $target_user  = $this_user;
+    $target_uid   = $uid;
+    $target_dbuid = $uid;
 }
 
 SUBPAGESTART();
@@ -123,7 +126,7 @@ else {
     # 
     $query_result =
 	DBQueryFatal("select mm.* from mailman_listnames as mm ".
-		     "where mm.owner_uid='$target_uid' ".
+		     "where mm.owner_uid='$target_dbuid' ".
 		     "order by $order");
 }
 

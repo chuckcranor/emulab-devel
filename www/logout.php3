@@ -14,12 +14,12 @@ require("defs.php3");
 #
 # $uid optionally comes in as a variable so admins can logout other users.
 #
-$target_uid = $_GET['target_uid'];
-$next_page  = $_GET['next_page'];
+$user      = $_GET['user'];
+$next_page = $_GET['next_page'];
 
 # Pedantic page argument checking.
-if (isset($target_uid) && $target_uid == "") {
-    PAGEARGERROR("Illegal characters in '$target_uid'");
+if (isset($user) && ($user == "" || !User::ValidWebID($user))) {
+    PAGEARGERROR("Illegal characters in '$user'");
 }
 
 # Get current login.
@@ -28,18 +28,20 @@ $this_user = CheckLoginOrDie(CHECKLOGIN_MODMASK);
 $uid       = $this_user->uid();
 $isadmin   = ISADMIN();
 
-if (isset($target_uid) && $target_uid != $uid) {
+if (isset($user)) {
+    if (! ($target_user = User::Lookup($user))) {
+	PAGEHEADER("Logout");
+	USERERROR("The user $user is not a valid user", 1);
+	PAGEFOOTER();
+	return;
+    }
+    $target_uid = $target_user->uid();
+    
     if (! $isadmin) {
 	PAGEHEADER("Logout");
 	echo "<center>
                   <h3>You do not have permission to logout '$target_uid'</h3>
               </center>\n";
-	PAGEFOOTER();
-	return;
-    }
-    if (! ($target_user = User::Lookup($target_uid))) {
-	PAGEHEADER("Logout");
-	USERERROR("The user $target_uid is not a valid user", 1);
 	PAGEFOOTER();
 	return;
     }

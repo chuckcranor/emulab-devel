@@ -35,8 +35,8 @@ $values  = array("adminon"        => array(0,1),
 
 # list of valid extra variables for the each toggle, and mandatory flag.
 $optargs = array("adminon"        => array(),
-		 "webfreeze"      => array("target_uid" => 1),
-		 "cvsweb"         => array("target_uid" => 1),
+		 "webfreeze"      => array("user" => 1),
+		 "cvsweb"         => array("user" => 1),
 		 "lockdown"       => array("pid" => 1, "eid" => 1),
 		 "cvsrepo_public" => array("pid" => 1));
 
@@ -86,8 +86,8 @@ elseif ($type == "webfreeze") {
     if (! $isadmin) {
 	USERERROR("You do not have permission to toggle $type!", 1);
     }
-    if (! ($target_user = User::Lookup($target_uid))) {
-	PAGEARGERROR("Target user '$target_uid' is not a valid user!");
+    if (! ($target_user = User::Lookup($user))) {
+	PAGEARGERROR("Target user '$user' is not a valid user!");
     }
     $target_user->SetWebFreeze($value);
 }
@@ -96,8 +96,8 @@ elseif ($type == "cvsweb") {
     if (! $isadmin) {
 	USERERROR("You do not have permission to toggle $type!", 1);
     }
-    if (! ($target_user = User::Lookup($target_uid))) {
-	PAGEARGERROR("Target user '$target_uid' is not a valid user!");
+    if (! ($target_user = User::Lookup($user))) {
+	PAGEARGERROR("Target user '$user' is not a valid user!");
     }
     $target_user->SetCVSWeb($value);
 }
@@ -142,7 +142,7 @@ if (isset($HTTP_REFERER) && $HTTP_REFERER != "" &&
     header("Location: $HTTP_REFERER");
 }
 else {
-    if (isset($target_uid)) {
+    if (isset($user)) {
 	header("Location: " . CreateURL("showuser", $target_user));
     } elseif (isset($pid) && isset($eid)) {
 	header("Location: $TBBASE/showexp.php3?pid=$pid&eid=$eid");

@@ -186,11 +186,14 @@ echo "</tr>\n";
 
 while ($row = mysql_fetch_array($query_result)) {
     $thisuid  = $row[uid];
+    $webid    = $row[uid_idx];
     $name     = $row[usr_name];
     $status   = $row[status];
     $unix_uid = $row[unix_uid];
     $webidle  = $row[webidle];
     $usersidle= $row[usersidle];
+
+    $showuser_url = CreateURL("showuser", URLARG_UID, $webid);
 
     echo "<tr>\n";
 
@@ -201,7 +204,7 @@ while ($row = mysql_fetch_array($query_result)) {
 	echo "<td align=center><img alt=\"N\" src=\"redball.gif\"></td>\n";
     }
 
-    echo "<td><A href='showuser.php3?target_uid=$thisuid'>$thisuid</A></td>
+    echo "<td><A href='$showuser_url'>$thisuid</A></td>
               <td>$name</td>\n";
 
     # List of projects.

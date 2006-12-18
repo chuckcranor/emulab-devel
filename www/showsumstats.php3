@@ -127,7 +127,7 @@ function showsummary ($showby, $sortby) {
 	    $which = "uid";
 	    $table = "user_stats";
 	    $title = "User Summary Stats (Epoch)";
-	    $link  = "showuser.php3?target_uid=";
+	    $link  = "showuser.php3?user=";
 	    break;
         default:
 	    USERERROR("Invalid showby argument: $showby!", 1);
@@ -667,7 +667,7 @@ function showrange ($showby, $sortby, $range) {
 	    $which = "uid";
 	    $table = $uid_summary;
 	    $title = "User Summary Stats ($range)";
-	    $link  = "showuser.php3?target_uid=";
+	    $link  = "showuser.php3?user=";
 	    break;
         default:
 	    USERERROR("Invalid showby argument: $showby!", 1);

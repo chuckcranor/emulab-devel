@@ -14,7 +14,7 @@ include_once("template_defs.php");
 #
 # A project
 #
-function SHOWPROJECT($pid, $thisuid) {
+function SHOWPROJECT($pid, $ignore) {
     global $WIKISUPPORT, $CVSSUPPORT, $TBPROJ_DIR, $TBCVSREPO_DIR;
     global $MAILMANSUPPORT, $OPSCVSURL, $USERNODE;
     global $TBDB_TRUST_GROUPROOT;
@@ -254,7 +254,7 @@ function SHOWPROJECT($pid, $thisuid) {
 #
 # A Group
 #
-function SHOWGROUP($pid, $gid, $thisuid) {
+function SHOWGROUP($pid, $gid, $ignore) {
     global $OURDOMAIN;
     global $MAILMANSUPPORT;
     global $TBDB_TRUST_GROUPROOT;
@@ -444,12 +444,17 @@ function SHOWGROUPMEMBERS($pid, $gid, $prived = 0) {
 #
 # A list of groups for a user.
 #
-function SHOWGROUPMEMBERSHIP($uid) {
+function SHOWGROUPMEMBERSHIP($webid) {
     $none = TBDB_TRUSTSTRING_NONE;
+
+    if (! ($user = User::Lookup($webid))) {
+	TBERROR("Error getting object for user $webid", 1);
+    }
+    $idx = $user->uid_idx();
     
     $query_result =
 	DBQueryFatal("SELECT * FROM group_membership ".
-		     "WHERE uid='$uid' and trust!='$none' ".
+		     "WHERE uid_idx='$idx' and trust!='$none' ".
 		     "order by pid");
     
     if (! mysql_num_rows($query_result)) {
@@ -486,226 +491,12 @@ function SHOWGROUPMEMBERSHIP($uid) {
 #
 # A User
 #
-function SHOWUSER($uid) {
-    global $WIKISUPPORT;
+function SHOWUSER($webid) {
 
-    if (! ($user = User::Lookup($uid))) {
-	TBERROR("Error getting object for user $uid", 1);
+    if (! ($user = User::Lookup($webid))) {
+	TBERROR("Error getting object for user $webid", 1);
     }
-
-    $uid_idx     = $user->uid_idx();
-    $usr_email   = $user->email();
-    $usr_URL     = $user->URL();
-    $usr_addr    = $user->addr();
-    $usr_addr2   = $user->addr2();
-    $usr_city    = $user->city();
-    $usr_state   = $user->state();
-    $usr_zip     = $user->zip();
-    $usr_country = $user->country();
-    $usr_name    = $user->name();
-    $usr_phone   = $user->phone();
-    $usr_shell   = $user->shell();
-    $usr_title   = $user->title();
-    $usr_affil   = $user->affil();
-    $status      = $user->status();
-    $admin       = $user->admin();
-    $notes       = $user->notes();
-    $frozen      = $user->weblogin_frozen();
-    $failcount   = $user->weblogin_failcount();
-    $failstamp   = $user->weblogin_failstamp();
-    $wikiname    = $user->wikiname();
-    $cvsweb      = $user->cvsweb();
-    $wikionly    = $user->wikionly();
-
-    if (!strcmp($usr_addr2, ""))
-	$usr_addr2 = "&nbsp;";
-    if (!strcmp($usr_city, ""))
-	$usr_city = "&nbsp;";
-    if (!strcmp($usr_state, ""))
-	$usr_state = "&nbsp;";
-    if (!strcmp($usr_zip, ""))
-	$usr_zip = "&nbsp;";
-    if (!strcmp($usr_country, ""))
-	$usr_country = "&nbsp;";
-    if (!strcmp($notes, ""))
-	$notes = "&nbsp;";
-
-    #
-    # Last Login info.
-    #
-    if (($lastweblogin = LASTWEBLOGIN($uid)) == 0)
-	$lastweblogin = "&nbsp;";
-    if (($lastuserslogininfo = TBUsersLastLogin($uid)) == 0)
-	$lastuserslogin = "N/A";
-    else {
-	$lastuserslogin = $lastuserslogininfo["date"] . " " .
-		          $lastuserslogininfo["time"];
-    }
-    
-    if (($lastnodelogininfo = TBUidNodeLastLogin($uid)) == 0)
-	$lastnodelogin = "N/A";
-    else {
-	$lastnodelogin = $lastnodelogininfo["date"] . " " .
-		         $lastnodelogininfo["time"] . " " .
-                         "(" . $lastnodelogininfo["node_id"] . ")";
-    }
-    
-    echo "<table align=center border=1>\n";
-    
-    echo "<tr>
-              <td>Username:</td>
-              <td>$uid ($uid_idx)</td>
-          </tr>\n";
-    
-    echo "<tr>
-              <td>Full Name:</td>
-              <td>$usr_name</td>
-          </tr>\n";
-    
-    echo "<tr>
-              <td>Email Address:</td>
-              <td>$usr_email</td>
-          </tr>\n";
-
-    echo "<tr>
-              <td>Home Page URL:</td>
-              <td><a href='$usr_URL'>$usr_URL</a></td>
-          </tr>\n";
-
-    if ($WIKISUPPORT && isset($wikiname)) {
-	$wikiurl = "gotowiki.php3?redurl=Main/$wikiname";
-	
-	echo "<tr>
-                  <td>Emulab Wiki Page:</td>
-                  <td class=\"left\">
-                      <a href='$wikiurl'>$wikiname</a></td>
-              </tr>\n";
-    }
-    
-    #echo "<tr>
-    #          <td>Expiration date:</td>
-    #          <td>$usr_expires</td>
-    #      </tr>\n";
-    
-    echo "<tr>
-              <td>Address 1:</td>
-              <td>$usr_addr</td>
-          </tr>\n";
-    
-    echo "<tr>
-              <td>Address 2:</td>
-              <td>$usr_addr2</td>
-          </tr>\n";
-    
-    echo "<tr>
-              <td>City:</td>
-              <td>$usr_city</td>
-          </tr>\n";
-    
-    echo "<tr>
-              <td>State:</td>
-              <td>$usr_state</td>
-          </tr>\n";
-    
-    echo "<tr>
-              <td>ZIP:</td>
-              <td>$usr_zip</td>
-          </tr>\n";
-
-    echo "<tr>
-              <td>Country:</td>
-              <td>$usr_country</td>
-          </tr>\n";
-    
-    echo "<tr>
-              <td>Phone #:</td>
-              <td>$usr_phone</td>
-          </tr>\n";
-
-    echo "<tr>
-	      <td>Shell:</td>
-	      <td>$usr_shell</td>
-          </tr>\n";
-    
-    echo "<tr>
-              <td>Title/Position:</td>
-              <td>$usr_title</td>
-         </tr>\n";
-    
-    echo "<tr>
-              <td>Institutional Affiliation:</td>
-              <td>$usr_affil</td>
-          </tr>\n";
-    
-    echo "<tr>
-              <td>Status:</td>
-              <td>$status</td>
-          </tr>\n";
-
-    if ($wikionly) {
-	echo "<tr>
-                  <td><b>Wikionly</b>:</td>
-                  <td>Yes</td>
-              </tr>\n";
-    }
-
-    if ($admin) {
-	echo "<tr>
-                  <td>Administrator:</td>
-                  <td>Yes</td>
-              </tr>\n";
-    }
-    
-    echo "<tr>
-              <td>Last Web Login:</td>
-              <td>$lastweblogin</td>
-          </tr>\n";
-    
-    echo "<tr>
-              <td>Last Users Login:</td>
-              <td>$lastuserslogin</td>
-          </tr>\n";
-    
-    echo "<tr>
-              <td>Last Node Login:</td>
-              <td>$lastnodelogin</td>
-          </tr>\n";
-
-    if (ISADMIN()) {
-	$cvswebflip = ($cvsweb ? 0 : 1);
-
-	$toggle_url = CreateURL("toggle", $user,
-				"type", "cvsweb", "value", $cvswebflip);
-
-	echo "<tr>
-                  <td>CVSWeb Access:</td>
-                  <td>$cvsweb (<a href='$toggle_url'>Toggle</a>)
-              </tr>\n";
-	
-	$freezeflip = ($frozen ? 0 : 1);
-	$toggle_url = CreateURL("toggle", $user,
-				"type", "webfreeze", "value", $freezeflip);
-
-	echo "<tr>
-                  <td>Web Freeze:</td>
-                  <td>$frozen (<a href='$toggle_url'>Toggle</a>)
-              </tr>\n";
-	
-	if ($frozen && $failstamp && $failcount) {
-	    $when = strftime("20%y-%m-%d %H:%M:%S", $failstamp);
-	    
-	    echo "<tr>
-                      <td>Login Failures:</td>
-                      <td>$failcount ($when)</td>
-                  </tr>\n";
-	}
-	echo "<tr>
-                  <td>Notes:</td>
-                  <td>$notes</td>
-              </tr>\n";
-    }
-    echo "</table>\n";
-
+    return $user->Show();
 }
 
 #
@@ -1152,11 +943,21 @@ function SHOWEXPLIST($type, $fromuid, $id, $gid = "") {
 }
 
 
-function showexplist_internal($templates_only, $type, $fromuid, $id, $gid) {
+function showexplist_internal($templates_only, $type, $fromwebid, $id, $gid) {
     global $TB_EXPTSTATE_SWAPPED, $TB_EXPTSTATE_SWAPPING;
 
+    if (! ($this_user = User::Lookup($fromwebid))) {
+	TBERROR("Error getting object for user $fromwebid", 1);
+    }
+    $from_idx = $this_user->uid_idx();
+
     if ($type == "USER") {
-	$where = "expt_head_uid='$id'";
+	if (! ($target_user = User::Lookup($id))) {
+	    TBERROR("Error getting object for user $id", 1);
+	}
+	$uid = $target_user->uid();
+	
+	$where = "expt_head_uid='$uid'";
 	$title = "Current";
     } elseif ($type == "PROJ") {
 	$where = "e.pid='$id'";
@@ -1202,7 +1003,7 @@ function showexplist_internal($templates_only, $type, $fromuid, $id, $gid) {
 			 "left join reserved as r on e.pid=r.pid and ".
 			 "     e.eid=r.eid ".
  			 "left join group_membership as g on g.pid=e.pid and ".
-	 		 "     g.gid=e.gid and g.uid='$fromuid' ".
+	 		 "     g.gid=e.gid and g.uid_idx='$from_idx' ".
 			 "where g.uid is not null and ($where) ".
 			 "      and t.guid is null $template_clause " .
 			 "group by e.pid,e.eid order by e.state,e.eid");
@@ -2040,9 +1841,14 @@ function SHOWIMAGEID($imageid, $edit, $isadmin = 0) {
 #
 # Show all experiments using a particular OSID
 #
-function SHOWOSIDEXPTS($pid, $osname, $uid) {
+function SHOWOSIDEXPTS($pid, $osname, $webid) {
     global $TBOPSPID;
     global $TB_EXPT_READINFO;
+
+    if (! ($user = User::Lookup($webid))) {
+	TBERROR("Error getting object for user $webid", 1);
+    }
+    $uid = $user->uid();
 
     #
     # Due to the funny way we handle 'global' images in the emulab-ops project,
@@ -2939,8 +2745,13 @@ function SPITOSINFOLINK($osid)
 #
 # A list of widearea accounts.
 #
-function SHOWWIDEAREAACCOUNTS($uid) {
+function SHOWWIDEAREAACCOUNTS($webid) {
     $none = TBDB_TRUSTSTRING_NONE;
+
+    if (! ($user = User::Lookup($webid))) {
+	TBERROR("Error getting object for user $webid", 1);
+    }
+    $uid = $user->uid();
     
     $query_result =
 	DBQueryFatal("SELECT * FROM widearea_accounts ".

@@ -21,8 +21,7 @@ $isadmin   = ISADMIN();
 #
 # Verify arguments.
 # 
-if (!isset($target_uid) ||
-    strcmp($target_uid, "") == 0) {
+if (!isset($user) || $user == "") {
     USERERROR("You must provide a User ID.", 1);
 }
 if (isset($target_pid) &&
@@ -33,9 +32,11 @@ if (isset($target_pid) &&
 #
 # Confirm target is a real user.
 #
-if (! ($target_user = User::Lookup($target_uid))) {
-    USERERROR("The user $target_uid is not a valid user", 1);
+if (! ($target_user = User::Lookup($user))) {
+    USERERROR("The user $user is not a valid user", 1);
 }
+$target_dbuid = $target_user->uid();
+$target_uid   = $target_user->uid();
 
 #
 # Requesting? Fire off email and we are done. 
@@ -89,7 +90,8 @@ if (isset($target_pid)) {
 }
 else {
     $query_result =
-	DBQueryFatal("select pid from projects where head_uid='$target_uid'");
+	DBQueryFatal("select pid from projects ".
+		     "where head_uid='$target_dbuid'");
 
     if (mysql_num_rows($query_result)) {
 	USERERROR("$target_uid is still heading up projects!", 1);
@@ -126,7 +128,7 @@ else {
 # 
 $query_result =
     DBQueryFatal("SELECT * FROM experiments ".
-		 "where expt_head_uid='$target_uid' ".
+		 "where expt_head_uid='$target_dbuid' ".
 		 (isset($target_pid) ? "and pid='$target_pid'" : ""));
 
 if (mysql_num_rows($query_result)) {
@@ -190,7 +192,7 @@ if (!$confirmed) {
     }
     
     echo "<form action=deleteuser.php3 method=post>";
-    echo "<input type=hidden name=target_uid value=\"$target_uid\">\n";
+    echo "<input type=hidden name=user value=\"$user\">\n";
     if (isset($target_pid)) {
 	echo "<input type=hidden name=target_pid value=\"$target_pid\">\n";
     }
@@ -217,7 +219,7 @@ if (!$confirmed_twice) {
     }
     
     echo "<form action=deleteuser.php3 method=post>";
-    echo "<input type=hidden name=target_uid value=\"$target_uid\">\n";
+    echo "<input type=hidden name=user value=\"$user\">\n";
     if (isset($target_pid)) {
 	echo "<input type=hidden name=target_pid value=\"$target_pid\">\n";
     }
@@ -250,14 +252,12 @@ STOPBUSY();
 # project leaders, must send us a request for it.
 #
 if (isset($target_pid)) {
-    $query_result =
-	DBQueryFatal("select pid,gid from group_membership ".
-		     "where uid='$target_uid' and pid=gid");
+    $projlist = $target_user->ProjectList();
+    
+    if (! count($projlist)) {
+	echo "<b>User 'target_uid' is no longer a member of any projects.\n";
 
-    if (! mysql_num_rows($query_result)) {
-	echo "<b>User '$target_uid' is no longer a member of any projects.\n";
-
-	$url = CreateURL("deleteuser", URLARG_UID, $target_uid);
+	$url = CreateURL("deleteuser", $target_user);
 	    
 	if ($isadmin) {
 	    echo "Do you want to

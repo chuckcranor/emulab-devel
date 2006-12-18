@@ -489,7 +489,7 @@ if (! isset($_POST['submit'])) {
     return;
 }
 else {
-    # Form submitted. Make sure we have a formfields array and a target_uid.
+    # Form submitted. Make sure we have a formfields array.
     if (!isset($_POST['formfields']) ||
 	!is_array($_POST['formfields'])) {
 	PAGEARGERROR("Invalid form arguments.");

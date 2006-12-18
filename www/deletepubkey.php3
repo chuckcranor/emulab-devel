@@ -19,11 +19,11 @@ $uid       = $this_user->uid();
 $isadmin   = ISADMIN();
 
 # Page arguments.
-$target_uid = $_GET['target_uid'];
-$key        = $_GET['key'];
+$user = $_GET['user'];
+$key  = $_GET['key'];
 
 # Pedantic argument checking.
-if (!isset($target_uid) || $target_uid == "" || !TBvalid_uid($target_uid) ||
+if (!isset($user) || $user == "" || !User::ValidWebID($user) ||
     !isset($key) || $key == "" || !preg_match("/^[\d]+$/", $key)) {
     PAGEARGERROR();
 }
@@ -31,15 +31,17 @@ if (!isset($target_uid) || $target_uid == "" || !TBvalid_uid($target_uid) ||
 #
 # Check to make sure thats this is a valid UID.
 #
-if (! ($target_user = User::Lookup($target_uid))) {
-    USERERROR("The user $target_uid is not a valid user", 1);
+if (! ($target_user = User::Lookup($user))) {
+    USERERROR("The user $user is not a valid user", 1);
 }
+$target_dbuid = $target_user->uid();
+$target_uid   = $target_user->uid();
 
 #
 # Verify that this uid is a member of one of the projects that the
-# target_uid is in. Must have proper permission in that group too. 
+# user is in. Must have proper permission in that group too. 
 #
-if (!$isadmin && $uid != $target_uid &&
+if (!$isadmin && 
     !$target_user->AccessCheck($this_user, $TB_USERINFO_MODIFYINFO)) {
     USERERROR("You do not have permission!", 1);
 }
@@ -49,7 +51,7 @@ if (!$isadmin && $uid != $target_uid &&
 #
 $query_result =
     DBQueryFatal("select * from user_pubkeys ".
-		 "where uid='$target_uid' and idx='$key'");
+		 "where uid='$target_dbuid' and idx='$key'");
 
 if (! mysql_num_rows($query_result)) {
     USERERROR("Public Key for user '$target_uid' does not exist!", 1);
@@ -130,7 +132,7 @@ TBMAIL("$targuid_name <$targuid_email>",
      "Errors-To: $TBMAIL_WWW");
 
 DBQueryFatal("delete from user_pubkeys ".
-	     "where uid='$target_uid' and idx='$key'");
+	     "where uid='$target_dbuid' and idx='$key'");
 
 #
 # update authkeys files and nodes, but only if user has a real account.

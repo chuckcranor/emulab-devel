@@ -32,8 +32,12 @@ $wikionly = 0;
 function SPITFORM($formfields, $errors)
 {
     global $TBDB_UIDLEN, $TBDB_PIDLEN, $TBDB_GIDLEN, $isadmin;
-    global $target_uid, $target_user, $wikionly;
+    global $target_user, $wikionly;
     global $shelllist, $defaultshell;
+
+    $username = $target_user->uid();
+    $uid_idx  = $target_user->uid_idx();
+    $webid    = $target_user->webid();
     
     #
     # Standard Testbed Header. Written late cause of password
@@ -80,13 +84,11 @@ function SPITFORM($formfields, $errors)
         #
         echo "<tr>
                   <td colspan=2>Username:</td>
-                  <td class=left>
-                      $formfields[target_uid]
+                  <td class=left>$username ($uid_idx)
                       <input type=hidden
                              name=\"formfields[target_uid]\"
-                             value=\"" . $formfields[target_uid] . "\"
-                             size=$TBDB_UIDLEN
-   	                     maxlength=$TBDB_UIDLEN>
+                             value=\"" . $webid . "\"
+                             size=$TBDB_UIDLEN>
               </td>
              </tr>\n";
 
@@ -379,7 +381,7 @@ else {
 }
 
 # Pedantic check of uid before continuing.
-if ($target_uid == "" || !TBvalid_uid($target_uid)) {
+if ($target_uid == "" || !User::ValidWebID($target_uid)) {
     PAGEARGERROR("Invalid uid: '$target_uid'");
 }
 
@@ -393,7 +395,7 @@ if (! ($target_user = User::Lookup($target_uid))) {
 #
 # Admin types can change anyone. 
 #
-if (!$isadmin && !$this_user->SameUser($target_user) &&
+if (!$isadmin && 
     !$target_user->AccessCheck($this_user, $TB_USERINFO_MODIFYINFO)) {
     USERERROR("You do not have permission to modify information for ".
 	      "user: $target_uid!", 1);
@@ -510,7 +512,8 @@ if (!isset($formfields[usr_email]) ||
 elseif (! TBvalid_email($formfields[usr_email])) {
     $errors["Email Address"] = TBFieldErrorString();
 }
-elseif (User::LookupByEmail($formfields[usr_email])) {
+elseif (($temp_user = User::LookupByEmail($formfields[usr_email])) &&
+	!$target_user->SameUser($temp_user)) {
     $errors["Email Address"] = "Already in use by another user!";
 }
 if (!$isadmin && !$wikionly) {

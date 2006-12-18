@@ -618,6 +618,7 @@ function TBNodeAccessCheck($uid, $node_id, $access_type)
     global $TBDB_TRUST_GROUPROOT;
     global $TBDB_TRUST_LOCALROOT;
     global $TBOPSPID;
+    global $CHECKLOGIN_USER;
     $mintrust;
 
     if ($access_type < $TB_NODEACCESS_MIN ||
@@ -636,7 +637,7 @@ function TBNodeAccessCheck($uid, $node_id, $access_type)
 	# If the current user is in the emulab-ops project and has sufficient
 	# privs, then he can muck with free nodes as if he were an admin type.
 	#
-	if ($uid == GETUID() && OPSGUY()) {
+	if ($uid == $CHECKLOGIN_USER->uid() && OPSGUY()) {
 	    return(TBMinTrust(TBGrpTrust($uid, $TBOPSPID, $TBOPSPID),
 			      $TBDB_TRUST_LOCALROOT));
 	}
@@ -654,54 +655,6 @@ function TBNodeAccessCheck($uid, $node_id, $access_type)
     }
     return TBMinTrust(TBGrpTrust($uid, $pid, $gid), $mintrust) ||
 	TBMinTrust(TBGrpTrust($uid, $pid, $pid), $TBDB_TRUST_GROUPROOT);
-}
-
-#
-# Determine if uid can access a another user record (read or modify).
-#
-# Usage: TBUserInfoAccessCheck($uid, $target_uid, $access_type)
-#	 returns 0 if not allowed.
-#        returns 1 if allowed.
-# 
-function TBUserInfoAccessCheck($uid, $target_uid, $access_type)
-{
-    global $TB_USERINFO_READINFO;
-    global $TB_USERINFO_MODIFYINFO;
-    global $TB_USERINFO_MIN;
-    global $TB_USERINFO_MAX;
-
-    if ($access_type < $TB_USERINFO_MIN || $access_type > $TB_USERINFO_MAX) {
-	TBERROR("Invalid access type $access_type!", 1);
-    }
-
-    if (strcmp($uid, $target_uid) == 0) {
-	return 1;
-    }
-
-    #
-    # Admins do whatever they want!
-    # 
-    if (ISADMIN($uid)) {
-	return 1;
-    }
-
-    #
-    # This join will allow the operation if the current user is in the same
-    # group (any group) as the target user, but with root permissions.
-    # 
-    $query_result =
-	DBQueryFatal("select g.trust from group_membership as g ".
-		     "left join group_membership as authed on ".
-		     "     g.pid=authed.pid and g.gid=authed.gid and ".
-		     "     g.uid='$target_uid' ".
-		     "where authed.uid='$uid' and ".
-		     "      (authed.trust='group_root' or ".
-		     "       authed.trust='project_root')");
-
-    if (mysql_num_rows($query_result) == 0) {
-	return 0;
-    }
-    return 1;
 }
 
 #

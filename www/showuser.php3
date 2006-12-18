@@ -19,15 +19,26 @@ $isadmin   = ISADMIN();
 #
 # Verify form arguments.
 # 
-if (!isset($target_uid) ||
-    strcmp($target_uid, "") == 0) {
+if (!isset($user) ||
+    strcmp($user, "") == 0) {
     USERERROR("You must provide a User ID.", 1);
 }
 
 #
+# Check to make sure thats this is a valid UID.
+#
+if (! ($target_user = User::Lookup($user))) {
+    USERERROR("Could not lookup user '$user'!", 1);
+}
+$userstatus = $target_user->status();
+$wikionly   = $target_user->wikionly();
+$target_idx = $target_user->uid_idx();
+$target_uid = $target_user->uid();
+
+#
 # Standard Testbed Header, now that we know what we want to say.
 #
-if (strcmp($uid, $target_uid)) {
+if (! $this_user->SameUser($target_user)) {
     PAGEHEADER("Information for User: $target_uid");
 }
 else {
@@ -35,20 +46,10 @@ else {
 }
 
 #
-# Check to make sure thats this is a valid UID.
-#
-if (! ($target_user = User::Lookup($target_uid))) {
-    USERERROR("Could not lookup user '$target_uid'!", 1);
-}
-$userstatus = $target_user->status();
-$wikionly   = $target_user->wikionly();
-$target_idx = $target_user->uid_idx();
-
-#
 # Verify that this uid is a member of one of the projects that the
 # target_uid is in. Must have proper permission in that group too. 
 #
-if (!$isadmin && !$this_user->SameUser($target_user) &&
+if (!$isadmin && 
     !$target_user->AccessCheck($this_user, $TB_USERINFO_READINFO)) {
     USERERROR("You do not have permission to view this user's information!", 1);
 }
@@ -201,7 +202,7 @@ SUBMENUSTART("User Options");
 WRITESUBMENUBUTTON("Edit Profile",
 		   CreateURL("moduserinfo", $target_user));
 
-if (!$wikionly && ($isadmin || !strcmp($uid, $target_uid))) {
+if (!$wikionly && ($isadmin || $target_user->SameUser($this_user))) {
     WRITESUBMENUBUTTON("Edit SSH Keys",
 		       CreateURL("showpubkeys", $target_user));
     
@@ -256,7 +257,8 @@ if ($isadmin) {
 }
 SUBMENUEND();
 
-SHOWUSER($target_uid);
+$target_user->Show();
+
 SUBPAGEEND();
 
 if ($isadmin) {

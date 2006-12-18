@@ -14,8 +14,8 @@ $this_user = CheckLoginOrDie();
 #
 # Verify arguments.
 # 
-if (!isset($target_uid) ||
-    strcmp($target_uid, "") == 0) {
+if (!isset($user) ||
+    strcmp($user, "") == 0) {
     USERERROR("You must provide a User ID.", 1);
 }
 
@@ -26,15 +26,15 @@ if (ISADMIN()) {
 #
 # Confirm target is a real user.
 #
-if (! ($target_user = User::Lookup($target_uid))) {
-    USERERROR("No such user '$target_uid'", 1);
+if (! ($target_user = User::Lookup($user))) {
+    USERERROR("No such user '$user'", 1);
 }
 
 if (DOLOGIN_MAGIC($target_user->uid(), $target_user->uid_idx()) < 0) {
     USERERROR("Could not log you in as $target_uid", 1);
 }
 # So the menu and headers get spit out properly.
-$_COOKIE[$TBNAMECOOKIE] = $target_uid;
+$_COOKIE[$TBNAMECOOKIE] = $target_user->webid();
 
 PAGEHEADER("SU as User");
 

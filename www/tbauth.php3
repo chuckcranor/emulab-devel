@@ -93,10 +93,10 @@ function REMEMBERED_ID() {
 # logged in. This interface is deprecated and being replaced.
 # 
 function GETLOGIN() {
-    global $CHECKLOGIN_UID;
+    global $CHECKLOGIN_USER;
     
     if (CheckLogin($status))
-	return $CHECKLOGIN_UID;
+	return $CHECKLOGIN_USER->uid();
 
     return FALSE;
 }
@@ -120,28 +120,29 @@ function GETUID() {
 	if (! preg_match("/^[-\w]+$/", $uid)) {
 	    return FALSE;
 	}
-	return $uid;
-    }
-    elseif (isset($_COOKIE[$TBNAMECOOKIE])) {
-	$idx = $_COOKIE[$TBNAMECOOKIE];
-
-        # Pedantic check
-	if (! preg_match("/^[\d]+$/", $idx)) {
-	    return FALSE;
-	}
+	$safe_uid = addslashes($uid);
 
 	#
-	# Map this to a uid (from an index). This is a temporary measure until
-	# all of the web code agrees on what a uid is (uid or idx). 
+	# Map this to an index (from a uid).
 	#
 	$query_result =
-	    DBQueryFatal("select uid from users where uid_idx='$idx'");
+	    DBQueryFatal("select uid_idx from users where uid='$safe_uid'");
     
 	if (! mysql_num_rows($query_result))
 	    return FALSE;
 	
 	$row = mysql_fetch_array($query_result);
 	return $row[0];
+    }
+    elseif (isset($_COOKIE[$TBNAMECOOKIE])) {
+	$idx = $_COOKIE[$TBNAMECOOKIE];
+
+        # Pedantic check
+	if (! preg_match("/^[-\w]+$/", $idx)) {
+	    return FALSE;
+	}
+
+	return $idx;
     }
     return FALSE;
 }
@@ -169,11 +170,11 @@ function LoginStatus() {
     }
 
     # No UID in the browser? Obviously not logged in!
-    if (($uid = GETUID()) == FALSE) {
+    if (($uid_idx = GETUID()) == FALSE) {
 	$CHECKLOGIN_STATUS = CHECKLOGIN_NOTLOGGEDIN;
 	return $CHECKLOGIN_STATUS;
     }
-    $CHECKLOGIN_UID = $uid;
+    $CHECKLOGIN_IDX = $uid_idx;
 
     # for java applet, we can send the key in the $auth variable,
     # rather than passing it is a cookie.
@@ -209,7 +210,7 @@ function LoginStatus() {
     if (isset($hashhash)) {
 	$CHECKLOGIN_HASHHASH = $safe_hashhash = addslashes($hashhash);
     }
-    $safe_uid = addslashes($uid);
+    $safe_idx = addslashes($uid_idx);
     
     #
     # Note that we get multiple rows back because of the group_membership
@@ -224,7 +225,7 @@ function LoginStatus() {
 		     "left join newlogin as l on l.uid_idx=u.uid_idx ".
 		     "left join group_membership as g on g.uid_idx=u.uid_idx ".
 		     "left join nodetypeXpid_permissions as n on g.pid=n.pid ".
-		     "where u.uid='$safe_uid' and ".
+		     "where u.uid_idx='$safe_idx' and ".
 		     (isset($curhash) ?
 		      "l.hashkey='$safe_curhash'" :
 		      "l.hashhash='$safe_hashhash'"));
@@ -359,8 +360,6 @@ function LoginStatus() {
 	    return $CHECKLOGIN_STATUS;
 	}
     }
-    # Again, this is temporary.
-    $CHECKLOGIN_IDX = $uid_idx;
 
     # Cache this now; someone will eventually want it.
     $CHECKLOGIN_USER = User::Lookup($uid_idx);
@@ -428,7 +427,7 @@ function LoginStatus() {
 #
 function LOGGEDINORDIE($uid, $modifier = 0, $login_url = NULL) {
     global $TBBASE, $BASEPATH;
-    global $TBAUTHTIMEOUT, $CHECKLOGIN_HASHKEY, $CHECKLOGIN_UID;
+    global $TBAUTHTIMEOUT, $CHECKLOGIN_HASHKEY;
 
     #
     # We now ignore the $uid argument and let LoginStatus figure it out.
@@ -504,7 +503,8 @@ function LOGGEDINORDIE($uid, $modifier = 0, $login_url = NULL) {
         USERERROR("Sorry. The Web Interface is ".
 		  "<a href=nologins.php3>Temporarily Unavailable!</a>", 1);
 
-    return $CHECKLOGIN_UID;
+    # No one should ever look at the return value of this function.
+    return null;
 }
 
 #
@@ -576,8 +576,7 @@ function STUDLY() {
     global $CHECKLOGIN_STATUS;
     
     if ($CHECKLOGIN_STATUS == CHECKLOGIN_NOSTATUS) {
-	$uid=GETUID();
-	TBERROR("STUDLY: $uid is not logged in!", 1);
+	TBERROR("STUDLY: user is not logged in!", 1);
     }
 
     return (($CHECKLOGIN_STATUS &
@@ -589,8 +588,7 @@ function OPSGUY() {
     global $CHECKLOGIN_STATUS;
     
     if ($CHECKLOGIN_STATUS == CHECKLOGIN_NOSTATUS) {
-	$uid=GETUID();
-	TBERROR("OPSGUY: $uid is not logged in!", 1);
+	TBERROR("OPSGUY: user is not logged in!", 1);
     }
 
     return (($CHECKLOGIN_STATUS &
@@ -602,8 +600,7 @@ function WIKIONLY() {
     global $CHECKLOGIN_STATUS;
     
     if ($CHECKLOGIN_STATUS == CHECKLOGIN_NOSTATUS) {
-	$uid=GETUID();
-	TBERROR("WIKIONLY: $uid is not logged in!", 1);
+	TBERROR("WIKIONLY: user is not logged in!", 1);
     }
 
     return (($CHECKLOGIN_STATUS &
@@ -689,10 +686,10 @@ function ISPLABUSER() {
 #
 function NODETYPE_ALLOWED($type) {
     global $CHECKLOGIN_NODETYPES;
-    $uid = GETUID();
-    if (!$uid) {
+
+    if (! GETUID())
 	return 0;
-    }
+
     if ($CHECKLOGIN_NODETYPES[$type]) {
 	return 1;
     } else {

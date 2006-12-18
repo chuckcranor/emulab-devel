@@ -21,8 +21,7 @@ $isadmin   = ISADMIN();
 #
 # Verify arguments.
 # 
-if (!isset($target_uid) ||
-    strcmp($target_uid, "") == 0) {
+if (!isset($user) || $user == "") {
     USERERROR("You must provide a User ID.", 1);
 }
 if (isset($action)) {
@@ -46,9 +45,10 @@ else {
 #
 # Confirm target is a real user.
 #
-if (! ($target_user = User::Lookup($target_uid))) {
-    USERERROR("No such user '$target_uid'", 1);
+if (! ($target_user = User::Lookup($user))) {
+    USERERROR("No such user '$user'", 1);
 }
+$target_uid = $target_user->uid();
 
 #
 # Confirm a valid op.
@@ -116,7 +116,7 @@ if (!$confirmed) {
     echo "Are you <b>REALLY</b> sure you want to $action user '$target_uid'\n";
     
     echo "<form action=freezeuser.php3 method=post>";
-    echo "<input type=hidden name=target_uid value=\"$target_uid\">\n";
+    echo "<input type=hidden name=user value=\"$user\">\n";
     echo "<input type=hidden name=action value=\"$action\">\n";
     echo "<b><input type=submit name=confirmed value=Confirm></b>\n";
     echo "<b><input type=submit name=canceled value=Cancel></b>\n";
@@ -135,7 +135,7 @@ if (!$confirmed_twice) {
               '$target_uid'\n";
     
     echo "<form action=freezeuser.php3 method=post>";
-    echo "<input type=hidden name=target_uid value=\"$target_uid\">\n";
+    echo "<input type=hidden name=user value=\"$user\">\n";
     echo "<input type=hidden name=confirmed value=Confirm>\n";
     echo "<input type=hidden name=action value=\"$action\">\n";
     echo "<b><input type=submit name=confirmed_twice value=Confirm></b>\n";

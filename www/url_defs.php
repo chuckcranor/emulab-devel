@@ -49,7 +49,7 @@ $url_mapping["sendtestmsg"]		= "sendtestmsg.php3";
 # The caller will pass in a page id, and a list of things. If the thing
 # is a class we know about, then we generate the argument directly from
 # it. For example, if the argument is a User instance, we know to append
-# "target_uid=$user->uid()" cause all pages that take uid arguments use
+# "user=$user->uid()" cause all pages that take uid arguments use
 # the same protocol.
 #
 # If the thing is not something we know about, then its a key/value pair,
@@ -57,7 +57,7 @@ $url_mapping["sendtestmsg"]		= "sendtestmsg.php3";
 # The key (say, "uid") is the kind of argument to be added to the URL,
 # and the value (a string or an user class instance) is where we get
 # the argument from. To be consistent across all pages, something like "uid"
-# is mapped to "?target_uid=$value" rather then "uid".
+# is mapped to "?user=$value" rather then "uid".
 #
 # Note that this idea comes from a google search for ways to deal with
 # this problem. Nothing fancy.
@@ -130,7 +130,7 @@ function CreateURL($page_id)
 	#
 	switch ($key) {
 	case URLARG_UID:
-	    $key = "target_uid";
+	    $key = "user";
 	    if (is_a($val, 'User')) {
 		$val = $val->webid();
 	    }

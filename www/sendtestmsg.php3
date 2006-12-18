@@ -16,8 +16,8 @@ $isadmin   = ISADMIN();
 #
 # Verify form arguments.
 # 
-if (!isset($target_uid) ||
-    strcmp($target_uid, "") == 0) {
+if (!isset($user) ||
+    strcmp($user, "") == 0) {
     USERERROR("You must provide a User ID.", 1);
 }
 
@@ -27,9 +27,10 @@ if (!$isadmin) {
     USERERROR("You do not have permission to view this page!", 1);
 }
 
-if (! ($target_user = User::Lookup($target_uid))) {
-    USERERROR("The user $target_uid is not a valid user", 1);
+if (! ($target_user = User::Lookup($user))) {
+    USERERROR("The user $user is not a valid user", 1);
 }
+$target_uid = $target_user->uid();
 
 # Get email info.
 $usr_name  = $target_user->name();

@@ -16,8 +16,8 @@ $isadmin   = ISADMIN();
 #
 # Verify form arguments.
 # 
-if (!isset($target_uid) ||
-    strcmp($target_uid, "") == 0) {
+if (!isset($user) ||
+    strcmp($user, "") == 0) {
     USERERROR("You must provide a User ID.", 1);
 }
 
@@ -30,9 +30,10 @@ if (!$isadmin) {
 #
 # Confirm target is a real user.
 #
-if (! ($target_user = User::Lookup($target_uid))) {
+if (! ($target_user = User::Lookup($user))) {
     USERERROR("The user $target_uid is not a valid user", 1);
 }
+$target_uid = $target_user->uid();
 
 # Get email info and Key,
 $usr_name  = $target_user->name();
@@ -51,7 +52,7 @@ TBMAIL("$usr_name '$target_uid' <$usr_email>",
        "This is your account verification key: $key\n\n".
        "Please use this link to verify your user account:\n".
        "\n".
-       "    ${TBBASE}/login.php3?vuid=$target_uid&key=$key\n".
+       "    ${TBBASE}/login.php3?vuid=$user&key=$key\n".
        "\n".
        "You will then be verified as a user.\n".
        "\n".

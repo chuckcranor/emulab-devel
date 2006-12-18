@@ -27,22 +27,25 @@ $isadmin   = ISADMIN();
 #
 # Verify page arguments.
 # 
-if (isset($target_uid)) {
-    if ($target_uid == "") {
-	$target_uid = $uid;
+if (isset($user)) {
+    if ($user == "") {
+	$user = $uid;
     }
-    elseif (! TBvalid_uid($target_uid)) {
-	PAGEARGERROR("Invalid characters in '$target_uid'");
+    elseif (! User::ValidWebID($user)) {
+	PAGEARGERROR("Invalid characters in '$user'");
     }
-    elseif (! ($target_user = User::Lookup($target_uid))) {
-	USERERROR("The user $target_uid is not a valid user", 1);
+    elseif (! ($target_user = User::Lookup($user))) {
+	USERERROR("The user $user is not a valid user", 1);
     }
     elseif (! $target_user->AccessCheck($this_user, $TB_USERINFO_READINFO)) {
 	USERERROR("You do not have permission to do this!", 1);
     }
+    $target_uid  = $target_user->uid();
+    $target_idx  = $target_user->uid_idx();
 }
 else {
     $target_uid  = $uid;
+    $target_idx  = $this_user->uid_idx();
     $target_user = $this_user;
 }
 
@@ -178,7 +181,7 @@ if (! strcmp($showtype, "summary")) {
 		DBQueryFatal("select distinct type from group_membership as g ".
 			     "left join nodetypeXpid_permissions as p ".
 			     "     on g.pid=p.pid ".
-			     "where uid='$target_uid' $pidclause");
+			     "where uid_idx='$target_idx' $pidclause");
 	}
 	
 	while ($row = mysql_fetch_array($query_result)) {

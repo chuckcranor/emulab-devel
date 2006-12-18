@@ -15,6 +15,16 @@ class User
     var	$user;
 
     #
+    # For pedantic checks early in pages.
+    #
+    function ValidWebID($token) {
+	if (! preg_match("/^[-\w]+$/", $token)) {
+	    return 0;
+	}
+	return 1;
+    }
+
+    #
     # Constructor by lookup on unique index.
     #
     function &User($uid_idx) {
@@ -150,7 +160,7 @@ class User
     }
     function uid_idx()		{ return $this->field("uid_idx"); }
     function uid()		{ return $this->field("uid"); }
-    function webid()		{ return $this->field("uid"); }
+    function webid()		{ return $this->field("uid_idx"); }
     function created()		{ return $this->field("usr_created"); }
     function expires()		{ return $this->field("usr_expires"); }
     function modified()		{ return $this->field("usr_modified"); }
@@ -438,6 +448,222 @@ class User
 	}
 	$html .= "</table>\n";
 	return $html;
+    }
+
+    function Show() {
+	global $WIKISUPPORT;
+
+	$user = $this;
+
+	$uid         = $user->uid();
+	$webid       = $user->webid();
+	$uid_idx     = $user->uid_idx();
+	$usr_email   = $user->email();
+	$usr_URL     = $user->URL();
+	$usr_addr    = $user->addr();
+	$usr_addr2   = $user->addr2();
+	$usr_city    = $user->city();
+	$usr_state   = $user->state();
+	$usr_zip     = $user->zip();
+	$usr_country = $user->country();
+	$usr_name    = $user->name();
+	$usr_phone   = $user->phone();
+	$usr_shell   = $user->shell();
+	$usr_title   = $user->title();
+	$usr_affil   = $user->affil();
+	$status      = $user->status();
+	$admin       = $user->admin();
+	$notes       = $user->notes();
+	$frozen      = $user->weblogin_frozen();
+	$failcount   = $user->weblogin_failcount();
+	$failstamp   = $user->weblogin_failstamp();
+	$wikiname    = $user->wikiname();
+	$cvsweb      = $user->cvsweb();
+	$wikionly    = $user->wikionly();
+
+	if (!strcmp($usr_addr2, ""))
+	    $usr_addr2 = "&nbsp;";
+	if (!strcmp($usr_city, ""))
+	    $usr_city = "&nbsp;";
+	if (!strcmp($usr_state, ""))
+	    $usr_state = "&nbsp;";
+	if (!strcmp($usr_zip, ""))
+	    $usr_zip = "&nbsp;";
+	if (!strcmp($usr_country, ""))
+	    $usr_country = "&nbsp;";
+	if (!strcmp($notes, ""))
+	    $notes = "&nbsp;";
+
+        #
+        # Last Login info.
+        #
+	if (($lastweblogin = LASTWEBLOGIN($uid)) == 0)
+	    $lastweblogin = "&nbsp;";
+	if (($lastuserslogininfo = TBUsersLastLogin($uid)) == 0)
+	    $lastuserslogin = "N/A";
+	else {
+	    $lastuserslogin = $lastuserslogininfo["date"] . " " .
+		$lastuserslogininfo["time"];
+	}
+    
+	if (($lastnodelogininfo = TBUidNodeLastLogin($uid)) == 0)
+	    $lastnodelogin = "N/A";
+	else {
+	    $lastnodelogin = $lastnodelogininfo["date"] . " " .
+		$lastnodelogininfo["time"] . " " .
+		"(" . $lastnodelogininfo["node_id"] . ")";
+	}
+    
+	echo "<table align=center border=1>\n";
+    
+	echo "<tr>
+                  <td>Username:</td>
+                  <td>$uid ($uid_idx)</td>
+              </tr>\n";
+    
+        echo "<tr>
+                  <td>Full Name:</td>
+                  <td>$usr_name</td>
+              </tr>\n";
+    
+        echo "<tr>
+                  <td>Email Address:</td>
+                  <td>$usr_email</td>
+              </tr>\n";
+
+        echo "<tr>
+                  <td>Home Page URL:</td>
+                  <td><a href='$usr_URL'>$usr_URL</a></td>
+              </tr>\n";
+
+	if ($WIKISUPPORT && isset($wikiname)) {
+	    $wikiurl = "gotowiki.php3?redurl=Main/$wikiname";
+	
+	    echo "<tr>
+                      <td>Emulab Wiki Page:</td>
+                      <td class=\"left\">
+                          <a href='$wikiurl'>$wikiname</a></td>
+                  </tr>\n";
+	}
+    
+	echo "<tr>
+                  <td>Address 1:</td>
+                  <td>$usr_addr</td>
+             </tr>\n";
+    
+        echo "<tr>
+                  <td>Address 2:</td>
+                  <td>$usr_addr2</td>
+              </tr>\n";
+    
+        echo "<tr>
+                  <td>City:</td>
+                  <td>$usr_city</td>
+              </tr>\n";
+    
+	echo "<tr>
+                  <td>State:</td>
+                  <td>$usr_state</td>
+              </tr>\n";
+    
+        echo "<tr>
+                  <td>ZIP:</td>
+                  <td>$usr_zip</td>
+              </tr>\n";
+
+        echo "<tr>
+                  <td>Country:</td>
+                  <td>$usr_country</td>
+              </tr>\n";
+    
+        echo "<tr>
+                  <td>Phone #:</td>
+                  <td>$usr_phone</td>
+              </tr>\n";
+
+	echo "<tr>
+	          <td>Shell:</td>
+	          <td>$usr_shell</td>
+              </tr>\n";
+    
+        echo "<tr>
+                  <td>Title/Position:</td>
+                  <td>$usr_title</td>
+             </tr>\n";
+    
+	echo "<tr>
+                  <td>Institutional Affiliation:</td>
+                  <td>$usr_affil</td>
+              </tr>\n";
+    
+        echo "<tr>
+                  <td>Status:</td>
+                  <td>$status</td>
+              </tr>\n";
+
+	if ($wikionly) {
+	    echo "<tr>
+                      <td><b>Wikionly</b>:</td>
+                      <td>Yes</td>
+                  </tr>\n";
+	}
+
+	if ($admin) {
+	    echo "<tr>
+                      <td>Administrator:</td>
+                      <td>Yes</td>
+                  </tr>\n";
+	}
+    
+	echo "<tr>
+                  <td>Last Web Login:</td>
+                  <td>$lastweblogin</td>
+              </tr>\n";
+    
+	echo "<tr>
+                  <td>Last Users Login:</td>
+                  <td>$lastuserslogin</td>
+              </tr>\n";
+    
+        echo "<tr>
+                  <td>Last Node Login:</td>
+                  <td>$lastnodelogin</td>
+              </tr>\n";
+
+	if (ISADMIN()) {
+	    $cvswebflip = ($cvsweb ? 0 : 1);
+
+	    $toggle_url = CreateURL("toggle", $user,
+				    "type", "cvsweb", "value", $cvswebflip);
+
+	    echo "<tr>
+                      <td>CVSWeb Access:</td>
+                      <td>$cvsweb (<a href='$toggle_url'>Toggle</a>)
+                  </tr>\n";
+	
+	    $freezeflip = ($frozen ? 0 : 1);
+	    $toggle_url = CreateURL("toggle", $user,
+				    "type", "webfreeze", "value", $freezeflip);
+
+	    echo "<tr>
+                      <td>Web Freeze:</td>
+                      <td>$frozen (<a href='$toggle_url'>Toggle</a>)
+                  </tr>\n";
+	
+	    if ($frozen && $failstamp && $failcount) {
+		$when = strftime("20%y-%m-%d %H:%M:%S", $failstamp);
+	    
+		echo "<tr>
+                          <td>Login Failures:</td>
+                          <td>$failcount ($when)</td>
+                      </tr>\n";
+	    }
+	    echo "<tr>
+                      <td>Notes:</td>
+                      <td>$notes</td>
+                  </tr>\n";
+	}
+	echo "</table>\n";
     }
 
     #

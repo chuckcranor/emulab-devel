@@ -16,34 +16,36 @@ $isadmin   = ISADMIN();
 #
 # Verify page/form arguments.
 #
-if (! isset($_GET['target_uid']))
-    $target_uid = $uid;
+if (! isset($_GET['user']))
+    $user = $uid;
 else
-    $target_uid = $_GET['target_uid'];
+    $user = $_GET['user'];
 
 # Pedantic check of uid before continuing.
-if ($target_uid == "" || !TBvalid_uid($target_uid)) {
-    PAGEARGERROR("Invalid uid: '$target_uid'");
+if ($user == "" || !User::ValidWebID($user)) {
+    PAGEARGERROR("Invalid uid: '$user'");
 }
 
 #
 # Check to make sure thats this is a valid UID.
 #
-if (! ($target_user = User::Lookup($target_uid))) {
-    USERERROR("The user $target_uid is not a valid user", 1);
+if (! ($target_user = User::Lookup($user))) {
+    USERERROR("The user $user is not a valid user", 1);
 }
+$target_uid   = $target_user->uid();
+$target_dbuid = $target_user->uid();
 
 #
 # Only admin people can create SSL certs for another user.
 #
-if (!$isadmin &&
-    strcmp($uid, $target_uid)) {
-    USERERROR("You do not have permission to download SSL cert for $user!", 1);
+if (!$isadmin && !$target_user->SameUser($this_user)) {
+    USERERROR("You do not have permission to download SSL cert ".
+	      "for $user!", 1);
 }
 
 $query_result =
     DBQueryFatal("select cert,privkey from user_sslcerts ".
-		 "where uid='$target_uid' and encrypted=1");
+		 "where uid='$target_dbuid' and encrypted=1");
 
 if (!mysql_num_rows($query_result)) {
     PAGEHEADER("Download SSL Certificate for $target_uid");
