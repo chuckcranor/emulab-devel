@@ -19,7 +19,7 @@ if (!isset($user) ||
     USERERROR("You must provide a User ID.", 1);
 }
 
-if (ISADMIN()) {
+if (!ISADMIN()) {
     USERERROR("You do not have permission to do this!", 1);
 }
 

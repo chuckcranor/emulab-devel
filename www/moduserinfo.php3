@@ -86,7 +86,7 @@ function SPITFORM($formfields, $errors)
                   <td colspan=2>Username:</td>
                   <td class=left>$username ($uid_idx)
                       <input type=hidden
-                             name=\"formfields[target_uid]\"
+                             name=\"formfields[user]\"
                              value=\"" . $webid . "\"
                              size=$TBDB_UIDLEN>
               </td>
@@ -364,33 +364,34 @@ function SPITFORM($formfields, $errors)
 #
 if (! isset($_POST['submit'])) {
     # First page load. Default to current user.
-    if (! isset($_GET['target_uid']))
-	$target_uid = $uid;
+    if (! isset($_GET['user']))
+	$user = $uid;
     else
-	$target_uid = $_GET['target_uid'];
+	$user = $_GET['user'];
 }
 else {
-    # Form submitted. Make sure we have a formfields array and a target_uid.
+    # Form submitted. Make sure we have a formfields array and a user.
     if (!isset($_POST['formfields']) ||
 	!is_array($_POST['formfields']) ||
-	!isset($_POST['formfields']['target_uid'])) {
+	!isset($_POST['formfields']['user'])) {
 	PAGEARGERROR("Invalid form arguments!");
     }
     $formfields = $_POST['formfields'];
-    $target_uid = $formfields['target_uid'];
+    $user       = $formfields['user'];
 }
 
 # Pedantic check of uid before continuing.
-if ($target_uid == "" || !User::ValidWebID($target_uid)) {
-    PAGEARGERROR("Invalid uid: '$target_uid'");
+if ($user == "" || !User::ValidWebID($user)) {
+    PAGEARGERROR("Invalid uid: '$user'");
 }
 
 #
 # Confirm target is a real user.
 #
-if (! ($target_user = User::Lookup($target_uid))) {
-    USERERROR("No such user '$target_uid'", 1);
+if (! ($target_user = User::Lookup($user))) {
+    USERERROR("No such user '$user'", 1);
 }
+$target_uid = $target_user->uid();
 
 #
 # Admin types can change anyone. 
@@ -408,7 +409,7 @@ if (!$isadmin &&
 # simply to change their password. 
 #
 $defaults	       = array();
-$defaults[target_uid]  = $target_uid;
+$defaults[user]        = $target_user->webid();
 $defaults[usr_email]   = $target_user->email();
 $defaults[usr_URL]     = $target_user->URL();
 $defaults[usr_addr]    = $target_user->addr();
@@ -581,7 +582,7 @@ if (isset($formfields[password1]) &&
     elseif (strcmp($formfields[password1], $formfields[password2])) {
 	$errors["Retype Password"] = "Two Passwords Do Not Match";
     }
-    elseif (! CHECKPASSWORD($formfields[target_uid],
+    elseif (! CHECKPASSWORD($target_uid,
 			    $formfields[password1],
 			    $formfields[usr_name],
 			    $formfields[usr_email], $checkerror)) {
@@ -598,7 +599,7 @@ if (isset($formfields[w_password1]) &&
     elseif (strcmp($formfields[w_password1], $formfields[w_password2])) {
 	$errors["Retype Windows Password"] = "Two Windows Passwords Do Not Match";
     }
-    elseif (! CHECKPASSWORD($formfields[target_uid],
+    elseif (! CHECKPASSWORD($target_uid,
 			    $formfields[w_password1],
 			    $formfields[usr_name],
 			    $formfields[usr_email], $checkerror)) {
@@ -631,6 +632,7 @@ if ($target_user->email() != $formfields["usr_email"]) {
 	   "Email Address for '$target_uid' changed by '$uid'.\n".
 	   "\n".
 	   "Name:              " . $target_user->name()  . "\n".
+	   "IDX:               " . $target_user->uid_idx()  . "\n".
 	   "Email:             " . $target_user->email() . "\n",
 	   "From: $TBMAIL_OPS\n".
 	   "Errors-To: $TBMAIL_WWW");
@@ -667,7 +669,7 @@ if ((isset($formfields["password1"]) && $formfields["password1"] != "") &&
     # always set the expiration to right now so that the target user
     # is "forced" to change it. 
     #
-    if ($uid != $target_uid)
+    if (! $target_user->SameUser($this_user))
 	$expires = "now()";
     else
 	$expires = "date_add(now(), interval 1 year)";
@@ -765,6 +767,7 @@ if ($modified) {
 	   "User information for '$target_uid' changed by '$uid'.\n".
 	   "\n".
 	   "Name:              $usr_name\n".
+	   "IDX:               " . $target_user->uid_idx()  . "\n".
 	   "Email:             $usr_email\n".
 	   "URL:               $usr_URL\n".
 	   "Affiliation:       $usr_affil\n".

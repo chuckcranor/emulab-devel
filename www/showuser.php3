@@ -238,7 +238,7 @@ if ($isadmin) {
 		       CreateURL("deleteuser", $target_user));
 
     WRITESUBMENUBUTTON("SU as User",
-		       CreateURL("suuser", $this_user));
+		       CreateURL("suuser", $target_user));
 
     if ($userstatus == TBDB_USERSTATUS_UNAPPROVED) {
 	WRITESUBMENUBUTTON("Change UID",

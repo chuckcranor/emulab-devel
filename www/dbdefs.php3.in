@@ -566,20 +566,19 @@ function TBExptAccessCheck($uid, $pid, $eid, $access_type)
     #
     # Admins do whatever they want!
     # 
-    if (ISADMIN($uid)) {
+    if (ISADMIN()) {
 	return 1;
     }
 
     $query_result =
-	DBQueryFatal("SELECT gid,expt_head_uid FROM experiments WHERE ".
+	DBQueryFatal("SELECT gid FROM experiments WHERE ".
 		     "eid='$eid' and pid='$pid'");
     
     if (mysql_num_rows($query_result) == 0) {
 	return 0;
     }
     $row  = mysql_fetch_array($query_result);
-    $gid  = $row[gid];
-    $head = $row[expt_head_uid];
+    $gid  = $row["gid"];
 
     if ($access_type == $TB_EXPT_READINFO) {
 	$mintrust = $TBDB_TRUST_USER;
@@ -853,33 +852,6 @@ function TBValidGroup($pid, $gid)
 function TBValidProject($pid)
 {
     return TBValidGroup($pid, $pid);
-}
-
-#
-# Confirm a group member.
-#
-# usage TBGroupMember($uid, $pid, $gid, &$approved)
-#       returns 1 if a member.
-#       returns 0 if not a member.
-#
-function TBGroupMember($uid, $pid, $gid, &$approved)
-{
-    global $TBDB_TRUST_USER;
-	
-    $approved = 0;
-    
-    $query_result =
-	DBQueryFatal("select trust from group_membership ".
-		     "where uid='$uid' and pid='$pid' and gid='$gid'");
-
-    if (mysql_num_rows($query_result) == 0) {
-	return 0;
-    }
-    $row = mysql_fetch_row($query_result);
-    $trust = $row[0];
-
-    $approved = TBMinTrust($trust, $TBDB_TRUST_USER);
-    return 1;
 }
 
 #
