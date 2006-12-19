@@ -329,7 +329,7 @@ function TBProjAccessCheck($uid, $pid, $gid, $access_type)
     #
     # Admins do whatever they want!
     # 
-    if (ISADMIN($uid)) {
+    if (ISADMIN()) {
 	return 1;
     }
 
@@ -681,7 +681,7 @@ function TBOSIDAccessCheck($uid, $osid, $access_type)
     #
     # Admins do whatever they want!
     # 
-    if (ISADMIN($uid)) {
+    if (ISADMIN()) {
 	return 1;
     }
 
@@ -748,7 +748,7 @@ function TBImageIDAccessCheck($uid, $imageid, $access_type)
     #
     # Admins do whatever they want!
     # 
-    if (ISADMIN($uid)) {
+    if (ISADMIN()) {
 	return 1;
     }
 
@@ -1167,7 +1167,7 @@ function TBProjList($uid, $access_type)
     }
     elseif ($access_type == $TB_PROJECT_MAKEOSID ||
 	    $access_type == $TB_PROJECT_MAKEIMAGEID) {
-        if (ISADMIN($uid)) {
+        if (ISADMIN()) {
             $user_clause = "";
 	}
         else {

@@ -12,8 +12,8 @@ include("defs.php3");
 
 #
 # Get current user.
-# 
-$uid = GETLOGIN();
+#
+$this_user = CheckLogin($check_status);
 
 #
 # See if we are in an initial Emulab setup.
@@ -25,11 +25,11 @@ $FirstInitState = (TBGetFirstInitState() == "createproject");
 # If the login is not valid. We require that the user be logged in
 # to start a second project.
 #
-if ($uid && !$FirstInitState) {
+if ($this_user && !$FirstInitState) {
     # Allow unapproved users to create multiple projects ...
     # Must be verified though.
-    LOGGEDINORDIE($uid, CHECKLOGIN_UNAPPROVED|CHECKLOGIN_WEBONLY);
-    $proj_head_uid = $uid;
+    CheckLoginOrDie(CHECKLOGIN_UNAPPROVED|CHECKLOGIN_WEBONLY);
+    $proj_head_uid = $this_user->uid();
     $returning = 1;
 }
 else {
@@ -1013,10 +1013,7 @@ if (!$returning) {
     }
 }
 else {
-    if (! ($leader = User::Lookup($proj_head_uid))) {
-	TBERROR("Could not lookup project leader '$proj_head_uid'!", 1);
-    }
-
+    $leader = $this_user;
     $usr_title	   = $leader->title();
     $usr_name	   = $leader->name();
     $usr_affil	   = $leader->affil();

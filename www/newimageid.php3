@@ -16,9 +16,9 @@ PAGEHEADER("Create a new Image Descriptor (long form)");
 #
 # Only known and logged in users!
 #
-$uid = GETLOGIN();
-LOGGEDINORDIE($uid);
-$isadmin = ISADMIN($uid);
+$this_user = CheckLoginOrDie();
+$uid       = $this_user->uid();
+$isadmin   = ISADMIN();
 
 #
 # See what projects the uid can do this in.

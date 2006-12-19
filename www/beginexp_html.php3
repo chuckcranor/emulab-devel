@@ -25,10 +25,10 @@ function EXPERROR()
 #
 # Only known and logged in users can begin experiments.
 #
-$uid = GETLOGIN();
-LOGGEDINORDIE($uid);
+$this_user = CheckLoginOrDie();
+$uid       = $this_user->uid();
+$isadmin   = ISADMIN();
 
-# This will not return if its a sajax request.
 include("showlogfile_sup.php3");
 
 #

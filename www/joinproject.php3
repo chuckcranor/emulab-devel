@@ -12,19 +12,19 @@ include("defs.php3");
 
 #
 # Get current user.
-# 
-$uid = GETLOGIN();
+#
+$this_user = CheckLogin($check_status);
 
 #
 # If a uid came in, then we check to see if the login is valid.
 # We require that the user be logged in to start a second project.
 #
-if ($uid) {
+if ($this_user) {
     # Allow unapproved users to join multiple groups ...
     # Must be verified though.
-    LOGGEDINORDIE($uid, CHECKLOGIN_UNAPPROVED|
-		  CHECKLOGIN_WEBONLY|CHECKLOGIN_WIKIONLY);
-    $joining_uid = $uid;
+    CheckLoginOrDie(CHECKLOGIN_UNAPPROVED|
+		    CHECKLOGIN_WEBONLY|CHECKLOGIN_WIKIONLY);
+    $joining_uid = $this_user->uid();
     $returning = 1;
 }
 else {
@@ -754,9 +754,7 @@ if (!$forwikionly) {
 	TBERROR("Could not lookup object for $pid/$gid!", 1);
     }
     if ($returning) {
-	if (! ($user = User::Lookup($joining_uid))) {
-	    TBERROR("Could not lookup user '$joining_uid'!", 1);
-	}
+	$user = $this_user;
 	if ($group->IsMember($user, $ignore)) {
 	    $errors["Membership"] = "You are already a member";
 	}

@@ -38,7 +38,7 @@ if (!isset($SSL_PROTOCOL)) {
 #
 # Must not be logged in.
 # 
-if (GETLOGIN() != FALSE) {
+if (CheckLogin($check_status)) {
     PAGEHEADER("Forgot Your Password?", $view);
 
     echo "<h3>

@@ -12,16 +12,16 @@ include("defs.php3");
 
 #
 # Get current user.
-# 
-$uid = GETLOGIN();
+#
+$this_user = CheckLoginOrDie();
 
 #
 # If a uid came in, then we check to see if the login is valid.
 # If the login is not valid. We require that the user be logged in.
 #
-if ($uid) {
-    LOGGEDINORDIE($uid, CHECKLOGIN_UNAPPROVED);
-    $usr_uid = $uid;
+if ($this_user) {
+    CheckLoginOrDie(CHECKLOGIN_UNAPPROVED);
+    $usr_uid = $this_user->uid();
     $returning = 1;
 }
 else {
@@ -873,10 +873,7 @@ else {
     #
     # Grab info from the DB for the email message below. Kinda silly.
     #
-    if (! ($user = User::Lookup($usr_uid))) {
-	TBERROR("Could not lookup user '$usr_email'!", 1);
-    }
-    
+    $user = $this_user;
     $usr_title	   = $user->title();
     $usr_name	   = $user->name();
     $usr_affil	   = $user->affil();

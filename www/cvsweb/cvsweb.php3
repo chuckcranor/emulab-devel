@@ -11,12 +11,16 @@
 chdir("../");
 require("defs.php3");
 
+unset($uid);
+unset($repodir);
+
 #
 # We look for anon access, and if so, redirect to ops web server.
 # WARNING: See the LOGGEDINORDIE() calls below.
 #
-$uid = GETLOGIN();
-unset($repodir);
+if (($this_user = CheckLogin($check_status))) {
+     $uid = $this_user->uid();
+}
 
 # Tell system we do not want any headers drawn on errors.
 $noheaders = 1;
@@ -35,7 +39,7 @@ if (isset($pid) && $pid != "") {
 	PAGEARGERROR("Invalid project ID.");
     }
     # Redirect now, to avoid phishing.
-    if ($uid) {
+    if ($this_user) {
 	CheckLoginOrDie();
     }
     else {
@@ -57,7 +61,7 @@ if (isset($pid) && $pid != "") {
 	if (! TBValidExperiment($pid, $eid)) {
 	    USERERROR("Experiment '$pid/$eid' is not a valid experiment", 1);
 	}
-	if (! ISADMIN($uid) &&
+	if (! ISADMIN() &&
 	    ! TBExptAccessCheck($uid, $pid, $eid, $TB_EXPT_READINFO)) {
 	    USERERROR("Not enough permission to view '$pid/$eid'", 1);
 	}
@@ -82,7 +86,7 @@ if (isset($pid) && $pid != "") {
 	#
 	# Wants access to the project repo.
 	#
-	if (! ISADMIN($uid) &&
+	if (! ISADMIN() &&
 	    ! TBProjAccessCheck($uid, $pid, $gid, $TB_PROJECT_READINFO)) {
             # Then check to see if the project cvs repo is public.
 	    $query_result =
@@ -108,7 +112,7 @@ elseif (isset($exptidx) && $exptidx != "") {
     }
 
     # Must be logged in for this!
-    if ($uid) {
+    if ($this_user) {
 	CheckLoginOrDie();
     }
     
@@ -131,14 +135,14 @@ elseif (isset($exptidx) && $exptidx != "") {
 
     # Lets do group level check since it might not be a current experiment.
     if (!$archived) {
-	if (! ISADMIN($uid) &&
+	if (! ISADMIN() &&
 	    ! TBProjAccessCheck($uid, $pid, $gid, $TB_PROJECT_READINFO)) {
 	    USERERROR("Not enough permission to view '$pid/$eid'", 1);
 	}
 	$repodir = "/usr/testbed/exparchive/$repoidx/repo/";
     }
     else {
-	if (! ISADMIN($uid)) {
+	if (! ISADMIN()) {
 	    USERERROR("Must be administrator to view historical archives!", 1);
 	}
 	$repodir = "/usr/testbed/exparchive/Archive/$repoidx/repo/";

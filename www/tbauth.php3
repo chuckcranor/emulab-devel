@@ -545,7 +545,7 @@ function CheckLogin(&$status)
 # in user that has to be admin. So ignore the uid and make sure
 # there is a login status.
 #
-function ISADMIN($uid = 1) {
+function ISADMIN() {
     global $CHECKLOGIN_STATUS;
     
     if ($CHECKLOGIN_STATUS == CHECKLOGIN_NOSTATUS) {
