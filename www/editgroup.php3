@@ -39,6 +39,10 @@ if (strcmp($gid, $pid) == 0) {
     $defaultgroup = 1;
 }
 
+if (! ($group = Group::LookupByPidGid($pid, $gid))) {
+    USERERROR("No such group group $gid in project $pid!", 1);
+}
+
 #
 # Verify permission. 
 #
@@ -100,9 +104,9 @@ $nonmembers_result =
 # 
 if (mysql_num_rows($curmembers_result)) {
     while ($row = mysql_fetch_array($curmembers_result)) {
-	$user = $row[0];
+	$user     = $row[0];
 	$oldtrust = $row[1];
-	$foo  = "change_$user";
+	$foo      = "change_$user";
 
 	#
 	# Is member to be deleted?
@@ -110,6 +114,10 @@ if (mysql_num_rows($curmembers_result)) {
 	if (!$defaultgroup && !isset($$foo)) {
 	    # Yes.
 	    continue;
+	}
+
+	if (! ($target_user = User::Lookup($user))) {
+	    TBERROR("Could not find user object for $user", 1);
 	}
 
         #
@@ -141,7 +149,7 @@ if (mysql_num_rows($curmembers_result)) {
 		      "trust to users in $pid/$gid!", 1 );
 	}
 
-	TBCheckGroupTrustConsistency($user, $pid, $gid, $newtrust, 1);
+	$group->CheckTrustConsistency($target_user, $newtrust, 1);
     }
 }
 
@@ -182,8 +190,12 @@ if ($grabusers && !$defaultgroup && mysql_num_rows($nonmembers_result)) {
 		USERERROR("You do not have permission to bestow group root".
 			  "trust to users in $pid/$gid!", 1 );
 	    }
-	    
-	    TBCheckGroupTrustConsistency($user, $pid, $gid, $newtrust, 1);
+
+	    if (! ($target_user = User::Lookup($user))) {
+		TBERROR("Could not find user object for $user", 1);
+	    }
+
+	    $group->CheckTrustConsistency($target_user, $newtrust, 1);
 	}
     }
 }

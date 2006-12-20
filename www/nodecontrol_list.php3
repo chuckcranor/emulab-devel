@@ -240,7 +240,7 @@ if (! strcmp($showtype, "summary")) {
 	}
     }
 
-    $projlist = TBProjList($target_uid, $TB_PROJECT_CREATEEXPT);
+    $projlist = $target_user->ProjectAccessList($TB_PROJECT_CREATEEXPT);
     if (count($projlist) > 1) {
 	echo "<b>By Project Permission: ";
 	while (list($project) = each($projlist)) {

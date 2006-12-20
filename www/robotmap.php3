@@ -257,7 +257,7 @@ echo "<form method=post action='robotmap.php3" .
 
 echo "Click on the image to get its X,Y coordinates<br>\n";
 # The image may be clicked to get node info or set a new center-point.
-if ($isadmin || TBWebCamAllowed($uid)) {
+if ($isadmin || $this_user->WebCamAllowed()) {
     echo "  <a href=webcam.php3>Webcam View</a> (Updated in real time)";
     echo "  <br>\n";
 }

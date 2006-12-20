@@ -252,7 +252,7 @@ STOPBUSY();
 # project leaders, must send us a request for it.
 #
 if (isset($target_pid)) {
-    $projlist = $target_user->ProjectList();
+    $projlist = $target_user->ProjectMembershipList();
     
     if (! count($projlist)) {
 	echo "<b>User 'target_uid' is no longer a member of any projects.\n";

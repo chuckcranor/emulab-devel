@@ -42,9 +42,8 @@ if (!$isadmin) {
 #
 # Check to make sure this is a valid PID/EID tuple.
 #
-if (! TBValidExperiment($pid, $eid)) {
-    USERERROR("The experiment $eid is not a valid experiment ".
-	      "in project $pid.", 1);
+if (! ($experiment = Experiment::LookupByPidEid($pid, $eid))) {
+    USERERROR("The experiment $pid/$eid is not a valid experiment!", 1);
 }
 
 #
@@ -107,7 +106,7 @@ if (!$confirmed) {
 
 # Info about experiment.
 $query_result =
-    DBQueryFatal("select e.gid,e.expt_swap_uid as swapper, ".
+    DBQueryFatal("select e.expt_swap_uid as swapper, ".
 		 "       e.expt_head_uid as creator, ".
 		 "       UNIX_TIMESTAMP(now())-UNIX_TIMESTAMP(e.expt_swapped)".
 		 "   as swapseconds, r.pnodes ".
@@ -118,7 +117,6 @@ $query_result =
 		 "where e.pid='$pid' and e.eid='$eid'");
 
 $row = mysql_fetch_array($query_result);
-$gid     = $row["gid"];
 $swapper = $row["swapper"];
 $creator = $row["creator"];
 $pcs     = $row["pnodes"];
@@ -131,9 +129,12 @@ if (! ($creator_user = User::Lookup($creator))) {
 if (! ($swapper_user = User::Lookup($swapper))) {
     TBERROR("Could not lookup object for user $swapper!", 1);
 }
+if (! ($group = $experiment->Group())) {
+    TBERROR("Could not lookup object for experiment group!", 1);
+}
 
 # Lots of email addresses!
-$allleaders    = TBLeaderMailList($pid, $gid);
+$allleaders    = $group->LeaderMailList();
 $swapper_name  = $swapper_user->name();
 $swapper_email = $swapper_user->mail();
 $creator_name  = $creator_user->name();

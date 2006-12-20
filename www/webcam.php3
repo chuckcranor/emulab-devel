@@ -39,7 +39,7 @@ if (!$admins_can_view || (!$anyone_can_view && !$isadmin)) {
 #
 # Now check permission.
 #
-if (!$isadmin && !TBWebCamAllowed($uid)) {
+if (!$isadmin && !$this_user->WebCamAllowed()) {
     MyError("Not enough permission to view the robot cameras!");
 }
 

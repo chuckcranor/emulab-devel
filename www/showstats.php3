@@ -172,7 +172,7 @@ elseif ($showby == "all") {
         #
         # Get a project list for which the user has read permission.
         #
-        $projlist = TBProjList($uid, $TB_PROJECT_READINFO);
+        $projlist = $this_user->ProjectAccessList($TB_PROJECT_READINFO);
 	if (! count($projlist)) {
 	    USERERROR("You do not have permission to view stats for any ".
 		      "project!", 1);

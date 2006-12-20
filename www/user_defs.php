@@ -48,11 +48,11 @@ class User
     # Lookup by uid_idx.
     function &Lookup($uid_idx) {
 	global $user_cache;
-	
+
         # Look in cache first
 	if (array_key_exists("$uid_idx", $user_cache))
 	    return $user_cache["$uid_idx"];
-	
+
 	$foo =& new User($uid_idx);
 
 	if (! $foo->IsValid()) {
@@ -61,6 +61,9 @@ class User
 	    
 	    if (! $foo->IsValid())
 		return null;
+	    
+	    # Already in the cache from LookupByUid() so just return it.
+	    return $foo;
 	}
 	# Insert into cache.
 	$user_cache["$uid_idx"] =& $foo;
@@ -868,9 +871,76 @@ class User
     }
 
     #
-    # Return project list for a user.
+    # Return project access list for a user. This returns just pid,eid for
+    # now, later return actual objects. 
     #
-    function ProjectList() {
+    function ProjectAccessList($access_type) {
+	global $TB_PROJECT_CREATEEXPT;
+	global $TB_PROJECT_MAKEOSID;
+	global $TB_PROJECT_MAKEIMAGEID;
+	global $TB_PROJECT_MAKEGROUP;
+	global $TB_PROJECT_READINFO;
+
+	$uid_idx     = $this->uid_idx();
+	$result      = array();
+	$user_clause = "where uid_idx='$uid_idx' and";
+	$trust_clause= "";
+
+	# Constants.
+	$trust_none   = TBDB_TRUSTSTRING_NONE;
+	$trust_user   = TBDB_TRUSTSTRING_USER;
+	$trust_local  = TBDB_TRUSTSTRING_LOCALROOT;
+	$trust_group  = TBDB_TRUSTSTRING_GROUPROOT;
+	$trust_project= TBDB_TRUSTSTRING_PROJROOT;
+	
+	if ($access_type == $TB_PROJECT_READINFO) {
+	    $trust_clause = "trust!='$trust_none'";
+	}
+	elseif ($access_type == $TB_PROJECT_MAKEGROUP) {
+	    $trust_clause = "trust='$trust_project'";
+	}
+	elseif ($access_type == $TB_PROJECT_CREATEEXPT) {
+	    $trust_clause =
+		"(trust='$trust_project' or trust='$trust_group' or ".
+		" trust='$trust_local')";
+	}
+	elseif ($access_type == $TB_PROJECT_MAKEOSID ||
+		$access_type == $TB_PROJECT_MAKEIMAGEID) {
+	    if (ISADMIN()) {
+		$user_clause = "";
+	    }
+	    else {
+		$trust_clause =
+		    "(trust='$trust_project' or trust='$trust_group' or ".
+		    " trust='$trust_local')";
+	    
+	    }
+	}
+	else {
+	    TBERROR("Invalid access type $access_type!", 1);
+	}
+    
+	$query_result =
+	    DBQueryFatal("SELECT distinct pid,gid FROM group_membership ".
+			 "$user_clause $trust_clause order by pid");
+
+	if (mysql_num_rows($query_result) == 0) {
+	    return $result;
+	}
+
+	while ($row = mysql_fetch_array($query_result)) {
+	    $pid = $row['pid'];
+	    $gid = $row['gid'];
+	
+	    $result[$pid][] = $gid;
+	}
+	return $result;
+    }
+
+    #
+    # Return project membership list for a user.
+    #
+    function ProjectMembershipList() {
 	$uid_idx = $this->uid_idx();
 	$result  = array();
 
@@ -883,7 +953,7 @@ class User
 	    $pid_idx = $row["pid_idx"];
 
 	    if (! ($project = Project::Lookup($pid_idx))) {
-		TBERROR("User::ProjectList: ".
+		TBERROR("User::ProjectMembershipList: ".
 			"Could not load project $pid_idx!", 1);
 	    }
 	    $result[] = $project;
@@ -971,5 +1041,23 @@ class User
 	    $result["$uid_idx"][] =& $group;
 	}
 	return $result;
+    }
+
+    #
+    # See if user has enough permission to view the webcams. If not an admin
+    # person, then must be a project with permission to use the robots.
+    # Eventually this needs to be a much more restrictive test.
+    #
+    function WebCamAllowed() {
+	$uid_idx = $this->uid_idx();
+	
+	$query_result =
+	    DBQueryFatal("select distinct class from group_membership as g ".
+			 "left join nodetypeXpid_permissions as p on ".
+			 "     g.pid=p.pid ".
+			 "left join node_types as nt on nt.type=p.type ".
+			 "where g.uid_idx='$uid_idx' and class='robot'");
+	
+	return mysql_num_rows($query_result);
     }
 }

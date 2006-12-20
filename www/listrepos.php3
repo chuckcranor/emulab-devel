@@ -65,7 +65,7 @@ if (!$isadmin &&
 #
 # See what projects the uid is a member of, and print some repo pointers
 #
-$projlist = TBProjList($target_uid, $TB_PROJECT_READINFO);
+$projlist = $target_user->ProjectAccessList($TB_PROJECT_READINFO);
 
 if (! count($projlist)) {
     USERERROR("$target_uid is not a member of any Projects!", 1);

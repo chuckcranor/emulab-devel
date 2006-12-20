@@ -79,7 +79,7 @@ echo "<center><h3>You have the following choices:</h3></center>
 #
 SHOWPROJECT($pid, $uid);
 
-$projleader = $target_project->GetLeader();
+$projleader = $this_project->GetLeader();
 
 echo "<center>
       <h3>Project Leader Information</h3>
@@ -136,7 +136,7 @@ echo "<tr>
        </tr>\n";
 
 #
-# Allow the approver to change the project's head UID - gotta find everyone in
+# Allow the approver to change the projects head UID - gotta find everyone in
 # the default group, first
 #
 echo "<tr>
@@ -144,12 +144,14 @@ echo "<tr>
 	      Head UID:
               <select name=head_uid>
                       <option value=''>(Unchanged)</option>";
-$query_result =
-    DBQueryFatal("select uid from group_membership where pid='$pid' and " .
-	    "gid='$pid'");
-while ($row = mysql_fetch_array($query_result)) {
-    $thisuid = $row[uid];
-    echo "                      <option value='$thisuid'>$thisuid</option>\n";
+
+$allmembers = $this_project->MemberList();
+
+foreach ($allmembers as $other_user) {
+    $this_uid   = $other_user->uid();
+    $this_webid = $other_user->webid();
+    
+    echo "                   <option value='$this_webid'>$this_uid</option>\n";
 }
 echo "        </select>
           </td>

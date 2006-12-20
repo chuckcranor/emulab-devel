@@ -162,9 +162,10 @@ class Experiment
     # Access Check. This is not code I want to duplicate, so hand off to
     # global routine until all code converted.
     #
-    function AccessCheck ($uid, $access_type) {
+    function AccessCheck ($user, $access_type) {
 	$pid = $this->pid();
 	$eid = $this->eid();
+	$uid = $user->uid();
 	
 	return TBExptAccessCheck($uid, $pid, $eid, $access_type);
     }

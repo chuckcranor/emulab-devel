@@ -205,13 +205,12 @@ while (list ($header, $value) = each ($HTTP_POST_VARS)) {
 	#
 	# See if user is in any other projects (even unapproved).
 	#
-        $query_result =
-	    DBQueryFatal("select * from group_membership where uid='$user'");
+	$project_list = $target_user->ProjectMembershipList();
 
 	#
 	# If yes, then we cannot safely delete the user account.
 	#
-	if (mysql_num_rows($query_result)) {
+	if (count($project_list)) {
 	    echo "<p>
                   User $user was <b>denied</b> an account on $node_id.
                   <br>

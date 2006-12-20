@@ -22,7 +22,7 @@ $isadmin   = ISADMIN();
 #
 # See what projects the uid can do this in.
 #
-$projlist = TBProjList($uid, $TB_PROJECT_MAKEOSID);
+$projlist = $this_user->ProjectAccessList($TB_PROJECT_MAKEOSID);
 
 if (! count($projlist)) {
     USERERROR("You do not appear to be a member of any Projects in which ".

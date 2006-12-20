@@ -255,8 +255,6 @@ function TBMinTrust($trust_value, $minimum)
 # 
 function TBGrpTrust($uid, $pid, $gid)
 {
-    global $TBDB_TRUST_NONE;
-
     #
     # No group, then use the default group.
     #
@@ -264,20 +262,17 @@ function TBGrpTrust($uid, $pid, $gid)
 	$gid = $pid;
     }
 
-    $query_result =
-	DBQueryFatal("select trust from group_membership ".
-		     "where uid='$uid' and pid='$pid' and gid='$gid'");
-
     #
-    # No membership is the same as no trust. True? Maybe an error instead?
-    # 
-    if (mysql_num_rows($query_result) == 0) {
-	return $TBDB_TRUST_NONE;
+    # Until all this code is fixed, pass this off to the group object
+    #
+    if (! ($group = Group::LookupByPidGid($pid, $gid))) {
+        TBERROR("TBGrpTrust: Could not look up group object for $pid/$eid!",1);
     }
-    $row = mysql_fetch_array($query_result);
-    $trust_string = $row[trust];
-
-    return TBTrustConvert($trust_string);
+    
+    if (! ($user = User::Lookup($uid))) {
+        TBERROR("TBGrpTrust: Could not look up user object for $uid!", 1);
+    }
+    return $group->UserTrust($user);
 }
 
 #
@@ -421,103 +416,6 @@ function TBProjAccessCheck($uid, $pid, $gid, $access_type)
     }
 
     return TBMinTrust(TBGrpTrust($uid, $pid, $gid), $mintrust);
-}
-
-
-#
-# Checks proposed Group trust change for consistency.
-#
-# Usage: TBCheckGroupTrustConsistency($user, $pid, $gid, $newtrust, $fail) 
-#        returns 1 if proposed change is valid
-#        returns 0 if proposed change is invalid and $fail == 0
-#        does not return if proposed change is invalid and $fail == 1.
-#
-
-function TBCheckGroupTrustConsistency($user, $pid, $gid, $newtrust, $fail)
-{
-    global $TBDB_TRUST_USER;
-
-    # 
-    # set $newtrustisroot to 1 if attempting to set a rootful trust,
-    # 0 otherwise.
-    #
-    $newtrustisroot = TBTrustConvert($newtrust) > $TBDB_TRUST_USER ? 1 : 0;
-
-    #
-    # If changing subgroup trust level, then compare levels.
-    # A user may not have root privs in the project and user privs
-    # in the subgroup; it makes no sense to do that and can violate trust.
-    #
-    if (strcmp($pid, $gid)) {
-	#
-	# Setting non-default "sub"group.
-	# Verify that if user has root in project,
-	# we are setting a rootful trust for him in 
-	# the subgroup as well.
-	#
-	$projtrustisroot = TBProjTrust($user, $pid) > $TBDB_TRUST_USER ? 1 : 0;
-
-	if ($projtrustisroot > $newtrustisroot) {
-	    if (!$fail) { return 0; }
-	    TBERROR("User $user may not have a root trust level in ".
-		      "the default group of $pid, ".
-		      "yet be non-root in subgroup $gid!", 1);
-	}
-    }
-    else {
-	#
-	# Setting default group.
-	# Do not verify anything (yet.)
-	#
-	$projtrustisroot = $newtrustisroot;
-    }
-
-    #
-    # Get all the subgroups not equal to the subgroup being changed.
-    # 
-    $query_result =
-	DBQueryFatal("select trust,gid from group_membership ".
-		     "where uid='$user' and pid='$pid' and trust!='none' ".
-		     " and gid!=pid and gid!='$gid'");
-
-    while ($row = mysql_fetch_array($query_result)) {
-	$grptrust = $row[0];
-	$ogid     = $row[1];
-	
-	# 
-	# Get what the users trust level is in the 
-	# current subgroup we're looking at.
-	#
-	$grptrustisroot = 
-	    TBTrustConvert( $grptrust ) > $TBDB_TRUST_USER ? 1 : 0;
-
-	#
-	# If users trust level is higher in the default group than in the
-	# subgroup we are looking at, this is wrong.
-	#
-	if ($projtrustisroot > $grptrustisroot) {
-	    if (!$fail) { return 0; }
-	    TBERROR("User $user may not have a root trust level in ".
-		      "the default group of $pid, ".
-		      "yet be non-root in subgroup $ogid!", 1);
-	}
-
-	if (strcmp($pid, $gid)) {
-            #
-	    # Iff we are modifying a subgroup, 
-	    # Make sure that the trust we are setting is as
-	    # rootful as the trust we already have set in
-	    # every other subgroup.
-	    # 
-	    if ($newtrustisroot != $grptrustisroot) { 
-		if (!$fail) { return 0; }
-		TBERROR("User $user may not mix root and ".
-			  "non-root trust levels in ".
-			  "different subgroups of $pid!", 1);
-	    }
-	}
-    }
-    return 1;
 }
 
 
@@ -1042,37 +940,6 @@ function TBValidNodeType($type)
 }
 
 #
-# Return mail addresses for project_root and group_root people.
-#
-# usage TBLeaderMailList($pid, $gid)
-#       Uses default group (pid=gid) if gid not given.
-#       returns string like "Leader Name (uid) <email>[, ...]"
-#       returns the empty string if not valid
-function TBLeaderMailList($pid, $gid)
-{
-  # No group, then use the default group.
-  if (! $gid) { $gid = $pid; }
-  
-  $query_result =
-    DBQueryFatal("select distinct usr_name,u.uid,usr_email from users as u ".
-		 "left join group_membership as gm on gm.uid=u.uid ".
-		 "where (trust='". TBDB_TRUSTSTRING_PROJROOT .
-		 "' and pid='$pid') or (trust='". TBDB_TRUSTSTRING_GROUPROOT .
-		 "' and pid='$pid' and gid='$gid') ".
-		 "order by trust DESC, usr_name");
-  
-  if (mysql_num_rows($query_result) == 0) {
-    return "";
-  }
-  $mailstr="";
-  while ($row = mysql_fetch_array($query_result)) {
-    if ($mailstr != "") { $mailstr .=", "; }
-    $mailstr .= '"'.$row[usr_name]." (".$row[uid].")\" <".$row[usr_email].">";
-  }
-  return $mailstr;
-}
-
-#
 # Return Project Leader.
 #
 # usage TBProjLeader($pid, &$projleader)
@@ -1135,68 +1002,6 @@ function TBExpLeader($pid, $eid, &$expleader)
     $expleader  = $row[expt_head_uid];
     
     return 1;
-}
-
-#
-# Return a list of projects for which the uid is allowed to perform the
-# requested operation. Only a couple of access options are supported since
-# to be totally general would require too many DB operations. Not worth
-# the effort or the expense.
-#
-# Returns an indexed array (by pid) of lists (of gids).
-#
-function TBProjList($uid, $access_type)
-{
-    global $TB_PROJECT_CREATEEXPT;
-    global $TB_PROJECT_MAKEOSID;
-    global $TB_PROJECT_MAKEIMAGEID;
-    global $TB_PROJECT_MAKEGROUP;
-    global $TB_PROJECT_READINFO;
-    $result = array();
-    $user_clause = "where uid='$uid' and";
-    
-    if ($access_type == $TB_PROJECT_READINFO) {
-	$trust_clause = "trust!='none'";
-    }
-    elseif ($access_type == $TB_PROJECT_MAKEGROUP) {
-	$trust_clause = "trust='project_root'";
-    }
-    elseif ($access_type == $TB_PROJECT_CREATEEXPT) {
-	$trust_clause = "(trust='project_root' or trust='group_root' or ".
-	                " trust='local_root')";
-    }
-    elseif ($access_type == $TB_PROJECT_MAKEOSID ||
-	    $access_type == $TB_PROJECT_MAKEIMAGEID) {
-        if (ISADMIN()) {
-            $user_clause = "";
-	}
-        else {
-  	    $trust_clause = "(trust='project_root' or trust='group_root' or ".
-	                    " trust='local_root')";
-        }
-    }
-    else {
-	TBERROR("Invalid access type $access_type!", 1);
-    }
-    
-    $query_result =
-	DBQueryFatal("SELECT distinct pid,gid FROM group_membership ".
-		     "$user_clause $trust_clause order by pid");
-
-    if (mysql_num_rows($query_result) == 0) {
-	return $result;
-    }
-
-    $i = 0;
-    while ($row = mysql_fetch_array($query_result)) {
-	$pid = $row['pid'];
-	$gid = $row['gid'];
-	
-	$result[$pid][] = $gid;
-
-	$i++;
-    }
-    return $result;
 }
 
 function TBExptState($pid, $eid)
@@ -1818,20 +1623,6 @@ function TBExptFirewall($pid, $eid) {
 	return 0;
    
     return 1;
-}
-
-#
-# See if user has enough permission to view the webcams. If not an admin
-# person, then must be a project with permission to use the robots.
-# Eventually this needs to be a much more restrictive test.
-#
-function TBWebCamAllowed($uid) {
-    $query_result =
-	DBQueryFatal("select distinct class from group_membership as g ".
-		     "left join nodetypeXpid_permissions as p on g.pid=p.pid ".
-		     "left join node_types as nt on nt.type=p.type ".
-		     "where uid='$uid' and class='robot'");
-    return mysql_num_rows($query_result);
 }
 
 #

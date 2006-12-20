@@ -176,10 +176,11 @@ while (list ($uid_idx, $grouplist) = each ($approvelist)) {
               </td>
               <td rowspan=2>
                   <select name=\"$newuid\$\$trust-$pid/$gid\">\n";
-    if (TBCheckGroupTrustConsistency($newuid, $pid, $gid, "user", 0)) {
+     
+    if ($group->CheckTrustConsistency($user, TBDB_TRUSTSTRING_USER, 0)) {
 	echo  "<option value='user'>User </option>\n";
     }
-    if (TBCheckGroupTrustConsistency($newuid, $pid, $gid, "local_root", 0)) {       
+    if ($group->CheckTrustConsistency($user, TBDB_TRUSTSTRING_LOCALROOT, 0)) {
 	# local_root means any root is valid.
         echo  "<option value='local_root'>Local Root </option>\n";
 

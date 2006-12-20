@@ -158,7 +158,7 @@ while (list ($header, $value) = each ($HTTP_POST_VARS)) {
 	# List of subgroup membership in this project.
 	$grouplist = $target_project->GroupList($target_user);
 
-	while (list($subgroup) = each($grouplist)) {
+	foreach ($grouplist as $subgroup) {
 	    $gid = $subgroup->gid();
 
             #
@@ -274,7 +274,7 @@ while (list ($user, $value) = each ($projectchecks)) {
 	}
 	$pidlist[$pid] = $pid;
 
-	$target_group->CheckGroupTrustConsistency($target_user, $trust, 1);
+	$target_group->CheckTrustConsistency($target_user, $trust, 1);
     }
     
     reset($value);
@@ -338,7 +338,7 @@ while (list ($header, $value) = each ($POST_VARS_COPY)) {
     #
     # Email info for the proj/group leaders too.
     #
-    $leaders = TBLeaderMailList($project, $group);
+    $leaders = $target_group->LeaderMailList();
     
     #
     # Well, looks like everything is okay. Change the project membership
@@ -387,7 +387,7 @@ while (list ($header, $value) = each ($POST_VARS_COPY)) {
 	#
 	# See if user is in any other projects (even unapproved).
 	#
-	$project_list = $target_user->ProjectList();
+	$project_list = $target_user->ProjectMembershipList();
 
 	#
 	# If yes, then we cannot safely delete the user account.

@@ -39,6 +39,10 @@ if (strcmp($gid, $pid) == 0) {
     $defaultgroup = 1;
 }
 
+if (! ($group = Group::LookupByPidGid($pid, $gid))) {
+    USERERROR("No such group group $gid in project $pid!", 1);
+}
+
 #
 # Verify permission.
 #
@@ -158,19 +162,21 @@ if (mysql_num_rows($curmembers_result)) {
 	#
 	# We want to have the current trust value selected in the menu.
 	#
-	if (TBCheckGroupTrustConsistency($user, $pid, $gid, "user", 0)) {
+	if ($group->CheckTrustConsistency($target_user,
+					  TBDB_TRUSTSTRING_USER, 0)) {
 	    echo "<option value='user' " .
 		((strcmp($trust, "user") == 0) ? "selected" : "") .
 		    ">User </option>\n";
 	}
-	if (TBCheckGroupTrustConsistency($user, $pid, $gid, "local_root", 0)) {
+	if ($group->CheckTrustConsistency($target_user,
+					  TBDB_TRUSTSTRING_LOCALROOT, 0)) {
 	    echo "<option value='local_root' " .
 		((strcmp($trust, "local_root") == 0) ? "selected" : "") .
 		    ">Local Root </option>\n";
 
 	    #
-	    # If group_root is already selected, or we have permission to set it,
-	    # show it. Otherwise do not.
+	    # If group_root is already selected, or we have permission to set
+	    # it, show it. Otherwise do not.
 	    #
 	    if (strcmp($trust, "group_root") == 0 || $bestowgrouproot) {
 		echo "<option value='group_root' " .
@@ -211,12 +217,14 @@ if ($grabusers && mysql_num_rows($nonmembers_result)) {
 	echo "   <td align=center>
                    <select name='$user\$\$trust'>\n";
 
-	if (TBCheckGroupTrustConsistency($user, $pid, $gid, "user", 0)) {
+	if ($group->CheckTrustConsistency($target_user,
+					  TBDB_TRUSTSTRING_USER, 0)) {
 	    echo "<option value='user' " .
 		((strcmp($trust, "user") == 0) ? "selected" : "") .
 		    ">User</option>\n";
 	}
-	if (TBCheckGroupTrustConsistency($user, $pid, $gid, "local_root", 0)) {
+	if ($group->CheckTrustConsistency($target_user,
+					  TBDB_TRUSTSTRING_LOCALROOT, 0)) {
 	    echo "<option value='local_root' " .
 		((strcmp($trust, "local_root") == 0) ? "selected" : "") .
 		    ">Local Root</option>\n";

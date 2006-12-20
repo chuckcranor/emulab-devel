@@ -42,6 +42,9 @@ class Project
 	    
 	    if (! $foo->IsValid())
 		return null;
+
+	    # Return here, in case I add a cache and forget to do this.
+	    return $foo;
 	}
 	return $foo;
     }
@@ -254,6 +257,29 @@ class Project
 	$group = $this->LoadGroup();
 
 	return $group->IsMember($user, $approved);
+    }
+
+    #
+    # Member list for a group.
+    #
+    function MemberList() {
+	$pid_idx = $this->pid_idx();
+	$result  = array();
+
+	$query_result =
+	    DBQueryFatal("select uid_idx from group_membership ".
+			 "where pid_idx='$pid_idx' and gid_idx=pid_idx");
+
+	while ($row = mysql_fetch_array($query_result)) {
+	    $uid_idx = $row["uid_idx"];
+
+	    if (! ($user =& User::Lookup($uid_idx))) {
+		TBERROR("Project::MemberList: ".
+			"Could not load user $uid_idx!", 1);
+	    }
+	    $result[] =& $user;
+	}
+	return $result;
     }
 
     #
