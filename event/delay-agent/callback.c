@@ -1,6 +1,6 @@
 /*
  * EMULAB-COPYRIGHT
- * Copyright (c) 2000-2003, 2006 University of Utah and the Flux Group.
+ * Copyright (c) 2000-2003, 2006, 2007 University of Utah and the Flux Group.
  * All rights reserved.
  */
 
@@ -117,9 +117,9 @@ activate_pipe(int mapix, char *args)
 	      link->interfaces[0]);
       systemf("ipfw pipe %d config bw %d delay %d plr 0 queue %d",
 	      link->pipes[0],
-	      link_map[link_index].params[0].bw.bandwidth,
-	      link_map[link_index].params[0].delay.delay,
-	      link_map[link_index].params[0].q_size);
+	      link->params[0].bw.bandwidth,
+	      link->params[0].delay.delay,
+	      link->params[0].q_size);
       link->inactive = 0;
     }
     else if (link->clouddir == 2) {
@@ -132,9 +132,9 @@ activate_pipe(int mapix, char *args)
 	      link->interfaces[0]);
       systemf("ipfw pipe %d config bw 0 delay %d plr %f queue %d",
 	      link->pipes[0],
-	      link_map[link_index].params[0].delay.delay,
-	      (double)link_map[link_index].params[0].loss.plr/0x7fffffff,
-	      link_map[link_index].params[0].q_size);
+	      link->params[0].delay.delay,
+	      (double)link->params[0].loss.plr/0x7fffffff,
+	      link->params[0].q_size);
       link->inactive = 0;
     }
     /*
@@ -152,8 +152,8 @@ activate_pipe(int mapix, char *args)
 	      link->interfaces[0]);
       systemf("ipfw pipe %d config bw %d delay 0 plr 0 queue %d",
 	      link->pipes[0],
-	      link_map[link_index].params[0].bw.bandwidth,
-	      link_map[link_index].params[0].q_size);
+	      link->params[0].bw.bandwidth,
+	      link->params[0].q_size);
       link->inactive = 0;
     }
   }
@@ -410,6 +410,8 @@ void agent_callback(event_handle_t handle,
 	}
 	  
 	*lm = *mainlm;
+	lm->clouddir = 0;
+	lm->inactive = 0;
 	lm->islan = 0;
 	lm->numpipes = 1;
 	lm->fs = fs;
@@ -423,7 +425,24 @@ void agent_callback(event_handle_t handle,
 		lm->fs.srcport,
 		lm->fs.dstport,
 		lm->interfaces[0]);
-	systemf("ipfw pipe %d config queue 50", lm->pipes[0]);
+
+	/*
+	 * Initialize its characteristics from the "basis" pipe.
+	 * Note that if the basis is a funky BW only pipe, we need to
+	 * extract the delay/PLR from the following pipe.
+	 */
+	lm->params[0] = mainlm->params[0];
+	assert(mainlm->clouddir != 2);
+	if (mainlm->clouddir == 1) {
+		assert((mainlm+1) < &link_map[link_index]);
+		lm->params[0].delay = (mainlm+1)->params[0].delay;
+		lm->params[0].loss = (mainlm+1)->params[0].loss;
+	}
+	systemf("ipfw pipe %d config bw %d delay %d plr 0 queue %d",
+		lm->pipes[0],
+		lm->params[0].bw.bandwidth,
+		lm->params[0].delay.delay,
+		lm->params[0].q_size);
       }
     }
 
@@ -876,6 +895,8 @@ void set_link_params(int l_index, int blackhole, int p_which)
 	    switch (link_map[l_index].clouddir) {
 	    case 1:
 	      p_params->delay.delay = 0;
+	      p_params->loss.dist = DN_DIST_CONST_RATE;
+	      p_params->loss.plr = 0;
 	      break;
 	    case 2:
 	      p_params->bw.bandwidth = 0;
