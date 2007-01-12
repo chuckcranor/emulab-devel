@@ -41,7 +41,10 @@ void ptOffset(geomPt p, geomVec v, double scale, geomPt result);
 // Result can be the same point as either of the two point arguments.b
 void ptBlend(geomPt p1, geomPt p2, double t, geomPt result);
 
-// Line - Line equation is Ax+By+C, == 0 on the line, positive inside.
+// Line - Line equation is Bx-Ay+C, == 0 on the line, positive inside.
+// [A,B] is a vector perpendicular to the line, positive to the right.
+// Notice that this is not the Ax+By+C form you learned in Algebra class.
+// It makes for efficient calculation of the distance from a point to a line.
 struct geomLineStruct
 {
   geomPt pt1, pt2;
