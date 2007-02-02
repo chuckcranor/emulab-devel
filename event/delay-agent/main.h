@@ -1,6 +1,6 @@
 /*
  * EMULAB-COPYRIGHT
- * Copyright (c) 2000-2003, 2006 University of Utah and the Flux Group.
+ * Copyright (c) 2000-2003, 2006, 2007 University of Utah and the Flux Group.
  * All rights reserved.
  */
 
@@ -163,14 +163,11 @@ void usage(char *);
 void fill_tuple(address_tuple_t);
 void agent_callback(event_handle_t handle,
 		    event_notification_t notification, void *data);
-void handle_pipes (char *objname, char *eventtype, event_notification_t
-		   ,event_handle_t, int);
+void handle_pipes (char *objname, char *eventtype, char *args, int);
 int  checkevent (char *);
 void handle_link_up(char * linkname, int l_index);
 void handle_link_down(char * linkname, int l_index);
-void handle_link_modify(char * linkname, int l_index,
-			event_handle_t handle,
-			event_notification_t notification);
+void handle_link_modify(char * linkname, int l_index, char *args);
 int  get_link_params(int l_index);
 void get_flowset_params(struct dn_flow_set*, int, int);
 void get_queue_params(struct dn_flow_set*,int, int);

@@ -1,6 +1,6 @@
 /*
  * EMULAB-COPYRIGHT
- * Copyright (c) 2000-2004, 2006 University of Utah and the Flux Group.
+ * Copyright (c) 2000-2004, 2006, 2007 University of Utah and the Flux Group.
  * All rights reserved.
  */
 
@@ -325,9 +325,16 @@ int main(int argc, char **argv)
    if (handle == NULL) {
        error("could not register with event system\n");
        return 1;
-     }
+   }
 
-  info("registered with the event server\n");
+  if (debug)
+    info("registered with the event server\n");
+  else {
+    struct timeval tv;
+    gettimeofday(&tv, NULL);
+    info("%d.%06d: %s: starting\n", tv.tv_sec, tv.tv_usec, myexp);
+  }
+
  /* allocate an address_tuple*/
   event_t = address_tuple_alloc();
 
@@ -339,6 +346,9 @@ int main(int argc, char **argv)
         error("could not subscribe to %d event\n",event_t->eventtype);
         return 1;
     }
+
+   if (!debug)
+     info("  subscribed to: %s/%s\n", event_t->objname, event_t->eventtype);
 
   if (strlen(lanobjects)) {
     strcat(lanobjects, ",");
@@ -353,13 +363,19 @@ int main(int argc, char **argv)
       error("could not subscribe to %d event\n", event_t->eventtype);
       return 1;
     }
+
+    if (!debug)
+      info("  subscribed to: %s/%s\n", event_t->objname, event_t->eventtype);
   }
   
-  info("subscribed...\n");
+  if (debug)
+    info("subscribed...\n");
+
   /* free the memory for the address tuple*/
   address_tuple_free(event_t);
 
-  info("entering the main loop\n");
+  if (debug)
+    info("entering the main loop\n");
   /* enter the event loop */
    event_main(handle);
   
@@ -406,7 +422,8 @@ void fill_tuple(address_tuple_t at)
   at->expt = myexp;
   at->host = ADDRESSTUPLE_ANY;
 
-  info("tuple: %s -- %s\n", myobjects, myexp);
+  if (debug)
+    info("tuple: %s -- %s\n", myobjects, myexp);
   
   /*fill in other values, dont know what to fill in yet*/
   at->site = ADDRESSTUPLE_ANY;
@@ -419,56 +436,64 @@ void fill_tuple(address_tuple_t at)
 }
 
 /***************************dump_link_map******************************
- A debugging aid.*/
+ Debugging aides.*/
 /***************************dump_link_map******************************/
-void dump_link_map(){
-  int i,j;
-  struct timeval tv;
+void dump_link(structlink_map *lmentry)
+{
+    int j;
 
-  gettimeofday(&tv, NULL);
-  info("dump at %ld.%d\n", tv.tv_sec, tv.tv_usec);
-  for (i = 0; i < link_index; i++){
     info ("===============================================================\n");
-    info("linkname = %s\n", link_map[i].linkname);
-    info("linktype = %s\n", link_map[i].linktype);
-    info("linkstatus = %d \n", link_map[i].stat);
-    info("numpipes   = %d \n", link_map[i].numpipes);
-    info("islan      = %d \n", link_map[i].islan);
-    info("dest       = %s \n", link_map[i].fs.dest);
-    info("protocol   = %s \n", link_map[i].fs.protocol);
-    info("srcport    = %d \n", link_map[i].fs.srcport);
-    info("dstport    = %d \n", link_map[i].fs.dstport);
+    info("linkname = %s\n", lmentry->linkname);
+    info("linktype = %s\n", lmentry->linktype);
+    info("linkstatus = %d \n", lmentry->stat);
+    info("numpipes   = %d \n", lmentry->numpipes);
+    info("islan      = %d \n", lmentry->islan);
+    info("dest       = %s \n", lmentry->fs.dest);
+    info("protocol   = %s \n", lmentry->fs.protocol);
+    info("srcport    = %d \n", lmentry->fs.srcport);
+    info("dstport    = %d \n", lmentry->fs.dstport);
 
-    for (j = 0; j < link_map[i].numpipes; j++) {
+    for (j = 0; j < lmentry->numpipes; j++) {
       info("Pipe params:\n");
-      info("interface = %s\n", link_map[i].interfaces[j]);
-      info("pipe num  = %d\n", link_map[i].pipes[j]);
-      info("vnode     = %s\n", link_map[i].vnodes[j]);
-      info("linkvnode = %s\n", link_map[i].linkvnodes[j]);
+      info("interface = %s\n", lmentry->interfaces[j]);
+      info("pipe num  = %d\n", lmentry->pipes[j]);
+      info("vnode     = %s\n", lmentry->vnodes[j]);
+      info("linkvnode = %s\n", lmentry->linkvnodes[j]);
 
-      info("delay = %d bw = %d plr = %f\n",  link_map[i].params[j].delay.delay,
-	   link_map[i].params[j].bw.bandwidth, link_map[i].params[j].loss.plr);
+      info("delay = %d bw = %d plr = %f\n",  lmentry->params[j].delay.delay,
+	   lmentry->params[j].bw.bandwidth, lmentry->params[j].loss.plr);
       info("q_size = %d buckets = %d n_qs = %d flags_p = %d\n",
-	   link_map[i].params[j].q_size, link_map[i].params[j].buckets,
-	   link_map[i].params[j].n_qs, link_map[i].params[j].flags_p);
+	   lmentry->params[j].q_size, lmentry->params[j].buckets,
+	   lmentry->params[j].n_qs, lmentry->params[j].flags_p);
       
-      if(link_map[i].params[j].flags_p & PIPE_Q_IS_RED){
+      if(lmentry->params[j].flags_p & PIPE_Q_IS_RED){
         info(" queue is RED min_th = %d max_th = %d w_q = %f max_p = %f\n",
-	     link_map[i].params[j].red_gred_params.min_th,
-	     link_map[i].params[j].red_gred_params.max_th,
-	     link_map[i].params[j].red_gred_params.w_q,
-	     link_map[i].params[j].red_gred_params.max_p);
+	     lmentry->params[j].red_gred_params.min_th,
+	     lmentry->params[j].red_gred_params.max_th,
+	     lmentry->params[j].red_gred_params.w_q,
+	     lmentry->params[j].red_gred_params.max_p);
       }
-      else if(link_map[i].params[j].flags_p & PIPE_Q_IS_GRED){
+      else if(lmentry->params[j].flags_p & PIPE_Q_IS_GRED){
 	info(" queue is GRED min_th = %d max_th = %d w_q = %f max_p = %f\n",
-	     link_map[i].params[j].red_gred_params.min_th,
-	     link_map[i].params[j].red_gred_params.max_th,
-	     link_map[i].params[j].red_gred_params.w_q,
-	     link_map[i].params[j].red_gred_params.max_p);
+	     lmentry->params[j].red_gred_params.min_th,
+	     lmentry->params[j].red_gred_params.max_th,
+	     lmentry->params[j].red_gred_params.w_q,
+	     lmentry->params[j].red_gred_params.max_p);
       }
       else info("queue is droptail\n");
       info ("-----------------------------------------------------------\n");
     }
+}
+
+void dump_link_map()
+{
+  int i;
+  struct timeval tv;
+
+  gettimeofday(&tv, NULL);
+  info("dump at %ld.%d\n", tv.tv_sec, tv.tv_usec);
+  for (i = 0; i < link_index; i++) {
+    dump_link(&link_map[i]);  
   }
 }
 
@@ -481,19 +506,28 @@ reset_callback(event_handle_t handle,
 	char		*prog = "delaysetup";
 	unsigned long	token = ~0;
 	int		errcode = 0;
+	char		*redir = ">/dev/null";
 
-	info("Got a RESET event!\n");
+	event_notification_get_objname(handle, notification,
+				       objname, sizeof(objname));
+
+	if (debug) {
+	  info("Got a RESET event!\n");
+	  redir = "";
+	} else {
+	  struct timeval tv;
+	  gettimeofday(&tv, NULL);
+	  info("%d.%06d: %s: RESET\n", tv.tv_sec, tv.tv_usec, objname);
+	}
 
 	if (myvnode)
-		sprintf(buf, "%s -r -j %s", prog, myvnode);
+		sprintf(buf, "%s -r -j %s %s", prog, myvnode, redir);
 	else
-		sprintf(buf, "%s -r", prog);
+		sprintf(buf, "%s -r %s", prog, redir);
 	errcode = system(buf);
 
 	event_notification_get_int32(handle, notification,
 				     "TOKEN", (int32_t *)&token);
-	event_notification_get_objname(handle, notification,
-				       objname, sizeof(objname));
 
 	/* ... notify the scheduler of the completion. */
 	event_do(handle,

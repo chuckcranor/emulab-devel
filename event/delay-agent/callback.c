@@ -27,6 +27,10 @@ extern structlink_map *old_map;
 extern int old_length;
 extern int s_dummy; 
 extern int debug;
+
+extern void dump_link(structlink_map *);
+extern void dump_link_map(void);
+
 /******************************* EXTERNS **************************/
 
 /********************************FUNCTION DEFS *******************/
@@ -102,39 +106,53 @@ static void
 activate_pipe(int mapix, char *args)
 {
   structlink_map_t link = &link_map[mapix];
+  char *redir = ">/dev/null";
+
+  if (debug)
+    redir = "";
 
   /*
    * If not done already, create the delay pipe
    */
   if (link->inactive) {
     if (link->clouddir == 3) {  
-      info("activating delay/BW pipe %d\n", link->pipes[0]);
+      if (debug)
+	info("activating delay/BW pipe %d\n", link->pipes[0]);
+      else
+	info("  create delay/BW pipe %d\n", link->pipes[0]);
 
-      systemf("ipfw add %d pipe %d ip from any to %s in recv %s",
+      systemf("ipfw add %d pipe %d ip from any to %s in recv %s %s",
 	      link->pipes[0],
 	      link->pipes[0],
 	      link->fs.dest,
-	      link->interfaces[0]);
-      systemf("ipfw pipe %d config bw %d delay %d plr 0 queue %d",
+	      link->interfaces[0],
+	      redir);
+      systemf("ipfw pipe %d config bw %d delay %d plr 0 queue %d %s",
 	      link->pipes[0],
 	      link->params[0].bw.bandwidth,
 	      link->params[0].delay.delay,
-	      link->params[0].q_size);
+	      link->params[0].q_size,
+	      redir);
       link->inactive = 0;
     }
     else if (link->clouddir == 2) {
-      info("activating delay pipe %d\n", link->pipes[0]);
+      if (debug)
+	info("activating delay pipe %d\n", link->pipes[0]);
+      else
+	info("  create delay pipe %d\n", link->pipes[0]);
 
-      systemf("ipfw add %d pipe %d ip from %s to any in recv %s",
+      systemf("ipfw add %d pipe %d ip from %s to any in recv %s %s",
 	      link->pipes[0],
 	      link->pipes[0],
 	      link->fs.dest,
-	      link->interfaces[0]);
-      systemf("ipfw pipe %d config bw 0 delay %d plr %f queue %d",
+	      link->interfaces[0],
+	      redir);
+      systemf("ipfw pipe %d config bw 0 delay %d plr %f queue %d %s",
 	      link->pipes[0],
 	      link->params[0].delay.delay,
 	      (double)link->params[0].loss.plr/0x7fffffff,
-	      link->params[0].q_size);
+	      link->params[0].q_size,
+	      redir);
       link->inactive = 0;
     }
     /*
@@ -143,17 +161,22 @@ activate_pipe(int mapix, char *args)
      * flow-specific BW shaping pipe.
      */
     else if (link->fs.dest[0] && strstr(args, "BANDWIDTH")) {
-      info("activating BW pipe %d\n", link->pipes[0]);
+      if (debug)
+	info("activating BW pipe %d\n", link->pipes[0]);
+      else
+	info("  create BW pipe %d\n", link->pipes[0]);
 
-      systemf("ipfw add %d pipe %d ip from any to %s in recv %s",
+      systemf("ipfw add %d pipe %d ip from any to %s in recv %s %s",
 	      link->pipes[0],
 	      link->pipes[0],
 	      link->fs.dest,
-	      link->interfaces[0]);
-      systemf("ipfw pipe %d config bw %d delay 0 plr 0 queue %d",
+	      link->interfaces[0],
+	      redir);
+      systemf("ipfw pipe %d config bw %d delay 0 plr 0 queue %d %s",
 	      link->pipes[0],
 	      link->params[0].bw.bandwidth,
-	      link->params[0].q_size);
+	      link->params[0].q_size,
+	      redir);
       link->inactive = 0;
     }
   }
@@ -182,6 +205,10 @@ void agent_callback(event_handle_t handle,
   int i, dest_len, srcport_len, dstport_len, protocol_len;
   static int lo_rule_no = LO_RULE_NO;
   static int hi_rule_no = HI_RULE_NO;
+  char *redir = ">/dev/null";
+
+  if (debug)
+    redir = "";
 
     /* get the name of the object, eg. link0 or link1*/
   if(event_notification_get_string(handle,
@@ -202,10 +229,6 @@ void agent_callback(event_handle_t handle,
   
   event_notification_get_arguments(handle,
 				   notification, args, sizeof(args));
-
-#if 0
-  info("OBJ=%s, TYPE=%s, ARGS=%s\n", objname, eventtype, args);
-#endif
 
   /*
    * Get the flowspec parameters.  If there are none, the default
@@ -245,6 +268,12 @@ void agent_callback(event_handle_t handle,
     structlink_map_t lm;
 
     /* Handle a CLEAR event. */
+    if (!debug) {
+      struct timeval tv;
+      gettimeofday(&tv, NULL);
+      info("%d.%06d: %s: CLEAR: %s\n",
+	   tv.tv_sec, tv.tv_usec, objname, args);
+    }
     
     if (dest_len > 0 && srcport_len > 0 && dstport_len > 0 &&
 	protocol_len > 0) {
@@ -252,10 +281,13 @@ void agent_callback(event_handle_t handle,
 	error("unknown flow for agent %s\n", objname);
       }
       else {
-	info("clearing pipe %d\n", lm->pipes[0]);
+	if (debug)
+	  info("clearing pipe %d\n", lm->pipes[0]);
+	else
+	  info("  clear pipe: %d\n", lm->pipes[0]);
 	/* Delete the rule/pipe and */
-	systemf("ipfw delete %d", lm->pipes[0]);
-	systemf("ipfw pipe delete %d", lm->pipes[0]);
+	systemf("ipfw delete %d %s", lm->pipes[0], redir);
+	systemf("ipfw pipe delete %d %s", lm->pipes[0], redir);
 	/* ... mark the structure as free for another use. */
 	strcpy(lm->linkvnodes[0], "__free");
 	strcpy(lm->linkvnodes[1], "__free");
@@ -268,7 +300,8 @@ void agent_callback(event_handle_t handle,
        * might be shared.  So, we find all pipes associated with
        * the indicated object that have non-null flow info.
        */
-      info("clearing all flow pipes for %s\n", objname);
+      if (debug)
+	info("clearing all flow pipes for %s\n", objname);
       for (lm = &link_map[0]; lm < &link_map[link_index]; lm++) {
 	if (strcmp(lm->linkname, objname) != 0 ||
 	    strcmp(lm->linkvnodes[0], "__free") == 0 ||
@@ -276,11 +309,14 @@ void agent_callback(event_handle_t handle,
 	  continue;
 
         if (!lm->inactive) {
-	  info("clearing pipe %d\n", lm->pipes[0]);
+	  if (debug)
+	    info("clearing pipe %d\n", lm->pipes[0]);
+	  else
+	    info("  clear pipe: %d\n", lm->pipes[0]);
 
 	  /* Delete the rule/pipe and */
-	  systemf("ipfw delete %d", lm->pipes[0]);
-	  systemf("ipfw pipe delete %d", lm->pipes[0]);
+	  systemf("ipfw delete %d %s", lm->pipes[0], redir);
+	  systemf("ipfw pipe delete %d %s", lm->pipes[0], redir);
 	}
 	/* ... mark the structure as free for another use. */
 	strcpy(lm->linkvnodes[0], "__free");
@@ -296,15 +332,22 @@ void agent_callback(event_handle_t handle,
       }
     }
 
-    dump_link_map();
+    if (debug)
+      dump_link_map();
     return;
   }
 
   if (strcmp(eventtype, TBDB_EVENTTYPE_CREATE) == 0) {
-    if (dest_len == -1) {
-      extern void dump_link_map();
+    if (!debug) {
+      struct timeval tv;
+      gettimeofday(&tv, NULL);
+      info("%d.%06d: %s: CREATE: %s\n",
+	   tv.tv_sec, tv.tv_usec, objname, args);
+    }
 
-      info("creating per-host pipes for %s\n", objname);
+    if (dest_len == -1) {
+      if (debug)
+	info("creating per-host pipes for %s\n", objname);
       
       if (link_map == old_map) {
 	link_map = NULL;
@@ -393,8 +436,6 @@ void agent_callback(event_handle_t handle,
       else {
 	int rule_no;
 
-	info("creating per-flow pipe\n");
-	
 	if ((lm = find_map("__free", &blankfs)) == NULL) {
 	  /* No free structlink_map objects, allocate a new one. */
 	  realloc_map();
@@ -409,6 +450,11 @@ void agent_callback(event_handle_t handle,
 	  rule_no = lm->pipes[0];
 	}
 	  
+	if (debug)
+	  info("creating per-flow pipe\n");
+	else
+	  info("  create flow pipe %d\n", rule_no);
+
 	*lm = *mainlm;
 	lm->clouddir = 0;
 	lm->inactive = 0;
@@ -417,14 +463,15 @@ void agent_callback(event_handle_t handle,
 	lm->fs = fs;
 	lm->pipes[0] = rule_no;
 	systemf("ipfw add %d pipe %d %s from any to %s "
-		"src-port %d dst-port %d in recv %s",
+		"src-port %d dst-port %d in recv %s %s",
 		lm->pipes[0],
 		lm->pipes[0],
 		lm->fs.protocol,
 		lm->fs.dest,
 		lm->fs.srcport,
 		lm->fs.dstport,
-		lm->interfaces[0]);
+		lm->interfaces[0],
+		redir);
 
 	/*
 	 * Initialize its characteristics from the "basis" pipe.
@@ -438,15 +485,17 @@ void agent_callback(event_handle_t handle,
 		lm->params[0].delay = (mainlm+1)->params[0].delay;
 		lm->params[0].loss = (mainlm+1)->params[0].loss;
 	}
-	systemf("ipfw pipe %d config bw %d delay %d plr 0 queue %d",
+	systemf("ipfw pipe %d config bw %d delay %d plr 0 queue %d %s",
 		lm->pipes[0],
 		lm->params[0].bw.bandwidth,
 		lm->params[0].delay.delay,
-		lm->params[0].q_size);
+		lm->params[0].q_size,
+		redir);
       }
     }
 
-    dump_link_map();
+    if (debug)
+      dump_link_map();
     return;
   }
 
@@ -460,7 +509,7 @@ void agent_callback(event_handle_t handle,
        !strcmp(link_map[i].linkvnodes[0], objname) ||
        !strcmp(link_map[i].linkvnodes[1], objname)) {
       if (flowspeccmp(&link_map[i].fs, &fs) == 0) {
-	handle_pipes(objname, eventtype, notification, handle, i);
+	handle_pipes(objname, eventtype, args, i);
       }
     }
   }
@@ -471,12 +520,16 @@ This dispatch function checks the event type and dispatches to the appropriate
 routine to handle
  ******************** handle_pipes ***************************************/
 
-void handle_pipes (char *objname, char *eventtype,
-		   event_notification_t notification, event_handle_t handle,
-		   int l_index)
+void handle_pipes (char *objname, char *eventtype, char *args, int l_index)
 {
-  
   /*link_map[index] contains the relevant info*/
+
+  if (!debug) {
+    struct timeval tv;
+    gettimeofday(&tv, NULL);
+    info("%d.%06d: %s(%d): %s: %s\n",
+	 tv.tv_sec, tv.tv_usec, objname, l_index, eventtype, args);
+  }
 
   if(strcmp(eventtype, TBDB_EVENTTYPE_UP) == 0){
     handle_link_up(objname, l_index);
@@ -485,7 +538,7 @@ void handle_pipes (char *objname, char *eventtype,
     handle_link_down(objname, l_index);
   }
   else if(strcmp(eventtype, TBDB_EVENTTYPE_MODIFY) == 0){
-    handle_link_modify(objname, l_index, handle, notification);
+    handle_link_modify(objname, l_index, args);
   }
   else error("unknown link event type\n");
 
@@ -507,8 +560,10 @@ void handle_link_up(char * linkname, int l_index)
   /* get the pipe params from the params field of the
      link_map table. Set the pipe params in dummynet
    */
-  info("==========================================\n");
-  info("recd. UP event for link = %s\n", linkname);
+  if (debug) {
+    info("==========================================\n");
+    info("recd. UP event for link = %s\n", linkname);
+  }
 
   /* no need to do anything if link is already up*/
   if(link_map[l_index].stat == LINK_UP)
@@ -533,8 +588,10 @@ void handle_link_down(char * linkname, int l_index)
    * Change the pipe config so that plr = 1.0
    * so that packets are blackholed
    */
-  info("==========================================\n");
-  info("recd. DOWN event for link = %s\n", linkname);
+  if (debug) {
+    info("==========================================\n");
+    info("recd. DOWN event for link = %s\n", linkname);
+  }
 
   if(link_map[l_index].stat == LINK_DOWN)
     return;
@@ -553,28 +610,21 @@ it just returns. IF the link is up, then it calls set_link_params
 to set the new params
  *********** handle_link_modify *****************************/
 
-void handle_link_modify(char * linkname, int l_index,
-			event_handle_t handle,
-			event_notification_t notification)
+void handle_link_modify(char * linkname, int l_index, char * args)
 {
-  char argstring[256], *args;
-
   /* Get the new pipe params from the notification, and then
      update the new set of params by setting the params in
      dummynet
    */
+  char myargs[BUFSIZ];
   int i, p_which = -1;
 
-  info("==========================================\n");
-  info("recd. MODIFY event for link = %s (%d)\n", linkname, l_index);
+  if (debug) {
+    info("==========================================\n");
+    info("recd. MODIFY event for link = %s (%d)\n", linkname, l_index);
+  }
 
-  /* Grab the event ARGS= strings */
-  if (event_notification_get_string(handle, notification, "ARGS",
-				    argstring, sizeof(argstring)) != 0) {
-    args = argstring;
-    info("ARGS = %s\n", argstring);
-  } else
-    args = NULL;
+  strncpy(myargs, args, BUFSIZ);
 
   /*
    * As a convience to the user, we create virt_agents entries
@@ -597,7 +647,7 @@ void handle_link_modify(char * linkname, int l_index,
   
   /* Create the pipe(s) if it hasn't been done already */
   if (link_map[l_index].clouddir != 0)
-    activate_pipe(l_index, args);
+    activate_pipe(l_index, myargs);
 
   /* if the link is up, then get the params from dummynet,
      get the params from the notification and then merge
@@ -605,11 +655,11 @@ void handle_link_modify(char * linkname, int l_index,
    */
   if(link_map[l_index].stat == LINK_UP){
     if(get_link_params(l_index) == 1)
-      if(get_new_link_params(l_index, args, &p_which) == 1)
+      if(get_new_link_params(l_index, myargs, &p_which) == 1)
 	set_link_params(l_index, 0, p_which);
   } else
     /* link is down, so just change in the link_map*/
-    get_new_link_params(l_index, args, &p_which);
+    get_new_link_params(l_index, myargs, &p_which);
 }
 
 /**
@@ -867,10 +917,13 @@ void set_link_params(int l_index, int blackhole, int p_which)
      set them into dummynet by calling setsockopt
    */
   int p_index;
-  struct timeval tv;
 
-  gettimeofday(&tv, NULL);
-  info("setting at %ld.%d\n", tv.tv_sec, tv.tv_usec);
+  if (debug) {
+    struct timeval tv;
+    gettimeofday(&tv, NULL);
+    info("setting at %ld.%d\n", tv.tv_sec, tv.tv_usec);
+  }
+
   for (p_index = 0; p_index < link_map[l_index].numpipes; p_index++) {
       /*
        * Want to do all the pipes, or just the one pipe that was
@@ -882,11 +935,12 @@ void set_link_params(int l_index, int blackhole, int p_which)
 	    structpipe_params *p_params
 	      = &(link_map[l_index].params[p_index]);
 
-	    info("entered the loop, pindex = %d %s %s (%s)\n", p_index,
-		 link_map[l_index].linkvnodes[p_index],
-		 link_map[l_index].fs.dest,
-		 link_map[l_index].inactive ? "inactive" : "active");
-	
+	    if (debug)
+	      info("entered the loop, pindex = %d %s %s (%s)\n", p_index,
+		   link_map[l_index].linkvnodes[p_index],
+		   link_map[l_index].fs.dest,
+		   link_map[l_index].inactive ? "inactive" : "active");
+
 	    if (link_map[l_index].inactive)
 	      continue;
 
@@ -1347,7 +1401,8 @@ int get_new_link_params(int l_index, char *argstring, int *pipe_which)
 
       /* BANDWIDTH parameters. */
       if(strcmp(argtype,"BANDWIDTH")== 0){
-	info("Bandwidth = %d\n", atoi(argvalue) * 1000);
+	if (debug)
+	  info("Bandwidth = %d\n", atoi(argvalue) * 1000);
 	link_map[l_index].params[p_num].bw.bandwidth = atoi(argvalue) * 1000;
 	link_map[l_index].params[p_num].bw.dist = DN_DIST_CONST_RATE;
 	if (! gotpipe) {
@@ -1357,11 +1412,13 @@ int get_new_link_params(int l_index, char *argstring, int *pipe_which)
 	}
       }
       else if (strcmp(argtype,"BWQUANTUM")== 0){
-	 info("Bandwidthq = %d\n", atoi(argvalue));
+	 if (debug)
+	   info("Bandwidthq = %d\n", atoi(argvalue));
 	 bq = atoi(argvalue);
       }
       else if (strcmp(argtype,"BWQUANTABLE")== 0){
-	 info("Bandwidthqt = %s\n", argvalue);
+	 if (debug)
+	   info("Bandwidthqt = %s\n", argvalue);
 	 
 	 free(link_map[l_index].params[p_num].bw.quantum);
 	 link_map[l_index].params[p_num].bw.quantum =
@@ -1377,7 +1434,8 @@ int get_new_link_params(int l_index, char *argstring, int *pipe_which)
 	 }
       }
       else if (strcmp(argtype,"BWMEAN")== 0){
-	 info("Bandwidth mean = %d\n", atoi(argvalue) * 1000);
+	 if (debug)
+	   info("Bandwidth mean = %d\n", atoi(argvalue) * 1000);
 	 link_map[l_index].params[p_num].bw.mean = atoi(argvalue) * 1000;
 	 if (! gotpipe) {
 	   link_map[l_index].params[1].bw.mean =
@@ -1385,7 +1443,8 @@ int get_new_link_params(int l_index, char *argstring, int *pipe_which)
 	 }
       }
       else if (strcmp(argtype,"BWSTDDEV")== 0){
-	 info("Bandwidth stddev = %d\n", atoi(argvalue));
+	 if (debug)
+	   info("Bandwidth stddev = %d\n", atoi(argvalue));
 	 link_map[l_index].params[p_num].bw.stddev = atoi(argvalue);
 	 if (! gotpipe) {
 	   link_map[l_index].params[1].bw.stddev =
@@ -1393,7 +1452,8 @@ int get_new_link_params(int l_index, char *argstring, int *pipe_which)
 	 }
       }
       else if (strcmp(argtype,"BWDIST")== 0){
-	 info("bwdist = %s\n", argvalue);
+	 if (debug)
+	   info("bwdist = %s\n", argvalue);
 
 	 link_map[l_index].params[p_num].bw.dist =
 	   dist_name_to_enum(argvalue,
@@ -1408,7 +1468,8 @@ int get_new_link_params(int l_index, char *argstring, int *pipe_which)
       else if (strcmp(argtype,"BWTABLE")== 0){
 	 int lpc;
 
-	 info("bwtable = %s\n", argvalue);
+	 if (debug)
+	   info("bwtable = %s\n", argvalue);
 
 	 free(link_map[l_index].params[p_num].bw.table);
 	 link_map[l_index].params[p_num].bw.table =
@@ -1431,7 +1492,8 @@ int get_new_link_params(int l_index, char *argstring, int *pipe_which)
       
       /* DELAY parameters. */
       else if (strcmp(argtype,"DELAY")== 0){
-	 info("Delay = %d\n", atoi(argvalue));
+	 if (debug)
+	   info("Delay = %d\n", atoi(argvalue));
 	 link_map[l_index].params[p_num].delay.delay = atoi(argvalue);
 	 link_map[l_index].params[p_num].delay.dist = DN_DIST_CONST_TIME;
 	 if (! gotpipe) {
@@ -1442,11 +1504,13 @@ int get_new_link_params(int l_index, char *argstring, int *pipe_which)
 	 }
       }
       else if (strcmp(argtype,"DELAYQUANTUM")== 0){
-	 info("Delayq = %d\n", atoi(argvalue));
+	 if (debug)
+	   info("Delayq = %d\n", atoi(argvalue));
 	 dq = atoi(argvalue);
       }
       else if (strcmp(argtype,"DELAYQUANTABLE")== 0){
-	 info("Delayqt = %s\n", argvalue);
+	 if (debug)
+	   info("Delayqt = %s\n", argvalue);
 	 
 	 free(link_map[l_index].params[p_num].delay.quantum);
 	 link_map[l_index].params[p_num].delay.quantum =
@@ -1462,7 +1526,8 @@ int get_new_link_params(int l_index, char *argstring, int *pipe_which)
 	 }
       }
       else if (strcmp(argtype,"DELAYMEAN")== 0){
-	 info("Delay mean = %d\n", atoi(argvalue));
+	 if (debug)
+	   info("Delay mean = %d\n", atoi(argvalue));
 	 link_map[l_index].params[p_num].delay.mean = atoi(argvalue);
 	 if (! gotpipe) {
 	   link_map[l_index].params[1].delay.mean =
@@ -1470,7 +1535,8 @@ int get_new_link_params(int l_index, char *argstring, int *pipe_which)
 	 }
       }
       else if (strcmp(argtype,"DELAYSTDDEV")== 0){
-	 info("Delay stddev = %d\n", atoi(argvalue));
+	 if (debug)
+	   info("Delay stddev = %d\n", atoi(argvalue));
 	 link_map[l_index].params[p_num].delay.stddev = atoi(argvalue);
 	 if (! gotpipe) {
 	   link_map[l_index].params[1].delay.stddev =
@@ -1478,7 +1544,8 @@ int get_new_link_params(int l_index, char *argstring, int *pipe_which)
 	 }
       }
       else if (strcmp(argtype,"DELAYDIST")== 0){
-	 info("delaydist = %s\n", argvalue);
+	 if (debug)
+	   info("delaydist = %s\n", argvalue);
 
 	 link_map[l_index].params[p_num].delay.dist =
 	   dist_name_to_enum(argvalue,
@@ -1491,7 +1558,8 @@ int get_new_link_params(int l_index, char *argstring, int *pipe_which)
 	 }
       }
       else if (strcmp(argtype,"DELAYTABLE")== 0){
-	 info("delaytable = %s\n", argvalue);
+	 if (debug)
+	   info("delaytable = %s\n", argvalue);
 
 	 free(link_map[l_index].params[p_num].delay.table);
 	 link_map[l_index].params[p_num].delay.table =
@@ -1509,7 +1577,8 @@ int get_new_link_params(int l_index, char *argstring, int *pipe_which)
       
       /* PLR parameters. */
       else if (strcmp(argtype,"PLR")== 0){
-	 info("Plr = %f\n", atof(argvalue));
+	 if (debug)
+	   info("Plr = %f\n", atof(argvalue));
 	 link_map[l_index].params[p_num].loss.plr =
 	   (int)(atof(argvalue) * 0x7fffffff);
 	 link_map[l_index].params[p_num].loss.dist = DN_DIST_CONST_RATE;
@@ -1525,14 +1594,17 @@ int get_new_link_params(int l_index, char *argstring, int *pipe_which)
 	   free(link_map[l_index].params[1].loss.quantum);
 	   link_map[l_index].params[1].loss.quantum = NULL;
 	 }
-	 info("plr = %x\n", link_map[l_index].params[p_num].loss.plr);
+	 if (debug)
+	   info("plr = %x\n", link_map[l_index].params[p_num].loss.plr);
       }
       else if (strcmp(argtype,"PLRQUANTUM")== 0){
-	 info("plrq = %d\n", atoi(argvalue));
+	 if (debug)
+	   info("plrq = %d\n", atoi(argvalue));
 	 lq = atoi(argvalue);
       }
       else if (strcmp(argtype,"PLRQUANTABLE")== 0){
-	 info("plrqt = %s\n", argvalue);
+	 if (debug)
+	   info("plrqt = %s\n", argvalue);
 	 
 	 free(link_map[l_index].params[p_num].loss.quantum);
 	 link_map[l_index].params[p_num].loss.quantum =
@@ -1548,7 +1620,8 @@ int get_new_link_params(int l_index, char *argstring, int *pipe_which)
 	 }
       }
       else if (strcmp(argtype,"PLRMEAN")== 0){
-	 info("plr mean = %f\n", atof(argvalue));
+	 if (debug)
+	   info("plr mean = %f\n", atof(argvalue));
 	 link_map[l_index].params[p_num].loss.mean = 
 	   (int)(atof(argvalue) * 0x7fffffff);
 	 if (! gotpipe) {
@@ -1557,7 +1630,8 @@ int get_new_link_params(int l_index, char *argstring, int *pipe_which)
 	 }
       }
       else if (strcmp(argtype,"PLRSTDDEV")== 0){
-	 info("plr stddev = %f\n", atof(argvalue));
+	 if (debug)
+	   info("plr stddev = %f\n", atof(argvalue));
 	 link_map[l_index].params[p_num].loss.stddev =
 	   (int)(atof(argvalue) * 0x7fffffff);
 	 if (! gotpipe) {
@@ -1566,7 +1640,8 @@ int get_new_link_params(int l_index, char *argstring, int *pipe_which)
 	 }
       }
       else if (strcmp(argtype,"PLRDIST")== 0){
-	 info("plrdist = %s\n", argvalue);
+	 if (debug)
+	   info("plrdist = %s\n", argvalue);
 
 	 link_map[l_index].params[p_num].loss.dist =
 	   dist_name_to_enum(argvalue,
@@ -1579,7 +1654,8 @@ int get_new_link_params(int l_index, char *argstring, int *pipe_which)
 	 }
       }
       else if (strcmp(argtype,"PLRTABLE")== 0){
-	 info("plrtable = %s\n", argvalue);
+	 if (debug)
+	   info("plrtable = %s\n", argvalue);
 
 	 free(link_map[l_index].params[p_num].loss.table);
 	 link_map[l_index].params[p_num].loss.table =
@@ -1595,7 +1671,8 @@ int get_new_link_params(int l_index, char *argstring, int *pipe_which)
 	 }
       }
       else if (strcmp(argtype,"MAXINQ")== 0){
-	 info("maxinq = %s\n", argvalue);
+	 if (debug)
+	   info("maxinq = %s\n", argvalue);
 
 	 link_map[l_index].params[p_num].loss.maxinq = atoi(argvalue);
       }
@@ -1606,7 +1683,8 @@ int get_new_link_params(int l_index, char *argstring, int *pipe_which)
           and the 1 pipe is from the switch. */
        
        else if (strcmp(argtype,"LIMIT")== 0){
-	 info("QSize/Limit = %d\n", atoi(argvalue));
+	 if (debug)
+	   info("QSize/Limit = %d\n", atoi(argvalue));
 	 /* set the PIPE_QSIZE_IN_BYTES flag to 0,
 	    since we assume that limit is in slots/packets by default
 	 */
@@ -1623,11 +1701,13 @@ int get_new_link_params(int l_index, char *argstring, int *pipe_which)
        else if (strcmp(argtype,"QUEUE-IN-BYTES")== 0){
 	 int qsztype = atoi(argvalue);
 	 if(qsztype == 0){
-	   info("QSize in slots/packets");
+	   if (debug)
+	     info("QSize in slots/packets");
 	   link_map[l_index].params[p_num].flags_p &= ~PIPE_QSIZE_IN_BYTES;
 	 }
 	 else {
-	   info("QSize in bytes\n");
+	   if (debug)
+	     info("QSize in bytes\n");
 	   link_map[l_index].params[p_num].flags_p |= PIPE_QSIZE_IN_BYTES;
 	 }
 	 if (!gotpipe && !islan) {
@@ -1636,7 +1716,8 @@ int get_new_link_params(int l_index, char *argstring, int *pipe_which)
 	 }
        }
        else if(strcmp(argtype,"MAXTHRESH")== 0){
-	 info("Maxthresh = %d \n", atoi(argvalue));
+	 if (debug)
+	   info("Maxthresh = %d \n", atoi(argvalue));
 	 link_map[l_index].params[p_num].red_gred_params.max_th =
 		 atoi(argvalue);
 	 if (!gotpipe && !islan) {
@@ -1645,7 +1726,8 @@ int get_new_link_params(int l_index, char *argstring, int *pipe_which)
 	 }
        }
        else if(strcmp(argtype,"THRESH")== 0){
-	 info("Thresh = %d \n", atoi(argvalue));
+	 if (debug)
+	   info("Thresh = %d \n", atoi(argvalue));
 	 link_map[l_index].params[p_num].red_gred_params.min_th =
 		 atoi(argvalue);
 	 if (!gotpipe && !islan) {
@@ -1654,7 +1736,8 @@ int get_new_link_params(int l_index, char *argstring, int *pipe_which)
 	 }
        }
        else if(strcmp(argtype,"LINTERM")== 0){
-	 info("Linterm = %f\n", 1.0 / atof(argvalue));
+	 if (debug)
+	   info("Linterm = %f\n", 1.0 / atof(argvalue));
 	 link_map[l_index].params[p_num].red_gred_params.max_p =
 		 1.0 / atof(argvalue);
 	 if (!gotpipe && !islan) {
@@ -1663,7 +1746,8 @@ int get_new_link_params(int l_index, char *argstring, int *pipe_which)
 	 }
        }
        else if(strcmp(argtype,"Q_WEIGHT")== 0){
-	 info("Qweight = %f\n", atof(argvalue));
+	 if (debug)
+	   info("Qweight = %f\n", atof(argvalue));
 	 link_map[l_index].params[p_num].red_gred_params.w_q =
 		 atof(argvalue);
 	 if (!gotpipe && !islan) {
@@ -1672,7 +1756,8 @@ int get_new_link_params(int l_index, char *argstring, int *pipe_which)
 	 }
        }
        else if(strcmp(argtype,"PIPE")== 0){
-	 info("PIPE = %s\n", argvalue);
+	 if (debug)
+	   info("PIPE = %s\n", argvalue);
 
 	 gotpipe++;
 	 if(strcmp(argvalue, "pipe0") == 0)
