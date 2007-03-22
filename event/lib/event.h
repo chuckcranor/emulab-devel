@@ -241,12 +241,14 @@ int event_unsubscribe(event_handle_t handle, event_subscription_t es);
 int event_async_unsubscribe(event_handle_t handle, event_subscription_t es);
 int event_notification_insert_hmac(event_handle_t handle,
 				   event_notification_t notification);
+#ifdef NOTYET
 int event_notification_pack(event_handle_t handle,
 			    event_notification_t notification,
 			    unsigned char *data, int *len);
 int event_notification_unpack(event_handle_t handle,
 			    event_notification_t *notification,
 			    unsigned char *data, int len);
+#endif
 int event_set_idle_period(event_handle_t handle, int seconds) ;
 int event_set_failover(event_handle_t handle, int dofail) ;
 

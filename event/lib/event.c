@@ -27,6 +27,7 @@
 #include <netdb.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
+#include <sys/time.h>
 #include <sys/param.h>
 #include <time.h>
 #include "event.h"
@@ -142,7 +143,7 @@ event_register_withkeydata_withretry(char *name, int threaded,
     struct hostent     *he;
     struct in_addr	myip;
     char	       *sstr = 0, *pstr = 0, *cp;
-    int			port;
+    int			port = SERVER_PORTNUM;
 
     if (gethostname(hostname, MAXHOSTNAMELEN) == -1) {
         ERROR("could not get hostname: %s\n", strerror(errno));
@@ -213,15 +214,17 @@ event_register_withkeydata_withretry(char *name, int threaded,
     cp = strdup(name);
     if (cp) {
       sstr = strrchr(cp, '/');
-      pstr = strrchr(cp, ':');
     }
-    if (!sstr || !pstr) {
+    if (!sstr) {
       ERROR("could not parse: %s", name);
       goto bad;
     }
-    sstr++;
-    *pstr++ = '\0';
-    port = atoi(pstr);
+    *sstr++ = '\0';
+    pstr = strrchr(sstr, ':');
+    if (pstr) {
+	    *pstr++ = '\0';
+	    port = atoi(pstr);
+    }
 
     /* Connect to the elvin server: */
     if (handle->connect(sstr, port, &server) != 0) {
@@ -1380,8 +1383,6 @@ address_tuple_free(address_tuple_t tuple)
 	return 1;
 }
 
-#ifdef NOTYET
-
 /*
  * Insert an HMAC into the notification. 
  */
@@ -1392,8 +1393,8 @@ address_tuple_free(address_tuple_t tuple)
  * The traversal function callback. Add to the hmac for each attribute.
  */
 static int
-hmac_traverse(void *rock, char *name, pubsub_basetypes_t type,
-              pubsub_value_t value, pubsub_error_t status)
+hmac_traverse(void *rock, char *name, char *value, int vlen,
+	      pubsub_error_t *status)
 {
 	HMAC_CTX	*ctx = (HMAC_CTX *) rock;
 
@@ -1403,32 +1404,7 @@ hmac_traverse(void *rock, char *name, pubsub_basetypes_t type,
 	if (!strcmp(name, "__hmac__"))
 		return 1;
 
-	switch (type) {
-	case ELVIN_INT32:
-		HMAC_Update(ctx, (unsigned char *)&(value.i), sizeof(value.i));
-		break;
-		
-	case ELVIN_INT64:
-		HMAC_Update(ctx, (unsigned char *)&(value.h), sizeof(value.h));
-		break;
-		
-	case ELVIN_REAL64:
-		HMAC_Update(ctx, (unsigned char *)&(value.d), sizeof(value.d));
-		break;
-		
-	case ELVIN_STRING:
-		HMAC_Update(ctx, (unsigned char *)(value.s), strlen(value.s));
-		break;
-		
-	case ELVIN_OPAQUE:
-		HMAC_Update(ctx, (unsigned char *)(value.o.data),
-			    value.o.length);
-		break;
-
-	default:
-		ERROR("invalid parameter\n");
-		return 0;
-	}
+	HMAC_Update(ctx, (unsigned char *)(value), vlen);
 	return 1;
 }
 
@@ -1494,9 +1470,8 @@ event_notification_check_hmac(event_handle_t handle,
 {
 	HMAC_CTX	ctx;
 	unsigned char	srcmac[EVP_MAX_MD_SIZE], mac[EVP_MAX_MD_SIZE];
+	char		*pmac;
 	int		i, srclen, len = EVP_MAX_MD_SIZE;
-	pubsub_value_t	value;
-	pubsub_basetypes_t type;
 
 	if (0)
 	    INFO("event_notification_check_hmac: %d %s\n",
@@ -1505,15 +1480,14 @@ event_notification_check_hmac(event_handle_t handle,
 	/*
 	 * Pull out the MAC from the notification so we can compare it.
 	 */
-	if (!pubsub_notification_get(notification->pubsub_notification,
-			    "__hmac__", &type, &value, &handle->status)) {
+	if (!pubsub_notification_get_opaque(notification->pubsub_notification,
+			    "__hmac__", &pmac, &srclen, &handle->status)) {
 		ERROR("MAC not present!\n");
 		notification->has_hmac = 0;
 		return -1;
 	}
-	srclen = value.o.length;
 	assert(srclen <= EVP_MAX_MD_SIZE);
-	memcpy(srcmac, (unsigned char *)value.o.data, value.o.length);
+	memcpy(srcmac, pmac, srclen);
 
 	if (0) {
 		INFO("event_notification_check_hmac1: %d\n", srclen);
@@ -1555,6 +1529,8 @@ event_notification_check_hmac(event_handle_t handle,
 	notification->has_hmac = 1;
     	return 0;
 }
+
+#ifdef NOTYET
 
 /*
  * Support for packing and unpacking a notification. Packing a notification
@@ -2004,7 +1980,6 @@ int event_do(event_handle_t handle, ea_tag_t tag, ...)
 }
 
 
-#ifdef NOTYET
 int event_set_idle_period(event_handle_t handle, int seconds) {
   int retval;
 
@@ -2013,6 +1988,10 @@ int event_set_idle_period(event_handle_t handle, int seconds) {
     return 0;
   }
 
+#if 1
+    ERROR("event_set_idle_period not implemented\n");
+    retval = -1;
+#else
   retval = pubsub_handle_set_idle_period(handle->server, seconds,
 				     &handle->status);
   if (retval == 0) {
@@ -2021,7 +2000,7 @@ int event_set_idle_period(event_handle_t handle, int seconds) {
   }
 
   return retval;
-
+#endif
 }
 
 
@@ -2033,6 +2012,10 @@ int event_set_failover(event_handle_t handle, int dofail) {
     return 0;
   }
 
+#if 1
+    ERROR("event_set_failover not implemented\n");
+    retval = -1;
+#else
   retval = pubsub_handle_set_failover(handle->server, dofail,
 				     &handle->status);
   if (retval == 0) {
@@ -2041,6 +2024,5 @@ int event_set_failover(event_handle_t handle, int dofail) {
   }
 
   return retval;
-
-}
 #endif
+}
