@@ -17,7 +17,7 @@
 #include <stdio.h>
 #include <stdarg.h>
 #include <stdlib.h>
-#include <pubsub.h>
+#include <pubsub/pubsub.h>
 
 #ifndef MAXHOSTNAMELEN
 #define MAXHOSTNAMELEN 64

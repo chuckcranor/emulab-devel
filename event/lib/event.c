@@ -1246,8 +1246,8 @@ event_async_unsubscribe(event_handle_t handle, event_subscription_t es)
       return 0;
     }
 
-    free(es->rock);
-    es->rock = NULL;
+/*    free(es->rock);
+      es->rock = NULL; */
 #if 1
     ERROR("async_add_subscribe not implemented\n");
     retval = -1;
@@ -1267,8 +1267,8 @@ event_unsubscribe(event_handle_t handle, event_subscription_t es)
 {
     int retval;
 
-    free(es->rock);
-    es->rock = NULL;
+/*    free(es->rock);
+      es->rock = NULL; */
     retval = handle->unsubscribe(handle->server, es, &handle->status);
     
     return retval;

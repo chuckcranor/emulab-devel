@@ -11,9 +11,9 @@ SUBDIR		= event/lib
 
 include $(OBJDIR)/Makeconf
 
-PUBSUBFLAGS     = -I/usr/local/include/pubsub
-PUBSUBMTFLAGS   = -I/usr/local/include/pubsub
-PUBSUBLIB       = -lpubsub
+PUBSUBFLAGS     = -I/usr/local/include
+PUBSUBMTFLAGS   = -I/usr/local/include
+PUBSUBLIB       = /usr/local/lib/libpubsub.so
 
 #PUBSUBFLAGS	= `$(ELVIN_CONFIG) --cflags vin4c`
 #PUBSUBMTFLAGS	= `$(ELVIN_CONFIG) --cflags vin4mt`
