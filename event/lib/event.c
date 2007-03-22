@@ -313,13 +313,13 @@ internal_event_poll(event_handle_t handle, int blocking, unsigned int timeout)
 			return pubsub_error_get_code(&handle->status);
 		}
 	}
-	rv = pubsub_dispatcher(handle->server, blocking, &handle->status);
+	rv = pubsub_dispatch(handle->server, blocking, &handle->status);
 	if (rv != 0) {
 		ERROR("Pubsub dispatcher failed\n");
 		pubsub_error_fprintf(stderr, &handle->status);
 	}
 
-	rv = pubsub_error_get_code(&handle->status);
+/*	rv = pubsub_error_get_code(&handle->status); */
 
 	/*
 	 * Try to remove the timeout - if it didn't go off, we don't want to
