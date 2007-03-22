@@ -1,6 +1,6 @@
 /*
  * EMULAB-COPYRIGHT
- * Copyright (c) 2000-2006 University of Utah and the Flux Group.
+ * Copyright (c) 2000-2007 University of Utah and the Flux Group.
  * All rights reserved.
  */
 
@@ -775,10 +775,10 @@ enqueue(event_handle_t handle, event_notification_t notification, void *data)
 		if (! event_notification_remove(handle,
 						event.notification,
 						"SCHEDULER") ||
-		    ! event_notification_put_int32(handle,
-						   event.notification,
-						   "SCHEDULER",
-						   0)) {
+		    ! event_notification_put_string(handle,
+						    event.notification,
+						    "SCHEDULER",
+						    "0")) {
 			error("could not clear scheduler attribute of "
 			      "notification %p\n", event.notification);
 			return;

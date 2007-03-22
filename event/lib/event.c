@@ -482,7 +482,8 @@ event_schedule(event_handle_t handle, event_notification_t notification,
      * Add an attribute that signifies its a scheduler operation.
      */
     if (! event_notification_remove(handle, notification, "SCHEDULER") ||
-	! event_notification_put_int32(handle, notification, "SCHEDULER", 1)) {
+	! event_notification_put_string(handle,
+					notification, "SCHEDULER", "1")) {
 	ERROR("could not add scheduler attribute to notification %p\n",
               notification);
         return 0;
@@ -524,6 +525,7 @@ event_notification_alloc(event_handle_t handle, address_tuple_t tuple)
 {
     event_notification_t notification;
     pubsub_notification_t *pubsub_notification;
+    char tmp[32];
 
     if (!handle) {
         ERROR("invalid paramater\n");
@@ -553,6 +555,7 @@ event_notification_alloc(event_handle_t handle, address_tuple_t tuple)
 	\
 	event_notification_put_string(handle, notification, name, foo); \
 })
+    snprintf(tmp, sizeof(tmp), "%d", tuple->scheduler);
     
     /* Add the target address stuff to the notification */
     if (!EVPUT("SITE", site) ||
@@ -563,7 +566,8 @@ event_notification_alloc(event_handle_t handle, address_tuple_t tuple)
 	!EVPUT("OBJNAME", objname) ||
 	!EVPUT("EVENTTYPE", eventtype) ||
 	!EVPUT("TIMELINE", timeline) ||
-	! event_notification_put_int32(handle, notification, "SCHEDULER", tuple->scheduler)) {
+	!event_notification_put_string(handle,
+				       notification, "SCHEDULER", tmp)) {
 	ERROR("could not add attributes to notification %p\n", notification);
         return NULL;
     }
@@ -1123,7 +1127,7 @@ tuple_expression(address_tuple_t tuple, char *expression, int elen)
 	    return NULL;
     
     index += snprintf(&expression[index], elen - index,
-		     "%s SCHEDULER == %d ",
+		     "%s SCHEDULER == \"%d\" ",
 		     (index ? "&&" : ""),
 		     tuple->scheduler);
 
