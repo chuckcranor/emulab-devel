@@ -38,7 +38,7 @@ ULXRLIBS  = -L/usr/local/lib  -lulsshxmlrpcpp -lulxmlrpcpp -lexpat
 #     gave up quickly. Deal with it later. 
 #
 #LIBS     += `elvin-config --libs vin4mt`
-LIBS	 += -L/usr/local/lib -lpubsub -lssl -lcrypto -lm
+LIBS	 += -L/usr/local/lib -lpubsub_r -lssl -lcrypto -lm
 
 OBJS	  = event-sched.o 
 

@@ -138,6 +138,8 @@ event_register_withkeydata_withretry(char *name, int threaded,
 			   unsigned char *keydata, int keylen,
 			   int retrycount)
 {
+    extern int pubsub_is_threaded[] __attribute__ ((weak));
+    
     event_handle_t	handle;
     pubsub_handle_t    *server;
     struct hostent     *he;
@@ -202,8 +204,12 @@ event_register_withkeydata_withretry(char *name, int threaded,
     handle->connect = pubsub_connect;
     handle->disconnect = pubsub_disconnect;
 #ifdef THREADED
+    assert(threaded == 1);
+    assert(pubsub_is_threaded != NULL);
     handle->mainloop = NULL; /* no mainloop for mt programs */
 #else
+    assert(threaded == 0);
+    assert(pubsub_is_threaded == NULL);
     handle->mainloop = pubsub_mainloop;
 #endif
     handle->notify = pubsub_notify;
@@ -482,8 +488,8 @@ event_schedule(event_handle_t handle, event_notification_t notification,
      * Add an attribute that signifies its a scheduler operation.
      */
     if (! event_notification_remove(handle, notification, "SCHEDULER") ||
-	! event_notification_put_string(handle,
-					notification, "SCHEDULER", "1")) {
+	! event_notification_put_int32(handle,
+				       notification, "SCHEDULER", 1)) {
 	ERROR("could not add scheduler attribute to notification %p\n",
               notification);
         return 0;
@@ -555,8 +561,7 @@ event_notification_alloc(event_handle_t handle, address_tuple_t tuple)
 	\
 	event_notification_put_string(handle, notification, name, foo); \
 })
-    snprintf(tmp, sizeof(tmp), "%d", tuple->scheduler);
-    
+
     /* Add the target address stuff to the notification */
     if (!EVPUT("SITE", site) ||
 	!EVPUT("EXPT", expt) ||
@@ -566,8 +571,9 @@ event_notification_alloc(event_handle_t handle, address_tuple_t tuple)
 	!EVPUT("OBJNAME", objname) ||
 	!EVPUT("EVENTTYPE", eventtype) ||
 	!EVPUT("TIMELINE", timeline) ||
-	!event_notification_put_string(handle,
-				       notification, "SCHEDULER", tmp)) {
+	!event_notification_put_int32(handle,
+				      notification, "SCHEDULER",
+				      tuple->scheduler)) {
 	ERROR("could not add attributes to notification %p\n", notification);
         return NULL;
     }
@@ -1397,7 +1403,8 @@ address_tuple_free(address_tuple_t tuple)
  * The traversal function callback. Add to the hmac for each attribute.
  */
 static int
-hmac_traverse(void *rock, char *name, char *value, int vlen,
+hmac_traverse(void *rock, char *name,
+	      pubsub_type_t type, char *value, int vlen,
 	      pubsub_error_t *status)
 {
 	HMAC_CTX	*ctx = (HMAC_CTX *) rock;
@@ -1408,6 +1415,7 @@ hmac_traverse(void *rock, char *name, char *value, int vlen,
 	if (!strcmp(name, "__hmac__"))
 		return 1;
 
+	HMAC_Update(ctx, (unsigned char *)(name), strlen(name));
 	HMAC_Update(ctx, (unsigned char *)(value), vlen);
 	return 1;
 }
@@ -1455,8 +1463,8 @@ event_notification_insert_hmac(event_handle_t handle,
 	/*
 	 * Okay, now insert the MAC into the notification as an opaque field.
 	 */
-	if (!pubsub_notification_add_opaque(notification->pubsub_notification,
-				   "__hmac__", mac, len, &handle->status)) {
+	if (pubsub_notification_add_opaque(notification->pubsub_notification,
+				"__hmac__", mac, len, &handle->status) != 0) {
 		ERROR("pubsub_notification_add_opaque failed: ");
 		pubsub_error_fprintf(stderr, &handle->status);
 		return 1;
@@ -1484,8 +1492,8 @@ event_notification_check_hmac(event_handle_t handle,
 	/*
 	 * Pull out the MAC from the notification so we can compare it.
 	 */
-	if (!pubsub_notification_get_opaque(notification->pubsub_notification,
-			    "__hmac__", &pmac, &srclen, &handle->status)) {
+	if (pubsub_notification_get_opaque(notification->pubsub_notification,
+			"__hmac__", &pmac, &srclen, &handle->status) != 0) {
 		ERROR("MAC not present!\n");
 		notification->has_hmac = 0;
 		return -1;
@@ -1496,9 +1504,9 @@ event_notification_check_hmac(event_handle_t handle,
 	if (0) {
 		INFO("event_notification_check_hmac1: %d\n", srclen);
 		for (i = 0; i < srclen; i += 4) {
-			INFO("%x", *((unsigned int *)(&srcmac[i])));
+			info("%08x", *((unsigned int *)(&srcmac[i])));
 		}
-		INFO("\n");
+		info("\n");
 	}
 	
 	memset(&ctx, 0, sizeof(ctx));
@@ -1521,9 +1529,9 @@ event_notification_check_hmac(event_handle_t handle,
 	if (0) {
 		INFO("event_notification_check_hmac2: %d\n", len);
 		for (i = 0; i < len; i += 4) {
-			INFO("%x", *((unsigned int *)(&mac[i])));
+			info("%08x", *((unsigned int *)(&mac[i])));
 		}
-		INFO("\n");
+		info("\n");
 	}
 
 	if (srclen != len || memcmp(srcmac, mac, len)) {

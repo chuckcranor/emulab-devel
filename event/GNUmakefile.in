@@ -1,6 +1,6 @@
 #
 # EMULAB-COPYRIGHT
-# Copyright (c) 2000-2006 University of Utah and the Flux Group.
+# Copyright (c) 2000-2007 University of Utah and the Flux Group.
 # All rights reserved.
 #
 
@@ -14,7 +14,7 @@ include $(OBJDIR)/Makeconf
 SYSTEM	       := $(shell uname -s)
 
 #SUBDIRS	= lib tbgen program-agent proxy example linktest link-agent
-SUBDIRS		= lib tbgen 
+SUBDIRS		= lib tbgen program-agent
 ifeq ($(SYSTEM),FreeBSD)
 SUBDIRS	       += sched stated
 endif
@@ -36,6 +36,7 @@ install:
 	@$(MAKE) -C lib install
 	@$(MAKE) -C sched install
 	@$(MAKE) -C tbgen install
+	@$(MAKE) -C program-agent install
 	@$(MAKE) -C stated install
 
 client:		trafgen-fetch client-subdirs
