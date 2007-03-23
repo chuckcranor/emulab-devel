@@ -13,7 +13,7 @@
 
 #include <stdio.h>
 #include <stdlib.h>
-#include <time.h>
+#include <sys/time.h>
 #include "event.h"
 
 /* Attempt to allocate SIZE bytes of memory and exit if memory
