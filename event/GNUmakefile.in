@@ -13,10 +13,12 @@ include $(OBJDIR)/Makeconf
 
 SYSTEM	       := $(shell uname -s)
 
-#SUBDIRS	= lib tbgen program-agent proxy example linktest link-agent
-SUBDIRS		= lib tbgen program-agent
+SUBDIRS		= lib tbgen program-agent proxy example linktest link-agent
+ifneq ($(SYSTEM),CYGWIN_NT-5.1)
+SUBDIRS	       += trafgen
+endif
 ifeq ($(SYSTEM),FreeBSD)
-SUBDIRS	       += sched stated
+SUBDIRS	       += sched delay-agent nsetrafgen stated
 endif
 
 all:	etc-subdir trafgen-fetch all-subdirs
@@ -36,8 +38,8 @@ install:
 	@$(MAKE) -C lib install
 	@$(MAKE) -C sched install
 	@$(MAKE) -C tbgen install
-	@$(MAKE) -C program-agent install
 	@$(MAKE) -C stated install
+	@$(MAKE) -C linktest install
 
 client:		trafgen-fetch client-subdirs
 client-install: client client-install-subdirs
