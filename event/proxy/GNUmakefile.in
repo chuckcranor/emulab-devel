@@ -10,9 +10,9 @@ OBJDIR		= ../..
 SUBDIR		= event/proxy
 
 SYSTEM	       := $(shell uname -s)
-PROGRAMS	= evproxy proxytest evproxyplab elvindtest
+PROGRAMS	= evproxy proxytest elvindtest
 ifneq ($(SYSTEM),Linux)
-PROGRAMS       += evproxyclient evproxyserver
+PROGRAMS       += 
 endif
 
 include $(OBJDIR)/Makeconf
@@ -42,17 +42,17 @@ $(LIBEVENTDIR)/%.a:
 CFLAGS   += -DDEBUG
 CFLAGS	 += -O2 -g -Wall
 CFLAGS   += -I. -I${OBJDIR} -I$(SRCDIR)/../lib -I$(TESTBED_SRCDIR)/lib/libtb
-CFLAGS   += `$(ELVIN_CONFIG) --cflags vin4c`
+CFLAGS   += -I/usr/local/include
 
 PFLAGS    = -pthread
 PFLAGS   += -DDEBUG
 PFLAGS	 += -O2 -g -Wall
 PFLAGS   += -I. -I${OBJDIR} -I$(SRCDIR)/../lib -I$(TESTBED_SRCDIR)/lib/libtb
-PFLAGS   += `$(ELVIN_CONFIG) --cflags vin4mt`
+PFLAGS   += -L/usr/local/lib -lpubsub_r -lm
 
 LDFLAGS  += -L$(OBJDIR)/lib -L$(OBJDIR)/lib/libtb -L../lib
 LIBS     += -levent -ltb -lcrypto
-LIBS     += `$(ELVIN_CONFIG) --libs vin4c`
+LIBS     += -L/usr/local/lib -lpubsub -lm
 CPPC     = g++
 
 ifeq ($(host_cpu),arm)
