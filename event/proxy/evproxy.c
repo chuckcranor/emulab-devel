@@ -119,6 +119,12 @@ main(int argc, char **argv)
 		server = EVENTSERVER;
 
 	/*
+	 * XXX Need to daemonize earlier or the threads go away.
+	 */
+	if (!debug)
+		daemon(0, 0);
+	
+	/*
 	 * Convert server/port to elvin thing.
 	 *
 	 * XXX This elvin string stuff should be moved down a layer. 
@@ -181,13 +187,6 @@ main(int argc, char **argv)
 		(void) fclose(fp);
 	}
 
-	/*
-	 * Do this now, once we have had a chance to fail on the above
-	 * event system calls.
-	 */
-	if (!debug)
-		daemon(0, 0);
-	
 	/* Begin the event loop, waiting to receive event notifications */
 	while (1)
 		sleep(10);
