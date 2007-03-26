@@ -1,6 +1,6 @@
 /*
  * EMULAB-COPYRIGHT
- * Copyright (c) 2003, 2004 University of Utah and the Flux Group.
+ * Copyright (c) 2003, 2004, 2007 University of Utah and the Flux Group.
  * All rights reserved.
  */
 
@@ -11,6 +11,8 @@
 #include <ctype.h>
 #include <netdb.h>
 #include <unistd.h>
+#include <string.h>
+#include <errno.h>
 #include <time.h>
 #include <math.h>
 #include <paths.h>
@@ -18,6 +20,7 @@
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
+#include <pthread.h>
 #include "config.h"
 #include "event.h"
 #include "tbdefs.h"
@@ -56,6 +59,7 @@ main(int argc, char **argv)
 	int			c;
 	struct in_addr		myip;
 	FILE			*fp;
+	pthread_t		lthread;
 
 	progname = argv[0];
 	
@@ -134,13 +138,13 @@ main(int argc, char **argv)
 	}
 	
 	/* Register with the event system on boss */
-	bosshandle = event_register(server, 0);
+	bosshandle = event_register(server, 1);
 	if (bosshandle == NULL) {
 		fatal("could not register with remote event system");
 	}
 
 	/* Register with the event system on the local node */
-	localhandle = event_register("elvin://localhost", 0);
+	localhandle = event_register("elvin://localhost", 1);
 	if (localhandle == NULL) {
 		fatal("could not register with local event system");
 	}
@@ -185,7 +189,8 @@ main(int argc, char **argv)
 		daemon(0, 0);
 	
 	/* Begin the event loop, waiting to receive event notifications */
-	event_main(bosshandle);
+	while (1)
+		sleep(10);
 
 	/* Unregister with the remote event system: */
 	if (event_unregister(bosshandle) == 0) {

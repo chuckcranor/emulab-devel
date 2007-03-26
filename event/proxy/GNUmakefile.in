@@ -51,8 +51,8 @@ PFLAGS   += -I. -I${OBJDIR} -I$(SRCDIR)/../lib -I$(TESTBED_SRCDIR)/lib/libtb
 PFLAGS   += -L/usr/local/lib -lpubsub_r -lm
 
 LDFLAGS  += -L$(OBJDIR)/lib -L$(OBJDIR)/lib/libtb -L../lib
-LIBS     += -levent -ltb -lcrypto
-LIBS     += -L/usr/local/lib -lpubsub -lm
+LIBS     += -levent_r -ltb -lcrypto
+LIBS     += -L/usr/local/lib -lpubsub_r -lm
 CPPC     = g++
 
 ifeq ($(host_cpu),arm)
@@ -79,7 +79,7 @@ PLIBS     = -levent_r -ltb
 PLIBS	 += -L/usr/local/lib -lvin4mt -lvin4c -lvin4 -lcrypto -lm
 
 evproxy-debug:	evproxy.o $(LIBTBDIR)/log.o
-	$(CC) $(LDFLAGS) -o $@ evproxy.o $(LIBS)
+	$(CC) $(LDFLAGS) -o $@ -pthread evproxy.o $(LIBS)
 
 evproxyclient-debug:	proxyclient.o $(LIBTBDIR)/log.o
 	$(CC) $(LDFLAGS) -o $@ proxyclient.o $(LIBS)
@@ -91,7 +91,7 @@ proxyserver.o:  proxyserver.c
 	$(CC) $(PFLAGS) -c $<
 
 proxytest-debug:	proxytest.o $(LIBTBDIR)/log.o
-	$(CC) $(LDFLAGS) -o $@ proxytest.o $(LIBS)
+	$(CC) $(LDFLAGS) -o $@ proxytest.o -pthread $(LIBS)
 
 evproxyplab.o: evproxyplab.cc
 	$(CPPC) $(CFLAGS)  -c $<
@@ -100,7 +100,7 @@ evproxyplab:    evproxyplab.o ../lib/libevent.a ../lib/event.h
 	$(CPPC) $(LDFLAGS) -o $@ evproxyplab.o $(LIBS)
 
 elvindtest-debug: elvindtest.o
-	$(CC) $(LDFLAGS) -o $@ elvindtest.o $(LIBS)
+	$(CC) $(LDFLAGS) -o $@ elvindtest.o -pthread $(LIBS)
 
 
 $(PROGRAMS):	../lib/libevent.a ../lib/event.h
