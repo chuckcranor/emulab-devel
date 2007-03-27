@@ -145,7 +145,7 @@ event_register_withkeydata_withretry(char *name, int threaded,
     struct hostent     *he;
     struct in_addr	myip;
     char	       *sstr = 0, *pstr = 0, *cp;
-    int			port = SERVER_PORTNUM;
+    int			port = PUBSUB_SERVER_PORTNUM;
 
     if (gethostname(hostname, MAXHOSTNAMELEN) == -1) {
         ERROR("could not get hostname: %s\n", strerror(errno));
