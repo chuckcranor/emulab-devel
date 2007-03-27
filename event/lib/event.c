@@ -288,6 +288,20 @@ event_unregister(event_handle_t handle)
     return 1;
 }
 
+/*
+ * Callback for event_poll timeout that just records that the timeout
+ * happened.
+ */
+static int
+timeout_callback(pubsub_handle_t *handle, pubsub_timeout_t *timeout,
+		 void *data, pubsub_error_t *error)
+{
+	assert(data != 0);
+	assert(*(int *)data == 0);
+	*(int *)data = 1;
+
+	return 0;
+}
 
 /*
  * An internal function to handle the two different event_poll calls, without
@@ -296,7 +310,7 @@ event_unregister(event_handle_t handle)
 int
 internal_event_poll(event_handle_t handle, int blocking, unsigned int timeout)
 {
-	int rv;
+	int rv, triggered = 0;
 	pubsub_timeout_t *pubsub_timeout = NULL;
 
 	if (!handle->mainloop) {
@@ -311,7 +325,9 @@ internal_event_poll(event_handle_t handle, int blocking, unsigned int timeout)
 	 */
 	if (timeout) {
 		pubsub_timeout = pubsub_add_timeout(handle->server, NULL,
-						    timeout, NULL, NULL,
+						    timeout,
+						    timeout_callback,
+						    (void *)&triggered,
 						    &handle->status);
 		if (!pubsub_timeout) {
 			ERROR("Elvin pubsub_sync_add_timeout failed\n");
@@ -333,7 +349,7 @@ internal_event_poll(event_handle_t handle, int blocking, unsigned int timeout)
 	 * off (and we don't really have a good way of knowing that), it's not
 	 * there any more, so it looks like an error.
 	 */
-	if (timeout && pubsub_timeout)
+	if (timeout && pubsub_timeout && !triggered)
 		pubsub_remove_timeout(handle->server, pubsub_timeout,
 				      &handle->status);
 
