@@ -1149,7 +1149,7 @@ tuple_expression(address_tuple_t tuple, char *expression, int elen)
 	    return NULL;
     
     index += snprintf(&expression[index], elen - index,
-		     "%s SCHEDULER == \"%d\" ",
+		     "%s SCHEDULER == %d ",
 		     (index ? "&&" : ""),
 		     tuple->scheduler);
 
@@ -1420,7 +1420,7 @@ address_tuple_free(address_tuple_t tuple)
  */
 static int
 hmac_traverse(void *rock, char *name,
-	      pubsub_type_t type, char *value, int vlen,
+	      pubsub_type_t type, pubsub_value_t value,
 	      pubsub_error_t *status)
 {
 	HMAC_CTX	*ctx = (HMAC_CTX *) rock;
@@ -1431,8 +1431,41 @@ hmac_traverse(void *rock, char *name,
 	if (!strcmp(name, "__hmac__"))
 		return 1;
 
-	HMAC_Update(ctx, (unsigned char *)(name), strlen(name));
-	HMAC_Update(ctx, (unsigned char *)(value), vlen);
+	switch (type) {
+	case INT32_TYPE:
+		HMAC_Update(ctx,
+			    (unsigned char *)&(value.pv_int32),
+			    sizeof(value.pv_int32));
+		break;
+		
+	case INT64_TYPE:
+		HMAC_Update(ctx,
+			    (unsigned char *)&(value.pv_int64),
+			    sizeof(value.pv_int64));
+		break;
+		
+	case REAL64_TYPE:
+		HMAC_Update(ctx,
+			    (unsigned char *)&(value.pv_real64),
+			    sizeof(value.pv_real64));
+		break;
+		
+	case STRING_TYPE:
+		HMAC_Update(ctx,
+			    (unsigned char *)(value.pv_string),
+			    strlen(value.pv_string));
+		break;
+		
+	case OPAQUE_TYPE:
+		HMAC_Update(ctx,
+			    (unsigned char *)(value.pv_opaque.data),
+			    value.pv_opaque.length);
+		break;
+
+	default:
+		ERROR("invalid parameter\n");
+		return 0;
+	}
 	return 1;
 }
 
