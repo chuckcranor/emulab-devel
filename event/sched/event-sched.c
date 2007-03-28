@@ -776,10 +776,10 @@ enqueue(event_handle_t handle, event_notification_t notification, void *data)
 		if (! event_notification_remove(handle,
 						event.notification,
 						"SCHEDULER") ||
-		    ! event_notification_put_string(handle,
+		    ! event_notification_put_int32(handle,
 						    event.notification,
 						    "SCHEDULER",
-						    "0")) {
+						    0)) {
 			error("could not clear scheduler attribute of "
 			      "notification %p\n", event.notification);
 			return;
