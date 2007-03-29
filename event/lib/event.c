@@ -1503,7 +1503,7 @@ notification_hmac(pubsub_notification_t *notification, HMAC_CTX *ctx,
 	struct elvin_hashtable *table;
 
 	if ((table = elvin_hashtable_alloc(0, status)) == NULL) {
-		retval = -1;
+		return -1;
 	}
 	else if (!pubsub_notification_traverse(notification, hmac_fill_hash,
 					       table, status)) {
