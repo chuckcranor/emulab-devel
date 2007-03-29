@@ -17,6 +17,7 @@
 #include <stdio.h>
 #include <stdarg.h>
 #include <stdlib.h>
+#include <sys/time.h>
 #include <pubsub/pubsub.h>
 
 #ifndef MAXHOSTNAMELEN

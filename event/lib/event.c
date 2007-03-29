@@ -2059,9 +2059,8 @@ int event_set_idle_period(event_handle_t handle, int seconds) {
     ERROR("could not set elvin idle period to %i", seconds);
     pubsub_error_fprintf(stderr, &handle->status);
   }
-
-  return retval;
 #endif
+  return retval;
 }
 
 
@@ -2083,7 +2082,6 @@ int event_set_failover(event_handle_t handle, int dofail) {
     ERROR("Could not set failover on event handle: ");
     pubsub_error_fprintf(stderr, &handle->status);
   }
-
-  return retval;
 #endif
+  return retval;
 }

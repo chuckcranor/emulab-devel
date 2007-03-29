@@ -1,6 +1,6 @@
 /*
  * EMULAB-COPYRIGHT
- * Copyright (c) 2000-2002 University of Utah and the Flux Group.
+ * Copyright (c) 2000-2002, 2007 University of Utah and the Flux Group.
  * All rights reserved.
  */
 
@@ -13,7 +13,7 @@
 
 #include <stdio.h>
 #include <stdlib.h>
-#include <sys/time.h>
+#include <time.h>
 #include "event.h"
 
 /* Attempt to allocate SIZE bytes of memory and exit if memory
