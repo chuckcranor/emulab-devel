@@ -59,7 +59,6 @@ main(int argc, char **argv)
 	int			c;
 	struct in_addr		myip;
 	FILE			*fp;
-	pthread_t		lthread;
 
 	progname = argv[0];
 	

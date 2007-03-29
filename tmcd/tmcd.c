@@ -17,6 +17,7 @@
 #include <syslog.h>
 #include <signal.h>
 #include <stdarg.h>
+#include <errno.h>
 #include <assert.h>
 #include <sys/wait.h>
 #include <sys/fcntl.h>

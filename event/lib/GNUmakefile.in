@@ -23,7 +23,7 @@ SYSTEM	       := $(shell uname -s)
 LIBS		= libevent.a
 SWIGLIBS        =
 # Re-entrant, multi-threaded version on FreeBSD, not on Linux or Windows clients.
-ifeq ($(SYSTEM),FreeBSD)
+ifneq ($(SYSTEM),CYGWIN_NT-5.1)
 LIBS           += libevent_r.a
 SWIGLIBS       += event.so _tbevent.so
 endif

@@ -1,6 +1,6 @@
 /*
  * EMULAB-COPYRIGHT
- * Copyright (c) 2004, 2005 University of Utah and the Flux Group.
+ * Copyright (c) 2004, 2005, 2007 University of Utah and the Flux Group.
  * All rights reserved.
  */
 
@@ -13,6 +13,7 @@
 
 #include "config.h"
 
+#include <errno.h>
 #include <assert.h>
 
 #include "local-agent.h"
