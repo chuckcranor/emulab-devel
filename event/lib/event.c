@@ -1430,11 +1430,19 @@ hmac_traverse(void *rock, char *name,
 	HMAC_CTX	*ctx = (HMAC_CTX *) rock;
 
 	/*
-	 * Do not include hmac in hmac computation!
+	 * Do not include hmac in hmac computation.
 	 */
-	if (!strcmp(name, "__hmac__"))
+	if (!strcmp(name, "__hmac__")) 
 		return 1;
 
+#ifdef ELVIN_COMPAT
+	/*
+	 * The elvin gateway sticks this flag in, but we need to ignore it
+	 * when doing hmac computation.
+	 */
+	if (!strcmp(name, "___elvin_ordered___"))
+		return 1;
+#endif
 	switch (type) {
 	case INT32_TYPE:
 		HMAC_Update(ctx,
@@ -1481,12 +1489,6 @@ hmac_fill_hash(void *rock, char *name,
 {
 	struct elvin_hashtable	*table = (struct elvin_hashtable *) rock;
 
-	/*
-	 * Do not include hmac in hmac computation!
-	 */
-	if (!strcmp(name, "__hmac__"))
-		return 1;
-
 	if (elvin_hashtable_add(table, name, value, type, status) == -1)
 		return 0;
 	
@@ -1500,8 +1502,18 @@ notification_hmac(pubsub_notification_t *notification, HMAC_CTX *ctx,
 {
 	int retval = 0;
 #ifdef ELVIN_COMPAT
-	struct elvin_hashtable *table;
+	struct elvin_hashtable  *table;
+	int			elvin_ordered;
 
+	if (pubsub_notification_get_int32(notification,
+					  "___elvin_ordered___",
+					  &elvin_ordered, status) == 0) {
+		if (!pubsub_notification_traverse(notification, hmac_traverse,
+						  ctx, status)) {
+			return -1;
+		}
+		return 0;
+	}
 	if ((table = elvin_hashtable_alloc(0, status)) == NULL) {
 		return -1;
 	}
@@ -1559,11 +1571,14 @@ event_notification_insert_hmac(event_handle_t handle,
 	HMAC_cleanup(&ctx);
 
 	if (0) {
+		unsigned char   *up;
+		
 		INFO("event_notification_insert_hmac: %d\n", len);
-		for (i = 0; i < len; i += 4) {
-			INFO("%x", *((unsigned int *)(&mac[i])));
-		}
-		INFO("\n");
+		up = (unsigned char *) mac;
+		for (i = 0; i < len; i++, up++) {
+			fprintf(stderr, "%02hhx", *up);
+		}		
+		fprintf(stderr, "\n");
 	}
 
 	/*
@@ -1608,11 +1623,14 @@ event_notification_check_hmac(event_handle_t handle,
 	memcpy(srcmac, pmac, srclen);
 
 	if (0) {
+		unsigned char   *up;
+		
 		INFO("event_notification_check_hmac1: %d\n", srclen);
-		for (i = 0; i < srclen; i += 4) {
-			info("%08x", *((unsigned int *)(&srcmac[i])));
-		}
-		info("\n");
+		up = (unsigned char *) srcmac;
+		for (i = 0; i < srclen; i++, up++) {
+			fprintf(stderr, "%02hhx", *up);
+		}		
+		fprintf(stderr, "\n");
 	}
 	
 	memset(&ctx, 0, sizeof(ctx));
@@ -1633,11 +1651,14 @@ event_notification_check_hmac(event_handle_t handle,
 	HMAC_cleanup(&ctx);
 
 	if (0) {
+		unsigned char   *up;
+		
 		INFO("event_notification_check_hmac2: %d\n", len);
-		for (i = 0; i < len; i += 4) {
-			info("%08x", *((unsigned int *)(&mac[i])));
-		}
-		info("\n");
+		up = (unsigned char *) mac;
+		for (i = 0; i < len; i++, up++) {
+			fprintf(stderr, "%02hhx", *up);
+		}		
+		fprintf(stderr, "\n");
 	}
 
 	if (srclen != len || memcmp(srcmac, mac, len)) {
