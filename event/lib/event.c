@@ -32,6 +32,10 @@
 #include <time.h>
 #include "event.h"
 
+#ifdef ELVIN_COMPAT
+#include <pubsub/elvin_hash.h>
+#endif
+
 #define ERROR(fmt,...) \
  { fputs(__FUNCTION__,stderr); fprintf(stderr,": " fmt, ## __VA_ARGS__); }
 #define INFO(fmt,...) \
@@ -1469,6 +1473,59 @@ hmac_traverse(void *rock, char *name,
 	return 1;
 }
 
+#ifdef ELVIN_COMPAT
+static int
+hmac_fill_hash(void *rock, char *name,
+	       pubsub_type_t type, pubsub_value_t value,
+	       pubsub_error_t *status)
+{
+	struct elvin_hashtable	*table = (struct elvin_hashtable *) rock;
+
+	/*
+	 * Do not include hmac in hmac computation!
+	 */
+	if (!strcmp(name, "__hmac__"))
+		return 1;
+
+	if (elvin_hashtable_add(table, name, value, type, status) == -1)
+		return 0;
+	
+	return 1;
+}
+#endif
+
+static int
+notification_hmac(pubsub_notification_t *notification, HMAC_CTX *ctx,
+		  pubsub_error_t *status)
+{
+	int retval = 0;
+#ifdef ELVIN_COMPAT
+	struct elvin_hashtable *table;
+
+	if ((table = elvin_hashtable_alloc(0, status)) == NULL) {
+		retval = -1;
+	}
+	else if (!pubsub_notification_traverse(notification, hmac_fill_hash,
+					       table, status)) {
+		retval = -1;
+	}
+	else if (!elvin_hashtable_traverse(table, hmac_traverse,
+					   ctx, status)) {
+		retval = -1;
+	}
+
+	elvin_hashtable_free(table);
+	table = NULL;
+#else
+	if (!pubsub_notification_traverse(notification, hmac_traverse,
+					  ctx, status)) {
+		return -1;
+	}
+#endif
+	
+	return retval;
+}
+
 int
 event_notification_insert_hmac(event_handle_t handle,
 			       event_notification_t notification)
@@ -1493,8 +1550,8 @@ event_notification_insert_hmac(event_handle_t handle,
 	HMAC_CTX_init(&ctx);
 	HMAC_Init_ex(&ctx, handle->keydata, handle->keylen, EVP_sha1(), NULL);
 #endif
-	if (!pubsub_notification_traverse(notification->pubsub_notification,
-				 hmac_traverse, &ctx, &handle->status)) {
+	if (notification_hmac(notification->pubsub_notification,
+			      &ctx, &handle->status) == -1) {
 		HMAC_cleanup(&ctx);
 		return 1;
 	}
@@ -1567,8 +1624,8 @@ event_notification_check_hmac(event_handle_t handle,
 #endif
 	
 	/* Compute the MAC */
-	if (!pubsub_notification_traverse(notification->pubsub_notification,
-				 hmac_traverse, &ctx, &handle->status)) {
+	if (notification_hmac(notification->pubsub_notification,
+			      &ctx, &handle->status) == -1) {
 		HMAC_cleanup(&ctx);
 		return -1;
 	}
