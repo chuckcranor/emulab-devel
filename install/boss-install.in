@@ -434,6 +434,14 @@ Phase "ports", "Installing ports", sub {
 		    if ($pname);
 		ExecQuietFatal("$ENV PKG_PATH=$packagedir $PKG_ADD $TFTPD_PKG");
 	    };
+	    # XXX Also temporary
+	    Phase "pubsub", "Installing pubsub package", sub {
+		if (!ExecQuiet("$PKG_INFO -x pubsub")) {
+		    PhaseSkip("pubsub already installed");
+		}
+		my $pname = GetPackage("pubsub", $packagedir);
+		ExecQuietFatal("$ENV PKG_PATH=$packagedir $PKG_ADD $pname");
+	    };
 	}
     };
     PhaseSkip("Package directory provided; not installing from sources")
