@@ -221,7 +221,7 @@ my $VARRUN        = "/var/run";
 #
 my @LOCAL_HOSTS        = ($OURDOMAIN,$BOSSNODE,$USERNODE,$FSNODE);
 my @LOGFILES           = ("/var/log/logins","/var/log/tiplogs/capture.log",
-    "/var/log/mountd.log", "LOGDIR/pubsubd.log", "LOGDIR/elvin_gateway.log");
+    "/var/log/mountd.log", "$LOGDIR/pubsubd.log", "$LOGDIR/elvin_gateway.log");
 my @LOCAL_MAILING_LISTS = grep(/$OURDOMAIN$/,@MAILING_LISTS);
 my @MAILING_LIST_NAMES  = map { /^([\w-]+)\@/ } @LOCAL_MAILING_LISTS;
 

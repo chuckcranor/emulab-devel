@@ -192,7 +192,7 @@ my @LOGFILES = ("$LOGDIR/bootinfo.log", "$LOGDIR/tmcd.log",
     "$LOGDIR/elvind.log", "$LOGDIR/stated.log", "$LOGDIR/osselect.log",
     "$LOGDIR/tftpd.log", "$LOGDIR/sdcollectd.log", "$LOGDIR/genlastlog.log",
     "$LOGDIR/sshxmlrpc.log", "$LOGDIR/plabgetfree.log", "$LOGDIR/xmlrpcbag.log",
-    "$LOGDIR/plabrenew.log", "$LOGDIR/sslxmlrpc.log", "LOGDIR/pubsubd.log");
+    "$LOGDIR/plabrenew.log", "$LOGDIR/sslxmlrpc.log", "$LOGDIR/pubsubd.log");
 
 my @CISCO_MIBS = ("CISCO-SMI", "CISCO-TC", "CISCO-VTP-MIB", "CISCO-PAGP-MIB",
     "CISCO-PRIVATE-VLAN-MIB", "CISCO-STACK-MIB", "CISCO-VLAN-MEMBERSHIP-MIB",
