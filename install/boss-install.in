@@ -1137,6 +1137,19 @@ Phase "event", "Setting up event system", sub {
     };
 };
 
+Phase "pubsub", "Setting up pubsub system", sub {
+    # For elabinelab, be sure to kill off running event system. Harmless.
+    Phase "stopping", "Stopping pubsub system", sub {
+	if (ExecQuiet("killall -s pubsubd")) {
+	    PhaseSkip("pubsubd not running");
+	}
+	ExecQuietFatal("$RCDIR/2.pubsubd.sh stop");
+    };
+    Phase "starting", "Starting pubsub system", sub {
+	ExecQuietFatal("$RCDIR/2.pubsubd.sh start");
+    };
+};
+
 #
 # Build and install software. Note that I am not looking to see if its
 # been done; I suppose we could touch a file to indicate that build has
