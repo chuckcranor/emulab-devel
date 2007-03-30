@@ -774,9 +774,9 @@ Phase "syslog", "Setting up syslog", sub {
 	print SC "!mountd\n";
 	print SC "*.*\t\t\t\t\t\t/var/log/mountd.log\n";
 	print SC "!pubsubd\n";
-	print SC "*.*\t\t\t\t\t\t/var/log/pubsubd.log\n";
+	print SC "*.*\t\t\t\t\t\t${LOGDIR}/pubsubd.log\n";
 	print SC "!elvin_gateway\n";
-	print SC "*.*\t\t\t\t\t\t/var/log/elvin_gateway.log\n";
+	print SC "*.*\t\t\t\t\t\t${LOGDIR}/elvin_gateway.log\n";
 	print SC "# " . MAGIC_TESTBED_END . "\n";
 	close SC;
     };
