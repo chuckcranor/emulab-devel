@@ -12,12 +12,12 @@
 #include <ctype.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <errno.h>
 #include <string.h>
 #include <unistd.h>
 #include <syslog.h>
 #include <signal.h>
 #include <stdarg.h>
-#include <errno.h>
 #include <assert.h>
 #include <sys/wait.h>
 #include <sys/fcntl.h>
@@ -4019,7 +4019,7 @@ mydb_connect()
 	if (mysql_real_connect(&db, 0, "tmcd", 0,
 			       dbname, 0, 0, CLIENT_INTERACTIVE) == 0) {
 		error("%s: connect failed: %s\n", dbname, mysql_error(&db));
-		return 1;
+		return 0;
 	}
 	strcpy(db_dbname, dbname);
 	db_connected = 1;
@@ -4052,9 +4052,24 @@ mydb_query(char *query, int ncols, ...)
 		return (MYSQL_RES *) 0;
 
 	if (mysql_real_query(&db, querybuf, n) != 0) {
-		error("%s: query failed: %s\n", dbname, mysql_error(&db));
+		error("%s: query failed: %s, retrying\n",
+		      dbname, mysql_error(&db));
 		mydb_disconnect();
-		return (MYSQL_RES *) 0;
+		/*
+		 * Try once to reconnect.  In theory, the caller (client)
+		 * will retry the tmcc call and we will reconnect and
+		 * everything will be fine.  The problem is that the
+		 * client may get a different tmcd process each time,
+		 * and every one of those will fail once before
+		 * reconnecting.  Hence, the client could wind up failing
+		 * even if it retried.
+		 */
+		if (!mydb_connect() ||
+		    mysql_real_query(&db, querybuf, n) != 0) {
+			error("%s: query failed: %s\n",
+			      dbname, mysql_error(&db));
+			return (MYSQL_RES *) 0;
+		}
 	}
 
 	res = mysql_store_result(&db);
@@ -6177,6 +6192,44 @@ COMMAND_PROTOTYPE(doeplabconfig)
 			       "VNAME=%s IP=%s NETMASK=%s MAC=%s\n",
 			       row[0], row[1], row[2], row[3]);
 		client_writeback(sock, buf, strlen(buf), tcp);
+	}
+	mysql_free_result(res);
+
+	/*
+	 * Grab lanlink on which the node should be/contact plc.
+	 */
+	/* 
+	 * For now, just assume that plab_plcnet is a valid lan name and 
+	 * join it with virtlans and ifaces.
+	 */
+	res = mydb_query("select vl.vnode,r.node_id,vn.plab_plcnet,"
+			 "       vn.plab_role,i.IP,i.mask,i.mac"
+			 "  from reserved as r left join virt_lans as vl"
+			 "    on r.pid=vl.pid and r.eid=vl.eid"
+			 "  left join interfaces as i"
+			 "    on vl.ip=i.IP and r.node_id=i.node_id"
+			 "  left join virt_nodes as vn"
+			 "    on vl.vname=vn.plab_plcnet and r.vname=vn.vname"
+			 "  where r.pid='%s' and r.eid='%s' and"
+                         "    r.plab_role != 'none' and i.IP != ''"
+			 "      and vn.plab_plcnet != 'none'"
+			 "      and vn.plab_plcnet != 'control'",
+			 7,reqp->pid,reqp->eid);
+	if (!res) {
+	    error("EPLABCONFIG: %s: DB Error getting plab_in_elab info\n",
+		  reqp->nodeid);
+	    return 1;
+	}
+	nrows = (int)mysql_num_rows(res);
+	while (nrows--) {
+	    row = mysql_fetch_row(res);
+	    bufp = buf;
+	    
+	    bufp += OUTPUT(bufp,ebufp-bufp,
+			   "VNAME=%s PNAME=%s.%s PLCNETWORK=%s ROLE=%s IP=%s NETMASK=%s MAC=%s\n",
+			   row[0],row[1],OURDOMAIN,row[2],row[3],row[4],row[5],
+			   row[6]);
+	    client_writeback(sock,buf,strlen(buf),tcp);
 	}
 	mysql_free_result(res);
 
