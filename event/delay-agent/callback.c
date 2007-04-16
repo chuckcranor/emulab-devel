@@ -440,6 +440,11 @@ void agent_callback(event_handle_t handle,
 	  /* No free structlink_map objects, allocate a new one. */
 	  realloc_map();
 	  
+	  /* XXX need to relocate the basis pipe due to realloc */
+	  if ((mainlm = find_map(objname, &mainfs)) == NULL) {
+	    error("No such agent: %s\n", objname);
+	  }
+
 	  lm = &link_map[link_index];
 	  link_index += 1;
 	  rule_no = lo_rule_no;
