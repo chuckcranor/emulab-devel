@@ -551,7 +551,6 @@ event_notification_alloc(event_handle_t handle, address_tuple_t tuple)
 {
     event_notification_t notification;
     pubsub_notification_t *pubsub_notification;
-    char tmp[32];
 
     if (!handle) {
         ERROR("invalid paramater\n");

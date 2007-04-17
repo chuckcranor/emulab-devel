@@ -133,6 +133,8 @@ int		address_tuple_free(address_tuple_t);
         event_notification_get_string(handle, note, "___SENDER___", buf, len)
 #define event_notification_set_sender(handle, note, buf) \
         event_notification_put_string(handle, note, "___SENDER___", buf)
+#define event_notification_clr_sender(handle, note) \
+        event_notification_remove(handle, note, "___SENDER___")
 #endif /* ifndef NO_EVENT_MACROS */
 #endif /* ifndef SWIG */
 
