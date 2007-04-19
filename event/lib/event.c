@@ -1553,7 +1553,15 @@ event_notification_insert_hmac(event_handle_t handle,
 		event_notification_remove(handle, notification, "__hmac__");
 		notification->has_hmac = 0;
 	}
-
+#ifdef  ELVIN_COMPAT
+	/*
+	 * Remove this so we recompute the elvin ordering above, since the
+	 * notification might have changed, and the exiting linear order
+	 * will no longer correspond to elvin ordering.
+	 */
+	pubsub_notification_remove(notification->pubsub_notification,
+				   "___elvin_ordered___", &handle->status);
+#endif	
 	memset(&ctx, 0, sizeof(ctx));
 #if (OPENSSL_VERSION_NUMBER < 0x0090703f)
 	HMAC_Init(&ctx, handle->keydata, handle->keylen, EVP_sha1());
