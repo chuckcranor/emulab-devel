@@ -562,6 +562,7 @@ CREATE TABLE `experiment_stats` (
   `pid` varchar(12) NOT NULL default '',
   `pid_idx` mediumint(8) unsigned NOT NULL default '0',
   `eid` varchar(32) NOT NULL default '',
+  `eid_uuid` varchar(40) NOT NULL default '',
   `creator` varchar(8) NOT NULL default '',
   `creator_idx` mediumint(8) unsigned NOT NULL default '0',
   `exptidx` int(10) unsigned NOT NULL default '0',
@@ -590,7 +591,8 @@ CREATE TABLE `experiment_stats` (
   `dpdbname` varchar(64) default NULL,
   PRIMARY KEY  (`exptidx`),
   KEY `rsrcidx` (`rsrcidx`),
-  KEY `pideid` (`pid`,`eid`)
+  KEY `pideid` (`pid`,`eid`),
+  KEY `eid_uuid` (`eid_uuid`)
 ) ENGINE=MyISAM DEFAULT CHARSET=latin1;
 
 --
@@ -860,6 +862,7 @@ CREATE TABLE `experiment_templates` (
 DROP TABLE IF EXISTS `experiments`;
 CREATE TABLE `experiments` (
   `eid` varchar(32) NOT NULL default '',
+  `eid_uuid` varchar(40) NOT NULL default '',
   `pid_idx` mediumint(8) unsigned NOT NULL default '0',
   `gid_idx` mediumint(8) unsigned NOT NULL default '0',
   `pid` varchar(12) NOT NULL default '',
@@ -953,7 +956,8 @@ CREATE TABLE `experiments` (
   UNIQUE KEY `pideid` (`pid`,`eid`),
   UNIQUE KEY `pididxeid` (`pid_idx`,`eid`),
   KEY `batchmode` (`batchmode`),
-  KEY `state` (`state`)
+  KEY `state` (`state`),
+  KEY `eid_uuid` (`eid_uuid`)
 ) ENGINE=MyISAM DEFAULT CHARSET=latin1;
 
 --
@@ -1131,6 +1135,7 @@ CREATE TABLE `group_stats` (
   `gid` varchar(12) NOT NULL default '',
   `pid_idx` mediumint(8) unsigned NOT NULL default '0',
   `gid_idx` mediumint(8) unsigned NOT NULL default '0',
+  `gid_uuid` varchar(40) NOT NULL default '',
   `exptstart_count` int(11) unsigned default '0',
   `exptstart_last` datetime default NULL,
   `exptpreload_count` int(11) unsigned default '0',
@@ -1148,7 +1153,8 @@ CREATE TABLE `group_stats` (
   `allexpt_pnodes` int(11) unsigned default '0',
   `allexpt_pnode_duration` int(11) unsigned default '0',
   PRIMARY KEY  (`gid_idx`),
-  UNIQUE KEY `pidgid` (`pid`,`gid`)
+  UNIQUE KEY `pidgid` (`pid`,`gid`),
+  KEY `gid_uuid` (`gid_uuid`)
 ) ENGINE=MyISAM DEFAULT CHARSET=latin1;
 
 --
@@ -1161,6 +1167,7 @@ CREATE TABLE `groups` (
   `gid` varchar(12) NOT NULL default '',
   `pid_idx` mediumint(8) unsigned NOT NULL default '0',
   `gid_idx` mediumint(8) unsigned NOT NULL default '0',
+  `gid_uuid` varchar(40) NOT NULL default '',
   `leader` varchar(8) NOT NULL default '',
   `leader_idx` mediumint(8) unsigned NOT NULL default '0',
   `created` datetime default NULL,
@@ -1176,7 +1183,8 @@ CREATE TABLE `groups` (
   KEY `unix_gid` (`unix_gid`),
   KEY `gid` (`gid`),
   KEY `pid` (`pid`),
-  KEY `pididx` (`pid_idx`,`gid_idx`)
+  KEY `pididx` (`pid_idx`,`gid_idx`),
+  KEY `gid_uuid` (`gid_uuid`)
 ) ENGINE=MyISAM DEFAULT CHARSET=latin1;
 
 --
@@ -1196,7 +1204,7 @@ CREATE TABLE `iface_counters` (
 ) ENGINE=MyISAM DEFAULT CHARSET=latin1;
 
 --
--- Table structure for table `images	`
+-- Table structure for table `images`
 --
 
 DROP TABLE IF EXISTS `images`;
@@ -1207,6 +1215,7 @@ CREATE TABLE `images` (
   `pid` varchar(12) NOT NULL default '',
   `gid` varchar(12) NOT NULL default '',
   `imageid` int(8) unsigned NOT NULL default '0',
+  `uuid` varchar(40) NOT NULL default '',
   `old_imageid` varchar(45) NOT NULL default '',
   `creator` varchar(8) default NULL,
   `creator_idx` mediumint(8) unsigned NOT NULL default '0',
@@ -1231,7 +1240,8 @@ CREATE TABLE `images` (
   PRIMARY KEY  (`imageid`),
   UNIQUE KEY `pid` (`pid`,`imagename`),
   KEY `gid` (`gid`),
-  KEY `old_imageid` (`old_imageid`)
+  KEY `old_imageid` (`old_imageid`),
+  KEY `uuid` (`uuid`)
 ) ENGINE=MyISAM DEFAULT CHARSET=latin1;
 
 --
@@ -2070,6 +2080,7 @@ CREATE TABLE `os_info` (
   `pid` varchar(12) NOT NULL default '',
   `pid_idx` mediumint(8) unsigned NOT NULL default '0',
   `osid` int(8) unsigned NOT NULL default '0',
+  `uuid` varchar(40) NOT NULL default '',
   `old_osid` varchar(35) NOT NULL default '',
   `creator` varchar(8) default NULL,
   `creator_idx` mediumint(8) unsigned NOT NULL default '0',
@@ -2094,7 +2105,8 @@ CREATE TABLE `os_info` (
   UNIQUE KEY `pid` (`pid`,`osname`),
   KEY `OS` (`OS`),
   KEY `path` (`path`(255)),
-  KEY `old_osid` (`old_osid`)
+  KEY `old_osid` (`old_osid`),
+  KEY `uuid` (`uuid`)
 ) ENGINE=MyISAM DEFAULT CHARSET=latin1;
 
 --
@@ -2180,6 +2192,23 @@ CREATE TABLE `plab_mapping` (
 ) ENGINE=MyISAM DEFAULT CHARSET=latin1;
 
 --
+-- Table structure for table `plab_nodehist`
+--
+
+DROP TABLE IF EXISTS `plab_nodehist`;
+CREATE TABLE `plab_nodehist` (
+  `idx` mediumint(10) unsigned NOT NULL auto_increment,
+  `node_id` varchar(32) NOT NULL,
+  `phys_node_id` varchar(32) NOT NULL,
+  `timestamp` datetime NOT NULL,
+  `component` varchar(64) NOT NULL,
+  `operation` varchar(64) NOT NULL,
+  `status` enum('success','failure','unknown') NOT NULL default 'unknown',
+  `msg` text,
+  PRIMARY KEY  (`idx`,`node_id`)
+) ENGINE=MyISAM DEFAULT CHARSET=latin1;
+
+--
 -- Table structure for table `plab_site_mapping`
 --
 
@@ -2220,6 +2249,7 @@ CREATE TABLE `plab_slices` (
   `exptidx` int(11) NOT NULL default '0',
   `slicename` varchar(64) NOT NULL default '',
   `slicemeta` text,
+  `slicemeta_legacy` text,
   `leaseend` datetime default NULL,
   `admin` tinyint(1) default '0',
   PRIMARY KEY  (`exptidx`),
@@ -2368,6 +2398,7 @@ CREATE TABLE `projects` (
   `default_user_interface` enum('emulab','plab') NOT NULL default 'emulab',
   `linked_to_us` tinyint(4) NOT NULL default '0',
   `cvsrepo_public` tinyint(1) NOT NULL default '0',
+  `allow_workbench` tinyint(1) NOT NULL default '0',
   PRIMARY KEY  (`pid_idx`),
   UNIQUE KEY `pid` (`pid`),
   KEY `unix_gid` (`unix_gid`),
@@ -2831,6 +2862,7 @@ DROP TABLE IF EXISTS `user_stats`;
 CREATE TABLE `user_stats` (
   `uid` varchar(8) NOT NULL default '',
   `uid_idx` mediumint(8) unsigned NOT NULL default '0',
+  `uid_uuid` varchar(40) NOT NULL default '',
   `weblogin_count` int(11) unsigned default '0',
   `weblogin_last` datetime default NULL,
   `exptstart_count` int(11) unsigned default '0',
@@ -2849,7 +2881,8 @@ CREATE TABLE `user_stats` (
   `allexpt_vnode_duration` int(11) unsigned default '0',
   `allexpt_pnodes` int(11) unsigned default '0',
   `allexpt_pnode_duration` int(11) unsigned default '0',
-  PRIMARY KEY  (`uid_idx`)
+  PRIMARY KEY  (`uid_idx`),
+  KEY `uid_uuid` (`uid_uuid`)
 ) ENGINE=MyISAM DEFAULT CHARSET=latin1;
 
 --
@@ -2860,6 +2893,7 @@ DROP TABLE IF EXISTS `users`;
 CREATE TABLE `users` (
   `uid` varchar(8) NOT NULL default '',
   `uid_idx` mediumint(8) unsigned NOT NULL default '0',
+  `uid_uuid` varchar(40) NOT NULL default '',
   `usr_created` datetime default NULL,
   `usr_expires` datetime default NULL,
   `usr_modified` datetime default NULL,
@@ -2907,7 +2941,8 @@ CREATE TABLE `users` (
   PRIMARY KEY  (`uid_idx`),
   UNIQUE KEY `uid` (`uid`),
   KEY `unix_uid` (`unix_uid`),
-  KEY `status` (`status`)
+  KEY `status` (`status`),
+  KEY `uid_uuid` (`uid_uuid`)
 ) ENGINE=MyISAM DEFAULT CHARSET=latin1;
 
 --
@@ -3208,6 +3243,7 @@ CREATE TABLE `virt_nodes` (
   `fixed` text NOT NULL,
   `inner_elab_role` enum('boss','boss+router','router','ops','ops+fs','fs','node') default NULL,
   `plab_role` enum('plc','node','none') NOT NULL default 'none',
+  `plab_plcnet` varchar(32) NOT NULL default 'none',
   `numeric_id` int(11) default NULL,
   PRIMARY KEY  (`exptidx`,`vname`),
   UNIQUE KEY `pideid` (`pid`,`eid`,`vname`),

@@ -173,6 +173,7 @@ class User
     function uid()		{ return $this->field("uid"); }
     function webid()		{ return $this->field("uid_idx"); }
     function dbid()		{ return $this->field("uid_idx"); }
+    function uuid()		{ return $this->field("uid_uuid"); }
     function created()		{ return $this->field("usr_created"); }
     function expires()		{ return $this->field("usr_expires"); }
     function modified()		{ return $this->field("usr_modified"); }
@@ -575,6 +576,8 @@ class User
 	$wikiname    = $user->wikiname();
 	$cvsweb      = $user->cvsweb();
 	$wikionly    = $user->wikionly();
+	$stud        = $user->stud();
+	$uuid        = $user->uuid();
 
 	if (!strcmp($usr_addr2, ""))
 	    $usr_addr2 = "&nbsp;";
@@ -726,6 +729,11 @@ class User
               </tr>\n";
 
 	if (ISADMIN()) {
+	    echo "<tr>
+                    <td>UUID: </td>
+                    <td class=left>$uuid</td>
+                  </tr>\n";
+	    
 	    $cvswebflip = ($cvsweb ? 0 : 1);
 
 	    $toggle_url = CreateURL("toggle", $user,
@@ -740,6 +748,19 @@ class User
 	    $toggle_url = CreateURL("toggle", $user,
 				    "type", "webfreeze", "value", $freezeflip);
 
+	    $studflip = ($stud ? 0 : 1);
+
+	    $toggle_url = CreateURL("toggle", $user,
+				    "type", "stud", "value", $studflip);
+
+	    echo "<tr>
+                      <td>Studly:</td>
+                      <td>$stud (<a href='$toggle_url'>Toggle</a>)
+                  </tr>\n";
+	
+	    $freezeflip = ($frozen ? 0 : 1);
+	    $toggle_url = CreateURL("toggle", $user,
+				    "type", "webfreeze", "value", $freezeflip);
 	    echo "<tr>
                       <td>Web Freeze:</td>
                       <td>$frozen (<a href='$toggle_url'>Toggle</a>)
@@ -898,6 +919,17 @@ class User
 		     "   cvsweb='$onoff' ".
 		     "where uid_idx='$idx'");
 	$this->user["cvsweb"] = $onoff;
+	return 0;
+    }
+    function SetStudly($onoff) {
+	$idx   = $this->uid_idx();
+
+	$onoff = ($onoff ? 1 : 0);
+			    
+	DBQueryFatal("update users set ".
+		     "   stud='$onoff' ".
+		     "where uid_idx='$idx'");
+	$this->user["stud"] = $onoff;
 	return 0;
     }
     function UpdateWebLoginFail() {

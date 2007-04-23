@@ -25,7 +25,7 @@ static void croak(const char *format, ...) {
     vfprintf(stderr,format, ap);
     va_end(ap);
     fflush(stderr);
-    exit(1);
+    abort();
 }
 
 /*
@@ -708,7 +708,7 @@ void printlog(logmsg_t type, int fd, ...) {
             if (!monitor_udp) { print = false; }
             print_value = false;
         default:
-            croak("Invalid type (%) passed to printlog()\n",type);
+            croak("Invalid type (%i) passed to printlog()\n",type);
     }
 
     /*

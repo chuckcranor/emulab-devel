@@ -1,6 +1,6 @@
 /*
  * EMULAB-COPYRIGHT
- * Copyright (c) 2000-2006 University of Utah and the Flux Group.
+ * Copyright (c) 2000-2007 University of Utah and the Flux Group.
  * All rights reserved.
  */
 
@@ -19,6 +19,7 @@
 #include "config.h"
 
 #include <stdio.h>
+#include <string.h>
 #include <signal.h>
 #include <sys/time.h>
 #include <sys/types.h>
@@ -776,9 +777,9 @@ enqueue(event_handle_t handle, event_notification_t notification, void *data)
 						event.notification,
 						"SCHEDULER") ||
 		    ! event_notification_put_int32(handle,
-						   event.notification,
-						   "SCHEDULER",
-						   0)) {
+						    event.notification,
+						    "SCHEDULER",
+						    0)) {
 			error("could not clear scheduler attribute of "
 			      "notification %p\n", event.notification);
 			return;
@@ -1561,6 +1562,17 @@ handle_completeevent(event_handle_t handle, sched_event_t *eventp)
 	}
 	else {
 		warning("completion event is missing CTOKEN argument\n");
+	}
+
+	if (debug) {
+		char time_buf_1[24];
+		struct timeval now;
+
+		gettimeofday(&now, NULL);
+		make_timestamp(time_buf_1, &now);
+			
+		info("Done:  now:%s CTOKEN=%d ERROR=%d\n",
+		     time_buf_1, ctoken, agerror);
 	}
 
 	if (agerror != 0 && agerror != ~0) {

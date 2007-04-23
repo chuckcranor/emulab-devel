@@ -3937,3 +3937,44 @@ last_net_act,last_cpu_act,last_ext_act);
          ./step4_newids.pl
 
 4.114: Minor fix to schema file; skip to next entry.
+
+4.115: Add a workbench flag to the project table.
+
+       alter table project add 
+           `allow_workbench` tinyint(1) NOT NULL default '0'
+	    after cvsrepo_public;
+
+4.116: Add custom history table for planetlab nodes.
+
+       DROP TABLE IF EXISTS `plab_nodehist`;
+       CREATE TABLE `plab_nodehist` (
+           `idx` mediumint(10) unsigned NOT NULL auto_increment,
+	   `node_id` varchar(32) NOT NULL,
+	   `phys_node_id` varchar(32) NOT NULL,
+	   `timestamp` datetime NOT NULL,
+	   `component` varchar(64) NOT NULL,
+	   `operation` varchar(64) NOT NULL,
+	   `status` enum('success','failure','unknown') NOT NULL default 'unknown',
+	   `msg` text,
+	   PRIMARY KEY  (`idx`,`node_id`)
+       ) ENGINE=MyISAM DEFAULT CHARSET=latin1;
+
+4.117: Add a field to specify to which network a private PLC is connected.
+
+       alter table virt_nodes add 
+           `plab_plcnet` varchar(32) NOT NULL default 'none'
+	   after plab_role;
+
+4.118: Add a field to hold a legacy PLC slice ticket (since the migration from
+       3.x to 4.x continues).
+
+       alter table plab_slices add 
+           `slicemeta_legacy` text 
+	   after slicemeta;
+
+4.119: Add UUIDs to lots of tables.
+
+       All of the sql changes are made in the following script:
+
+         ./step5_newids.pl
+

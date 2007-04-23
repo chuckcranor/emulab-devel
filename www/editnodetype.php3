@@ -22,8 +22,8 @@ if (! $isadmin) {
     USERERROR("You do not have permission to edit node types!", 1);
 }
 
-$reqargs = RequiredPageArguments("node_type",  PAGEARG_STRING);
 $optargs = OptionalPageArguments("submit",     PAGEARG_STRING,
+				 "node_type",  PAGEARG_STRING,
 				 "new_type",   PAGEARG_STRING,
 				 "formfields", PAGEARG_ARRAY,
 				 "deletes",    PAGEARG_ARRAY,
@@ -31,6 +31,10 @@ $optargs = OptionalPageArguments("submit",     PAGEARG_STRING,
 				 "newattribute_type",  PAGEARG_STRING,
 				 "newattribute_name",  PAGEARG_STRING,
 				 "newattribute_value", PAGEARG_STRING);
+
+if (!isset($attributes)) {
+    $attributes = array();
+}
 
 # This belongs elsewhere!
 $initial_attributes = array(
@@ -340,7 +344,7 @@ if (isset($new_type)) {
 	$attribute_deletes[$entry['attrkey']] = "";
     }
 }
-else {
+elseif (isset($node_type)) {
     #
     # Editing an existing type - suck the current info out of the
     # database.
@@ -370,6 +374,10 @@ else {
 	$attribute_types[$row['attrkey']] = $row['attrtype'];
 	$attribute_deletes[$row['attrkey']] = "";
     }
+}
+else {
+    PAGEARGERROR("Must provide one of node_type or new_type");
+    return;
 }
 
 #

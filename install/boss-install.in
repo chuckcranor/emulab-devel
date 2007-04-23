@@ -41,6 +41,7 @@ my $BOSSNODE_IP= '@BOSSNODE_IP@';
 my $USERNODE_IP= '@USERNODE_IP@';
 my $FSNODE_IP=   '@FSNODE_IP@';
 my $SCRATCHDIR = '@FSDIR_SCRATCH@';
+my $SHAREDIR   = '@FSDIR_SHARE@';
 
 #
 # Fixed paths for clients
@@ -177,7 +178,10 @@ my $CISCO_MIB_FTP = "ftp://ftp.cisco.com/pub/mibs/v2";
 my @TESTBED_DIRS = ($PREFIX);
 
 my @MOUNTPOINTS = ("$USERSVAR_DIR", "$OPSDIR_DIR",
-		   "$USERROOT", "$PROJROOT", "$GROUPROOT", "$SHAREROOT");
+		   "$USERROOT", "$PROJROOT", "$GROUPROOT");
+if ($SHAREDIR) {
+    push(@MOUNTPOINTS, "$SHAREROOT");
+}
 if ($SCRATCHDIR) {
     push(@MOUNTPOINTS, "$SCRATCHROOT");
 }
@@ -188,7 +192,7 @@ my @LOGFILES = ("$LOGDIR/bootinfo.log", "$LOGDIR/tmcd.log",
     "$LOGDIR/elvind.log", "$LOGDIR/stated.log", "$LOGDIR/osselect.log",
     "$LOGDIR/tftpd.log", "$LOGDIR/sdcollectd.log", "$LOGDIR/genlastlog.log",
     "$LOGDIR/sshxmlrpc.log", "$LOGDIR/plabgetfree.log", "$LOGDIR/xmlrpcbag.log",
-    "$LOGDIR/plabrenew.log", "$LOGDIR/sslxmlrpc.log");
+    "$LOGDIR/plabrenew.log", "$LOGDIR/sslxmlrpc.log", "$LOGDIR/pubsubd.log");
 
 my @CISCO_MIBS = ("CISCO-SMI", "CISCO-TC", "CISCO-VTP-MIB", "CISCO-PAGP-MIB",
     "CISCO-PRIVATE-VLAN-MIB", "CISCO-STACK-MIB", "CISCO-VLAN-MEMBERSHIP-MIB",
@@ -430,6 +434,14 @@ Phase "ports", "Installing ports", sub {
 		    if ($pname);
 		ExecQuietFatal("$ENV PKG_PATH=$packagedir $PKG_ADD $TFTPD_PKG");
 	    };
+	    # XXX Also temporary
+	    Phase "pubsub", "Installing pubsub package", sub {
+		if (!ExecQuiet("$PKG_INFO -x pubsub")) {
+		    PhaseSkip("pubsub already installed");
+		}
+		my $pname = GetPackage("pubsub", $packagedir);
+		ExecQuietFatal("$ENV PKG_PATH=$packagedir $PKG_ADD $pname");
+	    };
 	}
     };
     PhaseSkip("Package directory provided; not installing from sources")
@@ -642,6 +654,7 @@ Phase "syslog", "Setting up syslog", sub {
 	    "!capserver", "*.*\t\t\t\t\t\t$LOGDIR/capserver.log",
 	    "!frisbeed",  "*.*\t\t\t\t\t\t$LOGDIR/frisbeed.log",
 	    "!elvind",    "*.*\t\t\t\t\t\t$LOGDIR/elvind.log",
+	    "!pubsubd",    "*.*\t\t\t\t\t\t$LOGDIR/pubsubd.log",
 	    "!stated",    "*.*\t\t\t\t\t\t$LOGDIR/stated.log",
 	    "!osselect",  "*.*\t\t\t\t\t\t$LOGDIR/osselect.log",
 	    "!genlastlog","*.*\t\t\t\t\t\t$LOGDIR/genlastlog.log",
@@ -692,6 +705,7 @@ Phase "syslog", "Setting up syslog", sub {
 	    "$LOGDIR/bootinfo.log           640  7     200  *     Z",
 	    "$LOGDIR/capserver.log          640  5     200  *     Z",
 	    "$LOGDIR/elvind.log             640  5     1000 *     Z",
+	    "$LOGDIR/pubsubd.log            640  5     1000 *     Z",
 	    "$LOGDIR/suexec.log             640  3     200  *     Z",
 	    "$LOGDIR/genlastlog.log         640  3     200  *     Z",
 	    "$LOGDIR/genlastlog             640  3     200  *     Z " .
@@ -1106,20 +1120,25 @@ if ($MAILMANSUPPORT) {
     };
 }
 
-Phase "event", "Setting up event system", sub {
-    Phase "elvinconf", "Installing elvind config file", sub {
-	DoneIfIdentical($ELVIND_CONF,$BOSS_ELVIND_CONF);
-	ExecQuietFatal("$CP $BOSS_ELVIND_CONF $ELVIND_CONF");
-    };
+Phase "pubsub", "Setting up pubsub system", sub {
+    # Ug, kill off the sync server in elabinelab.
+    if ($ELABINELAB) {	
+	Phase "syncd", "Stopping syncd", sub {
+	    if (ExecQuiet("killall -s emulab-syncd")) {
+		PhaseSkip("syncd not running");
+	    }
+	    ExecQuietFatal("killall emulab-syncd");
+	};
+    }
     # For elabinelab, be sure to kill off running event system. Harmless.
-    Phase "stopping", "Stopping event system", sub {
-	if (ExecQuiet("killall -s elvind")) {
-	    PhaseSkip("elvind not running");
+    Phase "stopping", "Stopping pubsub system", sub {
+	if (ExecQuiet("killall -s pubsubd")) {
+	    PhaseSkip("pubsubd not running");
 	}
-	ExecQuietFatal("$RCDIR/2.elvind.sh stop");
+	ExecQuietFatal("$RCDIR/2.pubsubd.sh stop");
     };
-    Phase "starting", "Starting event system", sub {
-	ExecQuietFatal("$RCDIR/2.elvind.sh start");
+    Phase "starting", "Starting pubsub system", sub {
+	ExecQuietFatal("$RCDIR/2.pubsubd.sh start");
     };
 };
 
@@ -1272,8 +1291,6 @@ Phase "firstuser", "Setting up initial user ($PROTOUSER)", sub {
 	ExecQuietFatal("$SUDO -u $PROTOUSER $WAP $ADDPUBKEY -w $PROTOUSER");
     };
 };
-
-	exit(0);
 
 Phase "chkupuser", "Setting up checkup user (elabckup)", sub {
     PhaseSkip("elabckup already created")

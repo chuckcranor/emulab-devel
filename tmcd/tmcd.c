@@ -12,6 +12,7 @@
 #include <ctype.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <errno.h>
 #include <string.h>
 #include <unistd.h>
 #include <syslog.h>
@@ -160,6 +161,7 @@ typedef struct {
 	int		elab_in_elab;
         int		singlenet;	  /* Modifier for elab_in_elab */
 	int		update_accounts;
+	int		exptidx;
 	char		nodeid[TBDB_FLEN_NODEID];
 	char		vnodeid[TBDB_FLEN_NODEID];
 	char		pnodeid[TBDB_FLEN_NODEID]; /* XXX */
@@ -4018,7 +4020,7 @@ mydb_connect()
 	if (mysql_real_connect(&db, 0, "tmcd", 0,
 			       dbname, 0, 0, CLIENT_INTERACTIVE) == 0) {
 		error("%s: connect failed: %s\n", dbname, mysql_error(&db));
-		return 1;
+		return 0;
 	}
 	strcpy(db_dbname, dbname);
 	db_connected = 1;
@@ -4051,9 +4053,24 @@ mydb_query(char *query, int ncols, ...)
 		return (MYSQL_RES *) 0;
 
 	if (mysql_real_query(&db, querybuf, n) != 0) {
-		error("%s: query failed: %s\n", dbname, mysql_error(&db));
+		error("%s: query failed: %s, retrying\n",
+		      dbname, mysql_error(&db));
 		mydb_disconnect();
-		return (MYSQL_RES *) 0;
+		/*
+		 * Try once to reconnect.  In theory, the caller (client)
+		 * will retry the tmcc call and we will reconnect and
+		 * everything will be fine.  The problem is that the
+		 * client may get a different tmcd process each time,
+		 * and every one of those will fail once before
+		 * reconnecting.  Hence, the client could wind up failing
+		 * even if it retried.
+		 */
+		if (!mydb_connect() ||
+		    mysql_real_query(&db, querybuf, n) != 0) {
+			error("%s: query failed: %s\n",
+			      dbname, mysql_error(&db));
+			return (MYSQL_RES *) 0;
+		}
 	}
 
 	res = mysql_store_result(&db);
@@ -4128,7 +4145,8 @@ iptonodeid(struct in_addr ipaddr, tmcdreq_t *reqp)
 				 " pt.isremotenode,vt.issubnode,e.keyhash, "
 				 " nk.sfshostid,e.eventkey,vt.isplabdslice, "
 				 " ps.admin, "
-				 " e.elab_in_elab,e.elabinelab_singlenet "
+				 " e.elab_in_elab,e.elabinelab_singlenet, "
+				 " e.idx "
 				 "from nodes as nv "
 				 "left join nodes as np on "
 				 " np.node_id=nv.phys_nodeid "
@@ -4148,7 +4166,7 @@ iptonodeid(struct in_addr ipaddr, tmcdreq_t *reqp)
 				 " nk.node_id=nv.node_id "
 				 "where nv.node_id='%s' and "
 				 " (i.IP='%s' and i.role='ctrl') ",
-				 25, reqp->vnodeid, inet_ntoa(ipaddr));
+				 26, reqp->vnodeid, inet_ntoa(ipaddr));
 	}
 	else {
 		res = mydb_query("select t.class,t.type,n.node_id,n.jailflag,"
@@ -4158,7 +4176,8 @@ iptonodeid(struct in_addr ipaddr, tmcdreq_t *reqp)
 				 " e.sync_server,t.class,t.type, "
 				 " t.isremotenode,t.issubnode,e.keyhash, "
 				 " nk.sfshostid,e.eventkey,0, "
-				 " 0,e.elab_in_elab,e.elabinelab_singlenet "
+				 " 0,e.elab_in_elab,e.elabinelab_singlenet, "
+				 " e.idx "
 				 "from interfaces as i "
 				 "left join nodes as n on n.node_id=i.node_id "
 				 "left join reserved as r on "
@@ -4170,7 +4189,7 @@ iptonodeid(struct in_addr ipaddr, tmcdreq_t *reqp)
 				 "left join node_hostkeys as nk on "
 				 " nk.node_id=n.node_id "
 				 "where i.IP='%s' and i.role='ctrl'", /*XXX*/
-				 25, inet_ntoa(ipaddr));
+				 26, inet_ntoa(ipaddr));
 	}
 
 	if (!res) {
@@ -4208,6 +4227,7 @@ iptonodeid(struct in_addr ipaddr, tmcdreq_t *reqp)
 	if (row[4] && row[5]) {
 		strncpy(reqp->pid, row[4], sizeof(reqp->pid));
 		strncpy(reqp->eid, row[5], sizeof(reqp->eid));
+		reqp->exptidx = atoi(row[25]);
 		reqp->allocated = 1;
 
 		if (row[6])
@@ -6179,6 +6199,44 @@ COMMAND_PROTOTYPE(doeplabconfig)
 	}
 	mysql_free_result(res);
 
+	/*
+	 * Grab lanlink on which the node should be/contact plc.
+	 */
+	/* 
+	 * For now, just assume that plab_plcnet is a valid lan name and 
+	 * join it with virtlans and ifaces.
+	 */
+	res = mydb_query("select vl.vnode,r.node_id,vn.plab_plcnet,"
+			 "       vn.plab_role,i.IP,i.mask,i.mac"
+			 "  from reserved as r left join virt_lans as vl"
+			 "    on r.pid=vl.pid and r.eid=vl.eid"
+			 "  left join interfaces as i"
+			 "    on vl.ip=i.IP and r.node_id=i.node_id"
+			 "  left join virt_nodes as vn"
+			 "    on vl.vname=vn.plab_plcnet and r.vname=vn.vname"
+			 "  where r.pid='%s' and r.eid='%s' and"
+                         "    r.plab_role != 'none' and i.IP != ''"
+			 "      and vn.plab_plcnet != 'none'"
+			 "      and vn.plab_plcnet != 'control'",
+			 7,reqp->pid,reqp->eid);
+	if (!res) {
+	    error("EPLABCONFIG: %s: DB Error getting plab_in_elab info\n",
+		  reqp->nodeid);
+	    return 1;
+	}
+	nrows = (int)mysql_num_rows(res);
+	while (nrows--) {
+	    row = mysql_fetch_row(res);
+	    bufp = buf;
+	    
+	    bufp += OUTPUT(bufp,ebufp-bufp,
+			   "VNAME=%s PNAME=%s.%s PLCNETWORK=%s ROLE=%s IP=%s NETMASK=%s MAC=%s\n",
+			   row[0],row[1],OURDOMAIN,row[2],row[3],row[4],row[5],
+			   row[6]);
+	    client_writeback(sock,buf,strlen(buf),tcp);
+	}
+	mysql_free_result(res);
+
 	return 0;
 }
 
@@ -7048,10 +7106,10 @@ COMMAND_PROTOTYPE(doportregister)
 		 * Register port for the service.
 		 */
 		if (mydb_update("replace into port_registration set "
-				"     pid='%s', eid='%s', "
+				"     pid='%s', eid='%s', exptidx=%d, "
 				"     service='%s', node_id='%s', port='%d'",
-				reqp->pid, reqp->eid, service,
-				reqp->nodeid, port)) {
+				reqp->pid, reqp->eid, reqp->exptidx,
+				service, reqp->nodeid, port)) {
 			error("doportregister: %s: DB Error setting %s=%d!\n",
 			      reqp->nodeid, service, port);
 			return 1;
