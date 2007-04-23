@@ -1,6 +1,6 @@
 /*
  * EMULAB-COPYRIGHT
- * Copyright (c) 2005, 2007 University of Utah and the Flux Group.
+ * Copyright (c) 2005 University of Utah and the Flux Group.
  * All rights reserved.
  */
 
@@ -10,7 +10,6 @@
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
-#include <rpc/rpc.h>
 #include <netdb.h>
 #include <fcntl.h>
 #include <stdio.h>
@@ -72,7 +71,7 @@ int
 main(int argc, char **argv)
 {
 	int			sock, ch, rc, retval = EXIT_FAILURE;
-	int			port = SERVERPORT;
+	int			length, port = SERVERPORT;
 	char		       *server = BOSSNODE;
 	struct sockaddr_in	sin;
 	whoami_t		whoami;

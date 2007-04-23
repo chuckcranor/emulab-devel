@@ -13,7 +13,6 @@
 #include <ctype.h>
 #include <netdb.h>
 #include <unistd.h>
-#include <string.h>
 #include <sys/types.h>
 #include <sys/time.h>
 #include <sys/socket.h>

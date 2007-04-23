@@ -6,8 +6,6 @@
 
 #include "config.h"
 
-#include <unistd.h>
-#include <string.h>
 #include <errno.h>
 #include <fcntl.h>
 #include <sys/types.h>

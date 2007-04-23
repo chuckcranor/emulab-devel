@@ -461,7 +461,7 @@ if (!isset($formfields["runid"]) || $formfields["runid"] == "") {
 elseif (!TBvalid_eid($formfields["runid"])) {
     $errors["ID"] = TBFieldErrorString();
 }
-elseif (! $instance->UniqueRunID($formfields["runid"])) {
+elseif (Experiment::Lookup($pid, $formfields["runid"])) {
     $errors["ID"] = "Already in use";
 }
 else {

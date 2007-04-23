@@ -1,6 +1,6 @@
 #
 # EMULAB-COPYRIGHT
-# Copyright (c) 2002-2007 University of Utah and the Flux Group.
+# Copyright (c) 2002-2006 University of Utah and the Flux Group.
 # All rights reserved.
 #
 
@@ -10,7 +10,7 @@ OBJDIR		= ../..
 SUBDIR		= event/example
 
 SYSTEM	       := $(shell uname -s)
-PROGRAMS	= tbrecv tbsend tbrecv.py tbsend.py eventdebug.pl
+PROGRAMS	= tbrecv tbsend tbrecv.py tbsend.py eventdebug.pl dumpevsubs
 
 include $(OBJDIR)/Makeconf
 
@@ -21,11 +21,11 @@ include $(TESTBED_SRCDIR)/GNUmakerules
 CFLAGS   += -DDEBUG
 CFLAGS	 += -O -g -static -Wall
 CFLAGS   += -I. -I${OBJDIR} -I$(SRCDIR)/../lib -I$(TESTBED_SRCDIR)/lib/libtb
-CFLAGS   += -I/usr/local/include
+CFLAGS   += `elvin-config --cflags vin4c`
 
 LDFLAGS  += -static -L../lib -L${OBJDIR}/lib/libtb
 LIBS     += -levent -ltb -lcrypto
-LIBS     +=  -L/usr/local/lib -lpubsub -lm
+LIBS     += `elvin-config --libs vin4c`
 ifeq ($(SYSTEM),Linux)
 LIBS     += -ldl
 endif

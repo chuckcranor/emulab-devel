@@ -9,7 +9,6 @@
  */
 
 #include <stdio.h>
-#include <unistd.h>
 #include <ctype.h>
 #include <unistd.h>
 #include <time.h>

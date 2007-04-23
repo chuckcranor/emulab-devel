@@ -100,7 +100,7 @@ bievent_send(struct in_addr ipaddr, char *event)
 	if (debug >= 2)
 	    info("Sending event %s for node %s\n", event, nodeid);
 
-	if (event_notify(event_handle, notification) == 0) {
+	if (event_notify(event_handle, notification) == NULL) {
 		error("Unable to send notification!");
 		event_notification_free(event_handle, notification);
 

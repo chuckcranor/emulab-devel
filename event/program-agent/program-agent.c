@@ -1,6 +1,6 @@
 /*
  * EMULAB-COPYRIGHT
- * Copyright (c) 2000-2007 University of Utah and the Flux Group.
+ * Copyright (c) 2000-2006 University of Utah and the Flux Group.
  * All rights reserved.
  */
 
@@ -12,9 +12,7 @@
 
 #include <config.h>
 
-#include <errno.h>
 #include <stdio.h>
-#include <string.h>
 #include <ctype.h>
 #include <netdb.h>
 #include <unistd.h>
@@ -44,11 +42,7 @@
 #include "systemf.h"
 #include "be_user.h"
 #include "event.h"
-
-#ifdef HAVE_ELVIN
 #include <elvin/elvin.h>
-#endif
-
 #ifdef __CYGWIN__
 #include <w32api/windows.h>
 #include <sys/cygwin.h>
@@ -140,14 +134,10 @@ static char		*tokenfile;
  */
 static int		isplab;
 
-#ifdef HAVE_ELVIN
 /**
  * Elvin error object.
  */
 static elvin_error_t elvin_error;
-#elif HAVE_PUBSUB
-static pubsub_error_t pubsub_error;
-#endif
 
 /**
  * Flags for the proginfo structure.
@@ -179,13 +169,8 @@ struct proginfo {
 	unsigned long	timeout;
 	int		initial_expected_exit_code;
 	int		expected_exit_code;
-
-#ifdef HAVE_ELVIN
-	elvin_timeout_t	timeout_handle;
-#elif HAVE_PUBSUB
-	pubsub_timeout_t *timeout_handle;
-#endif
 	
+	elvin_timeout_t	timeout_handle;
 	int		pid;
 	struct timeval  started;
 	unsigned long	token;
@@ -283,16 +268,9 @@ static int	parse_configfile_env(char *filename);
  * @param rock The proginfo that executed passed the timeout.
  * @param eerror The elvin error object to use.
  */
-#ifdef HAVE_ELVIN
 static int	timeout_callback(elvin_timeout_t timeout,
 				 void *rock,
 				 elvin_error_t eerror);
-#elif HAVE_PUBSUB
-static int	timeout_callback(pubsub_handle_t *handle,
-				 pubsub_timeout_t *timeout,
-				 void *rock,
-				 pubsub_error_t *eerror);
-#endif
 
 /**
  * Callback triggered when there are children to be reaped.
@@ -303,18 +281,10 @@ static int	timeout_callback(pubsub_handle_t *handle,
  * @param elvin_error Elvin error structure.
  * @return zero
  */
-#ifdef HAVE_ELVIN
 static int	child_callback(elvin_io_handler_t handler,
 			       int fd,
 			       void *rock,
 			       elvin_error_t eerror);
-#elif HAVE_PUBSUB
-static int	child_callback(pubsub_handle_t *handle,
-			       pubsub_iohandler_t *handler,
-			       int fd,
-			       void *rock,
-			       pubsub_error_t *eerror);
-#endif
 
 /**
  * Handler for SIGCHLD that writes a byte to "childpipe" in order to wake up
@@ -455,6 +425,7 @@ main(int argc, char **argv)
 	char *keyfile = NULL;
 	char buf[BUFSIZ], agentlist[BUFSIZ];
 	char pid[MAXHOSTNAMELEN], eid[MAXHOSTNAMELEN];
+	elvin_io_handler_t eih;
 	struct proginfo *pinfo;
 	struct sigaction sa;
 	struct passwd *pw;
@@ -848,29 +819,17 @@ main(int argc, char **argv)
 	if (pipe(childpipe) < 0) {
 		fatal("could not create pipe");
 	}
-#ifdef HAVE_ELVIN
 	else if ((elvin_error = elvin_error_alloc()) == NULL) {
 		fatal("could not allocate elvin error");
 	}
-	else if (elvin_sync_add_io_handler(NULL,
-					   childpipe[0],
-					   ELVIN_READ_MASK,
-					   child_callback,
-					   NULL,
-					   elvin_error) == NULL) {
+	else if ((eih = elvin_sync_add_io_handler(NULL,
+						  childpipe[0],
+						  ELVIN_READ_MASK,
+						  child_callback,
+						  NULL,
+						  elvin_error)) == NULL) {
 		fatal("could not register I/O callback");
 	}
-#elif HAVE_PUBSUB
-	else if (pubsub_add_iohandler(handle->server,
-				      NULL,
-				      childpipe[0],
-				      0,
-				      child_callback,
-				      NULL,
-				      &pubsub_error) == NULL) {
-		fatal("could not register I/O callback");
-	}
-#endif
 	fcntl(childpipe[0], F_SETFL, O_NONBLOCK);
 	/* Don't leak the descriptors into the children. */
 	fcntl(childpipe[0], F_SETFD, FD_CLOEXEC);
@@ -965,6 +924,8 @@ main(int argc, char **argv)
 		}
 #endif
 	}
+
+	elvin_sync_remove_io_handler(eih, elvin_error);
 
 	/*
 	 * Unregister with the event system:
@@ -1486,7 +1447,6 @@ start_program(struct proginfo *pinfo, unsigned long token, char *args)
 	gettimeofday(&pinfo->started, NULL);
 	pinfo->token = token;
 
-#ifdef HAVE_ELVIN
 	if ((pinfo->timeout > 0) &&
 	    (pinfo->timeout_handle =
 	     elvin_sync_add_timeout(NULL,
@@ -1497,20 +1457,7 @@ start_program(struct proginfo *pinfo, unsigned long token, char *args)
 		error("Could not add timeout for %s!", pinfo->name);
 		return -1;
 	}
-#elif HAVE_PUBSUB
-	if ((pinfo->timeout > 0) &&
-	    (pinfo->timeout_handle =
-	     pubsub_add_timeout(handle->server,
-				NULL,
-				pinfo->timeout * 1000,
-				timeout_callback,
-				pinfo,
-				&pubsub_error)) == NULL) {
-		error("Could not add timeout for %s!", pinfo->name);
-		return -1;
-	}
-#endif
-	
+
 	/*
 	 * The command is going to be run via the shell. 
 	 * We do not know anything about the command line, so we reinit
@@ -1925,16 +1872,8 @@ parse_configfile_env(char *filename)
 	return 0;
 }
 
-#ifdef HAVE_ELVIN
 static int
 timeout_callback(elvin_timeout_t timeout, void *rock, elvin_error_t eerror)
-#elif HAVE_PUBSUB
-static int
-timeout_callback(pubsub_handle_t *handle,
-		 pubsub_timeout_t *timeout,
-		 void *rock,
-		 pubsub_error_t *eerror)
-#endif
 {
 	struct proginfo *pi = (struct proginfo *)rock;
 	int retval = 0;
@@ -1951,20 +1890,11 @@ timeout_callback(pubsub_handle_t *handle,
 	return retval;
 }
 
-#ifdef HAVE_ELVIN
 static int
 child_callback(elvin_io_handler_t handler,
 	       int fd,
 	       void *rock,
 	       elvin_error_t eerror)
-#elif HAVE_PUBSUB
-static int
-child_callback(pubsub_handle_t *pshandle,
-	       pubsub_iohandler_t *handler,
-	       int fd,
-	       void *rock,
-	       pubsub_error_t *eerror)
-#endif
 {
 	struct timeval now;
 	struct rusage ru;
@@ -2131,14 +2061,8 @@ child_callback(pubsub_handle_t *pshandle,
 				pi->flags &= ~(PIF_HALT_COMPLETION);
 			}
 			if (pi->timeout_handle != NULL) {
-#ifdef HAVE_ELVIN
 				elvin_sync_remove_timeout(pi->timeout_handle,
 							  eerror);
-#elif HAVE_PUBSUB
-				pubsub_remove_timeout(pshandle,
-						      pi->timeout_handle,
-						      eerror);
-#endif
 				pi->timeout_handle = NULL;
 			}
 

@@ -1,6 +1,6 @@
 /*
  * EMULAB-COPYRIGHT
- * Copyright (c) 2000-2004, 2006, 2007 University of Utah and the Flux Group.
+ * Copyright (c) 2000-2004, 2006 University of Utah and the Flux Group.
  * All rights reserved.
  */
 
@@ -16,7 +16,6 @@
 #include <signal.h>
 #include <db.h>
 #include <fcntl.h>
-#include <time.h>
 #include "log.h"
 #include "tbdefs.h"
 #include "bootwhat.h"
@@ -298,13 +297,13 @@ bicache_needevent(struct in_addr ipaddr)
 	/*
 	 * First find current value.
 	 */
-	if ((r = (dbp->get)(dbp, &key, &item, 0)) != 0) {
+	if ((r = (dbp->get)(dbp, &key, &item, NULL)) != NULL) {
 		if (r == -1) {
 			errorc("Could not retrieve entry from DBM for %s\n",
 			       inet_ntoa(ipaddr));
 		}
 	}
-	if (r == 0) {
+	if (r == NULL) {
 		time_t	oldtt = *((time_t *)item.data);
 
 		if (debug) {
@@ -321,7 +320,7 @@ bicache_needevent(struct in_addr ipaddr)
 		item.data = (void *) &tt;
 		item.size = sizeof(tt);
 
-		if ((dbp->put)(dbp, &key, &item, 0) != 0) {
+		if ((dbp->put)(dbp, &key, &item, NULL) != NULL) {
 			errorc("Could not insert DBM entry for %s\n",
 			       inet_ntoa(ipaddr));
 		}

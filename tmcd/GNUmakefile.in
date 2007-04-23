@@ -78,9 +78,10 @@ MDSUBDIR  = linux-sg
 endif
 
 ifeq ($(EVENTSYS),1)
-	TMCDCFLAGS  = -I$(TESTBED_SRCDIR)/event/lib -DEVENTSYS
+	TMCDCFLAGS = `elvin-config --cflags vin4c` \
+		     -I$(TESTBED_SRCDIR)/event/lib -DEVENTSYS
 	TMCDLIBS    = ${OBJDIR}/event/lib/libevent.a
-	ELVINFLAGS  = -lm -L/usr/local/lib -lpubsub 
+	ELVINFLAGS = `elvin-config --libs vin4c`
 endif
 
 tmcd: tmcd.c ${TMCDLIBS} decls.h version.o $(SSLOBJ)
