@@ -300,6 +300,8 @@ function WRITESIDEBAR() {
 	WRITESIDEBARBUTTON("Projects on Emulab", $TBDOCBASE,
 		"projectlist.php3");
     }
+
+    echo "<li><a href=\"$TBDOCBASE/gallery/gallery.php3\">Photos</a></li>";
     
     echo "</ul>\n";
 
