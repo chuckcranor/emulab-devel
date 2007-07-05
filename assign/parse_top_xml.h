@@ -32,28 +32,6 @@ XERCES_CPP_NAMESPACE_USE
  * Our error reporter - this gets called if the parser runs into any errors
  * while inside the parse() function.
  */
-
-class ParsePtopErrorHandler : public ErrorHandler {
-    public:
-    ParsePtopErrorHandler() : hadError(false) { ; };
-    ~ParsePtopErrorHandler() { ; };
-    
-    /*
-     * Implementation of the ErrorHandler functions
-     */
-    void warning(const SAXParseException& toCatch) { /* Ignore for now */ };
-    void error(const SAXParseException& toCatch);
-    void fatalError(const SAXParseException& toCatch);
-    void resetErrors() { hadError = false; }
-    
-    bool sawError() const { return hadError; }
-    
-    private:
-    bool hadError;
-    
-};
-
 int parse_top_xml(tb_vgraph &VG, char* filename);
-
 
 #endif

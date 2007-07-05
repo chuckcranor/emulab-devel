@@ -61,7 +61,8 @@ class fstring {
             if (_str[0] == '\0') { str = emptystr; }
             else { str = unique_string(_str.c_str()); }
         };
-		
+	
+	
         /*
          * Nothing to do here for now, but we might want to consider reclaiming
          * unused strings later
@@ -148,8 +149,8 @@ class fstring {
         }
 
     private:
-        // This is the only actual intatiable data method of an fstring
-        const char *str;
+        // This is the only a pointer to the One True Copy of the the string
+	const char *str;
 
         /*
          * Used so that we can put char*s in maps

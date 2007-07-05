@@ -98,9 +98,23 @@ public:
 
 class tb_vnode {
 public:
-  tb_vnode(): vclass(NULL), fixed(false), assigned(false), subnode_of(NULL),
-      subnode_of_name(""), typecount(1) {;}
+//  tb_vnode(): vclass(NULL), fixed(false), assigned(false), subnode_of(NULL),
+//      subnode_of_name(""), typecount(1) {;}
 
+    tb_vnode(fstring _name, fstring _type, int _typecount):
+	name(_name), type(_type), typecount(_typecount),
+	desires(), vclass(NULL),
+        fixed(false), assigned(false), assignment(),
+	disallow_trivial_mix(false), nontrivial_links(0), trivial_links(0),
+	subnode_of(NULL), subnode_of_name(""), subnodes(),
+#ifdef PER_VNODE_TT
+	num_links(0), total_bandwidth(0),
+#endif
+        link_counts()
+    {
+	;
+    }
+    
   friend ostream &operator<<(ostream &o, const tb_vnode& node)
   {
     o << "tb_vnode: " << node.name << " (" << &node << ")" << endl;

@@ -5,7 +5,7 @@
    All rights reserved.
 -->
 <top pid="testbed" eid="xmltop" xmlns="http://emulab.net/resources/vtop/1.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemalocation="http://emulab.net/resources/vtop/1.0 file:/home/ricci/testbed/assign/top.xsd">
-    <node name="nodeA"><ass/>
+    <node name="nodeA">
         <node_type>
             <type_name>pc</type_name>
         </node_type>

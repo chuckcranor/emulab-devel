@@ -101,32 +101,27 @@ int parse_top(tb_vgraph &VG, istream& i)
 	}
 
 	num_nodes++;
-	tb_vnode *v = new tb_vnode();
+        tb_vclass *vclass;
+	
+	name_vclass_map::iterator dit = vclass_map.find(type);
+	if (dit != vclass_map.end()) {
+	  type = "";
+	  vclass = (*dit).second;
+	} else {
+	  vclass = NULL;
+	  if (vtypes.find(type) == vtypes.end()) {
+	      vtypes[type] = typecount;
+	  } else {
+	      vtypes[type] += typecount;
+	  }
+	}
+
+	tb_vnode *v = new tb_vnode(name,type,typecount);
+	v->vclass = vclass;
 	vvertex vv = add_vertex(VG);
 	vname2vertex[name] = vv;
 	virtual_nodes.push_back(vv);
 	put(vvertex_pmap,vv,v);
-	v->name = name;
-	name_vclass_map::iterator dit = vclass_map.find(type);
-	if (dit != vclass_map.end()) {
-	  v->type="";
-	  v->vclass = (*dit).second;
-	} else {
-	  v->type=type;
-	  v->vclass=NULL;
-	  if (vtypes.find(v->type) == vtypes.end()) {
-	      vtypes[v->type] = typecount;
-	  } else {
-	      vtypes[v->type] += typecount;
-	  }
-	}
-	v->typecount = typecount;
-#ifdef PER_VNODE_TT
-	v->num_links = 0;
-	v->total_bandwidth = 0;
-#endif
-	v->disallow_trivial_mix = false;
-	v->nontrivial_links = v->trivial_links = 0;
 	
 	for (unsigned int i = 3;i < parsed_line.size();++i) {
 	  string desirename,desireweight;

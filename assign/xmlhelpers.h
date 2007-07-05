@@ -16,6 +16,8 @@ using namespace std;
 #include <xercesc/util/XMLString.hpp>
 XERCES_CPP_NAMESPACE_USE
 
+#include "fstring.h"
+
 /*
  * This class provides for conversion between Xerces' internal XMLCh* type
  * (which is 16 bits wide to hold international characters) and simple
@@ -30,19 +32,30 @@ XERCES_CPP_NAMESPACE_USE
 class XStr {
     public:
         XStr(char *_str) : cstr(_str), cstr_mine(false), xmlstr(NULL),
-                           xmlstr_mine(false) { ; };
+                           xmlstr_mine(false), fstr(NULL),
+			   fstr_mine(false) { ; };
         XStr(const XMLCh *_str) : cstr(NULL), cstr_mine(false), xmlstr(NULL),
-                           xmlstr_mine(true) {
+                           xmlstr_mine(true), fstr(NULL), fstr_mine(false) {
             xmlstr = XMLString::replicate(_str);
         };
+	XStr(fstring &_str) : fstr_mine(true), cstr_mine(false), xmlstr(NULL),
+			     xmlstr_mine(false) {
+	    fstr = new fstring(_str);
+	    cstr = fstr->c_str();
+	};
 
         ~XStr() {
             if (cstr_mine && cstr != NULL) {
-                XMLString::release(&cstr);
+		// XXX: This sure looks like a bug!
+		//XMLString::release(&cstr);
+		delete cstr;
             }
             if (xmlstr_mine && xmlstr != NULL) {
                 XMLString::release(&xmlstr);
             }
+	    if (fstr_mine && fstr != NULL) {
+		delete fstr;
+	    }
         };
 
 	/*
@@ -59,13 +72,24 @@ class XStr {
 	/*
 	 * convert to a C-style string (null-terminated char*)
 	 */
-        char *c() {
+        const char *c() {
             if (this->cstr == NULL) {
                 this->cstr = XMLString::transcode(this->xmlstr);
                 this->cstr_mine = true;
             }
             return this->cstr;
         };
+	
+	/*
+	 * convert to the fstring type used internally in assign
+	 */
+	fstring *f() {
+	    if (this->fstr == NULL) {
+		this->fstr = new fstring(this->c());
+		this->fstr_mine = true;
+	    }
+	    return this->fstr;
+	};
 
         bool operator==(const char * const other) {
             return (strcmp(this->c(),other) == 0);
@@ -75,20 +99,24 @@ class XStr {
         };
 	
 	/*
-	 * Crazy, I know, but this is how you tell C++ it can implicilty convert an
-	 * XString into other data types. Thanks to Jon Duerig and the ghost of Bjarne
-	 * Stroustrup (really, his C++ book) for helping me figure this out.
+	 * Crazy, I know, but this is how you tell C++ it can implicilty convert
+	 * an XString into other data types. Thanks to Jon Duerig and the ghost 
+	 * of Bjarne Stroustrup (really, his C++ book) for helping me figure 
+	 * this out.
 	 */
-	operator char*() { return this->c(); };
-	// Note, this operator commented out because some functions that can take
-	// either a char* or an XMLch* get confused if we have conversions to both
+	operator const char*() { return this->c(); };
+	// Note, this operator commented out because some functions that can 
+	// take either a char* or an XMLch* get confused if we have conversions
+	// to both
 	//operator const XMLCh*() { return this->x(); };
 
     private:
-        char *cstr;
+	const char *cstr;
         bool cstr_mine;
         XMLCh *xmlstr;
-        bool xmlstr_mine;
+	bool xmlstr_mine; 
+	fstring *fstr;
+	bool fstr_mine;
 };
 
 #endif

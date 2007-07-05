@@ -189,7 +189,7 @@ public:
   // NOTE: Parallel data strucure, see below!
   typedef hash_map<fstring,type_record*> types_map;
   types_map types;
-  
+
   // Same as above, but a list for fast iteration
   // If you touch the above list, you must touch this one too
   typedef list<type_record*> types_list;

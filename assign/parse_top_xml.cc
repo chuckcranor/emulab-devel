@@ -26,6 +26,7 @@ using namespace boost;
 #include "string.h"
 #include "parse_top_xml.h"
 #include "xmlhelpers.h"
+#include "parse_error_handler.h"
 
 extern name_vvertex_map vname2vertex;
 extern name_name_map fixed_nodes;
@@ -33,6 +34,9 @@ extern name_name_map node_hints;
 extern name_count_map vtypes;
 extern name_list_map vclasses;
 extern vvertex_vector virtual_nodes;
+
+#define XMLDEBUG(x) (cout << x);
+
 
 #define top_error(s) errors++;cout << "TOP:" << line << ": " << s << endl
 #define top_error_noline(s) errors++;cout << "TOP: " << s << endl
@@ -69,21 +73,6 @@ int bind_top_subnodes() {
 
 extern name_vclass_map vclass_map;
 
-void ParsePtopErrorHandler::error(const SAXParseException& toCatch) {    
-    cerr << "Error at file \"" << XStr(toCatch.getSystemId())
-		 << "\", line " << toCatch.getLineNumber()
-		 << ", column " << toCatch.getColumnNumber()
-         << "\n   Message: " << XStr(toCatch.getMessage()) << endl;
-    this->hadError = true;
-}
-void ParsePtopErrorHandler::fatalError(const SAXParseException& toCatch) {
-    XERCES_STD_QUALIFIER cerr << "Fatal Error at file \"" << XStr(toCatch.getSystemId())
-		 << "\", line " << toCatch.getLineNumber()
-		 << ", column " << toCatch.getColumnNumber()
-         << "\n   Message: " << XStr(toCatch.getMessage()) << XERCES_STD_QUALIFIER endl;
-    this->hadError = true;
-}
-
 int parse_top_xml(tb_vgraph &VG, char* filename) {
     
     /*
@@ -103,18 +92,21 @@ int parse_top_xml(tb_vgraph &VG, char* filename) {
     
     //parser->loadGrammar("top.xsd",1,true);
     
-    ParsePtopErrorHandler *handler = new ParsePtopErrorHandler();
+    ParseErrorHandler *handler = new ParseErrorHandler();
     parser->setErrorHandler(handler);
-
+    
+    
     /*
      * Do the actual parsing
-     * TODO: Catch exceptions
      */
     parser->parse(filename);
     
     DOMDocument *doc = parser->getDocument();
+    
     DOMElement *root = doc->getDocumentElement();
-    cerr << XStr(root->getNodeName()) << endl;
+    
+    XMLDEBUG(cerr << "top root node: " << XStr(root->getNodeName()) 
+	     << endl);
     
     if (handler->sawError()) {
 	exit(EXIT_FATAL);
@@ -122,25 +114,57 @@ int parse_top_xml(tb_vgraph &VG, char* filename) {
     
     /*
      * Parse the nodes
+     * Design decision - do we simply ask for all nodes, or do we actually walk
+     * the whole structure?
+     * We're not going to do much error checking in here, as we assume
+     * that a lot of it was done by the validator.
      */
     DOMNodeList *nodes = root->getElementsByTagName(XStr("node").x());
-    cerr << "Found " << nodes->getLength() << " nodes" << endl;
+    XMLDEBUG(cerr << "Found " << nodes->getLength() << " nodes" << endl);
     
     for (int i = 0; i < nodes->getLength(); i++) {
+	//DOMElement *node = dynamic_cast<DOMElement*>(nodes->item(i));
 	DOMNode *node = nodes->item(i);
 	DOMNamedNodeMap *atts = node->getAttributes();
-	char *name = XStr(atts->getNamedItem(XStr("name").x())->getNodeValue());
-	cerr << "Node name is: " << name << endl;
+	XStr *xstr = new XStr(atts->getNamedItem(XStr("name").x())->getNodeValue());
+	fstring *name = xstr->f();
+	XMLDEBUG(cerr << "Node name is: " << *name << endl);
+	cerr << "XML node name is: " << XStr(node->getNodeName()) << endl;
+	cerr << "XML node type is: " << node->getNodeType() << endl;
+	
+	DOMElement *element = static_cast<DOMElement *>(node);
+	//DOMElement *element = dynamic_cast<DOMElement *>(node);
+	//DOMElement *element = (DOMElement*)node;
+	cerr << "Element after casting is " << element << endl;
+	
+	/*
+	 * Get the node's type and the number of slots it occupies
+	 */
+	DOMNodeList *typeL = element->getElementsByTagName(XStr("type_name").x());
+	DOMElement *type = static_cast<DOMElement *>(typeL->item(0));
+	//DOMElement *type = dynamic_cast<DOMElement *>(typeL->item(0));
+	//DOMElement *type = (DOMElement *)(typeL->item(0));
+	const XMLCh *typeX = type->getFirstChild()->getNodeValue();
+	
+	tb_vnode *v = new tb_vnode(*name,XStr(typeX).c(),1);
+	vvertex vv = add_vertex(VG);
+	vname2vertex[*name] = vv;
+	virtual_nodes.push_back(vv);
+	put(vvertex_pmap,vv,v);
+	
+	delete xstr;
     }
  
-    DOMNodeList *links = root->getElementsByTagName(XStr("links").x());
+    DOMNodeList *links = root->getElementsByTagName(XStr("links").x());        
     cerr << "Found " << links->getLength() << " links" << endl;
 	
     for (int i = 0; i < links->getLength(); i++) {
 	DOMNode *link = links->item(i);
 	DOMNamedNodeMap *atts = link->getAttributes();
-	char *name = XStr(atts->getNamedItem(XStr("name").x())->getNodeValue());
+	XStr *xstr = new XStr(atts->getNamedItem(XStr("name").x())->getNodeValue());
+	fstring *name = xstr->f();
 	cerr << "Link name is: " << name << endl;
+	delete xstr;
     }
     
     // Clean up parser memory
