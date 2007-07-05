@@ -4,6 +4,8 @@
  * All rights reserved.
  */
 
+static const char rcsid[] = "$Id: anneal.cc,v 1.45.8.1 2007-07-05 23:50:37 ricci Exp $";
+
 #include "anneal.h"
 
 #include "virtual.h"
