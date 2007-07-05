@@ -4,6 +4,8 @@
  * All rights reserved.
  */
 
+static const char rcsid[] = "$Id: parse_top_xml.cc,v 1.3.8.2 2007-07-05 23:59:23 ricci Exp $";
+
 #include "port.h"
 
 #include <boost/config.hpp>

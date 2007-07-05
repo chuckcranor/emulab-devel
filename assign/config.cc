@@ -4,6 +4,8 @@
  * All rights reserved.
  */
 
+static const char rcsid[] = "$Id: config.cc,v 1.4.56.1 2007-07-05 23:59:23 ricci Exp $";
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>

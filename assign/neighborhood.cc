@@ -9,6 +9,8 @@
  * solution.
  */
 
+static const char rcsid[] = "$Id: neighborhood.cc,v 1.3.8.1 2007-07-05 23:59:23 ricci Exp $";
+
 #include "neighborhood.h"
 
 // From asssign.cc

@@ -8,6 +8,8 @@
  * featuredesire.cc - implementation of the objects from featuredesire.h
  */
 
+static const char rcsid[] = "$Id: featuredesire.cc,v 1.4.8.1 2007-07-05 23:59:23 ricci Exp $";
+
 #include "featuredesire.h"
 #include <iostream>
 using namespace std;

@@ -4,6 +4,8 @@
  * All rights reserved.
  */
 
+static const char rcsid[] = "$Id: parser.cc,v 1.8.8.1 2007-07-05 23:59:23 ricci Exp $";
+
 #include "parser.h"
 
 #include <iostream>

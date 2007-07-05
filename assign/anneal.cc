@@ -1,10 +1,10 @@
 /*
  * EMULAB-COPYRIGHT
- * Copyright (c) 2003-2006 University of Utah and the Flux Group.
+ * Copyright (c) 2003-2007 University of Utah and the Flux Group.
  * All rights reserved.
  */
 
-static const char rcsid[] = "$Id: anneal.cc,v 1.45.8.1 2007-07-05 23:50:37 ricci Exp $";
+static const char rcsid[] = "$Id: anneal.cc,v 1.45.8.2 2007-07-05 23:59:23 ricci Exp $";
 
 #include "anneal.h"
 

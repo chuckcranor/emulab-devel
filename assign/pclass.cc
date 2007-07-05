@@ -4,6 +4,8 @@
  * All rights reserved.
  */
 
+static const char rcsid[] = "$Id: pclass.cc,v 1.29.8.1 2007-07-05 23:59:23 ricci Exp $";
+
 #include "port.h"
 
 #include <stdlib.h>

@@ -4,6 +4,7 @@
  * All rights reserved.
  */
 
+static const char rcsid[] = "$Id: score.cc,v 1.63.8.1 2007-07-05 23:59:23 ricci Exp $";
 
 #include "port.h"
 

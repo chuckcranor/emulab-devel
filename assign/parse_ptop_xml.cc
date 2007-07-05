@@ -8,6 +8,8 @@
  * Parsing for the (experimental) ptop XML format
  */
 
+static const char rcsid[] = "$Id: parse_ptop_xml.cc,v 1.3.8.1 2007-07-05 23:59:23 ricci Exp $";
+
 #include "port.h"
 
 #include <boost/graph/adjacency_list.hpp>

@@ -4,6 +4,8 @@
  * All rights reserved.
  */
 
+static const char rcsid[] = "$Id: solution.cc,v 1.12.8.1 2007-07-05 23:59:23 ricci Exp $";
+
 #include "solution.h"
 #include "vclass.h"
 #include <string>
