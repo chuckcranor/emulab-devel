@@ -4,7 +4,7 @@
  * All rights reserved.
  */
 
-static const char rcsid[] = "$Id: anneal.cc,v 1.45.8.2 2007-07-05 23:59:23 ricci Exp $";
+static const char rcsid[] = "$Id: anneal.cc,v 1.45.8.3 2007-07-06 23:40:35 ricci Exp $";
 
 #include "anneal.h"
 
@@ -419,7 +419,6 @@ void anneal(bool scoring_selftest, double scale_neighborhood,
   // Crap added by ricci
 #ifdef MELT
   bool melting;
-  double meltstart;
 #endif
   int nincreases, ndecreases;
   double avgincrease;

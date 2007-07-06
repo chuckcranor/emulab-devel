@@ -37,6 +37,7 @@ class solution {
 	// TODO: make sure copying the assignments doesn't alias!
 	this->vnode_assignments = other.vnode_assignments;
 	this->vtype_assignments = other.vtype_assignments;
+	return(*this);
     };
     
     inline bool is_assigned(const vvertex &vv) const {

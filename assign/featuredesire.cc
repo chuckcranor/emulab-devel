@@ -8,7 +8,7 @@
  * featuredesire.cc - implementation of the objects from featuredesire.h
  */
 
-static const char rcsid[] = "$Id: featuredesire.cc,v 1.4.8.1 2007-07-05 23:59:23 ricci Exp $";
+static const char rcsid[] = "$Id: featuredesire.cc,v 1.4.8.2 2007-07-06 23:40:35 ricci Exp $";
 
 #include "featuredesire.h"
 #include <iostream>
@@ -83,7 +83,7 @@ tb_featuredesire::tb_featuredesire(fstring _my_name) : my_name(_my_name),
 ostream &operator<<(ostream &o, const tb_featuredesire &fd) {
     // Perhaps this should print more information like the flags and/or global
     // use count
-    o << fd.my_name;
+    return (o << fd.my_name);
 }
 
 

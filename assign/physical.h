@@ -179,9 +179,9 @@ public:
 
 	  friend ostream &operator<<(ostream &o, const type_record& node)
 	  {
-	      o << "max_load = " << node.max_load <<
+	      return (o << "max_load = " << node.max_load <<
 		   " current_load = " << node.current_load <<
-		   " is_static = " << node.is_static;
+		   " is_static = " << node.is_static);
 	  }
   };
 
