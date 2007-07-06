@@ -72,8 +72,8 @@ class PtopParserHandlers : public DefaultHandler {
 	
 	unsigned int pnode_count;
 	
-        tb_pgraph PG;
-        tb_sgraph SG;
+        tb_pgraph &PG;
+        tb_sgraph &SG;
 
 	// Element handling functions
         void startNode(const Attributes& attrs);

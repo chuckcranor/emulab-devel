@@ -1,10 +1,10 @@
 /*
  * EMULAB-COPYRIGHT
- * Copyright (c) 2005-2006 University of Utah and the Flux Group.
+ * Copyright (c) 2005-2007 University of Utah and the Flux Group.
  * All rights reserved.
  */
 
-static const char rcsid[] = "$Id: parse_top_xml.cc,v 1.3.8.2 2007-07-05 23:59:23 ricci Exp $";
+static const char rcsid[] = "$Id: parse_top_xml.cc,v 1.3.8.3 2007-07-06 23:40:08 ricci Exp $";
 
 #include "port.h"
 
