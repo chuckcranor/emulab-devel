@@ -1,72 +1,204 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!--
-   EMULAB-COPYRIGHT
-   Copyright (c) 2005-2006 University of Utah and the Flux Group.
-   All rights reserved.
+  
+  EMULAB-COPYRIGHT
+  Copyright (c) 2005-2007 University of Utah and the Flux Group.
+  All rights reserved.
+  
 -->
-<element name="top" xmlns:a="http://relaxng.org/ns/compatibility/annotations/1.0" ns="http://emulab.net/resources/vtop/1.0" xmlns="http://relaxng.org/ns/structure/1.0">
-  <attribute name="pid">
-    <a:documentation>Project ID</a:documentation>
-  </attribute>
-  <attribute name="eid">
-    <a:documentation>Experiment ID</a:documentation>
-  </attribute>
-  <optional>
-    <attribute name="gid">
-      <a:documentation>Group ID (optional)</a:documentation>
-    </attribute>
-  </optional>
-  <optional>
-    <attribute name="uid">
-      <a:documentation>User ID owning the experiment (optional)</a:documentation>
-    </attribute>
-  </optional>
-  <zeroOrMore>
-    <element name="node">
-      <a:documentation>Nodes in the topology - zero or more</a:documentation>
-      <attribute name="name"/>
-      <element name="node_type">
-        <element name="type_name">
-          <text/>
-        </element>
-        <optional>
-          <element name="type_slots">
-            <a:documentation>TODO - Change type</a:documentation>
-            <text/>
-          </element>
-        </optional>
-      </element>
+<grammar xmlns:a="http://relaxng.org/ns/compatibility/annotations/1.0" ns="http://emulab.net/resources/vtop/0.2" xmlns="http://relaxng.org/ns/structure/1.0" datatypeLibrary="http://www.w3.org/2001/XMLSchema-datatypes">
+  <start>
+    <element name="top">
+      <attribute name="pid">
+        <a:documentation>Project ID</a:documentation>
+      </attribute>
+      <attribute name="eid">
+        <a:documentation>Experiment ID</a:documentation>
+      </attribute>
+      <optional>
+        <attribute name="gid">
+          <a:documentation>Group ID (optional)</a:documentation>
+        </attribute>
+      </optional>
+      <optional>
+        <attribute name="uid">
+          <a:documentation>User ID owning the experiment (optional)</a:documentation>
+        </attribute>
+      </optional>
       <zeroOrMore>
-        <element name="desire">
-          <element name="desire_name">
-            <text/>
-          </element>
-          <element name="desire_weight">
-            <text/>
-          </element>
-          <optional>
-            <element name="violatable">
-              <empty/>
+        <element name="node">
+          <a:documentation>Nodes in the topology - zero or more</a:documentation>
+          <attribute name="name">
+            <a:documentation>Name of the node - each node name must be unique within the 
+top element</a:documentation>
+          </attribute>
+          <zeroOrMore>
+            <element name="node_type">
+              <a:documentation>Types of virtual nodes that this physical node can satisfy</a:documentation>
+              <element name="type_name">
+                <a:documentation>Name of the type - will almost certainly not be unique</a:documentation>
+                <text/>
+              </element>
+              <choice>
+                <a:documentation>How many virtual nodes of this type this physical node can
+handle.</a:documentation>
+                <element name="type_slots">
+                  <data type="integer">
+                    <param name="minInclusive">1</param>
+                  </data>
+                </element>
+                <element name="unlimited">
+                  <empty/>
+                </element>
+              </choice>
+              <optional>
+                <element name="static">
+                  <a:documentation>A flag that indicates that this physical node *always*
+has this type - a node is only allowed to have one dynamic
+(ie. not flagged as static) type at a time, but any number
+of static types at a time</a:documentation>
+                  <empty/>
+                </element>
+              </optional>
             </element>
-          </optional>
+          </zeroOrMore>
+          <zeroOrMore>
+            <element name="desire">
+              <a:documentation>Desires of this node, which should (or must) be matched by the
+physical node we are assigned to</a:documentation>
+              <ref name="FeatureSpec"/>
+            </element>
+          </zeroOrMore>
+          <zeroOrMore>
+            <element name="node_option">
+              <a:documentation>Flags for this virtual node</a:documentation>
+              <element name="option_name">
+                <a:documentation>Name of the option</a:documentation>
+                <choice>
+                  <value>trivial_bw</value>
+                  <value>subnode_of</value>
+                  <value>unique</value>
+                </choice>
+              </element>
+              <optional>
+                <element name="option_value">
+                  <a:documentation>Value for the option - not all options require values</a:documentation>
+                  <text/>
+                </element>
+              </optional>
+            </element>
+          </zeroOrMore>
         </element>
       </zeroOrMore>
       <zeroOrMore>
-        <element name="node_option">
-          <element name="option_name">
-            <text/>
+        <element name="link">
+          <a:documentation>Links in the topology - zero or more</a:documentation>
+          <attribute name="name">
+            <a:documentation>Name of the link - must be unique in the top</a:documentation>
+          </attribute>
+          <element name="source_interface">
+            <a:documentation>First interface for this link - links are assumed to be
+symmetric, so the order of the interfaces does not currently
+matter</a:documentation>
+            <ref name="InterfaceSpec"/>
           </element>
-          <element name="option_value">
-            <text/>
+          <element name="destination_interface">
+            <a:documentation>Second interface for this link</a:documentation>
+            <ref name="InterfaceSpec"/>
           </element>
+          <element name="bandwidth">
+            <a:documentation>Bandwidth of the link in kbps</a:documentation>
+            <data type="float">
+              <param name="minExclusive">0.0</param>
+            </data>
+          </element>
+          <element name="latency">
+            <a:documentation>Latency of the link in ms</a:documentation>
+            <data type="float">
+              <param name="minInclusive">0.0</param>
+            </data>
+          </element>
+          <element name="packet_loss">
+            <a:documentation>Static packet loss probability of the link as a fraction
+(ie. 0.01 == 1%)</a:documentation>
+            <data type="float">
+              <param name="minInclusive">0.0</param>
+            </data>
+          </element>
+          <oneOrMore>
+            <element name="link_type">
+              <a:documentation>Type of virtual link this physical link is allowed to satisfy</a:documentation>
+              <element name="type_name">
+                <text/>
+              </element>
+            </element>
+          </oneOrMore>
         </element>
       </zeroOrMore>
+      <element name="type-limit">
+        <a:documentation>This is, in essence, a policy statement, and thus, it may
+move out of the ptop file</a:documentation>
+        <attribute name="node_type"/>
+        <attribute name="limit">
+          <data type="integer">
+            <param name="minInclusive">0</param>
+          </data>
+        </attribute>
+      </element>
     </element>
-  </zeroOrMore>
-  <zeroOrMore>
-    <element name="link">
-      <a:documentation>Links in the topology - zero or more</a:documentation>
+  </start>
+  <!--
+    These should probably go into a seperate file included by both this file
+    and the ptop spec
+  -->
+  <define name="InterfaceSpec">
+    <element name="node_name">
+      <a:documentation>Name of the node, which must match one of the nodes in this top</a:documentation>
       <text/>
     </element>
-  </zeroOrMore>
-</element>
+    <element name="interface">
+      <a:documentation>Name of the interface itself</a:documentation>
+      <text/>
+    </element>
+  </define>
+  <define name="FeatureSpec">
+    <element name="feature_name">
+      <a:documentation>Name of this feature</a:documentation>
+      <text/>
+    </element>
+    <element name="feature_penalty">
+      <a:documentation>The penalty associated with this feature</a:documentation>
+      <data type="float">
+        <param name="minInclusive">0.0</param>
+      </data>
+    </element>
+    <optional>
+      <element name="violatable">
+        <a:documentation>If this flag is present, not having the feature is considered a violation</a:documentation>
+        <empty/>
+      </element>
+    </optional>
+    <optional>
+      <choice>
+        <a:documentation>Flags for special types of operators</a:documentation>
+        <group>
+          <element name="global">
+            <empty/>
+          </element>
+          <element name="operator">
+            <value>OnceOnly</value>
+            <value>FirstFree</value>
+          </element>
+        </group>
+        <group>
+          <element name="local">
+            <empty/>
+          </element>
+          <element name="operator">
+            <value>+</value>
+          </element>
+        </group>
+      </choice>
+    </optional>
+  </define>
+</grammar>
