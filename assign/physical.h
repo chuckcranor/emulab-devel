@@ -128,8 +128,8 @@ class tb_ptype {
 		return 0;
 	    }
 	}
-	inline void set_max_users(int users) {
-	    max_users = users;
+	inline void set_max_users(int _max_users) {
+	    max_users = _max_users;
 	}
 	inline void add_slots(int additional_slots) {
 	    slots += additional_slots;

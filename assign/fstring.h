@@ -196,7 +196,7 @@ template<> struct hash<fstring> {
   }
 };
 #ifdef NEW_GCC
-};
+}
 #endif
 
 #endif /*FSTRING_H_*/

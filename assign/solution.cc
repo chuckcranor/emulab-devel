@@ -4,7 +4,7 @@
  * All rights reserved.
  */
 
-static const char rcsid[] = "$Id: solution.cc,v 1.12.8.1 2007-07-05 23:59:23 ricci Exp $";
+static const char rcsid[] = "$Id: solution.cc,v 1.12.8.2 2007-07-13 22:02:15 ricci Exp $";
 
 #include "solution.h"
 #include "vclass.h"
@@ -284,6 +284,7 @@ void solution_edge_writer::operator()(ostream &out,const vedge &v) const {
 	    }
 	    break;
 	case tb_link_info::LINK_TRIVIAL: style="dashed";color="blue"; break;
+	case tb_link_info::LINK_DELAYED: style="dotted";color="green"; break;
     }
     out << "style=" << style << " color=" << color;
     if (label.size() != 0) {

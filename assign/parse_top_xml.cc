@@ -4,7 +4,7 @@
  * All rights reserved.
  */
 
-static const char rcsid[] = "$Id: parse_top_xml.cc,v 1.3.8.3 2007-07-06 23:40:08 ricci Exp $";
+static const char rcsid[] = "$Id: parse_top_xml.cc,v 1.3.8.4 2007-07-13 22:02:15 ricci Exp $";
 
 #include "port.h"
 
@@ -53,7 +53,7 @@ int bind_top_subnodes() {
 
     // Iterate through all vnodes looking for ones that are subnodes
     vvertex_iterator vit,vendit;
-    tie(vit,vendit) = vertices(VG);
+    tie(vit,vendit) = vertices(vg);
     for (;vit != vendit;++vit) {
 	tb_vnode *vnode = get(vvertex_pmap, *vit);
 	if (!vnode->subnode_of_name.empty()) {
@@ -75,7 +75,7 @@ int bind_top_subnodes() {
 
 extern name_vclass_map vclass_map;
 
-int parse_top_xml(tb_vgraph &VG, char* filename) {
+int parse_top_xml(tb_vgraph &vg, char* filename) {
     
     /*
      * Initialize the XML parser
@@ -124,7 +124,7 @@ int parse_top_xml(tb_vgraph &VG, char* filename) {
     DOMNodeList *nodes = root->getElementsByTagName(XStr("node").x());
     XMLDEBUG(cerr << "Found " << nodes->getLength() << " nodes" << endl);
     
-    for (int i = 0; i < nodes->getLength(); i++) {
+    for (size_t i = 0; i < nodes->getLength(); i++) {
 	//DOMElement *node = dynamic_cast<DOMElement*>(nodes->item(i));
 	DOMNode *node = nodes->item(i);
 	DOMNamedNodeMap *atts = node->getAttributes();
@@ -149,7 +149,7 @@ int parse_top_xml(tb_vgraph &VG, char* filename) {
 	const XMLCh *typeX = type->getFirstChild()->getNodeValue();
 	
 	tb_vnode *v = new tb_vnode(*name,XStr(typeX).c(),1);
-	vvertex vv = add_vertex(VG);
+	vvertex vv = add_vertex(vg);
 	vname2vertex[*name] = vv;
 	virtual_nodes.push_back(vv);
 	put(vvertex_pmap,vv,v);
@@ -160,7 +160,7 @@ int parse_top_xml(tb_vgraph &VG, char* filename) {
     DOMNodeList *links = root->getElementsByTagName(XStr("links").x());        
     cerr << "Found " << links->getLength() << " links" << endl;
 	
-    for (int i = 0; i < links->getLength(); i++) {
+    for (size_t i = 0; i < links->getLength(); i++) {
 	DOMNode *link = links->item(i);
 	DOMNamedNodeMap *atts = link->getAttributes();
 	XStr *xstr = new XStr(atts->getNamedItem(XStr("name").x())->getNodeValue());
@@ -176,7 +176,7 @@ int parse_top_xml(tb_vgraph &VG, char* filename) {
 }
 
 #if 0
-int parse_top(tb_vgraph &VG, istream& i)
+int parse_top(tb_vgraph &vg, istream& i)
 {
   string_vector parsed_line;
   int errors=0,line=0;
@@ -211,7 +211,7 @@ int parse_top(tb_vgraph &VG, istream& i)
 
 	num_nodes++;
 	tb_vnode *v = new tb_vnode();
-	vvertex vv = add_vertex(VG);
+	vvertex vv = add_vertex(vg);
 	vname2vertex[name] = vv;
 	virtual_nodes.push_back(vv);
 	put(vvertex_pmap,vv,v);
@@ -346,7 +346,7 @@ int parse_top(tb_vgraph &VG, istream& i)
 
 	vvertex node1 = vname2vertex[src];
 	vvertex node2 = vname2vertex[dst];
-	e = add_edge(node1,node2,VG).first;
+	e = add_edge(node1,node2,vg).first;
 	tb_vlink *l = new tb_vlink();
 	l->src = node1;
 	l->dst = node2;

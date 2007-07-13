@@ -4,7 +4,7 @@
  * All rights reserved.
  */
 
-static const char rcsid[] = "$Id: config.cc,v 1.4.56.1 2007-07-05 23:59:23 ricci Exp $";
+static const char rcsid[] = "$Id: config.cc,v 1.4.56.2 2007-07-13 22:02:15 ricci Exp $";
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -17,15 +17,15 @@ static const char rcsid[] = "$Id: config.cc,v 1.4.56.1 2007-07-05 23:59:23 ricci
  */
 
 void
-parse_options(char **argv, struct config_param options[], int nopt)
+parse_options(char **argv, struct config_param opts[], int nopt)
 {
   extern char **environ;
 
   /* get from environment first */
-  config_parse(environ, options, nopt);
+  config_parse(environ, opts, nopt);
 
   /* then command line */
-  config_parse(argv, options, nopt);
+  config_parse(argv, opts, nopt);
 }
 
 int

@@ -4,7 +4,7 @@
  * All rights reserved.
  */
 
-static const char rcsid[] = "$Id: anneal.cc,v 1.45.8.4 2007-07-13 20:28:02 ricci Exp $";
+static const char rcsid[] = "$Id: anneal.cc,v 1.45.8.5 2007-07-13 22:02:15 ricci Exp $";
 
 #include "anneal.h"
 
@@ -889,10 +889,10 @@ void anneal(bool scoring_selftest, double scale_neighborhood,
 #endif // SCORE_DEBUG
 	  tie(vit,veit) = vertices(VG);
 	  for (;vit!=veit;++vit) {
-	      tb_vnode *vn = get(vvertex_pmap,*vit);
-	      if (vn->assigned) {
-		  best_solution.set_assignment(*vit,vn->assignment);
-		  best_solution.set_vtype_assignment(*vit,vn->type);
+	      tb_vnode *vnode = get(vvertex_pmap,*vit);
+	      if (vnode->assigned) {
+		  best_solution.set_assignment(*vit,vnode->assignment);
+		  best_solution.set_vtype_assignment(*vit,vnode->type);
 	      } else {
 		  best_solution.clear_assignment(*vit);
 	      }
@@ -901,14 +901,14 @@ void anneal(bool scoring_selftest, double scale_neighborhood,
 	    //abstypes[*vit] = get(vvertex_pmap,*vit)->type;
 	  }
 	  
-	  vedge_iterator eit, eeit;
-	  tie(eit, eeit) = edges(VG);
-	  for (;eit!=eeit;++eit) {
-	      tb_vlink *vlink = get(vedge_pmap, *eit);
+	  vedge_iterator edge_it, edge_it_end;
+	  tie(edge_it, edge_it_end) = edges(VG);
+	  for (;edge_it!=edge_it_end;++edge_it) {
+	      tb_vlink *vlink = get(vedge_pmap, *edge_it);
 	      if (vlink->link_info.type_used != tb_link_info::LINK_UNMAPPED) {
-		  best_solution.set_link_assignment(*eit,vlink->link_info);
+		  best_solution.set_link_assignment(*edge_it,vlink->link_info);
 	      } else {
-		  best_solution.clear_link_assignment(*eit);
+		  best_solution.clear_link_assignment(*edge_it);
 	      }
 	  }	
 	  

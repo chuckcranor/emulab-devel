@@ -61,7 +61,6 @@ class violated_info {
 	int max_types;
 };
 
-extern double score;
 extern int violated;
 extern violated_info vinfo;
 extern bool allow_trivial_links;

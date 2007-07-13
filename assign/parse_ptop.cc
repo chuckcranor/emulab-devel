@@ -4,7 +4,7 @@
  * All rights reserved.
  */
 
-static const char rcsid[] = "$Id: parse_ptop.cc,v 1.41.6.1 2007-07-05 23:59:23 ricci Exp $";
+static const char rcsid[] = "$Id: parse_ptop.cc,v 1.41.6.2 2007-07-13 22:02:15 ricci Exp $";
 
 #include "port.h"
 
@@ -32,12 +32,12 @@ extern name_pvertex_map pname2vertex;
 // dependant on their ordering in the ptop file, which can be annoying to get
 // right.
 // Returns the number of errors found
-int bind_ptop_subnodes() {
+int bind_ptop_subnodes(tb_pgraph &pg) {
     int errors = 0;
 
     // Iterate through all pnodes looking for ones that are subnodes
     pvertex_iterator vit,vendit;
-    tie(vit,vendit) = vertices(PG);
+    tie(vit,vendit) = vertices(pg);
     for (;vit != vendit;++vit) {
 	tb_pnode *pnode = get(pvertex_pmap,*vit);
 	if (!pnode->subnode_of_name.empty()) {
@@ -56,16 +56,16 @@ int bind_ptop_subnodes() {
     return errors;
 }
 
-int parse_ptop(tb_pgraph &PG, tb_sgraph &SG, istream& i)
+int parse_ptop(tb_pgraph &pg, tb_sgraph &sg, istream& input)
 {
   int num_nodes = 0;
   int line=0,errors=0;
   char inbuf[16384];
   string_vector parsed_line;
 
-  while (!i.eof()) {
+  while (!input.eof()) {
     line++;
-    i.getline(inbuf,16384);
+    input.getline(inbuf,16384);
     parsed_line = split_line(inbuf,' ');
     if (parsed_line.size() == 0) {continue;}
 
@@ -78,7 +78,7 @@ int parse_ptop(tb_pgraph &PG, tb_sgraph &SG, istream& i)
 	num_nodes++;
 	fstring name = parsed_line[1];
 	bool isswitch = false;
-	pvertex pv = add_vertex(PG);
+	pvertex pv = add_vertex(pg);
 	tb_pnode *p = new tb_pnode(name);
 	put(pvertex_pmap,pv,p);
 	
@@ -120,7 +120,7 @@ int parse_ptop(tb_pgraph &PG, tb_sgraph &SG, istream& i)
 	    isswitch = true;
 	    p->is_switch = true;
 	    p->types["switch"] = new tb_pnode::type_record(1,false,ptype);
-	    svertex sv = add_vertex(SG);
+	    svertex sv = add_vertex(sg);
 	    tb_switch *s = new tb_switch();
 	    put(svertex_pmap,sv,s);
 	    s->mate = pv;
@@ -267,7 +267,7 @@ int parse_ptop(tb_pgraph &PG, tb_sgraph &SG, istream& i)
       tb_pnode *dstnode = get(pvertex_pmap,dstv);
       
       for (int cur = 0;cur<num;++cur) {
-	pedge pe = (add_edge(srcv,dstv,PG)).first;
+	pedge pe = (add_edge(srcv,dstv,pg)).first;
 	tb_plink *pl = new
 	    tb_plink(name,tb_plink::PLINK_NORMAL,link_type,srcmac,dstmac,
 		     srciface,dstiface);
@@ -291,7 +291,7 @@ int parse_ptop(tb_pgraph &PG, tb_sgraph &SG, istream& i)
 	  } else {
 	    svertex src_switch = get(pvertex_pmap,srcv)->sgraph_switch;
 	    svertex dst_switch = get(pvertex_pmap,dstv)->sgraph_switch;
-	    sedge swedge = add_edge(src_switch,dst_switch,SG).first;
+	    sedge swedge = add_edge(src_switch,dst_switch,sg).first;
 	    tb_slink *sl = new tb_slink();
 	    put(sedge_pmap,swedge,sl);
 	    sl->mate = pe;
@@ -302,11 +302,12 @@ int parse_ptop(tb_pgraph &PG, tb_sgraph &SG, istream& i)
 	dstnode->total_interfaces++;
 	srcnode->link_counts[link_type]++;
 	dstnode->link_counts[link_type]++;
-	for (int i = 8; i < parsed_line.size(); i++) {
-	  fstring link_type = parsed_line[i];
-	  pl->types.insert(link_type);
-	  srcnode->link_counts[link_type]++;
-	  dstnode->link_counts[link_type]++;
+	// There can be more than one link type
+	for (size_t i = 8; i < parsed_line.size(); i++) {
+	  fstring extra_link_type = parsed_line[i];
+	  pl->types.insert(extra_link_type);
+	  srcnode->link_counts[extra_link_type]++;
+	  dstnode->link_counts[extra_link_type]++;
 	}
 	if (ISSWITCH(srcnode) &&
 	    ! ISSWITCH(dstnode)) {
@@ -345,7 +346,7 @@ int parse_ptop(tb_pgraph &PG, tb_sgraph &SG, istream& i)
     }
   }
 
-  errors += bind_ptop_subnodes();
+  errors += bind_ptop_subnodes(pg);
 
   if (errors > 0) {exit(EXIT_FATAL);}
   

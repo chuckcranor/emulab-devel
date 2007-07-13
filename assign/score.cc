@@ -4,7 +4,7 @@
  * All rights reserved.
  */
 
-static const char rcsid[] = "$Id: score.cc,v 1.63.8.2 2007-07-13 20:28:03 ricci Exp $";
+static const char rcsid[] = "$Id: score.cc,v 1.63.8.3 2007-07-13 22:02:15 ricci Exp $";
 
 #include "port.h"
 
@@ -576,6 +576,7 @@ void resolve_link(vvertex vv, pvertex pv, tb_vnode *vnode, tb_pnode *pnode,
                 choice -= LINK_RESOLVE_INTERSWITCH; break;
               case tb_link_info::LINK_UNMAPPED:
               case tb_link_info::LINK_TRIVIAL:
+	      case tb_link_info::LINK_DELAYED:
                 cerr << "*** Internal error: Should not be here." <<
                   endl;
                 exit(EXIT_FATAL);
@@ -1139,6 +1140,7 @@ void score_link_info(vedge ve, tb_pnode *src_pnode, tb_pnode *dst_pnode, tb_vnod
     break;
 #endif
   case tb_link_info::LINK_UNMAPPED:
+  case tb_link_info::LINK_DELAYED:
     cout << "*** Internal error: Should not be here either." << endl;
     exit(EXIT_FATAL);
     break;

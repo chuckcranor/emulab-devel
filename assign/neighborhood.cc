@@ -9,7 +9,7 @@
  * solution.
  */
 
-static const char rcsid[] = "$Id: neighborhood.cc,v 1.3.8.1 2007-07-05 23:59:23 ricci Exp $";
+static const char rcsid[] = "$Id: neighborhood.cc,v 1.3.8.2 2007-07-13 22:02:15 ricci Exp $";
 
 #include "neighborhood.h"
 
@@ -134,14 +134,14 @@ tb_pnode *find_pnode_connected(vvertex vv, tb_vnode *vn) {
   for (int i = 0; vedge_it != end_vedge_it; vedge_it++, i++) {
     visit_order[i] = *vedge_it;
   }
-  for (int i = 0; i < visit_order.size(); i++) {
+  for (size_t i = 0; i < visit_order.size(); i++) {
 	int i1 = RANDOM() % visit_order.size();
 	int i2 = RANDOM() % visit_order.size();
 	vedge tmp = visit_order[i1];
 	visit_order[i1] = visit_order[i2];
 	visit_order[i2] = tmp;
   }
-  for (int i = 0; i < visit_order.size(); i++) {
+  for (size_t i = 0; i < visit_order.size(); i++) {
     vvertex neighbor_vv = target(visit_order[i],VG);
     tb_vnode *neighbor_vn = get(vvertex_pmap,neighbor_vv);
     //cerr << "    trying " << neighbor_vn->name << endl;

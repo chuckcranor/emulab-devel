@@ -588,11 +588,12 @@ int mapping_precheck() {
 
 		// Check to see if if the pnode has enough slots of the
 		// appropriate type available
-		tb_pnode::types_map::iterator mit = pnode->types.find(v->type);
-		if (mit == pnode->types.end()) {
+		tb_pnode::types_map::iterator type_iterator =
+		    pnode->types.find(v->type);
+		if (type_iterator == pnode->types.end()) {
 		    // Must have been a vtype to get here - ignore it
 		} else {
-		    if (v->typecount > mit->second->max_load) {
+		    if (v->typecount > type_iterator->second->max_load) {
 			// Nope, this vnode is too demanding
 			potential_match = false;
 		    }
@@ -642,11 +643,12 @@ int mapping_precheck() {
                 // ports on a switch available, but we could map by using
                 // the trunk links
                 if (this_type != "lan") {
-                  tb_vnode::link_counts_map::iterator vit;
-                  for (vit = v->link_counts.begin(); vit != v->link_counts.end();
-                      vit++) {
-                    fstring type = vit->first;
-                    int count = vit->second;
+                  tb_vnode::link_counts_map::iterator link_it;
+                  for (link_it = v->link_counts.begin();
+		       link_it != v->link_counts.end();
+                       link_it++) {
+                    fstring type = link_it->first;
+                    int count = link_it->second;
                     desired_links[type] = count;
                     if (pnode->link_counts.find(type) !=
                           pnode->link_counts.end()) {

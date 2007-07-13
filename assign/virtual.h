@@ -80,6 +80,7 @@ public:
     case LINK_INTRASWITCH : o << "LINK_INTRASWITCH"; break;
     case LINK_INTERSWITCH : o << "LINK_INTERSWITCH"; break;
     case LINK_TRIVIAL : o << "LINK_TRIVIAL"; break;
+    case LINK_DELAYED : o << "LINK_DELAYED"; break;
     }
     o << " Path: ";
     for (pedge_path::const_iterator it=link.plinks.begin();

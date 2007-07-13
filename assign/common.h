@@ -61,7 +61,7 @@ namespace __gnu_cxx
         }
     };
 #ifdef NEW_GCC
-};
+}
 #endif
 
 
