@@ -15,6 +15,10 @@
 #include <iostream>
 using namespace std;
 
+// The weight at which a feature or desire triggers a violations if
+// unstatisfied or unused
+const float FD_VIOLATION_WEIGHT = 1.0;
+
 /*
  * Base class for features and desires - not intended to be used directly, only
  * to be subclassed by tb_feature and tb_desire

@@ -4,7 +4,7 @@
  * All rights reserved.
  */
 
-static const char rcsid[] = "$Id: anneal.cc,v 1.45.8.3 2007-07-06 23:40:35 ricci Exp $";
+static const char rcsid[] = "$Id: anneal.cc,v 1.45.8.4 2007-07-13 20:28:02 ricci Exp $";
 
 #include "anneal.h"
 
@@ -49,6 +49,35 @@ name_name_map node_hints;
 #ifdef GNUPLOT_OUTPUT
 extern FILE *scoresout, *tempout, *deltaout;
 #endif
+
+/*
+ * Parameters used to control annealing
+ */
+int init_temp = 10;
+int temp_prob = 130;
+#ifdef LOW_TEMP_STOP
+float temp_stop = .005;
+#else
+float temp_stop = 2;
+#endif
+int CYCLES = 20;
+
+// The following are basically arbitrary constants
+// Initial acceptance ratio for melting
+float X0 = .95;
+#ifdef LOCAL_DERIVATIVE
+float epsilon = 0.0001;
+#else
+float epsilon = 0.01;
+#endif
+float delta = 2;
+
+// Number of runs to spend melting
+int melt_trans = 1000;
+int min_neighborhood_size = 1000;
+
+float temp_rate = 0.9;
+
 
 // Determines whether to accept a change of score difference 'change' at
 // temperature 'temperature'.
@@ -189,15 +218,10 @@ void anneal(bool scoring_selftest, double scale_neighborhood,
   double scorediff;
 
   int nnodes = num_vertices(VG);
-  int npnodes = num_vertices(PG);
+  //int npnodes = num_vertices(PG);
   int npclasses = pclasses.size();
   
   float cycles = CYCLES*(float)(nnodes + num_edges(VG) + PHYSICAL(npnodes));
-  float optimal = OPTIMAL_SCORE(num_edges(VG),nnodes);
-    
-#ifdef STATS
-  cout << "STATS_OPTIMAL = " << optimal << endl;
-#endif
 
   int mintrans = (int)cycles;
   int trans;
@@ -216,7 +240,7 @@ void anneal(bool scoring_selftest, double scale_neighborhood,
   vvertex_int_priority_queue unassigned_nodes;
 
 #ifdef VERBOSE
-  cout << "Initialized to cycles="<<cycles<<" optimal="<<optimal<<" mintrans="
+  cout << "Initialized to cycles="<<cycles<<" mintrans="
        << mintrans<<" naccepts="<<naccepts<< endl;
 #endif
 
@@ -747,13 +771,7 @@ void anneal(bool scoring_selftest, double scale_neighborhood,
        * this transition
        */
       bool accepttrans = false;
-      if (newscore < optimal) {
-        // If this score is smaller than the one we think is optimal, of course we
-        // take it!
-        accepttrans = true;
-	RDEBUG(cout << "accept: optimal (" << newscore << "," << optimal
-	       << ")" << endl;)
-      } else if (melting) {
+      if (melting) {
         // When melting, we take everything!
 	accepttrans = true;
 	RDEBUG(cout << "accept: melting" << endl;)
@@ -900,10 +918,6 @@ void anneal(bool scoring_selftest, double scale_neighborhood,
 #ifdef SCORE_DEBUG
 	  cerr << "New best recorded" << endl;
 #endif
-	}
-	if (newscore < optimal) {
-	  cout << "OPTIMAL ( " << optimal << ")" << endl;
-	  goto DONE;
 	}
 	// Accept change
       } else { // !acceptrans

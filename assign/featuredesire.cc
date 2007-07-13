@@ -8,9 +8,11 @@
  * featuredesire.cc - implementation of the objects from featuredesire.h
  */
 
-static const char rcsid[] = "$Id: featuredesire.cc,v 1.4.8.2 2007-07-06 23:40:35 ricci Exp $";
+static const char rcsid[] = "$Id: featuredesire.cc,v 1.4.8.3 2007-07-13 20:28:02 ricci Exp $";
 
 #include "featuredesire.h"
+#include "score.h"
+
 #include <iostream>
 using namespace std;
 

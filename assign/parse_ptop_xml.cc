@@ -8,7 +8,7 @@
  * Parsing for the (experimental) ptop XML format
  */
 
-static const char rcsid[] = "$Id: parse_ptop_xml.cc,v 1.3.8.1 2007-07-05 23:59:23 ricci Exp $";
+static const char rcsid[] = "$Id: parse_ptop_xml.cc,v 1.3.8.2 2007-07-13 20:28:03 ricci Exp $";
 
 #include "port.h"
 
@@ -197,7 +197,6 @@ void PtopParserHandlers::fatalError(const SAXParseException& exc) {
 }
 
 int parse_ptop_xml(tb_pgraph &PG, tb_sgraph &SG, char *filename) {
-	char buffer[16384];
 
 	/*
 	 * Initialize the XML parser

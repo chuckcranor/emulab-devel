@@ -4,7 +4,7 @@
  * All rights reserved.
  */
 
-static const char rcsid[] = "$Id: score.cc,v 1.63.8.1 2007-07-05 23:59:23 ricci Exp $";
+static const char rcsid[] = "$Id: score.cc,v 1.63.8.2 2007-07-13 20:28:03 ricci Exp $";
 
 #include "port.h"
 
@@ -95,6 +95,55 @@ void score_link_endpoints(pedge pe);
 
 #define MIN(a,b) (((a) < (b))? (a) : (b))
 #define MAX(a,b) (((a) > (b))? (a) : (b))
+
+/*
+ * 'Constants' used in scoring. These can be changed, but it MUST be
+ * done BEFORE any actual scoring is done.
+ */
+#ifdef PENALIZE_BANDWIDTH
+float SCORE_DIRECT_LINK = 0.0;
+float SCORE_INTRASWITCH_LINK = 0.0;
+float SCORE_INTERSWITCH_LINK = 0.0;
+#else
+float SCORE_DIRECT_LINK = 0.01;
+float SCORE_INTRASWITCH_LINK = 0.02;
+float SCORE_INTERSWITCH_LINK = 0.2;
+#endif
+float SCORE_DIRECT_LINK_PENALTY = 0.5;
+float SCORE_NO_CONNECTION = 0.5;
+float SCORE_PNODE = 0.2;
+float SCORE_PNODE_PENALTY = 0.5;
+float SCORE_SWITCH = 0.5;
+float SCORE_UNASSIGNED = 1.0;
+float SCORE_DESIRE = 1.0;
+float SCORE_FEATURE = 1.0;
+float SCORE_MISSING_LOCAL_FEATURE = 1.0;
+float SCORE_OVERUSED_LOCAL_FEATURE = 0.5;
+#ifdef NO_PCLASS_PENALTY
+float SCORE_PCLASS = 0.0;
+#else
+float SCORE_PCLASS = 0.5;
+#endif
+float SCORE_VCLASS = 1.0;
+float SCORE_EMULATED_LINK = 0.01;
+float SCORE_OUTSIDE_DELAY = 0.5;
+float SCORE_DELAY = 10.0;
+#ifdef PENALIZE_UNUSED_INTERFACES
+float SCORE_UNUSED_INTERFACE = 0.04;
+#endif
+float SCORE_TRIVIAL_PENALTY = 0.5;
+
+float SCORE_TRIVIAL_MIX = 0.5;
+
+float SCORE_SUBNODE = 0.5;
+float SCORE_MAX_TYPES = 0.15;
+float LINK_RESOLVE_TRIVIAL = 8.0;
+float LINK_RESOLVE_DIRECT = 4.0;
+float LINK_RESOLVE_INTRASWITCH = 2.0;
+float LINK_RESOLVE_INTERSWITCH = 1.0;
+float VIOLATION_SCORE = 1.0;
+
+float opt_nodes_per_sw = 5.0;
 
 /*
  * score()
@@ -279,7 +328,6 @@ float find_link_resolutions(resolution_vector &resolutions, pvertex pv,
   for (pvertex_set::iterator source_switch_it = pnode->switches.begin();
       source_switch_it != pnode->switches.end();
       ++source_switch_it) {
-    int tmp = 0;
     for (pvertex_set::iterator dest_switch_it =
         dest_pnode->switches.begin();
         dest_switch_it != dest_pnode->switches.end();
@@ -370,10 +418,13 @@ inline float resolution_cost(tb_link_info::linkType res_type) {
 	    return LINK_RESOLVE_INTERSWITCH; break;
 	case tb_link_info::LINK_UNMAPPED:
 	case tb_link_info::LINK_TRIVIAL:
-	    cerr << "*** Internal error: Should not be here. (resolution_cost)" << endl;
-   	    exit(EXIT_FATAL);
+	default:
+	    // These shouldn't be passed in: fall through to below and die
 	break;
     }
+    
+    cerr << "*** Internal error: Should not be here. (resolution_cost)" << endl;
+    exit(EXIT_FATAL);
 }
 
 /*
@@ -1360,13 +1411,10 @@ bool find_best_link(pvertex pv,pvertex switch_pv,tb_vlink *vlink,
   pvertex dest_pv;
   double best_distance = 1000.0;
   int best_users = 1000;
-  double best_avail_bandwidth = 0;
   pedge best_pedge;
   bool found_best=false;
   poedge_iterator pedge_it,end_pedge_it;
   tie(pedge_it,end_pedge_it) = out_edges(pv,PG);
-
-  tb_pnode *pnode = get(pvertex_pmap,pv);
 
   for (;pedge_it!=end_pedge_it;++pedge_it) {
     dest_pv = target(*pedge_it,PG);

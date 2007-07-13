@@ -43,6 +43,7 @@ using namespace boost;
 #include "solution.h"
 #include "maps.h"
 #include "anneal.h"
+#include "config.h"
 #ifdef WITH_XML
 #include "parse_ptop_xml.h"
 #include "parse_top_xml.h"

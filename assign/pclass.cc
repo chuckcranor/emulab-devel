@@ -4,7 +4,7 @@
  * All rights reserved.
  */
 
-static const char rcsid[] = "$Id: pclass.cc,v 1.29.8.1 2007-07-05 23:59:23 ricci Exp $";
+static const char rcsid[] = "$Id: pclass.cc,v 1.29.8.2 2007-07-13 20:28:03 ricci Exp $";
 
 #include "port.h"
 
@@ -45,9 +45,6 @@ using namespace boost;
 // annealing process.  A function generate_pclasses is provided to
 // fill out the pclass structure.  Then two routines pclass_set, and
 // pclass_unset are used to maintaing the structure during annealing.
-
-// Used to catch cumulative floating point errors
-static double ITTY_BITTY = 0.00000001;
 
 extern pnode_pvertex_map pnode2vertex;
 
@@ -159,7 +156,6 @@ int pclass_equiv(tb_pgraph &PG, tb_pnode *a,tb_pnode *b)
   poedge_iterator eit,eendit;
   tie(eit,eendit) = out_edges(bn,PG);
   for (;eit != eendit;++eit) {
-    pvertex dst = target(*eit,PG);
     b_links.push_back(*eit);
   }
   

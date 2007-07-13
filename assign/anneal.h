@@ -59,6 +59,25 @@ using namespace __gnu_cxx;
 #endif
 
 /*
+ * Parameters used to control annealing
+ */
+extern int init_temp;
+extern int temp_prob;
+extern float temp_stop;
+extern int CYCLES;
+
+// Initial acceptance ratio for melting
+extern float X0;
+extern float epsilon;
+extern float delta;
+
+// Number of runs to spend melting
+extern int melt_trans;
+extern int min_neighborhood_size;
+
+extern float temp_rate;
+
+/*
  * Globals - XXX made non-global!
  */
 /* From assign.cc */
