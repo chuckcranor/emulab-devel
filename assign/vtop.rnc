@@ -1,0 +1,41 @@
+default namespace = "http://emulab.net/resources/vtop/0.1"
+
+include "top.rnc"
+
+# Add an atribute to the 'node' tag that allows you to fix it to a specific
+# physical node
+NodeSpec &= attribute assigned_to { text }?
+
+## Specify a virtual class
+VclassSpec = element vclass {
+    ## Name of the virtual class
+    attribute name { text },
+    ## Specify whether the vclass is hard (ie. all nodes *must* be of the same
+    ## type) or soft (ie. violating it is allowed, but penalize)
+    (element hard { empty } |
+     (element soft { empty },
+      element weight { xsd:float { minInclusive = "0.0" } } ))
+}
+
+start = element vtop {
+    ## Project ID
+    attribute pid { text },
+    ## Experiment ID
+    attribute eid { text },
+    ## Group ID (optional)
+    attribute gid { text }?,
+    ## User ID owning the experiment (optional)
+    attribute uid { text }?,
+    ## Nodes in the topology - zero or more
+    # TODO: Support disallow_trivial_mix
+    NodeSpec*,
+    ## Links in the topology - zero or more
+    # TODO: Fix interfaces
+    # TODO: Figure out what to do with nodelay flag (not currently used)
+    # TODO: Deal with emulated flag
+    # TODO: Figure out what do with trivial_ok flag - deal with using type
+    #       system?
+    LinkSpec*,
+    VclassSpec*
+    # TODO: Deal with node-hints
+}

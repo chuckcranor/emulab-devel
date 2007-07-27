@@ -1,0 +1,75 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" elementFormDefault="qualified" targetNamespace="http://emulab.net/resources/vtop/0.1" xmlns:top="http://emulab.net/resources/top/0.1" xmlns:vtop="http://emulab.net/resources/vtop/0.1">
+  <xs:import namespace="http://emulab.net/resources/top/0.1" schemaLocation="top.xsd"/>
+  <!--
+    Add an atribute to the 'node' tag that allows you to fix it to a specific
+    physical node
+  -->
+  <xs:element name="vclass">
+    <xs:complexType>
+      <xs:choice>
+        <xs:element ref="vtop:hard"/>
+        <xs:sequence>
+          <xs:element ref="vtop:soft"/>
+          <xs:element ref="vtop:weight"/>
+        </xs:sequence>
+      </xs:choice>
+      <xs:attribute name="name" use="required">
+        <xs:annotation>
+          <xs:documentation>Name of the virtual class</xs:documentation>
+        </xs:annotation>
+      </xs:attribute>
+    </xs:complexType>
+  </xs:element>
+  <xs:element name="hard">
+    <xs:complexType/>
+  </xs:element>
+  <xs:element name="soft">
+    <xs:complexType/>
+  </xs:element>
+  <xs:element name="weight">
+    <xs:simpleType>
+      <xs:restriction base="xs:float">
+        <xs:minInclusive value="0.0"/>
+      </xs:restriction>
+    </xs:simpleType>
+  </xs:element>
+  <xs:element name="vtop">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element minOccurs="0" maxOccurs="unbounded" ref="top:node">
+          <xs:annotation>
+            <xs:documentation>Nodes in the topology - zero or more</xs:documentation>
+          </xs:annotation>
+        </xs:element>
+        <xs:element minOccurs="0" maxOccurs="unbounded" ref="top:link">
+          <xs:annotation>
+            <xs:documentation>Links in the topology - zero or more</xs:documentation>
+          </xs:annotation>
+        </xs:element>
+        <xs:element minOccurs="0" maxOccurs="unbounded" ref="vtop:vclass"/>
+      </xs:sequence>
+      <xs:attribute name="pid" use="required">
+        <xs:annotation>
+          <xs:documentation>Project ID</xs:documentation>
+        </xs:annotation>
+      </xs:attribute>
+      <xs:attribute name="eid" use="required">
+        <xs:annotation>
+          <xs:documentation>Experiment ID</xs:documentation>
+        </xs:annotation>
+      </xs:attribute>
+      <xs:attribute name="gid">
+        <xs:annotation>
+          <xs:documentation>Group ID (optional)</xs:documentation>
+        </xs:annotation>
+      </xs:attribute>
+      <xs:attribute name="uid">
+        <xs:annotation>
+          <xs:documentation>User ID owning the experiment (optional)</xs:documentation>
+        </xs:annotation>
+      </xs:attribute>
+      <xs:attributeGroup ref="top:NodeSpec"/>
+    </xs:complexType>
+  </xs:element>
+</xs:schema>

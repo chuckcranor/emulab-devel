@@ -1,0 +1,32 @@
+#
+# EMULAB-COPYRIGHT
+# Copyright (c) 2007 University of Utah and the Flux Group.
+# All rights reserved.
+#
+
+default namespace = "http://emulab.net/resources/ptop/0.1"
+
+include "top.rnc"
+
+## A simple policy specification - it may end up the policy does not belong in
+## the ptop file directly
+TypeLimitSpec = element type_limit {
+    ## Name of the type we are limiting
+    element type_name { text },
+    ## Limit as to the number of nodes of this type the experiment can use
+    element type_limit { xsd:integer { minInclusive = "0" } }
+}
+  
+start = element ptop {
+    ## The testbed that this physical topology came from
+    attribute testbed { text },
+    ## Nodes in the topology - zero or more
+    # TODO: Handle trivial_bw - probably by making trivial links 'real' links
+    # Note: The 'unique' flag is gone - if needed, just use a unique property
+    NodeSpec*,
+    ## Links in the topology - zero or more
+    LinkSpec*,
+    ## Any limits on how many nodes of a particular type this experiment can
+    ## use.
+    TypeLimitSpec*
+}

@@ -1,0 +1,82 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<grammar xmlns:a="http://relaxng.org/ns/compatibility/annotations/1.0" ns="http://emulab.net/resources/vtop/0.1" xmlns="http://relaxng.org/ns/structure/1.0" datatypeLibrary="http://www.w3.org/2001/XMLSchema-datatypes">
+  <include href="top.rng"/>
+  <!--
+    Add an atribute to the 'node' tag that allows you to fix it to a specific
+    physical node
+  -->
+  <define name="NodeSpec" combine="interleave">
+    <optional>
+      <attribute name="assigned_to"/>
+    </optional>
+  </define>
+  <define name="VclassSpec">
+    <a:documentation>Specify a virtual class</a:documentation>
+    <element name="vclass">
+      <attribute name="name">
+        <a:documentation>Name of the virtual class</a:documentation>
+      </attribute>
+      <choice>
+        <a:documentation>Specify whether the vclass is hard (ie. all nodes *must* be of the same
+type) or soft (ie. violating it is allowed, but penalize)</a:documentation>
+        <element name="hard">
+          <empty/>
+        </element>
+        <group>
+          <element name="soft">
+            <empty/>
+          </element>
+          <element name="weight">
+            <data type="float">
+              <param name="minInclusive">0.0</param>
+            </data>
+          </element>
+        </group>
+      </choice>
+    </element>
+  </define>
+  <start>
+    <element name="vtop">
+      <group>
+        <attribute name="pid">
+          <a:documentation>Project ID</a:documentation>
+        </attribute>
+        <attribute name="eid">
+          <a:documentation>Experiment ID</a:documentation>
+        </attribute>
+        <optional>
+          <attribute name="gid">
+            <a:documentation>Group ID (optional)</a:documentation>
+          </attribute>
+        </optional>
+        <optional>
+          <attribute name="uid">
+            <a:documentation>User ID owning the experiment (optional)</a:documentation>
+          </attribute>
+        </optional>
+        <zeroOrMore>
+          <!-- TODO: Support disallow_trivial_mix -->
+          <ref name="NodeSpec">
+            <a:documentation>Nodes in the topology - zero or more</a:documentation>
+          </ref>
+        </zeroOrMore>
+        <zeroOrMore>
+          <!--
+            TODO: Fix interfaces
+            TODO: Figure out what to do with nodelay flag (not currently used)
+            TODO: Deal with emulated flag
+            TODO: Figure out what do with trivial_ok flag - deal with using type
+                  system?
+          -->
+          <ref name="LinkSpec">
+            <a:documentation>Links in the topology - zero or more</a:documentation>
+          </ref>
+        </zeroOrMore>
+        <zeroOrMore>
+          <ref name="VclassSpec"/>
+        </zeroOrMore>
+      </group>
+      <!-- TODO: Deal with node-hints -->
+    </element>
+  </start>
+</grammar>

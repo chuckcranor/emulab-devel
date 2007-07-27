@@ -4,95 +4,95 @@
 # All rights reserved.
 #
 
-default namespace = "http://emulab.net/resources/vtop/0.2"
+default namespace = "http://emulab.net/resources/top/0.1"
 
-start = element top {
-    ## Project ID
-    attribute pid { text },
-    ## Experiment ID
-    attribute eid { text },
-    ## Group ID (optional)
-    attribute gid { text }?,
-    ## User ID owning the experiment (optional)
-    attribute uid { text }?,
-    ## Nodes in the topology - zero or more
-    element node {
-	## Name of the node - each node name must be unique within the 
-	## top element
-        attribute name { text },
-        ## Types of virtual nodes that this physical node can satisfy
-	element node_type {
-	    ## Name of the type - will almost certainly not be unique
-            element type_name { text },
-	    ## How many virtual nodes of this type this physical node can
-	    ## handle.
-	    (element type_slots { xsd:integer { minInclusive = "1" } } |
-	     element unlimited { empty }),
-	    ## A flag that indicates that this physical node *always*
-	    ## has this type - a node is only allowed to have one dynamic
-	    ## (ie. not flagged as static) type at a time, but any number
-	    ## of static types at a time
-	    element static { empty }?
-        }*,
-	## Desires of this node, which should (or must) be matched by the
-	## physical node we are assigned to
-        element desire {
-	    FeatureSpec
-        }*,
-	## Flags for this virtual node
-        element node_option {
-	    ## Name of the option
-	    element option_name { "trivial_bw" | "subnode_of" | "unique" },
-            ## Value for the option - not all options require values
-	    element option_value { text }?
-        }*
-    }*,
-    ## Links in the topology - zero or more
-    element link {
-	## Name of the link - must be unique in the top
-        attribute name { text },
-	## First interface for this link - links are assumed to be
-	## symmetric, so the order of the interfaces does not currently
-	## matter
-	element source_interface { InterfaceSpec },
-	## Second interface for this link
-	element destination_interface { InterfaceSpec },
-	## Bandwidth of the link in kbps
-	element bandwidth { xsd:float { minExclusive = "0.0" } },
-	## Latency of the link in ms
-	element latency { xsd:float { minInclusive = "0.0" } },
-	## Static packet loss probability of the link as a fraction
-	## (ie. 0.01 == 1%)
-	element packet_loss { xsd:float { minInclusive = "0.0" } },
-	## Type of virtual link this physical link is allowed to satisfy
-	element link_type {
-	    element type_name { text }
-	}+
-    }*,
-    ## This is, in essence, a policy statement, and thus, it may
-    ## move out of the ptop file
-    element type-limit {
-	attribute node_type { text },
-	attribute limit { xsd:integer { minInclusive = "0" } }
-    }
+NodeTypeSpec = element node_type {
+        ## Name of the type - will almost certainly not be unique
+        element type_name { text },
+        ## How many virtual nodes of this type this physical node can
+        ## handle.
+        (element type_slots { xsd:integer { minInclusive = "1" } } |
+         element unlimited { empty }),
+        ## A flag that indicates that this physical node *always*
+        ## has this type - a node is only allowed to have one dynamic
+        ## (ie. not flagged as static) type at a time, but any number
+        ## of static types at a time
+        element static { empty }?
 }
 
-# These should probably go into a seperate file included by both this file
-# and the ptop spec
+NodeSpec = element node {
+    ## Name of the node - each node name must be unique within the 
+    ## top element
+    attribute name { text },
+    ## Specify that this node is a subnode of another node. We MIGHT
+    ## try to do this with properties in the future
+    element subnode_of { text }?,
+    ## Types of virtual nodes that this physical node can satisfy
+    ## Desires of this node, which should (or must) be matched by the
+    ## physical node we are assigned to
+    PropertySpec*,
+    ## Type specification
+    NodeTypeSpec*
+}
+
+# XXX: MAYBE this should be combined with NodeTypeSpec
+# Link types are almost certainly going to have to get more complicated, for
+# two reasons:
+#     First, I want to allow virtual links to specify more than one type, so
+#       that we can ask for links that are, say, 'ethernet or loopback'
+#     Second, I want to have a lot more control over links that get mapped to
+#       multi-hop paths
+LinkTypeSpec = element link_type {
+    element type_name { text }
+}
+
+# TODO: Delay spec should be its own type. Or, maybe it should simply become
+# properties?
+
+## Links in the topology - zero or more
+LinkSpec = element link {
+    ## Name of the link - must be unique in the top
+    attribute name { text },
+    ## First interface for this link - links are assumed to be
+    ## symmetric, so the order of the interfaces does not currently
+    ## matter
+    element source_interface { InterfaceSpec },
+    ## Second interface for this link
+    element destination_interface { InterfaceSpec },
+    ## Bandwidth of the link in kbps
+    element bandwidth { xsd:float { minExclusive = "0.0" } },
+    ## Latency of the link in ms
+    element latency { xsd:float { minInclusive = "0.0" } },
+    ## Static packet loss probability of the link as a fraction
+    ## (ie. 0.01 == 1%)
+    element packet_loss { xsd:float { minInclusive = "0.0" } },
+    ## Type of virtual link this physical link is allowed to satisfy
+    LinkTypeSpec*,
+    ## Properties of this link
+    ## XXX - Aha! Maybe we express bandwidth, etc. as properties?
+    PropertySpec*
+}
 
 InterfaceSpec =
     ## Name of the node, which must match one of the nodes in this top
     element node_name { text },
     ## Name of the interface itself
-    element interface { text }
+    element interface { text },
+    ## Properties of the interface
+    PropertySpec*
     
-FeatureSpec =
-    ## Name of this feature
-    element feature_name { text },
-    ## The penalty associated with this feature
-    element feature_penalty { xsd:float { minInclusive = "0.0" } },
-    ## If this flag is present, not having the feature is considered a violation
+PropertySpec = element property {
+    ## Name of this property
+    element property_name { text },
+    ## Value associated with this property
+    ## TODO: Add ranges and other types from rspec
+    element property_value { text | xsd:float },
+    ## The penalty associated with this property
+    element property_penalty { xsd:float { minInclusive = "0.0" } },
+    ## If this flag is present, not having the property is considered a violation
     element violatable { empty }?,
+    # TODO: Add more operators - equality, range test, etc
     ## Flags for special types of operators
     ((element global { empty }, element operator { "OnceOnly", "FirstFree" }) |
      (element local { empty }, element operator { "+" }))?
+}
