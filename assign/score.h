@@ -113,8 +113,6 @@ extern float SCORE_PNODE; /* Cost of using a pnode*/
 extern float SCORE_PNODE_PENALTY; /* Cost of overusing a pnode*/
 extern float SCORE_SWITCH; /* Cost of using a switch.*/
 extern float SCORE_UNASSIGNED; /* Cost of an unassigned node*/
-extern float SCORE_DESIRE; /* Multiplier for desire costs*/
-extern float SCORE_FEATURE; /* Multiplier for feature weights*/
 extern float SCORE_MISSING_LOCAL_FEATURE;
 extern float SCORE_OVERUSED_LOCAL_FEATURE;
 extern float SCORE_PCLASS; /* Cost of each pclass */
@@ -123,7 +121,6 @@ extern float SCORE_VCLASS; /* vclass score multiplier */
 extern float SCORE_EMULATED_LINK; /* cost of an emualted link */
 extern float SCORE_OUTSIDE_DELAY; /* penalty for going out of delay
 requirements */
-extern float SCORE_DELAY; /* multiplier to distance for delay scoring */
 #ifdef PENALIZE_UNUSED_INTERFACES
 extern float SCORE_UNUSED_INTERFACE;
 #endif

@@ -49,8 +49,6 @@ static struct config_param options[] = {
     { "TS",	CONFIG_INT,	&temp_stop,			0 },
     { "CY",	CONFIG_INT,	&CYCLES,			0 },
     { "UN",	CONFIG_FLOAT,	&SCORE_UNASSIGNED,     		0 },
-    { "DE",	CONFIG_FLOAT,	&SCORE_DESIRE,			0 },
-    { "FE",	CONFIG_FLOAT,	&SCORE_FEATURE,			0 },
     { "1S",	CONFIG_FLOAT,	&SCORE_INTERSWITCH_LINK,	0 },
     { "2S",	CONFIG_FLOAT,	&SCORE_INTRASWITCH_LINK,	0 },
     { "NC",	CONFIG_FLOAT,	&SCORE_NO_CONNECTION,		0 },
@@ -67,8 +65,7 @@ static struct config_param options[] = {
     { "LD",     CONFIG_FLOAT,   &LINK_RESOLVE_DIRECT,           0 },
     { "LI",     CONFIG_FLOAT,   &LINK_RESOLVE_INTRASWITCH,      0 },
     { "LT",     CONFIG_FLOAT,   &LINK_RESOLVE_INTERSWITCH,      0 },
-    { "OD",     CONFIG_FLOAT,   &SCORE_OUTSIDE_DELAY,           0 },
-    { "DM",     CONFIG_FLOAT,   &SCORE_DELAY,                   0 }
+    { "OD",     CONFIG_FLOAT,   &SCORE_OUTSIDE_DELAY,           0 }
 };
 
 const int noptions = sizeof(options) / sizeof(options[0]);

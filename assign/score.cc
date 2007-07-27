@@ -4,7 +4,7 @@
  * All rights reserved.
  */
 
-static const char rcsid[] = "$Id: score.cc,v 1.63.8.3 2007-07-13 22:02:15 ricci Exp $";
+static const char rcsid[] = "$Id: score.cc,v 1.63.8.4 2007-07-27 18:36:51 ricci Exp $";
 
 #include "port.h"
 
@@ -115,8 +115,6 @@ float SCORE_PNODE = 0.2;
 float SCORE_PNODE_PENALTY = 0.5;
 float SCORE_SWITCH = 0.5;
 float SCORE_UNASSIGNED = 1.0;
-float SCORE_DESIRE = 1.0;
-float SCORE_FEATURE = 1.0;
 float SCORE_MISSING_LOCAL_FEATURE = 1.0;
 float SCORE_OVERUSED_LOCAL_FEATURE = 0.5;
 #ifdef NO_PCLASS_PENALTY
@@ -127,7 +125,6 @@ float SCORE_PCLASS = 0.5;
 float SCORE_VCLASS = 1.0;
 float SCORE_EMULATED_LINK = 0.01;
 float SCORE_OUTSIDE_DELAY = 0.5;
-float SCORE_DELAY = 10.0;
 #ifdef PENALIZE_UNUSED_INTERFACES
 float SCORE_UNUSED_INTERFACE = 0.04;
 #endif
