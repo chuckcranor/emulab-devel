@@ -353,7 +353,8 @@ void prune_unusable_pclasses() {
                     /*
                      * Remove it from the current ptype
                      */
-                    this_type_p->remove_slots(tm_iterator->second->max_load);
+                    this_type_p->remove_slots(
+		       tm_iterator->second->get_max_load());
 
                     /*
                      * Move on to the next node
@@ -547,9 +548,9 @@ int mapping_precheck() {
 	map<fstring,bool> matched_links;
 
 	tb_vclass *vclass = v->vclass;
-	tb_vclass::members_map::iterator mit;
+	tb_vclass::members_map::const_iterator mit;
 	if (vclass) {
-	    mit = vclass->members.begin();
+	    mit = vclass->get_members().begin();
 	}
 	for (;;) {
 	    // Loop over all types this node can take on, which might be only
@@ -593,7 +594,7 @@ int mapping_precheck() {
 		if (type_iterator == pnode->types.end()) {
 		    // Must have been a vtype to get here - ignore it
 		} else {
-		    if (v->typecount > type_iterator->second->max_load) {
+		    if (v->typecount > type_iterator->second->get_max_load()) {
 			// Nope, this vnode is too demanding
 			potential_match = false;
 		    }
@@ -682,7 +683,7 @@ int mapping_precheck() {
 nosuchtype:
 	    if (vclass) { 
 		mit++;
-		if (mit == vclass->members.end()) {
+		if (mit == vclass->get_members().end()) {
 		    break;
 		}
 	    } else {

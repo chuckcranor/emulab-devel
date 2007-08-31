@@ -4,7 +4,7 @@
  * All rights reserved.
  */
 
-static const char rcsid[] = "$Id: pclass.cc,v 1.29.8.3 2007-07-13 22:02:15 ricci Exp $";
+static const char rcsid[] = "$Id: pclass.cc,v 1.29.8.4 2007-08-31 20:31:24 ricci Exp $";
 
 #include "port.h"
 
@@ -269,7 +269,7 @@ int generate_pclasses(tb_pgraph &pg, bool pclass_for_each_pnode,
       bool multiplexed = false;
       tb_pnode::types_map::iterator it = pnode->types.begin();
       for (; it != pnode->types.end(); it++) {
-	  if ((*it).second->max_load > 1) {
+	  if ((*it).second->get_max_load() > 1) {
 	      multiplexed = true;
 	      break;
 	  }
@@ -386,8 +386,8 @@ int pclass_set(tb_vnode *v,tb_pnode *p)
   for (dit=c->members.begin();dit!=c->members.end();dit++) {
     if ((*dit).first == p->current_type) {
       // same class - only remove if node is full
-      if ((p->current_type_record->current_load ==
-	      p->current_type_record->max_load) ||
+      if ((p->current_type_record->get_current_load() ==
+	      p->current_type_record->get_max_load()) ||
 	      p->my_own_class) {
 	(*dit).second->remove(p);
 	if (p->my_own_class) {
@@ -396,7 +396,7 @@ int pclass_set(tb_vnode *v,tb_pnode *p)
       }
     } else {
       // XXX - should be made faster
-      if (!p->types[dit->first]->is_static) {
+      if (!p->types[dit->first]->is_static()) {
 	  // If it's not in the list then this fails quietly.
 	  (*dit).second->remove(p);
       }
@@ -432,14 +432,14 @@ int pclass_unset(tb_pnode *p)
       // empty and the front if it's not.  Since unset is called before
       // remove_node empty means only one user.
       if (! (*dit).second->exists(p)) {
-	assert(p->current_type_record->current_load > 0);
+	assert(p->current_type_record->get_current_load() > 0);
 #ifdef PNODE_ALWAYS_FRONT
 	(*dit).second->push_front(p);
 #else
 #ifdef PNODE_SWITCH_LOAD
-	if (p->current_type_record->current_load == 0) {
+	if (p->current_type_record->get_current_load() == 0) {
 #else
-	if (p->current_load == 1) {
+	if (p->get_current_load() == 1) {
 #endif
 	  (*dit).second->push_back(p);
 	} else {

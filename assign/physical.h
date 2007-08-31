@@ -163,26 +163,52 @@ public:
 
   class type_record {
       public:
-	  type_record(int _max_load, bool _is_static, tb_ptype *_ptype) :
+	  type_record(int _max_load, bool _static_type, tb_ptype *_ptype) :
 	      max_load(_max_load), current_load(0),
-	      is_static(_is_static), ptype(_ptype) { ; }
-	  int max_load;		// maximum load for this type
-	  int current_load;	// how many vnodes are assigned of this type
-	  bool is_static;	// whether this type is static or dynamic
-
-	  tb_ptype *ptype;	// Pointer to the global ptype strucutre for
-	  			// type
+	      static_type(_static_type), ptype(_ptype) { ; }
 
 	  bool operator==(const type_record &b) {
-	      return ((max_load == b.max_load) && (is_static == b.is_static));
+	      return ((max_load == b.max_load) && (static_type == b.static_type));
 	  }
-
+      
+	  tb_ptype *get_ptype() const {
+	      return(ptype);
+          }
+      
+          bool is_static() const {
+   	      return(static_type);
+          }
+      
+          int get_max_load() const {
+	      return(max_load);
+          }
+      
+          int get_current_load() const {
+	      return(current_load);
+          }
+      
+          void add_load(int howmuch) {
+              current_load += howmuch;
+	  }
+      
+          void remove_load(int howmuch) {
+	      current_load -= howmuch;
+          }
+      
 	  friend ostream &operator<<(ostream &o, const type_record& node)
 	  {
 	      return (o << "max_load = " << node.max_load <<
 		   " current_load = " << node.current_load <<
-		   " is_static = " << node.is_static);
+		   " static_type = " << node.static_type);
 	  }
+      private:
+          int max_load;		// maximum load for this type
+          int current_load;	// how many vnodes are assigned of this type
+          bool static_type;	// whether this type is static or dynamic
+      
+          tb_ptype *ptype;	// Pointer to the global ptype strucutre for
+	     		        // type
+      
   };
 
   // Contains max nodes for each type

@@ -9,7 +9,7 @@
  * solution.
  */
 
-static const char rcsid[] = "$Id: neighborhood.cc,v 1.3.8.2 2007-07-13 22:02:15 ricci Exp $";
+static const char rcsid[] = "$Id: neighborhood.cc,v 1.3.8.3 2007-08-31 20:31:24 ricci Exp $";
 
 #include "neighborhood.h"
 
@@ -33,10 +33,10 @@ inline bool pnode_is_match(tb_vnode *vn, tb_pnode *pn) {
 
   bool matched = false;
   tb_pnode::type_record *tr = mit->second;
-  if (tr->is_static) {
-    if ((tr->current_load + vn->typecount) > tr->max_load) {
+  if (tr->is_static()) {
+    if ((tr->get_current_load() + vn->typecount) > tr->get_max_load()) {
       // This would put us over its max load
-      if (allow_overload && (tr->max_load > 1)) {
+      if (allow_overload && (tr->get_max_load() > 1)) {
 	// That's okay, we're allowing overload
 	matched = true;
       } else {
@@ -53,13 +53,13 @@ inline bool pnode_is_match(tb_vnode *vn, tb_pnode *pn) {
 	// Failure - the pnode has a type, and it isn't ours
 	matched = false;
       } else {
-	if ((pn->current_type_record->current_load + vn->typecount) >
-	    pn->current_type_record->max_load) {
+	if ((pn->current_type_record->get_current_load() + vn->typecount) >
+	    pn->current_type_record->get_max_load()) {
 	  // This would put us over its max load
 	  //if (allow_overload && (tr->max_load > 1) &&
 	  //    ((pn->current_type_record->current_load + vn->typecount) <
 	  //    (pn->current_type_record->max_load + 2))) {
-	  if (allow_overload && (tr->max_load > 1)) {
+	  if (allow_overload && (tr->get_max_load() > 1)) {
 	    // That's okay, we're allowing overload
 	    matched = true;
 	  } else {

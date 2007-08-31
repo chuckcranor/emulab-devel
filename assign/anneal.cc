@@ -4,7 +4,7 @@
  * All rights reserved.
  */
 
-static const char rcsid[] = "$Id: anneal.cc,v 1.45.8.5 2007-07-13 22:02:15 ricci Exp $";
+static const char rcsid[] = "$Id: anneal.cc,v 1.45.8.6 2007-08-31 20:31:24 ricci Exp $";
 
 #include "anneal.h"
 
@@ -284,8 +284,8 @@ void anneal(bool scoring_selftest, double scale_neighborhood,
           // For now, if we find more than one match, we pick the first. It's
           // possible that picking some other type would give us a better
           // score, but let's noty worry about that
-          if (vn->vclass->has_type((*i)->ptype->name())) {
-            vn->type = (*i)->ptype->name();
+          if (vn->vclass->has_type((*i)->get_ptype()->name())) {
+            vn->type = (*i)->get_ptype()->name();
             break;
           }
         }

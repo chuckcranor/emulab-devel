@@ -4,7 +4,7 @@
  * All rights reserved.
  */
 
-static const char rcsid[] = "$Id: solution.cc,v 1.12.8.2 2007-07-13 22:02:15 ricci Exp $";
+static const char rcsid[] = "$Id: solution.cc,v 1.12.8.3 2007-08-31 20:31:24 ricci Exp $";
 
 #include "solution.h"
 #include "vclass.h"
@@ -202,7 +202,7 @@ void vvertex_writer::operator()(ostream &out,const vvertex &v) const {
     if (vnode->vclass == NULL) {
 	out << vnode->type;
     } else {
-	out << vnode->vclass->name;
+	out << vnode->vclass->get_name();
     }
     out << "\"";
     if (vnode->fixed) {

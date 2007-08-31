@@ -4,7 +4,7 @@
  * All rights reserved.
  */
 
-static const char rcsid[] = "$Id: score.cc,v 1.63.8.4 2007-07-27 18:36:51 ricci Exp $";
+static const char rcsid[] = "$Id: score.cc,v 1.63.8.5 2007-08-31 20:31:24 ricci Exp $";
 
 #include "port.h"
 
@@ -855,7 +855,7 @@ void remove_node(vvertex vv)
   /*
    * Clean up the pnode's state
    */
-  if (!tr->is_static) {
+  if (!tr->is_static()) {
     if (pnode->my_class) {
       pclass_unset(pnode);
     }
@@ -866,7 +866,7 @@ void remove_node(vvertex vv)
 #endif
 
   // pclass
-  if ((!disable_pclasses) && !(tr->is_static) && pnode->my_class
+  if ((!disable_pclasses) && !(tr->is_static()) && pnode->my_class
 	  && (pnode->my_class->used_members == 0)) {
     SDEBUG(cerr << "  freeing pclass" << endl);
     SSUB(SCORE_PCLASS);
@@ -975,8 +975,8 @@ void remove_node(vvertex vv)
   /*
    * Adjust scores for the pnode
    */
-  int old_load = tr->current_load;
-  tr->current_load -= vnode->typecount;
+  int old_load = tr->get_current_load();
+  tr->remove_load(vnode->typecount);
   pnode->total_load -= vnode->typecount;
 #ifdef LOAD_BALANCE
   // Use this tricky formula to score based on how 'full' the pnode is, so that
@@ -992,7 +992,8 @@ void remove_node(vvertex vv)
     // ptypes
     tb_pnode::types_list::iterator lit = pnode->type_list.begin();
     while (lit != pnode->type_list.end()) {
-	int removed_violations = (*lit)->ptype->remove_users((*lit)->max_load);
+	int removed_violations =
+	    (*lit)->get_ptype()->remove_users((*lit)->get_max_load());
 	if (removed_violations) {
 	    SSUB(SCORE_MAX_TYPES * removed_violations);
 	    violated -= removed_violations;
@@ -1000,13 +1001,15 @@ void remove_node(vvertex vv)
 	}
 	lit++;
     }
-  } else if (old_load > tr->max_load) {
+  } else if (old_load > tr->get_max_load()) {
     // If the pnode was over its load, remove the penalties for the nodes we
     // just removed, down to the max_load.
     SDEBUG(cerr << "  reducing penalty, old load was " << old_load <<
 	    ", new load = " << tr->current_load << ", max load = " <<
 	    tr->max_load << endl);
-    for (int i = old_load; i > MAX(tr->current_load,tr->max_load); i--) {
+    for (int i = old_load;
+	 i > MAX(tr->get_current_load(),tr->get_max_load());
+	 i--) {
       SSUB(SCORE_PNODE_PENALTY);
       vinfo.pnode_load--;
       violated--;
@@ -1229,9 +1232,9 @@ int add_node(vvertex vv,pvertex pv, bool deterministic, bool is_fixed, bool skip
    * Handle types
    */
   tr = mit->second;
-  if (tr->is_static) {
+  if (tr->is_static()) {
     // XXX: Scoring???
-    if (tr->current_load < tr->max_load) {
+    if (tr->get_current_load() < tr->get_max_load()) {
     } else {
       return 1;
     }
@@ -1317,11 +1320,11 @@ int add_node(vvertex vv,pvertex pv, bool deterministic, bool is_fixed, bool skip
       resolve_links(vv,pv,vnode,pnode,deterministic);
   }
   
-  int old_load = tr->current_load;
+  int old_load = tr->get_current_load();
   int old_total_load = pnode->total_load;
 
   // finish setting up pnode
-  tr->current_load += vnode->typecount;
+  tr->add_load(vnode->typecount);
   pnode->total_load += vnode->typecount;
 
 #ifdef PENALIZE_UNUSED_INTERFACES
@@ -1330,10 +1333,12 @@ int add_node(vvertex vv,pvertex pv, bool deterministic, bool is_fixed, bool skip
   SADD((pnode->total_interfaces - pnode->used_interfaces) * SCORE_UNUSED_INTERFACE);
 #endif
 
-  if (tr->current_load > tr->max_load) {
+  if (tr->get_current_load() > tr->get_max_load()) {
     SDEBUG(cerr << "  load too high - penalty (" <<
 	pnode->current_type_record->current_load << ")" << endl);
-    for (int i = MAX(old_load,tr->max_load); i < tr->current_load; i++) {
+    for (int i = MAX(old_load,tr->get_max_load());
+	 i < tr->get_current_load();
+	 i++) {
       SADD(SCORE_PNODE_PENALTY);
       vinfo.pnode_load++;
       violated++;
@@ -1347,7 +1352,8 @@ int add_node(vvertex vv,pvertex pv, bool deterministic, bool is_fixed, bool skip
     // ptypes
     tb_pnode::types_list::iterator lit = pnode->type_list.begin();
     while (lit != pnode->type_list.end()) {
-	int new_violations = (*lit)->ptype->add_users((*lit)->max_load);
+	int new_violations = 
+	    (*lit)->get_ptype()->add_users((*lit)->get_max_load());
 	if (new_violations) {
 	    SADD(SCORE_MAX_TYPES * new_violations);
 	    violated += new_violations;
@@ -1375,7 +1381,7 @@ int add_node(vvertex vv,pvertex pv, bool deterministic, bool is_fixed, bool skip
   }
 
   // pclass
-  if ((!disable_pclasses) && (!tr->is_static) && pnode->my_class &&
+  if ((!disable_pclasses) && (!tr->is_static()) && pnode->my_class &&
 	  (pnode->my_class->used_members == 0)) {
     SDEBUG(cerr << "  new pclass" << endl);
     SADD(SCORE_PCLASS);
@@ -1395,7 +1401,7 @@ int add_node(vvertex vv,pvertex pv, bool deterministic, bool is_fixed, bool skip
   SDEBUG(cerr << "  assignment=" << vnode->assignment << endl);
   SDEBUG(cerr << "  new score=" << score << " new violated=" << violated << endl);
 
-  if (!tr->is_static) {
+  if (!tr->is_static()) {
     if (pnode->my_class) {
       pclass_set(vnode,pnode);
     }
