@@ -129,14 +129,15 @@ function SHOWFREENODES()
     $freepcs   = TBFreePCs();
     $reloading = TBReloadingPCs();
 
-    $output .= "<table valign=top align=center width=100% height=100% border=1>
-                 <tr><td nowrap colspan=6 class=menuoptusage align=center>
- 	           <font size=+1>$freepcs Free PCs</font></td></tr>\n";
+    $output .= "<table valign=top align=center width=100% height=100% border=1
+		 cellspacing=1 cellpadding=0>
+                 <tr><td nowrap colspan=8 class=usagefreenodes align=center>
+ 	           <b>$freepcs Free PCs, $reloading reloading</b></td></tr>\n";
 
     $pccount = count($freecounts);
     $newrow  = 1;
-    $maxcols = (int) ($pccount / 3);
-    if ($pccount % 3)
+    $maxcols = (int) ($pccount / 2);
+    if ($pccount % 2)
 	$maxcols++;
     $cols    = 0;
     foreach($freecounts as $key => $value) {
@@ -146,14 +147,14 @@ function SHOWFREENODES()
 	    $output .= "<tr>\n";
 	}
 	
-	$output .= "<td class=menuoptusage align=right>
+	$output .= "<td class=usagefreenodes align=right>
                      <a target=_parent href=shownodetype.php3?node_type=$key>
                         $key</a></td>
-                    <td class=menuoptusage align=left>${freecount}</td>\n";
+                    <td class=usagefreenodes align=left>${freecount}</td>\n";
 
 	$cols++;
 	$newrow = 0;
-	if ($cols == $maxcols || $pccount <= 3) {
+	if ($cols == $maxcols || $pccount <= 4) {
 	    $cols   = 0;
 	    $newrow = 1;
 	}
@@ -165,23 +166,19 @@ function SHOWFREENODES()
     if (! $newrow) {
         # Fill out to $maxcols
 	for ($i = $cols + 1; $i <= $maxcols; $i++) {
-	    $output .= "<td class=menuoptusage>&nbsp</td>";
-	    $output .= "<td class=menuoptusage>&nbsp</td>";
+	    $output .= "<td class=usagefreenodes>&nbsp</td>";
+	    $output .= "<td class=usagefreenodes>&nbsp</td>";
 	}
 	$output .= "</tr>\n";
     }
-    # Fill in up to 3 rows.
-    if ($pccount < 3) {
-	for ($i = $pccount + 1; $i <= 3; $i++) {
-	    $output .= "<tr><td class=menuoptusage>&nbsp</td>
-                            <td class=menuoptusage>&nbsp</td></tr>\n";
+    # Fill in up to 2 rows.
+    if ($pccount < 2) {
+	for ($i = $pccount + 1; $i <= 2; $i++) {
+	    $output .= "<tr><td class=usagefreenodes>&nbsp</td>
+                            <td class=usagefreenodes>&nbsp</td></tr>\n";
 	}
     }
 
-    $output .= "<tr>
-                 <td class=menuoptusage colspan=6 align=center>
-                    <font size=+1>$reloading PCs reloading</font></td>
-               </tr>\n";
     $output .= "</table>";
     return $output;
 }
@@ -233,7 +230,7 @@ if ($this_user) {
 
     ?>
     function FreeNodeHtml_CB(stuff) {
-	getObjbyName('usage').innerHTML = stuff;
+	getObjbyName('usagefreenodes').innerHTML = stuff;
 	setTimeout('GetFreeNodeHtml()', 60000);
     }
     function GetFreeNodeHtml() {
@@ -244,7 +241,7 @@ if ($this_user) {
     <?php
     echo "</script>\n";
 	  
-    echo "<div id=usage>\n";
+    echo "<div id=usagefreenodes>\n";
     echo   SHOWFREENODES();
     echo "</div>\n";
     echo "</body></html>";

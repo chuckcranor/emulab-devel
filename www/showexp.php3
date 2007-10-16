@@ -7,9 +7,10 @@
 include("defs.php3");
 require("Sajax.php");
 include("showstuff.php3");
+include_once("node_defs.php");
 include_once("template_defs.php");
 sajax_init();
-sajax_export("GetExpState", "Show", "ModifyAnno");
+sajax_export("GetExpState", "Show", "ModifyAnno", "FreeNodeHtml");
 
 #
 # Only known and logged in users can look at experiments.
@@ -61,6 +62,11 @@ if ($EXPOSETEMPLATES) {
 #
 # For the Sajax Interface
 #
+function FreeNodeHtml()
+{
+    return ShowFreeNodes();
+}
+
 function GetExpState($a, $b)
 {
     global $experiment;
@@ -308,8 +314,6 @@ while ($row = mysql_fetch_array($query_result)) {
     }
 }
 
-echo $experiment->PageHeader();
-echo "<br /><br />\n";
 SUBPAGESTART();
 
 SUBMENUSTART("$tag Options");
@@ -556,6 +560,22 @@ if ($isadmin) {
 }
     
 SUBMENUEND_2A();
+
+echo "<br>\n";
+echo "<script>\n";
+echo "function FreeNodeHtml_CB(stuff) {
+         getObjbyName('showexpusagefreenodes').innerHTML = stuff;
+         setTimeout('GetFreeNodeHtml()', 60000);
+      }
+      function GetFreeNodeHtml() {
+         x_FreeNodeHtml(FreeNodeHtml_CB);
+      }
+      setTimeout('GetFreeNodeHtml()', 60000);
+      </script>\n";
+	  
+echo "<div id=showexpusagefreenodes>\n";
+echo   ShowFreeNodes();
+echo "</div>\n";
 
 echo "<br>
       <a href='shownsfile.php3?pid=$exp_pid&eid=$exp_eid'>
