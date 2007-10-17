@@ -108,9 +108,10 @@ iframe.usageframe, iframe.transparentusageframe {
   float: right;
 }
 iframe.navbarusageframe {
-  width: 250px;
+  width: 85px;
   height: 54px;
-  float: right;
+  float: left;
+  border-right: solid 2px #555;
 }
 iframe.outputframe {
   width: 98%;
@@ -135,7 +136,6 @@ div#usage table {
     height: 100px;
 }
 div#usagefreenodes table {
-  border-width: 0px;
   background-color: #666666;
   /* Force the same height as the banner */
   height: 54px;  /* must match usageframe size */
@@ -147,6 +147,7 @@ div#showexpusagefreenodes table {
   border: 0px;
 }
 div#showexpusagefreenodes table td {
+  border: 1px;
   background-color: #FFF;
   color: #000;
 }
@@ -162,7 +163,8 @@ div#showexpusagefreenodes table td a {
 }
 
 td.menuoptusage, td.usagefreenodes {
-  font-weight: bold;
+  font:bold 8pt arial,Helvetica,sans-serif;
+  border: solid 0px #666;
   background-color: #000;
   color: #ffffff;
   padding-left: 1px;
@@ -171,8 +173,7 @@ td.menuoptusage, td.usagefreenodes {
   padding-bottom: 0px;
   margin: 0px; 
   border: 0px;
-  line-height: 10px;
-  font-size: 8pt;
+  line-height: 12px;
 }
 td.menuoptusage, td.usagefreenodes a {
     /* Change link color to be more visible on a dark background */
@@ -222,17 +223,25 @@ div.topcell {
   height: 54px; 
   z-index: 1;
 }
+#topcellimage {
+  float: left;
+  border: 0px;
+}
+#topcellimage img {
+  border: 0px;
+}
 div.midtopcell {
-  position: absolute;
+/*  position: absolute;
   left: 200px;
-  top: 2px;
+  top: 2px;  */
   float: left;
   padding: 0px;
   margin: 0px;
   border-left: solid 3px #555;
-  border-right: solid 3px #555;
+  border-right: solid 2px #555;
   height: 56px;
 }
+
 div.midtopcell table#navmenus, div.midtopcell table#navmenus td {
   background-color: #111;
   /* The height allows for extra separation between upper/lower row */

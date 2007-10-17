@@ -709,7 +709,7 @@ function WRITESIDEBAR() {
 	NavMenuButtonNew("Approve Widearea User",
 			 "$TBBASE/approvewauser_form.php3");
     }
-    if ($login_user) {
+    if (0 && $login_user) {
 	NavMenuSection("Status", "Status");
 	
 	$freepcs = TBFreePCs();
@@ -726,8 +726,10 @@ function WRITESIDEBAR() {
     NavMenuRender();
     
     if ($login_user) {
+	echo "</td></tr></table>\n";
+	
 	# Close up div at start of navmenu
-	echo "</td></tr></table></div>\n";
+	echo "</div>\n";
     }
 }
 
@@ -854,6 +856,9 @@ function PAGEBEGINNING( $title, $nobanner = 0, $nocontent = 0,
 	    #
 	    # It is a violation of Emulab licensing restrictions to remove
 	    # this logo!
+            #
+            # NOTE: This has to come before any images in the div for the
+	    # float to work correctly.
 	    #
 	    if (!$TBMAINSITE) {
 		echo "<a class='rightsidebuiltwith' ".
@@ -861,7 +866,7 @@ function PAGEBEGINNING( $title, $nobanner = 0, $nocontent = 0,
 		echo "<img src='$BASEPATH/fancy-builtwith.png'></a>\n";
 	    }
 	    
-	    echo "<a href='$TBDOCBASE/index.php3'>";
+	    echo "<a id='topcellimage' href='$TBDOCBASE/index.php3'>";
 	    echo "<img border='0' ";
 	    echo "alt='$THISHOMEBASE - the network testbed' ";
 	    if ($FANCYBANNER)
@@ -925,7 +930,7 @@ function PAGEBEGINNING( $title, $nobanner = 0, $nocontent = 0,
 #
 function FINISHSIDEBAR($nocontent = 0)
 {
-    global $TBMAINSITE, $TBBASE, $BASEPATH, $login_user;
+    global $TBMAINSITE, $TBBASE, $BASEPATH, $currentusage, $login_user;
 
     if (!$nocontent) {
 	if (!$TBMAINSITE) {
@@ -937,6 +942,11 @@ function FINISHSIDEBAR($nocontent = 0)
 		echo "       <a class='builtwith' href='http://www.emulab.net'>
                              <img src='$BASEPATH/builtwith.png'></a>";
 	    }
+	}
+	if ($currentusage && $login_user) {
+	    $class = "navbarusageframe";
+	    echo "<iframe src='$BASEPATH/currentusage.php3' class='$class'
+                              scrolling='no' frameborder='0'></iframe>\n";
 	}
 	echo "<!-- sidebar ends -->
               </div>";

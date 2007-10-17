@@ -86,6 +86,33 @@ function SHOWSTATS()
 #
 # Logged in users, show free node counts.
 #
+function ShowStatus()
+{
+    $freepcs = TBFreePCs();
+    $reload  = TBReloadingPCs();
+    $users   = TBLoggedIn();
+    $active  = TBActiveExperiments();
+    $output  = "";
+
+    $output .= "<table valign=top align=center width=100% height=100% 
+		 cellspacing=1 cellpadding=0>";
+
+    $output .= "<tr><td class=usagefreenodes>$freepcs Free PCs</td>".
+	"</tr>\n";
+    $output .= "<tr><td class=usagefreenodes>$reload PCs reloading</td>".
+	"</tr>\n";
+    $output .= "<tr><td class=usagefreenodes>$users active users</td>".
+	"</tr>\n";
+    $output .= "<tr><td class=usagefreenodes>$active active expts.</td>".
+	"</tr>\n";
+    
+    $output .= "</table>";
+    return $output;
+}
+
+#
+# Logged in users, show free node counts.
+#
 function SHOWFREENODES()
 {
     $freecounts = array();
@@ -190,7 +217,7 @@ function FreeNodeHtml() {
     global $this_user;
 
     if ($this_user) {
-	return SHOWFREENODES();
+	return ShowStatus();
     }
     else {
 	return SHOWSTATS();
@@ -242,7 +269,7 @@ if ($this_user) {
     echo "</script>\n";
 	  
     echo "<div id=usagefreenodes>\n";
-    echo   SHOWFREENODES();
+    echo   ShowStatus();
     echo "</div>\n";
     echo "</body></html>";
 }
