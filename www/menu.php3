@@ -333,7 +333,7 @@ function WRITESIDEBAR() {
 	echo "<div class='midtopcell'>\n";
 	echo "<!-- main navigation menu begins -->\n";
 
-	echo "<table cellspacing='0' cellpadding='0'>".
+	echo "<table id='navmenus' cellspacing='0' cellpadding='0'>".
 	    "<tr><td>\n";
 
 	# Logout option on first row.
@@ -387,7 +387,7 @@ function WRITESIDEBAR() {
         }
         # The search box.
 	echo "<span id='topcellsearchrow'>";
-	echo "<table border='0' cellspacing='0' cellpadding='0'>";
+	echo "<table id='topcellsearchtable' cellspacing='0' cellpadding='0'>";
 	echo "<form method='get' action='$newsBase/search.php3'>";
 	echo "<tr><td>";
 	echo "<input class='textInputEmpty' name='query'
@@ -713,11 +713,14 @@ function WRITESIDEBAR() {
 	NavMenuSection("Status", "Status");
 	
 	$freepcs = TBFreePCs();
+	$reload  = TBReloadingPCs();
 	$users   = TBLoggedIn();
+	$active  = TBActiveExperiments();
 	NavMenuButton("Status",
 		      "$TBBASE/nodecontrol_list.php3",
 		      null, null, FALSE,
-		      "$freepcs Free PCs, $users users logged in");
+		      "$freepcs Free PCs, $reload PCs reloading<br> ".
+		      "$users users logged in, $active active experiments");
     }
     # Terminate Interaction menu and render.
     NavMenuRender();
@@ -774,9 +777,10 @@ function PAGEBEGINNING( $title, $nobanner = 0, $nocontent = 0,
     
     if (0 && !$MAINPAGE) {
 	echo "<!-- @import url($BASEPATH/style-nonmain.css); -->";
-    } 
-
+    }
     echo "</style>\n";
+    echo "<!-- [if gt IE 6.0]><style type=\"text/css\">".
+	".menu ul li a:hover ul { top: 18px; }</style><![endif]> -->\n";
 
     if ($TBMAINSITE) {
 	echo "<meta name=\"keywords\" ".
@@ -1442,7 +1446,7 @@ class menuBar
 	    }
 	    else {
 		echo "<li> $title <img class=droparrow src=menu-expanded.png>\n";
-		echo "<!--[if gt IE 6]><!--></a><!--<![endif]--><!--[if lt IE 7]>".
+		echo "<!--[if gt IE 6]><!--><!--<![endif]--><!--[if lt IE 7]>".
 		    "<table border=0 cellpadding=0 cellspacing=0><tr><td><![endif]-->\n";
 		echo "<ul>\n";
 
@@ -1458,7 +1462,7 @@ class menuBar
 		    echo "<li $div><a href=\"$link\">$text</a></li>\n";
 		}
 		echo "</ul>\n";
-		echo "<!--[if lte IE 6]></td></tr></table></a><![endif]-->\n";
+		echo "<!--[if lte IE 6]></td></tr></table><![endif]-->\n";
 		echo "</li>\n";
 	    }
 	}

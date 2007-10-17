@@ -206,13 +206,12 @@ td.menuoptusage, td.usagefreenodes a {
 /* region across the top. */
 div.topcell {
   /* Border for the entire group of menus. */
-  border: solid 2px black;
+  border: solid 2px black; 
 
   background-image: url("fancy-header-background.jpg");
   background-repeat: repeat-x;
 /*  background-color: #111;
   background-repeat: no-repeat; */
-  border-bottom: solid 2px #000000;
   padding: 0px;
   margin-bottom: 4px;
   top: 0px;
@@ -220,36 +219,41 @@ div.topcell {
   display: inline;
   min-width: 99%; /* XXX Safari doesn't expand the div to fill the viewport. */
   float: left;
-  height: 54px;
+  height: 54px; 
   z-index: 1;
 }
 div.midtopcell {
   position: absolute;
-  left: 204px;
-  top: 3px;
+  left: 200px;
+  top: 2px;
   float: left;
   padding: 0px;
+  margin: 0px;
   border-left: solid 3px #555;
   border-right: solid 3px #555;
+  height: 56px;
 }
-div.midtopcell table tr {
-  /* The height allows for extra separation between upper/lower row */
-  height: 14px;
-  vertical-align: middle;
-}
-div.midtopcell table, div.midtopcell table td {
+div.midtopcell table#navmenus, div.midtopcell table#navmenus td {
   background-color: #111;
   /* The height allows for extra separation between upper/lower row */
-  height: 14px;
   border: 0px;
   margin: 0px;
   padding: 0px;
   font-size: 14px;
   vertical-align: middle;
 }
-div.midtopcell table {
+div.midtopcell table#navmenus {
   padding-left: 4px;
   padding-right: 4px;
+  height: 56px;
+}
+div.midtopcell table#navmenus tr {
+  /* The height allows for extra separation between upper/lower row */
+  vertical-align: middle;
+  height: 16px;
+}
+div.midtopcell table#navmenus td {
+  height: 16px;
 }
 a.midtopcell:link, a.midtopcell:visited { color: #FFF; text-decoration: none;}
 
@@ -308,6 +312,10 @@ ul.navmenu li.newgroup {
 /* Firefox does not understand inline-table. */
 #topcellsearchrow table {
   display: inline;
+  height: 16px;
+  border: 0px;
+  margin: 0px;
+  padding: 0px;
 }
 #topcellsearchrow table {
   display: inline-table;
@@ -323,7 +331,7 @@ ul.navmenu li.newgroup {
   border-top: solid 2px black;
   border-bottom: solid 2px black;
 }
-#searchrow, #topcellsearchrow {
+#searchrow {
   /*position: relative; */
   top: 5px;
   padding: 0px;
@@ -335,6 +343,15 @@ ul.navmenu li.newgroup {
   background-color: #def;
   margin: 0px;
 }
+#topcellsearchrow table, #topcellsearchrow table tr,
+#topcellsearchrow table tr td {
+  /* Make sure the background is the same for the table that makes up the
+   * search box. */
+  background-color: #000;
+  height: 16px;
+  vertical-align: middle;
+}
+
 /* The text box. */
 #searchbox {
   padding: 0px;
