@@ -822,8 +822,6 @@ function PAGEBEGINNING( $title, $nobanner = 0, $nocontent = 0,
         # complicated
         #
 	if ($login_user) {
-		# Need this to force no top margin/padding. No idea why! 
-		echo "<div id='nobannercell'></div>\n";
 		echo "<div class='topcell'>\n";
 	}
 	else {
