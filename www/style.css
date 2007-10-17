@@ -593,6 +593,11 @@ ul.submenu li.newgroup {
 .rightsidebuiltwith {
   display: inline;
   float: right;
+  padding: 4px;
+  border: 0px;
+}
+.rightsidebuiltwith img {
+  border: 0px;
 }
 .gripe {
   position: absolute; /* Take it out of the normal flow. */
