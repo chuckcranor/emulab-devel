@@ -97,13 +97,13 @@ function ShowStatus()
     $output .= "<table valign=top align=center width=100% height=100% 
 		 cellspacing=1 cellpadding=0>";
 
-    $output .= "<tr><td class=usagefreenodes>$freepcs Free PCs</td>".
+    $output .= "<tr><td nowrap class=usagefreenodes>$freepcs Free PCs</td>".
 	"</tr>\n";
-    $output .= "<tr><td class=usagefreenodes>$reload PCs reloading</td>".
+    $output .= "<tr><td nowrap class=usagefreenodes>$reload PCs reloading</td>".
 	"</tr>\n";
-    $output .= "<tr><td class=usagefreenodes>$users active users</td>".
+    $output .= "<tr><td nowrap class=usagefreenodes>$users active users</td>".
 	"</tr>\n";
-    $output .= "<tr><td class=usagefreenodes>$active active expts.</td>".
+    $output .= "<tr><td nowrap class=usagefreenodes>$active active expts.</td>".
 	"</tr>\n";
     
     $output .= "</table>";
