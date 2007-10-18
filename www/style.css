@@ -730,12 +730,12 @@ span.printable {
 }
 #topnavbarbottom
 {
-  height: 16px;
+  height: 4px;
   border-top: 1px solid #778;
   margin-top: 0;
   margin-bottom: 8px;
   padding-top: 0;
-  background: #DDE;
+  background: #FFF;
 }
 		
 #topnavbar li
