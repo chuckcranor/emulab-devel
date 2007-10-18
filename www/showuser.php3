@@ -290,8 +290,9 @@ if ($isadmin && $html_stats) {
 	      "id=\"li_stats\" onclick=\"Show('stats');\">".
               "User Stats</a></li>\n";
 }
-
 echo "</ul>\n";
+echo "</div>\n";
+echo "<div align=center id=topnavbarbottom>&nbsp</div>\n";
 
 if ($html_templates) {
      echo $html_templates;
