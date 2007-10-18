@@ -234,14 +234,14 @@ echo "<script type='text/javascript' language='javascript'>
         function Show(which) {
 	    li = getObjbyName(li_current);
             li.style.backgroundColor = '#DDE';
-            li.style.borderBottom = 'none';
+            li.style.borderBottom = '1px solid #778';
             table = getObjbyName(table_current);
             table.style.display = 'none';
 
             li_current = 'li_' + which;
 	    li = getObjbyName(li_current);
             li.style.backgroundColor = 'white';
-            li.style.borderBottom = '1px solid white';
+            li.style.borderBottom = 'none';
             table_current = which + '_table';
             table = getObjbyName(table_current);
             table.style.display = 'block';
@@ -257,34 +257,37 @@ echo "<div width=\"100%\" align=center>\n";
 echo "<ul id=\"topnavbar\">\n";
 if ($html_templates) {
     echo "<li>
-           <a href=\"#A\"  ".
+           <a href=\"#A\" class=topnavbar ".
                "id=\"li_templates\" onclick=\"Show('templates');\">".
                "Templates</a></li>\n";
 }
 if ($html_experiments) {
      echo "<li>
-            <a href=\"#B\" style=\"background-color:white\" ".
+            <a href=\"#B\" class=topnavbar style=\"background-color:white\" ".
                "id=\"li_experiments\" onclick=\"Show('experiments');\">".
                "Experiments</a></li>\n";
 }
 if ($html_instances) {
     echo "<li>
-           <a href=\"#C\" ".
+           <a href=\"#C\" class=topnavbar ".
               "id=\"li_instances\" onclick=\"Show('instances');\">".
               "Instances</a></li>\n";
 }
 if ($html_groups) {
     echo "<li>
-          <a href=\"#D\" id=\"li_groups\" onclick=\"Show('groups');\">".
+          <a href=\"#D\" class=topnavbar ".
+	      "id=\"li_groups\" onclick=\"Show('groups');\">".
               "Membership</a></li>\n";
 }
 echo "<li>
-      <a href=\"#E\" id=\"li_profile\" onclick=\"Show('profile');\">".
+      <a href=\"#E\" class=topnavbar ".
+           "id=\"li_profile\" onclick=\"Show('profile');\">".
            "Profile</a></li>\n";
 
 if ($isadmin && $html_stats) {
     echo "<li>
-          <a href=\"#F\" id=\"li_stats\" onclick=\"Show('stats');\">".
+          <a href=\"#F\" class=topnavbar ".
+	      "id=\"li_stats\" onclick=\"Show('stats');\">".
               "User Stats</a></li>\n";
 }
 

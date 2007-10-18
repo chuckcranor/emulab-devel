@@ -728,7 +728,7 @@ span.printable {
 {
   padding: 3px 0;
   margin-left: 0;
-  border-bottom: 1px solid #778;
+  border-bottom: 12px solid #DDE;
   font: bold 12px Verdana, sans-serif;
 }
 		
@@ -739,23 +739,24 @@ span.printable {
   display: inline;
 }
 	
-#topnavbar li a
+#topnavbar li a.topnavbar
 {
   padding: 3px 0.5em;
   margin-left: 3px;
   border: 1px solid #778;
-  border-bottom: none;
   background: #DDE;
   text-decoration: none;
+  color: #667;
 }
 		
-#topnavbar li a:link { color: #448; }
-#topnavbar li a:visited { color: #667; }
+#topnavbar li a.topnavbar:link    { color: #667; background: #DDE}
+#topnavbar li a.topnavbar:active  { color: #667; background: #DDE}
+#topnavbar li a.topnavbar:visited { color: #667; background: #DDE}
 		
-#topnavbar li a:hover
+#topnavbar li a.topnavbar:hover
 {
   color: #000;
-  background: #AAE;
+  background: #DDE;
   border-color: #227;
 }
 
