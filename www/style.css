@@ -85,6 +85,9 @@ iframe.usageframe, iframe.transparentusageframe, iframe.navbarusageframe {
   margin: 0px;
   padding: 0px;
   background-color: #444444;
+  top: 2px; /* Must match the border on the top of the cell */
+  right: 0px;
+  position: absolute;
 }
 iframe.transparentusageframe, iframe.navbarusageframe {
   background-color: #444444;
@@ -105,9 +108,6 @@ iframe.navbarusageframe {
   height: 54px;
   /*float: left;*/
   display: inline;
-  top: 2px; /* Must match the border on the top of the cell */
-  right: 0px;
-  position: absolute;
   z-index: 1; /* So that it will move behind the menu table if the window is
                  narrow */
 }
