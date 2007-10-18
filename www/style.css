@@ -108,7 +108,6 @@ iframe.navbarusageframe {
   top: 2px; /* Must match the border on the top of the cell */
   right: 0px;
   position: absolute;
-  border-right: solid 2px #555;
   z-index: 1; /* So that it will move behind the menu table if the window is
                  narrow */
 }
@@ -241,7 +240,7 @@ div.midtopcell {
   padding: 0px;
   margin: 0px;
   border-left: solid 3px #555;
-  border-right: solid 2px #555;
+  border-right: solid 3px #555;
   height: 54px;
   z-index: 2;
 }
