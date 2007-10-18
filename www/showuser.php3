@@ -241,12 +241,17 @@ echo "<script type='text/javascript' language='javascript'>
             li_current = 'li_' + which;
 	    li = getObjbyName(li_current);
             li.style.backgroundColor = 'white';
-            li.style.borderBottom = 'none';
+            li.style.borderBottom = '1px solid white';
             table_current = which + '_table';
             table = getObjbyName(table_current);
             table.style.display = 'block';
 
             return false;
+        }
+        function Setup() {
+	    li = getObjbyName(li_current);
+            li.style.backgroundColor = 'white';
+            li.style.borderBottom = '1px solid white';
         }
       </script>\n";
 
@@ -263,7 +268,7 @@ if ($html_templates) {
 }
 if ($html_experiments) {
      echo "<li>
-            <a href=\"#B\" class=topnavbar style=\"background-color:white\" ".
+            <a href=\"#B\" class=topnavbar ".
                "id=\"li_experiments\" onclick=\"Show('experiments');\">".
                "Experiments</a></li>\n";
 }
@@ -310,6 +315,13 @@ if ($isadmin && $html_stats) {
 if ($html_experiments) {
     echo $html_experiments;
 }
+
+#
+# Get the active tab to look right.
+#
+echo "<script type='text/javascript' language='javascript'>
+      Setup();
+      </script>\n";
 
 #
 # Standard Testbed Footer

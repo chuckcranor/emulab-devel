@@ -595,7 +595,7 @@ echo "<script type='text/javascript' language='javascript'>
         function Show(which) {
 	    li = getObjbyName(li_current);
             li.style.backgroundColor = '#DDE';
-            li.style.borderBottom = 'none';
+            li.style.borderBottom = '1px solid #778';
 
             li_current = 'li_' + which;
 	    li = getObjbyName(li_current);
@@ -647,6 +647,11 @@ echo "<script type='text/javascript' language='javascript'>
         }
         function ModifyAnno_cb(val) {
         }
+        function Setup() {
+	    li = getObjbyName(li_current);
+            li.style.backgroundColor = 'white';
+            li.style.borderBottom = '1px solid white';
+        }
       </script>\n";
 
 #
@@ -655,32 +660,37 @@ echo "<script type='text/javascript' language='javascript'>
 echo "<div width=\"100%\" align=center>\n";
 echo "<ul id=\"topnavbar\">\n";
 echo "<li>
-          <a href=\"#A\" style=\"background-color:white\" ".
+          <a href=\"#A\" class=topnavbar ".
                "id=\"li_settings\" onclick=\"Show('settings');\">".
                "Settings</a></li>\n";
 echo "<li>
-          <a href=\"#B\" id=\"li_vis\" onclick=\"Show('vis');\">".
+          <a href=\"#B\" class=topnavbar ".
+               "id=\"li_vis\" onclick=\"Show('vis');\">".
                "Visualization</a></li>\n";
 echo "<li>
-          <a href=\"#C\" id=\"li_nsfile\" onclick=\"Show('nsfile');\">".
+          <a href=\"#C\" class=topnavbar ".
+              "id=\"li_nsfile\" onclick=\"Show('nsfile');\">".
               "NS File</a></li>\n";
 echo "<li>
-          <a href=\"#D\" id=\"li_details\" onclick=\"Show('details');\">".
+          <a href=\"#D\" class=topnavbar ".
+              "id=\"li_details\" onclick=\"Show('details');\">".
               "Details</a></li>\n";
 
 if ($instance) {
     echo "<li>
-              <a href=\"#E\" id=\"li_anno\" onclick=\"Show('anno');\">".
+              <a href=\"#E\" class=topnavbar ".
+	          "id=\"li_anno\" onclick=\"Show('anno');\">".
                   "Annotation</a></li>\n";
 }
 echo "</ul>\n";
+echo "</div>\n";
+echo "<div align=center id=topnavbarbottom>&nbsp</div>\n";
 
 #
 # Start out with details ...
 #
 echo "<div align=center width=\"100%\" id=\"showexp_visarea\">\n";
 $experiment->Show();
-echo "</div>\n";
 echo "</div>\n";
 
 if ($experiment->Firewalled() &&
@@ -740,6 +750,13 @@ if ($isadmin) {
 
     $experiment->ShowStats();
 }
+
+#
+# Get the active tab to look right.
+#
+echo "<script type='text/javascript' language='javascript'>
+      Setup();
+      </script>\n";
 
 #
 # Standard Testbed Footer

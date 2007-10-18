@@ -728,14 +728,14 @@ span.printable {
 {
   padding: 3px 0;
   margin: 0;
-  border-bottom: 1px solid #778;
   font: bold 12px Verdana, sans-serif;
 }
 #topnavbarbottom
 {
-  height: 12px;
-  border: 0;
+  height: 16px;
+  border-top: 1px solid #778;
   margin-top: 0;
+  margin-bottom: 8px;
   padding-top: 0;
   background: #DDE;
 }
@@ -756,10 +756,13 @@ span.printable {
   text-decoration: none;
   color: #667;
 }
-		
+
+# outline property gets rid of the dashed outline after clicking.
 #topnavbar li a.topnavbar:link    { color: #667; background: #DDE}
-#topnavbar li a.topnavbar:active  { color: #667; background: #DDE}
+#topnavbar li a.topnavbar:active  { color: #667; background: #DDE;
+                                   outline: none;}
 #topnavbar li a.topnavbar:visited { color: #667; background: #DDE}
+#topnavbar li a.topnavbar:focus   { -moz-outline-style: none;}
 		
 #topnavbar li a.topnavbar:hover
 {
