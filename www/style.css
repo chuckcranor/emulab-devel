@@ -263,7 +263,7 @@ div.midtopcell table#navmenus, div.midtopcell table#navmenus td {
 div.midtopcell table#navmenus {
   padding-left: 4px;
   padding-right: 4px;
-  height: 56px;
+  height: 54px;
 }
 div.midtopcell table#navmenus tr {
   /* The height allows for extra separation between upper/lower row */
