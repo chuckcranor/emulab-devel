@@ -297,7 +297,7 @@ if ($isadmin && $html_stats) {
 }
 echo "</ul>\n";
 echo "</div>\n";
-echo "<div align=center id=topnavbarbottom>&nbsp</div>\n";
+echo "<div align=center id=topnavbarbottom>&nbsp</div>\n"; 
 
 if ($html_templates) {
      echo $html_templates;

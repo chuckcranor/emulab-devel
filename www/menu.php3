@@ -330,6 +330,7 @@ function WRITESIDEBAR() {
     }
 
     if ($login_user) {
+	echo "<td>\n";
 	echo "<div class='midtopcell'>\n";
 	echo "<!-- main navigation menu begins -->\n";
 
@@ -461,7 +462,7 @@ function WRITESIDEBAR() {
                         onfocus='focus_text(this, \"Search Documentation\")'
                         onblur='blur_text(this, \"Search Documentation\")' />
                </td>
-	     <td><input type='submit' id='searchsub' value=Search /></td>
+	     <td><input type='submit' id='searchsub' value=Go /></td>
         </table>
         </form>
 	</div>\n";
@@ -730,6 +731,7 @@ function WRITESIDEBAR() {
 	
 	# Close up div at start of navmenu
 	echo "</div>\n";
+	echo "</td>\n";
     }
 }
 
@@ -851,6 +853,9 @@ function PAGEBEGINNING( $title, $nobanner = 0, $nocontent = 0,
                           scrolling='no' frameborder='0'></iframe>\n";
 	}
 	if ($login_user) {
+	    echo "<table id=topcelltable ".
+		     "cellspacing=0 cellpadding=0 border=0><tr>";
+	    
 	    #
 	    # It is a violation of Emulab licensing restrictions to remove
 	    # this logo!
@@ -863,7 +868,7 @@ function PAGEBEGINNING( $title, $nobanner = 0, $nocontent = 0,
 		    "href='http://www.emulab.net'>";
 		echo "<img src='$BASEPATH/fancy-builtwith.png'></a>\n";
 	    }
-	    
+	    echo "<td>\n";
 	    echo "<a id='topcellimage' href='$TBDOCBASE/index.php3'>";
 	    echo "<img border='0' ";
 	    echo "alt='$THISHOMEBASE - the network testbed' ";
@@ -879,6 +884,7 @@ function PAGEBEGINNING( $title, $nobanner = 0, $nocontent = 0,
 			strtolower($THISHOMEBASE) . ".gif' ";
 	    }
 	    echo "></a>\n";
+	    echo "</td>\n";
 	}
 	else {
 	    if ($FANCYBANNER) {
@@ -943,8 +949,10 @@ function FINISHSIDEBAR($nocontent = 0)
 	}
 	if ($currentusage && $login_user) {
 	    $class = "navbarusageframe";
+	    echo "<td>\n";
 	    echo "<iframe src='$BASEPATH/currentusage.php3' class='$class'
                               scrolling='no' frameborder='0'></iframe>\n";
+	    echo "</td></tr></table>\n";
 	}
 	echo "<!-- sidebar ends -->
               </div>";

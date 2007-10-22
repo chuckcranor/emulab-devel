@@ -80,7 +80,7 @@ td.paddedcell2 { padding: 0.5em; }
 }
 
 /* Styling for the usage box title and cells. */
-iframe.usageframe, iframe.transparentusageframe, iframe.navbarusageframe {
+iframe.usageframe, iframe.transparentusageframe {
   border: 0px;
   margin: 0px;
   padding: 0px;
@@ -104,12 +104,13 @@ iframe.usageframe, iframe.transparentusageframe {
   /*float: right;*/
 }
 iframe.navbarusageframe {
+  border: 0px;
+  margin: 0px;
+  padding: 0px;
+  background-color: #444444;
   width: 90px;
   height: 54px;
-  /*float: left;*/
-  display: inline;
-  z-index: 1; /* So that it will move behind the menu table if the window is
-                 narrow */
+  z-index: 1;
 }
 iframe.outputframe {
   width: 98%;
@@ -220,31 +221,36 @@ div.topcell {
   left: 0px;
   display: block;
   width: 100%;
-  /* float: left; */
+  /* So we goto a scroll bar before the top nav menus go to hell */
+  min-width: 800px;
   clear: both;
   height: 54px;
   z-index: 1;
 }
+table#topcelltable, table#topcelltable tr, table#topcelltable tr td {
+  background-color: #111;
+  padding: 0;
+  margin: 0;
+  border: 0;
+}
+table#topcelltable tr td {
+  border-right: solid 3px #555;
+}
 #topcellimage {
-  float: left;
+/*  float: left; */
   border: 0px;
 }
 #topcellimage img {
   border: 0px;
 }
 div.midtopcell {
-  position: absolute;
-  left: 200px;
-  top: 2px; /* Must match the top border of the topcell */
-  /* float: left; */
   padding: 0px;
   margin: 0px;
-  border-left: solid 3px #555;
-  border-right: solid 3px #555;
   height: 54px;
-  z-index: 2;
+/*  min-width: 500px; */
+  /* IE: so menus appear on top */
+  z-index: 1;
 }
-
 div.midtopcell table#navmenus, div.midtopcell table#navmenus td {
   background-color: #111;
   /* The height allows for extra separation between upper/lower row */
@@ -271,7 +277,6 @@ a.midtopcell:link, a.midtopcell:visited { color: #FFF; text-decoration: none;}
 
 div.cbody {
   clear: left;
-/*  width: 99%;  */
   overflow: visible;
   padding: 6px;
 }
@@ -614,8 +619,9 @@ ul.submenu li.newgroup {
 .rightsidebuiltwith {
   display: inline;
   float: right;
-  padding: 4px;
-  border: 0px;
+  padding: 0;
+  margin: 0;
+  border: solid 5px black;
 }
 .rightsidebuiltwith img {
   border: 0px;
@@ -731,6 +737,7 @@ span.printable {
 #topnavbarbottom
 {
   height: 4px;
+  min-width: 100%;
   border-top: 1px solid #778;
   margin-top: 0;
   margin-bottom: 8px;

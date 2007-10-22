@@ -14,7 +14,7 @@
 
 .menu {
 	position:relative;        /* establish a menu-relative positioning context */
-	float:left;                                     /* play nicely with others */
+/*	float:left;                                     /* play nicely with others */
 	margin:0;
 	padding:0;
 	border:0;
@@ -50,7 +50,7 @@
 	margin:0;
 }
 .menu li.divider {
-	border-top: solid 2px #ccccff;
+	border-top: solid 2px black;
 }
 
 .menu ul li table {
@@ -123,8 +123,8 @@
 	left:-1px;       /* left-align our drop-down to the previous button border */
 	height:auto;      /* the drop-down height will be determiend by line count */
 	width:13.5em;
-	color:#2222BB;                        /* this sets the unselected-text color */
-        background:#ccccff;    /* this sets our menu's effective "border" color */
+	color:#000;                        /* this sets the unselected-text color */
+        background:black;    /* this sets our menu's effective "border" color */
 }
 
 .menu ul li:hover ul.leftbutton,
@@ -149,28 +149,28 @@
 
 .menu ul li:hover ul li a,
 .menu ul li a:hover ul li a {                   /* 2nd level unselected items */
-	border-top: solid 1px #ccccff;
+	border-top: solid 1px black;
 	margin:0;
 	padding:0;
 	height:auto;
-	color:#2222BB;               /* this sets the unselected drop-down text color */
+	color:#000;               /* this sets the unselected drop-down text color */
 	background:#FFFFFF;       /* this sets the drop-down menu background color */
 	width:13.5em;
 }
 .menu ul li:hover ul li.divider a,
 .menu ul li a:hover ul li.divider a {                /* 2nd level unselected items */
-        border-top: solid 2px #ccccff;
+        border-top: solid 2px black;
 	margin:0;
 	padding:0;
 	height:auto;
-	color:#2222BB;               /* this sets the unselected drop-down text color */
+	color:#000;               /* this sets the unselected drop-down text color */
 	background:#FFFFFF;       /* this sets the drop-down menu background color */
 	width:13.5em;
 }
 
 .menu ul li:hover ul li:hover a,
 .menu ul li a:hover ul li a:hover {                /* 2nd level selected item */
-	color:#2222BB;
+	color:#000;
 	background:#99A;
 }
 
