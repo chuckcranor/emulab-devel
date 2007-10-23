@@ -660,25 +660,25 @@ echo "<script type='text/javascript' language='javascript'>
 echo "<div width=\"100%\" align=center>\n";
 echo "<ul id=\"topnavbar\">\n";
 echo "<li>
-          <a href=\"#A\" class=topnavbar ".
+          <a href=\"#A\" class=topnavbar onfocus=\"this.hideFocus=true;\" ".
                "id=\"li_settings\" onclick=\"Show('settings');\">".
                "Settings</a></li>\n";
 echo "<li>
-          <a href=\"#B\" class=topnavbar ".
+          <a href=\"#B\" class=topnavbar onfocus=\"this.hideFocus=true;\" ".
                "id=\"li_vis\" onclick=\"Show('vis');\">".
                "Visualization</a></li>\n";
 echo "<li>
-          <a href=\"#C\" class=topnavbar ".
+          <a href=\"#C\" class=topnavbar onfocus=\"this.hideFocus=true;\"  ".
               "id=\"li_nsfile\" onclick=\"Show('nsfile');\">".
               "NS File</a></li>\n";
 echo "<li>
-          <a href=\"#D\" class=topnavbar ".
+          <a href=\"#D\" class=topnavbar onfocus=\"this.hideFocus=true;\" ".
               "id=\"li_details\" onclick=\"Show('details');\">".
               "Details</a></li>\n";
 
 if ($instance) {
     echo "<li>
-              <a href=\"#E\" class=topnavbar ".
+              <a href=\"#E\" class=topnavbar onfocus=\"this.hideFocus=true;\" ".
 	          "id=\"li_anno\" onclick=\"Show('anno');\">".
                   "Annotation</a></li>\n";
 }

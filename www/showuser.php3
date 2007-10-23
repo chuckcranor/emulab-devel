@@ -262,36 +262,36 @@ echo "<div width=\"100%\" align=center>\n";
 echo "<ul id=\"topnavbar\">\n";
 if ($html_templates) {
     echo "<li>
-           <a href=\"#A\" class=topnavbar ".
+           <a href=\"#A\" class=topnavbar onfocus=\"this.hideFocus=true;\" ".
                "id=\"li_templates\" onclick=\"Show('templates');\">".
                "Templates</a></li>\n";
 }
 if ($html_experiments) {
      echo "<li>
-            <a href=\"#B\" class=topnavbar ".
+            <a href=\"#B\" class=topnavbar onfocus=\"this.hideFocus=true;\" ".
                "id=\"li_experiments\" onclick=\"Show('experiments');\">".
                "Experiments</a></li>\n";
 }
 if ($html_instances) {
     echo "<li>
-           <a href=\"#C\" class=topnavbar ".
+           <a href=\"#C\" class=topnavbar onfocus=\"this.hideFocus=true;\"  ".
               "id=\"li_instances\" onclick=\"Show('instances');\">".
               "Instances</a></li>\n";
 }
 if ($html_groups) {
     echo "<li>
-          <a href=\"#D\" class=topnavbar ".
+          <a href=\"#D\" class=topnavbar onfocus=\"this.hideFocus=true;\" ".
 	      "id=\"li_groups\" onclick=\"Show('groups');\">".
               "Membership</a></li>\n";
 }
 echo "<li>
-      <a href=\"#E\" class=topnavbar ".
+      <a href=\"#E\" class=topnavbar onfocus=\"this.hideFocus=true;\" ".
            "id=\"li_profile\" onclick=\"Show('profile');\">".
            "Profile</a></li>\n";
 
 if ($isadmin && $html_stats) {
     echo "<li>
-          <a href=\"#F\" class=topnavbar ".
+          <a href=\"#F\" class=topnavbar onfocus=\"this.hideFocus=true;\" ".
 	      "id=\"li_stats\" onclick=\"Show('stats');\">".
               "User Stats</a></li>\n";
 }

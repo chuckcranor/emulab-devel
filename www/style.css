@@ -768,6 +768,7 @@ span.printable {
                                    outline: none;}
 #topnavbar li a.topnavbar:visited { color: #667; background: #DDE}
 #topnavbar li a.topnavbar:focus   { -moz-outline-style: none;}
+#topnavbar li a.topnavbar:focus   { outline: none;}
 		
 #topnavbar li a.topnavbar:hover
 {

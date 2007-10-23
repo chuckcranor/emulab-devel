@@ -341,7 +341,7 @@ function WRITESIDEBAR() {
 	if ($login_status & (CHECKLOGIN_LOGGEDIN|CHECKLOGIN_MAYBEVALID)) {
 	    echo "<a class=midtopcell ".
 		"href='$TBBASE/" . CreateURL("showuser", $login_user) . "'>".
-		"My Emulab.Net</a>\n";
+		"My Emulab</a>\n";
 
 	    echo " <font color=grey>|</font> ";
 
@@ -1437,7 +1437,6 @@ class menuBar
 
     function writeMenuBar() {
 	echo "<div class=\"menu\">\n";
-	echo "<ul>\n";
 	
 	foreach ($this->mO as $i => $menu) {
 	    $title = $menu['#title'];
@@ -1461,9 +1460,12 @@ class menuBar
 		}
 	    }
 	    else {
-		echo "<li> $title <img class=droparrow src=menu-expanded.png>\n";
-		echo "<!--[if gt IE 6]><!--><!--<![endif]--><!--[if lt IE 7]>".
-		    "<table border=0 cellpadding=0 cellspacing=0><tr><td><![endif]-->\n";
+		echo "<ul>\n";
+		echo "<li> <a href=/index.php3>$title <img class=droparrow src=menu-expanded.png>";
+		echo "<!--[if gt IE 6]><!--></a><!--<![endif]-->";
+		echo "<!--[if lt IE 7]>";
+		echo "<table border=0 cellpadding=0 cellspacing=0><tr><td>";
+		echo "<![endif]-->";
 		echo "<ul>\n";
 
 		foreach ($menu['#links'] as $h => $item) {
@@ -1477,12 +1479,14 @@ class menuBar
 
 		    echo "<li $div><a href=\"$link\">$text</a></li>\n";
 		}
-		echo "</ul>\n";
-		echo "<!--[if lte IE 6]></td></tr></table><![endif]-->\n";
+		echo "</ul>";
+#		echo "</td></tr></table></a>";
+		echo "<!--[if lte IE 6]></td></tr></table></a><![endif]-->";
 		echo "</li>\n";
+		echo "</ul>\n";
 	    }
 	}
-	echo "</ul></div>\n";
+	echo "</div>\n";
     }
 }
 

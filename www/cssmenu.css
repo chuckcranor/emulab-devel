@@ -18,14 +18,16 @@
 	margin:0;
 	padding:0;
 	border:0;
-	/*height:18px;                                  /* the menu's overall height */
+/*	height:18px;                                  /* the menu's overall height */
 	width:100%;         /* we always want our menu to fill the available space */
 	background:#111;
         color: #FFF;
 	font:normal 16px arial,Helvetica,sans-serif;
 }
 
-.menu img {
+.menu img, img.droparrow {
+        border: 0px;
+	color:#111;
 	vertical-align: top;      /* prevent images from being pushed down by text */
 }
 
@@ -55,7 +57,6 @@
 
 .menu ul li table {
 	margin:-1px 0;              /* IE5 needs -1px top and bottom table margins */
-	margin:0;               /* re-zero the table margins for everyone but IE5 */
 	border-collapse:collapse;      /* IE5 needs this for the sub-menus to work */
         font:14px arial, Helvetica, sans-serif;  /* this sets the base font size for our entire menu */
 }
@@ -95,20 +96,24 @@
 	 vertical-align: middle;	/* Force down-arrow to middle of line. */
 }
 .menu ul li  {
+        padding:0;
+	border:0;
 	margin-right:10px;		/* Space between toplevel items. */
 }
 
 .menu ul li a,
 .menu ul li a:visited {                    /* unselected top-level menu items */
+        color: #FFF;
+	background: #111;
 	display:block;
 	float:left;
 	text-decoration:none;
-	/*height:18px; */
+	height:18px;
 }
 
 .menu ul li:hover a,
 .menu ul li a:hover {                        /* selected top-level menu items */
-	border-top:1px solid #000;    /* these 2 lines create the push-in illusion */
+	border-top: 0;
 	height:16px;
 }
 
