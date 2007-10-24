@@ -1,3 +1,0 @@
-domain @OURDOMAIN@
-search @OURDOMAIN@
-nameserver 127.0.0.1
