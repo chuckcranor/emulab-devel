@@ -85,13 +85,7 @@ iframe.usageframe, iframe.transparentusageframe {
   margin: 0px;
   padding: 0px;
   background-color: #444444;
- /* Must match the border on the top of the cell */
-  /*
-  top: 2px;
-  right: 0px;
-  position: absolute;
-  */
-  float: left;
+  float: right;
   overflow: hide;
 }
 iframe.transparentusageframe, iframe.navbarusageframe {
@@ -106,7 +100,6 @@ iframe.transparentusageframe, iframe.navbarusageframe {
 iframe.usageframe, iframe.transparentusageframe {
   width: 198px;
   height: 100px;
-  /*float: right;*/
 }
 iframe.navbarusageframe {
   border: 0px;
@@ -226,14 +219,9 @@ div.topcell {
   left: 0px;
   display: block;
   width: 100%;
-<<<<<<< style.css
-  /* float: left; */
-  /* clear: both; */
-=======
   /* So we goto a scroll bar before the top nav menus go to hell */
   min-width: 800px;
   clear: both;
->>>>>>> 1.46.4.15
   height: 54px;
   z-index: 1;
 }
@@ -254,23 +242,8 @@ table#topcelltable tr td {
   border: 0px;
 }
 div.midtopcell {
-<<<<<<< style.css
-    /*
-  position: absolute;
-  left: 200px;
-  top: 2px;*/ /* Must match the top border of the topcell */
-  float: left;
-=======
->>>>>>> 1.46.4.15
   padding: 0px;
   margin: 0px;
-<<<<<<< style.css
-  border-left: solid 3px #555;
-  /* Taken care of by the usageframe */ /* border-right: solid 3px #555; */
-=======
->>>>>>> 1.46.4.15
-  height: 54px;
-/*  min-width: 500px; */
   /* IE: so menus appear on top */
   z-index: 1;
 }
