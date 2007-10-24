@@ -57,10 +57,10 @@ if ($yourpcs) {
 # Standard Testbed Header, now that we know what we want to say.
 #
 if (! $this_user->SameUser($target_user)) {
-    PAGEHEADER("$target_uid Emulab.Net", null, null, $notice);
+    PAGEHEADER("${target_uid}'s Emulab", null, null, $notice);
 }
 else {
-    PAGEHEADER("My Emulab.Net", null, null, $notice);
+    PAGEHEADER("My Emulab", null, null, $notice);
 }
 
 #

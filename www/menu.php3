@@ -364,9 +364,9 @@ function WRITESIDEBAR() {
 	    echo "<a class=midtopcell href='$TBBASE/emailus.php3'>".
 		"Contact Us</a>\n";
 
-	    echo " <font color=grey>|</font> ";
-
 	    if (ISADMINISTRATOR()) {
+		echo " <font color=grey>|</font> ";
+
 		if (ISADMIN()) {
 		    $url = CreateURL("toggle", $login_user,
 				     "type", "adminon", "value", 0);
@@ -383,7 +383,6 @@ function WRITESIDEBAR() {
                               <img src='/greenball.gif'
                                    border='0' alt='Admin Off'></a>\n";
 		}
-		echo " <font color=grey>|</font> ";
 	    }
         }
         # The search box.
@@ -838,16 +837,11 @@ function PAGEBEGINNING( $title, $nobanner = 0, $nocontent = 0,
         # NOTE: This has to come before any images in the div for the float to
         # work correctly.
 	if ($currentusage && !$login_user) {
-	    if ($login_user) { 
-		$class = "navbarusageframe";
+	    if ($FANCYBANNER) {
+		$class = "transparentusageframe";
 	    }
 	    else {
-		if ($FANCYBANNER) {
-		    $class = "transparentusageframe";
-		}
-		else {
-		    $class = "usageframe";
-		}
+		$class = "usageframe";
 	    }
 	    echo "<iframe src='$BASEPATH/currentusage.php3' class='$class'
                           scrolling='no' frameborder='0'></iframe>\n";
