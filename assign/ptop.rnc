@@ -8,7 +8,7 @@ default namespace = "http://emulab.net/resources/ptop/0.1"
 
 include "top.rnc"
 
-## A simple policy specification - it may end up the policy does not belong in
+## A simple policy specification - it may end up that policy does not belong in
 ## the ptop file directly
 TypeLimitSpec = element type_limit {
     ## Name of the type we are limiting

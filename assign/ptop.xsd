@@ -6,8 +6,8 @@
   All rights reserved.
   
 -->
-<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" elementFormDefault="qualified" targetNamespace="http://emulab.net/resources/ptop/0.1" xmlns:top="http://emulab.net/resources/top/0.1" xmlns:ptop="http://emulab.net/resources/ptop/0.1">
-  <xs:import namespace="http://emulab.net/resources/top/0.1" schemaLocation="top.xsd"/>
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" elementFormDefault="qualified" targetNamespace="http://emulab.net/resources/ptop/0.1" xmlns:top="http://emulab.net/resources/top/0.2" xmlns:ptop="http://emulab.net/resources/ptop/0.1">
+  <xs:import namespace="http://emulab.net/resources/top/0.2" schemaLocation="top.xsd"/>
   <xs:element name="type_limit">
     <xs:complexType>
       <xs:sequence>

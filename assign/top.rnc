@@ -4,8 +4,15 @@
 # All rights reserved.
 #
 
-default namespace = "http://emulab.net/resources/top/0.1"
+#
+# Definition of common data structures used for representing topologies -
+# shared between vtop (virtual topology) and ptop (physical topology)
+# formats
+#
 
+default namespace = "http://emulab.net/resources/top/0.2"
+
+## Representation of a single node type
 NodeTypeSpec = element node_type {
         ## Name of the type - will almost certainly not be unique
         element type_name { text },
@@ -20,34 +27,38 @@ NodeTypeSpec = element node_type {
         element static { empty }?
 }
 
+## A node in the topology
 NodeSpec = element node {
     ## Name of the node - each node name must be unique within the 
     ## top element
     attribute name { text },
-    ## Specify that this node is a subnode of another node. We MIGHT
-    ## try to do this with properties in the future
-    element subnode_of { text }?,
+    ## Type specification
+    ## XXX: Virtual node gets one, physical can have many
+    NodeTypeSpec*,
+    ## Legacy flags
+    ## XXX: Not the same set for virtual and physical nodes
+    NodeFlagSpec,
+    ## Legacy features and desires
+    FeatureDesireSpec*,
     ## Types of virtual nodes that this physical node can satisfy
     ## Desires of this node, which should (or must) be matched by the
     ## physical node we are assigned to
-    PropertySpec*,
-    ## Type specification
-    NodeTypeSpec*
+    PropertySpec*
 }
 
-# XXX: MAYBE this should be combined with NodeTypeSpec
 # Link types are almost certainly going to have to get more complicated, for
 # two reasons:
 #     First, I want to allow virtual links to specify more than one type, so
 #       that we can ask for links that are, say, 'ethernet or loopback'
 #     Second, I want to have a lot more control over links that get mapped to
 #       multi-hop paths
+# TODO: MAYBE this should be combined with NodeTypeSpec
 LinkTypeSpec = element link_type {
     element type_name { text }
 }
 
-# TODO: Delay spec should be its own type. Or, maybe it should simply become
-# properties?
+# TODO: Delay spec should be its own type. Or, maybe it should simply be
+# expressed as a set of properties?
 
 ## Links in the topology - zero or more
 LinkSpec = element link {
@@ -66,21 +77,60 @@ LinkSpec = element link {
     ## Static packet loss probability of the link as a fraction
     ## (ie. 0.01 == 1%)
     element packet_loss { xsd:float { minInclusive = "0.0" } },
-    ## Type of virtual link this physical link is allowed to satisfy
+    ## Type of this link
+    ## XXX: Virtual can have one, physical can have many
     LinkTypeSpec*,
     ## Properties of this link
-    ## XXX - Aha! Maybe we express bandwidth, etc. as properties?
+    ## TODO: Maybe we express bandwidth, etc. as properties?
     PropertySpec*
 }
 
-InterfaceSpec =
-    ## Name of the node, which must match one of the nodes in this top
+## "Legacy" assign features and desires - will be phased out in favor of
+## properties
+FeatureDesireSpec = element fd {
+    ## Name of this feature or desire
+    element fd_name { text },
+    ## Weight assocated with the feature or desire
+    element fd_weight { xsd:float },
+    ## A flag indicating whether or not a failure to match the desire with a
+    ## a feature is a constraint violation
+    element violatable { empty }?,
+    ## Type information expressed in features and desires
+    ((element global { empty }, element operator { "OnceOnly", "FirstFree" }) |
+     (element local { empty }, element operator { "+" }))?
+}
+
+## "Legacy" assign node flags - will be replaced with properties, and in some
+## cases, explicit links
+NodeFlagSpec =
+    ## Gives the amount of bandwidth this node can forward through its loopback
+    ## interface. In the future, we will make the loopback interface/link
+    ## explicit in the topology
+    ## Valid only for physical nodes
+    element trivial_bandwidth { xsd:integer },
+    ## Specify that this node is a subnode of another node. We MIGHT
+    ## try to do this with properties in the future
+    ## Valid for both virtual and physical nodes
+    element subnode_of { text }?,
+    ## Indicates that this node should never be considered identical to any
+    ## other node. Could be done with a property
+    ## Valid only for physical nodes
+    element unique { empty }?,
+    ## Indicates that virtual links must either all be trivial (loopback), or
+    ## none of them must be. Possibly expressible with properties?
+    element disallow_trivial_mix { empty }?
+
+## Interfaces
+InterfaceSpec = element interface {
+    ## Name of the node, which must match one of the nodes in this topology
     element node_name { text },
     ## Name of the interface itself
     element interface { text },
     ## Properties of the interface
     PropertySpec*
+}
     
+## Properties - new: replacements for features and desires
 PropertySpec = element property {
     ## Name of this property
     element property_name { text },
@@ -94,5 +144,5 @@ PropertySpec = element property {
     # TODO: Add more operators - equality, range test, etc
     ## Flags for special types of operators
     ((element global { empty }, element operator { "OnceOnly", "FirstFree" }) |
-     (element local { empty }, element operator { "+" }))?
+     (element local { empty }, element operator { "=", "+" }))?
 }
