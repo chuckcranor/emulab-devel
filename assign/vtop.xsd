@@ -1,6 +1,44 @@
 <?xml version="1.0" encoding="UTF-8"?>
+<!--
+  
+  EMULAB-COPYRIGHT
+  Copyright (c) 2007 University of Utah and the Flux Group.
+  All rights reserved.
+  
+-->
+<!--
+  
+  Description of a virtual topology
+  
+-->
 <xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" elementFormDefault="qualified" targetNamespace="http://emulab.net/resources/vtop/0.2" xmlns:top="http://emulab.net/resources/top/0.2" xmlns:vtop="http://emulab.net/resources/vtop/0.2">
   <xs:import namespace="http://emulab.net/resources/top/0.2" schemaLocation="top.xsd"/>
+  <!--
+    
+    We include the common topology specification schema, but override a few
+    elements
+    
+  -->
+  <xs:element name="NodeSpec.NodeType" abstract="true">
+    <xs:annotation>
+      <xs:documentation>In the vtop file, a node is only allowed to have a single type</xs:documentation>
+    </xs:annotation>
+    <xs:complexType>
+      <xs:sequence>
+        <xs:group ref="top:type_name"/>
+        <xs:choice>
+          <xs:element ref="top:type_slots"/>
+          <xs:element ref="top:unlimited"/>
+        </xs:choice>
+        <xs:element minOccurs="0" ref="top:static"/>
+      </xs:sequence>
+    </xs:complexType>
+  </xs:element>
+  <xs:group name="LinkSpec.LinkType">
+    <xs:sequence>
+      <xs:element minOccurs="0" ref="top:link_type"/>
+    </xs:sequence>
+  </xs:group>
   <xs:element name="vclass">
     <xs:complexType>
       <xs:choice>

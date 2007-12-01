@@ -4,6 +4,10 @@
 # All rights reserved.
 #
 
+#
+# Description of a physical topology
+#
+
 default namespace = "http://emulab.net/resources/ptop/0.1"
 
 include "top.rnc"
@@ -18,11 +22,10 @@ TypeLimitSpec = element type_limit {
 }
   
 start = element ptop {
-    ## The testbed that this physical topology came from
+    ## The testbed that this physical topology came from - will be used for
+    ## federation
     attribute testbed { text },
     ## Nodes in the topology - zero or more
-    # TODO: Handle trivial_bw - probably by making trivial links 'real' links
-    # Note: The 'unique' flag is gone - if needed, just use a unique property
     NodeSpec*,
     ## Links in the topology - zero or more
     LinkSpec*,

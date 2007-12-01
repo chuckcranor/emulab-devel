@@ -1,6 +1,36 @@
 <?xml version="1.0" encoding="UTF-8"?>
+<!--
+  
+  EMULAB-COPYRIGHT
+  Copyright (c) 2007 University of Utah and the Flux Group.
+  All rights reserved.
+  
+-->
+<!--
+  
+  Description of a virtual topology
+  
+-->
 <grammar xmlns:a="http://relaxng.org/ns/compatibility/annotations/1.0" ns="http://emulab.net/resources/vtop/0.2" xmlns="http://relaxng.org/ns/structure/1.0" datatypeLibrary="http://www.w3.org/2001/XMLSchema-datatypes">
-  <include href="top.rng"/>
+  <!--
+    
+    We include the common topology specification schema, but override a few
+    elements
+    
+  -->
+  <include href="top.rng">
+    <define name="NodeSpec.NodeType">
+      <a:documentation>In the vtop file, a node is only allowed to have a single type</a:documentation>
+      <ref name="NodeTypeSpec"/>
+    </define>
+    <define name="LinkSpec.LinkType">
+      <a:documentation>In the vtop file, a link is only allowed to have a single type (which
+is optional)</a:documentation>
+      <optional>
+        <ref name="LinkTypeSpec"/>
+      </optional>
+    </define>
+  </include>
   <define name="NodeSpec" combine="interleave">
     <a:documentation>Add an atribute to the 'node' tag that allows you to fix it to a specific
 physical node</a:documentation>
@@ -16,7 +46,9 @@ be a good idea to assign it to a specific physical node</a:documentation>
     </optional>
   </define>
   <define name="VclassSpec">
-    <a:documentation>Specify a virtual class</a:documentation>
+    <a:documentation>Specify a virtual class - assign allows you to define classes for virtual
+nodes, and specify that all nodes using that class should, or must, be
+assigned to physical nodes of the same type</a:documentation>
     <element name="vclass">
       <attribute name="name">
         <a:documentation>Name of the virtual class</a:documentation>

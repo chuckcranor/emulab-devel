@@ -6,6 +6,11 @@
   All rights reserved.
   
 -->
+<!--
+  
+  Description of a physical topology
+  
+-->
 <grammar xmlns:a="http://relaxng.org/ns/compatibility/annotations/1.0" ns="http://emulab.net/resources/ptop/0.1" xmlns="http://relaxng.org/ns/structure/1.0" datatypeLibrary="http://www.w3.org/2001/XMLSchema-datatypes">
   <include href="top.rng"/>
   <define name="TypeLimitSpec">
@@ -27,13 +32,10 @@ the ptop file directly</a:documentation>
   <start>
     <element name="ptop">
       <attribute name="testbed">
-        <a:documentation>The testbed that this physical topology came from</a:documentation>
+        <a:documentation>The testbed that this physical topology came from - will be used for
+federation</a:documentation>
       </attribute>
       <zeroOrMore>
-        <!--
-          TODO: Handle trivial_bw - probably by making trivial links 'real' links
-          Note: The 'unique' flag is gone - if needed, just use a unique property
-        -->
         <ref name="NodeSpec">
           <a:documentation>Nodes in the topology - zero or more</a:documentation>
         </ref>

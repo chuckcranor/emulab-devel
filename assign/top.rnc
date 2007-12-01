@@ -7,7 +7,7 @@
 #
 # Definition of common data structures used for representing topologies -
 # shared between vtop (virtual topology) and ptop (physical topology)
-# formats
+# formats.
 #
 
 default namespace = "http://emulab.net/resources/top/0.2"
@@ -32,11 +32,11 @@ NodeSpec = element node {
     ## Name of the node - each node name must be unique within the 
     ## top element
     attribute name { text },
-    ## Type specification
-    ## XXX: Virtual node gets one, physical can have many
-    NodeTypeSpec*,
+    ## Type specification - we use a named pattern here (defined below), so
+    ## that it can be overriden in the virtual topology schema, where you are
+    ## only allowed to have one
+    NodeSpec.NodeType,
     ## Legacy flags
-    ## XXX: Not the same set for virtual and physical nodes
     NodeFlagSpec,
     ## Legacy features and desires
     FeatureDesireSpec*,
@@ -46,19 +46,19 @@ NodeSpec = element node {
     PropertySpec*
 }
 
-# Link types are almost certainly going to have to get more complicated, for
-# two reasons:
-#     First, I want to allow virtual links to specify more than one type, so
-#       that we can ask for links that are, say, 'ethernet or loopback'
-#     Second, I want to have a lot more control over links that get mapped to
-#       multi-hop paths
-# TODO: MAYBE this should be combined with NodeTypeSpec
+## A node can (by default) have one or more types
+NodeSpec.NodeType = NodeTypeSpec+
+
+## Link types are currently just a siple string. They will almost certainly 
+## have to get more complicated, for two reasons:
+##     First, I want to allow virtual links to specify more than one type, so
+##       that we can ask for links that are, say, 'ethernet or loopback'
+##     Second, I want to have a lot more control over links that get mapped to
+##       multi-hop paths
+## TODO: MAYBE this should be combined with NodeTypeSpec
 LinkTypeSpec = element link_type {
     element type_name { text }
 }
-
-# TODO: Delay spec should be its own type. Or, maybe it should simply be
-# expressed as a set of properties?
 
 ## Links in the topology - zero or more
 LinkSpec = element link {
@@ -70,6 +70,8 @@ LinkSpec = element link {
     element source_interface { InterfaceSpec },
     ## Second interface for this link
     element destination_interface { InterfaceSpec },
+    ## TODO: In the future, the bandwidth, latency, and packet loss will be
+    ## moved to features and/or properties
     ## Bandwidth of the link in kbps
     element bandwidth { xsd:float { minExclusive = "0.0" } },
     ## Latency of the link in ms
@@ -77,13 +79,16 @@ LinkSpec = element link {
     ## Static packet loss probability of the link as a fraction
     ## (ie. 0.01 == 1%)
     element packet_loss { xsd:float { minInclusive = "0.0" } },
-    ## Type of this link
-    ## XXX: Virtual can have one, physical can have many
-    LinkTypeSpec*,
+    ## Type of this link - we use a named pattern here (defined below), so
+    ## that it can be overriden in the virtual topology schema, where you are
+    ## only allowed to have one
+    LinkSpec.LinkType,
     ## Properties of this link
-    ## TODO: Maybe we express bandwidth, etc. as properties?
     PropertySpec*
 }
+
+## A link can (by default) have zero or more types
+LinkSpec.LinkType = LinkTypeSpec*
 
 ## "Legacy" assign features and desires - will be phased out in favor of
 ## properties
@@ -130,7 +135,8 @@ InterfaceSpec = element interface {
     PropertySpec*
 }
     
-## Properties - new: replacements for features and desires
+## Properties - new: replacements for features and desires. Not yet implemented
+## in assign, and not yet fully fleshed out in this schema.
 PropertySpec = element property {
     ## Name of this property
     element property_name { text },
@@ -141,7 +147,7 @@ PropertySpec = element property {
     element property_penalty { xsd:float { minInclusive = "0.0" } },
     ## If this flag is present, not having the property is considered a violation
     element violatable { empty }?,
-    # TODO: Add more operators - equality, range test, etc
+    ## TODO: Add more operators - equality, range test, etc
     ## Flags for special types of operators
     ((element global { empty }, element operator { "OnceOnly", "FirstFree" }) |
      (element local { empty }, element operator { "=", "+" }))?

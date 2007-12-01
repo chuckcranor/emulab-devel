@@ -10,7 +10,7 @@
   
   Definition of common data structures used for representing topologies -
   shared between vtop (virtual topology) and ptop (physical topology)
-  formats
+  formats.
   
 -->
 <grammar xmlns:a="http://relaxng.org/ns/compatibility/annotations/1.0" ns="http://emulab.net/resources/top/0.2" xmlns="http://relaxng.org/ns/structure/1.0" datatypeLibrary="http://www.w3.org/2001/XMLSchema-datatypes">
@@ -51,15 +51,13 @@ of static types at a time</a:documentation>
         <a:documentation>Name of the node - each node name must be unique within the 
 top element</a:documentation>
       </attribute>
-      <zeroOrMore>
-        <ref name="NodeTypeSpec">
-          <a:documentation>Type specification
-XXX: Virtual node gets one, physical can have many</a:documentation>
-        </ref>
-      </zeroOrMore>
+      <ref name="NodeSpec.NodeType">
+        <a:documentation>Type specification - we use a named pattern here (defined below), so
+that it can be overriden in the virtual topology schema, where you are
+only allowed to have one</a:documentation>
+      </ref>
       <ref name="NodeFlagSpec">
-        <a:documentation>Legacy flags
-XXX: Not the same set for virtual and physical nodes</a:documentation>
+        <a:documentation>Legacy flags</a:documentation>
       </ref>
       <zeroOrMore>
         <ref name="FeatureDesireSpec">
@@ -75,26 +73,26 @@ physical node we are assigned to</a:documentation>
       </zeroOrMore>
     </element>
   </define>
-  <!--
-    Link types are almost certainly going to have to get more complicated, for
-    two reasons:
-        First, I want to allow virtual links to specify more than one type, so
-          that we can ask for links that are, say, 'ethernet or loopback'
-        Second, I want to have a lot more control over links that get mapped to
-          multi-hop paths
-    TODO: MAYBE this should be combined with NodeTypeSpec
-  -->
+  <define name="NodeSpec.NodeType">
+    <a:documentation>A node can (by default) have one or more types</a:documentation>
+    <oneOrMore>
+      <ref name="NodeTypeSpec"/>
+    </oneOrMore>
+  </define>
   <define name="LinkTypeSpec">
+    <a:documentation>Link types are currently just a siple string. They will almost certainly 
+have to get more complicated, for two reasons:
+    First, I want to allow virtual links to specify more than one type, so
+      that we can ask for links that are, say, 'ethernet or loopback'
+    Second, I want to have a lot more control over links that get mapped to
+      multi-hop paths
+TODO: MAYBE this should be combined with NodeTypeSpec</a:documentation>
     <element name="link_type">
       <element name="type_name">
         <text/>
       </element>
     </element>
   </define>
-  <!--
-    TODO: Delay spec should be its own type. Or, maybe it should simply be
-    expressed as a set of properties?
-  -->
   <define name="LinkSpec">
     <a:documentation>Links in the topology - zero or more</a:documentation>
     <element name="link">
@@ -112,7 +110,9 @@ matter</a:documentation>
         <ref name="InterfaceSpec"/>
       </element>
       <element name="bandwidth">
-        <a:documentation>Bandwidth of the link in kbps</a:documentation>
+        <a:documentation>TODO: In the future, the bandwidth, latency, and packet loss will be
+moved to features and/or properties
+Bandwidth of the link in kbps</a:documentation>
         <data type="float">
           <param name="minExclusive">0.0</param>
         </data>
@@ -130,19 +130,23 @@ matter</a:documentation>
           <param name="minInclusive">0.0</param>
         </data>
       </element>
-      <zeroOrMore>
-        <ref name="LinkTypeSpec">
-          <a:documentation>Type of this link
-XXX: Virtual can have one, physical can have many</a:documentation>
-        </ref>
-      </zeroOrMore>
+      <ref name="LinkSpec.LinkType">
+        <a:documentation>Type of this link - we use a named pattern here (defined below), so
+that it can be overriden in the virtual topology schema, where you are
+only allowed to have one</a:documentation>
+      </ref>
       <zeroOrMore>
         <ref name="PropertySpec">
-          <a:documentation>Properties of this link
-TODO: Maybe we express bandwidth, etc. as properties?</a:documentation>
+          <a:documentation>Properties of this link</a:documentation>
         </ref>
       </zeroOrMore>
     </element>
+  </define>
+  <define name="LinkSpec.LinkType">
+    <a:documentation>A link can (by default) have zero or more types</a:documentation>
+    <zeroOrMore>
+      <ref name="LinkTypeSpec"/>
+    </zeroOrMore>
   </define>
   <define name="FeatureDesireSpec">
     <a:documentation>"Legacy" assign features and desires - will be phased out in favor of
@@ -240,7 +244,8 @@ none of them must be. Possibly expressible with properties?</a:documentation>
     </element>
   </define>
   <define name="PropertySpec">
-    <a:documentation>Properties - new: replacements for features and desires</a:documentation>
+    <a:documentation>Properties - new: replacements for features and desires. Not yet implemented
+in assign, and not yet fully fleshed out in this schema.</a:documentation>
     <element name="property">
       <element name="property_name">
         <a:documentation>Name of this property</a:documentation>
@@ -267,9 +272,9 @@ TODO: Add ranges and other types from rspec</a:documentation>
         </element>
       </optional>
       <optional>
-        <!-- TODO: Add more operators - equality, range test, etc -->
         <choice>
-          <a:documentation>Flags for special types of operators</a:documentation>
+          <a:documentation>TODO: Add more operators - equality, range test, etc
+Flags for special types of operators</a:documentation>
           <group>
             <element name="global">
               <empty/>

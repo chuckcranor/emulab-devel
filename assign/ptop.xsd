@@ -6,6 +6,11 @@
   All rights reserved.
   
 -->
+<!--
+  
+  Description of a physical topology
+  
+-->
 <xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" elementFormDefault="qualified" targetNamespace="http://emulab.net/resources/ptop/0.1" xmlns:top="http://emulab.net/resources/top/0.2" xmlns:ptop="http://emulab.net/resources/ptop/0.1">
   <xs:import namespace="http://emulab.net/resources/top/0.2" schemaLocation="top.xsd"/>
   <xs:element name="type_limit">
@@ -45,11 +50,7 @@
         </xs:element>
         <xs:element minOccurs="0" maxOccurs="unbounded" ref="ptop:type_limit"/>
       </xs:sequence>
-      <xs:attribute name="testbed" use="required">
-        <xs:annotation>
-          <xs:documentation>The testbed that this physical topology came from</xs:documentation>
-        </xs:annotation>
-      </xs:attribute>
+      <xs:attribute name="testbed" use="required"/>
     </xs:complexType>
   </xs:element>
 </xs:schema>

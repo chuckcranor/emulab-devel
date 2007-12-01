@@ -1,6 +1,25 @@
+#
+# EMULAB-COPYRIGHT
+# Copyright (c) 2007 University of Utah and the Flux Group.
+# All rights reserved.
+#
+
+#
+# Description of a virtual topology
+#
 default namespace = "http://emulab.net/resources/vtop/0.2"
 
-include "top.rnc"
+#
+# We include the common topology specification schema, but override a few
+# elements
+#
+include "top.rnc" {
+    ## In the vtop file, a node is only allowed to have a single type
+    NodeSpec.NodeType = NodeTypeSpec
+    ## In the vtop file, a link is only allowed to have a single type (which
+    ## is optional)
+    LinkSpec.LinkType = LinkTypeSpec?
+}
 
 ## Add an atribute to the 'node' tag that allows you to fix it to a specific
 ## physical node
@@ -10,7 +29,9 @@ NodeSpec &= attribute assigned_to { text }?
 ## be a good idea to assign it to a specific physical node
 NodeSpec &= attribute hint_to { text }?
 
-## Specify a virtual class
+## Specify a virtual class - assign allows you to define classes for virtual
+## nodes, and specify that all nodes using that class should, or must, be
+## assigned to physical nodes of the same type
 VclassSpec = element vclass {
     ## Name of the virtual class
     attribute name { text },
