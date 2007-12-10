@@ -1,0 +1,66 @@
+#
+# EMULAB-COPYRIGHT
+# Copyright (c) 2000-2006 University of Utah and the Flux Group.
+# All rights reserved.
+#
+
+SRCDIR		= @srcdir@
+TESTBED_SRCDIR	= @top_srcdir@
+OBJDIR		= ../../..
+SUBDIR		= event/linktest/iperf
+
+include $(OBJDIR)/Makeconf
+
+SYSTEM         := $(patsubst CYGWIN%,CYGWIN,$(shell uname -s))
+
+ifeq ($(SYSTEM),CYGWIN)
+# Compile single-threaded on Windows.  Otherwise, the client iperf often hangs
+# after the first phase of a two-way bandwidth test.
+CONFIG_ARGS     = --disable-threads
+endif
+
+ifeq ($(host_cpu),arm)
+TARGETS =
+ITARGETS =
+else
+TARGETS = src/emulab-iperf
+ITARGETS = iperf-install
+endif
+
+all: $(TARGETS)
+
+include $(TESTBED_SRCDIR)/GNUmakerules
+
+# Next two rules for linux, where make=gmake.
+%-am:		Makefile force
+	$(MAKE) -f Makefile $@
+
+%-recursive:	Makefile force
+	$(MAKE) -f Makefile $@
+
+src/emulab-iperf:	iperf-2.0.2 config.status build-iperf
+
+build-iperf: Makefile
+	$(MAKE) -f Makefile all
+
+client: all
+
+iperf-install: build-iperf
+	$(INSTALL_PROGRAM) -s src/iperf $(DESTDIR)$(CLIENT_BINDIR)/emulab-iperf
+
+client-install: $(ITARGETS)
+
+# Note: GNU make wants to pass options in MAKEFLAGS (w) that are compatible
+# with BSD make.  So we just force configure to assume/use gmake for BSD.
+config.status:
+	MAKE=$(MAKE) $(SRCDIR)/iperf-2.0.2/configure $(CONFIG_ARGS)
+
+iperf-2.0.2:
+	$(SRCDIR)/iperf-fetch.sh $(SRCDIR)
+
+clean: Makefile
+	$(MAKE) -f Makefile clean
+
+Makefile: config.status
+
+force: ;

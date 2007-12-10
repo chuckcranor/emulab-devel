@@ -1,0 +1,20 @@
+#
+# EMULAB-COPYRIGHT
+# Copyright (c) 2005-2006 University of Utah and the Flux Group.
+# All rights reserved.
+#
+
+set ns [new Simulator]
+source tb_compat.tcl
+
+set node0 [$ns node]
+tb-set-node-os $node0 @OS@
+
+set node1 [$ns node]
+tb-set-node-os $node1 @OS@
+
+set link0 [$ns duplex-link $node0 $node1 100Mb 0ms DropTail]
+
+$ns rtproto Static
+$ns run
+
