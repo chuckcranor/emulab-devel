@@ -1,6 +1,6 @@
 #!/bin/csh -f
 #
-# $Id: manager.sh,v 1.1 2005-11-28 15:44:00 stack Exp $
+# $Id: manager.sh,v 1.1.12.1 2007-12-12 01:01:42 kevina Exp $
 #
 # Dan Ellard
 #

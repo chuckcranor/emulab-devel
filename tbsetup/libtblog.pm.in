@@ -266,7 +266,7 @@ undef $SCRIPTNAME; # signal to use $ENV{TBLOG_SCRIPTNAME}
 my $DB;
 my $TBLOG_PID;
 
-my $REVISION_STR = '$Revision: 2.24 $';
+my $REVISION_STR = '$Revision: 2.24.8.1 $';
 
 #
 # Internal Utility Functions

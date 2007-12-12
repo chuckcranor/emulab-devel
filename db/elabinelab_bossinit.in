@@ -1,0 +1,172 @@
+#!/usr/bin/perl -wT
+#
+# EMULAB-COPYRIGHT
+# Copyright (c) 2000-2004, 2007 University of Utah and the Flux Group.
+# All rights reserved.
+#
+use English;
+use Getopt::Std;
+
+#
+# ElabInElab: This is run on the inner boss to construct a bunch stuff
+# from the db (groups, projects, users, etc).
+#
+sub usage()
+{
+    print STDERR "Usage: $0 [-d] <pid>\n";
+    exit(1);
+}
+my $optlist = "d";
+my $debug   = 0;
+sub mysystem($);
+
+#
+# Configure variables
+#
+my $TB		= "@prefix@";
+my $TBOPS       = "@TBOPSEMAIL@";
+my $ELABINELAB  = @ELABINELAB@;
+my $SAVEUID     = $UID;
+
+# un-taint path
+$ENV{'PATH'} = '/bin:/usr/bin:/usr/sbin:/usr/local/bin';
+delete @ENV{'IFS', 'CDPATH', 'ENV', 'BASH_ENV'};
+
+# Turn off line buffering on output
+$| = 1;
+
+use lib "@prefix@/lib";
+use libdb;
+use libtestbed;
+
+# Defined in libdb ...
+my $TBOPSPID    = TBOPSPID();
+
+if (!$ELABINELAB) {
+    die("*** $0:\n".
+	"    This script can only run on an inner Emulab!\n");
+}
+# Only admin types!
+if (!TBAdmin($UID)) {
+    die("*** $0:\n".
+	"    Only TB administrators can run this script!\n");
+}
+#
+# We don't want to run this script unless its the real version.
+#
+if ($EUID != 0) {
+    die("*** $0:\n".
+	"    Must be root! Maybe its a development version?\n");
+}
+
+#
+# Parse command arguments. Once we return from getopts, all that should
+# left are the required arguments.
+#
+%options = ();
+if (! getopts($optlist, \%options)) {
+    usage();
+}
+if (defined($options{"d"})) {
+    $debug = 1;
+}
+
+usage()
+    if (scalar(@ARGV) != 1);
+my $pid = shift();
+
+#
+# Untaint the arguments.
+#
+if ($pid =~ /^([-\w]+)$/) {
+    $pid = $1;
+}
+else {
+    die("Tainted argument $pid!\n");
+}
+
+# Temporary ... See utils/firstuser ... 
+DBQueryFatal("update group_membership set pid_idx=1,gid_idx=1 ".
+	     "where pid='$TBOPSPID' and pid=gid");
+
+#
+# Shift to real user for these scripts.
+#
+$EUID = $UID;
+
+#
+# Build the project.
+#
+mysystem("$TB/sbin/mkproj -s $pid");
+
+#
+# Get the list of users and admin status. Admin users get a real shell
+# on boss. Create the users, and not that we have to do this before the
+# groups are created (tbacct add does not do a setgroups).
+#
+my $users_result =
+    DBQueryFatal("select distinct u.uid,u.admin from group_membership as m ".
+		 "left join users as u on u.uid_idx=m.uid_idx ".
+		 "where u.status='" . USERSTATUS_ACTIVE() . "'");
+while (my ($uid,$admin) = $users_result->fetchrow_array()) {
+    next
+	if ($uid eq "elabman");
+    
+    mysystem("$TB/sbin/tbacct -b add $uid");
+    if ($admin) {
+	# Add admin users to group wheel for convenience.
+	DBQueryFatal("replace into unixgroup_membership ".
+		     "values ('$uid','wheel')");
+    }
+    if ($admin) {
+	# Flip back to root for pw command.
+	$EUID = 0;
+	mysystem("pw usermod -n $uid -s /bin/tcsh");
+	$EUID = $UID;
+    }
+}
+
+#
+# Get the list of subgroups in the project and create those groups.
+#
+my $query_result =
+    DBQueryFatal("select gid_idx from groups where pid='$pid' and pid!=gid");
+while (my ($gid_idx) = $query_result->fetchrow_array()) {
+    mysystem("$TB/sbin/mkgroup -s $gid_idx");
+}
+
+#
+# Now do a setgroups.
+#
+$users_result->dataseek(0);
+while (my ($uid,$admin) = $users_result->fetchrow_array()) {
+    next
+	if ($uid eq "elabman");
+    
+    mysystem("$TB/sbin/setgroups $uid");
+}
+
+#
+# Do the exports setup and the genelists all at once now that all the above
+# stuff happened.
+#
+mysystem("$TB/sbin/genelists -a");
+mysystem("$TB/sbin/exports_setup");
+
+#
+# Run a command string.
+#
+sub mysystem($)
+{
+    my ($command) = @_;
+
+    if ($debug) {
+	print "Command: '$command\'\n";
+    }
+
+    system($command);
+    if ($?) {
+	die("*** $0:\n".
+	    "    Command failed: $? - $command\n");
+    }
+}

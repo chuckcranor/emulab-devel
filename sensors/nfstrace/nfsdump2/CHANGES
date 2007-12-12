@@ -1,4 +1,4 @@
-$Header: /home/cvs_mirrors/cvs-public.flux.utah.edu/CVS/testbed/sensors/nfstrace/nfsdump2/CHANGES,v 1.1 2005-11-28 15:44:00 stack Exp $
+$Header: /home/cvs_mirrors/cvs-public.flux.utah.edu/CVS/testbed/sensors/nfstrace/nfsdump2/CHANGES,v 1.1.12.1 2007-12-12 01:01:42 kevina Exp $
 
 Tuesday January 9, 2001. mcr@sandelman.ottawa.on.ca. Summary for 3.6 release
 	Cleaned up documentation.
@@ -595,4 +595,4 @@ v2.0 Sun Jan 13 12:20:40 PST 1991
 
 - Initial public release.
 
-@(#) $Header: /home/cvs_mirrors/cvs-public.flux.utah.edu/CVS/testbed/sensors/nfstrace/nfsdump2/CHANGES,v 1.1 2005-11-28 15:44:00 stack Exp $ (LBL)
+@(#) $Header: /home/cvs_mirrors/cvs-public.flux.utah.edu/CVS/testbed/sensors/nfstrace/nfsdump2/CHANGES,v 1.1.12.1 2007-12-12 01:01:42 kevina Exp $ (LBL)

@@ -18,7 +18,7 @@
  * MA 02111-1307, USA
  *
  * 10/14/96 katayama@rd.nacsis.ac.jp
- * $Id: wvcluster.cc,v 1.1 2007-09-14 21:40:16 pramod Exp $
+ * $Id: wvcluster.cc,v 1.1.2.1 2007-12-12 01:01:29 kevina Exp $
  */
 
 /* Modified into wvcluster.cc  by Taekhyun Kim */

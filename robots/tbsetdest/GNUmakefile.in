@@ -1,0 +1,42 @@
+#
+# EMULAB-COPYRIGHT
+# Copyright (c) 2005 University of Utah and the Flux Group.
+# All rights reserved.
+#
+
+SRCDIR		= @srcdir@
+TESTBED_SRCDIR	= @top_srcdir@
+OBJDIR		= ../..
+SUBDIR		= robots/tbsetdest
+
+include $(OBJDIR)/Makeconf
+
+PROGS = tbsetdest
+
+all: $(PROGS)
+client client-install:
+
+include $(TESTBED_SRCDIR)/GNUmakerules
+
+OBJS	  = tbsetdest.o
+ULXRINC   = -I/usr/local/include/ulxmlrpcpp
+CXXFLAGS += -O -g -Wall -I${OBJDIR} -I/usr/local/include $(ULXRINC)
+CXXFLAGS += -pthread
+LDFLAGS   = -L/usr/local/lib
+
+LIBS	  = -lulsshxmlrpcpp -lulxmlrpcpp -lexpat
+LIBS	 += -L/usr/local/lib -lvin4mt -lvin4c -lvin4 -lssl -lcrypto -lm
+
+tbsetdest: $(OBJS)
+	$(CXX) -static $(CXXFLAGS) $(LDFLAGS) -o $@ $(OBJS) $(LIBS)
+
+install: all
+	-mkdir -p $(INSTALL_DIR)/opsdir/bin
+	$(INSTALL_PROGRAM) tbsetdest $(INSTALL_DIR)/opsdir/bin/tbsetdest
+
+control-install: all
+	-mkdir -p $(INSTALL_DIR)/bin
+	$(INSTALL_PROGRAM) tbsetdest $(INSTALL_DIR)/bin/tbsetdest
+
+clean:
+	rm -f *.o

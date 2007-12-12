@@ -1,0 +1,727 @@
+#!/usr/bin/perl -wT
+
+#
+# EMULAB-COPYRIGHT
+# Copyright (c) 2000-2007 University of Utah and the Flux Group.
+# All rights reserved.
+#
+
+use English;
+use Getopt::Std;
+use Socket;
+use File::Basename;
+    
+#
+# Parse an ns file. Since the parser runs arbitrary NS file for the user,
+# this cannot be safely done on boss without jumping through huge hoops
+# to secure tcl and the DB. Yuck! So, instead of running the parser on boss,
+# we run it over on ops. This first version operates like this:
+#
+# NB: This script is setuid.
+#
+sub usage()
+{
+    print STDOUT
+	"Usage: parse-ns [options] pid gid eid nsfile\n".
+        "Where options and arguments are those required by parse.tcl\n";
+ 
+    exit(-1);
+}
+my $optlist  = "nqap";
+my $anonmode = 0;
+my $passmode = 0;
+my $impotent = 0;
+my $debug    = 0;
+
+#
+# Configure variables
+#
+my $TB       = "@prefix@";
+my $TBOPS    = "@TBOPSEMAIL@";
+my $CONTROL  = "@USERNODE@";
+my $TESTMODE = @TESTMODE@;
+
+# Locals
+my $infile   = "parse.input";
+my $outfile  = "parse.output";
+my $SAVEUID  = $UID;
+my $this_user;
+my $pid;
+my $gid;
+my $eid;
+my $exptidx;
+my $nsfile;
+my $experiment;
+
+#
+# Turn off line buffering on output
+#
+$| = 1;
+
+#
+# Untaint the path
+# 
+$ENV{'PATH'} = "$TB/bin:$TB/sbin:/bin:/usr/bin:/sbin:/usr/sbin";
+delete @ENV{'IFS', 'CDPATH', 'ENV', 'BASH_ENV'};
+
+if ($TESTMODE) {
+    # In testmode, drop privs (my devel tree at home is TESTMODE=1)
+    $EUID = $UID;
+}
+elsif ($EUID != 0) {
+    # We don't want to run this script unless its the real version.
+    die("Must be root! Maybe its a development version?");
+}
+
+# This script is setuid, so please do not run it as root. Hard to track
+# what has happened.
+if ($UID == 0) {
+    die("Please do not run this as root! Its already setuid!");
+}
+
+#
+# Testbed Support libraries
+#
+use lib "@prefix@/lib";
+use libdb;
+use libtestbed;
+use libtblog;
+use libtblog qw(dblog *SERR);
+use NodeType;
+use Template;
+use Experiment;
+use User;
+
+use constant false => 0;
+use constant true  => 1;
+
+sub parse_error($);
+
+#
+# Parse command arguments. Once we return from getopts, all that should
+# left are the required arguments.
+#
+%options = ();
+if (! getopts($optlist, \%options)) {
+    usage();
+}
+if (defined($options{"a"})) {
+    $anonmode = 1;
+}
+if (defined($options{"n"})) {
+    $impotent = 1;
+}
+if (defined($options{"p"})) {
+    $passmode = 1;
+}
+if (@ARGV != 4 && @ARGV != 1) {
+    usage();
+}
+
+if (@ARGV == 1) {
+    $nsfile = $ARGV[0];
+}
+else {
+    $pid   = $ARGV[0];
+    $gid   = $ARGV[1];
+    $eid   = $ARGV[2];
+    $nsfile= $ARGV[3];
+}
+
+#
+# Must taint check!
+#
+if ($nsfile =~ /^([-\w\/\.]+)$/) {
+    $nsfile = $1;
+}
+else {
+    die("Bad data in argument: $nsfile.");
+}
+   
+if (defined($pid)) {
+    if ($pid =~ /^([-\w]+)$/) {
+	$pid = $1;
+    }
+    else {
+	die("Bad data in argument: $pid.");
+    }
+    if ($eid =~ /^([-\w]+)$/) {
+	$eid = $1;
+    }
+    else {
+	die("Bad data in argument: $eid.");
+    }
+    if ($gid =~ /^([-\w]+)$/) {
+	$gid = $1;
+    }
+    else {
+	die("Bad data in argument: $gid.");
+    }
+
+    # Slowly convert to new libraries ...
+    $experiment = Experiment->Lookup($pid, $eid);
+    if (! defined($experiment)) {
+	tbdie("Cannot find the experiment object for $pid/$eid");
+    }
+    $exptidx = $experiment->idx();
+}
+
+# Remove temps cause of swapin by alternates.
+unlink($infile);
+unlink($outfile);
+
+if (!$TESTMODE) {
+    #
+    # Get DB uid for sending over to ops. In testmode, it runs locally
+    # as the user running the testsuite, obviously.
+    #
+    $this_user = User->ThisUser();
+    if (! defined($this_user)) {
+	tbdie("You ($UID) do not exist!");
+    }
+
+    # Run as the user for most of this script.
+    $EUID = $UID;
+}
+
+# Create the defs files.
+sub GenDefsFile($);
+GenDefsFile($infile);
+
+# Now append the NS file to. This part is hokey. Fix later.
+system("cat $nsfile >> $infile") == 0
+    or die("Could not combine TCL defs file and the NS file!\n");
+
+#
+# Touch the output file, to avoid a root owned, 644 file. 
+#
+if (-e $outfile) {
+    unlink($outfile) or
+	tbdie("Could not unlink $outfile");
+}
+system("touch $outfile") == 0 or
+    tbdie("Could not create $outfile");
+
+#
+# Build up a new command line to run the parser on ops, writing the
+# result back to a file if not in anonmode. Remember to tack on the
+# user ID to flip to, when not in testmode.
+#
+my $cmdargs = "$TB/libexec/ns2ir/parse.proxy ";
+$cmdargs .= " -u " . $this_user->uid() . " "
+    if (defined($this_user));
+$cmdargs .= " -- ";
+$cmdargs .= " -a"
+    if ($anonmode);
+$cmdargs .= " -n"
+    if (defined($options{"n"}));
+$cmdargs .= " -q"
+    if (defined($options{"q"}));
+$cmdargs .= " -p"
+    if ($passmode);
+$cmdargs .= " $pid $gid $eid"
+    if (!$anonmode);
+
+#
+# Run parser, redirecting stdout to a file to capture the parser results.
+# Stderr is redirected to the ERR filehandle
+# Must flip to real root to run ssh.
+#
+if ($TESTMODE) {
+    #
+    # In testmode, no ssh. Just run locally.
+    #
+    open ERR, "$cmdargs < $infile 2>&1 >> $outfile |";
+}
+else {
+    #
+    # In non-testmode, must flip to real root for the ssh, and then flip
+    # back afterwards.
+    # 
+    $EUID = $UID = 0;
+    open ERR, "sshtb -host $CONTROL $cmdargs < $infile 2>&1 >> $outfile |";
+    $EUID = $UID = $SAVEUID;
+}
+
+#
+# Now read in the results from stderr and correctly insert the errors
+# into the database under the process name of the script called above.
+# Also echo the results to the non-captured stderr (SERR).  This is
+# needed because parse.proxy may be run on ops, not boss.
+#
+{
+    my $old_env = \%ENV;
+    local %ENV;
+    copy_hash %ENV, $old_env;
+
+    my @argv = split /\s+/, $cmdargs;
+    my $cmd = basename(shift @argv);
+    
+    tblog_new_process($cmd, @argv);
+    tblog_set_default_cause('user');
+
+    my $err = '';
+    
+    # assume any output indicates an error
+    while (<ERR>) {
+	print SERR $_;
+	if (/^\s*\*\*\*\s*(.+)/) {
+	    parse_error($err);
+	    dblog(TBLOG_ERR, {}, $err) if $err; # flush any previous errors
+	    $_ = $1;
+	    if (/^\S+:\s*$/) { # error on next line
+		$_ = <ERR>;
+		print SERR $_;
+		s/^\s+//;
+	    } 
+	    s/\s+$//;
+	    parse_error($_);
+	    dblog(TBLOG_ERR, {}, $_) if $_;
+	    $err = '';
+	} else {
+	    $err .= $_;
+	}
+    }
+    parse_error($err);
+    dblog(TBLOG_ERR, {}, $err) if $err;
+
+    tblog_exit();
+}
+close ERR;
+
+
+if ($?) {
+    my $exit_status = $? >> 8;
+    
+    tbdie({cause => 'user', type => 'extra', severity => SEV_ERROR,
+	   error => ['ns_parse_failed']},
+	  "Parsing failed (error code $exit_status)!");
+}
+exit(0)
+    if ($impotent);
+
+#
+# Run the XML converter on the output. 
+#
+system("$TB/libexec/xmlconvert -p -x $outfile $pid $eid");
+
+if ($?) {
+    my $exit_status = $? >> 8;
+    
+    tbdie({type => 'primary', severity => SEV_ERROR,
+	   error => ['xml_converter_failed']},
+	  "XML converter exited with error code $exit_status!\n");
+}
+
+#
+# Now we have to fix up one minor thing; widearea tunnel IPs. These have
+# to be unique, but without the DB to ask, there is no easy way to arrange
+# that.
+
+my %subnetmap = ();
+my $WANETMASK = "255.255.255.248";
+
+my $query_result =
+    DBQueryFatal("select vname,ips from virt_nodes ".
+		 "where pid='$pid' and eid='$eid'");
+while (my ($vname,$ips) = $query_result->fetchrow_array()) {
+    my @newiplist = ();
+    my $newips;
+
+    foreach my $ipinfo (split(" ", $ips)) {
+	my ($port,$ip) = split(":", $ipinfo);
+	my ($a,$b,$c,$d) = ($ip =~ /(\d+).(\d+).(\d+).(\d+)/);
+
+	if ($a eq "69" && $b eq "69") {
+	    my $net = inet_ntoa(inet_aton($WANETMASK) & inet_aton($ip));
+		
+	    if (! defined($subnetmap{$net})) {
+		DBQueryFatal("insert into ipsubnets (exptidx,pid,eid,idx) ".
+			     "values ('$exptidx','$pid','$eid', NULL)");
+		my ($id) =
+		    DBQueryFatal("select LAST_INSERT_ID() ".
+				 "from ipsubnets")->fetchrow_array();
+
+		# We are going to shift the bits up so they do not conflict
+		# with the lower part.
+		if ($id >= 8192) {
+		    die("No more widearea subnets left!\n");
+		}
+		$id = $id << 3;
+
+		my $cc = ($id & 0xff00) >> 8;
+		my $dd = ($id & 0xf8);
+		$subnetmap{$net} = inet_aton("192.168.$cc.$dd");
+	    }
+	    my $newsubnet = inet_ntoa($subnetmap{$net} | inet_aton("$d"));
+	    push(@newiplist, "$port:${newsubnet}");
+	}
+	else {
+	    push(@newiplist, $ipinfo);
+	}
+    }
+    $newips = join(" ", @newiplist);
+    
+    if ($newips ne $ips) {
+	DBQueryFatal("update virt_nodes set ips='$newips' ".
+		     "where vname='$vname' and pid='$pid' and eid='$eid'");
+    }
+}
+#
+# So, if we ended up changing any, we have look for corresponding entries
+# in virt_trafgens, and fix them too.
+#
+if (keys(%subnetmap)) {
+    $query_result =
+	DBQueryFatal("select vnode,vname,ip,target_ip from virt_trafgens ".
+		     "where pid='$pid' and eid='$eid'");
+    while (my ($vnode,$vname,$ip,$dstip) = $query_result->fetchrow_array()) {
+	my ($a,$b,$c,$d) = ($ip =~ /(\d+).(\d+).(\d+).(\d+)/);
+	my $newip        = $ip;
+	my $newdstip     = $dstip;
+	my $net		 = inet_ntoa(inet_aton($WANETMASK) & inet_aton($ip));
+	
+	if (defined($subnetmap{$net})) {
+	    $newip = inet_ntoa($subnetmap{$net} | inet_aton("$d"));
+	}
+	($a,$b,$c,$d) = ($dstip =~ /(\d+).(\d+).(\d+).(\d+)/);
+	$net          = inet_ntoa(inet_aton($WANETMASK) & inet_aton($dstip));
+	if (defined($subnetmap{$net})) {
+	    $newdstip = inet_ntoa($subnetmap{$net} | inet_aton("$d"));
+	}
+	if ($ip ne $newip || $dstip ne $newdstip) {
+	    DBQueryFatal("update virt_trafgens set ".
+			 "       ip='$newip',target_ip='$newdstip' ".
+			 "where pid='$pid' and eid='$eid' and ".
+			 "      vnode='$vnode' and vname='$vname'");
+	}
+    }
+}
+exit(0);
+
+
+#
+# Open up a TCL file and write a bunch of TCL to it!
+#
+sub GenDefsFile($)
+{
+    my($fname) = $_[0];
+
+    open(TCL, "> $fname")
+	or die("Could not open TCL defs file for writing: $!\n");
+
+    print TCL "namespace eval TBCOMPAT {\n";
+
+    print TCL "# Event Object Types\n";
+    my $query_result =
+	DBQueryFatal("select idx,type from event_objecttypes");
+    while (my ($idx,$type) = $query_result->fetchrow_array()) {
+	print TCL "set objtypes($type) $idx\n";
+    }
+    print TCL "\n";
+
+    print TCL "# Event Event Types\n";
+    $query_result =
+	DBQueryFatal("select idx,type from event_eventtypes");
+    while (my ($idx,$type) = $query_result->fetchrow_array()) {
+	print TCL "set eventtypes($type) $idx\n";
+    }
+    print TCL "\n";
+    
+    print TCL "# Node Types and Classes\n";
+    my @alltypes = NodeType->AllTypes();
+    foreach my $typeinfo (@alltypes) {
+	my $type   = $typeinfo->type();
+	my $class  = $typeinfo->class();
+	my $isrem  = $typeinfo->isremotenode();
+	my $isvirt = $typeinfo->isvirtnode();
+	my $issub  = $typeinfo->issubnode();
+	my $osid   = $typeinfo->default_osid();
+
+	print TCL "set hwtypes($type) 1\n";
+	print TCL "set hwtype_class($type) $class\n";
+	print TCL "set isremote($type) $isrem\n";
+	print TCL "set isvirt($type) $isvirt\n";
+	print TCL "set issubnode($type) $issub\n";
+
+	# Since there are multiple types per class, this is probably not
+	# the right thing to do.
+	print TCL "set hwtypes($class) 1\n";
+	print TCL "set isremote($class) $isrem\n";
+	print TCL "set isvirt($class) $isvirt\n";
+	print TCL "set issubnode($class) $issub\n";
+
+	if (defined($osid) && $osid ne "") {
+	    $query_result =
+		DBQueryFatal("select osname from os_info ".
+			     "where osid='$osid'");
+	    if ($query_result->numrows) {
+		my ($osname) = $query_result->fetchrow_array();
+
+		if ($osname) {
+		    print TCL "set default_osids($type) \"$osname\"\n"
+		}
+	    }
+	}
+    }
+    print TCL "\n";
+    
+    print TCL "# Node Aux Types\n";
+    my @auxtypes = NodeType->AuxTypes();
+    foreach my $typeinfo (@auxtypes) {
+	my $type   = $typeinfo->type();
+	my $isrem  = $typeinfo->isremotenode();
+	my $isvirt = $typeinfo->isvirtnode();
+	my $issub  = $typeinfo->issubnode();
+	my $osid   = $typeinfo->default_osid();
+
+	print TCL "set hwtypes($type) 1\n";
+	print TCL "set isremote($type) $isrem\n";
+	print TCL "set isvirt($type) $isvirt\n";
+	print TCL "set issubnode($type) $issub\n";
+
+	if (defined($osid) && $osid ne "") {
+	    $query_result =
+		DBQueryFatal("select osname from os_info ".
+			     "where osid='$osid'");
+	    if ($query_result->numrows) {
+		my ($osname) = $query_result->fetchrow_array();
+
+		if ($osname) {
+		    print TCL "set default_osids($type) \"$osname\"\n"
+		}
+	    }
+	}
+    }
+    print TCL "\n";
+
+    print TCL "# Global Vtypes\n";
+    $query_result = 
+        DBQueryFatal("select vtype, weight, types ".
+                     " from global_vtypes");
+    while (my ($vtype, $weight, $types) = $query_result->fetchrow_array()) {
+        print TCL "set ::GLOBALS::vtypes($vtype) [Vtype $vtype $weight {$types}]\n";
+    }
+    print TCL "\n";
+
+    
+    print TCL "# Node Permissions\n";
+    my %nodeperms = ();
+    $query_result =
+	DBQueryFatal("select type,pid from nodetypeXpid_permissions");
+    while (my ($type,$pid) = $query_result->fetchrow_array()) {
+	if (! defined($nodeperms{$type})) {
+	    $nodeperms{$type} = [];
+	}
+	push(@{$nodeperms{$type}}, $pid);
+    }
+    foreach my $type (keys(%nodeperms)) {
+	my @pids = @{$nodeperms{$type}};
+
+	print TCL "set nodetypeXpid_permissions($type) [list @pids]\n";
+    }
+    print TCL "\n";
+
+    print TCL "# Robot areas\n";
+    $query_result =
+	DBQueryFatal("select distinct building from node_startloc");
+    while (my ($building,$floor) = $query_result->fetchrow_array()) {
+	print TCL "set areas($building) 1\n";
+    }
+    print TCL "\n";
+
+    print TCL "# Obstacles\n";
+    $query_result = DBQueryFatal(
+	"select o.obstacle_id,o.building,o.x1,o.x2,o.y1,o.y2,o.description, ".
+	" fi.pixels_per_meter ".
+	"from obstacles as o ".
+	"left join floorimages as fi on fi.building=o.building");
+    while (my ($id,$building,$x1,$x2,$y1,$y2,$description,$ppm) = 
+	   $query_result->fetchrow_array()) {
+	print TCL "set obstacles($id,$building,x1) " . $x1 / $ppm . "\n";
+	print TCL "set obstacles($id,$building,x2) " . $x2 / $ppm . "\n";
+	print TCL "set obstacles($id,$building,y1) " . $y1 / $ppm . "\n";
+	print TCL "set obstacles($id,$building,y2) " . $y2 / $ppm . "\n";
+	print TCL "set obstacles($id,$building,description) {$description}\n";
+    }
+    print TCL "\n";
+
+    print TCL "# Cameras\n";
+    $query_result = DBQueryFatal(
+	"select name,building,loc_x,loc_y,width,height from cameras");
+    while (my ($name,$building,$loc_x,$loc_y,$width,$height) = 
+	   $query_result->fetchrow_array()) {
+	print TCL "set cameras($name,$building,x) $loc_x\n";
+	print TCL "set cameras($name,$building,y) $loc_y\n";
+	print TCL "set cameras($name,$building,width) $width\n";
+	print TCL "set cameras($name,$building,height) $height\n";
+    }
+    print TCL "\n";
+
+    if (defined($pid)) {
+	print TCL "# OSIDs\n";
+	$query_result =
+	    DBQueryFatal("select osname from os_info ".
+			 "where shared=1 or pid='$pid'");
+		     
+	while (my ($osname) = $query_result->fetchrow_array()) {
+	    print TCL "set osids($osname) 1\n";
+	}
+	print TCL "\n";
+    }
+
+    if (defined($pid)) {
+	# Load reserved nodes, for swapmodify.
+	$query_result = 
+	    DBQueryFatal("select r.vname,r.node_id,n.type from reserved as r ".
+			 "left join nodes as n on n.node_id=r.node_id ".
+			 "where r.pid='$pid' and r.eid='$eid'");
+
+	print TCL "# Reserved Nodes\n";
+	while (($vname,$reserved,$type) = $query_result->fetchrow_array()) {
+	    print TCL "lappend reserved_list \"$vname\"\n";
+	    print TCL "set reserved_type($vname) \"$type\"\n";
+	    print TCL "set reserved_node($vname) \"$reserved\"\n";
+	}
+    }
+
+    print TCL "# Physical Node Names\n";
+    $query_result =
+	DBQueryFatal("select n.node_id,nt.type from nodes as n ".
+		     "left join node_types as nt on n.type=nt.type ".
+		     "where n.node_id=n.phys_nodeid and nt.isremotenode=0 ".
+		     "and n.role='testnode' and nt.type!='dnard'");
+
+    while (($node_id,$type) = $query_result->fetchrow_array()) {
+	print TCL "set physnodes($node_id) \"$type\"\n";
+    }
+
+    print TCL "# Location info\n";
+    $query_result =
+	DBQueryFatal("select li.node_id,li.building,li.loc_x,li.loc_y,".
+		     "li.loc_z,fi.pixels_per_meter ".
+		     "from location_info as li ".
+		     "left join floorimages as fi on fi.building=li.building");
+
+    while (my ($node_id,$building,$loc_x,$loc_y,$loc_z,$ppm) =
+	   $query_result->fetchrow_array()) {
+	print TCL "set location_info($node_id,$building,x) ". 
+	    $loc_x / $ppm ."\n";
+	print TCL "set location_info($node_id,$building,y) ". 
+	    $loc_y / $ppm ."\n";
+	if (!defined($loc_z)) {
+	    $loc_z = 0.0;
+	}
+	print TCL "set location_info($node_id,$building,z) ". 
+	    $loc_z / $ppm ."\n";
+    }
+
+    #
+    # ElabInElab stuff.
+    # 
+    my $maxnodes   = 0;
+    if (defined($pid)) {
+	my $elabinelab = 0;
+	my $elabinelab_eid;
+
+	TBExptIsElabInElab($pid, $eid, \$elabinelab, \$elabinelab_eid)
+	    or tbdie("Failed to get ElabInElab attributes!");
+
+	if ($elabinelab && defined($elabinelab_eid)) {
+	    if (! TBExptMinMaxNodes($pid, $elabinelab_eid, undef, \$maxnodes)) {
+		tbdie("Could not get max nodes from DB!");
+	    }
+	}
+    }
+    # Be sure to initialize this to something ...
+    print TCL "set elabinelab_maxpcs $maxnodes\n\n";
+
+    #
+    # For Templates.
+    #
+    print TCL "# Template goo\n";
+    # Does not matter what it is, as long as it is set.
+    print TCL "set ::DATASTORE \"" . PROJROOT() . "\"\n";
+    
+    if (defined($experiment)) {
+	my $instance =
+	    Template::Instance->LookupByID($experiment->instance_idx());
+	
+	if (defined($instance)) {
+	    my $datastore = $instance->path() . "/datastore";
+	    my %parameters;
+
+	    print TCL "set ::DATASTORE \"$datastore\"\n";
+
+	    $instance->BindingList(\%parameters) == 0
+		or tbdie("Could not get binding list for $instance");
+		
+	    foreach my $name (keys(%parameters)) {
+		my $value = $parameters{$name};
+
+		print TCL "set parameter_list_defaults($name) \"$value\"\n";
+	    }
+	    
+	    $instance->RunBindingList(\%parameters) == 0
+		or tbdie("Could not get run binding list for $instance");
+		
+	    foreach my $name (keys(%parameters)) {
+		my $value = $parameters{$name};
+
+		print TCL "set parameter_list_defaults($name) \"$value\"\n";
+	    }
+	}
+    }
+    print TCL "\n\n";
+
+    print TCL "}\n";
+    close(TCL);
+}
+
+sub parse_error($) {
+    my ($mesg) = @_;
+
+    return if parse_invalid_os_error($mesg);
+    return if parse_invalid_variable_error($mesg);
+
+    return;
+}
+
+sub parse_invalid_os_error($) {
+    my ($mesg) = @_;
+    my ($type, $osname);
+
+    if ($mesg =~ /^\[tb-set-(\w+)-os\] Invalid osid (\S+)\.$/) {
+	($type, $osname) = ($1, $2);
+    } else {
+	return false;
+    }
+
+    tbreport(SEV_ADDITIONAL, {script => 'parse.tcl'}, 'invalid_os',
+	     $type, $osname, undef);
+
+    return true;
+}
+
+sub parse_invalid_variable_error($) {
+    my ($mesg) = @_;
+    my ($type, $var);
+
+    if ($mesg =~ /^\[tb-set-hardware\] Invalid hardware type (\S+)\.$/) {
+	$var  = $1;
+	$type = 'hardware_type';
+    } elsif ($mesg =~ /^\[run\] Invalid lan\/link name (\S+)\./) {
+	$var  = $1;
+	$type = 'lan_link_name';
+    } elsif ($mesg =~ /^\[run\] Invalid node name (\S+)\./) {
+	$var  = $1;
+	$type = 'node_name';
+    } else {
+	return false;
+    }
+
+    tbreport(SEV_ADDITIONAL, {script => 'parse.tcl'}, 'invalid_variable',
+	     $type, $var);
+
+    return true;
+}

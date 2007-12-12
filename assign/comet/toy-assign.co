@@ -6,7 +6,7 @@
  * All rights reserved.
  */
 
-string rcsid = "$Id: toy-assign.co,v 1.1 2005-12-17 00:46:45 ricci Exp $";
+string rcsid = "$Id: toy-assign.co,v 1.1.18.1 2007-12-12 01:01:00 kevina Exp $";
 
 /*
  * Include some routines for a local solver

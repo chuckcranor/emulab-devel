@@ -1,4 +1,4 @@
-// $Id: ElabRadioDump.nc,v 1.1 2005-05-27 21:55:55 johnsond Exp $
+// $Id: ElabRadioDump.nc,v 1.1.14.1 2007-12-12 01:01:15 kevina Exp $
 
 /*									tab:4
  * "Copyright (c) 2000-2003 The Regents of the University  of California.  
@@ -29,7 +29,7 @@
  * 94704.  Attention:  Intel License Inquiry.
  */
 /* Author:	Phil Buonadonna
- * Revision:	$Id: ElabRadioDump.nc,v 1.1 2005-05-27 21:55:55 johnsond Exp $
+ * Revision:	$Id: ElabRadioDump.nc,v 1.1.14.1 2007-12-12 01:01:15 kevina Exp $
  */
 
 /**

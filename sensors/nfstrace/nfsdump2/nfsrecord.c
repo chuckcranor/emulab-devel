@@ -1,5 +1,5 @@
 /*
- * $Id: nfsrecord.c,v 1.3 2006-02-02 16:16:17 stack Exp $
+ * $Id: nfsrecord.c,v 1.3.10.1 2007-12-12 01:01:43 kevina Exp $
  */
 
 #ifdef HAVE_CONFIG_H

@@ -1,0 +1,75 @@
+#
+# EMULAB-COPYRIGHT
+# Copyright (c) 2000-2007 University of Utah and the Flux Group.
+# All rights reserved.
+#
+
+SRCDIR		= @srcdir@
+TESTBED_SRCDIR	= @top_srcdir@
+OBJDIR		= ..
+SUBDIR		= capture
+
+SYSTEM	       := $(shell uname -s)
+
+include $(OBJDIR)/Makeconf
+
+all:		boss-all tipserv-all
+boss-all:	capserver
+tipserv-all:	capture capture-tty capquery
+client: capture capquery
+
+include $(TESTBED_SRCDIR)/GNUmakerules
+
+DBFLAGS	+= -I/usr/local/include -I$(TESTBED_SRCDIR)/lib/libtb
+
+#
+# Define LOG_DROPS to record warnings in syslog whenever chars were dropped
+# due to the output device/pty being full.
+#
+CFLAGS += -Wall -g -O2 -DLOG_DROPS -I${OBJDIR} -DLOG_TESTBED=$(LOG_TESTBED)
+LDFLAGS  += $(LDSTATIC)
+
+ifeq ($(SYSTEM),Linux)
+ifneq ($(wildcard /usr/kerberos/bin/krb5-config),)
+CFLAGS   += `/usr/kerberos/bin/krb5-config --cflags`
+LIBS     += `/usr/kerberos/bin/krb5-config --libs krb5`
+ifneq ($(wildcard /usr/lib/libkrb5support.a),)
+LIBS     += -lkrb5support
+endif
+endif
+LIBS	 += -ldl -lz
+endif
+
+capture: capture.c capdecls.h
+	$(CC) $(CFLAGS) -DUSESOCKETS -DWITHSSL -DPREFIX=\"$(TBROOT)\" -o capture $< $(LDFLAGS) -lssl -lcrypto $(LIBS)
+
+capquery: capquery.c capdecls.h
+	$(CC) $(CFLAGS) -DPREFIX=\"$(TBROOT)\" -o $@ $< $(LDFLAGS) $(LIBS)
+
+capture-nossl: capture.c capdecls.h
+	$(CC) $(CFLAGS) -DUSESOCKETS -DPREFIX=\"$(TBROOT)\" -o capture-nossl $<
+
+capture-tty: capture.c capdecls.h
+	$(CC) $(CFLAGS) -o capture-tty $<
+
+capserver:	capserver.c capdecls.h
+	$(CC) $(CFLAGS) $(DBFLAGS) -o capserver $< \
+		${OBJDIR}/lib/libtb/libtb.a \
+		-L/usr/local/lib/mysql -lmysqlclient
+
+#
+# Do not capture install by default.
+#
+install:	all $(INSTALL_SBINDIR)/capserver
+	$(INSTALL_PROGRAM) capture $(INSTALL_DIR)/opsdir/sbin/capture
+
+client-install: client
+	$(INSTALL_PROGRAM) capture$(EXE) $(DESTDIR)$(CLIENT_BINDIR)/capture$(EXE)
+	$(INSTALL_PROGRAM) capquery$(EXE) $(DESTDIR)$(CLIENT_BINDIR)/capquery$(EXE)
+
+real-install:	all $(INSTALL_SBINDIR)/capserver $(INSTALL_SBINDIR)/capture
+
+tipserv-install:	tipserv-all $(INSTALL_SBINDIR)/capture
+
+clean:
+	rm -f *.o capture capture-tty capserver capquery core errs Errs

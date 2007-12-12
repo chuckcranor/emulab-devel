@@ -18,7 +18,7 @@
  * WARRANTIES, INCLUDING, WITHOUT LIMITATION, THE IMPLIED WARRANTIES OF
  * MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE.
  *
- * @(#) $Header: /home/cvs_mirrors/cvs-public.flux.utah.edu/CVS/testbed/sensors/nfstrace/nfsdump2/setsignal.h,v 1.1 2005-11-28 15:44:00 stack Exp $ (LBL)
+ * @(#) $Header: /home/cvs_mirrors/cvs-public.flux.utah.edu/CVS/testbed/sensors/nfstrace/nfsdump2/setsignal.h,v 1.1.12.1 2007-12-12 01:01:43 kevina Exp $ (LBL)
  */
 #ifndef setsignal_h
 #define setsignal_h

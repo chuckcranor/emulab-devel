@@ -18,7 +18,7 @@
  * WARRANTIES, INCLUDING, WITHOUT LIMITATION, THE IMPLIED WARRANTIES OF
  * MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE.
  *
- * @(#) $Header: /home/cvs_mirrors/cvs-public.flux.utah.edu/CVS/testbed/sensors/nfstrace/nfsdump2/lbl/os-ultrix4.h,v 1.1 2005-11-28 15:44:00 stack Exp $ (LBL)
+ * @(#) $Header: /home/cvs_mirrors/cvs-public.flux.utah.edu/CVS/testbed/sensors/nfstrace/nfsdump2/lbl/os-ultrix4.h,v 1.1.12.1 2007-12-12 01:01:43 kevina Exp $ (LBL)
  */
 
 /* Prototypes missing in Ultrix 4 */

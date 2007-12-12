@@ -1,4 +1,4 @@
-dnl @(#) $Header: /home/cvs_mirrors/cvs-public.flux.utah.edu/CVS/testbed/sensors/nfstrace/nfsdump2/configure.in,v 1.1 2005-11-28 15:44:00 stack Exp $ (LBL)
+dnl @(#) $Header: /home/cvs_mirrors/cvs-public.flux.utah.edu/CVS/testbed/sensors/nfstrace/nfsdump2/configure.in,v 1.1.12.1 2007-12-12 01:01:42 kevina Exp $ (LBL)
 dnl
 dnl Copyright (c) 1994, 1995, 1996, 1997
 dnl	The Regents of the University of California.  All rights reserved.
@@ -6,7 +6,7 @@ dnl
 dnl Process this file with autoconf to produce a configure script.
 dnl
 
-AC_REVISION($Revision: 1.1 $)
+AC_REVISION($Revision: 1.1.12.1 $)
 AC_PREREQ(2.13)
 AC_INIT(tcpdump.c)
 

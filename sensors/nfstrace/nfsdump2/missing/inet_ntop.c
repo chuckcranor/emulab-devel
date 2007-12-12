@@ -36,11 +36,11 @@
  * SUCH DAMAGE.
  */
 
-/* $Id: inet_ntop.c,v 1.1 2005-11-28 15:44:00 stack Exp $ */
+/* $Id: inet_ntop.c,v 1.1.12.1 2007-12-12 01:01:43 kevina Exp $ */
 
 #ifndef lint
 static const char rcsid[] =
-     "@(#) $Header: /home/cvs_mirrors/cvs-public.flux.utah.edu/CVS/testbed/sensors/nfstrace/nfsdump2/missing/inet_ntop.c,v 1.1 2005-11-28 15:44:00 stack Exp $";
+     "@(#) $Header: /home/cvs_mirrors/cvs-public.flux.utah.edu/CVS/testbed/sensors/nfstrace/nfsdump2/missing/inet_ntop.c,v 1.1.12.1 2007-12-12 01:01:43 kevina Exp $";
 #endif
 
 #include <stdio.h>

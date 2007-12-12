@@ -23,7 +23,7 @@
  */
 #ifndef lint
 static const char rcsid[] =
-    "@(#) $Header: /home/cvs_mirrors/cvs-public.flux.utah.edu/CVS/testbed/sensors/nfstrace/nfsdump2/addrtoname.c,v 1.1 2005-11-28 15:44:00 stack Exp $ (LBL)";
+    "@(#) $Header: /home/cvs_mirrors/cvs-public.flux.utah.edu/CVS/testbed/sensors/nfstrace/nfsdump2/addrtoname.c,v 1.1.12.1 2007-12-12 01:01:42 kevina Exp $ (LBL)";
 #endif
 
 #ifdef HAVE_CONFIG_H

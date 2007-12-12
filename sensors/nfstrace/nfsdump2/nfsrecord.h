@@ -1,5 +1,5 @@
 /*
- * $Id: nfsrecord.h,v 1.2 2006-02-02 16:16:17 stack Exp $
+ * $Id: nfsrecord.h,v 1.2.10.1 2007-12-12 01:01:43 kevina Exp $
  */
 
 #ifndef _nfsrecord_h

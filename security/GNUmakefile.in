@@ -1,0 +1,63 @@
+#
+# EMULAB-COPYRIGHT
+# Copyright (c) 2000-2004, 2006 University of Utah and the Flux Group.
+# All rights reserved.
+#
+
+SRCDIR		= @srcdir@
+TESTBED_SRCDIR	= @top_srcdir@
+OBJDIR		= ..
+SUBDIR		= security
+
+include $(OBJDIR)/Makeconf
+
+BINS		= suexec
+SBINS		= genlastlog lastlog_daemon
+
+# These scripts installed setuid, with sudo. 
+SETUID_BIN_SCRIPTS   = 
+SETUID_SBIN_SCRIPTS  = 
+SETUID_LIBX_SCRIPTS  = suexec
+
+#
+# Force dependencies on the scripts so that they will be rerun through
+# configure if the .in file is changed.
+# 
+all:	$(BINS) $(SBINS)
+
+include $(TESTBED_SRCDIR)/GNUmakerules
+
+CFLAGS	+= -O2 -g
+
+suexec:		suexec.c suexec.h
+	$(CC) $(CFLAGS) \
+		-DLOG_EXEC='"$(prefix)/log/suexec.log"' \
+		-DDOC_ROOT='"$(prefix)/libexec/"' \
+		-DSAFE_PATH='"$(prefix)/libexec:/usr/local/bin:/usr/bin:/bin"'\
+		-o suexec $<
+
+genlastlog:	genlastlog.c
+	$(CC) $(CFLAGS) -I/usr/local/include -I$(TESTBED_SRCDIR)/lib/libtb \
+		-DTBDBNAME='"$(TBDBNAME)"' \
+		-DUSERSVAR='"$(prefix)/usersvar"' \
+		-DOURDOMAIN='"$(OURDOMAIN)"' \
+                -DUSERNODE='"$(USERNODE)"' \
+		-DLOG_TESTBED=$(LOG_TESTBED) \
+		-o genlastlog $< ${OBJDIR}/lib/libtb/libtb.a \
+		-L/usr/local/lib/mysql -lmysqlclient
+
+install: $(addprefix $(INSTALL_LIBEXECDIR)/, $(BINS)) \
+	$(addprefix $(INSTALL_SBINDIR)/, $(SBINS))
+	@echo "Don't forget to do a post-install as root"
+
+post-install:
+	chown root $(INSTALL_LIBEXECDIR)/suexec
+	chmod u+s $(INSTALL_LIBEXECDIR)/suexec
+
+#
+# Control node installation (okay, plastic)
+#
+control-install:
+
+clean:
+	rm -f *.o genlastlog suexec core

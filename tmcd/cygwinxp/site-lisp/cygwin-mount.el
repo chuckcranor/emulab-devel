@@ -24,7 +24,7 @@
 ;; Boston, MA 02111-1307, USA.
 
 ;; Additional info:
-;; $Date: 2005-06-11 04:16:19 $
+;; $Date: 2007-12-12 01:01:58 $
 ;; Maintenance: Eric Hanchrow <offby1@blarg.net>
 ;; Additional code by: Stephane Rollandin <hepta@zogotounga.net>
 ;;                     Michael Mauger <mmaug@yahoo.com>

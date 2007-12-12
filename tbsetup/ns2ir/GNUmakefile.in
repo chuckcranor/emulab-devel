@@ -1,0 +1,76 @@
+#
+# EMULAB-COPYRIGHT
+# Copyright (c) 2000-2006 University of Utah and the Flux Group.
+# All rights reserved.
+#
+
+#
+# Insert Copyright Here.
+#
+SRCDIR		= @srcdir@
+TESTBED_SRCDIR	= @top_srcdir@
+OBJDIR		= ../..
+SUBDIR		= tbsetup/ns2ir
+
+include $(OBJDIR)/Makeconf
+
+LIB_STUFF    = lanlink.tcl node.tcl sim.tcl tb_compat.tcl null.tcl \
+		  nsobject.tcl traffic.tcl vtype.tcl parse.tcl program.tcl \
+		  nsenode.tcl nstb_compat.tcl event.tcl firewall.tcl \
+		  elabinelab.ns elabinelab-withfsnode.ns \
+		  fw.ns timeline.tcl sequence.tcl \
+		  topography.tcl console.tcl
+BOSSLIBEXEC  = parse-ns
+USERLIBEXEC  = parse.proxy
+
+# These scripts installed setuid, with sudo. 
+SETUID_BIN_SCRIPTS   = 
+SETUID_SBIN_SCRIPTS  = 
+SETUID_LIBX_SCRIPTS  = parse-ns
+
+#
+# Force dependencies on the scripts so that they will be rerun through
+# configure if the .in file is changed.
+# 
+all: $(LIB_STUFF) $(BOSSLIBEXEC) $(USERLIBEXEC)
+
+include $(TESTBED_SRCDIR)/GNUmakerules
+
+install:	control-install \
+	$(addprefix $(INSTALL_LIBEXECDIR)/, $(BOSSLIBEXEC)) \
+	$(addprefix $(INSTALL_DIR)/opsdir/lib/ns2ir/, $(LIB_STUFF)) \
+	$(addprefix $(INSTALL_DIR)/opsdir/libexec/ns2ir/, $(USERLIBEXEC))
+
+control-install: $(addprefix $(INSTALL_LIBDIR)/ns2ir/, $(LIB_STUFF)) \
+	$(addprefix $(INSTALL_LIBEXECDIR)/ns2ir/, $(USERLIBEXEC))
+
+post-install: 
+	chmod 775 $(INSTALL_LIBEXECDIR)
+	chown root $(INSTALL_LIBEXECDIR)/parse-ns
+	chmod 775 $(INSTALL_LIBEXECDIR)/ns2ir
+	chmod u+s $(INSTALL_LIBEXECDIR)/parse-ns
+	chmod 775 $(INSTALL_LIBDIR)/ns2ir
+	chmod 775 $(INSTALL_DIR)/opsdir/lib/ns2ir
+	chmod 775 $(INSTALL_DIR)/opsdir/libexec/ns2ir
+
+$(INSTALL_LIBDIR)/ns2ir/%: %
+	@echo "Installing $<"
+	-mkdir -p $(INSTALL_LIBDIR)/ns2ir
+	$(INSTALL) $< $@
+
+$(INSTALL_LIBEXECDIR)/ns2ir/%: %
+	@echo "Installing $<"
+	-mkdir -p $(INSTALL_LIBEXECDIR)/ns2ir
+	$(INSTALL) $< $@
+
+$(INSTALL_DIR)/opsdir/lib/ns2ir/%: %
+	@echo "Installing $<"
+	-mkdir -p $(INSTALL_DIR)/opsdir/lib/ns2ir
+	$(INSTALL) $< $@
+
+$(INSTALL_DIR)/opsdir/libexec/ns2ir/%: %
+	@echo "Installing $<"
+	-mkdir -p $(INSTALL_DIR)/opsdir/libexec/ns2ir
+	$(INSTALL) $< $@
+
+clean:

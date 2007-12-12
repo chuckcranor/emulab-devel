@@ -1,0 +1,14 @@
+#!/bin/sh
+#
+# EMULAB-COPYRIGHT
+# Copyright (c) 2004 University of Utah and the Flux Group.
+# All rights reserved.
+#
+
+DIR=@prefix@/sbin
+
+if [ -e /var/run/bootinfo.pid ]; then
+    kill `cat /var/run/bootinfo.pid`;
+fi
+${DIR}/bootinfo
+

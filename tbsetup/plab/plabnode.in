@@ -1,0 +1,190 @@
+#!/usr/local/bin/python
+# -*- python -*-
+#
+# EMULAB-COPYRIGHT
+# Copyright (c) 2000-2003 University of Utah and the Flux Group.
+# All rights reserved.
+#
+
+# system imports
+import sys, os
+import getopt
+import time
+import traceback
+import __builtin__
+
+# Emulab imports
+sys.path.append("@prefix@/lib")
+from libtestbed import *
+import libplab
+
+
+def usage(me):
+    print "Usage: %s \\\n" \
+          "  [-vdfE] {alloc|renew|free|stop|start|restart|nmping} \\\n" \
+          "          pid eid nodeid\n" \
+          "  (or without Emulab DB):\n" \
+          "          slicename nodeid" \
+          % (me)
+    sys.exit(1)
+
+def processException(command, nodeid, e):
+    print "plabnode: %s, %s, fail, %s" % (nodeid, command, str(e))
+    if parser.values.debug:
+        traceback.print_exc()
+        pass
+    pass
+
+def main(args):
+    me = args[0]
+    Force = False
+
+    #
+    # Grab a parser, and add options:
+    #
+    __builtin__.parser = TBParser()
+    parser.add_option("-f", "--force", dest="force", default=False,
+                      action="store_true", help="Force vserver creation.")
+    parser.add_option("--pollNode", action="store_true", dest="pollNode",
+                      default=False,
+                      help="Poll node before attempting to set it up.")
+    parser.add_option("--noIS", dest="noIS", action="store_true",
+                      default=False,
+                      help="Don't run InstantiateSliver() in mod_PLC")
+    parser.add_option("-E","--no-emulabify",dest="no_emulabify",default=False,
+                      action="store_true",help="Do not install/config Emulab" \
+                      " software on the node")
+
+    # parse command line options
+    opts, args = parser.parse_args(args[1:])
+
+    slicename = None
+    # make sure we were told what to do on the command line.
+    if len(args) == 3:
+        command, slicename, nodeid = args
+        pass
+    elif len(args) == 4:
+        command, pid, eid, nodeid = args
+        pass
+    else:
+        usage(me)
+        pass
+    
+    plab = libplab.Plab()
+    if slicename != None:
+        slice = plab.loadSliceNoDB(slicename)
+        pass
+    else:
+        slice = plab.loadSlice(pid, eid)
+        pass
+
+    if command == "alloc":
+        try:
+            node = slice.createNode(nodeid, force=parser.values.force)
+            # With the v4 NM, we have to sleep a couple seconds to give
+            # the slice the a chance to get keys/acct stuff straightened out
+            # so we can actually slogin and copy fixsudo.sh to the node.
+            if not opts.no_emulabify:
+                time.sleep(2)
+                node.emulabify()
+                pass
+            # Note that vnode_setup boots the node
+            pass
+        except Exception, e:
+            print "Node setup failed on %s" % nodeid
+            processException(command, nodeid, e)
+            try: node.free()
+            except: pass
+            sys.exit(1)
+            pass
+        pass
+
+    elif command == "renew":
+        try:
+            node = slice.loadNode(nodeid)
+            node.renew()
+            pass
+        except Exception, e:
+            processException(command, nodeid, e)
+            sys.exit(1)
+            pass
+
+    elif command == "free":
+        try:
+            node = slice.loadNode(nodeid)
+            node.free()
+            pass
+        except Exception, e:
+            processException(command, nodeid, e)
+            sys.exit(1)
+            pass
+        pass
+
+    elif command == "stop":
+        try:
+            node = slice.loadNode(nodeid)
+            node.stop()
+            pass
+        except Exception, e:
+            processException(command, nodeid, e)
+            sys.exit(1)
+            pass
+        pass
+
+    elif command == "start":
+        try:
+            node = slice.loadNode(nodeid)
+            node.start()
+            pass
+        except Exception, e:
+            processException(command, nodeid, e)
+            sys.exit(1)
+            pass
+        pass
+
+    elif command == "stop":
+        try:
+            node = slice.loadNode(nodeid)
+            node.stop()
+            pass
+        except Exception, e:
+            processException(command, nodeid, e)
+            sys.exit(1)
+            pass
+        pass
+
+    elif command == "restart":
+        try:
+            node = slice.loadNode(nodeid)
+            node.restart()
+            pass
+        except Exception, e:
+            processException(command, nodeid, e)
+            sys.exit(1)
+            pass
+        pass
+
+    elif command == "nmping":
+        exitval = 1
+        try:
+            node = slice.loadNode(nodeid)
+            res = node.pingNM()
+            if res:
+                exitval = 0
+                pass
+            pass
+        except:
+            if parser.values.debug:
+                traceback.print_exc()
+                pass
+            pass
+        sys.exit(exitval)
+
+    else:
+        usage(me)
+        pass
+
+    pass
+
+if __name__ == "__main__":
+    main(sys.argv)
