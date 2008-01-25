@@ -446,6 +446,8 @@ void dump_link(structlink_map *lmentry)
     info("linkname = %s\n", lmentry->linkname);
     info("linktype = %s\n", lmentry->linktype);
     info("linkstatus = %d \n", lmentry->stat);
+    if (lmentry->clouddir)
+      info("clouddir  = %d \n", lmentry->clouddir);
     info("numpipes   = %d \n", lmentry->numpipes);
     info("islan      = %d \n", lmentry->islan);
     info("dest       = %s \n", lmentry->fs.dest);
@@ -454,7 +456,7 @@ void dump_link(structlink_map *lmentry)
     info("dstport    = %d \n", lmentry->fs.dstport);
 
     for (j = 0; j < lmentry->numpipes; j++) {
-      info("Pipe params:\n");
+      info("Pipe %d params:\n", j);
       info("interface = %s\n", lmentry->interfaces[j]);
       info("pipe num  = %d\n", lmentry->pipes[j]);
       info("vnode     = %s\n", lmentry->vnodes[j]);

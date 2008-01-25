@@ -130,7 +130,7 @@ typedef struct {
  * Flow specification structure, used for per-flow delays.
  */
 struct flowspec {
-  char		dest[32]; /* destination IP address */
+  char		dest[128]; /* destination IP address (list) */
   char		protocol[8]; /* protocol (e.g. tcp, udp) */
   int		srcport; /* source port for ipfw rule */
   int		dstport; /* destination port for ipfw rule */

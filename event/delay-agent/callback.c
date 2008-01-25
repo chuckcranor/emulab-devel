@@ -115,18 +115,66 @@ activate_pipe(int mapix, char *args)
    * If not done already, create the delay pipe
    */
   if (link->inactive) {
-    if (link->clouddir == 3) {  
+    if (link->clouddir == 4) {
+      if (debug)
+	info("activating SRC delay pipe %d\n", link->pipes[0]);
+      else
+	info("  create SRC delay pipe %d\n", link->pipes[0]);
+
+      if (debug > 1)
+        info("  ipfw add %d pipe %d ip from %s to any in recv %s %s",
+	     link->pipes[0],
+	     link->pipes[0],
+	     link->fs.dest,
+	     link->interfaces[0],
+	     redir);
+      systemf("ipfw add %d pipe %d ip from %s to any in recv %s %s",
+	      link->pipes[0],
+	      link->pipes[0],
+	      link->fs.dest,
+	      link->interfaces[0],
+	      redir);
+      if (debug > 1)
+        info("  ipfw pipe %d config bw 0 delay %d plr %f queue %d %s",
+	     link->pipes[0],
+	     link->params[0].delay.delay,
+	     (double)link->params[0].loss.plr/0x7fffffff,
+	     link->params[0].q_size,
+	     redir);
+      systemf("ipfw pipe %d config bw 0 delay %d plr %f queue %d %s",
+	      link->pipes[0],
+	      link->params[0].delay.delay,
+	      (double)link->params[0].loss.plr/0x7fffffff,
+	      link->params[0].q_size,
+	      redir);
+      link->inactive = 0;
+    }
+    else if (link->clouddir == 3) {
       if (debug)
 	info("activating delay/BW pipe %d\n", link->pipes[0]);
       else
 	info("  create delay/BW pipe %d\n", link->pipes[0]);
 
+      if (debug > 1)
+        info("  ipfw add %d pipe %d ip from any to %s in recv %s %s",
+	     link->pipes[0],
+	     link->pipes[0],
+	     link->fs.dest,
+	     link->interfaces[0],
+	     redir);
       systemf("ipfw add %d pipe %d ip from any to %s in recv %s %s",
 	      link->pipes[0],
 	      link->pipes[0],
 	      link->fs.dest,
 	      link->interfaces[0],
 	      redir);
+      if (debug > 1)
+        info("  ipfw pipe %d config bw %d delay %d plr 0 queue %d %s",
+	     link->pipes[0],
+	     link->params[0].bw.bandwidth,
+	     link->params[0].delay.delay,
+	     link->params[0].q_size,
+	     redir);
       systemf("ipfw pipe %d config bw %d delay %d plr 0 queue %d %s",
 	      link->pipes[0],
 	      link->params[0].bw.bandwidth,
@@ -141,12 +189,26 @@ activate_pipe(int mapix, char *args)
       else
 	info("  create delay pipe %d\n", link->pipes[0]);
 
+      if (debug > 1)
+        info("  ipfw add %d pipe %d ip from %s to any in recv %s %s",
+	     link->pipes[0],
+	     link->pipes[0],
+	     link->fs.dest,
+	     link->interfaces[0],
+	     redir);
       systemf("ipfw add %d pipe %d ip from %s to any in recv %s %s",
 	      link->pipes[0],
 	      link->pipes[0],
 	      link->fs.dest,
 	      link->interfaces[0],
 	      redir);
+      if (debug > 1)
+        info("  ipfw pipe %d config bw 0 delay %d plr %f queue %d %s",
+	     link->pipes[0],
+	     link->params[0].delay.delay,
+	     (double)link->params[0].loss.plr/0x7fffffff,
+	     link->params[0].q_size,
+	     redir);
       systemf("ipfw pipe %d config bw 0 delay %d plr %f queue %d %s",
 	      link->pipes[0],
 	      link->params[0].delay.delay,
@@ -166,12 +228,25 @@ activate_pipe(int mapix, char *args)
       else
 	info("  create BW pipe %d\n", link->pipes[0]);
 
+      if (debug > 1)
+        info("  ipfw add %d pipe %d ip from any to %s in recv %s %s",
+	     link->pipes[0],
+	     link->pipes[0],
+	     link->fs.dest,
+	     link->interfaces[0],
+	     redir);
       systemf("ipfw add %d pipe %d ip from any to %s in recv %s %s",
 	      link->pipes[0],
 	      link->pipes[0],
 	      link->fs.dest,
 	      link->interfaces[0],
 	      redir);
+      if (debug > 1)
+        info("  ipfw pipe %d config bw %d delay 0 plr 0 queue %d %s",
+		link->pipes[0],
+		link->params[0].bw.bandwidth,
+		link->params[0].q_size,
+		redir);
       systemf("ipfw pipe %d config bw %d delay 0 plr 0 queue %d %s",
 	      link->pipes[0],
 	      link->params[0].bw.bandwidth,
@@ -201,11 +276,12 @@ void agent_callback(event_handle_t handle,
   char eventtype[MAX_LEN];
   char args[BUFSIZ];
   struct flowspec fs = { "", "", 0, 0 };
-  char *dest, *srcport_str, *dstport_str, *protocol;
-  int i, dest_len, srcport_len, dstport_len, protocol_len;
+  char *src, *dest, *srcport_str, *dstport_str, *protocol;
+  int i, src_len, dest_len, srcport_len, dstport_len, protocol_len;
   static int lo_rule_no = LO_RULE_NO;
   static int hi_rule_no = HI_RULE_NO;
   char *redir = ">/dev/null";
+  int hackix = -1;
 
   if (debug)
     redir = "";
@@ -234,10 +310,16 @@ void agent_callback(event_handle_t handle,
    * Get the flowspec parameters.  If there are none, the default
    * initialization (all zeros) will be used.
    */
+  src_len = event_arg_get(args, "SRC", &src);
   dest_len = event_arg_get(args, "DEST", &dest);
   protocol_len = event_arg_get(args, "PROTOCOL", &protocol);
   srcport_len = event_arg_get(args, "SRCPORT", &srcport_str);
   dstport_len = event_arg_get(args, "DSTPORT", &dstport_str);
+
+  if (src_len > (int)sizeof(fs.dest)) {
+    error("SRC is too large: (%d>%d) %s\n", src_len, sizeof(fs.dest), src);
+    return;
+  }
 
   if (dest_len > (int)sizeof(fs.dest)) {
     error("DEST is too large: (%d>%d) %s\n", dest_len, sizeof(fs.dest), dest);
@@ -286,7 +368,11 @@ void agent_callback(event_handle_t handle,
 	else
 	  info("  clear pipe: %d\n", lm->pipes[0]);
 	/* Delete the rule/pipe and */
+	if (debug > 1)
+	  info("  ipfw delete %d %s", lm->pipes[0], redir);
 	systemf("ipfw delete %d %s", lm->pipes[0], redir);
+	if (debug > 1)
+	  info("  ipfw pipe delete %d %s", lm->pipes[0], redir);
 	systemf("ipfw pipe delete %d %s", lm->pipes[0], redir);
 	/* ... mark the structure as free for another use. */
 	strcpy(lm->linkvnodes[0], "__free");
@@ -315,7 +401,11 @@ void agent_callback(event_handle_t handle,
 	    info("  clear pipe: %d\n", lm->pipes[0]);
 
 	  /* Delete the rule/pipe and */
+	  if (debug > 1)
+	    info("  ipfw delete %d %s", lm->pipes[0], redir);
 	  systemf("ipfw delete %d %s", lm->pipes[0], redir);
+	  if (debug > 1)
+	    info("  ipfw pipe delete %d %s", lm->pipes[0], redir);
 	  systemf("ipfw pipe delete %d %s", lm->pipes[0], redir);
 	}
 	/* ... mark the structure as free for another use. */
@@ -456,7 +546,7 @@ void agent_callback(event_handle_t handle,
 	}
 	  
 	if (debug)
-	  info("creating per-flow pipe\n");
+	  info("creating per-flow pipe:\n");
 	else
 	  info("  create flow pipe %d\n", rule_no);
 
@@ -467,6 +557,18 @@ void agent_callback(event_handle_t handle,
 	lm->numpipes = 1;
 	lm->fs = fs;
 	lm->pipes[0] = rule_no;
+
+	if (debug > 1)
+	  info("  ipfw add %d pipe %d %s from any to %s "
+	       "src-port %d dst-port %d in recv %s %s",
+	       lm->pipes[0],
+	       lm->pipes[0],
+	       lm->fs.protocol,
+	       lm->fs.dest,
+	       lm->fs.srcport,
+	       lm->fs.dstport,
+	       lm->interfaces[0],
+	       redir);
 	systemf("ipfw add %d pipe %d %s from any to %s "
 		"src-port %d dst-port %d in recv %s %s",
 		lm->pipes[0],
@@ -486,10 +588,18 @@ void agent_callback(event_handle_t handle,
 	lm->params[0] = mainlm->params[0];
 	assert(mainlm->clouddir != 2);
 	if (mainlm->clouddir == 1) {
-		assert((mainlm+1) < &link_map[link_index]);
-		lm->params[0].delay = (mainlm+1)->params[0].delay;
-		lm->params[0].loss = (mainlm+1)->params[0].loss;
+	  assert((mainlm+1) < &link_map[link_index]);
+	  lm->params[0].delay = (mainlm+1)->params[0].delay;
+	  lm->params[0].loss = (mainlm+1)->params[0].loss;
 	}
+
+	if (debug > 1)
+	  info("  ipfw pipe %d config bw %d delay %d plr 0 queue %d %s",
+	       lm->pipes[0],
+	       lm->params[0].bw.bandwidth,
+	       lm->params[0].delay.delay,
+	       lm->params[0].q_size,
+	       redir);
 	systemf("ipfw pipe %d config bw %d delay %d plr 0 queue %d %s",
 		lm->pipes[0],
 		lm->params[0].bw.bandwidth,
@@ -513,10 +623,43 @@ void agent_callback(event_handle_t handle,
     if(!strcmp(link_map[i].linkname, objname) ||
        !strcmp(link_map[i].linkvnodes[0], objname) ||
        !strcmp(link_map[i].linkvnodes[1], objname)) {
-      if (flowspeccmp(&link_map[i].fs, &fs) == 0) {
+      if (src_len <= 0 && flowspeccmp(&link_map[i].fs, &fs) == 0) {
 	handle_pipes(objname, eventtype, args, i);
+	hackix = -1;
+      }
+
+      /*
+       * XXX wicked rude hack:
+       * Create a link_map entry for a multi-destination modify BW rule
+       * or a SRC based modify DELAY rule.
+       */
+      else if (hackix == -1 && strcmp(eventtype, TBDB_EVENTTYPE_MODIFY) == 0) {
+        if (src_len > 0 && link_map[i].clouddir == 2 &&
+	    strstr(args, "DELAY")) {
+	  hackix = i;
+	}
+	else if (index(fs.dest, ',') && link_map[i].clouddir == 1 &&
+	    strstr(args, "BANDWIDTH")) {
+	  hackix = i;
+	}
       }
     }
+  }
+
+  if (hackix != -1) {
+    realloc_map();
+    i = link_index++;
+    link_map[i] = link_map[hackix];
+    if (src_len <= 0) {
+      strncpy(link_map[i].fs.dest, fs.dest, sizeof(link_map[i].fs.dest));
+    } else {
+      strncpy(link_map[i].fs.dest, src, src_len);
+      link_map[i].params[0].q_size = 50;
+      link_map[i].clouddir = 4;
+    }
+    link_map[i].inactive = 1;
+    link_map[i].pipes[0] = hi_rule_no--;
+    handle_pipes(objname, eventtype, args, i);
   }
 }
 
@@ -547,9 +690,9 @@ void handle_pipes (char *objname, char *eventtype, char *args, int l_index)
   }
   else error("unknown link event type\n");
 
-  if(debug){
+  if(debug > 1) {
     system ("echo ======================================== >> /tmp/ipfw.log"); 
-    system("(date;echo PARAMS ; ipfw pipe show all) >> /tmp/ipfw.log");
+    system("(date;echo PARAMS;ipfw show;ipfw pipe show all) >> /tmp/ipfw.log");
   }
 }
 
@@ -632,7 +775,7 @@ void handle_link_modify(char * linkname, int l_index, char * args)
   strncpy(myargs, args, BUFSIZ);
 
   /*
-   * As a convience to the user, we create virt_agents entries
+   * As a convenience to the user, we create virt_agents entries
    * for each "link-vnode" so that users can talk to a specific
    * side of a duplex link, or a specific node in a lan (in which
    * case it refers to both pipes, not just one). Look at the
@@ -948,7 +1091,8 @@ void set_link_params(int l_index, int blackhole, int p_which)
 	      = &(link_map[l_index].params[p_index]);
 
 	    if (debug)
-	      info("entered the loop, pindex = %d %s %s (%s)\n", p_index,
+	      info("entered the loop, pindex=%d, pipe=%d %s %s (%s)\n",
+		   p_index, link_map[l_index].pipes[p_index],
 		   link_map[l_index].linkvnodes[p_index],
 		   link_map[l_index].fs.dest,
 		   link_map[l_index].inactive ? "inactive" : "active");
@@ -1793,7 +1937,8 @@ int get_new_link_params(int l_index, char *argstring, int *pipe_which)
 	   return -1;
 	 }
        }
-       else if(strcmp(argtype,"DEST")== 0 ||
+       else if(strcmp(argtype,"SRC")== 0 ||
+	       strcmp(argtype,"DEST")== 0 ||
 	       strcmp(argtype,"SRCPORT") == 0 ||
 	       strcmp(argtype,"DSTPORT") == 0 ||
 	       strcmp(argtype,"PROTOCOL") == 0){
