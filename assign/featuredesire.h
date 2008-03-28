@@ -41,6 +41,8 @@ public:
     bool is_limited()              { return limited_use; }
     double get_limit()             { return max_use; }
     
+    friend ostream &operator<<(ostream &o, const tb_featuredesire_policy &fdp);
+    
 private:
     // Indicates whether or not we are allowed to use this feature or
     // desire, and if so, how much of it we are allowed to use. Note that
@@ -219,6 +221,9 @@ class tb_node_featuredesire {
 	const bool  is_global() const { return featuredesire_obj->is_global(); }
 	const bool  is_l_additive() const {
 	    return featuredesire_obj->is_l_additive();
+	}
+	void add_desire_user(double weight) const { 
+	    featuredesire_obj->add_desire_user(weight); 
 	}
 
 	score_and_violations add_global_user() const;

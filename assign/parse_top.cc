@@ -4,7 +4,7 @@
  * All rights reserved.
  */
 
-static const char rcsid[] = "$Id: parse_top.cc,v 1.40.8.3 2007-07-13 22:02:15 ricci Exp $";
+static const char rcsid[] = "$Id: parse_top.cc,v 1.40.8.4 2008-03-28 23:18:42 ricci Exp $";
 
 #include "port.h"
 
@@ -149,8 +149,9 @@ int parse_top(tb_vgraph &vg, istream& input)
 		      top_error("Bad desire, bad weight.");
 		      gweight = 0;
 		  }
-		  v->desires.push_front(
-			  tb_node_featuredesire(desirename,gweight));
+		  tb_node_featuredesire node_fd(desirename, gweight);
+		  node_fd.add_desire_user(gweight);
+		  v->desires.push_front(node_fd);
 	      }
 	  }
 	}

@@ -753,9 +753,12 @@ nosuchtype:
 // time are not violated. Returns 1 if everything is A-OK, 0 otherwise
 // TODO - move away from using global variables
 int policy_precheck() {
+  cout << "Policy precheck:" << endl;
   if (tb_featuredesire::check_desire_policies()) {
+    cout << "Policy precheck succeeded" << endl;
     return 1;
   } else {
+    cout << "*** Policy precheck failed!" << endl;
     return 0;
   }
 }  

@@ -8,7 +8,7 @@
  * featuredesire.cc - implementation of the objects from featuredesire.h
  */
 
-static const char rcsid[] = "$Id: featuredesire.cc,v 1.4.8.4 2008-03-18 00:11:08 ricci Exp $";
+static const char rcsid[] = "$Id: featuredesire.cc,v 1.4.8.5 2008-03-28 23:18:42 ricci Exp $";
 
 #include "featuredesire.h"
 #include "score.h"
@@ -157,13 +157,15 @@ bool tb_featuredesire::check_desire_policies() {
     while (it != featuredesires_by_name.end()) {
 	tb_featuredesire *fd = it->second;
 	if (!fd->desire_policy.is_allowable() && fd->desire_users) {
-	    cout << "  *** Policy violation: Feature " << it->first
+	    cout << "  *** Policy violation: " << endl
+		<< "      Feature " << it->first
 		<< " requested, but prohibited by policy" << endl;
 	    errors++;
 	} else {
 	    if (fd->desire_policy.is_limited() &&
 		(fd->desire_total_weight > fd->desire_policy.get_limit())) {
-		cout << "  *** Policy violation: Feature " << it->first
+		cout << "  *** Policy violation: " << endl
+		    << "    Feature " << it->first
 		    << " requested with weight " << fd->desire_total_weight
 		    << " but limted to " << fd->desire_policy.get_limit()
 		    << " by policy" << endl;
@@ -179,6 +181,8 @@ bool tb_featuredesire::check_desire_policies() {
 	return true;
     }
 }
+
+
 
 /*********************************************************************
  * tb_node_featuredesire
