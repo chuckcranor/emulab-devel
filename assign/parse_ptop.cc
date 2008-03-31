@@ -4,7 +4,7 @@
  * All rights reserved.
  */
 
-static const char rcsid[] = "$Id: parse_ptop.cc,v 1.41.6.3 2008-03-28 23:18:42 ricci Exp $";
+static const char rcsid[] = "$Id: parse_ptop.cc,v 1.41.6.4 2008-03-31 18:56:19 ricci Exp $";
 
 #include "port.h"
 
@@ -351,7 +351,6 @@ int parse_ptop(tb_pgraph &pg, tb_sgraph &sg, istream& input)
 		tb_featuredesire *fd_obj =
 		tb_featuredesire::get_featuredesire_obj(desire);
 		if (type == "disallow") {
-		    cerr << "** Disallowing " << desire << endl;
 		    fd_obj->disallow_desire();  
 		} else if (type == "limit") {
 		    if (parsed_line.size() != 5) {
