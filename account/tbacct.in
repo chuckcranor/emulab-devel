@@ -2,7 +2,7 @@
 
 #
 # EMULAB-COPYRIGHT
-# Copyright (c) 2000-2008 University of Utah and the Flux Group.
+# Copyright (c) 2000-2007 University of Utah and the Flux Group.
 # All rights reserved.
 #
 use English;
@@ -48,7 +48,6 @@ my $BUGDBSUPPORT= @BUGDBSUPPORT@;
 my $OPSDBSUPPORT= @OPSDBSUPPORT@;
 my $CHATSUPPORT = @CHATSUPPORT@;
 my $MAILMANSUPPORT= @MAILMANSUPPORT@;
-my $THISHOMEBASE= "@THISHOMEBASE@";
 my $PROTOUSER   = 'elabman';
 
 my $SAMBANODE	= "fs";  # DNS makes this do the right thing in E-in-E.
@@ -78,7 +77,6 @@ my $MMMODIFYUSER= "$TB/sbin/mmmodifymember";
 my $ADDMMUSER   = "$TB/sbin/addmmuser";
 my $DELMMUSER   = "$TB/sbin/delmmuser";
 my $OPSDBCONTROL= "$TB/sbin/opsdb_control";
-my $ADDHOOK     = "$TB/sbin/adduserhook";
 my $NOLOGIN	= "/sbin/nologin";
 my $SSH		= "$TB/bin/sshtb";
 my $SAVEUID	= $UID;
@@ -86,8 +84,7 @@ my $NOSUCHUSER  = 67;
 my $USEREXISTS  = 65;
 # Nasty. Should do this with /etc/pw.conf shellpath.
 my %shellpaths  = ("csh"  => "/bin/csh", "sh" => "/bin/sh",
-		   "tcsh" => "/bin/tcsh", "bash" => "/usr/local/bin/bash",
-		   "zsh" => "/bin/zsh");
+		   "tcsh" => "/bin/tcsh", "bash" => "/usr/local/bin/bash");
 
 my $errors      = 0;
 my $sfsupdate   = 0;
@@ -403,16 +400,6 @@ sub AddUser()
 	    
 	if (system("$SSH -host $CONTROL $CHPASS -p '$pswd' $user")) {
 	    fatal("Could not initialize password for user $user on $CONTROL!");
-	}
-
-	#
-	# Extra hook added for CMU. Generalize later.
-	#
-	if ($THISHOMEBASE =~ /^cmuemulab$/i) {
-	    print "Running post create hook for user $user on $CONTROL.\n";
-
-	    # Do not worry about failure. 
-	    system("$SSH -host $CONTROL $ADDHOOK $user");
 	}
     }
     $UID = $SAVEUID;

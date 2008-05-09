@@ -11,10 +11,7 @@
 #include <errno.h>
 #include <string.h>
 #include <unistd.h>
-#ifndef NO_EMULAB
-#include <mysql/mysql.h>
-#include "tbdb.h"
-#endif
+
 
 extern char *optarg;
 extern int optopt;
@@ -50,30 +47,22 @@ void usage(char *prog) {
     int i;
 
     fprintf(stderr,
-	    "Usage: %s [-hHdsE] [-tmrkgu <arg>] <clientname> <command>\n"
+	    "Usage: %s [-hHds] [-tmrkgu <arg>] -c <clientname> <command>\n"
 	    "\n"
 	    "  -h         Print this message\n"
 	    "  -d         Turn on debugging (more d's mean more debug info)\n"
 	    "  -s         Use secure RMCP\n"
 	    "  -H         Interpret keys as hex strings instead of char strings\n"
-#ifndef NO_EMULAB
-	    "  -E         Resolve client and keys using the Emulab database\n"
-#endif
-	    "               (this option implies -H)\n"
+	    "  -c host    The hostname of the managed client\n"
 	    "  -t timeout Timeout (in seconds) for individual RMCP messages\n"
 	    "               (default: %d)\n"
 	    "  -m retries Retry N times for unacknowledged RMCP sends\n"
 	    "               (default: %d)\n"
 	    "  -r role    Use this role (either 'operator' or 'administrator')\n"
-	    "               (default 'administrator')\n"
 	    "  -k key     Use this key with the role specified by '-r'\n"
 	    "  -g key     Use this generation key\n"
 	    "  -u uid     Send the specified username\n"
 	    "\n"
-	    "  clientname IP or hostname\n"
-#ifndef NO_EMULAB
-	    "    (or Emulab node_id if -E specified)\n"
-#endif
 	    "  command    This argument performs an operation on the managed\n"
 	    "             client.  The available commands are:\n",
 	    prog,DEFAULT_TIMEOUT,DEFAULT_RETRIES);
@@ -99,27 +88,18 @@ int main(int argc,char **argv) {
     int secure = 0;
     int hex_mode = 0;
     char *client = NULL;
-    u_int8_t *rkey = NULL;
+    u_int8_t *rkey;
     int rkey_len;
-    u_int8_t *gkey = NULL;
+    u_int8_t *gkey;
     int gkey_len;
     int timeout = DEFAULT_TIMEOUT;
     int retries = DEFAULT_RETRIES;
-    char *role = "administrator";
+    char *role = NULL;
     int roleno;
     char *uid = NULL;
     char *command = NULL;
-    int emulab = 0;
-    char emip[16];
-#ifndef NO_EMULAB
-    MYSQL_RES *res;
-    MYSQL_ROW row;
-    int nrows;
-#endif
-    char *src;
-    int clen;
 
-    while ((c = getopt(argc,argv,"t:m:r:k:g:u:hdsHE")) != -1) {
+    while ((c = getopt(argc,argv,"c:t:m:r:k:g:u:hdsH")) != -1) {
 	switch (c) {
 	case 'h':
 	    usage(argv[0]);
@@ -134,10 +114,8 @@ int main(int argc,char **argv) {
 	case 'H':
 	    hex_mode = 1;
 	    break;
-	case 'E':
-	    emulab = 1;
-	    /* assume keys in the Emulab db are in hex mode... */
-	    hex_mode = 1;
+	case 'c':
+	    client = optarg;
 	    break;
 	case 't':
 	    timeout = atoi(optarg);
@@ -180,14 +158,12 @@ int main(int argc,char **argv) {
     argc -= optind;
     argv += optind;
     
-    if (argc != 2) {
-	fprintf(stderr,
-		"ERROR: must supply both clientname and command args!\n");
+    if (argc != 1) {
+	fprintf(stderr,"ERROR: required command argument is missing!\n");
 	exit(-1);
     }
     else {
-	client = argv[0];
-	command = argv[1];
+	command = argv[0];
     }
 
     if (!secure && (!strcmp(command,"reset") || !strcmp(command,"cycle") 
@@ -201,91 +177,6 @@ int main(int argc,char **argv) {
 
     ctx = rmcp_ctx_init(timeout,retries);
 
-#ifndef NO_EMULAB
-    if (emulab) {
-	dbinit();
-	/* Attempt lookup in Emulab db */
-	if (debug) {
-	    fprintf(stderr,"Resolving %s... ",client);
-	}
-	if (!mydb_nodeidtoip(client,emip)) {
-	    fprintf(stderr,"ERROR: could not resolve node_id %s",client);
-	    exit(9);
-	}
-	if (debug) {
-	    fprintf(stderr,"%s.\n",emip);
-	}
-
-	/* 
-	 * If we're in secure mode, grab keys out of the db too if we
-	 * need them.
-	 */
-	if (rkey == NULL) {
-	    res = mydb_query("select mykey from outlets_remoteauth"
-			     "  where node_id='%s' and key_role='%s'",
-			     1,client,role);
-	    if (!res) {
-		fprintf(stderr,
-			"ERROR: could not find keys for %s in Emulab db!\n",
-			client);
-		exit(10);
-	    }
-	    
-	    nrows = (int)mysql_num_rows(res);
-	    if (nrows != 1) {
-		fprintf(stderr,"ERROR: could not find role key for Emulab"
-			" nodeid %s\n",client);
-		exit(11);
-	    }
-
-	    row = mysql_fetch_row(res);
-	    rkey = (char *)malloc(strlen(row[0])+1);
-	    src = row[0];
-	    clen = strlen(row[0]) + 1;
-	    if (!strncmp("0x",row[0],2)) {
-		src = &row[0][2];
-		clen -= 2;
-	    }
-	    strncpy(rkey,src,clen);
-	    rkey_len = strlen(rkey);
-	    mysql_free_result(res);
-	}
-
-	if (gkey == NULL) {
-	    res = mydb_query("select mykey from outlets_remoteauth"
-                             "  where node_id='%s' and key_role='%s'",
-                             1,client,"generation");
-            if (!res) {
-                fprintf(stderr,
-                        "ERROR: could not find gkey for %s in Emulab db!\n",
-                        client);
-                exit(10);
-            }
-
-            nrows = (int)mysql_num_rows(res);
-            if (nrows != 1) {
-                fprintf(stderr,"ERROR: could not find generation key for"
-			" Emulab nodeid %s\n",client);
-                exit(11);
-            }
-
-            row = mysql_fetch_row(res);
-            gkey = (char *)malloc(strlen(row[0])+1);
-            src = row[0];
-            clen = strlen(row[0]) + 1;
-            if (!strncmp("0x",row[0],2)) {
-                src = &row[0][2];
-                clen -= 2;
-            }
-            strncpy(gkey,src,clen);
-	    gkey_len = strlen(gkey);
-	    mysql_free_result(res);
-        }
-
-	client = emip;
-    }
-#endif
-
     if (secure) {
 	if (strcmp(role,"administrator") == 0) {
 	    roleno = RMCP_ROLE_ADM;
@@ -294,7 +185,7 @@ int main(int argc,char **argv) {
 	    roleno = RMCP_ROLE_OP;
 	}
 	else {
-	    fprintf(stderr,"Unknown role '%s'!\n",role);
+	    fprintf(stderr,"Unknown  role '%s'!\n",role);
 	    exit(-4);
 	}
 

@@ -11,7 +11,6 @@ local $MinSikKimScriptPath = "/proj/tbres/pramod/bottleneck-emulab/devel/MinSikK
 local $ClusterProgramPath = "/proj/tbres/pramod/bottleneck-emulab/devel/Clustering/c++-samples/wvcluster";
 local $elabInitScript = "/proj/tbres/duerig/testbed/pelab/init-elabnodes.pl";
 
-
 local $newExpName = "";
 local $newProjName = "";
 local $logsDir = "";
@@ -134,7 +133,6 @@ foreach $conditionLine (@initialConditions)
             $numNodes += 1;
 
             $elabMap{$srcAddress} = "elabc-elab-" . $2;
-            print "Mapping $srcAddress to $elabMap{$srcAddress}\n";
         }
 
 # Create a mapping of the initial conditions.
@@ -160,22 +158,6 @@ if($numNodes != ($#nodeNameList+1) )
     exit(1);
 }
 
-foreach $tmpDirName (@nodeNameList)
-{
-    # Create empty directories if some of the log files were missing.
-    if(not (-d "$logsDir/$tmpDirName"))
-    {
-        print "@ WARNING: Creating dummy directory $logsDir/$tmpDirName and its sub-directories.\n";
-        foreach $tmpDirName2 (@nodeNameList)
-        {
-            if($tmpDirName2 ne $tmpDirName)
-            {
-                system("mkdir -p $logsDir/$tmpDirName/$tmpDirName2");
-            }
-        }
-    }
-}
-
 # Convert the delay data produced by the wavelet code
 # into something palatable to the Rubenstein program.
 if($Algorithm =~ /rubenstein/i)
@@ -185,7 +167,7 @@ if($Algorithm =~ /rubenstein/i)
         `rm -rf $scratchSpaceDir`;
     }
 
-    `mkdir -p $scratchSpaceDir`;
+    `mkdir $scratchSpaceDir`;
 
     opendir(logsDirHandle, $logsDir);
     foreach $sourceName (readdir(logsDirHandle))
@@ -209,7 +191,6 @@ if($Algorithm =~ /rubenstein/i)
                             }
                             else
                             {
-                                push(@dirNameList, $destOne);
                                 print "WARNING: Missing log file $logsDir/$sourceName/$destOne/delay.log\n";
                             }
                         }
@@ -227,10 +208,7 @@ if($Algorithm =~ /rubenstein/i)
                         if($secondLevelIndex > $firstLevelIndex)
                         {
                             `mkdir -p $scratchSpaceDir/$sourceName/$destOne/$destTwo`;
-                            if((-e "$logsDir/$sourceName/$destOne/delay.log") and (-e "$logsDir/$sourceName/$destTwo/delay.log"))
-                            {
-                                `paste -d ' ' $logsDir/$sourceName/$destOne/delay.log $logsDir/$sourceName/$destTwo/delay.log > $scratchSpaceDir/$sourceName/$destOne/$destTwo/delay.log `;
-                            }
+                            `paste -d ' ' $logsDir/$sourceName/$destOne/delay.log $logsDir/$sourceName/$destTwo/delay.log > $scratchSpaceDir/$sourceName/$destOne/$destTwo/delay.log `;
                         }
 
                         $secondLevelIndex++;
@@ -263,8 +241,8 @@ my %nodeNameMap = {};
 # Create & send events.
 my $tevc = "/usr/testbed/bin/tevc -e $newProjName/$newExpName now";
 
-#`/usr/testbed/bin/tevc -w -e $newProjName/$newExpName now elabc reset`;
-#`$tevc elabc create start`;
+`/usr/testbed/bin/tevc -w -e $newProjName/$newExpName now elabc reset`;
+`$tevc elabc create start`;
 
 opendir(logsDirHandle, $logsDir);
 
@@ -283,7 +261,6 @@ foreach $sourceName (readdir(logsDirHandle))
         $addrNodeMapping{$sourceName} = $addressList[$addrIndex];
         $nodeNameMapping{$sourceName} = $addrIndex + 1; 
         $nodeNumberMapping{$addrIndex + 1} = $sourceName; 
-        print "Mapping $sourceName to $addressList[$addrIndex]\n";
         $addrIndex++;
         $numDests++;
     }
@@ -294,7 +271,7 @@ rewinddir(logsDirHandle);
 # Descend into all the source directories
 foreach $sourceName (readdir(logsDirHandle))
 {
-    if( (-d "$logsDir/$sourceName" ) && $sourceName ne "." && $sourceName ne ".." )
+    if( (-d $logsDir . "/" . $sourceName ) && $sourceName ne "." && $sourceName ne ".." )
     {
 
         my @destLists;
@@ -304,49 +281,30 @@ foreach $sourceName (readdir(logsDirHandle))
 
         my @denoisedDelays = ();
 
-        for($i = 0; $i < $numDests; $i++)
-        {
-            push(@denoisedDelays, 0);
-        }
-
         foreach $destOne (readdir(sourceDirHandle))
         {
-            if( (-d "$logsDir/$sourceName/$destOne") && $destOne ne "." && $destOne ne ".." )
+            if( (-d $logsDir . "/" . $sourceName . "/" . $destOne) && $destOne ne "." && $destOne ne ".." )
             {
                 # Inside each destination directory, look for 
                 # delay.log file with delay values.
 
                 $fullPath = "$logsDir/$sourceName/$destOne/delay.log";
-                my @scriptOutput = ();
-                if(not(-r $fullPath))
-                {
-                    $denoisedDelays[$nodeNameMapping{$destOne}] = [ @scriptOutput ];
-                    next;
-                }
                 $waveletScript = "$MinSikKimScriptPath $fullPath";
+                my @scriptOutput;
 
-# Indicates low variance of the delay samples.
-                if((&CheckVariance($fullPath) == 1))
-                {
-                    $denoisedDelays[$nodeNameMapping{$destOne}] = [ @scriptOutput ];
-                }
-                else
-                {
-                    @scriptOutput = `$waveletScript`;
-                    $denoisedDelays[$nodeNameMapping{$destOne}] = [ @scriptOutput ];
-                }
+                @scriptOutput = `$waveletScript`;
+                $denoisedDelays[$nodeNameMapping{$destOne}] = [ @scriptOutput ];
 
             }
         }
         closedir(sourceDirHandle);
 
-        my $numOfSamples = 128;
         local @equivClasses = ();
 
         $tmpTreeRecordFile = "/tmp/bw-wavelet-clustering.rcd";
 
         open(RECORDFILE, ">$tmpTreeRecordFile");
-        print RECORDFILE "$numOfSamples\n";
+        print RECORDFILE "128\n";
         for($i = 1; $i <= $numDests; $i++)
         {
             if($i == $nodeNameMapping{$sourceName})
@@ -360,13 +318,13 @@ foreach $sourceName (readdir(logsDirHandle))
 
                 # Put this destination in a seperate cluster - we
                 # have zero samples/delay values.
-                if( ($#scriptOutput == 0) or ($#scriptOutput < $numOfSamples) )
+                if( ($#scriptOutput == 0) or ($#scriptOutput < 128) )
                 {
                     my @newEquivClass = ();
                     push(@newEquivClass, $i);
 
                     push(@equivClasses, [@newEquivClass]);
-                    print "@@ $sourceName: WARNING: Creating a new equiv class/cluster for $nodeNumberMapping{$i} due to lack of samples($#scriptOutput) or low variance\n";
+                    print "$sourceName: WARNING: Creating a new equiv class/cluster for $nodeNumberMapping{$i} due to lack of samples($#scriptOutput)\n";
                 }
                 else
                 {
@@ -377,7 +335,7 @@ foreach $sourceName (readdir(logsDirHandle))
                     {
                         chomp($delayValue);
 
-                        if($counter < $numOfSamples)
+                        if($counter < 128)
                         {
                             $avgValue += $delayValue;
                             push(@delayValueArray, $delayValue);
@@ -388,33 +346,30 @@ foreach $sourceName (readdir(logsDirHandle))
                             last;
                         }
                     }
-                    #############################################
-                    #$avgValue = $avgValue/$numOfSamples;
+                    $avgValue = $avgValue/128.0;
 
-                    #my $denominator = 0;
-                    #foreach $delayValue (@delayValueArray)
-                    #{
-                    #    $denominator += ($delayValue - $avgValue)*($delayValue - $avgValue);
-                    #}
-                    #$denominator = sqrt($denominator);
+                    my $denominator = 0;
+                    foreach $delayValue (@delayValueArray)
+                    {
+                        $denominator += ($delayValue - $avgValue)*($delayValue - $avgValue);
+                    }
+                    $denominator = sqrt($denominator);
 
                     # Exclude paths with low-variance.
-                    #if($denominator < 25)
-                    #{
-                    #    my @newEquivClass = ();
-                    #    push(@newEquivClass, $i);
-#
-#                        push(@equivClasses, [@newEquivClass]);
-#                        print "$sourceName: WARNING: Creating a new equiv class/cluster for $nodeNumberMapping{$i} due to low variance of samples($denominator)\n";
-#                        next;
-#                    }
-                    #############################################
+                    if($denominator < 25)
+                    {
+                        my @newEquivClass = ();
+                        push(@newEquivClass, $i);
+
+                        push(@equivClasses, [@newEquivClass]);
+                        print "$sourceName: WARNING: Creating a new equiv class/cluster for $nodeNumberMapping{$i} due to low variance of samples($denominator)\n";
+                        next;
+                    }
 
                     foreach $delayValue (@delayValueArray)
                     {
-                        #$delayValue = ($delayValue - $avgValue)/$denominator;
-                        #print RECORDFILE "$delayValue:";
-                        printf (RECORDFILE "%.4f:",$delayValue);
+                        $delayValue = ($delayValue - $avgValue)/$denominator;
+                        print RECORDFILE "$delayValue:";
                     }
 
                     print RECORDFILE "$i\n";
@@ -423,10 +378,9 @@ foreach $sourceName (readdir(logsDirHandle))
         }
         close(RECORDFILE);
 
-
         $clusteringProgram = "$ClusterProgramPath $tmpTreeRecordFile /tmp/tmp.idx";
 
-        my @clusteringOutput  = (); 
+        my @clusteringOutput ; 
 
         @clusteringOutput = `$clusteringProgram`;
 
@@ -446,18 +400,17 @@ foreach $sourceName (readdir(logsDirHandle))
             push(@equivClasses, [@newEquivClass]);
         }
 
-        print "@@@ Clusters for $sourceName:\n";
+        print "Clusters for $sourceName:\n";
         foreach $tmpName (@equivClasses)
         {
-            print "@@@ ";
             foreach $tmpName2 (@$tmpName)
             { 
                 print "$nodeNumberMapping{$tmpName2} ";
             }
-            print " \n";
+            print "\n";
         }
 
-        print "@@@ \n";
+        print "\n";
 
 # Send the events to all the nodes which form an equivalent class.
         foreach $tmpName (@equivClasses)
@@ -494,12 +447,12 @@ foreach $sourceName (readdir(logsDirHandle))
                 $delayEventCommand = $delayEventCommand . " " . "DELAY=" . ($delayMap{$addrNodeMapping{$sourceName}}{$addrNodeMapping{$nodeNumberMapping{$tmpName2}}});
 # Execute the delay event command.
                 print "EXECUTE $delayEventCommand\n";
-                #`$delayEventCommand`;
+                `$delayEventCommand`;
             }
             $bwEventCommand = $bwEventCommand . " " . "BANDWIDTH=" . $maxBw;
 # Execute the event to set the bandwidth for this equivalence class.
             print "EXECUTE $bwEventCommand\n";
-            #`$bwEventCommand`;
+            `$bwEventCommand`;
         }
 
             print "\n\n";
@@ -507,51 +460,3 @@ foreach $sourceName (readdir(logsDirHandle))
 }
 
 closedir(logsDirHandle);
-
-sub CheckVariance()
-{
-    open(FILEHANDLE, $_[0]);
-    my @delayValueArray = ();
-    while(<FILEHANDLE>)
-    {
-        if(/(\-?[0-9]*) ([0-9]*)/)
-        {
-            push(@delayValueArray, $1);
-        }
-
-    }
-    close(FILEHANDLE);
-    chomp($delayValueArray);
-
-
-    my $avgValue = 0;
-    if($#delayValueArray == -1)
-    {
-        return 1;
-    }
-
-    foreach $delayValue (@delayValueArray)
-    {
-        $avgValue += $delayValue;
-    }
-    $avgValue = $avgValue/($#delayValueArray+1);
-
-    my $variance = 0;
-    foreach $delayValue (@delayValueArray)
-    {
-        $variance += ($delayValue - $avgValue)*($delayValue - $avgValue);
-    }
-    $variance = sqrt($variance);
-
-# Exclude paths with low-variance.
-    if($variance < 25)
-    {
-        print "@@ WARNING: Low Variance($variance) for $fullPath\n";
-        return 1;
-    }
-    else
-    {
-        return 0;
-    }
-}
-

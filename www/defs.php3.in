@@ -1,7 +1,7 @@
 <?php
 #
 # EMULAB-COPYRIGHT
-# Copyright (c) 2000-2008 University of Utah and the Flux Group.
+# Copyright (c) 2000-2007 University of Utah and the Flux Group.
 # All rights reserved.
 #
 # Lets emulate register_globals=off for a while.
@@ -24,14 +24,12 @@ $TBDOCBASE	= "@TBDOCBASE@";
 $TBWWW		= "@TBWWW@";
 $THISHOMEBASE	= "@THISHOMEBASE@";
 $ELABINELAB     = @ELABINELAB@;
-$PLABSUPPORT    = @PLABSUPPORT@;
 $WIKISUPPORT    = @WIKISUPPORT@;
 $TRACSUPPORT    = @TRACSUPPORT@;
 $BUGDBSUPPORT   = @BUGDBSUPPORT@;
 $CVSSUPPORT     = @CVSSUPPORT@;
 $MAILMANSUPPORT = @MAILMANSUPPORT@;
 $CHATSUPPORT    = @CHATSUPPORT@;
-$ISOLATEADMINS  = @ISOLATEADMINS@;
 $CONTROL_NETWORK= "@CONTROL_NETWORK@";
 $WIKIHOME       = "https://${USERNODE}/twiki";
 $WIKIURL        = "${WIKIHOME}/bin/newlogon";
@@ -105,7 +103,6 @@ $TBMAIL_WWW		= "Testbed WWW <$TBMAILADDR_WWW>";
 $TBMAIL_APPROVAL	= "Testbed Approval <$TBMAILADDR_APPROVAL>";
 $TBMAIL_LOGS		= "Testbed Logs <$TBMAILADDR_LOGS>";
 $TBMAIL_AUDIT		= "Testbed Audit <$TBMAILADDR_AUDIT>";
-$TBMAIL_NOREPLY		= "no-reply@$OURDOMAIN";
 
 #
 # This just spits out an email address in a page, so it does not need
@@ -166,41 +163,6 @@ function TBMAIL($to, $subject, $message, $headers = 0)
 	$headers = $tag;
     }
     return mail($to, $subject, $message, $headers);
-}
-
-#
-#
-# Identical to perl function of the same name
-#
-#
-function SendProjAdminMail($proj, $from, $to, $subject, $message, $headers = "")
-{
-    global $MAILMANSUPPORT, $TBMAIL_APPROVAL, $TBMAIL_AUDIT, $OURDOMAIN, $TBMAIL_WWW;
-    $projadminmail = $MAILMANSUPPORT ? "$proj-admin@$OURDOMAIN" : $TBMAIL_APPROVAL;
-    if ($headers) {
-        $headers .= "\n";
-    }
-    if ($from == 'ADMIN') {
-	$from = $projadminmail;
-	$headers .= "Bcc: $projadminmail\n";
-    } elseif ($to == 'ADMIN') {
-	$to = $projadminmail;
-	$headers .= "Reply-To: $projadminmail\n";
-    } else {
-	$headers .= "Bcc: $projadminmail\n";
-    }
-    $headers .= "From: $from\n";
-    if ($from == 'AUDIT') {
-	$from = $TBMAIL_AUDIT;
-	$headers .= "Bcc: $TBMAIL_AUDIT\n";
-    } elseif ($to == "AUDIT") {
-	$to = $TBMAIL_AUDIT;
-    } else {
-	$headers .= "Bcc: $TBMAIL_AUDIT\n";
-    }
-    $headers .= "Errors-To: $TBMAIL_WWW\n"; # FIXME: Why?
-    $headers = substr($headers, 0, -1);
-    TBMAIL($to, $subject, $message, $headers);
 }
 
 #
@@ -284,8 +246,7 @@ function FORMERROR($field) {
 # A page argument error. 
 # 
 function PAGEARGERROR($msg = 0) {
-    $default = "Invalid page arguments: " .
-          	htmlspecialchars($_SERVER['REQUEST_URI']);
+    $default = "Invalid page arguments: " . $_SERVER['REQUEST_URI'];
 
     if ($msg) {
 	$default = "$default<br><br>$msg";

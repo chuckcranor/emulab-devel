@@ -566,7 +566,6 @@ REPLACE INTO table_regex VALUES ('experiments','wa_plr_solverweight','float','re
 REPLACE INTO table_regex VALUES ('experiments','sync_server','text','redirect','virt_nodes:vname',0,0,NULL);
 
 REPLACE INTO table_regex VALUES ('groups','project','text','redirect','projects:pid',0,0,NULL);
-REPLACE INTO table_regex VALUES ('groups','pid_idx','text','redirect','projects:pid_idx',0,0,NULL);
 REPLACE INTO table_regex VALUES ('groups','gid','text','regex','^[a-zA-Z][-\\w]+$',2,12,NULL);
 REPLACE INTO table_regex VALUES ('groups','gid_idx','text','regex','^[\\d]+$',1,12,NULL);
 REPLACE INTO table_regex VALUES ('groups','group_id','text','redirect','groups:gid',2,12,NULL);
@@ -601,7 +600,7 @@ REPLACE INTO table_regex VALUES ('users','uid_idx','text','regex','^[\\d]+$',1,1
 REPLACE INTO table_regex VALUES ('users','usr_phone','text','regex','^[-\\d\\(\\)\\+\\.x ]+$',7,64,NULL);
 REPLACE INTO table_regex VALUES ('users','usr_name','text','regex','^[-\\w\\. ]+$',4,64,NULL);
 REPLACE INTO table_regex VALUES ('users','usr_email','text','regex','^([-\\w\\+\\.]+)\\@([-\\w\\.]+)$',3,64,NULL);
-REPLACE INTO table_regex VALUES ('users','usr_shell','text','regex','^(csh|sh|bash|tcsh|zsh)$',0,0,NULL);
+REPLACE INTO table_regex VALUES ('users','usr_shell','text','regex','^(csh|sh|bash|tcsh)$',0,0,NULL);
 REPLACE INTO table_regex VALUES ('users','usr_title','text','redirect','default:tinytext',0,0,NULL);
 REPLACE INTO table_regex VALUES ('users','usr_affil','text','redirect','default:tinytext',0,0,NULL);
 REPLACE INTO table_regex VALUES ('users','usr_addr','text','redirect','default:tinytext',0,0,NULL);
@@ -663,7 +662,6 @@ REPLACE INTO table_regex VALUES ('virt_lans','trace_expr','text','redirect','def
 REPLACE INTO table_regex VALUES ('virt_lans','trace_snaplen','int','redirect','default:int',0,0,NULL);
 REPLACE INTO table_regex VALUES ('virt_lans','trace_endnode','int','redirect','default:tinyint',0,1,NULL);
 REPLACE INTO table_regex VALUES ('virt_lans','trace_db','int','redirect','default:tinyint',0,1,NULL);
-REPLACE INTO table_regex VALUES ('virt_lans','fixed_iface','text','redirect','default:tinytext',0,0,NULL);
 REPLACE INTO table_regex VALUES ('virt_lans','modbase','int','redirect','default:boolean',0,0,NULL);
 REPLACE INTO table_regex VALUES ('virt_lans','compat','int','redirect','default:boolean',0,0,NULL);
 
@@ -731,7 +729,8 @@ REPLACE INTO table_regex VALUES ('projects','num_members','int','redirect','defa
 REPLACE INTO table_regex VALUES ('projects','num_pcs','int','redirect','default:int',0,2048,NULL);
 REPLACE INTO table_regex VALUES ('projects','num_pcplab','int','redirect','default:int',0,2048,NULL);
 REPLACE INTO table_regex VALUES ('projects','num_ron','int','redirect','default:int',0,1024,NULL);
-REPLACE INTO table_regex VALUES ('experiments','encap_style','text','regex','^(alias|veth|veth-ne|vlan|vtun|egre|gre|default)$',0,0,NULL);
+
+REPLACE INTO table_regex VALUES ('experiments','encap_style','text','regex','^(alias|veth|veth-ne|vlan|default)$',0,0,NULL);
 REPLACE INTO table_regex VALUES ('experiments','veth_encapsulate','int','redirect','default:boolean',0,0,NULL);
 REPLACE INTO table_regex VALUES ('experiments','allowfixnode','int','redirect','default:boolean',0,0,NULL);
 REPLACE INTO table_regex VALUES ('experiments','jail_osname','text','redirect','os_info:osname',0,0,NULL);

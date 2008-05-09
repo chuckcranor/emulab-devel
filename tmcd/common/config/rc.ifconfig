@@ -1,7 +1,7 @@
 #!/usr/bin/perl -w
 #
 # EMULAB-COPYRIGHT
-# Copyright (c) 2004-2008 University of Utah and the Flux Group.
+# Copyright (c) 2004, 2005, 2006 University of Utah and the Flux Group.
 # All rights reserved.
 #
 use English;
@@ -46,7 +46,7 @@ use librc;
 # Not all clients support this.
 #
 exit(0)
-    if (MFS() || (JAILED() && !LINUXJAILED()) || REMOTE() || PLAB());
+    if (MFS() || JAILED() || REMOTE() || PLAB());
 
 # Protos.
 sub doboot();
@@ -131,7 +131,6 @@ sub doboot()
 	    my $aliases  = $ifconfig->{ALIASES};
 	    my $iface    = $ifconfig->{IFACE};
 	    my $settings = $ifconfig->{SETTINGS};
-	    my $lan      = $ifconfig->{LAN};
 	    my $ifrtabid = undef;
 
 	    #
@@ -162,8 +161,7 @@ sub doboot()
 	    my ($upline, $downline) =
 		os_ifconfig_line($iface, $inet, $mask,
 				 $speed, $duplex, $aliases,
-				 $type, $lan, $settings,
-				 $ifrtabid, \%oscookie);
+				 $type, $settings, $ifrtabid, \%oscookie);
 		    
 	    if (defined($upline) && $upline) {
 		$upcmds .= "$upline\n    ";
@@ -189,7 +187,6 @@ sub doboot()
 	    my $vmac     = $ifconfig->{VMAC};
 	    my $pmac     = $ifconfig->{PMAC};
 	    my $iface    = $ifconfig->{IFACE};
-	    my $viface   = $ifconfig->{VIFACE};
 	    my $ifrtabid = undef;
 	    my $encap    = $ifconfig->{ENCAP};
 	    my $vtag	 = $ifconfig->{VTAG};
@@ -227,10 +224,6 @@ sub doboot()
 		$downcmds .= TMROUTECONFIG . " $inet down\n    ";
 		$downcmds .= "$downline\n    ";
 	    }
-
-	    # Trivially parsable map for users, which associate an IP
-	    # with a local interface. 
-	    push(@ifacemap, "$viface $inet $vmac");
 	}
     }
 

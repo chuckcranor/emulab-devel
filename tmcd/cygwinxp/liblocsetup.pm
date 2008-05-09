@@ -1,7 +1,7 @@
 #!/usr/bin/perl -wT
 #
 # EMULAB-COPYRIGHT
-# Copyright (c) 2000-2008 University of Utah and the Flux Group.
+# Copyright (c) 2000-2006 University of Utah and the Flux Group.
 # All rights reserved.
 #
 
@@ -21,7 +21,7 @@ use Exporter;
 	 os_ifconfig_veth os_viface_name
 	 os_routing_enable_forward os_routing_enable_gated
 	 os_routing_add_manual os_routing_del_manual os_homedirdel
-	 os_groupdel os_samba_mount os_islocaldir
+	 os_groupdel os_samba_mount 
 	 os_getnfsmounts os_getnfsmountpoints os_noisycmd
 	 os_fwconfig_line os_fwrouteconfig_line
        );
@@ -485,22 +485,6 @@ sub os_userdel($)
 }
 
 #
-# Modify user password.
-# 
-sub os_modpasswd($$)
-{
-    my($login, $pswd) = @_;
-
-    my $cmd = "echo -e '$pswd\\n$pswd' | passwd $login >& /dev/null";
-    ##print "    $cmd\n";
-    if (system($cmd) != 0) {
-	warning("os_modpasswd error ($cmd)\n");
-	return -1;
-    }
-    return 0;
-}
-
-#
 # Modify user group membership and password.
 # Changing the login shell is unimplemented.
 # 
@@ -743,18 +727,6 @@ sub MapShell($)
        $fullpath = $DEFSHELL;
    }
    return $fullpath;
-}
-
-# Return non-zero if given directory is on a "local" filesystem
-sub os_islocaldir($)
-{
-    my ($dir) = @_;
-
-    # XXX
-    if ($dir =~ /^\/(proj|groups|users|share)/) {
-	return 0;
-    }
-    return 1;
 }
 
 sub os_samba_mount($$$)

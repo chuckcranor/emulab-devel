@@ -2,7 +2,7 @@
 
 #
 # EMULAB-COPYRIGHT
-# Copyright (c) 2000-2008 University of Utah and the Flux Group.
+# Copyright (c) 2000-2007 University of Utah and the Flux Group.
 # All rights reserved.
 #
 
@@ -132,7 +132,6 @@ use vars qw(@ISA @EXPORT);
 	 TBDB_STATS_SWAPIN TBDB_STATS_SWAPOUT TBDB_STATS_SWAPMODIFY
 	 TBDB_STATS_FLAGS_IDLESWAP TBDB_STATS_FLAGS_PREMODIFY
 	 TBDB_STATS_FLAGS_START TBDB_STATS_FLAGS_PRESWAPIN
-	 TBDB_STATS_FLAGS_MODHOSED
 
 	 TBDB_JAILIPBASE TBDB_JAILIPMASK
 
@@ -162,7 +161,6 @@ use vars qw(@ISA @EXPORT);
 	 SetNodeBootStatus OSFeatureSupported NodeidToExp 
 	 DBQuery DBQueryFatal DBQueryWarn DBWarn DBFatal DBErr
 	 NewTBDBHandle DBQueryN DBQueryFatalN DBQueryWarnN DBErrN
-	 DBQuerySingleFatal DBQuerySingleFatalN
 	 DBQuoteSpecial ExpState
 	 ExpNodes ExpNodeVnames ExpNodesOldReserved
 	 DBDateTime DefaultImageID 
@@ -216,7 +214,8 @@ use vars qw(@ISA @EXPORT);
 	 TBDB_ROUTERTYPE_STATIC TBDB_ROUTERTYPE_MANUAL
 	 TBDB_USER_INTERFACE_EMULAB TBDB_USER_INTERFACE_PLAB
 	 TBDB_EVENTKEY TBDB_WEBKEY
-         max min 
+	 TBDB_CHECKDBSLOT_NOFLAGS TBDB_CHECKDBSLOT_WARN TBDB_CHECKDBSLOT_ERROR
+         max min TBcheck_dbslot TBFieldErrorString
 	 hash_recurse array_recurse hash_recurse2 array_recurse2
 	 TBGetUniqueIndex
 
@@ -238,8 +237,6 @@ use vars qw(@ISA @EXPORT);
 
 # Must come after package declaration!
 use lib '@prefix@/lib';
-use emdbi;
-use emutil;
 use libtblog_simple;
 use English;
 use File::Basename;
@@ -249,7 +246,7 @@ require Project;
 require Group;
 require Node;
 require NodeType;
-require Lan;
+require Mysql;
 use vars qw($DBQUERY_MAXTRIES $DBCONN_MAXTRIES
 	    $DBCONN_EXITONERR $DBQUERY_RECONNECT $DBQUERY_DEBUG
 	    @EXPORT_OK @virtualTables @physicalTables);
@@ -279,10 +276,54 @@ else {
     $SCRIPTNAME = "Tainted";
 }
 
+{
+    #
+    # Create a special class for keeping track of the process the
+    # database handle was created.  This is needed so that the child
+    # process after a fork() 1) set's InactiveDestroy to avoid sending
+    # a disconnect message since it will also close the parent's
+    # database handle 2) reconnects since two separate processes
+    # shouldn't share the same handle.  (1) is handled via overridding
+    # the database handle DESTROY method, (2) is handled in the
+    # DBQueryN function.
+    #
+    package TestbedDBHandle;
+    use vars '@ISA';
+    @ISA = ('Mysql');
+    @TestbedDBHandle::Statement::ISA = ('Mysql::Statement');
+    my %DB_PID; # hash based on db handle
+    sub obj_hash( $ ) {
+	# Return a hex string of the location of the object in memory.
+	# This is slightly better than just converting it to a scalar
+	# as two objects as the scalar also included the class name
+	# the object is "blessed" into which might change over time
+	sprintf("0x%x", $_[0]); 
+    }
+    sub MakeA ( $ ) {
+	my ($obj) = @_;
+	return unless defined $obj;
+	bless ($obj);
+	$DB_PID{obj_hash($obj)} = $$;
+    }
+    sub db_pid () {
+	my ($self) = @_;
+	return $DB_PID{obj_hash($self)};
+    }
+    sub DESTROY {
+	my ($self) = @_;
+	if ($self->db_pid() != $$) {
+	    $self->setInactiveDestroy(1);
+	}
+	delete $DB_PID{obj_hash($self)};
+	$self->SUPER::DESTROY() if $self->can("SUPER::DESTROY");
+    }
+}
+
 #
 # Set up for querying the database. Note that fork causes a reconnect
 # to the DB in the child.
 #
+my @DB;
 $DBQUERY_MAXTRIES  = 1;
 $DBQUERY_RECONNECT = 1;
 $DBCONN_MAXTRIES   = 5;
@@ -290,47 +331,45 @@ $DBCONN_EXITONERR  = 1;
 $DBQUERY_DEBUG     = 0;
 @EXPORT_OK         = qw($DBQUERY_MAXTRIES $DBQUERY_RECONNECT
 			$DBCONN_EXITONERR $DBCONN_MAXTRIES $DBQUERY_DEBUG);
-@EXPORT            = (@emutil::EXPORT, @EXPORT);
 
-sub TBDBConnect($)	{ return emdbi::TBDBConnect($_[0], $DBNAME); }
-sub TBDBReconnect($)    { return emdbi::TBDBReconnect($_[0]); }
-sub TBDBDisconnect()    { return emdbi::TBDBDisconnect(); }
-sub NewTBDBHandle()     { return emdbi::NewTBDBHandle($DBNAME); }
-sub DBQueryN($$)	{ return emdbi::DBQueryN($_[0], $_[1]); }
-sub DBQuery($)		{ return emdbi::DBQuery($_[0]); }
-sub DBQueryFatalN($$)   { return emdbi::DBQueryFatalN($_[0], $_[1]); }
-sub DBQueryFatal($)     { return emdbi::DBQueryFatal($_[0]);}
-sub DBQuerySingleFatalN($$) { return emdbi::DBQuerySingleFatalN($_[0], $_[1]);}
-sub DBQuerySingleFatal($)   { return emdbi::DBQuerySingleFatal($_[0]);}
-sub DBQueryWarnN($$)	{ return emdbi::DBQueryWarnN($_[0], $_[1]); }
-sub DBQueryWarn($)      { return emdbi::DBQueryWarn($_[0]);}
-sub DBQuoteSpecial($)	{ return emdbi::DBQuoteSpecial($_[0]); }
-sub DBErrN($)		{ return emdbi::DBErrN($_[0]); }
-sub DBErr()		{ return emdbi::DBErr(); }
-# These are handled differently cause of tblog stuff.
-sub DBWarn($;$)		{ DBError(\&tbwarn, $_[0], $_[1]); }
-sub DBFatal($;$)	{ DBError(\&tbdie, $_[0], $_[1]); }
-sub DBError($$;$) 
+sub TBDBConnect($)
 {
-    my($f, $message, $nomail) = @_;
-    
-    if (! defined($nomail)) {
-	libtestbed::SENDMAIL($TBOPS, "DBError - $message",
-			     "$message - In $SCRIPTNAME\n".
-			     "$emdbi::DBErrorString\n");
+    my ($dbnum) = @_;
+    my $maxtries = $DBCONN_MAXTRIES;
+
+    #
+    # Construct a 'username' from the name of this script and the user who
+    # ran it. This is for accounting purposes.
+    #
+    my $name = getpwuid($UID);
+    if (!$name) {
+	$name = "uid$UID";
     }
+    my $dbuser = "$SCRIPTNAME:$name:$PID";
 
-    $f->({cause=>'software'}, "$message:\n$emdbi::DBErrorString");
+    while ($maxtries) {
+	$DB[$dbnum] = Mysql->connect("localhost", $DBNAME, $dbuser, "none");
+        TestbedDBHandle::MakeA($DB[$dbnum]);
+	if (defined($DB[$dbnum])) {
+	    last;
+	}
+	$maxtries--;
+	if ($maxtries) {
+	    print STDERR "Cannot connect to DB; trying again in 5 seconds!\n";
+	    sleep(5);
+	}
+    }
+    if (!defined($DB[$dbnum])) {
+	print STDERR
+	    "Cannot connect to DB after $DBQUERY_MAXTRIES attempts!\n";
+	return -1
+	    if (! $DBCONN_EXITONERR);
+	exit(-1);
+    }
+    $DB[$dbnum]->{'dbh'}->{'PrintError'} = 0;
+    $Mysql::QUIET = 1;
+    return 0;
 }
-
-# Be nice to just reexport these from emdbi to caller. How?
-$emdbi::DBQUERY_MAXTRIES  = $DBQUERY_MAXTRIES;
-$emdbi::DBQUERY_RECONNECT = $DBQUERY_RECONNECT;
-$emdbi::DBCONN_MAXTRIES   = $DBCONN_MAXTRIES;
-$emdbi::DBCONN_EXITONERR  = $DBCONN_EXITONERR;
-$emdbi::DBQUERY_DEBUG     = $DBQUERY_DEBUG;
-
-# Default connection.
 TBDBConnect(0);
 
 # Old version. Should be renamed or just eventfork.
@@ -340,6 +379,57 @@ sub TBdbfork()
 	EventFork();
     }
 }
+
+# New version.
+sub TBDBReconnect($)
+{
+    my ($retry) = @_;
+    my ($exitonerr,$maxtries);
+    
+    if ($retry) {
+	$exitonerr = $DBCONN_EXITONERR;
+	$DBCONN_EXITONERR = 0;
+	
+	# And we want to keep trying for a long time!
+	$maxtries = $DBCONN_MAXTRIES;
+	$DBCONN_MAXTRIES  = 10000;
+    }
+
+    for (my $i = 0; $i < @DB; $i++) {
+	undef($DB[$i]);
+	return -1
+	    if (TBDBConnect($i) != 0);
+    }
+
+    if ($retry) {
+	$DBCONN_EXITONERR = $exitonerr;
+	$DBCONN_MAXTRIES  = $maxtries;
+    }
+    #print "Reconnected to DB in process $PID\n";
+   
+    return 0;
+}
+
+# To avoid keeping a mysql connection around.
+sub TBDBDisconnect()
+{
+    for (my $i = 0; $i < @DB; $i++) {
+	undef($DB[$i]);
+    }
+    select(undef, undef, undef, 0.2);
+}
+
+# Create a new DB handle and return the handle number
+sub NewTBDBHandle() {
+    my $dbnum = @DB;
+    TBDBConnect($dbnum);
+    return $dbnum;
+}
+
+#
+# Record last DB error string.
+#
+my $DBErrorString = "";
 
 #
 # Needs to be config'ed.
@@ -646,7 +736,6 @@ sub TBDB_STATS_FLAGS_PREMODIFY(){ 0x02; }
 sub TBDB_STATS_FLAGS_START()    { 0x04; }
 sub TBDB_STATS_FLAGS_PRESWAPIN(){ 0x08; }
 sub TBDB_STATS_FLAGS_BATCHCTRL(){ 0x10; }
-sub TBDB_STATS_FLAGS_MODHOSED() { 0x20; }
 # Do not export these variables!
 my $TBDB_STATS_STARTCLOCK;
 my $TBDB_STATS_SAVEDSWAPUID;
@@ -683,6 +772,11 @@ sub TBDB_USER_INTERFACE_PLAB()	{ "plab"; }
 # Key Stuff
 sub TBDB_EVENTKEY($$)	{ TBExptUserDir($_[0],$_[1]) . "/tbdata/eventkey"; }
 sub TBDB_WEBKEY($$)	{ TBExptUserDir($_[0],$_[1]) . "/tbdata/webkey"; }
+
+# Regex stuff
+sub TBDB_CHECKDBSLOT_NOFLAGS()	{ 0x0; }
+sub TBDB_CHECKDBSLOT_WARN()	{ 0x1; }
+sub TBDB_CHECKDBSLOT_ERROR()	{ 0x2; }
 
 # Security Levels.
 sub TBDB_SECLEVEL_GREEN()	{ 0; }
@@ -731,6 +825,7 @@ sub TBDB_PHYSICAL_NODE_TABLES() {
 	'switch_stacks'		=> [ 'node_id' ],
 	'tiplines'		=> [ 'node_id' ],
 	'tmcd_redirect'		=> [ 'node_id' ],
+	'tunnels'		=> [ 'node_id' ],
 	'uidnodelastlogin'	=> [ 'node_id' ],
 	'v2pmap'		=> [ 'node_id' ],
 	'vinterfaces'		=> [ 'node_id' ],
@@ -2354,6 +2449,8 @@ sub TBExptContainsNodeCT($$$)
 		   "ipsubnets");
 
 @physicalTables = ("delays",
+		   "vlans",
+		   "tunnels",
 		   "ipport_ranges",
 		   "v2pmap",
 		   "linkdelays",
@@ -2550,13 +2647,6 @@ sub TBExptRemovePhysicalState($$)
     my ($pid, $eid) = @_;
     my $errors = 0;
 
-    my $experiment = Experiment->Lookup($pid, $eid);
-    return 1
-	if (!defined($experiment));
-
-    return 1
-	if (Lan->DestroyExperimentLans($experiment) != 0);
-    
     foreach my $table (@physicalTables) {
 	DBQueryWarn("DELETE FROM $table WHERE pid='$pid' AND eid='$eid'")
 	    or $errors++;
@@ -2607,13 +2697,6 @@ sub TBExptBackupPhysicalState($$)
 	    or return 1;
     }
 
-    my $experiment = Experiment->Lookup($pid, $eid);
-    return 1
-	if (!defined($experiment));
-
-    return 1
-	if (Lan->BackupExperimentLans($experiment, $pstateDir) != 0);
-    
     foreach my $table (@physicalTables) {
 	DBQueryWarn("SELECT * FROM $table WHERE pid='$pid' AND eid='$eid' ".
 		    "INTO OUTFILE '$pstateDir/$table' ")
@@ -2647,13 +2730,6 @@ sub TBExptRestorePhysicalState($$)
     my $errors    = 0;
     my $pstateDir = TBExptWorkDir($pid, $eid) . "/pstate";
 
-    my $experiment = Experiment->Lookup($pid, $eid);
-    return 1
-	if (!defined($experiment));
-
-    return 1
-	if (Lan->RestoreExperimentLans($experiment, $pstateDir) != 0);
-    
     foreach my $table (@physicalTables) {
 	DBQueryWarn("LOAD DATA INFILE '$pstateDir/$table' INTO TABLE $table")
 	    or $errors++;
@@ -3046,30 +3122,6 @@ sub TBNodeUpdateAccountsByUID($)
     $query_result =
 	DBQueryFatal("select node_id from widearea_accounts ".
 		     "where uid='$uid' and trust!='none'");
-
-    while (my %row = $query_result->fetchhash()) {
-	my $node_id = $row{'node_id'};
-
-	DBQueryFatal("update nodes set update_accounts=update_accounts+1 ".
-		     "where node_id='$node_id' and update_accounts<2");
-    }
-
-    #
-    # Finally update nodes who are accessible by the user via the 'dp_projects'
-    # node attribute.
-    #
-    # XXX big ugly query alert!
-    #
-    $query_result = 
-	DBQueryFatal("select n.node_id from projects as p, ".
-		     "  groups as g, group_membership as gm, ".
-		     "  nodes as n, node_attributes as na ".
-		     "where p.pid=g.pid and p.approved!=0 ".
-		     "  and g.gid=gm.gid and p.pid=gm.pid ".
-		     "  and n.node_id=na.node_id ".
-		     "  and FIND_IN_SET(g.gid_idx, na.attrvalue) > 0 ".
-		     "  and na.attrkey='dp_projects' ".
-		     "  and gm.uid='$uid'");
 
     while (my %row = $query_result->fetchhash()) {
 	my $node_id = $row{'node_id'};
@@ -3506,6 +3558,193 @@ sub TBExptGetSwapoutAction($$$) {
 }
 
 #
+# Issue a DB query. Argument is a string. Returns the actual query object, so
+# it is up to the caller to test it. I would not for one moment view this
+# as encapsulation of the DB interface. I'm just tired of typing the same
+# silly stuff over and over.
+#
+# usage: DBQuery(char *str)
+#        returns the query object result.
+#
+# Sets $DBErrorString is case of error; saving the original query string and
+# the error string from the DB module. Use DBFatal (below) to print/email
+# that string, and then exit.
+#
+sub DBQueryN($$)
+{
+    my($dbnum, $query)   = @_;
+    my $maxtries = $DBQUERY_MAXTRIES;
+    my $result;
+
+    # Not really forever :-)
+    if (!$maxtries) {
+	$maxtries = 100000;
+    }
+
+    # Reconnect to mysqld in child of fork.
+    if ($DB[$dbnum]->db_pid() != $PID) {
+	if (TBDBReconnect(1) != 0) {
+	    $DBErrorString =
+		"  Query: $query\n".
+		"  Error: Could not reconnect to mysqld";
+	    return undef;
+	}
+    }
+
+    if ($DBQUERY_DEBUG) {
+	print STDERR "Query: '$query'\n";
+    }
+
+    while ($maxtries) {
+	# Get this each time through the loop since we try reconnect below.
+	my $db = $DB[$dbnum];
+
+	$result = $db->query($query);
+
+	if (! defined($result)) {
+	    my $err = $db->err;
+
+	    $DBErrorString =
+		"  Query: $query\n".
+		"  Error: " . $db->errstr . " ($err)";
+	}
+	if (defined($result) ||
+	    ($db->err != 2006) && ($db->err != 1053) && ($db->err != 2013) &&
+	    ($db->err != 1046)) {
+	    last;
+	}
+
+	#
+	# If we lose the connection to mysqld; lets try to reconnect. 
+	#
+	if ($db->err == 2006 || $db->err == 2013) {
+	    # This is just for the mysqld watchdog daemon.
+	    return undef
+		if (! $DBQUERY_RECONNECT);
+
+	    if (TBDBReconnect(1) != 0) {
+		$DBErrorString =
+		    "  Query: $query\n".
+		    "  Error: Could not reconnect to mysqld";
+
+		return undef;
+	    }
+	    next;
+	}
+
+	$maxtries--;
+	DBWarn("mysqld went away in process $PID. $maxtries tries left", 0);
+	sleep(1);
+    }
+    return $result;
+}
+sub DBQuery($) {return DBQueryN(0,$_[0]);}
+
+#
+# Same as above, but die on error.
+#
+sub DBQueryFatalN($$)
+{
+    my($dbnum, $query) = @_;
+    my($result);
+
+    $result = DBQueryN($dbnum, $query);
+
+    if (! $result) {
+	DBFatal("DB Query failed");
+    }
+    return $result;
+}
+sub DBQueryFatal($) {return DBQueryFatalN(0,$_[0]);}
+
+#
+# Same as above, but just send email on error. This info is useful
+# to the TB system, but the caller has to retain control.
+#
+sub DBQueryWarnN($$)
+{
+    my($dbnum, $query) = @_;
+    my($result);
+
+    $result = DBQueryN($dbnum, $query);
+
+    if (! $result) {
+	DBWarn("DB Query failed");
+    }
+    return $result;
+}
+sub DBQueryWarn($) {return DBQueryWarnN(0,$_[0]);}
+
+#
+# Warn and send email after a failed DB query. First argument is the error
+# message to display. The contents of $DBErrorString is also printed.
+#
+# usage: DBWarn(char *message)
+#
+sub DBWarn($;$)
+{
+    my($message, $nomail) = @_;
+    
+    DBError(\&tbwarn, $message, $nomail);
+}
+
+#
+# Same as above, but die after the warning.
+#
+# usage: DBFatal(char *message);
+#
+sub DBFatal($;$)
+{
+    my($message,$nomail) = $_[0];
+    
+    DBError(\&tbdie, $message, $nomail);
+}
+
+#
+# DBError, common parts of DBWarn and DBFatal
+#
+# usage: DBError(log function, message, nomail)
+#
+sub DBError($$;$) 
+{
+    my($f, $message, $nomail) = @_;
+    
+    if (! defined($nomail)) {
+	libtestbed::SENDMAIL($TBOPS, "DBError - $message",
+			     "$message - In $SCRIPTNAME\n".
+			     "$DBErrorString\n");
+    }
+
+    $f->({cause=>'software'}, "$message:\n$DBErrorString");
+}
+
+#
+# Quote a string for DB insertion.
+#
+# usage: char *DBQuoteSpecial(char *string);
+#
+sub DBQuoteSpecial($)
+{
+    my($string) = $_[0];
+
+    $string = $DB[0]->quote($string);
+
+    return $string;
+}
+
+#
+# Get the Error From the Last Database query
+#
+sub DBErrN($)
+{
+    return $DB[$_[0]]->err;
+}
+sub DBErr()
+{
+    return $DB[0]->err;
+}
+
+#
 # Return a (current) string suitable for DB insertion in datetime slot.
 # Of course, you can use this for anything you like!
 #
@@ -3799,6 +4038,175 @@ sub array_recurse2($%) {
 	}
     }
     return $str;
+}
+
+#
+# Support for checking field values against what is specified.
+#
+my %DBFieldData;
+my $DBFieldErrstr = "";
+
+sub TBFieldErrorString() { return $DBFieldErrstr; }
+
+#
+# Download all data from the DB and store in hash for latter access.
+#
+sub TBGrabFieldData()
+{
+    %DBFieldData = ();
+
+    my $query_result =
+	DBQueryFatal("select * from table_regex");
+
+    while (my %row = $query_result->fetchhash()) {
+	my $table_name  = $row{"table_name"};
+	my $column_name = $row{"column_name"};
+
+	$DBFieldData{$table_name . ":" . $column_name} =
+	    { "check"       => $row{"check"},
+	      "check_type"  => $row{"check_type"},
+	      "column_type" => $row{"column_type"},
+	      "min"         => $row{"min"},
+	      "max"         => $row{"max"}
+	    };
+    }
+}
+
+#
+# Return the field data for a specific table/slot. If none, return the default
+# entry.
+#
+# The top level entry defines some stuff that is not to be overidden by the
+# redirected entries. For example, the top level entry is the only place we
+# can specify a field is optional when inserting a record. We could do this
+# with default entries in the DB table defintion, but I do not like that idea.
+# The min/max lengths also override, unless they are both zero in which case
+# let the first non-zero defs set them.
+#
+sub TBFieldData($$;$)
+{
+    my ($table, $column, $flag) = @_;
+    my $toplevel;
+    my $fielddata;
+
+    if (! %DBFieldData) {
+	TBGrabFieldData();
+    }
+    my $key = $table . ":" . $column;
+
+    while (exists($DBFieldData{$key})) {
+	$fielddata = $DBFieldData{$key};
+
+	#
+	# See if a redirect to another entry.
+	#
+	if ($fielddata->{"check_type"} eq "redirect") {
+	    if (!defined($toplevel)) {
+		$toplevel = $fielddata;
+	    }
+
+	    $key = $fielddata->{"check"};
+#	    print STDERR "Redirecting to $key for $table/$column!\n";
+	    next;
+	}
+	last;
+    }
+    # Resort to a default entry.
+    if (!defined($fielddata)) {
+	$DBFieldErrstr = "Error-checking pattern missing from the database";
+	
+	if (defined($flag)) {
+	    if ($flag & TBDB_CHECKDBSLOT_WARN()) {
+		print STDERR "*** $0:\n" .
+		             "    WARNING: No slot data for $table/$column!\n";
+	    }
+	    return undef
+		if ($flag & TBDB_CHECKDBSLOT_ERROR());
+	}
+	$fielddata = $DBFieldData{"default:default"};
+    }
+    # Return both entries.
+    if (defined($toplevel) &&
+	($toplevel->{"min"} || $toplevel->{"max"})) {
+	return ($fielddata, $toplevel);
+    }
+    return ($fielddata);
+}
+
+#
+# Generic wrapper to check a slot.
+#
+sub TBcheck_dbslot($$$;$)
+{
+    my ($token, $table, $column, $flag) = @_;
+    
+    $DBFieldErrstr = "Unknown Error";
+
+    my ($fielddata,$toplevel) = TBFieldData($table, $column, $flag);
+
+    return 0
+	if (!defined($fielddata));
+
+    my $check       = $fielddata->{"check"};
+    my $check_type  = $fielddata->{"check_type"};
+    my $column_type = $fielddata->{"column_type"};
+    my $min         = (defined($toplevel) ?
+		       $toplevel->{"min"} : $fielddata->{"min"});
+    my $max         = (defined($toplevel) ?
+		       $toplevel->{"max"} : $fielddata->{"max"});
+
+#    print STDERR "Using $check/$check_type/$column_type/$min/$max for ".
+#	"$table/$column\n";
+
+    #
+    # Functional checks not implemented yet.
+    #
+    if ($check_type eq "function") {
+	die("*** $0:\n" .
+	    "    Functional DB checks not implemented: $table/$column!\n");
+    }
+
+    # Make sure the regex is anchored. Its a mistake not to be!
+    $check = "^" . $check
+	if (! ($check =~ /^\^/));
+
+    $check = $check . "\$"
+	if (! ($check =~ /\Q$/));
+
+    # Check regex.
+    if (! ("$token" =~ /$check/)) {
+	$DBFieldErrstr = "Illegal Characters";
+	return 0;
+    }
+
+    # Check min/max.
+    if ($column_type eq "text") {
+	my $len = length($token);
+
+	# Any length is okay if no min or max. 
+	return 1
+	    if ((!($min || $max)) ||
+		($len >= $min && $len <= $max));
+	$DBFieldErrstr = "Too Short"
+	    if ($min && $len < $min);
+	$DBFieldErrstr = "Too Long"
+	    if ($max && $len > $max);
+    }
+    elsif ($column_type eq "int" ||
+	   $column_type eq "float") {
+	# If both min/max are zero, then skip check; allow anything.
+	return 1
+	    if ((!($min || $max)) || ($token >= $min && $token <= $max));
+	$DBFieldErrstr = "Too Small"
+	    if ($min && $token < $min);
+	$DBFieldErrstr = "Too Big"
+	    if ($max && $token > $max);
+    }
+    else {
+	die("*** $0:\n" .
+	    "    Unrecognized column_type $column_type\n");
+    }
+    return 0;
 }
 
 #

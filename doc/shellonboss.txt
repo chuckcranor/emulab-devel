@@ -132,8 +132,10 @@ certainly do things very differently.
 
 	cd ~/testbed/obj-devel
 	gmake boss-install
+	sudo gmake post-install
 
-  The boss-install target will use sudo to set some executables as setuid root.
+  If you forget the post-install, many things will break. Don't run the
+  boss-install target as root, just the post-install.
 
 * You can now use your own binaries by running programs from your devel
   tree, and your personal web interface is:
@@ -175,7 +177,10 @@ Okay, to install software into the main tree:
 * Install the tree.
 
 	gmake boss-install
+	sudo gmake post-install
 
+  Do not forget the post-install; the main tree will break and users will
+  be unhappy if you forget this.
 
 
 

@@ -23,7 +23,6 @@ $isadmin   = ISADMIN();
 $optargs = OptionalPageArguments("target_project", PAGEARG_PROJECT,
 				 "target_group",   PAGEARG_GROUP,
 				 "listname",       PAGEARG_STRING,
-				 "asadmin",        PAGEARG_BOOLEAN,
 				 "wantadmin",      PAGEARG_BOOLEAN,
 				 "wantconfig",     PAGEARG_BOOLEAN);
 
@@ -128,7 +127,7 @@ elseif (isset($listname) && $listname != "") {
     # Make sure the user is allowed! We must do a permission check since
     # we are asking mailman to generate a cookie without a password.
     #
-    if (isset($wantadmin) || isset($asadmin)) {
+    if (isset($wantadmin)) {
 	if (!$isadmin) {
 	    $mm_result = DBQueryFatal("select * from mailman_listnames ".
 				      "where listname='$listname'");
@@ -147,11 +146,7 @@ elseif (isset($listname) && $listname != "") {
 	    }
 	}
 	$cookietype = "admin";
-	if (isset($wantadmin)) {
-	    $listiface  = "admin";
-	} else {
-	    $listiface  = "private";
-        }
+	$listiface  = "admin";
     }
     elseif (isset($wantconfig)) {
 	$cookietype = "user";

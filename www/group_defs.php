@@ -1,7 +1,7 @@
 <?php
 #
 # EMULAB-COPYRIGHT
-# Copyright (c) 2006-2008 University of Utah and the Flux Group.
+# Copyright (c) 2006, 2007 University of Utah and the Flux Group.
 # All rights reserved.
 #
 #
@@ -638,8 +638,7 @@ class Group
     # Notify leaders of new (and verified) group member.
     #
     function NewMemberNotify($user) {
-	global $TBWWW, 
-	       $TBMAIL_APPROVAL, $TBMAIL_AUDIT, $TBMAIL_WWW, $TBMAIL_NOREPLY;
+	global $TBWWW, $TBMAIL_APPROVAL, $TBMAIL_AUDIT, $TBMAIL_WWW;
 	
 	if (! $this->project) {
 	    $this->LoadProject();
@@ -665,9 +664,8 @@ class Group
 	$usr_country	= $user->country();
 	$usr_phone	= $user->phone();
 	$usr_URL	= $user->URL();
-
-	TBMAIL	
-          ("$leader_name '$leader_uid' <$leader_email>",
+	
+	TBMAIL("$leader_name '$leader_uid' <$leader_email>",
 	   "$joining_uid $pid Project Join Request",
 	   "$usr_name is trying to join your group $gid in project $pid.\n".
 	   "\n".
@@ -691,7 +689,7 @@ class Group
 	   "decision regarding $usr_name's membership in your project.\n\n".
 	   "Thanks,\n".
 	   "Testbed Operations\n",
-	   "From: $usr_name '$joining_uid' <$usr_email>\n".
+	   "From: $TBMAIL_APPROVAL\n".
 	   "Cc: $allleaders\n".
 	   "Bcc: $TBMAIL_AUDIT\n".
 	   "Errors-To: $TBMAIL_WWW");
@@ -743,8 +741,7 @@ class Group
 			 "     g.pid=m.pid and g.gid=m.gid ".
 			 "where m.pid_idx='$pid_idx' and ".
 			 "      m.gid_idx='$gid_idx' and ".
-			 "      m.trust!='$trust_none' ".
-			 "order by m.uid");
+			 "      m.trust!='$trust_none'");
 
 	while ($row = mysql_fetch_array($query_result)) {
 	    $uid_idx = $row["uid_idx"];
@@ -784,8 +781,7 @@ class Group
 			 "     a.pid_idx=m.pid_idx and a.gid_idx='$gid_idx' ".
 			 "where m.pid_idx='$pid_idx' and ".
 			 "      m.gid_idx=m.pid_idx and a.uid_idx is NULL ".
-			 "      and m.trust!='$trust_none' ".
-			 "order by m.uid");
+			 "      and m.trust!='$trust_none'");
 
 	while ($row = mysql_fetch_array($query_result)) {
 	    $uid_idx = $row["uid_idx"];

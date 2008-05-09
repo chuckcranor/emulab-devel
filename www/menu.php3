@@ -1,7 +1,7 @@
 <?php
 #
 # EMULAB-COPYRIGHT
-# Copyright (c) 2000-2008 University of Utah and the Flux Group.
+# Copyright (c) 2000-2007 University of Utah and the Flux Group.
 # All rights reserved.
 #
 
@@ -294,10 +294,10 @@ function WRITESIDEBAR() {
     global $login_status, $login_user, $pid, $gid;
     global $TBBASE, $TBDOCBASE, $BASEPATH, $WIKISUPPORT, $MAILMANSUPPORT;
     global $BUGDBSUPPORT, $BUGDBURL, $CVSSUPPORT, $CHATSUPPORT, $TRACSUPPORT;
-    global $CHECKLOGIN_WIKINAME, $TBMAINSITE;
+    global $CHECKLOGIN_WIKINAME;
     global $THISHOMEBASE;
     global $EXPOSETEMPLATES;
-    global $currentusage, $FANCYBANNER, $ELABINELAB, $PLABSUPPORT;
+    global $currentusage, $FANCYBANNER, $ELABINELAB;
     $firstinitstate = TBGetFirstInitState();
 
     #
@@ -534,11 +534,6 @@ function WRITESIDEBAR() {
 	echo "<a id='webdisabled' href='$TBDOCBASE/nologins.php3'>".
 	    "Web Interface Temporarily Unavailable</a>";
 	WRITESIDEBARNOTICE("Please Try Again Later");
-	
-        $message = TBGetSiteVar("web/message");
-        if ($message != "") {
-	    WRITESIDEBARNOTICE($message);
-	}
     }
 
     # Start Interaction section if going to spit out interaction options.
@@ -592,12 +587,10 @@ function WRITESIDEBAR() {
 		    NavMenuButton("Create a Template",
 				  "$TBBASE/template_create.php");
 		}
-
-		if ($PLABSUPPORT) {
-                    # Put _NEW back when Plab is working again.
-		    NavMenuButton("Create a PlanetLab Slice",
-				  "$TBBASE/plab_ez.php3");
-		}
+	
+		# Put _NEW back when Plab is working again.
+		NavMenuButton("Create a PlanetLab Slice",
+			      "$TBBASE/plab_ez.php3");
 
 		NavMenuButton("Experiment List", "$TBBASE/showexp_list.php3");
 
@@ -682,21 +675,9 @@ function WRITESIDEBAR() {
 	    NavMenuButton("My Chat Buddies",
 			  "$TBBASE/" . CreateURL("mychat", $login_user));
 	}
-	if ($TBMAINSITE && $TRACSUPPORT) {
-	    $geniproject = Project::Lookup("geni");
-	    $approved    = 0;
-	    
-	    if ($geniproject &&
-		$geniproject->IsMember($login_user, $approved) && $approved) {
-		NavMenuButton("ProtoGENI Trac Wiki",
-			      "$TBBASE/" . CreateURL("gototrac", $login_user,
-						     "wiki", "geni"));
-	    }
-	    if (STUDLY()) {
-		NavMenuButton("Emulab Trac Wiki",
-			      "$TBBASE/" . CreateURL("gototrac", $login_user,
-						     "wiki", "emulab"));
-	    }
+	if ($TRACSUPPORT && STUDLY()) {
+	    NavMenuButton("Trac Management",
+			  "$TBBASE/" . CreateURL("gototrac", $login_user));
 	}
     }
 
@@ -792,7 +773,7 @@ function PAGEBEGINNING( $title, $nobanner = 0, $nocontent = 0,
 	<html>
 	  <head>
 	    <title>$THISHOMEBASE - $title</title>
-            <link rel=\"shortcut icon\" href=\"$BASEPATH/favicon.ico\" TYPE=\"image/vnd.microsoft.icon\">
+            <link rel=\"shortcut icon\" href=\"favicon.ico\" TYPE=\"image/vnd.microsoft.icon\">
             <link rel=\"search\" type=\"application/opensearchdescription+xml\" title=\"$THISHOMEBASE Search\" href=\"emusearch.xml\">
     	    <!-- dumbed-down style sheet for any browser that groks (eg NS47). -->
 	    <link rel='stylesheet' href='$BASEPATH/common-style.css' type='text/css' />
@@ -868,6 +849,9 @@ function PAGEBEGINNING( $title, $nobanner = 0, $nocontent = 0,
                           scrolling='no' frameborder='0'></iframe>\n";
 	}
 	if ($login_user) {
+	    echo "<table id=topcelltable ".
+		     "cellspacing=0 cellpadding=0 border=0><tr>";
+	    
 	    #
 	    # It is a violation of Emulab licensing restrictions to remove
 	    # this logo!
@@ -880,16 +864,12 @@ function PAGEBEGINNING( $title, $nobanner = 0, $nocontent = 0,
 		    "href='http://www.emulab.net'>";
 		echo "<img src='$BASEPATH/fancy-builtwith.png'></a>\n";
 	    }
-	    echo "<table id=topcelltable ".
-		     "cellspacing=0 cellpadding=0 border=0><tr>";
-	    
 	    echo "<td>\n";
 	    echo "<a id='topcellimage' href='$TBDOCBASE/index.php3'>";
 	    echo "<img border='0' ";
 	    echo "alt='$THISHOMEBASE - the network testbed' ";
 	    if ($FANCYBANNER)
-		echo "src='$BASEPATH/fancy-sheader-" .
-		    strtolower($THISHOMEBASE) . ".png' ";
+		echo "src='$BASEPATH/fancy-banner-short.png' ";
 	    elseif ($ELABINELAB) {
 		echo "height='54' ";
 		echo "src='$BASEPATH/overlay.elabinelab.gif' ";
@@ -905,12 +885,9 @@ function PAGEBEGINNING( $title, $nobanner = 0, $nocontent = 0,
 	else {
 	    if ($FANCYBANNER) {
 		echo "<a href='$TBDOCBASE/index.php3'>
-                        <img height='100px' width='365px' border='0' ";
-		echo "src='$BASEPATH/fancy-header-" .
-			strtolower($THISHOMEBASE) . ".png' ";
-		echo "></a>\n";
-	    }
-	    else {
+                        <img height='100px' width='365px' border='0'
+                           src='$BASEPATH/fancy-header.png' /></a>\n";
+	    } else {
 		echo "<map name='overlaymap'>
                          <area shape=\"rect\" coords=\"100,60,339,100\"
                                href='http://www.emulab.net/index.php3'>

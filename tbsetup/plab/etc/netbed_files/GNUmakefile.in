@@ -8,6 +8,7 @@ SRCDIR		= @srcdir@
 TESTBED_SRCDIR	= @top_srcdir@
 OBJDIR		= ../../../..
 SUBDIR		= tbsetup/plab/etc/netbed_files
+ROOTBALL	= @PLAB_ROOTBALL@
 
 include $(OBJDIR)/Makeconf
 
@@ -21,7 +22,10 @@ include $(TESTBED_SRCDIR)/GNUmakerules
 
 mkdirs: $(LOG_DIR) $(WWW_DIR)
 
-install: sbin-install mkdirs
+rootball-link:
+	-ln -fs $(INSTALL_ETCDIR)/plab/$(ROOTBALL) $(WWW_DIR)/$(ROOTBALL)
+
+install: sbin-install mkdirs rootball-link
 
 sbin-install: $(addprefix $(SBIN_DIR)/, $(SBIN_STUFF))
 

@@ -135,7 +135,7 @@ class Project
     function approved()      { return $this->field("approved"); }
     function inactive()      { return $this->field("inactive"); }
     function date_inactive() { return $this->field("date_inactive"); }
-    function ispublic()      { return $this->field("public"); }
+    function public()        { return $this->field("public"); }
     function public_whynot() { return $this->field("public_whynot"); }
     function expt_count()    { return $this->field("expt_count"); }
     function expt_last()     { return $this->field("expt_last"); }
@@ -594,7 +594,7 @@ class Project
 	$proj_created		= $this->created();
 	$proj_name		= $this->name();
 	$proj_URL		= $this->URL();
-	$proj_public		= YesNo($this->ispublic());
+	$proj_public		= YesNo($this->public());
 	$proj_funders		= $this->funders();
 	$proj_head_idx		= $this->head_idx();
 	$proj_members		= $this->num_members();
@@ -674,7 +674,7 @@ class Project
 	}
 	if ($CVSSUPPORT) {
 	    $cvsdir = "$TBCVSREPO_DIR/$pid";
-	    $cvsurl = "cvsweb/cvswebwrap.php3?pid=$pid";
+	    $cvsurl = "cvsweb/cvsweb.php3?pid=$pid";
 	
 	    echo "<tr>
                       <td>Project CVS Repository:</td>
@@ -720,19 +720,6 @@ class Project
 	    }
 	    echo "    </td>
                   </tr>\n";
-
-	    if (ISADMIN()) {
-		$mmurl   = "gotommlist.php3?listname=${pid}-admin&asadmin=1";
-
-		echo "<tr>
-                         <td>Project Admin Mailing List:</td>
-                         <td class=\"left\">
-                             <a href='$mmurl'>${pid}-admin</a> ";
-		$mmurl   = "gotommlist.php3?listname=${pid}-admin&wantadmin=1";
-		echo "<a href='$mmurl'>(admin access)</a>";
-		echo "    </td>
-                     </tr>\n";
-	    }
 	}
 
 	echo "<tr>

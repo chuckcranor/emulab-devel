@@ -30,14 +30,8 @@ my $UPTIME       = "/usr/bin/uptime";
 # package vars
 my %logs = ();
 
-sub STATUSLOG { 
-    my $log = shift || '';
-    return "StatusLog-$log";
-}
-sub STATUSLOGPATH { 
-    my $log = shift || '';
-    return "$TB/log/plabnodestatus-$log.log";
-}
+sub STATUSLOG { "StatusLog"; }
+sub STATUSLOGPATH { "$TB/log/plabnodestatus.log"; }
 
 sub MIN($$) {
     my ($a, $b) = @_;

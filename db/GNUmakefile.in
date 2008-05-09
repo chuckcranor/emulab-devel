@@ -1,6 +1,6 @@
 #
 # EMULAB-COPYRIGHT
-# Copyright (c) 2000-2008 University of Utah and the Flux Group.
+# Copyright (c) 2000-2007 University of Utah and the Flux Group.
 # All rights reserved.
 #
 SRCDIR		= @srcdir@
@@ -17,7 +17,7 @@ SBIN_SCRIPTS	= avail inuse showgraph if2port backup webcontrol node_status \
 		  dbcheck interswitch dbboot grabron stategraph newwanode \
 		  idletimes idlemail setsitevar audit changeuid changepid \
 		  elabinelab_bossinit update_permissions mysqld_watchdog \
-		  dumperrorlog changeleader checkstats changecreator
+		  dumperrorlog changeleader
 
 WEB_SBIN_SCRIPTS= webnodelog webnewwanode webidlemail webchangeuid \
 		  webchangeleader
@@ -25,8 +25,7 @@ WEB_BIN_SCRIPTS = webnfree
 LIBEXEC_SCRIPTS = $(WEB_BIN_SCRIPTS) $(WEB_SBIN_SCRIPTS) xmlconvert
 LIB_SCRIPTS     = libdb.pm Node.pm libdb.py libadminctrl.pm Experiment.pm \
 		  NodeType.pm Interface.pm User.pm Group.pm Project.pm \
-		  Image.pm OSinfo.pm Archive.pm Logfile.pm Lan.pm emdbi.pm \
-		  emutil.pm
+		  Image.pm OSinfo.pm Archive.pm Logfile.pm
 
 # Stuff installed on plastic.
 USERSBINS	= genelists.proxy dumperrorlog.proxy
@@ -34,8 +33,7 @@ USERLIBS	= libtbdb.pm libdb.py
 
 # These scripts installed setuid, with sudo. 
 SETUID_BIN_SCRIPTS   = 
-SETUID_SBIN_SCRIPTS  = genelists dhcpd_makeconf elabinelab_bossinit \
-                       changecreator
+SETUID_SBIN_SCRIPTS  = genelists dhcpd_makeconf elabinelab_bossinit
 SETUID_LIBX_SCRIPTS  = 
 
 #

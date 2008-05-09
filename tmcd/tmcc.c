@@ -1,6 +1,6 @@
 /*
  * EMULAB-COPYRIGHT
- * Copyright (c) 2000-2004, 2008 University of Utah and the Flux Group.
+ * Copyright (c) 2000-2004 University of Utah and the Flux Group.
  * All rights reserved.
  */
 
@@ -54,9 +54,6 @@ typedef int socklen_t;
 #  endif
 #endif
 #include <setjmp.h>
-#ifdef linux
-#define strlcpy strncpy
-#endif
 
 #ifndef KEYFILE
 #  define KEYFILE		"/etc/emulab.pkey"
@@ -623,7 +620,7 @@ doudp(char *data, int outfd, struct in_addr serverip, int portnum)
 static int
 dounix(char *data, int outfd, char *unixpath)
 {
-#if defined(_WIN32)
+#if defined(linux) || defined(_WIN32)
 	fprintf(stderr, "unix domain socket mode not supported on this platform!\n");
 	return -1;
 #else
@@ -634,7 +631,7 @@ dounix(char *data, int outfd, char *unixpath)
 	sunaddr.sun_family = AF_UNIX;
 	strlcpy(sunaddr.sun_path, unixpath, sizeof(sunaddr.sun_path));
 	length = SUN_LEN(&sunaddr)+1;
-#if !defined(__CYGWIN__) && !defined(linux)
+#  ifndef __CYGWIN__
 	sunaddr.sun_len = length;
 #  endif /* __CYGWIN__ */
 
@@ -716,7 +713,7 @@ dounix(char *data, int outfd, char *unixpath)
 static void
 beproxy(char *localpath, struct in_addr serverip, char *partial)
 {
-#if defined(_WIN32)
+#if defined(linux) || defined(_WIN32)
 	fprintf(stderr, "proxy mode not supported on this platform!\n");
 	exit(-1);
 #else
@@ -739,9 +736,9 @@ beproxy(char *localpath, struct in_addr serverip, char *partial)
 	sunaddr.sun_family = AF_UNIX;
 	strlcpy(sunaddr.sun_path, localpath, sizeof(sunaddr.sun_path));
 	length = SUN_LEN(&sunaddr) + 1;
-#if !defined(__CYGWIN__) && !defined(linux)
+#  ifndef __CYGWIN__
 	sunaddr.sun_len = length;
-#endif /* __CYGWIN__ */
+#  endif /* __CYGWIN__ */
 	if (bind(sock, (struct sockaddr *)&sunaddr, length) < 0) {
 		perror("binding unix domain socket");
 		exit(-1);

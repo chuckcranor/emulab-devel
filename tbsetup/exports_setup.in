@@ -2,7 +2,7 @@
 
 #
 # EMULAB-COPYRIGHT
-# Copyright (c) 2000-2008 University of Utah and the Flux Group.
+# Copyright (c) 2000-2007 University of Utah and the Flux Group.
 # All rights reserved.
 #
 
@@ -38,13 +38,6 @@ my $groupdir    = "@FSDIR_GROUPS@";
 my $scratchdir  = "@FSDIR_SCRATCH@";
 my $DISABLED	= "@DISABLE_EXPORTS_SETUP@";
 my $WINSUPPORT  = @WINSUPPORT@;
-my $ISOLATEADMIN= @ISOLATEADMINS@;
-
-# XXX for TESTMODE: output to stdout
-my $TOSTDOUT	= 0;
-if ($TOSTDOUT) {
-    $TESTMODE = 1;
-}
 
 # Note no -n option. We redirect stdin from the new exports file below.
 my $SSH		= "$TB/bin/sshtb -l root -host $FSNODE";
@@ -122,11 +115,6 @@ if (!$TESTMODE) {
   if ($WINSUPPORT) {
       open(SMBMAP, ">$smbconftail") || fatal("Couldn't open $smbconftail\n");
   }
-} elsif ($TOSTDOUT) {
-  open(MAP, ">/dev/stdout") || fatal("Couldn't open /dev/stdout\n");
-  if ($WINSUPPORT) {
-      open(SMBMAP, ">/dev/stdout") || fatal("Couldn't open /dev/stdout\n");
-  }
 } else {
   open(MAP, ">/dev/null") || fatal("Couldn't open /dev/null\n");
   if ($WINSUPPORT) {
@@ -148,25 +136,23 @@ if ($WINSUPPORT) {
 
 #
 # First gather up all the nodes that are reserved and the required info.
-# Order by pid,gid,admin first so that they're all grouped together and we
-# avoid extra db queries (see lastpid/lastgid/lastadmin).
+# Order by pid,gid first so that they're all grouped together and we avoid
+# extra db queries.
 #
 # VIRTNODE HACK: Virtual nodes are special, so do not export. (isvirtnode).
 #
 $nodes_result =
-    DBQueryFatal("select r.node_id,r.pid,r.eid,e.gid,i.IP,u.admin ".
-		 "from reserved as r ".
+    DBQueryFatal("select r.node_id,r.pid,r.eid,e.gid,i.IP from reserved as r ".
 		 "left join experiments as e on r.pid=e.pid and r.eid=e.eid ".
 		 "left join nodes on r.node_id=nodes.node_id ".
 		 "left join node_types on node_types.type=nodes.type ".
 		 "left join interfaces as i on r.node_id=i.node_id ".
-		 "left join users as u on e.swapper_idx=u.uid_idx ".
 		 " where i.IP!='NULL' and ".
 		 "       i.role='" . TBDB_IFACEROLE_CONTROL() . "' ".
 		 "       and nodes.role='testnode' ".
 		 "       and node_types.isvirtnode=0 ".
 		 "       and node_types.isremotenode=0 ".
-		 "order by r.pid,e.gid,r.eid,u.admin,nodes.priority");
+		 "order by r.pid,e.gid,r.eid,nodes.priority");
 
 my %ipgroups    = ();
 my %globalsmbshares   = ();
@@ -174,7 +160,6 @@ my %lastfslist  = ();
 my @lastsmbshares = ();
 my $lastpid     = "";
 my $lastgid     = "";
-my $lastadmin	= "";
 
 my @mountpoints = fsinit();
 
@@ -192,7 +177,6 @@ while (@row = $nodes_result->fetchrow_array) {
     my $eid     = $row[2];
     my $gid     = $row[3];
     my $ip      = $row[4];
-    my $admin	= $row[5];
     my %fslist = ();
     my @dirlist = ();
     my @smbshares = ();
@@ -200,13 +184,12 @@ while (@row = $nodes_result->fetchrow_array) {
     # Sanity check - don't try this if any of the above are not defined - we
     # may end up with a bad line in exports
     if ((!defined($node_id)) || (!defined($pid)) || (!defined($eid)) ||
-        (!defined($gid)) || (!defined($admin)) || (!defined($ip))) {
+        (!defined($gid)) || (!defined($ip))) {
         print "WARNING: exports_setup: Skipping database row with undefined values\n";
 	next;
     }
 
-    if ($lastpid eq $pid && $lastgid eq $gid &&
-	(!$ISOLATEADMIN || $lastadmin eq $admin)) {
+    if ($lastpid eq $pid && $lastgid eq $gid) {
 
 	# If this is for the same proj and group again, don't requery the db 
 	# and don't recompute everything.
@@ -217,7 +200,6 @@ while (@row = $nodes_result->fetchrow_array) {
 
 	$lastpid=$pid;
 	$lastgid=$gid;
-	$lastadmin=$admin;
 
 	# Construct a list of directories accessible from this node.
 	# First the project and group directories.
@@ -249,21 +231,12 @@ while (@row = $nodes_result->fetchrow_array) {
 	# Determine the users that can access this node, and add those
 	# users' directories to the list.
 	# XXX needs to be fixed for shared experiments?
-	#
-	# Note that if we are isolating admins, only those users with
-	# the same admin status as the swapper are allowed.
-	my $adminclause = "";
-	if ($ISOLATEADMIN) {
-	    $adminclause = "u.admin=$admin and ";
-	}
-
 	$users_result =
 	    DBQueryFatal("select distinct g.uid from group_membership as g ".
 			 "left join users as u on u.uid_idx=g.uid_idx ".
 			 "where g.pid='$pid' and g.gid='$gid' and ".
 			 "      (g.trust!='none' and ".
 			 "       u.webonly=0 and ".
-			 "       $adminclause ".
 			 "       u.status='" . USERSTATUS_ACTIVE() . "')");
 
 	while (@usersrow = $users_result->fetchrow_array) {
@@ -335,19 +308,11 @@ while (@row = $nodes_result->fetchrow_array) {
     }
 }
 
-# just cuz
-sub sortbyip {
-    my @ao = split('\.', $a);
-    my @bo = split('\.', $b);
-    return ($ao[0] <=> $bo[0] || $ao[1] <=> $bo[1] ||
-	    $ao[2] <=> $bo[2] || $ao[3] <=> $bo[3]);
-}
-
 #
 # Now spit out each group!
 #
 foreach my $str ( keys(%ipgroups) ) {
-    my @iplist = sort sortbyip @{ $ipgroups{$str} };
+    my @iplist = @{ $ipgroups{$str} };    
 
     print MAP "$str -maproot=root @iplist\n";
 }
@@ -360,7 +325,7 @@ close(MAP);
 #
 if ($WINSUPPORT) {
     foreach my $share ( keys(%globalsmbshares) ) {
-        my @iplist = sort sortbyip @{ $globalsmbshares{$share}->{iplist} };
+        my @iplist = @{ $globalsmbshares{$share}->{iplist} };
         my $path   = $globalsmbshares{$share}->{path};
 
         print SMBMAP "[$share]\n";

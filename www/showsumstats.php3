@@ -1,7 +1,7 @@
 <?php
 #
 # EMULAB-COPYRIGHT
-# Copyright (c) 2000-2008 University of Utah and the Flux Group.
+# Copyright (c) 2000-2007 University of Utah and the Flux Group.
 # All rights reserved.
 #
 include("defs.php3");
@@ -30,9 +30,8 @@ if (!$isadmin && !STUDLY()) {
 #
 # Verify page arguments.
 #
-$optargs = OptionalPageArguments("showby",     PAGEARG_STRING,
-				 "range",      PAGEARG_STRING,
-				 "experiment", PAGEARG_EXPERIMENT);
+$optargs = OptionalPageArguments("showby", PAGEARG_STRING,
+				 "range",  PAGEARG_STRING);
 
 # Page args,
 if (! isset($showby)) {
@@ -289,16 +288,9 @@ function showsummary ($showby) {
 
 function showrange ($showby, $range) {
     global $TBOPSPID, $TB_EXPTSTATE_ACTIVE, $debug, $debug2, $debug3;
-    global $experiment;
-
-    $ACTIVE   = TBDB_USERSTATUS_ACTIVE;
-    $ARCHIVED = TBDB_USERSTATUS_ARCHIVED;
-    
     $now   = time();
     $inactive_swapmods = 0;
     unset($rangematches);
-    $users_created    = 0;
-    $projects_created = 0;
     
     switch ($range) {
         case "day":
@@ -335,29 +327,6 @@ function showrange ($showby, $range) {
     }
     if ($debug)
 	echo "start $spanstart end $spanend<br>\n";
-
-    #
-    # Get users/projects created during that time.
-    #
-    $query_result =
-	DBQueryFatal("select count(uid_idx) from users ".
-		     "where UNIX_TIMESTAMP(usr_created) >= $spanstart and ".
-		     "      UNIX_TIMESTAMP(usr_created) <  $spanend and ".
-		     "      (status='$ACTIVE' or status='$ARCHIVED') and ".
-		     "      usr_email not like '%flux.utah.edu'");
-    if ($query_result && mysql_num_rows($query_result)) {
-	$row = mysql_fetch_row($query_result);
-	$users_created = $row[0];
-    }
-    $query_result =
-	DBQueryFatal("select count(pid_idx) from projects ".
-		     "where UNIX_TIMESTAMP(created) >= $spanstart and ".
-		     "      UNIX_TIMESTAMP(created) <  $spanend and ".
-		     "      approved=1");
-    if ($query_result && mysql_num_rows($query_result)) {
-	$row = mysql_fetch_row($query_result);
-	$projects_created = $row[0];
-    }
 
     # Summary info, indexed by pid and uid. Each entry is an array of the
     # summary info.
@@ -412,8 +381,7 @@ function showrange ($showby, $range) {
 				       'pseconds' => 0,
 				       'eseconds' => 0,
 				       'current'  => 1,
-				       'preloaded'=> 0,
-				       'started'  => 0,
+				       'new'      => 0,
 				       'swapmods' => 0,
 				       'swapins'  => 0);
 	}
@@ -423,8 +391,7 @@ function showrange ($showby, $range) {
 				       'pseconds' => 0,
 				       'eseconds' => 0,
 				       'current'  => 1,
-				       'preloaded'=> 0,
-				       'started'  => 0,
+				       'new'      => 0,
 				       'swapmods' => 0,
 				       'swapins'  => 0);
 	}
@@ -443,17 +410,20 @@ function showrange ($showby, $range) {
 	DBQueryFatal("select s.exptidx,s.pid,u.uid,r.pnodes,r.vnodes, ".
 		     "   swapin_time,swapout_time,swapmod_time,byswapmod, ".
 		     "   e.eid_uuid,r.idx,r.lastidx,byswapin ".
-		     " from experiment_resources as r ".
-		     "left join experiment_stats as s on ".
+		     " from experiment_stats as s ".
+		     "left join experiment_resources as r on ".
 		     "     r.exptidx=s.exptidx ".
 		     "left join experiments as e on e.idx=s.exptidx ".
 		     "left join users as u on u.uid_idx=r.uid_idx ".
-		     "where (UNIX_TIMESTAMP(r.tstamp) >= $spanstart) and ".
-		     "      (UNIX_TIMESTAMP(r.tstamp) <= $spanend) and ".
-		     "      s.pid!='$TBOPSPID' and ".
-		     "        not (s.pid='ron' and s.eid='all') ".
-		     (isset($experiment) ?
-		      "and r.exptidx=" . $experiment->idx() . " " : " ") .
+		     "where (UNIX_TIMESTAMP(r.tstamp) >= $spanstart or ".
+		     "       swapin_time >= $spanstart or ".
+		     "       swapmod_time >= $spanstart or ".
+		     "       swapout_time >= $spanstart) and ".
+		     "      (swapin_time <= $spanend and ".
+		     "       swapmod_time <= $spanend and ".
+		     "       swapout_time <= $spanend) and ".
+		     "    e.pid!='$TBOPSPID' and ".
+		     "      not (e.pid='ron' and e.eid='all') ".
 		     "order by s.exptidx,UNIX_TIMESTAMP(r.tstamp)");
 
     while ($row = mysql_fetch_assoc($query_result)) {
@@ -487,8 +457,7 @@ function showrange ($showby, $range) {
 				       'pseconds' => 0,
 				       'eseconds' => 0,
 				       'current'  => 0,
-				       'preloaded'=> 0,
-				       'started'  => 0,
+				       'new'      => 0,
 				       'swapmods' => 0,
 				       'swapins'  => 0);
 	}
@@ -498,21 +467,14 @@ function showrange ($showby, $range) {
 				       'pseconds' => 0,
 				       'eseconds' => 0,
 				       'current'  => 0,
-				       'preloaded'=> 0,
-				       'started'  => 0,
+				       'new'      => 0,
 				       'swapmods' => 0,
 				       'swapins'  => 0);
 	}
 
 	if (!$lastidx) {
-	    if ($swapin_time) {
-		$pid_summary[$pid]["started"]++;
-		$uid_summary[$uid]["started"]++;
-	    }
-	    else {
-		$pid_summary[$pid]["preloaded"]++;
-		$uid_summary[$uid]["preloaded"]++;
-	    }
+	    $pid_summary[$pid]["new"]++;
+	    $uid_summary[$uid]["new"]++;
 	}
 	if ($byswapin) {
 	    $pid_summary[$pid]["swapins"]++;
@@ -616,16 +578,14 @@ function showrange ($showby, $range) {
     $edays_total  = 0;
     $swapin_total = 0;
     $swapmod_total= 0;
-    $preload_total= 0;
-    $started_total= 0;
+    $new_total    = 0;
 
     foreach ($table as $key => $value) {
 	$pnodes  = $value["pnodes"];
 	$vnodes  = $value["vnodes"];
 	$swapins = $value["swapins"];
 	$swapmods= $value["swapmods"];
-	$preload = $value["preloaded"];
-	$starts  = $value["started"];
+	$new     = $value["new"];
 	$pdays   = sprintf("%.2f", $value["pseconds"] / (3600 * 24));
 	$edays   = sprintf("%.2f", $value["eseconds"] / (3600 * 24));
 
@@ -638,20 +598,13 @@ function showrange ($showby, $range) {
 	$edays_total   += $edays;
 	$swapin_total  += $swapins;
 	$swapmod_total += $swapmods;
-	$preload_total += $preload;
-	$started_total += $starts;
+	$new_total     += $new;
     }
 
     SUBPAGESTART();
     echo "<table>
            <tr><td colspan=2 nowrap align=center>
                <b>Totals</b></td>
-           </tr>
-           <tr><td nowrap align=right><b>New Projects</b></td>
-               <td align=left>$projects_created</td>
-           </tr>
-           <tr><td nowrap align=right><b>New Users</b></td>
-               <td align=left>$users_created</td>
            </tr>
            <tr><td nowrap align=right><b>Pnodes</b></td>
                <td align=left>$pnode_total</td>
@@ -665,20 +618,14 @@ function showrange ($showby, $range) {
            <tr><td nowrap align=right><b>Expt Days</b></td>
                <td align=left>$edays_total</td>
            </tr>
-           <tr><td nowrap align=right><b>Starts</b></td>
-               <td align=left>$started_total</td>
-           </tr>
            <tr><td nowrap align=right><b>Swapins</b></td>
                <td align=left>$swapin_total</td>
            </tr>
-           <tr><td nowrap align=right><b>Total Swapmods</b></td>
-               <td align=left>$swapmod_total</td>
+           <tr><td nowrap align=right><b>Swapmods</b></td>
+               <td align=left>$swapmod_total ($inactive_swapmods)</td>
            </tr>
-           <tr><td nowrap align=right><b>Inactive Swapmods</b></td>
-               <td align=left>$inactive_swapmods</td>
-           </tr>
-           <tr><td nowrap align=right><b>Preloaded</b></td>
-               <td align=left>$preload_total</td>
+           <tr><td nowrap align=right><b>New</b></td>
+               <td align=left>$new_total</td>
            </tr>
           </table>\n";
     SUBMENUEND_2B();
@@ -694,10 +641,9 @@ function showrange ($showby, $range) {
              <th>Pnodes</th>
              <th>Pnode Days</th>
              <th>Expt Days</th>
-             <th>Starts</th>
              <th>Swapins</th>
              <th>Swapmods</th>
-             <th>Preloaded</th>
+             <th>New</th>
              <th>Vnodes</th>
           </tr></thead>\n";
 
@@ -707,8 +653,7 @@ function showrange ($showby, $range) {
 	$vnodes  = $value["vnodes"];
 	$swapins = $value["swapins"];
 	$swapmods= $value["swapmods"];
-	$preload = $value["preloaded"];
-	$starts  = $value["started"];
+	$new     = $value["new"];
 	$current = $value["current"];
 	$pdays   = sprintf("%.2f", $value["pseconds"] / (3600 * 24));
 	$edays   = sprintf("%.2f", $value["eseconds"] / (3600 * 24));
@@ -723,10 +668,9 @@ function showrange ($showby, $range) {
                 <td>$pnodes</td>
                 <td>$pdays</td>
                 <td>$edays</td>
-                <td>$starts</td>
                 <td>$swapins</td>
                 <td>$swapmods</td>
-                <td>$preload</td>
+                <td>$new</td>
                 <td>$vnodes</td>
               </tr>\n";
     }

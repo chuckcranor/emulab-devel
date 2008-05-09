@@ -108,7 +108,7 @@ if (defined($options{"r"})) {
     $DBHOST = "users.emulab.net";
 }
 if (defined($options{"d"})) {
-    $DBHOST = "utah.datapository.net";
+    $DBHOST = "datapository.net";
     $DBNAME = "nodesamples";
     $DBUSER = "flexlabdata";
     $PWDFILE = "";

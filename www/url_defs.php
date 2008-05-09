@@ -1,7 +1,7 @@
 <?php
 #
 # EMULAB-COPYRIGHT
-# Copyright (c) 2006, 2007, 2008 University of Utah and the Flux Group.
+# Copyright (c) 2006, 2007 University of Utah and the Flux Group.
 # All rights reserved.
 #
 
@@ -45,7 +45,6 @@ define("PAGEARG_OSID",		"osid");
 define("PAGEARG_LOGFILE",	"logfile");
 define("PAGEARG_BOOLEAN",	"boolean");
 define("PAGEARG_STRING",	"string");
-define("PAGEARG_PASSWORD",	"password");
 define("PAGEARG_INTEGER",	"integer");
 define("PAGEARG_NUMERIC",	"numeric");
 define("PAGEARG_ARRAY",		"array");
@@ -165,53 +164,38 @@ function CreateURL($page_id)
 	    #
 	    $val = $key;
 	    
-            #
-            # In the cases, use both the lowercased version of the classname
-            # and the real classname so this works under php4 and php5.
-            #
 	    switch (get_class($key)) {
 	    case "user":
-	    case "User":
 		$key = URLARG_UID;
 		break;
 	    case "project":
-	    case "Project":
 		$key = URLARG_PID;
 		break;
 	    case "group":
-	    case "Group":
 		$key = URLARG_GID;
 		break;
 	    case "experiment":
-	    case "Experiment":
 		$key = URLARG_EID;
 		break;
 	    case "node":
-	    case "Node":
 		$key = URLARG_NODEID;
 		break;
 	    case "image":
-	    case "Image":
 		$key = URLARG_IMAGEID;
 		break;
 	    case "osinfo":
-	    case "OSinfo":
 		$key = URLARG_OSID;
 		break;
 	    case "template":
-	    case "Template":
 		$key = URLARG_TEMPLATE;
 		break;
 	    case "templateinstance":
-	    case "TemplateInstance":
 		$key = URLARG_INSTANCE;
 		break;
 	    case "templatemetadata":
-	    case "TemplateMetadata":
 		$key = URLARG_METADATA;
 		break;
 	    case "logfile":
-	    case "Logfile":
 		$key = URLARG_LOGFILE;
 		break;
 	    default:
@@ -608,21 +592,7 @@ function VerifyPageArguments($argspec, $required)
 
                 # Pages never get arguments with special chars. Check.
 		if (preg_match("/[\'\"]/", $object)) {
-		    $object = htmlspecialchars($object);
 		    PAGEARGERROR("Invalid characters in '$name': $object");
-		}
-	    }
-	    break;
-	    
-	case PAGEARG_PASSWORD:
-	default:
-	    if (isset($_REQUEST[$name])) {
-		$object = $_REQUEST[$name];
-		$yep = 1;
-
-                # Only printable chars.
-		if (!preg_match("/^[\040-\176]+$/", $object)) {
-		    PAGEARGERROR("Invalid characters in '$name'");
 		}
 	    }
 	    break;

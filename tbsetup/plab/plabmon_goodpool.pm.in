@@ -54,17 +54,13 @@ my $PLABDOWN_EID    = PLABDOWN_EID();
 my $PLABTESTING_PID = PLABTESTING_PID();
 my $PLABTESTING_EID = PLABTESTING_EID();
 
-my $plcname = '';
-my $plcvtype = '';
-
 sub new($$$$$) {
 
     # The next two lines are some voodoo taken from perltoot(1)
     my $proto = shift;
     my $class = ref($proto) || $proto;
 
-    my ($plcid, $poolname, $poolpid, $pooleid, $chpid2pool) = @_;
-    $plcname = $plcid;
+    my ($poolname, $poolpid, $pooleid, $chpid2pool) = @_;
 
     #
     # Create the actual object
@@ -78,44 +74,11 @@ sub new($$$$$) {
     $self->{'PNODES'}  = {};
     $self->{'PENDING'} = {};
 
-    # grab the vtype for this plc:
-    my $qr = DBQueryFatal("select node_type from plab_plc_info" . 
-			  " where plc_name='$plcname'");
-    if ($qr->num_rows() < 1) {
-	die "could not find vtype for plc $plcname!";
-    }
-    elsif ($qr->num_rows() > 1) {
-	die "too many possible vtypes for plc $plcname!";
-    }
-    my @qrow = $qr->fetchrow_array();
-    $plcvtype = $qrow[0];
-
     # Clean up anything left behind by a terminated monitor
     # XXX: this is kind of hacky, but it works.
-    #
-    my @vnodes = ();
-    my $qres = DBQueryFatal("select r.node_id" . 
-			    " from reserved as r" . 
-			    " left join plab_slice_nodes as psn" . 
-			    "   on r.node_id=psn.node_id" . 
-			    " left join plab_plc_info as ppi" . 
-			    "   on psn.plc_idx=ppi.plc_idx" . 
-			    " left join nodes as n" . 
-			    "   on r.node_id=n.node_id" . 
-			    " where r.pid='$PLABTESTING_PID'" . 
-			    "   and r.eid='$PLABTESTING_EID'" . 
-			    "   and ppi.plc_name='$plcname'" . 
-			    "   and n.type=ppi.node_type");
-    if ($qres->num_rows()) {
-	while (my @row = $qres->fetchrow_array()) {
-	    my $vnodename = $row[0];
-	    push @vnodes, $vnodename;
-	}
-    }
+    my @vnodes = ExpNodes($PLABTESTING_PID, $PLABTESTING_EID);
     if (@vnodes) {
-	my $nodelist = join(" ",@vnodes);
-        system("$VNODE_SETUP -f -k -n 100" . 
-	       " $PLABTESTING_PID $PLABTESTING_EID $nodelist");
+        system("$VNODE_SETUP -f -k -n 100 $PLABTESTING_PID $PLABTESTING_EID");
         Node::DeleteVnodes(@vnodes);
     }
 
@@ -146,7 +109,7 @@ sub checknextnode($) {
     my %options = ( 'pid'    => $PLABTESTING_PID,
                     'eid'    => $PLABTESTING_EID,
                     'count'  => 1,
-                    'vtype'  => "$plcvtype",
+                    'vtype'  => 'pcplab',
                     'nodeid' => $pnode->{'name'});
     if (Node::CreateVnodes(\@vnodes, \%options)) {
         print "Failed to allocate vnode for $pnode->{'name'}!\n";
@@ -522,7 +485,7 @@ sub movetodownpool($$) {
     
     TBSetNodeLogEntry($pnode->{'name'}, "root", TB_DEFAULT_NODELOGTYPE(),
                       "'Moved to $PLABDOWN_EID; ".
-                      "$plcvtype node $pnode->{'vnode'} setup failed by monitor.'");
+                      "plab node $pnode->{'vnode'} setup failed by monitor.'");
 }
 
 # Make perl happy...

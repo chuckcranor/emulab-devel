@@ -19,11 +19,9 @@
 	! ssh $MYBOSS ./waitexp testproj3 testexp3 swapped
     ! endif
 
-    ! if ( "$expstate" != "swapped" ) then
-	/swapexp.php3
-	# Wait for the swapout to finish if a probe gets through.
-	-ssh $MYBOSS  ./waitexp testproj3 testexp3 swapped
-    ! endif
+    /swapexp.php3
+    # Wait for the swapout to finish if a probe gets through.
+    -ssh $MYBOSS  ./waitexp testproj3 testexp3 swapped
 
     # Don't go on until it's actually swapped out.
     ! ssh $MYBOSS ./waitexp testproj3 testexp3 swapped

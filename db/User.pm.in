@@ -1,7 +1,7 @@
 #!/usr/bin/perl -wT
 #
 # EMULAB-COPYRIGHT
-# Copyright (c) 2005-2008 University of Utah and the Flux Group.
+# Copyright (c) 2005, 2006, 2007 University of Utah and the Flux Group.
 # All rights reserved.
 #
 package User;
@@ -287,28 +287,6 @@ sub LookupByEmail($$)
     my $query_result =
 	DBQueryFatal("select uid_idx from users ".
 		     "where LCASE(usr_email)=LCASE('$email') and ".
-		     "      status!='$status_archived'");
-
-    return undef
-	if (! $query_result || !$query_result->numrows);
-
-    my ($uid_idx) = $query_result->fetchrow_array();
-
-    return User->Lookup($uid_idx);
-}
-
-#
-# Lookup user given a UUID.  
-#
-sub LookupByUUID($$)
-{
-    my ($class, $uuid) = @_;
-    my $status_archived = $USERSTATUS_ARCHIVED;
-    my $safe_uuid = DBQuoteSpecial($uuid);
-
-    my $query_result =
-	DBQueryFatal("select uid_idx from users ".
-		     "where uid_uuid=$safe_uuid and ".
 		     "      status!='$status_archived'");
 
     return undef
@@ -996,31 +974,6 @@ sub SetStatus($$)
 }
 
 #
-# Get user ssl certificate (pubkey). 
-#
-sub SSLCert($$$)
-{
-    my ($self, $encrypted, $pref) = @_;
-    $encrypted = ($encrypted ? 1 : 0);
-    
-    # Must be a real reference. 
-    return -1
-	if (! ref($self));
-
-    my $uid_idx = $self->uid_idx();
-
-    my $query_result =
-	DBQueryWarn("select cert from user_sslcerts ".
-		    "where uid_idx='$uid_idx' and encrypted=$encrypted");
-    return -1
-	if (!defined($query_result) || !$query_result->numrows);
-
-    my ($cert) = $query_result->fetchrow_array();
-    $$pref = $cert;
-    return 0;
-}
-
-#
 # Set password for user.
 #
 sub SetPassword($$$)
@@ -1466,8 +1419,7 @@ sub escapeshellarg($)
     my ($str) = @_;
 
     $str =~ s/[^[:alnum:]]/\\$&/g;
-    $str =~ /^(.+)$/; # untaint the result
-    return $1;
+    return $str;
 }
 
 # _Always_ make sure that this 1 is at the end of the file...

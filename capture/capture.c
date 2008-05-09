@@ -1,6 +1,6 @@
 /*
  * EMULAB-COPYRIGHT
- * Copyright (c) 2000-2008 University of Utah and the Flux Group.
+ * Copyright (c) 2000-2007 University of Utah and the Flux Group.
  * All rights reserved.
  */
 
@@ -78,7 +78,6 @@ void dolog(int level, char *format, ...);
 
 int val2speed(int val);
 void rawmode(char *devname, int speed);
-int netmode();
 void writepid(void);
 void createkey(void);
 int handshake(void);
@@ -130,14 +129,12 @@ int	 powermon = 0;
 #ifndef  USESOCKETS
 #define relay_snd 0
 #define relay_rcv 0
-#define remotemode 0
 #else
 char		  *Bossnode = BOSSNODE;
 struct sockaddr_in Bossaddr;
 char		  *Aclname;
 int		   serverport = SERVERPORT;
 int		   sockfd, tipactive, portnum, relay_snd, relay_rcv;
-int		   remotemode;
 int		   upportnum = -1, upfd = -1, upfilefd = -1;
 char		   uptmpnam[64];
 size_t		   upfilesize = 0;
@@ -325,7 +322,7 @@ main(int argc, char **argv)
 	else
 		Progname = *argv;
 
-	while ((op = getopt(argc, argv, "rds:Hb:ip:c:T:aou:v:Pm")) != EOF)
+	while ((op = getopt(argc, argv, "rds:Hb:ip:c:T:aou:v:P")) != EOF)
 		switch (op) {
 #ifdef	USESOCKETS
 #ifdef  WITHSSL
@@ -343,10 +340,6 @@ main(int argc, char **argv)
 
 		case 'i':
 			standalone = 1;
-			break;
-
-		case 'm':
-			remotemode = 1;
 			break;
 #endif /* USESOCKETS */
 		case 'H':
@@ -414,11 +407,7 @@ main(int argc, char **argv)
 	Ttyname = newstr(strbuf);
 	(void) snprintf(strbuf, sizeof(strbuf), PTYNAME, TIPPATH, argv[0]);
 	Ptyname = newstr(strbuf);
-	if (remotemode)
-		strcpy(strbuf, argv[1]);
-	else
-		(void) snprintf(strbuf, sizeof(strbuf),
-				DEVNAME, DEVPATH, argv[1]);
+	(void) snprintf(strbuf, sizeof(strbuf), DEVNAME, DEVPATH, argv[1]);
 	Devname = newstr(strbuf);
 
 	openlog(Progname, LOG_PID, LOG_TESTBED);
@@ -594,17 +583,13 @@ main(int argc, char **argv)
 	}
 	
 	if (!relay_rcv) {
-#ifdef  USESOCKETS
-	    if (remotemode) {
-		if (netmode() != 0)
-		    die("Could not establish connection to %s\n", Devname);
-	    }
-	    else
-#endif
-		    rawmode(Devname, speed);
+		rawmode(Devname, speed);
 	}
+	
 	writepid();
+
 	capture();
+
 	cleanup();
 	exit(0);
 }
@@ -824,26 +809,10 @@ capture(void)
 			else
 #endif
 			  cc = read(devfd, buf, sizeof(buf));
-			if (cc <= 0) {
-#ifdef  USESOCKETS
-				if (remotemode) {
-					FD_CLR(devfd, &sfds);
-					close(devfd);
-					warning("remote socket closed;"
-						"attempting to reconnect");
-					while (netmode() != 0) {
-					    usleep(5000000);
-					}
-					FD_SET(devfd, &sfds);
-					continue;
-				}
-#endif
-				if (cc < 0)
-					die("%s: read: %s",
-					    Devname, geterr(errno));
-				if (cc == 0)
-					die("%s: read: EOF", Devname);
-			}
+			if (cc < 0)
+				die("%s: read: %s", Devname, geterr(errno));
+			if (cc == 0)
+				die("%s: read: EOF", Devname);
 			errno = 0;
 
 			sigprocmask(SIG_BLOCK, &actionsigmask, &omask);
@@ -883,7 +852,6 @@ capture(void)
 				}
 				if (i == 0) {
 #ifdef	USESOCKETS
-					sigprocmask(SIG_SETMASK, &omask, NULL);
 					goto disconnected;
 #else
 					die("%s: write: zero-length", Ptyname);
@@ -1415,53 +1383,6 @@ rawmode(char *devname, int speed)
 		die("%s: powermonmode: %s", Devname, geterr(errno));
 	
 }
-
-/*
- * The console line is really a socket on some node:port.
- */
-#ifdef  USESOCKETS
-int
-netmode()
-{
-	struct sockaddr_in	sin;
-	struct hostent		*he;
-	char			*bp;
-	int			port;
-	char			hostport[BUFSIZ];
-	
-	strcpy(hostport, Devname);
-	if ((bp = strchr(hostport, ':')) == NULL)
-		die("%s: bad format, expecting 'host:port'", hostport);
-	*bp++ = '\0';
-	if (sscanf(bp, "%d", &port) != 1)
-		die("%s: bad port number", bp);
-	he = gethostbyname(hostport);
-	if (he == 0) {
-		warning("gethostbyname(%s): %s", hostport, hstrerror(h_errno));
-		return -1;
-	}
-	bzero(&sin, sizeof(sin));
-	memcpy ((char *)&sin.sin_addr, he->h_addr, he->h_length);
-	sin.sin_family = AF_INET;
-	sin.sin_port = htons(port);
-
-	if ((devfd = socket(AF_INET, SOCK_STREAM, 0)) < 0) {
-		warning("socket(): %s", geterr(errno));
-		return -1;
-	}
-	if (connect(devfd, (struct sockaddr *)&sin, sizeof(sin)) < 0) {
-		warning("connect(): %s", geterr(errno));
-		close(devfd);
-		return -1;
-	}
-	if (fcntl(devfd, F_SETFL, O_NONBLOCK) < 0) {
-		warning("%s: fcntl(O_NONBLOCK): %s", Devname, geterr(errno));
-		close(devfd);
-		return -1;
-	}
-	return 0;
-}
-#endif
 
 /*
  * From kgdbtunnel

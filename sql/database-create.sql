@@ -234,26 +234,6 @@ CREATE TABLE `current_reloads` (
 ) ENGINE=MyISAM DEFAULT CHARSET=latin1;
 
 --
--- Table structure for table `daily_stats`
---
-
-DROP TABLE IF EXISTS `daily_stats`;
-CREATE TABLE `daily_stats` (
-  `theday` date NOT NULL default '0000-00-00',
-  `exptstart_count` int(11) unsigned default '0',
-  `exptpreload_count` int(11) unsigned default '0',
-  `exptswapin_count` int(11) unsigned default '0',
-  `exptswapout_count` int(11) unsigned default '0',
-  `exptswapmod_count` int(11) unsigned default '0',
-  `allexpt_duration` int(11) unsigned default '0',
-  `allexpt_vnodes` int(11) unsigned default '0',
-  `allexpt_vnode_duration` int(11) unsigned default '0',
-  `allexpt_pnodes` int(11) unsigned default '0',
-  `allexpt_pnode_duration` int(11) unsigned default '0',
-  PRIMARY KEY  (`theday`)
-) ENGINE=MyISAM DEFAULT CHARSET=latin1;
-
---
 -- Table structure for table `datapository_databases`
 --
 
@@ -541,7 +521,7 @@ CREATE TABLE `experiment_input_data` (
 ) ENGINE=MyISAM DEFAULT CHARSET=latin1;
 
 --
--- Table structure for table `experiment_inputs`
+-- Table structure for table `experiment_template_inputs`
 --
 
 DROP TABLE IF EXISTS `experiment_inputs`;
@@ -663,7 +643,6 @@ CREATE TABLE `experiment_stats` (
   `gid_idx` mediumint(8) unsigned NOT NULL default '0',
   `created` datetime default NULL,
   `destroyed` datetime default NULL,
-  `last_activity` datetime default NULL,
   `swapin_count` smallint(5) unsigned default '0',
   `swapin_last` datetime default NULL,
   `swapout_count` smallint(5) unsigned default '0',
@@ -1028,7 +1007,7 @@ CREATE TABLE `experiments` (
   `idx` int(10) unsigned NOT NULL auto_increment,
   `sim_reswap_count` smallint(5) unsigned NOT NULL default '0',
   `veth_encapsulate` tinyint(4) NOT NULL default '1',
-  `encap_style` enum('alias','veth','veth-ne','vlan','vtun','egre','gre','default') NOT NULL default 'default',
+  `encap_style` enum('alias','veth','veth-ne','vlan','default') NOT NULL default 'default',
   `allowfixnode` tinyint(4) NOT NULL default '1',
   `jail_osname` varchar(20) default NULL,
   `delay_osname` varchar(20) default NULL,
@@ -1119,9 +1098,9 @@ CREATE TABLE `firewalls` (
   `fwname` varchar(32) NOT NULL default '',
   `vlan` int(11) default NULL,
   `vlanid` int(11) default NULL,
-  PRIMARY KEY  (`exptidx`,`fwname`),
-  KEY `vlan` (`vlan`),
-  KEY `pideid` (`pid`,`eid`,`fwname`)
+  PRIMARY KEY (`exptidx`,`fwname`),
+  KEY `pideid` (`pid`,`eid`,`fwname`),
+  KEY `vlan` (`vlan`)
 ) ENGINE=MyISAM DEFAULT CHARSET=latin1;
 
 --
@@ -1259,9 +1238,9 @@ CREATE TABLE `group_stats` (
   `last_activity` datetime default NULL,
   `allexpt_duration` int(11) unsigned default '0',
   `allexpt_vnodes` int(11) unsigned default '0',
-  `allexpt_vnode_duration` double(14,0) unsigned default '0',
+  `allexpt_vnode_duration` int(11) unsigned default '0',
   `allexpt_pnodes` int(11) unsigned default '0',
-  `allexpt_pnode_duration` double(14,0) unsigned default '0',
+  `allexpt_pnode_duration` int(11) unsigned default '0',
   PRIMARY KEY  (`gid_idx`),
   UNIQUE KEY `pidgid` (`pid`,`gid`),
   KEY `gid_uuid` (`gid_uuid`)
@@ -1311,28 +1290,6 @@ CREATE TABLE `iface_counters` (
   PRIMARY KEY  (`node_id`,`tstamp`,`mac`),
   KEY `macindex` (`mac`),
   KEY `node_idindex` (`node_id`)
-) ENGINE=MyISAM DEFAULT CHARSET=latin1;
-
---
--- Table structure for table `ifaces`
---
-
-DROP TABLE IF EXISTS `ifaces`;
-CREATE TABLE `ifaces` (
-  `lanid` int(11) NOT NULL default '0',
-  `ifaceid` int(11) NOT NULL default '0',
-  `exptidx` int(11) NOT NULL default '0',
-  `pid` varchar(12) NOT NULL default '',
-  `eid` varchar(32) NOT NULL default '',
-  `node_id` varchar(32) NOT NULL default '',
-  `vnode` varchar(32) NOT NULL default '',
-  `vname` varchar(32) NOT NULL default '',
-  `vidx` int(11) NOT NULL default '0',
-  `vport` tinyint(3) NOT NULL default '0',
-  PRIMARY KEY  (`lanid`,`ifaceid`),
-  KEY `pideid` (`pid`,`eid`),
-  KEY `exptidx` (`exptidx`),
-  KEY `lanid` (`lanid`)
 ) ENGINE=MyISAM DEFAULT CHARSET=latin1;
 
 --
@@ -1499,66 +1456,6 @@ CREATE TABLE `knowledge_base_entries` (
   `archiver_uid` varchar(8) default NULL,
   `archiver_idx` mediumint(8) unsigned NOT NULL default '0',
   PRIMARY KEY  (`idx`)
-) ENGINE=MyISAM DEFAULT CHARSET=latin1;
-
---
--- Table structure for table `lan_attributes`
---
-
-DROP TABLE IF EXISTS `lan_attributes`;
-CREATE TABLE `lan_attributes` (
-  `lanid` int(11) NOT NULL default '0',
-  `attrkey` varchar(32) NOT NULL default '',
-  `attrvalue` tinytext NOT NULL,
-  `attrtype` enum('integer','float','boolean','string') default 'string',
-  PRIMARY KEY  (`lanid`,`attrkey`)
-) ENGINE=MyISAM DEFAULT CHARSET=latin1;
-
---
--- Table structure for table `lan_member_attributes`
---
-
-DROP TABLE IF EXISTS `lan_member_attributes`;
-CREATE TABLE `lan_member_attributes` (
-  `lanid` int(11) NOT NULL default '0',
-  `memberid` int(11) NOT NULL default '0',
-  `attrkey` varchar(32) NOT NULL default '',
-  `attrvalue` tinytext NOT NULL,
-  `attrtype` enum('integer','float','boolean','string') default 'string',
-  PRIMARY KEY  (`lanid`,`memberid`,`attrkey`)
-) ENGINE=MyISAM DEFAULT CHARSET=latin1;
-
---
--- Table structure for table `lan_members`
---
-
-DROP TABLE IF EXISTS `lan_members`;
-CREATE TABLE `lan_members` (
-  `lanid` int(11) NOT NULL default '0',
-  `memberid` int(11) NOT NULL auto_increment,
-  `node_id` varchar(32) NOT NULL default '',
-  PRIMARY KEY  (`lanid`,`memberid`),
-  KEY `node_id` (`node_id`)
-) ENGINE=MyISAM DEFAULT CHARSET=latin1;
-
---
--- Table structure for table `lans`
---
-
-DROP TABLE IF EXISTS `lans`;
-CREATE TABLE `lans` (
-  `lanid` int(11) NOT NULL auto_increment,
-  `exptidx` int(11) NOT NULL default '0',
-  `pid` varchar(12) NOT NULL default '',
-  `eid` varchar(32) NOT NULL default '',
-  `vname` varchar(64) NOT NULL default '',
-  `vidx` int(11) NOT NULL default '0',
-  `type` varchar(32) NOT NULL default '',
-  `link` int(11) default NULL,
-  `ready` tinyint(1) default '0',
-  PRIMARY KEY  (`lanid`),
-  KEY `pideid` (`pid`,`eid`),
-  KEY `exptidx` (`exptidx`)
 ) ENGINE=MyISAM DEFAULT CHARSET=latin1;
 
 --
@@ -2398,23 +2295,6 @@ CREATE TABLE `partitions` (
 ) ENGINE=MyISAM DEFAULT CHARSET=latin1;
 
 --
--- Table structure for table `plab_attributes`
---
-
-DROP TABLE IF EXISTS `plab_attributes`;
-CREATE TABLE `plab_attributes` (
-  `attr_idx` int(11) unsigned NOT NULL auto_increment,
-  `plc_idx` int(10) unsigned default NULL,
-  `slicename` varchar(64) default NULL,
-  `nodegroup_idx` int(10) unsigned default NULL,
-  `node_id` varchar(32) default NULL,
-  `attrkey` varchar(64) NOT NULL default '',
-  `attrvalue` tinytext NOT NULL,
-  PRIMARY KEY  (`attr_idx`),
-  UNIQUE KEY `realattrkey` (`plc_idx`,`slicename`,`nodegroup_idx`,`node_id`,`attrkey`)
-) ENGINE=MyISAM DEFAULT CHARSET=latin1;
-
---
 -- Table structure for table `plab_comondata`
 --
 
@@ -2465,34 +2345,7 @@ CREATE TABLE `plab_mapping` (
   `IP` varchar(15) NOT NULL default '',
   `mac` varchar(17) NOT NULL default '',
   `create_time` datetime default NULL,
-  `deleted` tinyint(1) NOT NULL default '0',
-  `plc_idx` int(10) unsigned NOT NULL default '0',
   PRIMARY KEY  (`node_id`)
-) ENGINE=MyISAM DEFAULT CHARSET=latin1;
-
---
--- Table structure for table `plab_nodegroup_members`
---
-
-DROP TABLE IF EXISTS `plab_nodegroup_members`;
-CREATE TABLE `plab_nodegroup_members` (
-  `plc_idx` int(10) unsigned NOT NULL default '0',
-  `nodegroup_idx` int(10) unsigned NOT NULL default '0',
-  `node_id` varchar(32) NOT NULL default '',
-  PRIMARY KEY  (`plc_idx`,`nodegroup_idx`,`node_id`)
-) ENGINE=MyISAM DEFAULT CHARSET=latin1;
-
---
--- Table structure for table `plab_nodegroups`
---
-
-DROP TABLE IF EXISTS `plab_nodegroups`;
-CREATE TABLE `plab_nodegroups` (
-  `plc_idx` int(10) unsigned NOT NULL default '0',
-  `nodegroup_idx` int(10) unsigned NOT NULL default '0',
-  `name` varchar(64) NOT NULL default '',
-  `description` text NOT NULL,
-  PRIMARY KEY  (`plc_idx`,`nodegroup_idx`,`name`)
 ) ENGINE=MyISAM DEFAULT CHARSET=latin1;
 
 --
@@ -2531,49 +2384,6 @@ CREATE TABLE `plab_nodehiststats` (
 ) ENGINE=MyISAM DEFAULT CHARSET=latin1;
 
 --
--- Table structure for table `plab_objmap`
---
-
-DROP TABLE IF EXISTS `plab_objmap`;
-CREATE TABLE `plab_objmap` (
-  `plc_idx` int(10) unsigned NOT NULL,
-  `objtype` varchar(32) NOT NULL,
-  `elab_id` varchar(64) NOT NULL,
-  `plab_id` varchar(255) NOT NULL,
-  `plab_name` tinytext NOT NULL,
-  PRIMARY KEY  (`plc_idx`,`objtype`,`elab_id`)
-) ENGINE=MyISAM DEFAULT CHARSET=latin1;
-
---
--- Table structure for table `plab_plc_attributes`
---
-
-DROP TABLE IF EXISTS `plab_plc_attributes`;
-CREATE TABLE `plab_plc_attributes` (
-  `plc_idx` int(10) unsigned NOT NULL default '0',
-  `attrkey` varchar(64) NOT NULL default '',
-  `attrvalue` tinytext NOT NULL,
-  PRIMARY KEY  (`plc_idx`,`attrkey`)
-) ENGINE=MyISAM DEFAULT CHARSET=latin1;
-
---
--- Table structure for table `plab_plc_info`
---
-
-DROP TABLE IF EXISTS `plab_plc_info`;
-CREATE TABLE `plab_plc_info` (
-  `plc_idx` int(10) unsigned NOT NULL auto_increment,
-  `plc_name` varchar(64) NOT NULL default '',
-  `api_url` varchar(255) NOT NULL default '',
-  `def_slice_prefix` varchar(32) NOT NULL default '',
-  `nodename_prefix` varchar(30) NOT NULL default '',
-  `node_type` varchar(30) NOT NULL default '',
-  `svc_slice_name` varchar(64) NOT NULL default '',
-  PRIMARY KEY  (`plc_idx`),
-  KEY `plc_name` (`plc_name`)
-) ENGINE=MyISAM DEFAULT CHARSET=latin1;
-
---
 -- Table structure for table `plab_site_mapping`
 --
 
@@ -2583,21 +2393,7 @@ CREATE TABLE `plab_site_mapping` (
   `site_idx` smallint(5) unsigned NOT NULL auto_increment,
   `node_id` varchar(32) NOT NULL default '',
   `node_idx` tinyint(3) unsigned NOT NULL default '0',
-  `plc_idx` int(10) unsigned NOT NULL default '0',
-  PRIMARY KEY  (`site_name`,`site_idx`,`node_idx`,`plc_idx`)
-) ENGINE=MyISAM DEFAULT CHARSET=latin1;
-
---
--- Table structure for table `plab_slice_attributes`
---
-
-DROP TABLE IF EXISTS `plab_slice_attributes`;
-CREATE TABLE `plab_slice_attributes` (
-  `plc_idx` int(10) unsigned NOT NULL default '0',
-  `slicename` varchar(64) NOT NULL default '',
-  `attrkey` varchar(64) NOT NULL default '',
-  `attrvalue` tinytext NOT NULL,
-  PRIMARY KEY  (`plc_idx`,`slicename`,`attrkey`)
+  PRIMARY KEY  (`site_name`,`site_idx`,`node_idx`)
 ) ENGINE=MyISAM DEFAULT CHARSET=latin1;
 
 --
@@ -2606,12 +2402,15 @@ CREATE TABLE `plab_slice_attributes` (
 
 DROP TABLE IF EXISTS `plab_slice_nodes`;
 CREATE TABLE `plab_slice_nodes` (
+  `pid` varchar(12) NOT NULL default '',
+  `eid` varchar(32) NOT NULL default '',
+  `exptidx` int(11) NOT NULL default '0',
   `slicename` varchar(64) NOT NULL default '',
   `node_id` varchar(32) NOT NULL default '',
   `leaseend` datetime default NULL,
   `nodemeta` text,
-  `plc_idx` int(10) unsigned NOT NULL default '0',
-  PRIMARY KEY  (`slicename`,`plc_idx`,`node_id`)
+  PRIMARY KEY  (`node_id`),
+  KEY `exptidx` (`exptidx`)
 ) ENGINE=MyISAM DEFAULT CHARSET=latin1;
 
 --
@@ -2628,12 +2427,8 @@ CREATE TABLE `plab_slices` (
   `slicemeta_legacy` text,
   `leaseend` datetime default NULL,
   `admin` tinyint(1) default '0',
-  `plc_idx` int(10) unsigned NOT NULL default '0',
-  `is_created` tinyint(1) default '0',
-  `is_configured` tinyint(1) default '0',
-  `no_cleanup` tinyint(1) default '0',
-  `no_destroy` tinyint(1) default '0',
-  PRIMARY KEY  (`exptidx`,`slicename`,`plc_idx`)
+  PRIMARY KEY  (`exptidx`),
+  UNIQUE KEY `pideid` (`pid`,`eid`)
 ) ENGINE=MyISAM DEFAULT CHARSET=latin1;
 
 --
@@ -2736,9 +2531,9 @@ CREATE TABLE `project_stats` (
   `last_activity` datetime default NULL,
   `allexpt_duration` int(11) unsigned default '0',
   `allexpt_vnodes` int(11) unsigned default '0',
-  `allexpt_vnode_duration` double(14,0) unsigned default '0',
+  `allexpt_vnode_duration` int(11) unsigned default '0',
   `allexpt_pnodes` int(11) unsigned default '0',
-  `allexpt_pnode_duration` double(14,0) unsigned default '0',
+  `allexpt_pnode_duration` int(11) unsigned default '0',
   PRIMARY KEY  (`pid_idx`),
   UNIQUE KEY `pid` (`pid`)
 ) ENGINE=MyISAM DEFAULT CHARSET=latin1;
@@ -3126,6 +2921,31 @@ CREATE TABLE `traces` (
 ) ENGINE=MyISAM DEFAULT CHARSET=latin1;
 
 --
+-- Table structure for table `tunnels`
+--
+
+DROP TABLE IF EXISTS `tunnels`;
+CREATE TABLE `tunnels` (
+  `pid` varchar(12) NOT NULL default '',
+  `eid` varchar(32) NOT NULL default '',
+  `exptidx` int(11) NOT NULL default '0',
+  `node_id` varchar(32) NOT NULL default '',
+  `vname` varchar(32) NOT NULL default '',
+  `isserver` tinyint(3) unsigned NOT NULL default '0',
+  `port` int(11) NOT NULL default '0',
+  `peer_ip` varchar(32) NOT NULL default '',
+  `mask` varchar(15) default NULL,
+  `password` varchar(32) NOT NULL default '',
+  `proto` varchar(12) NOT NULL default 'udp',
+  `encrypt` tinyint(3) unsigned NOT NULL default '0',
+  `compress` tinyint(3) unsigned NOT NULL default '0',
+  `assigned_ip` varchar(32) NOT NULL default '',
+  PRIMARY KEY  (`exptidx`,`node_id`,`vname`),
+  UNIQUE KEY `pideid` (`pid`,`eid`,`node_id`,`vname`),
+  KEY `node_id` (`node_id`)
+) ENGINE=MyISAM DEFAULT CHARSET=latin1;
+
+--
 -- Table structure for table `uidnodelastlogin`
 --
 
@@ -3233,9 +3053,9 @@ CREATE TABLE `user_stats` (
   `last_activity` datetime default NULL,
   `allexpt_duration` int(11) unsigned default '0',
   `allexpt_vnodes` int(11) unsigned default '0',
-  `allexpt_vnode_duration` double(14,0) unsigned default '0',
+  `allexpt_vnode_duration` int(11) unsigned default '0',
   `allexpt_pnodes` int(11) unsigned default '0',
-  `allexpt_pnode_duration` double(14,0) unsigned default '0',
+  `allexpt_pnode_duration` int(11) unsigned default '0',
   PRIMARY KEY  (`uid_idx`),
   KEY `uid_uuid` (`uid_uuid`)
 ) ENGINE=MyISAM DEFAULT CHARSET=latin1;
@@ -3380,9 +3200,6 @@ CREATE TABLE `vinterfaces` (
   `iface` varchar(10) default NULL,
   `rtabid` smallint(5) unsigned NOT NULL default '0',
   `vnode_id` varchar(32) default NULL,
-  `exptidx` int(10) NOT NULL default '0',
-  `virtlanidx` int(11) NOT NULL default '0',
-  `vlanid` int(11) NOT NULL default '0',
   PRIMARY KEY  (`node_id`,`unit`),
   KEY `bynode` (`node_id`,`iface`),
   KEY `type` (`type`)
@@ -3513,7 +3330,7 @@ CREATE TABLE `virt_lans` (
   `nobwshaping` tinyint(4) default '0',
   `mustdelay` tinyint(1) default '0',
   `usevethiface` tinyint(4) default '0',
-  `encap_style` enum('alias','veth','veth-ne','vlan','vtun','egre','gre','default') NOT NULL default 'default',
+  `encap_style` enum('alias','veth','veth-ne','vlan','default') NOT NULL default 'default',
   `trivial_ok` tinyint(4) default '1',
   `protocol` varchar(30) NOT NULL default 'ethernet',
   `is_accesspoint` tinyint(4) default '0',
@@ -3523,7 +3340,6 @@ CREATE TABLE `virt_lans` (
   `trace_snaplen` int(11) NOT NULL default '0',
   `trace_endnode` tinyint(1) NOT NULL default '0',
   `trace_db` tinyint(1) NOT NULL default '0',
-  `fixed_iface` varchar(16) default '',
   PRIMARY KEY  (`exptidx`,`vname`,`vnode`,`vport`),
   UNIQUE KEY `vport` (`pid`,`eid`,`vname`,`vnode`,`vport`),
   KEY `pid` (`pid`,`eid`,`vname`),
@@ -3906,9 +3722,6 @@ CREATE TABLE `widearea_nodeinfo` (
   `bwlimit` varchar(32) default NULL,
   `privkey` varchar(128) default NULL,
   `IP` varchar(15) default NULL,
-  `gateway` varchar(15) NOT NULL default '',
-  `dns` tinytext NOT NULL,
-  `boot_method` enum('static','dhcp','') NOT NULL default '',
   PRIMARY KEY  (`node_id`),
   KEY `IP` (`IP`),
   KEY `privkey` (`privkey`)

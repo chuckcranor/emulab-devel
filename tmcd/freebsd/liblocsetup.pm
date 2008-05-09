@@ -2,7 +2,7 @@
 
 #
 # EMULAB-COPYRIGHT
-# Copyright (c) 2000-2008 University of Utah and the Flux Group.
+# Copyright (c) 2000-2006 University of Utah and the Flux Group.
 # All rights reserved.
 #
 
@@ -17,11 +17,11 @@ use Exporter;
 	 $LOOPBACKMOUNT 
 	 os_account_cleanup os_ifconfig_line os_etchosts_line
 	 os_setup os_groupadd os_useradd os_userdel os_usermod os_mkdir
-	 os_ifconfig_veth os_viface_name os_modpasswd
+	 os_ifconfig_veth os_viface_name
 	 os_routing_enable_forward os_routing_enable_gated
 	 os_routing_add_manual os_routing_del_manual os_homedirdel
-	 os_groupdel os_getnfsmounts os_islocaldir
-	 os_fwconfig_line os_fwrouteconfig_line os_config_gre
+	 os_groupdel os_getnfsmounts
+	 os_fwconfig_line os_fwrouteconfig_line
        );
 
 # Must come after package declaration!
@@ -51,7 +51,6 @@ sub JAILED()	{ return libsetup::JAILED(); }
 # Various programs and things specific to FreeBSD and that we want to export.
 # 
 $CP		= "/bin/cp";
-$DF		= "/bin/df";
 $EGREP		= "/usr/bin/egrep -s -q";
 $NFSMOUNT	= "/sbin/mount -o -b ";
 $LOOPBACKMOUNT	= "/sbin/mount -t null ";
@@ -115,9 +114,9 @@ sub os_account_cleanup()
 # Generate and return an ifconfig line that is approriate for putting
 # into a shell script (invoked at bootup).
 #
-sub os_ifconfig_line($$$$$$$$;$$%)
+sub os_ifconfig_line($$$$$$$;$$%)
 {
-    my ($iface, $inet, $mask, $speed, $duplex, $aliases, $iface_type, $lan,
+    my ($iface, $inet, $mask, $speed, $duplex, $aliases, $iface_type,
 	$settings, $rtabid, $cookie) = @_;
     my $media    = "";
     my $mediaopt = "";
@@ -182,9 +181,7 @@ sub os_ifconfig_line($$$$$$$$;$$%)
 	# Config the interface.
 	$uplines  .= sprintf($IFCONFIG, $iface, $inet, $mask,
 			     $media, $mediaopt);
-	# An interface underlying virtual interfaces does not go down.
-	$downlines = "$IFCONFIGBIN $iface down"
-	    if (defined($lan) && $lan ne "");
+	$downlines = "$IFCONFIGBIN $iface down";
     }
     return ($uplines, $downlines);
 }
@@ -436,25 +433,6 @@ sub os_useradd($$$$$$$$$)
 }
 
 #
-# Modify user password
-# 
-sub os_modpasswd($$)
-{
-    my($login, $pswd) = @_;
-
-    if (system("$CHPASS '$pswd' $login") != 0) {
-	warn "*** WARNING: $CHPASS $login error.\n";
-	return -1;
-    }
-    if ($login eq "root" &&
-	system("$CHPASS '$pswd' toor") != 0) {
-	warn "*** WARNING: $CHPASS $login error.\n";
-	return -1;
-    }
-    return 0;
-}
-
-#
 # Remove a homedir. Might someday archive and ship back.
 #
 sub os_homedirdel($$)
@@ -587,19 +565,6 @@ sub MapShell($)
        $fullpath = $DEFSHELL;
    }
    return $fullpath;
-}
-
-# Return non-zero if given directory is on a "local" filesystem
-sub os_islocaldir($)
-{
-    my ($dir) = @_;
-    my $rv = 0; 
-
-    my @dfoutput = `$DF -l $dir 2>/dev/null`;
-    if (grep(!/^filesystem/i, @dfoutput) > 0) {
-	$rv = 1;
-    }
-    return $rv;
 }
 
 #
@@ -851,30 +816,6 @@ sub os_fwrouteconfig_line($$$)
     $downline .= "    done";
 
     return ($upline, $downline);
-}
-
-sub os_config_gre($$$$$$$)
-{
-    my ($name, $unit, $inetip, $peerip, $mask, $srchost, $dsthost) = @_;
-    
-    my $gre = `ifconfig gre create`;
-    if ($?) {
-	warn("*** Could not create a new gre device.\n");
-	return -1;
-    }
-    if ($gre =~ /^(gre\d*)$/) {
-	$gre = $1;
-    }
-    else {
-	warn("*** Cannot parse gre device '$gre'\n");
-	return -1;
-    }
-    if (system("ifconfig $gre $inetip $peerip link1 netmask $mask up") ||
-	system("ifconfig $gre tunnel $srchost $dsthost")) {
-	warn("Could not start tunnel!\n");
-	return -1;
-    }
-    return 0;
 }
 
 1;

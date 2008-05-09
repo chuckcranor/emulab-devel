@@ -1,7 +1,7 @@
 #!/usr/bin/perl -w
 #
 # EMULAB-COPYRIGHT
-# Copyright (c) 2000-2008 University of Utah and the Flux Group.
+# Copyright (c) 2000-2007 University of Utah and the Flux Group.
 # All rights reserved.
 #
 use strict;
@@ -17,17 +17,16 @@ use Getopt::Std;
 #
 sub usage ()
 {
-    die("Usage: nfree [-x] [-o] <pid> <eid> (-a | <node> <node> <...>)\n".
-	"Releases all nodes in the specified experiment if -a is given.\n".
+    die("Usage: nfree [-x] [-o] <pid> <eid> [<node> <node> <...>]\n".
+	"Releases all nodes in the specified experiment.\n".
 	"If nodes are listed, nfree releases only those nodes.\n".
 	" '-x' frees all virtual nodes on any physical node that is freed.\n".
 	" '-o' Moves nodes into a oldreserved holding experiment.\n"
 	);
 }
-my $optlist = "xoa";
+my $optlist = "xo";
 my $freeDependantVirtuals = 0;
 my $moveToOldReserved     = 0;
-my $freeAllNodes          = 0;
 
 # Configure variables
 my $TB       = "@prefix@";
@@ -82,22 +81,11 @@ if (defined($options{"x"})) {
 if (defined($options{"o"})) {
     $moveToOldReserved = 1;
 }
-if (defined($options{"a"})) {
-    $freeAllNodes = 1;
-}
-if (@ARGV < 2 || @ARGV == 2 && !$freeAllNodes) {
+if (@ARGV < 2) {
     usage();
 }
 my $pid = shift;
 my $eid = shift;
-
-if (@ARGV > 0 && $ARGV[0] eq '-a') {
-    $freeAllNodes = 1;
-    shift;
-}
-if ($freeAllNodes && @ARGV > 0) {
-    usage();
-}
 
 # Make sure that the experiment actually exists
 my $experiment = Experiment->Lookup($pid, $eid);
@@ -275,7 +263,7 @@ if ($moveToOldReserved) {
 # NOTE: this does not happen very often. elabinelab, plabinelab?
 #
 foreach my $node (@freed_nodes) {
-    if ($node->pxe_boot_path() && $node->pxe_boot_path() ne "") {
+    if ($node->pxe_boot_path() && $node->pxe_boot_path() != "") {
 	$node->Update({"pxe_boot_path" => "NULL"}) == 0 or
 	    die("*** $0:\n".
 		"    Could not update pxe_boot_path for $node\n");
@@ -496,7 +484,7 @@ foreach my $node (@freed_nodes) {
 	}
 	next;
     }
-    elsif (!$TESTMODE && !exists($ENV{'NORELOAD'}) &&
+    elsif (!$TESTMODE &&
 	   ((!$isvirt && $imageable) || # XXX force reload hack!
 	    $inreloads || $mustzero{$node_id})) { # XXX Garcia hack
 	print "Moving $node to $reloading_experiment\n";

@@ -227,10 +227,10 @@ sub mysystem($)
     }
     else {
 	print "'$command'\n";
-	my $rv = system($command);
-	if ($rv) {
+	system($command);
+	if ($?) {
 	    die("*** $0:\n".
-		"    Failed ($rv): '$command'\n");
+		"    Failed: '$command'\n");
 	}
     }
     return 0

@@ -1,7 +1,7 @@
 <?php
 #
 # EMULAB-COPYRIGHT
-# Copyright (c) 2006-2008 University of Utah and the Flux Group.
+# Copyright (c) 2006, 2007 University of Utah and the Flux Group.
 # All rights reserved.
 #
 include_once("osinfo_defs.php");
@@ -497,13 +497,9 @@ class Node
 		isset($row["floor"]) && isset($row["building"])) {
 		$floor    = $row["floor"];
 		$building = $row["building"];
-		$room     = $row["room"];
 		$loc_x    = $row["loc_x"];
 		$loc_y    = $row["loc_y"];
 		$orient   = $row["orientation"];
-		$contact  = $row["contact"];
-		$email    = $row["email"];
-		$phone    = $row["phone"];
 	
 		$query_result =
 		    DBQueryFatal("select * from floorimages ".
@@ -632,44 +628,14 @@ class Node
             #
             # Location info.
             # 
-	    if (isset($building)) {
-		echo "<tr>
-                      <td>Location (bldg/floor/room):</td>
-                      <td class=left>$building";
-		if (isset($floor)) {
-		    echo "/$floor";
-		}
-		if (isset($room)) {
-		    echo "/$room";
-		}
-		echo "</td>
-                      </tr>\n";
-	    }
 	    if (isset($meters_x) && isset($meters_y)) {
 		echo "<tr>
-                      <td>Location Coordinates:</td>
+                      <td>Location:</td>
                       <td class=left>x=$meters_x, y=$meters_y meters";
 		if (isset($orientation)) {
 		    echo " (o=$orientation degrees)";
 		}
 		echo      "</td>
-                  </tr>\n";
-	    }
-	    if (OPSGUY() && (isset($contact) || isset($email))) {
-		$lcstr = "";
-		if (isset($contact)) {
-		    $lcstr .= "$contact:";
-		}
-		if (isset($email)) {
-		    $lcstr .= " <a href='mailto:$email'>$email</a>";
-		}
-		if (isset($phone)) {
-		    $lcstr .= " $phone";
-		}
-		echo "<tr>
-                      <td>Location Contact:</td>
-                      <td class=left>$lcstr
-                      </td>
                   </tr>\n";
 	    }
 	}
@@ -997,9 +963,7 @@ class Node
         #
 	$query_result =
 	    DBQueryFatal("select attrkey,attrvalue from node_attributes ".
-			 "where node_id='$node_id' ".
-			 ($noperm ? "" : "and attrkey!='root_password'"));
-			 
+			 "where node_id='$node_id'");
 	if (!$short && mysql_num_rows($query_result)) {
 	    echo "<tr>
                     <td align=center colspan=2>Node Attributes</td>
@@ -1043,9 +1007,6 @@ class Node
 	$country	= $row["country"];
 	$hostname	= $row["hostname"];
 	$site		= $row["site"];
-	$boot_method    = $row["boot_method"];
-	$gateway        = $row["gateway"];
-	$dns            = $row["dns"];
 
 	if (! ($user = User::Lookup($contact_uid))) {
             # This is not an error since the field is set to "nobody" when
@@ -1107,21 +1068,6 @@ class Node
         echo "<tr>
                   <td>Hostname:</td>
                   <td class=left>$hostname</td>
-              </tr>\n";
-
-        echo "<tr>
-                  <td>Boot Method:</td>
-                  <td class=left>$boot_method</td>
-              </tr>\n";
-
-        echo "<tr>
-                  <td>Gateway:</td>
-                  <td class=left>$gateway</td>
-              </tr>\n";
-
-        echo "<tr>
-                  <td>DNS:</td>
-                  <td class=left>$dns</td>
               </tr>\n";
 
 	echo "<tr>

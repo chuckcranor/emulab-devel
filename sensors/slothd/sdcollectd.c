@@ -274,11 +274,6 @@ int ParseRecord(IDLE_DATA *iddata) {
   
   /* Parse out fields */
   itemptr = strtok(iddata->buf, " \t");
-  if (itemptr == NULL) {
-    error("No valid data; rejecting.");
-    return 0;
-  }
-
   do {
 
     if (strstr(itemptr, "vers")) {

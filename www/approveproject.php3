@@ -1,7 +1,7 @@
 <?php
 #
 # EMULAB-COPYRIGHT
-# Copyright (c) 2000-2008 University of Utah and the Flux Group.
+# Copyright (c) 2000-2007 University of Utah and the Flux Group.
 # All rights reserved.
 #
 include("defs.php3");
@@ -110,34 +110,12 @@ if (! $this_project->IsMember($leader, $ignore)) {
 # Well, looks like everything is okay. Change the project approval
 # value appropriately.
 #
-if ($approval == "postpone") {
-    if (isset($message) && $message != "") {
-	echo "<table class=stealth align=center border=0>";
-	echo "<tr><td class=stealth>";
-	echo "You requested postponement for $pid, but there is a ".
-	    "message in the text box which will vanish. If that is ".
-	    "not what you intended, the Back button below will give you ".
-	    "another chance, with text intact";
-	echo "</td></tr>";
-	echo "<tr><td class=stealth align=center>";
-	echo "<form action='approveproject_form.php3?project=$pid'
-               method=post>";
-
-	if (isset($head_uid)) {
-	    echo "<input type=hidden name=head_uid value=$head_uid>\n";
-	}
-	echo "<input type=hidden name=user_interface value=$user_interface>\n";
-	echo "<input type=hidden name=silent value=$silent>\n";
-	echo "<input type=hidden name=pcplab_okay value=$pcplab_okay>\n";
-	echo "<input type=hidden name=ron_okay value=$ron_okay>\n";
-	echo "<input type=hidden name=message value='".
-	    htmlspecialchars($message) . "'>\n";
-    
-	echo "<b><input type=submit name=back value=Back></b>\n";
-	echo "</form>\n";
-	echo "</td></tr></table>";
-	PAGEFOOTER();
-	return;
+if (strcmp($approval, "postpone") == 0) {
+    if (isset($message) && strcmp($message, "")) {
+	USERERROR("You requested postponement for $pid, but there is a ".
+		  "message in the text box which will vanish. If that is ".
+		  "not what you intended, the back button will give you ".
+		  "another chance, with text intact.", 1);
     }
     echo "<p><h3>
              Project approval for project $pid (User: $headuid) was
@@ -145,8 +123,7 @@ if ($approval == "postpone") {
           </h3>\n";
 }
 elseif (strcmp($approval, "moreinfo") == 0) {
-    SendProjAdminMail
-        ($pid, "ADMIN", "$headname '$headuid' <$headuid_email>",
+    TBMAIL("$headname '$headuid' <$headuid_email>",
          "Project '$pid' Approval Postponed",
          "\n".
          "This message is to notify you that your project application\n".
@@ -156,7 +133,10 @@ elseif (strcmp($approval, "moreinfo") == 0) {
          "\n$message".
          "\n\n".
          "Thanks,\n".
-         "Testbed Operations\n");
+         "Testbed Operations\n",
+         "From: $TBMAIL_APPROVAL\n".
+         "Bcc: $TBMAIL_APPROVAL\n".
+         "Errors-To: $TBMAIL_WWW");
 
     echo "<p><h3>
              Project approval for project $pid (User: $headuid) was

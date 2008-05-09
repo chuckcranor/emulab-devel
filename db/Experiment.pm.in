@@ -1,7 +1,7 @@
 #!/usr/bin/perl -wT
 #
 # EMULAB-COPYRIGHT
-# Copyright (c) 2005, 2006, 2007, 2008 University of Utah and the Flux Group.
+# Copyright (c) 2005, 2006, 2007 University of Utah and the Flux Group.
 # All rights reserved.
 #
 package Experiment;
@@ -191,8 +191,6 @@ sub pid_idx($)		{ return field($_[0], 'pid_idx'); }
 sub gid_idx($)		{ return field($_[0], 'gid_idx'); }
 sub eid($)		{ return field($_[0], 'eid'); }
 sub idx($)		{ return field($_[0], 'idx'); }
-sub uuid($)		{ return field($_[0], 'eid_uuid'); }
-sub eid_uuid($)		{ return field($_[0], 'eid_uuid'); }
 sub description($)	{ return field($_[0], 'expt_name'); }
 sub path($)		{ return field($_[0], 'path'); }
 sub state($)		{ return field($_[0], 'state'); }
@@ -250,20 +248,6 @@ sub LookupByIndex($$)
 }
 
 #
-# Equality test. Not strictly necessary in perl, but good form.
-#
-sub SameExperiment($$)
-{
-    my ($self, $other) = @_;
-
-    # Must be a real reference. 
-    return -1
-	if (! (ref($self) && ref($other)));
-
-    return $self->idx() == $other->idx();
-}
-
-#
 # All active experiments.
 #
 sub AllActive($)
@@ -296,9 +280,7 @@ sub UserExperimentList($$$)
     
     my $query_result =
 	DBQueryWarn("select idx from experiments ".
-		    "where creator_idx='$uid_idx' or ".
-		    "      (swapper_idx='$uid_idx' and ".
-		    "       state!='" . EXPTSTATE_SWAPPED() . "')");
+		    "where creator_idx='$uid_idx' or swapper_idx='$uid_idx'");
     return -1
 	if (! $query_result);
 
@@ -543,13 +525,11 @@ sub Create($$$$)
     #
     if (! DBQueryWarn("insert into experiment_stats ".
 		      "(eid, pid, creator, creator_idx, gid, created, ".
-		      " batch, exptidx, rsrcidx, pid_idx, gid_idx, eid_uuid, ".
-		      " last_activity) ".
+		      " batch, exptidx, rsrcidx, pid_idx, gid_idx, eid_uuid) ".
 		      "values('$eid', '$pid', '$creator_uid', '$creator_idx',".
 		      "       '$gid', FROM_UNIXTIME('$now'), ".
 		      "        $batchmode, $exptidx, $rsrcidx, ".
-		      "        $pid_idx, $gid_idx, '$uuid', ".
-		      "        FROM_UNIXTIME('$now'))")) {
+		      "        $pid_idx, $gid_idx, '$uuid')")) {
 	DBQueryWarn("delete from experiments where pid='$pid' and eid='$eid'");
 	DBQueryWarn("delete from experiment_resources where idx=$rsrcidx");
 	DBQueryWarn("unlock tables");
@@ -751,8 +731,7 @@ sub AddInputFile($$;$)
 	}
 	if ($isnsfile &&
 	    $self->TableUpdate("experiment_resources",
-			       "input_data_idx='$input_data_idx'",
-			       "idx='$rsrcidx'") != 0) {
+			       "input_data_idx='$input_data_idx'") != 0) {
 	    DBQueryWarn("unlock tables");
 	    return -1;
 	}
@@ -1854,7 +1833,7 @@ sub PreSwap($$$$)
     # Update the timestamps in the current resource record to reflect
     # the official start of the operation.
     #
-    if ($which eq $EXPT_SWAPIN || $which eq $EXPT_START) {
+    if ($which eq $EXPT_SWAPIN) {
 	DBQueryWarn("update experiment_resources set ".
 		    "  swapin_time=UNIX_TIMESTAMP(now()) ".
 		    "where idx='$rsrcidx'")
@@ -1900,9 +1879,9 @@ sub PreSwap($$$$)
 #
 # Rollback after a failed swap operation; cleans up the stats and resources.
 #
-sub SwapFail($$$$;$)
+sub SwapFail($$$$)
 {
-    my ($self, $swapper, $which, $ecode, $flags) = @_;
+    my ($self, $swapper, $which, $ecode) = @_;
 
     # Must be a real reference. 
     return -1
@@ -1911,9 +1890,6 @@ sub SwapFail($$$$;$)
     # Do not proceed if we got here via a hosed resources record.
     return 0
 	if ($EXPT_RESOURCESHOSED);
-
-    $flags = 0
-	if (!defined($flags));
 
     # Old swap gathering stuff.
     $self->GatherSwapStats($swapper, $which, $ecode);
@@ -1949,9 +1925,8 @@ sub SwapFail($$$$;$)
     # creating a new resource record when doing a swapmod to an inactive
     # experiment, but do not want to tackle that at this time
     #
-    if (! $lastrsrc && ($which eq $EXPT_START || $which eq $EXPT_SWAPIN)) {
-	DBQueryWarn("update experiment_resources set swapin_time=0, ".
-		    " vnodes=0,jailnodes=0,plabnodes=0,delaynodes=0 ".
+    if (! $lastrsrc && $which eq $EXPT_SWAPIN) {
+	DBQueryWarn("update experiment_resources set swapin_time=0 ".
 		    "where idx='$rsrcidx'")
 	or return -1;
     }
@@ -1973,10 +1948,7 @@ sub SwapFail($$$$;$)
 
     if ($which eq $EXPT_SWAPMOD &&
 	$self->state() eq libdb::EXPTSTATE_ACTIVE()) {
-	DBQueryWarn("update experiment_resources set ".
-		    ($flags & libdb::TBDB_STATS_FLAGS_MODHOSED() ?
-		     "swapout_time=swapmod_time, " : " ") .
-		    "swapmod_time=0 ".
+	DBQueryWarn("update experiment_resources set swapmod_time=0 ".
 		    "where idx='$lastrsrc'")
 	    or return -1;
     }
@@ -2070,7 +2042,7 @@ sub PostSwap($$$$)
 		$query_result->fetchrow_array;
 	    # Might happen if swapin stats got losts.
 	    $duration = 0
-		if (! defined($duration) || $duration < 0);
+		if (! defined($duration));
 
 	    $prev_swapper = User->Lookup($prev_uid_idx);
 	    $prev_swapper = $swapper
@@ -2120,41 +2092,35 @@ sub PostSwap($$$$)
 	($which eq $EXPT_SWAPMOD &&
 	 $self->state() eq libdb::EXPTSTATE_ACTIVE())) {
 	$query_result =
-	    DBQueryWarn("select r.node_id,n.type,r.erole,r.vname, ".
-			"    n.phys_nodeid,nt.isremotenode,nt.isvirtnode ".
+	    DBQueryWarn("select r.node_id,n.type,r.erole, ".
+			"     r.vname,n.phys_nodeid ".
 			"  from reserved as r ".
 			"left join nodes as n on r.node_id=n.node_id ".
-			"left join node_types as nt on nt.type=n.type ".
 			"where r.exptidx='$exptidx' and ".
 			"      (n.role='testnode' or n.role='virtnode')");
 
 	return -1
 	    if (! $query_result);
 
-	# Count up the unique *local* pnodes.
-	my %pnodemap = ();
+	$pnodes = $query_result->numrows;
+
+	DBQueryWarn("update experiment_resources set pnodes=$pnodes ".
+		    "where idx=$rsrcidx")
+	    or return -1;
+
 	# Generate the pmapping insert.
 	my @mappings = ();
 
-	while (my ($node_id,$type,$erole,$vname,$physnode,$isrem,$isvirt) =
+	while (my ($node_id,$type,$erole,$vname,$physnode) =
 	       $query_result->fetchrow_array()) {
 	    push(@mappings,
 		 "($rsrcidx, '$vname', '$physnode', '$type', '$erole')");
-
-	    # We want just local physical nodes in this counter.
-	    $pnodemap{$physnode} = $physnode
-		if (! ($isrem || $isvirt));
 	}
 	if (@mappings) {
 	    DBQueryWarn("insert into experiment_pmapping values ".
 			join(",", @mappings))
 		or return -1;
 	}
-	$pnodes = scalar(keys(%pnodemap));
-
-	DBQueryWarn("update experiment_resources set pnodes=$pnodes ".
-		    "where idx=$rsrcidx")
-	    or return -1;
     }
     
     #
@@ -2175,7 +2141,6 @@ sub PostSwap($$$$)
 	else {
 	    $swapper->UpdateStats($which, 0, 0, 0);
 	}
-	
 
 	#
 	# Update the per-experiment record.
@@ -2192,7 +2157,6 @@ sub PostSwap($$$$)
 	    DBQueryWarn("update experiment_stats ".
 			"set ${tmp}_count=${tmp}_count+1, ".
 			"    ${tmp}_last=now(), ".
-			"    last_activity=${tmp}_last, ".
 			"    swapin_duration=swapin_duration+${duration}, ".
 			"    swap_exitcode=0, ".
 			"    last_error=NULL ".
@@ -3288,6 +3252,7 @@ sub VnameToPmap($$)
     my ($node_id) = $query_result->fetchrow_array();    
     return Node->Lookup($node_id);
 }
+
 
 # _Always_ make sure that this 1 is at the end of the file...
 1;

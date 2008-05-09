@@ -1,7 +1,7 @@
 #!/usr/bin/perl -wT
 #
 # EMULAB-COPYRIGHT
-# Copyright (c) 2007, 2008 University of Utah and the Flux Group.
+# Copyright (c) 2007 University of Utah and the Flux Group.
 # All rights reserved.
 #
 package Image;
@@ -30,6 +30,7 @@ my $TB		  = "@prefix@";
 my $BOSSNODE      = "@BOSSNODE@";
 my $CONTROL	  = "@USERNODE@";
 my $TBOPS         = "@TBOPSEMAIL@";
+my $TBAPPROVAL    = "@TBAPPROVALEMAIL@";
 my $TBAUDIT       = "@TBAUDITEMAIL@";
 my $TBBASE        = "@TBBASE@";
 my $TBWWW         = "@TBWWW@";
@@ -191,7 +192,7 @@ sub Create($$$$$$$$)
 	push(@arg_slots, $key);
     }
     # Pass-through optional slots, otherwise the DB default is used.
-    foreach my $key ("path", "shared", "global", "ezid") {
+    foreach my $key ("path", "shared", "global") {
 	if (exists($argref->{$key})) {
 	    push(@arg_slots, $key);
 	}
@@ -233,7 +234,7 @@ sub Create($$$$$$$$)
 	#
 	# Grab unique ID. Table already locked.
 	# 
-	$imageid  = TBGetUniqueIndex("next_osid", undef, 1);
+	$imageid  = TBGetUniqueIndex("next_imageid", undef, 1);
     }
     my $uuid  = NewUUID();
 

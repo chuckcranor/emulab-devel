@@ -328,9 +328,8 @@ if ($isadmin) {
 select e.pid,e.eid from experiments as e 
 left join reserved as r on e.pid=r.pid and e.eid=r.eid 
 left join nodes as n on r.node_id=n.node_id 
-left join nodes as n2 on n.phys_nodeid=n2.node_id 
-left join node_types as nt on n2.type=nt.type 
-where nt.isplabphysnode=1 group by e.pid,e.eid";
+left join node_types as nt on n.type=nt.type 
+where nt.type='pcplab' group by e.pid,e.eid";
 }
 else {
     $pequery = "
@@ -338,10 +337,9 @@ select e.pid,e.eid from group_membership as g
 left join experiments as e on g.pid=e.pid and g.pid=g.gid 
 left join reserved as r on e.pid=r.pid and e.eid=r.eid 
 left join nodes as n on r.node_id=n.node_id 
-left join nodes as n2 on n.phys_nodeid=n2.node_id 
-left join node_types as nt on n2.type=nt.type 
-where g.uid='johnsond' and e.pid is not null and e.eid is not null 
-  and nt.isplabphysnode=1 group by e.pid,e.eid";
+left join node_types as nt on n.type=nt.type 
+where g.uid='$uid' and e.pid is not null and e.eid is not null 
+  and nt.type='pcplab' group by e.pid,e.eid";
 }
 $qres = DBQueryFatal($pequery);
 
@@ -389,9 +387,7 @@ if (mysql_num_rows($qres) > 0) {
 $colmap = array( 'node_id' => 'pm.node_id',
 		 'hostname' => 'pm.hostname',
 		 'plab_id' => 'pm.plab_id',
-                 'plc_name' => 'ppi.plc_name',
 		 'site' => 'psm.site_name',
-		 'plab_nodegroup' => 'png.nodegrouplist',
                  # emulab columns
 		 'nodestatus' => 'ns.status',
 		 'nodestatustime' => 'ns.status_timestamp',
@@ -400,6 +396,8 @@ $colmap = array( 'node_id' => 'pm.node_id',
 		 'jitdeduction' => 'pnhs.jitdeduct',
 		 'successes' => 'pnhs.succnum',
 		 'failures' => 'pnhs.failnum',
+                 # what about what kind of link the node contains 
+		 # (i.e., inet,inet2,dsl,...) ?
                  # comon columns
 		 'resptime' => 'pcd.resptime','uptime' => 'pcd.uptime',
 		 'lastcotop' => 'pcd.lastcotop',
@@ -435,19 +433,17 @@ $colsrc = array( 'resptime' => 'CoMon','uptime' => 'CoMon',
                  'bwlimit' => 'CoMon','txrate' => 'CoMon','rxrate' => 'CoMon',
 		 
 		 'node_id' => 'Emulab','hostname' => 'Emulab',
-                 'plc_name' => 'Emulab',
 		 'plab_id' => 'Emulab','unavail' => 'Emulab',
 		 'site' => 'Emulab','nettype' => 'Emulab',
 		 'jitdeduction' => 'Emulab','successes' => 'Emulab',
                  'failures' => 'Emulab','nodestatus' => 'Emulab',
-                 'nodestatustime' => 'Emulab','plab_nodegroup' => 'Emulab' );
+                 'nodestatustime' => 'Emulab' );
 
 # The legend for fields.  The comon data is quoted from
 # http://summer.cs.princeton.edu/status/legend.html .
 $coldoc = array( 'node_id' => 'Emulab physical node id.',
 		 'hostname' => 'Node hostname.',
 		 'plab_id' => 'PLC node id number.',
-		 'plc_name' => 'PLC name.',
 		 'site' => 'Site with which the node is affiliated.',
 		 'nodestatus' => 'Emulab node status; up or down.',
 		 'nodestatustime' => 'Most recent heartbeat time from the ' . 
@@ -570,7 +566,7 @@ $colmap_mysqlnames_where = array();
 
 foreach ($colmap as $k => $v) {
     $had_as = false;
-    if (strpos($v," as ") != false) {
+    if (strstr($v,' as ')) {
 	$sa = explode(' as ',$v);
 	$nv = $sa[1];
 	$had_as = true;
@@ -596,9 +592,8 @@ foreach ($colmap as $k => $v) {
 }
 
 # Default columns displayed, in this order.
-$defcols = array( 'node_id','hostname','plab_nodegroup','nodestatus',
-                  'nodestatustime','unavail','5minload','freemem',
-                  'txrate','rxrate','date', );
+$defcols = array( 'node_id','hostname','nodestatus','nodestatustime','unavail',
+		  '5minload','freemem','txrate','rxrate','date', );
 
 # Default sort and included columns
 $defsortcols = array( 'unavail','5minload' );
@@ -703,34 +698,25 @@ elseif ((isset($newpgsel) && count($newpgsel) > 0)
 }
 
 #
-# Grab the base types for all plc nodetypes.  Used in pm_buildqueryinfo below.
-#
-$basenodetypes = array();
-$qres = DBQueryFatal("select type from node_types where isplabdslice=1");
-while ($row = mysql_fetch_array($qres)) {
-    array_push($basenodetypes,$row['type']);
-}
-
-#
 # Next, build query:
 #
 
 # Grab query parts
 $qbits = pm_buildqueryinfo();
 $select_s = $qbits[0]; $src_s = $qbits[1]; $filter_s = $qbits[2]; 
-$sort_s = $qbits[3]; $group_s = $qbits[4]; $pag_s = $qbits[5];
+$sort_s = $qbits[3]; $pag_s = $qbits[4];
 
 # query that counts num data rows
 $qcount = "select count(" . $colmap['node_id'] . ") as num" . 
-    " from $src_s $filter_s $group_s";
+    " from $src_s $filter_s";
 
 # query that gets data (note that if we need to do postfiltering, we
 # manually paginate the data!)
 if ($mustpostfilter) {
-    $q = "select $select_s from $src_s $filter_s $group_s $sort_s";
+    $q = "select $select_s from $src_s $filter_s $sort_s";
 }
 else {
-    $q = "select $select_s from $src_s $filter_s $group_s $sort_s $pag_s";
+    $q = "select $select_s from $src_s $filter_s $sort_s $pag_s";
 }
 
 #echo "qcount = $qcount<br><br>\n";
@@ -858,7 +844,7 @@ function pm_filterdata($data) {
     #
     if (isset($experiment) 
 	&& (isset($upnodefilter) && $upnodefilter == 'emulab')) {
-        #echo "FOO: rns = " . count($remaining_nodes) . "<br>\n";
+	echo "FOO: rns = " . count($remaining_nodes) . "<br>\n";
 	$upnodes = array();
 	$pnq = "select n.node_id from nodes as n" . 
 	    " left join reserved as r on n.node_id=r.node_id" . 
@@ -877,7 +863,7 @@ function pm_filterdata($data) {
 	    }
 	}
 	$remaining_nodes = $rnatmp;
-        #echo "FOO: rns = " . count($remaining_nodes) . "<br>\n";
+	echo "FOO: rns = " . count($remaining_nodes) . "<br>\n";
     }
 
     #
@@ -1631,7 +1617,6 @@ function pm_buildqueryinfo() {
     global $hostfilter,$hf_regexp;
     global $userquery;
     global $opterrs;
-    global $basenodetypes;
 
     $q_colstr = '';
     foreach ($cols as $c) {
@@ -1647,25 +1632,17 @@ function pm_buildqueryinfo() {
     if (isset($experiment)) {
         $q_joinstr = " reserved as r" . 
             " left join nodes as n on r.node_id=n.node_id" .
-	    " left join nodes as n2 on n.phys_nodeid=n2.phys_nodeid" . 
-	    " left join node_types as nt2 on n2.type=nt2.type" . 
-            " left join plab_mapping as pm on n.phys_nodeid=pm.node_id" . 
-	    " left join plab_plc_info as ppi on pm.plc_idx=ppi.plc_idx";
+            " left join plab_mapping as pm on n.phys_nodeid=pm.node_id";
     }
     elseif (isset($upnodefilter) && $upnodefilter == 'emulab') {
         # Note, the other half of this case (if $experiment isset AND this 
         # case) is covered later because it has to be postfiltered!
 	$q_joinstr = " reserved as r" . 
             " left join nodes as n on r.node_id=n.node_id" .
-	    " left join nodes as n2 on n.phys_nodeid=n2.phys_nodeid" . 
-	    " left join node_types as nt2 on n.type=nt2.type" . 
-            " left join plab_mapping as pm on n2.node_id=pm.node_id" . 
-	    " left join plab_plc_info as ppi on pm.plc_idx=ppi.plc_idx";
+            " left join plab_mapping as pm on n.phys_nodeid=pm.node_id";
     }
     else {
         $q_joinstr = " plab_mapping as pm";
-        $q_joinstr .= " left join plab_plc_info as ppi" . 
-	              " on pm.plc_idx=ppi.plc_idx";
     }
     # for now, just join all possible tables, even if we are not selecting data
     $q_joinstr .= " left join plab_site_mapping as psm on pm.node_id=psm.node_id";
@@ -1674,33 +1651,16 @@ function pm_buildqueryinfo() {
     $q_joinstr .= " left join plab_comondata as pcd on pm.node_id=pcd.node_id";
     $q_joinstr .= " left join plab_nodehiststats as pnhs" . 
 	" on pm.node_id=pnhs.node_id";
-    #
-    # Note that we have to use a subquery to get this crap.  It\'s either that
-    # or use a view
-    #
-    $q_joinstr .= " left join (select pngm.node_id as node_id," . 
-        " group_concat(png.name order by png.name) as nodegrouplist" . 
-        " from plab_nodegroup_members as pngm" . 
-        " left join plab_nodegroups as png" . 
-        " on pngm.nodegroup_idx=png.nodegroup_idx" . 
-        " group by pngm.node_id) as png on pm.node_id=png.node_id";
 
     # setup the quick filter string (note that all of these get anded)
     
-    # note that all plab nodes get a non-"<nodetype_prefix>" node auxtype,
-    # and this denotes to which network the node is connected.
-    $rbtypes = array();
-    foreach ($basenodetypes as $btype) {
-        array_push($rbtypes,"'$btype'");
-    }
-    $q_quickfs = "!(nat.type in (".implode(',',$rbtypes)."))";
+    # note that all plab nodes get a non-"pcplab" node auxtype.
+    $q_quickfs = "nat.type != 'pcplab'";
     if (isset($experiment)) {
         if (strlen($q_quickfs) > 0) {
 	    $q_quickfs .= " and ";
         }
         $q_quickfs .= " r.pid='$pid' and r.eid='$eid'";
-        $q_quickfs .= " and ";
-        $q_quickfs .= " nt2.isplabphysnode=1";
     }
     if (isset($upnodefilter)) {
         if ($upnodefilter == "emulab") {
@@ -1709,7 +1669,7 @@ function pm_buildqueryinfo() {
             }
             $q_quickfs .= " ns.status='up'";
 	    if (!isset($experiment)) {
-		$q_quickfs .= " and nt2.isplabphysnode=1 and !(r.pid='emulab-ops' and r.eid='hwdown')";
+		$q_quickfs .= " and n.type='pcplabphys' and !(r.pid='emulab-ops' and r.eid='hwdown')";
 	    }
         }
         elseif ($upnodefilter == "comon") {
@@ -1781,8 +1741,6 @@ function pm_buildqueryinfo() {
     }
     $q_sortstr .= " $sortdir";
 
-    $q_groupstr = " ";
-
     # setup pagination
     $q_pagstr = '';
     if (!isset($limit)) {
@@ -1798,8 +1756,7 @@ function pm_buildqueryinfo() {
 	$q_pagstr .= " limit $limit offset $offset";
     }
 
-    return array($q_colstr,$q_joinstr,$q_finalfs,$q_sortstr,
-		 $q_groupstr,$q_pagstr);
+    return array($q_colstr,$q_joinstr,$q_finalfs,$q_sortstr,$q_pagstr);
 }
 
 function pm_showtable($totalrows,$data) {
@@ -1948,7 +1905,7 @@ function pm_showtable($totalrows,$data) {
 # containers may be implicit (that is, <name> <comp> <const> is a container).
 #
 function pm_parseuserquery($q,$debug = false) {
-    global $colmap,$colmap_mysqlnames,$colmap_mysqlnames_where;
+    global $colmap,$colmap_mysqlnames;
 
     # first tokenize
     $toka = array();
@@ -2079,7 +2036,7 @@ function pm_parseuserquery($q,$debug = false) {
 	return false;
     }
     function iscop($tok) {
-	$cops = array('<','>','<=','>=','==','!=','like');
+	$cops = array('<','>','<=','>=','==','!=');
 	foreach ($cops as $cop) {
 	    if ($cop == $tok)
 		return true;
@@ -2125,7 +2082,6 @@ function pm_parseuserquery($q,$debug = false) {
 	elseif ($need == 'ccont' && $tok == ')') {
 	    return true;
 	}
-	return false;
     }
     function whichsat($tok,$lneeds) {
 	foreach ($lneeds as $n) {
@@ -2161,23 +2117,20 @@ function pm_parseuserquery($q,$debug = false) {
     # needs are valid.
     $sawcop = false;
 
-    $prev_toka_like = false;
     foreach ($toka as $i) {
-        #echo "needs = " . implode(',',$needs) . "; <br>\n";
+        # echo "needs = " . implode(',',$needs) . "; ";
 	$sneed = whichsat($i,$needs);
 	if ($sneed == '') {
 	    $errstr = "Parser error at token '$i'!";
 	    break;
 	}
-
-	$just_set_like = false;
-
+	
 	$needs = $trans[$sneed];
 	if (!isset($needs)) {
 	    $needs = array();
 	}
 
-        #echo "sneed = $sneed; newneeds = " . implode(',',$needs) . "<br>\n";
+        # echo "sneed = $sneed; newneeds = " . implode(',',$needs) . "<br>\n";
 
 	if ($sneed == 'ocont') {
 	    ++$oc;
@@ -2189,7 +2142,7 @@ function pm_parseuserquery($q,$debug = false) {
 	}
         # XXX: handle the problem caused by use of ' as ' in colmap
 	elseif ($sneed == 'name') {
-	    $retq .= " " . $colmap_mysqlnames_where[$i] . " ";
+	    $retq .= " " . $colmap[$i] . " ";
 	    if ($sawcop) {
 		$sawcop = false;
 		$trans['name'] = $pre_cop_name_const_trans;
@@ -2202,12 +2155,7 @@ function pm_parseuserquery($q,$debug = false) {
 		$cstr = $i;
 	    }
 	    else {
-                # add the wildcards on user behalf
-		$ss = '';
-		if ($prev_toka_like) {
-		    $ss = '%';
-		}
-		$cstr = "'$ss" . $i . "$ss'";
+		$cstr = "'" . $i . "'";
 	    }
 	    $retq .= " $cstr ";
 	    if ($sawcop) {
@@ -2226,19 +2174,9 @@ function pm_parseuserquery($q,$debug = false) {
 	    $sawcop = true;
 	    $trans['name'] = $post_cop_name_const_trans;
 	    $trans['const'] = $post_cop_name_const_trans;
-
-	    if ($i == "like") {
-		$prev_toka_like = true;
-		$just_set_like = true;
-	    }
 	}
 	elseif ($sneed == 'bop') {
 	    $retq .= " $i ";
-	}
-
-        # clear special case for like cop
-	if (!$just_set_like) {
-	    $prev_toka_like = false;
 	}
     }
     if (strlen($errstr) > 0) {

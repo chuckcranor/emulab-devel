@@ -46,8 +46,8 @@ my $debug = 0;
 #  members is the number of consecutive 'success's or 'failure's in 
 #    the sequence.
 #
-sub getNodeHistSequences($;$$) {
-    my $plcname = shift;
+sub getNodeHistSequences(;$$) {
+    
     my $fpnode = shift;
     my $fstime = shift;
 
@@ -74,15 +74,12 @@ sub getNodeHistSequences($;$$) {
 		     localtime(time() - $fstime)) . "'";
     }
 
-    my $q = "select pnh.phys_node_id,unix_timestamp(pnh.timestamp)," . 
-	    "  pnh.status" . 
-	    " from plab_nodehist as pnh" . 
-	    " left join plab_mapping as pm on pnh.phys_node_id=pm.node_id" . 
-	    " left join plab_plc_info as ppi on pm.plc_idx=ppi.plc_idx" . 
-	    " where component='node' and operation='create'" . 
-	    "   and ppi.plc_name='$plcname'" . 
-	    " $filter" . 
-	    " order by phys_node_id,timestamp";
+    my $q = "select phys_node_id,unix_timestamp(timestamp)," . 
+	    "    status" . 
+	    "  from plab_nodehist" . 
+	    "  where component='node' and operation='create'" . 
+	    "  $filter" . 
+	    "  order by phys_node_id,timestamp";
 
     if ($debug) {
 	print "query = \"$q\"\n";
@@ -193,7 +190,6 @@ my $JITTER_DEDUCTION_FACTOR = 0.015;
 # increasing order of unavailability (so that the most avail are first).
 #
 # Arguments:
-#   $0 = name of plc.
 #   $1 = a ref to a hash returned by getNodeHistSequences; if undef, this 
 #        function will call getNodeHistSequences.
 #   $2 = boolean; if !0, will increase unavailability rank for a node if it is 
@@ -202,16 +198,11 @@ my $JITTER_DEDUCTION_FACTOR = 0.015;
 #        of the data; each successively prior day's unavailability gets a 
 #        decreasing weight.  Could be useful; easy to do.
 #
-sub rankNodesByUnavail($;$$$) {
-    my $plcname = shift;
+sub rankNodesByUnavail(;$$$) {
     my ($sref,$dojitter,$doewma) = @_;
 
-    if (!defined($plcname)) {
-	return undef;
-    }
-
     if (!defined($sref)) {
-	$sref = getNodeHistSequences($plcname);
+	$sref = getNodeHistSequences();
     }
     if (!defined($dojitter)) {
 	$dojitter = 0;

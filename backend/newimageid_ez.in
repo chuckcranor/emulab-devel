@@ -1,7 +1,7 @@
 #!/usr/bin/perl -wT
 #
 # EMULAB-COPYRIGHT
-# Copyright (c) 2000-2008 University of Utah and the Flux Group.
+# Copyright (c) 2000-2007 University of Utah and the Flux Group.
 # All rights reserved.
 #
 use English;
@@ -345,9 +345,9 @@ if (!defined($project)) {
 }
 
 my $group;
-if (exists($newimageid_args{"gid"})) {
-    my $gid = $newimageid_args{"gid"};
-    $group = Group->LookupByPidGid($project->pid(), $gid);
+if (exists($newimageid_args{"group"})) {
+    my $gid = $newimageid_args{"group"};
+    $group = Group->LookupSubgroupByName($gid);
     if (!defined($group)) {
 	UserError("Group: No such group $gid");
     }
@@ -556,12 +556,9 @@ my $loadlen  = 1;
 if ($newimageid_args{"wholedisk"}) {
     $loadlen  = 4;
     $loadpart = 0;
-    $newimageid_args{"part1_osid"} = $osid;
-} else {
-    $newimageid_args{"part${loadpart}_osid"} = $osid;
 }
-$newimageid_args{"loadpart"} = $loadpart;
 $newimageid_args{"loadlength"} = $loadlen;
+$newimageid_args{"part${loadpart}_osid"} = $osid;
 $newimageid_args{"default_osid"} = $osid;
 
 # Create the osidtoimageid mapping too.

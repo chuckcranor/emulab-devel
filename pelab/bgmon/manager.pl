@@ -27,29 +27,12 @@ sub usage {
 
 my $debug    = 0;
 my $impotent = 0;
-my $nocap    = 0;
-my $bwperiod = 5;
-
-#
-# $evexpt is the experiment ("pid/eid") in which the entire bgmon framework
-# (probes, manager, clients) is running.  This is used for confining Emulab
-# events (client/manager communication) to just that experiment.  The
-# '-e pid/eid' option to the manager sets the context for that instance.
-#
-# $bgmonexpt is an incompletely implemented feature that allows multiple
-# probe experiments to share the manager.  Here the client specifies the
-# experiment of the probes (passed in the message) and one common manager
-# muxes/demuxes messages to the different probe experiments.  There are
-# still seperate opsrecv processes.  It isn't yet clear how useful this
-# might be.
-# 
-
 my $evexpt   = "__none";
-my $default_bgmonexpt = "tbres/pelabbgmon";
 my $bgmonexpt;
+my $default_bgmonexpt = "tbres/pelabbgmon";
 my ($server,$port,$cmdport);
 my %opt = ();
-if (!getopts("s:p:c:dNihe:", \%opt)) {
+if (!getopts("s:p:c:dih", \%opt)) {
     exit &usage;
 }
 
@@ -75,10 +58,9 @@ if ($opt{s}) { $server = $opt{s}; } else { $server = "localhost"; }
 if ($opt{p}) { $port = $opt{p}; }
 if ($opt{c}) { $cmdport = $opt{c};} else { $cmdport = 5052; }
 if ($opt{h}) { exit &usage; }
-if ($opt{e}) { $evexpt = $opt{e}; setevexpid($evexpt); $bgmonexpt=$evexpt;}
+#if ($opt{e}) { $evexpt = $opt{e}; }
 if ($opt{d}) { $debug = 1; }
 if ($opt{i}) { $impotent = 1; } 
-if ($opt{N}) { $nocap = 1; print "*** No bandwidth cap enforced\n"; }
 
 if (@ARGV !=0) { exit &usage; }
 
@@ -105,7 +87,6 @@ if ($port) { $URL .= ":$port"; }
 
 # Register for normal "manager client" notifications
 my $handle_mc = event_register($URL,0);
-
 if (!$handle_mc) { die "Unable to register with event system\n"; }
 my $tuple = address_tuple_alloc();
 if (!$tuple) { die "Could not allocate an address tuple\n"; }
@@ -135,7 +116,7 @@ $sel->add($socket_cmd);
 
 print "setting cmdport $cmdport and cmdexpt $bgmonexpt\n";
 setcmdport($cmdport);
-setexpid($bgmonexpt);
+setexpid($default_bgmonexpt);
 
 
 #main()
@@ -167,51 +148,6 @@ while (1) {
 	}
     }
 }
-
-#
-#XXX / TODO: stuff for tool generalization
-#  hacked in here for now, but source should be from the 
-# managerclient' message (?)
-#
-sub addToolSpecificFields
-{
-    my ($cmdRef) = @_;
-    my $testtype = $cmdRef->{testtype};
-    my $toolname;
-    my ($req_params_actual, $opt_params_actual);
-
-    if( $testtype eq "bw" ){
-        $toolname = "iperf";
-#        $toolwrapperpath = "/tmp/iperfwrapper";
-#        $tooltype = "one-shot";
-        $req_params_actual = "port 5002 duration 5";
-    }elsif( $testtype eq "latency"){
-        $toolname = "fping";
-#        $toolwrapperpath = "/tmp/fpingwrapper";
-#        $tooltype = "one-shot";
-        $req_params_actual = "timeout 10000 retries 1";
-    }
-
-    my $sth = DBQuery("select * from tool_spec where toolname='$toolname'");
-    my ( $toolname, $metric, $type, $toolwrapperpath, 
-         $req_params_formal, $opt_params_formal)
-        = ( $sth->fetchrow_array() );
-
-    #XXX / TODO Check that all given actual parameters match the formal params
-    #
-    $cmdRef->{toolname} = $toolname;
-    $cmdRef->{toolwrapperpath} = $toolwrapperpath;
-    $cmdRef->{tooltype} = $type;
-    $cmdRef->{req_params} = $req_params_actual;
-    $cmdRef->{opt_params} = $opt_params_actual;
-
-    print "CMD: \n";
-    foreach my $key (keys %{$cmdRef}){
-        my $value = ${$cmdRef}{$key};
-        print "  $key=$value  \n";
-    }
-}
-
 
 
 #
@@ -245,16 +181,8 @@ sub callbackFunc($$$) {
 	print "EVENT: $time $objtype $eventtype\n"
 	    if ($debug);
 
-	# XXX just to make sure we get the event
-	if( $eventtype eq "TEST" ){
-	    my $managerID = event_notification_get_string($handle,
-							  $notification,
-							  "managerID");
-	    print "got TEST event: managerID=$managerID\n";
-	}
-
 	# TODO: Does this have to be listed in lib/libtb/tbdefs.h ??
-	elsif( $eventtype eq "EDIT" ){
+	if( $eventtype eq "EDIT" ){
 	    #
 	    # Got a request to modify a path's test freq
 	    #
@@ -280,22 +208,19 @@ sub callbackFunc($$$) {
 	    my $newexpid = event_notification_get_string($handle,
 							  $notification,
 							  "expid");
-
-
 	    if( !defined $newexpid || $newexpid eq "" ){
 		$newexpid = $bgmonexpt;
 	    }
 
 	    my %cmd = ( expid     => $newexpid,
-                    cmdtype   => $eventtype,
-                    dstnode   => $dstnode,
-                    testtype  => $testtype,
-                    testper   => "$period",
-                    duration  => "$duration",
-                    managerID => $managerID
+			cmdtype   => $eventtype,
+			dstnode   => $dstnode,
+			testtype  => $testtype,
+			testper   => "$period",
+			duration  => "$duration",
+			managerID => $managerID
 			);
-        
-        addToolSpecificFields(\%cmd);
+
 
 	    print "got EDIT: $srcnode, $dstnode: $newexpid\n";
 
@@ -329,31 +254,31 @@ sub callbackFunc($$$) {
 	    my $newexpid = event_notification_get_string($handle,
 							 $notification,
 							 "expid");
-
 	    if( !defined $newexpid || $newexpid eq "" ){
 		$newexpid = $bgmonexpt;
 	    }
 
 	    my %cmd = ( expid     => $newexpid,
-                    cmdtype   => $eventtype,
-                    destnodes  => $destnodes,
-                    srcnode   => $srcnode,
-                    testtype  => $testtype,
-                    testper   => "$testper",
-                    duration  => "$duration"
-                    ,managerID => $managerID
+			cmdtype   => $eventtype,
+			destnodes  => $destnodes,
+                        srcnode   => $srcnode,
+			testtype  => $testtype,
+			testper   => "$testper",
+			duration  => "$duration"
+			,managerID => $managerID
 			);
-
-        addToolSpecificFields(\%cmd);
 
 	    print "got $eventtype:$srcnode,$destnodes,$testtype,".
 		"$testper,$duration,$managerID,$newexpid\n";
 
+	    # only automanager can send "forever" edits (duration=0)
+#	    if( $duration > 0 ){ #|| $managerID eq "automanagerclient" ){
+#		print "sending cmd from $srcnode\n";
+#		sendcmd( $srcnode, \%cmd );
+#	    }
 	    if( isCmdValid(\%cmd) ){
-            print "sending cmd to $srcnode on behalf of $managerID\n";
-            sendcmd( $srcnode, \%cmd );
-	    }else{
-            print "rejecting $testtype cmd for $srcnode\n";
+		print "sending cmd from $srcnode\n";
+                sendcmd( $srcnode, \%cmd );
 	    }
 	}
 	elsif( $eventtype eq "STOPALL" ){
@@ -390,21 +315,11 @@ sub isCmdValid($)
     #list of invalid conditions
     if( $cmdref->{managerID} ne "automanagerclient" ){
 	#managerclient is not the AMC
-	if( $cmdref->{duration} == 0 ){
+	if( $cmdref->{duration} eq "0" ){
 	    #only AMC can send "forever" commands
-	    return(0);
-	}
-	if( $cmdref->{testtype} eq "bw" ){
-	    # Cannot specify period less than test length
-	    if ( $cmdref->{testper} < $bwperiod ){
-		return(0);
-	    }
-
-	    # No caps enforced
-	    if ($nocap) {
-		return(1);
-	    }
-
+	    $valid = 0;
+	}elsif( $cmdref->{testtype} eq "bw" )
+	{
 	    my @destnodes;
 	    if( $cmdref->{cmdtype} eq "INIT" ){
 		@destnodes = split(" ",$cmdref->{destnodes});
@@ -598,7 +513,6 @@ sub getBandwidth() {
         return $avgbw;
     }
 }
-
 
 =pod
 sub event_poll_amc($){

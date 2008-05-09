@@ -1,7 +1,7 @@
 <?php
 #
 # EMULAB-COPYRIGHT
-# Copyright (c) 2000-2008 University of Utah and the Flux Group.
+# Copyright (c) 2000-2007 University of Utah and the Flux Group.
 # All rights reserved.
 #
 include("defs.php3");
@@ -16,39 +16,14 @@ $this_user = CheckLoginOrDie(CHECKLOGIN_USERSTATUS|
 			     CHECKLOGIN_WEBONLY|CHECKLOGIN_WIKIONLY);
 $uid       = $this_user->uid();
 
-#
-# Verify page arguments. project_title is the project to zap to.
-#
-$optargs = OptionalPageArguments("wiki",  PAGEARG_STRING,
-				 "force", PAGEARG_BOOLEAN);
-if (!isset($wiki)) {
-    $wiki = "emulab";
-}
-
-if ($wiki == "geni") {
-    $geniproject = Project::Lookup("geni");
-    $approved    = 0;
-    if (! ($geniproject &&
-	   $geniproject->IsMember($this_user, $approved) && $approved)) {
-	USERERROR("You do not have permission to access the Trac wiki!", 1);
-    }
-    $wiki    = "protogeni";
-    $TRACURL = "https://www.protogeni.net/trac/$wiki";
-    $TRACCOOKIENAME = "trac_auth_protogeni_priv";
-}
-elseif ($wiki != "emulab") {
-    USERERROR("Unknown Trac wiki $wiki!", 1);
-}
-else {
-    $TRACURL = "https://${USERNODE}/trac/$wiki";
-    $TRACCOOKIENAME = "trac_auth_${wiki}";
-}
+$TRACURL        = "https://${USERNODE}/trac";
+$TRACCOOKIENAME = "trac_auth";
 
 #
 # Look for our cookie. If the browser has it, then there is nothing
 # more to do; just redirect the user over to the wiki.
 #
-if (!isset($force) && isset($_COOKIE[$TRACCOOKIENAME])) {
+if (isset($_COOKIE[$TRACCOOKIENAME])) {
     header("Location: ${TRACURL}");
     return;
 }
@@ -56,18 +31,14 @@ if (!isset($force) && isset($_COOKIE[$TRACCOOKIENAME])) {
 #
 # Do the xlogin, which gives us back a hash to stick in the cookie.
 #
-SUEXEC($uid, "nobody", "tracxlogin -w " . escapeshellarg($wiki) .
-       " $uid " . $_SERVER['REMOTE_ADDR'], SUEXEC_ACTION_DIE);
+SUEXEC($uid, "nobody", "tracxlogin $uid " . $_SERVER['REMOTE_ADDR'],
+       SUEXEC_ACTION_DIE);
 
 if (!preg_match("/^(\w*)$/", $suexec_output, $matches)) {
     TBERROR($suexec_output, 1);
 }
-$hash = $matches[1];
-
-if ($wiki == "protogeni") {
-    # We do this for the private wiki. Temporary.
-    setcookie($TRACCOOKIENAME, $hash, 0, "/", $TBAUTHDOMAIN, $TBSECURECOOKIES);
-}
-header("Location: ${TRACURL}/xlogin?user=$uid&hash=$hash");
+setcookie($TRACCOOKIENAME,
+	  $matches[1], 0, "/", $TBAUTHDOMAIN, $TBSECURECOOKIES);
+header("Location: ${TRACURL}");
 
 ?>

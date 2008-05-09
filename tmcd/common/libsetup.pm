@@ -2,7 +2,7 @@
 
 #
 # EMULAB-COPYRIGHT
-# Copyright (c) 2000-2008 University of Utah and the Flux Group.
+# Copyright (c) 2000-2007 University of Utah and the Flux Group.
 # All rights reserved.
 #
 # TODO: Signal handlers for protecting db files.
@@ -21,13 +21,12 @@ use Exporter;
 	 jailsetup dojailconfig findiface libsetup_getvnodeid 
 	 ixpsetup libsetup_refresh gettopomap getfwconfig gettiptunnelconfig
 	 gettraceconfig genhostsfile getmotelogconfig calcroutes fakejailsetup
-	 getlocalevserver
 
 	 TBDebugTimeStamp TBDebugTimeStampsOn
 
 	 MFS REMOTE CONTROL WINDOWS JAILED PLAB LOCALROOTFS IXP USESFS 
 	 SIMTRAFGEN SIMHOST ISDELAYNODEPATH JAILHOST DELAYHOST STARGATE
-	 ISFW FAKEJAILED LINUXJAILED
+	 ISFW FAKEJAILED
 
 	 CONFDIR LOGDIR TMDELAY TMJAILNAME TMSIMRC TMCC
 	 TMNICKNAME TMSTARTUPCMD FINDIF
@@ -48,7 +47,7 @@ use libtmcc;
 #
 # BE SURE TO BUMP THIS AS INCOMPATIBILE CHANGES TO TMCD ARE MADE!
 #
-sub TMCD_VERSION()	{ 29; };
+sub TMCD_VERSION()	{ 27; };
 libtmcc::configtmcc("version", TMCD_VERSION());
 
 # Control tmcc timeout.
@@ -86,12 +85,6 @@ sub libsetup_getvnodeid()
 # True if running inside a jail. Set just below. 
 # 
 my $injail;
-
-#
-# True if $injail == TRUE and running on Linux.
-# Right now this means vserves on RHL.
-#
-my $inlinuxjail;
 
 #
 # True if running as a fake jail (no jail, just processes).
@@ -142,9 +135,6 @@ BEGIN
 
 	libsetup_setvnodeid($vid);
 	$injail = 1;
-	if ($^O eq "linux") {
-	    $inlinuxjail = 1;
-	}
     }
     elsif (exists($ENV{'FAKEJAIL'})) {
 	# Fake jail.
@@ -302,7 +292,6 @@ sub STARGATE()  { if (-e "$ETCDIR/isstargate") { return 1; } else { return 0; } 
 #
 sub JAILED()	{ if ($injail) { return $vnodeid; } else { return 0; } }
 sub FAKEJAILED(){ if ($nojail) { return $vnodeid; } else { return 0; } }
-sub LINUXJAILED(){ if ($injail && $inlinuxjail) { return $vnodeid; } else { return 0; } }
 
 #
 # Are we on plab?
@@ -1192,29 +1181,42 @@ sub gettraceconfig($)
 sub gettunnelconfig($)
 {
     my ($rptr)   = @_;
-    my $tunnels  = {};
+    my @tunnels = ();
 
     if (tmcc(TMCCCMD_TUNNEL, undef, \@tmccresults) < 0) {
 	warn("*** WARNING: Could not get tunnel config from server!\n");
 	return -1;
     }
 
-    my $pat  = q(TUNNEL=([\w]+) MEMBER=([\w]+) KEY='(.*)' VALUE='(.*)');
+    my $pat  = q(TUNNEL=([-\w.]+) ISSERVER=(\d) PEERIP=([-\w.]+) );
+    $pat    .= q(PEERPORT=(\d+) PASSWORD=([-\w.]+) );
+    $pat    .= q(ENCRYPT=(\d) COMPRESS=(\d) INET=([-\w.]+) );
+    $pat    .= q(MASK=([-\w.]+) PROTO=([-\w.]+));
 
     foreach my $str (@tmccresults) {
 	if ($str =~ /$pat/) {
-	    my $tunnel = $1;
-	    my $member = $2;
-	    my $key    = $3;
-	    my $value  = $4;
+	    my $tunnel = {};
 
-	    $tunnels->{"$tunnel:$member"}->{$key} = $value;
+	    #
+	    # The following is rather specific to vtund!
+	    #
+	    $tunnel->{"NAME"}       = $1;
+	    $tunnel->{"ISSERVER"}   = $2;
+	    $tunnel->{"PEERIPADDR"} = $3;
+	    $tunnel->{"PEERPORT"}   = $4;
+	    $tunnel->{"PASSWORD"}   = $5;
+	    $tunnel->{"ENCRYPT"}    = $6;
+	    $tunnel->{"COMPRESS"}   = $7;
+	    $tunnel->{"IPADDR"}     = $9;
+	    $tunnel->{"IPMASK"}     = $10;
+	    $tunnel->{"PROTO"}      = $11;
+	    push(@tunnels, $tunnel);
 	}
 	else {
 	    warn("*** WARNING: Bad tunnels line: $str\n");
 	}
     }
-    $$rptr = $tunnels;
+    @$rptr = @tunnels;
     return 0;
 }
 
@@ -1837,23 +1839,6 @@ sub whatsmynickname()
     }
 
     return "$vname.$eid.$pid";
-}
-
-#
-# Return the hostname or IP to use for a local event server.
-# Normally this is "localhost", but for virtual nodes which share an
-# event server via the physical host, it may be the IP of the physical host.
-#
-sub getlocalevserver()
-{
-    my $evserver = "localhost";
-
-    if (-e "$BOOTDIR/localevserver") {
-	$evserver = `cat $BOOTDIR/localevserver`;
-	chomp($evserver);
-    }
-
-    return $evserver;
 }
 
 #

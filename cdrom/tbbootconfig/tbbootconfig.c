@@ -28,7 +28,6 @@ static char *usagestr =
  " -d              Turn on debugging.\n"
  " -v              Verify and exit with status; Do not print anything\n"
  " -p              Purge the header block (write zeros)\n"
- " -b biosdev      Specify the BIOS device to boot from\n"
  " -w filename     Write system config to header block from file\n"
  " -r filename     Read system config from header block and write to file\n"
  " -k 0,#          Set the bootfromdisk flag to either 0 or a DOS part#\n"
@@ -56,7 +55,6 @@ main(argc, argv)
 	int		rval, ch, devfd;
 	tbboot_t	tbboot_hdr;
 	int		bootfromcdrom = -1, bootfromdisk = -1, validimage = -1;
-	int		bootdisk = 0xff;
 	char	       *configfile = NULL, *emulabkey = NULL;
 	int		readconfig = 0, writeconfig = 0;
 
@@ -72,7 +70,7 @@ main(argc, argv)
 		exit(-1);
 	}
 	
-	while ((ch = getopt(argc, argv, "fidk:c:vm:r:w:pe:b:")) != -1)
+	while ((ch = getopt(argc, argv, "fidk:c:vm:r:w:pe:")) != -1)
 		switch(ch) {
 		case 'i':
 			info++;
@@ -88,11 +86,6 @@ main(argc, argv)
 			break;
 		case 'p':
 			purge++;
-			break;
-		case 'b':
-			bootdisk = strtoul(optarg, NULL, 16);
-			if (bootdisk < 0 || bootdisk > 255)
-				usage();
 			break;
 		case 'k':
 			bootfromdisk = atoi(optarg);
@@ -168,8 +161,6 @@ main(argc, argv)
 		tbboot_hdr.bootfromdisk  = bootfromdisk;
 	if (validimage != -1)
 		tbboot_hdr.validimage    = validimage;
-
-	tbboot_hdr.bootdisk = bootdisk;
 
 	if (emulabkey) {
 		if (strlen(emulabkey) > TBBOOT_MAXKEYLEN - 1) {

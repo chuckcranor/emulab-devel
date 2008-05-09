@@ -2,7 +2,7 @@
 
 #
 # EMULAB-COPYRIGHT
-# Copyright (c) 2000-2008 University of Utah and the Flux Group.
+# Copyright (c) 2000-2007 University of Utah and the Flux Group.
 # All rights reserved.
 #
 use English;
@@ -322,12 +322,8 @@ elsif ($swapop eq "update") {
 	    if ($CanRecover) {
 		print STDERR "Recovering virtual and physical state.\n";
 
-		# It is safe to remove the phystate since we know it was
-		# backed up above, and cause we do not know if assign_wrapper
-		# made it to that point before it failed. 
 		if (TBExptRemoveVirtualState($pid, $eid) ||
 		    TBExptRestoreVirtualState($pid, $eid) ||
-		    TBExptRemovePhysicalState($pid, $eid) ||
 		    TBExptRestorePhysicalState($pid,$eid)) {
 		    print STDERR "Could not restore backed-up state; ";
 		    $CanRecover = 0;
@@ -606,7 +602,7 @@ sub doSwapout($) {
 	#
 	print STDERR "Freeing nodes.\n";
 	TBDebugTimeStamp("nfree started");
-	if (system("nfree -a $pid $eid")) {
+	if (system("nfree $pid $eid")) {
 	    tberror({type => 'secondary', severity => SEV_SECONDARY,
 		     error => ['nfree_failed']},
 		    "Could not free nodes.");
@@ -709,23 +705,20 @@ sub doSwapout($) {
 			 "where pid='$pid' and eid='$eid'");
 
 	if ($db_result->numrows) {
-	    # Are there any nodes left in the slice?
+	    # Are there any dslice nodes left?
 	    $db_result =
-		DBQueryFatal("select r.node_id ".
-			     " from plab_slices as ps".
-			     " left join plab_slice_nodes as psn ".
-			     "   on (ps.slicename=psn.slicename ".
-			     "       and ps.plc_idx=psn.plc_idx) ".
-			     " left join reserved as r ".
-			     "   on psn.node_id=r.node_id ".
-			     " where ps.pid='$pid' and ps.eid='$eid'".
-			     "   and r.node_id is not NULL");
+		DBQueryFatal("select n.node_id from nodes as n ".
+			     "left join node_types as nt on n.type = nt.type ".
+			     "left join reserved as r ".
+			     " on r.node_id = n.node_id ".
+			     "where r.pid='$pid' and r.eid='$eid' ".
+			     " and nt.isplabdslice = 1");
 
 	    if (!$db_result->numrows) {
-		print "Tearing down Slices.\n";
+		print "Destroying Planetlab slice.\n";
 		TBDebugTimeStamp("plabslice destroy started");
 		if (system("plabslice destroy $pid $eid")) {
-		    tberror "Failed to tear down Slices.";
+		    tberror "Failed to destroy Plab dslice.";
 		    $swapout_errors = 1;
 		}
 		TBDebugTimeStamp("plabslice destroy finished");
@@ -993,33 +986,37 @@ sub doSwapin($) {
     # dslice now
     #
     if ($type > UPDATE_RECOVER) {
-	# Are there any Plab nodes?  First get a list of node types in the exp;
-	# if any are types hosted by any of the PLCs we know about, create
-	# all slices necessary for the experiment in a single plabslice call.
+	# Are there any Plab nodes?
 	$db_result =
-	    DBQueryFatal("select nt.type,ppi.plc_name from nodes as n ".
-			 "  left join node_types as nt on n.type = nt.type ".
-			 "  left join reserved as r on r.node_id = n.node_id ".
-			 "  left join plab_plc_info as ppi ".
-			 "    on nt.type = ppi.node_type".
-			 " where r.pid='$pid' and r.eid='$eid'".
-			 "    and ppi.node_type is not NULL".
-			 " group by nt.type");
+	    DBQueryFatal("select n.node_id from nodes as n ".
+			 "left join node_types as nt on n.type = nt.type ".
+			 "left join reserved as r on r.node_id = n.node_id ".
+			 "where r.pid='$pid' and r.eid='$eid' ".
+			 " and nt.isplabdslice = 1");
 
 	if ($db_result->numrows) {
-	    my $info_str = "";
-	    while (my ($nt,$plc) = $db_result->fetchrow_array()) {
-		$info_str .= " $plc($nt)";
+	    # Does slice already exist?
+	    $db_result =
+		DBQueryFatal("select slicename from plab_slices ".
+			     "where pid='$pid' and eid='$eid'");
+
+	    if (! $db_result->numrows) {
+		my @plabnodes = ();
+		
+		while (my ($node) = $db_result->fetchrow_array()) {
+		    push(@plabnodes, $node);
+		}
+		
+		print "Creating Planetlab slice.\n";
+		TBDebugTimeStamp("plabslice create started");
+		if (system("plabslice create $pid $eid")) {
+		    tberror({type => 'secondary', severity => SEV_SECONDARY,
+			     error => ['plabslice_create_failed']},
+			    "Failed to create Plab dslice");
+		    return 3;
+		}
+		TBDebugTimeStamp("plabslice alloc finished");
 	    }
-	    print "Configuring Slices for $info_str.\n";
-	    TBDebugTimeStamp("plabslice started");
-	    if (system("plabslice create $pid $eid")) {
-		tberror({type => 'secondary', severity => SEV_SECONDARY,
-			 error => ['plabslice_create_failed']},
-			"Failed to configure Slices.");
-		return 3;
-	    }
-	    TBDebugTimeStamp("plabslice finished");
 	}
     }
 

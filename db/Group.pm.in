@@ -1,7 +1,7 @@
 #!/usr/bin/perl -wT
 #
 # EMULAB-COPYRIGHT
-# Copyright (c) 2005, 2006, 2007, 2008 University of Utah and the Flux Group.
+# Copyright (c) 2005, 2006, 2007 University of Utah and the Flux Group.
 # All rights reserved.
 #
 package Group;
@@ -407,6 +407,7 @@ sub EditGroup($$$$)
     #
     # First pass does checks. Second pass does the real thing. 
     #
+
     my $g_pid = $group->pid();
     my $g_gid = $group->gid();
     my $target_user;
@@ -486,7 +487,7 @@ sub EditGroup($$$$)
 	foreach $target_user (@nonmembers) {
 	    $target_uid = $target_user->uid();
 	    $target_idx = $target_user->uid_idx();
-	    $foo        = "add_$target_idx";
+	    $foo        = "add_$target_idx";    
 
 	    if (exists($argref->{$foo}) && $argref->{$foo} eq "permit"){
 		#
@@ -705,10 +706,9 @@ sub AccessCheck($$$)
 	print "*** Invalid access type: $access_type!\n";
 	return 0;
     }
-    # Admins do whatever they want. Treat leadgroup special though since
-    # the user has to actually be a member of the project, not just an admin.
+    # Admins do whatever they want.
     return 1
-	if ($user->IsAdmin() && $access_type != TB_PROJECT_LEADGROUP);
+	if ($user->IsAdmin());
 
     if ($access_type == TB_PROJECT_READINFO) {
 	$mintrust = PROJMEMBERTRUST_USER;
@@ -784,9 +784,7 @@ sub AccessCheck($$$)
 	# Only project_root or group_root in default group
 	# may grab (involuntarily add) users into groups.
 	#
-	if (! $self->IsProjectGroup()) {
-	    return $self->GetProject()->AccessCheck($user, $access_type);
-	}
+	$gid = $pid;
 	$mintrust = PROJMEMBERTRUST_GROUPROOT;
     }
     elsif ($access_type == TB_PROJECT_DELUSER) {
@@ -893,35 +891,35 @@ sub SendJoinEmail($$)
     $usr_URL = ""
 	if (!defined($usr_URL));
 
-    SENDMAIL
-	("$leader_name '$leader_uid' <$leader_email>",
-	 "$uid $pid Project Join Request",
-	 "$usr_name is trying to join your group $gid in project $pid.".
-	 "\n".
-	 "\n".
-	 "Contact Info:\n".
-	 "Name:            $usr_name\n".
-	 "Emulab ID:       $uid\n".
-	 "Email:           $usr_email\n".
-	 "User URL:        $usr_URL\n".
-	 "Job Title:       $usr_title\n".
-	 "Affiliation:     $usr_affil\n".
-	 "Address 1:       $usr_addr\n".
-	 "Address 2:       $usr_addr2\n".
-	 "City:            $usr_city\n".
-	 "State:           $usr_state\n".
-	 "ZIP/Postal Code: $usr_zip\n".
-	 "Country:         $usr_country\n".
-	 "Phone:           $usr_phone\n".
-	 "\n".
-	 "Please return to $TBWWW,\n".
-	 "log in, select the 'New User Approval' page, and enter your\n".
+    SENDMAIL("$leader_name '$leader_uid' <$leader_email>",
+	     "$uid $pid Project Join Request",
+	     "$usr_name is trying to join your group $gid in project $pid.".
+	     "\n".
+	     "\n".
+	     "Contact Info:\n".
+	     "Name:            $usr_name\n".
+	     "Emulab ID:       $uid\n".
+	     "Email:           $usr_email\n".
+	     "User URL:        $usr_URL\n".
+	     "Job Title:       $usr_title\n".
+	     "Affiliation:     $usr_affil\n".
+	     "Address 1:       $usr_addr\n".
+	     "Address 2:       $usr_addr2\n".
+	     "City:            $usr_city\n".
+	     "State:           $usr_state\n".
+	     "ZIP/Postal Code: $usr_zip\n".
+	     "Country:         $usr_country\n".
+	     "Phone:           $usr_phone\n".
+	     "\n".
+	     "Please return to $TBWWW,\n".
+	     "log in, select the 'New User Approval' page, and enter your\n".
 	     "decision regarding $usr_name's membership in your project.\n".
-	 "\n".
-	 "Thanks,\n".
-	 "Testbed Operations\n",
-	 "$usr_name '$uid' <$usr_email>",
-	 "CC: $allleaders");
+	     "\n".
+	     "Thanks,\n".
+	     "Testbed Operations\n",
+	     "$TBAPPROVAL",
+	     "CC: $allleaders\n".
+	     "Bcc: $TBAUDIT");
 
     return 0;
 }
@@ -952,8 +950,7 @@ sub SendApprovalEmail($$$)
 
     my $trust = $membership->trust();
 
-    AnonSENDMAIL(
-	     "$usr_name '$usr_uid' <$usr_email>",
+    SENDMAIL("$usr_name '$usr_uid' <$usr_email>",
              "Membership Approved in '$pid/$gid' ",
 	     "\n".
 	     "This message is to notify you that you have been approved as\n".
@@ -961,7 +958,7 @@ sub SendApprovalEmail($$$)
              "\n\n".
              "Thanks,\n".
              "Testbed Operations\n",
-             undef,
+             "$this_name <$this_email>",
 	     "CC: $allleaders\n".
 	     "Bcc: $TBAUDIT");
 

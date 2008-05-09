@@ -1,103 +1,69 @@
 #!/usr/bin/perl -w
+
 #
 # EMULAB-COPYRIGHT
-# Copyright (c) 2000-2007 University of Utah and the Flux Group.
+# Copyright (c) 2000-2002 University of Utah and the Flux Group.
 # All rights reserved.
 #
-use strict;
-use Getopt::Std;
-use English;
 
+use Getopt::Std;
 #
 # vlandiff - Show differences between switch state and vlan table, if any
 #
-sub usage()
-{
-    print(STDOUT "Usage: vlandiff [-v]\n");
-    exit(-1);
-}
-my $optlist = "vd";
-my $debug   = 0;
 
 #
 # Configure variables
 #
-my $TB		= "@prefix@";
-my $SNMPIT      = "$TB/bin/snmpit";
-
-# un-taint path
-$ENV{'PATH'} = '/bin:/usr/bin:/usr/local/bin:/usr/site/bin';
-delete @ENV{'IFS', 'CDPATH', 'ENV', 'BASH_ENV'};
-
-#
-# Turn off line buffering on output. Very important for this script!
-#
-$| = 1; 
-
-# Load the Testbed support stuff.
-use lib "@prefix@/lib";
+$ENV{'PATH'} = '@prefix@/sbin:@prefix@/bin:/bin';
+use lib '@prefix@/lib';
 use libdb;
-use libtestbed;
-use Lan;
 
-# Parse args.
-my %options = ();
-if (! getopts($optlist, \%options)) {
-    usage();
+my %opt = ();
+getopts('v',\%opt);
+
+my $debug = 0;
+if ($opt{v}) {
+    $debug = 1;
 }
-usage()
-    if (@ARGV);
-if (defined($options{"v"}) || defined($options{"d"})) {
-    $debug++;
+
+if (@ARGV) {
+    die "Usage: $0 [-v]\n";
 }
 
 sub debug(@);
 
-my %table  = ();
-my %switch = ();
-my %id     = ();
-my @vlans;
+my %table = ();
+my %switch= ();
+my %id = ();
 
-#
-# Get a list of all VLANs for swapped-in experiments
-#
-if (VLan->AllVLans(\@vlans) != 0) {
-    die("*** $0:\n".
-	"    Unable to load VLANs for all experiments\n");
-}
+# Get all the vlans from the table
 
-foreach my $vlan (@vlans) {
-    my @members;
-    my @list = ();
-    my $id   = $vlan->lanid();
+my $result = DBQueryFatal("select id,members from vlans");
+while (@row = $result->fetchrow_array()) {
+    my ($vlan_id, $members) = @row;
+    my @list = split(" ",$members);
 
-    if ($vlan->MemberList(\@members) != 0) {
-	die("*** $0:\n".
-	    "    Unable to load members for $vlan\n");
-    }
-    foreach my $member (@members) {
-	my $nodeid;
-	my $iface;
-
-	if ($member->GetAttribute("node_id", \$nodeid) != 0 ||
-	    $member->GetAttribute("iface", \$iface) != 0) {
-	    die("*** $0:\n".
-		"    Missing attributes for $member in $vlan\n");
+    foreach $port (@list) {
+	my ($node,$card) = split(":",$port);
+	if ($card =~ /[a-zA-Z]/) {
+	    # specified ala ethX
+	    my $result2 = DBQueryFatal("select card from interfaces ".
+		    "where node_id='$node' and iface='$card'");
+	    ($card) = $result2->fetchrow_array();
+	    debug("Had '$port', changed to '$node:$card'\n");
+	    $port = "$node:$card";
 	}
-	my $query_result =
-	    DBQueryFatal("select card from interfaces ".
-			 "where node_id='$nodeid' and iface='$iface'");
-	my ($card) = $query_result->fetchrow_array();
-	push(@list, "$nodeid:$card");
     }
-    $table{$id} = \@list;
-    debug("In table: $vlan $table{$id}\n");
+
+    $table{$vlan_id} = \@list;
+    debug("In table: vlan $vlan_id: $table{$vlan_id}\n");
 }
 
 # Get all the vlans from the switch
+
 my $list;
 my $vlan=0;
-open(LIST,"$SNMPIT -l |") || die ("vlandiff: couldn't run snmpit: $!\n");
+open(LIST,"snmpit -l |") || die ("vlandiff: couldn't run snmpit: $!\n");
 while(<LIST>) {
     chop;
 
@@ -123,7 +89,7 @@ close(LIST);
 
 # Compare all of them...
 
-foreach my $key (sort keys %table) {
+foreach $key (sort keys %table) {
     if ( defined $switch{$key} ) {
 	# Hacky 'one liner' list comparison
 	if (join("\0",sort(@{$switch{$key}}))
@@ -142,7 +108,7 @@ my $rv = 0;
 
 if (keys %table) {
     print "In vlans table only:\n";
-    foreach my $key (sort keys %table) {
+    foreach $key(sort keys %table) {
 	print "$key\t", join(" ",@{$table{$key}}), "\n";
     }
     $rv++;
@@ -150,7 +116,7 @@ if (keys %table) {
 
 if (keys %switch) {
     print "On switch only:\n";
-    foreach my $key (sort keys %switch) {
+    foreach $key(sort keys %switch) {
 	print "$key\t", join(" ",@{$switch{$key}}), "\n";
     }
     $rv++;

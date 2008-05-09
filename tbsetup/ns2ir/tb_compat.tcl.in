@@ -1,7 +1,7 @@
 # -*- tcl -*-
 #
 # EMULAB-COPYRIGHT
-# Copyright (c) 2000-2006, 2008 University of Utah and the Flux Group.
+# Copyright (c) 2000-2006 University of Utah and the Flux Group.
 # All rights reserved.
 #
 
@@ -147,9 +147,7 @@ namespace eval TBCOMPAT {
 
     # The experiment directory, this is where the feedback related files will
     # be read from and dumped to.  XXX Hacky
-    # XXX Hacky II: we must use PROJROOT and not FSDIR_PROJ since these
-    # sourced file paths get recorded and used on boss.
-    set expdir "${PROJROOT}/${::GLOBALS::pid}/exp/${::GLOBALS::eid}/"
+    set expdir "${FSDIR_PROJ}/${::GLOBALS::pid}/exp/${::GLOBALS::eid}/"
 
     # XXX Just for now...
     variable tbxlogfile
@@ -943,15 +941,6 @@ proc tb-set-link-encap {lanlink style} {
 	"alias" {
 	    set style "alias"
 	}
-	"gre" {
-	    set style "gre"
-	}
-	"egre" {
-	    set style "egre"
-	}
-	"vtun" {
-	    set style "vtun"
-	}
 	"veth" {
 	    set style "veth"
 	}
@@ -1125,15 +1114,6 @@ proc tb-set-vlink-emulation {style} {
     switch -- $style {
 	"alias" {
 	    set style "alias"
-	}
-	"gre" {
-	    set style "gre"
-	}
-	"egre" {
-	    set style "egre"
-	}
-	"vtun" {
-	    set style "vtun"
 	}
 	"veth" {
 	    set style "veth"
@@ -1710,20 +1690,4 @@ proc tb-set-node-id {vnode myid} {
 	return
     }
     $vnode set_numeric_id $myid
-}
-
-#
-# Fix a particular node interface to a lanlink
-#
-proc tb-fix-interface {vnode lanlink iface} {
-    if {[$vnode info class] != "Node"} {
-        perror "\[tb-fix-interface] $vnode is not a node."
-        return
-    }
-    if {[$lanlink info class] != "Link" && [$lanlink info class] != "Lan"} {
-        perror "\[tb-fix-interface] $lanlink must be a link or lan!"
-        return
-    }
-
-    $lanlink set_fixed_iface $vnode $iface
 }

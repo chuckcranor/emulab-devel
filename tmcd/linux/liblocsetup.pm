@@ -1,7 +1,7 @@
 #!/usr/bin/perl -wT
 #
 # EMULAB-COPYRIGHT
-# Copyright (c) 2000-2008 University of Utah and the Flux Group.
+# Copyright (c) 2000-2004, 2006, 2007 University of Utah and the Flux Group.
 # All rights reserved.
 #
 
@@ -12,15 +12,14 @@ package liblocsetup;
 use Exporter;
 @ISA = "Exporter";
 @EXPORT =
-    qw ( $CP $EGREP $NFSMOUNT $UMOUNT $TMPASSWD $SFSSD $SFSCD $RPMCMD
-	 $HOSTSFILE $LOOPBACKMOUNT
+    qw ( $CP $EGREP $NFSMOUNT $UMOUNT $TMPASSWD $SFSSD $SFSCD $RPMCMD $HOSTSFILE
 	 os_account_cleanup os_ifconfig_line os_etchosts_line
 	 os_setup os_groupadd os_useradd os_userdel os_usermod os_mkdir
-	 os_ifconfig_veth os_viface_name os_modpasswd
+	 os_ifconfig_veth os_viface_name
 	 os_routing_enable_forward os_routing_enable_gated
 	 os_routing_add_manual os_routing_del_manual os_homedirdel
-	 os_groupdel os_getnfsmounts os_islocaldir
-	 os_fwconfig_line os_fwrouteconfig_line os_config_gre
+	 os_groupdel os_getnfsmounts
+	 os_fwconfig_line os_fwrouteconfig_line
        );
 
 # Must come after package declaration!
@@ -42,19 +41,12 @@ BEGIN
     }
 }
 
-# Convenience.
-sub REMOTE()	{ return libsetup::REMOTE(); }
-sub PLAB()	{ return libsetup::PLAB(); }
-sub LINUXJAILED(){ return libsetup::LINUXJAILED(); }
-
 #
 # Various programs and things specific to Linux and that we want to export.
 # 
 $CP		= "/bin/cp";
-$DF		= "/bin/df";
 $EGREP		= "/bin/egrep -q";
 $NFSMOUNT	= "/bin/mount -o vers=2,udp"; # Force NFS Version 2 over UDP
-$LOOPBACKMOUNT	= "/bin/mount --bind ";
 $UMOUNT		= "/bin/umount";
 $TMPASSWD	= "$ETCDIR/passwd";
 $SFSSD		= "/usr/local/sbin/sfssd";
@@ -87,12 +79,11 @@ my $GATED	= "/usr/sbin/gated";
 my $ROUTE	= "/sbin/route";
 my $SHELLS	= "/etc/shells";
 my $DEFSHELL	= "/bin/tcsh";
-my $IWCONFIG    = '/usr/local/sbin/iwconfig';
-my $WLANCONFIG  = '/usr/local/bin/wlanconfig';
-my $RMMOD       = '/sbin/rmmod';
-my $MODPROBE    = '/sbin/modprobe';
-my $IWPRIV      = '/usr/local/sbin/iwpriv';
-my $BRCTL       = "/usr/sbin/brctl";
+my $IWCONFIG = '/usr/local/sbin/iwconfig';
+my $WLANCONFIG = '/usr/local/bin/wlanconfig';
+my $RMMOD = '/sbin/rmmod';
+my $MODPROBE = '/sbin/modprobe';
+my $IWPRIV = '/usr/local/sbin/iwpriv';
 
 #
 # OS dependent part of cleanup node state.
@@ -118,9 +109,9 @@ sub os_account_cleanup()
 # Generate and return an ifconfig line that is approriate for putting
 # into a shell script (invoked at bootup).
 #
-sub os_ifconfig_line($$$$$$$$;$$$)
+sub os_ifconfig_line($$$$$$$;$$$)
 {
-    my ($iface, $inet, $mask, $speed, $duplex, $aliases, $iface_type, $lan,
+    my ($iface, $inet, $mask, $speed, $duplex, $aliases, $iface_type,
 	$settings, $rtabid, $cookie) = @_;
     my ($miirest, $miisleep, $miisetspd, $media);
     my ($uplines, $downlines);
@@ -401,7 +392,6 @@ sub os_ifconfig_line($$$$$$$$;$$$)
 	$uplines = 
 	    "if $ethtool $iface >/dev/null 2>&1; then\n    " .
 	    "  $ethtool -s $iface autoneg off speed $speed duplex $duplex\n    " .
-	    "  sleep 2 # needed due to likely bug in e100 driver on pc850s\n".
 	    "else\n    " .
 	    "  /sbin/mii-tool --force=$media $iface\n    " .
 	    "fi\n    ";
@@ -423,7 +413,7 @@ sub os_ifconfig_line($$$$$$$$;$$$)
 #
 # Specialized function for configing virtual ethernet devices:
 #
-#	'veth'	one end of an etun device embedded in a vserver
+#	'veth'	locally hacked veth devices (not on Linux)
 #	'vlan'	802.1q tagged vlan devices
 #	'alias'	IP aliases on physical interfaces
 #
@@ -433,96 +423,13 @@ sub os_ifconfig_veth($$$$$;$$$$%)
 	$rtabid, $encap, $vtag, $itype, $cookie) = @_;
     my ($uplines, $downlines);
 
-    if ($itype !~ /^(alias|vlan|veth)$/) {
-	warn("Unknown virtual interface type $itype\n");
-	return "";
-    }
-
-    #
-    # Veth.
-    #
-    # Veths for Linux vservers mean vtun devices.  One end is outside
-    # the vserver and is bridged with other veths and peths as appropriate
-    # to form the topology.  The other end goes in the vserver and is
-    # configured with an IP address.  This final step is not done here
-    # as the vserver must be running first.
-    #
-    # In the current configuration, there is configuration that takes
-    # place both inside and outside the vserver.
-    #
-    # Inside:
-    # The inside case (LINUXJAILED() == 1) just configures the IP info on
-    # the interface.
-    #
-    # Outside:
-    # The outside actions are much more involved as described above.
-    # The VTAG identifies a bridge device "ebrN" to be used.
-    # The RTABID identifies the namespace, but we don't care here.
-    #
-    # To create a etun pair you do:
-    #    echo etun0,etun1 > /sys/module/etun/parameters/newif
-    # To destroy do:
-    #    echo etun0 > /sys/module/etun/parameters/delif
-    #
-    if ($itype eq "veth") {
-	#
-	# We are inside a Linux jail.
-	# We configure the interface pretty much like normal.
-	#
-	if (LINUXJAILED()) {
-	    if ($inet eq "") {
-		$uplines .= "$IFCONFIGBIN $iface up";
-	    }
-	    else {
-		$uplines  .= sprintf($IFCONFIG, $iface, $inet, $mask);
-		$downlines = "$IFCONFIGBIN $iface down";
-	    }
-	    
-	    return ($uplines, $downlines);
+    if ($itype !~ /^(alias|vlan)$/) {
+	if ($itype eq "veth") {
+	    warn("veth${id}: 'veth' not supported on Linux\n");
+	} else {
+	    warn("Unknown virtual interface type $itype\n");
 	}
-
-	#
-	# Outside jail.
-	# Create tunnels and bridge and plumb them all together.
-	#
-	my $brdev = "ebr$vtag";
-	my $iniface = "veth$id";
-	my $outiface = "peth$id";
-	my $devdir = "/sys/module/etun/parameters";
-
-	# UP
-	$uplines = "";
-
-	# modprobe (should be done already for cnet setup, but who cares)
-	$uplines .= "modprobe etun\n";
-
-	# make sure bridge device exists and is up
-	$uplines .= "    $IFCONFIGBIN $brdev >/dev/null 2>&1 || {";
-	$uplines .= "        $BRCTL addbr $brdev\n";
-	$uplines .= "        $IFCONFIGBIN $brdev up\n";
-	$uplines .= "    }\n";
-
-	# create the tunnel device
-	$uplines .= "    echo $outiface,$iniface > $devdir/newif || exit 1\n";
-
-	# bring up outside IF, insert into bridge device
-	$uplines .= "    $IFCONFIGBIN $outiface up || exit 2\n";
-	$uplines .= "    $BRCTL addif $brdev $outiface || exit 3\n";
-
-	# configure the MAC address for the inside device
-	$uplines .= "    $IFCONFIGBIN $iniface hw ether $vmac || exit 4\n";
-
-	# DOWN
-	$downlines = "";
-
-	# remove IF from bridge device, down it (remove bridge if empty?)
-	$downlines .= "$BRCTL delif $brdev $outiface || exit 13\n";
-	$downlines .= "    $IFCONFIGBIN $outiface down || exit 12\n";
-
-	# destroy tunnel devices (this will fail if inside IF in vserver still)
-	$downlines .= "    echo $iniface > $devdir/delif || exit 11\n";
-
-	return ($uplines, $downlines);
+	return "";
     }
 
     #
@@ -595,15 +502,12 @@ sub os_viface_name($)
     # alias: There is an alias device, but not sure what it is good for
     #        so for now we just return the phys device.
     # vlan:  vlan<VTAG>
-    # veth:  veth<ID>
     #
     my $itype = $ifconfig->{"ITYPE"};
     if ($itype eq "alias") {
 	return $piface;
     } elsif ($itype eq "vlan") {
 	return $itype . $ifconfig->{"VTAG"};
-    } elsif ($itype eq "veth") {
-	return $itype . $ifconfig->{"ID"};
     }
 
     warn("Linux does not support virtual interface type '$itype'\n");
@@ -671,76 +575,32 @@ sub os_usermod($$$$$$)
 }
 
 #
-# Modify user password.
-# 
-sub os_modpasswd($$)
-{
-    my($login, $pswd) = @_;
-
-    if (system("$USERMOD -p '$pswd' $login") != 0) {
-	warn "*** WARNING: resetting password for $login.\n";
-	return -1;
-    }
-    if ($login eq "root" &&
-	system("$USERMOD -p '$pswd' toor") != 0) {
-	warn "*** WARNING: resetting password for toor.\n";
-	return -1;
-    }
-    return 0;
-}
-
-#
 # Add a user.
 # 
 sub os_useradd($$$$$$$$$)
 {
     my($login, $uid, $gid, $pswd, $glist, $homedir, $gcos, $root, $shell) = @_;
-    my $args = "";
 
     if ($root) {
 	$glist = join(',', split(/,/, $glist), "root");
     }
     if ($glist ne "") {
-	$args .= "-G $glist ";
+	$glist = "-G $glist";
     }
-    # If remote, let it decide where to put the homedir.
-    if (!REMOTE()) {
-	$args .= "-d $homedir ";
-
-	#
-	# -M is Redhat only option?  Overrides default CREATE_HOME.
-	# So we see if CREATE_HOME is set and if so, use -M.
-	#
-	if (!system("grep -q CREATE_HOME /etc/login.defs")) {
-	    $args .= "-M ";
-	}
-    }
-    elsif (!PLAB()) {
-	my $marg = "-m";
-
-	#
-	# XXX DP hack
-	# Only force creation of the homdir if the default homedir base
-	# is on a local FS.  On the DP, all nodes share a homedir base
-	# which is hosted on one of the nodes, so we create the homedir
-	# only on that node.
-	#
-	$defhome = `$USERADD -D 2>/dev/null`;
-	if ($defhome =~ /HOME=(.*)/) {
-	    if (!os_islocaldir($1)) {
-		$marg = "";
-	    }
-	}
-
-	# populate on remote nodes. At some point will tar files over.
-	$args .= $marg;
-    }
-
     # Map the shell into a full path.
     $shell = MapShell($shell);
 
-    if (system("$USERADD -u $uid -g $gid $args -p '$pswd' ".
-	       "-s $shell -c \"$gcos\" $login") != 0) {
+    #
+    # -M is Redhat only option?  Overrides default CREATE_HOME.
+    # So we see if CREATE_HOME is set and if so, use -M.
+    #
+    my $marg = "";
+    if (!system("grep -q CREATE_HOME /etc/login.defs")) {
+	$marg = "-M";
+    }
+
+    if (system("$USERADD $marg -u $uid -g $gid $glist -p '$pswd' ".
+	       "-d $homedir -s $shell -c \"$gcos\" $login") != 0) {
 	warn "*** WARNING: $USERADD $login error.\n";
 	return -1;
     }
@@ -860,38 +720,20 @@ sub MapShell($)
        return $DEFSHELL;
    }
 
-   #
-   # May be multiple lines (e.g., /bin/sh, /usr/bin/sh, etc.) in /etc/shells.
-   # Just use the first entry.
-   #
-   my @paths = `grep '/${shell}\$' $SHELLS`;
+   my $fullpath = `grep '/${shell}\$' $SHELLS`;
+
    if ($?) {
        return $DEFSHELL;
    }
-   my $fullpath = $paths[0];
-   chomp($fullpath);
 
-   # Sanity Checks
-   if ($fullpath =~ /^([-\w\/]*)$/ && -x $fullpath) {
+   # Sanity Check
+   if ($fullpath =~ /^([-\w\/]*)$/) {
        $fullpath = $1;
    }
    else {
        $fullpath = $DEFSHELL;
    }
    return $fullpath;
-}
-
-# Return non-zero if given directory is on a "local" filesystem
-sub os_islocaldir($)
-{
-    my ($dir) = @_;
-    my $rv = 0; 
-
-    my @dfoutput = `$DF -l $dir 2>/dev/null`;
-    if (grep(!/^filesystem/i, @dfoutput) > 0) {
-	$rv = 1;
-    }
-    return $rv;
 }
 
 sub os_getnfsmounts($)
@@ -1525,22 +1367,6 @@ sub getCurrentIwconfig($;$) {
     }
      
     return \%r;
-}
-
-sub os_config_gre($$$$$$$)
-{
-    my ($name, $unit, $inetip, $peerip, $mask, $srchost, $dsthost) = @_;
-
-    my $dev = "$name$unit";
-
-    if (system("ip tunnel add $dev mode gre remote $dsthost local $srchost") ||
-	system("ip link set $dev up") ||
-	system("ip addr add $inetip dev $dev") ||
-	system("$IFCONFIGBIN $dev netmask $mask")) {
-	warn("Could not start tunnel!\n");
-	return -1;
-    }
-    return 0;
 }
 
 1;

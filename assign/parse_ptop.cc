@@ -1,6 +1,6 @@
 /*
  * EMULAB-COPYRIGHT
- * Copyright (c) 2000-2007 University of Utah and the Flux Group.
+ * Copyright (c) 2000-2006 University of Utah and the Flux Group.
  * All rights reserved.
  */
 
@@ -267,8 +267,8 @@ int parse_ptop(tb_pgraph &PG, tb_sgraph &SG, istream& i)
       for (int cur = 0;cur<num;++cur) {
 	pedge pe = (add_edge(srcv,dstv,PG)).first;
 	tb_plink *pl = new
-	    tb_plink(name,tb_plink::PLINK_NORMAL,link_type,src,dst,
-                    srcmac,dstmac, srciface,dstiface);
+	    tb_plink(name,tb_plink::PLINK_NORMAL,link_type,srcmac,dstmac,
+		     srciface,dstiface);
 	put(pedge_pmap,pe,pl);
 	pl->delay_info.bandwidth = ibw;
 	pl->delay_info.delay = idelay;
@@ -321,7 +321,6 @@ int parse_ptop(tb_pgraph &PG, tb_sgraph &SG, istream& i)
 #endif
 	}
       }
-
     } else if (command == "set-type-limit") {
       if (parsed_line.size() != 3) {
 	ptop_error("Bad set-type-limit line, requires two arguments.");
@@ -338,36 +337,7 @@ int parse_ptop(tb_pgraph &PG, tb_sgraph &SG, istream& i)
       }
 
       ptypes[type]->set_max_users(max);
-     } else if (command == "policy") {
- 	if (parsed_line.size() < 3) {
- 	    ptop_error("No policy type given.");
- 	} else {
- 	    if (parsed_line[1] == "desire") {
- 		fstring desire = parsed_line[2];
- 		fstring type = parsed_line[3];
- 		tb_featuredesire *fd_obj =
- 		tb_featuredesire::get_featuredesire_obj(desire);
- 		if (type == "disallow") {
- 		    fd_obj->disallow_desire();  
- 		} else if (type == "limit") {
- 		    if (parsed_line.size() != 5) {
- 			ptop_error("Missing desire limit");
- 		    } else {
- 			double limit;
- 			if (sscanf(parsed_line[4].c_str(),"%lf",&limit) != 1) {
- 			    ptop_error("Malformed desire limit");
- 			} else {
- 			    fd_obj->limit_desire(limit);  
- 			}
- 		    }
- 		} else {
- 		    ptop_error("Unknown policy for desire");
- 		}
- 	    } else {
- 		ptop_error("Only desire policies are supported."); 
- 	    }
- 	}
- 	
+
     } else {
       ptop_error("Unknown directive: " << command << ".");
     }

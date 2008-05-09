@@ -1,7 +1,7 @@
 #!/usr/bin/perl -w
 #
 # EMULAB-COPYRIGHT
-# Copyright (c) 2004, 2005, 2006, 2007, 2008 University of Utah and the Flux Group.
+# Copyright (c) 2004, 2005, 2006, 2007 University of Utah and the Flux Group.
 # All rights reserved.
 #
 use English;
@@ -41,6 +41,15 @@ use libsetup;
 use libtmcc;
 use librc;
 
+#
+# If this is the MFS, hand off to that script.
+#
+if (MFS()) {
+    exec("$RCDIR/rc.mfs", @ARGV);
+    die("*** $0:\n".
+	"    Could not exec $RCDIR/rc.mfs!\n");
+}
+
 # Script specific goo.
 my $RCDIR	= "$BINDIR/rc";
 my $LOGFILE	= "$LOGDIR/bootsetup.debug";
@@ -53,15 +62,6 @@ sub doshutdown();
 sub doreconfig();
 sub docleanup();
 sub BootFatal($$);
-
-#
-# If this is the MFS, hand off to that script.
-#
-if (MFS()) {
-    exec("$RCDIR/rc.mfs", @ARGV);
-    die("*** $0:\n".
-	"    Could not exec $RCDIR/rc.mfs!\n");
-}
 
 # Parse command line.
 if (! getopts($optlist, \%options)) {
@@ -168,8 +168,6 @@ sub BootFatal($$)
 {
     my ($code, $msg) = @_;
     
-    print "$msg\n";
-
     #
     # Send the console log to the server.
     #
@@ -179,8 +177,7 @@ sub BootFatal($$)
 	print "Error sending TBFAILED to Emulab Control!\n";
     }
     
-    # XXX "--" ensures that code < 0 is not interpreted as a tmcc cmdline arg
-    if (tmcc(TMCCCMD_BOOTERRNO, "-- $code", undef, %TMCCTIMEOUT) < 0) {
+    if (tmcc(TMCCCMD_BOOTERRNO, $code, undef, %TMCCTIMEOUT) < 0) {
 	print "Error sending boot errno to Emulab Control!\n";
     }
     

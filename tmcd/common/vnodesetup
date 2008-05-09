@@ -94,9 +94,8 @@ if ($UID) {
 	die("*** $0:\n".
 	    "    $UID is not in the password file!\n");
 
-    $slicename = `cat /etc/slicename`;
-    chomp($slicename);
-    if ($pwname ne "emulabman" && $pwname ne $slicename) {
+    if ($pwname ne "emulabman" && !($pwname =~ /emulab_[-\@\w]*/) &&
+        !($pwname =~ /utah_[-\@\w]*/)) {
 	die("*** $0:\n".
 	    "    You do not have permission to run this script!\n");
     }
@@ -795,16 +794,8 @@ sub removeconfdir($)
 sub hackwaitandexit()
 {
     my $now   = time();
-    my $goofy;
+    my $goofy = CONFDIR() . "/root/var/run/emulab-watchdog.pid";
     my $count = 60;
-
-    # The first case is for our own (non-plab) vservers.
-    if (-e "/vservers") {
-	$goofy = "/vservers/$vnodeid/var/run/emulab-watchdog.pid";
-    }
-    else {
-	$goofy = CONFDIR() . "/root/var/run/emulab-watchdog.pid";
-    }
 	
     while ($count--) {
 	sleep(1);

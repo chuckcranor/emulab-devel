@@ -32,6 +32,6 @@ $ME     ALL=(ALL) NOPASSWD: ALL
 %root   ALL=(ALL) NOPASSWD: ALL
 EOF
 
-sudo install -c -m 440 $TMPSUDOERS /etc/sudoers
+su -c "install -c -m 440 $TMPSUDOERS /etc/sudoers"
 
 exit $?
