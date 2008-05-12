@@ -148,7 +148,8 @@ if (defined($options{"e"})) {
 if (defined($options{"x"})) {
     $do_xml = 1;
     print "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n";
-    print "<ptop testbed=\"@THISHOMEBASE@\">\n";
+    print "<ptop testbed=\"@THISHOMEBASE@\" "
+	. "xmlns=\"http://emulab.net/resources/ptop/0.1\">\n";
 }
 usage()
     if ($prune && !defined($exempt_eid));
@@ -1256,7 +1257,7 @@ sub print_named_link
     print "  </interface></destination_interface>\n";
     print "  <bandwidth>$bw</bandwidth>\n";
     print "  <latency>$delay</latency>\n";
-    print "  <loss>$loss</loss>\n";
+    print "  <packet_loss>$loss</packet_loss>\n";
     my $i = 0;
     for (; $i < $proto_count; ++$i) {
 	print "  <link_type><type_name>" . $_[$i] . "</type_name></link_type>\n";
