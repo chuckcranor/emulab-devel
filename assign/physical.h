@@ -37,8 +37,6 @@ using namespace __gnu_cxx;
 #include <hash_map>
 #endif
 
-#include "featuredesire.h"
-
 // Icky, but I can't include virtual.h here
 class tb_vnode;
 typedef hash_set<tb_vnode*,hashptr<tb_vnode*> > tb_vnode_set;
@@ -98,6 +96,10 @@ extern tb_pgraph_vertex_pmap pvertex_pmap;
 extern tb_pgraph_edge_pmap pedge_pmap;
 extern tb_sgraph_vertex_pmap svertex_pmap;
 extern tb_sgraph_edge_pmap sedge_pmap;
+
+// These are down here because forwarding.h need tb_pgraph and related types
+#include "featuredesire.h"
+#include "forwarding.h"
 
 /*
  * Represents a physical type
@@ -159,7 +161,7 @@ public:
 			  my_class(NULL), my_own_class(NULL), assigned_nodes(),
 			  trivial_bw(0), trivial_bw_used(0), subnode_of(NULL),
 			  subnode_of_name(""), has_subnode(false),
-			  unique(false), is_switch(false) {;}
+			  unique(false), is_switch(false), forwarding() {;}
 
   class type_record {
       public:
@@ -269,7 +271,11 @@ public:
 
   bool is_switch;		// Indicates whether or not this pnode is a
                                 // switch
-				//
+				// XXX: Should go away soon!
+				
+  forwarding_info forwarding;	// Records the set of protocols this node can
+                                // forward
+    
   link_type_count_map link_counts; // Counts how many links of each type this
   				   // node has 
 	
@@ -376,7 +382,12 @@ public:
 				// pnode endpoints
   nodepair_count_map vedge_counts; // list, and count, of all pairs of pnode
 				   // endpoints sharing this link
-				   
+
+  bool has_type(fstring type) const {	// Returns true if the given type is one
+				        // of the types supported by this link
+    return(types.find(type) != types.end());
+  }
+    
   friend ostream &operator<<(ostream &o, const tb_plink& link)
   {
     o << "tb_plink: " << link.name << " (" << &link << ")" << endl;
