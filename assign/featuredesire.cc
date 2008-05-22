@@ -8,7 +8,7 @@
  * featuredesire.cc - implementation of the objects from featuredesire.h
  */
 
-static const char rcsid[] = "$Id: featuredesire.cc,v 1.4.8.5 2008-03-28 23:18:42 ricci Exp $";
+static const char rcsid[] = "$Id: featuredesire.cc,v 1.4.8.6 2008-05-22 22:11:18 ricci Exp $";
 
 #include "featuredesire.h"
 #include "score.h"
@@ -22,6 +22,8 @@ using namespace std;
 tb_featuredesire::name_featuredesire_map
     tb_featuredesire::featuredesires_by_name;
 
+int tb_featuredesire::highest_id(0);
+
 /*
  * Constructor
  */
@@ -32,8 +34,7 @@ tb_featuredesire::tb_featuredesire(fstring _my_name) : my_name(_my_name),
 				    in_use_globally(0), desire_policy(),
 				    feature_policy(), desire_users(0),
 				    desire_total_weight(0.0f) { 
-    static int highest_id = 0;
-		
+  
     // Pick a unique numeric identifier for this feature/desire
     id = highest_id++;
 
@@ -82,6 +83,42 @@ tb_featuredesire::tb_featuredesire(fstring _my_name) : my_name(_my_name),
 }
 
 /*
+ * Alternate constuctor, including the type of the FD explicitly
+ */
+tb_featuredesire::tb_featuredesire(fstring _my_name,
+				   featuredesire::fd_type _fd_type) : 
+	global(false), local(false), l_additive(false), g_one_is_okay(false),
+	g_more_than_one(false), my_name(_my_name), in_use_globally(0),
+	desire_policy(), feature_policy(), desire_users(0),
+	desire_total_weight(0.0f) { 
+    // Pick a unique numeric identifier for this feature/desire
+    id = highest_id++;
+    // Determine the type of this feature/desire
+    switch (_fd_type) {
+	case featuredesire::FD_TYPE_NORMAL:
+	    break;
+	case featuredesire::FD_TYPE_LOCAL_ADDITIVE:
+	    local = true;
+	    l_additive = true;
+	    break;
+	case featuredesire::FD_TYPE_GLOBAL_ONE_IS_OKAY:
+	    global = true;
+	    g_one_is_okay = true;
+	    break;
+	case featuredesire::FD_TYPE_GLOBAL_MORE_THAN_ONE:
+	    global = true;
+	    g_more_than_one;
+    }
+	
+	
+    // Place this into the map for finding featuredesire objects by
+    // name
+    assert(featuredesires_by_name.find(my_name)
+	       == featuredesires_by_name.end());
+    featuredesires_by_name[my_name] = this;
+}	
+
+/*
  * Operators
  */
 ostream &operator<<(ostream &o, const tb_featuredesire &fd) {
@@ -94,14 +131,32 @@ ostream &operator<<(ostream &o, const tb_featuredesire &fd) {
 /*
  * Static functions
  */
-tb_featuredesire *tb_featuredesire::get_featuredesire_obj(const fstring name) {
+tb_featuredesire *tb_featuredesire::get_featuredesire_by_name(const fstring name) {
     name_featuredesire_map::iterator it =
 	featuredesires_by_name.find(name);
     if (it == featuredesires_by_name.end()) {
-	return new tb_featuredesire(name);
+	return NULL;
     } else {
 	return it->second;
     }
+}
+
+tb_featuredesire *tb_featuredesire::get_or_create_featuredesire(const fstring name) {
+    tb_featuredesire *fd_obj = get_featuredesire_by_name(name);
+    if (fd_obj == NULL) {
+	fd_obj = new tb_featuredesire(name);
+    }
+    return fd_obj;
+}
+
+tb_featuredesire *tb_featuredesire::get_or_create_featuredesire(const fstring name,
+						featuredesire::fd_type type) {
+    tb_featuredesire *fd_obj = get_featuredesire_by_name(name);
+    // TODO: Should probably check to make sure type is consistent
+    if (fd_obj == NULL) {
+	fd_obj = new tb_featuredesire(name,type);
+    }
+    return fd_obj;
 }
 
 /*
@@ -195,11 +250,22 @@ tb_node_featuredesire::tb_node_featuredesire(fstring _name, double _weight) :
 	weight(_weight), violateable(false), used_local_capacity(0.0f) {
     // We'll want to change in the in the future to seperate out the notions of
     // score and violations
-    if (weight >= FD_VIOLATION_WEIGHT) {
+    if (weight >= featuredesire::FD_VIOLATION_WEIGHT) {
 	violateable = true;
     }
-    featuredesire_obj = tb_featuredesire::get_featuredesire_obj(_name);
+    featuredesire_obj = tb_featuredesire::get_or_create_featuredesire(_name);
     assert(featuredesire_obj != NULL);
+}
+
+/*
+ * Alternate constructor
+ */
+tb_node_featuredesire::tb_node_featuredesire(fstring _name, double _weight,
+					     bool _violateable,
+					     featuredesire::fd_type _type):
+	weight(_weight), violateable(_violateable), used_local_capacity(0.0f) {
+    featuredesire_obj = tb_featuredesire::get_or_create_featuredesire(_name,
+								      _type);
 }
 
 /*

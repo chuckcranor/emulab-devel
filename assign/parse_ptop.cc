@@ -4,7 +4,7 @@
  * All rights reserved.
  */
 
-static const char rcsid[] = "$Id: parse_ptop.cc,v 1.41.6.4 2008-03-31 18:56:19 ricci Exp $";
+static const char rcsid[] = "$Id: parse_ptop.cc,v 1.41.6.5 2008-05-22 22:11:19 ricci Exp $";
 
 #include "port.h"
 
@@ -349,28 +349,30 @@ int parse_ptop(tb_pgraph &pg, tb_sgraph &sg, istream& input)
 		fstring desire = parsed_line[2];
 		fstring type = parsed_line[3];
 		tb_featuredesire *fd_obj =
-		tb_featuredesire::get_featuredesire_obj(desire);
-		if (type == "disallow") {
-		    fd_obj->disallow_desire();  
-		} else if (type == "limit") {
-		    if (parsed_line.size() != 5) {
-			ptop_error("Missing desire limit");
-		    } else {
-			double limit;
-			if (sscanf(parsed_line[4].c_str(),"%lf",&limit) != 1) {
-			    ptop_error("Malformed desire limit");
+		    tb_featuredesire::get_featuredesire_by_name(desire);
+		if (fd_obj != NULL) {
+		    if (type == "disallow") {
+			fd_obj->disallow_desire();  
+		    } else if (type == "limit") {
+			if (parsed_line.size() != 5) {
+			    ptop_error("Missing desire limit");
 			} else {
-			    fd_obj->limit_desire(limit);  
+			    double limit;
+			    if (sscanf(parsed_line[4].c_str(),"%lf",&limit)
+				    != 1) {
+				ptop_error("Malformed desire limit");
+			    } else {
+				fd_obj->limit_desire(limit);  
+			    }
 			}
+		    } else {
+			ptop_error("Unknown policy for desire");
 		    }
 		} else {
-		    ptop_error("Unknown policy for desire");
-		}
-	    } else {
 		ptop_error("Only desire policies are supported."); 
 	    }
 	}
-	
+	}
     } else {
       ptop_error("Unknown directive: " << command << ".");
     }

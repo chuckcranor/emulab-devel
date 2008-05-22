@@ -4,7 +4,7 @@
  * All rights reserved.
  */
 
-static const char rcsid[] = "$Id: parse_error_handler.cpp,v 1.1.2.1 2007-07-06 23:33:04 ricci Exp $";
+static const char rcsid[] = "$Id: parse_error_handler.cpp,v 1.1.2.2 2008-05-22 22:11:18 ricci Exp $";
 
 #include "parse_error_handler.h"
 
@@ -23,3 +23,4 @@ void ParseErrorHandler::fatalError(const SAXParseException& toCatch) {
     << "\n   Message: " << XStr(toCatch.getMessage()) << XERCES_STD_QUALIFIER endl;
     this->hadError = true;
 }
+ 

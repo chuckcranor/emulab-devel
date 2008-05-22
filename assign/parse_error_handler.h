@@ -29,7 +29,10 @@
 XERCES_CPP_NAMESPACE_USE
 
 #include <iostream>
+using namespace std;
+
 #include "xmlhelpers.h"
+#include "xstr.h"
 
 class ParseErrorHandler : public ErrorHandler {
 public:
