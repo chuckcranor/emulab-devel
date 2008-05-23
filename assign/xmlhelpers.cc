@@ -54,3 +54,19 @@ int parse_fds_xml(const DOMElement *tag, node_fd_set *fd_set) {
     }
     return fds->getLength();
 }
+
+/*
+ * TODO: Better error handling
+ */
+node_interface_pair parse_interface_xml(const DOMElement *tag) {
+    DOMNodeList *interface_list =
+	tag->getElementsByTagName(XStr("interface").x());
+    // XXX: Check that there is exactly one
+    DOMElement *interface_tag =
+	dynamic_cast<DOMElement*>(interface_list->item(0));
+    const XMLCh* node = getChildValue(interface_tag,"node_name");
+    const XMLCh* interface = getChildValue(interface_tag,"interface");
+    
+    node_interface_pair rv(node,interface);
+    return rv;
+}

@@ -37,4 +37,11 @@ bool hasChildTag(const DOMElement *tag, const char *name);
  */
 int parse_fds_xml(const DOMElement *tag, node_fd_set *fd_set);
 
+/*
+ * Get a node and interface name from an object containing an interface tag
+ * (such as a source_interface tag)
+ */
+typedef pair<const XMLCh*, const XMLCh*> node_interface_pair;
+node_interface_pair parse_interface_xml(const DOMElement *tag);
+
 #endif
