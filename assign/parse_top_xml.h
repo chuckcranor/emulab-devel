@@ -28,10 +28,6 @@
 #include <xercesc/sax2/XMLReaderFactory.hpp>
 XERCES_CPP_NAMESPACE_USE
 
-/*
- * Our error reporter - this gets called if the parser runs into any errors
- * while inside the parse() function.
- */
 int parse_top_xml(tb_vgraph &VG, char* filename);
 
 #endif

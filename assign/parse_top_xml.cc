@@ -4,7 +4,7 @@
  * All rights reserved.
  */
 
-static const char rcsid[] = "$Id: parse_top_xml.cc,v 1.3.8.4 2007-07-13 22:02:15 ricci Exp $";
+static const char rcsid[] = "$Id: parse_top_xml.cc,v 1.3.8.5 2008-05-23 00:37:42 ricci Exp $";
 
 #include "port.h"
 
@@ -28,6 +28,7 @@ using namespace boost;
 #include "string.h"
 #include "parse_top_xml.h"
 #include "xmlhelpers.h"
+#include "xstr.h"
 #include "parse_error_handler.h"
 
 extern name_vvertex_map vname2vertex;
@@ -129,8 +130,8 @@ int parse_top_xml(tb_vgraph &vg, char* filename) {
 	DOMNode *node = nodes->item(i);
 	DOMNamedNodeMap *atts = node->getAttributes();
 	XStr *xstr = new XStr(atts->getNamedItem(XStr("name").x())->getNodeValue());
-	fstring *name = xstr->f();
-	XMLDEBUG(cerr << "Node name is: " << *name << endl);
+	fstring name = xstr->f();
+	XMLDEBUG(cerr << "Node name is: " << name << endl);
 	cerr << "XML node name is: " << XStr(node->getNodeName()) << endl;
 	cerr << "XML node type is: " << node->getNodeType() << endl;
 	
@@ -148,9 +149,9 @@ int parse_top_xml(tb_vgraph &vg, char* filename) {
 	//DOMElement *type = (DOMElement *)(typeL->item(0));
 	const XMLCh *typeX = type->getFirstChild()->getNodeValue();
 	
-	tb_vnode *v = new tb_vnode(*name,XStr(typeX).c(),1);
+	tb_vnode *v = new tb_vnode(name,XStr(typeX).c(),1);
 	vvertex vv = add_vertex(vg);
-	vname2vertex[*name] = vv;
+	vname2vertex[name] = vv;
 	virtual_nodes.push_back(vv);
 	put(vvertex_pmap,vv,v);
 	
@@ -164,7 +165,7 @@ int parse_top_xml(tb_vgraph &vg, char* filename) {
 	DOMNode *link = links->item(i);
 	DOMNamedNodeMap *atts = link->getAttributes();
 	XStr *xstr = new XStr(atts->getNamedItem(XStr("name").x())->getNodeValue());
-	fstring *name = xstr->f();
+	fstring name = xstr->f();
 	cerr << "Link name is: " << name << endl;
 	delete xstr;
     }
