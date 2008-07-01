@@ -370,12 +370,17 @@ class PLCagent:
     def AuthCheck(self):
         return self.__server.AuthCheck(self.auth)
 
-    def SliceAddAttribute(self,attrname,attrvalue):
+    def SliceAddAttribute(self,attrname,attrvalue,node=None):
         if attrname == None or attrvalue == None \
            or attrname == '' or attrvalue == '':
             return 0
-        return self.__server.AddSliceAttribute(self.auth,self.slicename,
-                                               attrname,attrvalue)
+        if node:
+            return self.__server.AddSliceAttribute(self.auth,self.slicename,
+                                                   attrname,attrvalue,node)
+        else:
+            return self.__server.AddSliceAttribute(self.auth,self.slicename,
+                                                   attrname,attrvalue)
+        pass
 
     def SiteAdd(self,name,url,longitude,latitude):
         return self.__server.AddSite(self.auth,
@@ -731,7 +736,30 @@ class mod_PLC4:
                       % slice.slicename
                 raise
             pass
-        
+
+        # Allow slice attributes to be set "generically" via the db
+        # Also see below where we add slice attributes on a per-node basis
+        sas = self.plc.getAttrVal("slice_attributes",required=False)
+        if sas:
+            try:
+                kvpairs = sas.split(',')
+                for kvp in kvpairs:
+                    (k,v) = kvp.split(':',1)
+
+                    res = tryXmlrpcCmd(agent.SliceAddAttribute,(k,v),
+                                       OKstrs = ['Slice attribute already exists'])
+                    if debug:
+                        print "SliceAddAttribute(%s,%s) result: %s" \
+                              % (str(k),str(v),res)
+                        pass
+                    pass
+                pass
+            except:
+                print "Failed to set slice attribute %s=%s on slice %s" \
+                      % (str(k),str(v),slice.slicename)
+                raise
+            pass
+
         try:
             userlist = slice.getSliceUsers()
             # XXX: we might not always want to add emulabman
@@ -779,6 +807,12 @@ class mod_PLC4:
         except:
             print "Failed to add nodes to slice %s" % slice.slicename
             raise
+
+        # add any per-node or per-nodegroup attributes:
+        #
+        # XXX: will not work as above -- need to fix above and add this
+        # code in a way that works with the plab_attributes table.
+        #
 
         # XXX: this is currently locked out to pi/user roles, although the docs
         # say otherwise, so we can't use it automatically yet.
@@ -854,6 +888,10 @@ class mod_PLC4:
         pass
 
     def renewSlice(self, slice, force = False):
+        """
+        Returns -1 if did not need to renew; 0 if renew succeeded;
+        1 if renew failed.
+        """
         agent = self.__getAgent(slice.slicename)
         ret = 0
         now = int(time.time()) # seconds since the epoch (UTC)
@@ -897,7 +935,7 @@ class mod_PLC4:
         if leaseend - now > MIN_LEASE_WINDOW and not force:
             print "Slice %s (%s/%s) doesn't need to be renewed" % \
                   (slice.slicename, slice.pid, slice.eid)
-            return 1
+            return -1
 
         # Max out leaseend as far as (politically) possible
         newleaseend = now + MAX_PLC_LEASELEN
@@ -917,7 +955,7 @@ class mod_PLC4:
             slice.slicemeta = self.getSliceMeta(slice)
             slice.slicemeta_legacy = None
 
-            ret = 1
+            ret = 0
             if debug:
                 print "SliceRenew returns: %s" % res
                 pass
@@ -925,7 +963,7 @@ class mod_PLC4:
         except:
             print "Failed to renew lease for slice %s" % slice.slicename
             traceback.print_exc()
-            ret = 0
+            ret = 1
             pass
         else:
             slice.leaseend = newleaseend
@@ -1008,6 +1046,11 @@ class mod_PLC4:
 
     def createNode(self, node):
         plcagent = self.__getAgent(node.slice.slicename)
+
+        if debug:
+            print "createNode for node %s (%s/%s) starting" \
+                  % (str(node.nodeid),str(node.hostname),str(node.IP))
+            pass
 
         ticketdata = cPickle.loads(node.slice.slicemeta)
         node.nmagent = NM4agent(node.IP,node.nodeid,self.nmuid,self.nmkey)

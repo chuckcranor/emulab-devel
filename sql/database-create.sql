@@ -365,6 +365,7 @@ CREATE TABLE `deleted_users` (
   `usr_name` tinytext,
   `usr_title` tinytext,
   `usr_affil` tinytext,
+  `usr_affil_abbrev` varchar(16) default NULL,
   `usr_email` tinytext,
   `usr_URL` tinytext,
   `usr_addr` tinytext,
@@ -440,6 +441,59 @@ CREATE TABLE `emulab_indicies` (
   `name` varchar(64) NOT NULL default '',
   `idx` int(10) unsigned NOT NULL default '0',
   PRIMARY KEY  (`name`)
+) ENGINE=MyISAM DEFAULT CHARSET=latin1;
+
+--
+-- Table structure for table `emulab_pubs`
+--
+
+DROP TABLE IF EXISTS `emulab_pubs`;
+CREATE TABLE `emulab_pubs` (
+  `idx` int(10) unsigned NOT NULL auto_increment,
+  `uuid` varchar(40) NOT NULL,
+  `created` datetime NOT NULL,
+  `owner` mediumint(8) unsigned NOT NULL,
+  `submitted_by` mediumint(8) unsigned NOT NULL,
+  `last_edit` datetime NOT NULL,
+  `last_edit_by` mediumint(8) unsigned NOT NULL,
+  `type` tinytext NOT NULL,
+  `authors` tinytext NOT NULL,
+  `affil` tinytext NOT NULL,
+  `title` tinytext NOT NULL,
+  `conf` tinytext NOT NULL,
+  `conf_url` tinytext NOT NULL,
+  `where` tinytext NOT NULL,
+  `year` tinytext NOT NULL,
+  `month` float(3,1) NOT NULL,
+  `volume` tinytext NOT NULL,
+  `number` tinytext NOT NULL,
+  `pages` tinytext NOT NULL,
+  `url` tinytext NOT NULL,
+  `evaluated_on_emulab` tinytext NOT NULL,
+  `category` tinytext NOT NULL,
+  `project` tinytext NOT NULL,
+  `cite_osdi02` tinyint(1) default NULL,
+  `no_cite_why` tinytext NOT NULL,
+  `notes` text NOT NULL,
+  `visible` tinyint(1) NOT NULL default '1',
+  `deleted` tinyint(1) NOT NULL default '0',
+  `editable_owner` tinyint(1) NOT NULL default '1',
+  `editable_proj` tinyint(1) NOT NULL default '1',
+  PRIMARY KEY  (`idx`),
+  UNIQUE KEY `uuid` (`uuid`)
+) ENGINE=MyISAM DEFAULT CHARSET=latin1;
+
+--
+-- Table structure for table `emulab_pubs_month_map`
+--
+
+DROP TABLE IF EXISTS `emulab_pubs_month_map`;
+CREATE TABLE `emulab_pubs_month_map` (
+  `display_order` int(10) unsigned NOT NULL auto_increment,
+  `month` float(3,1) NOT NULL,
+  `month_name` char(8) NOT NULL,
+  PRIMARY KEY  (`month`),
+  UNIQUE KEY `display_order` (`display_order`)
 ) ENGINE=MyISAM DEFAULT CHARSET=latin1;
 
 --
@@ -1441,9 +1495,11 @@ CREATE TABLE `interfaces` (
   `rtabid` smallint(5) unsigned NOT NULL default '0',
   `vnode_id` varchar(32) default NULL,
   `whol` tinyint(4) NOT NULL default '0',
+  `uuid` varchar(40) NOT NULL default '',
   PRIMARY KEY  (`node_id`,`card`,`port`),
   KEY `mac` (`mac`),
-  KEY `IP` (`IP`)
+  KEY `IP` (`IP`),
+  KEY `uuid` (`uuid`)
 ) ENGINE=MyISAM DEFAULT CHARSET=latin1;
 
 --
@@ -2171,6 +2227,7 @@ CREATE TABLE `nodes` (
   `destination_y` float default NULL,
   `destination_orientation` float default NULL,
   `reserved_pid` varchar(12) default NULL,
+  `uuid` varchar(40) NOT NULL default '',
   PRIMARY KEY  (`node_id`),
   KEY `phys_nodeid` (`phys_nodeid`),
   KEY `node_id` (`node_id`,`phys_nodeid`),
@@ -2212,6 +2269,36 @@ DROP TABLE IF EXISTS `nologins`;
 CREATE TABLE `nologins` (
   `nologins` tinyint(4) NOT NULL default '0',
   PRIMARY KEY  (`nologins`)
+) ENGINE=MyISAM DEFAULT CHARSET=latin1;
+
+--
+-- Table structure for table `nonlocal_user_bindings`
+--
+
+DROP TABLE IF EXISTS `nonlocal_user_bindings`;
+CREATE TABLE `nonlocal_user_bindings` (
+  `uid` varchar(8) NOT NULL default '',
+  `uid_idx` mediumint(8) unsigned NOT NULL default '0',
+  `exptidx` int(11) NOT NULL default '0',
+   PRIMARY KEY  (`uid_idx`),
+   KEY `uid` (`uid`)
+) ENGINE=MyISAM DEFAULT CHARSET=latin1;
+
+--
+-- Table structure for table `nonlocal_users`
+--
+
+DROP TABLE IF EXISTS `nonlocal_users`;
+CREATE TABLE `nonlocal_users` (
+  `uid` varchar(8) NOT NULL default '',
+  `uid_idx` mediumint(8) unsigned NOT NULL default '0',
+  `uid_uuid` varchar(40) NOT NULL default '',
+  `created` datetime default NULL,
+  `name` tinytext,
+  `email` tinytext,
+   PRIMARY KEY  (`uid_idx`),
+   KEY `uid` (`uid`),
+   UNIQUE KEY `uid_uuid` (`uid_uuid`)
 ) ENGINE=MyISAM DEFAULT CHARSET=latin1;
 
 --
@@ -2878,6 +2965,7 @@ CREATE TABLE `reserved` (
   `plab_role` enum('plc','node','none') NOT NULL default 'none',
   `plab_boot` tinyint(1) default '0',
   `mustwipe` tinyint(4) NOT NULL default '0',
+  `genisliver_idx` int(10) unsigned default NULL,
   PRIMARY KEY  (`node_id`),
   UNIQUE KEY `vname` (`pid`,`eid`,`vname`),
   UNIQUE KEY `vname2` (`exptidx`,`vname`),
@@ -3206,7 +3294,13 @@ CREATE TABLE `user_sslcerts` (
   `privkey` text,
   `created` datetime default NULL,
   `encrypted` tinyint(1) NOT NULL default '0',
-  PRIMARY KEY  (`idx`)
+  `status` enum('valid','revoked','expired') default 'valid',
+  `orgunit` tinytext,
+  `revoked` datetime default NULL,
+  `password` tinytext,
+  PRIMARY KEY  (`idx`),
+  KEY `uid` (`uid`),
+  KEY `uid_idx` (`uid_idx`)
 ) ENGINE=MyISAM DEFAULT CHARSET=latin1;
 
 --
@@ -3255,6 +3349,7 @@ CREATE TABLE `users` (
   `usr_name` tinytext,
   `usr_title` tinytext,
   `usr_affil` tinytext,
+  `usr_affil_abbrev` varchar(16) default NULL,
   `usr_email` tinytext,
   `usr_URL` tinytext,
   `usr_addr` tinytext,

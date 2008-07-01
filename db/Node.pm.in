@@ -100,6 +100,7 @@ sub Lookup($$)
 # accessors
 sub field($$)  { return ((! ref($_[0])) ? -1 : $_[0]->{'DBROW'}->{$_[1]}); }
 sub node_id($)       { return field($_[0], 'node_id'); }
+sub uuid($)          { return field($_[0], 'uuid'); }
 sub type($)          { return field($_[0], 'type'); }
 sub eventstate($)    { return field($_[0], 'eventstate'); }
 sub jailflag($)      { return field($_[0], 'jailflag'); }
@@ -407,6 +408,47 @@ sub AllocCheck($$)
     my ($self, $pid) = @_;
 
     return $self->NodeAllocCheck($pid);
+}
+
+#
+# Set alloc state for a node.
+#
+sub SetAllocState($$)
+{
+    my ($self, $state) = @_;
+
+    return -1
+	if (! (ref($self)));
+    
+    my $now = time();
+    my $node_id = $self->node_id();
+    
+    DBQueryWarn("update nodes set allocstate='$state', " .
+		"    allocstate_timestamp=$now where node_id='$node_id'")
+	or return -1;
+
+    return Refresh($self);
+}
+
+#
+# Get alloc state for a node.
+#
+sub GetAllocState($$)
+{
+    my ($self, $pref) = @_;
+
+    return -1
+	if (! (ref($self) && ref($pref)));
+    
+    my $allocstate = $self->allocstate();
+    
+    if (defined($allocstate)) {
+	$$pref = $allocstate;
+    }
+    else {
+	$$pref = TBDB_ALLOCSTATE_UNKNOWN;
+    }
+    return 0;
 }
 
 #
@@ -1153,6 +1195,12 @@ sub CreateVnodes($$)
 	return -1;
     }
 
+    my $uuid = NewUUID();
+    if (!defined($uuid)) {
+	print "Could not generate a UUID!\n";
+	next NODE;
+    }
+    
     #
     # Assign however many we are told to (typically by assign). Locally
     # this is not a problem since nodes are not shared; assign always
@@ -1238,6 +1286,7 @@ sub CreateVnodes($$)
 	my $statement =
 	         "insert into nodes set ".
 		 "       node_id='$vnodeid', " .
+		 "       uuid='$uuid', " .
 		 "       type='$vtype', ".
 		 "       phys_nodeid='$pnode', ".
 		 "       role='virtnode', " .

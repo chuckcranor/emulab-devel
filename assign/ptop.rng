@@ -36,16 +36,15 @@ the ptop file directly</a:documentation>
 federation</a:documentation>
       </attribute>
       <zeroOrMore>
-        <ref name="NodeSpec">
-          <a:documentation>Nodes in the topology - zero or more</a:documentation>
-        </ref>
+        <choice>
+          <a:documentation>Nodes in the topology - zero or more
+Links in the topology - zero or more</a:documentation>
+          <ref name="NodeSpec"/>
+          <ref name="LinkSpec"/>
+        </choice>
       </zeroOrMore>
       <zeroOrMore>
-        <ref name="LinkSpec">
-          <a:documentation>Links in the topology - zero or more</a:documentation>
-        </ref>
-      </zeroOrMore>
-      <zeroOrMore>
+        <!--    LinkSpec*, -->
         <ref name="TypeLimitSpec">
           <a:documentation>Any limits on how many nodes of a particular type this experiment can
 use.</a:documentation>

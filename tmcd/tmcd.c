@@ -1663,6 +1663,12 @@ COMMAND_PROTOTYPE(doifconfig)
 			else if (strcmp(row[6], "vlan") == 0)
 				tag = row[9];
 
+			/* sanity check the tag */
+			if (!isdigit(tag[0])) {
+				error("IFCONFIG: bogus encap tag '%s'\n", tag);
+				tag = "0";
+			}
+
 			bufp += OUTPUT(bufp, ebufp - bufp, " VTAG=%s", tag);
 		}
 
@@ -1855,7 +1861,7 @@ COMMAND_PROTOTYPE(doaccounts)
 				 "  p.trust,g.pid,g.gid,g.unix_gid,u.admin, "
 				 "  u.emulab_pubkey,u.home_pubkey, "
 				 "  UNIX_TIMESTAMP(u.usr_modified), "
-				 "  u.usr_email,u.usr_shell "
+				 "  u.usr_email,u.usr_shell,u.uid_idx "
 				 "from group_membership as p "
 				 "join users as u on p.uid_idx=u.uid_idx "
 				 "join groups as g on p.pid=g.pid "
@@ -1863,7 +1869,7 @@ COMMAND_PROTOTYPE(doaccounts)
 				 "      and u.webonly=0 "
                                  "      and g.unix_id is not NULL "
 				 "      and u.status='active' order by u.uid",
-				 14, reqp->pid, reqp->gid);
+				 15, reqp->pid, reqp->gid);
 	}
 	else if (nodetypeprojects) {
 		/*
@@ -1878,7 +1884,7 @@ COMMAND_PROTOTYPE(doaccounts)
 				 "UNIX_TIMESTAMP(u.usr_modified), "
 				 "u.usr_email,u.usr_shell, "
 				 "u.widearearoot,u.wideareajailroot, "
-				 "u.usr_w_pswd "
+				 "u.usr_w_pswd,u.uid_idx "
 				 "from projects as p "
 				 "join group_membership as m on "
 				 "     m.pid_idx=p.pid_idx "
@@ -1898,7 +1904,7 @@ COMMAND_PROTOTYPE(doaccounts)
 				 "    where n.node_id='%s' and "
 				 "    na.attrkey='project_accounts')) > 0) "
 				 "order by u.uid",
-				 17, reqp->nodeid);
+				 18, reqp->nodeid);
 	}
 	else if (reqp->islocal || reqp->isvnode) {
 		/*
@@ -1921,7 +1927,7 @@ COMMAND_PROTOTYPE(doaccounts)
 				 "  UNIX_TIMESTAMP(u.usr_modified), "
 				 "  u.usr_email,u.usr_shell, "
 				 "  u.widearearoot,u.wideareajailroot, "
-				 "  u.usr_w_pswd "
+				 "  u.usr_w_pswd,u.uid_idx "
 				 "from group_membership as p "
 				 "join users as u on p.uid_idx=u.uid_idx "
 				 "join groups as g on "
@@ -1932,7 +1938,7 @@ COMMAND_PROTOTYPE(doaccounts)
 				 "      %s "
                                  "      and g.unix_gid is not NULL "
 				 "order by u.uid",
-				 17, reqp->pid, adminclause);
+				 18, reqp->pid, adminclause);
 	}
 	else if (reqp->jailflag) {
 		/*
@@ -1946,7 +1952,7 @@ COMMAND_PROTOTYPE(doaccounts)
 			     "  UNIX_TIMESTAMP(u.usr_modified), "
 			     "  u.usr_email,u.usr_shell, "
 			     "  u.widearearoot,u.wideareajailroot, "
-			     "  u.usr_w_pswd "
+			     "  u.usr_w_pswd,u.uid_idx "
 			     "from group_membership as p "
 			     "join users as u on p.uid_idx=u.uid_idx "
 			     "join groups as g on "
@@ -1954,7 +1960,7 @@ COMMAND_PROTOTYPE(doaccounts)
 			     "where (p.pid='%s') and p.trust!='none' "
 			     "      and u.status='active' and u.admin=1 "
 			     "      order by u.uid",
-			     17, RELOADPID);
+			     18, RELOADPID);
 	}
 	else {
 		/*
@@ -2006,7 +2012,7 @@ COMMAND_PROTOTYPE(doaccounts)
 				 "UNIX_TIMESTAMP(u.usr_modified), "
 				 "u.usr_email,u.usr_shell, "
 				 "u.widearearoot,u.wideareajailroot, "
-				 "u.usr_w_pswd "
+				 "u.usr_w_pswd,u.uid_idx "
 				 "from projects as p "
 				 "join group_membership as m "
 				 "  on m.pid=p.pid "
@@ -2021,7 +2027,7 @@ COMMAND_PROTOTYPE(doaccounts)
                                  "      and g.unix_gid is not NULL "
 				 "      and u.status='active' "
 				 "order by u.uid",
-				 17, subclause);
+				 18, subclause);
 	}
 
 	if (!res) {
@@ -2227,8 +2233,8 @@ COMMAND_PROTOTYPE(doaccounts)
 		 */
 		pubkeys_res = mydb_query("select idx,pubkey "
 					 " from user_pubkeys "
-					 "where uid='%s'",
-					 2, row[0]);
+					 "where uid_idx='%s'",
+					 2, row[17]);
 	
 		if (!pubkeys_res) {
 			error("ACCOUNTS: %s: DB Error getting keys\n", row[0]);
@@ -2294,8 +2300,8 @@ COMMAND_PROTOTYPE(doaccounts)
 		 */
 		sfskeys_res = mydb_query("select comment,pubkey "
 					 " from user_sfskeys "
-					 "where uid='%s'",
-					 2, row[0]);
+					 "where uid_idx='%s'",
+					 2, row[17]);
 
 		if (!sfskeys_res) {
 			error("ACCOUNTS: %s: DB Error getting SFS keys\n", row[0]);
@@ -4311,7 +4317,16 @@ iptonodeid(struct in_addr ipaddr, tmcdreq_t *reqp)
 				 " nk.node_id=n.node_id "
 				 "left join users as u on "
 				 " u.uid_idx=e.swapper_idx "
-				 "where i.IP='%s' and i.role='ctrl'", /*XXX*/
+				 "left outer join "
+				 "  (select type,attrvalue "
+				 "    from node_type_attributes "
+				 "    where attrkey='nobootinfo' "
+				 "      and attrvalue='1' "
+				 "     group by type) as nobootinfo_types "
+				 "  on n.type=nobootinfo_types.type "
+				 "where i.IP='%s' and i.role='ctrl' "
+				 "  and nobootinfo_types.attrvalue is NULL",
+				 /*XXX*/
 				 29, inet_ntoa(ipaddr));
 	}
 

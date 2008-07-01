@@ -16,9 +16,14 @@ use vars qw(@ISA @EXPORT);
 # Must come after package declaration!
 use lib '@prefix@/lib';
 use GeniDB;
+use GeniCHClient;
+use GeniAuthority;
+use GeniCredential;
+use GeniCertificate;
 use libtestbed;
 # Hate to import all this crap; need a utility library.
 use libdb qw(TBGetUniqueIndex);
+use Experiment;
 use English;
 use overload ('""' => 'Stringify');
 use vars qw();
@@ -53,32 +58,47 @@ sub Lookup($$)
 {
     my ($class, $token) = @_;
     my $query_result;
-
-    # Look in cache first
-    return $slices{"$token"}
-        if (exists($slices{"$token"}));
+    my $idx;
 
     if ($token =~ /^\d+$/) {
-	$query_result =
-	    DBQueryWarn("select * from geni_slices ".
-			"where idx='$token' and status='active'");
+	$idx = $token;
     }
     elsif ($token =~ /^\w+\-\w+\-\w+\-\w+\-\w+$/) {
 	$query_result =
-	    DBQueryWarn("select * from geni_slices ".
+	    DBQueryWarn("select idx from geni_slices ".
 			"where uuid='$token'");
+	    return undef
+		if (! $query_result || !$query_result->numrows);
+
+	    ($idx) = $query_result->fetchrow_array();
     }
     else {
 	return undef;
     }
     
+    # Look in cache first
+    return $slices{"$idx"}
+        if (exists($slices{"$idx"}));
+
+    $query_result =
+	DBQueryWarn("select * from geni_slices where idx='$idx'");
     return undef
 	if (!$query_result || !$query_result->numrows);
 
     my $self         = {};
     $self->{'SLICE'} = $query_result->fetchrow_hashref();
-
     bless($self, $class);
+
+    #
+    # Grab the certificate, since we will probably want it.
+    #
+    my $uuid = $self->{'SLICE'}->{'uuid'};
+    my $certificate = GeniCertificate->Lookup($uuid);
+    if (!defined($certificate)) {
+	print STDERR "Could not find certificate for slice $idx ($uuid)\n";
+	return undef;
+    }
+    $self->{'CERT'} = $certificate;
     
     # Add to cache. 
     $slices{$self->{'SLICE'}->{'idx'}} = $self;
@@ -86,14 +106,15 @@ sub Lookup($$)
     return $self;
 }
 # accessors
-sub field($$) { return ((! ref($_[0])) ? -1 : $_[0]->{'USER'}->{$_[1]}); }
+sub field($$) { return ((! ref($_[0])) ? -1 : $_[0]->{'SLICE'}->{$_[1]}); }
 sub idx($)		{ return field($_[0], "idx"); }
 sub hrn($)		{ return field($_[0], "hrn"); }
 sub uuid($)		{ return field($_[0], "uuid"); }
 sub creator_uuid($)	{ return field($_[0], "creator_uuid"); }
 sub created($)		{ return field($_[0], "created"); }
 sub sa_idx($)		{ return field($_[0], "sa_idx"); }
-
+sub cert($)		{ return $_[0]->{'CERT'}->cert(); }
+sub GetCertificate($)   { return $_[0]->{'CERT'}; }
 #
 # Stringify for output.
 #
@@ -129,11 +150,11 @@ sub CheckExisting($$$)
 }
 
 #
-# Class function to create new Geni slice and return object.
+# Class function to create new Geni slice and return the object.
 #
-sub Create($$$$)
+sub Create($$$$$$)
 {
-    my ($class, $hrn, $uuid, $creator_uuid, $sa_idx) = @_;
+    my ($class, $hrn, $uuid, $creator_uuid, $cert, $sa_idx) = @_;
     my @insert_data = ();
 
     # Every slice gets a new unique index.
@@ -142,6 +163,7 @@ sub Create($$$$)
     # Now tack on other stuff we need.
     push(@insert_data, "created=now()");
     push(@insert_data, "idx='$idx'");
+    push(@insert_data, "sa_idx='$sa_idx'");
 
     my $safe_hrn   = DBQuoteSpecial($hrn);
     my $safe_uuid  = DBQuoteSpecial($uuid);
@@ -149,6 +171,15 @@ sub Create($$$$)
     push(@insert_data, "hrn=$safe_hrn");
     push(@insert_data, "uuid=$safe_uuid");
     push(@insert_data, "creator_uuid=$safe_cuuid");
+
+    # Insert certificate.
+    if (defined($cert)) {
+	my $certificate = GeniCertificate->StorePublic($cert);
+	if (!defined($certificate)) {
+	    print STDERR "Could not store certificate for new user\n";
+	    return undef;
+	}
+    }
 
     # Insert into DB.
     DBQueryWarn("insert into geni_slices set " . join(",", @insert_data))
@@ -158,19 +189,147 @@ sub Create($$$$)
 }
 
 #
+# Class function to create new Geni slice from a local experiment.
+# We want to create the key pair so that we can sign credentials.
+#
+sub CreateFromLocal($$)
+{
+    my ($class, $experiment, $user) = @_;
+
+    # XXX Form hrn from the uid and domain. This is backwards.
+    my $hrn = $OURDOMAIN . "." . $experiment->pid() . "." . $experiment->eid();
+    my $uuid = $experiment->uuid();
+    my $creator_uuid = $user->uuid();
+
+    # Set the sa_idx to zero to indicate a local slice.
+    my $sa_idx = 0;
+
+    #
+    # Generate a certificate pair, capturing the certificate to store in
+    # the DB so we have ready access to it.
+    #
+    my $certificate = GeniCertificate->Create("slice", $uuid);
+    if (!defined($certificate)) {
+	print STDERR "Could not create certificate for slice.\n";
+	return undef;
+    }
+    return GeniSlice->Create($hrn, $uuid, $creator_uuid, undef, $sa_idx);
+}
+
+#
+# Register a local slice at the clearinghouse;
+#
+sub Register($)
+{
+    my ($self) = @_;
+
+    return -1
+	if (! ref($self));
+
+    GeniCHClient::RegisterSlice($self->hrn(), $self->uuid(),
+				$self->creator_uuid(), $self->cert())
+	== 0 or return -1;
+    
+    return 0;
+}
+
+#
+# Create a slice from the ClearingHouse, by looking up the info.
+#
+sub CreateFromRegistry($$)
+{
+    my ($class, $slice_uuid) = @_;
+
+    my $blob;
+    return undef
+	if (GeniCHClient::LookupSlice($slice_uuid, \$blob) != 0);
+
+    my $authority = GeniAuthority->Lookup($blob->{'sa'}->{'uuid'});
+    if (!defined($authority)) {
+	$authority = GeniAuthority->Create($blob->{'sa'}->{'uuid'},
+					   $blob->{'sa'}->{'hrn'},
+					   $blob->{'sa'}->{'url'},
+					   $blob->{'sa'}->{'cert'},
+					   $blob->{'sa'}->{'uuid_prefix'});
+	if (!defined($authority)) {
+	    print STDERR "Could not create new authority record\n";
+	    return undef;
+	}
+    }
+    return GeniSlice->Create($blob->{'hrn'},
+			     $blob->{'uuid'},
+			     $blob->{'creator_uuid'},
+			     $blob->{'cert'}, $authority->idx());
+}
+
+#
+# Discover resources for a local slice. We do not worry about the experiment
+# yet, since we do not have a resource discovery service. We get back a list
+# of components.
+#
+sub DiscoverResources($$)
+{
+    my ($self, $pref) = @_;
+
+    return -1
+	if (! ref($self));
+
+    GeniCHClient::DiscoverResources($self, $pref) == 0
+	or return -1;
+    
+    return 0;
+}
+
+#
 # Delete the slice, as for registration errors.
 #
 sub Delete($)
 {
     my ($self) = @_;
 
-    return 0
+    return -1
 	if (! ref($self));
 
-    my $idx = $self->idx();
+    my $idx  = $self->idx();
+    my $uuid = $self->uuid();
+    my $experiment = $self->GetExperiment();
+    return -1
+	if (!defined($experiment));
+    $experiment->UnBindNonLocalUsers();
 
+    DBQueryWarn("delete from geni_certificates where uuid='$uuid'")
+	or return -1;
     DBQueryWarn("delete from geni_slices where idx='$idx'")
 	or return -1;
+    
+    return 0;
+}
+
+#
+# Return the emulab experiment for this slice.
+#
+sub GetExperiment($)
+{
+    my ($self) = @_;
+
+    return undef
+	if (!ref($self));
+
+    return Experiment->Lookup($self->uuid());
+}
+
+#
+# Check if the given SA is the actual SA for the slice.
+#
+sub IsSliceAuthority($$)
+{
+    my ($self, $authority) = @_;
+
+    return 0
+	if (! (ref($self) && ref($authority)));
+
+    return 1
+	if ($self->sa_idx() == $authority->idx());
     
     return 0;
 }

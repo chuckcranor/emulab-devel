@@ -6,6 +6,7 @@
 #
 include("defs.php3");
 include_once("template_defs.php");
+include_once("pub_defs.php");
 
 #
 # Note the difference with which this page gets it arguments!
@@ -97,6 +98,17 @@ if ($isadmin) {
     ob_end_clean();
 }
 
+$papers_html = null;
+if ($PUBSUPPORT) {
+    #
+    # List papers for this project if any
+    #
+    $query_result = GetPubs("`project` = \"$pid\"");
+    if (mysql_num_rows($query_result)) {
+	$papers_html = MakeBibList($this_user, $isadmin, $query_result);
+    }
+}
+
 #
 # Show number of PCS
 #
@@ -182,6 +194,12 @@ if ($isadmin && $stats_html) {
 	      "id=\"li_stats\" onclick=\"Show('stats');\">".
               "Project Stats</a></li>\n";
 }
+if ($papers_html) {
+    echo "<li>
+          <a href=\"#G\" class=topnavbar onfocus=\"this.hideFocus=true;\" ".
+	      "id=\"li_papers\" onclick=\"Show('papers');\">".
+              "Publications</a></li>\n";
+}
 echo "</ul>\n";
 echo "</div>\n";
 echo "<div align=center id=topnavbarbottom>&nbsp</div>\n";
@@ -201,6 +219,9 @@ if ($members_html) {
 echo "<div class=invisible id=\"div_profile\">$profile_html</div>";
 if ($isadmin && $stats_html) {
     echo "<div class=invisible id=\"div_stats\">$stats_html</div>";
+}
+if ($papers_html) {
+     echo "<div class=invisible id=\"div_papers\">$papers_html</div>";
 }
 SUBPAGEEND();
 

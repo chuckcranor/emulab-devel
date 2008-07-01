@@ -155,6 +155,7 @@ AC_SUBST(OUTERBOSS_NODENAME)
 AC_SUBST(OUTERBOSS_XMLRPCPORT)
 AC_SUBST(OUTERBOSS_SSLCERTNAME)
 AC_SUBST(PLABSUPPORT)
+AC_SUBST(PUBSUPPORT)
 AC_SUBST(WIKISUPPORT)
 AC_SUBST(MAILMANSUPPORT)
 AC_SUBST(BUGDBSUPPORT)
@@ -256,6 +257,7 @@ OUTERBOSS_NODENAME=""
 OUTERBOSS_XMLRPCPORT=3069
 OUTERBOSS_SSLCERTNAME="/etc/outer_emulab.pem"
 PLABSUPPORT=0
+PUBSUPPORT=0
 WIKISUPPORT=0
 BUGDBSUPPORT=0
 OPSDBSUPPORT=0
@@ -849,6 +851,7 @@ outfiles="$outfiles Makeconf GNUmakefile \
 	tbsetup/mkproj tbsetup/libtestbed.pm \
 	tbsetup/portstats tbsetup/vnode_setup tbsetup/staticroutes \
 	tbsetup/console_setup.proxy tbsetup/exports_setup.proxy \
+	tbsetup/smbpasswd_setup.proxy \
 	tbsetup/checkports tbsetup/libaudit.pm \
 	tbsetup/libreboot.pm tbsetup/libosload.pm tbsetup/libadminmfs.pm \
 	tbsetup/sfskey_update tbsetup/sfskey_update.proxy \
@@ -914,7 +917,7 @@ outfiles="$outfiles Makeconf GNUmakefile \
 	vis/floormap vis/webfloormap \
 	rc.d/GNUmakefile rc.d/2.mysql-server.sh rc.d/3.testbed.sh \
 	rc.d/2.elvind.sh rc.d/3.plab.sh rc.d/2.dhcpd.sh rc.d/3.and.sh \
-	rc.d/3.elvin_gateway.sh \
+	rc.d/3.elvin_gateway.sh rc.d/pelab.sh \
 	tools/GNUmakefile rc.d/1.mysql-server.sh tools/svn/GNUmakefile \
 	tools/pcapper/GNUmakefile tools/teachswitch/GNUmakefile \
         tools/webcamapplet/GNUmakefile tools/whol/GNUmakefile \
@@ -963,6 +966,7 @@ outfiles="$outfiles Makeconf GNUmakefile \
 	collab/mailman/delmmlist collab/mailman/mmxlogin \
 	collab/mailman/genaliases collab/mailman/setmmlistmembers \
 	collab/mailman/mailmanproxy collab/mailman/setmmpasswd \
+	collab/cvstools/cvs.proxy collab/cvstools/cvs_ctrl \
 	collab/cvstools/cvsrepo_ctrl.proxy collab/cvstools/cvsrepo_ctrl \
 	collab/cvstools/webcvsrepo_ctrl "
 

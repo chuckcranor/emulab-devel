@@ -434,8 +434,8 @@ function WRITESIDEBAR() {
 
     if ($rootEmulab) {
 	# Leave New here about 2 weeks
-        NavMenuButton("Papers and Talks (Mar 9)", "$TBDOCBASE/pubs.php3");
-	NavMenuButton("Software (Jul 18)", "$TBDOCBASE/software.php3");
+        NavMenuButton("Papers and Talks (Jun 4)", "$TBDOCBASE/pubs.php3");
+	NavMenuButtonNew("Emulab Software (Jun 26)", "$TBDOCBASE/software.php3");
 
 	NavMenuButton("List People",
 		      "$TBDOCBASE/people.php3");
@@ -1027,6 +1027,7 @@ function PAGEHEADER($title, $view = NULL, $extra_headers = NULL,
 	$login_user   = null;
     }
     
+    header('Content-type: text/html; charset=utf-8');
     header("Last-Modified: " . gmdate("D, d M Y H:i:s") . " GMT");
     
     if (1) {
@@ -1216,8 +1217,15 @@ function PAGEFOOTER($view = NULL) {
 		x_FreeNodeHtml(usagetablemode, FreeNodeHtml_CB);
 	    }
             function ToggleUsageTable() {
-		usagetablemode =
-		    (usagetablemode == "status" ? "freenodes" : "status");
+		if (usagetablemode == "status") {
+		    usagetablemode = "freenodes";
+		}
+		else if (usagetablemode == "freenodes") {
+		    usagetablemode = "stats";
+		}
+		else {
+		    usagetablemode = "status";
+		}
 		document.cookie = "usagetablemode=" + usagetablemode;
 		GetFreeNodeHtml();
             }
