@@ -1,0 +1,554 @@
+#!/usr/bin/perl -wT
+#
+# EMULAB-COPYRIGHT
+# Copyright (c) 2008 University of Utah and the Flux Group.
+# All rights reserved.
+#
+package GeniCH;
+
+#
+# The server side of the Geni ClearingHouse API. 
+#
+use strict;
+use Exporter;
+use vars qw(@ISA @EXPORT);
+
+@ISA    = "Exporter";
+@EXPORT = qw ( );
+
+# Must come after package declaration!
+use lib '@prefix@/lib';
+use GeniDB;
+use Genixmlrpc;
+use GeniResponse;
+use User;
+use GeniUser;
+use GeniSlice;
+use GeniComponent;
+use GeniAuthority;
+use libtestbed;
+use emutil;
+use English;
+use Data::Dumper;
+
+# Configure variables
+my $TB		   = "@prefix@";
+my $TBOPS          = "@TBOPSEMAIL@";
+my $TBAPPROVAL     = "@TBAPPROVALEMAIL@";
+my $TBAUDIT   	   = "@TBAUDITEMAIL@";
+my $BOSSNODE       = "@BOSSNODE@";
+my $OURDOMAIN      = "@OURDOMAIN@";
+
+#
+# Get a credential to use the ClearingHouse. For the moment, the initial
+# credential will be provided to callers with the proper certificate, which
+# means just SAs/CMs that we know about via the ssl certificate used to
+# connect to us.
+#
+sub GetCredential($)
+{
+    my ($argref) = @_;
+    my $uuid = $argref->{'uuid'};
+    my $cred = $argref->{'credential'};
+    my $type = $argref->{'type'};
+
+    #
+    # The caller has to be known to us, but how are they known to us?
+    # Probably need a web interface? 
+    #
+    my $caller_uuid = $ENV{'GENIUUID'};
+    my $caller_authority = GeniAuthority->Lookup($ENV{'GENIUUID'});
+    return GeniResponse->Create(GENIRESPONSE_REFUSED, undef, "Who are You?")
+	if (!defined($caller_authority));
+    
+    #
+    # No credential, then return a generic credential giving caller permission
+    # to do other things.
+    #
+    if (!defined($cred)) {
+	#
+	# This credential is for access to this authority.
+	#
+	my $authority = GeniAuthority->Lookup($ENV{'MYUUID'});
+	if (!defined($authority)) {
+	    print STDERR "Could not find local authority object\n";
+	    return GeniResponse->Create(GENIRESPONSE_ERROR);
+	}
+	my $credential = GeniCredential->Create($authority, $caller_authority);
+	if (!defined($credential)) {
+	    print STDERR "Could not create credential for $caller_authority\n";
+	    return GeniResponse->Create(GENIRESPONSE_ERROR);
+	}
+	if ($credential->Sign($GeniCredential::LOCALMA_FLAG)) {
+	    print STDERR "Could not sign credential for $caller_authority\n";
+	    return GeniResponse->Create(GENIRESPONSE_ERROR);
+	}
+	return GeniResponse->Create(GENIRESPONSE_SUCCESS,
+				    $credential->asString());
+    }
+
+    #
+    # User provided a credential, and wants a new credential to access
+    # the object referenced by the uuid.
+    #
+    return GeniResponse->Create(GENIRESPONSE_UNSUPPORTED);
+}
+
+##
+# Lookup a UUID and return a blob of stuff. We allow lookups of both
+# users and slices, which is what we allow clients to register.
+#
+sub Resolve($)
+{
+    my ($argref) = @_;
+    my $cred = $argref->{'credential'};
+    my $uuid = $argref->{'uuid'};
+    my $type = $argref->{'type'};
+
+    if (! (defined($uuid) && ($uuid =~ /^[-\w]*$/))) {
+	return GeniResponse->MalformedArgsResponse();
+    }
+    if (! (defined($type) && ($type =~ /^(SA|CM|MA|Component|Slice|User)$/))) {
+	return GeniResponse->MalformedArgsResponse();
+    }
+    if (! defined($cred)) {
+	return GeniResponse->MalformedArgsResponse();
+    }
+    my $credential = GeniCredential->CreateFromSigned($cred);
+    if (!defined($credential)) {
+	return GeniResponse->Create(GENIRESPONSE_ERROR, undef,
+				    "Could not create GeniCredential object");
+    }
+
+    #
+    # Make sure the credential was issued to the caller.
+    #
+    if ($credential->owner_uuid() ne $ENV{'GENIUUID'}) {
+	return GeniResponse->Create(GENIRESPONSE_ERROR, undef,
+				    "This is not your credential!");
+    }
+    #
+    # And that the target of the credential is this registry.
+    #
+    my $authority = GeniAuthority->Lookup($ENV{'MYUUID'});
+    if (!defined($authority)) {
+	print STDERR "Could not find local authority object\n";
+	return GeniResponse->Create(GENIRESPONSE_ERROR);
+    }
+    if ($credential->target_uuid() ne $authority->uuid()) {
+	return GeniResponse->Create(GENIRESPONSE_FORBIDDEN,
+				    undef, "This is not your registry!");
+    }
+
+    if ($type eq "User") {
+	my $user = GeniUser->Lookup($uuid);
+	if (!defined($user)) {
+	    return GeniResponse->Create(GENIRESPONSE_SEARCHFAILED, undef,
+					"No such user $uuid");
+	}
+	# Grab keys.
+	my @sliverkeys;
+	if ($user->GetKeys(\@sliverkeys) != 0) {
+	    print STDERR "Could not get sliver keys for $user\n";
+	}
+
+	# Return a blob.
+	my $blob = { "uid"      => $user->uid(),
+		     "hrn"      => $user->hrn(),
+		     "uuid"     => $user->uuid(),
+		     "email"    => $user->email(),
+		     "cert"     => $user->cert(),
+		     "name"     => $user->name(),
+		     "sa_uuid"  => $user->sa_uuid(),
+		 };
+	$blob->{'sliverkeys'} = \@sliverkeys
+	    if (@sliverkeys);
+    
+	return GeniResponse->Create(GENIRESPONSE_SUCCESS, $blob);
+    }
+    if ($type eq "SA") {
+	my $authority = GeniAuthority->Lookup($uuid);
+	if (!defined($authority)) {
+	    return GeniResponse->Create(GENIRESPONSE_SEARCHFAILED, undef,
+					"No such authority $uuid");
+	}
+	# Return a blob.
+	my $blob = { "uuid"        => $authority->uuid(),
+		     "cert"        => $authority->cert(),
+		     "hrn"         => $authority->hrn(),
+		     "uuid_prefix" => $authority->uuid_prefix(),
+		     "url"         => $authority->url(),
+		 };
+	return GeniResponse->Create(GENIRESPONSE_SUCCESS, $blob);
+    }
+    if ($type eq "CM") {
+	my $component = GeniComponent->Lookup($uuid);
+	if (!defined($component)) {
+	    return GeniResponse->Create(GENIRESPONSE_SEARCHFAILED, undef,
+					"No such component $uuid");
+	}
+	# Return a blob.
+	my $blob = { "uuid"        => $component->uuid(),
+		     "cert"        => $component->cert(),
+		     "hrn"         => $component->hrn(),
+		     "url"         => $component->url(),
+		 };
+	return GeniResponse->Create(GENIRESPONSE_SUCCESS, $blob);
+    }
+    if ($type eq "Slice") {
+	my $slice = GeniSlice->Lookup($uuid);
+	if (!defined($slice)) {
+	    return GeniResponse->Create(GENIRESPONSE_SEARCHFAILED, undef,
+					"No such slice $uuid");
+	}
+
+	# User bindings too.
+	my @userbindings = ();
+	if ($slice->UserBindings(\@userbindings) != 0) {
+	    return GeniResponse->Create(GENIRESPONSE_ERROR, undef,
+					"Error getting users for slice");
+	}
+
+	# Return a blob.
+	my $blob = { "hrn"          => $slice->hrn(),
+		     "uuid"         => $slice->uuid(),
+		     "creator_uuid" => $slice->creator_uuid(),
+		     "cert"         => $slice->cert(),
+		     "sa_uuid"      => $slice->sa_uuid(),
+		     "userbindings" => \@userbindings,
+		 };
+	return GeniResponse->Create(GENIRESPONSE_SUCCESS, $blob);
+    }
+    return GeniResponse->Create(GENIRESPONSE_UNSUPPORTED);
+}
+
+##
+# Register a new object.
+#
+sub Register($)
+{
+    my ($argref) = @_;
+    my $cred  = $argref->{'credential'};
+    my $hrn   = $argref->{'hrn'};
+    my $cert  = $argref->{'cert'};
+    my $info  = $argref->{'info'};
+    my $type  = $argref->{'type'};
+
+    if (! (defined($hrn) && ($hrn =~ /^[-\w.]*$/))) {
+	return GeniResponse->MalformedArgsResponse();
+    }
+    if (! (defined($type) && ($type =~ /^(SA|MA|Component|Slice|User)$/))) {
+	return GeniResponse->MalformedArgsResponse();
+    }
+    if (! defined($cred)) {
+	return GeniResponse->MalformedArgsResponse();
+    }
+    if (! defined($cert)) {
+	return GeniResponse->MalformedArgsResponse();
+    }
+    if (! ($cert =~ /^[\012\015\040-\176]*$/)) {
+	return GeniResponse->Create(GENIRESPONSE_ERROR, undef,
+				    "cert: Invalid characters");
+    }
+    if (! defined($info)) {
+	return GeniResponse->MalformedArgsResponse();
+    }
+    my $credential = GeniCredential->CreateFromSigned($cred);
+    if (!defined($credential)) {
+	return GeniResponse->Create(GENIRESPONSE_ERROR, undef,
+				    "Could not create GeniCredential object");
+    }
+
+    #
+    # Make sure the credential was issued to the caller.
+    #
+    if ($credential->owner_uuid() ne $ENV{'GENIUUID'}) {
+	return GeniResponse->Create(GENIRESPONSE_ERROR, undef,
+				    "This is not your credential!");
+    }
+    #
+    # And that the target of the credential is this registry.
+    #
+    my $authority = GeniAuthority->Lookup($ENV{'MYUUID'});
+    if (!defined($authority)) {
+	print STDERR "Could not find local authority object\n";
+	return GeniResponse->Create(GENIRESPONSE_ERROR);
+    }
+    if ($credential->target_uuid() ne $authority->uuid()) {
+	return GeniResponse->Create(GENIRESPONSE_FORBIDDEN,
+				    undef, "This is not your registry!");
+    }
+
+    #
+    # Grab the uuid out of the certificate.
+    #
+    my $uuid;
+    GeniCertificate->CertificateInfo($cert, \$uuid) == 0
+	or return GeniResponse->Create(GENIRESPONSE_ERROR, undef,
+				       "cert: Could not get uuid");
+
+    if (! ($uuid =~ /^\w+\-\w+\-\w+\-\w+\-\w+$/)) {
+	return GeniResponse->Create(GENIRESPONSE_BADARGS, undef,
+				    "Improper format for uuid");
+    }
+    
+    if ($type eq "User") {
+	my $name  = $info->{'name'};
+	my $email = $info->{'email'};
+	my $keys  = $info->{'sliverkeys'};
+
+	if (! TBcheck_dbslot($name, "users", "usr_name",
+			     TBDB_CHECKDBSLOT_ERROR)) {
+	    return GeniResponse->Create(GENIRESPONSE_ERROR, undef,
+					"name: ". TBFieldErrorString());
+	}
+	if (! TBcheck_dbslot($email, "users", "usr_email",
+			     TBDB_CHECKDBSLOT_ERROR)){
+	    return GeniResponse->Create(GENIRESPONSE_ERROR, undef,
+					"email: ". TBFieldErrorString());
+	}
+	if (defined($keys)) {
+	    foreach my $keyref (@{ $keys }) {
+		my $type = $keyref->{'type'};
+		my $key  = $keyref->{'key'};
+
+		if ($type ne 'ssh') {
+		    return GeniResponse->Create(GENIRESPONSE_ERROR, undef,
+						"key: Invalid key type");
+		}
+		if (! ($key =~ /^[\012\015\040-\176]*$/)) {
+		    return GeniResponse->Create(GENIRESPONSE_ERROR, undef,
+						"key: Invalid characters");
+		}
+	    }
+	}
+	#
+	# Need to verify the UUID is permitted for the SA making the request.
+	#
+	my $slice_authority = GeniAuthority->Lookup($ENV{'GENIUUID'});
+	if (!defined($slice_authority)) {
+	    print STDERR "Could not find authority object for caller.\n";
+	    return GeniResponse->Create(GENIRESPONSE_ERROR);
+	}
+	if (! $slice_authority->PrefixMatch($uuid)) {
+	    return GeniResponse->Create(GENIRESPONSE_BADARGS, undef,
+					"uuid: Prefix mismatch");
+	}
+
+	#
+	# XXX
+	#
+	# What kind of uniquess requirements do we need? No one else with this
+	# email address? Of course, we have to allow hrn reuse, but should we
+	# require that for a given SA, that hrn is unique, at least to avoid
+	# lots of confusion?
+	#
+	if (GeniUser->CheckExisting($hrn, $email)) {
+	    return GeniResponse->Create(GENIRESPONSE_ERROR, undef,
+					"$hrn/$email already registered");
+	}
+
+	# The local uid we will use is the last part of the hrn.
+	my ($uid) = ($hrn =~ /^.*\.(\w*)$/);
+	if (!defined($uid)) {
+	    return GeniResponse->Create(GENIRESPONSE_ERROR, undef,
+					"uid: cannot parse hrn to get uid");
+	}
+	elsif (! TBcheck_dbslot($uid, "users", "uid",
+				TBDB_CHECKDBSLOT_ERROR)) {
+	    return GeniResponse->Create(GENIRESPONSE_ERROR, undef,
+					"uid: ". TBFieldErrorString());
+	}
+	my $newuser = GeniUser->Create($hrn, $uid, $uuid,
+				       $name, $email, $cert, $slice_authority,
+				       $keys);
+	if (!defined($newuser)) {
+	    return GeniResponse->Create(GENIRESPONSE_ERROR, undef,
+					"$hrn/$email could not be registered");
+	}
+	return GeniResponse->Create(GENIRESPONSE_SUCCESS, undef,
+				    "$hrn/$email has been registered");
+    }
+    if ($type eq "Slice") {
+	my $creator_uuid  = $info->{'creator_uuid'};
+	my $userbindings  = $info->{'userbindings'};
+
+	if (! ($creator_uuid =~ /^[-\w]*$/)) {
+	    return GeniResponse->Create(GENIRESPONSE_ERROR, undef,
+					"creator_uuid: Invalid characters");
+	}
+	#
+	# Make sure the geni user exists. 	
+	#
+	my $user = GeniUser->Lookup($creator_uuid);
+	if (!defined($user)) {
+	    return GeniResponse->Create(GENIRESPONSE_ERROR, undef,
+					"creator_uuid: No such User");
+	}
+
+	#
+	# Ditto any users bound to the slice.
+	#
+	if (defined($userbindings)) {
+	    foreach my $binding_uuid (@{ $userbindings }) {
+		my $binding_user = GeniUser->Lookup($binding_uuid);
+		if (!defined($binding_user)) {
+		    return GeniResponse->Create(GENIRESPONSE_ERROR, undef,
+						"$binding_user: No such User");
+		}
+	    }
+	}
+	
+	#
+	# Need to verify the UUID is permitted for the SA making the request.
+	#
+	my $slice_authority = GeniAuthority->Lookup($ENV{'GENIUUID'});
+	if (!defined($slice_authority)) {
+	    print STDERR "Could not find authority object for caller.\n";
+	    return GeniResponse->Create(GENIRESPONSE_ERROR);
+	}
+	if (! $slice_authority->PrefixMatch($uuid)) {
+	    return GeniResponse->Create(GENIRESPONSE_BADARGS, undef,
+					"uuid: Prefix mismatch");
+	}
+
+	#
+	# Make sure slice hrn and uuid are unique.
+	#
+	if (GeniSlice->CheckExisting($hrn, $uuid)) {
+	    return GeniResponse->Create(GENIRESPONSE_ERROR, undef,
+					"$hrn or $uuid already registered");
+	}
+
+	my $newslice = GeniSlice->Create($hrn, $uuid, $creator_uuid,
+					 $cert, $slice_authority);
+	if (!defined($newslice)) {
+	    return GeniResponse->Create(GENIRESPONSE_ERROR, undef,
+					"$hrn/$uuid could not be registered");
+	}
+
+	#
+	# Add the bindings now.
+	# 
+	if (defined($userbindings)) {
+	    foreach my $binding_uuid (@{ $userbindings }) {
+		my $binding_user = GeniUser->Lookup($binding_uuid);
+		$newslice->BindUser($binding_user);
+	    }
+	}
+	
+	return GeniResponse->Create(GENIRESPONSE_SUCCESS, undef,
+				    "$hrn/$uuid has been registered");
+    }
+    return GeniResponse->Create(GENIRESPONSE_UNSUPPORTED);
+}
+
+##
+# Delete an object.
+#
+sub Remove($)
+{
+    my ($argref) = @_;
+    my $cred  = $argref->{'credential'};
+    my $uuid  = $argref->{'uuid'};
+    my $type  = $argref->{'type'};
+
+    if (! (defined($type) && ($type =~ /^(SA|MA|Component|Slice|User)$/))) {
+	return GeniResponse->MalformedArgsResponse();
+    }
+    if (! defined($cred)) {
+	return GeniResponse->MalformedArgsResponse();
+    }
+    if (! (defined($uuid) && ($uuid =~ /^\w+\-\w+\-\w+\-\w+\-\w+$/))) {
+	return GeniResponse->MalformedArgsResponse();
+    }
+
+    my $credential = GeniCredential->CreateFromSigned($cred);
+    if (!defined($credential)) {
+	return GeniResponse->Create(GENIRESPONSE_ERROR, undef,
+				    "Could not create GeniCredential object");
+    }
+
+    #
+    # Make sure the credential was issued to the caller.
+    #
+    if ($credential->owner_uuid() ne $ENV{'GENIUUID'}) {
+	return GeniResponse->Create(GENIRESPONSE_ERROR, undef,
+				    "This is not your credential!");
+    }
+    #
+    # And that the target of the credential is this registry.
+    #
+    my $authority = GeniAuthority->Lookup($ENV{'MYUUID'});
+    if (!defined($authority)) {
+	print STDERR "Could not find local authority object\n";
+	return GeniResponse->Create(GENIRESPONSE_ERROR);
+    }
+    if ($credential->target_uuid() ne $authority->uuid()) {
+	return GeniResponse->Create(GENIRESPONSE_FORBIDDEN,
+				    undef, "This is not your registry!");
+    }
+
+    if ($type eq "User") {
+	my $user = GeniUser->Lookup($uuid);
+	if (!defined($user)) {
+	    return GeniResponse->Create(GENIRESPONSE_SEARCHFAILED, undef,
+					"No such user $uuid");
+	}
+	if (!$user->Delete()) {
+	    print STDERR "Could not delete $user from ClearingHouse!\n";
+	    return GeniResponse->Create(GENIRESPONSE_ERROR, undef,
+					"$uuid could not be unregistered");
+	}
+	return GeniResponse->Create(GENIRESPONSE_SUCCESS, undef,
+				    "$uuid has been unregistered");
+    }
+    if ($type eq "Slice") {
+	my $slice = GeniSlice->Lookup($uuid);
+	if (!defined($slice)) {
+	    return GeniResponse->Create(GENIRESPONSE_SEARCHFAILED, undef,
+					"No such slice $uuid");
+	}
+	if ($slice->Delete()) {
+	    print STDERR "Could not delete $slice from ClearingHouse!\n";
+	    return GeniResponse->Create(GENIRESPONSE_ERROR, undef,
+					"$uuid could not be unregistered");
+	}
+	return GeniResponse->Create(GENIRESPONSE_SUCCESS, undef,
+				    "$uuid has been unregistered");
+    }
+    return GeniResponse->Create(GENIRESPONSE_UNSUPPORTED);
+}
+
+#
+# This is just a placeholder; return a list of all components. Eventually
+# takes an rspec and we do a resource mapping. 
+#
+sub DiscoverResources($)
+{
+    my ($argref) = @_;
+    my $slice  = $argref->{'slice'};
+
+    # This is a certificate. Ignored for now. 
+    if (!defined($slice)) {
+	return Protogeni::MalformedArgsResponse();
+    }
+
+    #
+    # Return simple list of components (hashes).
+    #
+    my @results = ();
+    my $query_result = DBQueryWarn("select uuid from geni_components");
+    return GeniResponse->Create(GENIRESPONSE_DBERROR)
+	if (!defined($query_result));
+
+    while (my ($component_uuid) = $query_result->fetchrow_array()) {
+	my $component = GeniComponent->Lookup($component_uuid);
+	return GeniResponse->Create(GENIRESPONSE_DBERROR)
+	    if (!defined($component));
+	    
+	push(@results, { "uuid" => $component_uuid });
+    }
+    return GeniResponse->Create(GENIRESPONSE_SUCCESS, \@results);
+}
+

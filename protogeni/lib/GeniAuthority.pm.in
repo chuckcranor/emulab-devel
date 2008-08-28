@@ -1,0 +1,192 @@
+#!/usr/bin/perl -wT
+#
+# EMULAB-COPYRIGHT
+# Copyright (c) 2008 University of Utah and the Flux Group.
+# All rights reserved.
+#
+package GeniAuthority;
+
+#
+# Some simple ticket stuff.
+#
+use strict;
+use Exporter;
+use vars qw(@ISA @EXPORT);
+
+@ISA    = "Exporter";
+@EXPORT = qw ( );
+
+# Must come after package declaration!
+use lib '@prefix@/lib';
+use GeniDB;
+use libtestbed;
+use libdb qw(TBGetUniqueIndex);
+use English;
+use overload ('""' => 'Stringify');
+use XML::Simple;
+
+# Configure variables
+my $TB		   = "@prefix@";
+my $TBOPS          = "@TBOPSEMAIL@";
+my $TBAPPROVAL     = "@TBAPPROVALEMAIL@";
+my $TBAUDIT   	   = "@TBAUDITEMAIL@";
+my $BOSSNODE       = "@BOSSNODE@";
+my $OURDOMAIN      = "@OURDOMAIN@";
+my $SIGNCRED	   = "$TB/sbin/signgenicred";
+my $VERIFYCRED	   = "$TB/sbin/verifygenicred";
+
+# Cache of instances to avoid regenerating them.
+my %authorities    = ();
+
+#
+# Lookup by idx, or uuid.
+#
+sub Lookup($$)
+{
+    my ($class, $token) = @_;
+    my $query_result;
+    my $idx;
+
+    if ($token =~ /^\d+$/) {
+	$idx = $token;
+    }
+    elsif ($token =~ /^\w+\-\w+\-\w+\-\w+\-\w+$/) {
+	$query_result =
+	    DBQueryWarn("select idx from geni_authorities ".
+			"where uuid='$token'");
+	    return undef
+		if (! $query_result || !$query_result->numrows);
+
+	    ($idx) = $query_result->fetchrow_array();
+    }
+    elsif ($token =~ /^[\w\.]*$/) {
+	$query_result =
+	    DBQueryWarn("select idx from geni_authorities ".
+			"where hrn='$token'");
+	    return undef
+		if (! $query_result || !$query_result->numrows);
+
+	    ($idx) = $query_result->fetchrow_array();
+    }
+    else {
+	return undef;
+    }
+    # Look in cache first
+    return $authorities{"$idx"}
+        if (exists($authorities{"$idx"}));
+
+    $query_result =
+	DBQueryWarn("select * from geni_authorities where idx='$idx'");
+    
+    return undef
+	if (!$query_result || !$query_result->numrows);
+
+    my $self              = {};
+    $self->{'AUTHORITY'}  = $query_result->fetchrow_hashref();
+    bless($self, $class);
+
+    #
+    # Grab the certificate, since we will probably want it.
+    #
+    my $uuid = $self->{'AUTHORITY'}->{'uuid'};
+    my $certificate = GeniCertificate->Lookup($uuid);
+    if (!defined($certificate)) {
+	print STDERR "Could not find certificate for authority $idx\n";
+	return undef;
+    }
+    $self->{'CERT'} = $certificate;
+    
+    # Add to cache. 
+    $authorities{$self->{'AUTHORITY'}->{'idx'}} = $self;
+    
+    return $self;
+}
+
+#
+# Stringify for output.
+#
+sub Stringify($)
+{
+    my ($self) = @_;
+    
+    my $uuid = $self->uuid();
+    my $idx  = $self->idx();
+
+    return "[GeniAuthority: $uuid, IDX: $idx]";
+}
+
+#
+# Create a Geni authority in the DB.
+#
+sub Create($$$$$$)
+{
+    my ($class, $uuid, $hrn, $url, $cert, $prefix, $type) = @_;
+
+    my @insert_data = ();
+    my $idx = TBGetUniqueIndex('next_authority', 1);
+
+    my $safe_hrn    = DBQuoteSpecial($hrn);
+    my $safe_url    = DBQuoteSpecial($url);
+    my $safe_uuid   = DBQuoteSpecial($uuid);
+    my $safe_cert   = DBQuoteSpecial($cert);
+    my $safe_prefix = DBQuoteSpecial($prefix);
+    my $safe_type   = DBQuoteSpecial($type);
+    
+    # Now tack on other stuff we need.
+    push(@insert_data, "created=now()");
+    push(@insert_data, "idx='$idx'");
+    push(@insert_data, "hrn=$safe_hrn");
+    push(@insert_data, "url=$safe_url");
+    push(@insert_data, "uuid=$safe_uuid");
+    push(@insert_data, "uuid_prefix=$safe_prefix");
+    push(@insert_data, "type=$safe_type");
+
+    # Insert into DB.
+    DBQueryWarn("replace into geni_authorities set " .
+		join(",", @insert_data))
+	or return undef;
+
+    # Insert the certificate.
+    if (!DBQueryWarn("replace into geni_certificates set ".
+		     "  uuid=$safe_uuid, cert=$safe_cert")) {
+	DBQueryWarn("delete from geni_authorities where idx='$idx'");
+	return undef;
+    }
+
+    return GeniAuthority->Lookup($idx);
+}
+# accessors
+sub field($$) { return ((! ref($_[0])) ? -1 : $_[0]->{'AUTHORITY'}->{$_[1]}); }
+sub idx($)		{ return field($_[0], "idx"); }
+sub uuid($)		{ return field($_[0], "uuid"); }
+sub uuid_prefix($)	{ return field($_[0], "uuid_prefix"); }
+sub url($)		{ return field($_[0], "url"); }
+sub hrn($)		{ return field($_[0], "hrn"); }
+sub type($)		{ return field($_[0], "type"); }
+sub cert($)		{ return $_[0]->{'CERT'}->cert(); }
+sub GetCertificate($)   { return $_[0]->{'CERT'}; }
+
+#
+# Does the uuid prefix match.
+#
+sub PrefixMatch($$)
+{
+    my ($self, $uuid) = @_;
+
+    return 0
+	if (!ref($self));
+
+    my $uuid_prefix = $self->uuid_prefix();
+
+    print "$uuid, $uuid_prefix, $self\n";
+
+    if ($uuid =~ /^\w+\-\w+\-\w+\-\w+\-(\w+)$/) {
+	return 1
+	    if ("$uuid_prefix" eq "$1");
+    }
+    return 0;
+}
+
+# _Always_ make sure that this 1 is at the end of the file...
+1;
+
