@@ -907,9 +907,9 @@ int main(int argc,char **argv) {
 #endif 
   
   // Convert options to the common.h parameters.
-  parse_options(argv, options, noptions);
+  //parse_options(argv, options, noptions);
 #ifdef SCORE_DEBUG
-  dump_options("Configuration options:", options, noptions);
+  //dump_options("Configuration options:", options, noptions);
 #endif
 
 #ifdef GNUPLOT_OUTPUT
