@@ -43,6 +43,5 @@
         <link_type>
             <type_name>ethernet</type_name>
         </link_type>
-        <foo/>
     </link>
 </ptop>
