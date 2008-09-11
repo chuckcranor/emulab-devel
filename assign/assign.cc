@@ -129,7 +129,9 @@ double use_connected_pnode_find = 0.0f;
 
 #ifdef WITH_XML
 // Use XML for file input
-bool xml_input = false;
+// bool xml_input = false;
+bool ptop_xml_input = false;
+bool vtop_xml_input = false;
 #endif
   
 // XXX - shouldn't be in this file
@@ -161,7 +163,7 @@ void read_physical_topology(char *filename) {
   }
   
 #ifdef WITH_XML
-  if (!xml_input) {
+  if (!ptop_xml_input) {
       cout << "Physical Graph: " << parse_ptop(PG,SG,ptopfile) << endl;
   } else {
       cout << "Physical Graph: " << parse_ptop_xml(PG,SG,filename) << endl;
@@ -278,7 +280,7 @@ void read_virtual_topology(char *filename) {
   }
   
 #ifdef WITH_XML
-  if (!xml_input) {
+  if (!vtop_xml_input) {
       cout << "Virtual Graph: " << parse_top(VG,topfile) << endl;
   } else {
       cout << "Virtual Graph: " << parse_top_xml(VG,filename) << endl;
@@ -409,7 +411,10 @@ void print_help() {
       "<float>*100% of the time." << endl;
   cout << "  -n          - Don't anneal - just do the prechecks." << endl;
 #ifdef WITH_XML
-  cout << "  -x          - Use XML top and ptop files (still incomplete)" << endl;
+  cout << "  -x          - Use text top and ptop files (still incomplete)" << endl;
+  cout << "  -X          - Use XML top and ptop files (still incomplete)" << endl;
+  cout << "  -y          - Use text top and vtop files (still incomplete)" << endl;
+  cout << "  -Y          - Use XML top and vtop files (still incomplete)" << endl;
 #endif
   exit(EXIT_FATAL);
 }
@@ -793,7 +798,7 @@ int main(int argc,char **argv) {
   char ch;
   timelimit = 0.0;
   timetarget = 0.0;
-  while ((ch = getopt(argc,argv,"s:v:l:t:rpPTdH:oguc:nx")) != -1) {
+  while ((ch = getopt(argc,argv,"s:v:l:t:rpPTdH:oguc:nxXyY")) != -1) {
     switch (ch) {
     case 's':
       if (sscanf(optarg,"%d",&seed) != 1) {
@@ -858,8 +863,21 @@ int main(int argc,char **argv) {
       break;
 #ifdef WITH_XML
     case 'x':
-      xml_input = true;
+      ptop_xml_input = false;
       break;
+      
+    case 'X':
+      ptop_xml_input = true;
+    break;
+
+    case 'y':
+      vtop_xml_input = false;
+    break;
+
+    case 'Y':
+      vtop_xml_input = true;
+    break;
+
 #endif
     default:
       print_help();
