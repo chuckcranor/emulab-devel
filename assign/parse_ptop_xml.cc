@@ -8,7 +8,7 @@
  * XML Parser for ptop files
  */
 
-static const char rcsid[] = "$Id: parse_ptop_xml.cc,v 1.3.8.6 2008-09-11 23:05:00 tarunp Exp $";
+static const char rcsid[] = "$Id: parse_ptop_xml.cc,v 1.3.8.7 2008-09-12 20:06:01 ricci Exp $";
 
 #include "parse_ptop_xml.h"
 #include "xmlhelpers.h"
@@ -72,6 +72,7 @@ int parse_ptop_xml(tb_pgraph &pg, tb_sgraph &sg, char *filename) {
      * Do the actual parse
      */
     parser->parse(filename);
+    XMLDEBUG("XML parse completed" << endl);
     
     /* 
      * If there are any errors, do not go any further
@@ -92,16 +93,21 @@ int parse_ptop_xml(tb_pgraph &pg, tb_sgraph &sg, char *filename) {
         * These three calls do the real work of populating the assign data
         * structures
         */
+        XMLDEBUG("starting node population" << endl);
         if (!populate_nodes(root,pg,sg)) {
         cerr << "Error reading nodes from physical topology " << filename
             << endl;
         exit(EXIT_FATAL);
         }
+        XMLDEBUG("finishing node population" << endl);
+
+        XMLDEBUG("starting link population" << endl);
         if (!populate_links(root,pg)) {
         cerr << "Error reading links from physical topology " << filename
             << endl;
         exit(EXIT_FATAL);
         }
+        XMLDEBUG("finishing link population" << endl);
         //populate_policies(root);
         
         cerr << "Ptop parsing finished" << endl; 
@@ -122,8 +128,9 @@ bool populate_nodes(DOMElement *root, tb_pgraph &pg, tb_sgraph &sg) {
      * Get a list of all nodes in this document
      */
     DOMNodeList *nodes = root->getElementsByTagName(XStr("node").x());
-    XMLDEBUG("Found " << nodes->getLength()  << " nodes in ptop" << endl);
-    for (size_t i = 0; i < nodes->getLength(); i++) {
+    int nodeCount = nodes->getLength();
+    XMLDEBUG("Found " << nodeCount << " nodes in ptop" << endl);
+    for (size_t i = 0; i < nodeCount; i++) {
 	DOMNode *node = nodes->item(i);
 	// This should not be able to fail, due to the fact that all elements in
 	// this list came from the getElementsByTagName() call
@@ -265,8 +272,9 @@ bool populate_links(DOMElement *root, tb_pgraph &pg) {
      * TODO: Support the "FIX_PLINK_ENDPOINTS" and "FIX_PLINKS_DEFAULT" options?
      */
     DOMNodeList *links = root->getElementsByTagName(XStr("link").x());
+    int linkCount = links->getLength();
     XMLDEBUG("Found " << links->getLength()  << " links in ptop" << endl);
-    for (size_t i = 0; i < links->getLength(); i++) {
+    for (size_t i = 0; i < linkCount; i++) {
         DOMNode *link = links->item(i);
         DOMElement *elt = dynamic_cast<DOMElement*>(link);
         
