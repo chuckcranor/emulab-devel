@@ -8,7 +8,7 @@
  * XML Parser for ptop files
  */
 
-static const char rcsid[] = "$Id: parse_ptop_xml.cc,v 1.3.8.7 2008-09-12 20:06:01 ricci Exp $";
+static const char rcsid[] = "$Id: parse_ptop_xml.cc,v 1.3.8.8 2008-09-12 23:57:39 ricci Exp $";
 
 #include "parse_ptop_xml.h"
 #include "xmlhelpers.h"
@@ -379,6 +379,7 @@ bool populate_links(DOMElement *root, tb_pgraph &pg) {
             dst_pnode->link_counts[type_name.c()]++;
         }
     
+	//XMLDEBUG("created link " << *phys_link << endl);
     // XXX: Special treatment for switches
     }
     

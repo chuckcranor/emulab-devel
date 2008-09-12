@@ -391,18 +391,25 @@ public:
   friend ostream &operator<<(ostream &o, const tb_plink& link)
   {
     o << "tb_plink: " << link.name << " (" << &link << ")" << endl;
-    o << "  type: ";
-    switch (link.is_type) {
-    case tb_plink::PLINK_NORMAL:
-      o << "normal" << endl;
-      break;
-    case tb_plink::PLINK_INTERSWITCH:
-      o << "interswitch" << endl;
-      break;
-    case tb_plink::PLINK_LAN:
-      o << "lan" << endl;
-      break;
+    o << "  types=";
+    for (type_set::iterator it = link.types.begin();
+	 it != link.types.end();
+	 it++) {
+	o << *it << " ";
     }
+    o << endl;
+    o << "  interswitch type: ";
+      switch (link.is_type) {
+	  case tb_plink::PLINK_NORMAL:
+	      o << "normal" << endl;
+	      break;
+	  case tb_plink::PLINK_INTERSWITCH:
+	      o << "interswitch" << endl;
+	      break;
+	  case tb_plink::PLINK_LAN:
+	      o << "lan" << endl;
+	      break;
+      }      
     o << "  bw_used=" << link.bw_used <<
       " srcmac=" << link.srcmac << " dstmac=" << link.dstmac <<
       " emulated=" << link.emulated << " nonemulated=" <<
