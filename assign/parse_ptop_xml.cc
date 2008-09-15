@@ -8,7 +8,7 @@
  * XML Parser for ptop files
  */
 
-static const char rcsid[] = "$Id: parse_ptop_xml.cc,v 1.3.8.8 2008-09-12 23:57:39 ricci Exp $";
+static const char rcsid[] = "$Id: parse_ptop_xml.cc,v 1.3.8.9 2008-09-15 22:29:41 ricci Exp $";
 
 #include "parse_ptop_xml.h"
 #include "xmlhelpers.h"
@@ -361,9 +361,14 @@ bool populate_links(DOMElement *root, tb_pgraph &pg) {
         phys_link->delay_info.bandwidth = bandwidth.i();
         phys_link->delay_info.delay = latency.i();
         phys_link->delay_info.loss = packet_loss.d();
-        
+	
         // XXX: Should not be manual
         put(pedge_pmap, phys_edge, phys_link);
+	
+	// XXX: Likewise, should happen automatically, but the current tb_plink
+	// strucutre doesn't actually have pointers to the physnode endpoints
+	src_pnode->link_counts[first_type.c()]++;
+	dst_pnode->link_counts[first_type.c()]++;
         
         /*
         * Add in the rest of the link types we found
@@ -377,7 +382,7 @@ bool populate_links(DOMElement *root, tb_pgraph &pg) {
             phys_link->types.insert(type_name.c());
             src_pnode->link_counts[type_name.c()]++;
             dst_pnode->link_counts[type_name.c()]++;
-        }
+	}
     
 	//XMLDEBUG("created link " << *phys_link << endl);
     // XXX: Special treatment for switches
@@ -410,6 +415,7 @@ bool populate_links(DOMElement *root, tb_pgraph &pg) {
 		dstnode->total_interfaces++;
 		srcnode->link_counts[link_type]++;
 		dstnode->link_counts[link_type]++;
+
 		// There can be more than one link type
 		for (size_t i = 8; i < parsed_line.size(); i++) {
 		    fstring extra_link_type = parsed_line[i];
