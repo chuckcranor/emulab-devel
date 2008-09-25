@@ -10,15 +10,13 @@
 # formats.
 #
 
-default namespace = "http://emulab.net/resources/top/0.2"
-
 ## Representation of a single node type
 NodeTypeSpec = element node_type {
         ## Name of the type - will almost certainly not be unique
         element type_name { text },
         ## How many virtual nodes of this type this physical node can
         ## handle.
-        (element type_slots { xsd:integer { minInclusive = "1" } } |
+        (element type_slots { xsd:integer { minInclusive = "0" } } |
          element unlimited { empty }),
         ## A flag that indicates that this physical node *always*
         ## has this type - a node is only allowed to have one dynamic
@@ -28,7 +26,9 @@ NodeTypeSpec = element node_type {
 }
 
 ## A node in the topology
-NodeSpec = element node {
+NodeSpec = element node { NodeContents }
+
+NodeContents =
     ## Name of the node - each node name must be unique within the 
     ## top element
     attribute name { text },
@@ -44,7 +44,6 @@ NodeSpec = element node {
     ## Desires of this node, which should (or must) be matched by the
     ## physical node we are assigned to
     PropertySpec*
-}
 
 ## A node can (by default) have one or more types
 NodeSpec.NodeType = NodeTypeSpec+
@@ -61,31 +60,41 @@ LinkTypeSpec = element link_type {
 }
 
 ## Links in the topology - zero or more
-LinkSpec = element link {
+LinkSpec = element link { LinkContents }
+
+LinkContents =
     ## Name of the link - must be unique in the top
     attribute name { text },
-    ## First interface for this link - links are assumed to be
-    ## symmetric, so the order of the interfaces does not currently
-    ## matter
-    element source_interface { InterfaceSpec },
-    ## Second interface for this link
-    element destination_interface { InterfaceSpec },
-    ## TODO: In the future, the bandwidth, latency, and packet loss will be
-    ## moved to features and/or properties
-    ## Bandwidth of the link in kbps
-    element bandwidth { xsd:float { minExclusive = "0.0" } },
-    ## Latency of the link in ms
-    element latency { xsd:float { minInclusive = "0.0" } },
-    ## Static packet loss probability of the link as a fraction
-    ## (ie. 0.01 == 1%)
-    element packet_loss { xsd:float { minInclusive = "0.0" } },
+    ## The two interfaces which form the endpoints of this link.
+    LinkEndPoints,
+    ## The characteristics (bandwidth, latency, loss) which affect traffic.
+    LinkCharacteristics,
     ## Type of this link - we use a named pattern here (defined below), so
     ## that it can be overriden in the virtual topology schema, where you are
     ## only allowed to have one
     LinkSpec.LinkType,
     ## Properties of this link
     PropertySpec*
-}
+
+## A link has two endpoints. Right now, they are order
+## independent. But they might become order-dependant later.
+LinkEndPoints =
+    ## First interface for this link
+    element source_interface { InterfaceSpec },
+    ## Second interface for this link
+    element destination_interface { InterfaceSpec }
+
+## Link characterstics which affect traffic.
+## TODO: In the future, the bandwidth, latency, and packet loss will be
+## moved to features and/or properties
+LinkCharacteristics =
+    ## Bandwidth of the link in kbps
+    element bandwidth { xsd:float { minExclusive = "0.0" } },
+    ## Latency of the link in ms
+    element latency { xsd:float { minInclusive = "0.0" } },
+    ## Static packet loss probability of the link as a fraction
+    ## (ie. 0.01 == 1%)
+    element packet_loss { xsd:float { minInclusive = "0.0" } }
 
 ## A link can (by default) have zero or more types
 LinkSpec.LinkType = LinkTypeSpec*
@@ -101,8 +110,15 @@ FeatureDesireSpec = element fd {
     ## a feature is a constraint violation
     element violatable { empty }?,
     ## Type information expressed in features and desires
-    ((element global { empty }, element operator { "OnceOnly", "FirstFree" }) |
-     (element local { empty }, element operator { "+" }))?
+    (GlobalSpec | LocalSpec)?
+}
+
+GlobalSpec = element global {
+    element operator { "OnceOnly" | "FirstFree" }
+}
+
+LocalSpec = element local {
+    element operator { "+" }
 }
 
 ## "Legacy" assign node flags - will be replaced with properties, and in some
@@ -112,7 +128,7 @@ NodeFlagSpec =
     ## interface. In the future, we will make the loopback interface/link
     ## explicit in the topology
     ## Valid only for physical nodes
-    element trivial_bandwidth { xsd:integer },
+    (element trivial_bandwidth { xsd:integer })?,
     ## Specify that this node is a subnode of another node. We MIGHT
     ## try to do this with properties in the future
     ## Valid for both virtual and physical nodes
@@ -126,14 +142,15 @@ NodeFlagSpec =
     element disallow_trivial_mix { empty }?
 
 ## Interfaces
-InterfaceSpec = element interface {
+InterfaceSpec = element interface { InterfaceContents }
+
+InterfaceContents =
     ## Name of the node, which must match one of the nodes in this topology
     element node_name { text },
     ## Name of the interface itself
     element interface { text },
     ## Properties of the interface
     PropertySpec*
-}
     
 ## Properties - new: replacements for features and desires. Not yet implemented
 ## in assign, and not yet fully fleshed out in this schema.
@@ -149,6 +166,5 @@ PropertySpec = element property {
     element violatable { empty }?,
     ## TODO: Add more operators - equality, range test, etc
     ## Flags for special types of operators
-    ((element global { empty }, element operator { "OnceOnly", "FirstFree" }) |
-     (element local { empty }, element operator { "=", "+" }))?
+    (GlobalSpec | LocalSpec)?
 }
