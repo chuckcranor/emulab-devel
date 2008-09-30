@@ -52,7 +52,7 @@ Interpretation:
 <feature_type> - not documented in the paper. '?+' means 'additive' feature -
     values of matching desires for the assigned vnodes will be added up, and if
     they are greater than the value for the feature, a violation will be
-    flagged. Used primarily to express CPU and memory constraints. '&*' means
+    flagged. Used primarily to express CPU and memory constraints. '*&' means
     'one is okay' - the first user (globally) of this feature is not assessed
     the penalty, but subsequent users are. '*!' means 'more than one is okay' -
     the first user (globally) of this feature is assessed the penalty, but
@@ -96,7 +96,7 @@ top file: <line>*
 <node_line> ::= node <node_name> <node_type_name>[:<int>] <desire_or_flag>*
 <desire_or_flag> ::= disallow_trivial_mix | subnode_of:<node_name> | <desire>
 <desire> ::= <desire_type><desire_name>:<float>
-<desire_type> ::= | "?+" | "&*" | "*!"
+<desire_type> ::= | "?+" | "*&" | "*!"
 
 <link_line1> ::= link <link_name> <interface> <interface> <int> <float> <float>
                  <link_flag>*
