@@ -8,13 +8,14 @@
  * XML Parser for ptop files
  */
 
-static const char rcsid[] = "$Id: parse_ptop_xml.cc,v 1.3.8.9 2008-09-15 22:29:41 ricci Exp $";
+static const char rcsid[] = "$Id: parse_ptop_xml.cc,v 1.3.8.10 2008-10-24 15:44:41 tarunp Exp $";
 
 #include "parse_ptop_xml.h"
 #include "xmlhelpers.h"
 #include "parse_error_handler.h"
 
 #define XMLDEBUG(x) (cerr << x)
+#define ISSWITCH(n) (n->types.find("switch") != n->types.end())
 
 /*
  * XXX: Do I have to release lists when done with them?
@@ -36,7 +37,7 @@ int bind_ptop_subnodes(tb_pgraph &pg);
  * declared in here
  */
 bool populate_nodes(DOMElement *root, tb_pgraph &pg, tb_sgraph &sg);
-bool populate_links(DOMElement *root, tb_pgraph &pg);
+bool populate_links(DOMElement *root, tb_pgraph &pg, tb_sgraph &sg);
 void populate_policies(DOMElement *root);
 
 int parse_ptop_xml(tb_pgraph &pg, tb_sgraph &sg, char *filename) {
@@ -73,7 +74,7 @@ int parse_ptop_xml(tb_pgraph &pg, tb_sgraph &sg, char *filename) {
      */
     parser->parse(filename);
     XMLDEBUG("XML parse completed" << endl);
-    
+	    
     /* 
      * If there are any errors, do not go any further
      */
@@ -102,13 +103,14 @@ int parse_ptop_xml(tb_pgraph &pg, tb_sgraph &sg, char *filename) {
         XMLDEBUG("finishing node population" << endl);
 
         XMLDEBUG("starting link population" << endl);
-        if (!populate_links(root,pg)) {
+        if (!populate_links(root,pg, sg)) {
         cerr << "Error reading links from physical topology " << filename
             << endl;
         exit(EXIT_FATAL);
         }
         XMLDEBUG("finishing link population" << endl);
-        //populate_policies(root);
+        
+		//populate_policies(root);
         
         cerr << "Ptop parsing finished" << endl; 
     }
@@ -130,125 +132,133 @@ bool populate_nodes(DOMElement *root, tb_pgraph &pg, tb_sgraph &sg) {
     DOMNodeList *nodes = root->getElementsByTagName(XStr("node").x());
     int nodeCount = nodes->getLength();
     XMLDEBUG("Found " << nodeCount << " nodes in ptop" << endl);
-    for (size_t i = 0; i < nodeCount; i++) {
-	DOMNode *node = nodes->item(i);
-	// This should not be able to fail, due to the fact that all elements in
-	// this list came from the getElementsByTagName() call
-	DOMElement *elt = dynamic_cast<DOMElement*>(node);
-	XStr name(elt->getAttribute(XStr("name").x()));
-	//XMLDEBUG("Got node " << name << endl);
+
+    for (size_t i = 0; i < nodeCount; i++) 
+	{
+		DOMNode *node = nodes->item(i);
+		// This should not be able to fail, due to the fact that all elements in
+		// this list came from the getElementsByTagName() call
+		DOMElement *elt = dynamic_cast<DOMElement*>(node);
+		XStr name(elt->getAttribute(XStr("name").x()));
+		//XMLDEBUG("Got node " << name << endl);
+		
+		/*
+		* TODO: These three steps shouldn't be 'manual'
+		*/
+		pvertex pv = add_vertex(pg);
+		// XXX: This is wrong!
+		tb_pnode *p = new tb_pnode(name.f());
+		// XXX: Global
+		put(pvertex_pmap,pv,p);
+		
+		/*
+		* Add on types
+		*/
+		DOMNodeList *types = elt->getElementsByTagName(XStr("node_type").x());
+		for (int i = 0; i < types->getLength(); i++) 
+		{
+			
+			DOMElement *typetag = dynamic_cast<DOMElement*>(types->item(i));
+			XStr type_name(getChildValue(typetag, "type_name"));
+			
+			/*
+			* Check to see if it's a static type
+			*/
+			bool is_static;
+			if (hasChildTag(typetag,"static")) {
+				is_static = true;
+			} 
+			else {
+				is_static = false;
+			}
+			
+			/*
+			* ... and how many slots it has
+			* XXX: Need a real 'unlimited' value!
+			*/
+			int type_slots;
+			if (hasChildTag(typetag,"unlimited")) {
+				type_slots = 1000;
+			} 
+			else {
+				XStr type_slot_string(getChildValue(typetag,"type_slots"));
+				type_slots = type_slot_string.i();
+			}
+			//XMLDEBUG("  has type " << type_name << " with " << type_slots << " slots" << endl);
+			
+			/*
+			* Make a tb_ptype structure for this guy - or just add this node to
+			* it if it already exists
+			* XXX: This should not be "manual"!
+			*/
+			if (ptypes.find(type_name.c()) == ptypes.end()) {
+				ptypes[type_name.c()] = new tb_ptype(type_name.c());
+			}
+			ptypes[type_name.c()]->add_slots(type_slots);
+			tb_ptype *ptype = ptypes[type_name.c()];
+			
+			/*
+			* For the moment, we treat switches specially - when we get the
+			* "forwarding" code working correctly, this special treatment
+			* will go away.
+			* TODO: This should not be in the parser, it should be somewhere
+			* else!
+			*/
+			if (type_name == "switch") {
+				p->is_switch = true;
+				p->types["switch"] = new tb_pnode::type_record(1,false,ptype);
+				svertex sv = add_vertex(sg);
+				tb_switch *s = new tb_switch();
+				put(svertex_pmap,sv,s);
+				s->mate = pv;
+				p->sgraph_switch = sv;
+				p->switches.insert(pv);
+			} 
+			else {
+				p->types[type_name.c()] = 
+					new tb_pnode::type_record(type_slots,is_static,ptype);
+			}
+			p->type_list.push_back(p->types[type_name.c()]);
+		}
+		
+		/*
+		* Parse out the features
+		*/
+		parse_fds_xml(elt,&(p->features));
+		
+		/*
+		* Finally, pull out any special node flags
+		*/
+		if (hasChildTag(elt,"trivial_bw")) {
+			XStr trivial_bw(getChildValue(elt,"trivial_bw"));
+			p->trivial_bw = trivial_bw.i();
+			//XMLDEBUG("  Trivial bandwidth: " << trivial_bw << endl);
+		}
+		
+		if (hasChildTag(elt,"subnode_of")) {
+			XStr subnode_of_name(getChildValue(elt,"subnode_of"));
+			p->subnode_of_name = subnode_of_name.f();
+			//XMLDEBUG("  Subnode of: " << subnode_of_name << endl);
+		}
+		
+		if (hasChildTag(elt,"unique")) {
+			p->unique = true;
+			//XMLDEBUG("  Unique" << endl);
+		}
 	
-	/*
-	 * TODO: These three steps shouldn't be 'manual'
-	 */
-	pvertex pv = add_vertex(pg);
-	// XXX: This is wrong!
-	tb_pnode *p = new tb_pnode(name.f());
-	// XXX: Global
-	put(pvertex_pmap,pv,p);
-	
-	/*
-	 * Add on types
-	 */
-	DOMNodeList *types = elt->getElementsByTagName(XStr("node_type").x());
-	for (int i = 0; i < types->getLength(); i++) {
-	    
-	    DOMElement *typetag = dynamic_cast<DOMElement*>(types->item(i));
-	    XStr type_name(getChildValue(typetag, "type_name"));
-	    
-	    /*
-	     * Check to see if it's a static type
-	     */
-	    bool is_static;
-	    if (hasChildTag(typetag,"static")) {
-		is_static = true;
-	    } else {
-		is_static = false;
-	    }
-	    
-	    /*
-	     * ... and how many slots it has
-	     * XXX: Need a real 'unlimited' value!
-	     */
-	    int type_slots;
-	    if (hasChildTag(typetag,"unlimited")) {
-		type_slots = 1000;
-	    } else {
-		XStr type_slot_string(getChildValue(typetag,"type_slots"));
-		type_slots = type_slot_string.i();
-	    }
-	    //XMLDEBUG("  has type " << type_name << " with " << type_slots << " slots" << endl);
-	    
-	    /*
-	     * Make a tb_ptype structure for this guy - or just add this node to
-	     * it if it already exists
-	     * XXX: This should not be "manual"!
-	     */
-	    if (ptypes.find(type_name.c()) == ptypes.end()) {
-		ptypes[type_name.c()] = new tb_ptype(type_name.c());
-	    }
-	    ptypes[type_name.c()]->add_slots(type_slots);
-	    tb_ptype *ptype = ptypes[type_name.c()];
-	    
-	    /*
-	     * For the moment, we treat switches specially - when we get the
-	     * "forwarding" code working correctly, this special treatment
-	     * will go away.
-	     * TODO: This should not be in the parser, it should be somewhere
-	     * else!
-	     */
-	    if (type_name == "switch") {
-		p->is_switch = true;
-		p->types["switch"] = new tb_pnode::type_record(1,false,ptype);
-		svertex sv = add_vertex(sg);
-		tb_switch *s = new tb_switch();
-		put(svertex_pmap,sv,s);
-		s->mate = pv;
-		p->sgraph_switch = sv;
-		p->switches.insert(pv);
-	    } else {
-		p->types[type_name.c()] = 
-		    new tb_pnode::type_record(type_slots,is_static,ptype);
-	    }
-	    p->type_list.push_back(p->types[type_name.c()]);
-	}
-	
-	/*
-	 * Parse out the features
-	 */
-	parse_fds_xml(elt,&(p->features));
-	
-	/*
-	 * Finally, pull out any special node flags
-	 */
-	if (hasChildTag(elt,"trivial_bw")) {
-	    XStr trivial_bw(getChildValue(elt,"trivial_bw"));
-	    p->trivial_bw = trivial_bw.i();
-	    //XMLDEBUG("  Trivial bandwidth: " << trivial_bw << endl);
-	}
-	
-	if (hasChildTag(elt,"subnode_of")) {
-	    XStr subnode_of_name(getChildValue(elt,"subnode_of"));
-	    p->subnode_of_name = subnode_of_name.f();
-	    //XMLDEBUG("  Subnode of: " << subnode_of_name << endl);
-	}
-	
-	if (hasChildTag(elt,"unique")) {
-	    p->unique = true;
-	    //XMLDEBUG("  Unique" << endl);
-	}
-	
-	/*
-	 * XXX: Is this really necessary?
-	 */
-	p->features.sort();
-	
-	/*
-	 * XXX: This shouldn't be "manual"
-	 */
-	pname2vertex[name.c()] = pv;
+		/*
+		* XXX: Is this really necessary?
+		*/
+		p->features.sort();
+		
+
+		
+		/*
+		* XXX: This shouldn't be "manual"
+		*/
+		pname2vertex[name.c()] = pv;
     }
-    
+   		 
     /*
      * This post-pass binds subnodes to their parents
      */
@@ -263,7 +273,7 @@ bool populate_nodes(DOMElement *root, tb_pgraph &pg, tb_sgraph &sg) {
 /*
  * Pull the links from the ptop file, and populate assign's own data sturctures
  */
-bool populate_links(DOMElement *root, tb_pgraph &pg) {
+bool populate_links(DOMElement *root, tb_pgraph &pg, tb_sgraph &sg) {
     
     bool errors = false;
     
@@ -365,16 +375,16 @@ bool populate_links(DOMElement *root, tb_pgraph &pg) {
         // XXX: Should not be manual
         put(pedge_pmap, phys_edge, phys_link);
 	
-	// XXX: Likewise, should happen automatically, but the current tb_plink
-	// strucutre doesn't actually have pointers to the physnode endpoints
-	src_pnode->link_counts[first_type.c()]++;
-	dst_pnode->link_counts[first_type.c()]++;
+		// XXX: Likewise, should happen automatically, but the current tb_plink
+		// strucutre doesn't actually have pointers to the physnode endpoints
+		src_pnode->link_counts[first_type.c()]++;
+		dst_pnode->link_counts[first_type.c()]++;
         
         /*
         * Add in the rest of the link types we found
         */
-    
-        for (int i = 1; i < types->getLength(); i++) {
+        for (int i = 1; i < types->getLength(); i++) 
+		{
             DOMElement *link_type = dynamic_cast<DOMElement*>(types->item(i));
             XStr type_name(getChildValue(link_type,"type_name"));
             //XMLDEBUG("  Link has type " << type_name << endl);
@@ -382,61 +392,39 @@ bool populate_links(DOMElement *root, tb_pgraph &pg) {
             phys_link->types.insert(type_name.c());
             src_pnode->link_counts[type_name.c()]++;
             dst_pnode->link_counts[type_name.c()]++;
-	}
+		}
     
+		if (ISSWITCH(src_pnode) && ISSWITCH(dst_pnode)) 
+		{
+			svertex src_switch = get(pvertex_pmap,src_vertex)->sgraph_switch;
+			svertex dst_switch = get(pvertex_pmap,dst_vertex)->sgraph_switch;
+			sedge swedge = add_edge(src_switch,dst_switch,sg).first;
+			tb_slink *sl = new tb_slink();
+			put(sedge_pmap,swedge,sl);
+			sl->mate = phys_edge;
+			phys_link->is_type = tb_plink::PLINK_INTERSWITCH;
+		}
+		src_pnode->total_interfaces++;
+		dst_pnode->total_interfaces++;
+	
+		if (ISSWITCH(src_pnode) && ! ISSWITCH(dst_pnode)) 
+		{
+			dst_pnode->switches.insert(src_vertex);
+			#ifdef PER_VNODE_TT
+				dst_pnode->total_bandwidth += bandwidth.i();
+			#endif
+		}
+			
+		else if (ISSWITCH(dst_pnode) && ! ISSWITCH(src_pnode)) 
+		{
+			src_pnode->switches.insert(dst_vertex);
+			#ifdef PER_VNODE_TT
+				src_pnode->total_bandwidth += bandwidth.i();
+			#endif
+		}
+
 	//XMLDEBUG("created link " << *phys_link << endl);
     // XXX: Special treatment for switches
     }
-    
     return !errors;
-    
-#if 0
-    
-#define ISSWITCH(n) (n->types.find("switch") != n->types.end())
-
-    
-
-	if (ISSWITCH(srcnode) && ISSWITCH(dstnode)) {
-	    if (cur != 0) {
-		cout <<
-		"Warning: Extra links between switches will be ignored. (" <<
-		name << ")" << endl;
-		} else {
-		    svertex src_switch = get(pvertex_pmap,srcv)->sgraph_switch;
-		    svertex dst_switch = get(pvertex_pmap,dstv)->sgraph_switch;
-		    sedge swedge = add_edge(src_switch,dst_switch,sg).first;
-		    tb_slink *sl = new tb_slink();
-		    put(sedge_pmap,swedge,sl);
-		    sl->mate = pe;
-		    pl->is_type = tb_plink::PLINK_INTERSWITCH;
-		}
-		}
-		srcnode->total_interfaces++;
-		dstnode->total_interfaces++;
-		srcnode->link_counts[link_type]++;
-		dstnode->link_counts[link_type]++;
-
-		// There can be more than one link type
-		for (size_t i = 8; i < parsed_line.size(); i++) {
-		    fstring extra_link_type = parsed_line[i];
-		    pl->types.insert(extra_link_type);
-		    srcnode->link_counts[extra_link_type]++;
-		    dstnode->link_counts[extra_link_type]++;
-		}
-		if (ISSWITCH(srcnode) &&
-		    ! ISSWITCH(dstnode)) {
-		    dstnode->switches.insert(srcv);
-#ifdef PER_VNODE_TT
-		    dstnode->total_bandwidth += ibw;
-#endif
-		}
-		else if (ISSWITCH(dstnode) &&
-			 ! ISSWITCH(srcnode)) {
-		    srcnode->switches.insert(dstv);
-#ifdef PER_VNODE_TT
-		    srcnode->total_bandwidth += ibw;
-#endif
-		}
-
-#endif
 }
