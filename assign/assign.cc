@@ -38,16 +38,16 @@ using namespace boost;
 #include "physical.h"
 #include "virtual.h"
 #include "vclass.h"
-#include "pclass.h"
+#include "pclass.h"c-
+
 #include "score.h"
 #include "solution.h"
 #include "maps.h"
 #include "anneal.h"
 #include "config.h"
-#ifdef WITH_XML
 #include "parse_ptop_xml.h"
+#include "parse_vtop_xml.h"
 #include "parse_top_xml.h"
-#endif
 
 // Here we set up all our graphs.  Need to create the graphs
 // themselves and then setup the property maps.
@@ -127,12 +127,10 @@ bool print_summary = false;
 // Use the 'connected' find algorithm
 double use_connected_pnode_find = 0.0f;
 
-#ifdef WITH_XML
 // Use XML for file input
 // bool xml_input = false;
 bool ptop_xml_input = false;
 bool vtop_xml_input = false;
-#endif
   
 // XXX - shouldn't be in this file
 double absbest;
@@ -162,15 +160,11 @@ void read_physical_topology(char *filename) {
       exit(EXIT_FATAL);
   }
   
-#ifdef WITH_XML
   if (!ptop_xml_input) {
       cout << "Physical Graph: " << parse_ptop(PG,SG,ptopfile) << endl;
   } else {
       cout << "Physical Graph: " << parse_ptop_xml(PG,SG,filename) << endl;
   }
-#else
-cout << "Physical Graph: " << parse_ptop(PG,SG,ptopfile) << endl;
-#endif
 
 #ifdef DUMP_GRAPH
   {
@@ -279,15 +273,11 @@ void read_virtual_topology(char *filename) {
       exit(EXIT_FATAL);
   }
   
-#ifdef WITH_XML
   if (!vtop_xml_input) {
       cout << "Virtual Graph: " << parse_top(VG,topfile) << endl;
   } else {
-      cout << "Virtual Graph: " << parse_top_xml(VG,filename) << endl;
+      cout << "Virtual Graph: " << parse_vtop_xml(VG,filename) << endl;
   }
-#else
-cout << "Virtual Graph: " << parse_top(VG,topfile) << endl;
-#endif
 
 #ifdef DUMP_GRAPH
   {
@@ -410,12 +400,11 @@ void print_help() {
   cout << "  -c <float>  - Use the 'connected' pnode finding algorithm " <<
       "<float>*100% of the time." << endl;
   cout << "  -n          - Don't anneal - just do the prechecks." << endl;
-#ifdef WITH_XML
-  cout << "  -x          - Use text top and ptop files (still incomplete)" << endl;
-  cout << "  -X          - Use XML top and ptop files (still incomplete)" << endl;
-  cout << "  -y          - Use text top and vtop files (still incomplete)" << endl;
-  cout << "  -Y          - Use XML top and vtop files (still incomplete)" << endl;
-#endif
+  cout << "  -x          - Specify a text ptop file" << endl;
+  cout << "  -X          - Specify a XML ptop file" << endl;
+  cout << "  -y          - Specify a text top file" << endl;
+  cout << "  -Y          - Specify a XML vtop file (still incomplete)" << endl;
+
   exit(EXIT_FATAL);
 }
  
@@ -861,7 +850,6 @@ int main(int argc,char **argv) {
       prechecks_only = true;
       cout << "Doing only prechecks, exiting early" << endl;
       break;
-#ifdef WITH_XML
     case 'x':
       ptop_xml_input = false;
       break;
@@ -878,7 +866,6 @@ int main(int argc,char **argv) {
       vtop_xml_input = true;
     break;
 
-#endif
     default:
       print_help();
     }
