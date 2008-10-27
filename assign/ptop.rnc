@@ -81,9 +81,5 @@ start = element ptop {
     attribute testbed { text },
     ## Nodes in the topology - zero or more
     ## Links in the topology - zero or more
-    (NodeSpec | LinkSpec)*,
-##    LinkSpec*,
-    ## Any limits on how many nodes of a particular type this experiment can
-    ## use.
-    TypeLimitSpec*
+    (NodeSpec | LinkSpec)*
 }
