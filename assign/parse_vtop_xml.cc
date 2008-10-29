@@ -4,7 +4,7 @@
  * All rights reserved.
  */
 
-static const char rcsid[] = "$Id: parse_vtop_xml.cc,v 1.1.2.1 2008-10-24 15:43:40 tarunp Exp $";
+static const char rcsid[] = "$Id: parse_vtop_xml.cc,v 1.1.2.2 2008-10-29 22:34:37 tarunp Exp $";
 
 #include "port.h"
 
@@ -106,7 +106,6 @@ int parse_vtop_xml(tb_vgraph &vg, char* filename) {
     ParseErrorHandler *handler = new ParseErrorHandler();
     parser->setErrorHandler(handler);
     
-    
     /*
      * Do the actual parsing
      */
@@ -117,7 +116,6 @@ int parse_vtop_xml(tb_vgraph &vg, char* filename) {
 		exit(EXIT_FATAL);
 	}
 
-	
     DOMDocument *doc = parser->getDocument();
     DOMElement *root = doc->getDocumentElement();
     
@@ -187,7 +185,7 @@ bool populate_nodes (DOMElement *root, tb_vgraph &vg) {
 		// Else there has to be an "unlimited" node.
 		// If neither is present, the parser will have complained earlier.
 		XStr node_type_name (getChildValue (node_type, "type_name"));
-		int node_type_slots = -1;
+		int node_type_slots = 1;
 		bool is_unlimited = false;
 		bool is_static = hasChildTag (node_type, "static");
 
@@ -234,14 +232,14 @@ bool populate_nodes (DOMElement *root, tb_vgraph &vg) {
 		if (subnode_of_name != NULL)
 			v -> subnode_of_name = (*subnode_of_name).c();
 		
-		parse_fds_xml (elt, &(v -> desires));
-		
 		v->vclass = vclass;
-				
 		vvertex vv = add_vertex(vg);
 		vname2vertex[node_name.c()] = vv;
 		virtual_nodes.push_back(vv);
 		put(vvertex_pmap,vv,v);
+		
+		parse_fds_vnode_xml (elt, &(v -> desires));
+		v -> desires.sort();
 	}	
 
 	int errors = bind_vtop_subnodes (vg);
@@ -338,12 +336,12 @@ bool populate_links (DOMElement *root, tb_vgraph &vg) {
 		
 		bool fix_src_iface = false;
 		bool fix_dst_iface = false;
-		XStr *fixed_src_iface = NULL;
-		XStr *fixed_dst_iface = NULL;
+		fstring fixed_src_iface = "";
+		fstring fixed_dst_iface = "";
 		if ((fix_src_iface = hasChildTag(elt, "fixsrciface")))
-			fixed_src_iface = new XStr(getChildValue (elt, "fixsrciface"));
+			fixed_src_iface = XStr(getChildValue (elt, "fixsrciface")).f();
 		if ((fix_dst_iface = hasChildTag(elt, "fixdstiface")))
-			fixed_dst_iface = new XStr(getChildValue (elt, "fixdstiface"));
+			fixed_dst_iface = XStr(getChildValue (elt, "fixdstiface")).f();
 		
         //XMLDEBUG("  bw = " << link_bandwidth << " latency = " << link_latency << " loss = " << link_packet_loss << endl);
         
@@ -382,16 +380,16 @@ bool populate_links (DOMElement *root, tb_vgraph &vg) {
         
 		virt_link-> name = link_name.f();
 		virt_link-> type = link_type.f();
-		if (fix_src_iface)
-		{
+		//if (fix_src_iface)
+		//{
 			virt_link-> fix_src_iface = fix_src_iface;
-			virt_link-> src_iface = (*fixed_src_iface).f();
-		}
-		if (fix_dst_iface)
-		{
+			virt_link-> src_iface = (fixed_src_iface);//.f();
+		//}
+		//if (fix_dst_iface)
+		//{
 			virt_link-> fix_dst_iface = fix_dst_iface;
-			virt_link-> dst_iface = (*fixed_dst_iface).f();
-		}
+			virt_link-> dst_iface = (fixed_dst_iface);//.f();
+		//}
 		virt_link-> emulated = emulated;
 		virt_link-> allow_delayed = allow_delayed;
 		virt_link-> allow_trivial = allow_trivial;
