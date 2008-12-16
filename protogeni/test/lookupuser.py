@@ -24,7 +24,7 @@ import re
 import xmlrpclib
 
 # Default server
-XMLRPC_SERVER   = "boss"
+XMLRPC_SERVER   = "boss.emulab.net"
 SERVER_PATH     = ":443/protogeni/xmlrpc/"
 XMLRPC_PORT     = 3069
 XMLRPC_PATH     = "/usr/testbed"
@@ -39,6 +39,15 @@ passphrase      = ""
 # Debugging output.
 debug           = 0
 impotent        = 0
+
+CONFIGFILE      = ".protogeni-config.py"
+GLOBALCONF      = HOME + "/" + CONFIGFILE
+LOCALCONF       = CONFIGFILE
+
+if os.path.exists(GLOBALCONF):
+    execfile(GLOBALCONF)
+if os.path.exists(LOCALCONF):
+    execfile(LOCALCONF)
 
 def Fatal(message):
     print message

@@ -24,7 +24,7 @@ import re
 import xmlrpclib
 
 # Default server
-XMLRPC_SERVER   = "boss"
+XMLRPC_SERVER   = "boss.emulab.net"
 SERVER_PATH     = ":443/protogeni/xmlrpc/"
 
 HOME            = os.environ["HOME"]
@@ -37,6 +37,15 @@ passphrase      = ""
 # Debugging output.
 debug           = 0
 impotent        = 0
+
+CONFIGFILE      = ".protogeni-config.py"
+GLOBALCONF      = HOME + "/" + CONFIGFILE
+LOCALCONF       = CONFIGFILE
+
+if os.path.exists(GLOBALCONF):
+    execfile(GLOBALCONF)
+if os.path.exists(LOCALCONF):
+    execfile(LOCALCONF)
 
 def Fatal(message):
     print message
@@ -131,8 +140,8 @@ print "Got my SA credential"
 #
 params = {}
 params["credential"] = mycredential
-rval,response = do_method("ch", "ListComponents", params,
-                          URI="https://boss.emulab.net:443/protogeni/xmlrpc")
+rval,response = do_method("ch", "ListComponents", params)
+
 if rval:
     Fatal("Could not get a list of components from the ClearingHouse")
     pass
