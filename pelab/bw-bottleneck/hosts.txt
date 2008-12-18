@@ -1,3 +1,0 @@
-ricepl-1.cs.rice.edu
-planetlab1.tamu.edu
-planetlab01.cs.washington.edu
