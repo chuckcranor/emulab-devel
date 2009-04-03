@@ -4,7 +4,7 @@
  * All rights reserved.
  */
 
-static const char rcsid[] = "$Id: parse_vtop_xml.cc,v 1.1.2.2 2008-10-29 22:34:37 tarunp Exp $";
+static const char rcsid[] = "$Id: parse_vtop_xml.cc,v 1.1.2.3 2009-04-03 16:48:24 tarunp Exp $";
 
 #include "port.h"
 
@@ -75,10 +75,11 @@ int bind_top_subnodes() {
 }
 #endif
 
-extern name_vclass_map vclass_map;
-extern name_name_map fixed_nodes;
-extern name_name_map node_hints;
+// extern name_vclass_map vclass_map;
+// extern name_name_map fixed_nodes;
+// extern name_name_map node_hints;
 
+DOMElement *root = NULL;
 
 bool populate_nodes (DOMElement* root, tb_vgraph &vg);
 bool populate_links (DOMElement* root, tb_vgraph &vg);
@@ -117,10 +118,17 @@ int parse_vtop_xml(tb_vgraph &vg, char* filename) {
 	}
 
     DOMDocument *doc = parser->getDocument();
-    DOMElement *root = doc->getDocumentElement();
+    root = doc->getDocumentElement();
     
-    XMLDEBUG("top root node: " << XStr(root->getNodeName()) << endl);
-    
+	XMLDEBUG("Starting vclass population ... " << endl);
+    if (!populate_vclasses(root, vg))
+	{
+		cerr << "Error reading vclasses from virtual topology " << filename << endl;
+		exit (EXIT_FATAL);
+	}	
+	XMLDEBUG ("Finishing vclass population ... " << endl);
+	
+
 	XMLDEBUG("Starting node population ... " << endl);
     if (!populate_nodes(root, vg))
 	{
@@ -137,17 +145,10 @@ int parse_vtop_xml(tb_vgraph &vg, char* filename) {
 	}
 	XMLDEBUG ("Finishing link population ... " << endl);
 					
-	XMLDEBUG("Starting vclass population ... " << endl);
-    if (!populate_vclasses(root, vg))
-	{
-		cerr << "Error reading vclasses from virtual topology " << filename << endl;
-		exit (EXIT_FATAL);
-	}	
-	XMLDEBUG ("Finishing vclass population ... " << endl);
-	
+
     // Clean up parser memory
-    delete parser;
-    XMLPlatformUtils::Terminate();
+    // delete parser;
+    //XMLPlatformUtils::Terminate();
     return 0;
 }
 
@@ -209,6 +210,7 @@ bool populate_nodes (DOMElement *root, tb_vgraph &vg) {
 		name_vclass_map::iterator dit = vclass_map.find(node_type_name.f());
 		if (dit != vclass_map.end()) {
 			no_type = true;
+			cout<<"Found a type called " << node_type_name.f() << " ?"<<endl;
 			vclass = (*dit).second;
 		} 
 		else {
