@@ -8,7 +8,7 @@
  * XML Parser for RSpec ptop files
  */
 
-static const char rcsid[] = "$Id: parse_vtop_rspec.cc,v 1.1.2.1 2009-04-03 17:38:03 tarunp Exp $";
+static const char rcsid[] = "$Id: parse_vtop_rspec.cc,v 1.1.2.2 2009-04-03 18:31:28 tarunp Exp $";
 
 #include "parse_vtop_rspec.h"
 #include "xmlhelpers.h"
@@ -84,7 +84,7 @@ int parse_vtop_rspec(tb_vgraph &vg, char *filename) {
     /*
      * Must validate against the ptop schema
      */
-    parser -> setExternalSchemaLocation ("http://www.protogeni.net/resources/rspec/0.1 /z/tarunp/rspec-schemas/protogeni-rspec.xsd");
+    parser -> setExternalSchemaLocation ("http://www.protogeni.net/resources/rspec/0.1 protogeni-rspec.xsd");
     
     /*
      * Just use a custom error handler - must admin it's not clear to me why

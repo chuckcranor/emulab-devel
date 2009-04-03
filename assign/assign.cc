@@ -50,7 +50,6 @@ using namespace boost;
 #ifdef WITH_XML
 #include "parse_ptop_xml.h"
 #include "parse_vtop_xml.h"
-#include "parse_rspec_xml.h"
 #include "parse_top_xml.h"
 #include "parse_ptop_rspec.h"
 #include "parse_vtop_rspec.h"
