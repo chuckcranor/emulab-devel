@@ -4,11 +4,11 @@
  * All rights reserved.
  */
 
-static const char rcsid[] = "$Id: parse_error_handler.cpp,v 1.1.2.2 2008-05-22 22:11:18 ricci Exp $";
+static const char rcsid[] = "$Id: parse_error_handler.cc,v 1.1.2.1 2009-04-03 20:58:04 duerig Exp $";
 
 #include "parse_error_handler.h"
 
-void ParseErrorHandler::error(const SAXParseException& toCatch) {    
+void ParseErrorHandler::error(const SAXParseException& toCatch) {
     cerr << "Error at file \"" << XStr(toCatch.getSystemId())
     << "\", line " << toCatch.getLineNumber()
     << ", column " << toCatch.getColumnNumber()
@@ -23,4 +23,3 @@ void ParseErrorHandler::fatalError(const SAXParseException& toCatch) {
     << "\n   Message: " << XStr(toCatch.getMessage()) << XERCES_STD_QUALIFIER endl;
     this->hadError = true;
 }
- 

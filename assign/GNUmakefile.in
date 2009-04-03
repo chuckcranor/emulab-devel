@@ -106,6 +106,8 @@ fstringtest.o: fstringtest.cc fstring.h port.h
 neighborhood.o: neighborhood.cc neighborhood.h port.h common.h fstring.h \
   physical.h delay.h featuredesire.h forwarding.h vclass.h virtual.h \
   pclass.h
+parse_error_handler.o: parse_error_handler.cc parse_error_handler.h \
+  xmlhelpers.h featuredesire.h common.h port.h fstring.h xstr.h
 parse_policy_xml.o: parse_policy_xml.cc parse_policy_xml.h physical.h \
   common.h port.h fstring.h delay.h featuredesire.h forwarding.h \
   xmlhelpers.h xstr.h parse_error_handler.h
