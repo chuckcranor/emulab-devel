@@ -56,7 +56,6 @@ DOMElement* getElementByAttributeValue (const DOMElement* root, const char* tag,
 
 DOMElement* getElementByAttributeValue (vector<const DOMElement*> roots, const char* tag, const char* attribute_name, const char* attribute_value)
 {
-	
 	for (vector<const DOMElement*>::iterator it = roots.begin(); it != roots.end(); ++it)
 	{	
 		DOMNodeList *list = (*it)->getElementsByTagName(XStr(tag).x());
@@ -97,7 +96,15 @@ DOMElement* getElementByTagName (const DOMElement* root, const char* tag)
 	}
 }
 
-
+/* Returns the nth interface in a link (can be used for a node as well only if n is 0 */
+DOMElement* getNthInterface (const DOMElement* root, int n)
+{
+	DOMNodeList* interfaces = root->getElementsByTagName(XStr("interface").x());
+	if (interfaces->getLength() <= n) {
+		throw "Too few interfaces found";
+	}
+	return (dynamic_cast<DOMElement*>(interfaces->item(n)));	
+}
 
 /*
  * TODO: Better error handling
@@ -108,30 +115,36 @@ bool hasChildTag(const DOMElement *tag, const char *name) {
 
 int parse_fds_xml(const DOMElement *tag, node_fd_set *fd_set) {
     DOMNodeList *fds = tag->getElementsByTagName(XStr("fd").x());
-    for (int i = 0; i < fds->getLength(); i++) {
-	DOMElement *elt = dynamic_cast<DOMElement*>(fds->item(i));
-	XStr fd_name(getChildValue(elt,"fd_name"));
-	XStr fd_weight(getChildValue(elt,"fd_weight"));
-
-	bool violatable = hasChildTag(elt, "violatable");
-	featuredesire::fd_type fd_type;
-	if (hasChildTag(elt,"local")) {
-	    /*
-	     * Right now, there is only one type of local feature
-	     */
-	    fd_type = featuredesire::FD_TYPE_LOCAL_ADDITIVE;
-	} else if (hasChildTag(elt,"global")) {
-	    XStr fd_operator(getChildValue(elt,"operator"));
-	    if (fd_operator == "OnceOnly") {
-		fd_type = featuredesire::FD_TYPE_GLOBAL_ONE_IS_OKAY;
-	    } else {
-		fd_type = featuredesire::FD_TYPE_GLOBAL_MORE_THAN_ONE;
-	    }
-	} else {
-	    fd_type = featuredesire::FD_TYPE_NORMAL;
-	}
+    for (int i = 0; i < fds->getLength(); i++) 
+	{
+		DOMElement *elt = dynamic_cast<DOMElement*>(fds->item(i));
 	
-	fd_set->push_front(tb_node_featuredesire(fd_name.c(), fd_weight.d(),
+		XStr fd_name (elt->getAttribute(XStr("fd_name").x()));
+		XStr fd_weight (elt->getAttribute(XStr("fd_weight").x()));
+	
+		bool violatable = elt->hasAttribute(XStr("violatable").x());
+		featuredesire::fd_type fd_type;
+		if (elt->hasAttribute(XStr("local_operator").x())) 
+		{
+			/*
+			* Right now, there is only one type of local feature
+			*/
+			fd_type = featuredesire::FD_TYPE_LOCAL_ADDITIVE;
+		} 
+		else if (elt->hasAttribute(XStr("global_operator").x())) 
+		{	
+			XStr fd_operator(elt->getAttribute(XStr("global_operator").x()));
+			if (fd_operator == "OnceOnly") {
+				fd_type = featuredesire::FD_TYPE_GLOBAL_ONE_IS_OKAY;
+			} else {
+				fd_type = featuredesire::FD_TYPE_GLOBAL_MORE_THAN_ONE;
+			}
+		} 
+		else {
+			fd_type = featuredesire::FD_TYPE_NORMAL;
+		}
+	
+		fd_set->push_front(tb_node_featuredesire(fd_name.c(), fd_weight.d(),
 						 violatable, fd_type));
 	
     }
@@ -142,16 +155,11 @@ int parse_fds_xml(const DOMElement *tag, node_fd_set *fd_set) {
  * TODO: Better error handling
  */
 node_interface_pair parse_interface_xml(const DOMElement *tag) {
-    DOMNodeList *interface_list =
-	tag->getElementsByTagName(XStr("interface").x());
-    // XXX: Check that there is exactly one
-    DOMElement *interface_tag =
-	dynamic_cast<DOMElement*>(interface_list->item(0));
-    const XMLCh* node = getChildValue(interface_tag,"node_name");
-    const XMLCh* interface = getChildValue(interface_tag,"interface_name");
-    
-    node_interface_pair rv(node,interface);
-    return rv;
+	const XMLCh* node_name = tag->getAttribute(XStr("node_name").x());
+	const XMLCh* interface_name = tag->getAttribute(XStr("interface_name").x());
+	
+	node_interface_pair rv(node_name,interface_name);
+	return rv;
 }
 
 /* Parse the features and desires on a virtual node */
@@ -161,22 +169,22 @@ int parse_fds_vnode_xml (const DOMElement *tag, node_fd_set *fd_set)
     for (int i = 0; i < fds->getLength(); i++) 
     {
 		DOMElement *elt = dynamic_cast<DOMElement*>(fds->item(i));
-		XStr fd_name(getChildValue(elt,"fd_name"));
-		XStr fd_weight(getChildValue(elt,"fd_weight"));
+		XStr fd_name (elt->getAttribute(XStr("fd_name").x()));
+		XStr fd_weight (elt->getAttribute(XStr("fd_weight").x()));
 	
-		bool violatable = hasChildTag(elt, "violatable");
+		bool violatable = elt->hasAttribute(XStr("violatable").x());
 		featuredesire::fd_type fd_type;
-		if (hasChildTag(elt,"local")) {
+		if (elt->hasAttribute(XStr("local_operator").x())) {
 			/*
 			* Right now, there is only one type of local feature
 			*/
 			fd_type = featuredesire::FD_TYPE_LOCAL_ADDITIVE;
-		} else if (hasChildTag(elt,"global")) {
-			XStr fd_operator(getChildValue(elt,"operator"));
+		} else if (elt->hasAttribute(XStr("global_operator").x())) {	
+			XStr fd_operator(elt->getAttribute(XStr("global_operator").x()));
 			if (fd_operator == "OnceOnly") {
-			fd_type = featuredesire::FD_TYPE_GLOBAL_ONE_IS_OKAY;
+				fd_type = featuredesire::FD_TYPE_GLOBAL_ONE_IS_OKAY;
 			} else {
-			fd_type = featuredesire::FD_TYPE_GLOBAL_MORE_THAN_ONE;
+				fd_type = featuredesire::FD_TYPE_GLOBAL_MORE_THAN_ONE;
 			}
 		} else {
 			fd_type = featuredesire::FD_TYPE_NORMAL;
@@ -190,21 +198,15 @@ int parse_fds_vnode_xml (const DOMElement *tag, node_fd_set *fd_set)
     return fds->getLength();
 }
 
-interface_spec parse_interface_rspec_xml(const DOMElement *tag) {
-    DOMNodeList *interface_list = tag->getElementsByTagName(XStr("interface").x());
-    DOMElement *interface_tag = dynamic_cast<DOMElement*>(interface_list->item(0));
-    
-    interface_spec rv = {string(""), string(""), string(""), string("")};
-    
-    if (hasChildTag(interface_tag, "virtual_node_id"))
-		rv.virtual_node_uuid = string(XStr(interface_tag->getAttribute(XStr("virtual_node_id").x())).c());
-    if (hasChildTag(interface_tag, "virtual_interface_name"))
-		rv.virtual_interface_name = string(XStr(interface_tag->getAttribute (XStr("virtual_interface_name").x())).c());
-	if (hasChildTag(interface_tag, "component_node_uuid"))
-		rv.component_node_uuid = string(XStr(interface_tag->getAttribute(XStr("component_node_uuid").x())).c());
-    if (hasChildTag(interface_tag, "component_interface_name"))
-		rv.component_interface_name = string(XStr(interface_tag->getAttribute (XStr("component_interface_name").x())).c());
-    	
+interface_spec parse_interface_rspec_xml(const DOMElement *tag) 
+{
+	interface_spec rv =
+		{	
+			string(XStr(tag->getAttribute(XStr("virtual_node_id").x())).c()),
+			string(XStr(tag->getAttribute(XStr("virtual_interface_name").x())).c()),
+			string(XStr(tag->getAttribute(XStr("component_node_uuid").x())).c()),
+			string(XStr(tag->getAttribute(XStr("component_interface_name").x())).c())		
+		};
     return rv;
 }
 

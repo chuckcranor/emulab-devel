@@ -4,10 +4,11 @@
  * All rights reserved.
  */
 
-static const char rcsid[] = "$Id: solution.cc,v 1.12.8.4 2009-04-03 16:51:00 tarunp Exp $";
+static const char rcsid[] = "$Id: solution.cc,v 1.12.8.5 2009-04-29 23:47:30 tarunp Exp $";
 
 #include "solution.h"
 #include "annotate_rspec.h"
+#include "annotate_vtop.h"
 #include "vclass.h"
 				 
 #include <string>
@@ -16,8 +17,20 @@ static const char rcsid[] = "$Id: solution.cc,v 1.12.8.4 2009-04-03 16:51:00 tar
 
 #include "xstr.h"
 				 
+
+extern bool ptop_xml_input;
+extern bool ptop_rspec_input;
+
 extern bool vtop_xml_input;
 extern bool vtop_rspec_input;
+
+bool both_inputs_rspec = false;
+bool both_inputs_xml = false;
+
+#ifdef WITH_XML
+	annotate_rspec *rspec_annotater;
+	annotate_vtop *vtop_annotater;
+#endif
 
 using namespace std;
 
@@ -36,6 +49,15 @@ void print_solution(const solution &s) {
     vvertex_iterator vit,veit;
     tb_vnode *vn;
 
+#ifdef WITH_XML
+	bool both_inputs_xml = ptop_xml_input && vtop_xml_input;
+	bool both_inputs_rspec = ptop_rspec_input && vtop_rspec_input;
+	
+	if (both_inputs_rspec == true)
+		rspec_annotater = new annotate_rspec ();
+	else if (both_inputs_xml == true)
+		vtop_annotater = new annotate_vtop();
+#endif	
     /*
      * Start by printing out all node mappings
      */
@@ -50,9 +72,13 @@ void print_solution(const solution &s) {
 		const char* assigned_to = XStr (get(pvertex_pmap,s.get_assignment(*vit))->name).c() ;
 	    cout << node_name << " " << assigned_to << endl;
 	    #ifdef WITH_XML
-		if (vtop_rspec_input == true)
+		if (both_inputs_rspec == true)
 		{
-			annotate_rspec(node_name, assigned_to);
+			rspec_annotater->annotate_element(node_name, assigned_to);
+		}
+		else if (both_inputs_xml == true)
+		{
+			vtop_annotater->annotate_element(node_name, assigned_to);
 		}
 		#endif
 	}
@@ -83,9 +109,13 @@ void print_solution(const solution &s) {
 		p->srcmac << "," << p->dstmac << ") " <<
 		p2->name << " (" << p2->srcmac << "," << p2->dstmac << ")";
 #ifdef WITH_XML
-		if (vtop_rspec_input == true)
+		if (both_inputs_rspec == true)
 		{
-			annotate_rspec((vlink->name).c_str(), (p->name).c_str());
+			rspec_annotater->annotate_element((vlink->name).c_str(), (p->name).c_str());
+		}
+		else if (both_inputs_xml == true)
+		{
+// 			annotate_vtop((vlink->name).c_str(), (p->name).c_str());
 		}
 #endif
 	} else if (vlink->link_info.type_used ==
@@ -99,9 +129,13 @@ void print_solution(const solution &s) {
 #ifdef WITH_XML
 		links.push_back((p->name).c_str());
 		links.push_back((p2->name).c_str());
-		if (vtop_rspec_input == true)
+		if (both_inputs_rspec == true)
 		{
-			annotate_rspec((vlink->name).c_str(), &links);
+			rspec_annotater->annotate_element((vlink->name).c_str(), &links);
+		}
+		else if (both_inputs_xml == true)
+		{
+ 			vtop_annotater->annotate_element((vlink->name).c_str(), &links);
 		}
 #endif
 	} else if (vlink->link_info.type_used ==
@@ -116,10 +150,16 @@ void print_solution(const solution &s) {
 			cout << " " << p->name << " (" << p->srcmac << "," << p->dstmac << ")";
 	    }
 #ifdef WITH_XML
-		if (vtop_rspec_input == true)
+		if (both_inputs_rspec == true)
 		{
-			annotate_rspec((vlink->name).c_str(), &links);
+			rspec_annotater->annotate_element((vlink->name).c_str(), &links);
 		}
+		else if (both_inputs_xml == true)
+		{
+			vtop_annotater->annotate_element((vlink->name).c_str(), &links);
+		}
+
+
 #endif
 	} else if (vlink->link_info.type_used == tb_link_info::LINK_TRIVIAL) {
 	    // Trivial link - we really don't have useful information to
@@ -145,13 +185,21 @@ void print_solution(const solution &s) {
 }
 
 /* Print out the current solution and annotate the rspec */
-void print_solution (const solution &s, const char* output_rspec_filename)
+void print_solution (const solution &s, const char* output_filename)
 {
 	print_solution(s);
 #ifdef WITH_XML
-	if (vtop_rspec_input == true)
+	// This will work because print_solution is called already
+	// and the objects have been created there
+	if (both_inputs_rspec == true)
 	{
-		write_annotated_file (output_rspec_filename);
+		cout << "Writing annotated file to " << output_filename << endl;
+		rspec_annotater->write_annotated_file (output_filename);
+	}
+	else if (both_inputs_xml == true)
+	{
+		cout << "Writing annotated file to " << output_filename << endl;
+		vtop_annotater->write_annotated_file (output_filename);
 	}
 #endif
 }

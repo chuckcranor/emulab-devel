@@ -4,7 +4,7 @@
  * All rights reserved.
  */
 
-static const char rcsid[] = "$Id: parse_vtop_xml.cc,v 1.1.2.3 2009-04-03 16:48:24 tarunp Exp $";
+static const char rcsid[] = "$Id: parse_vtop_xml.cc,v 1.1.2.4 2009-04-29 23:47:30 tarunp Exp $";
 
 #include "port.h"
 
@@ -45,41 +45,12 @@ extern name_vclass_map vclass_map;
 #define top_error(s) errors++;cout << "TOP:" << line << ": " << s << endl
 #define top_error_noline(s) errors++;cout << "TOP: " << s << endl
 
-#if 0
-// Used to do late binding of subnode names to vnodes, so that we're no
-// dependant on their ordering in the top file, which can be annoying to get
-// right.
-// Returns the number of errors found
-int bind_top_subnodes() {
-    int errors = 0;
-
-    // Iterate through all vnodes looking for ones that are subnodes
-    vvertex_iterator vit,vendit;
-    tie(vit,vendit) = vertices(vg);
-    for (;vit != vendit;++vit) {
-	tb_vnode *vnode = get(vvertex_pmap, *vit);
-	if (!vnode->subnode_of_name.empty()) {
-	    if (vname2vertex.find(vnode->subnode_of_name)
-		    == vname2vertex.end()) {
-		top_error_noline(vnode->name << " is a subnode of a " <<
-			"non-existent node, " << vnode->subnode_of_name << ".");
-		continue;
-	    }
-	    vvertex parent_vv = vname2vertex[vnode->subnode_of_name];
-	    vnode->subnode_of = get(vvertex_pmap,parent_vv);
-	    vnode->subnode_of->subnodes.push_back(vnode);
-	}
-    }
-
-    return errors;
-}
-#endif
-
 // extern name_vclass_map vclass_map;
 // extern name_name_map fixed_nodes;
 // extern name_name_map node_hints;
 
 DOMElement *root = NULL;
+DOMDocument *vtop_xml_document = NULL;
 
 bool populate_nodes (DOMElement* root, tb_vgraph &vg);
 bool populate_links (DOMElement* root, tb_vgraph &vg);
@@ -102,7 +73,7 @@ int parse_vtop_xml(tb_vgraph &vg, char* filename) {
     parser->setDoSchema(true);
     parser->setValidationSchemaFullChecking(true);
     
-    parser -> setExternalSchemaLocation ("http://emulab.net/resources/vtop/0.2 vtop.xsd");
+    parser -> setExternalSchemaLocation ("http://emulab.net/resources/vtop/0.2 /z/tarunp/xml-schemas/vtop.xsd");
         
     ParseErrorHandler *handler = new ParseErrorHandler();
     parser->setErrorHandler(handler);
@@ -117,8 +88,8 @@ int parse_vtop_xml(tb_vgraph &vg, char* filename) {
 		exit(EXIT_FATAL);
 	}
 
-    DOMDocument *doc = parser->getDocument();
-    root = doc->getDocumentElement();
+    vtop_xml_document = parser->getDocument();
+    root = vtop_xml_document->getDocumentElement();
     
 	XMLDEBUG("Starting vclass population ... " << endl);
     if (!populate_vclasses(root, vg))
@@ -185,17 +156,18 @@ bool populate_nodes (DOMElement *root, tb_vgraph &vg) {
 		// If there is a type_slots node, it has the number of slots
 		// Else there has to be an "unlimited" node.
 		// If neither is present, the parser will have complained earlier.
-		XStr node_type_name (getChildValue (node_type, "type_name"));
+		XStr node_type_name (node_type->getAttribute(XStr("type_name").x()));
+		
+		XStr type_slots (node_type->getAttribute(XStr("type_slots").x()));
 		int node_type_slots = 1;
 		bool is_unlimited = false;
-		bool is_static = hasChildTag (node_type, "static");
-
-		if (hasChildTag (node_type, "type_slots"))
-			node_type_slots = XStr(getChildValue (node_type, "type_slots")).i();
-		// This check is redundant because the parser should have caught the error earlier
-		else if (hasChildTag (node_type, "unlimited"))
+		if (strcmp(type_slots.c(), "unlimited") == 0)
 			is_unlimited = true;
-		
+		else
+			node_type_slots = type_slots.i();
+
+		bool is_static = node_type->hasAttribute(XStr("static").x());
+				
 		XStr *subnode_of_name = NULL;
 		if (hasChildTag (elt, "subnode_of"))
 			subnode_of_name = new XStr(getChildValue (elt, "subnode_of"));
@@ -267,8 +239,6 @@ bool populate_links (DOMElement *root, tb_vgraph &vg) {
         
 		XStr link_name(elt->getAttribute(XStr("name").x()));
         
-        //XMLDEBUG("Got link " << link_name << endl);
-    
         /*
 		* Get source and destination interfaces - we use knowledge of the
 		* schema that there is awlays exactly one source and one destination
@@ -281,17 +251,13 @@ bool populate_links (DOMElement *root, tb_vgraph &vg) {
 		XStr link_src_node(source.first);
 		XStr link_src_iface(source.second);
         
-        //XMLDEBUG("  Source: " << link_src_node << " / " << link_src_iface << endl);
-        
-		DOMNodeList *dst_iface_container =
+        DOMNodeList *dst_iface_container =
 				elt->getElementsByTagName(XStr("destination_interface").x());
 		node_interface_pair dest =
 				parse_interface_xml(dynamic_cast<DOMElement*>
 				(dst_iface_container->item(0)));
 		XStr link_dst_node(dest.first);
 		XStr link_dst_iface(dest.second);
-        
-        //XMLDEBUG("  Destination: " << link_src_node << " / " << link_src_iface << endl);
         
         /*
 		* Check to make sure the referenced nodes actually exist
@@ -353,7 +319,7 @@ bool populate_links (DOMElement *root, tb_vgraph &vg) {
 		 */
 		DOMNodeList *type = elt->getElementsByTagName(XStr ("link_type").x());
 		DOMElement *type_tag = dynamic_cast<DOMElement*>(type->item(0));
-		XStr link_type(getChildValue(type_tag, "type_name"));
+		XStr link_type(type_tag->getAttribute(XStr("type_name").x()));
         
         //XMLDEBUG ("type_name = " << link_type << endl);
 		if (emulated) 
@@ -486,327 +452,3 @@ int bind_vtop_subnodes(tb_vgraph &vg) {
 
     return errors;
 }
-
-#if 0
-int parse_top(tb_vgraph &vg, istream& i)
-{
-  string_vector parsed_line;
-  int errors=0,line=0;
-  int num_nodes = 0;
-  char inbuf[1024];
-  
-  while (!i.eof()) {
-    line++;
-    i.getline(inbuf,1024);
-    parsed_line = split_line(inbuf,' ');
-    if (parsed_line.size() == 0) {continue;}
-
-    string command = parsed_line[0];
-
-    if (command == string("node")) {
-      if (parsed_line.size() < 3) {
-	top_error("Bad node line, too few arguments.");
-      } else {
-	string name = parsed_line[1];
-	string unparsed_type = parsed_line[2];
-
-	// Type might now a have a 'number of slots' assoicated with it
-	string type;
-	string typecount_str;
-	split_two(unparsed_type,':',type,typecount_str,"1");
-
-	int typecount;
-	if (sscanf(typecount_str.c_str(),"%i",&typecount) != 1) {
-	    top_error("Bad type slot count.");
-	    typecount = 1;
-	}
-
-	num_nodes++;
-	tb_vnode *v = new tb_vnode();
-	vvertex vv = add_vertex(vg);
-	vname2vertex[name] = vv;
-	virtual_nodes.push_back(vv);
-	put(vvertex_pmap,vv,v);
-	v->name = name;
-	name_vclass_map::iterator dit = vclass_map.find(type);
-	if (dit != vclass_map.end()) {
-	  v->type="";
-	  v->vclass = (*dit).second;
-	} else {
-	  v->type=type;
-	  v->vclass=NULL;
-	  if (vtypes.find(v->type) == vtypes.end()) {
-	      vtypes[v->type] = typecount;
-	  } else {
-	      vtypes[v->type] += typecount;
-	  }
-	}
-	v->typecount = typecount;
-#ifdef PER_VNODE_TT
-	v->num_links = 0;
-	v->total_bandwidth = 0;
-#endif
-	v->disallow_trivial_mix = false;
-	v->nontrivial_links = v->trivial_links = 0;
-	
-	for (unsigned int i = 3;i < parsed_line.size();++i) {
-	  string desirename,desireweight;
-	  if (split_two(parsed_line[i],':',desirename,desireweight,"0") == 1) {
-	      // It must be a flag?
-	      if (parsed_line[i] == string("disallow_trivial_mix")) {
-		  v->disallow_trivial_mix = true;
-	      } else {
-		  top_error("Unknown flag or bad desire (missing weight)");
-	      }
-	  } else {
-	      if (desirename == string("subnode_of")) {
-		  // Okay, it's not a desire, it's a subnode declaration
-		  if (!v->subnode_of_name.empty()) {
-		      top_error("Can only be a subnode of one node");
-		      continue;
-		  }
-		  v->subnode_of_name = desireweight;
-
-	      } else {
-		  double gweight;
-		  if (sscanf(desireweight.c_str(),"%lg",&gweight) != 1) {
-		      top_error("Bad desire, bad weight.");
-		      gweight = 0;
-		  }
-		  v->desires.push_front(
-			  tb_node_featuredesire(desirename,gweight));
-	      }
-	  }
-	}
-	v->desires.sort();
-      }
-    } else if (command == string("link")) {
-      if (parsed_line.size() < 8) {
-	top_error("Bad link line, too few arguments.");
-      } else {
-	string name = parsed_line[1];
-	string src = parsed_line[2];
-	string dst = parsed_line[3];
-	string link_type = parsed_line[7];
-	string bw,bwunder,bwover;
-	string delay,delayunder,delayover;
-	string loss,lossunder,lossover;
-	string bwweight,delayweight,lossweight;
-	string_vector parsed_delay,parsed_bw,parsed_loss;
-	parsed_bw = split_line(parsed_line[4],':');
-	bw = parsed_bw[0];
-	if (parsed_bw.size() == 1) {
-	  bwunder = "0";
-	  bwover = "0";
-	  bwweight = "1";
-	} else if (parsed_bw.size() == 3) {
-	  bwunder = parsed_bw[1];
-	  bwover = parsed_bw[2];
-	  bwweight = "1";
-	} else if (parsed_bw.size() == 4) {
-	  bwunder = parsed_bw[1];
-	  bwover = parsed_bw[2];
-	  bwweight = parsed_bw[3];
-	} else {
-	  top_error("Bad link line, bad bandwidth specifier.");
-	}
-	parsed_delay = split_line(parsed_line[5],':');
-	delay = parsed_delay[0];
-	if (parsed_delay.size() == 1) {
-	  delayunder = "0";
-	  delayover = "0";
-	  delayweight = "1";
-	} else if (parsed_delay.size() == 3) {
-	  delayunder = parsed_delay[1];
-	  delayover = parsed_delay[2];
-	  delayweight = "1";
-	} else if (parsed_delay.size() == 4) {
-	  delayunder = parsed_delay[1];
-	  delayover = parsed_delay[2];
-	  delayweight = parsed_delay[3];
-	} else {
-	  top_error("Bad link line, bad delay specifier.");
-	}
-	parsed_loss = split_line(parsed_line[6],':');
-	loss = parsed_loss[0];
-	if (parsed_loss.size() == 1) {
-	  lossunder = "0";
-	  lossover = "0";
-	  lossweight = "1";
-	} else if (parsed_loss.size() == 3) {
-	  lossunder = parsed_loss[1];
-	  lossover = parsed_loss[2];
-	  lossweight = "1";
-	} else if (parsed_loss.size() == 4) {
-	  lossunder = parsed_loss[1];
-	  lossover = parsed_loss[2];
-	  lossweight = parsed_loss[4];
-	} else {
-	  top_error("Bad link line, bad loss specifier.");
-	}
-
-	vedge e;
-	// Check to make sure the nodes in the link actually exist
-	if (vname2vertex.find(src) == vname2vertex.end()) {
-	  top_error("Bad link line, non-existent node.");
-	  continue;
-	}
-	if (vname2vertex.find(dst) == vname2vertex.end()) {
-	  top_error("Bad link line, non-existent node.");
-	  continue;
-	}
-
-	vvertex node1 = vname2vertex[src];
-	vvertex node2 = vname2vertex[dst];
-	e = add_edge(node1,node2,vg).first;
-	tb_vlink *l = new tb_vlink();
-	l->src = node1;
-	l->dst = node2;
-	l->type = link_type;
-	put(vedge_pmap,e,l);
-
-	if ((sscanf(bw.c_str(),"%d",&(l->delay_info.bandwidth)) != 1) ||
-	    (sscanf(bwunder.c_str(),"%d",&(l->delay_info.bw_under)) != 1) ||
-	    (sscanf(bwover.c_str(),"%d",&(l->delay_info.bw_over)) != 1) ||
-	    (sscanf(bwweight.c_str(),"%lg",&(l->delay_info.bw_weight)) != 1) ||
-	    (sscanf(delay.c_str(),"%d",&(l->delay_info.delay)) != 1) ||
-	    (sscanf(delayunder.c_str(),"%d",&(l->delay_info.delay_under)) != 1) ||
-	    (sscanf(delayover.c_str(),"%d",&(l->delay_info.delay_over)) != 1) ||
-	    (sscanf(delayweight.c_str(),"%lg",&(l->delay_info.delay_weight)) != 1) ||
-	    (sscanf(loss.c_str(),"%lg",&(l->delay_info.loss)) != 1) ||
-	    (sscanf(lossunder.c_str(),"%lg",&(l->delay_info.loss_under)) != 1) ||
-	    (sscanf(lossover.c_str(),"%lg",&(l->delay_info.loss_over)) != 1) ||
-	    (sscanf(lossweight.c_str(),"%lg",&(l->delay_info.loss_weight)) != 1)) {
-	  top_error("Bad line line, bad delay characteristics.");
-	}
-	l->no_connection = false;
-	l->name = name;
-	l->allow_delayed = true;
-#ifdef ALLOW_TRIVIAL_DEFAULT
-	l->allow_trivial = true;
-#else
-	l->allow_trivial = false;
-#endif
-	l->emulated = false;
-	
-	for (unsigned int i = 8;i < parsed_line.size();++i) {
-	  if (parsed_line[i] == string("nodelay")) {
-	    l->allow_delayed = false;
-	  } else if (parsed_line[i] == string("emulated")) {
-	    l->emulated = true;
-	  } else if (parsed_line[i] == string("trivial_ok")) {
-	    l->allow_trivial = true;
-	  } else {
-	    top_error("bad link line, unknown tag: " <<
-		      parsed_line[i] << ".");
-	  }
-	}
-	
-#ifdef PER_VNODE_TT
-	tb_vnode *vnode1 = get(vvertex_pmap,node1);
-	tb_vnode *vnode2 = get(vvertex_pmap,node2);
-	if (l->emulated) {
-	    if (!l->allow_trivial) {
-		vnode1->total_bandwidth += l->delay_info.bandwidth;
-		vnode2->total_bandwidth += l->delay_info.bandwidth;
-	    }
-	} else {
-	    vnode1->num_links++;
-	    vnode2->num_links++;
-	    vnode1->link_counts[link_type]++;
-	    vnode2->link_counts[link_type]++;
-	}
-#endif
-      }
-    } else if (command == string("make-vclass")) {
-      if (parsed_line.size() < 4) {
-	top_error("Bad vclass line, too few arguments.");
-      } else {
-	string name = parsed_line[1];
-	string weight = parsed_line[2];
-	double gweight;
-	if (sscanf(weight.c_str(),"%lg",&gweight) != 1) {
-	  top_error("Bad vclass line, invalid weight.");
-	  gweight = 0;
-	}
-	
-	tb_vclass *v = new tb_vclass(name,gweight);
-	vclass_map[name] = v;
-	for (unsigned int i = 3;i<parsed_line.size();++i) {
-	  v->add_type(parsed_line[i]);
-	  vclasses[name].push_back(parsed_line[i]);
-	}
-      }
-    } else if (command == string("fix-node")) {
-      if (parsed_line.size() != 3) {
-	top_error("Bad fix-node line, wrong number of arguments.");
-      } else {
-	string virtualnode = parsed_line[1];
-	string physicalnode = parsed_line[2];
-	fixed_nodes[virtualnode] = physicalnode;
-      }
-    } else if (command == string("node-hint")) {
-      if (parsed_line.size() != 3) {
-	top_error("Bad node-hint line, wrong number of arguments.");
-      } else {
-	string virtualnode = parsed_line[1];
-	string physicalnode = parsed_line[2];
-	node_hints[virtualnode] = physicalnode;
-      }
-    } else {
-      top_error("Unknown directive: " << command << ".");
-    }
-  }
-
-  errors += bind_top_subnodes();
-
-  if (errors > 0) {exit(EXIT_FATAL);}
-  
-  return num_nodes;
-}
-#endif // 0
-
-/*
-    /*
-			* Parse the nodes
-			* Design decision - do we simply ask for all nodes, or do we actually walk
-			* the whole structure?
-			* We're not going to do much error checking in here, as we assume
-			* that a lot of it was done by the validator.
-
-							DOMNodeList *nodes = root->getElementsByTagName(XStr("node").x());
-					XMLDEBUG("Found " << nodes->getLength() << " nodes" << endl);
-
-					for (size_t i = 0; i < nodes->getLength(); i++) {
-
-//DOMElement *node = dynamic_cast<DOMElement*>(nodes->item(i));
-						DOMNode *node = nodes->item(i);
-						DOMNamedNodeMap *atts = node->getAttributes();
-						XStr *xstr = new XStr(atts->getNamedItem(XStr("name").x())->getNodeValue());
-						fstring name = xstr->f();
-						XMLDEBUG("Node name is: " << name << endl);
-//cerr << "XML node name is: " << XStr(node->getNodeName()) << endl;
-// XMLDEBUG("XML node type is: " << node->getNodeType() << endl);
-
-						DOMElement *element = static_cast<DOMElement *>(node);
-						//DOMElement *element = dynamic_cast<DOMElement *>(node);
-						//DOMElement *element = (DOMElement*)node;
-		
-/*
-						* Get the node's type and the number of slots it occupies
-
-						DOMNodeList *typeL = element->getElementsByTagName(XStr("type_name").x());
-						DOMElement *type = static_cast<DOMElement *>(typeL->item(0));
-						//DOMElement *type = dynamic_cast<DOMElement *>(typeL->item(0));
-						//DOMElement *type = (DOMElement *)(typeL->item(0));
-						const XMLCh *typeX = type->getFirstChild()->getNodeValue();
-
-						tb_vnode *v = new tb_vnode(name,XStr(typeX).c(),1);
-						vvertex vv = add_vertex(vg);
-						vname2vertex[name] = vv;
-						virtual_nodes.push_back(vv);
-						put(vvertex_pmap,vv,v);
-
-						delete xstr;
-					}
-					*/

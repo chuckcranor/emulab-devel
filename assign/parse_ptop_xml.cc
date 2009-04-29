@@ -8,7 +8,7 @@
  * XML Parser for ptop files
  */
 
-static const char rcsid[] = "$Id: parse_ptop_xml.cc,v 1.3.8.11 2009-04-03 16:48:24 tarunp Exp $";
+static const char rcsid[] = "$Id: parse_ptop_xml.cc,v 1.3.8.12 2009-04-29 23:47:30 tarunp Exp $";
 
 #include "parse_ptop_xml.h"
 #include "xmlhelpers.h"
@@ -16,7 +16,10 @@ static const char rcsid[] = "$Id: parse_ptop_xml.cc,v 1.3.8.11 2009-04-03 16:48:
 
 #include <fstream>
 
+#include <time.h>
+
 #define XMLDEBUG(x) (cerr << x)
+				 
 #define ISSWITCH(n) (n->types.find("switch") != n->types.end())
 
 /*
@@ -43,6 +46,8 @@ bool populate_links(DOMElement *root, tb_pgraph &pg, tb_sgraph &sg);
 void populate_policies(DOMElement *root);
 
 int parse_fds_xml (const DOMElement* tag, node_fd_set *fd_set);
+
+map<string, DOMElement*>* ptop_elements = new map<string, DOMElement*>();
 
 int parse_ptop_xml(tb_pgraph &pg, tb_sgraph &sg, char *filename) {
     /* 
@@ -76,8 +81,12 @@ int parse_ptop_xml(tb_pgraph &pg, tb_sgraph &sg, char *filename) {
     /*
      * Do the actual parse
      */
+	clock_t start_time;
+	start_time = clock ();
     parser->parse(filename);
+	cerr << endl << "Completed parsing XML in " << (clock() - start_time) / CLOCKS_PER_SEC << " seconds." << endl << endl;		
     XMLDEBUG("XML parse completed" << endl);
+
 	    
     /* 
      * If there are any errors, do not go any further
@@ -98,20 +107,24 @@ int parse_ptop_xml(tb_pgraph &pg, tb_sgraph &sg, char *filename) {
         * These three calls do the real work of populating the assign data
         * structures
         */
-        XMLDEBUG("starting node population" << endl);
+		XMLDEBUG("starting node population" << endl);
+		start_time = clock ();
         if (!populate_nodes(root,pg,sg)) {
         cerr << "Error reading nodes from physical topology " << filename
             << endl;
         exit(EXIT_FATAL);
         }
+		cerr << endl << "Completed populating nodes in " << (clock() - start_time) / CLOCKS_PER_SEC << " seconds." << endl << endl;		
         XMLDEBUG("finishing node population" << endl);
-
+		
         XMLDEBUG("starting link population" << endl);
+		start_time = clock ();
         if (!populate_links(root,pg, sg)) {
         cerr << "Error reading links from physical topology " << filename
             << endl;
         exit(EXIT_FATAL);
         }
+		cerr << endl << "Completed populating links in " << (clock() - start_time) / CLOCKS_PER_SEC << " seconds." << endl << endl;		
         XMLDEBUG("finishing link population" << endl);
         
 		//populate_policies(root);
@@ -141,13 +154,13 @@ bool populate_nodes(DOMElement *root, tb_pgraph &pg, tb_sgraph &sg) {
 	int counter = 0;
     for (size_t i = 0; i < nodeCount; i++) 
 	{
-		
-		
 		DOMNode *node = nodes->item(i);
 		// This should not be able to fail, due to the fact that all elements in
 		// this list came from the getElementsByTagName() call
 		DOMElement *elt = dynamic_cast<DOMElement*>(node);
 		XStr name(elt->getAttribute(XStr("name").x()));
+		
+		ptop_elements->insert(pair<string, DOMElement*>(string(name.c()), elt));
 		
 		//XMLDEBUG("Got node " << name << endl);
 		
@@ -168,32 +181,27 @@ bool populate_nodes(DOMElement *root, tb_pgraph &pg, tb_sgraph &sg) {
 		{
 			
 			DOMElement *typetag = dynamic_cast<DOMElement*>(types->item(i));
-			XStr type_name(getChildValue(typetag, "type_name"));
+			XStr type_name(typetag->getAttribute(XStr("type_name").x()));
 			
 			/*
 			* Check to see if it's a static type
 			*/
-			bool is_static;
-			if (hasChildTag(typetag,"static")) {
+			bool is_static = false;
+			if (typetag->hasAttribute(XStr("static").x()))
 				is_static = true;
-			} 
-			else {
-				is_static = false;
-			}
 			
 			/*
 			* ... and how many slots it has
 			* XXX: Need a real 'unlimited' value!
 			*/
 			int type_slots;
-			if (hasChildTag(typetag,"unlimited")) {
+			XStr type_slot_string(typetag->getAttribute(XStr("type_slots").x()));
+			if (strcmp(type_slot_string.c(), "unlimited") == 0) {
 				type_slots = 1000;
 			} 
 			else {
-				XStr type_slot_string(getChildValue(typetag,"type_slots"));
 				type_slots = type_slot_string.i();
 			}
-			//XMLDEBUG("  has type " << type_name << " with " << type_slots << " slots" << endl);
 			
 			/*
 			* Make a tb_ptype structure for this guy - or just add this node to
@@ -313,6 +321,7 @@ bool populate_links(DOMElement *root, tb_pgraph &pg, tb_sgraph &sg) {
         
         XStr name(elt->getAttribute(XStr("name").x()));
         
+		ptop_elements->insert(pair<string, DOMElement*>(string(name.c()), elt));
         //XMLDEBUG("Got link " << name << endl);
     
         /*
@@ -376,8 +385,8 @@ bool populate_links(DOMElement *root, tb_pgraph &pg, tb_sgraph &sg) {
         */
         DOMNodeList *types = elt->getElementsByTagName(XStr ("link_type").x());
         DOMElement *first_type_tag = dynamic_cast<DOMElement*>(types->item(0));
-        XStr first_type (getChildValue(first_type_tag, "type_name"));
-        const char* str_first_type = first_type.c();
+		XStr first_type (first_type_tag->getAttribute(XStr("type_name").x()));
+		const char* str_first_type = first_type.c();
         
         //XMLDEBUG ("type_name = " << first_type << endl;);
         
@@ -420,7 +429,7 @@ bool populate_links(DOMElement *root, tb_pgraph &pg, tb_sgraph &sg) {
         for (int i = 1; i < types->getLength(); i++) 
 		{
             DOMElement *link_type = dynamic_cast<DOMElement*>(types->item(i));
-            const char *str_type_name = XStr(getChildValue(link_type,"type_name")).c();
+			const char *str_type_name = XStr(link_type->getAttribute(XStr("type_name").x())).c();
             //XMLDEBUG("  Link has type " << type_name << endl);
             // XXX: Should not be manual
             phys_link->types.insert(str_type_name);

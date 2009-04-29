@@ -51,8 +51,8 @@ using namespace boost;
 #include "parse_ptop_xml.h"
 #include "parse_vtop_xml.h"
 #include "parse_top_xml.h"
-#include "parse_ptop_rspec.h"
-#include "parse_vtop_rspec.h"
+#include "parse_advertisement_rspec.h"
+#include "parse_request_rspec.h"
 #endif
 
 // Here we set up all our graphs.  Need to create the graphs
@@ -249,6 +249,7 @@ void read_physical_topology(char *filename) {
   for (;pvit != pvendit;pvit++) {
     pnode2vertex[get(pvertex_pmap,*pvit)]=*pvit;
   }
+
 }
 
 // Calculate the minimum spanning tree for the switches - we only consider one
@@ -314,7 +315,6 @@ void read_virtual_topology(char *filename) {
 #else
 	cout << "Virtual Graph: " << parse_top(VG,topfile) << endl;
 #endif
-
 
 #ifdef DUMP_GRAPH
   {
@@ -383,8 +383,7 @@ void prune_unusable_pclasses() {
                     /*
                      * Remove it from the current ptype
                      */
-                    this_type_p->remove_slots(
-		       tm_iterator->second->get_max_load());
+                    this_type_p->remove_slots(tm_iterator->second->get_max_load());
 
                     /*
                      * Move on to the next node
@@ -1130,7 +1129,7 @@ int main(int argc,char **argv) {
   cout << vinfo;
 
 #ifdef WITH_XML
-  if (vtop_rspec_input)
+  if (vtop_rspec_input || vtop_xml_input)
   {
 	  print_solution(best_solution, annotated_filename(vtopFilename).c_str());
   }

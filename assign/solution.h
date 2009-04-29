@@ -19,9 +19,6 @@
 #include "virtual.h"
 #include "maps.h"
 
-#include <utility>
-#include <list>
-
 /*
  * Stucture to hold a potential solution
  */

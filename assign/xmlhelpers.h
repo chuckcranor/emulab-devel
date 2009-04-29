@@ -51,6 +51,9 @@ std::vector<const xercesc::DOMElement*> getElementsByAttributeValue (const xerce
  */ 
 xercesc::DOMElement* getElementByTagName (const xercesc::DOMElement* root, const char* tag);
 
+/* Returns the nth interface in a link (it can be used in a node only if n is set to 0 */
+xercesc::DOMElement* getNthInterface (const xercesc::DOMElement* root, int n);
+
 /*
  * Convenience function - return true if the given element has a tag with the
  * given name (at least one), or false if not.

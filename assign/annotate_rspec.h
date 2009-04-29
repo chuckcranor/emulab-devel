@@ -1,64 +1,45 @@
 #ifndef __ANNOTATE_RSPEC_H
 #define __ANNOTATE_RSPEC_H
 
-#include <utility>
+#include "annotate.h"
+
 #include <list>
+#include <map>
+#include <utility>
+#include <string>
 
 #include <xercesc/dom/DOM.hpp>
-#include <xercesc/dom/DOMImplementation.hpp>
-#include <xercesc/dom/DOMImplementationLS.hpp>
-#include <xercesc/dom/DOMWriter.hpp>
 
-#include <xercesc/framework/StdOutFormatTarget.hpp>
-#include <xercesc/framework/LocalFileFormatTarget.hpp>
-#include <xercesc/parsers/XercesDOMParser.hpp>
-#include <xercesc/util/XMLUni.hpp>
-
-#include <xercesc/util/XercesDefs.hpp>
-#include <xercesc/sax/ErrorHandler.hpp>
-#include <xercesc/sax/SAXParseException.hpp>
-
-#include <xercesc/util/OutOfMemoryException.hpp>
-
-#include <xercesc/sax2/XMLReaderFactory.hpp>
-
-// Annotates the vtop xml file
-void annotate_vtop (const char* v_name, const char* p_name, char element_type);
-
-// Annotates nodes in the rspec
-void annotate_rspec(const char* v_name, const char* p_name);
-
-// Annotates intraswitch and direct links in the rspec
-void annotate_rspec(const char* v_name, std::pair<const char*, const char*>* end_points);
-
-// Annotates intraswitch and interswitch links in the rspec
-void annotate_rspec(const char* v_name, std::list<const char*>* links);
-
-// Annotates interswitch links in the rspec
-void annotate_rspec(const char* v_name[], const char* p_name[]);
-
-// Annotates the interface elements on links
-void annotate_interface (xercesc::DOMElement* link, const char* interface_type, xercesc::DOMElement* component_interface);
-
-// Annotates the interface element on nodes
-void annotate_interface (const char* node_uuid, const char* virtual_iface_name, const char* component_iface_name);
-
-// Annotates the interface elements on a node to switch link (and for a switch to node link)
-void annotate_interface (xercesc::DOMElement* plink, xercesc::DOMElement* vlink, const char* src_iface_virt_iface_name, const char* interface_type);
-
-// Creates a hop from a switch till the next end point
-void create_hop (xercesc::DOMElement* p_switch_dst_link, xercesc::DOMElement* multi_hop_link, bool reverse);
-
-// Copies the component spec from the source to the destination
-void copy_component_spec(xercesc::DOMElement* src, xercesc::DOMElement* dst);
-
-// Creates source_interface and destination_interface tags with empty interface elements on the specified link
-void create_interface_spec(xercesc::DOMElement *link);
-
-// Writes the annotated xml to disk
-void write_annotated_file(const char* filename);
-
-// Finds the next link in the path
-xercesc::DOMElement* find_next_link_in_path (xercesc::DOMElement* prev, std::list<const char*>* links);
+class annotate_rspec : public annotate
+{
+	private:
+		// Enumeration of which interface in a hop is an interface to a link end point
+		enum endpoint_interface_enum { NEITHER, SOURCE, DESTINATION, BOTH };
+	
+	public:
+		annotate_rspec ();
+		~annotate_rspec () { ; }
+		
+		// Annotates nodes and direct links in the rspec
+		 void annotate_element(const char* v_name, const char* p_name);
+	
+		// Annotates intraswitch and interswitch links in the rspec
+		 void annotate_element(const char* v_name, std::list<const char*>* links);
+	
+		// Annotates an interface element on a link
+		 void annotate_interface (const xercesc::DOMElement* plink, xercesc::DOMElement* vlink, int interface_number);
+			
+		// Creates a hop from a switch till the next end point. Adds the hop to the vlink and returns the hop element that was created
+		 xercesc::DOMElement* create_component_hop (const xercesc::DOMElement* plink, xercesc::DOMElement* vlink, int endpoint_interface, const xercesc::DOMElement* prev_component_hop);
+			
+		// If the interface is the end point of a link/path, add an additional attribute to it
+		 void set_interface_as_link_endpoint (xercesc::DOMElement* interface, const char* _id);
+	
+		// Finds the next link in the path returned by assign
+		 xercesc::DOMElement* find_next_link_in_path (xercesc::DOMElement *prev, std::list<const char*>* links);
+		
+		// Copies the component spec from the source to the destination
+		void annotate_rspec::copy_component_spec(const xercesc::DOMElement* src, xercesc::DOMElement* dst);
+};
 
 #endif
