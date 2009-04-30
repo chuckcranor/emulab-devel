@@ -4,7 +4,7 @@
  * All rights reserved.
  */
 
-static const char rcsid[] = "$Id: parse_vtop_xml.cc,v 1.1.2.4 2009-04-29 23:47:30 tarunp Exp $";
+static const char rcsid[] = "$Id: parse_vtop_xml.cc,v 1.1.2.5 2009-04-30 00:04:36 tarunp Exp $";
 
 #include "port.h"
 
@@ -73,7 +73,7 @@ int parse_vtop_xml(tb_vgraph &vg, char* filename) {
     parser->setDoSchema(true);
     parser->setValidationSchemaFullChecking(true);
     
-    parser -> setExternalSchemaLocation ("http://emulab.net/resources/vtop/0.2 /z/tarunp/xml-schemas/vtop.xsd");
+    parser -> setExternalSchemaLocation ("http://emulab.net/resources/vtop/0.2 vtop.xsd");
         
     ParseErrorHandler *handler = new ParseErrorHandler();
     parser->setErrorHandler(handler);
