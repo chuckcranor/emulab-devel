@@ -1,10 +1,10 @@
 /*
  * EMULAB-COPYRIGHT
- * Copyright (c) 2003-2007 University of Utah and the Flux Group.
+ * Copyright (c) 2003-2009 University of Utah and the Flux Group.
  * All rights reserved.
  */
 
-static const char rcsid[] = "$Id: anneal.cc,v 1.45.8.7 2009-05-01 19:10:53 ricci Exp $";
+static const char rcsid[] = "$Id: anneal.cc,v 1.45.8.8 2009-05-01 23:01:19 ricci Exp $";
 
 #include "anneal.h"
 
@@ -202,8 +202,9 @@ void smart_unmap_part2() {
 double temp;
 
 /* When this is finished the state will reflect the best solution found. */
-void anneal(bool scoring_selftest, double scale_neighborhood,
-	double *initial_temperature, double use_connected_pnode_find)
+void anneal(bool scoring_selftest, bool check_fixed_nodes,
+        double scale_neighborhood, double *initial_temperature,
+        double use_connected_pnode_find)
 {
   cout << "Annealing." << endl;
 
@@ -301,7 +302,17 @@ void anneal(bool scoring_selftest, double scale_neighborhood,
           << vn->type << "\n";
       }
     }
-    if (add_node(vv,pv,false,true,false) == 1) {
+
+    /*
+     * Normally, we want to bypass some checks in add_node for fixed nodes -
+     * but not always (usually for testing purposes).
+     */
+    bool skip_checks = true;
+    if (check_fixed_nodes) {
+        skip_checks = false;
+    }
+
+    if (add_node(vv,pv,false,skip_checks,false) == 1) {
       cout << "*** Fixed node: Could not map " << vn->name <<
 	" to " << pn->name << endl;
       fix_failed++;

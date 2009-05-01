@@ -132,6 +132,9 @@ bool print_summary = false;
 // Use the 'connected' find algorithm
 double use_connected_pnode_find = 0.0f;
 
+// Whether or not to perform all checks on fixed nodex
+bool check_fixed_nodes = false;
+
 // Use XML for file input
 // bool xml_input = false;
 #ifdef WITH_XML
@@ -448,6 +451,7 @@ void print_help() {
   cout << "  -q <file>   - Specify a rspec ptop file" << endl;
   cout << "  -w <file>   - Specify a rspec vtop file" << endl;
 #endif
+  cout << "  -F          - Apply additional checking to fixed noded" << endl;
   exit(EXIT_FATAL);
 }
  
@@ -836,7 +840,7 @@ int main(int argc,char **argv) {
   char* vtopFilename = "";
   
   cout << argc << " arguments provided" << endl;
-  while ((ch = getopt(argc,argv,"s:v:l:t:rpPTdH:oguc:nx:X:y:Y:q:w:")) != -1) {
+  while ((ch = getopt(argc,argv,"s:v:l:t:rpPTdH:oguc:nx:X:y:Y:q:w:F")) != -1) {
     switch (ch) {
     case 's':
       if (sscanf(optarg,"%d",&seed) != 1) {
@@ -952,6 +956,9 @@ int main(int argc,char **argv) {
 	  vtopFilename = optarg;
     break;
 #endif
+        case 'F':
+          check_fixed_nodes = true;
+    break;
 
     default:
       print_help();
@@ -1112,8 +1119,8 @@ int main(int argc,char **argv) {
   }
  
   // Note, time is started earlier now, up by where we make pclasses
-  anneal(scoring_selftest, scale_neighborhood, initial_temperature_pointer,
-      use_connected_pnode_find);
+  anneal(scoring_selftest, check_fixed_nodes, scale_neighborhood,
+          initial_temperature_pointer, use_connected_pnode_find);
   timeend = used_time();
 
 #ifdef GNUPLOT_OUTPUT
