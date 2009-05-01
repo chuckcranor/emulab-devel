@@ -4,7 +4,7 @@
  * All rights reserved.
  */
 
-static const char rcsid[] = "$Id: score.cc,v 1.63.8.6 2009-05-01 19:10:53 ricci Exp $";
+static const char rcsid[] = "$Id: score.cc,v 1.63.8.7 2009-05-01 22:05:04 ricci Exp $";
 
 #include "port.h"
 
@@ -1399,7 +1399,7 @@ int add_node(vvertex vv,pvertex pv, bool deterministic, bool is_fixed, bool skip
     }
   }
 
-  SDEBUG(cerr << "  assignment=" << vnode->assignment << endl);
+  SDEBUG(cerr << "  assignment=" << pnode->name << endl);
   SDEBUG(cerr << "  new score=" << score << " new violated=" << violated << endl);
 
   if (!tr->is_static()) {
