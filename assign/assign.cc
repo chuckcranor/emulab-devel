@@ -813,6 +813,7 @@ void status_report(int signal) {
   cout << "I: " << iters << " T: " << temp << " S: " << get_score() << " V: "
     << violated << " (Best S: " << absbest << " V:" << absbestviolated << ")"
     << endl;
+  cout.flush();
 }
 
 // From anneal.cc - the best solution found
