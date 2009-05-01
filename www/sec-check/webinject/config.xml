@@ -1,3 +1,0 @@
-<testcasefile>testcases.xml</testcasefile>
-<globalhttplog>onfail</globalhttplog>
-<gnuplot>/usr/local/bin/gnuplot</gnuplot>

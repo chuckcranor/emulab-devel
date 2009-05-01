@@ -1,6 +1,0 @@
-User-Agent: *
-# Disallow downloads for now
-Disallow: /downloads
-Disallow: /wikidocs
-Disallow: /*ChangeLog*
-
