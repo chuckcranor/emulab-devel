@@ -834,6 +834,7 @@ int main(int argc,char **argv) {
   char* ptopFilename = "";
   char* vtopFilename = "";
   
+  cout << argc << " arguments provided" << endl;
   while ((ch = getopt(argc,argv,"s:v:l:t:rpPTdH:oguc:nx:X:y:Y:q:w:")) != -1) {
     switch (ch) {
     case 's':
@@ -955,14 +956,21 @@ int main(int argc,char **argv) {
       print_help();
     }
   }
+  
   argc -= optind;
   argv += optind;
   
+  if (argc == 2)
+  {
+	  ptopFilename = argv[0];
+	  vtopFilename = argv[1];
+  }
+  
   if (strcmp(ptopFilename, "") == 0)
-  	print_help();
+	  print_help();
   	
   if (strcmp(vtopFilename, "") == 0)
-  	print_help();	
+	  print_help();	
   
   if (seed == 0) {
     if (getenv("ASSIGN_SEED") != NULL) {
