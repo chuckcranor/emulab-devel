@@ -4,7 +4,7 @@
  * All rights reserved.
  */
 
-static const char rcsid[] = "$Id: parse_vtop_xml.cc,v 1.1.2.5 2009-04-30 00:04:36 tarunp Exp $";
+static const char rcsid[] = "$Id: parse_vtop_xml.cc,v 1.1.2.6 2009-05-05 18:05:33 tarunp Exp $";
 
 #include "port.h"
 
@@ -45,6 +45,12 @@ extern name_vclass_map vclass_map;
 #define top_error(s) errors++;cout << "TOP:" << line << ": " << s << endl
 #define top_error_noline(s) errors++;cout << "TOP: " << s << endl
 
+#ifdef TBROOT
+	#define SCHEMA_LOCATION TBROOT"/lib/assign/vtop.xsd"
+#else
+	#define SCHEMA_LOCATION "vtop.xsd"
+#endif
+
 // extern name_vclass_map vclass_map;
 // extern name_name_map fixed_nodes;
 // extern name_name_map node_hints;
@@ -73,7 +79,7 @@ int parse_vtop_xml(tb_vgraph &vg, char* filename) {
     parser->setDoSchema(true);
     parser->setValidationSchemaFullChecking(true);
     
-    parser -> setExternalSchemaLocation ("http://emulab.net/resources/vtop/0.2 vtop.xsd");
+	parser -> setExternalSchemaLocation ("http://emulab.net/resources/vtop/0.2 " SCHEMA_LOCATION);
         
     ParseErrorHandler *handler = new ParseErrorHandler();
     parser->setErrorHandler(handler);

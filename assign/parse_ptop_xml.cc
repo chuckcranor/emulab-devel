@@ -8,7 +8,7 @@
  * XML Parser for ptop files
  */
 
-static const char rcsid[] = "$Id: parse_ptop_xml.cc,v 1.3.8.12 2009-04-29 23:47:30 tarunp Exp $";
+static const char rcsid[] = "$Id: parse_ptop_xml.cc,v 1.3.8.13 2009-05-05 18:05:33 tarunp Exp $";
 
 #include "parse_ptop_xml.h"
 #include "xmlhelpers.h"
@@ -21,6 +21,12 @@ static const char rcsid[] = "$Id: parse_ptop_xml.cc,v 1.3.8.12 2009-04-29 23:47:
 #define XMLDEBUG(x) (cerr << x)
 				 
 #define ISSWITCH(n) (n->types.find("switch") != n->types.end())
+
+#ifdef TBROOT
+	#define SCHEMA_LOCATION TBROOT"/lib/assign/ptop.xsd"
+#else
+	#define SCHEMA_LOCATION "ptop.xsd"
+#endif
 
 /*
  * XXX: Do I have to release lists when done with them?
@@ -65,10 +71,10 @@ int parse_ptop_xml(tb_pgraph &pg, tb_sgraph &sg, char *filename) {
     parser->setDoSchema(true);
     parser->setValidationSchemaFullChecking(true);
         
-    /*
-     * Must validate against the ptop schema
-     */
-    parser -> setExternalSchemaLocation ("http://emulab.net/resources/ptop/0.1 ptop.xsd");
+	/*
+	 * Must validate against the ptop schema
+	 */
+	parser -> setExternalSchemaLocation ("http://emulab.net/resources/ptop/0.1 " SCHEMA_LOCATION);
     
     /*
      * Just use a custom error handler - must admin it's not clear to me why

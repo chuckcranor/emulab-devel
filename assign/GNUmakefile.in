@@ -69,6 +69,8 @@ CXXFLAGS += -DFIX_PLINK_ENDPOINTS
 CXXFLAGS += -DTRIVIAL_LINK_BW
 # Use the old acceptance criteria, which gives special treatment to violations
 CXXFLAGS += -DSPECIAL_VIOLATION_TREATMENT
+# Pass the Emulab installation root directory
+CXXFLAGS += -DTBROOT='"$(TBROOT)"'
 
 # If you're looking to turn on or off USE_OPTIMAL, its now a cmdline
 # option. Use OP={0,1} on the command line at run time... :)
@@ -77,8 +79,7 @@ DEPLIBS=$(OBJS)
 
 assign: ${MAKEFILE_IN} ${DEPLIBS} ${OBJS}
 	${CXX} -o assign ${LIBS} $(OBJS) ${LDFLAGS}
-	sh xsdgen
-
+	
 install: $(INSTALL_LIBEXECDIR)/assign 
 
 clean:
