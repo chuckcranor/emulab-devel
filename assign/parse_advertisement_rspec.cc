@@ -8,7 +8,7 @@
  * XML Parser for RSpec ptop files
  */
 
-static const char rcsid[] = "$Id: parse_advertisement_rspec.cc,v 1.1.2.2 2009-05-01 21:21:44 tarunp Exp $";
+static const char rcsid[] = "$Id: parse_advertisement_rspec.cc,v 1.1.2.3 2009-05-12 22:19:03 tarunp Exp $";
 
 #include "parse_advertisement_rspec.h"
 #include "xmlhelpers.h"
@@ -23,6 +23,12 @@ static const char rcsid[] = "$Id: parse_advertisement_rspec.cc,v 1.1.2.2 2009-05
 #define XMLDEBUG(x) (cerr << x)
 #define ISSWITCH(n) (n->types.find("switch") != n->types.end())
 
+#ifdef TBROOT
+	#define SCHEMA_LOCATION TBROOT"/lib/assign/rspec-advertisement.xsd"
+#else
+	#define SCHEMA_LOCATION "rspec-ad.xsd"
+#endif
+				 
 /*
  * XXX: Do I have to release lists when done with them?
  */
@@ -79,11 +85,11 @@ int parse_ptop_rspec(tb_pgraph &pg, tb_sgraph &sg, char *filename) {
     parser->setDoNamespaces(true);
     parser->setDoSchema(true);
     parser->setValidationSchemaFullChecking(true);
-        
+    
     /*
      * Must validate against the ptop schema
      */
-	parser -> setExternalSchemaLocation ("http://www.protogeni.net/resources/rspec/0.1 rspec-ad.xsd");
+	parser -> setExternalSchemaLocation ("http://www.protogeni.net/resources/rspec/0.1 " SCHEMA_LOCATION);
     
     /*
      * Just use a custom error handler - must admin it's not clear to me why
