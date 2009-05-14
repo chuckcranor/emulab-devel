@@ -8,6 +8,7 @@ TESTBED_SRCDIR	= @top_srcdir@
 OBJDIR		= ..
 SUBDIR		= assign
 MAKEFILE_IN	= @srcdir@/GNUmakefile.in
+HAVE_XERCES	= @HAVE_XERCES@
 
 include $(OBJDIR)/Makeconf
 
@@ -30,9 +31,11 @@ CXXFLAGS = -pipe -I/usr/local/include -ftemplate-depth-40
 # For OSX w/ fink
 CXXFLAGS += -I/sw/include
 
+ifeq ($(HAVE_XERCES),yes)
 CXXFLAGS += -DWITH_XML
 LIBS += -L/usr/local/lib -lxerces-c
 OBJS += parse_ptop_xml.o parse_vtop_xml.o parse_policy_xml.o parse_error_handler.o xmlhelpers.o parse_advertisement_rspec.o parse_request_rspec.o annotate_rspec.o annotate_vtop.o annotate.o
+endif
 
 # Pick either this
 CXXFLAGS += -O3 
