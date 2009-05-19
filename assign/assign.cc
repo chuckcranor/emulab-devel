@@ -839,7 +839,6 @@ int main(int argc,char **argv) {
   char* ptopFilename = "";
   char* vtopFilename = "";
   
-  cout << argc << " arguments provided" << endl;
   while ((ch = getopt(argc,argv,"s:v:l:t:rpPTdH:oguc:nx:X:y:Y:q:w:F")) != -1) {
     switch (ch) {
     case 's':

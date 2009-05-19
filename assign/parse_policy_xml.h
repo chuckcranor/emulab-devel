@@ -8,6 +8,8 @@
  * Parsing for the (experimental) policy XML format
  */
 
+#ifdef WITH_XML
+
 #ifndef __PARSE_POLICY_XML_H
 #define __PARSE_POLICY_XML_H
 
@@ -25,4 +27,6 @@ XERCES_CPP_NAMESPACE_USE
 
 int parse_policy_xml(char *filename);
 
-#endif
+#endif // for __PARSE_POLICY_XML
+
+#endif // for WITH_XML

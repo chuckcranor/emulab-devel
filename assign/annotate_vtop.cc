@@ -4,7 +4,9 @@
  * All rights reserved.
  */
 
-static const char rcsid[] = "$Id: annotate_vtop.cc,v 1.1.2.1 2009-04-29 23:47:30 tarunp Exp $";
+static const char rcsid[] = "$Id: annotate_vtop.cc,v 1.1.2.2 2009-05-19 20:10:15 tarunp Exp $";
+
+#ifdef WITH_XML
 
 #include "annotate.h"
 #include "annotate_vtop.h"
@@ -23,8 +25,6 @@ static const char rcsid[] = "$Id: annotate_vtop.cc,v 1.1.2.1 2009-04-29 23:47:30
 				 
 #define XMLDEBUG(x) (cerr << x);
 				 
-#ifdef WITH_XML
-
 extern DOMDocument* vtop_xml_document;
 extern DOMElement* root;
 extern map<string, DOMElement*>* ptop_elements;

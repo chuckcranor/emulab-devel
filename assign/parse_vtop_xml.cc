@@ -4,7 +4,9 @@
  * All rights reserved.
  */
 
-static const char rcsid[] = "$Id: parse_vtop_xml.cc,v 1.1.2.6 2009-05-05 18:05:33 tarunp Exp $";
+static const char rcsid[] = "$Id: parse_vtop_xml.cc,v 1.1.2.7 2009-05-19 20:10:15 tarunp Exp $";
+
+#ifdef WITH_XML
 
 #include "port.h"
 
@@ -458,3 +460,5 @@ int bind_vtop_subnodes(tb_vgraph &vg) {
 
     return errors;
 }
+
+#endif 

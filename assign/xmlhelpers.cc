@@ -4,6 +4,8 @@
  * All rights reserved.
  */
 
+#ifdef WITH_XML
+
 #include "xmlhelpers.h"
 #include "xstr.h"
 #include <string>
@@ -228,3 +230,5 @@ bool hasComponentSpec (DOMElement* elt)
 		return true;
 	return false;
 }
+
+#endif

@@ -8,7 +8,9 @@
  * XML Parser for policy files
  */
 
-static const char rcsid[] = "$Id: parse_policy_xml.cc,v 1.1.2.1 2008-10-27 19:51:47 tarunp Exp $";
+static const char rcsid[] = "$Id: parse_policy_xml.cc,v 1.1.2.2 2009-05-19 20:10:15 tarunp Exp $";
+
+#ifdef WITH_XML
 
 #include "parse_policy_xml.h"
 #include "xmlhelpers.h"
@@ -165,3 +167,5 @@ bool populate_desire_limits(DOMElement *root)
 	}
 	return is_ok;
 }
+
+#endif

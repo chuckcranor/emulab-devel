@@ -8,6 +8,8 @@
  * Parsing for the (experimental) ptop XML format
  */
 
+#ifdef WITH_XML 
+
 #ifndef __PARSE_PTOP_XML_H
 #define __PARSE_PTOP_XML_H
 
@@ -25,4 +27,6 @@ XERCES_CPP_NAMESPACE_USE
 
 int parse_ptop_xml(tb_pgraph &PG, tb_sgraph &SG, char *filename);
 
-#endif
+#endif // for __PARSE_PTOP_XML_H
+
+#endif // for WITH_XML

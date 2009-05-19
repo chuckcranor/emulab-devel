@@ -5,8 +5,12 @@
  */
 
 /*
- * XML Parser for RSpec ptop files
+ * Base class for the annotater. 
  */
+
+/* This is ugly, but we only really need this file if we are building with XML support */
+
+#ifdef WITH_XML
 
 #ifndef __ANNOTATE_H
 
@@ -43,4 +47,6 @@ class annotate
 		void write_annotated_file(const char* filename);
 };
 
-#endif
+#endif // for __ANNOTATE_H
+
+#endif // for WITH_XML

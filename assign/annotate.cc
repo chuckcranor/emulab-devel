@@ -5,10 +5,12 @@
  */
 
 /*
- * XML Parser for RSpec ptop files
+ * Implements the annotate methods which are independent of the type of file being annotated.
  */
 
-static const char rcsid[] = "$Id: annotate.cc,v 1.1.2.1 2009-04-29 23:47:29 tarunp Exp $";
+static const char rcsid[] = "$Id: annotate.cc,v 1.1.2.2 2009-05-19 20:10:14 tarunp Exp $";
+
+#ifdef WITH_XML
 
 #include "annotate.h"
 
@@ -48,3 +50,5 @@ void annotate::write_annotated_file (const char* filename)
 	// Release the memory
 	writer->release();
 }
+
+#endif

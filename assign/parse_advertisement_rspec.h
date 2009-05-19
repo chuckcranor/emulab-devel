@@ -8,6 +8,8 @@
  * Parsing for the (experimental) ptop XML format
  */
 
+#ifdef WITH_XML
+
 #ifndef __PARSE_ADVERTISEMENT_RSPEC_H
 #define __PARSE_ADVERTISEMENT_RSPEC_H
 
@@ -26,4 +28,6 @@ XERCES_CPP_NAMESPACE_USE
 
 int parse_ptop_rspec(tb_pgraph &PG, tb_sgraph &SG, char *filename);
 
-#endif
+#endif // for __PARSE_ADVERTISEMENT_RSPEC_H
+
+#endif // for WITH_XML

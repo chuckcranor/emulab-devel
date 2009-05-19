@@ -8,7 +8,9 @@
  * XML Parser for ptop files
  */
 
-static const char rcsid[] = "$Id: parse_ptop_xml.cc,v 1.3.8.13 2009-05-05 18:05:33 tarunp Exp $";
+static const char rcsid[] = "$Id: parse_ptop_xml.cc,v 1.3.8.14 2009-05-19 20:10:15 tarunp Exp $";
+
+#ifdef WITH_XML
 
 #include "parse_ptop_xml.h"
 #include "xmlhelpers.h"
@@ -475,3 +477,5 @@ bool populate_links(DOMElement *root, tb_pgraph &pg, tb_sgraph &sg) {
     }
     return !errors;
 }
+
+#endif

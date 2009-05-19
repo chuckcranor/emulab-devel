@@ -4,7 +4,9 @@
  * All rights reserved.
  */
 
-static const char rcsid[] = "$Id: annotate_rspec.cc,v 1.1.2.2 2009-04-29 23:47:30 tarunp Exp $";
+static const char rcsid[] = "$Id: annotate_rspec.cc,v 1.1.2.3 2009-05-19 20:10:15 tarunp Exp $";
+
+#ifdef WITH_XML
 
 #include "annotate.h"
 #include "annotate_rspec.h"
@@ -23,8 +25,6 @@ static const char rcsid[] = "$Id: annotate_rspec.cc,v 1.1.2.2 2009-04-29 23:47:3
 				 
 #define XMLDEBUG(x) (cerr << x);
 				 
-#ifdef WITH_XML
-
 extern DOMDocument* doc;
 extern DOMElement* request_root;
 extern map<string, DOMElement*>* advertisement_elements;

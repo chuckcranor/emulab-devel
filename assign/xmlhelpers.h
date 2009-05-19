@@ -8,6 +8,8 @@
  * xmlhelpers.h - Classes and functions to make XML parsing a little easier
  */
 
+#ifdef WITH_XML
+
 #ifndef __XMLHELPERS_H
 #define __XMLHELPERS_H
 
@@ -117,4 +119,6 @@ interface_spec parse_interface_rspec_xml (const xercesc::DOMElement* element);
  */
 bool hasComponentSpec (xercesc::DOMElement* elt);
 
-#endif
+#endif // for __XMLHELPERS_H
+
+#endif // for WITH_XML

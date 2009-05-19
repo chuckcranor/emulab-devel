@@ -4,19 +4,20 @@
  * All rights reserved.
  */
 
-static const char rcsid[] = "$Id: solution.cc,v 1.12.8.5 2009-04-29 23:47:30 tarunp Exp $";
+static const char rcsid[] = "$Id: solution.cc,v 1.12.8.6 2009-05-19 20:10:16 tarunp Exp $";
 
 #include "solution.h"
-#include "annotate_rspec.h"
-#include "annotate_vtop.h"
 #include "vclass.h"
 				 
 #include <string>
 #include <list>
 #include <utility>
 
-#include "xstr.h"
-				 
+#ifdef WITH_XML
+	#include "annotate_rspec.h"
+	#include "annotate_vtop.h"
+	#include "xstr.h"
+#endif
 
 extern bool ptop_xml_input;
 extern bool ptop_rspec_input;
@@ -68,10 +69,10 @@ void print_solution(const solution &s) {
 	if (! s.is_assigned(*vit)) {
 	    cout << "unassigned: " << vn->name << endl;
 	} else {
+		cout << vn->name << " " << get(pvertex_pmap,s.get_assignment(*vit))->name << endl;
+	    #ifdef WITH_XML
 		const char* node_name = XStr(vn -> name).c();
 		const char* assigned_to = XStr (get(pvertex_pmap,s.get_assignment(*vit))->name).c() ;
-	    cout << node_name << " " << assigned_to << endl;
-	    #ifdef WITH_XML
 		if (both_inputs_rspec == true)
 		{
 			rspec_annotater->annotate_element(node_name, assigned_to);

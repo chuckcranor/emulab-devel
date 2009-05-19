@@ -8,7 +8,9 @@
  * XML Parser for RSpec ptop files
  */
 
-static const char rcsid[] = "$Id: parse_request_rspec.cc,v 1.1.2.3 2009-05-12 22:19:03 tarunp Exp $";
+static const char rcsid[] = "$Id: parse_request_rspec.cc,v 1.1.2.4 2009-05-19 20:10:15 tarunp Exp $";
+
+#ifdef WITH_XML
 
 #include "parse_request_rspec.h"
 #include "xmlhelpers.h"
@@ -589,58 +591,4 @@ bool populate_links_rspec(DOMElement *root, tb_vgraph &vg) {
     return is_ok;
 }
 
-// bool populate_vclasses_rspec (DOMElement *root, tb_vgraph &vg)
-// {
-// 	bool is_ok = true;
-// 
-// 	DOMNodeList *vclass_elements = root->getElementsByTagName(XStr("vclass").x());
-// 	int vclassCount = vclass_elements->getLength();
-// 	//XMLDEBUG("Found " << vclassCount << " vclasses in vtop" << endl);
-// 
-// 	for (size_t i = 0; i < vclassCount; i++) 
-// 	{
-// 		DOMNode *vclass = vclass_elements->item(i);
-// 		
-// 		// This should not be able to fail, due to the fact that all elements in
-// 		// this list came from the getElementsByTagName() call
-// 		DOMElement *elt = dynamic_cast<DOMElement*>(vclass);
-// 		
-// 		XStr vclass_name (elt->getAttribute(XStr("name").x()));
-// 		const char *str_vclass_name = vclass_name.c();
-// 		
-// 		tb_vclass *v = NULL;
-// 		/* 
-// 		 * XXX: Have not dealt with the case when the hard tag is present.
-// 		 * Will have to do this before we can use this correctly
-// 		 */
-// 		if (hasChildTag (elt, "hard"))
-// 		{
-// 			// Deal with it here
-// 		}
-// 		else if (hasChildTag (elt, "soft"))
-// 		{
-// 			XStr vclass_weight (getChildValue(elt, "weight"));
-// 			v = new tb_vclass(vclass_name.f(),vclass_weight.d());
-// 			if (v == NULL)
-// 			{
-// 				//cerr << "Could not create vclass: " << vclass_name << endl;
-// 				is_ok = false;
-// 				continue;
-// 			}
-// 			vclass_map[str_vclass_name] = v;
-// 		}
-// 		
-// 		/* Get all the physical types for the vclass */
-// 		DOMNodeList *phys_types = elt->getElementsByTagName(XStr("physical_type").x());
-// 		for (int j = 0; j < phys_types->getLength(); j++) 
-// 		{
-// 			DOMElement* phys_type = dynamic_cast<DOMElement*>(phys_types -> item(j));
-// 			XStr phys_type_name (phys_type -> getFirstChild() -> getNodeValue());
-// 			v->add_type(phys_type_name.f());
-// 			vclasses[str_vclass_name].push_back(phys_type_name.f());
-// 		}
-// 	}
-// 	return is_ok;
-// }
-
-
+#endif

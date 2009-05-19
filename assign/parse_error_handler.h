@@ -4,6 +4,8 @@
  * All rights reserved.
  */
 
+#ifdef WITH_XML
+
 #ifndef __PARSE_ERROR_HANDLER_H
 #define __PARSE_ERROR_HANDLER_H
 
@@ -54,4 +56,6 @@ private:
     
 };
 
-#endif
+#endif // for __PARSE_ERROR_HANDLER_H
+
+#endif // for WITH_XML

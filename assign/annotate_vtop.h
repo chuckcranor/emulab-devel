@@ -1,3 +1,17 @@
+/*
+ * EMULAB-COPYRIGHT
+ * Copyright (c) 2008 University of Utah and the Flux Group.
+ * All rights reserved.
+ */
+
+/*
+ * Base class for the annotater. 
+ */
+
+/* This is ugly, but we only really need this file if we are building with XML support */
+
+#ifdef WITH_XML
+
 #ifndef __ANNOTATE_VTOP_H
 #define __ANNOTATE_VTOP_H
 
@@ -42,4 +56,6 @@ class annotate_vtop : public annotate
 		void set_component_hop_interface (xercesc::DOMElement* hop_interface, const xercesc::DOMElement* physical_interface);
 };
 
-#endif
+#endif // for __ANNOTATE_VTOP_H
+
+#endif // for WITH_XML

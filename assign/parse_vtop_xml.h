@@ -4,8 +4,10 @@
  * All rights reserved.
  */
 
-#ifndef __PARSE_TOP_XML_H
-#define __PARSE_TOP_XML_H
+#ifdef WITH_XML
+
+#ifndef __PARSE_VTOP_XML_H
+#define __PARSE_VTOP_XML_H
 
 #include <xercesc/util/PlatformUtils.hpp>
 
@@ -30,4 +32,6 @@ XERCES_CPP_NAMESPACE_USE
 
 int parse_vtop_xml(tb_vgraph &VG, char* filename);
 
-#endif
+#endif // for __PARSE_VTOP_XML_H
+
+#endif // for WITH_XML

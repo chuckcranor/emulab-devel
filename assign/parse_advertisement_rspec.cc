@@ -8,7 +8,9 @@
  * XML Parser for RSpec ptop files
  */
 
-static const char rcsid[] = "$Id: parse_advertisement_rspec.cc,v 1.1.2.3 2009-05-12 22:19:03 tarunp Exp $";
+static const char rcsid[] = "$Id: parse_advertisement_rspec.cc,v 1.1.2.4 2009-05-19 20:10:15 tarunp Exp $";
+
+#ifdef WITH_XML
 
 #include "parse_advertisement_rspec.h"
 #include "xmlhelpers.h"
@@ -638,3 +640,5 @@ bool populate_links_rspec(DOMElement *root, tb_pgraph &pg, tb_sgraph &sg) {
     }
     return is_ok;
 }
+
+#endif
