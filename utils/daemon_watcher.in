@@ -1,0 +1,222 @@
+#!/usr/bin/perl -w
+#
+# EMULAB-COPYRIGHT
+# Copyright (c) 2008 University of Utah and the Flux Group.
+# All rights reserved.
+#
+use English;
+use Getopt::Std;
+use POSIX qw(setsid);
+
+sub usage()
+{
+    print STDERR "Usage: daemon_watcher [-i interval] [-p pidfile] [-l logfile] [-n name] [-P pidfile_to_pollcheck] [-I pollcheck_interval ] command args ...\n";
+    exit(1);
+}
+my $optlist  = "di:p:l:n:P:I:";
+my $debug    = 0;
+my $mininterval = 1;
+my $maxinterval = (24 * 60 * 60);
+my $interval = $mininterval;
+
+my $TBOPS      = "@TBOPSEMAIL@";
+my $pidfile;
+my $logfile;
+my $daemon;
+my $cmd;
+my $cmdargs;
+my $childpid;
+my $pollcheck_pidfile;
+
+# Turn off line buffering on output
+$| = 1;
+
+#
+# Parse arguments
+#
+my %options = ();
+if (! getopts($optlist, \%options)) {
+    usage();
+}
+if (defined($options{"d"})) {
+    $debug = 1;
+}
+if (defined($options{"i"})) {
+    $interval = int($options{"i"});
+    if ($interval < $mininterval || $interval > $maxinterval) {
+	usage();
+    }
+    $mininterval = $interval;
+}
+if (defined($options{"p"})) {
+    $pidfile = $options{"p"};
+}
+if (defined($options{"l"})) {
+    $logfile = $options{"l"};
+}
+if (defined($options{"n"})) {
+    if ($options{"n"} =~ /^([-\w]+)$/) {
+	$daemon = $1;
+    } else {
+	print STDERR "Bogus characters in name string\n";
+	exit(1);
+    }
+    
+}
+if (@ARGV < 1) {
+    usage();
+}
+$cmd = shift;
+if (!defined($daemon)) {
+    if ($cmd =~ /.*\/([^\s]+)\s*.*$/) {
+	$daemon = $1;
+    } else {
+	print STDERR "Could not figure out daemon name from cmd!\n";
+	exit(1);
+    }
+}
+if (defined($options{"P"})) {
+    $pollcheck_pidfile = $options{"P"};
+}
+else {
+    $pollcheck_pidfile = "/var/run/${daemon}.pid";
+}
+if (defined($options{"I"})) {
+    $pollcheck_interval = $options{"I"};
+    if ($pollcheck_interval < 1) {
+	usage();
+    }
+}
+$cmdargs = join(' ', @ARGV);
+
+$pidfile = "/var/run/${daemon}_watcher.pid"
+    if (!defined($pidfile));
+$logfile = "/var/log/${daemon}_watcher.log"
+    if (!defined($logfile));
+
+# Only root.
+if ($UID != 0) {
+    die("*** $0:\n".
+	"    Must be root to run this script!\n");
+}
+
+#
+# Testbed support libs.
+# 
+use lib "@prefix@/lib";
+use libtestbed;
+
+# Signal handler to initiate cleanup in parent and the children.
+sub Pcleanup($)
+{
+    my ($signame) = @_;
+
+    $SIG{TERM} = 'IGNORE';
+
+    unlink $pidfile;
+    print TBTimeStampWithDate(),
+          " [$PID]: watcher exiting\n";
+    exit(0);
+}
+
+# Daemonize;
+if (!$debug && TBBackGround($logfile)) {
+    sleep(1);
+    exit(0);
+}
+
+#
+# Write our pid into the pid file so we can be killed later. 
+#
+system("echo '$PID' > $pidfile") == 0 or
+    die("*** $0:\n".
+	"    Could not create $pidfile!");
+
+# Okay, cleanup function.
+$SIG{TERM} = \&Pcleanup;
+
+# Fully disconnect from bootup. 
+setsid();
+
+print TBTimeStampWithDate(),
+    " [$PID]: watcher starting up; restart command is '$cmd",
+    $cmdargs ? " $cmdargs" : "", "'\n";
+
+# Loop forever, restarting the daemon if it ever dies.
+while (1) {
+    my $runtime = time();
+
+    my $checkpid = `cat $pollcheck_pidfile`;
+    chomp($checkpid);
+    if ($checkpid =~ /^(\d+)$/) {
+	my $pspid = `pidof $daemon`;
+	#print "checkpid $checkpid, pspid $pspid (".kill(0,$pspid).")\n";
+	while ($checkpid == $pspid && kill(0,$checkpid)) {
+	    sleep($pollcheck_interval);
+	}
+        #
+        # If the process ran for less than 5 seconds, there may be a problem
+        # with daemon startup.  To avoid spamming testbed-ops for a process
+        # that will never start, back off the checks exponentially up to some
+        # maximum interval.
+        #
+	$runtime = time() - $runtime;
+	if ($runtime < 5) {
+	    $interval *= 2;
+	    if ($interval > $maxinterval) {
+		$interval = $maxinterval;
+	    }
+	} else {
+	    $interval = $mininterval;
+	}
+        
+	print "restarting in $interval seconds\n";
+
+	sleep($interval);
+    }
+    else {
+	print "Trying to pollcheck $pollcheck_pidfile, but no valid pid!\n";
+    }
+
+    $childpid = fork();
+
+    die("*** $0:\n".
+	"    Could not fork!\n")
+	if ($childpid < 0);
+
+    if ($childpid == 0) {
+	if (!exec("$cmd $cmdargs")) {
+	    print STDERR "*** $0:\n".
+		         "    Could not exec $cmd!\n";
+	    exit(1);
+	}
+    }
+    print TBTimeStampWithDate(),
+          " [$PID]: $daemon command ($childpid) started\n";
+
+    waitpid($childpid, 0);
+    my $exitstat = $?;
+    my $ecode = $exitstat >> 8;
+    my $lpid = $childpid;
+    undef $childpid;
+
+    if ($exitstat) {
+	print TBTimeStampWithDate(),
+	    " [$PID]: $daemon command ($lpid) failed to start daemon ($ecode)\n";
+    }
+    #
+    # Since the watcher can't tell how or why the daemon died, we just keep
+    # restarting it.  The only time we bail on that is above, if $ecode == 1.
+    #
+    if ($ecode == 1) {
+	print "not restarting!\n";
+	SENDMAIL($TBOPS, "$daemon died",
+		 "$daemon command died with exit code 1\n".
+		 "Not restarting it; might be a configuration error",
+		 $TBOPS);
+	unlink $pidfile;
+	die("*** $0:\n".
+	    "    Could not start $daemon! Might be a configuration error.\n");
+    }
+}
+exit(0);

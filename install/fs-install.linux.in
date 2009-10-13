@@ -1,0 +1,451 @@
+#!/usr/bin/perl -w
+
+#
+# EMULAB-COPYRIGHT
+# Copyright (c) 2003-2008 University of Utah and the Flux Group.
+# All rights reserved.
+#
+
+#
+# install-fs - Script to do the initial install of a filesystem node
+#
+# The main things it does not do yet:
+# * Figure out where to put directories such as /users /proj - they must
+#   already exist
+#
+
+#
+# Configure variables
+#
+my $PREFIX = '@prefix@';
+my $TOP_SRCDIR = '@top_srcdir@';
+
+my $OURDOMAIN   = '@OURDOMAIN@';
+my $USERNODE    = '@USERNODE@';
+my $FSNODE      = '@FSNODE@';
+my $BOSSNODE    = '@BOSSNODE@';
+my $BOSSNODE_IP = '@BOSSNODE_IP@';
+my $USERNODE_IP = '@USERNODE_IP@';
+my $FSNODE_IP   = '@FSNODE_IP@';
+my $LOGFACIL    = '@TBLOGFACIL@';
+my $ELABINELAB  = @ELABINELAB@;
+my $WINSUPPORT  = @WINSUPPORT@;
+my $QUOTA_FSLIST= '@FS_WITH_QUOTAS@';
+my $SCRATCHDIR =  '@FSDIR_SCRATCH@';
+
+#
+# Fixed paths for clients
+#
+my $PROJROOT    = "@PROJROOT_DIR@";
+my $GROUPROOT   = "@GROUPSROOT_DIR@";
+my $USERROOT    = "@USERSROOT_DIR@";
+my $SCRATCHROOT	= "@SCRATCHROOT_DIR@";
+my $SHAREROOT	= "@SHAREROOT_DIR@";
+
+# For /share export below.
+my $CONTROL_NETWORK = "@CONTROL_NETWORK@";
+my $CONTROL_NETMASK = "@CONTROL_NETMASK@";
+
+# Should be configure variable
+my $TBADMINGID  = 101;
+
+#
+# Allow this to work if the library is left in the source directory
+#
+use lib '@srcdir@';
+   
+use English;
+use libinstall;
+use Getopt::Std;
+use Cwd 'abs_path';
+
+#
+# Handle command-line options
+#
+sub usage {
+    print "Usage: fs-install [-b] [-p packagedir] [-P portname]\n";
+    exit(1);
+}
+
+#
+# The meta-ports (name and version) that drag in all the dependancies for
+# an fs node. These are OS dependent as we upgrade.
+#
+my $FS_PKG = "emulab-fs-2.0";
+
+my $packagedir = "";
+my $batchmode  = 0;
+my %opts;
+if (! getopts("P:p:b", \%opts)) {
+    usage();
+}
+if (defined($opts{p})) {
+    $packagedir = $opts{p};
+}
+if (defined($opts{b})) {
+    $batchmode = 1;
+}
+if (defined($opts{P})) {
+    $FS_PKG = $opts{P};
+}
+if (@ARGV) {
+    usage();
+}
+
+#
+# Figure out which directory we live in, so that some stages can do thing
+# relative to it.
+#
+my $OBJDIR = `/usr/bin/dirname $0`;
+chomp $OBJDIR;
+my $TOP_OBJDIR = "$OBJDIR/..";
+
+#
+# Some programs we use
+#
+my $CHGRP      = "/usr/bin/chgrp";
+my $CHMOD      = "/bin/chmod";
+my $SH         = "/bin/sh";
+my $PWD        = "/bin/pwd";
+my $CP         = "/bin/cp";
+my $MV         = "/bin/mv";
+my $QUOTAON    = "/usr/sbin/quotaon";
+my $EXPORTFS   = "/usr/sbin/exportfs";
+
+#
+# Some files we edit/create
+#
+my $HOSTS           = "/etc/hosts";
+my $FSTAB           = "/etc/fstab";
+my $RCLOCAL         = "/etc/rc.local";
+my $RCCAPTURE       = "$PREFIX/etc/rc.capture";
+my $LOCAL_HOSTNAMES = "/etc/mail/local-host-names";
+my $ALIASES_FILE    = "/etc/mail/aliases";
+my $EXPORTS_FILE    = "/etc/exports";
+my $EXPORTS_HEAD    = "$EXPORTS_FILE.head";
+my $SUDOERS         = "/etc/sudoers";
+my $SSHD_CONFIG     = "/etc/ssh/sshd_config";
+my $INETD_CONF      = "/etc/inetd.conf";
+my $AUTHKEYS	    = "/root/.ssh/authorized_keys";
+my $SMBCONF_FILE    = "/etc/samba/smb.conf";
+my $SMBCONF_HEAD    = "$SMBCONF_FILE.head";
+
+#
+# Some directories we care about
+#
+my $LIST_DIR      = "/etc/mail/lists";
+my $TIPLOG_DIR    = "/var/log/tiplogs";
+my $SRCDIR        = '@srcdir@';
+my $RCDIR         = "/etc/rc.d";
+my $VARRUN        = "/var/run";
+
+#
+# And some lists that we use
+#
+my @LOGFILES           = ("/var/log/logins","/var/log/tiplogs/capture.log",
+    "/var/log/mountd.log");
+
+my @TESTBED_DIRS       = ([$PREFIX, "0775"], [$USERROOT, "0755"],
+    [$PROJROOT, "0755"], [$GROUPROOT, "0755"], [$SHAREROOT, "0775"]);
+my @MOUNTPOINTS        = ($USERROOT, $PROJROOT, $GROUPROOT, $SHAREROOT);
+
+if ($SCRATCHDIR) {
+    push(@TESTBED_DIRS, [$SCRATCHROOT, "0755"]);
+    push(@MOUNTPOINTS, $SCRATCHROOT);
+}
+
+
+#
+# A few files we have to deal with
+#
+my $IDENTPUB        = "$TOP_SRCDIR/install/identity.pub";
+
+#
+# List of names that goes into $HOSTS and which must resolve.
+# 
+my @OPS_NAMES = ($USERNODE, "users", "ops");
+
+if ($USERNODE eq $FSNODE) {
+    die "This script is only for use on a separate FS node";
+}
+
+#
+# Make sure they know what they're getting into...
+#
+if (! $batchmode) {
+    print STDERR
+	"WARNING: This script is ONLY intended to be run on a machine\n";
+    print STDERR
+	"that is being set up as a dedicated fs node. Continue? [y/N] ";
+    my $response = <>;
+    die "Installation aborted!\n" unless ($response =~ /^y/i);
+}
+
+if ($UID != 0) {
+    die "This script must be run as root.\n";
+}
+
+#
+# Grab Fedora release number:
+#
+my $FEDORARELEASE;
+open(FD,"/etc/redhat-release") 
+    or die "could not open /etc/redhat-release: $!";
+while (<FD>) {
+    if ($_ =~ /fedora release (\d+)/i) {
+	$FEDORARELEASE = $1;
+    }
+}
+close(FD);
+if (!defined($FEDORARELEASE)) {
+    print STDERR "Could not find your Fedora release number in /etc/redhat-release!\n";
+    exit(1);
+}
+
+#
+# The phases are fairly self-explanatory
+#
+
+Phase "dirs", "Setting directory permissions", sub {
+    foreach my $dirref (@TESTBED_DIRS) {
+	my ($dir, $newmode) = @$dirref;
+	Phase $dir, $dir, sub {
+	    if (!-d $dir) {
+		PhaseFail("Directory $dir does not exist");
+	    }
+	    # Use the real path, to avoid symlink problems
+	    my $realdir = abs_path($dir);
+	    chomp $realdir;
+	    my ($mode,$group) = (stat($realdir))[2,5];
+	    # Fix up the mode (strip file type)
+	    $mode = $mode & 0777;
+	    if ($mode == eval $newmode && $group eq $TBADMINGID) {
+		PhaseSkip("Already done");
+	    }
+	    ExecQuietFatal("$CHGRP $TBADMINGID $realdir");
+	    ExecQuietFatal("$CHMOD $newmode $realdir");
+	};
+    }
+};
+
+Phase "packages", "Installing packages", sub {
+    Phase "main", "Installing main package", sub {
+	if (!ExecQuiet("$RPM -q $FS_PKG")) {
+	    PhaseSkip("Package $FS_PKG already installed");
+	}
+	# XXX gpg sign.
+	ExecQuietFatal("$YUM --nogpgcheck install -y $FS_PKG");
+    };
+};
+
+Phase "services", "Configuring services", sub {
+    DoneIfEditedAll("/etc/sysconfig/nfs",);
+    AppendToFileFatal("/etc/sysconfig/nfs",
+		      qq|RPCNFSDCOUNT=16|,
+		      qq|MOUNTD_PORT=900|);
+    ExecQuietFatal('cp /etc/ntp.conf /etc/ntp.conf.old');
+    ExecQuietFatal('sed -e \'s/^server\(.*\)/#server \1/\' /etc/ntp.conf.old' . 
+		   ' > /etc/ntp.conf');
+    AppendToFileFatal("/etc/ntp.conf",qq|server boss|);
+
+    ExecQuietFatal("$CHKCONFIG rpcbind on");
+    ExecQuietFatal("$CHKCONFIG nfs on");
+    ExecQuietFatal("$CHKCONFIG nfslock on");
+    ExecQuietFatal("$CHKCONFIG rpcidmap on");
+
+    if ($WINSUPPORT) {
+	ExecQuietFatal("$CHKCONFIG smb on");
+	ExecQuietFatal("$CHKCONFIG nmb on");
+    }
+};
+
+Phase "hosts", "Adding boss/ops/fs IP addresses to $HOSTS", sub {
+    DoneIfEdited($HOSTS);
+    # first, remove stupid fedora 10 'localhost.localdomain' crap from
+    # /etc/hosts, cause this causes sendmail to barf a little.
+    if ($FEDORARELEASE >= 10) {
+	ExecQuietFatal('sed -i.orig -r -e \'s/(localhost6?\\.[\\.a-zA-Z0-9]+\\s*)//\' /etc/hosts');
+    }
+    my $hstr = "${BOSSNODE_IP}\t${BOSSNODE} boss".
+	      "\n${USERNODE_IP}\t@OPS_NAMES".
+	      "\n${FSNODE_IP}\t${FSNODE} fs";
+    AppendToFileFatal($HOSTS, $hstr);
+};
+
+Phase "resolve", "Checking to make sure names for boss/ops/fs resolve", sub {
+    my @hnames = (@OPS_NAMES, $BOSSNODE, "boss", $FSNODE, "fs");
+    foreach my $name (@hnames) {
+	Phase $name, $name, sub {
+	    if (gethostbyname($name)) {
+		PhaseSucceed("$name resolves");
+	    } else {
+		PhaseFail("$name does not resolve");
+	    }
+	};
+    }
+};
+
+Phase "exports", "Setting up exports", sub {
+    Phase "ex.head", "Creating $EXPORTS_HEAD", sub {
+	DoneIfExists($EXPORTS_HEAD);
+
+	#
+	# Figure out which of these directories are on the same
+	# filesystems.  Note: we cannot do /share on the same exports line
+	# as the other filesystems because of the RO mount below (trust me).
+	#
+	my %filesystems;
+	foreach my $dir (@MOUNTPOINTS) {
+	    if ($dir ne $SHAREROOT) {
+		my $dir = abs_path($dir);
+		chomp($dir);
+		my $dev = (stat($dir))[0];
+		push @{$filesystems{$dev}}, $dir;
+	    }
+	}
+
+	#
+	# Use that knowledge to create lines for /etc/exports.head
+	#
+	my @exports_lines;
+	foreach my $key (keys %filesystems) {
+	    push @exports_lines,
+		join(" ",@{$filesystems{$key}}) .
+		    "\t-no_root_squash $BOSSNODE $USERNODE";
+	}
+
+	#
+	# /share is special. We want to export to boss/ops read-write,
+	# but to the control network read-only.
+	#
+	my ($a,$b,$c,$d) = ($CONTROL_NETWORK =~ /^(\d*)\.(\d*)\.(\d*)\.(\d*)/);
+	my $realdir = abs_path($SHAREROOT);
+	chomp($realdir);
+	push(@exports_lines,
+	    "$realdir\t -no_root_squash $BOSSNODE $USERNODE");
+	push(@exports_lines,
+	     "$realdir\t -no_root_squash,ro" . 
+	     " ${a}.${b}.${c}.${d}/$CONTROL_NETMASK "); # alldirs ?
+
+	#
+	# Put them in exports.head, and copy that to /etc/exports
+	#
+	CreateFileFatal($EXPORTS_HEAD, @exports_lines);
+	ExecQuietFatal("cp $EXPORTS_HEAD $EXPORTS_FILE");
+    };
+
+    # XXX Newhup
+    Phase "mountd", "HUPing mountd", sub {
+	PhaseSkip("No new exports file") if PhaseWasSkipped("ex.head");
+	PhaseSkip("mountd not running") unless `ps -auxw | grep mountd | grep -v grep`;
+	ExecQuietFatal("$EXPORTFS -r");
+    };
+};
+
+Phase "quotas", "Setting up quotas", sub {
+    PhaseSkip("no quotas on linux!");
+    if ($QUOTA_FSLIST eq "") {
+	PhaseSkip("No filesystems with quotas");
+    }
+    Phase "fstab", "enabling quotas in $FSTAB", sub {
+	my @fs = split(' ', $QUOTA_FSLIST);
+	open(FT,"<$FSTAB") or
+	    PhaseFail("Unable to open $FSTAB : $!");
+	my @ft = <FT>;
+	close(FT);
+	my $changed = 0;
+	foreach my $fs (@fs) {
+	    my $found = 0;
+	    Phase $fs, $fs, sub {
+		foreach my $line (@ft) {
+		    if ($line =~ m((/dev/\S+\s+$fs\s+ufs\s+rw))) {
+			my $str = $1;
+			$found = 1;
+			PhaseSkip("already enabled")
+			    if ($line =~ /userquota/);
+			$line =~ s/$str/$str,userquota/;
+			$changed++;
+			last;
+		    }
+		}
+	    };
+	    print STDERR 
+		"WARNING: filesystem $fs not found, quotas not enabled\n"
+		    if (!$found);
+	}
+	open(FT,">$FSTAB.new") or
+	    PhaseFail("Unable to open $FSTAB.new : $!");
+	print FT @ft;
+	close(FT);
+	chmod(0644, "$FSTAB.new") or
+	    PhaseFail("Could not set permission of new fstab");
+	rename($FSTAB, "$FSTAB.orig") or
+	    PhaseFail("Could not save original fstab");
+	if (!rename("$FSTAB.new", $FSTAB)) {
+	    rename("$FSTAB.orig", $FSTAB);
+	    PhaseFail("Could not install new fstab, old version restored");
+	}
+    };
+    Phase "quotaon", "Turning quotas on", sub {
+	ExecQuietFatal("$QUOTAON -a");
+    };
+    Phase "rquotad", "Enabling rquotad", sub {
+	PhaseSkip("no inetd.conf!?") unless (-e $INETD_CONF);
+	PhaseSkip("already enabled") unless `grep '^#rquotad' $INETD_CONF`;
+	ExecQuietFatal("sed -i .orig -e '/^#rquotad/s/^#//' $INETD_CONF");
+	HUPDaemon("inetd");
+    };
+};
+
+Phase "sudoers", "Editing $SUDOERS to allow wheel group", sub {
+    DoneIfEdited($SUDOERS);
+    AppendToFileFatal($SUDOERS,"%wheel    ALL=(ALL) NOPASSWD: ALL");
+};
+
+Phase "samba", "Setting up Samba", sub {
+    if (!$WINSUPPORT) {
+	PhaseSkip("Windows support not enabled");
+    }
+    Phase "smb.conf", "Installing smb.conf[.head]", sub {
+	DoneIfEdited($SMBCONF_HEAD);
+	ExecQuietFatal("$CP -pf $TOP_OBJDIR/install/smb.conf.head $SMBCONF_HEAD");
+	AppendToFileFatal($SMBCONF_HEAD,
+			  "# This file created by Emulab Control");
+	ExecQuietFatal("$CP -pf $SMBCONF_HEAD $SMBCONF_FILE");
+    };
+    if ($ELABINELAB) {	
+	Phase "starting", "Starting Samba", sub {
+	    PhaseSkip("Already running") 
+		unless `/etc/init.d/smb status`;
+	    ExecQuietFatal("/etc/init.d/smb start");
+	};
+    }
+};
+
+Phase "ssh", "Allowing root ssh", sub {
+    Phase "sshdconfig", "Permitting root login through ssh", sub {
+	DoneIfEdited($SSHD_CONFIG);
+	AppendToFileFatal($SSHD_CONFIG,"PermitRootLogin yes");
+    };
+    Phase "dotssh", "Making root's .ssh directory", sub {
+	DoneIfExists("/root/.ssh");
+	mkdir("/root/.ssh",0700) or
+	    PhaseFail("Unable to create /root/.ssh: $!");
+    };
+    Phase "authkeys", "Adding stub identity to root authorized_keys", sub {
+	DoneIfEdited($AUTHKEYS);
+	my $ident = `cat $IDENTPUB`;
+	PhaseFail("Could not read $IDENTPUB")
+	    if ($?);
+	chomp($ident);
+	if (! -e $AUTHKEYS) {
+	    CreateFileFatal($AUTHKEYS);
+	}
+	AppendToFileFatal($AUTHKEYS,
+			  "from=\"${BOSSNODE}\" $ident");
+    };
+};
+
+print "----------------------------------------------------------------------\n";
+print "Installation completed succesfully!\n";
+print "Please reboot this machine before proceeding with ops and boss setup\n";

@@ -1,0 +1,1453 @@
+#!/usr/bin/perl -w
+
+#
+# EMULAB-COPYRIGHT
+# Copyright (c) 2003-2008 University of Utah and the Flux Group.
+# All rights reserved.
+#
+
+#
+# ops-install - Script to do the initial install of an ops node
+#
+# The main things it does not do yet:
+# * Figure out where to put directories such as /users /proj - they must
+#   already exist
+# * Fill out mailing list files - presumably, it's easier to just get the
+#   User to edit them himself
+#
+
+#
+# Configure variables
+#
+my $PREFIX = '@prefix@';
+
+my @MAILING_LISTS = ("@TBOPSEMAIL@","@TBLOGSEMAIL@","@TBWWWEMAIL@",
+    "@TBAPPROVALEMAIL@","@TBAUDITEMAIL@","@TBSTATEDEMAIL@",
+    "@TBTESTSUITEEMAIL@", "@TBERRORSEMAIL@", "@TBAUTOMAILEMAIL@");
+
+
+my $OURDOMAIN   = '@OURDOMAIN@';
+my $USERNODE    = '@USERNODE@';
+my $FSNODE      = '@FSNODE@';
+my $BOSSNODE    = '@BOSSNODE@';
+my $BOSSNODE_IP = '@BOSSNODE_IP@';
+my $USERNODE_IP = '@USERNODE_IP@';
+my $FSNODE_IP   = '@FSNODE_IP@';
+my $LOGFACIL    = '@TBLOGFACIL@';
+my $TBOPSEMAIL  = '@TBOPSEMAIL@';
+my $ELABINELAB  = @ELABINELAB@;
+my $WINSUPPORT  = @WINSUPPORT@;
+my $MAILMANSUPPORT = @MAILMANSUPPORT@;
+my $CVSSUPPORT  = @CVSSUPPORT@;
+my $BUGDBSUPPORT= @BUGDBSUPPORT@;
+my $WIKISUPPORT = @WIKISUPPORT@;
+my $CHATSUPPORT = @CHATSUPPORT@;
+my $OPSDBSUPPORT = @OPSDBSUPPORT@;
+my $QUOTA_FSLIST= '@FS_WITH_QUOTAS@';
+my $LOGDIR      = "$PREFIX/log";
+my $ETCDIR      = "$PREFIX/etc";
+my $LIBDIR      = "$PREFIX/lib";
+my $SCRATCHDIR =  '@FSDIR_SCRATCH@';
+my $OUTER_BOSS = '@OUTERBOSS_NODENAME@';
+if ($OUTER_BOSS eq '')
+    { $OUTER_BOSS = "www.emulab.net"; }
+
+#
+# Fixed paths for clients
+#
+my $PROJROOT    = "@PROJROOT_DIR@";
+my $GROUPROOT   = "@GROUPSROOT_DIR@";
+my $USERROOT    = "@USERSROOT_DIR@";
+my $SCRATCHROOT	= "@SCRATCHROOT_DIR@";
+my $SHAREROOT	= "@SHAREROOT_DIR@";
+my $ELVIN_COMPAT= @ELVIN_COMPAT@;
+
+# True if we are also the FS node
+my $ISFS	= ($USERNODE eq $FSNODE) ? 1 : 0;
+
+# For /share export below.
+my $CONTROL_NETWORK = "@CONTROL_NETWORK@";
+my $CONTROL_NETMASK = "@CONTROL_NETMASK@";
+
+# Should be configure variable
+my $TBADMINGID  = 101;
+
+#
+# Allow this to work if the library is left in the source directory
+#
+use lib '@srcdir@';
+   
+use English;
+use libinstall;
+use Getopt::Std;
+use Cwd 'abs_path';
+use Fcntl ':mode';
+
+#
+# Handle command-line options
+#
+sub usage {
+    print "Usage: ops-install [-b] [-P ops-portname] [-F fs-portname]\n";
+    exit(1);
+}
+
+#
+# The meta-ports (name and version) that drag in all the dependancies for
+# an ops/fs node. These are OS dependent as we upgrade.
+#
+my $OPS_PKG = "emulab-ops-2.0"; 
+my $FS_PKG = "emulab-fs-2.0";
+
+my $batchmode  = 0;
+my $password;
+my %opts;
+if (! getopts("P:bw:F:", \%opts)) {
+    usage();
+}
+if (defined($opts{b})) {
+    $batchmode = 1;
+}
+if (defined($opts{P})) {
+    $OPS_PKG = $opts{P};
+}
+if (defined($opts{F})) {
+    $FS_PKG = $opts{F};
+}
+if (defined($opts{w})) {
+    $password = $opts{w};
+}
+if (@ARGV) {
+    usage();
+}
+
+#
+# Figure out which directory we live in, so that some stages can do thing
+# relative to it.
+#
+my $OBJDIR = `/usr/bin/dirname $0`;
+chomp $OBJDIR;
+my $TOP_OBJDIR = "$OBJDIR/..";
+
+#
+# Some programs we use
+#
+my $CHGRP      = "/bin/chgrp";
+my $CHMOD      = "/bin/chmod";
+my $CHOWN      = "/bin/chown";
+my $PATCH      = "/usr/bin/patch";
+my $NEWALIASES = "/usr/bin/newaliases";
+my $SH         = "/bin/sh";
+my $PWD        = "/bin/pwd";
+my $GROUPADD   = "/usr/sbin/groupadd";
+my $GROUPMOD   = "/usr/sbin/groupmod";
+my $USERMOD    = "/usr/sbin/usermod";
+my $CP         = "/bin/cp";
+my $MV         = "/bin/mv";
+my $GMAKE      = "/usr/bin/gmake";
+my $ENV        = "/bin/env";
+my $MOUNT      = "/sbin/mount";
+my $EXPORTFS   = "/usr/sbin/exportfs";
+my $TAR	       = "/bin/tar";
+my $MD5	       = "/usr/bin/md5sum";
+my $BSDMD5     = "/sbin/md5";
+my $CHKCONFIG  = "/sbin/chkconfig";
+my $RPM        = "/bin/rpm";
+my $YUM        = "/usr/bin/yum";
+
+#
+# Some files we edit/create
+#
+my $HOSTS           = "/etc/hosts";
+my $FSTAB           = "/etc/fstab";
+my $RCLOCAL         = "/etc/rc.local";
+my $RCCAPTURE       = "$PREFIX/etc/rc.capture";
+my $LOCAL_HOSTNAMES = "/etc/mail/local-host-names";
+my $ALIASES_FILE    = "/etc/aliases";
+my $SENDMAIL_CF     = "/etc/mail/sendmail.cf";
+my $EXPORTS_FILE    = "/etc/exports";
+my $EXPORTS_HEAD    = "$EXPORTS_FILE.head";
+my $SYSLOG_CONF     = "/etc/rsyslog.conf";
+my $SUDOERS         = "/etc/sudoers";
+my $SSHD_CONFIG     = "/etc/ssh/sshd_config";
+my $CRONTAB         = "/etc/crontab";
+my $AUTHKEYS	    = "/root/.ssh/authorized_keys";
+my $SMBCONF_FILE    = "/etc/samba/smb.conf";
+my $SMBCONF_HEAD    = "$SMBCONF_FILE.head";
+my $APACHE_ETCDIR   = "/etc/httpd";
+my $HTTPD_CONF      = "$APACHE_ETCDIR/conf/httpd.conf";
+my $WWWDIR          = "/var/www/html";
+my $PHP_INI         = "/etc/php.ini";
+
+# For installing mysqld
+my $MYSQL           = "/usr/bin/mysql";
+my $MYSQLADMIN      = "/usr/bin/mysqladmin";
+my $MYSQLSHOW       = "/usr/bin/mysqlshow";
+my $MYSQLDUMP       = "/usr/bin/mysqldump";
+my $MYSQLINSTALL    = "/usr/bin/mysql_install_db";
+my $MYSQLDBDIR      = "/var/lib/mysql";
+my $MYSQL_LOGDIR    = "$LOGDIR/mysql";
+
+# sigh -- Mike is 27, something called wbpriv takes gid 88, 89 is taken...
+my $MYSQL_UIDGID    = 90;
+
+#
+# Some directories we care about
+#
+my $LIST_DIR      = "/etc/mail/lists";
+my $TIPLOG_DIR    = "/var/log/tiplogs";
+my $SRCDIR        = '@srcdir@';
+my $TOP_SRCDIR    = "@top_srcdir@";
+my $RCDIR         = "/etc/init.d";
+my $VARRUN        = "/var/run";
+
+#
+# A few files we have to deal with
+#
+my $IDENTPUB        = "$TOP_SRCDIR/install/identity.pub";
+
+#
+# And some lists that we use
+#
+my @LOCAL_HOSTS        = ($OURDOMAIN,$BOSSNODE,$USERNODE,$FSNODE);
+my @LOGFILES           = ("/var/log/logins","/var/log/tiplogs/capture.log",
+    "/var/log/mountd.log", "$LOGDIR/pubsubd.log", "$LOGDIR/elvin_gateway.log");
+
+my @LOCAL_MAILING_LISTS = grep(/$OURDOMAIN$/,@MAILING_LISTS);
+my @MAILING_LIST_NAMES  = map { /^([\w-]+)\@/ } @LOCAL_MAILING_LISTS;
+
+my @TESTBED_DIRS       = ([$PREFIX, "0775"], [$USERROOT, "0755"],
+			  [$PROJROOT, "0755"], [$GROUPROOT, "0755"],
+			  [$SHAREROOT, "0775"]);
+
+my @MOUNTPOINTS        = ($USERROOT, $PROJROOT, $GROUPROOT, $SHAREROOT);
+
+if ($SCRATCHDIR) {
+    push(@TESTBED_DIRS, [$SCRATCHROOT, "0755"]);
+    push(@MOUNTPOINTS, $SCRATCHROOT);
+}
+
+#
+# List of names that goes into $HOSTS and which must resolve.
+# 
+my @OPS_NAMES = ($USERNODE, "users", "ops");
+if ($ISFS) {
+    push(@OPS_NAMES, "fs");
+}
+
+#
+# Make sure they know what they're getting into...
+#
+if (! $batchmode) {
+    print STDERR
+	"WARNING: This script is ONLY intended to be run on a machine\n";
+    print STDERR
+	"that is being set up as a dedicated ops or ops+fs node. Continue? [y/N] ";
+    my $response = <>;
+    die "Installation aborted!\n" unless ($response =~ /^y/i);
+}
+
+if ($UID != 0) {
+    die "This script must be run as root.\n";
+}
+
+#
+# Grab Fedora release number:
+#
+my $FEDORARELEASE;
+open(FD,"/etc/redhat-release") 
+    or die "could not open /etc/redhat-release: $!";
+while (<FD>) {
+    if ($_ =~ /fedora release (\d+)/i) {
+	$FEDORARELEASE = $1;
+    }
+}
+close(FD);
+if (!defined($FEDORARELEASE)) {
+    print STDERR "Could not find your Fedora release number in /etc/redhat-release!\n";
+    exit(1);
+}
+
+#
+# The phases are fairly self-explanatory
+#
+Phase "usersgroups", "Creating users and groups", sub {
+    Phase "tbadmin", "Creating tbadmin group", sub {
+	if (getgrnam("tbadmin")) {
+	    PhaseSkip("tbadmin group already exists");
+	}
+	ExecQuietFatal("$GROUPADD -g $TBADMINGID tbadmin");
+    };
+    Phase "guest", "Creating guest group", sub {
+	if (getgrnam("guest")) {
+	    PhaseSkip("Group already exists");
+	}
+	ExecQuietFatal("$GROUPADD -g 102 guest");
+    };
+    # fixup the mysql situation -- the fedora mysql uid and gid 
+    # are the same as Mike Hibler's.
+    Phase "mysql", "Adjusting mysql uid/gid to $MYSQL_UIDGID", sub {
+	ExecQuietFatal("$USERMOD -u $MYSQL_UIDGID mysql");
+	ExecQuietFatal("$GROUPMOD -g $MYSQL_UIDGID mysql");
+	ExecQuietFatal("$CHOWN mysql:mysql $MYSQLDBDIR")
+	    if (-e $MYSQLDBDIR);
+	ExecQuietFatal("$CHOWN mysql:mysql /var/run/mysqld")
+	    if (-e "/var/run/mysqld");
+	ExecQuietFatal("$CHOWN mysql:mysql /var/log/mysqld.log")
+	    if (-e "/var/log/mysqld.log");
+    };
+};
+
+Phase "dirs", "Setting directory permissions", sub {
+    foreach my $dirref (@TESTBED_DIRS) {
+	my ($dir, $newmode) = @$dirref;
+	Phase $dir, $dir, sub {
+	    if (!-d $dir) {
+		PhaseFail("Directory $dir does not exist");
+	    }
+	    # Use the real path, to avoid symlink problems
+	    my $realdir = abs_path($dir);
+	    chomp $realdir;
+	    my ($mode,$group) = (stat($realdir))[2,5];
+	    # Fix up the mode (strip file type)
+	    $mode = $mode & 0777;
+	    if ($mode == eval $newmode && $group eq getgrnam("tbadmin")) {
+		PhaseSkip("Already done");
+	    }
+	    ExecQuietFatal("$CHGRP tbadmin $realdir");
+	    ExecQuietFatal("$CHMOD $newmode $realdir");
+	};
+    }
+};
+
+Phase "packages", "Installing packages", sub {
+    Phase "main", "Installing main package", sub {
+	if (!ExecQuiet("$RPM -q $OPS_PKG")) {
+	    PhaseSkip("Package $OPS_PKG already installed");
+	}
+	ExecQuietFatal("$YUM install -y $OPS_PKG");
+    };
+    Phase "fs-packages", "Installing FS packages", sub {
+	if (!$ISFS) {
+	    PhaseSkip("Not FS Node");
+	}
+	if (!ExecQuiet("$RPM -q $FS_PKG")) {
+	    PhaseSkip("Package $FS_PKG already installed");
+	}
+	ExecQuietFatal("$YUM install -y $FS_PKG");
+    };
+    if ($MAILMANSUPPORT) {
+	Phase "mailman", "Installing Mailman package", sub {
+	    if (!ExecQuiet("$RPM -q mailman")) {
+		PhaseSkip("Package mailman already installed");
+	    }
+	    ExecQuietFatal("yum install -y mailman");
+	};
+    }
+    if ($CVSSUPPORT) {
+	Phase "cvsd", "Installing cvsd package", sub {
+	    if (!ExecQuiet("$RPM -q cvsd")) {
+		PhaseSkip("Package cvsd already installed");
+	    }
+	    ExecQuietFatal("yum install -y cvsd");
+	    ExecQuietFatal("$CHKCONFIG cvsd on");
+	    # if installed, get out of way
+	    if (-e '/etc/cvsd/cvsd.conf') {
+		ExecQuietFatal("mv /etc/cvsd/cvsd.conf /etc/cvsd/cvsd.conf.orig");
+	    }
+	};
+    }
+    if ($BUGDBSUPPORT) {
+	Phase "flyspray", "Installing flyspray package support", sub {
+	    if (!ExecQuiet("$RPM -q flyspray php-mysql")) {
+		PhaseSkip("Package flyspray already installed");
+	    }
+	    ExecQuietFatal("yum install -y flyspray php-mysql");
+	};
+    }
+    if ($CHATSUPPORT) {
+	Phase "jabber", "Installing jabber package support", sub {
+	    if (!ExecQuiet("$RPM -q jabberd mu-conference python-xmpp perl-XML-Simple")) {
+		PhaseSkip("Package jabberd already installed");
+	    }
+	    ExecQuietFatal("yum install -y jabberd mu-conference python-xmpp" . 
+			   " perl-XML-Simple");
+	};
+    }
+    if ($WIKISUPPORT) {
+	Phase "wiki", "Installing wiki package support", sub {
+	    if (!ExecQuiet("$RPM -q twiki rcs")) {
+		PhaseSkip("Package twiki already installed");
+	    }
+	    ExecQuietFatal("yum install -y twiki rcs");
+	};
+    }
+    if ($OPSDBSUPPORT) {
+	Phase "opsdb", "Installing opsdb package support", sub {
+	    if (!ExecQuiet("$RPM -q perl-GDGraph snort")) {
+		PhaseSkip("opsdb packages already installed");
+	    }
+	    ExecQuietFatal("yum install -y perl-GDGraph snort");
+	    ExecQuietFatal("$CHKCONFIG snortd off");
+	};
+    }
+};
+
+Phase "patches", "Applying patches", sub {
+    PhaseSkip("linux probably needs patches, but we don't know what yet!");
+}; 
+
+Phase "services", "Configuring services", sub {
+    Phase "nfs", "Configuring NFS", sub {
+        DoneIfEdited("/etc/sysconfig/nfs");
+        AppendToFileFatal("/etc/sysconfig/nfs",
+                          qq|RPCNFSDCOUNT=16|,qq|MOUNTD_PORT=900|);
+    };
+    Phase "rsyslog", "Configuring rsyslog", sub {
+	# we have to fix the port to the standard one; rsyslog doesn't appear
+	# to correctly default to 514/udp as it should
+	my $port = 514;
+	DoneIfEdited("/etc/sysconfig/rsyslog");
+	if (ExecQuiet("grep -q '^SYSLOGD_OPTIONS' /etc/sysconfig/rsyslog")) {
+	    # just append a line
+	    AppendToFileFatal("SYSLOGD_OPTIONS=\"-r$port\"");
+	}
+	else {
+	    if (ExecQuiet("grep -q '^SYSLOGD_OPTIONS.*-r[0-9][0-9]*.*' /etc/sysconfig/rsyslog")) {
+		ExecQuietFatal("cp -p /etc/sysconfig/rsyslog /etc/sysconfig/rsyslog.bak");
+		ExecQuietFatal('sed -e \'s/^\(SYSLOGD_OPTIONS.*\)\(\"\)\$' . 
+			       '/\1 -r' . $port . '\2/\'' . 
+			       ' /etc/sysconfig/rsyslog.bak' . 
+			       ' > /etc/sysconfig/rsyslog');
+	    }
+	    else {
+		PhaseSkip("/etc/sysconfig/rsyslog appears to have remote flag set");
+	    }
+	}
+    };
+    # do this every time, doesn't hurt
+    Phase "enabling", "Enabling services", sub {
+        ExecQuietFatal("$CHKCONFIG sendmail on");
+        ExecQuietFatal("$CHKCONFIG rpcbind on");
+        ExecQuietFatal("$CHKCONFIG nfs on");
+        ExecQuietFatal("$CHKCONFIG nfslock on");
+        ExecQuietFatal("$CHKCONFIG rpcidmapd on");
+        #ExecQuietFatal("$CHKCONFIG ntpd on");
+        # misc
+        ExecQuietFatal("$CHKCONFIG rsyslog on");
+        ExecQuietFatal("$CHKCONFIG httpd on");
+        ExecQuietFatal("$CHKCONFIG crond on");
+	if ($ISFS && $WINSUPPORT) {
+	    ExecQuietFatal("$CHKCONFIG smb on");
+	}
+	ExecQuietFatal("$CHKCONFIG mysqld on");
+    };
+};
+
+Phase "hosts", "Adding boss/ops/fs IP addresses to $HOSTS", sub {
+    DoneIfEdited($HOSTS);
+    # first, remove stupid fedora 10 'localhost.localdomain' crap from
+    # /etc/hosts, cause this causes sendmail to barf a little.
+    if ($FEDORARELEASE >= 10) {
+	ExecQuietFatal('sed -i.orig -r -e \'s/(localhost6?\\.[\\.a-zA-Z0-9]+\\s*)//\' /etc/hosts');
+    }
+    my $hstr = "${BOSSNODE_IP}\t${BOSSNODE} boss" .
+	"\n${USERNODE_IP}\t@OPS_NAMES";
+    if (!$ISFS) {
+	$hstr .= "\n${FSNODE_IP}\t${FSNODE} fs";
+    }
+    AppendToFileFatal($HOSTS, $hstr);
+};
+
+Phase "resolve", "Checking to make sure names for boss/ops/fs resolve", sub {
+    my @hnames = (@OPS_NAMES, $BOSSNODE, "boss");
+
+    if (!$ISFS) {
+	push @hnames, $FSNODE, "fs";
+    }
+    foreach my $name (@hnames) {
+	Phase $name, $name, sub {
+	    if (gethostbyname($name)) {
+		PhaseSucceed("$name resolves");
+	    } else {
+		PhaseFail("$name does not resolve");
+	    }
+	};
+    }
+};
+
+Phase "sendmail","Configuring sendmail", sub {
+    Phase "localhosts", "Setting up $LOCAL_HOSTNAMES", sub {
+	DoneIfEdited($LOCAL_HOSTNAMES);
+	if (-e $LOCAL_HOSTNAMES) {
+	    AppendToFileFatal($LOCAL_HOSTNAMES,@LOCAL_HOSTS);
+	}
+	else {
+	    CreateFileFatal($LOCAL_HOSTNAMES,@LOCAL_HOSTS);
+	}
+    };
+    Phase "access", "Reconfiguring to listen on all interfaces", sub {
+	ExecQuietFatal("cp -p /etc/mail/sendmail.mc /etc/mail/sendmail.mc.orig");
+	ExecQuietFatal('sed -e \'s/^\(\s*DAEMON_OPTIONS.*\)Addr=127\.0\.0\.1,\(.*\)$/\1\2/\'' . 
+		       ' < /etc/mail/sendmail.mc.orig > /etc/mail/sendmail.mc');
+	ExecQuietFatal("cd /etc/mail ; make sendmail.cf");
+    };
+    Phase "maillists", "Setting up mailing lists", sub {
+	Phase "listdir", "Creating $LIST_DIR", sub { 
+	    DoneIfExists($LIST_DIR);
+	    mkdir($LIST_DIR,0740) or
+		PhaseFail("Unable to create $LIST_DIR: $!");
+	    ExecQuietFatal("$CHGRP -R mail $LIST_DIR");
+	    ExecQuietFatal("chmod 750 /etc/mail/lists");
+	};
+	Phase "listfiles", "Creating mailing list files", sub {
+	    foreach my $list (@MAILING_LIST_NAMES) {
+		Phase $list, $list, sub {
+		    DoneIfExists("$LIST_DIR/$list");
+		    CreateFileFatal("$LIST_DIR/$list");
+		    chmod(S_IRWXU|S_IRGRP|S_IROTH,"$LIST_DIR/$list");
+		};
+	    }
+	};
+	Phase "aliases", "Adding lists to $ALIASES_FILE", sub {
+	    DoneIfEdited($ALIASES_FILE);
+	    AppendToFileFatal($ALIASES_FILE,
+			      map("$_:\t:include:$LIST_DIR/$_",
+				  @MAILING_LIST_NAMES));
+	};
+	Phase "linking", "Linking /etc/mail/aliases to /etc/aliases", sub {
+	    if (-l "/etc/mail/aliases") {
+		PhaseSkip("/etc/mail/aliases symlink already exists");
+	    }
+	    if (-e "/etc/mail/aliases") {
+		unlink("/etc/mail/aliases");
+	    }
+	    ExecQuietFatal("ln -s /etc/aliases /etc/mail/aliases");
+	};
+	Phase "newaliases", "Running newaliases", sub {
+	    PhaseSkip("No new aliases") unless @MAILING_LIST_NAMES;
+	    PhaseSkip("No new aliases") if PhaseWasSkipped("aliases");
+	    ExecQuietFatal($NEWALIASES);
+	};
+    };
+};
+
+Phase "exports", "Setting up exports", sub {
+    Phase "ex.head", "Creating $EXPORTS_HEAD", sub {
+	DoneIfExists($EXPORTS_HEAD);
+
+	#
+	# On Linux, every export point has to be on a different line.
+	#
+	my @dirs = ('/var', $PREFIX);
+	if ($ISFS) {
+	    @dirs = (grep(!/^$SHAREROOT$/, @MOUNTPOINTS), @dirs);
+	}
+	@dirs = map {abs_path($_)} @dirs;
+	chomp @dirs;
+
+	#
+	# Use that knowledge to create lines for /etc/exports.head
+	#
+	my @exports_lines;
+	foreach my $dir (@dirs) {
+	    push @exports_lines,"$dir\t-no_root_squash,rw $BOSSNODE"; # alldirs ?
+	}
+
+	if ($ISFS) {
+	    #
+	    # /share is special. We want to export to boss read-write,
+	    # but to the control network read-only.
+	    #
+	    my ($a,$b,$c,$d) =
+		($CONTROL_NETWORK =~ /^(\d*)\.(\d*)\.(\d*)\.(\d*)/);
+	    my $realdir = abs_path($SHAREROOT);
+	    chomp($realdir);
+	    push(@exports_lines,
+		 "$realdir\t-no_root_squash $BOSSNODE(rw)" . 
+		 " ${a}.${b}.${c}.${d}/$CONTROL_NETMASK(ro)"); # alldirs ?
+	}
+
+	#
+	# Add localhost mount to proj/cvsrepos.
+	#
+	if ($CVSSUPPORT) {
+	    my $pdir;
+	    my $dfout = `df $PROJROOT | grep '/dev'`;
+	    if ($?) {
+		PhaseFail("'df $PROJROOT' failed!");
+	    }
+	    if ($dfout =~ /\s+([\/\w]*)$/) {
+		$pdir = $1;
+	    }
+	    else {
+		PhaseFail("Could not determine where $PROJROOT is mounted!");
+	    }
+	    # Note that we add the "sync" option to avoid warning from exportfs
+	    push(@exports_lines, "$pdir\tlocalhost(sync)"); # alldirs ?
+	}
+
+	#
+	# Put them in exports.head, and copy that to /etc/exports
+	#
+	CreateFileFatal($EXPORTS_HEAD, @exports_lines);
+	ExecQuietFatal("cp $EXPORTS_HEAD $EXPORTS_FILE");
+    };
+
+    # XXX Newhup
+    Phase "mountd", "Restarting mountd and rpcbind", sub {
+	PhaseSkip("No new exports file") if PhaseWasSkipped("ex.head");
+#	PhaseSkip("mountd not running") unless `ps -auxw | grep mountd | grep -v grep`;
+#	ExecQuietFatal("$EXPORTFS -r");
+	# restart nfs stuff no matter what, just to make sure it's on.
+	ExecQuietFatal("$RCDIR/rpcbind restart");
+	ExecQuietFatal("$RCDIR/nfs restart");
+	ExecQuietFatal("$RCDIR/rpcidmapd restart");
+	ExecQuietFatal("$RCDIR/nfslock restart");
+    };
+};
+
+Phase "NFSmounts", "Setting up NFS mounts", sub {
+    if ($ISFS) {
+	PhaseSkip("FSes are local");
+    }
+
+    Phase "mountpoints", "Creating mountpoints", sub {
+	foreach my $dir (@MOUNTPOINTS) {
+	    Phase $dir, $dir, sub {
+		DoneIfExists($dir);
+		mkdir $dir, 0777 or
+		    PhaseFail("Unable to create $dir : $!");
+	    };
+	}
+    };
+    Phase "fstab", "Adding NFS mounts to $FSTAB", sub {
+	DoneIfEdited($FSTAB);
+	my @lines = ("$FSNODE:$USERROOT\t\t$USERROOT\tnfs\trw,nodev,nosuid\t0\t0",
+		     "$FSNODE:$PROJROOT\t\t$PROJROOT\tnfs\trw,nodev,nosuid\t0\t0",
+		     "$FSNODE:$GROUPROOT\t\t$GROUPROOT\tnfs\trw,nodev,nosuid\t0\t0",
+		     "$FSNODE:$SHAREROOT\t\t$SHAREROOT\tnfs\trw,nodev,nosuid\t0\t0");
+	if ($SCRATCHDIR) {
+	    push(@lines,
+		 "$FSNODE:$SCRATCHROOT\t\t$SCRATCHROOT\tnfs\trw,nodev,nosuid\t0\t0");
+	}
+
+	AppendToFileFatal($FSTAB, @lines);
+    };
+    Phase "mounts", "Mounting NFS filesystems", sub {
+	foreach my $dir (@MOUNTPOINTS) {
+	    Phase $dir, $dir, sub {
+		DoneIfMounted($dir);
+		ExecQuietFatal("$MOUNT -o 'retry=1' $dir");
+	    };
+	}
+    };
+};
+
+#
+# Set up syslog
+#
+Phase "syslog", "Setting up syslog", sub {
+    Phase "sysconf", "Editing $SYSLOG_CONF", sub {
+	DoneIfEdited($SYSLOG_CONF);
+	
+	#
+	# Can't just append to this file, unfortunately. Have to put some of
+	# the lines in the middle of the file
+	#
+	open(SC,"+<$SYSLOG_CONF") or
+	    PhaseFail("Unable to open $SYSLOG_CONF : $!");
+	my @sc = <SC>;
+	if (scalar(grep(/$LOGFACIL/, @sc)) != 0) {
+	    PhaseFail("Testbed chosen facility $LOGFACIL already in use in $SYSLOG_CONF!");
+	}
+	if (scalar(grep(/^cron/, @sc)) != 1) {
+	    PhaseFail("Unable to find marker in $SYSLOG_CONF!");
+	}
+
+	#
+	# Clobber and re-write
+	#
+	seek(SC,0,0);
+	truncate(SC,0);
+
+	foreach my $line (@sc) {
+	    #
+	    # Modify the /var/log/messages line to exclude testbed stuff
+	    #
+	    my $pat = q(\s+/var/log/messages);
+	    if ($line =~ /^[^#].*$pat/) {
+		$line =~ s/($pat)/\;$LOGFACIL.none$1/;
+	    }
+
+	    #
+	    # XXX don't send anything to logged in root users.
+	    # Per-user linktest proxies run on ops as root in a "full"
+	    # ssh ("-t -t") which appears as a login shell.  Thus the
+	    # linktest output given to the user might include syslog
+	    # messages.
+	    #
+	    if ($line =~ /root$/) {
+		$line =~ s/^/#/;
+	    }
+
+	    print SC $line;
+
+	    #
+	    # Find the cron line, after which we place our auth.info line
+	    #
+	    if ($line =~ /^cron/) {
+		print SC "# " . MAGIC_TESTBED_START . "\n";
+		print SC "auth.info\t\t\t\t\t/var/log/logins\n";
+		print SC "# " . MAGIC_TESTBED_END . "\n";
+	    }
+	}
+
+	#
+	# Put a few more lines at the end
+	#
+	print SC "# " . MAGIC_TESTBED_START . "\n";
+	print SC "!capture\n";
+	print SC "*.*\t\t\t\t\t\t/var/log/tiplogs/capture.log\n";
+	print SC "!rpc.mountd\n";
+	print SC "*.*\t\t\t\t\t\t/var/log/mountd.log\n";
+	print SC "!pubsubd\n";
+	print SC "*.*\t\t\t\t\t\t${LOGDIR}/pubsubd.log\n";
+	print SC "!elvin_gateway\n";
+	print SC "*.*\t\t\t\t\t\t${LOGDIR}/elvin_gateway.log\n";
+	print SC "# " . MAGIC_TESTBED_END . "\n";
+	close SC;
+    };
+
+    Phase "tiplog", "Creating $TIPLOG_DIR", sub {
+	DoneIfExists($TIPLOG_DIR);
+	mkdir($TIPLOG_DIR,0755) or PhaseFail("Unable to make $TIPLOG_DIR : $!");
+    };
+    
+    Phase "logdir", "Creating log directory", sub {
+	DoneIfExists($LOGDIR);
+	mkdir $LOGDIR, 0775 or PhaseFail("Unable to create $LOGDIR : $!");
+	ExecQuietFatal("$CHGRP tbadmin $LOGDIR");
+	ExecQuietFatal("$CHMOD 775 $LOGDIR");
+    };
+
+    Phase "mysql-logdir", "Creating mysql log directory", sub {
+	DoneIfExists($MYSQL_LOGDIR);
+	mkdir $MYSQL_LOGDIR, 0775 or
+	    PhaseFail("Unable to create $MYSQL_LOGDIR : $!");
+	ExecQuietFatal("$CHOWN mysql:mysql $MYSQL_LOGDIR");
+	ExecQuietFatal("$CHMOD 775 $MYSQL_LOGDIR");
+    };
+
+    Phase "logfiles", "Creating log files", sub {
+	foreach my $logfile (@LOGFILES) {
+	    Phase $logfile, $logfile, sub {
+		DoneIfExists($logfile);
+		CreateFileFatal($logfile);
+		ExecQuietFatal("$CHGRP tbadmin $logfile");
+		ExecQuietFatal("$CHMOD 640 $logfile");
+	    };
+	}
+    };
+};
+
+Phase "cron", "Adding cron jobs", sub {
+    Phase "crontab", "Editing $CRONTAB", sub {
+	if ($QUOTA_FSLIST eq "") {
+	    PhaseSkip("No filesystem quotas");
+	}
+	DoneIfEdited($CRONTAB);
+
+	my @cronlist = ("0 \t6\t*\t*\t*\troot\t$PREFIX/sbin/quotamail");
+	if ($WIKISUPPORT) {
+	    push(@cronlist,
+		 "*/15 \t*\t*\t*\t*\troot\t(cd /usr/local/www/data/twiki/bin;".
+		 " ./mailnotify -q >> /var/tmp/mailnotify.log 2>&1)");
+	}
+	AppendToFileFatal($CRONTAB, @cronlist);
+    };
+    Phase "cronhup", "HUPing cron", sub {
+	if (PhaseWasSkipped("crontab")) { PhaseSkip("No new crontab"); }
+	HUPDaemon("cron");
+    };
+};
+
+Phase "sudoers", "Editing $SUDOERS to allow wheel group", sub {
+    DoneIfEdited($SUDOERS);
+    AppendToFileFatal($SUDOERS,
+		      "%wheel    ALL=(ALL) NOPASSWD: ALL",
+		      "Defaults  logfile=/var/log/sudo.log");
+};
+
+Phase "samba", "Setting up Samba", sub {
+    if (!$ISFS) {
+	PhaseSkip("Not FS node");
+    }
+    if (!$WINSUPPORT) {
+	PhaseSkip("Windows support not enabled");
+    }
+    Phase "smb.conf", "Installing smb.conf[.head]", sub {
+	DoneIfEdited($SMBCONF_HEAD);
+	ExecQuietFatal("$CP -pf $TOP_OBJDIR/install/smb.conf.head $SMBCONF_HEAD");
+	AppendToFileFatal($SMBCONF_HEAD,
+			  "# This file created by Emulab Control");
+	ExecQuietFatal("$CP -pf $SMBCONF_HEAD $SMBCONF_FILE");
+    };
+    if ($ELABINELAB) {	
+	Phase "starting", "Starting Samba", sub {
+            PhaseSkip("Already running")
+                unless `$RCDIR/smb status`;
+            ExecQuietFatal("$RCDIR/smb start");
+        };
+    }
+};
+
+Phase "ssh", "Allowing root ssh", sub {
+    Phase "sshdconfig", "Permitting root login through ssh", sub {
+	DoneIfEdited($SSHD_CONFIG);
+	AppendToFileFatal($SSHD_CONFIG,
+			  "PermitRootLogin yes",
+			  "Protocol 2,1");
+    };
+    Phase "dotssh", "Making root's .ssh directory", sub {
+	DoneIfExists("/root/.ssh");
+	mkdir("/root/.ssh",0700) or
+	    PhaseFail("Unable to create /root/.ssh: $!");
+    };
+    Phase "authkeys", "Adding stub identity to root authorized_keys", sub {
+	DoneIfEdited($AUTHKEYS);
+	my $ident = `cat $IDENTPUB`;
+	PhaseFail("Could not read $IDENTPUB")
+	    if ($?);
+	chomp($ident);
+	if (! -e $AUTHKEYS) {
+	    CreateFileFatal($AUTHKEYS);
+	}
+	AppendToFileFatal($AUTHKEYS,
+			  "from=\"${BOSSNODE}\" $ident");
+    };
+};
+
+Phase "capture", "Setting up capture", sub {
+    PhaseSkip("what does capture mean on Linux?");
+};
+
+Phase "rc.d", "Setting up rc.d scripts", sub {
+    if ($ELVIN_COMPAT) {
+	Phase "elvin-gateway", "Installing elvin gateway startup file", sub {
+	    PhaseSkip("No elvin compat on Linux!");
+	    PhaseSkip("elvind not installed, elvin_gateway not enabled")
+		if (! -x "/usr/local/libexec/elvind");
+	    DoneIfExists("$RCDIR/3.elvin_gateway.sh");
+	    PhaseFail("Pubsub system or elvin_gateway is not installed")
+	};
+    }
+    
+    # this doesn't do anything for linux at the moment...
+    Phase "rc.testbed", "Installing testbed RC scripts", sub {
+	ExecQuietFatal("$GMAKE -C $TOP_OBJDIR/rc.d control-install");
+    };
+};
+
+Phase "apache", "Configuring apache", sub {
+    Phase "config", "Installing apache config file", sub {
+	DoneIfEdited("$HTTPD_CONF");
+	ExecQuietFatal("$GMAKE -C $TOP_OBJDIR/apache control-install");
+    };
+    Phase "permissions", "Changing php session dir permissions", sub {
+	ExecQuietFatal("chgrp -R nobody /var/lib/php/session/");
+    };
+};
+
+Phase "wikidocs", "Installing wikidocs redirect", sub {
+    DoneIfExists("$WWWDIR/wikidocs/.htaccess");
+
+    if (! -e "$WWWDIR/wikidocs") {
+	mkdir("$WWWDIR/wikidocs", 0755) or
+	    PhaseFail("Unable to make $WWWDIR/wikidocs: $!");
+    }
+    CreateFileFatal("$WWWDIR/wikidocs/.htaccess",
+		    "Redirect /wikidocs http://users.emulab.net/trac/emulab");
+};
+
+Phase "database", "Setting up database", sub {
+    # Get a password for the the DB.
+    Phase "password", "Asking for mysqld root password", sub {
+	DoneIfExists("$ETCDIR/mysqld.pwd");
+
+	if (!defined($password)) {
+	    print "\n\nPick a password for mysqld (warning, will be echoed): ";
+	    $password = <>;
+	    chomp($password)
+		if (defined($password));
+	}
+	PhaseFail("Invalid password supplied")
+	    if (!defined($password) || $password eq "");
+	
+	if (! -d "$ETCDIR" ) {
+	    ExecQuietFatal("mkdir -p '$ETCDIR'");
+	    ExecQuietFatal("$CHOWN root:tbadmin '$ETCDIR'");
+	    ExecQuietFatal("$CHMOD 664 '$ETCDIR'");
+	}
+
+	CreateFileFatal("$ETCDIR/mysqld.pwd", "$password");
+	ExecQuietFatal("$CHMOD 750 $ETCDIR/mysqld.pwd");
+	ExecQuietFatal("$CHGRP tbadmin $ETCDIR/mysqld.pwd");
+    };
+    $password = `cat $ETCDIR/mysqld.pwd`;
+    chomp($password);
+
+    Phase "initialize", "Initializing mysql", sub {
+	PhaseSkip("mysqld already initialzed")
+	    if (-d "$MYSQLDBDIR/mysql");
+
+	ExecQuietFatal("$MYSQLINSTALL --ldata=${MYSQLDBDIR}");
+	ExecQuietFatal("$CHOWN -R mysql:mysql $MYSQLDBDIR");
+    };
+    
+    Phase "start", "Starting mysqld", sub {
+	my ($exitval) = ExecQuiet("$MYSQLADMIN -u mysql ping");
+
+	PhaseSkip("mysqld already running")
+	    if ($exitval == 0);
+
+	ExecQuietFatal("$RCDIR/mysqld start");
+	# Give mysqld some time to start, then make sure it did
+	sleep 5;
+	ExecQuietFatal("$MYSQLADMIN -u mysql ping");
+    };
+
+    # Once the password is inserted and privs flushed, will need a password
+    # from this point forward!
+    Phase "privs", "Initializing mysqld priv system", sub {
+	my ($exitval, @rows) =
+	    ExecQuiet("echo 'select * from user limit 1' | ".
+		      "$MYSQL -s -u root mysql");
+	if ($exitval) {
+	    PhaseSkip("Privs already initialized");
+	}
+	($exitval, @rows) =
+	    ExecQuietFatal("echo 'update user set ".
+			   " Password=PASSWORD(\"$password\") ".
+			   "where user=\"root\"; flush privileges' | ".
+			   "$MYSQL -s -u root mysql");
+    };
+
+    Phase "dbpatch", "Patching up mysql DB", sub {
+	if (!ExecQuiet("$MYSQLDUMP -u root -p$password mysql emulab_dbs")) {
+	    PhaseSkip("DB already patched");
+	}
+
+	ExecQuietFatal("$MYSQL -u root -p$password mysql ".
+		       "  < $TOP_SRCDIR/sql/opsdb.sql");
+    };
+};
+
+if ($MAILMANSUPPORT) {
+    my $MAILMANDIR   = "/usr/lib/mailman";
+    my $MAILMANCFG   = "$MAILMANDIR/Mailman/mm_cfg.py";
+    my $MAILMANLISTS = "/var/lib/mailman/lists";
+    my $MAILMANPWD   = "$ETCDIR/mailman.pwd";
+    my $MAILMANALIAS = "/etc/mail/aliases.mailman";
+    my $MMSITECONFIG = "/etc/mailman/sitelist.cfg";
+    
+    Phase "Mailman", "Setting up Mailman", sub {
+	ExecQuietFatal("$CHKCONFIG mailman on");
+	# Get a password for the mailman installation.
+	Phase "password", "Generating mailman password", sub {
+	    DoneIfExists($MAILMANPWD);
+	    
+	    my $string = substr(GenSecretKey(), 0, 10);
+
+	    PhaseFail("Invalid password supplied")
+		if (!defined($string) || $string eq "");
+	
+	    CreateFileFatal("$MAILMANPWD", "$string");
+	    ExecQuietFatal("$CHMOD 750 $MAILMANPWD");
+	    ExecQuietFatal("$CHGRP tbadmin $MAILMANPWD");
+	};
+	my $secret = `cat $MAILMANPWD`;
+	chomp($secret);
+
+	Phase "config", "Editing local config file", sub {
+	    DoneIfEdited("$MAILMANCFG");
+
+	    AppendToFileFatal($MAILMANCFG,
+			      "DEFAULT_EMAIL_HOST = '${OURDOMAIN}'",
+			      "DEFAULT_URL_HOST = '${USERNODE}'",
+			      "add_virtualhost(DEFAULT_URL_HOST, ".
+			                       "DEFAULT_EMAIL_HOST)");
+	};
+	Phase "gconfig", "Adding special global config file", sub {
+	    my $MAILMAN_CLFILE = "/usr/lib/mailman/emulab-config.py";
+	    my @mmcls = ("#",
+			 "# Emulab python tweaks for ./bin/config_list",
+			 "#",
+			 "generic_nonmember_action = 2",
+			 "");
+	    if (! -e $MAILMAN_CLFILE) {
+		CreateFileFatal($MAILMAN_CLFILE,@mmcls);
+	    }
+	    else {
+		DoneIfEdited("$MAILMAN_CLFILE");
+		AppendToFileFatal("$MAILMAN_CLFILE",@mmcls);
+	    }
+	};
+	Phase "mailman", "Creating mailman list", sub {
+	    PhaseSkip("List already created")
+		if (-d "$MAILMANLISTS/mailman");
+
+	    ExecQuietFatal("cd $MAILMANDIR; ".
+			   "bin/newlist -q mailman $TBOPSEMAIL $secret");
+	};
+	Phase "subscribe", "Subscribing testbed-ops", sub {
+	    PhaseSkip("Already subscribed")
+		if (ExecQuiet("$MAILMANDIR/bin/list_members mailman | ".
+			      "fgrep -q -s $TBOPSEMAIL") == 0);
+
+	    ExecQuietFatal("cd $MAILMANDIR; ".
+			   "echo $TBOPSEMAIL | ".
+			   "   bin/add_members -r - -w n -a n mailman");
+	};
+	# Can do this as many times as we like. No way to know.
+	ExecQuietFatal("cd $MAILMANDIR; ".
+		       "bin/config_list -i $MMSITECONFIG mailman");
+	# Ditto
+	ExecQuietFatal("cd $MAILMANDIR; ".
+		       "bin/mmsitepass $secret; ".
+		       "bin/mmsitepass -c $secret");
+
+	Phase "config", "Editing $SENDMAIL_CF", sub {
+	    PhaseSkip("Already edited")
+		if (ExecQuiet("fgrep ALIAS_FILE /etc/mail/sendmail.mc | ".
+			      "fgrep -q -s mailman") == 0);
+
+	    ExecQuietFatal('sed -i -e \'s/^\(define(`ALIAS_FILE.*\)$/dnl \1/\''.
+			   ' /etc/mail/sendmail.mc');
+	    ExecQuietFatal("echo 'dnl Add second aliases file for mailman' >> /etc/mail/sendmail.mc");
+	    ExecQuietFatal('echo "define(\`ALIAS_FILE\',\`/etc/aliases,/etc/aliases.mailman\')" >> /etc/mail/sendmail.mc');
+
+	    ExecQuietFatal("cd /etc/mail ; make sendmail.cf");
+	};
+	Phase "aliases", "Creating $MAILMANALIAS", sub {
+	    DoneIfExists($MAILMANALIAS);
+	    CreateFileFatal($MAILMANALIAS);
+	};
+	Phase "linking", "Linking $MAILMANALIAS", sub {
+	    DoneIfExists("/etc/aliases.mailman");
+	    ExecQuietFatal("ln -s $MAILMANALIAS /etc/aliases.mailman");
+	};
+	Phase "newaliases", "Running newaliases", sub {
+	    PhaseSkip("No new aliases") if PhaseWasSkipped("aliases");
+	    ExecQuietFatal($NEWALIASES);
+	};
+	Phase "mmconfig", "Configuring Mailman", sub {
+	    my $MAILMAN_CLFILE = "/usr/lib/mailman/emulab-config.py";
+	    my @mmcls = ("#",
+			 "# Emulab python tweaks for ./bin/config_list",
+			 "#",
+			 "generic_nonmember_action = 2",
+			 "");
+	    if (! -e $MAILMAN_CLFILE) {
+		CreateFileFatal($MAILMAN_CLFILE,@mmcls);
+	    }
+	    else {
+		DoneIfEdited("$MAILMAN_CLFILE");
+		AppendToFileFatal("$MAILMAN_CLFILE",@mmcls);
+	    }
+	};
+    };
+}
+
+if ($CVSSUPPORT) {
+    my $CVSDDIR   = "/etc/cvsd";
+    my $CVSDCONF  = "$CVSDDIR/cvsd.conf";
+    my $CVSDHEAD  = "$LIBDIR/cvsd.conf.head";
+    my $CVSDJAIL  = "/var/cvsjail";
+    my $BUILDROOT = "/usr/sbin/cvsd-buildroot";
+    my $REPOSDIR  = "$PROJROOT/cvsrepos";
+    my $LOCKDIR   = "/var";
+    my $JAILLOCKDIR = "$CVSDJAIL/var";
+    
+    Phase "cvsd", "Configuring cvsd", sub {
+        Phase "files", "Installing cvsd files", sub {
+            DoneIfExists($CVSDHEAD);
+            ExecQuietFatal("$GMAKE -C $TOP_OBJDIR/collab/cvstools ".
+                           "  control-install");
+        };
+
+        Phase "cvsd.conf", "Installing cvsd.conf", sub {
+            DoneIfExists($CVSDCONF);
+            ExecQuietFatal("$CP -f $CVSDHEAD $CVSDCONF");
+        };
+
+        Phase "jail", "Creating cvsd jail hierarchy", sub {
+            DoneIfExists($CVSDJAIL);
+            ExecQuietFatal("$BUILDROOT $CVSDJAIL");
+        };
+
+        Phase "dirs", "Creating extra directories", sub {
+            if (! -e "$CVSDJAIL/dummy") {
+                mkdir("$CVSDJAIL/dummy", 0755) or
+                    PhaseFail("Unable to make $CVSDJAIL/dummy : $!");
+            }
+            if (! -e "$CVSDJAIL/cvsrepos") {
+                mkdir("$CVSDJAIL/cvsrepos", 0755) or
+                    PhaseFail("Unable to make $CVSDJAIL/cvsrepos : $!");
+            }
+            ExecQuietFatal("$CHGRP nobody $CVSDJAIL/dummy $CVSDJAIL/cvsrepos");
+
+            if (! -e "$REPOSDIR") {
+                mkdir("$REPOSDIR", 0775) or
+                    PhaseFail("Unable to make $REPOSDIR : $!");
+            }
+
+	    # for whatever reason, we need cvslock, and probably it has/ought
+	    # to be in the cvsd jail dir.  At least, that's how it is on
+	    # utah ops.  Even `cvs ...' on ops, outside a cvsd jail, wants
+	    # /var/cvslock.  Seems odd.
+	    if (! -e "$LOCKDIR/cvslock") {
+		if (! -e "$JAILLOCKDIR/cvslock") {
+		    mkdir("$JAILLOCKDIR",0755) 
+			or PhaseFail("Unable to mkdir $JAILLOCKDIR: $!");
+		    mkdir("$JAILLOCKDIR/cvslock",0777) 
+			or PhaseFail("Unable to mkdir $JAILLOCKDIR/cvslock: $!");
+		    chmod(0777,"$JAILLOCKDIR/cvslock") 
+			or PhaseFail("Unable to chmod $JAILLOCKDIR/cvslock: $!");
+		}
+		ExecQuietFatal("ln -s $JAILLOCKDIR/cvslock $LOCKDIR/cvslock");
+	    }
+        };
+    };
+}
+
+if ($BUGDBSUPPORT) {
+    my $FLYSPRAYPWD   = "$ETCDIR/flyspray.pwd";
+    my $FLYSPRAYDIR   = "/var/www/html/flyspray";
+    my $FLYSPRAYCONF  = "/etc/flyspray.conf.php";
+    my $PHPCONFIG     = "/etc/php.ini";
+    my $ADODBPATH     = "/usr/share/php/adodb/adodb.inc.php";
+    my $ADODBINCPATH  = "\\/usr\\/share\\/php\\/adodb";
+
+    Phase "flyspray", "Installing flyspray", sub {
+	# Get a password for the installation.
+	Phase "password", "Generating flyspray password", sub {
+	    DoneIfExists($FLYSPRAYPWD);
+	    
+	    my $string = substr(GenSecretKey(), 0, 10);
+
+	    PhaseFail("Invalid password supplied")
+		if (!defined($string) || $string eq "");
+	
+	    CreateFileFatal("$FLYSPRAYPWD", "$string");
+	    ExecQuietFatal("$CHMOD 750 $FLYSPRAYPWD");
+	    ExecQuietFatal("$CHGRP tbadmin $FLYSPRAYPWD");
+	};
+	my $secret = `cat $FLYSPRAYPWD`;
+	chomp($secret);
+
+	Phase "php", "Patching up PHP config file", sub {
+	    DoneIfEdited("/etc/php.ini");
+	    # be nice to admins who have already done something here...
+	    if (ExecQuiet("grep '^include_path' /etc/php.ini") == 0) {
+		ExecQuietFatal('sed -i.orig -r -e \'s/^(include_path\s*=\s*")([^"]*)(.*)$/\1:'.$ADODBINCPATH.'\2/\' /etc/php.ini');
+	    }
+	    elsif (ExecQuiet("grep '^;.*include_path' /etc/php.ini") == 0) {
+		ExecQuietFatal('sed -i.orig -r -e \'s/^;.*include_path.*$/include_path = "' . $ADODBINCPATH . '"/\' /etc/php.ini');
+	    }
+	    else {
+		# ugh.
+		ExecQuietFatal('sed -r -e \'s/^\[PHP\]$/\[PHP\]\n\ninclude_path = "' . $ADODBINCPATH . '"/\' /etc/php.ini');
+	    }
+	    ExecQuietFatal('sed -i.orig -r -e' . 
+			   ' \'s/^(\s*display_errors.*=).*$/\1 On/ ; ' .
+			   ' s/^(\s*magic_quotes_gpc.*=).*$/\1 On/\'' .
+			   "  $PHP_INI");
+	    AppendToFileFatal("/etc/php.ini",
+			      "",
+			      "# Edited by Emulab testbed installation process",
+			      "");
+	};
+
+	Phase "dbcreate", "Creating flyspray DB", sub {
+	    if (! -d "$MYSQLDBDIR/flyspray") {
+		ExecQuietFatal("$MYSQLADMIN -u root -p${password} ".
+			       "            create flyspray");
+	    }
+	    ExecQuietFatal("echo 'grant all on flyspray.* to ".
+			   "      flyspray\@localhost ".
+			   "      identified by \"$secret\"' | ".
+			   "$MYSQL -s -u root -p${password} mysql");
+	};
+
+	Phase "permissions", "Setting permissions", sub {
+	    ExecQuietFatal("$CHOWN -R nobody $FLYSPRAYDIR");
+	};
+
+	Phase "dbinit", "Initializing flyspray DB", sub {
+	    if (!ExecQuiet("$MYSQLDUMP -d -u flyspray -p${secret} ".
+			   "flyspray flyspray_groups")) {
+		PhaseSkip("DB already initialized");
+	    }
+	    
+	    ExecQuietFatal("$MYSQL -u flyspray -p${secret} flyspray ".
+			   "  < $FLYSPRAYDIR/sql/flyspray-0.9.8.mysql");
+	    ExecQuietFatal("$MYSQL -u flyspray -p${secret} flyspray ".
+			   "  < $FLYSPRAYDIR/sql/flyspray-0.9.9-devel.mysql");
+	};
+
+	Phase "dbpatch", "Patching up flyspray DB", sub {
+	    if (!ExecQuiet("$MYSQLDUMP -d -u flyspray -p${secret} ".
+			   "flyspray emulab_project_mapping")) {
+		PhaseSkip("DB already patched");
+	    }
+
+	    ExecQuietFatal("$MYSQL -u flyspray -p${secret} flyspray ".
+			   "  < $TOP_SRCDIR/bugdb/sqlextras");
+	};
+	
+	#
+	# Fix up the password for the flyspray "superuser"
+	#
+	my $md5_secret = `$BSDMD5 -q -s $secret`;
+	PhaseFail("Could not take MD5 of flyspray password!")
+	    if ($?);
+	chomp($md5_secret);
+
+	ExecQuietFatal("echo 'update flyspray_users set ".
+		       "        user_pass=\"${md5_secret}\", ".
+		       "        jabber_id=\"\", ".
+		       "        email_address=\"${TBOPSEMAIL}\"' | ".
+		       "$MYSQL -u flyspray -p${secret} flyspray");
+	
+	Phase "configfile", "Creating flyspray config file", sub {
+	    DoneIfExists($FLYSPRAYCONF);
+	    CreateFileFatal($FLYSPRAYCONF,
+			    ";",
+			    "; Flyspray configuration",
+			    ";",
+			    "[general]",
+			    "basedir   = \"${FLYSPRAYDIR}\"",
+			    "baseurl   = \"https://${USERNODE}/flyspray/\"",
+			    "adodbpath = \"$ADODBPATH\"",
+			    "cookiesalt= 130918332",
+			    "output_buffering = \"on\"",
+			    "passwdcrypt = \"md5\"",
+			    "address_rewriting = \"0\"",
+			    "reminder_daemon = \"0\"",
+			    "[database]",
+			    "dbtype    = \"mysql\"",
+			    "dbhost    = \"localhost\"",
+			    "dbname    = \"flyspray\"",
+			    "dbprefix  = \"flyspray_\"",
+			    "dbuser    = \"flyspray\"",
+			    "dbpass    = \"$secret\""
+			   );
+	    ExecQuietFatal("$CHOWN nobody:tbadmin $FLYSPRAYCONF");
+	    ExecQuietFatal("$CHMOD 750 $FLYSPRAYCONF");
+
+	    ExecQuietFatal('sed -i.orig -r -e \'s/^(\s*\$conf.*=.*\().*(,.*)$/\1"\/etc\/flyspray.conf.php"\2/\' /var/www/html/flyspray/header.php');
+	};
+    };
+}
+
+if ($WIKISUPPORT) {
+    my $WIKIDIR       = "/var/www/html/twiki";
+    my $WIKICONF      = "LocalSite.cfg";
+    my $CGISESSDIR    = "/var/db/cgisess";
+    my $WIKI_LOGDIR   = "$LOGDIR/twiki";
+    
+    Phase "TWiki", "Installing TWiki", sub {
+	Phase "postinstall", "Doing postinstall configuration", sub {
+	    if (! -e "$CGISESSDIR") {
+		mkdir("$CGISESSDIR", 0770) or
+		    PhaseFail("Unable to make $CGISESSDIR : $!");
+	    }
+	    ExecQuietFatal("$CHOWN nobody:wheel $CGISESSDIR");
+
+	    if (! -e "$WIKIDIR") {
+		mkdir("$WIKIDIR", 0770) or
+		    PhaseFail("Unable to make $WIKIDIR : $!");
+	    }
+	    ExecQuietFatal("$CHMOD 770 $WIKIDIR");
+	    ExecQuietFatal("$CHOWN -R nobody:tbadmin $WIKIDIR");
+	};
+
+	Phase "logdir", "Creating TWiki log directory", sub {
+	    DoneIfExists($WIKI_LOGDIR);
+	    mkdir $WIKI_LOGDIR, 0775 or
+		PhaseFail("Unable to create $WIKI_LOGDIR : $!");
+	    
+	    ExecQuietFatal("$CHOWN nobody:tbadmin $WIKI_LOGDIR");
+	    ExecQuietFatal("$CHMOD 770 $WIKI_LOGDIR");
+	};
+
+	Phase "config", "Configuring TWiki", sub {
+	    # Must overwrite the distribution version.
+	    ExecQuietFatal("$CP -f $TOP_OBJDIR/wiki/$WIKICONF ".
+			   "       $WIKIDIR/lib/$WIKICONF");
+	    # Must fix paths from the FreeBSD-based version
+	    my $bsdwikidir = '\/usr\/local\/www\/data\/twiki';
+	    my $wikidir = '\/var\/www\/html\/twiki';
+	    ExecQuietFatal('sed -i.orig -e \'s/'.$bsdwikidir.
+			   '/'.$wikidir.'/\' ' . "$WIKIDIR/lib/$WIKICONF");
+	};
+    };
+}
+
+if ($CHATSUPPORT) {
+    # we might not have had this until emulab-ops got installed...
+    use XML::Simple;
+
+    my $mypass = `cat $ETCDIR/mysqld.pwd`;
+    chomp($mypass);
+    my $MYSQL_JABBERD_SETUP = "/usr/share/jabberd/db-setup.mysql";
+    my $JABBERD_LOGDIR = "/var/lib/jabberd/log";
+    my $JABBERD_CONFDIR = "/etc/jabberd";
+    my $JABBER_SERVER = "jabber.deine.testbed.emulab.net";
+    my $JABBER_PEMFILE = "/etc/jabberd/server.pem";
+    my %jfiles = ( 'sm' => "$JABBERD_CONFDIR/sm.xml",
+		   'c2s' => "$JABBERD_CONFDIR/c2s.xml",
+		   's2s' => "$JABBERD_CONFDIR/s2s.xml",
+		   'router' => "$JABBERD_CONFDIR/router.xml",
+		   'router-users' => "$JABBERD_CONFDIR/router-users.xml",
+		   'resolver' => "$JABBERD_CONFDIR/resolver.xml" );
+
+    my $parse  = XMLin($jfiles{"sm"});
+    $dbuser = $parse->{'storage'}->{'mysql'}->{'user'};
+    $dbname = $parse->{'storage'}->{'mysql'}->{'dbname'};
+    $dbpass = $parse->{'storage'}->{'mysql'}->{'pass'};
+    $parse = 0;
+
+    Phase "jabberd", "Setting up jabberd", sub {
+	Phase "dbcreate", "Creating database", sub {
+	    my $retval = ExecQuiet("echo '' | mysql -u root -p$mypass $dbname");
+	    PhaseSkip("db $dbname already exists") 
+		if ($retval == 0);
+	    ExecQuietFatal("$MYSQL -u root -p$password < $MYSQL_JABBERD_SETUP");
+	};
+	Phase "dbconfig", "Configuring database", sub {
+	    my $retval = ExecQuiet("echo '' | mysql -u $dbuser -p$dbpass $dbname");
+	    PhaseSkip("access to $dbname for $dbuser already granted") 
+		if ($retval == 0);
+	    ExecQuietFatal("echo \"GRANT CREATE TEMPORARY TABLES, LOCK TABLES" .
+			   " ON *.* TO '$dbuser'\@'localhost'" .
+			   " IDENTIFIED BY '$dbpass'\"" .
+			   " | mysql -u root -p$mypass");
+	    ExecQuietFatal("echo \"GRANT SELECT, INSERT, UPDATE, DELETE," .
+			   " EXECUTE ON $dbname.* TO '$dbuser'\@'localhost'" .
+			   " IDENTIFIED BY '$dbpass'\"" .
+			   " | mysql -u root -p$mypass");
+	};
+	Phase "router", "Editing ".$jfiles{"router"}, sub {
+	    DoneIfEdited($jfiles{"router"});
+
+	    $parse = XMLin($jfiles{"router"},ForceArray => 1);
+	    $parse->{'log'}->[0]->{'type'} = 'file';
+	    $parse->{'log'}->[0]->{'file'} = [ "$JABBERD_LOGDIR/router.log" ];
+	    $parse->{'local'}->[0]->{'secret'} = [ $dbpass ];
+	    open(FD,">".$jfiles{"router"});
+	    print FD "<!-- Edited by Emulab testbed installation process -->\n";
+	    print FD XMLout($parse,AttrIndent => 1,RootName => 'router');
+	    close(FD);
+	};
+	Phase "router-users", "Editing ".$jfiles{"router-users"}, sub {
+	    DoneIfEdited($jfiles{"router-users"});
+
+	    $parse = XMLin($jfiles{"router-users"},ForceArray => 1);
+	    $parse->{'user'}->[0]->{'secret'} = [ $dbpass ];
+	    open(FD,">".$jfiles{"router-users"});
+	    print FD "<!-- Edited by Emulab testbed installation process -->\n";
+	    print FD XMLout($parse,AttrIndent => 1,RootName => 'users');
+	    close(FD);
+	};
+	Phase "resolver", "Editing ".$jfiles{"resolver"}, sub {
+	    DoneIfEdited($jfiles{"resolver"});
+
+	    $parse = XMLin($jfiles{"resolver"},ForceArray => 1);
+	    $parse->{'log'}->[0]->{'type'} = 'file';
+	    $parse->{'log'}->[0]->{'file'} = [ "$JABBERD_LOGDIR/resolver.log" ];
+	    $parse->{'router'}->[0]->{'pass'} = [ $dbpass ];
+	    open(FD,">".$jfiles{"resolver"});
+	    print FD "<!-- Edited by Emulab testbed installation process -->\n";
+	    print FD XMLout($parse,AttrIndent => 1,RootName => 'resolver');
+	    close(FD);
+	};
+	Phase "s2s", "Editing ".$jfiles{"s2s"}, sub {
+	    DoneIfEdited($jfiles{"s2s"});
+
+	    $parse = XMLin($jfiles{"s2s"},ForceArray => 1);
+	    $parse->{'log'}->[0]->{'type'} = 'file';
+	    $parse->{'log'}->[0]->{'file'} = [ "$JABBERD_LOGDIR/s2s.log" ];
+	    $parse->{'router'}->[0]->{'pass'} = [ $dbpass ];
+	    open(FD,">".$jfiles{"s2s"});
+	    print FD "<!-- Edited by Emulab testbed installation process -->\n";
+	    print FD XMLout($parse,AttrIndent => 1,RootName => 's2s');
+	    close(FD);
+	};
+	Phase "c2s", "Editing ".$jfiles{"c2s"}, sub {
+	    DoneIfEdited($jfiles{"c2s"});
+
+	    $parse = XMLin($jfiles{"c2s"},ForceArray => 1);
+	    $parse->{'log'}->[0]->{'type'} = 'file';
+	    $parse->{'log'}->[0]->{'file'} = [ "$JABBERD_LOGDIR/c2s.log" ];
+	    $parse->{'router'}->[0]->{'pass'} = [ $dbpass ];
+	    $parse->{'local'}->[0]->{'id'} = [ $JABBER_SERVER ];
+	    $parse->{'local'}->[0]->{'pemfile'} = [ $JABBER_PEMFILE ];
+	    $parse->{'local'}->[0]->{'require-starttls'} = [ undef ];
+	    delete $parse->{'authreg'}->[0]->{'register'}->[0]->{'enable'};
+	    delete $parse->{'authreg'}->[0]->{'register'}->[0]->{'instructions'};
+	    $parse->{'authreg'}->[0]->{'module'} = [ 'mysql' ];
+	    $parse->{'authreg'}->[0]->{'mysql'}->[0]->{'pass'} = [ $dbpass ];
+	    $parse->{'authreg'}->[0]->{'mysql'}->[0]->{'user'} = [ $dbuser ];
+	    $parse->{'authreg'}->[0]->{'mysql'}->[0]->{'dbname'} = [ $dbname ];
+	    open(FD,">".$jfiles{"c2s"});
+	    print FD "<!-- Edited by Emulab testbed installation process -->\n";
+	    print FD XMLout($parse,AttrIndent => 1,RootName => 'c2s');
+	    close(FD);
+	};
+	Phase "sm", "Editing ".$jfiles{"sm"}, sub {
+	    DoneIfEdited($jfiles{"sm"});
+
+	    #
+            # Note: for the sm, we do not update dbname, user, or pass -- we 
+	    # read those out of sm.xml to fill in other places, so we've 
+	    # assumed them.
+	    #
+	    # Also note: we have to force a special type of "folding" (see
+	    # XML::Simple docs) to make sure the module chains don't get 
+	    # messed up.  Basically, Simple whacks things badly: the id attrs 
+	    # of the <chain> elements (which are themselves nested in a 
+	    # <modules> element) become the actually subelements of <modules>,
+	    # and <modules> gets "chain" as the value for its "name" attr.  Ugh!
+	    # Anyway, that's the point of the KeyAttr arg below.
+            #
+	    $parse = XMLin($jfiles{"sm"},
+			   ForceArray => 1,KeyAttr => { 'modules' => 'chain' });
+	    $parse->{'id'} = [ $JABBER_SERVER ];
+	    $parse->{'log'}->[0]->{'type'} = 'file';
+	    $parse->{'log'}->[0]->{'file'} = [ "$JABBERD_LOGDIR/sm.log" ];
+	    $parse->{'router'}->[0]->{'pass'} = [ $dbpass ];
+	    $parse->{'aci'}->[0]->{'acl'}->[0]->{'jid'} = [ $TBOPSEMAIL ];
+	    $parse->{'users'}->[0]->{'auto-create'} = [ undef ];
+	    open(FD,">".$jfiles{"sm"});
+	    print FD "<!-- Edited by Emulab testbed installation process -->\n";
+	    print FD XMLout($parse,AttrIndent => 1,RootName => 'sm');
+	    close(FD);
+	};
+	Phase "initscript", "Enabling startup on boot", sub {
+	    ExecQuietFatal("$CHKCONFIG jabberd on");
+	};
+    };
+}
+
+exit(0)
+    if ($ELABINELAB);
+
+print "----------------------------------------------------------------------\n";
+print "Installation completed succesfully!\n";
+print "Please reboot this machine before proceeding with boss setup\n";
+if (!PhaseWasSkipped("maillists")) {
+    print "Local mailing lists have been created, with no members, in\n";
+    print "$LIST_DIR . Please add members to the following lists:\n";
+    print map "$_\n", @LOCAL_MAILING_LISTS;
+}

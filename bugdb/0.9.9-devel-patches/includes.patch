@@ -1,0 +1,12 @@
+--- includes/class.tpl.php~     2008-12-04 15:15:42.000000000 -0700
++++ includes/class.tpl.php      2008-12-05 11:53:15.000000000 -0700
+@@ -232,7 +232,8 @@
+     foreach ($options as $value=>$label)
+     {
+         if (is_array($label)) {
+-            list($value, $label) = $label;
++            $value = $label[0];
++            $label = $label[1];
+         }
+         $label = htmlspecialchars($label, ENT_QUOTES, "utf-8");
+         $value = $labelIsValue ? $label

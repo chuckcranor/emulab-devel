@@ -1,0 +1,99 @@
+compress
+create 640 root tbadmin
+
+@LOGDIR@/tmcd.log {        
+    rotate 9
+    size=1000k
+}
+
+@LOGDIR@/stated.log {        
+    rotate 9
+    size=300k
+}
+
+@LOGDIR@/osselect.log {        
+    rotate 9
+    size=300k
+}
+
+@LOGDIR@/power.log {        
+    rotate 7
+    size=300k
+}
+
+@LOGDIR@/frisbeed.log {        
+    rotate 7
+    size=300k
+}
+
+@LOGDIR@/tftpd.log {        
+    rotate 7
+    size=200k
+    # not sure if in.tftpd procs can handle HUPs
+    copytruncate
+}
+
+@LOGDIR@/dhcpd.log {        
+    rotate 7
+    size=200k
+}
+
+@LOGDIR@/bootinfo.log {        
+    rotate 7
+    size=200k
+}
+
+@LOGDIR@/capserver.log {        
+    rotate 5
+    size=200k
+}
+
+@LOGDIR@/pubsubd.log {        
+    rotate 5
+    size=1000k
+}
+
+@LOGDIR@/suexec.log {        
+    rotate 3
+    size=200k
+}
+
+@LOGDIR@/genlastlog.log {        
+    rotate 3
+    size=200k
+}
+
+@LOGDIR@/genlastlog {        
+    rotate 3
+    size=200k
+    postrotate
+	kill -HUP `cat @RUNDIR@/lastlog_daemon.pid`
+    endscript
+}
+
+@LOGDIR@/plabmetrics.log {        
+    rotate 7
+    size=1000k
+    missingok
+}
+
+@LOGDIR@/plablinkdata.log {        
+    rotate 7
+    size=1000k
+    missingok
+}
+
+@LOGDIR@/xmlrpcbag.log {        
+    rotate 7
+    size=300k
+}
+
+@LOGDIR@/sshxmlrpc.log {        
+    rotate 7
+    size=300k
+}
+
+@LOGDIR@/sslxmlrpc.log {        
+    rotate 7
+    size=300k
+}

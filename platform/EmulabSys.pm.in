@@ -1,0 +1,536 @@
+#!/usr/bin/perl -wT
+#
+# EMULAB-COPYRIGHT
+# Copyright (c) 2008 University of Utah and the Flux Group.
+# All rights reserved.
+#
+# The main role of this class is to act as both a provider of default, 
+# unix-like functionality exposed as methods, and a factory to detect the 
+# OS, distro, version, etc, and load the appropriate platform-dependent 
+# class.
+#
+#
+package EmulabSys;
+
+use strict;
+use Exporter;
+use vars qw(@ISA @EXPORT);
+
+@ISA    = "Exporter";
+@EXPORT = qw ( );
+
+# Must come after package declaration!
+#use lib '@prefix@/lib';
+#use libdb;
+#use libtestbed;
+use English;
+#use Data::Dumper;
+#use File::Basename;
+#use overload ('""' => 'Stringify');
+#use Project;
+use vars qw($ERROR_USEREXISTS $ERROR_NOSUCHUSER %shells @EXPORT_OK);
+
+# Configure variables
+my $TB		   = '@prefix@';
+my $TBOPS          = '@TBOPSEMAIL@';
+my $TBAPPROVAL     = '@TBAPPROVALEMAIL@';
+my $TBAUDIT   	   = '@TBAUDITEMAIL@';
+my $TBBASE         = '@TBBASE@';
+my $TBWWW          = '@TBWWW@';
+my $WIKISUPPORT    = 0; #@WIKISUPPORT@;
+my $BOSSNODE       = '@BOSSNODE@';
+my $CONTROL	   = '@USERNODE@';
+my $OURDOMAIN      = '@OURDOMAIN@';
+my $MIN_UNIX_UID   = 0; #@MIN_UNIX_UID@;
+my $MIN_UNIX_GID   = 0; #@MIN_UNIX_GID@;
+
+#
+# Generic error conditions (where 0/1 isn't enough).  If you have a case like
+# this, please put these here so the return codes are "portable".
+#
+$ERROR_USEREXISTS = 129;
+$ERROR_NOSUCHUSER = 130;
+
+# Why, why, why?
+@EXPORT_OK = qw($ERROR_USEREXISTS $ERROR_NOSUCHUSER %shells);
+
+#
+# A map of platform-dependent modules to constraints.  Constraint fields are
+# whether constraint X is an OS or distro, the name of that object, 
+# the min version (i.e., X_version >= constraint), the max version (i.e.,
+# constraint <= X_version).
+#
+my %submap = ( "FreeBSDSys" => [ 'os',"FreeBSD",undef,undef ],
+	       "LinuxSys"   => [ 'os',"Linux",undef,undef ] );
+my $UNAME = "@UNAME@";
+my %defs = (
+    UNAME      => "@UNAME@",
+    SSHTB      => "/usr/testbed/bin/sshtb -host",
+    SMBPASSWD  => "@SMBPASSWD@",
+    CVSBIN     => "@CVS@",
+    CVS        => "@CVS@",
+    MYSQLDUMP  => "@MYSQLDUMP@",
+    MYSQL      => "@MYSQL@",
+    GZIP       => "@GZIP@",
+    TAR        => "@TAR@",
+    RSYNC      => "@RSYNC@",
+    ROUTE      => "@ROUTE@",
+    IFCONFIG   => "@IFCONFIG@",
+    CHOWN      => "@CHOWN@",
+    CHMOD      => "@CHMOD@",
+    MD5        => "@MD5@",
+    RNDC       => "@RNDC@",
+);
+
+my %shells = ();
+
+BEGIN {
+    # secure ourself
+    $ENV{PATH} = "/bin:/sbin:/usr/bin:/usr/sbin:/usr/local/bin:/usr/local/sbin";
+};
+
+
+sub detect_platform() {
+    my ($os,$os_version,$distro,$distro_version,$arch);
+
+    if (! -x "$UNAME") {
+	die("You don't seem to have `uname'; unsupported platform!");
+    }
+
+    $os = `$UNAME -s`;
+    $os_version = `$UNAME -r`;
+    chomp($os);
+    chomp($os_version);
+    if ($os eq 'Linux') {
+	# try to figure out which distro we're running
+	if (-e "/etc/redhat-release") {
+	    # redhat/fedora
+	    my $d = `cat /etc/redhat-release | grep -i release`;
+	    chomp($d);
+	    if ($d =~ /(Red Hat Linux)\s+release\s+([\d\.]+)/i) {
+		$distro = $1;
+		$distro_version = $2;
+	    }
+	    elsif ($d =~ /(Fedora Core)\s+release\s+([\d\.]+)/i) {
+		$distro = $1;
+		$distro_version = $2;
+	    }
+	    elsif ($d =~ /(Fedora)\s+release\s+([\d\.]+)/i) {
+		$distro = $1;
+		$distro_version = $2;
+	    }
+	}
+	elsif (-e "/etc/lsb-release") {
+	    my $d = `cat /etc/lsb-release | grep DISTRIB_ID`;
+	    chomp($d);
+	    if ($d =~ /DISTRIB_ID=([\w\d]+)/i) {
+		$distro = $1;
+	    }
+	    my $v = `cat /etc/lsb-release | grep DISTRIB_RELEASE`;
+	    chomp($v);
+	    if ($v =~ /DISTRIB_RELEASE=([\w\d\-\.]+)/i) {
+		$distro_version = $1;
+	    }
+	}
+    }
+    else {
+	# distro really has no meaning outside of linux, except we could use it
+	# for windows.  Thing is, I hope I'm dead before Emulab's server side
+	# stuff ever gets ported to windows!
+	($distro,$distro_version) = ($os,$os_version);
+    }
+
+    $arch = `$UNAME -m`;
+    chomp($arch);
+
+    my @retval = ($os,$os_version,$distro,$distro_version,$arch);
+    return @retval;
+}
+
+#
+# The only way users should use this class: 
+# 
+#   my $sys = EmulabSys->get;
+#   $sys->useradd(...);
+#
+sub get {
+    my $class = shift;
+    my @da = detect_platform();
+    my ($os,$os_version,$distro,$distro_version,$arch) = @da;
+
+    my $mod = undef;
+    foreach my $tmod (keys(%submap)) {
+	my ($ctype,$cval,$cmin,$cmax) = @{$submap{$tmod}};
+	my ($tval,$vval);
+	if ($ctype eq 'os') {
+	    ($tval,$vval) = ($os,$os_version);
+	}
+	elsif ($ctype eq 'distro') {
+	    ($tval,$vval) = ($distro,$distro_version);
+	}
+	else {
+	    next;
+	}
+
+#	print "constraints ($ctype,$cval,$cmin,$cmax) values ($tval,$vval)\n";
+
+	if ($cval eq $tval) {
+	    if (defined($cmin) && $vval < $cmin) {
+		next;
+	    }
+	    if (defined($cmax) && $vval > $cmax) {
+		next;
+	    }
+
+	    # match!
+	    $mod = $tmod;
+	    last;
+	}
+    }
+
+    my $self;
+    # If we found a match for the platform, construct the module from there, 
+    # then backfill our version info.
+    if (defined($mod)) {
+	eval "use $mod";
+	if ($@) {
+	    die "Cannot load `$mod'; dev should check EmulabSys::submap!";
+	}
+	$self = $mod->new;
+    }
+    else {
+	$self = {};
+    }
+
+    ($self->{"_os"},$self->{"_os_version"},
+     $self->{"_distro"},$self->{"_distro_version"},$self->{"_arch"}) = \
+	 detect_platform();
+
+    # Only bless to us if we could not find a child...
+    if (!defined($mod)) {
+	bless($self,$class);
+    }
+
+    return $self;
+}
+
+#
+# Think of the children...
+#
+sub new {
+    my $class = shift;
+    my $self = {};
+    $self->{"_debug"} = 0;
+    $self->{"_impotent"} = 0;
+    $self->{"_errorString"} = undef;
+    $self->{"_errorCode"} = undef;
+    bless($self,$class);
+
+    $self->init();
+
+    return $self;
+}
+
+sub init($) {
+    if ( -e '/etc/shells') {
+	open(FD,'/etc/shells') or die "could not open /etc/shells: $!";
+	while (<FD>) {
+	    if ($_ =~ /^([-\/\w]+)\/([-\w]+)$/) {
+		$shells{$2} = "$1/$2";
+	    }
+	}
+	close(FD);
+    }
+
+    return 0;
+}
+
+#
+# Util methods
+#
+sub detect($) {
+    my $self = shift;
+    return undef 
+	if (!ref($self));
+
+    ($self->{"_os"},$self->{"_os_version"},
+     $self->{"_distro"},$self->{"_distro_version"},$self->{"_arch"}) = \
+	 detect_platform();
+
+    return 0;
+}
+
+# Yes, this returns in host order, not network order!
+sub _inet_atoh($$) {
+    my $self = shift;
+    return undef 
+	if (!ref($self));
+    my $iparg = shift;
+    return undef 
+	if (!defined($iparg));
+
+    my @sip = split(/\./,$iparg);
+    if (@sip != 4) {
+	setError("Could not parse argument IP '$iparg'",undef);
+	return undef;
+    }
+    my $ip = ($sip[0] << 24) | ($sip[1] << 16) | ($sip[2] << 8) | $sip[3];
+
+    return $ip;
+}
+
+sub _inet_htoa($$) {
+    my $self = shift;
+    return undef 
+	if (!ref($self));
+    my $narg = shift;
+    return undef 
+	if (!defined($narg));
+
+    return "" . (($narg >> 24) & 0xff) . "." . (($narg >> 16) & 0xff) . 
+	"." . (($narg >> 8) & 0xff) . "." . ($narg & 0xff);
+}
+
+sub setError($$$) {
+    my $self = shift;
+    return undef 
+	if (!ref($self));
+
+    my ($s,$c) = @_;
+
+    $self->{"_errorString"} = $s;
+    $self->{"_errorCode"} = $c;
+
+    return 0;
+}
+
+sub clearError($) {
+    my $self = shift;
+    return undef 
+	if (!ref($self));
+
+    $self->{"_errorString"} = undef;
+    $self->{"_errorCode"} = undef;
+
+    return 0;
+}
+
+sub getError($) {
+    my $self = shift;
+    return undef 
+	if (!ref($self));
+
+    wantarray ? (${$self->{"_errorString"}},${$self->{"_errorCode"}}) : \
+	${$self->{"_errorString"}};
+}
+
+sub errorDie($) {
+    my $self = shift;
+    return undef 
+	if (!ref($self));
+
+    die "" . ${$self->{"_errorString"}} . " (" . ${$self->{"_errorCode"}} . ")";
+}
+
+sub whoami {
+    return "EmulabSys";
+}
+
+sub def {
+    my $defarg;
+    if (@_ > 1) {
+	$defarg = $_[1];
+    }
+    elsif (@_ == 1) {
+	$defarg = $_[0];
+    }
+
+    if (!defined($defarg) || ref($defarg)) {
+	die "must supply a defined variable name";
+    }
+
+    if (exists($defs{$defarg})) {
+	return $defs{$defarg};
+    }
+
+    return undef;
+}
+
+sub debug {
+    my $self = shift;
+    my $val;
+    if (@_ > 0) {
+	$val = shift;
+    }
+    return undef 
+	if (!ref($self));
+
+    if (defined($val)) {
+	$self->{"_debug"} = $val;
+    }
+    elsif (!exists($self->{"_debug"})) {
+	$self->{"_debug"} = 0;
+    }
+
+    return $self->{"_debug"};
+}
+
+sub impotent {
+    my $self = shift;
+    my $val;
+    if (@_ > 0) {
+	$val = shift;
+    }
+    return undef 
+	if (!ref($self));
+
+    if (defined($val)) {
+	$self->{"_impotent"} = $val;
+    }
+    elsif (!exists($self->{"_impotent"})) {
+	$self->{"_impotent"} = 0;
+    }
+
+    return $self->{"_impotent"};
+}
+
+# Little helper and debug function.
+sub mysystem($$) {
+    my ($self,$command) = @_;
+    return undef 
+	if (!ref($self));
+
+    if ($self->impotent()) {
+	print STDERR "(Would be) Running '$command'\n";
+	return 0;
+    }
+    else {
+	print STDERR "Running '$command'\n"
+	    if ($self->debug);
+	return system($command);
+    }
+}
+
+#
+# A bunch of methods that must produce answers...
+#
+
+sub os($) {
+    my $self = shift;
+    return undef 
+	if (!ref($self));
+    return $self->{'_os'};
+}
+
+sub osVersion($) {
+    my $self = shift;
+    return undef 
+	if (!ref($self));
+    return $self->{'_os_version'};
+}
+
+sub distro($) {
+    my $self = shift;
+    return undef 
+	if (!ref($self));
+    return $self->{'_distro'};
+}
+
+sub distroVersion($) {
+    my $self = shift;
+    return undef 
+	if (!ref($self));
+    return $self->{'_distro_version'};
+}
+
+#
+# Default implementations for methods that could be useful on multiple
+# platforms.
+#
+sub getShells($;@) {
+    return %shells;
+}
+
+#
+# A bunch of "abstract" methods... child classes *must* implement them; in 
+# this superclass, they just die, since that's all they can do.  The whole 
+# point is that all this stuff be implemented in platform-dependent classes.
+#
+
+sub userAdd($;@) {
+    my $self = shift;
+    return undef 
+	if (!ref($self));
+
+    die "Your platform does not implement the `userAdd' method!";
+}
+
+sub userMod($;@) {
+    my $self = shift;
+    return undef 
+	if (!ref($self));
+
+    die "Your platform does not implement the `userMod' method!";
+}
+
+sub userDel($;@) {
+    my $self = shift;
+    return undef 
+	if (!ref($self));
+
+    die "Your platform does not implement the `userDel' method!";
+}
+
+sub groupAdd($$$;@) {
+    my $self = shift;
+    return undef 
+	if (!ref($self));
+
+    die "Your platform does not implement the `groupAdd' method!";
+}
+
+sub groupDel($$;@) {
+    my $self = shift;
+    return undef 
+	if (!ref($self));
+
+    die "Your platform does not implement the `groupDel' method!";
+}
+
+sub chPasswd($;@) {
+    my $self = shift;
+    return undef 
+	if (!ref($self));
+
+    die "Your platform does not implement the `chPasswd' method!";
+}
+
+sub smbPasswd($;@) {
+    my $self = shift;
+    return undef 
+	if (!ref($self));
+
+    die "Your platform does not implement the `smbPasswd' method!";
+}
+
+sub getRoute($$\$\$) {
+    my $self = shift;
+    return undef 
+	if (!ref($self));
+
+    die "Your platform does not implement the `getRoute' method!";
+}
+
+#
+# Returns an (IPaddr,netmask,bcast) tuple
+#
+sub getIfaceInfo($$\$\$\$) {
+    my $self = shift;
+    return undef 
+	if (!ref($self));
+
+    die "Your platform does not implement the `getIfaceInfo' method!";
+}
+
+# _Always_ make sure that this 1 is at the end of the file...
+1;

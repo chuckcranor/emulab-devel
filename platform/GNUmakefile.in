@@ -1,0 +1,45 @@
+#
+# EMULAB-COPYRIGHT
+# Copyright (c) 2000-2007 University of Utah and the Flux Group.
+# All rights reserved.
+#
+
+SRCDIR		= @srcdir@
+TESTBED_SRCDIR	= @top_srcdir@
+OBJDIR		= ..
+SUBDIR		= platform
+
+include $(OBJDIR)/Makeconf
+
+LIB_STUFF	= EmulabSys.pm FreeBSDSys.pm LinuxSys.pm
+
+#
+# Force dependencies on the scripts so that they will be rerun through
+# configure if the .in file is changed.
+# 
+all:	$(LIB_STUFF)
+
+include $(TESTBED_SRCDIR)/GNUmakerules
+
+install: all script-install
+
+boss-install: install
+
+script-install:	$(addprefix $(INSTALL_LIBDIR)/, $(LIB_STUFF)) \
+	 $(addprefix $(INSTALL_DIR)/opsdir/lib/, $(LIB_STUFF))
+
+#
+# Control node installation (okay, plastic)
+#
+control-install: $(addprefix $(INSTALL_LIBDIR)/, $(LIB_STUFF))
+
+#
+# FS install
+#
+fs-install: $(addprefix $(INSTALL_LIBDIR)/, $(LIB_STUFF))
+
+$(INSTALL_DIR)/opsdir/lib/%: %
+	@echo "Installing $<"
+	-mkdir -p $(INSTALL_DIR)/opsdir/lib
+	$(INSTALL) $< $@
+

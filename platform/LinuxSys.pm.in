@@ -1,0 +1,516 @@
+#!/usr/bin/perl -wT
+#
+# EMULAB-COPYRIGHT
+# Copyright (c) 2008 University of Utah and the Flux Group.
+# All rights reserved.
+#
+# Linux platform stuff.
+#
+package LinuxSys;
+
+use strict;
+use Exporter;
+use vars qw(@ISA @EXPORT);
+
+@ISA    = ("EmulabSys","Exporter");
+@EXPORT = qw ( );
+
+# Must come after package declaration!
+#use lib '@prefix@/lib';
+#use libdb;
+#use libtestbed;
+use English;
+use Socket;
+#use Data::Dumper;
+#use File::Basename;
+#use overload ('""' => 'Stringify');
+#use Project;
+use vars qw(@EXPORT_OK);
+
+# Configure variables
+my $TB		   = '@prefix@';
+my $TBOPS          = '@TBOPSEMAIL@';
+my $TBAPPROVAL     = '@TBAPPROVALEMAIL@';
+my $TBAUDIT   	   = '@TBAUDITEMAIL@';
+my $TBBASE         = '@TBBASE@';
+my $TBWWW          = '@TBWWW@';
+my $WIKISUPPORT    = 0; #@WIKISUPPORT@;
+my $BOSSNODE       = '@BOSSNODE@';
+my $CONTROL	   = '@USERNODE@';
+my $OURDOMAIN      = '@OURDOMAIN@';
+my $MIN_UNIX_UID   = 0; #@MIN_UNIX_UID@;
+my $MIN_UNIX_GID   = 0; #@MIN_UNIX_GID@;
+
+my %pdefs = (
+    USERADD    => "@USERADD@",
+    USERDEL    => "@USERDEL@",
+    USERMOD    => "@USERMOD@",
+    GROUPADD   => "@GROUPADD@",
+    GROUPDEL   => "@GROUPDEL@",
+    CHPASS     => "@CHPASS@",
+    EXPORTFS   => "@EXPORTFS@",
+    DHCPD_CONF => "/etc/dhcpd.conf",
+    DHCPD_CONF_TEMPLATE => "/etc/dhcpd.conf.template",
+    MYSQL_RCSCRIPT => "/etc/init.d/mysqld",
+    # can't get these from configure because configure runs mostly on boss,
+    # and mailman is only installed on ops
+    MAILMANDIR => "/usr/lib/mailman",
+    MAILMANBINDIR => "/usr/lib/mailman/bin",
+    MAILMANLISTDIR => "/var/lib/mailman/lists",
+    MAILMANARCHDIR => "/var/lib/mailman/archives",
+    JABBERCONF => "/etc/jabberd/sm.xml",
+    MUCDIR => "/var/jabberd/muc",
+    MUCROOMS => "/var/jabberd/muc/rooms.xml",
+    WIKIDIR => "/var/www/html/twiki",
+    SNORTSCHEMA => "/usr/share/doc/snort-2.8.1/create_mysql",
+    CVSDCONFDIR => "/etc/cvsd",
+    CVSDRCSCRIPT => "/etc/init.d/cvsd",
+);
+
+my $ERROR_USEREXISTS = 9;
+my $ERROR_NOSUCHUSER  = 6;
+
+# Why, why, why?
+@EXPORT_OK = qw();
+
+#
+# Should not be used directly... use EmulabSys->get instead.
+#
+sub new {
+    my $class = shift;
+    my $self = EmulabSys->new();
+    bless($self,$class);
+    return $self;
+}
+
+#
+# Util methods
+#
+sub whoami {
+    return "LinuxSys";
+}
+
+sub def {
+    my $defarg;
+    if (@_ > 1) {
+	$defarg = $_[1];
+    }
+    elsif (@_ == 1) {
+	$defarg = $_[0];
+    }
+
+    if (!defined($defarg) || ref($defarg)) {
+	die "must supply a def variable name";
+    }
+
+    if (exists($pdefs{$defarg})) {
+	return $pdefs{$defarg};
+    }
+
+    return EmulabSys::def(@_);
+}
+
+#
+# Implement the abstract methods.
+#
+
+#
+# Args: obj,username,uid,groups (with primary first),shell,homedir,comment,host
+#
+sub userAdd($$$$$$$$;@) {
+    my $self = shift;
+    return undef 
+	if (!ref($self));
+
+    my ($username,$uid,$groups,$shell,$homedir,$comment,$host) = @_;
+    if (!defined($username)) {
+	die "no username!";
+    }
+
+    my $primary_group;
+    if (defined($groups)) {
+	my @ga = split(/,/,$groups);
+	if (@ga > 0) {
+	    $primary_group = $ga[0];
+	}
+	if (@ga > 0) {
+	    $groups = join(',',@ga);
+	}
+	else {
+	    $groups = undef;
+	}
+    }
+
+    my $cmd = $self->def("USERADD");
+    if (defined($uid)) {
+	$cmd .= " -u $uid";
+    }
+    if (defined($comment)) {
+	$cmd .= " -c \"$comment\"";
+    }
+    if (defined($homedir)) {
+	$cmd .= " -m -d $homedir";
+    }
+    if (defined($primary_group)) {
+	$cmd .= " -g $primary_group";
+    }
+    if (defined($groups)) {
+	$cmd .= " -G \"$groups\"";
+    }
+    if (defined($shell)) {
+	$cmd .= " -s $shell";
+    }
+    $cmd .= " $username";
+
+    if (defined($host)) {
+	$cmd = $self->def("SSHTB") . " $host '$cmd'";
+    }
+
+    my $retval = $self->mysystem($cmd) >> 8;
+
+    # strive for platform independence... sigh.
+    if ($retval == $ERROR_USEREXISTS) {
+	return $EmulabSys::ERROR_USEREXISTS;
+    }
+    elsif ($retval) {
+	return $retval;
+    }
+    return 0;
+}
+
+sub userMod($$$$$;@) {
+    my $self = shift;
+    return undef 
+	if (!ref($self));
+
+    my ($username,$shell,$comment,$groups,$host) = @_;
+    if (!defined($shell) && !defined($comment) && !defined($groups)) {
+	# ask naught, want naught.
+	return 0;
+    }
+
+    my $primary_group;
+    if (defined($groups)) {
+	my @ga = split(/,/,$groups);
+	if (@ga > 0) {
+	    $primary_group = $ga[0];
+	}
+	if (@ga > 0) {
+	    $groups = join(',',@ga);
+	}
+	else {
+	    $groups = undef;
+	}
+    }
+
+    my $cmd = $self->def("USERMOD");
+    if (defined($shell)) {
+	$cmd .= " -s $shell";
+    }
+    if (defined($comment)) {
+	$cmd .= " -s \"$comment\"";
+    }
+    if (defined($primary_group)) {
+	$cmd .= " -g $primary_group";
+    }
+    if (defined($groups)) {
+	$cmd .= " -G \"$groups\"";
+    }
+    $cmd .= " $username";
+
+    if (defined($host)) {
+	$cmd = $self->def("SSHTB") . " $host '$cmd'";
+    }
+
+    my $retval = $self->mysystem($cmd) >> 8;
+
+    # strive for platform independence... sigh.
+    if ($retval == $ERROR_NOSUCHUSER) {
+	return $EmulabSys::ERROR_NOSUCHUSER;
+    }
+    elsif ($retval) {
+	return $retval;
+    }
+    return 0;
+}
+
+sub userDel($$$;@) {
+    my $self = shift;
+    return undef 
+	if (!ref($self));
+
+    my ($username,$host) = @_;
+    if (!defined($username)) {
+	die "no username!";
+    }
+
+    my $cmd = $self->def("USERDEL") . " $username";
+    if (defined($host)) {
+	$cmd = $self->def("SSHTB") . " $host '$cmd'";
+    }
+
+    my $retval = $self->mysystem($cmd) >> 8;
+
+    # strive for platform independence... sigh.
+    if ($retval == $ERROR_NOSUCHUSER) {
+	return $EmulabSys::ERROR_NOSUCHUSER;
+    }
+    elsif ($retval) {
+	return $retval;
+    }
+    return 0;
+}
+
+#
+# Args: obj,groupname,gid,host
+#
+sub groupAdd($$$;@) {
+    my $self = shift;
+    return undef 
+	if (!ref($self));
+
+    my ($groupname,$gid,$host) = @_;
+    if (!defined($groupname)) {
+	die "no groupname!";
+    }
+
+    my $cmd = $self->def("GROUPADD");
+    if (defined($gid)) {
+	$cmd .= " -g $gid";
+    }
+    $cmd .= " $groupname";
+
+    if (defined($host)) {
+	$cmd = $self->def("SSHTB") . " $host '$cmd'";
+    }
+
+    my $retval = $self->mysystem($cmd) >> 8;
+
+    # strive for platform independence... sigh.
+    if ($retval == $ERROR_USEREXISTS) {
+	return $EmulabSys::ERROR_USEREXISTS;
+    }
+    elsif ($retval) {
+	return $retval;
+    }
+    return 0;
+}
+
+#
+# Args: obj,groupname,host
+#
+sub groupDel($$;@) {
+    my $self = shift;
+    return undef 
+	if (!ref($self));
+
+    my ($groupname,$host) = @_;
+    if (!defined($groupname)) {
+	die "no groupname!";
+    }
+
+    my $cmd = $self->def("GROUPDEL");
+    $cmd .= " $groupname";
+
+    if (defined($host)) {
+	$cmd = $self->def("SSHTB") . " $host '$cmd'";
+    }
+
+    my $retval = $self->mysystem($cmd) >> 8;
+
+    # strive for platform independence... sigh.
+    if ($retval == $ERROR_NOSUCHUSER) {
+	return $EmulabSys::ERROR_NOSUCHUSER;
+    }
+    elsif ($retval) {
+	return $retval;
+    }
+    return 0;
+}
+
+sub chPasswd($$$$;@) {
+    my $self = shift;
+    return undef 
+	if (!ref($self));
+
+    my ($username,$passwd,$host) = @_;
+    if (!defined($username)) {
+	die "no username!";
+    }
+    if (!defined($passwd)) {
+	die "no passwd!";
+    }
+
+    my $cmd = $self->def("CHPASS") . " -e";
+    if (defined($host)) {
+	$cmd = $self->def("SSHTB") . " $host $cmd";
+    }
+    if (!$self->impotent()) {
+	# we use chpasswd because then we can write the passwd over a pipe
+	# instead of passing the encrypted one to usermod via the command line
+	local $SIG{PIPE} = sub { die "chpasswd spooler pipe broke" };
+	my $retval = open(CFD,"| $cmd");
+	if (!defined($retval)) {
+	    return 1;
+	}
+	print CFD "${username}:${passwd}\n";
+	close(CFD);
+	
+	return $? >> 8;
+    }
+    else {
+	print STDERR "(Would be) Running $cmd (and sending $username:<pass>)\n";
+    }
+}
+
+sub smbPasswd($$$$;@) {
+    my $self = shift;
+    return undef 
+	if (!ref($self));
+
+    my ($username,$passwd,$host) = @_;
+    if (!defined($username)) {
+	die "no username!";
+    }
+    if (!defined($passwd)) {
+	die "no passwd!";
+    }
+
+    my $cmd = $self->def("SMBPASSWD") . " -s -a $username";
+    if (defined($host)) {
+	$cmd = $self->def("SSHTB") . " $host $cmd";
+    }
+    if (!$self->impotent()) {
+	local $SIG{PIPE} = sub { die "smbpasswd spooler pipe broke" };
+	my $retval = open(CFD,"| $cmd");
+	if (!defined($retval)) {
+	    return 1;
+	}
+	print CFD "$passwd\n$passwd\n";
+	close(CFD);
+
+	return $? >> 8;
+    }
+    else {
+	print STDERR "(Would be) Running '$cmd' (and sending <pass>)\n";
+    }
+}
+
+sub restartDaemon($$;@) {
+    my $self = shift;
+    my $daemon = shift;
+    return undef 
+	if (!ref($self) || !defined($daemon));
+
+    if ($daemon eq 'smbd') {
+	$daemon = 'smb';
+    }
+
+    if ($daemon eq 'mountd') {
+	# if it's mountd, just reexport.
+	my $retval = system($self->def("EXPORTFS") . " -a");
+	if ($retval) {
+	    $self->setError("Failure in exportfs -a: $!",
+			    $retval);
+	    return 1;
+	}
+    }
+    else {
+	my $retval = system("/etc/init.d/$daemon restart > /dev/null");
+	if ($retval) {
+	    $self->setError("Could not restart $daemon: $!",
+			    $retval);
+	    return 1;
+	}
+    }
+    return 0;
+}
+
+#
+# Returns a (gatewayIP,iface) tuple.
+#
+sub getRoute($$\$\$) {
+    my $self = shift;
+    return undef 
+	if (!ref($self));
+    my $iparg = shift;
+    return undef 
+	if (!defined($iparg));
+    my ($gref,$ifref) = @_;
+    return undef 
+	if (!ref($gref) || !ref($ifref));
+
+    # this is ridiculous
+    my $ip = $self->_inet_atoh(Socket::inet_ntoa(Socket::inet_aton($iparg)));
+
+    my $defGateway = '';
+    open(RFD,$self->def("ROUTE") . " -n |")
+	or die $self->def("ROUTE") . " -n: $?";
+    my $found = 0;
+    while (my $line = <RFD>) {
+	chomp($line);
+	my @fa = split(/\s+/,$line);
+	if (@fa != 8 || !($fa[0] =~ /^\d+\.\d+\.\d+\.\d+$/)) {
+	    next;
+	}
+	if ($fa[0] eq '0.0.0.0') {
+	    $defGateway = $fa[1];
+	}
+	if ($found) {
+	    next;
+	}
+	my ($d,$g,$n,$i) = ($fa[0],$fa[1],$fa[2],$fa[7]);
+	my $mask = $self->_inet_atoh($n);
+	my $dest = $self->_inet_atoh($d);
+	if (($mask & $ip) == $dest) {
+	    $found = 1;
+	    if (ref($gref))  { $$gref = $g; }
+	    if (ref($ifref)) { $$ifref = $i; }
+	}
+    }
+    close(RFD);
+    if ($found) {
+	if (ref($gref) && $$gref eq '0.0.0.0' && $defGateway ne '') {
+	    $$gref = $defGateway;
+	}
+	return 0;
+    }
+
+    $self->setError("No routes matched!",undef);
+    return undef;
+}
+
+#
+# Returns an (IPaddr,netmask,bcast) tuple
+#
+sub getIfaceInfo($$\$\$\$) {
+    my $self = shift;
+    return undef 
+	if (!ref($self));
+    my $iface = shift;
+    return undef 
+	if (!defined($iface));
+    my ($ip,$mask,$bcast) = @_;
+
+    open(IFD,$self->def("IFCONFIG") . " '$iface' |")
+	or die $self->def("IFCONFIG") . " '$iface': $?";
+
+    while (my $line = <IFD>) {
+	chomp($line);
+	if ($line =~ /^\s+inet addr:(\d+\.\d+\.\d+\.\d+)\s+Bcast:(\d+\.\d+\.\d+\.\d+)\s+Mask:(\d+\.\d+\.\d+\.\d+)$/) {
+	    close(IFD);
+	    if (ref($ip))    { $$ip = $1; }
+	    if (ref($mask))  { $$mask = $3; }
+	    if (ref($bcast)) { $$bcast = $2; }
+
+	    return 0;
+	}
+    }
+
+    $self->setError("No info for interface $iface!",undef);
+    return undef;
+}
+
+
+# _Always_ make sure that this 1 is at the end of the file...
+1;
