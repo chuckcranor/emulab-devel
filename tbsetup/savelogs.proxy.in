@@ -29,6 +29,8 @@ sub usage()
 #
 my $TB       = "@prefix@";
 my $TBOPS    = "@TBOPSEMAIL@";
+my $ID       = "@ID@";
+my $MKDIR    = "@MKDIR@";
 my $logdir   = "/var/log/tiplogs";
 my $errors   = 0;
 
@@ -79,7 +81,7 @@ shift(@ARGV);
 # cause thats the correct thing to do. Too bad perl does not have a
 # getgrouplist function like the C library.
 #
-my $glist = `/usr/bin/id -G $user`;
+my $glist = `$ID -G $user`;
 if ($glist =~ /^([\d ]*)$/) {
     $glist = $1;
 }

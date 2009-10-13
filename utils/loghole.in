@@ -104,6 +104,8 @@ SERVER = None
 COMPRESSFILE_THRESHOLD  = 512 * 1024
 COMPRESSFILE_EXTENSIONS = [ ".zip", ".gz", ".bz2" ]
 COMPRESSFILE_PROGRAM    = "/usr/bin/gzip"
+# Disable compression completely if true
+COMPRESSFILE_NEVER      = True
 
 OSIDS = {}
 
@@ -1024,6 +1026,9 @@ def print_status(msg):
 # Compress a file. Return False if file is skipped for whatever reason.
 #
 def compressfile(root, file, threshold):
+    if COMPRESSFILE_NEVER:
+        return False
+    
     pathname = os.path.join(root, file)
     if not os.path.exists(pathname):
         return False

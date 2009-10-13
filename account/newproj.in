@@ -9,6 +9,7 @@ use strict;
 use Getopt::Std;
 use XML::Simple;
 use Data::Dumper;
+use Cwd 'abs_path';
 
 #
 # Create a new user from a XML description. 
@@ -138,7 +139,7 @@ if (! defined($this_user)) {
     }
 
     # Use realpath to resolve any symlinks.
-    my $translated = `realpath $xmlfile`;
+    my $translated = abs_path($xmlfile);
     if ($translated =~ /^(\/tmp\/[-\w\.\/]+)$/) {
 	$xmlfile = $1;
     }
@@ -266,7 +267,7 @@ if (exists($newproj_args{'newuser_xml'})) {
 	}
 
 	# Use realpath to resolve any symlinks.
-	my $translated = `realpath $newuser_xml`;
+	my $translated = abs_path($newuser_xml);
 	if ($translated =~ /^(\/tmp\/[-\w\.\/]+)$/) {
 	    $newuser_xml = $1;
 	}

@@ -43,12 +43,13 @@ my $mysqldump = "mysqldump $extraopts -t $DBNAME sitevariables";
 # We use Mysql module instead of the testbed libraries, so that we can get
 # a more precise feel for what the error is.
 #
-use Mysql;
+use DBI;
 
 #
 # Check to see if the mysqld is running by trying to connect to it.
 #
-my $dbh = Mysql->connect(undef,undef,undef,undef);
+my $dbh = DBI->connect("DBI:mysql:host=localhost",undef,undef,
+		       { 'RaiseError' => 1 });
 if (!$dbh) {
     fatal("Unable to connect to mysqld - Either it's not running or \n" .
     	  "permission was denied.\n");
@@ -57,7 +58,7 @@ if (!$dbh) {
 #
 # Check to see if the database exists
 #
-my @dbs = $dbh->listdbs();
+my @dbs = map { my @sa = split(/:/,$_); $sa[2] } $dbh->data_sources();
 if (! grep (/^$DBNAME$/,@dbs)) {
     fatal("Database $DBNAME does not exist in the running database\n");
 }

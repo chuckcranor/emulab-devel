@@ -35,14 +35,14 @@ use overload ('""' => 'Stringify');
 my $TB		= "@prefix@";
 my $CONTROL	= "@USERNODE@";
 my $STAMPS      = @STAMPS@;
-my $MD5         = "/sbin/md5";
-my $MKDIR       = "/bin/mkdir";
-my $RMDIR       = "/bin/rmdir";
-my $RM		= "/bin/rm";
+my $MD5         = "@MD5@";
+my $MKDIR       = "@MKDIR@";
+my $RMDIR       = "@RMDIR@";
+my $RM		= "@RM@";
 my $makegraph   = "$TB/bin/template_graph";
 my $TEVC	= "$TB/bin/tevc";
 my $DBCONTROL   = "$TB/sbin/opsdb_control";
-my $RSYNC	= "/usr/local/bin/rsync";
+my $RSYNC	= "@RSYNC@";
 
 # Cache of template instances to avoid regenerating them.
 my %templates   = ();

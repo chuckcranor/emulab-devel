@@ -19,17 +19,16 @@ my $query_result =
 		 "left join reserved on nodes.node_id=reserved.node_id ".
 		 "where reserved.node_id is null and ".
 		 "      (nodes.type='pcvm' or nodes.type='pcplab')");
-
+my @vnodes = ();
 while (my ($vnodeid) = $query_result->fetchrow_array()) {
+    push @vnodes, $vnodeid;
     DBQueryWarn("delete from reserved where node_id='$vnodeid'");
     DBQueryWarn("delete from nodes where node_id='$vnodeid'");
 }
 
 DBQueryFatal("unlock tables");
 
-$query_result->dataseek(0);
-
-while (my ($vnodeid) = $query_result->fetchrow_array()) {
+foreach my $vnodeid (@vnodes) {
     DBQueryWarn("delete from node_hostkeys where node_id='$vnodeid'");
     DBQueryWarn("delete from node_status where node_id='$vnodeid'");
     DBQueryWarn("delete from node_rusage where node_id='$vnodeid'");

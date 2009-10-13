@@ -25,8 +25,7 @@ my $TBOPS      = "@TBOPSEMAIL@";
 # Locals.
 my $PIDFILE    = "/var/run/mysqld_watchdog.pid";
 my $LOGFILE    = "$TB/log/mysqld_watchdog.log";
-my $MYSQLD     = "/usr/local/etc/rc.d/2.mysql-server.sh";
-my $KILLALL    = "/usr/bin/killall";
+my $KILLALL    = "@KILLALL@";
 my $paused     = 0;
 
 # Turn off line buffering on output
@@ -44,6 +43,12 @@ if ($UID != 0) {
 use lib "@prefix@/lib";
 use libdb;
 use libtestbed;
+
+use EmulabSys;
+
+my $sys = EmulabSys->get();
+
+my $MYSQLD     = $sys->defs("MYSQL_RCSCRIPT");
 
 # Protos
 sub TryQuery();

@@ -13,7 +13,15 @@ SUBDIR		= apache
 
 include $(OBJDIR)/Makeconf
 
-CONFIG_FILES	= httpd.conf httpd.conf-ops
+CONFIG_FILES	= httpd.conf httpd.conf-ops \
+		  httpd.conf.linux httpd.conf-ops.linux
+
+SYSTEM          = $(shell uname -s)
+
+HTTPD_CONFIG_POST = 
+ifeq ($(SYSTEM),Linux)
+HTTPD_CONFIG_POST = .linux
+endif
 
 #
 # Force dependencies to make sure configure regenerates if the .in file
@@ -30,10 +38,10 @@ $(INSTALL_APACHE_CONFIG)/%: %
 	$(INSTALL_DATA) $< $@
 
 
-install: httpd.conf
-	$(INSTALL_DATA) httpd.conf $(INSTALL_APACHE_CONFIG)/httpd.conf
+install: httpd.conf$(HTTPD_CONFIG_POST)
+	$(INSTALL_DATA) httpd.conf$(HTTPD_CONFIG_POST) $(INSTALL_APACHE_CONFIG)/httpd.conf
 
 control-install: httpd.conf-ops
-	$(INSTALL_DATA) httpd.conf-ops $(INSTALL_APACHE_CONFIG)/httpd.conf
+	$(INSTALL_DATA) httpd.conf-ops$(HTTPD_CONFIG_POST) $(INSTALL_APACHE_CONFIG)/httpd.conf
 
 clean:

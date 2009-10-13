@@ -91,7 +91,11 @@
  *            for suEXEC.  For most systems, 100 is common.
  */
 #ifndef GID_MIN
+#ifdef __linux
+#define GID_MIN  99
+#else
 #define GID_MIN 100
+#endif
 #endif
 
 #endif /* _SUEXEC_H */

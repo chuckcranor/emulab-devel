@@ -3,7 +3,10 @@
 <!--
     XML NS template file for making a simple
 -->
-<nstemplate>
+<nstemplate name="Simple LAN">
+    <description>
+       Template to create a simple LAN
+    </description>
     <variable name="Count" default="10" />
     <variable name="OS" default="RHL-STD" />
     <variable name="HWType" default="pc" />

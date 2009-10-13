@@ -145,7 +145,7 @@ sub dostatus(@) {
 			      "from nodes as n " .
 			      "left join node_types as t on n.type=t.type " .
 			      "where n.role='powerctrl'");
-    while (my ($ctrl, $type) = $result->fetchrow()) {
+    while (my ($ctrl, $type) = $result->fetchrow_array()) {
 	$ctrls{$ctrl} = $type;
     }
 

@@ -22,7 +22,7 @@ use vars qw(@ISA @EXPORT);
 use lib '@prefix@/lib';
 use English;
 use File::Basename;
-require Mysql;
+use DBI;
 use vars qw($DBQUERY_MAXTRIES $DBCONN_MAXTRIES @EXPORT_OK);
 
 # Configure variables
@@ -36,6 +36,107 @@ if ($PROGRAM_NAME =~ /^([-\w\.\/]+)$/) {
 }
 else {
     $SCRIPTNAME = "Tainted";
+}
+
+{
+    #
+    # Create a special class for keeping track of the process the
+    # database handle was created.  This is needed so that the child
+    # process after a fork() 1) set's InactiveDestroy to avoid sending
+    # a disconnect message since it will also close the parent's
+    # database handle 2) reconnects since two separate processes
+    # shouldn't share the same handle.  (1) is handled via overridding
+    # the database handle DESTROY method, (2) is handled in the
+    # DBQueryN function.
+    #
+    package TestbedDBHandle;
+    use vars '@ISA';
+    @ISA = ('DBI::db');
+    my %DB_PID; # hash based on db handle
+    sub obj_hash( $ ) {
+	# Return a hex string of the location of the object in memory.
+	# This is slightly better than just converting it to a scalar
+	# as two objects as the scalar also included the class name
+	# the object is "blessed" into which might change over time
+	sprintf("0x%x", $_[0]); 
+    }
+    sub MakeA ( $ ) {
+	my ($obj) = @_;
+	return unless defined $obj;
+	bless ($obj);
+	$DB_PID{obj_hash($obj)} = $$;
+    }
+    sub db_pid () {
+	my ($self) = @_;
+	return $DB_PID{obj_hash($self)};
+    }
+    sub DESTROY {
+	my ($self) = @_;
+	if ($self->db_pid() != $$) {
+	    $self->{'InactiveDestroy'} = 1;
+	}
+	delete $DB_PID{obj_hash($self)};
+	$self->SUPER::DESTROY() if $self->can("SUPER::DESTROY");
+    }
+    sub query {
+	my ($self,$q) = @_;
+	my $sth = $self->prepare($q);
+	return undef 
+	    if (!$sth);
+	return undef 
+	    if (!$sth->execute());
+	TestbedStatementHandle::MakeA($sth);
+	return $sth;
+    }
+}
+
+{
+    #
+    # Create a special Statement style class that wraps a DBI statement
+    # and provides old Mysql class methods that are littered throughout the
+    # testbed code.
+    #
+    package TestbedStatementHandle;
+    use vars '@ISA';
+    @ISA = ('DBI::st');
+    sub MakeA ( $ ) {
+	my ($obj) = @_;
+	return unless defined $obj;
+	bless ($obj);
+    }
+    #
+    # This is sick ... but there are years of abuse to fix.
+    #
+    sub num_rows {
+	my ($self) = @_;
+	return $self->rows();
+    }
+    sub numrows {
+	my ($self) = @_;
+	return $self->rows();
+    }
+    sub affectedrows {
+	my ($self) = @_;
+	return $self->rows();
+    }
+    sub fetchhash {
+	my ($self) = @_;
+	my ($ref) = $self->fetchrow_hashref();
+	if ($ref) {
+	    return %$ref;
+	}
+	return ();
+    }
+    sub insertid {
+	my ($self) = @_;
+	#return $self->{'mysql_insertid'};
+	# a more portable way, hopefully
+	return $self->{Database}->last_insert_id(undef,undef,undef,undef);
+    }
+    sub dataseek {
+	my ($self,$pos) = @_;
+	$self->func($pos,'dataseek');
+    }
 }
 
 #
@@ -82,7 +183,9 @@ sub TBDBConnect($;$$$$)
 	if (defined($dbhost));
 
     while ($maxtries) {
-	$DB = Mysql->connect($tbdbhost, $tbdbname, $tbdbuser, $tbdbpasswd);
+	$DB = DBI->connect("DBI:mysql:database=$tbdbname;host=$tbdbhost",
+			   $tbdbuser,$tbdbpasswd,{ 'RaiseError' => 0 });
+	TestbedDBHandle::MakeA($DB);
 	if (defined($DB)) {
 	    last;
 	}
@@ -94,8 +197,8 @@ sub TBDBConnect($;$$$$)
 	# Ensure consistent error value. 
 	return -1;
     }
-    $DB->{'dbh'}->{'PrintError'} = 0;
-    $Mysql::QUIET = 1;
+    $DB->{'PrintError'} = 0;
+    #$Mysql::QUIET = 1;
     if (@_ == 5)  {
 	$_[4]->{'tbdbname'} = $tbdbname;
 	$_[4]->{'tbdbuser'} = $tbdbuser;
@@ -164,8 +267,11 @@ sub DBQuery($;$)
 	$maxtries = 100000;
     }
 
+    my $sth;
     while ($maxtries) {
-	$result = $dbhandle->query($query);
+	$sth = $dbhandle->prepare($query);
+	$result = $sth->execute();
+	TestbedStatementHandle::MakeA($sth);
 	if (! defined($result)) {
 	    my $err = $dbhandle->err;
 
@@ -184,7 +290,7 @@ sub DBQuery($;$)
 	DBWarn("mysqld went away. $maxtries tries left", 0);
 	sleep(1);
     }
-    return $result;
+    return $sth;
 }
 
 #
@@ -304,15 +410,16 @@ sub DBDateTime(;$)
 sub DBBinaryQuery {
    my ($handle, $statement, @data) = @_; 
    
-   my $dbh = $handle->{'DB'}->{'dbh'};
+   my $dbh = $handle->{'DB'};
    my $sth = $dbh->prepare($statement);
+   TestbedStatementHandle::MakeA($sth);
    if (!$sth) {
        $DBErrorString =
 	   "  Query: $statement\n".
 	   "  Error: " . $dbh->errstr() . " ( " . $dbh->err() . ")";
        return undef;
    }
-   $sth->{'PrintError'} = !$Mysql::QUIET;
+   #$sth->{'PrintError'} = !$Mysql::QUIET;
    
    my $query_result = $sth->execute(@data);
    if (!$query_result) {

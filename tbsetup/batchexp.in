@@ -9,6 +9,7 @@ use Getopt::Std;
 use POSIX qw(isatty setsid);
 use POSIX qw(strftime);
 use Errno qw(EDQUOT);
+use Cwd 'abs_path';
 use RPC::XML;
 
 #
@@ -113,7 +114,7 @@ use Group;
 my $parser      = "$TB/libexec/parse-ns";
 my $checkquota  = "$TB/sbin/checkquota";
 my $tbbindir    = "$TB/bin/";
-my $RSYNC	= "/usr/local/bin/rsync";
+my $RSYNC	= "@RSYNC@";
 my $errorstat=-1;
 my $exptidx;
 my $logfile;
@@ -959,7 +960,7 @@ sub ParseArgs()
 	#
 	# Use realpath to resolve any symlinks.
 	#
-	my $translated = `realpath $tempnsfile`;
+	my $translated = abs_path($tempnsfile);
 	if ($translated =~ /^([-\w\.\/]+)$/) {
 	    $tempnsfile = $1;
 	}

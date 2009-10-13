@@ -81,8 +81,8 @@ my $swapexp     = "$TB/bin/swapexp";
 my $endexp      = "$TB/bin/endexp";
 my $dbcontrol   = "$TB/sbin/opsdb_control";
 my $archcontrol = "$TB/bin/archive_control";
-my $CVSBIN      = "/usr/bin/cvs";
-my $RLOG        = "/usr/bin/rlog";
+my $CVSBIN      = "@CVS@";
+my $RLOG        = "@RLOG@";
 
 # Protos
 sub ParseArgs();

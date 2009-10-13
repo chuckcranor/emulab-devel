@@ -96,7 +96,7 @@ while (my $arg = shift @ARGV) {
 				"$row[5] (length $row[6], color $wireinfo)\n";
 		}
 	} else {
-		print $result->as_string;
+		$result->dump_results(-1,"\n","\t| ");
 	}
 }
 

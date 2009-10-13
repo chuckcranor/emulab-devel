@@ -51,7 +51,7 @@ my $TEMPLATE    = "$SSLDIR/usercert.cnf";
 my $CACONFIG    = "$SSLDIR/ca.cnf";
 my $EMULAB_CERT = "$TB/etc/emulab.pem";
 my $EMULAB_KEY  = "$TB/etc/emulab.key";
-my $OPENSSL     = "/usr/bin/openssl";
+my $OPENSSL     = "@OPENSSL@";
 my $WORKDIR     = "$TB/ssl";
 my $SAVEUID	= $UID;
 
@@ -362,8 +362,10 @@ else {
 # Combine the key and the certificate into one file which is
 # installed in the users home directory.
 #
+$UID = 0;
 system("cat usercert_key.pem usercert_cert.pem > usercert.pem") == 0
     or fatal("Could not combine cert and key into one file");
+$UID = $SAVEUID;
 
 #
 # Copy the certificate to the users .ssl directory.

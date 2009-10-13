@@ -14,6 +14,7 @@ use XML::Simple;
 use File::Find;
 use File::stat;
 use Data::Dumper;
+use Cwd 'abs_path';
 
 #
 # Start/Stop/Pause experiment runs ...
@@ -101,10 +102,10 @@ my $checkquota  = "$TB/sbin/checkquota";
 my $archcontrol = "$TB/bin/archive_control";
 my $eventcontrol= "$TB/bin/eventsys_control";
 my $tevc        = "$TB/bin/tevc";
-my $CVSBIN      = "/usr/bin/cvs";
+my $CVSBIN      = "@CVS@";
 my $CVSCTRL     = "/usr/testbed/sbin/cvs_ctrl";
-my $FIND        = "/usr/bin/find";
-my $RCS         = "/usr/bin/rcs";
+my $FIND        = "@FIND@";
+my $RCS         = "@RCS@";
 my $SSH		= "$TB/bin/sshtb";
 
 # Protos
@@ -978,7 +979,7 @@ sub ParseArgs()
 	#
 	# Use realpath to resolve any symlinks.
 	#
-	my $translated = `realpath $inputfile`;
+	my $translated = abs_path($inputfile);
 	if ($translated =~ /^([-\w\.\/]+)$/) {
 	    $inputfile = $1;
 	}

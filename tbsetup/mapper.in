@@ -81,6 +81,7 @@ my $WRAPPER2    = "$TB/libexec/assign_wrapper2";
 my $PTOPGEN     = "$TB/libexec/ptopgen";
 my $VTOPGEN     = "$TB/bin/vtopgen";
 my $NFREE       = "$TB/bin/nfree";
+my $NICE        = "@NICE@";
 
 #
 # Load the Testbed support stuff. 
@@ -521,7 +522,7 @@ sub RunAssign($$)
 	# the parent. 
 	#
         POSIX::setsid();
-	exec("nice $WRAPPER2 $cmd $args > assign.log 2>&1");
+	exec("$NICE $WRAPPER2 $cmd $args > assign.log 2>&1");
 	die("Could not start assign!\n");
     }
     TBDebugTimeStamp("assign finished");

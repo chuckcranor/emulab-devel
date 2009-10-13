@@ -30,6 +30,9 @@ my $TB       = "@prefix@";
 my $TBOPS    = "@TBOPSEMAIL@";
 my $OURDOMAIN= "@OURDOMAIN@";
 my $FLYCONF  = "/usr/local/etc/flyspray.conf.php";
+if (! -e $FLYCONF) {
+    $FLYCONF  = "/etc/flyspray.conf.php";
+}
 
 #
 # Turn off line buffering on output

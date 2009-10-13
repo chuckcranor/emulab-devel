@@ -48,6 +48,7 @@ if ($UID != 0) {
 #
 my $TB		= "@prefix@";
 my $TBOPS       = "@TBOPSEMAIL@";
+my $WGET        = "@WGET@";
 
 #
 # Turn off line buffering on output
@@ -460,7 +461,7 @@ sub DownLoadURL($$)
 	return($exitcode >> 8);
     }
     else {
-	exec("/usr/local/bin/wget","-q","-O","$tempfile","$url");
+	exec("$WGET","-q","-O","$tempfile","$url");
 	exit(1);
     }
 }

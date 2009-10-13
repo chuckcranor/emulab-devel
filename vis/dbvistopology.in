@@ -24,6 +24,7 @@ my  $optlist = "o:z:d:t:";
 # Configure variables
 #
 my $TB       = "@prefix@";
+my $NICE     = "@NICE@";
 
 #
 # Testbed Support libraries
@@ -161,7 +162,7 @@ if (defined($output)) {
     $args .= "2> /dev/null";
 }
 
-if (system("nice $render $args") != 0) { 
+if (system("$NICE $render $args") != 0) { 
     exit(1);
 }
 

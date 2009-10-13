@@ -27,5 +27,4 @@ if (($UID != 0) && (!TBAdmin())) {
 my $result = DBQueryFatal("select r.* from reserved as r left join nodes " .
 		" as n on r.node_id=n.node_id order by priority");
 
-print $result->as_string();
-
+$result->dump_results(-1,"\n","\t| ");

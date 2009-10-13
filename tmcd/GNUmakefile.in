@@ -98,6 +98,13 @@ TMSLIBS   += -lminires
 endif
 endif
 
+MYSQL_LIBS = -L/usr/local/lib/mysql -lmysqlclient
+BOOTINFO_LIBS = 
+ifeq ($(SYSTEM),Linux)
+MYSQL_LIBS = `mysql_config --libs`
+BOOTINFO_LIBS = -ldb
+endif
+
 ifeq ($(EVENTSYS),1)
 	TMCDCFLAGS  = -I$(TESTBED_SRCDIR)/event/lib -DEVENTSYS
 	TMCDLIBS    = ${OBJDIR}/event/lib/libevent.a
@@ -107,8 +114,9 @@ endif
 tmcd: tmcd.c ${TMCDLIBS} decls.h version.o $(SSLOBJ) $(BOOTINFO)
 	$(CC) $(CFLAGS) $(SSLFLAGS) $(TMCDCFLAGS) -o tmcd $< \
 		version.o $(SSLOBJ) $(BOOTINFO) \
-		$(LFLAGS) -L/usr/local/lib/mysql -lmysqlclient \
-		$(ELVINFLAGS) $(TMCDLDFLAGS) $(TMCDLIBS) $(TMLIBS) 
+		$(LFLAGS) $(MYSQL_LIBS) \
+		$(ELVINFLAGS) $(TMCDLDFLAGS) $(TMCDLIBS) $(TMLIBS) \
+		$(BOOTINFO_LIBS)
 
 mod_tmcd.so: libtmcd.o
 	apxs -c mod_tmcd.c -L/usr/local/lib/mysqlclient -lmysqlclient \

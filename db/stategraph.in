@@ -13,6 +13,9 @@ require "ctime.pl";
 # Turn off line buffering
 $| = 1;
 
+my $XVCG = "@XVCG@";
+my $DOT = "@DOT@";
+
 sub doformats($$);
 
 my $datetag = `date +%Y%m%d%H%M%S`;
@@ -139,7 +142,7 @@ my $lastmode="";
 my $delim="_";
 
 my $result = DBQueryFatal($cmd1);
-while(@r=$result->fetchrow()) {
+while(@r=$result->fetchrow_array()) {
     $m=$r[0];
     print "mode='$m' lastmode='$lastmode'\n" if ($v>1);
     if (!($allmodes || (defined($modes{$m}) && $modes{$m}))) { next; }
@@ -180,7 +183,7 @@ my $modetrans=1;
 
 %modelist=();
 $result = DBQueryFatal($cmd2);
-while(@r=$result->fetchrow()) {
+while(@r=$result->fetchrow_array()) {
     $m1=$r[0];
     $s1=$r[1];
     $m2=$r[2];
@@ -225,7 +228,7 @@ if ($vcg) {
     close TMP;
     print "Generating vcg graphs: ";
     if (-e "$filename.ps") { system("rm $filename.ps"); }
-    system("/usr/X11R6/bin/xvcg -silent -psoutput $filename.ps $filename");
+    system("$XVCG -silent -psoutput $filename.ps $filename");
     doformats("$filename.ps","$prefix$vcgtag");
     print "\n";
 }
@@ -233,7 +236,7 @@ if ($dot) {
     print TMPN "}\n";
     close TMPN;
     print "Generating dot graph: ";
-    system("/usr/local/bin/dot -Tps -o $filename2.ps $filename2");
+    system("$DOT -Tps -o $filename2.ps $filename2");
     doformats("$filename2.ps","$prefix$dottag");
     print "\n";
 }

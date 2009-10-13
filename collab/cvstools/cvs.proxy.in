@@ -28,7 +28,7 @@ sub usage()
 #
 my $TB       = "@prefix@";
 my $TBOPS    = "@TBOPSEMAIL@";
-my $CVSBIN   = "/usr/bin/cvs";
+my $CVSBIN   = "@CVS@";
 
 # Locals
 my $optlist  = "u:w:";

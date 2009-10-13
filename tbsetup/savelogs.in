@@ -134,9 +134,9 @@ while (my ($nodeid, $vname) = $query_result->fetchrow_array()) {
 #
 # Now we call over to the ops node to deal with the rest of this. 
 #
-$EUID = $UID = 0;
+TBSetreuid(0,0);
 system("$sshtb -host $CONTROL $cmdargs");
-$EUID = $UID = $SAVEUID;
+TBSetreuid($SAVEUID,$SAVEUID);
 
 #
 # Nothing else to do ... output from proxy went to stdout/stderr.

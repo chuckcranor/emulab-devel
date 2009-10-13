@@ -38,7 +38,7 @@ use Carp;
 
 use strict;
 
-use vars qw($SCRIPTNAME 
+use vars qw($SCRIPTNAME *SOUT *SERR 
 	    $EMERG $ALRET $CRIT $ERR $WARNING $NOTICE $INFO $DEBUG
 	    %PRIORITY_MAP_TO_STR %PRIORITY_MAP_TO_NUM);
 

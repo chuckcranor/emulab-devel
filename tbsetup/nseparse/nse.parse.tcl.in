@@ -1,4 +1,4 @@
-#!/usr/local/bin/otclsh
+#!/usr/bin/env otclsh
 
 #
 # EMULAB-COPYRIGHT

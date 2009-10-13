@@ -9,6 +9,8 @@ TESTBED_SRCDIR	= @top_srcdir@
 OBJDIR		= ../..
 SUBDIR		= event/sched
 
+SYSTEM          = $(shell uname -s)
+
 include $(OBJDIR)/Makeconf
 
 all: event-sched_rrpc
@@ -18,6 +20,10 @@ include $(TESTBED_SRCDIR)/GNUmakerules
 CFLAGS   += -g -pthread -DBINDIR='"$(INSTALL_BINDIR)"'
 CFLAGS   += -DSBINDIR='"$(INSTALL_SBINDIR)"'
 #CFLAGS  += -DDEBUG
+# gotta do this to pull in TIMEVAL_TO_TIMESPEC for queue.c
+ifeq ($(SYSTEM),Linux)
+CFLAGS   += -D_GNU_SOURCE
+endif
 CFLAGS	 += -O -Wall
 CFLAGS   += -I. -I${OBJDIR} -I$(SRCDIR)/../lib -I$(TESTBED_SRCDIR)/lib/libtb
 CFLAGS   += -I/usr/local/include
@@ -29,9 +35,15 @@ DBLIBS    = -L/usr/local/lib/mysql -lmysqlclient -lz
 LIBS     += -levent_r -ltb -lz
 
 ULXRINC   = -I/usr/local/include -I/usr/local/include/ulxmlrpcpp
+ifeq ($(SYSTEM),Linux)
+ULXRINC   = -I/usr/include/ulxmlrpcpp
+endif
 CXXFLAGS += -pthread -O $(ULXRINC) -I$(OBJDIR) -I$(TESTBED_SRCDIR)/lib/libtb
 CXXFLAGS += -I$(SRCDIR)/../lib
 ULXRLIBS  = -L/usr/local/lib  -lulsshxmlrpcpp -lulxmlrpcpp -lexpat
+ifeq ($(SYSTEM),Linux)
+ULXRLIBS  = -lulsshxmlrpcpp -lulxmlrpcpp -lexpat
+endif
 
 #
 # XXX elvin-config adds -lc which is rather bogus, and messes up -pthread

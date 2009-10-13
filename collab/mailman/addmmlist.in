@@ -184,7 +184,7 @@ else {
 #
 # For ssh.
 #
-$UID = $EUID;
+TBSetuid($EUID);
 
 if ($CONTROL ne $BOSSNODE) {
     my $optarg = ($debug ? "-d" : "");

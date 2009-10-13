@@ -9,6 +9,7 @@ use lib '@prefix@/lib';
 use libdb;
 use snmpit_lib;
 use snmpit_cisco;
+use EmulabSys;
 
 # This could probably be a configure variable, but I don't see a reason to make
 # it on yet
@@ -35,6 +36,8 @@ if ($UID && !TBAdmin($UID)) {
 if (@ARGV != 2 && @ARGV != 3) {
     usage();
 }
+
+my $sys = EmulabSys->get();
 
 my ($switch, $filename, $server) = @ARGV;
 
@@ -73,12 +76,7 @@ if (!$server) {
     # Use 'route get' to find out what interface we use to talk to this thing
     #
     my $iface;
-    foreach my $line (`route get $switch`) {
-        if ($line =~ /interface:\s+(\w+)/) {
-            $iface = $1;
-        }
-    }
-    if (!$iface) {
+    if (!defined($sys->getRoute($switch,undef,$iface))) {
         die "*** $0\n" .
             "    Unable to determine interface to $switch\n";
     }
@@ -86,12 +84,7 @@ if (!$server) {
     #
     # Use ifconfig to get that interface's IP address
     #
-    foreach my $line (`ifconfig $iface`) {
-        if ($line =~ /inet\s+(\d+\.\d+\.\d+\.\d+)\s+/) {
-            $server = $1;
-        }
-    }
-    if (!$server) {
+    if (!defined($sys->getIfaceInfo($iface,$server,undef,undef))) {
         die "*** $0\n" .
             "    Unable to determine IP address for $iface\n";
     }

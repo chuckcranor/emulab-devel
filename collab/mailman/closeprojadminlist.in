@@ -40,10 +40,6 @@ my $SSH         = "$TB/bin/sshtb";
 my $MMPROXY     = "$TB/sbin/mailmanproxy";
 my $ADDMMLIST   = "$TB/sbin/addmmlist";
 
-my $MAILMANDIR = "/usr/local/mailman";
-my $MMBINDIR   = "$MAILMANDIR/bin";
-my $MMLISTDIR  = "$MAILMANDIR/lists";
-
 
 # Protos
 sub fatal($);
@@ -66,6 +62,13 @@ use lib "@prefix@/lib";
 use libdb;
 use libtestbed;
 use User;
+use EmulabSys;
+
+my $sys = EmulabSys->get();
+
+my $MAILMANDIR     = $sys->def("MAILMANDIR");
+my $MMBINDIR       = $sys->def("MAILMANBINDIR");
+my $MMLISTDIR      = $sys->def("MAILMANLISTDIR");
 
 #
 # We don't want to run this script unless its the real version.
@@ -124,7 +127,7 @@ else {
 }
 
 # For ssh
-$UID = $EUID;
+TBSetuid($EUID);
 if ($CONTROL ne $BOSSNODE) {
 
     # Must serialize some of the mailman stuff. Be sure to use the same token!
@@ -134,9 +137,18 @@ if ($CONTROL ne $BOSSNODE) {
     system("echo $TBAPPROVAL | ".
 	   "$SSH -host $CONTROL $MMBINDIR/remove_members -f - $proj-admin");
 
-    open(CONFIG, " | $SSH -host $CONTROL $MMBINDIR/config_list -i /dev/stdin $proj-admin");
-    print CONFIG "generic_nonmember_action = 2\n";
-    close(CONFIG);
+    #
+    # On linux, a remote sshd seems to setup /dev/fd/0 (stdin) as a symlink to 
+    # an unnamed (or abstract?) socket, so config_list (via python's execfile
+    # function) cannot read /dev/stdin -- unlike freebsd, where stdin is a char
+    # device.  So, since this variable value doesn't need to change, we have
+    # now moved it to ops setup, where a special file gets create in 
+    # $MAILMANDIR .
+    #
+    #open(CONFIG, " | $SSH -host $CONTROL $MMBINDIR/config_list -i /dev/stdin $proj-admin");
+    #print CONFIG "generic_nonmember_action = 2\n";
+    #close(CONFIG);
+    system("$SSH -host $CONTROL $MMBINDIR/config_list -i $MAILMANDIR/emulab-config.py $proj-admin");
 
     my $status = $?;
     TBScriptUnlock();

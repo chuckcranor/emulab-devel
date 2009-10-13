@@ -1484,7 +1484,7 @@ sub TBImageLoadMaxOkay($$;@)
 	return 1;
     }
 
-    foreach my $OS ($query_result->fetchrow()) {
+    foreach my $OS ($query_result->fetchrow_array()) {
 	if ($OS && (!TBOSLoadMaxOkay($OS,$node_count,@nodes))) {
 	    return 0;
 	}
@@ -2209,7 +2209,7 @@ sub TBNodeType($)
 	return undef;
     }
     
-    my ($type, $class) = $result->fetchrow();
+    my ($type, $class) = $result->fetchrow_array();
     if (!$class) {
 	return undef;
     }

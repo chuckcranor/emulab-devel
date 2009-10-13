@@ -127,11 +127,11 @@ else {
 #
 # For ssh.
 #
-$UID = $EUID;
+TBSetuid($EUID);
 
 if ($CONTROL ne $BOSSNODE) {
-    open(COOKIE, "$SSH -host $CONTROL $MMPROXY ".
-				 "xlogin $user_uid $xtype $listname |") or
+    open(COOKIE, "-|", $SSH, "-host", $CONTROL, $MMPROXY,
+	 "xlogin", $user_uid, $xtype, $listname) or
 	fatal("$MMPROXY failed on $CONTROL!");
     my $cookie = <COOKIE>;
     close(COOKIE) or

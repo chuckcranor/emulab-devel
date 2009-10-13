@@ -8,6 +8,8 @@ TESTBED_SRCDIR	= @top_srcdir@
 OBJDIR		= ..
 SUBDIR		= www
 
+SYSTEM          = $(shell uname -s)
+
 #
 # A hack for only installing some things if installing on the main site
 #
@@ -210,7 +212,9 @@ INSTALLFILES = $(addprefix $(INSTALL_SBINDIR)/, htmlinstall) \
 
 install: $(INSTALLFILES)
 	-mkdir -p $(INSTALL_WWWDIR)/wikidocs/wiki
+ifneq ($(SYSTEM),Linux)
 	(swish-e -c ./swish.conf)
+endif
 	cd $(INSTALL_WWWDIR) && \
 		rm -f tbdb.html; \
 		ln -s index.html tbdb.html; \

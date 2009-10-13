@@ -5,7 +5,7 @@
 # All rights reserved.
 #
 use English;
-use Mysql;
+use DBI;
 
 #
 # usage: dumperrorlog.proxy
@@ -78,7 +78,8 @@ else {
     fatal("Bad characters in password!");
 }
 
-my $DB = Mysql->connect('localhost', $DBNAME, $DBUSER, $pwd);
+my $DB = DBI->connect("DBI:mysql:database=$DBNAME;host=localhost",
+		      $DBUSER, $pwd);
 
 fatal("Could not connect to errorlog DB!")
     if (!defined($DB));

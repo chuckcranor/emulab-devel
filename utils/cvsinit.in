@@ -15,9 +15,9 @@ sub fatal($);
 # Configure variables
 #
 my $TB       = "@prefix@";
-my $CVSBIN   = "/usr/bin/cvs";
-my $CHOWN    = "/usr/sbin/chown";
 my $CVSSUPPORT  = @CVSSUPPORT@;
+my $CVSBIN   = "@CVS@";
+my $CHOWN    = "@CHOWN@";
 
 #
 # Untaint the path

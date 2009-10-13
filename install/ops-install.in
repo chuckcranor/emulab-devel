@@ -410,6 +410,21 @@ Phase "ports", "Installing ports", sub {
 	    my $pname = GetPackage("mailman", $packagedir);
 	    ExecQuietFatal("$ENV PKG_PATH=$packagedir $PKG_ADD $pname");
 	};
+	Phase "mmconfig", "Configuring Mailman", sub {
+	    my $MAILMAN_CLFILE = "/usr/local/mailman/emulab-config.py";
+	    my @mmcls = ("#",
+			 "# Emulab python tweaks for ./bin/config_list",
+			 "#",
+			 "generic_nonmember_action = 2",
+			 "");
+	    if (! -e $MAILMAN_CLFILE) {
+		CreateFileFatal($MAILMAN_CLFILE,@mmcls);
+	    }
+	    else {
+		DoneIfEdited("$MAILMAN_CLFILE");
+		AppendToFileFatal("$MAILMAN_CLFILE",@mmcls);
+	    }
+	};
     }
     if ($CVSSUPPORT) {
 	Phase "cvsd", "Installing cvsd package", sub {

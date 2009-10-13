@@ -191,7 +191,7 @@ if ($errors_only) {
 my $query_result = PelabDBQueryFatal("select * from site_mapping",
 				$opshandle);
 my @results;
-while (@results = $query_result->fetchrow()) {
+while (@results = $query_result->fetchrow_array()) {
     my $result = DBBinaryQuery($dphandle, "replace into site_mapping ".
 			       "values (?,?,?,?)",
 			       @results);
@@ -277,7 +277,7 @@ if ($maxidx > $lastidx) {
 					"where idx > $start and idx <= $end ", 
 					$opshandle);
 	my @results;
-	while (@results = $query_result->fetchrow()) {
+	while (@results = $query_result->fetchrow_array()) {
 	    # dump it to dp
 	    my $idx = $results[0];
 	    my $query_result = $sth->execute(@results);
@@ -360,7 +360,7 @@ sub DeleteExceptions
     my $tmp = "";
     my $query_result = PelabDBQueryFatal("select * from sync_errors", $opshandle);
     my @results;
-    while (@results = $query_result->fetchrow()) {
+    while (@results = $query_result->fetchrow_array()) {
 	# dump it to dp
 	$tmp .= "and idx <> " . $results[0] . " ";
     }
@@ -379,7 +379,7 @@ sub PushErrorEntries
 				    "where pair_data.idx = sync_errors.idx",
 				    $opshandle);
     my @results;
-    while (@results = $query_result->fetchrow()) {
+    while (@results = $query_result->fetchrow_array()) {
 	# dump it to dp
 	my $result = DBBinaryQuery($dphandle, "insert into pair_data ".
 				   "values (?,?,?,?,?,?,?,?,?,?,?)", 

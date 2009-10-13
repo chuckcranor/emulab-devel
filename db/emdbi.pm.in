@@ -7,7 +7,7 @@
 package emdbi;
 use strict;
 use File::Basename;
-use Mysql;
+use DBI;
 use English;
 use Exporter;
 use vars qw(@ISA @EXPORT);
@@ -42,8 +42,7 @@ else {
     #
     package TestbedDBHandle;
     use vars '@ISA';
-    @ISA = ('Mysql');
-    @TestbedDBHandle::Statement::ISA = ('Mysql::Statement');
+    @ISA = ('DBI::db');
     my %DB_PID; # hash based on db handle
     sub obj_hash( $ ) {
 	# Return a hex string of the location of the object in memory.
@@ -65,10 +64,73 @@ else {
     sub DESTROY {
 	my ($self) = @_;
 	if ($self->db_pid() != $$) {
-	    $self->setInactiveDestroy(1);
+	    $self->{'InactiveDestroy'} = 1;
 	}
 	delete $DB_PID{obj_hash($self)};
 	$self->SUPER::DESTROY() if $self->can("SUPER::DESTROY");
+    }
+    sub query {
+	my ($self,$q) = @_;
+	my $sth = $self->prepare($q);
+	return undef 
+	    if (!$sth);
+	return undef 
+	    if (!$sth->execute());
+	TestbedStatementHandle::MakeA($sth);
+	return $sth;
+    }
+}
+
+{
+    #
+    # Create a special Statement style class that wraps a DBI statement
+    # and provides old Mysql class methods that are littered throughout the
+    # testbed code.
+    #
+    package TestbedStatementHandle;
+    use vars '@ISA';
+    @ISA = ('DBI::st');
+    sub MakeA ( $ ) {
+	my ($obj) = @_;
+	return unless defined $obj;
+	bless ($obj);
+    }
+    #
+    # This is sick ... but there are years of abuse to fix.
+    #
+    sub num_rows {
+	my ($self) = @_;
+	return $self->rows();
+    }
+    sub numrows {
+	my ($self) = @_;
+	return $self->rows();
+    }
+    sub affectedrows {
+	my ($self) = @_;
+	return $self->rows();
+    }
+    sub fetchhash {
+	my ($self) = @_;
+	my ($ref) = $self->fetchrow_hashref();
+	if ($ref) {
+	    return %$ref;
+	}
+	return ();
+    }
+    sub insertid {
+	my ($self) = @_;
+	#return $self->{'mysql_insertid'};
+	# a more portable way, hopefully
+	return $self->{Database}->last_insert_id(undef,undef,undef,undef);
+    }
+    sub dataseek {
+	my ($self,$pos) = @_;
+	$self->func($pos,'dataseek');
+    }
+    sub fetch_row {
+	my ($self) = @_;
+	return $self->fetchrow_array();
     }
 }
 
@@ -131,7 +193,8 @@ sub TBDBConnect($$)
 	    print STDERR "DBConnect:$dbnum $dbname\n";
 	}
 	
-	$DB[$dbnum] = Mysql->connect("localhost", $dbname, $dbuser, "none");
+	$DB[$dbnum] = DBI->connect("DBI:mysql:database=$dbname;host=localhost",
+				   $dbuser,undef,{ 'RaiseError' => 0 }); #$dbuser,undef);
         TestbedDBHandle::MakeA($DB[$dbnum]);
 	if (defined($DB[$dbnum])) {
 	    last;
@@ -149,8 +212,8 @@ sub TBDBConnect($$)
 	    if (! $DBCONN_EXITONERR);
 	exit(-1);
     }
-    $DB[$dbnum]->{'dbh'}->{'PrintError'} = 0;
-    $Mysql::QUIET = 1;
+    $DB[$dbnum]->{'PrintError'} = 0;
+    #$Mysql::QUIET = 1;
     return 0;
 }
 
@@ -228,6 +291,7 @@ sub DBQueryN($$)
     my($dbnum, $query)   = @_;
     my $maxtries = $DBQUERY_MAXTRIES;
     my $result;
+    my $isth;
 
     # Not really forever :-)
     if (!$maxtries) {
@@ -252,7 +316,10 @@ sub DBQueryN($$)
 	# Get this each time through the loop since we try reconnect below.
 	my $db = $DB[$dbnum];
 
-	$result = $db->query($query);
+	$isth = $db->prepare($query);
+	$result = $isth->execute();
+
+	TestbedStatementHandle::MakeA($isth);
 
 	if (! defined($result)) {
 	    my $err = $db->err;
@@ -289,7 +356,12 @@ sub DBQueryN($$)
 	DBWarn("mysqld went away in process $PID. $maxtries tries left", 0);
 	sleep(1);
     }
-    return $result;
+    # ugh.  We allow the undef to get returned if there was an error; but with
+    # vanilla DBI, we have to return the statement handle if there wasn't.
+    if (!defined($result)) {
+	return undef;
+    }
+    return $isth;
 }
 sub DBQuery($) {return DBQueryN(0,$_[0]);}
 

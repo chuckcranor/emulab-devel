@@ -29,9 +29,6 @@ my $impotent = 0;
 my $TB         = "@prefix@";
 my $TBOPS      = "@TBOPSEMAIL@";
 my $OURDOMAIN  = "@OURDOMAIN@";
-my $MAILMANDIR = "/usr/local/mailman";
-my $MMBINDIR   = "$MAILMANDIR/bin";
-my $MMLISTDIR  = "$MAILMANDIR/lists";
 my $GENALIASES = "$TB/libexec/mailman/genaliases";
 my $IDHASH     = "/var/db/emulabid2email";
 my $EMAILHASH  = "/var/db/email2emulabid";
@@ -52,6 +49,7 @@ $ENV{'PATH'} = "/bin:/usr/bin:/sbin:/usr/sbin:/usr/local/bin";
 delete @ENV{'IFS', 'CDPATH', 'ENV', 'BASH_ENV'};
 
 # For Mailman withlist wrapper
+# Note: we add the second path for linux -- won't affect bsd.
 $ENV{'PYTHONPATH'} = "$TB/lib/mailman";
 
 #
@@ -68,6 +66,14 @@ if ($UID != 0) {
 #
 use lib "@prefix@/lib";
 use libtestbed;
+use EmulabSys;
+
+my $sys = EmulabSys->get();
+
+my $MAILMANDIR     = $sys->def("MAILMANDIR");
+my $MMBINDIR       = $sys->def("MAILMANBINDIR");
+my $MMLISTDIR      = $sys->def("MAILMANLISTDIR");
+my $MAILMANARCHDIR = $sys->def("MAILMANARCHDIR");
 
 # Protos
 sub fatal($);
@@ -119,7 +125,7 @@ my (undef,undef,$unix_gid) = getgrnam("mailman") or
 
 $GID            = $unix_gid;
 $EGID           = $unix_gid;
-$EUID = $UID    = $unix_uid;
+TBSetreuid($unix_uid,$unix_uid);
 $ENV{'USER'}    = "mailman";
 $ENV{'LOGNAME'} = "mailman";
 
@@ -310,7 +316,7 @@ sub DelUser(@)
     my $emailcopy = $email;
     $emailcopy    =~ s/([^\\])([\+])/$1\\$2/g;
     
-    open(NAMES, "$MMBINDIR/find_member '$emailcopy' |") or
+    open(NAMES, "-|", "$MMBINDIR/find_member", $emailcopy) or
 	fatal("DelUser: Could not start up find_member!");
 
     while (<NAMES>) {
@@ -325,7 +331,7 @@ sub DelUser(@)
 	#
 	# Another convenient script provided by mailman ...
 	#
-	open(OWNER, "$MMBINDIR/list_owners '$listname' |") or
+	open(OWNER, "-|", "$MMBINDIR/list_owners", $listname) or
 	    fatal("DelUser: Could not start up list_owners!");
 
 	$_ = <OWNER>;
@@ -451,7 +457,7 @@ sub AddList(@)
 	if ($reconfig);
 
     # Step 3: Regen the aliases. We use an external script for this.
-    $EUID = $UID = 0;
+    TBSetreuid(0,0);
     system("$GENALIASES") == 0 or
 	fatal("AddList: Could not generate a new aliases file!");
 
@@ -524,7 +530,7 @@ sub SetListMembers(@)
     # Lets find out which members are already subscribed. We also want their
     # fullname info.
     #
-    open(MEMBERS, "$MMBINDIR/list_members -f -p $listname |") or
+    open(MEMBERS, "-|", "$MMBINDIR/list_members", "-f", "-p", $listname) or
 	fatal("SetListMembers: Could not start up list_members script!");
 
     while (<MEMBERS>) {
@@ -712,7 +718,8 @@ sub ModifyMember(@)
     #
     # Find the current subscription list for the user.
     #
-    open(LISTS, "$MMBINDIR/withlist -q -a -r mmscript.findmember $oldemail |")
+    open(LISTS, "-|", "$MMBINDIR/withlist", "-q", "-a", "-r", 
+	 "mmscript.findmember", $oldemail)
 	or fatal("ModifyMember: Could not start up withlist script!");
 
     while (<LISTS>) {
@@ -805,8 +812,8 @@ sub DeleteList(@)
     # We want to back up the mbox file just in case. We can regen the
     # archive from the mbox if needed later ... Use bin/arch command.
     #
-    my $pubarchive  = "$MAILMANDIR/archives/public/${lcname}.mbox";
-    my $privarchive = "$MAILMANDIR/archives/private/${lcname}.mbox";
+    my $pubarchive  = "$MAILMANARCHDIR/public/${lcname}.mbox";
+    my $privarchive = "$MAILMANARCHDIR/private/${lcname}.mbox";
     my $extension   = TBDateTimeFSSafe();
 
     if (-e $pubarchive) {
@@ -824,7 +831,7 @@ sub DeleteList(@)
     }
 
     # Regen the aliases. We use an external script for this.
-    $EUID = $UID = 0;
+    TBSetreuid(0,0);
     system("$GENALIASES") == 0 or
 	fatal("AddList: Could not generate a new aliases file!");
 
@@ -852,11 +859,11 @@ sub ListMembership(@)
 
     # The script we call expects regex, and embedded + signs mess things up.
     $email =~ s/([^\\])([\+])/$1\\$2/g;
-    
+
     #
     # Very convenient script provided by mailman ...
     #
-    open(NAMES, "$MMBINDIR/find_member '$email' |") or
+    open(NAMES, "-|", "$MMBINDIR/find_member", $email) or
 	fatal("ListMembership: Could not start up find_member!");
 
     while (<NAMES>) {
@@ -884,7 +891,15 @@ sub xLogin(@)
     # Get the current mapping.
     fatal("xlogin: Error mapping $uid to email address!")
 	if (EmulabID2Email($uid, \$email) < 0);
-    
+
+    # untaint email
+    if ($email =~ m/^([-\w\+\.]+\@[-\w\.]+)$/) {
+	$email = $1;
+    }
+    else {
+	fatal("xlogin: invalid characters in email '$email'!");
+    }
+
     #
     # Generate a cookie and send it back.
     # 

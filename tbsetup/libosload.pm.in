@@ -944,7 +944,7 @@ sub SetupReloadUISP($)
 	tberror "Failed to get path for $imageid!";
 	return -1;
     }
-    my ($path) = $query_result->fetchrow();
+    my ($path) = $query_result->fetchrow_array();
 
     #
     # Tell stated that we're about to start reloading

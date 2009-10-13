@@ -89,6 +89,81 @@ AC_PATH_PROG(ELVIN_CONFIG,elvin-config)
 AC_PATH_PROG(JAVAC,javac)
 AC_PATH_PROG(JAR,jar)
 AC_PATH_PROG(SUDO,sudo)
+AC_PATH_PROG(UNAME,uname)
+#
+# Get absolute paths to utils we invoke from many perl scripts.  If configure
+# can't find them, we set the variable value to the name of (one of) the 
+# expected binaries.  Since configure is run in multiple envs (client and 
+# server, and maybe more), we can't just fail if we don't find one of them, so
+# we set the variable to a relative program name to cause execution to fail
+# meaningfully.
+#
+# Also, note that we use the AC_PATH_PROGS macro instead of AC_PATH_PROG
+# even if we are only checking for one program name, since AC_PATH_PROGS will
+# set the variable value to the "not found" argument, and still report a "no"
+# in the configure output, where AC_PATH_PROG will report the "not found" 
+# argument value to the user -- this is deceptive.  We want the user to see
+# that the program was not found, but the "not found" value to be assigned
+# behind the scene, for the reason explained above.
+#
+AC_PATH_PROGS(MD5,md5 md5sum,"md5")
+AC_PATH_PROGS(SMBPASSWD,smbpasswd,"smbpasswd")
+AC_PATH_PROGS(CHOWN,chown,"chown")
+AC_PATH_PROGS(CHMOD,chmod,"chmod")
+AC_PATH_PROGS(MYSQL,mysql,"mysql")
+AC_PATH_PROGS(MYSQLDUMP,mysqldump,"mysqldump")
+AC_PATH_PROGS(MYSQLHOTCOPY,mysqlhotcopy,"mysqlhotcopy")
+AC_PATH_PROGS(GZIP,gzip,"gzip")
+AC_PATH_PROGS(TAR,tar,"tar")
+AC_PATH_PROGS(ROUTE,route,"route")
+AC_PATH_PROGS(IFCONFIG,ifconfig,"ifconfig")
+AC_PATH_PROGS(RNDC,rndc,"rndc")
+AC_PATH_PROGS(PW,pw,"pw")
+AC_PATH_PROGS(USERADD,useradd,"useradd")
+AC_PATH_PROGS(USERDEL,userdel,"userdel")
+AC_PATH_PROGS(USERMOD,usermod,"usermod")
+AC_PATH_PROGS(GROUPADD,groupadd,"groupadd")
+AC_PATH_PROGS(GROUPDEL,groupdel,"groupdel")
+AC_PATH_PROGS(GROUPMOD,groupmod,"groupmod")
+AC_PATH_PROGS(CHPASS,chpass chpasswd,"chpass")
+AC_PATH_PROGS(CVS,cvs,"cvs")
+AC_PATH_PROGS(DU,du,"du")
+AC_PATH_PROGS(MKDIR,mkdir,"mkdir")
+AC_PATH_PROGS(RMDIR,rmdir,"rmdir")
+AC_PATH_PROGS(CHGRP,chgrp,"chgrp")
+AC_PATH_PROGS(RM,rm,"rm")
+AC_PATH_PROGS(ZIP,zip,"zip")
+AC_PATH_PROGS(UNZIP,unzip,"unzip")
+AC_PATH_PROGS(ZIPINFO,zipinfo,"zipinfo")
+AC_PATH_PROGS(DIFF,diff,"diff")
+AC_PATH_PROGS(SCP,scp,"scp")
+AC_PATH_PROGS(KILLALL,killall,"killall")
+AC_PATH_PROGS(KILL,kill,"kill")
+AC_PATH_PROGS(XVCG,xvcg,"xvcg")
+AC_PATH_PROGS(DOT,dot,"dot")
+AC_PATH_PROGS(SSHKEYGEN,ssh-keygen,"ssh-keygen")
+AC_PATH_PROGS(OPENSSL,openssl,"openssl")
+AC_PATH_PROGS(SFSKEY,sfskey,"sfskey")
+AC_PATH_PROGS(QUOTA,quota,"quota")
+AC_PATH_PROGS(REPQUOTA,repquota,"repquota")
+AC_PATH_PROGS(MOUNT,mount,"mount")
+AC_PATH_PROGS(UMOUNT,umount,"umount")
+AC_PATH_PROGS(NEWALIASES,newaliases,"newaliases")
+AC_PATH_PROGS(PING,ping,"ping")
+AC_PATH_PROGS(UUIDGEN,uuidgen,"uuidgen")
+AC_PATH_PROGS(WGET,wget,"wget")
+AC_PATH_PROGS(METIS,kmetis,"kmetis")
+AC_PATH_PROGS(FIND,find,"find")
+AC_PATH_PROGS(RCS,rcs,"rcs")
+AC_PATH_PROGS(CO,co,"co")
+AC_PATH_PROGS(CI,ci,"ci")
+AC_PATH_PROGS(RLOG,rlog,"rlog")
+AC_PATH_PROGS(UPTIME,uptime,"uptime")
+AC_PATH_PROGS(EXPORTFS,exportfs,"exportfs")
+AC_PATH_PROGS(NICE,nice,"nice")
+#AC_PATH_PROGS(,,"")
+
+# rsync is checked below...
 
 AC_CHECK_TOOL(SSH,ssh)
 
@@ -482,7 +557,17 @@ fi
 # Note: In newer versions of autoconf, this can be done with 'quadrigraphs'
 changequote(START, END)dnl
 if test -z "$OURDOMAIN"; then
-    OURDOMAIN="`echo $BOSSNODE | sed -E -e 's/^[a-zA-Z0-9\-]+\.//'`"
+    # sed arg for extended regexps is different on linux and bsd
+    mysys="$(uname)"
+    case "$mysys" in 
+    Linux)
+        SEDEXTARG="-r"
+        ;;
+    *)
+        SEDEXTARG="-E"
+        ;;
+    esac
+    OURDOMAIN="`echo $BOSSNODE | sed $SEDEXTARG -e 's/^[a-zA-Z0-9\-]+\.//'`"
 fi
 changequote([, ])dnl
 AC_DEFINE_UNQUOTED(OURDOMAIN, "$OURDOMAIN")
@@ -596,6 +681,9 @@ AC_ARG_WITH(rcdir,
     INSTALL_RCDIR="$with_rcdir"
 ],[
     INSTALL_RCDIR="/usr/local/etc/rc.d"
+    if ! test -d "$INSTALL_RCDIR"; then
+        INSTALL_RCDIR="/etc/rc.d/init.d"
+    fi
 ])
 AC_SUBST(INSTALL_RCDIR)
 
@@ -608,8 +696,44 @@ AC_ARG_WITH(apache-config-dir,
     INSTALL_APACHE_CONFIG="$withval"
 ],[
     INSTALL_APACHE_CONFIG="/usr/local/etc/apache"
+    # XXX gross linux hack
+    if ! test -d "$INSTALL_APACHE_CONFIG"; then
+        INSTALL_APACHE_CONFIG="/etc/httpd/conf"
+    fi
 ])
 AC_SUBST(INSTALL_APACHE_CONFIG)
+
+#
+# Path to install samba config in
+#
+AC_ARG_WITH(samba-etcdir,
+[  --with-samba-etcdir	Specify path to install samba config (/etc/samba default)],
+[
+    SAMBA_ETCDIR="$withval"
+],[
+    # XXX gross linux hack
+    SAMBA_ETCDIR="/etc/samba"
+    if ! test -d "$SAMBA_ETCDIR"; then
+        SAMBA_ETCDIR="/usr/local/etc"
+    fi
+])
+AC_SUBST(SAMBA_ETCDIR)
+
+#
+# Path to install mibs in
+#
+AC_ARG_WITH(snmp-mib-dir,
+[  --with-snmp-mib	Specify path to install mib files (/usr/local/share/snmp/mibs default)],
+[
+    SNMP_MIB_DIR="$withval"
+],[
+    SNMP_MIB_DIR="/usr/local/share/snmp/mibs"
+    # XXX gross linux hack
+    if ! test -d "$SNMP_MIB_DIR"; then
+        SNMP_MIB_DIR="/usr/share/snmp/mibs"
+    fi
+])
+AC_SUBST(SNMP_MIB_DIR)
 
 #
 # Path to garcia installation
@@ -936,6 +1060,7 @@ outfiles="$outfiles Makeconf GNUmakefile \
         utils/backupswitches utils/setbuildinfo utils/checkquota \
 	utils/spewconlog utils/xlogin \
 	utils/opsdb_control utils/opsdb_control.proxy \
+	utils/template_record \
 	utils/remove_old_www utils/epmodeset \
 	www/GNUmakefile www/defs.php3 www/dbdefs.php3 www/xmlrpc.php3 \
 	www/xmlrpcpipe.php3 \
@@ -948,6 +1073,7 @@ outfiles="$outfiles Makeconf GNUmakefile \
 	rc.d/GNUmakefile rc.d/2.mysql-server.sh rc.d/3.testbed.sh \
 	rc.d/2.elvind.sh rc.d/3.plab.sh rc.d/2.dhcpd.sh rc.d/3.and.sh \
 	rc.d/3.elvin_gateway.sh rc.d/pelab.sh \
+	rc.d/testbed rc.d/testbedprep \
 	tools/GNUmakefile rc.d/1.mysql-server.sh tools/svn/GNUmakefile \
 	tools/pcapper/GNUmakefile tools/teachswitch/GNUmakefile \
         tools/webcamapplet/GNUmakefile tools/whol/GNUmakefile \
@@ -955,7 +1081,8 @@ outfiles="$outfiles Makeconf GNUmakefile \
 	$eventfiles \
 	$winfiles \
 	$pelabfiles \
-	apache/GNUmakefile apache/httpd.conf \
+	apache/GNUmakefile apache/httpd.conf apache/httpd.conf-ops \
+	apache/httpd.conf.linux apache/httpd.conf-ops.linux \
         xmlrpc/GNUmakefile xmlrpc/emulabclient.py xmlrpc/emulabserver.py \
 	xmlrpc/sshxmlrpc_client.py xmlrpc/sshxmlrpc_server.py \
 	xmlrpc/webxmlrpc xmlrpc/script_wrapper.py xmlrpc/libxmlrpc.pm \
@@ -967,9 +1094,13 @@ outfiles="$outfiles Makeconf GNUmakefile \
 	dhcpd/dhcpd.conf.template dhcpd/GNUmakefile \
 	install/GNUmakefile \
 	install/ops-install install/boss-install install/fs-install \
+	install/ops-install.linux install/boss-install.linux \
+	install/fs-install.linux \
 	install/load-descriptors install/dump-descriptors \
 	install/newnode_sshkeys/GNUmakefile install/smb.conf.head \
         install/clrhouse-install \
+	platform/GNUmakefile platform/EmulabSys.pm \
+	platform/FreeBSDSys.pm platform/LinuxSys.pm \
 	mote/GNUmakefile mote/tbuisp mote/tbsgmotepower mote/newmote \
 	mote/sgtools/GNUmakefile \
 	robots/GNUmakefile robots/tbsetdest/GNUmakefile \

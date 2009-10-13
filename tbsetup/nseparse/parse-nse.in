@@ -61,7 +61,7 @@ delete @ENV{'IFS', 'CDPATH', 'ENV', 'BASH_ENV'};
 
 if ($TESTMODE) {
     # In testmode, drop privs (my devel tree at home is TESTMODE=1)
-    $EUID = $UID;
+    TBSeteuid($UID);
 }
 elsif ($EUID != 0) {
     # We don't want to run this script unless its the real version.
@@ -136,7 +136,7 @@ if (!$TESTMODE) {
     }
 
     # Run as the user for most of this script.
-    $EUID = $UID;
+    TBSeteuid($UID);
 }
 
 
@@ -200,9 +200,9 @@ else {
     # In non-testmode, must flip to real root for the ssh, and then flip
     # back afterwards.
     # 
-    $EUID = $UID = 0;
+    TBSetreuid(0,0);
     system("sshtb -host $CONTROL $cmdargs < $infile >> $outfile");
-    $EUID = $UID = $SAVEUID;
+    TBSetreuid($SAVEUID,$SAVEUID);
 }
 
 # 

@@ -66,8 +66,8 @@ my $CONTROL     = "@USERNODE@";
 my $checkquota  = "$TB/sbin/checkquota";
 my $modify      = "$TB/bin/template_create";
 my $archcontrol = "$TB/bin/archive_control";
-my $TAR         = "/usr/bin/tar";
-my $RSYNC	= "/usr/local/bin/rsync";
+my $TAR         = "@TAR@";
+my $RSYNC	= "@RSYNC@";
 
 # Locals
 my $template;

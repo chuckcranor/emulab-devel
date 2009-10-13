@@ -8,6 +8,7 @@
 
 use English;
 use Getopt::Std;
+use Cwd 'abs_path';
 
 #
 # Syntax check an NS file.
@@ -86,7 +87,7 @@ else {
 #
 # Use realpath to resolve any symlinks.
 #
-my $translated = `realpath $tempfile`;
+my $translated = abs_path($tempfile);
 if ($translated =~ /^([-\w\.\/]+)$/) {
     $tempfile = $1;
 }

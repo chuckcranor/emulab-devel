@@ -26,16 +26,6 @@ my $domounts  = 0;
 my $TB		= "@prefix@";
 my $TBOPS       = "@TBOPSEMAIL@";
 
-my $CVSDCONF	= "/usr/local/etc/cvsd/cvsd.conf";
-my $CVSDCONFNEW	= "/usr/local/etc/cvsd/cvsd.conf.new";
-my $CVSDCONFOLD	= "/usr/local/etc/cvsd/cvsd.conf.backup";
-my $HEADFILE    = "$TB/lib/cvsd.conf.head";
-my $STARTPROG   = "/usr/local/etc/rc.d/cvsd.sh";
-my $REPODIR     = "cvsrepos";
-my $MOUNT	= "/sbin/mount -o ro";
-my $UNMOUNT     = "/sbin/umount";
-my %pubrepos    = ();
-
 #
 # We don't want to run this script unless its the real version.
 #
@@ -59,6 +49,22 @@ sub fatal($);
 # 
 use lib "@prefix@/lib";
 use libtestbed;
+use EmulabSys;
+
+my $sys = EmulabSys->get();
+
+my $CVSDCONFDIR = $sys->def("CVSDCONFDIR");
+my $CVSDCONF	= "$CVSDCONFDIR/cvsd.conf";
+my $CVSDCONFNEW	= "$CVSDCONFDIR/cvsd.conf.new";
+my $CVSDCONFOLD	= "$CVSDCONFDIR/cvsd.conf.backup";
+my $HEADFILE    = "$TB/lib/cvsd.conf.head";
+my $STARTPROG   = $sys->def("CVSDRCSCRIPT");
+my $REPODIR     = "cvsrepos";
+my $MOUNT	= "@MOUNT@ -o ro";
+my $UNMOUNT     = "@UMOUNT@";
+my $MKDIR       = "@MKDIR@";
+my $RMDIR       = "@RMDIR@";
+my %pubrepos    = ();
 
 my $PROJREPODIR = PROJROOT() . "/$REPODIR";
 my $JAILREPODIR = "/var/cvsjail/$REPODIR";
@@ -144,7 +150,7 @@ if ($domounts) {
 	my $dir = $repo;
 
 	if (! -d "$JAILREPODIR/$dir") {
-	    system("/bin/mkdir $JAILREPODIR/$dir") == 0 or
+	    system("$MKDIR $JAILREPODIR/$dir") == 0 or
 		fatal("Could not mkdir $JAILREPODIR/$dir");
 	}
 
@@ -195,7 +201,7 @@ foreach my $dir (@dirfiles) {
     if (! exists($pubrepos{$dir})) {
 	system("$UNMOUNT $JAILREPODIR/$dir") == 0 or
 	    fatal("Could not unmount $JAILREPODIR/$dir");
-	system("/bin/rmdir $JAILREPODIR/$dir") == 0 or
+	system("$RMDIR $JAILREPODIR/$dir") == 0 or
 	    fatal("Could not rmdir $JAILREPODIR/$dir");
     }
     else {
@@ -212,7 +218,7 @@ foreach my $dir (@dirfiles) {
 foreach my $repo (keys(%pubrepos)) {
     my $dir = $repo;
 	
-    system("/bin/mkdir $JAILREPODIR/$dir") == 0 or
+    system("$MKDIR $JAILREPODIR/$dir") == 0 or
 	fatal("Could not mkdir $JAILREPODIR/$dir");
 
     #

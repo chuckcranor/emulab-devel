@@ -29,7 +29,7 @@ my $TBOPS       = "@TBOPSEMAIL@";
 my $CONTROL     = "@USERNODE@";
 my $BOSSNODE	= "@BOSSNODE@";
 my $CHATSUPPORT = @CHATSUPPORT@;
-my $JABBERCHAT  = "$TB/sbin/chatsup";
+my $JABBERCHAT  = "$TB/sbin/chatsup.py";
 
 #
 # Untaint the path

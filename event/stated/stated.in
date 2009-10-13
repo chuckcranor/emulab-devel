@@ -393,7 +393,7 @@ sub readStates(;@) {
 
     my %nodes;
     while (my ($node_id, $state, $timestamp, $mode, $mode_timestamp, $tag)
-	   = $result->fetchrow()) {
+	   = $result->fetchrow_array()) {
 	$nodes{$node_id}{"tag"} = (defined($tag) ? $tag : "");
 
 	if ($dbtag ne "" && $dbtag eq $nodes{$node_id}{"tag"}) {
@@ -443,7 +443,7 @@ sub getTimeouts() {
 			      "FROM state_timeouts");
 
     my %timeouts;
-    while (my ($op_mode, $state, $timeout, $action) = $result->fetchrow()) {
+    while (my ($op_mode, $state, $timeout, $action) = $result->fetchrow_array()) {
 	$timeouts{$op_mode}{$state} = [ $timeout, $action ];
     }
     return %timeouts;
@@ -458,7 +458,7 @@ sub getValid() {
 			      "FROM state_transitions");
 
     my %valid;
-    while (my ($mode,$state1, $state2) = $result->fetchrow()) {
+    while (my ($mode,$state1, $state2) = $result->fetchrow_array()) {
 	$valid{$mode}{$state1}{$state2} = 1;
     }
     return %valid;
@@ -474,7 +474,7 @@ sub getModeTrans() {
 		   "FROM mode_transitions order by op_mode1,state1");
 
     my %modeTrans;
-    while (my ($mode1,$state1, $mode2, $state2) = $result->fetchrow()) {
+    while (my ($mode1,$state1, $mode2, $state2) = $result->fetchrow_array()) {
 	if (!defined($modeTrans{"$mode1:$state1"})) {
 	    $modeTrans{"$mode1:$state1"}= ["$mode2:$state2"];
 	} else {
@@ -519,7 +519,7 @@ sub getTriggers() {
 		   "FROM state_triggers where node_id='$TBANYMODE' ".
 		   "order by op_mode,state");
     my %t;
-    while (my ($mode, $state, $trig) = $result->fetchrow()) {
+    while (my ($mode, $state, $trig) = $result->fetchrow_array()) {
 	my @trigs = split(/\s*,\s*/,$trig);
 	$t{"$mode:$state"} = \@trigs;
 	debug("trig($mode:$state)\t => ".join(',',@trigs)."\n");
@@ -530,7 +530,7 @@ sub getTriggers() {
       DBQueryFatal("SELECT node_id, op_mode, state, `trigger` " .
 		   "FROM state_triggers where node_id!='$TBANYMODE' ".
 		   "order by op_mode,state");
-    while (my ($n, $mode, $state, $trig) = $result->fetchrow()) {
+    while (my ($n, $mode, $state, $trig) = $result->fetchrow_array()) {
 	my @trigs = split(/\s*,\s*/,$trig);
 	$t{"$n:$mode:$state"} = \@trigs;
 	debug("trig($n:$mode:$state)\t => ".join(',',@trigs)."\n");
@@ -773,7 +773,7 @@ sub stateTransition($$) {
 			my $query_result =
 			  DBQueryWarn("select next_op_mode from nodes ".
 				      "where node_id='$node'");
-			my ($nextmode) = $query_result->fetchrow();
+			my ($nextmode) = $query_result->fetchrow_array();
 			if ($nextmode) {
 			    info("$node: Forcing mode transition!\n");
 			    opModeTransition($node, $nextmode, 1);
@@ -820,7 +820,7 @@ sub stateTransition($$) {
 		# Check if we really need to do a reset
 		my $r = DBQueryWarn("select osid,def_boot_osid from nodes ".
 				    "where node_id='$node'");
-		my ($osid,$defosid) = $r->fetchrow();
+		my ($osid,$defosid) = $r->fetchrow_array();
 		if ($osid ne $defosid) {
 		    handleCtrlEvent($node,$trig);
 		}
@@ -870,7 +870,7 @@ sub stateTransition($$) {
 	info("$node: Checking for mode transition\n");
 	my $r = DBQueryWarn("select next_op_mode from nodes ".
 			    "where node_id='$node'");
-	my ($nextmode) = $r->fetchrow();
+	my ($nextmode) = $r->fetchrow_array();
 	if ($nextmode) {
 	    opModeTransition($node,$nextmode);
 	} else {
@@ -1178,7 +1178,7 @@ sub checkGenISUP($) {
     my $osfeatures="";
     # If we don't get anything back, assume it has no features.
     if ($r->num_rows() > 0) {
-	($osfeatures) = $r->fetchrow();
+	($osfeatures) = $r->fetchrow_array();
     }
 
     my @features = split(",",$osfeatures);
@@ -1232,7 +1232,7 @@ sub checkDBRedirect($) {
 	return 0;
     }
 
-    my ($testdb) = $result->fetchrow();
+    my ($testdb) = $result->fetchrow_array();
 
     # XXX: It's hokey to hardcode tbdb here, but....
 

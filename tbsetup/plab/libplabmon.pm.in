@@ -25,7 +25,7 @@ my $TB		= "@prefix@";
 my $BOSSNODE    = "@BOSSNODE@";
 
 # package consts
-my $UPTIME       = "/usr/bin/uptime";
+my $UPTIME       = "@UPTIME@";
 
 # package vars
 my %logs = ();

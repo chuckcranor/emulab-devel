@@ -58,7 +58,7 @@ close ROOTBALL;
 $ENV{'RSYNC_RSH'} = "ssh -q -oBatchMode=yes -oStrictHostKeyChecking=no " .
 		    "-l $PLAB_USER";
 
-my $RSYNC = "/usr/local/bin/rsync";
+my $RSYNC = "@RSYNC@";
 
 if (!(($> == 0) || TBAdmin())) {
     die "Sorry, only admins can use this script!\n";
@@ -83,7 +83,7 @@ if (!scalar(@nodes)) {
 		     "\" AND r.eid=\"" . NODEDEAD_EID .  "\") " . 
 		     "order by n.node_id");
     @nodes = ();
-    while (my ($node) = $query_result->fetchrow()) {
+    while (my ($node) = $query_result->fetchrow_array()) {
 	push @nodes, $node;
     }
 }

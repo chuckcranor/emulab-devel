@@ -1,6 +1,6 @@
-diff -ru ntfsprogs-1.7.1/include/disk_io.h ntfsprogs-linux/include/disk_io.h
---- ntfsprogs-1.7.1/include/disk_io.h	2003-02-06 08:24:56.000000000 -0700
-+++ ntfsprogs-linux/include/disk_io.h	2005-03-17 16:16:58.000000000 -0700
+diff -Nurb ntfsprogs-1.7.1.orig/include/disk_io.h ntfsprogs-1.7.1/include/disk_io.h
+--- ntfsprogs-1.7.1.orig/include/disk_io.h	2003-02-06 08:24:56.000000000 -0700
++++ ntfsprogs-1.7.1/include/disk_io.h	2008-07-24 21:42:32.000000000 -0600
 @@ -24,8 +24,10 @@
  
  #include "volume.h"
@@ -14,9 +14,9 @@ diff -ru ntfsprogs-1.7.1/include/disk_io.h ntfsprogs-linux/include/disk_io.h
  
  extern s64 ntfs_mst_pread(const int fd, const s64 pos, s64 count,
  		const u32 bksize, const void *b);
-diff -ru ntfsprogs-1.7.1/include/layout.h ntfsprogs-linux/include/layout.h
---- ntfsprogs-1.7.1/include/layout.h	2003-02-06 08:24:56.000000000 -0700
-+++ ntfsprogs-linux/include/layout.h	2005-03-17 16:14:29.000000000 -0700
+diff -Nurb ntfsprogs-1.7.1.orig/include/layout.h ntfsprogs-1.7.1/include/layout.h
+--- ntfsprogs-1.7.1.orig/include/layout.h	2003-02-06 08:24:56.000000000 -0700
++++ ntfsprogs-1.7.1/include/layout.h	2008-07-24 21:42:32.000000000 -0600
 @@ -292,7 +292,11 @@
   */
  typedef struct {
@@ -163,9 +163,9 @@ diff -ru ntfsprogs-1.7.1/include/layout.h ntfsprogs-linux/include/layout.h
  		SID sid;		/* $O index in FILE_Extend/$Quota:
  					   SID of the owner of the user_id. */
  		u32 owner_id;		/* $Q index in FILE_Extend/$Quota:
-diff -ru ntfsprogs-1.7.1/include/volume.h ntfsprogs-linux/include/volume.h
---- ntfsprogs-1.7.1/include/volume.h	2003-02-06 08:24:56.000000000 -0700
-+++ ntfsprogs-linux/include/volume.h	2005-03-17 16:20:29.000000000 -0700
+diff -Nurb ntfsprogs-1.7.1.orig/include/volume.h ntfsprogs-1.7.1/include/volume.h
+--- ntfsprogs-1.7.1.orig/include/volume.h	2003-02-06 08:24:56.000000000 -0700
++++ ntfsprogs-1.7.1/include/volume.h	2008-07-24 21:42:32.000000000 -0600
 @@ -156,6 +156,7 @@
  
  extern ntfs_volume *ntfs_volume_startup(const char *name, unsigned long rwflag);
@@ -174,9 +174,9 @@ diff -ru ntfsprogs-1.7.1/include/volume.h ntfsprogs-linux/include/volume.h
  
  extern int ntfs_umount(ntfs_volume *vol, const BOOL force);
  
-diff -ru ntfsprogs-1.7.1/libntfs/attrib.c ntfsprogs-linux/libntfs/attrib.c
---- ntfsprogs-1.7.1/libntfs/attrib.c	2003-02-13 03:25:30.000000000 -0700
-+++ ntfsprogs-linux/libntfs/attrib.c	2005-03-17 16:26:14.000000000 -0700
+diff -Nurb ntfsprogs-1.7.1.orig/libntfs/attrib.c ntfsprogs-1.7.1/libntfs/attrib.c
+--- ntfsprogs-1.7.1.orig/libntfs/attrib.c	2003-02-13 03:25:30.000000000 -0700
++++ ntfsprogs-1.7.1/libntfs/attrib.c	2008-07-24 21:45:28.000000000 -0600
 @@ -383,8 +383,8 @@
  {
  	if (NAttrNonResident(na) && na->rl)
@@ -188,9 +188,9 @@ diff -ru ntfsprogs-1.7.1/libntfs/attrib.c ntfsprogs-linux/libntfs/attrib.c
  	free(na);
  	return;
  }
-diff -ru ntfsprogs-1.7.1/libntfs/dir.c ntfsprogs-linux/libntfs/dir.c
---- ntfsprogs-1.7.1/libntfs/dir.c	2003-02-06 08:24:56.000000000 -0700
-+++ ntfsprogs-linux/libntfs/dir.c	2005-03-17 16:14:29.000000000 -0700
+diff -Nurb ntfsprogs-1.7.1.orig/libntfs/dir.c ntfsprogs-1.7.1/libntfs/dir.c
+--- ntfsprogs-1.7.1.orig/libntfs/dir.c	2003-02-06 08:24:56.000000000 -0700
++++ ntfsprogs-1.7.1/libntfs/dir.c	2008-07-24 21:42:32.000000000 -0600
 @@ -22,6 +22,7 @@
  #include <stdlib.h>
  #include <errno.h>
@@ -228,9 +228,9 @@ diff -ru ntfsprogs-1.7.1/libntfs/dir.c ntfsprogs-linux/libntfs/dir.c
  		goto put_err_out;
  	}
  	index_end = (u8*)&ir->index + le32_to_cpu(ir->index.index_length);
-diff -ru ntfsprogs-1.7.1/libntfs/disk_io.c ntfsprogs-linux/libntfs/disk_io.c
---- ntfsprogs-1.7.1/libntfs/disk_io.c	2003-02-06 08:24:56.000000000 -0700
-+++ ntfsprogs-linux/libntfs/disk_io.c	2005-03-17 16:30:28.000000000 -0700
+diff -Nurb ntfsprogs-1.7.1.orig/libntfs/disk_io.c ntfsprogs-1.7.1/libntfs/disk_io.c
+--- ntfsprogs-1.7.1.orig/libntfs/disk_io.c	2003-02-06 08:24:56.000000000 -0700
++++ ntfsprogs-1.7.1/libntfs/disk_io.c	2008-07-24 21:42:32.000000000 -0600
 @@ -40,6 +40,15 @@
  #	define BLKGETSIZE _IO(0x12,96) /* Get device size in 512byte blocks. */
  #endif
@@ -312,9 +312,9 @@ diff -ru ntfsprogs-1.7.1/libntfs/disk_io.c ntfsprogs-linux/libntfs/disk_io.c
  #ifdef BLKGETSIZE
  	long size;
  
-diff -ru ntfsprogs-1.7.1/libntfs/lcnalloc.c ntfsprogs-linux/libntfs/lcnalloc.c
---- ntfsprogs-1.7.1/libntfs/lcnalloc.c	2003-02-06 08:24:56.000000000 -0700
-+++ ntfsprogs-linux/libntfs/lcnalloc.c	2005-03-17 16:14:29.000000000 -0700
+diff -Nurb ntfsprogs-1.7.1.orig/libntfs/lcnalloc.c ntfsprogs-1.7.1/libntfs/lcnalloc.c
+--- ntfsprogs-1.7.1.orig/libntfs/lcnalloc.c	2003-02-06 08:24:56.000000000 -0700
++++ ntfsprogs-1.7.1/libntfs/lcnalloc.c	2008-07-24 21:42:32.000000000 -0600
 @@ -101,8 +101,8 @@
  	int err = 0, rlpos, rlsize, buf_size;
  	u8 pass, done_zones, search_zone, need_writeback, bit;
@@ -326,22 +326,20 @@ diff -ru ntfsprogs-1.7.1/libntfs/lcnalloc.c ntfsprogs-linux/libntfs/lcnalloc.c
  			(long long)start_lcn,
  			zone == MFT_ZONE ? "MFT" : "DATA");
  	if (!vol || count < 0 || start_lcn < -1 || !vol->lcnbmp_na ||
-diff -ru ntfsprogs-1.7.1/libntfs/mft.c ntfsprogs-linux/libntfs/mft.c
---- ntfsprogs-1.7.1/libntfs/mft.c	2003-02-13 03:02:28.000000000 -0700
-+++ ntfsprogs-linux/libntfs/mft.c	2005-03-17 16:31:50.000000000 -0700
-@@ -59,7 +59,8 @@
- 	s64 br;
+diff -Nurb ntfsprogs-1.7.1.orig/libntfs/mft.c ntfsprogs-1.7.1/libntfs/mft.c
+--- ntfsprogs-1.7.1.orig/libntfs/mft.c	2003-02-13 03:02:28.000000000 -0700
++++ ntfsprogs-1.7.1/libntfs/mft.c	2008-07-24 21:42:32.000000000 -0600
+@@ -60,6 +60,7 @@
  	VCN m;
  
--	Dprintf("%s(): Entering for inode 0x%Lx.\n", __FUNCTION__, MREF(mref));
-+  	Dprintf("%s(): Entering for inode 0x%Lx.\n", __FUNCTION__, MREF(mref));
+ 	Dprintf("%s(): Entering for inode 0x%Lx.\n", __FUNCTION__, MREF(mref));
 +
  	if (!vol || !vol->mft_na || !b || count < 0) {
  		errno = EINVAL;
  		return -1;
-diff -ru ntfsprogs-1.7.1/libntfs/volume.c ntfsprogs-linux/libntfs/volume.c
---- ntfsprogs-1.7.1/libntfs/volume.c	2003-02-06 08:24:56.000000000 -0700
-+++ ntfsprogs-linux/libntfs/volume.c	2005-03-17 16:32:57.000000000 -0700
+diff -Nurb ntfsprogs-1.7.1.orig/libntfs/volume.c ntfsprogs-1.7.1/libntfs/volume.c
+--- ntfsprogs-1.7.1.orig/libntfs/volume.c	2003-02-06 08:24:56.000000000 -0700
++++ ntfsprogs-1.7.1/libntfs/volume.c	2008-07-24 21:42:32.000000000 -0600
 @@ -71,6 +71,7 @@
  		ntfs_inode_close(v->mftmirr_ni);
  	if (v->fd) {

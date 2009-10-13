@@ -4,6 +4,10 @@
  * All rights reserved.
  */
 
+#ifdef __linux__
+#include <time.h>
+#define _XOPEN_SOURCE
+#endif
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
@@ -120,6 +124,11 @@ void		client_writeback_done(int sock, struct sockaddr_in *client);
 MYSQL_RES *	mydb_query(char *query, int ncols, ...);
 int		mydb_update(char *query, ...);
 static int	safesymlink(char *name1, char *name2);
+
+/* XXX: write later */
+#ifdef __linux__
+#define setproctitle(str, formatargs...) ({})
+#endif
 
 /* socket timeouts */
 static int	readtimo = READTIMO;
@@ -6938,7 +6947,7 @@ COMMAND_PROTOTYPE(dorootpswd)
 	 * to return the plain text.
 	 */
 	sprintf(buf, "$1$%s", hashbuf);
-	bp = crypt(hashbuf, buf);
+	bp = (char *)crypt(hashbuf, buf);
 
 	OUTPUT(buf, sizeof(buf), "HASH=%s\n", bp);
 	client_writeback(sock, buf, strlen(buf), tcp);

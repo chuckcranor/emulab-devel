@@ -46,14 +46,14 @@ my $STAMPS      = @STAMPS@;
 my $TBBASE      = "@TBBASE@";
 my $TEVC	= "$TB/bin/tevc";
 my $DBCONTROL   = "$TB/sbin/opsdb_control";
-my $RSYNC	= "/usr/local/bin/rsync";
+my $RSYNC	= "@RSYNC@";
 my $MKEXPDIR    = "$TB/libexec/mkexpdir";
 my $TBPRERUN    = "$TB/bin/tbprerun";
 my $TBSWAP      = "$TB/bin/tbswap";
 my $TBREPORT    = "$TB/bin/tbreport";
 my $TBEND       = "$TB/bin/tbend";
-my $DU          = "/usr/bin/du";
-my $MD5         = "/sbin/md5";
+my $DU          = "@DU@";
+my $MD5         = "@MD5@";
 
 # Swap Actions
 $EXPT_PRELOAD		= TBDB_STATS_PRELOAD();
@@ -1765,6 +1765,7 @@ sub CreateLogFile($$)
     my $logdir   = $self->WorkDir();
     my $linkname = "$logdir/${prefix}.log";
     my $logname  = `mktemp $logdir/${prefix}.XXXXXX`;
+    print STDERR "logname was $logname\n";
     return undef
 	if ($?);
     

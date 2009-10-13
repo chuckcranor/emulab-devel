@@ -29,7 +29,7 @@ my $assign_bin = "$TBROOT/libexec/assign";
 $| = 1;
 
 my $MAX_DESIRE_WEIGHT       = 0.99;
-my $METIS                   = "/usr/local/bin/kmetis";
+my $METIS                   = "@METIS@";
 my $AVG_NODES_PER_PARTITION = 10;
 
 #

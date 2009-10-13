@@ -121,7 +121,7 @@ my $fullname = $target_user->name();
 #
 # For ssh.
 #
-$UID = $EUID;
+TBSetuid($EUID);
 
 if ($CONTROL ne $BOSSNODE) {
     my $optarg = ($debug ? "-d" : "");

@@ -330,7 +330,9 @@ if ($showlinks) {
 		     "where v.pid='$pid' and v.eid='$eid' ".
 		     "order by v.vname,v.member");
 
+    my @vlanrows = ();
     while (my %row = $vlan_result->fetchhash()) {
+	$vlanrows[scalar(@vlanrows)] = \%row;
 	my $ip          = $row{"ip"};
 	my $vnode       = $row{"vnode"};
 	my $vport       = $row{"vport"};
@@ -338,7 +340,6 @@ if ($showlinks) {
 
 	$ipmap{$member} = $ip;
     }
-    $vlan_result->dataseek(0);
 
     #
     # If swapped in, get a bunch of physical link info.
@@ -420,7 +421,9 @@ if ($showlinks) {
 	print  "--------------- --------------- --------------- ".
 	       "-------------------- ---------\n";
 
-	while (my %row = $vlan_result->fetchhash()) {
+	for (my $i = 0; $i < @vlanrows; ++$i) {
+	    my %row = %{$vlanrows[$i]};
+
 	    my $vname       = $row{"vname"};
 	    my $vnode       = $row{"vnode"};
 	    my $vport       = $row{"vport"};
@@ -447,7 +450,6 @@ if ($showlinks) {
 	    }
 	}
 	print "\n";
-	$vlan_result->dataseek(0);
     }
 
     # Queue info.
@@ -466,7 +468,9 @@ if ($showlinks) {
 	print  "--------------- --------------- ---------- ".
 	       "------- ----------------------------\n";
 
-	while (my %row = $vlan_result->fetchhash()) {
+	for (my $i = 0; $i < @vlanrows; ++$i) {
+	    my %row = %{$vlanrows[$i]};
+
 	    my $vname       = $row{"vname"};
 	    my $vnode       = $row{"vnode"};
 	    my $vport       = $row{"vport"};
@@ -487,18 +491,17 @@ if ($showlinks) {
 		    "0/0/0/0"));
 	}
 	print "\n";
-	$vlan_result->dataseek(0);
     }
 
     # Trace info. See if any traced links
     my $got_traced = 0;
-    while (my %row = $vlan_result->fetchhash()) {
+    for (my $i = 0; $i < @vlanrows; ++$i) {
+	my %row = %{$vlanrows[$i]};
 	if ($row{'traced'}) {
 	    $got_traced++;
 	    last;
 	}
     }
-    $vlan_result->dataseek(0);
     
     if ($got_traced) {
 	print  "Trace/Monitoring Info:\n";
@@ -507,7 +510,9 @@ if ($showlinks) {
 	print  "--------------- --------------- ---------- ".
 	       "------- ----------------------------\n";
 
-	while (my %row = $vlan_result->fetchhash()) {
+	for (my $i = 0; $i < @vlanrows; ++$i) {
+	    my %row = %{$vlanrows[$i]};
+
 	    my $vname       = $row{"vname"};
 	    my $vnode       = $row{"vnode"};
 	    my $vport       = $row{"vport"};
@@ -521,7 +526,6 @@ if ($showlinks) {
 		   (defined($trace_expr) ? $trace_expr : ""));
 	}
 	print "\n";
-	$vlan_result->dataseek(0);
     }
 
     #
@@ -696,16 +700,19 @@ if ($showdelays && $state eq EXPTSTATE_ACTIVE) {
 		     "     and i.card=w.card1 and i.port=w.port1 ".
 		     "where d.pid='$pid' and d.eid='$eid' ".
 		     "order by d.vname,d.vnode0");
+    my @delayrows = ();
 
     $result_linkdelays =
 	DBQueryFatal("select * from linkdelays ".
 		     "where pid='$pid' and eid='$eid' ".
 		     "order by vlan,vnode,node_id");
+    my @linkdelayrows = ();
 
     my @data;
 
     if ($result_delays->numrows) {
 	while (my %row = $result_delays->fetchhash()) {
+	    $delayrows[scalar(@delayrows)] = \%row;
 	    # Skip dups.
 	    next
 		if ($row{'iface'} eq $row{'iface1'});
@@ -750,9 +757,6 @@ if ($showdelays && $state eq EXPTSTATE_ACTIVE) {
 		   \@data);
     }
 
-    $result_delays->dataseek(0);
-    $result_linkdelays->dataseek(0);
-
     if ($result_delays->numrows || $result_linkdelays->numrows) {
 	print  "Physical Queue Info:\n";
 	printf "%-15s %-15s %-15s %-7s %s\n",
@@ -763,7 +767,9 @@ if ($showdelays && $state eq EXPTSTATE_ACTIVE) {
     }
 
     if ($result_delays->numrows) {
-	while (my %row = $result_delays->fetchhash()) {
+	for (my $i = 0; $i < @delayrows; ++$i) {
+	    my %row = %{$delayrows[$i]};
+
 	    printf("%-15s %-15s %-15s %-7s %s\n", $row{vname},
 		   $row{vnode0},
 		   $row{q0_limit} . ($row{q0_qinbytes} ? " bytes" : " slots"),
@@ -791,7 +797,9 @@ if ($showdelays && $state eq EXPTSTATE_ACTIVE) {
     }
 
     if ($result_linkdelays->numrows) {
-	while (my %row = $result_linkdelays->fetchhash()) {
+	for (my $i = 0; $i < @linkdelayrows; ++$i) {
+	    my %row = %{$linkdelayrows[$i]};
+
 	    printf("%-15s %-15s %-15s %-7s %s\n", $row{vlan},
 		   $row{vnode},
 		   $row{q_limit} . ($row{q_qinbytes} ? " bytes" : " slots"),
@@ -805,8 +813,6 @@ if ($showdelays && $state eq EXPTSTATE_ACTIVE) {
 	print "\n";
     }
 
-    $result_delays->dataseek(0);
-
     if ($result_delays->numrows) {
 	print  "Delay Node Switch Info:\n";
 	printf "%-15s %-15s %-12s %-9s %-9s %-9s\n",
@@ -815,7 +821,9 @@ if ($showdelays && $state eq EXPTSTATE_ACTIVE) {
 	print  "--------------- --------------- ------------ --------- ".
 	       "--------- --------\n";
 
-	while (my %row = $result_delays->fetchhash()) {
+	for (my $i = 0; $i < @delayrows; ++$i) {
+	    my %row = %{$delayrows[$i]};
+
 	    my $vname       = $row{"vname"};
 	    my $dname       = $row{"delayvname"};
 	    my $iface       = $row{"iface"};

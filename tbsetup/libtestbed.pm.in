@@ -20,7 +20,7 @@ use Exporter;
 	 TBSCRIPTLOCK_IGNORE TBSCRIPTLOCK_FAILED
 	 PROJROOT GROUPROOT USERROOT SCRATCHROOT SHAREROOT
 	 TBValidUserDir TBValidUserDirList TBMakeTempFile NewUUID System
-	 SendProjAdminMail ReOpenLog);
+	 SendProjAdminMail ReOpenLog TBSetreuid TBSetuid TBSeteuid);
 @EXPORT_OK =
     qw ( TBMAIL_PROJADMIN);
 
@@ -46,6 +46,10 @@ my $TBWWWEMAIL	 = "@TBWWWEMAIL@";
 my $TBAUDITEMAIL = "@TBAUDITEMAIL@";
 my $NOREPLY      = "no-reply\@@OURDOMAIN@";
 my $SCRIPTNAME	 = "Unknown";
+my $UUIDGEN      = "@UUIDGEN@";
+my $MD5          = "@MD5@";
+
+my $debug = 0;
 
 # Exported.
 $SYSTEM_DEBUG = 0;
@@ -428,7 +432,7 @@ sub TBMakeLogname($)
 #
 sub TBGenSecretKey()
 {
-    my $key=`/bin/dd if=/dev/urandom count=128 bs=1 2> /dev/null | /sbin/md5`;
+    my $key=`/bin/dd if=/dev/urandom count=128 bs=1 2> /dev/null | $MD5`;
     chomp($key);
     return $key;
 }
@@ -480,6 +484,73 @@ sub TBForkCmd($;$) {
 
     # NOTREACHED
     return(0);
+}
+
+sub TBSetreuid($$) {
+    my ($uid,$euid) = @_;
+    if (!defined($uid) || !defined($euid)) {
+	return 1;
+    }
+
+    #
+    # Order is extremely important here.  FreeBSD doesn't seem to have the 
+    # restrictions that linux does.  On Linux, if you are attempting to raise
+    # privs from $EUID = $UID = N > 0, you *must* set $EUID first.  Similarly,
+    # if you are decreasing privs from $EUID = 0 and $UID = N, you must first
+    # set $UID = M, then $EUID = M.  If you set $UID = M after set $EUID = M,
+    # you lose your saved set id if the program is setuid, according to the 
+    # setuid man page on linux.  Now I don't actually know what perl does 
+    # behind the scenes in terms of syscalls when you set these vars, but I
+    # seem to have observed the man page behavior on linux, because I can't 
+    # raise privs to root ever again if I set $EUID = M, then $UID = M.
+    #
+    if ($EUID < $euid) {
+	TBSetuid($uid) && return 1;
+	TBSeteuid($euid) && return 1;
+    }
+    else {
+	TBSeteuid($euid) && return 1;
+	TBSetuid($uid) && return 1;
+    }
+    return 0;
+}
+
+sub TBSetuid($) {
+    my ($uid) = @_;
+    if (!defined($uid)) {
+	return 1;
+    }
+
+    $UID = $uid;
+    # check, we don't trust stuff
+    if ($UID != $uid) {
+	warn("*** TBSetuid: failed to setuid ($UID): $!");
+	return 1;
+    }
+    elsif ($debug) {
+	print STDERR "TBSetuid($uid) succeeded\n";
+    }
+
+    return 0;
+}
+
+sub TBSeteuid($) {
+    my ($euid) = @_;
+    if (!defined($euid)) {
+	return 1;
+    }
+
+    $EUID = $euid;
+    # check, we don't trust stuff
+    if ($EUID != $euid) {
+	warn("*** TBSeteuid: failed to seteuid ($EUID): $!");
+	return 1;
+    }
+    elsif ($debug) {
+	print STDERR "TBSeteuid($euid) succeeded\n";
+    }
+
+    return 0;
 }
 
 #
@@ -781,7 +852,7 @@ sub TBScriptUnlock()
 #
 sub NewUUID()
 {
-    my $uuid = `/usr/bin/uuidgen`;
+    my $uuid = `$UUIDGEN`;
 
     if ($uuid =~ /^(\w{8}\-\w{4}\-\w{4}\-\w{4}\-\w{12})$/) {
 	return $1;

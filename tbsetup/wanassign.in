@@ -29,6 +29,7 @@ my $wansolve    = "$TB/libexec/wanlinksolve";
 my $wansolveargs= "-m 4 -v";
 my $waninfo     = "$TB/libexec/wanlinkinfo";
 my $waninfoargs = "-b -m -p";
+my $NICE        = "@NICE@";
 
 #
 # Testbed Support libraries
@@ -598,7 +599,7 @@ sub runwansolver() {
 	# Start the solver. We will pipe in the stuff later.
 	# Tee does not work here. 
 	# 
-        exec("cat wanlinkinfo.input | nice $wansolve $wansolveargs");
+        exec("cat wanlinkinfo.input | $NICE $wansolve $wansolveargs");
 	#exec("cat /tmp/wansolved");
 	die("*** $0:\n".
 	    "    exec of $wansolve failed: $!\n");

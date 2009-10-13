@@ -53,4 +53,4 @@ my $cond = join(" or ",@list);
 
 my $result = DBQueryFatal("select * from interfaces where $cond");
 
-print $result->as_string();
+$result->dump_results(-1,"\n","\t| ");

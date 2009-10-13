@@ -313,7 +313,7 @@ while (($node,$building) = $result->fetchrow_array) {
 # Read the features table for each type.
 # 
 $result = DBQueryFatal("select type, feature, weight from node_type_features");
-while (my ($type, $feature, $weight) = $result->fetchrow()) {
+while (my ($type, $feature, $weight) = $result->fetchrow_array()) {
     push(@{$typemap{$type}->{'FEATURES'}}, "$feature:$weight");
 }
 
@@ -321,7 +321,7 @@ while (my ($type, $feature, $weight) = $result->fetchrow()) {
 # Read the auxtypes for each type.
 # 
 $result = DBQueryFatal("select auxtype,type from node_types_auxtypes");
-while (my ($auxtype,$type) = $result->fetchrow()) {
+while (my ($auxtype,$type) = $result->fetchrow_array()) {
     $typemap{$type}->{'AUXTYPES'}->{$auxtype} = 1;
     $auxtypemap{$auxtype} = $type;
 }
@@ -330,7 +330,7 @@ while (my ($auxtype,$type) = $result->fetchrow()) {
 # Read the features table for each individual node
 #
 $result = DBQueryFatal("select node_id, feature, weight from node_features");
-while (my ($node_id, $feature, $weight) = $result->fetchrow()) {
+while (my ($node_id, $feature, $weight) = $result->fetchrow_array()) {
     if (! defined($features{$node_id})) {
 	$features{$node_id} = ["$feature:$weight"];
 	next;
@@ -342,7 +342,7 @@ while (my ($node_id, $feature, $weight) = $result->fetchrow()) {
 # Read in the node_auxtypes table for each node.
 #
 $result = DBQueryFatal("select node_id, type, count from node_auxtypes");
-while (my ($node_id, $type, $count) = $result->fetchrow()) {
+while (my ($node_id, $type, $count) = $result->fetchrow_array()) {
     if (! defined($auxtypes{$node_id})) {
 	$auxtypes{$node_id} = ["$type:$count"];
 	next;
@@ -412,7 +412,7 @@ my %node_countries;
 my %node_latitudes;
 my %node_longitudes;
 $result = DBQueryFatal($osidquery);
-while (my ($osid,$type) = $result->fetchrow()) {
+while (my ($osid,$type) = $result->fetchrow_array()) {
     if ($node_type_osids{$type}) {
 	push @{$node_type_osids{$type}}, $osid;
     } else {
@@ -446,7 +446,7 @@ while (my ($subosid,$osid) = $result->fetchrow()) {
 #
 $result = DBQueryFatal("select osid from os_info where " .
     "nextosid is not null");
-while (my ($osid) = $result->fetchrow()) {
+while (my ($osid) = $result->fetchrow_array()) {
     #
     # Check to see if they were allowed to use the real OSID
     #
@@ -623,7 +623,7 @@ while (($node,$type,$physnode,$class,$issubnode,$def_boot_osid,$reserved,
 $result = DBQueryFatal("SELECT DISTINCT node_id1, node_id2 " .
                        "  FROM wires");
 my %connections = ();
-while (my ($node_id1, $node_id2) = $result->fetchrow()) {
+while (my ($node_id1, $node_id2) = $result->fetchrow_array()) {
     foreach my $nodes ([$node_id1, $node_id2], [$node_id2, $node_id1]) {
         my ($node1, $node2) = @$nodes;
         if ($connections{$node1}) {

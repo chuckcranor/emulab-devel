@@ -26,8 +26,9 @@ sub usage()
 	  "   -d = turn on debugging\n".
 	  "   -s = Select the source of the link to determine which pipe\n".
 	  "   -m = Modify the base experiment in addition to current state.\n".
-	  "Special PARAM:\n".
-	  " ENABLE=yes/no    - Bring the link up or down (or ENABLE=up/down)".
+	  "Special PARAMs:\n".
+	  " ENABLE=yes/no   - Bring the link up or down (or ENABLE=up/down)\n".
+	  " FLAGS=f1,f2,...,fn  - Special options for the remote node".
 	  "\n");
     # Web interface cares about this return value!
     exit(2);
@@ -83,6 +84,8 @@ my $eid    = shift(@ARGV);
 my $link   = shift(@ARGV);
 my $modify = 0;
 my $enable;		# Special case for bringing interface up/down.
+my $flags;              # Special case for supplying flags to this op that
+                        #   should not go into virt state in the db.
 my $srcvnode;
 my $member;		# For operating on virt_lans table (vname:port)
 my %physmap;		# For operating on the interface_settings table (pcXXX)
@@ -219,13 +222,19 @@ while (@ARGV) {
 	    if ($val eq "yes" || $val eq "up") {
 		$enable = "yes";
 	    }
-	    elsif ($val eq "no" || $val eq "no") {
+	    elsif ($val eq "no" || $val eq "down") {
 		$enable = "no";
 	    }
 	    else {
 		die("*** $0:\n".
 		    "    Should be ENABLE=yes/no or ENABLE=up/down!\n");
 	    }
+	    next;
+	}
+	# allow specification of flags that influence this action, but don't
+	# go in the database!
+	elsif ($key =~ /^flags$/i) {
+	    $flags = $val;
 	    next;
 	}
 
@@ -377,6 +386,9 @@ $inject_string .= " modify ";
 # Add in enable=yes/no first.
 if (defined($enable)) {
     $inject_string .= "enable=${enable} ";
+}
+if (defined($flags)) {
+    $inject_string .= "flags=${flags} ";
 }
 
 # Append the parameters.

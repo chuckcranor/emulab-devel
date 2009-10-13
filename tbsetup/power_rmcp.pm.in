@@ -82,7 +82,7 @@ sub rmcpctrl($$@) {
 	    ++$exitval;
 	}
 
-	while (my ($ttype,$role,$uid,$key) = $res->fetchrow()) {
+	while (my ($ttype,$role,$uid,$key) = $res->fetchrow_array()) {
 	    my $atref = [ $ttype,$role,$uid,$key ];
 
 	    if (!defined($rmcp_nodeinfo{$n})) {

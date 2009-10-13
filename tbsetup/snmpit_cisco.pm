@@ -24,6 +24,11 @@ use snmpit_lib;
 use Socket;
 use libtestbed;
 
+my $UNAME = "/usr/bin/uname";
+if (! -x $UNAME) {
+    $UNAME = "/bin/uname";
+}
+
 #
 # These are the commands that can be passed to the portControl function
 # below
@@ -485,7 +490,7 @@ sub vlanLock($) {
 	#
 	# Set the owner of the buffer to be the machine we're running on
 	#
-	my $me = `/usr/bin/uname -n`;
+	my $me = `$UNAME -n`;
 	chomp $me;
 	snmpitSetWarn($self->{SESS},[$BufferOwner,1,$me,"OCTETSTR"]);
 

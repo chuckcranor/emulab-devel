@@ -15,10 +15,10 @@ use POSIX ":sys_wait_h";
 #
 my $TBROOT          = "@prefix@";
 my $template_commit = "$TBROOT/bin/template_commit";
-my $RLOG	    = "/usr/bin/rlog";
-my $CO		    = "/usr/bin/co";
-my $CI		    = "/usr/bin/ci";
-my $RCS		    = "/usr/bin/rcs";
+my $RLOG	    = "@RLOG@";
+my $CO		    = "@CO@";
+my $CI		    = "@CI@";
+my $RCS		    = "@RCS@";
 my $logfile         = "/tmp/rtag_commit.$$";
 
 # un-taint path

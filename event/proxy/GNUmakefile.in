@@ -10,9 +10,9 @@ OBJDIR		= ../..
 SUBDIR		= event/proxy
 
 SYSTEM	       := $(shell uname -s)
-PROGRAMS	= evproxy proxytest eventping evproxyplab
-ifneq ($(SYSTEM),Linux)
-PROGRAMS       += 
+PROGRAMS	= evproxy proxytest eventping
+ifeq ($(SYSTEM),Linux)
+PROGRAMS       += evproxyplab
 endif
 
 include $(OBJDIR)/Makeconf
@@ -34,6 +34,10 @@ $(LIBEVENTDIR)/%.a:
 	@$(MAKE) -C $(LIBEVENTDIR) $(@F)
 
 CFLAGS   += -DDEBUG
+# gotta do this to pull in TIMEVAL_TO_TIMESPEC for proxyserver.c
+ifeq ($(SYSTEM),Linux)
+CFLAGS   += -D_GNU_SOURCE
+endif
 CFLAGS	 += -O2 -g -Wall
 CFLAGS   += -I. -I${OBJDIR} -I$(SRCDIR)/../lib -I$(TESTBED_SRCDIR)/lib/libtb
 CFLAGS   += -I/usr/local/include

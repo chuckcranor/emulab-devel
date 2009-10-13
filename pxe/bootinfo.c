@@ -137,7 +137,11 @@ bootinfo(struct in_addr ipaddr, char *node_id, struct boot_info *boot_info,
 /*
  * Simple cache to prevent dups when bootinfo packets get lost.
  */
+#if DB_VERSION_MAJOR > 3
+static DBM     *dbp;
+#else
 static DB      *dbp;
+#endif
 
 /*
  * Initialize an in-memory DB
@@ -145,7 +149,11 @@ static DB      *dbp;
 static int
 bicache_init(void)
 {
+#if DB_VERSION_MAJOR > 3
+	if ((dbp = dbm_open("/var/db/bootinfo.db", O_CREAT|O_TRUNC|O_RDWR, 664))
+#else
 	if ((dbp = dbopen(NULL, O_CREAT|O_TRUNC|O_RDWR, 664, DB_HASH, NULL))
+#endif
 	    == NULL) {
 		pfatal("failed to initialize the bootinfo DBM");
 		return -1;
@@ -163,7 +171,11 @@ bicache_init(void)
 static int
 bicache_needevent(struct in_addr ipaddr)
 {
+#if DB_VERSION_MAJOR > 3
+	datum   key, item;
+#else
 	DBT	key, item;
+#endif
 	time_t  tt = time(NULL);
 	int	rval = 1, r;
 
@@ -171,20 +183,36 @@ bicache_needevent(struct in_addr ipaddr)
 	if (!dbp)
 		return 1;
 
+#if DB_VERSION_MAJOR > 3
+	key.dptr = (char *) &ipaddr;
+	key.dsize = sizeof(ipaddr);
+#else
 	key.data = (void *) &ipaddr;
 	key.size = sizeof(ipaddr);
+#endif
 
 	/*
 	 * First find current value.
 	 */
+#if DB_VERSION_MAJOR > 3
+	item = dbm_fetch(dbp,key);
+	if (item.dptr == NULL) {
+		r = dbm_error(dbp);
+#else
 	if ((r = (dbp->get)(dbp, &key, &item, 0)) != 0) {
+#endif
 		if (r == -1) {
 			errorc("Could not retrieve entry from DBM for %s\n",
 			       inet_ntoa(ipaddr));
 		}
 	}
+#if DB_VERSION_MAJOR > 3
+	if (item.dptr) {
+		time_t	oldtt = *((time_t *)item.dptr);
+#else
 	if (r == 0) {
 		time_t	oldtt = *((time_t *)item.data);
+#endif
 
 		if (debug) {
 			info("Timestamps: old:%ld new:%ld\n", oldtt, tt);
@@ -197,10 +225,19 @@ bicache_needevent(struct in_addr ipaddr)
 		}
 	}
 	if (rval) {
+#if DB_VERSION_MAJOR > 3
+		item.dptr = (char *) &tt;
+		item.dsize = sizeof(tt);
+#else
 		item.data = (void *) &tt;
 		item.size = sizeof(tt);
+#endif
 
+#if DB_VERSION_MAJOR > 3
+		if (dbm_store(dbp, key, item, DBM_REPLACE) != 0) {
+#else
 		if ((dbp->put)(dbp, &key, &item, 0) != 0) {
+#endif
 			errorc("Could not insert DBM entry for %s\n",
 			       inet_ntoa(ipaddr));
 		}

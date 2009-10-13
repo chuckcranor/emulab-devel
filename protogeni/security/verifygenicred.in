@@ -9,6 +9,7 @@ use English;
 use Getopt::Std;
 use XML::LibXML;
 use Data::Dumper;
+use Cwd 'abs_path';
 
 #
 # Verify a GENI credential.
@@ -123,7 +124,7 @@ else {
     fatal("Tainted filename: $xmlfile");
 }
 # Use realpath to resolve any symlinks.
-my $translated = `realpath $xmlfile`;
+my $translated = abs_path($xmlfile);
 if ($translated =~ /^(\/tmp\/[-\w\.\/]+)$/) {
     $xmlfile = $1;
 }

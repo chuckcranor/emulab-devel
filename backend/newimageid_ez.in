@@ -9,6 +9,7 @@ use strict;
 use Getopt::Std;
 use XML::Simple;
 use Data::Dumper;
+use Cwd 'abs_path';
 
 #
 # Back-end script to create new Image descriptors (EZ Form.)
@@ -104,7 +105,7 @@ else {
     }
 
     # Use realpath to resolve any symlinks.
-    my $translated = `realpath $xmlfile`;
+    my $translated = abs_path($xmlfile);
     if ($translated =~ /^(\/tmp\/[-\w\.\/]+)$/) {
 	$xmlfile = $1;
     }

@@ -110,7 +110,7 @@ if ($query_result->numrows) {
 	  "---------------------- ----\n";
     
     while (my ($pid,$eid,$creator,$swapped,$count,$seconds) =
-	   $query_result->fetchrow()) {
+	   $query_result->fetchrow_array()) {
 	next
 	    if ($count == 0);
 	my $hours = int($seconds / (60 * 60));
@@ -151,7 +151,7 @@ if ($query_result->numrows) {
 	  "---------------------- ----\n";
     
     while (my ($pid,$eid,$creator,$locked,$count,$seconds) =
-	   $query_result->fetchrow()) {
+	   $query_result->fetchrow_array()) {
 	next
 	    if ($count == 0);
 	my $hours = int($seconds / (60 * 60));
@@ -186,7 +186,7 @@ if ($today == 7) {
 	    "---------------------- -----\n";
     
 	while (my ($exptidx,$pid,$eid,$swapin_last,$wlans) =
-	       $query_result->fetchrow()) {
+	       $query_result->fetchrow_array()) {
 
 	    printf("%-10s %-12s %-14s %-22s %-5s\n",
 		   $exptidx, $pid, $eid, $swapin_last, $wlans);
@@ -215,7 +215,7 @@ if ($query_result->numrows) {
     print "\n";
     print "'Free' nodes in an unknown state:\n";
     
-    while (my ($node_id) = $query_result->fetchrow()) {
+    while (my ($node_id) = $query_result->fetchrow_array()) {
 	print "$node_id ";
     }
     print "\n";
@@ -243,7 +243,7 @@ if ($query_result->numrows) {
     print "\n";
     print "Local nodes stuck in $DPID/$DEID:\n";
     
-    while (my ($node_id) = $query_result->fetchrow()) {
+    while (my ($node_id) = $query_result->fetchrow_array()) {
 	print "$node_id ";
     }
     print "\n";
@@ -268,7 +268,7 @@ if ($query_result->numrows) {
     
     printf("%-16s %-16s %-16s\n", "PID", "Type", "Count");
     print "---------------- ---------------- ---------------- \n";
-    while (my ($pid,$type,$count) = $query_result->fetchrow()) {
+    while (my ($pid,$type,$count) = $query_result->fetchrow_array()) {
 	printf("%-16s %-16s %-16s\n", $pid, $type, $count);
     }
     print "\n";
@@ -293,7 +293,7 @@ if ($query_result->numrows) {
     printf("%-16s %-16s %-16s %-22s\n", "Object", "Type", "State", "Start");
     print "---------------- ---------------- ---------------- ".
 	"--------------------\n";
-    while (my ($object,$type,$state,$start) = $query_result->fetchrow()) {
+    while (my ($object,$type,$state,$start) = $query_result->fetchrow_array()) {
 	printf("%-16s %-16s %-16s %-20s\n", $object, $type, $state, $start);
     }
     print "\n";
@@ -323,7 +323,7 @@ if ($query_result->numrows) {
 	  "---------------------- -------\n";
     
     while (my ($exptidx,$idx,$pid,$eid,$creator,$swapin_time) =
-	   $query_result->fetchrow()) {
+	   $query_result->fetchrow_array()) {
 
 	printf("%-12s %-12s %-8s %-12s %-22s %s\n",
 	       $pid, $eid, $exptidx, $creator, $swapin_time, $idx);
@@ -342,7 +342,7 @@ if ($ISOLATEADMINS) {
 
     my @badlist = ();
 
-    while (my ($pid_idx) = $query_result->fetchrow()) {
+    while (my ($pid_idx) = $query_result->fetchrow_array()) {
 	my $project = Project->Lookup($pid_idx);
 	fatal("Could not look up project $pid_idx in DB")
 	    if (!defined($project));

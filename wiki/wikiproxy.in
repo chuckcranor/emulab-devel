@@ -27,24 +27,6 @@ my $debug   = 0;
 #
 my $TB       = "@prefix@";
 my $TBOPS    = "@TBOPSEMAIL@";
-
-# Should be configure variables.
-my $WIKIDIR  = "/usr/local/www/data/twiki";
-
-# And other stuff.
-my $USERTEMPLATE = "$TB/lib/wiki/usertemplate";
-my $HOMETEMPLATE = "$TB/lib/wiki/webhometemplate";
-my $WIKIDATADIR  = "$WIKIDIR/data";
-my $WIKIUSERDIR  = "$WIKIDATADIR/Main";
-my $WIKIGROUPDIR = "$WIKIDATADIR/Main";
-my $WIKIARCHIVE  = "$WIKIDATADIR/_archive";
-my $WIKIPASSWD   = "$WIKIDIR/data/.htpasswd";
-my $USERMAPDB    = "$WIKIDIR/data/.usermap";
-my $COOKIEDIR    = "/var/db/cgisess";
-my $WIKIUSER     = "nobody";
-my $WIKIGROUP    = "nobody";
-my $CI		 = "ci";
-my $TAR		 = "tar";
     
 #
 # Turn off line buffering on output
@@ -89,6 +71,28 @@ if ($UID != 0) {
 #
 use lib "@prefix@/lib";
 use libtestbed;
+
+use EmulabSys;
+
+my $sys = EmulabSys->get();
+
+# Should be configure variables.
+my $WIKIDIR  = $sys->def("WIKIDIR");
+
+# And other stuff.
+my $USERTEMPLATE = "$TB/lib/wiki/usertemplate";
+my $HOMETEMPLATE = "$TB/lib/wiki/webhometemplate";
+my $WIKIDATADIR  = "$WIKIDIR/data";
+my $WIKIUSERDIR  = "$WIKIDATADIR/Main";
+my $WIKIGROUPDIR = "$WIKIDATADIR/Main";
+my $WIKIARCHIVE  = "$WIKIDATADIR/_archive";
+my $WIKIPASSWD   = "$WIKIDIR/data/.htpasswd";
+my $USERMAPDB    = "$WIKIDIR/data/.usermap";
+my $COOKIEDIR    = "/var/db/cgisess";
+my $WIKIUSER     = "nobody";
+my $WIKIGROUP    = "nobody";
+my $CI		 = "@CI@";
+my $TAR		 = "@TAR@";
 
 # Version of FreeBSD.
 my $FBSD_VERSION = 4;
@@ -475,7 +479,7 @@ sub AddWikiProject(@)
     system("chown ${WIKIUSER}:${WIKIGROUP} *.txt")
 	== 0 or fatal("Could not chown *.txt to ${WIKIUSER}:${WIKIGROUP}");
 
-    system("sudo -u nobody ci -u '-mInitial Revision by wikiproxy:\n".
+    system("sudo -n -u nobody ci -u '-mInitial Revision by wikiproxy:\n".
 	   "AddWikiProject $pid $wikiname' ".
 	   "      '-t-Initial Revision by wikiproxy' *.txt") == 0
         or fatal("Could not create new RCS control files.");
@@ -906,7 +910,7 @@ sub CI($$) {
 
     my $locking = ($FBSD_VERSION == 4 ? "-l" : "-u");
 
-    my $cmd = "sudo -u nobody ci -u '-mRevision by wikiproxy:\n$comment'".
+    my $cmd = "sudo -n -u nobody ci -u '-mRevision by wikiproxy:\n$comment'".
 	"      '-t-Revision by wikiproxy' $file 2>&1";
     my $output = `$cmd`;
     if ($? && $output =~ /no lock set by/ ) {
@@ -914,16 +918,29 @@ sub CI($$) {
 	print "'$unlockcmd'\n"
 	    if ($debug);
 	my $output = `$unlockcmd`;
-	return -1
-	    if ($?);
+	if ($?) {
+	    print "CI '$unlockcmd' failed with output:\n$output";
+	    return -1;
+	}
 	my $lockcmd = "rcs -l $file";
 	print "'$lockcmd'\n"
 	    if ($debug);
-	system("sudo -u nobody $lockcmd");
-	return -1
-	    if ($?);
-        return system($cmd);	
+	system("sudo -n -u nobody $lockcmd");
+	if ($?) {
+	    print "CI 'sudo -n -u nobody $lockcmd' failed with error: $?\n";
+	    return -1;
+	}
+	system($cmd);
+	if ($?) {
+	    print "CI '$cmd' failed with error: $?\n";
+	}
+	return $?;
     }
+    else {
+	print "CI failed with output:\n$output"
+	    if ($?);
+    }
+
     return $? >> 8;
 }
 

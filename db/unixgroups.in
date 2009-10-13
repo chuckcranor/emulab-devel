@@ -61,7 +61,7 @@ if ($opt{p}) {
     #
     my %members = ();
     my $result = DBQueryFatal("SELECT gid,uid FROM unixgroup_membership");
-    while (my ($gid,$uid) = $result->fetchrow() ) {
+    while (my ($gid,$uid) = $result->fetchrow_array() ) {
 	push @{$members{$gid}},$uid;
     }
 

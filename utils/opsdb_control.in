@@ -767,7 +767,7 @@ sub DoOpsStuff($;$)
     my ($command);
     
     # For ssh.
-    $UID = $EUID;
+    TBSetreuid(0,0);
 
     $command = "$SSH -host $CONTROL $OPSDBPROXY $flag $remote_command";
 
@@ -795,7 +795,7 @@ sub DoOpsStuff($;$)
 	    $retval = $? >> 8;
 	}
     }
-    $EUID = $SAVEUID;
+    TBSetreuid($SAVEUID,$SAVEUID);
     
     return $retval;
 }
@@ -837,6 +837,7 @@ sub Initialize()
 		     "order by u.admin");
 
     while (my ($uid) = $users_result->fetchrow_array()) {
+	push @uids,$uid;
 	AddUser(($uid)) == 0
 	    or fatal("Could not add user $uid to DB on $CONTROL");
     }
@@ -860,11 +861,6 @@ sub Initialize()
     #
     # Now go back to the users list and set the access lists
     #
-    $users_result->dataseek(0);
-    
-    while (my ($uid) = $users_result->fetchrow_array()) {
-	push(@uids, $uid);
-    }
     SetGroups(@uids) == 0
 	or fatal("Could not set groups for @uids!");
     

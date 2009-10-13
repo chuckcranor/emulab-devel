@@ -12,7 +12,7 @@
 #
 my $TB         = "@prefix@";
 my $ELABINELAB = @ELABINELAB@;
-my $KILL       = "/bin/kill";
+my $KILL       = "@KILL@";
 
 use lib '@prefix@/lib';
 use libdb;

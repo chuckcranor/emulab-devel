@@ -41,13 +41,13 @@ my $TBLOGS	= "@TBLOGSEMAIL@";
 my $TBDOCBASE	= "@TBDOCBASE@";
 my $TBBASE	= "@TBBASE@";
 my $CONTROL	= "@USERNODE@";
+my $DOT         = "@DOT@";
 
 # Protos
 sub ParseArgs();
 sub SetParent($@);
 
 # Locals
-my $DOT         = "/usr/local/bin/dot";
 my %versions    = ();
 
 #

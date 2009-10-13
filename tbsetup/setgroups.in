@@ -53,7 +53,6 @@ my $SETBUGDBGROUPS= "$TB/sbin/setbugdbgroups";
 my $OPSDBCONTROL  = "$TB/sbin/opsdb_control";
 
 my $SSH     = "$TB/bin/sshtb";
-my $USERMOD = "/usr/sbin/pw usermod";
 my $SAVEUID = $UID;
 
 my $dbuid;
@@ -87,6 +86,9 @@ use libaudit;
 use libdb;
 use libtestbed;
 use User;
+use EmulabSys;
+
+my $sys = EmulabSys->get();
 
 #
 # We do not want to run this script unless its the real version.
@@ -346,10 +348,10 @@ foreach my $uid (@userlist) {
     }
 
     if ($grouplist) {
-	$groupargument = "-G $grouplist";
+	$groupargument = "$grouplist";
     }
     else {
-	$groupargument = "-G \"\"";
+	$groupargument = "";
     }
 
     print "Updating user $uid record on local node.\n";
@@ -357,15 +359,15 @@ foreach my $uid (@userlist) {
     #
     # MAKE SURE not to update anything else!
     #
-    if (system("$USERMOD $uid -g $project $groupargument")) {
+    if ($sys->userMod($uid,undef,undef,"$project,$groupargument")) {
 	fatal("Could not modify user $uid on local node.");
     }
 
     print "Updating user $uid record on $control_node.\n";
 
     if ($control_node ne $BOSSNODE) {
-        if (system("$SSH -host $control_node ".
-	           "'$USERMOD $uid -g $project $groupargument'")) {
+        if ($sys->userMod($uid,undef,undef,"$project,$groupargument",
+			  $control_node)) {
 	    fatal("Could not modify user $uid record on $control_node.");
 	}
     }

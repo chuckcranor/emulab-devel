@@ -116,7 +116,11 @@ main(int argc, char **argv)
 		exit(1);
 	}
 	err = 1;
+#ifdef __linux__
+	if (setsockopt(sock, SOL_SOCKET, SO_REUSEADDR,
+#else
 	if (setsockopt(sock, SOL_SOCKET, SO_REUSEPORT,
+#endif
 		       (char *)&err, sizeof(err)) < 0)
 		errorc("setsockopt(SO_REUSEADDR)");
 	

@@ -40,6 +40,14 @@ OPS_SCRIPTS += pelab.sh
 endif
 
 #
+# Change for Linux, of course...
+#
+ifeq ($(SYSTEM),Linux)
+RC_SCRIPTS = testbed testbedprep
+OPS_SCRIPTS = 
+endif
+
+#
 # Force dependencies to make sure configure regenerates if the .in file
 # is changed.
 # 

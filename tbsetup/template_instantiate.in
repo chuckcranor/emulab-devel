@@ -12,6 +12,7 @@ use POSIX qw(strftime);
 use Errno qw(EDQUOT);
 use XML::Simple;
 use Data::Dumper;
+use Cwd 'abs_path';
 
 #
 # Create a new experiment template. 
@@ -101,8 +102,8 @@ my $swapin      = "$TB/bin/template_swapin";
 my $endexp      = "$TB/bin/endexp";
 my $dbcontrol   = "$TB/sbin/opsdb_control";
 my $archcontrol = "$TB/bin/archive_control";
-my $CVSBIN      = "/usr/bin/cvs";
-my $RLOG        = "/usr/bin/rlog";
+my $CVSBIN      = "@CVS@";
+my $RLOG        = "@RLOG@";
 
 # Protos
 sub ParseArgs();
@@ -722,7 +723,7 @@ sub ParseArgs()
 	#
 	# Use realpath to resolve any symlinks.
 	#
-	my $translated = `realpath $inputfile`;
+	my $translated = abs_path($inputfile);
 	if ($translated =~ /^([-\w\.\/]+)$/) {
 	    $inputfile = $1;
 	}

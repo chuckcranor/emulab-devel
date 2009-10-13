@@ -43,7 +43,6 @@ my $TBWWW       = "@TBWWW@";
 my $SSH         = "$TB/bin/sshtb";
 my $ADDMMLIST   = "$TB/sbin/addmmlist";
 my $OPSDBCONTROL= "$TB/sbin/opsdb_control";
-my $GROUPADD    = "/usr/sbin/pw groupadd";
 my @DIRLIST     = ("exp", "images", "logs", "tarfiles", "rpms", "tiplogs");
 my $SAVEUID     = $UID;
 
@@ -75,6 +74,9 @@ use libdb;
 use libtestbed;
 use User;
 use Group;
+use EmulabSys;
+
+my $sys = EmulabSys->get();
 
 # Defined in libtestbed.
 my $PROJROOT    = PROJROOT();
@@ -162,10 +164,10 @@ my $grouplink = "$PROJROOT/$pid/groups/$gid";
 # no matches are found.
 #
 if (system("egrep -q -s '^${unix_name}:' /etc/group")) {
-    print "Adding group $unix_name to local node ...\n";
+    print "Adding group $unix_name ($unix_gid) to local node ...\n";
 
-    if (system("$GROUPADD $unix_name -g $unix_gid")) {
-	fatal("Could not add $unix_gid ($unix_gid) to local node!\n");
+    if ($sys->groupAdd("$unix_name","$unix_gid")) {
+	fatal("Could not add $unix_name ($unix_gid) to local node!\n");
     }
 }
 
@@ -182,8 +184,7 @@ if ($control_node ne $BOSSNODE) {
 	       "egrep -q -s '^${unix_name}:' /etc/group")) {
 	print "Adding group $unix_name to $control_node.\n";
 
-	if (system("$SSH -host $control_node ".
-		   "$GROUPADD $unix_name -g $unix_gid")) {
+	if ($sys->groupAdd("$unix_name","$unix_gid","$control_node")) {
 	    fatal("Could not add $unix_name ($unix_gid) to $control_node!\n");
 	}
     }
@@ -197,8 +198,7 @@ foreach my $tipserver ( TBTipServers() ) {
 	       "egrep -q -s '^${unix_name}:' /etc/group")) {
 	print "Adding group $unix_name to $tipserver\n";
 
-	if (system("$SSH -host $tipserver ".
-		   "$GROUPADD $unix_name -g $unix_gid")) {
+	if ($sys->groupAdd("$unix_name","$unix_gid","$tipserver")) {
 	    fatal("Could not add $unix_name ($unix_gid) to $tipserver!\n");
 	}
     }

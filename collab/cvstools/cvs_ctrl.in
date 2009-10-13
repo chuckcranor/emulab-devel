@@ -113,7 +113,7 @@ foreach my $arg (@ARGV) {
 #
 # For ssh.
 #
-$UID = $EUID;
+TBSetuid($EUID);
 
 #print "$SSH @args\n";
 

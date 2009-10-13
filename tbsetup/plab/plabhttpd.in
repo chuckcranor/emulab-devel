@@ -53,7 +53,7 @@ if (!scalar(@nodes)) {
 		     "\" AND r.eid=\"" . NODEDEAD_EID .  "\") " . 
 		     "order by n.node_id");
 
-    while (my ($node) = $query_result->fetchrow()) {
+    while (my ($node) = $query_result->fetchrow_array()) {
 	push @nodes, $node;
     }
 }

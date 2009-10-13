@@ -76,7 +76,7 @@ $TBLIBEXEC_DIR	= "$TBDIR"."libexec/";
 $TBSUEXEC_PATH  = "$TBLIBEXEC_DIR/suexec";
 $TBCHKPASS_PATH = "$TBLIBEXEC_DIR/checkpass";
 $TBCSLOGINS     = "$TBETC_DIR/cslogins";
-$UUIDGEN_PATH   = "/usr/bin/uuidgen";
+$UUIDGEN_PATH   = "@UUIDGEN@";
 
 #
 # Hardcoded check against $WWWHOST, to prevent anyone from accidentally setting
@@ -486,7 +486,7 @@ function CHECKPASSWORD($uid, $password, $name, $email, &$error)
     $password = escapeshellarg($password);
     $stuff    = escapeshellarg("$name:$email");
     
-    $mypipe = popen("$TBCHKPASS_PATH $password $uid $stuff", "w+");
+    $mypipe = popen("$TBCHKPASS_PATH $password $uid $stuff", "r");
     
     if ($mypipe) { 
         $retval=fgets($mypipe, 1024);

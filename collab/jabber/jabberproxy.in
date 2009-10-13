@@ -36,9 +36,6 @@ my $TBOPS       = "@TBOPSEMAIL@";
 my $OURDOMAIN   = "@OURDOMAIN@";
 my $REALM	= "jabber.${OURDOMAIN}";
 my $MUCHOST	= "conference.${OURDOMAIN}";
-my $MUCDIR      = "/var/jabberd/muc";
-my $MUCROOMS    = "$MUCDIR/rooms.xml";
-my $JABBERCONF  = "/usr/local/etc/jabberd/sm.xml";
 
 #
 # Turn off line buffering on output
@@ -66,6 +63,13 @@ if ($UID != 0) {
 use lib "@prefix@/lib";
 use libtestbed;
 use libtbdb;
+use EmulabSys;
+
+my $sys = EmulabSys->get();
+
+my $MUCDIR      = $sys->def("MUCDIR");
+my $MUCROOMS    = $sys->def("MUCROOMS");
+my $JABBERCONF  = $sys->def("JABBERCONF");
 
 # Locals
 my $dbname;
@@ -80,6 +84,9 @@ sub AddGroup(@);
 sub DelGroup(@);
 sub AddBuddies(@);
 sub DelBuddies(@);
+sub AddChat(@);
+sub DelChat(@);
+sub SetChatMembers(@);
 sub fatal($);
 
 #

@@ -71,7 +71,7 @@ my $ipod	= "$TB/sbin/apod";
 my $vnodesetup	= "$TB/sbin/vnode_setup";
 my $bisend      = "$TB/sbin/bootinfosend";
 my $logfile	= "$TB/log/power.log";
-my $ping	= "/sbin/ping";
+my $ping	= "@PING@";
 my $reboot      = "$TB/bin/node_reboot";
 
 # Locals

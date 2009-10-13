@@ -3,7 +3,7 @@
 <!--
     XML NS template for making a Private Planetlab
 -->
-<nstemplate name="Create a Private PlanetLab">
+<nstemplate name="PlanetLab in Emulab">
     <description>
         This template is for creating a private PlanetLab.
         The only thing you may want to edit is the number of nodes.

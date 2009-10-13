@@ -6,6 +6,8 @@
 #
 use English;
 use File::Basename;
+use EmulabSys;
+use Cwd 'abs_path';
 
 #
 # Forceably chown a directory hierarchy to the real uid of the invoker.
@@ -23,7 +25,9 @@ my $TB			= "@prefix@";
 my $FSDIR_PROJ		= "@FSDIR_PROJ@";
 my $FSDIR_GROUPS	= "@FSDIR_GROUPS@";
 my $ARCHIVE_DIR		= "/usr/testbed/exparchive";
-my $CHOWN               = "/usr/sbin/chown";
+
+my $sys                 = EmulabSys->get();
+my $CHOWN               = $sys->def("CHOWN");
 
 use lib "@prefix@/lib";
 use libdb;
@@ -71,7 +75,7 @@ else {
     die("*** Tainted source: $pathname\n");
 }
 
-$pathname = `realpath $pathname`;
+$pathname = abs_path($pathname);
 
 if ($pathname =~ /^([-\w\/.]+)$/) {
     $pathname = $1;

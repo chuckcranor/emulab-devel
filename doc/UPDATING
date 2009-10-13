@@ -18,6 +18,17 @@ Note that some instructions may have steps that need to occur at a few
 different points in the install process - these are marked with the
 earliest time one of the steps needs to occur.
 
+linux-port: Before install.
+
+          Create the file /usr/local/mailman/emulab-config.py with contents
+
+              #
+	      # Emulab python tweaks for ./bin/config_list
+	      #
+	      generic_nonmember_action = 2
+
+          XXXX more?
+
 20090121: Before install but after reconfigure and rebuild.
 
 	  There are some functions that need to be installed on boss

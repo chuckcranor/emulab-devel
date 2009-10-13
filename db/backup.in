@@ -31,10 +31,11 @@ my $TBOPS       = "@TBOPSEMAIL@";
 
 my $BACKUPDIR	= "$TB/backup";
 my $LOGDIR	= "$TB/log/mysql";
-my $HOTCOPY     = "/usr/local/bin/mysqlhotcopy";
-my $MYSQLDUMP   = "/usr/local/bin/mysqldump";
+my $HOTCOPY     = "@MYSQLHOTCOPY@";
+my $MYSQLDUMP   = "@MYSQLDUMP@";
 my $SETSITEVAR  = "$TB/sbin/setsitevar";
-my $TAR         = "/usr/bin/tar";
+my $TAR         = "@TAR@";
+my $NICE        = "@NICE@";
 my $BASE	= "base";
 my $UPD		= "update";
 my $SLOW	= "slowqueries";
@@ -184,7 +185,7 @@ else {
     #
     # Compress the files.
     # 
-    if (system("nice gzip $backname")) {
+    if (system("$NICE gzip $backname")) {
 	fatal("gzip $backname failed!");
     }
 }
@@ -198,15 +199,15 @@ if (! chdir($LOGDIR)) {
     fatal("Could not chdir to $LOGDIR: $!");
 }
 
-if (-e "$basename" && system("nice gzip $basename")) {
+if (-e "$basename" && system("$NICE gzip $basename")) {
     fatal("gzip $basename failed!");
 }
 
-if (-e "$updname" && system("nice gzip $updname")) {
+if (-e "$updname" && system("$NICE gzip $updname")) {
     fatal("gzip $updname failed!");
 }
 
-if (-e "$slowname" && system("nice gzip $slowname")) {
+if (-e "$slowname" && system("$NICE gzip $slowname")) {
     fatal("gzip $slowname failed!");
 }
 

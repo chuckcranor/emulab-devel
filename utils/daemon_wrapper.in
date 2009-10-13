@@ -10,7 +10,7 @@ use POSIX qw(setsid);
 
 sub usage()
 {
-    print STDERR "Usage: daemon_wrapper [-i interval] [-p pidfile] [-l logfile] [-n name] command args ...\n";
+    print STDERR "Usage: daemon_watcher [-i interval] [-p pidfile] [-l logfile] [-n name] command args ...\n";
     exit(1);
 }
 my $optlist  = "di:p:l:n:";
@@ -75,9 +75,9 @@ if (!defined($daemon)) {
 }
 $cmdargs = join(' ', @ARGV);
 
-$pidfile = "/var/run/${daemon}_wrapper.pid"
+$pidfile = "/var/run/${daemon}_watcher.pid"
     if (!defined($pidfile));
-$logfile = "/var/log/${daemon}_wrapper.log"
+$logfile = "/var/log/${daemon}_watcher.log"
     if (!defined($logfile));
 
 # Only root.
@@ -105,7 +105,7 @@ sub Pcleanup($)
     }
     unlink $pidfile;
     print TBTimeStampWithDate(),
-          " [$PID]: wrapper exiting\n";
+          " [$PID]: watcher exiting\n";
     exit(0);
 }
 
@@ -129,7 +129,7 @@ $SIG{TERM} = \&Pcleanup;
 setsid();
 
 print TBTimeStampWithDate(),
-      " [$PID]: wrapper starting '$cmd",
+      " [$PID]: watcher starting '$cmd",
       $cmdargs ? " $cmdargs" : "", "'\n";
 
 # Loop forever, restarting the daemon if it ever dies.

@@ -6,6 +6,7 @@
 #
 use English;
 use Getopt::Std;
+use EmulabSys;
 
 sub fatal($);
 
@@ -28,11 +29,14 @@ my $output;
 #
 my $TB		= "@prefix@";
 my $TBOPS       = "@TBOPSEMAIL@";
-my $CVS		= "/usr/bin/cvs";
-##my $TAR	= "/usr/bin/gtar --ignore-failed-read";
-my $TAR		= "/usr/bin/tar";
-my $GZIP	= "/usr/bin/gzip";
 my $CVSREPO     = "/usr/testbed/CVS";
+
+my $sys         = EmulabSys->get();
+
+my $CVS		= $sys->def("CVS");
+##my $TAR	= "/usr/bin/gtar --ignore-failed-read";
+my $TAR		= $sys->def("TAR");
+my $GZIP	= $sys->def("GZIP");
 
 # un-taint path
 $ENV{'PATH'} = '/bin:/usr/bin:/usr/local/bin:/usr/site/bin';

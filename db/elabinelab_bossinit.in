@@ -38,6 +38,9 @@ $| = 1;
 use lib "@prefix@/lib";
 use libdb;
 use libtestbed;
+use EmulabSys;
+
+my $sys = EmulabSys->get();
 
 # Defined in libdb ...
 my $TBOPSPID    = TBOPSPID();
@@ -108,10 +111,12 @@ my $users_result =
     DBQueryFatal("select distinct u.uid,u.admin from group_membership as m ".
 		 "left join users as u on u.uid_idx=m.uid_idx ".
 		 "where u.status='" . USERSTATUS_ACTIVE() . "'");
+my @users_rows = ();
 while (my ($uid,$admin) = $users_result->fetchrow_array()) {
     next
 	if ($uid eq "elabman");
-    
+    push @users_rows, [ $uid,$admin ];
+
     mysystem("$TB/sbin/tbacct -b add $uid");
     if ($admin) {
 	# Add admin users to group wheel for convenience.
@@ -121,7 +126,9 @@ while (my ($uid,$admin) = $users_result->fetchrow_array()) {
     if ($admin) {
 	# Flip back to root for pw command.
 	$EUID = 0;
-	mysystem("pw usermod -n $uid -s /bin/tcsh");
+	if ($sys->userMod($uid,'/bin/tcsh',undef,undef)) {
+	    fatal("Could not modify user $uid");
+	}
 	$EUID = $UID;
     }
 }
@@ -138,8 +145,10 @@ while (my ($gid_idx) = $query_result->fetchrow_array()) {
 #
 # Now do a setgroups.
 #
-$users_result->dataseek(0);
-while (my ($uid,$admin) = $users_result->fetchrow_array()) {
+# yes, this is ugly because DBI-style mysql dbd does not support a cursor
+# abstraction!
+foreach my $users_row_ref (@users_rows) {
+    my ($uid,$admin) = @$users_row_ref;
     next
 	if ($uid eq "elabman");
     

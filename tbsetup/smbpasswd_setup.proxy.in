@@ -34,7 +34,8 @@ else {
 #
 my $WINSUPPORT  = @WINSUPPORT@;
 
-my $SMBPASSWD	= "/usr/local/bin/smbpasswd";
+# XXX should convert to EmulabSys
+my $SMBPASSWD	= "@SMBPASSWD@";
 
 #
 # We don't want to run this script unless its the real version (or debugging.)

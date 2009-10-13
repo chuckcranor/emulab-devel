@@ -32,28 +32,27 @@ my $exportsnew;
 my $exportsback;
 my $exportshead;
 my $exportstail;
-my $pidfile;
 my $daemon;
 
 # Are we modifying the Samba config file or the NFS exports?
 if (defined($opts{'S'})) {
-    $etcdir      = "/usr/local/etc";
+    $etcdir      = "@SAMBA_ETCDIR@";
     $exports	 = "$etcdir/smb.conf";
     $exportsnew  = "$etcdir/smb.conf.new";
     $exportsback = "$etcdir/smb.conf.backup";
     $exportshead = "$etcdir/smb.conf.head";
     $exportstail = "$etcdir/smb.conf.tail";
-    $pidfile     = "/var/run/smbd.pid";
     $daemon      = "smbd";
 }
 else {
+    # until we move off unix-like systems entirely, /etc/exports should always
+    # be the place
     $etcdir      = "/etc";
     $exports	 = "$etcdir/exports";
     $exportsnew  = "$etcdir/exports.new";
     $exportsback = "$etcdir/exports.backup";
     $exportshead = "$etcdir/exports.head";
     $exportstail = "$etcdir/exports.tail";
-    $pidfile     = "/var/run/mountd.pid";
     $daemon      = "mountd";
 }
 
@@ -78,6 +77,9 @@ $| = 1; #Turn off line buffering on output
 # 
 use lib "@prefix@/lib";
 use libtestbed;
+use EmulabSys;
+
+my $sys = EmulabSys->get();
 
 #
 # Take our input and write it to the tail file.
@@ -131,14 +133,8 @@ chmod(0444, $exports);
 #
 # I have little faith in HUPing mountd, but do it anyway.
 #
-my $daemonpid = `cat $pidfile`;
-$daemonpid =~ s/\n//;
-# untaint
-if ($daemonpid =~ /^([-\@\w.]+)$/) {
-    $daemonpid = $1;
-}
-if (kill('HUP', $daemonpid) == 0) {
-    fatal("Could not kill(HUP) process $daemonpid ($daemon): $!");
+if ($sys->restartDaemon($daemon)) {
+    fatal("Could not restart daemon $daemon: " . $sys->getError());
 }
 
 #

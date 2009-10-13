@@ -228,7 +228,7 @@ close(CONF);
 if (!$TESTMODE) {
     my $optarg = ($booting ? "-m" : "");
     
-    $UID = 0;
+    TBSetuid(0);
     
     system("$SSH $PROG $optarg < $tailfile") == 0 or
 	fatal("Failed: $SSH $PROG < $tailfile: $?");

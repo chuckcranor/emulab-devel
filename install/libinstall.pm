@@ -24,13 +24,21 @@ my $MAGIC_STRING = "testbed installation process";
 my $MAGIC_TESTBED_START = "The follwing lines were added by the $MAGIC_STRING";
 my $MAGIC_TESTBED_END = "End of testbed-added configuration";
 
+my $MD5 = "/sbin/md5";
+if ( ! -e $MD5 && -e "/usr/bin/md5sum" ) {
+    $MD5 = "/usr/bin/md5sum";
+}
+
 sub MAGIC_TESTBED_START { $MAGIC_TESTBED_START; }
 sub MAGIC_TESTBED_END { $MAGIC_TESTBED_END; }
 
 #
 # Some programs we may call
 #
-my $FETCH = "/usr/bin/fetch";
+my $FETCH = "/usr/bin/fetch -o";
+if (! -x "/usr/bin/fetch" ) {
+    $FETCH = "/usr/bin/wget -O";
+}
 
 #
 # Let's pretend perl's exception mechanism has a sane name for the function
@@ -217,6 +225,28 @@ sub PhaseWasSkipped($) {
 }
 
 #
+# Check to see if the phase is already done, as evidenced by the argument's
+# truth value (if $cond=0, then the condition is met; else fail).
+#
+sub DoneIf($) {
+    my ($cond) = @_;
+    if (!defined($cond)) { PhaseFail("Bad condition"); }
+    if ($cond) { PhaseFail("Condition not met"); }
+    PhaseSkip("Condition already met");
+}
+
+#
+# Check to see if the phase is already done, as evidenced by the argument's
+# truth value (if $cond=0, then the condition is met; else return).
+#
+sub DoneIfNoFail($) {
+    my ($cond) = @_;
+    if (!defined($cond)) { PhaseFail("Bad condition"); }
+    if ($cond) { return 0; }
+    PhaseSkip("Condition already met");
+}
+
+#
 # Check to see if the phase is already done, as evidenced by the existance of
 # a file
 #
@@ -255,6 +285,26 @@ sub DoneIfEdited($) {
 }
 
 #
+# Check to see if the phase is already done, as evidenced by the existance of
+# comments within a group of files.
+#
+sub DoneIfEditedAll(@) {
+    my $all = 1;
+    for my $filename (@_) {
+	if (!$filename) { PhaseFail("Bad filename passed to DoneIfEditedAll"); }
+	open(FH,$filename) or return;
+	if (! grep /$MAGIC_STRING/, <FH>) {
+	    $all = 0;
+	    close(FH);
+	    last;
+	}
+	close(FH);
+    }
+    PhaseSkip("Files have already been edited")
+	if ($all);
+}
+
+#
 # Check to see if the phase is already done, as evidenced by the fact that two
 # files are identical
 #
@@ -281,7 +331,7 @@ sub DoneIfMounted($)
     #
     # Grab the output of the mount command and parse. 
     #
-    if (! open(MOUNT, "/sbin/mount|")) {
+    if (! open(MOUNT, "mount |")) {
 	PhaseFail("Cannot run mount command");
     }
     while (<MOUNT>) {
@@ -294,6 +344,13 @@ sub DoneIfMounted($)
 			PhaseSkip("NFS dir already mounted");
 		    }
 		}
+	    }
+	}
+	# linux
+	elsif ($_ =~ /^([-\w\.\/:\(\)]+) on ([-\w\.\/]+) type nfs .+$/) {
+	    if ($dir eq $2) {
+		close(MOUNT);
+		PhaseSkip("NFS dir already mounted");
 	    }
 	}
     }
@@ -380,7 +437,13 @@ sub ExecQuiet(@) {
     #
     my $commandstr = join(" ",@_);
     my @output = ();
-    open(PIPE,"$commandstr 2>&1 |") or return -1;
+    my $retval = open(PIPE,"$commandstr 2>&1 |");
+    if (!$retval) {
+	# ugh, we have to do something, otherwise the error is very misleading
+	@libinstall::lastExecOutput = ();
+	$libinstall::lastCommand = "perl: open(PIPE,$commandstr) returned $!";
+	return -1;
+    };
     while (<PIPE>) {
 	push @output, $_;
     }
@@ -436,7 +499,7 @@ sub HUPDaemon($) {
 #
 sub FetchFile($$) {
     my ($URL, $localname) = @_;
-    if (ExecQuiet("$FETCH -o $localname $URL")) {
+    if (ExecQuiet("$FETCH $localname $URL")) {
 	return 0;
     } else {
 	return 1;
@@ -509,8 +572,11 @@ sub PrintLastOutput() {
 #
 sub GenSecretKey()
 {
-    my $key=`/bin/dd if=/dev/urandom count=128 bs=1 2> /dev/null | /sbin/md5`;
+    my $key=`/bin/dd if=/dev/urandom count=128 bs=1 2> /dev/null | $MD5`;
     chomp($key);
+    if ($key =~ /^([a-zA-Z0-9]+)\s*.*$/) {
+	$key = $1;
+    }
     return $key;
 }
 

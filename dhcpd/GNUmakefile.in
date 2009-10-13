@@ -9,7 +9,13 @@ TESTBED_SRCDIR	= @top_srcdir@
 OBJDIR		= ..
 SUBDIR		= dhcpd
 
+SYSTEM		:= $(shell uname -s)
+
+ifeq ($(SYSTEM),Linux)
+ETCDIR          = /etc
+else
 ETCDIR          = /usr/local/etc
+endif
 
 DHCPD_FILES	= dhcpd.conf.template
 

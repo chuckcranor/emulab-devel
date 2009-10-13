@@ -60,6 +60,7 @@ if ($UID != 0) {
 #
 my $TB		= "@prefix@";
 my $TBOPS       = "@TBOPSEMAIL@";
+my $WGET        = "@WGET@";
 
 #
 # Turn off line buffering on output
@@ -150,7 +151,7 @@ my $query_result =
 if ($query_result->num_rows() != 1) {
     fatal("Unable to determine iface for " . TBDB_WIDEAREA_LOCALNODE);
 }
-($LocalIface) = ($query_result->fetchrow());
+($LocalIface) = ($query_result->fetchrow_array());
 
 #
 # Grab the node list from the DB in one query, which we use later to
@@ -635,7 +636,7 @@ sub DownLoadURL($$)
 	return($exitcode >> 8);
     }
     else {
-	exec("/usr/local/bin/wget -q -O $tempfile $url");
+	exec("$WGET -q -O $tempfile $url");
 	exit(1);
     }
 }

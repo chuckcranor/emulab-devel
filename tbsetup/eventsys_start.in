@@ -103,7 +103,7 @@ foreach my $experiment (@experiments) {
     #
     $GID = $unix_pgid;
     $EGID = "$unix_pgid $unix_pgid $unix_egid";
-    $EUID = $UID = $unix_uid;
+    TBSetreuid($unix_uid,$unix_uid);
     $ENV{'USER'} = $swapper->uid();
 
     print "Starting event scheduler for $experiment ...\n";
@@ -115,7 +115,7 @@ foreach my $experiment (@experiments) {
 	print "Started event scheduler for $pid/$eid\n";
     }
     # set uid back to root
-    $EUID = $UID = 0;
+    TBSetreuid(0,0);
 }
 exit(0);
 

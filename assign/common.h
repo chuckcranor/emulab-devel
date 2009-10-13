@@ -13,7 +13,12 @@
  * We have to do these includes differently depending on which version of gcc
  * we're compiling with
  */
-#ifdef NEW_GCC
+#if defined(NEEDBACK_GCC)
+#include <backward/hash_map>
+#include <backward/hash_fun.h>
+using namespace __gnu_cxx;
+#define RANDOM() random()
+#elif defined(NEW_GCC)
 #include <ext/hash_map>
 #include <ext/hash_fun.h>
 using namespace __gnu_cxx;

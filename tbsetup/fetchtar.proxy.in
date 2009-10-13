@@ -10,6 +10,7 @@ use English;
 use Getopt::Std;
 use BSD::Resource;
 use POSIX qw(:signal_h);
+use Cwd 'abs_path';
     
 #
 # Fetch tarballs and RPMs on behalf of a user.
@@ -33,9 +34,9 @@ my $FSDIR_SCRATCH = "@FSDIR_SCRATCH@";
 my $ISFS = ("@USERNODE_IP@" eq "@FSNODE_IP@") ? 1 : 0;
 
 # Locals
-my $WGET = "/usr/local/bin/wget";
-my $REALPATH = "/bin/realpath";
-my $CHMOD = "/bin/chmod";
+my $WGET = "@WGET@";
+my $CHMOD = "@CHMOD@";
+my $NICE = "@NICE@";
 
 #
 # Turn off line buffering on output
@@ -102,8 +103,7 @@ if (!($localfile =~ /^([\w\.\_\-+\/]+)$/)) {
 	"    Illegal local filename given: $localfile\n");
 } else {
     $localfile = $1;
-    my $realpath = `$REALPATH $localfile`;
-    chomp $realpath;
+    my $realpath = abs_path($localfile);
     if (!TBValidUserDir($realpath, $ISFS)) {
 	die("*** $0:\n".
 	    "    Local file must be in one of " .
@@ -160,7 +160,7 @@ if (! $pid) {
     # Give parent a chance to react.
     sleep(1);
 
-    exec("nice -15 $WGET --timestamping --no-verbose -O $localfile $URL");
+    exec("$NICE -15 $WGET --timestamping --no-verbose -O $localfile $URL");
     die("Could not exec wget!\n");
 }
 

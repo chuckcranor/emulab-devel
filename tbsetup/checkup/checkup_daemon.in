@@ -114,7 +114,7 @@ print "Experiment head: $ev_uid\n"
 # Switch to the elabckup user.
 $GID = $unix_gid;
 $EGID = "$unix_gid";
-$EUID = $UID = $ev_uid;
+TBSetreuid($ev_uid,$ev_uid);
 
 my $iter = 0;
 

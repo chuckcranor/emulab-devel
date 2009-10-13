@@ -116,7 +116,7 @@ my $email = $target_user->email();
 #
 # For ssh.
 #
-$UID = $EUID;
+TBSetuid($EUID);
 
 if ($CONTROL ne $BOSSNODE) {
     my $optarg = ($debug ? "-d" : "");

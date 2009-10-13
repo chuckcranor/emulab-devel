@@ -126,7 +126,7 @@ if ($args{"aslist"}) {
     }
 }
 else { 
-    print $result->as_string();
+    $result->dump_results(-1,"\n","\t| ");
 }
 
 # Hacky. Batch daemon depends on this exit code.

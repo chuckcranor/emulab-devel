@@ -41,6 +41,7 @@ my $TB       = "@prefix@";
 my $TBOPS    = "@TBOPSEMAIL@";
 my $TESTMODE = @TESTMODE@;
 my $parser   = "$TB/lib/nseparse/nse.parse.tcl";
+my $NICE     = "@NICE@";
 
 # Locals
 my $tempdir  = "/tmp/parse-$$";
@@ -166,7 +167,7 @@ if (! $pid) {
     # Give parent a chance to react.
     sleep(1);
 
-    exec("nice -15 $parser @ARGV $defsfile $nsfile");
+    exec("$NICE -15 $parser @ARGV $defsfile $nsfile");
     die("Could not exec the nse parser!\n");
 }
 

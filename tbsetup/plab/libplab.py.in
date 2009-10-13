@@ -80,6 +80,8 @@ SLICE_ALIAS_DIR = "/etc/mail/plab-slice-addrs"
 
 DEFAULT_DATA_PATH = "@prefix@/etc/plab"
 
+PING = "@PING@"
+
 RESERVED_PID = "emulab-ops"
 RESERVED_EID = "hwdown"       # start life in hwdown
 MONITOR_PID  = "emulab-ops"
@@ -3205,7 +3207,7 @@ class Node:
 
     def pingNode(self,timeout=10):
         try:
-            self.__execute("/bin/ping -o -t %d %s" % (timeout,self.IP))
+            self.__execute("%s -o -t %d %s" % (PING,timeout,self.IP))
             # Don't flood hist table with successful pings.
             return True
         except:

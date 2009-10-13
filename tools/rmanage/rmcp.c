@@ -163,7 +163,7 @@ rmcp_error_t rmcp_asf_ping(rmcp_ctx_t *ctx,
 
     /* check if the received msg is a presence pong */
     /* if not, it's a protocol error! */
-    if (recv->hdr->class == RMCP_CLASS_ASF && recv->data 
+    if (recv->hdr->rclass == RMCP_CLASS_ASF && recv->data 
 	&& recv->data->type == RMCP_ASF_TYPE_PRESENCE_PONG) {
 	*supported = rmcp_decode_asf_supported(recv);
 	INFO(1,"got supported");
@@ -204,7 +204,7 @@ rmcp_error_t rmcp_asf_get_capabilities(rmcp_ctx_t *ctx,
 
     /* check if the received msg is a presence pong */
     /* if not, it's a protocol error! */
-    if (recv->hdr->class == RMCP_CLASS_ASF && recv->data 
+    if (recv->hdr->rclass == RMCP_CLASS_ASF && recv->data 
 	&& recv->data->type == RMCP_ASF_TYPE_CAPABILITIES_RESPONSE) {
 	*cap = rmcp_decode_asf_capabilities(recv);
 	INFO(1,"got capabilities");
@@ -244,7 +244,7 @@ rmcp_error_t rmcp_asf_get_sysstate(rmcp_ctx_t *ctx,
 
     /* check if the received msg is a presence pong */
     /* if not, it's a protocol error! */
-    if (recv->hdr->class == RMCP_CLASS_ASF && recv->data 
+    if (recv->hdr->rclass == RMCP_CLASS_ASF && recv->data 
 	&& recv->data->type == RMCP_ASF_TYPE_SYSSTATE_RESPONSE) {
 	*state = rmcp_decode_asf_sysstate(recv);
 	INFO(1,"got sysstate");
@@ -450,7 +450,7 @@ rmcp_error_t rmcp_finalize(rmcp_ctx_t *ctx) {
 	/* check if the received msg is a session close response, and
 	 * check response code */
 	/* if not, it's a protocol error! */
-	if (recv->hdr->class == RMCP_CLASS_ASF && recv->data 
+	if (recv->hdr->rclass == RMCP_CLASS_ASF && recv->data 
 	    && recv->data->type == RMCP_ASF_TYPE_CLOSE_SESSION_RESPONSE) {
 	    
 	    if (recv->data->data[0] == RMCP_RSP_RAKP_SUCCESS) {
@@ -1048,7 +1048,7 @@ static void rmcp_fill_hdr(rmcp_ctx_t *ctx,rmcp_msg_t *msg) {
     msg->hdr->reserved = 0x0;
     msg->hdr->seqno = ctx->rmcp_seqno;
     /* XXX: change so it's more flexible for other protocols like IPMI */
-    msg->hdr->class = RMCP_CLASS_ASF;
+    msg->hdr->rclass = RMCP_CLASS_ASF;
 }
 
 /* NOTE: this function DOES allocate a data segment. */
@@ -1124,7 +1124,7 @@ rmcp_error_t rmcp_raw_read(rmcp_ctx_t *ctx,
     else {
 	/* process the msg */
 	
-	/* if we get the requested bytes, take a look at the class field, make
+	/* if we get the requested bytes, take a look at the rclass field, make
 	 * sure we're reading ASF (XXX: or IPMI -- later!) */ 
 	
 	c = 0;
@@ -1232,7 +1232,7 @@ rmcp_error_t rmcp_send_msg_wait_ack(rmcp_ctx_t *ctx,
 	}
 	/* do we need an ack? */
 	if (sendmsg->hdr->seqno != RMCP_NOACK_SEQNO 
-	    && !(sendmsg->hdr->class & RMCP_ACK_CLASS_BIT)) {
+	    && !(sendmsg->hdr->rclass & RMCP_ACK_CLASS_BIT)) {
 	    INFO(3,"waiting for ack");
 	    retval = rmcp_recv_msg_and_ack(ctx,&ack);
 	    if (retval == RMCP_ERR_TIMEOUT) {
@@ -1241,8 +1241,8 @@ rmcp_error_t rmcp_send_msg_wait_ack(rmcp_ctx_t *ctx,
 	    else if (retval == RMCP_SUCCESS) {
 		/* check the ack and make sure it's ack'ing our sent msg */
 		/* if not, call it a protocol error */
-		if (ack->hdr->class & RMCP_ACK_CLASS_BIT 
-		    && (ack->hdr->class & 0x7f) == sendmsg->hdr->class) {
+		if (ack->hdr->rclass & RMCP_ACK_CLASS_BIT 
+		    && (ack->hdr->rclass & 0x7f) == sendmsg->hdr->rclass) {
 
 		    rmcp_free_asf_msg(ack);
 		    INFO(1,"recv'd ack");
@@ -1359,7 +1359,7 @@ u_int8_t *rmcp_marshall(rmcp_ctx_t *ctx,rmcp_msg_t *msg,int *len) {
 	buf[sz++] = msg->hdr->version;
 	buf[sz++] = msg->hdr->reserved;
 	buf[sz++] = msg->hdr->seqno;
-	buf[sz++] = msg->hdr->class;
+	buf[sz++] = msg->hdr->rclass;
     }
 
     /* rmcp asf data */
@@ -1441,7 +1441,7 @@ rmcp_msg_t *rmcp_unmarshall(rmcp_ctx_t *ctx,u_int8_t *buf,int len) {
     msg->hdr->version = buf[sz++];
     msg->hdr->reserved = buf[sz++];
     msg->hdr->seqno = buf[sz++];
-    msg->hdr->class = buf[sz++];
+    msg->hdr->rclass = buf[sz++];
 
     /* rmcp asf data */
     msg->data->iana_ent_id = ntohl(*(u_int32_t *)(&buf[sz]));
@@ -1584,7 +1584,7 @@ rmcp_error_t rmcp_build_ack(rmcp_ctx_t *ctx,
 			    rmcp_msg_t **ack) {
     rmcp_msg_t *new;
 
-    if (orig->hdr->class & RMCP_ACK_CLASS_BIT
+    if (orig->hdr->rclass & RMCP_ACK_CLASS_BIT
 	|| orig->hdr->seqno == 0xff) {
 	/* it's an ack or a packet that doesn't want an ack, return success */
 	return RMCP_ERR_NO_ACK_NEEDED;
@@ -1611,7 +1611,7 @@ rmcp_error_t rmcp_build_ack(rmcp_ctx_t *ctx,
 
     memcpy(new->hdr,orig->hdr,sizeof(rmcp_hdr_t));
     /* now change the MSB in the class field to identify as an ack */
-    new->hdr->class |= RMCP_ACK_CLASS_BIT;
+    new->hdr->rclass |= RMCP_ACK_CLASS_BIT;
 
     /* dealloc the asf data; don't need it */
     if (new->data) {

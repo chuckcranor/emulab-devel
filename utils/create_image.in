@@ -8,6 +8,7 @@ use English;
 use Getopt::Std;
 use POSIX qw(setsid);
 use File::Basename;
+use Cwd 'abs_path';
 
 #
 # Tuneables:
@@ -240,7 +241,7 @@ if ($isglobal && ($filename =~ /^\/usr\/testbed/)) {
 #
 # Use realpath to resolve any symlinks.
 #
-my $translated = `realpath $filename`;
+my $translated = abs_path($filename);
 if ($translated =~ /^([-\w\.\/\+]+)$/) {
     $filename = $1;
 }

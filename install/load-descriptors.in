@@ -176,7 +176,9 @@ foreach my $osid (keys(%local_osids)) {
 #
 $query_result = DBQueryFatal("select imageid,ezid from temp_images");
 
+my @imageids = ();
 while (my ($imageid,$ezid) = $query_result->fetchrow_array()) {
+    push @imageids, $imageid;
     if ($ezid) {
 	$local_imageids{$imageid} = $local_osids{$imageid};
     }
@@ -188,9 +190,7 @@ while (my ($imageid,$ezid) = $query_result->fetchrow_array()) {
 #
 # Update temp_images with locally derived imageids.
 #
-$query_result->dataseek(0);
-
-while (my ($imageid) = $query_result->fetchrow_array()) {
+foreach my $imageid (@imageids) {
     my $newimageid = $local_imageids{$imageid};
 
     DBQueryFatal("update temp_images set imageid='$newimageid' ".

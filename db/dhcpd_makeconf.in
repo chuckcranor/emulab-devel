@@ -45,10 +45,13 @@ use lib "@prefix@/lib";
 use libdb;
 use libtestbed;
 use NodeType;
+use EmulabSys;
+
+my $sys = EmulabSys->get();
 
 my $CRTLTAG	    = TBDB_IFACEROLE_CONTROL();
-my $DHCPD_CONF	    = "/usr/local/etc/dhcpd.conf";
-my $DHCPD_TEMPLATE  = "/usr/local/etc/dhcpd.conf.template";
+my $DHCPD_CONF	    = $sys->def("DHCPD_CONF");
+my $DHCPD_TEMPLATE  = $sys->def("DHCPD_CONF_TEMPLATE");
 my %servernodes	    = ();
 my %singlectlnet    = ();
 my $template        = $DHCPD_TEMPLATE;

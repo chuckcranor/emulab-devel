@@ -420,3 +420,14 @@ diff -ur ./configure ../../ns-allinone-2.29-emulab/tclcl-1.17/configure
  _ACEOF
  cat >>$CONFIG_STATUS <<_ACEOF
    sed "$ac_vpsub
+--- Tcl.cc.orig	2009-10-07 17:54:56.000000000 -0600
++++ Tcl.cc	2009-10-07 17:37:46.000000000 -0600
+@@ -563,7 +563,7 @@
+ 		};
+ 		// handle arrays in instvars if -parse-part1 was specified.
+ 		if (need_parse) {
+-			char *p = strchr(localName, '(');
++		  char *p = strchr((char *)localName, '(');
+ 			if (p)
+ 				*p = 0;
+ 		};

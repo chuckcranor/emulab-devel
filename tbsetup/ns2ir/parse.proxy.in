@@ -43,6 +43,7 @@ my $TESTMODE = @TESTMODE@;
 my $parser   = "$TB/lib/ns2ir/parse.tcl";
 my $vlib     = "$TB/lib/nsverify";
 my $vparser  = "$TB/libexec/nsverify/nstbparse";
+my $NICE     = "@NICE@";
 
 # Locals
 my $tempdir  = "/tmp/parse-$$";
@@ -174,7 +175,7 @@ if (! $pid) {
 	$nsfile = $tempdir . "/" . $nsfile;
     }
 
-    exec("nice -15 $parser @ARGV $nsfile");
+    exec("$NICE -15 $parser @ARGV $nsfile");
     die("Could not exec the parser!\n");
 }
 

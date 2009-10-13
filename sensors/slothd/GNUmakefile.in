@@ -24,10 +24,17 @@ CC?=gcc
 CFLAGS+= -Wall -I${OBJDIR} -I/usr/local/include -I$(TESTBED_SRCDIR)/lib/libtb \
 		-DCLIENT_BINDIR='"$(CLIENT_BINDIR)"' \
 		-DLOG_TESTBED=$(LOG_TESTBED)
-LDFLAGS+= $(LDSTATIC) -L${OBJDIR}/lib/libtb -L/usr/local/lib/mysql
-SDLIBS+= -ltb -lmysqlclient
+LDFLAGS+= $(LDSTATIC) -L${OBJDIR}/lib/libtb 
+SDLIBS+= -ltb 
 LIBS= $(MLIBS)
 CP= cp -pf
+
+ifeq ($(SYSTEM),Linux)
+LDFLAGS += `mysql_config --libs`
+else
+LDFLAGS += -L/usr/local/lib/mysql
+SDLIBS += -lmysqlclient
+endif
 
 ifeq ($(SYSTEM),CYGWIN_NT-5.1)
 # Cygwin on  Windows XP (a.k.a. NT 5.1).

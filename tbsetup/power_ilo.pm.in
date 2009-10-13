@@ -71,7 +71,7 @@ sub iloctrl($$@) {
 	    ++$exitval;
 	    next;
 	}
-	my ($IP) = $res->fetchrow();
+	my ($IP) = $res->fetchrow_array();
 
 	$res = DBQueryFatal("select key_role,key_uid,mykey" . 
 			    " from outlets_remoteauth" . 
@@ -81,7 +81,7 @@ sub iloctrl($$@) {
 	    ++$exitval;
 	    next;
 	}
-	my ($krole,$kuid,$kkey) = $res->fetchrow();
+	my ($krole,$kuid,$kkey) = $res->fetchrow_array();
 
 	$ilo_nodeinfo{$n} = [ $IP,$krole,$kuid,$kkey ];
     }

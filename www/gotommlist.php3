@@ -100,7 +100,7 @@ if (isset($target_project) || isset($target_group)) {
     # Set-Cookie: foo=2802; Path=/mailman/; Version=1;
     #
     if (!preg_match("/^Set-Cookie: ([-\w\+\.\%]+)=(\w*); ".
-		    "Path=(\/[\w]+\/); Version=1;$/",
+		    "Path=(\/[\w]+\/); Version=1;?$/",
 		    $suexec_output, $matches)) {
 	TBERROR($suexec_output, 1);
     }
@@ -173,9 +173,9 @@ elseif (isset($listname) && $listname != "") {
     # Set-Cookie: foo=2802; Path=/mailman/; Version=1;
     #
     if (!preg_match("/^Set-Cookie: ([-\w\+\.\%]+)=(\w*); ".
-		    "Path=(\/[\w]+\/); Version=1;$/",
+		    "Path=(\/[\w]+\/); Version=1;?$/",
 		    $suexec_output, $matches)) {
-	TBERROR($suexec_output, 1);
+	TBERROR("'$suexec_output'", 1);
     }
     setcookie($matches[1], $matches[2], 0, $matches[3], $TBAUTHDOMAIN, 0);
 

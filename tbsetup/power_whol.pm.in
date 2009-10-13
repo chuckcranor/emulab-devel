@@ -72,7 +72,7 @@ sub wholctrl($$@) {
 	    $exitval++;
 	    next;
 	}
-	($card, $mac) = $result->fetchrow();
+	($card, $mac) = $result->fetchrow_array();
 	$portinfo{$node}{card} = $card;
 	$portinfo{$node}{mac} = $mac;
 	print STDERR "WhOL: $node: $card, $mac\n"

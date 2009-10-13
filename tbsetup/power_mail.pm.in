@@ -66,7 +66,7 @@ sub mailctrl($@) {
 
 	my $ok;
 	
-	($ok, $pid, $eid) = $dbres->fetchrow();
+	($ok, $pid, $eid) = $dbres->fetchrow_array();
 
 	if (defined($pid) && defined($eid) &&
 	    $pid eq NODEDEAD_PID() && $eid eq NODEDEAD_EID()) {
@@ -207,7 +207,7 @@ sub mailctrl($@) {
 		    next;
 		}
 		
-		($ok) = $dbres->fetchrow();
+		($ok) = $dbres->fetchrow_array();
 		
 		if (($cmd eq "on" || $cmd eq "cycle") &&
 		    TBNodeEventStateUpdated($node, $state_update_tolerance)) {

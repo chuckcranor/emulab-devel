@@ -249,7 +249,7 @@ sub SetupVlans()
 			 "(" . join(' OR ', map("iface='$_'", @ifaces)) . ")");
 
 	if ($query_result) {
-	    while (my ($iface, $role, $IP) = $query_result->fetchrow()) {
+	    while (my ($iface, $role, $IP) = $query_result->fetchrow_array()) {
 		if (($role ne "expt") || ($IP ne "")) {
 		    die("*** $0:\n",
 			"Iface $iface for $node cannot be changed\n");
@@ -305,7 +305,7 @@ sub SetupVlans()
 	    DBQueryFatal("select outer_id from elabinelab_vlans ".
 			 "where pid='$pid' and eid='$eid' and inner_id='$id'");
 	if ($query_result->numrows == 1) {
-	    ($outer_id) = $query_result->fetchrow();
+	    ($outer_id) = $query_result->fetchrow_array();
 	    $vlan = VLan->Lookup($outer_id);
 	    if (!defined($vlan)) {
 		print STDERR "*** $0:\n".
@@ -409,7 +409,7 @@ sub Map()
 	DBQueryFatal("select inner_id,outer_id from elabinelab_vlans ".
 		     "where pid='$pid' and eid='$eid'");
 
-    while (my ($inner_id,$outer_id) = $query_result->fetchrow()) {
+    while (my ($inner_id,$outer_id) = $query_result->fetchrow_array()) {
 	$mapping{$inner_id} = $outer_id;
     }
     #
@@ -553,7 +553,7 @@ sub Trunk()
 	print STDERR "can't determine iface from $port in $pid/$eid\n";
 	return 1;
     }
-    my ($iface) = ($query_result->fetchrow())[0];
+    my ($iface) = ($query_result->fetchrow_array())[0];
 
     $query_result =
 	DBQueryFatal("select node_id from reserved where node_id='$node' ".

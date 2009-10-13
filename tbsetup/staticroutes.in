@@ -181,8 +181,10 @@ my %nodeport2lan = ();
 my $staticO = 0;
 my $staticN = 0;
 
+my @vnodeinfo = ();
 if (!$force) {
-    while (my (undef,undef,$routertype) = $query_result->fetchrow_array()) {
+    while (my ($vname,$ips,$routertype) = $query_result->fetchrow_array()) {
+	push @vnodeinfo, [ $vname,$ips ];
 	if ($routertype eq "static-old") {
 	    $staticO++;
 	}
@@ -203,14 +205,14 @@ if (!$force) {
 	     "route calculation.\n");
 	exit(0);
     }
-    $query_result->dataseek(0);
 }
 
 #
 # Convert list of nodes into a map of $vname:$port to IP. We will need the
 # IPs later when filling in the virt_routes table.
 # 
-while (my ($vname,$ips,undef) = $query_result->fetchrow_array) {
+foreach my $vref (@vnodeinfo) {
+    my ($vname,$ips) = @$vref;
     $linkcount{$vname} = 0;
     
     if (! defined($nodeportlist{$vname}) ) {

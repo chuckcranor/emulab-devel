@@ -1,4 +1,4 @@
-#!/usr/local/bin/python
+#!/usr/bin/env python
 #
 # EMULAB-COPYRIGHT
 # Copyright (c) 2008 University of Utah and the Flux Group.

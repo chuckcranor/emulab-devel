@@ -44,7 +44,7 @@ my $CONTROL  = "@USERNODE@";
 my $TESTMODE = @TESTMODE@;
 
 my $SAVEUID  = $UID;
-my $MD5      = "/sbin/md5";
+my $MD5      = "@MD5@";
 
 #
 # Turn off line buffering on output
@@ -128,7 +128,7 @@ my $exptidx = $experiment->idx();
 #
 my $result = $experiment->TableLookUp("virt_nodes", "vname,rpms,tarfiles");
 
-while (my ($vname, $rpms, $tarfiles) = $result->fetchrow()) {
+while (my ($vname, $rpms, $tarfiles) = $result->fetchrow_array()) {
     #
     # Find out the pnode where the this vnode is mapped, if any
     #
@@ -297,9 +297,9 @@ while (my ($URL, $localfile) = each %tofetch) {
     #
     # Must flip to real root for the ssh, and then flip back afterwards.
     # 
-    $EUID = $UID = 0;
+    TBSetreuid(0,0);
     system("sshtb -host $CONTROL $cmdargs ");
-    $EUID = $UID = $SAVEUID;
+    TBSetreuid($SAVEUID,$SAVEUID);
 
     if ($?) {
 	tbdie("Fetch of Tarball/RPM failed!");
@@ -311,10 +311,10 @@ while (my ($URL, $localfile) = each %tofetch) {
 #
 while (my ($localfile, $ignored) = each %toarchive) {
     # Lets not do this as root. 
-    $EUID = $UID;
+    TBSeteuid($UID);
     libArchive::TBExperimentArchiveAddFile($pid, $eid, $localfile) == 0 or
 	tbdie("Failed to add $localfile to the archive!");
-    $EUID = 0;
+    TBSeteuid(0);
 }
 
 #

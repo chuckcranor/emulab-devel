@@ -16,6 +16,7 @@ use English;
 
 use lib '@prefix@/lib';
 use libdb;
+use libtestbed;
 
 my $TB = "@prefix@";
 
@@ -51,7 +52,7 @@ if (!TBAdmin($UID)) {
 # We seem to have to do this so that ssh gets proper root permissions to read
 # the key file. Argh.
 #
-$UID = $EUID = 0;
+TBSetreuid(0,0);
 
 #
 # XXX - Check to see if the node we're sshing into is the one we think it is?

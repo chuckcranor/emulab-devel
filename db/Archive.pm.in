@@ -24,6 +24,7 @@ use English;
 use File::stat;
 use File::Basename;
 use Data::Dumper;
+use Cwd 'abs_path';
 use POSIX qw(strftime getgid);
 use Time::HiRes qw(gettimeofday);
 use overload ('""' => 'Stringify');
@@ -39,20 +40,20 @@ my $ARCHIVEDIR  = "/usr/testbed/exparchive";
 my $TESTMODE    = @TESTMODE@;
 my $TBOPS       = "@TBOPSEMAIL@";
 my $ELABINELAB  = @ELABINELAB@;
-my $MD5		= "/sbin/md5";
-my $MKDIR       = "/bin/mkdir";
-my $CHMOD       = "/bin/chmod";
+
+my $MD5		= "@MD5@";
+my $MKDIR       = "@MKDIR@";
+my $CHMOD       = "@CHMOD@";
 my $SUCHOWN     = "$TB/sbin/suchown";
-my $CHGRP       = "/usr/bin/chgrp";
-my $TAR		= "/usr/bin/tar";
-my $RSYNC	= "/usr/local/bin/rsync";
-my $RM		= "/bin/rm";
-my $REALPATH	= "/bin/realpath";
-my $ZIP         = "/usr/local/bin/zip";
-my $UNZIP       = "/usr/local/bin/unzip";
-my $ZIPINFO     = "/usr/local/bin/zipinfo";
-my $DU          = "/usr/bin/du";
-my $DIFF        = "/usr/bin/diff";
+my $CHGRP       = "@CHGRP@";
+my $TAR		= "@TAR@";
+my $RSYNC	= "@RSYNC@";
+my $RM		= "@RM@";
+my $ZIP         = "@ZIP@";
+my $UNZIP       = "@UNZIP@";
+my $ZIPINFO     = "@ZIPINFO@";
+my $DU          = "@DU@";
+my $DIFF        = "@DIFF@";
 my $inittag     = 'root';
 my $defaultview = 'head';
 my $REPO        = "ziprepo";
@@ -396,7 +397,7 @@ sub ValidatePath($)
     # files outside the directory space the user is allowed to access.
     # We must taint check the result to keep everyone happy.
     #
-    my $realpath = `$REALPATH $pathname`;
+    my $realpath = abs_path($pathname);
     if ($realpath =~ /^([-\w\/\.\+\@,~]+)$/) {
 	$realpath = $1;
     }

@@ -77,7 +77,7 @@ typedef struct rmcp_hdr {
     u_int8_t version;
     u_int8_t reserved;
     u_int8_t seqno;
-    u_int8_t class;
+    u_int8_t rclass;
 } rmcp_hdr_t;
 
 #define RMCP_ASF_TYPE_RESET                   0x10

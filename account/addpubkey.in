@@ -48,7 +48,7 @@ my $TB		= "@prefix@";
 my $TBOPS       = "@TBOPSEMAIL@";
 my $TBAUDIT     = "@TBAUDITEMAIL@";
 my $OURDOMAIN   = "@OURDOMAIN@";
-my $KEYGEN	= "/usr/bin/ssh-keygen";
+my $KEYGEN	= "@SSHKEYGEN@";
 my $USERUID;
 
 # Locals
@@ -245,12 +245,12 @@ else {
 #
 if ($initmode) {
     # Drop root privs, switch to target user.
-    $EUID = $UID = $USERUID;
+    TBSetreuid($USERUID,$USERUID);
     exit InitUser();
 }
 if ($genmode) {
     # Drop root privs, switch to target user.
-    $EUID = $UID = $USERUID;
+    TBSetreuid($USERUID,$USERUID);
     exit GenerateKeyFile();
 }
 
@@ -287,7 +287,7 @@ if (!$verify) {
     }
     if (-d "$HOMEDIR/$user_uid/.ssh") {
 	# Drop root privs, switch to target user.
-	$EUID = $UID = $USERUID;
+	TBSetreuid($USERUID,$USERUID);
 	$genmode = 1;
     }
     

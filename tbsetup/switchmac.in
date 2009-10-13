@@ -46,7 +46,7 @@ my $RPCCERT    = "@OUTERBOSS_SSLCERTNAME@";
 # We use SNMP directly, because we have to use some pretty dumb tricks that I
 # don't want to have to teach the snmpit libraries.
 #
-my $mibpath = "/usr/local/share/snmp/mibs";
+my $mibpath = "@SNMP_MIB_DIR@";
 my @mibs = ("$mibpath/SNMPv2-SMI.txt", "$mibpath/SNMPv2-TC.txt",
     "$mibpath/SNMPv2-MIB.txt", "$mibpath/IANAifType-MIB.txt",
     "$mibpath/IF-MIB.txt", "$mibpath/BRIDGE-MIB.txt");
@@ -299,7 +299,7 @@ SWITCH:
 		    if (!$res->num_rows()) {
 			$interface = "unknown";
 		    } else {
-			my ($node_id, $iface) = $res->fetchrow();
+			my ($node_id, $iface) = $res->fetchrow_array();
 			$interface  = "$node_id:$iface";
 		    }
 

@@ -424,7 +424,7 @@ sub convertPortFromIface($) {
             warn "WARNING: convertPortFromIface($port) - Unable to get card\n";
             return $port;
         }
-        my $card = ($result->fetchrow())[0];
+        my $card = ($result->fetchrow_array())[0];
         return "$node:$card";
     } else {
         warn "WARNING: convertPortFromIface($port) - Bad port format\n";
@@ -519,7 +519,7 @@ sub getDeviceNames(@) {
 	    }
 	    # This is a loop, on the off chance chance that a single port on a
 	    # node can be connected to multiple ports on the switch.
-	    while (my @row = $result->fetchrow()) {
+	    while (my @row = $result->fetchrow_array()) {
 		$device = $row[0];
 	    }
 	} elsif ($port =~ /^([^.]+)\.\d+(\/\d+)?$/) {
@@ -564,7 +564,7 @@ sub getDeviceType ($) {
     my $result =
 	DBQueryFatal("SELECT type FROM nodes WHERE node_id='$node'");
 
-    my @row = $result->fetchrow();
+    my @row = $result->fetchrow_array();
     # Sanity check - make sure the node exists
     if (!@row) {
 	die "No such node: $node\n";
@@ -590,7 +590,7 @@ sub getInterfaceSettings ($) {
 	DBQueryFatal("SELECT current_speed, duplex FROM interfaces " .
 		     "WHERE node_id='$node' and card=$port");
 
-    my @row = $result->fetchrow();
+    my @row = $result->fetchrow_array();
     # Sanity check - make sure the interface exists
     if (!@row) {
 	die "No such interface: $interface\n";
@@ -606,7 +606,7 @@ sub getTestSwitches () {
     my $result =
 	DBQueryFatal("SELECT node_id FROM nodes WHERE role='testswitch'");
     my @switches = (); 
-    while (my @row = $result->fetchrow()) {
+    while (my @row = $result->fetchrow_array()) {
 	push @switches, $row[0];
     }
 
@@ -620,7 +620,7 @@ sub getControlSwitches () {
     my $result =
 	DBQueryFatal("SELECT node_id FROM nodes WHERE role='ctrlswitch'");
     my @switches = (); 
-    while (my @row = $result->fetchrow()) {
+    while (my @row = $result->fetchrow_array()) {
 	push @switches, $row[0];
     }
 
@@ -635,7 +635,7 @@ sub getSwitchesInStack ($) {
     my $result = DBQueryFatal("SELECT node_id FROM switch_stacks " .
 	"WHERE stack_id='$stack_id'");
     my @switches = (); 
-    while (my @row = $result->fetchrow()) {
+    while (my @row = $result->fetchrow_array()) {
 	push @switches, $row[0];
     }
 
@@ -671,7 +671,7 @@ sub getSwitchPrimaryStack($) {
 	    "stack\n";
 	return undef;
     } else {
-	my ($stack_id) = ($result->fetchrow());
+	my ($stack_id) = ($result->fetchrow_array());
 	return $stack_id;
     }
 }
@@ -702,7 +702,7 @@ sub getSwitchStacks($) {
 	return undef;
     } else {
 	my @stack_ids;
-	while (my ($stack_id) = ($result->fetchrow())) {
+	while (my ($stack_id) = ($result->fetchrow_array())) {
 	    push @stack_ids, $stack_id;
 	}
 	return @stack_ids;
@@ -724,7 +724,7 @@ sub getStackType($) {
 	return undef;
     } else {
 	my ($stack_type,$supports_private,$single_domain,$community)
-	    = ($result->fetchrow());
+	    = ($result->fetchrow_array());
 	if (defined wantarray) {
 	    return ($stack_type,$supports_private,$single_domain, $community);
 	} else {
@@ -745,7 +745,7 @@ sub getStackLeader($) {
 	print STDERR "No stack found called $stack\n";
 	return undef;
     } else {
-	my ($leader) = ($result->fetchrow());
+	my ($leader) = ($result->fetchrow_array());
 	return $leader;
     }
 }
@@ -776,7 +776,7 @@ sub getDeviceOptions($) {
     }
 
     my ($supports_private, $single_domain, $snmp_community, $min_vlan,
-	$max_vlan) = $result->fetchrow();
+	$max_vlan) = $result->fetchrow_array();
 
     $options{'supports_private'} = $supports_private;
     $options{'single_domain'} = $single_domain;
@@ -811,7 +811,7 @@ sub getTrunks() {
     my $result = DBQueryFatal("SELECT node_id1, card1, port1, " .
 	"node_id2, card2, port2 FROM wires WHERE type='Trunk'");
 
-    while (my @row = $result->fetchrow()) {
+    while (my @row = $result->fetchrow_array()) {
 	my ($node_id1, $card1, $port1, $node_id2, $card2, $port2)  = @row;
 	push @{ $trunks{$node_id1}{$node_id2} }, "$card1.$port1";
 	push @{ $trunks{$node_id2}{$node_id1} }, "$card2.$port2";

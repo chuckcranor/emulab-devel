@@ -22,6 +22,10 @@
 #define NEW_GCC
 #endif
 
+#if (__GNUC__ == 4 && __GNUC_MINOR__ >= 3)
+#define NEEDBACK_GCC
+#endif
+
 #ifdef NEW_GCC
 #include <ext/slist>
 using namespace __gnu_cxx;

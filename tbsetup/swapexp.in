@@ -9,6 +9,7 @@
 use English;
 use Getopt::Std;
 use POSIX qw(isatty setsid);
+use Cwd 'abs_path';
 use RPC::XML;
 
 #
@@ -267,7 +268,7 @@ if ($inout eq "modify" && @ARGV > 2) {
     #
     # Use realpath to resolve any symlinks.
     #
-    my $translated = `realpath $tempnsfile`;
+    my $translated = abs_path($tempnsfile);
     if ($translated =~ /^([-\w\.\/]+)$/) {
 	$tempnsfile = $1;
     }

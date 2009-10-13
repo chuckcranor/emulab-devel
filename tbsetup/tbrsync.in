@@ -34,7 +34,7 @@ use strict;
 #
 # Constants
 #
-my $RSYNC  = "/usr/local/bin/rsync";
+my $RSYNC  = "@RSYNC@";
 my $SSHTB  = "$TB/bin/sshtb";
 my $POWER  = "$TB/bin/power";
 my $DEBUG  = 1;

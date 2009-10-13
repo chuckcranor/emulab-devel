@@ -217,7 +217,7 @@ elsif ($opt{p}) {
 	} else  {
 	    my $interfaces = DBQueryFatal("select card from interfaces " .
 		"where node_id = '$hostname'");
-	    while (my ($card) = $interfaces->fetchrow()) {
+	    while (my ($card) = $interfaces->fetchrow_array()) {
 		push @ports, "$port:$card";
 	    }
 	}

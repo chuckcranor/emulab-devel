@@ -226,7 +226,7 @@ foreach my $nodeid (@machines) {
 		 $TBOPS);
 	next;
     }
-    my ($power_id, $outlet, $last_power) = $result->fetchrow();
+    my ($power_id, $outlet, $last_power) = $result->fetchrow_array();
 
     #
     # Default power delay to 60 seconds if non-existent node.
@@ -311,7 +311,7 @@ foreach my $power_id (keys %outlets) {
 	    $exitval++;
 	    next;
 	}
-	($type, $IP, $class) = $result->fetchrow();
+	($type, $IP, $class) = $result->fetchrow_array();
     }
 
     #
@@ -442,7 +442,7 @@ sub dostatus(@) {
 			"left join node_types as t on n.type=t.type " .
 			"left join interfaces as i on n.node_id=i.node_id " .
 			"where n.role='powerctrl'");
-    while (my ($ctrl, $type, $IP) = $result->fetchrow()) {
+    while (my ($ctrl, $type, $IP) = $result->fetchrow_array()) {
 	$ctrls{$ctrl} = $type;
 	$IPs{$ctrl} = $IP;
     }
@@ -467,7 +467,7 @@ sub dostatus(@) {
 		$errors++;
 		next;
 	    } else {
-		($ctrl, $outlet) = $result->fetchrow();
+		($ctrl, $outlet) = $result->fetchrow_array();
 		print "$node is $ctrl outlet $outlet...\n";
 	    }
 	} else {

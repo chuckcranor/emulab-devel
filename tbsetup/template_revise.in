@@ -62,7 +62,7 @@ my $TBDOCBASE	= "@TBDOCBASE@";
 my $TBBASE	= "@TBBASE@";
 my $CONTROL     = "@USERNODE@";
 my $checkquota  = "$TB/sbin/checkquota";
-my $TAR         = "/usr/bin/tar";
+my $TAR         = "@TAR@";
 
 # Locals
 my $template;

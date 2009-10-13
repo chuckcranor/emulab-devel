@@ -193,7 +193,7 @@ static void err_output(const char *fmt, va_list ap)
     }
 
     time(&timevar);
-    lt = localtime(&timevar);
+    lt = (struct tm *)localtime(&timevar);
 
     fprintf(log, "[%d-%.2d-%.2d %.2d:%.2d:%.2d]: ",
 	    lt->tm_year + 1900, lt->tm_mon + 1, lt->tm_mday,
@@ -416,7 +416,7 @@ int main(int argc, char *argv[])
 	     */
 	    if ((rgid == 0) || (rgid < GID_MIN)) {
 	         log_err("crit: cannot run as forbidden gid (%d/%s)\n",
-			 gid, cmd);
+			 rgid, cmd);
 		 exit(108);
 	    }
 

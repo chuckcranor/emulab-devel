@@ -112,7 +112,7 @@ else {
 #
 # For ssh.
 #
-$UID = $EUID;
+TBSetuid($EUID);
 
 if ($CONTROL ne $BOSSNODE) {
     if (system("$SSH -host $CONTROL $WIKIPROXY xlogin $user '$key'")) {

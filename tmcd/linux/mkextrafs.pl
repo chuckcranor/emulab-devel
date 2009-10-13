@@ -18,10 +18,10 @@ sub mysystem($);
 
 sub usage()
 {
-    print("Usage: mkextrafs.pl [-f] [-lM] [-v <vglist>] <mountpoint>\n");
+    print("Usage: mkextrafs.pl [-f] [-s <partno>] [-lM] [-v <vglist>] <mountpoint>\n");
     exit(-1);
 }
-my  $optlist = "flv:M";
+my  $optlist = "fs:lv:M";
 
 #
 # Yep, hardwired for now.  Should be options or queried via TMCC.
@@ -59,6 +59,9 @@ if (! getopts($optlist, \%options)) {
 }
 if (defined($options{"f"})) {
     $forceit = 1;
+}
+if (defined($options{"s"})) {
+    $slice = $options{"s"};
 }
 if (defined($options{"l"})) {
     $lvm = 1;

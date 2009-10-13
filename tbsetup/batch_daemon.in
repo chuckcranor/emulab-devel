@@ -253,8 +253,12 @@ while (1) {
     }
     else {
 	my %canterm = ();
-	
+	my @running_rows = ();
+
 	while (my %running_row = $running_result->fetchhash()) {
+	    # save off for next pass
+	    $running_rows[scalar(@running_rows)] = \%running_row;
+
 	    # Local vars!
 	    my $eid         = $running_row{'eid'};
 	    my $pid         = $running_row{'pid'};
@@ -271,13 +275,9 @@ while (1) {
 	    $canterm{"$pid:$eid"} = ($query_result ? 1 : 0);
 	}
 	DBQueryWarn("unlock tables");
-
-	#
-	# Reset and go through again.
-	#
-	$running_result->dataseek(0);
 	
-	while (my %running_row = $running_result->fetchhash()) {
+	for (my $i = 0; $i < @running_rows; ++$i) {
+	    my %running_row = %{$running_rows[$i]};
 	    my $canceled    = $running_row{'canceled'};
 	    # Local vars!
 	    my $eid         = $running_row{'eid'};

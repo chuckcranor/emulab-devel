@@ -24,7 +24,7 @@ my $force   = 0;
 # Configure variables
 #
 my $TB		= "@prefix@";
-my $CHOWN       = "/usr/sbin/chown";
+my $CHOWN       = "@CHOWN@";
 
 #
 # Testbed Support libraries

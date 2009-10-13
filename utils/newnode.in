@@ -38,10 +38,6 @@ my $nfree = "$TB/bin/nfree";
 my $dhcpd_makeconf = "$TB/sbin/dhcpd_makeconf";
 my $exports_setup = "$TB/sbin/exports_setup";
 
-my $dhcpd_rc = "/usr/local/etc/rc.d/2.dhcpd.sh";
-
-my $sudo = "/usr/local/bin/sudo -S";
-
 #
 # MFS to boot the nodes into initially
 #
@@ -99,17 +95,13 @@ if ($options{f}) {
 # We seem to have to do this so that ssh gets proper root permissions to read
 # the key file. Argh.
 #
-$UID = $EUID = 0;
+# NOTE: this no longer seems necessary for anything in the code path this 
+# script traverses.
+#
+#TBSetreuid(0,0);
 
 if (@ARGV < 1) {
     usage();
-}
-
-#
-# The user has to be able to run sudo, so they can restart dhcpd.
-#
-if (system "$sudo /bin/pwd < /dev/null") {
-    die "You must be able to sudo to root to use this script\n";
 }
 
 #
@@ -152,7 +144,7 @@ NODE: foreach my $node_id (@node_ids) {
 	next NODE;
     }
     my ($new_node_id, $type, $IP, $tempIP, $floor, $building, $loc_x, $loc_y,
-	$contact, $phone, $room, $role) = $query_result->fetchrow();
+	$contact, $phone, $room, $role) = $query_result->fetchrow_array();
 
     #
     # Make sure they've given it an IP address that looks valid
@@ -169,7 +161,7 @@ NODE: foreach my $node_id (@node_ids) {
     $query_result = DBQueryFatal("SELECT node_id FROM interfaces WHERE " .
 	"IP='$IP' AND role='" . TBDB_IFACEROLE_CONTROL() . "'");
     if ($query_result->num_rows()) {
-	my ($existing_node_id) = $query_result->fetchrow();
+	my ($existing_node_id) = $query_result->fetchrow_array();
 	warn "Node $node_id failed: $existing_node_id is already using IP " .
 		"address $IP\n";
 	next NODE;
@@ -222,7 +214,7 @@ NODE: foreach my $node_id (@node_ids) {
 
     my %interfaces;
     while (my ($card, $MAC, $iface_type, $switch_id, $switch_card,
-	    $switch_port, $cable, $len, $ifrole) = $query_result->fetchrow()) {
+	    $switch_port, $cable, $len, $ifrole) = $query_result->fetchrow_array()) {
 	#
 	# Get some more information about this interface type
 	#
@@ -234,7 +226,7 @@ NODE: foreach my $node_id (@node_ids) {
 	    next NODE;
 	}
 
-	my ($max_speed, $full_duplex, $connector) = $iface_query->fetchrow();
+	my ($max_speed, $full_duplex, $connector) = $iface_query->fetchrow_array();
 
 	#
 	# Do a sanity check - make sure that we have a switch recorded for all
@@ -525,21 +517,9 @@ if (!@succeeded_nodes) {
 #
 # Re-generate dhcpd.conf
 #
-print "Re-generating dhcpd.conf\n";
+print "Re-generating and restarting dhcpd.conf\n";
 if (system("$dhcpd_makeconf -i -r")) {
     die "Unable to open regenerate dhcpd config file\n";
-}
-
-print "Restarting dhcpd: $sudo $dhcpd_rc stop\n";
-my $sudo_rv = system "$sudo $dhcpd_rc stop";
-if ($sudo_rv) {
-    die "Error stopping dhcpd - return value was $sudo_rv\n";
-}
-sleep 2;
-print "Restarting dhcpd: $sudo $dhcpd_rc start\n";
-$sudo_rv = system "$sudo $dhcpd_rc start";
-if ($sudo_rv) {
-    die "Error starting dhcpd - return value was $sudo_rv\n";
 }
 
 print "Setting up nameserver\n";

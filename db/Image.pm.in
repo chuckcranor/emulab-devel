@@ -385,7 +385,7 @@ sub EditImageid($$$$)
 	my $mtype = "mtype_$type";
 	if (exists($argref->{$mtype})) {
 	    my $value = $argref->{$mtype};
-	    ##printf "argref->{$mtype} %s\n", $value;
+	    printf "$mtype %s\n", $value;
 	    $mods{$mtype} = $value;
 	    if ($value eq "1") {
 		push(@map_updates, $type);
@@ -435,7 +435,7 @@ sub EditImageid($$$$)
 			     "VALUES ('$osid_array[$j]', ".
 			     "        '$map_updates[$i]', ".
 			     "        '$imageid')";
-		 ##print "$query\n";
+		 print "query = '$query'\n";
 		 DBQueryWarn($query);
 	    }
 	}

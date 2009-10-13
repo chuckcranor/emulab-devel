@@ -32,7 +32,7 @@ my $FS       = "@FSNODE@";
 my $TESTMODE = @TESTMODE@;
 my $FSLIST   = "@FS_WITH_QUOTAS@";
 
-my $QUOTACMD = "/usr/bin/quota";
+my $QUOTACMD = "@QUOTA@";
 my $SSHTB    = "/usr/testbed/bin/sshtb";
 
 # Locals

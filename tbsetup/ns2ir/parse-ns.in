@@ -66,6 +66,7 @@ delete @ENV{'IFS', 'CDPATH', 'ENV', 'BASH_ENV'};
 
 if ($TESTMODE) {
     # In testmode, drop privs (my devel tree at home is TESTMODE=1)
+    # can't use TBSeteuid yet, it's not imported
     $EUID = $UID;
 }
 elsif ($EUID != 0) {
@@ -181,7 +182,7 @@ if (!$TESTMODE) {
     }
 
     # Run as the user for most of this script.
-    $EUID = $UID;
+    TBSeteuid($UID);
 }
 
 # Create the defs files.
@@ -238,9 +239,9 @@ else {
     # In non-testmode, must flip to real root for the ssh, and then flip
     # back afterwards.
     # 
-    $EUID = $UID = 0;
+    TBSetreuid(0,0);
     open ERR, "sshtb -host $CONTROL $cmdargs < $infile 2>&1 >> $outfile |";
-    $EUID = $UID = $SAVEUID;
+    TBSetreuid($SAVEUID,$SAVEUID);
 }
 
 #

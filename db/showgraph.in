@@ -32,6 +32,9 @@ if ($#ARGV >= 1 || $#ARGV < 0) {
     require "ctime.pl";
 }
 
+my $XVCG = "@XVCG@";
+my $DOT = "@DOT@";
+
 my $display = shift;
 
 my $v = 0; # Verbose
@@ -80,7 +83,7 @@ foreach $tbl ( @tbls ) {
     push(@tablelist,$tbl);
     print "Found $tbl:\n" if $v;
     if ($sth = $dbh->query("describe $tbl") ) {
-	while ( @data = $sth->fetchrow()) {
+	while ( @data = $sth->fetchrow_array()) {
 	    $col = $data[0];
 	    $col =~ s/[0-9\-]+$//;
 	    if (!defined($tablecols{$col})) {
@@ -132,8 +135,8 @@ print TMPN "}\n";
 close TMPN;
 
 if ($display ne "") {
-  system("/usr/X11R6/bin/xvcg -silent -display $display $filename");
+  system("$XVCG -silent -display $display $filename");
 } else {
-  system("/usr/X11R6/bin/xvcg -silent $filename");
+  system("$XVCG -silent $filename");
 }
 #exec "/bin/rm $filename";

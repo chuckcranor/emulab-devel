@@ -34,8 +34,8 @@ my $TB		= "@prefix@";
 my $MAINSITE    = @TBMAINSITE@;
 my $ARCHSUPPORT = @ARCHIVESUPPORT@;
 my $USEARCHIVE  = ($MAINSITE || $ARCHSUPPORT);
-my $ZIPINFO     = "/usr/local/bin/zipinfo";
-my $TAR		= "/usr/bin/tar";
+my $ZIPINFO     = "@ZIPINFO@";
+my $TAR		= "@TAR@";
 
 sub setdebug($)
 {

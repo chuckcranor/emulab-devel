@@ -25,6 +25,9 @@
 #include <syslog.h>
 #include <pwd.h>
 #include <grp.h>
+#ifdef __linux__
+#include <time.h>
+#endif
 #include "tbdb.h"
 #include "log.h"
 

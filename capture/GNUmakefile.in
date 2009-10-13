@@ -40,6 +40,11 @@ endif
 LIBS	 += -ldl -lz
 endif
 
+MYSQL_LIBS = -L/usr/local/lib/mysql -lmysqlclient
+ifeq ($(SYSTEM),Linux)
+MYSQL_LIBS = `mysql_config --libs`
+endif
+
 capture: capture.c capdecls.h
 	$(CC) $(CFLAGS) -DUSESOCKETS -DWITHSSL -DPREFIX=\"$(TBROOT)\" -o capture $< $(LDFLAGS) -lssl -lcrypto $(LIBS)
 
@@ -61,7 +66,7 @@ capture-tty: capture.c capdecls.h
 capserver:	capserver.c capdecls.h
 	$(CC) $(CFLAGS) $(DBFLAGS) -o capserver $< \
 		${OBJDIR}/lib/libtb/libtb.a \
-		-L/usr/local/lib/mysql -lmysqlclient
+		$(MYSQL_LIBS)
 
 #
 # Do not capture install by default.

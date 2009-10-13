@@ -108,7 +108,7 @@ if (! defined($this_user)) {
 my $user_uid = $this_user->uid();
 
 # Run as the user for most of this script.
-$EUID = $UID;
+TBSeteuid($UID);
 
 my $cmdargs = "$TB/libexec/ns2ir/parse.proxy ";
 $cmdargs .= " -u $user_uid -v -- $pid $gid $eid";
@@ -119,9 +119,9 @@ open(FOO, ">$outfile") ||
     tbdie("Cannot create parser output file $outfile");
 close(FOO);
 
-$EUID = $UID = 0;
+TBSetreuid(0,0);
 system("sshtb -host $CONTROL $cmdargs < $nsfile > $outfile");
-$EUID = $UID = $SAVEUID;
+TBSetreuid($SAVEUID,$SAVEUID);
 
 if ($?) {
     my $exit_status = $? >> 8;

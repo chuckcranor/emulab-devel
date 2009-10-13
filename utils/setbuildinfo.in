@@ -21,12 +21,12 @@ my $DBMIGRATE = "@top_srcdir@/sql/database-migrate.txt";
 # script can run from a first-time installation, before the latter is
 # installed.
 #
-use Mysql;
+use DBI;
 
 #
 # Build a list of tables to export
 #
-my $dbh = Mysql->connect('localhost', $DBNAME, undef, undef);
+my $dbh = DBI->connect("DBI:mysql:database=$DBNAME;host=localhost",undef,undef);
 if (!$dbh) {
     die("*** $0:\n".
 	"    Unable to connect to mysqld\n");
@@ -41,9 +41,9 @@ $buildinfo = $dbh->quote($buildinfo);
 #
 # And store into the appropriate sitevar.
 #
-my $query_result =
-    $dbh->query("update sitevariables set value=$buildinfo ".
-		"where name='general/version/build'");
+my $sth = $dbh->prepare("update sitevariables set value=$buildinfo ".
+			"where name='general/version/build'");
+my $query_result = $sth->execute();
 if (!$query_result) {
     die("*** $0:\n".
 	"    Unable to set sitevar 'general/version/build' to $buildinfo\n");

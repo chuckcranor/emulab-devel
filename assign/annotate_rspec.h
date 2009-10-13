@@ -53,7 +53,7 @@ class annotate_rspec : public annotate
 		 xercesc::DOMElement* find_next_link_in_path (xercesc::DOMElement *prev, std::list<const char*>* links);
 		
 		// Copies the component spec from the source to the destination
-		void annotate_rspec::copy_component_spec(const xercesc::DOMElement* src, xercesc::DOMElement* dst);
+		void copy_component_spec(const xercesc::DOMElement* src, xercesc::DOMElement* dst);
 };
 
 #endif //for __ANNOTATE_RSPEC_H

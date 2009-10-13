@@ -90,7 +90,7 @@ if (! ($query_result = DBQueryWarn("show tables"))) {
     fatal("Error accessing the database.");
 }
 
-while (my ($table) = $query_result->fetchrow()) {
+while (my ($table) = $query_result->fetchrow_array()) {
     print "Checking $table ...\n";
 
     # virt_routes is too big for this.
@@ -100,7 +100,7 @@ while (my ($table) = $query_result->fetchrow()) {
     if (! $check_result) {
 	fatal("Error accessing the database.");
     }
-    while (my (undef, undef, $msgtype, $msgtext) = $check_result->fetchrow()) {
+    while (my (undef, undef, $msgtype, $msgtext) = $check_result->fetchrow_array()) {
 	if ($verbose) {
 	    printf("%8s : $msgtext\n", $msgtype, $msgtext);
 	    next;

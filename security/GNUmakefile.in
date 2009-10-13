@@ -19,6 +19,12 @@ SETUID_BIN_SCRIPTS   =
 SETUID_SBIN_SCRIPTS  = 
 SETUID_LIBX_SCRIPTS  = suexec
 
+SYSTEM	:= $(shell uname -s)
+MYSQL_LIBS	= -L/usr/local/lib/mysql -lmysqlclient
+ifeq ($(SYSTEM),Linux)
+MYSQL_LIBS	= `mysql_config --libs`
+endif
+
 #
 # Force dependencies on the scripts so that they will be rerun through
 # configure if the .in file is changed.
@@ -44,7 +50,7 @@ genlastlog:	genlastlog.c
                 -DUSERNODE='"$(USERNODE)"' \
 		-DLOG_TESTBED=$(LOG_TESTBED) \
 		-o genlastlog $< ${OBJDIR}/lib/libtb/libtb.a \
-		-L/usr/local/lib/mysql -lmysqlclient
+		$(MYSQL_LIBS)
 
 install: $(addprefix $(INSTALL_LIBEXECDIR)/, $(BINS)) \
 	$(addprefix $(INSTALL_SBINDIR)/, $(SBINS))

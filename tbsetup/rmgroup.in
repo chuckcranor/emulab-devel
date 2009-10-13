@@ -52,7 +52,6 @@ my $BUGDBSUPPORT  = @BUGDBSUPPORT@;
 my $OPSDBSUPPORT  = @OPSDBSUPPORT@;
 
 my $SSH           = "$TB/bin/sshtb";
-my $GROUPDEL      = "/usr/sbin/pw groupdel";
 my $DELMMLIST     = "$TB/sbin/delmmlist";
 my $MODGROUPS     = "$TB/sbin/modgroups";
 my $OPSDBCONTROL  = "$TB/sbin/opsdb_control";
@@ -75,6 +74,9 @@ use lib "@prefix@/lib";
 use libaudit;
 use libdb;
 use libtestbed;
+use EmulabSys;
+
+my $sys = EmulabSys->get();
 
 # Defined in libtestbed;
 my $PROJROOT    = PROJROOT();
@@ -199,10 +201,8 @@ if (system("grep -q '^${unix_gid}:' /etc/group")) {
     #
     print "Removing group $unix_name ($unix_gid) on local node.\n";
 
-    if (system("$GROUPDEL $unix_name")) {
-	if (($? >> 8) != 65) {
-	    fatal("Could not remove group $unix_name from local node!");
-	}
+    if ($sys->groupDel("$unix_name")) {
+	fatal("Could not remove group $unix_name from local node!");
     }
 
     if ($MAILMANSUPPORT && !$ELABINELAB) {
@@ -231,10 +231,8 @@ if (system("grep -q '^${unix_gid}:' /etc/group")) {
     if ($CONTROL ne $BOSSNODE) {
 	print "Removing group $unix_name ($unix_gid) on $CONTROL.\n";
 
-	if (system("$SSH -host $CONTROL $GROUPDEL $unix_name")) {
-	    if (($? >> 8) != 65) {
-		fatal("Could not remove group $unix_name from $CONTROL!");
-	    }
+	if ($sys->groupDel("$unix_name","$CONTROL")) {
+	    fatal("Could not remove group $unix_name from $CONTROL!");
 	}
     }
 
@@ -244,10 +242,8 @@ if (system("grep -q '^${unix_gid}:' /etc/group")) {
     foreach my $tipserver ( TBTipServers() ) {
 	print "Removing group $unix_name ($unix_gid) on $tipserver.\n";
 
-	if (system("$SSH -host $tipserver $GROUPDEL $unix_name")) {
-	    if (($? >> 8) != 65) {
-		fatal("Could not remove group $unix_name from $tipserver!");
-	    }
+	if ($sys->groupDel("$unix_name","$tipserver")) {
+	    fatal("Could not remove group $unix_name from $tipserver!");
 	}
     }
 }

@@ -98,8 +98,6 @@ order by pid,eid,n.node_id";
 
 my $q = DBQueryFatal($sql);
 
-if ($d) { print $q->as_string; $q->dataseek(0); }
-
 if ($s && $experiment) {
     # No output; For a single experiment, there should be a single row.
     my %row = $q->fetchhash();

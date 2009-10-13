@@ -108,6 +108,7 @@ my $NFREE         = "$TBROOT/bin/nfree";
 my $DBNAME  	  = "@TBDBNAME@";
 my $DELAYCAPACITY = @DELAYCAPACITY@;	# Can be overridden by user!
 $ENV{'PATH'} = "/usr/bin:$TBROOT/libexec:$TBROOT/sbin:$TBROOT/bin";
+my $NICE          = "@NICE@";
 
 #
 # Turn off line buffering on output
@@ -1119,7 +1120,7 @@ sub RunAssign ()
 	# the parent. 
 	#
         POSIX::setsid();
-	exec("nice assign_wrapper2 $cmd $cmdargs > assign.log 2>&1");
+	exec("$NICE assign_wrapper2 $cmd $cmdargs > assign.log 2>&1");
 	die "Could not start assign!\n";
     }
 
@@ -3793,7 +3794,7 @@ sub LoadPhysInfo()
     my $query_result =
 	DBQueryFatal("select * from interface_capabilities");
 
-    while (my ($type, $capkey, $capval) = $query_result->fetchrow()) {
+    while (my ($type, $capkey, $capval) = $query_result->fetchrow_array()) {
 	$interface_capabilities{$type} = {}
   	    if (!defined($interface_capabilities{$type}));
 	$interface_capabilities{$type}->{$capkey} = $capval;
@@ -3848,7 +3849,7 @@ sub LoadPhysInfo()
     # XXX Special hack for sim nodes.
     $node_type_linkbw{"sim"} = {};
 
-    while (my ($iface_type, $node_type) = $query_result->fetchrow()) {
+    while (my ($iface_type, $node_type) = $query_result->fetchrow_array()) {
 	my $node_class = nodetypeclass($node_type);
 
 	if (!defined($interface_capabilities{$iface_type}->{"protocols"})) {
@@ -3905,7 +3906,7 @@ sub LoadPhysInfo()
 	DBQueryFatal("select distinct n.type,at.type from node_auxtypes as at ".
 		     "left join nodes as n on n.node_id=at.node_id");
 
-    while (my ($phystype, $auxtype) = $query_result->fetchrow()) {
+    while (my ($phystype, $auxtype) = $query_result->fetchrow_array()) {
 	next
 	    if (!exists($node_type_linkbw{$phystype}));
 	
@@ -4213,7 +4214,7 @@ sub LoadVirtNodeDesires()
     my %virt_node_desires = ();
     my $query_result = DBQueryFatal("select vname, desire, weight from " .
 	"virt_node_desires where pid='$pid' and eid='$eid'");
-    while (my ($vname, $desire, $weight) = $query_result->fetchrow()) {
+    while (my ($vname, $desire, $weight) = $query_result->fetchrow_array()) {
 	if (!$virt_node_desires{$vname}) {
 	    $virt_node_desires{$vname} = { $desire => $weight };
 	} else {

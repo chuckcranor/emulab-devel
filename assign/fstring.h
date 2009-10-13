@@ -27,13 +27,17 @@
 #include <map>
 using namespace std;
 
-#ifdef NEW_GCC
+#if defined(NEEDBACK_GCC)
+#include <backward/hash_fun.h>
+using namespace __gnu_cxx;
+#elif defined(NEW_GCC)
 #include <ext/hash_fun.h>
 using namespace __gnu_cxx;
 #else
 #include <stl_hash_fun.h>
 #endif
 
+#include <string.h>
 #include <string>
 using namespace std;
 

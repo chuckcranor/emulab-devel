@@ -36,11 +36,6 @@ my $SSH         = "$TB/bin/sshtb";
 my $MMPROXY     = "$TB/sbin/mailmanproxy";
 my $ADDMMLIST   = "$TB/sbin/addmmlist";
 
-my $MAILMANDIR = "/usr/local/mailman";
-my $MMBINDIR   = "$MAILMANDIR/bin";
-my $MMLISTDIR  = "$MAILMANDIR/lists";
-
-
 # Protos
 sub fatal($);
 
@@ -62,6 +57,13 @@ use lib "@prefix@/lib";
 use libdb;
 use libtestbed;
 use User;
+use EmulabSys;
+
+my $sys = EmulabSys->get();
+
+my $MAILMANDIR     = $sys->def("MAILMANDIR");
+my $MMBINDIR       = $sys->def("MAILMANBINDIR");
+my $MMLISTDIR      = $sys->def("MAILMANLISTDIR");
 
 #
 # We don't want to run this script unless its the real version.
@@ -138,7 +140,7 @@ if (!defined($listpasswd) || $listpasswd eq "") {
 #
 # For ssh.
 #
-$UID = $EUID;
+TBSetuid($EUID);
 if ($CONTROL ne $BOSSNODE) {
 
     # Must serialize some of the mailman stuff. Be sure to use the same token!
