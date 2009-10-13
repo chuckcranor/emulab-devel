@@ -1,6 +1,6 @@
 /*
  * EMULAB-COPYRIGHT
- * Copyright (c) 2000-2009 University of Utah and the Flux Group.
+ * Copyright (c) 2000-2006 University of Utah and the Flux Group.
  * All rights reserved.
  */
 
@@ -33,9 +33,6 @@
 #include "sliceinfo.h"
 #include "global.h"
 
-/* XXX this is a hack right now */
-#define USE_HACKSORT 0
-
 #define min(a,b) ((a) <= (b) ? (a) : (b))
 
 char	*infilename;
@@ -57,7 +54,6 @@ int	badsectors= 0;
 int	retrywrites= 1;
 int	dorelocs  = 1;
 int	metaoptimize = 0;
-int	filemode  = 0;
 off_t	datawritten;
 partmap_t ignore, forceraw;
 
@@ -99,7 +95,7 @@ struct blockreloc	*relocs;
 int			numregions, numrelocs;
 
 void	dumpskips(int verbose);
-static void	sortrange(struct range **head, int domerge,
+void	sortrange(struct range *head, int domerge,
 		  int (*rangecmp)(struct range *, struct range *));
 int	mergeskips(int verbose);
 int	mergeranges(struct range *head);
@@ -218,9 +214,7 @@ devlseek(int fd, off_t off, int whence)
 	off_t noff;
 	assert((off & (DEV_BSIZE-1)) == 0);
 	noff = lseek(fd, off, whence);
-	if (!filemode) {
-		assert(noff == (off_t)-1 || (noff & (DEV_BSIZE-1)) == 0);
-	}
+	assert(noff == (off_t)-1 || (noff & (DEV_BSIZE-1)) == 0);
 	return noff;
 }
 
@@ -378,7 +372,7 @@ main(int argc, char *argv[])
 	extern char build_info[];
 
 	gettimeofday(&sstamp, 0);
-	while ((ch = getopt(argc, argv, "vlbnNdihrs:c:z:ofI:1F:DR:S:XC:H:M")) != -1)
+	while ((ch = getopt(argc, argv, "vlbnNdihrs:c:z:oI:1F:DR:S:XC:H:M")) != -1)
 		switch(ch) {
 		case 'v':
 			version++;
@@ -465,10 +459,6 @@ main(int argc, char *argv[])
 		case 'M':
 			metaoptimize++;
 			break;
-		case 'f':
-			filemode++;
-			rawmode++;
-			break;
 		case 'h':
 		case '?':
 		default:
@@ -517,7 +507,7 @@ main(int argc, char *argv[])
 	else
 		outfilename = argv[1];
 
-	if (!slicemode && !filemode && dorelocs)
+	if (!slicemode && dorelocs)
 		dorelocs = 0;
 
 	infilename = argv[0];
@@ -566,7 +556,7 @@ main(int argc, char *argv[])
 			rval = read_shd(chkpointdev, infilename, infd,
 					inputminsec, addvalid);
 			if (rval == 0)
-				sortrange(&ranges, 1, 0);
+				sortrange(ranges, 1, 0);
 		}
 		if (rval) {
 			fprintf(stderr, "* * * Aborting * * *\n");
@@ -604,7 +594,7 @@ main(int argc, char *argv[])
 	if (debug)
 		dumpranges(debug > 1);
 
-	sortrange(&fixups, 0, cmpfixups);
+	sortrange(fixups, 0, cmpfixups);
 	if (debug > 1)
 		dumpfixups(debug > 2);
 	fflush(stderr);
@@ -883,16 +873,9 @@ read_raw(void)
 		return 1;
 	}
 
-	/*
-	 * Round up the size to a sector boundary
-	 */
-	if (filemode)
-		size = sectobytes(bytestosec(size + secsize-1));
-
 	if (debug) {
 		fprintf(stderr, "  Raw Image\n");
-		fprintf(stderr, "        start %12d, size %12lld\n",
-			0, (long long)size);
+		fprintf(stderr, "        start %12d, size %12lld\n", 0, size);
 	}
 	return 0;
 }
@@ -1008,7 +991,7 @@ dumpskips(int verbose)
 	
 	fprintf(stderr,
 		"Total Number of Free Sectors: %d (bytes %lld) in %d ranges\n",
-		total, (long long)sectobytes(total), nranges);
+		total, sectobytes(total), nranges);
 }
 
 #undef DOHISTO
@@ -1030,7 +1013,7 @@ mergeskips(int verbose)
 	memset(histo, 0, sizeof(histo));
 #endif
 
-	sortrange(&skips, 0, 0);
+	sortrange(skips, 0, 0);
 	freed += mergeranges(skips);
 
 	/*
@@ -1060,7 +1043,7 @@ mergeskips(int verbose)
 		if (verbose && culled) {
 			fprintf(stderr,
 				"\nFree Sectors Ignored: %d (%lld bytes) in %d ranges\n",
-				total, (long long)sectobytes(total), culled);
+				total, sectobytes(total), culled);
 #ifdef DOHISTO
 			{
 				int i;
@@ -1086,89 +1069,19 @@ mergeskips(int verbose)
 	return (freed + culled);
 }
 
-#if USE_HACKSORT > 0
-/*
- * A "better" sort.  Put pointers to all the linked list elements in an
- * array so that we can use qsort and then rebuild the linked list afterward.
- * The best sort technology available with less than 5 minutes work!
- */
-int
-sfunc(void *rfunc, const void *e1, const void *e2)
-{
-	int ((*rangecmp)(struct range *, struct range *)) = rfunc;
-	struct range *r1 = *(struct range **)e1;
-	struct range *r2 = *(struct range **)e2;
-
-	if (r1->start > r2->start ||
-	    (rfunc && (*rangecmp)(r1, r2)))
-		return 1;
-	return -1;
-}
-
-struct range *
-bettersort(struct range *head, int count,
-	       int (*rangecmp)(struct range *, struct range *))
-{
-	struct range **tarray, *nlist, **listp, *prange;
-	int i;
-
-	tarray = calloc(count, sizeof(struct range *));
-	if (tarray == NULL)
-		return NULL;
-
-	i = 0;
-	for (prange = head; prange; prange = prange->next) {
-		assert(i < count);
-		tarray[i] = prange;
-		i++;
-	}
-	assert(i == count);
-	qsort_r(tarray, count, sizeof(struct range *), rangecmp, sfunc);
-	listp = &nlist;
-	for (i = 0; i < count; i++) {
-		assert(tarray[i+1] == NULL ||
-		       tarray[i]->start <= tarray[i+1]->start);
-		prange = tarray[i];
-		*listp = prange;
-		listp = &prange->next;
-	}
-	*listp = NULL;
-	free(tarray);
-	return nlist;
-}
-#endif
-
 /*
  * A very dumb bubblesort!
  */
 void
-sortrange(struct range **headp, int domerge,
+sortrange(struct range *head, int domerge,
 	  int (*rangecmp)(struct range *, struct range *))
 {
-	struct range	*prange, tmp, *head = *headp;
+	struct range	*prange, tmp;
 	int		changed = 1;
 
 	if (head == NULL)
 		return;
 	
-#if USE_HACKSORT > 0
-	{
-		int count = 0;
-		for (prange = head; prange; prange = prange->next)
-			count++;
-		fprintf(stderr, "sorting %d records\n", count);
-		if (count > 10000) {
-			head = bettersort(head, count, rangecmp);
-			for (prange = head; prange; prange = prange->next) {
-				if (prange->next)
-					assert(prange->start+prange->size <= prange->next->start);
-			}
-			*headp = head;
-			return;
-		}
-	}
-#endif
-
 	while (changed) {
 		changed = 0;
 
@@ -1644,7 +1557,7 @@ freerelocs(void)
 /*
  * Compress the image.
  */
-static uint8_t  output_buffer[CHUNKSIZE];
+static uint8_t  output_buffer[SUBBLOCKSIZE];
 static int	buffer_offset;
 static off_t	inputoffset;
 static struct timeval cstamp;
@@ -1734,7 +1647,7 @@ compress_image(void)
 			gettimeofday(&estamp, 0);
 			estamp.tv_sec -= cstamp.tv_sec;
 			fprintf(stderr, "%12lld in %ld seconds.\n",
-				inputoffset + size, (long)estamp.tv_sec);
+				inputoffset + size, estamp.tv_sec);
 		}
 		else if (dots && full) {
 			static int pos;
@@ -1744,7 +1657,7 @@ compress_image(void)
 				gettimeofday(&estamp, 0);
 				estamp.tv_sec -= cstamp.tv_sec;
 				fprintf(stderr, " %12lld %4ld\n",
-					inputoffset+size, (long)estamp.tv_sec);
+					inputoffset+size, estamp.tv_sec);
 				pos = 0;
 			}
 			fflush(stderr);
@@ -1987,10 +1900,10 @@ compress_image(void)
 		perror("seeking to get output file size");
 		exit(1);
 	}
-	count = tmpoffset / CHUNKSIZE;
+	count = tmpoffset / SUBBLOCKSIZE;
 
 	for (i = 0, outputoffset = 0; i < count;
-	     i++, outputoffset += CHUNKSIZE) {
+	     i++, outputoffset += SUBBLOCKSIZE) {
 		
 		if (lseek(outfd, (off_t) outputoffset, SEEK_SET) < 0) {
 			perror("seeking to read block header");
@@ -2052,7 +1965,7 @@ compress_status(int sig)
  */
 #define BSIZE		(128 * 1024)
 static char		inbuf[BSIZE];
-static			int subblockleft = CHUNKMAX;
+static			int subblockleft = SUBBLOCKMAX;
 static z_stream		d_stream;	/* Compression stream */
 
 #define CHECK_ZLIB_ERR(err, msg) { \
@@ -2069,10 +1982,10 @@ compress_chunk(off_t off, off_t size, int *full, uint32_t *subblksize)
 	off_t		total = 0;
 
 	/*
-	 * Whenever subblockleft equals CHUNKMAX, it means that a new
+	 * Whenever subblockleft equals SUBBLOCKMAX, it means that a new
 	 * compression subblock needs to be started.
 	 */
-	if (subblockleft == CHUNKMAX) {
+	if (subblockleft == SUBBLOCKMAX) {
 		d_stream.zalloc = (alloc_func)0;
 		d_stream.zfree  = (free_func)0;
 		d_stream.opaque = (voidpf)0;
@@ -2132,21 +2045,6 @@ compress_chunk(off_t off, off_t size, int *full, uint32_t *subblksize)
 			break;
 		}
 
-		/*
-		 * In filemode, a file may not be a multiple of the sector
-		 * size.  Pad it so it is.
-		 */
-		if (filemode && (cc & (secsize - 1)) != 0) {
-			int zoff = cc & (secsize - 1);
-			int zsize = secsize - zoff;
-
-			/* XXX minor abuse of reloc: signal short sector */
-			addreloc(off+total+(cc-zoff), zoff, RELOC_SHORTSECTOR);
-
-			memset(&inbuf[cc], 0, zsize);
-			cc += zsize;
-		}
-
 		if (cc != count && !tileof) {
 			fprintf(stderr, "Bad count in read, %d != %d at %llu\n",
 				cc, count,
@@ -2164,7 +2062,7 @@ compress_chunk(off_t off, off_t size, int *full, uint32_t *subblksize)
 			size -= cc;
 		total += cc;
 
-		outsize = CHUNKSIZE - buffer_offset;
+		outsize = SUBBLOCKSIZE - buffer_offset;
 
 		/* XXX match behavior of original compressor */
 		if (oldstyle && outsize > 0x20000)
@@ -2190,7 +2088,7 @@ compress_chunk(off_t off, off_t size, int *full, uint32_t *subblksize)
 		}
 		count = outsize - d_stream.avail_out;
 		buffer_offset += count;
-		assert(buffer_offset <= CHUNKSIZE);
+		assert(buffer_offset <= SUBBLOCKSIZE);
 		bytescompressed += cc - d_stream.avail_in;
 
 		/*
@@ -2222,7 +2120,7 @@ compress_chunk(off_t off, off_t size, int *full, uint32_t *subblksize)
 		compress_finish(subblksize);
 		return total;
 	}
-	*subblksize = CHUNKMAX - subblockleft;
+	*subblksize = SUBBLOCKMAX - subblockleft;
 	return total;
 }
 
@@ -2234,13 +2132,13 @@ compress_finish(uint32_t *subblksize)
 {
 	int		err, count;
 
-	if (subblockleft == CHUNKMAX)
+	if (subblockleft == SUBBLOCKMAX)
 		return 0;
 	
 	d_stream.next_in   = 0;
 	d_stream.avail_in  = 0;
 	d_stream.next_out  = &output_buffer[buffer_offset];
-	d_stream.avail_out = CHUNKSIZE - buffer_offset;
+	d_stream.avail_out = SUBBLOCKSIZE - buffer_offset;
 
 	err = deflate(&d_stream, Z_FINISH);
 	if (err != Z_STREAM_END)
@@ -2251,10 +2149,10 @@ compress_finish(uint32_t *subblksize)
 	/*
 	 * There can be some left even though we use Z_SYNC_FLUSH!
 	 */
-	count = (CHUNKSIZE - buffer_offset) - d_stream.avail_out;
+	count = (SUBBLOCKSIZE - buffer_offset) - d_stream.avail_out;
 	if (count) {
 		buffer_offset += count;
-		assert(buffer_offset <= CHUNKSIZE);
+		assert(buffer_offset <= SUBBLOCKSIZE);
 		subblockleft -= count;
 		assert(subblockleft >= 0);
 	}
@@ -2265,14 +2163,14 @@ compress_finish(uint32_t *subblksize)
 	/*
 	 * The caller needs to know how big the actual data is.
 	 */
-	*subblksize  = CHUNKMAX - subblockleft;
+	*subblksize  = SUBBLOCKMAX - subblockleft;
 		
 	/*
 	 * Pad the subblock out.
 	 */
-	assert(buffer_offset + subblockleft <= CHUNKSIZE);
+	assert(buffer_offset + subblockleft <= SUBBLOCKSIZE);
 	memset(&output_buffer[buffer_offset], 0, subblockleft);
 	buffer_offset += subblockleft;
-	subblockleft = CHUNKMAX;
+	subblockleft = SUBBLOCKMAX;
 	return 1;
 }

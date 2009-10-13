@@ -13,7 +13,6 @@
 use strict;
 use English;
 use Frontier::Responder;
-use Frontier::RPC2;
 use Data::Dumper;
 use POSIX;
 
@@ -64,11 +63,6 @@ if (!defined($certificate)) {
 	"    Could not get uuid from $EMULAB_PEMFILE\n");
 }
 $ENV{'MYUUID'} = $certificate->uuid();
-# The URN could also come from the certificate, and that might be preferable
-# in some ways (if anybody is doing something silly like authenticating
-# with somebody else's certificate).  But that would require everybody to
-# upgrade to URNs in their certificates, so we can't assume it yet.
-$ENV{'MYURN'} = "urn:publicid:IDN+@OURDOMAIN@+authority+cm";
 
 #
 # In the prototype, we accept certificate signed by trusted roots
@@ -129,7 +123,6 @@ LogStart(0, undef, LIBAUDIT_LOGTBOPS());
 Genixmlrpc->SetContext(Genixmlrpc->Context($certificate));
 
 my $responder = Frontier::Responder->new( "methods" => {
-    "GetVersion"        => \&GeniCM::GetVersion,
     "Resolve"	        => \&GeniCM::Resolve,
     "DiscoverResources" => \&GeniCM::DiscoverResources,
     "GetTicket"         => \&GeniCM::GetTicket,
@@ -149,7 +142,6 @@ my $responder = Frontier::Responder->new( "methods" => {
     "SliverStatus"      => \&GeniCM::SliverStatus,
     "SliverTicket"      => \&GeniCM::SliverTicket,
     "ListTickets"       => \&GeniCM::ListTickets,
-    "ListHistory"       => \&GeniCM::ListHistory,
    },
 );
 
@@ -164,11 +156,6 @@ my $response = $responder->{'_decode'}->serve($request,
 
 # Add stuff for log message if sent.
 AddAuditInfo("message", $response . "\n\n" . $request);
-
-#my $decoder = Frontier::RPC2->new();
-#my $object  = $decoder->decode($response);
-#my $value   = $object->{'value'};
-#print STDERR Dumper($value);
 
 #
 # Terminate the log capture so that we can print the response to STDOUT

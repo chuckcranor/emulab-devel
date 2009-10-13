@@ -1,24 +1,44 @@
-Docs
-Prefix
-
-Pain points
-=================================
-Testlayout - Suites and  Tests, buildup, teardown using Test::Class
-Testoutput - TestBuilderWrapper
-
 DOCS TODO
-  backoff example
-  more prose docs
+  Overview / howto write a test
 
 TODO
-  SSH SCP Cleanup
-  Revisit CartProd
+  TIMEOUT of XMLRPC Calls
+  TESTLWP
+  scp cleanup
+  chmod +x
+  wait for end of experiment
+  cmdline params (-D)
+  VERBOSENESS
+  Add basic image-test parameterization examples
+  EXAMPLES, Get some tests
+  traffic generation
+  convert more old tests
+  general result code handling framework
+
+STILL MESSY
+  XMLRPC/Client/Experiment TestSuite/Experiment return codes, exceptions, composability
+  Calling parallel tests 
+
+EXPAND CURRENT IMPLEMENTATION
+  event subsystem
+  parallel support (custom test harness)
 
 LATER
-  test groupings - use - perl modules works for now
+  Client.pm duplicate code elimination - Maybe this would make the code too unreadable
+  TestSuite::Experiment::Macros should be a monadic language like JQuery
+  test groupings
   Large External Tars and Resources for experiements
-  EXPAND CURRENT IMPLEMENTATION
-    event subsystem
+  buildup, teardown using Test::Class
+  create BSD virtual machine for testing
+  possibly collapse tbts and t/harness
 
 Parallel TODOS
-  clean up FF, Roles, constructors
+  retry
+  clean up FFF, Roles, constructors
+  CartProd teste - image test example
+
+DONE
+  POD function documentation
+  better general result code handling (ping_test single_node_test)
+  ForkFramework Constants
+

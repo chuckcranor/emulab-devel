@@ -108,12 +108,6 @@ sub new($$$$;$) {
     $self->{MIN_VLAN}         = $options->{'min_vlan'};
     $self->{MAX_VLAN}         = $options->{'max_vlan'};
 
-    if (($self->{MAX_VLAN} > 1024) && ($self->{MIN_VLAN} < 1000)) {
-	warn "ERROR: Some Cisco switches forbid creation of user vlans ".
-	     "with 1000 < vlan number <= 1024\n";
-	return undef;
-    }
-
     if ($community) { # Allow this to over-ride the default
 	$self->{COMMUNITY}    = $community;
     } else {
@@ -808,14 +802,11 @@ sub createVlan($$;$$$) {
 	# Perform the actual creation. Yes, this next line MUST happen all in
 	# one set command....
 	#
-	my ($statusRow, $typeRow, $nameRow, $saidRow) = 
-               ([$VlanRowStatus,"1.$vlan_number", "createAndGo","INTEGER"],
+	my $RetVal = snmpitSetWarn($self->{SESS},
+               [[$VlanRowStatus,"1.$vlan_number", "createAndGo","INTEGER"],
 		[$VlanType,"1.$vlan_number","ethernet","INTEGER"],
 		[$VlanName,"1.$vlan_number",$vlan_id,"OCTETSTR"],
-		[$VlanSAID,"1.$vlan_number",$SAID,"OCTETSTR"]);
-	my @varList = ($vlan_number > 1000) ?  ($statusRow, $nameRow)
-			    : ($statusRow, $typeRow, $nameRow, $saidRow);
-	my $RetVal = snmpitSetWarn($self->{SESS}, new SNMP::VarList(@varList));
+		[$VlanSAID,"1.$vlan_number",$SAID,"OCTETSTR"]]);
 	print "",($RetVal? "Succeeded":"Failed"), ".\n"	if (! $self->{QUIET});
 
 	#
@@ -1158,70 +1149,6 @@ sub removePortsFromVlan($@) {
 }
 
 #
-# Remove some ports from the given VLAN, which are given as Cisco-specific
-# VLAN numbers. Do not specify trunked ports here.
-#
-# usage: removeSomePortsFromVlan(self,int vlan, ports)
-#	 returns 0 on sucess.
-#	 returns the number of failed ports on failure.
-#
-sub removeSomePortsFromVlan($$@) {
-    my $self = shift;
-    my $vlan_number = shift;
-    my @ports = @_;
-
-    #
-    # Make sure the VLANs actually exist
-    #
-    if (!$self->vlanNumberExists($vlan_number)) {
-	print STDERR "ERROR: VLAN $vlan_number does not exist\n";
-	return 1;
-    }
-
-    #
-    # Make a hash of the ports for easy lookup later.
-    #
-    my %ports = ();
-    @ports{@ports} = @ports;
-
-    #
-    # Get a list of the ports in the VLAN
-    #
-    my $VlanPortVlan;
-    if ($self->{OSTYPE} eq "CatOS") {
-	$VlanPortVlan = "vlanPortVlan"; #index is ifIndex
-    } elsif ($self->{OSTYPE} eq "IOS") {
-	$VlanPortVlan = "vmVlan"; #index is ifIndex
-    }
-    my @remports;
-
-    #
-    # Walk the tree to find VLAN membership
-    #
-    my ($rows) = snmpitBulkwalkFatal($self->{SESS},[$VlanPortVlan]);
-    foreach my $rowref (@$rows) {
-	my ($name,$modport,$port_vlan_number) = @$rowref;
-	my ($trans) = convertPortFormat($PORT_FORMAT_NODEPORT,$modport);
-	if (!defined $trans) {
-	    $trans = ""; # Guard against some uninitialized value warnings
-	}
-
-	$self->debug("Got $name $modport ($trans) $port_vlan_number\n");
-	
-	push(@remports, $modport)
-	    if ("$port_vlan_number" eq "$vlan_number" &&
-		exists($ports{$trans}));
-    }
-
-    $self->debug("About to remove ports " . join(",",@remports) . "\n");
-    if (@remports) {
-	return $self->setPortVlan(1,@remports);
-    } else {
-	return 0;
-    }
-}
-
-#
 # Remove the given VLAN from this switch. This presupposes that all of its
 # ports have already been removed with removePortsFromVlan(). The VLAN is
 # given as a Cisco-specific VLAN number
@@ -1388,68 +1315,6 @@ sub vlanHasPorts($$) {
 }
 
 #
-# The next section is a helper function for checking which vlans
-# and which ports or trunks, setting and clearing them, etc.
-#
-
-my %vtrunkOIDS = (
-    0 => "vlanTrunkPortVlansEnabled",
-    1 => "vlanTrunkPortVlansEnabled2k",
-    2 => "vlanTrunkPortVlansEnabled3k",
-    3 => "vlanTrunkPortVlansEnabled4k"
-);
-
-# precompute 1k 0 bits as bitfield
-my $p1k = pack("x128");
-
-my ($VOP_CLEAR, $VOP_SET, $VOP_CLEARALL, $VOP_CHECK) = (0, 1, 2, 3);
-
-#
-# vlanTrunkUtil($self, $op, $ifIndex, @vlans)
-# does one of the 4 operations above on all 4 ranges of vlans
-# but tries to be a little smart about not visting ranges not needed.
-
-sub vlanTrunkUtil($$$$) {
-    my ($self, $op, $ifIndex, @vlans) = @_;
-
-    my ($bitfield, %vranges, @result);
-
-    if ($op == $VOP_CLEARALL)
-        { @result = @vlans = (1, 1025, 2049, 3073); }
-    foreach my $vlan (@vlans)
-	{ push @{$vranges{($vlan >> 10) & 3}}, $vlan; }
-
-    while (my ($bank, $banklist) = each %vranges) {
-	my ($bankbase, $bankOID) = (($bank << 10), $vtrunkOIDS{$bank});
-	$self->lock() unless ($op == $VOP_CHECK);
-	if ($op == $VOP_CLEARALL) {
-	    $bitfield = $p1k;
-	} else {
-	    $bitfield = snmpitGetFatal($self->{SESS}, [$bankOID,$ifIndex]);
-	    # the cisco 650x sometimes returns only a few bytes...
-	    my @bits = split //, unpack("B1024", $bitfield . $p1k);
-
-	    foreach my $vlan (@$banklist) {
-		 if ($op == $VOP_CHECK) {
-		     if ($bits[$vlan - $bankbase]) { push @result, $vlan; }
-		 } else {
-		     $bits[$vlan - $bankbase] = $op;
-		     push @result, $vlan;
-		 }
-	    }
-	    $bitfield = pack("B*", join('',@bits)) unless ($op == $VOP_CHECK);
-	}
-	next if ($op == $VOP_CHECK);
-
-	# don't need to check result because it dies if it doesn't work.
-	snmpitSetFatal($self->{SESS},
-	    [$bankOID,$ifIndex,$bitfield,"OCTETSTR"]);
-	$self->unlock();
-    }
-    return sort @result;
-}
-
-#
 # List all VLANs on the device
 #
 # usage: listVlans($self)
@@ -1529,12 +1394,19 @@ sub listVlans($) {
         #    $node = $self->{NAME} . ".$modport";
         #}
 
-	# Get the allowed VLANs on this trunk
-	my @trunklans = $self->vlanTrunkUtil($VOP_CHECK, $ifIndex, keys %Names);
-
-	foreach my $vlan_number (@trunklans) {
+	# Get the existing bitfield for allowed VLANs on this trunk
+	my $vlan_number = -1;
+	my $bitfield = snmpitGetFatal($self->{SESS},
+		["vlanTrunkPortVlansEnabled",$ifIndex]);
+	my $unpacked = unpack("B*",$bitfield);
+	# Put this into an array of 1s and 0s for easy manipulation
+	foreach my $bit (split //,$unpacked) {
+	    $vlan_number++;
+	    if ($bit == 0) { next; }
 	    $self->debug("got vlan $vlan_number on trunk $node\n",3);
-	    push @{$Members{$vlan_number}}, $node;
+	    if ($Names{$vlan_number}) {
+		push @{$Members{$vlan_number}}, $node;
+	    }
 	}
     }
 
@@ -1778,8 +1650,45 @@ sub setVlansOnTrunk($$$$) {
     }
 
     my ($ifIndex) = $self->convertPortFormat($PORT_FORMAT_IFINDEX,$port);
-    @vlan_numbers = $self->vlanTrunkUtil($value, $ifIndex, @vlan_numbers);
-    return (scalar(@vlan_numbers) != 0);
+
+    #
+    # Get the existing bitfield for allowed VLANs on the trunk
+    # If two snmpit process were manipulating trunks at the same
+    # time there is a potential race in which they would both
+    # retrieve the same bit vector, compute different results
+    # and then the trunk would not be correct, so we lock
+    # in the file system on boss, as that is likely to be faster
+    # than using the vlan lock buffer on the switch.
+    #
+    $self->lock();
+    my $bitfield = snmpitGetFatal($self->{SESS},
+	    ["vlanTrunkPortVlansEnabled",$ifIndex]);
+    my $unpacked = unpack("B*",$bitfield);
+    
+    # Put this into an array of 1s and 0s for easy manipulation
+    my @bits = split //,$unpacked;
+
+    # Just set the bit of the ones we want to change
+    foreach my $vlan_number (@vlan_numbers) {
+	$bits[$vlan_number] = $value;
+    }
+
+    # Pack it back up...
+    $unpacked = join('',@bits);
+
+    $bitfield = pack("B*",$unpacked);
+
+    # And save it back...
+    my $rv = snmpitSetFatal($self->{SESS},
+        ["vlanTrunkPortVlansEnabled",$ifIndex,$bitfield,"OCTETSTR"]);
+    $self->unlock();
+
+    if ($rv) {
+	return 1;
+    } else {
+	return 0;
+    }
+
 }
 
 #
@@ -1806,10 +1715,37 @@ sub clearAllVlansOnTrunk($$) {
     if (($channel =~ /^\d+$/) && ($channel != 0)) {
 	$ifIndex = $channel;
     }
-    my @vlan_numbers = $self->vlanTrunkUtil($VOP_CLEARALL, $ifIndex);
-    return (scalar(@vlan_numbers) != 0);
-}
 
+    #
+    # Get the existing bitfield for allowed VLANs on the trunk
+    #
+    my $bitfield = snmpitGetFatal($self->{SESS},
+	    ["vlanTrunkPortVlansEnabled",$ifIndex]);
+    my $unpacked = unpack("B*",$bitfield);
+    
+    # Put this into an array of 1s and 0s for easy manipulation
+    my @bits = split //,$unpacked;
+
+    # Clear the bit for every VLAN
+    foreach my $index (0 .. $#bits) {
+	$bits[$index] = 0;
+    }
+
+    # Pack it back up...
+    $unpacked = join('',@bits);
+
+    $bitfield = pack("B*",$unpacked);
+
+    # And save it back...
+    my $rv = snmpitSetFatal($self->{SESS},
+        ["vlanTrunkPortVlansEnabled",$ifIndex,$bitfield, "OCTETSTR"]);
+    if ($rv) {
+	return 1;
+    } else {
+	return 0;
+    }
+
+}
 #
 # Easy flush of FDB for a (vlan, trunk port) if port is on vlan
 # by removing it and adding it back
@@ -1843,11 +1779,55 @@ sub resetVlanIfOnTrunk($$$) {
     #	$ifIndex = $channel;
     #}
 
-    my @vlan_numbers = $self->vlanTrunkUtil($VOP_CHECK, $ifIndex, $vlan_number);
-    if (@vlan_numbers) {
-	$self->vlanTrunkUtil($VOP_CLEAR, $ifIndex, $vlan_number);
-	$self->vlanTrunkUtil($VOP_SET, $ifIndex, $vlan_number);
+    #
+    # Get the existing bitfield for allowed VLANs on the trunk
+    #
+    $self->lock();
+    my $bitfield = snmpitGetFatal($self->{SESS},
+	    ["vlanTrunkPortVlansEnabled",$ifIndex]);
+    my $unpacked = unpack("B*",$bitfield);
+    
+    # Put this into an array of 1s and 0s for easy manipulation
+    my @bits = split //,$unpacked;
+
+    # check to see if this vlan is already allowed on this trunk,
+    # if not, return.
+
+    if ($bits[$vlan_number] ne '1') {
+	return;
     }
+
+    # Just set the bit of the vlan we want to remove...
+    $bits[$vlan_number] = 0;
+
+    # Pack it back up...
+    $unpacked = join('',@bits);
+
+    $bitfield = pack("B*",$unpacked);
+
+    # And save it back...
+    my $rv = $self->{SESS}->set(["vlanTrunkPortVlansEnabled",$ifIndex,$bitfield,
+    	    "OCTETSTR"]);
+
+    #
+    # ask for the bitfield over again to make sure that the cisco has time
+    # to deal with setting it, before we clobber it all over again.
+    #
+    $bitfield = snmpitGetFatal($self->{SESS},
+	    ["vlanTrunkPortVlansEnabled",$ifIndex]);
+
+    # Just set the bit of the vlan we want to add back...
+    $bits[$vlan_number] = '1';
+
+    # Pack it back up...
+    $unpacked = join('',@bits);
+
+    $bitfield = pack("B*",$unpacked);
+
+    # And save it back...
+    $rv = $self->{SESS}->set(["vlanTrunkPortVlansEnabled",$ifIndex,$bitfield,
+    	    "OCTETSTR"]);
+    $self->unlock();
     return 0;
 }
 
@@ -1989,7 +1969,7 @@ sub readifIndex($) {
    
 	foreach my $rowref (@$rows) {
 	    my ($name,$iid,$descr) = @$rowref;
-	    if ($descr =~ /(\D*)(\d+)\/(\d+)$/) {
+	    if ($descr =~ /(\w*)(\d+)\/(\d+)$/) {
                 my $type = $1;
                 my $module = $2;
                 my $port = $3;

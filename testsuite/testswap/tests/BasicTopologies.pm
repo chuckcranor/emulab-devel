@@ -10,18 +10,18 @@ my $linkupdowntest = sub {
   my $eid = $e->eid;
   ok($e->linktest, "$eid linktest"); 
 
-  ok($e->link("link1")->down, "$eid link down");
+  ok($e->link("link1")->down, "link down");
   sleep(2);
 
   my $n1ssh = $e->node("node1")->ssh;
-  ok($n1ssh->cmdfailure("ping -c 5 10.1.2.3"), "$eid expected ping failure");
+  ok($n1ssh->cmdfailuredump("ping -c 5 10.1.2.3"));
 
-  ok($e->link("link1")->up, "$eid link up");
+  ok($e->link("link1")->up, "link up");
   sleep(2);
-  ok($n1ssh->cmdsuccess("ping -c 5 10.1.2.3"), "$eid expected ping success");
+  ok($n1ssh->cmdsuccessdump("ping -c 5 10.1.2.3"));
 };
 
-rege(e('linkupdown'), $BasicNSs::TwoNodeLanWithLink, $linkupdowntest, 5, 'link up and down with ping on link');
+rege('linkupdown', $BasicNSs::TwoNodeLanWithLink, $linkupdowntest, 5, 'link up and down with ping on link');
 
 my $twonodelan5Mbtest = sub {
   my ($e) = @_; 
@@ -29,8 +29,8 @@ my $twonodelan5Mbtest = sub {
   ok($e->linktest, "$eid linktest"); 
 };
 
-rege(e('2nodelan5Mb'), $BasicNSs::TwoNodeLan5Mb, $twonodelan5Mbtest, 1, '2nodelan5Mb linktest');
-rege(e('1singlenode'), $BasicNSs::SingleNode, sub { ok(shift->ping_test, "1singlenode ping test"); }, 1, 'single node pingswapkill');
-rege(e('2nodelan'), $BasicNSs::TwoNodeLan, sub { ok(shift->ping_test, "2nodelan ping test"); }, 1, 'two node lan pingswapkill');
+rege('2nodelan5Mb', $BasicNSs::TwoNodeLan5Mb, $twonodelan5Mbtest, 1, 'two node 5mb lan pingswapkill');
+rege('singlenode', $BasicNSs::SingleNode, sub { ok(shift->pingswapkill); }, 1, 'single node pingswapkill');
+rege('2nodelan', $BasicNSs::TwoNodeLan, sub { ok(shift->pingswapkill); }, 1, 'two node lan pingswapkill');
 
 1;

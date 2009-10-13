@@ -50,21 +50,18 @@ my $TBUISP	    = "$TB/bin/tbuisp";
 my %imageinfo       = ();	# Per imageid DB info.
 my $debug           = 0;
 my %children        = ();	# Child pids in when asyncmode=1
-my $remote_mult     = 10;       # Wait lots longer for remote nodes!
 
 sub osload ($$) {
     my ($args, $result) = @_;
 
     # These come in from the caller.
-    my @imageids;
+    my $imageid;
     my $waitmode    = 1;
     my @nodes       = ();
     my $noreboot    = 0;
     my $asyncmode   = 0;
     my $zerofree    = 0;
-    my $prepare     = 0;
     my $swapinfo    = 0;
-    my %nodeflags   = ();
 
     # Locals
     my %retries	    = ();
@@ -72,7 +69,7 @@ sub osload ($$) {
     my $usedefault  = 1;
     my $mereuser    = 0;
     my $rowref;
-    my @images;
+    my $image;
     my $this_user;
 
     if (!defined($args->{'nodelist'})) {
@@ -91,11 +88,7 @@ sub osload ($$) {
 	$debug = $args->{'debug'};
     }
     if (defined($args->{'imageid'})) {
-	@imageids = split(/,/, $args->{'imageid'});
-	$usedefault = 0;
-    }
-    if (defined($args->{'imageids'})) {
-	@imageids = @{$args->{'imageids'}};
+	$imageid    = $args->{'imageid'};
 	$usedefault = 0;
     }
     if (defined($args->{'asyncmode'})) {
@@ -104,14 +97,9 @@ sub osload ($$) {
     if (defined($args->{'zerofree'})) {
 	$zerofree = $args->{'zerofree'};
     }
-    if (defined($args->{'prepare'})) {
-	$prepare = $args->{'prepare'};
-    }
+
     if (defined($args->{'swapinfo'})) {
 	$swapinfo = $args->{'swapinfo'};
-    }
-    if (defined($args->{'nodeflags'})) {
-	%nodeflags = %{$args->{'nodeflags'}};
     }
 
     #
@@ -143,38 +131,36 @@ sub osload ($$) {
 	}
     }
 
-    foreach my $i (0 .. $#imageids) {
-	my $imageid = $imageids[$i];
-	$images[$i] = Image->Lookup($imageid);
-	my $image = $images[$i];
+    if (defined($imageid)) {
+	$image = Image->Lookup($imageid);
 	if (!defined($image)) {
 	    tberror("Could not map $imageid to its object!");
 	    return -1;
 	}
+    }
 
-	#
-	# Check permission to use the imageid.
-	# 
-    
-	if ($mereuser &&
-	    ! $image->AccessCheck($this_user, TB_IMAGEID_READINFO)) {
-	    tberror "You do not have permission to load $image";
-	    return -1;
-	}
+    #
+    # Check permission to use the imageid.
+    # 
+    if (defined($image) && $mereuser &&
+	! $image->AccessCheck($this_user, TB_IMAGEID_READINFO)) {
+	tberror "You do not have permission to load $image";
+	return -1;
+    }
 
-	#
-	# If there's a maxiumum number of concurrent loads listed for the image,
-	# check to see if we'll go over the limit, by checking to see how many
-	# other nodes are currently booting thie image's default_osid. This is
-	# NOT intended to be strong enforcement of license restrictions, just a
-	# way to catch mistakes.
-	#
-	if (!TBImageLoadMaxOkay($image->imageid(), scalar(@nodes), @nodes)) {
-	    tberror 
+    #
+    # If there's a maxiumum number of concurrent loads listed for the image,
+    # check to see if we'll go over the limit, by checking to see how many
+    # other nodes are currently booting thie image's default_osid. This is
+    # NOT intended to be strong enforcement of license restrictions, just a
+    # way to catch mistakes.
+    #
+    if (defined($image) &&
+	!TBImageLoadMaxOkay($image->imageid(), scalar(@nodes), @nodes)) {
+	tberror 
 	    "Would exceed maxiumum concurrent instances ".
 		"limitation for $image";
-	    return -1;
-	}
+	return -1;
     }
 
     #
@@ -227,37 +213,60 @@ sub osload ($$) {
 	}
 	
 	# Get default imageid for this node.
-	# NOTE that virtnodes don't have default imageids -- they are only 
-	# loaded (and thus arrive here) if the user specifically set a loadable
-	# subOS for the node.
-	if (!$nodeobject->isvirtnode()) {
-	    my $default_imageid = $nodeobject->default_imageid();
-	    if (! defined($default_imageid)) {
-		tberror "$node: No default imageid defined!";
-		goto failednode;
-	    }
-	    my @default_imageids = split(/,/, $default_imageid);
-	    my @default_images;
-	    foreach my $default_imageid (@default_imageids) {
-		my $default_image = Image->Lookup($default_imageid);
-		if (!defined($default_image)) {
-		    tberror("Could not map $default_imageid to its object!");
-		    return -1;
-		}
-		push @default_images, $default_image;
-	    }
-
-	    if ($usedefault) {
-		$prepare = 1;
-		@imageids = @default_imageids;
-		@images   = @default_images;
-	    }
+	my $default_imageid = $nodeobject->default_imageid();
+	if (! defined($default_imageid)) {
+	    tberror "$node: No default imageid defined!";
+	    goto failednode;
+	}
+	my $default_image = Image->Lookup($default_imageid);
+	if (!defined($default_image)) {
+	    tberror("Could not map $default_imageid to its object!");
+	    return -1;
 	}
 	
-	my @imageidxs = (0 .. $#imageids);
-	my $defosid;
-	my $maxwait = 0;
-	my @access_keys;
+	if ($usedefault) {
+	    $imageid = $default_imageid;
+	    $image   = $default_image;
+	}
+
+	print STDERR "osload: Using $image for $node\n"
+	    if $debug;
+
+	#
+	# We try to avoid repeated queries to DB for info that does not change
+	# by caching the image info on the first use.  GetImageInfo() will
+	# perform various one-time checks as well.
+	# 
+	if (!exists($imageinfo{$imageid}) && !GetImageInfo($image, $node)) {
+	    goto failednode;
+	}
+	$rowref = $imageinfo{$imageid};
+	if ($rowref eq 'BADIMAGE') {
+	    goto failednode;
+	}
+
+	my $loadpart       = $rowref->{'loadpart'};
+	my $loadlen        = $rowref->{'loadlength'};
+	my $imagepath      = $rowref->{'path'};
+	my $defosid        = $rowref->{'default_osid'};
+	my $maxwait	   = $rowref->{'maxloadwait'};
+	my $imagepid	   = $rowref->{'pid'};
+	my $access_key	   = $rowref->{'access_key'};
+
+	my $osinfo = OSinfo->Lookup($defosid);
+	if (!defined($osinfo)) {
+	    tberror("Could map map OSID $defosid to its object!");
+	    goto failednode;
+	}
+
+	print "osload ($node): Changing default OS to $osinfo\n";
+	if (!$TESTMODE) {
+	    system("$osselect $defosid $node");
+	    if ($?) {
+		tberror "$node: os_select $defosid failed!";
+		goto failednode;
+	    }
+	}
 
 	#
 	# If loading an image (which is not the default) then schedule
@@ -265,156 +274,98 @@ sub osload ($$) {
 	# will get a fresh default image before getting reallocated to
 	# another experiment.
 	#
-	# XXX: Disabled for now, is it even relevent anymore.
+	if ($imageid ne $default_imageid &&
+	    $nodeobject->SetSchedReload($default_image) != 0) {
+	    tberror
+		"$node: Could not schedule default reload";
+	    goto failednode;
+	}
+
 	#
-	#if ($imageid ne $default_imageid &&
-	#    $nodeobject->SetSchedReload($default_image) != 0) {
-	#    tberror
-	#	"$node: Could not schedule default reload";
-	#    goto failednode;
-	#}
+	# XXX assumes a DOS MBR, but this is ingrained in the DB schema
+	# as well (i.e., the images.part[1234]_osid fields).
+	#
+	my $MINPART = 1;
+	my $MAXPART = 4;
 
-	foreach my $i (@imageidxs) {
-	    my $imageid = $imageids[$i];
-	    my $image = $images[$i];
+	#
+	# Assign partition table entries for each partition in the image
+	# that has an OSID associated with it.
+	#
+	# This is complicated by the fact that an image that covers only
+	# part of the slices should only change the partition table entries
+	# for the subset of slices that are written to disk...
+	#
+	# ...UNLESS, the new image requires a different version of the MBR
+	# in which case we must invalidate all partitions except the ones we
+	# are loading since the partition boundaries may have changed.
+	#
+	my $startpart = $loadpart == 0 ? $MINPART : $loadpart;
+	my $endpart   = $startpart + $loadlen;
 	
-	    print STDERR "osload: Using $image for $node\n"
-		if $debug;
-
-	    #
-	    # We try to avoid repeated queries to DB for info that does not change
-	    # by caching the image info on the first use.  GetImageInfo() will
-	    # perform various one-time checks as well.
-	    # 
-	    if (!exists($imageinfo{$imageid}) && !GetImageInfo($image, $node)) {
-		goto failednode;
-	    }
-	    $rowref = $imageinfo{$imageid};
-	    if ($rowref eq 'BADIMAGE') {
-		goto failednode;
-	    }
-	    
-	    my $loadpart   = $rowref->{'loadpart'};
-	    my $loadlen    = $rowref->{'loadlength'};
-	    my $imagepath  = $rowref->{'path'};
-	    my $imagepid   = $rowref->{'pid'};
-	    $maxwait += $rowref->{'maxloadwait'};
-	    $access_keys[$i] = $rowref->{'access_key'};
-
-	    #
-	    # When loading multiple images, use the osinfo from the
-	    # last image
-	    #
-	    if ($i == $imageidxs[-1]) {
-		$defosid = $rowref->{'default_osid'};
-
-		my $osinfo = OSinfo->Lookup($defosid);
-		if (!defined($osinfo)) {
-		    tberror("Could map map OSID $defosid to its object!");
-		    goto failednode;
-		}
-		
-		print "osload ($node): Loading $image\n" if $i > 0;
-		print "osload ($node): Changing default OS to $osinfo\n";
-		if (!$TESTMODE) {
-		    system("$osselect $defosid $node");
-		    if ($?) {
-			tberror "$node: os_select $defosid failed!";
-			goto failednode;
-		    }
-		}
-	    } else {
-		print "osload ($node): Loading $image\n";
-	    }
+	for (my $i = $MINPART; $i <= $MAXPART; $i++) {
+	    my $partname = "part${i}_osid";
+	    my $dbresult;
 	    
 	    #
-	    # XXX assumes a DOS MBR, but this is ingrained in the DB schema
-	    # as well (i.e., the images.part[1234]_osid fields).
+	    # Partition is outside the range affected by this image.
+	    # Normally, we just leave it alone, unless a change of MBR
+	    # is implied by the current image.
 	    #
-	    my $MINPART = 1;
-	    my $MAXPART = 4;
-	    
-	    #
-	    # Assign partition table entries for each partition in the image
-	    # that has an OSID associated with it.
-	    #
-	    # This is complicated by the fact that an image that covers only
-	    # part of the slices should only change the partition table entries
-	    # for the subset of slices that are written to disk...
-	    #
-	    # ...UNLESS, the new image requires a different version of the MBR
-	    # in which case we must invalidate all partitions except the ones we
-	    # are loading since the partition boundaries may have changed.
-	    #
-	    my $startpart = $loadpart == 0 ? $MINPART : $loadpart;
-	    my $endpart   = $startpart + $loadlen;
-	    
-	    for (my $i = $MINPART; $i <= $MAXPART; $i++) {
-		my $partname = "part${i}_osid";
-		my $dbresult;
-		
-		#
-		# Partition is outside the range affected by this image.
-		# Normally, we just leave it alone, unless a change of MBR
-		# is implied by the current image.
-		#
-		if ($i < $startpart || $i >= $endpart) {
-		    if (defined($rowref->{'mbr_version'})) {
-			$dbresult =
-			    DBQueryWarn("select mbr_version ".
-					" from partitions as p,images as i ".
-					" where p.imageid=i.imageid ".
-					" and node_id='$node' and partition='$i'");
-			if ($dbresult && $dbresult->numrows) {
-			    my ($pmbr) = $dbresult->fetchrow_array();
-			    if ($pmbr != $rowref->{'mbr_version'}) {
-				# XXX: Is this right in the context of multiple images
-				tbwarn("$node: Existing partition $i inconsistent".
-				       " with new image partitioning,".
-				       " invalidating existing partition");
-				$dbresult =
-				    DBQueryWarn("delete from partitions ".
-						"where node_id='$node' and ".
-						"partition='$i'");
-				if (!$dbresult) {
-				    tberror("$node: Could not update ".
-					    "partition table");
-				    goto failednode;
-				}
+	    if ($i < $startpart || $i >= $endpart) {
+		if (defined($rowref->{'mbr_version'})) {
+		    $dbresult =
+			DBQueryWarn("select mbr_version ".
+				    " from partitions as p,images as i ".
+				    " where p.imageid=i.imageid ".
+				    " and node_id='$node' and partition='$i'");
+		    if ($dbresult && $dbresult->numrows) {
+			my ($pmbr) = $dbresult->fetchrow_array();
+			if ($pmbr != $rowref->{'mbr_version'}) {
+			    tbwarn("$node: Existing partition $i inconsistent".
+				   " with new image partitioning,".
+				   " invalidating existing partition");
+			    $dbresult =
+				DBQueryWarn("delete from partitions ".
+					    "where node_id='$node' and ".
+					    "partition='$i'");
+			    if (!$dbresult) {
+				tberror("$node: Could not update ".
+					"partition table");
+				goto failednode;
 			    }
 			}
 		    }
-		    next;
 		}
-		
-		#
-		# This image has an OSID in the current partition,
-		# replace the partition table info.
-		#
-		if (defined($rowref->{$partname})) {
-		    my $osid = $rowref->{$partname};
-		    
-		    $dbresult =
-			DBQueryWarn("replace into partitions ".
-				    "(node_id,partition,osid,imageid,imagepid) ".
-				    "values ".
-				    "('$node','$i','$osid','$imageid','$imagepid')");
-		}
-		#
-		# Otherwise, if there is no OS for a particular image partition,
-		# clear any current partitions table info.
-		#
-		else {
-		    $dbresult =
-			DBQueryWarn("delete from partitions ".
-				    "where node_id='$node' and partition='$i'");
-		}
-		if (!$dbresult) {
-		    tberror "$node: Could not update partition table";
-		    goto failednode;
-		}
+		next;
 	    }
-	    
+
+	    #
+	    # This image has an OSID in the current partition,
+	    # replace the partition table info.
+	    #
+	    if (defined($rowref->{$partname})) {
+		my $osid = $rowref->{$partname};
+		
+		$dbresult =
+		    DBQueryWarn("replace into partitions ".
+				"(node_id,partition,osid,imageid,imagepid) ".
+				"values ".
+				"('$node','$i','$osid','$imageid','$imagepid')");
+	    }
+	    #
+	    # Otherwise, if there is no OS for a particular image partition,
+	    # clear any current partitions table info.
+	    #
+	    else {
+		$dbresult =
+		    DBQueryWarn("delete from partitions ".
+				"where node_id='$node' and partition='$i'");
+	    }
+	    if (!$dbresult) {
+		tberror "$node: Could not update partition table";
+		goto failednode;
+	    }
 	}
 
 	#
@@ -433,8 +384,6 @@ sub osload ($$) {
 	#
 	my $type  = $nodeobject->type();
 	my $class = $nodeobject->class();
-	my $isremote = $nodeobject->isremotenode();
-	my $isvirtnode = $nodeobject->isvirtnode();
 	my $reload_mode;
 	my $reload_func;
 	my $reboot_required;
@@ -448,22 +397,15 @@ sub osload ($$) {
 	    $reload_func = \&SetupReloadFrisbee;
 	    $reboot_required = !$noreboot; # Reboot unless $noreboot flag set
 
-	    if (defined($nodeflags{$node}) 
-		&& defined($nodeflags{$node}{'noreboot'})) {
-		$reboot_required = !$nodeflags{$node}{'noreboot'};
-	    }
+	    # This is passed along so that remote node can request the file.
+	    # Make sure the image object has an access key defined.
+	    if ($nodeobject->isremotenode() && !defined($access_key)) {
+		$access_key = TBGenSecretKey();
 
-	    foreach my $i (@imageidxs) {
-		# This is passed along so that remote node can request the file.
-		# Make sure the image object has an access key defined.
-		if ($nodeobject->isremotenode() && !defined($access_keys[$i])) {
-		    $access_keys[$i] = TBGenSecretKey();
-		    
-		    $rowref->{'access_key'} = $access_keys[$i];
-		    if ($images[$i]->Update({'access_key' => $access_keys[$i]}) != 0) {
-			tberror "$node: Could not initialize image access key";
-			goto failednode;
-		    }
+		$rowref->{'access_key'} = $access_key;
+		if ($image->Update({'access_key' => $access_key}) != 0) {
+		    tberror "$node: Could not initialize image access key";
+		    goto failednode;
 		}
 	    }
 	}
@@ -473,17 +415,14 @@ sub osload ($$) {
 	# later, we'll know how to handle it
 	#
 	$reload_info{$node} = {
-	    'node'     => $node,
-	    'mode'     => $reload_mode,
-	    'func'     => $reload_func,
-	    'imageids' => \@imageids,
-	    'osid'     => $defosid,
-	    'reboot'   => $reboot_required,
-	    'zerofree' => $zerofree,
-	    'prepare'  => $prepare,
-	    'maxwait'  => $maxwait,
-	    'isremote' => $isremote,
-	    'isvirtnode' => $isvirtnode
+	    'node'    => $node,
+	    'mode'    => $reload_mode,
+	    'func'    => $reload_func,
+	    'imageid' => $imageid,
+	    'osid'    => $defosid,
+	    'reboot'  => $reboot_required,
+	    'zerofree'=> $zerofree,
+	    'maxwait' => $maxwait
 	};
 
 	print "Setting up reload for $node (mode: $reload_mode)\n";
@@ -769,8 +708,6 @@ sub WaitTillReloadDone($$$@)
 		# 1GB/minute.  Did I mention how this would take
 		# a really long time?
 		#
-		# Else, if we have a remote node, we wait another multiplier.
-		#
 		if ($reload_info->{$node}{'zerofree'}) {
 		    my $nodeobject = Node->Lookup($node);
 		    my $disksize   = $nodeobject->disksize();
@@ -778,20 +715,8 @@ sub WaitTillReloadDone($$$@)
 		    $disksize = 20
 			if (!$disksize);
 		    $maxwait = ($disksize * 60);
-		} elsif ($reload_info->{$node}{'isremote'}) {
-		    $maxwait = $reload_info->{$node}{'maxwait'} * $remote_mult;
 		} else {
 		    $maxwait = $reload_info->{$node}{'maxwait'};
-		}
-
-		#
-		# If it's a virtnode, we need to add a bunch of time based
-		# on how long the parent might take.  This is a fool's errand,
-		# given how synchronous our scripts are, so give it 8 mins 
-		# for now.
-		#
-		if ($reload_info->{$node}{'isvirtnode'}) {
-		    $maxwait += 8 * 60;
 		}
 		
 		my $query_result =
@@ -875,10 +800,8 @@ sub SetupReloadFrisbee($)
 {
     my $reload_info   = $_[0];
     my $node          = $reload_info->{'node'};
-    my $imageids      = $reload_info->{'imageids'};
+    my $imageid       = $reload_info->{'imageid'};
     my $zerofree      = $reload_info->{'zerofree'};
-    my $prepare       = $reload_info->{'prepare'};
-    my $isvirtnode    = $reload_info->{'isvirtnode'};
     my $osid          = TBNodeDiskloadOSID($node);
 
     #
@@ -886,39 +809,21 @@ sub SetupReloadFrisbee($)
     # OS to load. See tmcd. 
     #
     my $query_result = 
-	DBQueryWarn("delete from current_reloads where node_id = '$node'");
+	DBQueryWarn("replace into current_reloads ".
+		    "(node_id, image_id, mustwipe) values ".
+		    "('$node', '$imageid', $zerofree)");
     return -1
 	if (!$query_result);
-
-    my $idx = 1;
-    foreach my $imageid (@$imageids) {
-	my $prepare0 = $idx == 1 && $prepare ? 1 : 0;
-	my $query_result = 
-	    DBQueryWarn("insert into current_reloads ".
-			"(node_id, idx, image_id, mustwipe, prepare) values ".
-			"('$node', $idx, '$imageid', $zerofree, $prepare0)");
-	return -1
-	    if (!$query_result);
-	++$idx;
-    }
 
     system("$osselect -1 $osid $node");
     if ($?) {
 	tberror "os_select $osid failed!";
 	return -1;
     }
-
-    # Need to kick virtnodes so stated picks up the next_op_mode from os_select
-    if ($isvirtnode) {
-	TBSetNodeEventState($node,TBDB_NODESTATE_SHUTDOWN);
-    }
-
-    foreach my $imageid (@$imageids) {
-	system("$FRISBEELAUNCHER " . ($debug ? "-d ": "") . "$imageid");
-	if ($?) {
-	    tberror "Frisbee Launcher ($imageid) failed!";
-	    return -1;
-	}
+    system("$FRISBEELAUNCHER " . ($debug ? "-d ": "") . "$imageid");
+    if ($?) {
+	tberror "Frisbee Launcher ($imageid) failed!";
+	return -1;
     }
     return 0;
 }

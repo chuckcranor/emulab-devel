@@ -1,6 +1,6 @@
 /*
  * EMULAB-COPYRIGHT
- * Copyright (c) 2000-2009 University of Utah and the Flux Group.
+ * Copyright (c) 2000-2004, 2008 University of Utah and the Flux Group.
  * All rights reserved.
  */
 
@@ -94,7 +94,6 @@ static int	dotcp(char *, int, struct in_addr);
 static int	dounix(char *, int, char *);
 static void	beproxy(char *, struct in_addr, char *);
 static int	dooutput(int, char *, int);
-static int	rewritecommand(char *, char *, char **);
 
 char *usagestr = 
  "usage: tmcc [options] <command>\n"
@@ -112,6 +111,8 @@ char *usagestr =
  " -f datafile     Extra stuff to send to tmcd (tcp mode only)\n"
  " -i              Do not use SSL protocol\n"
  "\n";
+
+static int rewritecommand(char *, char *, char **);
 
 void
 usage()
@@ -294,7 +295,7 @@ main(int argc, char **argv)
 	if ((fp = fopen(keyfile, "r")) != NULL) {
 	    if (fgets(buf, sizeof(buf), fp)) {
 		if ((bp = strchr(buf, '\n')))
-		    *bp = '\0';
+		    *bp = (char) NULL;
 		privkey = strdup(buf);
 	    }
 	    fclose(fp);
@@ -414,7 +415,7 @@ getbossnode(char **bossnode, int *portp)
 		 * Look for port spec
 		 */
 		if ((bp = strchr(buf, ':'))) {
-			*bp++  = '\0';
+			*bp++  = (char) NULL;
 			*portp = atoi(bp);
 		}
 		*bossnode = strdup(buf);
@@ -435,13 +436,13 @@ getbossnode(char **bossnode, int *portp)
 		if ((fp = fopen(buf, "r")) != NULL) {
 			if (fgets(buf, sizeof(buf), fp)) {
 				if ((bp = strchr(buf, '\n')))
-					*bp = '\0';
+					*bp = (char) NULL;
 				fclose(fp);
 				/*
 				 * Look for port spec
 				 */
 				if ((bp = strchr(buf, ':'))) {
-					*bp++  = '\0'; 
+					*bp++  = (char) NULL;
 					*portp = atoi(bp);
 				}
 				*bossnode = strdup(buf);
@@ -605,9 +606,8 @@ dotcp(char *data, int outfd, struct in_addr serverip)
 static int
 doudp(char *data, int outfd, struct in_addr serverip, int portnum)
 {
-	int			sock, n, cc;
+	int			sock, length, n, cc;
 	struct sockaddr_in	name, client;
-	socklen_t		length;
 	char			buf[MYBUFSIZE];
 
 	/* Create socket from which to read. */
@@ -755,9 +755,8 @@ beproxy(char *localpath, struct in_addr serverip, char *partial)
 	fprintf(stderr, "proxy mode not supported on this platform!\n");
 	exit(-1);
 #else
-	int			sock, newsock, cc;
+	int			sock, newsock, cc, length;
 	struct sockaddr_un	sunaddr, client;
-	socklen_t		length;
 	char			command[MAXTMCDPACKET], buf[MAXTMCDPACKET];
 	char			*bp, *cp;
 	
@@ -930,7 +929,7 @@ rewritecommand(char *redirect, char *command, char **server)
 			
 	bp = strchr(redirect, '\n');
 	if (bp)
-		*bp = '\0';
+		*bp = (char) NULL;
 	bp = strchr(redirect, '=');
 	if (!bp)
 		return -1;
@@ -940,7 +939,7 @@ rewritecommand(char *redirect, char *command, char **server)
 	bp = strchr(bp, ':');
 	if (!bp)
 		return 0;
-	*bp++ = '\0';
+	*bp++ = (char) NULL;
 
 	sprintf(buf, "VNODEID=%s ", bp);
 

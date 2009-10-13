@@ -18,12 +18,11 @@ NodeContents &=
   ComponentName? &
   attribute colocate { text }? &
   # TODO: Remove and replace with something more exensible
-  attribute virtualization_subtype { text }? &
-  attribute exclusive { text }?
+  attribute virtualization_subtype { text }?
 
 # The LinkMapping will only be available after an assignment
 LinkContents &=
-#  attribute link_type { text }? &
+  attribute link_type { text }? &
   VirtualName &
   LinkMapping? &
   # Characteristics (bandwidth, latency, loss) which affect traffic.
@@ -37,8 +36,6 @@ InterfaceDecl &=
 # The ComponentInterfaceRefName will only be available after an assignment
 InterfaceRef &=
   attribute tunnel_ip { text }? &
-  # A number in the range [0, 32] denoting subnet
-  attribute tunnel_netmask { text }? &
   attribute virtual_node_id { text } &
   attribute virtual_interface_id { text }
 
@@ -52,18 +49,13 @@ RSpecContents &=
 LinkMapping =
   element component_hop { ComponentName, InterfaceMapping* }+
 
-VirtualInterfaceRefName =
-  (attribute virtual_node_id { text } &
-   attribute virtual_interface_id { text })
-
 # Each interface represents a particular physical interface. If that
 # interface is one of the link end points, it is also mapped to that
 # virtual interface name.
 InterfaceMapping = element interface_ref {
-  ComponentInterfaceRefName &
-  VirtualInterfaceRefName?
-#  (attribute virtual_node_id { text } &
-#   attribute virtual_interface_id { text })?
+  ComponentInterfaceRefName |
+  (attribute virtual_node_id { text } &
+   attribute virtual_interface_id { text })
 #  VirtualName ?
 }
 

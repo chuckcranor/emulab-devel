@@ -1532,33 +1532,8 @@ sub AccessCheck($$$)
     return 1
 	if ($user->IsAdmin());
 
-    # User can muck with his own stuff.
-    return 1
-	if SameUser($self, $user);
-
-    my $auth_idx = $user->uid_idx();
-    my $this_idx = $self->uid_idx();
-
-    #
-    # Only project leader in same project as user.
-    #
-    if ($access_type == TB_USERINFO_MODIFYINFO) {
-        #
-        # This join will allow the operation if the current user is in the 
-        # same project (any project) as the target user, but with root permissions.
-        # 
-	my $query_result =
-	    DBQueryFatal("select g.trust from group_membership as g ".
-			 "left join group_membership as authed on ".
-			 "     g.pid_idx=authed.pid_idx and ".
-			 "     g.gid_idx=authed.gid_idx and ".
-			 "     g.uid_idx='$this_idx' ".
-			 "where authed.uid_idx='$auth_idx' and ".
-			 "      (authed.trust='project_root')");
-
-	return $query_result->numrows;
-    }
-    return 0;
+    # Otherwise, better be the same user.
+    return SameUser($self, $user);
 }
 
 #
@@ -1730,35 +1705,6 @@ sub Create($$$$$$;$)
 	return undef;
     }
     return User::NonLocal->Lookup($idx);
-}
-
-#
-# Modify the keys.
-#
-sub ModifyKeys($$)
-{
-    my ($self, $sshkeys) = @_;
-
-    return 0
-	if ($self->shadow());
-
-    my $idx = $self->uid_idx();
-    my $uid = $self->uid();
-    
-    DBQueryWarn("delete from user_pubkeys where uid_idx='$idx'")
-	or return -1;
-    
-    if (defined($sshkeys)) {
-	foreach my $sshkey (@{ $sshkeys }) {
-	    my $safe_sshkey = DBQuoteSpecial($sshkey);
-
-	    DBQueryWarn("insert into user_pubkeys set ".
-			"  uid='$uid', uid_idx='$idx', ".
-			"  idx=NULL, stamp=now(), pubkey=$safe_sshkey")
-		or return -1;
-	}
-    }
-    return 0;
 }
 
 #

@@ -20,7 +20,7 @@ install: $(TARGET_PATH)/usr/sbin/dropbear
 
 $(DROPBEAR_PATH)/.extract-stamp:
 	mkdir -p $(TARGET_BUILD_PATH)
-	cd $(TARGET_BUILD_PATH); tar xzf $(TARBALL_PATH)/dropbear-$(DROPBEAR_VERSION).tar.gz
+	cd $(TARGET_BUILD_PATH); tar xzf $(SOURCE_PATH)/dropbear/dropbear-$(DROPBEAR_VERSION).tar.gz
 	touch $@
 
 $(DROPBEAR_PATH)/.patch-stamp: $(DROPBEAR_PATH)/.extract-stamp
@@ -35,8 +35,8 @@ $(DROPBEAR_PATH)/.config-stamp: $(DROPBEAR_PATH)/.patch-stamp
 	cd $(DROPBEAR_PATH);  \
 		$(HOST_CONFIGURE_OPTS) \
 		./configure --prefix=/usr \
-		--target=$(MFS_ARCH)-linux-uclibc \
-		--host=$(MFS_ARCH)-linux-uclibc \
+		--target=i386-linux-uclibc \
+		--host=i386-linux-uclibc \
 		--sysconfdir=/etc \
 		--localstatedir=/var \
 		--libdir=$(STAGING_DIR)/usr/lib \
@@ -46,7 +46,7 @@ $(DROPBEAR_PATH)/.config-stamp: $(DROPBEAR_PATH)/.patch-stamp
 
 $(DROPBEAR_PATH)/dropbearmulti: $(DROPBEAR_PATH)/.config-stamp
 	PATH=$(STAGING_DIR)/usr/bin:$(PATH) $(MAKE) -C $(DROPBEAR_PATH) \
-		$(TARGET_CONFIGURE_OPTS) LD=$(MFS_ARCH)-linux-uclibc-gcc \
+		$(TARGET_CONFIGURE_OPTS) LD=i386-linux-uclibc-gcc \
 		PROGRAMS="dropbear dbclient dropbearkey dropbearconvert scp" \
 		MULTI=1 SCPPROGRESS=1
 	touch $@

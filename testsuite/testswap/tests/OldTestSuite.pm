@@ -1,6 +1,7 @@
 package OldTestSuite;
 
 our $tests = {
+          'frontend' => {},
           'cbr' => {
                      'info' => 'Test UDP and a TCP agent/CBR. Also throw in some events to start/stop
 the trafgen.
@@ -118,7 +119,7 @@ tb_run("tbswap out",0);
 tb_run("tbend",0);
 '
                     },
-          'mininodes' => {
+          'mini_nodes' => {
                             'info' => 'Six nodes:
 
 	node2 - node0 - node1
@@ -128,8 +129,7 @@ tb_run("tbend",0);
 node0 to node3 is delayed.
 
 ',
-                            'nsfile' => 'source tb_compat.tcl
-set ns [new Simulator]
+                            'nsfile' => 'set ns [new Simulator]
 
 set node0 [$ns node]
 set node1 [$ns node]
@@ -137,10 +137,10 @@ set node2 [$ns node]
 set node3 [$ns node]
 set node4 [$ns node]
 
-$ns duplex-link $node0 $node1 100Mb 0ms DropTail 
+$ns duplex-link $node0 $node1 100Mb .1ms DropTail 
 $ns duplex-link $node0 $node3 10Mb 100ms DropTail
-$ns duplex-link $node2 $node4 100Mb 0ms DropTail
-$ns duplex-link $node3 $node1 100Mb 0ms DropTail
+$ns duplex-link $node2 $node4 100Mb .1ms DropTail
+$ns duplex-link $node3 $node1 100Mb .1ms DropTail
 
 $ns run
 
@@ -188,8 +188,7 @@ tb_run("tbend",0);
           'singlenode' => {
                             'info' => 'One node.
 ',
-                            'nsfile' => 'source tb_compat.tcl
-set ns [new Simulator]
+                            'nsfile' => 'set ns [new Simulator]
 set node [$ns node]
 $ns run
 
@@ -310,8 +309,8 @@ set router [$ns node]
 set client [$ns node]
 set server [$ns node]
 
-set client-lan [$ns make-lan "$send $router $client" 100Mb 2ms]
-set server-lan [$ns make-lan "$consume $server $router" 100Mb 2ms]
+set client-lan [$ns make-lan "$send $router $client" 100Mb 1ms]
+set server-lan [$ns make-lan "$consume $server $router" 100Mb 1ms]
 
 tb-set-node-startup $router /users/newbold/trafgen/fbsd-router-startup
 
@@ -498,6 +497,7 @@ tb_run("tbswap out",0);
 tb_run("tbend",0);
 '
                           },
+          'full' => {},
           'simplex' => {
                          'info' => 'Basic with the simplex tb commands.
 ',
@@ -514,7 +514,7 @@ set lan1 [$ns make-lan "$node1 $node2 $node3" 100Mb 0ms]
 set link1 [$ns duplex-link $node4 $node1 100Mb 50ms DropTail]
 set link2 [$ns duplex-link $node4 $node3 10Mb 100ms DropTail]
 
-tb-set-lan-simplex-params $lan1 $node1 0ms 100Mb 0.02 100ms 10Mb 0.02
+tb-set-lan-simplex-params $lan1 $node1 0ms 100Mb 0 100ms 10Mb 0.2
 tb-set-link-simplex-params $link1 $node4 300ms 20Mb 0.4
 
 $ns run
@@ -601,8 +601,8 @@ tb_run("tbend",0);
 node0 to node3 is delayed.
 
 ',
-                       'nsfile' => 'source tb_compat.tcl
-set ns [new Simulator]
+                       'nsfile' => 'set ns [new Simulator]
+
 set node0 [$ns node]
 set node1 [$ns node]
 set node2 [$ns node]
@@ -610,11 +610,11 @@ set node3 [$ns node]
 set node4 [$ns node]
 set node5 [$ns node]
 
-set link0 [$ns duplex-link $node0 $node1 100Mb 2ms DropTail]
-set link1 [$ns duplex-link $node0 $node2 100Mb 2ms DropTail]
+set link0 [$ns duplex-link $node0 $node1 100Mb .1ms DropTail]
+set link1 [$ns duplex-link $node0 $node2 100Mb .1ms DropTail]
 set link2 [$ns duplex-link $node0 $node3 10Mb 100ms DropTail]
-set link3 [$ns duplex-link $node3 $node4 100Mb 2ms DropTail]
-set link4 [$ns duplex-link $node3 $node5 100Mb 2ms DropTail]
+set link3 [$ns duplex-link $node3 $node4 100Mb .1ms DropTail]
+set link4 [$ns duplex-link $node3 $node5 100Mb .1ms DropTail]
 
 # Turn on manual routing.
 $ns rtproto Manual
@@ -858,7 +858,7 @@ tb_run("tbswap out",0);
 tb_run("tbend",0);
 '
                      },
-          'setip' => {
+          'set-ip' => {
                         'info' => 'Sets up a basic topology and then tries out all the tb-set-ip commands.
 
 ',
@@ -896,7 +896,7 @@ tb_run("tbswap out",0);
 tb_run("tbend",0);
 '
                       },
-          'basicrsrv' => {
+          'basic_rsrv' => {
                             'info' => 'Just a basic initial test.
 
 Topology:
@@ -959,7 +959,7 @@ tb_run("tbend",0);
 (\'pc10\',\'testbed\',\'unavailable\',0,\'pc10\',\'node\');
 '
                           },
-          'wideareatypes' => {
+          'widearea_types' => {
                                 'info' => 'Tests widearea nodes, using general types, such as Internet, Internet2, etc.
 ',
                                 'nsfile' => 'set ns [new Simulator]
@@ -1050,7 +1050,8 @@ tb_run("tbswap out",0);
 tb_run("tbend",0);
 '
                          },
-          'minisetip' => {
+          'delaycheck' => {},
+          'mini_set-ip' => {
                              'info' => 'Sets up a basic topology and then tries out all the tb-set-ip commands.
 
 ',
@@ -1181,6 +1182,7 @@ tb_run("tbswap out",0);
 tb_run("tbend",0);
 '
                    },
+          '10mbit' => {},
           'buddycache' => {
                             'info' => 'This is the buddycache experiment from Brandeis University.  It\'s a LAN of
 7 nodes, one of which, or, has a delay.
@@ -1203,7 +1205,7 @@ set fe5 [$ns node]
 set proxy [$ns node]
 set or [$ns node]
 
-set lan0 [$ns make-lan "$fe1 $fe2 $fe3 $fe4 $fe5 $proxy $or" 100Mb 2ms]
+set lan0 [$ns make-lan "$fe1 $fe2 $fe3 $fe4 $fe5 $proxy $or" 100Mb .1ms]
 tb-set-node-lan-delay $or $lan0 20ms
 
 $ns run
@@ -1220,9 +1222,7 @@ tb_run("tbend",0);
                          'info' => 'Trivial test.  Creates a simulator and runs it.  No nodes, no lans, 
 nothing.
 ',
-                         'nsfile' => '
-source tb_compat.tcl
-set ns [new Simulator]
+                         'nsfile' => 'set ns [new Simulator]
 $ns run
 
 ',
@@ -1234,7 +1234,7 @@ tb_run("tbswap out",0);
 tb_run("tbend",0);
 '
                        },
-          'wideareamapped' => {
+          'widearea_mapped' => {
                                  'info' => 'A widearea test that asks for specific links between nodes, which must be
 mapped with the WAN solver.
 ',
@@ -1264,7 +1264,7 @@ tb_run("tbswap out",0);
 tb_run("tbend",0);
 '
                                },
-          'minitbcmd' => {
+          'mini_tbcmd' => {
                             'info' => 'NOT A FULL TEST!
 
 This is a test of all the tb-* commands.  It also checks does checks on 
@@ -1394,7 +1394,7 @@ tb_run("tbswap in",255);
 tb_run("tbend",0);
 '
                             },
-          'minimultilink' => {
+          'mini_multilink' => {
                                 'info' => 'Two nodes connceted by undelayed links.
 
 ',

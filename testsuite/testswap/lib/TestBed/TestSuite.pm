@@ -3,30 +3,34 @@ package TestBed::TestSuite;
 use SemiModern::Perl;
 use TestBed::TestSuite::Experiment;
 use TestBed::ParallelRunner;
-use TestBed::ForkFramework;
-use TestBed::XMLRPC::Client::Node;
 use Data::Dumper;
 use Tools;
 
-
-our $error_trace = sub {
-  use Carp qw(confess longmess);
-
-  say "DEBUG: ERROR CAUGHT HERE " . __FILE__;
-  sayd(\@_);
-  Carp::cluck( "DIED\n", @_ );
-  say "DEBUG: DONE ERROR CAUGHT HERE " . __FILE__;
-};
-
-#$SIG{ __DIE__ } = $error_trace;
-
 require Exporter;
 our @ISA = qw(Exporter);
-our @EXPORT = qw(e CartProd CartProdRunner concretize defaults override rege prun prunout get_free_node_names);
+our @EXPORT = qw(e CartProd CartProdRunner concretize defaults override rege runtests);
 
-sub e { TestBed::TestSuite::Experiment::build_e(@_); }
+sub e { TestBed::TestSuite::Experiment->new(_build_e_from_positionals(@_)); }
 
-sub rege { $TestBed::ParallelRunner::GlobalRunner->build_executor(@_); }
+sub rege {
+  my $e;
+  if (@_ == 4)    { $e = e(); }
+  elsif (@_ == 5) { $e = e(shift); }
+  elsif (@_ == 6) { $e = e(shift, shift); }
+  elsif (@_ == 7) { $e = e(shift, shift, shift); }
+  else { die 'Too many args to rege'; }
+  return TestBed::ParallelRunner::add_experiment($e, @_);
+}
+sub runtests { TestBed::ParallelRunner::runtests(@_); }
+
+
+sub _build_e_from_positionals {
+  if (@_ == 0) { return {}; }
+  if (@_ == 1) { return { 'eid' => shift }; }
+  if (@_ == 2) { return { 'pid' => shift, 'eid' => shift }; }
+  if (@_ == 3) { return { 'pid' => shift, 'gid' => shift, 'eid' => shift }; }
+  if (@_ >  3) { die 'Too many args to e'; }
+}
 
 sub CartProd {
   my $config = shift;
@@ -85,10 +89,6 @@ sub CartProdRunner {
   for (CartProd(@_)) { $proc->($_); }
 }
 
-sub concretize {
- Tools::concretize(shift, %{ override( { @_ }, %{ $TBConfig::cmdline_defines } ) } );
-}
-
 sub defaults {
   my ($params, %defaults) = @_;
   return { %defaults, %{($params || {})} };
@@ -97,21 +97,6 @@ sub defaults {
 sub override {
   my ($params, %overrides) = @_;
   return { %{($params || {})}, %overrides };
-}
-
-sub prun {
-  my $results = TestBed::ForkFramework::ForEach::worksubs( @_);
-  die ("prun item failed", Dumper($results))  if ($results->has_errors);
-  return $results;
-}
-
-sub prunout {
-  my $results = prun(@_);
-  return $results->sorted_results;
-}
-
-sub get_free_node_names {
-  TestBed::XMLRPC::Client::Node->new()->get_free_node_names(@_);
 }
 
 =head1 NAME
@@ -135,10 +120,19 @@ creates a new experiment with pid and eid and uses the default gid in TBConfig
 
 creates a new experiment with pid, gid, and eid
 
-=item C<rege($e, $ns_contents, &test_sub, $test_count, $desc, %options)>
+=item C<rege($ns_contents, &test_sub, $test_count, $desc)>
+=item C<rege($eid, $ns_contents, &test_sub, $test_count, $desc)>
+=item C<rege($pid, $eid, $ns_contents, &test_sub, $test_count, $desc)>
+=item C<rege($pid, $gid, $eid, $ns_contents, &test_sub, $test_count, $desc)>
 
 registers experiement with parallel test running engine
-see doc/HOW_TO_WRITE_A_PARALLEL_TEST.txt for details on $options
+
+=item C<runtests($concurrent_pre_runs, $concurrent_node_count_usage) >
+
+allows a maximum of $concurrent_pre_runs during parallel execution
+allows a maximum of $concurrent_nodes during parallel execution
+
+start the execution of parallel tests, not needed 
 
 =item C<CartProd($hashref)> Cartesian Product Runner
 
@@ -169,10 +163,6 @@ my $config = {
 
 CartProdRunner(\&VNodeTest::VNodeTest, $config);
 
-=item C<concretize($templated_text, %substitution_values)>
-
-substitutes values as well as TBConfig::defines values into $templated_text
-
 =item C<defaults($hashref, %defaults)> provides default hash entries for a params hash ref
 
 returns a modified hash ref
@@ -180,18 +170,6 @@ returns a modified hash ref
 =item C<override($hashref, %overrides)> provides hash entry overrides for a params hash ref
 
 returns a modified hash ref
-
-=item C<prun(@anonymous_funcs)>
-
-executes anonymous funcs in parallel dying if any fail
-
-=item C<prunout(@anonymous_funcs)>
-
-executes anonymous funcs in parallel returning the output results
-
-=item C<get_free_node_names(%query_options)>
-
-reexports TestBed::XMLRPC::Client::Node->new()->get_free_node_names(@_);
 
 =back
 

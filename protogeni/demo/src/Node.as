@@ -23,21 +23,24 @@ package
   public class Node
   {
     public function Node(parent : DisplayObjectContainer,
-                         newComponent : Component,
-                         newManager : ComponentManager, newNodeIndex : int,
-                         newNumber : int, newMouseDownNode : Function,
+                         newName : String, newId : String,
+                         newInterfaces : Array,
+                         newCmIndex : int, newNodeIndex : int,
+                         newCleanupMethod : Function, newNumber : int,
+                         newMouseDownNode : Function,
                          newMouseDownLink : Function) : void
     {
-      component = newComponent;
-      name = newComponent.name;
-      id = newComponent.uuid;
-      managerId = newManager.getId();
-      isVirtual = newComponent.isVirtual;
-      isShared = newComponent.isShared;
-      sliverId = null;
-      interfaces = cloneInterfaces(newComponent);
-      manager = newManager;
+      name = newName;
+      id = newId;
+      sliverId = "";
+      interfaces = new Array();
+      for each (var inter in newInterfaces)
+      {
+        interfaces.push(inter.clone());
+      }
+      cmIndex = newCmIndex;
       nodeIndex = newNodeIndex;
+      cleanupMethod = newCleanupMethod;
       mouseDownNode = newMouseDownNode;
       mouseDownLink = newMouseDownLink;
 
@@ -45,11 +48,13 @@ package
       parent.addChild(clip);
       clip.width = WIDTH;
       clip.height = HEIGHT;
-      clip.node.addEventListener(MouseEvent.MOUSE_DOWN, mouseDownNode);
-      clip.addLink.addEventListener(MouseEvent.MOUSE_DOWN, mouseDownLink);
+      clip.node.nameField.text = name;
+      clip.node.cmField.text
+        = ComponentManager.cmNames[cmIndex].substring(0, 1);
       clip.node.mouseChildren = false;
+      clip.node.addEventListener(MouseEvent.MOUSE_DOWN, mouseDownNode);
       clip.node.selected.visible = false;
-      updateNodeClip();
+      clip.addLink.addEventListener(MouseEvent.MOUSE_DOWN, mouseDownLink);
       renumber(newNumber);
 
       links = new Array();
@@ -60,29 +65,10 @@ package
 
     public function cleanup() : void
     {
-      if (! isVirtual)
-      {
-        manager.removeUsed(nodeIndex);
-      }
+      cleanupMethod(cmIndex, nodeIndex);
       clip.node.removeEventListener(MouseEvent.MOUSE_DOWN, mouseDownNode);
       clip.addLink.removeEventListener(MouseEvent.MOUSE_DOWN, mouseDownLink);
       clip.parent.removeChild(clip);
-    }
-
-    function cloneInterfaces(newComponent : Component) : Array
-    {
-      var result : Array = new Array();
-      for each (var inter in newComponent.interfaces)
-      {
-        result.push(inter.clone());
-      }
-      return result;
-    }
-
-    function updateNodeClip() : void
-    {
-      clip.node.nameField.text = name;
-      clip.node.cmField.text = manager.getName().substring(0, 1);
     }
 
     public function renumber(number : int) : void
@@ -112,7 +98,7 @@ package
       clip.node.selected.visible = false;
     }
 
-    static var maxY : int = 460;
+    static var maxY : int = 255;
 
     public function centerX() : int
     {
@@ -169,16 +155,10 @@ package
     {
       return name;
     }
-/*
+
     public function getCmIndex() : int
     {
       return cmIndex;
-    }
-*/
-
-    public function getManager() : ComponentManager
-    {
-      return manager;
     }
 
     public function isBooted() : Boolean
@@ -188,36 +168,20 @@ package
 
     public function getHostName() : String
     {
-      return name + manager.getHostName();
+      return name + ComponentManager.hostName[cmIndex];
     }
 
     public function allocateInterface() : String
     {
-      var result = null;
+      var result = "*";
       for each (var candidate in interfaces)
       {
-        if (! candidate.used && candidate.role == Interface.EXPERIMENTAL)
+        if (! candidate.used)
         {
           candidate.used = true;
-          if (manager.getVersion() == 0)
-          {
-            result = candidate.name;
-          }
-          else
-          {
-            result = candidate.virtualId;
-          }
+          result = candidate.name;
           break;
         }
-      }
-      if (isVirtual || result == null)
-      {
-        var newInterface = new Interface("virt-" + String(interfaces.length),
-                                         null);
-        newInterface.used = true;
-        newInterface.role = Interface.EXPERIMENTAL;
-        interfaces.push(newInterface);
-        result = newInterface.virtualId;
       }
       return result;
     }
@@ -226,7 +190,7 @@ package
     {
       for each (var candidate in interfaces)
       {
-        if (interName == candidate.virtualId)
+        if (interName == candidate.name)
         {
           candidate.used = false;
           break;
@@ -234,32 +198,18 @@ package
       }
     }
 
-    public function interfaceUsed(interName : String) : Boolean
+    public function changeState(index : int, state : int) : void
     {
-      var result : Boolean = false;
-      for each (var candidate in interfaces)
-      {
-        if (interName == candidate.virtualId)
-        {
-          result = candidate.used;
-          break;
-        }
-      }
-      return result;
-    }
-
-    public function changeState(target : ComponentManager, state : int) : void
-    {
-      if (target == manager)
+      if (index == cmIndex)
       {
         newState = state;
         updateState();
       }
     }
 
-    public function commitState(target : ComponentManager) : void
+    public function commitState(index : int) : void
     {
-      if (target == manager)
+      if (index == cmIndex)
       {
         clip.node.nameField.textColor = 0x000000;
         oldState = newState;
@@ -267,9 +217,9 @@ package
       }
     }
 
-    public function revertState(target : ComponentManager) : void
+    public function revertState(index : int) : void
     {
-      if (target == manager)
+      if (index == cmIndex)
       {
         clip.node.nameField.textColor = 0xff0000;
         newState = oldState;
@@ -291,109 +241,34 @@ package
     {
       var state : int = calculateState();
       clip.node.nameField.backgroundColor = stateColor[state];
-      if (state != oldState)
-      {
-        clip.alpha = 0.65;
-      }
-      else
-      {
-        clip.alpha = 1.0;
-      }
     }
 
-    public function getXml(useTunnels : Boolean, version : int) : XML
+
+    public function getXml(targetIndex : int, useTunnels : Boolean) : XML
     {
       var result : XML = null;
-      var str : String = "<node ";
-      if (version < 1)
+      if (cmIndex == targetIndex)
       {
-        str += "uuid=\"" + id + "\" nickname=\"" + name
+//        result = <node> </node>;
+//        result.@uuid = id;
+//        result.@nickname = name;
+//        result.@virtualization_type = virtType;
+        var str : String = "<node uuid=\"" + id + "\" nickname=\"" + name
           + "\" virtualization_type=\"" + virtType + "\" ";
-        if (useTunnels && sliverId != null)
+        if (useTunnels)
         {
           str += "sliver_uuid=\"" + sliverId + "\" ";
         }
         str += "> </node>";
         result = XML(str);
       }
-      else
-      {
-        if (! isVirtual)
-        {
-          str += "component_uuid=\"" + id + "\" ";
-        }
-        str += "component_manager_uuid=\"" + managerId + "\" ";
-        str += "virtual_id=\"" + name + "\" "
-          + "virtualization_type=\"" + virtType + "\" ";
-        if (sliverId != null)
-        {
-          str += "sliver_uuid=\"" + sliverId + "\" ";
-        }
-        if (isShared)
-        {
-          str += "virtualization_subtype=\"emulab-openvz\" ";
-          str += "exclusive=\"0\"";
-        }
-        else
-        {
-          str += "exclusive=\"1\"";
-        }
-        str += ">";
-        if (component.isBgpMux)
-        {
-          str += '<node_type type_name="bgpmux" type_slots="1"> ';
-          str += '  <field key="upstream_as" value="' + component.upstreamAs
-            + '" /> ';
-          str += '  <field key="prefix" value="' + manager.getBgpAddress()
-            + '" /> ';
-          str += '  <field key="netmask" value="' + manager.getBgpNetmask()
-            + '" /> ';
-          str += '</node_type> ';
-        }
-        else
-        {
-          var nodeType = "pc";
-          if (isShared)
-          {
-            nodeType = "pcvm";
-          }
-          else
-          {
-            nodeType = "pc";
-//          if (manager.getName() == "Emulab")
-//          {
-//            nodeType = "pc600";
-//          }
-          }
-          str += "<node_type type_name=\"" + nodeType
-            + "\" type_slots=\"1\" /> ";
-        }
-        for each (var current in interfaces)
-        {
-          if (current.used)
-          {
-            str += "<interface virtual_id=\"" + current.virtualId + "\" ";
-/*
-            if (current.name != null)
-            {
-              str += "component_id=\"" + current.name + "\" ";
-            }
-*/
-            str += " />";
-          }
-        }
-        str += "<interface virtual_id=\"control\" />";
-        str += " </node>";
-        result = XML(str);
-      }
       return result;
     }
 
-    public function isState(target : ComponentManager,
-                            exemplar : int) : Boolean
+    public function isState(index : int, exemplar : int) : Boolean
     {
       var state : int = calculateState();
-      return target == manager && state == exemplar;
+      return index == cmIndex && state == exemplar;
     }
 
     public function getStatusText() : String
@@ -402,13 +277,13 @@ package
       var result : String = "";
       result += "<font color=\"#7777ff\">Name:</font> " + name + "\n";
       result += "<font color=\"#7777ff\">UUID:</font> " + id + "\n";
-      result += "<font color=\"#7777ff\">Component Manager:</font> "
-        + manager.getName() + "\n";
-      if (sliverId != "" && sliverId != null)
+      if (sliverId != "")
       {
         result += "<font color=\"#7777ff\">Sliver UUID:</font> "
           + sliverId + "\n";
       }
+      result += "<font color=\"#7777ff\">Component Manager:</font> "
+        + ComponentManager.cmNames[cmIndex] + "\n";
       if (state != ActiveNodes.PLANNED)
       {
         result += "<font color=\"#7777ff\">Status:</font> "
@@ -418,82 +293,23 @@ package
           result += ": " + ActiveNodes.statusText[oldState] + " -> "
             + ActiveNodes.statusText[newState];
         }
-        result += "\n";
-      }
-      for each (var inter in interfaces)
-      {
-        if (inter.used || inter.role == Interface.CONTROL)
-        {
-          result += "<font color=\"#770000\">";
-        }
-        else
-        {
-          result += "<font color=\"#000000\">";
-        }
-        result += inter.virtualId + " ";
-        result += "</font>"
       }
       return result;
     }
 
-    public function mapRequest(root : XML,
-                               mapManager : ComponentManager) : void
-    {
-      if (isVirtual && name == root.attribute("virtual_id"))
-      {
-        var newId = root.attribute("component_uuid");
-        if (! manager.isUsedString(newId) || isShared)
-        {
-          var newIndex = mapManager.makeUsed(newId);
-          if (newIndex != -1)
-          {
-            id = newId;
-            nodeIndex = newIndex;
-            manager = mapManager;
-            managerId = manager.getId();
-            isVirtual = false;
-            var component = manager.getComponent(nodeIndex);
-            if (isShared)
-            {
-              name = name + "_map";
-            }
-            else
-            {
-              name = component.name;
-            }
-/*
-            if (! isShared)
-            {
-              var newInterfaces = cloneInterfaces(component);
-              for each (var inter in newInterfaces)
-              {
-                inter.used = interfaceUsed(inter.virtualId);
-              }
-              interfaces = newInterfaces;
-            }
-*/
-            updateNodeClip();
-          }
-        }
-      }
-    }
-
-    var component : Component;
     var clip : NodeClip;
     var name : String;
     var id : String;
-    var managerId : String;
     var sliverId : String;
-    var manager : ComponentManager;
+    var cmIndex : int;
     var nodeIndex : int;
+    var cleanupMethod : Function;
     var links : Array;
     var mouseDownNode : Function;
     var mouseDownLink : Function;
     var oldState : int;
     var newState : int;
     var interfaces : Array;
-    var isVirtual : Boolean;
-    var isShared : Boolean;
 
     static var virtType = "emulab-vnode";
 

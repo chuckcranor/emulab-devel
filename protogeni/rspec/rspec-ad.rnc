@@ -23,18 +23,7 @@ NodeContents &=
   # that we can later get updates that include only this attribute (and a
   # UUID) Just binary for now - probably will include more things, such
   # as a number of "free slots", later
-  element available { xsd:boolean } &
-
-  # Indicates whether the node is in sharing mode: exclusive is true if
-  # the component manager will agree to promise not to share it.
-  element exclusive { xsd:boolean } &
-
-  # Marks this node as a stand-in for a large network rather than a
-  # single machine. This means that other CMs can make external
-  # references to this node without a corresponding external reference
-  # in this advertisement. It also means that it makes sense for
-  # multiple physical links to connect to the same interface.
-  element cloud { empty }
+  element available { xsd:boolean }
 
 LinkContents &=
   # Component identifiers
@@ -44,30 +33,12 @@ LinkContents &=
 
 InterfaceDecl &=
   ComponentInterfaceDeclName &
-  element monitoring { attribute user_traffic { text }? }? &
-  attribute role { "control" | "experimental" }? &
-  attribute public_ipv4 { text }?
+  element monitoring { attribute user_traffic { text }? }?
 
 InterfaceRef &=
   ComponentInterfaceRefName
 
-# Reference to components managed by other component managers.
-# TODO: Merge ComponentInterfaceRefName into just component_id when
-# length restrictions on URNs end.
-ExternalReference = element external_ref {
-  ComponentInterfaceRefName &
-  attribute component_manager_uuid { text }? &
-  attribute component_manager_urn { text }?
-}
-
 RSpecContents &=
-  attribute type { "advertisement" } &
-  ExternalReference* &
-  BgpPrefix*
-
-BgpPrefix = element bgp_prefix {
-  attribute address { text } &
-  attribute netmask { text }
-}
+  attribute type { "advertisement" }
 
 start = RSpec

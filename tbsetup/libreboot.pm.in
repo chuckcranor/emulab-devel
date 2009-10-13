@@ -35,7 +35,7 @@ my $BOSSNODE    = "@BOSSNODE@";
 my $PGENISUPPORT= @PROTOGENI_SUPPORT@;
 
 if ($PGENISUPPORT) {
-    require libGeni;
+    require GeniEmulab;
 }
 
 #
@@ -178,7 +178,7 @@ sub nodereboot($$)
     foreach my $node (@nodes) {
 	my $nodeobject = Node->Lookup($node);
 	my $rebootable = $nodeobject->rebootable();
-
+	
 	$nodeobjects{$node} = $nodeobject;
 	push(@temp,$node) if $rebootable;
     }

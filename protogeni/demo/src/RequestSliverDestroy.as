@@ -16,12 +16,13 @@ package
 {
   class RequestSliverDestroy extends Request
   {
-    public function RequestSliverDestroy(newManager : ComponentManager,
-                                         newNodes : ActiveNodes) : void
+    public function RequestSliverDestroy(newCmIndex : int,
+                                         newNodes : ActiveNodes,
+                                         newUrl : String) : void
     {
-      super(newManager.getName());
-      manager = newManager;
+      cmIndex = newCmIndex;
       nodes = newNodes;
+      url = newUrl;
     }
 
     override public function cleanup() : void
@@ -31,15 +32,15 @@ package
 
     override public function start(credential : Credential) : Operation
     {
-      // TODO: Check to make sure that manager.getSliver()
+      // TODO: Check to make sure that credential.slivers[cmIndex]
       // exists and perform a no-op if it doesn't.
-      nodes.changeState(manager, ActiveNodes.CREATED, ActiveNodes.PLANNED);
-      nodes.changeState(manager, ActiveNodes.BOOTED, ActiveNodes.PLANNED);
+      nodes.changeState(cmIndex, ActiveNodes.CREATED, ActiveNodes.PLANNED);
+      nodes.changeState(cmIndex, ActiveNodes.BOOTED, ActiveNodes.PLANNED);
       opName = "Deleting Sliver";
       op.reset(Geni.deleteSliver);
-      op.addField("credential", manager.getSliver());
+      op.addField("credential", credential.slivers[cmIndex]);
       op.addField("impotent", Request.IMPOTENT);
-      op.setUrl(manager.getUrl());
+      op.setUrl(url);
       return op;
     }
 
@@ -48,18 +49,18 @@ package
     {
       if (code == 0)
       {
-        nodes.commitState(manager);
+        nodes.commitState(cmIndex);
       }
       else
       {
-        nodes.revertState(manager);
+        nodes.revertState(cmIndex);
       }
-      manager.setSliver(null);
-      manager.setTicket(null);
+      credential.slivers[cmIndex] = null;
       return null;
     }
 
-    var manager : ComponentManager;
+    var cmIndex : int;
     var nodes : ActiveNodes;
+    var url : String;
   }
 }

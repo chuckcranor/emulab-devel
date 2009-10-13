@@ -128,21 +128,19 @@ my %lans  = ();
 # Since the port numbers are totally pointless outside of assign_wrapper.
 #
 my $query_result =
-    DBQueryFatal("select v.vname from virt_nodes as v " .
+    DBQueryFatal("select v.vname,v.ips from virt_nodes as v " .
 		 "where v.pid='$pid' and v.eid='$eid' " .
 		 "      order by v.vname");
 
-while (my ($vname) = $query_result->fetchrow_array()) {
+while (my ($vname,$ips) = $query_result->fetchrow_array()) {
     $nodes{$vname} = {};
     
     print $LTOUT "h $vname\n";
-}
-$query_result =
-    DBQueryFatal("select vnode,vport,ip from virt_lans " .
-		 "where pid='$pid' and eid='$eid'");
-
-while (my ($vnode,$vport,$ip) = $query_result->fetchrow_array()) {
-    $ips{"$vnode:$vport"} = $ip;
+    foreach my $ipinfo (split(" ", $ips)) {
+	my ($port,$ip) = split(":", $ipinfo);
+	
+	$ips{"$vname:$port"} = $ip;
+    }
 }
 
 #

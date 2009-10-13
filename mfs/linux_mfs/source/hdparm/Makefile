@@ -24,11 +24,11 @@ clean:
 
 $(HDPARM_PATH)/.extract-stamp:
 	mkdir -p $(TARGET_BUILD_PATH)
-	cd $(TARGET_BUILD_PATH); tar xzf $(TARBALL_PATH)/hdparm-$(HDPARM_VERSION).tar.gz
+	cd $(TARGET_BUILD_PATH); tar xzf $(SOURCE_PATH)/hdparm/hdparm-$(HDPARM_VERSION).tar.gz
 	touch $@
 
 $(HDPARM_PATH)/.patch-stamp: $(HDPARM_PATH)/.extract-stamp
-	$(SCRIPTS_PATH)/patch-kernel.sh $(HDPARM_PATH) $(SOURCE_PATH)/hdparm '*.patch'
+	$(SCRIPTS_PATH)/patch-kernel.sh $(HDPARM_PATH) $(SOURCE_PATH)/hdparm/ '*.patch'
 	touch $@
 
 $(HDPARM_PATH)/.config-stamp: $(HDPARM_PATH)/.patch-stamp
@@ -42,7 +42,7 @@ $(HDPARM_PATH)/hdparm: $(HDPARM_PATH)/.config-stamp
 	PATH=$(STAGING_DIR)/usr/bin:$(PATH) \
 	        CC=$(TARGET_CC) \
 	        $(MAKE) -C $(HDPARM_PATH) \
-		$(TARGET_CONFIGURE_OPTS) LD=$(MFS_ARCH)-linux-uclibc-gcc
+		$(TARGET_CONFIGURE_OPTS) LD=i386-linux-uclibc-gcc
 	touch $@
 
 $(TARGET_PATH)/sbin/hdparm: $(HDPARM_PATH)/hdparm

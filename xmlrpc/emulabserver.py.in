@@ -1231,19 +1231,16 @@ class experiment:
             argstr += " " + nsfilename
             pass
 
-        (exitval, output, errout) = runcommand(TBDIR + "/bin/batchexp " + argstr, 
-                                               separate_stderr=extrainfo);
+        (exitval, output) = runcommand(TBDIR + "/bin/batchexp " + argstr)
         if exitval:
 	    if extrainfo:
 		try:
 		    value = xmlrpclib.loads(output)[0][0]
 		except:
-		    output = errout + output
 		    return EmulabResponse(RESPONSE_ERROR, exitval >> 8, output=output)
 		value["exitval"] = exitval >> 8
 		output = value["output"]
 		del value["output"]
-		value["errout"] = errout
 		return EmulabResponse(RESPONSE_ERROR, value, output=output)
 	    else:
             	return EmulabResponse(RESPONSE_ERROR, exitval >> 8, output=output)
@@ -1317,19 +1314,16 @@ class experiment:
         argstr += " " + escapeshellarg(argdict["proj"])
         argstr += " " + escapeshellarg(argdict["exp"])
 
-        (exitval, output, errout) = runcommand(TBDIR + "/bin/swapexp " + argstr,
-                                               separate_stderr=extrainfo);
+        (exitval, output) = runcommand(TBDIR + "/bin/swapexp " + argstr)
         if exitval:
 	    if extrainfo:
 		try:
 		    value = xmlrpclib.loads(output)[0][0]
 		except:
-		    output = errout + output
 		    return EmulabResponse(RESPONSE_ERROR, exitval >> 8, output=output)
 		value["exitval"] = exitval >> 8
 		output = value["output"]
 		del value["output"]
-		value["errout"] = errout
 		return EmulabResponse(RESPONSE_ERROR, value, output=output)
 	    else:
             	return EmulabResponse(RESPONSE_ERROR, exitval >> 8, output=output)
@@ -1424,19 +1418,16 @@ class experiment:
             argstr += " " + nsfilename
             pass
 
-        (exitval, output, errout) = runcommand(TBDIR + "/bin/swapexp " + argstr, 
-                                               separate_stderr=extrainfo)
+        (exitval, output) = runcommand(TBDIR + "/bin/swapexp " + argstr)
         if exitval:
 	    if extrainfo:
 		try:
 		    value = xmlrpclib.loads(output)[0][0]
 		except:
-		    output = errout + output
 		    return EmulabResponse(RESPONSE_ERROR, exitval >> 8, output=output)
 		value["exitval"] = exitval >> 8
 		output = value["output"]
 		del value["output"]
-		value["errout"] = errout
 		return EmulabResponse(RESPONSE_ERROR, value, output=output)
 	    else:
             	return EmulabResponse(RESPONSE_ERROR, exitval >> 8, output=output)
@@ -3393,19 +3384,18 @@ class node:
             pass
 
         pid_clause = ""
-        pid_clause_list = ""
         if argdict.has_key("proj"):
             permerror = CheckProjPermission(self.uid, argdict["proj"])
             if permerror:
                 return permerror
 
-            pid_clause_list = str(argdict["proj"])
-            pid_clause = " or p.pid='%s'" % (pid_clause_list,)
+            pid_clause = " or p.pid='%s'" % (str(argdict["proj"]),)
             pass
         else:
-            pid_clause_list = ",".join([("'" + x + "'")
-                                        for x in GetProjects(self.uid)])
-            pid_clause = (" or p.pid in (" + pid_clause_list + ")")
+            pid_clause = (" or p.pid in ("
+                          + ",".join([("'" + x + "'")
+                                      for x in GetProjects(self.uid)])
+                          + ")")
             pass
 
         node_clause = ""
@@ -3424,9 +3414,7 @@ class node:
             "  (a.eventstate='ISUP' or "
             "   a.eventstate='PXEWAIT' or "
             "   a.eventstate='POWEROFF'),wn.site,nfcpu.weight, "
-            "  GROUP_CONCAT(DISTINCT aux.type),wn.hostname, "
-            "  a.reserved_pid is null or a.reserved_pid in "
-            "   (" + pid_clause_list + ") "
+            "   GROUP_CONCAT(DISTINCT aux.type),wn.hostname "
             "FROM nodes AS a "
             "left join reserved as b on a.node_id=b.node_id "
             "left join node_types as nt on a.type=nt.type "
@@ -3452,7 +3440,7 @@ class node:
                 result[row[0]] = {
                     "node_id" : row[0],
                     "type" : row[1],
-                    "free" : (row[2] == 1 and row[3] == 1 and row[8] == 1),
+                    "free" : (row[2] == 1 and row[3] == 1),
                     }
                 if row[4]:
                     result[row[0]]["site"] = row[4]
@@ -4508,7 +4496,8 @@ class elabinelab:
 
         argstr = "-p " + self.pid + " -e " + self.eid + " " + xmlfilename;
 
-        (exitval, output) = runcommand(TBDIR + "/sbin/snmpit.proxyv2 " + argstr)
+        (exitval, output) = runcommand("/usr/testbed/devel/stoller" +
+                                       "/sbin/snmpit.proxyv2 " + argstr)
         if exitval:
             return EmulabResponse(RESPONSE_ERROR, exitval >> 8, output=output)
         
@@ -5352,20 +5341,17 @@ def escapeshellarg(s):
 # Run a command. args is a list of strings to pass as arguments to cmd.
 # Return the exitcode and the output as a tuple.
 # 
-def runcommand(cmd, separate_stderr=None):
-    from subprocess import *
-    if separate_stderr == True:
-    	p = Popen(cmd, stdin=None, stdout=PIPE, stderr=PIPE, shell=True, close_fds=True)
-    	(stdoutdata, stderrdata) = p.communicate()
-        return (p.returncode << 8, stdoutdata, stderrdata)
-    elif separate_stderr == False:
-    	p = Popen(cmd, stdin=None, stdout=PIPE, stderr=STDOUT, shell=True, close_fds=True)
-    	(stdoutdata, stderrdata) = p.communicate()
-        return (p.returncode << 8, stdoutdata, stderrdata)
-    else:
-    	p = Popen(cmd, stdin=None, stdout=PIPE, stderr=STDOUT, shell=True, close_fds=True)
-    	(stdoutdata, stderrdata) = p.communicate()
-        return (p.returncode << 8, stdoutdata)
+def runcommand(cmd):
+    child  = popen2.Popen4(cmd)
+    output = ""
+    while (True):
+        foo = child.fromchild.read(1024 * 16)
+        if foo == "":
+            break
+        output += foo
+        pass
+    
+    return (child.wait(), output)
 
 def writensfile(str):
     tempfile.tempdir = "/var/tmp"

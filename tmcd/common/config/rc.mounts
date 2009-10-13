@@ -100,8 +100,8 @@ SWITCH: for ($action) {
 exit(0);
 
 # More protos
-sub VMmount();
-sub VMunmount();
+sub jailmount();
+sub jailunmount();
 
 #
 # Boot Action.
@@ -109,7 +109,7 @@ sub VMunmount();
 sub doboot()
 {
     # Special Case.
-    return VMmount()
+    return jailmount()
 	if (defined($vnodeid));
 	
     #
@@ -158,8 +158,8 @@ sub doboot()
 	    }
 	
 	    print STDOUT "  Mounting $remote on $local\n";
-	    if (os_nfsmount($remote,$local)) {
-		warning("Could not os_nfsmount $remote on $local: $!");
+	    if (system("$NFSMOUNT $remote $local")) {
+		warning("Could not $NFSMOUNT $remote on $local\n");
 		next;
 	    }
 	}
@@ -221,8 +221,8 @@ sub doboot()
 	}
 	
 	print STDOUT "  Mounting $remote on $local\n";
-	if (os_nfsmount($remote,$local)) {
-	    warning("Could not os_nfsmount $remote on $local: $!");
+	if (system("$NFSMOUNT $remote $local")) {
+	    warning("Could not $NFSMOUNT $remote on $local: $!");
 	    next;
 	}
 	$curmounts{$remote} = $local;
@@ -353,7 +353,7 @@ sub doboot()
 sub doshutdown()
 {
     # Special Case.
-    return VMunmount()
+    return jailunmount()
 	if (defined($vnodeid));
 	
     # Otherwise nothing.
@@ -386,21 +386,22 @@ sub docleanup()
 }
 
 #
-# Aux function called from the mkjail/VM code to do mounts outside of
-# a jail/VM. Can use either NFS or local loopback. 
+# Aux function called from the mkjail code to do mounts outside of a
+# jail. Can use either NFS or local loopback. Maybe SFS someday. Local
+# only, of course.
 #
-# Call this routine to both mount and unmount since when a jail/VM
+# mkjail calls this routine to both mount and unmount since when a jail
 # exits it cannot leave any mounts around. Any failures in unmount has
 # to stop mkjail, since otherwise really really bad things can happen
 # (homedirs getting deleted on the file server)!
 # 
-sub VMmount()
+sub jailmount()
 {
     my $JAILDB    = CONFDIR() . "/mounts";
     my $mountstr;
 
     #
-    # No mounts on remote nodes.
+    # No NFS mounts on remote nodes.
     # 
     if (REMOTE()) {
 	return ();
@@ -415,7 +416,7 @@ sub VMmount()
 
     #
     # We mount all the mounts that the physical node has mounted, into
-    # the jail/VM. Since this is not going to be updated (no support for
+    # the jail. Since this is not going to be updated (no support for
     # updating mounts yet), we construct a copy of the DB in the jail
     # directory so we know exactly what we did when it comes time to do
     # the unmounts. In the meantime, the physical node might change its
@@ -428,15 +429,18 @@ sub VMmount()
     if (SHAREDHOST()) {
 	my @tmccresults;
 
-	if (tmcc(TMCCCMD_MOUNTS, undef, \@tmccresults) < 0) {
-	    warn("Could not get mount info from server!\n");
+	if (tmcc(TMCCCMD_ACCT, undef, \@tmccresults) < 0) {
+	    warn("Could not get account info from server!\n");
 	    return -1;
 	}
 	foreach my $str (@tmccresults) {
-	    if ($str =~ /^REMOTE=([-:\@\w\.\/]+) LOCAL=([-\@\w\.\/]+)/) {
+	    if ($str =~ /^ADDUSER LOGIN=([-\w]+) .* HOMEDIR=([^\s]+)/) {
 		$MOUNTS{$2} = $2;
 	    }
 	}
+	my ($pid, $eid, $myname) = check_nickname();
+	$MOUNTS{"/proj/$pid"} = "/proj/$pid"
+	    if ($pid);
     }
     else {
         dbmopen(%MDB, $MOUNTDB, 0444);
@@ -476,11 +480,10 @@ sub VMmount()
 # Must be sure to delete the DB file at the end so that the jail directory
 # is not left with crud in it.
 # 
-sub VMunmount()
+sub jailunmount()
 {
-    my $JAILDB  = CONFDIR() . "/mounts";
-    my $errors  = 0;
-    my @deletes = ();
+    my $JAILDB = CONFDIR() . "/mounts";
+    my $errors = 0;
 
     #
     # No NFS mounts on remote nodes.
@@ -499,19 +502,9 @@ sub VMunmount()
 	print STDOUT "  Unmounting $path\n";
 	
 	if (system("$UMOUNT $path")) {
-	    #
-	    # If the directory is empty (rmdir works), then lets not
-	    # call it an error.
-	    #
-	    if (!rmdir("$path")) {
-		warning("Could not unmount or rmdir $path");
-		$errors++;
-	    }
+	    warning("Could not unmount $local");
+	    $errors++;
 	}
-	push(@deletes, $remote);
-    }
-    foreach my $remote (@deletes) {
-	delete($SDB{$remote});
     }
     dbmclose(%SDB);
 

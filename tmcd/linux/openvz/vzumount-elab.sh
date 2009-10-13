@@ -5,14 +5,7 @@ if [ -z $VEID ]; then
     exit 33
 fi
 
-if [ -z $VE_CONFFILE ]; then
-    echo "Must set VE_CONFFILE env var!"
-    exit 34
-fi
-
-. $VE_CONFFILE
-
-MYROOT=${VE_ROOT}
+MYROOT=/vz/root/${VEID}
 if [ ! -e $MYROOT ]; then
     echo "root dir $MYROOT doesn't seem to be mounted!"
     exit 1
@@ -26,20 +19,11 @@ RETVAL=0
 # can perform such actions.
 #
 # Find our vnode_id:
-vnodeid=`cat /var/emulab/vms/vnode.${VEID}`
+pat="s/^([a-zA-Z0-9\-]+)(\s+${VEID})(.+)\$/\\1/p"
+vnodeid=`sed -n -r -e $pat /var/emulab/vnode.map`
 if [ -z $vnodeid ]; then
     echo "No vnodeid found for $VEID in $MYROOT/var/emulab/boot/realname;"
     echo "  cannot kill tmcc proxy!"
-    exit 44
-fi
-
-#
-echo "Undoing Emulab mounts."
-/usr/local/etc/emulab/rc/rc.mounts -j $vnodeid $MYROOT 0 shutdown
-if [ $? = 0 ]; then
-    echo "ok."
-else
-    echo "FAILED with exit code $?"
     exit 44
 fi
 

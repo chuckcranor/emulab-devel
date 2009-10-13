@@ -4,7 +4,6 @@
 #define LIB_HH_DELAY_AGENT_1
 
 #include <cassert>
-#include <cmath>
 
 #include <string>
 #include <map>
@@ -15,7 +14,6 @@
 #include <fstream>
 
 #include "event.h"
-#include "log.h"
 
 #define TBDB_OBJECTTYPE_LINK    "LINK"
 #define TBDB_EVENTTYPE_UP       "UP"
@@ -27,7 +25,6 @@
 enum { EVENT_BUFFER_SIZE = 50 };
 
 int stringToInt(std::string const & val);
-double stringToDouble(std::string const & val);
 int hexStringToInt(std::string const & val);
 std::string intToString(int val);
 

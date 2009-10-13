@@ -94,7 +94,8 @@ fgetln(FILE *stream, size_t *len)
  * virtual database. 0 is returned on success, -1 on failure.
  */
 int
-cgetset(const char *ent)
+cgetset(ent)
+	char *ent;
 {
 	if (ent == NULL) {
 		if (toprec)
@@ -126,10 +127,11 @@ cgetset(const char *ent)
  * return NULL.
  */
 char *
-cgetcap(char *buf, const char *cap, int type)
+cgetcap(buf, cap, type)
+	char *buf, *cap;
+	int type;
 {
-	char *bp;
-	const char *cp;
+	register char *bp, *cp;
 
 	bp = buf;
 	for (;;) {
@@ -177,11 +179,12 @@ cgetcap(char *buf, const char *cap, int type)
  * reference loop is detected.
  */
 int
-cgetent(char **buf, char **db_array, const char *name)
+cgetent(buf, db_array, name)
+	char **buf, **db_array, *name;
 {
 	u_int dummy;
 
-	return (getent(buf, &dummy, db_array, -1, (char *)name, 0, NULL));
+	return (getent(buf, &dummy, db_array, -1, name, 0, NULL));
 }
 
 /*
@@ -203,7 +206,10 @@ cgetent(char **buf, char **db_array, const char *name)
  *	  MAX_RECURSION.
  */
 static int
-getent(char **cap, u_int *len, char **db_array, int fd, char *name, int depth, char *nfield)
+getent(cap, len, db_array, fd, name, depth, nfield)
+	char **cap, **db_array, *name, *nfield;
+	u_int *len;
+	int fd, depth;
 {
 	DB *capdbp;
 	register char *r_end, *rp, **db_p;
@@ -558,7 +564,9 @@ tc_exp:	{
 }
 
 static int
-cdbget(DB *capdbp, char **bp, char *name)
+cdbget(capdbp, bp, name)
+	DB *capdbp;
+	char **bp, *name;
 {
 	DBT key, data;
 
@@ -595,9 +603,10 @@ cdbget(DB *capdbp, char **bp, char *name)
  * record buf, -1 if not.
  */
 int
-cgetmatch(const char *buf, const char *name)
+cgetmatch(buf, name)
+	char *buf, *name;
 {
-	const char *np, *bp;
+	register char *np, *bp;
 
 	/*
 	 * Start search at beginning of record.
@@ -792,7 +801,9 @@ cgetnext(bp, db_array)
  * allocation failure).
  */
 int
-cgetstr(char *buf, const char *cap, char **str)
+cgetstr(buf, cap, str)
+	char *buf, *cap;
+	char **str;
 {
 	register u_int m_room;
 	register char *bp, *mp;
@@ -919,7 +930,8 @@ cgetstr(char *buf, const char *cap, char **str)
  * error was encountered (storage allocation failure).
  */
 int
-cgetustr(char *buf, const char *cap, char **str)
+cgetustr(buf, cap, str)
+	char *buf, *cap, **str;
 {
 	register u_int m_room;
 	register char *bp, *mp;
@@ -987,7 +999,9 @@ cgetustr(char *buf, const char *cap, char **str)
  * numeric capability couldn't be found.
  */
 int
-cgetnum(char *buf, const char *cap, long *num)
+cgetnum(buf, cap, num)
+	char *buf, *cap;
+	long *num;
 {
 	register long n;
 	register int base, digit;

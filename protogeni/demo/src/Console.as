@@ -15,34 +15,57 @@
 package
 {
   import flash.display.DisplayObjectContainer;
+  import flash.text.TextField;
   import flash.events.MouseEvent;
   import flash.events.ErrorEvent;
   import flash.net.navigateToURL;
   import flash.net.URLRequest;
-  import flash.system.System;
-  import flash.text.TextField;
-
   import fl.controls.Button;
-
   import com.mattism.http.xmlrpc.MethodFault;
 
 
   class Console
   {
     public function Console(parent : DisplayObjectContainer,
-                            newNodes : ActiveNodes,
-                            newManagers : ComponentView,
+                            newNodes : ActiveNodes, newCm : ComponentManager,
                             newArena : SliceDetailClip,
                             newCredential : Credential,
                             newText : String) : void
     {
       nodes = newNodes;
-      managers = newManagers;
+      cm = newCm;
       arena = newArena;
+/*
+      consoleButton = newConsoleButton;
+      consoleButton.label = "Console";
+      consoleButton.addEventListener(MouseEvent.CLICK, clickConsole);
+      createSliversButton = newCreateSliversButton;
+      createSliversButton.label = "Create Slivers";
+      createSliversButton.addEventListener(MouseEvent.CLICK,
+                                           clickCreateSlivers);
+      bootSliversButton = newBootSliversButton;
+      bootSliversButton.label = "Boot Slivers";
+      bootSliversButton.addEventListener(MouseEvent.CLICK,
+                                         clickBootSlivers);
+      runSpeedTestButton = newRunSpeedTestButton;
+      runSpeedTestButton.label = "Speed Test";
+      runSpeedTestButton.addEventListener(MouseEvent.CLICK,
+                                          clickRunSpeedTest);
+      deleteSliversButton = newDeleteSliversButton;
+      deleteSliversButton.label = "Delete Slivers";
+      deleteSliversButton.addEventListener(MouseEvent.CLICK,
+                                           clickDeleteSlivers);
+*/
       credential = newCredential;
 
       clip = new ConsoleClip();
       parent.addChild(clip);
+/*
+      clip.back.label = "Back";
+      clip.back.addEventListener(MouseEvent.CLICK, clickBack);
+      clip.rspec.label = "RSpec";
+      clip.rspec.addEventListener(MouseEvent.CLICK, clickRspec);
+*/
       clip.visible = false;
       clip.text.text = newText;
 
@@ -54,19 +77,15 @@ package
                                              arena.bootButton,
                                              arena.speedButton,
                                              arena.deleteButton,
-                                             arena.embedButton,
-                                             arena.rspecButton,
                                              clip.backButton,
-                                             clip.copyButton),
+                                             clip.rspecButton),
                                    new Array(clickConsole,
                                              clickCreateSlivers,
                                              clickBootSlivers,
                                              clickRunSpeedTest,
                                              clickDeleteSlivers,
-                                             clickEmbed,
-                                             clickRspec,
                                              clickBack,
-                                             clickCopy));
+                                             clickRspec));
 
       queue = new Queue();
       working = false;
@@ -74,6 +93,17 @@ package
 
     public function cleanup() : void
     {
+/*
+      consoleButton.removeEventListener(MouseEvent.CLICK, clickConsole);
+      createSliversButton.removeEventListener(MouseEvent.CLICK,
+                                              clickCreateSlivers);
+      bootSliversButton.removeEventListener(MouseEvent.CLICK,
+                                            clickBootSlivers);
+      runSpeedTestButton.removeEventListener(MouseEvent.CLICK,
+                                          clickRunSpeedTest);
+      clip.back.removeEventListener(MouseEvent.CLICK, clickBack);
+      clip.rspec.removeEventListener(MouseEvent.CLICK, clickRspec);
+*/
       buttons.cleanup();
       clip.parent.removeChild(clip);
     }
@@ -88,55 +118,38 @@ package
       return clip.text;
     }
 
-    function discoverSliver(cm : ComponentManager) : Request
+    function discoverSliver(index : int) : Request
     {
-      if (cm != managers.getManagers()[0])
+      var result : Request = null;
+      if (cm.getUrl(index) != null)
       {
-        if (cm.getName() == "Georgia Tech")
-        {
-          cm.resourceSuccess(ComponentView.gaAd);
-          return null;
-        }
-        else
-        {
-          return new RequestResourceDiscovery(cm);
-        }
+        result = new RequestResourceDiscovery(index, cm);
       }
-      else
-      {
-        return null;
-      }
+      return result;
     }
 
     function clickConsole(event : MouseEvent) : void
     {
-      clip.text.visible = true;
-      clip.textScroll.visible = true;
-      clip.rspecText.visible = false;
-      clip.rspecScroll.visible = false;
       clip.visible = true;
     }
 
     function forEachComponent(func : Function) : void
     {
-      for each (var cm in managers.getManagers())
+      var i : int = 0;
+      for (; i < cm.getCmCount(); ++i)
       {
-        if (cm.getUrl() != null)
+        if (cm.getUrl(i) != null)
         {
-          var newRequest = func(cm);
-          pushRequest(newRequest);
-        }
-      }
-    }
-
-    function pushRequest(newRequest : Request) : void
-    {
-      if (newRequest != null)
-      {
-        queue.push(newRequest);
-        if (! working)
-        {
-          start();
+          var newRequest = func(i);
+          if (newRequest != null)
+          {
+            queue.push(newRequest);
+//            nodes.changeState(i, ActiveNodes.PENDING);
+            if (! working)
+            {
+              start();
+            }
+          }
         }
       }
     }
@@ -149,23 +162,20 @@ package
       }
     }
 
-    function createSliver(cm : ComponentManager) : Request
+    function createSliver(index : int) : Request
     {
       var result : Request = null;
-      var shouldSend = nodes.managerUsed(cm);
-      if (shouldSend && cm.hasChanged() && cm.getName() != "Georgia Tech")
+      var rspec = nodes.getXml(index, false);
+      if (rspec != null)
       {
-        cm.clearChanged();
-        var rspec = null;
-        if (cm.getSliver() == null)
+        if (credential.slivers[index] == null)
         {
-          rspec = nodes.getXml(false, cm);
-          result = new RequestSliverCreate(cm, nodes, rspec);
+          result = new RequestSliverCreate(index, nodes, cm, rspec);
         }
-        else if (cm.getVersion() >= 2)
+        else
         {
-          rspec = nodes.getXml(true, cm);
-          result = new RequestSliverUpdate(cm, nodes, rspec, false);
+          rspec = nodes.getXml(index, true);
+          result = new RequestSliverUpdate(index, nodes, cm, rspec, true);
         }
       }
       return result;
@@ -179,12 +189,12 @@ package
       }
     }
 
-    function bootSliver(cm : ComponentManager) : Request
+    function bootSliver(index : int) : Request
     {
       var result : Request = null;
-      if (nodes.existsState(cm, ActiveNodes.CREATED))
+      if (nodes.existsState(index, ActiveNodes.CREATED))
       {
-        result = new RequestSliverStart(cm, nodes);
+        result = new RequestSliverStart(index, nodes, cm.getUrl(index));
       }
       return result;
     }
@@ -210,74 +220,47 @@ package
       }
     }
 
-    function deleteSliver(cm : ComponentManager) : Request
+    function deleteSliver(index : int) : Request
     {
       var result : Request = null;
-      if (nodes.existsState(cm, ActiveNodes.PENDING)
-          || nodes.existsState(cm, ActiveNodes.CREATED)
-          || nodes.existsState(cm, ActiveNodes.BOOTED))
+      if (nodes.existsState(index, ActiveNodes.PENDING)
+          || nodes.existsState(index, ActiveNodes.CREATED)
+          || nodes.existsState(index, ActiveNodes.BOOTED))
       {
-        result = new RequestSliverDestroy(cm, nodes);
+        result = new RequestSliverDestroy(index, nodes, cm.getUrl(index));
       }
       return result;
-    }
-
-    function clickEmbed(event : MouseEvent) : void
-    {
-      if (managers.isValidManager() && queue.isEmpty())
-      {
-        var currentManager = managers.getCurrentManager();
-        var request = new RequestSliceEmbedding(currentManager, nodes,
-                                                nodes.getXml(false,
-                                                             currentManager),
-                                                Geni.sesUrl);
-        pushRequest(request);
-      }
     }
 
     function clickBack(event : MouseEvent) : void
     {
       clip.visible = false;
-    }
-
-    function clickCopy(event : MouseEvent) : void
-    {
-      if (clip.text.visible)
-      {
-        System.setClipboard(clip.text.text);
-      }
-      else if (clip.rspecText.visible)
-      {
-        System.setClipboard(clip.rspecText.text);
-      }
+      clip.text.visible = true;
+      clip.textScroll.visible = true;
+      clip.rspecText.visible = false;
+      clip.rspecScroll.visible = false;
     }
 
     function clickRspec(event : MouseEvent) : void
     {
-      clip.text.visible = false;
-      clip.textScroll.visible = false;
-      clip.rspecText.visible = true;
-      clip.rspecScroll.visible = true;
-      clip.visible = true;
+      clip.text.visible = ! clip.text.visible;
+      clip.textScroll.visible = ! clip.textScroll.visible;
+      clip.rspecText.visible = ! clip.rspecText.visible;
+      clip.rspecScroll.visible = ! clip.rspecScroll.visible;
 
-      var managerName = managers.getCurrentManager().getName();
       clip.rspecText.text = "";
-      clip.rspecText.appendText("--------------------------------------\n");
-      clip.rspecText.appendText("Request: " + managerName + "\n");
-      clip.rspecText.appendText("--------------------------------------\n\n");
-      var xml = nodes.getXml(true, managers.getCurrentManager());
-      clip.rspecText.appendText(xml.toString());
-
-      clip.rspecText.appendText("\n\n--------------------------------------\n");
-      clip.rspecText.appendText("Advertisement: " + managerName + "\n");
-      clip.rspecText.appendText("--------------------------------------\n\n");
-      clip.rspecText.appendText(managers.getCurrentManager().getAd());
-
-      clip.rspecText.appendText("\n\n--------------------------------------\n");
-      clip.rspecText.appendText("Manifest: " + managerName + "\n");
-      clip.rspecText.appendText("--------------------------------------\n\n");
-      clip.rspecText.appendText(managers.getCurrentManager().getManifest());
-
+      var i : int = 0;
+      for (; i < ComponentManager.cmNames.length; ++i)
+      {
+        var xml = nodes.getXml(i, true);
+        if (xml != null)
+        {
+          clip.rspecText.appendText("\n\n\n\n--------------------------------\n");
+          clip.rspecText.appendText(ComponentManager.cmNames[i] + "\n");
+          clip.rspecText.appendText("--------------------------------\n\n");
+          clip.rspecText.appendText(xml.toString());
+        }
+      }
       clip.rspecScroll.update();
     }
 
@@ -287,7 +270,6 @@ package
       {
         var front = queue.front();
         var op = front.start(credential);
-        arena.opText.text = front.getOpName();
         clip.text.appendText(Util.getSend(front.getOpName(), front.getUrl(),
                                           ""));
         clip.text.scrollV = clip.text.maxScrollV;
@@ -310,7 +292,6 @@ package
       arena.bootButton.gotoAndStop(newState);
       arena.speedButton.gotoAndStop(newState);
       arena.deleteButton.gotoAndStop(newState);
-      arena.embedButton.gotoAndStop(newState);
     }
 
     function failure(event : ErrorEvent, fault : MethodFault) : void
@@ -345,14 +326,9 @@ package
       start();
     }
 
-    public function isWorking() : Boolean
-    {
-      return working;
-    }
-
     var clip : ConsoleClip;
     var nodes : ActiveNodes;
-    var managers : ComponentView;
+    var cm : ComponentManager;
     var arena : SliceDetailClip;
 
     var buttons : ButtonList;

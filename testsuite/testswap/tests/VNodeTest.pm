@@ -2,7 +2,7 @@
 package VNodeTest;
 use SemiModern::Perl;
 use TestBed::TestSuite;
-use Test::More;
+use Test::More 'no_plan';
 
 my $nsfile = <<'END';
 set ns [new Simulator]

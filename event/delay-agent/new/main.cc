@@ -10,6 +10,7 @@ using namespace std;
 void setupDefaultParameters(void);
 void readArgs(int argc, char * argv[]);
 void usage(char * name);
+void initLogging(string const & logFile);
 // Reads the map file, initializes the pipe and pipeVault data
 // structure, and sets up the two subscription strings for events.
 void readMapFile(string const & mapFile, string & linkSubscribe, string & resetSubscribe);
@@ -50,8 +51,7 @@ void readArgs(int argc, char * argv[])
 
   string mapFile;
   string logFile;
-  string pidFile("/var/run/delayagent.pid");
-  int pid;
+  string pidFile;
   // Prevent getopt from printing an error message.
   opterr = 0;
 
@@ -102,18 +102,9 @@ void readArgs(int argc, char * argv[])
   if(server == "" || mapFile == "" || g::experimentName == "")
       usage(argv[0]);
 
-  
-  if (g::debug) {
-      loginit(0, 0);
-  }
-  else {
-      /* Become a daemon */
-      daemon(0, 0);
-      loginit(0, (char *)logFile.c_str());
-  }
-
-  writePidFile(pidFile);
+  initLogging(logFile);
   readMapFile(mapFile, linkSubscribe, resetSubscribe);
+  writePidFile(pidFile);
   initEvents(server, port, keyFile, linkSubscribe, resetSubscribe);
 }
 
@@ -122,6 +113,10 @@ void usage(char * name)
   cerr << "Usage: " << name << " -E proj/exp -s server -f mapFile [-d] [-p port] [-l logFile] "
        << "[-i pidFile] [-k keyFile] [-j myvnode???]" << endl;
   exit(-1);
+}
+
+void initLogging(string const & /*logFile*/)
+{
 }
 
 void readMapFile(string const & mapFile, string & linkSubscribe, string & resetSubscribe)

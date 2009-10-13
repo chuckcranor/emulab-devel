@@ -1,6 +1,6 @@
 /*
  * EMULAB-COPYRIGHT
- * Copyright (c) 1999-2009 The University of Utah and the Flux Group.
+ * Copyright (c) 1999-2003 The University of Utah and the Flux Group.
  * All rights reserved.
  */
 
@@ -11,6 +11,10 @@
 #include "score.h"
 #include "anneal.h"
 
+#ifdef __cplusplus 
+extern "C" {
+#endif
+  
 /*
  * Dumb as a stump config for options that the test program supports
  */
@@ -19,7 +23,7 @@ struct config_param {
   int type;		/* type (see below) */
   void *ptr;		/* pointer to value portion */
   void (*func)(struct config_param *opt, char *newval);
-				/* function to set value (unused) */
+				/* function to set value */
 };
 
 /* types */
@@ -27,9 +31,13 @@ struct config_param {
 #define CONFIG_FLOAT	1
 
 void parse_options(char **argv, struct config_param options[], int nopt);
-int config_parse(char **args, struct config_param cparams[], int nparams,
-        bool exit_on_error);
+int config_parse(char **args, struct config_param cparams[], int nparams);
 void dump_options(const char *str, struct config_param cparams[], int nparams);
+
+#ifdef __cplusplus 
+}
+#endif
+
 
 /*
  * To use these on the command line, each entry gets a

@@ -33,17 +33,17 @@ ZLIB_CFLAGS		=	-fPIC -D_LARGEFILE_SOURCE -D_LARGEFILE64_SOURCE -D_FILE_OFFSET_BI
 
 $(ZLIB_PATH)/.extract-stamp:
 	mkdir -p $(TARGET_BUILD_PATH)
-	cd $(TARGET_BUILD_PATH); tar xjf $(TARBALL_PATH)/zlib-$(ZLIB_VERSION).tar.bz2
+	cd $(TARGET_BUILD_PATH); tar xjf $(SOURCE_PATH)/zlib/zlib-$(ZLIB_VERSION).tar.bz2
 	touch $@
 
 $(ZLIB_PATH)/.patch-stamp: $(ZLIB_PATH)/.extract-stamp
-	$(SCRIPTS_PATH)/patch-kernel.sh $(ZLIB_PATH) $(SOURCE_PATH)/zlib '*.patch'
+	$(SCRIPTS_PATH)/patch-kernel.sh $(ZLIB_PATH) $(SOURCE_PATH)/zlib/ '*.patch'
 	touch $@
 
 $(ZLIB_PATH)/.config-stamp: $(ZLIB_PATH)/.patch-stamp
 	rm -f $(ZLIB_PATH)/config.cache
 	cd $(ZLIB_PATH); \
-		$(HOST_CONFIGURE_OPTS) CC=$(MFS_ARCH)-linux-uclibc-gcc \
+		$(HOST_CONFIGURE_OPTS) CC=i386-linux-uclibc-gcc \
 		CFLAGS="$(ZLIB_CFLAGS)" \
 		./configure --prefix=/usr \
 		--exec_prefix=$(STAGING_DIR)/usr/bin \

@@ -1,7 +1,7 @@
 # -*- tcl -*-
 #
 # EMULAB-COPYRIGHT
-# Copyright (c) 2000-2009 University of Utah and the Flux Group.
+# Copyright (c) 2000-2008 University of Utah and the Flux Group.
 # All rights reserved.
 #
 
@@ -65,16 +65,6 @@ Node instproc init {s} {
     # table).
     $self set osid ""
 
-    # We have this for a bad, bad reason.  We can't expose $vhost variables
-    # in ns files because assign can't yet handle fixing vnodes to vhosts (or
-    # any other mapping constraints, since that would imply multiple levels 
-    # of mapping)... so when you set the parent_osid for vnodes, you are 
-    # setting the os for the vhost itself; the osid is the os for the vnode.
-    #
-    # If the osid gets set to a subosid, we set parent_osid to the default
-    # parent_osid for that osid in updatedb.
-    $self set parent_osid ""
-
     # Start with an empty set of desires
     $self instvar desirelist
     array set desirelist {}
@@ -90,7 +80,6 @@ Node instproc init {s} {
     $self set plab_plcnet "none"
     $self set fixed ""
     $self set nseconfig ""
-    $self set sharing_mode ""
 
     $self set topo ""
 
@@ -149,7 +138,6 @@ Node instproc updatedb {DB} {
     $self instvar portlist
     $self instvar type
     $self instvar osid
-    $self instvar parent_osid
     $self instvar cmdline
     $self instvar rpms
     $self instvar startup
@@ -170,14 +158,12 @@ Node instproc updatedb {DB} {
     $self instvar desirelist
     $self instvar nseconfig
     $self instvar simulated
-    $self instvar sharing_mode
     $self instvar topo
     $self instvar X_
     $self instvar Y_
     $self instvar orientation_
     $self instvar numeric_id
     var_import ::TBCOMPAT::default_osids
-    var_import ::TBCOMPAT::subosids
     var_import ::GLOBALS::use_physnaming
     var_import ::TBCOMPAT::physnodes
     var_import ::TBCOMPAT::objtypes
@@ -215,26 +201,6 @@ Node instproc updatedb {DB} {
 	    perror "You may not specify an OS for hosting virtnodes ($self)!"
 	    return
 	}
-    }
-
-    #
-    # If the osid is a subosid and there is no parent, choose the default
-    # one now.
-    # XXX don't do this for now -- an OS can be both a subOS and a regular OS
-    # (i.e., windows), and we don't want to imply to Emulab that there should
-    # be a subOS if the user doesn't force it.
-    #
-    #if {[info exists $subosids($osid)] && $parent_osid == ""} {
-    #    set parent_osid [lindex $subosids($osid) 0]
-    #}
-
-    #
-    # If the osid won't run on the specified parent, die.
-    #
-    if {$parent_osid != "" && $osid != "" 
-	&& [lsearch -exact $subosids($osid) $parent_osid] == -1} {
-	perror "subOSID $osid does not run on parent OSID $parent_osid!"
-	return
     }
 
     #
@@ -320,19 +286,9 @@ Node instproc updatedb {DB} {
 	lappend values $plab_plcnet
     }
 
-    if { $sharing_mode != "" } {
-	lappend fields "sharing_mode"
-	lappend values $sharing_mode
-    }
-
     if { $numeric_id != {} } {
 	lappend fields "numeric_id"
 	lappend values $numeric_id
-    }
-
-    if { $parent_osid != {} && $parent_osid != 0} {
-	lappend fields "parent_osname"
-	lappend values $parent_osid
     }
 
     $sim spitxml_data "virt_nodes" $fields $values
@@ -480,7 +436,6 @@ Node instproc set_fixed {pnode} {
     $self instvar topo
     $self instvar fixed
     $self instvar issubnode
-    $self instvar isvirt
 
     if { [Node info instances $pnode] != {} } {
         # $pnode is an object instance of class Node
@@ -494,7 +449,7 @@ Node instproc set_fixed {pnode} {
     }
     set fixed $pnode
 
-    if {$isvirt == 0 && [info exists physnodes($pnode)]} {
+    if {[info exists physnodes($pnode)]} {
 	set type $physnodes($pnode)
 	
 	if {$topo != ""} {

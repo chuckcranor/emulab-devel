@@ -84,9 +84,8 @@ sub Stringify($)
     my ($self) = @_;
     
     my $uuid = $self->uuid();
-    my $hrn  = $self->hrn();
 
-    return "[GeniCertificate: $uuid, $hrn]";
+    return "[GeniCertificate: $uuid]";
 }
 
 # accessors
@@ -147,7 +146,7 @@ sub Create($$$$;$$)
 	push(@certlines, $_);
     }
     if (!close(CERT)) {
-	print STDERR "$MKCERT failed!\n";
+	print STDERR "Could not generate a new certificate with $MKCERT\n";
 	return undef;
     }
     my $cert;
@@ -174,16 +173,10 @@ sub Create($$$$;$$)
     }
     if (! (defined($privkey) && defined($cert))) {
 	print STDERR "Could not generate a new certificate with $MKCERT\n";
-	foreach my $line (@certlines) {
-	    print STDERR $line;
-	}
 	return undef;
     }
     if (! ($cert =~ /^[\012\015\040-\176]*$/)) {
 	print STDERR "Improper chars in certificate string\n";
-	foreach my $line (@certlines) {
-	    print STDERR $line;
-	}
 	return undef;
     }
 
@@ -467,7 +460,7 @@ sub StoreCRL($$$)
 		"  uuid='$uuid', created=now(), expires=$dateconvert, ".
 		"  cert=$safe_cert")
 	or return -1;
-    unlink($filename);
+
     return 0;
 }
 
@@ -537,7 +530,6 @@ sub DN($)
     }
     chomp($dn);
     $self->{'CERT'}->{'DN'} = $dn;
-    unlink($filename);
     return $dn;
 }
 

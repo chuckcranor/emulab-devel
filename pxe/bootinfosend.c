@@ -146,7 +146,7 @@ main(int argc, char **argv)
 #endif
 	}
 	else {
-		err = query_bootinfo_db(target.sin_addr, NULL,
+		err = query_bootinfo_db(target.sin_addr,
 					boot_info.version,
 					boot_whatp, NULL);
 		if (err) {

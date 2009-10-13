@@ -228,11 +228,9 @@ CREATE TABLE `comments` (
 DROP TABLE IF EXISTS `current_reloads`;
 CREATE TABLE `current_reloads` (
   `node_id` varchar(32) NOT NULL default '',
-  `idx` smallint(5) unsigned NOT NULL default '0',
   `image_id` int(8) unsigned NOT NULL default '0',
   `mustwipe` tinyint(4) NOT NULL default '0',
-  `prepare` tinyint(4) NOT NULL default '0',
-  PRIMARY KEY  (`node_id`,`idx`)
+  PRIMARY KEY  (`node_id`)
 ) ENGINE=MyISAM DEFAULT CHARSET=latin1;
 
 --
@@ -1059,7 +1057,6 @@ CREATE TABLE `experiments` (
   `state` varchar(16) NOT NULL default 'new',
   `maximum_nodes` int(6) unsigned default NULL,
   `minimum_nodes` int(6) unsigned default NULL,
-  `virtnode_count` int(6) unsigned default NULL,
   `testdb` tinytext,
   `path` tinytext,
   `logfile` tinytext,
@@ -1502,7 +1499,6 @@ CREATE TABLE `interface_state` (
   `iface` varchar(32) NOT NULL,
   `enabled` tinyint(1) default '1',
   `tagged` tinyint(1) default '0',
-  `remaining_bandwidth` int(11) NOT NULL default '0',
   PRIMARY KEY  (`node_id`,`card`,`port`),
   KEY `nodeiface` (`node_id`,`iface`)
 ) ENGINE=MyISAM DEFAULT CHARSET=latin1;
@@ -1544,7 +1540,6 @@ CREATE TABLE `interfaces` (
   `rtabid` smallint(5) unsigned NOT NULL default '0',
   `vnode_id` varchar(32) default NULL,
   `whol` tinyint(4) NOT NULL default '0',
-  `trunk` tinyint(1) NOT NULL default '0',
   `uuid` varchar(40) NOT NULL default '',
   PRIMARY KEY  (`node_id`,`card`,`port`),
   KEY `mac` (`mac`),
@@ -1717,7 +1712,7 @@ CREATE TABLE `linkdelays` (
   `q_droptail` int(11) default '0',
   `q_red` tinyint(4) default '0',
   `q_gentle` tinyint(4) default '0',
-  PRIMARY KEY  (`exptidx`,`node_id`,`vlan`,`vnode`),
+  PRIMARY KEY  (`node_id`,`vlan`,`vnode`),
   KEY `id` (`pid`,`eid`),
   KEY `exptidx` (`exptidx`)
 ) ENGINE=MyISAM DEFAULT CHARSET=latin1;
@@ -2451,13 +2446,12 @@ CREATE TABLE `os_info` (
   `path` tinytext,
   `magic` tinytext,
   `machinetype` varchar(30) NOT NULL default '',
-  `osfeatures` set('ping','ssh','ipod','isup','veths','veth-ne','veth-en','mlinks','linktest','linkdelays','vlans','suboses') default NULL,
+  `osfeatures` set('ping','ssh','ipod','isup','veths','mlinks','linktest','linkdelays') default NULL,
   `ezid` tinyint(4) NOT NULL default '0',
   `shared` tinyint(4) NOT NULL default '0',
   `mustclean` tinyint(4) NOT NULL default '1',
   `op_mode` varchar(20) NOT NULL default 'MINIMAL',
   `nextosid` int(8) unsigned default NULL,
-  `def_parentosid` int(8) unsigned default NULL,
   `old_nextosid` varchar(35) NOT NULL default '',
   `max_concurrent` int(11) default NULL,
   `mfs` tinyint(4) NOT NULL default '0',
@@ -2468,17 +2462,6 @@ CREATE TABLE `os_info` (
   KEY `path` (`path`(255)),
   KEY `old_osid` (`old_osid`),
   KEY `uuid` (`uuid`)
-) ENGINE=MyISAM DEFAULT CHARSET=latin1;
-
---
--- Table structure for table `os_submap`
---
-
-DROP TABLE IF EXISTS `os_submap`;
-CREATE TABLE `os_submap` (
-  `osid` int(8) unsigned NOT NULL default '0',
-  `parent_osid` int(8) unsigned NOT NULL default '0',
-  PRIMARY KEY  (`osid`,`parent_osid`)
 ) ENGINE=MyISAM DEFAULT CHARSET=latin1;
 
 --
@@ -3046,7 +3029,7 @@ CREATE TABLE `reserved` (
   `exptidx` int(11) NOT NULL default '0',
   `rsrv_time` timestamp NOT NULL default CURRENT_TIMESTAMP on update CURRENT_TIMESTAMP,
   `vname` varchar(32) default NULL,
-  `erole` enum('node','virthost','delaynode','simhost','sharedhost') NOT NULL default 'node',
+  `erole` enum('node','virthost','delaynode','simhost','modelnet-core','modelnet-edge') NOT NULL default 'node',
   `simhost_violation` tinyint(3) unsigned NOT NULL default '0',
   `old_pid` varchar(12) NOT NULL default '',
   `old_eid` varchar(32) NOT NULL default '',
@@ -3058,10 +3041,8 @@ CREATE TABLE `reserved` (
   `plab_boot` tinyint(1) default '0',
   `mustwipe` tinyint(4) NOT NULL default '0',
   `genisliver_idx` int(10) unsigned default NULL,
-  `external_resource_index` int(10) unsigned default NULL,
-  `external_resource_id` tinytext,
   `tmcd_redirect` tinytext,
-  `sharing_mode` varchar(32) default NULL,
+  `sharing_mode` tinytext,
   PRIMARY KEY  (`node_id`),
   UNIQUE KEY `vname` (`pid`,`eid`,`vname`),
   UNIQUE KEY `vname2` (`exptidx`,`vname`),
@@ -3168,21 +3149,6 @@ CREATE TABLE `switch_paths` (
   `vname` varchar(32) default NULL,
   `node_id1` varchar(32) default NULL,
   `node_id2` varchar(32) default NULL
-) ENGINE=MyISAM DEFAULT CHARSET=latin1;
-
---
--- Table structure for table `openvpn_config`
---
-
-DROP TABLE IF EXISTS `sw_configfiles`;
-CREATE TABLE `sw_configfiles` (
-  `id` int(11) NOT NULL auto_increment,
-  `node_id` varchar(32) NOT NULL,
-  `connection_id` int(11) NOT NULL default '0',
-  `file` varchar(4) NOT NULL,
-  `data` text,
-  `swid` varchar(20) NOT NULL,
-   PRIMARY KEY(`id`)
 ) ENGINE=MyISAM DEFAULT CHARSET=latin1;
 
 --
@@ -3600,7 +3566,6 @@ CREATE TABLE `vinterfaces` (
   `exptidx` int(10) NOT NULL default '0',
   `virtlanidx` int(11) NOT NULL default '0',
   `vlanid` int(11) NOT NULL default '0',
-  `bandwidth` int(10) NOT NULL default '0',
   PRIMARY KEY  (`node_id`,`unit`),
   KEY `bynode` (`node_id`,`iface`),
   KEY `type` (`type`)
@@ -3743,7 +3708,7 @@ CREATE TABLE `virt_lans` (
   `trace_snaplen` int(11) NOT NULL default '0',
   `trace_endnode` tinyint(1) NOT NULL default '0',
   `trace_db` tinyint(1) NOT NULL default '0',
-  `fixed_iface` varchar(128) default '',
+  `fixed_iface` varchar(16) default '',
   PRIMARY KEY  (`exptidx`,`vname`,`vnode`,`vport`),
   UNIQUE KEY `vport` (`pid`,`eid`,`vname`,`vnode`,`vport`),
   KEY `pid` (`pid`,`eid`,`vname`),
@@ -3810,7 +3775,6 @@ CREATE TABLE `virt_nodes` (
   `exptidx` int(11) NOT NULL default '0',
   `ips` text,
   `osname` varchar(20) default NULL,
-  `parent_osname` varchar(20) default NULL,
   `cmd_line` text,
   `rpms` text,
   `deltas` text,
@@ -3825,7 +3789,6 @@ CREATE TABLE `virt_nodes` (
   `plab_role` enum('plc','node','none') NOT NULL default 'none',
   `plab_plcnet` varchar(32) NOT NULL default 'none',
   `numeric_id` int(11) default NULL,
-  `sharing_mode` varchar(32) default NULL,
   PRIMARY KEY  (`exptidx`,`vname`),
   UNIQUE KEY `pideid` (`pid`,`eid`,`vname`),
   KEY `pid` (`pid`,`eid`,`vname`)
@@ -4022,7 +3985,7 @@ CREATE TABLE `vlans` (
   `members` text NOT NULL,
   `id` int(11) NOT NULL auto_increment,
   `tag` smallint(5) NOT NULL default '0',
-  `stack` varchar(32) default NULL,
+  `stack` enum('Control','Experimental') NOT NULL default 'Experimental',
   PRIMARY KEY  (`id`),
   KEY `pid` (`pid`,`eid`,`virtual`),
   KEY `exptidx` (`exptidx`,`virtual`)
@@ -4247,4 +4210,18 @@ CREATE TABLE `wires` (
 /*!40101 SET COLLATION_CONNECTION=@OLD_COLLATION_CONNECTION */;
 /*!40111 SET SQL_NOTES=@OLD_SQL_NOTES */;
 
+---
+--- Table structure for table `openvpn_config`
+---
+
+DROP TABLE IF EXISTS `sw_configfiles`;
+CREATE TABLE `sw_configfiles` (
+  `id` int(11) NOT NULL auto_increment,
+  `node_id` varchar(32) NOT NULL,
+  `connection_id` int(11) NOT NULL default '0',
+  `file` varchar(4) NOT NULL,
+  `data` text,
+  `swid` varchar(20) NOT NULL,
+   PRIMARY KEY(`id`)
+) ENGINE=MyISAM DEFAULT CHARSET=latin1;
 

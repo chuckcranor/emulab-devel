@@ -25,7 +25,6 @@ use GeniSlice;
 use GeniRegistry;
 use GeniUtil;
 use emutil;
-use Data::Dumper;
 use English;
 use overload ('""' => 'Stringify');
 use XML::Simple;
@@ -41,7 +40,6 @@ my $PGENIDOMAIN    = "@PROTOGENI_DOMAIN@";
 my $SIGNCRED	   = "$TB/sbin/signgenicred";
 my $VERIFYCRED	   = "$TB/sbin/verifygenicred";
 my $NODEREBOOT	   = "$TB/bin/node_reboot";
-my $VNODESETUP     = "$TB/sbin/vnode_setup";
 
 # Cache of instances to avoid regenerating them.
 my %aggregates     = ();
@@ -142,8 +140,7 @@ sub Create($$$$$$)
     # Create a cert pair, which gives us a new uuid.
     my $certificate = GeniCertificate->Create("aggregate", $hrn, $TBOPS);
     if (!defined($certificate)) {
-	print STDERR "GeniAggregate::Create: ".
-	    "Could not generate new certificate and UUID for $hrn\n";
+	print STDERR "Could not generate new certificate and UUID!\n";
 	return undef;
     }
     my $uuid        = $certificate->uuid();
@@ -515,33 +512,6 @@ sub NewCredential($$)
 }
 
 #
-# Process the manifest. Just hand off to the slivers.
-#
-sub ProcessManifest($$)
-{
-    my ($self, $manifest) = @_;
-
-    return -1
-	if (! ref($self));
-
-    my @slivers = ();
-    if ($self->SliverList(\@slivers) != 0) {
-	print STDERR "Could not get sliver list for $self\n";
-	return -1;
-    }
-
-    foreach my $sliver (@slivers) {
-	next
-	    if (ref($sliver) ne "GeniSliver::Node");
-
-	if ($sliver->ProcessManifest($manifest) != 0) {
-	    return -1;
-	}
-    }
-    return 0;
-}
-
-#
 # Start all the slivers in the aggregate. Start is special since it
 # sorta means reboot, and the only thing we reboot are nodes. And,
 # since we might have multiple vnodes on a pnode, we want to be efficient
@@ -557,21 +527,13 @@ sub Start($)
     return -1
 	if (! ref($self));
 
-    my $experiment = Experiment->Lookup($self->slice_uuid());
-    if (!defined($experiment)) {
-	print STDERR "Could not map $self to its experiment\n";
-	return -1;
-    }
-    my $pid = $experiment->pid();
-    my $eid = $experiment->eid();
-
     my @slivers = ();
     if ($self->SliverList(\@slivers) != 0) {
 	print STDERR "Could not get sliver list for $self\n";
 	return -1;
     }
-    my %pnodes = ();
-    my %vnodes = ();
+
+    my %reboots = ();
 
     foreach my $sliver (@slivers) {
 	next
@@ -582,62 +544,28 @@ sub Start($)
 	    print STDERR "Could not map $sliver to a node\n";
 	    return -1;
 	}
-	print STDERR "GeniAggregate:StartSliver $node\n";
-	
-	my $reservation = $node->Reservation();
-	if (!defined($reservation)) {
-	    print STDERR "$node no long belongs to $self\n";
-	    return -1;
-	}
-	if ($reservation->SameExperiment($experiment)) {
-	    if ($node->isvirtnode()) {
-		$vnodes{$node->node_id} = $node;
-	    }
-	    else {
-		# node_reboot is smart enough to know that if a pnode
-		# is rebooted it can ignore the vnodes on it, so do
-		# not optimize this here.
-		$pnodes{$node->node_id} = $node;
-	    }
-	}
-	else {
-	    print STDERR "$node is reserved to another, not $self\n";
-	    # Signal error so we can look at what happened.
-	    return -1;
-	}
-    }
-    #
-    # Cull out vnodes that are going to get rebooted cause the
-    # physnode is getting rebooted. 
-    #
-    my %tmp = %vnodes;
-    foreach my $vnode (values(%vnodes)) {
-	if (!exists($pnodes{$vnode->phys_nodeid()})) {
-	    $tmp{$vnode->node_id()} = $vnode;
-	}
-    }
-    %vnodes = %tmp;
 
-    #
-    # Now reboot the physical nodes, then any leftover virtual nodes.
-    #
-    if (keys(%pnodes)) {
-	my @node_ids = keys(%pnodes);
+	# Remote nodes are handled special.
+	if ($node->isremotenode()) {
+	    $sliver->Start();
+	}
 
+	# We assume local nodes are not shared, so reboot pnode; this
+	# gets all the vnodes on that pnode.
+	if ($node->isvirtnode()) {
+	    $reboots{$node->phys_nodeid()} = 1;
+	}
+	# node_reboot is smart enough to know that if a pnode is rebooted
+	# it can ignore the vnodes on it, so do not optimize this here. 
+	$reboots{$node->node_id} = 1;
+    }
+    my @node_ids = keys(%reboots);
+
+    if (@node_ids) {
 	#
 	# Should waiting be an option?
 	#
-	system("$NODEREBOOT @node_ids");
-	return -1
-	    if ($?);
-    }
-    if (keys(%vnodes)) {
-	my @node_ids = keys(%vnodes);
-
-	#
-	# Should waiting be an option?
-	#
-	system("$VNODESETUP -j -m $pid $eid @node_ids");
+	system("$NODEREBOOT -s @node_ids");
 	return -1
 	    if ($?);
     }
@@ -750,8 +678,7 @@ sub Create($$$)
 }
 
 #
-# Provision all the slivers in the aggregate. For links, this is done
-# for the entire aggregate (experiment) at once.
+# Provision all the slivers in the aggregate.
 #
 sub Provision($;$)
 {
@@ -760,16 +687,52 @@ sub Provision($;$)
     return -1
 	if (! ref($self));
 
+    my @slivers = ();
+    if ($self->SliverList(\@slivers) != 0) {
+	print STDERR "Could not get sliver list for $self\n";
+	return -1;
+    }
+
+    my $experiment = Experiment->Lookup($self->slice_uuid());
+    if (!defined($experiment)) {
+	print STDERR "Could not map $self to its experiment\n";
+	return -1;
+    }
+
+    my $vlan = VLan->Create($experiment, $self->uuid());
+    if (!defined($vlan)) {
+	print STDERR "Could not create vlan for $self\n";
+	goto bad;
+    }
+
+    foreach my $sliver (@slivers) {
+	my $interface = Interface->LookupByUUID($sliver->uuid());
+	if (! defined($interface)) {
+	    print STDERR "Could not map $sliver to its interface object\n";
+	    goto bad;
+	}
+	if (! $vlan->AddMember($interface->node_id(), $interface->iface())) {
+	    print STDERR "$self: Could not add $interface to $vlan\n";
+	    goto bad;
+	}
+    }
+    if ($vlan->Instantiate(1) != 0) {
+	print STDERR "$self: Could not instantiate $vlan on switches\n";
+	goto bad;
+    }
     $self->SetStatus("ready");
     return 0;
 
   bad:
+    $vlan->UnInstantiate(1)
+	if (defined($vlan));
+    $vlan->Destroy()
+	if (defined($vlan));
     return -1
 }
 
 #
-# Unprovision all the slivers in the aggregate. For links, this is done
-# for the entire aggregate (experiment) at once.
+# Unprovision all the slivers in the aggregate.
 #
 sub UnProvision($)
 {
@@ -778,6 +741,30 @@ sub UnProvision($)
     return -1
 	if (! ref($self));
 
+    my @slivers = ();
+    if ($self->SliverList(\@slivers) != 0) {
+	print STDERR "Could not get sliver list for $self\n";
+	return -1;
+    }
+    my $experiment = Experiment->Lookup($self->slice_uuid());
+    if (!defined($experiment)) {
+	print STDERR "Could not map $self to its experiment\n";
+	return -1;
+    }
+
+    my $vlan = VLan->Lookup($experiment, $self->uuid());
+    if (! defined($vlan)) {
+	print STDERR "No vlan associated with $self\n";
+	return 0;
+    }
+    if ($vlan->UnInstantiate(1) != 0) {
+	print STDERR "Could not uninstantiate $vlan\n";
+	return -1;
+    }
+    if ($vlan->Destroy() != 0) {
+	print STDERR "Could not destroy $vlan\n";
+	return -1;
+    }
     return 0;
 }
 
@@ -893,25 +880,24 @@ sub Create($$$$$$)
 	}
     }
     else {
-	my $component = GeniComponent->Lookup($node1rspec->{'component_uuid'});
+	#
+	# Need to ask the clearinghouse where this node comes from.
+	#
+	$clearinghouse = GeniRegistry::ClearingHouse->Create();
+	
 	my $blob;
+	if ($clearinghouse->Resolve($node1rspec->{'component_uuid'},
+				    "Component", \$blob) != 0) {
+	    print STDERR "Could not lookup node at clearinghouse\n";
+	    goto bad;
+	}
 	
+	my $certificate = GeniCertificate->LoadFromString($blob->{'gid'});
+	goto bad
+	    if (!defined($certificate));
+	
+	my $component = GeniComponent->Lookup($certificate->uuid());
 	if (!defined($component)) {
-	    #
-	    # Need to ask the clearinghouse where this node comes from.
-	    #
-	    $clearinghouse = GeniRegistry::ClearingHouse->Create();
-	
-	    if ($clearinghouse->Resolve($node1rspec->{'component_uuid'},
-					"Component", \$blob) != 0) {
-		print STDERR "Could not lookup node at clearinghouse\n";
-		print STDERR Dumper($node1rspec);
-		goto bad;
-	    }
-	    my $certificate = GeniCertificate->LoadFromString($blob->{'gid'});
-	    goto bad
-		if (!defined($certificate));
-	
 	    $component = GeniComponent->CreateFromCertificate($certificate);
 	    if (!defined($component)) {
 		print STDERR "Could not create component from $certificate\n";
@@ -935,7 +921,7 @@ sub Create($$$$$$)
 	    if (defined($blob) && exists($blob->{'physctrl'}));
 
 	if (!defined($ctrlip1)) {
-	    print STDERR "Could not get control IP for ".
+	    print STDERR "Could get control IP for ".
 		"$node1rspec->{'component_uuid'} at $component\n";
 	    goto bad;
 	}
@@ -957,24 +943,24 @@ sub Create($$$$$$)
 	}
     }
     else {
+	#
+	# Need to ask the clearinghouse where this node comes from.
+	#
+	$clearinghouse = GeniRegistry::ClearingHouse->Create()
+	    if (!defined($clearinghouse));
+	
 	my $blob;
-	my $component = GeniComponent->Lookup($node2rspec->{'component_uuid'});
+	if ($clearinghouse->Resolve($node2rspec->{'component_uuid'},
+				    "Component", \$blob) != 0) {
+	    print STDERR "Could not lookup node at clearinghouse\n";
+	    goto bad;
+	}
+	my $certificate = GeniCertificate->LoadFromString($blob->{'gid'});
+	goto bad
+	    if (!defined($certificate));
+	
+	my $component = GeniComponent->Lookup($certificate->uuid());
 	if (!defined($component)) {
-	    #
-	    # Need to ask the clearinghouse where this node comes from.
-	    #
-	    $clearinghouse = GeniRegistry::ClearingHouse->Create();
-	
-	    if ($clearinghouse->Resolve($node2rspec->{'component_uuid'},
-					"Component", \$blob) != 0) {
-		print STDERR "Could not lookup node at clearinghouse\n";
-		print STDERR Dumper($node2rspec);
-		goto bad;
-	    }
-	    my $certificate = GeniCertificate->LoadFromString($blob->{'gid'});
-	    goto bad
-		if (!defined($certificate));
-	
 	    $component = GeniComponent->CreateFromCertificate($certificate);
 	    if (!defined($component)) {
 		print STDERR "Could not create component from $certificate\n";
@@ -998,7 +984,7 @@ sub Create($$$$$$)
 	    if (defined($blob) && exists($blob->{'physctrl'}));
 
 	if (!defined($ctrlip2)) {
-	    print STDERR "Could not get control IP for ".
+	    print STDERR "Could get control IP for ".
 		"$node2rspec->{'component_uuid'} at $component\n";
 	    goto bad;
 	}
@@ -1012,7 +998,7 @@ sub Create($$$$$$)
 	$iface1->SetAttribute("tunnel_dstip", $ctrlip2);
 	$iface1->SetAttribute("tunnel_ipmask", "255.255.255.0");
 	$iface1->SetAttribute("tunnel_lan", $linkname);
-	$iface1->SetAttribute("tunnel_unit", $iface1->memberid() + 1);
+	$iface1->SetAttribute("tunnel_unit", $iface1->memberid());
 	$iface1->SetAttribute("tunnel_style", "gre");
     }
     if (defined($iface2)) {
@@ -1022,7 +1008,7 @@ sub Create($$$$$$)
 	$iface2->SetAttribute("tunnel_dstip", $ctrlip1);
 	$iface2->SetAttribute("tunnel_ipmask", "255.255.255.0");
 	$iface2->SetAttribute("tunnel_lan", $linkname);
-	$iface2->SetAttribute("tunnel_unit", $iface2->memberid() + 1);
+	$iface2->SetAttribute("tunnel_unit", $iface2->memberid());
 	$iface2->SetAttribute("tunnel_style", "gre");
     }
     return $aggregate;

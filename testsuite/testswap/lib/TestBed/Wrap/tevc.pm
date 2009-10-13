@@ -45,12 +45,15 @@ by sshing to $host
 
 =cut
 
-sub tevc { tevc_at_host(shift, $TBConfig::OPS_SERVER, @_); }
+sub tevc {
+  my ($pid, $eid, @args) = @_;
+  tevc_at_host($pid, $eid, $TBConfig::OPS_SERVER, @args);
+}
 
 sub tevc_at_host {
-  my ($e, $host, @args) = @_;
-  my ($pid, $eid) = ($e->pid, $e->eid);
+  my ($pid, $eid, $host, @args) = @_;
   my $cmd = 'PATH=/usr/testbed/bin:$PATH tevc ' . "-e $pid/$eid " . join(" ", @args);
+  say $cmd;
   Tools::TBSSH::cmdsuccess($host, $cmd);
 }
 

@@ -421,84 +421,6 @@ sub CompareVlansWithSwitches($$$)
 }
 
 #
-# New version to coexist with syncVlansFromTables() in snmpit. Adding or
-# subtracting ports to an existing vlan is not considered a change now,
-# since syncVlansFromTables() can deal with that. The point of this function
-# then is to compare the vlan names and update the lanids of the newly
-# created lans.
-# 
-#
-sub CompareVlansWithSwitches2($$)
-{
-    my ($class, $experiment) = @_;
-
-    my $exptidx = $experiment->idx();
-
-    #
-    # Grab the existing vlans from the vlans table (managed by snmpit).
-    #
-    my $query_result =
-	DBQueryWarn("select id,virtual,members,tag from vlans ".
-		    "where exptidx='$exptidx'");
-    return -1
-	if (!$query_result);
-    
-    while (my ($oldid,$vname,$oldmembers,$tag) =
-	   $query_result->fetchrow_array()) {
-
-	my $vlan = VLan->Lookup($experiment, $vname);
-	if (!defined($vlan) || $vlan->type ne "vlan") {
-	    #
-	    # The vlan was deleted.
-	    #
-	    print STDERR "$vname is not a vlan!\n"
-		if (defined($vlan));
-	    next;
-	}
-	#
-	# Old vlan exists by the same name in the new set. We can just
-	# change the port membership on the switches.
-	#
-	my $newid = $vlan->lanid();
-
-	#
-	# Change the new lan (and its partner entries) to have the old id
-	# number, so that it matches what is on the switch, as told by
-	# the vlans table. 
-	#
-	# This is bad; if one of these updates fails, we are screwed.
-	#
-	foreach my $table ("lans", "lan_attributes", "lan_members",
-			   "lan_member_attributes", "ifaces") {
-	    DBQueryWarn("update $table set lanid=$oldid ".
-			"where lanid='$newid'")
-		or return -1;
-	}
-    }
-    return 0;
-}
-
-#
-# Class method to see if an experiment has any active trunks. If it does,
-# do not optimize vlan setup/teardown (see above function) when doing a
-# swapmod. Too difficult to deal with right now; the problem is that the
-# trunked interface is potentially a shared resource for multiple vlans,
-# and the bookkeeping does not support dealing with it.
-#
-sub GotTrunks($$)
-{
-    my ($class, $experiment) = @_;
-    my $exptidx = $experiment->idx();
-
-    my $query_result =
-	DBQueryWarn("select distinct r.node_id,i.iface from reserved as r " .
-		    "left join interfaces as i on i.node_id=r.node_id " .
-		    "where r.exptidx='$exptidx' and i.trunk!=0");
-
-    return $query_result->numrows;
-}
-
-#
 # Stringify for output.
 #
 sub Stringify($)
@@ -1575,9 +1497,9 @@ sub Lookup($$$)
 #
 # Create a new ProtoLan object and return it. 
 #
-sub Create($$$$;$)
+sub Create($$$;$)
 {
-    my ($class, $experiment, $vname, $impotent, $link) = @_;
+    my ($class, $experiment, $vname, $link) = @_;
 
     return undef
 	if (!ref($experiment));
@@ -1587,7 +1509,7 @@ sub Create($$$$;$)
     #
     # Make sure no existing lan ...
     #
-    if (!$impotent && Lan->Lookup($experiment, $vname)) {
+    if (Lan->Lookup($experiment, $vname)) {
 	print STDERR "*** Protolan Create: ".
 	    "Duplicate lan $vname in $experiment\n";
 	return undef;
@@ -1698,47 +1620,24 @@ sub Instantiate($)
 
     # Members ...
     foreach my $key (sort(keys(%{ $self->{"MEMBERS"} }))) {
-	my $protomember = $self->{"MEMBERS"}->{$key};
-	my $node        = $protomember->{'node'};
-	my $iface       = $protomember->{'iface'};
-	my $attributes  = $protomember->{'attrs'};
-	my $member      = $lan->AddMember($node, $iface);
-	
-	if (!defined($member)) {
+	my $member = $self->{"MEMBERS"}->{$key};
+
+	if (!$lan->AddMember($member->{'node'}, $member->{'iface'})) {
 	    $lan->Destroy();
 	    return -1;
-	}
-
-	if (defined($attributes)) {
-	    foreach my $attrkey (keys(%{$attributes})) {
-		my $attrvalue = $attributes->{$attrkey};
-
-		$member->SetAttribute($attrkey, $attrvalue);
-	    }
 	}
     }
 
     # Interfaces ...
     foreach my $key (sort(keys(%{ $self->{"IFACES"} }))) {
-	my $protomember = $self->{"IFACES"}->{$key};
-	my $node        = $protomember->{'node'};
-	my $vnode       = $protomember->{'vnode'};
-	my $vport       = $protomember->{'vport'};
-	my $iface       = $protomember->{'iface'};
-	my $attributes  = $protomember->{'attrs'};
-	my $interface   = $lan->AddInterface($node, $vnode, $vport, $iface);
-	
-	if (!defined($interface)) {
+	my $interface = $self->{"IFACES"}->{$key};
+
+	if (!$lan->AddInterface($interface->{'node'},
+			       $interface->{'vnode'},
+			       $interface->{'vport'},
+			       $interface->{'iface'})) {
 	    $lan->Destroy();
 	    return -1;
-	}
-
-	if (defined($attributes)) {
-	    foreach my $attrkey (keys(%{$attributes})) {
-		my $attrvalue = $attributes->{$attrkey};
-
-		$interface->SetAttribute($attrkey, $attrvalue);
-	    }
 	}
     }
     $self->{'INSTANCE'} = $lan;
@@ -1845,9 +1744,9 @@ sub Dump($)
 #
 # Add an interface to a protolan.
 #
-sub AddInterface($$$$$;$)
+sub AddInterface($$$$$)
 {
-    my ($self, $node, $vnode, $vport, $iface, $attributes) = @_;
+    my ($self, $node, $vnode, $vport, $iface) = @_;
 
     if (!ref($node)) {
 	$node = Node->Lookup($node);
@@ -1864,8 +1763,7 @@ sub AddInterface($$$$$;$)
     $self->{'IFACES'}->{"$vnode:$vport"} = { "node"  => $node,
 					     "vnode" => $vnode,
 					     "vport" => $vport,
-					     "iface" => $iface,
-					     "attrs" => $attributes,
+					     "iface" => $iface
 					    };
     return 0;
 }
@@ -1873,9 +1771,9 @@ sub AddInterface($$$$$;$)
 #
 # Add a member to a vlan, as for delay node links and tagged vlans.
 #
-sub AddMember($$$;$)
+sub AddMember($$$)
 {
-    my ($self, $node, $iface, $attributes) = @_;
+    my ($self, $node, $iface) = @_;
 
     if (!ref($node)) {
 	$node = Node->Lookup($node);
@@ -1891,8 +1789,7 @@ sub AddMember($$$;$)
     }
     
     $self->{'MEMBERS'}->{"$nodeid:$iface"} = { "node"  => $node,
-					       "iface" => $iface,
-					       "attrs" => $attributes,
+					       "iface" => $iface
 					     };
     return 0;
 }
@@ -1961,7 +1858,7 @@ sub IfaceNode($$)
 }
 
 #
-# Set value of an attribute for a member;
+# Set value of an attribute.
 #
 sub SetAttribute($$$;$)
 {
@@ -2109,7 +2006,7 @@ sub Create($$$;$)
     return undef
 	if (!defined($vlan));
 
-    $vlan->SetClass("Experimental") == 0
+    $vlan->SetStack("Experimental") == 0
 	or return undef;
 
     return $vlan;
@@ -2358,64 +2255,21 @@ sub GetTag($$)
     return $tag;
 	
 }
-sub SetClass($$)
+sub SetStack($$)
 {
-    my ($self, $class) = @_;
-
-    return $self->GetLan()->SetAttribute("class", $class);
-}
-sub GetClassNoDefault($) {
-    my ($self) = @_;
-    my $class;
-
-    return $class
-	if ($self->GetAttribute("class", \$class) == 0);
-    return undef;
-}
-sub GetClass($)
-{
-    my ($self) = @_;
-    my $class = $self->GetClassNoDefault();
-    return $class if (defined($class));
-
-    # Assume experimental LAN
-    return "Experimental";
-}
-
-# Find out which stack a VLAN resides on
-sub GetStack($) {
-    my ($self) = @_;
-
-    my $query_result =
-	DBQueryWarn("select stack from vlans  ".
-		    "where id='" . $self->lanid() . "'");
-    if (!$query_result || !$query_result->numrows) {
-        warn "VLan::GetStack(): Tried to get stack for " . $self->lanid() .
-            ", but missing vlans table entry";
-        return undef;
-    }
-    my ($stack) = $query_result->fetchrow_array();
-    if (!$stack) {
-        return undef;
-    } else {
-        return $stack;
-    }
-}
-# Set the stack that the VLAN resides on
-sub SetStack($$) {
     my ($self, $stack) = @_;
 
-    my $query_result =
-	DBQueryWarn("select stack from vlans  ".
-		    "where id='" . $self->lanid() . "'");
-    if (!$query_result || !$query_result->numrows) {
-        warn "VLan::SetStack(): Tried to set for " . $self->lanid() .
-            ", but missing vlans table entry";
-        return -1;
-    }
-    DBQueryWarn("update vlans set stack='$stack' ".
-                "where id='" . $self->lanid() . "'") or return -1;
-    return 0;
+    return $self->GetLan()->SetAttribute("stack", $stack);
+}
+sub GetStack($)
+{
+    my ($self) = @_;
+    my $stack;
+
+    return $stack
+	if ($self->GetAttribute("stack", \$stack) == 0);
+    # Assume experimental stack.
+    return "Experimental";
 }
 
 #
@@ -2435,21 +2289,6 @@ sub IsManual($)
     return $flag
 	if ($self->GetAttribute("cmdline_created", \$flag) == 0);
     return 0;
-}
-
-#
-# Check to see if we think the VLAN actually exists on any switches at the
-# moment (ie. has a vlans table entry)
-#
-sub CreatedOnSwitches() {
-    my ($self) = @_;
-    my $query_result =
-        DBQueryWarn("select * from vlans where id='" . $self->lanid() . "'");
-    if (!$query_result || !$query_result->numrows) {
-        return 0;
-    } else {
-        return 1;
-    }
 }
 
 #
@@ -2493,7 +2332,7 @@ sub ExperimentVLans($$$)
     my $query_result =
 	DBQueryWarn("select l.lanid from lans as l ".
 		    "left join lan_attributes as la on ".
-		    "  la.lanid=l.lanid and la.attrkey='class' ".
+		    "  la.lanid=l.lanid and la.attrkey='stack' ".
 		    "where l.type='vlan' and l.exptidx='$exptidx' and ".
 		    "      (la.attrvalue='Experimental' or ".
 		    "       la.attrvalue is null)");
@@ -2532,7 +2371,7 @@ sub Instantiate($;$)
     my $vname  = $self->vname();
     my $lanid  = $self->lanid();
     my $opt    = ($quiet ? "-q" : "");
-    my $class  = $self->GetClass();
+    my $stack  = $self->GetStack();
 
     #print "Setting up VLAN $vname ($lanid) in $pid/$eid\n";
     system("$SNMPIT $opt -t $pid $eid $lanid");
@@ -2562,7 +2401,7 @@ sub UnInstantiate($;$)
     my $vname  = $self->vname();
     my $lanid  = $self->lanid();
     my $opt    = ($quiet ? "-q" : "");
-    my $class  = $self->GetClass();
+    my $stack  = $self->GetStack();
 
     #print "Removing VLAN $vname ($lanid) from $pid/$eid\n";
     system("$SNMPIT $opt -r $pid $eid $lanid");
@@ -2575,9 +2414,9 @@ sub UnInstantiate($;$)
 # Class methods to maintain the backup vlans table, which records what
 # is on the switches. 
 #
-sub RecordVlanInsertion($$$$)
+sub RecordVlanInsertion($$$)
 {
-    my ($class, $experiment, $lanid, $stack) = @_;
+    my ($class, $experiment, $lanid) = @_;
 
     my $pid     = $experiment->pid();
     my $eid     = $experiment->eid();
@@ -2586,8 +2425,9 @@ sub RecordVlanInsertion($$$$)
     return -1
 	if (!defined($vlan));
 
-    my $vname     = $vlan->vname();
-    my $tag       = $vlan->GetTag(undef);
+    my $stack   = $vlan->GetStack();
+    my $vname   = $vlan->vname();
+    my $tag     = $vlan->GetTag(undef);
     return -1
 	if ($tag <= 0);
     
@@ -2610,42 +2450,6 @@ sub RecordVLanDeletion($$)
     my ($class, $id) = @_;
 
     DBQueryWarn("delete from vlans where id='$id'")
-	or return -1;
-
-    return 0;
-}
-
-sub RecordVLanModification($$$$)
-{
-    my ($class, $lanid, $added, $removed) = @_;
-
-    my $query_result =
-	DBQueryWarn("select members from vlans where id='$lanid'");
-
-    return -1
-	if (!$query_result);
-    my ($current) = $query_result->fetchrow_array();
-    my %current   = map { $_ => $_ } split(/\s+/, $current);
-
-    if ($added) {
-	foreach my $port (@$added) {
-	    my ($nodeid,$iface) = ($port =~ /(.+):(.+)/);
-
-	    $current{"$nodeid:$iface"} = "$nodeid:$iface";
-	}
-    }
-    if ($removed) {
-	foreach my $port (@$removed) {
-	    my ($nodeid,$iface) = ($port =~ /(.+):(.+)/);
-	    
-	    delete($current{"$nodeid:$iface"})
-		if (exists($current{"$nodeid:$iface"}));
-	}
-    }
-    my $members = join(" ", keys(%current));
-    
-    DBQueryWarn("update vlans set members='$members' ".
-		"where id='$lanid'")
 	or return -1;
 
     return 0;
@@ -2710,10 +2514,9 @@ sub StaleVlanList($$$)
     my $exptidx = $experiment->idx();
     my @result  = ();
 
-    # XXX: Hack - want to catch all non-Control VLANs
     my $query_result =
 	DBQueryWarn("select id from vlans ".
-		    "where exptidx=$exptidx and stack!='Control'");
+		    "where exptidx=$exptidx and stack='Experimental'");
     return -1
 	if (!$query_result);
 

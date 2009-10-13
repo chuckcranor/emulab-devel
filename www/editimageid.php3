@@ -48,23 +48,13 @@ $types_result =
 		 "left join node_type_attributes as a on a.type=n.type ".
 		 "where a.attrkey='imageable' and ".
 		 "      a.attrvalue!='0'");
-$types_array = array();
-while ($row = mysql_fetch_array($types_result)) {
-    $types_array[] = $row["type"];
-}
-
-#
-# Special hack to specify subOSes that can run on vnodes 
-# -- see SetupReload in os_setup
-#
-$types_array[] = "pcvm";
 
 #
 # Spit the form out using the array of data.
 #
 function SPITFORM($image, $formfields, $errors)
 {
-    global $uid, $isadmin, $types_array, $defaults;
+    global $uid, $isadmin, $types_result, $defaults;
     global $TBDB_IMAGEID_IMAGENAMELEN, $TBDB_NODEIDLEN;
 
     if ($errors) {
@@ -228,7 +218,9 @@ function SPITFORM($image, $formfields, $errors)
               <td>Node Types:</td>
               <td>\n";
 
-    foreach ($types_array as $type) {
+    mysql_data_seek($types_result, 0);
+    while ($row = mysql_fetch_array($types_result)) {
+        $type    = $row["type"];
         $checked = "";
 
         if (isset($formfields["mtype_$type"]) &&
@@ -342,7 +334,10 @@ if (count($errors)) {
 # Store the valid types in a new array for simplicity.
 #
 $mtypes_array = array();
-foreach ($types_array as $type) {
+mysql_data_seek($types_result, 0);
+while ($row = mysql_fetch_array($types_result)) {
+    $type = $row["type"];
+
     #
     # Look for a post variable with name.
     # 
@@ -375,6 +370,7 @@ if (isset($formfields["path"]) && $formfields["path"] != "" &&
 
 # The mtype_* checkboxes are dynamically generated.
 foreach ($mtypes_array as $type) {
+
     # Filter booleans from checkbox values, send if different.
     $checked = isset($formfields["mtype_$type"]) &&
 	strcmp($formfields["mtype_$type"], "Yep") == 0;

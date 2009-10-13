@@ -104,7 +104,6 @@ Parameter parseArg(string const & arg)
   }
   std::string key = arg.substr(0, equalsPos);
   std::string valueString = arg.substr(equalsPos + 1);
-
   if (key == "BANDWIDTH" || key == "bandwidth")
   {
     int value = stringToInt(valueString);
@@ -117,8 +116,8 @@ Parameter parseArg(string const & arg)
   }
   else if (key == "PLR" || key == "plr")
   {
-    double value = stringToDouble(valueString);
-    result = Parameter(Parameter::LOSS, (int)(value*0x7fffffff));
+    // TODO: Implement PLR
+    cerr << "EVENT: PLR is not yet implmented" << endl;
   }
   else
   {

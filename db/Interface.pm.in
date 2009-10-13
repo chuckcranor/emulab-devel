@@ -108,12 +108,8 @@ sub LookupAll($$$)
 
 	    return -1
 		if (!$state_result);
-	    if (!$state_result->numrows) {
-		print STDERR
-		    "*** Missing interface_state table entry for interface\n".
-		    "    card:port $card:$port on $nodeid.\n";
-		return -1;
-	    }
+	    return -1
+		if (!$state_result->numrows);
 	    $interface->{'STATE'} = $state_result->fetchrow_hashref();
 
 	    # Cache by card,port and by iface
@@ -148,7 +144,6 @@ sub switch_port($) { return $_[0]->{'WIRES'}->{'port2'}; }
 # Interface State table
 sub enabled($)     { return $_[0]->{'STATE'}->{'enabled'}; }
 sub tagged($)      { return $_[0]->{'STATE'}->{'tagged'}; }
-sub remaining_bandwidth { return $_[0]->{'STATE'}->{'remaining_bandwidth'}; }
 
 sub IsExperimental($)
 {
@@ -227,44 +222,6 @@ sub Lookup($$$$)
 }
 
 #
-# Refresh instance by reloading from the DB.
-#
-sub Refresh($)
-{
-    my ($self) = @_;
-
-    return -1
-	if (! ref($self));
-
-    my $nodeid  = $self->node_id();
-    my $iface   = $self->iface();
-    my $card    = $self->card();
-    my $port    = $self->port();
-
-    my $query_result =
-	DBQueryWarn("select * from interfaces ".
-		    "where node_id='$nodeid' and iface='$iface'");
-    return undef
-	if (!$query_result || !$query_result->numrows);
-
-    $self->{"DBROW"} = $query_result->fetchrow_hashref();
-    
-    #
-    # And the interface_state table.
-    #
-    $query_result =
-	DBQueryWarn("select * from interface_state ".
-		    "where node_id='$nodeid' and ".
-		    "      card='$card' and port='$port'");
-    return undef
-	if (!$query_result || !$query_result->numrows);
-
-    $self->{'STATE'} = $query_result->fetchrow_hashref();
-    
-    return 0;
-}
-
-#
 # Create a new interface record. This also handles the wires table entries.
 #
 sub Create($$$)
@@ -292,10 +249,8 @@ sub Create($$$)
     my $wire_type  = $argref->{'wire_type'};
     my $cable      = $argref->{'cable'};
     my $length     = $argref->{'length'};
-    my $iface      = $argref->{'iface'};
-    
-    $iface = "eth$card"    
-	if (!defined($iface));
+    my $iface      = "eth$card";
+
     $port = 1
 	if (!defined($port));
     $IP = ""
@@ -312,14 +267,6 @@ sub Create($$$)
 	    print STDERR "Could not generate a UUID!\n";
 	    return undef;
 	}
-    }
-    if (! (defined($card) && defined($ifrole) && defined($MAC) &&
-	   defined($IP) && defined($port) && defined($mask) &&
-	   defined($iftype) && defined($iface) && defined($max_speed) &&
-	   defined($duplex) && defined($uuid))) {
-	print STDERR "Interface::Create: Missing fields in arguments:\n";
-	print STDERR Dumper($argref);
-	return undef;
     }
     DBQueryWarn("insert into interfaces set ".
 		"  node_id='$node_id', " .
@@ -378,13 +325,9 @@ sub LookupByIface($$$)
     return $all_interfaces{"$nodeid:$iface"}
         if (exists($all_interfaces{"$nodeid:$iface"}));
 
-    # Used from Protogeni code, so be careful.
-    my $safe_nodeid = DBQuoteSpecial($nodeid);
-    my $safe_iface  = DBQuoteSpecial($iface);
-
     my $query_result =
 	DBQueryWarn("select card,port from interfaces ".
-		    "where node_id=$safe_nodeid and iface=$safe_iface");
+		    "where node_id='$nodeid' and iface='$iface'");
 
     return undef
 	if (!$query_result);
@@ -483,179 +426,6 @@ sub LookUpWideAreaSwitch($$)
 	if (DBQueryWarn("insert into widearea_switches set ".
 			" hrn=$safe_hrn, node_id='$switch_id'"));
     return undef;
-}
-
-#
-# Perform some updates ...
-#
-sub Update($$)
-{
-    my ($self, $argref) = @_;
-
-    # Must be a real reference. 
-    return -1
-	if (! ref($self));
-
-    my $nodeid  = $self->node_id();
-    my $iface   = $self->iface();
-    my @sets    = ();
-
-    foreach my $key (keys(%{$argref})) {
-	my $val = $argref->{$key};
-
-	# Treat NULL special.
-	push (@sets, "${key}=" . ($val eq "NULL" ?
-				  "NULL" : DBQuoteSpecial($val)));
-    }
-
-    my $query = "update interfaces set " . join(",", @sets) .
-	" where node_id='$nodeid' and iface='$iface'";
-
-    return -1
-	if (! DBQueryWarn($query));
-
-    return Refresh($self);
-}
-
-##############################################################################
-package Interface::VInterface;
-use libdb;
-use libtestbed;
-use English;
-use overload ('""' => 'Stringify');
-
-my $nextfake = 0;
-
-#
-# Lookup by node_id,unit
-#
-sub Lookup($$$$)
-{
-    my ($class, $nodeid, $unit) = @_;
-
-    $nodeid = $nodeid->node_id()
-	if (ref($nodeid));
-
-    my $query_result =
-	DBQueryWarn("select * from vinterfaces ".
-		    "where node_id='$nodeid' and unit='$unit'");
-
-    return undef
-	if (!$query_result);
-    return undef
-	if (!$query_result->numrows);
-
-    my $vinterface = {};
-	
-    $vinterface->{"DBROW"} = $query_result->fetchrow_hashref();
-    bless($vinterface, $class);
-}
-# accessors
-sub field($$)      { return ((! ref($_[0])) ? -1 : $_[0]->{'DBROW'}->{$_[1]}); }
-sub node_id($)     { return field($_[0], 'node_id'); }
-sub unit($)        { return field($_[0], 'unit'); }
-sub mac($)         { return field($_[0], 'mac'); }
-sub IP($)          { return field($_[0], 'IP'); }
-sub mask($)        { return field($_[0], 'mask'); }
-sub type($)        { return field($_[0], 'type'); }
-sub iface($)       { return field($_[0], 'iface'); }
-sub rtabid($)      { return field($_[0], 'rtabid'); }
-sub vnode_id($)    { return field($_[0], 'vnode_id'); }
-sub exptidx($)     { return field($_[0], 'exptidx'); }
-sub virtlanidx($)  { return field($_[0], 'virtlanidx'); }
-sub vlanid($)      { return field($_[0], 'vlanid'); }
-sub bandwidth($)   { return field($_[0], 'bandwidth'); }
-
-# The virtual iface name is $type$unit
-sub viface($)     { return $_[0]->type() . $_[0]->unit(); }
-    
-#
-# Create a new vinterface
-#
-sub Create($$$)
-{
-    my ($class, $nodeid, $argref) = @_;
-
-    $nodeid = $nodeid->node_id()
-	if (ref($nodeid));
-    $argref->{'node_id'} = $nodeid;
-
-    # This is generated by the insert.
-    delete($argref->{'unit'})
-	if (exists($argref->{'unit'}));
-
-    my $query = "insert into vinterfaces set ".
-	join(",", map("$_='" . $argref->{$_} . "'", keys(%{$argref})));
-
-    my $query_result = DBQueryWarn($query);
-    return undef
-	if (!defined($query_result));
-
-    my $unit  = $query_result->insertid;
-    return Interface::VInterface->Lookup($nodeid, $unit);
-}
-
-#
-# Create a fake object, as for the mapper (assign_wrapper) during debugging.
-#
-sub MakeFake($$$)
-{
-    my ($class, $nodeid, $argref) = @_;
-
-    $nodeid = $nodeid->node_id()
-	if (ref($nodeid));
-    $argref->{'node_id'} = $nodeid;
-
-    # This is usually generated by the insert.
-    $argref->{'unit'} = $nextfake++;
-
-    my $self            = {};
-    $self->{"DBROW"}    = $argref;
-    bless($self, $class);
-    return $self;
-}
-
-#
-# Stringify for output.
-#
-sub Stringify($)
-{
-    my ($self) = @_;
-    
-    my $nodeid  = $self->node_id();
-    my $unit    = $self->unit();
-    my $iface   = (defined($self->iface()) ? ":" . $self->iface() : "");
-    my $vnodeid = (defined($self->vnode_id()) ? ":" . $self->vnode_id() : "");
-
-    return "[VInterface: $nodeid:${unit}${iface}${vnodeid}]";
-}
-
-#
-# On a shared node, we have to "reserve" the required bandwidth on
-# the physical interface.
-#
-sub ReserveSharedBandwidth($$)
-{
-    my ($self, $bandwidth) = @_;
-
-    my $nodeid  = $self->node_id();
-    my $unit    = $self->unit();
-    my $iface   = $self->iface();
-
-    # Must be a trivial link.
-    return 0
-	if (!defined($iface));
-
-    #
-    # Set the bw to the negative value; this is the bw that we need
-    # to reserve later. Negative indicates we have not done it yet.
-    #
-    DBQueryWarn("update vinterfaces set bandwidth=0-${bandwidth} ".
-		"where node_id='$nodeid' and unit='$unit'")
-	or return -1;
-	
-    $self->{'DBROW'}->{'bandwidth'} = $bandwidth;
-    return 0;
 }
 
 # _Always_ make sure that this 1 is at the end of the file...

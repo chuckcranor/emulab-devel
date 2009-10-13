@@ -32,28 +32,22 @@ use GeniSliver;
 use GeniUser;
 use GeniRegistry;
 use GeniUtil;
-use GeniHRN;
 use libtestbed qw(SENDMAIL);
 use emutil;
 # Hate to import all this crap; need a utility library.
-use libdb qw(TBGetSiteVar EXPTSTATE_SWAPPED EXPTSTATE_ACTIVE TBOPSPID
-	     TBDB_NODESTATE_TBFAILED);
+use libdb qw(TBGetSiteVar);
 use User;
 use Node;
-use OSinfo;
-use Image;
+use libadminctrl;
 use Interface;
 use English;
 use Data::Dumper;
 use XML::Simple;
 use Date::Parse;
-use POSIX qw(strftime tmpnam);
+use POSIX qw(strftime);
 use Time::Local;
 use Experiment;
-use VirtExperiment;
 use Firewall;
-use Compress::Zlib;
-use MIME::Base64;
 
 # Configure variables
 my $TB		   = "@prefix@";
@@ -75,54 +69,7 @@ my $PLABSLICE	   = "$TB/sbin/plabslicewrapper";
 my $NAMEDSETUP     = "$TB/sbin/named_setup";
 my $VNODESETUP     = "$TB/sbin/vnode_setup";
 my $GENTOPOFILE    = "$TB/libexec/gentopofile";
-my $TARFILES_SETUP = "$TB/bin/tarfiles_setup";
-my $MAPPER         = "$TB/bin/mapper";
-my $VTOPGEN        = "$TB/bin/vtopgen";
-my $SNMPIT         = "$TB/bin/snmpit";
-my $PRERENDER      = "$TB/libexec/vis/prerender";
 my $EMULAB_PEMFILE = "@prefix@/etc/genicm.pem";
-
-my $API_VERSION = 1;
-
-#
-# Tell the client what API revision we support.  The correspondence
-# between revision numbers and API features is to be specified elsewhere.
-# No credentials are required.
-#
-sub GetVersion()
-{
-    return GeniResponse->Create( GENIRESPONSE_SUCCESS, $API_VERSION );
-}
-
-# Look up a node by an identifier of unspecified type (perhaps a URN, an
-# (obsolete) UUID, or an old-style HRN.  Ultimately, all IDs should be
-# URNs and this mess will go away, but for now we try not to make
-# any assumptions, because of backward compatibility constraints.
-sub LookupNode($)
-{
-    my ($nodeid) = @_;
-
-    if( GeniHRN::IsValid( $nodeid ) ) {
-	# Looks like a URN.
-	my ($auth,$t,$id) = GeniHRN::Parse( $nodeid );
-
-	return undef if $auth ne $OURDOMAIN or $t ne "node";
-
-	return Node->Lookup( $id );
-    }
- 
-    #
-    # Looks like an old HRN, but we only want the last token for node lookup.
-    #
-    if ($nodeid =~ /\./) {
-	($nodeid) = ($nodeid =~ /\.([-\w]*)$/);
-
-	return Node->Lookup($nodeid);
-    }
-    
-    # Assume it's a UUID, and pass it on as is.
-    return Node->Lookup($nodeid);
-}
 
 #
 # Respond to a Resolve request. 
@@ -132,32 +79,17 @@ sub Resolve($)
     my ($argref) = @_;
     my $uuid       = $argref->{'uuid'};
     my $cred       = $argref->{'credential'};
-    my $type       = lc( $argref->{'type'} );
-    my $hrn        = $argref->{'hrn'};
+    my $type       = $argref->{'type'};
+    my $hrn;
 
     if (! defined($cred)) {
 	return GeniResponse->MalformedArgsResponse();
     }
-    if (defined($uuid) && GeniHRN::IsValid($uuid)) {
-	$hrn  = $uuid;
-	$uuid = undef;
-    }
-    if( defined( $hrn ) && GeniHRN::IsValid( $hrn ) ) {
-	my ($auth,$t,$id) = GeniHRN::Parse( $hrn );
-
-	return GeniResponse->Create( GENIRESPONSE_ERROR, undef,
-				     "Authority mismatch" )
-	    if( $auth ne $OURDOMAIN );
-
-	$type = lc( $t );
-	
-	$hrn = $id;	
-    }
-    if (! (defined($type) && ($type =~ /^(node)$/))) {
+    if (! (defined($type) && ($type =~ /^(Node)$/))) {
 	return GeniResponse->MalformedArgsResponse();
     }
     # Allow lookup by uuid or hrn.
-    if (! defined($uuid) && !defined( $hrn ) ) {
+    if (! defined($uuid)) {
 	return GeniResponse->MalformedArgsResponse();
     }
     if (defined($uuid) && !($uuid =~ /^[-\w]*$/)) {
@@ -178,24 +110,24 @@ sub Resolve($)
 	return GeniResponse->Create(GENIRESPONSE_ERROR, undef,
 				    "This is not your credential!");
     }
-    if ($type eq "node") {
+    if ($type eq "Node") {
 	my $node;
 	
 	if (defined($uuid)) {
-	    $node= LookupNode($uuid);
+	    $node= Node->Lookup($uuid);
 	}
 	else {
-	    $node= LookupNode($hrn);
+	    #
+	    # We only want the last token for node lookup.
+	    #
+	    if ($hrn =~ /\./) {
+		($hrn) = ($hrn =~ /\.([-\w]*)$/);
+	    }
+	    $node= Node->Lookup($hrn);
 	}
-	if (! defined($node)) {
+	if (!defined($node)) {
 	    return GeniResponse->Create(GENIRESPONSE_SEARCHFAILED,
 					undef, "Nothing here by that name");
-	}
-
-	my $rspec = GetAdvertisement(0, $node->node_id());
-	if (! defined($rspec)) {
-	    return GeniResponse->Create(GENIRESPONSE_ERROR, undef,
-					"Could not start avail");
 	}
 	
 	# Return a blob.
@@ -205,12 +137,43 @@ sub Resolve($)
 		     "hostname"     => $node->node_id() . ".${OURDOMAIN}",
 		     "physctrl"     => 
 			 Interface->LookupControl( $node->phys_nodeid() )->IP(),
-		     "urn"          => GeniHRN::Generate( $OURDOMAIN,
-							  "node",
-							  $node->node_id() ),
-		     "rspec"        => $rspec
 		   };
 
+	#
+	# Get the list of interfaces for the node.
+	#
+	my @interfaces;
+	if ($node->AllInterfaces(\@interfaces) != 0) {
+	    return GeniResponse->Create(GENIRESPONSE_ERROR, undef,
+					"Could not get interfaces for $uuid");
+	}
+
+	my @iblobs = ();
+	foreach my $interface (@interfaces) {
+	    next
+		if (!defined($interface->switch_id()));
+		
+	    my $iblob = { "uuid"	=> $interface->uuid(),
+			  "iface"	=> $interface->iface(),
+			  "type"	=> $interface->type(),
+			  "card"	=> $interface->card(),
+			  "port"	=> $interface->port(),
+			  "role"	=> $interface->role(),
+			  "IP"		=> $interface->IP() || "",
+			  "mask"	=> $interface->mask() || "",
+			  "MAC"		=> $interface->mac(),
+			  "switch_id"   => "${OURDOMAIN}." . 
+			      $interface->switch_id(),
+			  "switch_card"	=> $interface->switch_card(),
+			  "switch_port"	=> $interface->switch_port(),
+			  "wire_type"	=> $interface->wire_type(),
+		      };
+
+	    push(@iblobs, $iblob);
+	}
+	$blob->{'interfaces'} = \@iblobs
+	    if (@iblobs);
+	
 	return GeniResponse->Create(GENIRESPONSE_SUCCESS, $blob);
     }
     return GeniResponse->Create(GENIRESPONSE_UNSUPPORTED);
@@ -223,8 +186,6 @@ sub DiscoverResources($)
 {
     my ($argref) = @_;
     my $credential = $argref->{'credential'};
-    my $available = $argref->{'available'} || 0;
-    my $compress = $argref->{'compress'} || 0;
     my $user_uuid  = $ENV{'GENIUSER'};
 
     $credential = GeniCredential->CreateFromSigned($credential);
@@ -236,16 +197,6 @@ sub DiscoverResources($)
     if ($user_uuid ne $credential->owner_uuid()) {
 	return GeniResponse->Create(GENIRESPONSE_FORBIDDEN, undef,
 				    "Invalid credentials for operation");
-    }
-
-    # Oh, for $*%(s sake.  Frontier::RPC2 insists on representing a
-    # Boolean as its own object type -- which Perl always interprets as
-    # true, regardless of the object's value.  Undo all of that silliness.
-    if (defined($available) && ref($available) eq 'Frontier::RPC2::Boolean') {
-	$available = $available->value;
-    }
-    if (defined($compress) && ref($compress) eq 'Frontier::RPC2::Boolean') {
-	$compress = $compress->value;
     }
 
     #
@@ -266,44 +217,19 @@ sub DiscoverResources($)
     }
 
     #
-    # Acquire the advertisement from ptopgen and compress it if requested.
+    # Use ptopgen in xml mode to spit back an xml file. 
     #
-    my $xml = GetAdvertisement($available, undef);
-    if (! defined($xml)) {
+    if (! open(AVAIL, "$PTOPGEN -x -g -r -p GeniSlices |")) {
 	return GeniResponse->Create(GENIRESPONSE_ERROR, undef,
 				    "Could not start avail");
     }
-
-    if( $compress ) {
-	my $coder = Frontier::RPC2->new();
-	my $base64 = encode_base64( compress( $xml ) );
-	$xml = $coder->base64( $base64 );	
+    my $xml = "";
+    while (<AVAIL>) {
+	$xml .= $_;
     }
+    close(AVAIL);
 
     return GeniResponse->Create(GENIRESPONSE_SUCCESS, $xml);
-}
-
-#
-# Use ptopgen in xml mode to spit back an xml file. 
-#
-sub GetAdvertisement($$)
-{
-    my ($available, $pc) = @_;
-    my $xml = undef;
-
-    my $invocation = "$PTOPGEN -x -g -r -p GeniSlices";
-    $invocation .= " -a" unless $available;
-    if (defined($pc)) {
-	$invocation .= " -1 $pc";
-    }
-    if (open(AVAIL, "$invocation |")) {
-	$xml = "";
-	while (<AVAIL>) {
-	    $xml .= $_;
-	}
-	close(AVAIL);
-    }
-    return $xml;
 }
 
 #
@@ -331,8 +257,6 @@ sub GetTicket($;$)
     my $owner_uuid = $ENV{'GENIUSER'};
     my $response   = undef;
     my $didfwsetup = 0;
-    my $restorevirt = 0;	# Flag to restore virtual state
-    my $restorephys = 0;	# Flag to restore physical state
     my $ticket;
 
     # Default to no update
@@ -367,6 +291,13 @@ sub GetTicket($;$)
     else {
 	return GeniResponse->MalformedArgsResponse();
     }
+    if ($isupdate) {
+	$ticket = GeniTicket->CreateFromSignedTicket($tick);
+	if (!defined($ticket)) {
+	    return GeniResponse->Create(GENIRESPONSE_ERROR, undef,
+					"Could not create GeniTicket object");
+	}
+    }
     my $credential = GeniCredential->CreateFromSigned($cred);
     if (!defined($credential)) {
 	return GeniResponse->Create(GENIRESPONSE_ERROR, undef,
@@ -374,10 +305,7 @@ sub GetTicket($;$)
     }
     my $slice_uuid = $credential->target_uuid();
     my $user_uuid  = $credential->owner_uuid();
-    
-    print STDERR $credential->target_cert() . "\n";
-    print STDERR $credential->owner_cert() . "\n";
-
+        
     #
     # Make sure the credential was issued to the caller.
     #
@@ -386,15 +314,6 @@ sub GetTicket($;$)
 				    "This is not your credential!");
     }
     
-    if ($isupdate) {
-	$ticket = GeniTicket->CreateFromSignedTicket($tick);
-	if (!defined($ticket)) {
-	    return GeniResponse->Create(GENIRESPONSE_ERROR, undef,
-					"Could not create GeniTicket object");
-	}
-	$ticket->SetSlice($slice_uuid);
-    }
-
     defined($credential) &&
 	($credential->HasPrivilege( "pi" ) or
 	 $credential->HasPrivilege( "instantiate" ) or
@@ -558,40 +477,9 @@ sub GetTicket($;$)
     }
 
     #
-    # We need this now so we can form a virtual topo.
+    # Until a ticket is redeemed, there is no experiment.
     #
-    my $slice_experiment = GeniExperiment($slice);
-    if (!defined($slice_experiment)) {
-	print STDERR "Could not create new Geni slice experiment!\n";
-	$response = GeniResponse->Create(GENIRESPONSE_ERROR);
-	goto bad;
-    }
-    my $pid = $slice_experiment->pid();
-    my $eid = $slice_experiment->eid();
-
-    #
-    # Mark the experiment locally as coming from the cooked interface.
-    # This changes what tmcd returns to the local nodes.
-    #
-    if (exists($rspec->{'generated_by'}) &&
-	$rspec->{'generated_by'} eq "libvtop") {
-	$slice_experiment->Update({"geniflags" =>
-				       $Experiment::EXPT_GENIFLAGS_EXPT|
-				       $Experiment::EXPT_GENIFLAGS_COOKED});
-    }
-    
-    #
-    # Create a virt topology object. We are going to load this up as we
-    # process the rspec.
-    #
-    my $virtexperiment = VirtExperiment->CreateNew($slice_experiment);
-    if (!defined($virtexperiment)) {
-	print STDERR "Could not create VirtExperiment object!\n";
-	$response = GeniResponse->Create(GENIRESPONSE_ERROR);
-	goto bad;
-    }
-    # Turn off fixnode; we will control this on the commandline.
-    $virtexperiment->allowfixnode(0);
+    my $slice_experiment = $slice->GetExperiment();
 
     # This is where nodes are parked until a ticket is redeemed.
     my $reserved_holding = Experiment->Lookup("GeniSlices", "reservations");
@@ -610,16 +498,11 @@ sub GetTicket($;$)
     # cannot be granted.
     #
     my %namemap  = ();
+    my %tofree   = ();
     my %colomap  = ();
     my %ifacemap = ();
-    my %nodemap  = ();
     my @nodeids  = ();
-    my %lannodes = ();
     my @dealloc;
-
-    # Try to make the output format mimic the input, until everybody
-    # has migrated to URNs.
-    my $use_urns = 0; # +ve yes; -ve no; 0 guess
 
     #
     # If this is a ticket update, we want to seed the namemap with
@@ -628,72 +511,29 @@ sub GetTicket($;$)
     # what nodes are currently reserved in case we have to release some.
     #
     if ($isupdate) {
-	$slice_experiment->ClearBackupState();
-	if ($slice_experiment->BackupVirtualState()) {
-	    print STDERR "Could not backup virtual state!\n";
-	    $response = GeniResponse->Create(GENIRESPONSE_ERROR);
-	    goto bad;
-	}
-	if ($slice_experiment->RemoveVirtualState()) {
-	    print STDERR "Could not remove virtual state!\n";
-	    $response = GeniResponse->Create(GENIRESPONSE_ERROR);
-	    goto bad;
-	}
-	$restorevirt = 1;
-
-	if ($slice_experiment->BackupPhysicalState()) {
-	    print STDERR "Could not backup physical state!\n";
-	    $response = GeniResponse->Create(GENIRESPONSE_ERROR);
-	    goto bad;
-	}
-	
 	foreach my $ref (@{$ticket->rspec()->{'node'}}) {
 	    my $resource_uuid = $ref->{'component_uuid'} || $ref->{'uuid'};
 	    my $manager_uuid  = $ref->{'component_manager_uuid'};
 	    my $node_nickname = $ref->{'virtual_id'} || $ref->{'nickname'};
 	    my $colocate      = $ref->{'colocate'} || $ref->{'phys_nickname'};
 
-	    if( defined( $manager_uuid ) ) {
-		if( GeniHRN::IsValid( $manager_uuid ) ) {
-		    $use_urns++;
-		} else {
-		    $use_urns--;
-		}
-	    }
-
 	    # Let remote nodes pass through.
 	    next
-		if (defined($manager_uuid) &&
-		    !GeniHRN::Equal( $manager_uuid, $ENV{'MYURN'} ) &&
-		    $manager_uuid ne $ENV{'MYUUID'});
+		if (defined($manager_uuid) && $manager_uuid ne $ENV{'MYUUID'});
 
-	    # Skip lan nodes; they are fake.
-	    next
-		if (exists($ref->{'node_type'}) &&
-		    exists($ref->{'node_type'}->{'type_name'}) &&
-		    $ref->{'node_type'}->{'type_name'} eq "lan");
-
-	    my $node = LookupNode($resource_uuid);
+	    my $node = Node->Lookup($resource_uuid);
 	    if (!defined($node)) {
 		$response = GeniResponse->Create(GENIRESPONSE_BADARGS, undef,
-				 "Bad resource $resource_uuid in ticket");
+						 "Bad resource $resource_uuid in ticket");
 		goto bad;
 	    }
 
-	    #
-	    # Grab the reservation. For backwards compatibility, we want
-	    # to find nodes in the reservations holding area, and move them
-	    # into the slice experiment. The holding area is no longer going
-	    # to be used, at least not until we have a reservations system.
-	    #
+	    # Grab the reservation. We will want to release unused nodes,
+	    # but only if not already assigned to the slice.
 	    my $reservation = $node->Reservation();
-	    if (defined($reservation) &&
-		$reservation->SameExperiment($reserved_holding)) {
-		if ($node->MoveReservation($slice_experiment)) {
-		    print STDERR "Could not move $node to $slice_experiment\n";
-		    goto bad;
-		}
-		$node->Refresh();
+	    if (defined($reservation)) {
+		$tofree{$resource_uuid} = $node
+		    if ($reservation->SameExperiment($reserved_holding));
 	    }
 	    $namemap{$node_nickname} = $node;
 	    $colomap{$colocate} = $node
@@ -701,66 +541,18 @@ sub GetTicket($;$)
 	}
     }
 
-    print STDERR Dumper($rspec);
-
     foreach my $ref (@{$rspec->{'node'}}) {
 	my $resource_uuid = $ref->{'component_uuid'} || $ref->{'uuid'};
 	my $manager_uuid  = $ref->{'component_manager_uuid'};
 	my $node_nickname = $ref->{'virtual_id'} || $ref->{'nickname'};
 	my $colocate      = $ref->{'colocate'} || $ref->{'phys_nickname'};
-	my $virtualization_type    = $ref->{'virtualization_type'};
-	my $virtualization_subtype = $ref->{'virtualization_subtype'};
-	my $exclusive     = $ref->{'exclusive'};
-	my $pctype;
-	my $osname;
+	my $virtualization_type = $ref->{'virtualization_type'};
 	my $node;
 
 	# Let remote nodes pass through.
 	next
-	    if (defined($manager_uuid) &&
-		!GeniHRN::Equal( $manager_uuid, $ENV{'MYURN'} ) &&
-		$manager_uuid ne $ENV{'MYUUID'});
+	    if (defined($manager_uuid) && $manager_uuid ne $ENV{'MYUUID'});
 
-	#
-	# Lan nodes are fake and do not go into the virt topo. Need
-	# to remember them though, for when we do the links below.
-	# They are still in the returned ticket though. 
-	#
-	if (exists($ref->{'node_type'}) &&
-	    exists($ref->{'node_type'}->{'type_name'}) &&
-	    $ref->{'node_type'}->{'type_name'} eq "lan") {
-	    $lannodes{$node_nickname} = $ref;
-	    next;
-	}
-
-	if (defined($virtualization_type)) {
-	    if ($virtualization_type eq "emulab-vnode") {
-		if (defined($virtualization_subtype)) {
-		    if ($virtualization_subtype eq "emulab-jail") {
-			$osname = "FBSD-JAIL";
-		    }
-		    elsif ($virtualization_subtype eq "emulab-openvz") {
-			$osname = "OPENVZ-STD";
-		    }
-		    $pctype = "pcvm";
-		}
-		else {
-		    goto raw;
-		}
-	    }
-	    else {
-	      raw:
-		# Lets force to exclusive real node.
-		$ref->{'exclusive'} = $exclusive = 1;
-		$ref->{'virtualization_type'} = "raw";
-	    }
-	}
-	else {
-	    $response = GeniResponse->Create(GENIRESPONSE_BADARGS, undef,
-				     "Must provide a virtualization_type");
-	    goto bad;
-
-	}
 	if (!defined($node_nickname)) {
 	    $response = GeniResponse->Create(GENIRESPONSE_BADARGS, undef,
 				     "Must provide a virtual_id for nodes");
@@ -768,7 +560,7 @@ sub GetTicket($;$)
 	}
 
 	#
-	# Allow wildcarding.
+	# Mostly for debugging right now, allow a wildcard.
 	#
 	if (!defined($resource_uuid) || $resource_uuid eq "*") {
 	    if (defined($colocate) && exists($colomap{$colocate})) {
@@ -777,9 +569,22 @@ sub GetTicket($;$)
 	    elsif ($isupdate && exists($namemap{$node_nickname})) {
 		$node = $namemap{$node_nickname};
 	    }
+	    else {
+		$node = FindFreeNode($virtualization_type, @nodeids);
+	    }
+	    
+	    if (!defined($node)) {
+		$response = GeniResponse->Create(GENIRESPONSE_UNAVAILABLE,
+						 undef,
+						 "No free nodes for wildcard");
+		goto bad;
+	    }
+	    $resource_uuid = $node->uuid();
+	    $ref->{'component_uuid'} = $node->uuid();
+	    $ref->{'component_manager_uuid'} = $ENV{'MYUUID'};
 	}
 	else {
-	    $node = LookupNode($resource_uuid);
+	    $node = Node->Lookup($resource_uuid);
 
 	    if (!defined($node)) {
 		$response =
@@ -787,85 +592,12 @@ sub GetTicket($;$)
 					 "Bad resource $resource_uuid");
 		goto bad;
 	    }
-	    $pctype = $node->type()
-		if (!defined($pctype));
-	}
-	#
-	# If no osname by this point, try for the default.
-	#
-	if (defined($node) && !defined($osname)) {
-	    if (defined($node->default_osid())) {	    
-		my $osinfo = OSinfo->Lookup($node->default_osid());
-		$osname = $osinfo->osname()
-		    if (defined($osinfo));
-	    }
-	}
-	# The slot does not like to be NULL.
-	$osname = ""
-	    if (!defined($osname));
-	
-	# Need some kind of default.
-	$pctype = "pc"
-	    if (!defined($pctype));
-	
-	my $nodeblob = {"vname"   => $node_nickname,
-			"type"    => $pctype,
-			"osname"  => $osname,
-			"ips"     => '', # deprecated
-			"cmd_line"=> '', # bogus
-			"fixed"   => (defined($node) ?
-				      $node->node_id() : "")};
-
-	# Tarball and startup command.
-	if (0 && exists($ref->{'startup_command'})) {
-	    my $startupcmd = $ref->{'startup_command'};
-	    
-	    if (! TBcheck_dbslot($startupcmd, "virt_nodes", "startupcmd",
-			 TBDB_CHECKDBSLOT_WARN|TBDB_CHECKDBSLOT_ERROR)) {
-		$response =
-		    GeniResponse->Create(GENIRESPONSE_BADARGS, undef,
-					 "Invalid startup command");
-		goto bad;
-	    }
-	    $nodeblob->{'startupcmd'} = $startupcmd;
-	}
-	if (exists($ref->{'tarfiles'})) {
-	    my $tarfiles = $ref->{'tarfiles'};
-	    
-	    if (! TBcheck_dbslot($tarfiles, "virt_nodes", "tarfiles",
-			 TBDB_CHECKDBSLOT_WARN|TBDB_CHECKDBSLOT_ERROR)) {
-		$response =
-		    GeniResponse->Create(GENIRESPONSE_BADARGS, undef,
-					 "Invalid tarfiles");
-		goto bad;
-	    }
-	    $nodeblob->{'tarfiles'} = $tarfiles;
 	}
 
-	my $virtnode = $virtexperiment->NewTableRow("virt_nodes", $nodeblob);
-	if (!defined($virtnode)) {
-	    $response = GeniResponse->Create(GENIRESPONSE_ERROR, undef,
-					     "Error creating virtnode");
-	    goto bad;
-	}
-
-	$virtexperiment->NewTableRow("virt_node_desires",
-				     {"vname"    => $node_nickname,
-				      "desire"   => "pcshared",
-				      "weight"   => 0.95})
-	    if (!defined($exclusive) || !$exclusive);
-
-	# Store reference so we can munge it below. 
-	$nodemap{$node_nickname} = {"rspec"    => $ref,
-				    "virtnode" => $virtnode};
-	
 	#
 	# Look for interface forward declarations that will be used later
 	# in the link specifications. 
 	#
-	next
-	    if (!exists($ref->{'interface'}));
-	
 	foreach my $linkref (@{$ref->{'interface'}}) {
 	    my $component_id = $linkref->{"component_id"};
 	    my $virtual_id   = $linkref->{"virtual_id"};
@@ -879,285 +611,90 @@ sub GetTicket($;$)
 	    $ifacemap{$node_nickname} = {}
 	        if (!exists($ifacemap{$node_nickname}));
 
-	    # port counter.
-	    my $vport = scalar(keys(%{ $ifacemap{$node_nickname} }));
-
 	    # Store reference so we can munge it below. 
-	    $ifacemap{$node_nickname}->{$virtual_id} = {"rspec" => $linkref,
-							"vport" => $vport};
-
-	    # This is used after the mapper runs since it uses vname:vport.
-	    $ifacemap{"$node_nickname:$vport"} = $linkref;
-	}
-    }
-
-    goto skiplinks
-	if (!exists($rspec->{'link'}));
-    
-    #
-    # Now deal with links for wildcarded nodes. We need to fill in the
-    # node_uuid.
-    #
-    my $linknum = 1;
-    
-    foreach my $linkref (@{$rspec->{'link'}}) {
-	my $lanname    = $linkref->{"nickname"} || $linkref->{"virtual_id"};
-	my $istunnel   = (exists($linkref->{'link_type'}) &&
-			  $linkref->{'link_type'} eq "tunnel");
-	my $interfaces = $linkref->{'linkendpoints'} ||
-	    $linkref->{'interface_ref'};
-	my $ifacenum   = 1;
-
-	if (!defined($lanname)) {
-	    $response = GeniResponse->Create(GENIRESPONSE_BADARGS, undef,
-				     "Must provide a virtual_id for links");
-	    goto bad;
-	}
-
-	#
-	# Ick. Before we create the virt_lan_lans entry, we have to check
-	# inside to see if one of the interfaces is connected to a lan
-	# node. In this case, we want to reuse (if its been created) the
-	# lan name, rather then a bunch of links with one interface, which
-	# would result in a bogus topology. 
-	#
-	if (!$istunnel) {
-	    foreach my $ref (@{ $interfaces }) {
-		my $node_nickname = $ref->{'virtual_node_id'} ||
-		    $ref->{'node_nickname'};
-
-		if (exists($lannodes{$node_nickname})) {
-		    $lanname = $node_nickname;
-		}
-	    }
-	    if (!defined($virtexperiment->Find("virt_lan_lans", $lanname))) {
-		$virtexperiment->NewTableRow("virt_lan_lans",
-					     {"vname" => $lanname});
-	    }
+	    $ifacemap{$node_nickname}->{$virtual_id} = $linkref;
 	}
 	
-	foreach my $ref (@{ $interfaces }) {
-	    my $node_nickname = $ref->{'virtual_node_id'} ||
-		$ref->{'node_nickname'};
-	    my $iface_id     = $ref->{'virtual_interface_id'} ||
-		$ref->{'iface_name'};
-
-	    if (!defined($node_nickname)) {
-		$response =
-		    GeniResponse->Create(GENIRESPONSE_ERROR, undef,
-				 "$lanname: Need node id for links");
-		goto bad;
-	    }
-	    if (!defined($iface_id)) {
-		$response =
-		    GeniResponse->Create(GENIRESPONSE_ERROR, undef,
-				 "$lanname: Need interface id for links");
-		goto bad;
-	    }
-
-	    #
-	    # Look for links that are really lans; one of the interfaces
-	    # is on a fake lan node, which we caught above. Just skip it
-	    # since in the virt topo, a lan is just a link with more then
-	    # two nodes.
-	    #
-	    next
-		if (exists($lannodes{$node_nickname}));
-
-	    if ($istunnel) {
-		# Might be the other side. Skip for now; might bite later.
-		next
-		    if (!exists($namemap{$node_nickname}));
-
-		# Not doing anything else.
-		next;
-	    }
-	    if (!exists($ifacemap{$node_nickname})) {
-		$response =
-		    GeniResponse->Create(GENIRESPONSE_ERROR, undef,
-				 "$lanname: No such virtual_node_id: ".
-				 "$node_nickname");
-		goto bad;
-	    }
-	    
-	    #
-	    # Sanity check the interface.
-	    #
-	    if (!exists($ifacemap{$node_nickname}->{$iface_id})) {
-		$response =
-		    GeniResponse->Create(GENIRESPONSE_ERROR, undef,
-				 "$lanname: No such interface on component: ".
-				 "$node_nickname:$iface_id");
-		goto bad;
-	    }
-	    my $iface_ref   = $ifacemap{$node_nickname}->{$iface_id}->{"rspec"};
-	    my $iface_name  = $iface_ref->{"component_id"} || "";
-	    if( GeniHRN::IsValid( $iface_name ) ) {
-		my ($urn_authority,$urn_node,$urn_iface) =
-		    GeniHRN::ParseInterface( $iface_name );
-		$iface_name = $urn_iface;
-	    }
-	    my $iface_vport = $ifacemap{$node_nickname}->{$iface_id}->{"vport"};
-
-	    # XXX
-	    my $ip     = "10.10.${linknum}.${ifacenum}";
-	    my $mask   = "255.255.255.0";
-	    my $member = "$node_nickname:$iface_vport";
-	    my $bandwidth = 100000;
-
-	    # Let user override.
-	    $bandwidth = $linkref->{'bandwidth'}
-	        if (exists($linkref->{'bandwidth'}));
-	    
-	    $virtexperiment->NewTableRow("virt_lans",
-					 {"vname"       => $lanname,
-					  "vnode"       => $node_nickname,
-					  "vport"       => $iface_vport,
-					  "trivial_ok"  => 1,
-					  "ip"          => $ip,
-					  "delay"       => 0.0,
-					  "bandwidth"   => $bandwidth, # kbps
-					  "lossrate"    => 0.0,
-					  "member"      => $member,
-					  "mask"        => $mask,
-					  "rdelay"      => 0.0,
-					  "rbandwidth"  => $bandwidth, # kbps
-					  "rlossrate"   => 0.0,
-					  "fixed_iface" => $iface_name});
-	    $ifacenum++;
-	}
-	$linknum++;
-    }
-  skiplinks:
-    $virtexperiment->Dump();
-    if ($virtexperiment->Store()) {
-	$response = GeniResponse->Create(GENIRESPONSE_ERROR, undef);
-	goto bad;
-    }
-
-    # Must chdir to the work directory for the mapper.
-    if (! chdir($slice_experiment->WorkDir())) {
-	$response = GeniResponse->Create(GENIRESPONSE_ERROR, undef);
-	goto bad;
-    }
-
-    # Do a render cause its nice to have on the show experiment page.
-    system("$PRERENDER -r $pid $eid");
-    system("$PRERENDER -t $pid $eid");
-
-    #
-    # Now run the mapper in impotent mode. The idea is get a solution
-    # without allocating any nodes. If we get a solution, and we can
-    # allocate the nodes, we update the rspec with the physical info.
-    #
-    my $tmpfile = POSIX::tmpnam();
-
-    # First a prerun to get the node counts and verify topo.
-    system("$VTOPGEN -p $pid $eid");
-    if ($?) {
-	$response =
-	    GeniResponse->Create(GENIRESPONSE_ERROR, undef,
-				 "Could not verify topo");
-	goto bad;
-    }
-    system("$MAPPER -n -d -v -m 3 -u -o $tmpfile $pid $eid");
-    if ($?) {
-	$response =
-	    GeniResponse->Create(GENIRESPONSE_ERROR, undef,
-				 "Could not map to resources");
-	unlink($tmpfile);
-	if ($isupdate) {
-	    $slice_experiment->RemovePhysicalState();
-	    $slice_experiment->RestorePhysicalState();
-	}
 	#
-	# Lets dump the error log too, so it ends up in the email.
-	# Have to figure out a better approach for this.
+	# Widearea nodes do not need to be allocated, but for now all
+	# I allow is a plabdslice node.
 	#
-	if (-e "assign.log") {
-	    print STDERR "----------------------------------------------\n";
-	    print STDERR "------------- Assign Error Log ---------------\n";
-	    my $log = `cat assign.log`;
-	    print STDERR $log . "\n";
-	    print STDERR "----------------------------------------------\n";
-	}	    
-	goto bad;
-    }
-    my $solution = XMLin($tmpfile, KeyAttr => [],
-			 ForceArray => ["node", "link", "interface",
-					"interface_ref", "linkendpoints"]);
-    unlink($tmpfile);
-    print Dumper($solution);
+	if ($node->isremotenode()) {
+	    if (! $node->isplabphysnode()) {
+		$response =
+		    GeniResponse->Create(GENIRESPONSE_BADARGS, undef,
+					 "Only plab widearea nodes");
+		goto bad;
+	    }
+	    goto skipalloc;
+	}
 
-    foreach my $ref (@{$solution->{'node'}}) {
-	my $virtual_id     = $ref->{"virtual_id"};
-	my $component_uuid = $ref->{"component_uuid"};
-	if (!exists($nodemap{$virtual_id})) {
+	#
+	# See if the node is already reserved. 
+	#
+	my $reservation = $node->Reservation();
+	if (defined($reservation)) {
+	    # Reserved during previous ticket operation, or already
+	    # assigned to the slice (ticket redeemed).
+	    goto skipalloc
+		if ($reservation->SameExperiment($reserved_holding) ||
+		    (defined($slice_experiment) &&
+		     $reservation->SameExperiment($slice_experiment)));
+	    
 	    $response =
-		GeniResponse->Create(GENIRESPONSE_ERROR, undef,
-				     "Mapper inserted nodes you did not want");
+		GeniResponse->Create(GENIRESPONSE_UNAVAILABLE, undef,
+				     "$resource_uuid ($node) not available");
 	    goto bad;
 	}
-	my $rspec          = $nodemap{$virtual_id}->{'rspec'};
-	my $virtnode       = $nodemap{$virtual_id}->{'virtnode'};
-	my $node           = LookupNode($component_uuid);
-	my $colocate       = $rspec->{'colocate'} ||
-	    $rspec->{'phys_nickname'};
-	my $exclusive      = $rspec->{'exclusive'};
-	$exclusive = 0
-	    if (!defined($exclusive));
-	
-	$rspec->{'component_uuid'} = $component_uuid;
-	$rspec->{'component_manager_uuid'} =
-	    $use_urns >= 0 ? $ENV{'MYURN'} : $ENV{'MYUUID'};
+	# watch for duplicates, as for multiple vnodes on a pnode.
+	push(@nodeids, $node->node_id())
+	    if (! grep {$_ eq $node->node_id()} @nodeids);
 
-	# Also update the virtexperiment table row.
-	$virtnode->fixed($node->node_id());
-
-	#
-	# Shared and virt nodes do not need to be allocated.
-	#
-	# XXX This is going to cause breakage since the reservations
-	# are not recorded anyplace until the ticket is redeemed.
-	#
-	if (! ($node->sharing_mode() || $node->isplabphysnode() ||
-	       ($node->isremotenode() && !$exclusive))) {
-	    # Need to allocate this node unless already mapped.
-	    push(@nodeids, $node->node_id())
-		if (!exists($namemap{$virtual_id}));
-	}
-	$namemap{$virtual_id} = $node;
+      skipalloc:
+	$namemap{$node_nickname} = $node
+	    if (defined($node_nickname));
 	$colomap{$colocate} = $node
 	    if (defined($colocate));
+	delete($tofree{$node->uuid()})
+	    if ($isupdate && exists($tofree{$node->uuid()}));
     }
-    foreach my $ref (@{$solution->{'link'}}) {
-	my $nickname          = $ref->{"virtual_id"};
-	my $interfaces        = $ref->{'interface_ref'};
 
-	foreach my $iface_ref (@{ $interfaces }) {
-	    my $virtual_node_id   = $iface_ref->{"virtual_node_id"};
-	    my $virtual_port_id   = $iface_ref->{"virtual_port_id"};
-	    my $component_id      = $iface_ref->{"component_id"};
-	    my $linkref     = $ifacemap{"$virtual_node_id:$virtual_port_id"};
-
-	    $component_id = "lo0"
-		if (!defined($component_id));
-	
-	    $linkref->{'component_id'} = $component_id;
-	}
+    #
+    # A sitevar controls how many total nodes external users can allocate.
+    #
+    # XXX All this policy stuff is a whack job for the initial release. 
+    #
+    my $max_externalnodes = 0;
+    if (!TBGetSiteVar('protogeni/max_externalnodes', \$max_externalnodes)){
+	# Cannot get the value, say none.
+	$max_externalnodes = 0;
     }
-    # Store the virt topo again since we changed it above.
-    $virtexperiment->Dump();
-    if ($virtexperiment->Store()) {
-	$response = GeniResponse->Create(GENIRESPONSE_ERROR, undef);
+    if (scalar(@nodeids) > $max_externalnodes) {
+	$response = GeniResponse->Create(GENIRESPONSE_UNAVAILABLE, undef,
+					 "Too many nodes; limited to $max_externalnodes");
 	goto bad;
     }
-
-    print Dumper($rspec);
+    # Check current usage by dipping into the libadminctrl library.
+    my $curusage = libadminctrl::LoadCurrent($reserved_holding->creator(),
+					     $reserved_holding->pid(),
+					     $reserved_holding->gid());
+    if (!defined($curusage)) {
+	print STDERR "Could not get current usage from adminctl library\n";
+	$response = GeniResponse->Create(GENIRESPONSE_UNAVAILABLE, undef,
+					 "Temporarily unavailable");
+	goto bad;
+    }
+    if ($curusage->{"nodes"}->{'project'} + scalar(@nodeids) >=
+	$max_externalnodes) {
+	my $nodesleft = $max_externalnodes - $curusage->{"nodes"}->{'project'};
+	$response = GeniResponse->Create(GENIRESPONSE_UNAVAILABLE, undef,
+					 "Too many nodes; limited to $nodesleft");
+	goto bad;
+    }
 
     # Nalloc might fail if the node gets picked up by someone else.
     if (@nodeids && !$impotent) {
-	system("$NALLOC $pid $eid @nodeids");
+	system("$NALLOC GeniSlices reservations @nodeids");
 	if (($? >> 8) < 0) {
 	    $response =
 		GeniResponse->Create(GENIRESPONSE_ERROR, undef,
@@ -1167,13 +704,113 @@ sub GetTicket($;$)
 	elsif (($? >> 8) > 0) {
 	    $response =
 		GeniResponse->Create(GENIRESPONSE_UNAVAILABLE, undef,
-				     "Could not allocate some nodes");
+				     "Could not allocate node");
 	    goto bad;
 	}
 	# In case the code below fails, before ticket is created.
 	@dealloc = @nodeids;
     }
+    goto skiplinks
+	if (!exists($rspec->{'link'}));
     
+    #
+    # Now deal with links for wildcarded nodes. We need to fill in the
+    # node_uuid.
+    #
+    foreach my $linkref (@{$rspec->{'link'}}) {
+	my $nickname   = $linkref->{"nickname"} || $linkref->{"virtual_id"};
+	my $interfaces = $linkref->{'linkendpoints'} ||
+	    $linkref->{'interface_ref'};
+
+	if (!defined($nickname)) {
+	    $response = GeniResponse->Create(GENIRESPONSE_BADARGS, undef,
+				     "Must provide a virtual_id for links");
+	    goto bad;
+	}
+	
+	foreach my $ref (@{ $interfaces }) {
+	    my $node_nickname = $ref->{'virtual_node_id'} ||
+		$ref->{'node_nickname'};
+	    my $iface_id     = $ref->{'virtual_interface_id'} ||
+		$ref->{'iface_name'};
+	    my $istunnel      = (exists($linkref->{'link_type'}) &&
+				 $linkref->{'link_type'} eq "tunnel");
+
+	    if (!defined($node_nickname)) {
+		$response =
+		    GeniResponse->Create(GENIRESPONSE_ERROR, undef,
+				 "$nickname: Need node id for links");
+		goto bad;
+	    }
+	    if (!defined($iface_id)) {
+		$response =
+		    GeniResponse->Create(GENIRESPONSE_ERROR, undef,
+				 "$nickname: Need interface id for links");
+		goto bad;
+	    }
+
+	    if ($istunnel) {
+		# Might be the other side. Skip for now; might bite later.
+		next
+		    if (!exists($namemap{$node_nickname}));
+
+		# Not doing anything else.
+		next;
+	    }
+	    if (!exists($namemap{$node_nickname})) {
+		$response =
+		    GeniResponse->Create(GENIRESPONSE_ERROR, undef,
+				 "$nickname: No such virtual_node_id: ".
+				 "$node_nickname:$iface_id");
+		goto bad;
+	    }
+	    
+	    #
+	    # Sanity check the interface.
+	    #
+	    if (!exists($ifacemap{$node_nickname}->{$iface_id})) {
+		$response =
+		    GeniResponse->Create(GENIRESPONSE_ERROR, undef,
+				 "$nickname: No such interface on component: ".
+				 "$node_nickname:$iface_id");
+		goto bad;
+	    }
+	    my $node = $namemap{$node_nickname};
+	    my $iface_ref  = $ifacemap{$node_nickname}->{$iface_id};
+	    my $iface_name = $iface_ref->{"component_id"};
+
+	    # Grab all the interfaces.
+	    my @interfaces;
+	    if ($node->AllInterfaces(\@interfaces) != 0) {
+		$response = GeniResponse->Create(GENIRESPONSE_ERROR, undef,
+				 "Could not get interfaces for $node");
+		goto bad;
+	    }
+	    # Make sure its valid, or fill in a wildcard.
+	    foreach my $interface (@interfaces) {
+		next
+		    if (!defined($interface->switch_id()));
+		next
+		    if ($interface->role() ne "expt");
+
+		if (defined($iface_name) && $iface_name ne "*") {
+
+		}
+		else {
+		    $iface_name = $interface->iface();
+		    $iface_ref->{"component_id"} = $iface_name;
+		    last;
+		}
+	    }
+	    if (!defined($iface_name)) {
+		$response = GeniResponse->Create(GENIRESPONSE_ERROR, undef,
+				 "$nickname: Could not assign wildcard: ".
+				 "$node_nickname:$iface_id");
+		goto bad;
+	    }
+	}
+    }
+  skiplinks:
     #
     # Create a new ticket.
     #
@@ -1184,16 +821,9 @@ sub GetTicket($;$)
 				 "Could not create GeniTicket object");
 	goto bad;
     }
-    $newticket->SetSlice($slice_uuid);
-    
-    if ($newticket->Sign()) {
+    if ($newticket->Sign() || $newticket->Store()) {
 	$response = GeniResponse->Create(GENIRESPONSE_ERROR, undef,
 					 "Could not sign Ticket");
-	goto bad;
-    }
-    if (!$impotent && $newticket->Store()) {
-	$response = GeniResponse->Create(GENIRESPONSE_ERROR, undef,
-					 "Internal error storing Ticket");
 	goto bad;
     }
 
@@ -1203,12 +833,18 @@ sub GetTicket($;$)
 	#
 	$ticket->Delete(TICKET_RELEASED)
 	    if ($ticket->stored());
+
+	# And release any nodes we no longer wanted.
+	if (keys(%tofree)) {
+	    my @ids = map { $_->node_id() } values(%tofree);
+
+	    system("export NORELOAD=1; ".
+		   "$NFREE -x -q GeniSlices reservations @ids");
+	}
     }
     $slice->UnLock();
     return GeniResponse->Create(GENIRESPONSE_SUCCESS, $newticket->asString());
   bad:
-    system("$PRERENDER -r $pid $eid")
-	if (defined($slice_experiment));
     #
     # Have to be careful in a ticket update, to not release nodes that
     # might be referenced in the old ticket. 
@@ -1220,11 +856,7 @@ sub GetTicket($;$)
 	}
 	if (@dealloc) {
 	    system("export NORELOAD=1; ".
-		   "$NFREE -x -q GeniSlices $eid @dealloc");
-	}
-	if (defined($slice_experiment) && $restorevirt) {
-	    $slice_experiment->RemoveVirtualState();
-	    $slice_experiment->RestoreVirtualState();
+		   "$NFREE -x -q GeniSlices reservations @dealloc");
 	}
     }
     else {
@@ -1234,15 +866,8 @@ sub GetTicket($;$)
 	}
 	elsif (@dealloc) {
 	    system("export NORELOAD=1; ".
-		   "$NFREE -x -q GeniSlices $eid @dealloc");
+		   "$NFREE -x -q GeniSlices reservations @dealloc");
 	}
-	#
-	# Lets leave the experiment lying around; it will get cleaned
-	# up when the slice is expired. But need to kill off the virtual
-	# topo we might have added to it. 
-	#
-	$slice_experiment->RemoveVirtualState()
-	    if (defined($slice_experiment));
     }
   unlock:
     $slice->UnLock()
@@ -1284,7 +909,6 @@ sub SliverWork($$)
     my $keys       = $argref->{'keys'};
     my $extraargs  = $argref->{'extraargs'};
     my $didfwsetup = 0;
-    my $restorephys = 0;	# Flag to restore physical state
 
     $impotent = 0
 	if (!defined($impotent));
@@ -1370,8 +994,6 @@ sub SliverWork($$)
 					"Already have an aggregate for slice");
 	}
     }
-    $ticket->SetSlice($slice_uuid);
-    
     if ($ticket->Lock() != 0) {
 	return GeniResponse->BusyResponse("ticket");
     }
@@ -1418,8 +1040,6 @@ sub SliverWork($$)
 	return GeniResponse->Create(GENIRESPONSE_ERROR, undef,
 				    "No local experiment for slice");
     }
-    my $pid = $experiment->pid();
-    my $eid = $experiment->eid();
 
     #
     # Figure out what nodes to allocate or free. 
@@ -1427,16 +1047,14 @@ sub SliverWork($$)
     my %physnodes= ();
     my %nodemap  = ();
     my %linkmap  = ();
-    my %newnodes = ();
-    my %lannodes = ();
+    my %toalloc  = ();
     my %colomap  = ();
     my @allocated= ();
-    my @freenodes= ();
-    my @freelinks= ();
+    my @tofree   = ();
+    my $pid      = $experiment->pid();
+    my $eid      = $experiment->eid();
     my $rspec    = $ticket->rspec();
     my $needplabslice = 0;
-
-    print Dumper($rspec);
 
     #
     # Find current slivers and save.
@@ -1516,69 +1134,43 @@ sub SliverWork($$)
 	
 	# Let remote nodes pass through.
 	next
-	    if (defined($manager_uuid) &&
-		!GeniHRN::Equal( $manager_uuid, $ENV{'MYURN'} ) &&
-		$manager_uuid ne $ENV{'MYUUID'});
+	    if (defined($manager_uuid) && $manager_uuid ne $ENV{'MYUUID'});
 
-	#
-	# Lan nodes are fake and do not go into the virt topo. Need
-	# to remember them though, for when we do the links below.
-	# They are still in the ticket though. 
-	#
-	if (exists($ref->{'node_type'}) &&
-	    exists($ref->{'node_type'}->{'type_name'}) &&
-	    $ref->{'node_type'}->{'type_name'} eq "lan") {
-	    $lannodes{$node_nickname} = $ref;
-	    next;
-	}
-
-	my $node = LookupNode($resource_uuid);
+	my $node = Node->Lookup($resource_uuid);
 	if (!defined($node)) {
 	    $message = "Bad resource_uuid $resource_uuid";
 	    goto bad;
 	}
 
 	#
-	# Plab nodes do not need to be allocated.
+	# Widearea nodes do not need to be allocated, but for now all
+	# I allow is a plabdslice node.
 	#
-	if ($node->isplabphysnode()) {
+	if ($node->isremotenode()) {
+	    if (! $node->isplabphysnode()) {
+		$message = "Only plab widearea nodes";
+		goto bad;
+	    }
 	    $needplabslice = 1;
-	    next;
-	}
-	# These are not allocated either.
-	if ($node->sharing_mode()) {
 	    next;
 	}
 
 	#
-	# See if the node is properly reserved. 
+	# See if the node is already reserved. 
 	#
 	my $reservation = $node->Reservation();
 	if (defined($reservation)) {
+	    # Reserved during previous operation on the sliver.
+	    next
+		if ($reservation->SameExperiment($experiment));
+
+	    # Need to move it into the experiment.
 	    if ($reservation->SameExperiment($reserved_holding)) {
-		# This is for backwards compatibility.
-		if ($node->MoveReservation($experiment)) {
-		    print STDERR "Could not move $node to $experiment\n";
-		    goto bad;
-		}
-		$node->Refresh();
+		$toalloc{$node->node_id()} = $node;
+		next;
 	    }
-	    elsif (!$reservation->SameExperiment($experiment)) {
-		$message = "$resource_uuid ($node) is not available";
-		goto bad;
-	    }
-	}
-	else {
 	    $message = "$resource_uuid ($node) is not available";
 	    goto bad;
-	}
-    
-	# Unincorporated nodes have no genisliver_idx.
-	my $restable = $node->ReservedTableEntry();
-	if (defined($restable) &&
-	    !defined($restable->{'genisliver_idx'})) {
-	    $newnodes{$node->node_id()} = $node;
-	    next;
 	}
     }
 
@@ -1610,7 +1202,7 @@ sub SliverWork($$)
 		$message = "Must tear down dependent slivers first";
 		goto bad;
 	    }
-	    push(@freenodes, $sliver);
+	    push(@tofree, $sliver);
 	}
     }
 
@@ -1678,74 +1270,22 @@ sub SliverWork($$)
 	}
 	if ($needfree) {
 	    my $s = $linkmap{$linkname};
-	    push(@freelinks, $s);
+	    $s->UnProvision();
+	    $s->Delete(0);
 	    delete($linkmap{$linkname});
 	}
     }
 
-    if ($isupdate) {
-	#
-	# Backup physical state in case of failure.
-	#
-	if ($experiment->ClearBackupState() ||
-	    $experiment->BackupPhysicalState()) {
-	    print STDERR "Could not backup physical state!\n";
-	    goto bad;
-	}
-	$restorephys = 1;
-
-	system("$SNMPIT -r $pid $eid");
-	if ($?) {
-	    print STDERR "Could not tear down vlans\n";
-	    goto bad;
+    # Move the nodes into the experiment.
+    if (keys(%toalloc)) {
+	foreach my $node (values(%toalloc)) {
+	    if ($node->MoveReservation($experiment)) {
+		print STDERR "Could not move $node to $experiment\n";
+		goto bad;
+	    }
 	}
     }
-    else {
-	#
-	# Remove physical state.
-	#
-	if ($experiment->RemovePhysicalState()) {
-	    print STDERR "Could not remove physical state!\n";
-	    goto bad;
-	}
-    }
-
-    #
-    # Now run the mapper again. All the resources are fixed, and it should
-    # just run like it did the first time. The difference is that it will
-    # fill out the physical tables this time.
-    #
-    # Must chdir to the work directory for the mapper.
-    if (! chdir($experiment->WorkDir())) {
-	print STDERR "Could not chdir to workdir\n";
-	goto bad;
-    }
-    # Add -u for update mode, but not -f (fixnode). 
-    system("$MAPPER -d -v -u -m 3 $pid $eid");
-    if ($?) {
-	print STDERR "Mapper failed!\n";
-	#
-	# Lets dump the error log too, so it ends up in the email.
-	# Have to figure out a better approach for this.
-	#
-	if (-e "assign.log") {
-	    print STDERR "----------------------------------------------\n";
-	    print STDERR "------------- Assign Error Log ---------------\n";
-	    my $log = `cat assign.log`;
-	    print STDERR $log . "\n";
-	    print STDERR "----------------------------------------------\n";
-	}	    
-	goto bad;
-    }
-
-    #
-    # Must do this after the mapper runs.
-    #
-    if (system("$TARFILES_SETUP $pid $eid")) {
-	print STDERR "Could not setup tarfiles\n";
-	goto bad;
-    }
-
+    
     #
     # Now for each resource (okay, node) in the ticket create a sliver and
     # add it to the aggregate.
@@ -1763,33 +1303,13 @@ sub SliverWork($$)
 
 	# Let remote nodes pass through.
 	next
-	    if (defined($manager_uuid) &&
-		!GeniHRN::Equal( $manager_uuid, $ENV{'MYURN'} ) &&
-		$manager_uuid ne $ENV{'MYUUID'});
-
-	# Skip lan nodes; they are fake.
-	next
-	    if (exists($lannodes{$virtual_id}));
-
-	#
-	# For a map of the interfaces.
-	#
-	foreach my $linkref (@{$ref->{'interface'}}) {
-	    my $component_id     = $linkref->{"component_id"};
-	    my $virtual_iface_id = $linkref->{"virtual_id"};
-
-	    $ifacemap{$virtual_id} = {}
-	        if (!exists($ifacemap{$virtual_id}));
-
-	    # Store reference so we can munge it below. 
-	    $ifacemap{$virtual_id}->{$virtual_iface_id} = $component_id;
-	}
+	    if (defined($manager_uuid) && $manager_uuid ne $ENV{'MYUUID'});
 
 	# Already in the aggregate?
 	next
 	    if (grep {$_ eq $virtual_id} keys(%nodemap));
 	
-	my $node = LookupNode($resource_uuid);
+	my $node = Node->Lookup($resource_uuid);
 	if (!defined($node)) {
 	    $message = "Unknown resource_uuid in ticket: $resource_uuid";
 	    goto bad;
@@ -1806,25 +1326,8 @@ sub SliverWork($$)
 	$slivers{$sliver->uuid()} = $sliver;
 	$nodemap{$virtual_id} = $sliver;
 
-	#
-	# Find the actual node (might be a vnode) so that we can put
-	# the info into the manifest.
-	#
-	my $realnode = Node->Lookup($sliver->uuid());
-	if (!defined($realnode)) {
-	    print STDERR "Could not lookup node for $sliver\n";
-	    $message = "Internal Error finding mapped node for $virtual_id\n";
-	    goto bad;
-	}
-	my $sliver_urn = GeniHRN::Generate($OURDOMAIN, "sliver",
-					   $realnode->node_id());
-
 	# Manifest goes back to the user.
 	$ref->{'sliver_uuid'} = $sliver->uuid();
-	$ref->{'sliver_urn'}  = $sliver_urn;
-	$ref->{'component_hostname'} = $realnode->node_id() . ".${OURDOMAIN}";
-	$ref->{'sshdport'}    = $realnode->sshdport()
-	    if ($realnode->isvirtnode());
 
 	# Add to the aggregate.
 	if ($sliver->SetAggregate($aggregate) != 0) {
@@ -1832,14 +1335,28 @@ sub SliverWork($$)
 	    goto bad;
 	}
 
-	# See below; setup all plab nodes at once.
-	if ($node->isplabphysnode()) {
-	    my $vnode = LookupNode($sliver->uuid());
+	# See below; setup all pnodes at once.
+	if ($node->isremotenode()) {
+	    my $vnode = Node->Lookup($sliver->uuid());
 	    if (!defined($vnode)) {
 		print STDERR "Could not locate vnode $sliver\n";
 		goto bad;
 	    }
 	    push(@plabnodes, $vnode);
+	}
+
+	#
+	# For a map of the interfaces.
+	#
+	foreach my $linkref (@{$ref->{'interface'}}) {
+	    my $component_id     = $linkref->{"component_id"};
+	    my $virtual_iface_id = $linkref->{"virtual_id"};
+
+	    $ifacemap{$virtual_id} = {}
+	        if (!exists($ifacemap{$virtual_id}));
+
+	    # Store reference so we can munge it below. 
+	    $ifacemap{$virtual_id}->{$virtual_iface_id} = $component_id;
 	}
     }
 
@@ -1937,23 +1454,13 @@ sub SliverWork($$)
 	foreach my $ifaceref (@{ $interfaces }) {
 	    my $iface_id   = $ifaceref->{'virtual_interface_id'};
 	    my $node_id    = $ifaceref->{'virtual_node_id'};
-
-	    #
-	    # Look for links that are really lans; one of the interfaces
-	    # is on a fake lan node, which we caught above. Just skip it
-	    # since in the virt topo, a lan is just a link with more then
-	    # two nodes.
-	    #
-	    next
-		if (exists($lannodes{$node_id}));
-
 	    my $nodesliver = $nodemap{$node_id};
 	    
 	    if (!defined($nodesliver)) {
 		$message = "Link $linkname specifies a non-existent node";
 		goto bad;
 	    }
-	    my $nodeobject= LookupNode($nodesliver->resource_uuid());
+	    my $nodeobject= Node->Lookup($nodesliver->resource_uuid());
 	    if (!defined($nodeobject)) {
 		$message = "Could not find node object for $nodesliver";
 		goto bad;
@@ -1963,35 +1470,26 @@ sub SliverWork($$)
 	    # The interface was set above.
 	    #
 	    my $iface_name = $ifacemap{$node_id}->{$iface_id};
-	    if (!defined($iface_name)) {
-		$message = "Inconsistent ifacemap; $node_id,$iface_id";
-		goto bad;
-	    }
-	    my $interface;
 
-	    if ($iface_name ne "lo0") {
-		$interface = Interface->LookupByIface($nodeobject,$iface_name);
-		if (!defined($interface)) {
-		    $message = "No such interface ".
-			"$iface_name on node $nodeobject";
-		    goto bad;
-		}
+	    my $interface = Interface->LookupByIface($nodeobject, $iface_name);
+	    if (!defined($interface)) {
+		$message = "No such interface $iface_name on node $nodeobject";
+		goto bad;
 	    }
 	    my $sliver = GeniSliver::Interface->Create($slice,
 						       $owner,
-						       undef,
+						       $interface->uuid(),
 						       $nodeobject,
 						       $linkname,
 						       $ifaceref);
 	    if (!defined($sliver)) {
-		$message = "Could not create GeniSliver for ".
-		    "$iface_name in $linkname";
+		$message = "Could not create GeniSliver ".
+		    "$interface in $linkname";
 		goto bad;
 	    }
 	    # Manifest goes back to the user.
 	    $ifaceref->{'sliver_uuid'} = $sliver->uuid();
-	    $ifaceref->{'MAC'} = $interface->mac()
-		if (defined($interface));
+	    $ifaceref->{'MAC'} = $interface->mac();
 	    
 	    if ($sliver->SetAggregate($linkaggregate) != 0) {
 		$message = "Could not add link sliver $sliver to $aggregate";
@@ -2013,7 +1511,7 @@ sub SliverWork($$)
 
     # Do firewall stuff.
     if ($slice->needsfirewall()) {
-	my @nodeids = map { $_->node_id() } values(%newnodes);
+	my @nodeids = map { $_->node_id() } values(%toalloc);
 
 	if (@nodeids && doFWlans($experiment, FWADDNODES, \@nodeids) != 0) {
 	    print STDERR "FireWall setup failed\n";
@@ -2023,13 +1521,15 @@ sub SliverWork($$)
     }
 
     #
-    # Now do the provisioning. The entire aggregate is provisioned, which
-    # is extra work, but needed since running the mapper above might have
-    # changed some important state.
+    # Now do the provisioning (note that we actually allocated the
+    # node above when the ticket was granted). Then add the sliver to
+    # the aggregate. 
     #
-    if (!$impotent && $aggregate->Provision() != 0) {
-	$message = "Could not provision $aggregate";
-	goto bad;
+    foreach my $sliver (values(%slivers)) {
+	if (!$impotent && $sliver->Provision() != 0) {
+	    $message = "Could not provision $sliver";
+	    goto bad;
+	}
     }
 
     #
@@ -2056,15 +1556,6 @@ sub SliverWork($$)
 	}
     }
 
-    #
-    # Run snmpit ...
-    #
-    system("$SNMPIT -t $pid $eid");
-    if ($?) {
-	$message = "Could not set up vlans";
-	goto bad;
-    }
-
     # The Manifest.
     my $manifest = XMLout($rspec, "NoAttr" => 1);
     $manifest =~ s/opt\>/rspec\>/g;
@@ -2080,8 +1571,6 @@ sub SliverWork($$)
     # The API states we return a credential to control the aggregate.
     #
     if (!$isupdate) {
-	$experiment->SetState(EXPTSTATE_ACTIVE());
-	
 	my $sliver_credential = $aggregate->NewCredential($owner);
 	if (!defined($sliver_credential)) {
 	    $message = "Could not create credential";
@@ -2096,13 +1585,8 @@ sub SliverWork($$)
     #
     # Free any slivers that were no longer wanted.
     #
-    foreach my $s (@freelinks) {
-	$s->UnProvision();
-	$s->Delete(0);
-    }
-    foreach my $s (@freenodes) {
-	$s->UnProvision();
-	$s->Delete(0);
+    if (@tofree) {
+
     }
     $ticket->Redeem();
     $slice->UnLock();
@@ -2114,44 +1598,21 @@ sub SliverWork($$)
 	    if (! $impotent);
 	$sliver->Delete(GENI_PURGEFLAG);
     }
-    # Mark the nodes as no longer being incorporated. 
-    if (keys(%newnodes)) {
-	my @nodeids = map { $_->node_id() } values(%newnodes);
+    # Move the nodes back into the holding experiment.
+    if (keys(%toalloc)) {
+	my @nodeids = map { $_->node_id() } values(%toalloc);
 	
 	if ($slice->needsfirewall() && $didfwsetup) {
 	    if (@nodeids && doFWlans($experiment, FWDELNODES, \@nodeids)) {
 		print STDERR "FireWall cleanup failed\n";
 	    }
 	}
-	foreach my $node (values(%newnodes)) {
-	    if ($node->ModifyReservation({"genisliver_idx" => 0})) {
-		print STDERR "Could not clear genisliver_idx from $node\n";
+	foreach my $node (values(%toalloc)) {
+	    if ($node->MoveReservation($reserved_holding)) {
+		print STDERR "Could not move $node to $reserved_holding\n";
 	    }
 	}
     }
-    if ($isupdate) {
-	#
-	# Restore old physical state. 
-	#
-	if ($restorephys) {
-	    if ($experiment->ReserveSharedBandwidth(1, 1) ||
-		$experiment->RemovePhysicalState() ||
-		$experiment->RestorePhysicalState()) {
-		print STDERR "Could not restore backup state for $pid,$eid\n";
-	    }
-	}
-	system("$SNMPIT -t $pid $eid");
-	if ($?) {
-	    print STDERR "Could not restore vlans\n";
-	}
-    }
-    else {
-	system("$SNMPIT -r $pid $eid");
-	if ($?) {
-	    print STDERR "Could not tear down vlans\n";
-	}
-    }
-    
     $aggregate->Delete(GENI_PURGEFLAG)
 	if (defined($aggregate) && !$isupdate);
     
@@ -2166,30 +1627,26 @@ sub SliverWork($$)
 sub ReleaseTicket($)
 {
     my ($argref) = @_;
-    my $tickstr     = $argref->{'ticket'};
-    my $credstr     = $argref->{'credential'};
+    my $ticket     = $argref->{'ticket'};
 
-    if (! (defined($tickstr) && defined($credstr))) {
-	return GeniResponse->MalformedArgsResponse();
+    if (! (defined($ticket) &&
+	   !TBcheck_dbslot($ticket, "default", "text",
+			   TBDB_CHECKDBSLOT_ERROR))) {
+	return GeniResponse->Create(GENIRESPONSE_ERROR, undef,
+				    "ticket: ". TBFieldErrorString());
     }
-    my $ticket = GeniTicket->CreateFromSignedTicket($tickstr);
+    $ticket = GeniTicket->CreateFromSignedTicket($ticket);
     if (!defined($ticket)) {
 	return GeniResponse->Create(GENIRESPONSE_ERROR, undef,
 				    "Could not create GeniTicket object");
     }
-    my $credential = GeniCredential->CreateFromSigned($credstr);
-    if (!defined($credential)) {
-	return GeniResponse->Create(GENIRESPONSE_ERROR, undef,
-				    "Could not create GeniCredential object");
-    }
-    $ticket->SetSlice($credential->target_uuid());
     
     #
-    # Make sure the ticket was issued to the caller.
+    # Make sure the credential was issued to the caller.
     #
     if ($ticket->owner_uuid() ne $ENV{'GENIUUID'}) {
 	return GeniResponse->Create(GENIRESPONSE_ERROR, undef,
-				    "This is not your ticket!");
+				    "This is not your credential!");
     }
     #
     # If the ticket is not stored, it is not a ticket that needs
@@ -2215,7 +1672,6 @@ sub StartSliver($)
 {
     my ($argref) = @_;
     my $cred        = $argref->{'credential'};
-    my $manifest    = $argref->{'manifest'};
     my $impotent    = $argref->{'impotent'};
 
     $impotent = 0
@@ -2253,13 +1709,6 @@ sub StartSliver($)
 				    "No such sliver/aggregate $sliver_uuid");
 	}
     }
-
-    if (defined($manifest)) {
-	$manifest = XMLin($manifest, KeyAttr => [],
-			  ForceArray => ["node", "link", "interface",
-					 "interface_ref", "linkendpoints"]);
-    }
-    
     #
     # Lock the slice to avoid concurrent operation.
     #
@@ -2277,21 +1726,6 @@ sub StartSliver($)
 	return GeniResponse->Create(GENIRESPONSE_FORBIDDEN, undef,
 				    "Slice has been shutdown");
     }
-
-    if (defined($manifest)) {
-	print Dumper($manifest);
-	
-	#
-	# This is not signed, so have to be very careful about using
-	# anything inside it.
-	#
-	if ($sliver->ProcessManifest($manifest) != 0) {
-	    $slice->UnLock();
-	    return GeniResponse->Create(GENIRESPONSE_ERROR, undef,
-					"Could not process manifest");
-	}
-    }
-    
     if (!$impotent && $sliver->Start() != 0) {
 	$slice->UnLock();
 	return GeniResponse->Create(GENIRESPONSE_ERROR, undef,
@@ -2350,7 +1784,7 @@ sub DeleteSliver($)
 					"Must supply toplevel sliver");
 	}
 	else {
-	    return GeniResponse->Create(GENIRESPONSE_SEARCHFAILED, undef,
+	    return GeniResponse->Create(GENIRESPONSE_BADARGS, undef,
 					"No such sliver");
 	}
     }
@@ -2367,23 +1801,14 @@ sub DeleteSliver($)
     if ($slice->Lock() != 0) {
 	return GeniResponse->BusyResponse();
     }
-    my $experiment = $slice->GetExperiment();
-    my $pid = $experiment->pid();
-    my $eid = $experiment->eid();
 
     if (!$impotent) {
-	system("$SNMPIT -r $pid $eid");
-	if ($?) {
-	    print STDERR "Could not tear down vlans\n";
-	    $response = GeniResponse->Create(GENIRESPONSE_ERROR, undef,
-					     "Could not tear down vlans");
-	    goto bad;
-	}
-	
 	#
 	# A firewalled slice gets special treatment.
 	#
 	if ($slice->needsfirewall()) {
+	    my $experiment = $slice->GetExperiment();
+	
 	    if (undoFWNodes($experiment, 1) != 0) {
 		print STDERR "FireWall cleanup failed\n";
 		$response =
@@ -2405,11 +1830,7 @@ sub DeleteSliver($)
 	}
 	DBQueryWarn("delete from geni_manifests ".
 		    "where slice_uuid='$slice_uuid'");
-
-	$experiment->RemoveVirtualState();
-	$experiment->RemovePhysicalState();
     }
-    $experiment->SetState(EXPTSTATE_SWAPPED());
     $slice->UnLock();
     return GeniResponse->Create(GENIRESPONSE_SUCCESS);
 
@@ -2874,72 +2295,6 @@ sub ListUsage($)
 }
 
 #
-# Return historical data. This is used by the clearinghouse to get stats.
-# Currently, only the ClearingHouse will be allowed to make this call.
-#
-sub ListHistory($)
-{
-    my ($argref) = @_;
-    my $cred     = $argref->{'credential'};
-    my $type     = $argref->{'type'};
-
-    if (! (defined($cred))) {
-	return GeniResponse->MalformedArgsResponse();
-    }
-    my $credential = GeniCredential->CreateFromSigned($cred);
-    if (!defined($credential)) {
-	return GeniResponse->Create(GENIRESPONSE_ERROR, undef,
-				    "Could not create GeniCredential object");
-    }
-    #
-    # Make sure the credential was issued to the caller.
-    #
-    if ($credential->owner_uuid() ne $ENV{'GENIUUID'}) {
-	return GeniResponse->Create(GENIRESPONSE_ERROR, undef,
-				    "This is not your credential!");
-    }
-    #
-    # And that the target of the credential is this registry.
-    #
-    if ($credential->target_uuid() ne $ENV{'MYUUID'}) {
-	return GeniResponse->Create(GENIRESPONSE_FORBIDDEN,
-				    undef, "This is not your authority!");
-    }
-    # Just one of these, at Utah.
-    my $GENICH_PEMFILE = "@prefix@/etc/genich.pem";
-    my $certificate = GeniCertificate->LoadFromFile($GENICH_PEMFILE);
-    if (!defined($certificate)) {
-	print STDERR "Could not load certificate from $GENICH_PEMFILE\n";
-	return GeniResponse->Create(GENIRESPONSE_ERROR);
-    }
-
-    # The caller has to match the clearinghouse.
-    if ($credential->owner_uuid() ne $certificate->uuid()) {
-	return GeniResponse->Create(GENIRESPONSE_ERROR, undef,
-				    "Only the clearinghouse can do this!");
-    }
-
-    my @tickets;
-    if (GeniUsage->ListTickets(\@tickets) != 0) {
-	return GeniResponse->Create(GENIRESPONSE_ERROR);
-    }
-    my @result = ();
-
-    foreach my $ticket (@tickets) {
-	my $blob = {"owner_hrn"  => $ticket->{'owner_hrn'},
-		    "slice_hrn"  => $ticket->{'slice_hrn'},
-		    "created"    => $ticket->{'created'},
-		    "redeemed"   => $ticket->{'redeemed'},
-		    "expired"    => $ticket->{'expired'},
-		    "released"   => $ticket->{'released'},
-		    "rspec"      => $ticket->{'rspec_string'}};
-
-	push(@result, $blob);
-    }
-    return GeniResponse->Create(GENIRESPONSE_SUCCESS, \@result);
-}
-
-#
 # Slice Status
 #
 sub SliceStatus($)
@@ -2994,7 +2349,6 @@ sub SliceStatus($)
     #
     my $summary    = "ready";
     my %details    = ();
-    my %detailsNew = ();
     my @slivers    = ();
     if (GeniSliver->SliceSlivers($slice, \@slivers) != 0) {
 	print STDERR "Could not get slivers for $slice\n";
@@ -3006,34 +2360,23 @@ sub SliceStatus($)
 	    if ($sliver->resource_type() ne "Node");
 
 	my $node_uuid = $sliver->uuid();
-	my $node = LookupNode($node_uuid);
+	my $node = Node->Lookup($node_uuid);
 	if (!defined($node)) {
 	    $slice->UnLock();
 	    print STDERR "Cannot find node by uuid $node_uuid\n";
 	    return GeniResponse->Create(GENIRESPONSE_ERROR);
 	}
-	my $hrn = GeniHRN::Generate($OURDOMAIN, "sliver", $node->node_id());
-
 	if ($node->IsUp()) {
 	    $details{$node_uuid} = "ready";
-	    $detailsNew{$hrn}    = "ready";
-	}
-	elsif ($node->eventstate() eq TBDB_NODESTATE_TBFAILED()) {
-	    $details{$node_uuid} = "failed";
-	    $detailsNew{$hrn}    = "failed";
-	    $summary = "failed";
 	}
 	else {
 	    $details{$node_uuid} = "notready";
-	    $detailsNew{$hrn}    = "notready";
 	    $summary = "notready";
 	}
     }
     $slice->UnLock();
     my $blob = {"status"  => $summary,
-		"details" => \%details,
-		"detailsNew" => \%detailsNew,
-	       };
+		"details" => \%details};
     return GeniResponse->Create(GENIRESPONSE_SUCCESS, $blob);
 }
 
@@ -3201,7 +2544,6 @@ sub SliverStatus($)
     #
     my $summary    = "ready";
     my %details    = ();
-    my %detailsNew = ();
     my @slivers    = ();
     if ($aggregate->SliverList(\@slivers) != 0) {
 	print STDERR "Could not get slivers for $aggregate\n";
@@ -3215,42 +2557,23 @@ sub SliverStatus($)
 	    if ($sliver->resource_type() ne "Node");
 
 	my $node_uuid = $sliver->uuid();
-	my $node = LookupNode($node_uuid);
+	my $node = Node->Lookup($node_uuid);
 	if (!defined($node)) {
 	    $slice->UnLock();
 	    print STDERR "Cannot find node by uuid $node_uuid\n";
 	    return GeniResponse->Create(GENIRESPONSE_ERROR);
 	}
-	my $hrn = GeniHRN::Generate($OURDOMAIN, "sliver", $node->node_id());
-
 	if ($node->IsUp()) {
 	    $details{$node_uuid} = "ready";
-	    $detailsNew{$hrn}    = "ready";
-	}
-	elsif ($node->eventstate() eq TBDB_NODESTATE_TBFAILED()) {
-	    $details{$node_uuid} = "failed";
-	    $detailsNew{$hrn}    = "failed";
-	    $summary = "failed";
-
-	    my $bootlog;
-	    my $nodeid = $node->node_id();
-	    if ($node->GetBootLog(\$bootlog) == 0) {
-		print STDERR "\n\n";
-		print STDERR "--------------- $nodeid BootLog -------------\n";
-		print STDERR "$bootlog\n";
-	    }
 	}
 	else {
 	    $details{$node_uuid} = "notready";
-	    $detailsNew{$hrn}    = "notready";
 	    $summary = "notready";
 	}
     }
     $slice->UnLock();
     my $blob = {"status"  => $summary,
-		"details" => \%details,
-		"detailsNew" => \%detailsNew,
-	       };
+		"details" => \%details};
     return GeniResponse->Create(GENIRESPONSE_SUCCESS, $blob);
 }
 
@@ -3435,28 +2758,18 @@ sub CleanupDeadSlice($;$)
 
     # print "Cleaning up dead slice $slice\n";
     my $slice_uuid = $slice->uuid();
-    my $experiment = $slice->GetExperiment();
 
-    if (defined($experiment)) {
-	my $pid = $experiment->pid();
-	my $eid = $experiment->eid();
+    #
+    # A firewalled slice gets special treatment.
+    #
+    if ($slice->needsfirewall()) {
+	my $experiment = $slice->GetExperiment();
+
+	print "Calling undoFWNodes ...\n";
 	
-	system("$SNMPIT -r $pid $eid");
-	if ($?) {
-	    print STDERR "Could not tear down vlans\n";
+	if (undoFWNodes($experiment, 1) != 0) {
+	    print STDERR "FireWall cleanup failed\n";
 	    return -1;
-	}
-
-	#
-	# A firewalled slice gets special treatment.
-	#
-	if ($slice->needsfirewall()) {
-	    print "Calling undoFWNodes ...\n";
-	    
-	    if (undoFWNodes($experiment, 1) != 0) {
-		print STDERR "FireWall cleanup failed\n";
-		return -1;
-	    }
 	}
     }
 
@@ -3524,6 +2837,7 @@ sub CleanupDeadSlice($;$)
     return 0
 	if (!$purge);
 
+    my $experiment = $slice->GetExperiment();
     if (defined($experiment)) {
 	my @pnodes = $experiment->NodeList(1, 1);
 	my $pnodes = scalar(@pnodes);
@@ -3597,26 +2911,56 @@ sub GeniExperiment($)
 	    return undef;
 	}
 	$experiment = Experiment->Lookup($uuid);
-	$experiment->SetState(EXPTSTATE_SWAPPED());
-	$experiment->Update({"geniflags" => $Experiment::EXPT_GENIFLAGS_EXPT});
+	$experiment->Update({"geniflags" => 1});
     }
     return $experiment;
 }
 
-sub CreateTicket($)
+#
+#
+#
+sub FindFreeNode($@)
 {
-    my ($self) = @_;
-    return CreateRspec($self);
-}
+    # Already going to allocate these.
+    my $vtype   = shift(@_);
+    my $type    = "pc";
+    my @nodeids = @_;
 
-sub CreateManifest($)
-{
-    my ($self) = @_;
-    return CreateRspec($self);
-}
+    if (defined($vtype)) {
+	# XXX Need to implement this.
+	;
+    }
+    
+    my $query_result =
+	DBQueryWarn("select uuid from geni_components");
+    return undef
+	if (!$query_result || !$query_result->numrows);
 
-sub CreateRspec($)
-{
+    while (my ($uuid) = $query_result->fetchrow_array()) {
+	my $node = Node->Lookup($uuid);
+	next
+	    if (!defined($node));
+	next
+	    if ($node->isremotenode());
+	next
+	    if (grep {$_ eq $node->node_id()} @nodeids);
+
+	my $nodetype = $node->NodeTypeInfo();
+	next
+	    if (!defined($nodetype));
+
+	my $exclude = $nodetype->GetAttribute("protogeni_exclude");
+	next
+	    if (defined($exclude) && $exclude);
+
+	#
+	# See if the node is already reserved.
+	#
+	my $reservation = $node->Reservation();
+	return $node
+	    if (!defined($reservation));
+    }
+    return undef;
 }
 
 # _Always_ make sure that this 1 is at the end of the file...

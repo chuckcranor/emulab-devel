@@ -59,8 +59,7 @@ bootinfo_init(void)
 }
 
 int
-bootinfo(struct in_addr ipaddr, char *node_id, struct boot_info *boot_info, 
-	 void *opaque, int no_event_send)
+bootinfo(struct in_addr ipaddr, struct boot_info *boot_info, void *opaque)
 {
 	int		needevent = 0;
 	int		err;
@@ -72,12 +71,11 @@ bootinfo(struct in_addr ipaddr, char *node_id, struct boot_info *boot_info,
 			inet_ntoa(ipaddr), boot_info->data, boot_info->version);
 #ifdef	EVENTSYS
 		needevent = bicache_needevent(ipaddr);
-		if (!no_event_send && needevent)
+		if (needevent)
 			bievent_send(ipaddr, opaque,
 				     TBDB_NODESTATE_PXEBOOTING);
 #endif
-		err = query_bootinfo_db(ipaddr, node_id, boot_info->version, 
-					boot_whatp, boot_info->data);
+		err = query_bootinfo_db(ipaddr, boot_info->version, boot_whatp, boot_info->data);
 		break;
 	case BIOPCODE_BOOTWHAT_REQUEST:
 	case BIOPCODE_BOOTWHAT_INFO:
@@ -85,11 +83,11 @@ bootinfo(struct in_addr ipaddr, char *node_id, struct boot_info *boot_info,
 		     inet_ntoa(ipaddr), boot_info->version);
 #ifdef	EVENTSYS
 		needevent = bicache_needevent(ipaddr);
-		if (!no_event_send && needevent)
+		if (needevent)
 			bievent_send(ipaddr, opaque,
 				     TBDB_NODESTATE_PXEBOOTING);
 #endif
-		err = query_bootinfo_db(ipaddr, node_id,
+		err = query_bootinfo_db(ipaddr,
 					boot_info->version, boot_whatp, NULL);
 		break;
 
@@ -103,7 +101,7 @@ bootinfo(struct in_addr ipaddr, char *node_id, struct boot_info *boot_info,
 	else {
 		boot_info->status = BISTAT_SUCCESS;
 #ifdef	EVENTSYS
-		if (!no_event_send && needevent) {
+		if (needevent) {
 			switch (boot_whatp->type) {
 			case BIBOOTWHAT_TYPE_PART:
 			case BIBOOTWHAT_TYPE_SYSID:

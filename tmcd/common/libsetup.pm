@@ -2,7 +2,7 @@
 
 #
 # EMULAB-COPYRIGHT
-# Copyright (c) 2000-2009 University of Utah and the Flux Group.
+# Copyright (c) 2000-2008 University of Utah and the Flux Group.
 # All rights reserved.
 #
 # TODO: Signal handlers for protecting db files.
@@ -22,7 +22,7 @@ use Exporter;
 	 ixpsetup libsetup_refresh gettopomap getfwconfig gettiptunnelconfig
 	 gettraceconfig genhostsfile getmotelogconfig calcroutes fakejailsetup
 	 getlocalevserver genvnodesetup getgenvnodeconfig stashgenvnodeconfig
-         getlinkdelayconfig getloadinfo getbootwhat
+         getlinkdelayconfig
 
 	 TBDebugTimeStamp TBDebugTimeStampsOn
 
@@ -570,39 +570,6 @@ sub dorole()
 }
 
 #
-# Get the nodeid
-# 
-sub donodeid()
-{
-    my $nodeid;
-    my @tmccresults;
-
-    if (tmcc(TMCCCMD_NODEID, undef, \@tmccresults) < 0) {
-	warn("*** WARNING: Could not get nodeid from server!\n");
-	return -1;
-    }
-    return 0
-	if (! @tmccresults);
-    
-    #
-    # There should be just one string. Ignore anything else.
-    #
-    if ($tmccresults[0] =~ /([-\w]*)/) {
-	$nodeid = $1;
-    }
-    else {
-	warn "*** WARNING: Bad nodeid line: $tmccresults[0]";
-	return -1;
-    }
-    
-    system("echo '$nodeid' > ". TMNODEID);
-    if ($?) {
-	warn "*** WARNING: Could not write nodeid to " . TMNODEID() . "\n";
-    }
-    return 0;
-}
-
-#
 # Parse the router config and return a hash. This leaves the ugly pattern
 # matching stuff here, but lets the caller do whatever with it (as is the
 # case for the IXP configuration stuff). This is inconsistent with many
@@ -983,13 +950,7 @@ sub findiface($;$)
     $iface = <FIF>;
     
     if (! close(FIF)) {
-	if (!defined($ip)) {
-	    return 0;
-	}
-	#
-	# MAC was bogus, if we had an IP, look that up instead
-	#
-	$iface = "";
+	return 0;
     }
     
     $iface =~ s/\n//g;
@@ -1470,80 +1431,6 @@ sub getmotelogconfig($)
     return 0;
 }
 
-#
-# Get load info.
-#
-sub getloadinfo($)
-{
-    my ($rptr)   = @_;
-    my @retval = ();
-    my @tmccresults = ();
-    # don't cache this stuff, can't get stale reload info!
-    my %opthash = ( 'nocache' => 1 );
-
-    if (tmcc(TMCCCMD_LOADINFO, undef, \@tmccresults, %opthash) < 0) {
-	warn("*** WARNING: Could not get loadinfo from server!\n");
-	return -1;
-    }
-
-    # accept any key/val pair with basic formatting
-    foreach my $res (@tmccresults) {
-	chomp($res);
-	my @kvs = split(/\s+/,$res);
-	my %resh = ();
-	foreach my $kv (@kvs) {
-	    my @kvpair = split(/=/,$kv);
-	    if (scalar(@kvpair) != 2) {
-		warn("*** WARNING: malformed key-val pair in loadinfo: $kv\n");
-	    }
-	    else {
-		$resh{$kvpair[0]} = $kvpair[1];
-	    }
-	}
-	push @retval, \%resh;
-    }
-
-    @$rptr = @retval;
-    return 0;
-}
-
-#
-# Get load info.
-#
-sub getbootwhat($)
-{
-    my ($rptr)   = @_;
-    my @retval = ();
-    my @tmccresults = ();
-    # don't cache this stuff, can't get stale boot info!
-    my %opthash = ( 'nocache' => 1 );
-
-    if (tmcc(TMCCCMD_BOOTWHAT, undef, \@tmccresults, %opthash) < 0) {
-	warn("*** WARNING: Could not get bootwhat from server!\n");
-	return -1;
-    }
-
-    # accept any key/val pair with basic formatting
-    foreach my $res (@tmccresults) {
-	chomp($res);
-	my @kvs = split(/\s+/,$res);
-	my %resh = ();
-	foreach my $kv (@kvs) {
-	    my @kvpair = split(/=/,$kv);
-	    if (scalar(@kvpair) != 2) {
-		warn("*** WARNING: malformed key-val pair in bootwhat: $kv\n");
-	    }
-	    else {
-		$resh{$kvpair[0]} = $kvpair[1];
-	    }
-	}
-	push @retval, \%resh;
-    }
-
-    @$rptr = @retval;
-    return 0;
-}
-
 my %fwvars = ();
 
 #
@@ -1794,11 +1681,6 @@ sub bootsetup()
     #
     dorole();
 
-    #
-    # And the nodeid.
-    #
-    donodeid();
-
     return ($pid, $eid, $vname);
 }
 
@@ -1962,7 +1844,7 @@ sub vnodejailsetup($)
     dojailconfig();
 
     return ($pid, $eid, $vname);
-}
+}   
 
 #
 # All we do is store it away in the file. This makes it avail later.
@@ -2033,7 +1915,6 @@ sub getgenvnodeconfig($;$)
 sub genvnodesetup($;$$)
 {
     my ($vid) = @_;
-    my $issharedhost = SHAREDHOST();
 
     #
     # Set global vnodeid for tmcc commands.
@@ -2099,8 +1980,6 @@ sub genvnodesetup($;$$)
     # have to call initsfs() first). The full config will be copied
     # to the proper location inside the jail by mkjail.
     #
-    tmccclrconfig()
-	if ($issharedhost);
     tmccgetconfig();
     
     #

@@ -1,6 +1,6 @@
 /*
  * EMULAB-COPYRIGHT
- * Copyright (c) 2000-2009 University of Utah and the Flux Group.
+ * Copyright (c) 2000-2004 University of Utah and the Flux Group.
  * All rights reserved.
  */
 
@@ -29,17 +29,17 @@
 
 /*
  * Each compressed block of the file has this little header on it.
- * Since each block is independently compressed, we need to know
+ * Since each subblock is independently compressed, we need to know
  * its internal size (it will probably be shorter than 1MB) since we
  * have to know exactly how much to give the inflator.
  */
 struct blockhdr_V1 {
-	uint32_t	magic;		/* magic/version */
+	uint32_t	magic;
 	uint32_t	size;		/* Size of compressed part */
-	int32_t		blockindex;	/* netdisk: which block we are */
-	int32_t		blocktotal;	/* netdisk: total number of blocks */
-	int32_t		regionsize;	/* sizeof header + regions */
-	int32_t		regioncount;	/* number of regions */
+	int32_t		blockindex;
+	int32_t		blocktotal;
+	int32_t		regionsize;
+	int32_t		regioncount;
 };
 
 /*
@@ -69,7 +69,7 @@ struct blockhdr_V2 {
  * absolute block numbers.  This descriptor tells the unzipper what the
  * data structure is and where it is located in the block.
  *
- * Relocation descriptors follow the region descriptors in the header area.
+ * Relocation descriptors follow the region descriptors in the header block.
  */
 struct blockreloc {
 	uint32_t	type;		/* relocation type (below) */
@@ -83,7 +83,6 @@ struct blockreloc {
 #define RELOC_LILOSADDR		3	/* LILO sector address */
 #define RELOC_LILOMAPSECT	4	/* LILO map sector */
 #define RELOC_LILOCKSUM		5	/* LILO descriptor block cksum */
-#define RELOC_SHORTSECTOR	6	/* indicated sector < sectsize */
 
 /* XXX potential future alternatives to hard-wiring BSD disklabel knowledge */
 #define RELOC_ADDPARTOFFSET	100	/* add partition offset to location */
@@ -105,33 +104,22 @@ struct region {
 };
 
 /*
- * Each block has its own region header info.
+ * In the new model, each sub region has its own region header info.
+ * But there is no easy way to tell how many regions before compressing.
+ * Just leave a page, and hope that 512 regions is enough!
  *
- * Since there is no easy way to tell how many regions will fit before
- * we have compressed the region data, we just have to pick a size here.
- * If this area is too small, it is possible that a highly fragmented image
- * will fill this header before filling the data area of a block.  If the
- * region header area is too large, we will almost always fill up the data
- * area before filling the region header.  Since the latter is more likely
- * to be common, we tend to the small-ish side.
- *
- * At 4K with 8 byte region descriptors, we can fix 512 regions into a
- * single chunk.
+ * This number must be a multiple of the NFS read size in netdisk.
  */
-#define DEFAULTREGIONSIZE	4096
+#define DEFAULTREGIONSIZE	(1024 * 4)
 
 /*
  * Ah, the frisbee protocol. The new world order is to break up the
- * file into fixed chunks, with the region info prepended to each
+ * file into fixed 1MB chunks, with the region info prepended to each
  * chunk so that it can be layed down on disk independently of all the
  * chunks in the file. 
  */
-#define F_BLOCKSIZE		1024
-#define F_BLOCKSPERCHUNK	1024
-
-#define CHUNKSIZE		(F_BLOCKSIZE * F_BLOCKSPERCHUNK)
-#define CHUNKMAX		(CHUNKSIZE - DEFAULTREGIONSIZE)
-
+#define SUBBLOCKSIZE		(1024 * 1024)
+#define SUBBLOCKMAX		(SUBBLOCKSIZE - DEFAULTREGIONSIZE)
 
 /*
  * Assumed sector (block) size

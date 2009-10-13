@@ -30,22 +30,22 @@ package
       clip = new SliceSelectClip();
       newParent.addChild(clip);
 
-      buttons = new ButtonList([clip.okButton], [clickOk]);
+      clip.ok.label = "Create Slice";
+      clip.ok.addEventListener(MouseEvent.CLICK, clickOk);
 
       clip.sliceName.text = "demoslice";
       clip.sliceName.setSelection(0, clip.sliceName.length);
       clip.sliceName.alwaysShowSelection = true;
       clip.stage.focus = clip.sliceName;
-      clip.sliceName.restrict = "a-zA-Z";
 
       clip.stage.addEventListener(KeyboardEvent.KEY_UP, keyUp);
     }
 
     override public function cleanup() : void
     {
+      clip.ok.removeEventListener(MouseEvent.CLICK, clickOk);
       clip.stage.removeEventListener(KeyboardEvent.KEY_UP, keyUp);
 
-      buttons.cleanup();
       clip.parent.removeChild(clip);
     }
 
@@ -71,6 +71,5 @@ package
     }
 
     var clip : SliceSelectClip;
-    var buttons : ButtonList;
   }
 }

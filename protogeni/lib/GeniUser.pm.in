@@ -560,7 +560,7 @@ sub IsLocal($)
 }
 
 #
-# Delete all users for an authority.
+# Delete all slices for an authority.
 #
 sub DeleteAll($$)
 {
@@ -612,35 +612,6 @@ sub DeleteAll($$)
     return 0;
 }
 
-#
-# List All users.
-#
-sub ListAll($$)
-{
-    my ($class, $pref) = @_;
-    my @result = ();
-    @$pref = ();
-
-    my $query_result =
-	DBQueryWarn("select uuid from geni_users");
-
-    return -1
-	if (! $query_result);
-    return 0
-	if (!$query_result->numrows);
-
-    while (my ($uuid) = $query_result->fetchrow_array()) {
-	my $user = GeniUser->Lookup($uuid);
-	if (!defined($user)) {
-	    print STDERR "Could not lookup user $uuid\n";
-	    return -1;
-	}
-	push(@result, $user);
-    }
-    @$pref = @result;
-    return 0;
-}
-
 ############################################################################
 #
 # Wrapper for local users.
@@ -686,8 +657,6 @@ sub created($)		{ return $_[0]->{'USER'}->created(); }
 sub name($)		{ return $_[0]->{'USER'}->name(); }
 sub email($)		{ return $_[0]->{'USER'}->email(); }
 sub GetSSHKeys($$)      { return $_[0]->{'USER'}->GetSSHKeys($_[1]); }
-sub SSLPassPhrase($$$)  { return $_[0]->{'USER'}->SSLPassPhrase($_[1],$_[2]); }
-sub HomeDir($)          { return $_[0]->{'USER'}->HomeDir(); }
 
 # Need to construct this since not in User structure.
 sub hrn($)		{ return "${PGENIDOMAIN}." . $_[0]->uid(); }

@@ -23,7 +23,6 @@ use GeniRegistry;
 use GeniResponse;
 use GeniUser;
 use GeniComponent;
-use GeniHRN;
 use GeniAuthority;
 use emutil;
 use libtestbed qw(SENDMAIL);
@@ -38,18 +37,6 @@ my $TBAUDIT   	   = "@TBAUDITEMAIL@";
 my $BOSSNODE       = "@BOSSNODE@";
 my $OURDOMAIN      = "@OURDOMAIN@";
 my $SLICESHUTDOWN  = "$TB/sbin/protogeni/shutdownslice";
-
-my $API_VERSION = 1;
-
-#
-# Tell the client what API revision we support.  The correspondence
-# between revision numbers and API features is to be specified elsewhere.
-# No credentials are required.
-#
-sub GetVersion()
-{
-    return GeniResponse->Create( GENIRESPONSE_SUCCESS, $API_VERSION );
-}
 
 #
 # Get a credential to use the ClearingHouse. For the moment, the initial
@@ -90,8 +77,6 @@ sub GetCredential($)
 				    "Could not parse certificate")
 	    if (!defined($certificate));
 
-	print STDERR "GetCredential(): " . $certificate->DN() . "\n";
-
 	if (! ($certificate->uuid() =~ /^\w+\-\w+\-\w+\-\w+\-\w+$/)) {
 	    return GeniResponse->Create(GENIRESPONSE_BADARGS, undef,
 					"Improper format for uuid");
@@ -104,11 +89,6 @@ sub GetCredential($)
 	return GeniResponse->Create(GENIRESPONSE_ERROR, undef,
 				    "Could not find URL in the certificate")
 	    if (!defined($url));
-
-	if ($certificate->hrn() =~ /^unknown/i) {
-	    return GeniResponse->Create(GENIRESPONSE_BADARGS, undef,
-					"Please define PROTOGENI_DOMAIN");
-	}
 
 	#
 	# Check for an existing authority. 
@@ -175,42 +155,12 @@ sub Resolve($)
     my $uuid = $argref->{'uuid'};
     my $hrn  = $argref->{'hrn'};
     my $type = $argref->{'type'};
-    my $urn  = undef;
 
     if (! (defined($uuid) || defined($hrn))) {
 	return GeniResponse->MalformedArgsResponse();
     }
     if (defined($uuid) && defined($hrn)) {
 	return GeniResponse->MalformedArgsResponse();
-    }
-    $urn = $uuid if (defined($uuid) && GeniHRN::IsValid( $uuid ));
-    $urn = $hrn if (defined($hrn) && GeniHRN::IsValid( $hrn ));
-    if (defined($urn)) {
-	my ($auth,$t,$id) = GeniHRN::Parse( $urn );
-	my $manager_urn = GeniHRN::Generate($auth, "authority", "cm");
-	my $authority   = GeniAuthority->Lookup($manager_urn);
-
-#	print STDERR "$authority, $urn\n";
-	
-	return GeniResponse->Create(GENIRESPONSE_DBERROR)
-	    if (!defined($authority));
-
-	my ($translated) = $authority->hrn() =~ /^([-\w]+)\..*/;
-
-#	print STDERR "$auth, $t, $id, $translated\n";
-
-	if ($t eq "node") {
-	    $type = "Component";
-	}
-	elsif ($t eq "authority") {
-	    $type = $id;
-	}
-	else {
-	    $type = $t;
-	}
-	$hrn = $translated . "." . $id;
-#	print STDERR "$auth, $t, $id, $hrn, $type\n";
-	$uuid = undef;
     }
     if (defined($uuid) && !($uuid =~ /^[-\w]*$/)) {
 	return GeniResponse->MalformedArgsResponse();
@@ -312,7 +262,6 @@ sub Resolve($)
 	# Return a blob.
 	my $blob = { "gid"         => $manager->cert(),
 		     "url"         => $manager->url(),
-		     "type"        => $manager->type(),
 		 };
 	return GeniResponse->Create(GENIRESPONSE_SUCCESS, $blob);
     }
@@ -323,7 +272,6 @@ sub Resolve($)
 	# Return a blob.
 	my $blob = { "gid"         => $authority->cert(),
 		     "url"         => $authority->url(),
-		     "type"        => $authority->type(),
 		 };
 	return GeniResponse->Create(GENIRESPONSE_SUCCESS, $blob);
     }
@@ -357,7 +305,7 @@ sub Register($)
     my $info  = $argref->{'info'};
     my $type  = $argref->{'type'};
 
-    if (! (defined($type) && ($type =~ /^(SA|MA|CM|SES|Component|Slice|User)$/i))){
+    if (! (defined($type) && ($type =~ /^(SA|MA|CM|Component|Slice|User)$/i))){
 	return GeniResponse->MalformedArgsResponse();
     }
     $type = lc($type);
@@ -570,7 +518,7 @@ sub Register($)
 	}
 	return GeniResponse->Create(GENIRESPONSE_SUCCESS);
     }
-    if ($type eq "cm" || $type eq "sa" || $type eq "ses") {
+    if ($type eq "cm" || $type eq "sa") {
 	#
 	# Check for an existing authority. 
 	#
@@ -585,11 +533,6 @@ sub Register($)
 				    "Could not find URL in the certificate")
 	    if (!defined($url));
 
-	if ($certificate->hrn() =~ /^unknown/i) {
-	    return GeniResponse->Create(GENIRESPONSE_BADARGS, undef,
-					"Please define PROTOGENI_DOMAIN");
-	}
-	
 	SENDMAIL($TBOPS, "ProtoGeni Authority Registration",
 		 $certificate->asText());
 	
@@ -887,7 +830,7 @@ sub List($)
     my $type = $argref->{'type'};
     my @results = ();
 
-    if (! (defined($type) && ($type =~ /^(Authorities|Components|Slices|Users)$/i))){
+    if (! (defined($type) && ($type =~ /^(Authorities|Components|Slices)$/i))){
 	return GeniResponse->MalformedArgsResponse();
     }
     $type = lc($type);
@@ -948,20 +891,6 @@ sub List($)
 	    my $blob = {"gid"  => $authority->cert(),
 			"hrn"  => $authority->hrn(),
 			"uuid" => $authority->uuid() };
-	    
-	    push(@results, $blob);
-	}
-    }
-    elsif ($type eq "users") {
-	my @users;
-
-	if (GeniUser->ListAll(\@users) != 0) {
-	    return GeniResponse->Create(GENIRESPONSE_ERROR);
-	}
-	foreach my $user (@users) {
-	    my $blob = {"gid"  => $user->cert(),
-			"hrn"  => $user->hrn(),
-			"uuid" => $user->uuid() };
 	    
 	    push(@results, $blob);
 	}

@@ -2,7 +2,7 @@
 
 #
 # EMULAB-COPYRIGHT
-# Copyright (c) 2000-2009 University of Utah and the Flux Group.
+# Copyright (c) 2000-2008 University of Utah and the Flux Group.
 # All rights reserved.
 #
 
@@ -34,7 +34,7 @@ sub usage()
 	  "<nsfile> - Optional NS file to parse for experiment modify\n");
     exit(-1);
 }
-my  $optlist = "biafres:wqxgNXn";
+my  $optlist = "biafres:wqxgNX";
 
 #
 # Exit codes are important; they tell the web page what has happened so
@@ -97,7 +97,7 @@ my $signaled = 0;
 my $tbdir    = "$TB/bin";
 my $tbdata   = "tbdata";
 my $checkquota = "$TB/sbin/checkquota";
-my $vtopgen  = "$TB/bin/vtopgen";
+my $wrapper    = "$TB/libexec/assign_wrapper";
 my $batch    = 0;
 my $idleswap = 0;
 my $autoswap = 0;
@@ -106,8 +106,6 @@ my $reboot   = 0;
 my $waitmode = 0;
 my $quiet    = 0;
 my $genimode = 0;
-my $noswapout= 0;
-my $noreconfig=0;
 my $eventsys_restart   = 0;
 my $errorstat= -1;
 my $modifyHosed   = 0;
@@ -173,12 +171,7 @@ if (defined($options{"f"})) {
     $force = 1;
 }
 if (defined($options{"g"})) {
-    $genimode  = 1;
-    $noswapout = 1;
-}
-if (defined($options{"n"})) {
-    $noswapout  = 1;
-    $noreconfig = 1;
+    $genimode = 1;
 }
 if (defined($options{"b"})) {
     $batch = 1;
@@ -880,7 +873,7 @@ if (! $batch && ! $template_mode && !$genimode) {
 		}
 		$d->{output} = $output;
 	        print SOUT RPC::XML::response->new($d)->as_string(), "\n";
-	    } elsif (!$quiet) {
+	    } else {
 		print $output;
 	    }
 	}
@@ -1069,7 +1062,7 @@ elsif ($inout eq "modify") {
 	# Need the min/max numbers, usually done during prerun.
 	#
 	print "Doing a pre-assign ...\n";
-	if (system("$vtopgen -p $pid $eid")) {
+	if (system("$wrapper -t $pid $eid")) {
 	    fatal({type => 'secondary', severity => SEV_SECONDARY,
 		   error => ['update_aborted', undef]},
 		  "assign prerun failed!");
@@ -1104,8 +1097,7 @@ elsif ($inout eq "modify") {
 	else {
 	    $optarg  = ($reboot ? "-reboot" : "");
 	    $optarg .= ($eventsys_restart ? " -eventsys_restart" : "");
-	    $optarg .= ($noswapout ? " -noswapout" : "");
-	    $optarg .= ($noreconfig ? " -noreconfig" : "");
+	    $optarg .= ($genimode ? "-noswapout" : "");
 	}
 
 	if ($experiment->Swap($Experiment::EXPT_SWAPMOD, $optarg) == 0) {
@@ -1143,7 +1135,7 @@ elsif ($inout eq "modify") {
 		$modifyError = "Update aborted; experiment swapped out.";
 	    }
 	    else {
-		if ($noswapout) {
+		if ($genimode) {
 		    tbreport(SEV_SECONDARY, 'update_aborted','still active');
 		    $modifyError = "Update aborted; still swapped in.";
 		}

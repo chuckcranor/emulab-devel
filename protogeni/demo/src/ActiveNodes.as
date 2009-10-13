@@ -77,18 +77,20 @@ package
       linkLayer = null;
     }
 
-    public function addNode(component : Component, manager : ComponentManager,
-                            nodeIndex : int, x : int, y : int) : void
+    public function addNode(name : String, uuid : String,
+                            interfaces : Array, cmIndex : int,
+                            nodeIndex : int, cleanupMethod : Function,
+                            x : int, y : int) : void
     {
-      var newNode : Node = new Node(nodeLayer, component, manager,
-                                    nodeIndex, nodes.length,
+      var newNode : Node = new Node(nodeLayer, name, uuid, interfaces,
+                                    cmIndex, nodeIndex,
+                                    cleanupMethod, nodes.length,
                                     beginDragEvent, beginAddLink);
       dragX = Node.CENTER_X;
       dragY = Node.CENTER_Y;
       newNode.move(x - dragX, y - dragY);
       nodes.push(newNode);
       beginDrag(newNode);
-      newNode.getManager().setChanged();
     }
 
     function removeNode(doomedNode : Node) : void
@@ -99,7 +101,6 @@ package
       {
         removeLink(nodeLinks[i]);
       }
-      doomedNode.getManager().setChanged();
       doomedNode.cleanup();
 
       var index = nodes.indexOf(doomedNode);
@@ -241,8 +242,6 @@ package
       var newLink = new Link(linkLayer, links.length, source, dest,
                              removeLinkEvent);
       links.push(newLink);
-      source.getManager().setChanged();
-      dest.getManager().setChanged();
     }
 
     function removeLinkEvent(event : MouseEvent)
@@ -252,8 +251,6 @@ package
 
     function removeLink(doomedLink : Link)
     {
-      doomedLink.getLeft().getManager().setChanged();
-      doomedLink.getRight().getManager().setChanged();
       doomedLink.cleanup();
       var index : int = links.indexOf(doomedLink);
       if (index != -1)
@@ -291,13 +288,13 @@ package
       return result;
     }
 
-    public function setSliverId(cm : ComponentManager, name : String,
+    public function setSliverId(cmIndex : int, name : String,
                                 sliverId : String) : void
     {
       var i : int = 0;
       for (; i < nodes.length; ++i)
       {
-        if (nodes[i].getManager() == cm
+        if (nodes[i].getCmIndex() == cmIndex
             && nodes[i].getName() == name)
         {
           nodes[i].setSliverId(sliverId);
@@ -305,63 +302,37 @@ package
       }
     }
 
-    public function getXml(useTunnels : Boolean, cm : ComponentManager) : XML
+    public function getXml(cmIndex : int, useTunnels : Boolean) : XML
     {
-      var version = 2;
-      if (cm != null)
-      {
-        version = cm.getVersion();
-      }
-      var result = XML("<?xml version=\"1.0\" encoding=\"UTF-8\"?> "
-                       + "<rspec "
-                       + "xmlns=\"http://www.protogeni.net/resources/rspec/0.1\" "
-                       + "type=\"request\" />");
+      var result : XML = null;
       var i : int = 0;
 
       for (i = 0; i < nodes.length; ++i)
       {
-        if (version >= 1 || cm == nodes[i].getManager())
+        var currentNode : XML = nodes[i].getXml(cmIndex, useTunnels);
+        if (currentNode != null)
         {
-          var currentNode : XML = nodes[i].getXml(useTunnels, version);
-          if (currentNode != null)
+          if (result == null)
           {
-            result.appendChild(currentNode);
+            result = <rspec xmlns="http://protogeni.net/resources/rspec/0.1" />;
           }
+          result.appendChild(currentNode);
         }
       }
 
       for (i = 0; i < links.length; ++i)
       {
-        if (version >= 3 || links[i].isConnectedTo(cm))
+        var currentLink : XML = links[i].getXml(cmIndex, useTunnels);
+        if (currentLink != null)
         {
-          var currentLink : XML = links[i].getXml(useTunnels, version);
-          if (currentLink != null)
-          {
-            result.appendChild(currentLink);
-          }
+          result.appendChild(currentLink);
         }
       }
 
       return result;
     }
 
-    // Returns true if cmIndex represents a component manager whose
-    // nodes are used by the current rspec.
-    public function managerUsed(target : ComponentManager) : Boolean
-    {
-      var result : Boolean = false;
-      for each (var node in nodes)
-      {
-        if (node.getManager() == target)
-        {
-          result = true;
-          break;
-        }
-      }
-      return result;
-    }
-
-    public function changeState(target : ComponentManager, oldState : int,
+    public function changeState(cmIndex : int, oldState : int,
                                 newState : int) : void
     {
       var i : int = 0;
@@ -369,51 +340,48 @@ package
       {
         if (nodes[i].calculateState() == oldState)
         {
-          nodes[i].changeState(target, newState);
+          nodes[i].changeState(cmIndex, newState);
         }
       }
       updateSelectText();
     }
 
-    public function revertState(target : ComponentManager) : void
+    public function revertState(cmIndex : int) : void
     {
       var i : int = 0;
       for (; i < nodes.length; ++i)
       {
-        nodes[i].revertState(target);
+        nodes[i].revertState(cmIndex);
       }
-      updateSelectText();
     }
 
-    public function commitState(target : ComponentManager) : void
+    public function commitState(cmIndex : int) : void
     {
       var i : int = 0;
       for (; i < nodes.length; ++i)
       {
-        nodes[i].commitState(target);
+        nodes[i].commitState(cmIndex);
       }
-      updateSelectText();
     }
 
-    public function existsState(target : ComponentManager,
-                                newState : int) : Boolean
+    public function existsState(cmIndex : int, newState : int) : Boolean
     {
       var result : Boolean = false;
       var i : int = 0;
       for (; i < nodes.length && !result; ++i)
       {
-        result = result || nodes[i].isState(target, newState);
+        result = result || nodes[i].isState(cmIndex, newState);
       }
       return result;
     }
 
-    public function hasTunnels(target : ComponentManager) : Boolean
+    public function hasTunnels(cmIndex : int) : Boolean
     {
       var result : Boolean = false;
       var i : int = 0;
       for (; i < links.length && !result; ++i)
       {
-        result = result || links[i].hasTunnelTo(target);
+        result = result || links[i].hasTunnelTo(cmIndex);
       }
       return result;
     }
@@ -438,7 +406,7 @@ package
           }
           isFirst = false;
           names += nodes[i].getName();
-          cms += nodes[i].getManager().getName();
+          cms += ComponentManager.cmNames[nodes[i].getCmIndex()];
           hostnames += nodes[i].getHostName();
         }
       }
@@ -450,20 +418,6 @@ package
         result += "hostnames=" + hostnames;
       }
       return result;
-    }
-
-    public function mapRequest(request : String,
-                               manager : ComponentManager) : void
-    {
-      var root : XML = XML(request);
-      var nodeName : QName = new QName(root.namespace(), "node");
-      var nodeXml = root.elements(nodeName);
-      var i : int = 0;
-      for (; i < nodes.length; ++i)
-      {
-        nodes[i].mapRequest(nodeXml[i], manager);
-      }
-      updateSelectText();
     }
 
     var nodes : Array;

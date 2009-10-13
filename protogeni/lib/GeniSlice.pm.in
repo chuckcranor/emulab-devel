@@ -37,7 +37,6 @@ my $TBAUDIT   	   = "@TBAUDITEMAIL@";
 my $BOSSNODE       = "@BOSSNODE@";
 my $CONTROL	   = "@USERNODE@";
 my $OURDOMAIN      = "@OURDOMAIN@";
-my $PGENIDOMAIN    = "@PROTOGENI_DOMAIN@";
 
 # Cache of instances to avoid regenerating them.
 my %slices     = ();
@@ -152,22 +151,6 @@ sub LookupByExperiment($$)
 }
 
 #
-# Lookup all slice(s) of a specified creator.
-#
-sub LookupByCreator($$)
-{
-    my ($class, $creator) = @_;
-
-    my $creator_uuid = $creator->uuid();
-    my $query_result =
-	DBQueryWarn("select idx from geni_slices ".
-		    "where creator_uuid='$creator_uuid'");
-    return undef unless defined($query_result);
-
-    return map( GeniSlice->Lookup( $_ ), $query_result->fetchcol( 0 ) );
-}
-
-#
 # We lock at a very coarse grain, mostly in the CM. When a slice is busy
 # we cannot expire things from it.
 #
@@ -240,22 +223,19 @@ sub CreateFromLocal($$$)
 	print STDERR "Could not find the local authority record\n";
 	return undef;
     }
-
-    #
-    # XXX Form hrn from the domain. 
-    #
-    my $hrn = "${PGENIDOMAIN}.slices." . $experiment->idx(); 
+    
+    my $hrn = $authority->hrn() . "." . $experiment->idx();
+    my $creator_uuid = $user->uuid();
 
     #
     # Generate a certificate.
     #
     $certificate = GeniCertificate->Create("slice", $hrn, $user->email());
     if (!defined($certificate)) {
-	print STDERR "GeniSlice::CreateFromLocal: ".
-	    "Could not generate new certificate $experiment\n";
+	print STDERR "Could not create certificate for slice.\n";
 	return undef;
     }
-    my $slice = GeniSlice->Create($certificate, $user->uuid(),
+    my $slice = GeniSlice->Create($certificate, $creator_uuid,
 				  $authority, $experiment->idx());
     $certificate->Delete()
 	if (!defined($slice));

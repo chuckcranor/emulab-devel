@@ -1,14 +1,13 @@
 package Tools;
 use SemiModern::Perl;
 use Log::Log4perl qw(get_logger :levels);
-use POSIX qw(setsid);
 #use Log::Log4perl::Appender::Screen
 #use Log::Log4perl::Appender::ScreenColoredLevels
 #use Log::Log4perl::Appender::File
 
 require Exporter;
 our @ISA = qw(Exporter);
-our @EXPORT_OK = qw(prettytimestamp timestamp sayts sayperl slurp toperl
+our @EXPORT = qw(prettytimestamp timestamp sayts sayperl slurp toperl
                  init_tbts_logger concretize yn_prompt splat_to_temp);
 
 =head1 NAME
@@ -220,7 +219,6 @@ sub splat_to_temp {
   close $tmp;
   return $tmp;
 }
-
 
 =back
 

@@ -2,7 +2,7 @@
 
 #
 # EMULAB-COPYRIGHT
-# Copyright (c) 2003-2009 University of Utah and the Flux Group.
+# Copyright (c) 2003-2008 University of Utah and the Flux Group.
 # All rights reserved.
 #
 
@@ -42,7 +42,6 @@ my $USERNODE_IP= '@USERNODE_IP@';
 my $FSNODE_IP=   '@FSNODE_IP@';
 my $SCRATCHDIR = '@FSDIR_SCRATCH@';
 my $SHAREDIR   = '@FSDIR_SHARE@';
-my $FRISADDR   = '@FRISEBEEMCASTADDR@';
 
 #
 # Fixed paths for clients
@@ -227,10 +226,6 @@ my %EXPERIMENTS =
 			 "description" => "Nodes in limbo during nfree"},
      "opsnodes"	     => {"pid"	       => "emulab-ops",
 			 "description" => "Nodes designated as Ops Nodes"},
-     "holding"	     => {"pid"	       => "emulab-ops",
-			 "description" => "Nodes in a holding pattern"},
-     "shared-nodes"  => {"pid"	       => "emulab-ops",
-			 "description" => "Nodes in shared mode"},
     );
 
 #
@@ -930,12 +925,6 @@ Phase "rc.conf", "Adding testbed content to $RCCONF", sub {
 			qq|named_uid="root"|,
 			qq|named_pidfile="$NAMED_PIDFILE"|));
     }
-
-    # add multicast route for frisbee
-    my ($o1) = split(/\./, $FRISADDR);
-    push(@strings, (qq|static_routes="\$static_routes frisbee"|,
-		    qq|route_frisbee="-net $o1.0.0.0/8 -iface $BOSSNODE_IP"|));
-
     AppendToFileFatal($RCCONF, @strings);
 };
 

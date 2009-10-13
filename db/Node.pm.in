@@ -246,18 +246,13 @@ sub AUTOLOAD {
     elsif (exists($self->{'HASH'}->{$name})) {
 	return $self->{'HASH'}->{$name};
     }
-    print STDERR "$self: tried to access unknown slot $name\n";
+    print STDERR "$self: tried access unknown slot $name\n";
     return undef;
 }
 
 #
 # Create a new node.
 #
-# The list of table we have to clear if anything goes wrong.
-my @cleantables = ("nodes", "node_hostkeys", "node_status",
-		   "node_activity", "node_utilization",
-		   "node_auxtypes", "reserved", "widearea_nodeinfo");
-
 sub Create($$$$)
 {
     my ($class, $node_id, $experiment, $argref) = @_;
@@ -291,56 +286,30 @@ sub Create($$$$)
 	    print STDERR "*** No virtnode_capacity for $type! Using zero.\n";
 	    $virtnode_capacity = 0;
 	}
-	if ($isremote) {
-	    $osid   = 0;
-	    $opmode = "";
-
-	    if (defined($typeinfo->default_osid())) {
-		$osid = $typeinfo->default_osid();
-		
-		my $osinfo = OSinfo->Lookup($osid);
-		if (!defined($osinfo)) {
-		    print STDERR
-			"*** Could not find OSinfo object for $osid!\n";
-		    return undef;
-		}
-		$osid   = $osinfo->osid();
-		$opmode = $osinfo->op_mode();
-	    }
+	if ($typeinfo->adminmfs_osid(\$adminmfs_osid)) {
+	    print STDERR "*** No adminmfs osid for $type!\n";
+	    return undef;
+	}
+	# Find object for the adminfs.
+	if (defined($adminmfs_osid)) {
+	    $adminmfs = OSinfo->Lookup($adminmfs_osid);
 	}
 	else {
-	    if ($typeinfo->adminmfs_osid(\$adminmfs_osid)) {
-		print STDERR "*** No adminmfs osid for $type!\n";
-		return undef;
-	    }
-	    # Find object for the adminfs.
-	    if (defined($adminmfs_osid)) {
-		$adminmfs = OSinfo->Lookup($adminmfs_osid);
-	    }
-	    else {
-		$adminmfs = OSinfo->Lookup(TBOPSPID(), $MFS_INITIAL);
-	    }
-	    if (!defined($adminmfs)) {
-		print STDERR
-		    "*** Could not find OSinfo object for adminmfs!\n";
-		return undef;
-	    }
-	    $osid   = $adminmfs->osid();
-	    $opmode = $adminmfs->op_mode();
+	    $adminmfs = OSinfo->Lookup(TBOPSPID(), $MFS_INITIAL);
 	}
+	if (!defined($adminmfs)) {
+	    print STDERR "*** Could not find OSinfo object for adminmfs!\n";
+	    return undef;
+	}
+	$osid   = $adminmfs->osid();
+	$opmode = $adminmfs->op_mode();
     }
     else {
 	$osid   = 0;
 	$opmode = "";
     }
     $state  = $STATE_INITIAL;
-
-    #
-    # Lock the tables to prevent concurrent creation
-    #
-    DBQueryWarn("lock tables nodes write, widearea_nodeinfo write")
-	or return -1;
-
+    
     #
     # Make up a priority (just used for sorting)
     #
@@ -350,35 +319,21 @@ sub Create($$$$)
     else {
 	$priority = 1;
     }
+    # The list of table we have to clear if anything goes wrong.
+    my @cleantables = ("nodes", "node_hostkeys", "node_status",
+		       "node_activity", "node_utilization",
+		       "node_auxtypes", "reserved");
 
-    if (!DBQueryWarn("insert into nodes set ".
-		     "  node_id='$node_id', type='$type', " .
-		     "  phys_nodeid='$node_id', role='$role', ".
-		     "  priority=$priority, " .
-		     "  eventstate='$state', op_mode='$opmode', " .
-		     "  def_boot_osid='$osid', " .
-		     "  inception=now(), uuid=$uuid, ".
-		     "  state_timestamp=unix_timestamp(NOW()), " .
-		     "  op_mode_timestamp=unix_timestamp(NOW())")) {
-	DBQueryWarn("unlock tables");
-	return undef;
-    }
-    if ($isremote) {
-	my $hostname = $argref->{'hostname'};
-	my $external = $argref->{'external_node_id'};
-	my $IP       = $argref->{'IP'};
-	    
-	if (!DBQueryWarn("replace into widearea_nodeinfo ".
-			 " (node_id, contact_uid, contact_idx, hostname," .
-			 "  external_node_id, IP) ".
-			 " values ('$node_id', 'nobody', '0', ".
-			 "         '$hostname', '$external', '$IP')")) {
-	    DBQueryWarn("delete from nodes where node_id='$node_id'");
-	    DBQueryWarn("unlock tables");
-	    return undef;
-	}
-    }
-    DBQueryWarn("unlock tables");
+    DBQueryWarn("insert into nodes set ".
+		"  node_id='$node_id', type='$type', " .
+		"  phys_nodeid='$node_id', role='$role', ".
+		"  priority=$priority, " .
+		"  eventstate='$state', op_mode='$opmode', " .
+		"  def_boot_osid='$osid', " .
+		"  inception=now(), uuid=$uuid, ".
+		"  state_timestamp=unix_timestamp(NOW()), " .
+		"  op_mode_timestamp=unix_timestamp(NOW())")
+	or goto bad;
 
     if ($role eq "testnode") {
 	DBQueryWarn("insert into node_hostkeys (node_id) ".
@@ -442,20 +397,6 @@ sub Create($$$$)
 	DBQueryWarn("delete from $table where node_id='$node_id'");
     }
     return undef;
-}
-
-#
-# Only use this for Create() errors.
-#
-sub Delete($)
-{
-    my ($self)  = @_;
-    my $node_id = $self->node_id();
-
-    foreach my $table (@cleantables) {
-	DBQueryWarn("delete from $table where node_id='$node_id'");
-    }
-    return 0;
 }
 
 #
@@ -590,17 +531,6 @@ sub IsReserved($)
 	return 1;
     }
     return 1;
-}
-
-#
-# Flush the reserve info so it reloads.
-#
-sub FlushReserved($)
-{
-    my ($self) = @_;
-
-    $self->{"RSRV"} = undef;
-    return 0;
 }
 
 #
@@ -928,9 +858,9 @@ sub OldReservationID($)
 #
 # Return the tip server (and tipname) for a node.
 #
-sub TipServer($$;$$$)
+sub TipServer($$;$)
 {
-    my ($self, $pserver, $ptipname, $pportnum, $pkeydata) = @_;
+    my ($self, $pserver, $ptipname) = @_;
 
     return -1
 	if (! ref($self));
@@ -942,7 +872,7 @@ sub TipServer($$;$$$)
     my $nodeid = $self->node_id();
 	
     my $query_result =
-	DBQueryWarn("select server,tipname,portnum,keydata from tiplines " .
+	DBQueryWarn("select server,tipname from tiplines " .
 		    "where node_id='$nodeid'");
     return -1
 	if (!$query_result);
@@ -950,14 +880,10 @@ sub TipServer($$;$$$)
     return 0
 	if (!$query_result->numrows);
 
-    my ($server,$tipname,$portnum,$keydata) = $query_result->fetchrow_array();
+    my ($server, $tipname) = $query_result->fetchrow_array();
     $$pserver  = $server;
     $$ptipname = $tipname
 	if (defined($ptipname));
-    $$pkeydata = $keydata
-	if (defined($pkeydata));
-    $$pportnum = $portnum
-	if (defined($pportnum));
 
     return 0;
 }
@@ -1022,50 +948,31 @@ sub VirtualNodes($$)
     return 0;
 }
 
-#
-# Does a node have any virtual nodes on it. Table might be locked.
-#
-sub HasVirtualNodes($)
+# Need to create a set of access methods for the reservation.
+sub vname($)
 {
     my ($self) = @_;
 
-    return -1
-	if (! ref($self));
-
-    my $node_id = $self->node_id();
-
-    my $query_result = 
-	DBQueryWarn("select node_id from nodes ".
-		    "where phys_nodeid='$node_id' and node_id!=phys_nodeid");
-    return -1
-	if (!$query_result);
-    
-    return $query_result->numrows;
-}
-
-#
-# Access methods for the reservation.
-#
-sub __reservation($$)
-{
-    my ($self, $slotname) = @_;
-
     return undef
 	if (! ref($self));
+
     return undef
 	if (! $self->IsReserved());
-    return undef
-	if (! exists($self->{"RSRV"}->{$slotname}));
 
-    return $self->{"RSRV"}->{$slotname};
+    return $self->{"RSRV"}->{'vname'};
 }
-sub vname($)		{ return __reservation($_[0], 'vname'); }
-sub sharing_mode($)	{ return __reservation($_[0], 'sharing_mode'); }
-sub erole($)		{ return __reservation($_[0], 'erole'); }
-sub external_resource_index($) {
-    return __reservation($_[0], 'external_resource_index'); }
-sub external_resource_id($) {
-    return __reservation($_[0], 'external_resource_id'); }
+sub sharing_mode($)
+{
+    my ($self) = @_;
+
+    return undef
+	if (! ref($self));
+
+    return undef
+	if (! $self->IsReserved());
+
+    return $self->{"RSRV"}->{'sharing_mode'};
+}
 
 #
 # Lookup a specific attribute in the node_attributes table, 
@@ -1219,8 +1126,7 @@ sub Update($$)
 	my $val = $argref->{$key};
 
 	# Treat NULL special.
-	push (@sets, "${key}=" . ($val eq "NULL" ?
-				  "NULL" : DBQuoteSpecial($val)));
+	push (@sets, "${key}=" . ($val eq "NULL" ? "NULL" : "'$val'"));
     }
 
     my $query = "update nodes set " . join(",", @sets) .
@@ -1262,6 +1168,9 @@ sub InsertNodeLogEntry($$$$)
 #
 # Clear the experimental interfaces for a node.
 #
+#
+# Insert a Log entry for a node.
+#
 sub ClearInterfaces($)
 {
     my ($self) = @_;
@@ -1273,57 +1182,11 @@ sub ClearInterfaces($)
     my $node_id = $self->node_id();
 
     DBQueryWarn("update interfaces set IP='',IPaliases=NULL,mask=NULL,".
-		"       rtabid='0',vnode_id=NULL,current_speed='0',trunk='0' ".
+		"       rtabid='0',vnode_id=NULL,current_speed='0' ".
 		"where node_id='$node_id' and ".
 		"  role='" . TBDB_IFACEROLE_EXPERIMENT() . "'")
 	or return -1;
 
-    DBQueryWarn("update interface_state,interfaces set ".
-		"       remaining_bandwidth=0 ".
-		"where interface_state.node_id=interfaces.node_id and ".
-		"      interface_state.iface=interfaces.iface and ".
-		"      interfaces.node_id='$node_id' and ".
-		"  role='" . TBDB_IFACEROLE_EXPERIMENT() . "'")
-	or return -1;
-
-    return 0;
-}
-
-#
-# Clear the shared bandwidth being used by a (virtual) node.
-#
-sub ReleaseSharedBandwidth($)
-{
-    my ($self) = @_;
-
-    # Must be a real reference. 
-    return -1
-	if (! ref($self));
-
-    my $node_id  = $self->node_id();
-
-    DBQueryWarn("lock tables vinterfaces write, interface_state write")
-	or return -1;
-
-    #
-    # A negative BW is not reserved yet.
-    #
-    if (!DBQueryWarn("update interface_state,vinterfaces set ".
-		     "     remaining_bandwidth=remaining_bandwidth+bandwidth ".
-		     "where interface_state.node_id=vinterfaces.node_id and ".
-		     "      interface_state.iface=vinterfaces.iface and ".
-		     "      vinterfaces.vnode_id='$node_id' and ".
-		     "      vinterfaces.iface is not null and ".
-		     "      vinterfaces.bandwidth>0")) {
-	DBQueryWarn("unlock tables");
-	return -1;
-    }
-    if (!DBQueryWarn("update vinterfaces set bandwidth=0 ".
-		     "where vinterfaces.vnode_id='$node_id'")) {
-	DBQueryWarn("unlock tables");
-	return -1;
-    }
-    DBQueryWarn("unlock tables");
     return 0;
 }
 
@@ -1545,8 +1408,6 @@ sub CreateVnodes($$)
     my $verbose = defined($options->{'verbose'}) && $options->{'verbose'};
     my $regression = defined($options->{'regression'}) &&
 	$options->{'regression'};
-    my $sharedokay = defined($options->{'sharedokay'}) &&
-	$options->{'sharedokay'};
     my $pid     = $options->{'pid'};
     my $eid     = $options->{'eid'};
     my $count   = $options->{'count'};
@@ -1580,9 +1441,9 @@ sub CreateVnodes($$)
 	print STDERR "*** CreateVnodes: Not a dynamic node type: '$vtype'\n";
 	return -1;
     }
-    my $isremote  = $nodetype->isremotenode();
-    my $isjailed  = $nodetype->isjailed();
-    my $isfednode = $nodetype->isfednode();
+    my $isremote = $nodetype->isremotenode();
+    my $isjailed = $nodetype->isjailed();
+    my $sharing_mode = $node->sharing_mode();
 
     #
     # Make up a priority (just used for sorting). We need the name prefix
@@ -1591,13 +1452,7 @@ sub CreateVnodes($$)
     my $nodeprefix;
     my $nodenum;
     my $ipbase;
-
-    if ($isfednode) {
-	$nodeprefix = $nodetype->type();
-	$nodenum    = "";
-	$ipbase     = 0;
-    }
-    elsif ($pnode =~ /^(.*\D)(\d+)$/) {
+    if ($pnode =~ /^(.*\D)(\d+)$/) {
 	$nodeprefix = $1;
 	$nodenum    = $2;
 	$ipbase     = $nodenum;
@@ -1606,29 +1461,25 @@ sub CreateVnodes($$)
 	$nodeprefix = $pnode;
 	$nodenum    = "";
 
-	if ($isjailed) {
-	    #
-	    # Determine ipbase from the control IP (jailed nodes).
-	    #
-	    my $interface = Interface->LookupControl($node);
-	    if (!defined($interface)) {
-		print STDERR
-		    "*** CreateVnodes: No control interface for $node\n";
-		return -1;
-	    }
-	    my $ctrlip = $interface->IP();
-	    if (!defined($ctrlip) || $ctrlip eq "") {
-		print STDERR
-		    "*** CreateVnodes: No control IP for $interface\n";
-		return -1;
-	    }
-	    my $tmp = ~inet_aton($CONTROL_NETMASK) & inet_aton($ctrlip);
-	    $ipbase = unpack("N", $tmp);
-	    if ($ipbase == 0 || $ipbase < 0 || $ipbase > 0x3fff) {
-		print STDERR
-		    "*** CreateVnodes: Bad ipbase '$ipbase' for $interface\n";
-		return -1;
-	    }
+	#
+	# Determine ipbase from the control IP. 
+	#
+	my $interface = Interface->LookupControl($node);
+	if (!defined($interface)) {
+	    print STDERR "*** CreateVnodes: No control interface for $node\n";
+	    return -1;
+	}
+	my $ctrlip = $interface->IP();
+	if (!defined($ctrlip) || $ctrlip eq "") {
+	    print STDERR "*** CreateVnodes: No control IP for $interface\n";
+	    return -1;
+	}
+	my $tmp = ~inet_aton($CONTROL_NETMASK) & inet_aton($ctrlip);
+	$ipbase = unpack("N", $tmp);
+	if ($ipbase == 0 || $ipbase < 0 || $ipbase > 0x3fff) {
+	    print STDERR
+		"*** CreateVnodes: Bad ipbase '$ipbase' for $interface\n";
+	    return -1;
 	}
     }
 
@@ -1681,37 +1532,6 @@ sub CreateVnodes($$)
     DBQueryFatal("lock tables nodes write, reserved write, ".
 		 "node_status write, node_hostkeys write");
 
-    #
-    # Reload the reservation status now that tables are locked and confirm
-    # that the shared node is still reserved. See nfree, which checks shared
-    # nodes after locking reserved table.
-    #
-    $node->FlushReserved();
-    my $sharing_mode = $node->sharing_mode();
-    
-    if (! ($impotent || $isfednode)) {
-	my $reservation = $node->Reservation();
-	if (!defined($reservation)) {
-	    print STDERR "*** CreateVnodes: no reservation for $node!\n";
-	    DBQueryFatal("unlock tables");
-	    return -1;
-	}
-
-	#
-	# The only time that the reservation can be different then the
-	# the experiment we are creating for, is if the sharedokay flag
-	# is on and the pnode is in sharedmode. Locking in nfree and in
-	# the pool daemon prevents the race. 
-	#
-	if (!$experiment->SameExperiment($reservation)) {
-	    if (! ($sharedokay && $sharing_mode)) {
-		print STDERR "*** CreateVnodes: $node is not shared!\n";
-		DBQueryFatal("unlock tables");
-		return -1;
-	    }
-	}
-    }
-
     if (0 && !$isremote) {
 	for (my $i = 1; $i <= $count; $i++) {
 	    push(@tocreate, $i);
@@ -1745,36 +1565,33 @@ sub CreateVnodes($$)
     #
     # Create a bunch.
     #
-    foreach my $n (@tocreate) {
-	my $vpriority = 10000000 + ($ipbase * 1000) + $n;
-	my $vnodeid   = $nodeprefix . "vm" . $nodenum . "-" . $n;
-	my $jailip;
+    foreach my $i (@tocreate) {
+	my $vpriority = 10000000 + ($ipbase * 1000) + $i;
+	my $vnodeid   = $nodeprefix . "vm" . $nodenum . "-" . $i;
 
-	if ($isjailed) {
-	    #
-	    # Construct the vnode IP.  The general form is:
-	    #	<IPBASE1>.<IPBASE2>.<pnode>.<vnode>
-	    # but if <pnode> is greater than 254 we have to increment
-	    # IPBASE2.
-	    #
-	    # XXX at Utah our second big cluster of nodes starts at
-	    # nodenum=201 and I would like our vnode IPs to align
-	    # at that boundary, so 254 becomes 200.
-	    #
-	    my $nodenumlimit = $ISUTAH ? 200 : 254;
-	    my $pnet = $IPBASE2;
-	    my $pnode2 = int($ipbase);
-	    while ($pnode2 > $nodenumlimit) {
-		$pnet++;
-		$pnode2 -= $nodenumlimit;
-	    }
-	    $jailip = "${IPBASE1}.${pnet}.${pnode2}.${n}";
+	#
+	# Construct the vnode IP.  The general form is:
+	#	<IPBASE1>.<IPBASE2>.<pnode>.<vnode>
+	# but if <pnode> is greater than 254 we have to increment
+	# IPBASE2.
+	#
+	# XXX at Utah our second big cluster of nodes starts at
+	# nodenum=201 and I would like our vnode IPs to align
+	# at that boundary, so 254 becomes 200.
+	#
+	my $nodenumlimit = $ISUTAH ? 200 : 254;
+	my $pnet = $IPBASE2;
+	my $pnode2 = int($ipbase);
+	while ($pnode2 > $nodenumlimit) {
+	    $pnet++;
+	    $pnode2 -= $nodenumlimit;
 	}
+	my $jailip = "${IPBASE1}.${pnet}.${pnode2}.${i}";
 
 	# Need to keep the UUIDs consistent across regression mode.
 	my $uuid;
 	if ($regression) {
-	    $uuid = "0000${n}-1111-2222-3333-44444444";
+	    $uuid = "${pnode2}${i}-1111-2222-3333-44444444";
 	}
 	else {
 	    $uuid = (@uuids ? shift(@uuids) : NewUUID());
@@ -1785,9 +1602,7 @@ sub CreateVnodes($$)
 	}
 
 	if ($verbose) {
-	    print STDERR "Jail IP for $vnodeid is $jailip\n"
-		if ($jailip);
-	    
+	    print STDERR "Jail IP for $vnodeid is $jailip\n";
 	    if ($impotent) {
 		print STDERR
 		    "Would allocate $vnodeid on $pnode ($vtype, $osid)\n";
@@ -1916,10 +1731,6 @@ sub DeleteVnodes(@)
 	DBQueryWarn("delete from node_hostkeys where node_id='$vnodeid'");
 	DBQueryWarn("delete from node_status where node_id='$vnodeid'");
 	DBQueryWarn("delete from node_rusage where node_id='$vnodeid'");
-	# Need to clean out some additional tables since some vnodes can be
-	# reimaged now!
-	DBQueryWarn("delete from current_reloads where node_id='$vnodeid'");
-	DBQueryWarn("delete from partitions where node_id='$vnodeid'");
     }
 
     return 0;
@@ -2233,105 +2044,8 @@ sub OSSelect($$$$)
 	or return -1;
 
     return Refresh($self);
-}
-
-#
-# Get the next rtabid for a shared node. Need locking in this case
-# since multiple mappers can be running at once.
-#
-# We only need to do this on the physical node. On the virtual node, use
-# the same slot to store what rtabid was assigned to the vnode.
-#
-sub Nextrtabid($)
-{
-    my ($self) = @_;
-    my $rtabid = undef;
-
-    my $node_id = $self->node_id();
-    
-    DBQueryWarn("lock tables nodes write")
-	or return undef;
-
-    DBQueryWarn("update nodes set rtabid=rtabid+1 ".
-		"where node_id='$node_id'")
-	or goto bad;
-    my $query_result =
-	DBQueryWarn("select rtabid from nodes ".
-		    "where node_id='$node_id'");
-    goto bad
-	if (!$query_result || !$query_result->numrows);
-    ($rtabid) = $query_result->fetchrow_array();
-  bad:
-    DBQueryWarn("unlock tables");
-    return $rtabid;
-}
-
-#
-# Set rtabid for a node.
-#
-sub Setrtabid($$)
-{
-    my ($self, $rtabid) = @_;
-
-    return -1
-	if (! (ref($self)));
-    
-    my $node_id = $self->node_id();
-    
-    DBQueryWarn("update nodes set rtabid='$rtabid' where node_id='$node_id'")
-	or return -1;
-
-    return Refresh($self);
-}
-
-#
-# Get the max share count for a node. This is actually the pcvm count
-# from the aux table, but might change someday, I hope.
-#
-sub MaxShareCount($)
-{
-    my ($self) = @_;
-
-    return -1
-	if (! (ref($self)));
-    
-    my $node_id = $self->node_id();
-
-    my $query_result =
-	DBQueryWarn("select count from node_auxtypes ".
-		     "where node_id='$node_id' and type='pcvm'");
-    return -1
-	if (!$query_result);
-    return 10
-	if (!$query_result->numrows);
-
-    my ($count) = $query_result->fetchrow_array();
-    return $count;
-}
-
-sub IsVirtHost($)
-{
-    my $self = shift;
-    return 1
-	if ($self->{"DBROW"}{"role"} eq 'virthost');
-    return 0;
-}
-
-sub GetPhysHost($) {
-    my $self = shift;
-    my $phys_nodeid = $self->{"DBROW"}{"phys_nodeid"};
-    if (defined($phys_nodeid) && $phys_nodeid ne '') {
-	return Node->Lookup($phys_nodeid);
-    }
-    return undef;
-}
-
-sub GetOsids($) {
-    my $self = shift;
-    return ($self->{"DBROW"}{"def_boot_osid"},
-	    $self->{"DBROW"}{"temp_boot_osid"},
-	    $self->{"DBROW"}{"next_boot_osid"});
-}
+}    
 
 # _Always_ make sure that this 1 is at the end of the file...
+
 1;

@@ -10,13 +10,14 @@ has 'host' => ( isa => 'Str', is => 'rw');
 has 'user' => ( isa => 'Str', is => 'rw');
 
 sub cmd {
-  my ($ssh, $cmd, $stdin) = @_;
+  my ($ssh, $cmd) = @_;
   my $out;
   my $err;
   my $host = $ssh->host;
   my $user = $ssh->user;
   my $sshcmd = "ssh -x -o BatchMode=yes -o StrictHostKeyChecking=no $user\@$host $cmd";
-  run3($sshcmd, \$stdin, \$out, \$err);
+  say $sshcmd if ($TBConfig::DEBUG_XML_CLIENT);
+  run3($sshcmd, undef, \$out, \$err);
   my $rc = $? >> 8;
   ($out, $err, $rc);
 }
@@ -28,15 +29,12 @@ sub scp_worker {
   my $host = $ssh->host;
   my $user = $ssh->user;
   my $sshcmd = "scp -o BatchMode=yes -o StrictHostKeyChecking=no @files";
+  say $sshcmd if ($TBConfig::DEBUG_XML_CLIENT);
   run3($sshcmd, undef, \$out, \$err);
   my $rc = $? >> 8;
   ($out, $err, $rc);
 }
 
-sub saydebug {
-  my $s = shift; 
-  say sprintf("ssh %s@%s %s", $s->user, $s->host, "@_");
-}
 
 =head1 NAME
 
@@ -48,13 +46,9 @@ Tools::TBSSH
 
 B<LOWLEVEL SUB> execute $cmd on $host as $user by wrapping cmdline ssh
 
-=item C<< $ssh->scp_worker(@files) >>
+=item C<< $ssh->scp_worker(@files)  >>
 
 B<LOWLEVEL SUB> execute $scp with $files as arguments
-
-=item C<< $ssh->saydebug() >>
-
-B<LOWLEVEL SUB> prints out ssh command line 
 
 =back
 

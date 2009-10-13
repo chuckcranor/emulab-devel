@@ -134,13 +134,9 @@ class tb_ptype {
 	    max_users = _max_users;
 	}
 	inline void add_slots(int additional_slots) {
-	    //cerr << "Adding " << additional_slots << " to " << my_name
-            //<< endl; 
 	    slots += additional_slots;
 	}
 	inline void remove_slots(int slots_to_remove) {
-	    //cerr << "Removing " << slots_to_remove << " from " << my_name
-            //<< endl;
 	    slots -= slots_to_remove;
 	}
     private:
@@ -307,21 +303,21 @@ public:
       o << "  Types:" << endl;
       for (types_map::const_iterator it = node.types.begin();
 	   it!=node.types.end();it++) 
-	o << "    " << (*it).first << " -> " << *((*it).second) << endl;
+	o << "    " << (*it).first << " -> " << (*it).second << endl;
       o << "  Features:" << endl;
       for (node_feature_set::const_iterator it = node.features.begin();
 	   it != node.features.end(); it++) 
 	cout << "    " << it->name() << " -> " << it->cost() << endl;
-      /* o << "  Current Type: " << node.current_type << endl; <<
+      o << "  Current Type: " << node.current_type << endl; /* <<
 	" (" << node.current_load << "/" << node.max_load << ")" <<  endl; */
-      /*o << "  switches=";
+      o << "  switches=";
       for (pvertex_set::const_iterator it = node.switches.begin();
 	   it != node.switches.end();++it) {
 	o << " " << get(pvertex_pmap,*it)->name;
       }
       o << endl;
       o << " sgraph_switch=" << node.sgraph_switch
-	  << " my_class=" << node.my_class << endl; */
+	  << " my_class=" << node.my_class << endl;
       return o;
     }
 
@@ -343,11 +339,7 @@ public:
 // Hasher for pairs
 template <class T> struct pairhash { 
     size_t operator()(pair<T,T> const &A) const {
-#ifdef NEW_GCC
-	__gnu_cxx::hash<T> H;
-#else
-        ::hash<T> H;
-#endif
+	hash<T> H;
 	return (H(A.first) | H(A.second));
     }
 };

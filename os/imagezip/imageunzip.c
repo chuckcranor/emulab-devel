@@ -1,6 +1,6 @@
 /*
  * EMULAB-COPYRIGHT
- * Copyright (c) 2000-2009 University of Utah and the Flux Group.
+ * Copyright (c) 2000-2007 University of Utah and the Flux Group.
  * All rights reserved.
  */
 
@@ -37,13 +37,8 @@
 
 #define MAXWRITEBUFMEM	0	/* 0 == unlimited */
 
-long long totalddata = 0;	/* total decompressed data */
-long long totaledata = 0;	/* total bytes covered by image */
-long long totalrdata = 0;	/* total data written to disk (image+zeros) */
-long long totalzdata = 0;	/* total zeros written to disk */
-long totalwriteops   = 0;	/* total write operations */
-long totalzeroops    = 0;	/* total zero write operations */
-long totalseekops    = 0;	/* total non-contiguous writes */
+long long totaledata = 0;
+long long totalrdata = 0;
 
 int totalchunks, donechunks;
 
@@ -89,19 +84,20 @@ static int	 infd;
 static int	 version= 0;
 static unsigned	 fillpat= 0;
 static int	 readretries = 0;
-static int	 nodecompress = 0;
-static char	 chunkbuf[CHUNKSIZE];
+static char	 chunkbuf[SUBBLOCKSIZE];
 #endif
 int		 readmbr(int slice);
 int		 fixmbr(int slice, int dtype);
+#ifdef FRISBEE
 static int	 write_subblock(int, const char *);
+#endif
 static int	 inflate_subblock(const char *);
 void		 writezeros(off_t offset, off_t zcount);
 void		 writedata(off_t offset, size_t count, void *buf);
 
 static void	zero_remainder(void);
 static void	getrelocinfo(const blockhdr_t *hdr);
-static size_t	applyrelocs(off_t offset, size_t cc, void *buf);
+static void	applyrelocs(off_t offset, size_t cc, void *buf);
 
 static int	 seekable;
 static off_t	 nextwriteoffset;
@@ -202,7 +198,7 @@ dump_stats(int sig)
 			fprintf(stderr, " ");
 		
 		fprintf(stderr, "%4ld %6d\n",
-			(long)estamp.tv_sec, totalchunks - donechunks);
+			estamp.tv_sec, totalchunks - donechunks);
 	}
 	else {
 		if (sig) {
@@ -219,25 +215,8 @@ dump_stats(int sig)
 				fprintf(stderr, "%d chunks decompressed\n",
 					donechunks);
 		}
-		fprintf(stderr,
-			"Decompressed %lld bytes, wrote %lld bytes (%lld actual) in %ld.%03ld seconds\n",
-			totalddata, totaledata, totalrdata,
-			(long)estamp.tv_sec, (long)estamp.tv_usec/1000);
-		fprintf(stderr,
-			"%lld bytes of data in %ld ops (%lld bytes/op), %ld seeks\n",
-			totalrdata, totalwriteops,
-			totalrdata/(totalwriteops?:1), totalseekops);
-		if (totalzdata > 0) {
-			fprintf(stderr,
-				"  %lld bytes of disk data in %ld ops (%lld bytes/op)\n",
-				(totalrdata-totalzdata),
-				(totalwriteops-totalzeroops),
-				(totalrdata-totalzdata)/((totalwriteops-totalzeroops)?:1));
-			fprintf(stderr,
-				"  %lld bytes of zero data in %ld ops (%lld bytes/op)\n",
-				totalzdata, totalzeroops,
-				totalzdata/(totalzeroops?:1));
-		}
+		fprintf(stderr, "Wrote %lld bytes (%lld actual) in %ld seconds\n",
+			totaledata, totalrdata, estamp.tv_sec);
 	}
 	if (debug)
 		fprintf(stderr, "decompressor blocked: %lu, "
@@ -291,7 +270,7 @@ void dodots(int dottype, off_t cc)
 			gettimeofday(&estamp, 0);
 			estamp.tv_sec -= stamp.tv_sec;
 			fprintf(stderr, "%4ld %6d\n",
-				(long)estamp.tv_sec, totalchunks - donechunks);
+				estamp.tv_sec, totalchunks - donechunks);
 			dotcol = 0;
 		}
 	}
@@ -469,7 +448,7 @@ dowrite_request(writebuf_t *wbuf)
 			/*
 			 * Handle any relocations
 			 */
-			size = (off_t)applyrelocs(offset, (size_t)size, buf);
+			applyrelocs(offset, (size_t)size, buf);
 			writedata(offset, (size_t)size, buf);
 		}
 		free_writebuf(wbuf);
@@ -488,8 +467,7 @@ dowrite_request(writebuf_t *wbuf)
 		/*
 		 * Handle any relocations
 		 */
-		size = (off_t)applyrelocs(offset, (size_t)size, buf);
-		wbuf->size = size;
+		applyrelocs(offset, (size_t)size, buf);
 	}
 
 	/*
@@ -537,13 +515,12 @@ main(int argc, char *argv[])
 {
 	int		i, ch;
 	off_t		foff;
-	int		chunkno;
 	extern char	build_info[];
 
 #ifdef NOTHREADS
 	nothreads = 1;
 #endif
-	while ((ch = getopt(argc, argv, "vdhs:zp:oOnFD:W:Cr:N")) != -1)
+	while ((ch = getopt(argc, argv, "vdhs:zp:oOnFD:W:Cr:")) != -1)
 		switch(ch) {
 #ifdef FAKEFRISBEE
 		case 'F':
@@ -594,10 +571,6 @@ main(int argc, char *argv[])
 			readretries = atoi(optarg);
 			break;
 
-		case 'N':
-			nodecompress++;
-			break;
-
 #ifndef NOTHREADS
 		case 'W':
 			maxwritebufmem = atoi(optarg);
@@ -639,7 +612,7 @@ main(int argc, char *argv[])
 			exit(1);
 		}
 		if (fstat(infd, &st) == 0)
-			totalchunks = st.st_size / CHUNKSIZE;
+			totalchunks = st.st_size / SUBBLOCKSIZE;
 	} else {
 		infd = fileno(stdin);
 		if (readretries > 0) {
@@ -770,7 +743,6 @@ main(int argc, char *argv[])
 	signal(SIGINFO, dump_stats);
 #endif
 	foff = 0;
-	chunkno = 0;
 	while (1) {
 		int	count = sizeof(chunkbuf);
 		char	*bp   = chunkbuf;
@@ -779,7 +751,7 @@ main(int argc, char *argv[])
 		if (dofrisbee) {
 			if (*nextchunk == -1)
 				goto done;
-			foff = (off_t)*nextchunk * CHUNKSIZE;
+			foff = (off_t)*nextchunk * SUBBLOCKSIZE;
 			if (lseek(infd, foff, SEEK_SET) < 0) {
 				perror("seek failed");
 				exit(1);
@@ -805,14 +777,8 @@ main(int argc, char *argv[])
 			bp    += cc;
 			foff  += cc;
 		}
-		if (nodecompress) {
-			if (write_subblock(chunkno, chunkbuf))
-				break;
-		} else {
-			if (inflate_subblock(chunkbuf))
-				break;
-		}
-		chunkno++;
+		if (inflate_subblock(chunkbuf))
+			break;
 	}
  done:
 	close(infd);
@@ -1015,14 +981,14 @@ threadquit(void)
 }
 
 #ifdef FRISBEE
-extern void (*DiskStatusCallback)(int);
+extern void (*DiskIdleCallback)(int);
 #endif
 
 void *
 DiskWriter(void *arg)
 {
 	writebuf_t	*wbuf = 0;
-	static int	gotone = 0;
+	static int	gotone;
 
 	while (1) {
 		pthread_testcancel();
@@ -1032,8 +998,8 @@ DiskWriter(void *arg)
 			if (gotone) {
 				writeridles++;
 #ifdef FRISBEE
-				if (DiskStatusCallback)
-					(*DiskStatusCallback)(1);
+				if (DiskIdleCallback)
+					(*DiskIdleCallback)(1);
 #endif
 			}
 			do {
@@ -1048,15 +1014,9 @@ DiskWriter(void *arg)
 				pthread_testcancel();
 			} while (queue_empty(&writequeue));
 #ifdef FRISBEE
-			if (DiskStatusCallback)
-				(*DiskStatusCallback)(0);
+			if (DiskIdleCallback)
+				(*DiskIdleCallback)(0);
 #endif
-		} else {
-#ifdef FRISBEE
-			if (DiskStatusCallback)
-				(*DiskStatusCallback)(2);
-#endif
-			;
 		}
 		queue_remove_first(&writequeue, wbuf, writebuf_t *, chain);
 		writeinprogress = 1; /* XXX */
@@ -1076,6 +1036,7 @@ DiskWriter(void *arg)
 }
 #endif
 
+#ifdef FRISBEE
 /*
  * Just write the raw, compressed chunk data to disk
  */
@@ -1085,8 +1046,8 @@ write_subblock(int chunkno, const char *chunkbufp)
 	writebuf_t	*wbuf;
 	off_t		offset, size, bytesleft;
 	
-	offset = chunkno * CHUNKSIZE;
-	bytesleft = CHUNKSIZE;
+	offset = chunkno * SUBBLOCKSIZE;
+	bytesleft = SUBBLOCKSIZE;
 	while (bytesleft > 0) {
 		size = (bytesleft >= OUTSIZE) ? OUTSIZE : bytesleft;
 		wbuf = alloc_writebuf(offset, size, 1, 1);
@@ -1102,6 +1063,7 @@ write_subblock(int chunkno, const char *chunkbufp)
 
 	return 0;
 }
+#endif
 
 static int
 inflate_subblock(const char *chunkbufp)
@@ -1193,7 +1155,7 @@ inflate_subblock(const char *chunkbufp)
 
 	if (debug == 1)
 		fprintf(stderr, "Decompressing chunk %04d: %14lld --> ",
-			blockhdr->blockindex, (long long)offset);
+			blockhdr->blockindex, offset);
 
 	wbuf = NULL;
 
@@ -1287,8 +1249,7 @@ inflate_subblock(const char *chunkbufp)
 				fprintf(stderr,
 					"%12lld %8d %8d %12lld %10lld %8d %5d %8d"
 					"\n",
-					(long long)offset, cc, count,
-					totaledata, (long long)size,
+					offset, cc, count, totaledata, size,
 					ibsize, ibleft, d_stream.avail_in);
 			}
 
@@ -1336,8 +1297,6 @@ inflate_subblock(const char *chunkbufp)
 		}
 		assert(wbuf == NULL);
 
-		totalddata += ibsize;
-
 		/*
 		 * Exhausted our output buffer but may still have more input in
 		 * the current chunk.
@@ -1377,7 +1336,7 @@ inflate_subblock(const char *chunkbufp)
  
 	donechunks++;
 	if (debug == 1) {
-		fprintf(stderr, "%14lld\n", (long long)offset);
+		fprintf(stderr, "%14lld\n", offset);
 	}
 	dodots(DODOTS_CHUNKS, 0);
 
@@ -1391,9 +1350,6 @@ writezeros(off_t offset, off_t zcount)
 	off_t ozcount;
 
 	assert((offset & (SECSIZE-1)) == 0);
-
-	if (offset != nextwriteoffset)
-		totalseekops++;
 
 #ifndef FRISBEE
 	if (docrconly)
@@ -1411,8 +1367,8 @@ writezeros(off_t offset, off_t zcount)
 		}
 		nextwriteoffset = offset;
 	} else if (offset != nextwriteoffset) {
-		fprintf(stderr, "Non-contiguous write @ %lld (should be %lld)\n",
-			(long long)offset, (long long)nextwriteoffset);
+		fprintf(stderr, "Non-contiguous write @ %llu (should be %llu)\n",
+			offset, nextwriteoffset);
 		exit(1);
 	}
 
@@ -1433,8 +1389,8 @@ writezeros(off_t offset, off_t zcount)
 				perror("Writing Zeros");
 			} else if ((wcc & (SECSIZE-1)) != 0) {
 				fprintf(stderr, "Writing Zeros: "
-					"partial sector write (%ld bytes)\n",
-					(long)wcc);
+					"partial sector write (%d bytes)\n",
+					wcc);
 				wcc = -1;
 			} else if (wcc == 0) {
 				fprintf(stderr, "Writing Zeros: "
@@ -1447,9 +1403,6 @@ writezeros(off_t offset, off_t zcount)
 		}
 		zcount     -= zcc;
 		totalrdata += zcc;
-		totalzdata += zcc;
-		totalwriteops++;
-		totalzeroops++;
 		nextwriteoffset += zcc;
 		dodots(DODOTS_ZERO, ozcount-zcount);
 	}
@@ -1464,9 +1417,6 @@ writedata(off_t offset, size_t size, void *buf)
 
 	/*	fprintf(stderr, "Writing %d bytes at %qd\n", size, offset); */
 
-	if (offset != nextwriteoffset)
-		totalseekops++;
-
 #ifndef FRISBEE
 	if (docrconly) {
 		compute_crc((u_char *)buf, size, &crc);
@@ -1478,8 +1428,8 @@ writedata(off_t offset, size_t size, void *buf)
 	} else if (offset == nextwriteoffset) {
 		cc = write(outfd, buf, size);
 	} else {
-		fprintf(stderr, "Non-contiguous write @ %lld (should be %lld)\n",
-			(long long)offset, (long long)nextwriteoffset);
+		fprintf(stderr, "Non-contiguous write @ %llu (should be %llu)\n",
+			offset, nextwriteoffset);
 		exit(1);
 	}
 		
@@ -1494,7 +1444,6 @@ writedata(off_t offset, size_t size, void *buf)
 	if (nextwriteoffset > maxwrittenoffset)
 		maxwrittenoffset = nextwriteoffset;
 	totalrdata += cc;
-	totalwriteops++;
 	dodots(DODOTS_DATA, cc);
 }
 
@@ -1519,7 +1468,7 @@ zero_remainder()
 		outputmaxsec = getdisksize(outfd);
 	disksize = sectobytes(outputmaxsec);
 	if (debug)
-		fprintf(stderr, "\ndisksize = %lld\n", (long long)disksize);
+		fprintf(stderr, "\ndisksize = %lld\n", disksize);
 
 	/* XXX must wait for writer thread to finish to get maxwrittenoffset value */
 	threadwait();
@@ -1531,18 +1480,15 @@ zero_remainder()
 		if (debug)
 			fprintf(stderr, "zeroing %lld bytes at offset %lld "
 				"(%u sectors at %u)\n",
-				(long long)remaining,
-				(long long)maxwrittenoffset,
-				bytestosec(remaining),
-				bytestosec(maxwrittenoffset));
+				remaining, maxwrittenoffset,
+				bytestosec(remaining), bytestosec(maxwrittenoffset));
 		wbuf = alloc_writebuf(maxwrittenoffset, remaining, 0, 1);
 		dowrite_request(wbuf);
 	} else {
 		if (debug)
 			fprintf(stderr, "not zeroing: disksize = %lld, "
 				"maxwritten =  %lld\n",
-				(long long)disksize,
-				(long long)maxwrittenoffset);
+				disksize, maxwrittenoffset);
 	}
 }
 
@@ -1663,22 +1609,15 @@ getrelocinfo(const blockhdr_t *hdr)
 	memcpy(reloctable, relocs, numrelocs * sizeof(struct blockreloc));
 }
 
-/*
- * Perform relocations that apply to this chunk.
- * Return value is the new size of the valid data in buf.  This value
- * only changes for the special SHORTSECTOR reloc that indicates a chunk
- * that is not a multiple of the sector size.
- */
-static size_t
+static void
 applyrelocs(off_t offset, size_t size, void *buf)
 {
 	struct blockreloc *reloc;
 	off_t roffset;
 	uint32_t coff;
-	size_t nsize = size;
 
 	if (numrelocs == 0)
-		return nsize;
+		return;
 
 	offset -= sectobytes(outputminsec);
 
@@ -1692,12 +1631,10 @@ applyrelocs(off_t offset, size_t size, void *buf)
 			coff = (u_int32_t)(roffset - offset);
 			if (debug > 1)
 				fprintf(stderr,
-					"Applying reloc type %d [%lld-%lld] "
-					"to [%lld-%lld]\n", reloc->type,
-					(long long)roffset,
-					(long long)roffset+reloc->size,
-					(long long)offset,
-					(long long)offset+size);
+					"Applying reloc type %d [%llu-%llu] "
+					"to [%llu-%llu]\n", reloc->type,
+					roffset, roffset+reloc->size,
+					offset, offset+size);
 			switch (reloc->type) {
 			case RELOC_NONE:
 				break;
@@ -1717,12 +1654,6 @@ applyrelocs(off_t offset, size_t size, void *buf)
 			case RELOC_LILOCKSUM:
 				reloc_lilocksum(buf, coff, reloc->size);
 				break;
-			case RELOC_SHORTSECTOR:
-				assert(reloc->sectoff == 0);
-				assert(reloc->size < SECSIZE);
-				assert(roffset+SECSIZE == offset+size);
-				nsize -= (SECSIZE - reloc->size);
-				break;
 			default:
 				fprintf(stderr,
 					"Ignoring unknown relocation type %d\n",
@@ -1731,7 +1662,6 @@ applyrelocs(off_t offset, size_t size, void *buf)
 			}
 		}
 	}
-	return nsize;
 }
 
 #ifndef linux

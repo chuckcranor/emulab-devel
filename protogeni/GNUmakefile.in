@@ -11,7 +11,7 @@ SUBDIR		= protogeni
 
 include $(OBJDIR)/Makeconf
 
-SUBDIRS	= security xmlrpc lib scripts etc rspec
+SUBDIRS	= security xmlrpc lib scripts etc 
 
 all:	all-subdirs
 
@@ -23,11 +23,6 @@ install:
 	@$(MAKE) -C lib install
 	@$(MAKE) -C scripts install
 	@$(MAKE) -C etc install
-	@$(MAKE) -C rspec install
-	@$(MAKE) -C test install
-
-install-genischemacheck:
-	@$(MAKE) -C lib install-genischemacheck
 
 control-install: 
 

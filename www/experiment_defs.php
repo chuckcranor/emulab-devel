@@ -1,7 +1,7 @@
 <?php
 #
 # EMULAB-COPYRIGHT
-# Copyright (c) 2006-2009 University of Utah and the Flux Group.
+# Copyright (c) 2006, 2007, 2008 University of Utah and the Flux Group.
 # All rights reserved.
 #
 #
@@ -680,7 +680,6 @@ class Experiment
 	$lastswapreq = $exprow["last_swap_req"];
 	$minnodes    = $exprow["min_nodes"];
 	$maxnodes    = $exprow["max_nodes"];
-	$virtnodes   = $exprow["virtnode_count"];
 	$syncserver  = $exprow["sync_server"];
 	$mem_usage   = $exprow["mem_usage"];
 	$cpu_usage   = $exprow["cpu_usage"];
@@ -924,19 +923,6 @@ class Experiment
                       <td class=\"left\"><font color=green>Unknown</font></td>
                   </tr>\n";
 	    }
-	    if ($virtnodes) {
-		echo "<tr>
-                      <td>Virtual Nodes: </td>
-                      <td class=\"left\"><font>
-                          $virtnodes</font></td>
-                  </tr>\n";
-	    }
-	    else {
-		echo "<tr>
-                      <td>Virtual Nodes: </td>
-                      <td class=\"left\"><font color=green>Unknown</font></td>
-                  </tr>\n";
-	    }
 	}
 	if (!$short) {
 	    if ($mem_usage || $cpu_usage) {
@@ -1061,49 +1047,6 @@ class Experiment
 		echo " ($archive_idx) ";
 	    echo " </td>
               </tr>\n";
-	}
-	if (!$short && ISADMIN() && $this->geniflags()) {
-	    $dbid = DBConnect("geni-cm");
-	    $slice_hrn = null;
-	    $user_hrn  = null;
-	    if ($dbid) {
-		$geni_result =
-		    DBQueryFatal("select hrn,creator_uuid from geni_slices ".
-				 "where uuid='$uuid'", $dbid);
-		if ($geni_result &&
-		    mysql_num_rows($geni_result)) {
-		    $genirow = mysql_fetch_array($geni_result);
-		    $creator_uuid = $genirow["creator_uuid"];
-		    $slice_hrn    = $genirow["hrn"];
-
-		    $geni_result =
-			DBQueryFatal("select hrn from geni_users ".
-				     "where uuid='$creator_uuid'", $dbid);
-		    if ($geni_result &&
-			mysql_num_rows($geni_result)) {
-			$genirow = mysql_fetch_array($geni_result);
-			$user_hrn = $genirow["hrn"];
-		    }
-		    else {
-			$user = User::LookupByUUID($creator_uuid);
-			if ($user) {
-			    $user_hrn = $user->uid();
-			}
-		    }
-		    if (! is_null($slice_hrn)) {
-			echo "<tr>
-                               <td>Geni Slice HRN: </td>
-                               <td class=\"left\">$slice_hrn</td>
-                              </tr>\n";
-		    }
-		    if (! is_null($user_hrn)) {
-			echo "<tr>
-                               <td>Geni User HRN: </td>
-                               <td class=\"left\">$user_hrn</td>
-                              </tr>\n";
-		    }
-		}
-	    }
 	}
 	echo "</table>\n";
     }

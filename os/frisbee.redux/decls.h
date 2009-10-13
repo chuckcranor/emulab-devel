@@ -1,6 +1,6 @@
 /*
  * EMULAB-COPYRIGHT
- * Copyright (c) 2000-2009 University of Utah and the Flux Group.
+ * Copyright (c) 2000-2005 University of Utah and the Flux Group.
  * All rights reserved.
  */
 
@@ -8,34 +8,26 @@
  * Shared for defintions for frisbee client/server code.
  */
 
-#include <inttypes.h>
 #include <limits.h>	/* CHAR_BIT */
 #include "log.h"
 
 /*
- * Ethernet MTU (1514 or 9000) - eth header (14) - min UDP/IP (28) - BLOCK msg
+ * Ethernet MTU (1514) - eth header (14) - min UDP/IP (28) - BLOCK msg
  * header (24).
  */
-#ifdef JUMBO
-#define MAXBLOCKSIZE	8934
-#else
 #define MAXBLOCKSIZE	1448
-#endif
 
 /*
  * Images are broken into chunks which are the standalone unit of decompression
  * Chunks are broken into blocks which are the unit of transmission
  */
-#ifdef JUMBO
-#define CHUNKSIZE	128
-#define BLOCKSIZE	8192
-#else
 #define CHUNKSIZE	1024
 #define BLOCKSIZE	1024
-#endif
 
 /*
  * Make sure we can fit a block in a single ethernet MTU.
+ * This limits the maximum block size to 1448 with the current protocol
+ * headers on Ethernet.
  */
 #if BLOCKSIZE > MAXBLOCKSIZE
 #error "Invalid block size"
@@ -73,11 +65,9 @@
 
 /*
  * Socket buffer size, used for both send and receive in client and
- * server right now.  If DYN_SOCKBUFSIZE is set, we find the larger
- * socketbuffer size possible that is less than or equal to SOCKBUFSIZE.
+ * server right now.
  */
-#define SOCKBUFSIZE	(512 * 1024)
-#define DYN_SOCKBUFSIZE	1
+#define SOCKBUFSIZE	(200 * 1024)
 
 /*
  * The number of read-ahead chunks that the client will request
@@ -178,40 +168,40 @@
  */
 #define CLIENT_STATS_VERSION	1
 typedef struct {
-	int32_t	version;
+	int	version;
 	union {
 		struct {
-			int32_t	 runsec;
-			int32_t	 runmsec;
-			int32_t	 delayms;
-			uint64_t rbyteswritten;
-			uint64_t ebyteswritten;
-			int32_t	 chunkbufs;
-			int32_t	 maxreadahead;
-			int32_t	 maxinprogress;
-			int32_t	 pkttimeout;
-			int32_t	 startdelay;
-			int32_t	 idletimer;
-			int32_t	 idledelay;
-			int32_t	 redodelay;
-			int32_t	 randomize;
-			uint32_t nochunksready;
-			uint32_t nofreechunks;
-			uint32_t dupchunk;
-			uint32_t dupblock;
-			uint32_t prequests;
-			uint32_t recvidles;
-			uint32_t joinattempts;
-			uint32_t requests;
-			uint32_t decompblocks;
-			uint32_t writeridles;
-			int32_t	 writebufmem;
-			uint32_t lostblocks;
-			uint32_t rerequests;
-		} __attribute__((__packed__)) v1;
-		uint32_t limit[256];
+			int	runsec;
+			int	runmsec;
+			int	delayms;
+			unsigned long long rbyteswritten;
+			unsigned long long ebyteswritten;
+			int	chunkbufs;
+			int	maxreadahead;
+			int	maxinprogress;
+			int	pkttimeout;
+			int	startdelay;
+			int	idletimer;
+			int	idledelay;
+			int	redodelay;
+			int	randomize;
+			unsigned long	nochunksready;
+			unsigned long	nofreechunks;
+			unsigned long	dupchunk;
+			unsigned long	dupblock;
+			unsigned long	prequests;
+			unsigned long	recvidles;
+			unsigned long	joinattempts;
+			unsigned long	requests;
+			unsigned long	decompblocks;
+			unsigned long	writeridles;
+			int	writebufmem;
+			unsigned long	lostblocks;
+			unsigned long	rerequests;
+		} v1;
+		unsigned long limit[256];
 	} u;
-} __attribute__((__packed__)) ClientStats_t;
+} ClientStats_t;
 
 typedef struct {
 	char	map[CHUNKSIZE/CHAR_BIT];
@@ -222,10 +212,10 @@ typedef struct {
  */
 typedef struct {
 	struct {
-		int32_t		type;
-		int32_t		subtype;
-		int32_t 	datalen; /* Useful amount of data in packet */
-		uint32_t	srcip;   /* Filled in by network level. */
+		int		type;
+		int		subtype;
+		int		datalen; /* Useful amount of data in packet */
+		unsigned int	srcip;   /* Filled in by network level. */
 	} hdr;
 	union {
 		/*
@@ -235,31 +225,31 @@ typedef struct {
 		 * We must return the number of chunks in the file though.
 		 */
 		union {
-			uint32_t	clientid;
-			int32_t		blockcount;
+			unsigned int	clientid;
+			int		blockcount;
 		} join;
 		
 		struct {
-			uint32_t	clientid;
-			int32_t		elapsed;	/* Stats only */
+			unsigned int	clientid;
+			int		elapsed;	/* Stats only */
 		} leave;
 
 		/*
 		 * A data block, indexed by chunk,block.
 		 */
 		struct {
-			int32_t		chunk;
-			int32_t		block;
-			int8_t		buf[BLOCKSIZE];
+			int		chunk;
+			int		block;
+			char		buf[BLOCKSIZE];
 		} block;
 
 		/*
 		 * A request for a data block, indexed by chunk,block.
 		 */
 		struct {
-			int32_t		chunk;
-			int32_t		block;
-			int32_t		count;	/* Number of blocks */
+			int		chunk;
+			int		block;
+			int		count;	/* Number of blocks */
 		} request;
 
 		/*
@@ -270,8 +260,8 @@ typedef struct {
 		 * we made.
 		 */
 		struct {
-			int32_t		chunk;
-			int32_t		retries;
+			int		chunk;
+			int		retries;
 			BlockMap_t	blockmap;
 		} prequest;
 
@@ -279,8 +269,8 @@ typedef struct {
 		 * Leave reporting client params/stats
 		 */
 		struct {
-			uint32_t	clientid;
-			int32_t		elapsed;
+			unsigned int	clientid;
+			int		elapsed;
 			ClientStats_t	stats;
 		} leave2;
 	} msg;
@@ -298,7 +288,6 @@ typedef struct {
 /*
  * Protos.
  */
-int	GetSockbufSize(void);
 int	ClientNetInit(void);
 int	ServerNetInit(void);
 int	ServerNetMCKeepAlive(void);

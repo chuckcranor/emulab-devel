@@ -1,7 +1,7 @@
 #!/usr/bin/perl -wT
 #
 # EMULAB-COPYRIGHT
-# Copyright (c) 2000-2009 University of Utah and the Flux Group.
+# Copyright (c) 2000-2008 University of Utah and the Flux Group.
 # All rights reserved.
 #
 
@@ -13,7 +13,7 @@ use Exporter;
 @ISA = "Exporter";
 @EXPORT =
     qw ( $CP $EGREP $NFSMOUNT $UMOUNT $TMPASSWD $SFSSD $SFSCD $RPMCMD
-	 $HOSTSFILE $LOOPBACKMOUNT $TMGROUP $TMSHADOW $TMGSHADOW
+	 $HOSTSFILE $LOOPBACKMOUNT
 	 os_account_cleanup os_ifconfig_line os_etchosts_line
 	 os_setup os_groupadd os_useradd os_userdel os_usermod os_mkdir
 	 os_ifconfig_veth os_viface_name os_modpasswd
@@ -21,7 +21,7 @@ use Exporter;
 	 os_routing_add_manual os_routing_del_manual os_homedirdel
 	 os_groupdel os_getnfsmounts os_islocaldir
 	 os_fwconfig_line os_fwrouteconfig_line os_config_gre
-	 os_get_disks os_get_disk_size os_get_partition_info os_nfsmount
+	 os_get_disks os_get_disk_size os_get_partition_info
        );
 
 # Must come after package declaration!
@@ -47,9 +47,7 @@ BEGIN
 sub REMOTE()	{ return libsetup::REMOTE(); }
 sub REMOTEDED()	{ return libsetup::REMOTEDED(); }
 sub PLAB()	{ return libsetup::PLAB(); }
-sub LINUXJAILED()  { return libsetup::LINUXJAILED(); }
-sub GENVNODE()     { return libsetup::GENVNODE(); }
-sub GENVNODETYPE() { return libsetup::GENVNODETYPE(); }
+sub LINUXJAILED(){ return libsetup::LINUXJAILED(); }
 
 #
 # Various programs and things specific to Linux and that we want to export.
@@ -57,16 +55,10 @@ sub GENVNODETYPE() { return libsetup::GENVNODETYPE(); }
 $CP		= "/bin/cp";
 $DF		= "/bin/df";
 $EGREP		= "/bin/egrep -q";
-# Note that we try multiple versions in os_nfsmount below; this is for legacy
-# code, or code where the mount is best done in the caller itself... or code
-# I didn't want to convert!
 $NFSMOUNT	= "/bin/mount -o vers=2,udp"; # Force NFS Version 2 over UDP
-$LOOPBACKMOUNT	= "/bin/mount -n -o bind ";
+$LOOPBACKMOUNT	= "/bin/mount --bind ";
 $UMOUNT		= "/bin/umount";
 $TMPASSWD	= "$ETCDIR/passwd";
-$TMGROUP	= "$ETCDIR/group";
-$TMSHADOW       = "$ETCDIR/shadow";
-$TMGSHADOW      = "$ETCDIR/gshadow";
 $SFSSD		= "/usr/local/sbin/sfssd";
 $SFSCD		= "/usr/local/sbin/sfscd";
 $RPMCMD		= "/bin/rpm";
@@ -1561,20 +1553,11 @@ sub os_config_gre($$$$$$$)
 
     my $dev = "$name$unit";
 
-    if (GENVNODE() && GENVNODETYPE() eq "openvz") {
-	$dev = "gre$unit";
-	
-	if (system("$IFCONFIGBIN $dev $inetip netmask $mask up")) {
-	    warn("Could not start tunnel $dev!\n");
-	    return -1;
-	}
-    }
-    elsif (system("ip tunnel add $dev mode gre ".
-		  "remote $dsthost local $srchost") ||
-	   system("ip link set $dev up") ||
-	   system("ip addr add $inetip dev $dev") ||
-	   system("$IFCONFIGBIN $dev netmask $mask")) {
-	warn("Could not start tunnel $dev!\n");
+    if (system("ip tunnel add $dev mode gre remote $dsthost local $srchost") ||
+	system("ip link set $dev up") ||
+	system("ip addr add $inetip dev $dev") ||
+	system("$IFCONFIGBIN $dev netmask $mask")) {
+	warn("Could not start tunnel!\n");
 	return -1;
     }
     return 0;
@@ -1639,18 +1622,6 @@ sub os_get_partition_info($$)
     close FDISK;
 
     return -1;
-}
-
-sub os_nfsmount($$)
-{
-    my ($remote,$local) = @_;
-
-    if (system("/bin/mount -o vers=2,udp $remote $local")
-	&& system("/bin/mount -o udp $remote $local")) {
-	return 1;
-    }
-
-    return 0;
 }
 
 1;

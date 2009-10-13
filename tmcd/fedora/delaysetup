@@ -1,7 +1,7 @@
 #!/usr/bin/perl -wT
 #
 # EMULAB-COPYRIGHT
-# Copyright (c) 2000-2009 University of Utah and the Flux Group.
+# Copyright (c) 2000-2007 University of Utah and the Flux Group.
 # All rights reserved.
 #
 use English;
@@ -131,18 +131,14 @@ if (GENVNODE() && GENVNODETYPE() eq 'openvz') {
 # Update the delays configuration. Also run the the commands to make
 # the changes.
 #
-if (DelaySetup()) {
-    exit(1);
-}
+DelaySetup();
 if (-e TMDELAY) {
     system(TMDELAY . " enable")
         if ($install || $reinstall);
     exit(0);
 }
 
-if (LinkDelaySetup()) {
-    exit(1);
-}
+LinkDelaySetup();
 if ($install) {
     system(TMLINKDELAY)
 	if (-e TMLINKDELAY);
@@ -546,10 +542,7 @@ sub LinkDelaySetup()
 	    # address which is the unique characteristic for some forms
 	    # of virtual interface.
 	    # 
-	    if (!($iface = findiface($iface,$inet))) {
-		warn("*** WARNING: Could not map $1/$inet to an interface!\n");
-		return -1;
-	    }
+	    $iface        = findiface($iface,$inet);
 
 	    #
 	    # Delays are floating point numbers (unit is ms). ipfw does not

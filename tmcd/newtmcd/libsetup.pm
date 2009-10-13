@@ -2,7 +2,7 @@
 
 #
 # EMULAB-COPYRIGHT
-# Copyright (c) 2000-2009 University of Utah and the Flux Group.
+# Copyright (c) 2000-2008 University of Utah and the Flux Group.
 # All rights reserved.
 #
 # TODO: Signal handlers for protecting db files.
@@ -753,13 +753,7 @@ sub findiface($;$)
     $iface = <FIF>;
     
     if (! close(FIF)) {
-	if (!defined($ip)) {
-	    return 0;
-	}
-	#
-	# MAC was bogus, if we had an IP, look that up instead
-	#
-	$iface = "";
+	return 0;
     }
     
     $iface =~ s/\n//g;

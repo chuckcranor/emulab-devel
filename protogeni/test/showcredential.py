@@ -87,11 +87,7 @@ def ShowCredential( cred, level ):
 
     print "    Owner: " + SubjectName( owner )
     print "    Target: " + SubjectName( target )
-    try:
-        # look for deprecated UUID
-        print "    UUID: " + Text( Lookup( cred, "uuid" ) )
-    except Exception:
-        pass
+    print "    UUID: " + Text( Lookup( cred, "uuid" ) )
     print "    Expires: " + Text( Lookup( cred, "expires" ) )
 
     if type == "privilege":

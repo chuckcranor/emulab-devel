@@ -1,6 +1,6 @@
 /*
  * EMULAB-COPYRIGHT
- * Copyright (c) 2000-2009 University of Utah and the Flux Group.
+ * Copyright (c) 2000-2005 University of Utah and the Flux Group.
  * All rights reserved.
  */
 
@@ -90,8 +90,8 @@ main(int argc, char **argv)
 
 		if (!isstdin) {
 			if ((infd = open(argv[0], O_RDONLY, 0666)) < 0) {
-				perror(argv[0]);
-				continue;
+				perror("opening input file");
+				exit(1);
 			}
 		} else
 			infd = fileno(stdin);
@@ -116,13 +116,12 @@ usage(void)
 	exit(1);
 }	
 
-static char chunkbuf[CHUNKSIZE];
+static char chunkbuf[SUBBLOCKSIZE];
 static unsigned int magic;
 static unsigned long chunkcount;
 static uint32_t nextsector;
 static uint32_t fmax, fmin, franges, amax, amin, aranges;
 static uint32_t adist[8]; /* <4k, <8k, <16k, <32k, <64k, <128k, <256k, >=256k */
-static int regmax, regmin;
 
 static void
 dumpfile(char *name, int fd)
@@ -142,7 +141,6 @@ dumpfile(char *name, int fd)
 	fmax = amax = 0;
 	fmin = amin = ~0;
 	franges = aranges = 0;
-	regmin = regmax = 0;
 	memset(adist, 0, sizeof(adist));
 
 	if (!isstdin) {
@@ -152,7 +150,7 @@ dumpfile(char *name, int fd)
 			perror(name);
 			return;
 		}
-		if ((st.st_size % CHUNKSIZE) != 0)
+		if ((st.st_size % SUBBLOCKSIZE) != 0)
 			printf("%s: WARNING: "
 			       "file size not a multiple of chunk size\n",
 			       name);
@@ -206,11 +204,11 @@ dumpfile(char *name, int fd)
 				checkindex = 0;
 			} else
 				chunkcount = hdr->blocktotal;
-			if ((filesize / CHUNKSIZE) != chunkcount) {
+			if ((filesize / SUBBLOCKSIZE) != chunkcount) {
 				if (chunkcount != 0) {
 					if (isstdin)
 						filesize = (off_t)chunkcount *
-							CHUNKSIZE;
+							SUBBLOCKSIZE;
 					else
 						printf("%s: WARNING: file size "
 						       "inconsistant with "
@@ -218,7 +216,7 @@ dumpfile(char *name, int fd)
 						       "(%lu != %lu)\n",
 						       name,
 						       (unsigned long)
-						       (filesize/CHUNKSIZE),
+						       (filesize/SUBBLOCKSIZE),
 						       chunkcount);
 				} else if (magic == COMPRESSED_V1) {
 					if (!ignorev1)
@@ -230,9 +228,9 @@ dumpfile(char *name, int fd)
 				}
 			}
 
-			printf("%s: %llu bytes, %lu chunks, version %d\n",
-			       name, (unsigned long long)filesize,
-			       (unsigned long)(filesize / CHUNKSIZE),
+			printf("%s: %qu bytes, %lu chunks, version %d\n",
+			       name, filesize,
+			       (unsigned long)(filesize / SUBBLOCKSIZE),
 			       hdr->magic - COMPRESSED_MAGIC_BASE + 1);
 		} else if (chunkno == 1 && !ignorev1) {
 			blockhdr_t *hdr = (blockhdr_t *)chunkbuf;
@@ -258,7 +256,7 @@ dumpfile(char *name, int fd)
 #endif
 
 	if (filesize == 0)
-		filesize = (off_t)(chunkno + 1) * CHUNKSIZE;
+		filesize = (off_t)(chunkno + 1) * SUBBLOCKSIZE;
 
 	cbytes = (unsigned long long)(filesize - wasted);
 	dbytes = SECTOBYTES(sectinuse);
@@ -269,8 +267,6 @@ dumpfile(char *name, int fd)
 
 	printf("  %llu bytes of overhead/wasted space (%5.2f%% of image file)\n",
 	       wasted, (double)wasted / filesize * 100);
-	printf("  %d total regions: %.1f/%d/%d ave/min/max per chunk\n",
-	       aranges, (double)aranges / (chunkno + 1), regmin, regmax);
 	if (relocs)
 		printf("  %d relocations covering %llu bytes\n",
 		       relocs, relocbytes);
@@ -287,29 +283,20 @@ dumpfile(char *name, int fd)
 		       SECTOBYTES(fmin), SECTOBYTES(fmax));
 	if (aranges) {
 		int maxsz, i;
-		uint32_t adistsum;
 
 		printf("  %d allocated ranges: %llu/%llu/%llu ave/min/max size\n",
 		       aranges, SECTOBYTES(sectinuse)/aranges,
 		       SECTOBYTES(amin), SECTOBYTES(amax));
 		printf("  size distribution:\n");
-		adistsum = 0;
 		maxsz = 4*SECSIZE;
 		for (i = 0; i < 7; i++) {
 			maxsz *= 2;
-			if (adist[i]) {
-				adistsum += adist[i];
-				printf("    <  %3dk bytes: %6d %4.1f%% %4.1f%%\n",
-				       maxsz/1024, adist[i],
-				       (double)adist[i]/aranges*100,
-				       (double)adistsum/aranges*100);
-			}
+			if (adist[i])
+				printf("    < %dk bytes: %d\n",
+				       maxsz/1024, adist[i]);
 		}
-		if (adist[i]) {
-			printf("    >= %3dk bytes: %6d %4.1f%%\n",
-			       maxsz/1024, adist[i],
-			       (double)adist[i]/aranges*100);
-		}
+		if (adist[i])
+			printf("    >= %dk bytes: %d\n", maxsz/1024, adist[i]);
 	}
 }
 
@@ -346,21 +333,17 @@ dumpchunk(char *name, char *buf, int chunkno, int checkindex)
 		       name, hdr->blocktotal, chunkcount, chunkno);
 		return 1;
 	}
-	if (hdr->size > (CHUNKSIZE - hdr->regionsize)) {
+	if (hdr->size > (SUBBLOCKSIZE - hdr->regionsize)) {
 		printf("%s: bad chunksize (%d > %d) in chunk %d\n",
-		       name, hdr->size, CHUNKSIZE-hdr->regionsize, chunkno);
+		       name, hdr->size, SUBBLOCKSIZE-hdr->regionsize, chunkno);
 		return 1;
 	}
 #if 1
 	/* include header overhead */
-	wasted += CHUNKSIZE - hdr->size;
+	wasted += SUBBLOCKSIZE - hdr->size;
 #else
-	wasted += ((CHUNKSIZE - hdr->regionsize) - hdr->size);
+	wasted += ((SUBBLOCKSIZE - hdr->regionsize) - hdr->size);
 #endif
-	if (regmin == 0 || hdr->regioncount < regmin)
-		regmin = hdr->regioncount;
-	if (regmax == 0 || hdr->regioncount > regmax)
-		regmax = hdr->regioncount;
 
 	if (detail > 0) {
 		printf("  Chunk %d: %u compressed bytes, ",
@@ -527,9 +510,6 @@ dumpchunk(char *name, char *buf, int chunkno, int checkindex)
 				break;
 			case RELOC_LILOCKSUM:
 				relocstr = "LILOCKSUM";
-				break;
-			case RELOC_SHORTSECTOR:
-				relocstr = "SHORTSECTOR";
 				break;
 			default:
 				relocstr = "??";

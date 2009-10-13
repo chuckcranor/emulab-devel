@@ -1,6 +1,6 @@
 /*
  * EMULAB-COPYRIGHT
- * Copyright (c) 2000-2009 University of Utah and the Flux Group.
+ * Copyright (c) 2000-2006 University of Utah and the Flux Group.
  * All rights reserved.
  */
 
@@ -132,9 +132,6 @@ double use_connected_pnode_find = 0.0f;
 
 // Whether or not to perform all checks on fixed nodes
 bool check_fixed_nodes = false;
-
-// If true, dump a bunch of configrution information
-bool dump_config = false;
 
 // Use XML for file input
 // bool xml_input = false;
@@ -371,32 +368,27 @@ void prune_unusable_pclasses() {
                 /*
                  * For every node with this type, we want to remove its slot
                  * count from the total slot count for the type, since we know
-                 * we will never use this particular node.
-                 * Note: We only have to do this for pclasses that are "real",
-                 * not dynamic ones.
+                 * we will never use this particular node
                  */
-                if (!(*pclass_iterator)->is_dynamic) {
-                    tb_pnodelist::list_iter pnode_iterator =
-                        ptype_iterator->second->L.begin();
-                    while (pnode_iterator != ptype_iterator->second->L.end()) {
-                        /*
-                         * Get the slotcount for this ptype
-                         */
-                        tb_pnode::types_map::iterator tm_iterator;
-                        tm_iterator = (*pnode_iterator)->types.find(this_type);
-                        assert(tm_iterator != (*pnode_iterator)->types.end());
+                tb_pnodelist::list_iter pnode_iterator =
+                    ptype_iterator->second->L.begin();
+                while (pnode_iterator != ptype_iterator->second->L.end()) {
+                    /*
+                     * Get the slotcount for this ptype
+                     */
+                    tb_pnode::types_map::iterator tm_iterator;
+                    tm_iterator = (*pnode_iterator)->types.find(this_type);
+                    assert(tm_iterator != (*pnode_iterator)->types.end());
 
-                        /*
-                         * Remove it from the current ptype
-                         */
-                        this_type_p->remove_slots(
-                                tm_iterator->second->get_max_load());
+                    /*
+                     * Remove it from the current ptype
+                     */
+                    this_type_p->remove_slots(tm_iterator->second->get_max_load());
 
-                        /*
-                         * Move on to the next node
-                         */
-                        pnode_iterator++;
-                    }
+                    /*
+                     * Move on to the next node
+                     */
+                    pnode_iterator++;
                 }
                 ptype_iterator++;
             }
@@ -419,7 +411,7 @@ void prune_unusable_pclasses() {
 }
 
 void print_help() {
-  cout << "assign [options] ptopfile topfile [cparams]" << endl;
+  cout << "assign [options] ptopfile topfile [config params]" << endl;
   cout << "Options: " << endl;
 #ifdef TIME_TERMINATE
   cout << "  -l <time>   - Limit runtime." << endl;
@@ -442,7 +434,7 @@ void print_help() {
       << endl;
   cout << "  -u          - Print a summary of the solution." << endl;
   cout << "  -c <float>  - Use the 'connected' pnode finding algorithm " <<
-      "<float>*100%" << endl << "                of the time." << endl;
+      "<float>*100% of the time." << endl;
   cout << "  -n          - Don't anneal - just do the prechecks." << endl;
 
   cout << "  -x <file>   - Specify a text ptop file" << endl;
@@ -456,13 +448,8 @@ void print_help() {
 #ifdef WITH_XML
   cout << "  -q <file>   - Specify a rspec ptop file" << endl;
   cout << "  -w <file>   - Specify a rspec vtop file" << endl;
-  cout << "  -W <file>   - Specify the output rspec file" << endl;
 #endif
-  cout << "  -F          - Apply additional checking to fixed nodes" << endl;
-  cout << "  -D          - Dump configuration options" << endl;
-  cout << "  cparams     - You probably don't want to touch these!" << endl;
-  cout << "                If you must, see config.h in the source for a list"
-       << endl;
+  cout << "  -F          - Apply additional checking to fixed noded" << endl;
   exit(EXIT_FATAL);
 }
  
@@ -849,9 +836,8 @@ int main(int argc,char **argv) {
   
   char* ptopFilename = "";
   char* vtopFilename = "";
-  char* vtopOutputFilename = 0;
-
-  while ((ch = getopt(argc,argv,"s:v:l:t:rpPTdH:oguc:nx:X:y:Y:q:w:W:FD")) != -1) {
+  
+  while ((ch = getopt(argc,argv,"s:v:l:t:rpPTdH:oguc:nx:X:y:Y:q:w:F")) != -1) {
     switch (ch) {
     case 's':
       if (sscanf(optarg,"%d",&seed) != 1) {
@@ -914,9 +900,6 @@ int main(int argc,char **argv) {
       prechecks_only = true;
       cout << "Doing only prechecks, exiting early" << endl;
       break;
-    case 'D':
-      dump_config = true;
-      break;
     case 'x':
 #ifdef WITH_XML
       ptop_xml_input = false;
@@ -969,13 +952,6 @@ int main(int argc,char **argv) {
 	  }
 	  vtopFilename = optarg;
     break;
-
-	case 'W':
-	  if (strcmp(optarg, "") == 0) {
-	  	print_help();
-	  }
-	  vtopOutputFilename = optarg;
-    break;
 #endif
         case 'F':
           check_fixed_nodes = true;
@@ -985,30 +961,13 @@ int main(int argc,char **argv) {
       print_help();
     }
   }
-
-  // Save argv and argc, and advance past the initial options
-  char **oldargv = argv;
-  int oldargc = argc;
   argc -= optind;
   argv += optind;
-
-  if (strcmp(ptopFilename, "") == 0 && argc >= 1) {
-      ptopFilename = argv[0];
-      argc -= 1;
-      argv += 1;
-  }
-
-  if (strcmp(vtopFilename, "") == 0 && argc >= 1) {
-      vtopFilename = argv[0];
-      argc -= 1;
-      argv += 1;
-  }
   
-  if (argc > 0)
+  if (argc == 2)
   {
-      // If there are still more options, they must be from the common.h
-      // parameters.
-      parse_options(argv, options, noptions);
+	  ptopFilename = argv[0];
+	  vtopFilename = argv[1];
   }
   
   if (strcmp(ptopFilename, "") == 0)
@@ -1054,6 +1013,12 @@ int main(int argc,char **argv) {
   sigaction(SIGINFO,&action2,NULL);
 #endif 
   
+  // Convert options to the common.h parameters.
+  //parse_options(argv, options, noptions);
+#ifdef SCORE_DEBUG
+  //dump_options("Configuration options:", options, noptions);
+#endif
+
 #ifdef GNUPLOT_OUTPUT
   scoresout = fopen("scores.out","w");
   tempout = fopen("temp.out","w");
@@ -1062,16 +1027,6 @@ int main(int argc,char **argv) {
 
   cout << "seed = " << seed << endl;
   srandom(seed);
-
-  // Print out information about how we were called
-  if (dump_config) {
-      cout << "Command line:";
-      for (int i = 0; i < oldargc; i++) {
-          cout << " " << oldargv[i];
-      }
-      cout << endl;
-      dump_options("Config parameters", options, noptions);
-  }
 
   read_physical_topology(ptopFilename);
   calculate_switch_MST();
@@ -1087,28 +1042,6 @@ int main(int argc,char **argv) {
 
 #ifdef PCLASS_DEBUG
   pclass_debug();
-#endif
-
-#ifdef NODE_DUMP_DEBUG
-  cerr << "========== Physical nodes" << endl;
-  pvertex_iterator vit,vendit;
-  tie(vit,vendit) = vertices(PG);
-  for (;vit != vendit;++vit) {
-      pvertex cur = *vit;
-      tb_pnode *curP = get(pvertex_pmap,cur);
-      cerr << *curP;
-  }
-  cerr << "========== End physical nodes" << endl;
-
-  cerr << "========== Virtual nodes" << endl;
-  vvertex_iterator vvit,vvendit;
-  tie(vvit,vvendit) = vertices(VG);
-  for (;vvit != vvendit;++vvit) {
-      vvertex cur = *vvit;
-      tb_vnode *curV = get(vvertex_pmap,cur);
-      cerr << *curV;
-  }
-  cerr << "========== End virtual nodes" << endl;
 #endif
 
   /*
@@ -1209,13 +1142,7 @@ int main(int argc,char **argv) {
 #ifdef WITH_XML
   if (vtop_rspec_input || vtop_xml_input)
   {
-      // For now, only produce annotated file if we succeeded - print the
-      // text version regardless
-      if (violated == 0) {
-	  print_solution(best_solution, vtopOutputFilename ? vtopOutputFilename : annotated_filename(vtopFilename).c_str());
-      } else {
-	  print_solution(best_solution);
-      }
+	  print_solution(best_solution, annotated_filename(vtopFilename).c_str());
   }
   else
 	  print_solution(best_solution);

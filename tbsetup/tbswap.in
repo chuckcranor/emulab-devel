@@ -37,15 +37,11 @@ my $TBROOT         = "@prefix@";
 my $TBOPS          = "@TBOPSEMAIL@";
 my $TBLOGS         = "@TBLOGSEMAIL@";
 my $MAINSITE	   = @TBMAINSITE@;
-my $ELABINELAB     = @ELABINELAB@;
 my $THISHOMEBASE   = "@THISHOMEBASE@";
 my $TESTMODE       = @TESTMODE@;
 my $DISABLE_EVENTS = "@DISABLE_EVENT_SCHED@";
 my $piper          = "$TBROOT/sbin/locpiper";
-my $mapper         = "$TBROOT/bin/mapper";
-my $wrapper        = "$TBROOT/libexec/assign_wrapper";
 my $NFSTRACESUPPORT= @NFSTRACESUPPORT@;
-my $PGENISUPPORT   = @PROTOGENI_SUPPORT@;
 
 # Untaint the path
 $ENV{'PATH'} = "/usr/bin:$TBROOT/libexec:$TBROOT/libexec/ns2ir" . 
@@ -65,9 +61,8 @@ use Experiment;
 use User;
 use Lan;
 use Firewall;
-if ($PGENISUPPORT) {
-    require libGeni;
-}
+
+#require exitonwarn; # exitonwarn isn't really a module, so just require it
 
 #
 # Actual swap-in and swap-out functions, defined below.
@@ -145,7 +140,7 @@ while ($#ARGV > 1) {
     } elsif ($arg eq "-eventsys_restart" && $swapop eq "modify") {
 	$update_Eventsys_restart = 1;
     } elsif ($arg eq "-noswapout") {
-	$noswapout = 1;
+	$noswapout = 0;
     } else {
 	usage();
     }
@@ -197,7 +192,6 @@ my $experiment = Experiment->Lookup($pid, $eid);
 if (!defined($experiment)) {
     tbdie("Could not lookup experiment object!")
 }
-my $special = ($pid eq "testbed" || $pid eq "tbres" || $pid eq "emulab-ops");
 
 #
 # Print starting message.
@@ -306,14 +300,9 @@ elsif ($swapop eq "update" || $swapop eq "modify") {
     if ($errors) {
 	#
 	# Clean up the mess, leaving the experiment in the SWAPPED state,
-	#
-	if ($noswapout) {
-	    print STDERR "Leaving experiment swapped in as directed.\n";
-	}
-	else {
-	    print STDERR "Cleaning up after errors.\n";
-	    doSwapout(CLEANUP);
-	}
+	# 
+	print STDERR "Cleaning up after errors.\n";
+	doSwapout(CLEANUP);
 	$updatehosed = 1;
     }
     else {
@@ -339,11 +328,10 @@ elsif ($swapop eq "update" || $swapop eq "modify") {
 		# It is safe to remove the phystate since we know it was
 		# backed up above, and cause we do not know if assign_wrapper
 		# made it to that point before it failed. 
-		if ($experiment->RemoveVirtualState() ||
-		    $experiment->RestoreVirtualState() ||
-		    $experiment->ReserveSharedBandwidth(1, 1) ||
-		    $experiment->RemovePhysicalState() ||
-		    $experiment->RestorePhysicalState()) {
+		if ($experiment->RemoveVirtualState($pid, $eid) ||
+		    $experiment->RestoreVirtualState($pid, $eid) ||
+		    $experiment->RemovePhysicalState($pid, $eid) ||
+		    $experiment->RestorePhysicalState($pid,$eid)) {
 		    print STDERR "Could not restore backed-up state; ";
 		    $CanRecover = 0;
 		}
@@ -540,8 +528,7 @@ sub doSwapout($) {
 	# When modifying an elabinelab experiment, leave the vlans intact
 	# so that the inner networks are not suddenly disconnected.
 	#
-	if ($type != MODIFY ||
-	    ($type == MODIFY && $ELABINELAB && Lan->GotTrunks($experiment))) {
+	if ($type != MODIFY) {
 	    TBDebugTimeStamp("snmpit started");
 	    print STDERR "Removing VLANs.\n";
 	    if (system("snmpit -r $pid $eid")) {
@@ -578,9 +565,6 @@ sub doSwapout($) {
     }
 	
     if ($type >= CLEANUP) {
-	# XXX Do this before releasing the nodes. Needs more thought.
-	$experiment->DeleteInternalProgramAgents();
-	
 	#
 	# Undo plab in elab specialness.
 	# No need to worry about VLANs here, as all the special abilities
@@ -645,16 +629,6 @@ sub doSwapout($) {
 	if ($soaction{'command'} && doSwapoutAction($pid, $eid, %soaction)) {
 	    tblog_set_cleanup(0);
 	    return 1;
-	}
-
-	#
-	# Clear away Geni slivers. Do not proceed if this fails.
-	#
-	if ($PGENISUPPORT) {
-	    if (libGeni::DeleteAllSlivers($experiment, $this_user)) {
-		tberror("Could not delete slivers\n");
-		return 1;
-	    }
 	}
 
 	#
@@ -897,7 +871,7 @@ sub doSwapin($) {
 	}
 	
 	print "Mapping to physical reality ...\n";
-	TBDebugTimeStamp("mapper wrapper started");
+	TBDebugTimeStamp("assign_wrapper started");
 
 	#
 	# Pass the -u (update) switch into assign_wrapper, which turns on
@@ -906,15 +880,11 @@ sub doSwapin($) {
 	# that did not boot.
 	#
 	my $exitcode;
-	my $cmd = "$wrapper";
-	if ($pid eq "testbed" || $pid eq "tbres" || $pid eq "emulab-ops" ||
-	    $this_user->stud() || $experiment->virtnode_count()) {
-	    $cmd = "$mapper";
-	}
-	$cmd .= " -f"
+	my $wrapper = "assign_wrapper -u";
+	$wrapper .= " -f"
 	    if ($type == RETRY);
 	
-	if (system("$cmd -u $pid $eid")) {
+	if (system("$wrapper $pid $eid")) {
 	    $exitcode = $? >> 8;
 
 	    tberror "Failed ($exitcode) to map to reality.";
@@ -931,7 +901,7 @@ sub doSwapin($) {
 		return 1;
 	    }
 	}
-	TBDebugTimeStamp("mapper wrapper finished");
+	TBDebugTimeStamp("assign_wrapper finished");
 
 	print "Mapped to physical reality!\n";
     }
@@ -950,45 +920,25 @@ sub doSwapin($) {
     # exist on the switches will be left as is by snmpit.
     #
     # We must do this before the nfree of deleted nodes in the next section
-    # because the new test in nfree that prevents nodes from accidentally
+    # because the new test in nfree the prevents nodes from accidentally
     # getting released when they are in a vlan.
     #
     if ($type == MODIFY) {
 	my @diff = ();
 	my @same = ();
-	my $ret;
-
-	if ($ELABINELAB || !$MAINSITE || !$special) {
-	    $ret = Lan->CompareVlansWithSwitches($experiment, \@diff, \@same);
-	}
-	else {
-	    $ret = Lan->CompareVlansWithSwitches2($experiment);
-	}
-	if ($ret) {
+	if (Lan->CompareVlansWithSwitches($experiment, \@diff, \@same) != 0) {
 	    tberror({type => 'summary', severity => SEV_SECONDARY,
 		     error => ['vlan_setup_failed']},
 		    "Failed to compare old vlans");
 	    return 1;
 	}
-	if ($ELABINELAB || !$MAINSITE || !$special) {
-	    if (@diff) {
-		print "Removing obsolete vlans @diff\n";
-		system("snmpit -f ". join(" ", map("-o $_", @diff)));
-		if ($?) {
-		    tberror({type => 'summary', severity => SEV_SECONDARY,
-			     error => ['vlan_setup_failed']},
-			    "Failed to remove obsolete VLANs.");
-		    return 1;
-		}
-	    }
-	}
-	else {
-	    print "Synchronizing VLANs.\n";
-	    system("snmpit -X $pid $eid");
+	if (@diff) {
+	    print "Removing obsolete vlans @diff\n";
+	    system("snmpit -f ". join(" ", map("-o $_", @diff)));
 	    if ($?) {
 		tberror({type => 'summary', severity => SEV_SECONDARY,
 			 error => ['vlan_setup_failed']},
-			"Failed to synchronize VLANs.");
+			"Failed to remove old vlans");
 		return 1;
 	    }
 	}
@@ -1297,17 +1247,16 @@ sub doSwapin($) {
     # the step has completed and 2) It's OK for the command to run in
     # parallel with os_setup (no DB dependencies, etc.)
     #
-    if ($type != MODIFY || $ELABINELAB) {
-	print "Setting up VLANs.\n";
-	TBDebugTimeStamp("snmpit started");
-	if (system("snmpit -t $pid $eid")) {
-	    tberror({type => 'summary', severity => SEV_SECONDARY,
-		     error => ['vlan_setup_failed']},
-		    "Failed to set up VLANs.");
-	    return 1;
-	}
-	TBDebugTimeStamp("snmpit finished");
+
+    print "Setting up VLANs.\n";
+    TBDebugTimeStamp("snmpit started");
+    if (system("snmpit -t $pid $eid")) {
+	tberror({type => 'summary', severity => SEV_SECONDARY,
+		 error => ['vlan_setup_failed']},
+		"Failed to set up VLANs.");
+	return 1;
     }
+    TBDebugTimeStamp("snmpit finished");
 
     # No need to do this except during a real swapin.
     if ($type == REAL) {

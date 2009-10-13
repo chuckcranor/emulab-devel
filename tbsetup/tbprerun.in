@@ -34,7 +34,6 @@ my $TBROOT   = "@prefix@";
 my $TESTMODE = @TESTMODE@;
 my $TBLOGS   = "@TBLOGSEMAIL@";
 my $OPSDBSUPPORT= @OPSDBSUPPORT@;
-my $vtopgen  = "$TBROOT/bin/vtopgen";
 my $wrapper  = "$TBROOT/libexec/assign_wrapper";
 my $batchexp = "$TBROOT/bin/batchexp";
 my $template = "$TBROOT/lib/ns2ir/elabinelab.ns";
@@ -52,7 +51,6 @@ use lib "@prefix@/lib";
 use libdb;
 use libtestbed;
 use libtblog;
-use User;
 use Experiment;
 use Template;
 
@@ -86,14 +84,6 @@ my ($nsfile) = @ARGV;
 
 if (! -r $nsfile) {
     tbdie("NS File '$nsfile' does not exist!");
-}
-
-#
-# Verify user and get his DB uid and other info for later.
-#
-my $this_user = User->ThisUser();
-if (! defined($this_user)) {
-    tbdie("You ($UID) do not exist!");
 }
 
 # Slowly convert to using Experiment module.
@@ -196,18 +186,6 @@ my $events_result =
 		 "  (o.os is NULL or o.os='Linux' or o.os='Fedora')");
 if ($events_result->num_rows) {
     fatal("Oops, cannot send static events to linkdelay agents on Linux!");
-}
-
-#
-# Only admins can set the sharing mode on nodes.
-#
-my $query_result =
-    DBQueryFatal("select sharing_mode from virt_nodes ".
-		 "where pid='$pid' and eid='$eid' and ".
-		 "      sharing_mode is not null");
-if ($query_result->numrows &&
-    !($this_user->IsAdmin() || $this_user->uid eq "elabman")) {
-    fatal("Only testbed admininstrators can set the sharing mode on nodes");
 }
 
 #
@@ -345,18 +323,11 @@ if (!$experiment->elabinelab()) {
 # This is the only DB state that is modified during a top only run.
 #
 if (!$zeemode) {
-    my $cmd = "$wrapper -t $pid $eid";
-
-    if ($pid eq "testbed" || $pid eq "tbres" || $pid eq "emulab-ops" ||
-	$this_user->stud()) {
-	$cmd = "$vtopgen -p $pid $eid";
-    }
     TBDebugTimeStamp("assign prerun started");
-    print "Doing a pre-assign: '$cmd' ...\n";
-
-    if (system($cmd)) {
+    print "Doing a pre-assign ...\n";
+    if (system("$wrapper -t $pid $eid")) {
 	fatal({type => 'secondary', severity => SEV_SECONDARY,
-	       error => ['vtopgen', undef]},
+	       error => ['assign_wrapper_failed', undef]},
 	      "assign prerun failed!");
     }
 }

@@ -2,14 +2,12 @@
 package TestBed::TestSuite::Experiment;
 use SemiModern::Perl;
 use Mouse;
-use TBConfig;
 use TestBed::XMLRPC::Client::Experiment;
 use TestBed::Wrap::tevc;
 use TestBed::Wrap::linktest;
 use TestBed::Wrap::loghole;
 use Tools;
 use Tools::TBSSH;
-use Tools::Network;
 use Data::Dumper;
 use TestBed::TestSuite;
 use TestBed::TestSuite::Node;
@@ -25,46 +23,13 @@ framwork class for starting and testing experiments
 
 =over 4
 
-=item C<< build_e(...) >>
-
-builds a TestBed::TestSuite::Experiment given either
-()
-($eid)
-($pid, $eid)
-($pid, $gid, $eid)
-=cut
-sub build_e {
-  my $args;
-  if (@_ == 0) { $args = {}; }
-  if (@_ == 1) { $args = { 'eid' => shift }; }
-  if (@_ == 2) { my $pid = shift; $args = { 'pid' => $pid, 'gid' => $pid, 'eid' => shift }; }
-  if (@_ == 3) { $args = { 'pid' => shift, 'gid' => shift, 'eid' => shift }; }
-  if (@_ >  3) { die 'Too many args to e'; }
-  TestBed::TestSuite::Experiment->new(%$args);
-}
-
-=item C<< $e->resolve($nodename) >>
-
-resolves node name into a fully qualified node name
-=cut
-sub resolve {
-  my ($e, $name) = @_;
-  if ($name !~ m{\.}) {
-    my $eid = $e->eid;
-    my $pid = $e->pid;
-    my $suffix = $TBConfig::EMULAB_SUFFIX;
-    return "$name.$eid.$pid.$suffix";
-  }
-  return $name;
-}
-
 =item C<< $e->node($nodename) >>
 
 returns a node object representing node $nodename in the experiment
 =cut
 sub node {
   my ($e, $nodename) = @_;
-  TestBed::TestSuite::Node->new('experiment' => $e, 'name' => $e->resolve($nodename));
+  TestBed::TestSuite::Node->new('experiment' => $e, 'name' => $nodename);
 }
 
 =item C<< $e->link($linkname) >>
@@ -82,7 +47,7 @@ returns a list of node names representing each node in the experiment
 =cut
 sub nodenames {
   my ($e) = @_;
-  my $nodenames = $e->fqnodenames();
+  my $nodenames = $e->nodeinfo();
   return wantarray ? @{$nodenames} : $nodenames;
 }
 
@@ -92,7 +57,7 @@ returns a list of node hostnames representing each node in the experiment
 =cut
 sub hostnames {
   my ($e) = @_;
-  my $nodenames = $e->fqnodenames();
+  my $nodenames = $e->nodeinfo();
   my @hostnames = map { $_ =~ /([^\.]*)/; $1 } @$nodenames;
   return wantarray ? @hostnames : \@hostnames;
 }
@@ -104,7 +69,7 @@ returns a list of node objects representing each node in the experiment
 =cut
 sub nodes {
   my ($e) = @_;
-  my @node_instances = map { TestBed::TestSuite::Node->new('experiment' => $e, 'name'=>$_); } @{$e->fqnodenames()};
+  my @node_instances = map { TestBed::TestSuite::Node->new('experiment' => $e, 'name'=>$_); } @{$e->nodeinfo()};
   \@node_instances;
 }
 
@@ -114,138 +79,9 @@ runs a ping test across all nodes
 =cut
 sub ping_test {
   my ($e) = @_;
-  for (@{$e->nodes}) { die $_->name . "failed ping" unless $_->ping(); }
-  1;
-}
-
-=item C<< $e->wait_for_nodes_to_activate($timeout, @nodes) >>
-
-waits until $timeout for @nodes to respond to ping
-=cut
-sub wait_for_nodes_to_activate {
-  my ($e, $timeout) = (shift, shift);
-  my $start = time;
-  my $done = 0;
-  while (!$done){
-    my $mapping = $e->info(aspect => 'mapping');
-    $done = 1;
-    for my $key (keys %$mapping){
-      if ($mapping->{$key}->{'eventstatus'} ne 'ISUP'){
-        $done = 0;
-      }
-    }
-    sleep 4;
-    if ((time - $start) >  $timeout) { die "Timeout before $_ activated"; }
+  for (@{$e->nodes}) {
+    die $_->name . "failed ping" unless $_->ping();
   }
-}
-
-=item C<< $e->traceroute >>
-
-run Tools::Network::traceroute
-=cut
-sub traceroute { 
-  my ($e) = shift;
-  my $src  = $e->resolve(shift);
-  Tools::Network::traceroute($src, @_);
-}
-
-=item C<< $e->traceroute_ok >>
-
-run Tools::Network::traceroute_ok
-=cut
-sub traceroute_ok { 
-  my ($e) = shift;
-  my $src  = $e->resolve(shift);
-  Tools::Network::traceroute_ok($src, @_);
-}
-
-=item C<<gen_try($func, $times)>>
-
-generate a new function that tries $func $times before giving up
-=cut
-sub gen_try($$){
-  my ($func, $times) = @_;
-  my $work = sub{
-    my $ex;
-    for (1..$times){
-      eval{$func->()};
-      $ex = $@;
-      unless ($ex){ return 1; }
-    }
-    die $ex;
-  };
-  return $work;
-}
-
-=item C<< $e->cartesian_ping() >>
-
-runs a nxn ping test across all nodes
-=cut
-
-sub cartesian_ping {
-  my ($e) = shift;
-  my @nodes = $e->nodenames();
-  my @hosts = $e->hostnames();
-
-  my @work;
-  for (@nodes) {
-    my $src_node = $_;
-    my $for_node = sub {
-      for (@hosts) {
-        my $dest_node = $_;
-        if ($src_node ne $dest_node){
-          gen_try(sub{$e->ping_from_to($src_node, $dest_node)}, 5)->();
-        }
-      }
-    };
-    push @work, $for_node;
-  }
-  TestBed::TestSuite::prun(@work);
-}
-
-=item C<< $e->cartesian_connectivity() >>
-
-runs a nxn socket connect test to port 22 across all nodes
-=cut
-
-sub cartesian_connectivity {
- my ($e) = shift;
- my @nodes = $e->nodenames();
- my @hosts = $e->hostnames();
-     
- my $hosts = "[" . join(', ', map("'$_'", @hosts)) . "]";
- my $cmd = <<EOF;
-import sys, socket
-def ok(to):
-    s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    s.connect((to, 22))
-    print "Connected to %s:22" % to
-for host in $hosts:
-    ok(host)
-sys.exit(0)
-EOF
-
- my @work;
- for (@nodes) {
-   my $src_node = $_;
-   my $for_node = sub {
-      my $from = $src_node;
-      Tools::TBSSH::cmdsuccess_stdin($from, "\"sh -c 'PATH=/bin:/usr/sbin:/usr/sbin:/sbin:/usr/bin python -'\"", $cmd, "pinged $from");
-   };
-   push @work, $for_node;
- }
-
- TestBed::TestSuite::prun(@work);
-}
-
-
-=item C<< $e->ping_from_to($src, $dest) >>
-
-ssh to $src and ping $dest
-=cut
-sub ping_from_to {
-  my ($e, $from, $to) = @_;
-  Tools::TBSSH::cmdsuccess($from, "'sh -c \"PATH=/bin:/usr/sbin:/usr/sbin:/sbin ping -i 0.2 -c 2 $to\"'", "ping from $from to $to");
 }
 
 =item C<< $e->single_node_tests() >>
@@ -254,8 +90,9 @@ runs a single_node_tests test across all nodes
 =cut
 sub single_node_tests {
   my ($e) = @_;
-  for (@{$e->nodes}) {$_->single_node_tests(); }
-  return 1;
+  for (@{$e->nodes}) {
+    die $_->name . "failed single_node_tests" unless $_->single_node_tests();
+  }
 }
 
 =item C<< $e->linktest >>
@@ -274,7 +111,7 @@ takes an argument string such as "now link1 down"
 =cut
 sub tevc {
   my ($e) = shift;
-  TestBed::Wrap::tevc::tevc($e, @_);
+  TestBed::Wrap::tevc::tevc($e->pid, $e->eid, @_);
 }
 
 =item C<< $e->tevc_at_host($host, @args) >>
@@ -285,7 +122,7 @@ takes an argument string such as "now link1 down"
 
 sub tevc_at_host {
   my ($e) = shift;
-  TestBed::Wrap::tevc::tevc_at_host($e, @_);
+  TestBed::Wrap::tevc::tevc_at_host($e->pid, $e->eid, @_);
 }
 
 =item C<< $e->parallel_tevc($proc, $items) >>
@@ -293,7 +130,15 @@ sub tevc_at_host {
 runs tevc on ops for each cmdline produced by calling $proc on each $item.
 =cut
 sub parallel_tevc {
-  parallel_tevc_at_host(shift, $TBConfig::OPS_SERVER, @_);
+  my ($e, $proc, $items) = @_;
+  my $result = TestBed::ForkFramework::ForEach::work(sub {
+    my @tevc_cmd = $proc->(@_);
+    TestBed::Wrap::tevc::tevc($e->pid, $e->eid, @tevc_cmd);
+  }, $items);
+  if ($result->[0]) {
+    sayd($result->[2]);
+    die 'TestBed::ParallelRunner::runtests died during parallel_tevc';
+  }
 }
 
 =item C<< $e->parallel_tevc_at_host($host, $proc, $items) >>
@@ -304,11 +149,11 @@ sub parallel_tevc_at_host {
   my ($e, $host, $proc, $items) = @_;
   my $result = TestBed::ForkFramework::ForEach::work(sub {
     my @tevc_cmd = $proc->(@_);
-    TestBed::Wrap::tevc::tevc_at_host($e, $host, @tevc_cmd);
+    TestBed::Wrap::tevc::tevc_at_host($e->pid, $e->eid, $host, @tevc_cmd);
   }, $items);
   if ($result->[0]) {
     sayd($result->[2]);
-    die 'TestBed::ForkFramework::ForEach::work died during parallel_tevc';
+    die 'TestBed::ParallelRunner::runtests died during parallel_tevc';
   }
 }
 
@@ -337,10 +182,12 @@ splats $data to $filename on each node
 =cut
 sub splat {
   my ($e, $data, $fn) = @_;
-  my $temp = Tools::splat_to_temp($data);
+  my $temp = splat_to_temp($data);
   my $rc = 0;
   for (@{$e->nodes}) {
-    my $dest = $_->build_remote_name($fn);
+    my $user = $TBConfig::EMULAB_USER;
+    my $host = $_->name;
+    my $dest = "$user\@$host:$fn";
     my @results = $_->scp($temp, $dest);
     $rc ||= $results[0];
     die "splat to $dest failed" if $rc;
@@ -354,7 +201,7 @@ uses tevc to bring down a link
 =cut
 sub linkup {
   my ($e, $link) = @_;
-  TestBed::Wrap::tevc::tevc($e, "now $link up");
+  TestBed::Wrap::tevc::tevc($e->pid, $e->eid, "now $link up");
 }
 
 =item C<< $e->linkdown($linkname) >>
@@ -363,16 +210,7 @@ uses tevc to bring up a link
 =cut
 sub linkdown {
   my ($e, $link) = @_;
-  TestBed::Wrap::tevc::tevc($e, "now $link down");
-}
-
-=item C<< $e->pretty_list() >>
-
-prints a list of all experiments and there status
-=cut
-sub pretty_list {
-  use TestBed::XMLRPC::Client::Pretty;
-  pretty_listexp(shift->getlist_full);
+  TestBed::Wrap::tevc::tevc($e->pid, $e->eid, "now $link down");
 }
 
 =item C<trytest { code ... } $e>
@@ -487,27 +325,6 @@ trytest {
     $e->end                   && die "exp end $eid failed";
   } $e;
 }
-
-=item C<< $n->reboot >>
-
-=cut
-
-sub reboot {
-  my ($e) = shift;
-  my ($pid, $eid) = ($e->pid, $e->eid);
-  Tools::Network::node_reboot(@_ , "-e $pid.$eid");
-}
-
-=item C<< $n->powercycle >>
-
-=cut
-
-sub powercycle {
-  my ($e) = shift;
-  my ($pid, $eid) = ($e->pid, $e->eid);
-  Tools::Network::node_reboot('-f', "-e $pid.$eid");
-}
-
 
 =back
 

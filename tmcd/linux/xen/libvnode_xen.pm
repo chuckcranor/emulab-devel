@@ -20,11 +20,10 @@ use Exporter;
               rootPreConfigNetwork rootPostConfig
 	      vnodeCreate vnodeDestroy vnodeState
 	      vnodeBoot vnodePreBoot vnodeHalt vnodeReboot vnodeKill
-	      vnodeUnmount
 	      vnodePreConfig vnodePreConfigControlNetwork
               vnodePreConfigFinal
               vnodePreConfigExpNetwork vnodeConfigResources
-              vnodeConfigDevices vnodePostConfig vnodeExec
+              vnodeConfigDevices vnodePostConfig
 	    );
 
 %ops = ( 'init' => \&init,
@@ -39,9 +38,7 @@ use Exporter;
          'vnodeState' => \&vnodeState,
          'vnodeBoot' => \&vnodeBoot,
          'vnodeHalt' => \&vnodeHalt,
-         'vnodeUnmount' => \&vnodeUnmount,
          'vnodeReboot' => \&vnodeReboot,
-         'vnodeExec' => \&vnodeExec,
          'vnodeKill' => \&vnodeKill,
          'vnodePreConfig' => \&vnodePreConfig,
          'vnodePreConfigFinal' => \&vnodePreConfigFinal,
@@ -112,8 +109,8 @@ sub disk_hacks($){
     copy($filetobecopied, $newfile) or die $!;
 }
 
-sub createDisk($$){
-    my ($name,$callback) = @_;
+sub createDisk($){
+    my ($name) = @_;
     my $disk = $name;
     my $disk_path = "/mnt/xen/disk";
     my $root_path = "/mnt/xen/root";
@@ -132,11 +129,9 @@ sub createDisk($$){
 
     # hacks to make things work!
     disk_hacks($disk_path);
-    my $ret = &$callback($disk_path);
 
     mysystem("umount $root_path");
     mysystem("umount $disk_path");
-    return $ret;
 }
 
 sub diskName($){
@@ -202,10 +197,11 @@ sub createConfig($$$){
     close FILE;
 }
 
-sub vnodePreConfig($$$){
-    my ($id,$vmid,$callback) = @_;
+sub vnodePreConfig($){
+    my ($id,) = @_;
     return 0 if (-e diskName($id));
-    return createDisk(diskName($id),$callback);
+    createDisk(diskName($id));
+    return 0;
 }
 
 my @dhcp;
@@ -512,17 +508,6 @@ sub vnodeReboot($){
     mysystem("/usr/sbin/xm destroy $id");
     my $file = configFile($id);
     mysystem("/usr/sbin/xm create $file");
-}
-
-sub vnodeExec {
-    my ($vnode_id,$vmid,$command) = @_;
-
-    return -1;
-}
-sub vnodeUnmount {
-    my ($vnode_id,$vmid) = @_;
-
-    return -1;
 }
 
 1

@@ -39,18 +39,6 @@ my $OURDOMAIN      = "@OURDOMAIN@";
 my $PGENIDOMAIN    = "@PROTOGENI_DOMAIN@";
 my $SLICESHUTDOWN  = "$TB/sbin/protogeni/shutdownslice";
 
-my $API_VERSION = 1;
-
-#
-# Tell the client what API revision we support.  The correspondence
-# between revision numbers and API features is to be specified elsewhere.
-# No credentials are required.
-#
-sub GetVersion()
-{
-    return GeniResponse->Create( GENIRESPONSE_SUCCESS, $API_VERSION );
-}
-
 #
 # Get a credential for an object. Ignoring the type for now. If no credential
 # provided, then return a generic credential for the registered Emulab user.
@@ -91,7 +79,7 @@ sub GetCredential($)
 	# breaking stuff.
 	my $authority = GeniAuthority->Lookup($ENV{'MYUUID'});
 	if (!defined($authority)) {
-	    print STDERR "Could not find local authority object for $ENV{'MYUUID'}\n";
+	    print STDERR "Could not find local authority object\n";
 	    return GeniResponse->Create(GENIRESPONSE_ERROR);
 	}
 	my $credential = GeniCredential->Create($authority, $geniuser);
@@ -280,11 +268,7 @@ sub Resolve($)
 	    return GeniResponse->Create(GENIRESPONSE_SEARCHFAILED,
 					undef, "No one here by that name");
 	}
-
-	my @slices = GeniSlice->LookupByCreator( $geniuser );
-	my @sliceURNs = map( GeniHRN::Generate( $OURDOMAIN, "slice",
-						$_->slicename() ), @slices );
-
+	
 	# Return a blob.
 	my $blob = { "uid"      => $geniuser->uid(),
 		     "hrn"      => $geniuser->hrn(),
@@ -292,7 +276,6 @@ sub Resolve($)
 		     "email"    => $geniuser->email(),
 		     "gid"      => $geniuser->cert(),
 		     "name"     => $geniuser->name(),
-		     "slices"   => \@sliceURNs
 		    };
 	
 	return GeniResponse->Create(GENIRESPONSE_SUCCESS, $blob);

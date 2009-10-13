@@ -1,7 +1,4 @@
 #!/usr/bin/perl
-package TestBed::XMLRPC::Client::Node::InsufficientNodes;
-use Mouse;
-
 package TestBed::XMLRPC::Client::Node;
 use SemiModern::Perl;
 use Mouse;
@@ -34,16 +31,7 @@ sub get_free {
 }
 
 sub get_free_names {
-  my $x = shift;
-  keys %{$x->get_free(@_)};
-}
-
-sub get_free_node_names {
-  my $node = shift;
-  my $qty = shift;
-  my @names = $node->get_free_names(@_);
-  if (scalar @names < $qty ) { die TestBed::XMLRPC::Client::Node::InsufficientNodes->new; }
-  return @names;
+  keys %{shift->get_free(@_)};
 }
 
 =head1 NAME
@@ -68,13 +56,9 @@ returns a new has containing key,value pairs that $proce returned true for
 
 given a list of nodeshashes return nodehashes for nodes that are free
 
-=item C<get_free_names( param => value, ...)>
+=item C<get_free_names()>
 
-returns a list of free node names that meet criteria of params => values
-
-=item C<get_free_node_names($qrt, )>
-
-returns a list of at least $qty free node names that meet criteria of params => values
+given a list of nodeshashes returns a list of node names that are free
 
 =back
 

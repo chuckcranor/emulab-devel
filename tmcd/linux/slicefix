@@ -29,8 +29,8 @@ case $# in
 	exit 1
 esac
 
-linux_disk=`$BINDIR/freebsd_to_linux_disk $freebsd_disk`
-old_linux_disk=${linux_disk#* }
+linux_disk=`$BINDIR/freebsd_to_linux_disk $freebsd_disk $part`
+lrootdev=${linux_disk#* }
 linux_disk=${linux_disk%% *}
 
 if [ $OS = Linux ]; then
@@ -138,8 +138,6 @@ dofreebsd() {
 		fstype=ufs
 		fsopts=ro
 	elif [ $OS = Linux ]; then
-		echo "Reloading partition table for $disk..."
-		echo w | /sbin/fdisk /dev/$disk > /dev/null 2>&1
 		rootdev=/dev/`$BINDIR/check_disklabel $disk $part`
 		[ "$rootdev" = /dev/ ] && exit 1
 		fstype=ufs
@@ -414,7 +412,7 @@ lilogetkernel() {
 
 dolinux() {
 
-	$BINDIR/linux_slicefix.pl /dev/$linux_disk$part /dev/$old_linux_disk$part
+	$BINDIR/linux_slicefix $part $linux_disk
 	return $?
 }
 

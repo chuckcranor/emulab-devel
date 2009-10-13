@@ -23,20 +23,16 @@ sub instance {
 }
 
 sub wrapped_ssh {
-  my ($invocant, $user, $cmd, $checker, $diemessage, $stdin) = @_;
+  my ($invocant, $user, $cmd, $checker) = @_;
   my $ssh;
   if (ref $invocant) { $ssh = $invocant }
   else {
     $ssh = Tools::TBSSH->new('host' => $invocant, 'user' => $user);
   }
-  my @results = $ssh->cmd($cmd, $stdin);
-  if ($TBConfig::DEBUG_XML_CLIENT) {
-    $ssh->saydebug($cmd);
-    sayd @results;
-  }
+  my @results = $ssh->cmd($cmd);
 
   if (defined $checker) {
-    &$checker(@results) || die ($diemessage || "ssh checker of cmd $cmd failed " . Dumper(\@results));
+    &$checker(@results) || die "ssh checker of cmd $cmd failed";
   }
   ($results[2], @results);
 }
@@ -60,24 +56,8 @@ sub cmdcheckoutput {
 }
 
 sub cmdsuccess {
-  my ($host, $cmd, $diemessage) = @_;
-  return wrapped_ssh($host, $TBConfig::EMULAB_USER, $cmd, sub { $_[2] == 0; }, $diemessage);
-}
-
-sub cmdsuccess_stdin {
-  my ($host, $cmd, $stdin, $diemessage) = @_;
-  return wrapped_ssh($host, $TBConfig::EMULAB_USER, $cmd, sub { $_[2] == 0; }, $diemessage, $stdin);
-}
-
-sub cmdoutput {
-  my ($host, $cmd, $diemessage) = @_;
-  my @results = wrapped_ssh($host, $TBConfig::EMULAB_USER, $cmd, sub { $_[2] == 0; }, $diemessage );
-  return $results[1];
-}
-
-sub cmdmatch {
-  my ($host, $cmd, $regex, $diemessage) = @_;
-  return wrapped_ssh($host, $TBConfig::EMULAB_USER, $cmd, sub { $_[0] =~ $regex; }, $diemessage );
+  my ($host, $cmd) = @_;
+  return wrapped_ssh($host, $TBConfig::EMULAB_USER, $cmd, sub { $_[2] == 0; } );
 }
 
 sub cmdsuccessdump {
@@ -86,8 +66,8 @@ sub cmdsuccessdump {
 }
 
 sub cmdfailure {
-  my ($host, $cmd, $diemessage) = @_;
-  return wrapped_ssh($host, $TBConfig::EMULAB_USER, $cmd, sub { $_[2] != 0; }, $diemessage );
+  my ($host, $cmd) = @_;
+  return wrapped_ssh($host, $TBConfig::EMULAB_USER, $cmd, sub { $_[2] != 0; } );
 }
 
 sub cmdfailuredump {
@@ -128,14 +108,6 @@ executes $cmd as $TBConfig::EMULAB_USER on $host and calls checker with ($out, $
 
 returns the ssh result code of executing $cmd as $TBConfig::EMULAB_USER
 
-=item C<cmdsuccess_stdin($host, $cmd, $stdin, $diemessage)>
-
-returns the ssh result code of executing $cmd with $stdin as $TBConfig::EMULAB_USER
-
-=item C<cmdoutput($host, $cmd, $diemessage)>>
-
-returns the ssh stdout of executing $cmd as $TBConfig::EMULAB_USER
-
 =item C<cmdsuccessdump($host, $cmd)>
 
 returns the ssh result code of executing $cmd as $TBConfig::EMULAB_USER and dumps the ssh stdout, stderr, resultcode
@@ -147,10 +119,6 @@ returns the ssh result code of executing $cmd as $TBConfig::EMULAB_USER
 =item C<cmdfailuredump($host, $cmd)>
 
 returns the ssh result code of executing $cmd as $TBConfig::EMULAB_USER and dumps the ssh stdout, stderr, resultcode
-
-=item C<cmdmatch($host, $cmd, $regex, $diemessage)>
-
-executes $cmd as $TBConfig::EMULAB_USER and dies with diemessage if stdout doesn't match $regex
 
 =back
 

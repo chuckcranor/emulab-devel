@@ -1,6 +1,6 @@
 /*
  * EMULAB-COPYRIGHT
- * Copyright (c) 2000-2009 University of Utah and the Flux Group.
+ * Copyright (c) 2000-2005 University of Utah and the Flux Group.
  * All rights reserved.
  */
 
@@ -81,12 +81,10 @@ struct {
 	unsigned long	requests;
 	unsigned long	joinrep;
 	unsigned long	blockssent;
-	unsigned long   dupsent;
 	unsigned long	filereads;
 	unsigned long long filebytes;
-	unsigned long long fileusecs;
-	unsigned long	filemaxusec;
 	unsigned long	partialreq;
+	unsigned long   dupsent;
 	unsigned long	qmerges;
 	unsigned long	badpackets;
 	unsigned long   blockslost;
@@ -127,7 +125,6 @@ static int		WorkQSize = 0;
 static int		WorkChunk, WorkBlock, WorkCount;
 #ifdef STATS
 static int		WorkQMax = 0;
-static unsigned long	WorkQMaxBlocks = 0;
 #endif
 
 /*
@@ -137,7 +134,8 @@ static unsigned long	WorkQMaxBlocks = 0;
  * request can be dropped if there already exists a Q item, since the client
  * is going to see that piece eventually.
  *
- * We use a mutex to guard the work queue.
+ * We use a spinlock to guard the work queue, which incidentally will protect
+ * malloc/free.
  *
  * XXX - Clients make requests for chunk/block pieces they are
  * missing. For now, map that into an entire chunk and add it to the
@@ -168,9 +166,6 @@ WorkQueueEnqueue(int chunk, BlockMap_t *map, int count)
 {
 	WQelem_t	*wqel;
 	int		elt, blocks;
-#ifdef STATS
-	unsigned long	qblocks = 0;
-#endif
 
 	if (count == 0)
 		return 0;
@@ -208,17 +203,6 @@ WorkQueueEnqueue(int chunk, BlockMap_t *map, int count)
 			 */
 			if (wqel->nblocks == CHUNKSIZE)
 				blocks = 0;
-			/*
-			 * Or if incoming request is an entire chunk
-			 * just copy that map.
-			 */
-			else if (count == CHUNKSIZE) {
-				wqel->blockmap = *map;
-				blocks = CHUNKSIZE - wqel->nblocks;
-			}
-			/*
-			 * Otherwise do the full merge
-			 */
 			else
 				blocks = BlockMapMerge(map, &wqel->blockmap);
 			EVENT(1, EV_WORKMERGE, mcastaddr,
@@ -228,9 +212,6 @@ WorkQueueEnqueue(int chunk, BlockMap_t *map, int count)
 			pthread_mutex_unlock(&WorkQLock);
 			return 0;
 		}
-#ifdef STATS
-		qblocks += wqel->nblocks;
-#endif
 		elt--;
 	}
 
@@ -246,8 +227,6 @@ WorkQueueEnqueue(int chunk, BlockMap_t *map, int count)
 #ifdef STATS
 	if (WorkQSize > WorkQMax)
 		WorkQMax = WorkQSize;
-	if (qblocks > WorkQMaxBlocks)
-		WorkQMaxBlocks = qblocks;
 #endif
 
 	pthread_mutex_unlock(&WorkQLock);
@@ -663,10 +642,8 @@ PlayFrisbee(void)
 		fatal("could not allocate read buffer");
 
 	while (1) {
-		if (killme) {
-			log("Interrupted!");
-			break;
-		}
+		if (killme)
+			return;
 		
 		/*
 		 * Look for a WorkQ item to process. When there is nothing
@@ -730,7 +707,7 @@ PlayFrisbee(void)
 			int	readbytes;
 			int	resends;
 			int	thisburst = 0;
-#if defined(NEVENTS) || defined(STATS)
+#ifdef NEVENTS
 			struct timeval rstamp;
 			gettimeofday(&rstamp, 0);
 #endif
@@ -750,19 +727,6 @@ PlayFrisbee(void)
 					pfatal("Reading File");
 				fatal("EOF on file");
 			}
-#ifdef STATS
-			{
-				struct timeval now;
-				int us;
-				gettimeofday(&now, 0);
-				timersub(&now, &rstamp, &now);
-				us = now.tv_sec * 1000000 + now.tv_usec;
-				assert(us >= 0);
-				Stats.fileusecs += us;
-				if (us > Stats.filemaxusec)
-					Stats.filemaxusec = us;
-			}
-#endif
 			DOSTAT(filereads++);
 			DOSTAT(filebytes += cc);
 			EVENT(2, EV_READFILE, mcastaddr,
@@ -973,7 +937,7 @@ main(int argc, char **argv)
 
 	if (tracing) {
 		TraceStop();
-		TraceDump(1, tracing);
+		TraceDump();
 	}
 	subtime(&LastReq, &LastReq, &FirstReq);
 
@@ -1006,24 +970,17 @@ main(int argc, char **argv)
 		    Stats.dupsent);
 		log("  client re-req:     %d",
 		    Stats.clientlost);
-		log("  %dk blocks sent:    %d (%d repeated)",
-		    (BLOCKSIZE/1024),
+		log("  1k blocks sent:    %d (%d repeated)",
 		    Stats.blockssent, Stats.blockssent ?
 		    (Stats.blockssent-FileInfo.blocks) : 0);
 		log("  file reads:        %d (%qu bytes, %qu repeated)",
 		    Stats.filereads, Stats.filebytes, Stats.filebytes ?
 		    (Stats.filebytes - FileInfo.blocks * BLOCKSIZE) : 0);
-		log("  file read time:    %d.%03d sec (%llu us/op, %d us max)",
-		    (int)(Stats.fileusecs / 1000000),
-		    (int)((Stats.fileusecs % 1000000) / 1000),
-		    Stats.fileusecs / (Stats.filereads ? Stats.filereads : 1),
-		    Stats.filemaxusec);
 		log("  net idle/blocked:  %d/%d", Stats.goesidle, nonetbufs);
 		log("  send intvl/missed: %d/%d",
 		    Stats.intervals, Stats.missed);
 		log("  spurious wakeups:  %d", Stats.wakeups);
-		log("  max workq size:    %d elts, %lu blocks",
-		    WorkQMax, WorkQMaxBlocks);
+		log("  max workq size:    %d", WorkQMax);
 	}
 #endif
 
@@ -1272,11 +1229,6 @@ compute_sendrate(void)
 	}
 	if (dynburst)
 		maxburstsize = burstsize;
-
-	if (burstsize * sizeof(Packet_t) > GetSockbufSize()) {
-		warning("Burst size exceeds socket buffer size, "
-			"may drop packets");
-	}
 
 	log("Maximum send bandwidth %.3f Mbits/sec (%d blocks/sec)",
 	    bandwidth / 1000000.0, bandwidth / wireblocksize);

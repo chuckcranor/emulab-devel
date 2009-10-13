@@ -50,7 +50,7 @@ sub usage ()
 		 "implies -n\n";
     exit($WRAPPER_FAILED);
 }
-my $optlist    = "dvunfprqczxm:ko:";
+my $optlist    = "dvunfprqczxm:k";
 my $verbose    = 0;
 my $debug      = 0;
 my $fixmode    = 0;
@@ -58,7 +58,6 @@ my $updating   = 0;
 my $impotent   = 0;
 my $precheck   = 0;
 my $prepass    = 0;
-my $outfile;
 my $mfactor;
 my $regression = 0;
 my $noassign   = 0;  # Only with regression mode, use previous solution.
@@ -101,7 +100,6 @@ sub RunAssign($$);
 sub FinalizeRegression($);
 sub AssignLoop();
 sub MapperWrapper();
-sub PrintSolution();
 
 # un-taint path
 $ENV{'PATH'} = '/bin:/usr/bin:/usr/local/bin';
@@ -151,9 +149,6 @@ if (defined($options{"p"})) {
 }
 if (defined($options{"x"})) {
     $prepass = 1;
-}
-if (defined($options{"o"})) {
-    $outfile = $options{"o"};
 }
 if (defined($options{"m"})) {
     $mfactor = $options{"m"};
@@ -206,12 +201,10 @@ $mfactor = $experiment->multiplex_factor()
 my $vtopflags = 0;
 $vtopflags |= $libvtop::VTOP_FLAGS_VERBOSE
     if ($verbose);
-$vtopflags |= $libvtop::VTOP_FLAGS_QUIET
-    if ($quiet);
 $vtopflags |= $libvtop::VTOP_FLAGS_UPDATE
     if ($updating);
 $vtopflags |= $libvtop::VTOP_FLAGS_FIXNODES
-    if ($fixmode || $usecurrent);
+    if ($fixmode);
 $vtopflags |= $libvtop::VTOP_FLAGS_IMPOTENT
     if ($impotent);
 $vtopflags |= $libvtop::VTOP_FLAGS_REGRESSION
@@ -230,8 +223,6 @@ if ($regression) {
     }
     FinalizeRegression(0);
 }
-PrintSolution()
-    if ($outfile);
 exit(0);
 
 sub MapperWrapper()
@@ -239,12 +230,23 @@ sub MapperWrapper()
     chat("Starting the new and improved mapper wrapper.\n");
 
     TBDebugTimeStamp("Create libvtop started");
-    $vtop = libvtop->Create($experiment, $this_user, $vtopflags);
+    $vtop = libvtop->Create($experiment, $vtopflags);
     if (!defined($vtop)) {
 	fatal("Could not create vtop structure for $experiment");
     }
     TBDebugTimeStamp("Create libvtop ended");
 
+    #
+    # If updating, load current experiment resources. We have to be
+    # careful of how this is merged in with the (new) desired
+    # topology.
+    #
+    if ($updating || $usecurrent) {
+	TBDebugTimeStamp("LoadCurrentResources started");
+	$vtop->LoadCurrentResources() == 0
+	    or fatal("Could not load current resources into mapper");
+	TBDebugTimeStamp("LoadCurrentResources ended");
+    }
     if (!$impotent && ($updating || $clear)) {
 	if ($clear) {
 	    chat("Freeing reserved nodes ...\n");
@@ -457,27 +459,24 @@ sub RunAssign($$)
 
     if (! ($impotent || $regression)) {
 	if ($experiment->Update({"maximum_nodes" => $vtop->maximum_nodes(),
-				 "minimum_nodes" => $vtop->minimum_nodes(),
-				 "virtnode_count"=> $vtop->virtnodecount() })){
-	    tberror("Could not update min/max/virt nodes for $experiment\n");
+				 "minimum_nodes" => $vtop->minimum_nodes() })){
+	    tberror("Could not update min/max nodes for $experiment\n");
 	    return -1;
 	}
     }
 
     # Run assign
-    my $cmd  = "assign";
-    my $args = "$ptopfile $vtopfile";
-    $args = "-P $args"
-	if (!$vtop->sharednodecount());
+    my $cmd  = "assign-dev";
+    my $args = "-P -x $ptopfile -y $vtopfile";
+#    my $cmd  = "assign";
+#    my $args = "-P $ptopfile $vtopfile";
     $args = "-uod -c .75 $args"
 	if ($vtop->virtnodecount() || $vtop->simnodecount());
     $args = "-n $args"
     	if ($precheck);
     $args = "-s 123456 $args"
 	if ($regression);
-    $args .= " PN=1.0"
-	if ($vtop->sharednodecount());
-    
+
     # The prepass speeds up assign on big topos with virtual nodes.
     if ($prepass) {
     	$cmd = "assign_prepass";
@@ -571,7 +570,7 @@ sub RunAssign($$)
 	return -1;
     }
     TBDebugTimeStamp("ReadSolution started");
-    if ($vtop->ReadTextSolution(*ASSIGNFP) != 0) {
+    if ($vtop->ReadSolution(*ASSIGNFP) != 0) {
 	print("Could not parse assign logfile! $!\n");
 	return -1;
     }
@@ -589,13 +588,9 @@ sub RunAssign($$)
 		"Cancel flag set; aborting assign run!\n");
 	return -1;
     }
-    my $retval = $vtop->AllocNodes();
-    if ($retval != 0) {
-	if ($retval < 1) {
-	    print("Could not allocate any nodes.\n");
-	    return -1;
-	}
-	return 1;
+    if ($vtop->AllocNodes() != 0) {
+	print("Could not allocate nodes.\n");
+	return -1;
     }
     TBDebugTimeStamp("AllocNodes ended, InterpLinks Started");
     if ($vtop->InterpLinks() != 0) {
@@ -608,14 +603,6 @@ sub RunAssign($$)
 	return -1;
     }
     TBDebugTimeStamp("InitializePhysNodes ended");
-    if (! ($impotent || $regression)) {
-	TBDebugTimeStamp("ReserveSharedBandwidth started");
-	if ($experiment->ReserveSharedBandwidth($updating) != 0) {
-	    print("Could not reserve shared bandwidth\n");
-	    return -1;
-	}
-	TBDebugTimeStamp("ReserveSharedBandwidth ended");
-    }
     return 0;
 }
 
@@ -672,29 +659,6 @@ sub FinalizeRegression($)
     return 0;
 }
 
-#
-# Print a solution in rspec format.
-#
-sub PrintSolution()
-{
-    my $output = undef;
-    
-    if ($outfile ne "-") {
-	if (! open(OUTFILE, "> $outfile")) {
-	    tberror("Could not open $outfile: $!\n");
-	    return -1;
-	}
-	$output = *OUTFILE;
-    }
-    if ($vtop->PrintSolution($output) != 0) {
-	tberror("Could not print solution for $experiment\n");
-	return -1;
-    }
-    close($output)
-	if (defined($output));
-    return 0;
-}
-
 # We will come through here no matter how we exit.
 END {
     # Watch for getting here cause of a die()/exit() statement someplace.
@@ -733,7 +697,7 @@ sub fatal(@)
 	
 	    if (@newreservednodes) {
 		$NoRecover = 0
-		    if (system("$NFREE -x $pid $eid @newreservednodes") == 0);
+		    if (system("nfree -x $pid $eid @newreservednodes") == 0);
 	    }
 	    else {
 		# When not updating this is meaningless to tbswap.

@@ -1,7 +1,7 @@
 #!/usr/bin/perl -w
 #
 # EMULAB-LGPL
-# Copyright (c) 2000-2009 University of Utah and the Flux Group.
+# Copyright (c) 2000-2008 University of Utah and the Flux Group.
 # All rights reserved.
 #
 
@@ -13,27 +13,22 @@ package snmpit_lib;
 
 use Exporter;
 @ISA = ("Exporter");
-@EXPORT = qw( macport portnum portiface Dev vlanmemb vlanid
+@EXPORT = qw( macport portnum Dev vlanmemb vlanid
 		getTestSwitches getControlSwitches getSwitchesInStack
-                getSwitchesInStacks
 		getVlanPorts convertPortsFromIfaces convertPortFromIface
-		getExperimentTrunks setVlanTag setVlanStack
+		getExperimentTrunks setVlanTag
 		getExperimentVlans getDeviceNames getDeviceType
 		getInterfaceSettings mapPortsToDevices getSwitchPrimaryStack
-		getSwitchStacks getStacksForSwitches
+		getSwitchStacks
 		getStackType getStackLeader
 		getDeviceOptions getTrunks getTrunksFromSwitches
                 getTrunkHash 
 		getExperimentPorts snmpitGet snmpitGetWarn snmpitGetFatal
                 getExperimentControlPorts
-                getPlannedStacksForVlans getActualStacksForVlans
-                filterPlannedVlans
 		snmpitSet snmpitSetWarn snmpitSetFatal 
                 snmpitBulkwalk snmpitBulkwalkWarn snmpitBulkwalkFatal
 	        setPortEnabled setPortTagged
-		printVars tbsort getExperimentCurrentTrunks
-	        getExperimentVlanPorts
-                uniq);
+		printVars tbsort );
 
 use English;
 use libdb;
@@ -59,9 +54,6 @@ my %Devices=();
 
 my %Interfaces=();
 # Interfaces maps pcX:Y<==>MAC
-
-my %PortIface=();
-# Maps pcX:Y<==>pcX:iface
 
 my %Ports=();
 # Ports maps pcX:Y<==>switch:port
@@ -95,15 +87,7 @@ sub macport {
 }
 
 #
-# Map between node:iface and port numbers
-#
-sub portiface {
-    my $val = shift || "";
-    return $PortIface{$val};
-}
-
-#
-# Map between switch interfaces and port numbers
+# Map between interfaces and port numbers
 #
 sub portnum {
     my $val = shift || "";
@@ -125,21 +109,16 @@ sub Dev {
 sub ReadTranslationTable {
     my $name="";
     my $mac="";
-    my $iface="";
     my $switchport="";
 
     print "FILLING %Interfaces\n" if $debug;
-    my $result =
-	DBQueryFatal("select node_id,card,port,mac,iface from interfaces");
+    my $result = DBQueryFatal("select * from interfaces;");
     while ( @_ = $result->fetchrow_array()) {
 	$name = "$_[0]:$_[1]";
-	$iface = "$_[0]:$_[4]";
 	if ($_[2] != 1) {$name .=$_[2]; }
 	$mac = "$_[3]";
 	$Interfaces{$name} = $mac;
 	$Interfaces{$mac} = $name;
-	$PortIface{$name} = $iface;
-	$PortIface{$iface} = $name;
 	print "Interfaces: $mac <==> $name\n" if $debug > 1;
     }
 
@@ -206,109 +185,19 @@ sub getExperimentTrunks($$) {
     my ($pid, $eid) = @_;
     my @ports;
 
-    my $query_result =
-	DBQueryFatal("select distinct r.node_id,i.iface from reserved as r " .
-		     "left join interfaces as i on i.node_id=r.node_id " .
-		     "where r.pid='$pid' and r.eid='$eid' and " .
-		     "      i.trunk!=0");
+    my $query = "select distinct r.node_id,v.iface from reserved as r " .
+		  "left join vinterfaces as v on v.node_id=r.node_id " .
+		  "where r.pid='$pid' and r.eid='$eid' and v.type='vlan' and " .
+		  "v.iface is not NULL";
 
-    while (my ($node, $iface) = $query_result->fetchrow()) {
+#    $query = "select node_id , iface from trunk_test";
+
+    my $result = DBQueryFatal($query);
+    while (my ($node, $iface) = $result->fetchrow()) {
 	$node = $node . ":" . $iface;
 	push @ports, $node;
     }
     return convertPortsFromIfaces(@ports);
-}
-
-#
-# Returns an an array of trunked ports (in node:card form) used by an
-# experiment. These are the ports that are actually in trunk mode,
-# rather then the ports we want to be in trunk mode (above function).
-#
-sub getExperimentCurrentTrunks($$) {
-    my ($pid, $eid) = @_;
-    my @ports;
-
-    my $query_result =
-	DBQueryFatal("select distinct r.node_id,i.iface from reserved as r " .
-		     "left join interface_state as i on i.node_id=r.node_id " .
-		     "where r.pid='$pid' and r.eid='$eid' and " .
-		     "      i.tagged!=0");
-
-    while (my ($node, $iface) = $query_result->fetchrow()) {
-	$node = $node . ":" . $iface;
-	push @ports, $node;
-    }
-    return convertPortsFromIfaces(@ports);
-}
-
-#
-# Returns an an array of ports (in node:card form) that currently in
-# the given vlan.
-#
-sub getExperimentVlanPorts($) {
-    my ($vlanid) = @_;
-
-    my $query_result =
-	DBQueryFatal("select members from vlans as v ".
-		     "where v.id='$vlanid'");
-    return ()
-	if (!$query_result->numrows());
-
-    my ($members) = $query_result->fetchrow_array();
-    my @members   = split(/\s+/, $members);
-
-    return convertPortsFromIfaces(@members);
-}
-
-#
-# Get the list of stacks that the given set of VLANs *will* or *should* exist
-# on
-#
-sub getPlannedStacksForVlans(@) {
-    my @vlans = @_;
-
-    # Get VLAN members, then go from there to devices, then from there to
-    # stacks
-    my @ports = getVlanPorts(@vlans);
-    if ($debug) {
-        print "getPlannedStacksForVlans: got ports " . join(",",@ports) . "\n";
-    }
-    my @devices = getDeviceNames(@ports);
-    if ($debug) {
-        print("getPlannedStacksForVlans: got devices " . join(",",@devices)
-            . "\n");
-    }
-    my @stacks = getStacksForSwitches(@devices);
-    if ($debug) {
-        print("getPlannedStacksForVlans: got stacks " . join(",",@stacks) . "\n");
-    }
-    return @stacks;
-}
-
-#
-# Get the list of stacks that the given VLANs actually occupy
-#
-sub getActualStacksForVlans(@) {
-    my @vlans = @_;
-
-    # Run through all the VLANs and make a list of the stacks they
-    # use
-    my @stacks;
-    foreach my $vlan (@vlans) {
-        my ($vlanobj, $stack);
-        if ($debug) {
-            print("getActualStacksForVlans: looking up ($vlan)\n");
-        }
-        if (defined($vlanobj = VLan->Lookup($vlan)) &&
-            defined($stack = $vlanobj->GetStack())) {
-
-            if ($debug) {
-                print("getActualStacksForVlans: found stack $stack in database\n");
-            }
-            push @stacks, $stack;
-        }
-    }
-    return uniq(@stacks);
 }
 
 #
@@ -329,42 +218,6 @@ sub setVlanTag ($$) {
 	if ($vlan->SetTag($tag) != 0);
 
     return 0;
-}
-
-#
-# Ditto for stack that VLAN exists on
-#
-sub setVlanStack($$) {
-    my ($vlan_id, $stack_id) = @_;
-    
-    my $vlan = VLan->Lookup($vlan_id);
-    return ()
-	if (!defined($vlan));
-    return ()
-	if ($vlan->SetStack($stack_id) != 0);
-
-    return 0;
-}
-
-#
-# Given a list of VLANs, return only the VLANs that are beleived to actually
-# exist on the switches
-#
-sub filterPlannedVlans(@) {
-    my @vlans = @_;
-    my @out;
-    foreach my $vlan (@vlans) {
-        my $vlanobj = VLan->Lookup($vlan);
-        if (!defined($vlanobj)) {
-            warn "snmpit: Warning, tried to check status of non-existant " .
-                "VLAN $vlan\n";
-            next;
-        }
-        if ($vlanobj->CreatedOnSwitches()) {
-            push @out, $vlan;
-        }
-    }
-    return @out;
 }
 
 #
@@ -530,10 +383,6 @@ sub getDeviceNames(@) {
 	}
 
 	$devices{$device} = 1;
-
-        if ($debug) {
-            print "getDevicesNames: Mapping $port to $device\n";
-        }
     }
     return (sort {tbsort($a,$b)} keys %devices);
 }
@@ -643,20 +492,6 @@ sub getSwitchesInStack ($) {
 }
 
 #
-# Returns an array with the names of all switches in the given *stacks*, with
-# no switches duplicated
-#
-sub getSwitchesInStacks (@) {
-    my @stack_ids = @_;
-    my @switches;
-    foreach my $stack_id (@stack_ids) {
-        push @switches, getSwitchesInStack($stack_id);
-    }
-
-    return uniq(@switches);
-}
-
-#
 # Returns the stack_id of a switch's primary stack
 #
 sub getSwitchPrimaryStack($) {
@@ -674,20 +509,6 @@ sub getSwitchPrimaryStack($) {
 	my ($stack_id) = ($result->fetchrow());
 	return $stack_id;
     }
-}
-
-#
-# Returns the stack_ids of the primary stacks for the given switches.
-# Surpresses duplicates.
-#
-sub getStacksForSwitches(@) {
-    my (@switches) = @_;
-    my @stacks;
-    foreach my $switch (@switches) {
-        push @stacks, getSwitchPrimaryStack($switch);
-    }
-
-    return uniq(@stacks);
 }
 
 #
@@ -1030,7 +851,7 @@ sub snmpitDoIt($$$;$) {
 	$array_size = 4;
     }
 
-    if (((ref($var) ne "SNMP::Varbind") && (ref($var) ne "SNMP::VarList")) &&
+    if ((ref($var) ne "SNMP::Varbind") &&
 	    ((ref($var) ne "ARRAY") || ((@$var != $array_size) && (@$var != 4)))) {
 	$snmpitErrorString = "Invalid SNMP variable given ($var)!\n";
 	return undef;
@@ -1337,18 +1158,6 @@ sub tbsort {
     }
     return 0;
 }
-
-
-#
-# Silly helper function - returns its input array with duplicates removed
-# (ordering is likely to be changed)
-#
-sub uniq(@) {
-    my %elts;
-    foreach my $elt (@_) { $elts{$elt} = 1; }
-    return keys %elts;
-}
-
 # End with true
 1;
 

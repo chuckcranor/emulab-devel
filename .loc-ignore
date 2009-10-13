@@ -31,12 +31,3 @@ tool/svn/svn_load_dirs.pl
 copyrights 
 hyperviewer/hypviewer 
 www/sec-check
-www/tutorial
-sql
-doc
-www/doc
-GPL-COPYING
-LGPL-COPYING
-AGPL-COPYING
-TODO.plab
-MOVED-TO-WIKI

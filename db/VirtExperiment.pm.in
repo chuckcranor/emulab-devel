@@ -65,7 +65,7 @@ my $debug	      = 0;
      "virt_programs"		=> [ "vname", "vnode" ],
      "virt_user_environment"	=> [ "name", "value" ],
      "nseconfigs"		=> [ "vname" ],
-     "eventlist"		=> [ "idx" ],
+     "eventlist"		=> [ "vname", "idx"],
      "event_groups"		=> [ "group_name", "agent_name" ],
      "virt_firewalls"		=> [ "fwname", "type", "style" ],
      "firewall_rules"		=> [ "fwname", "ruleno", "rule" ],
@@ -73,9 +73,10 @@ my $debug	      = 0;
      "virt_parameters"          => [ "name", "value" ],
 );
 
-# 
+# XXX
 # The experiment table is special. Only certain fields are allowed to
-# be updated.
+# be updated. Not sure what the right approach for this is.
+# Note that I regex the data before inserting it below.
 #
 %experiment_fields = ("multiplex_factor"	=> 1,
 		      "forcelinkdelays"		=> 1,
@@ -545,7 +546,6 @@ sub Create($$$)
     $self->{'SLOTNAMES'}  = $slotnames;
     $self->{'TABLEHASH'}  = {};
     $self->{'TABLELIST'}  = [];
-    $self->{'COUNTER'}    = 1;
     bless($self, $class);
 
     return $self;
@@ -567,7 +567,6 @@ sub DESTROY {
     $self->{'SLOTNAMES'}  = undef;
     $self->{'TABLEHASH'}  = undef;
     $self->{'TABLELIST'}  = undef;
-    $self->{'COUNTER'}    = undef;
 }
 
 #
@@ -623,13 +622,8 @@ sub NewRow($$)
     my @pvals = ();
     foreach my $key (@pkeys) {
 	if (!exists($argref->{$key})) {
-	    if ($tablename eq "eventlist" && $key eq "idx") {
-		$argref->{$key} = $self->{'COUNTER'}++;
-	    }
-	    else {
-		carp("Missing table key for new table in $tablename");
-		return undef;
-	    }
+	    carp("Missing table key for new table in $tablename");
+	    return undef;
 	}
 	push(@pvals, $argref->{$key});
     }
@@ -671,9 +665,9 @@ sub Dump($)
 #
 # Store rows for table.
 #
-sub Store($$)
+sub Store($)
 {
-    my ($self,$flags) = @_;
+    my ($self) = @_;
 
     my @rows = @{ $self->{'TABLELIST'} };
 
@@ -681,7 +675,7 @@ sub Store($$)
 	if (!@rows);
 	    
     foreach my $rowref (@rows) {
-	$rowref->Store($flags) == 0
+	$rowref->Store() == 0
 	    or return -1;
     }
     return 0;
@@ -796,7 +790,7 @@ sub AUTOLOAD {
     my $row = $self->tablerow();
 
     unless (exists($self->{'SLOTNAMES'}->{$name})) {
-	print STDERR "No such slot '$name' field in class $type\n";
+	carp("No such slot '$name' field in class $type");
 	return undef;
     }
     if (@_) {
@@ -915,7 +909,7 @@ sub Store($;$)
     
     my @fields  = ("exptidx", "pid", "eid");
     my @values  = ("'$exptidx'", "'$pid'", "'$eid'");
-
+    
     foreach my $key (keys(%{ $row })) {
 	my $val = $row->{$key};
 
@@ -925,11 +919,8 @@ sub Store($;$)
 	    if ($key eq "pid" ||$key eq "eid" || $key eq "exptidx");
 	
 	if ($key eq "idx") {
-	    # This test for eventlist.
-	    if ($tablename eq "eventlist") {
-		push(@values, "NULL");
-	    }
-	    elsif ($val =~ /^\d*$/) {
+	    # XXX 
+	    if ($val =~ /^\d*$/) {
 		push(@values, DBQuoteSpecial($val));
 	    }
 	    else {
@@ -955,10 +946,10 @@ sub Store($;$)
 		     "    $key - $val: ". TBFieldErrorString() . "\n");
 		return -1;
 	    }
+	    # If a key remove from the list; we got it.
+	    delete($pkeys{$key})
+		if (exists($pkeys{$key}));
 	}
-	# If a key remove from the list; we got it.
-	delete($pkeys{$key})
-	    if (exists($pkeys{$key}));
 	push(@fields, $key);
     }
     if (keys(%pkeys)) {

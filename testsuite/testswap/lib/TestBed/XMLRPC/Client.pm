@@ -10,7 +10,7 @@ use Tools;
 
 my $loglevel = "INFO";
 $loglevel = "DEBUG" if $TBConfig::DEBUG_XML_CLIENT;
-my $logger = Tools::init_tbts_logger("XMLRPCClient", undef, "INFO", "SCREEN");
+my $logger = init_tbts_logger("XMLRPCClient", undef, "INFO", "SCREEN");
 
 
 #ensures loading of client side SSL certificates
@@ -38,8 +38,6 @@ sub AUTOLOAD {
 
 sub args { 
   my $self = shift;
-
-  die "Odd number of args" . sayd(@_) if ((scalar @_) % 2 !=0);
   +{ @_ };
 }
 
@@ -61,11 +59,11 @@ sub func    { (shift->pkgfunclist())[2]; }
 
 sub single_request {
   my ($self, $command, @args) = @_;
-  $logger->debug(Tools::toperl($command, @args));
+  $logger->debug(toperl($command, @args));
   $logger->debug("Sent");
   if ($TBConfig::DEBUG_XML_CLIENT) {
     say("Sent");
-    Tools::sayperl($command, @args)
+    sayperl($command, @args)
   }
   my $resp = $self->client->send_request($command, $TBConfig::XMLRPC_VERSION, @args); 
   $logger->debug("Received");
@@ -74,9 +72,12 @@ sub single_request {
     say("Received");
     say Dumper($resp);
   }
-  if ((!ref($resp)) && ($resp =~ /SSL \w+ timeout/)) { die "SSL_SOCKET_TIMEOUT"; }
-  if ($resp->isa('RPC::XML::fault')) { die $resp->{faultString}; }
-  if ($resp->isa('RPC::XML::struct') && $resp->value->{'code'} != 0 ) { die $resp; }
+  if ((!ref($resp)) && ($resp =~ /SSL \w+ timeout/)) {
+    die "SSL_SOCKET_TIMEOUT";
+  }
+  if ($resp->isa('RPC::XML::struct') && $resp->value->{'code'} != 0 ) {
+    die $resp;
+  }
   $resp;
 }
 

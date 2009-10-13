@@ -3566,9 +3566,9 @@ sub NewVirtIface($$$;$)
 
     #
     # Make up a MAC address.  For now, just derive it from the assigned
-    # IP address.
+    # IP address.  Note that this is only needed for "veth" type interfaces.
     #
-    if ($ip =~ /^\d+\.\d+\.\d+\.\d+$/) {
+    if ($isveth) {
 	$mac = sprintf "0000%.2x%.2x%.2x%.2x", split(/\./, $ip);
     } else {
 	$mac = "000000000000";
@@ -3597,10 +3597,8 @@ sub NewVirtIface($$$;$)
 	my $speed = interfacespeedmbps(physinterfacetype($pnode, $pport),
 				       "ethernet");
 	
-	my $trunk = ($type eq "vlan" ? 1 : 0);
-
 	DBQueryFatal("update interfaces set " .
-		     "   current_speed='$speed',trunk=$trunk " .
+		     "   current_speed='$speed' " .
 		     "where node_id='$pnode' and iface='$pport'");
     }
 
@@ -5430,9 +5428,8 @@ sub CreateTopFile()
     $minimum_nodes = POSIX::ceil($minimum_nodes);
 
     if (! ($impotent || $regression)) {
-	DBQueryFatal("UPDATE experiments set maximum_nodes=$maximum_nodes, ".
-		     "                       minimum_nodes=$minimum_nodes, ".
-		     "                       virtnode_count=$virtnode_count ".
+	DBQueryFatal("UPDATE experiments set maximum_nodes=$maximum_nodes, " .
+		     "                       minimum_nodes=$minimum_nodes ".
 		     "where pid='$pid' and eid='$eid'");
     }
 

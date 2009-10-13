@@ -1,6 +1,6 @@
 #
 # EMULAB-COPYRIGHT
-# Copyright (c) 2000-2009 University of Utah and the Flux Group.
+# Copyright (c) 2000-2007 University of Utah and the Flux Group.
 # All rights reserved.
 #
 
@@ -30,16 +30,11 @@ export HAVE_GCC3 = 1
 export HAVE_LOCALE = 1
 endif
 
-WITH_LTHREADS	= 0
-
 # XXX 5.3 and linuxthreads don't see to get along
-# 7.0 and beyond should not need it
-ifneq ($(FBSDREL),5.3)
-ifneq ($(FBSDMAJ),7)
-ifneq ($(FBSDMAJ),8)
+ifeq ($(FBSDREL),5.3)
+WITH_LTHREADS	= 0
+else
 WITH_LTHREADS	= 1
-endif
-endif
 endif
 
 # XXX special checkpoint/shadow device support
@@ -73,7 +68,7 @@ ifeq ($(WITH_LTHREADS),1)
 PTHREADCFLAGS	= -D_THREAD_SAFE -I/usr/local/include/pthread/linuxthreads
 PTHREADLIBS	= -L/usr/local/lib -llthread -llgcc_r
 else
-PTHREADCFLAGS	= -D_THREAD_SAFE -DCONDVARS_WORK
+PTHREADCFLAGS	= -DCONDVARS_WORK
 PTHREADLIBS	= -lpthread
 endif
 SUBDIRCFLAGS	+= 
@@ -112,16 +107,6 @@ ifeq ($(WITH_NTFS),1)
 ifndef HAVE_GCC3
 CC		= gcc30
 endif
-
-#
-# Default to the old libntfs for now.
-# Once proven, switch to 2.0.0.
-#
-ifndef NTFSVER
-NTFSVER		= 1.7.1
-endif
-export		NTFSVER
-
 CFLAGS		+= -DWITH_NTFS
 SUBDIRS		+= ntfs
 ZIPLIBS		+= ntfs/libntfs.a
@@ -154,7 +139,7 @@ ZIPLIBS		+= hashmap/libhashmap.a
 LIBS		+= -lcrypto $(PTHREADLIBS)
 endif
 
-all:	imagezip imageunzip imagedump imagehash
+all:	$(SUBDIRS) imagezip imageunzip imagedump imagehash
 
 whoami:
 	@echo "SYSTEM is $(SYSTEM)"
@@ -165,7 +150,7 @@ endif
 
 include $(TESTBED_SRCDIR)/GNUmakerules
 
-imagezip: $(SUBDIRS) imagezip.o disksize.o version.o $(ZIPLIBS)
+imagezip: imagezip.o disksize.o version.o $(ZIPLIBS)
 	$(CC) $(CFLAGS) imagezip.o disksize.o version.o $(ZIPLIBS) $(LIBS) -o imagezip
 
 imagezip.o:	imagezip.c

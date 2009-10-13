@@ -1,6 +1,6 @@
 /*
  * EMULAB-COPYRIGHT
- * Copyright (c) 2008, 2009 University of Utah and the Flux Group.
+ * Copyright (c) 2008 University of Utah and the Flux Group.
  * All rights reserved.
  */
 
@@ -8,7 +8,7 @@
  * XML Parser for RSpec ptop files
  */
 
-static const char rcsid[] = "$Id: parse_request_rspec.cc,v 1.15 2009-10-08 00:31:59 tarunp Exp $";
+static const char rcsid[] = "$Id: parse_request_rspec.cc,v 1.2 2009-05-20 18:06:08 tarunp Exp $";
 
 #ifdef WITH_XML
 
@@ -62,8 +62,8 @@ int bind_vtop_subnodes(tb_vgraph &vg);
  * These are not meant to be used outside of this file, so they are only
  * declared in here
  */
-bool populate_nodes_rspec(DOMElement *root, tb_vgraph &vg, map< pair<string, string>, pair<string, string> >* fixed_interfaces);
-bool populate_links_rspec(DOMElement *root, tb_vgraph &vg, map< pair<string, string>, pair<string, string> >* fixed_interfaces);
+bool populate_nodes_rspec(DOMElement *root, tb_vgraph &vg);
+bool populate_links_rspec(DOMElement *root, tb_vgraph &vg);
 bool populate_vclasses_rspec (DOMElement *root, tb_vgraph &vg);
 
 bool hasComponentSpec (DOMElement* element);
@@ -134,27 +134,24 @@ int parse_vtop_rspec(tb_vgraph &vg, char *filename) {
         XStr generated (request_root->getAttribute(XStr("generated").x()));
         XStr valid_until(request_root->getAttribute(XStr("valid_until").x()));
         
-		map< pair<string, string>, pair<string, string> > fixed_interfaces;
-				//map< pair<string, string>, pair<string, string> >();
-				
         /*
         * These three calls do the real work of populating the assign data
         * structures
         */
         // clock_t startNode = clock();
         XMLDEBUG("starting node population" << endl);
-        if (!populate_nodes_rspec(request_root,vg, &fixed_interfaces)) {
-			cerr << "Error reading nodes from virtual topology " << filename << endl;
-			exit(EXIT_FATAL);
+        if (!populate_nodes_rspec(request_root,vg)) {
+        cerr << "Error reading nodes from virtual topology " << filename << endl;
+        exit(EXIT_FATAL);
         }
         XMLDEBUG("finishing node population" << endl);
         // //cerr << "Time taken : " << (clock() - startNode) / CLOCKS_PER_SEC << endl;
 
 		// clock_t startLink = clock();
         XMLDEBUG("starting link population" << endl);
-        if (!populate_links_rspec(request_root,vg, &fixed_interfaces)) {
-			cerr << "Error reading links from virtual topology " << filename << endl;
-			exit(EXIT_FATAL);
+        if (!populate_links_rspec(request_root,vg)) {
+        cerr << "Error reading links from virtual topology " << filename << endl;
+        exit(EXIT_FATAL);
         }
         XMLDEBUG("finishing link population" << endl);
 		// //cerr << "Time taken : " << (clock() - startLink) / CLOCKS_PER_SEC << endl;
@@ -175,7 +172,7 @@ int parse_vtop_rspec(tb_vgraph &vg, char *filename) {
 /*
  * Pull nodes from the document, and populate assign's own data structures
  */
-bool populate_nodes_rspec(DOMElement *root, tb_vgraph &vg, map< pair<string, string>, pair<string, string> >* fixed_interfaces) {
+bool populate_nodes_rspec(DOMElement *root, tb_vgraph &vg) {
 	bool is_ok = true;
     /*
      * Get a list of all nodes in this document
@@ -221,40 +218,18 @@ bool populate_nodes_rspec(DOMElement *root, tb_vgraph &vg, map< pair<string, str
 		
 		if (str_virtual_uuid == "")
 		{
-			cerr << "ERROR: Every node must have a virtual_id" << endl;
+			cerr << "Every node must have a virtual_id" << endl;
 			is_ok = false;
 			continue;
 		}
 
 		DOMNodeList *interfaces = elt->getElementsByTagName(XStr("interface").x());
-		string *str_interface_virtual_ids = new string [interfaces->getLength()];
-		string *str_interface_component_ids = new string [interfaces->getLength()];
+		string *str_virtual_interface_names = new string [interfaces->getLength()];
+		string *str_component_interface_names = new string [interfaces->getLength()];
 		for (int index = 0; index < interfaces->getLength(); ++index)
 		{
-			DOMElement* interface = dynamic_cast<DOMElement*>(interfaces->item(index));
-			str_interface_virtual_ids[index] = string(XStr(interface->getAttribute(XStr("virtual_id").x())).c());
-			if (interface->hasAttribute(XStr("component_id").x()))
-			{
-				string component_id = string(XStr(interface->getAttribute(XStr("component_id").x())).c());
-				string component_uuid = str_component_uuid;
-				if (component_uuid == "") 
-				{
-					cerr << "ERROR: Found a fixed interface (" << str_interface_virtual_ids[index] << ") on an unfixed node (" << str_virtual_uuid << ")" << endl;
-					is_ok = false;
-					continue;
-				}
-				pair<map< pair<string, string>, pair<string, string> > :: iterator, bool> rv 
-										= fixed_interfaces->insert(make_pair(
-										 	make_pair(str_virtual_uuid, str_interface_virtual_ids[index]),
-											make_pair(str_component_uuid, component_id)));
-				if (rv.second == false) 
-				{
-					is_ok = false;
-					cerr << "The node-interface pair (" << str_virtual_uuid << "," << str_interface_virtual_ids[index] << ") was not unique.";
-					cerr << "Interfaces within a node must have unique identifiers."<< endl;
-					continue;
-				}
-			}
+			str_virtual_interface_names[index] = string(XStr((dynamic_cast<DOMElement*>(interfaces->item(index)))->getAttribute(XStr("virtual_name").x())).c());
+			str_component_interface_names[index] = string(XStr((dynamic_cast<DOMElement*>(interfaces->item(index)))->getAttribute(XStr("component_name").x())).c());
 		}
 
 		/* Deal with the location tag */
@@ -274,27 +249,25 @@ bool populate_nodes_rspec(DOMElement *root, tb_vgraph &vg, map< pair<string, str
 		/*
 		* Add on types
 		*/
-		int type_slots = 1;
-		tb_vclass *vclass = NULL;
+		int type_slots = 0;
+		bool no_type = false;
+		tb_vclass *vclass;
 		const char* str_type_name;
 		// XXX: This a ghastly hack. Find a way around it ASAP.
 		string s_type_name = string("");
 		DOMNodeList *types = elt->getElementsByTagName(XStr("node_type").x());
-		int num_types = types->getLength();
-		bool no_type = !num_types;
-
-		for (int i = 0; i < num_types; i++) 
+		for (int i = 0; i < types->getLength(); i++) 
 		{
 			DOMElement *node_type = dynamic_cast<DOMElement*>(types->item(i));
 			XStr node_type_name (node_type->getAttribute(XStr("type_name").x()));
 			
-			XStr type_slots_str (node_type->getAttribute(XStr("type_slots").x()));
+			XStr type_slots (node_type->getAttribute(XStr("type_slots").x()));
 			int node_type_slots = 1;
 			bool is_unlimited = false;
-			if (strcmp(type_slots_str.c(), "unlimited") == 0)
+			if (strcmp(type_slots.c(), "unlimited") == 0)
 				is_unlimited = true;
 			else
-				type_slots = node_type_slots = type_slots_str.i();
+				node_type_slots = type_slots.i();
 
 			bool is_static = node_type->hasAttribute(XStr("static").x());
 			
@@ -326,7 +299,7 @@ bool populate_nodes_rspec(DOMElement *root, tb_vgraph &vg, map< pair<string, str
 				}
 			}
 		}
-
+		
 		/*
 		* Parse out the features
 		* TODO: We are still not sure how to add features and desires in Protogeni.
@@ -393,9 +366,7 @@ bool populate_nodes_rspec(DOMElement *root, tb_vgraph &vg, map< pair<string, str
 		
 		tb_vnode *v = NULL;
 		if (no_type)
-                        // If they gave no type, just assume it's a PC for
-                        // now. This is not really a good assumption.
-			v = new tb_vnode(str_virtual_uuid.c_str(), "pc", type_slots);
+			v = new tb_vnode(str_virtual_uuid.c_str(), "", type_slots);
 		else
 			v = new tb_vnode(str_virtual_uuid.c_str(), s_type_name.c_str(), type_slots);
 		
@@ -403,31 +374,6 @@ bool populate_nodes_rspec(DOMElement *root, tb_vgraph &vg, map< pair<string, str
 		v -> disallow_trivial_mix = is_disallow_trivial_mix;
 		if (subnode_of_name != NULL)
 			v -> subnode_of_name = (*subnode_of_name).c();
-		
-		if( elt->hasAttribute( XStr( "exclusive" ).x() ) ) {
-		    XStr exclusive( elt->getAttribute( XStr(
-			"exclusive" ).x() ) );
-		    fstring desirename( "shared" );
-
-		    if( !strcmp( exclusive, "false" ) ||
-			!strcmp( exclusive, "0" ) ) {
-			tb_node_featuredesire node_fd( desirename, 1.0,
-                                true, featuredesire::FD_TYPE_NORMAL);
-			node_fd.add_desire_user( 1.0 );
-			v->desires.push_front( node_fd );
-		    } else if( strcmp( exclusive, "true" ) &&
-			       strcmp( exclusive, "1" ) ) {
-			static int syntax_error;
-
-			if( !syntax_error ) {
-			    syntax_error = 1;
-
-			    cout << "Warning: unrecognised exclusive "
-				"attribute \"" << exclusive << "\"; will "
-				"assume exclusive=\"true\"\n";
-			}
-		    }
-		}
 		
 		v->vclass = vclass;
 		vvertex vv = add_vertex(vg);
@@ -454,7 +400,7 @@ bool populate_nodes_rspec(DOMElement *root, tb_vgraph &vg, map< pair<string, str
 /*
  * Pull the links from the ptop file, and populate assign's own data sturctures
  */
-bool populate_links_rspec(DOMElement *root, tb_vgraph &vg, map< pair<string, string>, pair<string, string> >* fixed_interfaces) {
+bool populate_links_rspec(DOMElement *root, tb_vgraph &vg) {
     
     bool is_ok = true;
     
@@ -497,7 +443,7 @@ bool populate_links_rspec(DOMElement *root, tb_vgraph &vg, map< pair<string, str
         string src_iface;
         string dst_node;
         string dst_iface;
-		DOMNodeList *interfaces = elt->getElementsByTagName(XStr("interface_ref").x());
+		DOMNodeList *interfaces = elt->getElementsByTagName(XStr("interface").x());
 		/* NOTE: In a request, we assume that each link has only two interfaces specified. 
 		 * Although the order is immaterial, assign expects a source and a destination and we assume 
 		 * that the first is the source and the second is the destination. */
@@ -528,18 +474,12 @@ bool populate_links_rspec(DOMElement *root, tb_vgraph &vg, map< pair<string, str
 			continue;
 		}
         
-		/*
-		 * Get standard link characteristics
-		 */
-		XStr bandwidth( hasChildTag( elt, "bandwidth" ) ?
-				getChildValue(elt,"bandwidth") :
-				XStr( "100000" ).x() );
-		XStr latency( hasChildTag( elt, "latency" ) ?
-			      getChildValue(elt,"latency") :
-			      XStr( "0" ).x() );
-		XStr packet_loss( hasChildTag( elt, "packet_loss" ) ?
-				  getChildValue(elt,"packet_loss") :
-				  XStr( "0" ).x() );
+        /*
+        * Get standard link characteristics
+        */
+        XStr bandwidth(getChildValue(elt,"bandwidth"));
+        XStr latency(getChildValue(elt,"latency"));
+        XStr packet_loss(getChildValue(elt,"packet_loss"));
 	
 		if (vname2vertex.find(src_node.c_str()) == vname2vertex.end()) {
 			cerr << "Bad link, non-existent source node " << src_node << " which has length " << src_node.length() << endl;
@@ -555,18 +495,10 @@ bool populate_links_rspec(DOMElement *root, tb_vgraph &vg, map< pair<string, str
 		/*
 		* Get the link type - we know there is at least one, and we
 		* need it for the constructor
-                * Note: Changed from element to attribute
 		*/
-                /*
 		DOMNodeList *type = elt->getElementsByTagName(XStr ("link_type").x());
 		DOMElement *type_tag = dynamic_cast<DOMElement*>(type->item(0));
 		XStr link_type(type_tag->getAttribute(XStr("type_name").x()));
-                */
-		string str_link_type(XStr(elt->getAttribute(XStr("link_type").x())).c());
-                if (str_link_type == "")
-                {
-                  str_link_type = "ethernet";
-                }
 		
 		
 		/* ------------------- vtop stuff goes here --------------------------- */
@@ -585,34 +517,12 @@ bool populate_links_rspec(DOMElement *root, tb_vgraph &vg, map< pair<string, str
 		//This section has a whole bunch of defaults for tags that were present earlier
 		// but are not in Protogeni. We will eventually decide whether or not we want them.
 		bool allow_delayed = true;
-		//bool allow_trivial = false;
-		bool allow_trivial = true;
-		
-		map< pair<string,string>, pair<string,string> >::iterator it;
-		
+		bool allow_trivial = false;
 		bool fix_src_iface = false;
-		fstring fixed_src_iface = "";
-		it = fixed_interfaces->find(pair<string,string>(src_node.c_str(), src_iface.c_str()));
-		if (it != fixed_interfaces->end())
-		{
-			cerr << "Found fixed source interface (" << (it->second).first << "," << (it->second).second << ") on (" << (it->first).first << "," << (it->first).second << ")" << endl;
-			fix_src_iface = true;
-			fixed_src_iface = (it->second).second;
-		}
-			
-		
 		bool fix_dst_iface = false;
+		fstring fixed_src_iface = "";
 		fstring fixed_dst_iface = "";
-		it = fixed_interfaces->find(make_pair(dst_node, src_iface));
-		if (it != fixed_interfaces->end())
-		{
-			cerr << "Found fixed destination interface (" << (it->second).first << "," << (it->second).second << ") on (" << (it->first).first << "," << (it->first).second << ")" << endl;
-			fix_dst_iface = true;
-			fixed_dst_iface = (it->second).second;
-		}
-		
-		
-		
+
 
 /*		bool allow_trivial = false;
 		#ifdef ALLOW_TRIVIAL_DEFAULT
@@ -643,8 +553,8 @@ bool populate_links_rspec(DOMElement *root, tb_vgraph &vg, map< pair<string, str
 		{
 			src_vnode->num_links++;
 			dst_vnode->num_links++;
-			src_vnode->link_counts[str_link_type.c_str()]++;
-			dst_vnode->link_counts[str_link_type.c_str()]++;
+			src_vnode->link_counts[link_type.c()]++;
+			dst_vnode->link_counts[link_type.c()]++;
 		}
 
 		/*
@@ -655,7 +565,7 @@ bool populate_links_rspec(DOMElement *root, tb_vgraph &vg, map< pair<string, str
 		tb_vlink *virt_link = new tb_vlink();
 		
 		virt_link-> name = str_virtual_uuid;
-		virt_link-> type = fstring(str_link_type.c_str());
+		virt_link-> type = link_type.f();
 
 		virt_link-> fix_src_iface = fix_src_iface;
 		virt_link-> src_iface = (fixed_src_iface);//.f();

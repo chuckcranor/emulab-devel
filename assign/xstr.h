@@ -28,24 +28,26 @@ XERCES_CPP_NAMESPACE_USE
  */
 class XStr {
 public:
-    XStr(const char *_str) : cstr(_str), transcoded(NULL), xmlstr(NULL)
-			     /*, fstr(NULL),
+    XStr(const char *_str) : cstr(_str), cstr_mine(false), xmlstr(NULL),
+			     xmlstr_mine(false) /*, fstr(NULL),
                              fstr_mine(false)  */ { ; };
-    XStr(const XMLCh *_str) : cstr(NULL), transcoded(NULL), xmlstr(NULL)
-			      /*, fstr(NULL), fstr_mine(false) */ {
+    XStr(const XMLCh *_str) : cstr(NULL), cstr_mine(false), xmlstr(NULL),
+			      xmlstr_mine(true) /*, fstr(NULL), fstr_mine(false) */ {
 	xmlstr = XMLString::replicate(_str);
     };
-    XStr(const fstring &_str) : /* fstr_mine(true), */
-      transcoded(NULL), xmlstr(NULL) {
+    XStr(const fstring &_str) : /* fstr_mine(true), */ cstr_mine(false), xmlstr(NULL),
+			  xmlstr_mine(false) {
 	//fstr = new fstring(_str);
 	cstr = _str.c_str();
     };
     
     ~XStr() {
-	if (transcoded != NULL) {
-	    XMLString::release(&transcoded);
+	if (cstr_mine && cstr != NULL) {
+	    // XXX: This sure looks like a bug!
+	    //XMLString::release(&cstr);
+	    delete cstr;
 	}
-	if (xmlstr != NULL) {
+	if (xmlstr_mine && xmlstr != NULL) {
 	    XMLString::release(&xmlstr);
 	}
 	/*if (fstr_mine && fstr != NULL) {
@@ -59,6 +61,7 @@ public:
     const XMLCh *x() {
 	if (this->xmlstr == NULL) {
 	    this->xmlstr = XMLString::transcode(this->cstr);
+	    this->xmlstr_mine = true;
 	}
 	return this->xmlstr;
     };
@@ -68,8 +71,8 @@ public:
      */
     const char *c() {
 	if (this->cstr == NULL) {
-	    this->transcoded = XMLString::transcode(this->xmlstr);
-	    this->cstr = this->transcoded;
+	    this->cstr = XMLString::transcode(this->xmlstr);
+	    this->cstr_mine = true;
 	}
 	return this->cstr;
     };
@@ -131,8 +134,9 @@ public:
     
 private:
     const char *cstr;
-    char * transcoded;
+    bool cstr_mine;
     XMLCh *xmlstr;
+    bool xmlstr_mine; 
 
     /*
      * Make the copy and assignment constructors private - I haven't decided

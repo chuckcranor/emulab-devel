@@ -5,8 +5,7 @@
    All rights reserved.
 -->
 <!DOCTYPE ptop SYSTEM "ptop.dtd">
-<ptop xmlns="http://emulab.net/resources/ptop/0.1" testbed="emulab">
-<!--
+<ptop testbed="emulab">
     <node name="pc1">
         <node_type name="pc">
             <limit slots="1" />
@@ -63,5 +62,4 @@
         </delay_spec>
         <link_type type="ethernet" />
     </link>
--->
 </ptop>

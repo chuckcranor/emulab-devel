@@ -36,20 +36,17 @@ package
 
       clip.sliceName.text = sliceName;
       nodes = new ActiveNodes(parent, clip.nodeList, clip.description);
-      managers = new ComponentView(clip.cmSelect, clip.nodeList, nodes);
-      console = new Console(parent, nodes, managers, clip,
+      cm = new ComponentManager(clip.cmSelect, clip.nodeList, nodes);
+      credential.setupSlivers(cm.getCmCount());
+      console = new Console(parent, nodes, cm, clip,
                             credential, Main.getText());
       console.discoverResources();
-      wait = new SliceWait(clip.wait, clip.opText, console);
-      abstract = new AbstractNodes(clip, nodes, managers);
     }
 
     override public function cleanup() : void
     {
-      abstract.cleanup();
-      wait.cleanup();
       console.cleanup();
-      managers.cleanup();
+      cm.cleanup();
       nodes.cleanup();
       clip.parent.removeChild(clip);
     }
@@ -65,9 +62,7 @@ package
     var parent : DisplayObjectContainer;
     var clip : SliceDetailClip;
     var nodes : ActiveNodes;
-    var managers : ComponentView;
+    var cm : ComponentManager;
     var console : Console;
-    var wait : SliceWait;
-    var abstract : AbstractNodes;
   }
 }

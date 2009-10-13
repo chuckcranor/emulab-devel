@@ -1,6 +1,6 @@
 /*
  * EMULAB-COPYRIGHT
- * Copyright (c) 2000-2009 University of Utah and the Flux Group.
+ * Copyright (c) 2000-2006 University of Utah and the Flux Group.
  * All rights reserved.
  */
 
@@ -39,47 +39,9 @@ static int		sock = -1;
 struct in_addr		myipaddr;
 static int		nobufdelay = -1;
 int			broadcast = 0;
-static int		isclient = 0;
-static int		sndportnum;	/* kept in network order */
-
-int
-GetSockbufSize(void)
-{
-
-	static int sbsize = 0;
-
-	if (sbsize == 0) {
-#if DYN_SOCKBUFSIZE > 0
-		int sock;
-
-		if ((sock = socket(PF_INET, SOCK_DGRAM, IPPROTO_UDP)) < 0)
-			pfatal("Could not allocate a socket");
-
-		for (sbsize = SOCKBUFSIZE; sbsize > 0; sbsize -= (16*1024)) {
-			int i = sbsize;
-			if (setsockopt(sock, SOL_SOCKET, SO_SNDBUF,
-				       &i, sizeof(i)) >= 0)
-				break;
-		}
-		if (sbsize < 0) {
-			int i = 0;
-			unsigned int ilen = sizeof(i);
-			if (getsockopt(sock, SOL_SOCKET, SO_SNDBUF,
-				       &i, &ilen) < 0)
-				i = SOCKBUFSIZE;
-			sbsize = i;
-		}
-		close(sock);
-#else
-		sbsize = SOCKBUFSIZE;
-#endif
-		log("Maximum socket buffer size of %d bytes", sbsize);
-	}
-	return sbsize;
-}
 
 static void
-CommonInit(int dobind)
+CommonInit(void)
 {
 	struct sockaddr_in	name;
 	struct timeval		timeout;
@@ -90,44 +52,40 @@ CommonInit(int dobind)
 	if ((sock = socket(PF_INET, SOCK_DGRAM, IPPROTO_UDP)) < 0)
 		pfatal("Could not allocate a socket");
 
-	i = GetSockbufSize();
+	i = SOCKBUFSIZE;
 	if (setsockopt(sock, SOL_SOCKET, SO_SNDBUF, &i, sizeof(i)) < 0)
-		pwarning("Could not increase send socket buffer size to %d", i);
+		pwarning("Could not increase send socket buffer size to %d",
+			 SOCKBUFSIZE);
     
-	i = GetSockbufSize();
+	i = SOCKBUFSIZE;
 	if (setsockopt(sock, SOL_SOCKET, SO_RCVBUF, &i, sizeof(i)) < 0)
-		pwarning("Could not increase recv socket buffer size to %d", i);
+		pwarning("Could not increase recv socket buffer size to %d",
+			 SOCKBUFSIZE);
 
-	if (dobind) {
-		name.sin_family      = AF_INET;
-		name.sin_port	     = htons(portnum);
-		name.sin_addr.s_addr = htonl(INADDR_ANY);
+	name.sin_family      = AF_INET;
+	name.sin_port	     = htons(portnum);
+	name.sin_addr.s_addr = htonl(INADDR_ANY);
 
-		i = MAXBINDATTEMPTS;
-		while (i) {
-			if (bind(sock, (struct sockaddr *)&name, sizeof(name)) == 0)
-				break;
+	i = MAXBINDATTEMPTS;
+	while (i) {
+		if (bind(sock, (struct sockaddr *)&name, sizeof(name)) == 0)
+			break;
 
-			/*
-			 * Note that we exit with a magic value. 
-			 * This is for server wrapper-scripts so that they can
-			 * differentiate this case and try again with a
-			 * different port.
-			 */
-			if (--i == 0) {
-				error("Could not bind to port %d!\n", portnum);
-				exit(EADDRINUSE);
-			}
-
-			pwarning("Bind to port %d failed. Will try %d more times!",
-				 portnum, i);
-			sleep(5);
+		/*
+		 * Note that we exit with a magic value. 
+		 * This is for server wrapper-scripts so that they can
+		 * differentiate this case and try again with a different port.
+		 */
+		if (--i == 0) {
+			error("Could not bind to port %d!\n", portnum);
+			exit(EADDRINUSE);
 		}
-		log("Bound to port %d", portnum);
-	} else {
-		log("NOT binding to port %d", portnum);
+
+		pwarning("Bind to port %d failed. Will try %d more times!",
+			 portnum, i);
+		sleep(5);
 	}
-	sndportnum = htons(portnum);
+	log("Bound to port %d", portnum);
 
 	/*
 	 * At present, we use a multicast address in both directions.
@@ -214,12 +172,7 @@ CommonInit(int dobind)
 int
 ClientNetInit(void)
 {
-#ifndef SAME_HOST_HACK
-	CommonInit(1);
-#else
-	CommonInit(0);
-#endif
-	isclient = 1;
+	CommonInit();
 	
 	return 1;
 }
@@ -233,8 +186,7 @@ ClientNetID(void)
 int
 ServerNetInit(void)
 {
-	CommonInit(1);
-	isclient = 0;
+	CommonInit();
 
 	return 1;
 }
@@ -307,33 +259,12 @@ PacketReceive(Packet_t *p)
 		    mlen, p->hdr.datalen);
 		return 1;
 	}
-#ifdef SAME_HOST_HACK
-	/*
-	 * If using a host alias for the client, a message may get
-	 * the wrong IP, so rig the IP check to make it always work.
-	 */
-	if (p->hdr.srcip != from.sin_addr.s_addr)
-		from.sin_addr.s_addr = p->hdr.srcip;
-
-	/*
-	 * Also, we aren't binding to a port on the client side, so the
-	 * first message to the server will contain the actual port we
-	 * will use from now on.
-	 */
-	if (!isclient && sndportnum == htons(portnum) &&
-	    sndportnum != from.sin_port)
-		sndportnum = from.sin_port;
-#endif
 	if (p->hdr.srcip != from.sin_addr.s_addr) {
 		log("Bad message source (%x != %x)",
 		    ntohl(from.sin_addr.s_addr), ntohl(p->hdr.srcip));
 		return 1;
 	}
-	if (sndportnum != from.sin_port) {
-		log("Bad message port (%d != %d)",
-		    ntohs(from.sin_port), ntohs(sndportnum));
-		return 1;
-	}
+
 	return 0;
 }
 
@@ -354,7 +285,7 @@ PacketSend(Packet_t *p, int *resends)
 	p->hdr.srcip = myipaddr.s_addr;
 
 	to.sin_family      = AF_INET;
-	to.sin_port        = sndportnum;
+	to.sin_port        = htons(portnum);
 	to.sin_addr.s_addr = mcastaddr.s_addr;
 
 	delays = 0;
@@ -391,7 +322,7 @@ PacketReply(Packet_t *p)
 	len = sizeof(p->hdr) + p->hdr.datalen;
 
 	to.sin_family      = AF_INET;
-	to.sin_port        = sndportnum;
+	to.sin_port        = htons(portnum);
 	to.sin_addr.s_addr = p->hdr.srcip;
 	p->hdr.srcip       = myipaddr.s_addr;
 

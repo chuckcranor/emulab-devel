@@ -35,9 +35,10 @@ mycredential = get_self_credential()
 print "Got my SA credential. Looking for slice ..."
 
 #
-# Lookup slice.
+# Lookup slice, delete before proceeding.
 #
 myslice = resolve_slice( SLICENAME, mycredential )
+myuuid  = myslice["uuid"]
 print "Found the slice, asking for a credential ..."
 
 #

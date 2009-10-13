@@ -16,13 +16,14 @@ package
 {
   class RequestSliverCreate extends Request
   {
-    public function RequestSliverCreate(newManager : ComponentManager,
+    public function RequestSliverCreate(newCmIndex : int,
                                         newNodes : ActiveNodes,
+                                        newCm : ComponentManager,
                                         newRspec : String) : void
     {
-      super(newManager.getName());
-      manager = newManager;
+      cmIndex = newCmIndex;
       nodes = newNodes;
+      cm = newCm;
       rspec = newRspec;
     }
 
@@ -33,25 +34,24 @@ package
 
     override public function start(credential : Credential) : Operation
     {
-      if (manager.getTicket() == null)
+      if (cm.getTicket(cmIndex) == null)
       {
-        nodes.changeState(manager, ActiveNodes.PLANNED, ActiveNodes.CREATED);
+        nodes.changeState(cmIndex, ActiveNodes.PLANNED, ActiveNodes.CREATED);
         opName = "Getting Ticket";
         op.reset(Geni.getTicket);
         op.addField("credential", credential.slice);
         op.addField("rspec", rspec);
         op.addField("impotent", Request.IMPOTENT);
-        op.setUrl(manager.getUrl());
+        op.setUrl(cm.getUrl(cmIndex));
       }
       else
       {
         opName = "Redeeming Ticket";
         op.reset(Geni.redeemTicket);
-        op.addField("credential", credential.slice);
-        op.addField("ticket", manager.getTicket());
+        op.addField("ticket", cm.getTicket(cmIndex));
         op.addField("impotent", Request.IMPOTENT);
         op.addField("keys", credential.ssh);
-        op.setUrl(manager.getUrl());
+        op.setUrl(cm.getUrl(cmIndex));
       }
       return op;
     }
@@ -62,34 +62,26 @@ package
       var result : Request = null;
       if (code == 0)
       {
-        if (manager.getTicket() == null)
+        if (cm.getTicket(cmIndex) == null)
         {
           var ticket : String = response.value;
-          manager.setTicket(ticket);
-//          setSliverIds(ticket);
-          result = new RequestSliverCreate(manager, nodes, rspec);
+          cm.setTicket(cmIndex, ticket);
+          setSliverIds(ticket);
+          result = new RequestSliverCreate(cmIndex, nodes, cm, rspec);
         }
         else
         {
-          if (manager.getVersion() == 0)
-          {
-            manager.setSliver(response.value);
-            setSliverIds(response.value);
-          }
-          else
-          {
-            manager.setSliver(response.value[0]);
-            manager.setManifest(response.value[1]);
-          }
+          credential.slivers[cmIndex] = response.value;
+          cm.setTicket(cmIndex, null);
 
-          if (! nodes.hasTunnels(manager))
+          if (! nodes.hasTunnels(cmIndex))
           {
-            nodes.commitState(manager);
+            nodes.commitState(cmIndex);
           }
           else
           {
-            var newRspec = nodes.getXml(true, manager);
-            result = new RequestSliverUpdate(manager, nodes, newRspec,
+            var newRspec = nodes.getXml(cmIndex, true);
+            result = new RequestSliverUpdate(cmIndex, nodes, cm, newRspec,
                                              true);
           }
         }
@@ -97,7 +89,7 @@ package
       else
       {
         result = releaseTicket();
-        nodes.revertState(manager);
+        nodes.revertState(cmIndex);
       }
       return result;
     }
@@ -105,19 +97,17 @@ package
     override public function fail() : Request
     {
       var result : Request = releaseTicket();
-      nodes.revertState(manager);
+      nodes.revertState(cmIndex);
       return result;
     }
 
     function releaseTicket() : Request
     {
       var result : Request = null;
-      if (manager.getTicket() != null)
+      if (cm.getTicket(cmIndex) != null)
       {
-        result = new RequestReleaseTicket(manager.getTicket(),
-                                          manager.getUrl(),
-                                          manager.getName());
-        manager.setTicket(null);
+        result = new RequestReleaseTicket(cm.getTicket(cmIndex),
+                                          cm.getUrl(cmIndex));
       }
       return result;
     }
@@ -131,13 +121,14 @@ package
         var sliverId : String = node.elements("sliver_uuid");
         if (name != "" && sliverId != "")
         {
-          nodes.setSliverId(manager, name, sliverId);
+          nodes.setSliverId(cmIndex, name, sliverId);
         }
       }
     }
 
-    var manager : ComponentManager;
+    var cmIndex : int;
     var nodes : ActiveNodes;
+    var cm : ComponentManager;
     var rspec : String;
   }
 }

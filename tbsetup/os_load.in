@@ -17,11 +17,9 @@ sub usage()
     print("Usage: os_load [-s] [[-p <pid>] -i <imageid>] <node> [node ...]\n".
 	  "       os_load [-s] [[-p <pid>] -i <imageid>] -e pid,eid\n".
 	  "       os_load -l\n".
-	  "Use -i to specify a comma seperated list of image IDs.\n".
-          "       Use the node default otherwise.\n".
+	  "Use -i to specify an image ID. Use node default otherwise.\n".
 	  "Use -p to specify the project ID in which to find the imageid.\n".
-	  "       If the image is not found in <pid> also try ".TB_OPSPID().".\n".
-	  "Use -m to specify the internal name(s) if an image ID.\n".
+	  "Use -m to specify the internal name if an image ID.\n".
 	  "Use -s to start reload, but do not wait for it to complete.\n".
 	  "Use -w to wait for the nodes to finish booting.\n".
 	  "Use -r to supress rebooting nodes - you need to to it yourself\n".
@@ -30,23 +28,21 @@ sub usage()
 	  "Use -z <style> to zero all unallocated blocks on the disk\n".
 	  "       style==0: do not zero (same as not using -z)\n".
 	  "       style==1: let frisbee do the zeroing\n".
-	  "       style==2: zero disk before running frisbee\n".
-          "Use -P to prepare the disk as if a whole disk image was loaded\n");
+	  "       style==2: zero disk before running frisbee\n");
     exit(-1);
 }
-my $optlist   = "swldi:e:p:m:rz:P";
+my $optlist   = "swldi:e:p:m:rz:";
 my $waitmode  = 1;
 my $listonly  = 0;
 my $debug     = 0;
 my $noreboot  = 0;
 my $zerofree  = 0;
-my $prepare   = 0;
 my @nodes     = ();
 my $imagepid;
+my $imagename;
+my $imageid;
 my $pid;
 my $eid;
-my @imageids = ();
-my $imagenames;
 
 # Configure variables
 my $TB		= "@prefix@";
@@ -58,8 +54,6 @@ use libosload;
 use libtestbed;
 use Experiment;
 use Node;
-use OSinfo;
-use Image;
 
 # Be careful not to exit on transient error
 $libdb::DBQUERY_MAXTRIES = 30;
@@ -97,8 +91,6 @@ $noreboot = 1
     if (defined($options{"r"}));
 $zerofree = $options{"z"}
     if (defined($options{"z"}));
-$prepare = 1
-    if (defined($options{"P"}));
 
 #
 # Figure out which nodes. Choice of nodes on command line, or all nodes in an
@@ -158,6 +150,15 @@ else {
 if (defined($options{"i"})) {
     usage()
 	if (defined($options{"m"}));
+    
+    $imagename = $options{"i"};
+    
+    if ($imagename =~ /^([-\w\.\+]+)$/) {
+	$imagename = $1;
+    }
+    else {
+	die("*** Bad data in imagename: $imagename.\n");
+    }
 
     if (defined($options{"p"})) {
 	$imagepid = $options{"p"};
@@ -169,29 +170,21 @@ if (defined($options{"i"})) {
 	    die("*** Bad data in imagepid: $imagepid.\n");
 	}
     }
-    
-    $imagenames = $options{"i"};
 
-    foreach my $imagename (split /,/, $imagenames) {
-	
-	if ($imagename =~ /^([-\w\.\+]+)$/) {
-	    $imagename = $1;
+    #
+    # If -p option given, use that.
+    # If in experiment mode, then use the pid of the experiment, unless
+    # a -p option was given.
+    # Otherwise look in the system project.
+    #
+    if (defined($imagepid)) {
+	if (! ($imageid = TBImageID($imagepid, $imagename))) {
+	    die("*** $0:\n".
+		"    No such image $imagename in project $imagepid!\n");
 	}
-	else {
-	    die("*** Bad data in imagename: $imagename.\n");
-	}
-	
-	#
-	# If -p option given, use that.
-	# If in experiment mode, then use the pid of the experiment, unless
-	# a -p option was given.
-	# Otherwise look in the system project.
-	#
-	my $imageid;
-	if (defined($imagepid)) {
-	    $imageid = TBImageID($imagepid, $imagename);
-	}
-	if (! $imageid && defined($pid)) {
+    }
+    else {
+	if (defined($pid)) {
 	    $imageid = TBImageID($pid, $imagename);
 	}
 	if (! $imageid) {
@@ -199,9 +192,8 @@ if (defined($options{"i"})) {
 	}
 	if (! $imageid) {
 	    die("*** $0:\n".
-		"	 No such image $imagename!\n");
+		"    No such image $imagename!\n");
 	}
-	push @imageids, $imageid;
     }
 }
 
@@ -212,16 +204,13 @@ if (defined($options{"m"})) {
     usage()
 	if (defined($options{"i"}));
 
-    foreach my $imageid (split /,/, $options{"i"}) {
-
-	if ($imageid =~ /^([-\w\.\+]+)$/) {
-	    $imageid = $1;
-	}
-	else {
-	    die("*** Bad data in imageid: $imageid\n");
-	}
-
-	push @imageids, $imageid;
+    $imageid = $options{"m"};
+    
+    if ($imageid =~ /^([-\w\.\+]+)$/) {
+	$imageid = $1;
+    }
+    else {
+	die("*** Bad data in imageid: $imageid\n");
     }
 }
 
@@ -231,48 +220,8 @@ if (defined($options{"m"})) {
 my $first = 1;
 my @temp = ();
 foreach my $node ( @nodes ) {
-    my $nodeid = $node->node_id();
-    if ($node->isvirtnode()) {
-	#
-	# Some virtnodes can be reloaded, IF their virthost is running an OS
-	# that supports subimages, and if the new child OS can run on the
-	# current virthost OS.
-	#
-	my $parent = $node->GetPhysHost();
-	my $failed = 0;
-	if (defined($parent)) {
-	    my ($def_boot_osid,undef,undef) = $parent->GetOsids();
-            my $posinfo = OSinfo->Lookup($def_boot_osid);
-            if (defined($posinfo) && $posinfo->FeatureSupported("suboses")) {
-                foreach my $imageid (@imageids) {
-		    my $image = Image->Lookup($imageid);
-		    my $osinfo = OSinfo->Lookup($image->default_osid());
-		    if (!$osinfo->IsSubOS()) {
-			print "*** reload($nodeid): $osinfo is not a subOS and thus cannot run on a virtnode, skipping!\n";
-			$failed = 1;
-		    }
-		    elsif (!$osinfo->RunsOnParent($posinfo)) {
-			print "*** reload($nodeid): subOS $osinfo cannot run on parent node $parent running $posinfo, skipping!\n";
-			$failed = 1;
-		    }
-                }
-            }
-            else {
-                print "*** reload ($nodeid): parent os $posinfo on $parent does not support suboses, skipping!\n";
-                $failed = 1;
-            }
-        }
-        else {
-	    print "*** reload ($nodeid): could not find parent phys host!\n";
-	    $failed = 1;
-        }
-
-        if ($failed) {
-	    $first = 0;
-	    next;
-        }
-    }
-    elsif (!$node->imageable()) {
+    if (!$node->imageable()) {
+	my $nodeid = $node->node_id();
 	#
 	# Common mistake: forget the -i before the imagename, e.g.,
 	# "os_load FBSD54-STD pcNN", which results in pcNN getting loaded
@@ -280,7 +229,7 @@ foreach my $node ( @nodes ) {
 	# is an image ID, assume they have made this mistake and stop.
 	#
 	my $_pid = defined($imagepid) ? $imagepid : TB_OPSPID();
-	if ($first && !defined($imagenames) && TBImageID($_pid, $nodeid)) {
+	if ($first && !defined($imagename) && TBImageID($_pid, $nodeid)) {
 	    print "*** reload: forgot the -i before image name $nodeid?\n";
 	    exit(1);
 	}
@@ -310,11 +259,10 @@ $osloadargs{'debug'}    = $debug;
 $osloadargs{'waitmode'} = $waitmode;
 $osloadargs{'noreboot'} = $noreboot;
 $osloadargs{'zerofree'} = $zerofree;
-$osloadargs{'prepare'}  = $prepare;
 $osloadargs{'nodelist'} = [ map { $_->node_id() } @nodes ];
 # No imageid means to load the default image.
-$osloadargs{'imageids'} = [ @imageids ]
-    if (@imageids);
+$osloadargs{'imageid'}  = $imageid
+    if (defined($imageid));
 $osloadargs{'swapinfo'} = 1;
 
 exit(osload(\%osloadargs, \%failednodes));

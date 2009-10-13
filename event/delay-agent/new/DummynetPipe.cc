@@ -111,7 +111,7 @@ void DummynetPipe::updateParameter(struct dn_pipe* pipe, Parameter const & newPa
     pipe->delay = newParameter.getValue();
     break;
   case Parameter::LOSS:
-    pipe->fs.plr = newParameter.getValue();
+    // TODO: Loss
     break;
   case Parameter::NOTHING:
     break;

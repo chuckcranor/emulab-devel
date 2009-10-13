@@ -18,7 +18,7 @@ NodeContents =
     # Each node has exactly one virtualization technology, which we simply
     # enumerate here
     attribute virtualization_type { "raw" | "trellis-vserver" |
-      "planetlab-vserver" | "emulab-vnode" | "bgpmux" }? &
+      "planetlab-vserver" | "emulab-vnode" }? &
 
     # Node type list
     NodeTypeList &
@@ -32,12 +32,12 @@ NodeContents =
     }*
 
   LinkContents =
-    # Each link has exactly one virtualization technology, which we simply
+	# Each link has exactly one virtualization technology, which we simply
     # enumerate here
     attribute virtualization_type { "raw" | "trellis-vserver" |
       "planetlab-vserver" | "emulab-vnode" }? &
     # Link types
-    LinkType+ &
+    LinkTypeList &
     # The interfaces which this link spans.
     element interface_ref {
       InterfaceRef
@@ -45,37 +45,23 @@ NodeContents =
 
 NodeTypeList = NodeTypeSpec+
 
-NodeTypeContents &= TypeField*
-
-LinkType = element link_type {
-    attribute name { text }? &
-    attribute type_name { text }? &
-    TypeField*
-    }
-
-TypeField = element field {
-    attribute key { text } &
-    attribute value { text }
-    }
+LinkTypeList = LinkTypeSpec+
 
 VirtualName = attribute virtual_id { text }
 
 ComponentName =
   # This is the uuid of the aggregate that this node or link belongs
   # to. It is required in an advertisement.
-  attribute component_manager_uuid { text }? &
-  attribute component_manager_urn { text }? &
+  attribute component_manager_uuid { text } &
   # User-readable name for the component
   attribute component_name { text }? &
   # The uuid of the physical component.
-  attribute component_uuid { text }? &
-  attribute component_urn { text }?
+  attribute component_uuid { text }
 
 ComponentInterfaceDeclName = attribute component_id { text }
 
 ComponentInterfaceRefName =
-  attribute component_node_uuid { text }? &
-  attribute component_node_urn { text }? &
+  attribute component_node_uuid { text } &
   attribute component_interface_id { text }
 
 InterfaceDecl = empty
@@ -85,10 +71,10 @@ InterfaceRef = empty
 Location = element location {
   # The two-letter ISO 3166 code for the country the node is in.
   attribute country { text } &
-  # Longitude and Latitude coordinates of the node using the
+  # Longitude and Lattitude coordinates of the node using the
   # WGS 84 standard.
   attribute longitude { text }? &
-  attribute latitude { text }?
+  attribute lattitude { text }?
 }
 
 RSpec = element rspec {
@@ -99,10 +85,6 @@ RSpecContents =
   # When this RSpec was generated - optional, can be used for determining
   # staleness
   attribute generated { xsd:dateTime }? &
-  # Who/what generated the rspec. This is purely informative and
-  # should not be used for any policy consideration. The format is
-  # not fixed.
-  attribute generated_by { text }? &
   # How long this rspec is valid - in the case of a ticket, this indicates
   # how long the holder may use the resources. For a resource request, it's
   # how long we want the resources. For an advertisement, it might be a hint
