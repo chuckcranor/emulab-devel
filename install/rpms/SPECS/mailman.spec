@@ -1,3 +1,6 @@
+# new rpm won't accept fuzzy patches :-)
+%define _default_patch_fuzz 2
+
 Summary: Mailing list manager with built in Web access
 Name: mailman
 Version: 2.1.9
