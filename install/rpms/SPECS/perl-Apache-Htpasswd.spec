@@ -21,7 +21,7 @@ URL:		%{url}
 Source:	      	%{pname}-%{version}.tar.gz
 BuildRoot:	%{_tmppath}/%{name}-%{version}-%{release}-root-%(%{__id_u} -n)
 
-BuildRequires:	coreutils, make, perl, perl-Crypt-PasswdMD5, perl-Digest-SHA1
+BuildRequires:	coreutils, make, perl, perl-Crypt-PasswdMD5, perl-Digest-SHA1, perl-ExtUtils-MakeMaker
 Requires:	perl, perl-Crypt-PasswdMD5, perl-Digest-SHA1
 
 Provides:	perl-Apache-Htpasswd, perl(Apache::Htpasswd)

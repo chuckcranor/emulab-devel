@@ -25,7 +25,7 @@ URL:		%{url}
 Source:	      	%{realname}-%{version}.tar.gz
 BuildRoot:	%{_tmppath}/%{name}-%{version}-%{release}-root-%(%{__id_u} -n)
 
-BuildRequires:	make, gcc
+BuildRequires:	make, gcc, gcc-c++, byacc
 Requires:	glibc, bash, coreutils
 Provides:	pubsub
 

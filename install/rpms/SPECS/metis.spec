@@ -24,6 +24,8 @@ BuildRequires:	make, gcc
 
 Provides:	metis
 
+Patch1:		metis-4.0-libc-math.patch
+
 %description
 METIS is a set of serial programs for partitioning graphs, partitioning finite
 element meshes, and producing fill reducing orderings for sparse matrices. The
@@ -33,6 +35,7 @@ schemes developed in our lab.
 
 %prep
 %setup -n %{name}-%{src_version}
+%patch1 -p0
 
 %build
 make

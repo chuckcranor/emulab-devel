@@ -18,7 +18,7 @@ URL:		%{url}
 Source:	      	%{name}-%{version}.tar.gz
 BuildRoot:	%{_tmppath}/%{name}-%{version}-%{release}-root-%(%{__id_u} -n)
 
-BuildRequires:	make, autoconf, gcc
+BuildRequires:	make, autoconf, gcc, expat-devel, gcc-c++
 #Requires:	
 
 Provides:	ulsshxmlrpcpp

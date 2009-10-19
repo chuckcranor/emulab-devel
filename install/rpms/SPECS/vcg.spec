@@ -19,7 +19,7 @@ URL:		%{url}
 Source:	      	%{name}.%{realversion}.tgz
 BuildRoot:	%{_tmppath}/%{name}-%{version}-%{release}-root-%(%{__id_u} -n)
 
-BuildRequires:	make, imake, gcc, libXext, libXext-devel, tcsh
+BuildRequires:	make, imake, gcc, libXext, libXext-devel, tcsh, flex, bison
 Requires:	libXext
 
 Provides:	vcg
