@@ -47,6 +47,7 @@ This is the OPS "metapackage", which is essentially a big dependency container
 of all the packages that need to be installed on an Emulab OPS server.
 
 %prep
+mkdir -p $RPM_BUILD_ROOT
 
 %build
 

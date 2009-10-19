@@ -67,6 +67,7 @@ This is the BOSS "metapackage", which is essentially a big dependency container
 of all the packages that need to be installed on an Emulab BOSS server.
 
 %prep
+mkdir -p $RPM_BUILD_ROOT
 
 %build
 
