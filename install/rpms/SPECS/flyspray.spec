@@ -22,12 +22,12 @@ Requires:	httpd, php, php-adodb
 
 Provides:	flyspray
 
-patch1:		notify.patch
-patch2:		perf.patch
-patch3:		scripts.patch
-patch4:		theme.patch
-patch5:		xmlrpc.patch
-patch6:		includes.patch
+patch1:		flyspray-notify.patch
+patch2:		flyspray-perf.patch
+patch3:		flyspray-scripts.patch
+patch4:		flyspray-theme.patch
+patch5:		flyspray-xmlrpc.patch
+patch6:		flyspray-includes.patch
 
 %description
 Flyspray is an uncomplicated, web-based bug tracking system written in PHP for
