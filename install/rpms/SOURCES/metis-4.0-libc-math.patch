@@ -1,0 +1,12 @@
+--- Lib/rename.h.orig	1998-11-30 09:26:50.000000000 -0700
++++ Lib/rename.h	2009-09-09 20:27:24.911683365 -0600
+@@ -410,7 +410,8 @@
+ #define RandomPermute			__RandomPermute
+ #define ispow2				__ispow2
+ #define InitRandom			__InitRandom
+-#define log2				__log2
++/* libc seems to have an __log2 now */
++#define log2				___log2
+ 
+ 
+ 

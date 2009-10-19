@@ -1,0 +1,114 @@
+diff -Nurb mrouted-3.9-beta3.old/fedora/mrouted.init.d mrouted-3.9-beta3/fedora/mrouted.init.d
+--- mrouted-3.9-beta3.old/fedora/mrouted.init.d	1969-12-31 17:00:00.000000000 -0700
++++ mrouted-3.9-beta3/fedora/mrouted.init.d	2008-11-12 13:27:40.000000000 -0700
+@@ -0,0 +1,110 @@
++#!/bin/bash
++### BEGIN INIT INFO
++# Provides: mrouted
++# chkconfig: - 16 84
++# config: /etc/mrouted.conf
++# Short-Description: A multicast routing engine
++# Description: A multicast routing engine that turns a UNIX machine into a multicast router
++### END INIT INFO
++
++# source function library
++. /etc/rc.d/init.d/functions
++
++# Get network config
++. /etc/sysconfig/network
++
++RETVAL=0
++PROG="mrouted"
++cmd=/usr/sbin/mrouted
++LOCK_FILE=/var/lock/subsys/mrouted
++CONF_FILE=/etc/mrouted.conf
++LOG_FILE=/var/log/mrouted.log
++DEBUG_OPTS="routing,interface,membership,igmp"
++PID_FILE=/var/run/mrouted.pid
++
++case "$1" in
++  start)
++	# Check that networking is up.
++	[ "${NETWORKING}" = "no" ] && exit 1
++
++	# The process must be configured first.
++	[ -f $CONF_FILE ] || exit 6
++
++	# check if already running
++	RUNNING=0
++	PID=0
++	if [ -e $PID_FILE ]; then
++	    PID=`cat $PID_FILE`
++	    if [ -n $PID ]; then
++		ps -p $PID >/dev/null 2>&1
++		if [ $? -eq 0 ]; then
++		    RUNNING=1
++		fi
++	    fi
++	fi
++	# I hate initscripts that rely on the lockfile's existence, but...
++	if [ -e $LOCK_FILE ]; then
++	    echo "warning: found lockfile $LOCK_FILE, but no process!"
++	    RUNNING=1
++	fi
++
++	if [ $RUNNING -eq 1 ]; then
++	    echo "error: $PROG already running!"
++	    action $"Starting $PROG: " /bin/false
++	fi
++
++	# we do our own thing instead of using daemon() so we can redirect
++	# output to a logfile
++	touch $LOG_FILE
++
++	$cmd -d "$DEBUG_OPTS" >> $LOG_FILE 2>&1 &
++	PID=$!
++
++	# make sure it really started...
++	sleep 3
++	ps -p $PID >/dev/null 2>&1 
++	RETVAL=$?
++	if [ $RETVAL -eq 0 ]; then
++	    # hah, mrouted writes its own pidfile
++	    #echo $PID > $PID_FILE
++	    touch $LOCK_FILE
++	    action $"Starting $PROG: " /bin/true
++	else
++	    rm -f $PID_FILE >/dev/null 2>&1
++	    rm -f $LOCK_FILE >/dev/null 2>&1
++	    action $"Starting $PROG: " /bin/false
++	fi
++	;;
++  stop)
++	killproc -p $PID_FILE $cmd
++	RETVAL=$?
++	if [ $RETVAL -eq 0 ]; then 
++	    rm -f $LOCK_FILE
++	    rm -f $PID_FILE
++	    action $"Stopping $PROG: " /bin/true
++	else
++	    action $"Stopping $PROG: " /bin/false
++	fi
++	;;
++  restart|reload)
++        $0 stop
++        $0 start
++	RETVAL=$?
++        ;;
++  condrestart)
++        if [ -f $LOCK_FILE ]; then
++                $0 stop
++		$0 start
++        fi
++	RETVAL=$?
++        ;;
++  status)
++        status $cmd
++	RETVAL=$?
++        ;;
++  *)
++	echo $"Usage: $0 {start|stop|restart|reload|condrestart|status}"
++	exit 2
++esac
++
++exit $RETVAL

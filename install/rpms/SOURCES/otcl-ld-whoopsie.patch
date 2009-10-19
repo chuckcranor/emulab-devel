@@ -1,0 +1,24 @@
+diff -Nurb otcl-1.13/configure otcl-1.13.new/configure
+--- otcl-1.13/configure	2008-10-30 16:46:40.000000000 -0600
++++ otcl-1.13.new/configure	2008-10-30 16:48:48.000000000 -0600
+@@ -5515,7 +5515,7 @@
+         ;;
+     Linux*)
+         SHLIB_CFLAGS="-fpic"
+-        SHLIB_LD="ld -shared"
++        SHLIB_LD="gcc -shared"
+         SHLIB_SUFFIX=".so"
+         DL_LIBS="-ldl"
+         SHLD_FLAGS=""
+diff -Nurb otcl-1.13/configure.in otcl-1.13.new/configure.in
+--- otcl-1.13/configure.in	2007-02-03 18:41:50.000000000 -0700
++++ otcl-1.13.new/configure.in	2008-10-30 16:48:25.000000000 -0600
+@@ -74,7 +74,7 @@
+         ;;
+     Linux*)
+         SHLIB_CFLAGS="-fpic"
+-        SHLIB_LD="ld -shared"
++        SHLIB_LD="${CC} -shared"
+         SHLIB_SUFFIX=".so"
+         DL_LIBS="-ldl"
+         SHLD_FLAGS=""

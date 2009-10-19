@@ -1,0 +1,11 @@
+--- Mailman/SecurityManager.py.save	2006-07-30 13:35:36.000000000 -0600
++++ Mailman/SecurityManager.py	2008-12-04 15:05:07.000000000 -0700
+@@ -296,7 +296,7 @@
+                 prefix = self.internal_name() + '+user+'
+                 for k in c.keys():
+                     if k.startswith(prefix):
+-                        usernames.append(k[len(prefix):])
++                        usernames.append(urllib.unquote(k[len(prefix):]))
+             # If any check out, we're golden.  Note: `@'s are no longer legal
+             # values in cookie keys.
+             for user in [Utils.UnobscureEmail(u) for u in usernames]:

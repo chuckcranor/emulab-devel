@@ -1,0 +1,10 @@
+--- mrouted-3.9-beta3.orig/defs.h~	2008-11-12 09:24:05.000000000 -0700
++++ mrouted-3.9-beta3.orig/defs.h	2008-11-12 09:28:21.000000000 -0700
+@@ -45,6 +45,7 @@
+ #undef rtentry
+ #endif
+ #endif
++#include <linux/types.h>
+ #include "netinet/ip_mroute.h"
+ #ifdef RSRR
+ #include <sys/un.h>

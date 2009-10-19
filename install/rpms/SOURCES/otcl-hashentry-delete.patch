@@ -1,0 +1,14 @@
+--- otcl.c~	2009-07-20 14:08:10.000000000 -0600
++++ otcl.c	2009-07-20 15:25:55.000000000 -0600
+@@ -998,7 +998,11 @@
+     * the already-freed hash table entry.)
+     */
+     Var* vp = (Var*)Tcl_GetHashValue(hp);
++#if TCL_MAJOR_VERSION >= 8 && TCL_MINOR_VERSION >= 5
++    Tcl_DeleteHashEntry(&((VarInHash *)vp)->entry);
++#else
+     vp->hPtr = 0;
++#endif
+     hp = Tcl_NextHashEntry(&hs);
+   }
+   Tcl_DeleteHashTable(ObjVarTablePtr(obj));

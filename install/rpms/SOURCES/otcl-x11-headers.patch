@@ -1,0 +1,46 @@
+diff -Nurb otcl-1.13/conf/configure.in.x11 otcl-1.13.new/conf/configure.in.x11
+--- otcl-1.13/conf/configure.in.x11	2006-09-27 23:25:04.000000000 -0600
++++ otcl-1.13.new/conf/configure.in.x11	2008-10-30 16:41:59.000000000 -0600
+@@ -14,7 +14,8 @@
+ 	/usr/X386/lib \
+ 	/usr/X11/lib \
+ 	/usr/unsupported/lib \
+-	/import/X11R4/usr/lib"
++	/import/X11R4/usr/lib \
++	/usr/lib/X11"
+ 
+ xincdirs="\
+ 	/usr/openwin/include \
+@@ -29,7 +30,8 @@
+ 	/usr/X11/include \
+ 	/usr/lpp/X11/include \
+ 	/usr/unsupported/include \
+-	/import/X11R4/include"
++	/import/X11R4/include \
++	/usr/include/X11"
+ 
+ 
+ echo "checking for X11 header files"
+diff -Nurb otcl-1.13/configure otcl-1.13.new/configure
+--- otcl-1.13/configure	2008-10-30 16:43:54.000000000 -0600
++++ otcl-1.13.new/configure	2008-10-30 16:41:10.000000000 -0600
+@@ -5035,7 +5035,8 @@
+ 	/usr/X386/lib \
+ 	/usr/X11/lib \
+ 	/usr/unsupported/lib \
+-	/import/X11R4/usr/lib"
++	/import/X11R4/usr/lib \
++        /usr/lib/X11"
+ 
+ xincdirs="\
+ 	/usr/openwin/include \
+@@ -5050,7 +5051,8 @@
+ 	/usr/X11/include \
+ 	/usr/lpp/X11/include \
+ 	/usr/unsupported/include \
+-	/import/X11R4/include"
++	/import/X11R4/include \
++        /usr/include/X11"
+ 
+ 
+ echo "checking for X11 header files"

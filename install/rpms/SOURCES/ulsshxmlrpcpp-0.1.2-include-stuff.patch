@@ -1,0 +1,13 @@
+--- ./ulxmlrpcpp/ulxmlrpcpp/ulxmlrpcpp.h~	2009-07-14 14:31:54.000000000 -0600
++++ ./ulxmlrpcpp/ulxmlrpcpp/ulxmlrpcpp.h	2009-07-14 14:30:40.000000000 -0600
+@@ -41,6 +41,10 @@
+ 
+ #include <iostream>
+ 
++#include <cstdlib>
++#include <cstring>
++#include <cstdio>
++
+ #ifdef _MSC_VER
+ # include <ulxr_config-msvc.h>
+ #elif defined(__BORLANDC__)
