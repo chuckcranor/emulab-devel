@@ -67,7 +67,7 @@ my $PORT_FORMAT_NODEPORT = 3;
 # usage: new($classname,$devicename,$debuglevel,$community)
 #        returns a new object, blessed into the snmpit_cisco class.
 #
-sub new($$$$;$) {
+sub new($$$;$) {
 
     # The next two lines are some voodoo taken from perltoot(1)
     my $proto = shift;
@@ -75,7 +75,6 @@ sub new($$$$;$) {
 
     my $name = shift;
     my $debugLevel = shift;
-    my $quiet = shift;
     my $community = shift;
 
     #
@@ -90,11 +89,6 @@ sub new($$$$;$) {
 	$self->{DEBUG} = $debugLevel;
     } else {
 	$self->{DEBUG} = 0;
-    }
-    if (defined($quiet)) {
-	$self->{QUIET} = $quiet;
-    } else {
-	$self->{QUIET} = 0;
     }
     $self->{BLOCK} = 1;
     $self->{BULK} = 1;
@@ -514,8 +508,7 @@ sub vlanUnlock($) {
     my $EditOp = 'vtpVlanEditOperation'; # use index 1
     my $ApplyStatus = 'vtpVlanApplyStatus'; # use index 1
 
-    print "    Applying VLAN changes on $self->{NAME} ..."
-	if (! $self->{QUIET});
+    print "    Applying VLAN changes on $self->{NAME} ...";
 
     #
     # Send the command to apply what's in the edit buffer
@@ -557,13 +550,11 @@ sub vlanUnlock($) {
         # Tell the caller what happened
         #
         if ($ApplyRetVal ne "succeeded") {
-            print " FAILED\n"
-		if (! $self->{QUIET});
+            print " FAILED\n";
             warn("**** ERROR: Failure applying VLAN changes on $self->{NAME}:".
 		 " $ApplyRetVal\n");
         } else { 
-            print " Succeeded\n"
-		if (! $self->{QUIET});
+            print " Succeeded\n";
             $self->debug("Apply Succeeded.\n");
         }
     }
@@ -807,7 +798,7 @@ sub createVlan($$;$$$) {
 	my $SAID = pack("H*",sprintf("%08x",$vlan_number + 100000));
 
 	print "  Creating VLAN $vlan_id as VLAN #$vlan_number on " .
-		"$self->{NAME} ... " if (! $self->{QUIET});
+		"$self->{NAME} ... ";
 
 	#
 	# Perform the actual creation. Yes, this next line MUST happen all in
@@ -821,7 +812,7 @@ sub createVlan($$;$$$) {
 	my @varList = ($vlan_number > 1000) ?  ($statusRow, $nameRow)
 			    : ($statusRow, $typeRow, $nameRow, $saidRow);
 	my $RetVal = snmpitSetWarn($self->{SESS}, new SNMP::VarList(@varList));
-	print "",($RetVal? "Succeeded":"Failed"), ".\n"	if (! $self->{QUIET});
+	print "",($RetVal? "Succeeded":"Failed"), ".\n";
 
 	#
 	# Check for success
@@ -1263,20 +1254,13 @@ sub removeVlan($@) {
 	#
 	my $VlanRowStatus = 'vtpVlanEditRowStatus'; # vlan is index
 
-	print "  Removing VLAN #$vlan_number on $self->{NAME} ... "
-	    if (! $self->{QUIET});
+	print "  Removing VLAN #$vlan_number on $self->{NAME} ... ";
 	my $RetVal = snmpitSetWarn($self->{SESS},
             [$VlanRowStatus,"1.$vlan_number","destroy","INTEGER"]);
 	if ($RetVal) {
-	    print "Succeeded.\n" if (! $self->{QUIET});
+	    print "Succeeded.\n";
 	} else {
-	    if ($self->{QUIET}) {
-		print "  Removing VLAN #$vlan_number on ".
-		    "$self->{NAME} failed.\n";
-	    }
-	    else {
-		print "Failed.\n";
-	    }
+	    print "Failed.\n";
 	    $errors++;
 	}
 
