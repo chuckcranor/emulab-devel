@@ -1,0 +1,123 @@
+#
+# Some transformations we do by default to make the user's life a bit easier.
+#
+# First, add URLs to all items in SOURCES-$(pkg) for each pkg if they don't 
+# start with a URL.  Of course, some sources could come from CVS; we filter
+# these out using the SOURCESCVS-$(pkg) variable so these don't get downloaded.
+SOURCELIST = $(foreach pkg,$(PKGS),$(filter-out $(CVSSOURCES-$(pkg)),$(SOURCES-$(pkg))))
+fullsourcelist = $(foreach pkg,$(PKGS),$(SOURCES-$(pkg)))
+
+SECONDARYSOURCES = $(addprefix $(SOURCEDIR)/,$(foreach pkg,$(PKGS),$(addprefix $(pkg)/,$(filter-out $(CVSSOURCES-$(pkg)),$(SOURCES-$(pkg))))))
+
+# Second, foreach pkg and item INSTALLFILES-$(pkg), turn that into a full RPM
+# package filename.  We do this by using spectool to get the version and 
+# release from the spec file; grep'ing for noarch in the RPMBUILDFLAGS-$(pkg)
+# and using that for arch, or i686 if x86, else uname -m; and using
+# $(MYBUILDROOT) to make a full pathname.
+
+all: $(addprefix built-,$(PKGS))
+
+# extra layer of indirection so that the config variables can just use 
+# 'installed-tcl' or similar, not INSTALLEDDIR/tcl
+installed-%: $(INSTALLEDDIR)/%
+	
+
+$(INSTALLEDDIR)/%: install-%
+	
+
+.SECONDEXPANSION:
+
+install-%: build-% $$(addprefix $(MYBUILDROOT)/,$$(INSTALLFILES-$$*))
+	@if [ -z "$(INSTALLOPTS-$*)" ]; then \
+		echo "Installing $* with default installopts!" ; \
+		rpm $(INSTALLOPTS-DEFAULT) $(addprefix $(MYBUILDROOT)/,$(INSTALLFILES-$*)) ; \
+	else \
+		rpm $(INSTALLOPTS-$*) $(addprefix $(MYBUILDROOT)/,$(INSTALLFILES-$*)) ; \
+	fi
+	mkdir -p $(INSTALLEDDIR)
+	touch $(INSTALLEDDIR)/$*
+
+# extra layer of indirection so that the config variables can just use 
+# 'built-tcl' or similar, not BUILTDIR/tcl
+built-%: $(BUILTDIR)/%
+	
+
+$(BUILTDIR)/%: build-%
+	@echo "Touching builtfile for $*"
+	mkdir -p $(BUILTDIR)
+	date > $(BUILTDIR)/$*
+	@echo -n "Build of $* completed at "
+	@cat $(BUILTDIR)/$*
+
+build-%: $(SPECDIR)/%.spec source-% $$(addprefix installed-,$$(LOCALBUILDDEPS-$$*))
+	@if [ -z "$(RPMBUILDFLAGS-$*)" ]; then \
+		echo "building with default rpmbuild flags!" ; \
+		rpmbuild $(RPMBUILDFLAGS-DEFAULT) $< ; \
+	else \
+		rpmbuild $(RPMBUILDFLAGS-$*) $< ; \
+	fi
+
+build-deps: $(addprefix build-deps-,$(PKGS))
+	
+
+build-deps-%:
+	@if [ "$(BUILDDEPS-$*)" != "" ]; then \
+		echo "Installing build dependencies for $*:" ; \
+		echo "  $(BUILDDEPS-$*)" ; \
+		sudo yum -y install $(BUILDDEPS-$*) ; \
+	fi
+
+source: $(addprefix source-,$(PKGS))
+
+source-%: $$(addprefix $(SOURCEDIR)/$$*/,$$(filter-out $$(CVSSOURCES-$$*),$$(SOURCES-$$*)))
+	
+
+#$(SOURCEDIR)/%: SRC = $(lastword $(subst /, ,%)) PKG = $(firstword $(subst /, ,%))
+$(SOURCEDIR)/%:
+	# pkg = $(firstword $(subst /, ,$*))
+	# src = $(lastword $(subst /, ,$*))
+	mkdir -p $(dir $(SOURCEDIR)/$*)
+	if [ -z "$(SOURCEFETCHMETHOD-$(firstword $(subst /, ,$*)))" ]; then \
+		wget -N -P $(SOURCEDIR) $(if $(SOURCEBASEURL-$(firstword $(subst /, ,$*))),$(SOURCEBASEURL-$(firstword $(subst /, ,$*))),$(SOURCEBASEURL))/$(lastword $(subst /, ,$*)) ; \
+	fi
+	if [ "$(SOURCEFETCHMETHOD-$(firstword $(subst /, ,$*)))" = "rsync" ]; then \
+		rsync -av $(SOURCEBASEURL-$(firstword $(subst /, ,$*)))/$(lastword $(subst /, ,$*)) $(SOURCEDIR)/ ; \
+	fi
+	@echo "$(SOURCEFETCHMETHOD-$(firstword $(subst /, ,$*)))"
+	if [ ! -e $(SOURCEDIR)/$* ]; then \
+		ln -s $(SOURCEDIR)/$(lastword $(subst /, ,$*)) $(SOURCEDIR)/$* ; \
+	fi
+
+clean: clean-build
+
+clean-source: $(addprefix clean-source-,$(PKGS))
+	@echo "Cleaned all sources."
+
+clean-source-%: clean-srcsentinels-%
+	@echo "Cleaning sources for $*"
+ifneq ($$(SOURCES-$$*),)
+	rm -f $(addprefix $(SOURCEDIR)/,$(filter-out $(CVSSOURCES-$*),$(SOURCES-$*)))
+endif
+
+clean-srcsentinels: $(addprefix clean-srcsentinels-,$(PKGS))
+	@echo "Cleaned all source sentinels."
+
+clean-srcsentinels-%:
+	@echo "Cleaning source sentinels for $*"
+	rm -rf $(SOURCEDIR)/$*
+
+clean-build: $(addprefix clean-build-,$(PKGS))
+
+clean-build-%:
+	rm -f $(BUILTDIR)/$*
+
+#
+# Ugh, have to prevent automatic deletions of these :-)
+#
+.SECONDARY: $(addprefix $(BUILTDIR)/,$(PKGS)) $(addprefix $(INSTALLEDDIR)/,$(PKGS)) $(SECONDARYSOURCES)
+
+# Get rid of a bunch of nasty built-in implicit rules.
+.SUFFIXES:
+
+.PHONY: clean clean-srcsentinels clean-source clean-build source all 
+

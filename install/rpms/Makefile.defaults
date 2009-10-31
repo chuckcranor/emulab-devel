@@ -1,0 +1,35 @@
+#
+# Some defaults that can be overridden...
+#
+MYBUILDROOT ?= /usr/src/redhat
+
+BUILTDIR = $(MYBUILDROOT)/BUILT
+INSTALLEDDIR = $(MYBUILDROOT)/INSTALLED
+SPECDIR = $(MYBUILDROOT)/SPECS
+SOURCEDIR = $(MYBUILDROOT)/SOURCES
+RPMDIR = $(MYBUILDROOT)/RPMS
+BUILDDIR = $(MYBUILDROOT)/BUILD
+
+RPMBUILDFLAGS-DEFAULT = -bb --with emulab
+INSTALLOPTS-DEFAULT = -ivh --force
+
+DISTRO = $(shell sed -r -n -e 's/^Fedora.*release[ ]*([0-9]*)[ ]*.*$/fedora\1/p' < /etc/redhat-release)
+
+#
+# Helpers that the per-user Makefile can invoke...
+#
+
+#find-spec-sources = $(shell sed -n -r -e 's/^source[0-9]*\s*:\s*([^ ]*)\s*$$/\1/ip' $(MYBUILDROOT)/SPECS/$(1).spec | xargs)
+find-spec-sources = $(notdir $(shell spectool -l SPECS/$(1).spec | sed -n -r -e 's/^([^ \t]*[ \t]*)(.*)$$/\2/p' | xargs))
+find-spec-name = $(shell sed -n -r -e 's/^name\s*:\s*([^ ]*)\s*$/\1/ip' $(MYBUILDROOT)/SPECS/$(1).spec)
+find-spec-packages = $(shell sed -n -r -e 's/^package\s*:\s*([^ ]*)\s*$$/\1/ip' $(SPECDIR)/$(1).spec)
+find-spec-builddeps = $(shell sed -n -r -e 's/^(BuildRequires:[ \t]*)(.*)$$/\2/ip' $(SPECDIR)/$(1).spec | sed -e 's/,//g')
+
+find-spec-version = $(shell rpm -q --queryformat '%{version}\n' $(MYBUILDROOT)/SPECS/$(1).spec)
+find-spec-release = $(shell rpm -q --queryformat '%{version}\n' $(MYBUILDROOT)/SPECS/$(1).spec)
+
+# XXX hack
+get-mach-arch = $(shell uname -m)
+find-pkg-arch = $(if $(filter noarch,$(RPMBUILDFLAGS-$(1))),noarch,$(call get-mach-arch))
+
+find-pkg-version = $(shell rpm -q --queryformat '%{version}-%{release}\n' $(MYBUILDROOT)/SPECS/$(1).spec)

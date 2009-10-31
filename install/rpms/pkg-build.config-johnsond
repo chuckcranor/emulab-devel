@@ -1,0 +1,46 @@
+#!/usr/bin/perl
+
+$PARALLELIZE = 1;
+# Multiple -t args to force tty alloc so we can run sudo
+$SSH_COMMAND = "ssh -t -t -A -x -o StrictHostKeyChecking=no";
+# rsync doesn't like ttys
+$RSH_COMMAND = "ssh -A -x -o StrictHostKeyChecking=no";
+
+%buildboxes = 
+    ( 'fedora8-i686' => 
+      { 'hostname' => 'f8b32leb.sdn-leb.emulab-ops.emulab.net',
+	'arch'     => 'i686',
+	'buildroot' => '/usr/src/redhat',
+	'distro'    => 'fedora8',
+      },
+      'fedora8-x86_64' => 
+      { 'hostname' => 'f8b64leb.sdn-leb.emulab-ops.emulab.net',
+	'arch'     => 'x86_64',
+	'buildroot' => '/usr/src/redhat',
+	'distro'    => 'fedora8',
+      },
+      'fedora10-i686' => 
+      { 'hostname' => 'f10b32leb.sdn-leb.emulab-ops.emulab.net',
+	'arch'     => 'i686',
+	'buildroot' => '/usr/src/redhat',
+	'distro'    => 'fedora10',
+      },
+      'fedora10-x86_64' => 
+      { 'hostname' => 'f10b64leb.sdn-leb.emulab-ops.emulab.net',
+	'arch'     => 'x86_64',
+	'buildroot' => '/usr/src/redhat',
+	'distro'    => 'fedora10',
+      },
+      'fedora11-i686' => 
+      { 'hostname' => 'f11b32leb.sdn-leb.emulab-ops.emulab.net',
+	'arch'     => 'i686',
+	'buildroot' => '/usr/src/redhat',
+	'distro'    => 'fedora11',
+      },
+      'fedora11-x86_64' => 
+      { 'hostname' => 'f11b64leb.sdn-leb.emulab-ops.emulab.net',
+	'arch'     => 'x86_64',
+	'buildroot' => '/usr/src/redhat',
+	'distro'    => 'fedora11',
+      },
+    );

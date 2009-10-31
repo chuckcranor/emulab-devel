@@ -16,7 +16,7 @@ Group:		Language
 License:	MIT
 URL:		%{url}
 Source0:      	%{name}-src-%{version}.tar.gz
-Source1:      	tclvers
+Source1:      	otcl-tclvers
 BuildRoot:	%{_tmppath}/%{name}-%{version}-%{release}-root-%(%{__id_u} -n)
 
 #BuildRequires:	tcl, tcl-devel, tk, tk-devel

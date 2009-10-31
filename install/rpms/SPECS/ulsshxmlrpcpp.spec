@@ -24,6 +24,7 @@ BuildRequires:	make, autoconf, gcc, expat-devel, gcc-c++
 Provides:	ulsshxmlrpcpp
 
 Patch1:		ulsshxmlrpcpp-0.1.2-include-stuff.patch
+Patch2:		ulsshxmlrpcpp-0.1.2-64bit-lint.patch
 
 %description
 OTcl, short for MIT Object Tcl, is an extension to Tcl/Tk for
@@ -34,6 +35,7 @@ name and have been using it for a while.)
 %prep
 %setup -n %{name}-%{version}
 %patch1 -p0
+%patch2 -p0
 
 %build
 %configure --prefix=/usr

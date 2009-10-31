@@ -1,0 +1,288 @@
+#!/usr/bin/perl
+
+#use strict;
+use English;
+use Getopt::Std;
+use POSIX ":sys_wait_h";
+
+$PARALLELIZE = 1;
+$RSYNC_OPTS = "-q -avz -u";
+$SSH_COMMAND = "ssh";
+$RSH_COMMAND = "ssh";
+($USERNAME,undef,undef,undef,undef,
+    undef,undef,undef,undef,undef) = getpwuid($UID);
+$CVSEXCLUDE = 1;
+$LOGDIR = "logs";
+$CONFIG = "pkg-build.config";
+$GLOBAL_RPMFLAGS = "";
+
+$PER_PKG_MAKE = 0;
+$IGNORE_BUILD_ERRORS = 0;
+
+%buildboxes = ();
+@boxes = ();
+%pkgs = ();
+$command;
+@targets;
+
+$NO_SYNC_MAKEFILES = 0;
+$NO_SYNC_SOURCES = 0;
+
+#
+# Handle command-line options
+#
+my %opts;
+sub usage {
+    print "Usage: pkg-build [-MS] [-c config-file] [-r rpmbuild-flags] [-p pkg1[(pkg-flags)],pkg2[(pkg-flags)],...] [-t <targetlist>] [-C command] [-b box1,box2,...]\n";
+    exit(1);
+}
+
+if (! getopts("MSp:b:c:r:C:t:", \%opts)) {
+    usage();
+}
+if (defined($opts{'M'})) {
+    $NO_SYNC_MAKEFILES = 1;
+}
+if (defined($opts{'S'})) {
+    $NO_SYNC_SOURCES = 1;
+}
+if (defined($opts{'r'})) {
+    $GLOBAL_RPMFLAGS = $opts{'r'};
+}
+if (defined($opts{'c'})) {
+    $CONFIG = $opts{'c'};
+}
+if (defined($opts{'b'})) {
+    @boxes = split(/,/,$opts{'b'});
+}
+if (defined($opts{'t'})) {
+    @targets = split(/,/,$opts{'t'});
+}
+if (defined($opts{'p'})) {
+    my @ps = split(/,/,$opts{'p'});
+    foreach my $p (@ps) {
+	if ($p =~ /^([-\w\d]+)\((.*)\)$/) {
+	    $pkgs{$1} = $2;
+	    # Build packages individually since at least one has custom flags
+	    $PER_PKG_MAKE = 1;
+	}
+	elsif ($p =~ /^([-\w\d]+)$/) {
+	    $pkgs{$1} = '';
+	}
+	else {
+	    die "malformed pkg name/opts '$p'!";
+	}
+    }
+}
+if (defined($opts{'C'})) {
+    $command = $opts{'C'};
+}
+if (@ARGV) {
+    usage();
+}
+
+require "$CONFIG";
+
+if (scalar(@boxes) == 0) {
+    @boxes = keys(%buildboxes);
+}
+
+#
+# Prototypes
+#
+sub syncMakefile(;@);
+sub syncSources(;@);
+sub mysystem($);
+
+mysystem("mkdir -p $LOGDIR");
+
+#
+# Push makefile first so we can download the original sources, then overlay
+# them if necessary.
+#
+if (!$NO_SYNC_MAKEFILES) {
+    foreach my $box (sort(@boxes)) {
+	syncMakefile($box);
+    }
+}
+
+if (!$NO_SYNC_SOURCES) {
+    foreach my $box (sort(@boxes)) {
+	syncSources($box);
+    }
+}
+
+my %kids = ();
+foreach my $box (sort(@boxes)) {
+    my (undef,undef,$buildroot) = getSyncParams($box);
+
+    if (defined($command)) {
+	$kids{$box} = runCommand($box,"$command");
+    }
+    else {
+	my $cmd = "cd $buildroot;";
+	if (defined($GLOBAL_RPMFLAGS) && $GLOBAL_RPMFLAGS ne '') {
+	    $cmd .= " export GLOBAL_RPMBUILDFLAGS=\"${GLOBAL_RPMFLAGS}\""
+	}
+
+	if (defined(@targets)) {
+	    $cmd .= " make " . join(' ',@targets);
+	}
+	elsif ($PER_PKG_MAKE == 0) {
+	    my $ttargets = "all";
+	    if (keys(%pkgs)) {
+		$ttargets = "build-" . join(' build-',sort(keys(%pkgs)));
+	    }
+	    $cmd .= " make $ttargets";
+	}
+	else {
+	    #
+	    # Note that although we trigger off per-package makes, we set all 
+	    # the per package flags first -- since the build order is 
+	    # determined by the Makefile, we need to do this...
+	    #
+	    foreach my $pkg (sort(keys(%pkgs))) {
+		if (defined($pkgs{$pkg}) && $pkgs{$pkg} ne '') {
+		    $cmd .= " export RPMBUILDFLAGS-$pkg=\"" . $pkgs{$pkg} . "\";";
+		}
+	    }
+	    $cmd .= " make build-" . join(' build-',sort(keys(%pkgs)));
+	}
+
+	# Run!
+	$kids{$box} = runCommand($box,$cmd);
+    }
+}
+
+my @failed = ();
+while (keys(%kids)) {
+    foreach my $box (sort(keys(%kids))) {
+	my $retval = waitpid($kids{$box},WNOHANG);
+	if ($retval == $kids{$box}) {
+	    if ($?) {
+		print "ERROR: $box (".$buildboxes{'hostname'}.") failed:\n";
+		system("tail -8 $LOGDIR/$box.log");
+		push @failed, $box;
+	    }
+	    else {
+		print "$box finished.\n";
+	    }
+	    delete $kids{$box};
+	}
+	elsif ($retval < 0) {
+	    print "ERROR: waitpid: $!\n";
+	}
+    }
+    sleep(1);
+}
+
+if (scalar(@failed)) {
+    print "Some builds failed:\n";
+    foreach my $box (sort(@failed)) {
+	print "  $box (" . $buildboxes{$box}{'hostname'} . ")\n";
+    }
+    exit(@failed);
+}
+
+print "Done.\n";
+exit(0);
+
+#
+# Helpers
+#
+
+sub runCommand($$) {
+    my ($box,$cmd) = @_;
+    my (undef,$host,undef) = getSyncParams($box);
+
+    my $pid = fork();
+    if (!$pid) {
+	open(FD,">>$LOGDIR/$box.log")
+	    or die "open($LOGDIR/$box.log: $!";
+	close(STDIN);
+	close(STDOUT);
+	close(STDERR);
+	open(STDOUT,">&FD");
+	open(STDERR,">&FD");
+
+	print "### \n";
+	print "### Running '$cmd' on $box ($host)\n";
+	print "### \n";
+
+	$cmd = "$SSH_COMMAND $host '$cmd'";
+	#exit(mysystem($cmd));
+	exec($cmd)
+	    or die "exec($cmd): $!";
+    }
+
+    print "Running '$cmd' on $box ($host)\n";
+
+    return $pid;
+}
+
+sub getSyncParams($) {
+    my $box = shift;
+    my ($rcmd,$rhost,$buildroot);
+
+    $rcmd = "rsync -d $RSYNC_OPTS";
+    if (defined($RSH_COMMAND) && $RSH_COMMAND ne '') {
+	$rcmd .= " --rsh '$RSH_COMMAND'";
+    }
+    if ($CVSEXCLUDE) {
+	$rcmd .= " -C";
+    }
+    $rhost = $buildboxes{$box}{'hostname'};
+    if (defined($USERNAME)) {
+	$rhost = "$USERNAME\@$rhost";
+    }
+    $buildroot = '/usr/src/redhat';
+    if (defined($buildboxes{$box}{'buildroot'})) {
+	$buildroot = $buildboxes{$box}{'buildroot'};
+    }
+
+    return ($rcmd,$rhost,$buildroot);
+}
+
+sub syncMakefile(;@) {
+    my @boxes = @_;
+
+    foreach my $box (@boxes) {
+	print "Synch'ing Makefile to $box (" . $buildboxes{$box}{'hostname'} . ")\n";
+
+	my ($cmd,$host,$buildroot) = getSyncParams($box);
+
+	# shove the Makefiles over
+	mysystem("$cmd Makefile* ${host}:${buildroot}/");
+    }
+}
+
+sub syncSources(;@) {
+    my @boxes = @_;
+
+    foreach my $box (@boxes) {
+	print "Synch'ing sources to $box (" . $buildboxes{$box}{'hostname'} . ")\n";
+
+	my ($cmd,$host,$buildroot) = getSyncParams($box);
+
+	# first push general spec files, minus excludes
+	mysystem("$cmd SPECS/ ${host}:${buildroot}/SPECS/");
+	# then push general source files, minus excludes
+	mysystem("$cmd SOURCES/ ${host}:${buildroot}/SOURCES/");
+
+	my $distro = $buildboxes{$box}{'distro'};
+	if (defined($buildboxes{$box}{'distro'}) && -d "${distro}/SPECS/") {
+	    # then push distro-specific spec files, minus excludes
+	    mysystem("$cmd ${distro}/SPECS/ ${host}:${buildroot}/SPECS/");
+	}
+	if (defined($buildboxes{$box}{'distro'}) && -d "${distro}/SOURCES/") {
+	    # then push distro-specific source files, minus excludes
+	    mysystem("$cmd ${distro}/SOURCES/ ${host}:${buildroot}/SOURCES/");
+	}
+    }
+}
+
+sub mysystem($) {
+    my $cmd = shift;
+
+    return system($cmd);
+}

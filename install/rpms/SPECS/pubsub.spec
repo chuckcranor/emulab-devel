@@ -1,5 +1,5 @@
 %define realname pubsub
-%define version 20081119
+%define version 20091031
 %define url http://www.emulab.net
 
 %define release_num 1
