@@ -5,6 +5,8 @@ use English;
 use Getopt::Std;
 use POSIX ":sys_wait_h";
 
+$DEBUG = 0;
+
 $PARALLELIZE = 1;
 $RSYNC_OPTS = "-q -avz -u";
 $SSH_COMMAND = "ssh";
@@ -18,6 +20,8 @@ $GLOBAL_RPMFLAGS = "";
 
 $PER_PKG_MAKE = 0;
 $IGNORE_BUILD_ERRORS = 0;
+
+$MAKECMD;
 
 %buildboxes = ();
 @boxes = ();
@@ -37,8 +41,11 @@ sub usage {
     exit(1);
 }
 
-if (! getopts("MSp:b:c:r:C:t:", \%opts)) {
+if (! getopts("dMSp:b:c:r:C:t:", \%opts)) {
     usage();
+}
+if (defined($opts{'d'})) {
+    $DEBUG = 1;
 }
 if (defined($opts{'M'})) {
     $NO_SYNC_MAKEFILES = 1;
@@ -87,6 +94,13 @@ if (scalar(@boxes) == 0) {
     @boxes = keys(%buildboxes);
 }
 
+if ($DEBUG && !defined($MAKECMD)) {
+    $MAKECMD = "make -d -r";
+}
+elsif (!defined($MAKECMD)) {
+    $MAKECMD = "make -r";
+}
+
 #
 # Prototypes
 #
@@ -126,14 +140,14 @@ foreach my $box (sort(@boxes)) {
 	}
 
 	if (defined(@targets)) {
-	    $cmd .= " make " . join(' ',@targets);
+	    $cmd .= " $MAKECMD " . join(' ',@targets);
 	}
 	elsif ($PER_PKG_MAKE == 0) {
 	    my $ttargets = "all";
 	    if (keys(%pkgs)) {
 		$ttargets = "build-" . join(' build-',sort(keys(%pkgs)));
 	    }
-	    $cmd .= " make $ttargets";
+	    $cmd .= " $MAKECMD $ttargets";
 	}
 	else {
 	    #
@@ -146,7 +160,7 @@ foreach my $box (sort(@boxes)) {
 		    $cmd .= " export RPMBUILDFLAGS-$pkg=\"" . $pkgs{$pkg} . "\";";
 		}
 	    }
-	    $cmd .= " make build-" . join(' build-',sort(keys(%pkgs)));
+	    $cmd .= " $MAKECMD build-" . join(' build-',sort(keys(%pkgs)));
 	}
 
 	# Run!

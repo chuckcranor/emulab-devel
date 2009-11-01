@@ -10,10 +10,11 @@ SOURCEDIR = $(MYBUILDROOT)/SOURCES
 RPMDIR = $(MYBUILDROOT)/RPMS
 BUILDDIR = $(MYBUILDROOT)/BUILD
 
-RPMBUILDFLAGS-DEFAULT = -bb --with emulab
+RPMBUILDFLAGS-DEFAULT = -bb --target `uname -m` --with emulab
 INSTALLOPTS-DEFAULT = -ivh --force
 
-DISTRO = $(shell sed -r -n -e 's/^Fedora.*release[ ]*([0-9]*)[ ]*.*$/fedora\1/p' < /etc/redhat-release)
+DISTRO = $(shell sed -r -n -e 's/^Fedora.*release[ ]*([0-9]*)[ ]*.*$$/fedora\1/p' < /etc/redhat-release)
+SHORTDISTRO = $(shell sed -r -n -e 's/^Fedora.*release[ ]*([0-9]*)[ ]*.*$$/fc\1/p' < /etc/redhat-release)
 
 #
 # Helpers that the per-user Makefile can invoke...
@@ -25,11 +26,19 @@ find-spec-name = $(shell sed -n -r -e 's/^name\s*:\s*([^ ]*)\s*$/\1/ip' $(MYBUIL
 find-spec-packages = $(shell sed -n -r -e 's/^package\s*:\s*([^ ]*)\s*$$/\1/ip' $(SPECDIR)/$(1).spec)
 find-spec-builddeps = $(shell sed -n -r -e 's/^(BuildRequires:[ \t]*)(.*)$$/\2/ip' $(SPECDIR)/$(1).spec | sed -e 's/,//g')
 
-find-spec-version = $(shell rpm -q --queryformat '%{version}\n' $(MYBUILDROOT)/SPECS/$(1).spec)
-find-spec-release = $(shell rpm -q --queryformat '%{version}\n' $(MYBUILDROOT)/SPECS/$(1).spec)
+find-spec-version = $(shell rpm -q --specfile --queryformat '%{version}\n' $(MYBUILDROOT)/SPECS/$(1).spec)
+find-spec-release = $(shell rpm -q --specfile --queryformat '%{version}\n' $(MYBUILDROOT)/SPECS/$(1).spec)
 
 # XXX hack
 get-mach-arch = $(shell uname -m)
 find-pkg-arch = $(if $(filter noarch,$(RPMBUILDFLAGS-$(1))),noarch,$(call get-mach-arch))
 
-find-pkg-version = $(shell rpm -q --queryformat '%{version}-%{release}\n' $(MYBUILDROOT)/SPECS/$(1).spec)
+find-pkg-version = $(shell rpm -q --specfile --queryformat '%{version}-%{release}\n' $(MYBUILDROOT)/SPECS/$(1).spec)
+
+#
+# XXX note the sort call below -- this is necessary for some weird reason
+# when calling find-pkg-version, since that call produces three identical
+# words, for some weird reason!
+#
+find-built-pkg-filename = $(MYBUILDROOT)/RPMS/$(call find-pkg-arch,$(1))/$(2)-$(sort $(call find-pkg-version,$(1))).$(call find-pkg-arch,$(1)).rpm
+find-built-pkg-filenames = $(foreach ipkg,$(INSTALLFILES-$(1)),$(call find-built-pkg-filename,$(1),$(ipkg)))
