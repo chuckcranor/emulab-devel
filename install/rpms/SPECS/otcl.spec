@@ -34,6 +34,7 @@ patch1:		otcl-x11-headers.patch
 patch2:		otcl-ld-whoopsie.patch
 patch3:		otcl-varTable-hash-stuff.patch
 patch4:		otcl-hashentry-delete.patch
+patch5:		otcl-64bit-configure.patch
 
 %description
 OTcl, short for MIT Object Tcl, is an extension to Tcl/Tk for
@@ -50,6 +51,7 @@ name and have been using it for a while.)
 %patch2 -p1
 %patch3 -p0
 %patch4 -p0
+%patch5 -p0
 #cd ..
 
 %build

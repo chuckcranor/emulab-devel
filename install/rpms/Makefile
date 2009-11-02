@@ -56,7 +56,8 @@ BUILDDEPS-emulab-supplemental-mibs = $(call find-spec-builddeps,emulab-supplemen
 
 SOURCES-otcl = $(call find-spec-sources,otcl)
 CVSSOURCES-otcl = otcl-hashentry-delete.patch otcl-ld-whoopsie.patch \
-	otcl-varTable-hash-stuff.patch otcl-x11-headers.patch
+	otcl-varTable-hash-stuff.patch otcl-x11-headers.patch \
+	otcl-64bit-configure.patch
 BUILDDEPS-otcl = $(call find-spec-builddeps,otcl)
 ifeq ($(DISTRO),fedora10)
 LOCALBUILDDEPS-otcl = tcl tcl-devel tk tk-devel

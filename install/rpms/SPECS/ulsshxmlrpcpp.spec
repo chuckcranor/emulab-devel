@@ -55,7 +55,7 @@ rm -rf $RPM_BUILD_ROOT
 /usr/bin/*
 /usr/include/*
 /usr/include/ulxmlrpcpp/*
-/usr/lib/*
+/usr/lib*/*
 /usr/share/ulxmlrpcpp/httpd/*
 
 

@@ -49,9 +49,9 @@ rm -rf $RPM_BUILD_ROOT
 %files
 %defattr(-,root,root,-)
 %doc
-/usr/lib/perl5/%{perlvers}/i386-linux-thread-multi/perllocal.pod
-/usr/lib/perl5/site_perl/%{perlvers}/Apache/Htpasswd.pm
-/usr/lib/perl5/site_perl/%{perlvers}/i386-linux-thread-multi/auto/Apache/Htpasswd/.packlist
+/usr/lib*/perl5/%{perlvers}/*-linux-thread-multi/perllocal.pod
+/usr/lib*/perl5/site_perl/%{perlvers}/Apache/Htpasswd.pm
+/usr/lib*/perl5/site_perl/%{perlvers}/*-linux-thread-multi/auto/Apache/Htpasswd/.packlist
 /usr/share/man/man3/Apache::Htpasswd.3pm.gz
 
 %post
