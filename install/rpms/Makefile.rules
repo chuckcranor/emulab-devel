@@ -9,6 +9,10 @@ all: $(addprefix built-,$(PKGS))
 
 .SECONDEXPANSION:
 
+# just sign them all for now...
+sign: 
+	sudo ./sign.pl `find RPMS | grep \.rpm\$$ | xargs`
+
 #
 # extra layer of indirection so that the config variables can just use 
 # 'installed-tcl' or similar, not INSTALLEDDIR/tcl

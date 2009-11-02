@@ -266,7 +266,7 @@ sub syncMakefile(;@) {
 	my ($cmd,$host,$buildroot) = getSyncParams($box);
 
 	# shove the Makefiles over
-	mysystem("$cmd Makefile* ${host}:${buildroot}/");
+	mysystem("$cmd Makefile* sign.pl ${host}:${buildroot}/");
     }
 }
 
