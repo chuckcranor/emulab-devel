@@ -95,10 +95,10 @@ if (scalar(@boxes) == 0) {
 }
 
 if ($DEBUG && !defined($MAKECMD)) {
-    $MAKECMD = "make -d -r";
+    $MAKECMD = "make -d";
 }
 elsif (!defined($MAKECMD)) {
-    $MAKECMD = "make -r";
+    $MAKECMD = "make";
 }
 
 #
