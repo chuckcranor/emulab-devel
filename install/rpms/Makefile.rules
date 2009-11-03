@@ -11,7 +11,13 @@ all: $(addprefix built-,$(PKGS))
 
 # just sign them all for now...
 sign: 
-	sudo ./sign.pl `find RPMS | grep \.rpm\$$ | xargs`
+	sudo ./sign.pl `find RPMS | grep \.rpm\$$ | xargs` \
+		`find SRPMS | grep \.rpm\$$ | xargs`
+
+buildsource: $(addprefix buildsource-,$(PKGS)) $(foreach pkg,$(PKGS),$(addprefix buildsource-,$(LOCALBUILDPKGS-$(pkg))))
+
+buildsource-%: $(SPECDIR)/$$*.spec source-$$*
+	rpmbuild -bs $<
 
 #
 # extra layer of indirection so that the config variables can just use 
