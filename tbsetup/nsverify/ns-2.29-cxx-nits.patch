@@ -1,0 +1,223 @@
+diff -u ./dsr/dsragent.h~ ./dsr/dsragent.h
+--- dsr/dsragent.h~	2005-10-19 22:45:22.000000000 -0600
++++ dsr/dsragent.h	2008-10-30 14:58:04.000000000 -0600
+@@ -110,6 +110,9 @@
+ 
+ LIST_HEAD(DSRAgent_List, DSRAgent);
+ 
++void XmitFailureCallback(Packet *pkt, void *data);
++void XmitFlowFailureCallback(Packet *pkt, void *data);
++
+ class DSRAgent : public Tap, public Agent {
+ public:
+ 
+diff -u ./sctp/sctp.h~ ./sctp/sctp.h
+--- ./sctp/sctp.h~	2005-10-19 22:45:23.000000000 -0600
++++ ./sctp/sctp.h	2008-10-30 14:25:27.000000000 -0600
+@@ -702,7 +702,7 @@
+ 
+   /* debugging functions
+    */
+-  void SctpAgent::DumpSendBuffer();
++  void DumpSendBuffer();
+ 
+   /* sctp association state variable
+    */
+diff -u ./diffusion/diffusion.h~ ./diffusion/diffusion.h
+--- ./diffusion/diffusion.h~	2005-10-19 22:45:22.000000000 -0600
++++ ./diffusion/diffusion.h	2008-10-30 15:09:35.000000000 -0600
+@@ -137,6 +137,7 @@
+   DiffusionAgent *a_;
+ };
+ 
++void XmitFailedCallback(Packet *pkt, void *data);
+ 
+ class DiffusionAgent : public Agent {
+  public:
+diff -u ./diffusion/omni_mcast.h~ ./diffusion/omni_mcast.h
+--- ./diffusion/omni_mcast.h~	2005-10-19 22:45:22.000000000 -0600
++++ ./diffusion/omni_mcast.h	2008-10-30 15:10:03.000000000 -0600
+@@ -156,7 +156,7 @@
+ };
+ 
+ 
+-
++void OmniMcastXmitFailedCallback(Packet *pkt, void *data);
+ 
+ class OmniMcastAgent : public Agent {
+  public:
+diff -u ./pgm/pgm-receiver.cc~ ./pgm/pgm-receiver.cc
+--- ./pgm/pgm-receiver.cc~	2005-10-19 22:45:23.000000000 -0600
++++ ./pgm/pgm-receiver.cc	2008-10-30 15:12:22.000000000 -0600
+@@ -183,7 +183,7 @@
+   void print_stats();
+   void display_packet(Packet *pkt); // For debugging.
+ 
+-  void PgmReceiver::trace_event(char *evType, double evTime);
++  void trace_event(char *evType, double evTime);
+ 
+   EventTrace * et_;  //Trace Object for Custom Event Trace
+ 
+diff -u ./pgm/pgm-agent.cc~ ./pgm/pgm-agent.cc
+--- ./pgm/pgm-agent.cc~	2005-10-19 22:45:23.000000000 -0600
++++ ./pgm/pgm-agent.cc	2008-10-30 15:11:54.000000000 -0600
+@@ -304,7 +304,7 @@
+ 
+   void print_stats();
+ 
+-  void PgmAgent::trace_event(char *evType, double evTime);
++  void trace_event(char *evType, double evTime);
+ 
+ #ifdef PGM_DEBUG
+   void display_packet(Packet *pkt);
+diff -u ./pgm/pgm-sender.cc~ ./pgm/pgm-sender.cc
+--- ./pgm/pgm-sender.cc~	2005-10-19 22:45:23.000000000 -0600
++++ ./pgm/pgm-sender.cc	2008-10-30 15:12:08.000000000 -0600
+@@ -186,7 +186,7 @@
+ 
+   void display_packet(Packet *pkt); // For debugging.
+ 
+-  void PgmSender::trace_event(char *evType, nsaddr_t daddr, double evTime); 
++  void trace_event(char *evType, nsaddr_t daddr, double evTime); 
+ 
+   EventTrace * et_; 	//Trace Object for custom Event Traces
+ 
+diff -u ./mobile/god.h~ ./mobile/god.h
+--- ./mobile/god.h~	2005-10-19 22:45:22.000000000 -0600
++++ ./mobile/god.h	2008-10-30 14:26:22.000000000 -0600
+@@ -85,20 +85,20 @@
+ 		return sqrt(X*X + Y*Y + Z*Z);
+ 	}
+ 
+-	inline void vector::operator=(const vector a) {
++	inline void operator=(const vector a) {
+ 		X = a.X;
+ 		Y = a.Y;
+ 		Z = a.Z;
+ 	}
+-	inline void vector::operator+=(const vector a) {
++	inline void operator+=(const vector a) {
+ 		X += a.X;
+ 		Y += a.Y;
+ 		Z += a.Z;
+ 	}
+-	inline int vector::operator==(const vector a) {
++	inline int operator==(const vector a) {
+ 		return (X == a.X && Y == a.Y && Z == a.Z);
+ 	}
+-	inline int vector::operator!=(const vector a) {
++	inline int operator!=(const vector a) {
+ 		return (X != a.X || Y != a.Y || Z != a.Z);
+ 	}
+ 	inline vector operator-(const vector a) {
+diff -u ./tcp/tcp-sack-rh.cc~ ./tcp/tcp-sack-rh.cc
+--- ./tcp/tcp-sack-rh.cc~	2005-10-19 22:45:25.000000000 -0600
++++ ./tcp/tcp-sack-rh.cc	2008-10-30 15:10:58.000000000 -0600
+@@ -65,7 +65,7 @@
+ 	virtual void estadjust();
+ 	virtual void rhclear();
+ 	virtual void computefack();
+-	virtual void SackRHTcpAgent::newack(Packet* pkt);
++	virtual void newack(Packet* pkt);
+  protected:
+ 	int fack_;	          /* the FACK state variable  */
+ 	int retran_data_;         /* the number of retransmitted packets in the pipe  */
+--- ./queue/red.cc.orig	2005-10-19 22:45:23.000000000 -0600
++++ ./queue/red.cc	2009-10-07 18:16:04.000000000 -0600
+@@ -871,10 +871,10 @@
+ {
+ 	char wrk[500], *p;
+ 
+-	if (((p = strstr(v->name(), "ave")) == NULL) &&
+-	    ((p = strstr(v->name(), "prob")) == NULL) &&
+-	    ((p = strstr(v->name(), "curq")) == NULL) &&
+-	    ((p = strstr(v->name(), "cur_max_p"))==NULL) ) {
++	if (((p = strstr((char *) v->name(), "ave")) == NULL) &&
++	    ((p = strstr((char *) v->name(), "prob")) == NULL) &&
++	    ((p = strstr((char *) v->name(), "curq")) == NULL) &&
++	    ((p = strstr((char *) v->name(), "cur_max_p"))==NULL) ) {
+ 		fprintf(stderr, "RED:unknown trace var %s\n",
+ 			v->name());
+ 		return;
+@@ -884,7 +884,7 @@
+ 		int n;
+ 		double t = Scheduler::instance().clock();
+ 		// XXX: be compatible with nsv1 RED trace entries
+-		if (strstr(v->name(), "curq") != NULL) {
++		if (strstr((char *) v->name(), "curq") != NULL) {
+ 			sprintf(wrk, "Q %g %d", t, int(*((TracedInt*) v)));
+ 		} else {
+ 			sprintf(wrk, "%c %g %g", *p, t,
+--- ./queue/rio.cc.orig	2009-10-07 18:25:54.000000000 -0600
++++ ./queue/rio.cc	2009-10-07 18:27:06.000000000 -0600
+@@ -562,13 +562,13 @@
+ {
+ 	char wrk[500], *p;
+ 
+-	if (((p = strstr(v->name(), "ave")) == NULL) &&
+-	    ((p = strstr(v->name(), "in_ave")) == NULL) &&
+-	    ((p = strstr(v->name(), "out_ave")) == NULL) &&
+-	    ((p = strstr(v->name(), "prob")) == NULL) &&
+-	    ((p = strstr(v->name(), "in_prob")) == NULL) &&
+-	    ((p = strstr(v->name(), "out_prob")) == NULL) &&
+-	    ((p = strstr(v->name(), "curq")) == NULL)) {
++	if (((p = strstr((char *) v->name(), "ave")) == NULL) &&
++	    ((p = strstr((char *) v->name(), "in_ave")) == NULL) &&
++	    ((p = strstr((char *) v->name(), "out_ave")) == NULL) &&
++	    ((p = strstr((char *) v->name(), "prob")) == NULL) &&
++	    ((p = strstr((char *) v->name(), "in_prob")) == NULL) &&
++	    ((p = strstr((char *) v->name(), "out_prob")) == NULL) &&
++	    ((p = strstr((char *) v->name(), "curq")) == NULL)) {
+ 		fprintf(stderr, "RIO:unknown trace var %s\n",
+ 			v->name());
+ 		return;
+--- ./queue/pi.cc.orig	2009-10-07 18:30:42.000000000 -0600
++++ ./queue/pi.cc	2009-10-07 18:31:17.000000000 -0600
+@@ -313,8 +313,8 @@
+ {
+ 	char wrk[500], *p;
+ 
+-	if (((p = strstr(v->name(), "prob")) == NULL) &&
+-	    ((p = strstr(v->name(), "curq")) == NULL)) {
++	if (((p = strstr((char *) v->name(), "prob")) == NULL) &&
++	    ((p = strstr((char *) v->name(), "curq")) == NULL)) {
+ 		fprintf(stderr, "PI:unknown trace var %s\n", v->name());
+ 		return;
+ 	}
+--- ./queue/rem.cc.orig	2009-10-07 18:32:09.000000000 -0600
++++ ./queue/rem.cc	2009-10-07 18:32:37.000000000 -0600
+@@ -332,9 +332,9 @@
+ {
+ 	char wrk[500], *p;
+ 
+-	if (((p = strstr(v->name(), "ave")) == NULL) &&
+-	    ((p = strstr(v->name(), "prob")) == NULL) &&
+-	    ((p = strstr(v->name(), "curq")) == NULL)) {
++	if (((p = strstr((char *) v->name(), "ave")) == NULL) &&
++	    ((p = strstr((char *) v->name(), "prob")) == NULL) &&
++	    ((p = strstr((char *) v->name(), "curq")) == NULL)) {
+ 		fprintf(stderr, "REM:unknown trace var %s\n",
+ 			v->name());
+ 		return;
+--- ./queue/vq.cc.orig	2009-10-07 18:33:17.000000000 -0600
++++ ./queue/vq.cc	2009-10-07 18:33:35.000000000 -0600
+@@ -330,7 +330,7 @@
+ {
+ 	char wrk[500], *p;
+ 
+-	if ((p = strstr(v->name(), "curq")) == NULL) {
++	if ((p = strstr((char *) v->name(), "curq")) == NULL) {
+ 		fprintf(stderr, "Vq:unknown trace var %s\n", v->name());
+ 		return;
+ 	}
+--- ./queue/gk.cc.orig	2009-10-07 18:34:13.000000000 -0600
++++ ./queue/gk.cc	2009-10-07 18:34:30.000000000 -0600
+@@ -204,7 +204,7 @@
+ {
+ 	char wrk[500], *p;
+ 
+-	if ((p = strstr(v->name(), "curq")) == NULL) {
++	if ((p = strstr((char *) v->name(), "curq")) == NULL) {
+ 		fprintf(stderr, "Vq:unknown trace var %s\n", v->name());
+ 		return;
+ 	}
