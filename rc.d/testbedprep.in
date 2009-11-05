@@ -1,0 +1,53 @@
+#!/bin/bash
+#
+# testbedprep        Cleanup stale Emulab state after a reboot
+#
+### BEGIN INIT INFO
+# Provides: testbedprep
+# Default-Start: 3 4 5
+# Default-Stop: 0 1 6
+# Should-Start: 
+# Required-Start: mysqld
+# Required-Stop: 
+# Short-Description: Cleanup stale Emulab state after a reboot
+# Description: Cleanup stale Emulab state after a reboot
+### END INIT INFO
+#
+# The fields below are left around for legacy tools (will remove later).
+#
+# chkconfig: 345 89 9
+# description: testbedprep cleans up stale Emulab state after a reboot
+#
+
+# Source function library.
+. /etc/rc.d/init.d/functions
+
+RETVAL=0
+PREFIX=@prefix@
+
+start() {
+	action $"Cleaning up Emulab database: " $PREFIX/sbin/dbboot
+	RETVAL=$?
+}
+
+stop() {
+    RETVAL=0
+}
+
+# See how we were called.
+case "$1" in
+    start)
+        start
+        ;;
+    stop)
+        RETVAL=0
+        ;;
+    status)
+        RETVAL=0
+        ;;
+    *)
+        echo $"Usage: $prog {start|stop|status}"
+	RETVAL=3
+esac
+
+exit $RETVAL

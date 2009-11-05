@@ -1,0 +1,192 @@
+#!/bin/sh
+#
+# testbed        Start and stop various Emulab testbed daemons
+#
+### BEGIN INIT INFO
+# Provides: testbed
+# Default-Start: 3 4 5
+# Default-Stop: 0 1 6
+# Should-Start: 
+# Required-Start: $local_fs $remote_fs $network named mysqld httpd xinetd
+# Required-Stop: httpd
+# Short-Description: Start and stop various Emulab testbed daemons
+# Description: Start and stop various Emulab testbed daemons
+### END INIT INFO
+#
+# The fields below are left around for legacy tools (will remove later).
+#
+# chkconfig: 345 90 10
+# description: testbed starts and stops various Emulab testbed daemons
+#
+
+# Source function library.
+. /etc/rc.d/init.d/functions
+
+RETVAL=0
+PREFIX=@prefix@
+LOCK_FILE=/var/lock/subsys/testbed
+
+start() {
+    if [ -e $LOCK_FILE ]; then
+        echo "Testbed daemons already running, or stale lock file $LOCK_FILE"
+        action $"Starting testbed: " /bin/false
+	exit 1
+    fi
+
+    touch $LOCK_FILE
+
+    # this is first, since dhcp is essential.  Note that we only stop-start
+    # it if we have daemon_wrapper; else we will rely on it being started by
+    # init.
+    if [ -x $PREFIX/sbin/daemon_wrapper ]; then
+	# don't care if this fails
+	/etc/init.d/dhcpd stop >/dev/null 2>&1
+	action $"Monitoring dhcpd via daemon_watcher: " \
+	    $PREFIX/sbin/daemon_watcher -I 1 -P /var/run/dhcpd.pid \
+	    -l /var/log/dhcpd_watcher.log /etc/init.d/dhcpd start
+    fi
+
+    if [ -x $PREFIX/sbin/bootinfo.restart ]; then
+        action $"Starting bootinfo: " $PREFIX/sbin/bootinfo.restart
+    fi
+
+    if [ -x $PREFIX/sbin/tmcd.restart ]; then
+        action $"Starting tmcd: " $PREFIX/sbin/tmcd.restart
+    fi
+
+    if [ -x $PREFIX/sbin/capserver ]; then
+        action $"Starting capserver: " $PREFIX/sbin/capserver
+    fi
+
+    if [ -x $PREFIX/etc/capture.rc -a -d /var/log/tiplogs ]; then
+        action $"Starting capture: " $PREFIX/etc/capture.rc
+    fi
+
+    if [ -x $PREFIX/sbin/lastlog_daemon ]; then
+        action $"Starting lastlog_daemon: " $PREFIX/sbin/lastlog_daemon
+    fi
+
+    if [ -x $PREFIX/sbin/hmcd ]; then
+        action $"Starting hmcd: " $PREFIX/sbin/hmcd
+    fi
+
+    if [ -x $PREFIX/sbin/sdcollectd ]; then
+        action $"Starting sdcollectd: " $PREFIX/sbin/sdcollectd
+    fi
+
+    if [ -x $PREFIX/sbin/stated ]; then
+        action $"Starting stated: " $PREFIX/sbin/stated
+    fi
+
+    if [ -x $PREFIX/sbin/sslxmlrpc_server.py ]; then
+        action $"Starting sslxmlrpc_server: " $PREFIX/sbin/sslxmlrpc_server.py
+    fi
+
+    if [ -x $PREFIX/sbin/reload_daemon ]; then
+        action $"Starting reload_daemon: " $PREFIX/sbin/reload_daemon
+    fi
+
+    if [ -x $PREFIX/sbin/repos_daemon ]; then
+        action $"Starting repos_daemon: " $PREFIX/sbin/repos_daemon
+    fi
+
+    if [ -x $PREFIX/sbin/checkup_daemon ]; then
+        action $"Starting checkup_daemon: " $PREFIX/sbin/checkup_daemon
+    fi
+
+    if [ -x $PREFIX/sbin/robomonitord ]; then
+        action $"Starting robomonitord: " $PREFIX/sbin/robomonitord
+    fi
+
+    if [ -x $PREFIX/sbin/mysqld_watchdog ]; then
+        action $"Starting mysqld_watchdog: " $PREFIX/sbin/mysqld_watchdog
+    fi
+
+    #
+    # Could trigger experiment creation, so make sure everything
+    # else is setup first; i.e., run this last!
+    #
+    if [ -x $PREFIX/sbin/batch_daemon  ]; then
+	if [ -x $PREFIX/sbin/daemon_wrapper ]; then
+	    action $"Starting batch_daemon: " $PREFIX/sbin/daemon_wrapper \
+		-i 30 -l $PREFIX/log/batchlog \
+		$PREFIX/sbin/batch_daemon -d
+	else
+	    action $"Starting batch_daemon: " $PREFIX/sbin/batch_daemon
+	fi
+    fi
+}
+
+stop() {
+    # kill the piddly ones
+    for daemon in $PREFIX/sbin/robomonitord $PREFIX/sbin/checkup_daemon $PREFIX/sbin/repos_daemon $PREFIX/sbin/reload_daemon $PREFIX/sbin/sdcollectd $PREFIX/sbin/hmcd $PREFIX/sbin/lastlog_daemon $PREFIX/sbin/capserver $PREFIX/sbin/bootinfo
+    do
+        if [ -x $daemon ]; then
+            action $"Stopping `basename $daemon`: " /usr/bin/killall `basename $daemon`
+	fi
+    done
+
+    if [ -x $PREFIX/sbin/sslxmlrpc_server.py  ]; then
+	echo -n $"Stopping sslxmlrpc_server: "
+	killproc -p /var/run/sslxmlrpc_server.pid $PREFIX/sbin/sslxmlrpc_server.py
+	echo
+    fi
+
+    if [ -x $PREFIX/etc/capture.rc ]; then
+	action $"Stopping capture: " killall capture
+    fi
+
+    if [ -x $PREFIX/sbin/batch_daemon  ]; then
+	echo -n $"Stopping batch_daemon: "
+	if [ -x $PREFIX/sbin/daemon_wrapper ]; then
+	    killproc -p /var/run/batch_daemon_wrapper.pid daemon_wrapper
+	fi
+	killall batch_daemon
+	echo
+    fi
+
+    # Only a few of our daemons keep enough state to require an
+    # explicit kill
+    echo -n $"Stopping stated: "
+    killproc -p /var/run/stated.pid /usr/testbed/sbin/stated
+    echo
+
+    echo -n $"Stopping tmcd: "
+    killproc -p /var/run/tmcd.pid /usr/testbed/sbin/tmcd
+    echo
+
+    # just kill this one via sigkill, since we don't want mail about it or 
+    # anything -- if the system's really going down, dhcpd will get killed
+    # by its own initscript
+    if [ -x $PREFIX/sbin/daemon_watcher -a \
+	 -e /var/run/dhcpd_watcher.pid ]; then
+	action $"Stopping daemon_watcher for dhcpd: " kill -9 `cat /var/run/dhcpd_watcher.pid`
+	echo
+    fi
+
+    rm -f $LOCK_FILE
+}
+
+
+
+# See how we were called.
+case "$1" in
+    start)
+        start
+        ;;
+    stop)
+	stop
+        RETVAL=0
+        ;;
+    status)
+        RETVAL=0
+        ;;
+    *)
+	echo ""
+	echo "Usage: `basename $0` {start|stop|status}"
+	echo ""
+	exit 64
+	;;
+esac
+
+exit $RETVAL
