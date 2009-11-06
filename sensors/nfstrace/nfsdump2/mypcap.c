@@ -3,8 +3,16 @@
 
 #include <errno.h>
 #include <stdlib.h>
+#ifdef __linux__
+#include <unistd.h>
+#include <pthread.h>
+#include <pcap.h>
+#include <pcap-int.h>
+#include <pcap-bpf.h>
+#else
 #include <linuxthreads/pthread.h>
 #include <pcap-int.h>
+#endif
 
 #include "listNode.h"
 
@@ -122,12 +130,23 @@ int mypcap_read(pcap_t *pd, void *user)
 	/*
 	 * Loop through each packet.
 	 */
+#ifdef __linux__
+#define BPF_ALIGNMENT sizeof(long)
+#define BPF_WORDALIGN(x) (((x)+(BPF_ALIGNMENT-1))&~(BPF_ALIGNMENT-1))
+#define bhp ((struct pcap_pkthdr *)bp)
+#else
 #define bhp ((struct bpf_hdr *)bp)
+#endif
 	ep = bp + cc;
 	while (bp < ep) {
 		register int caplen, hdrlen;
+#ifdef __linux__
+		caplen = bhp->caplen;
+		hdrlen = bhp->len;
+#else
 		caplen = bhp->bh_caplen;
 		hdrlen = bhp->bh_hdrlen;
+#endif
 		/*
 		 * XXX A bpf_hdr matches a pcap_pkthdr.
 		 */

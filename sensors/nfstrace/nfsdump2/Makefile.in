@@ -17,7 +17,7 @@
 #  WARRANTIES, INCLUDING, WITHOUT LIMITATION, THE IMPLIED WARRANTIES OF
 #  MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE.
 #
-# @(#) $Header: /home/cvs_mirrors/cvs-public.flux.utah.edu/CVS/testbed/sensors/nfstrace/nfsdump2/Makefile.in,v 1.2 2006-02-02 16:16:17 stack Exp $ (LBL)
+# @(#) $Header: /home/cvs_mirrors/cvs-public.flux.utah.edu/CVS/testbed/sensors/nfstrace/nfsdump2/Makefile.in,v 1.2.18.1 2009-11-06 00:00:57 johnsond Exp $ (LBL)
 
 #
 # Various configurable paths (remember to edit Makefile.in, not Makefile)
@@ -37,12 +37,23 @@ CCOPT = @V_CCOPT@
 INCLS = -I. @V_INCLS@
 DEFS = @DEFS@
 
+SYSTEM = $(shell uname -s)
+
 # Standard CFLAGS
-CFLAGS = $(CCOPT) $(DEFS) $(INCLS) -g -I/usr/local/include/pthread -I/usr/local/include/pthread/linuxthreads
+CFLAGS = $(CCOPT) $(DEFS) $(INCLS) -g 
+ifneq ($(SYSTEM),Linux)
+CFLAGS += -I/usr/local/include/pthread -I/usr/local/include/pthread/linuxthreads
+endif
 
 # Standard LDFLAGS
+
 #LDFLAGS = @LDFLAGS@ -pthread
-LDFLAGS = @LDFLAGS@ -L/usr/local/lib -llthread -llgcc_r
+LDFLAGS = @LDFLAGS@ 
+ifneq ($(SYSTEM),Linux)
+LDFLAGS += -L/usr/local/lib -llthread -llgcc_r
+else
+LDFLAGS += -lpthread
+endif
 
 # Standard LIBS
 LIBS = @LIBS@

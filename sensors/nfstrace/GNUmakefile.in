@@ -13,9 +13,17 @@ SUBDIR          = sensors/nfstrace
 
 NFSTRACESUPPORT = @NFSTRACESUPPORT@
 
+SYSTEM          = $(shell uname -s)
+
+STUFF = nfstrace.proxy nfsdump2db nfsdump nfstrace.init
+# XXX ugh, but we don't use this and nfsdump won't compile on linux
+ifeq ($(SYSTEM),Linux)
+STUFF = nfstrace.proxy nfsdump2db nfstrace.init
+endif
+
 include $(OBJDIR)/Makeconf
 
-all: nfstrace.proxy nfsdump2db nfsdump nfstrace.init
+all: $(STUFF)
 
 include $(TESTBED_SRCDIR)/GNUmakerules
 
