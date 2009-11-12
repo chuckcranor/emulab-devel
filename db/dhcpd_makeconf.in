@@ -311,6 +311,18 @@ if ($install) {
     system("mv -f $outfile $DHCPD_CONF") == 0 or
 	    fatal("Could not install new ${DHCPD_CONF}");
 
+    # Workaround for distros with /etc/dhcp/ directory
+    if (-e "/etc/dhcp") {
+        if (-e "/etc/dhcp/dhcpd.conf") {
+            system("cp -fp /etc/dhcp/dhcpd.conf /etc/dhcp/dhcpd.conf.old") == 0 or
+                fatal("Could not backup copy of /etc/dhcp/dhcpd.conf");
+            unlink("/etc/dhcp/dhcpd.conf");
+        }
+        system("ln -s $DHCPD_CONF /etc/dhcp/dhcpd.conf") == 0 or
+            fatal("Could not create /etc/dhcp/dhcpd.conf symlink");
+    }
+
+
     if ($restart) {
 	$dpid = `cat /var/run/dhcpd.pid`;
 	chomp($dpid);
