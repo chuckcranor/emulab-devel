@@ -1,0 +1,81 @@
+#!/usr/bin/perl
+
+$PARALLELIZE = 1;
+# Multiple -t args to force tty alloc so we can run sudo
+$SSH_COMMAND = "ssh -t -t -A -x -o StrictHostKeyChecking=no";
+# rsync doesn't like ttys
+$RSH_COMMAND = "ssh -A -x -o StrictHostKeyChecking=no";
+
+$CREATEREPO_HOST = "pc402.emulab.net";
+
+%buildboxes = 
+    ( 'fedora8-i686' => 
+      { 'hostname' => 'f8b32leb.sdn-leb.emulab-ops.emulab.net',
+	'arch'     => 'i686',
+	'buildroot' => '/usr/src/redhat',
+	'distro'    => 'fedora8',
+	'install'   => [ { 'lpath' => '/usr/src/redhat/RPMS/i686',
+			   'rhost' => 'ops.emulab.net',
+			   'rpath' => '/share/fedora/emulab-repo/releases/8/i686' },
+			 # do the fedora8 SRPMS from this host, not the other
+			 # -- it would be duplicated work.
+			 { 'lpath' => '/usr/src/redhat/SRPMS',
+			   'rhost' => 'ops.emulab.net',
+			   'rpath' => '/share/fedora/emulab-repo/releases/8/source' }, ],
+      },
+      'fedora8-x86_64' => 
+      { 'hostname' => 'f8b64leb.sdn-leb.emulab-ops.emulab.net',
+	'arch'     => 'x86_64',
+	'buildroot' => '/usr/src/redhat',
+	'distro'    => 'fedora8',
+	'install'   => [ { 'lpath' => '/usr/src/redhat/RPMS/x86_64',
+			   'rhost' => 'ops.emulab.net',
+			   'rpath' => '/share/fedora/emulab-repo/releases/8/x86_64' } ],
+      },
+      'fedora10-i686' => 
+      { 'hostname' => 'f10b32leb.sdn-leb.emulab-ops.emulab.net',
+	'arch'     => 'i686',
+	'buildroot' => '/usr/src/redhat',
+	'distro'    => 'fedora10',
+	'install'   => [ { 'lpath' => '/usr/src/redhat/RPMS/i686',
+			   'rhost' => 'ops.emulab.net',
+			   'rpath' => '/share/fedora/emulab-repo/releases/10/i686' },
+			 # do the fedora10 SRPMS from this host, not the other
+			 # -- it would be duplicated work.
+			 { 'lpath' => '/usr/src/redhat/SRPMS',
+			   'rhost' => 'ops.emulab.net',
+			   'rpath' => '/share/fedora/emulab-repo/releases/10/source' }, ],
+      },
+      'fedora10-x86_64' => 
+      { 'hostname' => 'f10b64leb.sdn-leb.emulab-ops.emulab.net',
+	'arch'     => 'x86_64',
+	'buildroot' => '/usr/src/redhat',
+	'distro'    => 'fedora10',
+	'install'   => [ { 'lpath' => '/usr/src/redhat/RPMS/x86_64',
+			   'rhost' => 'ops.emulab.net',
+			   'rpath' => '/share/fedora/emulab-repo/releases/10/x86_64' } ],
+      },
+      'fedora11-i686' => 
+      { 'hostname' => 'f11b32leb.sdn-leb.emulab-ops.emulab.net',
+	'arch'     => 'i686',
+	'buildroot' => '/usr/src/redhat',
+	'distro'    => 'fedora11',
+	'install'   => [ { 'lpath' => '/usr/src/redhat/RPMS/i686',
+			   'rhost' => 'ops.emulab.net',
+			   'rpath' => '/share/fedora/emulab-repo/releases/11/i686' },
+			 # do the fedora11 SRPMS from this host, not the other
+			 # -- it would be duplicated work.
+			 { 'lpath' => '/usr/src/redhat/SRPMS',
+			   'rhost' => 'ops.emulab.net',
+			   'rpath' => '/share/fedora/emulab-repo/releases/11/source' }, ],
+      },
+      'fedora11-x86_64' => 
+      { 'hostname' => 'f11b64leb.sdn-leb.emulab-ops.emulab.net',
+	'arch'     => 'x86_64',
+	'buildroot' => '/usr/src/redhat',
+	'distro'    => 'fedora11',
+	'install'   => [ { 'lpath' => '/usr/src/redhat/RPMS/x86_64',
+			   'rhost' => 'ops.emulab.net',
+			   'rpath' => '/share/fedora/emulab-repo/releases/11/x86_64' } ],
+      },
+    );
