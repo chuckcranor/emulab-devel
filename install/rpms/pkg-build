@@ -246,7 +246,7 @@ sub installRepos($) {
 	}
 	# in here is the command to be run from rhost
 	# first pull new rpms
-	$cmd .= " rsync -e \\\"$RSH_COMMAND\\\" -avz $uid$lh:$lp/ $rp/";
+	$cmd .= " rsync -e \\\"$RSH_COMMAND\\\" -rltvzO $uid$lh:$lp/ $rp/";
 	# then ssh to $CREATEREPO_HOST
 	$cmd .= " && $SSH_COMMAND $uid$createhost \\\"";
 	my $tmpdir = "/tmp/rdata." . rand(100000);
@@ -254,7 +254,7 @@ sub installRepos($) {
 	$cmd .= "rm -rf $tmpdir ; mkdir -p $tmpdir";
 	$cmd .= " ; createrepo -o $tmpdir $rp \\\"";
 	# sync back teh repodata
-	$cmd .= " && rsync -e \\\"$RSH_COMMAND\\\" -avz $uid$createhost:$tmpdir/repodata/ $rp/repodata/";
+	$cmd .= " && rsync -e \\\"$RSH_COMMAND\\\" -rltvzO $uid$createhost:$tmpdir/repodata/ $rp/repodata/";
 	# remove the tmp dir
 	$cmd .= " && $SSH_COMMAND $uid$createhost \\\"rm -rf $tmpdir\\\"";
 
