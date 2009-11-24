@@ -23,6 +23,12 @@ Requires:	zlib
 %if 0%{?fedora} >= 9
 Requires:	zlib-static
 %endif
+%if 0%{?fedora} >= 11
+Requires:   openssl-static
+Requires:   glibc-static
+Requires:   libpcap-devel
+Requires:   php-process
+%endif
 Requires:	nfs-utils
 Requires:	mysql, mysql-server, mysql-devel
 Requires:	perl, perl-suidperl, perl-BSD-Resource, perl-DBD-MySQL, perl-DBI, perl-XML-Parser, perl-XML-Simple, perl-XML-LibXML, perl-CGI-Session, perl-GDGraph, perl-HTML-Parser, perl-TimeDate, perl-RPC-XML, perl-IO-Tty, perl-MD5, perl-SNMP-Info, perl-SNMP_Session, perl-Digest-SHA1, perl-Digest-SHA, perl-Digest-HMAC, perl-MD5
