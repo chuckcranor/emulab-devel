@@ -10,7 +10,7 @@ $CREATEREPO_HOST = "pc402.emulab.net";
 
 %buildboxes = 
     ( 'fedora8-i686' => 
-      { 'hostname' => 'f8b32leb.sdn-leb.emulab-ops.emulab.net',
+      { 'hostname' => 'f8b32.sdn-lbb.emulab-ops.emulab.net',
 	'arch'     => 'i686',
 	'buildroot' => '/usr/src/redhat',
 	'distro'    => 'fedora8',
@@ -24,7 +24,7 @@ $CREATEREPO_HOST = "pc402.emulab.net";
 			   'rpath' => '/share/fedora/emulab-repo/releases/8/source' }, ],
       },
       'fedora8-x86_64' => 
-      { 'hostname' => 'f8b64leb.sdn-leb.emulab-ops.emulab.net',
+      { 'hostname' => 'f8b64.sdn-lbb.emulab-ops.emulab.net',
 	'arch'     => 'x86_64',
 	'buildroot' => '/usr/src/redhat',
 	'distro'    => 'fedora8',
@@ -33,7 +33,7 @@ $CREATEREPO_HOST = "pc402.emulab.net";
 			   'rpath' => '/share/fedora/emulab-repo/releases/8/x86_64' } ],
       },
       'fedora10-i686' => 
-      { 'hostname' => 'f10b32leb.sdn-leb.emulab-ops.emulab.net',
+      { 'hostname' => 'f10b32.sdn-lbb.emulab-ops.emulab.net',
 	'arch'     => 'i686',
 	'buildroot' => '/usr/src/redhat',
 	'distro'    => 'fedora10',
@@ -47,7 +47,7 @@ $CREATEREPO_HOST = "pc402.emulab.net";
 			   'rpath' => '/share/fedora/emulab-repo/releases/10/source' }, ],
       },
       'fedora10-x86_64' => 
-      { 'hostname' => 'f10b64leb.sdn-leb.emulab-ops.emulab.net',
+      { 'hostname' => 'f10b64.sdn-lbb.emulab-ops.emulab.net',
 	'arch'     => 'x86_64',
 	'buildroot' => '/usr/src/redhat',
 	'distro'    => 'fedora10',
@@ -56,7 +56,7 @@ $CREATEREPO_HOST = "pc402.emulab.net";
 			   'rpath' => '/share/fedora/emulab-repo/releases/10/x86_64' } ],
       },
       'fedora11-i686' => 
-      { 'hostname' => 'f11b32leb.sdn-leb.emulab-ops.emulab.net',
+      { 'hostname' => 'f11b32.sdn-lbb.emulab-ops.emulab.net',
 	'arch'     => 'i686',
 	'buildroot' => '/usr/src/redhat',
 	'distro'    => 'fedora11',
@@ -70,7 +70,7 @@ $CREATEREPO_HOST = "pc402.emulab.net";
 			   'rpath' => '/share/fedora/emulab-repo/releases/11/source' }, ],
       },
       'fedora11-x86_64' => 
-      { 'hostname' => 'f11b64leb.sdn-leb.emulab-ops.emulab.net',
+      { 'hostname' => 'f11b64.sdn-lbb.emulab-ops.emulab.net',
 	'arch'     => 'x86_64',
 	'buildroot' => '/usr/src/redhat',
 	'distro'    => 'fedora11',
