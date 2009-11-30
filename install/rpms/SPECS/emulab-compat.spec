@@ -2,7 +2,7 @@
 %define version 0.1
 %define url http://www.emulab.net
 
-%define release_num 1
+%define release_num 2
 %define release %{release_num}.emulab%{?date:.%{date}}
 
 %define debug_package %{nil}

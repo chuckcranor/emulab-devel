@@ -17,6 +17,11 @@ $CREATEREPO_HOST = "pc402.emulab.net";
 	'install'   => [ { 'lpath' => '/usr/src/redhat/RPMS/i686',
 			   'rhost' => 'ops.emulab.net',
 			   'rpath' => '/share/fedora/emulab-repo/releases/8/i686' },
+			 # do the fedora8 noarch RPMS from this host, not the other
+			 # -- it would be duplicated work.
+			 { 'lpath' => '/usr/src/redhat/RPMS/noarch',
+			   'rhost' => 'ops.emulab.net',
+			   'rpath' => '/share/fedora/emulab-repo/releases/8/noarch' },
 			 # do the fedora8 SRPMS from this host, not the other
 			 # -- it would be duplicated work.
 			 { 'lpath' => '/usr/src/redhat/SRPMS',
@@ -40,6 +45,11 @@ $CREATEREPO_HOST = "pc402.emulab.net";
 	'install'   => [ { 'lpath' => '/usr/src/redhat/RPMS/i686',
 			   'rhost' => 'ops.emulab.net',
 			   'rpath' => '/share/fedora/emulab-repo/releases/10/i686' },
+			 # do the fedora10 noarch RPMS from this host, not the other
+			 # -- it would be duplicated work.
+			 { 'lpath' => '/usr/src/redhat/RPMS/noarch',
+			   'rhost' => 'ops.emulab.net',
+			   'rpath' => '/share/fedora/emulab-repo/releases/10/noarch' },
 			 # do the fedora10 SRPMS from this host, not the other
 			 # -- it would be duplicated work.
 			 { 'lpath' => '/usr/src/redhat/SRPMS',
@@ -63,6 +73,11 @@ $CREATEREPO_HOST = "pc402.emulab.net";
 	'install'   => [ { 'lpath' => '/usr/src/redhat/RPMS/i686',
 			   'rhost' => 'ops.emulab.net',
 			   'rpath' => '/share/fedora/emulab-repo/releases/11/i686' },
+			 # do the fedora11 noarch RPMS from this host, not the other
+			 # -- it would be duplicated work.
+			 { 'lpath' => '/usr/src/redhat/RPMS/noarch',
+			   'rhost' => 'ops.emulab.net',
+			   'rpath' => '/share/fedora/emulab-repo/releases/11/noarch' },
 			 # do the fedora11 SRPMS from this host, not the other
 			 # -- it would be duplicated work.
 			 { 'lpath' => '/usr/src/redhat/SRPMS',
