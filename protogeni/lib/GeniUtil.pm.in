@@ -20,6 +20,7 @@ use XML::Simple;
 # Configure variables
 my $TB		   = "@prefix@";
 my $TBOPS          = "@TBOPSEMAIL@";
+my $UUIDGEN	   = "@UUIDGEN@";
 my $user	   = "geniuser";
 my $group          = "GeniSlices";
 
@@ -74,7 +75,7 @@ sub FlushCaches()
 #
 sub NewUUID()
 {
-    my $uuid = `/usr/bin/uuidgen`;
+    my $uuid = `$UUIDGEN`;
 
     if ($uuid =~ /^(\w{8}\-\w{4}\-\w{4}\-\w{4}\-\w{12})$/) {
 	return $1;
