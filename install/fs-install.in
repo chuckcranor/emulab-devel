@@ -2,7 +2,7 @@
 
 #
 # EMULAB-COPYRIGHT
-# Copyright (c) 2003-2008 University of Utah and the Flux Group.
+# Copyright (c) 2003-2009 University of Utah and the Flux Group.
 # All rights reserved.
 #
 
@@ -84,7 +84,9 @@ else {
 #
 my $FS_PORT = "emulab-fs-1.4";
 if ($FBSD_MAJOR > 4) {
-    if ($FBSD_MAJOR == 6 && $FBSD_MINOR > 2) {
+    if ($FBSD_MAJOR > 6) {
+	$FS_PORT = "emulab-fs-3.0";
+    } elsif ($FBSD_MAJOR == 6 && $FBSD_MINOR > 2) {
 	$FS_PORT = "emulab-fs-2.1";
     } else {
 	$FS_PORT = "emulab-fs-2.0";
