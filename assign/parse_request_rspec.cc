@@ -594,8 +594,19 @@ bool populate_link (DOMElement* elt,
     dst = interfaces[1];
   }
   else {
-    cout << "*** Too few interfaces found (" << ifaceCount << ")" 
-	 << " on " << virtualId << " at least 2 required ... Aborting" 
+    cerr << "*** Too few interfaces found (" << ifaceCount << ")" 
+	 << " on link \"" << virtualId << ".\"  ";
+    switch (ifaceCount) {
+	case RSPEC_ERROR_BAD_IFACE_COUNT:
+	    cerr << "Bad interface count.\n"; break;
+	case RSPEC_ERROR_UNSEEN_NODEIFACE_SRC:
+	    cerr << "Source interface not recognized.\n"; break;
+	case RSPEC_ERROR_UNSEEN_NODEIFACE_DST:
+	    cerr << "Destination interface not recognized.\n"; break;
+	default:
+	    cerr << "(Unknown error.)\n";
+    }
+    cerr << "At least 2 interfaces are required ... Aborting"
 	 << endl;
     return false;
   }

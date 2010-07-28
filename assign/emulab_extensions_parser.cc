@@ -12,10 +12,25 @@
 
 #include "emulab_extensions_parser.h"
 
+#include <stdexcept>
+
 XERCES_CPP_NAMESPACE_USE
 
 using namespace std;
 using namespace rspec_emulab_extension;
+
+namespace {
+  // Call this only on conversions that should never fail.
+  // Don't call this if p might be zero or not a DOMElement*.
+  template <class T>
+  DOMElement* domEltOrDie (T* p)
+  {
+    DOMElement* e = dynamic_cast<DOMElement*> (p);
+    if (!e) throw std::logic_error
+      ("unexpected Xerces error extracting a DOMElement");
+    return e;
+  }
+}
 
 emulab_operator emulab_extensions_parser::readOperator(const DOMElement* tag)
 {
@@ -39,7 +54,7 @@ emulab_extensions_parser::readFeaturesDesires (const DOMElement* ele, int& count
   count = fdNodes->getLength();
   for (unsigned int i = 0; i < fdNodes->getLength(); i++) 	{
     fds.push_back(this->readFeatureDesire
-		  (dynamic_cast<DOMElement*>(fdNodes->item(i))));
+		  (domEltOrDie(fdNodes->item(i))));
   }
   return fds;
 }
@@ -63,7 +78,7 @@ vector<struct property> emulab_extensions_parser::readProperties
   vector<struct property> properties;
   for (unsigned int i = 0; i < propNodes->getLength(); i++) {
     properties.push_back(this->readProperty
-			 (dynamic_cast<DOMElement*>(propNodes->item(i))));
+			 (domEltOrDie(propNodes->item(i))));
   }
   return properties;
 }
@@ -106,8 +121,7 @@ emulab_extensions_parser::readVClasses (const DOMElement* elem)
   vector<struct vclass> vclasses;
   for (unsigned int i = 0; i < vclassNodes->getLength(); i++) {
     vclasses.push_back(this->readVClass
-		       (dynamic_cast<DOMElement*>
-			(vclassNodes->item(i))));
+		       (domEltOrDie(vclassNodes->item(i))));
   }
   return vclasses;
 }
@@ -119,7 +133,7 @@ emulab_extensions_parser::readVClass (const DOMElement* tag)
   DOMNodeList* physNodes
     = tag->getElementsByTagName(XStr("emulab:physical_type").x());
   for (unsigned int i = 0; i < physNodes->getLength(); i++) {
-    DOMElement* physNode = dynamic_cast<DOMElement*>(physNodes->item(i));
+    DOMElement* physNode = domEltOrDie(physNodes->item(i));
     // XXX: This is nasty because the type name that we give assign
     // has to be the concatation of the hardware type and sliver type
     // It's not clear which is the best place to do this
@@ -149,7 +163,8 @@ string emulab_extensions_parser::readTypeSlots (const DOMElement* tag)
   if (typeSlotsNodes->getLength() == 0) {
     return "";
   }
-  DOMElement* typeSlotsNode = dynamic_cast<DOMElement*>(typeSlotsNodes->item(0));
+  DOMElement* typeSlotsNode = domEltOrDie(typeSlotsNodes->item(0));
+
   return (this->getAttribute(typeSlotsNode, "type_slots"));
 }
 
@@ -160,7 +175,8 @@ bool emulab_extensions_parser::readStaticType (const DOMElement* tag)
   if (typeSlotsNodes->getLength() == 0) {
     return false;
   }
-  DOMElement* typeSlotsNode = dynamic_cast<DOMElement*>(typeSlotsNodes->item(0));
+  DOMElement* typeSlotsNode = domEltOrDie(typeSlotsNodes->item(0));
+
   return (typeSlotsNode->hasAttribute(XStr("static").x()));
 }
 
@@ -172,7 +188,7 @@ emulab_extensions_parser::readTypeLimits (const DOMElement* tag, int& count)
     = tag->getElementsByTagName(XStr("emulab:set_type_limit").x());
   count = typeLimitNodes->getLength();
   for (int i = 0; i < count; i++) {
-    DOMElement* limitNode = dynamic_cast<DOMElement*>(typeLimitNodes->item(i));
+    DOMElement* limitNode = domEltOrDie(typeLimitNodes->item(i));
     string typeClass = this->getAttribute(limitNode, "typeclass");
     string typeCount = this->getAttribute(limitNode, "count");
     struct type_limit limit = { 
@@ -192,7 +208,7 @@ emulab_extensions_parser::readFixedInterface(const DOMElement* tag,bool& fixed)
     = tag->getElementsByTagName(XStr("emulab:fixedinterface").x());
   fixed = (fixIfaces->getLength() == 1);
   if (fixed) {
-    DOMElement* fixedIface = dynamic_cast<DOMElement*>(fixIfaces->item(0));
+    DOMElement* fixedIface = domEltOrDie(fixIfaces->item(0));
     rv = this->getAttribute(fixedIface, "name");
   }
   return rv;
@@ -207,7 +223,7 @@ emulab_extensions_parser::readShortInterfaceName (const DOMElement* tag,
     = tag->getElementsByTagName(XStr("emulab:interface").x());
   hasShortName = (interfaces->getLength() == 1);
   if (hasShortName) {
-    DOMElement* interface = dynamic_cast<DOMElement*>(interfaces->item(0));
+    DOMElement* interface = domEltOrDie(interfaces->item(0));
     rv = this->getAttribute(interface, "name");
   }
   return rv;
@@ -221,7 +237,7 @@ string emulab_extensions_parser::readSubnodeOf (const DOMElement* tag,
     = tag->getElementsByTagName(XStr("emulab:subnode_of").x());
   isSubnode = (subnodes->getLength() > 0);
   if (isSubnode) {
-    DOMElement* subnode = dynamic_cast<DOMElement*>(subnodes->item(0));
+    DOMElement* subnode = domEltOrDie(subnodes->item(0));
     rv = this->getAttribute(subnode, "parent");
   }
   return rv;
@@ -249,7 +265,7 @@ int emulab_extensions_parser::readTrivialBandwidth(const DOMElement* tag,
   hasTrivialBw = (bws->getLength() > 0);
   if (hasTrivialBw) {
     trivialBw =(int)this->stringToNum(this->getAttribute
-				      (dynamic_cast<DOMElement*>(bws->item(0)),
+				      (domEltOrDie(bws->item(0)),
 				       "value"));
   }
   return trivialBw;
@@ -262,7 +278,7 @@ string emulab_extensions_parser::readHintTo (const DOMElement* tag,
   DOMNodeList* hints = tag->getElementsByTagName(XStr("emulab:hint_to").x());
   hasHint = (hints->getLength() > 0);
   if (hasHint) {
-    hint = this->getAttribute(dynamic_cast<DOMElement*>(hints->item(0)), 
+    hint = this->getAttribute(domEltOrDie(hints->item(0)),
 			      "value");
   }
   return hint;
@@ -313,7 +329,7 @@ emulab_extensions_parser::readPolicies (const DOMElement* tag, int& count)
   count = policies->getLength();
   for (int i = 0; i < count; i++) {
     rv.push_back
-      (this->readPolicy(dynamic_cast<DOMElement*>(policies->item(0))));
+      (this->readPolicy(domEltOrDie(policies->item(0))));
   }
   return rv;
 }

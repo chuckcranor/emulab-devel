@@ -15,6 +15,7 @@
 #include "rspec_parser.h"
 
 #include <cstdlib>
+#include <stdexcept>
 #include <string>
 #include <vector>
 #include <xercesc/dom/DOM.hpp>
@@ -106,6 +107,9 @@ rspec_parser_v2 :: readLinkCharacteristics (const DOMElement* link,
   if (count > 0) {
     // Read only from the first property and ignore the rest
     DOMElement* property = dynamic_cast<DOMElement*>(properties->item(0));
+    if (!property) throw std::logic_error
+      ("rspec_parser_v2::readLinkCharacteristics: "
+       "expected a DOMElement reading from <property> element list");
     strBw = this->getAttribute(property, "capacity", hasBandwidth);
     strLat = this->getAttribute(property, "latency", hasLatency);
     strLoss = this->getAttribute(property, "packet_loss", hasPacketLoss);
@@ -152,6 +156,8 @@ rspec_parser_v2 :: readLinkCharacteristics (const DOMElement* link,
       }
     }
   }
+  else cerr << "No <property> on a link element -- "
+	       "link characteristics will be bogus!\n";
     
   if (!isOk) {
     count = RSPEC_ASYMMETRIC_LINK;
