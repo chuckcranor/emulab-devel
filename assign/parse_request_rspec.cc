@@ -458,8 +458,7 @@ bool populate_link (DOMElement* elt,
     = rspecParser->readVirtualizationType(elt, hasVirtualizationType);
   
   /*
-   * Get the link type - we know there is at least one, and we
-   * need it for the constructor
+   * Get the link type - we need it for the constructor.
    * Note: Changed from element to attribute
    */
   int count;
