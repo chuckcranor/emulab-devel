@@ -123,7 +123,7 @@ void print_solution(const solution &s) {
 	cout << vlink->name;
 #endif
 		
-	list<const char*> links;
+	list<string> links;
 
 	if (vlink->link_info.type_used == tb_link_info::LINK_DIRECT) {
 	    // Direct link - just need the source and destination
@@ -152,7 +152,7 @@ void print_solution(const solution &s) {
 	    tb_plink *p = get(pedge_pmap,vlink->link_info.plinks.front());
 	    tb_plink *p2 = get(pedge_pmap,vlink->link_info.plinks.back());
 #ifdef WITH_XML
-	    links.push_back((p->name).c_str());
+	    links.push_back((p->name).c_str());  // p->name is an fstring.
 	    links.push_back((p2->name).c_str());
 	    if (both_inputs_rspec) {
 	      rspec_annotater->annotate_element((vlink->name).c_str(), &links);
@@ -175,7 +175,7 @@ void print_solution(const solution &s) {
 	       ++it) {
 	    tb_plink *p = get(pedge_pmap,*it);
 #ifdef WITH_XML
-	    links.push_back((p->name).c_str());
+	    links.push_back((p->name).c_str());  // p->name is an fstring.
 	    if (!is_generated)
 	      cout << " " << p->name 
 		   << " (" << p->srcmac << "," << p->dstmac << ")";

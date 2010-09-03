@@ -44,7 +44,7 @@ class annotate_rspec_v2 : public annotate_rspec
   
   // Annotates intraswitch and interswitch links in the rspec
   void annotate_element(const char* v_name, 
-			std::list<const char*>* links);
+			std::list<std::string>* links);
   
   // Annotate a trivial link
   void annotate_element(const char* v_name);
@@ -81,7 +81,7 @@ class annotate_rspec_v2 : public annotate_rspec
   // Finds the next link in the path returned by assign
   xercesc::DOMElement* find_next_link_in_path 
     (xercesc::DOMElement *prev, 
-     std::list<const char*>* links);
+     std::list<std::string>* links);
   
   // Copies the component spec from the source to the destination
   void copy_component_spec(const xercesc::DOMElement* src, 
@@ -129,7 +129,7 @@ class annotate_rspec_v2 : public annotate_rspec
   // Orders the links in the specified list of links from head to tail
   // The first element in the list MUST be the head
   // WARNING: This will destroy in the input list
-  std::list<const char*>* reorderLinks (std::list<const char*>* links);
+  std::list<std::string>* reorderLinks (std::list<std::string>* links);
 };
 
 #endif //for __ANNOTATE_RSPEC_H

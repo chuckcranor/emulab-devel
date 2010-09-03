@@ -153,10 +153,10 @@ annotate_rspec_v2::annotate_element (const char* v_name, const char* p_name)
 
 // This is called when an intraswitch or interswitch link has to be annotated
 void annotate_rspec_v2::annotate_element (const char* v_name, 
-                                          list<const char*>* unordered)
+                                          list<string>* unordered)
 {
   // Re-order links to ensure that they are all head-to-tail.
-  list<const char*>* links;
+  list<string>* links;
 #ifdef ANNOTATE_ARBITRARY_LINK_ORDER
   links = unordered;
 #else
@@ -165,8 +165,8 @@ void annotate_rspec_v2::annotate_element (const char* v_name,
 
   // These are the paths from the source to the first switch
   // and from the last switch to the destination
-  const char* psrc_name = links->front();	
-  const char* pdst_name = links->back();	
+  const string psrc_name = links->front();
+  const string pdst_name = links->back();
   DOMElement* p_src_switch_link 
     = (this->physical_elements->find(psrc_name))->second;
   DOMElement* p_switch_dst_link 
@@ -517,9 +517,9 @@ annotate_rspec_v2::copy_component_spec(const DOMElement* src, DOMElement* dst)
 // WARNING: This removes the link in the path from the list of links
 DOMElement* 
 annotate_rspec_v2::find_next_link_in_path (DOMElement *prev, 
-                                           list<const char*>* links)
+                                           list<string>* links)
 {
-  list<const char*>::iterator it;
+  list<string>::iterator it;
   DOMElement* link = NULL;
 
   //XMLDEBUG("Checking for next link for " << string(XStr(prev->getAttribute(XStr("component_id").x())).c()) << endl);
@@ -702,11 +702,10 @@ string annotate_rspec_v2::getShortInterfaceName (string interface)
 // Re-orders the links so that all the links on an interswitch link
 // are in the correct order
 // WARNING: This will distroy the input list
-// NOTE: The caller has the responsibility to return the freed list and all
-// char*s it contains
+// NOTE: The caller has the responsibility to return the freed list
 #ifndef ANNOTATE_ARBITRARY_LINK_ORDER
-list<const char*>* 
-annotate_rspec_v2::reorderLinks (list<const char*>* links)
+list<string>*
+annotate_rspec_v2::reorderLinks (list<string>* links)
 {
   /*
   XMLDEBUG("Reordering started: before ");
@@ -721,53 +720,39 @@ annotate_rspec_v2::reorderLinks (list<const char*>* links)
   XMLDEBUG(endl);
   */
 
-  list<const char*> *ordered = new list<const char*>();
-  //  list<const char*>::iterator it;
+  list<string> *ordered = new list<string>;
 
-  // IMPORTANT: The *only* reason we can push this char* directly into ordered
-  // (instead of making a copy) is that we know that it came from an fstring
-  // when the 'links' structure was created, and fstring never frees its
-  // strings. If that were not true, this code could produce dangling pointers
-  const char *link = links->front();
+  string link = links->front();
   links->pop_front();
-  DOMElement* prev = (this->physical_elements)->find(link)->second;
+  DOMElement* prev = (this->physical_elements)->find(link.c_str())->second;
   ordered->push_back(link);
   // XMLDEBUG("first is " << link << endl);
 
   while(!links->empty()) {
     prev = this->find_next_link_in_path(prev, links);
-
-    // TODO: This is a minor memory leak - we keep the pointer to the char*
-    // inside the string, but not the pointer to the string object itself, so
-    // it cannot be freed. The best way to clean this up would be to make links
-    // and ordered lists of fstrings (not pointers to fstrings)
-    string* link 
-      = new string(XStr(prev->getAttribute(XStr("component_id").x())).c());
+    string link
+      = XStr(prev->getAttribute(XStr("component_id").x())).c();
 
     // Remove this link from the list - would rather use links->remove(), but
     // it doesn't seem to be able to compare strings
     // XXX - I think this is okay not to do, since find_list_in_path is
     // destructive
     bool found = true;
+
     /*
-    list<const char*>::iterator it;
-    bool found = false;
-    for (it = links->begin(); it != links->end(); it++) {
-        if (!strcmp(link->c_str(),*it)) {
-            found = true;
-            links->erase(it);
-            break;
-        }
-    }
+    // Note that list::remove(x) removes all occurrences of x,
+    // not just the first one.
+	list<string>::size_type sz = links->size();
+    links->remove(link);
     */
 
-    // XMLDEBUG(" pushing on " << link->c_str() << endl);
+    // XMLDEBUG(" pushing on " << link << endl);
     if (found) {
-        ordered->push_back(link->c_str());
+        ordered->push_back(link);
     } else {
         // Sanity check 
         cerr << "Error annotating link: couldn't find link (" <<
-            link->c_str() << ")" << endl;
+            link << ")" << endl;
         exit(EXIT_FATAL);
     }
   }

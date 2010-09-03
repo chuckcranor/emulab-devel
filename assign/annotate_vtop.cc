@@ -64,12 +64,12 @@ void annotate_vtop::annotate_element (const char* v_name, const char* p_name)
 }
 
 // This is called when an intraswitch or interswitch link has to be annotated
-void annotate_vtop::annotate_element (const char* v_name, list<const char*>* links)
+void annotate_vtop::annotate_element (const char* v_name, list<string>* links)
 {
 	// These are the paths from the source to the first switch
 	// and from the last switch to the destination
-	const char* psrc_name = links->front();	
-	const char* pdst_name = links->back();	
+	const string psrc_name = links->front();
+	const string pdst_name = links->back();
 	DOMElement* p_src_switch_link = (this->physical_elements->find(psrc_name))->second;
 	DOMElement* p_switch_dst_link = (this->physical_elements->find(pdst_name))->second;
 	
@@ -183,9 +183,9 @@ void annotate_vtop::set_interface_as_link_endpoint (DOMElement* interface, const
 // Finds the next link in the path returned by assign
 // Assign sometimes reverses the links on the path from the source to the destination, 
 // so you need to look at the entire path to find the next link
-DOMElement* annotate_vtop::find_next_link_in_path (DOMElement *prev, list<const char*>* links)
+DOMElement* annotate_vtop::find_next_link_in_path (DOMElement *prev, list<string>* links)
 {
-	list<const char*>::iterator it;
+	list<string>::iterator it;
 	DOMElement* link = NULL;
 	for (it = links->begin(); it != links->end(); ++it)
 	{

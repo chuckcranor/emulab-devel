@@ -35,7 +35,7 @@ class annotate
   
   // Annotates intraswitch and interswitch links in the rspec
   virtual void annotate_element(const char* v_name, 
-				std::list<const char*>* links) = 0;
+				std::list<std::string>* links) = 0;
   
   // Creates a hop from a switch till the next end point. 
   // Adds the hop to the vlink and returns the hop element that was created
@@ -48,7 +48,7 @@ class annotate
   // Finds the next link in the path returned by assign
   virtual xercesc::DOMElement* 
     find_next_link_in_path (xercesc::DOMElement *prev, 
-			    std::list<const char*>* links) = 0;
+			    std::list<std::string>* links) = 0;
   
   // Writes the annotated xml to disk
   void write_annotated_file(const char* filename);
