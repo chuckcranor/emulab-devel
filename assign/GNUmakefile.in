@@ -87,8 +87,12 @@ $(INSTALL_LIBDIR)/assign/%: %
 	$(INSTALL) $< $@
 
 #
-# All this crap generated with 'g++ -MM' - don't want to do all the makefile goo
-# to make this automatic, since none of it ever changes
+# All this crap generated like this:
+#
+#   for x in *.cc; do g++ -MM -DWITH_XML $x; done
+#
+# Don't want to do all the makefile goo to make
+# this automatic, since it doesn't change often.
 #
 anneal.o: anneal.cc anneal.h port.h delay.h physical.h common.h fstring.h \
   featuredesire.h forwarding.h pclass.h virtual.h maps.h score.h \
