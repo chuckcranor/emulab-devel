@@ -235,6 +235,11 @@ def do_method(module, method, params, URI=None, quiet=False, version=None,
     if ( method in ( "GetCredential", "ListComponents", "DiscoverResources" ) ) or ( method == "Resolve" and module in ( "ch", "sa" ) ):
         cachename = os.environ[ "HOME" ] + "/.protogeni/" + re.sub( r'[^a-zA-Z0-9]', '', URI ) + "-" + re.sub( r'[^a-zA-Z0-9]', '', method )
 
+        if "urn" in params:
+            cachename = cachename + "-" + re.sub( r'[^a-zA-Z0-9]', '', params[ "urn" ] )
+        elif "uuid" in params:
+            cachename = cachename + "-" + re.sub( r'[^a-zA-Z0-9]', '', params[ "uuid" ] )
+
         try:
             f = open( cachename )
             contents = f.read()
