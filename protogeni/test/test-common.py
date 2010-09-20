@@ -232,7 +232,7 @@ def do_method(module, method, params, URI=None, quiet=False, version=None,
         print URI + " " + method
         pass
 
-    if method in ( "GetCredential", "ListComponents", "DiscoverResources" ):
+    if ( method in ( "GetCredential", "ListComponents", "DiscoverResources" ) ) or ( method == "Resolve" and module in ( "ch", "sa" ) ):
         cachename = os.environ[ "HOME" ] + "/.protogeni/" + re.sub( r'[^a-zA-Z0-9]', '', URI ) + "-" + re.sub( r'[^a-zA-Z0-9]', '', method )
 
         try:
