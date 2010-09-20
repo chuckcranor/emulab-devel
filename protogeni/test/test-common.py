@@ -64,13 +64,15 @@ if "Usage" not in dir():
     -r file, --read-commands=file       specify additional configuration file
     -s file, --slicecredentials=file    read slice credentials from file
                                             [default: query from SA]
-    -a file, --admincredentials=file    read admin credentials from file"""
+    -a file, --admincredentials=file    read admin credentials from file
+    -x module.method, --fail=module.method    inject faults in method calls"""
 
 try:
-    opts, REQARGS = getopt.getopt( sys.argv[ 1: ], "c:df:hn:p:r:s:m:a:",
+    opts, REQARGS = getopt.getopt( sys.argv[ 1: ], "c:df:hn:p:r:s:m:a:x:",
                                    [ "credentials=", "debug", "certificate=",
                                      "help", "passphrase=", "read-commands=",
-                                     "slicecredentials=","admincredentials",                                     "slicename=", "cm=", "delete"] )
+                                     "slicecredentials=","admincredentials",
+                                     "slicename=", "cm=", "delete", "fail=" ] )
 except getopt.GetoptError, err:
     print >> sys.stderr, str( err )
     Usage()
@@ -82,6 +84,8 @@ if "PROTOGENI_CERTIFICATE" in os.environ:
     CERTIFICATE = os.environ[ "PROTOGENI_CERTIFICATE" ]
 if "PROTOGENI_PASSPHRASE" in os.environ:
     PASSPHRASEFILE = os.environ[ "PROTOGENI_PASSPHRASE" ]
+
+fail = []
 
 for opt, arg in opts:
     if opt in ( "-c", "--credentials" ):
@@ -113,6 +117,8 @@ for opt, arg in opts:
         slicecredentialfile = arg
     elif opt in ( "-a", "--admincredentials" ):
         admincredentialfile = arg
+    elif opt in ( "-x", "--fail" ):
+        fail.append( arg.split( ".", 1 ) )
 
 cert = X509.load_cert( CERTIFICATE )
 
@@ -225,6 +231,26 @@ def do_method(module, method, params, URI=None, quiet=False, version=None,
 #        print URI + " " + method + " " + str(params);
         print URI + " " + method
         pass
+
+    if method in ( "GetCredential", "ListComponents", "DiscoverResources" ):
+        cachename = os.environ[ "HOME" ] + "/.protogeni/" + re.sub( r'[^a-zA-Z0-9]', '', URI ) + "-" + re.sub( r'[^a-zA-Z0-9]', '', method )
+
+        try:
+            f = open( cachename )
+            contents = f.read()
+            f.close()
+            if debug:
+                print "Cache hit on" + cachename
+            return ( 0, eval( contents ) ) # Hopelessly insecure.  Too bad.
+        except StandardError, e:
+            pass
+    else:
+        cachename = None
+
+    if [ module, method ] in fail:
+        if debug:
+            print "Injecting fault for", method, "call to", module
+        return ( -1, None )
     
     ctx = SSL.Context("sslv23")
     ctx.load_cert(CERTIFICATE, CERTIFICATE, PassPhraseCB)
@@ -284,6 +310,14 @@ def do_method(module, method, params, URI=None, quiet=False, version=None,
             rval = response["value"]
             pass
         pass
+    elif cachename:
+        try:
+            f = open( cachename, "w" )
+            f.write( repr( response ) )
+            f.close()
+        except StandardError, e:
+            pass
+
     return (rval, response)
 
 def get_self_credential():
