@@ -239,6 +239,8 @@ def do_method(module, method, params, URI=None, quiet=False, version=None,
             cachename = cachename + "-" + re.sub( r'[^a-zA-Z0-9]', '', params[ "urn" ] )
         elif "uuid" in params:
             cachename = cachename + "-" + re.sub( r'[^a-zA-Z0-9]', '', params[ "uuid" ] )
+        elif "hrn" in params:
+            cachename = cachename + "-" + re.sub( r'[^a-zA-Z0-9]', '', params[ "hrn" ] )
 
         try:
             f = open( cachename )
