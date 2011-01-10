@@ -18,6 +18,7 @@ use Exporter;
                 getSwitchesInStacks
 		getVlanPorts convertPortsFromIfaces convertPortFromIface
 		getExperimentTrunks setVlanTag setVlanStack
+		reserveVlanTag getReservedVlanTag getReservedVlanTags
 		getExperimentVlans getDeviceNames getDeviceType
 		getInterfaceSettings mapPortsToDevices getSwitchPrimaryStack
 		getSwitchStacks getStacksForSwitches
@@ -30,7 +31,7 @@ use Exporter;
                 filterPlannedVlans
 		snmpitSet snmpitSetWarn snmpitSetFatal 
                 snmpitBulkwalk snmpitBulkwalkWarn snmpitBulkwalkFatal
-	        setPortEnabled setPortTagged
+	        setPortEnabled setPortTagged isPortTagged
 		printVars tbsort getExperimentCurrentTrunks
 	        getExperimentVlanPorts
                 uniq);
@@ -72,6 +73,9 @@ my %vlanmembers=();
 my %vlanids=();
 # vlanids maps pid:eid <==> id
 
+my %DeviceOptions=();
+# Maps devicename -> hash of options to avoid db call after forking;
+
 my $snmpitErrorString;
 
 # Protos
@@ -83,6 +87,7 @@ sub getTrunkPath($$$$);
 sub init($) {
     $debug = shift || $debug;
     &ReadTranslationTable;
+    &ReadDeviceOptions;
     return 0;
 }
 
@@ -332,6 +337,47 @@ sub setVlanTag ($$) {
 }
 
 #
+# Update database to reserve a vlan tag.
+# snmpit will lock, reserve all tags for all vlans to be created
+# by snmpit -t or -X, then unlock and proceed, so the tag
+# will be recorded before the vlan actually exists.
+#
+sub reserveVlanTag ($$) {
+    my ($vlan_id, $tag) = @_;
+    
+    # Silently exit if they passed us no VLANs
+    if (!$vlan_id || !defined($tag)) {
+	return ();
+    }
+
+    my $vlan = VLan->Lookup($vlan_id);
+    return ()
+	if (!defined($vlan));
+
+    return $vlan->SetAttribute("reservedvlantag", $tag);
+}
+
+sub getReservedVlanTag ($) {
+    my ($vlan_id) = @_;
+    my ($tag, $vlan);
+    
+    return 0 if (!$vlan_id || !($vlan = VLan->Lookup($vlan_id)) ||
+		 ($vlan->GetAttribute("reservedvlantag",\$tag)== -1));
+    return $tag;
+}
+
+#
+# This probably ought to be a class method.
+#
+sub getReservedVlanTags() {
+    my $q="select distinct attrvalue from lan_attributes ".
+	    "where attrkey='reservedvlantag'";
+    my $query_result = DBQueryWarn($q);
+    return () if (!$query_result || ($query_result->numrows==0));
+    return $query_result->fetchcol(0);
+}
+
+#
 # Ditto for stack that VLAN exists on
 #
 sub setVlanStack($$) {
@@ -378,7 +424,8 @@ sub setPortEnabled($$) {
     $enabled = ($enabled ? 1 : 0);
 
     DBQueryFatal("update interface_state set enabled=$enabled ".
-		 "where node_id='$node' and card='$card'");
+		 "where node_id='$node' and card='$card'")
+		     unless (!$node || (!defined($card)));
     
     return 0;
 }
@@ -391,8 +438,25 @@ sub setPortTagged($$) {
     $tagged = ($tagged ? 1 : 0);
 
     DBQueryFatal("update interface_state set tagged=$tagged ".
-		 "where node_id='$node' and card='$card'");
+		 "where node_id='$node' and card='$card'")
+		     unless (!$node || (!defined($card)));
 }
+# Needed by snmpit -prune
+sub isPortTagged($) {
+    my ($port, $tagged) = @_;
+
+    $port =~ /^(.+):(\d+)$/;
+    my ($node, $card) = ($1, $2);
+
+    my $qr = DBQuery("select tagged from  interface_state".
+		 "where node_id='$node' and card='$card'")
+		     unless (!$node || (!defined($card)));
+    if ($qr && $qr->numrows) {
+	($tagged) = $qr->fetchrow();
+    }
+    return $tagged ? 1 : 0;
+}
+
 
 #
 # Convert an entire list of ports in port:iface format to into port:card -
@@ -640,8 +704,9 @@ sub getControlSwitches () {
 #
 sub getSwitchesInStack ($) {
     my ($stack_id) = @_;
-    my $result = DBQueryFatal("SELECT node_id FROM switch_stacks " .
-	"WHERE stack_id='$stack_id'");
+    my $result = DBQueryFatal("SELECT s.node_id FROM switch_stacks as s " .
+	"join nodes as n on n.node_id=s.node_id " .
+	"WHERE n.role like '%switch' and stack_id='$stack_id'");
     my @switches = (); 
     while (my @row = $result->fetchrow()) {
 	push @switches, $row[0];
@@ -770,38 +835,57 @@ sub getStackLeader($) {
 #
 sub getDeviceOptions($) {
     my $switch = shift;
-    my %options;
+    return $DeviceOptions{$switch} || {} ;
+}
 
-    my $result = DBQueryFatal("SELECT supports_private, " .
+sub ReadDeviceOptions {
+    my $result = DBQueryFatal("SELECT s.node_id, supports_private, " .
 	"single_domain, snmp_community, min_vlan, max_vlan " .
 	"FROM switch_stacks AS s left join switch_stack_types AS t " .
-	"    ON s.stack_id = t.stack_id ".
-	"WHERE s.node_id='$switch'");
+	"    ON s.stack_id = t.stack_id ");
 
-    if (!$result->numrows()) {
-	print STDERR "No switch $switch found, or it is not in a stack\n";
-	return undef;
+    if (!$result || !$result->numrows()) {
+	print STDERR "No switch found in any stack\n";
+	return;
     }
 
-    my ($supports_private, $single_domain, $snmp_community, $min_vlan,
-	$max_vlan) = $result->fetchrow();
+    while (my ($switch, $supports_private, $single_domain, $snmp_community,
+		$min_vlan, $max_vlan) = $result->fetchrow()) {
 
-    $options{'supports_private'} = $supports_private;
-    $options{'single_domain'} = $single_domain;
-    $options{'snmp_community'} = $snmp_community || "public";
-    $options{'min_vlan'} = $min_vlan || 2;
-    $options{'max_vlan'} = $max_vlan || 1000;
+	my %options = ();
+	$options{'supports_private'} = $supports_private;
+	$options{'single_domain'} = $single_domain;
+	$options{'snmp_community'} = $snmp_community || "public";
+	$options{'min_vlan'} = $min_vlan || 2;
+	$options{'max_vlan'} = $max_vlan || 1000;
 
-    $options{'type'} = getDeviceType($switch);
+	$options{'type'} = getDeviceType($switch);
 
-    if ($debug) {
-	print "Options for $switch:\n";
-	while (my ($key,$value) = each %options) {
-	    print "$key = $value\n"
+	my $result = DBQuery("select attrkey, attrvalue from node_attributes " .
+		    "where node_id='$switch' and attrkey like 'snmpit%'");
+	if ($result && $result->numrows()) {
+	    while (my ($key, $value) = $result->fetchrow()) {
+		    $key =~ s/^snmpit_//;
+		    $options{$key} = $value;
+	    }
 	}
-    }
 
-    return \%options;
+	if ($options{'use_cli'} || $options{'igmp_snooping'}) {
+	    # not really foolproof. 
+	    $result = DBQuery("select distinct card2 from wires " .
+			    "where card2 > 1 and node_id2='$switch'");
+	    $options{'one_u_switch'} = 1
+		if ($result && ($result->numrows==0));
+	}
+	if ($debug) {
+	    print "Options for $switch:\n";
+	    while (my ($key,$value) = each %options) {
+		print "$key = $value\n"
+	    }
+	}
+	# XXX: should check if already defined and complain.
+	$DeviceOptions{$switch} = { %options };
+    }
 }
 
 #
