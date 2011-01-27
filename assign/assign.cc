@@ -81,7 +81,6 @@ pclass_types type_table;
 pclass_types vnode_type_table;
 #endif
 
-#ifndef FULL_SWITCHGRAPH
 // This datastructure contains all the information needed to calculate
 // the shortest path between any two switches.  Indexed by svertex,
 // the value will be a predicate map (indexed by svertex as well) of
@@ -90,7 +89,6 @@ switch_pred_map_map switch_preds;
 
 // Same, but for distances 
 switch_dist_map_map switch_dist;
-#endif
 
 // Time started, finished, and the time limit
 double timestart, timeend, timelimit, timetarget;
@@ -137,6 +135,10 @@ bool check_fixed_nodes = false;
 
 // If true, dump a bunch of configrution information
 bool dump_config = false;
+
+// If true, do a full search of switch graph rather than using a pre-computed
+// shortest path set
+bool full_switch_graph_search;
 
 // Use XML for file input
 // bool xml_input = false;
@@ -286,18 +288,19 @@ void calculate_switch_MST() {
 	100000000-get(pedge_pmap,slink->mate)->delay_info.bandwidth);
   }
 
-  // Let boost do the Disjktra's for us, from each switch
-#ifndef FULL_SWITCHGRAPH
-  svertex_iterator svit,svendit;
-  tie(svit,svendit) = vertices(SG);
-  for (;svit != svendit;svit++) {
-    switch_preds[*svit] = new switch_pred_map(num_vertices(SG));
-    switch_dist[*svit] = new switch_dist_map(num_vertices(SG));
-    dijkstra_shortest_paths(SG,*svit,
-    			    predecessor_map(&((*switch_preds[*svit])[0])).
-			    distance_map(&((*switch_dist[*svit])[0])));
+  // Let boost do the Disjktra's for us, from each switch (but not if we
+  // are going to do a full switch search)
+  if (!full_switch_graph_search) {
+      svertex_iterator svit,svendit;
+      tie(svit,svendit) = vertices(SG);
+      for (;svit != svendit;svit++) {
+        switch_preds[*svit] = new switch_pred_map(num_vertices(SG));
+        switch_dist[*svit] = new switch_dist_map(num_vertices(SG));
+        dijkstra_shortest_paths(SG,*svit,
+                                predecessor_map(&((*switch_preds[*svit])[0])).
+                                distance_map(&((*switch_dist[*svit])[0])));
+      }
   }
-#endif
 
 #ifdef GRAPH_DEBUG
   cout << "Shortest paths" << endl;
@@ -471,6 +474,7 @@ void print_help() {
 #endif
   cout << "  -F          - Apply additional checking to fixed nodes" << endl;
   cout << "  -D          - Dump configuration options" << endl;
+  cout << "  -S          - Do a full search of switch graph (slow)" << endl;
   cout << "  cparams     - You probably don't want to touch these!" << endl;
   cout << "                If you must, see config.h in the source for a list"
        << endl;
@@ -874,9 +878,9 @@ int main(int argc,char **argv) {
 	char* ptopFileFormat;
 	char* vtopFileFormat;
 	char* delims = "/";
-	char* flags = "s:v:l:t:rpPTdH:oguc:nx:y:W:FDf:";
+	char* flags = "s:v:l:t:rpPTdH:oguc:nx:y:W:FDSf:";
 #else
-	char* flags = "s:v:l:t:rpPTdH:oguc:nx:y:FD";
+	char* flags = "s:v:l:t:rpPTdH:oguc:nx:y:FDS";
 #endif	
 	
   while ((ch = getopt(argc,argv,flags)) != -1) {
@@ -944,6 +948,9 @@ int main(int argc,char **argv) {
       break;
     case 'D':
       dump_config = true;
+      break;
+    case 'S':
+      full_switch_graph_search = true;
       break;
     case 'x':
 #ifdef WITH_XML

@@ -50,6 +50,7 @@ using namespace boost;
 extern switch_pred_map_map switch_preds;
 
 extern bool disable_pclasses;
+extern bool full_switch_graph_search;
 
 double score;			// The score of the current mapping
 int violated;			// How many times the restrictions
@@ -1677,179 +1678,187 @@ bool find_best_link(pvertex pv,pvertex switch_pv,tb_vlink *vlink,
   }
 }
 
-// this uses the shortest paths calculated over the switch graph to
-// find a path between src and dst.  It passes out list<edge>, a list
+// Find a path between src and dst.  It passes out list<edge>, a list
 // of the edges used. (assumed to be empty to begin with).
 // Returns 0 if no path exists and 1 otherwise.
 int find_interswitch_path(pvertex src_pv,pvertex dest_pv,
 			  int bandwidth,pedge_path &out_path,
 			  pvertex_list &out_switches)
 {
-#ifndef FULL_SWITCHGRAPH
-  // We know the shortest path from src to node already.  It's stored
-  // in switch_preds[src] and is a node_array<edge>.  Let P be this
-  // array.  We can trace our shortest path by starting at the end and
-  // following the pred edges back until we reach src.  We need to be
-  // careful though because the switch_preds deals with elements of SG
-  // and we have elements of PG.
 
-  svertex src_sv = get(pvertex_pmap,src_pv)->sgraph_switch;
-  svertex dest_sv = get(pvertex_pmap,dest_pv)->sgraph_switch;
+  /*
+   * We have two versions of this function - one that uses shortest-path
+   * information, which is faster, but can miss mutliple edges between switches
+   * and non-tree edges. The second is slower, but catches these.
+   */
 
-  sedge current_se;
-  svertex current_sv = dest_sv;
-  switch_pred_map &preds = *switch_preds[src_sv];
-  
-  if (preds[dest_sv] == dest_sv) {
-    // unreachable
-    return 0;
-  }
-  while (current_sv != src_sv) {
-    out_switches.push_front(get(svertex_pmap,current_sv)->mate);
-    current_se = edge(current_sv,preds[current_sv],SG).first;
-    out_path.push_back(get(sedge_pmap,current_se)->mate);
-    current_sv = preds[current_sv];
-  }
-  out_switches.push_front(get(svertex_pmap,current_sv)->mate);
-  return 1;
-#else
-  // Alternate switch pathfinding - we do a (slow!) breadth first
-  // walk through the switch topo looking for a path that works.
-  svertex src_sv = get(pvertex_pmap,src_pv)->sgraph_switch;
-  svertex dest_sv = get(pvertex_pmap,dest_pv)->sgraph_switch;
+  if (!full_switch_graph_search) {
+      // We know the shortest path from src to node already.  It's stored
+      // in switch_preds[src] and is a node_array<edge>.  Let P be this
+      // array.  We can trace our shortest path by starting at the end and
+      // following the pred edges back until we reach src.  We need to be
+      // careful though because the switch_preds deals with elements of SG
+      // and we have elements of PG.
 
-  typedef set<svertex> svertex_set;
-  typedef list<svertex> svertex_list;
-  typedef pair<pedge_path*,pvertex_list*> vertex_path;
-  typedef pair<svertex,vertex_path*> move;
-  typedef std::queue<move*> svertex_queue;
+      svertex src_sv = get(pvertex_pmap,src_pv)->sgraph_switch;
+      svertex dest_sv = get(pvertex_pmap,dest_pv)->sgraph_switch;
 
-  // Did we find a path to the end that works?
-  bool foundpath = false;
+      sedge current_se;
+      svertex current_sv = dest_sv;
+      switch_pred_map &preds = *switch_preds[src_sv];
+      
+      if (preds[dest_sv] == dest_sv) {
+        // unreachable
+        return 0;
+      }
+      while (current_sv != src_sv) {
+        out_switches.push_front(get(svertex_pmap,current_sv)->mate);
+        current_se = edge(current_sv,preds[current_sv],SG).first;
+        out_path.push_back(get(sedge_pmap,current_se)->mate);
+        current_sv = preds[current_sv];
+      }
+      out_switches.push_front(get(svertex_pmap,current_sv)->mate);
+      return 1;
+  } else {
+      // Alternate switch pathfinding - we do a (slow!) breadth first
+      // walk through the switch topo looking for a path that works.
+      svertex src_sv = get(pvertex_pmap,src_pv)->sgraph_switch;
+      svertex dest_sv = get(pvertex_pmap,dest_pv)->sgraph_switch;
 
-  // Set of switches we've visted so far
-  svertex_set marked;
+      typedef set<svertex> svertex_set;
+      typedef list<svertex> svertex_list;
+      typedef pair<pedge_path*,pvertex_list*> vertex_path;
+      typedef pair<svertex,vertex_path*> move;
+      typedef std::queue<move*> svertex_queue;
 
-  // Frontier between explored and unexplored space
-  svertex_queue plan;
+      // Did we find a path to the end that works?
+      bool foundpath = false;
 
-  // Start by setting the frontier to the source switch
-  plan.push(new move(src_sv,new vertex_path(new pedge_path(),new pvertex_list)));
-  marked.insert(src_sv);
+      // Set of switches we've visted so far
+      svertex_set marked;
 
-  // Keep going until we've exhausted every switch we can reach
-  while (!plan.empty()) {
+      // Frontier between explored and unexplored space
+      svertex_queue plan;
 
-      // Grab a switch
-      // Note: The pop happens at the bottom, so that for the last switch,
-      // it gets caught by the regular cleanup code rather than need its
-      // own cleanup code for that case
-      move* current = plan.front();
+      // Start by setting the frontier to the source switch. Lists showing
+      // how we got here are empty
+      plan.push(new move(src_sv,new vertex_path(new pedge_path(),
+                      new pvertex_list)));
+      marked.insert(src_sv);
 
-      // Explore all edges out from it
-      // TODO: Go through them in random order, to avoid problems where we
-      // can get stuck.
-      soedge_iterator sedge_it,end_sedge_it;
-      tie(sedge_it,end_sedge_it) = out_edges(current->first,SG);
-      for (;sedge_it!=end_sedge_it;++sedge_it) {
-        
-          // Get the ends of the link right - the order on the endpoints isn't
-          // necessarily the same as the order we're exploring it in
-          svertex new_sv = target(*sedge_it,SG);
-          if (new_sv == current->first)
-              new_sv = source(*sedge_it,PG);
+      // Keep going until we've exhausted every switch we can reach
+      while (!plan.empty()) {
 
-          // Skip switches we've already seen
-          if (marked.find(new_sv) != marked.end()) {
-              continue;
-          }
+          // Grab a switch
+          // Note: The pop happens at the bottom, so that for the last switch,
+          // it gets caught by the regular cleanup code rather than need its
+          // own cleanup code for that case
+          move* current = plan.front();
 
-          /*
-           * Make sure we can actaully get to the switch we're considering
-           */
+          // Explore all edges out from it
+          // TODO: Go through them in random order, to avoid problems where we
+          // can get stuck.
+          soedge_iterator sedge_it,end_sedge_it;
+          tie(sedge_it,end_sedge_it) = out_edges(current->first,SG);
+          for (;sedge_it!=end_sedge_it;++sedge_it) {
+            
+              // Get the ends of the link right - the order on the endpoints
+              // isn't necessarily the same as the order we're exploring it in
+              svertex new_sv = target(*sedge_it,SG);
+              if (new_sv == current->first)
+                  new_sv = source(*sedge_it,PG);
 
-          // Get the actual link object
-          tb_slink *sl = get(sedge_pmap,*sedge_it);
-          pedge pe = sl->mate;
-          tb_plink *pl = get(pedge_pmap,pe);
-
-          // TODO: Need to check types, but they are not passed into this
-          // function
-
-          // Check bandwidth to make sure there's enough left.
-          if ((pl->delay_info.bandwidth - pl->bw_used) >= bandwidth) {
-              
-              // Keep track of how we got to this switch
-              // TODO: probably memory leaks galore
-              vertex_path *old_path = current->second;
-
-              // Make new paths and switchlists by copying the old ones
-              pedge_path *new_path = new pedge_path(*(old_path->first));
-              pvertex_list *new_switchlist = new pvertex_list(*(old_path->second));
-              
-              // Add these onto the path
-              // TODO: I don't understand why one is push_front and the other
-              // push_back, need to investigate and document
-              new_path->push_front(pe);
-              new_switchlist->push_back(pl);
+              // Skip switches we've already seen
+              if (marked.find(new_sv) != marked.end()) {
+                  continue;
+              }
 
               /*
-               * If the switch we just ended up at is the one we were shooting
-               * for, great, we're done. Otherwise, add it to the new
-               * frontier
+               * Make sure we can actaully get to the switch we're considering
                */
-              if (new_sv == dest_sv) {
-                  // TODO: Clean up memory leaks
-                  // Note: This does a shallow copy (I think)
-                  out_path = *new_path;
-                  out_switches = *new_switchlist;
-                  foundpath = true;
-                  goto cleanup;
+
+              // Get the actual link object
+              tb_slink *sl = get(sedge_pmap,*sedge_it);
+              pedge pe = sl->mate;
+              tb_plink *pl = get(pedge_pmap,pe);
+
+              // TODO: Need to check types, but they are not passed into this
+              // function
+
+              // Check bandwidth to make sure there's enough left.
+              if ((pl->delay_info.bandwidth - pl->bw_used) >= bandwidth) {
+                  
+                  // Keep track of how we got to this switch
+                  vertex_path *old_path = current->second;
+
+                  // Make new paths and switchlists by copying the old ones
+                  pedge_path *new_path = new pedge_path(*(old_path->first));
+                  pvertex_list *new_switchlist =
+                      new pvertex_list(*(old_path->second));
+                  
+                  // Add these onto the path
+                  // TODO: I don't understand why one is push_front and the
+                  // other push_back, need to investigate and document
+                  new_path->push_front(pe);
+                  new_switchlist->push_back(pl);
+
+                  /*
+                   * If the switch we just ended up at is the one we were
+                   * shooting for, great, we're done. Otherwise, add it to the
+                   * new frontier
+                   */
+                  if (new_sv == dest_sv) {
+                      // This should do a shallow copy (which is what we want)
+                      out_path = *new_path;
+                      out_switches = *new_switchlist;
+                      foundpath = true;
+                      goto cleanup;
+                  } else {
+                      // Not the droids we're looking for, put it on the queue
+                      plan.push(new move(new_sv,
+                                  new vertex_path(new_path,new_switchlist)));
+                      marked.insert(new_sv);
+                  }
               } else {
-                  // Not the droids we're looking for, put it on the queue
-                  plan.push(new move(new_sv,
-                              new vertex_path(new_path,new_switchlist)));
-                  marked.insert(new_sv);
+                  // Not enough bandwidth, move on
               }
-          } else {
-              // Not enough bandwidth, move on
+
+              // End of loop through edges
           }
 
+          // Pull the 'current' switch out of the list and delete the
+          // heap-allocated data structures associated with it.
+          plan.pop();
+
+          delete(current->second->first);
+          delete(current->second->second);
+          delete(current->second);
+          delete(current);
+      }
+      
+      // We didn't find the destination switch
+      foundpath = false;
+
+    cleanup:
+      // Free up anything left in the plan list
+      while (!plan.empty()) {
+          move* current = plan.front();
+          plan.pop();
+          vertex_path *path = current->second;
+          pedge_path *ppath = path->first;
+          pvertex_list *vlist = path->second;
+
+          delete(vlist);
+          delete(ppath);
+          delete(path);
+          delete(current);
 
       }
 
-      plan.pop();
-
-      // Fix memory leak
-      delete(current->second->first);
-      delete(current->second->second);
-      delete(current->second);
-      delete(current);
+      // Note that if foundpath is true, we already copied the output parmeters
+      // over.
+      return foundpath;
   }
-  
-  // We didn't find it
-  foundpath = false;
-
-cleanup:
-  // Free up anything left in the plan list
-  while (!plan.empty()) {
-      move* current = plan.front();
-      plan.pop();
-      vertex_path *path = current->second;
-      pedge_path *ppath = path->first;
-      pvertex_list *vlist = path->second;
-
-      delete(vlist);
-      delete(ppath);
-      delete(path);
-      delete(current);
-
-  }
-
-
-  return foundpath;
-
-#endif
 }
 
 // this does scoring for over users and over bandwidth on edges.
