@@ -1720,9 +1720,12 @@ int find_interswitch_path(pvertex src_pv,pvertex dest_pv,
 
   typedef set<svertex> svertex_set;
   typedef list<svertex> svertex_list;
-  typedef pair<pedge_path,pvertex_list> vertex_path;
-  typedef pair<svertex,vertex_path> move;
-  typedef std::queue<move> svertex_queue;
+  typedef pair<pedge_path*,pvertex_list*> vertex_path;
+  typedef pair<svertex,vertex_path*> move;
+  typedef std::queue<move*> svertex_queue;
+
+  // Did we find a path to the end that works?
+  bool foundpath = false;
 
   // Set of switches we've visted so far
   svertex_set marked;
@@ -1731,28 +1734,30 @@ int find_interswitch_path(pvertex src_pv,pvertex dest_pv,
   svertex_queue plan;
 
   // Start by setting the frontier to the source switch
-  plan.push(move(src_sv,vertex_path()));
+  plan.push(new move(src_sv,new vertex_path(new pedge_path(),new pvertex_list)));
   marked.insert(src_sv);
 
   // Keep going until we've exhausted every switch we can reach
   while (!plan.empty()) {
 
       // Grab a switch
-      move current = plan.front();
-      plan.pop();
+      // Note: The pop happens at the bottom, so that for the last switch,
+      // it gets caught by the regular cleanup code rather than need its
+      // own cleanup code for that case
+      move* current = plan.front();
 
       // Explore all edges out from it
+      // TODO: Go through them in random order, to avoid problems where we
+      // can get stuck.
       soedge_iterator sedge_it,end_sedge_it;
-      tie(sedge_it,end_sedge_it) = out_edges(current.first,SG);
+      tie(sedge_it,end_sedge_it) = out_edges(current->first,SG);
       for (;sedge_it!=end_sedge_it;++sedge_it) {
         
           // Get the ends of the link right - the order on the endpoints isn't
           // necessarily the same as the order we're exploring it in
           svertex new_sv = target(*sedge_it,SG);
-          if (new_sv == current.first)
+          if (new_sv == current->first)
               new_sv = source(*sedge_it,PG);
-
-          // TODO: Clean up memory
 
           // Skip switches we've already seen
           if (marked.find(new_sv) != marked.end()) {
@@ -1776,17 +1781,17 @@ int find_interswitch_path(pvertex src_pv,pvertex dest_pv,
               
               // Keep track of how we got to this switch
               // TODO: probably memory leaks galore
-              vertex_path &old_path = current.second;
+              vertex_path *old_path = current->second;
 
               // Make new paths and switchlists by copying the old ones
-              pedge_path new_path(old_path.first);
-              pvertex_list new_switchlist(old_path.second);
-
+              pedge_path *new_path = new pedge_path(*(old_path->first));
+              pvertex_list *new_switchlist = new pvertex_list(*(old_path->second));
+              
               // Add these onto the path
               // TODO: I don't understand why one is push_front and the other
               // push_back, need to investigate and document
-              new_path.push_front(pe);
-              new_switchlist.push_back(pl);
+              new_path->push_front(pe);
+              new_switchlist->push_back(pl);
 
               /*
                * If the switch we just ended up at is the one we were shooting
@@ -1796,23 +1801,53 @@ int find_interswitch_path(pvertex src_pv,pvertex dest_pv,
               if (new_sv == dest_sv) {
                   // TODO: Clean up memory leaks
                   // Note: This does a shallow copy (I think)
-                  out_path = new_path;
-                  out_switches = new_switchlist;
-                  return 1;
+                  out_path = *new_path;
+                  out_switches = *new_switchlist;
+                  foundpath = true;
+                  goto cleanup;
               } else {
                   // Not the droids we're looking for, put it on the queue
-                  plan.push(move(new_sv,vertex_path(new_path,new_switchlist)));
+                  plan.push(new move(new_sv,
+                              new vertex_path(new_path,new_switchlist)));
                   marked.insert(new_sv);
               }
           } else {
               // Not enough bandwidth, move on
           }
 
+
       }
+
+      plan.pop();
+
+      // Fix memory leak
+      delete(current->second->first);
+      delete(current->second->second);
+      delete(current->second);
+      delete(current);
+  }
+  
+  // We didn't find it
+  foundpath = false;
+
+cleanup:
+  // Free up anything left in the plan list
+  while (!plan.empty()) {
+      move* current = plan.front();
+      plan.pop();
+      vertex_path *path = current->second;
+      pedge_path *ppath = path->first;
+      pvertex_list *vlist = path->second;
+
+      delete(vlist);
+      delete(ppath);
+      delete(path);
+      delete(current);
+
   }
 
-  // We didn't find it
-  return 0;
+
+  return foundpath;
 
 #endif
 }
