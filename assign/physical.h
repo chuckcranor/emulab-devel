@@ -57,8 +57,13 @@ typedef property<edge_data_t,tb_slink*,
 
 typedef adjacency_list<listS,listS,undirectedS,
   PNodeProperty,PEdgeProperty> tb_pgraph;
+#ifdef FULL_SWITCHGRAPH
+typedef adjacency_list<listS,listS,undirectedS,
+  SNodeProperty,SEdgeProperty> tb_sgraph;
+#else
 typedef adjacency_list<listS,vecS,undirectedS,
   SNodeProperty,SEdgeProperty> tb_sgraph;
+#endif
 
 typedef property_map<tb_pgraph,vertex_data_t>::type tb_pgraph_vertex_pmap;
 typedef property_map<tb_pgraph,edge_data_t>::type tb_pgraph_edge_pmap;

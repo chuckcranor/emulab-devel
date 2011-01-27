@@ -18,10 +18,14 @@ static const char rcsid[] = "$Id: score.cc,v 1.69 2009-12-09 22:53:44 ricci Exp 
 #ifdef NEW_GCC
 #include <ext/hash_map>
 #include <ext/hash_set>
+#include <set>
+#include <queue>
 using namespace __gnu_cxx;
 #else
 #include <hash_map>
 #include <hash_set>
+#include <set>
+#include <queue>
 #endif
 
 #include <boost/config.hpp>
@@ -1681,6 +1685,7 @@ int find_interswitch_path(pvertex src_pv,pvertex dest_pv,
 			  int bandwidth,pedge_path &out_path,
 			  pvertex_list &out_switches)
 {
+#ifndef FULL_SWITCHGRAPH
   // We know the shortest path from src to node already.  It's stored
   // in switch_preds[src] and is a node_array<edge>.  Let P be this
   // array.  We can trace our shortest path by starting at the end and
@@ -1707,6 +1712,101 @@ int find_interswitch_path(pvertex src_pv,pvertex dest_pv,
   }
   out_switches.push_front(get(svertex_pmap,current_sv)->mate);
   return 1;
+#else
+  // Alternate switch pathfinding - we do a (slow!) breadth first
+  // walk through the switch topo looking for a path that works.
+  svertex src_sv = get(pvertex_pmap,src_pv)->sgraph_switch;
+  svertex dest_sv = get(pvertex_pmap,dest_pv)->sgraph_switch;
+
+  typedef set<svertex> svertex_set;
+  typedef list<svertex> svertex_list;
+  typedef pair<pedge_path,pvertex_list> vertex_path;
+  typedef pair<svertex,vertex_path> move;
+  typedef std::queue<move> svertex_queue;
+
+  svertex_set marked;
+  svertex_queue plan;
+
+  plan.push(move(src_sv,vertex_path()));
+  marked.insert(src_sv);
+
+  while (!plan.empty()) {
+      move current = plan.front();
+      plan.pop();
+
+      // Explore all edges
+      soedge_iterator sedge_it,end_sedge_it;
+      tie(sedge_it,end_sedge_it) = out_edges(current.first,SG);
+      for (;sedge_it!=end_sedge_it;++sedge_it) {
+        
+          // get the ends of the link right 
+          svertex dsv = target(*sedge_it,SG);
+          if (dsv == current.first)
+              dsv = source(*sedge_it,PG);
+
+          // Skip switches we've already seen
+          if (marked.find(dsv) != marked.end()) {
+              cerr << "skipping seen switch" << endl;
+              continue;
+          }
+
+          // Make sure we can get to this switch
+
+          // Get the actual link object
+          tb_slink *sl = get(sedge_pmap,*sedge_it);
+
+          // XXX: Need to check types
+
+          // Check bandwidth to make sure it works
+          pedge pe = sl->mate;
+          tb_plink *pl = get(pedge_pmap,pe);
+
+          if ((pl->delay_info.bandwidth - pl->bw_used) >= bandwidth) {
+              cerr << "bandwidth works\n";
+              // Get it in the list
+              // XXX probably memory leaks galore
+              pedge_path pep(current.second.first);
+              pvertex_list pvl(current.second.second);
+
+              pep.push_front(pe);
+              pvl.push_back(pl);
+
+              if (dsv == dest_sv) {
+                  // Found it, return
+                  // XXX possible pointer to stack
+                  out_path = pep;
+                  out_switches = pvl;
+                  cerr << "Found path\n";
+                  return 1;
+              } else {
+                  // Not the droids we're looking for, put it on the queue
+                  plan.push(move(dsv,vertex_path(pep,pvl)));
+                  marked.insert(dsv);
+
+              }
+
+
+          } else {
+              cerr << "bandwidth fails\n";
+          }
+
+          //out_switches.push_front(get(svertex_pmap,current_sv)->mate);
+          //current_se = edge(current_sv,preds[current_sv],SG).first;
+          //out_path.push_back(get(sedge_pmap,current_se)->mate);
+          //current_sv = preds[current_sv];
+
+      }
+      
+      if (current.first == dest_sv) {
+          // XXX found it!
+          return 1;
+      }
+  }
+
+  // We didn't find it
+  return 0;
+
+#endif
 }
 
 // this does scoring for over users and over bandwidth on edges.

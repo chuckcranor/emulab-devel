@@ -81,6 +81,7 @@ pclass_types type_table;
 pclass_types vnode_type_table;
 #endif
 
+#ifndef FULL_SWITCHGRAPH
 // This datastructure contains all the information needed to calculate
 // the shortest path between any two switches.  Indexed by svertex,
 // the value will be a predicate map (indexed by svertex as well) of
@@ -89,6 +90,7 @@ switch_pred_map_map switch_preds;
 
 // Same, but for distances 
 switch_dist_map_map switch_dist;
+#endif
 
 // Time started, finished, and the time limit
 double timestart, timeend, timelimit, timetarget;
@@ -285,6 +287,7 @@ void calculate_switch_MST() {
   }
 
   // Let boost do the Disjktra's for us, from each switch
+#ifndef FULL_SWITCHGRAPH
   svertex_iterator svit,svendit;
   tie(svit,svendit) = vertices(SG);
   for (;svit != svendit;svit++) {
@@ -294,6 +297,7 @@ void calculate_switch_MST() {
     			    predecessor_map(&((*switch_preds[*svit])[0])).
 			    distance_map(&((*switch_dist[*svit])[0])));
   }
+#endif
 
 #ifdef GRAPH_DEBUG
   cout << "Shortest paths" << endl;
