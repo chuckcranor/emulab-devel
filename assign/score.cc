@@ -1724,82 +1724,90 @@ int find_interswitch_path(pvertex src_pv,pvertex dest_pv,
   typedef pair<svertex,vertex_path> move;
   typedef std::queue<move> svertex_queue;
 
+  // Set of switches we've visted so far
   svertex_set marked;
+
+  // Frontier between explored and unexplored space
   svertex_queue plan;
 
+  // Start by setting the frontier to the source switch
   plan.push(move(src_sv,vertex_path()));
   marked.insert(src_sv);
 
+  // Keep going until we've exhausted every switch we can reach
   while (!plan.empty()) {
+
+      // Grab a switch
       move current = plan.front();
       plan.pop();
 
-      // Explore all edges
+      // Explore all edges out from it
       soedge_iterator sedge_it,end_sedge_it;
       tie(sedge_it,end_sedge_it) = out_edges(current.first,SG);
       for (;sedge_it!=end_sedge_it;++sedge_it) {
         
-          // get the ends of the link right 
-          svertex dsv = target(*sedge_it,SG);
-          if (dsv == current.first)
-              dsv = source(*sedge_it,PG);
+          // Get the ends of the link right - the order on the endpoints isn't
+          // necessarily the same as the order we're exploring it in
+          svertex new_sv = target(*sedge_it,SG);
+          if (new_sv == current.first)
+              new_sv = source(*sedge_it,PG);
+
+          // TODO: Clean up memory
 
           // Skip switches we've already seen
-          if (marked.find(dsv) != marked.end()) {
-              cerr << "skipping seen switch" << endl;
+          if (marked.find(new_sv) != marked.end()) {
               continue;
           }
 
-          // Make sure we can get to this switch
+          /*
+           * Make sure we can actaully get to the switch we're considering
+           */
 
           // Get the actual link object
           tb_slink *sl = get(sedge_pmap,*sedge_it);
-
-          // XXX: Need to check types
-
-          // Check bandwidth to make sure it works
           pedge pe = sl->mate;
           tb_plink *pl = get(pedge_pmap,pe);
 
+          // TODO: Need to check types, but they are not passed into this
+          // function
+
+          // Check bandwidth to make sure there's enough left.
           if ((pl->delay_info.bandwidth - pl->bw_used) >= bandwidth) {
-              cerr << "bandwidth works\n";
-              // Get it in the list
-              // XXX probably memory leaks galore
-              pedge_path pep(current.second.first);
-              pvertex_list pvl(current.second.second);
+              
+              // Keep track of how we got to this switch
+              // TODO: probably memory leaks galore
+              vertex_path &old_path = current.second;
 
-              pep.push_front(pe);
-              pvl.push_back(pl);
+              // Make new paths and switchlists by copying the old ones
+              pedge_path new_path(old_path.first);
+              pvertex_list new_switchlist(old_path.second);
 
-              if (dsv == dest_sv) {
-                  // Found it, return
-                  // XXX possible pointer to stack
-                  out_path = pep;
-                  out_switches = pvl;
-                  cerr << "Found path\n";
+              // Add these onto the path
+              // TODO: I don't understand why one is push_front and the other
+              // push_back, need to investigate and document
+              new_path.push_front(pe);
+              new_switchlist.push_back(pl);
+
+              /*
+               * If the switch we just ended up at is the one we were shooting
+               * for, great, we're done. Otherwise, add it to the new
+               * frontier
+               */
+              if (new_sv == dest_sv) {
+                  // TODO: Clean up memory leaks
+                  // Note: This does a shallow copy (I think)
+                  out_path = new_path;
+                  out_switches = new_switchlist;
                   return 1;
               } else {
                   // Not the droids we're looking for, put it on the queue
-                  plan.push(move(dsv,vertex_path(pep,pvl)));
-                  marked.insert(dsv);
-
+                  plan.push(move(new_sv,vertex_path(new_path,new_switchlist)));
+                  marked.insert(new_sv);
               }
-
-
           } else {
-              cerr << "bandwidth fails\n";
+              // Not enough bandwidth, move on
           }
 
-          //out_switches.push_front(get(svertex_pmap,current_sv)->mate);
-          //current_se = edge(current_sv,preds[current_sv],SG).first;
-          //out_path.push_back(get(sedge_pmap,current_se)->mate);
-          //current_sv = preds[current_sv];
-
-      }
-      
-      if (current.first == dest_sv) {
-          // XXX found it!
-          return 1;
       }
   }
 
