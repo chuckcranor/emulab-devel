@@ -372,7 +372,7 @@ public:
       srcnode(_srcnode), dstnode(_dstnode),
       delay_info(), bw_used(0), emulated(0), nonemulated(0),
       penalty(0.0), fixends(false), current_endpoints(), current_count(0),
-      vedge_counts() {
+      never_multiplex(false), vedge_counts() {
 	  types.insert(_type);
       }
 
@@ -398,9 +398,19 @@ public:
   nodepair_count_map vedge_counts; // list, and count, of all pairs of pnode
 				   // endpoints sharing this link
 
+  bool never_multiplex;         // Don't allow more than one vlink on this
+                                // physical link (currently only honored for
+                                // PLINK_INTERSWITCH links, and only when
+                                // searching all switches)
+                                // TODO: Need to make a violation for this
+
   bool has_type(fstring type) const {	// Returns true if the given type is one
 				        // of the types supported by this link
     return(types.find(type) != types.end());
+  }
+
+  bool has_users() const {
+      return (emulated != 0) || (nonemulated != 0);
   }
     
   friend ostream &operator<<(ostream &o, const tb_plink& link)

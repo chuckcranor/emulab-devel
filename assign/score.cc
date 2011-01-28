@@ -1758,6 +1758,8 @@ int find_interswitch_path(pvertex src_pv,pvertex dest_pv,
           // Explore all edges out from it
           // TODO: Go through them in random order, to avoid problems where we
           // can get stuck.
+          // TODO: If none have enough bandwidth, we should pick one at
+          // random; this will get caught later as a violation.
           soedge_iterator sedge_it,end_sedge_it;
           tie(sedge_it,end_sedge_it) = out_edges(current->first,SG);
           for (;sedge_it!=end_sedge_it;++sedge_it) {
@@ -1785,42 +1787,50 @@ int find_interswitch_path(pvertex src_pv,pvertex dest_pv,
               // TODO: Need to check types, but they are not passed into this
               // function
 
-              // Check bandwidth to make sure there's enough left.
-              if ((pl->delay_info.bandwidth - pl->bw_used) >= bandwidth) {
-                  
-                  // Keep track of how we got to this switch
-                  vertex_path *old_path = current->second;
+              // Check bandwidth to make sure there's enough left
+              if (bandwidth > (pl->delay_info.bandwidth - pl->bw_used)) {
+                  continue;
+              }
 
-                  // Make new paths and switchlists by copying the old ones
-                  pedge_path *new_path = new pedge_path(*(old_path->first));
-                  pvertex_list *new_switchlist =
-                      new pvertex_list(*(old_path->second));
-                  
-                  // Add these onto the path
-                  // TODO: I don't understand why one is push_front and the
-                  // other push_back, need to investigate and document
-                  new_path->push_front(pe);
-                  new_switchlist->push_back(pl);
+              // Check to make sure it's not already being used (and has
+              // the flag set to disallow this
+              // XXX: Terrible hack, but we apparently don't keep user counts
+              // for interswitch links
+              //if (pl->has_users() && pl->never_multiplex) {
+              if (pl->bw_used > 0 && pl->never_multiplex) {
+                  continue;
+              }
+              
+              // Keep track of how we got to this switch
+              vertex_path *old_path = current->second;
 
-                  /*
-                   * If the switch we just ended up at is the one we were
-                   * shooting for, great, we're done. Otherwise, add it to the
-                   * new frontier
-                   */
-                  if (new_sv == dest_sv) {
-                      // This should do a shallow copy (which is what we want)
-                      out_path = *new_path;
-                      out_switches = *new_switchlist;
-                      foundpath = true;
-                      goto cleanup;
-                  } else {
-                      // Not the droids we're looking for, put it on the queue
-                      plan.push(new move(new_sv,
-                                  new vertex_path(new_path,new_switchlist)));
-                      marked.insert(new_sv);
-                  }
+              // Make new paths and switchlists by copying the old ones
+              pedge_path *new_path = new pedge_path(*(old_path->first));
+              pvertex_list *new_switchlist =
+                  new pvertex_list(*(old_path->second));
+              
+              // Add these onto the path
+              // TODO: I don't understand why one is push_front and the
+              // other push_back, need to investigate and document
+              new_path->push_front(pe);
+              new_switchlist->push_back(pl);
+
+              /*
+               * If the switch we just ended up at is the one we were
+               * shooting for, great, we're done. Otherwise, add it to the
+               * new frontier
+               */
+              if (new_sv == dest_sv) {
+                  // This should do a shallow copy (which is what we want)
+                  out_path = *new_path;
+                  out_switches = *new_switchlist;
+                  foundpath = true;
+                  goto cleanup;
               } else {
-                  // Not enough bandwidth, move on
+                  // Not the droids we're looking for, put it on the queue
+                  plan.push(new move(new_sv,
+                              new vertex_path(new_path,new_switchlist)));
+                  marked.insert(new_sv);
               }
 
               // End of loop through edges
