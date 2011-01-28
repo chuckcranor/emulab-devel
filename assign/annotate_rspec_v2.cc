@@ -160,7 +160,8 @@ void annotate_rspec_v2::annotate_element (const char* v_name,
   static bool gave_apology = false;
 
   // Re-order links to ensure that they are all head-to-tail.
-  list<const char*>* links = this->reorderLinks(unordered);
+  //list<const char*>* links = this->reorderLinks(unordered);
+  list<const char*>* links = unordered;
 
   // These are the paths from the source to the first switch
   // and from the last switch to the destination
@@ -202,6 +203,8 @@ void annotate_rspec_v2::annotate_element (const char* v_name,
                                              NEITHER, prevComponentHop);
     prevLinkInPath = pSwitchSwitchLink;
     //    componentHops.push_back(prevComponentHop);
+    // XXX almost certainly wrong
+    links->pop_front();
   }
   
   DOMElement* hop = create_component_hop (p_switch_dst_link, vlink, 
@@ -475,6 +478,7 @@ void annotate_rspec_v2::annotate_interface (const DOMElement* plink,
       cerr << "Virtual node mapped to: " << physNodeId << endl;
       cerr << "Physical link ID: " 
 	   << XStr(plink->getAttribute(XStr("component_id").x())).c() << endl;
+      abort();
       exit(EXIT_FATAL);
     }
     interface = XStr(pIface->getAttribute(XStr("component_id").x())).c();
