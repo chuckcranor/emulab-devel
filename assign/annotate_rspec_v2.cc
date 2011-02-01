@@ -160,8 +160,8 @@ void annotate_rspec_v2::annotate_element (const char* v_name,
   static bool gave_apology = false;
 
   // Re-order links to ensure that they are all head-to-tail.
-  //list<const char*>* links = this->reorderLinks(unordered);
-  list<const char*>* links = unordered;
+  list<const char*>* links = this->reorderLinks(unordered);
+  //list<const char*>* links = unordered;
 
   // These are the paths from the source to the first switch
   // and from the last switch to the destination
@@ -203,8 +203,6 @@ void annotate_rspec_v2::annotate_element (const char* v_name,
                                              NEITHER, prevComponentHop);
     prevLinkInPath = pSwitchSwitchLink;
     //    componentHops.push_back(prevComponentHop);
-    // XXX almost certainly wrong
-    links->pop_front();
   }
   
   DOMElement* hop = create_component_hop (p_switch_dst_link, vlink, 
@@ -511,7 +509,7 @@ annotate_rspec_v2::copy_component_spec(const DOMElement* src, DOMElement* dst)
 // Assign sometimes reverses the links on the path 
 // from the source to destination, 
 // so you need to look at the entire path to find the next link
-// WARNING: This removes the link in the path from the list of link
+// WARNING: This removes the link in the path from the list of links
 DOMElement* 
 annotate_rspec_v2::find_next_link_in_path (DOMElement *prev, 
                                            list<const char*>* links)
@@ -519,8 +517,17 @@ annotate_rspec_v2::find_next_link_in_path (DOMElement *prev,
   list<const char*>::iterator it;
   DOMElement* link = NULL;
 
+  XMLDEBUG("Checking for next link for " << string(XStr(prev->getAttribute(XStr("component_id").x())).c()) << endl);
+  //string(XStr(prev->getAttribute(XStr("component_id").x())).c());
+
   for (it = links->begin(); it != links->end(); ++it) {
     link = (this->physical_elements->find(*it))->second;
+
+    // Be sure we aren't comparing a link with itself. :)
+    if (link == prev) {
+        XMLDEBUG("Comparing link with itself - oops" << endl);
+        continue;
+    }
 
     // We assume as we have done throughout that the first interface 
     // represents the source of the link and the second interface
@@ -530,15 +537,28 @@ annotate_rspec_v2::find_next_link_in_path (DOMElement *prev,
     string prevSrc = this->getNthInterface(prev, 0);
     string prevDst = this->getNthInterface(prev, 1);
 
-    if ((linkSrc == prevDst && linkDst != prevSrc)
-        || (linkSrc == prevSrc && linkDst != prevDst)
-        || (linkDst == prevSrc && linkSrc != prevDst)
-        || (linkDst == prevDst && linkSrc != prevSrc)) {
+    //XMLDEBUG("  prev: (" << prevSrc << ")/(" << prevDst << ") this: (" << linkSrc << ")/(" << linkDst << ")" << endl);
+
+    /* find the node that each interface is on */
+    bool found;
+    string linkSrcNode = this->lookupIface(this->pInterfaceMap,linkSrc,found); assert(found);
+    string linkDstNode = this->lookupIface(this->pInterfaceMap,linkDst,found); assert(found);
+    string prevSrcNode = this->lookupIface(this->pInterfaceMap,prevSrc,found); assert(found);
+    string prevDstNode = this->lookupIface(this->pInterfaceMap,prevDst,found); assert(found);
+
+    XMLDEBUG("  prev: (" << prevSrcNode << ")/(" << prevDstNode << ") this: (" << linkSrcNode << ")/(" << linkDstNode << ")" << endl);
+
+    if ((linkSrcNode == prevDstNode && linkDstNode != prevSrcNode)
+        || (linkSrcNode == prevSrcNode && linkDstNode != prevDstNode)
+        || (linkDstNode == prevSrcNode && linkSrcNode != prevDstNode)
+        || (linkDstNode == prevDstNode && linkSrcNode != prevSrcNode)) {
       links->remove(*it);
-      break;
+      XMLDEBUG("     good enough!" << endl);
+      return link;
     }
   }
-  return link;
+  XMLDEBUG("     failed to find the next link!" << endl);
+  return NULL;
 }
 
 void annotate_rspec_v2::cleanup()
@@ -681,6 +701,17 @@ string annotate_rspec_v2::getShortInterfaceName (string interface)
 list<const char*>* 
 annotate_rspec_v2::reorderLinks (list<const char*>* links)
 {
+  XMLDEBUG("Reordering started: before ");
+
+  list<const char*>::iterator it, eit;
+  it = links->begin(); eit = links->end();
+  while (it != eit) {
+      XMLDEBUG("(" << *it << ") ");
+      it++;
+  }
+
+  XMLDEBUG(endl);
+
   list<const char*> *ordered = new list<const char*>();
   //  list<const char*>::iterator it;
 
@@ -692,6 +723,7 @@ annotate_rspec_v2::reorderLinks (list<const char*>* links)
   links->pop_front();
   DOMElement* prev = (this->physical_elements)->find(link)->second;
   ordered->push_back(link);
+  XMLDEBUG("first is " << link << endl);
 
   while(!links->empty()) {
     prev = this->find_next_link_in_path(prev, links);
@@ -705,6 +737,10 @@ annotate_rspec_v2::reorderLinks (list<const char*>* links)
 
     // Remove this link from the list - would rather use links->remove(), but
     // it doesn't seem to be able to compare strings
+    // XXX - I think this is okay not to do, since find_list_in_path is
+    // destructive
+    bool found = true;
+    /*
     list<const char*>::iterator it;
     bool found = false;
     for (it = links->begin(); it != links->end(); it++) {
@@ -714,7 +750,9 @@ annotate_rspec_v2::reorderLinks (list<const char*>* links)
             break;
         }
     }
+    */
 
+    XMLDEBUG(" pushing on " << link->c_str() << endl);
     if (found) {
         ordered->push_back(link->c_str());
     } else {
@@ -723,6 +761,14 @@ annotate_rspec_v2::reorderLinks (list<const char*>* links)
             link->c_str() << ")" << endl;
         exit(EXIT_FATAL);
     }
+  }
+
+  XMLDEBUG("Reordering after: ");
+
+  it = ordered->begin(); eit = ordered->end();
+  while (it != eit) {
+      XMLDEBUG("(" << *it << ") ");
+      it++;
   }
   
   return ordered;
