@@ -189,20 +189,12 @@ void annotate_rspec_v2::annotate_element (const char* v_name,
   componentHops.push_back(prevComponentHop);
 
   for (DOMElement *prevLinkInPath = p_src_switch_link; !links->empty(); ) {
-#ifndef DISABLE_LINK_ANNOTATION
-    if (!gave_apology) { 
-      gave_apology = true;
-      cerr << endl << "\nWARNING: Unable to locate interfaces on "
-	"switch/switch links; omitting those from the annotation" << endl;
-    }
-#endif
     DOMElement* pSwitchSwitchLink 
-      //      = ((this->physical_elements)->find(*it))->second;
       = find_next_link_in_path (prevLinkInPath, links);
     prevComponentHop = create_component_hop (pSwitchSwitchLink, vlink, 
                                              NEITHER, prevComponentHop);
     prevLinkInPath = pSwitchSwitchLink;
-    //    componentHops.push_back(prevComponentHop);
+    componentHops.push_back(prevComponentHop);
   }
   
   DOMElement* hop = create_component_hop (p_switch_dst_link, vlink, 
