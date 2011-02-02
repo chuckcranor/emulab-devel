@@ -590,7 +590,7 @@ bool populate_links(DOMElement *root, tb_pgraph &pg, tb_sgraph &sg,
     phys_link->delay_info.bandwidth = bandwidth;
     phys_link->delay_info.delay = latency;
     phys_link->delay_info.loss = packetLoss;
-		
+
     // XXX: Should not be manual
     put(pedge_pmap, phys_edge, phys_link);
     
@@ -621,7 +621,7 @@ bool populate_links(DOMElement *root, tb_pgraph &pg, tb_sgraph &sg,
       src_pnode->link_counts[str_type_name]++;
       dst_pnode->link_counts[str_type_name]++;
     }
-    
+
     if (ISSWITCH(src_pnode) && ISSWITCH(dst_pnode)) {
       svertex src_switch = get(pvertex_pmap,src_vertex)->sgraph_switch;
       svertex dst_switch = get(pvertex_pmap,dst_vertex)->sgraph_switch;
@@ -630,6 +630,13 @@ bool populate_links(DOMElement *root, tb_pgraph &pg, tb_sgraph &sg,
       put(sedge_pmap,swedge,sl);
       sl->mate = phys_edge;
       phys_link->is_type = tb_plink::PLINK_INTERSWITCH;
+      // XXX: Warn if this flag is present on non-interswitch links
+      if (rspecParser->readNeverMultiplex(elt)) {
+          XMLDEBUG("Marking link as 'never multiplex'" << endl);
+          phys_link->never_multiplex = true;
+      }
+
+              
     }
     
     else if (ISSWITCH(src_pnode) && ! ISSWITCH(dst_pnode)) {

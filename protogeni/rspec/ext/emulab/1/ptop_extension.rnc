@@ -37,5 +37,11 @@ TypeLimitContents =
 ## for robustness. We need it to handle fixed interfaces
 InterfaceSpec = element emulab:interface { attribute name { text } }
 
+LinkFlagSpec =
+    ## Indicates that it is never okay to multiplex multiple virtual links
+    ## onto this physical link. Used, for example, on layer 1 links.
+    element emulab:never_multiplex { empty }?
+
+
 start = NodeFlagSpec | FeatureDesireSpec | TypeLimitSpec | PolicySpec
-      		     | InterfaceSpec
+      		     | InterfaceSpec | LinkFlagSpec

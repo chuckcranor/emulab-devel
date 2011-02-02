@@ -391,6 +391,11 @@ bool rspec_parser_v2::readMultiplexOk (const DOMElement* tag)
   return ((this->emulabExtensions)->readMultiplexOk(tag));
 }
 
+bool rspec_parser_v2::readNeverMultiplex (const DOMElement* tag)
+{
+  return ((this->emulabExtensions)->readNeverMultiplex(tag));
+}
+
 vector<struct policy> 
 rspec_parser_v2::readPolicies (const DOMElement* tag, int& count) 
 {

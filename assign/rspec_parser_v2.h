@@ -63,6 +63,7 @@ class rspec_parser_v2 : public rspec_parser
   bool readNoDelay (const xercesc::DOMElement* tag);
   bool readTrivialOk (const xercesc::DOMElement* tag);
   bool readMultiplexOk (const xercesc::DOMElement* tag);
+  bool readNeverMultiplex (const xercesc::DOMElement* tag);
   std::vector<struct rspec_emulab_extension::policy>
     readPolicies (const xercesc::DOMElement* tag, int& count);
   std::string convertType (const std::string);

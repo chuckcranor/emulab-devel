@@ -118,6 +118,7 @@ namespace rspec_emulab_extension {
     virtual bool readNoDelay (const xercesc::DOMElement* tag);
     virtual bool readTrivialOk (const xercesc::DOMElement* tag);
     virtual bool readMultiplexOk (const xercesc::DOMElement* tag);
+    virtual bool readNeverMultiplex (const xercesc::DOMElement* tag);
     virtual string readFixedInterface (const xercesc::DOMElement*, bool&);
     virtual string readShortInterfaceName (const xercesc::DOMElement*, bool&);
     virtual struct policy readPolicy (const xercesc::DOMElement*);

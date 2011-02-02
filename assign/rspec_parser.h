@@ -153,6 +153,7 @@ class rspec_parser : public rspec_parser_helper
   virtual bool readUnique (const xercesc::DOMElement* tag);
   virtual int readTrivialBandwidth (const xercesc::DOMElement* tag, bool&);
   virtual bool readMultiplexOk (const xercesc::DOMElement* tag);
+  virtual bool readNeverMultiplex (const xercesc::DOMElement* tag);
   virtual std::string readHintTo (const xercesc::DOMElement* tag, bool&);
   virtual bool readNoDelay (const xercesc::DOMElement* tag);
   virtual bool readTrivialOk (const xercesc::DOMElement* tag);

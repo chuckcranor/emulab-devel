@@ -286,6 +286,13 @@ bool emulab_extensions_parser::readMultiplexOk (const DOMElement* tag)
   return (multiplexOks->getLength() > 0);
 }
 
+bool emulab_extensions_parser::readNeverMultiplex (const DOMElement* tag)
+{
+  DOMNodeList* neverMultiplexList
+    = tag->getElementsByTagName(XStr("emulab:never_multiplex").x());
+  return (neverMultiplexList->getLength() > 0);
+}
+
 struct policy emulab_extensions_parser::readPolicy(const DOMElement* tag) 
 {
   struct policy policy = {

@@ -371,6 +371,11 @@ bool rspec_parser::readMultiplexOk (const DOMElement* tag)
   return false;
 }
 
+bool rspec_parser::readNeverMultiplex (const DOMElement* tag)
+{
+  return false;
+}
+
 // In the default case, just return the type as it is. 
 // Only in version 2 will we need to do something intelligent(?) with it
 string rspec_parser::convertType (const string hwType) {
