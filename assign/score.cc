@@ -1812,7 +1812,7 @@ int find_interswitch_path(pvertex src_pv,pvertex dest_pv,
               // Add these onto the path
               // TODO: I don't understand why one is push_front and the
               // other push_back, need to investigate and document
-              new_path->push_front(pe);
+              new_path->push_back(pe);
               new_switchlist->push_back(pl);
 
               /*
