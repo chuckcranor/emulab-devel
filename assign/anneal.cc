@@ -802,7 +802,6 @@ void anneal(bool scoring_selftest, bool check_fixed_nodes,
 	 if (!melting) {
              assert(accepts <= neighborsize);
 	     scores[accepts] = new_score;
-             cout << accepts << endl;
 	 }
 #endif // CHILL
 
