@@ -16,6 +16,8 @@ static const char rcsid[] = "$Id: anneal.cc,v 1.46 2009-05-20 18:06:07 tarunp Ex
 #include "vclass.h"
 #include "neighborhood.h"
 
+#include <vector>
+
 /*
  * Internal variables
  */
@@ -340,7 +342,8 @@ void anneal(bool scoring_selftest, bool check_fixed_nodes,
   neighborsize = (int)(neighborsize * scale_neighborhood);
 
 #ifdef CHILL
-  double scores[neighborsize];
+  std::vector<double> scores;
+  scores.resize(neighborsize+1);
 #endif
 
   if (num_fixed >= nnodes) {
@@ -797,7 +800,9 @@ void anneal(bool scoring_selftest, bool check_fixed_nodes,
 
 #ifdef CHILL
 	 if (!melting) {
+             assert(accepts <= neighborsize);
 	     scores[accepts] = new_score;
+             cout << accepts << endl;
 	 }
 #endif // CHILL
 
