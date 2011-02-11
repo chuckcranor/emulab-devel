@@ -160,8 +160,12 @@ void annotate_rspec_v2::annotate_element (const char* v_name,
   static bool gave_apology = false;
 
   // Re-order links to ensure that they are all head-to-tail.
-  list<const char*>* links = this->reorderLinks(unordered);
-  //list<const char*>* links = unordered;
+  list<const char*>* links;
+#ifdef ANNOTATE_ARBITRARY_LINK_ORDER
+  links = unordered;
+#else
+  links = this->reorderLinks(unordered);
+#endif
 
   // These are the paths from the source to the first switch
   // and from the last switch to the destination
@@ -189,8 +193,13 @@ void annotate_rspec_v2::annotate_element (const char* v_name,
   componentHops.push_back(prevComponentHop);
 
   for (DOMElement *prevLinkInPath = p_src_switch_link; !links->empty(); ) {
-    DOMElement* pSwitchSwitchLink 
-      = find_next_link_in_path (prevLinkInPath, links);
+    DOMElement* pSwitchSwitchLink;
+#ifdef ANNOTATE_ARBITRARY_LINK_ORDER
+    pSwitchSwitchLink = (this->physical_elements->find(links->front()))->second;
+    links->pop_front();
+#else
+    pSwitchSwitchLink = find_next_link_in_path (prevLinkInPath, links);
+#endif
     prevComponentHop = create_component_hop (pSwitchSwitchLink, vlink, 
                                              NEITHER, prevComponentHop);
     prevLinkInPath = pSwitchSwitchLink;
@@ -690,6 +699,7 @@ string annotate_rspec_v2::getShortInterfaceName (string interface)
 // WARNING: This will distroy the input list
 // NOTE: The caller has the responsibility to return the freed list and all
 // char*s it contains
+#ifndef ANNOTATE_ARBITRARY_LINK_ORDER
 list<const char*>* 
 annotate_rspec_v2::reorderLinks (list<const char*>* links)
 {
@@ -765,5 +775,6 @@ annotate_rspec_v2::reorderLinks (list<const char*>* links)
   
   return ordered;
 }
+#endif /* ANNOTATE_ARBITRARY_LINK_ORDER */
 
 #endif
