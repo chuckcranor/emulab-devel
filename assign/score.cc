@@ -459,6 +459,11 @@ float find_link_resolutions(resolution_vector &resolutions, pvertex pv,
             info.plinks, info.switches) != 0) {
         // Okay, we found a real resolution!
         if (flipped) { // Order these need to go in depends on flipped bit
+
+          // If the link is flipped, then the interswitch path already
+          // found is backwards
+          info.plinks.reverse();
+
           if (second_link) {
             info.plinks.push_front(second);
           }
