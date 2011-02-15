@@ -1719,7 +1719,7 @@ int find_interswitch_path(pvertex src_pv,pvertex dest_pv,
       while (current_sv != src_sv) {
         out_switches.push_front(get(svertex_pmap,current_sv)->mate);
         current_se = edge(current_sv,preds[current_sv],SG).first;
-        out_path.push_back(get(sedge_pmap,current_se)->mate);
+        out_path.push_front(get(sedge_pmap,current_se)->mate);
         current_sv = preds[current_sv];
       }
       out_switches.push_front(get(svertex_pmap,current_sv)->mate);
