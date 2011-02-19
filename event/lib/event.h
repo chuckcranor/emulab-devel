@@ -290,6 +290,7 @@ typedef enum {
     EA_When,
 } ea_tag_t;
 
+#ifndef SWIG
 event_notification_t event_notification_create_v(event_handle_t handle,
 						 struct timeval **when_out,
 						 ea_tag_t tag,
@@ -299,6 +300,7 @@ event_notification_t event_notification_create(event_handle_t handle,
 					       ...);
 int event_do_v(event_handle_t handle, ea_tag_t tag, va_list args);
 int event_do(event_handle_t handle, ea_tag_t tag, ...);
+#endif
 
 /* util.c */
 void *xmalloc(int size);

@@ -86,6 +86,10 @@ event.o:	event.c
 	$(CC) $(SCFLAGS) -c -o event.o $<
 util.o:		util.c
 	$(CC) $(SCFLAGS) -c -o util.o $<
+event-pic.o:	event.c
+	$(CC) -fpic -DPIC $(SCFLAGS) -c -o event-pic.o $<
+util-pic.o:		util.c
+	$(CC) -fpic -DPIC $(SCFLAGS) -c -o util-pic.o $<
 
 #
 # These three targets are for the perl binding to the event system
@@ -103,6 +107,8 @@ swig-wrappers:	event.i	event.c event.pm.tail
 
 event_wrap.o:	$(SRCDIR)/event_wrap.c
 	$(CC) -c $(CFLAGS_NOWARN) $(PCORE) $<
+event_wrap-pic.o:	$(SRCDIR)/event_wrap.c
+	$(CC) -c -fpic -DPIC $(CFLAGS_NOWARN) $(PCORE) $< -o event_wrap-pic.o
 
 #
 # Note: The python version of the wrappers do not seem to be afflicted by the
@@ -118,11 +124,13 @@ swig-pywrappers: event.i event.h event.c tbevent.py.tail
 
 event_wrap_py.o: $(SRCDIR)/event_wrap_py.c event.h
 	$(CC) -c $(CFLAGS_NOWARN) $(PYCORE) $<
+event_wrap_py-pic.o: $(SRCDIR)/event_wrap_py.c event.h
+	$(CC) -c -fpic -DPIC $(CFLAGS_NOWARN) $(PYCORE) $< -o event_wrap_py-pic.o
 
-event.so:	event.o event_wrap.o util.o
+event.so:	event-pic.o event_wrap-pic.o util-pic.o
 	ld -shared $^ $(PUBSUBLIB) -lcrypto -o event.so
 
-_tbevent.so:	event.o event_wrap_py.o util.o
+_tbevent.so:	event-pic.o event_wrap_py-pic.o util-pic.o
 	ld -shared $^ $(PUBSUBLIB) -lcrypto -o $@
 
 LIB_STUFF       = event.pm event.so tbevent.py _tbevent.so

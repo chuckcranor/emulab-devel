@@ -1490,17 +1490,15 @@ SWIG_Perl_SetModule(swig_module_info *module) {
 #define SWIGTYPE_p_int32_t swig_types[16]
 #define SWIGTYPE_p_int64_t swig_types[17]
 #define SWIGTYPE_p_p_char swig_types[18]
-#define SWIGTYPE_p_p_timeval swig_types[19]
-#define SWIGTYPE_p_pubsub_error_t swig_types[20]
-#define SWIGTYPE_p_pubsub_handle_t swig_types[21]
-#define SWIGTYPE_p_pubsub_notification_t swig_types[22]
-#define SWIGTYPE_p_pubsub_subscription_t swig_types[23]
-#define SWIGTYPE_p_timeval swig_types[24]
-#define SWIGTYPE_p_unsigned_char swig_types[25]
-#define SWIGTYPE_p_va_list swig_types[26]
-#define SWIGTYPE_p_void swig_types[27]
-static swig_type_info *swig_types[29];
-static swig_module_info swig_module = {swig_types, 28, 0, 0, 0, 0};
+#define SWIGTYPE_p_pubsub_error_t swig_types[19]
+#define SWIGTYPE_p_pubsub_handle_t swig_types[20]
+#define SWIGTYPE_p_pubsub_notification_t swig_types[21]
+#define SWIGTYPE_p_pubsub_subscription_t swig_types[22]
+#define SWIGTYPE_p_timeval swig_types[23]
+#define SWIGTYPE_p_unsigned_char swig_types[24]
+#define SWIGTYPE_p_void swig_types[25]
+static swig_type_info *swig_types[27];
+static swig_module_info swig_module = {swig_types, 26, 0, 0, 0, 0};
 #define SWIG_TypeQuery(name) SWIG_TypeQueryModule(&swig_module, &swig_module, name)
 #define SWIG_MangledTypeQuery(name) SWIG_MangledTypeQueryModule(&swig_module, &swig_module, name)
 
@@ -1535,6 +1533,26 @@ SWIGEXPORT void SWIG_init (CV *cv, CPerlObj *);
 
 #define NO_EVENT_MACROS
 #include "event.h"
+
+
+SWIGINTERNINLINE SV *
+SWIG_FromCharPtrAndSize(const char* carray, size_t size)
+{
+  SV *obj = sv_newmortal();
+  if (carray) {
+    sv_setpvn(obj, carray, size);
+  } else {
+    sv_setsv(obj, &PL_sv_undef);
+  }
+  return obj;
+}
+
+
+SWIGINTERNINLINE SV * 
+SWIG_FromCharPtr(const char *cptr)
+{ 
+  return SWIG_FromCharPtrAndSize(cptr, (cptr ? strlen(cptr) : 0));
+}
 
 
 SWIGINTERNINLINE SV *
@@ -1735,26 +1753,6 @@ SWIG_AsCharPtrAndSize(SV *obj, char** cptr, size_t* psize, int *alloc)
 
 
 
-
-
-SWIGINTERNINLINE SV *
-SWIG_FromCharPtrAndSize(const char* carray, size_t size)
-{
-  SV *obj = sv_newmortal();
-  if (carray) {
-    sv_setpvn(obj, carray, size);
-  } else {
-    sv_setsv(obj, &PL_sv_undef);
-  }
-  return obj;
-}
-
-
-SWIGINTERNINLINE SV * 
-SWIG_FromCharPtr(const char *cptr)
-{ 
-  return SWIG_FromCharPtrAndSize(cptr, (cptr ? strlen(cptr) : 0));
-}
 
 
 SWIGINTERN int
@@ -5622,198 +5620,6 @@ XS(_wrap_event_arg_dup) {
 }
 
 
-XS(_wrap_event_notification_create_v) {
-  {
-    event_handle_t arg1 = (event_handle_t) 0 ;
-    struct timeval **arg2 = (struct timeval **) 0 ;
-    ea_tag_t arg3 ;
-    va_list arg4 ;
-    void *argp1 = 0 ;
-    int res1 = 0 ;
-    void *argp2 = 0 ;
-    int res2 = 0 ;
-    int val3 ;
-    int ecode3 = 0 ;
-    void *argp4 ;
-    int res4 = 0 ;
-    int argvi = 0;
-    event_notification_t result;
-    dXSARGS;
-    
-    if ((items < 4) || (items > 4)) {
-      SWIG_croak("Usage: event_notification_create_v(handle,when_out,tag,args);");
-    }
-    res1 = SWIG_ConvertPtr(ST(0), &argp1,SWIGTYPE_p_event_handle, 0 |  0 );
-    if (!SWIG_IsOK(res1)) {
-      SWIG_exception_fail(SWIG_ArgError(res1), "in method '" "event_notification_create_v" "', argument " "1"" of type '" "event_handle_t""'"); 
-    }
-    arg1 = (event_handle_t)(argp1);
-    res2 = SWIG_ConvertPtr(ST(1), &argp2,SWIGTYPE_p_p_timeval, 0 |  0 );
-    if (!SWIG_IsOK(res2)) {
-      SWIG_exception_fail(SWIG_ArgError(res2), "in method '" "event_notification_create_v" "', argument " "2"" of type '" "struct timeval **""'"); 
-    }
-    arg2 = (struct timeval **)(argp2);
-    ecode3 = SWIG_AsVal_int SWIG_PERL_CALL_ARGS_2(ST(2), &val3);
-    if (!SWIG_IsOK(ecode3)) {
-      SWIG_exception_fail(SWIG_ArgError(ecode3), "in method '" "event_notification_create_v" "', argument " "3"" of type '" "ea_tag_t""'");
-    } 
-    arg3 = (ea_tag_t)(val3);
-    {
-      res4 = SWIG_ConvertPtr(ST(3), &argp4, SWIGTYPE_p_va_list,  0 );
-      if (!SWIG_IsOK(res4)) {
-        SWIG_exception_fail(SWIG_ArgError(res4), "in method '" "event_notification_create_v" "', argument " "4"" of type '" "va_list""'"); 
-      }  
-      if (!argp4) {
-        SWIG_exception_fail(SWIG_ValueError, "invalid null reference " "in method '" "event_notification_create_v" "', argument " "4"" of type '" "va_list""'");
-      } else {
-        arg4 = *((va_list *)(argp4));
-      }
-    }
-    result = (event_notification_t)event_notification_create_v(arg1,arg2,arg3,arg4);
-    ST(argvi) = SWIG_NewPointerObj(SWIG_as_voidptr(result), SWIGTYPE_p_event_notification, 0 | SWIG_SHADOW); argvi++ ;
-    
-    
-    
-    XSRETURN(argvi);
-  fail:
-    
-    
-    
-    SWIG_croak_null();
-  }
-}
-
-
-XS(_wrap_event_notification_create) {
-  {
-    event_handle_t arg1 = (event_handle_t) 0 ;
-    ea_tag_t arg2 ;
-    void *arg3 = 0 ;
-    void *argp1 = 0 ;
-    int res1 = 0 ;
-    int val2 ;
-    int ecode2 = 0 ;
-    int argvi = 0;
-    event_notification_t result;
-    dXSARGS;
-    
-    if (items < 2) {
-      SWIG_croak("Usage: event_notification_create(handle,tag,...);");
-    }
-    res1 = SWIG_ConvertPtr(ST(0), &argp1,SWIGTYPE_p_event_handle, 0 |  0 );
-    if (!SWIG_IsOK(res1)) {
-      SWIG_exception_fail(SWIG_ArgError(res1), "in method '" "event_notification_create" "', argument " "1"" of type '" "event_handle_t""'"); 
-    }
-    arg1 = (event_handle_t)(argp1);
-    ecode2 = SWIG_AsVal_int SWIG_PERL_CALL_ARGS_2(ST(1), &val2);
-    if (!SWIG_IsOK(ecode2)) {
-      SWIG_exception_fail(SWIG_ArgError(ecode2), "in method '" "event_notification_create" "', argument " "2"" of type '" "ea_tag_t""'");
-    } 
-    arg2 = (ea_tag_t)(val2);
-    result = (event_notification_t)event_notification_create(arg1,arg2,arg3);
-    ST(argvi) = SWIG_NewPointerObj(SWIG_as_voidptr(result), SWIGTYPE_p_event_notification, 0 | SWIG_SHADOW); argvi++ ;
-    
-    
-    XSRETURN(argvi);
-  fail:
-    
-    
-    SWIG_croak_null();
-  }
-}
-
-
-XS(_wrap_event_do_v) {
-  {
-    event_handle_t arg1 = (event_handle_t) 0 ;
-    ea_tag_t arg2 ;
-    va_list arg3 ;
-    void *argp1 = 0 ;
-    int res1 = 0 ;
-    int val2 ;
-    int ecode2 = 0 ;
-    void *argp3 ;
-    int res3 = 0 ;
-    int argvi = 0;
-    int result;
-    dXSARGS;
-    
-    if ((items < 3) || (items > 3)) {
-      SWIG_croak("Usage: event_do_v(handle,tag,args);");
-    }
-    res1 = SWIG_ConvertPtr(ST(0), &argp1,SWIGTYPE_p_event_handle, 0 |  0 );
-    if (!SWIG_IsOK(res1)) {
-      SWIG_exception_fail(SWIG_ArgError(res1), "in method '" "event_do_v" "', argument " "1"" of type '" "event_handle_t""'"); 
-    }
-    arg1 = (event_handle_t)(argp1);
-    ecode2 = SWIG_AsVal_int SWIG_PERL_CALL_ARGS_2(ST(1), &val2);
-    if (!SWIG_IsOK(ecode2)) {
-      SWIG_exception_fail(SWIG_ArgError(ecode2), "in method '" "event_do_v" "', argument " "2"" of type '" "ea_tag_t""'");
-    } 
-    arg2 = (ea_tag_t)(val2);
-    {
-      res3 = SWIG_ConvertPtr(ST(2), &argp3, SWIGTYPE_p_va_list,  0 );
-      if (!SWIG_IsOK(res3)) {
-        SWIG_exception_fail(SWIG_ArgError(res3), "in method '" "event_do_v" "', argument " "3"" of type '" "va_list""'"); 
-      }  
-      if (!argp3) {
-        SWIG_exception_fail(SWIG_ValueError, "invalid null reference " "in method '" "event_do_v" "', argument " "3"" of type '" "va_list""'");
-      } else {
-        arg3 = *((va_list *)(argp3));
-      }
-    }
-    result = (int)event_do_v(arg1,arg2,arg3);
-    ST(argvi) = SWIG_From_int  SWIG_PERL_CALL_ARGS_1((int)(result)); argvi++ ;
-    
-    
-    XSRETURN(argvi);
-  fail:
-    
-    
-    SWIG_croak_null();
-  }
-}
-
-
-XS(_wrap_event_do) {
-  {
-    event_handle_t arg1 = (event_handle_t) 0 ;
-    ea_tag_t arg2 ;
-    void *arg3 = 0 ;
-    void *argp1 = 0 ;
-    int res1 = 0 ;
-    int val2 ;
-    int ecode2 = 0 ;
-    int argvi = 0;
-    int result;
-    dXSARGS;
-    
-    if (items < 2) {
-      SWIG_croak("Usage: event_do(handle,tag,...);");
-    }
-    res1 = SWIG_ConvertPtr(ST(0), &argp1,SWIGTYPE_p_event_handle, 0 |  0 );
-    if (!SWIG_IsOK(res1)) {
-      SWIG_exception_fail(SWIG_ArgError(res1), "in method '" "event_do" "', argument " "1"" of type '" "event_handle_t""'"); 
-    }
-    arg1 = (event_handle_t)(argp1);
-    ecode2 = SWIG_AsVal_int SWIG_PERL_CALL_ARGS_2(ST(1), &val2);
-    if (!SWIG_IsOK(ecode2)) {
-      SWIG_exception_fail(SWIG_ArgError(ecode2), "in method '" "event_do" "', argument " "2"" of type '" "ea_tag_t""'");
-    } 
-    arg2 = (ea_tag_t)(val2);
-    result = (int)event_do(arg1,arg2,arg3);
-    ST(argvi) = SWIG_From_int  SWIG_PERL_CALL_ARGS_1((int)(result)); argvi++ ;
-    
-    
-    XSRETURN(argvi);
-  fail:
-    
-    
-    SWIG_croak_null();
-  }
-}
-
-
 XS(_wrap_xmalloc) {
   {
     int arg1 ;
@@ -6950,14 +6756,12 @@ static swig_type_info _swigt__p_f_p_struct_event_handle_p_struct_event_notificat
 static swig_type_info _swigt__p_int32_t = {"_p_int32_t", "int32_t *", 0, 0, (void*)0, 0};
 static swig_type_info _swigt__p_int64_t = {"_p_int64_t", "int64_t *", 0, 0, (void*)0, 0};
 static swig_type_info _swigt__p_p_char = {"_p_p_char", "char **", 0, 0, (void*)0, 0};
-static swig_type_info _swigt__p_p_timeval = {"_p_p_timeval", "struct timeval **", 0, 0, (void*)0, 0};
 static swig_type_info _swigt__p_pubsub_error_t = {"_p_pubsub_error_t", "pubsub_error_t *", 0, 0, (void*)0, 0};
 static swig_type_info _swigt__p_pubsub_handle_t = {"_p_pubsub_handle_t", "pubsub_handle_t *", 0, 0, (void*)0, 0};
 static swig_type_info _swigt__p_pubsub_notification_t = {"_p_pubsub_notification_t", "pubsub_notification_t *", 0, 0, (void*)0, 0};
 static swig_type_info _swigt__p_pubsub_subscription_t = {"_p_pubsub_subscription_t", "event_subscription_t|pubsub_subscription_t *", 0, 0, (void*)0, 0};
 static swig_type_info _swigt__p_timeval = {"_p_timeval", "struct timeval *|timeval *", 0, 0, (void*)"event::timeval", 0};
 static swig_type_info _swigt__p_unsigned_char = {"_p_unsigned_char", "unsigned char *", 0, 0, (void*)0, 0};
-static swig_type_info _swigt__p_va_list = {"_p_va_list", "va_list *", 0, 0, (void*)0, 0};
 static swig_type_info _swigt__p_void = {"_p_void", "void *", 0, 0, (void*)0, 0};
 
 static swig_type_info *swig_type_initial[] = {
@@ -6980,14 +6784,12 @@ static swig_type_info *swig_type_initial[] = {
   &_swigt__p_int32_t,
   &_swigt__p_int64_t,
   &_swigt__p_p_char,
-  &_swigt__p_p_timeval,
   &_swigt__p_pubsub_error_t,
   &_swigt__p_pubsub_handle_t,
   &_swigt__p_pubsub_notification_t,
   &_swigt__p_pubsub_subscription_t,
   &_swigt__p_timeval,
   &_swigt__p_unsigned_char,
-  &_swigt__p_va_list,
   &_swigt__p_void,
 };
 
@@ -7010,14 +6812,12 @@ static swig_cast_info _swigc__p_f_p_struct_event_handle_p_struct_event_notificat
 static swig_cast_info _swigc__p_int32_t[] = {  {&_swigt__p_int32_t, 0, 0, 0},{0, 0, 0, 0}};
 static swig_cast_info _swigc__p_int64_t[] = {  {&_swigt__p_int64_t, 0, 0, 0},{0, 0, 0, 0}};
 static swig_cast_info _swigc__p_p_char[] = {  {&_swigt__p_p_char, 0, 0, 0},{0, 0, 0, 0}};
-static swig_cast_info _swigc__p_p_timeval[] = {  {&_swigt__p_p_timeval, 0, 0, 0},{0, 0, 0, 0}};
 static swig_cast_info _swigc__p_pubsub_error_t[] = {  {&_swigt__p_pubsub_error_t, 0, 0, 0},{0, 0, 0, 0}};
 static swig_cast_info _swigc__p_pubsub_handle_t[] = {  {&_swigt__p_pubsub_handle_t, 0, 0, 0},{0, 0, 0, 0}};
 static swig_cast_info _swigc__p_pubsub_notification_t[] = {  {&_swigt__p_pubsub_notification_t, 0, 0, 0},{0, 0, 0, 0}};
 static swig_cast_info _swigc__p_pubsub_subscription_t[] = {  {&_swigt__p_pubsub_subscription_t, 0, 0, 0},{0, 0, 0, 0}};
 static swig_cast_info _swigc__p_timeval[] = {  {&_swigt__p_timeval, 0, 0, 0},{0, 0, 0, 0}};
 static swig_cast_info _swigc__p_unsigned_char[] = {  {&_swigt__p_unsigned_char, 0, 0, 0},{0, 0, 0, 0}};
-static swig_cast_info _swigc__p_va_list[] = {  {&_swigt__p_va_list, 0, 0, 0},{0, 0, 0, 0}};
 static swig_cast_info _swigc__p_void[] = {  {&_swigt__p_void, 0, 0, 0},{0, 0, 0, 0}};
 
 static swig_cast_info *swig_cast_initial[] = {
@@ -7040,14 +6840,12 @@ static swig_cast_info *swig_cast_initial[] = {
   _swigc__p_int32_t,
   _swigc__p_int64_t,
   _swigc__p_p_char,
-  _swigc__p_p_timeval,
   _swigc__p_pubsub_error_t,
   _swigc__p_pubsub_handle_t,
   _swigc__p_pubsub_notification_t,
   _swigc__p_pubsub_subscription_t,
   _swigc__p_timeval,
   _swigc__p_unsigned_char,
-  _swigc__p_va_list,
   _swigc__p_void,
 };
 
@@ -7156,10 +6954,6 @@ static swig_command_info swig_commands[] = {
 {"eventc::event_set_failover", _wrap_event_set_failover},
 {"eventc::event_arg_get", _wrap_event_arg_get},
 {"eventc::event_arg_dup", _wrap_event_arg_dup},
-{"eventc::event_notification_create_v", _wrap_event_notification_create_v},
-{"eventc::event_notification_create", _wrap_event_notification_create},
-{"eventc::event_do_v", _wrap_event_do_v},
-{"eventc::event_do", _wrap_event_do},
 {"eventc::xmalloc", _wrap_xmalloc},
 {"eventc::xrealloc", _wrap_xrealloc},
 {"eventc::make_timestamp", _wrap_make_timestamp},
@@ -7487,6 +7281,11 @@ XS(SWIG_init) {
     SvREADONLY_on(sv);
   }
   
+  /*@SWIG:/usr/local/share/swig/1.3.39/perl5/perltypemaps.swg,65,%set_constant@*/ do {
+    SV *sv = get_sv((char*) SWIG_prefix "EVENT_LIBRARY_VERSION", TRUE | 0x2 | GV_ADDMULTI);
+    sv_setsv(sv, SWIG_FromCharPtr("1.0"));
+    SvREADONLY_on(sv);
+  } while(0) /*@SWIG@*/;
   /*@SWIG:/usr/local/share/swig/1.3.39/perl5/perltypemaps.swg,65,%set_constant@*/ do {
     SV *sv = get_sv((char*) SWIG_prefix "MAXHOSTNAMELEN", TRUE | 0x2 | GV_ADDMULTI);
     sv_setsv(sv, SWIG_From_int  SWIG_PERL_CALL_ARGS_1((int)(64)));
