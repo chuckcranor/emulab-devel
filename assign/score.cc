@@ -823,6 +823,7 @@ void unscore_link_info(vedge ve,tb_pnode *src_pnode,tb_pnode *dst_pnode, tb_vnod
     for (pvertex_list::iterator it = vlink->link_info.switches.begin();
 	 it != vlink->link_info.switches.end();++it) {
       tb_pnode *the_switch = get(pvertex_pmap,*it);
+      assert (the_switch->canary == 'c');
       if (--the_switch->switch_used_links == 0) {
 	SDEBUG(cerr << "  releasing switch" << endl);
 	SSUB(SCORE_SWITCH);
@@ -1197,6 +1198,7 @@ void score_link_info(vedge ve, tb_pnode *src_pnode, tb_pnode *dst_pnode, tb_vnod
     for (pvertex_list::iterator switch_it = vlink->link_info.switches.begin();
 	 switch_it != vlink->link_info.switches.end();++switch_it) {
       the_switch = get(pvertex_pmap,*switch_it);
+      assert (the_switch->canary == 'c');
       if (++the_switch->switch_used_links == 1) {
 	SDEBUG(cerr << "  new switch" << endl);
 	SADD(SCORE_SWITCH);
@@ -1815,10 +1817,8 @@ int find_interswitch_path(pvertex src_pv,pvertex dest_pv,
                   new pvertex_list(*(old_path->second));
               
               // Add these onto the path
-              // TODO: I don't understand why one is push_front and the
-              // other push_back, need to investigate and document
               new_path->push_back(pe);
-              new_switchlist->push_back(pl);
+              new_switchlist->push_back(get(svertex_pmap,new_sv)->mate);
 
               /*
                * If the switch we just ended up at is the one we were
