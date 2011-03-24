@@ -233,11 +233,17 @@ DOMElement* annotate_rspec_v2::create_component_hop (DOMElement* vlink)
     = dynamic_cast<DOMElement*>(doc->importNode
 				(dynamic_cast<DOMNode*>(srcIface),true));
   srcIfaceClone->setAttribute(XStr("component_id").x(), XStr("loopback").x()); 
+  // XXX: Totally bogus, but we don't have the real component_manager_id 
+  // available here
+  srcIfaceClone->setAttribute(XStr("component_manager_id").x(), XStr("").x()); 
   
   DOMElement* dstIfaceClone
     = dynamic_cast<DOMElement*>(doc->importNode
 				(dynamic_cast<DOMNode*>(dstIface),true));
   dstIfaceClone->setAttribute(XStr("component_id").x(), XStr("loopback").x());
+  // XXX: Totally bogus, but we don't have the real component_manager_id 
+  // available here
+  dstIfaceClone->setAttribute(XStr("component_manager_id").x(), XStr("").x());
 
   DOMElement* hop = doc->createElement(XStr("component_hop").x());  
   hop->appendChild(srcIfaceClone);
