@@ -229,8 +229,6 @@ DOMElement* annotate_rspec_v2::create_component_hop (DOMElement* vlink)
   string srcIfaceNodeId =this->lookupIface(this->vInterfaceMap,srcIfaceId,fnd);
   string dstIfaceNodeId =this->lookupIface(this->vInterfaceMap,dstIfaceId,fnd);
 
-  vlink->setAttribute(XStr("component_id").x(), XStr("").x());
-  vlink->setAttribute(XStr("component_manager_id").x(), XStr("").x());
   DOMElement* srcIfaceClone 
     = dynamic_cast<DOMElement*>(doc->importNode
 				(dynamic_cast<DOMNode*>(srcIface),true));
@@ -250,6 +248,8 @@ DOMElement* annotate_rspec_v2::create_component_hop (DOMElement* vlink)
   DOMElement* hop = doc->createElement(XStr("component_hop").x());  
   hop->appendChild(srcIfaceClone);
   hop->appendChild(dstIfaceClone);
+  hop->setAttribute(XStr("component_id").x(), XStr("").x());
+  hop->setAttribute(XStr("component_manager_id").x(), XStr("").x());
 
   return hop;
 }
