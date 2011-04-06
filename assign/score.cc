@@ -1553,6 +1553,13 @@ bool find_best_link(pvertex pv,pvertex switch_pv,tb_vlink *vlink,
 	  continue;
       }
 
+      // If the plink is marked as never_multiplex, and is already in use,
+      // skip it
+      if (plink->never_multiplex &&
+              ((plink->emulated > 0) || (plink->nonemulated > 0))) {
+          continue;
+      }
+
       SDEBUG(cerr << "         find_best_link: fix_src_iface = " <<
               vlink->fix_src_iface << " check_src_iface = " << check_src_iface
               << " fix_dst_iface = " << vlink->fix_dst_iface
@@ -1576,7 +1583,6 @@ bool find_best_link(pvertex pv,pvertex switch_pv,tb_vlink *vlink,
                   plink->srcnode << ")" << endl;)
           plink_order_reversed = false;
       }
-
 
       // If the vlink has a fixed source interface, and it doesn't match
       // this plink, skip it

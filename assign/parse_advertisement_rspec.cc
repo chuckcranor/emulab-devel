@@ -622,6 +622,17 @@ bool populate_links(DOMElement *root, tb_pgraph &pg, tb_sgraph &sg,
       dst_pnode->link_counts[str_type_name]++;
     }
 
+    /*
+     * Handle never_multiplex flag
+     */
+    if (rspecParser->readNeverMultiplex(elt)) {
+        XMLDEBUG("Marking link as 'never multiplex'" << endl);
+        phys_link->never_multiplex = true;
+    }
+
+    /*
+     * Handle properties that are specific to interswitch link
+     */
     if (ISSWITCH(src_pnode) && ISSWITCH(dst_pnode)) {
       svertex src_switch = get(pvertex_pmap,src_vertex)->sgraph_switch;
       svertex dst_switch = get(pvertex_pmap,dst_vertex)->sgraph_switch;
@@ -630,13 +641,6 @@ bool populate_links(DOMElement *root, tb_pgraph &pg, tb_sgraph &sg,
       put(sedge_pmap,swedge,sl);
       sl->mate = phys_edge;
       phys_link->is_type = tb_plink::PLINK_INTERSWITCH;
-      // XXX: Warn if this flag is present on non-interswitch links
-      if (rspecParser->readNeverMultiplex(elt)) {
-          XMLDEBUG("Marking link as 'never multiplex'" << endl);
-          phys_link->never_multiplex = true;
-      }
-
-              
     }
     
     else if (ISSWITCH(src_pnode) && ! ISSWITCH(dst_pnode)) {
