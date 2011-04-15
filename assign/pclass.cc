@@ -343,7 +343,7 @@ int tb_pclass::add_member(tb_pnode *p, bool own_class)
 // Debugging function to check the invariant that a node is either in its
 // dynamic pclass, a 'normal' pclass, but not both
 void assert_own_class_invariant(tb_pnode *p) {
-  cerr << "class_invariant: " << p->name << endl;
+  //cerr << "class_invariant: " << p->name << endl;
   bool own_class = false;
   bool other_class = false;
   pclass_list::iterator pit = pclasses.begin();
@@ -352,14 +352,14 @@ void assert_own_class_invariant(tb_pnode *p) {
     for (;mit != (*pit)->members.end(); mit++) {
       if (mit->second->exists(p)) {
 	if (*pit == p->my_own_class) {
-	  cerr << "In own pclass (" << (*pit)->name << "," << (*pit)->disabled
-	    << ")" << endl;
+	  //cerr << "In own pclass (" << (*pit)->name << "," << (*pit)->disabled
+	  //  << ")" << endl;
 	  if (!(*pit)->disabled) {
 	    own_class = true;
 	  }
 	} else {
-	  cerr << "In pclass " << (*pit)->name << " type " << mit->first <<
-	    " size " << mit->second->size() << endl;
+	  //cerr << "In pclass " << (*pit)->name << " type " << mit->first <<
+	  //  " size " << mit->second->size() << endl;
 	  other_class = true;
 	}
       }
@@ -381,22 +381,37 @@ void assert_own_class_invariant(tb_pnode *p) {
 int pclass_set(tb_vnode *v,tb_pnode *p)
 {
   tb_pclass *c = p->my_class;
-  
-  // remove p node from correct lists in equivalence class.
   tb_pclass::pclass_members_map::iterator dit;
+
+  //cerr << "pclass_set for " << p->name << ", " << c->name << endl;
+  // TODO: This function can probably be made a lot faster
+
+  c->used_members++;
+
+  // If this node has a private pclass, enable it, and make sure it gets
+  // removed completely from its 'regular' pclass
+  if (p->my_own_class != NULL) {
+      //cerr << "Enabling private pclass " << p->my_own_class->name << endl;
+      p->my_own_class->disabled = false;
+      for (dit=c->members.begin();dit!=c->members.end();dit++) {
+	// If it's not in the list then this fails quietly.
+        (*dit).second->remove(p);
+      }
+      // Now, when we do the more fine-grained removal below, we need to do
+      // it on the 'own' pclass, not the 'regular' one
+      c = p->my_own_class;
+  }
+          
+  // Remove p node from correct lists in equivalence class.
   for (dit=c->members.begin();dit!=c->members.end();dit++) {
     if ((*dit).first == p->current_type) {
       // same class - only remove if node is full
       if ((p->current_type_record->get_current_load() ==
-	      p->current_type_record->get_max_load()) ||
-	      p->my_own_class) {
+	      p->current_type_record->get_max_load())) {
 	(*dit).second->remove(p);
-	if (p->my_own_class) {
-	  p->my_own_class->disabled = false;
-	}
       }
     } else {
-      // XXX - should be made faster
+      // different class - remove it unless it's a static type
       if (!p->types[dit->first]->is_static()) {
 	  // If it's not in the list then this fails quietly.
 	  (*dit).second->remove(p);
@@ -404,8 +419,6 @@ int pclass_set(tb_vnode *v,tb_pnode *p)
     }
   }
 
-  c->used_members++;
-  
   //assert_own_class_invariant(p);
   return 0;
 }
@@ -415,18 +428,49 @@ int pclass_unset(tb_pnode *p)
   // add pnode back to the list in the equivalence class that corresponds with
   // the current type of the vnode - may be used whether or not the pnode is
   // empty.
-  tb_pclass *c = p->my_class;
 
   tb_pclass::pclass_members_map::iterator dit;
+  tb_pclass *c = p->my_class;
+
+  //cerr << "pclass_unset for " << p->name << ", " << c->name << endl;
+
+  c->used_members--;
+
+  // Since unset is called before remove_node
+  // is finished decremeting the counts, empty means only one user.
+  // XXX: Two definitions of emtpy used to be in different parts of this
+  // function - hopefully I got the right one!
+  assert(p->current_type_record->get_current_load() > 0);
+  bool empty = (p->current_type_record->get_current_load() == 1);
+  //bool empty = (p->total_load == 1);
+
+  // If we are going empty, and this node has its own pclass, disable the
+  // private pclass and get the type lists back to a 'clean' state
+  if (empty && (p->my_own_class != NULL)) {
+      //cerr << "Resetting/disabling private pclass " << p->my_own_class->name << endl;
+      p->my_own_class->disabled = true;
+      for (dit  = p->my_own_class->members.begin();
+           dit != p->my_own_class->members.end();
+           ++dit) {
+          if (!(*dit).second->exists(p)) {
+              (*dit).second->push_front(p);
+          }
+      }
+  }
+
+  // If we have a private pclass, and are *not* going empty, then we need to
+  // muck with the private pclass and not the 'regular' one
+  if ((p->my_own_class != NULL) && !empty) {
+      c = p->my_own_class;
+  }
+
   for (dit=c->members.begin();dit!=c->members.end();++dit) {
     if ((*dit).first == p->current_type) {
       // If it's not in the list then we need to add it to the back if it's
       // empty (so that it will be picked last) and the front if it's not (so 
-      // hat it will be picked first). Since unset is called before remove_node
-      // is finished decremeting the counts, empty means only one user.
+      // hat it will be picked first).      
       if (! (*dit).second->exists(p)) {
-	assert(p->current_type_record->get_current_load() > 0);
-	if (p->current_type_record->get_current_load() == 1) {
+	if (empty) {
 	  (*dit).second->push_back(p);
 	} else {
 	  (*dit).second->push_front(p);
@@ -435,12 +479,6 @@ int pclass_unset(tb_pnode *p)
     }
   }
 
-  if (p->my_own_class && (p->total_load == 1)) {
-    p->my_own_class->disabled = true;
-  }
-
-  c->used_members--;
-  
   //assert_own_class_invariant(p);
   return 0;
 }
