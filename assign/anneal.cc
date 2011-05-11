@@ -949,6 +949,21 @@ NOTQUITEDONE:
 	  stddev /= (accepts +1);
 	  stddev = sqrt(stddev);
 	  temp = temp / (1 + (temp * log(1 + delta))/(3  * stddev));
+
+          /*
+           * This solution might be to specific to one bug, but...
+           * If we have a temperature guard in place, but accepted no
+           * solutions, turn the temperature guard off so that the regular
+           * termination conditions apply - we might get stuck in an infinite
+           * loop if the temperature never drops
+           */
+#ifdef EPSILON_TERMINATE
+          if ((accepts == 0) && (temperature_guard >= 0)) {
+              cout << "*** WARNING: Disabling temperature guard, temperature not changing" << endl;
+              temperature_guard = -1;
+          }
+
+#endif
       }
 #else
       /* 
@@ -986,7 +1001,7 @@ NOTQUITEDONE:
 #endif
     
     RDEBUG(
-    printf("temp_end: temp: %f ratio: %f stddev: %f\n",temp,temp * avgscore / initialavg,stddev);
+    printf("temp_end: temp: %f ratio: %f stddev: %f guard: %f\n",temp,temp * avgscore / initialavg,stddev,temperature_guard);
     );
 
     /*
@@ -1041,7 +1056,7 @@ NOTQUITEDONE:
     // We have a mininum number of timestepss, and *might* have a minimum
     // temperature that we must reach before we will stop
     if ((tsteps >= mintsteps) &&
-            ((temperature_guard < 0) || (temp < temperature_guard)) &&
+            ((temperature_guard < 0) || (temp <= temperature_guard)) &&
     /*
      * ALLOW_NEGATIVE_DELTA controls whether we're willing to stop if the
      * derivative gets small and negative, not just small and positive.
