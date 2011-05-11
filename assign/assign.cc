@@ -475,6 +475,9 @@ void print_help() {
   cout << "  -F          - Apply additional checking to fixed nodes" << endl;
   cout << "  -D          - Dump configuration options" << endl;
   cout << "  -S          - Do a full search of switch graph (slow)" << endl;
+#ifdef EPSILON_TERMINATE 
+  cout << "  -G <float>  - Temperature guard - don't stop annealing until reaching this value" << endl;
+#endif
   cout << "  cparams     - You probably don't want to touch these!" << endl;
   cout << "                If you must, see config.h in the source for a list"
        << endl;
@@ -878,9 +881,9 @@ int main(int argc,char **argv) {
 	char* ptopFileFormat;
 	char* vtopFileFormat;
 	char* delims = "/";
-	char* flags = "s:v:l:t:rpPTdH:oguc:nx:y:W:FDSf:";
+	char* flags = "s:v:l:t:rpPTdH:oguc:nx:y:W:FDSf:G:";
 #else
-	char* flags = "s:v:l:t:rpPTdH:oguc:nx:y:FDS";
+	char* flags = "s:v:l:t:rpPTdH:oguc:nx:y:FDSG:";
 #endif	
 	
   while ((ch = getopt(argc,argv,flags)) != -1) {
@@ -952,6 +955,13 @@ int main(int argc,char **argv) {
     case 'S':
       full_switch_graph_search = true;
       break;
+#ifdef EPSILON_TERMINATE
+    case 'G':
+      if (sscanf(optarg,"%lf",&temperature_guard) != 1) {
+	print_help();
+      }
+      break;
+#endif
     case 'x':
 #ifdef WITH_XML
       ptop_xml_input = false;

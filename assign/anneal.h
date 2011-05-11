@@ -65,6 +65,9 @@ extern int init_temp;
 extern int temp_prob;
 extern float temp_stop;
 extern int CYCLES;
+#ifdef EPSILON_TERMINATE
+extern float temperature_guard;
+#endif
 
 // Initial acceptance ratio for melting
 extern float X0;

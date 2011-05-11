@@ -44,6 +44,10 @@ name_name_map fixed_nodes;
 // allowed to move these.
 name_name_map node_hints;
 
+#ifdef EPSILON_TERMINATE
+float temperature_guard = -1;
+#endif
+
 // From assign.cc
 #ifdef GNUPLOT_OUTPUT
 extern FILE *scoresout, *tempout, *deltaout;
@@ -1034,7 +1038,10 @@ NOTQUITEDONE:
        printf("epsilon: (%f) %f / %f * %f / %f < %f (%f)\n", fabs(deltaavg), temp, initialavg,
 	   deltaavg, deltatemp, epsilon,(temp / initialavg) * (deltaavg/ deltatemp));
     );
+    // We have a mininum number of timestepss, and *might* have a minimum
+    // temperature that we must reach before we will stop
     if ((tsteps >= mintsteps) &&
+            ((temperature_guard < 0) || (temp < temperature_guard)) &&
     /*
      * ALLOW_NEGATIVE_DELTA controls whether we're willing to stop if the
      * derivative gets small and negative, not just small and positive.
@@ -1043,9 +1050,9 @@ NOTQUITEDONE:
 	((temp < 0) || isnan(temp) ||
 //	 || (fabs((temp / initialavg) * (deltaavg/ deltatemp)) < epsilon))) {
 	 ((temp / initialavg) * (deltaavg/ deltatemp)) < epsilon)) {
-#else
+#else /* ALLOW_NEGATIVE_DELTA */
 	(deltaavg > 0) && ((temp / initialavg) * (deltaavg/ deltatemp) < epsilon)) {
-#endif
+#endif /* ALLOW_NEGATIVE_DELTA */
 #ifdef FINISH_HILLCLIMB
         if (!finishedonce && ((best_violated <= violated) && (best_score < prev_score))) {
 	    // We don't actually stop, we just go do a hill-climb (basically) at the best
@@ -1055,12 +1062,12 @@ NOTQUITEDONE:
 	} else {
 	    finished = true;
 	}
-#else
+#else /* FINISH_HILLCLIMB */
 	finished = true;
-#endif
+#endif /* FINISH_HILLCLIMB */
 	forcerevert = true;
     }
-#endif
+#endif /* EPSILON_TERMINATE */
     
     /*
      * RANDOM_ASSIGNMENT is not really very random, but we stop after the first
