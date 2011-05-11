@@ -957,7 +957,7 @@ int main(int argc,char **argv) {
       break;
 #ifdef EPSILON_TERMINATE
     case 'G':
-      if (sscanf(optarg,"%lf",&temperature_guard) != 1) {
+      if (sscanf(optarg,"%f",&temperature_guard) != 1) {
 	print_help();
       }
       break;
