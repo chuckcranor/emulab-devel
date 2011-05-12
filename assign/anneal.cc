@@ -1039,9 +1039,11 @@ NOTQUITEDONE:
 	   deltaavg, deltatemp, epsilon,(temp / initialavg) * (deltaavg/ deltatemp));
     );
     // We have a mininum number of timestepss, and *might* have a minimum
-    // temperature that we must reach before we will stop
+    // temperature that we must reach before we will stop. Note that the
+    // temperature_guard clause is formulated to give the correct result
+    // even when temp goes to nan
     if ((tsteps >= mintsteps) &&
-            ((temperature_guard < 0) || (temp < temperature_guard)) &&
+            ((temperature_guard < 0) || !(temp > temperature_guard)) &&
     /*
      * ALLOW_NEGATIVE_DELTA controls whether we're willing to stop if the
      * derivative gets small and negative, not just small and positive.
