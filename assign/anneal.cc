@@ -16,6 +16,7 @@ static const char rcsid[] = "$Id: anneal.cc,v 1.46 2009-05-20 18:06:07 tarunp Ex
 #include "neighborhood.h"
 
 #include <vector>
+#include <cstdio>
 
 // From assign.cc
 // XXX: Should be passed in!
