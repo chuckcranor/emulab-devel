@@ -1747,6 +1747,10 @@ int find_interswitch_path(pvertex src_pv,pvertex dest_pv,
       // Did we find a path to the end that works?
       bool foundpath = false;
 
+      // Used to debug a memory leak
+      int news = 0;
+      int deletes = 0;
+
       // Set of switches we've visted so far
       svertex_set marked;
 
@@ -1757,6 +1761,7 @@ int find_interswitch_path(pvertex src_pv,pvertex dest_pv,
       // how we got here are empty
       plan.push(new move(src_sv,new vertex_path(new pedge_path(),
                       new pvertex_list)));
+      news += 4;
       marked.insert(src_sv);
 
       // Keep going until we've exhausted every switch we can reach
@@ -1821,6 +1826,7 @@ int find_interswitch_path(pvertex src_pv,pvertex dest_pv,
               pedge_path *new_path = new pedge_path(*(old_path->first));
               pvertex_list *new_switchlist =
                   new pvertex_list(*(old_path->second));
+              news += 2;
               
               // Add these onto the path
               new_path->push_back(pe);
@@ -1835,12 +1841,20 @@ int find_interswitch_path(pvertex src_pv,pvertex dest_pv,
                   // This should do a shallow copy (which is what we want)
                   out_path = *new_path;
                   out_switches = *new_switchlist;
+
+                  // Free up the local copy of the path; the copy that we
+                  // just made will remain
+                  delete new_path;
+                  delete new_switchlist;
+                  deletes += 2;
+
                   foundpath = true;
                   goto cleanup;
               } else {
                   // Not the droids we're looking for, put it on the queue
                   plan.push(new move(new_sv,
                               new vertex_path(new_path,new_switchlist)));
+                  news += 2;
                   marked.insert(new_sv);
               }
 
@@ -1855,6 +1869,7 @@ int find_interswitch_path(pvertex src_pv,pvertex dest_pv,
           delete(current->second->second);
           delete(current->second);
           delete(current);
+          deletes += 4;
       }
       
       // We didn't find the destination switch
@@ -1873,8 +1888,15 @@ int find_interswitch_path(pvertex src_pv,pvertex dest_pv,
           delete(ppath);
           delete(path);
           delete(current);
+          deletes += 4;
 
       }
+      
+      if (news != deletes) {
+          cerr << "Allocated " << news << " new structures, deleted " <<
+              deletes << endl;
+      }
+      //assert(news == deletes);
 
       // Note that if foundpath is true, we already copied the output parmeters
       // over.
