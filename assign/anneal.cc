@@ -46,6 +46,7 @@ name_name_map node_hints;
 
 #ifdef EPSILON_TERMINATE
 float temperature_guard = -1;
+bool finish_hillclimb = false;
 #endif
 
 // From assign.cc
@@ -1055,19 +1056,29 @@ NOTQUITEDONE:
 #else /* ALLOW_NEGATIVE_DELTA */
 	(deltaavg > 0) && ((temp / initialavg) * (deltaavg/ deltatemp) < epsilon)) {
 #endif /* ALLOW_NEGATIVE_DELTA */
-#ifdef FINISH_HILLCLIMB
-        if (!finishedonce && ((best_violated <= violated) && (best_score < prev_score))) {
-	    // We don't actually stop, we just go do a hill-climb (basically) at the best
-	    // one we previously found
-	    finishedonce = true;
-	    printf("Epsilon Terminated, but going back to a better solution\n");
-	} else {
-	    finished = true;
-	}
-#else /* FINISH_HILLCLIMB */
-	finished = true;
-#endif /* FINISH_HILLCLIMB */
+        
+        /*
+         * Normally, we are done here.
+         */
 	forcerevert = true;
+        if (!finish_hillclimb) {
+            finished = true;
+        } else {
+            /*
+             * This option goes back to the best result we ever found, and
+             * goes one more round - the idea is to finish up with a very
+             * low temperature, at which will will probably take only
+             * better solutions (hillclimbing)
+             */
+            if (!finishedonce &&
+                 ((best_violated <= violated) && (best_score < prev_score))) {
+                finishedonce = true;
+                cout << "Epsilon Terminated, but going back to a better solution"
+                    << endl;
+            } else {
+                finished = true;
+            }
+        }
     }
 #endif /* EPSILON_TERMINATE */
     
@@ -1158,6 +1169,9 @@ NOTQUITEDONE:
 	if (vnode->assigned) {
 	  RDEBUG(cout << "removing: revert " << vnode->name << endl;)
 	  remove_node(*vvertex_it);
+          // Add to the list of unassigned nodes in case we're going to
+          // keep annealing
+          unassigned_nodes.push_front(*vvertex_it);
 	} else {
 	  RDEBUG(cout << "not removing: revert " << vnode->name << endl;)
 	}
@@ -1194,6 +1208,8 @@ NOTQUITEDONE:
 	    vnode->type = best_solution.get_vtype_assignment(*vvertex_it);
 	  }
 	  assert(!add_node(*vvertex_it,best_solution.get_assignment(*vvertex_it),true,false,true));
+          // Remove from list of unassigned nodes
+          unassigned_nodes.remove(*vvertex_it);
 	}
       }
       

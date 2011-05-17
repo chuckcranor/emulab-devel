@@ -477,6 +477,7 @@ void print_help() {
   cout << "  -S          - Do a full search of switch graph (slow)" << endl;
 #ifdef EPSILON_TERMINATE 
   cout << "  -G <float>  - Temperature guard - don't stop annealing until reaching this value" << endl;
+  cout << "  -C          - Finish with a round of hill climbing" << endl;
 #endif
   cout << "  cparams     - You probably don't want to touch these!" << endl;
   cout << "                If you must, see config.h in the source for a list"
@@ -881,9 +882,9 @@ int main(int argc,char **argv) {
 	char* ptopFileFormat;
 	char* vtopFileFormat;
 	char* delims = "/";
-	char* flags = "s:v:l:t:rpPTdH:oguc:nx:y:W:FDSf:G:";
+	char* flags = "s:v:l:t:rpPTdH:oguc:nx:y:W:FDSf:G:C";
 #else
-	char* flags = "s:v:l:t:rpPTdH:oguc:nx:y:FDSG:";
+	char* flags = "s:v:l:t:rpPTdH:oguc:nx:y:FDSG:C";
 #endif	
 	
   while ((ch = getopt(argc,argv,flags)) != -1) {
@@ -960,6 +961,9 @@ int main(int argc,char **argv) {
       if (sscanf(optarg,"%f",&temperature_guard) != 1) {
 	print_help();
       }
+      break;
+    case 'C':
+      finish_hillclimb = true;
       break;
 #endif
     case 'x':

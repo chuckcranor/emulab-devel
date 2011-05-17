@@ -67,6 +67,7 @@ extern float temp_stop;
 extern int CYCLES;
 #ifdef EPSILON_TERMINATE
 extern float temperature_guard;
+extern bool finish_hillclimb;
 #endif
 
 // Initial acceptance ratio for melting
