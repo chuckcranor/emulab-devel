@@ -437,9 +437,7 @@ void prune_unusable_pclasses() {
 void print_help() {
   cout << "assign [options] ptopfile topfile [cparams]" << endl;
   cout << "Options: " << endl;
-#ifdef TIME_TERMINATE
   cout << "  -l <time>   - Limit runtime." << endl;
-#endif
   cout << "  -s <seed>   - Set the seed." << endl;
 #ifdef GRAPHVIZ_SUPPORT
   cout << "  -v <viz>    - Produce graphviz files with given prefix." <<
@@ -890,13 +888,11 @@ int main(int argc,char **argv) {
       viz_prefix = optarg;
       break;
 #endif
-#ifdef TIME_TERMINATE
     case 'l':
       if (sscanf(optarg,"%lf",&timelimit) != 1) {
 	print_help();
       }
       break;
-#endif
     case 'a':
       if (sscanf(optarg,"%lf",&timetarget) != 1) {
 	print_help();

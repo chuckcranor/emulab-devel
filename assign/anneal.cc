@@ -884,22 +884,20 @@ void anneal(bool scoring_selftest, bool check_fixed_nodes,
       }
       
       /*
-       * With TIME_TERMINATE, we just give up after our time limit
+       * With timelimit set, we just give up after our time limit
        */
-#ifdef TIME_TERMINATE
-      if (timelimit && ((used_time() - timestart) > timelimit)) {
+      if ((timelimit != 0.0) && ((used_time() - timestart) > timelimit)) {
 	printf("Reached end of run time, finishing\n");
 	forcerevert = true;
 	finished = true;
 	goto NOTQUITEDONE;
       }
-#endif
 
     } /* End of inner annealing loop */
      
-#ifdef TIME_TERMINATE
+
 NOTQUITEDONE:
-#endif
+
     RDEBUG(printf("avgscore: %f = %f / %i\n",avgscore / (accepts +1),avgscore,accepts+1);)
 	
     /*

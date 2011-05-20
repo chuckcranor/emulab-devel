@@ -81,8 +81,15 @@ extern int min_neighborhood_size;
 
 // Try to target a specific runtime
 extern double timetarget;
+// Stop when we reach a specific time, no matter what
+extern double timelimit;
 
 extern float temp_rate;
+
+/*
+ * From assign.cc - time we started annealing
+ */
+extern double timestart;
 
 /*
  * Globals - XXX made non-global!
