@@ -427,7 +427,7 @@ bool populate_nodes(DOMElement *root,
   int nodeCount = nodes->getLength();
   XMLDEBUG("Found " << nodeCount << " nodes in rspec" << endl);
   
-  for (unsigned i = 0; i < nodeCount; i++)  {
+  for (int i = 0; i < nodeCount; i++)  {
     DOMNode *node = nodes->item(i);
     // This should not be able to fail, because all elements in
     // this list came from the getElementsByTagName() call

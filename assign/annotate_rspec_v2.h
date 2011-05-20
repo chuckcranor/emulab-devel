@@ -115,7 +115,7 @@ class annotate_rspec_v2 : public annotate_rspec
     getIfaceOnNode(const xercesc::DOMElement* plink, std::string physNodeId);
 
   // Retuns the component id of the nth interface of a link
-  std::string getNthInterface (const xercesc::DOMElement* link, int n);
+  std::string getNthInterface (const xercesc::DOMElement* link, unsigned int n);
 
   // Annotates the end point of a link
   bool annotate_endpoint(xercesc::DOMElement* iface, std::string virtId);

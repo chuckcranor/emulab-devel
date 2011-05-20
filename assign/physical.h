@@ -112,7 +112,8 @@ extern tb_sgraph_edge_pmap sedge_pmap;
  */
 class tb_ptype {
     public:
-	tb_ptype(fstring _name) : users(0), max_users(0), my_name(_name), slots(0)
+	tb_ptype(fstring _name) : my_name(_name), users(0), max_users(0),
+                                  slots(0)
 	    { ; }
 	inline fstring name() const { return my_name; };
 	inline int pnode_slots() const { return slots; };
@@ -369,21 +370,23 @@ public:
 
   tb_plink(fstring _name, plinkType _is_type, fstring _type, fstring _srcnode, fstring _srcmac,
          fstring _srciface, fstring _dstnode,  fstring _dstmac, fstring _dstiface)
-    : name(_name), srcmac(_srcmac), dstmac(_dstmac), is_type(_is_type),
-      srciface(_srciface), dstiface(_dstiface),
+    : name(_name), is_type(_is_type), 
       srcnode(_srcnode), dstnode(_dstnode),
+      srcmac(_srcmac), dstmac(_dstmac), 
+			srciface(_srciface), dstiface(_dstiface),
       delay_info(), bw_used(0), emulated(0), nonemulated(0),
       penalty(0.0), fixends(false), current_endpoints(), current_count(0),
-      never_multiplex(false), vedge_counts() {
-	  types.insert(_type);
+      vedge_counts(), never_multiplex(false) {
+	  		types.insert(_type);
       }
 
   fstring name;			// the name
+  plinkType is_type;		// inter-switch type of the link
+		
   fstring srcnode,dstnode;      // source and destination node names
   fstring srcmac,dstmac;	// source and destination MAC addresses.
   fstring srciface, dstiface;	// source and destination interface names
 
-  plinkType is_type;		// inter-switch type of the link
   type_set types;		// type (ie. ethernet) of the link
   tb_delay_info delay_info;	// the delay characteristics of this link
   int bw_used;			// how much is used

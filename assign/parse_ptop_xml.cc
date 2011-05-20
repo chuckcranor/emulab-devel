@@ -159,8 +159,7 @@ bool populate_nodes(DOMElement *root, tb_pgraph &pg, tb_sgraph &sg) {
     int nodeCount = nodes->getLength();
     XMLDEBUG("Found " << nodeCount << " nodes in ptop" << endl);
 
-	int counter = 0;
-    for (size_t i = 0; i < nodeCount; i++) 
+    for (int i = 0; i < nodeCount; i++) 
 	{
 		DOMNode *node = nodes->item(i);
 		// This should not be able to fail, due to the fact that all elements in
@@ -185,7 +184,7 @@ bool populate_nodes(DOMElement *root, tb_pgraph &pg, tb_sgraph &sg) {
 		* Add on types
 		*/
 		DOMNodeList *types = elt->getElementsByTagName(XStr("node_type").x());
-		for (int i = 0; i < types->getLength(); i++) 
+		for (size_t i = 0; i < types->getLength(); i++) 
 		{
 			
 			DOMElement *typetag = dynamic_cast<DOMElement*>(types->item(i));
@@ -250,7 +249,6 @@ bool populate_nodes(DOMElement *root, tb_pgraph &pg, tb_sgraph &sg) {
 		/*
 		* Parse out the features
 		*/
-		clock_t start = clock ();
 		parse_fds_xml(elt,&(p->features));
 		
 		/*
@@ -323,7 +321,7 @@ bool populate_links(DOMElement *root, tb_pgraph &pg, tb_sgraph &sg) {
     DOMNodeList *links = root->getElementsByTagName(XStr("link").x());
     int linkCount = links->getLength();
     XMLDEBUG("Found " << links->getLength()  << " links in ptop" << endl);
-    for (size_t i = 0; i < linkCount; i++) {
+    for (int i = 0; i < linkCount; i++) {
         DOMNode *link = links->item(i);
         DOMElement *elt = dynamic_cast<DOMElement*>(link);
         
@@ -435,7 +433,7 @@ bool populate_links(DOMElement *root, tb_pgraph &pg, tb_sgraph &sg) {
         /*
         * Add in the rest of the link types we found
         */
-        for (int i = 1; i < types->getLength(); i++) 
+        for (size_t i = 1; i < types->getLength(); i++) 
 		{
             DOMElement *link_type = dynamic_cast<DOMElement*>(types->item(i));
 			const char *str_type_name = XStr(link_type->getAttribute(XStr("type_name").x())).c();

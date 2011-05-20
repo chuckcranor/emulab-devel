@@ -116,7 +116,7 @@ string rspec_parser_helper :: convertType (string type)
 {
   string hwType = type;
   string slType = "raw-pc";
-  int pos  = type.find("vm");
+  size_t pos  = type.find("vm");
   if (pos != string::npos) {
     slType = "openvz";
     hwType = type.substr(0, pos) + type.substr(pos+2, type.length() - (pos+2));
@@ -130,7 +130,7 @@ rspec_parser_helper::getChildrenByName (const DOMElement* tag,
 {
   vector<DOMElement*> rv;
   DOMNodeList* children = tag->getElementsByTagName(XStr(name).x());
-  for (int i = 0; i < children->getLength(); i++) {
+  for (size_t i = 0; i < children->getLength(); i++) {
     DOMNode* child = children->item(i);
     if (dynamic_cast<DOMElement*>(child->getParentNode()) == tag) {
       rv.push_back(dynamic_cast<DOMElement*>(child));

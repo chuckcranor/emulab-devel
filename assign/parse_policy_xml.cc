@@ -110,7 +110,7 @@ bool populate_type_limits(DOMElement *root)
 	DOMNodeList *type_limits = root->getElementsByTagName(XStr("type_limit").x());
 	int typelimitCount = type_limits->getLength();
 	
-	for (size_t i = 0; i < typelimitCount; i++) 
+	for (int i = 0; i < typelimitCount; i++) 
 	{
 		DOMNode *type_limit = type_limits->item(i);
 		// This should not be able to fail, due to the fact that all elements in
@@ -141,7 +141,7 @@ bool populate_desire_limits(DOMElement *root)
 	DOMNodeList *desire_limits = root->getElementsByTagName(XStr("desire_policy").x());
 	int desirelimitCount = desire_limits->getLength();
 	
-	for (size_t i = 0; i < desirelimitCount; i++) 
+	for (int i = 0; i < desirelimitCount; i++) 
 	{
 		DOMNode *desire = desire_limits->item(i);
 		DOMElement *elt = dynamic_cast<DOMElement*>(desire);

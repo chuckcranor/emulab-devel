@@ -82,7 +82,8 @@ xercesc::DOMElement* getElementByTagName (const xercesc::DOMElement* root,
 /* Returns the nth interface in a link 
   (it can be used in a node only if n is set to 0 
 */
-xercesc::DOMElement* getNthInterface (const xercesc::DOMElement* root, int n);
+xercesc::DOMElement* getNthInterface (const xercesc::DOMElement* root,
+	unsigned int n);
 
 /*
  * Convenience function - return true if the given element has a tag with the

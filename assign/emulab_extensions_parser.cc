@@ -88,6 +88,8 @@ struct hardness emulab_extensions_parser::readHardness (const DOMElement* tag)
 
   if (strWeight == "hard") {
     hardnessObject.type = HARD_VCLASS;
+    // For backwards compatability
+    hardnessObject.weight = 1;
   }
   else {
     hardnessObject.type = SOFT_VCLASS;

@@ -664,7 +664,7 @@ void resolve_link(vvertex vv, pvertex pv, tb_vnode *vnode, tb_pnode *pnode,
           cerr << "Doing deterministic link resolution" << endl;
           cerr << "total_weight: " << total_weight << ", resolution_index: "
             << resolution_index << endl;
-          int bestindex;
+          int bestindex = -1;
           int bestviolated = 10000;
           double bestscore=10000.0;
           int i;
@@ -679,6 +679,7 @@ void resolve_link(vvertex vv, pvertex pv, tb_vnode *vnode, tb_pnode *pnode,
             }
             unscore_link_info(edge,pnode,dest_pnode,vnode,dest_vnode);
           }
+          assert(bestindex != -1);
           index = bestindex;
         }
 #ifdef PENALIZE_UNUSED_INTERFACES

@@ -99,18 +99,16 @@ public:
 
 class tb_vnode {
 public:
-//  tb_vnode(): vclass(NULL), fixed(false), assigned(false), subnode_of(NULL),
-//      subnode_of_name(""), typecount(1) {;}
 
     tb_vnode(fstring _name, fstring _type, int _typecount):
 	name(_name), type(_type), typecount(_typecount),
-	desires(), vclass(NULL),
+	    vclass(NULL), desires(),
         fixed(false), assigned(false), assignment(),
-	disallow_trivial_mix(false), nontrivial_links(0), trivial_links(0),
-	subnode_of(NULL), subnode_of_name(""), subnodes(),
 #ifdef PER_VNODE_TT
-	num_links(0), total_bandwidth(0),
+    	num_links(0), total_bandwidth(0),
 #endif
+        disallow_trivial_mix(false), nontrivial_links(0), trivial_links(0),
+        subnode_of(NULL), subnode_of_name(""), subnodes(),
         link_counts()
     {
 	;
@@ -129,13 +127,15 @@ public:
     return o;
   }
 
-  // contains weight of each desire
-  node_desire_set desires;
+  fstring name;			// string name of the node
 
   fstring type;			// the current type of the node
   int typecount;		// How many slots of the type this vnode takes up
   tb_vclass *vclass;		// the virtual class of the node, if any
-  fstring name;			// string name of the node
+
+  // contains weight of each desire
+  node_desire_set desires;
+ 
   bool fixed;			// is this node fixed
   bool assigned;		// is this node assigned?
   pvertex assignment;		// the physical vertex assigned to
@@ -155,9 +155,9 @@ public:
   // own parent (if any), but any children we have, since our being assigned
   // will mean that we have to check them as well
   tb_vnode *subnode_of;
+  fstring subnode_of_name;
   typedef list<tb_vnode*> subnode_list;
   subnode_list subnodes;
-  fstring subnode_of_name;
 
   // Counts how many links of each type this virtual node has
   typedef hash_map<fstring,int> link_counts_map;

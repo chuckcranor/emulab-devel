@@ -139,7 +139,7 @@ bool populate_nodes (DOMElement *root, tb_vgraph &vg) {
     int nodeCount = nodes->getLength();
     XMLDEBUG("Found " << nodeCount << " nodes in vtop" << endl);
 
-    for (size_t i = 0; i < nodeCount; i++) 
+    for (int i = 0; i < nodeCount; i++) 
 	{
 		DOMNode *node = nodes->item(i);
 		// This should not be able to fail, due to the fact that all elements in
@@ -173,14 +173,11 @@ bool populate_nodes (DOMElement *root, tb_vgraph &vg) {
 			is_unlimited = true;
 		else
 			node_type_slots = type_slots.i();
-
-		bool is_static = node_type->hasAttribute(XStr("static").x());
-				
+			
 		XStr *subnode_of_name = NULL;
 		if (hasChildTag (elt, "subnode_of"))
 			subnode_of_name = new XStr(getChildValue (elt, "subnode_of"));
 
-		bool is_unique = hasChildTag (elt, "unique");
 		bool is_disallow_trivial_mix = hasChildTag (elt, "disallow_trivial_mix");
 		
 		tb_vclass *vclass;
@@ -241,7 +238,7 @@ bool populate_links (DOMElement *root, tb_vgraph &vg) {
 	int linkCount = links->getLength();
 	XMLDEBUG("Found " << links->getLength()  << " links in vtop" << endl);
 	
-	for (size_t i = 0; i < linkCount; i++) {
+	for (int i = 0; i < linkCount; i++) {
 		DOMNode *link = links->item(i);
 		DOMElement *elt = dynamic_cast<DOMElement*>(link);
         
@@ -391,7 +388,7 @@ bool populate_vclasses (DOMElement *root, tb_vgraph &vg)
 	int vclassCount = vclass_elements->getLength();
 	XMLDEBUG("Found " << vclassCount << " vclasses in vtop" << endl);
 
-	for (size_t i = 0; i < vclassCount; i++) 
+	for (int i = 0; i < vclassCount; i++) 
 	{
 		DOMNode *vclass = vclass_elements->item(i);
 		
@@ -426,7 +423,7 @@ bool populate_vclasses (DOMElement *root, tb_vgraph &vg)
 		
 		/* Get all the physical types for the vclass */
 		DOMNodeList *phys_types = elt->getElementsByTagName(XStr("physical_type").x());
-		for (int j = 0; j < phys_types->getLength(); j++) 
+		for (size_t j = 0; j < phys_types->getLength(); j++) 
 		{
 			DOMElement* phys_type = dynamic_cast<DOMElement*>(phys_types -> item(j));
 			XStr phys_type_name (phys_type -> getFirstChild() -> getNodeValue());

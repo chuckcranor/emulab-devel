@@ -214,7 +214,7 @@ bool populate_nodes(DOMElement *root,
   XMLDEBUG("Found " << nodeCount << " nodes in rspec" << endl);
   
   int availableCount = 0;
-  for (size_t i = 0; i < nodeCount; i++) {
+  for (int i = 0; i < nodeCount; i++) {
     DOMNode *node = nodes->item(i);
     // This should not be able to fail, because all elements in
     // this list came from the getElementsByTagName() call
@@ -440,7 +440,7 @@ bool populate_links(DOMElement *root, tb_pgraph &pg, tb_sgraph &sg,
   int linkCount = links->getLength();
   XMLDEBUG("Found " << links->getLength()  << " links in rspec" << endl);
   
-  for (size_t i = 0; i < linkCount; i++) {
+  for (int i = 0; i < linkCount; i++) {
     
     DOMNode *link = links->item(i);
     DOMElement *elt = dynamic_cast<DOMElement*>(link);

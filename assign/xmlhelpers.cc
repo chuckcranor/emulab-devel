@@ -112,7 +112,7 @@ DOMElement* getElementByTagName (const DOMElement* root, const char* tag)
 }
 
 /* Returns the nth interface in a link (can be used for a node as well only if n is 0 */
-DOMElement* getNthInterface (const DOMElement* root, int n)
+DOMElement* getNthInterface (const DOMElement* root, unsigned int n)
 {
 	DOMNodeList* interfaces = root->getElementsByTagName(XStr("interface").x());
 	if (interfaces->getLength() <= n) {
@@ -130,7 +130,7 @@ bool hasChildTag(const DOMElement *tag, const char *name) {
 
 int parse_fds_xml(const DOMElement *tag, node_fd_set *fd_set) {
     DOMNodeList *fds = tag->getElementsByTagName(XStr("fd").x());
-    for (int i = 0; i < fds->getLength(); i++) 
+    for (size_t i = 0; i < fds->getLength(); i++) 
 	{
 		DOMElement *elt = dynamic_cast<DOMElement*>(fds->item(i));
 	
@@ -181,7 +181,7 @@ node_interface_pair parse_interface_xml(const DOMElement *tag) {
 int parse_fds_vnode_xml (const DOMElement *tag, node_fd_set *fd_set)
 {
 	DOMNodeList *fds = tag->getElementsByTagName(XStr("fd").x());
-    for (int i = 0; i < fds->getLength(); i++) 
+    for (size_t i = 0; i < fds->getLength(); i++) 
     {
 		DOMElement *elt = dynamic_cast<DOMElement*>(fds->item(i));
 		XStr fd_name (elt->getAttribute(XStr("fd_name").x()));

@@ -50,7 +50,8 @@ int split_two(string line,char split_char,string &a,string &b,string default_b)
   size_t space = line.find(split_char);
   if (space != string::npos) {
     a = line.substr(0,space).c_str();
-    b = line.substr(++space,line.length() - space).c_str();
+    space++;
+    b = line.substr(space,line.length() - space).c_str();
     return 0;
   } else {
     a = line.c_str();

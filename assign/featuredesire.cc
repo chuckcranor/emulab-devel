@@ -28,11 +28,11 @@ int tb_featuredesire::highest_id(0);
  * Constructor
  */
 tb_featuredesire::tb_featuredesire(fstring _my_name) : my_name(_my_name),
-				    global(false), local(false),
-				    l_additive(false), g_one_is_okay(false),
+				    global(false), g_one_is_okay(false),
 				    g_more_than_one(false),
-				    in_use_globally(0), desire_policy(),
-				    feature_policy(), desire_users(0),
+				    local(false), l_additive(false),
+				    in_use_globally(0), feature_policy(),
+				    desire_policy(), desire_users(0),
 				    desire_total_weight(0.0f) { 
   
     // Pick a unique numeric identifier for this feature/desire
@@ -87,9 +87,10 @@ tb_featuredesire::tb_featuredesire(fstring _my_name) : my_name(_my_name),
  */
 tb_featuredesire::tb_featuredesire(fstring _my_name,
 				   featuredesire::fd_type _fd_type) : 
-	global(false), local(false), l_additive(false), g_one_is_okay(false),
-	g_more_than_one(false), my_name(_my_name), in_use_globally(0),
-	desire_policy(), feature_policy(), desire_users(0),
+	my_name(_my_name),
+	global(false), g_one_is_okay(false), g_more_than_one(false),
+	local(false), l_additive(false), in_use_globally(0),
+	feature_policy(), desire_policy(), desire_users(0),
 	desire_total_weight(0.0f) { 
     // Pick a unique numeric identifier for this feature/desire
     id = highest_id++;
@@ -107,7 +108,7 @@ tb_featuredesire::tb_featuredesire(fstring _my_name,
 	    break;
 	case featuredesire::FD_TYPE_GLOBAL_MORE_THAN_ONE:
 	    global = true;
-	    g_more_than_one;
+	    g_more_than_one = true;
     }
 	
 	

@@ -134,12 +134,15 @@ void anneal(bool scoring_selftest, bool check_fixed_nodes,
   int nnodes = num_vertices(VG);
   //int npnodes = num_vertices(PG);
   int npclasses = pclasses.size();
-  
-  float cycles = CYCLES*(float)(nnodes + num_edges(VG) + PHYSICAL(npnodes));
-
-  int mintrans = (int)cycles;
+ 
   int trans;
+
+#ifndef NEIGHBOR_LENGTH
+  float cycles = CYCLES*(float)(nnodes + num_edges(VG) + PHYSICAL(npnodes));
   int naccepts = 20*(nnodes + PHYSICAL(npnodes));
+  int mintrans = (int)cycles;
+#endif
+
   pvertex oldpos;
   bool oldassigned;
   int num_fixed=0;
@@ -645,8 +648,8 @@ void anneal(bool scoring_selftest, bool check_fixed_nodes,
 	  // this node, then removing it, is the same one we had before
 	  double oldscore = get_score();
 	  int oldviolated = violated;
-	  double tempscore;
-	  int tempviolated;
+	  double tempscore = -1.0;
+	  int tempviolated = -1;
 	  if (!add_node(vv,newpos,false,false,false)) {
 	    tempscore = get_score();
 	    tempviolated = violated;
@@ -892,8 +895,9 @@ void anneal(bool scoring_selftest, bool check_fixed_nodes,
 
     } /* End of inner annealing loop */
      
-
+#ifdef TIME_TERMINATE
 NOTQUITEDONE:
+#endif
     RDEBUG(printf("avgscore: %f = %f / %i\n",avgscore / (accepts +1),avgscore,accepts+1);)
 	
     /*
@@ -968,10 +972,10 @@ NOTQUITEDONE:
 #ifdef EPSILON_TERMINATE
 #ifdef CHILL
     RDEBUG(printf("temp_end: %f %f %f\n",temp,temp * avgscore / initialavg,stddev);)
-#else
+#else /* CHILL */
     RDEBUG(printf("temp_end: %f %f\n",temp,temp * avgscore / initialavg);)
-#endif
-#else
+#endif /* CHILL */
+#else /* EPSILON_TERMINATE */
     printf("temp_end: %f ",temp);
     if (trans >= mintrans) {
 	if (accepts >= naccepts) {
@@ -983,8 +987,8 @@ NOTQUITEDONE:
 	printf("accepts %f",trans*1.0/mintrans);
     }
     printf("\n");
-#endif
-#endif
+#endif /* EPSILON_TERMINATE */
+#endif /* DEBUG_TSTEP */
     
     RDEBUG(
     printf("temp_end: temp: %f ratio: %f stddev: %f\n",temp,temp * avgscore / initialavg,stddev);

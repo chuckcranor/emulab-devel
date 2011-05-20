@@ -119,7 +119,7 @@ DOMElement* annotate_vtop::create_component_hop (const DOMElement* plink, DOMEle
 	DOMElement* component_hop = vtop_xml_document->createElement(XStr("component_hop").x());
 	component_hop->setAttribute (XStr("assigned_to").x(), plink->getAttribute(XStr("name").x()));
 
-	DOMElement* component_hop_interface = vtop_xml_document->createElement(XStr("interface").x());
+	vtop_xml_document->createElement(XStr("interface").x());
 		
 	// We assume the first interface is the source and the second is the destination
 	DOMElement* plink_src_iface = getElementByTagName(plink, "source_interface");

@@ -155,10 +155,6 @@ annotate_rspec_v2::annotate_element (const char* v_name, const char* p_name)
 void annotate_rspec_v2::annotate_element (const char* v_name, 
                                           list<const char*>* unordered)
 {
-  // We can't locate interfaces on the switches, so we don't add those 
-  // to the annotation. The warning is only given the one time
-  static bool gave_apology = false;
-
   // Re-order links to ensure that they are all head-to-tail.
   list<const char*>* links;
 #ifdef ANNOTATE_ARBITRARY_LINK_ORDER
@@ -648,10 +644,11 @@ annotate_rspec_v2::getIfaceOnNode(const DOMElement* plink, string nodeId)
 }
 
 // Returns the component id for the nth interface on a link
-string annotate_rspec_v2::getNthInterface (const DOMElement* link, int number)
+string annotate_rspec_v2::getNthInterface (const DOMElement* link,
+	unsigned int number)
 {
   DOMNodeList* ifaces = link->getElementsByTagName(XStr("interface_ref").x());
-  if ((int)ifaces->getLength() < number) {
+  if (ifaces->getLength() < number) {
     cerr << "*** Link " 
          << XStr(link->getAttribute(XStr("component_id").x())).c()
          << " has only " << ifaces->getLength() << " interfaces. "
