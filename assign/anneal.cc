@@ -380,6 +380,8 @@ void anneal(bool scoring_selftest, bool check_fixed_nodes,
   int tsteps;
   int mintsteps;
 
+  double meltstart;
+
 #define MAX_AVG_HIST 16
   double avghist[MAX_AVG_HIST];
   int hstart, nhist;
@@ -417,9 +419,9 @@ void anneal(bool scoring_selftest, bool check_fixed_nodes,
       temp = *initial_temperature;
       cout << "Starting with initial temperature " << temp << endl;
   }
-#ifdef TIME_TARGET
-  meltstart = used_time();
-#endif
+  if (timetarget != 0.0) {
+    meltstart = used_time();
+  }
 #else
   melting = false;
 #endif
@@ -923,22 +925,20 @@ NOTQUITEDONE:
 	forcerevert = true;
       }
       /*
-       * With TIME_TARGET, we look at how long melting took, then use that to
+       * With timetarget, we look at how long melting took, then use that to
        * estimate how many temperature steps it will take to hit our time
        * target. We adjust our cooling schedule accordingly.
        */
-#ifdef TIME_TARGET
-      if (timetarget) {
+      if (timetarget != 0.0) {
 	double melttime = used_time() - meltstart;
 	double timeleft = timetarget - melttime;
 	double stepsleft = timeleft / melttime;
 	cout << "Melting took " << melttime << " seconds, will try for "
 	  << stepsleft << " temperature steps" << endl;
 	temp_rate = pow(temp_stop/temp,1/stepsleft);
-	cout << "Timelimit: " << timelimit << " Timeleft: " << timeleft
+	cout << "Timelimit: " << timetarget << " Timeleft: " << timeleft
 	  << " temp_rate: " << temp_rate << endl;
       }
-#endif
     } else {
       /*
        * The CHILL cooling schedule is the standard one from the Simulated

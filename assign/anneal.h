@@ -79,6 +79,9 @@ extern float delta;
 extern int melt_trans;
 extern int min_neighborhood_size;
 
+// Try to target a specific runtime
+extern double timetarget;
+
 extern float temp_rate;
 
 /*
