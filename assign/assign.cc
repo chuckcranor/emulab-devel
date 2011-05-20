@@ -1094,7 +1094,7 @@ int main(int argc,char **argv) {
   action2.sa_handler = status_report;
   sigemptyset(&action2.sa_mask);
   action2.sa_flags = 0;
-#ifdef __FreeBSD__
+#if __FreeBSD__ || __APPLE__
   sigaction(SIGINFO,&action2,NULL);
 #endif 
   
