@@ -469,11 +469,10 @@ void print_help() {
   cout << "  -F          - Apply additional checking to fixed nodes" << endl;
   cout << "  -D          - Dump configuration options" << endl;
   cout << "  -S          - Do a full search of switch graph (slow)" << endl;
-#ifdef EPSILON_TERMINATE 
   cout << "  -G <float>  - Temperature guard - don't stop annealing until reaching this value" << endl;
   cout << "  -C          - Finish with a round of hill climbing" << endl;
-#endif
   cout << "  -a <float>  - Attempt to terminate in <float> seconds (not ver accruate)" << endl;
+  cout << "  -E          - Turn off the 'epsilon termination' condition" << endl;
   cout << "  cparams     - You probably don't want to touch these!" << endl;
   cout << "                If you must, see config.h in the source for a list"
        << endl;
@@ -871,9 +870,9 @@ int main(int argc,char **argv) {
 	char* ptopFileFormat;
 	char* vtopFileFormat;
 	const char* delims = "/";
-	const char* flags = "s:v:l:t:rpPTdH:oguc:nx:y:W:FDSf:G:Ca:";
+	const char* flags = "s:v:l:t:rpPTdH:oguc:nx:y:W:FDSf:G:Ca:E";
 #else
-	const char* flags = "s:v:l:t:rpPTdH:oguc:nx:y:FDSG:Ca:";
+	const char* flags = "s:v:l:t:rpPTdH:oguc:nx:y:FDSG:Ca:E";
 #endif	
 	
   while ((ch = getopt(argc,argv,flags)) != -1) {
@@ -939,7 +938,6 @@ int main(int argc,char **argv) {
     case 'S':
       full_switch_graph_search = true;
       break;
-#ifdef EPSILON_TERMINATE
     case 'G':
       if (sscanf(optarg,"%f",&temperature_guard) != 1) {
 	print_help();
@@ -948,7 +946,9 @@ int main(int argc,char **argv) {
     case 'C':
       finish_hillclimb = true;
       break;
-#endif
+    case 'E':
+      epsilon_terminate = false;
+      break;
     case 'x':
 #ifdef WITH_XML
       ptop_xml_input = false;

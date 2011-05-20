@@ -44,10 +44,10 @@ name_name_map fixed_nodes;
 // allowed to move these.
 name_name_map node_hints;
 
-#ifdef EPSILON_TERMINATE
+// See anneal.h for descriptions
+bool epsilon_terminate = true;
 float temperature_guard = -1;
 bool finish_hillclimb = false;
-#endif
 
 // From assign.cc
 #ifdef GNUPLOT_OUTPUT
@@ -110,7 +110,17 @@ void anneal(bool scoring_selftest, bool check_fixed_nodes,
         double scale_neighborhood, double *initial_temperature,
         double use_connected_pnode_find)
 {
+     
   cout << "Annealing." << endl;
+
+  cout << "Using annealing options:";
+  if (epsilon_terminate) {
+    cout << " epsilon_terminate";  
+  }
+  if (finish_hillclimb) {
+    cout << " finish_hillclimb";  
+  }
+  cout << endl;
 
   /*
    * The score and number of violations at the start of the inner annealing
@@ -436,14 +446,10 @@ void anneal(bool scoring_selftest, bool check_fixed_nodes,
    * The main annealing loop!
    * Each iteration is a temperature step - how we get out of the loop depends
    * on what the termination condition is. Normally, we have a target temperature
-   * at which we stop, but with EPSILON_TERMINATE, we watch the derivative of the
+   * at which we stop, but with epsilon_terminate, we watch the derivative of the
    * average temperature, and break out of the loop when it gets small enough.
    */
-#ifdef EPSILON_TERMINATE
-  while(1) {
-#else
-  while (temp >= temp_stop) {
-#endif
+  while(epsilon_terminate || (temp >= temp_stop)) {
       
 #ifdef VERBOSE
     cout << "Temperature:  " << temp << " Best: " << best_score <<
@@ -967,25 +973,25 @@ NOTQUITEDONE:
      * Debugging
      */
 #ifdef DEBUG_TSTEP
-#ifdef EPSILON_TERMINATE
+    if (epsilon_terminate) {
 #ifdef CHILL
-    RDEBUG(printf("temp_end: %f %f %f\n",temp,temp * avgscore / initialavg,stddev);)
+        RDEBUG(printf("temp_end: %f %f %f\n",temp,temp * avgscore / initialavg,stddev);)
 #else /* CHILL */
-    RDEBUG(printf("temp_end: %f %f\n",temp,temp * avgscore / initialavg);)
+        RDEBUG(printf("temp_end: %f %f\n",temp,temp * avgscore / initialavg);)
 #endif /* CHILL */
-#else /* EPSILON_TERMINATE */
-    printf("temp_end: %f ",temp);
-    if (trans >= mintrans) {
-	if (accepts >= naccepts) {
-	    printf("both");
-	} else {
-	    printf("trans %f",accepts*1.0/naccepts);
-	}
-    } else {
-	printf("accepts %f",trans*1.0/mintrans);
-    }
-    printf("\n");
-#endif /* EPSILON_TERMINATE */
+    } else { /* epsilon_terminate */
+        printf("temp_end: %f ",temp);
+        if (trans >= mintrans) {
+	        if (accepts >= naccepts) {
+	            printf("both");
+	        } else {
+	            printf("trans %f",accepts*1.0/naccepts);
+	        }
+        } else {
+	        printf("accepts %f",trans*1.0/mintrans);
+        }
+        printf("\n");
+    } /* epsilon_terminate */
 #endif /* DEBUG_TSTEP */
     
     RDEBUG(
@@ -1031,58 +1037,58 @@ NOTQUITEDONE:
     lasttemp = temp;
 
     /*
-     * EPSILON_TERMINATE means that we define some small number, epsilon, and
+     * epsilon_terminate means that we define some small number, epsilon, and
      * the derivative of the average change in temperature gets below that
      * epsilon (ie. we have stopped getting improvements in score), we're done
      */
-#ifdef EPSILON_TERMINATE
-    RDEBUG(
-       printf("avgs: real: %f, smoothed %f, initial: %f\n",avgscore,smoothedavg,initialavg);
-       printf("epsilon: (%f) %f / %f * %f / %f < %f (%f)\n", fabs(deltaavg), temp, initialavg,
-	   deltaavg, deltatemp, epsilon,(temp / initialavg) * (deltaavg/ deltatemp));
-    );
-    // We have a mininum number of timestepss, and *might* have a minimum
-    // temperature that we must reach before we will stop. Note that the
-    // temperature_guard clause is formulated to give the correct result
-    // even when temp goes to nan
-    if ((tsteps >= mintsteps) &&
-            ((temperature_guard < 0) || !(temp > temperature_guard)) &&
-    /*
-     * ALLOW_NEGATIVE_DELTA controls whether we're willing to stop if the
-     * derivative gets small and negative, not just small and positive.
-     */
+    if (epsilon_terminate) {
+        RDEBUG(
+           printf("avgs: real: %f, smoothed %f, initial: %f\n",avgscore,smoothedavg,initialavg);
+           printf("epsilon: (%f) %f / %f * %f / %f < %f (%f)\n", fabs(deltaavg), temp, initialavg,
+    	   deltaavg, deltatemp, epsilon,(temp / initialavg) * (deltaavg/ deltatemp));
+        );
+        // We have a mininum number of timestepss, and *might* have a minimum
+        // temperature that we must reach before we will stop. Note that the
+        // temperature_guard clause is formulated to give the correct result
+        // even when temp goes to nan
+        if ((tsteps >= mintsteps) &&
+                ((temperature_guard < 0) || !(temp > temperature_guard)) &&
+        /*
+         * ALLOW_NEGATIVE_DELTA controls whether we're willing to stop if the
+         * derivative gets small and negative, not just small and positive.
+         */
 #ifdef ALLOW_NEGATIVE_DELTA
-	((temp < 0) || isnan(temp) ||
-//	 || (fabs((temp / initialavg) * (deltaavg/ deltatemp)) < epsilon))) {
-	 ((temp / initialavg) * (deltaavg/ deltatemp)) < epsilon)) {
+    	((temp < 0) || isnan(temp) ||
+    //	 || (fabs((temp / initialavg) * (deltaavg/ deltatemp)) < epsilon))) {
+    	 ((temp / initialavg) * (deltaavg/ deltatemp)) < epsilon)) {
 #else /* ALLOW_NEGATIVE_DELTA */
-	(deltaavg > 0) && ((temp / initialavg) * (deltaavg/ deltatemp) < epsilon)) {
+    	(deltaavg > 0) && ((temp / initialavg) * (deltaavg/ deltatemp) < epsilon)) {
 #endif /* ALLOW_NEGATIVE_DELTA */
         
-        /*
-         * Normally, we are done here.
-         */
-	forcerevert = true;
-        if (!finish_hillclimb) {
-            finished = true;
-        } else {
             /*
-             * This option goes back to the best result we ever found, and
-             * goes one more round - the idea is to finish up with a very
-             * low temperature, at which will will probably take only
-             * better solutions (hillclimbing)
+             * Normally, we are done here.
              */
-            if (!finishedonce &&
-                 ((best_violated <= violated) && (best_score < prev_score))) {
-                finishedonce = true;
-                cout << "Epsilon Terminated, but going back to a better solution"
-                    << endl;
-            } else {
+    		forcerevert = true;
+            if (!finish_hillclimb) {
                 finished = true;
+            } else {
+                /*
+                 * This option goes back to the best result we ever found, and
+                 * goes one more round - the idea is to finish up with a very
+                 * low temperature, at which will will probably take only
+                 * better solutions (hillclimbing)
+                 */
+                if (!finishedonce &&
+                     ((best_violated <= violated) && (best_score < prev_score))) {
+                    finishedonce = true;
+                    cout << "Epsilon Terminated, but going back to a better solution"
+                        << endl;
+                } else {
+                    finished = true;
+                }
             }
         }
-    }
-#endif /* EPSILON_TERMINATE */
+    } /* epsilon_terminate */
     
     /*
      * RANDOM_ASSIGNMENT is not really very random, but we stop after the first
@@ -1123,12 +1129,11 @@ NOTQUITEDONE:
       cout << "Reverting: forced" << endl;
       revert = true;
     }
-    if (REVERT_LAST && (temp < temp_stop)) {
-       cout << "Reverting: REVERT_LAST" << endl;
+    if (!epsilon_terminate && (temp < temp_stop)) {
+       cout << "Reverting: finished annealing" << endl;
        revert = true;
     }
-
-    
+  
     /*
      * Okay, NO_REVERT is not the best possible name for this ifdef. 
      * Historically, assign used to revert to the best solution at the end of

@@ -40,9 +40,6 @@ CHILL			Rather than a simple multiplicative decrease in
 NEIGHBOR_LENGTH		Base the length of the Markov chains on the approximate
 			size of the neighborhood structure - simply the number
 			of vnodes * the number of pclasses
-EPSILON_TERMINATE	Use a delta function, which is compared against a
-			constant, epsilon, to determine when we're done, instead
-			of stopping at a static temperature
 
 PHYS_CHAIN_LEN		Make the length of Markov chains (iters. at each
 			temperature step) dependent on the size of the physical
@@ -74,8 +71,6 @@ NO_REVERT		Normal behavior is to revert to the best solution at
 			the end of each temperature step. This is somewhat
 			questionable, so setting this disables it. You should
 			set REVERT_LAST if this is set!
-REVERT_LAST		Revert to best solution at the end of the last
-			temperature step - only needed with NO_REVERT
 REVERT_VIOLATIONS	Exclusive with  NO_REVERT - revert at the end of the
 			temperature step if the best solution has fewer
 			violations, but ignore the score

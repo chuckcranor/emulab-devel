@@ -48,10 +48,6 @@ using namespace __gnu_cxx;
 #define REVERT_VIOLATIONS 1
 #endif
 
-#ifndef REVERT_LAST
-#define REVERT_LAST 0
-#endif
-
 #ifdef PHYS_CHAIN_LEN
 #define PHYSICAL(x) x
 #else
@@ -65,10 +61,14 @@ extern int init_temp;
 extern int temp_prob;
 extern float temp_stop;
 extern int CYCLES;
-#ifdef EPSILON_TERMINATE
 extern float temperature_guard;
 extern bool finish_hillclimb;
-#endif
+
+/*
+ * Use a delta function, which is compared against a constant, epsilon, to
+ * determine when we're done, instead of stopping at a static temperature
+ */
+extern bool epsilon_terminate;
 
 // Initial acceptance ratio for melting
 extern float X0;
