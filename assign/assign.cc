@@ -500,9 +500,9 @@ int type_precheck(int round) {
      */
     char *round_str;
     if (round == 1) {
-        round_str = "available";
+        round_str = (char*) "available";
     } else {
-        round_str = "suitable";
+        round_str = (char*) "suitable";
     }
     // First, check the regular types
     for (name_count_map::iterator vtype_it=vtypes.begin();
@@ -874,17 +874,17 @@ int main(int argc,char **argv) {
   timelimit = 0.0;
   timetarget = 0.0;
   
-  char* ptopFilename = "";
-  char* vtopFilename = "";
+  char* ptopFilename = (char*) "";
+  char* vtopFilename = (char*) "";
   char* vtopOutputFilename = 0;
 
 #ifdef WITH_XML
 	char* ptopFileFormat;
 	char* vtopFileFormat;
-	char* delims = "/";
-	char* flags = "s:v:l:t:rpPTdH:oguc:nx:y:W:FDSf:G:C";
+	const char* delims = "/";
+	const char* flags = "s:v:l:t:rpPTdH:oguc:nx:y:W:FDSf:G:C";
 #else
-	char* flags = "s:v:l:t:rpPTdH:oguc:nx:y:FDSG:C";
+	const char* flags = "s:v:l:t:rpPTdH:oguc:nx:y:FDSG:C";
 #endif	
 	
   while ((ch = getopt(argc,argv,flags)) != -1) {
