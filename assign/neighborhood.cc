@@ -15,9 +15,7 @@ static const char rcsid[] = "$Id: neighborhood.cc,v 1.4 2009-05-20 18:06:08 taru
 
 // From asssign.cc
 extern bool allow_overload;
-#ifdef PER_VNODE_TT
 extern pclass_types vnode_type_table;
-#endif
 
 /*
  * This overly-verbose function returns true if it's okay to map vn to pn,
@@ -174,11 +172,7 @@ tb_pnode *find_pnode_connected(vvertex vv, tb_vnode *vn) {
 
 tb_pnode *find_pnode(tb_vnode *vn)
 {
-#ifdef PER_VNODE_TT
   tt_entry tt = vnode_type_table[vn->name];
-#else
-  tt_entry tt = type_table[vn->type];
-#endif
   int num_types = tt.first;
   pclass_vector *acceptable_types = tt.second;
   
@@ -215,15 +209,13 @@ tb_pnode *find_pnode(tb_vnode *vn)
     // If not searching for the pnode, just grab the front one
     newpnode = pclass->members[vn->type]->front();
 #else
-#ifdef PER_VNODE_TT
-    // If using PER_VNODE_TT and vclasses, it's possible that there are
+    // If using vclasses, it's possible that there are
     // some pclasses in this node's type table that can't be used right now,
     // becuase they contain entires that don't contain the vnodes _current_
     // type
     if (pclass->members.find(vn->type) == pclass->members.end()) {
 	continue;
     }
-#endif
 
     RDEBUG(cout << "find_pnode: Members list has " <<
             pclass->members[vn->type]->L.size() << ", type is " << vn->type <<

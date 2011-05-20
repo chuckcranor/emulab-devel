@@ -124,16 +124,6 @@ ALLOW_TRIVIAL_DEFAULT   The new behavior for trivial links is that a vlink must
 			satisfy it with a trivial link. This reverts to the old
 			behavior in which all vlinks are allowed to be mapped to
 			trivial links by default.
-PER_VNODE_TT		Normally, assign keeps a 'type table' indicating which
-			pnodes are potential matches by type - eg., there is
-			a list of all pc850 nodes. This option builds this table
-			for each node, instead of for each type. This helps
-			greatly when there are nodes of the same type, but with
-			different numbers of interfaces. Also provides some
-			helpful information up-from about which nodes cannot
-			be mapped, and could be used to prune down the size of
-			the search space, since we can ignore nodes that are not
-			in any node's TT.
 
 Scoring Options
 ---------------

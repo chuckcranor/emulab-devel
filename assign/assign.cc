@@ -77,9 +77,7 @@ pnode_pvertex_map pnode2vertex;
 // Map of a type to a tt_entry, a vector of pclasses and the size of
 // the vector.
 pclass_types type_table;
-#ifdef PER_VNODE_TT
 pclass_types vnode_type_table;
-#endif
 
 // This datastructure contains all the information needed to calculate
 // the shortest path between any two switches.  Indexed by svertex,
@@ -450,9 +448,7 @@ void print_help() {
   cout << "  -r          - Don't allow trivial links." << endl;
   cout << "  -p          - Disable pclasses." << endl;
   cout << "  -d          - Enable dynamic pclasses." << endl;
-#ifdef PER_VNODE_TT
   cout << "  -P          - Prune unusable pclasses." << endl;
-#endif
   cout << "  -T          - Doing some scoring self-testing." << endl;
   cout << "  -H <float>  - Try <float> times harder." << endl;
   cout << "  -o          - Allow overloaded pnodes to be considered." << endl;
@@ -581,7 +577,6 @@ int type_precheck(int round) {
 // mapping.  Returns 1 if this is the case, 0 if not.
 // TODO - move away from using global variables
 int mapping_precheck() {
-#ifdef PER_VNODE_TT
     cout << "Node mapping precheck:" << endl;
     /*
      * Build up an entry in the type table for each vnode, by first looking at
@@ -821,11 +816,6 @@ nosuchtype:
 	cout << "*** Node mapping precheck failed!" << endl;
 	return 0;
     }
-
-#else // PER_VNODE_TT
-    // PER_VNODE_TT is required for this check, just pretend it's OK.
-    return 1;
-#endif
 }
 
 // Perfrom a pre-cehck to make sure that polices that are checkable at precheck
@@ -917,10 +907,8 @@ int main(int argc,char **argv) {
       allow_trivial_links = false; break;
     case 'p':
       disable_pclasses = true; break;
-#ifdef PER_VNODE_TT
     case 'P':
       prune_pclasses = true; break;
-#endif
     case 'T':
       scoring_selftest = true; break;
     case 'd':
@@ -1188,7 +1176,6 @@ int main(int argc,char **argv) {
       exit(EXIT_UNRETRYABLE);
   }
 
-#ifdef PER_VNODE_TT
   if (prune_pclasses) {
       prune_unusable_pclasses();
       /*
@@ -1201,7 +1188,6 @@ int main(int argc,char **argv) {
           exit(EXIT_UNRETRYABLE);
       }
   }
-#endif
     
   // Run the policy precheck - the idea behind running this last is that some
   // policy violations might become more clear after doing pruning

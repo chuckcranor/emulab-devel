@@ -92,9 +92,7 @@ extern double best_score;
 extern int best_violated, iters, iters_to_best;
 extern bool allow_overload;
 
-#ifdef PER_VNODE_TT
 extern pclass_types vnode_type_table;
-#endif
 
 /* Decides based on the temperature if a new score should be accepted or not */
 inline bool accept(double change, double temperature);

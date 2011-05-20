@@ -458,23 +458,17 @@ bool populate_links(DOMElement *root, tb_pgraph &pg, tb_sgraph &sg) {
 		else if (ISSWITCH(src_pnode) && ! ISSWITCH(dst_pnode)) 
 		{
 			dst_pnode->switches.insert(src_vertex);
-			#ifdef PER_VNODE_TT
-				dst_pnode->total_bandwidth += bandwidth.i();
-			#endif
+			dst_pnode->total_bandwidth += bandwidth.i();
 		}
 			
 		else if (ISSWITCH(dst_pnode) && ! ISSWITCH(src_pnode)) 
 		{
 			src_pnode->switches.insert(dst_vertex);
-			#ifdef PER_VNODE_TT
-				src_pnode->total_bandwidth += bandwidth.i();
-			#endif
+			src_pnode->total_bandwidth += bandwidth.i();
 		} else {
                     // Neither is a switch - a direct node->node link
-#ifdef PER_VNODE_TT
                     dst_pnode->total_bandwidth += bandwidth.i();
                     src_pnode->total_bandwidth += bandwidth.i();
-#endif
                 }
 
 	//XMLDEBUG("created link " << *phys_link << endl);

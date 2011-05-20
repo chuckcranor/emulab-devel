@@ -301,7 +301,6 @@ int parse_top(tb_vgraph &vg, istream& input)
 
 	tb_vnode *vnode1 = get(vvertex_pmap,node1);
 	tb_vnode *vnode2 = get(vvertex_pmap,node2);
-#ifdef PER_VNODE_TT
 	if (l->emulated) {
 	    if (!l->allow_trivial) {
 		vnode1->total_bandwidth += l->delay_info.bandwidth;
@@ -313,7 +312,6 @@ int parse_top(tb_vgraph &vg, istream& input)
 	    vnode1->link_counts[link_type]++;
 	    vnode2->link_counts[link_type]++;
 	}
-#endif
         
         // Some sanity checks: this combination is illegal for now
         if (l->delay_info.adjust_to_native_bandwidth && (l->allow_trivial ||

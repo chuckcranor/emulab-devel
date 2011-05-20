@@ -63,9 +63,6 @@ CXXFLAGS += -DMELT -DEPSILON_TERMINATE -DCHILL -DNEIGHBOR_LENGTH \
 CXXFLAGS += -DINTERSWITCH_LENGTH
 # Various tweaks to the simulated annealing behavior
 CXXFLAGS += -DFIND_PNODE_SEARCH -DNO_REVERT
-# Keeps information about which pclasses are potential mappings for vnodes on a
-# per-vnode basis, not a per-type basis
-CXXFLAGS += -DPER_VNODE_TT
 # Make sure that all emulated links that are assigned to a plink have the same
 # endpoints
 CXXFLAGS += -DFIX_PLINK_ENDPOINTS

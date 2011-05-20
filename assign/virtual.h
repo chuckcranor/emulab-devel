@@ -104,9 +104,7 @@ public:
 	name(_name), type(_type), typecount(_typecount),
 	    vclass(NULL), desires(),
         fixed(false), assigned(false), assignment(),
-#ifdef PER_VNODE_TT
     	num_links(0), total_bandwidth(0),
-#endif
         disallow_trivial_mix(false), nontrivial_links(0), trivial_links(0),
         subnode_of(NULL), subnode_of_name(""), subnodes(),
         link_counts()
@@ -140,10 +138,8 @@ public:
   bool assigned;		// is this node assigned?
   pvertex assignment;		// the physical vertex assigned to
 
-#ifdef PER_VNODE_TT
   int num_links;
   int total_bandwidth;
-#endif
 
   // For the case where we want to make sure that a vnode has all trivial
   // links, or no trivial links, but not a mix of both.
