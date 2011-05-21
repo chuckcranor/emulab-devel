@@ -626,7 +626,7 @@ bool populate_links(DOMElement *root, tb_pgraph &pg, tb_sgraph &sg,
      * Handle never_multiplex flag
      */
     if (rspecParser->readNeverMultiplex(elt)) {
-        XMLDEBUG("Marking link as 'never multiplex'" << endl);
+        //XMLDEBUG("Marking link as 'never multiplex'" << endl);
         phys_link->never_multiplex = true;
     }
 
