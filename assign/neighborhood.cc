@@ -201,7 +201,7 @@ tb_pnode *find_pnode(tb_vnode *vn)
     tb_pclass *pclass = (*acceptable_types)[index];
 
     // Skip pclasses that have been disabled
-    if (pclass->disabled) {
+    if (pclass->is_disabled()) {
 	  continue;
     }
 
@@ -213,7 +213,7 @@ tb_pnode *find_pnode(tb_vnode *vn)
     // some pclasses in this node's type table that can't be used right now,
     // becuase they contain entires that don't contain the vnodes _current_
     // type
-    if (pclass->members.find(vn->type) == pclass->members.end()) {
+    if (!pclass->has_member_of_type(vn->type)) {
 	continue;
     }
 

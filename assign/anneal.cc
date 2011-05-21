@@ -1198,15 +1198,6 @@ NOTQUITEDONE:
 	      endl << "     This indicates a bug - contact the operators" <<
 	      endl << "     (initial score: " << initial_score <<
 	      ", current score: " << get_score() << ")" << endl;
-	  // One source of this can be pclasses that are still used - check for
-	  // those
-	  pclass_list::iterator pit = pclasses.begin();
-	  for (;pit != pclasses.end();pit++) {
-	      if ((*pit)->used_members != 0) {
-		  cout << (*pit)->name << " is " << (*pit)->used_members
-		      << "% used" << endl;
-	      }
-	  }
       }
       
       /* 

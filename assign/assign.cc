@@ -368,14 +368,14 @@ void prune_unusable_pclasses() {
     int pruned = 0;
     pclass_list::iterator pclass_iterator = pclasses.begin();
     while (pclass_iterator != pclasses.end()) {
-	if ((*pclass_iterator)->refcount == 0) {
+	if (!(*pclass_iterator)->is_referenced()) {
             /*
              * Remove the nodes in the pclass we're removing from the slot
              * counts for their ptypes
              */
-            tb_pclass::pclass_members_map::iterator ptype_iterator;
-            ptype_iterator = (*pclass_iterator)->members.begin();
-            while (ptype_iterator != (*pclass_iterator)->members.end()) {
+            tb_pclass::iterator ptype_iterator;
+            ptype_iterator = (*pclass_iterator)->begin();
+            while (ptype_iterator != (*pclass_iterator)->end()) {
                 /*
                  * Find the recort for this type in the ptypes structure
                  */
@@ -391,7 +391,7 @@ void prune_unusable_pclasses() {
                  * Note: We only have to do this for pclasses that are "real",
                  * not dynamic ones.
                  */
-                if (!(*pclass_iterator)->is_dynamic) {
+                if (!(*pclass_iterator)->is_dynamic()) {
                     tb_pnodelist::list_iter pnode_iterator =
                         ptype_iterator->second->begin();
                     while (pnode_iterator != ptype_iterator->second->end()) {
@@ -646,7 +646,7 @@ int mapping_precheck() {
 
 		bool potential_match = true;
 		// Grab the first node of the pclass as a representative sample
-	 	tb_pnode *pnode = *((*it)->members[this_type]->begin());
+	 	tb_pnode *pnode = (*it)->get_node_of_type(this_type);
 
 		// Check to see if any of the link that this pnode has are of
 		// the correct type for the virtual node
@@ -744,7 +744,7 @@ int mapping_precheck() {
 		if (potential_match) {
 		    vec->push_back(*it);
 		    vnode_type_table[v->name].first++;
-		    (*it)->refcount++;
+		    (*it)->add_ref();
 #ifdef PCLASS_DEBUG
 		    cerr << v->name << " can map to " << (*it)->name << endl;
 #endif

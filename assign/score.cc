@@ -960,7 +960,7 @@ void remove_node(vvertex vv)
 
   // pclass
   if ((!disable_pclasses) && !(tr->is_static()) && pnode->my_class
-	  && (pnode->my_class->used_members == 0)) {
+	  && pnode->my_class->any_used_members()) {
     SDEBUG(cerr << "  freeing pclass" << endl);
     SSUB(SCORE_PCLASS);
   }
@@ -1491,7 +1491,7 @@ int add_node(vvertex vv,pvertex pv, bool deterministic, bool is_fixed, bool skip
 
   // pclass
   if ((!disable_pclasses) && (!tr->is_static()) && pnode->my_class &&
-	  (pnode->my_class->used_members == 0)) {
+	  pnode->my_class->any_used_members()) {
     SDEBUG(cerr << "  new pclass" << endl);
     SADD(SCORE_PCLASS);
   }

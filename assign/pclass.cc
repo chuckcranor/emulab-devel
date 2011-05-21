@@ -134,6 +134,89 @@ ostream &operator<<(ostream &o, const tb_pnodelist& l) {
 }
 
 /*
+ * Class: tb_pclass
+ */
+
+int tb_pclass::add_member(tb_pnode *p, bool own_class)	{
+
+	tb_pnode::types_map::iterator it;
+	for (it=p->types.begin();it!=p->types.end();++it) {
+		fstring type = (*it).first;
+		
+		/*
+		 * Create a new entry for this type if necessart
+		 */
+		if (members.find(type) == members.end()) {
+			members[type] = new tb_pnodelist;
+		}
+		
+		members[type]->push_back(p);
+	}
+	
+	this->size++;
+
+	/*
+	 * Set approriate class variable in the pnode
+	 */
+	if (own_class) {
+		p->my_own_class=this;
+	} else {
+		p->my_class=this;
+	}
+
+	return 0;
+}
+
+void tb_pclass::add_ref() {
+	this->refcount++;
+}
+
+bool tb_pclass::is_referenced() const {
+	return (this->refcount > 0);
+}
+
+bool tb_pclass::any_used_members() const {
+	return (this->used_members > 0);
+}
+	
+bool tb_pclass::is_dynamic() const {
+	return this->dynamic;
+}
+	
+bool tb_pclass::is_disabled() const {
+	return this->disabled;
+}
+	
+tb_pnode *tb_pclass::get_node_of_type(fstring type) {
+	return *(this->members[type]->begin());
+}
+	
+bool tb_pclass::has_member_of_type(fstring type) {
+	return (this->members[type]->begin() != this->members[type]->end());
+}
+
+tb_pclass::iterator tb_pclass::begin() const {
+	return this->members.begin();
+}
+
+tb_pclass::iterator tb_pclass::end() const {
+	return this->members.end();
+}
+
+ostream &operator<<(ostream &o, const tb_pclass& p) {
+	o << p.name << " size=" << p.size <<
+		" used_members=" << p.used_members << " disabled=" << p.disabled <<
+		" is_dynamic=" << p.dynamic << "\n";
+	tb_pclass::pclass_members_map::const_iterator dit;
+	for (dit=p.members.begin();dit!=p.members.end();++dit) {
+		o << "  " << (*dit).first << ":\n";
+		o << *((*dit).second) << endl;
+	}
+	o << endl;
+	return o;
+}
+
+/*
  * Standalone (non-class) functions
  */
 
@@ -327,10 +410,9 @@ int generate_pclasses(tb_pgraph &pg, bool pclass_for_each_pnode,
 
     if (found_class == 0) {
       // new class
-      tb_pclass *n = new tb_pclass;
+      tb_pclass *n = new tb_pclass(curP->name);
       pclasses.push_back(n);
       canonical_members[n]=curP;
-      n->name = curP->name;
       n->add_member(curP,false);
     }
   }
@@ -358,12 +440,12 @@ int generate_pclasses(tb_pgraph &pg, bool pclass_for_each_pnode,
       if (!multiplexed) {
 	  continue;
       }
-      tb_pclass *n = new tb_pclass;
+      tb_pclass *n = new tb_pclass(pnode->name + "-own");
       pclasses.push_back(n);
-      n->name = pnode->name + "-own";
+
       n->add_member(pnode,true);
       n->disabled = true;
-      n->is_dynamic = true;
+      n->dynamic = true;
     }
   }
 
@@ -398,25 +480,6 @@ int generate_pclasses(tb_pgraph &pg, bool pclass_for_each_pnode,
       (*A)[i++] = *it;
     }
     delete L;
-  }
-  return 0;
-}
-
-int tb_pclass::add_member(tb_pnode *p, bool own_class)
-{
-  tb_pnode::types_map::iterator it;
-  for (it=p->types.begin();it!=p->types.end();++it) {
-    fstring type = (*it).first;
-    if (members.find(type) == members.end()) {
-      members[type]=new tb_pnodelist;
-    }
-    members[type]->push_back(p);
-  }
-  size++;
-  if (own_class) {
-      p->my_own_class=this;
-  } else {
-      p->my_class=this;
   }
   return 0;
 }
