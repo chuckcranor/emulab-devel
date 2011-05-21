@@ -183,6 +183,14 @@ void anneal(const annealing_parameters &params, double *initial_temperature)
   double meltedtemp;
   temp = params.init_temp;
   double deltatemp, deltaavg;
+  
+  /*
+   * Used only for statistical purposes
+   */
+  int solutions_considered = 0;
+  int valid_solutions_considered = 0;
+  int solutions_accepted = 0;
+  int valid_solutions_accepted = 0;
 
   // List of unassigned virtual nodes
   slist<vvertex> unassigned_nodes;
@@ -413,8 +421,6 @@ void anneal(const annealing_parameters &params, double *initial_temperature)
   finished = forcerevert = false;
   int tsteps;
   int mintsteps;
-
-
 	
   double meltstart;
 
@@ -711,6 +717,12 @@ void anneal(const annealing_parameters &params, double *initial_temperature)
 	  continue;
         }	
       }
+      
+      // Bookkeeping
+      solutions_considered++;
+      if (violated == 0) {
+        valid_solutions_considered++;
+      }
 
       /*
        * Okay, now that we've mapped some new node, let's check the scoring
@@ -824,6 +836,12 @@ void anneal(const annealing_parameters &params, double *initial_temperature)
 	// Accept change
 	prev_score = new_score;
 	prev_violated = violated;
+	
+	// Bookeeping
+        solutions_accepted++;
+	if (violated == 0) {
+          valid_solutions_accepted++;
+	}
 	
 	if (violated == 0 && (time_to_first_valid == 0.0)) {
         cout << "    Found first valid solution on iteration " << iters << endl;
@@ -1315,6 +1333,16 @@ NOTQUITEDONE:
   cout << "    Finshed at temperature: " << temp << endl;
   cout << "    Average iterations per second: " << (iters/annealing_time)
        << endl;
+  cout << "    Number of solutions considered: " << solutions_considered
+       << endl;
+  cout << "    Fraction of iterations during which a solution was considered: "
+       << ((solutions_considered*1.0)/iters) << endl;
+  cout << "    Fraction of solutions accepted: "
+       << ((solutions_accepted*1.0)/solutions_considered) << endl;
+  cout << "    Fraction of potential solutions that were valid: "
+       << ((valid_solutions_considered*1.0)/solutions_considered) << endl;
+  cout << "    Fraction of accepted solutions that were valid: "
+       << ((valid_solutions_accepted*1.0)/solutions_accepted) << endl;
   if (time_to_first_valid > 0.0) {
     cout << "    Fraction of time to find first valid solution: "
          << (time_to_first_valid / annealing_time) << endl;
