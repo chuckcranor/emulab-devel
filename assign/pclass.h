@@ -101,7 +101,7 @@ class tb_pclass {
 	
 	// From neighborhood.h - not ideal to make this a friend, but it lets me
 	// avoid exposing member iterators to the outside
-	friend tb_pnode *find_pnode(tb_vnode *vn);
+	friend tb_pnode *find_pnode(tb_vnode *vn, bool allow_overload);
 
 public:
 	/*

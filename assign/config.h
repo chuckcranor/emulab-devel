@@ -36,10 +36,18 @@ void dump_options(const char *str, struct config_param cparams[], int nparams);
  * <name>=<value> pair on the command line.
  */
 static struct config_param options[] = {
+	/*
+	 * Disabled until I can make them point into the new annealing_params
+	 * structure
+	 */
+#if 0
     { "IT",	CONFIG_INT,	&init_temp,			0 },
     { "TP",	CONFIG_INT,	&temp_prob,			0 },
     { "TS",	CONFIG_INT,	&temp_stop,			0 },
     { "CY",	CONFIG_INT,	&CYCLES,			0 },
+    { "ON",	CONFIG_FLOAT,	&opt_nodes_per_sw,		0 },
+    { "TR",	CONFIG_FLOAT,	&temp_rate,			0 },
+#endif
     { "UN",	CONFIG_FLOAT,	&SCORE_UNASSIGNED,     		0 },
     { "1S",	CONFIG_FLOAT,	&SCORE_INTERSWITCH_LINK,	0 },
     { "2S",	CONFIG_FLOAT,	&SCORE_INTRASWITCH_LINK,	0 },
@@ -52,8 +60,6 @@ static struct config_param options[] = {
     { "VC",     CONFIG_FLOAT,   &SCORE_VCLASS,                  0 },
     { "SW",	CONFIG_FLOAT,	&SCORE_SWITCH,			0 },
     { "EL",	CONFIG_FLOAT,	&SCORE_EMULATED_LINK,		0 },
-    { "ON",	CONFIG_FLOAT,	&opt_nodes_per_sw,		0 },
-    { "TR",	CONFIG_FLOAT,	&temp_rate,			0 },
     { "LD",     CONFIG_FLOAT,   &LINK_RESOLVE_DIRECT,           0 },
     { "LI",     CONFIG_FLOAT,   &LINK_RESOLVE_INTRASWITCH,      0 },
     { "LT",     CONFIG_FLOAT,   &LINK_RESOLVE_INTERSWITCH,      0 },

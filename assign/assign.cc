@@ -88,11 +88,8 @@ switch_pred_map_map switch_preds;
 // Same, but for distances 
 switch_dist_map_map switch_dist;
 
-// Time started, finished, and the time limit
-double timestart, timeend, timelimit, timetarget;
-
-// An amount to scale the neighborhood size by
-double scale_neighborhood = 1.0;
+// Time started and finished
+double timestart, timeend;
 
 #ifdef GNUPLOT_OUTPUT
 FILE *scoresout, *tempout, *deltaout;
@@ -110,9 +107,6 @@ bool prune_pclasses = false;
 // Whether or not we should use the experimental support for dynamic pclasses
 bool dynamic_pclasses = false;
 
-// Whether or not to allow assign to temporarily over-subscribe pnodes
-bool allow_overload = false;
-
 // Forces assign to do greedy link assignment, by chosing the first link in its
 // list, which is usually the lowest-cost
 bool greedy_link_assignment = false;
@@ -124,12 +118,6 @@ double initial_temperature = 0.0f;
 
 // Print out a summary of the solution in addition to the solution itself
 bool print_summary = false;
-
-// Use the 'connected' find algorithm
-double use_connected_pnode_find = 0.0f;
-
-// Whether or not to perform all checks on fixed nodes
-bool check_fixed_nodes = false;
 
 // If true, dump a bunch of configrution information
 bool dump_config = false;
@@ -855,13 +843,15 @@ int main(int argc,char **argv) {
 #ifdef GRAPHVIZ_SUPPORT
   fstring viz_prefix;
 #endif
-  bool scoring_selftest = false;
   bool prechecks_only = false;
+
+  /*
+   * Parameters we're going to pass to the simulated annealing function
+   */
+  annealing_parameters annealing_params;
   
   // Handle command line
   char ch;
-  timelimit = 0.0;
-  timetarget = 0.0;
   
   char* ptopFilename = (char*) "";
   char* vtopFilename = (char*) "";
@@ -889,12 +879,12 @@ int main(int argc,char **argv) {
       break;
 #endif
     case 'l':
-      if (sscanf(optarg,"%lf",&timelimit) != 1) {
+      if (sscanf(optarg,"%lf",&annealing_params.timelimit) != 1) {
 	print_help();
       }
       break;
     case 'a':
-      if (sscanf(optarg,"%lf",&timetarget) != 1) {
+      if (sscanf(optarg,"%lf",&annealing_params.timetarget) != 1) {
 	print_help();
       }
       break;
@@ -905,16 +895,16 @@ int main(int argc,char **argv) {
     case 'P':
       prune_pclasses = true; break;
     case 'T':
-      scoring_selftest = true; break;
+      annealing_params.scoring_selftest = true; break;
     case 'd':
       dynamic_pclasses = true; break;
     case 'H':
-      if (sscanf(optarg,"%lf",&scale_neighborhood) != 1) {
+      if (sscanf(optarg,"%lf",&annealing_params.scale_neighborhood) != 1) {
 	print_help();
       }
       break;
     case 'o':
-      allow_overload = true; break;
+      annealing_params.allow_overload = true; break;
     case 'g':
       greedy_link_assignment = true; break;
     case 't':
@@ -925,7 +915,7 @@ int main(int argc,char **argv) {
     case 'u':
       print_summary = true; break;
     case 'c':
-      if (sscanf(optarg,"%lf",&use_connected_pnode_find) != 1) {
+      if (sscanf(optarg,"%lf",&annealing_params.use_connected_pnode_find) != 1) {
 	print_help();
       }
       break;
@@ -940,18 +930,18 @@ int main(int argc,char **argv) {
       full_switch_graph_search = true;
       break;
     case 'G':
-      if (sscanf(optarg,"%f",&temperature_guard) != 1) {
+      if (sscanf(optarg,"%f",&annealing_params.temperature_guard) != 1) {
 	print_help();
       }
       break;
     case 'C':
-      finish_hillclimb = true;
+      annealing_params.finish_hillclimb = true;
       break;
     case 'E':
-      epsilon_terminate = false;
+      annealing_params.epsilon_terminate = false;
       break;
     case 'A':
-      local_derivative = false;
+      annealing_params.local_derivative = false;
       break;
     case 'x':
 #ifdef WITH_XML
@@ -973,7 +963,7 @@ int main(int argc,char **argv) {
 	  vtopFilename = optarg;
     break;
 	  case 'F':
-          check_fixed_nodes = true;
+          annealing_params.check_fixed_nodes = true;
     break;
 
 #ifdef WITH_XML
@@ -1228,8 +1218,7 @@ int main(int argc,char **argv) {
   }
  
   // Note, time is started earlier now, up by where we make pclasses
-  anneal(scoring_selftest, check_fixed_nodes, scale_neighborhood,
-          initial_temperature_pointer, use_connected_pnode_find);
+  anneal(annealing_params, initial_temperature_pointer);
   timeend = used_time();
 
 #ifdef GNUPLOT_OUTPUT

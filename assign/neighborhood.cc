@@ -14,14 +14,13 @@ static const char rcsid[] = "$Id: neighborhood.cc,v 1.4 2009-05-20 18:06:08 taru
 #include "neighborhood.h"
 
 // From asssign.cc
-extern bool allow_overload;
 extern pclass_types vnode_type_table;
 
 /*
  * This overly-verbose function returns true if it's okay to map vn to pn,
  * false otherwise
  */
-inline bool pnode_is_match(tb_vnode *vn, tb_pnode *pn) {
+inline bool pnode_is_match(tb_vnode *vn, tb_pnode *pn, bool allow_overload) {
   // Find the type record for this type
   tb_pnode::types_map::iterator mit = pn->types.find(vn->type);
   if (mit == pn->types.end()) {
@@ -120,7 +119,7 @@ inline bool pnode_is_match(tb_vnode *vn, tb_pnode *pn) {
  * 2) Satisifies the usual pnode mapping constraints
  * 3) The vnode is not already mapped to
  */
-tb_pnode *find_pnode_connected(vvertex vv, tb_vnode *vn) {
+tb_pnode *find_pnode_connected(vvertex vv, tb_vnode *vn, bool allow_overload) {
 
   //cerr << "find_pnode_connected(" << vn->name << ") called" << endl;
 
@@ -158,7 +157,7 @@ tb_pnode *find_pnode_connected(vvertex vv, tb_vnode *vn) {
     // Check to make sure that our vn can map to the neibor's assigment
     tb_pnode *neighbor_pnode = get(pvertex_pmap,neighbor_vn->assignment);
     //cerr << "        neighbor on " << neighbor_pnode->name << endl;
-    if (pnode_is_match(vn,neighbor_pnode)) {
+    if (pnode_is_match(vn,neighbor_pnode,allow_overload)) {
       //cerr << "        good" << endl;
       //cerr << "    worked" << endl;
       return neighbor_pnode;
@@ -170,7 +169,7 @@ tb_pnode *find_pnode_connected(vvertex vv, tb_vnode *vn) {
   return NULL;
 }
 
-tb_pnode *find_pnode(tb_vnode *vn)
+tb_pnode *find_pnode(tb_vnode *vn, bool allow_overload)
 {
   tt_entry tt = vnode_type_table[vn->name];
   int num_types = tt.first;
@@ -222,7 +221,7 @@ tb_pnode *find_pnode(tb_vnode *vn)
             ", used is " << pclass->used_members << endl;)
     list<tb_pnode*>::iterator it = pclass->members[vn->type]->begin();
     while (it != pclass->members[vn->type]->end()) {
-	if (pnode_is_match(vn,*it)) {
+	if (pnode_is_match(vn,*it,allow_overload)) {
 	    break; 
 	} else {
 	    it++;

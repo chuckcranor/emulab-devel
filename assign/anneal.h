@@ -55,42 +55,164 @@ using namespace __gnu_cxx;
 #endif
 
 /*
- * Parameters used to control annealing
+ * Parameters used to control annealing - we put these in a struct so that
+ * we can easily pass them around without having to make a bunch of globals.
  */
-extern int init_temp;
-extern int temp_prob;
-extern float temp_stop;
+class annealing_parameters {
+	
+	/*
+	 * For now, I don't think it makes sense to make a bunch of accesors, so
+	 * we'll leave it all public
+	 */
+
+public:	
+	
+	/*
+	 * Starting temperature (only used when not using melting)
+	 */
+	int init_temp;
+	
+	/*
+	 * Used to control the probability of accepting a 0-cost change
+	 * TODO: Need to document this better!
+	 */
+	int temp_prob;
+	
+	/*
+	 * Temperature to stop at, when using the original (not 'chill') cooling
+	 * schedule
+	 */
+	int temp_stop;
+	
+	/* 
+	 * Rate at which we decrease the temperature, when using original cooling
+	 * schedue.
+	 */
+	float temp_rate;
+	
+	/*
+	 * If set to a value 0 or greater, don't stop annealing until we reach
+	 * this temperature
+	 */
+	float temperature_guard;
+	
+	/*
+	 * If set, do one round of hillclimbing at the end - basically, go back
+	 * to the best solution, and run at a very low temperature so that only
+	 * superior solutions will be accepted
+	 */
+	bool finish_hillclimb;
+
+
+	/*
+	 * Use a delta function, which is compared against a constant, epsilon, to
+	 * determine when we're done, instead of stopping at a static temperature
+	 */
+	bool epsilon_terminate;
+	
+	/*
+	 * Use the local derivative for epsilon_terminate - if this is off, we use the 
+	 * total score delta divided by the total temperature delta.
+	 */
+	bool local_derivative;
+	
+	/*
+	 * Our target inital acceptance rate while doing melting - we adjust the
+	 * temperature so that this percentage of transitions would be accepted.
+	 */
+	float X0;
+	
+	/*
+	 * Parameter used to calculate new temperature when using 'chill' cooling
+	 * schedule.
+	 * TODO: Need to document better!
+	 */
+	float delta;
+	
+	/*
+	 * Minimum size of the neighborhood (length of Markov chain at each
+	 * temperature step)
+	 */
+	int min_neighborhood_size;
+	
+	/*
+	 * Scale the size of the neighborhood by this amount, to make assign
+	 * try harder (or less hard). Set to 1.0 to get normal behavior.
+	 */
+	double scale_neighborhood;
+	
+	/*
+	 * Try to target a specific runtime - disabled if set to 0
+	 */
+	double timetarget;
+	
+	/*
+	 * Stop when we reach a specific time, no matter what - disabled if set
+	 * to 0
+	 */
+	double timelimit;
+	
+	/*
+	 * Allow for the generations of solutions that overload physical nodes -
+	 * this still counts as a violation, however. The goal is to explore some
+	 * intermediate states that might be on the path to better solutions
+	 */
+	bool allow_overload;
+	
+	/*
+	 * Percentage of the time we use the 'connected pnode find' algorithm -
+	 * instead of picking a new pnode at random, pick a pnode to which a
+	 * neighbor of the given node is already mapped. (0 to disable)
+	 */
+	double use_connected_pnode_find;
+	
+	/*
+	 * Perform a sanity check, in which, for every transition we try, map the
+	 * node, then unmap it to make sure we get the same score back, then map
+	 * it again and move on. Slows assign down a lot, but useful for finding
+	 * bugs in the scoring system.
+	 */
+	bool scoring_selftest;
+	
+	/*
+	 * Normally, we *don't* require fixed nodes to pass all of the checks
+	 * that 'regular' nodes must to map - for example, we normally give them a
+	 * pass on features/desires, assuming that if you've fixed a node, you
+	 * know what you are doing. Setting this value to true re-enables those
+	 * checks.
+	 */
+	bool check_fixed_nodes;
+	
+	/*
+	 * Defaults
+	 */
+	annealing_parameters() :
+		init_temp(10.0),
+		temp_prob(130),
+		temp_stop(2.0),
+		temp_rate(0.9),
+		temperature_guard(-1.0),
+		finish_hillclimb(false),
+		epsilon_terminate(true),
+		local_derivative(true),
+		X0(0.95),
+		delta(2.0),
+		min_neighborhood_size(1000),
+		scale_neighborhood(1.0),
+		timetarget(0.0),
+		timelimit(0.0),
+		allow_overload(false),
+		use_connected_pnode_find(0.0),
+		scoring_selftest(false),
+		check_fixed_nodes(false)
+	{;}
+};
+
+/*
+ * TODO: These are messy ones - deal with them later!
+ */
 extern int CYCLES;
-extern float temperature_guard;
-extern bool finish_hillclimb;
-
-/*
- * Use a delta function, which is compared against a constant, epsilon, to
- * determine when we're done, instead of stopping at a static temperature
- */
-extern bool epsilon_terminate;
-
-/*
- * Use the local derivative for epsilon_terminate - if this is off, we use the 
- * total score delta divided by the total temperature delta.
- */
-extern bool local_derivative;
-
-// Initial acceptance ratio for melting
-extern float X0;
 extern float epsilon;
-extern float delta;
-
-// Number of runs to spend melting
-extern int melt_trans;
-extern int min_neighborhood_size;
-
-// Try to target a specific runtime
-extern double timetarget;
-// Stop when we reach a specific time, no matter what
-extern double timelimit;
-
-extern float temp_rate;
 
 /*
  * From assign.cc - time we started annealing
@@ -106,20 +228,21 @@ extern pclass_list pclasses;
 extern pnode_pvertex_map pnode2vertex;
 extern double best_score;
 extern int best_violated, iters, iters_to_best;
-extern bool allow_overload;
 
 extern pclass_types vnode_type_table;
 
 /* Decides based on the temperature if a new score should be accepted or not */
-inline bool accept(double change, double temperature);
+inline bool accept(double change, double temperature,
+	const annealing_parameters &params);
 
 /* Find a pnode that can satisfy the give vnode */
 tb_pnode *find_pnode(tb_vnode *vn);
 
-/* The big guy! */
-void anneal(bool scoring_selftest, bool check_fixed_nodes,
-        double scale_neighborhood, double *initial_temperature,
-        double use_connected_pnode_find);
+/*
+ * The big guy!
+ * TODO: Deal with intial temperature!
+ */
+void anneal(const annealing_parameters &params, double *initial_temperature);
 
 typedef hash_map<fstring,fstring> name_name_map;
 typedef slist<fstring> name_slist;

@@ -23,7 +23,7 @@
  * This overly-verbose function returns true if it's okay to map vn to pn,
  * false otherwise
  */
-inline bool pnode_is_match(tb_vnode *vn, tb_pnode *pn);
+inline bool pnode_is_match(tb_vnode *vn, tb_pnode *pn, bool allow_overload);
 
 /*
  * Finds a pnode which:
@@ -31,8 +31,8 @@ inline bool pnode_is_match(tb_vnode *vn, tb_pnode *pn);
  * 2) Satisifies the usual pnode mapping constraints
  * 3) The vnode is not already mapped to
  */
-tb_pnode *find_pnode_connected(vvertex vv, tb_vnode *vn);
+tb_pnode *find_pnode_connected(vvertex vv, tb_vnode *vn, bool allow_overload);
 
-tb_pnode *find_pnode(tb_vnode *vn);
+tb_pnode *find_pnode(tb_vnode *vn, bool allow_overload);
 
 #endif

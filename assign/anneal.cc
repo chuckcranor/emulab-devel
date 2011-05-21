@@ -44,50 +44,25 @@ name_name_map fixed_nodes;
 // allowed to move these.
 name_name_map node_hints;
 
-// See anneal.h for descriptions
-bool epsilon_terminate = true;
-bool local_derivative = true;
-float temperature_guard = -1;
-bool finish_hillclimb = false;
-
 // From assign.cc
 #ifdef GNUPLOT_OUTPUT
 extern FILE *scoresout, *tempout, *deltaout;
 #endif
 
-/*
- * Parameters used to control annealing
- */
-int init_temp = 10;
-int temp_prob = 130;
-#ifdef LOW_TEMP_STOP
-float temp_stop = .005;
-#else
-float temp_stop = 2;
-#endif
-int CYCLES = 20;
-
 // The following are basically arbitrary constants
-// Initial acceptance ratio for melting
-float X0 = .95;
 float epsilon;
-float delta = 2;
-
-// Number of runs to spend melting
-int melt_trans = 1000;
-int min_neighborhood_size = 1000;
-
-float temp_rate = 0.9;
+int CYCLES = 20;
 
 
 // Determines whether to accept a change of score difference 'change' at
 // temperature 'temperature'.
-inline bool accept(double change, double temperature) {
+inline bool accept(double change, double temperature,
+	const annealing_parameters &params) {
   double p;
   int r;
 
   if (change == 0) {
-    p = 1000 * temperature / temp_prob;
+    p = 1000 * temperature / params.temp_prob;
   } else {
     p = expf(change/temperature) * 1000;
   }
@@ -103,21 +78,19 @@ inline bool accept(double change, double temperature) {
 double temp;
 
 /* When this is finished the state will reflect the best solution found. */
-void anneal(bool scoring_selftest, bool check_fixed_nodes,
-        double scale_neighborhood, double *initial_temperature,
-        double use_connected_pnode_find)
+void anneal(const annealing_parameters &params, double *initial_temperature)
 {
      
   cout << "Annealing." << endl;
 
   cout << "Using annealing options:";
-  if (epsilon_terminate) {
+  if (params.epsilon_terminate) {
     cout << " epsilon_terminate";  
   }
-  if (finish_hillclimb) {
+  if (params.finish_hillclimb) {
     cout << " finish_hillclimb";  
   }
-  if (local_derivative) {
+  if (params.local_derivative) {
 	cout << " local_derivative";
 	/*
 	 * We need a much smaller epsilon when looking at the local score changes,
@@ -135,6 +108,8 @@ void anneal(bool scoring_selftest, bool check_fixed_nodes,
    */
   double prev_score = 0;
   int prev_violated = 0;
+
+  float temp_rate = params.temp_rate;
 
   /*
    * 
@@ -164,7 +139,7 @@ void anneal(bool scoring_selftest, bool check_fixed_nodes,
   bool oldassigned;
   int num_fixed=0;
   double meltedtemp;
-  temp = init_temp;
+  temp = params.init_temp;
   double deltatemp, deltaavg;
 
   // List of unassigned virtual nodes
@@ -238,7 +213,7 @@ void anneal(bool scoring_selftest, bool check_fixed_nodes,
      * but not always (usually for testing purposes).
      */
     bool skip_checks = true;
-    if (check_fixed_nodes) {
+    if (params.check_fixed_nodes) {
         skip_checks = false;
     }
 
@@ -358,13 +333,13 @@ void anneal(bool scoring_selftest, bool check_fixed_nodes,
    */
   int neighborsize;
   neighborsize = (nnodes - num_fixed) * npclasses;
-  if (neighborsize < min_neighborhood_size) {
-    neighborsize = min_neighborhood_size;
+  if (neighborsize < params.min_neighborhood_size) {
+    neighborsize = params.min_neighborhood_size;
   }
 
   // Allow scaling of the neighborhood size, so we can make assign try harder
   // (or less hard)
-  neighborsize = (int)(neighborsize * scale_neighborhood);
+  neighborsize = (int)(neighborsize * params.scale_neighborhood);
 
 #ifdef CHILL
   std::vector<double> scores;
@@ -397,6 +372,8 @@ void anneal(bool scoring_selftest, bool check_fixed_nodes,
   int tsteps;
   int mintsteps;
 
+
+	
   double meltstart;
 
 #define MAX_AVG_HIST 16
@@ -436,18 +413,12 @@ void anneal(bool scoring_selftest, bool check_fixed_nodes,
       temp = *initial_temperature;
       cout << "Starting with initial temperature " << temp << endl;
   }
-  if (timetarget != 0.0) {
+  if (params.timetarget != 0.0) {
     meltstart = used_time();
   }
 #else
   melting = false;
 #endif
-
-  /*
-   * When melting, this is the number of different solutions we will try during
-   * this temperature step
-   */
-  melt_trans = neighborsize;
   
   /*
    * The main annealing loop!
@@ -456,7 +427,7 @@ void anneal(bool scoring_selftest, bool check_fixed_nodes,
    * at which we stop, but with epsilon_terminate, we watch the derivative of the
    * average temperature, and break out of the loop when it gets small enough.
    */
-  while(epsilon_terminate || (temp >= temp_stop)) {
+  while(params.epsilon_terminate || (temp >= params.temp_stop)) {
       
 #ifdef VERBOSE
     cout << "Temperature:  " << temp << " Best: " << best_score <<
@@ -491,7 +462,7 @@ void anneal(bool scoring_selftest, bool check_fixed_nodes,
      * solution. When we're melting, we have a special number of transitions
      * we're shooting for.
      */
-    while ((melting && (trans < melt_trans))
+    while ((melting && (trans < neighborsize))
 #ifdef NEIGHBOR_LENGTH
 	    || (trans < transitions)) {
 #else
@@ -593,10 +564,10 @@ void anneal(bool scoring_selftest, bool check_fixed_nodes,
        * Find a pnode to map this vnode to
        */
       tb_pnode *newpnode = NULL;
-      if ((use_connected_pnode_find != 0)
-	  && ((RANDOM() % 1000) < (use_connected_pnode_find * 1000))) {
+      if ((params.use_connected_pnode_find != 0)
+	  && ((RANDOM() % 1000) < (params.use_connected_pnode_find * 1000))) {
         RDEBUG(cout << "   using find_pnode_connected" << endl;)
-	newpnode = find_pnode_connected(vv,vn);
+	newpnode = find_pnode_connected(vv,vn,params.allow_overload);
       }
       
       /* 
@@ -605,7 +576,7 @@ void anneal(bool scoring_selftest, bool check_fixed_nodes,
        */
       if (newpnode == NULL) {
         RDEBUG(cout << "   using find_pnode" << endl;)
-	newpnode = find_pnode(vn);
+	newpnode = find_pnode(vn, params.allow_overload);
       }
       
       /*
@@ -658,7 +629,7 @@ void anneal(bool scoring_selftest, bool check_fixed_nodes,
       if (newpnode != NULL) {	
         RDEBUG(cout << "MOVE: " << vn->name << " to " << newpnode->name << " " << endl;)
         newpos = pnode2vertex[newpnode];
-        if (scoring_selftest) {
+        if (params.scoring_selftest) {
 	  // Run a little test here - see if the score we get by adding	
 	  // this node, then removing it, is the same one we had before
 	  double oldscore = get_score();
@@ -772,7 +743,7 @@ void anneal(bool scoring_selftest, bool check_fixed_nodes,
 		 << ")" << endl;
 	    cout << "Violations: (new) " << violated << endl;
 	    cout << vinfo;)
-        } else if (accept(scorediff,temp)) {
+        } else if (accept(scorediff,temp,params)) {
 	  accepttrans = true;
 	  RDEBUG(cout << "accept: metropolis (" << new_score << ","
 		 << prev_score << "," << scorediff << "," << temp
@@ -795,7 +766,7 @@ void anneal(bool scoring_selftest, bool check_fixed_nodes,
 
         if (adjusted_new_score < adjusted_old_score) {
           accepttrans = true;
-        } else if (accept(adjusted_old_score - adjusted_new_score,temp)) {
+        } else if (accept(adjusted_old_score - adjusted_new_score,temp,params)) {
 	  accepttrans = true;
         }
 
@@ -890,7 +861,7 @@ void anneal(bool scoring_selftest, bool check_fixed_nodes,
        */
       if (melting) {
 	temp = avgincrease /
-	  log(nincreases/ (nincreases * X0 - ndecreases * (1 - X0)));
+	  log(nincreases/ (nincreases * params.X0 - ndecreases * (1 - params.X0)));
 	if (!(temp > 0.0)) {
 	    temp = 0.0;
 	}
@@ -899,7 +870,8 @@ void anneal(bool scoring_selftest, bool check_fixed_nodes,
       /*
        * With timelimit set, we just give up after our time limit
        */
-      if ((timelimit != 0.0) && ((used_time() - timestart) > timelimit)) {
+      if ((params.timelimit != 0.0) && 
+		((used_time() - timestart) > params.timelimit)) {
 	printf("Reached end of run time, finishing\n");
 	forcerevert = true;
 	finished = true;
@@ -940,14 +912,14 @@ NOTQUITEDONE:
        * estimate how many temperature steps it will take to hit our time
        * target. We adjust our cooling schedule accordingly.
        */
-      if (timetarget != 0.0) {
+      if (params.timetarget != 0.0) {
 	double melttime = used_time() - meltstart;
-	double timeleft = timetarget - melttime;
+	double timeleft = params.timetarget - melttime;
 	double stepsleft = timeleft / melttime;
 	cout << "Melting took " << melttime << " seconds, will try for "
 	  << stepsleft << " temperature steps" << endl;
-	temp_rate = pow(temp_stop/temp,1/stepsleft);
-	cout << "Timelimit: " << timetarget << " Timeleft: " << timeleft
+	temp_rate = pow(params.temp_stop/temp,1/stepsleft);
+	cout << "Timelimit: " << params.timetarget << " Timeleft: " << timeleft
 	  << " temp_rate: " << temp_rate << endl;
       }
     } else {
@@ -964,7 +936,7 @@ NOTQUITEDONE:
 	  }
 	  stddev /= (accepts +1);
 	  stddev = sqrt(stddev);
-	  temp = temp / (1 + (temp * log(1 + delta))/(3  * stddev));
+	  temp = temp / (1 + (temp * log(1 + params.delta))/(3  * stddev));
       }
 #else
       /* 
@@ -1032,7 +1004,7 @@ NOTQUITEDONE:
      * Are we computing the derivative of the average temperatures over the
      * whole history, or just the most recent one?
      */
-    if (local_derivative) {
+    if (params.local_derivative) {
       deltaavg = lastsmoothed - smoothedavg;
       deltatemp = lasttemp - temp;
     } else {
@@ -1048,7 +1020,7 @@ NOTQUITEDONE:
      * the derivative of the average change in temperature gets below that
      * epsilon (ie. we have stopped getting improvements in score), we're done
      */
-    if (epsilon_terminate) {
+    if (params.epsilon_terminate) {
         RDEBUG(
            printf("avgs: real: %f, smoothed %f, initial: %f\n",avgscore,smoothedavg,initialavg);
            printf("epsilon: (%f) %f / %f * %f / %f < %f (%f)\n", fabs(deltaavg), temp, initialavg,
@@ -1059,7 +1031,8 @@ NOTQUITEDONE:
         // temperature_guard clause is formulated to give the correct result
         // even when temp goes to nan
         if ((tsteps >= mintsteps) &&
-                ((temperature_guard < 0) || !(temp > temperature_guard)) &&
+                ((params.temperature_guard < 0) ||
+                !(temp > params.temperature_guard)) &&
         /*
          * ALLOW_NEGATIVE_DELTA controls whether we're willing to stop if the
          * derivative gets small and negative, not just small and positive.
@@ -1076,7 +1049,7 @@ NOTQUITEDONE:
              * Normally, we are done here.
              */
     		forcerevert = true;
-            if (!finish_hillclimb) {
+            if (!params.finish_hillclimb) {
                 finished = true;
             } else {
                 /*
@@ -1136,7 +1109,7 @@ NOTQUITEDONE:
       cout << "Reverting: forced" << endl;
       revert = true;
     }
-    if (!epsilon_terminate && (temp < temp_stop)) {
+    if (!params.epsilon_terminate && (temp < params.temp_stop)) {
        cout << "Reverting: finished annealing" << endl;
        revert = true;
     }
