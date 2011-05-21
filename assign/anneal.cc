@@ -159,10 +159,15 @@ void anneal(const annealing_parameters &params, double *initial_temperature)
   iters_to_best = 0;
   int accepts = 0;
   
+  // Used for figuring out how much time we might have wasted
+  double time_to_first_valid = 0.0;
+  double time_to_best = 0.0;
 
   int nnodes = num_vertices(VG);
   //int npnodes = num_vertices(PG);
   int npclasses = pclasses.size();
+  
+  bool done = false;
  
   int trans;
 
@@ -385,7 +390,7 @@ void anneal(const annealing_parameters &params, double *initial_temperature)
 
   if (num_fixed >= nnodes) {
     cout << "All nodes are fixed.  No annealing." << endl;
-    goto DONE;
+    done = true;
   }
   
   vvertex vv;
@@ -464,7 +469,7 @@ void anneal(const annealing_parameters &params, double *initial_temperature)
    * at which we stop, but with epsilon_terminate, we watch the derivative of the
    * average temperature, and break out of the loop when it gets small enough.
    */
-  while(params.epsilon_terminate || (temp >= params.temp_stop)) {
+  while(!done && (params.epsilon_terminate || (temp >= params.temp_stop))) {
       
 #ifdef VERBOSE
     cout << "Temperature:  " << temp << " Best: " << best_score <<
@@ -552,7 +557,7 @@ void anneal(const annealing_parameters &params, double *initial_temperature)
 	    vv = virtual_nodes[choice];
 	} else {
 	    cout << "**** Error, unable to find any non-fixed nodes" << endl;
-	    goto DONE;
+	    exit(EXIT_UNRETRYABLE);
 	}
       }      
       vn = get(vvertex_pmap,vv);
@@ -819,6 +824,11 @@ void anneal(const annealing_parameters &params, double *initial_temperature)
 	// Accept change
 	prev_score = new_score;
 	prev_violated = violated;
+	
+	if (violated == 0 && (time_to_first_valid == 0.0)) {
+        cout << "    Found first valid solution on iteration " << iters << endl;
+        time_to_first_valid = used_time() - meltstart;
+    }
 
 #ifdef GNUPLOT_OUTPUT
 	fprintf(tempout,"%f\n",temp);
@@ -876,6 +886,7 @@ void anneal(const annealing_parameters &params, double *initial_temperature)
 	  best_score = new_score;
 	  best_violated = violated;
 	  iters_to_best = iters;
+      time_to_best = used_time() - meltstart;
 #ifdef SCORE_DEBUG
 	  cerr << "New best recorded" << endl;
 #endif
@@ -940,9 +951,11 @@ NOTQUITEDONE:
       RDEBUG(cout << "Melting finished with a temperature of " << temp
 	<< " avg score was " << initialavg << endl;)
       if (!(meltedtemp > 0.0)) { // This backwards expression to catch NaNs
-	cout << "Finished annealing while melting!" << endl;
+	cout << "    Finished annealing while melting!" << endl;
 	finished = true;
 	forcerevert = true;
+      } else {
+          cout << "Finished melting, picked temperature " << temp << endl;
       }
       /*
        * With timetarget, we look at how long melting took, then use that to
@@ -1284,10 +1297,33 @@ NOTQUITEDONE:
     tsteps++;
 
     if (finished) {
-      goto DONE;
+        done = true;
     }
   } /* End of outer annealing loop */
-DONE:
-  cout << "Done" << endl;
+
+  cout << "Done annealing" << endl;
+  
+  /*
+   * Print out some useful statistics
+   */
+  double finished_time = used_time();
+  double annealing_time = finished_time - meltstart;
+  
+  cout << "    Total annealing time: " << annealing_time << endl;
+  cout << "    Total temperature steps: " << tsteps << endl;
+  cout << "    Total iterations: " << iters << endl;
+  cout << "    Finshed at temperature: " << temp << endl;
+  cout << "    Average iterations per second: " << (iters/annealing_time)
+       << endl;
+  if (time_to_first_valid > 0.0) {
+    cout << "    Fraction of time to find first valid solution: "
+         << (time_to_first_valid / annealing_time) << endl;
+  }
+
+  if (time_to_best > 0.0) {
+    cout << "    Fraction of time to find best solution: "
+         << (time_to_best / annealing_time) << endl;
+  }
+  
 } // End of anneal()
 	    
