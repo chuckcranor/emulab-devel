@@ -73,6 +73,49 @@ inline bool accept(double change, double temperature,
   return 0;
 }
 
+/*
+ * Dump annealing parameters
+ */
+ostream &operator<<(ostream &o, const annealing_parameters &ap) {
+    o << "Annealing Parameters:" << endl;
+    if (ap.epsilon_terminate) {
+        o << "    epsilon_terminate" << endl;
+    }
+    if (ap.finish_hillclimb) {
+        o << "    finish_hillclimb" << endl;
+    }
+    if (ap.local_derivative) {
+        o << "    local_derivative" << endl;
+    }
+    if (ap.temperature_guard != -1.0) {
+        o << "    temperature_guard = " << ap.temperature_guard << endl;
+    }
+    if (ap.timetarget > 0.0) {
+        o << "    timetarget = " << ap.timetarget << endl;
+    }
+    if (ap.timelimit > 0.0) {
+        o << "    timelimit = " << ap.timelimit << endl;
+    }
+    if (ap.allow_overload) {
+        o << "    allow_overload" << endl;
+    }
+    if (ap.use_connected_pnode_find > 0.0) {
+        o << "    use_connected_pnode_find = " << ap.use_connected_pnode_find
+            << endl;
+    }
+    if (ap.scoring_selftest) {
+        o << "    scoring_selftest" << endl;
+    }
+    if (ap.check_fixed_nodes) {
+        o << "    check_fixed_nodes" << endl;
+    }
+    if (ap.scale_neighborhood != 1.0) {
+        o << "    scale_neighborhood = " << ap.scale_neighborhood << endl;
+    }
+    
+    return o;
+}
+
 // We put the temperature outside the function so that external stuff, like
 // status_report in assign.cc, can see it.
 double temp;
@@ -83,15 +126,10 @@ void anneal(const annealing_parameters &params, double *initial_temperature)
      
   cout << "Annealing." << endl;
 
-  cout << "Using annealing options:";
-  if (params.epsilon_terminate) {
-    cout << " epsilon_terminate";  
-  }
-  if (params.finish_hillclimb) {
-    cout << " finish_hillclimb";  
-  }
+  // Print out parameters so that we can check them
+  cout << params;
+
   if (params.local_derivative) {
-	cout << " local_derivative";
 	/*
 	 * We need a much smaller epsilon when looking at the local score changes,
 	 * since the absolute values are much smaller.
@@ -100,7 +138,6 @@ void anneal(const annealing_parameters &params, double *initial_temperature)
   } else {
     epsilon = 0.01;
   }
-  cout << endl;
 
   /*
    * The score and number of violations at the start of the inner annealing
@@ -641,7 +678,7 @@ void anneal(const annealing_parameters &params, double *initial_temperature)
 	    tempviolated = violated;
 	    remove_node(vv);
 	  }	
-	  if ((oldscore != get_score()) || (oldviolated != violated)) {
+	  if (!compare_scores(oldscore,get_score()) || (oldviolated != violated)) {
 	    cerr << "Scoring problem adding a mapping - oldscore was " <<
 		oldscore <<  " current score is " << get_score() << " tempscore was "
 		<< tempscore << endl;

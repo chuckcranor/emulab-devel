@@ -206,6 +206,11 @@ public:
 		scoring_selftest(false),
 		check_fixed_nodes(false)
 	{;}
+	
+	/*
+	 * Useful for debugging
+	 */
+	friend ostream &operator<<(ostream &o, const annealing_parameters &ap);
 };
 
 /*
