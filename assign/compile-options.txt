@@ -46,9 +46,6 @@ PHYS_CHAIN_LEN		Make the length of Markov chains (iters. at each
 			graph. Not for use with the new cooling schedule
 USE_OPTIMAL		Exit early if we hit a lower bound we've computed on
 			the score. Not very maintainable, so not recommended
-LOCAL_DERIVATIVE	Use the local derivative for EPSILON_TERMINATE - default
-			is to use the total temperature delta divided by the
-			total temperature delta
 ALLOW_NEGATIVE_DELTA    I was having some trouble with EPSILON_TERMINATE -
 			the average score was getting temporarily worse by
 			a small amount, causing early termination. If this

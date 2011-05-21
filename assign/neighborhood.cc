@@ -218,17 +218,17 @@ tb_pnode *find_pnode(tb_vnode *vn)
     }
 
     RDEBUG(cout << "find_pnode: Members list has " <<
-            pclass->members[vn->type]->L.size() << ", type is " << vn->type <<
+            pclass->members[vn->type]->size() << ", type is " << vn->type <<
             ", used is " << pclass->used_members << endl;)
-    list<tb_pnode*>::iterator it = pclass->members[vn->type]->L.begin();
-    while (it != pclass->members[vn->type]->L.end()) {
+    list<tb_pnode*>::iterator it = pclass->members[vn->type]->begin();
+    while (it != pclass->members[vn->type]->end()) {
 	if (pnode_is_match(vn,*it)) {
 	    break; 
 	} else {
 	    it++;
 	}
     }
-    if (it == pclass->members[vn->type]->L.end()) {
+    if (it == pclass->members[vn->type]->end()) {
 	newpnode = NULL;
     } else {
 	newpnode = *it;

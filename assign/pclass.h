@@ -7,63 +7,50 @@
 #ifndef __PCLASS_H
 #define __PCLASS_H
 
-#include<map>
+#include <map>
 
-// Declared in assign.cc - indicated whether or not we should use pclasses
+/*
+ * Defined in assign.cc - indicates whether or not we should use pclasses
+ */
 extern bool use_pclasses;
 
-// tb pnode list is a data structure that acts like list but has
-// O(1) removal.  It is a list of tb_pnode*.
+/*
+ * tb pnode list is a data structure that acts like list but has
+ * O(1) removal.  It is a list of tb_pnode*.
+ */
 class tb_pnodelist {
+
 public:
-  typedef list<tb_pnode*> pnode_list;
-  typedef pnode_list::iterator list_iter;
-  pnode_list L;
-  typedef hash_map<tb_pnode*,list_iter,hashptr<tb_pnode*> > pnode_iter_map;
-  pnode_iter_map D;
+	/*
+	 * These have to be public so that others can declare iterators
+	 */
+	typedef list<tb_pnode*> pnode_list;
+	typedef pnode_list::iterator list_iter;
+	
 
-  list_iter push_front(tb_pnode *p) {
-    L.push_front(p);
-    list_iter it = L.begin();
-    D[p]=it;
-    return it;
-  };
-  list_iter push_back(tb_pnode *p) {
-    L.push_back(p);
-    list_iter it = L.end();
-    it--;
-    D[p]=it;
-    return it;
-  };
-  int remove(tb_pnode *p) {
-    if (exists(p)) {
-      pnode_iter_map::iterator dit = D.find(p);
-      L.erase((*dit).second);
-      D.erase(dit);
-      return 0;
-    } else {
-      return 1;
-    }
-  };
-  int exists(tb_pnode *p) {
-    return (D.find(p) != D.end());
-  }
-  tb_pnode *front() {
-    return (L.empty() ? NULL : L.front());
-  };
+	/*
+	 * These do the same thing as the standard list functions
+	 */
+	list_iter begin();
+	list_iter end();	
+	list_iter push_front(tb_pnode *p);
+	list_iter push_back(tb_pnode *p);
+	int remove(tb_pnode *p);
+	int exists(tb_pnode *p);
+	tb_pnode *front();
+	int size();
+	
+	/*
+	 * For debugging - print out the whole list
+	 */
+	friend ostream &operator<<(ostream &o, const tb_pnodelist& l);
+		
+private:
+	pnode_list L;
+	typedef hash_map<tb_pnode*,list_iter,hashptr<tb_pnode*> > pnode_iter_map;
+	pnode_iter_map D;
 
-  int size() {
-      return L.size();
-  };
 
-  friend ostream &operator<<(ostream &o, const tb_pnodelist& l)
-  {
-    pnode_list::const_iterator lit;
-    for (lit=l.L.begin();lit!=l.L.end();++lit) {
-      o << "    " << (*lit)->name << endl;
-    }
-    return o;
-  }
 };
 
 class tb_pclass {

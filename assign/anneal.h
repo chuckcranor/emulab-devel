@@ -70,6 +70,12 @@ extern bool finish_hillclimb;
  */
 extern bool epsilon_terminate;
 
+/*
+ * Use the local derivative for epsilon_terminate - if this is off, we use the 
+ * total score delta divided by the total temperature delta.
+ */
+extern bool local_derivative;
+
 // Initial acceptance ratio for melting
 extern float X0;
 extern float epsilon;

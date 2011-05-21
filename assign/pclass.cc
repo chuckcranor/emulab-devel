@@ -56,6 +56,87 @@ extern pclass_list pclasses;
 // length of the array.
 extern pclass_types type_table;
 
+/*
+ * Class: tb_pnodelist
+ */
+tb_pnodelist::list_iter tb_pnodelist::begin() {
+	return L.begin();
+}
+
+tb_pnodelist::list_iter tb_pnodelist::end() {
+	return L.end();
+}
+
+tb_pnodelist::list_iter tb_pnodelist::push_front(tb_pnode *p) {
+
+	L.push_front(p);
+
+	/*
+	 * In addition to the standard list insertion, record the iterator in a
+	 * hashtable for fast lookup
+	 */
+	list_iter it = L.begin();
+	D[p]=it;
+
+	return it;
+};
+
+tb_pnodelist::list_iter tb_pnodelist::push_back(tb_pnode *p) {
+	L.push_back(p);
+
+	/*
+	 * In addition to the standard list insertion, record the iterator in a
+	 * hashtable for fast lookup
+	 */
+	list_iter it = L.end();
+	it--;
+	D[p]=it;
+
+	return it;
+};
+
+int tb_pnodelist::remove(tb_pnode *p) {
+	/*
+	 * This can go fast, since we can look up the iterator for the item in
+	 * our hash table
+	 */
+	if (exists(p)) {
+		pnode_iter_map::iterator dit = D.find(p);
+    	L.erase((*dit).second);
+    	D.erase(dit);
+    	return 0;
+  	} else {
+		return 1;
+  	}
+};
+
+int tb_pnodelist::exists(tb_pnode *p) {
+	/*
+	 * Also fast thanks to our hashtable
+	 */
+	return (D.find(p) != D.end());
+}
+
+tb_pnode *tb_pnodelist::front() {
+	return (L.empty() ? NULL : L.front());
+};
+
+int tb_pnodelist::size() {
+    return L.size();
+};
+
+ostream &operator<<(ostream &o, const tb_pnodelist& l) {
+	tb_pnodelist::pnode_list::const_iterator lit;
+	for (lit=l.L.begin();lit!=l.L.end();++lit) {
+		o << "    " << (*lit)->name << endl;
+	}
+	return o;
+}
+
+/*
+ * Standalone (non-class) functions
+ */
+
 // returns 1 if a and b are equivalent.  They are equivalent if the
 // type and features information match and if there is a one-to-one
 // mapping between links that preserves bw, and destination.

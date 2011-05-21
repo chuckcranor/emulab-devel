@@ -46,6 +46,7 @@ name_name_map node_hints;
 
 // See anneal.h for descriptions
 bool epsilon_terminate = true;
+bool local_derivative = true;
 float temperature_guard = -1;
 bool finish_hillclimb = false;
 
@@ -69,11 +70,7 @@ int CYCLES = 20;
 // The following are basically arbitrary constants
 // Initial acceptance ratio for melting
 float X0 = .95;
-#ifdef LOCAL_DERIVATIVE
-float epsilon = 0.0001;
-#else
-float epsilon = 0.01;
-#endif
+float epsilon;
 float delta = 2;
 
 // Number of runs to spend melting
@@ -119,6 +116,16 @@ void anneal(bool scoring_selftest, bool check_fixed_nodes,
   }
   if (finish_hillclimb) {
     cout << " finish_hillclimb";  
+  }
+  if (local_derivative) {
+	cout << " local_derivative";
+	/*
+	 * We need a much smaller epsilon when looking at the local score changes,
+	 * since the absolute values are much smaller.
+	 */
+	epsilon = 0.0001;
+  } else {
+    epsilon = 0.01;
   }
   cout << endl;
 
@@ -1025,13 +1032,13 @@ NOTQUITEDONE:
      * Are we computing the derivative of the average temperatures over the
      * whole history, or just the most recent one?
      */
-#ifdef LOCAL_DERIVATIVE
-    deltaavg = lastsmoothed - smoothedavg;
-    deltatemp = lasttemp - temp;
-#else
-    deltaavg = initialavg - smoothedavg;
-    deltatemp = meltedtemp - temp;
-#endif
+    if (local_derivative) {
+      deltaavg = lastsmoothed - smoothedavg;
+      deltatemp = lasttemp - temp;
+    } else {
+      deltaavg = initialavg - smoothedavg;
+      deltatemp = meltedtemp - temp;
+    }
 
     lastsmoothed = smoothedavg;
     lasttemp = temp;

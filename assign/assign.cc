@@ -169,7 +169,7 @@ tb_ptype_map ptypes;
  */
 
 // Return the CPU time (in seconds) used by this process
-float used_time() {
+double used_time() {
   struct rusage ru;
   getrusage(RUSAGE_SELF,&ru);
   return ru.ru_utime.tv_sec+ru.ru_utime.tv_usec/1000000.0+
@@ -393,8 +393,8 @@ void prune_unusable_pclasses() {
                  */
                 if (!(*pclass_iterator)->is_dynamic) {
                     tb_pnodelist::list_iter pnode_iterator =
-                        ptype_iterator->second->L.begin();
-                    while (pnode_iterator != ptype_iterator->second->L.end()) {
+                        ptype_iterator->second->begin();
+                    while (pnode_iterator != ptype_iterator->second->end()) {
                         /*
                          * Get the slotcount for this ptype
                          */
@@ -473,6 +473,7 @@ void print_help() {
   cout << "  -C          - Finish with a round of hill climbing" << endl;
   cout << "  -a <float>  - Attempt to terminate in <float> seconds (not ver accruate)" << endl;
   cout << "  -E          - Turn off the 'epsilon termination' condition" << endl;
+  cout << "  -A          - Use absolute, rather than local, derivative, for termination" << endl;
   cout << "  cparams     - You probably don't want to touch these!" << endl;
   cout << "                If you must, see config.h in the source for a list"
        << endl;
@@ -645,7 +646,7 @@ int mapping_precheck() {
 
 		bool potential_match = true;
 		// Grab the first node of the pclass as a representative sample
-	 	tb_pnode *pnode = *((*it)->members[this_type]->L.begin());
+	 	tb_pnode *pnode = *((*it)->members[this_type]->begin());
 
 		// Check to see if any of the link that this pnode has are of
 		// the correct type for the virtual node
@@ -870,9 +871,9 @@ int main(int argc,char **argv) {
 	char* ptopFileFormat;
 	char* vtopFileFormat;
 	const char* delims = "/";
-	const char* flags = "s:v:l:t:rpPTdH:oguc:nx:y:W:FDSf:G:Ca:E";
+	const char* flags = "s:v:l:t:rpPTdH:oguc:nx:y:W:FDSf:G:Ca:EA";
 #else
-	const char* flags = "s:v:l:t:rpPTdH:oguc:nx:y:FDSG:Ca:E";
+	const char* flags = "s:v:l:t:rpPTdH:oguc:nx:y:FDSG:Ca:EA";
 #endif	
 	
   while ((ch = getopt(argc,argv,flags)) != -1) {
@@ -948,6 +949,9 @@ int main(int argc,char **argv) {
       break;
     case 'E':
       epsilon_terminate = false;
+      break;
+    case 'A':
+      local_derivative = false;
       break;
     case 'x':
 #ifdef WITH_XML

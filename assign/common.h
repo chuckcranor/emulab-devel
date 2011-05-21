@@ -95,7 +95,7 @@ template <class T> struct hashptr {
 /*
  * Return the CPU time (in seconds) used by this process
  */
-float used_time();
+double used_time();
 
 /*
  * Misc. debugging stuff
