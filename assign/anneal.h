@@ -38,6 +38,7 @@ using namespace __gnu_cxx;
 #include "physical.h"
 #include "pclass.h"
 #include "fstring.h"
+#include "solution.h"
 
 // Some defaults for #defines
 #ifndef NO_REVERT
@@ -53,6 +54,12 @@ using namespace __gnu_cxx;
 #else
 #define PHYSICAL(x) 0
 #endif
+
+/*
+ * TODO: Where do these go?
+ */
+typedef hash_map<fstring,fstring> name_name_map;
+typedef slist<fstring> name_slist;
 
 /*
  * Parameters used to control annealing - we put these in a struct so that
@@ -235,6 +242,43 @@ public:
 };
 
 /*
+ * This class encapsulates the state of the annealing process
+ * TODO:
+ *   Make references to the global structures, instead of using the globals
+ *     directly
+ *   Keep things like the solution, best score, etc. inside the class
+ *   Deal with returning the result to the caller
+ */
+class annealer {
+public:
+	explicit annealer(const annealing_parameters &_params) :
+		params(_params) {;};
+	/*
+	 * The big guy!
+	 */
+	void anneal();
+	
+	/*
+	 * Print out a status report to the given ostream - useful for
+	 * SIGINFO, etc.
+	 */
+	void status_report(ostream &o) const;
+	
+private:
+	/*
+	 * Decides based on the temperature if a new score should be accepted
+	 * or not
+	*/
+	bool accept(double change, double temperature) const;
+
+	// Annealing-specific parameters
+	const annealing_parameters &params;
+	
+	// Current temperature
+	double temp;	
+};
+
+/*
  * From assign.cc - time we started annealing
  */
 extern double timestart;
@@ -248,23 +292,13 @@ extern pclass_list pclasses;
 extern pnode_pvertex_map pnode2vertex;
 extern double best_score;
 extern int best_violated, iters, iters_to_best;
+extern name_vvertex_map vname2vertex;
 
 extern pclass_types vnode_type_table;
-
-/* Decides based on the temperature if a new score should be accepted or not */
-inline bool accept(double change, double temperature,
-	const annealing_parameters &params);
-
-/* Find a pnode that can satisfy the give vnode */
-tb_pnode *find_pnode(tb_vnode *vn);
-
-/*
- * The big guy!
- * TODO: Deal with intial temperature!
- */
-void anneal(const annealing_parameters &params);
-
-typedef hash_map<fstring,fstring> name_name_map;
-typedef slist<fstring> name_slist;
+extern solution best_solution;
+extern vvertex_vector virtual_nodes;
+extern name_pvertex_map pname2vertex;
+extern name_name_map fixed_nodes;
+extern name_name_map node_hints;
 
 #endif

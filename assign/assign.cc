@@ -147,6 +147,34 @@ int iters, iters_to_best;
 // Map of all physical types in use in the system
 tb_ptype_map ptypes;
 
+// Map of virtual node name to its vertex descriptor.
+name_vvertex_map vname2vertex;
+
+// These variables store the best solution.
+solution best_solution;
+
+// This is a vector of all the nodes in the top file.  It's used
+// to randomly choose nodes.
+vvertex_vector virtual_nodes;
+
+// Map of physical node name to its vertex descriptor.
+name_pvertex_map pname2vertex;
+
+// Map of virtual node name to the physical node name it's fixed to.
+// The domain is the set of all fixed virtual nodes and the range is
+// the set of all fixed physical nodes.
+name_name_map fixed_nodes;
+
+// Map of virtual node name to the physical node name that we should
+// start the virtual node on. However, unlike fixed nodes, assign is
+// allowed to move these.
+name_name_map node_hints;
+
+/*
+ * Actual object that will do the annealing
+ */
+annealer *anneal = NULL;
+
 /*
  * Internal functions
  */
@@ -822,11 +850,12 @@ void exit_unretryable(int signal) {
 }
 
 // Singal handler - add a way for a user to get some status information
-extern double temp;
 void status_report(int signal) {
-  cout << "I: " << iters << " T: " << temp << " S: " << get_score() << " V: "
-    << violated << " (Best S: " << best_score << " V:" << best_violated << ")"
-    << endl;
+  if (anneal == NULL) {
+    cout << "Annealer not running" << endl;
+  } else {
+    anneal->status_report(cout);
+  }
   cout.flush();
 }
 
@@ -1210,8 +1239,11 @@ int main(int argc,char **argv) {
   /*
    * Go baby go!
    */
-  anneal(annealing_params);
+  anneal = new annealer(annealing_params);
+  anneal->anneal();
   timeend = used_time();
+  delete anneal;
+  anneal = NULL;
 
 #ifdef GNUPLOT_OUTPUT
   fclose(scoresout);

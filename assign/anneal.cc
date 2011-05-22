@@ -12,37 +12,10 @@ static const char rcsid[] = "$Id: anneal.cc,v 1.46 2009-05-20 18:06:07 tarunp Ex
 #include "maps.h"
 #include "common.h"
 #include "score.h"
-#include "solution.h"
 #include "vclass.h"
 #include "neighborhood.h"
 
 #include <vector>
-
-/*
- * Internal variables
- */
-// These variables store the best solution.
-solution best_solution;
-
-// Map of virtual node name to its vertex descriptor.
-name_vvertex_map vname2vertex;
-
-// This is a vector of all the nodes in the top file.  It's used
-// to randomly choose nodes.
-vvertex_vector virtual_nodes;
-
-// Map of physical node name to its vertex descriptor.
-name_pvertex_map pname2vertex;
-  
-// Map of virtual node name to the physical node name it's fixed to.
-// The domain is the set of all fixed virtual nodes and the range is
-// the set of all fixed physical nodes.
-name_name_map fixed_nodes;
-
-// Map of virtual node name to the physical node name that we should
-// start the virtual node on. However, unlike fixed nodes, assign is
-// allowed to move these.
-name_name_map node_hints;
 
 // From assign.cc
 #ifdef GNUPLOT_OUTPUT
@@ -51,8 +24,7 @@ extern FILE *scoresout, *tempout, *deltaout;
 
 // Determines whether to accept a change of score difference 'change' at
 // temperature 'temperature'.
-inline bool accept(double change, double temperature,
-	const annealing_parameters &params) {
+inline bool annealer::accept(double change, double temperature) const {
   double p;
   int r;
 
@@ -128,19 +100,19 @@ ostream &operator<<(ostream &o, const annealing_parameters &ap) {
     return o;
 }
 
-// We put the temperature outside the function so that external stuff, like
-// status_report in assign.cc, can see it.
-double temp;
+void annealer::status_report(ostream &o) const {
+  o << "I: " << iters << " T: " << temp << " S: " << get_score() << " V: "
+    << violated << " (Best S: " << best_score << " V:" << best_violated << ")"
+    << endl;	
+}
 
 /* When this is finished the state will reflect the best solution found. */
-void anneal(const annealing_parameters &params) {
+void annealer::anneal() {
      
   cout << "Annealing." << endl;
 
   // Print out parameters so that we can check them
   cout << params;
-
-
 
   /*
    * The score and number of violations at the start of the inner annealing
@@ -784,7 +756,7 @@ void anneal(const annealing_parameters &params) {
 		 << ")" << endl;)
 	    //cout << "Violations: (new) " << violated << endl;
 	    //cout << vinfo;
-        } else if (accept(scorediff,temp,params)) {
+        } else if (accept(scorediff,temp)) {
 	  accepttrans = true;
 	  RDEBUG(cout << "accept: metropolis (" << new_score << ","
 		 << prev_score << "," << scorediff << "," << temp
@@ -807,7 +779,7 @@ void anneal(const annealing_parameters &params) {
 
         if (adjusted_new_score < adjusted_old_score) {
           accepttrans = true;
-        } else if (accept(adjusted_old_score - adjusted_new_score,temp,params)) {
+        } else if (accept(adjusted_old_score - adjusted_new_score,temp)) {
 	  accepttrans = true;
         }
 
