@@ -30,16 +30,10 @@ Cooling Schedule Options
 ------------------------
 
 These four constitute the new, from the literature, cooling schedule:
-MELT			Start with a melting phase, in which we accept all
-			transitions, and decide on an initial temperature.
-			Standard SA stuff.
 CHILL			Rather than a simple multiplicative decrease in 
 			temperature, uses a function from the literature that
 			picks the new temperature based on the score change
 			in the previous temperature stop
-NEIGHBOR_LENGTH		Base the length of the Markov chains on the approximate
-			size of the neighborhood structure - simply the number
-			of vnodes * the number of pclasses
 
 PHYS_CHAIN_LEN		Make the length of Markov chains (iters. at each
 			temperature step) dependent on the size of the physical

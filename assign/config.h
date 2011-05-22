@@ -44,7 +44,6 @@ static struct config_param options[] = {
     { "IT",	CONFIG_INT,	&init_temp,			0 },
     { "TP",	CONFIG_INT,	&temp_prob,			0 },
     { "TS",	CONFIG_INT,	&temp_stop,			0 },
-    { "CY",	CONFIG_INT,	&CYCLES,			0 },
     { "ON",	CONFIG_FLOAT,	&opt_nodes_per_sw,		0 },
     { "TR",	CONFIG_FLOAT,	&temp_rate,			0 },
 #endif

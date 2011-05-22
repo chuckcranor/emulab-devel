@@ -111,11 +111,6 @@ bool dynamic_pclasses = false;
 // list, which is usually the lowest-cost
 bool greedy_link_assignment = false;
 
-// Forces assign to skip melting, and, instead, use the temperature given as
-// the initial temperature
-bool no_melting = false;
-double initial_temperature = 0.0f;
-
 // Print out a summary of the solution in addition to the solution itself
 bool print_summary = false;
 
@@ -908,10 +903,10 @@ int main(int argc,char **argv) {
     case 'g':
       greedy_link_assignment = true; break;
     case 't':
-      if (sscanf(optarg,"%lf",&initial_temperature) != 1) {
+      if (sscanf(optarg,"%lf",&annealing_params.initial_temperature) != 1) {
 	print_help();
       }
-      no_melting = true; break;
+      annealing_params.melt = false; break;
     case 'u':
       print_summary = true; break;
     case 'c':
@@ -965,6 +960,10 @@ int main(int argc,char **argv) {
 	  case 'F':
           annealing_params.check_fixed_nodes = true;
     break;
+	  case 'M':
+          annealing_params.melt = false;
+    break;
+        
 
 #ifdef WITH_XML
 
@@ -1207,18 +1206,11 @@ int main(int argc,char **argv) {
     sfile.close();
   }
 #endif
-
-  // Handle the initial temperature, if one was given - a NULL initial temp.
-  // means that we should start with the normal melting procedure
-  double *initial_temperature_pointer;
-  if (no_melting) {
-    initial_temperature_pointer = &initial_temperature;
-  } else {
-    initial_temperature_pointer = NULL;
-  }
  
-  // Note, time is started earlier now, up by where we make pclasses
-  anneal(annealing_params, initial_temperature_pointer);
+  /*
+   * Go baby go!
+   */
+  anneal(annealing_params);
   timeend = used_time();
 
 #ifdef GNUPLOT_OUTPUT

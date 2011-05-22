@@ -172,7 +172,7 @@ public:
 	 * it again and move on. Slows assign down a lot, but useful for finding
 	 * bugs in the scoring system.
 	 */
-	bool scoring_selftest;
+        bool scoring_selftest;
 	
 	/*
 	 * Normally, we *don't* require fixed nodes to pass all of the checks
@@ -182,6 +182,25 @@ public:
 	 * checks.
 	 */
 	bool check_fixed_nodes;
+	
+	/*
+	 * This one is midly tricky, as it depends on the value of
+	 * local_derivative - not sure a fucntion is the most efficient thing
+	 * to do, but we'll give it a try.  
+	 */ 	
+        float get_epsilon() const;
+
+        /*
+         * When true, try to arrive at an intial temperature through a
+         * special round of annealing
+         */
+        bool melt;
+         
+        /*
+         * When *not* doing melting, this provides a temperature to start
+         * with
+         */
+        double initial_temperature;
 	
 	/*
 	 * Defaults
@@ -204,7 +223,9 @@ public:
 		allow_overload(false),
 		use_connected_pnode_find(0.0),
 		scoring_selftest(false),
-		check_fixed_nodes(false)
+		check_fixed_nodes(false),
+		melt(true),
+		initial_temperature(10.0)
 	{;}
 	
 	/*
@@ -212,12 +233,6 @@ public:
 	 */
 	friend ostream &operator<<(ostream &o, const annealing_parameters &ap);
 };
-
-/*
- * TODO: These are messy ones - deal with them later!
- */
-extern int CYCLES;
-extern float epsilon;
 
 /*
  * From assign.cc - time we started annealing
@@ -247,7 +262,7 @@ tb_pnode *find_pnode(tb_vnode *vn);
  * The big guy!
  * TODO: Deal with intial temperature!
  */
-void anneal(const annealing_parameters &params, double *initial_temperature);
+void anneal(const annealing_parameters &params);
 
 typedef hash_map<fstring,fstring> name_name_map;
 typedef slist<fstring> name_slist;

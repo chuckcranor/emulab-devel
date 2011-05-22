@@ -49,11 +49,6 @@ name_name_map node_hints;
 extern FILE *scoresout, *tempout, *deltaout;
 #endif
 
-// The following are basically arbitrary constants
-float epsilon;
-int CYCLES = 20;
-
-
 // Determines whether to accept a change of score difference 'change' at
 // temperature 'temperature'.
 inline bool accept(double change, double temperature,
@@ -73,6 +68,18 @@ inline bool accept(double change, double temperature,
   return 0;
 }
 
+inline float annealing_parameters::get_epsilon() const {
+  if (this->local_derivative) {
+    /*
+     * We need a much smaller epsilon when looking at the local score changes,
+     * since the absolute values are much smaller.
+     */
+    return 0.0001;
+  } else {
+    return 0.01;
+  }
+}
+
 /*
  * Dump annealing parameters
  */
@@ -86,6 +93,11 @@ ostream &operator<<(ostream &o, const annealing_parameters &ap) {
     }
     if (ap.local_derivative) {
         o << "    local_derivative" << endl;
+    }
+    if (ap.melt) {
+        o << "    melt" << endl;
+    } else {
+        o << "    initial_temperature: " << ap.initial_temperature << endl;    
     }
     if (ap.temperature_guard != -1.0) {
         o << "    temperature_guard = " << ap.temperature_guard << endl;
@@ -121,23 +133,14 @@ ostream &operator<<(ostream &o, const annealing_parameters &ap) {
 double temp;
 
 /* When this is finished the state will reflect the best solution found. */
-void anneal(const annealing_parameters &params, double *initial_temperature)
-{
+void anneal(const annealing_parameters &params) {
      
   cout << "Annealing." << endl;
 
   // Print out parameters so that we can check them
   cout << params;
 
-  if (params.local_derivative) {
-	/*
-	 * We need a much smaller epsilon when looking at the local score changes,
-	 * since the absolute values are much smaller.
-	 */
-	epsilon = 0.0001;
-  } else {
-    epsilon = 0.01;
-  }
+
 
   /*
    * The score and number of violations at the start of the inner annealing
@@ -170,12 +173,6 @@ void anneal(const annealing_parameters &params, double *initial_temperature)
   bool done = false;
  
   int trans;
-
-#ifndef NEIGHBOR_LENGTH
-  float cycles = CYCLES*(float)(nnodes + num_edges(VG) + PHYSICAL(npnodes));
-  int naccepts = 20*(nnodes + PHYSICAL(npnodes));
-  int mintrans = (int)cycles;
-#endif
 
   pvertex oldpos;
   bool oldassigned;
@@ -405,9 +402,7 @@ void anneal(const annealing_parameters &params, double *initial_temperature)
   tb_vnode *vn;
 
   // Crap added by ricci
-#ifdef MELT
   bool melting;
-#endif
   int nincreases, ndecreases;
   double avgincrease;
   double avgscore;
@@ -453,20 +448,16 @@ void anneal(const annealing_parameters &params, double *initial_temperature)
   /*
    * Initial temperature calcuation/melting
    */
-#ifdef MELT
-  if (initial_temperature == NULL) {
+  if (params.melt) {
       melting = true;
   } else {
       melting = false;
-      temp = *initial_temperature;
+      temp = params.initial_temperature;
       cout << "Starting with initial temperature " << temp << endl;
   }
-  if (params.timetarget != 0.0) {
-    meltstart = used_time();
-  }
-#else
-  melting = false;
-#endif
+ 
+  meltstart = used_time();
+  
   
   /*
    * The main annealing loop!
@@ -511,11 +502,7 @@ void anneal(const annealing_parameters &params, double *initial_temperature)
      * we're shooting for.
      */
     while ((melting && (trans < neighborsize))
-#ifdef NEIGHBOR_LENGTH
 	    || (trans < transitions)) {
-#else
-	    || (!melting && (trans < mintrans && accepts < naccepts))) {
-#endif
 
     RDEBUG(cout << "ANNEALING: Loop starts with score " << get_score() <<
             " violations " << violated << endl;)
@@ -794,9 +781,9 @@ void anneal(const annealing_parameters &params, double *initial_temperature)
 	  accepttrans = true;
 	  RDEBUG(cout << "accept: better (violations) (" << new_score << ","
 		 << prev_score << "," << violated << "," << prev_violated
-		 << ")" << endl;
-	    cout << "Violations: (new) " << violated << endl;
-	    cout << vinfo;)
+		 << ")" << endl;)
+	    //cout << "Violations: (new) " << violated << endl;
+	    //cout << vinfo;
         } else if (accept(scorediff,temp,params)) {
 	  accepttrans = true;
 	  RDEBUG(cout << "accept: metropolis (" << new_score << ","
@@ -1108,9 +1095,9 @@ NOTQUITEDONE:
 #ifdef ALLOW_NEGATIVE_DELTA
     	((temp < 0) || isnan(temp) ||
     //	 || (fabs((temp / initialavg) * (deltaavg/ deltatemp)) < epsilon))) {
-    	 ((temp / initialavg) * (deltaavg/ deltatemp)) < epsilon)) {
+    	 ((temp / initialavg) * (deltaavg/ deltatemp)) < params.get_epsilon())) {
 #else /* ALLOW_NEGATIVE_DELTA */
-    	(deltaavg > 0) && ((temp / initialavg) * (deltaavg/ deltatemp) < epsilon)) {
+    	(deltaavg > 0) && ((temp / initialavg) * (deltaavg/ deltatemp) < params.get_epsilon())) {
 #endif /* ALLOW_NEGATIVE_DELTA */
         
             /*
