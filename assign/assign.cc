@@ -485,6 +485,7 @@ void print_help() {
   cout << "  -a <float>  - Attempt to terminate in <float> seconds (not ver accruate)" << endl;
   cout << "  -E          - Turn off the 'epsilon termination' condition" << endl;
   cout << "  -A          - Use absolute, rather than local, derivative, for termination" << endl;
+  cout << "  -Q          - Quiet: don't print solution (useful for debugging)" << endl;
   cout << "  cparams     - You probably don't want to touch these!" << endl;
   cout << "                If you must, see config.h in the source for a list"
        << endl;
@@ -868,6 +869,7 @@ int main(int argc,char **argv) {
   fstring viz_prefix;
 #endif
   bool prechecks_only = false;
+  bool quiet = false;
 
   /*
    * Parameters we're going to pass to the simulated annealing function
@@ -885,9 +887,9 @@ int main(int argc,char **argv) {
 	char* ptopFileFormat;
 	char* vtopFileFormat;
 	const char* delims = "/";
-	const char* flags = "s:v:l:t:rpPTdH:oguc:nx:y:W:FDSf:G:Ca:EA";
+	const char* flags = "s:v:l:t:rpPTdH:oguc:nx:y:W:FDSf:G:Ca:EAQ";
 #else
-	const char* flags = "s:v:l:t:rpPTdH:oguc:nx:y:FDSG:Ca:EA";
+	const char* flags = "s:v:l:t:rpPTdH:oguc:nx:y:FDSG:Ca:EAQ";
 #endif	
 	
   while ((ch = getopt(argc,argv,flags)) != -1) {
@@ -992,7 +994,9 @@ int main(int argc,char **argv) {
 	  case 'M':
           annealing_params.melt = false;
     break;
-        
+	  case 'Q':
+          quiet = true;
+    break;        
 
 #ifdef WITH_XML
 
@@ -1265,23 +1269,26 @@ int main(int argc,char **argv) {
   cout << "Violations: " << violated << endl;
   cout << vinfo;
 
+  if (!quiet) {
+      
 #ifdef WITH_XML
-  if (vtop_rspec_input || vtop_xml_input)
-  {
-      // For now, only produce annotated file if we succeeded - print the
-      // text version regardless
-      if (violated == 0) {
-	  print_solution(best_solution, vtopOutputFilename ? vtopOutputFilename : annotated_filename(vtopFilename).c_str());
-      } else {
-	  print_solution(best_solution);
-      }
-  }
-  else
-	  print_solution(best_solution);
+    if (vtop_rspec_input || vtop_xml_input)
+    {
+        // For now, only produce annotated file if we succeeded - print the
+        // text version regardless
+        if (violated == 0) {
+	    print_solution(best_solution, vtopOutputFilename ? vtopOutputFilename : annotated_filename(vtopFilename).c_str());
+        } else {
+	    print_solution(best_solution);
+        }
+    }
+    else
+	    print_solution(best_solution);
 #else
-  print_solution(best_solution);
+    print_solution(best_solution);
 #endif
-
+  }
+  
   if (print_summary) {
     print_solution_summary(best_solution);
   }
