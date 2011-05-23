@@ -148,7 +148,6 @@ void annealer::anneal() {
 
   pvertex oldpos;
   bool oldassigned;
-  int num_fixed=0;
   double meltedtemp;
   temp = params.init_temp;
   double deltatemp, deltaavg;
@@ -172,97 +171,8 @@ void annealer::anneal() {
   /* Set up the initial counts */
   init_score();
 
-  /* Set up fixed nodes */
-  /* Count of nodes which could not be fixed - we wait until we've tried to fix
-   * all nodes before bailing, so that the user gets to see all of the
-   * messages.
-   */
-  int fix_failed = 0;
-  for (name_name_map::iterator fixed_it=fixed_nodes.begin();
-       fixed_it!=fixed_nodes.end();++fixed_it) {
-    if (vname2vertex.find((*fixed_it).first) == vname2vertex.end()) {
-      cout << "*** Fixed virtual node: " << (*fixed_it).first <<
-	" does not exist." << endl;
-      fix_failed++;
-      continue;
-    }
-    vvertex vv = vname2vertex[(*fixed_it).first];
-    if (pname2vertex.find((*fixed_it).second) == pname2vertex.end()) {
-      cout << "*** Fixed physical node: " << (*fixed_it).second <<
-	" not available." << endl;
-      fix_failed++;
-      continue;
-    }
-    pvertex pv = pname2vertex[(*fixed_it).second];
-    tb_vnode *vn = get(vvertex_pmap,vv);
-    tb_pnode *pn = get(pvertex_pmap,pv);
-    if (vn->vclass != NULL) {
-      // Find a type on this physical node that can satisfy something in the
-      // virtual class
-      if (pn->typed) {
-        if (vn->vclass->has_type(pn->current_type)) {
-          vn->type = pn->current_type;
-        }
-      } else {
-        for (tb_pnode::types_list::iterator i = pn->type_list.begin();
-            i != pn->type_list.end(); i++) {
-          // For now, if we find more than one match, we pick the first. It's
-          // possible that picking some other type would give us a better
-          // score, but let's noty worry about that
-          if (vn->vclass->has_type((*i)->get_ptype()->name())) {
-            vn->type = (*i)->get_ptype()->name();
-            break;
-          }
-        }
-      }
-      if (vn->type.empty()) {
-        // This is an internal error, so it's okay to handle it in a different
-        // way from the others
-        cout << "*** Unable to find a type for fixed, vtyped, node " << vn->name
-          << endl;
-        exit(EXIT_FATAL);
-      } else {
-        cout << "Setting type of vclass node " << vn->name << " to "
-          << vn->type << "\n";
-      }
-    }
-
-    /*
-     * Normally, we want to bypass some checks in add_node for fixed nodes -
-     * but not always (usually for testing purposes).
-     */
-    bool skip_checks = true;
-    if (params.check_fixed_nodes) {
-        skip_checks = false;
-    }
-
-    if (add_node(vv,pv,false,skip_checks,false) == 1) {
-      cout << "*** Fixed node: Could not map " << vn->name <<
-	" to " << pn->name << endl;
-      fix_failed++;
-      continue;
-    }
-    vn->fixed = true;
-    /*
-    if (vn->vclass != NULL) {
-      vn->type = vn->vclass->choose_type();
-      cout << "Picked type " << vn->type << " for " << vn->name << endl;
-    }
-    */
-    num_fixed++;
-  }
-
-  if (fix_failed){
-    cout << "*** Some fixed nodes failed to map" << endl;
-    exit(EXIT_UNRETRYABLE);
-  }
-
-  // Subtract the number of fixed nodes from nnodes, since they don't really
-  // count
-  if (num_fixed) {
-      cout << "Adjusting dificulty estimate for fixed nodes, " <<
-	  (nnodes - num_fixed) << " remain.\n";
-  }
+  /* Handle the fixed nodes in the topology */
+  bool fix_failed = setup_fixed();
 
   /* We'll check against this later to make sure that whe we've unmapped
    * everything, the score is the same */
@@ -350,8 +260,16 @@ void annealer::anneal() {
    * number of pclasses. This is how long we usually stick with a given 
    * temperature.
    */
+   
+  // Subtract the number of fixed nodes from nnodes, since they don't really
+  // count
+  if (fixed_node_count > 0) {
+     cout << "Adjusting dificulty estimate for fixed nodes, " <<
+             (nnodes - fixed_node_count) << " remain.\n";
+  }
+
   int neighborsize;
-  neighborsize = (nnodes - num_fixed) * npclasses;
+  neighborsize = (nnodes - fixed_node_count) * npclasses;
   if (neighborsize < params.min_neighborhood_size) {
     neighborsize = params.min_neighborhood_size;
   }
@@ -365,7 +283,7 @@ void annealer::anneal() {
   scores.resize(neighborsize+1);
 #endif
 
-  if (num_fixed >= nnodes) {
+  if (fixed_node_count >= nnodes) {
     cout << "All nodes are fixed.  No annealing." << endl;
     done = true;
   }
@@ -1313,4 +1231,102 @@ NOTQUITEDONE:
   }
   
 } // End of anneal()
-	    
+
+/*
+ * Set up fixed nodes
+ */
+bool annealer::setup_fixed() {
+    
+    fixed_node_count = 0;
+    
+    /* 
+     * Count of nodes which could not be fixed - we wait until we've tried to fix
+     * all nodes before bailing, so that the user gets to see all of the
+     * messages.
+     */
+    int fix_failed = 0;
+    for (name_name_map::iterator fixed_it=fixed_nodes.begin();
+         fixed_it!=fixed_nodes.end();
+         ++fixed_it) {
+    
+        if (vname2vertex.find((*fixed_it).first) == vname2vertex.end()) {
+            cout << "*** Fixed virtual node: " << (*fixed_it).first <<
+                    " does not exist." << endl;
+            fix_failed++;
+            continue;
+        }
+        
+        vvertex vv = vname2vertex[(*fixed_it).first];
+        if (pname2vertex.find((*fixed_it).second) == pname2vertex.end()) {
+            cout << "*** Fixed physical node: " << (*fixed_it).second <<
+                    " not available." << endl;
+            fix_failed++;
+            continue;
+        }
+        
+        pvertex pv = pname2vertex[(*fixed_it).second];
+        tb_vnode *vn = get(vvertex_pmap,vv);
+        tb_pnode *pn = get(pvertex_pmap,pv);
+        if (vn->vclass != NULL) {
+            // Find a type on this physical node that can satisfy something in the
+            // virtual class
+            if (pn->typed) {
+                if (vn->vclass->has_type(pn->current_type)) {
+                    vn->type = pn->current_type;
+                }
+            } else {
+                for (tb_pnode::types_list::iterator i = pn->type_list.begin();
+                     i != pn->type_list.end();
+                     i++) {
+                    // For now, if we find more than one match, we pick the first. It's
+                    // possible that picking some other type would give us a better
+                    // score, but let's noty worry about that
+                    if (vn->vclass->has_type((*i)->get_ptype()->name())) {
+                        vn->type = (*i)->get_ptype()->name();
+                        break;
+                    }
+                }
+            }
+        
+            if (vn->type.empty()) {
+                // This is an internal error, so it's okay to handle it in a different
+                // way from the others
+                cout << "*** Unable to find a type for fixed, vtyped, node " << vn->name
+                     << endl;
+                exit(EXIT_FATAL);
+            } else {
+                cout << "Setting type of vclass node " << vn->name << " to "
+                     << vn->type << "\n";
+            }
+        }
+
+        /*
+         * Normally, we want to bypass some checks in add_node for fixed nodes -
+         * but not always (usually for testing purposes).
+         */
+         
+        bool skip_checks = true;
+        if (params.check_fixed_nodes) {
+            skip_checks = false;
+        }
+
+        if (add_node(vv,pv,false,skip_checks,false) == 1) {
+            cout << "*** Fixed node: Could not map " << vn->name <<
+                    " to " << pn->name << endl;
+            fix_failed++;
+            continue;
+        }
+        
+        vn->fixed = true;
+
+        fixed_node_count++;
+    }
+
+    if (fix_failed){
+        cout << "*** Some fixed nodes failed to map" << endl;
+        exit(EXIT_UNRETRYABLE);
+    }
+
+    return (fix_failed > 0);
+}
+

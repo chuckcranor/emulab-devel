@@ -252,7 +252,7 @@ public:
 class annealer {
 public:
 	explicit annealer(const annealing_parameters &_params) :
-		params(_params) {;};
+		params(_params), temp(0.0),fixed_node_count(0) {;};
 	/*
 	 * The big guy!
 	 */
@@ -270,12 +270,20 @@ private:
 	 * or not
 	*/
 	bool accept(double change, double temperature) const;
+	
+	/*
+	 * Set up the fixed nodes, before we start annealing
+	 */
+	bool setup_fixed();
 
 	// Annealing-specific parameters
 	const annealing_parameters &params;
 	
 	// Current temperature
-	double temp;	
+	double temp;
+	
+	// Number of fixed nodes in the topology
+	int fixed_node_count;
 };
 
 /*
