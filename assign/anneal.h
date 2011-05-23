@@ -274,7 +274,12 @@ private:
 	/*
 	 * Set up the fixed nodes, before we start annealing
 	 */
-	bool setup_fixed();
+	bool setup_fixed_nodes();
+	
+	/*
+	 * Handle nodes that have been hinted to certain starting locations
+	 */
+    void setup_hinted_nodes();
 
 	// Annealing-specific parameters
 	const annealing_parameters &params;

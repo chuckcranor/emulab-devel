@@ -168,14 +168,24 @@ void annealer::anneal() {
        << mintrans<<" naccepts="<<naccepts<< endl;
 #endif
 
-  /* Set up the initial counts */
+  /*
+   * Set up the initial counts
+   */
   init_score();
 
-  /* Handle the fixed nodes in the topology */
-  bool fix_failed = setup_fixed();
+  /*
+   * Handle the fixed nodes in the topology
+   */
+  bool fix_failed = setup_fixed_nodes();
+  if (fix_failed){
+      cout << "*** Some fixed nodes failed to map" << endl;
+      exit(EXIT_UNRETRYABLE);
+  }
 
-  /* We'll check against this later to make sure that whe we've unmapped
-   * everything, the score is the same */
+  /* 
+   * We'll check against this later to make sure that whe we've unmapped
+   * everything, the score is the same
+   */
   double initial_score = get_score();
 
   /*
@@ -184,34 +194,8 @@ void annealer::anneal() {
    * final mapping. Also, we ignore any hints for vnodes which have already
    * been assigned - they must have been fixed, and that over-rides the hint.
    */
-  for (name_name_map::iterator hint_it=node_hints.begin();
-       hint_it!=node_hints.end();++hint_it) {
-    if (vname2vertex.find((*hint_it).first) == vname2vertex.end()) {
-      cout << "Warning: Hinted node: " << (*hint_it).first <<
-	"does not exist." << endl;
-      continue;
-    }
-    vvertex vv = vname2vertex[(*hint_it).first];
-    if (pname2vertex.find((*hint_it).second) == pname2vertex.end()) {
-      cout << "Warning: Hinted node: " << (*hint_it).second <<
-	" not available." << endl;
-      continue;
-    }
-    pvertex pv = pname2vertex[(*hint_it).second];
-    tb_vnode *vn = get(vvertex_pmap,vv);
-    tb_pnode *pn = get(pvertex_pmap,pv);
-    if (vn->assigned) {
-      cout << "Warning: Skipping hint for node " << vn->name << ", which is "
-	<< "fixed in place" << endl;
-      continue;
-    }
-    if (add_node(vv,pv,false,false,false) == 1) {
-      cout << "Warning: Hinted node: Could not map " << vn->name <<
-	" to " << pn->name << endl;
-      continue;
-    }
-  }
-       
+  setup_hinted_nodes();
+          
   /*
    * Find out the starting temperature
    */
@@ -1235,7 +1219,7 @@ NOTQUITEDONE:
 /*
  * Set up fixed nodes
  */
-bool annealer::setup_fixed() {
+bool annealer::setup_fixed_nodes() {
     
     fixed_node_count = 0;
     
@@ -1322,11 +1306,42 @@ bool annealer::setup_fixed() {
         fixed_node_count++;
     }
 
-    if (fix_failed){
-        cout << "*** Some fixed nodes failed to map" << endl;
-        exit(EXIT_UNRETRYABLE);
-    }
-
     return (fix_failed > 0);
 }
 
+/*
+ * Assign hinted nodes to their starting locations
+ */
+void annealer::setup_hinted_nodes() {
+    for (name_name_map::iterator hint_it = node_hints.begin();
+         hint_it!=node_hints.end();
+         ++hint_it) {
+             
+        if (vname2vertex.find((*hint_it).first) == vname2vertex.end()) {
+            cout << "Warning: Hinted node: " << (*hint_it).first <<
+    	            "does not exist." << endl;
+            continue;
+        }
+    
+        vvertex vv = vname2vertex[(*hint_it).first];
+        if (pname2vertex.find((*hint_it).second) == pname2vertex.end()) {
+          cout << "Warning: Hinted node: " << (*hint_it).second <<
+    	          " not available." << endl;
+          continue;
+        }
+    
+        pvertex pv = pname2vertex[(*hint_it).second];
+        tb_vnode *vn = get(vvertex_pmap,vv);
+        tb_pnode *pn = get(pvertex_pmap,pv);
+        if (vn->assigned) {
+            cout << "Warning: Skipping hint for node " << vn->name << ", which is "
+    	         << "fixed in place" << endl;
+            continue;
+        }
+        if (add_node(vv,pv,false,false,false) == 1) {
+            cout << "Warning: Hinted node: Could not map " << vn->name <<
+    	            " to " << pn->name << endl;
+            continue;
+        }
+    }
+}
