@@ -160,9 +160,6 @@ void annealer::anneal() {
   int solutions_accepted = 0;
   int valid_solutions_accepted = 0;
 
-  // List of unassigned virtual nodes
-  slist<vvertex> unassigned_nodes;
-
 #ifdef VERBOSE
   cout << "Initialized to cycles="<<cycles<<" mintrans="
        << mintrans<<" naccepts="<<naccepts<< endl;
@@ -195,48 +192,25 @@ void annealer::anneal() {
    * been assigned - they must have been fixed, and that over-rides the hint.
    */
   setup_hinted_nodes();
-          
+  
   /*
-   * Find out the starting temperature
+   * Set up the unassigned_nodes structure so that we know what work we
+   * need to do!
+   * TODO: This might move to the virtual topology structure
+   */
+  setup_unassigned_nodes(); 
+   
+  /*
+   * Set up initial conditions - what we've got is the best solution so far
    */
   prev_score = get_score();
   prev_violated = violated;
-
-#ifdef VERBOSE
-  cout << "Problem started with score "<<prev_score<<" and "<< violated
-       << " violations." << endl;
-#endif
-
   best_score = prev_score;
   best_violated = prev_violated;
-
-  /*
-   * Make a list of all nodes that are still unassigned
-   */
-  vvertex_iterator vit,veit;
-  tie(vit,veit) = vertices(VG);
-  for (;vit!=veit;++vit) {
-    tb_vnode *vn = get(vvertex_pmap,*vit);
-    if (vn->assigned) {
-	best_solution.set_assignment(*vit,vn->assignment);
-	best_solution.set_vtype_assignment(*vit,vn->type);
-    } else {
-	best_solution.clear_assignment(*vit);
-	unassigned_nodes.push_front(*vit);
-    }
-  }
   
-  /*
-   * Set any links that have been assigned
-   */
-  vedge_iterator eit, eeit;
-  tie(eit, eeit) = edges(VG);
-  for (;eit!=eeit;++eit) {
-      tb_vlink *vlink = get(vedge_pmap, *eit);
-      if (vlink->link_info.type_used != tb_link_info::LINK_UNMAPPED) {
-	  best_solution.set_link_assignment(*eit,vlink->link_info);
-      }
-  }
+  // Copy the current assignments into the best_solution variable.
+  best_solution.set(VG);
+
 
   /*
    * The neighborhood size is the number of solutions we can reach with one
@@ -740,28 +714,7 @@ void annealer::anneal() {
 #ifdef SCORE_DEBUG
 	  cerr << "New best solution." << endl;
 #endif // SCORE_DEBUG
-	  tie(vit,veit) = vertices(VG);
-	  for (;vit!=veit;++vit) {
-	      tb_vnode *vnode = get(vvertex_pmap,*vit);
-	      if (vnode->assigned) {
-		  best_solution.set_assignment(*vit,vnode->assignment);
-		  best_solution.set_vtype_assignment(*vit,vnode->type);
-	      } else {
-		  best_solution.clear_assignment(*vit);
-	      }
-	  }
-	  
-	  vedge_iterator edge_it, edge_it_end;
-	  tie(edge_it, edge_it_end) = edges(VG);
-	  for (;edge_it!=edge_it_end;++edge_it) {
-	      tb_vlink *vlink = get(vedge_pmap, *edge_it);
-	      if (vlink->link_info.type_used != tb_link_info::LINK_UNMAPPED) {
-		  best_solution.set_link_assignment(*edge_it,vlink->link_info);
-	      } else {
-		  best_solution.clear_link_assignment(*edge_it);
-	      }
-	  }	
-	  
+      best_solution.set(VG);
 	  best_score = new_score;
 	  best_violated = violated;
 	  iters_to_best = iters;
@@ -1342,6 +1295,24 @@ void annealer::setup_hinted_nodes() {
             cout << "Warning: Hinted node: Could not map " << vn->name <<
     	            " to " << pn->name << endl;
             continue;
+        }
+    }
+}
+
+/*
+ * Make a list of all nodes that are currently unassigned
+ */
+void annealer::setup_unassigned_nodes() {
+    
+    unassigned_nodes.clear();
+    
+    // Simple, just go through the topology looking for unassigned nodes
+    vvertex_iterator vit,veit;
+    tie(vit,veit) = vertices(VG);
+    for (;vit!=veit;++vit) {
+        tb_vnode *vn = get(vvertex_pmap,*vit);
+        if (!vn->assigned) {
+    	    unassigned_nodes.push_front(*vit);
         }
     }
 }

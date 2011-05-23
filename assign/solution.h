@@ -38,6 +38,16 @@ class solution {
 	this->vtype_assignments = other.vtype_assignments;
 	return(*this);
     };
+
+    // Clean out this assignment
+    void clear() {
+	vnode_assignments.clear();
+	vtype_assignments.clear();
+	vlink_assignments.clear();
+    }
+
+    // Set up solution based on the assignments in the given virtual graph
+    void set(const tb_vgraph &vg) ;
     
     inline bool is_assigned(const vvertex &vv) const {
 	//return vnode_is_assigned[vv];

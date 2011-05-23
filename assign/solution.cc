@@ -326,6 +326,40 @@ void print_solution_summary(const solution &s)
   cout << "End summary" << endl;
 }
 
+void solution::set(const tb_vgraph &vg) {
+    
+    /*
+     * Start with a clean solution
+     */
+    this->clear();
+    
+    /*
+     * Iterate through all nodes, recording their assignments as well as the
+     * type they have taken on
+     */
+	vvertex_iterator vit,veit;
+	tie(vit,veit) = vertices(vg);
+	for (;vit!=veit;++vit) {
+	    tb_vnode *vn = get(vvertex_pmap,*vit);
+	    if (vn->assigned) {
+			this->set_assignment(*vit,vn->assignment);
+			this->set_vtype_assignment(*vit,vn->type);
+	    }
+	}
+	    
+    /*
+	 * Same for links
+	 */
+    vedge_iterator eit, eeit;
+	tie(eit, eeit) = edges(vg);
+	for (;eit!=eeit;++eit) {
+        tb_vlink *vlink = get(vedge_pmap, *eit);
+	    if (vlink->link_info.type_used != tb_link_info::LINK_UNMAPPED) {
+		    this->set_link_assignment(*eit,vlink->link_info);
+	    }
+    }
+}
+
 void pvertex_writer::operator()(ostream &out,const pvertex &p) const {
     tb_pnode *pnode = get(pvertex_pmap,p);
     out << "[label=\"" << pnode->name << "\"";

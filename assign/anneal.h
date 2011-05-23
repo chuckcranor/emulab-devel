@@ -280,7 +280,12 @@ private:
 	 * Handle nodes that have been hinted to certain starting locations
 	 */
     void setup_hinted_nodes();
-
+    
+    /*
+     * Set up the unassigned_nodes structure from the current virtual topology
+     */
+    void setup_unassigned_nodes();
+    
 	// Annealing-specific parameters
 	const annealing_parameters &params;
 	
@@ -289,6 +294,9 @@ private:
 	
 	// Number of fixed nodes in the topology
 	int fixed_node_count;
+	
+	// Nodes that are not currently assigned
+    slist<vvertex> unassigned_nodes;
 };
 
 /*
