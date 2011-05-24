@@ -486,6 +486,7 @@ void print_help() {
   cout << "  -E          - Turn off the 'epsilon termination' condition" << endl;
   cout << "  -A          - Use absolute, rather than local, derivative, for termination" << endl;
   cout << "  -Q          - Quiet: don't print solution (useful for debugging)" << endl;
+  cout << "  -V          - Turn off special treatment for violations" << endl;
   cout << "  cparams     - You probably don't want to touch these!" << endl;
   cout << "                If you must, see config.h in the source for a list"
        << endl;
@@ -887,9 +888,9 @@ int main(int argc,char **argv) {
 	char* ptopFileFormat;
 	char* vtopFileFormat;
 	const char* delims = "/";
-	const char* flags = "s:v:l:t:rpPTdH:oguc:nx:y:W:FDSf:G:Ca:EAQ";
+	const char* flags = "s:v:l:t:rpPTdH:oguc:nx:y:W:FDSf:G:Ca:EAQV";
 #else
-	const char* flags = "s:v:l:t:rpPTdH:oguc:nx:y:FDSG:Ca:EAQ";
+	const char* flags = "s:v:l:t:rpPTdH:oguc:nx:y:FDSG:Ca:EAQV";
 #endif	
 	
   while ((ch = getopt(argc,argv,flags)) != -1) {
@@ -968,6 +969,8 @@ int main(int argc,char **argv) {
       break;
     case 'A':
       annealing_params.local_derivative = false;
+    case 'V':
+      annealing_params.special_violation_treatment = false;
       break;
     case 'x':
 #ifdef WITH_XML

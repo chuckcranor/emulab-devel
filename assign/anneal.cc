@@ -101,7 +101,7 @@ ostream &operator<<(ostream &o, const annealing_parameters &ap) {
 }
 
 void annealer::status_report(ostream &o) const {
-  o << "Iterations: " << iters << " Temp: " << temp << " Score: "
+  o << "Iterations: " << total_iterations << " Temp: " << temp << " Score: "
     << get_score() << " Violations: " << violated
     << " (Best S: " << best_score << " V:" << best_violated << ")"
     << endl;	
@@ -124,14 +124,10 @@ void annealer::anneal() {
 
   float temp_rate = params.temp_rate;
 
-  /*
-   * 
-   */
   double new_score = 0;
   double scorediff;
  
   // The number of iterations that took place.
-  int total_iterations = 0;
   iters_to_best = 0;
 
   
@@ -139,8 +135,6 @@ void annealer::anneal() {
   double time_to_first_valid = 0.0;
   double time_to_best = 0.0;
 
-
-  
   bool done = false;
 
   pvertex oldpos;
@@ -148,9 +142,7 @@ void annealer::anneal() {
   double meltedtemp;
   temp = params.init_temp;
   double deltatemp, deltaavg;
-  
-  vvertex vv;
-  tb_vnode *vn;
+ 
 
   double initialavg = 1.0f;
   double stddev = 0.0f;
@@ -177,6 +169,8 @@ void annealer::anneal() {
   int valid_solutions_considered = 0;
   int solutions_accepted = 0;
   int valid_solutions_accepted = 0;
+  int solutions_rejected = 0;
+  int valid_solutions_rejected = 0;
   
   /*
    * Grab some values that we'll use a lot
@@ -293,8 +287,6 @@ void annealer::anneal() {
      */
     while (tstate.iterations < iterations_per_tstep) {
 
-
-
     RDEBUG(cout << "ANNEALING: Loop starts with score " << get_score() <<
             " violations " << violated << endl;)
 
@@ -314,37 +306,15 @@ void annealer::anneal() {
        *   those
        * If not, find some other random vnode, which we'll unmap then remap
        */
+      vvertex vv;
       if (! unassigned_nodes.empty()) {
         // Pick a random node from the list of unassigned nodes
-        int choice = RANDOM() % unassigned_nodes.size();
-        slist<vvertex>::iterator uit = unassigned_nodes.begin();
-        for (int i = 0; i < choice; i++) { uit++; }
-        assert(uit != unassigned_nodes.end());
-
-        vv = *uit;
-	assert(!get(vvertex_pmap,vv)->assigned);
-        unassigned_nodes.erase(uit);
-        RDEBUG(cout << "Using unassigned node " << choice << ": " <<
-                get(vvertex_pmap,vv)->name << " (" <<
-                unassigned_nodes.size() << " in queue)" << endl;)
+        vv = pick_unassigned_vnode();
       } else {
-	int start = RANDOM()%vnode_count;
-	int choice = start;
-	while (get(vvertex_pmap,virtual_nodes[choice])->fixed) {
-	  choice = (choice +1) % vnode_count;
-	  if (choice == start) {
-	      choice = -1;
-	      break;
-	  }
-	}
-	if (choice >= 0) {
-	    vv = virtual_nodes[choice];
-	} else {
-	    cout << "**** Error, unable to find any non-fixed nodes" << endl;
-	    exit(EXIT_UNRETRYABLE);
-	}
-      }      
-      vn = get(vvertex_pmap,vv);
+        vv = pick_assigned_vnode();
+      }
+                  
+      tb_vnode *vn = get(vvertex_pmap,vv);
       RDEBUG(cout << "Reassigning " << vn->name << endl;)
 	  
       /*
@@ -360,15 +330,8 @@ void annealer::anneal() {
       
       /*
        * Problem: If we free the chosen vnode now, we might just try remapping
-       * it to the same pnode. If FREE_IMMEDIATELY is not set, we do the 
-       * later, after we've chosen a pnode unmapping
+       * it to the same pnode. So, we do that after picking a pnode
        */
-#ifdef FREE_IMMEDIATELY
-      if (oldassigned) {
-	remove_node(vv);
-	RDEBUG(cout << "Freeing up " << vn->name << endl;)
-      }
-#endif
       
       /*
        * We have to handle vnodes with vtypes (vclasses) specially - we have
@@ -406,14 +369,12 @@ void annealer::anneal() {
       }
       
       /*
-       * If we didn't free the vnode up above, do it now
+       * Free up the node now
        */
-#ifndef FREE_IMMEDIATELY
       if (oldassigned) {
-	RDEBUG(cout << "removing: !lan, oldassigned" << endl;)
+	RDEBUG(cout << "removing: oldassigned" << endl;)
 	remove_node(vv);
       }
-#endif
       
       /*
        * If we didn't find a node to map this vnode to, free up some other
@@ -545,7 +506,7 @@ void annealer::anneal() {
 		 << ")" << endl;)
         }
 #else
-#ifdef SPECIAL_VIOLATION_TREATMENT
+      if (params.special_violation_treatment) {
         /*
          * In this ifdef, we always accept new solutions that have fewer
          * violations than the old solution, and when we're trying to
@@ -568,7 +529,7 @@ void annealer::anneal() {
         if ((violated == prev_violated) && (new_score < prev_score)) {
 	  accepttrans = true;
 	  RDEBUG(cout << "accept: better (" << new_score << "," << prev_score
-		 << ")" << endl;)
+		 << ")" << endl);
 	} else if (violated < prev_violated) {
 	  accepttrans = true;
 	  RDEBUG(cout << "accept: better (violations) (" << new_score << ","
@@ -580,9 +541,11 @@ void annealer::anneal() {
 	  accepttrans = true;
 	  RDEBUG(cout << "accept: metropolis (" << new_score << ","
 		 << prev_score << "," << scorediff << "," << temp
-		 << ")" << endl;)
+                 << ")" << endl;)
+        } else {
+            RDEBUG(cout << "rejected: " << ((violated == 0) ? "valid" : "invalid") << endl;)
         }
-#else // no SPECIAL_VIOLATION_TREATMENT
+      } else { // no SPECIAL_VIOLATION_TREATMENT
         /*
          * In this branch of the ifdef, we give violations no special
          * treatment when it comes to accepting new solution - we just add
@@ -603,7 +566,7 @@ void annealer::anneal() {
 	  accepttrans = true;
         }
 
-#endif // SPECIAL_VIOLATION_TREATMENT
+      } // SPECIAL_VIOLATION_TREATMENT
 
       }
 #endif // NO_VIOLATIONS
@@ -668,6 +631,10 @@ void annealer::anneal() {
 #endif
 	}
       } else { // !acceptrans
+        solutions_rejected++;
+      	if (violated == 0) {
+            valid_solutions_rejected++;
+      	}
 	// Reject change, go back to the state we were in before
 	RDEBUG(cout << "removing: rejected change" << endl;)
 	remove_node(vv);
@@ -1090,7 +1057,7 @@ NOTQUITEDONE:
   cout << "    Total annealing time: " << annealing_time << endl;
   cout << "    Total temperature steps: " << tsteps << endl;
   cout << "    Total iterations: " << total_iterations << endl;
-  cout << "    Finshed at temperature: " << temp << endl;
+  cout << "    Finished at temperature: " << temp << endl;
   cout << "    Average iterations per second: " << (total_iterations/annealing_time)
        << endl;
   cout << "    Number of solutions considered: " << solutions_considered
@@ -1103,6 +1070,14 @@ NOTQUITEDONE:
        << ((valid_solutions_considered*1.0)/solutions_considered) << endl;
   cout << "    Fraction of accepted solutions that were valid: "
        << ((valid_solutions_accepted*1.0)/solutions_accepted) << endl;
+  cout << "    Fraction of rejected solutions that were valid: "
+       << ((valid_solutions_rejected*1.0)/solutions_rejected) << endl;
+  cout << "    Fraction of valid solutions that were accepted: "
+       << ((valid_solutions_accepted*1.0)/valid_solutions_considered) << endl;
+  cout << "    Fraction of invalid solutions that were accepted: "
+       << (solutions_accepted - valid_solutions_accepted*1.0) / 
+          (solutions_considered - valid_solutions_considered*1.0) << endl;
+          
   if (time_to_first_valid > 0.0) {
     cout << "    Fraction of time to find first valid solution: "
          << (time_to_first_valid / annealing_time) << endl;
@@ -1312,7 +1287,7 @@ int annealer::get_neighborsize() const {
     // Subtract the number of fixed nodes from vnode_count, since they don't really
     // count
     if (fixed_node_count > 0) {
-        cout << "Adjusting dificulty estimate for fixed nodes, " <<
+        cout << "Adjusting difficulty estimate for fixed nodes, " <<
                 (vnode_count - fixed_node_count) << " remain.\n";
     }
 
@@ -1331,4 +1306,61 @@ int annealer::get_neighborsize() const {
     size = (int)(size * params.scale_neighborhood);
     
     return size;
+}
+
+/*
+ * Pick a random noded from the set of currently unassigned nodes
+ */
+vvertex annealer::pick_unassigned_vnode() {
+
+    /*
+     * Pick a random number, then go that deep in the list
+     */
+    int choice = RANDOM() % unassigned_nodes.size();
+    slist<vvertex>::iterator uit = unassigned_nodes.begin();
+    for (int i = 0; i < choice; i++) { uit++; }
+    assert(uit != unassigned_nodes.end());
+
+    // Make sure it's not assigned!
+    assert(!get(vvertex_pmap,*uit)->assigned);
+    
+    // Remove it from the list, it will get put back later if we don't take
+    // the new assignment for it
+    unassigned_nodes.erase(uit);
+    
+    RDEBUG(cout << "Using unassigned node " << choice << ": " <<
+            get(vvertex_pmap,vv)->name << " (" <<
+            unassigned_nodes.size() << " in queue)" << endl;)
+
+    return *uit;
+}
+
+/*
+ * Pick a random node that's already assigned - we'll unassign it later
+ */
+vvertex annealer::pick_assigned_vnode() {
+
+    /*
+     * We can index directoy into the virtual nodes array, but we have to
+     * skip fixed nodes. We should have skipped out early if all nodes were
+     * fixed.
+     * TODO: This biases towards selecting non-fixed nodes that come after
+     * long sets of fixed nodes
+     */
+    int start = RANDOM()%vnode_count;
+    int choice = start;
+    while (get(vvertex_pmap,virtual_nodes[choice])->fixed) {
+        choice = (choice +1) % vnode_count;
+	if (choice == start) {
+ 	    choice = -1;
+ 	    break;
+ 	}
+    }
+    
+    if (choice >= 0) {
+        return(virtual_nodes[choice]);
+     } else {
+        cout << "**** Error, unable to find any non-fixed nodes" << endl;
+ 	exit(EXIT_UNRETRYABLE);
+     }
 }

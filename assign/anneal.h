@@ -220,6 +220,12 @@ public:
 	 * which uses a constant multiplicative decrease to manage the temperature
 	 */
         bool chill;
+        
+        /*
+         * Treat violations specially in annealing, or treat them as a score
+         * with a high penalty?
+         */
+        bool special_violation_treatment;
 	
 	/*
 	 * Defaults
@@ -246,7 +252,8 @@ public:
 		melt(true),
 		initial_temperature(10.0),
 		verbose(false),
-		chill(true)
+		chill(true),
+		special_violation_treatment(true)
 	{;}
 	
 	/*
@@ -267,7 +274,7 @@ class annealer {
 public:
 	explicit annealer(const annealing_parameters &_params) :
 		params(_params), fixed_node_count(0),
-		temp(0.0),  prev_score(0) {;};
+		temp(0.0),  prev_score(0), total_iterations(0) {;};
 	/*
 	 * The big guy!
 	 */
@@ -317,6 +324,13 @@ private:
          * move to neighborhood.h
          */ 
         int get_neighborsize() const;
+        
+        /*
+         * Pick a node from the virtual topology that is currently unassigned,
+         * or assigned.
+         */
+        vvertex pick_unassigned_vnode();
+        vvertex pick_assigned_vnode(); 
     
 	/*
 	 * Annealing-specific parameters
@@ -358,6 +372,9 @@ private:
         // The score from the previous iteration
         // TODO: This can probably be handled better
         double prev_score;
+        
+        // Total number of iterations we've gone through so far
+        int total_iterations;
 	
 	/*
 	 * State that's used/modified by an individual timestep
@@ -419,7 +436,7 @@ extern pclass_types type_table;
 extern pclass_list pclasses;
 extern pnode_pvertex_map pnode2vertex;
 extern double best_score;
-extern int best_violated, iters, iters_to_best;
+extern int best_violated, iters_to_best;
 extern name_vvertex_map vname2vertex;
 
 extern pclass_types vnode_type_table;

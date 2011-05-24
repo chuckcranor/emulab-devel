@@ -50,10 +50,6 @@ RANDOM_ASSIGNMENT	Perform a pseudo-random assignment by exiting as soon
 			as we get violation-free solution
 REALLY_RANDOM_ASSIGNMENT Like RANDOM_ASSIGNMENT, but exits even if there are
 			violations
-FINISH_HILLCLIMB	When we would normally terminate, go back to the best
-			solution and keep going for a while - the idea is to
-			do a hillclimb from there. Seems like a good idea, but
-			not well tested
 
 SA Mechanics Options
 --------------------
@@ -91,13 +87,6 @@ AUTO_MIGRATE		Performs LAN migration every time a node in the LAN is
 			that much. Probably, LAN migration should be made more
 			lightweight so that this can be turned on without much
 			computation time penalty
-FREE_IMMEDIATELY	When assign picks a vnode to re-map, it waits until
-			after finding a replacement pnode to free the original
-			mapping. This solves the exact-fit problem in which
-			nodes being remapped always pick the old mapping again,
-			since the just-freed pnode is the only one free. This
-			option reverts to the old behavior, in which the unmap
-			is done immediately, before picking a new pnode
 ALLOW_TRIVIAL_DEFAULT   The new behavior for trivial links is that a vlink must
 			be specially marked in order for assign to be allowed to
 			satisfy it with a trivial link. This reverts to the old
