@@ -69,6 +69,7 @@ extern int CYCLES;
 extern float temperature_guard;
 extern bool finish_hillclimb;
 #endif
+extern bool special_violation_treatment;
 
 // Initial acceptance ratio for melting
 extern float X0;

@@ -48,6 +48,7 @@ name_name_map node_hints;
 float temperature_guard = -1;
 bool finish_hillclimb = false;
 #endif
+bool special_violation_treatment = true;
 
 // From assign.cc
 #ifdef GNUPLOT_OUTPUT
@@ -723,7 +724,7 @@ void anneal(bool scoring_selftest, bool check_fixed_nodes,
 		 << ")" << endl;)
         }
 #else
-#ifdef SPECIAL_VIOLATION_TREATMENT
+      if (special_violation_treatment) {
         /*
          * In this ifdef, we always accept new solutions that have fewer
          * violations than the old solution, and when we're trying to
@@ -760,7 +761,7 @@ void anneal(bool scoring_selftest, bool check_fixed_nodes,
 		 << prev_score << "," << scorediff << "," << temp
 		 << ")" << endl;)
         }
-#else // no SPECIAL_VIOLATION_TREATMENT
+      } else { // no SPECIAL_VIOLATION_TREATMENT
         /*
          * In this branch of the ifdef, we give violations no special
          * treatment when it comes to accepting new solution - we just add
@@ -781,7 +782,7 @@ void anneal(bool scoring_selftest, bool check_fixed_nodes,
 	  accepttrans = true;
         }
 
-#endif // SPECIAL_VIOLATION_TREATMENT
+      }
 
       }
 #endif // NO_VIOLATIONS

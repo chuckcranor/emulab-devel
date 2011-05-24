@@ -478,6 +478,7 @@ void print_help() {
 #ifdef EPSILON_TERMINATE 
   cout << "  -G <float>  - Temperature guard - don't stop annealing until reaching this value" << endl;
   cout << "  -C          - Finish with a round of hill climbing" << endl;
+  cout << "  -V          - Disable special treatment of violations" << endl;
 #endif
   cout << "  cparams     - You probably don't want to touch these!" << endl;
   cout << "                If you must, see config.h in the source for a list"
@@ -882,9 +883,9 @@ int main(int argc,char **argv) {
 	char* ptopFileFormat;
 	char* vtopFileFormat;
 	char* delims = "/";
-	char* flags = "s:v:l:t:rpPTdH:oguc:nx:y:W:FDSf:G:C";
+	char* flags = "s:v:l:t:rpPTdH:oguc:nx:y:W:FDSf:G:CV";
 #else
-	char* flags = "s:v:l:t:rpPTdH:oguc:nx:y:FDSG:C";
+	char* flags = "s:v:l:t:rpPTdH:oguc:nx:y:FDSG:CV";
 #endif	
 	
   while ((ch = getopt(argc,argv,flags)) != -1) {
@@ -988,6 +989,9 @@ int main(int argc,char **argv) {
 	  case 'F':
           check_fixed_nodes = true;
     break;
+          case 'V':
+              special_violation_treatment = false;
+        break;
 
 #ifdef WITH_XML
 
