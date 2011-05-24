@@ -101,8 +101,9 @@ ostream &operator<<(ostream &o, const annealing_parameters &ap) {
 }
 
 void annealer::status_report(ostream &o) const {
-  o << "I: " << iters << " T: " << temp << " S: " << get_score() << " V: "
-    << violated << " (Best S: " << best_score << " V:" << best_violated << ")"
+  o << "Iterations: " << iters << " Temp: " << temp << " Score: "
+    << get_score() << " Violations: " << violated
+    << " (Best S: " << best_score << " V:" << best_violated << ")"
     << endl;	
 }
 
@@ -118,7 +119,7 @@ void annealer::anneal() {
    * The score and number of violations at the start of the inner annealing
    * loop
    */
-  double prev_score = 0;
+
   int prev_violated = 0;
 
   float temp_rate = params.temp_rate;
@@ -130,27 +131,44 @@ void annealer::anneal() {
   double scorediff;
  
   // The number of iterations that took place.
-  iters = 0;
+  int total_iterations = 0;
   iters_to_best = 0;
-  int accepts = 0;
+
   
   // Used for figuring out how much time we might have wasted
   double time_to_first_valid = 0.0;
   double time_to_best = 0.0;
 
-  int nnodes = num_vertices(VG);
-  //int npnodes = num_vertices(PG);
-  int npclasses = pclasses.size();
+
   
   bool done = false;
- 
-  int trans;
 
   pvertex oldpos;
   bool oldassigned;
   double meltedtemp;
   temp = params.init_temp;
   double deltatemp, deltaavg;
+  
+  vvertex vv;
+  tb_vnode *vn;
+
+  double initialavg = 1.0f;
+  double stddev = 0.0f;
+  bool finished = false;
+  bool forcerevert = false;
+  int tsteps = 0;
+
+  double anneal_start_time;
+
+  #define MAX_AVG_HIST 16
+  double avghist[MAX_AVG_HIST];
+  int mintsteps = MAX_AVG_HIST;
+  
+  int hstart = 0, nhist = 0;
+  double lasttemp = 5000.0f;
+  double smoothedavg, lastsmoothed = 500000.0f;
+
+  bool finishedonce = false;
   
   /*
    * Used only for statistical purposes
@@ -159,11 +177,12 @@ void annealer::anneal() {
   int valid_solutions_considered = 0;
   int solutions_accepted = 0;
   int valid_solutions_accepted = 0;
-
-#ifdef VERBOSE
-  cout << "Initialized to cycles="<<cycles<<" mintrans="
-       << mintrans<<" naccepts="<<naccepts<< endl;
-#endif
+  
+  /*
+   * Grab some values that we'll use a lot
+   */
+  pclass_count = pclasses.size();
+  vnode_count = num_vertices(VG);
 
   /*
    * Set up the initial counts
@@ -218,94 +237,28 @@ void annealer::anneal() {
    * number of pclasses. This is how long we usually stick with a given 
    * temperature.
    */
-   
-  // Subtract the number of fixed nodes from nnodes, since they don't really
-  // count
-  if (fixed_node_count > 0) {
-     cout << "Adjusting dificulty estimate for fixed nodes, " <<
-             (nnodes - fixed_node_count) << " remain.\n";
-  }
+  neighborsize = this->get_neighborsize();
 
-  int neighborsize;
-  neighborsize = (nnodes - fixed_node_count) * npclasses;
-  if (neighborsize < params.min_neighborhood_size) {
-    neighborsize = params.min_neighborhood_size;
-  }
 
-  // Allow scaling of the neighborhood size, so we can make assign try harder
-  // (or less hard)
-  neighborsize = (int)(neighborsize * params.scale_neighborhood);
-
-#ifdef CHILL
-  std::vector<double> scores;
-  scores.resize(neighborsize+1);
-#endif
-
-  if (fixed_node_count >= nnodes) {
+  if (fixed_node_count >= vnode_count) {
     cout << "All nodes are fixed.  No annealing." << endl;
     done = true;
   }
-  
-  vvertex vv;
-  tb_vnode *vn;
-
-  // Crap added by ricci
-  bool melting;
-  int nincreases, ndecreases;
-  double avgincrease;
-  double avgscore;
-  double initialavg;
-  double stddev;
-  bool finished; 
-  bool forcerevert; 
-  // Lame, we have to do this on a seperate line, or the compiler gets mad about
-  // the goto above crossing initialization. Well, okay, okay, I know the goto
-  // itself is lame....
-  finished = forcerevert = false;
-  int tsteps;
-  int mintsteps;
-	
-  double meltstart;
-
-#define MAX_AVG_HIST 16
-  double avghist[MAX_AVG_HIST];
-  int hstart, nhist;
-  hstart = nhist = 0;
-  double lasttemp;
-  double smoothedavg, lastsmoothed;
-  lastsmoothed = 500000.0f;
-  lasttemp = 5000.0f;
-  int melttrials;
-  melttrials = 0;
-
-  bool finishedonce;
-  finishedonce = false;
-
-  tsteps = 0;
-  mintsteps = MAX_AVG_HIST;
-  tsteps = 0;
-  mintsteps = MAX_AVG_HIST;
-  tsteps = 0;
-  mintsteps = MAX_AVG_HIST;
-
-  // Make sure the last two don't prevent us from running!
-  avgscore = initialavg = 1.0;
-
-  stddev = 0;
 
   /*
-   * Initial temperature calcuation/melting
+   * Initialize melting, or set starting temperature
    */
   if (params.melt) {
-      melting = true;
+      this->start_melting();
   } else {
-      melting = false;
       temp = params.initial_temperature;
       cout << "Starting with initial temperature " << temp << endl;
   }
  
-  meltstart = used_time();
-  
+  /*
+   * Record when we started the annealing loop
+   */
+  anneal_start_time = used_time();
   
   /*
    * The main annealing loop!
@@ -316,32 +269,21 @@ void annealer::anneal() {
    */
   while(!done && (params.epsilon_terminate || (temp >= params.temp_stop))) {
       
-#ifdef VERBOSE
-    cout << "Temperature:  " << temp << " Best: " << best_score <<
-      " (" << best_violated << ")" << endl;
-#endif
+    if (params.verbose) {
+      this->status_report(cout);
+    }
+    
+    /*
+     * Initialize this temperature step - we get back the number of iterations
+     * we should do at this temperature
+     */
+    int iterations_per_tstep = this->init_tstep();
 
     /*
-     * Initialize this temperature step
-     */
-    trans = 0;
-    accepts = 0;
-    nincreases = ndecreases = 0;
-    avgincrease = 0.0;
-    avgscore = prev_score;
-#ifdef CHILL
-    scores[0] = prev_score;
-#endif
-
-    // Adjust the number of transitions we're going to do based on the number
-    // of pclasses that are actually 'in play'
-    int transitions = (int)(neighborsize *
-      (count_enabled_pclasses() *1.0 / pclasses.size()));
-    assert(transitions <= neighborsize);
-
-    if (melting) {
-      cout << "Doing melting run" << endl;
-    }
+     * Object that we'll use to keep track of the state of this individual
+     * timestep
+     */    
+    tstep_state tstate(this);
 
     /*
      * The inner loop - 
@@ -349,21 +291,22 @@ void annealer::anneal() {
      * solution. When we're melting, we have a special number of transitions
      * we're shooting for.
      */
-    while ((melting && (trans < neighborsize))
-	    || (trans < transitions)) {
+    while (tstate.iterations < iterations_per_tstep) {
+
+
 
     RDEBUG(cout << "ANNEALING: Loop starts with score " << get_score() <<
             " violations " << violated << endl;)
 
 #ifdef STATS
       cout << "STATS temp:" << temp << " score:" << get_score() <<
-	" violated:" << violated << " trans:" << trans <<
+	" violated:" << violated << " iters:" << iterations <<
 	" accepts:" << accepts << " current_time:" <<
 	used_time() << endl;
 #endif 
       pvertex newpos;
-      trans++;
-      iters++;
+      tstate.iterations++;
+      total_iterations++;
 
       /*
        * Find a virtual node to map -
@@ -385,10 +328,10 @@ void annealer::anneal() {
                 get(vvertex_pmap,vv)->name << " (" <<
                 unassigned_nodes.size() << " in queue)" << endl;)
       } else {
-	int start = RANDOM()%nnodes;
+	int start = RANDOM()%vnode_count;
 	int choice = start;
 	while (get(vvertex_pmap,virtual_nodes[choice])->fixed) {
-	  choice = (choice +1) % nnodes;
+	  choice = (choice +1) % vnode_count;
 	  if (choice == start) {
 	      choice = -1;
 	      break;
@@ -479,11 +422,11 @@ void annealer::anneal() {
       if (newpnode == NULL) {
 	// Push this node back onto the unassigned map
 	unassigned_nodes.push_front(vv);
-	int start = RANDOM()%nnodes;
+	int start = RANDOM()%vnode_count;
 	int toremove = start;
 	while (get(vvertex_pmap,virtual_nodes[toremove])->fixed ||
 	       (! get(vvertex_pmap,virtual_nodes[toremove])->assigned)) {
-	    toremove = (toremove +1) % nnodes;
+	    toremove = (toremove +1) % vnode_count;
 	  if (toremove == start) {
 	    toremove = -1;
             RDEBUG(cout << "Not removing a node" << endl;)
@@ -570,11 +513,12 @@ void annealer::anneal() {
       // This looks funny, because < 0 means worse, which means an increase in
       // score
       if (scorediff < 0) {
-        nincreases++;
-        avgincrease = avgincrease * (nincreases -1) / nincreases +
-  		    (-scorediff)  / nincreases;
+        tstate.increase_count++;
+        tstate.avg_increase = tstate.avg_increase * (tstate.increase_count -1) /
+                                   tstate.increase_count +
+  		              (-scorediff)  / tstate.increase_count;
       } else {
-        ndecreases++;
+        tstate.decrease_count++;
       }	
    
       /*
@@ -679,8 +623,8 @@ void annealer::anneal() {
 	}
 	
 	if (violated == 0 && (time_to_first_valid == 0.0)) {
-        cout << "    Found first valid solution on iteration " << iters << endl;
-        time_to_first_valid = used_time() - meltstart;
+        cout << "    Found first valid solution on iteration " << total_iterations << endl;
+        time_to_first_valid = used_time() - anneal_start_time;
     }
 
 #ifdef GNUPLOT_OUTPUT
@@ -689,13 +633,13 @@ void annealer::anneal() {
 	fprintf(deltaout,"%f\n",-scorediff);
 #endif // GNUPLOT_OUTPUT
 
-	avgscore += new_score;
-	accepts++;
+	tstate.avg_score += new_score;
+	tstate.accepts++;
 
 #ifdef CHILL
 	 if (!melting) {
-             assert(accepts <= neighborsize);
-	     scores[accepts] = new_score;
+             assert(tstate.accepts <= neighborsize);
+	     tstate.scores[tstate.accepts] = new_score;
 	 }
 #endif // CHILL
 
@@ -717,8 +661,8 @@ void annealer::anneal() {
       best_solution.set(VG);
 	  best_score = new_score;
 	  best_violated = violated;
-	  iters_to_best = iters;
-      time_to_best = used_time() - meltstart;
+	  iters_to_best = total_iterations;
+      time_to_best = used_time() - anneal_start_time;
 #ifdef SCORE_DEBUG
 	  cerr << "New best recorded" << endl;
 #endif
@@ -740,8 +684,10 @@ void annealer::anneal() {
        * almost every transition will be accepted
        */
       if (melting) {
-	temp = avgincrease /
-	  log(nincreases/ (nincreases * params.X0 - ndecreases * (1 - params.X0)));
+	temp = tstate.avg_increase /
+	  log(tstate.increase_count/
+	      (tstate.increase_count * params.X0 - 
+	           tstate.decrease_count * (1 - params.X0)));
 	if (!(temp > 0.0)) {
 	    temp = 0.0;
 	}
@@ -771,14 +717,14 @@ NOTQUITEDONE:
      */
 	
     // Keep an average of the score over this temperature step	
-    avgscore = avgscore / (accepts +1);
+    tstate.avg_score = tstate.avg_score / (tstate.accepts +1);
 
     /*
      * If we were melting, then we we need to pick an initial temperature
      */
     if (melting) {
       melting = false;
-      initialavg = avgscore;
+      initialavg = tstate.avg_score;
       meltedtemp = temp;
       RDEBUG(cout << "Melting finished with a temperature of " << temp
 	<< " avg score was " << initialavg << endl;)
@@ -795,7 +741,7 @@ NOTQUITEDONE:
        * target. We adjust our cooling schedule accordingly.
        */
       if (params.timetarget != 0.0) {
-	double melttime = used_time() - meltstart;
+	double melttime = used_time() - anneal_start_time;
 	double timeleft = params.timetarget - melttime;
 	double stepsleft = timeleft / melttime;
 	cout << "Melting took " << melttime << " seconds, will try for "
@@ -813,10 +759,10 @@ NOTQUITEDONE:
 #ifdef CHILL
       if (!melting) {
 	  stddev = 0;
-	  for (int i = 0; i <= accepts; i++) {
-	    stddev += pow(scores[i] - avgscore,2);
+	  for (int i = 0; i <= tstate.accepts; i++) {
+	    stddev += pow(tstate.scores[i] - tstate.avg_score,2);
 	  }
-	  stddev /= (accepts +1);
+	  stddev /= (tstate.accepts +1);
 	  stddev = sqrt(stddev);
 	  temp = temp / (1 + (temp * log(1 + params.delta))/(3  * stddev));
       }
@@ -842,14 +788,14 @@ NOTQUITEDONE:
 #endif /* CHILL */
     } else { /* epsilon_terminate */
         printf("temp_end: %f ",temp);
-        if (trans >= mintrans) {
+        if (iterations >= mintrans) {
 	        if (accepts >= naccepts) {
 	            printf("both");
 	        } else {
-	            printf("trans %f",accepts*1.0/naccepts);
+	            printf("iterations %f",accepts*1.0/naccepts);
 	        }
         } else {
-	        printf("accepts %f",trans*1.0/mintrans);
+	        printf("accepts %f",iterations*1.0/mintrans);
         }
         printf("\n");
     } /* epsilon_terminate */
@@ -870,12 +816,12 @@ NOTQUITEDONE:
      * Add this temperature step to the history, and computer a smoothed
      * average.
      */
-    smoothedavg = avgscore / (nhist + 1);
+    smoothedavg = tstate.avg_score / (nhist + 1);
     for (int j = 0; j < nhist; j++) {
       smoothedavg += avghist[(hstart + j) % MAX_AVG_HIST] / (nhist + 1);
     }
 
-    avghist[(hstart + nhist) % MAX_AVG_HIST] = avgscore;
+    avghist[(hstart + nhist) % MAX_AVG_HIST] = tstate.avg_score;
     if (nhist < MAX_AVG_HIST) {
       nhist++;
     } else {
@@ -1139,18 +1085,18 @@ NOTQUITEDONE:
    * Print out some useful statistics
    */
   double finished_time = used_time();
-  double annealing_time = finished_time - meltstart;
+  double annealing_time = finished_time - anneal_start_time;
   
   cout << "    Total annealing time: " << annealing_time << endl;
   cout << "    Total temperature steps: " << tsteps << endl;
-  cout << "    Total iterations: " << iters << endl;
+  cout << "    Total iterations: " << total_iterations << endl;
   cout << "    Finshed at temperature: " << temp << endl;
-  cout << "    Average iterations per second: " << (iters/annealing_time)
+  cout << "    Average iterations per second: " << (total_iterations/annealing_time)
        << endl;
   cout << "    Number of solutions considered: " << solutions_considered
        << endl;
   cout << "    Fraction of iterations during which a solution was considered: "
-       << ((solutions_considered*1.0)/iters) << endl;
+       << ((solutions_considered*1.0)/total_iterations) << endl;
   cout << "    Fraction of solutions accepted: "
        << ((solutions_accepted*1.0)/solutions_considered) << endl;
   cout << "    Fraction of potential solutions that were valid: "
@@ -1315,4 +1261,74 @@ void annealer::setup_unassigned_nodes() {
     	    unassigned_nodes.push_front(*vit);
         }
     }
+}
+
+/*
+ * Does what it says, sets up the state for melting
+ */
+void annealer::start_melting() {
+    cout << "Starting melting run" << endl;
+    melting = true;
+}
+
+/*
+ * Indicate that we're done melting
+ */
+void annealer::stop_melting() {
+    
+    melting = false;
+}
+
+/*
+ * Set up all the variables that need to be initialized at the beginning of a
+ * temperature step. Returns the number of iterations this tstep should last
+ * (which depends on whether or not we're currently melting)
+ */
+int annealer::init_tstep() {
+      
+    /*
+     * The number of iterations for this tstep depends on a few different
+     * things - if we're melting, we want to do a pretty large timestep.
+     * Otherwise, we adjust to the number of enabled pclasses (though we
+     * only disable pclasses when using dynamic pclasses; when dynamic
+     * pclasses are not in use, this will have no effect)
+     */ 
+    if (melting) {
+        return neighborsize;
+    } else {
+        // Adjust the number of transitions we're going to do based on the number
+        // of pclasses that are actually 'in play'
+        int iters = (int)(neighborsize *
+            (count_enabled_pclasses() *1.0 / pclasses.size()));
+        assert(iters <= neighborsize);
+        return iters;
+    }
+}
+
+int annealer::get_neighborsize() const {
+    
+    int size;
+    
+    // Subtract the number of fixed nodes from vnode_count, since they don't really
+    // count
+    if (fixed_node_count > 0) {
+        cout << "Adjusting dificulty estimate for fixed nodes, " <<
+                (vnode_count - fixed_node_count) << " remain.\n";
+    }
+
+    // Basic neighborhood size is the number of virtual nodes, multiplied by
+    // the number of pclasses that we have.
+    size = (vnode_count - fixed_node_count) * pclass_count;
+
+    // We want to make sure we don't give up *too* fast - so cap the minimum
+    // size of the neighborhood
+    if (size < params.min_neighborhood_size) {
+        size = params.min_neighborhood_size;
+    }
+
+    // Allow scaling of the neighborhood size, so we can make assign try harder
+    // (or less hard)
+    size = (int)(size * params.scale_neighborhood);
+    
+    return size;
 }
