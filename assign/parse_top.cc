@@ -79,7 +79,7 @@ int parse_top(tb_vgraph &vg, istream& input)
   while (!input.eof()) {
     line++;
     input.getline(inbuf,1024);
-    parsed_line = split_line(inbuf,' ');
+    parsed_line = split_line(inbuf);
     if (parsed_line.size() == 0) {continue;}
 
     string command = parsed_line[0];
@@ -169,59 +169,25 @@ int parse_top(tb_vgraph &vg, istream& input)
 	string delay,delayunder,delayover;
 	string loss,lossunder,lossover;
 	string bwweight,delayweight,lossweight;
-	string_vector parsed_delay,parsed_bw,parsed_loss;
-	parsed_bw = split_line(parsed_line[4],':');
-	bw = parsed_bw[0];
-	if (parsed_bw.size() == 1) {
-	  bwunder = "0";
-	  bwover = "0";
-	  bwweight = "1";
-	} else if (parsed_bw.size() == 3) {
-	  bwunder = parsed_bw[1];
-	  bwover = parsed_bw[2];
-	  bwweight = "1";
-	} else if (parsed_bw.size() == 4) {
-	  bwunder = parsed_bw[1];
-	  bwover = parsed_bw[2];
-	  bwweight = parsed_bw[3];
-	} else {
-	  top_error("Bad link line, bad bandwidth specifier.");
-	}
-	parsed_delay = split_line(parsed_line[5],':');
-	delay = parsed_delay[0];
-	if (parsed_delay.size() == 1) {
-	  delayunder = "0";
-	  delayover = "0";
-	  delayweight = "1";
-	} else if (parsed_delay.size() == 3) {
-	  delayunder = parsed_delay[1];
-	  delayover = parsed_delay[2];
-	  delayweight = "1";
-	} else if (parsed_delay.size() == 4) {
-	  delayunder = parsed_delay[1];
-	  delayover = parsed_delay[2];
-	  delayweight = parsed_delay[3];
-	} else {
-	  top_error("Bad link line, bad delay specifier.");
-	}
-	parsed_loss = split_line(parsed_line[6],':');
-	loss = parsed_loss[0];
-	if (parsed_loss.size() == 1) {
-	  lossunder = "0";
-	  lossover = "0";
-	  lossweight = "1";
-	} else if (parsed_loss.size() == 3) {
-	  lossunder = parsed_loss[1];
-	  lossover = parsed_loss[2];
-	  lossweight = "1";
-	} else if (parsed_loss.size() == 4) {
-	  lossunder = parsed_loss[1];
-	  lossover = parsed_loss[2];
-	  lossweight = parsed_loss[4];
-	} else {
-	  top_error("Bad link line, bad loss specifier.");
-	}
-
+        
+        bw = parsed_line[4];
+        // This stuff is not actually supported, so just make up values for now
+	bwunder = "0";
+	bwover = "0";
+	bwweight = "1";
+	
+        delay = parsed_line[5];
+        // This stuff is not actually supported, so just make up values for now	
+	delayunder = "0";
+	delayover = "0";
+	delayweight = "1";
+	
+        loss = parsed_line[6];
+        // This stuff is not actually supported, so just make up values for now	
+	lossunder = "0";
+	lossover = "0";
+	lossweight = "1";
+	
 	vedge e;
 	// Check to make sure the nodes in the link actually exist
 	if (vname2vertex.find(src) == vname2vertex.end()) {

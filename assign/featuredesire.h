@@ -234,20 +234,20 @@ class tb_node_featuredesire {
 	/*
 	 * Operators, mostly for use with the STL
 	 */
-	const bool operator==(const tb_node_featuredesire &o) const {
+	bool operator==(const tb_node_featuredesire &o) const {
 	    // Note: Compares that two FDs are have the same name/ID, but NOT
 	    // that they have the same weight - see equivalent() below for that
 	    return(*featuredesire_obj == *(o.featuredesire_obj));
 	}
 
-	const bool operator<(const tb_node_featuredesire &o) const {
+	bool operator<(const tb_node_featuredesire &o) const {
 	    return(*featuredesire_obj < *(o.featuredesire_obj));
 	}
 
 	// Since we have to use == to compare names, for the STL's sake, this
 	// function checks to make sure that the node-specific parts are
 	// equivalent too
-	const bool equivalent(const tb_node_featuredesire &o) const {
+	bool equivalent(const tb_node_featuredesire &o) const {
 	    return ((*this == o) && (weight == o.weight) &&
 		    (violateable == o.violateable));
 	}
@@ -255,17 +255,17 @@ class tb_node_featuredesire {
 	/*
 	 * Silly accesors
 	 */
-	inline const bool   is_violateable() const { return violateable; }
-	inline const double cost()           const { return weight;      }
-	inline const double used()	     const { return used_local_capacity; }
+	inline bool   is_violateable() const { return violateable; }
+	inline double cost()           const { return weight;      }
+	inline double used()	       const { return used_local_capacity; }
 
 	/*
 	 * Proxy functions for the stuff in tb_featuredesire
 	 */
 	const fstring name()      const { return featuredesire_obj->name();      }
-	const bool  is_local()  const { return featuredesire_obj->is_local();  }
-	const bool  is_global() const { return featuredesire_obj->is_global(); }
-	const bool  is_l_additive() const {
+	      bool  is_local()  const { return featuredesire_obj->is_local();  }
+	      bool  is_global() const { return featuredesire_obj->is_global(); }
+	      bool  is_l_additive() const {
 	    return featuredesire_obj->is_l_additive();
 	}
 	void add_desire_user(double weight) const { 
@@ -339,7 +339,7 @@ class tb_featuredesire_set_iterator {
 	}
 
 	// Return the set membership of the current element
-	const set_membership membership() const {
+	set_membership membership() const {
 	    return current_membership;
 	}
 

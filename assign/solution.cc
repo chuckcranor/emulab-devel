@@ -250,7 +250,7 @@ void print_solution (const solution &s, const char* output_filename)
  * the physical perspective. For example, now many vnodes are assigned to each
  * pnode, and how much total bandwidth each pnode is handling.
  */
-void print_solution_summary(const solution &s)
+void print_solution_summary()
 {
   // First, print the number of vnodes on each pnode, and the total number of
   // pnodes used

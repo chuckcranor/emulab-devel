@@ -452,7 +452,7 @@ public:
   // bandwidth.
   // NOTE: should probably use a helper function in delay_info, but right now,
   // we only care about bandwidth
-  const bool is_equiv(const tb_plink& link) {
+  bool is_equiv(const tb_plink& link) {
 #ifdef PCLASS_DEBUG_TONS
       cerr << "        Comparing " << delay_info.bandwidth 
           << " and " << link.delay_info.bandwidth << endl;

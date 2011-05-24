@@ -66,7 +66,7 @@ int parse_ptop(tb_pgraph &pg, tb_sgraph &sg, istream& input)
   while (!input.eof()) {
     line++;
     input.getline(inbuf,16384);
-    parsed_line = split_line(inbuf,' ');
+    parsed_line = split_line(inbuf);
     if (parsed_line.size() == 0) {continue;}
 
     string command = parsed_line[0];

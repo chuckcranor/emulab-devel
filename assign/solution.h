@@ -130,7 +130,7 @@ void print_solution(const solution &s);
 void print_solution(const solution &s, const char* output_rspec_filename);
 
 /* Print a summary of the solution */
-void print_solution_summary(const solution &s);
+void print_solution_summary();
 
 /* Check to see if two scores are, for all intents and purposes, the same */
 bool compare_scores(double score1, double score2);

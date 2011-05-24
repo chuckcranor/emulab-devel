@@ -18,7 +18,7 @@ using namespace std;
 #define DEBUG(x)
 #endif
 
-string_vector split_line(string line,char split_char)
+string_vector split_line(string line)
 {
   string_vector parsed;
   

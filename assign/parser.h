@@ -18,6 +18,6 @@ typedef vector<string> string_vector;
 
 int split_two(string line,char split_char,string &a,string &b);
 int split_two(string line,char split_char,string &a,string &b,string default_b);
-string_vector split_line(string line,char split_char);
+string_vector split_line(string line);
 
 #endif

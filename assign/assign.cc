@@ -1290,7 +1290,7 @@ int main(int argc,char **argv) {
   }
   
   if (print_summary) {
-    print_solution_summary(best_solution);
+    print_solution_summary();
   }
 
 #ifdef GRAPHVIZ_SUPPORT
