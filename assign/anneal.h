@@ -40,21 +40,6 @@ using namespace __gnu_cxx;
 #include "fstring.h"
 #include "solution.h"
 
-// Some defaults for #defines
-#ifndef NO_REVERT
-#define NO_REVERT 0
-#endif
-
-#ifndef REVERT_VIOLATIONS
-#define REVERT_VIOLATIONS 1
-#endif
-
-#ifdef PHYS_CHAIN_LEN
-#define PHYSICAL(x) x
-#else
-#define PHYSICAL(x) 0
-#endif
-
 /*
  * TODO: Where do these go?
  */
@@ -243,6 +228,31 @@ public:
     bool allow_negative_delta;
 
     /*
+     * If set, we stop when we first get a valid solution - not really random,
+     * but it's an approximation
+     */
+    bool random_assignment;
+
+    /*
+     * If set, we stop when all nodes are assigned, whether or not the solution
+     * is valid. This is a better approximation of random, but still not
+     * perfect
+     */
+    bool really_random_assignment;
+
+    /*
+     * If set, we do a rever at the end of every single temperature step. This
+     * is not kosher SA behaviour, but it's what assign used to do.
+     */
+    bool revert_every_tstep;
+
+    /*
+     * Only active if revert_every_tstep is true - if we are reverting every
+     * temperature step, do so based on violations rather than score
+     */
+    bool revert_violations;
+
+    /*
      * Defaults
      */
     annealing_parameters() :
@@ -270,7 +280,11 @@ public:
         chill(true),
         special_violation_treatment(true),
         no_violations(false),
-        allow_negative_delta(true)
+        allow_negative_delta(true),
+        random_assignment(false),
+        really_random_assignment(false),
+        revert_every_tstep(false),
+        revert_violations(true)
     {;}
         
     /*
@@ -288,10 +302,19 @@ public:
  *   Deal with returning the result to the caller
  */
 class annealer {
+
+private:
+    class tstep_state;
+
 public:
+
+
     explicit annealer(const annealing_parameters &_params) :
         params(_params), fixed_node_count(0),
-        temp(0.0),  prev_score(0), total_iterations(0) {;};
+        temp(0.0),  prev_score(0), total_iterations(0),
+        meltedtemp(0.0), initialavg(0.0),
+        anneal_start_time(0.0), temp_rate(params.temp_rate),
+        finished(false), forcerevert(false) {;};
     /*
      * The big guy!
      */
@@ -329,7 +352,7 @@ private:
      * Do just what they say
      */
     void start_melting();
-    void stop_melting();
+    double stop_melting(const tstep_state &tstate);
 
     /*
      * Get ready to run a timestep
@@ -358,6 +381,18 @@ private:
             const pvertex &new_assignment);
 
     /*
+     * High-level function to decide if we are going to take a potential
+     * new solution - takes into account violations
+     */
+    bool accept_transition(double new_score, double old_score,
+            int new_violations, int old_violations);
+
+    /*
+     * Decide what the temperature for the next step should be
+     */
+    double next_temperature(const tstep_state &tstate);
+
+    /*
      * Annealing-specific parameters
      */
     const annealing_parameters &params;
@@ -380,6 +415,19 @@ private:
     // Size of the local neighborhood
     int neighborsize;
 
+    // Temperature at which melting finished
+    double meltedtemp;
+
+    // The average score at the end of the melting round
+    double initialavg;
+    
+    // The rusage time from when annealing began
+    double anneal_start_time;
+
+    // The multiplicative factor we use to decrease the score under the old
+    // cooling schedule
+    float temp_rate;
+
     /*
      * Volatile variables - these change frequently during the run of
      * the annealing loop
@@ -400,6 +448,16 @@ private:
 
     // Total number of iterations we've gone through so far
     int total_iterations;
+
+    // TODO: These next few variables may belong someplace else!
+
+    // When set to true, we are done annealing and won't do another temperature
+    // step
+    bool finished;
+    
+    // Functions can set this to force a revert at the end of the temperature
+    // step
+    bool forcerevert;
 
     /*
      * State that's used/modified by an individual timestep

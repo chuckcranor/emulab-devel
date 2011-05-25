@@ -91,9 +91,10 @@ switch_dist_map_map switch_dist;
 // Time started and finished
 double timestart, timeend;
 
-#ifdef GNUPLOT_OUTPUT
-FILE *scoresout, *tempout, *deltaout;
-#endif
+// Used for gnutplot output - we can graph the scores, temperature, etc.
+// over time
+FILE *scoresout = NULL, *tempout = NULL, *deltaout = NULL;
+
 // Whether or not assign is allowed to generate trivial links
 bool allow_trivial_links = true;
 
@@ -871,6 +872,7 @@ int main(int argc,char **argv) {
 #endif
   bool prechecks_only = false;
   bool quiet = false;
+  bool gnuplot_output = false;
 
   /*
    * Parameters we're going to pass to the simulated annealing function
@@ -1127,11 +1129,11 @@ int main(int argc,char **argv) {
   sigaction(SIGINFO,&action2,NULL);
 #endif 
   
-#ifdef GNUPLOT_OUTPUT
-  scoresout = fopen("scores.out","w");
-  tempout = fopen("temp.out","w");
-  deltaout = fopen("delta.out","w");
-#endif
+  if (gnuplot_output) {
+      scoresout = fopen("scores.out","w");
+      tempout = fopen("temp.out","w");
+      deltaout = fopen("delta.out","w");
+  }
 
   cout << "seed = " << seed << endl;
   srandom(seed);
@@ -1252,11 +1254,11 @@ int main(int argc,char **argv) {
   delete anneal;
   anneal = NULL;
 
-#ifdef GNUPLOT_OUTPUT
-  fclose(scoresout);
-  fclose(tempout);
-  fclose(deltaout);
-#endif
+  if (gnuplot_output) {
+      fclose(scoresout);
+      fclose(tempout);
+      fclose(deltaout);
+  }
 
   if ((!compare_scores(get_score(),best_score)) || (violated > best_violated)) {
     cout << "WARNING: Internal scoring inconsistency." << endl;

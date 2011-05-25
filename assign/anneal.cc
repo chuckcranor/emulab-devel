@@ -18,9 +18,8 @@ static const char rcsid[] = "$Id: anneal.cc,v 1.46 2009-05-20 18:06:07 tarunp Ex
 #include <vector>
 
 // From assign.cc
-#ifdef GNUPLOT_OUTPUT
+// XXX: Should be passed in!
 extern FILE *scoresout, *tempout, *deltaout;
-#endif
 
 // Determines whether to accept a change of score difference 'change' at
 // temperature 'temperature'.
@@ -122,10 +121,7 @@ void annealer::anneal() {
 
     int prev_violated = 0;
 
-    float temp_rate = params.temp_rate;
-
     double new_score = 0;
-    double scorediff;
 
     // The number of iterations that took place.
     iters_to_best = 0;
@@ -139,20 +135,13 @@ void annealer::anneal() {
 
     pvertex oldpos;
     bool oldassigned;
-    double meltedtemp;
     temp = params.init_temp;
     double deltatemp, deltaavg;
 
 
-    double initialavg = 1.0f;
-    double stddev = 0.0f;
-    bool finished = false;
-    bool forcerevert = false;
     int tsteps = 0;
 
-    double anneal_start_time;
-
-#define MAX_AVG_HIST 16
+    const int MAX_AVG_HIST = 16;
     double avghist[MAX_AVG_HIST];
     int mintsteps = MAX_AVG_HIST;
 
@@ -288,7 +277,6 @@ void annealer::anneal() {
          */
         while (tstate.iterations < iterations_per_tstep) {
 
-            pvertex newpos;
             tstate.iterations++;
             total_iterations++;
 
@@ -328,9 +316,6 @@ void annealer::anneal() {
             if (vn->vclass != NULL) {
                 vn->type = vn->vclass->choose_type();
             }
-
-            // Did we free a node?
-            bool freednode = false;
 
             /* 
              * Find a pnode to map this vnode to
@@ -387,7 +372,8 @@ void annealer::anneal() {
              * Okay, we've got pnode to map this vnode to - let's do it
              */
             if (newpnode != NULL) {
-                newpos = pnode2vertex[newpnode];
+                // Have to get the pvertex associated with the tb_vpnode
+                pvertex newpos = pnode2vertex[newpnode];
 
                 /*
                  * First, we might want to run a sanity check on our scores -
@@ -405,10 +391,6 @@ void annealer::anneal() {
                     unassigned_nodes.push_front(vv);
                     continue;
                 }
-            } else { // pnode != NULL
-                if (freednode) {
-                    continue;
-                }        
             }
 
             // Bookkeeping
@@ -419,13 +401,16 @@ void annealer::anneal() {
 
             /*
              * Okay, now that we've mapped some new node, let's check the
-             * scoring
+             * scoring, so that we can decide if we're going to accept it
              */
             new_score = get_score();
             assert(new_score >= 0);
 
-            // Negative means bad
-            scorediff = prev_score - new_score;
+            /*
+             * Negative is bad - it means the score increased
+             */
+            double scorediff = prev_score - new_score;
+            
             // This looks funny, because < 0 means worse, which means an
             // increase in score
             if (scorediff < 0) {
@@ -438,80 +423,10 @@ void annealer::anneal() {
             }        
 
             /*
-             * Here are all the various conditions for deciding if we're
-             * going to accept this transition
+             * Decide if we're going to accept this transition or not
              */
-            bool accepttrans = false;
-            if (melting) {
-                // When melting, we take everything!
-                accepttrans = true;
-            } else {
-                if (params.no_violations) {
-                    // Here, we don't consider violations at all, just
-                    // whether the regular simulated annealing accept
-                    // conditions
-                    if (new_score < prev_score) {
-                        accepttrans = true;
-                    } else if (accept(scorediff,temp)) {
-                        accepttrans = true;
-                    }
-                } else if (params.special_violation_treatment) {
-                    /*
-                     * In this ifdef, we always accept new solutions that
-                     * have fewer violations than the old solution, and
-                     * when we're trying to determine whether or not to
-                     * accept a new solution with a higher score, we don't
-                     * take violations into the account.
-                     *
-                     * The problem with this shows up at low temperatures.
-                     * What can often happen is that we accept a solution
-                     * with worse violations but a better (or similar)
-                     * score. Then, if we were to try, say the first
-                     * solution (or a score-equivalent one) again, we'd
-                     * accept it again.
-                     *
-                     * What this leads to is 'thrashing', where we have a
-                     * whole lot of variation of scores over time, but are
-                     * not making any real progress. This prevents the
-                     * cooling schedule from converging for much, much
-                     * longer than it should really take.
-                     */
-                    if ((violated == prev_violated) &&
-                            (new_score < prev_score)) {
-                        accepttrans = true;
-                    } else if (violated < prev_violated) {
-                        accepttrans = true;
-                    } else if (accept(scorediff,temp)) {
-                        accepttrans = true;
-                    }
-                    // Otherwise, it's implicitly rejected
-                } else { // no special_violation_treatment
-                    /*
-                     * In this branch of the ifdef, we give violations no
-                     * special treatment when it comes to accepting new
-                     * solution - we just add them into the score. This
-                     * makes assign behave in a more 'classic' simulated
-                     * annealing manner.
-                     *
-                     * One consequence, though, is that we have to be more
-                     * careful with scores. We do not want to be able to
-                     * get into a situation where adding a violation
-                     * results in a _lower_ score than a solution with
-                     * fewer violations.
-                     */
-                    double adjusted_new_score =
-                        new_score + violated * VIOLATION_SCORE;
-                    double adjusted_old_score =
-                        prev_score + prev_violated * VIOLATION_SCORE;
-
-                    if (adjusted_new_score < adjusted_old_score) {
-                        accepttrans = true;
-                    } else if (accept(adjusted_old_score -
-                                adjusted_new_score,temp)) {
-                        accepttrans = true;
-                    }
-                } // special_violation_treatment
-            } // melting
+            bool accepttrans = accept_transition(new_score, prev_score,
+                    violated, prev_violated);
 
             /* 
              * Okay, we've decided to accep this transition - do some
@@ -534,21 +449,24 @@ void annealer::anneal() {
                     time_to_first_valid = used_time() - anneal_start_time;
                 }
 
-#ifdef GNUPLOT_OUTPUT
-                fprintf(tempout,"%f\n",temp);
-                fprintf(scoresout,"%f\n",new_score);
-                fprintf(deltaout,"%f\n",-scorediff);
-#endif // GNUPLOT_OUTPUT
+                // gnuplot data files
+                if (tempout != NULL) {
+                    fprintf(tempout,"%f\n",temp);
+                    fprintf(scoresout,"%f\n",new_score);
+                    fprintf(deltaout,"%f\n",-scorediff);
+                }
 
                 tstate.avg_score += new_score;
                 tstate.accepts++;
 
-#ifdef CHILL
-                if (!melting) {
+                /*
+                 * In the 'chill' cooling schedule, we have to keep track of
+                 * all scores we've seen
+                 */
+                if (params.chill && !melting) {
                     assert(tstate.accepts <= neighborsize);
                     tstate.scores[tstate.accepts] = new_score;
                 }
-#endif // CHILL
 
                 /*
                  * Okay, if this is the best score we've gotten so far,
@@ -620,61 +538,9 @@ NOTQUITEDONE:
         tstate.avg_score = tstate.avg_score / (tstate.accepts +1);
 
         /*
-         * If we were melting, then we we need to pick an initial temperature
+         * Get the temperature for the next timestep
          */
-        if (melting) {
-            melting = false;
-            initialavg = tstate.avg_score;
-            meltedtemp = temp;
-            if (!(meltedtemp > 0.0)) { // This backwards expression catches NaNs
-                cout << "    Finished annealing while melting!" << endl;
-                finished = true;
-                forcerevert = true;
-            } else {
-                cout << "Finished melting, picked temperature " << temp << endl;
-            }
-
-            /*
-             * With timetarget, we look at how long melting took, then use that
-             * to estimate how many temperature steps it will take to hit our
-             * time target. We adjust our cooling schedule accordingly.
-             */
-            if (params.timetarget != 0.0) {
-                double melttime = used_time() - anneal_start_time;
-                double timeleft = params.timetarget - melttime;
-                double stepsleft = timeleft / melttime;
-                cout << "Melting took " << melttime << " seconds, will try for "
-                    << stepsleft << " temperature steps" << endl;
-                temp_rate = pow(params.temp_stop/temp,1/stepsleft);
-                cout << "Timelimit: " << params.timetarget
-                    << " Timeleft: " << timeleft
-                    << " temp_rate: " << temp_rate << endl;
-            }
-        } else {
-            /*
-             * The CHILL cooling schedule is the standard one from the
-             * Simulated Annealing literature - it lower the temperature based
-             * on the standard deviation of the scores of accepted
-             * configurations
-             */
-#ifdef CHILL
-            if (!melting) {
-                stddev = 0;
-                for (int i = 0; i <= tstate.accepts; i++) {
-                    stddev += pow(tstate.scores[i] - tstate.avg_score,2);
-                }
-                stddev /= (tstate.accepts +1);
-                stddev = sqrt(stddev);
-                temp = temp / (1 + (temp * log(1 + params.delta))/(3  * stddev));
-            }
-#else
-            /* 
-             * This is assign's original cooling schedule - more predictable,
-             * but not at all reactive to the problem at hand
-             */
-            temp *= temp_rate;
-#endif
-        }
+        temp = next_temperature(tstate);
 
         /*
          * The next section of code deals with termination conditions - how do
@@ -774,21 +640,17 @@ NOTQUITEDONE:
          * RANDOM_ASSIGNMENT is not really very random, but we stop after the
          * first valid solution we get
          */
-#ifdef RANDOM_ASSIGNMENT
-        if (violated == 0) {
+        if (params.random_assignment && (violated == 0)) {
             finished = true;
         }
-#endif
 
         /*
          * REALLY_RANDOM_ASSIGNMENT stops after we've assigned all nodes,
          * whether or not our solution is valid
          */
-#ifdef REALLY_RANDOM_ASSIGNMENT
-        if (unassigned_nodes.size() == 0) {
+        if (params.really_random_assignment && (unassigned_nodes.size() == 0)) {
             finished = true;
         }
-#endif
 
         /*
          * The following section deals with reverting. This is not standard
@@ -815,23 +677,22 @@ NOTQUITEDONE:
         }
 
         /*
-         * Okay, NO_REVERT is not the best possible name for this ifdef.
          * Historically, assign used to revert to the best solution at the end
          * of every temperature step. This is definitely NOT kosher. In my
          * mind, it assign too susceptible to falling into local minima.
          * Anyhow, the idea is that we go back to the best soltion if the
          * current solution is worse than it either in violations or in score.
          */
-#ifndef NO_REVERT
-        if (REVERT_VIOLATIONS && (best_violated < violated)) {
-            cout << "Reverting: REVERT_VIOLATIONS" << endl;
-            revert = true;
+        if (params.revert_every_tstep) {
+            if (params.revert_violations && (best_violated < violated)) {
+                cout << "Reverting: revert_violations" << endl;
+                revert = true;
+            }
+            if (best_score < prev_score) {
+                cout << "Reverting: best score" << endl;
+                revert = true;
+            }
         }
-        if (best_score < prev_score) {
-            cout << "Reverting: best score" << endl;
-            revert = true;
-        }
-#endif
 
         /*
          * This is the code to do the actual revert.  IMPORTANT: At this time,
@@ -1160,10 +1021,47 @@ void annealer::start_melting() {
 }
 
 /*
- * Indicate that we're done melting
+ * Indicate that we're done melting, and pick a new temperature
  */
-void annealer::stop_melting() {
+double annealer::stop_melting(const tstep_state &tstate) {
+    
+    // Flip it off in the main annealer object
     melting = false;
+
+    // Record a few variable for use later (these are also in the main
+    // annealer object)
+    meltedtemp = temp;
+    initialavg = tstate.avg_score;
+
+    if (!(meltedtemp > 0.0)) { // This backwards expression catches NaNs
+        cout << "    Finished annealing while melting!" << endl;
+        finished = true;
+        forcerevert = true;
+    } else {
+        cout << "Finished melting, picked temperature " << temp << endl;
+    }
+
+    /*
+     * With timetarget, we look at how long melting took, then use that
+     * to estimate how many temperature steps it will take to hit our
+     * time target. We adjust our cooling schedule accordingly.
+     */
+    if (params.timetarget != 0.0) {
+        double melttime = used_time() - anneal_start_time;
+        double timeleft = params.timetarget - melttime;
+        double stepsleft = timeleft / melttime;
+        cout << "Melting took " << melttime << " seconds, will try for "
+            << stepsleft << " temperature steps" << endl;
+        temp_rate = pow(params.temp_stop/temp,1/stepsleft);
+        cout << "Timelimit: " << params.timetarget
+            << " Timeleft: " << timeleft
+            << " temp_rate: " << temp_rate << endl;
+    }
+
+    /*
+     * The initial temperature is the one we've already calcuated.
+     */
+    return temp;
 }
 
 /*
@@ -1313,4 +1211,123 @@ void annealer::scoring_selftest(const vvertex &assign_me,
 
     // Returns nothing, since it abort()s on failure
     return;
+}
+
+/*
+ * Returns true if we should accept this transition, false if we should not
+ */
+bool annealer::accept_transition(double new_score, double old_score,
+        int new_violations, int old_violations) {
+    if (melting) {
+        // When melting, we take everything!
+        return true;
+    }
+
+    if (params.special_violation_treatment) {
+        /*
+         * In this branch, we always accept new solutions that have fewer
+         * violations than the old solution, and when we're trying to determine
+         * whether or not to accept a new solution with a higher score, we
+         * don't take violations into the account.
+         *
+         * The problem with this shows up at low temperatures.  What can often
+         * happen is that we accept a solution with worse violations but a
+         * better (or similar) score. Then, if we were to try, say the first
+         * solution (or a score-equivalent one) again, we'd accept it again.
+         *
+         * What this leads to is 'thrashing', where we have a whole lot of
+         * variation of scores over time, but are not making any real progress.
+         * This prevents the cooling schedule from converging for much, much
+         * longer than it should really take.
+         *
+         * It also means that in situations where there are a *lot* of invalid
+         * solutions, we find it very easy to pop back into invalid space,
+         * which is not necesssarily a good thing
+         */
+        if ((new_violations == old_violations) && (new_score < old_score)) {
+            // Same violation count, but better score: take it
+            return true;
+        } else if (new_violations < old_violations) {
+            // Fewer violations: take it
+            return true;
+        } else if (accept(old_score - new_score,temp)) {
+            // New violations > old violations, or violation count is the
+            // same, but the new score is higher: check the metropolis
+            // criteria
+            return true;
+        } else {
+            // Otherwise, nope.
+            return false;
+        }
+    } else {
+        /*
+         * Here, we use the regular simulated annealing score-based acceptance
+         * criteria. However, we have to decide if we're going to include
+         * violations in the score or not.
+         */
+        double adjusted_new_score;
+        double adjusted_old_score;
+
+        if (params.no_violations) {
+            /*
+             * We don't count violations at all
+             */
+            adjusted_new_score = new_score;
+            adjusted_old_score = old_score;
+        } else {
+            /*
+             * We add violations into the score
+             * One consequence, though, is that we have to be more careful with
+             * scores.  We do not want to be able to get into a situation where
+             * adding a violation results in a _lower_ score than a solution
+             * with fewer violations.
+             */
+            adjusted_new_score = new_score + new_violations * VIOLATION_SCORE;
+            adjusted_old_score = old_score + old_violations * VIOLATION_SCORE;
+        }
+
+        /*
+         * This is just the standard SA acceptance criteria - take better
+         * scores, check the metropolis criteria for other scores.
+         */
+        if (adjusted_new_score < adjusted_old_score) {
+            return true;
+        } else if (accept(adjusted_old_score - adjusted_new_score,temp)) {
+            return true;
+        } else {
+            return false;
+        }
+    }
+}
+
+double annealer::next_temperature(const tstep_state &tstate) {
+
+    /*
+     * If we were melting, then we we need to pick an initial temperature
+     */
+    if (melting) {
+        return stop_melting(tstate);
+    }
+
+    /*
+     * The CHILL cooling schedule is the standard one from the
+     * Simulated Annealing literature - it lower the temperature based
+     * on the standard deviation of the scores of accepted
+     * configurations
+     */
+    if (params.chill) {
+        double stddev = 0;
+        for (int i = 0; i <= tstate.accepts; i++) {
+            stddev += pow(tstate.scores[i] - tstate.avg_score,2);
+        }
+        stddev /= (tstate.accepts +1);
+        stddev = sqrt(stddev);
+        return temp / (1 + (temp * log(1 + params.delta))/(3  * stddev));
+    } else {
+        /* 
+         * This is assign's original cooling schedule - more predictable,
+         * but not at all reactive to the problem at hand
+         */
+        return temp * temp_rate;
+    }
 }
