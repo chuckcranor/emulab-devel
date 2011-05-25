@@ -350,6 +350,14 @@ private:
     vvertex pick_assigned_vnode(); 
 
     /*
+     * Run a sanity check on the scoring function - tries to map, then
+     * unmap, the specified pair of nodes. abort()s if it doesn't get
+     * the same score back.
+     */
+    void scoring_selftest(const vvertex &assign_me,
+            const pvertex &new_assignment);
+
+    /*
      * Annealing-specific parameters
      */
     const annealing_parameters &params;

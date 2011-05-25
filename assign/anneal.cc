@@ -364,27 +364,21 @@ void annealer::anneal() {
              * could get stuck
              */
             if (newpnode == NULL) {
-                // Push this node back onto the unassigned map
+                /*
+                 * Push this node back onto the unassigned map - we won't
+                 * be trying to assign it to something this time through
+                 */
                 unassigned_nodes.push_front(vv);
-                int start = RANDOM()%vnode_count;
-                int toremove = start;
-                while (get(vvertex_pmap,virtual_nodes[toremove])->fixed ||
-                        (! get(vvertex_pmap,virtual_nodes[toremove])->assigned)) {
-                    toremove = (toremove +1) % vnode_count;
-                    if (toremove == start) {
-                        toremove = -1;
-                        break;
-                    }        
-                }
-                if (toremove >= 0) {
-                    remove_node(virtual_nodes[toremove]);
-                    unassigned_nodes.push_front(virtual_nodes[toremove]);
-                }        
+                
+                /*
+                 * Free up a random, already-assigned, node
+                 */
+                vvertex free_me = pick_assigned_vnode();
+                remove_node(free_me);
+                unassigned_nodes.push_front(free_me);
 
                 /*
-                 * Start again with another vnode - which will probably be
-                 * the same one, since we just marked it as unmapped. But
-                 * now, there will be at least one free pnode
+                 * Start again with another vnode
                  */
                 continue;        
             }
@@ -394,34 +388,13 @@ void annealer::anneal() {
              */
             if (newpnode != NULL) {
                 newpos = pnode2vertex[newpnode];
+
+                /*
+                 * First, we might want to run a sanity check on our scores -
+                 * this abort()s if the check fails
+                 */
                 if (params.scoring_selftest) {
-                    // Run a little test here - see if the score we get by
-                    // adding this node, then removing it, is the
-                    // same one we had before
-                    double oldscore = get_score();
-                    int oldviolated = violated;
-                    double tempscore = -1.0;
-                    int tempviolated = -1;
-                    if (!add_node(vv,newpos,false,false,false)) {
-                        tempscore = get_score();
-                        tempviolated = violated;
-                        remove_node(vv);
-                    }        
-                    if (!compare_scores(oldscore,get_score()) ||
-                            (oldviolated != violated)) {
-                        cerr << "Scoring problem adding a mapping - "
-                             << "oldscore was " << oldscore
-                             <<  " current score is " << get_score()
-                             << " tempscore was " << tempscore << endl;
-                        cerr << "oldviolated was " << oldviolated
-                             << " newviolated is " << violated <<
-                            " tempviolated was " << tempviolated << endl;
-                        cerr << "I was tring to map " << vn->name
-                             << " to " << newpnode->name << endl;
-                        print_solution(best_solution);
-                        cerr << vinfo;
-                        abort();
-                    }
+                    scoring_selftest(vv,newpos);
                 }
 
                 /*
@@ -1298,4 +1271,46 @@ vvertex annealer::pick_assigned_vnode() {
         cout << "**** Error, unable to find any non-fixed nodes" << endl;
          exit(EXIT_UNRETRYABLE);
      }
+}
+
+void annealer::scoring_selftest(const vvertex &assign_me,
+        const pvertex &new_assignment) {
+    /*
+     * See if the score we get by adding this node, then removing it, is the
+     * same one we had before
+     */
+
+    double oldscore = get_score();
+    int oldviolated = violated;
+
+    double tempscore = -1.0;
+    int tempviolated = -1;
+
+    if (!add_node(assign_me,new_assignment,false,false,false)) {
+        tempscore = get_score();
+        tempviolated = violated;
+        remove_node(assign_me);
+    }        
+
+    if (!compare_scores(oldscore,get_score()) ||
+            (oldviolated != violated)) {
+        cerr << "Scoring problem adding a mapping - "
+            << "oldscore was " << oldscore
+            <<  " current score is " << get_score()
+            << " tempscore was " << tempscore << endl;
+        cerr << "oldviolated was " << oldviolated
+            << " newviolated is " << violated <<
+            " tempviolated was " << tempviolated << endl;
+        /* TODO: This is commented out until I have a more sane way to
+         * deal with the vvertex/tb_vnode duality
+        cerr << "I was tring to map " << vn->name
+            << " to " << newpnode->name << endl;
+        */
+        print_solution(best_solution);
+        cerr << vinfo;
+        abort();
+    }
+
+    // Returns nothing, since it abort()s on failure
+    return;
 }
