@@ -25,31 +25,31 @@ extern FILE *scoresout, *tempout, *deltaout;
 // Determines whether to accept a change of score difference 'change' at
 // temperature 'temperature'.
 inline bool annealer::accept(double change, double temperature) const {
-  double p;
-  int r;
+    double p;
+    int r;
 
-  if (change == 0) {
-    p = 1000 * temperature / params.temp_prob;
-  } else {
-    p = expf(change/temperature) * 1000;
-  }
-  r = RANDOM() % 1000;
-  if (r < p) {
-    return 1;
-  }
-  return 0;
+    if (change == 0) {
+        p = 1000 * temperature / params.temp_prob;
+    } else {
+        p = expf(change/temperature) * 1000;
+    }
+    r = RANDOM() % 1000;
+    if (r < p) {
+        return 1;
+    }
+    return 0;
 }
 
 inline float annealing_parameters::get_epsilon() const {
-  if (this->local_derivative) {
-    /*
-     * We need a much smaller epsilon when looking at the local score changes,
-     * since the absolute values are much smaller.
-     */
-    return 0.0001;
-  } else {
-    return 0.01;
-  }
+    if (this->local_derivative) {
+        /*
+         * We need a much smaller epsilon when looking at the local score
+         * changes, since the absolute values are much smaller.
+         */
+        return 0.0001;
+    } else {
+        return 0.01;
+    }
 }
 
 /*
@@ -96,999 +96,939 @@ ostream &operator<<(ostream &o, const annealing_parameters &ap) {
     if (ap.scale_neighborhood != 1.0) {
         o << "    scale_neighborhood = " << ap.scale_neighborhood << endl;
     }
-    
+
     return o;
 }
 
 void annealer::status_report(ostream &o) const {
-  o << "Iterations: " << total_iterations << " Temp: " << temp << " Score: "
-    << get_score() << " Violations: " << violated
-    << " (Best S: " << best_score << " V:" << best_violated << ")"
-    << endl;	
+    o << "Iterations: " << total_iterations << " Temp: " << temp << " Score: "
+        << get_score() << " Violations: " << violated
+        << " (Best S: " << best_score << " V:" << best_violated << ")"
+        << endl;        
 }
 
 /* When this is finished the state will reflect the best solution found. */
 void annealer::anneal() {
-     
-  cout << "Annealing." << endl;
 
-  // Print out parameters so that we can check them
-  cout << params;
+    cout << "Annealing." << endl;
 
-  /*
-   * The score and number of violations at the start of the inner annealing
-   * loop
-   */
+    // Print out parameters so that we can check them
+    cout << params;
 
-  int prev_violated = 0;
-
-  float temp_rate = params.temp_rate;
-
-  double new_score = 0;
-  double scorediff;
- 
-  // The number of iterations that took place.
-  iters_to_best = 0;
-
-  
-  // Used for figuring out how much time we might have wasted
-  double time_to_first_valid = 0.0;
-  double time_to_best = 0.0;
-
-  bool done = false;
-
-  pvertex oldpos;
-  bool oldassigned;
-  double meltedtemp;
-  temp = params.init_temp;
-  double deltatemp, deltaavg;
- 
-
-  double initialavg = 1.0f;
-  double stddev = 0.0f;
-  bool finished = false;
-  bool forcerevert = false;
-  int tsteps = 0;
-
-  double anneal_start_time;
-
-  #define MAX_AVG_HIST 16
-  double avghist[MAX_AVG_HIST];
-  int mintsteps = MAX_AVG_HIST;
-  
-  int hstart = 0, nhist = 0;
-  double lasttemp = 5000.0f;
-  double smoothedavg, lastsmoothed = 500000.0f;
-
-  bool finishedonce = false;
-  
-  /*
-   * Used only for statistical purposes
-   */
-  int solutions_considered = 0;
-  int valid_solutions_considered = 0;
-  int solutions_accepted = 0;
-  int valid_solutions_accepted = 0;
-  int solutions_rejected = 0;
-  int valid_solutions_rejected = 0;
-  
-  /*
-   * Grab some values that we'll use a lot
-   */
-  pclass_count = pclasses.size();
-  vnode_count = num_vertices(VG);
-
-  /*
-   * Set up the initial counts
-   */
-  init_score();
-
-  /*
-   * Handle the fixed nodes in the topology
-   */
-  bool fix_failed = setup_fixed_nodes();
-  if (fix_failed){
-      cout << "*** Some fixed nodes failed to map" << endl;
-      exit(EXIT_UNRETRYABLE);
-  }
-
-  /* 
-   * We'll check against this later to make sure that whe we've unmapped
-   * everything, the score is the same
-   */
-  double initial_score = get_score();
-
-  /*
-   * Handle node hints - we do this _after_ we've figured out the initial
-   * score, since, unlike fixed nodes, hints get unmapped before we do the
-   * final mapping. Also, we ignore any hints for vnodes which have already
-   * been assigned - they must have been fixed, and that over-rides the hint.
-   */
-  setup_hinted_nodes();
-  
-  /*
-   * Set up the unassigned_nodes structure so that we know what work we
-   * need to do!
-   * TODO: This might move to the virtual topology structure
-   */
-  setup_unassigned_nodes(); 
-   
-  /*
-   * Set up initial conditions - what we've got is the best solution so far
-   */
-  prev_score = get_score();
-  prev_violated = violated;
-  best_score = prev_score;
-  best_violated = prev_violated;
-  
-  // Copy the current assignments into the best_solution variable.
-  best_solution.set(VG);
-
-
-  /*
-   * The neighborhood size is the number of solutions we can reach with one
-   * transition operation - it's roughly the number of virtual nodes times the
-   * number of pclasses. This is how long we usually stick with a given 
-   * temperature.
-   */
-  neighborsize = this->get_neighborsize();
-
-
-  if (fixed_node_count >= vnode_count) {
-    cout << "All nodes are fixed.  No annealing." << endl;
-    done = true;
-  }
-
-  /*
-   * Initialize melting, or set starting temperature
-   */
-  if (params.melt) {
-      this->start_melting();
-  } else {
-      temp = params.initial_temperature;
-      cout << "Starting with initial temperature " << temp << endl;
-  }
- 
-  /*
-   * Record when we started the annealing loop
-   */
-  anneal_start_time = used_time();
-  
-  /*
-   * The main annealing loop!
-   * Each iteration is a temperature step - how we get out of the loop depends
-   * on what the termination condition is. Normally, we have a target temperature
-   * at which we stop, but with epsilon_terminate, we watch the derivative of the
-   * average temperature, and break out of the loop when it gets small enough.
-   */
-  while(!done && (params.epsilon_terminate || (temp >= params.temp_stop))) {
-      
-    if (params.verbose) {
-      this->status_report(cout);
-    }
-    
     /*
-     * Initialize this temperature step - we get back the number of iterations
-     * we should do at this temperature
+     * The score and number of violations at the start of the inner annealing
+     * loop
      */
-    int iterations_per_tstep = this->init_tstep();
+
+    int prev_violated = 0;
+
+    float temp_rate = params.temp_rate;
+
+    double new_score = 0;
+    double scorediff;
+
+    // The number of iterations that took place.
+    iters_to_best = 0;
+
+
+    // Used for figuring out how much time we might have wasted
+    double time_to_first_valid = 0.0;
+    double time_to_best = 0.0;
+
+    bool done = false;
+
+    pvertex oldpos;
+    bool oldassigned;
+    double meltedtemp;
+    temp = params.init_temp;
+    double deltatemp, deltaavg;
+
+
+    double initialavg = 1.0f;
+    double stddev = 0.0f;
+    bool finished = false;
+    bool forcerevert = false;
+    int tsteps = 0;
+
+    double anneal_start_time;
+
+#define MAX_AVG_HIST 16
+    double avghist[MAX_AVG_HIST];
+    int mintsteps = MAX_AVG_HIST;
+
+    int hstart = 0, nhist = 0;
+    double lasttemp = 5000.0f;
+    double smoothedavg, lastsmoothed = 500000.0f;
+
+    bool finishedonce = false;
 
     /*
-     * Object that we'll use to keep track of the state of this individual
-     * timestep
-     */    
-    tstep_state tstate(this);
-
-    /*
-     * The inner loop - 
-     * Each iteration of this inner loop corresponds to one attempt to try a new
-     * solution. When we're melting, we have a special number of transitions
-     * we're shooting for.
+     * Used only for statistical purposes
      */
-    while (tstate.iterations < iterations_per_tstep) {
+    int solutions_considered = 0;
+    int valid_solutions_considered = 0;
+    int solutions_accepted = 0;
+    int valid_solutions_accepted = 0;
+    int solutions_rejected = 0;
+    int valid_solutions_rejected = 0;
 
-    RDEBUG(cout << "ANNEALING: Loop starts with score " << get_score() <<
-            " violations " << violated << endl;)
+    /*
+     * Grab some values that we'll use a lot
+     */
+    pclass_count = pclasses.size();
+    vnode_count = num_vertices(VG);
 
-#ifdef STATS
-      cout << "STATS temp:" << temp << " score:" << get_score() <<
-	" violated:" << violated << " iters:" << iterations <<
-	" accepts:" << accepts << " current_time:" <<
-	used_time() << endl;
-#endif 
-      pvertex newpos;
-      tstate.iterations++;
-      total_iterations++;
+    /*
+     * Set up the initial counts
+     */
+    init_score();
 
-      /*
-       * Find a virtual node to map -
-       * If there are any virtual nodes that are not yet mapped, start with
-       *   those
-       * If not, find some other random vnode, which we'll unmap then remap
-       */
-      vvertex vv;
-      if (! unassigned_nodes.empty()) {
-        // Pick a random node from the list of unassigned nodes
-        vv = pick_unassigned_vnode();
-      } else {
-        vv = pick_assigned_vnode();
-      }
-                  
-      tb_vnode *vn = get(vvertex_pmap,vv);
-      RDEBUG(cout << "Reassigning " << vn->name << endl;)
-	  
-      /*
-       * Keep track of the old assignment for this node
-       */
-      oldassigned = vn->assigned;
-      oldpos = vn->assignment;
-
-      if (oldassigned) {
-          RDEBUG(cout << "   was assigned to " <<
-                  get(pvertex_pmap,oldpos)->name << endl;)
-      }
-      
-      /*
-       * Problem: If we free the chosen vnode now, we might just try remapping
-       * it to the same pnode. So, we do that after picking a pnode
-       */
-      
-      /*
-       * We have to handle vnodes with vtypes (vclasses) specially - we have
-       * to make the vtype pick a type to masquerade as for now.
-       */
-      if (vn->vclass != NULL) {
-	vn->type = vn->vclass->choose_type();
-#ifdef SCORE_DEBUG
-	cerr << "vclass " << vn->vclass->get_name()  << ": choose type for " <<
-	    vn->name << " = " << vn->type << " dominant = " <<
-	    vn->vclass->get_dominant() << endl;
-#endif
-      }
-      
-      // Did we free a node?
-      bool freednode = false;
-      
-      /* 
-       * Find a pnode to map this vnode to
-       */
-      tb_pnode *newpnode = NULL;
-      if ((params.use_connected_pnode_find != 0)
-	  && ((RANDOM() % 1000) < (params.use_connected_pnode_find * 1000))) {
-        RDEBUG(cout << "   using find_pnode_connected" << endl;)
-	newpnode = find_pnode_connected(vv,vn,params.allow_overload);
-      }
-      
-      /* 
-       * If not using the connected find, or it failed to find a node, then
-       * fall back on the regular algorithm to find a pnode
-       */
-      if (newpnode == NULL) {
-        RDEBUG(cout << "   using find_pnode" << endl;)
-	newpnode = find_pnode(vn, params.allow_overload);
-      }
-      
-      /*
-       * Free up the node now
-       */
-      if (oldassigned) {
-	RDEBUG(cout << "removing: oldassigned" << endl;)
-	remove_node(vv);
-      }
-      
-      /*
-       * If we didn't find a node to map this vnode to, free up some other
-       * vnode so that we can make progress - otherwise, we could get stuck
-       */
-      if (newpnode == NULL) {
-	// Push this node back onto the unassigned map
-	unassigned_nodes.push_front(vv);
-	int start = RANDOM()%vnode_count;
-	int toremove = start;
-	while (get(vvertex_pmap,virtual_nodes[toremove])->fixed ||
-	       (! get(vvertex_pmap,virtual_nodes[toremove])->assigned)) {
-	    toremove = (toremove +1) % vnode_count;
-	  if (toremove == start) {
-	    toremove = -1;
-            RDEBUG(cout << "Not removing a node" << endl;)
-	    break;
-	  }	
-        }	
-        if (toremove >= 0) {
-          RDEBUG(cout << "removing: freeing up node " <<
-                  get(vvertex_pmap,virtual_nodes[toremove])->name << endl;)
-          remove_node(virtual_nodes[toremove]);
-          unassigned_nodes.push_front(virtual_nodes[toremove]);
-        }	
-      
-        /*
-         * Start again with another vnode - which will probably be the same one,
-         * since we just marked it as unmapped. But now, there will be at least one
-         * free pnode
-         */
-        RDEBUG(cout << "Failed to find a possible mapping; try again..." << endl;)
-        continue;	
-      }
-    
-      /*
-       * Okay, we've got pnode to map this vnode to - let's do it
-       */
-      if (newpnode != NULL) {	
-        RDEBUG(cout << "MOVE: " << vn->name << " to " << newpnode->name << " " << endl;)
-        newpos = pnode2vertex[newpnode];
-        if (params.scoring_selftest) {
-	  // Run a little test here - see if the score we get by adding	
-	  // this node, then removing it, is the same one we had before
-	  double oldscore = get_score();
-	  int oldviolated = violated;
-	  double tempscore = -1.0;
-	  int tempviolated = -1;
-	  if (!add_node(vv,newpos,false,false,false)) {
-	    tempscore = get_score();
-	    tempviolated = violated;
-	    remove_node(vv);
-	  }	
-	  if (!compare_scores(oldscore,get_score()) || (oldviolated != violated)) {
-	    cerr << "Scoring problem adding a mapping - oldscore was " <<
-		oldscore <<  " current score is " << get_score() << " tempscore was "
-		<< tempscore << endl;
-	    cerr << "oldviolated was " << oldviolated << " newviolated is "
-		<< violated << " tempviolated was " << tempviolated << endl;
-	    cerr << "I was tring to map " << vn->name << " to " <<
-		newpnode->name << endl;
-	    print_solution(best_solution);
-	    cerr << vinfo;
-	    abort();
-          }
-        }
-      
-        /*
-         * Actually try the new mapping - if it fails, the node is still
-         * unassigned, and we go back and try with another
-         */
-        if (add_node(vv,newpos,false,false,false) != 0) {
-	  unassigned_nodes.push_front(vv);
-          RDEBUG(cout << "failed" << endl;)
-	  continue;
-        }
-      } else { // pnode != NULL
-        if (freednode) {
-	  continue;
-        }	
-      }
-      
-      // Bookkeeping
-      solutions_considered++;
-      if (violated == 0) {
-        valid_solutions_considered++;
-      }
-
-      /*
-       * Okay, now that we've mapped some new node, let's check the scoring
-       */
-      new_score = get_score();
-      assert(new_score >= 0);
-
-      // Negative means bad
-      scorediff = prev_score - new_score;
-      // This looks funny, because < 0 means worse, which means an increase in
-      // score
-      if (scorediff < 0) {
-        tstate.increase_count++;
-        tstate.avg_increase = tstate.avg_increase * (tstate.increase_count -1) /
-                                   tstate.increase_count +
-  		              (-scorediff)  / tstate.increase_count;
-      } else {
-        tstate.decrease_count++;
-      }	
-   
-      /*
-       * Here are all the various conditions for deciding if we're going to accept
-       * this transition
-       */
-      bool accepttrans = false;
-      if (melting) {
-        // When melting, we take everything!
-	accepttrans = true;
-	RDEBUG(cout << "accept: melting" << endl;)
-      } else {
-#ifdef NO_VIOLATIONS
-        // Here, we don't consider violations at all, just whether the regular
-        // simulated annealing accept conditions
-	if (new_score < prev_score) {
-	    accepttrans = true;
-	    RDEBUG(cout << "accept: better (" << new_score << "," << prev_score
-		   << ")" << endl;)
-        } else if (accept(scorediff,temp)) {
-  	  accepttrans = true;
-	  RDEBUG(cout << "accept: metropolis (" << new_score << ","
-		 << prev_score << "," << expf(scorediff/(temp*sensitivity))
-		 << ")" << endl;)
-        }
-#else
-      if (params.special_violation_treatment) {
-        /*
-         * In this ifdef, we always accept new solutions that have fewer
-         * violations than the old solution, and when we're trying to
-         * determine whether or not to accept a new solution with a higher
-         * score, we don't take violations into the account.
-         *
-         * The problem with this shows up at low temperatures. What can often
-         * happen is that we accept a solution with worse violations but a
-         * better (or similar) score. Then, if we were to try, say the first
-         * solution (or a score-equivalent one) again, we'd accept it again.
-         *
-         * What this leads to is 'thrashing', where we have a whole lot of
-         * variation of scores over time, but are not making any real
-         * progress. This prevents the cooling schedule from converging for
-         * much, much longer than it should really take.
-         */
-        RDEBUG(cout << "CRITERIA: v=" << violated << " bv=" <<
-                prev_violated << " ns=" << new_score << " ps=" <<
-                prev_score << " sd=" << scorediff << " t=" << temp << endl;)
-        if ((violated == prev_violated) && (new_score < prev_score)) {
-	  accepttrans = true;
-	  RDEBUG(cout << "accept: better (" << new_score << "," << prev_score
-		 << ")" << endl);
-	} else if (violated < prev_violated) {
-	  accepttrans = true;
-	  RDEBUG(cout << "accept: better (violations) (" << new_score << ","
-		 << prev_score << "," << violated << "," << prev_violated
-		 << ")" << endl;)
-	    //cout << "Violations: (new) " << violated << endl;
-	    //cout << vinfo;
-        } else if (accept(scorediff,temp)) {
-	  accepttrans = true;
-	  RDEBUG(cout << "accept: metropolis (" << new_score << ","
-		 << prev_score << "," << scorediff << "," << temp
-                 << ")" << endl;)
-        } else {
-            RDEBUG(cout << "rejected: " << ((violated == 0) ? "valid" : "invalid") << endl;)
-        }
-      } else { // no SPECIAL_VIOLATION_TREATMENT
-        /*
-         * In this branch of the ifdef, we give violations no special
-         * treatment when it comes to accepting new solution - we just add
-         * them into the score. This makes assign behave in a more 'classic'
-         * simulated annealing manner.
-         *
-         * One consequence, though, is that we have to be more careful with
-         * scores. We do not want to be able to get into a situation where
-         * adding a violation results in a _lower_ score than a solution with
-         * fewer violations.
-         */
-        double adjusted_new_score = new_score + violated * VIOLATION_SCORE;
-        double adjusted_old_score = prev_score + prev_violated * VIOLATION_SCORE;
-
-        if (adjusted_new_score < adjusted_old_score) {
-          accepttrans = true;
-        } else if (accept(adjusted_old_score - adjusted_new_score,temp)) {
-	  accepttrans = true;
-        }
-
-      } // SPECIAL_VIOLATION_TREATMENT
-
-      }
-#endif // NO_VIOLATIONS
-
-      /* 
-       * Okay, we've decided to accep this transition - do some bookkeeping
-       */
-      if (accepttrans) {
-	// Accept change
-	prev_score = new_score;
-	prev_violated = violated;
-	
-	// Bookeeping
-        solutions_accepted++;
-	if (violated == 0) {
-          valid_solutions_accepted++;
-	}
-	
-	if (violated == 0 && (time_to_first_valid == 0.0)) {
-        cout << "    Found first valid solution on iteration " << total_iterations << endl;
-        time_to_first_valid = used_time() - anneal_start_time;
+    /*
+     * Handle the fixed nodes in the topology
+     */
+    bool fix_failed = setup_fixed_nodes();
+    if (fix_failed){
+        cout << "*** Some fixed nodes failed to map" << endl;
+        exit(EXIT_UNRETRYABLE);
     }
+
+    /* 
+     * We'll check against this later to make sure that whe we've unmapped
+     * everything, the score is the same
+     */
+    double initial_score = get_score();
+
+    /*
+     * Handle node hints - we do this _after_ we've figured out the initial
+     * score, since, unlike fixed nodes, hints get unmapped before we do the
+     * final mapping. Also, we ignore any hints for vnodes which have already
+     * been assigned - they must have been fixed, and that over-rides the hint.
+     */
+    setup_hinted_nodes();
+
+    /*
+     * Set up the unassigned_nodes structure so that we know what work we
+     * need to do!
+     * TODO: This might move to the virtual topology structure
+     */
+    setup_unassigned_nodes(); 
+
+    /*
+     * Set up initial conditions - what we've got is the best solution so far
+     */
+    prev_score = get_score();
+    prev_violated = violated;
+    best_score = prev_score;
+    best_violated = prev_violated;
+
+    // Copy the current assignments into the best_solution variable.
+    best_solution.set(VG);
+
+
+    /*
+     * The neighborhood size is the number of solutions we can reach with one
+     * transition operation - it's roughly the number of virtual nodes times the
+     * number of pclasses. This is how long we usually stick with a given 
+     * temperature.
+     */
+    neighborsize = this->get_neighborsize();
+
+
+    if (fixed_node_count >= vnode_count) {
+        cout << "All nodes are fixed.  No annealing." << endl;
+        done = true;
+    }
+
+    /*
+     * Initialize melting, or set starting temperature
+     */
+    if (params.melt) {
+        this->start_melting();
+    } else {
+        temp = params.initial_temperature;
+        cout << "Starting with initial temperature " << temp << endl;
+    }
+
+    /*
+     * Record when we started the annealing loop
+     */
+    anneal_start_time = used_time();
+
+    /*
+     * The main annealing loop!
+     * Each iteration is a temperature step - how we get out of the loop
+     * depends on what the termination condition is. Normally, we have a target
+     * temperature at which we stop, but with epsilon_terminate, we watch the
+     * derivative of the average temperature, and break out of the loop when it
+     * gets small enough.
+     */
+    while(!done && (params.epsilon_terminate || (temp >= params.temp_stop))) {
+
+        if (params.verbose) {
+            this->status_report(cout);
+        }
+
+        /*
+         * Initialize this temperature step - we get back the number of
+         * iterations we should do at this temperature
+         */
+        int iterations_per_tstep = this->init_tstep();
+
+        /*
+         * Object that we'll use to keep track of the state of this individual
+         * timestep
+         */    
+        tstep_state tstate(this);
+
+        /*
+         * The inner loop - 
+         * Each iteration of this inner loop corresponds to one attempt to try
+         * a new solution. When we're melting, we have a special number of
+         * transitions we're shooting for.
+         */
+        while (tstate.iterations < iterations_per_tstep) {
+
+            pvertex newpos;
+            tstate.iterations++;
+            total_iterations++;
+
+            /*
+             * Find a virtual node to map -
+             * If there are any virtual nodes that are not yet mapped, start
+             * with those If not, find some other random vnode, which we'll
+             * unmap then remap
+             */
+            vvertex vv;
+            if (! unassigned_nodes.empty()) {
+                // Pick a random node from the list of unassigned nodes
+                vv = pick_unassigned_vnode();
+            } else {
+                vv = pick_assigned_vnode();
+            }
+
+            tb_vnode *vn = get(vvertex_pmap,vv);
+
+            /*
+             * Keep track of the old assignment for this node
+             */
+            oldassigned = vn->assigned;
+            oldpos = vn->assignment;
+
+            /*
+             * Problem: If we free the chosen vnode now, we might just try
+             * remapping it to the same pnode. So, we do that after picking
+             * a pnode
+             */
+
+            /*
+             * We have to handle vnodes with vtypes (vclasses) specially -
+             * we have to make the vtype pick a type to masquerade as for
+             * now.
+             */
+            if (vn->vclass != NULL) {
+                vn->type = vn->vclass->choose_type();
+            }
+
+            // Did we free a node?
+            bool freednode = false;
+
+            /* 
+             * Find a pnode to map this vnode to
+             */
+            tb_pnode *newpnode = NULL;
+            if ((params.use_connected_pnode_find != 0)
+                    && ((RANDOM() % 1000) <
+                        (params.use_connected_pnode_find * 1000))) {
+                newpnode =
+                    find_pnode_connected(vv,vn,params.allow_overload);
+            }
+
+            /* 
+             * If not using the connected find, or it failed to find a node,
+             * then fall back on the regular algorithm to find a pnode
+             */
+            if (newpnode == NULL) {
+                newpnode = find_pnode(vn, params.allow_overload);
+            }
+
+            /*
+             * Free up the node now
+             */
+            if (oldassigned) {
+                remove_node(vv);
+            }
+
+            /*
+             * If we didn't find a node to map this vnode to, free up some
+             * other vnode so that we can make progress - otherwise, we
+             * could get stuck
+             */
+            if (newpnode == NULL) {
+                // Push this node back onto the unassigned map
+                unassigned_nodes.push_front(vv);
+                int start = RANDOM()%vnode_count;
+                int toremove = start;
+                while (get(vvertex_pmap,virtual_nodes[toremove])->fixed ||
+                        (! get(vvertex_pmap,virtual_nodes[toremove])->assigned)) {
+                    toremove = (toremove +1) % vnode_count;
+                    if (toremove == start) {
+                        toremove = -1;
+                        break;
+                    }        
+                }
+                if (toremove >= 0) {
+                    remove_node(virtual_nodes[toremove]);
+                    unassigned_nodes.push_front(virtual_nodes[toremove]);
+                }        
+
+                /*
+                 * Start again with another vnode - which will probably be
+                 * the same one, since we just marked it as unmapped. But
+                 * now, there will be at least one free pnode
+                 */
+                continue;        
+            }
+
+            /*
+             * Okay, we've got pnode to map this vnode to - let's do it
+             */
+            if (newpnode != NULL) {
+                newpos = pnode2vertex[newpnode];
+                if (params.scoring_selftest) {
+                    // Run a little test here - see if the score we get by
+                    // adding this node, then removing it, is the
+                    // same one we had before
+                    double oldscore = get_score();
+                    int oldviolated = violated;
+                    double tempscore = -1.0;
+                    int tempviolated = -1;
+                    if (!add_node(vv,newpos,false,false,false)) {
+                        tempscore = get_score();
+                        tempviolated = violated;
+                        remove_node(vv);
+                    }        
+                    if (!compare_scores(oldscore,get_score()) ||
+                            (oldviolated != violated)) {
+                        cerr << "Scoring problem adding a mapping - "
+                             << "oldscore was " << oldscore
+                             <<  " current score is " << get_score()
+                             << " tempscore was " << tempscore << endl;
+                        cerr << "oldviolated was " << oldviolated
+                             << " newviolated is " << violated <<
+                            " tempviolated was " << tempviolated << endl;
+                        cerr << "I was tring to map " << vn->name
+                             << " to " << newpnode->name << endl;
+                        print_solution(best_solution);
+                        cerr << vinfo;
+                        abort();
+                    }
+                }
+
+                /*
+                 * Actually try the new mapping - if it fails, the node is
+                 * still unassigned, and we go back and try with another
+                 */
+                if (add_node(vv,newpos,false,false,false) != 0) {
+                    unassigned_nodes.push_front(vv);
+                    continue;
+                }
+            } else { // pnode != NULL
+                if (freednode) {
+                    continue;
+                }        
+            }
+
+            // Bookkeeping
+            solutions_considered++;
+            if (violated == 0) {
+                valid_solutions_considered++;
+            }
+
+            /*
+             * Okay, now that we've mapped some new node, let's check the
+             * scoring
+             */
+            new_score = get_score();
+            assert(new_score >= 0);
+
+            // Negative means bad
+            scorediff = prev_score - new_score;
+            // This looks funny, because < 0 means worse, which means an
+            // increase in score
+            if (scorediff < 0) {
+                tstate.increase_count++;
+                tstate.avg_increase = tstate.avg_increase *
+                    (tstate.increase_count -1) / tstate.increase_count
+                    + (-scorediff)  / tstate.increase_count;
+            } else {
+                tstate.decrease_count++;
+            }        
+
+            /*
+             * Here are all the various conditions for deciding if we're
+             * going to accept this transition
+             */
+            bool accepttrans = false;
+            if (melting) {
+                // When melting, we take everything!
+                accepttrans = true;
+            } else {
+                if (params.no_violations) {
+                    // Here, we don't consider violations at all, just
+                    // whether the regular simulated annealing accept
+                    // conditions
+                    if (new_score < prev_score) {
+                        accepttrans = true;
+                    } else if (accept(scorediff,temp)) {
+                        accepttrans = true;
+                    }
+                } else if (params.special_violation_treatment) {
+                    /*
+                     * In this ifdef, we always accept new solutions that
+                     * have fewer violations than the old solution, and
+                     * when we're trying to determine whether or not to
+                     * accept a new solution with a higher score, we don't
+                     * take violations into the account.
+                     *
+                     * The problem with this shows up at low temperatures.
+                     * What can often happen is that we accept a solution
+                     * with worse violations but a better (or similar)
+                     * score. Then, if we were to try, say the first
+                     * solution (or a score-equivalent one) again, we'd
+                     * accept it again.
+                     *
+                     * What this leads to is 'thrashing', where we have a
+                     * whole lot of variation of scores over time, but are
+                     * not making any real progress. This prevents the
+                     * cooling schedule from converging for much, much
+                     * longer than it should really take.
+                     */
+                    if ((violated == prev_violated) &&
+                            (new_score < prev_score)) {
+                        accepttrans = true;
+                    } else if (violated < prev_violated) {
+                        accepttrans = true;
+                    } else if (accept(scorediff,temp)) {
+                        accepttrans = true;
+                    }
+                    // Otherwise, it's implicitly rejected
+                } else { // no special_violation_treatment
+                    /*
+                     * In this branch of the ifdef, we give violations no
+                     * special treatment when it comes to accepting new
+                     * solution - we just add them into the score. This
+                     * makes assign behave in a more 'classic' simulated
+                     * annealing manner.
+                     *
+                     * One consequence, though, is that we have to be more
+                     * careful with scores. We do not want to be able to
+                     * get into a situation where adding a violation
+                     * results in a _lower_ score than a solution with
+                     * fewer violations.
+                     */
+                    double adjusted_new_score =
+                        new_score + violated * VIOLATION_SCORE;
+                    double adjusted_old_score =
+                        prev_score + prev_violated * VIOLATION_SCORE;
+
+                    if (adjusted_new_score < adjusted_old_score) {
+                        accepttrans = true;
+                    } else if (accept(adjusted_old_score -
+                                adjusted_new_score,temp)) {
+                        accepttrans = true;
+                    }
+                } // special_violation_treatment
+            } // melting
+
+            /* 
+             * Okay, we've decided to accep this transition - do some
+             * bookkeeping
+             */
+            if (accepttrans) {
+                // Accept change
+                prev_score = new_score;
+                prev_violated = violated;
+
+                // Bookeeping
+                solutions_accepted++;
+                if (violated == 0) {
+                    valid_solutions_accepted++;
+                }
+
+                if (violated == 0 && (time_to_first_valid == 0.0)) {
+                    cout << "    Found first valid solution on iteration "
+                        << total_iterations << endl;
+                    time_to_first_valid = used_time() - anneal_start_time;
+                }
 
 #ifdef GNUPLOT_OUTPUT
-	fprintf(tempout,"%f\n",temp);
-	fprintf(scoresout,"%f\n",new_score);
-	fprintf(deltaout,"%f\n",-scorediff);
+                fprintf(tempout,"%f\n",temp);
+                fprintf(scoresout,"%f\n",new_score);
+                fprintf(deltaout,"%f\n",-scorediff);
 #endif // GNUPLOT_OUTPUT
 
-	tstate.avg_score += new_score;
-	tstate.accepts++;
+                tstate.avg_score += new_score;
+                tstate.accepts++;
 
 #ifdef CHILL
-	 if (!melting) {
-             assert(tstate.accepts <= neighborsize);
-	     tstate.scores[tstate.accepts] = new_score;
-	 }
+                if (!melting) {
+                    assert(tstate.accepts <= neighborsize);
+                    tstate.scores[tstate.accepts] = new_score;
+                }
 #endif // CHILL
 
-        /*
-         * Okay, if this is the best score we've gotten so far, let's do some
-	 * further bookkeeping - copy it into the structures for our best solution
-	 */
-#ifdef NO_VIOLATIONS
-	if (new_score < best_score) {
-#else // NO_VIOLATIONS
-	if ((violated < best_violated) ||
-	    ((violated == best_violated) &&
-	     (new_score < best_score))) {
-#endif // NO_VIOLATIONS
-	    
-#ifdef SCORE_DEBUG
-	  cerr << "New best solution." << endl;
-#endif // SCORE_DEBUG
-      best_solution.set(VG);
-	  best_score = new_score;
-	  best_violated = violated;
-	  iters_to_best = total_iterations;
-      time_to_best = used_time() - anneal_start_time;
-#ifdef SCORE_DEBUG
-	  cerr << "New best recorded" << endl;
-#endif
-	}
-      } else { // !acceptrans
-        solutions_rejected++;
-      	if (violated == 0) {
-            valid_solutions_rejected++;
-      	}
-	// Reject change, go back to the state we were in before
-	RDEBUG(cout << "removing: rejected change" << endl;)
-	remove_node(vv);
-	if (oldassigned) {
-	  add_node(vv,oldpos,false,false,false);
-	} else {
-          unassigned_nodes.push_front(vv);
-        }
-      }
+                /*
+                 * Okay, if this is the best score we've gotten so far,
+                 * let's do some further bookkeeping - copy it into the
+                 * structures for our best solution
+                 */
+                if ((params.no_violations && (new_score < best_score)) ||
+                        ((violated < best_violated) ||
+                         ((violated == best_violated) &&
+                          (new_score < best_score)))) {
+                    best_solution.set(VG);
+                    best_score = new_score;
+                    best_violated = violated;
+                    iters_to_best = total_iterations;
+                    time_to_best = used_time() - anneal_start_time;
+                }
+            } else { // !acceptrans
+                solutions_rejected++;
+                if (violated == 0) {
+                    valid_solutions_rejected++;
+                }
+                // Reject change, go back to the state we were in before
+                if (oldassigned) {
+                    remove_node(vv);
+                    add_node(vv,oldpos,false,false,false);
+                } else {
+                    unassigned_nodes.push_front(vv);
+                }
+            }
 
-      /*
-       * If we're melting, we do a little extra bookkeeping to do, becuase the
-       * goal of melting is to come up with an initial temperature such that
-       * almost every transition will be accepted
-       */
-      if (melting) {
-	temp = tstate.avg_increase /
-	  log(tstate.increase_count/
-	      (tstate.increase_count * params.X0 - 
-	           tstate.decrease_count * (1 - params.X0)));
-	if (!(temp > 0.0)) {
-	    temp = 0.0;
-	}
-      }
-      
-      /*
-       * With timelimit set, we just give up after our time limit
-       */
-      if ((params.timelimit != 0.0) && 
-		((used_time() - timestart) > params.timelimit)) {
-	printf("Reached end of run time, finishing\n");
-	forcerevert = true;
-	finished = true;
-	goto NOTQUITEDONE;
-      }
+            /*
+             * If we're melting, we do a little extra bookkeeping to do,
+             * becuase the goal of melting is to come up with an initial
+             * temperature such that almost every transition will be
+             * accepted
+             */
+            if (melting) {
+                temp = tstate.avg_increase /
+                    log(tstate.increase_count/
+                            (tstate.increase_count * params.X0 - 
+                             tstate.decrease_count * (1 - params.X0)));
+                if (!(temp > 0.0)) {
+                    temp = 0.0;
+                }
+            }
 
-    } /* End of inner annealing loop */
-     
+            /*
+             * With timelimit set, we just give up after our time limit
+             */
+            if ((params.timelimit != 0.0) && 
+                    ((used_time() - timestart) > params.timelimit)) {
+                printf("Reached end of run time, finishing\n");
+                forcerevert = true;
+                finished = true;
+                goto NOTQUITEDONE;
+            }
+
+        } /* End of inner annealing loop */
+
 
 NOTQUITEDONE:
 
-    RDEBUG(printf("avgscore: %f = %f / %i\n",avgscore / (accepts +1),avgscore,accepts+1);)
-	
-    /*
-     * Most of the code past this point concerns itself with the cooling
-     * schedule (what the next temperature step should be
-     */
-	
-    // Keep an average of the score over this temperature step	
-    tstate.avg_score = tstate.avg_score / (tstate.accepts +1);
-
-    /*
-     * If we were melting, then we we need to pick an initial temperature
-     */
-    if (melting) {
-      melting = false;
-      initialavg = tstate.avg_score;
-      meltedtemp = temp;
-      RDEBUG(cout << "Melting finished with a temperature of " << temp
-	<< " avg score was " << initialavg << endl;)
-      if (!(meltedtemp > 0.0)) { // This backwards expression to catch NaNs
-	cout << "    Finished annealing while melting!" << endl;
-	finished = true;
-	forcerevert = true;
-      } else {
-          cout << "Finished melting, picked temperature " << temp << endl;
-      }
-      /*
-       * With timetarget, we look at how long melting took, then use that to
-       * estimate how many temperature steps it will take to hit our time
-       * target. We adjust our cooling schedule accordingly.
-       */
-      if (params.timetarget != 0.0) {
-	double melttime = used_time() - anneal_start_time;
-	double timeleft = params.timetarget - melttime;
-	double stepsleft = timeleft / melttime;
-	cout << "Melting took " << melttime << " seconds, will try for "
-	  << stepsleft << " temperature steps" << endl;
-	temp_rate = pow(params.temp_stop/temp,1/stepsleft);
-	cout << "Timelimit: " << params.timetarget << " Timeleft: " << timeleft
-	  << " temp_rate: " << temp_rate << endl;
-      }
-    } else {
-      /*
-       * The CHILL cooling schedule is the standard one from the Simulated
-       * Annealing literature - it lower the temperature based on the standard
-       * deviation of the scores of accepted configurations
-       */
-#ifdef CHILL
-      if (!melting) {
-	  stddev = 0;
-	  for (int i = 0; i <= tstate.accepts; i++) {
-	    stddev += pow(tstate.scores[i] - tstate.avg_score,2);
-	  }
-	  stddev /= (tstate.accepts +1);
-	  stddev = sqrt(stddev);
-	  temp = temp / (1 + (temp * log(1 + params.delta))/(3  * stddev));
-      }
-#else
-      /* 
-       * This is assign's original cooling schedule - more predictable, but not
-       * at all reactive to the problem at hand
-       */
-      temp *= temp_rate;
-#endif
-    }
-
-
-    /*
-     * Debugging
-     */
-#ifdef DEBUG_TSTEP
-    if (epsilon_terminate) {
-#ifdef CHILL
-        RDEBUG(printf("temp_end: %f %f %f\n",temp,temp * avgscore / initialavg,stddev);)
-#else /* CHILL */
-        RDEBUG(printf("temp_end: %f %f\n",temp,temp * avgscore / initialavg);)
-#endif /* CHILL */
-    } else { /* epsilon_terminate */
-        printf("temp_end: %f ",temp);
-        if (iterations >= mintrans) {
-	        if (accepts >= naccepts) {
-	            printf("both");
-	        } else {
-	            printf("iterations %f",accepts*1.0/naccepts);
-	        }
-        } else {
-	        printf("accepts %f",iterations*1.0/mintrans);
-        }
-        printf("\n");
-    } /* epsilon_terminate */
-#endif /* DEBUG_TSTEP */
-    
-    RDEBUG(
-    printf("temp_end: temp: %f ratio: %f stddev: %f\n",temp,temp * avgscore / initialavg,stddev);
-    );
-
-    /*
-     * The next section of code deals with termination conditions - how do we
-     * decide that we're done?
-     */
-    
-    /*
-     * Keep a history of the average scores over the last MAX_AVG_HIST
-     * temperature steps. We treat the avghist array like a ring buffer.
-     * Add this temperature step to the history, and computer a smoothed
-     * average.
-     */
-    smoothedavg = tstate.avg_score / (nhist + 1);
-    for (int j = 0; j < nhist; j++) {
-      smoothedavg += avghist[(hstart + j) % MAX_AVG_HIST] / (nhist + 1);
-    }
-
-    avghist[(hstart + nhist) % MAX_AVG_HIST] = tstate.avg_score;
-    if (nhist < MAX_AVG_HIST) {
-      nhist++;
-    } else {
-      hstart = (hstart +1) % MAX_AVG_HIST;
-    }
-
-    /*
-     * Are we computing the derivative of the average temperatures over the
-     * whole history, or just the most recent one?
-     */
-    if (params.local_derivative) {
-      deltaavg = lastsmoothed - smoothedavg;
-      deltatemp = lasttemp - temp;
-    } else {
-      deltaavg = initialavg - smoothedavg;
-      deltatemp = meltedtemp - temp;
-    }
-
-    lastsmoothed = smoothedavg;
-    lasttemp = temp;
-
-    /*
-     * epsilon_terminate means that we define some small number, epsilon, and
-     * the derivative of the average change in temperature gets below that
-     * epsilon (ie. we have stopped getting improvements in score), we're done
-     */
-    if (params.epsilon_terminate) {
-        RDEBUG(
-           printf("avgs: real: %f, smoothed %f, initial: %f\n",avgscore,smoothedavg,initialavg);
-           printf("epsilon: (%f) %f / %f * %f / %f < %f (%f)\n", fabs(deltaavg), temp, initialavg,
-    	   deltaavg, deltatemp, epsilon,(temp / initialavg) * (deltaavg/ deltatemp));
-        );
-        // We have a mininum number of timestepss, and *might* have a minimum
-        // temperature that we must reach before we will stop. Note that the
-        // temperature_guard clause is formulated to give the correct result
-        // even when temp goes to nan
-        if ((tsteps >= mintsteps) &&
-                ((params.temperature_guard < 0) ||
-                !(temp > params.temperature_guard)) &&
         /*
-         * ALLOW_NEGATIVE_DELTA controls whether we're willing to stop if the
-         * derivative gets small and negative, not just small and positive.
+         * Most of the code past this point concerns itself with the cooling
+         * schedule (what the next temperature step should be
          */
-#ifdef ALLOW_NEGATIVE_DELTA
-    	((temp < 0) || isnan(temp) ||
-    //	 || (fabs((temp / initialavg) * (deltaavg/ deltatemp)) < epsilon))) {
-    	 ((temp / initialavg) * (deltaavg/ deltatemp)) < params.get_epsilon())) {
-#else /* ALLOW_NEGATIVE_DELTA */
-    	(deltaavg > 0) && ((temp / initialavg) * (deltaavg/ deltatemp) < params.get_epsilon())) {
-#endif /* ALLOW_NEGATIVE_DELTA */
-        
-            /*
-             * Normally, we are done here.
-             */
-    		forcerevert = true;
-            if (!params.finish_hillclimb) {
+
+        // Keep an average of the score over this temperature step        
+        tstate.avg_score = tstate.avg_score / (tstate.accepts +1);
+
+        /*
+         * If we were melting, then we we need to pick an initial temperature
+         */
+        if (melting) {
+            melting = false;
+            initialavg = tstate.avg_score;
+            meltedtemp = temp;
+            if (!(meltedtemp > 0.0)) { // This backwards expression catches NaNs
+                cout << "    Finished annealing while melting!" << endl;
                 finished = true;
+                forcerevert = true;
             } else {
+                cout << "Finished melting, picked temperature " << temp << endl;
+            }
+
+            /*
+             * With timetarget, we look at how long melting took, then use that
+             * to estimate how many temperature steps it will take to hit our
+             * time target. We adjust our cooling schedule accordingly.
+             */
+            if (params.timetarget != 0.0) {
+                double melttime = used_time() - anneal_start_time;
+                double timeleft = params.timetarget - melttime;
+                double stepsleft = timeleft / melttime;
+                cout << "Melting took " << melttime << " seconds, will try for "
+                    << stepsleft << " temperature steps" << endl;
+                temp_rate = pow(params.temp_stop/temp,1/stepsleft);
+                cout << "Timelimit: " << params.timetarget
+                    << " Timeleft: " << timeleft
+                    << " temp_rate: " << temp_rate << endl;
+            }
+        } else {
+            /*
+             * The CHILL cooling schedule is the standard one from the
+             * Simulated Annealing literature - it lower the temperature based
+             * on the standard deviation of the scores of accepted
+             * configurations
+             */
+#ifdef CHILL
+            if (!melting) {
+                stddev = 0;
+                for (int i = 0; i <= tstate.accepts; i++) {
+                    stddev += pow(tstate.scores[i] - tstate.avg_score,2);
+                }
+                stddev /= (tstate.accepts +1);
+                stddev = sqrt(stddev);
+                temp = temp / (1 + (temp * log(1 + params.delta))/(3  * stddev));
+            }
+#else
+            /* 
+             * This is assign's original cooling schedule - more predictable,
+             * but not at all reactive to the problem at hand
+             */
+            temp *= temp_rate;
+#endif
+        }
+
+        /*
+         * The next section of code deals with termination conditions - how do
+         * we decide that we're done?
+         */
+
+        /*
+         * Keep a history of the average scores over the last MAX_AVG_HIST
+         * temperature steps. We treat the avghist array like a ring buffer.
+         * Add this temperature step to the history, and computer a smoothed
+         * average.
+         */
+        smoothedavg = tstate.avg_score / (nhist + 1);
+        for (int j = 0; j < nhist; j++) {
+            smoothedavg += avghist[(hstart + j) % MAX_AVG_HIST] / (nhist + 1);
+        }
+
+        avghist[(hstart + nhist) % MAX_AVG_HIST] = tstate.avg_score;
+        if (nhist < MAX_AVG_HIST) {
+            nhist++;
+        } else {
+            hstart = (hstart +1) % MAX_AVG_HIST;
+        }
+
+        /*
+         * Are we computing the derivative of the average temperatures over the
+         * whole history, or just the most recent one?
+         */
+        if (params.local_derivative) {
+            deltaavg = lastsmoothed - smoothedavg;
+            deltatemp = lasttemp - temp;
+        } else {
+            deltaavg = initialavg - smoothedavg;
+            deltatemp = meltedtemp - temp;
+        }
+
+        lastsmoothed = smoothedavg;
+        lasttemp = temp;
+
+        /*
+         * epsilon_terminate means that we define some small number, epsilon,
+         * and the derivative of the average change in temperature gets below
+         * that epsilon (ie. we have stopped getting improvements in score),
+         * we're done
+         */
+        if (params.epsilon_terminate) {
+            // We have a mininum number of timestepss, and *might* have a
+            // minimum temperature that we must reach before we will stop. Note
+            // that the temperature_guard clause is formulated to give the
+            // correct result even when temp goes to nan
+            /*
+             * ALLOW_NEGATIVE_DELTA controls whether we're willing to
+             * stop if the derivative gets small and negative, not just
+             * small and positive.
+             * TODO: Seriously clean up this expression!
+             */
+            //         || (fabs((temp / initialavg) * (deltaavg/ deltatemp)) < epsilon))) {
+            if ((tsteps >= mintsteps) &&
+                    ((params.temperature_guard < 0) ||
+                     !(temp > params.temperature_guard)) &&
+                    (params.allow_negative_delta &&
+                     (((temp < 0) || isnan(temp) ||
+                       ((temp / initialavg) * (deltaavg/ deltatemp)) <
+                       params.get_epsilon()))
+                    ) || (
+                        (deltaavg > 0) &&
+                        ((temp / initialavg) * (deltaavg/ deltatemp)
+                         < params.get_epsilon()))) {
+
                 /*
-                 * This option goes back to the best result we ever found, and
-                 * goes one more round - the idea is to finish up with a very
-                 * low temperature, at which will will probably take only
-                 * better solutions (hillclimbing)
+                 * Normally, we are done here.
                  */
-                if (!finishedonce &&
-                     ((best_violated <= violated) && (best_score < prev_score))) {
-                    finishedonce = true;
-                    cout << "Epsilon Terminated, but going back to a better solution"
-                        << endl;
-                } else {
+                forcerevert = true;
+                if (!params.finish_hillclimb) {
                     finished = true;
+                } else {
+                    /*
+                     * This option goes back to the best result we ever found,
+                     * and goes one more round - the idea is to finish up with
+                     * a very low temperature, at which will will probably take
+                     * only better solutions (hillclimbing)
+                     */
+                    if (!finishedonce &&
+                            ((best_violated <= violated) &&
+                             (best_score < prev_score))) {
+                        finishedonce = true;
+                        cout << "Epsilon Terminated, but going back to a "
+                             << "better solution" << endl;
+                    } else {
+                        finished = true;
+                    }
                 }
             }
-        }
-    } /* epsilon_terminate */
-    
-    /*
-     * RANDOM_ASSIGNMENT is not really very random, but we stop after the first
-     * valid solution we get
-     */
+        } /* epsilon_terminate */
+
+        /*
+         * RANDOM_ASSIGNMENT is not really very random, but we stop after the
+         * first valid solution we get
+         */
 #ifdef RANDOM_ASSIGNMENT
-    if (violated == 0) {
-       finished = true;
-    }
+        if (violated == 0) {
+            finished = true;
+        }
 #endif
 
-    /*
-     * REALLY_RANDOM_ASSIGNMENT stops after we've assigned all nodes, whether or
-     * not our solution is valid
-     */
+        /*
+         * REALLY_RANDOM_ASSIGNMENT stops after we've assigned all nodes,
+         * whether or not our solution is valid
+         */
 #ifdef REALLY_RANDOM_ASSIGNMENT
-    if (unassigned_nodes.size() == 0) {
-      finished = true;
-    }
+        if (unassigned_nodes.size() == 0) {
+            finished = true;
+        }
 #endif
 
-    /*
-     * The following section deals with reverting. This is not standard
-     * Simulated Annealing at all. In assign, a revert means that we go back
-     * to some previous solution (usually a better one). There are lots of
-     * things that could trigger this, so we use a bool to check if any of
-     * them happened.
-     */
-    bool revert = false;
-    
-    /*
-     * Some of the termination condidtions force a revert when they decide
-     * they're finished. This is fine - of course, we want to return the best
-     * solution we ever found, which might not be the one we're sitting at right
-     * now.
-     */
-    if (forcerevert) {
-      cout << "Reverting: forced" << endl;
-      revert = true;
-    }
-    if (!params.epsilon_terminate && (temp < params.temp_stop)) {
-       cout << "Reverting: finished annealing" << endl;
-       revert = true;
-    }
-  
-    /*
-     * Okay, NO_REVERT is not the best possible name for this ifdef. 
-     * Historically, assign used to revert to the best solution at the end of
-     * every temperature step. This is definitely NOT kosher. In my mind, it
-     * assign too susceptible to falling into local minima. Anyhow, the idea is
-     * that we go back to the best soltion if the current solution is worse than
-     * it either in violations or in score.
-     */
+        /*
+         * The following section deals with reverting. This is not standard
+         * Simulated Annealing at all. In assign, a revert means that we go back
+         * to some previous solution (usually a better one). There are lots of
+         * things that could trigger this, so we use a bool to check if any of
+         * them happened.
+         */
+        bool revert = false;
+
+        /*
+         * Some of the termination condidtions force a revert when they decide
+         * they're finished. This is fine - of course, we want to return the
+         * best solution we ever found, which might not be the one we're
+         * sitting at right now.
+         */
+        if (forcerevert) {
+            cout << "Reverting: forced" << endl;
+            revert = true;
+        }
+        if (!params.epsilon_terminate && (temp < params.temp_stop)) {
+            cout << "Reverting: finished annealing" << endl;
+            revert = true;
+        }
+
+        /*
+         * Okay, NO_REVERT is not the best possible name for this ifdef.
+         * Historically, assign used to revert to the best solution at the end
+         * of every temperature step. This is definitely NOT kosher. In my
+         * mind, it assign too susceptible to falling into local minima.
+         * Anyhow, the idea is that we go back to the best soltion if the
+         * current solution is worse than it either in violations or in score.
+         */
 #ifndef NO_REVERT
-    if (REVERT_VIOLATIONS && (best_violated < violated)) {
-	cout << "Reverting: REVERT_VIOLATIONS" << endl;
-	revert = true;
-    }
-    if (best_score < prev_score) {
-	cout << "Reverting: best score" << endl;
-	revert = true;
-    }
+        if (REVERT_VIOLATIONS && (best_violated < violated)) {
+            cout << "Reverting: REVERT_VIOLATIONS" << endl;
+            revert = true;
+        }
+        if (best_score < prev_score) {
+            cout << "Reverting: best score" << endl;
+            revert = true;
+        }
 #endif
 
-    /*
-     * This is the code to do the actual revert.
-     * IMPORTANT: At this time, a revert does not take you back to _exactly_ the
-     * same state as before, because there are some things, like link
-     * assignments, that we don't save. Since the way these get mapped is
-     * dependant on the order they happen in, and this order is almost certainly
-     * different than the order they got mapped during annealing, there can be
-     * discrepancies (ie. now we have violations, when before we had none.)
-     */
-    vvertex_iterator vvertex_it,end_vvertex_it;
-    vedge_iterator vedge_it,end_vedge_it;
-    if (revert) {
-      cout << "Reverting to best solution\n";
-      /*
-       * We start out by unmapping every vnode that's currently allocated
-       */
-      tie(vvertex_it,end_vvertex_it) = vertices(VG);
-      for (;vvertex_it!=end_vvertex_it;++vvertex_it) {
-	tb_vnode *vnode = get(vvertex_pmap,*vvertex_it);
-	if (vnode->fixed) continue;
-	if (vnode->assigned) {
-	  RDEBUG(cout << "removing: revert " << vnode->name << endl;)
-	  remove_node(*vvertex_it);
-          // Add to the list of unassigned nodes in case we're going to
-          // keep annealing
-          unassigned_nodes.push_front(*vvertex_it);
-	} else {
-	  RDEBUG(cout << "not removing: revert " << vnode->name << endl;)
-	}
-      }
+        /*
+         * This is the code to do the actual revert.  IMPORTANT: At this time,
+         * a revert does not take you back to _exactly_ the same state as
+         * before, because there are some things, like link assignments, that
+         * we don't save. Since the way these get mapped is dependant on the
+         * order they happen in, and this order is almost certainly different
+         * than the order they got mapped during annealing, there can be
+         * discrepancies (ie. now we have violations, when before we had none.)
+         */
+        vvertex_iterator vvertex_it,end_vvertex_it;
+        vedge_iterator vedge_it,end_vedge_it;
+        if (revert) {
+            cout << "Reverting to best solution\n";
+            /*
+             * We start out by unmapping every vnode that's currently allocated
+             */
+            tie(vvertex_it,end_vvertex_it) = vertices(VG);
+            for (;vvertex_it!=end_vvertex_it;++vvertex_it) {
+                tb_vnode *vnode = get(vvertex_pmap,*vvertex_it);
+                if (vnode->fixed) continue;
+                if (vnode->assigned) {
+                    remove_node(*vvertex_it);
+                    // Add to the list of unassigned nodes in case we're going
+                    // to keep annealing
+                    unassigned_nodes.push_front(*vvertex_it);
+                }
+            }
 
-      // Check to make sure that our 'clean' solution scores the same as
-      // the initial score - if not, that indicates a bug
-      if (!compare_scores(get_score(),initial_score)) {
-	  cout << "*** WARNING: 'Clean' score does not match initial score" <<
-	      endl << "     This indicates a bug - contact the operators" <<
-	      endl << "     (initial score: " << initial_score <<
-	      ", current score: " << get_score() << ")" << endl;
-      }
-      
-      /* 
-       * Now, go through the previous best solution, and add all of the node
-       * mappings back in.
-       */
-      tie(vvertex_it,end_vvertex_it) = vertices(VG);
-      for (;vvertex_it!=end_vvertex_it;++vvertex_it) {
-	tb_vnode *vnode = get(vvertex_pmap,*vvertex_it);
-	if (vnode->fixed) continue;
-	if (best_solution.is_assigned(*vvertex_it)) {
-	  if (vnode->vclass != NULL) {
-	    vnode->type = best_solution.get_vtype_assignment(*vvertex_it);
-	  }
-	  assert(!add_node(*vvertex_it,best_solution.get_assignment(*vvertex_it),true,false,true));
-          // Remove from list of unassigned nodes
-          unassigned_nodes.remove(*vvertex_it);
-	}
-      }
-      
-      /*
-       * Add back in the old link resolutions
-       */
-      tie(vedge_it,end_vedge_it) = edges(VG);
-      for (;vedge_it != end_vedge_it; ++vedge_it) {
-	  tb_vlink *vlink = get(vedge_pmap,*vedge_it);
-          tb_vnode *src_vnode = get(vvertex_pmap,vlink->src);
-          tb_vnode *dst_vnode = get(vvertex_pmap,vlink->dst);
-	  if (best_solution.link_is_assigned(*vedge_it)) {
-	      // XXX: It's crappy that I have to do all this work here - something
-	      // needs re-organzing
-	      /*
-	       * This line does the actual link mapping revert
-		*/
-	      vlink->link_info = best_solution.get_link_assignment(*vedge_it);
-	      
-	      if (!dst_vnode->assigned || !src_vnode->assigned) {
-		  // This shouldn't happen, but don't try to score links which
-		  // don't have both endpoints assigned.
-		  continue;
-	      }
-              if (dst_vnode->fixed && src_vnode->fixed) {
-                  // If both endpoints were fixed, this link never got
-                  // unmapped, so don't map it again
-                  continue;
-              }
-	      tb_pnode *src_pnode = get(pvertex_pmap,src_vnode->assignment);
-	      tb_pnode *dst_pnode = get(pvertex_pmap,dst_vnode->assignment);
-	      
-	      /*
-	       * Okay, now that we've jumped through enough hoops, we can actually
-	       * do the scoring
-	       */
-              mark_vlink_assigned(vlink);
-	      score_link_info(*vedge_it, src_pnode, dst_pnode, src_vnode, dst_vnode);
-	  } else {
-              /*
-               * If one endpoint or the other was unmapped, we just note that
-               * the link wasn't mapped - however, if both endpoints were
-               * mapped, then we have to make sure the score reflects that.
-               */
-	      if (!dst_vnode->assigned || !src_vnode->assigned) {
-                  if (!vlink->no_connection) {
-                      mark_vlink_unassigned(vlink);
-                  }
-              }
-	  }
-      }
-    } // End of reverting code
+            // Check to make sure that our 'clean' solution scores the same as
+            // the initial score - if not, that indicates a bug
+            if (!compare_scores(get_score(),initial_score)) {
+                cout << "*** WARNING: 'Clean' score does not match initial "
+                     << "score" << endl
+                     << "     This indicates a bug - contact the operators"
+                     << endl
+                     << "     (initial score: " << initial_score
+                     << ", current score: " << get_score() << ")" << endl;
+            }
 
-    /*
-     * Whew, that's it!
-     */
-    tsteps++;
+            /* 
+             * Now, go through the previous best solution, and add all of the
+             * node mappings back in.
+             */
+            tie(vvertex_it,end_vvertex_it) = vertices(VG);
+            for (;vvertex_it!=end_vvertex_it;++vvertex_it) {
+                tb_vnode *vnode = get(vvertex_pmap,*vvertex_it);
+                if (vnode->fixed) continue;
+                if (best_solution.is_assigned(*vvertex_it)) {
+                    if (vnode->vclass != NULL) {
+                        vnode->type =
+                            best_solution.get_vtype_assignment(*vvertex_it);
+                    }
+                    assert(!add_node(*vvertex_it,
+                                best_solution.get_assignment(*vvertex_it),
+                                true,false,true));
+                    // Remove from list of unassigned nodes
+                    unassigned_nodes.remove(*vvertex_it);
+                }
+            }
 
-    if (finished) {
-        done = true;
-    }
-  } /* End of outer annealing loop */
+            /*
+             * Add back in the old link resolutions
+             */
+            tie(vedge_it,end_vedge_it) = edges(VG);
+            for (;vedge_it != end_vedge_it; ++vedge_it) {
+                tb_vlink *vlink = get(vedge_pmap,*vedge_it);
+                tb_vnode *src_vnode = get(vvertex_pmap,vlink->src);
+                tb_vnode *dst_vnode = get(vvertex_pmap,vlink->dst);
+                if (best_solution.link_is_assigned(*vedge_it)) {
+                    // XXX: It's crappy that I have to do all this work here -
+                    // something needs re-organzing
+                    /*
+                     * This line does the actual link mapping revert
+                     */
+                    vlink->link_info =
+                        best_solution.get_link_assignment(*vedge_it);
 
-  cout << "Done annealing" << endl;
-  
-  /*
-   * Print out some useful statistics
-   */
-  double finished_time = used_time();
-  double annealing_time = finished_time - anneal_start_time;
-  
-  cout << "    Total annealing time: " << annealing_time << endl;
-  cout << "    Total temperature steps: " << tsteps << endl;
-  cout << "    Total iterations: " << total_iterations << endl;
-  cout << "    Finished at temperature: " << temp << endl;
-  cout << "    Average iterations per second: " << (total_iterations/annealing_time)
-       << endl;
-  cout << "    Number of solutions considered: " << solutions_considered
-       << endl;
-  cout << "    Fraction of iterations during which a solution was considered: "
-       << ((solutions_considered*1.0)/total_iterations) << endl;
-  cout << "    Fraction of solutions accepted: "
-       << ((solutions_accepted*1.0)/solutions_considered) << endl;
-  cout << "    Fraction of potential solutions that were valid: "
-       << ((valid_solutions_considered*1.0)/solutions_considered) << endl;
-  cout << "    Fraction of accepted solutions that were valid: "
-       << ((valid_solutions_accepted*1.0)/solutions_accepted) << endl;
-  cout << "    Fraction of rejected solutions that were valid: "
-       << ((valid_solutions_rejected*1.0)/solutions_rejected) << endl;
-  cout << "    Fraction of valid solutions that were accepted: "
-       << ((valid_solutions_accepted*1.0)/valid_solutions_considered) << endl;
-  cout << "    Fraction of invalid solutions that were accepted: "
-       << (solutions_accepted - valid_solutions_accepted*1.0) / 
-          (solutions_considered - valid_solutions_considered*1.0) << endl;
-          
-  if (time_to_first_valid > 0.0) {
-    cout << "    Fraction of time to find first valid solution: "
-         << (time_to_first_valid / annealing_time) << endl;
-  }
+                    if (!dst_vnode->assigned || !src_vnode->assigned) {
+                        // This shouldn't happen, but don't try to
+                        // score links which don't have both endpoints
+                        // assigned.
+                        continue;
+                    }
+                    if (dst_vnode->fixed && src_vnode->fixed) {
+                        // If both endpoints were fixed, this link never got
+                        // unmapped, so don't map it again
+                        continue;
+                    }
+                    tb_pnode *src_pnode =
+                        get(pvertex_pmap,src_vnode->assignment);
+                    tb_pnode *dst_pnode =
+                        get(pvertex_pmap,dst_vnode->assignment);
 
-  if (time_to_best > 0.0) {
-    cout << "    Fraction of time to find best solution: "
-         << (time_to_best / annealing_time) << endl;
-  }
-  
-} // End of anneal()
+                    /*
+                     * Okay, now that we've jumped through enough hoops, we can
+                     * actually do the scoring
+                     */
+                    mark_vlink_assigned(vlink);
+                    score_link_info(*vedge_it, src_pnode, dst_pnode,
+                            src_vnode, dst_vnode);
+                } else {
+                    /*
+                     * If one endpoint or the other was unmapped, we just note
+                     * that the link wasn't mapped - however, if both endpoints
+                     * were mapped, then we have to make sure the score
+                     * reflects that.
+                     */
+                    if (!dst_vnode->assigned || !src_vnode->assigned) {
+                        if (!vlink->no_connection) {
+                            mark_vlink_unassigned(vlink);
+                        }
+                    }
+                }
+            }
+        } // End of reverting code
+
+        /*
+         * Whew, that's it!
+         */
+        tsteps++;
+
+        if (finished) {
+            done = true;
+        }
+        } /* End of outer annealing loop */
+
+        cout << "Done annealing" << endl;
+
+        /*
+         * Print out some useful statistics
+         */
+        double finished_time = used_time();
+        double annealing_time = finished_time - anneal_start_time;
+
+        cout << "    Total annealing time: " << annealing_time << endl;
+        cout << "    Total temperature steps: " << tsteps << endl;
+        cout << "    Total iterations: " << total_iterations << endl;
+        cout << "    Finished at temperature: " << temp << endl;
+        cout << "    Average iterations per second: "
+             << (total_iterations/annealing_time) << endl;
+        cout << "    Number of solutions considered: " << solutions_considered
+             << endl;
+        cout << "    Fraction of iterations during which a solution was considered: "
+             << ((solutions_considered*1.0)/total_iterations) << endl;
+        cout << "    Fraction of solutions accepted: "
+             << ((solutions_accepted*1.0)/solutions_considered) << endl;
+        cout << "    Fraction of potential solutions that were valid: "
+             << ((valid_solutions_considered*1.0)/solutions_considered) << endl;
+        cout << "    Fraction of accepted solutions that were valid: "
+             << ((valid_solutions_accepted*1.0)/solutions_accepted) << endl;
+        cout << "    Fraction of rejected solutions that were valid: "
+             << ((valid_solutions_rejected*1.0)/solutions_rejected) << endl;
+        cout << "    Fraction of valid solutions that were accepted: "
+             << ((valid_solutions_accepted*1.0)/valid_solutions_considered) << endl;
+        cout << "    Fraction of invalid solutions that were accepted: "
+             << (solutions_accepted - valid_solutions_accepted*1.0) / 
+                (solutions_considered - valid_solutions_considered*1.0) << endl;
+
+        if (time_to_first_valid > 0.0) {
+            cout << "    Fraction of time to find first valid solution: "
+                 << (time_to_first_valid / annealing_time) << endl;
+        }
+
+        if (time_to_best > 0.0) {
+            cout << "    Fraction of time to find best solution: "
+                 << (time_to_best / annealing_time) << endl;
+        }
+
+    } // End of anneal()
 
 /*
  * Set up fixed nodes
@@ -1098,8 +1038,8 @@ bool annealer::setup_fixed_nodes() {
     fixed_node_count = 0;
     
     /* 
-     * Count of nodes which could not be fixed - we wait until we've tried to fix
-     * all nodes before bailing, so that the user gets to see all of the
+     * Count of nodes which could not be fixed - we wait until we've tried to
+     * fix all nodes before bailing, so that the user gets to see all of the
      * messages.
      */
     int fix_failed = 0;
@@ -1109,7 +1049,7 @@ bool annealer::setup_fixed_nodes() {
     
         if (vname2vertex.find((*fixed_it).first) == vname2vertex.end()) {
             cout << "*** Fixed virtual node: " << (*fixed_it).first <<
-                    " does not exist." << endl;
+                " does not exist." << endl;
             fix_failed++;
             continue;
         }
@@ -1117,7 +1057,7 @@ bool annealer::setup_fixed_nodes() {
         vvertex vv = vname2vertex[(*fixed_it).first];
         if (pname2vertex.find((*fixed_it).second) == pname2vertex.end()) {
             cout << "*** Fixed physical node: " << (*fixed_it).second <<
-                    " not available." << endl;
+                " not available." << endl;
             fix_failed++;
             continue;
         }
@@ -1126,8 +1066,8 @@ bool annealer::setup_fixed_nodes() {
         tb_vnode *vn = get(vvertex_pmap,vv);
         tb_pnode *pn = get(pvertex_pmap,pv);
         if (vn->vclass != NULL) {
-            // Find a type on this physical node that can satisfy something in the
-            // virtual class
+            // Find a type on this physical node that can satisfy something in
+            // the virtual class
             if (pn->typed) {
                 if (vn->vclass->has_type(pn->current_type)) {
                     vn->type = pn->current_type;
@@ -1136,9 +1076,9 @@ bool annealer::setup_fixed_nodes() {
                 for (tb_pnode::types_list::iterator i = pn->type_list.begin();
                      i != pn->type_list.end();
                      i++) {
-                    // For now, if we find more than one match, we pick the first. It's
-                    // possible that picking some other type would give us a better
-                    // score, but let's noty worry about that
+                    // For now, if we find more than one match, we pick the
+                    // first. It's possible that picking some other type would
+                    // give us a better score, but let's noty worry about that
                     if (vn->vclass->has_type((*i)->get_ptype()->name())) {
                         vn->type = (*i)->get_ptype()->name();
                         break;
@@ -1147,14 +1087,14 @@ bool annealer::setup_fixed_nodes() {
             }
         
             if (vn->type.empty()) {
-                // This is an internal error, so it's okay to handle it in a different
-                // way from the others
-                cout << "*** Unable to find a type for fixed, vtyped, node " << vn->name
-                     << endl;
+                // This is an internal error, so it's okay to handle it in a
+                // different way from the others
+                cout << "*** Unable to find a type for fixed, vtyped, node "
+                     << vn->name << endl;
                 exit(EXIT_FATAL);
             } else {
                 cout << "Setting type of vclass node " << vn->name << " to "
-                     << vn->type << "\n";
+                    << vn->type << "\n";
             }
         }
 
@@ -1162,7 +1102,7 @@ bool annealer::setup_fixed_nodes() {
          * Normally, we want to bypass some checks in add_node for fixed nodes -
          * but not always (usually for testing purposes).
          */
-         
+
         bool skip_checks = true;
         if (params.check_fixed_nodes) {
             skip_checks = false;
@@ -1170,11 +1110,11 @@ bool annealer::setup_fixed_nodes() {
 
         if (add_node(vv,pv,false,skip_checks,false) == 1) {
             cout << "*** Fixed node: Could not map " << vn->name <<
-                    " to " << pn->name << endl;
+                " to " << pn->name << endl;
             fix_failed++;
             continue;
         }
-        
+
         vn->fixed = true;
 
         fixed_node_count++;
@@ -1188,33 +1128,33 @@ bool annealer::setup_fixed_nodes() {
  */
 void annealer::setup_hinted_nodes() {
     for (name_name_map::iterator hint_it = node_hints.begin();
-         hint_it!=node_hints.end();
-         ++hint_it) {
-             
+            hint_it!=node_hints.end();
+            ++hint_it) {
+
         if (vname2vertex.find((*hint_it).first) == vname2vertex.end()) {
             cout << "Warning: Hinted node: " << (*hint_it).first <<
-    	            "does not exist." << endl;
+                "does not exist." << endl;
             continue;
         }
-    
+
         vvertex vv = vname2vertex[(*hint_it).first];
         if (pname2vertex.find((*hint_it).second) == pname2vertex.end()) {
-          cout << "Warning: Hinted node: " << (*hint_it).second <<
-    	          " not available." << endl;
-          continue;
+            cout << "Warning: Hinted node: " << (*hint_it).second <<
+                " not available." << endl;
+            continue;
         }
-    
+
         pvertex pv = pname2vertex[(*hint_it).second];
         tb_vnode *vn = get(vvertex_pmap,vv);
         tb_pnode *pn = get(pvertex_pmap,pv);
         if (vn->assigned) {
-            cout << "Warning: Skipping hint for node " << vn->name << ", which is "
-    	         << "fixed in place" << endl;
+            cout << "Warning: Skipping hint for node " << vn->name
+                  << ", which is " << "fixed in place" << endl;
             continue;
         }
         if (add_node(vv,pv,false,false,false) == 1) {
             cout << "Warning: Hinted node: Could not map " << vn->name <<
-    	            " to " << pn->name << endl;
+                " to " << pn->name << endl;
             continue;
         }
     }
@@ -1224,16 +1164,16 @@ void annealer::setup_hinted_nodes() {
  * Make a list of all nodes that are currently unassigned
  */
 void annealer::setup_unassigned_nodes() {
-    
+
     unassigned_nodes.clear();
-    
+
     // Simple, just go through the topology looking for unassigned nodes
     vvertex_iterator vit,veit;
     tie(vit,veit) = vertices(VG);
     for (;vit!=veit;++vit) {
         tb_vnode *vn = get(vvertex_pmap,*vit);
         if (!vn->assigned) {
-    	    unassigned_nodes.push_front(*vit);
+            unassigned_nodes.push_front(*vit);
         }
     }
 }
@@ -1250,7 +1190,6 @@ void annealer::start_melting() {
  * Indicate that we're done melting
  */
 void annealer::stop_melting() {
-    
     melting = false;
 }
 
@@ -1271,8 +1210,8 @@ int annealer::init_tstep() {
     if (melting) {
         return neighborsize;
     } else {
-        // Adjust the number of transitions we're going to do based on the number
-        // of pclasses that are actually 'in play'
+        // Adjust the number of transitions we're going to do based on the
+        // number of pclasses that are actually 'in play'
         int iters = (int)(neighborsize *
             (count_enabled_pclasses() *1.0 / pclasses.size()));
         assert(iters <= neighborsize);
@@ -1284,11 +1223,11 @@ int annealer::get_neighborsize() const {
     
     int size;
     
-    // Subtract the number of fixed nodes from vnode_count, since they don't really
-    // count
+    // Subtract the number of fixed nodes from vnode_count, since they don't
+    // really count
     if (fixed_node_count > 0) {
         cout << "Adjusting difficulty estimate for fixed nodes, " <<
-                (vnode_count - fixed_node_count) << " remain.\n";
+            (vnode_count - fixed_node_count) << " remain.\n";
     }
 
     // Basic neighborhood size is the number of virtual nodes, multiplied by
@@ -1328,10 +1267,6 @@ vvertex annealer::pick_unassigned_vnode() {
     // the new assignment for it
     unassigned_nodes.erase(uit);
     
-    RDEBUG(cout << "Using unassigned node " << choice << ": " <<
-            get(vvertex_pmap,vv)->name << " (" <<
-            unassigned_nodes.size() << " in queue)" << endl;)
-
     return *uit;
 }
 
@@ -1351,16 +1286,16 @@ vvertex annealer::pick_assigned_vnode() {
     int choice = start;
     while (get(vvertex_pmap,virtual_nodes[choice])->fixed) {
         choice = (choice +1) % vnode_count;
-	if (choice == start) {
- 	    choice = -1;
- 	    break;
- 	}
+        if (choice == start) {
+             choice = -1;
+             break;
+         }
     }
     
     if (choice >= 0) {
         return(virtual_nodes[choice]);
      } else {
         cout << "**** Error, unable to find any non-fixed nodes" << endl;
- 	exit(EXIT_UNRETRYABLE);
+         exit(EXIT_UNRETRYABLE);
      }
 }
