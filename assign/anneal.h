@@ -308,13 +308,22 @@ private:
 
 public:
 
-
     explicit annealer(const annealing_parameters &_params) :
-        params(_params), fixed_node_count(0),
-        temp(0.0),  prev_score(0), total_iterations(0),
-        meltedtemp(0.0), initialavg(0.0),
-        anneal_start_time(0.0), temp_rate(params.temp_rate),
-        finished(false), forcerevert(false) {;};
+        params(_params),
+        fixed_node_count(0),
+        meltedtemp(0.0),
+        initialavg(0.0),
+        anneal_start_time(0.0),
+        temp_rate(params.temp_rate),
+        temp(0.0),
+        melting(false),
+        prev_score(0),
+        total_iterations(0), 
+        time_to_best(0.0),
+        iters_to_best(0), 
+        finished(false),
+        forcerevert(false) {;};
+
     /*
      * The big guy!
      */
@@ -325,6 +334,19 @@ public:
      * SIGINFO, etc.
      */
     void status_report(ostream &o) const;
+
+    /*
+     * Get some state that's useful to the outside
+     */
+    double get_best_score() const     { return best_score;       };
+    int get_best_violations() const   { return best_violated;    };
+    int get_total_iterations() const  { return total_iterations; };
+    int get_iters_to_best() const     { return iters_to_best;    };
+
+    // This makes a copy of the solution object - I'm not really worried
+    // about the overhead of this, though, since this will tend to get
+    // called once per run of assign
+    solution get_best_solution() const { return best_solution;   };
         
 private:
     /*
@@ -392,6 +414,22 @@ private:
      */
     double next_temperature(const tstep_state &tstate);
 
+
+    /*
+     * Get a new tempreature for melting
+     */
+    double adjust_melting_temperature(const tstep_state &tstate);
+
+    /*
+     * True if the current soltion is the best one we've seen so far
+     */
+    bool best_score_so_far(double new_score, int new_violated);
+
+    /*
+     * Copy the current solution to the best solution
+     */
+    void set_best_solution(const tb_vgraph &vg, double new_score, int violated);
+
     /*
      * Annealing-specific parameters
      */
@@ -448,6 +486,16 @@ private:
 
     // Total number of iterations we've gone through so far
     int total_iterations;
+
+    // How much time, and how many iterations, it took for us to get to
+    // the best solution (so far)
+    double time_to_best;
+    int iters_to_best;
+
+    // The best solution we've found
+    int best_violated;
+    double best_score;
+    solution best_solution;
 
     // TODO: These next few variables may belong someplace else!
 
@@ -518,12 +566,9 @@ extern double timestart;
 extern pclass_types type_table;
 extern pclass_list pclasses;
 extern pnode_pvertex_map pnode2vertex;
-extern double best_score;
-extern int best_violated, iters_to_best;
 extern name_vvertex_map vname2vertex;
 
 extern pclass_types vnode_type_table;
-extern solution best_solution;
 extern vvertex_vector virtual_nodes;
 extern name_pvertex_map pname2vertex;
 extern name_name_map fixed_nodes;

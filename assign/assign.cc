@@ -131,28 +131,11 @@ bool ptop_rspec_input = false;
 bool vtop_rspec_input = false;
 #endif
 
-/*
- * Score and violations for the best score found so far
- * XXX - shouldn't be in this file
- */
-double best_score;
-int best_violated;
-
-/*
- * Number of iterations executed so far, and how many it took us to find the
- * best solution
- * XXX - shouldn't be in this file
- */
-int iters, iters_to_best;
-
 // Map of all physical types in use in the system
 tb_ptype_map ptypes;
 
 // Map of virtual node name to its vertex descriptor.
 name_vvertex_map vname2vertex;
-
-// These variables store the best solution.
-solution best_solution;
 
 // This is a vector of all the nodes in the top file.  It's used
 // to randomly choose nodes.
@@ -862,9 +845,6 @@ void status_report(int signal) {
   cout.flush();
 }
 
-// From anneal.cc - the best solution found
-extern solution best_solution;
-
 int main(int argc,char **argv) {
   int seed = 0;
 #ifdef GRAPHVIZ_SUPPORT
@@ -1251,8 +1231,6 @@ int main(int argc,char **argv) {
   anneal = new annealer(annealing_params);
   anneal->anneal();
   timeend = used_time();
-  delete anneal;
-  anneal = NULL;
 
   if (gnuplot_output) {
       fclose(scoresout);
@@ -1260,17 +1238,20 @@ int main(int argc,char **argv) {
       fclose(deltaout);
   }
 
-  if ((!compare_scores(get_score(),best_score)) || (violated > best_violated)) {
+  if ((!compare_scores(get_score(),anneal->get_best_score())) ||
+          (violated > anneal->get_best_violations())) {
     cout << "WARNING: Internal scoring inconsistency." << endl;
-    cout << "score:" << get_score() << " best_score:" << best_score <<
-      " violated:" << violated << " best_violated:" <<
-      best_violated << endl;
+    cout << "score:" << get_score()
+        << " best_score:" << anneal->get_best_score()
+        << " violated:" << violated
+        << " best_violated:" << anneal->get_best_violations() << endl;
   }
   
-  cout << "   BEST SCORE:  " << get_score() << " in " << iters <<
-    " iters and " << timeend-timestart << " seconds" << endl;
+  cout << "   BEST SCORE:  " << get_score() << " in "
+       << anneal->get_total_iterations() << " iters and "
+       << timeend-timestart << " seconds" << endl;
   cout << "With " << violated << " violations" << endl;
-  cout << "Iters to find best score:  " << iters_to_best << endl;
+  cout << "Iters to find best score:  " << anneal->get_iters_to_best() << endl;
   cout << "Violations: " << violated << endl;
   cout << vinfo;
 
@@ -1282,21 +1263,27 @@ int main(int argc,char **argv) {
         // For now, only produce annotated file if we succeeded - print the
         // text version regardless
         if (violated == 0) {
-	    print_solution(best_solution, vtopOutputFilename ? vtopOutputFilename : annotated_filename(vtopFilename).c_str());
+	    print_solution(anneal->get_best_solution(),
+                    vtopOutputFilename ?
+                        vtopOutputFilename :
+                        annotated_filename(vtopFilename).c_str());
         } else {
-	    print_solution(best_solution);
+	    print_solution(anneal->get_best_solution());
         }
     }
     else
-	    print_solution(best_solution);
+	    print_solution(anneal->get_best_solution());
 #else
-    print_solution(best_solution);
+    print_solution(anneal->get_best_solution());
 #endif
   }
   
   if (print_summary) {
     print_solution_summary();
   }
+
+  delete anneal;
+  anneal = NULL;
 
 #ifdef GRAPHVIZ_SUPPORT
   if (viz_prefix.size() != 0) {
