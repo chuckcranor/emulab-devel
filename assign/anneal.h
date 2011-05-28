@@ -414,7 +414,6 @@ private:
      */
     double next_temperature(const tstep_state &tstate);
 
-
     /*
      * Get a new tempreature for melting
      */
@@ -429,6 +428,11 @@ private:
      * Copy the current solution to the best solution
      */
     void set_best_solution(const tb_vgraph &vg, double new_score, int violated);
+
+    /*
+     * Revert to the given solution
+     */
+    void revert_to_solution(const solution &sol);
 
     /*
      * Annealing-specific parameters
@@ -465,6 +469,9 @@ private:
     // The multiplicative factor we use to decrease the score under the old
     // cooling schedule
     float temp_rate;
+
+    // The score that we started with
+    double initial_score;
 
     /*
      * Volatile variables - these change frequently during the run of

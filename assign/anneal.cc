@@ -179,7 +179,7 @@ void annealer::anneal() {
      * We'll check against this later to make sure that whe we've unmapped
      * everything, the score is the same
      */
-    double initial_score = get_score();
+    initial_score = get_score();
 
     /*
      * Handle node hints - we do this _after_ we've figured out the initial
@@ -674,121 +674,11 @@ void annealer::anneal() {
             }
         }
 
-        /*
-         * This is the code to do the actual revert.  IMPORTANT: At this time,
-         * a revert does not take you back to _exactly_ the same state as
-         * before, because there are some things, like link assignments, that
-         * we don't save. Since the way these get mapped is dependant on the
-         * order they happen in, and this order is almost certainly different
-         * than the order they got mapped during annealing, there can be
-         * discrepancies (ie. now we have violations, when before we had none.)
-         */
-        vvertex_iterator vvertex_it,end_vvertex_it;
-        vedge_iterator vedge_it,end_vedge_it;
         if (revert) {
             cout << "Reverting to best solution\n";
-            /*
-             * We start out by unmapping every vnode that's currently allocated
-             */
-            tie(vvertex_it,end_vvertex_it) = vertices(VG);
-            for (;vvertex_it!=end_vvertex_it;++vvertex_it) {
-                tb_vnode *vnode = get(vvertex_pmap,*vvertex_it);
-                if (vnode->fixed) continue;
-                if (vnode->assigned) {
-                    remove_node(*vvertex_it);
-                    // Add to the list of unassigned nodes in case we're going
-                    // to keep annealing
-                    unassigned_nodes.push_front(*vvertex_it);
-                }
-            }
+            revert_to_solution(best_solution);
+        }
 
-            // Check to make sure that our 'clean' solution scores the same as
-            // the initial score - if not, that indicates a bug
-            if (!compare_scores(get_score(),initial_score)) {
-                cout << "*** WARNING: 'Clean' score does not match initial "
-                     << "score" << endl
-                     << "     This indicates a bug - contact the operators"
-                     << endl
-                     << "     (initial score: " << initial_score
-                     << ", current score: " << get_score() << ")" << endl;
-            }
-
-            /* 
-             * Now, go through the previous best solution, and add all of the
-             * node mappings back in.
-             */
-            tie(vvertex_it,end_vvertex_it) = vertices(VG);
-            for (;vvertex_it!=end_vvertex_it;++vvertex_it) {
-                tb_vnode *vnode = get(vvertex_pmap,*vvertex_it);
-                if (vnode->fixed) continue;
-                if (best_solution.is_assigned(*vvertex_it)) {
-                    if (vnode->vclass != NULL) {
-                        vnode->type =
-                            best_solution.get_vtype_assignment(*vvertex_it);
-                    }
-                    assert(!add_node(*vvertex_it,
-                                best_solution.get_assignment(*vvertex_it),
-                                true,false,true));
-                    // Remove from list of unassigned nodes
-                    unassigned_nodes.remove(*vvertex_it);
-                }
-            }
-
-            /*
-             * Add back in the old link resolutions
-             */
-            tie(vedge_it,end_vedge_it) = edges(VG);
-            for (;vedge_it != end_vedge_it; ++vedge_it) {
-                tb_vlink *vlink = get(vedge_pmap,*vedge_it);
-                tb_vnode *src_vnode = get(vvertex_pmap,vlink->src);
-                tb_vnode *dst_vnode = get(vvertex_pmap,vlink->dst);
-                if (best_solution.link_is_assigned(*vedge_it)) {
-                    // XXX: It's crappy that I have to do all this work here -
-                    // something needs re-organzing
-                    /*
-                     * This line does the actual link mapping revert
-                     */
-                    vlink->link_info =
-                        best_solution.get_link_assignment(*vedge_it);
-
-                    if (!dst_vnode->assigned || !src_vnode->assigned) {
-                        // This shouldn't happen, but don't try to
-                        // score links which don't have both endpoints
-                        // assigned.
-                        continue;
-                    }
-                    if (dst_vnode->fixed && src_vnode->fixed) {
-                        // If both endpoints were fixed, this link never got
-                        // unmapped, so don't map it again
-                        continue;
-                    }
-                    tb_pnode *src_pnode =
-                        get(pvertex_pmap,src_vnode->assignment);
-                    tb_pnode *dst_pnode =
-                        get(pvertex_pmap,dst_vnode->assignment);
-
-                    /*
-                     * Okay, now that we've jumped through enough hoops, we can
-                     * actually do the scoring
-                     */
-                    mark_vlink_assigned(vlink);
-                    score_link_info(*vedge_it, src_pnode, dst_pnode,
-                            src_vnode, dst_vnode);
-                } else {
-                    /*
-                     * If one endpoint or the other was unmapped, we just note
-                     * that the link wasn't mapped - however, if both endpoints
-                     * were mapped, then we have to make sure the score
-                     * reflects that.
-                     */
-                    if (!dst_vnode->assigned || !src_vnode->assigned) {
-                        if (!vlink->no_connection) {
-                            mark_vlink_unassigned(vlink);
-                        }
-                    }
-                }
-            }
-        } // End of reverting code
 
         /*
          * Whew, that's it!
@@ -1355,4 +1245,124 @@ void annealer::set_best_solution(const tb_vgraph &vg, double new_score,
     best_violated = violated;
     iters_to_best = total_iterations;
     time_to_best = used_time() - anneal_start_time;
+}
+
+/*
+ * This is the code to do the actual revert.  IMPORTANT: At this time,
+ * a revert does not take you back to _exactly_ the same state as
+ * before, because there are some things, like link assignments, that
+ * we don't save. Since the way these get mapped is dependant on the
+ * order they happen in, and this order is almost certainly different
+ * than the order they got mapped during annealing, there can be
+ * discrepancies (ie. now we have violations, when before we had none.)
+ */
+void annealer::revert_to_solution(const solution &sol) {
+
+    vvertex_iterator vvertex_it,end_vvertex_it;
+    vedge_iterator vedge_it,end_vedge_it;
+
+    /*
+     * We start out by unmapping every vnode that's currently allocated
+     */
+    tie(vvertex_it,end_vvertex_it) = vertices(VG);
+    for (;vvertex_it!=end_vvertex_it;++vvertex_it) {
+        tb_vnode *vnode = get(vvertex_pmap,*vvertex_it);
+        if (vnode->fixed) continue;
+        if (vnode->assigned) {
+            remove_node(*vvertex_it);
+        }
+    }
+
+    /*
+     * Check to make sure that our 'clean' solution scores the same as the
+     * initial score - if not, that indicates a bug
+     */
+    if (!compare_scores(get_score(),initial_score)) {
+        cout << "*** WARNING: 'Clean' score does not match initial "
+            << "score" << endl
+            << "     This indicates a bug - contact the operators"
+            << endl
+            << "     (initial score: " << initial_score
+            << ", current score: " << get_score() << ")" << endl;
+    }
+
+    /* 
+     * Now, go through the given solution, and add all of the node mappings
+     * back in.
+     */
+    tie(vvertex_it,end_vvertex_it) = vertices(VG);
+    for (;vvertex_it!=end_vvertex_it;++vvertex_it) {
+        tb_vnode *vnode = get(vvertex_pmap,*vvertex_it);
+        if (vnode->fixed) continue;
+        if (sol.is_assigned(*vvertex_it)) {
+            if (vnode->vclass != NULL) {
+                vnode->type = sol.get_vtype_assignment(*vvertex_it);
+            }
+            bool add_failed = add_node(*vvertex_it,
+                    sol.get_assignment(*vvertex_it), true,false,true);
+            assert(!add_failed);
+        }
+    }
+
+    /*
+     * Add back in the old link resolutions
+     */
+    tie(vedge_it,end_vedge_it) = edges(VG);
+    for (;vedge_it != end_vedge_it; ++vedge_it) {
+        tb_vlink *vlink = get(vedge_pmap,*vedge_it);
+        tb_vnode *src_vnode = get(vvertex_pmap,vlink->src);
+        tb_vnode *dst_vnode = get(vvertex_pmap,vlink->dst);
+        if (sol.link_is_assigned(*vedge_it)) {
+            // XXX: It's crappy that I have to do all this work here -
+            // something needs re-organzing
+            /*
+             * This line does the actual link mapping revert
+             */
+            vlink->link_info =
+                sol.get_link_assignment(*vedge_it);
+
+            if (!dst_vnode->assigned || !src_vnode->assigned) {
+                // This shouldn't happen, but don't try to
+                // score links which don't have both endpoints
+                // assigned.
+                continue;
+            }
+            if (dst_vnode->fixed && src_vnode->fixed) {
+                // If both endpoints were fixed, this link never got
+                // unmapped, so don't map it again
+                continue;
+            }
+
+            tb_pnode *src_pnode =
+                get(pvertex_pmap,src_vnode->assignment);
+            tb_pnode *dst_pnode =
+                get(pvertex_pmap,dst_vnode->assignment);
+
+            /*
+             * Okay, now that we've jumped through enough hoops, we can
+             * actually do the scoring
+             */
+            mark_vlink_assigned(vlink);
+            score_link_info(*vedge_it, src_pnode, dst_pnode,
+                    src_vnode, dst_vnode);
+        } else {
+            /*
+             * If one endpoint or the other was unmapped, we just note
+             * that the link wasn't mapped - however, if both endpoints
+             * were mapped, then we have to make sure the score
+             * reflects that.
+             */
+            if (!dst_vnode->assigned || !src_vnode->assigned) {
+                if (!vlink->no_connection) {
+                    mark_vlink_unassigned(vlink);
+                }
+            }
+        }
+    }
+
+    /*
+     * Set up the unassigned_nodes structure, so that if we're going to
+     * keep annealing (eg. as we do when hillclimbing at the end), it's correct
+     */
+    setup_unassigned_nodes();
 }
