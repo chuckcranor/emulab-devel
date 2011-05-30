@@ -123,9 +123,6 @@ void annealer::anneal() {
 
     double new_score = 0;
 
-    // Used for figuring out how much time we might have wasted
-    double time_to_first_valid = 0.0;
-
     bool done = false;
 
     pvertex oldpos;
@@ -144,16 +141,6 @@ void annealer::anneal() {
     double smoothedavg, lastsmoothed = 500000.0f;
 
     bool finishedonce = false;
-
-    /*
-     * Used only for statistical purposes
-     */
-    int solutions_considered = 0;
-    int valid_solutions_considered = 0;
-    int solutions_accepted = 0;
-    int valid_solutions_accepted = 0;
-    int solutions_rejected = 0;
-    int valid_solutions_rejected = 0;
 
     /*
      * Grab some values that we'll use a lot
@@ -207,7 +194,6 @@ void annealer::anneal() {
     // Copy the current assignments into the best_solution variable.
     best_solution.set(VG);
 
-
     /*
      * The neighborhood size is the number of solutions we can reach with one
      * transition operation - it's roughly the number of virtual nodes times the
@@ -235,7 +221,7 @@ void annealer::anneal() {
     /*
      * Record when we started the annealing loop
      */
-    anneal_start_time = used_time();
+    stats.start();
 
     /*
      * The main annealing loop!
@@ -387,11 +373,7 @@ void annealer::anneal() {
                 }
             }
 
-            // Bookkeeping
-            solutions_considered++;
-            if (violated == 0) {
-                valid_solutions_considered++;
-            }
+            stats.solution_considered(violated == 0);
 
             /*
              * Okay, now that we've mapped some new node, let's check the
@@ -432,15 +414,10 @@ void annealer::anneal() {
                 prev_violated = violated;
 
                 // Bookeeping
-                solutions_accepted++;
-                if (violated == 0) {
-                    valid_solutions_accepted++;
-                }
+                stats.solution_accepted(violated == 0);
 
-                if (violated == 0 && (time_to_first_valid == 0.0)) {
-                    cout << "    Found first valid solution on iteration "
-                        << total_iterations << endl;
-                    time_to_first_valid = used_time() - anneal_start_time;
+                if (violated == 0 && !stats.found_valid()) {
+                    stats.first_valid_solution(total_iterations);
                 }
 
                 // gnuplot data files
@@ -471,10 +448,7 @@ void annealer::anneal() {
                     set_best_solution(VG,new_score,violated);
                 }
             } else { // !acceptrans
-                solutions_rejected++;
-                if (violated == 0) {
-                    valid_solutions_rejected++;
-                }
+                stats.solution_rejected(violated == 0);
                 // Reject change, go back to the state we were in before
                 if (oldassigned) {
                     remove_node(vv);
@@ -690,47 +664,15 @@ void annealer::anneal() {
         }
     } /* End of outer annealing loop */
 
+    // Close out the stats gathering
+    stats.stop();
+
     cout << "Done annealing" << endl;
 
     /*
      * Print out some useful statistics
      */
-    double finished_time = used_time();
-    double annealing_time = finished_time - anneal_start_time;
-
-    cout << "    Total annealing time: " << annealing_time << endl;
-    cout << "    Total temperature steps: " << tsteps << endl;
-    cout << "    Total iterations: " << total_iterations << endl;
-    cout << "    Finished at temperature: " << temp << endl;
-    cout << "    Average iterations per second: "
-         << (total_iterations/annealing_time) << endl;
-    cout << "    Number of solutions considered: " << solutions_considered
-         << endl;
-    cout << "    Fraction of iterations during which a solution was considered: "
-         << ((solutions_considered*1.0)/total_iterations) << endl;
-    cout << "    Fraction of solutions accepted: "
-         << ((solutions_accepted*1.0)/solutions_considered) << endl;
-    cout << "    Fraction of potential solutions that were valid: "
-         << ((valid_solutions_considered*1.0)/solutions_considered) << endl;
-    cout << "    Fraction of accepted solutions that were valid: "
-         << ((valid_solutions_accepted*1.0)/solutions_accepted) << endl;
-    cout << "    Fraction of rejected solutions that were valid: "
-         << ((valid_solutions_rejected*1.0)/solutions_rejected) << endl;
-    cout << "    Fraction of valid solutions that were accepted: "
-         << ((valid_solutions_accepted*1.0)/valid_solutions_considered) << endl;
-    cout << "    Fraction of invalid solutions that were accepted: "
-         << (solutions_accepted - valid_solutions_accepted*1.0) / 
-            (solutions_considered - valid_solutions_considered*1.0) << endl;
-
-    if (time_to_first_valid > 0.0) {
-        cout << "    Fraction of time to find first valid solution: "
-             << (time_to_first_valid / annealing_time) << endl;
-    }
-
-    if (time_to_best > 0.0) {
-        cout << "    Fraction of time to find best solution: "
-             << (time_to_best / annealing_time) << endl;
-    }
+    stats.dump_stats(cout,total_iterations);
 
 } // End of anneal()
 
@@ -917,7 +859,7 @@ double annealer::stop_melting(const tstep_state &tstate) {
      * time target. We adjust our cooling schedule accordingly.
      */
     if (params.timetarget != 0.0) {
-        double melttime = used_time() - anneal_start_time;
+        double melttime = stats.time_used();
         double timeleft = params.timetarget - melttime;
         double stepsleft = timeleft / melttime;
         cout << "Melting took " << melttime << " seconds, will try for "
@@ -1243,8 +1185,7 @@ void annealer::set_best_solution(const tb_vgraph &vg, double new_score,
     best_solution.set(vg);
     best_score = new_score;
     best_violated = violated;
-    iters_to_best = total_iterations;
-    time_to_best = used_time() - anneal_start_time;
+    stats.new_best_solution(total_iterations);
 }
 
 /*
@@ -1365,4 +1306,99 @@ void annealer::revert_to_solution(const solution &sol) {
      * keep annealing (eg. as we do when hillclimbing at the end), it's correct
      */
     setup_unassigned_nodes();
+}
+
+/*
+ * Simple accessors for the annealer class
+ */
+double annealer::get_best_score()       const { return best_score;             }
+int    annealer::get_best_violations()  const { return best_violated;          }
+int    annealer::get_total_iterations() const { return total_iterations;       }
+int    annealer::get_iters_to_best()    const { return stats.get_iters_to_best(); }
+
+/*
+ * Functions for the annealer::statistics class
+ */
+void annealer::statistics::start() {
+    anneal_start_time = used_time();
+}
+
+void annealer::statistics::stop() {
+    anneal_finished_time = time_used();
+}
+
+void annealer::statistics::solution_considered(bool valid) {
+    solutions_considered++;
+    if (valid) { valid_solutions_considered++; }
+}
+
+void annealer::statistics::solution_accepted(bool valid) {
+    solutions_accepted++;
+    if (valid) { valid_solutions_accepted++; }
+}
+
+void annealer::statistics::solution_rejected(bool valid) {
+    solutions_rejected++;
+    if (valid) { valid_solutions_rejected++; }
+}
+
+void annealer::statistics::first_valid_solution(int iteration) {
+    cout << "    Found first valid solution on iteration "
+         << iteration << endl;
+    time_to_first_valid = used_time() - anneal_start_time;
+}
+
+bool annealer::statistics::found_valid() const {
+    return (time_to_first_valid != 0.0);
+}
+
+double annealer::statistics::time_used() const {
+    return used_time() - anneal_start_time;
+}
+
+void annealer::statistics::new_best_solution(int iteration) {
+    iters_to_best = iteration;
+    time_to_best = time_used();
+}
+
+int annealer::statistics::get_iters_to_best() const {
+    return iters_to_best;
+}
+
+void annealer::statistics::dump_stats(ostream &o, int total_iterations) const {
+
+    double annealing_time = anneal_finished_time - anneal_start_time;
+
+    o << "    Total annealing time: " << annealing_time << endl;
+    o << "    Total iterations: " << total_iterations << endl;
+    o << "    Average iterations per second: "
+      << (total_iterations/annealing_time) << endl;
+    o << "    Number of solutions considered: " << solutions_considered
+      << endl;
+    o << "    Fraction of iterations during which a solution was considered: "
+      << ((solutions_considered*1.0)/total_iterations) << endl;
+    o << "    Fraction of solutions accepted: "
+      << ((solutions_accepted*1.0)/solutions_considered) << endl;
+    o << "    Fraction of potential solutions that were valid: "
+      << ((valid_solutions_considered*1.0)/solutions_considered) << endl;
+    o << "    Fraction of accepted solutions that were valid: "
+      << ((valid_solutions_accepted*1.0)/solutions_accepted) << endl;
+    o << "    Fraction of rejected solutions that were valid: "
+      << ((valid_solutions_rejected*1.0)/solutions_rejected) << endl;
+    o << "    Fraction of valid solutions that were accepted: "
+      << ((valid_solutions_accepted*1.0)/valid_solutions_considered) << endl;
+    o << "    Fraction of invalid solutions that were accepted: "
+      << (solutions_accepted - valid_solutions_accepted*1.0) / 
+         (solutions_considered - valid_solutions_considered*1.0) << endl;
+
+    if (time_to_first_valid > 0.0) {
+        o << "    Fraction of time to find first valid solution: "
+          << (time_to_first_valid / annealing_time) << endl;
+    }
+
+    if (time_to_best > 0.0) {
+        o << "    Fraction of time to find best solution: "
+          << (time_to_best / annealing_time) << endl;
+    }
+
 }

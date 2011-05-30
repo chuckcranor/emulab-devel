@@ -305,6 +305,7 @@ class annealer {
 
 private:
     class tstep_state;
+    class statistics;
 
 public:
 
@@ -313,14 +314,11 @@ public:
         fixed_node_count(0),
         meltedtemp(0.0),
         initialavg(0.0),
-        anneal_start_time(0.0),
         temp_rate(params.temp_rate),
         temp(0.0),
+        total_iterations(0),
         melting(false),
         prev_score(0),
-        total_iterations(0), 
-        time_to_best(0.0),
-        iters_to_best(0), 
         finished(false),
         forcerevert(false) {;};
 
@@ -338,10 +336,10 @@ public:
     /*
      * Get some state that's useful to the outside
      */
-    double get_best_score() const     { return best_score;       };
-    int get_best_violations() const   { return best_violated;    };
-    int get_total_iterations() const  { return total_iterations; };
-    int get_iters_to_best() const     { return iters_to_best;    };
+    double get_best_score() const;
+    int get_best_violations() const;
+    int get_total_iterations() const;
+    int get_iters_to_best() const;
 
     // This makes a copy of the solution object - I'm not really worried
     // about the overhead of this, though, since this will tend to get
@@ -430,7 +428,8 @@ private:
     void set_best_solution(const tb_vgraph &vg, double new_score, int violated);
 
     /*
-     * Revert to the given solution
+     * Go back to the a particular solution (usually, the best one we've found
+     * so far)
      */
     void revert_to_solution(const solution &sol);
 
@@ -463,15 +462,9 @@ private:
     // The average score at the end of the melting round
     double initialavg;
     
-    // The rusage time from when annealing began
-    double anneal_start_time;
-
     // The multiplicative factor we use to decrease the score under the old
     // cooling schedule
     float temp_rate;
-
-    // The score that we started with
-    double initial_score;
 
     /*
      * Volatile variables - these change frequently during the run of
@@ -480,6 +473,12 @@ private:
 
     // Current temperature
     double temp;
+
+    // First score that we found
+    double initial_score;
+    
+    // Total number of iterations we've gone through so far
+    int total_iterations;
 
     // Nodes that are not currently assigned
     slist<vvertex> unassigned_nodes;
@@ -490,14 +489,6 @@ private:
     // The score from the previous iteration
     // TODO: This can probably be handled better
     double prev_score;
-
-    // Total number of iterations we've gone through so far
-    int total_iterations;
-
-    // How much time, and how many iterations, it took for us to get to
-    // the best solution (so far)
-    double time_to_best;
-    int iters_to_best;
 
     // The best solution we've found
     int best_violated;
@@ -513,6 +504,85 @@ private:
     // Functions can set this to force a revert at the end of the temperature
     // step
     bool forcerevert;
+
+    /*
+     * Statistics regarding the annealing process - kept in a class not really
+     * because they need to be for encapsulation, but because it's nice to
+     * explicitly group them together.
+     */
+    class statistics {
+    public:
+
+        // Start and stop statistics gathering
+        void start();
+        void stop();
+
+        // Indicate the a solution has been considered (and was it valid?)
+        void solution_considered(bool valid);
+        // Ditto for accepting and rejecting solutions
+        void solution_accepted(bool valid);
+        void solution_rejected(bool valid);
+
+        // Indicate that we just found the first valid solution of the run
+        void first_valid_solution(int iteration);
+
+        // Have we recorded a valid solution before?
+        bool found_valid() const;
+
+        // Indicate that we just found a new best solution
+        void new_best_solution(int iteration);
+
+        // How much time have we spent annealing so far?
+        double time_used() const;
+
+        // How many iterations did it take to find the best solution (so far)?
+        int get_iters_to_best() const;
+
+        // Print out some statistics
+        void dump_stats(ostream &o, int total_iterations) const;
+
+        statistics() : anneal_start_time(0.0f), anneal_finished_time(0.0f),
+                       time_to_best(0.0f), iters_to_best(0),
+                       time_to_first_valid(0), solutions_considered(0),
+                       solutions_accepted(0), solutions_rejected(0),
+                       valid_solutions_considered(0),
+                       valid_solutions_accepted(0),
+                       valid_solutions_rejected(0)
+        {;}  
+
+    private:
+        // The rusage time from when annealing began
+        double anneal_start_time;
+
+        // rusage from when annealing finished
+        double anneal_finished_time;
+        
+        // How much time, and how many iterations, it took for us to get to
+        // the best solution (so far)
+        double time_to_best;
+        int iters_to_best;
+
+        // Used for figuring out how much time we might have wasted
+        double time_to_first_valid;
+        
+        // The number of solutions consdiered, accepted, and rejected, and the
+        // number of those that were valid. We can look at this to get a sense
+        // for how hard the problem is - if we spend most time looking at
+        // invalid solutions, for example, this means we had a very hard
+        // problem
+        int solutions_considered;
+        int solutions_accepted;
+        int solutions_rejected;
+        int valid_solutions_considered;
+        int valid_solutions_accepted;
+        int valid_solutions_rejected;
+
+    };
+
+    /*
+     * This object will keep statistics for the run
+     */
+    statistics stats;
 
     /*
      * State that's used/modified by an individual timestep
