@@ -95,6 +95,12 @@ ostream &operator<<(ostream &o, const annealing_parameters &ap) {
     if (ap.scale_neighborhood != 1.0) {
         o << "    scale_neighborhood = " << ap.scale_neighborhood << endl;
     }
+    if (ap.special_violation_treatment) {
+        o << "    special_violation_treatment" << endl;
+    }
+    if (ap.no_violations) {
+        o << "    no_violation" << endl;
+    }
 
     return o;
 }
@@ -115,24 +121,20 @@ void annealer::anneal() {
     cout << params;
 
     /*
-     * The score and number of violations at the start of the inner annealing
-     * loop
+     * Initial temperature
      */
-
-    int prev_violated = 0;
-
-    double new_score = 0;
-
-    pvertex oldpos;
-    bool oldassigned;
     temp = params.init_temp;
 
-    int tsteps = 0;
-
+    /*
+     * Variables that keep track of the *last* timestep. Start them at
+     * ridiculous values to avoid accidentally exiting early
+     */
+ 
+    // This keeps track of the temperature from the last round 
     double lasttemp = 5000.0f;
-    double smoothedavg, lastsmoothed = 500000.0f;
-
-    bool finished_once = false;
+    
+    // Smoothed average from the last round
+    double lastsmoothed = 500000.0f;
 
     /*
      * Grab some values that we'll use a lot
@@ -211,6 +213,15 @@ void annealer::anneal() {
     }
 
     /*
+     * How many timesteps have we run?
+     */
+    int tsteps = 0;
+
+    // This is used for the finish_hillclimb feature - record if we've
+    // hit the termination condition once already.
+    bool finished_once = false;
+
+    /*
      * Record when we started the annealing loop
      */
     stats.start();
@@ -267,8 +278,8 @@ void annealer::anneal() {
             /*
              * Keep track of the old assignment for this node
              */
-            oldassigned = vn->assigned;
-            oldpos = vn->assignment;
+            bool oldassigned = vn->assigned;
+            pvertex oldpos = vn->assignment;
 
             /*
              * Problem: If we free the chosen vnode now, we might just try
@@ -361,13 +372,15 @@ void annealer::anneal() {
                 }
             }
 
-            stats.solution_considered(violated == 0);
+            bool is_valid = (violated == 0);
+
+            stats.solution_considered(is_valid);
 
             /*
              * Okay, now that we've mapped some new node, let's check the
              * scoring, so that we can decide if we're going to accept it
              */
-            new_score = get_score();
+            double new_score = get_score();
             assert(new_score >= 0);
 
             /*
@@ -402,9 +415,9 @@ void annealer::anneal() {
                 prev_violated = violated;
 
                 // Bookeeping
-                stats.solution_accepted(violated == 0);
+                stats.solution_accepted(is_valid);
 
-                if (violated == 0 && !stats.found_valid()) {
+                if (is_valid && !stats.found_valid()) {
                     stats.first_valid_solution(total_iterations);
                 }
 
@@ -436,7 +449,7 @@ void annealer::anneal() {
                     set_best_solution(VG,new_score,violated);
                 }
             } else { // !acceptrans
-                stats.solution_rejected(violated == 0);
+                stats.solution_rejected(is_valid);
                 // Reject change, go back to the state we were in before
                 if (oldassigned) {
                     remove_node(vv);
@@ -488,7 +501,7 @@ void annealer::anneal() {
          * We smooth out the average score over the last several timesteps,
          * to avoid timesteps with anomalous averages
          */
-        smoothedavg = stats.update_smoothed_average(tstate);
+        double smoothedavg = stats.update_smoothed_average(tstate);
 
         /*
          * The next section of code deals with termination conditions - how do

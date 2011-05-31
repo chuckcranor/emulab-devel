@@ -326,7 +326,8 @@ public:
         temp(0.0),
         total_iterations(0),
         melting(false),
-        prev_score(0),
+        prev_score(0.0),
+        prev_violated(0),
         finished(false),
         forcerevert(false),
         stats(this) {;};
@@ -503,6 +504,10 @@ private:
     // The score from the previous iteration
     // TODO: This can probably be handled better
     double prev_score;
+    
+    // The violations from the previous iteration
+    // TODO: This can probably be handled better
+    int prev_violated;
 
     // The best solution we've found
     int best_violated;
