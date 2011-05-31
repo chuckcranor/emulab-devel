@@ -129,9 +129,6 @@ void annealer::anneal() {
 
     int tsteps = 0;
 
-    double avghist[params.min_tsteps];
-
-    int hstart = 0, nhist = 0;
     double lasttemp = 5000.0f;
     double smoothedavg, lastsmoothed = 500000.0f;
 
@@ -488,27 +485,15 @@ void annealer::anneal() {
         temp = next_temperature(tstate);
 
         /*
+         * We smooth out the average score over the last several timesteps,
+         * to avoid timesteps with anomalous averages
+         */
+        smoothedavg = stats.update_smoothed_average(tstate);
+
+        /*
          * The next section of code deals with termination conditions - how do
          * we decide that we're done?
          */
-
-        /*
-         * Keep a history of the average scores over the last min_tsteps
-         * temperature steps. We treat the avghist array like a ring buffer.
-         * Add this temperature step to the history, and computer a smoothed
-         * average.
-         */
-        smoothedavg = tstate.avg_score / (nhist + 1);
-        for (int j = 0; j < nhist; j++) {
-            smoothedavg += avghist[(hstart + j) % params.min_tsteps] / (nhist + 1);
-        }
-
-        avghist[(hstart + nhist) % params.min_tsteps] = tstate.avg_score;
-        if (nhist < params.min_tsteps) {
-            nhist++;
-        } else {
-            hstart = (hstart +1) % params.min_tsteps;
-        }
 
         /*
          * Are we computing the derivative of the average temperatures over the
@@ -1385,6 +1370,37 @@ void annealer::statistics::new_best_solution(int iteration) {
 
 int annealer::statistics::get_iters_to_best() const {
     return iters_to_best;
+}
+
+
+/*
+ * Keep a history of the average scores over the last min_tsteps temperature
+ * steps. We treat the avghist array like a ring buffer.  Add this temperature
+ * step to the history, and compute a smoothed average.
+ * TODO: This could probably be cleaned up significantly
+ */
+double annealer::statistics::update_smoothed_average(const tstep_state &tstate) {
+
+    /*
+     * Compute the new smoothed average - just a simple average accross the
+     * new value and all of the ones already in the buffer
+     */
+    double smoothedavg =  tstate.avg_score / (nhist + 1);
+    for (int j = 0; j < nhist; j++) {
+        smoothedavg += avghist[(hstart + j) % parent->params.min_tsteps] /
+            (nhist + 1);
+    }
+
+    /*
+     * Update the ring buffer by adding in this new entry, overwriting a
+     * previous one if necessary.
+     */
+    avghist[(hstart + nhist) % parent->params.min_tsteps] = tstate.avg_score;
+    if (nhist < parent->params.min_tsteps) {
+        nhist++;
+    } else {
+        hstart = (hstart +1) % parent->params.min_tsteps;
+    }
 }
 
 void annealer::statistics::dump_stats(ostream &o, int total_iterations) const {

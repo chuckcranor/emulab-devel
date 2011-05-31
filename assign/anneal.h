@@ -328,7 +328,8 @@ public:
         melting(false),
         prev_score(0),
         finished(false),
-        forcerevert(false) {;};
+        forcerevert(false),
+        stats(this) {;};
 
     /*
      * The big guy!
@@ -524,6 +525,10 @@ private:
      * explicitly group them together.
      */
     class statistics {
+    private:
+        // The outer annealing loop that is calling us
+        annealer const *parent;
+
     public:
 
         // Start and stop statistics gathering
@@ -554,14 +559,21 @@ private:
         // Print out some statistics
         void dump_stats(ostream &o, int total_iterations) const;
 
-        statistics() : anneal_start_time(0.0f), anneal_finished_time(0.0f),
+        // Update the ring buffer of recent score averages, and return the
+        // new smoothed average
+        double update_smoothed_average(const tstep_state &tstate);
+
+        explicit statistics(const annealer *_parent) : parent(_parent),
+                       anneal_start_time(0.0f), anneal_finished_time(0.0f),
                        time_to_best(0.0f), iters_to_best(0),
                        time_to_first_valid(0), solutions_considered(0),
                        solutions_accepted(0), solutions_rejected(0),
                        valid_solutions_considered(0),
                        valid_solutions_accepted(0),
-                       valid_solutions_rejected(0)
-        {;}  
+                       valid_solutions_rejected(0),
+                       hstart(0),
+                       nhist(0)
+        { avghist.resize(parent->params.min_tsteps); }  
 
     private:
         // The rusage time from when annealing began
@@ -589,6 +601,11 @@ private:
         int valid_solutions_considered;
         int valid_solutions_accepted;
         int valid_solutions_rejected;
+
+        // Ring buffer used to compute smoothed averages
+        vector<double> avghist;
+        int hstart;
+        int nhist;
 
     };
 
