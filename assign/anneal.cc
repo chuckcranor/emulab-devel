@@ -123,24 +123,19 @@ void annealer::anneal() {
 
     double new_score = 0;
 
-    bool done = false;
-
     pvertex oldpos;
     bool oldassigned;
     temp = params.init_temp;
-    double deltatemp, deltaavg;
 
     int tsteps = 0;
 
-    const int MAX_AVG_HIST = 16;
-    double avghist[MAX_AVG_HIST];
-    int mintsteps = MAX_AVG_HIST;
+    double avghist[params.min_tsteps];
 
     int hstart = 0, nhist = 0;
     double lasttemp = 5000.0f;
     double smoothedavg, lastsmoothed = 500000.0f;
 
-    bool finishedonce = false;
+    bool finished_once = false;
 
     /*
      * Grab some values that we'll use a lot
@@ -205,7 +200,7 @@ void annealer::anneal() {
 
     if (fixed_node_count >= vnode_count) {
         cout << "All nodes are fixed.  No annealing." << endl;
-        done = true;
+        finished = true;
     }
 
     /*
@@ -225,13 +220,9 @@ void annealer::anneal() {
 
     /*
      * The main annealing loop!
-     * Each iteration is a temperature step - how we get out of the loop
-     * depends on what the termination condition is. Normally, we have a target
-     * temperature at which we stop, but with epsilon_terminate, we watch the
-     * derivative of the average temperature, and break out of the loop when it
-     * gets small enough.
+     * Each iteration is a temperature step
      */
-    while(!done && (params.epsilon_terminate || (temp >= params.temp_stop))) {
+    while(!finished) {
 
         if (params.verbose) {
             this->status_report(cout);
@@ -247,7 +238,7 @@ void annealer::anneal() {
          * Object that we'll use to keep track of the state of this individual
          * timestep
          */    
-        tstep_state tstate(this);
+        tstep_state tstate(this,tsteps);
 
         /*
          * The inner loop - 
@@ -502,21 +493,21 @@ void annealer::anneal() {
          */
 
         /*
-         * Keep a history of the average scores over the last MAX_AVG_HIST
+         * Keep a history of the average scores over the last min_tsteps
          * temperature steps. We treat the avghist array like a ring buffer.
          * Add this temperature step to the history, and computer a smoothed
          * average.
          */
         smoothedavg = tstate.avg_score / (nhist + 1);
         for (int j = 0; j < nhist; j++) {
-            smoothedavg += avghist[(hstart + j) % MAX_AVG_HIST] / (nhist + 1);
+            smoothedavg += avghist[(hstart + j) % params.min_tsteps] / (nhist + 1);
         }
 
-        avghist[(hstart + nhist) % MAX_AVG_HIST] = tstate.avg_score;
-        if (nhist < MAX_AVG_HIST) {
+        avghist[(hstart + nhist) % params.min_tsteps] = tstate.avg_score;
+        if (nhist < params.min_tsteps) {
             nhist++;
         } else {
-            hstart = (hstart +1) % MAX_AVG_HIST;
+            hstart = (hstart +1) % params.min_tsteps;
         }
 
         /*
@@ -524,46 +515,34 @@ void annealer::anneal() {
          * whole history, or just the most recent one?
          */
         if (params.local_derivative) {
-            deltaavg = lastsmoothed - smoothedavg;
-            deltatemp = lasttemp - temp;
+            tstate.deltaavg = lastsmoothed - smoothedavg;
+            tstate.deltatemp = lasttemp - temp;
         } else {
-            deltaavg = initialavg - smoothedavg;
-            deltatemp = meltedtemp - temp;
+            tstate.deltaavg = initialavg - smoothedavg;
+            tstate.deltatemp = meltedtemp - temp;
         }
 
         lastsmoothed = smoothedavg;
         lasttemp = temp;
 
         /*
-         * epsilon_terminate means that we define some small number, epsilon,
-         * and the derivative of the average change in temperature gets below
-         * that epsilon (ie. we have stopped getting improvements in score),
-         * we're done
+         * If we've finished once already (this due to finish_hillclimb), then
+         * we are done when we hit this.
          */
-        if (params.epsilon_terminate) {
-            // We have a mininum number of timestepss, and *might* have a
-            // minimum temperature that we must reach before we will stop. Note
-            // that the temperature_guard clause is formulated to give the
-            // correct result even when temp goes to nan
+        if (finished_once) {
+            finished = true;
+        } else if (params.epsilon_terminate) {
             /*
-             * ALLOW_NEGATIVE_DELTA controls whether we're willing to
-             * stop if the derivative gets small and negative, not just
-             * small and positive.
-             * TODO: Seriously clean up this expression!
+             * epsilon_terminate means that we define some small number,
+             * epsilon, and the derivative of the average change in temperature
+             * gets below that epsilon (ie. we have stopped getting
+             * improvements in score),
+             * we're done
              */
-            //         || (fabs((temp / initialavg) * (deltaavg/ deltatemp)) < epsilon))) {
-            if ((tsteps >= mintsteps) &&
-                    ((params.temperature_guard < 0) ||
-                     !(temp > params.temperature_guard)) &&
-                    (params.allow_negative_delta &&
-                     (((temp < 0) || isnan(temp) ||
-                       ((temp / initialavg) * (deltaavg/ deltatemp)) <
-                       params.get_epsilon()))
-                    ) || (
-                        (deltaavg > 0) &&
-                        ((temp / initialavg) * (deltaavg/ deltatemp)
-                         < params.get_epsilon()))) {
-
+            
+            // This condition is complicated enough that it's encapsulated
+            // in a function
+            if (check_epsilon_condition(tstate)) {
                 /*
                  * Normally, we are done here.
                  */
@@ -575,20 +554,25 @@ void annealer::anneal() {
                      * This option goes back to the best result we ever found,
                      * and goes one more round - the idea is to finish up with
                      * a very low temperature, at which will will probably take
-                     * only better solutions (hillclimbing)
+                     * only better solutions (hillclimbing).
+                     * (Note that we have already forced a revert above.)
                      */
-                    if (!finishedonce &&
-                            ((best_violated <= violated) &&
-                             (best_score < prev_score))) {
-                        finishedonce = true;
-                        cout << "Epsilon Terminated, but going back to a "
-                             << "better solution" << endl;
-                    } else {
-                        finished = true;
-                    }
+                    cout << "Finishing with a round of hill-climbing " << 
+                        endl;
+                    temp = 0.0;
+                    finished_once = true;
                 }
             }
-        } /* epsilon_terminate */
+        } else { /* epsilon_terminate */
+            /*
+             * If we're not using epsilon termination, we simply
+             * look to see if the temperature has gone below a threshold
+             */
+            if (temp < params.temp_stop) {
+                finished = true;
+            }
+        }
+
 
         /*
          * RANDOM_ASSIGNMENT is not really very random, but we stop after the
@@ -659,9 +643,6 @@ void annealer::anneal() {
          */
         tsteps++;
 
-        if (finished) {
-            done = true;
-        }
     } /* End of outer annealing loop */
 
     // Close out the stats gathering
@@ -1306,6 +1287,47 @@ void annealer::revert_to_solution(const solution &sol) {
      * keep annealing (eg. as we do when hillclimbing at the end), it's correct
      */
     setup_unassigned_nodes();
+}
+
+bool annealer::check_epsilon_condition(const tstep_state &tstate) const {
+    // We have a mininum number of timesteps, and *might* have a
+    // minimum temperature that we must reach before we will stop. Note
+    // that the temperature_guard clause is formulated to give the
+    // correct result even when temp goes to nan
+    /*
+     * ALLOW_NEGATIVE_DELTA controls whether we're willing to
+     * stop if the derivative gets small and negative, not just
+     * small and positive.
+     */
+    //         || (fabs((temp / initialavg) * (deltaavg/ deltatemp)) < epsilon))) {
+    // We have a minimum number of timesteps that we have to go through, to
+    // avoid exiting early on relatively simple problems
+    if (tstate.this_tstep < params.min_tsteps) {
+        return false;
+    }
+    // If the temperature guard is enabled, make sure to honor it (note that
+    // the temperature expression is a little funny to catch NaNs and the like
+    if ((params.temperature_guard >= 0.0) &&
+            (temp > params.temperature_guard)) {
+        return false;
+    }
+
+    if (params.allow_negative_delta) {
+        if (((temp < 0) || isnan(temp) ||
+               ((temp / initialavg) * (tstate.deltaavg/ tstate.deltatemp)) <
+               params.get_epsilon())) {
+            return true;
+        }
+    } else {
+        if ((tstate.deltaavg > 0) &&
+                ((temp / initialavg) * (tstate.deltaavg/ tstate.deltatemp) <
+                    params.get_epsilon())) {
+            return true;
+        }
+    }
+
+    // If neither of the conditions above matched, we're not done
+    return false;
 }
 
 /*

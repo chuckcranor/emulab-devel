@@ -253,6 +253,13 @@ public:
     bool revert_violations;
 
     /*
+     * Minimum number of timestemps to go through - this prevents us from
+     * bailing early on relatively easy problems.
+     * We also use this as the number of steps to smooth our averages
+     */
+    int min_tsteps;
+
+    /*
      * Defaults
      */
     annealing_parameters() :
@@ -284,7 +291,8 @@ public:
         random_assignment(false),
         really_random_assignment(false),
         revert_every_tstep(false),
-        revert_violations(true)
+        revert_violations(true),
+        min_tsteps(16)
     {;}
         
     /*
@@ -432,6 +440,11 @@ private:
      * so far)
      */
     void revert_to_solution(const solution &sol);
+
+    /*
+     * Check to see if the epsilon termination condition is met or not
+     */
+    bool check_epsilon_condition(const tstep_state &tstate) const;
 
     /*
      * Annealing-specific parameters
@@ -596,10 +609,10 @@ private:
     public:
         typedef std::vector<double> score_list;
 
-        tstep_state(annealer const *_parent) :
-            parent(_parent), iterations(0), accepts(0), 
-            increase_count(0), decrease_count(0), avg_increase(0.0),
-            avg_score(parent->prev_score) {             
+        tstep_state(annealer const *_parent, int _this_tstep) :
+            parent(_parent), this_tstep(_this_tstep),  iterations(0),
+            accepts(0), increase_count(0), decrease_count(0), avg_increase(0.0),
+            avg_score(parent->prev_score), deltatemp(0), deltaavg(0) {
                 if (parent->params.chill) { 
                     // If we're going to use the chill cooling schedule, 
                     // size this structure so that it can hold all the
@@ -608,6 +621,9 @@ private:
                     scores[0] = parent->prev_score;
                 }
             };
+
+        // Which tstep is this?
+        const int this_tstep;
 
         // Number of iterations so far in this timestep
         int iterations;
@@ -626,6 +642,11 @@ private:
 
         // Scores recorded during this timestep
         score_list scores;
+
+        // The change in temperature and average score over this
+        // timestep
+        double deltatemp;
+        double deltaavg;
 
     };
 
