@@ -330,21 +330,20 @@ bool populate_links (DOMElement *root, tb_vgraph &vg) {
 		XStr link_type(type_tag->getAttribute(XStr("type_name").x()));
         
         //XMLDEBUG ("type_name = " << link_type << endl);
-		if (emulated) 
-		{
-			if (!allow_trivial) 
-			{
-				src_vnode->total_bandwidth += link_bandwidth.i();
-				dst_vnode->total_bandwidth += link_bandwidth.i();
-			}
-		} 
-		else 
-		{
-			src_vnode->num_links++;
-			dst_vnode->num_links++;
-			src_vnode->link_counts[link_type.c()]++;
-			dst_vnode->link_counts[link_type.c()]++;
-		}
+                if (!allow_trivial) {
+                    if (emulated) 
+                    {
+                        src_vnode->total_bandwidth += link_bandwidth.i();
+                        dst_vnode->total_bandwidth += link_bandwidth.i();
+                    } 
+                    else 
+                    {
+                        src_vnode->num_links++;
+                        dst_vnode->num_links++;
+                        src_vnode->link_counts[link_type.c()]++;
+                        dst_vnode->link_counts[link_type.c()]++;
+                    }
+                }
 
 		//XMLDEBUG ("Got here" << endl);
         /*

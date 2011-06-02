@@ -666,17 +666,19 @@ bool populate_link (DOMElement* elt,
 
   }
   
-  if (emulated) {
-    if (!allow_trivial) {
-      src_vnode->total_bandwidth += bandwidth;
-      dst_vnode->total_bandwidth += bandwidth;
+  // We don't do bookkeeping for links that might be trivial, since we
+  // don't need to find nodes with matching plinks
+  if (!allow_trivial) {
+    if (emulated) {
+        src_vnode->total_bandwidth += bandwidth;
+        dst_vnode->total_bandwidth += bandwidth;
+    } 
+    else {
+      src_vnode->num_links++;
+      dst_vnode->num_links++;
+      src_vnode->link_counts[linkType.c_str()]++;
+      dst_vnode->link_counts[linkType.c_str()]++;
     }
-  } 
-  else {
-    src_vnode->num_links++;
-    dst_vnode->num_links++;
-    src_vnode->link_counts[linkType.c_str()]++;
-    dst_vnode->link_counts[linkType.c_str()]++;
   }
   
   vedge virt_edge = (add_edge(v_src_vertex,v_dst_vertex,vg)).first;
