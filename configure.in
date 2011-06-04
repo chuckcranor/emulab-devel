@@ -668,14 +668,18 @@ AC_ARG_ENABLE(debug,
 
 if test "$enable_debug" = "yes"; then
 	OPT_CFLAGS="-g -DDEBUG";
+        DEBUG_BUILD=2;
 else
 	if test "$enable_debug" = "no"; then
 		OPT_CFLAGS="-O2 -DNDEBUG -UDEBUG";
+                DEBUG_BUILD=0;
 	else
 		OPT_CFLAGS="-g -O";
+                DEBUG_BUILD=1;
 	fi
 fi
 AC_SUBST(OPT_CFLAGS)
+AC_SUBST(DEBUG_BUILD)
 
 #
 # Disable event system. Relies on Elvin. On by default.

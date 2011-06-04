@@ -23,9 +23,9 @@ OBJS=parse_top.o parse_ptop.o assign.o pclass.o vclass.o score.o \
      parser.o solution.o anneal.o featuredesire.o neighborhood.o fstring.o \
      config.o
 
-LIBS += -lm
-LDFLAGS += -pipe -O3
-CXXFLAGS += -pipe -I/usr/local/include -ftemplate-depth-40
+LIBS += -lm -lstdc++
+LDFLAGS += -pipe 
+CXXFLAGS += -pipe -I/usr/local/include -ftemplate-depth-40 -Wall
 
 ifeq ($(HAVE_XERCES),yes)
 CXXFLAGS += -DWITH_XML
@@ -41,11 +41,24 @@ ifeq ($(NEWER_BOOST),yes)
 CXXFLAGS += -DNEWER_BOOST
 endif
 
-# Pick either this
-CXXFLAGS += -O3
-# or this
-#CXXFLAGS += -O0 -g -Wall
-# and then zero or more of these
+# Compiler flags to use for debugging
+CXXFLAGS_debug   += -g -O0
+# Compiler flags to use for optimized (production) builds
+CXXFLAGS_opt += -O3
+
+# Debug settings from configure.in:
+ifeq ($(DEBUG_BUILD), 0)               # --disable-debug
+  CXXFLAGS += $(CXXFLAGS_opt)
+else ifeq ($(DEBUG_BUILD), 2)          # --enable-debug
+  CXXFLAGS += $(CXXFLAGS_debug)
+else ifeq ($(DEBUG_BUILD), 1)          # neither - we build optimized
+  CXXFLAGS += $(CXXFLAGS_opt)
+else
+  $(error expected a DEBUG_BUILD variable with value 0, 1, or 2)
+endif
+
+
+# For debugging. pick zero or more of these
 #CXXFLAGS += -DSCORE_DEBUG
 #CXXFLAGS += -DSCORE_DEBUG_MORE
 #CXXFLAGS += -DPCLASS_DEBUG

@@ -52,6 +52,7 @@ CFLAGS	       += @CFLAGS@
 CXXFLAGS       += @CXXFLAGS@
 LDFLAGS		= @LDFLAGS@
 OPT_CFLAGS	= @OPT_CFLAGS@
+DEBUG_BUILD     = @DEBUG_BUILD@
 
 INSTALL_TOPDIR	= @exec_prefix@
 INSTALL_DIR     = @exec_prefix@
