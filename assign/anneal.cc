@@ -450,11 +450,12 @@ void annealer::anneal() {
                 }
             } else { // !acceptrans
                 stats.solution_rejected(is_valid);
+                remove_node(vv);
                 // Reject change, go back to the state we were in before
                 if (oldassigned) {
-                    remove_node(vv);
                     add_node(vv,oldpos,false,false,false);
                 } else {
+                    assert(!get(vvertex_pmap,vv)->assigned);
                     unassigned_nodes.push_front(vv);
                 }
             }
@@ -958,22 +959,25 @@ vvertex annealer::pick_assigned_vnode() {
      * skip fixed nodes. We should have skipped out early if all nodes were
      * fixed.
      * TODO: This biases towards selecting non-fixed nodes that come after
-     * long sets of fixed nodes
+     * long sets of fixed nodes, and assigned nodes that come after sets
+     * of unassigned nodes
      */
     int start = RANDOM()%vnode_count;
     int choice = start;
-    while (get(vvertex_pmap,virtual_nodes[choice])->fixed) {
+    tb_vnode *vn = get(vvertex_pmap,virtual_nodes[choice]);
+    while (vn->fixed || !vn->assigned) {
         choice = (choice +1) % vnode_count;
         if (choice == start) {
-             choice = -1;
-             break;
-         }
+            choice = -1;
+            break;
+        }
+        vn = get(vvertex_pmap,virtual_nodes[choice]);
     }
     
     if (choice >= 0) {
         return(virtual_nodes[choice]);
      } else {
-        cout << "**** Error, unable to find any non-fixed nodes" << endl;
+         cout << "**** Error, unable to find any non-fixed nodes" << endl;
          exit(EXIT_UNRETRYABLE);
      }
 }
