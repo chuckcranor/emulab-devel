@@ -42,9 +42,9 @@ class violated_info {
 	{ }
 	
 	int count_violations() const {
-	    return unassigned + pnode_load + no_connection + link_users + bandwidth
-		+ desires + vclass + delay + incorrect_endpoints + trivial_mix 
-		+ subnodes + max_types;
+            return unassigned + pnode_load + no_connection + link_users +
+                bandwidth + desires + vclass + delay + incorrect_endpoints +
+                trivial_mix + subnodes + max_types;
 	}
 
 	int unassigned;
@@ -76,7 +76,8 @@ typedef vector<tb_link_info> resolution_vector;
  */
 void init_score();
 void remove_node(vvertex vv);
-int add_node(vvertex vv,pvertex pv,bool deterministic, bool is_fixed, bool skip_links = false);
+int add_node(vvertex vv, pvertex pv, bool deterministic,
+        bool is_fixed, bool skip_links = false);
 double get_score();
 pvertex make_lan_node(vvertex vv);
 void delete_lan_node(pvertex pv);
@@ -87,15 +88,15 @@ void delete_lan_node(pvertex pv);
 void score_link_info(vedge ve, tb_pnode *src_pnode, tb_pnode *dst_pnode,
 	tb_vnode *src_vnode, tb_vnode *dst_vnode);
 void unscore_link_info(vedge ve, tb_pnode *src_pnode, tb_pnode *dst_pnode,
-	tb_vnode *src_vnode, tb_vnode *dst_vnode);
+        tb_vnode *src_vnode, tb_vnode *dst_vnode);
 float find_link_resolutions(resolution_vector &resolutions, pvertex pv,
-    pvertex dest_pv, tb_vlink *vlink, tb_pnode *pnode, tb_pnode *dest_pnode,
-    bool flipped);
+        pvertex dest_pv, tb_vlink *vlink, tb_pnode *pnode,
+        tb_pnode *dest_pnode, bool flipped);
 void resolve_link(vvertex vv, pvertex pv, tb_vnode *vnode, tb_pnode *pnode,
-    bool deterministic, hash_set<const tb_vlink*, 
-    hashptr<const tb_vlink*> > &seen_loopback_links, vedge edge);
+        bool deterministic, hash_set<const tb_vlink*, 
+        hashptr<const tb_vlink*> > &seen_loopback_links, vedge edge);
 void resolve_links(vvertex vv, pvertex pv, tb_vnode *vnode, tb_pnode *pnode,
-    bool deterministic);
+        bool deterministic);
 void mark_vlink_unassigned(tb_vlink *vlink);
 void mark_vlink_assigned(tb_vlink *vlink);
 
