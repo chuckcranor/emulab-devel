@@ -630,6 +630,10 @@ bool populate_links(DOMElement *root, tb_pgraph &pg, tb_sgraph &sg,
         phys_link->never_multiplex = true;
     }
 
+    // Keep track of the total bandwidth that the nodes can handle
+    dst_pnode->total_bandwidth += bandwidth;
+    src_pnode->total_bandwidth += bandwidth;
+
     /*
      * Handle properties that are specific to interswitch link
      */
@@ -645,16 +649,12 @@ bool populate_links(DOMElement *root, tb_pgraph &pg, tb_sgraph &sg,
     
     else if (ISSWITCH(src_pnode) && ! ISSWITCH(dst_pnode)) {
       dst_pnode->switches.insert(src_vertex);
-      dst_pnode->total_bandwidth += bandwidth;
     }
     
     else if (ISSWITCH(dst_pnode) && ! ISSWITCH(src_pnode)) {
 	src_pnode->switches.insert(dst_vertex);
-	src_pnode->total_bandwidth += bandwidth;
     } else {
         // Neither is a switch - a direct node->node link
-      dst_pnode->total_bandwidth += bandwidth;
-      src_pnode->total_bandwidth += bandwidth;
     }
     
   }

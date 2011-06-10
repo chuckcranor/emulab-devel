@@ -309,19 +309,20 @@ int parse_ptop(tb_pgraph &pg, tb_sgraph &sg, istream& input)
 	  srcnode->link_counts[extra_link_type]++;
 	  dstnode->link_counts[extra_link_type]++;
 	}
+        
+        // Keep track of the total bandwidth that the nodes can handle
+        dstnode->total_bandwidth += ibw;
+        srcnode->total_bandwidth += ibw;
+
 	if (ISSWITCH(srcnode) &&
 	    ! ISSWITCH(dstnode)) {
 	  dstnode->switches.insert(srcv);
-	  dstnode->total_bandwidth += ibw;
 	}
 	else if (ISSWITCH(dstnode) &&
 		 ! ISSWITCH(srcnode)) {
 	  srcnode->switches.insert(dstv);
-	  srcnode->total_bandwidth += ibw;
 	} else {
           // Neither is a switch - a direct node->node link
-          dstnode->total_bandwidth += ibw;
-          srcnode->total_bandwidth += ibw;
         }
       }
     } else if (command == "set-type-limit") {
