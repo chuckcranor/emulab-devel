@@ -435,7 +435,7 @@ void print_help() {
   cout << "  -l <time>   - Limit runtime." << endl;
   cout << "  -s <seed>   - Set the seed." << endl;
 #ifdef GRAPHVIZ_SUPPORT
-  cout << "  -v <viz>    - Produce graphviz files with given prefix." <<
+  cout << "  -R <viz>    - Produce graphviz files with given prefix." <<
     endl;
 #endif
   cout << "  -r          - Don't allow trivial links." << endl;
@@ -471,6 +471,7 @@ void print_help() {
   cout << "  -A          - Use absolute, rather than local, derivative, for termination" << endl;
   cout << "  -Q          - Quiet: don't print solution (useful for debugging)" << endl;
   cout << "  -V          - Turn off special treatment for violations" << endl;
+  cout << "  -v          - Be a little more verbose" << endl;
   cout << "  cparams     - You probably don't want to touch these!" << endl;
   cout << "                If you must, see config.h in the source for a list"
        << endl;
@@ -870,9 +871,9 @@ int main(int argc,char **argv) {
 	char* ptopFileFormat;
 	char* vtopFileFormat;
 	const char* delims = "/";
-	const char* flags = "s:v:l:t:rpPTdH:oguc:nx:y:W:FDSf:G:Ca:EAQV";
+	const char* flags = "s:v:l:t:rpPTdH:oguc:nx:y:W:FDSf:G:Ca:EAQVR";
 #else
-	const char* flags = "s:v:l:t:rpPTdH:oguc:nx:y:FDSG:Ca:EAQV";
+	const char* flags = "s:v:l:t:rpPTdH:oguc:nx:y:FDSG:Ca:EAQVR";
 #endif	
 	
   while ((ch = getopt(argc,argv,flags)) != -1) {
@@ -883,7 +884,7 @@ int main(int argc,char **argv) {
       }
       break;
 #ifdef GRAPHVIZ_SUPPORT
-    case 'v':
+    case 'R':
       viz_prefix = optarg;
       break;
 #endif
@@ -953,6 +954,9 @@ int main(int argc,char **argv) {
       annealing_params.local_derivative = false;
     case 'V':
       annealing_params.special_violation_treatment = false;
+      break;
+    case 'v':
+      annealing_params.verbose = true;
       break;
     case 'x':
 #ifdef WITH_XML
