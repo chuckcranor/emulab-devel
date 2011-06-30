@@ -1419,6 +1419,8 @@ double annealer::statistics::update_smoothed_average(const tstep_state &tstate) 
     } else {
         hstart = (hstart +1) % parent->params.min_tsteps;
     }
+
+    return smoothedavg;
 }
 
 void annealer::statistics::dump_stats(ostream &o, int total_iterations) const {
