@@ -484,6 +484,17 @@ void annealer::anneal() {
                 break;
             }
 
+            /*
+             * Sometimes, we don't care about finding a really good solution,
+             * we just want to return when we find the first valid one
+             */
+            if (is_valid && params.return_first_valid_solution) {
+                cout << "  Found a valid solution, finishing" << endl;
+                finished = true;
+                forcerevert = false;
+                break;
+            }
+
         } /* End of inner annealing loop */
 
         /*
@@ -573,21 +584,13 @@ void annealer::anneal() {
             }
         }
 
-
-        /*
-         * RANDOM_ASSIGNMENT is not really very random, but we stop after the
-         * first valid solution we get
-         */
-        if (params.random_assignment && (violated == 0)) {
-            finished = true;
-        }
-
         /*
          * REALLY_RANDOM_ASSIGNMENT stops after we've assigned all nodes,
          * whether or not our solution is valid
          */
         if (params.really_random_assignment && (unassigned_nodes.size() == 0)) {
             finished = true;
+            forcerevert = false;
         }
 
         /*

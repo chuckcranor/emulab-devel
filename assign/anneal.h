@@ -228,14 +228,13 @@ public:
     bool allow_negative_delta;
 
     /*
-     * If set, we stop when we first get a valid solution - not really random,
-     * but it's an approximation
+     * If set, we stop when we first get a valid solution
      */
-    bool random_assignment;
+    bool return_first_valid_solution;
 
     /*
      * If set, we stop when all nodes are assigned, whether or not the solution
-     * is valid. This is a better approximation of random, but still not
+     * is valid. This is an okay approximation of random, but still not
      * perfect
      */
     bool really_random_assignment;
@@ -288,7 +287,7 @@ public:
         special_violation_treatment(true),
         no_violations(false),
         allow_negative_delta(true),
-        random_assignment(false),
+        return_first_valid_solution(false),
         really_random_assignment(false),
         revert_every_tstep(false),
         revert_violations(true),

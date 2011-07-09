@@ -871,9 +871,9 @@ int main(int argc,char **argv) {
 	char* ptopFileFormat;
 	char* vtopFileFormat;
 	const char* delims = "/";
-	const char* flags = "s:vl:t:rpPTdH:oguc:nx:y:W:FDSf:G:Ca:EAQVR";
+	const char* flags = "s:vl:t:rpPTdH:oguc:nx:y:W:FDSf:G:Ca:EAQVRi";
 #else
-	const char* flags = "s:vl:t:rpPTdH:oguc:nx:y:FDSG:Ca:EAQVR";
+	const char* flags = "s:vl:t:rpPTdH:oguc:nx:y:FDSG:Ca:EAQVRi";
 #endif	
 	
   while ((ch = getopt(argc,argv,flags)) != -1) {
@@ -957,6 +957,9 @@ int main(int argc,char **argv) {
       break;
     case 'v':
       annealing_params.verbose = true;
+      break;
+    case 'i':
+      annealing_params.return_first_valid_solution = true;
       break;
     case 'x':
 #ifdef WITH_XML
