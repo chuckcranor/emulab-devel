@@ -871,9 +871,9 @@ int main(int argc,char **argv) {
 	char* ptopFileFormat;
 	char* vtopFileFormat;
 	const char* delims = "/";
-	const char* flags = "s:v:l:t:rpPTdH:oguc:nx:y:W:FDSf:G:Ca:EAQVR";
+	const char* flags = "s:vl:t:rpPTdH:oguc:nx:y:W:FDSf:G:Ca:EAQVR";
 #else
-	const char* flags = "s:v:l:t:rpPTdH:oguc:nx:y:FDSG:Ca:EAQVR";
+	const char* flags = "s:vl:t:rpPTdH:oguc:nx:y:FDSG:Ca:EAQVR";
 #endif	
 	
   while ((ch = getopt(argc,argv,flags)) != -1) {
