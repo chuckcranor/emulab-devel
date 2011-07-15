@@ -521,13 +521,8 @@ void annotate_rspec::cleanup()
 	}
 }
 
-bool annotate_rspec::is_generated_element(const char* tag, 
-										  const char* attr_name, 
-										  const char* attr_value)
+bool annotate_rspec::is_generated_element(const DOMElement* element)
 {
-	DOMElement* element 
-			= getElementByAttributeValue(this->virtual_root, tag, 
-										 attr_name, attr_value);
 	if (element == NULL)
 		return false;
 	return (element->hasAttribute(XStr("generated_by_assign").x()));

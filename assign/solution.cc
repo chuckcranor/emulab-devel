@@ -86,8 +86,7 @@ void print_solution(const solution &s) {
 	string assigned_to =XStr(get(pvertex_pmap,s.get_assignment(*vit))->name).c();
 	if (both_inputs_rspec) {
 	  rspec_annotater->annotate_element(node_name.c_str(), assigned_to.c_str());
-	  if (rspec_annotater->is_generated_element("node", "virtual_id",
-                                              node_name.c_str())) {
+	  if (rspec_annotater->is_generated_element(vn->elt)) {
 	    continue;
     }
 	}
@@ -112,8 +111,7 @@ void print_solution(const solution &s) {
 
 #ifdef WITH_XML
 	if (both_inputs_rspec) {
-	  is_generated = rspec_annotater->is_generated_element 
-	    ("link", "virtual_id", (vlink->name).c_str());
+	  is_generated = rspec_annotater->is_generated_element(vlink->elt);
 	  if (!is_generated)
 	    cout << vlink->name;
 	}

@@ -99,11 +99,8 @@ class annotate_rspec_v2 : public annotate_rspec
   // Removes all extra tags and generated elements from the XML document
   void cleanup ();
   
-  // Checks whether an element of type tag 
-  // with attr_name = attr_value is a generated element
-  bool is_generated_element (const char* tag, 
-			     const char* attr_name, 
-			     const char* attr_value);
+  // Checks whether an element was internally generated in assign
+  bool is_generated_element (const xercesc::DOMElement *element);
 
   // Given an interface Id, returns the node on which the interface is present
   std::string lookupIface (std::map<std::string, std::string>* map,

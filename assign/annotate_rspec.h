@@ -101,11 +101,9 @@ class annotate_rspec : public annotate
   // Removes all extra tags and generated elements from the XML document
   virtual void cleanup ();
   
-  // Checks whether an element of type tag 
+  // Checks whether an element was generated internally in assign
   // with attr_name = attr_value is a generated element
-  virtual bool is_generated_element (const char* tag, 
-				     const char* attr_name, 
-				     const char* attr_value);
+  virtual bool is_generated_element (const xercesc::DOMElement* element);
 };
 
 #endif //for __ANNOTATE_RSPEC_H

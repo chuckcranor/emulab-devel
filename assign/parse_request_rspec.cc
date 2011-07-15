@@ -329,6 +329,8 @@ bool populate_node(DOMElement* elt,
              << "Defaulting to " << typeName.c_str() << endl);
   }
   v = new tb_vnode(virtualId.c_str(), typeName.c_str(), typeSlots);
+
+  v->elt = elt;
   
   // Construct the vertex
   if (disallow_trivial_mix) {
@@ -694,6 +696,8 @@ bool populate_link (DOMElement* elt,
   vedge virt_edge = (add_edge(v_src_vertex,v_dst_vertex,vg)).first;
   
   tb_vlink *virt_link = new tb_vlink();
+
+  virt_link->elt = elt;
   
   virt_link->name = virtualId;
   virt_link->type = fstring(linkType.c_str());

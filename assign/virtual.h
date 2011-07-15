@@ -9,6 +9,12 @@
 
 #include "port.h"
 
+#ifdef WITH_XML
+#include <xercesc/dom/DOMElement.hpp>
+XERCES_CPP_NAMESPACE_USE
+#endif
+
+
 /*
  * We have to do these includes differently depending on which version of gcc
  * we're compiling with
@@ -108,6 +114,9 @@ public:
         disallow_trivial_mix(false), nontrivial_links(0), trivial_links(0),
         subnode_of(NULL), subnode_of_name(""), subnodes(),
         link_counts()
+#ifdef WITH_XML
+        , elt(NULL)
+#endif
     {
 	;
     }
@@ -159,11 +168,21 @@ public:
   typedef hash_map<fstring,int> link_counts_map;
   link_counts_map link_counts;
 
+#ifdef WITH_XML
+  // If using XML, this is the element in the DOM tree that this
+  // vnode is matched to
+ DOMElement *elt;
+#endif
+
 };
 
 class tb_vlink {
 public:
-  tb_vlink() {;}
+  tb_vlink()
+#ifdef WITH_XML
+      : elt(NULL)
+#endif
+  {;}
 
   friend ostream &operator<<(ostream &o, const tb_vlink& link)
   {
@@ -191,6 +210,12 @@ public:
   bool allow_delayed;		// can this vlink by a delayed link
   bool allow_trivial;           // can this vlink be a trivial link?
   vvertex src, dst;		// Source and destination for this link
+
+#ifdef WITH_XML
+  // If using XML, this is the element in the DOM tree that this
+  // link is matched to
+  DOMElement *elt;
+#endif
 };
 
 extern tb_vgraph_vertex_pmap vvertex_pmap;

@@ -206,6 +206,8 @@ bool populate_nodes (DOMElement *root, tb_vgraph &vg) {
 		else
 			v = new tb_vnode(node_name.c(), str_node_type_name, node_type_slots);
 		
+		v->elt = elt;
+
 		// Construct the vertex
 		v -> disallow_trivial_mix = is_disallow_trivial_mix;
 		if (subnode_of_name != NULL)
@@ -349,6 +351,8 @@ bool populate_links (DOMElement *root, tb_vgraph &vg) {
 		vedge virt_edge = (add_edge(src_vertex,dst_vertex,vg)).first;
         
 		tb_vlink *virt_link = new tb_vlink();
+
+		virt_link->elt = elt;
         
 		virt_link-> name = link_name.f();
 		virt_link-> type = link_type.f();
