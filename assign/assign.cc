@@ -472,6 +472,7 @@ void print_help() {
   cout << "  -Q          - Quiet: don't print solution (useful for debugging)" << endl;
   cout << "  -V          - Turn off special treatment for violations" << endl;
   cout << "  -v          - Be a little more verbose" << endl;
+  cout << "  -i          - Exit as soon as the first valid solution is found" << endl;
   cout << "  cparams     - You probably don't want to touch these!" << endl;
   cout << "                If you must, see config.h in the source for a list"
        << endl;
