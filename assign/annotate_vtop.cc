@@ -41,11 +41,11 @@ annotate_vtop :: annotate_vtop ()
 }
 
 // This will get called when a node or a direct link needs to be annotated
-void annotate_vtop::annotate_element (DOMElement *element, const char* p_name)
+void annotate_vtop::annotate_element (DOMElement *v_element, DOMElement *p_element)
 {
 	DOMElement* vnode = NULL;
-        if (XMLString::equals(element->getTagName(),XStr("node").x())) {
-            vnode = element;
+        if (XMLString::equals(v_element->getTagName(),XStr("node").x())) {
+            vnode = v_element;
         }
 
 	// If a vnode by that name was found, then go ahead. If not, that element should be a link
@@ -53,12 +53,12 @@ void annotate_vtop::annotate_element (DOMElement *element, const char* p_name)
 	// because direct links are never really going to happen
 	if (vnode != NULL)
 	{
-		vnode->setAttribute(XStr("assigned_to").x(), XStr(p_name).x());
+		vnode->setAttribute(XStr("assigned_to").x(), p_element->getAttribute(XStr("node_name").x()));
 	}
 	else
 	{
-		DOMElement* vlink = element;
-		DOMElement* plink = (this->physical_elements->find(p_name))->second;
+		DOMElement* vlink = v_element;
+		DOMElement* plink = p_element;
 		
 		annotate_interface(plink, vlink, "source_interface");
 		annotate_interface(plink, vlink, "destination_interface");
@@ -68,14 +68,12 @@ void annotate_vtop::annotate_element (DOMElement *element, const char* p_name)
 }
 
 // This is called when an intraswitch or interswitch link has to be annotated
-void annotate_vtop::annotate_element (DOMElement *vlink, list<string>* links)
+void annotate_vtop::annotate_element (DOMElement *vlink, list<DOMElement*>* links)
 {
 	// These are the paths from the source to the first switch
 	// and from the last switch to the destination
-	const string psrc_name = links->front();
-	const string pdst_name = links->back();
-	DOMElement* p_src_switch_link = (this->physical_elements->find(psrc_name))->second;
-	DOMElement* p_switch_dst_link = (this->physical_elements->find(pdst_name))->second;
+	DOMElement* p_src_switch_link = links->front();
+	DOMElement* p_switch_dst_link = links->back();
 	
 	// Remove these links from the list
 	// If it is an intra-switch link, the list should now be empty.
@@ -186,13 +184,13 @@ void annotate_vtop::set_interface_as_link_endpoint (DOMElement* interface, const
 // Finds the next link in the path returned by assign
 // Assign sometimes reverses the links on the path from the source to the destination, 
 // so you need to look at the entire path to find the next link
-DOMElement* annotate_vtop::find_next_link_in_path (DOMElement *prev, list<string>* links)
+DOMElement* annotate_vtop::find_next_link_in_path (DOMElement *prev, list<DOMElement*>* links)
 {
-	list<string>::iterator it;
+	list<DOMElement*>::iterator it;
 	DOMElement* link = NULL;
 	for (it = links->begin(); it != links->end(); ++it)
 	{
-		link = (this->physical_elements->find(*it))->second;
+		link = *it;
 		XStr link_src(getElementByTagName(link, "source_interface")->getAttribute(XStr("node_name").x()));
 		XStr link_dst(getElementByTagName(link, "destination_interface")->getAttribute(XStr("node_name").x()));
 		XStr prev_dst(getElementByTagName(prev, "destination_interface")->getAttribute(XStr("node_name").x()));

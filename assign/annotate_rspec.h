@@ -38,11 +38,11 @@ class annotate_rspec : public annotate
   ~annotate_rspec () { ; }
   
   // Annotates nodes and direct links in the rspec
-  virtual void annotate_element(DOMElement *element, const char* p_name);
+  virtual void annotate_element(DOMElement *v_element, DOMElement *p_element);
   
   // Annotates intraswitch and interswitch links in the rspec
   virtual void annotate_element(DOMElement *vlink, 
-				std::list<std::string>* links);
+				std::list<DOMElement*>* links);
   
   // Annotate a trivial link
   virtual void annotate_element(DOMElement* link);
@@ -85,7 +85,7 @@ class annotate_rspec : public annotate
   // Finds the next link in the path returned by assign
   virtual xercesc::DOMElement* find_next_link_in_path 
     (xercesc::DOMElement *prev, 
-     std::list<std::string>* links);
+     std::list<DOMElement*>* links);
   
   // Copies the component spec from the source to the destination
   virtual void copy_component_spec(const xercesc::DOMElement* src, 

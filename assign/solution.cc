@@ -83,15 +83,15 @@ void print_solution(const solution &s) {
       } else {
 #ifdef WITH_XML
 	string node_name = XStr(vn -> name).c();
-	string assigned_to =XStr(get(pvertex_pmap,s.get_assignment(*vit))->name).c();
+	tb_pnode *assigned_to = get(pvertex_pmap,s.get_assignment(*vit));
 	if (both_inputs_rspec) {
-	  rspec_annotater->annotate_element(vn->elt, assigned_to.c_str());
+	  rspec_annotater->annotate_element(vn->elt, assigned_to->elt);
 	  if (rspec_annotater->is_generated_element(vn->elt)) {
 	    continue;
     }
 	}
 	else if (both_inputs_xml) {
-	  vtop_annotater->annotate_element(vn->elt, assigned_to.c_str());
+	  vtop_annotater->annotate_element(vn->elt, assigned_to->elt);
 	}
 #endif
 	cout << vn->name << " " 
@@ -117,11 +117,12 @@ void print_solution(const solution &s) {
 	}
 	else
 	  cout << vlink->name;
+
+	list<DOMElement*> links;
 #else
 	cout << vlink->name;
 #endif
 		
-	list<string> links;
 
 	if (vlink->link_info.type_used == tb_link_info::LINK_DIRECT) {
 	    // Direct link - just need the source and destination
@@ -133,7 +134,7 @@ void print_solution(const solution &s) {
 #ifdef WITH_XML
 	    if (both_inputs_rspec) {
 	      rspec_annotater->annotate_element(vlink->elt, 
-                                          (p->name).c_str());
+                                          p->elt);
 	      if (is_generated)
 		continue;
 	    }
@@ -150,8 +151,8 @@ void print_solution(const solution &s) {
 	    tb_plink *p = get(pedge_pmap,vlink->link_info.plinks.front());
 	    tb_plink *p2 = get(pedge_pmap,vlink->link_info.plinks.back());
 #ifdef WITH_XML
-	    links.push_back((p->name).c_str());  // p->name is an fstring.
-	    links.push_back((p2->name).c_str());
+	    links.push_back(p->elt); 
+	    links.push_back(p->elt);
 	    if (both_inputs_rspec) {
 	      rspec_annotater->annotate_element(vlink->elt, &links);
 	      if (is_generated)
@@ -173,7 +174,7 @@ void print_solution(const solution &s) {
 	       ++it) {
 	    tb_plink *p = get(pedge_pmap,*it);
 #ifdef WITH_XML
-	    links.push_back((p->name).c_str());  // p->name is an fstring.
+	    links.push_back(p->elt);
 	    if (!is_generated)
 	      cout << " " << p->name 
 		   << " (" << p->srcmac << "," << p->dstmac << ")";

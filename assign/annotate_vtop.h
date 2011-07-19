@@ -35,10 +35,10 @@ class annotate_vtop : public annotate
 		~annotate_vtop () { ; }
 		
 		// Annotates nodes and direct links in the rspec
-		void annotate_element(DOMElement *element, const char* p_name);
+		void annotate_element(DOMElement *v_element, DOMElement *p_element);
 	
 		// Annotates intraswitch and interswitch links in the rspec
-		void annotate_element(DOMElement *vlink, std::list<std::string>* links);
+		void annotate_element(DOMElement *vlink, std::list<DOMElement*>* links);
 	
 		// Annotates an interface element on a link
 		void annotate_interface (const xercesc::DOMElement* plink, xercesc::DOMElement* vlink, const char* interface_type);
@@ -50,7 +50,7 @@ class annotate_vtop : public annotate
 		void set_interface_as_link_endpoint (xercesc::DOMElement* interface, const xercesc::DOMElement* vlink_interface);
 	
 		// Finds the next link in the path returned by assign
-		xercesc::DOMElement* find_next_link_in_path (xercesc::DOMElement *prev, std::list<std::string>* links);
+		xercesc::DOMElement* find_next_link_in_path (xercesc::DOMElement *prev, std::list<DOMElement*>* links);
 		
 		// Sets the attributes of an interface element in the component hop using the corresponding physical interface
 		void set_component_hop_interface (xercesc::DOMElement* hop_interface, const xercesc::DOMElement* physical_interface);

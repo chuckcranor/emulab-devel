@@ -60,7 +60,7 @@ extern name_vclass_map vclass_map;
 // because it takes far too long for it to search the XML DOM tree.
 map<string,DOMElement*>* advertisement_elements= new map<string,DOMElement*>();
 
-map<string, string>* pIfacesMap = new map<string, string>();
+map<string, DOMElement*>* pIfacesMap = new map<string, DOMElement*>();
 map<string, string> shortNodeNames;
 
 DOMElement* advt_root = NULL;
@@ -268,6 +268,8 @@ bool populate_nodes(DOMElement *root,
      * XXX: This shouldn't be "manual"
      */
     pname2vertex[componentId.c_str()] = pv;
+
+    p->elt = elt;
     
     int typeCount;
     vector<struct node_type>types = rspecParser->readNodeTypes(elt, typeCount);
@@ -515,9 +517,6 @@ bool populate_links(DOMElement *root, tb_pgraph &pg, tb_sgraph &sg,
       continue;
     }
 
-    pIfacesMap->insert(pair<string, string>(src_iface, src_node));
-    pIfacesMap->insert(pair<string, string>(dst_iface, dst_node));
-
     if( unavailable.count( src_node ) || 
 	unavailable.count( dst_node ) )
       //one or both of the endpoints are unavailable; silently
@@ -553,6 +552,9 @@ bool populate_links(DOMElement *root, tb_pgraph &pg, tb_sgraph &sg,
     pvertex dst_vertex = pname2vertex[dst_node.c_str()];
     tb_pnode *src_pnode = get(pvertex_pmap,src_vertex);
     tb_pnode *dst_pnode = get(pvertex_pmap,dst_vertex);
+
+    pIfacesMap->insert(pair<string, DOMElement*>(src_iface, src_pnode->elt));
+    pIfacesMap->insert(pair<string, DOMElement*>(dst_iface, dst_pnode->elt));
     
     /*
      * Start getting link types - we know there is at least one, and we
@@ -590,6 +592,7 @@ bool populate_links(DOMElement *root, tb_pgraph &pg, tb_sgraph &sg,
     phys_link->delay_info.bandwidth = bandwidth;
     phys_link->delay_info.delay = latency;
     phys_link->delay_info.loss = packetLoss;
+    phys_link->elt = elt;
 
     // XXX: Should not be manual
     put(pedge_pmap, phys_edge, phys_link);

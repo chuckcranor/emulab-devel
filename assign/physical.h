@@ -38,6 +38,11 @@ using namespace __gnu_cxx;
 #include <hash_map>
 #endif
 
+#ifdef WITH_XML
+#include <xercesc/dom/DOMElement.hpp>
+XERCES_CPP_NAMESPACE_USE
+#endif
+
 // Icky, but I can't include virtual.h here
 class tb_vnode;
 typedef hash_set<tb_vnode*,hashptr<tb_vnode*> > tb_vnode_set;
@@ -172,7 +177,11 @@ public:
 			  my_class(NULL), my_own_class(NULL), assigned_nodes(),
 			  trivial_bw(0), trivial_bw_used(0), subnode_of(NULL),
 			  subnode_of_name(""), has_subnode(false),
-			  unique(false), is_switch(false), forwarding() { canary = 'c';}
+			  unique(false), is_switch(false), forwarding()
+#ifdef WITH_XML
+                          , elt(NULL)
+#endif
+    { canary = 'c';}
 
   class type_record {
       public:
@@ -290,6 +299,11 @@ public:
     
   link_type_count_map link_counts; // Counts how many links of each type this
   				   // node has 
+
+#ifdef WITH_XML
+  // Matching node in the DOM
+  DOMElement *elt;
+#endif
 	
   bool set_current_type(fstring type) {
       if (types.find(type) == types.end()) {
@@ -376,7 +390,11 @@ public:
 			srciface(_srciface), dstiface(_dstiface),
       delay_info(), bw_used(0), emulated(0), nonemulated(0),
       penalty(0.0), fixends(false), current_endpoints(), current_count(0),
-      vedge_counts(), never_multiplex(false) {
+      vedge_counts(), never_multiplex(false)
+#ifdef WITH_XML
+      , elt(NULL)
+#endif
+      {
 	  		types.insert(_type);
       }
 
@@ -408,6 +426,10 @@ public:
                                 // PLINK_INTERSWITCH links, and only when
                                 // searching all switches)
                                 // TODO: Need to make a violation for this
+
+#ifdef WITH_XML
+  DOMElement *elt;              // Matching element in DOM
+#endif
 
   bool has_type(fstring type) const {	// Returns true if the given type is one
 				        // of the types supported by this link

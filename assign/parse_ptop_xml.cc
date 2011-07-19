@@ -179,6 +179,8 @@ bool populate_nodes(DOMElement *root, tb_pgraph &pg, tb_sgraph &sg) {
 		tb_pnode *p = new tb_pnode(name.f());
 		// XXX: Global
 		put(pvertex_pmap,pv,p);
+
+		p->elt = elt;
 		
 		/*
 		* Add on types
@@ -411,6 +413,7 @@ bool populate_links(DOMElement *root, tb_pgraph &pg, tb_sgraph &sg) {
         phys_link->delay_info.bandwidth = bandwidth.i();
         phys_link->delay_info.delay = latency.i();
         phys_link->delay_info.loss = packet_loss.d();
+        phys_link->elt = elt;
 	
         // XXX: Should not be manual
         put(pedge_pmap, phys_edge, phys_link);

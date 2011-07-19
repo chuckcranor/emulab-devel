@@ -73,19 +73,19 @@ void annotate_rspec::annotate_element (DOMElement *vlink)
 }
 
 // This will get called when a node or a direct link needs to be annotated
-void annotate_rspec::annotate_element (DOMElement *element, const char* p_name)
+void annotate_rspec::annotate_element (DOMElement *v_element, DOMElement *p_element)
 {
   // If the element is not a node, it should be a link
-  if (XMLString::equals(element->getTagName(),XStr("node").x())) {
-    DOMElement *vnode = element;
+  if (XMLString::equals(v_element->getTagName(),XStr("node").x())) {
+    DOMElement *vnode = v_element;
     if (!vnode->hasAttribute(XStr("generated_by_assign").x())) {
-      DOMElement* pnode = (this->physical_elements->find(p_name))->second;
+      DOMElement* pnode = p_element;
       copy_component_spec(pnode, vnode);
     }
   }
   else {
-    DOMElement* vlink = element;
-    DOMElement* plink = (this->physical_elements->find(p_name))->second;
+    DOMElement* vlink = v_element;
+    DOMElement* plink = p_element;
     
     // If plink is NULL, then it must be a trivial link
     if (plink == NULL) {
@@ -116,16 +116,12 @@ void annotate_rspec::annotate_element (DOMElement *element, const char* p_name)
 
 // This is called when an intraswitch or interswitch link has to be annotated
 void annotate_rspec::annotate_element (DOMElement *vlink, 
-				       list<string>* links)
+				       list<DOMElement*>* links)
 {
   // These are the paths from the source to the first switch
   // and from the last switch to the destination
-  const string psrc_name = links->front();
-  const string pdst_name = links->back();
-  DOMElement* p_src_switch_link 
-    = (this->physical_elements->find(psrc_name))->second;
-  DOMElement* p_switch_dst_link 
-    = (this->physical_elements->find(pdst_name))->second;
+  DOMElement* p_src_switch_link = links->front();
+  DOMElement* p_switch_dst_link = links->back();
   
   // Remove these links from the list
   // If it is an intra-switch link, the list should now be empty.
@@ -451,13 +447,13 @@ annotate_rspec::set_interface_as_link_endpoint (DOMElement* interface,
 // from the source to destination, 
 // so you need to look at the entire path to find the next link
 DOMElement* annotate_rspec::find_next_link_in_path (DOMElement *prev, 
-                                                    list<string>* links)
+                                                    list<DOMElement*>* links)
 {
-	list<string>::iterator it;
+	list<DOMElement*>::iterator it;
 	DOMElement* link = NULL;
 	for (it = links->begin(); it != links->end(); ++it)
 	{
-		link = (this->physical_elements->find(*it))->second;
+		link = *it;
     
 		string link_src = XStr(find_urn(getNthInterface(link,0),
                                     "component_node")).c();

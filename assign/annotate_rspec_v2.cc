@@ -31,8 +31,8 @@ extern DOMElement* advt_root;
 
 extern map<string, DOMElement*>* advertisement_elements;
 
-extern map<string,string>* pIfacesMap;
-extern map<string,string>* vIfacesMap;
+extern map<string,DOMElement*>* pIfacesMap;
+extern map<string,DOMElement*>* vIfacesMap;
 				 
 XERCES_CPP_NAMESPACE_USE
 using namespace std;
@@ -92,15 +92,15 @@ void annotate_rspec_v2::annotate_element (DOMElement *vlink)
 
 // This will get called when a node or a direct link needs to be annotated
 void 
-annotate_rspec_v2::annotate_element (DOMElement *element, const char* p_name)
+annotate_rspec_v2::annotate_element (DOMElement *v_element, DOMElement *p_element)
 {
   // If the element is not a node, it should be a link
-  if (XMLString::equals(element->getTagName(),XStr("node").x())) {
-    DOMElement *vnode = element;
+  if (XMLString::equals(v_element->getTagName(),XStr("node").x())) {
+    DOMElement *vnode = v_element;
     if (!vnode->hasAttribute(XStr("generated_by_assign").x())) {
       // TODO: It would probably be good to pass this in rather than
       // search the DOM for it
-      DOMElement* pnode = (this->physical_elements->find(p_name))->second;
+      const DOMElement* pnode = p_element;
       vnode->setAttribute(XStr("component_id").x(),
                           pnode->getAttribute(XStr("component_id").x()));
       vnode->setAttribute(XStr("component_manager_id").x(),
@@ -108,10 +108,10 @@ annotate_rspec_v2::annotate_element (DOMElement *element, const char* p_name)
     }
   }
   else {
-    DOMElement* vlink = element; 
+    DOMElement* vlink = v_element; 
     // TODO: It would probably be good to pass this in rather than
     // search the DOM for it
-    DOMElement* plink = (this->physical_elements->find(p_name))->second;
+    DOMElement* plink = p_element;
     
     // If plink is NULL, then it must be a trivial link
     // XXX: Add trivial link support?
@@ -146,10 +146,10 @@ annotate_rspec_v2::annotate_element (DOMElement *element, const char* p_name)
 
 // This is called when an intraswitch or interswitch link has to be annotated
 void annotate_rspec_v2::annotate_element (DOMElement *vlink, 
-                                          list<string>* unordered)
+                                          list<DOMElement*>* unordered)
 {
   // Re-order links to ensure that they are all head-to-tail.
-  list<string>* links;
+  list<DOMElement*>* links;
 #ifdef ANNOTATE_ARBITRARY_LINK_ORDER
   links = unordered;
 #else
@@ -158,13 +158,8 @@ void annotate_rspec_v2::annotate_element (DOMElement *vlink,
 
   // These are the paths from the source to the first switch
   // and from the last switch to the destination
-  const string psrc_name = links->front();
-  const string pdst_name = links->back();
-  // TODO: It would be good to not have to search the DOM for these
-  DOMElement* p_src_switch_link 
-    = (this->physical_elements->find(psrc_name))->second;
-  DOMElement* p_switch_dst_link 
-    = (this->physical_elements->find(pdst_name))->second;
+  DOMElement *p_src_switch_link = links->front();
+  DOMElement *p_switch_dst_link = links->back();
   
   // Remove these links from the list
   // If it is an intra-switch link, the list should now be empty.
@@ -211,10 +206,6 @@ DOMElement* annotate_rspec_v2::create_component_hop (DOMElement* vlink)
   DOMElement* dstIface = dynamic_cast<DOMElement*>(ifaces->item(1));
   string srcIfaceId = XStr(srcIface->getAttribute(XStr("client_id").x())).c();
   string dstIfaceId = XStr(dstIface->getAttribute(XStr("client_id").x())).c();
-
-  bool fnd;
-  string srcIfaceNodeId =this->lookupIface(this->vInterfaceMap,srcIfaceId,fnd);
-  string dstIfaceNodeId =this->lookupIface(this->vInterfaceMap,dstIfaceId,fnd);
 
   DOMElement* srcIfaceClone 
     = dynamic_cast<DOMElement*>(doc->importNode
@@ -279,10 +270,12 @@ annotate_rspec_v2::create_component_hop (const DOMElement* plink,
     = XStr(plinkDstIface->getAttribute(XStr("component_id").x())).c();
   
   bool found = false;
-  string plinkSrcNodeId = this->lookupIface(this->pInterfaceMap,
+  DOMElement* plinkSrcNode = this->lookupIface(this->pInterfaceMap,
 					    plinkSrcIfaceId, found);
-  string plinkDstNodeId = this->lookupIface(this->pInterfaceMap, 
+  DOMElement* plinkDstNode = this->lookupIface(this->pInterfaceMap, 
 					    plinkDstIfaceId, found);
+  string plinkDstNodeId = 
+      XStr(plinkDstNode->getAttribute(XStr("component_id").x())).c();
 
   // If the previous component is specified,
   // the link specification could be the opposite of what we need
@@ -294,8 +287,10 @@ annotate_rspec_v2::create_component_hop (const DOMElement* plink,
 
     string prevHopDstIfaceId 
       = XStr(prevHopDstIface->getAttribute(XStr("component_id").x())).c();
-    string prevHopDstNodeId = this->lookupIface(this->pInterfaceMap, 
+    DOMElement* prevHopDstNode = this->lookupIface(this->pInterfaceMap, 
 						prevHopDstIfaceId, found);
+    string prevHopDstNodeId = 
+        XStr(prevHopDstNode->getAttribute(XStr("component_id").x())).c();
 
     // We need to do this because in advertisements, 
     // all links are from nodes to switches
@@ -327,13 +322,6 @@ annotate_rspec_v2::create_component_hop (const DOMElement* plink,
       this->annotate_endpoint(plinkSrcIfaceClone, vlinkDstIfaceId);
     }
   }
-
-  // Find the physical nodes for the source and destination interfaces
-  // We need these to determine the component manager IDs.
-  DOMElement* plinkSrcNode 
-    = ((this->physical_elements)->find(plinkSrcNodeId))->second;
-  DOMElement* plinkDstNode
-    = ((this->physical_elements)->find(plinkDstNodeId))->second;
 
   plinkSrcIfaceClone->setAttribute
     (XStr("component_manager_id").x(),
@@ -438,9 +426,7 @@ void annotate_rspec_v2::annotate_interface (const DOMElement* plink,
   
   // Get the client_id of the node to which the interface belongs
   bool found = false;
-  string nodeId = this->lookupIface(this->vInterfaceMap, ifaceId, found);
-  DOMElement* vnode = getElementByAttributeValue(this->virtual_root, "node", 
-                                                 "client_id", nodeId.c_str());
+  DOMElement* vnode = this->lookupIface(this->vInterfaceMap, ifaceId, found);
   DOMElement* decl = getElementByAttributeValue(vnode, "interface", 
                                                 "client_id", ifaceId.c_str());
 
@@ -468,7 +454,7 @@ void annotate_rspec_v2::annotate_interface (const DOMElement* plink,
       cerr << "Virtual link ID: "
 	   << XStr(vlink->getAttribute(XStr("client_id").x())).c() << endl;
       cerr << "Interface ID on vlink: " << ifaceId << endl;
-      cerr << "Interface declared on vnode: " << nodeId << endl;
+      //cerr << "Interface declared on vnode: " << nodeId << endl;
       cerr << "Virtual node mapped to: " << physNodeId << endl;
       cerr << "Physical link ID: " 
 	   << XStr(plink->getAttribute(XStr("component_id").x())).c() << endl;
@@ -508,16 +494,16 @@ annotate_rspec_v2::copy_component_spec(const DOMElement* src, DOMElement* dst)
 // WARNING: This removes the link in the path from the list of links
 DOMElement* 
 annotate_rspec_v2::find_next_link_in_path (DOMElement *prev, 
-                                           list<string>* links)
+                                           list<DOMElement*>* links)
 {
-  list<string>::iterator it;
+  list<DOMElement*>::iterator it;
   DOMElement* link = NULL;
 
   //XMLDEBUG("Checking for next link for " << string(XStr(prev->getAttribute(XStr("component_id").x())).c()) << endl);
   //string(XStr(prev->getAttribute(XStr("component_id").x())).c());
 
   for (it = links->begin(); it != links->end(); ++it) {
-    link = (this->physical_elements->find(*it))->second;
+    link = *it;
 
     // Be sure we aren't comparing a link with itself. :)
     if (link == prev) {
@@ -537,10 +523,10 @@ annotate_rspec_v2::find_next_link_in_path (DOMElement *prev,
 
     /* find the node that each interface is on */
     bool found;
-    string linkSrcNode = this->lookupIface(this->pInterfaceMap,linkSrc,found); assert(found);
-    string linkDstNode = this->lookupIface(this->pInterfaceMap,linkDst,found); assert(found);
-    string prevSrcNode = this->lookupIface(this->pInterfaceMap,prevSrc,found); assert(found);
-    string prevDstNode = this->lookupIface(this->pInterfaceMap,prevDst,found); assert(found);
+    DOMElement* linkSrcNode = this->lookupIface(this->pInterfaceMap,linkSrc,found); assert(found);
+    DOMElement* linkDstNode = this->lookupIface(this->pInterfaceMap,linkDst,found); assert(found);
+    DOMElement* prevSrcNode = this->lookupIface(this->pInterfaceMap,prevSrc,found); assert(found);
+    DOMElement* prevDstNode = this->lookupIface(this->pInterfaceMap,prevDst,found); assert(found);
 
     //XMLDEBUG("  prev: (" << prevSrcNode << ")/(" << prevDstNode << ") this: (" << linkSrcNode << ")/(" << linkDstNode << ")" << endl);
 
@@ -597,18 +583,18 @@ bool annotate_rspec_v2::is_generated_element(const DOMElement *element)
   return (element->hasAttribute(XStr("generated_by_assign").x()));
 }
 
-string annotate_rspec_v2::lookupIface (map<string,string>* ifacesMap, 
+DOMElement* annotate_rspec_v2::lookupIface (map<string,DOMElement*>* ifacesMap, 
 				       string ifaceId,
 				       bool& found) 
 {
-  string nodeId = "";
+  DOMElement *node = NULL;
   found = false;
-  map<string, string>::iterator it = ifacesMap->find(ifaceId);
+  map<string, DOMElement*>::iterator it = ifacesMap->find(ifaceId);
   if (it != ifacesMap->end()) {
-    nodeId = it->second;
+    node = it->second;
     found = true;
   }
-  return nodeId;
+  return node;
 }
 
 // Returns that interface on the physical link which is declared in 
@@ -621,7 +607,9 @@ annotate_rspec_v2::getIfaceOnNode(const DOMElement* plink, string nodeId)
     bool found = false;
     DOMElement* ref = dynamic_cast<DOMElement*>(refs->item(i));
     string ifaceId = XStr(ref->getAttribute(XStr("component_id").x())).c();
-    string declNodeId = this->lookupIface(this->pInterfaceMap, ifaceId, found);
+    DOMElement* declNode = this->lookupIface(this->pInterfaceMap, ifaceId, found);
+    string declNodeId
+        = XStr(declNode->getAttribute(XStr("component_id").x())).c();
     if (found && (declNodeId == nodeId)) {
       return ref;
     }
@@ -651,12 +639,11 @@ bool annotate_rspec_v2::annotate_endpoint(DOMElement* iface, string virtId)
   bool found = false;
   bool annotated = false;
   string ifaceId = XStr(iface->getAttribute(XStr("component_id").x())).c();
-  string physNodeId = this->lookupIface(this->pInterfaceMap, ifaceId, found);
-  string virtNodeId = this->lookupIface(this->vInterfaceMap, virtId, found);
-  DOMElement* virtNode
-    = getElementByAttributeValue(this->virtual_root, "node", "client_id", 
-				 virtNodeId.c_str());
+  DOMElement *physNode = this->lookupIface(this->pInterfaceMap, ifaceId, found);
+  DOMElement *virtNode = this->lookupIface(this->vInterfaceMap, virtId, found);
   string mappedTo = XStr(virtNode->getAttribute(XStr("component_id").x())).c();
+  string physNodeId
+        = XStr(physNode->getAttribute(XStr("component_id").x())).c();
   if (mappedTo == physNodeId) {
     annotated = true;
     iface->setAttribute(XStr("client_id").x(), XStr(virtId).x());
@@ -690,8 +677,8 @@ string annotate_rspec_v2::getShortInterfaceName (string interface)
 // WARNING: This will distroy the input list
 // NOTE: The caller has the responsibility to return the freed list
 #ifndef ANNOTATE_ARBITRARY_LINK_ORDER
-list<string>*
-annotate_rspec_v2::reorderLinks (list<string>* links)
+list<DOMElement*>*
+annotate_rspec_v2::reorderLinks (list<DOMElement*>* links)
 {
   /*
   XMLDEBUG("Reordering started: before ");
@@ -706,18 +693,16 @@ annotate_rspec_v2::reorderLinks (list<string>* links)
   XMLDEBUG(endl);
   */
 
-  list<string> *ordered = new list<string>;
+  list<DOMElement*> *ordered = new list<DOMElement*>;
 
-  string link = links->front();
+  DOMElement* link = links->front();
   links->pop_front();
-  DOMElement* prev = (this->physical_elements)->find(link.c_str())->second;
+  DOMElement* prev = link;
   ordered->push_back(link);
   // XMLDEBUG("first is " << link << endl);
 
   while(!links->empty()) {
     prev = this->find_next_link_in_path(prev, links);
-    string link
-      = XStr(prev->getAttribute(XStr("component_id").x())).c();
 
     // Remove this link from the list - would rather use links->remove(), but
     // it doesn't seem to be able to compare strings
@@ -734,7 +719,7 @@ annotate_rspec_v2::reorderLinks (list<string>* links)
 
     // XMLDEBUG(" pushing on " << link << endl);
     if (found) {
-        ordered->push_back(link);
+        ordered->push_back(prev);
     } else {
         // Sanity check 
         cerr << "Error annotating link: couldn't find link (" <<

@@ -59,7 +59,7 @@ extern name_vclass_map vclass_map;
 DOMElement* request_root = NULL;
 DOMDocument* doc = NULL;
 
-map<string, string>* vIfacesMap = new map<string, string>();
+map<string, DOMElement*>* vIfacesMap = new map<string, DOMElement*>();
 
 int rspec_version = -1;
 
@@ -640,13 +640,13 @@ bool populate_link (DOMElement* elt,
     return false;
   }
 
-  vIfacesMap->insert(pair<string, string>(srcIface, srcNode));
-  vIfacesMap->insert(pair<string, string>(dstIface, dstNode));
-  
   vvertex v_src_vertex = vname2vertex[srcNode.c_str()];
   vvertex v_dst_vertex = vname2vertex[dstNode.c_str()];
   tb_vnode *src_vnode = get(vvertex_pmap,v_src_vertex);
   tb_vnode *dst_vnode = get(vvertex_pmap,v_dst_vertex);
+
+  vIfacesMap->insert(pair<string, DOMElement*>(srcIface, src_vnode->elt));
+  vIfacesMap->insert(pair<string, DOMElement*>(dstIface, dst_vnode->elt));
   
   // XXX: This is obsolete. We need to fix it ASAP
   bool emulated = false;

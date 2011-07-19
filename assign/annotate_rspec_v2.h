@@ -32,19 +32,19 @@ class annotate_rspec_v2 : public annotate_rspec
   enum endpoint_interface_enum { NEITHER, SOURCE, DESTINATION, BOTH };
   std::map< std::string, std::set<std::string> > lan_links_map;
 
-  std::map< std::string, std::string >* vInterfaceMap;
-  std::map< std::string, std::string >* pInterfaceMap;
+  std::map< std::string, DOMElement* >* vInterfaceMap;
+  std::map< std::string, DOMElement* >* pInterfaceMap;
   
  public:
   annotate_rspec_v2 ();
   ~annotate_rspec_v2 () { ; }
   
   // Annotates nodes and direct links in the rspec
-  void annotate_element(DOMElement *element, const char* p_name);
+  void annotate_element(DOMElement *v_element, DOMElement *p_element);
   
   // Annotates intraswitch and interswitch links in the rspec
   void annotate_element(DOMElement *vlink,
-			std::list<std::string>* links);
+			std::list<DOMElement*>* links);
   
   // Annotate a trivial link
   void annotate_element(DOMElement *vlink);
@@ -81,7 +81,7 @@ class annotate_rspec_v2 : public annotate_rspec
   // Finds the next link in the path returned by assign
   xercesc::DOMElement* find_next_link_in_path 
     (xercesc::DOMElement *prev, 
-     std::list<std::string>* links);
+     std::list<DOMElement*>* links);
   
   // Copies the component spec from the source to the destination
   void copy_component_spec(const xercesc::DOMElement* src, 
@@ -103,7 +103,7 @@ class annotate_rspec_v2 : public annotate_rspec
   bool is_generated_element (const xercesc::DOMElement *element);
 
   // Given an interface Id, returns the node on which the interface is present
-  std::string lookupIface (std::map<std::string, std::string>* map,
+  DOMElement* lookupIface (std::map<std::string, DOMElement*>* map,
 			   std::string ifaceId, bool&);
 
   // Returns the interface on the physical link
@@ -126,7 +126,7 @@ class annotate_rspec_v2 : public annotate_rspec
   // Orders the links in the specified list of links from head to tail
   // The first element in the list MUST be the head
   // WARNING: This will destroy in the input list
-  std::list<std::string>* reorderLinks (std::list<std::string>* links);
+  std::list<DOMElement*>* reorderLinks (std::list<DOMElement*>* links);
 };
 
 #endif //for __ANNOTATE_RSPEC_H
