@@ -41,9 +41,13 @@ annotate_vtop :: annotate_vtop ()
 }
 
 // This will get called when a node or a direct link needs to be annotated
-void annotate_vtop::annotate_element (const char* v_name, const char* p_name)
+void annotate_vtop::annotate_element (DOMElement *element, const char* p_name)
 {
-	DOMElement* vnode = getElementByAttributeValue(this->virtual_root, "node", "name", v_name);
+	DOMElement* vnode = NULL;
+        if (XMLString::equals(element->getTagName(),XStr("node").x())) {
+            vnode = element;
+        }
+
 	// If a vnode by that name was found, then go ahead. If not, that element should be a link
 	// We are not terribly concerned about having to scan the entire physical topology twice
 	// because direct links are never really going to happen
@@ -53,7 +57,7 @@ void annotate_vtop::annotate_element (const char* v_name, const char* p_name)
 	}
 	else
 	{
-		DOMElement* vlink = getElementByAttributeValue(this->virtual_root, "link", "name", v_name);
+		DOMElement* vlink = element;
 		DOMElement* plink = (this->physical_elements->find(p_name))->second;
 		
 		annotate_interface(plink, vlink, "source_interface");
@@ -64,7 +68,7 @@ void annotate_vtop::annotate_element (const char* v_name, const char* p_name)
 }
 
 // This is called when an intraswitch or interswitch link has to be annotated
-void annotate_vtop::annotate_element (const char* v_name, list<string>* links)
+void annotate_vtop::annotate_element (DOMElement *vlink, list<string>* links)
 {
 	// These are the paths from the source to the first switch
 	// and from the last switch to the destination
@@ -78,7 +82,6 @@ void annotate_vtop::annotate_element (const char* v_name, list<string>* links)
 	links->pop_front();
 	links->pop_back();
 		
-	DOMElement* vlink = getElementByAttributeValue (this->virtual_root, "link", "name", v_name);
 	annotate_interface (p_src_switch_link, vlink, "source_interface");
 	annotate_interface (p_switch_dst_link, vlink, "destination_interface");
 	

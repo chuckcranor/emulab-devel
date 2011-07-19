@@ -85,13 +85,13 @@ void print_solution(const solution &s) {
 	string node_name = XStr(vn -> name).c();
 	string assigned_to =XStr(get(pvertex_pmap,s.get_assignment(*vit))->name).c();
 	if (both_inputs_rspec) {
-	  rspec_annotater->annotate_element(node_name.c_str(), assigned_to.c_str());
+	  rspec_annotater->annotate_element(vn->elt, assigned_to.c_str());
 	  if (rspec_annotater->is_generated_element(vn->elt)) {
 	    continue;
     }
 	}
 	else if (both_inputs_xml) {
-	  vtop_annotater->annotate_element(node_name.c_str(), assigned_to.c_str());
+	  vtop_annotater->annotate_element(vn->elt, assigned_to.c_str());
 	}
 #endif
 	cout << vn->name << " " 
@@ -132,7 +132,7 @@ void print_solution(const solution &s) {
 	    // But it needs to be checked anyway.
 #ifdef WITH_XML
 	    if (both_inputs_rspec) {
-	      rspec_annotater->annotate_element((vlink->name).c_str(), 
+	      rspec_annotater->annotate_element(vlink->elt, 
                                           (p->name).c_str());
 	      if (is_generated)
 		continue;
@@ -153,12 +153,12 @@ void print_solution(const solution &s) {
 	    links.push_back((p->name).c_str());  // p->name is an fstring.
 	    links.push_back((p2->name).c_str());
 	    if (both_inputs_rspec) {
-	      rspec_annotater->annotate_element((vlink->name).c_str(), &links);
+	      rspec_annotater->annotate_element(vlink->elt, &links);
 	      if (is_generated)
 		continue;
 	    }
 	    else if (both_inputs_xml) {
-	      vtop_annotater->annotate_element((vlink->name).c_str(), &links);
+	      vtop_annotater->annotate_element(vlink->elt, &links);
 	    }
 #endif
 	    cout << " intraswitch " << p->name << " (" <<
@@ -184,10 +184,10 @@ void print_solution(const solution &s) {
 	  }
 #ifdef WITH_XML
 	    if (both_inputs_rspec) {
-	      rspec_annotater->annotate_element((vlink->name).c_str(), &links);
+	      rspec_annotater->annotate_element(vlink->elt, &links);
 	    }
 	    else if (both_inputs_xml) {
-	      vtop_annotater->annotate_element((vlink->name).c_str(), &links);
+	      vtop_annotater->annotate_element(vlink->elt, &links);
 	    }
 #endif
 	} else if (vlink->link_info.type_used == tb_link_info::LINK_TRIVIAL) {
@@ -200,7 +200,7 @@ void print_solution(const solution &s) {
 	  tb_pnode *pnode = get(pvertex_pmap,pv);
 #ifdef WITH_XML
 	  if (both_inputs_rspec) {
-	    rspec_annotater->annotate_element((vlink->name).c_str());
+	    rspec_annotater->annotate_element(vlink->elt);
 	    if (is_generated)
 	      continue;
 	  }

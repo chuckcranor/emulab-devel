@@ -80,11 +80,8 @@ annotate_rspec_v2 :: annotate_rspec_v2 ()
 }
 
 // Annotate a trivial link
-void annotate_rspec_v2::annotate_element (const char* v_name)
+void annotate_rspec_v2::annotate_element (DOMElement *vlink)
 {
-  DOMElement* vlink 
-    = getElementByAttributeValue(this->virtual_root, 
-				 "link", "client_id", v_name);
   annotate_interface (vlink, 0);
   annotate_interface (vlink, 1);	
 #ifndef DISABLE_LINK_ANNOTATION
@@ -95,18 +92,14 @@ void annotate_rspec_v2::annotate_element (const char* v_name)
 
 // This will get called when a node or a direct link needs to be annotated
 void 
-annotate_rspec_v2::annotate_element (const char* v_name, const char* p_name)
+annotate_rspec_v2::annotate_element (DOMElement *element, const char* p_name)
 {
-  DOMElement* vnode 
-    = getElementByAttributeValue(this->virtual_root, 
-                                 "node", "client_id", v_name);
-  // If a vnode by that name was found, then go ahead. 
-  // If not, that element should be a link
-  // We are not terribly concerned about 
-  // having to scan the entire physical topology twice
-  // because direct links are never really going to happen
-  if (vnode != NULL) {
+  // If the element is not a node, it should be a link
+  if (XMLString::equals(element->getTagName(),XStr("node").x())) {
+    DOMElement *vnode = element;
     if (!vnode->hasAttribute(XStr("generated_by_assign").x())) {
+      // TODO: It would probably be good to pass this in rather than
+      // search the DOM for it
       DOMElement* pnode = (this->physical_elements->find(p_name))->second;
       vnode->setAttribute(XStr("component_id").x(),
                           pnode->getAttribute(XStr("component_id").x()));
@@ -115,9 +108,9 @@ annotate_rspec_v2::annotate_element (const char* v_name, const char* p_name)
     }
   }
   else {
-    DOMElement* vlink 
-      = getElementByAttributeValue(this->virtual_root, 
-                                   "link", "client_id", v_name);
+    DOMElement* vlink = element; 
+    // TODO: It would probably be good to pass this in rather than
+    // search the DOM for it
     DOMElement* plink = (this->physical_elements->find(p_name))->second;
     
     // If plink is NULL, then it must be a trivial link
@@ -152,7 +145,7 @@ annotate_rspec_v2::annotate_element (const char* v_name, const char* p_name)
 }
 
 // This is called when an intraswitch or interswitch link has to be annotated
-void annotate_rspec_v2::annotate_element (const char* v_name, 
+void annotate_rspec_v2::annotate_element (DOMElement *vlink, 
                                           list<string>* unordered)
 {
   // Re-order links to ensure that they are all head-to-tail.
@@ -167,6 +160,7 @@ void annotate_rspec_v2::annotate_element (const char* v_name,
   // and from the last switch to the destination
   const string psrc_name = links->front();
   const string pdst_name = links->back();
+  // TODO: It would be good to not have to search the DOM for these
   DOMElement* p_src_switch_link 
     = (this->physical_elements->find(psrc_name))->second;
   DOMElement* p_switch_dst_link 
@@ -177,9 +171,6 @@ void annotate_rspec_v2::annotate_element (const char* v_name,
   links->pop_front();
   links->pop_back();
 
-  DOMElement* vlink 
-    = getElementByAttributeValue (this->virtual_root, "link", 
-                                  "client_id", v_name);
   annotate_interface(p_src_switch_link, vlink, 0);
   annotate_interface(p_switch_dst_link, vlink, 1);
   

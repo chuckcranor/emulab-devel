@@ -40,14 +40,14 @@ class annotate_rspec_v2 : public annotate_rspec
   ~annotate_rspec_v2 () { ; }
   
   // Annotates nodes and direct links in the rspec
-  void annotate_element(const char* v_name, const char* p_name);
+  void annotate_element(DOMElement *element, const char* p_name);
   
   // Annotates intraswitch and interswitch links in the rspec
-  void annotate_element(const char* v_name, 
+  void annotate_element(DOMElement *vlink,
 			std::list<std::string>* links);
   
   // Annotate a trivial link
-  void annotate_element(const char* v_name);
+  void annotate_element(DOMElement *vlink);
   
   // Annotates an interface element on a link
   void annotate_interface (const xercesc::DOMElement* plink, 

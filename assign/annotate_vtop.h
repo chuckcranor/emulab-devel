@@ -35,10 +35,10 @@ class annotate_vtop : public annotate
 		~annotate_vtop () { ; }
 		
 		// Annotates nodes and direct links in the rspec
-		void annotate_element(const char* v_name, const char* p_name);
+		void annotate_element(DOMElement *element, const char* p_name);
 	
 		// Annotates intraswitch and interswitch links in the rspec
-		void annotate_element(const char* v_name, std::list<std::string>* links);
+		void annotate_element(DOMElement *vlink, std::list<std::string>* links);
 	
 		// Annotates an interface element on a link
 		void annotate_interface (const xercesc::DOMElement* plink, xercesc::DOMElement* vlink, const char* interface_type);

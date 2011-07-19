@@ -20,6 +20,8 @@
 #include <map>
 
 #include <xercesc/dom/DOM.hpp>
+#include <xercesc/dom/DOMElement.hpp>
+XERCES_CPP_NAMESPACE_USE
 
 class annotate
 {
@@ -31,10 +33,10 @@ class annotate
   
  public:
   // Annotates nodes and direct links in the rspec
-  virtual void annotate_element(const char* v_name, const char* p_name) = 0;
+  virtual void annotate_element(DOMElement *element, const char* p_name) = 0;
   
   // Annotates intraswitch and interswitch links in the rspec
-  virtual void annotate_element(const char* v_name, 
+  virtual void annotate_element(DOMElement *vlink, 
 				std::list<std::string>* links) = 0;
   
   // Creates a hop from a switch till the next end point. 
