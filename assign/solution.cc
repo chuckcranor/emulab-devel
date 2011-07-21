@@ -152,7 +152,7 @@ void print_solution(const solution &s) {
 	    tb_plink *p2 = get(pedge_pmap,vlink->link_info.plinks.back());
 #ifdef WITH_XML
 	    links.push_back(p->elt); 
-	    links.push_back(p->elt);
+	    links.push_back(p2->elt);
 	    if (both_inputs_rspec) {
 	      rspec_annotater->annotate_element(vlink->elt, &links);
 	      if (is_generated)
