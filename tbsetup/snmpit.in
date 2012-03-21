@@ -1606,10 +1606,15 @@ sub planOneVlan($$$@)
     # value in the database
     #
     foreach my $port (@ports) {
-	if ($portsdone->{$port}) {
-	    push @{$portsdone->{$port}}, $vlanid;
-	    next;
-	}
+	#
+	# Include port in vlan regardless if already seen or $NOSTACKMIB.
+	# Ports get converted to modport in $bigplan, so must save.
+	#
+	$plan{$port} = undef;
+	my $seen = defined($portsdone->{$port});
+	push @{$portsdone->{$port}}, $vlanid;
+	next
+	    if ($seen);
 	my ($speed,$duplex) = getInterfaceSettings($port);
 	#
 	# If either is not set, we do nothing. We could make
@@ -1628,8 +1633,6 @@ sub planOneVlan($$$@)
 	if (my $trunktype = $totrunk->{$port}) {
 	    push @{$plan{$port}}, $trunktype;
 	}
-	# ports get converted to modport in $bigplan, so must save
-	$portsdone->{$port} = [$vlanid];
     }
     push @$bigplan,
 	$stack->planVlan($vlanid, $assigned->{$vlanid}, $bydev, \%plan);
