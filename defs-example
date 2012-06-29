@@ -280,6 +280,14 @@ VIRTNODE_NETMASK=255.240.0.0
 JAILIPBASE=$VIRTNODE_NETWORK
 JAILIPMASK=$VIRTNODE_NETMASK
 
+# Dynamic public addresses for virtual nodes.  Leave as "none" if you don't
+# have public IP addresses to spare, otherwise define to an otherwise
+# unused block of addresses that will be given out to virtual nodes asking
+# for routable control net interfaces (instead of the VIRTNODE_NETWORK
+# block they'd otherwise get).
+VPUBADDR_BASE=none
+VPUBADDR_BITLEN=none
+
 #
 # Selective disable of a couple of features.
 #

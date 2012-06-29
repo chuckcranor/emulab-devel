@@ -1,0 +1,78 @@
+#!/usr/bin/perl -w
+
+#
+# EMULAB-COPYRIGHT
+# Copyright (c) 2012 University of Utah and the Flux Group.
+# All rights reserved.
+#
+
+use English;
+use strict;
+use Socket;
+
+#
+# Configure variables
+#
+my $TB			= "@prefix@";
+
+#
+# Turn off line buffering on output
+#
+$| = 1;
+
+#
+# Untaint the path
+# 
+$ENV{'PATH'} = "$TB/bin:$TB/sbin:/bin:/usr/bin:/sbin:/usr/sbin";
+delete @ENV{'IFS', 'CDPATH', 'ENV', 'BASH_ENV'};
+
+#
+# Testbed Support libraries
+#
+use lib "@prefix@/lib";
+use libdb;
+use libtestbed;
+
+#
+# Handle command-line options.
+#
+sub usage() {
+    print STDERR "Usage: $0 aaa.bbb.ccc.ddd/ee [mmm.nnn.ooo.ppp]\n" .
+	"    where aaa.bbb.ccc.ddd is the prefix of the addresses to add,\n" .
+	"          ee is the bit-length of the prefix,\n" .
+	"          and mmm.nnn.ooo.ppp is the optional netmask to apply\n" .
+	"              (default is derived from prefix length).\n";
+    exit( 1 );
+}
+
+usage() unless @ARGV == 1 || @ARGV == 2;
+
+my $pattern = $ARGV[ 0 ];
+my ( $mask, $base, $masklen );
+
+if( $pattern =~ /^([0-9]+\.[0-9]+\.[0-9]+\.[0-9]+)\/([0-9]+)$/ ) {
+    $base = $1;
+    $masklen = $2;
+} else {
+    usage();
+}
+
+if( @ARGV == 1 ) {
+    my $derived_mask = 0xFFFFFFFF - ( 0xFFFFFFFF >> $masklen );
+    my $mask_addr = pack( "N", $derived_mask );
+    $mask = inet_ntoa( $mask_addr );
+} else {
+    $mask = $ARGV[ 1 ];
+}
+
+my $first = unpack( "N", inet_aton( $base ) );
+my $last = $first | ( 0xFFFFFFFF >> ( $masklen ) );
+my $i;
+
+for( $i = $first; $i <= $last; $i++ ) {
+    my $addr = inet_ntoa( pack( "N", $i ) );
+    DBQueryWarn( "INSERT INTO virt_node_public_addr SET " .
+		 "IP='$addr', mask='$mask'" );
+}
+
+exit( 0 );

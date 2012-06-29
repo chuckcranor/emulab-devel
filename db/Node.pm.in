@@ -2099,7 +2099,8 @@ sub CreateVnodes($$$)
     # those. Must do this with tables locked, of course.
     #
     DBQueryFatal("lock tables nodes write, reserved write, ".
-		 "node_status write, node_hostkeys write");
+		 "node_status write, node_hostkeys write, ".
+		 "virt_node_public_addr write");
 
     #
     # Reload the reservation status now that tables are locked and confirm
@@ -2170,7 +2171,7 @@ sub CreateVnodes($$$)
     foreach my $n (@tocreate) {
 	my $vpriority = 10000000 + ($ipbase * 1000) + $n;
 	my $vnodeid   = $nodeprefix . "vm" . $nodenum . "-" . $n;
-	my $jailip;
+	my ( $jailip, $jailmask );
 
 	if ($isjailed) {
 	    #
@@ -2183,14 +2184,33 @@ sub CreateVnodes($$$)
 	    # nodenum=201 and I would like our vnode IPs to align
 	    # at that boundary, so 254 becomes 200.
 	    #
-	    my $nodenumlimit = $ISUTAH ? 200 : 254;
-	    my $pnet = $IPBASE2;
-	    my $pnode2 = int($ipbase);
-	    while ($pnode2 > $nodenumlimit) {
-		$pnet++;
-		$pnode2 -= $nodenumlimit;
+	    if( 1 ) { # XXX check if public address requested for this node
+		      # (look in virt_node_attributes?)
+		$query_result =
+		    DBQueryWarn( "SELECT IP, mask FROM virt_node_public_addr ".
+				 "WHERE node_id IS NULL" );
+
+		if (!$query_result || !$query_result->numrows ) {
+		    print STDERR "*** CreateVnodes: no free public address\n";
+		    goto bad;
+		}
+
+		( $jailip, $jailmask ) = $query_result->fetchrow_array();
+
+		DBQueryFatal( "UPDATE virt_node_public_addr SET " .
+			      "node_id='$vnodeid', card='0', port='1' " .
+			      "WHERE IP='$jailip'" );
+	    } else {
+		my $nodenumlimit = $ISUTAH ? 200 : 254;
+		my $pnet = $IPBASE2;
+		my $pnode2 = int($ipbase);
+		while ($pnode2 > $nodenumlimit) {
+		    $pnet++;
+		    $pnode2 -= $nodenumlimit;
+		}
+		$jailip = "${IPBASE1}.${pnet}.${pnode2}.${n}";
+		$jailmask = $JAILIPMASK;
 	    }
-	    $jailip = "${IPBASE1}.${pnet}.${pnode2}.${n}";
 	}
 
 	# Need to keep the UUIDs consistent across regression mode.
@@ -2318,7 +2338,7 @@ sub CreateVnodes($$$)
 		"role"      => TBDB_IFACEROLE_CONTROL(),
 		"MAC"       => "000000000000",
 		"IP"        => $jailip,
-		"mask"      => $JAILIPMASK,
+		"mask"      => $jailmask,
 		"type"      => "generic",
 		"logical"   => 1,
 	    };
@@ -2402,9 +2422,13 @@ sub DeleteVnodes(@)
     
     foreach my $vnodeid (@vnodes) {
 	my $interface = Interface->LookupControl($vnodeid);
-	$interface->Delete()
-	    if (defined($interface));
-	
+	if( defined( $interface ) ) {
+	    my $addr = $interface->IP();
+	    DBQueryWarn( "UPDATE virt_node_public_addr SET node_id=NULL, " .
+			 "card='0', port='0' WHERE IP='$addr'" );
+	    $interface->Delete();
+	}
+
 	DBQueryWarn("delete from node_bootlogs where node_id='$vnodeid'");
 	DBQueryWarn("delete from node_hostkeys where node_id='$vnodeid'");
 	DBQueryWarn("delete from node_status where node_id='$vnodeid'");
@@ -3190,13 +3214,23 @@ sub GetJailIP($;$)
 	print STDERR "*** GetJailIP: Bad ipbase '$ipbase' for $interface\n";
 	return undef;
     }
-    
-    my $nodenumlimit = $ISUTAH ? 200 : 254;
-    my $pnet = $IPBASE2;
-    my $pnode2 = int($ipbase);
-    while ($pnode2 > $nodenumlimit) {
-	$pnet++;
-	$pnode2 -= $nodenumlimit;
+
+    my $node_id = $self->node_id();
+    my $query_result =
+	DBQueryWarn( "SELECT IP, mask FROM virt_node_public_addr WHERE " .
+		     "node_id='$node_id' AND card='0' AND port='1'" );
+
+    if( $query_result && $query_result->numrows ) {
+	# we've assigned a public address to this one
+	return $query_result->fetchrow_array();
+    } else {
+	my $nodenumlimit = $ISUTAH ? 200 : 254;
+	my $pnet = $IPBASE2;
+	my $pnode2 = int($ipbase);
+	while ($pnode2 > $nodenumlimit) {
+	    $pnet++;
+	    $pnode2 -= $nodenumlimit;
+	}
     }
     return ("${IPBASE1}.${pnet}.${pnode2}.${num}", $JAILIPMASK);
 }
