@@ -2100,7 +2100,7 @@ sub CreateVnodes($$$)
     #
     DBQueryFatal("lock tables nodes write, reserved write, ".
 		 "node_status write, node_hostkeys write, ".
-		 "virt_node_public_addr write");
+		 "virt_node_public_addr write, virt_node_attributes read");
 
     #
     # Reload the reservation status now that tables are locked and confirm
@@ -2184,8 +2184,16 @@ sub CreateVnodes($$$)
 	    # nodenum=201 and I would like our vnode IPs to align
 	    # at that boundary, so 254 becomes 200.
 	    #
-	    if( 1 ) { # XXX check if public address requested for this node
-		      # (look in virt_node_attributes?)
+	    my $vname = $options->{'vlist'}->[ $n - 1 ];
+
+	    $query_result =
+		DBQueryWarn( "SELECT attrvalue FROM virt_node_attributes " .
+			     "WHERE pid='$pid' AND eid='$eid' AND " .
+			     "vname='$vname' AND " .
+			     "attrkey='routable_control_ip'" );
+
+	    if( $query_result && $query_result->numrows &&
+		( $query_result->fetchrow_array() )[ 0 ] eq "true" ) {
 		$query_result =
 		    DBQueryWarn( "SELECT IP, mask FROM virt_node_public_addr ".
 				 "WHERE node_id IS NULL" );

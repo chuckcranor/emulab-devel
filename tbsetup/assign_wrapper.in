@@ -1720,7 +1720,8 @@ foreach my $pnode (sort(keys(%virtnodes))) {
 				    "nodeid" => $pnode,
 				    "verbose"  => $verbose,
 				    "regression" => $regression,
-				    "impotent" => $impotent}) < 0) {
+				    "impotent" => $impotent,
+				    "vlist" => \@vlist }) < 0) {
 		fatal("Could not allocate vnodes on $pnode");
 	    }
 	}
