@@ -20,7 +20,7 @@ slothd_port=8509
 evproxy_port=16505
 LOGDIR=/var/emulab/logs
 
-if [ $# < 3 ]; then
+if [ $# -lt 3 ]; then
     echo "usage: $0 vmid host_ip vnode_name vnode_ip [ other_args ]"
     exit 1
 fi
@@ -30,19 +30,21 @@ vmid=$1; shift
 host_ip=$1; shift
 vhost_id=$1; shift
 vif_ip=$1; shift
+bridge=`xenstore-read "$XENBUS_PATH/bridge"`
+host_cnet_iface=`cat /var/emulab/boot/controlif`
 
 local_tmcd_port=`expr $tmcd_port \+ $vmid`
 
 #echo "${vhost_id}: op=$1, host_ip=$host_ip, vmid=$vmid, [vif=$vif], vnode_ip=$vif_ip, other=$*" >> /var/emulab/logs/xen-cnet.log
 
 # xen's configuration for a vif
-sh /etc/xen/scripts/vif-bridge $*
+/etc/xen/scripts/vif-bridge $*
 
 iptables=/sbin/iptables
 
 do_offline() {
     # dhcp
-    $iptables -D OUTPUT -j DROP -o $vif -m pkttype --pkt-type broadcast -m physdev --physdev-out $vif
+    $iptables -D FORWARD -o $bridge -m pkttype --pkt-type broadcast -m physdev --physdev-in $vif --physdev-is-bridged --physdev-out $host_cnet_iface -j DROP
 
     # tmcc
     $iptables -t nat -D PREROUTING -j DNAT -p tcp --dport $tmcd_port -d $boss -s $vif_ip --to-destination $host_ip:$local_tmcd_port
@@ -52,9 +54,9 @@ do_offline() {
     fi
 
     # slothd
-    $iptables -t nat -D POSTROUTING -j SNAT -p udp --dport $slothd_port --to-source $host_ip -s $vif_ip --destination $boss -o eth0
+    $iptables -t nat -D POSTROUTING -j SNAT -p udp --dport $slothd_port --to-source $host_ip -s $vif_ip --destination $boss -o $bridge
 
-    $iptables -t nat -D POSTROUTING -j SNAT --to-source $host_ip -s $vif_ip --destination $fs -o eth0
+    $iptables -t nat -D POSTROUTING -j SNAT --to-source $host_ip -s $vif_ip --destination $fs -o $bridge
 
     # evproxy
     $iptables -t nat -D PREROUTING -j DNAT -p tcp --dport $evproxy_port -d $ops -s $vif_ip --to-destination $host_ip:$evproxy_port
@@ -62,7 +64,8 @@ do_offline() {
 
 do_online() {
     # prevent dhcp requests from reaching eth0
-    $iptables -A OUTPUT -j DROP -o $vif -m pkttype --pkt-type broadcast -m physdev --physdev-out $vif
+    $iptables -A FORWARD -o $bridge -m pkttype --pkt-type broadcast -m physdev --physdev-in $vif --physdev-is-bridged --physdev-out $host_cnet_iface -j DROP
+    $iptables -A FORWARD -m physdev  --physdev-in $vif -j ACCEPT
 
     # reroute tmcd calls to the proxy on the physical host
     $iptables -t nat -A PREROUTING -j DNAT -p tcp --dport $tmcd_port -d $boss -s $vif_ip --to-destination $host_ip:$local_tmcd_port
@@ -73,14 +76,14 @@ do_online() {
     echo "$!" > /var/run/tmcc-$vhost_id.pid
 
     # slothd
-    $iptables -t nat -A POSTROUTING -j SNAT -p udp --dport $slothd_port --to-source $host_ip -s $vif_ip --destination $boss -o eth0
+    $iptables -t nat -A POSTROUTING -j SNAT -p udp --dport $slothd_port --to-source $host_ip -s $vif_ip --destination $boss -o $bridge
 
     # source-nat all traffic to fs node to come from vnode host
     # XXX "fs" is usually "ops", so make sure other ops redirects happen first
     #
     # TODO: only forward ports the mount server needs (use rpcinfo on fs node)
     # TODO: also only route back to the vif ip 
-    $iptables -t nat -A POSTROUTING -j SNAT --to-source $host_ip -s $vif_ip --destination $fs -o eth0
+    $iptables -t nat -A POSTROUTING -j SNAT --to-source $host_ip -s $vif_ip --destination $fs -o $bridge
 
     # reroute evproxy packets
     $iptables -t nat -A PREROUTING -j DNAT -p tcp --dport $evproxy_port -d $ops -s $vif_ip --to-destination $host_ip:$evproxy_port

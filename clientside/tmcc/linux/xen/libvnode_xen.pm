@@ -92,6 +92,7 @@ my $SYSCTL = "/sbin/sysctl";
 my $VLANCONFIG = "/sbin/vconfig";
 my $MODPROBE = "/sbin/modprobe";
 my $DHCPCONF_FILE = "/etc/dhcpd.conf";
+my $NEW_DHCPCONF_FILE = "/etc/dhcp/dhcpd.conf";
 
 my $debug  = 0;
 
@@ -103,10 +104,14 @@ my $debug  = 0;
 my $GLOBAL_CONF_LOCK = "xenconf";
 
 # default image to load on logical disks
+# Just symlink /boot/vmlinuz-xenU and /boot/initrd-xenU
+# to the kernel and ramdisk you want to use by default.
 my %defaultImage = (
  'name'    => "emulab-ops-emulab-ops-XEN-GUEST-F8-XXX",
- 'kernel'  => "/boot/vmlinuz-2.6.18.8-xenU",
- 'ramdisk' => "/boot/initrd-2.6.18.8-xenU.img"
+# 'kernel'  => "/boot/vmlinuz-2.6.18.8-xenU",
+# 'ramdisk' => "/boot/initrd-2.6.18.8-xenU.img"
+ 'kernel'  => "/boot/vmlinuz-xenU",
+ 'ramdisk' => "/boot/initrd-xenU"
 );
 
 # where all our config files go
@@ -145,6 +150,11 @@ my $XEN_LDSIZE = $MIN_GB_DISK;
 #
 my %vninfo = ();
 
+#
+# Information about the running Xen hypervisor
+#
+my %xeninfo = ();
+
 # Local functions
 sub findRoot();
 sub copyRoot($$);
@@ -160,6 +170,7 @@ sub hostIP($);
 sub createDHCP();
 sub addDHCP($$$$);
 sub subDHCP($$);
+sub restartDHCP();
 sub formatDHCP($$$);
 sub fixupMac($);
 sub createControlNetworkScript($$$);
@@ -171,6 +182,21 @@ sub domainExists($);
 sub addConfig($$$);
 sub createXenConfig($$);
 sub readXenConfig($);
+sub getXenInfo();
+
+sub getXenInfo()
+{
+    open(XM,"xm info|") 
+        or die "getXenInfo: could not run 'xm info': $!";
+
+    while (<XM>) {
+	    chomp;
+	    /^(\S+)\s*:\s+(.*)$/;
+	    $xeninfo{$1} = $2;
+    }
+    
+    close XM;
+}
 
 sub init($)
 {
@@ -178,6 +204,7 @@ sub init($)
 
     makeIfaceMaps();
     makeBridgeMaps();
+    getXenInfo();
 
     return 0;
 }
@@ -235,31 +262,6 @@ sub rootPreConfig($)
 	#
 	system("route del default >/dev/null 2>&1");
 	mysystem("route add default gw $cnet_gw");
-    }
-
-    #
-    # Ensure that LVM is loaded in the kernel and ready.
-    #
-    print "Enabling LVM...\n"
-	if ($debug);
-
-    # be ready to snapshot later on...
-    open(FD, "gunzip -c /proc/config.gz |");
-    my $snapshot = "n";
-    while (my $line = <FD>) {
-	if ($line =~ /^CONFIG_DM_SNAPSHOT=([yYmM])/) {
-	    $snapshot = $1;
-	    last;
-	}
-    }
-    close(FD);
-    if ($snapshot eq 'n' || $snapshot eq 'N') {
-	print STDERR "ERROR: this kernel does not support LVM snapshots!\n";
-	TBScriptUnlock();
-	return -1;
-    }
-    elsif ($snapshot eq 'm' || $snapshot eq 'M') {
-	mysystem("$MODPROBE dm-snapshot");
     }
 
     #
@@ -350,7 +352,7 @@ sub rootPreConfigNetwork($$$$)
     }
 
     createDHCP()
-	if (! -e $DHCPCONF_FILE);
+	if (! -e $DHCPCONF_FILE && ! -e $NEW_DHCPCONF_FILE);
 
     #
     # If we blocked, it would be because vnodes have come or gone,
@@ -406,6 +408,7 @@ sub vnodeCreate($$$$)
 	print STDERR "xen_vnodeCreate: no image specified, using default ('$imagename')\n";
 
 	my $vname = $imagename . ".0";
+	$lvname = $vname;
 	if (!findLVMLogicalVolume($vname)) {
 	    createRootDisk($vname);
 	}
@@ -558,6 +561,9 @@ sub vnodeCreate($$$$)
     my $kernel = $image{'kernel'};
     my $ramdisk = $image{'ramdisk'};
     my $vdisk = "sda";	# yes, this is right for FBSD too
+    if ($xeninfo{xen_major} >= 4) {
+	    $vdisk = 'xvda';
+    }
 
     addConfig($vmid, "# Xen configuration script for $os vnode $vnode_id", 2);
     addConfig($vmid, "name = '$vnode_id'", 2);
@@ -578,7 +584,7 @@ sub vnodeCreate($$$$)
 	addConfig($vmid, "extra += ',kern.bootfile=/boot/kernel/kernel'", 2);
     } else {
 	addConfig($vmid, "root = '/dev/$vdisk ro'", 2);
-	addConfig($vmid, "extra = '3 xencons=tty'", 2);
+	addConfig($vmid, "extra = 'console=hvc0 xencons=tty'", 2);
     }
 
     #
@@ -1017,11 +1023,13 @@ sub copyRoot($$)
     my $disk_path = "/mnt/xen/disk";
     my $root_path = "/mnt/xen/root";
     print "Mount root\n";
+    mkpath(['/mnt/xen/root']);
+    mkpath(['/mnt/xen/disk']);
     mysystem("mount $from $root_path");
     mysystem("mount -o loop $to $disk_path");
     mkpath([map{"$disk_path/$_"} qw(proc sys home tmp)]);
     print "Copying files\n";
-    system("cp -a $root_path/{root,dev,var,etc,usr,bin,sbin,lib} $disk_path");
+    system("cp -a $root_path/* $disk_path");
 
     # hacks to make things work!
     disk_hacks($disk_path);
@@ -1050,7 +1058,7 @@ sub createRootDisk($)
 	return -1;
     }
 
-    system("/usr/sbin/lvcreate -n $lv -L ${size}G $VGNAME");
+    system("lvcreate -n $lv -L ${size}G $VGNAME");
     system("echo y | mkfs -t ext3 $full_path");
     mysystem("e2label $full_path /");
     copyRoot(findRoot(), $full_path);
@@ -1073,7 +1081,7 @@ sub createAuxDisk($$)
 	print STDERR "Could not get the xennetwork lock after a long time!\n";
 	return -1;
     }
-    system("/usr/sbin/lvcreate -n $lv -L ${size} $VGNAME");
+    system("lvcreate -n $lv -L ${size} $VGNAME");
     if ($?) {
 	TBScriptUnlock();
 	return -1;
@@ -1125,7 +1133,7 @@ sub createImageDisk($$)
     }
 
     my $size = $XEN_LDSIZE;
-    if (system("/usr/sbin/lvcreate -n $lvname -L ${size}G $VGNAME")) {
+    if (system("lvcreate -n $lvname -L ${size}G $VGNAME")) {
 	print STDERR "libvnode_xen: could not create disk for $image\n";
 	TBScriptUnlock();
 	return -1;
@@ -1171,14 +1179,36 @@ sub disk_hacks($)
     # don't try to recursively boot vnodes!
     unlink("$path/usr/local/etc/emulab/bootvnodes");
 
+    # don't set up the xen bridge on guests
+    system("sed -i.bak -e '/xenbridge-setup/d' $path/etc/network/interfaces");
+
     # don't start dhcpd in the VM
     unlink("$path/etc/dhcpd.conf");
+    unlink("$path/etc/dhcp/dhcpd.conf");
+
+    # Remove mtab just in case
+    unlink("$path/etc/mtab");
+
+    # Remove dhcp client state
+    unlink("$path/var/lib/dhcp/dhclient.leases");
+
+    # Clear out the cached control net interface name
+    unlink("$path/var/run/cnet");
+
+    # remove swap partitions from fstab
+    system("sed -i.bak -e '/swap/d' $path/etc/fstab");
 
     # fixup fstab: change UUID=blah to LABEL=/
     system("sed -i.bak -e 's/UUID=[0-9a-f-]*/LABEL=\\//' $path/etc/fstab");
 
     # enable the correct device for console
-    system("sed -i.bak -e 's/xvc0/console/' $path/etc/inittab");
+    if (-f "$path/etc/inittab") {
+	    system("sed -i.bak -e 's/xvc0/console/' $path/etc/inittab");
+    }
+
+    if (-f "$path/etc/init/ttyS0.conf") {
+	    system("sed -i.bak -e 's/ttyS0/hvc0/' $path/etc/init/ttyS0.conf");
+    }
 }
 
 sub configFile($)
@@ -1269,8 +1299,14 @@ sub createDHCP()
 	$cnet_mask,undef,$cnet_net,undef,$cnet_gw) = findControlNet();
 
     my $vnode_dns = findDNS($vnode_gw);
+    my $file;
 
-    open(FILE, ">$DHCPCONF_FILE") or die("Cannot write $DHCPCONF_FILE");
+    if (-d "/etc/dhcp") {
+	$file = $NEW_DHCPCONF_FILE;
+    } else {
+	$file = $DHCPCONF_FILE;
+    }
+    open(FILE, ">$file") or die("Cannot write $file");
 
     print FILE <<EOF;
 #
@@ -1306,8 +1342,7 @@ EOF
     ;
     close(FILE);
 
-    # make sure dhcpd is running
-    system("/etc/init.d/dhcpd restart");
+    restartDHCP();
 }
 
 #
@@ -1322,9 +1357,13 @@ sub subDHCP($$) { return modDHCP("--", "--", @_, 1); }
 sub modDHCP($$$$$)
 {
     my ($host,$ip,$mac,$doHUP,$dorm) = @_;
-    my $cur = "$DHCPCONF_FILE";
-    my $bak = "$DHCPCONF_FILE.old";
-    my $tmp = "$DHCPCONF_FILE.new";
+    my $dhcp_config_file = $DHCPCONF_FILE;
+    if (-f $NEW_DHCPCONF_FILE) {
+        $dhcp_config_file = $NEW_DHCPCONF_FILE;
+    }
+    my $cur = "$dhcp_config_file";
+    my $bak = "$dhcp_config_file.old";
+    my $tmp = "$dhcp_config_file.new";
 
     if (TBScriptLock($GLOBAL_CONF_LOCK, 0, 60) != TBSCRIPTLOCK_OKAY()) {
 	print STDERR "Could not get the xennetwork lock after a long time!\n";
@@ -1433,12 +1472,30 @@ sub modDHCP($$$$$)
 	TBScriptUnlock();
 	return -1;
     }
+
     if ($doHUP) {
-	system("/etc/init.d/dhcpd restart");
+        restartDHCP();
     }
 
     TBScriptUnlock();
     return 0;
+}
+
+sub restartDHCP()
+{
+    my $dhcpd_service = 'dhcpd';
+    if (-f '/etc/init/isc-dhcp-server.conf') {
+        $dhcpd_service = 'isc-dhcp-server';
+    }
+
+    # make sure dhcpd is running
+    if (-x '/sbin/initctl') {
+        # Upstart
+        system("/sbin/initctl restart $dhcpd_service");
+    } else {
+        #sysvinit
+        system("/etc/init.d/$dhcpd_service restart");
+    }
 }
 
 sub formatDHCP($$$)
