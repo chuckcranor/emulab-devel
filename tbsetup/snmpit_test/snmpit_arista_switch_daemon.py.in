@@ -74,6 +74,7 @@ def setPortStatus(sysdb, port, up=1):
     if ic is None:
         debug("setPortStatus("+str(port)+","+str(up)+") error: cannot get port.")
         return
+    
     if up == 1:
         ic.linkStatus = 'linkUp'
         ic.operStatus = 'intfOperUp'
@@ -323,7 +324,8 @@ def _enablePortTrunking(port, native_vlan_num, tag_native):
             pc.trunkNativeVlan = 0
         else:
             pc.trunkNativeVlan = int(native_vlan_num)
-            pc.trunkAllowedVlans = str(native_vlan_num)
+
+        pc.trunkAllowedVlans = str(native_vlan_num)
         pc.enabled = True
         setPortStatus(sysdbroot, str(port), 1)
         retval = 1
@@ -359,6 +361,7 @@ def _disablePortTrunking(port):
                 
             pc.enabled = True
             setPortStatus(sysdbroot, str(port), 1)
+            
         retval = 1
     except:
         print sign + " error: "+str(sys.exc_info())
@@ -377,6 +380,7 @@ def setBitmapByRanges(bmp, ranges, val = 1):
         l, u = t
         for i in range(l, u+1):
             bmp[i] = val
+            
     return bmp
 
 # Convert a string range to int tuple, e.g.:
@@ -405,6 +409,7 @@ def bitmap2String(bmp):
             if in_range==0:
                 in_range = 1
                 l = i
+                
         else:
             if in_range==1:
                 in_range = 0
@@ -434,6 +439,7 @@ def _setAllowedVlansOnTrunkedPort(port, allow, vnums):
     debug(sign)
     try:
         pc = getBridgingConfig(sysdbroot).switchIntfConfig.newMember(str(port))
+        setPortStatus(sysdbroot, str(port), 1)
 
         if pc.switchportMode == 'access':
             pc.switchportMode = 'trunk'
@@ -445,6 +451,7 @@ def _setAllowedVlansOnTrunkedPort(port, allow, vnums):
             bmp = setBitmapByRanges(bmp, vlan_ranges)
         else:
             bmp = setBitmapByRanges(bmp, vlan_ranges, 0)
+            
         pc.trunkAllowedVlans = bitmap2String(bmp)
         retval = 1
     except:
@@ -454,6 +461,40 @@ def _setAllowedVlansOnTrunkedPort(port, allow, vnums):
     debug(sign + " returns " + str(retval))
     return retval
 
+
+#
+# Get LACP logical port channel by its real physical ports
+#
+# Follow the algorithm in snmpit_hp, we just return the LAG of
+# the first port that has LAG.
+#
+def _getPortChannel(ports):
+    retval = ""
+    sig = "_getChannelIfIndex("+str(ports)+")"
+    debug(sig)
+    try:
+        pcs = sysdbroot['lag']['input']['config']['cli'].phyIntf
+        for port in ports:
+            if pcs.has_key(str(port)):
+                pc = pcs[str(port)]
+                if pc.lag is not None:
+                    retval = pc.lag.name
+                    break
+                
+            else: # match has_key()
+                # This seems unlikely, but just in case, and is not treated as error:
+                # In this case, some ports are not in port-channel at all, we
+                # simply ignore them.
+                print sig+" warning: port "+str(port)+" is not in port-channel.\n"
+                pass
+            
+    except:
+        print sig + " error: "+str(sys.exc_info())
+        retval = ""
+
+    debug(sig + "returns "+str(retval))
+    return retval
+    
 #
 # Exported methods list
 #
@@ -467,7 +508,8 @@ funcs = [(_createVlan, "createVlan"),
          (_listVlans, "listVlans"),
          (_enablePortTrunking, "enablePortTrunking"),
          (_disablePortTrunking, "disablePortTrunking"),
-         (_setAllowedVlansOnTrunkedPort, "setAllowedVlansOnTrunkedPort")
+         (_setAllowedVlansOnTrunkedPort, "setAllowedVlansOnTrunkedPort"),
+         (_getPortChannel, "getPortChannel")
          ]
 
 s = initRPCServer(BIND_ADDR, RPC_PORT, funcs)

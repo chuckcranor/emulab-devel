@@ -53,8 +53,18 @@ my $VLAN_ID_PREFIX = "EV_";
 # Port format
 #
 # 1. Port used by SNMP OID: (slot*1000)+port
+#    or, for a port-channel: 1000000 + port-channel#, we assume slot == 1000.
+#
 # 2. Port class instance.
-# 3. Port used by SysDB on Arista switch, "EthernetX/Y", X: module/layer/level/slot, Y: port
+#    IMPORTANT - A special case is for port-channel:
+#    normally, port-channel should not be represented using Port instance,
+#    but just in case. If a port-channel
+#    is represented by a Port instance, the card should be 1000 and port is the
+#    port-channel number.
+#
+# 3. Port used by SysDB on Arista switch:
+#    - "EthernetX/Y", X: module/layer/level/slot, Y: port
+#    - "Port-ChannelX", X: the port-channel number, from 1-1000
 #
 # NOTE: 1. switch side port module # starts from 1, not 0
 #       2. the wires table in DB must also take care of the format rules above.
@@ -226,6 +236,8 @@ sub sysdb2Ifindex($$) {
 
     if ($sbport =~ /^Ethernet(\d+)\/(\d+)$/) {
 	return $1*1000 + $2;
+    } elsif ($sbport =~ /^Port-Channel(\d+)$/) {
+	return 1000000 + int($1);
     }
 
     return undef;
@@ -240,9 +252,36 @@ sub sysdb2PortInstance($$) {
 		$self->{NAME},
 		$1,
 		$2));
+    } elsif ($sbport =~ /^Port-Channel(\d+)$/) {
+	return Port->LookupByStringForced(
+	    Port->Tokens2TripleString(
+		$self->{NAME},
+		1000,
+		$1));
     }
 
     return undef;
+}
+
+sub portInst2Sysdb($$) {
+    my ($self, $port) = @_;
+
+    if (int($port->card()) == 1000) { # This is a port-channel.
+	$pcid = $port->port();
+	return "Port-Channel$pcid";
+    } else {
+	return "Ethernet".$port->card()."/".$port->port();
+    }
+}
+
+sub ifindex2Sysdb($$) {
+    my ($self, $ifindex) = @_;
+
+    if (int($ifindex /1000) == 1000) { # A port-channel.
+	return "Port-Channel".int($ifindex %1000);
+    } else {
+	return "Ethernet".int($ifindex /1000)."/".int($ifindex %1000);
+    }
 }
 
 
@@ -273,7 +312,7 @@ sub convertPortFormat($$@) {
     my $input = undef;
     if (Port->isPort($sample)) {
 	$input = $PORT_FORMAT_PORT;
-    } elsif ($sample =~ /^Ethernet/) {
+    } elsif ($sample =~ /^Ethernet/ || $sample =~ /^Port-Channel/) {
 	$input = $PORT_FORMAT_SYSDB;
     } else {
 	$input = $PORT_FORMAT_IFINDEX;
@@ -293,7 +332,7 @@ sub convertPortFormat($$@) {
 	    my @ifports = map int(int($_->card())*1000 +int($_->port())), @swports;
 	    return @ifports;
 	} else {
-	    my @sysdbports = map "Ethernet".$_->card()."/".$_->port(), @swports;
+	    my @sysdbports = map $self->portInst2Sysdb($_), @swports; # "Ethernet".$_->card()."/".$_->port(), @swports;
 	    return @sysdbports
 	}
     } elsif ($input == $PORT_FORMAT_IFINDEX) {
@@ -305,7 +344,7 @@ sub convertPortFormat($$@) {
 		    $_ %1000)), @ports;
 	    return @swports;
 	} else {
-	    my @sysdbports = map "Ethernet".int($_ /1000)."/".int($_ %1000), @ports;
+	    my @sysdbports = map $self->ifindex2Sysdb($_), @ports; # "Ethernet".int($_ /1000)."/".int($_ %1000), @ports;
 	    return @sysdbports;
 	}
 	
@@ -811,7 +850,7 @@ sub listVlans($) {
 #
 # List all ports on the device
 #
-# Specially for Arista switch: All ports are duplex, auto-negotiated.
+# Specially for Arista switch: All ports are duplex.
 #
 # usage: listPorts($self)
 # see snmpit_cisco_stack.pm for a description of return value format
@@ -934,6 +973,8 @@ sub getStats() {
 #
 # usage: resetVlanIfOnTrunk(self, modport, vlan)
 #
+# note: the modport here is most likely a channel ifindex.
+# 
 sub resetVlanIfOnTrunk($$$) {
     my ($self, $modport, $vlan) = @_;
 
@@ -966,13 +1007,20 @@ sub resetVlanIfOnTrunk($$$) {
 # maintenance functions of vlans and so you should check for each port
 # any way, and 2.) the check is cheap and can be done in convertPortFormat.
 #
-# NOTE: NOT-SUPPORTED We mostly use XML-RPC rather than SNMP.
-#
 sub getChannelIfIndex($@) {
     my $self = shift;
     my @ports = @_;
+    my $id = $self->{NAME}."::getChannelIfIndex";
 
-    warn "ERROR: " . $self->{NAME} . "::getChannelIfIndex: not supported.\n";
+    my @swports = $self->convertPortFormat($PORT_FORMAT_SYSDB, @ports);
+
+    my $resp = $self->callRPC($id, 'getPortChannel', \@swports);
+
+    if ($resp) {
+	my ($ifindex) = $self->convertPortFormat($PORT_FORMAT_IFINDEX, $resp);
+	$self->debug("$id gets $ifindex ($resp)\n",1);
+	return $ifindex;
+    }
 
     return undef;
 }
@@ -991,8 +1039,7 @@ sub setVlansOnTrunk($$$$) {
     my ($self, $modport, $value, @vlan_numbers) = @_;
     my $id = $self->{NAME} . "::setVlansOnTrunk";
 
-    # NOTE: so-called $modport must be a Port instance!
-    my $swport = $self->convertPortFormat($PORT_FORMAT_SYSDB, $modport);
+    my ($swport) = $self->convertPortFormat($PORT_FORMAT_SYSDB, $modport);
     my $resp = $self->callRPC($id, 'setAllowedVlansOnTrunkedPort', $swport,
 			      ($value?1:0), \@vlan_numbers);
     if ($resp) {
@@ -1018,7 +1065,7 @@ sub enablePortTrunking2($$$$) {
     my $id = $self->{NAME} .
 		"::enablePortTrunking($port,$native_vlan,$equaltrunking)";
 
-    my $swport = $self->convertPortFormat($PORT_FORMAT_SYSDB, $port);
+    my ($swport) = $self->convertPortFormat($PORT_FORMAT_SYSDB, $port);
     my $resp = $self->callRPC($id, 'enablePortTrunking',
 			      $swport, $native_vlan, ($equaltrunking?1:0));
     if ($resp) {
@@ -1038,7 +1085,7 @@ sub disablePortTrunking($$) {
     my ($self, $port) = @_;
     my $id = $self->{NAME} . "::disablePortTrunking($port)";
 
-    my $swport = $self->convertPortFormat($PORT_FORMAT_SYSDB, $port);
+    my ($swport) = $self->convertPortFormat($PORT_FORMAT_SYSDB, $port);
     my $resp = $self->callRPC($id, 'disablePortTrunking',
 			      $swport);
     if ($resp) {
