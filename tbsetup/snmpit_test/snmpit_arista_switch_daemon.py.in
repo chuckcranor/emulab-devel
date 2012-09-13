@@ -62,6 +62,19 @@ def vlanExists(sysdb, vlan_num):
     bc = getBridgingConfig(sysdb)
     return bc.vlanConfig.has_key(vlan_num)
 
+
+def setPortAdminStatus(sysdb, port, enabld=1):
+    pc = sysdb['interface']['config']['all'].get(port)
+    if pc is None:
+        debug("setPortAdminStatus("+str(port)+","+str(enabled)+") error: can not get port.")
+        return
+
+    if enabled==1:
+        pc.adminEnabled='True'
+    else:
+        pc.adminEnabled='False'
+    
+
 #
 # Not every port is active, or up. Inactive ports won't be listed
 # under the IntfConfig folder and other interface folders, though
@@ -204,6 +217,13 @@ def _removePortsFromVlan(vlan_num, ports):
                 else:
                     if pbc.accessVlan == int(vlan_num):
                         pbc.accessVlan = DEFAULT_VLAN_NUM
+                        setPortAdminStatus(sysdbroot, p, 0)
+                    elif pbc.switchportMode == 'trunk':
+
+                        # This is hard to deal with, just remove the given vlan.
+                        if pbc.trunkNativeVlan == int(vlan_num):
+                            pbc.trunkNativeVlan = 0
+                        disableVlanOnTrunkedPort(sysdbroot, p, vlan_num)
 
     except:
         print sign + " error: "+str(sys.exc_info())
@@ -422,6 +442,21 @@ def bitmap2String(bmp):
                 s += sr
     
     return s
+
+
+#
+# Disable the given VLAN on trunked port.
+#
+# Pre-condition: port must be trunked.
+#
+def disableVlanOnTrunkedPort(sysdb, port, vlan_num):
+    sign = "disableVlanOnTrunkedPort("+str(port)+","+str(vlan_num)+")"
+    debug(sign)
+    pc = getBridgingConfig(sysdb).switchIntfConfig.newMember(str(port))
+    bmp = string2Bitmap(pc.trunkAllowedVlans)
+    bmp[int(vlan_num)] = 0
+    pc.trunkAllowedVlans = bitmap2String(bmp)
+    
 
 #
 # Set allowed VLANs on trunked port.

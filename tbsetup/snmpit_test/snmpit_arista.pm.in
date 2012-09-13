@@ -679,6 +679,12 @@ sub setPortVlan($$@) {
 	$errors = scalar(@ports);
     }
 
+    # enable/disable ports:
+    # if the vlan is '1', then disable ports(which means deleting the ports from
+    # some vlan).
+    my $onoroff = ($vlan_number ne "1")? "enable":"disable";
+    $error += $self->portControl($onoroff, @ports);
+
     return $errors;
 }
 
