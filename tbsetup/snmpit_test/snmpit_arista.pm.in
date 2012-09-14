@@ -267,7 +267,7 @@ sub portInst2Sysdb($$) {
     my ($self, $port) = @_;
 
     if (int($port->card()) == 1000) { # This is a port-channel.
-	$pcid = $port->port();
+	my $pcid = $port->port();
 	return "Port-Channel$pcid";
     } else {
 	return "Ethernet".$port->card()."/".$port->port();
@@ -683,7 +683,7 @@ sub setPortVlan($$@) {
     # if the vlan is '1', then disable ports(which means deleting the ports from
     # some vlan).
     my $onoroff = ($vlan_number ne "1")? "enable":"disable";
-    $error += $self->portControl($onoroff, @ports);
+    $errors += $self->portControl($onoroff, @ports);
 
     return $errors;
 }

@@ -63,16 +63,16 @@ def vlanExists(sysdb, vlan_num):
     return bc.vlanConfig.has_key(vlan_num)
 
 
-def setPortAdminStatus(sysdb, port, enabld=1):
+def setPortAdminStatus(sysdb, port, enabled=1):
     pc = sysdb['interface']['config']['all'].get(port)
     if pc is None:
         debug("setPortAdminStatus("+str(port)+","+str(enabled)+") error: can not get port.")
         return
 
     if enabled==1:
-        pc.adminEnabled='True'
+        pc.adminEnabled=True
     else:
-        pc.adminEnabled='False'
+        pc.adminEnabled=False
     
 
 #
