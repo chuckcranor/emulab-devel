@@ -57,14 +57,15 @@ sub mysystem($)
 #
 # Accessors
 #
-sub lease_id($)        {return $_[0]->{'LEASE_ID'}; }
-sub pid($)             {return $_[0]->{'PROJ'}; }
-sub idx($)             {return $_[0]->{'IDX'}; }
+sub lease_id($)        {return $_[0]->{'DBROW'}->{'lease_id'}; }
+sub pid($)             {return $_[0]->{'DBROW'}->{'pid'}; }
+sub idx($)             {return $_[0]->{'DBROW'}->{'lease_idx'}; }
+sub lease_idx($)       {return $_[0]->idx(); }
 sub owner($)           {return $_[0]->{'DBROW'}->{'owner_uid'}; }
 sub type($)            {return $_[0]->{'DBROW'}->{'type'}; }
 sub inception($)       {return str2time($_[0]->{'DBROW'}->{'inception'}); }
-sub leaseend($)        {return str2time($_[0]->{'DBROW'}->{'leaseend'}); }
-sub expiration($)      {return $_[0]->leaseend(); }
+sub lease_end($)       {return str2time($_[0]->{'DBROW'}->{'lease_end'}); }
+sub expiration($)      {return $_[0]->lease_end(); }
 sub last_used($)       {return str2time($_[0]->{'DBROW'}->{'last_used'}); }
 sub state($)           {return $_[0]->{'DBROW'}->{'state'}; }
 sub statestamp($)      {return str2time($_[0]->{'DBROW'}->{'statestamp'}); }
@@ -73,51 +74,80 @@ sub statestamp($)      {return str2time($_[0]->{'DBROW'}->{'statestamp'}); }
 #
 # Lookup a lease in the DB and return an object representing it.
 #
-sub Lookup($$$)
+sub Lookup($$;$)
 {
     my ($class, $pid, $lease_id) = @_;
-    my $plid = $pid + "-" + $lease_id;
+    my ($wclause);
 
-    # Look in cache first
-    return $leases{$plid}
-        if (exists($leases{$plid}));
+    # Determine how we were called.  If only a single parameter was passed
+    # to the method, then it should be a lease index.  If both are passed in,
+    # then they are what their variable names imply.
+    if (!defined($lease_id)) {
+	my $idx = $pid;
+	if ($idx !~ /^\d+$/) {
+	    print STDERR "Lease->Create: single parameter to call must be a numeric interger index.\n";
+	    return undef;
+	}
+	# Look in cache first
+	return $leases{$idx}
+	    if (exists($leases{$idx}));
+
+	$wclause = "lease_idx=$idx";
+    } else {
+	# Look in cache first
+	return $leases{"$pid:$lease_id"}
+	    if (exists($leases{"$pid:$lease_id"}));
+
+	$wclause = "pid='$pid' and lease_id='$lease_id'";
+    }
 
     my $self            = {};
-    $self->{"PID"}      = $pid;
-    $self->{"LEASE_ID"} = $lease_id;
     $self->{"ATTRS"}    = undef;  # load lazily
-
-    bless($self, $class);
 
     # Load lease from DB, if it exists. Otherwise, return undef.
     my $query_result =
-	DBQueryWarn("select * from project_leases where pid='$pid' and lease_id='$lease_id'");
+	DBQueryWarn("select * from project_leases where $wclause");
 
     return undef
 	if (!$query_result || !$query_result->numrows);
 
-    my $leaseh = $query_result->fetchrow_hashref();
-    $self->{'DBROW'} = $leaseh;
-    $self->{'IDX'} = $leaseh->{'lease_idx'};
+    $self->{'DBROW'} = $query_result->fetchrow_hashref();;
+    bless($self, $class);
 
-    # Add to cache.
-    $leases{$plid} = $self;
+    # Add to cache (dual lookup).
+    $leases{$self->pid() + ":" + $self->lease_id()} = $self;
+    $leases{$self->idx()} = $self;
     return $self;
 }
 
 #
 # Force a reload of the data.
 #
-sub LookupSync($$$)
-{
-    my ($class, $proj, $lease_id) = @_;
-    my $plid = $proj + "-" + $lease_id;
+sub LookupSync($$;$) {
+    my ($class, $pid, $lease_id) = @_;
+    my ($lease_idx, $plid);
+
+    if (!defined($lease_id)) {
+	$lease_idx = $pid;
+	if (exists($leases{$lease_idx})) {
+	    $plid = 
+		$leases{$lease_idx}->pid() + ":" + 
+		$leases{$lease_idx}->lease_id();
+	}
+    } else {
+	$plid = "$pid:$lease_id";
+	if (exists($leases{$plid})) {
+	    $lease_idx = $leases{$plid}->idx();
+	}
+    }
 
     # delete from cache
+    delete($leases{$lease_idx})
+        if (defined($lease_idx) && exists($leases{$lease_idx}));
     delete($leases{$plid})
-        if (exists($leases{$plid}));
+        if (defined($plid) && exists($leases{$plid}));
 
-    return Lookup($class, $proj, $lease_id);
+    return Lookup($class, $lease_idx);
 }
 
 #
@@ -139,17 +169,17 @@ sub DESTROY($) {
 sub Create($$;$) {
     my ($class, $argref, $attrs) = @_;
 
-    my ($lease_id, $pid, $uid, $type, $leaseend, $state);
+    my ($lease_id, $pid, $uid, $type, $lease_end, $state);
 
     return undef
 	if (!ref($argref));
 
-    $lease_id = $argref->{'lease_id'};
-    $pid      = $argref->{'pid'};
-    $uid      = $argref->{'uid'};
-    $type     = $argref->{'type'};
-    $leaseend = $argref->{'leaseend'};
-    $state    = $argref->{'state'};
+    $lease_id  = $argref->{'lease_id'};
+    $pid       = $argref->{'pid'};
+    $uid       = $argref->{'uid'};
+    $type      = $argref->{'type'};
+    $lease_end = $argref->{'lease_end'};
+    $state     = $argref->{'state'};
     
     if (!($lease_id && $pid && $uid && $type && $leasend && $state)) {
 	print STDERR "Lease->Create: Missing required parameters in argref\n";
@@ -197,11 +227,11 @@ sub Create($$;$) {
     }
 
     # XXX: minimum lease length should be changeable via sitevar.
-    if ($leaseend !~ /^\d+$/) {
-	print "Lease->Create: Invalid lease end time: $leaseend\n";
+    if ($lease_end !~ /^\d+$/) {
+	print "Lease->Create: Invalid lease end time: $lease_end\n";
 	return undef;
     }
-    if ($leaseend < time() + $MINLEASELEN) {
+    if ($lease_end < time() + $MINLEASELEN) {
 	print STDERR "Lease->Create: Lease end is not far enough in the future.\n";
 	return undef;
     }
@@ -220,7 +250,7 @@ sub Create($$;$) {
 		"pid='". $pid->pid() ."',".
 		"owner_uid='". $uid->uid() ."',".
 		"type='$type',".
-		"leaseend=FROM_UNIXTIME($leaseend),".
+		"lease_end=FROM_UNIXTIME($lease_end),".
 		"state='$state',".
 		"statestamp=NOW(),"
 		"inception=NOW()")
@@ -256,15 +286,21 @@ sub Delete($) {
     my ($self) = @_;
 
     return -1
-	if (ref($self) ne "Lease");
+	if (!ref($self));
 
-    my $idx = $self->idx();
+    my $idx  = $self->idx();
+    my $plid = $self->pid() + ":" + $self->lease_id();
 
     DBQueryWarn("delete from project_leases where lease_idx=$idx")
 	or return -1;
     
     DBQueryWarn("delete from leases_attributes where lease_idx=$idx")
 	or return -1;
+
+    delete($leases{$idx})
+	if (exists($leases{$idx}));
+    delete($leases{$plid})
+	if (exists($leases{$plid}));
 
     return 0
 }
@@ -279,6 +315,10 @@ sub AllProjectLeases($$)
     
     return undef
 	if !defined($pid);
+
+    if (ref($pid) eq "Project") {
+	$pid = $pid->pid();
+    }
     
     my $query_result =
 	DBQueryWarn("select lease_id from leases where pid='$pid'");
@@ -314,13 +354,13 @@ sub AllUserLeases($$)
     }
     
     my $query_result =
-	DBQueryWarn("select lease_id,pid from leases where owner_uid='$uid'");
+	DBQueryWarn("select lease_idx from leases where owner_uid='$uid'");
     
     return ()
 	if (!$query_result || !$query_result->numrows);
 
-    while (my ($lease_id, $pid) = $query_result->fetchrow_array()) {
-	my $lease = Lookup($class, $pid, $lease_id);
+    while (my ($lease_idx) = $query_result->fetchrow_array()) {
+	my $lease = Lookup($class, $lease_idx);
 
 	# Something went wrong?
 	return ()
@@ -448,8 +488,8 @@ sub AddTime($$) {
     }
 
     my $idx = $self->idx();
-    my $newend = $self->leaseend() + $ntime;
-    DBQueryWarn("update project_leases set leaseend=FROM_UNIXTIME($newend) where lease_idx=$idx")
+    my $newend = $self->lease_end() + $ntime;
+    DBQueryWarn("update project_leases set lease_end=FROM_UNIXTIME($newend) where lease_idx=$idx")
 	or return -1;
 
     return 0;
@@ -470,7 +510,7 @@ sub SetEndTime($$) {
     }
 
     my $idx = $self->idx();
-    DBQueryWarn("update project_leases set leaseend=FROM_UNIXTIME($ntime) where lease_idx=$idx")
+    DBQueryWarn("update project_leases set lease_end=FROM_UNIXTIME($ntime) where lease_idx=$idx")
 	or return -1;
 
     return 0;
@@ -482,7 +522,7 @@ sub SetEndTime($$) {
 sub IsExpired($) {
     my ($self) = @_;
     
-    if ($self->leaseend() < time()) {
+    if ($self->lease_end() < time()) {
 	return 1;
     }
 
@@ -594,11 +634,11 @@ sub GetAttributes($)
 #
 # Set the value of an attribute
 #
-sub SetAttribute($$$;$$)
+sub SetAttribute($$$;$)
 {
     my ($self, $attrkey, $attrvalue, $attrtype) = @_;
     
-    goto bad
+    return -1
 	if (!ref($self));
 
     $self->LoadAttributes() == 0
@@ -619,6 +659,24 @@ sub SetAttribute($$$;$$)
 	"value" => $attrvalue,
 	"type" => $attrtype
     };
+
+    return 0;
+}
+
+#
+# Remove an attribute
+#
+sub DeleteAttribute($$) {
+    my ($self, $attrkey) @_;
+
+    return -1
+	if (!ref(self));
+
+    my $idx = $self->idx();
+    DBQueryWarn("delete from lease_attributes where lease_idx=$idx and attrkey='$attrkey'");
+
+    delete($self->{"ATTRS"}->{$attrkey})
+	if (exists($self->{"ATTRS"}->{$attrkey}));
 
     return 0;
 }
