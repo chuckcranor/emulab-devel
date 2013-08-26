@@ -85,7 +85,7 @@ sub Lookup($$;$)
     if (!defined($lease_id)) {
 	my $idx = $pid;
 	if ($idx !~ /^\d+$/) {
-	    print STDERR "Lease->Create: single parameter to call must be a numeric interger index.\n";
+	    print STDERR "Lease->Lookup: single parameter to call must be a numeric index.\n";
 	    return undef;
 	}
 	# Look in cache first
@@ -101,8 +101,10 @@ sub Lookup($$;$)
 	$wclause = "pid='$pid' and lease_id='$lease_id'";
     }
 
-    my $self            = {};
-    $self->{"ATTRS"}    = undef;  # load lazily
+    my $self              = {};
+    $self->{"LOCKED"}     = 0;
+    $self->{"LOCKER_PID"} = 0;
+    $self->{"ATTRS"}      = undef;  # load lazily
 
     # Load lease from DB, if it exists. Otherwise, return undef.
     my $query_result =
@@ -156,9 +158,8 @@ sub LookupSync($$;$) {
 sub DESTROY($) {
     my ($self) = @_;
 
-    $self->{'PID'} = undef;
-    $self->{'LEASE_ID'} = undef;
-    $self->{'IDX'} = undef;
+    $self->{'LOCKED'} = undef;
+    $self->{'LOCKER_PID'} = undef;
     $self->{'ATTRS'} = undef;
     $self->{'DBROW'} = undef;
 }
@@ -530,6 +531,153 @@ sub IsExpired($) {
 }
 
 #
+# Check Lease permissions for a specific user.
+#
+sub AccessCheck($$$) {
+    my ($self, $user, $access_type) = @_;
+    my $user_access = 0;
+
+    if (ref($user) ne "User") {
+	print STDERR "Lease->AccessCheck: 'user' argument must be a valid User object.\n";
+	return 0;
+    }
+
+    if ($access_type < $LEASE_ACCESS_MIN || $access_type > $LEASE_ACCESS_MAX) {
+	print STDERR "Lease->AccessCheck: Invalid access type: $access_type\n";
+	return 0;
+    }
+
+    # Testbed admins have all privs.
+    if ($user->IsAdmin() || $UID == 0 || $UID eq "root") {
+	return 1;
+    }
+
+    # Some special cases
+    if ($user->uid() eq $self->owner_uid()) {
+	# Owning UID has all permissions.
+	return 1;
+    }
+
+    # Need this for trust checks below.
+    my $proj = Project->Lookup($self->pid());
+
+    # Project managers can do anything to a lease that is attributed
+    # to their project.
+    if (TBMinTrust($proj->Trust($uid), PROJMEMBERTRUST_GROUPROOT())) {
+	return 1;
+    }
+
+    # If the user is a member of the owning project, then they can at
+    # least grab the lease's info.
+    if (TBMinTrust($proj->Trust($uid), PROJMEMBERTRUST_USER())) {
+	$user_access = LEASE_ACCESS_READINFO();
+    }
+
+    my $idx = $self->idx();
+    my $qres = DBQueryWarn("select permission_type,permission_idx,allow_modify from lease_permissions where lease_idx=$idx");
+
+    # If nothing was returned, just pass back the result based on the
+    # special checks above.
+    return (TBMinTrust($user_access, $access_type) ? 1 : 0)
+	if !defined($qres);
+
+    while (my ($perm_type, $perm_idx, $modify) = $qres->fetchrow_array()) {
+	if ($perm_type eq "group") {
+	    # If the user is a member of this group and has a minimum of
+	    # trust, then give them the access listed in the db.
+	    my $dbgroup = Group->Lookup($perm_idx);
+	    if ($dbgroup && TBMinTrust($dbgroup->Trust($user), 
+				       PROJMEMBERTRUST_LOCALROOT()) {
+		$user_access = 
+		    $modify ? LEASE_ACCESS_MODIFY() : LEASE_ACCESS_READ();
+	    }
+	} elsif ($perm_type eq "user") {
+	    # If this is a user permission, and the incoming user arg matches,
+	    # then give them the privileges listed in this entry.
+	    my $dbuser = User->Lookup($perm_idx);
+	    if (defined($dbuser) && $dbuser->uid() == $user->uid()) {
+		$user_access = 
+		    $modify ? LEASE_ACCESS_MODIFY() : LEASE_ACCESS_READ();
+	    }
+	} else {
+	    print STDERR "Lease->AccessCheck: Unknown permission type in DB for lease index $idx: $perm_type\n";
+	    return 0;
+	}
+    }
+
+    return (TBMinTrust($user_access, $access_type) ? 1 : 0);
+}
+
+#
+# Grant permission to access a Lease.
+#
+sub GrantAccess($$$)
+{
+    my ($self, $target, $modify) = @_;
+    $modify = ($modify ? 1 : 0);
+
+    my $idx      = $self->idx()();
+    my $lease_id = $self->lease_id();
+    my ($perm_idx, $perm_id, $perm_type);
+
+    if (ref($target) eq "User") {
+	$perm_idx  = $target->uid_idx();
+	$perm_id   = $target->uid();
+	$perm_type = "user";
+    } 
+    elsif (ref($target) eq "Group") {
+	$perm_idx  = $target->gid_idx();
+	$perm_id   = $target->pid() . "/" . $target->gid();
+	$perm_type = "group";
+    } 
+    else {
+	print STDERR "Lease->GrantAccess: Bad target: $target\n";
+	return -1;
+    }
+
+    return -1
+	if (!DBQueryWarn("replace into lease_permissions set ".
+			 "  lease_idx=$idx, lease_id='$lease_id', ".
+			 "  permission_type='$perm_type', ".
+			 "  permission_id='$perm_id', ".
+			 "  permission_idx='$perm_idx', ".
+			 "  allow_modify='$modify'"));
+    return 0;
+}
+
+
+#
+# Revoke permission for a lease.
+#
+sub RevokeAccess($$)
+{
+    my ($self, $target) = @_;
+
+    my $idx        = $self->idx();
+    my ($perm_idx, $perm_type);
+
+    if (ref($target) eq "User") {
+	$perm_idx  = $target->uid_idx();
+	$perm_type = "user";
+    }
+    elsif (ref($target) eq "Group") {
+	$perm_idx  = $target->gid_idx();
+	$perm_type = "group";
+    }
+    else {
+	print STDERR "Lease->RevokeAccess: Bad target: $target\n";
+	return -1;
+    }
+
+    return -1
+	if (!DBQueryWarn("delete from lease_permissions ".
+			 "where lease_idx=$idx' and ".
+			 "  permission_type='$perm_type' and ".
+			 "  permission_idx='$perm_idx'"));
+    return 0;
+}
+
+#
 # Load attributes if not already loaded.
 #
 sub LoadAttributes($)
@@ -679,6 +827,95 @@ sub DeleteAttribute($$) {
 	if (exists($self->{"ATTRS"}->{$attrkey}));
 
     return 0;
+}
+
+#
+# Lock and Unlock
+#
+sub Lock($)
+{
+    my ($self) = @_;
+
+    # Must be a real reference. 
+    return -1
+	if (! ref($self));
+
+    # Already locked?
+    if ($self->GotLock()) {
+	return 0;
+    }
+
+    return -1
+	if (!DBQueryWarn("lock tables project_leases write"));
+
+    my $idx = $self->idx();
+
+    my $query_result =
+	DBQueryWarn("update project_leases set locked=now(),locker_pid=$PID " .
+		    "where lease_idx=$idx and locked is null");
+
+    if (! $query_result ||
+	$query_result->numrows == 0) {
+	DBQueryWarn("unlock tables");
+	return -1;
+    }
+    DBQueryWarn("unlock tables");
+    $self->{'LOCKED'} = time();
+    $self->{'LOCKER_PID'} = $PID;
+    return 0;
+}
+
+sub Unlock($)
+{
+    my ($self) = @_;
+
+    # Must be a real reference. 
+    return -1
+	if (! ref($self));
+
+    my $idx   = $self->idx();
+
+    return -1
+	if (! DBQueryWarn("update project_leases set locked=null,locker_pid=0 " .
+			  "where lease_idx=$idx"));
+    
+    $self->{'LOCKED'} = 0;
+    $self->{'LOCKER_PID'} = 0;
+    return 0;
+}
+
+sub GotLock($)
+{
+    my ($self) = @_;
+
+    return 1
+	if ($self->{'LOCKED'} &&
+	    $self->{'LOCKER_PID'} == $PID);
+    
+    return 0;
+}
+
+#
+# Wait to get lock.
+#
+sub WaitLock($$)
+{
+    my ($self, $seconds) = @_;
+
+    # Must be a real reference. 
+    return -1
+	if (! ref($self));
+
+    while ($seconds > 0) {
+	return 0
+	    if ($self->Lock() == 0);
+
+	# Sleep and try again.
+	sleep(5);
+	$seconds -= 5;
+    }
+    # One last try.
+    return $self->Lock();
 }
 
 # _Always_ make sure that this 1 is at the end of the file...

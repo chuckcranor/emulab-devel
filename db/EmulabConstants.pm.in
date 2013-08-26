@@ -381,6 +381,16 @@ sub TB_IMAGEID_MAX()		{ TB_IMAGEID_ACCESS(); }
 sub TB_IMAGEID_IMAGEIDLEN()	{ 45; }
 sub TB_IMAGEID_IMAGENAMELEN()	{ 30; }
 
+#
+# Lease Access Types
+#
+sub LEASE_ACCESS_READINFO()     { 1; }
+sub LEASE_ACCESS_READ()         { 2; }
+sub LEASE_ACCESS_MODIFY()       { 3; }
+sub LEASE_ACCESS_DESTROY()      { 4; }
+sub LEASE_ACCESS_MIN()          { LEASE_ACCESS_READINFO(); }
+sub LEASE_ACCESS_MAX()          { LEASE_ACCESS_DESTROY(); }
+
 # Node Log Types
 sub TB_NODELOGTYPE_MISC		{ "misc"; }
 sub TB_NODELOGTYPES()		{ ( TB_NODELOGTYPE_MISC() ) ; }
