@@ -124,27 +124,27 @@ sub Lookup($$;$)
 #
 sub LookupSync($$;$) {
     my ($class, $pid, $quota_id) = @_;
-    my ($quota_idx, $plid);
+    my ($quota_idx, $qpid);
 
     if (!defined($quota_id)) {
 	$quota_idx = $pid;
 	if (exists($quotas{$quota_idx})) {
-	    $plid = 
+	    $qpid = 
 		$quotas{$quota_idx}->pid() + ":" + 
 		$quotas{$quota_idx}->quota_id();
 	}
     } else {
-	$plid = "$pid:$quota_id";
-	if (exists($quotas{$plid})) {
-	    $quota_idx = $quotas{$plid}->idx();
+	$qpid = "$pid:$quota_id";
+	if (exists($quotas{$qpid})) {
+	    $quota_idx = $quotas{$qpid}->idx();
 	}
     }
 
     # delete from cache
     delete($quotas{$quota_idx})
         if (defined($quota_idx) && exists($quotas{$quota_idx}));
-    delete($quotas{$plid})
-        if (defined($plid) && exists($quotas{$plid}));
+    delete($quotas{$qpid})
+        if (defined($qpid) && exists($quotas{$qpid}));
 
     return Lookup($class, $quota_idx);
 }
