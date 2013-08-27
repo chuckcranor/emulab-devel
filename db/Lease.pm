@@ -32,12 +32,17 @@ use vars qw(@ISA @EXPORT);
 
 use libdb;
 use libtestbed;
+use EmulabConstants;
+use User;
+use Group;
+use Project;
 use English;
 use Date::Parse;
 use Data::Dumper;
 use overload ('""' => 'Stringify');
 
-my @LEASE_TYPES = ();
+my @LEASE_TYPES  = ("user","group");
+my @LEASE_STATES = ("valid","unapproved","grace","locked","expired");
 my $MINLEASELEN = 1 * 24 * 60 * 60   # One day.
 
 # Cache of instances to avoid regenerating them.
@@ -189,8 +194,8 @@ sub Create($$;$) {
 
     # Sanity checks for incoming arguments
     if (!TBcheck_dbslot($lease_id, "project_leases", "lease_id")) {
-	print STDERR "Lease->Create: Bad data for lease id: " + 
-	    $DBFieldErrstr + "\n";
+	print STDERR "Lease->Create: Bad data for lease id: ".
+	    $DBFieldErrstr ."\n";
 	return undef;
     }
 
@@ -295,7 +300,10 @@ sub Delete($) {
     DBQueryWarn("delete from project_leases where lease_idx=$idx")
 	or return -1;
     
-    DBQueryWarn("delete from leases_attributes where lease_idx=$idx")
+    DBQueryWarn("delete from lease_attributes where lease_idx=$idx")
+	or return -1;
+
+    DBQueryWarn("delete from lease_permissions where lease_idx=$idx")
 	or return -1;
 
     delete($leases{$idx})
@@ -312,7 +320,7 @@ sub Delete($) {
 sub AllProjectLeases($$)
 {
     my ($class, $pid)  = @_;
-    my @leases = ();
+    my @pleases = ();
     
     return undef
 	if !defined($pid);
@@ -322,7 +330,7 @@ sub AllProjectLeases($$)
     }
     
     my $query_result =
-	DBQueryWarn("select lease_id from leases where pid='$pid'");
+	DBQueryWarn("select lease_id from project_leases where pid='$pid'");
     
     return ()
 	if (!$query_result || !$query_result->numrows);
@@ -334,9 +342,9 @@ sub AllProjectLeases($$)
 	return ()
 	    if (!defined($lease));
 	
-	push(@leases, $lease);
+	push(@pleases, $lease);
     }
-    return @leases;
+    return @pleases;
 }
 
 #
@@ -345,7 +353,7 @@ sub AllProjectLeases($$)
 sub AllUserLeases($$)
 {
     my ($class, $uid)  = @_;
-    my @leases = ();
+    my @pleases = ();
     
     return undef
 	if !defined($uid);
@@ -355,7 +363,7 @@ sub AllUserLeases($$)
     }
     
     my $query_result =
-	DBQueryWarn("select lease_idx from leases where owner_uid='$uid'");
+	DBQueryWarn("select lease_idx from project_leases where owner_uid='$uid'");
     
     return ()
 	if (!$query_result || !$query_result->numrows);
@@ -367,9 +375,9 @@ sub AllUserLeases($$)
 	return ()
 	    if (!defined($lease));
 	
-	push(@leases, $lease);
+	push(@pleases, $lease);
     }
-    return @leases;
+    return @pleases;
 }
 
 #
@@ -427,9 +435,6 @@ sub Refresh($)
 	if (!$query_result || !$query_result->numrows);
 
     $self->{"DBROW"}    = $query_result->fetchrow_hashref();
-    $self->{"PROJ"}     = $self->{"DBROW"}->{"pid"};
-    $self->{"LEASE_ID"} = $self->{"DBROW"}->{"lease_id"};
-    $self->{"IDX"}      = $self->{"DBROW"}->{"lease_idx"};
     $self->{"ATTRS"}    = undef;
 
     return 0;
@@ -447,7 +452,7 @@ sub UpdateState($$) {
     return -1
 	if (!defined($state));
 
-    if (!grep {/^$state$/} $LEASE_STATES) {
+    if (!grep {/^$state$/} @LEASE_STATES) {
 	print STDERR "Lease->UpdateState: Invalid state: $state\n";
 	return -1;
     }
@@ -553,7 +558,7 @@ sub AccessCheck($$$) {
     }
 
     # Some special cases
-    if ($user->uid() eq $self->owner_uid()) {
+    if ($user->uid() eq $self->owner()) {
 	# Owning UID has all permissions.
 	return 1;
     }
@@ -740,6 +745,8 @@ sub GetAttribute($$;$$$)
 	return undef
 	    if (!defined($pattrvalue));
 	$$pattrvalue = undef;
+	$$pattertype = undef
+	    if (defined($pattrtype));
 	return 0;
     }
 
@@ -759,6 +766,8 @@ sub GetAttribute($$;$$$)
     return undef
 	if (!defined($pattrvalue));
     $$pattrvalue = undef;
+    $$pattertype = undef
+	if (defined($pattrtype));
     return -1;
 }
 
