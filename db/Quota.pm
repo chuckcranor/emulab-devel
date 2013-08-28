@@ -161,8 +161,8 @@ sub DESTROY($) {
 #
 # Create a new quota.
 #
-sub Create($$;$) {
-    my ($class, $argref, $attrs) = @_;
+sub Create($$) {
+    my ($class, $argref) = @_;
 
     my ($quota_id, $pid, $type, $size, $notes);
 
