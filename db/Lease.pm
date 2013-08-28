@@ -41,9 +41,9 @@ use Date::Parse;
 use Data::Dumper;
 use overload ('""' => 'Stringify');
 
-my @LEASE_TYPES  = ("user","group");
+my @LEASE_TYPES  = ("stdataset","ltdataset");
 my @LEASE_STATES = ("valid","unapproved","grace","locked","expired");
-my $MINLEASELEN = 1 * 24 * 60 * 60   # One day.
+my $MINLEASELEN = 1 * 24 * 60 * 60;   # One day.
 
 # Cache of instances to avoid regenerating them.
 my %leases	= ();
@@ -122,7 +122,7 @@ sub Lookup($$;$)
     bless($self, $class);
 
     # Add to cache (dual lookup).
-    $leases{$self->pid() + ":" + $self->lease_id()} = $self;
+    $leases{$self->pid() .":". $self->lease_id()} = $self;
     $leases{$self->idx()} = $self;
     return $self;
 }
@@ -138,7 +138,7 @@ sub LookupSync($$;$) {
 	$lease_idx = $pid;
 	if (exists($leases{$lease_idx})) {
 	    $plid = 
-		$leases{$lease_idx}->pid() + ":" + 
+		$leases{$lease_idx}->pid() .":". 
 		$leases{$lease_idx}->lease_id();
 	}
     } else {
@@ -187,7 +187,7 @@ sub Create($$;$) {
     $lease_end = $argref->{'lease_end'};
     $state     = $argref->{'state'};
     
-    if (!($lease_id && $pid && $uid && $type && $leasend && $state)) {
+    if (!($lease_id && $pid && $uid && $type && $lease_end && $state)) {
 	print STDERR "Lease->Create: Missing required parameters in argref\n";
 	return undef;
     }
@@ -195,7 +195,7 @@ sub Create($$;$) {
     # Sanity checks for incoming arguments
     if (!TBcheck_dbslot($lease_id, "project_leases", "lease_id")) {
 	print STDERR "Lease->Create: Bad data for lease id: ".
-	    $DBFieldErrstr ."\n";
+	    TBFieldErrorString() ."\n";
 	return undef;
     }
 
@@ -258,7 +258,7 @@ sub Create($$;$) {
 		"type='$type',".
 		"lease_end=FROM_UNIXTIME($lease_end),".
 		"state='$state',".
-		"statestamp=NOW(),"
+		"statestamp=NOW(),".
 		"inception=NOW()")
 	or return undef;
 
@@ -276,7 +276,7 @@ sub Create($$;$) {
 	    DBQueryWarn("insert into lease_attributes set ".
 			"lease_idx=$lease_idx,".
 			"attrkey='$key',".
-			"attrval='$val',".
+			"attrval=$val,".
 			"attrtype='$type'")
 		or return undef;
 	}
@@ -295,7 +295,7 @@ sub Delete($) {
 	if (!ref($self));
 
     my $idx  = $self->idx();
-    my $plid = $self->pid() + ":" + $self->lease_id();
+    my $plid = $self->pid() .":". $self->lease_id();
 
     DBQueryWarn("delete from project_leases where lease_idx=$idx")
 	or return -1;
@@ -476,6 +476,7 @@ sub BumpLastUsed($) {
 
     my $idx = $self->idx();
     DBQueryWarn("update project_leases set last_used=NOW() where lease_idx=$idx");
+    $self->Refresh();
     return 0;
 }
 
@@ -498,6 +499,7 @@ sub AddTime($$) {
     DBQueryWarn("update project_leases set lease_end=FROM_UNIXTIME($newend) where lease_idx=$idx")
 	or return -1;
 
+    $self->Refresh();
     return 0;
 }
 
@@ -519,6 +521,7 @@ sub SetEndTime($$) {
     DBQueryWarn("update project_leases set lease_end=FROM_UNIXTIME($ntime) where lease_idx=$idx")
 	or return -1;
 
+    $self->Refresh();
     return 0;
 }
 
@@ -547,7 +550,8 @@ sub AccessCheck($$$) {
 	return 0;
     }
 
-    if ($access_type < $LEASE_ACCESS_MIN || $access_type > $LEASE_ACCESS_MAX) {
+    if ($access_type < LEASE_ACCESS_MIN() || 
+	$access_type > LEASE_ACCESS_MAX()) {
 	print STDERR "Lease->AccessCheck: Invalid access type: $access_type\n";
 	return 0;
     }
@@ -568,13 +572,13 @@ sub AccessCheck($$$) {
 
     # Project managers can do anything to a lease that is attributed
     # to their project.
-    if (TBMinTrust($proj->Trust($uid), PROJMEMBERTRUST_GROUPROOT())) {
+    if (TBMinTrust($proj->Trust($user), PROJMEMBERTRUST_GROUPROOT())) {
 	return 1;
     }
 
     # If the user is a member of the owning project, then they can at
     # least grab the lease's info.
-    if (TBMinTrust($proj->Trust($uid), PROJMEMBERTRUST_USER())) {
+    if (TBMinTrust($proj->Trust($user), PROJMEMBERTRUST_USER())) {
 	$user_access = LEASE_ACCESS_READINFO();
     }
 
@@ -591,23 +595,24 @@ sub AccessCheck($$$) {
 	    # If the user is a member of this group and has a minimum of
 	    # trust, then give them the access listed in the db.
 	    my $dbgroup = Group->Lookup($perm_idx);
-	    if ($dbgroup && TBMinTrust($dbgroup->Trust($user), 
-				       PROJMEMBERTRUST_LOCALROOT()) {
-		$user_access = 
-		    $modify ? LEASE_ACCESS_MODIFY() : LEASE_ACCESS_READ();
-	    }
+	    next unless (defined($dbgroup) && 
+			 TBMinTrust($dbgroup->Trust($user), 
+				    PROJMEMBERTRUST_LOCALROOT()));
 	} elsif ($perm_type eq "user") {
 	    # If this is a user permission, and the incoming user arg matches,
 	    # then give them the privileges listed in this entry.
-	    my $dbuser = User->Lookup($perm_idx);
-	    if (defined($dbuser) && $dbuser->uid() == $user->uid()) {
-		$user_access = 
-		    $modify ? LEASE_ACCESS_MODIFY() : LEASE_ACCESS_READ();
-	    }
+	    my $dbusr = User->Lookup($perm_idx);
+	    next unless (defined($dbusr) && $dbusr->uid() eq $user->uid());
 	} else {
 	    print STDERR "Lease->AccessCheck: Unknown permission type in DB for lease index $idx: $perm_type\n";
 	    return 0;
 	}
+
+	# Take the greater of the access found.
+	my $this_access = 
+	    $modify ? LEASE_ACCESS_MODIFY() : LEASE_ACCESS_READ();
+	$user_access = $this_access
+	    if ($this_access > $user_access);
     }
 
     return (TBMinTrust($user_access, $access_type) ? 1 : 0);
@@ -621,7 +626,7 @@ sub GrantAccess($$$)
     my ($self, $target, $modify) = @_;
     $modify = ($modify ? 1 : 0);
 
-    my $idx      = $self->idx()();
+    my $idx      = $self->idx();
     my $lease_id = $self->lease_id();
     my ($perm_idx, $perm_id, $perm_type);
 
@@ -676,7 +681,7 @@ sub RevokeAccess($$)
 
     return -1
 	if (!DBQueryWarn("delete from lease_permissions ".
-			 "where lease_idx=$idx' and ".
+			 "where lease_idx=$idx and ".
 			 "  permission_type='$perm_type' and ".
 			 "  permission_idx='$perm_idx'"));
     return 0;
@@ -701,7 +706,7 @@ sub LoadAttributes($)
     my $idx = $self->idx();
     
     my $query_result =
-	DBQueryWarn("select attrkey,attrvalue,attrtype".
+	DBQueryWarn("select attrkey,attrval,attrtype".
 		    "  from lease_attributes ".
 		    "  where lease_idx='$idx'");
 
@@ -745,7 +750,7 @@ sub GetAttribute($$;$$$)
 	return undef
 	    if (!defined($pattrvalue));
 	$$pattrvalue = undef;
-	$$pattertype = undef
+	$$pattrtype = undef
 	    if (defined($pattrtype));
 	return 0;
     }
@@ -766,7 +771,7 @@ sub GetAttribute($$;$$$)
     return undef
 	if (!defined($pattrvalue));
     $$pattrvalue = undef;
-    $$pattertype = undef
+    $$pattrtype = undef
 	if (defined($pattrtype));
     return -1;
 }
@@ -812,7 +817,7 @@ sub SetAttribute($$$;$)
 	or return -1;
 
     $self->{"ATTRS"}->{$attrkey} = {
-	"key" => $attrkey
+	"key" => $attrkey,
 	"value" => $attrvalue,
 	"type" => $attrtype
     };
@@ -824,10 +829,10 @@ sub SetAttribute($$$;$)
 # Remove an attribute
 #
 sub DeleteAttribute($$) {
-    my ($self, $attrkey) @_;
+    my ($self, $attrkey) = @_;
 
     return -1
-	if (!ref(self));
+	if (!ref($self));
 
     my $idx = $self->idx();
     DBQueryWarn("delete from lease_attributes where lease_idx=$idx and attrkey='$attrkey'");

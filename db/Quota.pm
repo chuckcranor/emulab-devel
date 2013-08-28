@@ -42,10 +42,10 @@ use Data::Dumper;
 use overload ('""' => 'Stringify');
 
 my @QUOTA_TYPES  = ("ltdataset",);
-my $MINQUOTASIZE = 1 # 1 mebibyte
-my $MAXQUOTASIZE = 1024 * 1024 * 1024 # 1 pebibyte
+my $MINQUOTASIZE = 1; # 1 mebibyte
+my $MAXQUOTASIZE = 1024 * 1024 * 1024; # 1 pebibyte
 
-# Cache of instances to avoid regenerating them.
+# cache of instances to avoid regenerating them.
 my %quotas	= ();
 my $debug	= 0;
 
@@ -114,7 +114,7 @@ sub Lookup($$;$)
     bless($self, $class);
 
     # Add to cache (dual lookup).
-    $quotas{$self->pid() + ":" + $self->quota_id()} = $self;
+    $quotas{$self->pid() .":". $self->quota_id()} = $self;
     $quotas{$self->idx()} = $self;
     return $self;
 }
@@ -130,7 +130,7 @@ sub LookupSync($$;$) {
 	$quota_idx = $pid;
 	if (exists($quotas{$quota_idx})) {
 	    $qpid = 
-		$quotas{$quota_idx}->pid() + ":" + 
+		$quotas{$quota_idx}->pid() .":". 
 		$quotas{$quota_idx}->quota_id();
 	}
     } else {
@@ -183,7 +183,7 @@ sub Create($$) {
     # Sanity checks for incoming arguments
     if (!TBcheck_dbslot($quota_id, "project_quotas", "quota_id")) {
 	print STDERR "Quota->Create: Bad data for quota id: ". 
-	    $DBFieldErrstr ."\n";
+	    TBFieldErrorString() ."\n";
 	return undef;
     }
 
@@ -194,14 +194,6 @@ sub Create($$) {
 	    return undef;
 	}
 	$pid = $npid;
-    }
-
-    # User must belong to incoming project.  The code calling into Create()
-    # should have already checked to be sure that the caller has permission
-    # to create the quota in the first place.
-    if (!$pid->LookupUser($uid)) {
-	print STDERR "Quota->Create: User $uid is not a member of project $pid\n";
-	return undef;
     }
     
     # If quota types ever grow to be many and complex, then this info will
@@ -226,7 +218,7 @@ sub Create($$) {
     if (defined($notes) && $notes) {
 	if (!TBcheck_dbslot($notes, "project_quotas", "notes")) {
 	    print STDERR "Quota->Create: Bad data in notes: ".
-		$DBFieldErrstr ."\n";
+		TBFieldErrorString() ."\n";
 	    return undef;
 	}
 	$safe_notes = DBQuoteSpecial($notes);	
@@ -243,7 +235,7 @@ sub Create($$) {
 		"pid='". $pid->pid() ."',".
 		"type='$type',".
 		"size=$size,".
-		"notes='$safe_notes'")
+		"notes=$safe_notes")
 	or return undef;
 
     return Lookup($class, $pid->pid(), $quota_id);
@@ -259,7 +251,7 @@ sub Delete($) {
 	if (!ref($self));
 
     my $idx  = $self->idx();
-    my $qpid = $self->pid() + ":" + $self->quota_id();
+    my $qpid = $self->pid() .":". $self->quota_id();
 
     DBQueryWarn("delete from project_quotas where quota_idx=$idx")
 	or return -1;
@@ -378,13 +370,13 @@ sub UpdateNotes($$) {
 
     if (!TBcheck_dbslot($notes, "project_quotas", "notes")) {
 	print STDERR "Quota->UpdateNotes: Bad data in notes: ".
-	    $DBFieldErrstr ."\n";
+	    TBFieldErrorString() ."\n";
 	return -1;
     }
     my $safe_notes = DBQuoteSpecial($notes);	
 
     my $idx = $self->idx();
-    DBQueryWarn("update project_quotas set notes='$safe_notes' ".
+    DBQueryWarn("update project_quotas set notes=$safe_notes ".
 		"where quota_idx=$idx")
 	or return -1;
 
