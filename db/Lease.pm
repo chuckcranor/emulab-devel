@@ -43,7 +43,6 @@ use overload ('""' => 'Stringify');
 
 my @LEASE_TYPES  = ("stdataset","ltdataset");
 my @LEASE_STATES = ("valid","unapproved","grace","locked","expired");
-my $MINLEASELEN = 1 * 24 * 60 * 60;   # One day.
 
 # Cache of instances to avoid regenerating them.
 my %leases	= ();
@@ -237,8 +236,8 @@ sub Create($$;$) {
 	print "Lease->Create: Invalid lease end time: $lease_end\n";
 	return undef;
     }
-    if ($lease_end < time() + $MINLEASELEN) {
-	print STDERR "Lease->Create: Lease end is not far enough in the future.\n";
+    if ($lease_end < time()) {
+	print STDERR "Lease->Create: Lease end cannot be in the past\n";
 	return undef;
     }
 
@@ -813,7 +812,7 @@ sub SetAttribute($$$;$)
 
     DBQueryWarn("replace into lease_attributes set ".
 		"  lease_idx='$idx', attrkey='$attrkey', ".
-		"  attrtype='$attrtype', attrvalue=$safe_attrvalue")
+		"  attrtype='$attrtype', attrval=$safe_attrvalue")
 	or return -1;
 
     $self->{"ATTRS"}->{$attrkey} = {
