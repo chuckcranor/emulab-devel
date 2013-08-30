@@ -42,7 +42,6 @@ use Data::Dumper;
 use overload ('""' => 'Stringify');
 
 my @QUOTA_TYPES  = ("ltdataset",);
-my $MINQUOTASIZE = 1; # 1 mebibyte
 my $MAXQUOTASIZE = 1024 * 1024 * 1024; # 1 pebibyte
 
 # cache of instances to avoid regenerating them.
@@ -208,8 +207,8 @@ sub Create($$) {
 	print "Quota->Create: Invalid quota size: $size\n";
 	return undef;
     }
-    if ($size < $MINQUOTASIZE || $size > $MAXQUOTASIZE) {
-	print STDERR "Quota->Create: Quota is either too small or too big ($MINQUOTASIZE/$MAXQUOTASIZE).\n";
+    if ($size < 0 || $size > $MAXQUOTASIZE) {
+	print STDERR "Quota->Create: Quota is either negative or too big ($MAXQUOTASIZE).\n";
 	return undef;
     }
 
@@ -359,7 +358,7 @@ sub Refresh($)
 #
 # Update the notes for a quota entry.
 #
-sub UpdateNotes($$) {
+sub SetNotes($$) {
     my ($self, $notes) = @_;
 
     return -1
@@ -380,6 +379,7 @@ sub UpdateNotes($$) {
 		"where quota_idx=$idx")
 	or return -1;
 
+    $self->Refresh();
     return 0;
 }
 
@@ -392,8 +392,8 @@ sub IncreaseSize($$) {
     return -1
 	if (!ref($self));
 
-    if ($incr < $MINQUOTASIZE || $self->size() + $incr > $MAXQUOTASIZE) {
-	print STDERR "Quota->IncreaseSize: Size increment is either too small or the new total is too big ($MINQUOTASIZE/$MAXQUOTASIZE).\n";
+    if ($incr < 0 || $self->size() + $incr > $MAXQUOTASIZE) {
+	print STDERR "Quota->IncreaseSize: Size increment is either negative or the new total is too big ($MAXQUOTASIZE).\n";
 	return -1
     }
 
@@ -402,6 +402,7 @@ sub IncreaseSize($$) {
     DBQueryWarn("update project_quotas set size=$newsize where quota_idx=$idx")
 	or return -1;
 
+    $self->Refresh();
     return 0;
 }
 
@@ -414,8 +415,8 @@ sub SetSize($$) {
     return -1
 	if (!ref($self));
 
-    if ($size < $MINQUOTASIZE || $size > $MAXQUOTASIZE) {
-	print STDERR "Quota->SetSize: New quota size is either too small or too big ($MINQUOTASIZE/$MAXQUOTASIZE).\n";
+    if ($size < 0 || $size > $MAXQUOTASIZE) {
+	print STDERR "Quota->SetSize: Size is either negative or too big ($MAXQUOTASIZE).\n";
 	return -1
     }
 
@@ -423,6 +424,7 @@ sub SetSize($$) {
     DBQueryWarn("update project_quotas set size=$size where quota_idx=$idx")
 	or return -1;
 
+    $self->Refresh();
     return 0;
 }
 
