@@ -931,6 +931,15 @@ sub WaitLock($$)
     return $self->Lock();
 }
 
+package Lease::Blockstore;
+use base qw(Lease);
+
+use libdb;
+use libtestbed;
+use English;
+use Data::Dumper;
+use overload ('""' => 'Stringify');
+
 # _Always_ make sure that this 1 is at the end of the file...
 
 1;
