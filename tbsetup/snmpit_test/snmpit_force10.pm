@@ -1,0 +1,1574 @@
+#!/usr/bin/perl -w
+
+#
+# Copyright (c) 2004, Regents, University of California.
+# This file is part of the Netbed/Emulab network testbed software.
+# Its use and redistribution are covered by the LGPL version 2.1, which
+# can be found in the file LGPL-COPYING at the root of the source tree.
+# Utah
+#
+
+# TODO:
+# Currently this module does not support setting due to lacking MIB support.
+# - portDuplex
+# - portAdminSpeed
+# - set/get autoneg
+
+#
+# snmpit module for Force10 E1200 switches
+#
+
+package snmpit_force10;
+use strict;
+
+$| = 1; # Turn off line buffering on output
+
+use English;
+use SNMP;
+use snmpit_lib;
+use Socket;            # FIXME Not yet sure what these
+use libtestbed;        # are used for (currently it works without these lines)
+
+#
+# These are the commands that can be passed to the portControl function
+# below
+#
+my %cmdOIDs =
+(
+	"enable"  => ["ifAdminStatus","up"],
+	"disable" => ["ifAdminStatus","down"],
+	#"1000mbit"=> ["portAdminSpeed","s1000000000"], # commented out = not supported by FTOS-EF-7.4.2.3
+	#"100mbit" => ["portAdminSpeed","s100000000"],  #
+	#"10mbit"  => ["portAdminSpeed","s10000000"],   #
+	#"full"    => ["portDuplex","full"],            #
+	#"half"    => ["portDuplex","half"],            #
+	#"auto"    => ["portAdminSpeed","autoDetect",   #
+	#              "portDuplex","auto"]
+);
+
+#
+# Force10 Chassis configuration info
+#
+my $ChassisInfo = {
+    "force10c300" => {
+        "moduleSlots"           => 8,   # Max # of modules in chassis
+        "maxPortsPerModule"     => 48,  # Max # of ports in any module
+        "bitmaskBitsPerModule"  => 224, # Number of bits per module
+    },
+    "force10e1200" => {
+        "moduleSlots"           => 14,  # Max # of modules in chassis
+        "maxPortsPerModule"     => 48,  # Max # of ports in any module
+        "bitmaskBitsPerModule"  => 96,  # Number of bits per module
+    },
+};
+
+#
+# Force10 calculates ifIndex for VLANs as 0b10_0001_0000001_1110_00000000000000 + 802.1Q VLAN tag number
+#
+my $vlanNumberToIfindexOffset = 1107787776;
+
+#
+# Force10 FTOS-EF-7.4.2.3 cannot set purely numeric administrative VLAN names (dot1qVlanStaticName) (by design...)
+# So we prepend some alphabetical characters when setting, end strip them when getting
+#
+my $vlanStaticNamePrefix = "emuID";
+
+#
+# Ports can be passed around in three formats:
+# ifindex : positive integer corresponding to the interface index
+#           (eg. 311476282 for gi 8/35)
+# modport : dotted module.port format, following the physical reality of
+#           Force10 switches (eg. 5/42)
+# nodeport: node:port pair, referring to the node that the switch port is
+# 	        connected to (eg. "pc42:1")
+#
+# See the function convertPortFormat below for conversions between these
+# formats
+#
+my $PORT_FORMAT_IFINDEX  = 1;
+my $PORT_FORMAT_MODPORT  = 2;
+my $PORT_FORMAT_NODEPORT = 3;
+
+
+#
+# Creates a new object.
+#
+# usage: new($classname,$devicename,$debuglevel,$community)
+#        returns a new object, blessed into the snmpit_force10 class.
+#
+sub new($$$;$) {
+
+    # The next two lines are some voodoo taken from perltoot(1)
+    my $proto = shift;
+    my $class = ref($proto) || $proto;
+
+    my $name = shift;                       # the name of the switch, e.g. e1200a
+    my $debugLevel = shift;
+    my $community = shift;
+
+    #
+    # Create the actual object
+    #
+    my $self = {};
+
+    #
+    # Set the defaults for this object
+    # 
+    if (defined($debugLevel)) {
+		$self->{DEBUG} = $debugLevel;
+    } else {
+		$self->{DEBUG} = 0;
+    }
+    $self->{BLOCK} = 1;
+    $self->{CONFIRM} = 1;
+    $self->{NAME} = $name;
+
+    #
+    # Get config options from the database
+    #
+    my $options = getDeviceOptions($self->{NAME});
+    if (!$options) {
+		warn "ERROR: Getting switch options for $self->{NAME}\n";
+		return undef;
+    }
+
+    $self->{MIN_VLAN}         = $options->{'min_vlan'};
+    $self->{MAX_VLAN}         = $options->{'max_vlan'};
+
+    if ($community) { # Allow this to over-ride the default
+		$self->{COMMUNITY}    = $community;
+    } else {
+		$self->{COMMUNITY}    = $options->{'snmp_community'};
+    }
+
+    #
+    # Get devicetype from database
+    #
+    my $devicetype = getDeviceType($self->{NAME});
+    $self->{TYPE}=$devicetype;
+
+    #
+    # set up hashes for pending vlans
+    #
+    $self->{NEW_NAMES} = {};   # FIXME not sure if necessary, only found in foundry code
+    $self->{NEW_NUMBERS} = {}; # FIXME not sure if necessary, only found in foundry code
+    
+    $self->{IFINDEX} = {};     # Used for converting modport to ifIndex (somtimes called iid; e.g. 345555002) and vice versa
+    $self->{PORTINDEX} = {};   # Will contain elements for experimental "interfaces" only (no VLANs, no Mgmgnt ifaces); format: ifIndex => ifDescr
+
+    if ($self->{DEBUG}) {
+		print "snmpit_force10 module initializing... debug level $self->{DEBUG}\n";
+    }
+
+
+    #
+    # Set up SNMP module variables, and connect to the device
+    #
+    $SNMP::debugging = ($self->{DEBUG} - 2) if $self->{DEBUG} > 2;
+    my $mibpath = '/usr/local/share/snmp/mibs';
+    &SNMP::addMibDirs($mibpath);
+    &SNMP::addMibFiles("$mibpath/SNMPv2-SMI.txt", "$mibpath/SNMPv2-TC.txt", 
+	               "$mibpath/SNMPv2-MIB.txt", "$mibpath/IANAifType-MIB.txt",
+		       "$mibpath/IF-MIB.txt",
+		       "$mibpath/SNMP-FRAMEWORK-MIB.txt",
+		       "$mibpath/SNMPv2-CONF.txt",
+		       "$mibpath/BRIDGE-MIB.txt",
+		       "$mibpath/P-BRIDGE-MIB.txt",
+		       "$mibpath/RMON-MIB.txt",
+		       "$mibpath/TOKEN-RING-RMON-MIB.txt",
+		       "$mibpath/RMON2-MIB.txt",
+		       "$mibpath/Q-BRIDGE-MIB.txt");
+    $SNMP::save_descriptions = 1; # must be set prior to mib initialization
+    SNMP::initMib();		  # parses default list of Mib modules 
+    $SNMP::use_enums = 1;	  # use enum values instead of only ints
+
+    warn ("Opening SNMP session to $self->{NAME}...") if ($self->{DEBUG});
+
+    $self->{SESS} = new SNMP::Session(DestHost => $self->{NAME},
+	Community => $self->{COMMUNITY});
+
+    if (!$self->{SESS}) {
+	#
+	# Bomb out if the session could not be established
+	#
+		warn "WARNING: Unable to connect via SNMP to $self->{NAME}\n";
+		return undef;
+    }
+
+    #
+    # Connecting an SNMP session doesn't necessarily mean you can actually get
+    # packets to and from the switch. Test that by grabbing an OID that should
+    # be on every switch. Let it retry a bunch, to hide transient failures
+    #
+
+    my $OS_details = snmpitGetFatal($self->{SESS},["sysDescr",0],30);
+    print "Switch $self->{NAME} is running $OS_details\n" if $self->{DEBUG};
+
+    #
+    # The bless needs to occur before readifIndex(), since it's a class 
+    # method
+    #
+    bless($self,$class);
+
+    $self->readifIndex();
+    
+    return $self;
+}
+
+
+
+#
+# Prints out a debugging message, but only if debugging is on. If a level is
+# given, the debuglevel must be >= that level for the message to print. If
+# the level is omitted, 1 is assumed
+#
+# Usage: debug($self, $message, $level)
+#
+sub debug($$;$) {
+    my $self = shift;
+    my $string = shift;
+    my $debuglevel = shift;
+    if (!(defined $debuglevel)) {
+	    $debuglevel = 1;
+    }
+    if ($self->{DEBUG} >= $debuglevel) {
+	    print STDERR $string;
+    }
+}
+
+
+#
+# Reads the IfIndex table from the switch, for SNMP functions that use 
+# IfIndex rather than the module.port style. Fills out the objects IFINDEX
+# and PORTINDEX members
+#
+# usage: readifIndex(self)
+#        returns nothing but sets instance variable IFINDEX
+#
+sub readifIndex($) {
+	my $self = shift;
+	$self->debug("readifIndex:\n",2);
+	
+	my $field = ["ifDescr",0];
+	$self->{SESS}->getnext($field);
+	my ($name,$iid,$descr) = @{$field};
+
+	while ($name eq "ifDescr") {
+		$self->debug("got $name, $iid, descr $descr ",2);
+
+		if ($descr =~ /(\w*)\s+(\d+)\/(\d+)$/) { # will match GigabitEthernet 9/47 but not Vlan 123
+			my $type = $1;
+			my $module = $2;
+			my $port = $3;
+			my $modport = "$module.$port";
+			my $ifIndex = $iid;
+
+			if ( $descr !~ /management/i) {      # exclude e.g. ManagementEthernet ports
+				$self->{IFINDEX}{$modport} = $ifIndex;
+				$self->{IFINDEX}{$ifIndex} = $modport;
+				$self->{PORTINDEX}{$ifIndex} = $descr;
+				$self->debug("mod $module, port $port, modport $modport, descr $descr\n",2);
+			}
+		}
+
+		$self->{SESS}->getnext($field);
+		($name,$iid,$descr) = @{$field};
+	}
+}
+
+
+#
+# Convert a set of ports to an alternate format. The input format is detected
+# automatically. See the declarations of the constants at the top of this
+# file for a description of the different port formats.
+#
+# usage: convertPortFormat($self, $output format, @ports)
+#        returns a list of ports in the specified output format
+#        returns undef if the output format is unknown
+#
+# TODO: Add debugging output, better comments, more sanity checking
+#
+sub convertPortFormat($$@) {
+    my $self = shift;
+    my $output = shift;
+    my @ports = @_;
+
+    #
+    # Avoid warnings by exiting if no ports given
+    # 
+    if (!@ports) {
+		return ();
+    }
+
+    #
+    # We determine the type by sampling the first port given
+    #
+    my $sample = $ports[0];
+    if (!defined($sample)) {
+		warn "convertPortFormat: Given a bad list of ports\n";
+		return undef;
+    }
+
+    my $input;
+    SWITCH: for ($sample) {
+		(/^\d+$/) 
+			&& do {
+				# 1 or more digits; if matches => exit SWITCH scope
+				$input = $PORT_FORMAT_IFINDEX; 
+				last SWITCH; 
+			};      
+		(/^\d+\.\d+$/) 
+			&& do {
+				# 1 or more digits, a dot, and again 1 or more digits
+				$input = $PORT_FORMAT_MODPORT;
+				last SWITCH; 
+			}; 
+		(/^$self->{NAME}\.\d+\/\d+$/) 
+			&& do {
+				# something like name34.34 ? 
+				# FIXME probably not needed for Force10.
+				$input = $PORT_FORMAT_MODPORT;
+				@ports = map {
+					/^$self->{NAME}\.(\d+)\/(\d+)$/; "$1.$2";} @ports; 
+				last SWITCH;
+			};
+		# DEFAULT
+		# if the previous ones didn't match, it's probably in NODEPORT format
+		$input = $PORT_FORMAT_NODEPORT; 
+		last SWITCH;                          
+    }
+
+    #
+    # It's possible the ports are already in the right format
+    #
+    if ($input == $output) {
+		$self->debug("Not converting, input format = output format\n",2);
+		return @ports;
+    }
+
+    if ($input == $PORT_FORMAT_IFINDEX) {
+		if ($output == $PORT_FORMAT_MODPORT) {
+		    $self->debug("Converting ifindex to modport\n",2);
+		    return map $self->{IFINDEX}{$_}, @ports;
+		} elsif ($output == $PORT_FORMAT_NODEPORT) {
+		    $self->debug("Converting ifindex to nodeport\n",2);
+		    # portnum (see snmpit_lib.pm) converts a string of the 
+			# format "<switchname:module.port>" to its node:port 
+			# counterpart so we use $self->{IFINDEX}{$_} to get the 
+			# right module.port information
+		    return map portnum($self->{NAME}.":".$self->{IFINDEX}{$_}), @ports;
+		}
+    } elsif ($input == $PORT_FORMAT_MODPORT) {
+		if ($output == $PORT_FORMAT_IFINDEX) {
+		    $self->debug("Converting modport to ifindex\n",2);
+		    return map $self->{IFINDEX}{$_}, @ports;
+		} elsif ($output == $PORT_FORMAT_NODEPORT) {
+		    $self->debug("Converting modport to nodeport\n",2);
+		    return map portnum($self->{NAME} . ":$_"), @ports;
+		}
+    } elsif ($input == $PORT_FORMAT_NODEPORT) {
+		if ($output == $PORT_FORMAT_IFINDEX) {
+		    $self->debug("Converting nodeport to ifindex\n",2);
+		    return map $self->{IFINDEX}{(split /:/,portnum($_))[1]}, @ports;
+		} elsif ($output == $PORT_FORMAT_MODPORT) {
+		    $self->debug("Converting nodeport to modport\n",2);
+		    return map { (split /:/,portnum($_))[1] } @ports;
+		}
+    }
+
+    #
+    # Some combination we don't know how to handle
+    #
+    warn "convertPortFormat: Bad input/output combination ($input/$output)\n";
+    return undef;
+}
+
+
+
+#
+# List all ports on the device
+#
+# usage: listPorts($self)
+# see snmpit_cisco_stack.pm for a description of return value format
+#
+#
+sub listPorts($) {
+    my $self = shift;
+
+    my %Able = ();
+    my %Link = ();
+    my %speed = ();
+    my %duplex = ();
+
+    my ($ifIndex, $status);
+
+    #
+    # Get the port configuration, including ifOperStatus (really up or down),
+    # duplex, speed / whether or not it is autoconfiguring
+    #
+    foreach $ifIndex (keys %{$self->{PORTINDEX}}) {
+		my ($nodeport) = $self->convertPortFormat($PORT_FORMAT_NODEPORT,$ifIndex);
+		
+		#
+		# Skip ports that don't seem to have anything interesting attached
+		#
+		if (!$nodeport) {
+			$self->debug("ifIndex $ifIndex not connected, skipping\n");
+			next;
+		}
+
+		if ($status = $self->{SESS}->get(["ifAdminStatus",$ifIndex])) {
+		    $Able{$ifIndex} = ( $status =~ /up/ ? "yes" : "no" );
+		}    	
+    	
+		if ($status = $self->{SESS}->get(["ifOperStatus",$ifIndex])) {
+		    $Link{$ifIndex} = $status;
+		}
+		
+		# FIXME No duplex getting/setting support found for Force10 yet.
+		# as we'll only be using full duplex anyway, we'll fake a little bit.
+		# For Cisco, this is portDuplex in CISCO-STACK-MIB
+		# a good candidate seems to be 
+		# 1.3.6.1.2.1.10.7.2.1.19 : dot3StatsDuplexStatus from Ether-like MIB !
+		#
+		#if ($status = $self->{SESS}->get(["someCurrentlyStillUnknownForce10DuplexObject",$ifIndex])) {
+		#    $status =~ s/Duplex//;
+		#    $duplex{$ifIndex} = $status;
+		    $duplex{$ifIndex} = "full";
+		    #$duplex{$ifIndex} = "half";
+		#}
+		
+		# FIXME We'll never encounter "auto", because that's not supported in IF-MIB
+		# For Cisco, this can be found in portAdminSpeed in CISCO-STACK-MIB
+		if ($status = $self->{SESS}->get(["ifSpeed",$ifIndex])) {
+		    #$status =~ s/^s//;                # leading s, not used in Force10 with IF-MIB
+		    #$status =~ s/M$//;                # trailing M, ditto
+		    #$status =~ s/G/000/;              # ditto
+		    #$status =~ s/Sense//;             # IF-MIB doesn't tell anything about autosensing
+		    $status =~ s/([10]+)000000/${1}Mbps/;
+		    $speed{$ifIndex} = $status;
+		} else { $speed{$ifIndex} = "0Mbps"; } # FIXME not sure whether I should do this...
+		
+		# FIXME this isn't applicable (yet) either for Force10...
+		# Insert stuff here to get ifSpeed if necessary... AdminSpeed is the
+		# _desired_ speed, and ifSpeed is the _real_ speed it is using
+    };
+
+    #
+    # Put all of the data gathered in the loop into a list suitable for
+    # returning
+    #
+    my @rv = ();
+    foreach my $ifIndex ( sort keys %Able ) { # For each ifIndex, find out node:port and add a line to @rv
+		my ($nodeport) = $self->convertPortFormat($PORT_FORMAT_NODEPORT,$ifIndex);
+    	
+		# my $vlan; # fixme no idea what this is doing here
+		if (! defined ($speed{$ifIndex}) ) { $speed{$ifIndex} = " "; }
+		if (! defined ($duplex{$ifIndex}) ) { $duplex{$ifIndex} = " "; }
+		$speed{$ifIndex} =~ s/s([10]+)000000/${1}Mbps/;
+		push @rv, [$nodeport,$Able{$ifIndex},$Link{$ifIndex},$speed{$ifIndex},$duplex{$ifIndex}];
+    }
+    return @rv;
+}
+
+
+#
+# List all VLANs on the device
+#
+# usage: listVlans($self)
+# see snmpit_cisco_stack.pm for a description of return value format
+#
+sub listVlans($) {
+	my $self = shift;
+	$self->debug("\n\nlistVlans:\n",2);
+	
+	my %Names = ();
+	my %Numbers = ();
+	my %Members = ();
+
+	# get list of vlan names from dot1qVlanStaticName (Q-BRIDGE-MIB)
+	# and save these in %Names with the ifIndexes (iids) as the key
+	# (unlike ethernet ports, vlans aren't static, so this is done from
+	# scratch each time instead of being stored in a hash by the constructor)
+	my $field = ["dot1qVlanStaticName"];
+	$self->{SESS}->getnext($field);
+
+	# $name should always be "dot1qVlanStaticName"
+	my ($name,$iid,$vlanname) = @{$field}; 
+
+	while ($name eq "dot1qVlanStaticName") {
+		$self->debug("listVlans(): got $name, $iid, name $vlanname\n",2);
+		# FIXME kludge: prepending some alphabetical characters makes the 
+		# E1200 accept, a numeric-only name does not work :( (FTOS-EF-7.4.2.3)
+		# so we need to strip the $vlanStaticNamePrefix here
+		$vlanname=~s/^$vlanStaticNamePrefix(.+)/$1/;
+		$Names{$iid} = $vlanname;
+
+		$self->{SESS}->getnext($field);
+		($name,$iid,$vlanname) = @{$field};
+	}
+	
+	my ($ifIndex, $status);
+	
+	# get corresponding VLAN numbers
+	# (i.e. the "real" vlan tags as known by the switch, called 
+	# "cisco-specific" in the snmpit_cisco.pm module;
+	# with "vlan id" they mean the vlan name as known in the 
+	# database = the administrative name in the switch, not the tag)
+	foreach $ifIndex (keys %Names) {
+		if ($status = $self->{SESS}->get(["ifDescr",$ifIndex])) {
+			$status =~ s/^Vlan\s(\d+)$/$1/;
+		    $Numbers{$ifIndex} = $status;
+		}
+	}
+	
+	# get corresponding port bitmaps from dot1qVlanStaticEgressPorts
+	# and find out the corresponding port ifIndexes
+	foreach $ifIndex (keys %Names) {
+		if ($status = $self->{SESS}->get(
+				["dot1qVlanStaticEgressPorts",$ifIndex])) {
+		    $Members{$ifIndex} = $self->convertBitmaskToIfindexes($status);
+		}
+	}
+	
+	# replace ifIndexes by nodeport values, as demanded by API
+	foreach my $nodeportlist (values %Members) {
+		@$nodeportlist = $self->convertPortFormat($PORT_FORMAT_NODEPORT,
+			@$nodeportlist);
+	}
+
+	# create array to return to caller
+	my @vlanInfo = ();
+	foreach $ifIndex (sort {$a <=> $b} keys %Names) {
+		push @vlanInfo, [$Names{$ifIndex},$Numbers{$ifIndex},
+			$Members{$ifIndex}];
+	}
+	$self->debug(join("\n",(map {join ",", @$_} @vlanInfo))."\n");
+	
+	return @vlanInfo;
+}
+
+#
+# Internal function which converts a bitmask (a binary string) to a list 
+# of switch ports (ifIndexes)
+#
+sub convertBitmaskToIfindexes($$) {
+    my $self = shift;
+    my $bitmask = shift;
+
+    # Store switch config in local vars for code readability
+    my $type                 = $self->{TYPE};
+    my $moduleSlots          = $ChassisInfo->{$type}->{moduleSlots};
+    my $maxPortsPerModule    = $ChassisInfo->{$type}->{maxPortsPerModule};
+    my $bitmaskBitsPerModule = $ChassisInfo->{$type}->{bitmaskBitsPerModule};
+
+    my @ifIndexes;
+                                                          
+    # start at module 0
+    my $mod = 0;                                          
+    while ($mod < $moduleSlots) {
+        # start at port 0
+        my $port = 0;
+
+        # loop over until maxports.  Not usefull to loop over
+        # the padding bits, cause some switches use _a lot_ of
+        # these bits !!
+        while ($port < $maxPortsPerModule) {
+
+            my $offset = 
+                # start index for first port of the module
+                $mod * $bitmaskBitsPerModule
+                # start index for first port of the block of 8
+                # ports containing the current port
+                + (int($port / 8) * 8)
+                # the offset we're actually looking for
+                + (7 - ($port % 8));
+
+            if ( vec($bitmask,$offset,1) ) { 
+                push @ifIndexes, $self->{IFINDEX}{"$mod.$port"};
+            }
+            $port++;
+        }
+        $mod++;
+    }
+
+    return \@ifIndexes;
+}
+
+#
+# Internal function which converts a list of switch ports (ifIndexes) to a
+# bitmask (a binary string)
+#
+sub convertIfindexesToBitmask($@) {
+    my $self = shift;
+    my $ifIndexes = shift;
+
+    # Store switch config in local vars for code readability
+    my $type                 = $self->{TYPE};
+    my $moduleSlots          = $ChassisInfo->{$type}->{moduleSlots};
+    my $maxPortsPerModule    = $ChassisInfo->{$type}->{maxPortsPerModule};
+    my $bitmaskBitsPerModule = $ChassisInfo->{$type}->{bitmaskBitsPerModule};
+
+    # initialize ( to avoid perl warnings )
+    my $bitmask = 0b0;
+    # Overwrite our bitmask with zeroes
+    for my $offset (0..($bitmaskBitsPerModule*$moduleSlots+7)) {
+        vec($bitmask, $offset, 1) = 0b0;
+    }
+
+    # Convert all ifIndexes to modport format and parse modport information
+    # to find out vec() offset and set the right bit
+    my @modports = $self->convertPortFormat($PORT_FORMAT_MODPORT,@$ifIndexes);
+
+    foreach my $modport (@modports) {
+        $modport =~ /(\d+)\.(\d+)/;
+        my $mod  = $1;
+        my $port = $2;
+
+        if ( $port >= $maxPortsPerModule )
+        {
+            warn "Cannot set port lager than maxport";
+            next;
+        }
+
+        
+        my $offset = 
+            # start index for first port of the module
+            $mod * $bitmaskBitsPerModule
+            # start index for first port of the block of 8
+            # ports containing the current port
+            + (int($port / 8) * 8)
+            # the offset we're actually looking for
+            + (7 - ($port % 8));
+
+        vec($bitmask, $offset, 1) = 0b1;
+    }
+    
+    # All set!
+    return $bitmask;
+}
+
+#
+# Internal function which compares two bitmasks of equal length
+# and returns the number of differing bits
+#
+# usage: bitmasksDiffer($bitmask1, $bitmask2) 
+#
+sub bitmasksDiffer($$$) {
+	my $self = shift;
+	my $bm1 = shift;
+	my $bm2 = shift;
+	
+	my $differingBits = 0;
+	my $bm1unp = unpack('B*', $bm1);
+	my @bm1unp = split //, $bm1unp; 
+	my $bm2unp = unpack('B*', $bm2);
+	my @bm2unp = split //, $bm2unp;
+	
+	if ( $#bm1unp == $#bm2unp ) { # must be of equal length
+		for my $i (0 .. $#bm1unp) {
+			if ($bm1unp[$i] != $bm2unp[$i]) {
+				$self->debug("bitmasksDiffer(): bit with index $i differs!\n");
+				$differingBits++;
+			}
+		}
+
+		return $differingBits;
+	}
+	else {
+		print "bitmasksDiffer(): I am not supposed to compare bitmasks of differing length!\n";
+		print "\$bm1 has last index $#bm1unp and \$bm2 has last index $#bm2unp\n";
+		return ( $#bm1unp > $#bm2unp ? $#bm1unp : $#bm2unp);
+	}
+}
+
+#
+# Internal function which checks if all set bits in a bitmask are set or not in
+# another one. Both bitmasks must be of equal length.
+# 
+# Returns 0 if all bits of interest conform, otherwise returns the number of
+# non-conforming bits
+#
+# usage: checkBits($requestedStatus, $bitsOfInterest, $bitmaskToInvestigate)
+#        $requestedStatus can be "on" or "off"
+#
+sub checkBits($$$$) {
+	my $self = shift;
+	my $reqStatus = shift;
+	my $bm1 = shift; # reference bitmask, defining which bits need to be checked
+	my $bm2 = shift; # bitmask to investigate
+	
+	my $differingBits = 0;
+	my $bm1unp = unpack('B*', $bm1);
+	my @bm1unp = split //, $bm1unp; 
+	my $bm2unp = unpack('B*', $bm2);
+	my @bm2unp = split //, $bm2unp;
+	
+	if ( $#bm1unp == $#bm2unp ) { # must be of equal length
+		if ($reqStatus eq "on") {
+			for my $i (0 .. $#bm1unp) {
+				if ($bm1unp[$i]) { # if bit is set
+					if ($bm1unp[$i] != $bm2unp[$i]) {
+						$self->debug("checkIfBitsAreSet(\"on\"): bit with index $i isn't set in the other bitmask, while it should be!\n");
+						$differingBits++;
+					}
+				}
+			}
+		} elsif ($reqStatus eq "off") {
+			for my $i (0 .. $#bm1unp) {
+				if ($bm1unp[$i]) { # if bit is set
+					if ($bm1unp[$i] == $bm2unp[$i]) {
+						$self->debug("checkIfBitsAreSet(\"off\"): bit with index $i is set in the other bitmask, while it shouldn't be!\n");
+						$differingBits++;
+					}
+				}
+			}			
+		} else {
+			print "checkBits(): invalid requested status argument!\n";
+			return ($#bm1unp + 1);
+		}
+	
+		return $differingBits;
+	} else {
+		print "checkIfBitsAreSet(): I am not supposed to compare bitmasks of differing length!\n";
+		print "\$bm1 has last index $#bm1unp and \$bm2 has last index $#bm2unp\n";
+		return ( $#bm1unp > $#bm2unp ? $#bm1unp + 1 : $#bm2unp + 1);
+	}
+}
+
+
+# 
+# Check to see if the given "real" VLAN number (i.e. tag) exists on the switch
+#
+# usage: vlanNumberExists($self, $vlan_number)
+#        returns 1 if the 802.1Q VLAN tag exists, 0 otherwise
+#
+sub vlanNumberExists($$) {
+    my $self = shift;
+    my $vlan_number = shift;
+
+    # Just look up the ifDescr for this VLAN, and see if we get an answer back
+    my $ifIndex = $vlanNumberToIfindexOffset + $vlan_number;
+    my $status = $self->{SESS}->get(["ifDescr",$ifIndex]);
+    #print "\$status is $status!!!\n"; #pvdp
+    if (!$status or $status eq "NOSUCHINSTANCE") {
+		return 0;
+    } else {
+    	return 1;
+    }
+}
+
+
+#
+# Given VLAN indentifiers from the database, finds the cisco-specific VLAN
+# number for them. If not VLAN id is given, returns mappings for the entire
+# switch.
+# 
+# usage: findVlans($self, @vlan_ids)
+#        returns a hash mapping VLAN ids to Cisco VLAN numbers
+#        any VLANs not found have NULL VLAN numbers
+#
+sub findVlans($@) {
+    my $self = shift;
+    my @vlan_ids = @_;
+    my %hash = ();
+    
+	my $field = ["dot1qVlanStaticName"];
+	$self->{SESS}->getnext($field);
+	my ($name,$iid,$vlanname) = @{$field}; # $name should always contain "dot1qVlanStaticName"
+
+	while ($name eq "dot1qVlanStaticName") {
+		$self->debug("findVlans(): got $name, $iid, name $vlanname\n",2);
+		# FIXME kludge: prepending an alphabetical character makes the E1200
+		# accept, a numeric-only name does not work :( (FTOS-EF-7.4.2.3)
+		
+		# If it doesn't match, these vlans aren't ours, but we still need to
+		# include them in the list or otherwise emulab would think this vlan is
+		# free!
+		$vlanname=~s/^$vlanStaticNamePrefix(.+)/$1/; 
+
+		# add to hash if theres no @vlan_ids list (requesting all) or if the
+		# vlan is actually in the list
+		if ( (! @vlan_ids) || (grep {$_ eq $vlanname} @vlan_ids) ) {
+			$hash{$vlanname} = $iid - $vlanNumberToIfindexOffset;
+		}
+
+		$self->{SESS}->getnext($field);
+		($name,$iid,$vlanname) = @{$field};
+	}
+
+    return %hash;
+}
+
+#
+# Given a VLAN identifier from the database, find the "cisco-specific VLAN
+# number" that is assigned to that VLAN (= VLAN tag). Retries several times (to
+# account for propagation delays) unless the $no_retry option is given.
+#
+# usage: findVlan($self, $vlan_id,$no_retry)
+#        returns the VLAN number for the given vlan_id if it exists
+#        returns undef if the VLAN id is not found
+#
+sub findVlan($$;$) { 
+	my $self = shift;
+	my $vlan_id = shift;
+	my $no_retry = shift;
+
+	my $max_tries;
+	if ($no_retry) {
+		$max_tries = 1;
+    } else {
+		$max_tries = 10;
+    }
+
+	# We try this a few times, with 1 second sleeps, since it can take
+	# a while for VLAN information to propagate
+	foreach my $try (1 .. $max_tries) {
+
+		my %mapping = $self->findVlans($vlan_id);
+		if (defined($mapping{$vlan_id})) {
+			return $mapping{$vlan_id};
+		}
+
+		# Wait before we try again
+		if ($try < $max_tries) {
+			$self->debug("VLAN find failed, trying again\n");
+			sleep 1;
+		}
+	}
+
+	# Didn't find it
+	return undef;
+}
+
+#
+# Create a VLAN on this switch, with the given identifier (which comes from
+# the database) and given 802.1Q tag number ($vlan_number). If $vlan_number
+# is given, attempts to use it when creating the vlan - otherwise, picks its
+# own  802.1Q tag number.
+#
+# usage: createVlan($self, $vlan_id, [$vlan_number])
+#        returns the new VLAN number on success
+#        returns 0 on failure
+#
+sub createVlan($$) {
+	my $self = shift;
+
+	# as known in db and as will be saved in administrative vlan name on switch
+	my $vlan_id = shift;
+
+	# 802.1Q vlan tag
+	my $vlan_number = shift; 
+	
+    # If they gave a VLAN number, make sure it doesn't exist
+    if ($vlan_number) {
+		if ($self->vlanNumberExists($vlan_number)) {
+			$self->debug("ERROR: VLAN $vlan_number already exists\n");
+			return 0;
+		}
+	} else {
+		# Find a free VLAN number to use. Get a list of all VLANs on the
+		# switch, then look through for a free one
+		my %vlan_mappings = $self->findVlans();
+
+		# Convert the mapping to a form we can use
+		my @vlan_numbers = values(%vlan_mappings);
+		my @taken_vlans;
+		foreach my $num (@vlan_numbers) {
+			$taken_vlans[$num] = 1;
+		}
+
+		# Pick a VLAN number
+		$vlan_number = $self->{MIN_VLAN};
+		while (defined($taken_vlans[$vlan_number])) {
+			$vlan_number++;
+		}
+		
+		if ($vlan_number > $self->{MAX_VLAN}) {
+			$self->debug("ERROR: Failed to find a free VLAN number\n");
+			next;
+	    }
+	}
+
+	$self->debug("Using Row $vlan_number\n");
+	
+	# Create VLAN
+	my $RetVal = $self->{SESS}->set(["dot1qVlanStaticRowStatus", 
+		$vlan_number, "createAndGo", "INTEGER"]);
+	# $RetVal should contain "0 but true" if successful
+	if (! defined($RetVal) )  { 
+		$self->debug("VLAN Create id '$vlan_id' as VLAN $vlan_number fail.\n");
+	    return 0;
+	}
+	
+	# Set administrative name to vlan_id as known in emulab db
+	# FIXME kludge: prepending an alphabetical character makes the E1200 accept
+	# the name, a numeric-only one does not work :( (FTOS-EF-7.4.2.3)
+	#
+	$RetVal = $self->{SESS}->set(["dot1qVlanStaticName", ($vlan_number +
+			$vlanNumberToIfindexOffset), $vlanStaticNamePrefix.$vlan_id,
+			"OCTETSTR"]);
+
+	# $RetVal should contain "0 but true" if successful
+	if (! defined($RetVal) )  { 
+	    $self->debug("Set VLAN name to '$vlan_id' failed. ".
+			"VLAN $vlan_number was created though! Manual cleanup required.\n");
+	    return 0;
+	}
+
+	return $vlan_number;
+}
+
+#
+# Put the given ports in the given VLAN. The VLAN is given as an 802.1Q 
+# tag number. (so NOT as a vlan_id from the database!)
+#
+# usage: setPortVlan($self, $vlan_number, @ports)
+#	 returns 0 on sucess.
+#	 returns the number of failed ports on failure
+#
+sub setPortVlan($$@) {
+	my $self = shift;
+	my $vlan_number = shift;
+	my @ports = @_;
+	
+	# Run the port list through portmap to find the ports on the switch that
+	# we are concerned with
+	my @portlist = $self->convertPortFormat($PORT_FORMAT_IFINDEX, @ports);
+	$self->debug("ports: " . join(",",@ports) . "\n");
+	$self->debug("as ifIndexes: " . join(",",@portlist) . "\n");
+	
+	# Create a bitmask from this ifIndex list
+	my $bitmask = $self->convertIfindexesToBitmask(\@portlist);
+	
+	# First remove the ports from all VLANs, just in case.
+	# If a port is still untagged in a different VLAN, the set command would
+	# fail
+	
+	my @vlanInfo = $self->listVlans();
+	my $RetVal; 
+	foreach my $entry (@vlanInfo) {
+		my $currentVlan = @$entry[1];
+
+		# removing untagged ports from default VLAN 1 wouldn't make sense
+		if ($currentVlan == 1) { 
+			next; 
+		} 
+
+		$self->debug("setPortVlan(): preventively attempting to ".
+			"remove @ports from vlan number $currentVlan\n");
+
+		$RetVal = $self->removeSelectPortsFromVlan($currentVlan, @ports);
+		if ($RetVal) {
+			$self->debug("setPortVlan(): error when making sure that ".
+				"@ports are removed from vlan number $currentVlan!\n".
+			    "  Does it contain only tagged ports? ".
+				"Boldly trying to go on...\n");
+		}
+	}
+	
+	# Calculate VLAN ifIndex
+	my $vlanIfindex = $vlan_number + $vlanNumberToIfindexOffset;
+	
+	# Add the ports, both objects must be set in a single command!  (note that
+	# in the switch, this bitmask is ORed with the already existing bitmask
+	# so ports already in it will NOT be removed if their bit is snmpset to 0!)
+	
+	$RetVal = $self->{SESS}->set([
+		# port is in this vlan
+		["dot1qVlanStaticEgressPorts"  , $vlanIfindex, $bitmask, "OCTETSTR"], 
+		# port is untagged
+		["dot1qVlanStaticUntaggedPorts", $vlanIfindex, $bitmask, "OCTETSTR"]
+		]);
+
+	if ( ! defined ($RetVal) ) { 
+		# $RetVal should contain "0 but true" if successful, but...
+		# occasionally $RetVal is undef, especially when adding a port from
+		# module 13 (last module) to any VLAN
+		#print "setPortVlan() for port(s) @ports into vlan $vlan_number:\n";
+		#print "              generic error trying to set dot1qVlanStaticEgressPorts, dot1qVlanStaticUntaggedPorts\n";
+		#print "              (are you attempting to add a port from module 13 as a member?)\n";
+		#print "              (if so, this is probably an FTOS bug and everything is fine anyway)\n";
+	}
+		
+	# ...so the return value cannot be trusted => we do our own little investigation
+	# Get the current membership bitmask for this vlan
+	my $currentBitmask;
+	if (! ( $currentBitmask = $self->{SESS}->get(["dot1qVlanStaticEgressPorts",$vlanIfindex]) ) ) {
+		print "setPortVlan(): Error getting current membership bitmask for vlan $vlan_number\n";
+		return scalar(@ports);
+	}
+	
+	# Should return 0 if everything is alright, no. of failed ports otherwise
+	my $failedPortCount = $self->checkBits("on", $bitmask, $currentBitmask);
+	if ($failedPortCount) {
+		print "setPortVlan(): Could not put $failedPortCount ports into vlan $vlan_number!\n";
+	}
+	return $failedPortCount; # should be 0
+}
+
+# Removes and disables some ports in a given VLAN. The VLAN is given as a VLAN
+# 802.1Q tag value.  Ports are known to be regular ports and not trunked.
+#
+# usage: removeSomePortsFromVlan(self,vlan,@ports)
+#	 returns 0 on sucess.
+#	 returns the number of failed ports on failure.
+sub removeSomePortsFromVlan($$@) {
+	my ($self, $vlan_number, @ports) = @_;
+	return $self->removeSelectPortsFromVlan($vlan_number, @ports);
+}
+
+
+
+#
+# Removes select ports from the given VLANS. Each VLAN is given as a VLAN
+# 802.1Q tag value.
+#
+# usage: removeSelectPortsFromVlan(self,@vlan)
+#	 returns 0 on sucess (!!!)
+#	 returns the number of failed ports on failure.
+#
+sub removeSelectPortsFromVlan($$@) {
+	my $self = shift;
+	my $vlan_number = shift;
+	my @ports = @_;
+
+    # VLAN 1 is default VLAN, that's where all ports are supposed to go
+    # so trying to remove them there doesn't make sense
+    if ($vlan_number == 1) {
+    	print "removeSelectPortsFromVlan() error: attempt to remove @ports from default VLAN 1\n";
+    	return 0;
+    }
+
+	# Run the port list through portmap to find the ports on the switch that
+	# we are concerned with
+	my @portlist = $self->convertPortFormat($PORT_FORMAT_IFINDEX, @ports);
+	$self->debug("removeSelectPortsFromVlan(): ports: " . join(",",@ports) . "\n");
+	$self->debug("removeSelectPortsFromVlan(): as ifIndexes: " . join(",",@portlist) . "\n");
+	
+	# Create a bitmask from this ifIndex list
+	my $bitmaskToRemove = $self->convertIfindexesToBitmask(\@portlist);
+	
+	# Create an all-zero bitmask
+	my $allZeroBitmask = "00000000" x length($bitmaskToRemove);
+	$allZeroBitmask = pack("B*", $allZeroBitmask);
+	
+	# Update the switch; both objects must be set in a single command Note that
+	# only those ports whose bit is set in $bitmaskToRemove will be updated,
+	# even though it looks like we're zeroeing the entire
+	# dot1qVlanStaticEgressPorts value
+	
+	my $vlanIfindex = $vlan_number + $vlanNumberToIfindexOffset;
+	my $RetVal = $self->{SESS}->set([
+		["dot1qVlanStaticEgressPorts"  , $vlanIfindex, 
+			$allZeroBitmask, "OCTETSTR"], 
+		["dot1qVlanStaticUntaggedPorts", $vlanIfindex, 
+			$bitmaskToRemove, "OCTETSTR"]
+		]);
+	
+	if ( ! defined ($RetVal) ) { 
+		# $RetVal should contain "0 but true" if successful, but...
+		# occasionally $RetVal is undef, especially when attempting to remove
+		# ANY port from a VLAN which has a port from module 13 (last module) as
+		# a member
+		#print "removeSelectPortsFromVlan() for port(s) @ports from vlan $vlan_number:\n";
+		#print "              generic error trying to set dot1qVlanStaticEgressPorts, dot1qVlanStaticUntaggedPorts\n";
+		#print "              (does this vlan have a port from module 13 as a member?)\n";
+		#print "              (if so, this is probably an FTOS bug and everything is fine anyway)\n";
+	}
+    
+	# ...so the return value cannot be trusted => we do our own little
+	# investigation Errors mostly happen when a custom VLAN has tagged members
+	# (in which case dot1qVlanStaticUntaggedPorts isn't the right object)
+	
+	# Get the current membership bitmask for this vlan
+	my $currentBitmask;
+	if (! ( $currentBitmask = $self->{SESS}->get(
+			["dot1qVlanStaticEgressPorts",$vlanIfindex]) ) ) {
+		print "removeSelectPortsFromVlan(): Error getting current ".
+			"membership bitmask for vlan $vlan_number\n";
+		return scalar(@ports);
+	}
+	
+	# Should return 0 if everything is alright, no. of failed ports otherwise
+	my $failedPortCount = $self->checkBits("off", $bitmaskToRemove, 
+		$currentBitmask);
+
+	if ($failedPortCount) {
+		print "setPortVlan(): Could not remove $failedPortCount ".
+			"ports from vlan $vlan_number!\n";
+	}
+	return $failedPortCount; # should be 0
+}
+
+
+#
+# Remove the given VLANs from this switch. Removes all ports from the VLAN,
+# so it's not necessary to call removePortsFromVlan() first. The VLAN is
+# given as a 802.1Q VLAN tag number (so NOT as a vlan_id from the database!)
+#
+# usage: removeVlan(self,int vlan)
+#	 returns 1 on success
+#	 returns 0 on failure
+#
+sub removeVlan($@) {
+	my $self = shift;
+	my @vlan_numbers = @_;
+	my $errors = 0;
+	my $DeleteOID = "dot1qVlanStaticRowStatus";
+	my $name = $self->{NAME};
+
+	foreach my $vlan_number (@vlan_numbers) {
+		# Calculate ifIndex for this VLAN
+		my $ifIndex = $vlanNumberToIfindexOffset + $vlan_number;
+		
+		# Perform the actual removal (no need to first remove all ports from
+		# the VLAN)
+		
+		my $RetVal = undef;
+		print "  Removing VLAN # $vlan_number ... ";
+		$RetVal = $self->{SESS}->set([[$DeleteOID,$ifIndex,"destroy","INTEGER"]]);
+		# $RetVal should contain "0 but true" if successful	
+		if ( defined($RetVal) ) { 
+			print "Removed VLAN $vlan_number on switch $name.\n";
+		} else {
+			$self->debug("Remove VLAN $vlan_number failed on switch $name.\n");
+			$errors++;
+		}
+	}
+	
+	return ($errors == 0) ? 1 : 0;
+}
+
+
+#
+# Removes ALL ports from the given VLANS. Each VLAN is given as a VLAN
+# 802.1Q tag value.
+#
+# usage: removePortsFromVlan(self,@vlan)
+#	 returns 0 on sucess (!!!)
+#	 returns the number of failed ports on failure.
+#
+sub removePortsFromVlan($@) {
+	my $self = shift;
+	my @vlan_numbers = @_;
+	my $errors = 0;
+
+    foreach my $vlan_number (@vlan_numbers) {
+    	$self->debug("removePortsFromVlan(): attempting to remove all ports from vlan_number $vlan_number\n");
+    	
+		# VLAN 1 is default VLAN, that's where all ports are supposed to go
+		# so trying to remove them there doesn't make sense
+		if ($vlan_number == 1) {
+		    print "removePortsFromVlan() error: attempt to remove all ports from default VLAN 1\n";
+		    next;
+		}
+		
+		# Get the current membership bitmask for this vlan
+		my $vlanIfindex = $vlan_number + $vlanNumberToIfindexOffset;
+		my $currentBitmask;
+		if (! ( $currentBitmask = $self->{SESS}->get(["dot1qVlanStaticEgressPorts",$vlanIfindex]) ) ) {
+			print "removePortsFromVlan(): error getting current membership bitmask for vlan_number $vlan_number. Does it even exist?\n";
+			# no membership bitmask => impossible to obtain number of ports
+			# anyway => next...
+			next; 
+		}
+		
+		# Count how many ports are in it
+		my $temp = unpack('B*', $currentBitmask);
+		my @temp = split //, $temp;
+		my $portsInThisVlan = 0;
+		foreach (@temp) { $portsInThisVlan += $_; } # counting the 1's
+		
+		# Create an all-zero bitmask
+		my $allZeroBitmask = "";
+		foreach (@temp) { $allZeroBitmask .= "0"; }
+        $allZeroBitmask = pack("B*", $allZeroBitmask);
+		
+		# Update the switch; both objects must be set in a single command, with
+		# the second one still with the ORIGINAL bitmask (!). There's probably
+		# a good reason for this.
+		#
+		my $RetVal = $self->{SESS}->set([
+			   ["dot1qVlanStaticEgressPorts"  , $vlanIfindex, 
+			   		$allZeroBitmask, "OCTETSTR"], 
+		       ["dot1qVlanStaticUntaggedPorts", $vlanIfindex, 
+			   		$currentBitmask, "OCTETSTR"]
+			   ]);
+		
+		# $RetVal should contain "0 but true" if successful
+		if ( ! defined($RetVal) ) { 		    
+			print "removePortsFromVlan(): problem removing all ".
+				"ports from vlan_number $vlan_number\n";
+			$errors += $portsInThisVlan;
+		} else {
+			$self->debug("removePortsFromVlan(): removed all ports ".
+				"from vlan_number $vlan_number\n");
+		}
+    }
+
+	return $errors;
+}
+
+
+#
+# Set a variable associated with a port. The commands to execute are given
+# in the cmdOIDs hash above. A command can involve multiple OIDs.
+#
+# usage: portControl($self, $command, @ports)
+#    returns 0 on success.
+#    returns number of failed ports on failure.
+#    returns -1 if the operation is unsupported
+#
+sub portControl ($$@) {
+	my $self = shift;
+	my $cmd = shift;
+	my @ports = @_;
+
+	$self->debug("portControl(): $cmd -> (@ports)\n");
+
+	# Find the command in the %cmdOIDs hash (defined at the top of this file)
+	if (defined $cmdOIDs{$cmd}) {
+		my @oid = @{$cmdOIDs{$cmd}};
+		my $errors = 0;
+
+		# Convert the ports from the format they were given in to the format
+		# required by the command... and probably FTOS will always require
+		# ifIndexes.
+		
+		my $portFormat = $PORT_FORMAT_IFINDEX;
+		my @portlist = $self->convertPortFormat($portFormat,@ports);
+
+		# Some commands involve multiple SNMP commands, so we need to make
+		# sure we get all of them
+		while (@oid) {
+			my $myoid = shift @oid;
+			my $myval = shift @oid;
+
+			$errors += $self->UpdateField($myoid,$myval,@portlist);
+		}
+		return $errors;
+	} else {
+		# Command not supported
+		$self->debug("portControl(): Unsupported port control command ".
+				"'$cmd' ignored.\n",1);
+		return -1;
+	}
+}
+
+#
+# Sets a *single* OID to a desired value for a given list of ports (in ifIndex format)
+#
+# usage: UpdateField($self, $OID, $desired_value, @ports)
+#    returns 0 on success
+#    returns -1 on failure
+#
+sub UpdateField($$$@) {
+	my $self = shift;
+	my ($OID,$val,@ports)= @_;
+
+	$self->debug("UpdateField(): OID $OID value $val ports @ports\n");
+
+	my $RetVal = 0;
+	my $result = 0;
+
+    foreach my $port (@ports) {
+		$self->debug("UpdateField(): checking port $port for $OID $val ...\n");
+		$RetVal = $self->{SESS}->get([$OID,$port]);
+		if (!defined $RetVal) {
+			$self->debug("UpdateField(): Port $port, change to $val: ".
+				"No answer from device\n");
+			$result = -1;
+		} else {
+			$self->debug("UpdateField(): Port $port was $RetVal\n");
+			if ($RetVal ne $val) {
+				$self->debug("UpdateField(): Setting port $port to $val...\n");
+				$RetVal = $self->{SESS}->set([[$OID,$port,$val,"INTEGER"]]);
+
+				my $count = 6;
+				while (($RetVal ne $val) && (--$count > 0)) { 
+					sleep 1;
+					$RetVal = $self->{SESS}->get([$OID,$port]);
+					$self->debug("UpdateField(): Value for port $port is ".
+						"currently $RetVal\n");
+				}
+				$result =  ($count > 0) ? 0 : -1;
+				$self->debug("UpdateField(): ".
+					($result ? "failed.\n" : "succeeded.\n") );
+			}
+		}
+	}
+	return $result;
+}
+
+# 
+# Get statistics for ports on the switch
+#
+# usage: getPorts($self)
+# see snmpit_cisco_stack.pm for a description of return value format
+#
+#
+sub getStats ($) {
+	my $self = shift;
+
+	my $ifTable = ["ifInOctets",0];
+	my %inOctets=();
+	my %inUcast=();
+    my %inNUcast=();
+	my %inDiscard=();
+	my %inErr=();
+	my %inUnkProt=();
+	my %outOctets=();
+	my %outUcast=();
+	my %outNUcast=();
+	my %outDiscard=();
+	my %outErr=();
+	my %outQLen=();
+	my ($varname, $port, $value);
+
+	#
+	# Walk the whole stats tree, and fill these hashes
+	#
+	$self->{SESS}->getnext($ifTable);
+	do {
+		($varname,$port,$value) = @{$ifTable};
+		$self->debug("getStats: Got $varname, $port, $value\n");
+		
+		if ($varname =~ /InOctets/) {
+			$inOctets{$port} = $value;
+		} elsif ($varname =~ /InUcast/) {
+			$inUcast{$port} = $value;
+		} elsif ($varname =~ /InNUcast/) {
+			$inNUcast{$port} = $value;
+		} elsif ($varname =~ /InDiscard/) {
+			$inDiscard{$port} = $value;
+		} elsif ($varname =~ /InErrors/) {
+			$inErr{$port} = $value;
+		} elsif ($varname =~ /InUnknownP/) {
+			$inUnkProt{$port} = $value;
+		} elsif ($varname =~ /OutOctets/) {
+			$outOctets{$port} = $value;
+		} elsif ($varname =~ /OutUcast/) {
+			$outUcast{$port} = $value;
+		} elsif ($varname =~ /OutNUcast/) {
+			$outNUcast{$port} = $value;
+		} elsif ($varname =~ /OutDiscard/) {
+			$outDiscard{$port} = $value;
+		} elsif ($varname =~ /OutErrors/) {
+			$outErr{$port} = $value;
+		} elsif ($varname =~ /OutQLen/) {
+			$outQLen{$port} = $value;
+		}
+		
+		$self->{SESS}->getnext($ifTable);
+	} while ( $varname =~ /^i[f](In|Out)/) ;
+
+	#
+	# Put all of the data gathered in the loop into a list suitable for
+	# returning
+	#
+	my @rv = ();
+
+	# PORTINDEX contains only the "real" ports, no vlans/mgmnt ifaces
+	foreach my $id ( keys %{$self->{PORTINDEX}} ) { 
+		$port = portnum($self->{NAME} . ":" . $self->{IFINDEX}{$id});
+
+		#
+		# Skip ports that don't seem to have anything interesting attached
+		#
+		if (!$port) {
+			$self->debug("$id does not seem to be connected, skipping\n");
+			next;
+		}
+		
+		push @rv, [$port,$inOctets{$id},$inUcast{$id},$inNUcast{$id},
+		           $inDiscard{$id},$inErr{$id},$inUnkProt{$id},$outOctets{$id},
+		           $outUcast{$id},$outNUcast{$id},$outDiscard{$id},$outErr{$id},
+	    	       $outQLen{$id}];
+	}
+	return @rv;
+}
+
+
+#
+# Read a set of values for all given ports.
+#
+# usage: getFields(self,ports,oids)
+#        ports: Reference to a list of ports, in any allowable port format
+#        oids: A list of OIDs to retrieve values for
+#
+# On sucess, returns a two-dimensional list indexed by port,oid
+#
+sub getFields($$$) {
+	my $self = shift;
+	my ($ports,$oids) = @_;
+
+	my @ifindicies = $self->convertPortFormat($PORT_FORMAT_IFINDEX,@$ports);
+	my @oids = @$oids;
+
+	# Put together an SNMP::VarList for all the values we want to get
+	my @vars = ();
+	foreach my $ifindex (@ifindicies) {
+		foreach my $oid (@oids) {
+			push @vars, ["$oid","$ifindex"];
+		}
+	}
+
+	# If we try to ask for too many things at once, we get back really bogus
+	# errors. So, we limit ourselves to an arbitrary number that, by
+	# experimentation, works.
+	my $maxvars = 16;
+	my @results = ();
+	while (@vars) {
+		my $varList = new SNMP::VarList(splice(@vars,0,$maxvars));
+		my $rv = $self->{SESS}->get($varList);
+		push @results, @$varList;
+	}
+	    
+	# Build up the two-dimensional list for returning
+	my @return = ();
+	foreach my $i (0 .. $#ifindicies) {
+		foreach my $j (0 .. $#oids) {
+			my $val = shift @results;
+			$return[$i][$j] = $$val[2];
+		}
+	}
+
+	return @return;
+}
+
+
+######
+###### New switch backends
+######
+
+###
+### methods below probably not needed;
+###
+
+#$device->enablePortTrunking2($self, $port, $vlan_number, $equaltrunking)
+##        modport: module.port of the trunk to operate on
+##        nativevlan: VLAN number of the native VLAN for this trunk
+##        equaltrunk: don't do dual mode; tag PVID also.
+##        Returns 1 on success, 0 otherwise
+#
+#$device->clearAllVlansOnTrunk($self, $modport)
+##        modport: module.port of the trunk to operate on
+##        Returns 1 on success, 0 otherwise (must be done before taking a
+##        port out of trunking mode.
+#
+#(usually internal).
+#
+#$device->disablePortTrunking($self, $modport)
+#        returns 1 on success, 0 on failure.
+#
+#$device->getChannelIfIndex($self, @ports)
+#        this is used in the function immediately below; an interswitch
+#        trunk maybe connected by several physical wires constituting
+#        a logical trunk.  It is necessary on cisco's (and possibly
+#        others) to return a special cookie for trunk operations.
+#        this function only deals with one trunk at a time.
+#
+#$device->setVlansOnTrunk($self, $trunkIndex, $value, @vlan_number)
+##        $trunkIndex: cookie returned above for the trunk on which to operate.
+##        $value: 0 to disallow the VLAN on the trunk, 1 to allow it
+##        #vlan_numbers: An array of 802.1Q VLAN numbers to operate on
+##        Returns 1 on success, 0 otherwise
+##
+#
+#$device->resetVlanIfOnTrunk($self, $modport, $vlan_number)
+##        modport: module.port of the trunk to operate on
+##        vlan_number: A 802.1Q VLAN tag number to check
+##        return value currently ignored.  Takes vlan out of the trunk and puts
+##        it back in to flush the FDB.
+#
+#
+
+
+#
+# Enable Openflow
+#
+sub enableOpenflow($$) {
+    my $self = shift;
+    my $vlan = shift;
+    my $RetVal;
+    
+    #
+    # Force10 switch doesn't support Openflow yet.
+    #
+    warn "ERROR: Force10 swith doesn't support Openflow now";
+    return 0;
+}
+
+#
+# Disable Openflow
+#
+sub disableOpenflow($$) {
+    my $self = shift;
+    my $vlan = shift;
+    my $RetVal;
+    
+    #
+    # Force10 switch doesn't support Openflow yet.
+    #
+    warn "ERROR: Force10 swith doesn't support Openflow now";
+    return 0;
+}
+
+#
+# Set controller
+#
+sub setOpenflowController($$$) {
+    my $self = shift;
+    my $vlan = shift;
+    my $controller = shift;
+    my $RetVal;
+    
+    #
+    # Force10 switch doesn't support Openflow yet.
+    #
+    warn "ERROR: Force10 swith doesn't support Openflow now";
+    return 0;
+}
+
+#
+# Set listener
+#
+sub setOpenflowListener($$$) {
+    my $self = shift;
+    my $vlan = shift;
+    my $listener = shift;
+    my $RetVal;
+    
+    #
+    # Force10 switch doesn't support Openflow yet.
+    #
+    warn "ERROR: Force10 swith doesn't support Openflow now";
+    return 0;
+}
+
+#
+# Get used listener ports
+#
+sub getUsedOpenflowListenerPorts($) {
+    my $self = shift;
+    my %ports = ();
+
+    warn "ERROR: Force10 swith doesn't support Openflow now\n";
+
+    return %ports;
+}
+
+#
+# Check if Openflow is supported on this switch
+#
+sub isOpenflowSupported($) {
+    #
+    # Force10 switch doesn't support Openflow yet.
+    #
+    return 0;
+}
+
+
+# end with 1;
+1;
