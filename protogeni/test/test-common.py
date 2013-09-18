@@ -60,6 +60,11 @@ slicecredentialfile = None
 admincredentialfile = None
 speaksforcredential = None
 
+if "DEFAULTAUTHENTICATE" not in globals():
+    DEFAULTAUTHENTICATE=1
+
+authenticate=DEFAULTAUTHENTICATE
+
 if "Usage" not in dir():
     def Usage():
         print "usage: " + sys.argv[ 0 ] + " [option...]"
@@ -71,6 +76,7 @@ if "Usage" not in dir():
 def BaseOptions():
     print """
     -a file, --admincredentials=file    read admin credentials from file
+    -A, --authenticated                 authenticate client
     -c file, --credentials=file         read self-credentials from file
                                             [default: query from SA]
     -d, --debug                         be verbose about XML methods invoked
@@ -90,17 +96,20 @@ def BaseOptions():
     -r file, --read-commands=file       specify additional configuration file
     -s file, --slicecredentials=file    read slice credentials from file
                                             [default: query from SA]
-    -S file, --speaksfor=file           read speaksfor credential from file"""
+    -S file, --speaksfor=file           read speaksfor credential from file
+    -U, --unauthenticated               do not authenticate client"""
     pass
 
 try:
-    opts, REQARGS = getopt.gnu_getopt( sys.argv[ 1: ], "a:c:df:hl:m:n:p:r:s:S:",
-                                       [ "admincredentials=", "credentials=",
-                                         "debug", "certificate=",
-                                         "help", "sa=", "cm=", "slicename=",
-                                         "passphrase=", "read-commands=",
-                                         "speaksfor=",
-                                         "slicecredentials=", "delete" ] )
+    opts, REQARGS = getopt.gnu_getopt( sys.argv[ 1: ], "a:Ac:df:hl:m:n:p:r:s:S:U",
+                                       [ "admincredentials=", "authenticated",
+                                         "credentials=", "debug",
+                                         "certificate=", "help", "sa=", "cm=",
+                                         "slicename=", "passphrase=",
+                                         "read-commands=", "slicecredentials=",
+                                         "speaksfor=", "unauthenticated",
+                                         "delete" ] )
+
 except getopt.GetoptError, err:
     print >> sys.stderr, str( err )
     Usage()
@@ -116,6 +125,8 @@ if "PROTOGENI_PASSPHRASE" in os.environ:
 for opt, arg in opts:
     if opt in ( "-a", "--admincredentials" ):
         admincredentialfile = arg
+    elif opt in ( "-A", "--authenticated" ):
+        authenticate=1
     elif opt in ( "-c", "--credentials" ):
         selfcredentialfile = arg
     elif opt in ( "-d", "--debug" ):
@@ -149,13 +160,19 @@ for opt, arg in opts:
         f = open(arg)
         speaksforcredential = f.read()
         f.close()
+    elif opt in ( "-U", "--unauthenticated" ):
+        authenticate=0
     elif opt in ( "--delete" ):
         DELETE = 1
 
+# try to load a cert even if we're not planning to authenticate, since we
+# can use it to construct default authority locations
 cert = M2Crypto.X509.load_cert( CERTIFICATE )
 
 # XMLRPC server: use www.emulab.net for the clearinghouse.
-XMLRPC_SERVER   = { "ch" : "www.emulab.net" }
+XMLRPC_SERVER   = { "ch" : "www.emulab.net", "sr" : "www.emulab.net" }
+SERVER_PATH = { "ch" : ":12369/protogeni/xmlrpc/",
+                "sr" : ":12370/protogeni/pubxmlrpc/" }
 
 try:
     extension = cert.get_ext("authorityInfoAccess")
@@ -173,13 +190,13 @@ try:
         if port:
 	    path = ":" + port + path
             pass
-        SERVER_PATH = { "default" : path }
+        SERVER_PATH["default"] = path
 except LookupError, err:
     pass
 
 if "default" not in XMLRPC_SERVER:
     XMLRPC_SERVER["default"] = cert.get_issuer().CN
-    SERVER_PATH = { "default" : ":443/protogeni/xmlrpc/" }
+    SERVER_PATH ["default"] = ":443/protogeni/xmlrpc/"
 pass
 
 if os.path.exists( GLOBALCONF ):
@@ -232,6 +249,14 @@ def geni_am_response_handler(method, method_args):
     """
     return apply(method, method_args)
 
+def geni_sr_response_handler(method, method_args):
+    """Handles the GENI SR responses, which are different from the
+    ProtoGENI responses. ProtoGENI always returns a dict with three
+    keys (code, value, and output). GENI SR operations return the
+    value, or an XML RPC Fault if there was a problem.
+    """
+    return apply(method, method_args)
+
 #
 # Call the rpc server.
 #
@@ -278,7 +303,7 @@ def do_method(module, method, params, URI=None, quiet=False, version=None,
         print str( url ) + " " + method
 
     if url.scheme == "https":
-        if not os.path.exists(CERTIFICATE):
+        if authenticate and not os.path.exists(CERTIFICATE):
             if not quiet:
                 print >> sys.stderr, "error: missing emulab certificate: " + CERTIFICATE
             return (-1, None)
@@ -286,7 +311,8 @@ def do_method(module, method, params, URI=None, quiet=False, version=None,
         port = url.port if url.port else 443
 
         ctx = M2Crypto.SSL.Context("sslv23")
-        ctx.load_cert_chain(CERTIFICATE, CERTIFICATE, PassPhraseCB)
+        if authenticate:
+            ctx.load_cert_chain(CERTIFICATE, CERTIFICATE, PassPhraseCB)
         ctx.set_verify(M2Crypto.SSL.verify_none, 16)
         ctx.set_allow_unknown_ca(0)
     

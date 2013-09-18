@@ -1,5 +1,5 @@
 #
-# Copyright (c) 2008-2012 University of Utah and the Flux Group.
+# Copyright (c) 2000-2013 University of Utah and the Flux Group.
 # 
 # {{{GENIPUBLIC-LICENSE
 # 
@@ -30,58 +30,38 @@
 SRCDIR		= @srcdir@
 TESTBED_SRCDIR	= @top_srcdir@
 OBJDIR		= ../..
-SUBDIR		= protogeni/lib
+SUBDIR		= protogeni/pubxmlrpc
 
 include $(OBJDIR)/Makeconf
 
-LIB_SCRIPTS     = GeniDB.pm GeniUser.pm  \
-		  GeniSlice.pm GeniSA.pm GeniCM.pm GeniCMV2.pm \
-		  GeniTicket.pm GeniSliver.pm GeniCredential.pm \
-		  GeniComponent.pm GeniCH.pm GeniEmulabUtil.pm \
-		  GeniAuthority.pm GeniCertificate.pm GeniAggregate.pm \
-		  GeniUtil.pm GeniRegistry.pm GeniUsage.pm GeniHRN.pm \
-		  GeniSES.pm GeniResource.pm GeniXML.pm GeniAM.pm \
-		  GeniEmulab.pm GeniFoam.pm GeniStitch.pm \
-		  GeniStd.pm GeniMA.pm GeniStdSA.pm GeniSR.pm
-SBIN_SCRIPTS	= plabnodewrapper plabslicewrapper
-
-SCRIPTS		= genischemacheck.pl
-
 # These scripts installed setuid, with sudo. 
-SETUID_SBIN_SCRIPTS  = plabnodewrapper plabslicewrapper
+SETUID_BIN_SCRIPTS   = 
+SETUID_SBIN_SCRIPTS  = 
+SETUID_SUEXEC_SCRIPTS  = pubgeni-wrapper.pl
 
 #
 # Force dependencies on the scripts so that they will be rerun through
 # configure if the .in file is changed.
 # 
-all:	$(LIB_SCRIPTS) $(SBIN_SCRIPTS) $(SCRIPTS)
+all:	geni-sr.pm pubgeni-wrapper.pl
 
 include $(TESTBED_SRCDIR)/GNUmakerules
 
-install: $(addprefix $(INSTALL_LIBDIR)/, $(LIB_SCRIPTS)) \
-	 $(addprefix $(INSTALL_SBINDIR)/, $(SBIN_SCRIPTS)) \
-	 $(addprefix $(INSTALL_DIR)/opsdir/lib/, $(OPS_LIBS))
+install-libs: $(INSTALL_LIBDIR)/geni-sr.pm
 
-#
-# A check to see if this is a 'real' install. Kinda hacky, but as far as I can
-# tell, you can't put ifeq()'s inside of targets
-#
-ifeq ($(TBROOT),/usr/testbed)
-SCHEMACHECK= cd $(OBJDIR)/protogeni/lib && perl genischemacheck.pl
-else
-SCHEMACHECK= @echo "Skipping schema check, since prefix isn't /usr/testbed"
-endif
-install-genischemacheck: genischemacheck.pl
-	@echo "Checking DB schema..."
-	$(SCHEMACHECK)
+install-scripts: $(INSTALL_LIBEXECDIR)/pubgeni-wrapper.pl
+	-mkdir -p $(INSTALL_DIR)/protogeni/pubxmlrpc
+	-rm -f $(INSTALL_DIR)/protogeni/pubxmlrpc/pubgeni-wrapper.pl
+	ln  $< $(INSTALL_DIR)/protogeni/pubxmlrpc/pubgeni-wrapper.pl
+
+install: all install-libs install-scripts
 
 control-install:
 
 clean:
-	rm -f *.o core $(LIB_SCRIPTS)
+	rm -f *.o core *.pl *.pm *.py
 
-$(INSTALL_DIR)/opsdir/lib/%: %
+$(INSTALL_DIR)/protogeni/pubxmlrpc/%: %
 	@echo "Installing $<"
-	-mkdir -p $(INSTALL_DIR)/opsdir/lib
+	-mkdir -p $(INSTALL_DIR)/protogeni/pubxmlrpc
 	$(INSTALL) $< $@
-

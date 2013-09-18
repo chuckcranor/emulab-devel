@@ -685,6 +685,7 @@ GMAP_API_KEY
 STANDALONE_CLEARINGHOUSE
 PROTOGENI_GENIRACK
 PROTOGENI_URL
+GENI_PUBRPCPORT
 PROTOGENI_RPCNAME
 PROTOGENI_RPCPORT
 PROTOGENI_DOMAIN
@@ -4918,6 +4919,7 @@ done
 
 
 
+
 #
 # Offer both versions of the email addresses that have the @ escaped
 # for perl (the default), and that don't
@@ -5014,6 +5016,7 @@ PROTOGENI_WEBSITE="www.emulab.net"
 PROTOGENI_DOMAIN="unknown"
 PROTOGENI_RPCPORT=12369
 PROTOGENI_RPCNAME=""
+GENI_PUBRPCPORT=12370
 PROTOGENI_GENIRACK=0
 STANDALONE_CLEARINGHOUSE=0
 NODE_USAGE_SUPPORT=0
@@ -6694,7 +6697,7 @@ outfiles="$outfiles Makeconf GNUmakefile \
         protogeni/GNUmakefile protogeni/security/GNUmakefile \
         protogeni/xmlrpc/GNUmakefile protogeni/lib/GNUmakefile \
         protogeni/scripts/GNUmakefile protogeni/etc/GNUmakefile \
-        protogeni/test/GNUmakefile \
+        protogeni/test/GNUmakefile protogeni/pubxmlrpc/GNUmakefile \
 	protogeni/rspec-emulab/GNUmakefile \
         protogeni/rspec-emulab/0.1/GNUmakefile \
 	protogeni/rspec-emulab/0.2/GNUmakefile \

@@ -36,7 +36,7 @@ ELABINELAB      = @ELABINELAB@
 
 include $(OBJDIR)/Makeconf
 
-SUBDIRS	= security xmlrpc lib scripts etc rspec-emulab
+SUBDIRS	= security xmlrpc lib scripts etc rspec-emulab pubxmlrpc
 
 all:	check-submodule all-subdirs
 
@@ -50,6 +50,7 @@ install:
 	@$(MAKE) -C etc install
 	@$(MAKE) -C rspec-emulab install
 	@$(MAKE) -C test install
+	@$(MAKE) -C pubxmlrpc install
 
 check-submodule: 
 	@if [ ! -e "rspec-emulab" ]; then \
