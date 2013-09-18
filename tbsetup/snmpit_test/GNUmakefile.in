@@ -39,7 +39,8 @@ LIB_STUFF       = portstats snmpit_intel.pm \
 		  snmpit_foundry.pm snmpit_stack.pm snmpit_remote.pm \
 		  snmpit_nortel.pm snmpit_hp.pm snmpit_apcon.pm \
 		  snmpit_arista.pm snmpit_arista_switch_daemon.py \
-		  snmpit_mellanox.pm MLNX_XMLGateway.pm
+		  snmpit_mellanox.pm MLNX_XMLGateway.pm \
+                  snmpit_force10.pm
 
 #
 # Force dependencies on the scripts so that they will be rerun through

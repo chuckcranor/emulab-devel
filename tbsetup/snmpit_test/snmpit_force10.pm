@@ -26,8 +26,7 @@ $| = 1; # Turn off line buffering on output
 use English;
 use SNMP;
 use snmpit_lib;
-use Socket;            # FIXME Not yet sure what these
-use libtestbed;        # are used for (currently it works without these lines)
+use Port;
 
 #
 # These are the commands that can be passed to the portControl function
@@ -87,8 +86,18 @@ my $vlanStaticNamePrefix = "emuID";
 #
 my $PORT_FORMAT_IFINDEX  = 1;
 my $PORT_FORMAT_MODPORT  = 2;
-my $PORT_FORMAT_NODEPORT = 3;
+my $PORT_FORMAT_PORT     = 3;
 
+#
+# SNMP MIB variables.  May need to make these conditional based on the
+# switch OS...
+#
+my $SNMPVAR_ADMIN_STATUS = "ifAdminStatus";
+my $SNMPVAR_OPER_STATUS  = "ifOperStatus";
+my $SNMPVAR_DUPLEX       = "dot3StatsDuplexStatus";
+my $SNMPVAR_SPEED        = "ifHighSpeed";
+my $SNMPVAR_VLAN_NAME    = "dot1qVlanStaticName";
+my $SNMPVAR_EGRESS_PORTS = "dot1qVlanStaticEgressPorts";
 
 #
 # Creates a new object.
@@ -150,9 +159,6 @@ sub new($$$;$) {
     #
     # set up hashes for pending vlans
     #
-    $self->{NEW_NAMES} = {};   # FIXME not sure if necessary, only found in foundry code
-    $self->{NEW_NUMBERS} = {}; # FIXME not sure if necessary, only found in foundry code
-    
     $self->{IFINDEX} = {};     # Used for converting modport to ifIndex (somtimes called iid; e.g. 345555002) and vice versa
     $self->{PORTINDEX} = {};   # Will contain elements for experimental "interfaces" only (no VLANs, no Mgmgnt ifaces); format: ifIndex => ifDescr
 
@@ -210,7 +216,10 @@ sub new($$$;$) {
     #
     bless($self,$class);
 
-    $self->readifIndex();
+    if (!$self->readifIndex()) {
+	warn "WARNING: Unable to process ifindex table on $self->{NAME}\n";
+	return undef;
+    }
     
     return $self;
 }
@@ -246,34 +255,47 @@ sub debug($$;$) {
 #        returns nothing but sets instance variable IFINDEX
 #
 sub readifIndex($) {
-	my $self = shift;
-	$self->debug("readifIndex:\n",2);
-	
-	my $field = ["ifDescr",0];
-	$self->{SESS}->getnext($field);
-	my ($name,$iid,$descr) = @{$field};
+    my $self = shift;
+    $self->debug("readifIndex:\n",2);
+        
+    my $results = snmpitBulkwalkFatal($self->{SESS},["ifDescr"]);
+    
+    if (!@{$results}) {
+	warn "readifIndex: ERROR: No interface description rows returned ".
+	    "while attempting to build ifindex table.\n";
+	return 0;
+    }
 
-	while ($name eq "ifDescr") {
-		$self->debug("got $name, $iid, descr $descr ",2);
-
-		if ($descr =~ /(\w*)\s+(\d+)\/(\d+)$/) { # will match GigabitEthernet 9/47 but not Vlan 123
-			my $type = $1;
-			my $module = $2;
-			my $port = $3;
-			my $modport = "$module.$port";
-			my $ifIndex = $iid;
-
-			if ( $descr !~ /management/i) {      # exclude e.g. ManagementEthernet ports
-				$self->{IFINDEX}{$modport} = $ifIndex;
-				$self->{IFINDEX}{$ifIndex} = $modport;
-				$self->{PORTINDEX}{$ifIndex} = $descr;
-				$self->debug("mod $module, port $port, modport $modport, descr $descr\n",2);
-			}
-		}
-
-		$self->{SESS}->getnext($field);
-		($name,$iid,$descr) = @{$field};
+    foreach my $result (@{$results}) {
+	my ($name,$iid,$descr) = @{$result};
+	$self->debug("got $name, $iid, descr $descr ",2);
+	if ($name ne "ifDescr") {
+	    warn "readifIndex: WARNING: Foreign snmp var returned: $name";
+	    return 0;
 	}
+	
+	# will match "GigabitEthernet 9/47" but not "Vlan 123"
+	if ($descr =~ /(\w*)\s+(\d+)\/(\d+)$/) {
+	    my $type = $1;
+	    my $module = $2;
+	    my $port = $3;
+	    # Force10 modules and ports start at 0 instead of 1.  Emulab
+	    # convention is to be 1-based.
+	    my $modport = ($module+1) . "." . ($port+1);
+	    my $ifIndex = $iid;
+	    
+	    # exclude e.g. ManagementEthernet ports
+	    if ( $descr !~ /management/i) {
+		$self->{IFINDEX}{$modport} = $ifIndex;
+		$self->{IFINDEX}{$ifIndex} = $modport;
+		$self->{PORTINDEX}{$ifIndex} = $descr;
+		$self->debug("mod $module, port $port, modport $modport, descr $descr\n",2);
+	    }
+	}
+    }
+
+    # success
+    return 1;
 }
 
 
@@ -311,69 +333,52 @@ sub convertPortFormat($$@) {
 
     my $input;
     SWITCH: for ($sample) {
-		(/^\d+$/) 
-			&& do {
-				# 1 or more digits; if matches => exit SWITCH scope
-				$input = $PORT_FORMAT_IFINDEX; 
-				last SWITCH; 
-			};      
-		(/^\d+\.\d+$/) 
-			&& do {
-				# 1 or more digits, a dot, and again 1 or more digits
-				$input = $PORT_FORMAT_MODPORT;
-				last SWITCH; 
-			}; 
-		(/^$self->{NAME}\.\d+\/\d+$/) 
-			&& do {
-				# something like name34.34 ? 
-				# FIXME probably not needed for Force10.
-				$input = $PORT_FORMAT_MODPORT;
-				@ports = map {
-					/^$self->{NAME}\.(\d+)\/(\d+)$/; "$1.$2";} @ports; 
-				last SWITCH;
-			};
-		# DEFAULT
-		# if the previous ones didn't match, it's probably in NODEPORT format
-		$input = $PORT_FORMAT_NODEPORT; 
-		last SWITCH;                          
+	(Port->isPort($_)) && do { $input = $PORT_FORMAT_PORT; last; };
+	(/^\d+$/) && do { $input = $PORT_FORMAT_IFINDEX; last; };
+	(/^\d+\.\d+$/) && do { $input = $PORT_FORMAT_MODPORT; last; };
+	warn "convertPortFormat: Unrecognized input sample: $sample\n";
+	return undef;
     }
 
     #
     # It's possible the ports are already in the right format
     #
     if ($input == $output) {
-		$self->debug("Not converting, input format = output format\n",2);
-		return @ports;
+	$self->debug("Not converting, input format = output format\n",2);
+	return @ports;
     }
 
     if ($input == $PORT_FORMAT_IFINDEX) {
-		if ($output == $PORT_FORMAT_MODPORT) {
-		    $self->debug("Converting ifindex to modport\n",2);
-		    return map $self->{IFINDEX}{$_}, @ports;
-		} elsif ($output == $PORT_FORMAT_NODEPORT) {
-		    $self->debug("Converting ifindex to nodeport\n",2);
-		    # portnum (see snmpit_lib.pm) converts a string of the 
-			# format "<switchname:module.port>" to its node:port 
-			# counterpart so we use $self->{IFINDEX}{$_} to get the 
-			# right module.port information
-		    return map portnum($self->{NAME}.":".$self->{IFINDEX}{$_}), @ports;
-		}
+	if ($output == $PORT_FORMAT_MODPORT) {
+	    $self->debug("Converting ifindex to modport\n",2);
+	    return map $self->{IFINDEX}{$_}, @ports;
+	} elsif ($output == $PORT_FORMAT_PORT) {
+	    $self->debug("Converting ifindex to Port\n",2);
+	    return map {Port->LookupByStringForced(
+			    Port->Tokens2TripleString(
+				$self->{NAME},
+				split(/\./,$self->{IFINDEX}{$_})))} @ports;
+	}
     } elsif ($input == $PORT_FORMAT_MODPORT) {
-		if ($output == $PORT_FORMAT_IFINDEX) {
-		    $self->debug("Converting modport to ifindex\n",2);
-		    return map $self->{IFINDEX}{$_}, @ports;
-		} elsif ($output == $PORT_FORMAT_NODEPORT) {
-		    $self->debug("Converting modport to nodeport\n",2);
-		    return map portnum($self->{NAME} . ":$_"), @ports;
-		}
-    } elsif ($input == $PORT_FORMAT_NODEPORT) {
-		if ($output == $PORT_FORMAT_IFINDEX) {
-		    $self->debug("Converting nodeport to ifindex\n",2);
-		    return map $self->{IFINDEX}{(split /:/,portnum($_))[1]}, @ports;
-		} elsif ($output == $PORT_FORMAT_MODPORT) {
-		    $self->debug("Converting nodeport to modport\n",2);
-		    return map { (split /:/,portnum($_))[1] } @ports;
-		}
+	if ($output == $PORT_FORMAT_IFINDEX) {
+	    $self->debug("Converting modport to ifindex\n",2);
+	    return map $self->{IFINDEX}{$_}, @ports;
+	} elsif ($output == $PORT_FORMAT_PORT) {
+	    $self->debug("Converting modport to Port\n",2);
+	    return map {Port->LookupByStringForced(
+			    Port->Tokens2TripleString(
+				$self->{NAME},
+				split(/\./,$_)))} @ports;
+	}
+    } elsif ($input == $PORT_FORMAT_PORT) {
+	if ($output == $PORT_FORMAT_IFINDEX) {
+	    $self->debug("Converting Port to ifindex\n",2);
+	    return map {$self->{IFINDEX}{(split /:/,$_->toTripleString())[1]}}
+	           @ports;
+	} elsif ($output == $PORT_FORMAT_MODPORT) {
+	    $self->debug("Converting Port to modport\n",2);
+	    return map { (split /:/,$_->toTripleString())[1] } @ports;
+	}
     }
 
     #
@@ -383,7 +388,16 @@ sub convertPortFormat($$@) {
     return undef;
 }
 
+# Utility function
+sub stripVlanPrefix($) {
+    my $vlname = shift;
 
+    if ($vlname =~ /^$vlanStaticNamePrefix(\d+)$/) {
+	return $1;
+    } else {
+	return "";
+    }
+}
 
 #
 # List all ports on the device
@@ -395,6 +409,7 @@ sub convertPortFormat($$@) {
 sub listPorts($) {
     my $self = shift;
 
+    my %Nodeports = ();
     my %Able = ();
     my %Link = ();
     my %speed = ();
@@ -405,68 +420,52 @@ sub listPorts($) {
     #
     # Get the port configuration, including ifOperStatus (really up or down),
     # duplex, speed / whether or not it is autoconfiguring
-    #
+    #			
     foreach $ifIndex (keys %{$self->{PORTINDEX}}) {
-		my ($nodeport) = $self->convertPortFormat($PORT_FORMAT_NODEPORT,$ifIndex);
-		
-		#
-		# Skip ports that don't seem to have anything interesting attached
-		#
-		if (!$nodeport) {
-			$self->debug("ifIndex $ifIndex not connected, skipping\n");
-			next;
-		}
 
-		if ($status = $self->{SESS}->get(["ifAdminStatus",$ifIndex])) {
-		    $Able{$ifIndex} = ( $status =~ /up/ ? "yes" : "no" );
-		}    	
+	#
+	# Skip ports that don't seem to have anything interesting attached
+	#
+	my ($port) = $self->convertPortFormat($PORT_FORMAT_PORT, $ifIndex);
+	my $nodeport = $self->getOtherEndPort();
+	if (!defined($port) || !defined($nodeport) || 
+	    $port->toString() eq $nodeport->toString()) {
+	    $self->debug("Port $port not connected, skipping\n");
+	    next;
+	}
+	$Nodeports{$ifIndex} = $nodeport;
+
+	if ($status = snmpitGetWarn($self->{SESS},[$SNMPVAR_ADMIN_STATUS,
+						   $ifIndex])) {
+	    $Able{$ifIndex} = ( $status =~ /up/ ? "yes" : "no" );
+	}
     	
-		if ($status = $self->{SESS}->get(["ifOperStatus",$ifIndex])) {
-		    $Link{$ifIndex} = $status;
-		}
+	if ($status = snmpitGetWarn($self->{SESS},[$SNMPVAR_OPER_STATUS,
+						   $ifIndex])) {
+	    $Link{$ifIndex} = $status;
+	}
 		
-		# FIXME No duplex getting/setting support found for Force10 yet.
-		# as we'll only be using full duplex anyway, we'll fake a little bit.
-		# For Cisco, this is portDuplex in CISCO-STACK-MIB
-		# a good candidate seems to be 
-		# 1.3.6.1.2.1.10.7.2.1.19 : dot3StatsDuplexStatus from Ether-like MIB !
-		#
-		#if ($status = $self->{SESS}->get(["someCurrentlyStillUnknownForce10DuplexObject",$ifIndex])) {
-		#    $status =~ s/Duplex//;
-		#    $duplex{$ifIndex} = $status;
-		    $duplex{$ifIndex} = "full";
-		    #$duplex{$ifIndex} = "half";
-		#}
-		
-		# FIXME We'll never encounter "auto", because that's not supported in IF-MIB
-		# For Cisco, this can be found in portAdminSpeed in CISCO-STACK-MIB
-		if ($status = $self->{SESS}->get(["ifSpeed",$ifIndex])) {
-		    #$status =~ s/^s//;                # leading s, not used in Force10 with IF-MIB
-		    #$status =~ s/M$//;                # trailing M, ditto
-		    #$status =~ s/G/000/;              # ditto
-		    #$status =~ s/Sense//;             # IF-MIB doesn't tell anything about autosensing
-		    $status =~ s/([10]+)000000/${1}Mbps/;
-		    $speed{$ifIndex} = $status;
-		} else { $speed{$ifIndex} = "0Mbps"; } # FIXME not sure whether I should do this...
-		
-		# FIXME this isn't applicable (yet) either for Force10...
-		# Insert stuff here to get ifSpeed if necessary... AdminSpeed is the
-		# _desired_ speed, and ifSpeed is the _real_ speed it is using
-    };
-
+	if ($status = snmpitGetWarn($self->{SESS},[$SNMPVAR_DUPLEX,
+						   $ifIndex])) {
+	    $status =~ s/Duplex//;
+	    $duplex{$ifIndex} = $status;
+	}
+	
+	if ($status = snmpitGetWarn($self->{SESS},[$SNMPVAR_SPEED,
+						   $ifIndex])) {
+	    $speed{$ifIndex} = $status . "Mbps";
+	}
+    }
+    
     #
     # Put all of the data gathered in the loop into a list suitable for
     # returning
     #
     my @rv = ();
-    foreach my $ifIndex ( sort keys %Able ) { # For each ifIndex, find out node:port and add a line to @rv
-		my ($nodeport) = $self->convertPortFormat($PORT_FORMAT_NODEPORT,$ifIndex);
-    	
-		# my $vlan; # fixme no idea what this is doing here
-		if (! defined ($speed{$ifIndex}) ) { $speed{$ifIndex} = " "; }
-		if (! defined ($duplex{$ifIndex}) ) { $duplex{$ifIndex} = " "; }
-		$speed{$ifIndex} =~ s/s([10]+)000000/${1}Mbps/;
-		push @rv, [$nodeport,$Able{$ifIndex},$Link{$ifIndex},$speed{$ifIndex},$duplex{$ifIndex}];
+    foreach my $ifIndex ( sort keys %Able ) {
+	if (! defined ($speed{$ifIndex}) ) { $speed{$ifIndex} = " "; }
+	if (! defined ($duplex{$ifIndex}) ) { $duplex{$ifIndex} = "full"; }
+	push @rv, [$Nodeports{$ifIndex},$Able{$ifIndex},$Link{$ifIndex},$speed{$ifIndex},$duplex{$ifIndex}];
     }
     return @rv;
 }
@@ -489,23 +488,22 @@ sub listVlans($) {
 	# get list of vlan names from dot1qVlanStaticName (Q-BRIDGE-MIB)
 	# and save these in %Names with the ifIndexes (iids) as the key
 	# (unlike ethernet ports, vlans aren't static, so this is done from
-	# scratch each time instead of being stored in a hash by the constructor)
-	my $field = ["dot1qVlanStaticName"];
-	$self->{SESS}->getnext($field);
+	# scratch each time instead of being stored in a hash by the constructor
+	my $results = snmpitBulkwalkWarn($self->{SESS}, [$SNMPVAR_VLAN_NAME]);
 
 	# $name should always be "dot1qVlanStaticName"
-	my ($name,$iid,$vlanname) = @{$field}; 
+	foreach my $result (@{$results}) {
+	    my ($name,$iid,$vlanname) = @{$result};
+	    $self->debug("listVlans(): got $name, $iid, name $vlanname\n",2);
+	    if ($name ne "dot1qVlanStaticName") {
+		warn "listVlans: unexpected oid: $name\n";
+		next;
+	    }
 
-	while ($name eq "dot1qVlanStaticName") {
-		$self->debug("listVlans(): got $name, $iid, name $vlanname\n",2);
-		# FIXME kludge: prepending some alphabetical characters makes the 
-		# E1200 accept, a numeric-only name does not work :( (FTOS-EF-7.4.2.3)
-		# so we need to strip the $vlanStaticNamePrefix here
-		$vlanname=~s/^$vlanStaticNamePrefix(.+)/$1/;
-		$Names{$iid} = $vlanname;
-
-		$self->{SESS}->getnext($field);
-		($name,$iid,$vlanname) = @{$field};
+	    # Must strip the prefix required on the Force10 to get the vlan id
+	    # as known by Emulab.
+	    $vlanname = stripVlanPrefix($vlanname);
+	    $Names{$iid} = $vlanname;
 	}
 	
 	my ($ifIndex, $status);
@@ -516,27 +514,34 @@ sub listVlans($) {
 	# with "vlan id" they mean the vlan name as known in the 
 	# database = the administrative name in the switch, not the tag)
 	foreach $ifIndex (keys %Names) {
-		if ($status = $self->{SESS}->get(["ifDescr",$ifIndex])) {
-			$status =~ s/^Vlan\s(\d+)$/$1/;
-		    $Numbers{$ifIndex} = $status;
+	    if ($status = snmpitGetWarn($self->{SESS},
+					["ifDescr",$ifIndex])) {
+		if ($status =~ /^Vlan\s(\d+)$/) {
+		    $Numbers{$ifIndex} = $1;
+		} else {
+		    warn "Unable to parse out vlan tag for ifindex $ifIndex\n";
+		    return undef;
 		}
+	    } else {
+		warn "Unable to get vlan tag for ifindex $ifIndex\n";
+		return undef;
+	    }
 	}
 	
 	# get corresponding port bitmaps from dot1qVlanStaticEgressPorts
 	# and find out the corresponding port ifIndexes
 	foreach $ifIndex (keys %Names) {
-		if ($status = $self->{SESS}->get(
-				["dot1qVlanStaticEgressPorts",$ifIndex])) {
-		    $Members{$ifIndex} = $self->convertBitmaskToIfindexes($status);
-		}
+	    if ($status = snmpitGetWarn($self->{SESS},
+					[$SNMPVAR_EGRESS_PORTS, $ifIndex])) {
+		my $mbrifIndexes = $self->convertBitmaskToIfindexes($status);
+		$Members{$ifIndex} = 
+		    $self->convertPortFormat($PORT_FORMAT_PORT, @{$mbrifIndexes});
+	    } else {
+		warn "Unable to get port membership for ifindex $ifIndex\n";
+		return undef;
+	    }
 	}
 	
-	# replace ifIndexes by nodeport values, as demanded by API
-	foreach my $nodeportlist (values %Members) {
-		@$nodeportlist = $self->convertPortFormat($PORT_FORMAT_NODEPORT,
-			@$nodeportlist);
-	}
-
 	# create array to return to caller
 	my @vlanInfo = ();
 	foreach $ifIndex (sort {$a <=> $b} keys %Names) {
@@ -585,7 +590,7 @@ sub convertBitmaskToIfindexes($$) {
                 + (7 - ($port % 8));
 
             if ( vec($bitmask,$offset,1) ) { 
-                push @ifIndexes, $self->{IFINDEX}{"$mod.$port"};
+                push @ifIndexes, $self->{IFINDEX}{($mod+1).".".($port+1)};
             }
             $port++;
         }
@@ -622,12 +627,12 @@ sub convertIfindexesToBitmask($@) {
 
     foreach my $modport (@modports) {
         $modport =~ /(\d+)\.(\d+)/;
-        my $mod  = $1;
-        my $port = $2;
+        my $mod  = $1 - 1;
+        my $port = $2 - 1;
 
         if ( $port >= $maxPortsPerModule )
         {
-            warn "Cannot set port lager than maxport";
+            warn "convertIfindexesToBitmask: Cannot set port larger than maxport";
             next;
         }
 
@@ -749,15 +754,16 @@ sub vlanNumberExists($$) {
 
     # Just look up the ifDescr for this VLAN, and see if we get an answer back
     my $ifIndex = $vlanNumberToIfindexOffset + $vlan_number;
-    my $status = $self->{SESS}->get(["ifDescr",$ifIndex]);
+    my $status = snmpitGetWarn($self->{SESS},["ifDescr",$ifIndex]);
     #print "\$status is $status!!!\n"; #pvdp
     if (!$status or $status eq "NOSUCHINSTANCE") {
-		return 0;
+	return 0;
     } else {
     	return 1;
     }
 }
 
+# XXX: Editing stopped here.
 
 #
 # Given VLAN indentifiers from the database, finds the cisco-specific VLAN
