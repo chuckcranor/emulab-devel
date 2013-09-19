@@ -388,7 +388,7 @@ sub convertPortFormat($$@) {
     return undef;
 }
 
-# Utility function
+# Utility functions for handling vlan name prefix needed on the Force10
 sub stripVlanPrefix($) {
     my $vlname = shift;
 
@@ -397,6 +397,12 @@ sub stripVlanPrefix($) {
     } else {
 	return "";
     }
+}
+
+sub addVlanPrefix($) {
+    my $vlname = shift;
+    
+    return $vlanStaticNamePrefix.$vlname;
 }
 
 #
@@ -763,8 +769,6 @@ sub vlanNumberExists($$) {
     }
 }
 
-# XXX: Editing stopped here.
-
 #
 # Given VLAN indentifiers from the database, finds the cisco-specific VLAN
 # number for them. If not VLAN id is given, returns mappings for the entire
@@ -779,29 +783,27 @@ sub findVlans($@) {
     my @vlan_ids = @_;
     my %hash = ();
     
-	my $field = ["dot1qVlanStaticName"];
-	$self->{SESS}->getnext($field);
-	my ($name,$iid,$vlanname) = @{$field}; # $name should always contain "dot1qVlanStaticName"
+    # Grab the list of vlans.
+    my $results = snmpitBulkwalkWarn($self->{SESS}, [$SNMPVAR_VLAN_NAME]);
 
-	while ($name eq "dot1qVlanStaticName") {
-		$self->debug("findVlans(): got $name, $iid, name $vlanname\n",2);
-		# FIXME kludge: prepending an alphabetical character makes the E1200
-		# accept, a numeric-only name does not work :( (FTOS-EF-7.4.2.3)
-		
-		# If it doesn't match, these vlans aren't ours, but we still need to
-		# include them in the list or otherwise emulab would think this vlan is
-		# free!
-		$vlanname=~s/^$vlanStaticNamePrefix(.+)/$1/; 
-
-		# add to hash if theres no @vlan_ids list (requesting all) or if the
-		# vlan is actually in the list
-		if ( (! @vlan_ids) || (grep {$_ eq $vlanname} @vlan_ids) ) {
-			$hash{$vlanname} = $iid - $vlanNumberToIfindexOffset;
-		}
-
-		$self->{SESS}->getnext($field);
-		($name,$iid,$vlanname) = @{$field};
+    foreach my $result (@{$results}) {
+	my ($name,$iid,$vlanname) = @{$result};
+	$self->debug("listVlans(): got $name, $iid, name $vlanname\n",2);
+	if ($name ne "dot1qVlanStaticName") {
+	    warn "listVlans: unexpected oid: $name\n";
+	    next;
 	}
+
+	# Must strip the prefix required on the Force10 to get the vlan id
+	# as known by Emulab.
+	$vlanname = stripVlanPrefix($vlanname);
+	
+	# add to hash if theres no @vlan_ids list (requesting all) or if the
+	# vlan is actually in the list
+	if ( (! @vlan_ids) || (grep {$_ eq $vlanname} @vlan_ids) ) {
+	    $hash{$vlanname} = $iid - $vlanNumberToIfindexOffset;
+	}
+    }
 
     return %hash;
 }
@@ -816,114 +818,93 @@ sub findVlans($@) {
 #        returns undef if the VLAN id is not found
 #
 sub findVlan($$;$) { 
-	my $self = shift;
-	my $vlan_id = shift;
-	my $no_retry = shift;
-
-	my $max_tries;
-	if ($no_retry) {
-		$max_tries = 1;
+    my $self = shift;
+    my $vlan_id = shift;
+    my $no_retry = shift;
+    
+    my $max_tries;
+    if ($no_retry) {
+	$max_tries = 1;
     } else {
-		$max_tries = 10;
+	$max_tries = 10;
     }
 
-	# We try this a few times, with 1 second sleeps, since it can take
-	# a while for VLAN information to propagate
-	foreach my $try (1 .. $max_tries) {
+    # We try this a few times, with 1 second sleeps, since it can take
+    # a while for VLAN information to propagate
+    foreach my $try (1 .. $max_tries) {
 
-		my %mapping = $self->findVlans($vlan_id);
-		if (defined($mapping{$vlan_id})) {
-			return $mapping{$vlan_id};
-		}
-
-		# Wait before we try again
-		if ($try < $max_tries) {
-			$self->debug("VLAN find failed, trying again\n");
-			sleep 1;
-		}
+	my %mapping = $self->findVlans($vlan_id);
+	if (defined($mapping{$vlan_id})) {
+	    return $mapping{$vlan_id};
 	}
 
-	# Didn't find it
-	return undef;
+	# Wait before we try again
+	if ($try < $max_tries) {
+	    $self->debug("VLAN find failed, trying again\n");
+	    sleep 1;
+	}
+    }
+
+    # Didn't find it
+    return undef;
 }
 
 #
 # Create a VLAN on this switch, with the given identifier (which comes from
-# the database) and given 802.1Q tag number ($vlan_number). If $vlan_number
-# is given, attempts to use it when creating the vlan - otherwise, picks its
-# own  802.1Q tag number.
+# the database) and given 802.1Q tag number ($vlan_number). 
 #
-# usage: createVlan($self, $vlan_id, [$vlan_number])
+# usage: createVlan($self, $vlan_id, $vlan_number)
 #        returns the new VLAN number on success
 #        returns 0 on failure
 #
-sub createVlan($$) {
-	my $self = shift;
+sub createVlan($$$) {
+    my $self = shift;
+    
+    # as known in db and as will be saved in administrative vlan
+    # name on switch
+    my $vlan_id = shift;
 
-	# as known in db and as will be saved in administrative vlan name on switch
-	my $vlan_id = shift;
-
-	# 802.1Q vlan tag
-	my $vlan_number = shift; 
+    # 802.1Q vlan tag
+    my $vlan_number = shift; 
 	
-    # If they gave a VLAN number, make sure it doesn't exist
-    if ($vlan_number) {
-		if ($self->vlanNumberExists($vlan_number)) {
-			$self->debug("ERROR: VLAN $vlan_number already exists\n");
-			return 0;
-		}
-	} else {
-		# Find a free VLAN number to use. Get a list of all VLANs on the
-		# switch, then look through for a free one
-		my %vlan_mappings = $self->findVlans();
+    # Check to see if the requested vlan number already exists.
+    if ($self->vlanNumberExists($vlan_number)) {
+	$self->debug("ERROR: VLAN $vlan_number already exists\n");
+	return 0;
+    }
 
-		# Convert the mapping to a form we can use
-		my @vlan_numbers = values(%vlan_mappings);
-		my @taken_vlans;
-		foreach my $num (@vlan_numbers) {
-			$taken_vlans[$num] = 1;
-		}
+    # Create VLAN
+    my $RetVal = snmpitSetWarn($self->{SESS},["dot1qVlanStaticRowStatus", 
+					      $vlan_number, "createAndGo", 
+					      "INTEGER"]);
+    # $RetVal will be undefined if the set failed, or "1" if it succeeded.
+    if (! defined($RetVal) )  { 
+	print STDERR "VLAN Create id '$vlan_id' as VLAN $vlan_number failed.\n";
+	return 0;
+    }
+    
+    # Set administrative name to vlan_id as known in emulab db.
+    # Prepend a string to the numeric id as Force10 doesn't allow all numberic
+    # for a vlan name.
+    $vlan_id = addVlanPrefix($vlan_id);
+    $RetVal = snmpitSetWarn($self->{SESS},["dot1qVlanStaticName", 
+					   ($vlan_number + 
+					    $vlanNumberToIfindexOffset),
+					   $vlan_id,
+					   "OCTETSTR"]);
+    
+    # $RetVal will be undefined if the set failed, or "1" if it succeeded.
+    if (! defined($RetVal) )  { 
+	print STDERR "Set VLAN name to '$vlan_id' failed, ".
+		     "but VLAN $vlan_number was created! ".
+		     "Manual cleanup required.\n";
+	return 0;
+    }
 
-		# Pick a VLAN number
-		$vlan_number = $self->{MIN_VLAN};
-		while (defined($taken_vlans[$vlan_number])) {
-			$vlan_number++;
-		}
-		
-		if ($vlan_number > $self->{MAX_VLAN}) {
-			$self->debug("ERROR: Failed to find a free VLAN number\n");
-			next;
-	    }
-	}
-
-	$self->debug("Using Row $vlan_number\n");
-	
-	# Create VLAN
-	my $RetVal = $self->{SESS}->set(["dot1qVlanStaticRowStatus", 
-		$vlan_number, "createAndGo", "INTEGER"]);
-	# $RetVal should contain "0 but true" if successful
-	if (! defined($RetVal) )  { 
-		$self->debug("VLAN Create id '$vlan_id' as VLAN $vlan_number fail.\n");
-	    return 0;
-	}
-	
-	# Set administrative name to vlan_id as known in emulab db
-	# FIXME kludge: prepending an alphabetical character makes the E1200 accept
-	# the name, a numeric-only one does not work :( (FTOS-EF-7.4.2.3)
-	#
-	$RetVal = $self->{SESS}->set(["dot1qVlanStaticName", ($vlan_number +
-			$vlanNumberToIfindexOffset), $vlanStaticNamePrefix.$vlan_id,
-			"OCTETSTR"]);
-
-	# $RetVal should contain "0 but true" if successful
-	if (! defined($RetVal) )  { 
-	    $self->debug("Set VLAN name to '$vlan_id' failed. ".
-			"VLAN $vlan_number was created though! Manual cleanup required.\n");
-	    return 0;
-	}
-
-	return $vlan_number;
+    return $vlan_number;
 }
+
+# XXX: Editing stopped here.
 
 #
 # Put the given ports in the given VLAN. The VLAN is given as an 802.1Q 
