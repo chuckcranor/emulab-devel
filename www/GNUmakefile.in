@@ -149,6 +149,7 @@ BLOBFILES += $(wildcard blob/*.php3)
 APTUIFILES  = $(wildcard $(SRCDIR)/aptui/*.php)
 APTUIFILES += $(wildcard $(SRCDIR)/aptui/*.js)
 APTUIFILES += $(wildcard $(SRCDIR)/aptui/*.css)
+APTUIFILES += $(wildcard $(SRCDIR)/aptui/*.png)
 UIKITFILES =  $(wildcard $(SRCDIR)/aptui/uikit/fonts/*)
 
 # need to make it *.gz; with simply "*", 
