@@ -1,5 +1,5 @@
 #
-# Copyright (c) 2000-2012 University of Utah and the Flux Group.
+# Copyright (c) 2000-2013 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -146,6 +146,11 @@ JSFILES += $(wildcard $(SRCDIR)/js/*.js)
 
 BLOBFILES += $(wildcard blob/*.php3)
 
+APTUIFILES  = $(wildcard $(SRCDIR)/aptui/*.php)
+APTUIFILES += $(wildcard $(SRCDIR)/aptui/*.js)
+APTUIFILES += $(wildcard $(SRCDIR)/aptui/*.css)
+UIKITFILES =  $(wildcard $(SRCDIR)/aptui/uikit/fonts/*)
+
 # need to make it *.gz; with simply "*", 
 # we end up sucking over "CVS"
 DOWNLOADFILES = $(wildcard $(SRCDIR)/downloads/*.gz)
@@ -202,6 +207,8 @@ ALLUM     = $(notdir $(UMFILES))
 ALLJS     = $(notdir $(JSFILES))
 ALLWISTATS = $(notdir $(WIRELESSSTATSFILES))
 ALLBLOB   = $(notdir $(BLOBFILES))
+ALLAPTUI  = $(notdir $(APTUIFILES))
+ALLUIKITFONTS = $(notdir $(UIKITFILES))
 
 INSTALLFILES = $(addprefix $(INSTALL_SBINDIR)/, htmlinstall) \
 	$(addprefix $(INSTALL_WWWDIR)/, $(ALLFILES)) \
@@ -220,13 +227,16 @@ INSTALLFILES = $(addprefix $(INSTALL_SBINDIR)/, htmlinstall) \
 	$(addprefix $(INSTALL_WWWDIR)/wireless-stats/, $(ALLWISTATS)) \
 	$(addprefix $(INSTALL_WWWDIR)/autostatus-icons/, $(ALLICONS)) \
 	$(addprefix $(INSTALL_WWWDIR)/blob/, $(ALLBLOB)) \
+	$(addprefix $(INSTALL_WWWDIR)/aptui/, $(ALLAPTUI)) \
 	$(addprefix $(INSTALL_LIBEXECDIR)/, websearch) \
 	$(addprefix $(INSTALL_SBINDIR)/, htmlinstall) \
 	$(addprefix $(INSTALL_WWWDIR)/cvsweb/, $(ALLCVSWEB)) \
 	$(addprefix $(INSTALL_DIR)/opsdir/www/cvsweb/, $(ALLOPSCVSWEB)) \
 	$(INSTALL_WWWDIR)/wikidocs/wiki/ignore.html \
 	$(INSTALL_WWWDIR)/doc/LICENSE.txt \
-	$(addprefix $(INSTALL_ETCDIR)/, swish.conf)
+	$(INSTALL_WWWDIR)/aptui/uikit/js/uikit.js \
+	$(INSTALL_WWWDIR)/aptui/uikit/css/uikit.almost-flat.css \
+	$(addprefix $(INSTALL_WWWDIR)/aptui/uikit/fonts/, $(ALLUIKITFONTS))
 
 install: $(INSTALLFILES)
 	-mkdir -p $(INSTALL_WWWDIR)/wikidocs/wiki
