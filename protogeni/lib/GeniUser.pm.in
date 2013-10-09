@@ -105,7 +105,7 @@ sub Lookup($$;$)
 	    $query_result =
 		DBQueryWarn("select idx from geni_users ".
 			    "where hrn=$safe_hrn " .
-			    "and status='active'");
+			    "and (status='active' or status='unverified')");
 
 	    return undef
 		if (!$query_result);
@@ -138,7 +138,8 @@ sub Lookup($$;$)
     elsif ($token =~ /^\w+\-\w+\-\w+\-\w+\-\w+$/) {
 	$query_result =
 	    DBQueryWarn("select idx from geni_users ".
-			"where uuid='$token' and status='active'");
+			"where uuid='$token' and ".
+			"      (status='active' or status='unverified')");
 
 	return undef
 	    if (!$query_result);
@@ -160,7 +161,8 @@ sub Lookup($$;$)
     elsif ($token =~ /^[-\w\.]*$/) {
 	$query_result =
 	    DBQueryWarn("select idx from geni_users ".
-			"where hrn='$token' and status='active'");
+			"where hrn='$token' and ".
+			"(status='active' or status='unverified')");
 
 	return undef
 	    if (!$query_result);
@@ -232,7 +234,9 @@ sub name($)		{ return field($_[0], "name"); }
 sub email($)		{ return field($_[0], "email"); }
 sub cert($)		{ return $_[0]->{'CERT'}->cert(); }
 sub sa_uuid($)		{ return field($_[0], "sa_uuid"); }
+sub auth_token($)	{ return field($_[0], "auth_token"); }
 sub GetCertificate($)   { return $_[0]->{'CERT'}; }
+sub IsActive($)         { return ($_[0]->status() eq "active" ? 1 : 0); }
 
 #
 # Stringify for output.
@@ -311,11 +315,15 @@ sub ValidUserID($$)
 #
 # Class function to create new Geni user in the DB and return object. 
 #
-sub Create($$$$;$)
+sub Create($$$$;$$)
 {
-    my ($class, $certificate, $authority, $info) = @_;
+    my ($class, $certificate, $authority, $info, $unverified) = @_;
     my $idx;
     my @insert_data = ();
+
+    $unverified = 0
+	if (!defined($unverified));
+    my $status = ($unverified ? "unverified" : "active");
 
     # Every user gets a new unique index.
     if (defined($main::GENI_ISCLRHOUSE) && $main::GENI_ISCLRHOUSE) {
@@ -334,7 +342,7 @@ sub Create($$$$;$)
     # Now tack on other stuff we need.
     push(@insert_data, "created=now()");
     push(@insert_data, "idx='$idx'");
-    push(@insert_data, "status='active'");
+    push(@insert_data, "status='$status'");
 
     my $safe_hrn   = DBQuoteSpecial($certificate->hrn());
     my $safe_uuid  = DBQuoteSpecial($certificate->uuid());
@@ -497,6 +505,19 @@ sub BumpActivity($)
     return 0;
 }
 
+sub SetAuthToken($$)
+{
+    my ($self, $token) = @_;
+    my $safe_token = DBQuoteSpecial($token);
+    my $idx = $self->idx();
+
+    DBQueryWarn("update geni_users set auth_token=$safe_token ".
+		"where idx='$idx'")
+	or return -1;
+    
+    return 0;
+}
+
 #
 # Is this a local user. 
 #
@@ -505,6 +526,69 @@ sub IsLocal($)
     my ($self) = @_;
 
     return ref($self) eq "GeniUser::LocalUser";
+}
+
+#
+# Add an sshkey for a user. 
+#
+sub AddKeyAux($$$)
+{
+    my ($self, $internal, $key) = @_;
+    my $uuid = $self->uuid();
+    my $safe_key = DBQuoteSpecial($key);
+    $internal = ($internal ? 1 : 0);
+
+    DBQueryWarn("insert into geni_userkeys set internal='$internal', ".
+		" `key`=$safe_key, type='ssh', uuid='$uuid', created=now()")
+	or return -1;
+
+    return 0;
+}
+sub AddKey($$)          {  return AddKeyAux($_[0], 0, $_[1]); }
+sub AddInternalKey($$)  {  return AddKeyAux($_[0], 1, $_[1]); }
+
+sub GetKeys($)
+{
+    my ($self) = @_;
+    my $uuid = $self->uuid();
+    my @keys = ();
+
+    my $query_result =
+	DBQueryWarn("select `key` from geni_userkeys where uuid='$uuid'");
+    return ()
+	if (!defined($query_result) || !$query_result->numrows);
+    
+    while (my ($key) = $query_result->fetchrow_array()) {
+	push(@keys, $key);
+    }
+    return @keys;
+}
+
+#
+# Delete sshkeys for a user.
+#
+sub DeleteKeys($)
+{
+    my ($self) = @_;
+    my $uuid = $self->uuid();
+
+    DBQueryWarn("delete from geni_userkeys where ".
+		"  internal=0 and uuid='$uuid'")
+	or return -1;
+    
+    return 0;
+}
+
+sub DeleteInternalKeys($)
+{
+    my ($self) = @_;
+    my $uuid = $self->uuid();
+
+    DBQueryWarn("delete from geni_userkeys where ".
+		"  internal=1 and uuid='$uuid'")
+	or return -1;
+    
+    return 0;
 }
 
 #
