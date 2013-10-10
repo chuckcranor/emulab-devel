@@ -417,11 +417,27 @@ if (! $creator) {
     SPITFOOTER();
     return;
 }
+#
 # Remember the user and auth key so that we can verify.
+#
+# The cookie handling is a pain since we run this under the aptlab
+# virtual host, but the config uses a different domain, and so the
+# cookies do not work. So, we have to look at our SERVER_NAME and
+# set the cookie appropriately. 
+#
+if (stristr($_SERVER["SERVER_NAME"], $TBAUTHDOMAIN)) {
+    $cookiedomain = $TBAUTHDOMAIN;
+}
+else {
+    $cookiedomain = $_SERVER["SERVER_NAME"];
+}
+    
 setcookie("quickvm_user",
-	  $creator->uuid(), 0, "/", $TBAUTHDOMAIN, $TBSECURECOOKIES);
+	  $creator->uuid(), time() + (24 * 3600 * 30),
+	  "/", $cookiedomain, 0);
 setcookie("quickvm_authkey",
-	  $creator->auth_token(), 0, "/", $TBAUTHDOMAIN, $TBSECURECOOKIES);
+	  $creator->auth_token(), time() + (24 * 3600 * 30),
+	  "/", $cookiedomain, 0);
 
 header("Location: quickvm_status.php?uuid=" . $quickvm->uuid());
 ?>
