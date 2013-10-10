@@ -75,7 +75,7 @@ function StatusWatchCallBack(uuid, status)
 	    ShowTopo(uuid);
 	}
 	else if (status == 'failed') {
-	    status_html = "<font color=yellow>failed</font>";
+	    status_html = "<font color=red>failed</font>";
 	    if ($("#quickvm_progress").length) {
 		$("#quickvm_progress").removeClass("uk-progress-striped");
 		$("#quickvm_progress").removeClass("uk-active");
