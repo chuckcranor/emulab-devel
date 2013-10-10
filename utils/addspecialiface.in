@@ -150,8 +150,8 @@ if ($removing) {
     if ($node->IsReserved() &&
 	$node->erole() eq "sharedhost" && !$notrunk) {
 	print "Turning off trunk mode for $node_id:$iface_id\n";
-	system("$SNMPIT -T $node_id:$iface_id") == 0
-	    or fatal("Could not put port into trunking mode");
+	system("$SNMPIT -U $node_id:$iface_id") == 0
+	    or fatal("Could not turn off port trunking mode");
     }
 
     $interface->DeleteWire() == 0
