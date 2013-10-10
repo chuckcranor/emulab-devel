@@ -228,7 +228,6 @@ INSTALLFILES = $(addprefix $(INSTALL_SBINDIR)/, htmlinstall) \
 	$(addprefix $(INSTALL_WWWDIR)/wireless-stats/, $(ALLWISTATS)) \
 	$(addprefix $(INSTALL_WWWDIR)/autostatus-icons/, $(ALLICONS)) \
 	$(addprefix $(INSTALL_WWWDIR)/blob/, $(ALLBLOB)) \
-	$(addprefix $(INSTALL_WWWDIR)/aptui/, $(ALLAPTUI)) \
 	$(addprefix $(INSTALL_LIBEXECDIR)/, websearch) \
 	$(addprefix $(INSTALL_SBINDIR)/, htmlinstall) \
 	$(addprefix $(INSTALL_WWWDIR)/cvsweb/, $(ALLCVSWEB)) \
@@ -252,7 +251,8 @@ endif
 	$(INSTALL_OPSCVSWEBCONF)
 	$(INSTALL_OPSCVSWEBCGI)
 
-apt-install: $(INSTALL_WWWDIR)/apt/uikit/js/uikit.js \
+apt-install: 	$(addprefix $(INSTALL_WWWDIR)/apt/, $(ALLAPTUI)) \
+	$(INSTALL_WWWDIR)/apt/uikit/js/uikit.js \
 	$(INSTALL_WWWDIR)/apt/uikit/css/uikit.almost-flat.css \
 	$(addprefix $(INSTALL_WWWDIR)/apt/uikit/fonts/, $(ALLUIKITFONTS))
 
