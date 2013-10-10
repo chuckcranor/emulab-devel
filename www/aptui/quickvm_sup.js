@@ -11,7 +11,7 @@ function HideModal(which)
     console.log('Showing modal ' + which);
 }
     
-function CallMethod(method, callback, uuid)
+function CallMethod(method, callback, uuid, arg)
 {
     return $.ajax({
 	// the URL for the request
@@ -22,6 +22,7 @@ function CallMethod(method, callback, uuid)
 	    uuid: uuid,
 	    ajax_request: 1,
 	    ajax_method: method,
+	    ajax_argument: arg,
 	},
  
 	// whether this is a POST or GET request
@@ -36,9 +37,8 @@ function GetStatus(uuid)
 {
     var callback = function(json) {
 	StatusWatchCallBack(uuid, json.value);
-	setTimeout(function f() { GetStatus(uuid) }, 5000);
     }
-    var $xmlthing = CallMethod("status", null, uuid);
+    var $xmlthing = CallMethod("status", null, uuid, null);
     $xmlthing.done(callback);
 }
 
@@ -83,9 +83,17 @@ function StatusWatchCallBack(uuid, status)
 		$("#quickvm_progress_bar").width("100%");
 	    }
 	}
+	else if (status == 'terminating') {
+	    status_html = "<font color=red>failed</font>";
+	    $("#terminate_button").prop("disabled", true);
+	    $("#extend_button").prop("disabled", true);
+	}
 	$("#quickvm_status").html(status_html);
     } 
     StatusWatchCallBack.laststatus = status;
+    if (status != "terminating") {
+	setTimeout(function f() { GetStatus(uuid) }, 5000);
+    }
 }
 
 function Terminate(uuid, url)
@@ -94,7 +102,8 @@ function Terminate(uuid, url)
 	window.location.replace(url);
     }
     $("#terminate_button").prop("disabled", true);
-    var $xmlthing = CallMethod("terminate", null, uuid);
+    $("#extend_button").prop("disabled", true);
+    var $xmlthing = CallMethod("terminate", null, uuid, null);
     
     $xmlthing.done(callback);
 }
@@ -110,7 +119,7 @@ function ShowTopo(uuid)
 
 	$("#showtopo_div").html(html);
     }
-    var $xmlthing = CallMethod("gettopomap", null, uuid);
+    var $xmlthing = CallMethod("gettopomap", null, uuid, null);
     
     $xmlthing.done(callback);
 }
@@ -130,7 +139,40 @@ function Setsshurl(uuid)
 	$("#quickvm_sshurl").html(href);
 	// StartGateOne(url);
     }
-    var $xmlthing = CallMethod("manifest", null, uuid);
+    var $xmlthing = CallMethod("manifest", null, uuid, null);
+    $xmlthing.done(callback);
+}
+
+//
+// Request experiment extension.
+//
+function RequestExtension(uuid)
+{
+    var reason = $("#why_extend").val();
+    console.log(reason);
+    if (reason == "") {
+	return;
+    }
+    var callback = function(json) {
+	alert("Your request has been sent");
+    }
+    var $xmlthing = CallMethod("request_extension", null, uuid, reason);
+    $('#extend_modal').hide();
+    $xmlthing.done(callback);
+}
+
+function Extend(uuid)
+{
+    var code = $("#extend_code").val();
+    console.log(code);
+    if (code == "") {
+	return;
+    }
+    var callback = function(json) {
+	alert("Your request has been sent");
+    }
+    var $xmlthing = CallMethod("extend", null, uuid, code);
+    $('#extend_modal').hide();
     $xmlthing.done(callback);
 }
 
@@ -139,7 +181,7 @@ function Setsshurl(uuid)
 //
 function RegisterAccount(uid, email)
 {
-    $('#extend_modal').hide();
+    $('#register_modal').hide();
     var url = "../newproject.php3?uid=" + uid + "&email=" + email + "";
     var win = window.open(url, '_blank');
     win.focus();
@@ -168,7 +210,7 @@ function StartSSH(uuid, sshurl)
     var callback = function(json) {
 	console.log(json.value);
     }
-    var $xmlthing = CallMethod("gateone_authobject", null, uuid);
+    var $xmlthing = CallMethod("gateone_authobject", null, uuid, null);
     $xmlthing.done(callback);
 }
 
