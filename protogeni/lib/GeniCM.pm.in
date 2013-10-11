@@ -5063,12 +5063,17 @@ sub CreateSliceFromCertificate($$)
     }
     my $expires = $credential->expires();
     # This is already a localtime.
-    my $when = timelocal(strptime($expires));
-    my $diff = $when - time();
-
-    if ($diff > (3600 * 24 * $max_sliver_lifetime)) {
-	# Shorten to policy maximum. Okay to use a unix time.
+    my $when = eval { timelocal(strptime($expires)); };
+    if ($@) {
 	$expires = time() + (3600 * $max_sliver_lifetime);
+    }
+    else {
+	my $diff = $when - time();
+
+	if ($diff > (3600 * 24 * $max_sliver_lifetime)) {
+	    # Shorten to policy maximum. Okay to use a unix time.
+	    $expires = time() + (3600 * $max_sliver_lifetime);
+	}
     }
     $slice->SetExpiration($expires);
     $slice->SetPublicID();
@@ -6400,8 +6405,17 @@ sub SetSliceExpiration($$$@)
     }
 
     if (defined($expiration)) {
+	# Gack, why does Frontier do this. It is stupid.
+	if (ref($expiration) eq 'Frontier::RPC2::DateTime::ISO8601') {
+	    $expiration = $expiration->value;
+	}
+	
 	# Convert to a localtime.
-	$when = timegm(strptime($expiration));
+	$when = eval { timegm(strptime($expiration)); };
+	if ($@) {
+	    $message = $@;
+	    goto bad;
+	}
 	if (!defined($when)) {
 	    $message = "Could not parse expiration";
 	    goto bad;
