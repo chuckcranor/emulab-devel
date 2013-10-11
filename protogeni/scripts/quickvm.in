@@ -548,6 +548,7 @@ if ($failed) {
     fatal("$slice_urn failed."); 
 }
 elsif (!$ready) {
+    SetQuickVMStatus($quickvm_uuid, "failed");
     fatal("$slice_urn timed out."); 
 }
 $slice->UnLock();
