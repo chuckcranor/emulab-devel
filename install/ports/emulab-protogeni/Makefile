@@ -5,7 +5,9 @@
 .include "../emulab-boss/Makefile.emulab"
 
 # XXX deal with out-of-sync-edness of meta ports
-.if ${EMULAB_PORTVERSION} == "5.0"
+.if ${EMULAB_PORTVERSION} == "5.1"
+PORTVERSION=	3.1
+.elif ${EMULAB_PORTVERSION} == "5.0"
 PORTVERSION=	3.0
 .elif ${EMULAB_PORTVERSION} == "4.0"
 PORTVERSION=	2.0

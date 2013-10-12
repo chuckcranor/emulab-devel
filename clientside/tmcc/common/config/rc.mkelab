@@ -607,7 +607,7 @@ sub doboot()
 	$emulabconfig{PACKAGE_TARBALL} = "FreeBSD-8.3-packages${suf}.tar.gz";
 	$emulabconfig{PGENI_PKG}    = "emulab-protogeni-3.0";
     }
-    elsif ($FBSD_VERSION >= 9.0) {
+    elsif ($FBSD_VERSION >= 9.0 && $FBSD_VERSION < 9.2) {
 	$emulabconfig{FS_PKG_DIR} = "/share/freebsd/9.0/packages";
 	$emulabconfig{OPS_PKG_DIR}  = $emulabconfig{FS_PKG_DIR};
 	$emulabconfig{BOSS_PKG_DIR} = $emulabconfig{FS_PKG_DIR};
@@ -616,6 +616,16 @@ sub doboot()
 	$emulabconfig{BOSS_PKG}     = "emulab-boss-5.0";
 	$emulabconfig{PACKAGE_TARBALL} = "FreeBSD-9.0-packages.tar.gz";
 	$emulabconfig{PGENI_PKG}    = "emulab-protogeni-3.0";
+    } elsif ($FBSD_VERSION >= 9.2) {
+	my $suf = ($FBSD_ARCH eq "amd64") ? "-64" : "";
+	$emulabconfig{FS_PKG_DIR} = "/share/freebsd/9.2/packages${suf}";
+	$emulabconfig{OPS_PKG_DIR}  = $emulabconfig{FS_PKG_DIR};
+	$emulabconfig{BOSS_PKG_DIR} = $emulabconfig{FS_PKG_DIR};
+	$emulabconfig{FS_PKG}       = "emulab-fs-5.1";
+	$emulabconfig{OPS_PKG}      = "emulab-ops-5.1";
+	$emulabconfig{BOSS_PKG}     = "emulab-boss-5.1";
+	$emulabconfig{PACKAGE_TARBALL} = "FreeBSD-9.2-packages${suf}.tar.gz";
+	$emulabconfig{PGENI_PKG}    = "emulab-protogeni-3.1";
     }
     if (exists($emulabconfig{"PACKAGE_TARBALL"})) {
 	$emulabconfig{FS_PKG_DIR}   = "$TBDIR/packages";

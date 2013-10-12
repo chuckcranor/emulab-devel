@@ -28,7 +28,9 @@ MAINTAINER=	testbed-ops@flux.utah.edu
 # We must make sure PERL is built with this.
 #
 .MAKEFLAGS+=	ENABLE_SUIDPERL=yes
-.if ${PORTVERSION} == "5.0"
+.if ${PORTVERSION} == "5.1"
+.MAKEFLAGS+=	PERL_VERSION=5.12.5 PERL_VER=5.12 PERL_ARCH=mach
+.elif ${PORTVERSION} == "5.0"
 .MAKEFLAGS+=	PERL_VERSION=5.12.4 PERL_VER=5.12.4 PERL_ARCH=mach
 .elif (${PORTVERSION} == "3.1" || ${PORTVERSION} == "4.0")
 .MAKEFLAGS+=	PERL_VERSION=5.10.1 PERL_VER=5.10.1 PERL_ARCH=mach
@@ -54,7 +56,7 @@ MAINTAINER=	testbed-ops@flux.utah.edu
 # agrees with what is in the emulab-ops and emulab-php* metaports.
 #
 .MAKEFLAGS+=	-DWITH_APACHE
-.if (${PORTVERSION} == "4.0" || ${PORTVERSION} == "5.0")
+.if (${PORTVERSION} == "4.0" || ${PORTVERSION} == "5.0" || ${PORTVERSION} == "5.1")
 .MAKEFLAGS+=	APACHE_PORT=www/apache22
 .MAKEFLAGS+=	WITH_SUEXEC=yes
 .else
@@ -83,11 +85,12 @@ MAINTAINER=	testbed-ops@flux.utah.edu
 #
 .if (${PORTVERSION} == "1.4" || ${PORTVERSION} == "2.0")
 BUILD_DEPENDS=	\
-	${LOCALBASE}/lib/perl5/site_perl/${PERL_VER}/${PERL_ARCH}/Mysql.pm:${PORTSDIR}/databases/p5-DBD-mysql50
-.elif (${PORTVERSION} == "4.0" || ${PORTVERSION} == "5.0")
-# back to a standard p5-DBD-mysql50 install
+	${LOCALBASE}/lib/perl5/site_perl/${PERL_VER}/${PERL_ARCH}/Mysql.pm:${PORTSDIR}/databases/p5-DBD-mysql${MYSQL_VER}
+.elif (${PORTVERSION} == "4.0" || ${PORTVERSION} == "5.0" || \
+       ${PORTVERSION} == "5.1")
+# back to a standard p5-DBD-mysql${MYSQL_VER} install
 BUILD_DEPENDS=	\
-	${LOCALBASE}/lib/perl5/site_perl/${PERL_VER}/${PERL_ARCH}/DBD/mysql.pm:${PORTSDIR}/databases/p5-DBD-mysql50 \
+	${LOCALBASE}/lib/perl5/site_perl/${PERL_VER}/${PERL_ARCH}/DBD/mysql.pm:${PORTSDIR}/databases/p5-DBD-mysql${MYSQL_VER} \
 	${LOCALBASE}/libexec/apache22/libphp${PHP_VER}.so:${PORTSDIR}/misc/emulab-php${PHP_VER}
 .else
 BUILD_DEPENDS=	\
@@ -111,7 +114,7 @@ LIB_DEPENDS+= ulsshxmlrpcpp.0:${PORTSDIR}/misc/ulsshxmlrpcpp
 
 .if ${OSMAJOR} >= 6
 LIB_DEPENDS+= mhash.2:${PORTSDIR}/security/mhash \
-	mysqlclient.15:${PORTSDIR}/databases/mysql50-client
+	mysqlclient:${PORTSDIR}/databases/mysql${MYSQL_VER}-client
 .endif
 .if ${OSMAJOR} >= 7
 LIB_DEPENDS+= xmlrpc:${PORTSDIR}/net/xmlrpc-c
@@ -143,7 +146,8 @@ RUN_DEPENDS+= ${LOCALBASE}/libexec/elvind:${PORTSDIR}/misc/elvind
 .endif
 
 # apache related ports
-.if (${PORTVERSION} == "4.0" || ${PORTVERSION} == "5.0")
+.if (${PORTVERSION} == "4.0" || ${PORTVERSION} == "5.0" || \
+       ${PORTVERSION} == "5.1")
 RUN_DEPENDS+=	\
 	${LOCALBASE}/libexec/apache22/mod_ssl.so:${PORTSDIR}/${APACHE_PORT} \
 	${LOCALBASE}/libexec/apache22/mod_fastcgi.so:${PORTSDIR}/www/mod_fastcgi
@@ -155,7 +159,8 @@ RUN_DEPENDS+=	\
 
 # m2crypto port
 .if (${PORTVERSION} == "3.0" || ${PORTVERSION} == "3.1" || \
-     ${PORTVERSION} == "4.0" || ${PORTVERSION} == "5.0")
+     ${PORTVERSION} == "4.0" || ${PORTVERSION} == "5.0" || \
+     ${PORTVERSION} == "5.1")
 # must handle patching of m2crypto when the port is built
 # also needs swig to install!
 RUN_DEPENDS+=	\
@@ -168,7 +173,8 @@ RUN_DEPENDS+=	\
 .endif
 
 # misc. old vs. new port stuff
-.if (${PORTVERSION} == "4.0" || ${PORTVERSION} == "5.0")
+.if (${PORTVERSION} == "4.0" || ${PORTVERSION} == "5.0" || \
+     ${PORTVERSION} == "5.1")
 RUN_DEPENDS+=	\
 	autoconf:${PORTSDIR}/devel/autoconf \
 	libtool:${PORTSDIR}/devel/libtool
@@ -179,7 +185,7 @@ RUN_DEPENDS+=	\
 
 .if ${OSMAJOR} >= 6
 RUN_DEPENDS+= \
-	${LOCALBASE}/libexec/mysqld:${PORTSDIR}/databases/mysql50-server \
+	${LOCALBASE}/libexec/mysqld:${PORTSDIR}/databases/mysql${MYSQL_VER}-server \
 	${LOCALBASE}/lib/perl5/site_perl/${PERL_VER}/${PERL_ARCH}/DBI.pm:${PORTSDIR}/databases/p5-DBI \
 	${LOCALBASE}/lib/perl5/site_perl/${PERL_VER}/${PERL_ARCH}/XML/Parser:${PORTSDIR}/textproc/p5-XML-Parser \
 	${LOCALBASE}/lib/perl5/site_perl/${PERL_VER}/XML/Simple.pm:${PORTSDIR}/textproc/p5-XML-Simple \
@@ -191,7 +197,7 @@ RUN_DEPENDS+= \
 	${PYTHON_PKGNAMEPREFIX}MySQLdb>0:${PORTSDIR}/databases/py-MySQLdb \
         curl:${PORTSDIR}/ftp/curl \
         snort:${PORTSDIR}/security/snort \
-	mysqlhotcopy:${PORTSDIR}/databases/mysql50-scripts \
+	mysqlhotcopy:${PORTSDIR}/databases/mysql${MYSQL_VER}-scripts \
 	${LOCALBASE}/bin/flex:${PORTSDIR}/textproc/flex
 .else
 RUN_DEPENDS+= smbd:${PORTSDIR}/net/samba3

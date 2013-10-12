@@ -22,7 +22,9 @@ MAINTAINER=	testbed-ops@flux.utah.edu
 # We must make sure PERL is built with this.
 #
 .MAKEFLAGS+=	ENABLE_SUIDPERL=yes
-.if ${PORTVERSION} == "5.0"
+.if ${PORTVERSION} == "5.1"
+.MAKEFLAGS+=	PERL_VERSION=5.12.5 PERL_VER=5.12 PERL_ARCH=mach
+.elif ${PORTVERSION} == "5.0"
 .MAKEFLAGS+=	PERL_VERSION=5.12.4 PERL_VER=5.12.4 PERL_ARCH=mach
 .elif (${PORTVERSION} == "3.1" || ${PORTVERSION} == "4.0")
 .MAKEFLAGS+=	PERL_VERSION=5.10.1 PERL_VER=5.10.1 PERL_ARCH=mach
@@ -54,7 +56,8 @@ RUN_DEPENDS+=	\
 	sudo:${PORTSDIR}/security/sudo \
 	rsync:${PORTSDIR}/net/rsync \
 
-.if (${PORTVERSION} == "4.0" || ${PORTVERSION} == "5.0")
+.if (${PORTVERSION} == "4.0" || ${PORTVERSION} == "5.0" || \
+     ${PORTVERSION} == "5.1")
 RUN_DEPENDS+= \
 	smbd:${PORTSDIR}/net/samba36
 .else

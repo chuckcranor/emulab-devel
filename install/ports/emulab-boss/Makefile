@@ -24,7 +24,9 @@ MAINTAINER=	testbed-ops@flux.utah.edu
 # We must make sure PERL is built with this.
 #
 .MAKEFLAGS+=	ENABLE_SUIDPERL=yes
-.if ${PORTVERSION} == "5.0"
+.if ${PORTVERSION} == "5.1"
+.MAKEFLAGS+=	PERL_VERSION=5.12.5 PERL_VER=5.12 PERL_ARCH=mach
+.elif ${PORTVERSION} == "5.0"
 .MAKEFLAGS+=	PERL_VERSION=5.12.4 PERL_VER=5.12.4 PERL_ARCH=mach
 .elif (${PORTVERSION} == "3.1" || ${PORTVERSION} == "4.0")
 .MAKEFLAGS+=	PERL_VERSION=5.10.1 PERL_VER=5.10.1 PERL_ARCH=mach
@@ -50,7 +52,7 @@ MAINTAINER=	testbed-ops@flux.utah.edu
 # agrees with what is in the emulab-ops and emulab-php* metaports.
 #
 .MAKEFLAGS+=	-DWITH_APACHE
-.if (${PORTVERSION} == "4.0" || ${PORTVERSION} == "5.0")
+.if (${PORTVERSION} == "4.0" || ${PORTVERSION} == "5.0" || ${PORTVERSION} == "5.1")
 .MAKEFLAGS+=	APACHE_PORT=www/apache22
 .MAKEFLAGS+=	WITH_SUEXEC=yes
 .else
@@ -79,11 +81,12 @@ MAINTAINER=	testbed-ops@flux.utah.edu
 #
 .if (${PORTVERSION} == "1.7" || ${PORTVERSION} == "2.0")
 BUILD_DEPENDS=	\
-	${LOCALBASE}/lib/perl5/site_perl/${PERL_VER}/${PERL_ARCH}/Mysql.pm:${PORTSDIR}/databases/p5-DBD-mysql50
-.elif (${PORTVERSION} == "4.0" || ${PORTVERSION} == "5.0")
-# back to a standard p5-DBD-mysql50 install
+	${LOCALBASE}/lib/perl5/site_perl/${PERL_VER}/${PERL_ARCH}/Mysql.pm:${PORTSDIR}/databases/p5-DBD-mysql${MYSQL_VER}
+.elif (${PORTVERSION} == "4.0" || ${PORTVERSION} == "5.0" || \
+       ${PORTVERSION} == "5.1")
+# back to a standard p5-DBD-mysql5x install
 BUILD_DEPENDS=	\
-	${LOCALBASE}/lib/perl5/site_perl/${PERL_VER}/${PERL_ARCH}/DBD/mysql.pm:${PORTSDIR}/databases/p5-DBD-mysql50 \
+	${LOCALBASE}/lib/perl5/site_perl/${PERL_VER}/${PERL_ARCH}/DBD/mysql.pm:${PORTSDIR}/databases/p5-DBD-mysql${MYSQL_VER} \
 	${LOCALBASE}/libexec/apache22/libphp${PHP_VER}.so:${PORTSDIR}/misc/emulab-php${PHP_VER}
 .else
 BUILD_DEPENDS=	\
@@ -94,9 +97,9 @@ BUILD_DEPENDS=	\
 # XXX force our version of tcl early to prevent installing a newer version
 BUILD_DEPENDS+=	tclsh8.4:${PORTSDIR}/lang/tcl84
 
-LIB_DEPENDS= gd.4:${PORTSDIR}/graphics/gd \
+LIB_DEPENDS= libgd.so:${PORTSDIR}/graphics/gd \
 	mhash.2:${PORTSDIR}/security/mhash \
-	mysqlclient.15:${PORTSDIR}/databases/mysql50-client \
+	mysqlclient:${PORTSDIR}/databases/mysql${MYSQL_VER}-client \
 	snmp.4:${PORTSDIR}/misc/net-snmp4
 
 .if ${OSMAJOR} >= 6
@@ -136,7 +139,7 @@ RUN_DEPENDS+=	\
 	rsync:${PORTSDIR}/net/rsync \
 	neato:${PORTSDIR}/graphics/graphviz \
         swish-e:${PORTSDIR}/www/swish-e \
-	${LOCALBASE}/libexec/mysqld:${PORTSDIR}/databases/mysql50-server \
+	${LOCALBASE}/libexec/mysqld:${PORTSDIR}/databases/mysql${MYSQL_VER}-server \
 	anytopnm:${PORTSDIR}/graphics/netpbm \
 	otclsh:${PORTSDIR}/lang/otcl \
 	${LOCALBASE}/lib/perl5/site_perl/${PERL_VER}/${PERL_ARCH}/SNMP.pm:${PORTSDIR}/${P5SNMP_PORT} \
@@ -160,13 +163,21 @@ RUN_DEPENDS+=	\
 	${LOCALBASE}/include/boost:${PORTSDIR}/${BOOST_PORT} \
 	gmake:${PORTSDIR}/devel/gmake \
 	git:${PORTSDIR}/devel/git \
-	kmetis:${PORTSDIR}/math/metis \
         curl:${PORTSDIR}/ftp/curl \
 	${PYTHON_PKGNAMEPREFIX}MySQLdb>0:${PORTSDIR}/databases/py-MySQLdb \
-	mysqlhotcopy:${PORTSDIR}/databases/mysql50-scripts
+	mysqlhotcopy:${PORTSDIR}/databases/mysql${MYSQL_VER}-scripts
+
+.if ${PORTVERSION} == "5.1"
+RUN_DEPENDS+=	\
+	kmetis:${PORTSDIR}/math/metis4
+.else
+RUN_DEPENDS+=	\
+	kmetis:${PORTSDIR}/math/metis
+.endif
 
 # apache related ports
-.if (${PORTVERSION} == "4.0" || ${PORTVERSION} == "5.0")
+.if (${PORTVERSION} == "4.0" || ${PORTVERSION} == "5.0" || \
+     ${PORTVERSION} == "5.1")
 RUN_DEPENDS+=	\
 	${LOCALBASE}/libexec/apache22/mod_ssl.so:${PORTSDIR}/${APACHE_PORT} \
 	${LOCALBASE}/libexec/apache22/mod_fastcgi.so:${PORTSDIR}/www/mod_fastcgi
@@ -178,7 +189,8 @@ RUN_DEPENDS+=	\
 
 # m2crypto port
 .if (${PORTVERSION} == "3.0" || ${PORTVERSION} == "3.1" || \
-     ${PORTVERSION} == "4.0" || ${PORTVERSION} == "5.0")
+     ${PORTVERSION} == "4.0" || ${PORTVERSION} == "5.0" || \
+     ${PORTVERSION} == "5.1")
 # must handle patching of m2crypto when the port is built
 RUN_DEPENDS+=	\
 	${PYTHON_PKGNAMEPREFIX}m2crypto>0:${PORTSDIR}/misc/emulab-py-m2crypto
@@ -189,7 +201,8 @@ RUN_DEPENDS+=	\
 .endif
 
 # dhcpd port
-.if (${PORTVERSION} == "4.0" || ${PORTVERSION} == "5.0")
+.if (${PORTVERSION} == "4.0" || ${PORTVERSION} == "5.0" || \
+     ${PORTVERSION} == "5.1")
 RUN_DEPENDS+=	\
 	dhcpd:${PORTSDIR}/net/isc-dhcp42-server
 .elif (${PORTVERSION} == "3.1" || ${PORTVERSION} == "3.0")
@@ -201,7 +214,8 @@ RUN_DEPENDS+=	\
 .endif
 
 # misc. old vs. new port stuff
-.if (${PORTVERSION} == "4.0" || ${PORTVERSION} == "5.0")
+.if (${PORTVERSION} == "4.0" || ${PORTVERSION} == "5.0" || \
+     ${PORTVERSION} == "5.1")
 RUN_DEPENDS+=	\
 	autoconf:${PORTSDIR}/devel/autoconf \
 	libtool:${PORTSDIR}/devel/libtool
@@ -221,7 +235,7 @@ RUN_DEPENDS+=	\
 	${LOCALBASE}/lib/perl5/site_perl/${PERL_VER}/Privileges/Drop.pm:${PORTSDIR}/misc/p5-Privileges-Drop \
 	${LOCALBASE}/lib/perl5/site_perl/${PERL_VER}/IO/EventMux.pm:${PORTSDIR}/misc/p5-IO-EventMux \
 	${LOCALBASE}/lib/perl5/site_perl/${PERL_VER}/${PERL_ARCH}/IO/EventMux/Socket/MsgHdr.pm:${PORTSDIR}/misc/p5-IO-EventMux-Socket-MsgHdr
-.if ${PORTVERSION} == "5.0"
+.if (${PORTVERSION} == "5.0" || ${PORTVERSION} == "5.1")
 # perl 5.12 and beyond wants this
 RUN_DEPENDS+= \
 	${LOCALBASE}/lib/perl5/site_perl/${PERL_VER}/Class/ISA.pm:${PORTSDIR}/devel/p5-Class-ISA

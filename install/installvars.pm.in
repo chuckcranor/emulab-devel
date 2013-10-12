@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2003-2012 University of Utah and the Flux Group.
+# Copyright (c) 2003-2013 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -64,7 +64,11 @@ $BOSS_PORT = "emulab-boss-1.8";
 $OPS_PORT  = "emulab-ops-1.4"; 
 $FS_PORT   = "emulab-fs-1.4";
 if ($FBSD_MAJOR > 4) {
-    if ($FBSD_MAJOR > 8 || ($FBSD_MAJOR == 8 && $FBSD_MINOR > 2)) {
+    if ($FBSD_MAJOR > 9 || ($FBSD_MAJOR == 9 && $FBSD_MINOR > 1)) {
+	$BOSS_PORT = "emulab-boss-5.1";
+	$OPS_PORT = "emulab-ops-5.1";
+	$FS_PORT = "emulab-fs-5.1";
+    } elsif ($FBSD_MAJOR > 8 || ($FBSD_MAJOR == 8 && $FBSD_MINOR > 2)) {
 	$BOSS_PORT = "emulab-boss-5.0";
 	$OPS_PORT = "emulab-ops-5.0";
 	$FS_PORT = "emulab-fs-5.0";
@@ -96,7 +100,9 @@ $PHP_VERSION = 4;
 $PHP_PORT = "php4-extensions-1.0";
 if ($FBSD_MAJOR > 7 || ($FBSD_MAJOR == 7 && $FBSD_MINOR > 2)) {
     $PHP_VERSION = 5;
-    if ($FBSD_MAJOR > 8 || ($FBSD_MAJOR == 8 && $FBSD_MINOR > 2)) {
+    if ($FBSD_MAJOR > 9 || ($FBSD_MAJOR == 9 && $FBSD_MINOR > 1)) {
+	$PHP_PORT = "php5-extensions-1.7";
+    } elsif ($FBSD_MAJOR > 8 || ($FBSD_MAJOR == 8 && $FBSD_MINOR > 2)) {
 	$PHP_PORT = "php5-extensions-1.6";
     } elsif ($FBSD_MAJOR > 7) {
 	$PHP_PORT = "php5-extensions-1.4";
@@ -108,7 +114,7 @@ if ($FBSD_MAJOR > 7 || ($FBSD_MAJOR == 7 && $FBSD_MINOR > 2)) {
 # XXX temporary for tftp
 $TFTPD_PKG	  = "emulab-tftp-hpa-0.48";
 
-# XXX temporary for perl DBD mysql access
+# XXX temporary for perl DBD mysql access (only needed for FBSD7 and below)
 $P5DBD_PKG	  = "p5-DBD-mysql50-3.0002";
 
 # Lots of patches

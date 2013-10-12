@@ -35,7 +35,12 @@ sub Install($$$)
 	    };
 	}
 	Phase "perlselfloaderpatch", "Fixing perl self-loader", sub {
-	    my $perldir = "/usr/local/lib/perl5/5.10.1";
+	    my $perldir;
+	    # need for 5.10 or 5.12
+	    foreach my $pdir ("5.12", "5.12.4", "5.10.1") {
+		$perldir = "/usr/local/lib/perl5/$pdir";
+		last if (-d $perldir);
+	    }
 	    DoneIfDoesntExist("$perldir/SelfLoader.pm");
 	    my $ver = `fgrep 'our \$VERSION =' $perldir/SelfLoader.pm 2>/dev/null`;
 	    if ($? == 0 && $ver =~ /1\.18/) {
