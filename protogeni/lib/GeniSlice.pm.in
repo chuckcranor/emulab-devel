@@ -853,6 +853,35 @@ sub IsBound($$)
 }
 
 #
+# Helper function for expiration.
+#
+sub AddToExpiration($$)
+{
+    my ($self, $increment) = @_;
+
+    return undef
+	if (!defined($self->expires()));
+    
+    my $new_expires = str2time($self->expires()) + $increment;
+
+    return $self->SetExpiration($new_expires);
+}
+
+#
+# Return expiration in GMT time format.
+#
+sub ExpirationGMT($)
+{
+    my ($self) = @_;
+
+    return undef
+	if (!defined($self->expires()));
+    
+    return POSIX::strftime("20%y-%m-%dT%H:%M:%S GMT",
+			   gmtime(str2time($self->expires())));
+}
+
+#
 # Set the expiration time for a slice. 
 #
 sub SetExpiration($$)

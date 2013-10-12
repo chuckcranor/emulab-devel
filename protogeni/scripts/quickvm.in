@@ -41,13 +41,15 @@ sub usage()
 {
     print "Usage: quickvm <xmlfile>\n";
     print "Usage: quickvm -k <uuid>\n";
+    print "Usage: quickvm -e <seconds> <uuid>\n";
     exit(1);
 }
-my $optlist = "dkv";
+my $optlist = "dkve:";
 my $debug   = 0;
 my $verbose = 1;
 my $killit  = 0;
 my $xmlfile;
+my $extend;
 my $quickuuid;
 
 # Protos
@@ -55,6 +57,7 @@ sub fatal($);
 sub UserError($);
 sub GiveMeRspec($);
 sub Terminate($);
+sub Extend($$);
 
 #
 # Configure variables
@@ -112,10 +115,19 @@ if (defined($options{"v"})) {
 if (defined($options{"k"})) {
     $killit = 1;
 }
+if (defined($options{"e"})) {
+    $extend = $options{"e"};
+}
 if (@ARGV != 1) {
     usage();
 }
 if ($killit) {
+    $quickuuid = shift(@ARGV);
+}
+elsif ($extend) {
+    if ($extend !~ /^\d*$/) {
+	usage();
+    }
     $quickuuid = shift(@ARGV);
 }
 else {
@@ -154,7 +166,7 @@ else {
 }
 
 # Email record. 
-AuditStart(0, undef, LIBAUDIT_NODELETE())
+AuditStart(0, undef)
     if (! $debug);
 
 # Connect to the SA DB.
@@ -196,6 +208,9 @@ if (!defined($cm_authority)) {
 
 if ($killit) {
     exit(Terminate($quickuuid));
+}
+elsif ($extend) {
+    exit(Extend($quickuuid, $extend));
 }
 
 #
@@ -464,8 +479,6 @@ if (!$debug) {
     # All of the logging magic happens in here.
     libaudit::AuditFork();
 }
-print STDERR "Child pid $PID\n";
-
 my $rspecstr = GiveMeRspec($imageid);
 
 #
@@ -503,6 +516,9 @@ my $safe_manifest = DBQuoteSpecial($manifest);
 GeniDB::DBQueryWarn("update quickvms set ".
 		    " status='provisioned', manifest=$safe_manifest ".
 		    "where uuid='$quickvm_uuid'");
+
+print STDERR "\n";
+print STDERR "$manifest\n\n";
 
 #
 # but have to wait for the sliver to be ready, which means polling.
@@ -674,5 +690,65 @@ sub Terminate($)
     }
     $slice->Delete();
     DBQueryWarn("delete from quickvms where uuid=$safe_uuid");
+    exit(0);
+}
+
+#
+# Extend a quick VM.
+#
+sub Extend($$)
+{
+    my ($uuid, $seconds) = @_;
+    my $safe_uuid = DBQuoteSpecial($uuid);
+
+    my $query_result =
+	DBQueryWarn("select * from quickvms where uuid=$safe_uuid");
+    if (! ($query_result && $query_result->numrows)) {
+	fatal("No such quick VM: $uuid");
+    }
+    my $row = $query_result->fetchrow_hashref();
+
+    my $geniuser = GeniUser->Lookup($row->{'creator_uuid'}, 0);
+    if (!defined($geniuser)) {
+	fatal("No creator for quick VM: $uuid");
+    }
+    my $slice = GeniSlice->Lookup($row->{'slice_uuid'});
+    if (!defined($slice)) {
+	fatal("No slice for quick VM: $uuid");
+    }
+
+    # Need to update slice before creating new credential. 
+    $slice->AddToExpiration($extend);
+    my $new_expires = $slice->ExpirationGMT();
+    
+    # Create a slice credential
+    my $slice_credential =
+	GeniCredential->CreateSigned($slice,
+				     $geniuser,
+				     $GeniCredential::LOCALSA_FLAG);
+    if (!defined($slice_credential)) {
+	fatal("Could not create credential for $slice");
+    }
+    my $speaksfor_credential = GeniCredential->Create($geniuser, $sa_authority);
+    fatal("Could not create speaksfor credential")
+	if (!defined($speaksfor_credential));
+    $speaksfor_credential->SetType("speaksfor");
+    fatal("Could not sign speaksfor credential")
+	if ($speaksfor_credential->Sign($GeniCredential::LOCALSA_FLAG));
+
+    my $response =
+	Genixmlrpc::CallMethod($cm_authority->url(), undef,
+			       "RenewSlice",
+			       { "slice_urn"  => $slice->urn(),
+				 "expiration" => $new_expires,
+				 "credentials" =>
+				     [$slice_credential->asString(),
+				      $speaksfor_credential->asString()]});
+
+    if (!defined($response) || $response->code() != GENIRESPONSE_SUCCESS) {
+	fatal("RenewSlice failed: ".
+	      (defined($response) ? $response->output() : "") . "\n");
+    }
+    $slice->SetExpiration($new_expires);
     exit(0);
 }
