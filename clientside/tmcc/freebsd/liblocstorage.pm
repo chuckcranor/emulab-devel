@@ -169,6 +169,9 @@ sub find_serial($)
 	}
     }
 
+    # XXX for "mfi" devices we can use mfiutil to get SNs
+    # but have to be able to relate that info to /dev/* devices.
+
     # XXX Parse dmesg output?
 
     return undef;
