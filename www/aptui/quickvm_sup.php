@@ -27,7 +27,7 @@ function SPITHEADER($thinheader = 0)
     
     echo "<html>
       <head>
-        <title>AptLab.io - SSH</title>
+        <title>AptLab</title>
         <!-- UIKit -->
         <link rel='stylesheet' href='uikit/css/uikit.almost-flat.css'>
         <link rel='stylesheet' href='quickvm.css'>
@@ -73,17 +73,15 @@ function SPITAJAX_RESPONSE($value)
 	'value' => $value
 	);
     echo json_encode($results);
-    exit();
 }
 
-function SPITAJAX_ERROR($msg)
+function SPITAJAX_ERROR($code, $msg)
 {
     $results = array(
-	'code'  => 1,
+	'code'  => code,
 	'value' => $msg
 	);
     echo json_encode($results);
-    exit();
 }
 
 function GateOneAuthObject($uid)

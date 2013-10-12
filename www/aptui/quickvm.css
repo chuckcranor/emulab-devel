@@ -22,3 +22,11 @@ body > #bodycontainer { height: auto; min-height: 100%; }
     height: 1.0em;
 }
 
+/* Extra wide modal /*/
+.uk-modal-dialog-wide {
+  width: 800px;
+  /* 3 */
+
+  margin-left: -200px;
+  /* 4 */
+}

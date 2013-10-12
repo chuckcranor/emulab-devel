@@ -8,7 +8,7 @@ function ShowModal(which)
 function HideModal(which) 
 {
     $( which ).hide();
-    console.log('Showing modal ' + which);
+    console.log('Hide modal ' + which);
 }
     
 function CallMethod(method, callback, uuid, arg)
@@ -26,7 +26,7 @@ function CallMethod(method, callback, uuid, arg)
 	},
  
 	// whether this is a POST or GET request
-	type: "GET",
+	type: (arg ? "POST" : "GET"),
  
 	// the type of data we expect back
 	dataType : "json",
@@ -36,7 +36,7 @@ function CallMethod(method, callback, uuid, arg)
 function GetStatus(uuid)
 {
     var callback = function(json) {
-	StatusWatchCallBack(uuid, json.value);
+	StatusWatchCallBack(uuid, json);
     }
     var $xmlthing = CallMethod("status", null, uuid, null);
     $xmlthing.done(callback);
@@ -49,12 +49,16 @@ function StartStatusWatch(uuid)
 }
 
 // Call back for above.
-function StatusWatchCallBack(uuid, status)
+function StatusWatchCallBack(uuid, json)
 {
     // Check to see if the static variable has been initialized
     if (typeof StatusWatchCallBack.laststatus == 'undefined') {
         // It has not... perform the initilization
         StatusWatchCallBack.laststatus = "";
+    }
+    var status = json.value;
+    if (json.code) {
+	status = "terminated";
     }
     console.log(status);
     
@@ -72,6 +76,8 @@ function StatusWatchCallBack(uuid, status)
 		$("#quickvm_progress").addClass("uk-progress-success");
 		$("#quickvm_progress_bar").width("100%");
 	    }
+	    $("#terminate_button").prop("disabled", false);
+	    $("#extend_button").prop("disabled", false);
 	    ShowTopo(uuid);
 	}
 	else if (status == 'failed') {
@@ -83,15 +89,16 @@ function StatusWatchCallBack(uuid, status)
 		$("#quickvm_progress_bar").width("100%");
 	    }
 	}
-	else if (status == 'terminating') {
-	    status_html = "<font color=red>failed</font>";
+	else if (status == 'terminating' || status == 'terminated') {
+	    status_html = "<font color=red>" + status + "</font>";
 	    $("#terminate_button").prop("disabled", true);
 	    $("#extend_button").prop("disabled", true);
+	    StartCountdownClock.stop = 0;
 	}
 	$("#quickvm_status").html(status_html);
     } 
     StatusWatchCallBack.laststatus = status;
-    if (status != "terminating") {
+    if (! (status == 'terminating' || status == 'terminated')) {    
 	setTimeout(function f() { GetStatus(uuid) }, 5000);
     }
 }
@@ -103,6 +110,7 @@ function Terminate(uuid, url)
     }
     $("#terminate_button").prop("disabled", true);
     $("#extend_button").prop("disabled", true);
+    $('#terminate_modal').hide();    
     var $xmlthing = CallMethod("terminate", null, uuid, null);
     
     $xmlthing.done(callback);
@@ -150,11 +158,26 @@ function RequestExtension(uuid)
 {
     var reason = $("#why_extend").val();
     console.log(reason);
-    if (reason == "") {
+    if (reason.length < 30) {
+	alert("Your reason is too short! Say more please.");
 	return;
     }
     var callback = function(json) {
-	alert("Your request has been sent");
+	console.log(json.value);
+	
+	if (json.code) {
+	    if (json.code < 0) {
+		alert("Could not extend experiment. Please try again later");
+	    }
+	    else {
+		alert("Could not extend experiment: " + json.value);
+	    }
+	    return;
+	}
+	$("#quickvm_expires").html(json.value);
+	
+	// Reset the countdown clock.
+	StartCountdownClock.reset = json.value;
     }
     var $xmlthing = CallMethod("request_extension", null, uuid, reason);
     $('#extend_modal').hide();
@@ -169,7 +192,7 @@ function Extend(uuid)
 	return;
     }
     var callback = function(json) {
-	alert("Your request has been sent");
+	console.log(json.value);
     }
     var $xmlthing = CallMethod("extend", null, uuid, code);
     $('#extend_modal').hide();
@@ -232,21 +255,39 @@ function StartGateOne(sshurl)
 //
 function StartCountdownClock(when)
 {
+    // Use this static variable to force clock reset.
+    StartCountdownClock.reset = when;
+    
+    // Use this static variable to force clock stop
+    StartCountdownClock.stop = 0;
+    
     // set the date we're counting down to
     var target_date = new Date(when).getTime();
  
     // variables for time units
     var days, hours, minutes, seconds;
- 
+    
     // update the tag with id "countdown" every 1 second
-    setInterval(function () {
+    var updater = setInterval(function () {
+	// Clock stop
+	if (StartCountdownClock.stop) {
+	    // Amazing that this works!
+	    clearInterval(updater);
+	}
+	
+	// Clock reset
+	if (StartCountdownClock.reset != when) {
+	    when = StartCountdownClock.reset;
+	    target_date = new Date(when).getTime();
+	}
+	
 	// find the amount of "seconds" between now and target
 	var current_date = new Date().getTime();
 	var seconds_left = (target_date - current_date) / 1000;
 
 	if (seconds_left <= 0) {
-	    $("#terminate_button").prop("disabled", true);
-	    $("#extend_button").prop("disabled", true);
+	    // Amazing that this works!
+	    clearInterval(updater);
 	    return;
 	}
  

@@ -25,7 +25,7 @@ chdir("..");
 include("defs.php3");
 include_once("osinfo_defs.php");
 include_once("geni_defs.php");
-chdir("aptui");
+chdir("apt");
 include("quickvm_sup.php");
 
 #
@@ -197,9 +197,9 @@ function SPITFORM($username, $email, $sshkey, $imageid, $newuser, $errors)
 	else {
 	    $stuffing = substr(GENHASH(), 0, 16);
 	}
-	mail($email, "Confirm your email to create your Sandbox",
-	     "Here is your new user verification code. Please copy and\n".
-	     "paste this code into the box on the sandbox page.\n\n".
+	mail($email, "Confirm your email to create your Experiment",
+	     "Here is your user verification code. Please copy and\n".
+	     "paste this code into the box on the experiment page.\n\n".
 	     "      $stuffing\n",
 	     "From: $TBMAIL_OPS");
 	echo "<input type='hidden' name='stuffing' value='$stuffing' />";
@@ -223,6 +223,7 @@ if (!isset($create)) {
     #
     $username = null;
     $email    = null;
+    $sshkey   = null;
     
     if (isset($_COOKIE['quickvm_user'])) {
 	$geniuser = GeniUser::Lookup("sa", $_COOKIE['quickvm_user']);
@@ -316,26 +317,43 @@ $args["email"]    = $email;
 $args["imageid"]  = $imageid;
 
 #
-# Need to check for browser cookie, and existing VM. 
-#
-
-#
 # See if user exists and is verified. We send email with a code, which
 # they have to paste back into a box we add to the form. See above.
-# Maybe use some ajax code here. 
 #
-if (! ($exists && $exists->IsActive())) {
+# We also get here if the user exists, but the browser did not have
+# the tokens, as will happen if switching to another browser. We
+# force the user to repeat the verification with the same code we
+# have stored in the DB.
+#
+if (!$exists || !isset($_COOKIE['quickvm_authkey']) ||
+    $_COOKIE['quickvm_authkey'] != $exists->auth_token()) {
     if (isset($stuffing) && $stuffing != "") {
 	if (! (isset($verify) && $verify == $stuffing)) {
 	    SPITFORM($username, $email, $sshkey, $imageid, $stuffing, $errors);
 	    SPITFOOTER();
 	    return;
 	}
+	#
+	# If this is an existing user and they give us the right code,
+	# we can check again for an existing VM and redirect to the
+	# status page, like we do above.
+	#
+	if ($exists) {
+	    $quickvm = QuickVM::LookupByCreator($exists->uuid());
+	    if ($quickvm && $quickvm->status() != "terminating") {
+		header("Location: quickvm_status.php?uuid=" . $quickvm->uuid());
+		return;
+	    }
+	}
 	# Pass to backend to save in user object.
 	$args["auth_token"] = $stuffing;
     }
     else {
-	SPITFORM($username, $email, $sshkey, $imageid, true, $errors);
+	# Existing user, use existing auth token.
+	# New user, we create a new one.
+	$token = ($exists ? $exists->auth_token() : true);
+
+	SPITFORM($username, $email, $sshkey, $imageid, $token, $errors);
 	SPITFOOTER();
 	return;
     }

@@ -534,6 +534,7 @@ class QuickVM
     function status()	    { return $this->field('status'); }
     function profile()	    { return $this->field('profile'); }
     function manifest()	    { return $this->field('manifest'); }
+    function extension_code() { return $this->field('extension_code'); }
 
     function LookupByName($token) {
 	$dblink     = GetDBLink("sa");
