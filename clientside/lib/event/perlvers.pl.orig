@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2006, 2013 University of Utah and the Flux Group.
+# Copyright (c) 2006 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -30,15 +30,6 @@ use English;
 #
 foreach my $p (@INC) {
     if ($p =~ /perl5\/(\d+\.\d+\.\d+)\//) {
-	print "$1";
-	exit(0);
-    }
-}
-#
-# Around mid-2013 FreeBSD started installing into X.X rather than X.X.X
-#
-foreach my $p (@INC) {
-    if ($p =~ /perl5\/(\d+\.\d+)\//) {
 	print "$1";
 	exit(0);
     }
