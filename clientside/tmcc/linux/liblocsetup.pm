@@ -643,6 +643,10 @@ sub os_ifconfig_line($$$$$$$$;$$$)
         #
         # Need to check units on the speed. Just in case.
         #
+	if (!defined($speed)) {
+	    warn("*** No speed defined, default to 100Mbps\n");
+	    $speed = 100;
+	}
 	if ($speed =~ /(\d*)([A-Za-z]*)/) {
 	    if ($2 eq "Mbps") {
 		$speed = $1;
@@ -675,6 +679,10 @@ sub os_ifconfig_line($$$$$$$$;$$$)
 		$speed = 100;
 		$media = $IFC_100MBS;
 	    }
+	}
+	if (!defined($duplex)) {
+	    warn("*** No duplex defined, default to full\n");
+	    $duplex = "full";
 	}
 	if ($duplex eq "full") {
 	    $media = "$media-$IFC_FDUPLEX";
