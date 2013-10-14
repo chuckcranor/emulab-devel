@@ -844,7 +844,7 @@ sub AnnotateManifest($)
 	}
 	my $login = GeniXML::FindFirst("n:login", $services);
 	while (defined($login)) {
-	    $services->RemoveChild($login);
+	    $services->removeChild($login);
 	    $login = GeniXML::FindFirst("n:login", $services);	    
 	}
 	my $nonlocalusers;
