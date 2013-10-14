@@ -27,6 +27,7 @@ echo -n ' Cpucheck..'
 source checkutils.sh
 
 x=$(caller)
+echo "CPUCHECK standalone = $x"
 [[ "${x/NULL}" = "$x" ]] && declare -ri cpucheck_standalone=0 || declare -ri cpucheck_standalone=1
 
 declare arch="" failed="" s=""
@@ -49,10 +50,7 @@ reads_core Mhz:$mhz HT:${hyperthread} 64bit:${x64bit} HV:${hwvirt}"
 	echo "OK"
     else
 	echo "$failed"
-	(( $cpucheck_standalone )) && exit 1 || return 1
     fi
-    
-   (( $cpucheck_standalone )) && exit 0 || return 0
 }
 
 round1p() {
@@ -251,6 +249,5 @@ fi
 
 finish
 
-# should never get here
 (( $cpucheck_standalone )) && exit 0 || return 0
 
