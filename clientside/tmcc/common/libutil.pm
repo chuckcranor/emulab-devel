@@ -27,7 +27,7 @@
 package libutil;
 use Exporter;
 @ISA    = "Exporter";
-@EXPORT = qw( ipToMac macAddSep fatal mysystem mysystem2
+@EXPORT = qw( ipToMac macAddSep fatal mysystem mysystem2 ExecQuiet
               findDNS setState isRoutable findDomain convertToMebi
               ipToNetwork CIDRmask untaintNumber untaintHostname
 	      GenFakeMac
@@ -277,6 +277,42 @@ sub mysystem2($)
     if ($?) {
 	print STDERR "Command failed: $? - '$command'\n";
     }
+}
+
+sub ExecQuiet($)
+{
+    my ($command) = @_;
+
+    print STDERR "ExecQuiet: '$command'\n";
+
+    my $output    = "";
+    
+    #
+    # This open implicitly forks a child, which goes on to execute the
+    # command. The parent is going to sit in this loop and capture the
+    # output of the child. We do this so that we have better control
+    # over the descriptors.
+    #
+    my $pid = open(PIPE, "-|");
+    if (!defined($pid)) {
+	print STDERR "ExecQuiet Failure; popen failed!\n";
+	return undef;
+    }
+    if ($pid) {
+	while (<PIPE>) {
+	    $output .= $_;
+	}
+	close(PIPE);
+    }
+    else {
+	open(STDERR, ">&STDOUT");
+	exec($command);
+    }
+    print STDERR $output;
+    if ($?) {
+	print STDERR "Command failed: $?\n";
+    }
+    return $output;
 }
 
 #

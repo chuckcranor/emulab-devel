@@ -1549,7 +1549,23 @@ sub vnodeBoot($$$$)
     libutil::setState("BOOTING");
 
     # and finally, create the VM
-    mysystem("xm create $config");
+    my $output = ExecQuiet("xm create $config");
+    return -1
+	if (!defined($output));
+
+    # We have a problem with intermittent failures. We retry if we
+    # get a hotplug error after a small wait.
+    if ($? && $output =~ /hotplug/i) {
+	print "Hotplug Error: Retrying after a short wait.\n";
+	sleep(10);
+	
+	my $output = ExecQuiet("xm create $config");
+	return -1
+	    if (!defined($output));
+    }
+    return -1
+	if ($?);
+
     print "Created virtual machine $vnode_id\n";
     return 0;
 }
