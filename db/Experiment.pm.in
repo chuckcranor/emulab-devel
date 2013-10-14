@@ -46,10 +46,10 @@ use libtblog_simple;
 use vars qw($EXPT_PRELOAD $EXPT_START $EXPT_SWAPIN $EXPT_SWAPUPDATE
 	    $EXPT_SWAPOUT $EXPT_SWAPMOD %physicalTables @virtualTables
 	    $EXPT_FLAGS_NAMESONLY $EXPT_FLAGS_INCLUDEVIRT
-	    $EXPT_FLAGS_LOCALONLY
+	    $EXPT_FLAGS_LOCALONLY $EXPT_FLAGS_FIXRESOURCES
 	    $EXPT_GENIFLAGS_EXPT $EXPT_GENIFLAGS_COOKED
 	    @nodetable_fields %experiments
-	    $EXPT_STARTCLOCK $EXPT_RESOURCESHOSED
+	    $EXPT_STARTCLOCK $EXPT_RESOURCESHOSED 
 	    @EXPORT_OK
 	    $TB $BOSSNODE $CONTROL $TBOPS $PROJROOT $STAMPS $TBBASE  
 	    $TEVC $DBCONTROL $RSYNC $MKEXPDIR $TBPRERUN $TBSWAP   
@@ -124,9 +124,10 @@ $EXPT_ACCESS_MIN	= $EXPT_ACCESS_READINFO;
 $EXPT_ACCESS_MAX	= $EXPT_ACCESS_UPDATE;
 
 # Other flags.
-$EXPT_FLAGS_LOCALONLY   = 0x01;
-$EXPT_FLAGS_NAMESONLY   = 0x02;
-$EXPT_FLAGS_INCLUDEVIRT = 0x04;
+$EXPT_FLAGS_LOCALONLY    = 0x01;
+$EXPT_FLAGS_NAMESONLY    = 0x02;
+$EXPT_FLAGS_INCLUDEVIRT  = 0x04;
+$EXPT_FLAGS_FIXRESOURCES = 0x10;
 
 $EXPT_GENIFLAGS_EXPT    = 0x01;
 $EXPT_GENIFLAGS_COOKED  = 0x02;
@@ -1817,6 +1818,24 @@ sub SetState($$)
     return 0;
 }
 
+sub ResetState($$)
+{
+    my ($self, $newstate) = @_;
+
+    # Must be a real reference. 
+    return -1
+	if (! ref($self));
+
+    my $pid = $self->pid();
+    my $eid = $self->eid();
+
+    DBQueryWarn("update experiments set state='$newstate' ".
+		"where eid='$eid' and pid='$pid'")
+	or return -1;
+
+    return 0;
+}
+
 #
 # Logfiles. This all needs to change.
 #
@@ -2067,14 +2086,25 @@ sub PreSwap($$$$)
 
     #
     # We should never get here with a lastrsrc in the stats record; it
-    # indicates something went wrong, and we need to clean up the DB
-    # state by hand.
+    # indicates something went wrong.
     #
     if ($self->lastrsrc()) {
-	print STDERR "Inconsistent lastrsrc in stats record for $self!\n";
-	# XXX
-	$EXPT_RESOURCESHOSED = 1;
-	return -1;
+	print STDERR "*** Inconsistent lastrsrc in stats record for $self!\n";
+	print STDERR "    But we are going to try to fix it ...\n";
+
+	#
+	# Do what was not done during the last swap action. 
+	#
+	if ($self->SwapFail($swapper, $which, -1, $EXPT_FLAGS_FIXRESOURCES)) {
+	    #
+	    # Otherwise, we set this so that we leave things alone below
+	    # when caller calls SwapFail(). We will need to clean up the DB
+	    # state by hand.
+	    #
+	    $EXPT_RESOURCESHOSED = 1;
+	    return -1;
+	}
+	# Proceed ... 
     }
 
     #
@@ -2179,26 +2209,28 @@ sub SwapFail($$$$;$)
     return -1
 	if (! ref($self));
 
+    $flags = 0
+	if (!defined($flags));
+
     # Do not proceed if we got here via a hosed resources record.
     return 0
 	if ($EXPT_RESOURCESHOSED);
 
-    $flags = 0
-	if (!defined($flags));
+    if (($flags & $EXPT_FLAGS_FIXRESOURCES) == 0) {
+	# Old swap gathering stuff.
+	$self->GatherSwapStats($swapper, $which, $ecode);
 
-    # Old swap gathering stuff.
-    $self->GatherSwapStats($swapper, $which, $ecode);
+	my $exptidx = $self->idx();
+	my $session = libtblog::tblog_session();
+	$session = 'NULL' unless defined $session;
 
-    my $exptidx = $self->idx();
-    my $session = libtblog::tblog_session();
-    $session = 'NULL' unless defined $session;
-
-    # This is pointless.
-    DBQueryWarn("update experiment_stats set ".
-		"  swap_errors=swap_errors+1, ".
-		"  swap_exitcode=$ecode, ".
-		"  last_error=$session ".
-		"where exptidx=$exptidx");
+	# This is pointless.
+	DBQueryWarn("update experiment_stats set ".
+		    "  swap_errors=swap_errors+1, ".
+		    "  swap_exitcode=$ecode, ".
+		    "  last_error=$session ".
+		    "where exptidx=$exptidx");
+    }
 
     #
     # Get current and last rsrc record direct from DB to avoid local cache.
