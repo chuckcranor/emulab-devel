@@ -2204,6 +2204,7 @@ sub PreSwap($$$$)
 sub SwapFail($$$$;$)
 {
     my ($self, $swapper, $which, $ecode, $flags) = @_;
+    my $exptidx = $self->idx();
 
     # Must be a real reference. 
     return -1
@@ -2220,7 +2221,6 @@ sub SwapFail($$$$;$)
 	# Old swap gathering stuff.
 	$self->GatherSwapStats($swapper, $which, $ecode);
 
-	my $exptidx = $self->idx();
 	my $session = libtblog::tblog_session();
 	$session = 'NULL' unless defined $session;
 
