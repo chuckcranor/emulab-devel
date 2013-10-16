@@ -507,9 +507,12 @@ if ($waitmode) {
 #
 # Sanity check states in case someone changes something.
 #
-if ($estate eq EXPTSTATE_ACTIVE) { 
-    $experiment->PreSwap($this_user, TBDB_STATS_SWAPOUT, $estate) == 0 or
+if ($estate eq EXPTSTATE_ACTIVE) {
+    if ($experiment->PreSwap($this_user, TBDB_STATS_SWAPOUT, $estate)) {
+	# Reset back to original state.
+	$experiment->ResetState($estate);
 	fatal("Preswap failed!");
+    }
 
     if ($experiment->Swap($Experiment::EXPT_SWAPOUT) != 0) {
 	fatal({type => 'secondary', severity => SEV_SECONDARY,
