@@ -61,13 +61,13 @@ checkdrift_main() {
 		rm -f /tmp/.$$checkdiff
 	    done
 # :[[ $countsame -gt 1 ]] && echo "$host $countsame inventory files are the same"
-	    echo -n .
+# :	    echo -n .
 	else
 	    echo "No record of node id \"$host\"."
 	fi
     done
     echo ""
-    echo "$filecount files in $hostcount nodes checked"
+# :    echo "$filecount files in $hostcount nodes checked"
 }
 checkwce_main() {
     set -u
