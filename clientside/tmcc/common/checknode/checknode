@@ -120,11 +120,11 @@ postprocessing()
     # end XXX
 
     # have needed dirs ?
-	[[ ! -d ${projdir}/$host ]] && ( mkdir -p ${projdir}/$host ; chmod g+x ${projdir}/$host )
-	[[ ! -d ${projdir}/$host/.tbdb ]] && ( mkdir -p ${projdir}/$host/.tbdb ; chmod g+x ${projdir}/$host/.tbdb )
-	[[ ! -d ${projdir}/$host/.full ]] && ( mkdir -p ${projdir}/$host/.full ; chmod g+x ${projdir}/$host/.full )
-	[[ ! -d ${projdir}/$host/.diff ]] && ( mkdir -p ${projdir}/$host/.diff ; chmod g+x ${projdir}/$host/.diff )
-	[[ ! -d ${projdir}/$host/.tmcc ]] && ( mkdir -p ${projdir}/$host/.tmcc ; chmod g+x ${projdir}/$host/.tmcc )
+	[[ ! -d ${projdir}/$host ]] && ( mkdir -p ${projdir}/$host ; chmod go+rx ${projdir}/$host )
+	[[ ! -d ${projdir}/$host/.tbdb ]] && ( mkdir -p ${projdir}/$host/.tbdb ; chmod go+rx ${projdir}/$host/.tbdb )
+	[[ ! -d ${projdir}/$host/.full ]] && ( mkdir -p ${projdir}/$host/.full ; chmod go+rx ${projdir}/$host/.full )
+	[[ ! -d ${projdir}/$host/.diff ]] && ( mkdir -p ${projdir}/$host/.diff ; chmod go+rx ${projdir}/$host/.diff )
+	[[ ! -d ${projdir}/$host/.tmcc ]] && ( mkdir -p ${projdir}/$host/.tmcc ; chmod go+rx ${projdir}/$host/.tmcc )
 
     # copy over the files including timestamps
 	cp /tmp/nodecheck.log.tb.new ${projdir}/$host/.tbdb/$timestamp
@@ -144,7 +144,7 @@ postprocessing()
 	cd $owd
 
     # make sure no sudo is needed for read
-	chmod g+r ${projdir}/$host/.*/${timestamp}
+	chmod go+r ${projdir}/$host/.*/${timestamp}
     fi
     
     if (( $check_flag )) ; then
