@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2011 University of Utah and the Flux Group.
+# Copyright (c) 2000-2013 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -41,6 +41,7 @@ $isadmin   = ISADMIN();
 $reqargs = RequiredPageArguments("experiment",   PAGEARG_EXPERIMENT);
 $optargs = OptionalPageArguments("zoom",         PAGEARG_NUMERIC,
 				 "detail",       PAGEARG_BOOLEAN,
+				 "svg",          PAGEARG_BOOLEAN,
 				 "thumb",        PAGEARG_INTEGER);
 
 #
@@ -53,6 +54,7 @@ $unix_gid = $experiment->UnixGID();
 # if they dont exist, or are non-numeric, use defaults.
 if (!isset($zoom))       { $zoom   = 1; }
 if (!isset($detail))     { $detail = 0; }
+if (!isset($svg))        { $svg    = 0; }
 if (!isset($thumb))      { $thumb  = 0; }
 if ($zoom > 8.0)   { $zoom = 8.0; }
 if ($zoom <= 0.0)  { $zoom = 1.0; }
@@ -92,7 +94,12 @@ if (mysql_num_rows($query_result)) {
     $row   = mysql_fetch_array($query_result);
     $image = $row['image'];
     
-    header("Content-type: image/png");
+    if (strncmp($image, "<svg", 4) == 0) {
+	header("Content-type: image/svg+xml");
+    }
+    else {   
+	header("Content-type: image/png");
+    }
     echo $image;
     return;
 }
@@ -106,6 +113,7 @@ $arguments = "";
 # note that we already ensured that $detail and $thumb are numeric above.
 if ($detail != 0) { $arguments .= " -d $detail"; }
 if ($thumb != 0)  { $arguments .= " -t $thumb";  }
+if ($svg != 0 || $TBMAINSITE)    { $arguments .= " -x "; }
 
 #
 # Spit out the image with a content header.
@@ -113,7 +121,7 @@ if ($thumb != 0)  { $arguments .= " -t $thumb";  }
 
 if ($fp = popen("$TBSUEXEC_PATH $uid $unix_gid webvistopology " .
 		"$arguments -z $zoom $pid $eid", "r")) {
-    header("Content-type: image/png");
+    header("Content-type: image/svg+xml");
     fpassthru($fp);
 }
 else {
