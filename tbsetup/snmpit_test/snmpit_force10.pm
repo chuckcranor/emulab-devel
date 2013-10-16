@@ -59,6 +59,11 @@ my $ChassisInfo = {
         "maxPortsPerModule"     => 48,  # Max # of ports in any module
         "bitmaskBitsPerModule"  => 96,  # Number of bits per module
     },
+    "force10s55" => {
+        "moduleSlots"           => 1,   # Max # of modules in chassis
+        "maxPortsPerModule"     => 52,  # Max # of ports in any module
+        "bitmaskBitsPerModule"  => 96,  # Number of bits per module
+    },
 };
 
 #
@@ -87,17 +92,6 @@ my $vlanStaticNamePrefix = "emuID";
 my $PORT_FORMAT_IFINDEX  = 1;
 my $PORT_FORMAT_MODPORT  = 2;
 my $PORT_FORMAT_PORT     = 3;
-
-#
-# SNMP MIB variables.  May need to make these conditional based on the
-# switch OS...
-#
-my $SNMPVAR_ADMIN_STATUS = "ifAdminStatus";
-my $SNMPVAR_OPER_STATUS  = "ifOperStatus";
-my $SNMPVAR_DUPLEX       = "dot3StatsDuplexStatus";
-my $SNMPVAR_SPEED        = "ifHighSpeed";
-my $SNMPVAR_VLAN_NAME    = "dot1qVlanStaticName";
-my $SNMPVAR_EGRESS_PORTS = "dot1qVlanStaticEgressPorts";
 
 #
 # Creates a new object.
@@ -281,7 +275,7 @@ sub readifIndex($) {
 	    my $port = $3;
 	    # Force10 modules and ports start at 0 instead of 1.  Emulab
 	    # convention is to be 1-based.
-	    my $modport = ($module+1) . "." . ($port+1);
+	    my $modport = "${module}.${port}";
 	    my $ifIndex = $iid;
 	    
 	    # exclude e.g. ManagementEthernet ports
@@ -441,23 +435,23 @@ sub listPorts($) {
 	}
 	$Nodeports{$ifIndex} = $nodeport;
 
-	if ($status = snmpitGetWarn($self->{SESS},[$SNMPVAR_ADMIN_STATUS,
+	if ($status = snmpitGetWarn($self->{SESS},["ifAdminStatus",
 						   $ifIndex])) {
 	    $Able{$ifIndex} = ( $status =~ /up/ ? "yes" : "no" );
 	}
     	
-	if ($status = snmpitGetWarn($self->{SESS},[$SNMPVAR_OPER_STATUS,
+	if ($status = snmpitGetWarn($self->{SESS},["ifOperStatus",
 						   $ifIndex])) {
 	    $Link{$ifIndex} = $status;
 	}
 		
-	if ($status = snmpitGetWarn($self->{SESS},[$SNMPVAR_DUPLEX,
+	if ($status = snmpitGetWarn($self->{SESS},["dot3StatsDuplexStatus",
 						   $ifIndex])) {
 	    $status =~ s/Duplex//;
 	    $duplex{$ifIndex} = $status;
 	}
 	
-	if ($status = snmpitGetWarn($self->{SESS},[$SNMPVAR_SPEED,
+	if ($status = snmpitGetWarn($self->{SESS},["ifHighSpeed",
 						   $ifIndex])) {
 	    $speed{$ifIndex} = $status . "Mbps";
 	}
@@ -495,7 +489,7 @@ sub listVlans($) {
 	# and save these in %Names with the ifIndexes (iids) as the key
 	# (unlike ethernet ports, vlans aren't static, so this is done from
 	# scratch each time instead of being stored in a hash by the constructor
-	my $results = snmpitBulkwalkWarn($self->{SESS}, [$SNMPVAR_VLAN_NAME]);
+	my $results = snmpitBulkwalkWarn($self->{SESS}, ["dot1qVlanStaticName"]);
 
 	# $name should always be "dot1qVlanStaticName"
 	foreach my $result (@{$results}) {
@@ -538,7 +532,7 @@ sub listVlans($) {
 	# and find out the corresponding port ifIndexes
 	foreach $ifIndex (keys %Names) {
 	    if ($status = snmpitGetWarn($self->{SESS},
-					[$SNMPVAR_EGRESS_PORTS, $ifIndex])) {
+					["dot1qVlanStaticEgressPorts", $ifIndex])) {
 		my $mbrifIndexes = $self->convertBitmaskToIfindexes($status);
 		$Members{$ifIndex} = 
 		    $self->convertPortFormat($PORT_FORMAT_PORT, @{$mbrifIndexes});
@@ -596,7 +590,7 @@ sub convertBitmaskToIfindexes($$) {
                 + (7 - ($port % 8));
 
             if ( vec($bitmask,$offset,1) ) { 
-                push @ifIndexes, $self->{IFINDEX}{($mod+1).".".($port+1)};
+                push @ifIndexes, $self->{IFINDEX}{"${mod}.${port}"};
             }
             $port++;
         }
@@ -633,8 +627,8 @@ sub convertIfindexesToBitmask($@) {
 
     foreach my $modport (@modports) {
         $modport =~ /(\d+)\.(\d+)/;
-        my $mod  = $1 - 1;
-        my $port = $2 - 1;
+        my $mod  = $1;
+        my $port = $2;
 
         if ( $port >= $maxPortsPerModule )
         {
@@ -784,7 +778,7 @@ sub findVlans($@) {
     my %hash = ();
     
     # Grab the list of vlans.
-    my $results = snmpitBulkwalkWarn($self->{SESS}, [$SNMPVAR_VLAN_NAME]);
+    my $results = snmpitBulkwalkWarn($self->{SESS}, ["dot1qVlanStaticName"]);
 
     foreach my $result (@{$results}) {
 	my ($name,$iid,$vlanname) = @{$result};
@@ -904,8 +898,6 @@ sub createVlan($$$) {
     return $vlan_number;
 }
 
-# XXX: Editing stopped here.
-
 #
 # Put the given ports in the given VLAN. The VLAN is given as an 802.1Q 
 # tag number. (so NOT as a vlan_id from the database!)
@@ -1004,8 +996,6 @@ sub removeSomePortsFromVlan($$@) {
 	my ($self, $vlan_number, @ports) = @_;
 	return $self->removeSelectPortsFromVlan($vlan_number, @ports);
 }
-
-
 
 #
 # Removes select ports from the given VLANS. Each VLAN is given as a VLAN
@@ -1295,87 +1285,42 @@ sub UpdateField($$$@) {
 # see snmpit_cisco_stack.pm for a description of return value format
 #
 #
-sub getStats ($) {
-	my $self = shift;
+sub getStats() {
+    my $self = shift;
 
-	my $ifTable = ["ifInOctets",0];
-	my %inOctets=();
-	my %inUcast=();
-    my %inNUcast=();
-	my %inDiscard=();
-	my %inErr=();
-	my %inUnkProt=();
-	my %outOctets=();
-	my %outUcast=();
-	my %outNUcast=();
-	my %outDiscard=();
-	my %outErr=();
-	my %outQLen=();
-	my ($varname, $port, $value);
+    #
+    # Walk the tree for the VLAN members
+    #
+    my $vars = new SNMP::VarList(['ifInOctets'],['ifInUcastPkts'],
+    				 ['ifInNUcastPkts'],['ifInDiscards'],
+				 ['ifInErrors'],['ifInUnknownProtos'],
+				 ['ifOutOctets'],['ifOutUcastPkts'],
+				 ['ifOutNUcastPkts'],['ifOutDiscards'],
+				 ['ifOutErrors'],['ifOutQLen']);
+    my @stats = $self->{SESS}->bulkwalk(0,32,$vars);
 
-	#
-	# Walk the whole stats tree, and fill these hashes
-	#
-	$self->{SESS}->getnext($ifTable);
-	do {
-		($varname,$port,$value) = @{$ifTable};
-		$self->debug("getStats: Got $varname, $port, $value\n");
-		
-		if ($varname =~ /InOctets/) {
-			$inOctets{$port} = $value;
-		} elsif ($varname =~ /InUcast/) {
-			$inUcast{$port} = $value;
-		} elsif ($varname =~ /InNUcast/) {
-			$inNUcast{$port} = $value;
-		} elsif ($varname =~ /InDiscard/) {
-			$inDiscard{$port} = $value;
-		} elsif ($varname =~ /InErrors/) {
-			$inErr{$port} = $value;
-		} elsif ($varname =~ /InUnknownP/) {
-			$inUnkProt{$port} = $value;
-		} elsif ($varname =~ /OutOctets/) {
-			$outOctets{$port} = $value;
-		} elsif ($varname =~ /OutUcast/) {
-			$outUcast{$port} = $value;
-		} elsif ($varname =~ /OutNUcast/) {
-			$outNUcast{$port} = $value;
-		} elsif ($varname =~ /OutDiscard/) {
-			$outDiscard{$port} = $value;
-		} elsif ($varname =~ /OutErrors/) {
-			$outErr{$port} = $value;
-		} elsif ($varname =~ /OutQLen/) {
-			$outQLen{$port} = $value;
-		}
-		
-		$self->{SESS}->getnext($ifTable);
-	} while ( $varname =~ /^i[f](In|Out)/) ;
+    my $i = 0;
+    my %stats = ();
+    my %allports = ();
+    foreach my $array (@stats) {
+	while (@$array) {
+	    my ($name,$ifindex,$value) = @{shift @$array};
 
-	#
-	# Put all of the data gathered in the loop into a list suitable for
-	# returning
-	#
-	my @rv = ();
+	    # filter out entries we don't care about.
+            if (! defined $self->{IFINDEX}{$ifindex}) { next; }
 
-	# PORTINDEX contains only the "real" ports, no vlans/mgmnt ifaces
-	foreach my $id ( keys %{$self->{PORTINDEX}} ) { 
-		$port = portnum($self->{NAME} . ":" . $self->{IFINDEX}{$id});
-
-		#
-		# Skip ports that don't seem to have anything interesting attached
-		#
-		if (!$port) {
-			$self->debug("$id does not seem to be connected, skipping\n");
-			next;
-		}
-		
-		push @rv, [$port,$inOctets{$id},$inUcast{$id},$inNUcast{$id},
-		           $inDiscard{$id},$inErr{$id},$inUnkProt{$id},$outOctets{$id},
-		           $outUcast{$id},$outNUcast{$id},$outDiscard{$id},$outErr{$id},
-	    	       $outQLen{$id}];
+	    # Convert to Port object, check connectivity, and stash metrics.
+            my ($swport) = convertPortFormat($PORT_FORMAT_PORT, $ifindex);
+            if (! defined $swport) { next; } # Skip if we don't know about it
+            my $nportstr = $swport->getOtherEndPort()->toTripleString();
+            $allports{$nportstr} = $swport;
+	    ${$stats{$nportstr}}[$i] = $value;
 	}
-	return @rv;
-}
+	$i++;
+    }
 
+    return map [$allports{$_},@{$stats{$_}}], sort {tbsort($a,$b)} keys %stats;
+}
 
 #
 # Read a set of values for all given ports.
