@@ -352,6 +352,11 @@ DEVICE: foreach my $name (keys %portMap) {
 	    $device = new snmpit_mellanox($name);
 	    last;
 	};
+	/force10/ && do {
+	    require snmpit_force10;
+	    $device = new snmpit_force10($name);
+ 	    last;
+	};
 
 	# 'default' case
 	warn "WARNING: Unknown switch type ($type) for $name, skipping some ports\n";

@@ -1641,6 +1641,12 @@ sub snap($) {
 		$device = new snmpit_mellanox($devicename,$self->{DEBUG});
 		last;
 	        }; # /mellanox.*/
+	    (/force10/)
+		    && do {
+ 		require snmpit_force10;
+		$device = new snmpit_force10($devicename,$self->{DEBUG});
+		last;
+	        }; # /mellanox.*/
 	    print "Device $devicename is not of a known type\n";
 	}
 	if (!$device) {

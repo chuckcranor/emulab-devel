@@ -20,6 +20,7 @@
 
 package snmpit_force10;
 use strict;
+use Data::Dumper;
 
 $| = 1; # Turn off line buffering on output
 
@@ -174,18 +175,17 @@ sub new($$$;$) {
 		       "$mibpath/SNMPv2-CONF.txt",
 		       "$mibpath/BRIDGE-MIB.txt",
 		       "$mibpath/P-BRIDGE-MIB.txt",
-		       "$mibpath/RMON-MIB.txt",
-		       "$mibpath/TOKEN-RING-RMON-MIB.txt",
-		       "$mibpath/RMON2-MIB.txt",
-		       "$mibpath/Q-BRIDGE-MIB.txt");
+		       "$mibpath/Q-BRIDGE-MIB.txt",
+		       "$mibpath/EtherLike-MIB.txt");
     $SNMP::save_descriptions = 1; # must be set prior to mib initialization
     SNMP::initMib();		  # parses default list of Mib modules 
     $SNMP::use_enums = 1;	  # use enum values instead of only ints
 
     warn ("Opening SNMP session to $self->{NAME}...") if ($self->{DEBUG});
 
-    $self->{SESS} = new SNMP::Session(DestHost => $self->{NAME},
-	Community => $self->{COMMUNITY});
+    $self->{SESS} = new SNMP::Session(DestHost => $self->{NAME},Version => '2c',
+				      Timeout => 4000000, Retries=> 12,
+				      Community => $self->{COMMUNITY});
 
     if (!$self->{SESS}) {
 	#
@@ -252,15 +252,15 @@ sub readifIndex($) {
     my $self = shift;
     $self->debug("readifIndex:\n",2);
         
-    my $results = snmpitBulkwalkFatal($self->{SESS},["ifDescr"]);
+    my ($rows) = snmpitBulkwalkFatal($self->{SESS},["ifDescr"]);
     
-    if (!@{$results}) {
+    if (!$rows || !@{$rows}) {
 	warn "readifIndex: ERROR: No interface description rows returned ".
 	    "while attempting to build ifindex table.\n";
 	return 0;
     }
 
-    foreach my $result (@{$results}) {
+    foreach my $result (@{$rows}) {
 	my ($name,$iid,$descr) = @{$result};
 	$self->debug("got $name, $iid, descr $descr ",2);
 	if ($name ne "ifDescr") {
@@ -389,7 +389,7 @@ sub stripVlanPrefix($) {
     if ($vlname =~ /^$vlanStaticNamePrefix(\d+)$/) {
 	return $1;
     } else {
-	return "";
+	return $vlname;
     }
 }
 
@@ -427,7 +427,7 @@ sub listPorts($) {
 	# Skip ports that don't seem to have anything interesting attached
 	#
 	my ($port) = $self->convertPortFormat($PORT_FORMAT_PORT, $ifIndex);
-	my $nodeport = $self->getOtherEndPort();
+	my $nodeport = $port->getOtherEndPort();
 	if (!defined($port) || !defined($nodeport) || 
 	    $port->toString() eq $nodeport->toString()) {
 	    $self->debug("Port $port not connected, skipping\n");
@@ -489,7 +489,7 @@ sub listVlans($) {
 	# and save these in %Names with the ifIndexes (iids) as the key
 	# (unlike ethernet ports, vlans aren't static, so this is done from
 	# scratch each time instead of being stored in a hash by the constructor
-	my $results = snmpitBulkwalkWarn($self->{SESS}, ["dot1qVlanStaticName"]);
+	my ($results) = snmpitBulkwalkWarn($self->{SESS}, ["dot1qVlanStaticName"]);
 
 	# $name should always be "dot1qVlanStaticName"
 	foreach my $result (@{$results}) {
@@ -533,9 +533,10 @@ sub listVlans($) {
 	foreach $ifIndex (keys %Names) {
 	    if ($status = snmpitGetWarn($self->{SESS},
 					["dot1qVlanStaticEgressPorts", $ifIndex])) {
-		my $mbrifIndexes = $self->convertBitmaskToIfindexes($status);
-		$Members{$ifIndex} = 
-		    $self->convertPortFormat($PORT_FORMAT_PORT, @{$mbrifIndexes});
+		my $indexes = $self->convertBitmaskToIfindexes($status);
+		my @ports = $self->convertPortFormat($PORT_FORMAT_PORT, 
+						     @{$indexes});
+		$Members{$ifIndex} = \@ports;
 	    } else {
 		warn "Unable to get port membership for ifindex $ifIndex\n";
 		return undef;
@@ -778,7 +779,7 @@ sub findVlans($@) {
     my %hash = ();
     
     # Grab the list of vlans.
-    my $results = snmpitBulkwalkWarn($self->{SESS}, ["dot1qVlanStaticName"]);
+    my ($results) = snmpitBulkwalkWarn($self->{SESS}, ["dot1qVlanStaticName"]);
 
     foreach my $result (@{$results}) {
 	my ($name,$iid,$vlanname) = @{$result};
