@@ -428,6 +428,10 @@ Setting up an InstaGeni Rack. First, we need the following info:
 
 	testbed/install/genirack/shared-vms.ns
 
+  Expect the first swap-in to fail, since loading the disk for the first
+  time will probably time out.  Try it again to make sure things do
+  subsequently come up properly.
+
 * Need to reset the mailing lists to the local admin.
 
   All of the mailing lists are stored in ops:/etc/mail/lists. Add the local
