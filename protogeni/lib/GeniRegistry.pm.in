@@ -643,6 +643,7 @@ use Genixmlrpc;
 use GeniResponse;
 use GeniCertificate;
 use GeniCredential;
+use libEmulab;
 use overload ('""' => 'Stringify');
 
 #
@@ -677,10 +678,15 @@ sub Create($;$$)
     }
 
     #
-    # XXX Hardwired to PLC.
+    # XXX Hardwired to PLC via sitevar.
     #
+    my $plc_url;
+    if (!libEmulab::GetSiteVar('protogeni/plc_url', \$plc_url)) {
+	$plc_url = "https://www.planet-lab.org:12345";
+    }
+
     my $self              = {};
-    $self->{'url'}        = "https://www.planet-lab.org:12345";
+    $self->{'url'}        = $plc_url;
     $self->{'urn'}        = "";
     $self->{'context'}    = $context;
     $self->{'credential'} = $credential;
