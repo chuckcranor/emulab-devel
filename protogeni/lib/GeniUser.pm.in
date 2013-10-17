@@ -371,7 +371,7 @@ sub Create($$$$;$$)
 	return undef
 	    if (!defined($hash));
 	$hash = substr($hash, 0, 7);
-	if (!$hash || GeniUser->ValidUserID("u${hash}")) {
+	if (!$hash || !GeniUser->ValidUserID("u${hash}")) {
 	    print STDERR "Cannot form a uid from certificate\n".
 		$certificate->cert() . "\n";
 	    return undef;
