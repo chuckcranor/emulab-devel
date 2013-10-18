@@ -90,7 +90,7 @@ use libtestbed qw(TBBackGround);
 #
 # Forward declarations for prototype checking
 #
-sub killvnode();
+sub killvnode(;$);
 sub rebootvnode();
 sub cleanup();
 sub killvserver();
@@ -266,7 +266,7 @@ if ($rebootit) {
 if (-e $pidfile) {
     print "Killing an already running vnode manager!\n";
 
-    if (killvnode() == 0) {
+    if (killvnode(120) == 0) {
 	if (-e $pidfile) {
 	    die("*** $0:\n".
 		"    Not able to kill running vnode manager!\n");
@@ -587,7 +587,9 @@ exit 0;
 #
 # Routine to kill a vnode manager by sending it a signal.
 #
-sub killvnode() {
+sub killvnode(;$)
+{
+    my ($waittime) = @_;
     my $mpid = `cat $pidfile`;
     $mpid =~ s/\n//;
     # untaint
@@ -614,15 +616,16 @@ sub killvnode() {
     
     #
     # Wait for the pidfile to be removed. Do not wait too long though. 
-    # 
-    my $i = 0;
+    #
+    $waittime = 30
+	if (!defined($waittime));
     while (-e $pidfile) {
-	if ($i >= 30) {
+	if ($waittime <= 0) {
 	    print "*** vnode manager process ($mpid) has not stopped yet.\n";
 	    last;
 	}
 	sleep(1);
-	$i += 1;
+	$waittime -= 1;
     }
 
     if ($doplab) {
