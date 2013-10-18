@@ -375,12 +375,6 @@ Setting up an InstaGeni Rack. First, we need the following info:
 * Telnet to procurve2 (/usr/testbed/etc/switch.pswd):
 
 	5400> config
-	5400(config)# openflow
-	5400(openFlow)# vlan 1750
-	5400(openFlow vlan-1750)# enable
-	5400(openFlow vlan-1750)# controller "tcp:10.3.1.7:6633" fail-secure on
-	5400(openFlow vlan-1750)# exit
-	5400(openFlow)# exit
         5400(config)> ip ssh
         5400(config)> aaa authentication ssh login public-key none
         5400(config)> aaa authentication ssh enable public-key none
@@ -392,23 +386,6 @@ Setting up an InstaGeni Rack. First, we need the following info:
 
 	boss> wap addvpubaddr 192.1.242.150 192.1.242.179
 	boss> wap addvpubaddr 192.1.242.190 192.1.242.250
-
-* Most sites will have the openflow vlan plumbed through to port 24 on
-  the data switch. If this is indeed true, then we can go ahead and set
-  that up now, so Nick can get started on the FOAM stuff.
-
-	boss> wap addspecialdevice -t interconnect -s 100 interconnect-geni-core
-        boss> wap addspecialiface -b 1Gb -s procurve2,1,24 interconnect-geni-core eth0
-
-  If the rack is wired properly 1,24 is correct.  If the module is in
-  another slot, then this might be different.
-
-  Now create and share the openflow vlan:
-
-	boss> wap snmpit_test --vlan_tag=1750 -m mesoscale-openflow \
-		emulab-ops openflow-vlans interconnect-geni-core:eth0
-	boss> wap sharevlan -f -o emulab-ops,openflow-vlans \
-		mesoscale-openflow mesoscale-openflow
 
 * Run update_sitevars and addservers to get boss/ops into the DB
   and to turn on arp lockdown.
@@ -441,6 +418,34 @@ Setting up an InstaGeni Rack. First, we need the following info:
 * Run register_resources
 
 	boss> wap /usr/testbed/sbin/protogeni/register_resources
+
+* At this point, contact the GPO infrastructure people to find out
+  what port and what vlan number to use for the mesoscale vlan. The
+  instructions below use port 24 and vlan 1750, but that MIGHT NOT BE
+  THE CASE. 
+
+  Once you you know, telnet to the 5400:
+
+	5400> config
+	5400(config)# openflow
+	5400(openFlow)# vlan 1750
+	5400(openFlow vlan-1750)# enable
+	5400(openFlow vlan-1750)# controller "tcp:10.3.1.7:6633" fail-secure on
+	5400(openFlow vlan-1750)# exit
+	5400(openFlow)# exit
+	5400(config)> write memory
+
+  Then on boss:
+
+	boss> wap addspecialdevice -t interconnect -s 100 interconnect-geni-core
+        boss> wap addspecialiface -b 1Gb -s procurve2,1,24 interconnect-geni-core eth0
+
+  Now create and share the openflow vlan:
+
+	boss> wap snmpit_test --vlan_tag=1750 -m mesoscale-openflow \
+		emulab-ops openflow-vlans interconnect-geni-core:eth0
+	boss> wap sharevlan -f -o emulab-ops,openflow-vlans \
+		mesoscale-openflow mesoscale-openflow
 
 * Send email to local admin with pointer to instructions on getting their
   admin account on boss: http://www.protogeni.net/wiki/RackAdminAccounts
