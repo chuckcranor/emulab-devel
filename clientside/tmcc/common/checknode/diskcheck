@@ -21,7 +21,6 @@
 # 
 # }}}
 #
-
 echo -n ' Starting diskcheck..'
 
 # find the number of disks
@@ -30,6 +29,7 @@ echo -n ' Starting diskcheck..'
 
 declare error=""
 declare err=""
+[[ -z "${USE_TDD-}" ]] && declare USE_TDD=""
 
 
 source checkutils.sh
@@ -508,7 +508,6 @@ getserial() {
 	    res=${res^^} # upper case
 	fi
     fi
-    
     [[ $res ]] && echo "$res" || echo "UNKNOWN"
     return 0
 }
@@ -570,8 +569,7 @@ getbpers() {
 	    hdname=${hdname##*/}
 	    res=$(dmesg | grep "logical blocks" | grep $hdname)
 	    if [ -z "$res" ] ; then
-		echo 0
-		return 0
+		res=$(dmesg | grep "hardware sectors" | grep $hdname)
 	    fi
 	    res=${res%%-byte *}
 	    res=${res##*] }
@@ -616,12 +614,12 @@ getsectors() {
 	    hdname=${hdname##*/}
 	    res=$(dmesg | grep "logical blocks" | grep $hdname)
 	    if [ -z "$res" ] ; then
-		echo 0
-		return 0
+		res=$(dmesg | grep "hardware sectors" | grep $hdname)
+	    else
+		res=${res%%-byte *}
 	    fi
-	    res=${res%%-byte *}
 	    res=${res##*] }
-	    res=${res%% *}
+            res=${res%% *}
 	    [[ $res ]] || res=0
 	    ;;
 	FreeBSD )
@@ -664,11 +662,44 @@ getsectors() {
     return 0
 }
 
-getwspeed() {
-    hdname=$1
-    # disk is mounted somewhere then don't do the raw write speed
-    canwe=$(df | grep $hdname)
-    [[ $canwe ]] && { echo mounted; return 0; }
+whichdd2use() {
+    local usedd
+    local usetdd
+    local canwe
+    local ddbs
+    local workhouredd
+
+    usedd=$(which dd)
+    canwe=$(ls -l $usedd | grep busybox)
+    [[ $canwe ]] && { echo "bad_busybox_dd"; return 0; }
+    workhorsedd=$usedd
+
+    # if we have a timed dd, use a timeout rather than a count
+    usetdd=$(which tdd)
+    [[ -x $usetdd ]] && { USE_TDD=$usetdd; export TDD_DD=$usedd; usedd=$usetdd; } # the wapper tdd will use /bin/dd by default but this var will override
+
+    # check compatabily, ok to have 32bit on 64bit machine
+    if [ $native_bitsize -ne 64 ] ; then
+	ddbs=$(file -L $workhorsedd)
+	if [ "$ddbs" != "${ddbs/64}" ] ; then
+	    echo "bad_64bit_dd_on_32bit_machine"
+	    return 0
+	fi
+	if [ "${USE_TDD}" != "${USE_TDD/tdd}" ] ; then
+	    ddbs=$(file -L $USE_TDD)
+	    if [ "$ddbs" != "${ddbs/64}" ] ; then
+		echo "bad_64bit_ddt_on_32bit_machine"
+		return 0
+	    fi
+	fi
+    fi
+    echo "$usedd"
+    return 0
+}
+
+# call whichdd2use() before this to use correctly
+ddargs() {
+    local args=""
     if [ "$os" == "Linux" ] ; then 
 	#args="bs=64k iflag=direct count=8000"
 	#note iflag direct can't be used with /dev/zero as infile 
@@ -676,52 +707,47 @@ getwspeed() {
     elif [ "$os" == "FreeBSD" ] ; then 
 	args="bs=64k"
     fi
-    # do we have a working dd
-    dd=$(which dd)
-    canwe=$(ls -l $dd | grep busybox)
-    [[ $canwe ]] && { echo bad_dd; return 0; }
-
-    # if we have a timed dd, use a timeout rather than a count
-    tdd=$(which tdd)
-    if [[ $tdd ]]; then
-	export TDD_DD=$dd
-	dd=$tdd
-	# XXX paranoid: leave a count just in case
-	args="$args timeout=5 count=20000"
+    if [ "$USE_TDD" != "${USE_TDD/tdd}" ] ; then
+	# if we have a timed dd, use a timeout rather than a count
+	args="$args timeout=5 count=20000" # XXX paranoid: leave a count just in case
     else
 	args="$args count=8000"
     fi
+	
+    echo "$args"
+    return 0
+}
+
+getwspeed() {
+    hdname=$1
+    # disk is mounted somewhere then don't do the raw write speed
+    canwe=$(df | grep $hdname)
+    [[ $canwe ]] && { echo mounted; return 0; }
+
+    dd=$(whichdd2use)
+    [[ -x $dd ]] || { echo "$dd"; return 0; }
+    args=$(ddargs)
+
     add_on_exit 'rm -f /tmp/ddresultw'
     $dd if=/dev/zero of=$hdname $args >/tmp/ddresultw 2>&1
     res=$(grep bytes /tmp/ddresultw)
+
     echo $(parsedd $res)
     return 0
 }
+
 getrspeed() { 
     hdname=$1
-    if [ "$os" == "Linux" ] ; then 
-	args="bs=64k iflag=direct"
-    elif [ "$os" == "FreeBSD" ] ; then 
-	args="bs=64k"
-    fi
-    # do we have a working dd
-    dd=$(which dd)
-    canwe=$(ls -l $dd | grep busybox)
-    [[ $canwe ]] && { echo bad_dd; return 0; }
 
-    # if we have a timed dd, use a timeout rather than a count
-    tdd=$(which tdd)
-    if [[ $tdd ]]; then
-	export TDD_DD=$dd
-	dd=$tdd
-	# XXX paranoid: leave a count just in case
-	args="$args timeout=5 count=20000"
-    else
-	args="$args count=8000"
-    fi
+    # do we have a working dd
+    dd=$(whichdd2use)
+    [[ -x $dd ]] || { echo "$dd"; return 0; }
+    args=$(ddargs)
+
     add_on_exit 'rm -f /tmp/ddresultr'
     $dd of=/dev/null if=$hdname $args >/tmp/ddresultr 2>&1
     res=$(grep bytes /tmp/ddresultr)
+
     echo $(parsedd $res)
     return 0
 }
@@ -730,13 +756,13 @@ parsedd() {
     if [ "$os" == "Linux" ] ; then 
 	# linux dd returns 9 positional elements
 	if [ $# -lt 9 ] ; then
-	    x="DDtimeinERR"
+	    x="DDparseERR"
 	else
 	    y=$9
 	    if [ $y != ${y/MB} ] ; then
 		x=$8
 	    else
-		x="PareddError"
+		x="ParesddError"
 	    fi
 	fi
     elif [ "$os" == "FreeBSD" ] ; then 

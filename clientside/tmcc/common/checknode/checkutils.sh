@@ -41,6 +41,9 @@ fi
 [[ -z "${projdir-}" ]] && declare projdir # from tmcc hwinfo
 [[ -z "${errexit_val-}" ]] && declare errexit_val # holding var for set values, ie -e
 [[ -z "${mfsmode-}" ]] && declare -i mfsmode=0 #are we running in a MFS?
+[[ -z "${bitsize-}" ]] && declare bitsize=""
+[[ -z "${native_bitsize-}" ]] && declare -i native_bitsize=0 # what is our native binary bit size
+[[ -z "${whichfile-}" ]] && declare whichfile=""
 
 # PathNames
 [[ -z "${logfile-}" ]] && declare logfile # output log
@@ -77,6 +80,21 @@ initialize () {
 	mfsmode=1
     else
 	mfsmode=0
+    fi
+
+    save_e
+    set +e
+    # find native bit size
+    whichfile=$(which file)
+    [[ "${whichfile}" ]] ||  exit 1 # hard stop
+    bitsize=$(file -L $whichfile)
+    restore_e
+    if [ "$bitsize" != "${bitsize/32}" ] ; then
+	native_bitsize=32
+    elif [ "$bitsize" != "${bitsize/64}" ] ; then
+	native_bitsize=64
+    else
+	native_bitsize=0
     fi
 
     inithostname

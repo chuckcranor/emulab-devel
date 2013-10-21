@@ -27,14 +27,14 @@ echo -n ' Cpucheck..'
 source checkutils.sh
 
 x=$(caller)
-echo "CPUCHECK standalone = $x"
 [[ "${x/NULL}" = "$x" ]] && declare -ri cpucheck_standalone=0 || declare -ri cpucheck_standalone=1
 
 declare arch="" failed="" s=""
 declare -i sockets=0 cores_socket=0 threads_core=0 mhz=0 err=0
 declare -i hyperthread=0  x64bit=0 hwvirt=0
 declare p1="" p2="" p3=""
-declare phy="" cid=""
+declare phy="" cid=" "
+declare p p1 p3 p3 phy
 
 finish() {
     echo -n "Cpucheck `date`: " >> ${logfile}
@@ -120,7 +120,9 @@ fi
 
 case $os in
     Linux )
-	    # XXX if have lscpu then us it to get arch
+	# XXX if have lscpu then us it to get arch
+	save_e
+	set +e
 	    x=$(grep "model name" /proc/cpuinfo | head -1)
 	    x=${x##*: }
 	    #takeout all the spaces
@@ -128,26 +130,33 @@ case $os in
 	    [[ "${x:0:16}" == "Intel(R)Core(TM)" ]] && arch="x86_64" || arch=$x
 	    [[ "${x:0:15}" == "Intel(R)Xeon(R)" ]] && arch="x86_64" || arch=$x
 
-	    # count sockets using the 'physical id' string
+	    # count sockets using the max 'physical id' string
 	    # need to find how many different ids there are, to bad on some 
 	    # it starts at zero and on other machines it starts at 1
+
 	    x=$(grep "physical id" /proc/cpuinfo)
-	    while read -rd p p1 p2 p3 phy  ; do
-		cid+="$phy "
-	    done <<< $x
-	    first=999 last=0
-	    for i in $cid ; do
-		[[ $i -lt $first ]] && first=$i
-		[[ $i -gt $last ]]  && last=$i
-	    done
-	    sockets=$(($last - $first))
-	    ((++sockets))
+	    if [ -z "$x" ] ; then
+		sockets=1
+	    else
+		while read -rd p p1 p2 p3 phy  ; do
+		    cid+="$phy "
+		done <<< $x
+		first=999 last=0
+		for i in $cid ; do
+		    [[ $i -lt $first ]] && first=$i
+		    [[ $i -gt $last ]]  && last=$i
+		done
+		sockets=$(($last - $first))
+		((++sockets))
+	    fi
 
     	    x=$(grep "cpu cores" /proc/cpuinfo | head -1)
+	    [[ "$x" ]] || x="cpu cores	: 1" 
 	    x=${x##*: }
 	    cores_socket=$x
 
     	    x=$(grep "siblings" /proc/cpuinfo | head -1)
+	    [[ "$x" ]] || x="siblings	: 1" 
 	    x=${x##*: }
 	    threads_core=$(($x / $cores_socket))
 
@@ -156,16 +165,20 @@ case $os in
 	    ((++x))
 	    cpus=$x
 
-	    #better if dmesg not to old
+	    #better if dmesg not to old; else use proc/cpuinfo
     	    dmesgmhz=$(dmesg | grep -i mhz | grep processor)
 	    if [ -n "$dmesgmhz" ] ; then
 		x=${dmesgmhz#*Detected }
 		x=${x% MHz*}
-		rawmhz=$x
+	    else
+		x=$(grep -i mhz /proc/cpuinfo | head -1)
+		x=${x#*: }
 	    fi
+	    rawmhz=$x
 	    mhz=$(round1p $rawmhz)
 
 	    cpuflags=$(grep flags /proc/cpuinfo | head -1)
+	    restore_e
 	    [[ "${cpuflags}" = "${cpuflags/ht/}" ]] && hyperthread=0 || hyperthread=1
 	    [[ "${cpuflags}" = "${cpuflags/lm/}" ]] && x64bit=0 || x64bit=1
 	    [[ ("${cpuflags}" = "${cpuflags/vmx/}") && ("${cpuflags}" = "${cpuflags/svm/}") ]] && hwvirt=0 || hwvirt=1
