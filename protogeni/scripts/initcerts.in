@@ -144,7 +144,7 @@ if (!$asch && ! (-e "$TB/etc/.protogeni_federated" || -e "$TB/etc/.federated")){
     print "Your public certificate has been provisionally accepted.\n";
     print "Waiting a bit for the Clearing House to finish swallowing.\n";
     print "Please be patient!\n";
-    for (my $i = 0; $i < 10; $i++) {
+    for (my $i = 0; $i < 30; $i++) {
 	sleep(1);
 	print ".";
     }
