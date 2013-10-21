@@ -653,6 +653,7 @@ int sends_complete(struct agent *agent, const char *evtype)
 		{ TBDB_OBJECTTYPE_EVPROXY, NULL },
 		{ TBDB_OBJECTTYPE_BGMON, NULL },
 		{ TBDB_OBJECTTYPE_DISK, NULL },
+		{ TBDB_OBJECTTYPE_CUSTOM, NULL },
 		{ NULL, NULL }
 	};
 
