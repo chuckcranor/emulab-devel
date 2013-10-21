@@ -62,15 +62,18 @@ my $ChassisInfo = {
     },
     "force10s55" => {
         "moduleSlots"           => 1,   # Max # of modules in chassis
-        "maxPortsPerModule"     => 52,  # Max # of ports in any module
-        "bitmaskBitsPerModule"  => 96,  # Number of bits per module
+        "maxPortsPerModule"     => 64,  # Max # of ports in any module
+        "bitmaskBitsPerModule"  => 768, # Number of bits per module
     },
 };
 
+# XXX - The static offset approach appears to be unrealiable, so we look up
+# the ifindex using the "ifDescr" table.  Each vlan has an "interface" listed
+# there.
 #
 # Force10 calculates ifIndex for VLANs as 0b10_0001_0000001_1110_00000000000000 + 802.1Q VLAN tag number
 #
-my $vlanNumberToIfindexOffset = 1107787776;
+#my $vlanNumberToIfindexOffset = 1107787776;
 
 #
 # Force10 FTOS-EF-7.4.2.3 cannot set purely numeric administrative VLAN names (dot1qVlanStaticName) (by design...)
@@ -365,13 +368,13 @@ sub convertPortFormat($$@) {
 				split(/\./,$_)))} @ports;
 	}
     } elsif ($input == $PORT_FORMAT_PORT) {
+	my @swports = map $_->getEndByNode($self->{NAME}), @ports;
 	if ($output == $PORT_FORMAT_IFINDEX) {
 	    $self->debug("Converting Port to ifindex\n",2);
-	    return map {$self->{IFINDEX}{(split /:/,$_->toTripleString())[1]}}
-	           @ports;
+	    return map $self->{IFINDEX}{$_->card() .".". $_->port()}, @swports;
 	} elsif ($output == $PORT_FORMAT_MODPORT) {
 	    $self->debug("Converting Port to modport\n",2);
-	    return map { (split /:/,$_->toTripleString())[1] } @ports;
+	    return map $_->card() .".". $_->port(), @swports;
 	}
     }
 
@@ -397,6 +400,35 @@ sub addVlanPrefix($) {
     my $vlname = shift;
     
     return $vlanStaticNamePrefix.$vlname;
+}
+
+
+# Utility function for looking up ifindex for a vlan
+sub getVlanIfindex($$) {
+    my ($self, $vlan_number) = @_;
+
+    my ($rows) = snmpitBulkwalkFatal($self->{SESS},["ifDescr"]);
+    
+    if (!$rows || !@{$rows}) {
+	warn "getVlanIfindex: ERROR: No interface description rows returned.";
+	return 0;
+    }
+
+    foreach my $result (@{$rows}) {
+	my ($name,$iid,$descr) = @{$result};
+	$self->debug("getVlanIfindex: got $name, $iid, descr $descr\n",2);
+	if ($name ne "ifDescr") {
+	    warn "getVlanIfindex: WARNING: Foreign snmp var returned: $name";
+	    return 0;
+	}
+
+	if ($descr =~ /vlan\s+(\d+)/i && $1 == $vlan_number) {
+	    return $iid;
+	}
+    }
+
+    # Not found.
+    return 0;
 }
 
 #
@@ -754,7 +786,7 @@ sub vlanNumberExists($$) {
     my $vlan_number = shift;
 
     # Just look up the ifDescr for this VLAN, and see if we get an answer back
-    my $ifIndex = $vlanNumberToIfindexOffset + $vlan_number;
+    my $ifIndex = $self->getVlanIfindex($vlan_number);
     my $status = snmpitGetWarn($self->{SESS},["ifDescr",$ifIndex]);
     #print "\$status is $status!!!\n"; #pvdp
     if (!$status or $status eq "NOSUCHINSTANCE") {
@@ -777,15 +809,32 @@ sub findVlans($@) {
     my $self = shift;
     my @vlan_ids = @_;
     my %hash = ();
+    my %Vlnum = ();
+
+
+    # Build a mapping from vlan ifindex to vlan number.  Have to do this
+    # each time since the set of vlans varies over time.
+    my ($results) = snmpitBulkwalkWarn($self->{SESS}, ["ifDescr"]);
+    foreach my $result (@{$results}) {
+	my ($name,$iid,$vlid) = @{$result};
+	$self->debug("findVlans: got $name, $iid, name $vlid\n",2);
+	if ($name ne "ifDescr") {
+	    warn "findVlans: unexpected oid: $name\n";
+	    next;
+	}
+	if ($vlid =~ /vlan\s+(\d+)/i) {
+	    $Vlnum{$iid} = $1;
+	}
+    }
     
     # Grab the list of vlans.
-    my ($results) = snmpitBulkwalkWarn($self->{SESS}, ["dot1qVlanStaticName"]);
+    ($results) = snmpitBulkwalkWarn($self->{SESS}, ["dot1qVlanStaticName"]);
 
     foreach my $result (@{$results}) {
 	my ($name,$iid,$vlanname) = @{$result};
-	$self->debug("listVlans(): got $name, $iid, name $vlanname\n",2);
+	$self->debug("findVlans(): got $name, $iid, name $vlanname\n",2);
 	if ($name ne "dot1qVlanStaticName") {
-	    warn "listVlans: unexpected oid: $name\n";
+	    warn "findVlans: unexpected oid: $name\n";
 	    next;
 	}
 
@@ -796,7 +845,7 @@ sub findVlans($@) {
 	# add to hash if theres no @vlan_ids list (requesting all) or if the
 	# vlan is actually in the list
 	if ( (! @vlan_ids) || (grep {$_ eq $vlanname} @vlan_ids) ) {
-	    $hash{$vlanname} = $iid - $vlanNumberToIfindexOffset;
+	    $hash{$vlanname} = $Vlnum{$iid};
 	}
     }
 
@@ -877,14 +926,20 @@ sub createVlan($$$) {
 	print STDERR "VLAN Create id '$vlan_id' as VLAN $vlan_number failed.\n";
 	return 0;
     }
+
+    # trying to use static ifindex offsets for vlans is unreliable.
+    my $vlifindex = $self->getVlanIfindex($vlan_number);
+    if (!$vlifindex) {
+	print STDERR "Could not lookup vlan index for tag: $vlan_number\n";
+	return 0;
+    }
     
     # Set administrative name to vlan_id as known in emulab db.
     # Prepend a string to the numeric id as Force10 doesn't allow all numberic
     # for a vlan name.
     $vlan_id = addVlanPrefix($vlan_id);
     $RetVal = snmpitSetWarn($self->{SESS},["dot1qVlanStaticName", 
-					   ($vlan_number + 
-					    $vlanNumberToIfindexOffset),
+					   $vlifindex,
 					   $vlan_id,
 					   "OCTETSTR"]);
     
@@ -948,7 +1003,7 @@ sub setPortVlan($$@) {
 	}
 	
 	# Calculate VLAN ifIndex
-	my $vlanIfindex = $vlan_number + $vlanNumberToIfindexOffset;
+	my $vlanIfindex = $self->getVlanIfindex($vlan_number);
 	
 	# Add the ports, both objects must be set in a single command!  (note that
 	# in the switch, this bitmask is ORed with the already existing bitmask
@@ -1036,7 +1091,7 @@ sub removeSelectPortsFromVlan($$@) {
 	# even though it looks like we're zeroeing the entire
 	# dot1qVlanStaticEgressPorts value
 	
-	my $vlanIfindex = $vlan_number + $vlanNumberToIfindexOffset;
+	my $vlanIfindex = $self->getVlanIfindex($vlan_number);
 	my $RetVal = $self->{SESS}->set([
 		["dot1qVlanStaticEgressPorts"  , $vlanIfindex, 
 			$allZeroBitmask, "OCTETSTR"], 
@@ -1073,7 +1128,7 @@ sub removeSelectPortsFromVlan($$@) {
 		$currentBitmask);
 
 	if ($failedPortCount) {
-		print "setPortVlan(): Could not remove $failedPortCount ".
+		print "removeSelectPortsFromVlan(): Could not remove $failedPortCount ".
 			"ports from vlan $vlan_number!\n";
 	}
 	return $failedPortCount; # should be 0
@@ -1098,7 +1153,7 @@ sub removeVlan($@) {
 
 	foreach my $vlan_number (@vlan_numbers) {
 		# Calculate ifIndex for this VLAN
-		my $ifIndex = $vlanNumberToIfindexOffset + $vlan_number;
+		my $ifIndex = $self->getVlanIfindex($vlan_number);
 		
 		# Perform the actual removal (no need to first remove all ports from
 		# the VLAN)
@@ -1143,7 +1198,7 @@ sub removePortsFromVlan($@) {
 		}
 		
 		# Get the current membership bitmask for this vlan
-		my $vlanIfindex = $vlan_number + $vlanNumberToIfindexOffset;
+		my $vlanIfindex = $self->getVlanIfindex($vlan_number);
 		my $currentBitmask;
 		if (! ( $currentBitmask = $self->{SESS}->get(["dot1qVlanStaticEgressPorts",$vlanIfindex]) ) ) {
 			print "removePortsFromVlan(): error getting current membership bitmask for vlan_number $vlan_number. Does it even exist?\n";
