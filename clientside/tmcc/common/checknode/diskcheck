@@ -524,6 +524,7 @@ getwcache() {
 		    res="enabled"
 		elif [ "${x/off}" != "$x" ] ; then
 		    res="disabled"
+		    hdparm -W1 $1  > /dev/null 2>&1
 		fi
 	    fi
 	else
@@ -532,6 +533,7 @@ getwcache() {
 		res="enabled"
 	    elif [ "${x/Disabled}" != "$x" ] ; then
 		res="disabled"
+		$smtcl --set=wcache,on $1 > /dev/null 2>&1
 	    fi
 	fi
     fi
@@ -547,6 +549,7 @@ getwcache() {
 		    res="enabled"
 		elif [ "${x/0}" != "$x" ] ; then
 		    res="disabled"
+		    /usr/local/etc/emulab/camwce on $sd  > /dev/null 2>&1
 		fi
 	    fi
 	else
@@ -555,6 +558,7 @@ getwcache() {
 		res="enabled"
 	    elif [ "${x/Disabled}" != "$x" ] ; then
 		res="disabled"
+		$smtcl --set=wcache,on $1 > /dev/null 2>&1
 	    fi
 	fi
     fi
