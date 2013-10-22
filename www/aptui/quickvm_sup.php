@@ -31,11 +31,11 @@ function SPITHEADER($thinheader = 0)
         <!-- UIKit -->
         <link rel='stylesheet' href='uikit/css/uikit.almost-flat.css'>
         <link rel='stylesheet' href='quickvm.css'>
-        <script src='gateone.js'></script>
         <script src='quickvm_sup.js'></script>
         <script src='/emulab_sup.js'></script>
         <script src='https://code.jquery.com/jquery.js'></script>
         <script src='uikit/js/uikit.js'></script>
+        <script src='d3.v3.js'></script>
       </head>
     <body>
     <!-- Container for body, needed for sticky footer -->
@@ -82,6 +82,15 @@ function SPITAJAX_ERROR($code, $msg)
 	'value' => $msg
 	);
     echo json_encode($results);
+}
+
+#
+# Spit out an info tooltip.
+#
+function SpitToolTip($info)
+{
+    echo "<span data-uk-tooltip class='uk-icon-info-sign' ".
+	"title='$info'></span>";
 }
 
 function GateOneAuthObject($uid)

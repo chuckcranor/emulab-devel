@@ -26,7 +26,7 @@ function CallMethod(method, callback, uuid, arg)
 	},
  
 	// whether this is a POST or GET request
-	type: (arg ? "POST" : "GET"),
+	type: (arg ? "GET" : "GET"),
  
 	// the type of data we expect back
 	dataType : "json",
@@ -78,7 +78,8 @@ function StatusWatchCallBack(uuid, json)
 	    }
 	    $("#terminate_button").prop("disabled", false);
 	    $("#extend_button").prop("disabled", false);
-	    ShowTopo(uuid);
+//	    ShowTopo(uuid);
+	    ShowTopoNew(uuid);
 	}
 	else if (status == 'failed') {
 	    status_html = "<font color=red>failed</font>";
@@ -129,6 +130,24 @@ function ShowTopo(uuid)
     }
     var $xmlthing = CallMethod("gettopomap", null, uuid, null);
     
+    $xmlthing.done(callback);
+}
+
+function ShowTopoNew(uuid)
+{
+    var callback = function(json) {
+	console.log(json.value);
+	var xmlDoc = $.parseXML(json.value);
+	var xml    = $(xmlDoc);
+	var topo   = ConvertManifestToJSON(xml);
+	console.log(topo);
+
+	$("#showtopo_container").removeClass("uk-hidden");
+	maketopmap("#showtopo_div", 800, 500, topo);
+
+    }
+    console.log(uuid);
+    var $xmlthing = CallMethod("manifest", null, uuid, null);
     $xmlthing.done(callback);
 }
 
@@ -314,4 +333,204 @@ function StartCountdownClock(when)
 
 	$("#quickvm_countdown").html(countdown);
     }, 1000);
+}
+
+var foo = {"nodes": [{"name" : "node1"},
+		     {"name" : "node2"}],
+           "links": [{"source" : 0, "target" : 1, "value" : "foo"}]};
+
+function maketopmap(divname, width, height, json)
+{
+    var vis = d3.select(divname).append("svg:svg")
+	.attr("class", "topomap")
+	.attr("width", width)
+	.attr("height", height);
+
+    vis.append("svg:rect")
+	.attr("width", width)
+	.attr("height", height)
+        .style("fill-opacity", 0.0)
+	.style("stroke", "#000");
+
+    var topo = function(json) {
+	var force = self.force = d3.layout.force()
+	    .nodes(json.nodes)
+	    .links(json.links)
+	    .distance(150)
+	    .charge(-400)
+	    .size([width, height])
+	    .start();
+
+	var linkg = vis.selectAll("g.link")
+	    .data(json.links)
+	    .enter().append("svg:g");
+
+	var link = linkg.append("svg:line")
+	    .attr("class", "linkline")
+	    .attr("x1", function(d) { return d.source.x; })
+	    .attr("y1", function(d) { return d.source.y; })
+	    .attr("x2", function(d) { return d.target.x; })
+	    .attr("y2", function(d) { return d.target.y; });
+	
+	var linklabel = linkg.append("svg:text")
+	    .attr("class", "linktext")
+	    .attr("x", function(d) { return (d.source.x + d.target.x) / 2 })
+	    .attr("y", function(d) { return (d.source.y + d.target.y) / 2 })
+	    .text(function(d) { return d.name });
+
+	var node_drag = d3.behavior.drag()
+	    .on("dragstart", dragstart)
+	    .on("drag", dragmove)
+	    .on("dragend", dragend);
+
+	function dragstart(d, i) {
+	    // stops the force auto positioning before you start dragging
+	    force.stop() 
+	}
+
+	function dragmove(d, i) {
+	    d.px += d3.event.dx;
+	    d.py += d3.event.dy;
+	    d.x += d3.event.dx;
+	    d.y += d3.event.dy;
+	    // this is the key to make it work together with updating
+	    // both px,py,x,y on d !
+	    tick(); 
+	}
+
+	function dragend(d, i) {
+	    // of course set the node to fixed so the force doesn't
+	    // include the node in its auto positioning stuff
+	    d.fixed = true; 
+	    force.resume();
+	}
+
+	var nodeg = vis.selectAll("g.node")
+	    .data(json.nodes)
+	    .enter().append("svg:g")
+	    .call(node_drag);
+
+	var nodea = nodeg.append("svg:a")
+	    .attr("xlink:href", function(d) { return d.sshurl });
+	
+	var node = nodea.append("svg:rect")
+	    .attr("class", "nodebox")
+	    .attr("x", "-8px")
+	    .attr("y", "-8px")
+	    .attr("width", "20px")
+	    .attr("height", "20px");
+
+	nodeg.append("svg:text")
+	    .attr("class", "nodetext")
+	    .attr("dx", 16)
+	    .attr("dy", ".35em")
+	    .text(function(d) { return d.name });
+	
+	function tick() {
+	    if (0) {
+		node.attr("x",
+			  function(d) {
+			      return d.x =
+				  Math.max(10,
+					   Math.min(width - 10, d.x));
+			  })
+		    .attr("y",
+			  function(d) {
+			      return d.y =
+				  Math.max(10,
+					   Math.min(height - 10, d.y));
+			  });
+		
+	    }
+	    else {
+		nodeg.attr("transform", function(d) {
+		    d.x = Math.max(10, Math.min(width - 10, d.x));
+		    d.y = Math.max(10, Math.min(height - 10, d.y));
+		    return "translate(" + d.x + "," + d.y + ")"; });
+	    }
+	    link.attr("x1", function(d) { return d.source.x; })
+		.attr("y1", function(d) { return d.source.y; })
+		.attr("x2", function(d) { return d.target.x; })
+		.attr("y2", function(d) { return d.target.y; });
+	    
+	    linklabel.attr("x", function(d) { return (d.source.x + d.target.x)
+					      / 2 })
+		     .attr("y", function(d) { return (d.source.y + d.target.y)
+					      / 2 });
+	};
+	force.on("tick", tick);
+    }(json);
+    
+    return topo;
+}
+
+//
+// Convert a manifest in XML to a JSON object of nodes and links.
+//
+function ConvertManifestToJSON(xml)
+{
+    var json = {
+	"nodes": [],
+	"links": [],
+    };
+
+    $(xml).find("node").each(function(){
+	var client_id = $(this).attr("client_id");
+	var jobj      = {"name" : client_id};
+	
+	var login  = $(this).find("login");
+	if (login) {
+	    var user   = login.attr("username");
+	    var host   = login.attr("hostname");
+	    var port   = login.attr("port");
+	    var sshurl = "ssh://" + user + "@" + host + ":" + port + "/";
+
+	    jobj.sshurl = sshurl;
+	}
+	json.nodes.push(jobj);
+    });
+
+    $(xml).find("link").each(function(){
+	var client_id = $(this).attr("client_id");
+	var link_type = $(this).find("link_type");
+
+	if (link_type && $(link_type).attr("name") == "lan") {
+	    console.log("Oops, a lan");
+	}
+	else {
+	    var ifacerefs = $(xml).find("interface_ref");
+	    var source    = ifacerefs[0];
+	    var target    = ifacerefs[1];
+
+	    source = $(source);
+	    target = $(target);
+	    
+	    var source_ifname = source.attr("client_id");
+	    var target_ifname = target.attr("client_id");
+	    var source_ifpair = source_ifname.split(":");
+	    var target_ifpair = target_ifname.split(":");
+	    var source_name   = source_ifpair[0];
+	    var target_name   = target_ifpair[0];
+	    var source_index  = null;
+	    var target_index  = null;
+	
+	    // Javascript does not do dictionaries. Too bad.
+	    for (i = 0; i < json.nodes.length; i++) {
+		if (json.nodes[i].name == source_name) {
+		    source_index = i;
+		}
+		if (json.nodes[i].name == target_name) {
+		    target_index = i;
+		}
+	    }
+	    json.links.push({"name"         : client_id,
+			     "source"       : source_index,
+			     "target"       : target_index,
+			     "source_name"  : source_name,
+			     "target_name"  : target_name,
+			    });
+	}
+    });
+
+    return json;
 }

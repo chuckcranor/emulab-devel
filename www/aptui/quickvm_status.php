@@ -161,7 +161,7 @@ if (isset($ajax_request)) {
 		   "APT Extension: $uuid",
 		   "A request to extend your APT experiment was made and ".
 		   "granted.\n".
-		   "Your reason was:\n\n". $ajax_argument . "\n".
+		   "Your reason was:\n\n". $ajax_argument . "\n\n".
 		   "Your experiment will now expire at $new_expires\n",
 		   "CC: $TBMAIL_OPS");
 	}
@@ -262,7 +262,12 @@ echo "</div>\n";
 #
 # The topo diagram goes inside this div, when it becomes available.
 #
+echo "<div id='showtopo_container' class='uk-panel uk-panel-box
+           uk-container-center uk-width-2-3 uk-hidden'>\n";
 echo "<div id='showtopo_div'></div>\n";
+SpitToolTip("Click on a node to SSH to that node.<br>".
+	    "Click and drag on a node to move things around.");
+echo "</div>\n";
 
 #
 # A modal to tell people how to register

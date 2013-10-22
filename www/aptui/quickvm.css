@@ -30,3 +30,37 @@ body > #bodycontainer { height: auto; min-height: 100%; }
   margin-left: -200px;
   /* 4 */
 }
+
+/* Styles for svg diagrams */
+.topomap {
+    display: block;
+    margin: 0 auto;
+}
+.linktext {
+    fill: blue;
+    font: Helvetica;
+    font-size: 12;
+    font-weight: bold;
+}
+.nodetext {
+    fill: black;
+    font: Helvetica;
+    font-size: 12;
+    font-weight: bold;
+}
+.linkline {
+    fill: black;
+    fill-opacity: 1.0;
+    stroke: black;
+    stroke-opacity: 1.0;
+    stroke-width: 1;
+    stroke-linecap: square;
+}
+.nodebox {
+    fill: palegreen;
+    fill-opacity: 1.0;
+    stroke: black;
+    stroke-opacity: 1.0;
+    stroke-width: 2;
+}
+

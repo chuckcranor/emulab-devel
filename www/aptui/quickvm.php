@@ -400,7 +400,7 @@ if (count($errors)) {
 #
 #
 $retval = SUEXEC("nobody", "nobody", "webquickvm $xmlname",
-		 SUEXEC_ACTION_IGNORE);
+		 SUEXEC_ACTION_CONTINUE);
 
 if ($retval != 0) {
     if ($retval < 0) {
