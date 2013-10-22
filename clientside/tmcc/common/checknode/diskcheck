@@ -393,13 +393,13 @@ getdriver() {
 #	echo "UNKNOWN"
 #	return 0
 #    fi
-    echo "NA"
+    echo "NoInfo"
     return 0
 }
 gettype() { 
     smtcl=$(findSmartctl)
     if [ "${smtcl/smartctl}" == "$smtcl" ] ; then
-	echo "NA"
+	echo "NoInfo"
 	return 0
     fi
     res=$($smtcl -i $1 | grep "ATA Version is")
@@ -426,7 +426,7 @@ gettype() {
 gettemp() { 
     smtcl=$(findSmartctl)
     if [ "${smtcl/smartctl}" == "$smtcl" ] ; then
-	echo "NA"
+	echo "NoInfo"
 	return 0
     fi
     res="$($smtcl  -l scttempsts $1 | grep -i "Current Temperature:" | awk '{print $3}')"
@@ -451,7 +451,7 @@ getmodel() {
 	else
 	    # XXX 	# note: 'camcontrol devlist'
 	                # will give model on FreeBSD
-	    echo "NA"
+	    echo "NoInfo"
 	    return 0
 	fi
     else

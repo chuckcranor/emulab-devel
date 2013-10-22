@@ -515,11 +515,11 @@ printtmcinfo() {
 			obj=${objval%%=*}
 			val=${objval##*=}
 			[[ -z $val ]] && continue # bad also no value (or empty string)
-			u=${val,,} #lower case
-			[[ $u == ${u/unk} ]] || continue # the value has the UNKNOWN value
-			[[ $u == ${u/na} ]] || continue # the value has the NA
-			[[ $u == ${u/not} ]] || continue # the value has the LinuxNot
-			[[ $u == ${u/bad} ]] || continue # the value bad_dd
+			u=$val # orignal value
+			[[ $u == ${u/UNKNOWN} ]] || continue # the value has the UNKNOWN value
+			[[ $u == ${u/NoInfo} ]] || continue # the value has the NA
+			[[ $u == ${u/LINUXNOT} ]] || continue # the value has the LinuxNot
+			[[ $u == ${u/bad_} ]] || continue # has on of the bad_* strings
 		        # out put the stuff the database wants
 		        # skip the stuff the database does not want
 			case $obj in
