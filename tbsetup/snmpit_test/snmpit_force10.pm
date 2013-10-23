@@ -1216,20 +1216,20 @@ sub removePortsFromVlan($@) {
 	    print "removePortsFromVlan() error: attempt to remove all ports from default VLAN 1\n";
 	    next;
 	}
-		
-	# Get the current membership bitmask for this vlan
+	
+	# Get the vlan's ifindex.
 	my $vlanIfindex = $self->getVlanIfindex($vlan_number);
 	if (!defined($vlanIfindex)) {
 	    print "removePortsFromVlan: Error looking up ifindex for vlan number $vlan_number.\n";
 	    next;
 	}
 
-	my $currentBitmask = $self->getMemberBitmask($vlan_number);
+	# Get the current membership bitmask
+	my $currentBitmask = $self->getMemberBitmask($vlanIfindex);
 	if (!defined($currentBitmask)) {
 	    print "removePortsFromVlan(): error getting current membership bitmask for vlan_number $vlan_number.\n";
 	    # no membership bitmask => impossible to obtain number of ports
 	    # anyway => next...
-	    $errors++;
 	    next;
 	}
 		
@@ -1240,8 +1240,7 @@ sub removePortsFromVlan($@) {
 	foreach (@temp) { $portsInThisVlan += $_; } # counting the 1's
 	
 	# Create an all-zero bitmask
-	my $allZeroBitmask = "";
-	foreach (@temp) { $allZeroBitmask .= "0"; }
+	my $allZeroBitmask = "00000000" x length($currentBitmask);
         $allZeroBitmask = pack("B*", $allZeroBitmask);
 		
 	# Update the switch; both objects must be set in a single command, with
@@ -1255,14 +1254,33 @@ sub removePortsFromVlan($@) {
 	     $currentBitmask, "OCTETSTR"]
 					]);
 	
-	# $RetVal should contain "0 but true" if successful
-	if ( ! defined($RetVal) ) { 		    
-	    print "removePortsFromVlan(): problem removing all ".
-		"ports from vlan_number $vlan_number\n";
-	    $errors += $portsInThisVlan;
-	} else {
-	    $self->debug("removePortsFromVlan(): removed all ports ".
-			 "from vlan_number $vlan_number\n");
+	# $RetVal should contain "0 but true" if successful, but...
+	# occasionally $RetVal is undef, especially when attempting to remove
+	# ANY port from a VLAN which has a port from module 13 (last module) as
+	# a member.
+	#
+	# ...so the return value cannot be trusted => we do our own
+	# little investigation. Errors mostly happen when a custom VLAN
+	# has tagged members (in which case
+	# dot1qVlanStaticUntaggedPorts isn't the right object).
+	
+	# Get the current membership bitmask for this vlan
+	my $newBitmask = $self->getMemberBitmask($vlanIfindex);
+	if (!defined($newBitmask)) {
+		print "removePortsFromVlan(): Error getting current ".
+		      "membership bitmask for vlan $vlan_number\n";
+		$errors += $portsInThisVlan;
+		next;
+	}
+	
+	# Should return 0 if everything is alright, no. of failed ports otherwise
+	my $failedPortCount = $self->checkBits("off", $currentBitmask, 
+		$newBitmask);
+
+	if ($failedPortCount) {
+		print "removePortsFromVlan(): Could not remove $failedPortCount ".
+			"ports from vlan $vlan_number!\n";
+		$errors += $failedPortCount;
 	}
     }
 
