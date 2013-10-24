@@ -434,10 +434,11 @@ sub getVlanIfindex($$) {
 
     foreach my $result (@{$rows}) {
 	my ($name,$iid,$descr) = @{$result};
-	$self->debug("getVlanIfindex: got $name, $iid, descr $descr\n",2);
 
 	next unless $descr =~ /vlan\s+(\d+)/i;
 	my $curvlnum = $1;
+
+	$self->debug("getVlanIfindex: got $name, $iid, descr $descr\n",2);
 
 	if ($vlan_number eq "ALL") {
 	    $results{$curvlnum} = $iid;
@@ -490,17 +491,16 @@ sub setPortMembership($$$$$) {
 		["dot1qVlanStaticUntaggedPorts", $vlifindex, 
 			$uportmask, "OCTETSTR"]
 		]);
-	
+
+	# XXX: Look into why/when this happens ...
 	# $status should contain "0 but true" if successful, but...
 	# occasionally it is undefined (indicating failure) even when
 	# the operation succeeds. So, the return value cannot be
 	# trusted and we do our own little investigation. 
+	if (!defined($status)) {
+	    $self->debug("setPortMembership: Error setting port membership: $self->{SESS}->{ErrorStr}\n");
+	}
 
-	# XXX: check this ...
-	# Errors mostly happen when a custom VLAN has tagged members
-	# (in which case dot1qVlanStaticUntaggedPorts isn't the right
-	# object).
-	
 	# Get the current membership bitmask for this vlan
 	my $newmask = $self->getMemberBitmask($vlifindex);
 	if (!defined($newmask)) {
@@ -509,8 +509,10 @@ sub setPortMembership($$$$$) {
 		return $setcount;
 	}
 	
-	# Should return 0 if everything is alright, no. of failed ports otherwise
-	my $failcount = $self->checkBits($onoff, $uportmask, 
+	# Should return 0 if everything is alright, no. of failed
+	# ports otherwise
+	my $checkmask = $onoff eq "on" ? $eportmask : $uportmask;
+	my $failcount = $self->checkBits($onoff, $checkmask, 
 					 $newmask);
 
 	if ($failcount) {
