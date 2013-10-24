@@ -6442,7 +6442,7 @@ input.uk-search-field {
 
   -moz-box-sizing: border-box;
   box-sizing: border-box;
-  max-width: 200px;
+  max-width: 300px;
   padding: 5px 8px;
   /* 4 */
 
@@ -6450,7 +6450,7 @@ input.uk-search-field {
   color: rgba(255, 255, 255, 0.7);
   font-size: 12px;
   line-height: 18px;
-  text-align: center;
+  text-align: left;
   border-radius: 3px;
   text-shadow: 0 1px 0 rgba(0, 0, 0, 0.5);
 }
