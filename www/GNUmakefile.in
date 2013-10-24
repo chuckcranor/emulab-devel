@@ -151,9 +151,9 @@ APTUIFILES += $(wildcard $(SRCDIR)/aptui/*.js)
 APTUIFILES += $(wildcard $(SRCDIR)/aptui/*.css)
 APTUIFILES += $(wildcard $(SRCDIR)/aptui/*.png)
 UIKITFILES  = $(wildcard $(SRCDIR)/aptui/uikit/fonts/*)
-BOOTSTFONTS = $(wildcard $(SRCDIR)/aptuib/bootstrap/fonts/*)
-BOOTSTCSS   = $(wildcard $(SRCDIR)/aptuib/bootstrap/css/*)
-BOOTSTJS    = $(wildcard $(SRCDIR)/aptuib/bootstrap/js/*)
+BOOTSTFONTS = $(wildcard $(SRCDIR)/aptui/bootstrap/fonts/*)
+BOOTSTCSS   = $(wildcard $(SRCDIR)/aptui/bootstrap/css/*)
+BOOTSTJS    = $(wildcard $(SRCDIR)/aptui/bootstrap/js/*)
 
 # need to make it *.gz; with simply "*", 
 # we end up sucking over "CVS"
@@ -213,8 +213,6 @@ ALLWISTATS = $(notdir $(WIRELESSSTATSFILES))
 ALLBLOB   = $(notdir $(BLOBFILES))
 ALLAPTUI  = $(notdir $(APTUIFILES))
 ALLUIKITFONTS = $(notdir $(UIKITFILES))
-
-ALLAPTUIB      = $(notdir $(APTUIBFILES))
 ALLBOOTSTFONTS = $(notdir $(BOOTSTFONTS))
 ALLBOOTSTCSS   = $(notdir $(BOOTSTCSS))
 ALLBOOTSTJS    = $(notdir $(BOOTSTJS))
