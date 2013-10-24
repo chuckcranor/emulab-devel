@@ -143,7 +143,7 @@ function ShowTopoNew(uuid)
 	console.log(topo);
 
 	$("#showtopo_container").removeClass("uk-hidden");
-	maketopmap("#showtopo_div", 800, 500, topo);
+	maketopmap("#showtopo_div", 700, 400, topo);
 
     }
     console.log(uuid);
