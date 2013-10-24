@@ -82,20 +82,12 @@ initialize () {
 	mfsmode=0
     fi
 
-    save_e
-    set +e
-    # find native bit size
-    whichfile=$(which file)
-    [[ "${whichfile}" ]] ||  exit 1 # hard stop
-    bitsize=$(file -L $whichfile)
-    restore_e
-    if [ "$bitsize" != "${bitsize/32}" ] ; then
-	native_bitsize=32
-    elif [ "$bitsize" != "${bitsize/64}" ] ; then
-	native_bitsize=64
-    else
-	native_bitsize=0
-    fi
+    bitsize=$(uname -m)
+    case $bitsize in
+	i386 | x86 ) native_bitsize=32 ;;
+	amd64 | x86_64 ) native_bitsize=64 ;;
+	* ) native_bitsize=0 ;;
+    esac
 
     inithostname
     initlogs $@

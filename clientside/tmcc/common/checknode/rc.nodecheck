@@ -69,6 +69,7 @@ fi
 
 # if asked to collect need the collect dir for this project
 # (as given by tmcc hwinfo) mounted to save logs
+set -x
 if [ "$collect" = "1" ] ; then
     collectdir=`echo $testinfo | awk -F \" '{print $2}'`
     a=`echo $collectdir | awk -F \/ '{print $2}'`
@@ -104,11 +105,11 @@ if [ -f "/etc/emulab/ismfs" ] ; then
     fi
 
     os=`uname -s`
-    if [ ! -f $MFSPROJDIR/nodecheck/$os/bin/bash ] ; then
-	echo "*** Did not find expected bash in $MFSPROJDIR/$os/bin"
-    fi
-
-    export PATH="/usr/local/bin:$MFSPROJDIR/nodecheck/$os/bin:$PATH"
+    export PATH="/usr/local/bin:$MFSPROJDIR/nodecheck/`uname -s`/bin-`uname -m`:/usr/local/bin:$MFSPROJDIR/nodecheck/bin:$PATH"
+    
+#    if [ `echo $foundbash | grep nodecheck` ] ; then
+#	echo "*** Did not find expected bash in $MFSPROJDIR/$os/bin"
+#    fi
 
     echo 'Running Hardware Inventory Gather'
     bash $BINDIR/checknode $LOGDIR/nodecheck.log
@@ -119,6 +120,7 @@ if [ -f "/etc/emulab/ismfs" ] ; then
     fi
     exit 0
 fi
+set +x
 
 echo "Running nodechecks"
 # truncate file at boot time
