@@ -25,7 +25,7 @@ chdir("..");
 include("defs.php3");
 include_once("osinfo_defs.php");
 include_once("geni_defs.php");
-chdir("apt");
+chdir("aptb");
 include("quickvm_sup.php");
 
 $ajax_request = 0;
@@ -43,12 +43,11 @@ if (!isset($uuid)) {
 	exit();
     }
     SPITHEADER(1);
-    echo "<div class='tm-section tm-section-color-white'>
-            <div class='uk-container uk-container-center uk-text-center'>
-              <p class='uk-text-large'>
-               What experiment would you like to look at?
-              </p>
-          </div></div>\n";
+    echo "<div class='align-center'>
+            <p class='lead text-center'>
+              What experiment would you like to look at?
+            </p>
+          </div>\n";
     SPITFOOTER();
     return;
 }
@@ -63,12 +62,11 @@ if (!$quickvm) {
 	exit();
     }
     SPITHEADER(1);
-    echo "<div class='tm-section tm-section-color-white'>
-            <div class='uk-container uk-container-center uk-text-center'>
-              <p class='uk-text-large'>
-               Experiment does not exist. Redirecting to the front page.
-              </p>
-          </div></div>\n";
+    echo "<div class='align-center'>
+            <p class='lead text-center'>
+              Experiment does not exist. Redirecting to the front page.
+            </p>
+          </div>\n";
     SPITFOOTER();
     flush();
     sleep(3);
@@ -82,12 +80,11 @@ if (!$creator) {
 	exit();
     }
     SPITHEADER(1);
-    echo "<div class='tm-section tm-section-color-white'>
-            <div class='uk-container uk-container-center uk-text-center'>
-              <p class='uk-text-large'>
+    echo "<div class='align-center'>
+            <p class='lead text-center'>
                Hmm, there seems to be a problem.
-              </p>
-          </div></div>\n";
+            </p>
+          </div>\n";
     SPITFOOTER();
     TBERROR("No creator for quickvm $uuid", 0);
     return;
@@ -99,12 +96,11 @@ if (!$slice) {
 	exit();
     }
     SPITHEADER(1);
-    echo "<div class='tm-section tm-section-color-white'>
-            <div class='uk-container uk-container-center uk-text-center'>
-              <p class='uk-text-large'>
+    echo "<div class='align-center'>
+            <p class='lead text-center'>
                Hmm, there seems to be a problem.
-              </p>
-          </div></div>\n";
+            </p>
+          </div>\n";
     SPITFOOTER();
     TBERROR("No slice for quickvm $uuid", 0);
     return;
@@ -204,16 +200,21 @@ elseif ($quickvm_status == "provisioned") {
     $spinwidth = "66";
 }
 
-echo "<div class='uk-panel uk-panel-box uk-panel-header
-           uk-container-center uk-margin-bottom uk-width-2-3'>\n";
-echo "<table class='uk-table uk-table-condensed' $style>\n";
+echo "<div class='row'>
+      <div class='col-lg-6  col-lg-offset-3
+                  col-md-8  col-md-offset-2
+                  col-sm-8  col-sm-offset-2
+                  col-xs-10 col-xs-offset-1'>\n";
+echo "<div class='panel panel-default'>\n";
+echo "<div class='panel-body'>\n";
+echo "<table class='table table-condensed' $style>\n";
 if ($spin) {
     echo "<tr>\n";
-    echo "<td colspan=2 class='uk-width-5-5' $style>\n";
+    echo "<td colspan=2 $style>\n";
     echo "<div id='quickvm_spinner'>\n";
     echo " <div id='quickvm_progress'
-                class='uk-progress uk-progress-striped uk-active'>\n";
-    echo "  <div class='uk-progress-bar'
+                class='progress progress-striped active'>\n";
+    echo "  <div class='progress-bar' role='progressbar'
                  id='quickvm_progress_bar'
                  style='width: ${spinwidth}%;'></div>\n";
     echo " </div>\n";
@@ -243,49 +244,67 @@ echo "<td class='uk-width-4-5' $style>
          <span id='quickvm_countdown'></span></td>\n";
 echo "</tr>\n";
 echo "</table>\n";
-echo "<div class='uk-float-right'>\n";
-echo "  <button class='uk-button uk-button-primary'
+echo "<div class='pull-right'>\n";
+echo "  <button class='btn btn-primary'
            id='register_button' type=button
            onclick=\"ShowModal('#register_modal'); return false;\">
            Register</button>\n";
-echo "  <button class='uk-button uk-button-success' $disabled
+echo "  <button class='btn btn-success' $disabled
            id='extend_button' type=button
            onclick=\"ShowModal('#extend_modal'); return false;\">
            Extend</button>\n";
-echo "  <button class='uk-button uk-button-danger' $disabled
+echo "  <button class='btn btn-danger' $disabled
            id='terminate_button' type=button
            onclick=\"ShowModal('#terminate_modal'); return false;\">
            Terminate</button>\n";
+echo "</div>\n";
+echo "</div>\n";
+echo "</div>\n";
 echo "</div>\n";
 echo "</div>\n";
 
 #
 # The topo diagram goes inside this div, when it becomes available.
 #
-echo "<div id='showtopo_container' class='uk-panel uk-panel-box
-           uk-container-center uk-width-2-3 uk-hidden'>\n";
+echo "<div class='row'>
+      <div class='col-lg-6  col-lg-offset-3
+                  col-md-8  col-md-offset-2
+                  col-sm-8  col-sm-offset-2
+                  col-xs-10 col-xs-offset-1'>\n";
+echo "<div class='panel panel-default invisible' id='showtopo_container'>\n";
+echo "<div class='panel-body'>\n";
 echo "<div id='showtopo_div'></div>\n";
-SpitToolTip("Click on a node to SSH to that node.<br>".
+SpitToolTip("Click on a node to SSH to that node.\n".
 	    "Click and drag on a node to move things around.");
+echo "</div>\n";
+echo "</div>\n";
+echo "</div>\n";
 echo "</div>\n";
 
 #
 # A modal to tell people how to register
 #
 echo "<!-- This is a modal -->
-      <div id='register_modal' class='uk-modal'>
-        <div class='uk-modal-dialog'>
-          <a href='' class='uk-modal-close uk-close'></a>
+      <div id='register_modal' class='modal fade'>
+        <div class='modal-dialog'>
+        <div class='modal-content'>
+        <div class='modal-header'>
+          <button type='button' class='close' data-dismiss='modal'
+                   aria-hidden='true'>&times;</button>
           <h3>Register for an account</h3>
+        </div>
+        <div class='modal-body'>
           <p>If you want to design your own experiments, have more then
              one active experiment at a time, or extend the life of an
              experiment longer, you should register for a full account.
              Click on the link below to take you to the registration page.
           </p><br>
-               <button class='uk-button uk-button-primary uk-align-center'
+               <button class='btn btn-primary align-center'
                   onclick=\"RegisterAccount('$creator_uid',
                               '$creator_email'); return false;\"
                   type='submit' name='register'>Register</button>
+        </div>
+        </div>
         </div>
       </div>\n";
 
@@ -293,45 +312,49 @@ echo "<!-- This is a modal -->
 # A modal to tell people how to extend their experiment
 #
 echo "<!-- This is a modal -->
-      <div id='extend_modal' class='uk-modal'>
-        <div class='uk-modal-dialog uk-modal-dialog-wide'>
-          <a href='' class='uk-modal-close uk-close'></a>
-          <div class='uk-grid uk-grid-divider' data-uk-grid-match>
-            <div class='uk-width-1-2'>
+      <div id='extend_modal' class='modal fade'>
+        <div class='modal-dialog'>
+        <div class='modal-content'>
+         <div class='modal-body'>
+          <button type='button' class='close' data-dismiss='modal'
+                   aria-hidden='true'>&times;</button>
+          <div class='row'>
+            <div class='col-lg-7 col-md-7'
+                 style='padding-right:20px; border-right: 1px solid #ccc;'>
                 If you want to extend this experiment so that it does
                 not self-terminate at the time shown, just tell us why
                 and we will extend it for another 24 hours.
 		Watch for an email message that says its been done. 
-              <form id='extend_request_form'> 
-               <div class='uk-form-controls'>
+              <form id='extend_request_form' role='form'>
+               <div class='row'>
+                <div class='col-lg-10 col-md-6'>
                 <textarea id='why_extend' name='why_extend'
+                          class='form-control'
                           placeholder='Tell us a good story please.'
-                          class='uk-width-100 uk-align-center'
+                          class='align-center'
                           rows=5></textarea>
+               </div></div>
                <br>
-               <button class='uk-button uk-button-primary uk-button-small
-                       uk-align-center'
+               <button class='btn btn-primary btn-sm align-center'
                        onclick=\"RequestExtension('$uuid'); return false;\"
                        type='submit' name='request'>Request Extension</button>
-               </div>
               </form>
             </div>
-	    <div class='uk-width-1-2'>
+            <div class='col-lg-5 col-md-5'>
                To extend your experiment for more then another 24 hours,
                you need an extension code. If you do not have a code then
                you need not worry about it.
-               <form id='extend_form'>
-                <div class='uk-form-controls'>
+               <form id='extend_form' role='form'>
                 <input id='extend_code' name='extend_code' 
-                    class='uk-form-width-small uk-align-center'
+                    class='align-center'
                     placeholder='Extension code' autofocus type='text' />
                 <br>
-                <button class='uk-button uk-button-primary uk-button-small
-                       uk-align-center'
+                <button class='btn btn-primary btn-sm align-center'
                        onclick=\"Extend('$uuid'); return false;\"
                        type='submit' name='extend'>Extend</button>
-               </div>
               </form>
+            </div>
+            </div>
             </div>
            </div>
         </div>
@@ -341,14 +364,19 @@ echo "<!-- This is a modal -->
 # A modal to verify termination.
 #
 echo "<!-- This is a modal -->
-      <div id='terminate_modal' class='uk-modal'>
-        <div class='uk-modal-dialog'>
-          <a href='' class='uk-modal-close uk-close'></a>
-            <p>Are you sure you want to terminate this experiment? 
-               Click on the button below if you are really sure.</p><br>
-               <button class='uk-button uk-button-primary uk-align-center'
-                  onclick=\"Terminate('$uuid', 'quickvm.php'); return false;\"
-                  type='submit' name='terminate'>Terminate</button>
+      <div id='terminate_modal' class='modal fade'>
+        <div class='modal-dialog'>
+        <div class='modal-content'>
+        <div class='modal-body'>
+         <button type='button' class='close' data-dismiss='modal'
+                   aria-hidden='true'>&times;</button>
+         <p>Are you sure you want to terminate this experiment? 
+            Click on the button below if you are really sure.</p><br>
+             <button class='btn btn-primary align-center'
+                onclick=\"Terminate('$uuid', 'quickvm.php'); return false;\"
+                type='submit' name='terminate'>Terminate</button>
+        </div>
+        </div>
         </div>
       </div>\n";
 
@@ -367,6 +395,7 @@ echo "</div>\n";
 $location = uniqid("loc");
 $auth_object = GateOneAuthObject($creator_uid);
 
+echo "<script src='d3.v3.js'></script>\n";
 echo "<SCRIPT LANGUAGE=JavaScript>
                  InitQuickVM('$uuid', '$location', '$auth_object');
                  StartCountdownClock('$slice_expires');

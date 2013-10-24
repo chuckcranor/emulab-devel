@@ -28,24 +28,22 @@ function SPITHEADER($thinheader = 0)
     echo "<html>
       <head>
         <title>AptLab</title>
-        <!-- UIKit -->
-        <link rel='stylesheet' href='uikit/css/uikit.almost-flat.css'>
+        <link rel='stylesheet' href='bootstrap/css/bootstrap.css'>
         <link rel='stylesheet' href='quickvm.css'>
         <script src='quickvm_sup.js'></script>
         <script src='/emulab_sup.js'></script>
         <script src='https://code.jquery.com/jquery.js'></script>
-        <script src='uikit/js/uikit.js'></script>
-        <script src='d3.v3.js'></script>
+        <script src='bootstrap/js/bootstrap.js'></script>
       </head>
     <body>
     <!-- Container for body, needed for sticky footer -->
-    <div id='bodycontainer'>
-    <div id='bodycontent'>
-    <div class='uk-width-100 uk-container-center'
-         style='background-color: #ff6600'>
-        <img class='uk-align-center' style='width: ${height}px'
-             src='aptlogo.png'/>
-    </div>\n";
+    <div id='wrap'>
+      <div style='background-color: #ff6600'>
+         <img class='align-center' style='width: ${height}px'
+               src='aptlogo.png'/>
+      </div>
+     <!-- Page content -->
+     <div class='container'>\n";
 
 }
 
@@ -54,12 +52,14 @@ function SPITFOOTER()
     echo "</div>
       </div>
       <!--- Footer -->
-      <div id='footer' class='uk-width-100' style='background-color: #ff6600;'>
-        <div class='uk-align-left'>Powered by
+      <div>
+       <div id='footer'>
+        <div class='pull-left'>Powered by
              <img src='emulab-whiteout.png' id='elabpower'></div>
-        <div class='uk-align-right'>&copy; 2013 The University of Utah</div>
-        </div>
+        <div class='pull-right'>&copy; 2013 The University of Utah</div>
+       </div>
       </div>
+      <!-- Placed at the end of the document so the pages load faster -->
      </body></html>\n";
 }
 
@@ -89,8 +89,10 @@ function SPITAJAX_ERROR($code, $msg)
 #
 function SpitToolTip($info)
 {
-    echo "<span data-uk-tooltip class='uk-icon-info-sign' ".
-	"title='$info'></span>";
+    echo "<a href='#' class='btn btn-xs' data-toggle='popover' ".
+	"data-content='$info'> ".
+        "<span class='glyphicon glyphicon-question-sign'></span> ".
+        "</a>\n";
 }
 
 function GateOneAuthObject($uid)

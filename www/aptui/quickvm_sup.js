@@ -1,14 +1,13 @@
 function ShowModal(which) 
 {
-    modal = new $.UIkit.modal.Modal(which);
-    modal.show();
     console.log('Showing modal ' + which);
+    $( which ).modal('show');
 }
     
 function HideModal(which) 
 {
-    $( which ).hide();
     console.log('Hide modal ' + which);
+    $( which ).modal('hide');
 }
     
 function CallMethod(method, callback, uuid, arg)
@@ -71,9 +70,9 @@ function StatusWatchCallBack(uuid, json)
 	else if (status == 'ready') {
 	    status_html = "<font color=green>ready</font>";
 	    if ($("#quickvm_progress").length) {
-		$("#quickvm_progress").removeClass("uk-progress-striped");
-		$("#quickvm_progress").removeClass("uk-active");
-		$("#quickvm_progress").addClass("uk-progress-success");
+		$("#quickvm_progress").removeClass("progress-striped");
+		$("#quickvm_progress").removeClass("active");
+		$("#quickvm_progress").addClass("progress-bar-success");
 		$("#quickvm_progress_bar").width("100%");
 	    }
 	    $("#terminate_button").prop("disabled", false);
@@ -84,9 +83,9 @@ function StatusWatchCallBack(uuid, json)
 	else if (status == 'failed') {
 	    status_html = "<font color=red>failed</font>";
 	    if ($("#quickvm_progress").length) {
-		$("#quickvm_progress").removeClass("uk-progress-striped");
-		$("#quickvm_progress").removeClass("uk-active");
-		$("#quickvm_progress").addClass("uk-progress-danger");
+		$("#quickvm_progress").removeClass("progress-striped");
+		$("#quickvm_progress").removeClass("active");
+		$("#quickvm_progress").addClass("progress-bar-danger");
 		$("#quickvm_progress_bar").width("100%");
 	    }
 	}
@@ -111,7 +110,7 @@ function Terminate(uuid, url)
     }
     $("#terminate_button").prop("disabled", true);
     $("#extend_button").prop("disabled", true);
-    $('#terminate_modal').hide();    
+    HideModal('#terminate_modal');
     var $xmlthing = CallMethod("terminate", null, uuid, null);
     
     $xmlthing.done(callback);
@@ -142,8 +141,10 @@ function ShowTopoNew(uuid)
 	var topo   = ConvertManifestToJSON(xml);
 	console.log(topo);
 
-	$("#showtopo_container").removeClass("uk-hidden");
-	maketopmap("#showtopo_div", 700, 400, topo);
+	$("#showtopo_container").removeClass("invisible");
+	maketopmap("#showtopo_div",
+		   $("#showtopo_div").width() - 30,
+		   300, topo);
 
     }
     console.log(uuid);
@@ -199,7 +200,7 @@ function RequestExtension(uuid)
 	StartCountdownClock.reset = json.value;
     }
     var $xmlthing = CallMethod("request_extension", null, uuid, reason);
-    $('#extend_modal').hide();
+    HideModal('#extend_modal');
     $xmlthing.done(callback);
 }
 
@@ -214,7 +215,7 @@ function Extend(uuid)
 	console.log(json.value);
     }
     var $xmlthing = CallMethod("extend", null, uuid, code);
-    $('#extend_modal').hide();
+    HideModal('#extend_modal');
     $xmlthing.done(callback);
 }
 
@@ -223,7 +224,7 @@ function Extend(uuid)
 //
 function RegisterAccount(uid, email)
 {
-    $('#register_modal').hide();
+    HideModal('#register_modal');
     var url = "../newproject.php3?uid=" + uid + "&email=" + email + "";
     var win = window.open(url, '_blank');
     win.focus();
@@ -234,6 +235,11 @@ var gateone_location   = null;
 
 function InitQuickVM(uuid, location, auth_object)
 {
+    // This activates the popover subsystem.
+    $('[data-toggle="popover"]').popover({
+	trigger: 'hover',
+	'placement': 'top'
+    });
     gateone_authobject = auth_object;
     gateone_location   = location;
     GetStatus(uuid);
@@ -391,14 +397,15 @@ function maketopmap(divname, width, height, json)
 	function dragmove(d, i) {
 	    d.px += d3.event.dx;
 	    d.py += d3.event.dy;
-	    d.x += d3.event.dx;
-	    d.y += d3.event.dy;
+	    d.x  += d3.event.dx;
+	    d.y  += d3.event.dy;
 	    // this is the key to make it work together with updating
 	    // both px,py,x,y on d !
 	    tick(); 
 	}
 
 	function dragend(d, i) {
+	    console.log(d);
 	    // of course set the node to fixed so the force doesn't
 	    // include the node in its auto positioning stuff
 	    d.fixed = true; 
@@ -415,12 +422,12 @@ function maketopmap(divname, width, height, json)
 	
 	var node = nodea.append("svg:rect")
 	    .attr("class", "nodebox")
-	    .attr("x", "-8px")
-	    .attr("y", "-8px")
+	    .attr("x", "-10px")
+	    .attr("y", "-10px")
 	    .attr("width", "20px")
 	    .attr("height", "20px");
 
-	nodeg.append("svg:text")
+	var nodelabel = nodeg.append("svg:text")
 	    .attr("class", "nodetext")
 	    .attr("dx", 16)
 	    .attr("dy", ".35em")
@@ -444,8 +451,8 @@ function maketopmap(divname, width, height, json)
 	    }
 	    else {
 		nodeg.attr("transform", function(d) {
-		    d.x = Math.max(10, Math.min(width - 10, d.x));
-		    d.y = Math.max(10, Math.min(height - 10, d.y));
+		    d.px = d.x = Math.max(12, Math.min(width - 12, d.x));
+		    d.py = d.y = Math.max(12, Math.min(height - 12, d.y));
 		    return "translate(" + d.x + "," + d.y + ")"; });
 	    }
 	    link.attr("x1", function(d) { return d.source.x; })

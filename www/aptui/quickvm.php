@@ -25,7 +25,7 @@ chdir("..");
 include("defs.php3");
 include_once("osinfo_defs.php");
 include_once("geni_defs.php");
-chdir("apt");
+chdir("aptb");
 include("quickvm_sup.php");
 
 #
@@ -100,48 +100,46 @@ function SPITFORM($username, $email, $sshkey, $imageid, $newuser, $errors)
 	echo "<center><h2>$internal_error</h2></center><br>\n";
     }
 
-    echo "<form id='quickvm_form' class='uk-form uk-form-stacked'
+    echo "<div class='row'>
+          <div class='col-lg-6  col-md-offset-3
+                      col-md-6  col-md-offset-3
+                      col-sm-8  col-md-offset-2
+                      col-xs-10 col-md-offset-1'>\n";
+    echo "<form id='quickvm_form' role='form'
             method='post' action='quickvm.php'>\n";
-    echo "<div class='uk-panel uk-panel-box uk-panel-header
-            uk-container-center uk-margin-bottom uk-width-1-3'>
-        <h3 class='uk-panel-title'><i class='uk-icon-laptop'></i>
-            Create an Experiment</h3>
-            <div class='uk-form-row'>
-               <div class='uk-form-controls'>
+    echo "<div class='panel panel-default'>
+           <div class='panel-heading'>
+              <h3 class='panel-title'>
+                 Create an Experiment</h3></div>
+           <div class='panel-body'>
+            <div class='form-group'>
                 <input name='username' id='username'
                        value='$username_value'
-                       class='uk-width-100'
+                       class='form-control'
                        placeholder='$username_default' autofocus type='text'>
-               </div>
-		<label class='uk-form-label uk-text-small'
-                       style='color: red'
+		<label style='color: red'
                        for='username'>$username_error</label>
             </div>
-            <div class='uk-form-row'>
-               <div class='uk-form-controls'>
-                <input name='email' id='email'
+            <div class='form-group'>
+                <input name='email' id='email' type='text'
                        value='$email_value'
-                       class='uk-width-100'
+                       class='form-control'
                        placeholder='$email_default' type='text' />
-               </div>
-		<label class='uk-form-label uk-text-small'
+		<label 
                        style='color: red'
                        for='email'>$email_error</label>
             </div>
-            <div class='uk-form-row'>
-               <div class='uk-form-controls'>
+            <div class='form-group'>
                 <textarea id='sshkey' name='sshkey'
                           placeholder='$sshkey_default'
-                          class='uk-width-100'
+                          class='form-control'
                           rows=5 cols=45>$sshkey_value</textarea>
-               </div>
-		<label class='uk-form-label uk-text-small'
+		<label
                        style='color: red'
                        for='sshkey'>$sshkey_error</label>
             </div>
-            <div class='uk-form-row'>
-              <div class='uk-form-controls'>
-                <select class='uk-align-left' name='imageid'>
+            <div class='form-group'>
+                <select class='pull-left' name='imageid'>
                 <option value=''>Select Profile</option>\n";
     while (list ($id, $title) = each ($imageid_array)) {
 	$selected = "";
@@ -152,41 +150,43 @@ function SPITFORM($username, $email, $sshkey, $imageid, $newuser, $errors)
 	echo "<option $selected value='$id'>$title </option>\n";
     }
     echo "       </select>
-               </div>
-	        <label class='uk-form-label uk-text-small'
+	        <label
                        style='color: red'
                        for='imageid'>$imageid_error</label>
             </div>
-            <div class='uk-form-row'>
-            <button class='uk-button uk-button-primary uk-button-mini
-                           uk-align-left'
+            <button class='btn btn-primary pull-right'
+	            type='submit' name='create'>Create!
+	          </button>
+            <br> 
+            <button class='btn btn-primary btn-xs pull-left'
 	            type='button' name='reset'
                     onclick='formReset(); return false;'>
                     Reset Form</button>
-            <button class='uk-button uk-button-primary uk-align-right'
-	            type='submit' name='create'>Create!
-	          <i class='uk-icon-chevron-sign-right'></i></button>
-            </div>
+        </div>
+        </div>
+        </div>
         </div>\n";
 
     echo "<!-- This is the modal -->
-          <div id='working' class='uk-modal'>
-            <div class='uk-modal-dialog'>
-                <a class='uk-modal-close uk-close'></a>
-                <div class='uk-panel uk-panel-box'>
-                    <h3 class='uk-panel-title'><span class='uk-text-warning'>
-                    <i class='uk-icon-warning-sign'></i> Important</a></h3>
+          <div id='working' class='modal fade'>
+            <div class='modal-dialog'>
+            <div class='modal-content'>
+               <div class='modal-header'>
+                <button type='button' class='close' data-dismiss='modal'
+                   aria-hidden='true'>&times;</button>
+                <h3>Important</h3>
+               </div>
+               <div class='modal-body'>
                     <p>Check your email for a verification code, and
                        enter it here:</p>
                         <input name='verify'
-                               class='uk-form-width-medium'
                                placeholder='Verification code'
                                autofocus type='text' />
-                        <button class='uk-button uk-button-primary'
+                        <button class='btn btn-primary'
                             type='submit' name='create'>
-                            Create<i class='uk-icon-check-sign'>
-                          </i></button>
-                    </div>
+                            Create</button>
+               </div>
+            </div>
             </div>
          </div>\n";
 
