@@ -150,7 +150,10 @@ APTUIFILES  = $(wildcard $(SRCDIR)/aptui/*.php)
 APTUIFILES += $(wildcard $(SRCDIR)/aptui/*.js)
 APTUIFILES += $(wildcard $(SRCDIR)/aptui/*.css)
 APTUIFILES += $(wildcard $(SRCDIR)/aptui/*.png)
-UIKITFILES =  $(wildcard $(SRCDIR)/aptui/uikit/fonts/*)
+UIKITFILES  = $(wildcard $(SRCDIR)/aptui/uikit/fonts/*)
+BOOTSTFONTS = $(wildcard $(SRCDIR)/aptuib/bootstrap/fonts/*)
+BOOTSTCSS   = $(wildcard $(SRCDIR)/aptuib/bootstrap/css/*)
+BOOTSTJS    = $(wildcard $(SRCDIR)/aptuib/bootstrap/js/*)
 
 # need to make it *.gz; with simply "*", 
 # we end up sucking over "CVS"
@@ -211,6 +214,11 @@ ALLBLOB   = $(notdir $(BLOBFILES))
 ALLAPTUI  = $(notdir $(APTUIFILES))
 ALLUIKITFONTS = $(notdir $(UIKITFILES))
 
+ALLAPTUIB      = $(notdir $(APTUIBFILES))
+ALLBOOTSTFONTS = $(notdir $(BOOTSTFONTS))
+ALLBOOTSTCSS   = $(notdir $(BOOTSTCSS))
+ALLBOOTSTJS    = $(notdir $(BOOTSTJS))
+
 INSTALLFILES = $(addprefix $(INSTALL_SBINDIR)/, htmlinstall) \
 	$(addprefix $(INSTALL_WWWDIR)/, $(ALLFILES)) \
 	$(addprefix $(INSTALL_WWWDIR)/floormap/, $(ALLFLOORMAPS)) \
@@ -252,9 +260,9 @@ endif
 	$(INSTALL_OPSCVSWEBCGI)
 
 apt-install: 	$(addprefix $(INSTALL_WWWDIR)/apt/, $(ALLAPTUI)) \
-	$(INSTALL_WWWDIR)/apt/uikit/js/uikit.js \
-	$(INSTALL_WWWDIR)/apt/uikit/css/uikit.almost-flat.css \
-	$(addprefix $(INSTALL_WWWDIR)/apt/uikit/fonts/, $(ALLUIKITFONTS))
+	$(addprefix $(INSTALL_WWWDIR)/apt/bootstrap/css/, $(ALLBOOTSTCSS)) \
+	$(addprefix $(INSTALL_WWWDIR)/apt/bootstrap/js/, $(ALLBOOTSTJS)) \
+	$(addprefix $(INSTALL_WWWDIR)/apt/bootstrap/fonts/, $(ALLBOOTSTFONTS))
 
 post-install:
 
@@ -281,6 +289,11 @@ $(INSTALL_WWWDIR)/%: %
 	$(INSTALL_DATA) $(subst $$,\$$,$<) $(subst $$,\$$,$@) 
 
 $(INSTALL_WWWDIR)/apt/%: aptui/%
+	@echo "Installing $<"
+	-mkdir -p $(patsubst %/,%,$(dir $@))
+	$(INSTALL_DATA) $(subst $$,\$$,$<) $(subst $$,\$$,$@) 
+
+$(INSTALL_WWWDIR)/aptb/%: aptuib/%
 	@echo "Installing $<"
 	-mkdir -p $(patsubst %/,%,$(dir $@))
 	$(INSTALL_DATA) $(subst $$,\$$,$<) $(subst $$,\$$,$@) 
