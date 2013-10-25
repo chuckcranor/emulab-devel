@@ -466,7 +466,7 @@ sub getMemberBitmask($$) {
     my $bitmask = $self->{SESS}->get(["dot1qVlanStaticEgressPorts",
 				      $vlidx]);
     if (!$bitmask) {
-	print STDERR "getMemberBitmask(): Error getting current membership bitmask for vlan with ifindex $vlidx\n";
+	warn "getMemberBitmask: Error getting current membership bitmask for vlan with ifindex $vlidx\n";
 	return undef;
     }
 
@@ -504,8 +504,8 @@ sub setPortMembership($$$$$) {
 	# Get the current membership bitmask for this vlan
 	my $newmask = $self->getMemberBitmask($vlifindex);
 	if (!defined($newmask)) {
-		print "setPortMembership: Error getting current ".
-		      "membership bitmask for vlan with ifindex $vlifindex\n";
+		warn "setPortMembership: Error getting current ".
+		     "membership bitmask for vlan with ifindex $vlifindex\n";
 		return $setcount;
 	}
 	
@@ -516,8 +516,8 @@ sub setPortMembership($$$$$) {
 					 $newmask);
 
 	if ($failcount) {
-		print "setPortMembership: Could not manipulate $failcount ".
-			"ports in vlan with ifindex vlifindex!\n";
+		warn "setPortMembership: Could not manipulate $failcount ".
+		     "ports in vlan with ifindex vlifindex!\n";
 	}
 
 	return $failcount; # should be 0
@@ -806,8 +806,9 @@ sub bitmasksDiffer($$$) {
 		return $differingBits;
 	}
 	else {
-		print "bitmasksDiffer(): I am not supposed to compare bitmasks of differing length!\n";
-		print "\$bm1 has last index $#bm1unp and \$bm2 has last index $#bm2unp\n";
+		warn "bitmasksDiffer: ERROR: bitmasks to compare have ".
+		    "differing length: \$bm1 has last index $#bm1unp ".
+		    "and \$bm2 has last index $#bm2unp\n";
 		return ( $#bm1unp > $#bm2unp ? $#bm1unp : $#bm2unp);
 	}
 }
@@ -982,6 +983,29 @@ sub findVlan($$;$) {
 }
 
 #
+# Determine if a VLAN has any members 
+# (Used by stack->switchesWithPortsInVlan())
+#
+sub vlanHasPorts($$) {
+    my ($self, $vlan_number) = @_;
+
+    my $vlifindex = $self->getVlanIfindex($vlan_number);
+    if (!defined($vlifindex)) {
+	warn "vlanHasPorts: Could not lookup vlan index for vlan: $vlan_number\n";
+	return 0;
+    }
+
+    my $membermask = $self->getMemberBitmask($vlifindex);
+    if (!defined($membermask)) {
+	warn "vlanHasPorts: Could not get membership bitmask for blan: $vlan_number\n";
+	return 0;
+    }
+    my $setcount = pack("%32b*", $membermask);
+
+    return $setcount ? 1 : 0;
+}
+
+#
 # Create a VLAN on this switch, with the given identifier (which comes from
 # the database) and given 802.1Q tag number ($vlan_number). 
 #
@@ -1001,7 +1025,7 @@ sub createVlan($$$) {
 	
     # Check to see if the requested vlan number already exists.
     if ($self->vlanNumberExists($vlan_number)) {
-	$self->debug("ERROR: VLAN $vlan_number already exists\n");
+	warn "createVlan: WARNING: VLAN $vlan_number already exists\n";
 	return 0;
     }
 
@@ -1011,14 +1035,14 @@ sub createVlan($$$) {
 					      "INTEGER"]);
     # $RetVal will be undefined if the set failed, or "1" if it succeeded.
     if (! defined($RetVal) )  { 
-	print STDERR "VLAN Create id '$vlan_id' as VLAN $vlan_number failed.\n";
+	warn "createVlan: ERROR: VLAN Create id '$vlan_id' as VLAN $vlan_number failed.\n";
 	return 0;
     }
 
     # trying to use static ifindex offsets for vlans is unreliable.
     my $vlifindex = $self->getVlanIfindex($vlan_number);
     if (!defined($vlifindex)) {
-	print STDERR "Could not lookup vlan index for tag: $vlan_number\n";
+	warn "createVlan: Could not lookup ifindex for vlan number: $vlan_number\n";
 	return 0;
     }
     
@@ -1033,9 +1057,9 @@ sub createVlan($$$) {
     
     # $RetVal will be undefined if the set failed, or "1" if it succeeded.
     if (! defined($RetVal) )  { 
-	print STDERR "Set VLAN name to '$vlan_id' failed, ".
-		     "but VLAN $vlan_number was created! ".
-		     "Manual cleanup required.\n";
+	warn "createVlan: Set VLAN name to '$vlan_id' failed, ".
+	     "but VLAN $vlan_number was created! ".
+	     "Manual cleanup required.\n";
 	return 0;
     }
 
@@ -1082,9 +1106,7 @@ sub setPortVlan($$@) {
 	    $RetVal = $self->removeSelectPortsFromVlan($vlnum, @ports);
 	    if ($RetVal) {
 		$self->debug("setPortVlan(): error when making sure that ".
-			     "@ports are removed from vlan $vlnum!\n".
-			     "  Does it contain only tagged ports? ".
-			     "Boldly trying to go on...\n");
+			     "@ports are removed from vlan $vlnum!\n");
 	    }
 	}
     }
@@ -1121,7 +1143,7 @@ sub removeSelectPortsFromVlan($$@) {
 	# VLAN 1 is default VLAN, that's where all ports are supposed to go
 	# so trying to remove them there doesn't make sense
 	if ($vlan_number == 1) {
-	    print "removeSelectPortsFromVlan() error: attempt to remove @ports from default VLAN 1\n";
+	    warn "removeSelectPortsFromVlan: WARNING: Attempt made to remove @ports from default VLAN 1\n";
 	    return 0;
 	}
 
@@ -1141,7 +1163,7 @@ sub removeSelectPortsFromVlan($$@) {
 	# Get the ifindex of the vlan.
 	my $vlanIfindex = $self->getVlanIfindex($vlan_number);
 	if (!defined($vlanIfindex)) {
-	    print "setPortMembership: Error getting ifindex for vlan number $vlan_number!\n";
+	    warn "setPortMembership: Error getting ifindex for vlan number $vlan_number!\n";
 	    return scalar(@ports);
 	}
 
@@ -1170,7 +1192,7 @@ sub removeVlan($@) {
 		# Calculate ifIndex for this VLAN
 		my $ifIndex = $self->getVlanIfindex($vlan_number);
 		if (!defined($ifIndex)) {
-		    print "removeVlan: Error looking up vlan ifindex for vlan number $vlan_number.\n";
+		    warn "removeVlan: Error looking up vlan ifindex for vlan number $vlan_number.\n";
 		    $errors++;
 		    next;
 		}
@@ -1185,7 +1207,7 @@ sub removeVlan($@) {
 		if ( defined($RetVal) ) { 
 			print "Removed VLAN $vlan_number on switch $name.\n";
 		} else {
-		    print "removeVlan: Removal of VLAN $vlan_number failed on switch $name.\n";
+		    warn "removeVlan: ERROR: Removal of VLAN $vlan_number failed on switch $name.\n";
 		    $errors++;
 		    next;
 		}
@@ -1214,21 +1236,21 @@ sub removePortsFromVlan($@) {
 	# VLAN 1 is default VLAN, that's where all ports are supposed to go
 	# so trying to remove them there doesn't make sense
 	if ($vlan_number == 1) {
-	    print "removePortsFromVlan: attempt to remove all ports from default VLAN 1\n";
+	    warn "removePortsFromVlan: WARNING: Attempt made to remove all ports from default VLAN 1\n";
 	    next;
 	}
 
 	# Get the ifindex of the vlan.
 	my $vlanIfindex = $self->getVlanIfindex($vlan_number);
 	if (!defined($vlanIfindex)) {
-	    print "removePortsFromVlan: Error getting ifindex for vlan number $vlan_number!\n";
+	    warn "removePortsFromVlan: Error getting ifindex for vlan number $vlan_number!\n";
 	    next;
 	}
 	
 	# Get the current membership bitmask
 	my $currentBitmask = $self->getMemberBitmask($vlanIfindex);
 	if (!defined($currentBitmask)) {
-	    print "removePortsFromVlan: error getting current membership bitmask for vlan_number $vlan_number.\n";
+	    warn "removePortsFromVlan: error getting current membership bitmask for vlan_number $vlan_number.\n";
 	    # no membership bitmask => impossible to obtain number of ports
 	    # anyway => next...
 	    next;
