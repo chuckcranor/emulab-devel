@@ -355,7 +355,7 @@ function StartCountdownClock(when)
 	    var local_date = new Date(when);
 	    local_date.setHours(local_date.getHours() + timeOffsetInHours);
 
-	    var local_string = local_date.format("yyyy-mm-dd hh:mm:ss Z");
+	    var local_string = local_date.format("yyyy-mm-dd hh:MM:ss Z");
 	    $("#quickvm_expires").html(local_string);
 	}
 	
