@@ -25,7 +25,7 @@ chdir("..");
 include("defs.php3");
 include_once("osinfo_defs.php");
 include_once("geni_defs.php");
-chdir("aptb");
+chdir("apt");
 include("quickvm_sup.php");
 
 #
@@ -101,10 +101,10 @@ function SPITFORM($username, $email, $sshkey, $imageid, $newuser, $errors)
     }
 
     echo "<div class='row'>
-          <div class='col-lg-6  col-md-offset-3
+          <div class='col-lg-6  col-lg-offset-3
                       col-md-6  col-md-offset-3
-                      col-sm-8  col-md-offset-2
-                      col-xs-10 col-md-offset-1'>\n";
+                      col-sm-8  col-sm-offset-2
+                      col-xs-12 col-xs-offset-0'>\n";
     echo "<form id='quickvm_form' role='form'
             method='post' action='quickvm.php'>\n";
     echo "<div class='panel panel-default'>
@@ -167,6 +167,7 @@ function SPITFORM($username, $email, $sshkey, $imageid, $newuser, $errors)
         </div>
         </div>\n";
 
+    if (0) {
     echo "<!-- This is the modal -->
           <div id='working' class='modal fade'>
             <div class='modal-dialog'>
@@ -189,6 +190,7 @@ function SPITFORM($username, $email, $sshkey, $imageid, $newuser, $errors)
             </div>
             </div>
          </div>\n";
+    }
 
     if ($newuser) {
 	if (is_string($newuser)) {
