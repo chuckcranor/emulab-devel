@@ -233,7 +233,7 @@ function RegisterAccount(uid, email)
 var gateone_authobject = null;
 var gateone_location   = null;
 
-function InitQuickVM(uuid, location, auth_object)
+function InitQuickVM(uuid, slice_expires, location, auth_object)
 {
     // This activates the popover subsystem.
     $('[data-toggle="popover"]').popover({
@@ -242,6 +242,8 @@ function InitQuickVM(uuid, location, auth_object)
     });
     gateone_authobject = auth_object;
     gateone_location   = location;
+    StartResizeWatchdog(uuid);
+    StartCountdownClock(slice_expires);
     GetStatus(uuid);
 }
 
@@ -276,19 +278,63 @@ function StartGateOne(sshurl)
 }
 
 //
+// Install a window resize handler to redraw the topomap.
+//
+function StartResizeWatchdog(uuid)
+{
+    var resizeTimer;
+
+    //
+    // This does the actual work, called from the timer.
+    //
+    function resizeFunction() {
+	console.log("resizing topo");
+	// Must clear the div for the D3 library.
+	$("#showtopo_div").html("<div></div>");
+	$("#showtopo_div").removeClass("invisible");
+	ShowTopoNew(uuid);
+    }
+
+    //
+    // When we get (the first of a series) of resize events,
+    // we want to throw away the current topograph and set a
+    // timer that will run a little while later, to redraw
+    // it in the newly sized container. But, resize events might
+    // come pouring in as the user moves the moouse, so we just
+    // kill the old one each time, and eventually it will fire
+    // after the user stops dinking around.
+    //
+    $(window).resize(function() {
+	$("#showtopo_div").addClass("invisible");
+	
+	clearTimeout(resizeTimer);
+	resizeTimer = setTimeout(resizeFunction, 250);
+    });
+}
+
+//
 // Found this with a Google search.
 //
 function StartCountdownClock(when)
 {
+    console.log(when);
+
     // Use this static variable to force clock reset.
     StartCountdownClock.reset = when;
+
+    // Force init below
+    when = null;
     
     // Use this static variable to force clock stop
     StartCountdownClock.stop = 0;
     
-    // set the date we're counting down to
-    var target_date = new Date(when).getTime();
- 
+    // date counting down to
+    var target_date;
+
+    // Need the timezone offset to format a local time.
+    var timeOffsetInHours = (new Date().getTimezoneOffset()/60) * (-1);
+    console.log(timeOffsetInHours);
+
     // variables for time units
     var days, hours, minutes, seconds;
     
@@ -304,6 +350,13 @@ function StartCountdownClock(when)
 	if (StartCountdownClock.reset != when) {
 	    when = StartCountdownClock.reset;
 	    target_date = new Date(when).getTime();
+
+	    // Reformat in local time and show the user.
+	    var local_date = new Date(when);
+	    local_date.setHours(local_date.getHours() + timeOffsetInHours);
+
+	    var local_string = local_date.format("yyyy-mm-dd hh:mm:ss Z");
+	    $("#quickvm_expires").html(local_string);
 	}
 	
 	// find the amount of "seconds" between now and target
