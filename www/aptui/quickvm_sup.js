@@ -349,7 +349,6 @@ function StartCountdownClock(when)
 	// Clock reset
 	if (StartCountdownClock.reset != when) {
 	    when = StartCountdownClock.reset;
-	    target_date = new Date(when).getTime();
 
 	    // Reformat in local time and show the user.
 	    var local_date = new Date(when);
@@ -357,6 +356,9 @@ function StartCountdownClock(when)
 
 	    var local_string = local_date.format("yyyy-mm-dd hh:MM:ss Z");
 	    $("#quickvm_expires").html(local_string);
+
+	    // Countdown also based on local time. 
+	    target_date = local_date.getTime();
 	}
 	
 	// find the amount of "seconds" between now and target
@@ -379,13 +381,13 @@ function StartCountdownClock(when)
 	minutes = parseInt(seconds_left / 60);
 	seconds = parseInt(seconds_left % 60);
 
-	if (days < 9)
+	if (days <= 9)
 	    days = "0" + days;
-	if (hours < 9)
+	if (hours <= 9)
 	    hours = "0" + hours;
-	if (minutes < 9)
+	if (minutes <= 9)
 	    minutes = "0" + minutes;
-	if (seconds < 9)
+	if (seconds <= 9)
 	    seconds = "0" + seconds;
 
 	countdown = days + ":" + hours + ":" + minutes + ":" + seconds;  
