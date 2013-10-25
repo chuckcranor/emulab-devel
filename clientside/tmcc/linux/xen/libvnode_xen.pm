@@ -124,6 +124,7 @@ my $NETSTAT     = "/bin/netstat";
 my $IMAGEZIP    = "/usr/local/bin/imagezip";
 my $IMAGEUNZIP  = "/usr/local/bin/imageunzip";
 my $IMAGEDUMP   = "/usr/local/bin/imagedump";
+my $XM          = "/usr/sbin/xm";
 my $debug  = 0;
 
 ##
@@ -252,8 +253,8 @@ sub FreeRouteTable($);
 
 sub getXenInfo()
 {
-    open(XM,"xm info|") 
-        or die "getXenInfo: could not run 'xm info': $!";
+    open(XM,"$XM info|") 
+        or die "getXenInfo: could not run '$XM info': $!";
 
     while (<XM>) {
 	    chomp;
@@ -270,6 +271,11 @@ sub init($)
 
     makeIfaceMaps();
     makeBridgeMaps();
+
+    my $toolstack = `grep TOOLSTACK /etc/default/xen`;
+    if ($toolstack =~ /xl$/) {
+	$XM = "/usr/sbin/xl";
+    }
     getXenInfo();
 
     return 0;
@@ -1549,7 +1555,7 @@ sub vnodeBoot($$$$)
     libutil::setState("BOOTING");
 
     # and finally, create the VM
-    my $output = ExecQuiet("xm create $config");
+    my $output = ExecQuiet("$XM create $config");
     return -1
 	if (!defined($output));
 
@@ -1559,9 +1565,9 @@ sub vnodeBoot($$$$)
 	print "Hotplug Error: Retrying after a short wait.\n";
 	sleep(10);
 	
-	my $output = ExecQuiet("xm create $config");
+	my $output = ExecQuiet("$XM create $config");
 	return -1
-	    if (!defined($output));
+	    if ($?);
     }
     return -1
 	if ($?);
@@ -1582,7 +1588,7 @@ sub vnodeReboot($$$$)
     if ($vmid =~ m/(.*)/){
         $vmid = $1;
     }
-    mysystem("/usr/sbin/xm reboot $vmid");
+    mysystem("$XM reboot $vmid");
 }
 
 sub vnodeTearDown($$$$)
@@ -1641,7 +1647,7 @@ sub vnodeDestroy($$$$)
         $vnode_id = $1;
     }
     if (domainExists($vnode_id)) {
-	mysystem("/usr/sbin/xm destroy $vnode_id");
+	mysystem("$XM destroy $vnode_id");
 	# XXX hang out awhile waiting for domain to disappear
 	domainGone($vnode_id, 15);
     }
@@ -1721,8 +1727,8 @@ sub vnodeHalt($$$$)
 	# Any failure, do a destroy.
 	#
 	if ($stat) {
-	    print STDERR "xm shutdown returned $stat. Doing a destroy!\n";
-	    mysystem("/usr/sbin/xm destroy $vnode_id");
+	    print STDERR "$XM shutdown returned $stat. Doing a destroy!\n";
+	    mysystem("$XM destroy $vnode_id");
 	}
     }
     else {
@@ -1731,7 +1737,7 @@ sub vnodeHalt($$$$)
 	# Temporarily unblock and set to default so we die. 
 	#
 	local $SIG{TERM} = 'DEFAULT';
-	exec("/usr/sbin/xm shutdown -w $vnode_id");
+	exec("$XM shutdown -w $vnode_id");
 	exit(1);
     }
     return 0;
@@ -2328,7 +2334,7 @@ sub domain0Memory()
 sub totalMemory()
 {
     # returns amount in MB
-    my $meminfo = `/usr/sbin/xm info | grep total_memory`;
+    my $meminfo = `$XM info | grep total_memory`;
     if ($meminfo =~ m/\s*total_memory\s*:\s*(\d+)/){
         my $mem = int($1);
         return $mem - domain0Memory();
@@ -3004,9 +3010,17 @@ sub domainStatus($)
 {
     my ($id) = @_;
 
-    my $status = `xm list --long $id 2>/dev/null`;
-    if ($status =~ /\(state ([\w-]+)\)/) {
-	return $1;
+    if ($XM =~ /xl/) {
+	my $status = `$XM list $id | tail -n 1 | awk '{print \$5}'`;
+	if ($status =~ /([\w-]+)/) {
+	    return $1;
+	}
+    }
+    else {
+	my $status = `$XM list --long $id 2>/dev/null`;
+	if ($status =~ /\(state ([\w-]+)\)/) {
+	    return $1;
+	}
     }
     return "";
 }
