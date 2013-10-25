@@ -105,7 +105,7 @@ if [ -f "/etc/emulab/ismfs" ] ; then
     fi
 
     os=`uname -s`
-    export PATH="/usr/local/bin:$MFSPROJDIR/nodecheck/`uname -s`/bin-`uname -m`:/usr/local/bin:$MFSPROJDIR/nodecheck/bin:$PATH"
+    export PATH="/usr/local/bin:$MFSPROJDIR/nodecheck/`uname -s`/bin-`uname -m`:$PATH"
     
 #    if [ `echo $foundbash | grep nodecheck` ] ; then
 #	echo "*** Did not find expected bash in $MFSPROJDIR/$os/bin"
