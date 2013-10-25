@@ -307,6 +307,7 @@ sub ExecQuiet($)
     else {
 	open(STDERR, ">&STDOUT");
 	exec($command);
+	die("ExecQuiet: exec('$command') failed!\n");
     }
     print STDERR $output;
     if ($?) {
