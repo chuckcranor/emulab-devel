@@ -25,7 +25,7 @@ chdir("..");
 include("defs.php3");
 include_once("osinfo_defs.php");
 include_once("geni_defs.php");
-chdir("aptb");
+chdir("apt");
 include("quickvm_sup.php");
 
 $ajax_request = 0;
@@ -148,8 +148,7 @@ if (isset($ajax_request)) {
 	if ($retval == 0) {
 	    # Refresh. 
 	    $slice = GeniSlice::Lookup("sa", $quickvm->slice_uuid());
-	    $new_expires = gmdate("Y-m-d H:i:s",
-				  strtotime($slice->expires())) . " GMT";
+	    $new_expires = gmdate("Y-m-d H:i:s",strtotime($slice->expires()));
 	    
 	    SPITAJAX_RESPONSE($new_expires);
 
@@ -174,7 +173,7 @@ SPITHEADER(1);
 
 $style = "style='border: none;'";
 $slice_urn       = $slice->urn();
-$slice_expires   = gmdate("Y-m-d H:i:s", strtotime($slice->expires())) . " GMT";
+$slice_expires   = gmdate("Y-m-d H:i:s", strtotime($slice->expires()));
 $quickvm_status  = $quickvm->status();
 $sshkey          = chunk_split($creator->SSHKey(), 40);
 $creator_uid     = $creator->uid();
@@ -204,7 +203,7 @@ echo "<div class='row'>
       <div class='col-lg-6  col-lg-offset-3
                   col-md-8  col-md-offset-2
                   col-sm-8  col-sm-offset-2
-                  col-xs-10 col-xs-offset-1'>\n";
+                  col-xs-12 col-xs-offset-0'>\n";
 echo "<div class='panel panel-default'>\n";
 echo "<div class='panel-body'>\n";
 echo "<table class='table table-condensed' $style>\n";
@@ -270,7 +269,7 @@ echo "<div class='row'>
       <div class='col-lg-6  col-lg-offset-3
                   col-md-8  col-md-offset-2
                   col-sm-8  col-sm-offset-2
-                  col-xs-10 col-xs-offset-1'>\n";
+                  col-xs-12 col-xs-offset-0'>\n";
 echo "<div class='panel panel-default invisible' id='showtopo_container'>\n";
 echo "<div class='panel-body'>\n";
 echo "<div id='showtopo_div'></div>\n";
@@ -397,8 +396,8 @@ $auth_object = GateOneAuthObject($creator_uid);
 
 echo "<script src='d3.v3.js'></script>\n";
 echo "<SCRIPT LANGUAGE=JavaScript>
-                 InitQuickVM('$uuid', '$location', '$auth_object');
-                 StartCountdownClock('$slice_expires');
+                 InitQuickVM('$uuid', '$slice_expires',
+                             '$location', '$auth_object');
               </SCRIPT>\n";
 
 SPITFOOTER();
