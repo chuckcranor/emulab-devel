@@ -69,7 +69,6 @@ fi
 
 # if asked to collect need the collect dir for this project
 # (as given by tmcc hwinfo) mounted to save logs
-set -x
 if [ "$collect" = "1" ] ; then
     collectdir=`echo $testinfo | awk -F \" '{print $2}'`
     a=`echo $collectdir | awk -F \/ '{print $2}'`
@@ -120,7 +119,6 @@ if [ -f "/etc/emulab/ismfs" ] ; then
     fi
     exit 0
 fi
-set +x
 
 echo "Running nodechecks"
 # truncate file at boot time

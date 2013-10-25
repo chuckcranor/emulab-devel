@@ -43,7 +43,8 @@ fi
 [[ -z "${mfsmode-}" ]] && declare -i mfsmode=0 #are we running in a MFS?
 [[ -z "${bitsize-}" ]] && declare bitsize=""
 [[ -z "${native_bitsize-}" ]] && declare -i native_bitsize=0 # what is our native binary bit size
-[[ -z "${whichfile-}" ]] && declare whichfile=""
+[[ -z "${USE_DD-}" ]] && declare USE_DD="tdd" # if set which dd for the tdd program to use
+[[ -z "${TDD_DD-}" ]] && declare TDD_DD="dd" # if set which dd for the tdd program to use
 
 # PathNames
 [[ -z "${logfile-}" ]] && declare logfile # output log
@@ -76,18 +77,30 @@ initialize () {
 	fi
     fi
     
-    if [ -f /etc/emulab/ismfs ] ; then
-	mfsmode=1
-    else
-	mfsmode=0
-    fi
-
     bitsize=$(uname -m)
     case $bitsize in
-	i386 | x86 ) native_bitsize=32 ;;
+	i386 | x86 | i686 ) native_bitsize=32 ;;
 	amd64 | x86_64 ) native_bitsize=64 ;;
 	* ) native_bitsize=0 ;;
     esac
+
+    if [ -f /etc/emulab/ismfs ] ; then
+	mfsmode=1
+	dd=$(whichdd2use)
+	if [ "$dd" != "${dd/tdd}" ] ; then
+	    USE_DD=$dd
+	    TDD_DD=$(which dd)
+	elif [ "$dd" != "${dd/bad}" ] ; then
+	    USE_DD=$dd
+	    TDD_DD=""
+	else
+	    USE_DD=$(which dd)
+	    TDD_DD=""
+	fi
+    else
+	mfsmode=0
+	# no speed test don't have to check tdd, etc.
+    fi
 
     inithostname
     initlogs $@
@@ -815,8 +828,63 @@ getfromtb() {
     return 0
 }
 
+whichdd2use() {
+    local usetdd
+    local canwe
+    local -i bad64=0
+    
 
+    workhorsedd=$(which dd)
+    canwe=$(ls -l $workhorsedd | grep busybox)
+    [[ $canwe ]] && { echo "bad_busybox_dd"; return 0; }
 
+    # if we have a timed dd, use a timeout rather than a count
+    usetdd=$(which tdd)
+    [[ -x $usetdd ]] && { USE_DD=$usetdd; TDD_DD=$workhorsedd; usedd=$usetdd; }
+    # check compatabily, ok to have 32bit on 64bit machine
+    if [ $native_bitsize -ne 64 ] ; then
+	# check directory name of where the exectuable is installed
+	# if not 32 or not 64 then assume native binary and is ok
+	if [ "$workhorsedd" != "${workhorsedd/64}" ] ; then # it has 64 in path
+	    bad64=1
+	fi
+	# and check tdd if we are using it
+	if [ "${USE_DD}" != "${USE_DD/tdd}" ] ; then
+	    if [ "$USE_DD" != "${USE_DD/64}" ] ; then
+		bad64=1
+	    fi
+	fi
+	if [ $bad64 -eq 1 ] ; then
+	    echo "bad_64bit_dd_on_32bit_machine"
+	    return 0
+	fi
+    fi
+    echo "$usedd"
+
+    return 0
+}
+
+# call whichdd2use() before this to use correctly
+ddargs() {
+    local args=""
+    if [ "$os" == "Linux" ] ; then 
+	#args="bs=64k iflag=direct count=8000"
+	#note iflag direct can't be used with /dev/zero as infile 
+	args="bs=64k"
+    elif [ "$os" == "FreeBSD" ] ; then 
+	args="bs=64k"
+    fi
+
+    if [ "$USE_DD" != "${USE_DD/tdd}" ] ; then
+	# if we have a timed dd, use a timeout rather than a count
+	args="$args timeout=5 count=20000" # XXX paranoid: leave a count just in case
+    else
+	args="$args count=8000"
+    fi
+	
+    echo "$args"
+    return 0
+}
 
 # The timesys function terminates its script unless it terminates earlier on its own
 # args: max_time output_file command command_args

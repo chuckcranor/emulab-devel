@@ -29,8 +29,6 @@ echo -n ' Starting diskcheck..'
 
 declare error=""
 declare err=""
-[[ -z "${USE_TDD-}" ]] && declare USE_TDD=""
-
 
 source checkutils.sh
 source hbis.sh
@@ -666,61 +664,6 @@ getsectors() {
     return 0
 }
 
-whichdd2use() {
-    local usedd
-    local usetdd
-    local canwe
-    local ddbs
-    local workhouredd
-
-    usedd=$(which dd)
-    canwe=$(ls -l $usedd | grep busybox)
-    [[ $canwe ]] && { echo "bad_busybox_dd"; return 0; }
-    workhorsedd=$usedd
-
-    # if we have a timed dd, use a timeout rather than a count
-    usetdd=$(which tdd)
-    [[ -x $usetdd ]] && { USE_TDD=$usetdd; export TDD_DD=$usedd; usedd=$usetdd; } # the wapper tdd will use /bin/dd by default but this var will override
-
-    # check compatabily, ok to have 32bit on 64bit machine
-    if [ $native_bitsize -ne 64 ] ; then
-	ddbs=$(file -L $workhorsedd)
-	if [ "$ddbs" != "${ddbs/64}" ] ; then
-	    echo "bad_64bit_dd_on_32bit_machine"
-	    return 0
-	fi
-	if [ "${USE_TDD}" != "${USE_TDD/tdd}" ] ; then
-	    ddbs=$(file -L $USE_TDD)
-	    if [ "$ddbs" != "${ddbs/64}" ] ; then
-		echo "bad_64bit_ddt_on_32bit_machine"
-		return 0
-	    fi
-	fi
-    fi
-    echo "$usedd"
-    return 0
-}
-
-# call whichdd2use() before this to use correctly
-ddargs() {
-    local args=""
-    if [ "$os" == "Linux" ] ; then 
-	#args="bs=64k iflag=direct count=8000"
-	#note iflag direct can't be used with /dev/zero as infile 
-	args="bs=64k"
-    elif [ "$os" == "FreeBSD" ] ; then 
-	args="bs=64k"
-    fi
-    if [ "$USE_TDD" != "${USE_TDD/tdd}" ] ; then
-	# if we have a timed dd, use a timeout rather than a count
-	args="$args timeout=5 count=20000" # XXX paranoid: leave a count just in case
-    else
-	args="$args count=8000"
-    fi
-	
-    echo "$args"
-    return 0
-}
 
 getwspeed() {
     hdname=$1
@@ -728,11 +671,12 @@ getwspeed() {
     canwe=$(df | grep $hdname)
     [[ $canwe ]] && { echo mounted; return 0; }
 
-    dd=$(whichdd2use)
+    dd=$USE_DD
     [[ -x $dd ]] || { echo "$dd"; return 0; }
     args=$(ddargs)
 
     add_on_exit 'rm -f /tmp/ddresultw'
+    [[ -n "$TDD_DD" ]] && export TDD_DD
     $dd if=/dev/zero of=$hdname $args >/tmp/ddresultw 2>&1
     res=$(grep bytes /tmp/ddresultw)
 
@@ -744,11 +688,12 @@ getrspeed() {
     hdname=$1
 
     # do we have a working dd
-    dd=$(whichdd2use)
+    dd=$USE_DD
     [[ -x $dd ]] || { echo "$dd"; return 0; }
     args=$(ddargs)
 
     add_on_exit 'rm -f /tmp/ddresultr'
+    [[ -n "$TDD_DD" ]] && export TDD_DD
     $dd of=/dev/null if=$hdname $args >/tmp/ddresultr 2>&1
     res=$(grep bytes /tmp/ddresultr)
 
