@@ -168,7 +168,6 @@ if (defined($options{"d"})) {
 if (defined($options{"t"})) {
     if (!defined($datetime)) {
 	$datetime  = time() - $options{"t"};
-	$datelimit = time();
     }
     else {
 	$datelimit = $datetime;
@@ -448,7 +447,7 @@ while (my %row = $query_result->fetchhash()) {
 	 [ $node, $opideid, $oidx, $ouid, $ostamp, $elapsed, $ohistory_id ]);
 }
 
-if (!$datetime) {
+if (!$datelimit) {
     # Include the current state of nodes in a final record
     my $stamp = time();
     for $node (keys(%nodeinfo)) {
@@ -470,7 +469,7 @@ for my $rec (@rawrecords) {
 
     #print "RR: $node, $elapsed\n";
 
-    if (!defined($nodestats{$node})) {
+    if (!exists($nodestats{$node})) {
 	$nodestats{$node} = [ 0, 0, 0, 0 ];
     }
     my ($ftime, $atime, $rtime, $dtime) = @{$nodestats{$node}};
@@ -543,7 +542,7 @@ if (@records) {
 #
 my ($t_ftime, $t_atime, $t_rtime, $t_dtime) = (0, 0, 0, 0);
 for $node (sort keys(%nodestats)) {
-    if ($summary && defined($nodestats{$node})) {
+    if ($summary) {
 	my ($ftime, $atime, $rtime, $dtime) = @{$nodestats{$node}};
 	my $ttime = $ftime + $atime + $rtime + $dtime;
 
@@ -580,7 +579,14 @@ if ($verbose) {
     my $n = scalar(keys %nodestats);
     my $pct;
 
-    print "TOTAL ($n nodes)\n";
+    print "TOTAL ($n nodes";
+    if ($datelimit) {
+	print " from ", scalar(localtime($datetime)),
+	      " to ", scalar(localtime($datelimit));
+    } elsif ($datetime) {
+	print " since ", scalar(localtime($datetime));
+    }
+    print ")\n";
     if ($t_atime > 0) {
 	$pct = ($t_atime * 100) / $ttime;
 	printf("  Allocted:  %9d sec (%5.1f%%)\n", $t_atime, $pct);
