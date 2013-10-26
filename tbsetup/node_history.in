@@ -290,7 +290,7 @@ if ($datetime) {
 	    }
 	    else {
 		$nodeinfo{$node} =
-		    [ $pideid, $exptidx, $stamp, $uid. $history_id ];
+		    [ $pideid, $exptidx, $stamp, $uid, $history_id ];
 	    }
 	}
 	elsif ($op eq "free" || $op eq "destroy") {
@@ -368,6 +368,8 @@ my $query_result =
 		 "WHERE node_history.exptidx=experiment_stats.exptidx ".
 		 "$querymod $orderby $limitby");
 
+my $lastid = 0;
+my $laststamp = 0;
 while (my %row = $query_result->fetchhash()) {
     my $pideid = "$row{pid}/$row{eid}";
     my $exptidx = $row{"exptidx"};
@@ -376,11 +378,17 @@ while (my %row = $query_result->fetchhash()) {
     my $uid = $row{uid};
     my $history_id = $row{"history_id"};
 
+    if ($stamp < $laststamp) {
+	print STDERR "$node ($pideid): timestamp decrease $laststamp (ID:$lastid) to $stamp (ID: $history_id)\n" if ($warnme);
+    }
+    $lastid = $history_id;
+    $laststamp = $stamp;
+
     #
     # XXX if this is the first record for a node, consider it as free
     # from the epoch (or the low date specified) til now.
     #
-    if (!defined($nodeinfo{$node})) {
+    if (!exists($nodeinfo{$node})) {
 	my $ts = $nodestarts{$node};
 	$nodeinfo{$node} = [ "", undef, ($ts ? $ts : $epoch),
 			     "root", $history_id ];
@@ -395,7 +403,7 @@ while (my %row = $query_result->fetchhash()) {
     #
     if ($row{op} eq "alloc") {
 	if ($opideid ne "") {
-	    print STDERR "$node: dup alloc: already allocated to $opideid\n"
+	    print STDERR "$node (ID: $history_id): dup alloc: already allocated to $opideid\n"
 		if ($warnme);
 	    # XXX possibly missing state in the DB, treat as move
 	}
@@ -407,7 +415,7 @@ while (my %row = $query_result->fetchhash()) {
     #
     elsif ($row{op} eq "free") {
 	if ($opideid ne $pideid) {
-	    print STDERR "$node: mismatched alloc,free records: $opideid,$pideid\n"
+	    print STDERR "$node (ID: $history_id): mismatched alloc,free records: $opideid,$pideid\n"
 		if ($warnme);
 	}
 	$nodeinfo{$node} = [ "", undef, $stamp, $uid, $history_id ];
@@ -426,7 +434,7 @@ while (my %row = $query_result->fetchhash()) {
     }
     elsif ($row{op} eq "create") {
 	if ($opideid ne "") {
-	    print STDERR "$node: dup alloc: already allocated to $opideid\n"
+	    print STDERR "$node (ID: $history_id): dup alloc: already allocated to $opideid\n"
 		if ($warnme);
 	    # XXX possibly missing state in the DB.
 	}
@@ -434,7 +442,7 @@ while (my %row = $query_result->fetchhash()) {
     }
     elsif ($row{op} eq "destroy") {
 	if ($opideid ne $pideid) {
-	    print STDERR "$node: mismatched create,destroy records: ".
+	    print STDERR "$node (ID: $history_id): mismatched create,destroy records: ".
 		"$opideid,$pideid\n"
 		if ($warnme);
 	}
@@ -551,7 +559,7 @@ for $node (sort keys(%nodestats)) {
 	    print "$node SUMMARY\n";
 	    if ($atime > 0) {
 		$pct = ($atime * 100) / $ttime;
-		printf("  Allocted:  %9d sec (%5.1f%%)\n", $atime, $pct);
+		printf("  Allocated: %9d sec (%5.1f%%)\n", $atime, $pct);
 		$t_atime += $atime;
 	    }
 	    if ($ftime > 0) {
