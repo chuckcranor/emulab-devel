@@ -52,15 +52,16 @@ my $coder = Frontier::RPC2->new('use_objects' => 1);
 sub GetVersion()
 {
     my $blob = {
-	"VERSION" => $coder->string("0.1"),
-	"CREDENTIAL_TYPES" => ["SFA"]
+	"VERSION" => $coder->string("0.2"),
+	"CREDENTIAL_TYPES" => ["SFA"], #=> [$coder->string("3")]],
+	"SERVICES" => ["MEMBER"]
     };
     return GeniResponse->Create(GENIRESPONSE_SUCCESS, $blob);
 }
 
 sub LookupPublic($)
 {
-    my ($options) = @_;
+    my ($credential_args, $options) = @_;
 
     my ($match, $filter) = GeniStd::GetMatchFilter($options);
 
@@ -170,14 +171,14 @@ sub GetCredentials($$$)
 {
     my ($member_urn, $credential_args, $options) = @_;
 
-    my $credential = GeniSA::GetCredential($member_urn);
+    my $credential = GeniSA::GetCredential({ "urn" => $member_urn });
     return $credential
-	if (GeniResponse::IsResponse($credential));
+	if (GeniResponse::IsError($credential));
 
     my $blob = {
-	"geni_type" => "sfa",
+	"geni_type" => "geni_sfa",
 	"geni_version" => $coder->string("3"),
-	"geni_credential" => $credential->value()
+	"geni_value" => $credential->{"value"}
     };
 
     return GeniResponse->Create(GENIRESPONSE_SUCCESS, [$blob]);

@@ -54,12 +54,14 @@ sub FilterCredentials
 {
     my ($credentials) = @_;
     my $result = [];
-    foreach my $cred (@{ $credentials }) {
-	if (ref($cred) eq "HASH" &&
-	    $cred->{'geni_type'} eq "geni_sfa" &&
-	    ($cred->{'geni_version'} eq 2 || $cred->{'geni_version'} eq 3)) {
-	    push(@{ $result }, $cred->{'geni_value'});
-	    auto_add_sa($cred->{'geni_value'});
+    if (defined($credentials)) {
+	foreach my $cred (@{ $credentials }) {
+	    if (ref($cred) eq "HASH" &&
+		$cred->{'geni_type'} eq "geni_sfa" &&
+		($cred->{'geni_version'} eq 2 || $cred->{'geni_version'} eq 3)) {
+		push(@{ $result }, $cred->{'geni_value'});
+		auto_add_sa($cred->{'geni_value'});
+	    }
 	}
     }
     return $result;
@@ -353,13 +355,20 @@ sub CheckCredentials($)
 sub FilterFields($$)
 {
     my ($blob, $filterList) = @_;
+    my $hasFilter = 0;
+    if (defined($filterList)) {
+	$hasFilter = 1;
+    }
     my $filter = {};
-    foreach my $item ( @{ $filterList } ) {
-	$filter->{$item} = 1;
+    if ($hasFilter)
+    {
+	foreach my $item ( @{ $filterList } ) {
+	    $filter->{$item} = 1;
+	}
     }
     my $result = {};
     foreach my $key (keys(%{ $blob })) {
-	if (defined($filter) && exists($filter->{$key})) {
+	if (! $hasFilter || exists($filter->{$key})) {
 	    $result->{$key} = $blob->{$key};
 	}
     }
@@ -375,6 +384,7 @@ sub GetMatchFilter($)
     if (exists($options->{'match'})) {
 	push(@{ $match }, getMaybeArray($options->{'match'}->{'MEMBER_URN'}));
 	push(@{ $match }, getMaybeArray($options->{'match'}->{'MEMBER_UID'}));
+	push(@{ $match }, getMaybeArray($options->{'match'}->{'SLICE_URN'}));
     }
 
 

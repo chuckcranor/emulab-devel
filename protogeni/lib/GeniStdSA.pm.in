@@ -49,12 +49,14 @@ use GeniRegistry;
 use emutil;
 use Data::Dumper;
 
+my $coder = Frontier::RPC2->new('use_objects' => 1);
+
 sub GetVersion()
 {
     my $blob = {
-	"VERSION" => "0.1",
-	"SERVICES" => ["SLICE", "SLICE_INFO", "SLICE_MEMBER"],
-	"CREDENTIAL_TYPES" => ["SFA"],
+	"VERSION" => $coder->string("0.1"),
+	"SERVICES" => ["SLICE", "SLIVER_INFO", "SLICE_MEMBER"],
+	"CREDENTIAL_TYPES" => ["SFA"], # => [$coder->string("3")]],
 	"ROLES" => ["AUTHORITY", "ADMIN", "MEMBER"]
     };
     return GeniResponse->Create(GENIRESPONSE_SUCCESS, $blob);
@@ -91,8 +93,8 @@ sub CreateSlice($$)
     my $sliceCred = GeniCredential->CreateFromSigned(GeniResponse::value($response));
     my $blob = {
 	"SLICE_URN" => $sliceCred->target_urn(),
-	"SLICE_EXPIRATION" => $sliceCred->expires(),
-	"SLICE_CREDENTIAL" => GeniResponse::value($response)
+	"SLICE_EXPIRATION" => $sliceCred->expires()
+#	,"SLICE_CREDENTIAL" => GeniResponse::value($response)
     };
     return GeniResponse->Create(GENIRESPONSE_SUCCESS, $blob);
 }
@@ -114,24 +116,24 @@ sub LookupSlices()
 
     my $members = {};
     if (defined($match)) {
+	print STDERR "-- DEFINED\n";
 	foreach my $key (@{ $match }) {
-	    my $slice = GeniSlice->Lookup($key, 0);
+	    print STDERR "-- foreach\n";
+	    my $slice = GeniSlice->Lookup($key);
 	    if (defined($slice)) {
-		my $blob = {};
-		GeniStd::addField($blob, "SLICE_URN", $slice->urn(),
-				  $filter);
-		GeniStd::addField($blob, "SLICE_UID", $slice->uid(),
-				  $filter);
-		GeniStd::addField($blob, "SLICE_CREATION", $slice->created(),
-				  $filter);
-		GeniStd::addField($blob, "SLICE_EXPIRATION", $slice->expires(),
-				  $filter);
-		GeniStd::addField($blob, "EXPIRED", "False",
-				  $filter);
-		GeniStd::addField($blob, "SLICE_NAME", $slice->hrn(),
-				  $filter);
-		GeniStd::addField($blob, "SLICE_DESCRIPTION", "A Slice",
-				  $filter);
+		print STDERR "-- found slice\n";
+		my $completeblob = {
+		    "SLICE_URN"         => $slice->urn(),
+		    "SLICE_UID"         => $slice->uuid(),
+		    "SLICE_CREATION"    => $slice->created(),
+		    "SLICE_EXPIRATION"  => $slice->expires(),
+		    "SLICE_EXPIRED"     => "False",
+		    "SLICE_NAME"        => $slice->hrn(),
+		    "SLICE_DESCRIPTION" => "A Slice",
+		    "SLICE_PROJECT_URN" => "Unimplemented"
+		};
+		my $blob = GeniStd::FilterFields($completeblob, $filter);
+		$members->{$slice->urn()} = $blob;
 	    }
 	}
     }
@@ -155,14 +157,14 @@ sub GetCredentials()
 	return GeniResponse->MalformedArgsResponse('Requires a slice urn, a list of credentials, and an options field');
     }
 
-    my $credential = GeniSA::GetCredential($slice_urn);
+    my $credential = GeniSA::GetCredential({ "urn" => $slice_urn });
     return $credential
-	if (GeniResponse::IsResponse($credential));
+	if (GeniResponse::IsError($credential));
 
     my $blob = {
-	"geni_type" => "sfa",
-	"geni_type" => "3",
-	"geni_credential" => GeniResponse::value($credential)
+	"geni_type" => "geni_sfa",
+	"geni_version" => $coder->string("3"),
+	"geni_value" => $credential->{"value"}
     };
 
     return GeniResponse->Create(GENIRESPONSE_SUCCESS, [$blob]);
