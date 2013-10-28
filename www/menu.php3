@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2012 University of Utah and the Flux Group.
+# Copyright (c) 2000-2013 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -865,6 +865,10 @@ function PAGEBEGINNING( $title, $nobanner = 0, $nocontent = 0,
                       src='${BASEPATH}/js/inline-console.js'></script>\n";
     }
     echo "</head><body>\n";
+
+    if ($TBMAINSITE && file_exists("google-analytics.php")) {
+	readfile("google-analytics.php");
+    }
     
     if ($autorefresh) {
 	echo "<meta HTTP-EQUIV=\"Refresh\" content=\"$autorefresh\">\n";
