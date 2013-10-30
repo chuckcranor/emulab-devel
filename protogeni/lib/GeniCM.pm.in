@@ -2756,10 +2756,13 @@ sub SliverWorkAux($$$$$$$$)
     }
     my $realuser = FlipToUser($slice, $owner);
     if (!defined($realuser) || !$realuser) {
-	$response = GeniResponse->Create(GENIRESPONSE_ERROR, undef,
-					 "FlipToUser Error");
+	$slice->UnLock();
+	$ticket->UnLock()
+	    if (defined($ticket));
+	
 	print STDERR "Error flipping to real user\n";
-	goto bad;
+	return GeniResponse->Create(GENIRESPONSE_ERROR, undef,
+				    "FlipToUser Error");
     }
     my $pid = $experiment->pid();
     my $eid = $experiment->eid();
@@ -3090,6 +3093,7 @@ sub SliverWorkAux($$$$$$$$)
     else {
 	$experiment->PreSwap($realuser->emulab_user(),
 			     $Experiment::EXPT_SWAPIN, EXPTSTATE_SWAPPED());
+	$experiment->SetState(EXPTSTATE_ACTIVATING());
     }
     $didpreswap = 1;
     
