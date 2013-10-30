@@ -675,16 +675,23 @@ sub GenDefsFile($)
 	if (defined($this_user)) {
 	    my $uid_idx = $this_user->uid_idx();
 	    $query_result =
-		DBQueryFatal("select distinct o.pid,o.osname from os_info as o ".
-			 "left join image_permissions as p1 on ".
-			 "     p1.imageid=o.osid and p1.permission_type='group' ".
-			 "left join image_permissions as p2 on ".
-			 "     p2.imageid=o.osid and p2.permission_type='user' ".
-			 "left join group_membership as g on ".
-			 "     g.gid_idx=p1.permission_idx ".
-			 "where o.ezid!=0 and ".
-			 "      (g.uid_idx='$uid_idx' or ".
-			 "       p2.permission_idx='$uid_idx')");
+		DBQueryFatal("SELECT o.pid,o.osname FROM ".
+			     "  os_info AS o, ".
+			     "  image_permissions AS p ".
+			     "WHERE o.ezid!=0 ".
+			     "  AND p.imageid=o.osid ".
+			     "  AND p.permission_type='user' ".
+			     "  AND p.permission_idx='$uid_idx' ".
+			     "UNION DISTINCT ".
+			     "SELECT o.pid,o.osname FROM ".
+			     "  os_info AS o, ".
+			     "  image_permissions AS p, ".
+			     "  group_membership as g ".
+			     "WHERE o.ezid!=0 ".
+			     "  AND p.imageid=o.osid ".
+			     "  AND p.permission_type='group' ".
+			     "  AND p.permission_idx=g.gid_idx ".
+			     "  AND g.uid_idx='$uid_idx'");
 
 	    while (my ($pid,$osname) = $query_result->fetchrow_array()) {
 		print TCL "set osids($pid/$osname) 1\n";
