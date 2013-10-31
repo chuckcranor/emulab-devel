@@ -1234,6 +1234,9 @@ sub RenewSlice($)
     my $slice_urn    = $argref->{'slice_urn'};
     my $valid_until  = $argref->{'valid_until'} || $argref->{'expiration'};
     my $credentials  = $argref->{'credentials'};
+    my $alap         = 0;
+    # extend as long as possible.
+    $alap = $argref->{'alap'} if (exists($argref->{'alap'}));
 
     if (! (defined($credentials) && defined($slice_urn))) {
 	return GeniResponse->MalformedArgsResponse("Missing arguments");
@@ -1262,7 +1265,8 @@ sub RenewSlice($)
 	return GeniResponse->Create(GENIRESPONSE_FORBIDDEN(), undef,
 				    "Credential does not match the URN");
     }
-    return GeniCM::RenewSliverAux([$credential, @morecreds], $valid_until);
+    return GeniCM::RenewSliverAux([$credential, @morecreds],
+				  $valid_until, $alap);
 }
 
 #

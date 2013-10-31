@@ -564,8 +564,14 @@ sub RenewSliver()
     my $renew_args = {
         'slice_urn' => $slice_urn,
         'expiration' => $expiration_time,
-        'credentials' => $credentials
+        'credentials' => $credentials,
+	'alap' => 0,
     };
+    # extend as long as possible.
+    if (exists($options->{'geni_extend_alap'}) &&
+	$options->{'geni_extend_alap'}) {
+	$renew_args->{'alap'} = 1;
+    }
     my $response = GeniCMV2::RenewSlice($renew_args);
     if (GeniResponse::IsError($response)) {
         return $response;
@@ -573,7 +579,9 @@ sub RenewSliver()
 
     # Return an XML-RPC boolean
     my $coder = Frontier::RPC2->new();
-    return GeniResponse->Create(GENIRESPONSE_SUCCESS, $coder->boolean(1));
+    return GeniResponse->Create(GENIRESPONSE_SUCCESS,
+				GeniResponse::value($response),
+				GeniResponse::value($response));
 }
 
 sub Shutdown()
@@ -933,8 +941,14 @@ sub Renew
     my $args = {
 	'slice_urn' => $urns[0],
 	'expiration' => $expiration_time,
-	'credentials' => $credentials
+	'credentials' => $credentials,
+	'alap' => 0,
     };
+    # extend as long as possible.
+    if (exists($options->{'geni_extend_alap'}) &&
+	$options->{'geni_extend_alap'}) {
+	$args->{'alap'} = 1;
+    }
     my $response = GeniCMV2::RenewSlice($args);
     if (! GeniResponse::IsError($response)) {
 	my $description = Describe($urn_args, $credential_args, []);

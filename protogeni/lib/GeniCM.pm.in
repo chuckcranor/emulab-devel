@@ -615,7 +615,7 @@ sub GetTicketAuxAux($$$$$$$$$$)
 	}
 	# Note "checkonly" flag; we do not actually change the slice
 	# until the ticket is redeemed. 
-	my $tmp = SetSliceExpiration($slice, $expires, 1, @{ $credentials });
+	my $tmp = SetSliceExpiration($slice, $expires, 1, 0, @{ $credentials });
 	if (GeniResponse::IsResponse($tmp)) {
 	    return $tmp;
 	}
@@ -2862,7 +2862,7 @@ sub SliverWorkAux($$$$$$$$)
 	    $message = "Illegal valid_until in rspec";
 	    goto bad;
 	}
-	my $tmp = SetSliceExpiration($slice, $expires, 0, $credential);
+	my $tmp = SetSliceExpiration($slice, $expires, 0, 0, $credential);
 	if (GeniResponse::IsResponse($tmp)) {
 	    $message = GeniResponse::output($tmp);
 	    goto bad;
@@ -3943,12 +3943,12 @@ sub RenewSlice($)
     return $credential
 	if (GeniResponse::IsResponse($credential));
 
-    return RenewSliverAux([$credential], $expires);
+    return RenewSliverAux([$credential], $expires, 0);
 }
 
-sub RenewSliverAux($$)
+sub RenewSliverAux($$$)
 {
-    my ($credentials, $expires) = @_;
+    my ($credentials, $expires, $alap) = @_;
     my $credential  = $credentials->[0];
     my $message     = "Error renewing aggregate";
     my $when;
@@ -3971,7 +3971,8 @@ sub RenewSliverAux($$)
 	$message = "Slice has been shutdown";
 	goto bad;
     }
-    my $response = SetSliceExpiration($slice, $expires, 0, @{ $credentials });
+    my $response = SetSliceExpiration($slice,
+				      $expires, 0, $alap, @{ $credentials });
     if (GeniResponse::IsError($response)) {
 	$slice->UnLock();
 	return $response;
@@ -3984,7 +3985,7 @@ sub RenewSliverAux($$)
 	GeniCredential->DeleteForTarget($aggregate);
     }
     $slice->UnLock();
-    return GeniResponse->Create(GENIRESPONSE_SUCCESS);
+    return GeniResponse->Create(GENIRESPONSE_SUCCESS, $slice->ExpirationGMT());
 
   bad:
     $slice->UnLock();
@@ -5858,8 +5859,20 @@ sub GeniExperiment($;$)
 	    return GeniResponse->Create(GENIRESPONSE_ERROR, undef,
 					"Slice name already exists");
 	}
-	return GeniResponse->Create(GENIRESPONSE_ERROR, undef,
+	my $digest = sha1_hex($urn);
+	$digest = substr($digest, 0, 8);
+	$eid = lc("e${digest}");
+	if (! Experiment->ValidEID($eid)) {
+	    print STDERR "Cannot form a unique eid for $urn\n";
+	    return GeniResponse->Create(GENIRESPONSE_ERROR, undef,
+					"Cannot form a unique eid");
+	}
+	$experiment = Experiment->Lookup($project->pid(), $eid);
+	if (defined($experiment)) {
+	    return GeniResponse->Create(GENIRESPONSE_ERROR, undef,
 					"Slice name already exists");
+	}
+	print STDERR "Converted $urn to unique eid $eid\n";
     }
 
     #
@@ -6356,9 +6369,11 @@ sub KillMonitor($)
 #
 # Helper function to compute expiration time.
 #
-sub SetSliceExpiration($$$@)
+# alap => extend as long as possible
+#
+sub SetSliceExpiration($$$$@)
 {
-    my ($slice, $expiration, $checkonly, @credentials) = @_;
+    my ($slice, $expiration, $checkonly, $alap, @credentials) = @_;
     my $message     = "Error renewing sliver";
     my $when;
     
@@ -6463,9 +6478,14 @@ sub SetSliceExpiration($$$@)
 	}
     }
     elsif ($diff > (3600 * 24 * $max_sliver_lifetime)) {
-	$message = "expiration increment is greater then the maximum number ".
-	    "(" . (60 * 24 * $max_sliver_lifetime) . ") of minutes";
-	goto bad;
+	if ($alap) {
+	    $when = time() + (3600 * 24 * $max_sliver_lifetime);
+	}
+	else {
+	    $message = "expiration increment is greater then the maximum ".
+	    "number (" . (60 * 24 * $max_sliver_lifetime) . ") of minutes";
+	    goto bad;
+	}
     }
     if (!$checkonly && $slice->SetExpiration($when) != 0) {
 	$message = "could not set expiration time";
