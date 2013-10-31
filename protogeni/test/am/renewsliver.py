@@ -1,6 +1,6 @@
 #! /usr/bin/env python
 #
-# Copyright (c) 2008-2010 University of Utah and the Flux Group.
+# Copyright (c) 2008-2013 University of Utah and the Flux Group.
 # 
 # {{{GENIPUBLIC-LICENSE
 # 
@@ -93,13 +93,17 @@ print "Renewed the slice, asking for slice credential again";
 slicecred = get_slice_credential( myslice, mycredential )
 print "Got the slice credential, renewing the sliver";
 
-params = [SLICEURN, [slicecred], valid_until]
+params = [SLICEURN, [slicecred], valid_until, {"geni_extend_alap": 1}]
 try:
     response = do_method("am/2.0", "RenewSliver", params,
                          response_handler=geni_am_response_handler)
     if response:
-        print "Sliver has been renewed until " + valid_until
+        if response["code"]["geni_code"]:
+            Fatal("Could not renew sliver: %s" % response["output"])
+        else:
+            print "Sliver has been renewed until " + response["value"]
+            pass
     else:
-        print "Renewal request denied by aggregate."
+        print "Renewal failed at aggregate."
 except xmlrpclib.Fault, e:
     Fatal("Could not renew sliver: %s" % (str(e)))
