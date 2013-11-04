@@ -1364,9 +1364,21 @@ sub listVlans($) {
 		$modport =~ s/\./\//;
 		$node = Port->LookupByStringForced($self->{NAME} . ".$modport");
 	    }
-	    my $pcport = $node->getPCPort();
-	    $self->debug("$devicename:$vlan_number $node:$pcport\n", 3);
-	    push @{$Members{$vlan_number}}, $pcport;
+	    # Let's be clear about what kind of connection this is and
+	    # get the right port object.  If there is an endpoint here,
+	    # get that.  If this is a trunk, then the member we want to
+	    # put in the list is the "local" side (this switch's port).
+	    my $mbrport;
+	    if ($node->is_trunk_port()) {
+		$mbrport = $node;
+	    } else {
+		# getOtherEndPort() will return the object upon which the
+		# method is invoked if it fails to lookup the other side.
+		$mbrport = $node->getOtherEndPort();
+	    }
+	    push @{$Members{$vlan_number}}, $mbrport;
+	    $self->debug("$devicename:$vlan_number $node:$mbrport\n", 3);
+
 	    if (!$Names{$vlan_number}) {
 		$self->debug("listVlans: WARNING: port $node in non-existant " .
 		    "VLAN $vlan_number\n", 1);

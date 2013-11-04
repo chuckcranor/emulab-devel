@@ -55,9 +55,14 @@ use vars qw(@ISA @EXPORT);
 @EXPORT = qw ( );
 
 use libdb;
+use EmulabConstants;
 use English;
 use Data::Dumper;
 use overload ('""' => 'Stringify');
+
+# Local constants
+my $WIRE_END_NODE   = "node";
+my $WIRE_END_SWITCH = "switch";
 
 # Cache of port instances
 # node:iface OR node:card.port => Port Instance
@@ -345,6 +350,11 @@ sub fake_IfaceString2TripleTokens($;$)
 # This is useful when a port string is derived from the switch, but
 # it is not stored in DB. (eg. listing all ports on a switch)
 #
+# Note from RPR: We have never represented the switch side of
+# [interfaces] (except trunks) in the database. Most 'wires' table
+# entries have a "real" [interface] on the PC side, but are just
+# dangling references on the switch side.
+#
 sub LookupByStringForced($$)
 {
     my ($class, $str) = @_;
@@ -381,25 +391,34 @@ sub LookupByStringForced($$)
     }
     
     if (defined($port)) {
-	my $rowref = {};
+	my $irowref = {};
+	my $wrowref = {};
 	
 	$inst->{"RAW_STRING"} = $str;
 	$inst->{"FORCED"} = 1;
 	$inst->{"HAS_FIELDS"} = 1;
 	
-	$rowref->{'iface'} = $iface;
-	$rowref->{'node_id'} = $nodeid;
-	$rowref->{'card'} = $card;
-	$rowref->{'port'} = $port;
-	$rowref->{'mac'} = "";
-	$rowref->{'IP'} = "";
-	$rowref->{'role'} = "";
-	$rowref->{'interface_type'} = "";
-	$rowref->{'mask'} = "";
-	$rowref->{'uuid'} = "";
-	$rowref->{'trunk'} = 0;
-	$rowref->{'trunk_mode'} = "equal";
-	$inst->{"INTERFACES_ROW"} = $rowref;
+	$irowref->{'iface'} = $iface;
+	$irowref->{'node_id'} = $nodeid;
+	$irowref->{'card'} = $card;
+	$irowref->{'port'} = $port;
+	$irowref->{'mac'} = "";
+	$irowref->{'IP'} = "";
+	$irowref->{'role'} = "";
+	$irowref->{'interface_type'} = "";
+	$irowref->{'mask'} = "";
+	$irowref->{'uuid'} = "";
+	$irowref->{'trunk'} = 0;
+	$irowref->{'trunk_mode'} = "equal";
+	$inst->{"INTERFACES_ROW"} = $irowref;
+
+	# XXX: Incomplete, but if the port isn't in the wires table,
+	# what are we to do?  We know nothing about the other end.
+	$wrowref->{'type'} = TBDB_WIRETYPE_UNUSED();
+	$wrowref->{'node_id1'} = $nodeid;
+	$wrowref->{'card1'} = $card;
+	$wrowref->{'port1'} = $port;
+	$inst->{"WIRES_ROW"} = $wrowref;
     }
     else {
 	$inst->{"RAW_STRING"} = $str;
@@ -411,7 +430,7 @@ sub LookupByStringForced($$)
     # We should determine this according to the query result
     # in nodes table by nodeid.
     #
-    $inst->{"WIRE_END"} = "switch";
+    $inst->{"WIRE_END"} = $WIRE_END_SWITCH;
     
     bless($inst, $class);
     return $inst;
@@ -467,24 +486,27 @@ sub LookupByIface($$;$)
     # wire mapping
     $query_result =
 	DBQueryWarn("select * from wires ".
-		    "where node_id1='$nodeid' AND card1='$card' AND port1='$port'");
+		    "where (node_id1='$nodeid' AND card1='$card' AND port1='$port') OR (node_id2='$nodeid' AND card2='$card' AND port2='$port')");
     return undef
-	if (!$query_result);
-
-    $inst->{"WIRE_END"} = "pc";
-    
-    if (!$query_result->numrows) {
-	$query_result =
-	    DBQueryWarn("select * from wires ".
-		    "where node_id2='$nodeid' AND card2='$card' AND port2='$port'");
-	return undef
-	    if (!$query_result);
-	return undef
-	    if (!$query_result->numrows);
-	$inst->{"WIRE_END"} = "switch";
-    }
+	if (!$query_result or !$query_result->numrows);
 
     $rowref = $query_result->fetchrow_hashref();
+    if ($rowref->{'type'} eq TBDB_WIRETYPE_NODE() ||
+	$rowref->{'type'} eq TBDB_WIRETYPE_CONTROL()) {
+	if ($rowref->{'node_id1'} eq $nodeid) {
+	    $inst->{"WIRE_END"} = $WIRE_END_NODE;
+	} else {
+	    $inst->{"WIRE_END"} = $WIRE_END_SWITCH;
+	}
+    } elsif ($rowref->{'type'} eq TBDB_WIRETYPE_TRUNK()) {
+	$inst->{"WIRE_END"} = $WIRE_END_SWITCH;
+    } elsif ($rowref->{'node_id2'} eq $nodeid) {
+	$inst->{"WIRE_END"} = $WIRE_END_SWITCH;	
+    } else {
+	# XXX: Other cases are unhandled for now...
+	return undef;
+    }
+
     $inst->{"WIRES_ROW"} = $rowref;
     $inst->{"FORCED"} = 0;
     $inst->{"HAS_FIELDS"} = 1;
@@ -522,28 +544,36 @@ sub LookupByTriple($$;$$)
 	return $allports{$strtriple};
     }
 
+    my $inst = {};
+
     # wire mapping:
     my $query_result =
 	DBQueryWarn("select * from wires ".
-		    "where node_id1='$nodeid' AND card1='$card' AND port1='$port'");
+		    "where (node_id1='$nodeid' AND card1='$card' AND port1='$port') OR (node_id2='$nodeid' AND card2='$card' AND port2='$port')");
     return undef
-	if (!$query_result);
-
-    my $inst = {};
-    $inst->{"WIRE_END"} = "pc";
-    
-    if (!$query_result->numrows) {
-	$query_result =
-	    DBQueryWarn("select * from wires ".
-		    "where node_id2='$nodeid' AND card2='$card' AND port2='$port'");
-	return undef
-	    if (!$query_result);
-	return undef
-	    if (!$query_result->numrows);
-	$inst->{"WIRE_END"} = "switch";
-    }
+	if (!$query_result or !$query_result->numrows);
 
     my $rowref = $query_result->fetchrow_hashref();
+    if ($rowref->{'type'} eq TBDB_WIRETYPE_NODE() ||
+	$rowref->{'type'} eq TBDB_WIRETYPE_CONTROL()) {
+	# Emulab is consistent about using the node_id1, etc. fields for the
+	# endpoint for the above wire types.  If it were not, we would need
+	# to consult the 'nodes' table to see what role the node has.
+	if ($rowref->{'node_id1'} eq $nodeid) {
+	    $inst->{"WIRE_END"} = $WIRE_END_NODE;
+	} else {
+	    $inst->{"WIRE_END"} = $WIRE_END_SWITCH;
+	}
+    } elsif ($rowref->{'type'} eq TBDB_WIRETYPE_TRUNK()) {
+	$inst->{"WIRE_END"} = $WIRE_END_SWITCH;
+    } elsif ($rowref->{'node_id2'} eq $nodeid) {
+	# This is a failsafe case for wire types that are 'exotic'.
+	$inst->{"WIRE_END"} = $WIRE_END_SWITCH;	
+    } else {
+	# XXX: Other cases are unhandled for now...
+	return undef;
+    }
+    
     $inst->{"WIRES_ROW"} = $rowref;
 
     $query_result =
@@ -551,6 +581,10 @@ sub LookupByTriple($$;$$)
 		    "where node_id='$nodeid' AND card='$card' AND port='$port'");
     return undef
 	if (!$query_result);
+
+    # Note: The code will almost always fall into this conditional
+    # block for switch ports because we typically do not have entries
+    # for them in the 'interfaces' table.
     if (!$query_result->numrows) {
 	$rowref = {};
 	my $iface = fake_CardPort2Iface($card, $port);
@@ -646,10 +680,10 @@ sub trunk($)   { return field($_[0], 'trunk'); }
 sub trunk_mode($) { return field($_[0], 'trunk_mode'); }
 
 sub wire_end($) { return $_[0]->{'WIRE_END'}; }
-sub is_switch_side($) { return $_[0]->wire_end() eq "switch"; }
+sub is_switch_side($) { return $_[0]->wire_end() eq $WIRE_END_SWITCH; }
 
 sub wire_type($)   { return $_[0]->{'WIRES_ROW'}->{'type'}; }
-sub is_trunk_port($)  { return $_[0]->wire_type() eq "Trunk"; }
+sub is_trunk_port($)  { return $_[0]->wire_type() eq TBDB_WIRETYPE_TRUNK(); }
 
 sub is_forced($) { return $_[0]->{"FORCED"};}
 sub has_fields($) { return $_[0]->{"HAS_FIELDS"};}
@@ -698,7 +732,8 @@ sub switch_iface($)
 sub pc_node_id($)
 {
     my $self = shift;
-    if (!$self->is_switch_side()) {
+    if (!$self->is_switch_side() ||
+	$self->is_trunk_port()) {
 	return $self->node_id();
     } else {
 	return $self->other_end_node_id();
@@ -708,7 +743,8 @@ sub pc_node_id($)
 sub pc_card($)
 {
     my $self = shift;
-    if (!$self->is_switch_side()) {
+    if (!$self->is_switch_side() ||
+	$self->is_trunk_port()) {
 	return $self->card();
     } else {
 	return $self->other_end_card();
@@ -718,7 +754,8 @@ sub pc_card($)
 sub pc_port($)
 {
     my $self = shift;
-    if (!$self->is_switch_side()) {
+    if (!$self->is_switch_side() ||
+	$self->is_trunk_port()) {
 	return $self->port();
     } else {
 	return $self->other_end_port();
@@ -728,7 +765,8 @@ sub pc_port($)
 sub pc_iface($)
 {
     my $self = shift;
-    if (!$self->is_switch_side()) {
+    if (!$self->is_switch_side() ||
+	$self->is_trunk_port()) {
 	return $self->iface();
     } else {
 	return $self->other_end_iface();
@@ -750,7 +788,7 @@ sub other_end_node_id($)
 	}
     }
 
-    if ($self->wire_end() eq "pc") {
+    if ($self->node_id() eq $self->{'WIRES_ROW'}->{'node_id1'}) {
 	return $self->{'WIRES_ROW'}->{'node_id2'}; 
     } else {
 	return $self->{'WIRES_ROW'}->{'node_id1'};
@@ -772,7 +810,7 @@ sub other_end_card($)
 	}
     }
 
-    if ($self->wire_end() eq "pc") {
+    if ($self->node_id() eq $self->{'WIRES_ROW'}->{'node_id1'}) {
 	return $self->{'WIRES_ROW'}->{'card2'}; 
     } else {
 	return $self->{'WIRES_ROW'}->{'card1'};
@@ -794,7 +832,7 @@ sub other_end_port($)
 	}
     }
 
-    if ($self->wire_end() eq "pc") {
+    if ($self->node_id() eq $self->{'WIRES_ROW'}->{'node_id1'}) {
 	return $self->{'WIRES_ROW'}->{'port2'}; 
     } else {
 	return $self->{'WIRES_ROW'}->{'port1'};
@@ -816,7 +854,7 @@ sub other_end_iface($)
 	}
     }
 
-    if ($self->wire_end() eq "pc") {
+    if ($self->node_id() eq $self->{'WIRES_ROW'}->{'node_id1'}) {
 	return Port->LookupByTriple(
 	    $self->{'WIRES_ROW'}->{'node_id2'},
 	    $self->{'WIRES_ROW'}->{'card2'},
@@ -911,7 +949,10 @@ sub getOtherEndPort($) {
 }
 
 #
-# get the PC side of a port instance
+# get the PC side of a port instance.  It is bogus to call this on an
+# inter-switch trunk port, but we return the local ("this") side
+# anyway in this case since some snmpit code using this method doesn't
+# check the link type.
 #
 sub getPCPort($) {
     my $self = $_[0];
@@ -920,7 +961,8 @@ sub getPCPort($) {
 	return $self;
     }
 
-    if ($self->wire_end() eq "pc") {
+    if (!$self->is_switch_side() ||
+	$self->is_trunk_port()) {
 	return $self;
     } else {
 	return $self->getOtherEndPort();
@@ -928,7 +970,9 @@ sub getPCPort($) {
 }
 
 #
-# get the switch side of a port instance
+# get the switch side of a port instance.  This call is ambiguous in
+# the case of an inter-switch trunk port, and will always return "this"
+# port.
 #
 sub getSwitchPort($) {
     my $self = $_[0];
@@ -937,7 +981,7 @@ sub getSwitchPort($) {
 	return $self;
     }
 
-    if ($self->wire_end() ne "pc") {
+    if ($self->is_switch_side()) {
 	return $self;
     } else {
 	return $self->getOtherEndPort();

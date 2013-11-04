@@ -62,25 +62,6 @@ if (EmulabFeatures->FeatureEnabled("OldSnmpit", $this_user, undef, undef)) {
 	"    Could not exec $newpath: $!");
 }
 
-# Check feature access for both the user and the projects they belong to
-# for the portfix version of snmpit.  The user should be a member of at least
-# one project, so we will get into the foreach loop to check 'global' and
-# 'user' permissions as well.
-my @user_projects = ();
-$this_user->ProjectMembershipList(\@user_projects);
-foreach my $proj (@user_projects) {
-    if (EmulabFeatures->FeatureEnabled("PortfixSnmpit",
-				       $this_user,
-				       $proj,
-				       undef)) {
-	my $newpath = "$TB/bin/snmpit_portfix";
-	print STDERR "Invoking alternate snmpit from $newpath\n";
-	exec $newpath, @ARGV;
-	die("*** $0:\n".
-	    "    Could not exec $newpath: $!");
-    }
-}
-
 my $newpath = "$TB/bin/snmpit_test";
 exec $newpath, @ARGV;
 die("*** $0:\n".
