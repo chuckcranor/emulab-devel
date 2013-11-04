@@ -25,12 +25,6 @@
 # }}}
 #
 
-# TODO:
-# Currently this module does not support setting due to lacking MIB support.
-# - portDuplex
-# - portAdminSpeed
-# - set/get autoneg
-
 #
 # snmpit module for Force10 switches
 #
@@ -54,13 +48,6 @@ my %cmdOIDs =
 (
 	"enable"  => ["ifAdminStatus","up"],
 	"disable" => ["ifAdminStatus","down"],
-	#"1000mbit"=> ["portAdminSpeed","s1000000000"], # commented out = not supported by FTOS-EF-7.4.2.3
-	#"100mbit" => ["portAdminSpeed","s100000000"],  #
-	#"10mbit"  => ["portAdminSpeed","s10000000"],   #
-	#"full"    => ["portDuplex","full"],            #
-	#"half"    => ["portDuplex","half"],            #
-	#"auto"    => ["portAdminSpeed","autoDetect",   #
-	#              "portDuplex","auto"]
 );
 
 #
@@ -238,8 +225,6 @@ sub new($$$;$) {
     return $self;
 }
 
-
-
 #
 # Prints out a debugging message, but only if debugging is on. If a level is
 # given, the debuglevel must be >= that level for the message to print. If
@@ -259,6 +244,9 @@ sub debug($$;$) {
     }
 }
 
+##############################################################################
+## Internal / Utility Functions Section
+##
 
 #
 # Reads the IfIndex table from the switch, for SNMP functions that use 
@@ -311,7 +299,6 @@ sub readifIndex($) {
     # success
     return 1;
 }
-
 
 #
 # Convert a set of ports to an alternate format. The input format is detected
@@ -402,7 +389,197 @@ sub convertPortFormat($$@) {
     return undef;
 }
 
-# Utility functions for handling vlan name prefix needed on the Force10
+#
+# Internal function which converts a bitmask (a binary string) to a list 
+# of switch ports (ifIndexes)
+#
+sub convertBitmaskToIfindexes($$) {
+    my $self = shift;
+    my $bitmask = shift;
+
+    # Store switch config in local vars for code readability
+    my $type                 = $self->{TYPE};
+    my $moduleSlots          = $ChassisInfo->{$type}->{moduleSlots};
+    my $maxPortsPerModule    = $ChassisInfo->{$type}->{maxPortsPerModule};
+    my $bitmaskBitsPerModule = $ChassisInfo->{$type}->{bitmaskBitsPerModule};
+
+    my @ifIndexes;
+                                                          
+    # start at module 0
+    my $mod = 0;                                          
+    while ($mod < $moduleSlots) {
+        # start at port 0
+        my $port = 0;
+
+        # loop over until maxports.  Not usefull to loop over
+        # the padding bits, cause some switches use _a lot_ of
+        # these bits !!
+        while ($port < $maxPortsPerModule) {
+
+            my $offset = 
+                # start index for first port of the module
+                $mod * $bitmaskBitsPerModule
+                # start index for first port of the block of 8
+                # ports containing the current port
+                + (int($port / 8) * 8)
+                # the offset we're actually looking for
+                + (7 - ($port % 8));
+
+            if ( vec($bitmask,$offset,1) ) { 
+                push @ifIndexes, $self->{IFINDEX}{"${mod}.${port}"};
+            }
+            $port++;
+        }
+        $mod++;
+    }
+
+    return \@ifIndexes;
+}
+
+#
+# Internal function which converts a list of switch ports (ifIndexes) to a
+# bitmask (a binary string)
+#
+sub convertIfindexesToBitmask($@) {
+    my $self = shift;
+    my $ifIndexes = shift;
+
+    # Store switch config in local vars for code readability
+    my $type                 = $self->{TYPE};
+    my $moduleSlots          = $ChassisInfo->{$type}->{moduleSlots};
+    my $maxPortsPerModule    = $ChassisInfo->{$type}->{maxPortsPerModule};
+    my $bitmaskBitsPerModule = $ChassisInfo->{$type}->{bitmaskBitsPerModule};
+
+    # initialize ( to avoid perl warnings )
+    my $bitmask = 0b0;
+    # Overwrite our bitmask with zeroes
+    for my $offset (0..($bitmaskBitsPerModule*$moduleSlots+7)) {
+        vec($bitmask, $offset, 1) = 0b0;
+    }
+
+    # Convert all ifIndexes to modport format and parse modport information
+    # to find out vec() offset and set the right bit
+    my @modports = $self->convertPortFormat($PORT_FORMAT_MODPORT,@$ifIndexes);
+
+    foreach my $modport (@modports) {
+        $modport =~ /(\d+)\.(\d+)/;
+        my $mod  = $1;
+        my $port = $2;
+
+        if ( $port >= $maxPortsPerModule )
+        {
+            warn "convertIfindexesToBitmask: Cannot set port larger than maxport";
+            next;
+        }
+
+        
+        my $offset = 
+            # start index for first port of the module
+            $mod * $bitmaskBitsPerModule
+            # start index for first port of the block of 8
+            # ports containing the current port
+            + (int($port / 8) * 8)
+            # the offset we're actually looking for
+            + (7 - ($port % 8));
+
+        vec($bitmask, $offset, 1) = 0b1;
+    }
+    
+    # All set!
+    return $bitmask;
+}
+
+#
+# Internal function which compares two bitmasks of equal length
+# and returns the number of differing bits
+#
+# usage: bitmasksDiffer($bitmask1, $bitmask2) 
+#
+sub bitmasksDiffer($$$) {
+	my $self = shift;
+	my $bm1 = shift;
+	my $bm2 = shift;
+	
+	my $differingBits = 0;
+	my $bm1unp = unpack('B*', $bm1);
+	my @bm1unp = split //, $bm1unp; 
+	my $bm2unp = unpack('B*', $bm2);
+	my @bm2unp = split //, $bm2unp;
+	
+	if ( $#bm1unp == $#bm2unp ) { # must be of equal length
+		for my $i (0 .. $#bm1unp) {
+			if ($bm1unp[$i] != $bm2unp[$i]) {
+				$self->debug("bitmasksDiffer(): bit with index $i differs!\n");
+				$differingBits++;
+			}
+		}
+
+		return $differingBits;
+	}
+	else {
+		warn "bitmasksDiffer: ERROR: bitmasks to compare have ".
+		    "differing length: \$bm1 has last index $#bm1unp ".
+		    "and \$bm2 has last index $#bm2unp\n";
+		return ( $#bm1unp > $#bm2unp ? $#bm1unp : $#bm2unp);
+	}
+}
+
+#
+# Internal function which checks if all set bits in a bitmask are set or not in
+# another one. Both bitmasks must be of equal length.
+# 
+# Returns 0 if all bits of interest conform, otherwise returns the number of
+# non-conforming bits
+#
+# usage: checkBits($requestedStatus, $bitsOfInterest, $bitmaskToInvestigate)
+#        $requestedStatus can be "on" or "off"
+#
+sub checkBits($$$$) {
+    my $self = shift;
+    my $reqStatus = shift;
+    my $bm1 = shift; # reference bitmask, defining which bits need to be checked
+    my $bm2 = shift; # bitmask to investigate
+    
+    my $differingBits = 0;
+    my $bm1unp = unpack('B*', $bm1);
+    my @bm1unp = split //, $bm1unp; 
+    my $bm2unp = unpack('B*', $bm2);
+    my @bm2unp = split //, $bm2unp;
+    
+    if ( $#bm1unp == $#bm2unp ) { # must be of equal length
+	if ($reqStatus eq "on") {
+	    for my $i (0 .. $#bm1unp) {
+		if ($bm1unp[$i]) { # if bit is set
+		    if ($bm1unp[$i] != $bm2unp[$i]) {
+			$self->debug("checkIfBitsAreSet(\"on\"): bit with index $i isn't set in the other bitmask, while it should be!\n");
+			$differingBits++;
+		    }
+		}
+	    }
+	} elsif ($reqStatus eq "off") {
+	    for my $i (0 .. $#bm1unp) {
+		if ($bm1unp[$i]) { # if bit is set
+		    if ($bm1unp[$i] == $bm2unp[$i]) {
+			$self->debug("checkIfBitsAreSet(\"off\"): bit with index $i is set in the other bitmask, while it shouldn't be!\n");
+			$differingBits++;
+		    }
+		}
+	    }			
+	} else {
+	    print "checkBits(): invalid requested status argument!\n";
+	    return ($#bm1unp + 1);
+	}
+	
+	return $differingBits;
+    } else {
+	print "checkIfBitsAreSet(): I am not supposed to compare bitmasks of differing length!\n";
+	print "\$bm1 has last index $#bm1unp and \$bm2 has last index $#bm2unp\n";
+	return ( $#bm1unp > $#bm2unp ? $#bm1unp + 1 : $#bm2unp + 1);
+    }
+}
+
+# Utility function to add a static string prefix to an Emulab vlan id.
+# FTOS does not allow purely numeric vlan names.
 sub stripVlanPrefix($) {
     my $vlname = shift;
 
@@ -413,6 +590,8 @@ sub stripVlanPrefix($) {
     }
 }
 
+# Utility function to strip the static string prefix from a vlan name,
+# giving the original Emulab vlan id.
 sub addVlanPrefix($) {
     my $vlname = shift;
     
@@ -421,6 +600,11 @@ sub addVlanPrefix($) {
 
 
 # Utility function for looking up ifindex for a vlan
+# usage: getVlanIfindex($self,$vlan_number)
+#        $self - reference to "this" object
+#        $vlan_number - native switch vlan number to lookup (vlan tag)
+# returns: the ifindex of given vlan number, or a hash with all vlans if
+#          the keyword "ALL" is given.  undef on failure / not found.
 sub getVlanIfindex($$) {
     my ($self, $vlan_number) = @_;
 
@@ -473,10 +657,20 @@ sub getMemberBitmask($$) {
     return $bitmask;
 }
 
-# Utility function to punch in the egress and untagged port memeberships
+#
+# Utility function to punch in the egress and untagged port memberships
 # for the given vlan number (tag).  $onoff tells the function how to check
 # the resulting membership list ("on" - add; "off" - remove).
-# Returns the number of ports that failed to be (un)set.
+#
+# usage: setPortMembership($self, $onoff, $eportmask, $uportmask, $vlifindex)
+#        $self - reference to "this" object.
+#        $onoff - check for addition ("on") or removal ("off") ports.
+#        $eportmask - packed bitmask to use with dot1qVlanStaticEgressPorts
+#        $uportmask - packed bitmask to use with dot1qVlanStaticUntaggedPorts
+#        $vlifindex - ifindex of vlan to operate on.
+#
+# returns: number of ports that failed to be (un)set.
+#
 sub setPortMembership($$$$$) {
         my ($self, $onoff, $eportmask, $uportmask, $vlifindex) = @_;
 
@@ -517,11 +711,142 @@ sub setPortMembership($$$$$) {
 
 	if ($failcount) {
 		warn "setPortMembership: Could not manipulate $failcount ".
-		     "ports in vlan with ifindex vlifindex!\n";
+		     "ports in vlan with ifindex $vlifindex!\n";
 	}
 
 	return $failcount; # should be 0
 }
+
+#
+# Utility function - get the list of ports marked as trunks
+#
+# usage: getTrunkPorts($self)
+#        $self - current snmpit module object ("this")
+#        $getmask - return the membership bitmask instead of ifindex list.
+#
+# returns: list of ports that are marked as trunks (ifindexes), or undef on
+#          failure.  Returns the trunk bitmask if reqested instead of ifindex
+#          list.
+#
+sub getTrunkPorts($;$) {
+    my ($self, $getmask) = @_;
+
+    my $defvlanIfindex = $self->getVlanIfindex(1);
+    my $trunkmask = $self->{SESS}->get(["dot1qVlanForbiddenEgressPorts",
+					$defvlanIfindex]);
+    if (!$trunkmask) {
+	warn "getTrunkPorts: Error getting current trunking bitmask!\n";
+	return undef;
+    }
+
+    # Return trunk bitmask if requested.
+    return $trunkmask
+	if (defined($getmask) && $getmask);
+
+    my $ports = $self->convertBitmaskToIfindexes($trunkmask);
+    return @{$ports};
+}
+
+#
+# Utility function - set the list of ports to be marked as trunks
+#
+# usage: setTrunkPorts($self, @ports)
+#        $self - current snmpit module object ("this")
+#        @ports - list of ports to be marked as trunks
+#
+# returns: 1 on success, 0 on failure
+#
+# We use the same "hack" as in snmpit_hp here: set each corresponding
+# bit for the list of ports in the "forbidden" portset of vlan 1.
+#
+#
+sub setTrunkPorts($@) {
+    my ($self, @ports) = @_;
+
+    my @pifindexes = $self->convertPortFormat($PORT_FORMAT_IFINDEX, @ports);
+    my $defvlanIfindex = $self->getVlanIfindex(1);
+    my $membermask = $self->getMemberBitmask($defvlanIfindex);
+    my $portmask = $self->convertIfindexesToBitmask(\@pifindexes);
+    my $exclmask = $membermask & ~$portmask;
+
+    my $status = $self->{SESS}->set([["dot1qVlanStaticEgressPorts",
+				      $defvlanIfindex,
+				      $exclmask,
+				      "OCTETSTR"],
+	                             ["dot1qVlanForbiddenEgressPorts",
+				      $defvlanIfindex,
+				      $portmask,
+				      "OCTETSTR"]]);
+
+    if (!defined($status)) {
+	$self->debug("setTrunkPorts: Error setting trunk ports: $self->{SESS}->{ErrorStr}\n");
+    }
+
+    # Perform a sanity check to ensure that the set of trunks was indeed set
+    # as intended.
+    my $newmask = $self->{SESS}->get(["dot1qVlanForbiddenEgressPorts",
+				      $defvlanIfindex]);
+    if (!defined($newmask)) {
+	warn "setTrunkPorts: Error getting forbidden bitmask for vlan 1.\n";
+	return 0;
+    }
+    
+    my $failcount = $self->checkBits("on", $portmask, $newmask);
+    
+    if ($failcount) {
+	warn "setTrunkPorts: Could not manipulate $failcount ".
+	     "ports in vlan 1's forbidden list.\n";
+    }
+    
+    return $failcount ? 0 : 1;
+}
+
+#
+# Utility function - remove ports from the set marked as "trunking"
+#
+# usage: removeTrunkPorts($self, @ports)
+#        $self - current snmpit module object ("this")
+#        @ports - list of ports to be removed from 'trunked' list.
+#
+# returns: 1 on success, 0 on failure
+#
+sub removeTrunkPorts($@) {
+    my ($self, @ports) = @_;
+
+    my @pifindexes = $self->convertPortFormat($PORT_FORMAT_IFINDEX, @ports);
+    my @trunkports = $self->getTrunkPorts();
+
+    # Filter out the ports passed in.
+    @trunkports = grep {
+	my $a = $_; 
+	scalar(grep {$_ == $a} @pifindexes) == 0;
+    } @trunkports;
+
+    return $self->setTrunkPorts(@trunkports);
+}
+
+#
+# Utility function - add ports to the set marked as "trunking"
+#
+# usage: addTrunkPorts($self,@ports)
+#        $self  - current snmpit module object ("this")
+#        @ports - list of ports to be added to 'trunked' list.
+#
+# Returns 1 on success, 0 on failure;
+#
+sub addTrunkPorts($@) {
+    my ($self,@ports) = @_;
+
+    my @pifindexes = $self->convertPortFormat($PORT_FORMAT_IFINDEX, @ports);
+    my @trunkports = $self->getTrunkPorts();
+    push @trunkports, @pifindexes;
+
+    return $self->setTrunkPorts(@trunkports);
+}
+
+##############################################################################
+## Snmpit API Module Methods Section
+##
 
 #
 # List all ports on the device
@@ -677,196 +1002,6 @@ sub listVlans($) {
 	
 	return @vlanInfo;
 }
-
-#
-# Internal function which converts a bitmask (a binary string) to a list 
-# of switch ports (ifIndexes)
-#
-sub convertBitmaskToIfindexes($$) {
-    my $self = shift;
-    my $bitmask = shift;
-
-    # Store switch config in local vars for code readability
-    my $type                 = $self->{TYPE};
-    my $moduleSlots          = $ChassisInfo->{$type}->{moduleSlots};
-    my $maxPortsPerModule    = $ChassisInfo->{$type}->{maxPortsPerModule};
-    my $bitmaskBitsPerModule = $ChassisInfo->{$type}->{bitmaskBitsPerModule};
-
-    my @ifIndexes;
-                                                          
-    # start at module 0
-    my $mod = 0;                                          
-    while ($mod < $moduleSlots) {
-        # start at port 0
-        my $port = 0;
-
-        # loop over until maxports.  Not usefull to loop over
-        # the padding bits, cause some switches use _a lot_ of
-        # these bits !!
-        while ($port < $maxPortsPerModule) {
-
-            my $offset = 
-                # start index for first port of the module
-                $mod * $bitmaskBitsPerModule
-                # start index for first port of the block of 8
-                # ports containing the current port
-                + (int($port / 8) * 8)
-                # the offset we're actually looking for
-                + (7 - ($port % 8));
-
-            if ( vec($bitmask,$offset,1) ) { 
-                push @ifIndexes, $self->{IFINDEX}{"${mod}.${port}"};
-            }
-            $port++;
-        }
-        $mod++;
-    }
-
-    return \@ifIndexes;
-}
-
-#
-# Internal function which converts a list of switch ports (ifIndexes) to a
-# bitmask (a binary string)
-#
-sub convertIfindexesToBitmask($@) {
-    my $self = shift;
-    my $ifIndexes = shift;
-
-    # Store switch config in local vars for code readability
-    my $type                 = $self->{TYPE};
-    my $moduleSlots          = $ChassisInfo->{$type}->{moduleSlots};
-    my $maxPortsPerModule    = $ChassisInfo->{$type}->{maxPortsPerModule};
-    my $bitmaskBitsPerModule = $ChassisInfo->{$type}->{bitmaskBitsPerModule};
-
-    # initialize ( to avoid perl warnings )
-    my $bitmask = 0b0;
-    # Overwrite our bitmask with zeroes
-    for my $offset (0..($bitmaskBitsPerModule*$moduleSlots+7)) {
-        vec($bitmask, $offset, 1) = 0b0;
-    }
-
-    # Convert all ifIndexes to modport format and parse modport information
-    # to find out vec() offset and set the right bit
-    my @modports = $self->convertPortFormat($PORT_FORMAT_MODPORT,@$ifIndexes);
-
-    foreach my $modport (@modports) {
-        $modport =~ /(\d+)\.(\d+)/;
-        my $mod  = $1;
-        my $port = $2;
-
-        if ( $port >= $maxPortsPerModule )
-        {
-            warn "convertIfindexesToBitmask: Cannot set port larger than maxport";
-            next;
-        }
-
-        
-        my $offset = 
-            # start index for first port of the module
-            $mod * $bitmaskBitsPerModule
-            # start index for first port of the block of 8
-            # ports containing the current port
-            + (int($port / 8) * 8)
-            # the offset we're actually looking for
-            + (7 - ($port % 8));
-
-        vec($bitmask, $offset, 1) = 0b1;
-    }
-    
-    # All set!
-    return $bitmask;
-}
-
-#
-# Internal function which compares two bitmasks of equal length
-# and returns the number of differing bits
-#
-# usage: bitmasksDiffer($bitmask1, $bitmask2) 
-#
-sub bitmasksDiffer($$$) {
-	my $self = shift;
-	my $bm1 = shift;
-	my $bm2 = shift;
-	
-	my $differingBits = 0;
-	my $bm1unp = unpack('B*', $bm1);
-	my @bm1unp = split //, $bm1unp; 
-	my $bm2unp = unpack('B*', $bm2);
-	my @bm2unp = split //, $bm2unp;
-	
-	if ( $#bm1unp == $#bm2unp ) { # must be of equal length
-		for my $i (0 .. $#bm1unp) {
-			if ($bm1unp[$i] != $bm2unp[$i]) {
-				$self->debug("bitmasksDiffer(): bit with index $i differs!\n");
-				$differingBits++;
-			}
-		}
-
-		return $differingBits;
-	}
-	else {
-		warn "bitmasksDiffer: ERROR: bitmasks to compare have ".
-		    "differing length: \$bm1 has last index $#bm1unp ".
-		    "and \$bm2 has last index $#bm2unp\n";
-		return ( $#bm1unp > $#bm2unp ? $#bm1unp : $#bm2unp);
-	}
-}
-
-#
-# Internal function which checks if all set bits in a bitmask are set or not in
-# another one. Both bitmasks must be of equal length.
-# 
-# Returns 0 if all bits of interest conform, otherwise returns the number of
-# non-conforming bits
-#
-# usage: checkBits($requestedStatus, $bitsOfInterest, $bitmaskToInvestigate)
-#        $requestedStatus can be "on" or "off"
-#
-sub checkBits($$$$) {
-	my $self = shift;
-	my $reqStatus = shift;
-	my $bm1 = shift; # reference bitmask, defining which bits need to be checked
-	my $bm2 = shift; # bitmask to investigate
-	
-	my $differingBits = 0;
-	my $bm1unp = unpack('B*', $bm1);
-	my @bm1unp = split //, $bm1unp; 
-	my $bm2unp = unpack('B*', $bm2);
-	my @bm2unp = split //, $bm2unp;
-	
-	if ( $#bm1unp == $#bm2unp ) { # must be of equal length
-		if ($reqStatus eq "on") {
-			for my $i (0 .. $#bm1unp) {
-				if ($bm1unp[$i]) { # if bit is set
-					if ($bm1unp[$i] != $bm2unp[$i]) {
-						$self->debug("checkIfBitsAreSet(\"on\"): bit with index $i isn't set in the other bitmask, while it should be!\n");
-						$differingBits++;
-					}
-				}
-			}
-		} elsif ($reqStatus eq "off") {
-			for my $i (0 .. $#bm1unp) {
-				if ($bm1unp[$i]) { # if bit is set
-					if ($bm1unp[$i] == $bm2unp[$i]) {
-						$self->debug("checkIfBitsAreSet(\"off\"): bit with index $i is set in the other bitmask, while it shouldn't be!\n");
-						$differingBits++;
-					}
-				}
-			}			
-		} else {
-			print "checkBits(): invalid requested status argument!\n";
-			return ($#bm1unp + 1);
-		}
-	
-		return $differingBits;
-	} else {
-		print "checkIfBitsAreSet(): I am not supposed to compare bitmasks of differing length!\n";
-		print "\$bm1 has last index $#bm1unp and \$bm2 has last index $#bm2unp\n";
-		return ( $#bm1unp > $#bm2unp ? $#bm1unp + 1 : $#bm2unp + 1);
-	}
-}
-
 
 # 
 # Check to see if the given "real" VLAN number (i.e. tag) exists on the switch
@@ -1084,26 +1219,34 @@ sub setPortVlan($$@) {
     my @portlist = $self->convertPortFormat($PORT_FORMAT_IFINDEX, @ports);
     $self->debug("ports: " . join(",",@ports) . "\n");
     $self->debug("as ifIndexes: " . join(",",@portlist) . "\n");
+
+    # Get the trunk mode bitmask. We'll need this in a bit.
+    my $trunkmask = $self->getTrunkPorts(1);
 	
     # Create a bitmask from this ifIndex list
     my $bitmask = $self->convertIfindexesToBitmask(\@portlist);
-	
-    # First remove the ports from all VLANs, just in case.
-    # If a port is still untagged in a different VLAN, the set command would
-    # fail.	
+
+    # Remove any ports in trunk mode from $bitmask to create the
+    # "untagged" mask.
+    my $ubitmask = $bitmask & ~$trunkmask;
+    my $uports = $self->convertBitmaskToIfindexes($ubitmask);
+
+    # First remove untrunked ports from any VLAN they might be in
+    # (aside from the default). If a port is still untagged in a
+    # different VLAN, the set command will fail.
     my %vlifindexes = $self->getVlanIfindex("ALL");
     while (my ($vlnum, $vlifidx) = each %vlifindexes) {
-	# removing untagged ports from default VLAN 1 wouldn't make sense
+	# removing untagged ports from default (VLAN 1) wouldn't make sense
 	next if ($vlnum == 1);
 
 	# Only attempt to remove the ports if one or more appear in the
 	# current member list.
 	my $vlbitmask = $self->getMemberBitmask($vlifidx);
-	if ($self->checkBits("off",$bitmask,$vlbitmask)) {
+	if ($self->checkBits("off",$ubitmask,$vlbitmask)) {
 	    $self->debug("setPortVlan(): preventively attempting to ".
 			 "remove @ports from vlan number $vlnum\n");
 	    
-	    $RetVal = $self->removeSelectPortsFromVlan($vlnum, @ports);
+	    $RetVal = $self->removeSelectPortsFromVlan($vlnum, @{$uports});
 	    if ($RetVal) {
 		$self->debug("setPortVlan(): error when making sure that ".
 			     "@ports are removed from vlan $vlnum!\n");
@@ -1113,7 +1256,7 @@ sub setPortVlan($$@) {
 
     # get VLAN ifIndex
     my $vlanIfindex = $vlifindexes{$vlan_number};
-    return $self->setPortMembership("on", $bitmask, $bitmask, $vlanIfindex);
+    return $self->setPortMembership("on", $bitmask, $ubitmask, $vlanIfindex);
 }
 
 # Removes and disables some ports in a given VLAN. The VLAN is given as a VLAN
@@ -1449,31 +1592,107 @@ sub getFields($$$) {
 	return @return;
 }
 
+##############################################################################
+## Trunk and port channel backends - not fully implemented yet.
+##
 
-######
-###### New switch backends
-######
+#
+# Set a port's mode to "trunking"
+#
+# usage: enablePortTrunking2($self, $port, $vlan_number, $equaltrunking)
+#        modport: module.port of the trunk to operate on
+#        nativevlan: VLAN number of the native VLAN for this trunk
+#        equalmode: don't do dual mode; tag PVID also.
+#
+# returns: 1 on success, 0 otherwise
+#
+sub enablePortTrunking2($$$$) {
+    my ($self, $port, $vlan_number, $equalmode) = @_;
 
-###
-### methods below probably not needed;
-###
+    my ($pifindex) = $self->convertPortFormat($PORT_FORMAT_IFINDEX, $port);
+    if (!$pifindex) {
+	warn "enablePortTrunking2: Unknown port: $port\n";
+	return 0;
+    }
+    
+    my $vlifindex = $self->getVlanIfindex($vlan_number);
+    if (!$vlifindex) {
+	warn "enablePortTrunking2: Unknown vlan: $vlan_number\n";
+	return 0;
+    }
 
-#$device->enablePortTrunking2($self, $port, $vlan_number, $equaltrunking)
-##        modport: module.port of the trunk to operate on
-##        nativevlan: VLAN number of the native VLAN for this trunk
-##        equaltrunk: don't do dual mode; tag PVID also.
-##        Returns 1 on success, 0 otherwise
+    # Add port to the set of ports in trunking mode.
+    if (!$self->addTrunkPorts($port)) {
+	warn("enablePortTrunking2: Could not enable port trunking on $port\n");
+	return 0;
+    }
+
+    # Set the default (untagged) vlan if equal mode was NOT requested.  This
+    # assumes that upper layers always ask for 'vlan 1' as the native vlan
+    # when equal mode trunking is requested.
+    if (!$equalmode) {
+	my $portmask = $self->convertIfindexesToBitmask([$pifindex]);
+	if (!$self->setPortMembership("on", $portmask, $portmask, $vlifindex)) {
+	    warn "enablePortTrunking2: Could not add port $port as a member of $vlan_number\n";
+	    return 0;
+	}
+    }
+
+    return 1;
+}
+
 #
-#$device->clearAllVlansOnTrunk($self, $modport)
-##        modport: module.port of the trunk to operate on
-##        Returns 1 on success, 0 otherwise (must be done before taking a
-##        port out of trunking mode.
+# Disable trunking mode for a port
 #
-#(usually internal).
+# usage: disablePortTrunking($self, $modport)
+#        $self - reference to "this" object
+#        $port - port to remove (any supported port format)
 #
-#$device->disablePortTrunking($self, $modport)
-#        returns 1 on success, 0 on failure.
+# returns: 1 on success, 0 on failure.
 #
+sub disablePortTrunking($$) {
+    my ($self, $port) = @_;
+
+    my ($pifindex) = $self->convertPortFormat($PORT_FORMAT_IFINDEX, $port);
+    if (!$pifindex) {
+	warn "enablePortTrunking2: Unknown port: $port\n";
+	return 0;
+    }
+
+    # First remove the port from any VLAN it might be in
+    # (aside from the default).  We do this as a precaution - upper layers
+    # should have cleaned up already.
+    my %vlifindexes = $self->getVlanIfindex("ALL");
+    my $portmask = $self->convertIfindexesToBitmask([$pifindex]);
+    while (my ($vlnum, $vlifidx) = each %vlifindexes) {
+	# removing untagged ports from default (VLAN 1) wouldn't make sense
+	next if ($vlnum == 1);
+
+	# Only attempt to remove the ports if one or more appear in the
+	# current member list.
+	my $vlbitmask = $self->getMemberBitmask($vlifidx);
+	if ($self->checkBits("off",$portmask,$vlbitmask)) {
+	    $self->debug("setPortVlan(): preventively attempting to ".
+			 "remove $port from vlan number $vlnum\n");
+	    
+	    my $RetVal = $self->removeSelectPortsFromVlan($vlnum, $port);
+	    if ($RetVal) {
+		$self->debug("disablePortTrunking(): error when making sure ".
+			     "that $port is removed from vlan $vlnum!\n");
+	    }
+	}
+    }
+
+    if (!$self->removeTrunkPorts($pifindex)) {
+	warn "disablePortTrunking: Could not disable trunking on $port.\n";
+	return 0;
+    }
+
+    return 1;
+}
+
+### Unimplemented functions related to port channels.
+
 #$device->getChannelIfIndex($self, @ports)
 #        this is used in the function immediately below; an interswitch
 #        trunk maybe connected by several physical wires constituting
@@ -1494,8 +1713,10 @@ sub getFields($$$) {
 ##        return value currently ignored.  Takes vlan out of the trunk and puts
 ##        it back in to flush the FDB.
 #
-#
 
+##############################################################################
+## OpenFlow functionality - not implemented yet.
+##
 
 #
 # Enable Openflow
