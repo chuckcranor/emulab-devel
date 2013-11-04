@@ -1,6 +1,6 @@
 #!/bin/sh
 #
-# Copyright (c) 2005 University of Utah and the Flux Group.
+# Copyright (c) 2005, 2013 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -40,8 +40,16 @@ else
 	BINDIR=/etc/testbed
 fi
 
+pgctl="-P0"
+prefix=""
+if [ $# -gt 0 -a "$1" = "-P" ]; then
+    pgctl="-P3"
+    prefix="persistent "
+    shift
+fi
+
 if [ $# -lt 1 ]; then
-    echo 'usage: camwce <on|off> <dev>'
+    echo 'usage: camwce [-P] <on|off> <dev>'
     exit 1
 fi
 cof=$1
@@ -60,13 +68,13 @@ on|off)
         exit 1
 	;;
     esac
-    wce=`camcontrol modepage $dev -m8 | grep 'WCE:' | sed 's/WCE:[ 	]*\([01]\)/\1/'`
+    wce=`camcontrol modepage $dev -m8 $pgctl | grep 'WCE:' | sed 's/WCE:[ 	]*\([01]\)/\1/'`
     if [ $cof = "on" -a "$wce"x = "0x" -o $cof = "off" -a "$wce"x = "1x" ]
     then
-	echo "${dev}: turning write-cache $cof"
-	EDITOR=$BINDIR/camwce camcontrol modepage $dev -m8 -e
+	echo "${dev}: turning ${prefix}write-cache $cof"
+	EDITOR=$BINDIR/camwce camcontrol modepage $dev -m8 $pgctl -e
     else
-	echo "${dev}: write-cache already $cof"
+	echo "${dev}: ${prefix}write-cache already $cof"
 	exit 1
     fi
     ;;
@@ -77,7 +85,7 @@ on|off)
     # obscure sed invocation.
     #
     if [ $# -ne 1 ]; then
-	echo 'usage: camwce <on|off> <dev>'
+	echo 'usage: camwce [-P] <on|off> <dev>'
 	exit 1
     fi
     sed -i '' -e '/WCE:[ 	]*[01]/y/01/10/' $cof

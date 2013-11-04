@@ -547,7 +547,7 @@ getwcache() {
 		    res="enabled"
 		elif [ "${x/0}" != "$x" ] ; then
 		    res="disabled"
-		    /usr/local/etc/emulab/camwce on $sd  > /dev/null 2>&1
+		    /usr/local/etc/emulab/camwce -P on $sd  > /dev/null 2>&1
 		fi
 	    fi
 	else
