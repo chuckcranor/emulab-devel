@@ -19,10 +19,8 @@ COMMENT=	"Meta-port for an Emulab tipserv node"
 
 MAINTAINER=	testbed-ops@flux.utah.edu
 
-USE_PERL5_RUN=	yes
-
 #
-# We must make sure PERL is built with this.
+# We must make sure PERL is built with these.
 #
 .MAKEFLAGS+=	ENABLE_SUIDPERL=yes
 .if ${PORTVERSION} == "5.1"
@@ -45,6 +43,8 @@ USE_PERL5_RUN=	yes
 # We do this here because we do this for emulab-boss.
 #
 .MAKEFLAGS+=	WITHOUT_LATEX=yes
+
+BUILD_DEPENDS=
 
 LIB_DEPENDS=	\
 	telnet.2:${PORTSDIR}/misc/libtelnet
