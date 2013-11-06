@@ -894,9 +894,15 @@ sub SetupFsNode()
 	}
     }
 
+    my $sshdpid = "";
+    if (-r "/var/run/sshd.pid") {
+	$sshdpid = `cat /var/run/sshd.pid`;
+	chomp($sshdpid);
+    }
+
     #
     # Run the prepare script to clear out the current accounts and such.
-    # From this point on will need to log in as root,
+    # From this point on will need to log in as root.
     #
     print "Clearing out existing accounts and such\n";
     mysystem("$BINDIR/prepare -N");
@@ -917,6 +923,15 @@ sub SetupFsNode()
     #
     if ($XENVM) {
 	mysystem("echo '$vid' > $BOOTDIR/vmname");
+    }
+
+    #
+    # XXX did I mention what an a**hole prepare can be?
+    # Put back the sshd pid file that it removed so that that
+    # the install scripts can HUP sshd.
+    #
+    if ($sshdpid) {
+	mysystem("echo '$sshdpid' > /var/run/sshd.pid");
     }
 
     #
@@ -1386,9 +1401,15 @@ sub SetupOpsNode($)
 	}
     }
 
+    my $sshdpid = "";
+    if (-r "/var/run/sshd.pid") {
+	$sshdpid = `cat /var/run/sshd.pid`;
+	chomp($sshdpid);
+    }
+
     #
     # Run the prepare script to clear out the current accounts and such.
-    # From this point on will need to log in as root,
+    # From this point on will need to log in as root.
     #
     print "Clearing out existing accounts and such\n";
     mysystem("$BINDIR/prepare -N");
@@ -1409,6 +1430,15 @@ sub SetupOpsNode($)
     #
     if ($XENVM) {
 	mysystem("echo '$vid' > $BOOTDIR/vmname");
+    }
+
+    #
+    # XXX did I mention what an a**hole prepare can be?
+    # Put back the sshd pid file that it removed so that that
+    # the install scripts can HUP sshd.
+    #
+    if ($sshdpid) {
+	mysystem("echo '$sshdpid' > /var/run/sshd.pid");
     }
 
     #
@@ -2063,6 +2093,12 @@ sub SetupBossNode($)
 	}
     }
 
+    my $sshdpid = "";
+    if (-r "/var/run/sshd.pid") {
+	$sshdpid = `cat /var/run/sshd.pid`;
+	chomp($sshdpid);
+    }
+
     #
     # Save off the bootdir for getting the ops vm started up.
     # Stash into /var/boot for CreateOpsJail() below.
@@ -2094,6 +2130,15 @@ sub SetupBossNode($)
     #
     if ($XENVM) {
 	mysystem("echo '$vid' > $BOOTDIR/vmname");
+    }
+
+    #
+    # XXX did I mention what an a**hole prepare can be?
+    # Put back the sshd pid file that it removed so that that
+    # the install scripts can HUP sshd.
+    #
+    if ($sshdpid) {
+	mysystem("echo '$sshdpid' > /var/run/sshd.pid");
     }
 
     #
@@ -2721,6 +2766,12 @@ sub SetupOpsJail()
 	}
     }
 
+    my $sshdpid = "";
+    if (-r "/var/run/sshd.pid") {
+	$sshdpid = `cat /var/run/sshd.pid`;
+	chomp($sshdpid);
+    }
+
     #
     # Run the prepare script to clear out the current accounts and such.
     # From this point on will need to log in as root,
@@ -2744,6 +2795,15 @@ sub SetupOpsJail()
     #
     if ($XENVM) {
 	mysystem("echo '$vid' > $BOOTDIR/vmname");
+    }
+
+    #
+    # XXX did I mention what an a**hole prepare can be?
+    # Put back the sshd pid file that it removed so that that
+    # the install scripts can HUP sshd.
+    #
+    if ($sshdpid) {
+	mysystem("echo '$sshdpid' > /var/run/sshd.pid");
     }
 
     #
