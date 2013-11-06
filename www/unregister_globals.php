@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2010 University of Utah and the Flux Group.
+# Copyright (c) 2010-2013 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -61,7 +61,7 @@ function EmulateRegisterGlobals()
 	}
     }
 
-    error_reporting(E_ALL);
+    error_reporting(E_ALL & ~E_STRICT);
 }
 
 EmulateRegisterGlobals();
