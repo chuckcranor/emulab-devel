@@ -2665,10 +2665,7 @@ sub createExpNetworkScript($$$$$$$)
     }
     print FILE "#!/bin/sh\n";
     print FILE "/bin/mv -f ${lfile} ${lfile}.old\n";
-    print FILE "echo \"\$*\" >$lfile\n";
-    print FILE "echo \"\$vif\" >>$lfile\n";
-    print FILE "echo \"\$XENBUS_PATH\" >>$lfile\n";
-    print FILE "sh $file \$* >>$lfile 2>&1\n";
+    print FILE "/etc/xen/scripts/emulab-enet.pl $file \$* >${lfile} 2>&1\n";
     print FILE "exit \$?\n";
     close(FILE);
     chmod(0554, $wrapper);
