@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2012 University of Utah and the Flux Group.
+# Copyright (c) 2000-2013 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -184,7 +184,7 @@ if (! $isadmin) {
 #
 # Dump some Emulab auth vars for the xmlhttprequests
 #
-$auth = $HTTP_COOKIE_VARS[$TBAUTHCOOKIE];
+$auth = $_COOKIE[$TBAUTHCOOKIE];
 echo "<script language=javascript type=text/javascript>\n";
 echo "var tbuid = \"$uid\";\n";
 echo "var tbauth = \"$auth\";\n";

@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2003-2011 University of Utah and the Flux Group.
+# Copyright (c) 2003-2013 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -44,7 +44,7 @@ function handle_error($message, $death)
 #
 # Must be SSL, even though we do not require an account login.
 #
-if (!isset($SSL_PROTOCOL)) {
+if (!isset($_SERVER["SSL_PROTOCOL"])) {
     SPITERROR(400, "Must use https:// to access this page!");
 }
 

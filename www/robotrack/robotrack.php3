@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2007 University of Utah and the Flux Group.
+# Copyright (c) 2000-2013 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -200,7 +200,7 @@ if ($retval) {
     die("");
 }
 
-$auth    = $HTTP_COOKIE_VARS[$TBAUTHCOOKIE];
+$auth    = $_COOKIE[$TBAUTHCOOKIE];
 $pipeurl = "robopipe.php3?building=$building&floor=$floor";
 $baseurl = "../floormap_aux.php3?prefix=$uniqueid";
 

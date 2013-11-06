@@ -22,9 +22,7 @@ if (!isset($SAJAX_INCLUDED)) {
 	}
 	
 	function sajax_get_my_uri() {
-		global $REQUEST_URI;
-		
-		return $REQUEST_URI;
+		return $_SERVER["REQUEST_URI"];
 	}
 	
 	$sajax_remote_uri = sajax_get_my_uri();

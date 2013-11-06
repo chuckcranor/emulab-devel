@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2012 University of Utah and the Flux Group.
+# Copyright (c) 2000-2013 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -739,7 +739,7 @@ class Logfile
 $maxtries = 3;
 $DBlinkid = 0;
 while ($maxtries) {
-    $DBlinkid = mysql_connect("localhost", basename($SCRIPT_NAME));
+    $DBlinkid = mysql_connect("localhost", basename($_SERVER["SCRIPT_NAME"]));
     if ($DBlinkid) {
 	break;
     }
@@ -761,14 +761,13 @@ $DBlinkids[$TBDBNAME] = $DBlinkid;
 #
 function DBConnect($dbname)
 {
-    global $SCRIPT_NAME;
     global $DBlinkids;
 
     if (array_key_exists($dbname, $DBlinkids)) {
 	return $DBlinkids[$dbname];
     }
 
-    $linkid = mysql_connect("localhost", basename($SCRIPT_NAME), "none", 1);
+    $linkid = mysql_connect("localhost", basename($_SERVER["SCRIPT_NAME"]), "none", 1);
     if ($linkid) {
 	if (!mysql_select_db($dbname, $linkid)) {
 	    return null;

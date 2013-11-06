@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2006-2010 University of Utah and the Flux Group.
+# Copyright (c) 2006-2013 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -727,8 +727,8 @@ class Project
 	    $flip  = ($cvsrepo_public ? 0 : 1);
 	    echo "<tr>
                       <td>CVS Repository Publically Readable?:</td>
-                      <td><a href=toggle.php?pid=$pid&type=cvsrepo_public".
-		          "&value=$flip>$YesNo</a> (Click to toggle)</td>
+                      <td><a href='toggle.php?pid=$pid&type=cvsrepo_public".
+		          "&value=$flip'>$YesNo</a> (Click to toggle)</td>
                   </tr>\n";
 
 	    if ($cvsrepo_public) {
@@ -861,8 +861,8 @@ class Project
 	    
 	    echo "<tr>
                       <td>Allow Workbench:</td>
-                      <td><a href=toggle.php?pid=$pid&type=workbench".
-		          "&value=$flip>$YesNo</a> (Click to toggle)</td>
+                      <td><a href='toggle.php?pid=$pid&type=workbench".
+		          "&value=$flip'>$YesNo</a> (Click to toggle)</td>
                   </tr>\n";
 	}
 

@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2005, 2006, 2007 University of Utah and the Flux Group.
+# Copyright (c) 2005-2013 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -109,7 +109,7 @@ else {
 }
 
 if (isset($applet)) {
-    $auth    = $HTTP_COOKIE_VARS[$TBAUTHCOOKIE];
+    $auth    = $_COOKIE[$TBAUTHCOOKIE];
     
     while ($row = mysql_fetch_array($query_result)) {
 	$id  = $row["id"];

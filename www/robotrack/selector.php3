@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2007 University of Utah and the Flux Group.
+# Copyright (c) 2000-2013 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -116,7 +116,7 @@ echo "<table cellspacing=5 cellpadding=5 border=0 class=\"stealth\">
       </tr>
       </table><hr>\n";
 
-$auth       = $HTTP_COOKIE_VARS[$TBAUTHCOOKIE];
+$auth       = $_COOKIE[$TBAUTHCOOKIE];
 $floorcount = mysql_num_rows($query_result);
 $ppm        = 1;
 $index      = 0;

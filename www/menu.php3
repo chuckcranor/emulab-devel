@@ -50,7 +50,7 @@ $BASEPATH	  = "";
 # is no login active, we want to spit back http for the documentation,
 # but https for the start/join pages.
 #
-if (isset($SSL_PROTOCOL)) {
+if (isset($_SERVER["SSL_PROTOCOL"])) {
     $BASEPATH = $TBBASE;
 }
 else {
@@ -291,7 +291,7 @@ function WRITEPLABBOTTOMBAR() {
 	   <center>
 	   <br>
 	   <font size=-1>
-	   <form method=get action=$TBDOCBASE/search.php3>
+	   <form method='get' action='$TBDOCBASE/search.php3'>
 	   [ <a href='$WIKIDOCURL'>
 		Documentation</a> : <input name=query size = 15/>
 		  <input type=submit style='font-size:10px;' value='Search' /> ]
@@ -1039,7 +1039,7 @@ function PAGEHEADER($title, $view = NULL, $extra_headers = NULL,
 		    $notice = NULL) {
     global $login_status, $login_user;
     global $TBBASE, $TBDOCBASE, $THISHOMEBASE;
-    global $BASEPATH, $SSL_PROTOCOL, $drewheader, $autorefresh;
+    global $BASEPATH, $drewheader, $autorefresh;
     global $TBMAINSITE;
 
     $drewheader = 1;
@@ -1202,7 +1202,7 @@ function PAGEHEADER($title, $view = NULL, $extra_headers = NULL,
 #
 function PAGEFOOTER($view = NULL) {
     global $TBDOCBASE, $TBMAILADDR, $THISHOMEBASE, $BASEPATH, $TBBASE;
-    global $TBMAINSITE, $SSL_PROTOCOL, $bodyclosestring, $currently_busy;
+    global $TBMAINSITE, $bodyclosestring, $currently_busy;
     global $login_user, $javascript_debug, $sortedtables;
 
     if ($currently_busy) {

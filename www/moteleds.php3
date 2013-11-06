@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2004, 2005, 2006, 2007 University of Utah and the Flux Group.
+# Copyright (c) 2004-2013 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -86,7 +86,7 @@ else {
 	echo "<tr><th>$vname</th>";
 	echo "<td>$pnode</td><td>";
 	SHOWBLINKENLICHTEN($uid,
-			   $HTTP_COOKIE_VARS[$TBAUTHCOOKIE],
+			   $_COOKIE[$TBAUTHCOOKIE],
 			   CreateURL("ledpipe", $pnode));
     }
     echo "</table>\n";

@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2010 University of Utah and the Flux Group.
+# Copyright (c) 2000-2013 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -73,12 +73,12 @@ slice1_md5=d326a1f604489c43b488fa80a88221f4\n" . $slicexbase;
 # 
 function SPITSTATUS($status)
 {
-    global $REMOTE_ADDR, $REQUEST_URI;
-    
     header("Content-Type: text/plain");
     echo "emulab_status=$status\n";
 
     if ($status) {
+	    $REQUEST_URI = $_SERVER["REQUEST_URI"];
+	    $REMOTE_ADDR = $_SERVER["REMOTE_ADDR"];
 	    TBERROR("CDROM Checkin Error ($status) from $REMOTE_ADDR:\n\n".
 		    "$REQUEST_URI\n", 0);
     }
@@ -315,7 +315,7 @@ if (strcmp($privIP, "1.1.1.1")) {
 	SPITSTATUS(CDROMSTATUS_BADIPADDR);
 	return;
     }
-    if (strcmp($REMOTE_ADDR, $IP)) {
+    if (strcmp($_SERVER["REMOTE_ADDR"], $IP)) {
 	SPITSTATUS(CDROMSTATUS_BADREMOTEIP);
 	return;
     }
@@ -439,7 +439,7 @@ elseif ($cdvers == 3) {
     }
 }
 elseif ($cdvers == 69) {
-    if (!strcmp($REMOTE_ADDR, "155.101.132.191")) {
+    if (!strcmp($_SERVER["REMOTE_ADDR"], "155.101.132.191")) {
 	echo "fdisk=image.fdisk\n";
 	echo "fdisk_sig=image.fdisk.sig\n";
 	echo "slice1_image=slice1.ndz\n";

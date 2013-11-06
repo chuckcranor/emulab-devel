@@ -203,11 +203,10 @@ $session_errorhandler = 0;
 function TBMAIL($to, $subject, $message, $headers = 0)
 {
     global $THISHOMEBASE;
-    global $SCRIPT_NAME;
 
     $subject = strtoupper($THISHOMEBASE) . ": $subject";
 
-    $tag = "X-NetBed: " . basename($SCRIPT_NAME);
+    $tag = "X-NetBed: " . basename($_SERVER["SCRIPT_NAME"]);
     
     if ($headers) {
 	$headers = "$headers\n" . $tag;

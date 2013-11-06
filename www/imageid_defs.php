@@ -724,8 +724,8 @@ class Image
 
 	$globalflip = ($globalid ? 0 : 1);
 	$globalval  = ($globalid ? "Yes" : "No");
-	echo "$globalval (<a href=toggle.php?imageid=$imageid".
-	    "&type=imageglobal&value=$globalflip>Toggle</a>)";
+	echo "$globalval (<a href='toggle.php?imageid=$imageid".
+	    "&type=imageglobal&value=$globalflip'>Toggle</a>)";
 	echo "  </td>
               </tr>\n";
 
@@ -762,8 +762,8 @@ class Image
 	    echo "<tr>
                   <td>XEN Capable?:</td>
    	          <td class=left>
-                     $xenval (<a href=toggle.php?imageid=$imageid".
-		          "&type=imagedoesxen&value=$xenflip>Toggle</a>
+                     $xenval (<a href='toggle.php?imageid=$imageid".
+		          "&type=imagedoesxen&value=$xenflip'>Toggle</a>
                       if you know this image can run
                as a XEN guest. More info
                <a target=_blank

@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2006-2012 University of Utah and the Flux Group.
+# Copyright (c) 2006-2013 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -1060,8 +1060,8 @@ class Experiment
 	    $lockval  = ($lockdown ? "Yes" : "No");
 	    echo "<tr>
                    <td>Locked Down:</td>
-                   <td>$lockval (<a href=toggle.php?pid=$pid&eid=$eid".
-		"&type=lockdown&value=$lockflip>Toggle</a>)
+                   <td>$lockval (<a href='toggle.php?pid=$pid&eid=$eid".
+		"&type=lockdown&value=$lockflip'>Toggle</a>)
                    </td>
               </tr>\n";
 
@@ -1070,8 +1070,8 @@ class Experiment
 		$flipval  = ($skipvlans ? "Yes" : "No");
 		echo "<tr>
                        <td>Skip Vlans:</td>
-                       <td>$flipval (<a href=toggle.php?pid=$pid&eid=$eid".
-		           "&type=skipvlans&value=$thisflip>Toggle</a>)
+                       <td>$flipval (<a href='toggle.php?pid=$pid&eid=$eid".
+		           "&type=skipvlans&value=$thisflip'>Toggle</a>)
                        </td>
                       </tr>\n";
 	    }

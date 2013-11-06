@@ -184,7 +184,7 @@ function GETUID() {
 # Returns a combination of the CHECKLOGIN values above.
 #
 function LoginStatus() {
-    global $TBAUTHCOOKIE, $TBLOGINCOOKIE, $HTTP_COOKIE_VARS, $TBAUTHTIMEOUT;
+    global $TBAUTHCOOKIE, $TBLOGINCOOKIE, $TBAUTHTIMEOUT;
     global $CHECKLOGIN_STATUS, $CHECKLOGIN_UID, $CHECKLOGIN_NODETYPES;
     global $CHECKLOGIN_WIKINAME, $TBOPSPID;
     global $EXPOSEARCHIVE, $EXPOSETEMPLATES;
@@ -210,11 +210,11 @@ function LoginStatus() {
     if (isset($_GET['nocookieauth'])) {
 	$curhash = $_GET['nocookieauth'];
     }
-    elseif (array_key_exists($TBAUTHCOOKIE, $HTTP_COOKIE_VARS)) {
-	$curhash = $HTTP_COOKIE_VARS[$TBAUTHCOOKIE];
+    elseif (array_key_exists($TBAUTHCOOKIE, $_COOKIE)) {
+	$curhash = $_COOKIE[$TBAUTHCOOKIE];
     }
-    if (array_key_exists($TBLOGINCOOKIE, $HTTP_COOKIE_VARS)) {
-	$hashhash = $HTTP_COOKIE_VARS[$TBLOGINCOOKIE];
+    if (array_key_exists($TBLOGINCOOKIE, $_COOKIE)) {
+	$hashhash = $_COOKIE[$TBLOGINCOOKIE];
     }
 
     #
@@ -1123,7 +1123,7 @@ function VERIFYPASSWD($uid, $password) {
 function DOLOGOUT($user) {
     global $CHECKLOGIN_STATUS, $CHECKLOGIN_USER;
     global $TBAUTHCOOKIE, $TBLOGINCOOKIE, $TBAUTHDOMAIN, $WWWHOST;
-    global $WIKISUPPORT, $WIKICOOKIENAME, $HTTP_COOKIE_VARS;
+    global $WIKISUPPORT, $WIKICOOKIENAME;
     global $BUGDBSUPPORT, $BUGDBCOOKIENAME, $TRACSUPPORT, $TRACCOOKIENAME;
     global $TBLIBEXEC_DIR, $EXP_VIS;
 
@@ -1146,11 +1146,11 @@ function DOLOGOUT($user) {
     $curhash  = "";
     $hashhash = "";
 
-    if (isset($HTTP_COOKIE_VARS[$TBAUTHCOOKIE])) {
-	$curhash = $HTTP_COOKIE_VARS[$TBAUTHCOOKIE];
+    if (isset($_COOKIE[$TBAUTHCOOKIE])) {
+	$curhash = $_COOKIE[$TBAUTHCOOKIE];
     }
-    if (isset($HTTP_COOKIE_VARS[$TBLOGINCOOKIE])) {
-	$hashhash = $HTTP_COOKIE_VARS[$TBLOGINCOOKIE];
+    if (isset($_COOKIE[$TBLOGINCOOKIE])) {
+	$hashhash = $_COOKIE[$TBLOGINCOOKIE];
     }
     
     #

@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2007 University of Utah and the Flux Group.
+# Copyright (c) 2000-2013 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -163,7 +163,7 @@ app.appendChild(param);
 
 param = document.createElement("param");
 param.setAttribute("name", "auth");
-param.setAttribute("value", "<?php echo $HTTP_COOKIE_VARS[$TBAUTHCOOKIE]?>");
+param.setAttribute("value", "<?php echo $_COOKIE[$TBAUTHCOOKIE]?>");
 app.appendChild(param);
 
 if (pid != "" && eid != "") {
@@ -192,7 +192,7 @@ window.onLoad = resize;
             alt='You need java to run this applet'>
     <param name="class" value="net.emulab.netlab.client.NetlabClient">
     <param name="uid" value="<?php echo $uid?>">
-    <param name="auth" value="<?php echo $HTTP_COOKIE_VARS[$TBAUTHCOOKIE]?>">
+    <param name="auth" value="<?php echo $_COOKIE[$TBAUTHCOOKIE]?>">
     <?php if (isset($pid)): ?>
     <param name='pid' value='{$pid}'>
     <?php endif; ?>

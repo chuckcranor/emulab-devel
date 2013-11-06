@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2011 University of Utah and the Flux Group.
+# Copyright (c) 2000-2013 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -323,7 +323,7 @@ function doaction(theform) {
 	Iframe.contentWindow.document.close();
 	// And this fires it up.
 	Iframe.contentWindow.document.location =
-	    '<?php echo $REQUEST_URI; ?>&start=1&level=' + level;
+	    '<?php echo $_SERVER["REQUEST_URI"]; ?>&start=1&level=' + level;
 
 	curstate = "running";
 	theform['action'].value = "Stop Linktest";

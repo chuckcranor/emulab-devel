@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2007, 2012 University of Utah and the Flux Group.
+# Copyright (c) 2000-2013 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -64,7 +64,7 @@ PAGEHEADER("NetBuild");
   <param name='uid'
 	 value="<?php echo $uid?>">
   <param name='auth'
-	 value="<?php echo $HTTP_COOKIE_VARS[$TBAUTHCOOKIE]?>">
+	 value="<?php echo $_COOKIE[$TBAUTHCOOKIE]?>">
   <param name='expcreateurl'
          value="<?php echo $TBBASE?>/beginexp.php">
 <?php

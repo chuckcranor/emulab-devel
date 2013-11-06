@@ -30,7 +30,6 @@ include_once("osinfo_defs.php");
 include_once("node_defs.php");
 
 function SHOWNODES($pid, $eid, $sortby, $showclass) {
-    global $SCRIPT_NAME;
     global $TBOPSPID;
     global $WIKIDOCURL;
     global $login_user;
@@ -210,6 +209,7 @@ function SHOWNODES($pid, $eid, $sortby, $showclass) {
         }
 
 	if ($pid == $TBOPSPID) {
+	    $SCRIPT_NAME = $_SERVER["SCRIPT_NAME"];
 	    echo "<th class='sorttable_nosort'>Reserved<br>
                       <a href=\"$SCRIPT_NAME?pid=$pid&eid=$eid".
 		         "&sortby=rsrvtime-up&showclass=$showclass\">Up</a> or 
@@ -470,7 +470,7 @@ function SHOWWIDEAREAACCOUNTS($webid) {
 #
 # Example:
 #   SHOWBLINKENLICHTEN($uid,
-#                      $HTTP_COOKIE_VARS[$TBAUTHCOOKIE],
+#                      $_COOKIE[$TBAUTHCOOKIE],
 #                      "ledpipe.php3?node=em1");
 #
 function SHOWBLINKENLICHTEN($uid, $auth, $pipeurl, $width = 40, $height = 10) {

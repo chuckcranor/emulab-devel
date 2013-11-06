@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2002, 2007 University of Utah and the Flux Group.
+# Copyright (c) 2000-2013 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -31,7 +31,7 @@ RequiredPageArguments();
 #
 PAGEHEADER("Non Existent Page!");
 
-USERERROR("The URL you gave: <b>" . htmlentities( $REQUEST_URI ) . "</b>
+USERERROR("The URL you gave: <b>" . htmlentities( $_SERVER["REQUEST_URI"] ) . "</b>
            is not available or is broken.", 1);
 
 #

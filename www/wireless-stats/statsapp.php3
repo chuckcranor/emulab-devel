@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2006 University of Utah and the Flux Group.
+# Copyright (c) 2000-2013 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -148,7 +148,7 @@ for ($i = 0; $i <= $count; ++$i) {
 }     
 
 
-$auth    = $HTTP_COOKIE_VARS[$TBAUTHCOOKIE];
+$auth    = $_COOKIE[$TBAUTHCOOKIE];
 
 ## the requester will need to append '&dataset=...'
 $mapurl = "getdata.php3?type=map";

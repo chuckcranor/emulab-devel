@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2005, 2006, 2007 University of Utah and the Flux Group.
+# Copyright (c) 2005-2013 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -65,7 +65,7 @@ if ($status == "up") {
         <param name='class' value='GarciaTelemetry'>
         <param name='pipeurl' value='servicepipe.php3?node_id=$node_id'>
         <param name='uid' value='$uid'>
-        <param name='auth' value='$HTTP_COOKIE_VARS[$TBAUTHCOOKIE]'>
+        <param name='auth' value='$_COOKIE[$TBAUTHCOOKIE]'>
     </applet>\n";
 }
 else {
