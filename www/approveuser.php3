@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2003, 2005, 2006, 2007, 2010 University of Utah and the Flux Group.
+# Copyright (c) 2000-2013 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -60,14 +60,14 @@ ignore_user_abort(1);
 #
 
 #
-# copy of HTTP_POST_VARS we use to do actual work.
+# copy of _POST we use to do actual work.
 # this is so I can insert an implicit default-group approval
-# while iterating over HTTP_POST_VARS. 
+# while iterating over _POST.
 # A bit kludgey, indeed.
 #
 $POST_VARS_COPY = array();
  
-while (list ($header, $value) = each ($HTTP_POST_VARS)) {
+while (list ($header, $value) = each ($_POST)) {
     #echo "$header: $value<br>\n";
     $POST_VARS_COPY[$header] = $value; 
 
@@ -102,7 +102,7 @@ while (list ($header, $value) = each ($HTTP_POST_VARS)) {
     $foo      = "U${user}\$\$trust-$project/$group";
     #echo "$foo<br>\n";
     
-    $newtrust = $HTTP_POST_VARS[$foo];
+    $newtrust = $_POST[$foo];
     if (!$newtrust || strcmp($newtrust, "") == 0) {
 	TBERROR("Parse error finding trust in approveuser.php3", 1);
     }
@@ -193,9 +193,8 @@ while (list ($header, $value) = each ($HTTP_POST_VARS)) {
             #
 	    $foo = "$user\$\$approval-$project/$gid";
 	    
-	    if (!isset($HTTP_POST_VARS[$foo]) ||
-		($HTTP_POST_VARS[$foo] != "deny" &&
-		 $HTTP_POST_VARS[$foo] != "nuke")) {
+	    if (!isset($_POST[$foo]) ||
+		($_POST[$foo] != "deny" && $_POST[$foo] != "nuke")) {
 		USERERROR("If you wish to deny/nuke user $target_uid in ".
 			  "project $project then you must deny/nuke in all ".
 			  "of the subgroups $target_uid is attempting to ".
@@ -227,8 +226,7 @@ while (list ($header, $value) = each ($HTTP_POST_VARS)) {
     #
     $foo = "U${user}\$\$approval-$project/$project";
     $bar = "U${user}\$\$trust-$project/$project";
-    $default_approval =
-	(isset($HTTP_POST_VARS[$foo]) ? $HTTP_POST_VARS[$foo] : "");
+    $default_approval = (isset($_POST[$foo]) ? $_POST[$foo] : "");
     
     if ($default_approval == "") {
 	# Implicit group approval as user.
@@ -243,8 +241,8 @@ while (list ($header, $value) = each ($HTTP_POST_VARS)) {
 
 	# 3. For the while loop which does the actual work
 	$POST_VARS_COPY[$foo] = $approval;
-	$HTTP_POST_VARS[$foo] = $approval;
-	$HTTP_POST_VARS[$bar] = "user";
+	$_POST[$foo] = $approval;
+	$_POST[$bar] = "user";
     }
     if (strcmp($approval, "approve") == 0 &&
 	strcmp($default_approval, "approve")) {
@@ -305,7 +303,7 @@ while (list ($user, $value) = each ($projectchecks)) {
     reset($value);
 }
 
-reset($HTTP_POST_VARS);
+reset($_POST);
 
 STARTBUSY("Approving Users");
 
@@ -331,7 +329,7 @@ while (list ($header, $value) = each ($POST_VARS_COPY)) {
     # Corresponding trust value.
     #
     $foo      = "U${user}\$\$trust-$project/$group";
-    $newtrust = $HTTP_POST_VARS[$foo];
+    $newtrust = $_POST[$foo];
 
     #
     # Get the current status for the user, which we might need to change.

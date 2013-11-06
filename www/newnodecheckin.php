@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2003, 2005, 2007 University of Utah and the Flux Group.
+# Copyright (c) 2003-2013 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -55,7 +55,7 @@ $tmpIP = getenv("REMOTE_ADDR");
 # Find all interfaces
 #
 $interfaces = array();
-foreach ($HTTP_GET_VARS as $key => $value) {
+foreach ($_GET as $key => $value) {
     if (preg_match("/iface(name|mac|driver)(\d+)/",$key,$matches)) {
         $vartype = $matches[1];
     	$ifacenum = $matches[2];

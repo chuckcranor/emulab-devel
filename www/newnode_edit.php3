@@ -1,6 +1,6 @@
 <?PHP
 #
-# Copyright (c) 2003-2012 University of Utah and the Flux Group.
+# Copyright (c) 2003-2013 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -77,16 +77,16 @@ if (isset($node_id)) {
 #
 # Same for interface update information
 #
-foreach ($HTTP_GET_VARS as $key => $value) {
+foreach ($_GET as $key => $value) {
     if (preg_match("/iface(\d+)_mac/",$key,$matches)) {
     	$card        = $matches[1];
-    	$mac         = addslashes($HTTP_GET_VARS["iface${card}_mac"]);
-    	$type        = addslashes($HTTP_GET_VARS["iface${card}_type"]);
-    	$switch_id   = addslashes($HTTP_GET_VARS["iface${card}_switch_id"]);
-    	$switch_card = addslashes($HTTP_GET_VARS["iface${card}_switch_card"]);
-    	$switch_port = addslashes($HTTP_GET_VARS["iface${card}_switch_port"]);
-    	$cable       = addslashes($HTTP_GET_VARS["iface${card}_cable"]);
-    	$len         = addslashes($HTTP_GET_VARS["iface${card}_len"]);
+    	$mac         = addslashes($_GET["iface${card}_mac"]);
+    	$type        = addslashes($_GET["iface${card}_type"]);
+    	$switch_id   = addslashes($_GET["iface${card}_switch_id"]);
+    	$switch_card = addslashes($_GET["iface${card}_switch_card"]);
+    	$switch_port = addslashes($_GET["iface${card}_switch_port"]);
+    	$cable       = addslashes($_GET["iface${card}_cable"]);
+    	$len         = addslashes($_GET["iface${card}_len"]);
     	DBQueryFatal("UPDATE new_interfaces SET mac='$mac', " .
 	    "interface_type='$type', switch_id='$switch_id', " .
 	    "switch_card='$switch_card', switch_port='$switch_port', " .
