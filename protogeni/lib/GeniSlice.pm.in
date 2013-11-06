@@ -314,6 +314,7 @@ sub speaksfor_urn($)	{ return field($_[0], "speaksfor_urn"); }
 sub speaksfor_uuid($)	{ return field($_[0], "speaksfor_uuid"); }
 sub expiration_max($)	{ return field($_[0], "expiration_max"); }
 sub renew_limit($)	{ return field($_[0], "renew_limit"); }
+sub description($)      { return field($_[0], "description"); }
 sub cert($)		{ return $_[0]->{'CERT'}->cert(); }
 sub GetCertificate($)   { return $_[0]->{'CERT'}; }
 sub LOCKED($)           { return $_[0]->{'LOCKED'}; }
@@ -424,6 +425,26 @@ sub LookupByCreator($$)
     my @result = ();
     while (my ($idx) = $query_result->fetchrow_array()) {
 	my $slice = GeniSlice->Lookup($idx);
+	push(@result, $slice)
+	    if (defined($slice));
+    }
+    return @result;
+}
+
+
+sub BoundToUser($$)
+{
+    my ($class, $user) = @_;
+
+    my $uuid = $user->uuid();
+    my $query_result = 
+	DBQueryWarn("select slice_uuid from geni_bindings ".
+		    "where user_uuid='$uuid'");
+    return undef unless defined($query_result);
+
+    my @result = ();
+    while (my ($slice_uuid) = $query_result->fetchrow_array()) {
+	my $slice = GeniSlice->Lookup($slice_uuid);
 	push(@result, $slice)
 	    if (defined($slice));
     }
@@ -952,6 +973,22 @@ sub SetSpeaksFor($$)
 
     $self->{'SLICE'}->{'speaksfor_urn'}  = $speaksfor->owner_urn();
     $self->{'SLICE'}->{'speaksfor_uuid'} = $speaksfor->owner_uuid();
+
+    return 0;
+}
+
+sub SetDescription($$)
+{
+    my ($self, $description) = @_;
+    my $uuid = $self->uuid();
+    my $safe_description = DBQuoteSpecial($description);
+
+    return -w
+	if (!DBQueryWarn("update geni_slices set " .
+			 "  description=$safe_description ".
+			 "where uuid='$uuid'"));
+
+    $self->{'SLICE'}->{'description'} = $description;
 
     return 0;
 }
