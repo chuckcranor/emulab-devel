@@ -365,7 +365,10 @@ COMMAND_PROTOTYPE(dogenicontrolmac);
 COMMAND_PROTOTYPE(dogeniversion);
 COMMAND_PROTOTYPE(dogenigetversion);
 COMMAND_PROTOTYPE(dogenisliverstatus);
+COMMAND_PROTOTYPE(dogenistatus);
+COMMAND_PROTOTYPE(dogenicommands);
 COMMAND_PROTOTYPE(dogeniall);
+COMMAND_PROTOTYPE(dogeniinvalid);
 #endif
 
 /*
@@ -493,7 +496,12 @@ struct command {
 	{ "geni_version", FULLCONFIG_NONE, 0, dogeniversion },
 	{ "geni_getversion", FULLCONFIG_NONE, 0, dogenigetversion },
 	{ "geni_sliverstatus", FULLCONFIG_NONE, 0, dogenisliverstatus },
+	{ "geni_status", FULLCONFIG_NONE, 0, dogenistatus },
+	{ "geni_commands", FULLCONFIG_NONE, 0, dogenicommands },
 	{ "geni_all",     FULLCONFIG_NONE, 0, dogeniall },
+	/* A rather ugly hack to avoid making error handling a special case.
+	   THIS MUST BE THE LAST ENTRY IN THE ARRAY! */
+	{ "geni_invalid", FULLCONFIG_NONE, 0, dogeniinvalid }
 #endif
 };
 static int numcommands = sizeof(command_array)/sizeof(struct command);
@@ -1358,8 +1366,14 @@ handle_request(int sock, struct sockaddr_in *client, char *rdata, int istcp)
 			break;
 
 	if (i == numcommands) {
-		info("%s: INVALID REQUEST: %.8s\n", reqp->nodeid, bp);
-		goto skipit;
+	        if( !strncmp( bp, "geni_", 5 ) )
+		        /* Any invalid command with a GENI prefix is treated
+			   as geni_invalid. */
+		        i = numcommands - 1;
+		else {
+		        info("%s: INVALID REQUEST: %.8s\n", reqp->nodeid, bp);
+			goto skipit;
+		}
 	}
 
 	/*
@@ -11454,13 +11468,19 @@ static int dogeni( int sock, tmcdreq_t *reqp, int tcp,
     char *result = func( reqp );
 
     if( result ) {
+	client_writeback( sock, "", 1, tcp ); /* single NUL */
 	client_writeback( sock, result, strlen( result ), tcp );
 	client_writeback( sock, "\n", 1, tcp );
 	free( result );
 	
 	return 0;
-    } else
+    } else {
+	static char error_msg[] = "\0\0internal error handling request\n";
+	
+	client_writeback( sock, error_msg, sizeof error_msg - 1, tcp );
+	
 	return 1;
+    }
 }
 
 static char *geni_append( char *buf, char *buf_end, char *p ) {
@@ -11869,15 +11889,16 @@ static char *getgenigetversion( tmcdreq_t *reqp ) {
 	if( mysql_num_rows( res ) ) {
 		MYSQL_ROW row = mysql_fetch_row( res );
 
-		GOUTPUT( buf, sizeof buf, "{'code_tag':'%s',"
-			 "'urn':'urn:publicid:IDN+" OURDOMAIN "+authority+cm',"
-			 "'url':'" TBBASE ":12369/protogeni/xmlrpc/am',"
-			 "'geni_am_type':'protogeni',"
-			 "'geni_single_allocation':true,"
-			 "'geni_allocate':'geni_disjoint',"
-			 "'geni_credential_types':{"
-			 "'geni_type':'geni_sfa','geni_version':'2',"
-			 "'geni_type':'geni_sfa','geni_version':'3'}}",
+		GOUTPUT( buf, sizeof buf, "{\"code_tag\":\"%s\","
+			 "\"urn\":\"urn:publicid:IDN+" OURDOMAIN
+			 "+authority+cm\","
+			 "\"url\":\"" TBBASE ":12369/protogeni/xmlrpc/am\","
+			 "\"geni_am_type\":\"protogeni\","
+			 "\"geni_single_allocation\":true,"
+			 "\"geni_allocate\":\"geni_disjoint\","
+			 "\"geni_credential_types\":{"
+			 "\"geni_type\":\"geni_sfa\",\"geni_version\":\"2\","
+			 "\"geni_type\":\"geni_sfa\",\"geni_version\":\"3\"}}",
 			 row[ 0 ] );
 	}
 			 
@@ -11913,9 +11934,9 @@ static char *getgenisliverstatus( tmcdreq_t *reqp ) {
 	status = strcmp( row[ 1 ], "ready" ) && strcmp( row[ 1 ], "failed" ) ?
 	        "unknown" : row[ 1 ];
 	
-	p = buf + snprintf( buf, sizeof buf, "{'geni_urn':'urn:publicid:IDN+"
-			    OURDOMAIN "+sliver+%s','geni_status':'%s',"
-			    "'geni_resources':[", row[ 0 ], status );
+	p = buf + snprintf( buf, sizeof buf, "{\"geni_urn\":\"urn:publicid:"
+			    "IDN+" OURDOMAIN "+sliver+%s\",\"geni_status\""
+			    ":\"%s\",\"geni_resources\":[", row[ 0 ], status );
 
 	mysql_free_result( res );
 
@@ -11932,11 +11953,78 @@ static char *getgenisliverstatus( tmcdreq_t *reqp ) {
 	}
 
 	while( ( row = mysql_fetch_row( res ) ) ) {
-		p += snprintf( p, buf + sizeof buf - p, "%s{'geni_urn':"
-			       "'urn:publicid:IDN+" OURDOMAIN "+sliver+%s',"
-			       "'geni_status':'%s','geni_error':'%s'}",
+		p += snprintf( p, buf + sizeof buf - p, "%s{\"geni_urn\":"
+			       "\"urn:publicid:IDN+" OURDOMAIN "+sliver+%s\","
+			       "\"geni_status\":\"%s\",\"geni_error\":\"%s\"}",
 			       first ? "" : ",", row[ 0 ], row[ 1 ],
 			       row[ 2 ] ? row[ 2 ] : "" );
+		first = 0;
+	}
+
+	mysql_free_result( res );
+	
+	geni_append( p, buf + sizeof buf, "]}" );
+	
+	if( verbose )
+		info( "%s: geni_sliverstatus: %s", reqp->nodeid, buf );
+	
+	return strdup( buf );
+}
+
+/* This is "status", which returns the status of the sliver.  Not to be
+   confused with "sliverstatus", which returns the status of the sliver
+   slightly differently.  Hands up if you like design by committee! */
+static char *getgenistatus( tmcdreq_t *reqp ) {
+
+	MYSQL_RES	*res;
+	MYSQL_ROW	row;
+	char		buf[ 0x4000 ], *p, expires[ 0x40 ];
+	int		first = 1;
+	
+	res = mydb_query( "SELECT c.urn, s.expires FROM "
+			  "`geni-cm`.geni_certificates AS c, "
+			  "`geni-cm`.geni_slices AS s, "
+			  "`geni-cm`.geni_slivers AS l WHERE "
+			  "l.resource_uuid = '%s' AND "
+			  "c.uuid = l.slice_uuid AND "
+			  "s.uuid = l.slice_uuid", 2, reqp->nodeuuid );
+
+	if( !res || !mysql_num_rows( res ) ) {
+		error( "geni_sliverstatus: %s: DB error getting aggregate!\n",
+		       reqp->nodeid );
+		return NULL;
+	}
+
+	row = mysql_fetch_row( res );
+
+	p = buf + snprintf( buf, sizeof buf, "{\"geni_urn\":\"%s\","
+			    "geni_slivers\":[", row[ 0 ] );
+	strcpy( expires, row[ 1 ] );
+
+	mysql_free_result( res );
+
+	res = mydb_query( "SELECT x.idx, x.status, x.errorlog FROM "
+			  "`geni-cm`.geni_slivers AS x, "
+			  "`geni-cm`.geni_slivers AS y WHERE "
+			  "x.aggregate_uuid = y.aggregate_uuid AND "
+			  "y.resource_uuid = '%s'", 3, reqp->nodeuuid );
+	
+	if( !res || !mysql_num_rows( res ) ) {
+		error( "geni_sliverstatus: %s: DB error getting sliver!\n",
+		       reqp->nodeid );
+		return NULL;
+	}
+
+	while( ( row = mysql_fetch_row( res ) ) ) {
+		p += snprintf( p, buf + sizeof buf - p, "%s{\"geni_urn\":"
+			       "\"urn:publicid:IDN+" OURDOMAIN "+sliver+%s\","
+			       "\"geni_expires\":\"%s\","
+			       "\"geni_allocation_status\":"
+			       "\"geni_provisioned\","
+			       "\"geni_operational_status\":\"geni_%s\","
+			       "\"geni_error\":\"%s\"}",
+			       first ? "" : ",", row[ 0 ], expires,
+			       row[ 1 ], row[ 2 ] ? row[ 2 ] : "" );
 		first = 0;
 	}
 
@@ -11966,55 +12054,125 @@ MAKEGENICOMMAND(controlmac)
 MAKEGENICOMMAND(version)
 MAKEGENICOMMAND(getversion)
 MAKEGENICOMMAND(sliverstatus)
+MAKEGENICOMMAND(status)
+
+struct genicommand {
+    char *tag;
+    char *( *func )( tmcdreq_t * );
+    int quote;
+    char *desc;
+} genicommands[] = {
+    { "all", NULL, 0, NULL },
+    { "client_id", getgeniclientid, 1, "Return the client-specified "
+      "sliver ID" },
+    { "commands", NULL, 0, "Show all available commands" },
+    { "control_mac", getgenicontrolmac, 1, "Show the MAC address of the "
+      "control interface" },
+    { "geni_user", getgenigeniuser, 0, "Show user accounts and public keys" },
+    { "getversion", getgenigetversion, 0, "Report the AM version" },
+    { "manifest", getgenimanifest, 1, "Show the sliver manifest" },
+    { "slice_email", getgenisliceemail, 1, "Retrieve the e-mail address from "
+      "the slice certificate" },
+    { "slice_urn", getgenisliceurn, 1, "Show the URN of the slice" },
+    { "sliverstatus", getgenisliverstatus, 0, "Give the current status of "
+      "the sliver (AM API v2)" },
+    { "status", getgenistatus, 0, "Give the current status of "
+      "the sliver (AM API v3)" },
+    { "user_email", getgeniuseremail, 1, "Show the e-mail address of the "
+      "sliver creator" },
+    { "user_urn", getgeniuserurn, 1, "Show the URN of the sliver creator" },
+    { "version", getgeniversion, 1, NULL }
+};
+
+COMMAND_PROTOTYPE(dogenicommands)
+{
+    char buf[ 0x4000 ], *p;
+    int i, maxlen, first = 1;
+
+    buf[ 0 ] = 0; /* NUL */
+    buf[ 1 ] = '{';
+    buf[ 2 ] = '\n';
+    p = buf + 3;
+
+    for( i = 0, maxlen = 0; i < sizeof genicommands / sizeof *genicommands;
+	 i++ ) {
+	char *tag = genicommands[ i ].tag;
+	int len;
+	
+	if( tag && ( len = strlen( tag ) ) > maxlen )
+	    maxlen = len;
+    }
+    
+    for( i = 0; i < sizeof genicommands / sizeof *genicommands; i++ ) {
+	char *desc = genicommands[ i ].desc;
+
+	if( desc ) {
+	    if( first )
+		first = 0;
+	    else
+		p = geni_append( p, buf + sizeof buf, ",\n" );
+	    
+	    p += snprintf( p, buf + sizeof buf - p,
+			   " \"%s\":%*s\"%s\"",
+			   genicommands[ i ].tag,
+			   maxlen + 1 - strlen( genicommands[ i ].tag ), "",
+			   genicommands[ i ].desc );
+	}
+    }
+    
+    geni_append( p, buf + sizeof buf, "\n}\n" );
+    
+    client_writeback( sock, buf, 1 + strlen( buf + 1 ), tcp );
+
+    return 0;
+}
 
 COMMAND_PROTOTYPE(dogeniall)
 {
     /* Glob all the other stuff into a JSON structure.  Hey, at least
        it's not XML! */
     char buf[ 0x4000 ], *p;
-    struct work {
-	char *tag;
-	char *( *func )( tmcdreq_t * );
-	int quote;
-    } work[] = {
-	{ "client_id", getgeniclientid, 1 },
-	{ "slice_urn", getgenisliceurn, 1 },
-	{ "slice_email", getgenisliceemail, 1 },
-	{ "user_urn", getgeniuserurn, 1 },
-	{ "user_email", getgeniuseremail, 1 },
-	{ "geni_user", getgenigeniuser, 0 },
-	{ "manifest", getgenimanifest, 1 },
-	{ "control_mac", getgenicontrolmac, 1 },
-	{ "version", getgeniversion, 1 },
-	{ "getversion", getgenigetversion, 0 },
-	{ "sliverstatus", getgenisliverstatus, 0 }
-    };
-    int i;
-    
-    p = geni_append( buf, buf + sizeof buf, "{" );
+    int i, first = 1;
 
-    for( i = 0; i < sizeof work / sizeof *work; i++ ) {
-	char *val = work[ i ].func( reqp );
+    buf[ 0 ] = 0; /* NUL */
+    buf[ 1 ] = '{';
+    p = buf + 2;
 
-	if( !val )
+    for( i = 0; i < sizeof genicommands / sizeof *genicommands; i++ ) {
+	char *( *f )( tmcdreq_t * ) = genicommands[ i ].func;
+	char *val;
+
+	if( !f || !( val = f( reqp ) ) )
 	    continue;
 
-	if( i )
+	if( first )
+	    first = 0;
+	else
 	    p = geni_append( p, buf + sizeof buf, "," );
 	    
-	p = geni_quote( p, buf + sizeof buf, work[ i ].tag );
+	p = geni_quote( p, buf + sizeof buf, genicommands[ i ].tag );
 	p = geni_append( p, buf + sizeof buf, ":" );
-	p = ( work[ i ].quote ? geni_quote : geni_append )( p, buf + sizeof
-							    buf, val );
+	p = ( genicommands[ i ].quote ? geni_quote :
+	      geni_append )( p, buf + sizeof buf, val );
+	
 	free( val );
     }
 
     geni_append( p, buf + sizeof buf, "}\n" );
     
-    client_writeback( sock, buf, strlen( buf ), tcp );
+    client_writeback( sock, buf, 1 + strlen( buf + 1 ), tcp );
 
     return 0;
 }
+
+COMMAND_PROTOTYPE(dogeniinvalid)
+{
+    static char error_msg[] = "\0\0unknown request\n";
+	
+    client_writeback( sock, error_msg, sizeof error_msg - 1, tcp );
+	
+    return 1;
+}	
 #endif
 
 /*

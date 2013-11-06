@@ -47,6 +47,17 @@ def usage():
     print "    -n, --no-cache        disable reading cached results"
     print "    -p, --port            specify server port"
     print "    -v, --version         display server version"
+    print ""
+    print "Try \"" + sys.argv[ 0 ] + " commands\" for a list of supported commands."
+
+def dump( sock ):
+    while True:
+        buf = sock.recv( 0x10000 )
+        if not buf:
+            break
+        sys.stdout.write( buf )
+
+    sock.close()
 
 try:
     opts, args = getopt.getopt( sys.argv[ 1: ], "achnp:v", [ "all", "client-version", "help", "no-cache", "port=", "version" ] )
@@ -62,7 +73,7 @@ for opt, param in opts:
     if opt in ( "-a", "--all" ):
         command = "all"
     elif opt in ( "-c", "--client-version" ):
-        print "1"
+        print "1.1"
         sys.exit( 0 )
     elif opt in ( "-h", "--help" ):
         usage()
@@ -99,10 +110,32 @@ sock = socket.socket( socket.AF_INET, socket.SOCK_STREAM )
 sock.connect( (server, port) )
 sock.send( "geni_" + command )
 
-while True:
-    buf = sock.recv( 0x10000 )
-    if not buf:
-        break
-    print buf,
+firstchar = sock.recv( 1 )
+if not firstchar:
+    print >> sys.stderr, sys.argv[ 0 ] + ": unexpected EOF from server"
+    sys.exit( 1 )
 
-sock.close()
+if firstchar != "\x00":
+    # old protocol -- just dump everything
+    sys.stdout.write( firstchar )
+    dump( sock )
+    sys.exit( 0 )
+
+nextchar = sock.recv( 1 )
+if not nextchar:
+    print >> sys.stderr, sys.argv[ 0 ] + ": unexpected EOF from server"
+    sys.exit( 1 )
+
+if nextchar == "\x00":
+    # error from server
+    sys.stderr.write( sys.argv[ 0 ] + ": " + command + ": " )
+    while True:
+        buf = sock.recv( 0x10000 )
+        if not buf:
+            sock.close()
+            sys.exit( 1 )
+        sys.stderr.write( buf )
+
+# new protocol, success
+sys.stdout.write( nextchar )
+dump( sock )
