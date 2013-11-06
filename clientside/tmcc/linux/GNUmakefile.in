@@ -323,9 +323,11 @@ xen-install:	dir-install
 	$(INSTALL) -m 755 $(SRCDIR)/xen/restorevm.pl $(BINDIR)/restorevm.pl
 	$(INSTALL) -m 755 $(SRCDIR)/xen/capturevm.pl $(BINDIR)/capturevm.pl
 	$(INSTALL) -m 755 $(SRCDIR)/xen/xend-config.sxp $(SYSETCDIR)/xen/
+	$(INSTALL) -m 755 $(SRCDIR)/xen/xl.conf $(SYSETCDIR)/xen/
 	$(INSTALL) -m 755 $(SRCDIR)/xen/30-emulab.conf $(SYSETCDIR)/sysctl.d/
 	$(INSTALL) -m 755 $(SRCDIR)/xen/interfaces $(SYSETCDIR)/network/
 	$(INSTALL) -m 755 $(SRCDIR)/xen/emulab-cnet.pl $(SYSETCDIR)/xen/scripts/
+	$(INSTALL) -m 755 $(SRCDIR)/xen/emulab-enet.pl $(SYSETCDIR)/xen/scripts/
 	$(INSTALL) -m 755 $(SRCDIR)/xen/emulab-tun.pl $(SYSETCDIR)/xen/scripts/
 	$(INSTALL) -m 755 $(SRCDIR)/xen/create-image $(LBINDIR)/
 	$(INSTALL) -m 755 $(SRCDIR)/xen/mkimagecache $(BINDIR)/
