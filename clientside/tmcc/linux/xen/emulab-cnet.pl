@@ -124,13 +124,6 @@ my $outer_controlif = `cat $BOOTDIR/controlif`;
 chomp($outer_controlif);
 
 #
-# First run the xen script to setup the bridge interface.
-#
-mysystem2("/etc/xen/scripts/vif-bridge @ARGV");
-exit(1)
-    if ($?);
-
-#
 # We setup a bunch of iptables rules when a container goes online, and
 # then clear them when it goes offline.
 #
@@ -320,9 +313,19 @@ if (@ARGV) {
     # serialize the calls. Rather then worry about each call, just
     # take a big lock here. 
     #
-    if (TBScriptLock("iptables", 0, 900) != TBSCRIPTLOCK_OKAY()) {
+    if (TBScriptLock("iptables", 0, 300) != TBSCRIPTLOCK_OKAY()) {
 	print STDERR "Could not get the iptables lock after a long time!\n";
 	exit(-1);
+    }
+
+    #
+    # First run the xen script to do the bridge interface. We do this
+    # inside the lock since vif-bridge does some iptables stuff.
+    #
+    mysystem2("/etc/xen/scripts/vif-bridge @ARGV");
+    if ($?) {
+	TBScriptUnlock();
+	exit(1);
     }
     my $rval = 0;
     my $op   = shift(@ARGV);
