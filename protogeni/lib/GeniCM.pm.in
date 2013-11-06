@@ -818,19 +818,6 @@ sub GetTicketAuxAux($$$$$$$$$$)
 		goto bad;
 	    }
 	    #
-	    # Check for total hostname length > 63 characters. This
-	    # breaks a lot of clients. Do this until we have a plan
-	    # for dealing with it on the clients. Why 63 instead of 64?
-	    # Cause of a bug in the event library code, that is now fixed,
-	    # but will not make it out to all images for a while. 
-	    #
-	    my $fullhostname = $node_nickname . ".${eid}.${pid}.${OURDOMAIN}";
-	    if (length($fullhostname) > 63) {
-		$response = GeniResponse->Create(GENIRESPONSE_TOOBIG, undef,
-				 "Hostname > 63 characters: $fullhostname");
-	    }
-	    
-	    #
 	    # Is the node a virtual node? Must be an update to an
 	    # existing sliver/ticket, since we now return the node_id
 	    # of the allocated virtual node, not the physical node.
@@ -916,6 +903,20 @@ sub GetTicketAuxAux($$$$$$$$$$)
 	    next;
 	}
 
+	#
+	# Check for total hostname length > 63 characters. This
+	# breaks a lot of clients. Do this until we have a plan
+	# for dealing with it on the clients. Why 63 instead of 64?
+	# Cause of a bug in the event library code, that is now fixed,
+	# but will not make it out to all images for a while. 
+	#
+	my $fullhostname = $node_nickname . ".${eid}.${pid}.${OURDOMAIN}";
+	if (length($fullhostname) > 63) {
+	    $response = GeniResponse->Create(GENIRESPONSE_TOOBIG, undef,
+				     "Hostname > 63 characters: $fullhostname");
+	    goto bad;
+	}
+	    
 	#
 	# Check for disk_image request. Specified as a URN. 
 	#
