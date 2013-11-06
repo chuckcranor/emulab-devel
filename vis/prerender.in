@@ -290,13 +290,21 @@ for ($attempt = 0; $attempt < 16; $attempt++) {
 # (All we care about for now is "pos")
 # Links are ignored.
 
+    my $curline = "";
     while (<NEATO>) {
-	if (/^\s*(\w+)\s\[([^\]]*)\]/) {
+	chomp;
+
+	# build up a line til we get something we know ends a statement
+	$curline .= $_;
+	next if (/[^{};]$/);
+
+	if ($curline =~ /^\s*(\w+)\s+\[([^\]]*)\]/) {
 	    # this line is a property set
 	    ($cmd, $props) = ($1, $2);
 	    $props =~ s/[\=\,]/ /g;
+	    $props =~ s/\s+/ /g;
 
-	    while (($props =~ s/^\s*(\w+)\s+((\"[^\"]*\")|(\w+))\s*//)) {
+	    while (($props =~ s/^\s*(\w+)\s+((\"[^\"]*\")|(\S+))\s*//)) {
 		# add each property to %props
 		($k, $v) = ($1, $2);
 		$v =~ s/\"//g;
@@ -315,6 +323,7 @@ for ($attempt = 0; $attempt < 16; $attempt++) {
 		%props = ();
 	    }
 	}
+	$curline = "";
     }
 
 # done with neato process.
