@@ -13,7 +13,6 @@ CREATE TABLE `geni_users` (
   `name` tinytext,
   `email` tinytext,
   `sa_uuid` varchar(40) NOT NULL default '',
-  `uuid` varchar(40) NOT NULL default '',
   `auth_token` varchar(32) default NULL,
   PRIMARY KEY  (`idx`),
   KEY `hrn` (`hrn`),
