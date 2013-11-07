@@ -23,6 +23,8 @@
 #
 function SPITHEADER($thinheader = 0)
 {
+    global $TBMAINSITE;
+    
     $height = ($thinheader ? 150 : 250);
     
     echo "<html>
@@ -36,7 +38,13 @@ function SPITHEADER($thinheader = 0)
         <script src='https://code.jquery.com/jquery.js'></script>
         <script src='bootstrap/js/bootstrap.js'></script>
       </head>
-    <body>
+    <body>\n";
+    
+    if ($TBMAINSITE && file_exists("../google-analytics.php")) {
+	readfile("../google-analytics.php");
+    }
+    
+    echo "
     <!-- Container for body, needed for sticky footer -->
     <div id='wrap'>
       <div style='background-color: #ff6600'>
