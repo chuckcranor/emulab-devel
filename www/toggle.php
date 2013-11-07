@@ -292,10 +292,10 @@ else {
 #
 # Spit out a redirect 
 #
-if (isset($HTTP_REFERER) && $HTTP_REFERER != "" &&
-    strpos($HTTP_REFERER,$_SERVER["SCRIPT_NAME"])===false) {
+if (isset($_SERVER["HTTP_REFERER"]) && $_SERVER["HTTP_REFERER"] != "" &&
+    strpos($_SERVER["HTTP_REFERER"],$_SERVER["SCRIPT_NAME"])===false) {
     # Make sure the referer is not me!
-    header("Location: $HTTP_REFERER");
+    header("Location: " . $_SERVER["HTTP_REFERER"]);
 }
 elseif ($zapurl) {
     header("Location: $zapurl");
