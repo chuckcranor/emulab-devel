@@ -5569,6 +5569,20 @@ sub SetupPortLans($)
 	    tberror("Could not lock $portvlan for a long time!\n");
 	    return -1;
 	}
+	#
+	# Once we get the lock, make sure the lan is actually still
+	# shared. 
+	#
+	if ($portvlan->Refresh() != 0) {
+	    tberror("Could not refresh $portvlan after locking!\n");
+	    $portvlan->Unlock();
+	    return -1;
+	}
+	if (! $portvlan->IsShared()) {
+	    tberror("$portvlan is no longer shared!\n");
+	    $portvlan->Unlock();
+	    return -1;
+	}
 
 	#
 	# The idea here is to remove any members for this lan
@@ -5639,13 +5653,13 @@ sub SetupPortLans($)
 # When swapping out an experiment, need to clear the ports from the
 # shared lans. 
 #
-sub ClearPortLans($)
+sub ClearPortLans($;$@)
 {
-    my ($self) = @_;
+    my ($self, $nolock, @lans) = @_;
+    $nolock = 0 if (!defined($nolock));
     require Lan;
 
-    my @lans;
-    if (Lan->ExperimentLans($self, \@lans) != 0) {
+    if (!@lans && Lan->ExperimentLans($self, \@lans) != 0) {
 	tberror("Could not get list of all lans for $self\n");
 	return -1;
     }
@@ -5660,8 +5674,8 @@ sub ClearPortLans($)
 
 	my $portvlan = Lan->Lookup($target_lanid);
 	if (!defined($portvlan)) {
-	    tberror("Could not lookup portvlan $target_lanid\n");
-	    return -1;
+	    tbinfo("portvlan $target_lanid no longer exists. Skipping ...\n");
+	    next;
 	}
 
 	#
@@ -5670,9 +5684,32 @@ sub ClearPortLans($)
 	# timeout should not be too long; indicates an error if
 	# it is.
 	#
-	if ($portvlan->Lock(180) != 0) {
+	if (!$nolock && $portvlan->Lock(180) != 0) {
 	    tberror("Could not lock $portvlan for a long time!\n");
 	    return -1;
+	}
+
+	#
+	# Once we get the lock, make sure the lan is actually still
+	# shared. 
+	#
+	if ($portvlan->Refresh() != 0) {
+	    tberror("Could not refresh $portvlan after locking!\n");
+	    $portvlan->Unlock()
+		if (!$nolock);
+	    return -1;
+	}
+	#
+	# This does not need to be a fatal error since snmpit will not
+	# allow a shared vlan to removed. The only way to get here is
+	# if sharevlan -r -f is called, in which case the port was
+	# forcibly yanked out of the target vlan already, so we can just
+	# skip it. 
+	#
+	if (! $portvlan->IsShared()) {
+	    $portvlan->Unlock()
+		if (!$nolock);
+	    next;
 	}
 
 	#
@@ -5682,7 +5719,8 @@ sub ClearPortLans($)
 	my @members;
 	if ($portvlan->MemberList(\@members) != 0) {
 	    tberror("Could not get member list for $portvlan\n");
-	    $portvlan->Unlock();
+	    $portvlan->Unlock()
+		if (!$nolock);
 	    return -1;
 	}
 	foreach my $member (@members) {
@@ -5707,7 +5745,8 @@ sub ClearPortLans($)
 	    # Delete the member.
 	    if ($portvlan->DelMember($member)) {
 		tberror("Could not delete $member from $portvlan\n");
-		$portvlan->Unlock();
+		$portvlan->Unlock()
+		    if (!$nolock);
 		return -1;
 	    }
 	}
@@ -5716,7 +5755,8 @@ sub ClearPortLans($)
 	#
 	my $experiment = $portvlan->GetExperiment();
 	if (!defined($experiment)) {
-	    $portvlan->Unlock();
+	    $portvlan->Unlock()
+		if (!$nolock);
 	    return -1;
 	}
 	my $pid = $experiment->pid();
@@ -5726,10 +5766,12 @@ sub ClearPortLans($)
 	print "Syncing target vlan $lanid in $experiment\n";
 	mysystem("$TB/bin/snmpit_test -f --redirect-err -X $pid $eid $lanid");
 	if ($?) {
-	    $portvlan->Unlock();
+	    $portvlan->Unlock()
+		if (!$nolock);
 	    return -1;
 	}
-	$portvlan->Unlock();
+	$portvlan->Unlock()
+		if (!$nolock);
     }
     return 0;
 }
@@ -5773,6 +5815,32 @@ sub SharingVlans($)
 	if (!$query_result);
 
     return $query_result->numrows;
+}
+
+#
+# List of shared vlans
+#
+sub SharedVlanList($$)
+{
+    my ($self, $pref) = @_;
+    my @result = ();
+    my $idx = $self->idx();
+
+    my $query_result =
+	DBQueryWarn("select lanid from shared_vlans where exptidx='$idx'");
+    return -1
+	if (!$query_result);
+
+    while (my ($lanid) = $query_result->fetchrow_array()) {
+	my $vlan = VLan->Lookup($lanid);
+	if (!defined($vlan)) {
+	    tberror("Could not lookup shared vlan $lanid\n");
+	    return -1;
+	}
+	push(@result, $vlan);
+    }
+    @$pref = @result;
+    return 0;
 }
 
 #

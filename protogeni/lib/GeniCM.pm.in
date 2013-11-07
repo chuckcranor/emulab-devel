@@ -75,6 +75,7 @@ use Compress::Zlib;
 use File::Temp qw(tempfile);
 use MIME::Base64;
 use Digest::SHA1 qw(sha1_hex);
+use POSIX ":sys_wait_h";
 
 # Configure variables
 my $TB		   = "@prefix@";
@@ -119,6 +120,7 @@ my $ADDAUTHORITY   = "$TB/sbin/protogeni/addauthority";
 my $EMULAB_PEMFILE = "@prefix@/etc/genicm.pem";
 my $TARINSTALL     = "/usr/local/bin/install-tarfile";
 my $IMAGE_SETUP    = "$TB/sbin/image_setup";
+my $SHAREVLAN      = "$TB/sbin/sharevlan";
 my $FWNAME	   = "fw";
 my $API_VERSION    = 1;
 my $USELOCALPROJ   = 0;
@@ -916,7 +918,6 @@ sub GetTicketAuxAux($$$$$$$$$$)
 				     "Hostname > 63 characters: $fullhostname");
 	    goto bad;
 	}
-	    
 	#
 	# Check for disk_image request. Specified as a URN. 
 	#
@@ -5470,6 +5471,35 @@ sub CleanupDeadSlice($;$)
 	    print STDERR "Could not clear portvlans\n";
 	    return -1;
 	}
+
+	#
+	# If this experiment has shared a lan to others, then must
+	# revoke them. This will yank them out from underneath the
+	# slices using them, but thats the way it has to be.
+	#
+	if ($experiment->SharingVlans()) {
+	    my @sharedvlans = ();
+	    if ($experiment->SharedVlanList(\@sharedvlans)) {
+		print STDERR "Failed to get shared VLANs\n";
+		return -1;
+	    }
+	    while (@sharedvlans) {
+		my $vlan  = shift(@sharedvlans);
+		my $vname = $vlan->vname();
+		print STDERR "Unsharing vlan $vname in $pid,$eid\n";
+		#
+		# This operation has to be done as an admin person. 
+		#
+		GeniUtil::FlipToElabMan();
+		system("$WAP $SHAREVLAN -r -f $pid,$eid $vname");
+		my $ecode = $?;
+		FlipToUser($slice);
+		if ($ecode) {
+		    print STDERR "Failed to unshare vlan!\n";
+		    return -1;
+		}
+	    }
+	}
 	
 	system("$SNMPIT -C -r $pid $eid");
 	if ($?) {
@@ -6313,8 +6343,6 @@ sub KillMonitor($)
 
     return 0
 	if (!$pid);
-	
-    print STDERR "Monitor in progress: process id $pid ...\n";
 
     my $experiment = $slice->GetExperiment();
     if (!defined($experiment)) {
@@ -6322,6 +6350,21 @@ sub KillMonitor($)
 	return GeniResponse->Create(GENIRESPONSE_ERROR, undef,
 				    "No slice experiment");
     }
+    #
+    # See if the process still exists.
+    #
+    if (kill(0, $pid) == 0) {
+	if ($!{ESRCH}) {
+	    print STDERR "Monitor process $pid no longer exists.\n";
+	    $experiment->SetCancelFlag(0);
+	    $slice->ClearMonitorPid();
+	    return 0;
+	}
+	# What does getting here mean?
+    }
+	
+    print STDERR "Monitor in progress: process id $pid ...\n";
+
     if ($experiment->canceled()) {
 	print STDERR "Cancel flag already set for $experiment\n";
 	return GeniResponse->Create(GENIRESPONSE_ERROR, undef,

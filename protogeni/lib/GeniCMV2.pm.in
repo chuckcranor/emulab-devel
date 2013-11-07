@@ -99,6 +99,8 @@ my $SNMPIT         = "$TB/bin/snmpit";
 my $CLONEIMAGE     = "$TB/sbin/clone_image";
 my $CREATEIMAGE    = "$TB/bin/create_image";
 my $DELETEIMAGE    = "$TB/sbin/delete_image";
+my $WAP            = "$TB/sbin/withadminprivs";
+my $SHAREVLAN      = "$TB/sbin/sharevlan";
 my $XMLLINT	   = "/usr/local/bin/xmllint";
 my $PRERENDER      = "$TB/libexec/vis/prerender";
 my $EMULAB_PEMFILE = "@prefix@/etc/genicm.pem";
@@ -735,6 +737,8 @@ sub GetSliver($)
     my ($argref) = @_;
     my $slice_urn    = $argref->{'slice_urn'};
     my $credentials  = $argref->{'credentials'};
+
+    sleep(100);
 
     if (! (defined($credentials) && defined($slice_urn))) {
 	return GeniResponse->MalformedArgsResponse("Missing arguments");
@@ -2707,6 +2711,155 @@ sub ListActiveSlivers($)
     # Slow down the GMOC queries. 
     sleep(5);
     return GeniResponse->Create(GENIRESPONSE_SUCCESS, \@results);
+}
+
+#
+# Emulab specific function to share and unshare vlans. 
+#
+sub ShareLan($)
+{
+    my ($argref) = @_;
+    
+    return ShareLanAux($argref, 0);
+}
+sub UnShareLan($)
+{
+    my ($argref) = @_;
+    
+    return ShareLanAux($argref, 1);
+}
+
+sub ShareLanAux($$)
+{
+    my ($argref, $revoke) = @_;
+    my $slice_urn    = $argref->{'slice_urn'};
+    my $credentials  = $argref->{'credentials'};
+    my $linkname     = $argref->{'lanname'};
+    my $token        = $argref->{'token'};
+
+    require Lan;
+    
+    if (! (defined($credentials) && 
+	   defined($slice_urn) && defined($linkname))) {
+	return GeniResponse->MalformedArgsResponse("Missing arguments");
+    }
+    if (! ($linkname =~ /^[-\w]*$/)) {
+	return GeniResponse->MalformedArgsResponse("Improper lanname argument");
+    }
+    if (!$revoke) {
+	if (!defined($token)) {
+	    return GeniResponse->MalformedArgsResponse("Missing token");
+	}
+	if (! ($token =~ /^[-\w]*$/)) {
+	    return GeniResponse->MalformedArgsResponse("Improper token");
+	}
+    }
+    
+    my ($credential,$speaksfor) = GeniStd::CheckCredentials($credentials);
+    return $credential
+	if (GeniResponse::IsResponse($credential));
+
+    my $user = GeniCM::CreateUserFromCertificate($credential);
+    return $user
+	if (GeniResponse::IsResponse($user));
+    
+    my ($slice, $aggregate) = Credential2SliceAggregate($credential);
+    return $slice
+	if (defined($slice) && GeniResponse::IsResponse($slice));
+
+    if (! (defined($slice) && defined($aggregate))) {
+	return GeniResponse->Create(GENIRESPONSE_SEARCHFAILED, undef,
+				    "Slice does not exist");
+    }
+    main::AddLogfileMetaDataFromSlice($slice);
+
+    # If a monitor process is running, we are "busy".
+    if ($slice->monitor_pid()) {
+	return GeniResponse->MonitorResponse();
+    }
+    
+    if ($slice_urn ne $slice->urn()) {
+	return GeniResponse->Create(GENIRESPONSE_FORBIDDEN(), undef,
+				    "Credential does not match the URN");
+    }
+    #
+    # Lock the slice; we do not the user to mess with things.
+    #
+    if ($slice->Lock() != 0) {
+	return GeniResponse->BusyResponse();
+    }
+    my $experiment = $slice->GetExperiment();
+    if (!defined($experiment)) {
+	$slice->UnLock();
+	return GeniResponse->Create(GENIRESPONSE_ERROR, undef,
+				    "No local experiment for slice");
+    }
+    my $pid  = $experiment->pid();
+    my $eid  = $experiment->eid();
+    my $vlan = VLan->Lookup($experiment, $linkname);
+    if (!defined($vlan)) {
+	$slice->UnLock();
+	return GeniResponse->Create(GENIRESPONSE_ERROR, undef,
+				    "No such lan in sliver");
+    }
+    if ($vlan->IsShared() && !$revoke) {
+	$slice->UnLock();
+	return GeniResponse->Create(GENIRESPONSE_SUCCESS, undef,
+				    "Lan is already shared");
+    }
+    if (!$revoke) {
+	#
+	# This operation has to be done as an admin person. 
+	#
+	GeniUtil::FlipToElabMan();
+	my $output = GeniUtil::ExecQuiet("$WAP $SHAREVLAN -o $pid,$eid ".
+					 "  $linkname $token");
+	my $ecode  = $?;
+	GeniUtil::FlipToGeniUser();
+	if ($ecode) {
+	    print STDERR "Failed to share vlan:\n";
+	    print STDERR $output;
+	    $slice->UnLock();
+	    return GeniResponse->Create(GENIRESPONSE_ERROR, undef, $output);
+	}
+	libtestbed::SENDMAIL($TBOPS, "$linkname has been shared",
+			     "$linkname in $slice_urn has been\n".
+			     "shared by $user\n\n". 
+			     "Slice: $slice\n".
+			     "Experiment: $experiment\n",
+			     $TBOPS);
+	
+	$slice->UnLock();
+	return GeniResponse->Create(GENIRESPONSE_SUCCESS);
+    }
+    #
+    # Revoking is a litte trickier since we have to worry about the
+    # experiments that are actually using the shared vlan. But the
+    # backend program is going to revoke access from all the experiments
+    # using those ports. Oh well.
+    #
+    # This operation has to be done as an admin person. 
+    #
+    GeniUtil::FlipToElabMan();
+    my $output = GeniUtil::ExecQuiet("$WAP $SHAREVLAN -r -f $pid,$eid ".
+				     "  $linkname ");
+    my $ecode  = $?;
+    GeniUtil::FlipToGeniUser();
+    if ($ecode) {
+	print STDERR "Failed to unshare vlan:\n";
+	print STDERR $output;
+	$slice->UnLock();
+	return GeniResponse->Create(GENIRESPONSE_ERROR);
+    }
+    libtestbed::SENDMAIL($TBOPS, "$linkname has been unshared",
+			 "$linkname in $slice_urn has been\n".
+			 "unshared by $user\n\n". 
+			 "Slice: $slice\n".
+			 "Experiment: $experiment\n",
+			 $TBOPS);
+
+    $slice->UnLock();
+    return GeniResponse->Create(GENIRESPONSE_SUCCESS);
 }
 
 # _Always_ make sure that this 1 is at the end of the file...

@@ -579,9 +579,7 @@ sub RenewSliver()
 
     # Return an XML-RPC boolean
     my $coder = Frontier::RPC2->new();
-    return GeniResponse->Create(GENIRESPONSE_SUCCESS,
-				GeniResponse::value($response),
-				GeniResponse::value($response));
+    return GeniResponse->Create(GENIRESPONSE_SUCCESS, $coder->boolean(1));
 }
 
 sub Shutdown()
@@ -1126,6 +1124,28 @@ sub PerformOperationalAction
 	}
 	$slice->UnLock();
 	return GeniResponse->Create(GENIRESPONSE_SUCCESS);
+    }
+    elsif ($action eq 'geni_sharelan') {
+	if (!exists($options->{"geni_sharelan_lanname"})) {
+	    return GeniResponse->MalformedArgsResponse("No lanname provided!");
+	}
+	if (!exists($options->{"geni_sharelan_token"})) {
+	    return GeniResponse->MalformedArgsResponse("No token provided!");
+	}
+	$args->{'slice_urn'} = $slice->urn();
+	$args->{'token'}     = $options->{"geni_sharelan_token"};
+	$args->{'lanname'}   = $options->{"geni_sharelan_lanname"};
+	
+	return GeniCMV2::ShareLan($args);
+    }
+    elsif ($action eq 'geni_unsharelan') {
+	if (!exists($options->{"geni_unsharelan_lanname"})) {
+	    return GeniResponse->MalformedArgsResponse("No lanname provided!");
+	}
+	$args->{'slice_urn'} = $slice->urn();
+	$args->{'lanname'}   = $options->{"geni_unsharelan_lanname"};
+	
+	return GeniCMV2::UnShareLan($args);
     }
     return GeniResponse->Create(GENIRESPONSE_REFUSED, undef,
 				"Invalid operational action");

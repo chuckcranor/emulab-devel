@@ -33,13 +33,14 @@ sub usage()
 {
     print STDERR "Usage: sharevlan [-o] eid lanname token\n";
     print STDERR "       sharevlan -r | -i token\n";
+    print STDERR "       sharevlan -r eid lanname\n";
     print STDERR " -r    Revoke sharing instead\n";
     print STDERR " -i    Show members.\n";
     print STDERR " -o    Sharing is open to everyone.\n";
     print STDERR " -l    List all shared vlans\n";
     exit(-1);
 }
-my $optlist  = "hrolif";
+my $optlist  = "hrRolif";
 my $revoke   = 0;
 my $open     = 0;
 my $list     = 0;
@@ -112,8 +113,9 @@ elsif (defined($options{'l'})) {
 elsif (defined($options{'r'})) {
     $revoke = 1;
 
-    usage()
-	if (@ARGV != 1);
+    if (defined($options{'R'})) {
+	$force = 1;
+    }
 }
 else {
     usage()
@@ -163,7 +165,7 @@ if ($info) {
     my $token = $ARGV[0];
     my $query_result =
 	DBQueryFatal("select lanid from shared_vlans where token='$token'");
-    if (!$query_result) {
+    if (!$query_result->numrows) {
 	fatal("No such shared vlan");
     }
     my ($lanid) = $query_result->fetchrow_array();
@@ -208,24 +210,61 @@ if ($info) {
 }
 
 if ($revoke) {
-    my $token = $ARGV[0];
+    my ($vlan,$lanid);
     my $busy  = 0;
 
+    if (@ARGV == 1) {
+	my $token = $ARGV[0];
+
+	my $query_result =
+	    DBQueryFatal("select lanid from shared_vlans where token='$token'");
+	if (!$query_result->numrows) {
+	    fatal("No such shared vlan");
+	}
+	($lanid) = $query_result->fetchrow_array();
+	$vlan = VLan->Lookup($lanid);
+	if (!defined($vlan)) {
+	    fatal("No such vlan $lanid");
+	}
+    }
+    elsif (@ARGV == 2) {
+	my $eid     = $ARGV[0];
+	my $lanname = $ARGV[1];
+
+	my $experiment = Experiment->Lookup($eid);
+	if (!defined($experiment)) {
+	    fatal("No such experiment $eid");
+	}
+	$vlan = VLan->Lookup($experiment, $lanname);
+	if (!defined($vlan)) {
+	    fatal("No such lan in $experiment");
+	}
+	$lanid = $vlan->lanid();
+    }
+    else {
+	usage();
+    }
+    if (!$vlan->IsShared()) {
+	fatal("Lan is not shared");
+    }
+
+    #
+    # The lan is obviously shared, so we have to lock it.
+    # It should not spend much time locked though, so the
+    # timeout should not be too long; indicates an error if
+    # it is.
+    #
+    if ($vlan->Lock(180) != 0) {
+	fatal("Could not lock vlan $lanid");
+    }
+    
     #
     # Do not allow if the lan is actually being used by other experiments.
     #
-    my $query_result =
-	DBQueryFatal("select lanid from shared_vlans where token='$token'");
-    if (!$query_result) {
-	fatal("No such shared vlan");
-    }
-    my ($lanid) = $query_result->fetchrow_array();
-    my $vlan = VLan->Lookup($lanid);
-    if (!defined($vlan)) {
-	fatal("No such vlan $lanid");
-    }
+
     my @members;
     if ($vlan->MemberList(\@members) != 0) {
+	$vlan->Unlock();
 	fatal("Could not get member list for $vlan");
     }
     foreach my $member (@members) {
@@ -244,21 +283,42 @@ if ($revoke) {
 	    if (defined($experiment)) {
 		print $node->node_id() . ":$iface in ";
 		print $experiment->pid() . "/" . $experiment->eid() . " ";
-		print "is using this vlan!\n";
-		$busy++;
+		print "is using this vlan";
+		if ($force) {
+		    print ", but we are going to forcibly revoke it!\n";
+
+		    my $portlan = Lan->Lookup($experiment, $portlan_lanname);
+		    if (!defined($portlan)) {
+			$vlan->Unlock();
+			fatal("Could not revoke sharing of $vlan by ".
+			      "$portlan_lanname in $experiment cause ".
+			      "portlan_lanname does not exist!\n");
+		    }
+		    if ($experiment->ClearPortLans(1, $portlan)) {
+			$vlan->Unlock();
+			fatal("Could not revoke sharing of $vlan by ".
+			      "$portlan_lanname in $experiment!\n");
+		    }
+		}
+		else {
+		    print "!\n";
+		    $busy++;
+		}
 	    }
 	    else {
-		print $node->node_id() . ":$iface is marked as in this vlan ";
-		print "but the experiment is gone!\n";
+		print $node->node_id() . ":$iface is marked as shared in this ";
+		print "vlan but the experiment is gone!\n";
 	    }
 	}
     }
     if ($busy) {
 	print "*** Refusing to delete shared vlan until sharers give it up!\n";
+	$vlan->Unlock();
 	exit(1);
     }
     
-    DBQueryFatal("delete from shared_vlans where token='$token'");
+    $vlan->Unlock();
+    DBQueryFatal("delete from shared_vlans where lanid='$lanid'");
     exit(0);
 }
 
