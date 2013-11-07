@@ -55,7 +55,6 @@ my $quickuuid;
 # Protos
 sub fatal($);
 sub UserError($);
-sub GiveMeRspec($);
 sub Terminate($);
 sub Extend($$);
 
@@ -228,7 +227,7 @@ print STDERR Dumper($xmlparse)
 #
 # Make sure all the required arguments were provided.
 #
-foreach my $key ("username", "email", "imageid", "name") {
+foreach my $key ("username", "email", "profile", "name") {
     fatal("Missing required attribute '$key'")
 	if (! (exists($xmlparse->{'attribute'}->{"$key"}) &&
 	       defined($xmlparse->{'attribute'}->{"$key"}) &&
@@ -238,7 +237,7 @@ foreach my $key ("username", "email", "imageid", "name") {
 #
 # Gather up args and sanity check.
 #
-my ($value, $user_urn, $user_uid, $user_hrn, $user_email, $sshkey, $imageid);
+my ($value, $user_urn, $user_uid, $user_hrn, $user_email, $sshkey, $profile);
 
 #
 # Username and email has to be acceptable to Emulab user system.
@@ -262,15 +261,21 @@ $user_email = $value;
 #
 # Not many choices; see if it exists.
 #
-$value = $xmlparse->{'attribute'}->{"imageid"}->{'value'};
+$value = $xmlparse->{'attribute'}->{"profile"}->{'value'};
 if (! TBcheck_dbslot($value, "os_info", "osname",
 		     TBDB_CHECKDBSLOT_WARN|TBDB_CHECKDBSLOT_ERROR)) {
-    fatal("Illegal imageid: $value");
+    fatal("Illegal imageid: $profile");
 }
-if (!defined(OSinfo->LookupByName($value))) {
-    fatal("No such imageid: $value");
+my $safe_profile = DBQuoteSpecial($value);
+my $profile_result =
+    GeniDB::DBQueryWarn("select * from quickvm_rspecs ".
+			"where name=$safe_profile");
+if (!$profile_result || !$profile_result->numrows()) {
+    fatal("No such profile: $value");
 }
-$imageid = $value;
+my $row = $profile_result->fetchrow_hashref();
+my $rspecstr = $row->{'rspec'};
+my $profile = $value;
 
 #
 # This is so the php code can look it up in the DB. Silly.
@@ -460,7 +465,7 @@ sub SetQuickVMStatus($$)
 if (!GeniDB::DBQueryWarn("insert into quickvms set ".
 			 "  uuid='$quickvm_uuid', slice_uuid='$slice_uuid', ".
 			 "  creator_uuid='$user_uuid', status='created', ".
-			 "  profile='$imageid', name='$quickvm_name'")) {
+			 "  profile='$profile', name='$quickvm_name'")) {
     $slice->Delete();
     fatal("Could not create quickvm record");
 }
@@ -479,7 +484,6 @@ if (!$debug) {
     # All of the logging magic happens in here.
     libaudit::AuditFork();
 }
-my $rspecstr = GiveMeRspec($imageid);
 
 #
 # This creates the sliver and starts it.
@@ -585,41 +589,6 @@ sub UserError($) {
 	if (!$debug);
     print $mesg;
     exit(1);
-}
-
-sub GiveMeRspec($)
-{
-    my ($imageid) = @_;
-    
-    my $diskimage = 
-	"<disk_image ".
-	"    name='urn:publicid:IDN+emulab.net+image+emulab-ops//$imageid'/>\n";
-    
-    my $rspecstr = <<'EOL';
-<?xml version='1.0' encoding='UTF-8'?>
-    <rspec xmlns='http://www.protogeni.net/resources/rspec/2'
-           xmlns:xsi='http://www.w3.org/2001/XMLSchema-instance'
-	   xsi:schemaLocation='http://www.protogeni.net/resources/rspec/2 http://www.protogeni.net/resources/rspec/2/request.xsd'
-	   type='request' >
-      <node client_id='node1'
-            exclusive='false'>
-         <sliver_type name='emulab-xen'></sliver_type>
-         <interface client_id="node1:if0" />
-      </node>
-      <node client_id='node2'
-            exclusive='false'>
-         <sliver_type name='emulab-xen'></sliver_type>
-         <interface client_id="node2:if0" />
-      </node>
-      <link client_id='link0'>
-        <interface_ref client_id='node1:if0' />
-        <interface_ref client_id='node2:if0' />
-        <property source_id='node1:if0' dest_id='node2:if0' capacity='10000'/>
-        <property source_id='node2:if0' dest_id='node1:if0' capacity='10000'/>
-      </link>
-    </rspec>
-EOL
-    return $rspecstr;
 }
 
 #
