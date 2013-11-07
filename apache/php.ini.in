@@ -9,9 +9,10 @@
 magic_quotes_gpc	=	Off
 
 ;
-; Our scripts depend on this!
+; Our scripts depend on this being on!
+; Not any more!
 ;
-register_globals	=	On
+register_globals	=	Off
 
 ;
 ; Turn off the feature of php that kills programs after a set execution time

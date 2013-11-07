@@ -21,8 +21,6 @@
 # 
 # }}}
 #
-# Lets emulate register_globals=off for a while.
-include("unregister_globals.php");
 
 #
 # Standard definitions.
