@@ -867,9 +867,9 @@ function DBQueryWarn($query, $linkid = NULL)
 #
 function DBWarn($message)
 {
-    global	$PHP_SELF, $DBErrorString;
+    global	$DBErrorString;
     
-    $text = "$message - In $PHP_SELF\n" .
+    $text = "$message - In " . $_SERVER["PHP_SELF"] . "\n" .
   	    "$DBErrorString\n";
 
     TBERROR($text, 0);
@@ -882,9 +882,9 @@ function DBWarn($message)
 #
 function DBFatal($message)
 {
-    global	$PHP_SELF, $DBErrorString;
+    global	$DBErrorString;
 
-    $text = "$message - In $PHP_SELF\n" .
+    $text = "$message - In " . $_SERVER["PHP_SELF"] . "\n" .
   	    "$DBErrorString\n";
 
     TBERROR($text, 1);

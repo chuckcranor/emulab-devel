@@ -22,24 +22,24 @@ function quoteForSQL( $l ) {
 }
 
 function linkToViewDB( $text, $dbname ) {
-  global $PHP_SELF;
+  $PHP_SELF = $_SERVER["PHP_SELF"];
   return "<a href=\"$PHP_SELF?dbname=$dbname\">$text</a>";
 }
 
 function linkToViewServer( $text ) {
-  global $PHP_SELF;
+  $PHP_SELF = $_SERVER["PHP_SELF"];
 
   // use view action so we don't kick them into default database.
   return "<a href=\"$PHP_SELF?action=view\">$text</a>";
 }
 
 function linkToViewTable( $text, $dbname, $tablename ) {
-  global $PHP_SELF;
+  $PHP_SELF = $_SERVER["PHP_SELF"];
   return "<a href=\"$PHP_SELF?dbname=$dbname&tablename=$tablename\">$text</a>";
 }
 
 function linkToViewTableExtra( $text, $extra, $dbname, $tablename ) {
-  global $PHP_SELF;
+  $PHP_SELF = $_SERVER["PHP_SELF"];
   return "<a href=\"$PHP_SELF?dbname=$dbname&tablename=$tablename&$extra\">$text</a>";
 }
 
@@ -92,7 +92,7 @@ function encap( $c, $tag, $first ) {
 }
 
 function _form( $c ) { 
-  global $PHP_SELF;
+  $PHP_SELF = $_SERVER["PHP_SELF"];
   return "<form action='$PHP_SELF' method=post>\n" . $c . "</form>\n";   
 }
  
@@ -117,11 +117,11 @@ function _p( $c ) { return encap( $c, "p", ""); }
 function _b( $c ) { return encap( $c, "b", ""); }
 function _i( $c ) { return encap( $c, "i", ""); }
 function _link( $c, $vars ) { 
-  global $PHP_SELF;
+  $PHP_SELF = $_SERVER["PHP_SELF"];
   return encap( $c, "a", "href=\"$PHP_SELF?$vars\"" ); 
 }
 function _link2( $c, $vars, $o ) { 
-  global $PHP_SELF;
+  $PHP_SELF = $_SERVER["PHP_SELF"];
   return encap( $c, "a", "href=\"$PHP_SELF?$vars\" $o" ); 
 }
 

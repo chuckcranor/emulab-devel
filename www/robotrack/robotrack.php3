@@ -142,6 +142,7 @@ PAGEHEADER("Real Time Robot Tracking Applet");
 #
 # Draw the legend and some explanatory text.
 #
+$REQUEST_URI = $_SERVER["REQUEST_URI"];
 echo "<table cellspacing=5 cellpadding=5 border=0 class=\"stealth\">
       <tr>
        <td align=\"left\" valign=\"top\" class=\"stealth\">
