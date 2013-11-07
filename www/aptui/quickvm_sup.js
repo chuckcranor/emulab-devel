@@ -14,7 +14,7 @@ function CallMethod(method, callback, uuid, arg)
 {
     return $.ajax({
 	// the URL for the request
-	url: "quickvm_status.php",
+	url: window.location.href,
  
 	// the data to send (will be converted to a query string)
 	data: {
@@ -77,8 +77,7 @@ function StatusWatchCallBack(uuid, json)
 	    }
 	    $("#terminate_button").prop("disabled", false);
 	    $("#extend_button").prop("disabled", false);
-//	    ShowTopo(uuid);
-	    ShowTopoNew(uuid);
+	    ShowTopo(uuid);
 	}
 	else if (status == 'failed') {
 	    status_html = "<font color=red>failed</font>";
@@ -119,26 +118,10 @@ function Terminate(uuid, url)
 function ShowTopo(uuid)
 {
     var callback = function(json) {
-	if (json.value == "") {
-	    return;
-	}
-	console.log(json.value);
-	var html = "<div>" + json.value + "</div>";
-
-	$("#showtopo_div").html(html);
-    }
-    var $xmlthing = CallMethod("gettopomap", null, uuid, null);
-    
-    $xmlthing.done(callback);
-}
-
-function ShowTopoNew(uuid)
-{
-    var callback = function(json) {
 	console.log(json.value);
 	var xmlDoc = $.parseXML(json.value);
 	var xml    = $(xmlDoc);
-	var topo   = ConvertManifestToJSON(xml);
+	var topo   = ConvertManifestToJSON(null, xml);
 	console.log(topo);
 
 	$("#showtopo_container").removeClass("invisible");
@@ -150,6 +133,91 @@ function ShowTopoNew(uuid)
     console.log(uuid);
     var $xmlthing = CallMethod("manifest", null, uuid, null);
     $xmlthing.done(callback);
+}
+
+function ShowProfile(direction)
+{
+    var profile;
+    var index;
+    
+    if (direction) {
+	var max = $('#profile_name option').length;
+	console.log(max);
+	index = ShowProfile.index + direction;
+	
+	if (index < 1) {
+	    index = max;
+	}
+	else if (index >= max) {
+	    index = 1;
+	}
+	profile = $("#profile_name :nth("+ index + ")").val();
+    }
+    else {
+	// Use this static variable to track current index
+	index = $("#profile_name").prop("selectedIndex");
+	profile = $('#profile_name').val();
+    }
+    ShowProfile.index = index;
+    console.log(profile);
+    console.log(index);
+
+    var callback = function(json) {
+	console.log(json.value);
+	var xmlDoc = $.parseXML(json.value.rspec);
+	var xml    = $(xmlDoc);
+	var topo   = ConvertManifestToJSON(profile, xml);
+	console.log(topo);
+
+	ShowModal("#quickvm_topomodal");
+    
+	$('#showtopo_title').html("<h3>" + profile + "</h3>");
+	$('#showtopo_description').html(json.value.description);
+
+	maketopmap("#showtopo_div",
+		   ($("#showtopo_dialog").outerWidth()) - 90,
+		   300, topo);
+    }
+    var $xmlthing = CallMethod("getprofile", null, 0, profile);
+    $xmlthing.done(callback);
+}
+
+function ShowProfileSlider(direction)
+{
+    console.log(direction);
+    
+    var callback = function(json) {
+	console.log(json.value);
+	var xmlDoc = $.parseXML(json.value.rspec);
+	var xml    = $(xmlDoc);
+	var topo   = ConvertManifestToJSON(null, xml);
+	console.log(topo);
+
+	$('#showtopo_title').html("<h3>" + json.value.name + "</h3>");
+	$('#showtopo_description').html(json.value.description);
+	
+	$("#slider_container").removeClass("invisible");
+	maketopmap("#slider_div",
+		   ($("#slider_div").outerWidth()) - 90,
+		   200, topo);
+    }
+    var $xmlthing = CallMethod("getprofile", null, 0, null);
+    $xmlthing.done(callback);
+}
+
+function InitProfileSelector()
+{
+    $('#scrollleft').click(function () {
+	ShowProfile(-1);
+    });
+    $('#scrollright').click(function () {
+	ShowProfile(1);
+    });
+    $('#showtopo_select').click(function () {
+	HideModal("#quickvm_topomodal");
+	profile = $("#profile_name :nth("+ ShowProfile.index + ")").val();	
+	$('#profile_name').val(profile);
+    });
 }
 
 function Setsshurl(uuid)
@@ -292,7 +360,7 @@ function StartResizeWatchdog(uuid)
 	// Must clear the div for the D3 library.
 	$("#showtopo_div").html("<div></div>");
 	$("#showtopo_div").removeClass("invisible");
-	ShowTopoNew(uuid);
+	ShowTopo(uuid);
     }
 
     //
@@ -396,14 +464,13 @@ function StartCountdownClock(when)
     }, 1000);
 }
 
-var foo = {"nodes": [{"name" : "node1"},
-		     {"name" : "node2"}],
-           "links": [{"source" : 0, "target" : 1, "value" : "foo"}]};
-
 function maketopmap(divname, width, height, json)
 {
+    $(divname).html("<div></div>");
+    
     var vis = d3.select(divname).append("svg:svg")
 	.attr("class", "topomap")
+        .style("visibility", "hidden")
 	.attr("width", width)
 	.attr("height", height);
 
@@ -456,11 +523,10 @@ function maketopmap(divname, width, height, json)
 	    d.y  += d3.event.dy;
 	    // this is the key to make it work together with updating
 	    // both px,py,x,y on d !
-	    tick(); 
+	    tick(null); 
 	}
 
 	function dragend(d, i) {
-	    console.log(d);
 	    // of course set the node to fixed so the force doesn't
 	    // include the node in its auto positioning stuff
 	    d.fixed = true; 
@@ -488,7 +554,13 @@ function maketopmap(divname, width, height, json)
 	    .attr("dy", ".35em")
 	    .text(function(d) { return d.name });
 	
-	function tick() {
+	function tick(e) {
+	    if (e && e.alpha < 0.05) {
+		console.log("Cooled");
+		vis.style("visibility", "visible")
+		force.stop();
+		return;
+	    }
 	    if (0) {
 		node.attr("x",
 			  function(d) {
@@ -522,15 +594,22 @@ function maketopmap(divname, width, height, json)
 	};
 	force.on("tick", tick);
     }(json);
-    
+
     return topo;
 }
+
+// Avoid recalc of the layout if we already have seen it. Stash
+// json here and return it if we have it. 
+var saved = new Object();
 
 //
 // Convert a manifest in XML to a JSON object of nodes and links.
 //
-function ConvertManifestToJSON(xml)
+function ConvertManifestToJSON(name, xml)
 {
+    if (name && saved[name]) {
+	return saved[name];
+    }
     var json = {
 	"nodes": [],
 	"links": [],
@@ -560,7 +639,7 @@ function ConvertManifestToJSON(xml)
 	    console.log("Oops, a lan");
 	}
 	else {
-	    var ifacerefs = $(xml).find("interface_ref");
+	    var ifacerefs = $(this).find("interface_ref");
 	    var source    = ifacerefs[0];
 	    var target    = ifacerefs[1];
 
@@ -593,6 +672,8 @@ function ConvertManifestToJSON(xml)
 			    });
 	}
     });
-
+    if (name) {
+	saved[name] = json;
+    }
     return json;
 }

@@ -25,7 +25,7 @@ chdir("..");
 include("defs.php3");
 include_once("osinfo_defs.php");
 include_once("geni_defs.php");
-chdir("apt");
+chdir("aptlbs");
 include("quickvm_sup.php");
 
 $ajax_request = 0;
@@ -326,11 +326,11 @@ echo "<!-- This is a modal -->
 		Watch for an email message that says its been done. 
               <form id='extend_request_form' role='form'>
                <div class='row'>
-                <div class='col-lg-10 col-md-6'>
+                <div class='col-lg-12 col-md-12'>
                 <textarea id='why_extend' name='why_extend'
                           class='form-control'
                           placeholder='Tell us a good story please.'
-                          class='align-center'
+                          class='align-center-inline'
                           rows=5></textarea>
                </div></div>
                <br>
@@ -339,7 +339,7 @@ echo "<!-- This is a modal -->
                        type='submit' name='request'>Request Extension</button>
               </form>
             </div>
-            <div class='col-lg-5 col-md-5'>
+            <div class='col-lg-5 col-md-5 invisible'>
                To extend your experiment for more then another 24 hours,
                you need an extension code. If you do not have a code then
                you need not worry about it.

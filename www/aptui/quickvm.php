@@ -25,8 +25,9 @@ chdir("..");
 include("defs.php3");
 include_once("osinfo_defs.php");
 include_once("geni_defs.php");
-chdir("apt");
+chdir("aptlbs");
 include("quickvm_sup.php");
+$dblink = GetDBLink("sa");
 
 #
 # Verify page arguments.
@@ -34,35 +35,64 @@ include("quickvm_sup.php");
 $optargs = OptionalPageArguments("create",      PAGEARG_STRING,
 				 "username",    PAGEARG_STRING,
 				 "email",	PAGEARG_STRING,
-				 "imageid",     PAGEARG_STRING,
+				 "profile",     PAGEARG_STRING,
 				 "stuffing",    PAGEARG_STRING,
 				 "verify",      PAGEARG_STRING,
-				 "sshkey",	PAGEARG_STRING);
+				 "sshkey",	PAGEARG_STRING,
+				 "ajax_request",  PAGEARG_BOOLEAN,
+				 "ajax_method",   PAGEARG_STRING,
+				 "ajax_argument", PAGEARG_STRING);
+
+#
+# Deal with ajax requests.
+#
+if (isset($ajax_request)) {
+    if ($ajax_method == "getprofile") {
+	$profile_name = addslashes($ajax_argument);
+	$query_result =
+	    DBQueryWarn("select * from quickvm_rspecs ".
+			"where name='$profile_name'", $dblink);
+
+	if (!$query_result || !mysql_num_rows($query_result)) {
+	    SPITAJAX_ERROR(1, "No such profile!");
+	    exit();
+	}
+	$row = mysql_fetch_array($query_result);
+	
+	SPITAJAX_RESPONSE(array('rspec' => $row['rspec'],
+				'name'  => $row['name'],
+				'description' => $row['description']));
+    }
+    exit();
+}
 
 # Form defaults.
 $username_default = "Pick a user name";
 $email_default    = "Your email address";
 $sshkey_default   = "Your SSH public key";
-$imageid_default  = "UBUNTU12-64-STD";
+$profile_default  = "UBUNTU12-64-STD";
+$profile_array    = array();
 
-$imageid_array = array($imageid_default => "UBUNTU 12.04 LTS",
-		       "FBSD90-STD"   => "FreeBSD 9.0",
-		       "FEDORA15-STD" => "Fedora 15");
+$query_result =
+    DBQueryFatal("select * from quickvm_rspecs", $dblink);
+while ($row = mysql_fetch_array($query_result)) {
+    $profile_array[$row["name"]] = $row["name"];
+}
 
-function SPITFORM($username, $email, $sshkey, $imageid, $newuser, $errors)
+function SPITFORM($username, $email, $sshkey, $profile, $newuser, $errors)
 {
     global $TBBASE, $TBMAIL_OPS;
     global $username_default, $email_default, $sshkey_default;
-    global $imageid_default, $imageid_array;
+    global $profile_default, $profile_array;
 
     $username_value   = "";
     $email_value      = "";
     $sshkey_value     = "";
-    $imageid_value    = "";
+    $profile_value    = "";
     $username_error   = "";
     $email_error      = "";
     $sshkey_error     = "";
-    $imageid_error    = "";
+    $profile_error    = "";
     $internal_error   = null;
 
     if (isset($username) && $username != "") {
@@ -74,8 +104,8 @@ function SPITFORM($username, $email, $sshkey, $imageid, $newuser, $errors)
     if (isset($sshkey) && $sshkey != "") {
 	$sshkey_value = CleanString($sshkey);
     }
-    if (isset($imageid) && $imageid != "") {
-	$imageid_value = CleanString($imageid);
+    if (isset($profile) && $profile != "") {
+	$profile_value = CleanString($profile);
     }
     if ($errors) {
 	while (list ($name, $message) = each ($errors)) {
@@ -87,14 +117,14 @@ function SPITFORM($username, $email, $sshkey, $imageid, $newuser, $errors)
 		$email_error = $message;
 	    elseif ($name == "sshkey")
 		$sshkey_error = $message;
-	    elseif ($name == "imageid")
-		$imageid_error = $message;
+	    elseif ($name == "profile")
+		$profile_error = $message;
 	    elseif ($name == "internal") {
 		$internal_error = $message;
 	    }
 	}
     }
-    SPITHEADER();
+    SPITHEADER(1);
 
     if ($internal_error) {
 	echo "<center><h2>$internal_error</h2></center><br>\n";
@@ -133,18 +163,20 @@ function SPITFORM($username, $email, $sshkey, $imageid, $newuser, $errors)
                 <textarea id='sshkey' name='sshkey'
                           placeholder='$sshkey_default'
                           class='form-control'
-                          rows=5 cols=45>$sshkey_value</textarea>
+                          rows=4 cols=45>$sshkey_value</textarea>
 		<label
                        style='color: red'
                        for='sshkey'>$sshkey_error</label>
             </div>
             <div class='form-group'>
-                <select class='pull-left' name='imageid'>
+                <select class='pull-left' id='profile_name'
+                        name='profile'
+                        onChange='ShowProfile(0);'>
                 <option value=''>Select Profile</option>\n";
-    while (list ($id, $title) = each ($imageid_array)) {
+    while (list ($id, $title) = each ($profile_array)) {
 	$selected = "";
 	
-	if ($imageid_value == $id)
+	if ($profile_value == $id)
 	    $selected = "selected";
 	
 	echo "<option $selected value='$id'>$title </option>\n";
@@ -152,7 +184,7 @@ function SPITFORM($username, $email, $sshkey, $imageid, $newuser, $errors)
     echo "       </select>
 	        <label
                        style='color: red'
-                       for='imageid'>$imageid_error</label>
+                       for='profile'>$profile_error</label>
             </div>
             <button class='btn btn-primary pull-right'
 	            type='submit' name='create'>Create!
@@ -167,8 +199,8 @@ function SPITFORM($username, $email, $sshkey, $imageid, $newuser, $errors)
         </div>
         </div>\n";
 
-    if (0) {
-    echo "<!-- This is the modal -->
+    if (1) {
+    echo "<!-- This is the user verify modal -->
           <div id='working' class='modal fade'>
             <div class='modal-dialog'>
             <div class='modal-content'>
@@ -208,7 +240,53 @@ function SPITFORM($username, $email, $sshkey, $imageid, $newuser, $errors)
     }
     echo "</form>\n";
 
+    echo "<!-- This is the topology view modal -->
+          <div id='quickvm_topomodal' class='modal fade'>
+            <div class='modal-dialog'  id='showtopo_dialog'>
+            <div class='modal-content'>
+               <div class='modal-header'>
+                <button type='button' class='close' data-dismiss='modal'
+                   aria-hidden='true'>&times;</button>
+                <span id='showtopo_title'></span>
+               </div>
+               <div class='modal-body'>
+                 <!-- This topo diagram goes inside this div -->
+                 <div class='panel panel-default'
+                            id='showtopo_container'>
+                  <div class='panel-body'>
+                   <div id='showtopo_div'></div>
+                  </div>
+                 </div>
+	         <div id='scrollright'
+                     class='pull-right' style='cursor: pointer; ".
+	           "margin-bottom: 0px; margin-right: 5px;'>
+                   <span class='glyphicon glyphicon-arrow-right'></span>
+                 </div>
+                 <div id='scrollleft'
+                     class='pull-left' style='cursor: pointer; ".
+	            "margin-bottom: 0px; margin-right: 5px;'>
+                  <span class='glyphicon glyphicon-arrow-left'></span>
+                 </div>
+               </div>
+               <div class='modal-footer'>
+                 <span class='pull-left' id='showtopo_description'></span>
+                 <div class='pull-right'>
+                   <button id='showtopo_select'
+                         class='btn btn-primary btn-xs'
+                         type='submit' name='select'>
+                            Select</button>
+                 </div>
+               </div>
+            </div>
+            </div>
+         </div>\n";
+
+    echo "<SCRIPT LANGUAGE=JavaScript>
+               window.onload = InitProfileSelector;
+          </SCRIPT>\n";
+    echo "<script src='d3.v3.js'></script>\n";
     echo "<SCRIPT LANGUAGE=JavaScript>\n";
+    
     if ($newuser) {
 	echo "ShowModal('#working');\n";
     }
@@ -272,18 +350,18 @@ elseif (User::LookupByUid($username)) {
     $errors["username"] = "Already in use";
 }
 
-if (!isset($imageid) || $imageid == "") {
-    $errors["imageid"] = "No selection made";
+if (!isset($profile) || $profile == "") {
+    $errors["profile"] = "No selection made";
 }
-elseif (! array_key_exists($imageid, $imageid_array)) {
-    $errors["imageid"] = "Invalid Profile: $imageid";
+elseif (! array_key_exists($profile, $profile_array)) {
+    $errors["profile"] = "Invalid Profile: $profile";
 }
-elseif (! OSinfo::LookupByName($TBOPSPID, $imageid)) {
-    $errors["imageid"] = "Nonexistant Profile: $imageid";
+elseif (! in_array($profile, $profile_array)) {
+    $errors["profile"] = "Nonexistant Profile: $profile";
 }
 
 if (count($errors)) {
-    SPITFORM($username, $email, $sshkey, $imageid, false, $errors);
+    SPITFORM($username, $email, $sshkey, $profile, false, $errors);
     SPITFOOTER();
     return;
 }
@@ -310,13 +388,13 @@ else {
 }
 
 if (count($errors)) {
-    SPITFORM($username, $email, $sshkey, $imageid, false, $errors);
+    SPITFORM($username, $email, $sshkey, $profile, false, $errors);
     SPITFOOTER();
     return;
 }
 $args["username"] = $username;
 $args["email"]    = $email;
-$args["imageid"]  = $imageid;
+$args["profile"]  = $profile;
 
 #
 # See if user exists and is verified. We send email with a code, which
@@ -331,7 +409,7 @@ if (!$exists || !isset($_COOKIE['quickvm_authkey']) ||
     $_COOKIE['quickvm_authkey'] != $exists->auth_token()) {
     if (isset($stuffing) && $stuffing != "") {
 	if (! (isset($verify) && $verify == $stuffing)) {
-	    SPITFORM($username, $email, $sshkey, $imageid, $stuffing, $errors);
+	    SPITFORM($username, $email, $sshkey, $profile, $stuffing, $errors);
 	    SPITFOOTER();
 	    return;
 	}
@@ -355,7 +433,7 @@ if (!$exists || !isset($_COOKIE['quickvm_authkey']) ||
 	# New user, we create a new one.
 	$token = ($exists ? $exists->auth_token() : true);
 
-	SPITFORM($username, $email, $sshkey, $imageid, $token, $errors);
+	SPITFORM($username, $email, $sshkey, $profile, $token, $errors);
 	SPITFOOTER();
 	return;
     }
@@ -388,7 +466,7 @@ else {
     chmod($xmlname, 0666);
 }
 if (count($errors)) {
-    SPITFORM($username, $email, $sshkey, $imageid, false, $errors);
+    SPITFORM($username, $email, $sshkey, $profile, false, $errors);
     SPITFOOTER();
     return;
 }
@@ -417,7 +495,7 @@ if ($retval != 0) {
 	    $errors["internal"] = "Transient error(4); please try again later.";
 	}
     }
-    SPITFORM($username, $email, $sshkey, $imageid, false, $errors);
+    SPITFORM($username, $email, $sshkey, $profile, false, $errors);
     SPITFOOTER();
     return;
 }
@@ -426,14 +504,14 @@ unlink($xmlname);
 $quickvm = QuickVM::LookupByName($args["name"]);
 if (!$quickvm) {
     $errors["internal"] = "Transient error(5); please try again later.";
-    SPITFORM($username, $email, $sshkey, $imageid, false, $errors);
+    SPITFORM($username, $email, $sshkey, $profile, false, $errors);
     SPITFOOTER();
     return;
 }
 $creator = GeniUser::Lookup("sa", $quickvm->creator_uuid());
 if (! $creator) {
     $errors["internal"] = "Transient error(6); please try again later.";
-    SPITFORM($username, $email, $sshkey, $imageid, false, $errors);
+    SPITFORM($username, $email, $sshkey, $profile, false, $errors);
     SPITFOOTER();
     return;
 }
