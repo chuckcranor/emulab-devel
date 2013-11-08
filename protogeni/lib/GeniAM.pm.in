@@ -1139,11 +1139,11 @@ sub PerformOperationalAction
 	return GeniCMV2::ShareLan($args);
     }
     elsif ($action eq 'geni_unsharelan') {
-	if (!exists($options->{"geni_unsharelan_lanname"})) {
+	if (!exists($options->{"geni_sharelan_lanname"})) {
 	    return GeniResponse->MalformedArgsResponse("No lanname provided!");
 	}
 	$args->{'slice_urn'} = $slice->urn();
-	$args->{'lanname'}   = $options->{"geni_unsharelan_lanname"};
+	$args->{'lanname'}   = $options->{"geni_sharelan_lanname"};
 	
 	return GeniCMV2::UnShareLan($args);
     }
