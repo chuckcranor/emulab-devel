@@ -5,7 +5,7 @@ source checkutils.sh
 
 checkdrift_main() {
     set -u
-    declare -i countsame=1 filecount=0 hostcount=0
+    declare -i countsame=1 filecount=0 hostcount=0 
     projdir=/proj/emulab-ops/nodecheck
     cd $projdir
     if (( $# )) ; then
@@ -19,22 +19,38 @@ checkdrift_main() {
 	if [ -d $projdir/$host/.tbdb ] ; then
 	    cd $projdir/$host/.tbdb
 	    allchecks=$(ls | sort -r | paste -s -d \\\  -) # paste command used to convert into space seperated words.
-	    allchecks+=' ' # grr string matching, expect space at end
+	    allchecks+=' ' # grrr my string matching, expects space at end
 
-	    # check that the first file is has a mfsmode=1
+	    # set newest file and take off list
 	    newest=${allchecks%%\ *}
 	    allchecks=${allchecks#* } # pop the list
-	    [[ ! $allchecks ]] && continue
+	    [[ ! $allchecks ]] && continue # ran out of files for this node
 
+	    #only compare inventory computed in mfsmode
+            # from the top of list skip file that have mfsmode=0
 	    while (grep -c 'ismfs=0' $newest &> /dev/null ) ; do
 		newest=${allchecks%%\ *} # take off the top
 		allchecks=${allchecks#* } # pop the list
-		[[ ! $allchecks ]] && break
+		[[ ! $allchecks ]] && break # ran out of files, break from loop
 	    done
+	    [[ ! $allchecks ]] && continue # make sure we didn't consume all the file for node
+
+	    # X X X Hackitly Hackit Hack
+	    # drop those files that have empty SN, but report it
+	    if [ "$(grep 'DISKUNIT TYPE' $newest)" ] ; then
+		echo "Missing SN in $host $(pwd)/$newest"
+		newest=${allchecks%%\ *} # take off the top
+		allchecks=${allchecks#* } # pop the list
+		[[ ! $allchecks ]] && continue # ran out of files
+	    fi
 
 	    readtmcinfo $newest hwinvcopy
 	    for tocheck in $allchecks ; do
 		[[ $(grep 'ismfs=0' $tocheck) ]] && continue # if not in ismfs mode then don't check
+		if [ "$(grep 'DISKUNIT TYPE' $tocheck)" ] ; then
+		    echo "Missing SN in $host $(pwd)/$tocheck"
+		    continue
+		fi
 		readtmcinfo $tocheck hwinv
 		# note: will check against self for sanity
 		comparetmcinfo /tmp/.$$checkdiff
@@ -43,8 +59,9 @@ checkdrift_main() {
 		    echo ""
 		    echo "$host $newest $tocheck are not the same"
 		    echo "====================================================="
-		    echo "diff $tocheck $newest"
-		    diff $tocheck $newest
+		    cat /tmp/.$$checkdiff
+#		    echo "diff $tocheck $newest"
+#		    diff $tocheck $newest
 		    # reset compare file
 		    newest=$tocheck
 		    readtmcinfo $newest hwinvcopy
@@ -66,7 +83,6 @@ checkdrift_main() {
 	    echo "No record of node id \"$host\"."
 	fi
     done
-    echo ""
 # :    echo "$filecount files in $hostcount nodes checked"
 }
 checkwce_main() {
@@ -164,6 +180,7 @@ gentbsql_main() {
 	    listofdisks=$(grep 'DISKs:' diff)
 	    listofdisks=${listofdisks//DISKs:}
 	    hdnum=0
+
 	    for i in $listofdisks ; do
 		toadd=$(grep $i node)
 		if [ -n "$toadd" ] ; then
@@ -242,12 +259,10 @@ gentbsql_main() {
 		    ((++hdnum))
 		else
 		    if [ "$i" == "UNKNOWN" ] ; then
-			echo -n "# Missing Serial Number for disk${hdnum} on $host"
 			x=$(get_bsidx_from_hostAnddrive $host ${hdnum})
 			if [ -n "$x" ] ; then
+			    echo -n "# Missing Serial Number for disk${hdnum} on $host"
 			    echo " but found $(get_drive_from_bsidx $x) $(get_host_from_bsidx $x) @ bsidx=$x SN=$(get_sn_from_bsidx $x)" 
-			else
-			    echo ""
 			fi
 			((++hdnum))
 		    else
@@ -260,7 +275,6 @@ gentbsql_main() {
 				printf "mysql -e \"delete from blockstore_attributes where attrkey='%s';\" tbdb\n" "$i"
 			    else
 				echo "#Discovery error node_id $host"
-				      # Discovery error
 				      # Have only seen this when the "full" file for host lists a hard drive, including SN
 				      # but the "node" file does not have serial number for for the HD
 			    fi
@@ -358,6 +372,7 @@ if [ "$0" != "${0/setdir}" ] ; then
 elif [ "$0" != "${0/sql}" ] ; then
     gentbsql_main $@
 elif [ "$0" != "${0/drift}" ] ; then
+    declare -i offline=1
     checkdrift_main $@
 elif [ "$0" != "wce" ] ; then
     checkwce_main $@

@@ -132,7 +132,7 @@ err_report() {
 
 
 # read info from tmcc or a file. Copy into one of the three global arrays
-# hwinv, hwinvcopy, tmccinfo
+# hwinv, hwinvcopy or tmccinfo
 # $1 is the source $2 is the output array
 # error if not both set
 readtmcinfo() {
@@ -153,6 +153,7 @@ readtmcinfo() {
     fi
 
     if [ "$source" = "tmcc" ] ; then
+	# need temp file to hold tmcc hwinv output
 	rmtmp="y" # remove tmp file
 	source=/tmp/.$$tmcchwinv
 	$($BINDIR/tmcc hwinfo > $source)
@@ -316,7 +317,7 @@ comparetmcinfo() {
     for i in $arrayidx ; do
 	if [ "${hwinv[$i]}" != "${hwinvcopy[$i]}" ] ; then
 	    if [ ! -f $fileout ] ; then
-		echo "Differences found locally compared with testbed database" > $fileout
+		echo "Differences found locally compared with testbed database" >> $fileout
 	    fi
 	    echo "$i does not match" >> $fileout
 	    echo "local ${hwinv[$i]}" >> $fileout
@@ -348,7 +349,7 @@ compareunits() {
     local localidx="${hwinv["hwinvidx"]}"
     local tbdbidx="${hwinvcopy["hwinvidx"]}"
     local localunits="" tbdbunits="" devunit=""
-    local -i a b
+    local -i a b disregard_order
     local x addr ckaddr
 
     # How are things different between unit types, only NET and DISK right now
@@ -361,6 +362,7 @@ compareunits() {
 	    unit_post_strip="\"*"
 	    unit_human_output="NIC"
 	    unit_human_case="lower"
+	    disregard_order=1
 	    ;;
 	DISK )
 	    unitinfoidx_str="DISKINFO"
@@ -370,6 +372,7 @@ compareunits() {
 	    unit_post_strip="\"*"
 	    unit_human_output="DISK"
 	    unit_human_case="upper"
+	    disregard_order=0
 	    ;;
 	* )
 	    echo "Error in compareunits don't now type $unittype. Giving up."
@@ -429,22 +432,27 @@ compareunits() {
 	tbdbunits=${tbdbunits,,}
     fi
 
-    # remove from the lists all matching words
-    x=$localunits
-    for i in $x ; do
-	if [ "${tbdbunits/$i}" != "${tbdbunits}" ]; then
-	    tbdbunits=${tbdbunits/$i}
-	    localunits=${localunits/$i}
-	fi
-    done
-    # same but swap arrays
-    x=$tbdbunits
-    for i in $x ; do
-	if [ "${localunits/$i}" != "${localunits}" ]; then
-	    localunits=${localunits/$i}
-	    tbdbunits=${tbdbunits/$i}
-	fi
-    done
+    if (( $disregard_order )) ; then
+        # remove from both lists all words matched in the other list
+        # any thing left-over is non-matching
+	x=$localunits
+	for i in $x ; do
+	    if [ "${tbdbunits/$i}" != "${tbdbunits}" ]; then
+	    # same, take it out of both lists
+		tbdbunits=${tbdbunits/$i}
+		localunits=${localunits/$i}
+	    fi
+	done
+        # same but swap arrays
+	x=$tbdbunits
+	for i in $x ; do
+	    if [ "${localunits/$i}" != "${localunits}" ]; then
+		localunits=${localunits/$i}
+		tbdbunits=${tbdbunits/$i}
+	    fi
+	done
+    fi
+    
     #remove extra spaces
     save_e
     set +e
@@ -452,14 +460,25 @@ compareunits() {
     read -rd '' localunits <<< "$localunits"
     restore_e
 
+    # if the two strings are the same then zero strings
 
-    # any mismatches would be in ether localunits or tbdbunits
-    if [ -n "${localunits}" ]; then
-	printf "%s%s %s\n" "${unit_human_output}" "s:" "$localunits"  >> $localonly
+    if (( $disregard_order )) ; then
+        # any strings would be mismatches in ether localunits or tbdbunits
+	if [ -n "${localunits}" ]; then
+	    printf "%s%s %s\n" "${unit_human_output}" "s:" "$localunits"  >> $localonly
+	fi
+	if [ -n "${tbdbunits}" ]; then
+	    printf "%s%s %s\n" "${unit_human_output}" "s:" "$tbdbunits" >> $tbdbonly
+	fi
+    else
+	if [ "$tbdbunits" != "$localunits" ] ; then
+	    # we care about order report it
+	    [[ -z "${offline-}" ]] && declare -i offline=0 # if set from gen_sql
+	    (( ! $offline )) && printf "ERROR %s%s OUT OF ORDER found %s from tbdb %s\n" "${unit_human_output}" "s:" "$localunits" "$tbdbunits" 
+	    (( ! $offline )) && ( printf "ERROR %s OUT OF ORDER found %s from tbdb %s\n" "${unit_human_output}" "$localunits" "$tbdbunits" >> $fileout ) || ( printf "WARNING %s%s ORDER '%s' compared to '%s'\n" "${unit_human_output}" "s:" "$localunits" "$tbdbunits" >> $fileout )
+	fi
     fi
-    if [ -n "${tbdbunits}" ]; then
-	printf "%s%s %s\n" "${unit_human_output}" "s:" "$tbdbunits" >> $tbdbonly
-    fi
+
 
     return 0
 }
@@ -477,19 +496,6 @@ uniqstr() {
     done
     echo $outstr
 }
-
-# no args uses the globel arrays hwinvv, tcm_in, tcm_out
-#mergetmcinfo() {
-#    for i in ${hwinv["hwinvidx"]} ; do
-#	hwinv[$i]+=" ADD"
-#    done
-#}
-
-# arg $1 is the file to write uses the globel tcm_out array
-#writetmcinfo() {
-#:
-#}
-
 
 # print only the testbed data table
 printtmcinfo() {

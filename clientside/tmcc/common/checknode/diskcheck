@@ -237,7 +237,6 @@ if (( $check_flag )) ; then
     tbinfo=${tbinfo% }  # get rid of trailing space
     
 # echo driveinfo:$driveinfo: tbinfo:$tbinfo: 
-    
 {
 #save for both output to stdout and log file 
     if [ -z "$tbinfo" ] ; then
@@ -248,53 +247,57 @@ if (( $check_flag )) ; then
 #upper case
     tbinfo=${tbinfo^^}
     driveinfo=${driveinfo^^}
+
 # turn space seperated string into array
     unset -v tb; declare -a tb=(${tbinfo// / })
     unset -v have; declare -a have=(${driveinfo// / })
     
     havecnt=${#have[*]}
     tbcnt=${#tb[*]}
-    numserial=${tbcnt}
-    maxcnt=${tbcnt}
-    
+#-#     numserial=${tbcnt}
+#-#     maxcnt=${tbcnt}
+#-#     
     if [[ ${tbcnt} -ne ${havecnt} ]] ; then
-	failed="TBmiss"
-    [[ ${tbcnt} -gt ${havecnt} ]] && maxcnt=${tbcnt} || maxcnt=${havecnt}
+	failed="TBmiss "
+#-#     [[ ${tbcnt} -gt ${havecnt} ]] && maxcnt=${tbcnt} || maxcnt=${havecnt}
     fi
-    
-    for ((idx=0; idx<$maxcnt; idx++)) ; do
-	for ((ifi=0; ifi<$havecnt; ifi++)) ; do
-	    for ((tbi=0; tbi<$tbcnt; tbi++)) ; do
-		if [ "${have[$ifi]}" = "${tb[$tbi]}" ] ; then
-		    have[$ifi]=''
-		    tb[$tbi]=''
-	    fi
-	    done
-	done
-    done
-#turn array into string
-    haveresult=${have[@]-""}
-    tbresult=${tb[@]-""}
-    
-    if [[ "$haveresult" || "$tbresult" ]] ; then
-	if [[ $haveresult ]] ; then
-	failed="${failed}: NotIn TB $haveresult"
-	fi
-	if [[ $tbresult ]] ; then
-	    failed="${failed}: TB Claims $tbresult"
-	fi
-fi
+#-#     
+#-#     for ((idx=0; idx<$maxcnt; idx++)) ; do
+#-# 	for ((ifi=0; ifi<$havecnt; ifi++)) ; do
+#-# 	    for ((tbi=0; tbi<$tbcnt; tbi++)) ; do
+#-# 		if [ "${have[$ifi]}" = "${tb[$tbi]}" ] ; then
+#-# 		    have[$ifi]=''
+#-# 		    tb[$tbi]=''
+#-# 	    fi
+#-# 	    done
+#-# 	done
+#-#     done
+#-# #turn array into string
+     haveresult=${have[@]-""}
+     tbresult=${tb[@]-""}
+# comment out the next if statment and uncommet the #-# lines for drive
+# ordering not to matter when comparing drives found with tbdb
+     if [[ "$haveresult" || "$tbresult" ]] ; then
+	 failed="$failed found $haveresult but tbdb says $tbresult "
+     fi
+#-#     
+#-#     if [[ "$haveresult" || "$tbresult" ]] ; then
+#-# 	if [[ $haveresult ]] ; then
+#-# 	    failed="${failed}: NotIn TB $haveresult"
+#-# 	fi
+#-# 	if [[ $tbresult ]] ; then
+#-# 	    failed="${failed}: TB Claims $tbresult"
+#-# 	fi
+#-#     fi
     
     echo -n "Have $havecnt drive"
     [[ ${havecnt} -gt 1 ]] && echo -n "s" 
     [[ -z ${failed} ]] && echo " OK" || echo " $failed" FAILED
-    
 
 } > ${tmplog} 2>&1
     cat ${tmplog} >> $logfile
     cat ${tmplog}
-fi # check_flag
-
+fi # if (( $check_flag ))
 }
 
 getdriveinfo () {
