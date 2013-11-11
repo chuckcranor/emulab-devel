@@ -89,6 +89,13 @@ sub Install($$$)
 	    ExecQuietFatal("$SCP $TOP_OBJDIR/named/resolv.conf.ops ".
 			   "     ${FSNODE}:/etc/resolv.conf");
 	};
+	Phase "copying3", "Copying mail access file over to ops", sub {
+	    ExecQuietFatal("$SCP $TOP_OBJDIR/named/mail.access ".
+			   "     ${USERNODE}:/etc/mail/access");
+	    ExecQuietFatal("$SSH -o 'BatchMode=yes' root\@${USERNODE} ".
+			   "     makemap hash /etc/mail/access \\< ".
+			   "          /etc/mail/access");
+	};
     };
 
     return 0;

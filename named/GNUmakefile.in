@@ -50,7 +50,7 @@ USERTOKEN       = $(shell echo @USERNODE@ | sed -e 's/\..*//')
 NAMED_FILES	= named.conf.template named_makeconf named_makerev reverse.head \
 		 resolv.conf localhost.rev forward.head named_makeforw \
 		 $(REVFILES) $(OURDOMAIN).db.head $(OURDOMAIN).internal.db.head \
-		 named.conf resolv.conf.ops
+		 named.conf resolv.conf.ops mail.access
 
 include $(OBJDIR)/Makeconf
 
@@ -71,6 +71,9 @@ $(OURDOMAIN).internal.db.head: forward.head named_makeforw
 
 named.conf:	named.conf.template named_makeconf
 	perl named_makeconf named.conf.template > named.conf
+
+mail.access: mail_makeaccess
+	perl mail_makeaccess > mail.access
 
 $(REVFILES):	reverse.head named_makerev
 	perl named_makerev reverse.head
