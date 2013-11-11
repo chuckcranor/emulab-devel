@@ -81,11 +81,14 @@ my $API_VERSION    = "1.0";
 #
 sub get_version()
 {
-    my %version = (
-	"VERSION" => $API_VERSION, "FIELDS" => ()
+    my $coder = Frontier::RPC2->new('use_objects' => 1);
+    my $version = $coder->string( $API_VERSION );
+    my %fields = ();
+    my %result = (
+	"VERSION" => $version, "FIELDS" => \%fields
 	);
 
-    return GeniResponse->Create( GENIRESPONSE_SUCCESS, \%version );
+    return GeniResponse->Create( GENIRESPONSE_SUCCESS, \%result );
 }
 
 sub GetAuthorities($$)

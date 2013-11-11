@@ -68,19 +68,30 @@ sub ConvertResponse($)
     my ($geni_response) = @_;
 
     my $decoder = Frontier::RPC2->new();
-    my $response;
-    
-    if (GeniResponse::IsError($geni_response)) {
-	# An error result gets mapped to an XML RPC fault
-	$response =
-	    $decoder->encode_fault(GeniResponse::code($geni_response),
-				   GeniResponse::output($geni_response));
-    } else {
-	# A successful result means return the value
-	$response =
-	    $decoder->encode_response(GeniResponse::value($geni_response));
+    my $pg_code = GeniResponse::code($geni_response);
+    # For standard GENI errors, the geni_code is the same as our pg_code
+    my $geni_code = $pg_code;
+    if ($pg_code < GeniResponse::GENIRESPONSE_SUCCESS() ||
+	$pg_code > GeniResponse::GENIRESPONSE_ALREADYEXISTS()) {
+	# If the code is outside of the standard GENI code range, set
+	# the geni_code to ERROR
+	$geni_code = GeniResponse::GENIRESPONSE_ERROR();
     }
-    return $response;
+    my $blob = {
+	"value" => GeniResponse::value($geni_response),
+	"output" => GeniResponse::output($geni_response),
+	"code" => $geni_code
+    };
+    if (exists($geni_response->{'protogeni_error_log'})) {
+	$blob->{'protogeni_error_log'} =
+	    $geni_response->{'protogeni_error_log'};
+    }
+    if (exists($geni_response->{'protogeni_error_url'})) {
+	$blob->{'protogeni_error_url'} =
+	    $geni_response->{'protogeni_error_url'};
+    }
+
+    return $decoder->encode_response($blob);
 }
 
 $GENI_RESPONSE_CONVERTER = \&ConvertResponse;
