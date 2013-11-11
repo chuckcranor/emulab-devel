@@ -37,6 +37,9 @@ use IO::Pty;
 use strict;
 $ENV{'PATH'} = '/bin:/usr/bin:/usr/local/bin'; # Required when using system() or backticks `` in combination with the perl -T taint checks
 
+# timeout for telnet operations, library default is 10 seconds
+my $TIMEOUT = 10;
+
 sub spawn_subprocess {
     my(@cmd) = @_;
     my($pid, $pty, $tty, $tty_fd);
@@ -93,6 +96,7 @@ sub _icebox_exec ($$) {
                                -telnetmode => 0,
                                -cmd_remove_mode => 1,
                                -output_record_separator => "\r",
+			       -timeout => $TIMEOUT,
 			       -errmode => "return");
     if (not defined $ssh) {
 	print STDERR "$host: could not create telnet object\n";
