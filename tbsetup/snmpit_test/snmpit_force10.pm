@@ -581,7 +581,7 @@ sub checkBits($$$$) {
 	return $differingBits;
     } else {
 	warn "$id: ERROR: input bitmasks are of differing length!\n";
-	self->debug("$id: \$bm1 has last index $#bm1unp and \$bm2 has last index $#bm2unp\n");
+	$self->debug("$id: \$bm1 has last index $#bm1unp and \$bm2 has last index $#bm2unp\n");
 	return ( $#bm1unp > $#bm2unp ? $#bm1unp + 1 : $#bm2unp + 1);
     }
 }
@@ -692,17 +692,47 @@ sub setPortMembership($$$$$) {
         my ($self, $onoff, $eportmask, $uportmask, $vlifindex) = @_;
 	my $id = "$self->{NAME}::setPortMembership()";
 
+	# Sanity checks
+	if (!defined($onoff) || !defined($eportmask) || 
+	    !defined($uportmask) || !defined($vlifindex)) {
+	    warn "$id: ERROR: required parameters missing to call.";
+	    return -1;
+	}
+
+	if (length($eportmask) != length($uportmask)) {
+	    warn "$id: ERROR: egress and untagged portsets are different sizes!";
+	    return -1;
+	}
+
+	if ($onoff ne "on" && $onoff ne "off") {
+	    warn "$id: \$onoff must be either 'on' or 'off'";
+	    return -1;
+	}
+
+	if ($vlifindex !~ /^\d+$/) {
+	    warn "$id: vlan ifindex is not a number: $vlifindex\n";
+	    return -1;
+	}
+
 	# Grab the number of bits set in the untagged port mask.
 	my $setcount = unpack("%32b*", $uportmask);
 
+	$self->debug("$id: Setting membership for vlan with ".
+		     "ifindex $vlifindex\n");
+	$self->debug("$id: Validate membership state to be: $onoff\n");
+
 	# The egress ports and untagged ports have to be updated
 	# simultaneously.
-	my $status = snmpitSetWarn($self->{SESS},[
-		["dot1qVlanStaticEgressPorts", $vlifindex, 
-			$eportmask, "OCTETSTR"], 
-		["dot1qVlanStaticUntaggedPorts", $vlifindex, 
-			$uportmask, "OCTETSTR"]
-		]);
+	my $snmpvars = new SNMP::VarList(
+	    ["dot1qVlanStaticEgressPorts", $vlifindex, 
+	     $eportmask, "OCTETSTR"], 
+	    ["dot1qVlanStaticUntaggedPorts", $vlifindex, 
+	     $uportmask, "OCTETSTR"]);
+
+	# XXX: Can't use snmpitSetWarn since these port set operations
+	# routinely return an "undoFailed" status on the Force10
+	# platform.  Not sure why this happens...
+	my $status = $self->{SESS}->set($snmpvars);
 
 	# XXX: Look into why/when this happens ...
 	# $status should contain "0 but true" if successful, but...
@@ -1121,6 +1151,7 @@ sub setPortVlan($$@) {
     my @uportlist = ();
     foreach my $pobj (@portobjs) {
 	if (!$pobj->trunk()) {
+	    $self->debug("Adding port $pobj as untagged to $vlan_number\n",2);
 	    push @uportlist, $portlist[$i];
 	}
 	$i++;
@@ -1131,10 +1162,15 @@ sub setPortVlan($$@) {
     # (aside from the default). If a port is still untagged in a
     # different VLAN, the set command will fail.
     my %vlifindexes = $self->getVlanIfindex("ALL");
+    my $vlanIfindex;
     while (my ($vlifidx, $vlnum) = each %vlifindexes) {
+	# Save off the index to the requested vlan while we're in here.
+	if ($vlnum == $vlan_number) {
+	    $vlanIfindex = $vlifidx;
+	}
 	# removing untagged ports from the default vlan (VLAN 1) would fail.
 	next if ($vlnum == 1);
-
+	
 	# Only attempt to remove the ports if one or more appear in the
 	# current member list.
 	my $vlbitmask = $self->getMemberBitmask($vlifidx);
@@ -1150,8 +1186,10 @@ sub setPortVlan($$@) {
 	}
     }
 
-    # get VLAN ifIndex
-    my $vlanIfindex = $vlifindexes{$vlan_number};
+    if (!$vlanIfindex) {
+	warn "$id: ERROR: Could not find ifindex for vlan $vlan_number\n";
+	return scalar(@ports);
+    }
     return $self->setPortMembership("on", $bitmask, $ubitmask, $vlanIfindex);
 }
 
@@ -1190,8 +1228,8 @@ sub removeSelectPortsFromVlan($$@) {
 	# Run the port list through portmap to find the ports on the switch that
 	# we are concerned with
 	my @portlist = $self->convertPortFormat($PORT_FORMAT_IFINDEX, @ports);
-	$self->debug("$id: ports: " . join(",",@ports) . "\n");
-	$self->debug("$id: as ifIndexes: " . join(",",@portlist) . "\n");
+	$self->debug("$id: removing ports from vlan $vlan_number: @ports\n");
+	$self->debug("$id: port ifIndexes: @portlist\n");
 	
 	# Create a bitmask from this ifIndex list
 	my $bitmaskToRemove = $self->convertIfindexesToBitmask(\@portlist);
@@ -1243,7 +1281,7 @@ sub removeVlan($@) {
 		my $RetVal = undef;
 		print "  Removing VLAN # $vlan_number ... ";
 		$RetVal = snmpitSetWarn($self->{SESS},
-				[[$DeleteOID,$ifIndex,"destroy","INTEGER"]]);
+				[$DeleteOID,$ifIndex,"destroy","INTEGER"]);
 		# $RetVal should contain "0 but true" if successful	
 		if ( defined($RetVal) ) { 
 			print "Removed VLAN $vlan_number on switch $self->{NAME}.\n";
@@ -1349,7 +1387,7 @@ sub portControl ($$@) {
 	} else {
 		# Command not supported
 		warn "$id: Unsupported port control command ".
-		     "'$cmd' ignored.\n",1);
+		     "'$cmd' ignored.\n";
 		return -1;
 	}
 }
@@ -1381,7 +1419,7 @@ sub UpdateField($$$@) {
 			$self->debug("UpdateField(): Port $port was $RetVal\n");
 			if ($RetVal ne $val) {
 				$self->debug("UpdateField(): Setting port $port to $val...\n");
-				$RetVal = snmpitSetWarn($self->{SESS},[[$OID,$port,$val,"INTEGER"]]);
+				$RetVal = snmpitSetWarn($self->{SESS},[$OID,$port,$val,"INTEGER"]);
 
 				my $count = 6;
 				while (($RetVal ne $val) && (--$count > 0)) { 
@@ -1431,7 +1469,8 @@ sub getStats() {
             if (! defined $self->{IFINDEX}{$ifindex}) { next; }
 
 	    # Convert to Port object, check connectivity, and stash metrics.
-            my ($swport) = convertPortFormat($PORT_FORMAT_PORT, $ifindex);
+            my ($swport) = $self->convertPortFormat($PORT_FORMAT_PORT, 
+						    $ifindex);
             if (! defined $swport) { next; } # Skip if we don't know about it
             my $nportstr = $swport->getOtherEndPort()->toTripleString();
             $allports{$nportstr} = $swport;
@@ -1525,10 +1564,10 @@ sub enablePortTrunking2($$$$) {
     my $portmask = $self->convertIfindexesToBitmask([$pifindex]);
     my $allzeromask = pack("B*", "00000000" x length($portmask));
     my $ubitmask = $equalmode ? $allzeromask : $portmask;
-    if (!$self->setPortMembership("on", $portmask, $ubitmask, 
-				  $native_ifindex)) {
+    if ($self->setPortMembership("on", $portmask, $ubitmask, 
+				  $native_ifindex) != 0) {
 	warn "$id: ERROR: Could not add port $port to vlan ".
-	     "$vlan_number.\n";
+	     "$native_vlan.\n";
 	return 0;
     }
 
