@@ -1256,7 +1256,7 @@ sub ComputeStatus($$)
     #
     # If the sliver is "broken" then call it failed.
     #
-    if ($self->status() eq "broken" || $self->status() eq "failed") {
+    if ($self->status() eq "broken") {
 	$$pref = "failed";
 	return 0;
     }
