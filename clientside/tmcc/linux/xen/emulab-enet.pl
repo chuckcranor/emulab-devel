@@ -56,19 +56,7 @@ print STDERR "@ARGV\n";
 print STDERR $ENV{"vif"} . "\n";
 my $script = shift(@ARGV);
 
-#
-# Oh jeez, iptables is about the dumbest POS I've ever seen;
-# it fails if you run two at the same time. So we have to
-# serialize the calls. Rather then worry about each call, just
-# take a big lock here since there are going to be iptables
-# calls out of vif-bridge.
-#
-if (TBScriptLock("iptables", 0, 300) != TBSCRIPTLOCK_OKAY()) {
-    print STDERR "Could not get the iptables lock after a long time!\n";
-    exit(-1);
-}
 system("/bin/sh $script @ARGV");
 my $ecode = $? >> 8;
-TBScriptUnlock();
 exit($ecode);
 

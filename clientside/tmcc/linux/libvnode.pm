@@ -30,7 +30,7 @@ use Exporter;
 	      findControlNet existsIface findIface findMac
 	      existsBridge findBridge findBridgeIfaces
               downloadImage getKernelVersion createExtraFS
-              forwardPort removePortForward lvSize
+              forwardPort removePortForward lvSize DoIPtables
             );
 
 use Data::Dumper;
@@ -96,26 +96,45 @@ sub forwardPort($;$) {
     # Are we removing or adding the rule?
     my $op = (defined($remove) && $remove) ? "D" : "A";
 
-    #
-    # Oh jeez, iptables is about the dumbest POS I've ever seen;
-    # it fails if you run two at the same time. So we have to
-    # serialize the calls. 
-    #
+    return -1
+	if (DoIPtables("-v -t nat -$op PREROUTING -p $protocol -d $ext_ip ".
+		       "--dport $ext_port -j DNAT ".
+		       "--to-destination $int_ip:$int_port"));
+    return 0;
+}
+
+#
+# Oh jeez, iptables is about the dumbest POS I've ever seen; it fails
+# if you run two at the same time. So we have to serialize the calls.
+# The problem is that XEN also manipulates things, and so it is hard
+# to get a perfect lock. So, we do our best and if it fails sleep for
+# a couple of seconds and try again. 
+#
+sub DoIPtables($)
+{
+    my ($cmd) = @_;
+
     if (TBScriptLock("iptables", 0, 900) != TBSCRIPTLOCK_OKAY()) {
 	print STDERR "Could not get the iptables lock after a long time!\n";
 	return -1;
     }
-    mysystem2("$IPTABLES -v -t nat -$op PREROUTING -p $protocol -d $ext_ip ".
-	      "--dport $ext_port -j DNAT ".
-	      "--to-destination $int_ip:$int_port");
-    TBScriptUnlock();
-	
-    if ($? == 0) {
-	return 0;
+    my $retries = 5;
+    my $status  = 0;
+    while ($retries > 0) {
+	mysystem2("$IPTABLES $cmd");
+	$status = $?;
+	last
+	    if (!$status || $status >> 8 != 4);
+	print STDERR "will retry in a couple of seconds ...\n";
+	sleep(2);
+	$retries--;
     }
-    # Operation failed after multiple retries - return error
-    print STDERR "WARNING: forwardPort: Failed to manipulate NAT!\n";
-    return -1;
+    TBScriptUnlock();
+    
+    # Operation failed - return error
+    return -1
+	if (!$retries || $status);
+    return 0;
 }
 
 sub removePortForward($) {

@@ -57,6 +57,7 @@ use libtmcc;
 use libutil;
 use libtestbed;
 use libgenvnode;
+use libvnode;
 
 #
 # Configure.
@@ -130,21 +131,18 @@ chomp($outer_controlif);
 sub Online()
 {
     # Prevent dhcp requests from leaving the physical host.
-    mysystem2("$IPTABLES -A FORWARD -o $bridge -m pkttype ".
-	      "--pkt-type broadcast " .
-	      "-m physdev --physdev-in $vif --physdev-is-bridged ".
-	      "--physdev-out $outer_controlif -j DROP");
-    return -1
-	if ($?);
+    DoIPtables("-A FORWARD -o $bridge -m pkttype ".
+	       "--pkt-type broadcast " .
+	       "-m physdev --physdev-in $vif --physdev-is-bridged ".
+	       "--physdev-out $outer_controlif -j DROP")
+	== 0 or return -1;
 
     #
     # We ask vif-bridge to turn on antispoofing; this rule would negate that.
     #
     if (0) {
-	mysystem2("$IPTABLES -A FORWARD -m physdev ".
-		  "--physdev-in $vif -j ACCEPT");
-	return -1
-	    if ($?);
+	DoIPtables("-A FORWARD -m physdev --physdev-in $vif -j ACCEPT")
+	    == 0 or return -1;
     }
     
     # Start a tmcc proxy (handles both TCP and UDP)
@@ -164,24 +162,21 @@ sub Online()
     }
 
     # Reroute tmcd calls to the proxy on the physical host
-    mysystem2("$IPTABLES -t nat -A PREROUTING -j DNAT -p tcp ".
-	   "  --dport $TMCD_PORT -d $boss_ip -s $vnode_ip ".
-	   "  --to-destination $host_ip:$local_tmcd_port");
-    return -1
-	if ($?);
+    DoIPtables("-t nat -A PREROUTING -j DNAT -p tcp ".
+	       "  --dport $TMCD_PORT -d $boss_ip -s $vnode_ip ".
+	       "  --to-destination $host_ip:$local_tmcd_port")
+	== 0 or return -1;
 
-    mysystem2("$IPTABLES -t nat -A PREROUTING -j DNAT -p udp ".
-	   "  --dport $TMCD_PORT -d $boss_ip -s $vnode_ip ".
-	   "  --to-destination $host_ip:$local_tmcd_port");
-    return -1
-	if ($?);
+    DoIPtables("-t nat -A PREROUTING -j DNAT -p udp ".
+	       "  --dport $TMCD_PORT -d $boss_ip -s $vnode_ip ".
+	       "  --to-destination $host_ip:$local_tmcd_port")
+	== 0 or return -1;
 
     # Reroute evproxy to use the local daemon.
-    mysystem2("$IPTABLES -t nat -A PREROUTING -j DNAT -p tcp ".
-	   "  --dport $EVPROXY_PORT -d $ops_ip -s $vnode_ip ".
-	   "  --to-destination $host_ip:$EVPROXY_PORT");
-    return -1
-	if ($?);
+    DoIPtables("-t nat -A PREROUTING -j DNAT -p tcp ".
+	       "  --dport $EVPROXY_PORT -d $ops_ip -s $vnode_ip ".
+	       "  --to-destination $host_ip:$EVPROXY_PORT")
+	== 0 or return -1;
     
     #
     # GROSS! source-nat all traffic destined the fs node, to come from the
@@ -196,11 +191,10 @@ sub Online()
     # filesystems to the guest IPs if the guest is on a shared host.
     # 
     if (!SHAREDHOST()) {
-	mysystem2("$IPTABLES -t nat -A POSTROUTING -j SNAT ".
-	       "  --to-source $host_ip -s $vnode_ip -d $fs_ip,$fs_jailip ".
-	       "  -o $bridge");
-	return -1
-	    if ($?);
+	DoIPtables("-t nat -A POSTROUTING -j SNAT ".
+		   "  --to-source $host_ip -s $vnode_ip -d $fs_ip,$fs_jailip ".
+		   "  -o $bridge")
+	    == 0 or return -1;
     }
 
     # 
@@ -212,19 +206,17 @@ sub Online()
     # rely on the SNAT rule below. 
     #
     if (!REMOTEDED()) {
-	mysystem2("$IPTABLES -t nat -A POSTROUTING -j ACCEPT " . 
-		  " -s $vnode_ip -d $network/$cnet_mask");
-	return -1
-	    if ($?);
+	DoIPtables("-t nat -A POSTROUTING -j ACCEPT " . 
+		   " -s $vnode_ip -d $network/$cnet_mask")
+	    == 0 or return -1;
 
 	#
 	# Boss/ops/fs specific rules in case the control network is
 	# segmented like it is in Utah.
 	#
-	mysystem2("$IPTABLES -t nat -A POSTROUTING -j ACCEPT " . 
-		  " -s $vnode_ip -d $boss_ip,$ops_ip");
-	return -1
-	    if ($?);
+	DoIPtables("-t nat -A POSTROUTING -j ACCEPT " . 
+		   " -s $vnode_ip -d $boss_ip,$ops_ip")
+	    == 0 or return -1;
     }
 
     # 
@@ -232,10 +224,9 @@ sub Online()
     # jail network in on our node, and all of them are bridged
     # togther anyway. 
     # 
-    mysystem2("$IPTABLES -t nat -A POSTROUTING -j ACCEPT " . 
-	      " -s $vnode_ip -d $jail_network/$jail_netmask");
-    return -1
-	if ($?);
+    DoIPtables("-t nat -A POSTROUTING -j ACCEPT " . 
+	       " -s $vnode_ip -d $jail_network/$jail_netmask")
+	== 0 or return -1;
 
     # 
     # Otherwise, setup NAT so that traffic leaving the vnode on its 
@@ -243,8 +234,10 @@ sub Online()
     # control net iface, is NAT'd to the phys host's control
     # net IP, using SNAT.
     # 
-    mysystem2("$IPTABLES -t nat -A POSTROUTING ".
-	      " -s $vnode_ip -o $outer_controlif -j SNAT --to-source $host_ip");
+    DoIPtables("-t nat -A POSTROUTING ".
+	       "-s $vnode_ip -o $outer_controlif ".
+	       "-j SNAT --to-source $host_ip")
+	== 0 or return -1;
     
     return 0;
 }
@@ -252,25 +245,25 @@ sub Online()
 sub Offline()
 {
     # dhcp
-    mysystem2("$IPTABLES -D FORWARD -o $bridge -m pkttype ".
-	      "--pkt-type broadcast " .
-	      "-m physdev --physdev-in $vif --physdev-is-bridged ".
-	      "--physdev-out $outer_controlif -j DROP");
+    DoIPtables("-D FORWARD -o $bridge -m pkttype ".
+	       "--pkt-type broadcast " .
+	       "-m physdev --physdev-in $vif --physdev-is-bridged ".
+	       "--physdev-out $outer_controlif -j DROP");
 
     # See above. 
     if (0) {
-	mysystem2("$IPTABLES -D FORWARD -m physdev ".
-		  "--physdev-in $vif -j ACCEPT");
+	DoIPtables("-D FORWARD -m physdev ".
+		   "--physdev-in $vif -j ACCEPT");
     }
 
     # tmcc
     # Reroute tmcd calls to the proxy on the physical host
-    mysystem2("$IPTABLES -t nat -D PREROUTING -j DNAT -p tcp ".
-	   "  --dport $TMCD_PORT -d $boss_ip -s $vnode_ip ".
-	   "  --to-destination $host_ip:$local_tmcd_port");
-    mysystem2("$IPTABLES -t nat -D PREROUTING -j DNAT -p udp ".
-	   "  --dport $TMCD_PORT -d $boss_ip -s $vnode_ip ".
-	   "  --to-destination $host_ip:$local_tmcd_port");
+    DoIPtables("-t nat -D PREROUTING -j DNAT -p tcp ".
+	       "  --dport $TMCD_PORT -d $boss_ip -s $vnode_ip ".
+	       "  --to-destination $host_ip:$local_tmcd_port");
+    DoIPtables("-t nat -D PREROUTING -j DNAT -p udp ".
+	       "  --dport $TMCD_PORT -d $boss_ip -s $vnode_ip ".
+	       "  --to-destination $host_ip:$local_tmcd_port");
 
     if (-e "/var/run/tmccproxy-$vnode_id.pid") {
 	my $pid = `cat /var/run/tmccproxy-$vnode_id.pid`;
@@ -279,29 +272,29 @@ sub Offline()
     }
 
     if (!SHAREDHOST()) {
-	mysystem2("$IPTABLES -t nat -D POSTROUTING -j SNAT ".
-	       "  --to-source $host_ip -s $vnode_ip -d $fs_ip,$fs_jailip ".
-	       "  -o $bridge");
+	DoIPtables("-t nat -D POSTROUTING -j SNAT ".
+		   "  --to-source $host_ip -s $vnode_ip -d $fs_ip,$fs_jailip ".
+		   "  -o $bridge");
     }
 
-    mysystem2("$IPTABLES -t nat -D POSTROUTING -j ACCEPT " . 
-		  " -s $vnode_ip -d $jail_network/$jail_netmask");
+    DoIPtables("-t nat -D POSTROUTING -j ACCEPT " . 
+	       " -s $vnode_ip -d $jail_network/$jail_netmask");
 
     if (!REMOTEDED()) {
-	mysystem2("$IPTABLES -t nat -D POSTROUTING -j ACCEPT " . 
-		  " -s $vnode_ip -d $network/$cnet_mask");
+	DoIPtables("-t nat -D POSTROUTING -j ACCEPT " . 
+		   " -s $vnode_ip -d $network/$cnet_mask");
 
-	mysystem2("$IPTABLES -t nat -D POSTROUTING -j ACCEPT " . 
-		  " -s $vnode_ip -d $boss_ip,$ops_ip");
+	DoIPtables("-t nat -D POSTROUTING -j ACCEPT " . 
+		   " -s $vnode_ip -d $boss_ip,$ops_ip");
     }
 
-    mysystem2("$IPTABLES -t nat -D POSTROUTING ".
-	      " -s $vnode_ip -o $outer_controlif -j SNAT --to-source $host_ip");
+    DoIPtables("-t nat -D POSTROUTING ".
+	       "-s $vnode_ip -o $outer_controlif -j SNAT --to-source $host_ip");
 
     # evproxy
-    mysystem2("$IPTABLES -t nat -D PREROUTING -j DNAT -p tcp ".
-	   "  --dport $EVPROXY_PORT -d $ops_ip -s $vnode_ip ".
-	   "  --to-destination $host_ip:$EVPROXY_PORT");
+    DoIPtables("-t nat -D PREROUTING -j DNAT -p tcp ".
+	       "  --dport $EVPROXY_PORT -d $ops_ip -s $vnode_ip ".
+	       "  --to-destination $host_ip:$EVPROXY_PORT");
 
     return 0;
 }
@@ -327,6 +320,8 @@ if (@ARGV) {
 	TBScriptUnlock();
 	exit(1);
     }
+    TBScriptUnlock();
+    
     my $rval = 0;
     my $op   = shift(@ARGV);
     if ($op eq "online") {
@@ -335,7 +330,6 @@ if (@ARGV) {
     elsif ($op eq "offline") {
 	$rval = Offline();
     }
-    TBScriptUnlock();
     exit($rval);
 }
 exit(0);

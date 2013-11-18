@@ -1567,16 +1567,16 @@ sub vnodeBoot($$$$)
     libutil::setState("BOOTING");
 
     # and finally, create the VM
-    mysystem2("$XM create $config");
-
+    my $status = RunWithLock("xmtool", "$XM create $config");
+    
     # We have a problem with intermittent failures. 
-    if ($?) {
+    if ($status) {
 	print "Guest failure: retrying after a short wait.\n";
 	sleep(20);
-	mysystem2("$XM create $config");
+	$status = RunWithLock("xmtool", "$XM create $config");
     }
-    if ($?) {
-	print STDERR "$XM create failed: $?\n";
+    if ($status) {
+	print STDERR "$XM create failed: $status\n";
 	return -1;
     }
     print "Created virtual machine $vnode_id\n";
@@ -1595,7 +1595,8 @@ sub vnodeReboot($$$$)
     if ($vmid =~ m/(.*)/){
         $vmid = $1;
     }
-    mysystem("$XM reboot $vmid");
+    my $status = RunWithLock("xmtool", "$XM reboot $vmid");
+    return $status >> 8;
 }
 
 sub vnodeTearDown($$$$)
@@ -1654,7 +1655,7 @@ sub vnodeDestroy($$$$)
         $vnode_id = $1;
     }
     if (domainExists($vnode_id)) {
-	mysystem("$XM destroy $vnode_id");
+	RunWithLock("xmtool", "$XM destroy $vnode_id");
 	# XXX hang out awhile waiting for domain to disappear
 	domainGone($vnode_id, 15);
     }
@@ -1735,7 +1736,9 @@ sub vnodeHalt($$$$)
 	#
 	if ($stat) {
 	    print STDERR "$XM shutdown returned $stat. Doing a destroy!\n";
-	    mysystem("$XM destroy $vnode_id");
+	    my $status = RunWithLock("xmtool", "$XM destroy $vnode_id");
+	    fatal("Could not destroy $vnode_id")
+		if ($status);
 	}
     }
     else {
@@ -1744,8 +1747,8 @@ sub vnodeHalt($$$$)
 	# Temporarily unblock and set to default so we die. 
 	#
 	local $SIG{TERM} = 'DEFAULT';
-	exec("$XM shutdown -w $vnode_id");
-	exit(1);
+	my $status = RunWithLock("xmtool", "$XM shutdown -w $vnode_id");
+	exit($status >> 8);
     }
     return 0;
 }
