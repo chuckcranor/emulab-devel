@@ -1149,10 +1149,12 @@ sub setPortVlan($$@) {
     # are not.
     my $i = 0;
     my @uportlist = ();
+    my @upobj = ();
     foreach my $pobj (@portobjs) {
-	if (!$pobj->trunk()) {
+	if ($pobj->tagged() == 0) {
 	    $self->debug("Adding port $pobj as untagged to $vlan_number\n",2);
 	    push @uportlist, $portlist[$i];
+	    push @upobj, $pobj;
 	}
 	$i++;
     }
@@ -1176,7 +1178,7 @@ sub setPortVlan($$@) {
 	my $vlbitmask = $self->getMemberBitmask($vlifidx);
 	if ($self->checkBits("off",$ubitmask,$vlbitmask)) {
 	    $self->debug("$id: preventively attempting to ".
-			 "remove @ports from vlan number $vlnum\n");
+			 "remove @upobj from vlan number $vlnum\n");
 	    
 	    $RetVal = $self->removeSelectPortsFromVlan($vlnum, @uportlist);
 	    if ($RetVal) {
@@ -1240,6 +1242,9 @@ sub removeSelectPortsFromVlan($$@) {
 
 	# Get the ifindex of the vlan.
 	my $vlanIfindex = $self->getVlanIfindex($vlan_number);
+	my ($ebits, $ubits) = $self->getMemberBitmask($vlanIfindex,1);
+	$ebits &= ~$bitmaskToRemove;
+	$ubits &= ~$bitmaskToRemove;
 	if (!defined($vlanIfindex)) {
 	    warn "$id: ERROR: Could not get ifindex for vlan number $vlan_number!\n";
 	    return scalar(@ports);

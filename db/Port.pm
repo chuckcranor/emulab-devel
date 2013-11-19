@@ -410,6 +410,8 @@ sub LookupByStringForced($$)
 	$irowref->{'uuid'} = "";
 	$irowref->{'trunk'} = 0;
 	$irowref->{'trunk_mode'} = "equal";
+	$irowref->{'tagged'} = 0;
+	$irowref->{'enabled'} = 1;
 	$inst->{"INTERFACES_ROW"} = $irowref;
 
 	# XXX: Incomplete, but if the port isn't in the wires table,
@@ -461,8 +463,11 @@ sub LookupByIface($$;$)
     }
 
     # all fields
-    my $query_result = DBQueryWarn("select * from interfaces ".
-		    "where node_id='$nodeid' AND iface='$iface'");
+    my $query_result = 
+	DBQueryWarn("select i.*,ist.tagged,ist.enabled from interfaces as i".
+		    " left join interface_state as ist".
+		    "  on i.node_id=ist.node_id and i.iface=ist.iface".
+		    " where i.node_id='$nodeid' and i.iface='$iface'");
     return undef
 	if (!$query_result);
     
@@ -576,9 +581,13 @@ sub LookupByTriple($$;$$)
     
     $inst->{"WIRES_ROW"} = $rowref;
 
-    $query_result =
-	DBQueryWarn("select * from interfaces ".
-		    "where node_id='$nodeid' AND card='$card' AND port='$port'");
+    $query_result = 
+	DBQueryWarn("select i.*,ist.tagged,ist.enabled from interfaces as i".
+		    " left join interface_state as ist".
+		    "  on i.node_id=ist.node_id and i.card=ist.card".
+		    "   and i.port = ist.port".
+		    " where i.node_id='$nodeid' and i.card='$card'".
+		    "  and i.port='$port'");
     return undef
 	if (!$query_result);
 
@@ -600,6 +609,8 @@ sub LookupByTriple($$;$$)
 	$rowref->{'uuid'} = "";
 	$rowref->{'trunk'} = 0;
 	$rowref->{'trunk_mode'} = "equal";
+	$rowref->{'tagged'} = 0;
+	$rowref->{'enabled'} = 1;
     } else {
 	$rowref = $query_result->fetchrow_hashref();
     }
@@ -678,6 +689,10 @@ sub mask($)    { return field($_[0], 'mask'); }
 sub uuid($)    { return field($_[0], 'uuid'); }
 sub trunk($)   { return field($_[0], 'trunk'); }
 sub trunk_mode($) { return field($_[0], 'trunk_mode'); }
+# These two come from the "interface_state" table, which gives the
+# current view vs. the "mandated" (mapped) state from the interfaces table.
+sub tagged($)  { return field($_[0], 'tagged'); }
+sub enabled($) { return field($_[0], 'enabled'); }
 
 sub wire_end($) { return $_[0]->{'WIRE_END'}; }
 sub is_switch_side($) { return $_[0]->wire_end() eq $WIRE_END_SWITCH; }
