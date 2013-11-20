@@ -1,0 +1,231 @@
+#!/usr/bin/perl -w
+#
+# Copyright (c) 2013 University of Utah and the Flux Group.
+# 
+# {{{EMULAB-LICENSE
+# 
+# This file is part of the Emulab network testbed software.
+# 
+# This file is free software: you can redistribute it and/or modify it
+# under the terms of the GNU Affero General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or (at
+# your option) any later version.
+# 
+# This file is distributed in the hope that it will be useful, but WITHOUT
+# ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
+# FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Affero General Public
+# License for more details.
+# 
+# You should have received a copy of the GNU Affero General Public License
+# along with this file.  If not, see <http://www.gnu.org/licenses/>.
+# 
+# }}}
+#
+use strict;
+use English;
+use Getopt::Std;
+use Date::Parse;
+
+#
+# Modify a lease.
+# You can update the expiration or "last used" dates, change the state,
+# or add/remove/modify the set of attributes.
+#
+sub usage()
+{
+    print STDERR "Usage: modlease [-hd] [-s state] [-e expire] [-l last-used] [-a key=value] [-d key] name\n";
+    print STDERR "   -h         This message\n";
+    print STDERR "   -d         Print additional debug info\n";
+    print STDERR "   -s state   Update the state\n";
+    print STDERR "   -e date    Update the expiration date\n";
+    print STDERR "   -l date    Update the last used date ('now' for current time)\n";
+
+    print STDERR "   -a key=val Add or update attribute 'key' with value 'val'\n";
+    print STDERR "   -r key     Remove attribute 'key'\n";
+    print STDERR "   name       Name of lease (of form <pid>/<id>)\n";
+    exit(-1);
+}
+my $optlist  = "dhs:e:l:a:r:";
+my $debug = 0;
+my $pid;
+my $state;
+my $expire;
+my $lastused;
+my $addattr;
+my $delattr;
+my $lname;
+my $now = time();
+
+# Protos
+sub fatal($);
+
+#
+# Configure variables
+#
+my $TB		 = "@prefix@";
+my $TBOPS        = "@TBOPSEMAIL@";
+
+#
+# Testbed Support libraries
+#
+use lib "@prefix@/lib";
+use libdb;
+use Lease;
+use Project;
+use User;
+
+#
+# Turn off line buffering on output
+#
+$| = 1;
+
+#
+# Untaint the path
+# 
+$ENV{'PATH'} = "/bin:/sbin:/usr/bin:";
+
+#
+# Parse command arguments. Once we return from getopts, all that should be
+# left are the required arguments.
+#
+my %options = ();
+if (! getopts($optlist, \%options)) {
+    usage();
+}
+if (defined($options{h})) {
+    usage();
+}
+if (defined($options{d})) {
+    $debug++;
+}
+if (defined($options{s})) {
+    $state = $options{s};
+}
+if (defined($options{e})) {
+    if ($options{e} eq "now") {
+	$expire = $now;
+    } else {
+	$expire = str2time($options{e});
+	if (!$expire) {
+	    fatal("Could not parse expiration date.");
+	}
+    }
+}
+if (defined($options{l})) {
+    if ($options{l} eq "now") {
+	$lastused = $now;
+    } else {
+	$lastused = str2time($options{l});
+	if (!defined($lastused)) {
+	    fatal("Could not parse last-used date.");
+	}
+    }
+}
+if (defined($options{a})) {
+    $addattr = $options{a};
+    if ($addattr !~ /^([-\w]+)=([-\w\.\+\/:]+)$/) {
+	fatal("Malformed attribute name/value '$addattr'.");
+    }
+}
+if (defined($options{r})) {
+    $delattr = $options{r};
+    if ($delattr !~ /^([-\w]+)$/) {
+	fatal("Malformed attribute name '$delattr'.");
+    }
+}
+
+if (!($state || $expire || defined($lastused) || $addattr || $delattr)) {
+    print STDERR "Must specify SOME action!\n";
+    usage();
+}
+if (@ARGV != 1) {
+    print STDERR "Must specify exactly one lease.\n";
+    usage();
+}
+
+# lease name must include a project
+$lname = $ARGV[0];
+if ($lname =~ /^([-\w]+)\/([-\w]+)$/) {
+    $pid = $1;
+    $lname = $2;
+} else {
+    fatal("Lease name $lname not in the form <pid>/<lname>.");
+}
+
+# XXX right now, must be admin
+if (!TBAdmin()) {
+    fatal("Only admins can modify leases right now.");
+}
+
+my $this_user = User->ThisUser();
+if (! defined($this_user)) {
+    fatal("You ($UID) do not exist!");
+}
+
+my $project = Project->Lookup($pid);
+if (!defined($project)) {
+    fatal("No such project $pid\n");
+}
+
+#
+# Check dates: must be appropriately in the past/future.
+#
+if ($expire && $expire < $now) {
+    fatal("Cannot set expiration date in the past.");
+}
+if (defined($lastused) && $lastused > $now) {
+    fatal("Cannot set last-used date in the future.");
+}
+
+#
+# Check name: must exist and be modifiable.
+#
+my $lease = Lease->Lookup($pid, $lname);
+if (!$lease) {
+    fatal("Lease $pid/$lname does not exist.");
+}
+if (!$lease->AccessCheck($this_user, LEASE_ACCESS_MODIFY())) {
+    fatal("Cannot modify lease $pid/$lname.");
+}
+
+# Handle state
+if ($state && $lease->UpdateState($state)) {
+    fatal("Could not set state of $pid/$lname to '$state'.");
+}
+
+# Handle expiration date
+if ($expire && $lease->SetEndTime($expire)) {
+    fatal("Could not update expiration time of $pid/$lname.");
+}
+
+# Handle last used date
+if (defined($lastused)) {
+    if (($lastused >= $now && $lease->BumpLastUsed()) ||
+	($lastused < $now && $lease->SetLastUsedTime($lastused))) {
+	fatal("Could not update last-used time of $pid/$lname.");
+    }
+}
+
+#
+# Handle attributes. Delete, then add (replace).
+#
+if ($delattr && $lease->DeleteAttribute($delattr)) {
+    fatal("Could not remove attribute $delattr on lease $pid/$lname.");
+}
+if ($addattr) {
+    if ($addattr !~ /^([-\w]+)=([-\w\.\+\/:]+)$/ ||
+	$lease->SetAttribute($1, $2)) {
+	fatal("Could not set attribute $addattr on lease $pid/$lname.");
+    }
+}
+
+exit(0);
+
+sub fatal($)
+{
+    my ($mesg) = $_[0];
+
+    die("*** $0:\n".
+	"    $mesg\n");
+}
+

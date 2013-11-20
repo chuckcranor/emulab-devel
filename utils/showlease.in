@@ -1,0 +1,228 @@
+#!/usr/bin/perl -w
+#
+# Copyright (c) 2013 University of Utah and the Flux Group.
+# 
+# {{{EMULAB-LICENSE
+# 
+# This file is part of the Emulab network testbed software.
+# 
+# This file is free software: you can redistribute it and/or modify it
+# under the terms of the GNU Affero General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or (at
+# your option) any later version.
+# 
+# This file is distributed in the hope that it will be useful, but WITHOUT
+# ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
+# FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Affero General Public
+# License for more details.
+# 
+# You should have received a copy of the GNU Affero General Public License
+# along with this file.  If not, see <http://www.gnu.org/licenses/>.
+# 
+# }}}
+#
+use strict;
+use English;
+use Getopt::Std;
+use Date::Parse;
+use POSIX qw(strftime);
+
+#
+# Show all leases the caller has access to.
+#
+sub usage()
+{
+    print STDERR "Usage: showlease [-hda] [-p pid] [-u uid] lid ...\n";
+    print STDERR "   -h      This message\n";
+    print STDERR "   -d      Print additional debug info\n";
+    print STDERR "   -a      Show all leases (admin only)\n";
+    print STDERR "   -p pid  Show all leases for project <pid>\n";
+    print STDERR "   -u uid  Show all leases owned by user <uid>\n";
+    print STDERR "   lid ... Show named leases (name is <pid>/<id>)\n";
+    exit(-1);
+}
+my $optlist  = "dhap:u:";
+my $debug = 0;
+my $pid;
+my $uid;
+my $showall;
+my @lids = ();
+
+# Protos
+sub fatal($);
+
+#
+# Configure variables
+#
+my $TB		 = "@prefix@";
+my $TBOPS        = "@TBOPSEMAIL@";
+
+#
+# Testbed Support libraries
+#
+use lib "@prefix@/lib";
+use libdb;
+use Lease;
+use Project;
+use User;
+
+#
+# Turn off line buffering on output
+#
+$| = 1;
+
+#
+# Untaint the path
+# 
+$ENV{'PATH'} = "/bin:/sbin:/usr/bin:";
+
+#
+# Parse command arguments. Once we return from getopts, all that should be
+# left are the required arguments.
+#
+my %options = ();
+if (! getopts($optlist, \%options)) {
+    usage();
+}
+if (defined($options{h})) {
+    usage();
+}
+if (defined($options{d})) {
+    $debug++;
+}
+if (defined($options{a})) {
+    $showall = 1;
+}
+if (defined($options{p})) {
+    $pid = $options{p};
+}
+if (defined($options{u})) {
+    $uid = $options{u};
+}
+my @lnames = @ARGV;
+
+if ($showall) {
+    if (!TBAdmin()) {
+	print STDERR "Only admin can use -a\n";
+	usage();
+    }
+    $pid = $uid = 0;
+    @lnames = ();
+}
+if ($pid && $uid) {
+    print STDERR "Specify only one of -p and -u\n";
+    usage();
+}
+if (($pid || $uid) && @lnames > 0) {
+    print STDERR "Specify only one of -p/-u and explicit list of lids\n";
+    usage();
+}
+
+my $this_user = User->ThisUser();
+if (! defined($this_user)) {
+    fatal("You ($UID) do not exist!");
+}
+
+if ($showall) {
+    @lids = Lease->AllLeases();
+}
+
+if ($pid) {
+    my $project = Project->Lookup($pid);
+    if (!defined($project)) {
+	fatal("No such project $pid\n");
+    }
+    # must be admin or have access to the project
+    if (!TBAdmin() &&
+	!$project->AccessCheck($this_user, PROJMEMBERTRUST_USER())) {
+	fatal("You do not have access to pid $pid");
+    }
+    @lids = Lease->AllProjectLeases($project);
+}
+
+if ($uid) {
+    my $user = User->Lookup($uid);
+    if (!defined($user)) {
+	fatal("No such user $uid\n");
+    }
+    # must be admin or be the specified user
+    if (!TBAdmin() && !$user->SameUser($this_user)) {
+	fatal("You do not have access to uid $uid");
+    }
+    @lids = Lease->AllUserLeases($user);
+}
+# special case: no args, show all leases owned by the caller
+elsif (!$showall && @lnames == 0) {
+    @lids = Lease->AllUserLeases($this_user);
+}
+
+foreach my $name (@lnames) {
+    # lease names must have a project context
+    if ($name =~ /^([-\w]+)\/([-\w]+)$/) {
+	my $lid = Lease->Lookup($1, $2);
+	if (!defined($lid)) {
+	    fatal("Could not access lease $name\n.");
+	}
+	push @lids, $lid;
+    } else {
+	fatal("Lease name $name not in the form <pid>/<lname>.");
+    }
+}
+
+print STDERR "Found ", scalar(@lids), " leases\n"
+    if ($debug);
+@lids = sort { $a->pid() cmp $b->pid() || $a->lease_id() cmp $b->lease_id() } @lids;
+if (@lids > 0) {
+    my $fmt = "%-20s %-8s %-10s %-15s %-15s %-15s %-6s %s\n";
+    my %states = (
+	"valid" =>      'valid',
+	"unapproved" => 'unappr',
+	"grace" =>      'grace',
+	"locked" =>     'locked',
+	"expired" =>    'expire'
+    );
+
+    printf $fmt, "Pid/Name", "Owner", "Type", "Inception", "End",
+        "Last used", "State", "Attrs";
+
+    foreach my $lease (@lids) {
+	if (!$lease->AccessCheck($this_user, LEASE_ACCESS_READINFO())) {
+	    print STDERR "Admin cannot access lease $lease?!\n"
+		if (TBAdmin());
+	    next;
+	}
+
+	# Attributes
+	my $attrstr = "";
+	my $attrs = $lease->GetAttributes();
+	if ($attrs) {
+	    my $del = "";
+	    foreach my $k (keys %{$attrs}) {
+		my $v = $attrs->{$k}->{'value'};
+		$attrstr .= "$del$k=$v";
+		$del = ",";
+	    }
+	}
+
+	my $lname = $lease->pid() . "/" . $lease->lease_id();
+	my $stime = strftime("%D %R", localtime($lease->inception()));
+	my $etime = strftime("%D %R", localtime($lease->lease_end()));
+	my $ltime = "never";
+	if ($lease->last_used()) {
+	    $ltime = strftime("%D %R", localtime($lease->last_used()));
+	}
+	printf $fmt, $lname, $lease->owner(), $lease->type(),
+	    $stime, $etime, $ltime, $states{$lease->state()}, $attrstr;
+
+    }
+}
+
+exit(0);
+
+sub fatal($)
+{
+    my ($mesg) = $_[0];
+
+    die("*** $0:\n".
+	"    $mesg\n");
+}

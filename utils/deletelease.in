@@ -1,0 +1,128 @@
+#!/usr/bin/perl -w
+#
+# Copyright (c) 2013 University of Utah and the Flux Group.
+# 
+# {{{EMULAB-LICENSE
+# 
+# This file is part of the Emulab network testbed software.
+# 
+# This file is free software: you can redistribute it and/or modify it
+# under the terms of the GNU Affero General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or (at
+# your option) any later version.
+# 
+# This file is distributed in the hope that it will be useful, but WITHOUT
+# ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
+# FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Affero General Public
+# License for more details.
+# 
+# You should have received a copy of the GNU Affero General Public License
+# along with this file.  If not, see <http://www.gnu.org/licenses/>.
+# 
+# }}}
+#
+use strict;
+use English;
+use Getopt::Std;
+use Date::Parse;
+
+#
+# Delete a lease.
+#
+sub usage()
+{
+    print STDERR "Usage: deletelease [-hd] lname\n";
+    print STDERR "   -h       This message\n";
+    print STDERR "   -d       Print additional debug info\n";
+    print STDERR "   lname    Name of lease in <pid>/<id> form\n";
+    exit(-1);
+}
+my $optlist  = "dh";
+my $debug = 0;
+my $pid;
+my $lname;
+
+# Protos
+sub fatal($);
+
+#
+# Configure variables
+#
+my $TB		 = "@prefix@";
+my $TBOPS        = "@TBOPSEMAIL@";
+
+#
+# Testbed Support libraries
+#
+use lib "@prefix@/lib";
+use libdb;
+use Lease;
+use Project;
+use User;
+
+#
+# Turn off line buffering on output
+#
+$| = 1;
+
+#
+# Untaint the path
+# 
+$ENV{'PATH'} = "/bin:/sbin:/usr/bin:";
+
+#
+# Parse command arguments. Once we return from getopts, all that should be
+# left are the required arguments.
+#
+my %options = ();
+if (! getopts($optlist, \%options)) {
+    usage();
+}
+if (defined($options{h})) {
+    usage();
+}
+if (defined($options{d})) {
+    $debug++;
+}
+if (@ARGV != 1) {
+    print STDERR "Must specify exactly one lname\n";
+    usage();
+}
+
+$lname = $ARGV[0];
+if ($lname =~ /^([-\w]+)\/([-\w]+)$/) {
+    $pid = $1;
+    $lname = $2;
+} else {
+    fatal("Lease name $lname not in the form <pid>/<lname>.");
+}
+
+my $this_user = User->ThisUser();
+if (! defined($this_user)) {
+    fatal("You ($UID) do not exist!");
+}
+
+#
+# Check lease: project must exist, lease must exist,
+# caller must have privilege to destroy.
+#
+my $lease;
+if (!Project->Lookup($pid) || !($lease = Lease->Lookup($pid, $lname)) ||
+    !$lease->AccessCheck($this_user, LEASE_ACCESS_DESTROY())) {
+    fatal("Cannot access lease $pid/$lname.");
+}
+
+if ($lease->Delete()) {
+    fatal("Could not destroy lease $pid/$lname.");
+}
+
+exit(0);
+
+sub fatal($)
+{
+    my ($mesg) = $_[0];
+
+    die("*** $0:\n".
+	"    $mesg\n");
+}
+
