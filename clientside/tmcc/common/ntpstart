@@ -201,6 +201,9 @@ while (<NTP>) {
 	/^restrict\s+default\s+noserve$/ && do {
 	    $needrestrict = 1;
 	};
+	/^restrict\s+-4\s+default\s.*nomodify/ && do {
+	    $needrestrict = 1;
+	};
 	# Make a note if there were restrict lines
 	/^restrict\s+(\S+)$/ && do {
 	    $restricts{$1} = 1;
