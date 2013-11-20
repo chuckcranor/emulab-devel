@@ -314,6 +314,32 @@ sub Delete($) {
 }
 
 #
+# Return a list of all leases.
+#
+sub AllLeases($)
+{
+    my ($class)  = @_;
+    my @pleases = ();
+    
+    my $query_result =
+	DBQueryWarn("select lease_idx from project_leases");
+    
+    return ()
+	if (!$query_result || !$query_result->numrows);
+
+    while (my ($lease_idx) = $query_result->fetchrow_array()) {
+	my $lease = Lookup($class, $lease_idx);
+
+	# Something went wrong?
+	return ()
+	    if (!defined($lease));
+	
+	push(@pleases, $lease);
+    }
+    return @pleases;
+}
+
+#
 # Return a list of all leases belonging to a particular project.
 #
 sub AllProjectLeases($$)
@@ -461,6 +487,7 @@ sub UpdateState($$) {
 		"where lease_idx=$idx")
 	or return -1;
 
+    $self->Refresh();
     return 0;
 }
 
@@ -475,6 +502,31 @@ sub BumpLastUsed($) {
 
     my $idx = $self->idx();
     DBQueryWarn("update project_leases set last_used=NOW() where lease_idx=$idx");
+    $self->Refresh();
+    return 0;
+}
+
+#
+# Set last_used to a specific time
+#
+sub SetLastUsedTime($$) {
+    my ($self, $ntime) = @_;
+
+    return -1
+	if (!ref($self));
+
+    if ($ntime > time()) {
+	print STDERR "Lease->SetLastUsedTime: Can't set lease last-used time in the future.\n";
+	return -1
+    }
+    if ($ntime < $self->inception()) {
+	$ntime = 0;
+    }
+
+    my $idx = $self->idx();
+    DBQueryWarn("update project_leases set last_used=FROM_UNIXTIME($ntime) where lease_idx=$idx")
+	or return -1;
+
     $self->Refresh();
     return 0;
 }
