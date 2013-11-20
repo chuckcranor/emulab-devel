@@ -765,6 +765,43 @@ sub setPortMembership($$$$$) {
 	return $failcount; # should be 0
 }
 
+# Remove the input ports from any VLAN they might be in, except for the
+# default vlan.
+sub removePortsFromAllVlans($$@) {
+    my ($self, $tagged_only, @ports) = @_;
+    my $id = "$self->{NAME}::removePortsFromAllVlans";
+    my $errors = 0;
+
+    my @ifindexes = $self->convertPortFormat($PORT_FORMAT_IFINDEX, @ports);
+    my $portmask = $self->convertIfindexesToBitmask(\@ifindexes);
+    my %vlifindexes = $self->getVlanIfindex("ALL");
+    while (my ($vlifidx, $vlnum) = each %vlifindexes) {
+	# vlan 1 is the default vlan; we don't touch it in removal
+	# operations.  Membership in the default vlan is handled
+	# automagically on the Force10 platform.
+	next if ($vlnum == 1);
+
+	# Only attempt a removal operation if any of the ports appear
+	# in the current member list.  If only removal of tagged ports
+	# was requested, adjust the mask to check against accordingly.
+	my ($emask, $umask) = $self->getMemberBitmask($vlifidx,1);
+	my $checkmask = $emask;
+	my $rmports = \@ports;
+	if ($tagged_only) {
+	    # see comments in removeSomePortsFromVlan()
+	    $checkmask = $portmask & ($emask ^ $umask);
+	    $rmports = $self->convertBitmaskToIfindexes($checkmask);
+	} 
+	if ($self->checkBits("off", $portmask, $checkmask)) {
+	    $self->debug("$id: Attempting to remove @ports from ".
+			 "vlan number $vlnum\n");
+	    $errors += $self->removeSomePortsFromVlan($vlnum, @{$rmports});
+	}
+    }
+
+    return $errors;
+}
+
 ##############################################################################
 ## Snmpit API Module Methods Section
 ##
@@ -1127,10 +1164,17 @@ sub setPortVlan($$@) {
     my ($self, $vlan_number, @ports) = @_;
     my $id = "$self->{NAME}::setPortVlan";
 
-    my $RetVal; 
+    # Get the vlan's ifindex now.  No point in doing anything more if it
+    # doesn't exist!
+    my $vlanIfindex = $self->getVlanIfindex($vlan_number);
+    if (!$vlanIfindex) {
+	warn "$id: ERROR: Could not find ifindex for vlan $vlan_number\n";
+	return scalar(@ports);
+    }
 	
-    # Run the port list through portmap to find the ports on the switch that
-    # we are concerned with
+    # Convert the list of input ports into the two formats we need here.
+    # Hopefully the incoming list contains port objects already - otherwise
+    # we are in for DB queries.
     my @portlist = $self->convertPortFormat($PORT_FORMAT_IFINDEX, @ports);
     my @portobjs = $self->convertPortFormat($PORT_FORMAT_PORT, @ports);
     $self->debug("ports: " . join(",",@ports) . "\n");
@@ -1149,49 +1193,23 @@ sub setPortVlan($$@) {
     # are not.
     my $i = 0;
     my @uportlist = ();
-    my @upobj = ();
+    my @upobjs = ();
     foreach my $pobj (@portobjs) {
 	if ($pobj->tagged() == 0) {
 	    $self->debug("Adding port $pobj as untagged to $vlan_number\n",2);
 	    push @uportlist, $portlist[$i];
-	    push @upobj, $pobj;
+	    push @upobjs, $pobj;
 	}
 	$i++;
     }
     my $ubitmask = $self->convertIfindexesToBitmask(\@uportlist);
 
-    # First remove untrunked ports from any VLAN they might be in
-    # (aside from the default). If a port is still untagged in a
-    # different VLAN, the set command will fail.
-    my %vlifindexes = $self->getVlanIfindex("ALL");
-    my $vlanIfindex;
-    while (my ($vlifidx, $vlnum) = each %vlifindexes) {
-	# Save off the index to the requested vlan while we're in here.
-	if ($vlnum == $vlan_number) {
-	    $vlanIfindex = $vlifidx;
-	}
-	# removing untagged ports from the default vlan (VLAN 1) would fail.
-	next if ($vlnum == 1);
-	
-	# Only attempt to remove the ports if one or more appear in the
-	# current member list.
-	my $vlbitmask = $self->getMemberBitmask($vlifidx);
-	if ($self->checkBits("off",$ubitmask,$vlbitmask)) {
-	    $self->debug("$id: preventively attempting to ".
-			 "remove @upobj from vlan number $vlnum\n");
-	    
-	    $RetVal = $self->removeSelectPortsFromVlan($vlnum, @uportlist);
-	    if ($RetVal) {
-		$self->debug("$id: error when making sure that ".
-			     "@ports are removed from vlan $vlnum!\n");
-	    }
-	}
-    }
+    # Zap the untagged ports from any vlan that they are currently in
+    # (aside from the default).  Otherwise, the subsequent set operation
+    # might fail.
+    my $tagged_only = 0;
+    $self->removePortsFromAllVlans($tagged_only, @upobjs);
 
-    if (!$vlanIfindex) {
-	warn "$id: ERROR: Could not find ifindex for vlan $vlan_number\n";
-	return scalar(@ports);
-    }
     return $self->setPortMembership("on", $bitmask, $ubitmask, $vlanIfindex);
 }
 
@@ -1202,23 +1220,10 @@ sub setPortVlan($$@) {
 #	 returns 0 on sucess.
 #	 returns the number of failed ports on failure.
 sub removeSomePortsFromVlan($$@) {
-	my ($self, $vlan_number, @ports) = @_;
-	return $self->removeSelectPortsFromVlan($vlan_number, @ports);
-}
-
-#
-# Removes select ports from the given VLANS. Each VLAN is given as a VLAN
-# 802.1Q tag value.
-#
-# usage: removeSelectPortsFromVlan(self,@vlan)
-#	 returns 0 on sucess (!!!)
-#	 returns the number of failed ports on failure.
-#
-sub removeSelectPortsFromVlan($$@) {
 	my $self = shift;
 	my $vlan_number = shift;
 	my @ports = @_;
-	my $id = "$self->{NAME}::removeSelectPortsFromVlan()";
+	my $id = "$self->{NAME}::removeSomePortsFromVlan()";
 
 	# VLAN 1 is default VLAN, that's where all ports are supposed to go
 	# so trying to remove them there doesn't make sense
@@ -1240,18 +1245,32 @@ sub removeSelectPortsFromVlan($$@) {
 	my $allZeroBitmask = "00000000" x length($bitmaskToRemove);
         $allZeroBitmask = pack("B*", $allZeroBitmask);
 
-	# Get the ifindex of the vlan.
+	# Get the vlan's ifindex.
 	my $vlanIfindex = $self->getVlanIfindex($vlan_number);
-	my ($ebits, $ubits) = $self->getMemberBitmask($vlanIfindex,1);
-	$ebits &= ~$bitmaskToRemove;
-	$ubits &= ~$bitmaskToRemove;
 	if (!defined($vlanIfindex)) {
 	    warn "$id: ERROR: Could not get ifindex for vlan number $vlan_number!\n";
 	    return scalar(@ports);
 	}
 
-	return $self->setPortMembership("off", $allZeroBitmask, 
-					$bitmaskToRemove, $vlanIfindex);
+	# Warning - wacky bitmath ahead! Removing a port from a vlan is
+	# done differently for tagged vs. untagged ports.  To remove a tagged
+	# port, the port's bit needs to be '0' in both egress and untagged
+	# PortSets.  To remove an untagged port, the port's egress bit must
+	# be a '0', while the untagged bit must be a '1'.  Gross.
+	my ($curEbits, $curUbits) = $self->getMemberBitmask($vlanIfindex,1);
+	# The set of currently tagged ports have a '1' in the egress
+	# PortSet and a '0' in the untagged PortSet.  Tagged ports
+	# have a '1' in both sets, and non-members are '0' in both. XOR!
+	my $tagBits = $curEbits ^ $curUbits;
+	# Set the egress PortSet to zeros where we are removing ports, but
+	# set to '1' for tagged ports that are not to be removed. gawd.
+	my $eBits = ($bitmaskToRemove & $tagBits) ^ $tagBits;
+	# To create the untagged PortSet, we clear the tagged port
+	# bits in the input PortSet, leaving just the untagged ports
+	# with their bits set.
+	my $uBits = $curUbits & $bitmaskToRemove;
+
+	return $self->setPortMembership("off", $eBits, $uBits, $vlanIfindex);
 }
 
 
@@ -1272,6 +1291,8 @@ sub removeVlan($@) {
 	my $id = "$self->{NAME}::removeVlan()";
 
 	foreach my $vlan_number (@vlan_numbers) {
+	        # We won't remove vlan 1.
+	        next if $vlan_number == 1;
 		# Calculate ifIndex for this VLAN
 		my $ifIndex = $self->getVlanIfindex($vlan_number);
 		if (!defined($ifIndex)) {
@@ -1331,21 +1352,11 @@ sub removePortsFromVlan($@) {
 	    next;
 	}
 	
-	# Get the current membership bitmask
+	# Get the current membership bitmask and convert to a list of
+	# port ifindexes to pass to removeSomePortsFromVlan()
 	my $currentBitmask = $self->getMemberBitmask($vlanIfindex);
-	if (!defined($currentBitmask)) {
-	    warn "$id: WARNING: Could not get current membership bitmask for vlan_number $vlan_number.\n";
-	    # no membership bitmask => impossible to obtain number of ports
-	    # anyway => next...
-	    next;
-	}
-	
-	# Create an all-zero bitmask
-	my $allZeroBitmask = "00000000" x length($currentBitmask);
-        $allZeroBitmask = pack("B*", $allZeroBitmask);
-		
-	$errors += $self->setPortMembership("off", $allZeroBitmask,
-					    $currentBitmask, $vlanIfindex);
+	my $portlist = $self->convertBitmaskToIfindexes($currentBitmask);
+	$errors += $self->removeSomePortsFromVlan($vlan_number, @{$portlist});
     }
 
     return $errors;
@@ -1564,16 +1575,26 @@ sub enablePortTrunking2($$$$) {
 	return 0;
     }
 
-    # Add the port to the native vlan.  Tagged if equal trunking mode was
-    # requested, and untagged if not.
-    my $portmask = $self->convertIfindexesToBitmask([$pifindex]);
-    my $allzeromask = pack("B*", "00000000" x length($portmask));
-    my $ubitmask = $equalmode ? $allzeromask : $portmask;
-    if ($self->setPortMembership("on", $portmask, $ubitmask, 
-				  $native_ifindex) != 0) {
-	warn "$id: ERROR: Could not add port $port to vlan ".
-	     "$native_vlan.\n";
-	return 0;
+    # Add the port to the native vlan; tagged if equal trunking mode
+    # was requested, and untagged if not. Refuse to do this if the
+    # requested vlan is vlan 1.
+    if ($native_vlan != 1) {
+	# Firstly, zap the port from any existing vlans.
+	my $tagged_only = 0;
+	if ($self->removePortsFromAllVlans($tagged_only, $port)) {
+	    warn "$id: ERROR: Failed to remove $port from existing vlan(s)!";
+	    return 0;
+	}
+	# Next, add it as tagged if 'dual' mode, untagged if 'equal' mode.
+	my $portmask = $self->convertIfindexesToBitmask([$pifindex]);
+	my $allzeromask = pack("B*", "00000000" x length($portmask));
+	my $ubitmask = $equalmode ? $allzeromask : $portmask;
+	if ($self->setPortMembership("on", $portmask, $ubitmask, 
+				     $native_ifindex) != 0) {
+	    warn "$id: ERROR: Could not add port $port to vlan ".
+		"$native_vlan.\n";
+	    return 0;
+	}
     }
 
     return 1;
@@ -1599,28 +1620,12 @@ sub disablePortTrunking($$) {
     }
 
     # Remove the port from any VLAN it might be in, except for the
-    # native vlan.  We do this as a precaution - upper layers should
-    # have cleaned up already.
-    my %vlifindexes = $self->getVlanIfindex("ALL");
-    my $portmask = $self->convertIfindexesToBitmask([$pifindex]);
-    while (my ($vlifidx, $vlnum) = each %vlifindexes) {
-	next if ($vlnum == 1);
-
-	# Only attempt to remove the port if it appears in the current
-	# member list.  However, don't remove it from its native
-	# (untagged) vlan.
-	my ($vlebitmask, $vlubitmask) = $self->getMemberBitmask($vlifidx, 1);
-	if ($self->checkBits("off", $portmask, $vlebitmask)
-	    && !$self->checkBits("off", $portmask, $vlubitmask)) {
-	    $self->debug("$id: preventively attempting to ".
-			 "remove $port from vlan number $vlnum\n");
-	    
-	    my $RetVal = $self->removeSelectPortsFromVlan($vlnum, $port);
-	    if ($RetVal) {
-		$self->debug("$id: error when making sure ".
-			     "that $port is removed from vlan $vlnum!\n");
-	    }
-	}
+    # native (untagged) vlan.  We do this as a precaution - upper
+    # layers should have cleaned up already.
+    my $tagged_only = 1;
+    if ($self->removePortsFromAllVlans($tagged_only, $port)) {
+	warn "$id: ERROR: Could not remove $port from any/all vlans!";
+	return 0;
     }
 
     return 1;
