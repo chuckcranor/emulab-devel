@@ -2766,6 +2766,10 @@ sub createExpNetworkScript($$$$$$$)
     my @cmds = ();
 
     if ($xeninfo{xen_major} >= 4) {
+	# packet loss in netem is percent
+	$plr *= 100;
+	$rplr *= 100;
+
 	push(@cmds,
 	     "$TC qdisc add dev $iface handle $pipe20 root htb default 1");
 	if ($bandw != 0) {

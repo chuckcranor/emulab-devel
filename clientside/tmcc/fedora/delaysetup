@@ -425,6 +425,10 @@ sub DelaySetup
 	    $lp1 = $np1; $np1 += $pinc;
 	    $lp2 = $np2; $np2 += $pinc;
 
+	    # packet loss in netem is percent
+	    $plr1 *= 100;
+	    $plr2 *= 100;
+
 	    # next, plr and delay on the link
 	    push @upcmds,"$TC qdisc add dev $iface1 handle $np1 parent ${lp1}:1 netem drop $plr1 delay ${delay1}us";
 	    push @upcmds,"$TC qdisc add dev $iface2 handle $np2 parent ${lp2}:1 netem drop $plr2 delay ${delay2}us";
@@ -688,6 +692,9 @@ sub LinkDelaySetup()
 		}
 	    }
 	    else {
+		# packet loss in netem is percent
+		$plr *= 100;
+
 		#
 		# See comments in DelaySetup for why we have to reverse
 		# the normal shaping order for netem!
@@ -738,6 +745,9 @@ sub LinkDelaySetup()
 		    }
 		}
 		else {
+		    # packet loss in netem is percent
+		    $rplr *= 100;
+
 		    print DEL "$TC qdisc add dev $imqdev handle "; 
 		    print DEL "". ($pipeno+20) ." root ";
 		    print DEL "htb default 1\n";

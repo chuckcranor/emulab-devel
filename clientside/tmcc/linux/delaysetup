@@ -330,6 +330,9 @@ sub LinkDelaySetup()
 	    # our home grown stuff on newer kernels.
 	    #
 	    if ($useifb) {
+		# packet loss in netem is percent
+		$plr *= 100;
+
 		print DEL "ifconfig $iface txqueuelen $queue\n";
 		print DEL "$TC qdisc del dev $iface root\n";
 		print DEL "$TC qdisc del dev $iface ingress\n";
@@ -367,6 +370,9 @@ sub LinkDelaySetup()
 	    my $idev = ($useifb ? "ifb" : "imq") . "$inum";
 	    if ($type eq "duplex") {
 		if ($useifb) {
+		    # packet loss in netem is percent
+		    $rplr *= 100;
+
 		    print DEL "ifconfig $idev up\n";
 		    print DEL "$TC qdisc del dev $idev root\n";
 		    print DEL "$TC qdisc add dev $iface handle ffff: ingress\n";
