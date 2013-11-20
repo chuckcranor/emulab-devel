@@ -2950,9 +2950,9 @@ sub print_stitch_port
 {
     my ($node, $iface_urn, $remote_iface_urn, $capacity,
 	$vlans, $vlan_will_translate) = @_;
-    my (undef, undef, $iface) = GeniHRN::ParseInterface($iface_urn);
+    my (undef, undef, $iface) = GeniHRN::Parse($iface_urn);
     my $port_urn = GeniHRN::Generate($OURDOMAIN, "stitchport",
-				     $node . "//" . $iface);
+				     $iface);
     my $vlan_translate = "false";
     if ($vlan_will_translate) {
 	$vlan_translate = "true";
