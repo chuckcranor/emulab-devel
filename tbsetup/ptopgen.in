@@ -416,8 +416,13 @@ while (my ($cnode, $ccard, $cport, $ciface, $enode, $ecard, $eport, $eiface,
     if (! defined($ciface)) {
 	$ciface = "$ccard.$cport";
     }
+    my $ciface_urn;
     if (defined($subport)) {
-	$ciface = $subport;
+	$ciface_urn = $subport;
+    } else {
+	$ciface_urn = GeniHRN::GenerateInterface($OURDOMAIN,
+						 $cnode,
+						 $ciface);
     }
     if (! defined($external_iface_urn)) {
 	$external_iface_urn = $external_network_iface_urn;
@@ -434,9 +439,7 @@ while (my ($cnode, $ccard, $cport, $ciface, $enode, $ecard, $eport, $eiface,
     } else {
 	$contact_nodes{$cnode} = [$enode];
     }
-    $contact_ifaces{"$cnode:$enode"} = GeniHRN::GenerateInterface($OURDOMAIN,
-								  $cnode,
-								  $ciface);
+    $contact_ifaces{"$cnode:$enode"} = $ciface_urn;
 }
 
 print_header();
@@ -2192,15 +2195,7 @@ sub print_footer {
 
 
 		foreach my $node (keys(%contact_nodes)) {
-		    foreach my $external (@{ $contact_nodes{$node} }) {
-		      my $vlans = $external_nodes{$external};
-		      if (defined($external_links{"$node:$external"})) {
-			print_stitch_node($node,
-					  $contact_ifaces{"$node:$external"},
-					  $external_ifaces{"$node:$external"},
-					  1000000, $vlans, 0);
-		      }
-		    }
+		    print_stitch_node($node);
 		}
 		print "</aggregate>\n";
 		print "</stitching>\n";
@@ -2936,17 +2931,32 @@ sub print_type_relation
 
 sub print_stitch_node
 {
+    my ($node) = @_;
+    my $node_urn = GeniHRN::Generate($OURDOMAIN, "node", $node);
+    print "<node id=\"$node_urn\">\n";
+    foreach my $external (@{ $contact_nodes{$node} }) {
+	my $vlans = $external_nodes{$external};
+	if (defined($external_links{"$node:$external"})) {
+	    print_stitch_port($node,
+			      $contact_ifaces{"$node:$external"},
+			      $external_ifaces{"$node:$external"},
+			      1000000, $vlans, 0);
+	}
+    }
+    print "</node>\n";
+}
+
+sub print_stitch_port
+{
     my ($node, $iface_urn, $remote_iface_urn, $capacity,
 	$vlans, $vlan_will_translate) = @_;
     my (undef, undef, $iface) = GeniHRN::ParseInterface($iface_urn);
-    my $node_urn = GeniHRN::Generate($OURDOMAIN, "node", $node);
     my $port_urn = GeniHRN::Generate($OURDOMAIN, "stitchport",
 				     $node . "//" . $iface);
     my $vlan_translate = "false";
     if ($vlan_will_translate) {
 	$vlan_translate = "true";
     }
-    print "<node id=\"$node_urn\">\n";
     print "  <port id=\"$port_urn\">\n";
     print "    <capacity>$capacity</capacity>\n";
     print "    <maximumReservableCapacity>$capacity".
@@ -2977,7 +2987,6 @@ sub print_stitch_node
     print "      </switchingCapabilityDescriptor>\n";
     print "    </link>\n";
     print "  </port>\n";
-    print "</node>\n";
 }
 
 sub fatal($)
