@@ -26,10 +26,12 @@ if [ "${arg}" == "static" ] ; then
 fi
 
 #list=$(mysql -B -N -e "select node_id from reserved where pid='emulab-ops' and eid='nodechk';" tbdb)
-#blist=$(mysql -B -N -e "select node_id from reserved where pid='tbres' and eid='nodecheck';" tbdb)
-blist=$(mysql -B -N -e "select node_id from reserved where pid='emulab-ops' and eid='64nodecheck';" tbdb)
+blist=$(mysql -B -N -e "select node_id from reserved where pid='emulab-ops' and eid='nodecheck';" tbdb)
+elist=$(mysql -B -N -e "select node_id from reserved where pid='emulab-ops' and eid='64nodecheck';" tbdb)
 alist=$(mysql -B -N -e "select node_id from reserved where pid='emulab-ops' and eid='nore32';" tbdb)
-list="$alist $blist"
+clist=$(mysql -B -N -e "select node_id from reserved where pid='testbed' and eid='wce';" tbdb)
+dlist=$(mysql -B -N -e "select node_id from reserved where pid='emulab-ops' and eid='hw';" tbdb)
+list="$alist $blist $clist $dlist $elist"
 
 echo -n "LIST="
 for i in $list ; do
