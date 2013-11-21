@@ -282,8 +282,7 @@ sub readifIndex($) {
 	    my $type = $1;
 	    my $module = $2;
 	    my $port = $3;
-	    # Force10 modules and ports start at 0 instead of 1.  Emulab
-	    # convention is to be 1-based.
+	    # Note: Force10 modules and ports start at 0 instead of 1.
 	    my $modport = "${module}.${port}";
 	    my $ifIndex = $iid;
 	    
@@ -731,14 +730,11 @@ sub setPortMembership($$$$$) {
 
 	# XXX: Can't use snmpitSetWarn since these port set operations
 	# routinely return an "undoFailed" status on the Force10
-	# platform.  Not sure why this happens...
+	# platform (even when successful).  Not sure why this happens...
 	my $status = $self->{SESS}->set($snmpvars);
 
-	# XXX: Look into why/when this happens ...
-	# $status should contain "0 but true" if successful, but...
-	# occasionally it is undefined (indicating failure) even when
-	# the operation succeeds. So, the return value cannot be
-	# trusted and we do our own little investigation. 
+	# Since the return value cannot be trusted, we do our own
+	# little investigation to see if the set command succeeded.
 	if (!defined($status)) {
 	    $self->debug("$id: Error setting port membership: $self->{SESS}->{ErrorStr}\n");
 	}
@@ -1171,7 +1167,7 @@ sub setPortVlan($$@) {
 	warn "$id: ERROR: Could not find ifindex for vlan $vlan_number\n";
 	return scalar(@ports);
     }
-	
+
     # Convert the list of input ports into the two formats we need here.
     # Hopefully the incoming list contains port objects already - otherwise
     # we are in for DB queries.
@@ -1186,7 +1182,7 @@ sub setPortVlan($$@) {
     }
 
     # Create a bitmask from this ifIndex list
-    my $bitmask = $self->convertIfindexesToBitmask(\@portlist);
+    my $portmask = $self->convertIfindexesToBitmask(\@portlist);
 
     # Look at DB state (via Port objects) to determine which ports are
     # in trunk mode.  Create the "untagged" bitmask from those that
@@ -1202,7 +1198,7 @@ sub setPortVlan($$@) {
 	}
 	$i++;
     }
-    my $ubitmask = $self->convertIfindexesToBitmask(\@uportlist);
+    my $uportmask = $self->convertIfindexesToBitmask(\@uportlist);
 
     # Zap the untagged ports from any vlan that they are currently in
     # (aside from the default).  Otherwise, the subsequent set operation
@@ -1210,7 +1206,15 @@ sub setPortVlan($$@) {
     my $tagged_only = 0;
     $self->removePortsFromAllVlans($tagged_only, @upobjs);
 
-    return $self->setPortMembership("on", $bitmask, $ubitmask, $vlanIfindex);
+    # Mix in the membership already set up on the target vlan.  Doing this
+    # avoids accidentally removing tagged ports when adding new ports to the
+    # vlan (zeros written to a port's bit in both vectors will remove it from
+    # the vlan if it's a tagged member).
+    my ($vlebits, $vlubits) = $self->getMemberBitmask($vlanIfindex,1);
+    my $ebits = $portmask | $vlebits;
+    my $ubits = $uportmask | $vlubits;
+
+    return $self->setPortMembership("on", $ebits, $ubits, $vlanIfindex);
 }
 
 # Removes and disables some ports in a given VLAN. The VLAN is given as a VLAN
@@ -1402,8 +1406,8 @@ sub portControl ($$@) {
 		return $errors;
 	} else {
 		# Command not supported
-		warn "$id: Unsupported port control command ".
-		     "'$cmd' ignored.\n";
+		$self->debug("$id: Unsupported port control command ".
+			     "'$cmd' ignored.\n");
 		return -1;
 	}
 }
