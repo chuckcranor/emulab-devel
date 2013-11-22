@@ -134,6 +134,9 @@ sub new($$$;$) {
     $self->{CONFIRM} = 1;
     $self->{NAME} = $name;
 
+    # List of ports in trunk mode - used as a secondary check.
+    $self->{TRUNKS} = {};
+
     #
     # Get config options from the database
     #
@@ -1191,7 +1194,8 @@ sub setPortVlan($$@) {
     my @uportlist = ();
     my @upobjs = ();
     foreach my $pobj (@portobjs) {
-	if ($pobj->tagged() == 0) {
+	if ($pobj->tagged() == 0 && 
+	    !exists($self->{TRUNKS}->{$portlist[$i]})) {
 	    $self->debug("Adding port $pobj as untagged to $vlan_number\n",2);
 	    push @uportlist, $portlist[$i];
 	    push @upobjs, $pobj;
@@ -1579,16 +1583,17 @@ sub enablePortTrunking2($$$$) {
 	return 0;
     }
 
+    # Remove the port from any vlans it might be in.
+    my $tagged_only = 0;
+    if ($self->removePortsFromAllVlans($tagged_only, $port)) {
+	warn "$id: ERROR: Failed to remove $port from existing vlan(s)!";
+	return 0;
+    }
+
     # Add the port to the native vlan; tagged if equal trunking mode
     # was requested, and untagged if not. Refuse to do this if the
     # requested vlan is vlan 1.
     if ($native_vlan != 1) {
-	# Firstly, zap the port from any existing vlans.
-	my $tagged_only = 0;
-	if ($self->removePortsFromAllVlans($tagged_only, $port)) {
-	    warn "$id: ERROR: Failed to remove $port from existing vlan(s)!";
-	    return 0;
-	}
 	# Next, add it as tagged if 'dual' mode, untagged if 'equal' mode.
 	my $portmask = $self->convertIfindexesToBitmask([$pifindex]);
 	my $allzeromask = pack("B*", "00000000" x length($portmask));
@@ -1600,6 +1605,11 @@ sub enablePortTrunking2($$$$) {
 	    return 0;
 	}
     }
+
+    # Add to the global list of trunk ports just in case the trunking
+    # state doesn't get updated in the DB before other calls are made
+    # that depend on it.
+    $self->{TRUNKS}->{$pifindex} = 1;
 
     return 1;
 }
@@ -1631,6 +1641,10 @@ sub disablePortTrunking($$) {
 	warn "$id: ERROR: Could not remove $port from any/all vlans!";
 	return 0;
     }
+
+    # Remove from global trunk port list.
+    delete($self->{TRUNKS}->{$pifindex})
+	if exists($self->{TRUNKS}->{$pifindex});
 
     return 1;
 }
