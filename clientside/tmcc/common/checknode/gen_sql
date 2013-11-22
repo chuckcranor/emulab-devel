@@ -252,7 +252,7 @@ gentbsql_main() {
 			echo "# drive${hdnum} already used, bumping hdnum again"
 			((++hdnum))
 		    done
-		    printf "mysql -e \"insert into blockstores values (%d, '%s', 'disk%d', '%s', 'element', %d, 1, now());\" tbdb\n" "$bsidx_base" "$host" "$hdnum" "$hdtype" "$size" 
+		    printf "mysql -e \"insert into blockstores values (%d, '%s', 'disk%d', 0, '%s', 'element', %d, 1, now());\" tbdb\n" "$bsidx_base" "$host" "$hdnum" "$hdtype" "$size" 
 		    # now the second table
 		    printf "mysql -e \"insert into blockstore_attributes values (%d, '%s', '%s', '%s');\" tbdb\n" "$bsidx_base" "serialnum" "$sn" "string" 
 		    ((++bsidx_base))
