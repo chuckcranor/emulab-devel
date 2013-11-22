@@ -210,13 +210,14 @@ CREATE TABLE `blockstores` (
   `bsidx` int(10) unsigned NOT NULL,
   `node_id` varchar(32) NOT NULL default '',
   `bs_id` varchar(32) NOT NULL default '',
+  `lease_idx` int(10) unsigned NOT NULL default '0',
   `type` varchar(30) NOT NULL default '',
-  `role` enum('element','compound') NOT NULL default 'element',
+  `role` enum('element','compound','partition') NOT NULL default 'element',
   `total_size` int(10) unsigned NOT NULL default '0',
   `exported` tinyint(1) NOT NULL default '0',
   `inception` datetime default NULL,
   PRIMARY KEY (`bsidx`),
-  UNIQUE KEY nidbid (`node_id`,`bs_id`)
+  UNIQUE KEY nidbid (`node_id`,`bs_id`,`lease_idx`)
 ) ENGINE=MyISAM DEFAULT CHARSET=latin1;
 
 --
