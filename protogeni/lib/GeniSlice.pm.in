@@ -902,6 +902,17 @@ sub ExpirationGMT($)
 			   gmtime(str2time($self->expires())));
 }
 
+sub ExpirationUTC($)
+{
+    my ($self) = @_;
+
+    return undef
+	if (!defined($self->expires()));
+    
+    return POSIX::strftime("20%y-%m-%dT%H:%M:%SZ",
+			   gmtime(str2time($self->expires())));
+}
+
 #
 # Set the expiration time for a slice. 
 #

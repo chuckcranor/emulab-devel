@@ -691,15 +691,20 @@ sub Describe
 	if (GeniResponse::IsResponse($cred));
 
     my ($slice, $aggregate) = GeniCMV2::Credential2SliceAggregate($cred);
-    return GeniResponse->Create(GENIRESPONSE_REFUSED, undef,
-				"Slice credential not provided")
-	if (! defined($slice));
     return $slice
 	if (GeniResponse::IsResponse($slice));
     my $ticket = GeniTicket->SliceTicket($slice);
-    return GeniResponse->Create(GENIRESPONSE_REFUSED, undef,
-				"No slivers here")
-	if (! defined($ticket) && ! defined($aggregate));
+    if (! defined($slice) ||
+	(! defined($ticket) && ! defined($aggregate))) {
+
+	my $blob = {
+	    'geni_rspec' => GeniStd::GenerateEmptyManifest(),
+	    'geni_urn' => $cred->target_urn(),
+	    'geni_slivers' => []
+	};
+
+	return GeniResponse->Create(GENIRESPONSE_SUCCESS, $blob);
+    }
 
     if (scalar(@urns) != 1 || $urns[0] ne $slice->urn()) {
 	return GeniResponse->Create(GENIRESPONSE_REFUSED, undef,
@@ -726,7 +731,7 @@ sub Describe
 	foreach my $sliver (@slivers) {
 	    $sliver_blob = {
 		'geni_sliver_urn' => $sliver->sliver_urn(),
-		'geni_expires' => $aggregate->expires(),
+		'geni_expires' => $slice->ExpirationUTC(),
 		'geni_allocation_status' => "geni_provisioned",
 		'geni_operational_status' => GetOpState($sliver),
 		'geni_error' => ''

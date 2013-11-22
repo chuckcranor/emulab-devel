@@ -224,8 +224,7 @@ sub CheckCredentials($)
 	    foreach my $credstring (@credential_strings) {
 		my $credential = GeniCredential->CreateFromSigned($credstring);
 		if (!defined($credential)) {
-		    $error = GeniResponse->Create(GENIRESPONSE_ERROR, undef,
-				    $GeniCredential::CreateFromSignedError);
+		    $error = GeniResponse->MalformedArgsResponse($GeniCredential::CreateFromSignedError);
 		    goto bad;
 		}
 		if ($credential->type() eq "speaksfor" ||
@@ -409,4 +408,13 @@ sub getMaybeArray($)
 	}
     }
     return @result;
+}
+
+sub GenerateEmptyManifest()
+{
+    return '<rspec xmlns="http://www.geni.net/resources/rspec/3" '.
+	'xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" '.
+	'type="manifest" '.
+	'xsi:schemaLocation="http://www.geni.net/resources/rspec/3 '.
+	'http://www.geni.net/resources/rspec/3/manifest.xsd ">';
 }
