@@ -251,6 +251,8 @@ if (( $check_flag )) ; then
 # turn space seperated string into array
     unset -v tb; declare -a tb=(${tbinfo// / })
     unset -v have; declare -a have=(${driveinfo// / })
+
+#   lines commented with #-# disable the checking of HD order
     
     havecnt=${#have[*]}
     tbcnt=${#tb[*]}
@@ -297,7 +299,7 @@ if (( $check_flag )) ; then
 } > ${tmplog} 2>&1
     cat ${tmplog} >> $logfile
     cat ${tmplog}
-fi # if (( $check_flag ))
+fi # matching endif of (( $check_flag ))
 }
 
 getdriveinfo () {
@@ -513,11 +515,11 @@ getserial() {
     return 0
 }
 getwcache() {
-    res=""
+    res="NA"
     if [ "$os" == "Linux" ] ; then
 	smtcl=$(findSmartctl_getopt)
 	if [ "${smtcl/smartctl}" == "$smtcl" ] ; then
-	#don't have smartctl, maybe we can use hdparm
+	    # don't have smartctl, maybe we can use hdparm
 	    hdp=$(which hdparm)
 	    if [ "${hdp/hdparm}" != "${hdp}" ] ; then
 		x=$(hdparm -W $1 2>/dev/null | grep -i 'write-caching')
@@ -535,35 +537,39 @@ getwcache() {
 	    elif [ "${x/Disabled}" != "$x" ] ; then
 		res="disabled"
 		$smtcl --set=wcache,on $1 > /dev/null 2>&1
+	    else
+		res="WCE_not_supported"
 	    fi
 	fi
-    fi
-    if [ "$os" == "FreeBSD" ] ; then
-	smtcl=$(findSmartctl_getopt)
-	if [ "${smtcl/smartctl}" == "$smtcl" ] ; then
-	#don't have smartctl, maybe we can use camcontrol
-	    cmc=$(which camcontrol)
-	    if [ "${cmc/camcontrol}" != "${cmc}" ] ; then
-		sd=${1#/dev/}		
-		x=$(camcontrol modepage $sd -m8 | grep WCE 2>/dev/null)
-		if [ "${x/1}" != "$x" ] ; then
-		    res="enabled"
-		elif [ "${x/0}" != "$x" ] ; then
-		    res="disabled"
-		    /usr/local/etc/emulab/camwce -P on $sd  > /dev/null 2>&1
-		fi
+    elif [ "$os" == "FreeBSD" ] ; then
+	# try camcontrol first
+	cmc=$(which camcontrol)
+	if [ "${cmc/camcontrol}" != "${cmc}" ] ; then
+	    sd=${1#/dev/}		
+	    x=$(camcontrol modepage $sd -m8 | grep WCE 2>/dev/null)
+	    if [ "${x/1}" != "$x" ] ; then
+		res="enabled"
+	    elif [ "${x/0}" != "$x" ] ; then
+		res="disabled"
+		/usr/local/etc/emulab/camwce -P on $sd  > /dev/null 2>&1
 	    fi
 	else
-	    x=$($smtcl --get=wcache $1 | grep -i Write | grep -i cache)
-	    if [ "${x/Enabled}" != "$x" ] ; then
-		res="enabled"
-	    elif [ "${x/Disabled}" != "$x" ] ; then
-		res="disabled"
-		$smtcl --set=wcache,on $1 > /dev/null 2>&1
+	# don't have don't have camcontrol, maybe we can use smartctl
+	    smtcl=$(findSmartctl_getopt)
+	    if [ "${smtcl/smartctl}" != "$smtcl" ] ; then
+		x=$($smtcl --get=wcache $1 | grep -i Write | grep -i cache)
+		if [ "${x/Enabled}" != "$x" ] ; then
+		    res="enabled"
+		elif [ "${x/Disabled}" != "$x" ] ; then
+		    res="disabled"
+		    $smtcl --set=wcache,on $1 > /dev/null 2>&1
+		fi
 	    fi
 	fi
+    else
+	echo "try to get WCE unknown OS $os"
+	return 0
     fi
-    
     [[ $res ]] && echo "$res" || echo "UNKNOWN"
     return 0
 }
