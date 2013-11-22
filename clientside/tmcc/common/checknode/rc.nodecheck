@@ -67,49 +67,47 @@ if [ "$check" = "0" -a "$collect" = "0" ] ; then
     exit 0
 fi
 
-# if asked to collect need the collect dir for this project
-# (as given by tmcc hwinfo) mounted to save logs
-if [ "$collect" = "1" ] ; then
-    collectdir=`echo $testinfo | awk -F \" '{print $2}'`
-    a=`echo $collectdir | awk -F \/ '{print $2}'`
-    b=`echo $collectdir | awk -F \/ '{print $3}'`
-    mountpoint="/$a/$b"
-    
-    if [ ! -d "$mountpoint" ] ; then
-	mkdir -p $mountpoint
-    fi
+# if asked to collect need the proj directory this project
+# (as given by tmcc hwinfo) and mounted to save logs
+# Later - try mounting in any case since the static binaries will be better to use if found
 
-    mounted=0
-    isitmounted=$(mount | grep -c $mountpoint)
-    if [ $isitmounted -eq 0 ] ; then
-	mount -o soft,intr,bg fs:$mountpoint $mountpoint
-	if [ $? -ne 0 ]; then
-	    echo "*** Could not mount $mountpoint, nodecheck gather not done"
-	    collect=0
-	else
-	    mounted=1
-	    if [ ! -d "$collectdir" ] ; then
-		mkdir -p $collectdir
-	    fi
+collectdir=`echo $testinfo | awk -F \" '{print $2}'`
+a=`echo $collectdir | awk -F \/ '{print $2}'`
+b=`echo $collectdir | awk -F \/ '{print $3}'`
+mountpoint="/$a/$b"
+
+if [ ! -d "$mountpoint" ] ; then
+    mkdir -p $mountpoint
+fi
+
+mounted=0
+isitmounted=$(mount | grep -c $mountpoint)
+if [ $isitmounted -eq 0 ] ; then
+    mount -o soft,intr,bg fs:$mountpoint $mountpoint
+    if [ $? -ne 0 ]; then
+	echo "*** Could not mount $mountpoint, nodecheck gather not done"
+	collect=0
+    else
+	mounted=1
+	if [ ! -d "$collectdir" ] ; then
+	    mkdir -p $collectdir
 	fi
     fi
 fi
+
 if [ -f "/etc/emulab/ismfs" ] ; then
     # MFSes doesn't have all the apps we need, so mount an extra directory
     # and put in the path
 
-    if [ "$mountpoint" != "$MFSPROJDIR" ] ; then
-	echo "Nodecheck - Can not run in MFS mode without being in emulab-ops pid."
+    if [ ! -d $mountpoint/nodecheck/`uname -s`/bin-`uname -m` ] ; then
+	echo "Nodecheck - Can not run in MFS mode without having helper programs."
+	echo "Expecting to have $MFSPROJDIR/nodecheck/`uname -s`/bin-`uname -m` avaiable"
 	exit 0
     fi
 
     os=`uname -s`
-    export PATH="/usr/local/bin:$MFSPROJDIR/nodecheck/`uname -s`/bin-`uname -m`:$PATH"
+    export PATH="/usr/local/bin:$mountpoint/nodecheck/`uname -s`/bin-`uname -m`:$PATH"
     
-#    if [ `echo $foundbash | grep nodecheck` ] ; then
-#	echo "*** Did not find expected bash in $MFSPROJDIR/$os/bin"
-#    fi
-
     echo 'Running Hardware Inventory Gather'
     bash $BINDIR/checknode $LOGDIR/nodecheck.log
     echo 'Done Running Hardware Inventory'
@@ -121,7 +119,14 @@ if [ -f "/etc/emulab/ismfs" ] ; then
 fi
 
 echo "Running nodechecks"
-# truncate file at boot time
+
+# set path if we have the extra static binaries
+os=`uname -s`
+if [ -d "$mountpoint"/nodecheck/`uname -s`/bin-`uname -m` ] ; then
+    export PATH="/usr/local/bin:$mountpoint/nodecheck/`uname -s`/bin-`uname -m`:$PATH"
+fi
+
+# if booting node then truncate local log file
 if [ "$1" = "boot" ] ; then
     printf "%s------ Start boottime_nodecheck ------\n" "$(date)" > $LOGDIR/nodecheck.log
 fi
