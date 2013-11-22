@@ -148,6 +148,7 @@ sub LinkDelaySetup()
     my $gotjails = 0;
     my @jails;
     my $useifb = 0;
+    my $usenetem = 0;
 
     # Lets clean out old instructions.
     unlink TMLINKDELAY;
@@ -186,10 +187,42 @@ sub LinkDelaySetup()
 	open(DEL, ">" . TMLINKDELAY)
 	    or die("Could not open " . TMLINKDELAY . ": $!");
 
-	system("modinfo imq");
-	if ($?) {
-	    print "Using ifb instead\n";
+	system("modinfo ifb 2>&1 >/dev/null");
+	if ($? == 0) {
+	    print "Will use ifb kernel module for duplex endnodeshaping\n";
 	    $useifb = 1;
+	}
+	else {
+	    print "Will use imq kernel module for duplex endnodeshaping\n";
+	    system("modinfo imq");
+	    if ($?) {
+		print "WARNING: imq module does not exist; shaping may fail!\n";
+	    }
+	    $useifb = 0;
+	}
+
+	system("modinfo sch_netem 2>&1 >/dev/null");
+	if ($? == 0) {
+	    print "Using sch_netem kernel module for delay/plr\n";
+	    $usenetem = 1;
+	    print DEL "modprobe sch_netem\n";
+	}
+	else {
+	    print "Using sch_plr/sch_delay kernel modules for delay/plr"
+		. " (fallback)\n";
+	    $usenetem = 0;
+	    print DEL "modprobe sch_plr\n";
+	    print DEL "modprobe sch_delay\n";
+	    system("modinfo sch_plr 2>&1 >/dev/null");
+	    if ($?) {
+		print "WARNING: sch_plr module does not exist;"
+		    . " shaping may fail!\n";
+	    }
+	    system("modinfo sch_delay 2>&1 >/dev/null");
+	    if ($?) {
+		print "WARNING: sch_delay module does not exist;"
+		    . " shaping may fail!\n";
+	    }
 	}
 
 	print DEL "#!/bin/sh\n";
@@ -325,28 +358,44 @@ sub LinkDelaySetup()
             # XXX: temporarily select between delay, plr, and [g]red
             # until they become classful queues.
 
-	    #
-	    # Using IFBs implies using netem. We no longer use IMQs or
-	    # our home grown stuff on newer kernels.
-	    #
-	    if ($useifb) {
+	    if ($usenetem) {
+		#
+		# netem cannot have non-work-conserving qdiscs inside of
+		# itself, and it can't have itself inside itself --
+		# because it uses the skbuff's control block and would
+		# thus overwrite itself.  The Linux maintainers removed
+		# its classful support for these and other reasons, so
+		# you can't nest anything inside it.  So, we have to do
+		# bandwidth shaping first, and then the loss and delay
+		# with the same netem qdisc.
+		#
+
 		# packet loss in netem is percent
 		$plr *= 100;
 
 		print DEL "ifconfig $iface txqueuelen $queue\n";
 		print DEL "$TC qdisc del dev $iface root\n";
 		print DEL "$TC qdisc del dev $iface ingress\n";
-		print DEL "$TC qdisc add dev $iface handle ". ($pipeno+20) .
-		    " root htb default 1\n";
 
+		#
+		# We cannot use HTB at all if bandw is 0 (i.e., no bandwidth
+		# shaping should be performed).
+		#
 		if ($bandw != 0) {
+		    print DEL "$TC qdisc add dev $iface handle ". ($pipeno+20) .
+			" root htb default 1\n";
 		    print DEL "$TC class add dev $iface classid ".
 			($pipeno+20) .":1 parent " . ($pipeno+20) .
 			" htb rate ${bandw} ceil ${bandw}\n";
+		    print DEL "$TC qdisc add dev $iface handle ".
+			($pipeno+10) . " parent " . ($pipeno+20) . ":1 " .
+			"netem drop $plr delay ${delay}us\n";
 		}
-		print DEL "$TC qdisc add dev $iface handle ".
-		    ($pipeno+10) . " parent " . ($pipeno+20) . ":1 " .
-		    "netem drop $plr delay ${delay}us\n";
+		else {
+		    print DEL "$TC qdisc add dev $iface handle ".
+			($pipeno+10) . " root " .
+			"netem drop $plr delay ${delay}us\n";
+		}
 	    }
 	    else {
 		print DEL "$TC qdisc add dev $iface handle $pipeno root ";
@@ -369,7 +418,7 @@ sub LinkDelaySetup()
 	    my $inum = $1;
 	    my $idev = ($useifb ? "ifb" : "imq") . "$inum";
 	    if ($type eq "duplex") {
-		if ($useifb) {
+		if ($usenetem) {
 		    # packet loss in netem is percent
 		    $rplr *= 100;
 
@@ -379,13 +428,25 @@ sub LinkDelaySetup()
 		    print DEL "$TC filter add dev $iface parent ffff: ".
 			"protocol ip u32 match u32 0 0 flowid 2:1 ".
 			"action mirred egress redirect dev $idev\n";
-		    print DEL "$TC qdisc add dev $idev root handle 2: ".
-			"htb default 1\n";
-		    print DEL "$TC class add dev $idev parent 2: classid 2:1 ".
-			"htb rate ${rbandw} ceil ${rbandw}\n";
-		    # Do not use a colon: in the handle. It BREAKS!
-		    print DEL "$TC qdisc add dev $idev handle 3 parent 2:1 ".
-			"netem drop $rplr delay ${rdelay}us\n";
+
+		    #
+		    # We cannot use HTB at all if bandw is 0 (i.e., no bandwidth
+		    # shaping should be performed).
+		    #
+		    if ($rbandw != 0) {
+			print DEL "$TC qdisc add dev $idev root handle 2: ".
+			    "htb default 1\n";
+			print DEL "$TC class add dev $idev parent 2: classid 2:1 ".
+			    "htb rate ${rbandw} ceil ${rbandw}\n";
+			# Do not use a colon: in the handle. It BREAKS!
+			print DEL "$TC qdisc add dev $idev handle 3 parent 2:1 ".
+			    "netem drop $rplr delay ${rdelay}us\n";
+		    }
+		    else {
+			# Do not use a colon: in the handle. It BREAKS!
+			print DEL "$TC qdisc add dev $idev handle 3 root ".
+			    "netem drop $rplr delay ${rdelay}us\n";
+		    }
 		}
 		else {
 		    print DEL "$TC qdisc add dev $idev handle $pipeno ";
