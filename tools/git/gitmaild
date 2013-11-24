@@ -194,7 +194,7 @@ sub run_gitmail($$) {
     # NB: This depends on the Utah patch to gitlab that adds the project ID
     # to the data in the hook
     #
-    my $repoinfo = call_gitlab_api("/projects/" . $data->{"repository"}{"project_id"});
+    my $repoinfo = call_gitlab_api("/projects/" . $data->{"project_id"});
 
     #
     # Change to the directory where the repo lives - this is the simplest way
@@ -228,7 +228,7 @@ sub run_gitmail($$) {
     # If requested, send mail to everyone who's listed on the project
     if (exists $get_vars->{'mailmembers'} || exists $get_vars->{'noarchive'}) {
         $options{'alwaysmail'} =
-            get_member_addresses($data->{"repository"}{"project_id"});
+            get_member_addresses($data->{"project_id"});
     }
 
     # gitlab's URL for this project
