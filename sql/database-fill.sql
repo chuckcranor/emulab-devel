@@ -770,6 +770,10 @@ REPLACE INTO table_regex VALUES ('project_leases','lease_id','text','redirect','
 REPLACE INTO table_regex VALUES ('project_quotas','quota_id','text','regex','^[-_\\w\\.:+]+$',1,128,NULL);
 REPLACE INTO table_regex VALUES ('project_quotas','notes','text','redirect','default:tinytext',0,256,NULL);
 
+REPLACE INTO table_regex VALUES ('blockstores','node_id','text','redirect','nodes:node_id',0,0,NULL);
+REPLACE INTO table_regex VALUES ('blockstores','bs_id','text','regex','^[-\\w]+$',1,32,NULL);
+REPLACE INTO table_regex VALUES ('blockstores','type','text','regex','^[-\\w]+$',1,30,NULL);
+
 REPLACE INTO table_regex VALUES ('projects','newuser_xml','text','regex','^[-_\\w\\.\\/:+]*$',1,256,NULL);
 REPLACE INTO table_regex VALUES ('projects','newpid','text','regex','^[a-zA-Z][-a-zA-Z0-9]+$',2,48,NULL);
 REPLACE INTO table_regex VALUES ('projects','head_uid','text','redirect','users:uid',0,0,NULL);
