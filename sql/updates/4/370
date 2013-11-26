@@ -16,7 +16,7 @@ sub DoUpdate($$$)
 		 " '^[-\\\\w]+\$',1,32,NULL)");
     DBQueryFatal("REPLACE INTO table_regex VALUES ".
 		 "('blockstores','type','text','regex', ".
-		 " '^[-\\\\w]+\$',1,32,NULL)");
+		 " '^[-\\\\w]+\$',1,30,NULL)");
 
     return 0;
 }
