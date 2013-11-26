@@ -182,27 +182,44 @@ if (defined($lastused) && $lastused > $now) {
 #
 my $lease = Lease->Lookup($pid, $lname);
 if (!$lease) {
-    fatal("Lease $pid/$lname does not exist.");
+    fatal("$pid/$lname: lease does not exist.");
 }
 if (!$lease->AccessCheck($this_user, LEASE_ACCESS_MODIFY())) {
-    fatal("Cannot modify lease $pid/$lname.");
+    fatal("$pid/$lname: you are not allowed to modify lease.");
 }
 
-# Handle state
-if ($state && $lease->UpdateState($state)) {
-    fatal("Could not set state of $pid/$lname to '$state'.");
+#
+# Handle state. The transition from unapproved->* is special and must
+# be done via approvelease. It implies allocation of storage for dataset
+# leases. We also do not mess with the lease if it is initializing.
+#
+if ($state) {
+    my $curstate = $lease->state();
+
+    if ($curstate eq "unapproved") {
+	fatal("$pid/$lname: must be approved before other state changes can be made.");
+    }
+    if ($curstate eq "initializing") {
+	fatal("$pid/$lname: in transition, try later.");
+    }
+    if ($state eq "unapproved") {
+	fatal("$pid/$lname: cannot return lease to unapproved state.");
+    }
+    if ($state eq "initializing" || $lease->UpdateState($state)) {
+	fatal("$pid/$lname: could not set state to '$state'.");
+    }
 }
 
 # Handle expiration date
 if ($expire && $lease->SetEndTime($expire)) {
-    fatal("Could not update expiration time of $pid/$lname.");
+    fatal("$pid/$lname: could not update expiration time.");
 }
 
 # Handle last used date
 if (defined($lastused)) {
     if (($lastused >= $now && $lease->BumpLastUsed()) ||
 	($lastused < $now && $lease->SetLastUsedTime($lastused))) {
-	fatal("Could not update last-used time of $pid/$lname.");
+	fatal("$pid/$lname: could not update last-used time.");
     }
 }
 
@@ -210,12 +227,12 @@ if (defined($lastused)) {
 # Handle attributes. Delete, then add (replace).
 #
 if ($delattr && $lease->DeleteAttribute($delattr)) {
-    fatal("Could not remove attribute $delattr on lease $pid/$lname.");
+    fatal("$pid/$lname: could not remove attribute '$delattr'.");
 }
 if ($addattr) {
     if ($addattr !~ /^([-\w]+)=([-\w\.\+\/:]+)$/ ||
 	$lease->SetAttribute($1, $2)) {
-	fatal("Could not set attribute $addattr on lease $pid/$lname.");
+	fatal("$pid/$lname: could not set attribute '$addattr'.");
     }
 }
 
