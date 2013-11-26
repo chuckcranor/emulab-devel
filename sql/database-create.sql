@@ -3552,7 +3552,7 @@ CREATE TABLE `project_leases` (
   `inception` timestamp NOT NULL default CURRENT_TIMESTAMP,
   `lease_end` timestamp NOT NULL default '2037-01-19 03:14:07',
   `last_used` timestamp NOT NULL default '0000-00-00 00:00:00',
-  `state` enum('valid','unapproved','grace','locked','expired') NOT NULL default 'unapproved',
+  `state` enum('valid','unapproved','grace','locked','expired','initializing') NOT NULL default 'unapproved',
   `statestamp` timestamp NOT NULL default '0000-00-00 00:00:00',
   `locked` datetime default NULL, 
   `locker_pid` int(11) default '0',
