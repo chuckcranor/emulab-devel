@@ -37,6 +37,7 @@ use English;
 use Data::Dumper;
 use overload ('""' => 'Stringify');
 
+my @BLOCKSTORE_ROLES = ("element","compound","partition");
 my $debug	= 0;
 
 #
@@ -48,7 +49,8 @@ sub Lookup($$$)
     my ($class, $nodeid, $bsid) = @_;
 
     return undef
-	if (! ($nodeid =~ /^[-\w]+$/ && $bsid =~ /^[-\w]+$/));
+	if (!($nodeid && $bsid) ||
+	    !($nodeid =~ /^[-\w]+$/ && $bsid =~ /^[-\w]+$/));
 
     my $query_result =
 	DBQueryWarn("select * from blockstores ".
@@ -98,6 +100,168 @@ sub DESTROY {
 }
 
 #
+# Create a new blockstore.
+#
+sub Create($$;$) {
+    my ($class, $argref, $attrs) = @_;
+
+    my ($node_id, $bs_id, $lease_idx, $type, $role, $size, $exported);
+
+    return undef
+	if (!ref($argref));
+
+    $node_id   = $argref->{'node_id'};
+    $bs_id     = $argref->{'bs_id'};
+    $lease_idx = $argref->{'lease_idx'};
+    $type      = $argref->{'type'};
+    $role      = $argref->{'role'};
+    $size      = $argref->{'total_size'};
+    $exported  = $argref->{'exported'};
+
+    $lease_idx = 0 if (!defined($lease_idx));
+    $size      = 0 if (!defined($size));
+    $exported  = 0 if (!defined($exported));
+    
+    if (!($node_id && $bs_id && $type && $role)) {
+	print STDERR "Blockstore->Create: Missing required parameters in argref\n";
+	return undef;
+    }
+
+    # Sanity checks for incoming arguments
+    if (!TBcheck_dbslot($node_id, "blockstores", "node_id")) {
+	print STDERR "Blockstore->Create: Bad data for node_id: ".
+	    TBFieldErrorString() ."\n";
+	return undef;
+    }
+    if (!TBcheck_dbslot($bs_id, "blockstores", "bs_id")) {
+	print STDERR "Blockstore->Create: Bad data for bs_id: ".
+	    TBFieldErrorString() ."\n";
+	return undef;
+    }
+    if ($lease_idx != 0) {
+	my $lease_obj = Lease->Lookup($lease_idx);
+	if (!defined($lease_obj)) {
+	    print STDERR "Blockstore->Create: No lease for idx: $lease_idx\n";
+	    return undef;
+	}
+    }
+    if (!TBcheck_dbslot($bs_id, "blockstores", "type")) {
+	print STDERR "Blockstore->Create: Bad data for type: ".
+	    TBFieldErrorString() ."\n";
+	return undef;
+    }
+    # If blockstore types ever grow to be many and complex, then this info will
+    # have to come from a DB table instead of a static list in this module.
+    if (!grep {/^$role$/} @BLOCKSTORE_ROLES) {
+	print STDERR "Blockstore->Create: Unknown blockstore role: $role\n";
+	return undef;
+    }
+    if ($exported > 1) {
+	$exported = 1;
+    }
+
+    # Get a unique blockstore index and slam this stuff into the DB.
+    my $bs_idx = TBGetUniqueIndex('next_bsidx');
+
+    DBQueryWarn("insert into blockstores set ".
+		"bsidx=$bs_idx,".
+		"node_id='$node_id',".
+		"bs_id='$bs_id',".
+		"lease_idx='$lease_idx',".
+		"type='$type',".
+		"role='$role',".
+		"total_size='$size',".
+		"exported='$exported',".
+		"inception=NOW()")
+	or return undef;
+
+    # Now add attributes, if passed in.
+    if ($attrs) {
+	while (my ($key,$valp) = each %{$attrs}) {
+	    my ($val, $type);
+	    if (ref($valp) eq "HASH") {
+		$val  = DBQuoteSpecial($valp->{'value'});
+		$type = $valp->{'type'} || "string";
+	    } else {
+		$val  = DBQuoteSpecial($valp);
+		$type = "string";
+	    }
+	    DBQueryWarn("insert into blockstore_attributes set ".
+			"bsidx=$bs_idx,".
+			"attrkey='$key',".
+			"attrval=$val,".
+			"attrtype='$type'")
+		or return undef;
+	}
+    }
+
+    return Lookup($class, $node_id, $bs_id);
+}
+
+#
+# Delete an existing blockstore.
+# XXX this only clears out blockstores and blockstores_attributes right now!
+#
+sub Delete($) {
+    my ($self) = @_;
+
+    return -1
+	if (!ref($self));
+
+    my $bsidx = $self->bsidx();
+
+    #
+    # If this is a partition, we need to return our capacity to our
+    # parent blockstore.
+    # XXX maybe partitions should be a seperate blockstore object type?
+    #
+    if ($self->role() eq "partition") {
+	my $query_result =
+	    DBQueryWarn("select remaining_capacity from blockstore_state ".
+			"where bsidx='$bsidx'");
+	if ($query_result && $query_result->numrows) {
+	    my ($psize) = $query_result->fetchrow_array();
+	    if ($psize > 0) {
+		my $qr =
+		    DBQueryWarn("select aggidx from blockstore_trees ".
+				"where bsidx='$bsidx'");
+		if (!$qr || $qr->numrows != 1) {
+		    print STDERR
+			"Inconsistent state in blockstore_trees for ".
+			"partition blockstore idx=$bsidx\n";
+		    return -1;
+		}
+		my ($aggidx) = $qr->fetchrow_array();
+		if (!DBQueryWarn("update blockstore_state as f,".
+				 "       blockstore_state as t ".
+				 "set t.remaining_capacity=t.remaining_capacity+$psize,".
+				 "    f.remaining_capacity='0' ".
+				 "where t.bsidx=$aggidx and f.bsidx=$bsidx")) {
+		    print STDERR
+			"Could not transfer capacity $psize from idx=$bsidx to idx=$aggidx\n";
+		    return -1;
+		}
+	    }
+	}
+
+    }
+
+    DBQueryWarn("delete from blockstores where bsidx=$bsidx")
+	or return -1;
+    
+    DBQueryWarn("delete from blockstore_attributes where bsidx=$bsidx")
+	or return -1;
+
+    DBQueryWarn("delete from blockstore_state where bsidx=$bsidx")
+	or return -1;
+
+    DBQueryWarn("delete from blockstore_trees where bsidx=$bsidx")
+	or return -1;
+
+    return 0
+}
+
+#
 # Stringify for output.
 #
 sub Stringify($)
@@ -109,6 +273,112 @@ sub Stringify($)
     my $node_id = $self->node_id();
 
     return "[BlockStore:$bsidx, $bs_id, $node_id]";
+}
+
+#
+# Create a partition blockstore using space from the invoking blockstore.
+# Returns a new blockstore object.
+#
+# In addition to atomically updating the base blockstore's blockstore_state
+# entry, it creates new blockstores, blockstore_state, and blockstore_trees
+# entries for the partition.
+#
+sub Partition($$$$$)
+{
+    my ($self, $lease_idx, $pbs_name, $pbs_type, $pbs_size) = @_;
+    my $bsidx      = $self->bsidx();
+    my $bs_id      = $self->bs_id();
+    my $bs_node_id = $self->node_id();
+    my $remaining_capacity;
+    my $new_bs;
+
+    #
+    # Make sure we have an entry for the new blockstore.
+    # XXX we do this before we lock the tables since Create accesses
+    # other tables (e.g., table_regex) and we don't want to lock those.
+    #
+    my $args = {
+	"node_id"    => $bs_node_id,
+	"bs_id"      => $pbs_name,
+	"lease_idx"  => $lease_idx,
+	"type"       => $pbs_type,
+	"role"       => "partition",
+	"total_size" => $pbs_size,
+	"exported"   => 1
+    };
+    $new_bs = Blockstore->Create($args);
+    return undef
+	if (!$new_bs);
+
+    my $new_bsidx = $new_bs->bsidx();
+
+    if (!DBQueryWarn("lock tables blockstores write, ".
+		     "            blockstore_trees write, ".
+		     "            blockstore_state write, ".
+		     "            blockstore_state as f write, ".
+		     "            blockstore_state as t write")) {
+	$new_bs->Delete();
+	return undef;
+    }
+
+    #
+    # Need the remaining size to make sure we can allocate it.
+    #
+    my $query_result =
+	DBQueryWarn("select remaining_capacity from blockstore_state ".
+		    "where bsidx='$bsidx'");
+    goto bad
+	if (!$query_result);
+
+    #
+    # Just in case the state row is missing, okay to create it.
+    #
+    if (!$query_result->numrows) {
+	$remaining_capacity = $self->total_size();
+
+	DBQueryWarn("insert into blockstore_state set ".
+		    "  bsidx='$bsidx', node_id='$bs_node_id', bs_id='$bs_id', ".
+		    "  remaining_capacity='$remaining_capacity', ready='1'")
+	    or goto bad;
+    }
+    else {
+	($remaining_capacity) = $query_result->fetchrow_array();
+    }
+    if ($pbs_size > $remaining_capacity) {
+	print STDERR "Not enough remaining capacity on $self\n";
+	goto bad;
+    }
+
+    #
+    # Establish the relationship between the partition and the base.
+    #
+    DBQueryWarn("insert into blockstore_trees set ".
+		"  bsidx='$new_bsidx', aggidx='$bsidx', hint='PS'")
+	or goto bad;
+
+    #
+    # Create a state table entry.
+    #
+    DBQueryWarn("insert into blockstore_state set ".
+		"  bsidx='$new_bsidx', node_id='$bs_node_id', ".
+		"  bs_id='$pbs_name', remaining_capacity='0', ready='1'")
+	or goto bad;
+
+    #
+    # Now do an atomic update that changes both rows.
+    #
+    DBQueryWarn("update blockstore_state as f,blockstore_state as t ".
+		"set f.remaining_capacity=f.remaining_capacity-${pbs_size},".
+		"    t.remaining_capacity=$pbs_size ".
+		"where f.bsidx='$bsidx' and t.bsidx='$new_bsidx'")
+	or goto bad;
+done:
+    DBQueryWarn("unlock tables");
+    return $new_bs;
+  bad:
+    DBQueryWarn("unlock tables");
+    $new_bs->Delete();
+    return undef;
 }
 
 #
@@ -157,7 +427,7 @@ sub Reserve($$$$$)
 	($remaining_capacity) = $query_result->fetchrow_array();
     }
     if ($bs_size > $remaining_capacity) {
-	print STDERR "Not enough remaining capacity on $bsidx\n";
+	print STDERR "Not enough remaining capacity on $self\n";
 	goto bad;
     }
 
