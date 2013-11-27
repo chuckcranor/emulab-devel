@@ -27,20 +27,24 @@ use Getopt::Std;
 use Date::Parse;
 
 #
-# Delete a lease.
+# Approve a lease.
+# This forces allocation of storage for dataset leases.
 #
 sub usage()
 {
-    print STDERR "Usage: deletelease [-hd] lname\n";
-    print STDERR "   -h       This message\n";
-    print STDERR "   -d       Print additional debug info\n";
-    print STDERR "   lname    Name of lease in <pid>/<id> form\n";
+    print STDERR "Usage: approvelease [-hd] [-s state] name\n";
+    print STDERR "   -h         This message\n";
+    print STDERR "   -d         Print additional debug info\n";
+    print STDERR "   -s state   New state for the lease (defaults to 'valid')\n";
+    print STDERR "   name       Name of lease (of form <pid>/<id>)\n";
     exit(-1);
 }
-my $optlist  = "dh";
+my $optlist  = "dhs:";
 my $debug = 0;
 my $pid;
+my $state = "valid";
 my $lname;
+my $now = time();
 my $lease;
 
 # Protos
@@ -85,11 +89,16 @@ if (defined($options{h})) {
 if (defined($options{d})) {
     $debug++;
 }
+if (defined($options{s})) {
+    $state = $options{s};
+}
+
 if (@ARGV != 1) {
-    print STDERR "Must specify exactly one lname\n";
+    print STDERR "Must specify exactly one lease.\n";
     usage();
 }
 
+# lease name must include a project
 $lname = $ARGV[0];
 if ($lname =~ /^([-\w]+)\/([-\w]+)$/) {
     $pid = $1;
@@ -100,7 +109,7 @@ if ($lname =~ /^([-\w]+)\/([-\w]+)$/) {
 
 # XXX must be admin right now
 if (!TBAdmin()) {
-    fatal("Only admins can delete leases.");
+    fatal("Only admins can approve leases.");
 }
 
 my $this_user = User->ThisUser();
@@ -108,55 +117,82 @@ if (! defined($this_user)) {
     fatal("You ($UID) do not exist!");
 }
 
-#
-# Check lease: project must exist, lease must exist,
-# caller must have privilege to destroy.
-#
-if (!Project->Lookup($pid) || !($lease = Lease->Lookup($pid, $lname)) ||
-    !$lease->AccessCheck($this_user, LEASE_ACCESS_DESTROY())) {
-    fatal("Cannot access lease $pid/$lname.");
+my $project = Project->Lookup($pid);
+if (!defined($project)) {
+    fatal("No such project $pid\n");
 }
 
 #
-# Lock the lease and handle cleanup.
+# Check name: must exist, be modifiable and in the unapproved state.
 #
+$lease = Lease->Lookup($pid, $lname);
+if (!$lease) {
+    fatal("$pid/$lname: lease does not exist.");
+}
+if (!$lease->AccessCheck($this_user, LEASE_ACCESS_MODIFY())) {
+    fatal("$pid/$lname: you are not allowed to modify lease.");
+}
+
+# Lock the lease once we start messing with the state.
 if ($lease->Lock()) {
     fatal("$pid/$lname: currently locked, try again later.");
 }
 
-my $ostate = $lease->state();
-if ($ostate eq "initializing") {
-    fatal("$pid/$lname: in transition, cannot delete");
+if ($lease->state() ne "unapproved") {
+    fatal("$pid/$lname: lease has already been approved!?");
 }
 
 #
-# For an approved dataset lease, we must free up the server storage
+# Check new state. Must be something other than "unapproved".
 #
-if ($lease->type() =~ /dataset$/ && $ostate ne "unapproved") {
+if ($state eq "unapproved") {
+    fatal("$pid/$lname: must set to one of the approved states.");
+}
+
+#
+# Force allocation of storage for dataset leases.
+# We put the lease in the special "initializing" state while doing this.
+#
+if ($lease->type() =~ /dataset$/) {
     #
-    # Put in initializing state and unlock since this could be
-    # time consuming.
+    # Must be an associated size attribute.
+    #
+    my $size = $lease->GetAttribute("size");
+    if ($size && $size =~ /^(\d+)$/) {
+	$size = $1;
+    } else {
+	fatal("$pid/$lname: no valid 'size' attribute");
+    }
+
+    #
+    # Mark the lease as in-transition and unlock it since allocating
+    # storage could take a long time.
     #
     if ($lease->UpdateState("initializing")) {
-	fatal("$pid/$lname: could not mark lease as in-transition.");
+	fatal("$pid/$lname: could not set state to 'initializing'.");
     }
     $lease->Unlock();
 
     #
     # Call the blockstore control program to handle all things blockstore
-    # related (e.g., the actual deallocation of storage on the servers).
+    # related (e.g., the actual allocation of storage on the storage servers).
     #
     my $idx = $lease->lease_idx();
-    if (system("$BSCONTROL destroy lease-$idx")) {
+    if (system("$BSCONTROL -l $idx -s $size create lease-$idx")) {
 	$lease->UpdateState("unapproved");
-	fatal("$pid/$lname: could not deallocate storage");
+	fatal("$pid/$lname: could not allocate storage");
     }
+
+    # no need to re-lock transitioning out of initializing state
+    $lease->UpdateState($state);
+    print "$pid/$lname: allocated $size MiB of storage\n";
+} else {
+    $lease->UpdateState($state);
+    $lease->Unlock();
 }
 
-if ($lease->Delete()) {
-    fatal("Could not destroy lease $pid/$lname.");
-}
-
+# It all worked!
+print "$pid/$lname: state is now '$state'\n";
 exit(0);
 
 sub fatal($)
@@ -169,4 +205,3 @@ sub fatal($)
     die("*** $0:\n".
 	"    $mesg\n");
 }
-
