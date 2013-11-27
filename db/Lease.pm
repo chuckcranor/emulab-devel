@@ -42,7 +42,7 @@ use Data::Dumper;
 use overload ('""' => 'Stringify');
 
 my @LEASE_TYPES  = ("stdataset","ltdataset");
-my @LEASE_STATES = ("valid","unapproved","grace","locked","expired");
+my @LEASE_STATES = ("valid","unapproved","grace","locked","expired","initializing");
 
 # Cache of instances to avoid regenerating them.
 my %leases	= ();
