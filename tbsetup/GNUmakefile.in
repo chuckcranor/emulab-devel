@@ -64,7 +64,7 @@ SBIN_STUFF	= resetvlans console_setup.proxy sched_reload named_setup \
 		  nfstrace plabinelab smbpasswd_setup smbpasswd_setup.proxy \
 		  rmproj snmpit.proxynew snmpit.proxyv2 pool_daemon \
 		  checknodes_daemon snmpit.proxyv3 image_setup tcpp \
-		  arplockdown
+		  arplockdown bscontrol
 
 ifeq ($(ISMAINSITE),1)
 SBIN_STUFF     += repos_daemon
@@ -121,7 +121,8 @@ SETUID_BIN_SCRIPTS   = node_reboot eventsys_control tarfiles_setup savelogs \
 SETUID_SBIN_SCRIPTS  = mkproj rmgroup mkgroup frisbeehelper \
 			rmuser idleswap named_setup exports_setup \
 			sfskey_update setgroups newnode_reboot vnode_setup \
-			elabinelab nfstrace rmproj arplockdown
+			elabinelab nfstrace rmproj arplockdown \
+			bscontrol
 SETUID_LIBX_SCRIPTS  = console_setup spewrpmtar_verify
 SETUID_SUEXEC_SCRIPTS= spewlogfile
 
