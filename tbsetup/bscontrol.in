@@ -163,7 +163,9 @@ if (defined($options{P})) {
     }
 }
 if (defined($options{s})) {
-    $size = $options{s};
+    if ($options{s} =~ /^(\d+)$/) {
+	$size = $1;
+    }
 }
 if (defined($options{t})) {
     $type = $options{t};
@@ -591,8 +593,10 @@ sub bs_create($$$@)
     if (!defined($size)) {
 	fatal("create: must specify a size in MiB (-s)");
     }
-    if (!defined($name) || $name !~ /^[-\w]+$/) {
-	fatal("create: must specify a valid name");
+    if (defined($name) && $name =~ /^([-\w]+)$/) {
+	$name = $1;
+    } else {
+	fatal("create: must specify a valid volume name");
     }
 
     if ($leaseidx !~ /^\d+$/) {
@@ -710,8 +714,10 @@ sub bs_destroy($$$@)
 {
     my ($srv,$pool,$size,$name) = @_;
 
-    if (!defined($name) || $name !~ /^[-\w]+$/) {
-	fatal("destroy: must specify a valid name");
+    if (defined($name) && $name =~ /^([-\w]+)$/) {
+	$name = $1;
+    } else {
+	fatal("create: must specify a valid volume name");
     }
 
     #
