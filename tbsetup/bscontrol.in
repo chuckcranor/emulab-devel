@@ -88,8 +88,7 @@ sub bs_destory($$$@);
 #
 my $TB		 = "@prefix@";
 
-#my $PROXYCMD	 = "/usr/testbed/sbin/bscontrol.proxy";
-my $PROXYCMD	 = "perl -T /tmp/bscontrol.proxy.pl";
+my $PROXYCMD	 = "/usr/testbed/sbin/bscontrol.proxy";
 my $SSH		 = "ssh -n -o ConnectTimeout=2 -o Protocol=2 -o BatchMode=yes -o StrictHostKeyChecking=no";
 
 #
