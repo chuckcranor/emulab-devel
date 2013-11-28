@@ -31,14 +31,16 @@ use Date::Parse;
 #
 sub usage()
 {
-    print STDERR "Usage: deletelease [-hd] lname\n";
+    print STDERR "Usage: deletelease [-fhd] lname\n";
     print STDERR "   -h       This message\n";
     print STDERR "   -d       Print additional debug info\n";
+    print STDERR "   -f       Force destruction even if lease is in transition\n";
     print STDERR "   lname    Name of lease in <pid>/<id> form\n";
     exit(-1);
 }
-my $optlist  = "dh";
+my $optlist  = "dhf";
 my $debug = 0;
+my $force = 0;
 my $pid;
 my $lname;
 my $lease;
@@ -58,6 +60,7 @@ my $BSCONTROL	 = "$TB/sbin/bscontrol";
 use lib "@prefix@/lib";
 use libdb;
 use Lease;
+use Blockstore;
 use Project;
 use User;
 
@@ -83,7 +86,10 @@ if (defined($options{h})) {
     usage();
 }
 if (defined($options{d})) {
-    $debug++;
+    $debug = 1;
+}
+if (defined($options{f})) {
+    $force = 1;
 }
 if (@ARGV != 1) {
     print STDERR "Must specify exactly one lname\n";
@@ -125,7 +131,7 @@ if ($lease->Lock()) {
 }
 
 my $ostate = $lease->state();
-if ($ostate eq "initializing") {
+if (!$force && $ostate eq "initializing") {
     fatal("$pid/$lname: in transition, cannot delete");
 }
 
@@ -142,12 +148,23 @@ if ($lease->type() =~ /dataset$/ && $ostate ne "unapproved") {
     }
     $lease->Unlock();
 
+    my $idx = $lease->lease_idx();
+
+    #
+    # For efficiency, lookup the server in the blockstores table.
+    # Saves gathering info from every storage server.
+    #
+    my $bstore = Blockstore->LookupByLease($idx);
+    if (!$bstore) {
+	fatal("$pid/$lname: could not find blockstore object.");
+    }
+    my $srv = $bstore->node_id();
+
     #
     # Call the blockstore control program to handle all things blockstore
     # related (e.g., the actual deallocation of storage on the servers).
     #
-    my $idx = $lease->lease_idx();
-    if (system("$BSCONTROL destroy lease-$idx")) {
+    if (system("$BSCONTROL -S $srv destroy lease-$idx")) {
 	$lease->UpdateState("unapproved");
 	fatal("$pid/$lname: could not deallocate storage");
     }
@@ -169,4 +186,3 @@ sub fatal($)
     die("*** $0:\n".
 	"    $mesg\n");
 }
-
