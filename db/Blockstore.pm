@@ -67,6 +67,27 @@ sub Lookup($$$)
     return $self;
 }
 
+sub LookupByLease($$)
+{
+    my ($class, $leaseidx) = @_;
+
+    return undef
+	if (!($leaseidx && $leaseidx =~ /^\d+$/));
+
+    my $query_result =
+	DBQueryWarn("select * from blockstores where lease_idx='$leaseidx'");
+
+    return undef
+	if (!$query_result || !$query_result->numrows);
+
+    my $self         = {};
+    $self->{"HASH"}  = {};
+    $self->{"DBROW"} = $query_result->fetchrow_hashref();
+
+    bless($self, $class);
+    return $self;
+}
+
 # To avoid writing out all the methods.
 AUTOLOAD {
     my $self  = $_[0];
@@ -291,6 +312,14 @@ sub Partition($$$$$)
     my $bs_node_id = $self->node_id();
     my $remaining_capacity;
     my $new_bs;
+
+    #
+    # Make sure it doesn't already exist
+    #
+    if (Blockstore->Lookup($bs_node_id, $pbs_name)) {
+	print STDERR "Partition blockstore $bs_node_id/$pbs_name already exists\n";
+	return undef;
+    }
 
     #
     # Make sure we have an entry for the new blockstore.
