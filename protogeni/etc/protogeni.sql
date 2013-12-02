@@ -375,6 +375,18 @@ CREATE TABLE `quickvms` (
   `name` tinytext,
   `status` varchar(32) default NULL,
   `profile` tinytext,
+  `extension_code` varchar(32) default NULL,
   `manifest` mediumtext,
   PRIMARY KEY  (`uuid`)
+) ENGINE=MyISAM DEFAULT CHARSET=latin1;
+
+DROP TABLE IF EXISTS `quickvm_rspecs`;
+CREATE TABLE `quickvm_rspecs` (
+  `name` varchar(64) NOT NULL default '',
+  `idx` int(10) unsigned NOT NULL auto_increment,
+  `created` datetime default NULL,
+  `description` mediumtext,
+  `rspec` mediumtext,
+  PRIMARY KEY  (`idx`),
+  UNIQUE KEY `name` (`name`)
 ) ENGINE=MyISAM DEFAULT CHARSET=latin1;
