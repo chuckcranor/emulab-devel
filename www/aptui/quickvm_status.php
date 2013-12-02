@@ -25,7 +25,7 @@ chdir("..");
 include("defs.php3");
 include_once("osinfo_defs.php");
 include_once("geni_defs.php");
-chdir("aptlbs");
+chdir("apt");
 include("quickvm_sup.php");
 
 $ajax_request = 0;
@@ -130,8 +130,8 @@ if (isset($ajax_request)) {
 	$eid = $experiment->eid();
 	SPITAJAX_RESPONSE(GetTopoMap($creator->uid(), $pid, $eid));
     }
-    elseif ($ajax_method == "gateone_authobject") {
-	SPITAJAX_RESPONSE(GateOneAuthObject($creator->uid()));
+    elseif ($ajax_method == "ssh_authobject") {
+	SPITAJAX_RESPONSE(SSHAuthObject($creator->uid(), $ajax_argument));
     }
     elseif ($ajax_method == "request_extension") {
         # Only extend for 24 hours. More later.
@@ -266,19 +266,21 @@ echo "</div>\n";
 # The topo diagram goes inside this div, when it becomes available.
 #
 echo "<div class='row'>
-      <div class='col-lg-6  col-lg-offset-3
-                  col-md-8  col-md-offset-2
-                  col-sm-8  col-sm-offset-2
+      <div class='col-lg-10  col-lg-offset-1
+                  col-md-10  col-md-offset-1
+                  col-sm-10  col-sm-offset-1
                   col-xs-12 col-xs-offset-0'>\n";
 echo "<div class='panel panel-default invisible' id='showtopo_container'>\n";
 echo "<div class='panel-body'>\n";
+echo "<div id='quicktabs_div'>\n";
 echo "<div id='showtopo_div'></div>\n";
 SpitToolTip("Click on a node to SSH to that node.\n".
 	    "Click and drag on a node to move things around.");
-echo "</div>\n";
-echo "</div>\n";
-echo "</div>\n";
-echo "</div>\n";
+echo "</div>\n"; # showtopo
+echo "</div>\n"; # quicktabs
+echo "</div>\n"; # container
+echo "</div>\n"; # cols
+echo "</div>\n"; # row
 
 #
 # A modal to tell people how to register
@@ -379,25 +381,9 @@ echo "<!-- This is a modal -->
         </div>
       </div>\n";
 
-if (0) {
-echo "<div class='uk-panel uk-panel-box uk-panel-header
-           uk-container-center'>\n";
-
-echo "  <div id='gateone_container'
-	       style='font-family: monospace'>
-           <div id='gateone' style='height: 20em; font-family: monospace'>
-           </div>
-        </div>\n";
-echo "</div>\n";
-}
-
-$location = uniqid("loc");
-$auth_object = GateOneAuthObject($creator_uid);
-
 echo "<script src='d3.v3.js'></script>\n";
 echo "<SCRIPT LANGUAGE=JavaScript>
-                 InitQuickVM('$uuid', '$slice_expires',
-                             '$location', '$auth_object');
+                 InitQuickVM('$uuid', '$slice_expires');
               </SCRIPT>\n";
 
 SPITFOOTER();

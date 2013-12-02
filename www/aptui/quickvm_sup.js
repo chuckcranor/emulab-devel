@@ -1,12 +1,14 @@
+var myuuid = null;
+
 function ShowModal(which) 
 {
-    console.log('Showing modal ' + which);
+//   console.log('Showing modal ' + which);
     $( which ).modal('show');
 }
     
 function HideModal(which) 
 {
-    console.log('Hide modal ' + which);
+//   console.log('Hide modal ' + which);
     $( which ).modal('hide');
 }
     
@@ -59,7 +61,6 @@ function StatusWatchCallBack(uuid, json)
     if (json.code) {
 	status = "terminated";
     }
-    console.log(status);
     
     if (status != StatusWatchCallBack.laststatus) {
 	status_html = status;
@@ -87,6 +88,7 @@ function StatusWatchCallBack(uuid, json)
 		$("#quickvm_progress").addClass("progress-bar-danger");
 		$("#quickvm_progress_bar").width("100%");
 	    }
+	    $("#terminate_button").prop("disabled", false);
 	}
 	else if (status == 'terminating' || status == 'terminated') {
 	    status_html = "<font color=red>" + status + "</font>";
@@ -126,8 +128,7 @@ function ShowTopo(uuid)
 
 	$("#showtopo_container").removeClass("invisible");
 	maketopmap("#showtopo_div",
-		   $("#showtopo_div").width() - 30,
-		   300, topo);
+		   $("#showtopo_div").width(), 300, topo);
 
     }
     console.log(uuid);
@@ -233,7 +234,6 @@ function Setsshurl(uuid)
 	var href   = "<a href='" + url + "'>" + url + "</a>";
 	console.log(url);
 	$("#quickvm_sshurl").html(href);
-	// StartGateOne(url);
     }
     var $xmlthing = CallMethod("manifest", null, uuid, null);
     $xmlthing.done(callback);
@@ -298,51 +298,146 @@ function RegisterAccount(uid, email)
     win.focus();
 }
 
-var gateone_authobject = null;
-var gateone_location   = null;
-
-function InitQuickVM(uuid, slice_expires, location, auth_object)
+function InitQuickVM(uuid, slice_expires)
 {
     // This activates the popover subsystem.
     $('[data-toggle="popover"]').popover({
 	trigger: 'hover',
 	'placement': 'top'
     });
-    gateone_authobject = auth_object;
-    gateone_location   = location;
     StartResizeWatchdog(uuid);
     StartCountdownClock(slice_expires);
     GetStatus(uuid);
+    myuuid = uuid;
 }
 
 function resetForm($form) {
     $form.find('input:text, select, textarea').val('');
 }
 
-function StartSSH(uuid, sshurl)
+function StartSSH(id, authobject)
 {
-    var current_date = new Date().getTime();
+    var jsonauth = $.parseJSON(authobject);
+	
+    var callback = function(stuff) {
+        var split   = stuff.split(':');
+        var session = split[0];
+    	var port    = split[1];
 
-    GateOne.location = "loc" + current_date;
-    
-    var callback = function(json) {
-	console.log(json.value);
+        var url   = jsonauth.baseurl + ':' + port + '/' + '#' +
+            encodeURIComponent(document.location.href) + ',' + session;
+        console.log(url);
+        var iwidth  = $('#' + id).width();
+        var iheight = 300;
+
+        $('#' + id).html('<iframe id="' + id + '_iframe" ' +
+			   'width=' + iwidth + ' ' +
+                           'height=' + iheight + ' ' +
+                           'src=\'' + url + '\'>');
     }
-    var $xmlthing = CallMethod("gateone_authobject", null, uuid, null);
-    $xmlthing.done(callback);
+    var xmlthing = $.ajax({
+	// the URL for the request
+     	url: jsonauth.baseurl + '/d77e8041d1ad',
+ 
+     	// the data to send (will be converted to a query string)
+	data: {
+	    auth: authobject,
+	},
+ 
+ 	// Needs to be a POST to send the auth object.
+	type: 'POST',
+ 
+    	// Ask for plain text for easier parsing. 
+	dataType : 'text',
+    });
+    xmlthing.done(callback);
 }
 
-function StartGateOne(sshurl)
+//
+// User clicked on a node, so we want to create a tab to hold
+// the ssh tab with a panel in it, and then call StartSSH above
+// to get things going.
+//
+function NewSSHTab(hostport, client_id)
 {
-    GateOne.location = gateone_location;
-    
-    // Initialize Gate One:
-    GateOne.init({"url" :  'https://users.emulab.net:1090/gateone',
-  	          "autoConnectURL" : sshurl,
-		  "fillContainer"  : false,
-		  "showToolbar"    : false,
-		  "terminalFont"   : 'monospace',
-                  "auth"           : gateone_authobject});
+    var pair = hostport.split(":");
+    var host = pair[0];
+    var port = pair[1];
+
+    //
+    // On first ssh, we convert the topo div into a tabs array,
+    // and place each ssh session as a new tab.
+    //
+    if (! $("#quicktabs").length) {
+	var html =
+	    "<ul id='quicktabs' class='nav nav-tabs'>\n" +
+	    " <li><a href='#profile' data-toggle='tab'>Profile</a></li>\n" +
+	    "</ul>\n" +
+	    "<div id='quicktabs_content' class='tab-content'>\n" +
+	    " <div class='tab-pane' id='profile'>" +
+	    "  <div id='showtopo_div'>\n" +
+   	         $('#showtopo_div').html() +
+	    "  </div>\n" +
+	    " </div>\n" +
+	    "</div>\n";
+	$('#quicktabs_div').html(html);
+    }
+    //
+    // Need to create the tab before we can create the topo, since
+    // we need to know the dimensions of the tab.
+    //
+    var tabname = client_id + "_tab";
+    if (! $("#" + tabname).length) {
+	// The tab.
+	var html = "<li><a href='#" + tabname + "' data-toggle='tab'>" +
+	    client_id + "" +
+            "<button class='close' type='button' " +
+	    "        id='" + tabname + "_kill'>x</button>" +
+	    "</a>" +
+	    "</li>";	
+
+	// Append to end of tabs
+	$("#quicktabs_div ul").append(html);
+
+	// Install a click handler for the X button.
+	$("#" + tabname + "_kill").click(function(e) {
+	    e.preventDefault();
+	    // remove the li from the ul.
+	    $(this).parent().remove();
+	    // Remove the content div.
+	    $("#" + tabname).remove();
+	    // Activate the "profile" tab.
+	    $('#quicktabs a[href="#profile"]').tab('show');
+	})
+
+	// The content div.
+	html = "<div class='tab-pane' id='" + tabname + "'></div>";
+
+	$("#quicktabs_content").append(html);
+
+	// And make it active
+	$('#quicktabs a:last').tab('show') // Select last tab
+    }
+    else {
+	// Switch back to it.
+	$('#quicktabs a[href="#' + tabname + '"]').tab('show');
+	return;
+    }
+
+    // Ask the server for an authentication object that allows
+    // to start an ssh shell.
+    var callback = function(json) {
+	console.log(json.value);
+
+	if (json.code) {
+	    alert("Failed to gain authentication for ssh.");
+	}
+	else {
+	    StartSSH(tabname, json.value);
+	}
+    }
+    var xmlthing = CallMethod("ssh_authobject", null, myuuid, hostport);
+    xmlthing.done(callback);
 }
 
 //
@@ -538,11 +633,15 @@ function maketopmap(divname, width, height, json)
 	    .enter().append("svg:g")
 	    .call(node_drag);
 
-	var nodea = nodeg.append("svg:a")
-	    .attr("xlink:href", function(d) { return d.sshurl });
+//	var nodea = nodeg.append("svg:a")
+//	    .attr("xlink:href", function(d) { return d.sshurl });
 	
-	var node = nodea.append("svg:rect")
+	var node = nodeg.append("svg:rect")
 	    .attr("class", "nodebox")
+	    .attr("onclick",
+		  function(d) {
+		      return "NewSSHTab('" + d.hostport + "', " +
+			  "             '" + d.client_id + "')" })
 	    .attr("x", "-10px")
 	    .attr("y", "-10px")
 	    .attr("width", "20px")
@@ -556,7 +655,6 @@ function maketopmap(divname, width, height, json)
 	
 	function tick(e) {
 	    if (e && e.alpha < 0.05) {
-		console.log("Cooled");
 		vis.style("visibility", "visible")
 		force.stop();
 		return;
@@ -626,7 +724,9 @@ function ConvertManifestToJSON(name, xml)
 	    var port   = login.attr("port");
 	    var sshurl = "ssh://" + user + "@" + host + ":" + port + "/";
 
-	    jobj.sshurl = sshurl;
+	    jobj.client_id = client_id;
+	    jobj.hostport  = host + ":" + port;
+	    jobj.sshurl    = sshurl;
 	}
 	json.nodes.push(jobj);
     });

@@ -104,37 +104,50 @@ function SpitToolTip($info)
         "</a>\n";
 }
 
-function GateOneAuthObject($uid)
+#
+# Generate an authentication object to pass to the browser that
+# is passed to the web server on boss. This is used to grant
+# permission to the user to invoke ssh to a local node using their
+# emulab generated (no passphrase) key. This is basically a clone
+# of what GateOne does, but that code was a mess. 
+#
+function SSHAuthObject($uid, $nodeid)
 {
+    global $USERNODE;
+	
+    $file = "/usr/testbed/etc/sshauth.key";
+    
     #
     # We need the secret that is shared with ops.
     #
-    $fp = fopen("/usr/testbed/etc/gateone.key", "r");
+    $fp = fopen($file, "r");
     if (! $fp) {
-	TBERROR("Error opening /usr/testbed/etc/gateone.key", 0);
+	TBERROR("Error opening $file", 0);
 	return null;
     }
-    list($api_key,$secret) = preg_split('/:/', fread($fp, 128));
+    $key = fread($fp, 128);
     fclose($fp);
-    if (!($secret && $api_key)) {
-	TBERROR("Could not get kets from gateone.key", 0);
+    if (!$key) {
+	TBERROR("Could not get key from $file", 0);
 	return null;
     }
-    $secret = chop($secret);
+    $key   = chop($key);
+    $stuff = GENHASH();
+    $now   = time();
 
-    $authobj = array(
-	'api_key' => $api_key,
-	'upn' => $uid,
-	'timestamp' => time() . '000',
-	'signature_method' => 'HMAC-SHA1',
-	'api_version' => '1.0'
+
+    $authobj = array('uid'       => $uid,
+		     'stuff'     => $stuff,
+		     'nodeid'    => $nodeid,
+		     'timestamp' => $now,
+		     'baseurl'   => "https://${USERNODE}",
+		     'signature_method' => 'HMAC-SHA1',
+		     'api_version' => '1.0',
+		     'signature' => hash_hmac('sha1',
+					      $uid . $stuff . $nodeid . $now,
+					      $key),
     );
-    $authobj['signature'] = hash_hmac('sha1',
-				      $authobj['api_key'] . $authobj['upn'] .
-				      $authobj['timestamp'], $secret);
-    $valid_json_auth_object = json_encode($authobj);
-
-    return $valid_json_auth_object;
+    return json_encode($authobj);
 }
 
 #

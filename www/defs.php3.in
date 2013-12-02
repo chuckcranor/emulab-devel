@@ -624,6 +624,48 @@ function CleanString($string)
 }
 
 #
+# Generate an authentication object to pass to the browser that
+# is passed to the web server on boss. This is used to grant
+# permission to the user to invoke ssh to a local node using their
+# emulab generated (no passphrase) key. This is basically a clone
+# of what GateOne does, but that code was a mess. 
+#
+function SSHAuthObject($uid)
+{
+    $file = "/usr/testbed/etc/sshauth.key";
+    
+    #
+    # We need the secret that is shared with ops.
+    #
+    $fp = fopen($file, "r");
+    if (! $fp) {
+	TBERROR("Error opening $file", 0);
+	return null;
+    }
+    list($api_key,$secret) = preg_split('/:/', fread($fp, 128));
+    fclose($fp);
+    if (!($secret && $api_key)) {
+	TBERROR("Could not get key from $file", 0);
+	return null;
+    }
+    $secret = chop($secret);
+
+    $authobj = array(
+	'api_key' => $api_key,
+	'upn' => $uid,
+	'timestamp' => time() . '000',
+	'signature_method' => 'HMAC-SHA1',
+	'api_version' => '1.0'
+    );
+    $authobj['signature'] = hash_hmac('sha1',
+				      $authobj['api_key'] . $authobj['upn'] .
+				      $authobj['timestamp'], $secret);
+    $valid_json_auth_object = json_encode($authobj);
+
+    return $valid_json_auth_object;
+}
+
+#
 # Beware empty spaces (cookies)!
 # 
 require("tbauth.php3");

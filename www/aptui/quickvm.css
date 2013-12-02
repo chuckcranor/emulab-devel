@@ -55,6 +55,16 @@ body {
   margin-left: auto;
   margin-right: auto;
 }
+/* These two so the nav tab X looks right. */
+.nav-tabs > li .close {
+  display: inline;
+  margin: -5px 0 0 5px;
+  font-size: 15px;
+}
+/* Smaller nav tabs. */
+.nav > li > a {
+  padding: 5px 5px;
+}
 
 /* Styles for svg diagrams */
 .topomap {
