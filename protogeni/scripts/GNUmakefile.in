@@ -35,7 +35,8 @@ ISCLEARINGHOUSE = @PROTOGENI_ISCLEARINGHOUSE@
 
 include $(OBJDIR)/Makeconf
 
-SBIN_STUFF	= cleanupslice gencabundle cleanupticket
+SBIN_STUFF	= cleanupslice gencabundle cleanupticket aptssh-setup
+
 PSBIN_STUFF	= register_resources expire_daemon gencrl postcrl \
 		  addauthority getcacerts \
 		  gencrlbundle shutdownslice remauthority listusage \
@@ -53,7 +54,7 @@ endif
 
 # These scripts installed setuid, with sudo. 
 SETUID_BIN_SCRIPTS   = 
-SETUID_SBIN_SCRIPTS  = cleanupslice gencabundle cleanupticket
+SETUID_SBIN_SCRIPTS  = cleanupslice gencabundle cleanupticket aptssh-setup
 SETUID_LIBX_SCRIPTS  =
 
 #
@@ -61,7 +62,8 @@ SETUID_LIBX_SCRIPTS  =
 # configure if the .in file is changed.
 # 
 all:	$(SBIN_STUFF) $(PSBIN_STUFF) \
-	initsite resolve resolvenode resolve-ch getversion genspeaksfor
+	initsite resolve resolvenode resolve-ch getversion genspeaksfor \
+	shellinabox.pl
 
 include $(TESTBED_SRCDIR)/GNUmakerules
 
@@ -71,6 +73,9 @@ install: $(addprefix $(INSTALL_SBINDIR)/, $(SBIN_STUFF)) \
 	$(INSTALL_LIBEXECDIR)/webcacontrol \
 	$(INSTALL_LIBEXECDIR)/webmaptoslice
 	-rm -f $(INSTALL_SBINDIR)/protogeni/cleanupticket
+
+apt-install: $(addprefix $(INSTALL_DIR)/opsdir/cgi-bin/, shellinabox.pl) \
+	     $(addprefix $(INSTALL_SBINDIR)/, aptssh-setup)
 
 control-install:
 
@@ -82,5 +87,11 @@ $(INSTALL_SBINDIR)/protogeni/%: %
 	-mkdir -p $(INSTALL_SBINDIR)/protogeni
 	$(INSTALL) $< $@
 
-
-
+$(INSTALL_DIR)/opsdir/cgi-bin/shellinabox.pl: shellinabox.pl
+	echo "Installing (link to wrapper) $<"
+	mkdir -p $(INSTALL_DIR)/opsdir/cgi-bin
+	-rm -f $@
+	ln -s $(INSTALL_LIBEXECDIR)/runsuid $@
+	echo "Installing (real script) $<"
+	-mkdir -p $(INSTALL_DIR)/opsdir/suidbin
+	$(SUDO) $(INSTALL_PROGRAM) $< $(INSTALL_DIR)/opsdir/suidbin/$<

@@ -69,7 +69,7 @@ my $PGENIDOMAIN   = "@PROTOGENI_DOMAIN@";
 my $SACERT	  = "$TB/etc/genisa.pem";
 my $CMCERT	  = "$TB/etc/genicm.pem";
 my $SSHKEYGEN     = "/usr/bin/ssh-keygen";
-my $GATEONESETUP  = "$TB/sbin/gateone-setup";
+my $SSHSETUP      = "$TB/sbin/aptssh-setup";
 
 # un-taint path
 $ENV{'PATH'} = '/bin:/usr/bin:/usr/local/bin:/usr/site/bin';
@@ -354,13 +354,11 @@ if (!defined($geniuser)) {
     $geniuser->SetAuthToken($auth_token);
 
     #
-    # Setup GateOne browser ssh.
+    # Setup ssh browser ssh.
     #
-    if (0) {
-	system("$GATEONESETUP -g " . $geniuser->uuid());
-	fatal("Could not create ssh key pair")
-	    if ($?);
-    }
+    system("$SSHSETUP " . $geniuser->uuid());
+    fatal("Could not create ssh key pair")
+	if ($?);
 }
 my $user_uuid = $geniuser->uuid();
 # So we know this user has dome something lately.
@@ -653,7 +651,9 @@ sub Terminate($)
 				     [$slice_credential->asString(),
 				      $speaksfor_credential->asString()]});
 
-    if (!defined($response) || $response->code() != GENIRESPONSE_SUCCESS) {
+    if (!defined($response) ||
+	($response->code() != GENIRESPONSE_SUCCESS &&
+	 $response->code() != GENIRESPONSE_SEARCHFAILED)) {
 	fatal("DeleteSlice failed: ".
 	      (defined($response) ? $response->output() : "") . "\n");
     }
