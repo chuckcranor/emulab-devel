@@ -1,4 +1,4 @@
-#!/usr/bin/perl -w
+#!/usr/bin/perl -wT
 
 #
 # Copyright (c) 2000-2013 University of Utah and the Flux Group.
