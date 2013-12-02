@@ -85,6 +85,7 @@ my $SNMPIT         = "$TB/bin/snmpit_test";
 my $NAMEDSETUP     = "$TB/sbin/named_setup";
 my $EXPORTS_SETUP  = "$TB/sbin/exports_setup";
 my $GENTOPOFILE    = "$TB/libexec/gentopofile";
+my $GENELISTS      = "$TB/sbin/genelists";
 my $IMAGE_SETUP    = "$TB/sbin/image_setup";
 my $ARPLOCKDOWN    = "$TB/sbin/arplockdown";
 my $TARFILES_SETUP = "$TB/bin/tarfiles_setup";
@@ -1226,6 +1227,10 @@ sub Start($$$)
 	    close(MAP);
 	}
 	
+	if (system("$GENELISTS -c")) {
+	    $msg .= "$GENELISTS failed\n";
+	    goto bad;
+	}
 	if (system("$GENTOPOFILE $pid $eid")) {
 	    $msg .= "$GENTOPOFILE failed\n";
 	    goto bad;
