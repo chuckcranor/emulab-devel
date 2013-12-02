@@ -1,7 +1,7 @@
-#!/usr/bin/perl -wT
+#!/usr/bin/perl -w
 
 #
-# Copyright (c) 2000-2010 University of Utah and the Flux Group.
+# Copyright (c) 2000-2013 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -37,6 +37,7 @@ sub usage() {
 	  "  -u    - Generate lists for a user; add -m for new email address\n".
 	  "  -p    - Generate lists for a project (includes subgroups)\n".
 	  "  -t    - Generate activity lists\n".
+	  "  -c    - Generate just the current users list\n".
 	  "  -a    - Generate all email lists; careful ...\n");
     exit(-1);
 }
@@ -51,11 +52,12 @@ sub ProjectLeaders();
 sub ProjectLists($$);
 sub genelist($$$$);
 
-my $optlist = "anu:p:tdmf";
+my $optlist = "anu:p:tdmfc";
 my $debug   = 0;
 my $all     = 0;
 my $update  = 0;
 my $activity= 0;
+my $current = 0;
 my $impotent= 0;
 my $force   = 0;
 my $pid;
@@ -72,6 +74,7 @@ my $ELISTS      = "$TB/lists";
 my $ELABINELAB  = @ELABINELAB@;
 my $MAILMANSUPPORT= @MAILMANSUPPORT@;
 my $MMPROG	= "$TB/sbin/setmmlistmembers";
+my $PGENISUPPORT= @PROTOGENI_SUPPORT@;
 
 # Note no -n option. We redirect stdin from the new exports file below.
 my $SSH		= "$TB/bin/sshtb -l root -host $USERS";
@@ -87,6 +90,7 @@ $| = 1;
 
 # Load the Testbed support stuff.
 use lib "@prefix@/lib";
+use emdbi;
 use libdb;
 use libtestbed;
 use libtblog;
@@ -127,6 +131,9 @@ if (defined($options{"d"})) {
 }
 if (defined($options{"f"})) {
     $force = 1;
+}
+if (defined($options{"c"})) {
+    $current = 1;
 }
 if (defined($options{"a"})) {
     $all = 1;
@@ -253,7 +260,7 @@ else {
 }
 
 ActiveUsers()
-    if ($all || $activity || $update);
+    if ($all || $activity || $update || $current);
 
 RecentUsers()
     if ($all || $activity || $update);
@@ -330,6 +337,27 @@ sub ActiveUsers()
     $userlist = "$TBOPS\n".
 	        "$TBACTIVE";
 
+    if ($PGENISUPPORT) {
+	require GeniDB;
+	require GeniUser;
+	require GeniHRN;
+
+	if (emdbi::DBExists(GeniDB::GENICM_DBNAME())) {
+	    # Connect to the proper DB.
+	    GeniDB::DBConnect(GeniDB::GENICM_DBNAME());
+
+	    my $geni_users =
+		GeniDB::DBQueryFatal("select distinct u.email ".
+				     "  from geni_aggregates as a ".
+				     "left join geni_users as u on ".
+				     "     a.creator_uuid=u.uuid ".
+				     "where u.email is not null");
+	    
+	    while (my ($email) = $geni_users->fetchrow_array()) {
+		$userlist = "$email\n" . $userlist;
+	    }
+	}
+    }
     genelist($query_result, $userlist, "emulab-active-users", 0);
 }
 
