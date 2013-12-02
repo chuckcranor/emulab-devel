@@ -1254,7 +1254,8 @@ sub ComputeStatus($$)
 	if (! ref($self));
 
     #
-    # If the sliver is "broken" then call it failed.
+    # If the sliver is "broken" then call it failed. It might be failed,
+    # but if the node actually came up okay later, we set it back to okay.
     #
     if ($self->status() eq "broken") {
 	$$pref = "failed";
