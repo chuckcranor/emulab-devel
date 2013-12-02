@@ -282,8 +282,8 @@ if (( $check_flag )) ; then
      tbresult=${tb[@]-""}
 # comment out the next if statment and uncommet the #-# lines for drive
 # ordering not to matter when comparing drives found with tbdb
-     if [[ "$haveresult" || "$tbresult" ]] ; then
-	 failed="$failed found $haveresult but tbdb says $tbresult "
+     if [[ "$haveresult" != "$tbresult" ]] ; then
+	 failed=" found $haveresult but tbdb says $tbresult "
      fi
 #-#     
 #-#     if [[ "$haveresult" || "$tbresult" ]] ; then
