@@ -142,7 +142,6 @@ main_diskcheck() {
 		$temp_val ) d[$temp_val]=$(gettemp ${drive[$idx]}) ;;
 		$model_val ) d[$model_val]=$(getmodel ${drive[$idx]}) ;;
 		$serial_val ) d[$serial_val]=$(getserial ${drive[$idx]}) ;;
-		$wcache_val ) d[$wcache_val]=$(getwcache ${drive[$idx]}) ;;
 	    esac
 	done
 	# Must have sectors_val an bpers_val before calculating size
@@ -157,6 +156,8 @@ main_diskcheck() {
 	# Must have size val before attempting disk speed tests
 	if (( $mfsmode == 1 )) ; then
 	    for ((i=0;i<=$lastslot;i++)) ; do
+		# moved here getwcache so it will only run in mfsmode, and will run befor read/write test 
+		d[$wcache_val]=$(getwcache ${drive[$idx]})
 		case $i in
 		    $rspeed_val ) 
 		# check the size, if small then might be a USB drive
@@ -167,6 +168,8 @@ main_diskcheck() {
 		    fi
 		    ;;
 		    $wspeed_val ) 
+# XXX teriable test to call getwcache a second time just before write-test - really for testing only
+		    d[$wcache_val]=$(getwcache ${drive[$idx]})
 		    if [ ${d[$size_val]} -gt 8 ] ; then
 			d[$wspeed_val]=$(getwspeed ${drive[$idx]})
 		    else
@@ -544,6 +547,7 @@ getwcache() {
     elif [ "$os" == "FreeBSD" ] ; then
 	# try camcontrol first
 	cmc=$(which camcontrol)
+#set -x
 	if [ "${cmc/camcontrol}" != "${cmc}" ] ; then
 	    sd=${1#/dev/}		
 	    x=$(camcontrol modepage $sd -m8 | grep WCE 2>/dev/null)
@@ -551,8 +555,10 @@ getwcache() {
 		res="enabled"
 	    elif [ "${x/0}" != "$x" ] ; then
 		res="disabled"
+		printf " %s:%d "  "Setting WCE" ${$sd} >> ${logfile4tb}
 		/usr/local/etc/emulab/camwce -P on $sd  > /dev/null 2>&1
 	    fi
+#set +x
 	else
 	# don't have don't have camcontrol, maybe we can use smartctl
 	    smtcl=$(findSmartctl_getopt)
