@@ -354,7 +354,7 @@ if (!defined($geniuser)) {
     $geniuser->SetAuthToken($auth_token);
 
     #
-    # Setup ssh browser ssh.
+    # Setup browser ssh.
     #
     system("$SSHSETUP " . $geniuser->uuid());
     fatal("Could not create ssh key pair")
