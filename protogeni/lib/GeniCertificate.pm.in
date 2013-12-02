@@ -108,6 +108,7 @@ sub Lookup($$)
 
     my $self          = {};
     $self->{'CERT'}   = $query_result->fetchrow_hashref();
+    $self->{'ROOTCERT'}   = undef;
     $self->{'stored'} = 1;
     bless($self, $class);
     my $cert = $self->cert();
@@ -416,7 +417,7 @@ sub LoadFromString($$)
 	print STDERR "openssl x509 failed to parse certificate\n";
 	return undef;
     }
-    my $certificate = GeniCertificate->LoadFromArray(@certlines);
+    my $certificate = GeniCertificate->LoadFromArray($string, @certlines);
     return undef
 	if (!defined($certificate));
     
@@ -431,6 +432,16 @@ sub LoadFromString($$)
 sub LoadFromFile($$)
 {
     my ($class, $filename) = @_;
+    my $contents = "";
+
+    if (! open(CERT, $filename)) {
+	print STDERR "Could not open $filename: $!\n";
+	return undef;
+    }
+    while (<CERT>) {
+	$contents .= $_;
+    }
+    close(CERT);
 
     if (! open(X509, "$OPENSSL x509 -in $filename -subject -issuer -text |")) {
 	print STDERR "Could not start $OPENSSL on $filename\n";
@@ -444,7 +455,7 @@ sub LoadFromFile($$)
 	print STDERR "Could not load certificate from $filename\n";
 	return undef;
     }
-    my $certificate = GeniCertificate->LoadFromArray(@certlines);
+    my $certificate = GeniCertificate->LoadFromArray($contents, @certlines);
     return undef
 	if (!defined($certificate));
     
@@ -452,10 +463,10 @@ sub LoadFromFile($$)
     return $certificate;
 }
 
-sub LoadFromArray($@)
+sub LoadFromArray($$@)
 {
     my $class = shift();
-    my @certlines = @_;
+    my ($contents, @certlines) = @_;
     my $url;
     my $urn;
     
@@ -520,12 +531,6 @@ sub LoadFromArray($@)
 	$url = $alturi;
     }
 
-    #
-    # Throw away last line; the cert is rest.
-    #
-    pop(@certlines);
-    my $cert = join("", @certlines);
-
     # Unfortunately, for historical reasons, there are a whole bunch
     # of places the UUID might be stored (and we continue to store UUIDs
     # in multiple places ourselves, to maintain backward compatibility).
@@ -553,13 +558,26 @@ sub LoadFromArray($@)
         $uuid = GeniUtil::NewUUID();
     }
 
+    #
+    # For silly historical reasons, we strip the begin/end cert lines.
+    # We should fix this.
+    #
+    my @lines = split(/\n/, $contents);
+    if ($lines[0] =~ /^-----BEGIN CERT/) {
+	shift(@lines);
+    }
+    if ($lines[@lines - 1] =~ /^-----END CERT/) {
+	pop(@lines);
+    }
+    $contents = join("\n", @lines) . "\n";
+
     my $self          = {};
     $self->{'CERT'}   = {};
     $self->{'stored'} = 0;
     bless($self, $class);
 
     $self->{'CERT'}->{'uuid'}      = $uuid;
-    $self->{'CERT'}->{'cert'}      = $cert;
+    $self->{'CERT'}->{'cert'}      = $contents;
     $self->{'CERT'}->{'DN'}        = $DN;
     $self->{'CERT'}->{'subject'}   = $subject;
     $self->{'CERT'}->{'issuer'}    = $issuer;
@@ -1013,10 +1031,38 @@ sub VerifySSLChain($@)
 
 	foreach my $cert (@chaincerts) {
 	    print $tempfile "-----BEGIN CERTIFICATE-----\n";
-	    print $tempfile $cert->cert();
+	    print $tempfile (ref($cert) ? $cert->cert() : $cert);
 	    print $tempfile "-----END CERTIFICATE-----\n";
 	}
 	$optarg = "-untrusted $filename";
+    }
+    else {
+	#
+	# If we are not given chaincerts, then dig inside the cert
+	# string to see if its a bundle. This happens whenever we
+	# suck a certificate out of a credential and it includes 
+	# chain certs along with the target cert. We could split them
+	# into a separate file, or we could so the simple thing and
+	# just write the cert into another file for the untrusted arg.
+	#
+	my @lines  = split(/\n/, $self->cert());
+	my $needed = 0;
+
+	while (@lines) {
+	    my $line = shift(@lines);
+	    
+	    if ($line =~ /^-----BEGIN CERT/) {
+		$needed = 1;
+		last;
+	    }
+	}
+	if ($needed) {
+	    $filename = $self->WriteToFile();
+	    return -1
+		if (!$filename);
+	    
+	    $optarg = "-untrusted $filename";
+	}
     }
 
     #
