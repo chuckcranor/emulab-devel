@@ -560,9 +560,13 @@ sub LoadFromArray($$@)
 
     #
     # For silly historical reasons, we strip the begin/end cert lines.
-    # We should fix this.
+    # We should fix this. 
     #
     my @lines = split(/\n/, $contents);
+    # Also strip the extra text since we do not need that, just the cert(s).
+    while ($lines[0] !~ /^-----BEGIN CERT/) {
+	shift(@lines);
+    }
     if ($lines[0] =~ /^-----BEGIN CERT/) {
 	shift(@lines);
     }
