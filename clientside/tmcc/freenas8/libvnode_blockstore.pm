@@ -161,6 +161,7 @@ sub parseSliceName($);
 sub parseSlicePath($);
 sub calcSliceSizes($);
 sub getPoolList();
+sub getVolumeList();
 sub getIfConfig($);
 sub getVlan($);
 sub getNextAuthITag();
@@ -641,6 +642,23 @@ sub runBlockstoreCmds($$$) {
     return 0;
 }
 
+sub getVolumeList() {
+    my $vollist = {};
+
+    my @zvols = parseFreeNASListing($CLI_VERB_VOLUME);
+    foreach my $zvol (@zvols) {
+	my $vol = {};
+	if ($zvol->{'vol_name'} =~ /^([-\w]+)\/([-\w+]+)$/) {
+	    $vol->{'pool'} = $1;
+	    $vol->{'volume'} = $2;
+	    $vol->{'size'} = convertToMebi($zvol->{'vol_size'});
+	    $vollist->{$vol->{'volume'}} = $vol;
+	}
+    }
+
+    return $vollist;
+}
+
 # Yank information about blockstore slices out of FreeNAS.
 # Note: this is an expensive call - may want to re-visit caching some of
 # this later if performance becomes a problem.
@@ -787,17 +805,43 @@ sub getPoolList() {
 # XXX: Do 'sliceconfig' parameter checking.
 sub allocSlice($$$$) {
     my ($vnode_id, $sconf, $vnconfig, $priv) = @_;
+    my $bsid = untaintHostname($sconf->{'BSID'});
 
+    my $volname = $sconf->{'VOLNAME'};
+    $volname = "UNKNOWN" if (!$volname);
+
+    #
+    # If this is a use of a persistent store, the BSID is a unique
+    # volume name based on the lease ID. Look up the volume to make
+    # sure it exists, but do nothing else.
+    #
+    if ($bsid =~ /^lease-\d+$/) {
+	my $volumes = getVolumeList();
+	if (exists($volumes->{$bsid})) {
+	    $priv->{'pool'} = $volumes->{$bsid}->{'pool'};
+	    $priv->{'volume'} = $volumes->{$bsid}->{'volume'};
+	    return 0;
+	}
+	warn("*** ERROR: blockstore_allocSlice: $volname: ".
+	     "Requested volume not found: $bsid!");
+	return -1;
+    }
+
+    #
+    # Otherwise this is a "transient" store that we must create.
+    # Here the pool is given by the BSID and the volume is named
+    # after the vnode.
+    #
     my $pools  = getPoolList();
 
     # Does the requested pool exist?
-    my $bsid = untaintHostname($sconf->{'BSID'});
     my $destpool;
     if (exists($pools->{$bsid})) {
 	$destpool = $pools->{$bsid};
-	$priv->{'bsid'} = $bsid; # save for future calls.
+	$priv->{'pool'} = $bsid;
+	$priv->{'volume'} = $vnode_id;
     } else {
-	warn("*** ERROR: blockstore_allocSlice: ".
+	warn("*** ERROR: blockstore_allocSlice: $volname: ".
 	     "Requested pool not found: $bsid!");
 	return -1;
     }
@@ -806,7 +850,7 @@ sub allocSlice($$$$) {
     # a discrepancy between reality and the Emulab database.
     my $size = untaintNumber($sconf->{'VOLSIZE'});
     if ($size + $ZPOOL_LOW_WATERMARK > $destpool->{'avail'}) {
-	warn("*** ERROR: blockstore_allocSlice: ". 
+	warn("*** ERROR: blockstore_allocSlice: $volname: ". 
 	     "Not enough space remaining in requested pool: $bsid");
 	return -1;
     }
@@ -816,7 +860,7 @@ sub allocSlice($$$$) {
     eval { runFreeNASCmd($CLI_VERB_VOLUME, 
 			 "add $bsid $vnode_id ${size}MB off") };
     if ($@) {
-	warn("*** ERROR: blockstore_allocSlice: ".
+	warn("*** ERROR: blockstore_allocSlice: $volname: ".
 	     "slice allocation failed: $@");
 	return -1;
     }
@@ -839,44 +883,42 @@ sub exportSlice($$$$) {
 	return -1;
     }
     
-    # Extract bsid as stashed away in prior setup.
-    my $bsid = $priv->{'bsid'};
-    if (!defined($bsid)) {
-	warn("*** ERROR: blockstore_exportSlice: ".
-	     "blockstore ID not found!");
+    my $volname = $sconf->{'VOLNAME'};
+    $volname = "UNKNOWN" if (!$volname);
+
+    # Extract volume/pool as stashed away in prior setup.
+    my $pool = $priv->{'pool'};
+    my $volume = $priv->{'volume'};
+
+    if (!defined($pool) || !defined($volume)) {
+	warn("*** ERROR: blockstore_exportSlice: $volname: ".
+	     "volume/pool not found!");
 	return -1;
     }
 
     # Scrub request - we only support SAN/iSCSI at this point.
     if (!exists($sconf->{'CLASS'}) || $sconf->{'CLASS'} ne $BS_CLASS_SAN) {
-	warn("*** ERROR: blockstore_exportSlice: ".
+	warn("*** ERROR: blockstore_exportSlice: $volname: ".
 	     "invalid or missing blockstore class!");
 	return -1;
     }
 
     if (!exists($sconf->{'PROTO'}) || $sconf->{'PROTO'} ne $BS_PROTO_ISCSI) {
-	warn("*** ERROR: blockstore_exportSlice: ".
+	warn("*** ERROR: blockstore_exportSlice: $volname: ".
 	     "invalid or missing blockstore protocol!");
 	return -1;
     }
-
-    if (!exists($sconf->{'VOLNAME'})) {
-	warn("*** ERROR: blockstore_exportSlice: ".
-	     "missing volume name!");
-	return -1;
-    }
-    my $volname = $sconf->{'VOLNAME'};
 
     if (!exists($sconf->{'UUID'}) || 
 	!exists($sconf->{'UUID_TYPE'}) ||
 	$sconf->{'UUID_TYPE'} ne $BS_UUID_TYPE_IQN)
     {
-	warn("*** ERROR: blockstore_exportSlice: ".
+	warn("*** ERROR: blockstore_exportSlice: $volname: ".
 	     "bad UUID information!");
 	return -1;
     }
     if ($sconf->{'UUID'} !~ /^([-\.:\w]+)$/) {
-	warn("*** ERROR: blockstore_exportSlice: ".
+	warn("*** ERROR: blockstore_exportSlice: $volname: ".
 	     "bad characters in UUID!");
 	return -1;
     }
@@ -884,9 +926,9 @@ sub exportSlice($$$$) {
 
     # Create iSCSI extent
     eval { runFreeNASCmd($CLI_VERB_IST_EXTENT, 
-			 "add $iqn $bsid/$vnode_id") };
+			 "add $iqn $pool/$volume") };
     if ($@) {
-	warn("*** ERROR: blockstore_exportSlice: ".
+	warn("*** ERROR: blockstore_exportSlice: $volname: ".
 	     "Failed to create iSCSI extent: $@");
 	return -1;
     }
@@ -894,7 +936,7 @@ sub exportSlice($$$$) {
     # Create iSCSI auth group
     my $tag = getNextAuthITag();
     if ($tag !~ /^(\d+)$/) {
-	warn("*** ERROR: blockstore_exportSlice: ".
+	warn("*** ERROR: blockstore_exportSlice: $volname: ".
 	     "bad tag returned from getNextAuthITag: $tag");
 	return -1;
     }
@@ -902,7 +944,7 @@ sub exportSlice($$$$) {
     eval { runFreeNASCmd($CLI_VERB_IST_AUTHI,
 			 "add $tag ALL $network/$cmask $vnode_id") };
     if ($@) {
-	warn("*** ERROR: blockstore_exportSlice: ".
+	warn("*** ERROR: blockstore_exportSlice: $volname: ".
 	     "Failed to create iSCSI auth group: $@");
 	return -1;
     }
@@ -913,7 +955,7 @@ sub exportSlice($$$$) {
 		      "add $iqn $serial $ISCSI_GLOBAL_PORTAL ".
 			 "$tag Auto -1") };
     if ($@) {
-	warn("*** ERROR: blockstore_exportSlice: ".
+	warn("*** ERROR: blockstore_exportSlice: $volname: ".
 	     "Failed to create iSCSI target: $@");
 	return -1;
     }
@@ -922,7 +964,7 @@ sub exportSlice($$$$) {
     eval { runFreeNASCmd($CLI_VERB_IST_ASSOC,
 			 "add $iqn $iqn") };
     if ($@) {
-	warn("*** ERROR: blockstore_exportSlice: ".
+	warn("*** ERROR: blockstore_exportSlice: $volname: ".
 	     "Failed to associate iSCSI target with extent: $@");
 	return -1;
     }
@@ -1215,9 +1257,11 @@ sub removeVlanInterface($$) {
 sub unexportSlice($$$$) {
     my ($vnode_id, $sconf, $vnconfig, $priv) = @_;
 
+    my $volname = $sconf->{'VOLNAME'};
+    $volname = "UNKNOWN" if (!$volname);
+
     # All of the sanity checking was done when we first created and
     # exported this blockstore.  Assume nothing has changed...
-    my $volname = $sconf->{'VOLNAME'};
     $sconf->{'UUID'} =~ /^([-\.:\w]+)$/;
     my $iqn = $1; # untaint.
 
@@ -1226,7 +1270,7 @@ sub unexportSlice($$$$) {
     eval { runFreeNASCmd($CLI_VERB_IST_TARGET,
 			 "del $iqn") };
     if ($@) {
-	warn("*** WARNING: blockstore_unexportSlice: ".
+	warn("*** WARNING: blockstore_unexportSlice: $volname: ".
 	     "Failed to remove iSCSI target: $@");
     }
 
@@ -1237,7 +1281,7 @@ sub unexportSlice($$$$) {
 	eval { runFreeNASCmd($CLI_VERB_IST_AUTHI,
 			     "del $tag") };
 	if ($@) {
-	    warn("*** WARNING: blockstore_unexportSlice: ".
+	    warn("*** WARNING: blockstore_unexportSlice: $volname: ".
 		 "Failed to remove iSCSI auth group: $@");
 	}
     }
@@ -1246,7 +1290,7 @@ sub unexportSlice($$$$) {
     eval { runFreeNASCmd($CLI_VERB_IST_EXTENT, 
 			 "del $iqn") };
     if ($@) {
-	warn("*** WARNING: blockstore_unexportSlice: ".
+	warn("*** WARNING: blockstore_unexportSlice: $volname: ".
 	     "Failed to remove iSCSI extent: $@");
     }
 
@@ -1258,6 +1302,24 @@ sub deallocSlice($$$$) {
     my ($vnode_id, $sconf, $vnconfig, $priv) = @_;
     my $bsid = $sconf->{'BSID'};
 
+    my $volname = $sconf->{'VOLNAME'};
+    $volname = "UNKNOWN" if (!$volname);
+
+    #
+    # If this is a use of a persistent store, the BSID is a unique
+    # volume name based on the lease ID. Look up the volume to make
+    # sure it exists, but do nothing else.
+    #
+    if ($bsid =~ /^lease-\d+$/) {
+	my $volumes = getVolumeList();
+	if (exists($volumes->{$bsid})) {
+	    return 0;
+	}
+	warn("*** ERROR: blockstore_deallocSlice: $volname: ".
+	     "Requested volume not found: $bsid!");
+	return -1;
+    }
+
     # Deallocate slice.  Wrap in loop to enable retries.
     my $count;
     for ($count = 1; $count <= $MAX_RETRY_COUNT; $count++) {
@@ -1267,20 +1329,20 @@ sub deallocSlice($$$$) {
 	# some errors.
 	if ($@) { 
 	    if ($@ =~ /dataset is busy/) {
-		warn("*** WARNING: blockstore_deallocSlice: ".
+		warn("*** WARNING: blockstore_deallocSlice: $volname: ".
 		     "Slice is busy.  Waiting a bit before trying ".
 		     "to free again (count=$count).");
 		sleep $SLICE_BUSY_WAIT;
 	    }
 	    elsif ($@ =~ /does not exist/) {
 		if ($count < $MAX_RETRY_COUNT) {
-		    warn("*** WARNING: blockstore_deallocSlice: ".
+		    warn("*** WARNING: blockstore_deallocSlice: $volname: ".
 			 "Blockstore slice seems to be gone, retrying.");
 		    # Bump counter to just under termination to try once more.
 		    $count = $MAX_RETRY_COUNT-1;
 		    sleep $SLICE_GONE_WAIT;
 		} else {
-		    warn("*** WARNING: blockstore_deallocSlice: ".
+		    warn("*** WARNING: blockstore_deallocSlice: $volname: ".
 			 "Blockstore slice still seems to be gone.");
 		    # Bail now because we don't want to report this as an
 		    # error to the caller.
@@ -1288,7 +1350,7 @@ sub deallocSlice($$$$) {
 		}
 	    } 
 	    else {
-		warn("*** ERROR: blockstore_deallocSlice: ".
+		warn("*** ERROR: blockstore_deallocSlice: $volname: a".
 		     "slice removal failed: $@");
 		return -1;
 	    }
@@ -1302,7 +1364,7 @@ sub deallocSlice($$$$) {
     # consistency checking routines.
 
     if ($count > $MAX_RETRY_COUNT) {
-	warn("*** WARNING: blockstore_deallocSlice: ".
+	warn("*** WARNING: blockstore_deallocSlice: $volname: ".
 	     "Could not free slice after several attempts!");
 	return -1;
     }
