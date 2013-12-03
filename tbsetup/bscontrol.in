@@ -64,6 +64,10 @@ sub usage()
     print STDERR "Usage: bscontrol command args\n";
     print STDERR "   -h       This message\n";
     print STDERR "   -d       Print additional debug info\n";
+    print STDERR "commands:\n";
+    print STDERR "   list     List all blockstore servers\n";
+    print STDERR "   avail    For each server, show available storage\n";
+    print STDERR "   info     For each server, show all extant volumes\n";
     exit(-1);
 }
 my $optlist  = "hds:t:l:S:P:F";
@@ -88,7 +92,7 @@ sub bs_destory($$$@);
 #
 my $TB		 = "@prefix@";
 
-my $PROXYCMD	 = "/usr/testbed/sbin/bscontrol.proxy";
+my $PROXYCMD	 = "/usr/local/etc/emulab/bscontrol.proxy";
 my $SSH		 = "ssh -n -o ConnectTimeout=2 -o Protocol=2 -o BatchMode=yes -o StrictHostKeyChecking=no";
 
 #
