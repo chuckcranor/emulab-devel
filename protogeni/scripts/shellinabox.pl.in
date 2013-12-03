@@ -120,6 +120,9 @@ my $authstuff = $query->param('auth');
 if (!defined($authstuff)) {
     fatal("No auth object provided");
 }
+if (0) {
+    info(Dumper($query));
+}
 
 #
 # We need the shared key to recreate the SHA1 signature.
@@ -198,7 +201,7 @@ if ($gid =~ /^([-\w]*)$/) {
 $UID = $EUID;
 
 # Shove this header out so that we can do cross site xmlrpc.
-print "Access-Control-Allow-Origin: $TBBASE\n";
+print "Access-Control-Allow-Origin: *\n";
 
 my $cmd = "shellinaboxd " . ($debug ? "-d" : "-v") . " " .
     "--certfile=${CERTFILE} --keyfile=${KEYFILE} ".
