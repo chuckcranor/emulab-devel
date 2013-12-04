@@ -723,9 +723,9 @@ sub DiscoverResources($$;$$)
 	$method = "ListResources";
     }
     elsif ($manager_version == 2.0) {
-	$method_args->{'credentials'} = [$credential->asString()];
-	$method_args->{'available'}   = $available;
-	$method_args->{'compress'}    = $compress;
+	@method_args = ({'credentials' => [$credential->asString()],
+			 'available'   => $available,
+			 'compress',   => $compress});
 	$method = "DiscoverResources";
     }
     else {

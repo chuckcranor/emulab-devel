@@ -398,6 +398,12 @@ sub LoadFromString($$)
     if ($string =~ /^-----BEGIN CERTIFICATE-----/) {
         print CHILD $string;
     }
+    elsif ($string =~ /-----BEGIN CERTIFICATE/m) {
+        print CHILD $string;
+	if ($string !~ /END CERTIFICATE-----$/) {
+	    print CHILD "-----END CERTIFICATE-----\n";
+	}
+    }
     else {
         print CHILD "-----BEGIN CERTIFICATE-----\n";
         print CHILD $string;
