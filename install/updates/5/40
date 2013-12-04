@@ -13,11 +13,14 @@ sub InstallUpdate($$)
 	$phase eq "post" && !IMPOTENT_MODE()) {
 	
 	Phase "access", "Copying mail access file over to ops", sub {
+	    ExecQuietFatal("$GMAKE -C $TOP_OBJDIR/named mail.access");
 	    ExecQuietFatal("$SCP $TOP_OBJDIR/named/mail.access ".
 			   "     ${USERNODE}:/etc/mail/access");
 	    ExecQuietFatal("$SSH -o 'BatchMode=yes' root\@${USERNODE} ".
 			   "     makemap hash /etc/mail/access \\< ".
 			   "          /etc/mail/access");
+	    ExecQuietFatal("$SSH -o 'BatchMode=yes' root\@${USERNODE} ".
+			   "     /etc/rc.d/sendmail restart");
 	};
     }
     return 0;
