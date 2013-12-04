@@ -356,7 +356,9 @@ sub Install($$$)
 	
 	Phase "elabinelab", "Removing ELABINELAB stuff from defs file", sub {
 	    DoneIfExists($NEWDEFSFILE);
-	    ExecQuietFatal("cat $OLDDEFSFILE | sed ".
+	    # And some other stuff.
+	    ExecQuietFatal("echo 'EC2META_ENABLE=1' | ".
+			   " cat $OLDDEFSFILE - | sed ".
 			   "   -e 's/^ELABINELAB/#ELABINELAB/' ".
 			   "   -e 's/^WWWHOST=boss/WWWHOST=www/' ".
 			   "   > $NEWDEFSFILE");
