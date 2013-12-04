@@ -292,8 +292,6 @@ sub CallMethod($$$@)
     my $goo      = $parser->parse($xmlgoo);
     my ($value,$output,$code);
 
-    #print Dumper($goo);
-    
     # Python servers seem to return faults in structs, not as <fault> elements.
     # Sigh.
     if (!ref($goo)) {
@@ -326,7 +324,15 @@ sub CallMethod($$$@)
 	if (UNIVERSAL::isa($code,"HASH")) {
 	    $code = $code->{'geni_code'};
 	}
-	$value  = $goo->value()->{'value'}->value;
+	#
+	# Orca returns no value if there is a fault.
+	#
+	if (!defined($goo->value()->{'value'})) {
+	    $value = undef;
+	}
+	else {
+	    $value  = $goo->value()->{'value'}->value;
+	}
 	$output = $goo->value()->{'output'}->value
 	    if (exists($goo->value()->{'output'}));
     }
