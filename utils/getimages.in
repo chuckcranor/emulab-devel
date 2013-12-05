@@ -322,6 +322,8 @@ foreach my $imageid (keys(%{ $xmlparse->{'image'} })) {
     # So move it into place.
     #
     print "Moving new image into place\n";
+    unlink("${imagefilename}.old")
+	if (-e "${imagefilename}.old");
     rename("${imagefilename}", "${imagefilename}.old")
 	if (-e "${imagefilename}");
     rename("$tmpfilename", "${imagefilename}") or
