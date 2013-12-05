@@ -220,10 +220,23 @@ if ($pid) {
     close WRITER;
     close STDOUT;
     close STDIN;
+    #
+    # The read seems to get stuck, leaving a defunct child and this
+    # script hanging out. Not sure why, so cancel the read after a
+    # a bit and go on. 
+    #
+    local $SIG{ALRM} = sub {
+	info("Timed out waiting for $pid to say something");
+	waitpid($pid, 0);
+	info("After waitpid: $?");
+	exit($? >> 0);
+    };
+    alarm 30;
     while (<READER>) {
 	info($_);
     }
-    info("Before waitpid");
+    alarm 0;
+    info("Before waitpid for $pid");
     waitpid($pid, 0);
     info("After waitpid: $?");
     exit($? >> 0);
