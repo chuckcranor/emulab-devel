@@ -305,6 +305,29 @@ function InitQuickVM(uuid, slice_expires)
 	trigger: 'hover',
 	'placement': 'top'
     });
+    // Use an unload event to terminate any shells.
+    $(window).bind("unload", function() {
+	console.log("Unload function called");
+	
+	$('#quicktabs_content div').each(function () {
+	    console.log(this);
+	    var $this = $(this);
+	    // Skip the main profile tab
+	    if ($this.attr("id") == "profile") {
+		return;
+	    }
+	    var tabname = $this.attr("id");
+	    
+	    // Trigger the custom event.
+	    $("#" + tabname).trigger("killssh");
+	});
+    });
+    $(window).bind("beforeunload", function() {
+	console.log("BeforeUnload function called");
+    });
+    $(window).bind("pagehide", function() {
+	console.log("Pagehide function called");
+    });
     StartResizeWatchdog(uuid);
     StartCountdownClock(slice_expires);
     GetStatus(uuid);
@@ -334,6 +357,20 @@ function StartSSH(id, authobject)
 			   'width=' + iwidth + ' ' +
                            'height=' + iheight + ' ' +
                            'src=\'' + url + '\'>');
+
+	//
+	// Setup a custom event handler so we can kill the connection.
+	//
+	$('#' + id).on("killssh",
+		       { "url": jsonauth.baseurl + ':' + port + '/quit' +
+			        '?session=' + session },
+		       function(e) {
+			   console.log("killssh: " + e.data.url);
+			   $.ajax({
+     			       url: e.data.url,
+			       type: 'GET',
+			   });
+		       });
     }
     var xmlthing = $.ajax({
 	// the URL for the request
@@ -402,6 +439,8 @@ function NewSSHTab(hostport, client_id)
 	// Install a click handler for the X button.
 	$("#" + tabname + "_kill").click(function(e) {
 	    e.preventDefault();
+	    // Trigger the custom event.
+	    $("#" + tabname).trigger("killssh");
 	    // remove the li from the ul.
 	    $(this).parent().remove();
 	    // Remove the content div.
