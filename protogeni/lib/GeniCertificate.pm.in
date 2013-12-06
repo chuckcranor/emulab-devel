@@ -345,7 +345,19 @@ sub SameCert($$)
 {
     my ($self, $other) = @_;
 
-    return $self->GetCertificate()->cert() eq $other->GetCertificate()->cert();
+    return 1
+	if ($self->GetCertificate()->cert() eq
+	    $other->GetCertificate()->cert());
+
+    #
+    # Ick, we have changed the way we store certs; we now put the
+    # entire chain into the database, but this breaks existing cert
+    # checks. 
+    #
+    return 1
+	if (index($self->GetCertificate()->cert(),
+		  $other->GetCertificate()->cert()) >= 0);
+    return 0;
 }
 
 #
