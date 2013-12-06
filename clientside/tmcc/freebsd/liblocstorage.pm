@@ -127,7 +127,9 @@ my $VINUMSS	= "81920";
 #   (pass3:iscsi0:0:0:0): ATAPI_IDENTIFY. ACB: ...
 #   ...
 #
-# where N in "iscsiN" will be the session.
+# where N in "iscsiN" will be the session. Note that even if this command
+# causes an error, the -v will ensure that SCSI sense code data is dumped
+# and that will contain the magic string!
 # 
 
 sub iscsi_to_dev($)
@@ -141,10 +143,12 @@ sub iscsi_to_dev($)
     foreach (@lines) {
 	if (m#^/dev/(da\d+)$#) {
 	    my $dev = $1;
-	    my $out = `camcontrol identify $dev -v 2>&1`;
-	    if ($out =~ /^\(pass\d+:iscsi(\d+):/) {
-		if ($1 == $session) {
-		    return $dev;
+	    my @out = `camcontrol identify $dev -v 2>&1`;
+	    foreach my $line (@out) {
+		if ($line =~ /^\(pass\d+:iscsi(\d+):/) {
+		    if ($1 == $session) {
+			return $dev;
+		    }
 		}
 	    }
 	}
