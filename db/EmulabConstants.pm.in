@@ -401,6 +401,7 @@ sub LEASE_STATE_UNAPPROVED()    { "unapproved"; }
 sub LEASE_STATE_GRACE()         { "grace"; }
 sub LEASE_STATE_LOCKED()        { "locked"; }
 sub LEASE_STATE_EXPIRED()       { "expired"; }
+sub LEASE_STATE_INITIALIZING()  { "initializing"; }
 
 # Node Log Types
 sub TB_NODELOGTYPE_MISC		{ "misc"; }
