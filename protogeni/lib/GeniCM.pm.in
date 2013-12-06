@@ -5266,7 +5266,8 @@ sub CreateAuthorityFromCertificate($)
     # Check that this really is an SA.
     #
     my ($auth,$type,$id) = GeniHRN::Parse($certificate->urn());
-    if (! ($type eq "authority" && $id eq "sa")) {
+    if (! ($type eq "authority" &&
+	   ($id eq "sa" || $id eq "ma"))) {
 	return GeniResponse->Create(GENIRESPONSE_BADARGS, undef,
 			    "Signer certificate is not from a Slice Authority");
     }
