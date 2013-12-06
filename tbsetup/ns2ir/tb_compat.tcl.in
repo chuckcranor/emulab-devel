@@ -103,6 +103,7 @@ namespace eval TBCOMPAT {
     array set sodesires {
 	"class" 1
 	"protocol" 1
+	"lease" 1
     }
 
     variable soplacementdesires

@@ -110,6 +110,8 @@ use Template;
 use Experiment;
 use User;
 use BlockstoreType;
+use Blockstore;
+use Lease;
 
 use constant false => 0;
 use constant true  => 1;
@@ -878,6 +880,37 @@ sub GenDefsFile($)
 	}
     }
     print TCL "\n";
+
+    #
+    # XXX for now, all available datasets (leases) are those in the
+    # same project as the experiment.
+    #
+    if (defined($experiment)) {
+	my $pid = $experiment->pid();
+	my @leases = Lease->AllProjectLeases($pid);
+	print TCL "# Available datasets\n";
+	foreach my $lease (@leases) {
+	    # lease must be valid
+	    next if ($lease->state() ne "valid");
+	    # must have associated blockstore
+	    my $idx = $lease->lease_idx();
+	    my $bstore = Blockstore->LookupByLease($idx);
+	    next if (!$bstore);
+
+	    my $name = "$pid/" . $lease->lease_id();
+	    my $type = $lease->type();
+	    my $node = $bstore->node_id();
+	    my $bsid = $bstore->bs_id();
+	    my $size = $bstore->total_size();
+
+	    print TCL "set dataset_node($name) $node\n";
+	    print TCL "set dataset_bsid($name) $bsid\n";
+	    print TCL "set dataset_type($name) $type\n";
+	    print TCL "set dataset_size($name) $size\n";
+	    print TCL "set dataset_index($name) $idx\n";
+	}
+	print TCL "\n";
+    }
 
     print TCL "# Storage Objects\n";
     my @sotypes = BlockstoreType->AllTypes();

@@ -1,4 +1,3 @@
-
 # -*- tcl -*-
 #
 # Copyright (c) 2012-2013 University of Utah and the Flux Group.
@@ -49,8 +48,8 @@ Blockstore instproc init {s} {
     $self set node {}
     $self set type {}
     $self set size 0
-    $self set type {}
     $self set role "unknown"
+    $self set leasename {}
     # for compat with LanLink
     $self set simulated 0
 
@@ -103,6 +102,33 @@ Blockstore instproc set-type {newtype} {
     }
 
     set type $type
+    return
+}
+
+Blockstore instproc set-lease {lname} {
+    var_import ::TBCOMPAT::dataset_node
+    var_import ::TBCOMPAT::dataset_index
+    var_import ::GLOBALS::pid
+    var_import ::GLOBALS::anonymous
+    var_import ::GLOBALS::passmode
+    $self instvar leasename
+    $self instvar attributes
+
+    set fullname $lname
+    set index 0
+    if {! ${GLOBALS::anonymous} && ! ${GLOBALS::passmode}} {
+	if {[string first / $lname] == -1} {
+	    set fullname "$pid/"
+	    append fullname $lname
+	}
+	if {![info exists dataset_node($fullname)]} {
+	    perror "\[set-lease] Invalid lease name $lname ($fullname)"
+	    return
+	}
+	set index $dataset_index($fullname)
+    }
+    set leasename $fullname
+    set attributes(lease) $index
     return
 }
 
@@ -221,15 +247,47 @@ Blockstore instproc finalize {} {
     var_import ::TBCOMPAT::sofullplacements
     var_import ::TBCOMPAT::soplacementdesires
     var_import ::TBCOMPAT::sonodemounts
+    var_import ::TBCOMPAT::dataset_node
+    var_import ::TBCOMPAT::dataset_size
+    var_import ::TBCOMPAT::dataset_type
+    var_import ::TBCOMPAT::dataset_bsid
     $self instvar sim
     $self instvar node
     $self instvar size
+    $self instvar type
     $self instvar attributes
+    $self instvar leasename
 
     # Die if the user didn't attach the blockstore to anything.
     if { $node == {} } {
 	perror "Blockstore is not attached to anything: $self"
 	return -1
+    }
+
+    # If the blockstore is associated with a lease, disallow/override certain
+    # explicitly-specified values
+    if {$leasename != {}} {
+	var_import ::GLOBALS::anonymous
+	var_import ::GLOBALS::passmode
+	var_import ::GLOBALS::pid
+
+	if {$size != 0 || $type != {} ||
+	    [info exists attributes(class)] ||
+	    [info exists attributes(protocol)]} {
+	    perror "Cannot explicitly set size/type/class/protocol of lease-associated blockstore $self";
+	    return -1;
+	}
+
+	if {! ${GLOBALS::anonymous} && ! ${GLOBALS::passmode}} {
+	    set size $dataset_size($leasename)
+	    set type $dataset_type($leasename)
+	} else {
+	    set size 1
+	    set type "stdataset"
+	}
+	# XXX
+	set attributes(class) "SAN"
+	set attributes(protocol) "iSCSI"
     }
 
     # Make sure the blockstore has class...
