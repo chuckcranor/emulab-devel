@@ -96,15 +96,12 @@ use libgenvnode;
 use libvnode;
 use libtestbed;
 use libsetup;
+use libfreenas;
 
 #
 # Constants
 #
 my $GLOBAL_CONF_LOCK     = "blkconf";
-my $ZPOOL_CMD            = "/sbin/zpool";
-my $ZFS_CMD              = "/sbin/zfs";
-my $ZPOOL_STATUS_UNKNOWN = "unknown";
-my $ZPOOL_STATUS_ONLINE  = "online";
 my $ZPOOL_LOW_WATERMARK  = 2 * 2**10; # 2GiB, expressed in MiB
 my $FREENAS_MNT_PREFIX   = "/mnt";
 my $ISCSI_GLOBAL_PORTAL  = 1;
@@ -122,28 +119,6 @@ my $BS_CLASS_SAN         = "SAN";
 my $BS_PROTO_ISCSI       = "iSCSI";
 my $BS_UUID_TYPE_IQN     = "iqn";
 
-# CLI stuff
-my $FREENAS_CLI          = "$BINDIR/freenas-config";
-my $CLI_VERB_IFACE       = "interface";
-my $CLI_VERB_IST_EXTENT  = "ist_extent";
-my $CLI_VERB_IST_AUTHI   = "ist_authinit";
-my $CLI_VERB_IST_TARGET  = "ist";
-my $CLI_VERB_IST_ASSOC   = "ist_assoc";
-my $CLI_VERB_VLAN        = "vlan";
-my $CLI_VERB_VOLUME      = "volume";
-my $CLI_VERB_POOL        = "pool";
-
-my %cliverbs = (
-    $CLI_VERB_IFACE      => 1,
-    $CLI_VERB_IST_EXTENT => 1,
-    $CLI_VERB_IST_AUTHI  => 1,
-    $CLI_VERB_IST_TARGET => 1,
-    $CLI_VERB_IST_ASSOC  => 1,
-    $CLI_VERB_VLAN       => 1,
-    $CLI_VERB_VOLUME     => 1,
-    $CLI_VERB_POOL       => 1,
-    );
-
 #
 # Global variables
 #
@@ -154,14 +129,10 @@ my $debug  = 0;
 #
 # Local Functions
 #
-sub parseFreeNASListing($);
-sub runFreeNASCmd($$);
 sub getSliceList();
 sub parseSliceName($);
 sub parseSlicePath($);
 sub calcSliceSizes($);
-sub getPoolList();
-sub getVolumeList();
 sub getIfConfig($);
 sub getVlan($);
 sub getNextAuthITag();
@@ -536,86 +507,6 @@ sub vnodeUnmount($$$$)
 #
 
 #
-# Run a FreeNAS CLI command, checking for a return error and other
-# such things.  We check that the incoming verb is valid.  Command line
-# argument string needs to be untainted or this will fail.
-#
-# Throws exceptions (dies), passing along errors in $@.
-#
-sub runFreeNASCmd($$) {
-    my ($verb, $argstr) = @_;
-
-    my $errstate = 0;
-    my $message;
-
-    die "Invalid FreeNAS CLI verb: $verb"
-	unless exists($cliverbs{$verb});
-
-    print "DEBUG: blockstore_runFreeNASCmd:\n".
-	"\trunning: $verb $argstr\n" if $debug;
-
-    my $output = `$FREENAS_CLI $verb $argstr 2>&1`;
-
-    if ($? != 0) {
-	$errstate = 1;
-	$output =~ /^(.+Error: .+)$/;
-	$message = defined($1) ? $1 : "Error code: $?";
-    } elsif ($output =~ /"error": true/) {
-	$errstate = 1;
-	$output =~ /"message": "([^"]+)"/;
-	$message = $1;
-    }
-
-    if ($errstate) {
-	print STDERR $output if $debug;
-	die $message;
-    }
-
-    return 0;
-}
-
-# Run our custom FreeNAS CLI to extract info.  
-#
-# Returns an array of hash references.  Each hash contains info from
-# one line of output.  The hash keys are the field names from the
-# header (first line of output).  The hash values are the
-# corresponding pieces of data at each field location in a line.
-sub parseFreeNASListing($) {
-    my $verb = shift;
-    my @retlist = ();
-
-    # XXX: should check that a valid verb was passed in.
-
-    open(CLI, "$FREENAS_CLI $verb list |") or
-	die "Can't run FreeNAS CLI: $!";
-
-    my $header = <CLI>;
-
-    return @retlist
-	if !defined($header) or !$header;
-
-    chomp $header;
-    my @fields = split(/\t/, $header);
-
-    while (my $line = <CLI>) {
-	chomp $line;
-	my @lparts = split(/\t/, $line);
-	if (scalar(@lparts) != scalar(@fields)) {
-	    warn("*** WARNING: blockstore_parseFreeNASListing: ".
-		 "Bad output from CLI ($verb): $line");
-	    next;
-	}
-	my %lineh = ();
-	for (my $i = 0; $i < scalar(@fields); $i++) {
-	    $lineh{$fields[$i]} = $lparts[$i];
-	}
-	push @retlist, \%lineh;
-    }
-    close(CLI);
-    return @retlist;
-}
-
-#
 # Run through list of storage commands and execute them, checking
 # for errors.  (Should have a lock before doing this.)
 #
@@ -642,23 +533,6 @@ sub runBlockstoreCmds($$$) {
     return 0;
 }
 
-sub getVolumeList() {
-    my $vollist = {};
-
-    my @zvols = parseFreeNASListing($CLI_VERB_VOLUME);
-    foreach my $zvol (@zvols) {
-	my $vol = {};
-	if ($zvol->{'vol_name'} =~ /^([-\w]+)\/([-\w+]+)$/) {
-	    $vol->{'pool'} = $1;
-	    $vol->{'volume'} = $2;
-	    $vol->{'size'} = convertToMebi($zvol->{'vol_size'});
-	    $vollist->{$vol->{'volume'}} = $vol;
-	}
-    }
-
-    return $vollist;
-}
-
 # Yank information about blockstore slices out of FreeNAS.
 # Note: this is an expensive call - may want to re-visit caching some of
 # this later if performance becomes a problem.
@@ -666,7 +540,7 @@ sub getSliceList() {
     my $sliceshash = {};
 
     # Grab list of slices (iscsi extents) from FreeNAS
-    my @slist = parseFreeNASListing($CLI_VERB_IST_EXTENT);
+    my @slist = freenasParseListing($FREENAS_CLI_VERB_IST_EXTENT);
 
     # Just return if there are no slices.
     return if !@slist;
@@ -729,86 +603,40 @@ sub parseSlicePath($) {
 sub calcSliceSizes($) {
     my $sliceshash = shift;
 
-    my @zvols = parseFreeNASListing($CLI_VERB_VOLUME);
+    # Ugh... Have to look up size via the "volume" list for zvol slices.
+    my $zvollist = freenasVolumeList(0);
 
-    # Ugh... Have to look up size via the "volume" list for
-    # zvol slices.
     foreach my $slice (values(%$sliceshash)) {
-	my $bsid    = $slice->{'bsid'};
 	my $vnode_id = $slice->{'vnode_id'};
-	my $type    = lc($slice->{'type'});
-
-	my $size = undef;
+	my $type = lc($slice->{'type'});
 
 	if ($type eq "zvol") {
-	    foreach my $zvol (@zvols) {
-		#print STDERR "DEBUG: volume: ". $zvol->{'vol_name'} ."\n";
-		if ($zvol->{'vol_name'} eq "$bsid/$vnode_id") {
-		    $size = $zvol->{'vol_size'};
-		    last;
-		}
-	    }
-	    if (!defined($size)) {
+	    if (!exists($zvollist->{$vnode_id})) {
 		warn("*** WARNING: blockstore_calcSliceList: ".
-		     "Could not find matching volume entry for ".
+		     "Could not find matching volume entry ($vnode_id) for ".
 		     "zvol slice: $slice->{'name'}");
 		next;
 	    }
-	    $size .= "B"; # Fix up units (value is \d{1,3}[TGM]).
+	    # already converted to Mebi
+	    $slice->{'size'} = $zvollist->{$vnode_id}->{'size'};
 	} elsif ($type eq "file") {
-	    $size = $slice->{'filesize'};
+	    my $size = $slice->{'filesize'};
 	    $size =~ s/B$/iB/; # re-write with correct units.
+	    $slice->{'size'} = convertToMebi($size);
 	}
-	$slice->{'size'} = convertToMebi($size);
     }
     return;
-}
-
-# Return information on all of the volume pools available on this host.
-sub getPoolList() {
-    my $poolh = {};
-    my @pools = parseFreeNASListing($CLI_VERB_POOL);
-    
-    # Create hash with pool name as key.  Stuff in some sentinel values
-    # in case we don't get a match from 'zpool list' below.
-    foreach my $pool (@pools) {
-	$pool->{'size'} = 0;
-	$pool->{'avail'} = 0;
-	$poolh->{$pool->{'volume_name'}} = $pool;
-    }
-
-    # Yuck - have to go after capacity and status info by calling the
-    # 'zfs' command line utility since the CLI doesn't return this info.
-    open(ZFS, "$ZFS_CMD list -H -o name,used,avail |") or
-	die "Can't run 'zfs list'!";
-
-    while (my $line = <ZFS>) {
-	chomp $line;
-	my ($pname, $pused, $pavail) = split(/\s+/, $line);
-	next if $pname =~ /\//;  # filter out zvols.
-	if (exists($poolh->{$pname})) {
-	    my $pool = $poolh->{$pname};
-	    $pused  = convertToMebi($pused);
-	    $pavail = convertToMebi($pavail);
-	    $pool->{'size'}  = $pused + $pavail;
-	    $pool->{'avail'} = $pavail;
-	} else {
-	    warn("*** WARNING: blockstore_getPoolInfo: ".
-		 "No FreeNAS entry for zpool: $pname");
-	}
-    }
-
-    return $poolh;
 }
 
 # Allocate a slice based on information from Emulab Central
 # XXX: Do 'sliceconfig' parameter checking.
 sub allocSlice($$$$) {
     my ($vnode_id, $sconf, $vnconfig, $priv) = @_;
-    my $bsid = untaintHostname($sconf->{'BSID'});
 
+    my $bsid = $sconf->{'BSID'};
     my $volname = $sconf->{'VOLNAME'};
     $volname = "UNKNOWN" if (!$volname);
+    my $size = $sconf->{'VOLSIZE'};
 
     #
     # If this is a use of a persistent store, the BSID is a unique
@@ -816,7 +644,7 @@ sub allocSlice($$$$) {
     # sure it exists, but do nothing else.
     #
     if ($bsid =~ /^lease-\d+$/) {
-	my $volumes = getVolumeList();
+	my $volumes = freenasVolumeList(0);
 	if (exists($volumes->{$bsid})) {
 	    $priv->{'pool'} = $volumes->{$bsid}->{'pool'};
 	    $priv->{'volume'} = $volumes->{$bsid}->{'volume'};
@@ -827,45 +655,9 @@ sub allocSlice($$$$) {
 	return -1;
     }
 
-    #
-    # Otherwise this is a "transient" store that we must create.
-    # Here the pool is given by the BSID and the volume is named
-    # after the vnode.
-    #
-    my $pools  = getPoolList();
-
-    # Does the requested pool exist?
-    my $destpool;
-    if (exists($pools->{$bsid})) {
-	$destpool = $pools->{$bsid};
-	$priv->{'pool'} = $bsid;
-	$priv->{'volume'} = $vnode_id;
-    } else {
-	warn("*** ERROR: blockstore_allocSlice: $volname: ".
-	     "Requested pool not found: $bsid!");
-	return -1;
-    }
-
-    # Is there enough space on the requested blockstore?  If not, there is
-    # a discrepancy between reality and the Emulab database.
-    my $size = untaintNumber($sconf->{'VOLSIZE'});
-    if ($size + $ZPOOL_LOW_WATERMARK > $destpool->{'avail'}) {
-	warn("*** ERROR: blockstore_allocSlice: $volname: ". 
-	     "Not enough space remaining in requested pool: $bsid");
-	return -1;
-    }
-
-    # Allocate slice in zpool
-    # XXX: check on size conversion.
-    eval { runFreeNASCmd($CLI_VERB_VOLUME, 
-			 "add $bsid $vnode_id ${size}MB off") };
-    if ($@) {
-	warn("*** ERROR: blockstore_allocSlice: $volname: ".
-	     "slice allocation failed: $@");
-	return -1;
-    }
-
-    return 0;
+    $priv->{'pool'} = $bsid;
+    $priv->{'volume'} = $vnode_id;
+    return freenasVolumeCreate($bsid, $vnode_id, $size);
 }
 
 # Setup device export.
@@ -925,7 +717,7 @@ sub exportSlice($$$$) {
     my $iqn = $1; # untaint.
 
     # Create iSCSI extent
-    eval { runFreeNASCmd($CLI_VERB_IST_EXTENT, 
+    eval { freenasRunCmd($FREENAS_CLI_VERB_IST_EXTENT, 
 			 "add $iqn $pool/$volume") };
     if ($@) {
 	warn("*** ERROR: blockstore_exportSlice: $volname: ".
@@ -941,7 +733,7 @@ sub exportSlice($$$$) {
 	return -1;
     }
     $tag = $1; # untaint.
-    eval { runFreeNASCmd($CLI_VERB_IST_AUTHI,
+    eval { freenasRunCmd($FREENAS_CLI_VERB_IST_AUTHI,
 			 "add $tag ALL $network/$cmask $vnode_id") };
     if ($@) {
 	warn("*** ERROR: blockstore_exportSlice: $volname: ".
@@ -951,7 +743,7 @@ sub exportSlice($$$$) {
 
     # Create iSCSI target
     my $serial = genSerial();
-    eval { runFreeNASCmd($CLI_VERB_IST_TARGET,
+    eval { freenasRunCmd($FREENAS_CLI_VERB_IST_TARGET,
 		      "add $iqn $serial $ISCSI_GLOBAL_PORTAL ".
 			 "$tag Auto -1") };
     if ($@) {
@@ -961,7 +753,7 @@ sub exportSlice($$$$) {
     }
 
     # Bind iSCSI target to slice (extent)
-    eval { runFreeNASCmd($CLI_VERB_IST_ASSOC,
+    eval { freenasRunCmd($FREENAS_CLI_VERB_IST_ASSOC,
 			 "add $iqn $iqn") };
     if ($@) {
 	warn("*** ERROR: blockstore_exportSlice: $volname: ".
@@ -981,7 +773,7 @@ sub findAuthITag($) {
     return undef
 	if !defined($vnode_id);
 
-    my @authentries = parseFreeNASListing($CLI_VERB_IST_AUTHI);
+    my @authentries = freenasParseListing($FREENAS_CLI_VERB_IST_AUTHI);
 
     return undef
 	if !@authentries;
@@ -998,7 +790,7 @@ sub findAuthITag($) {
 # Helper function.
 # Locate and return next unused tag ID for iSCSI initiator groups.
 sub getNextAuthITag() {
-    my @authentries = parseFreeNASListing($CLI_VERB_IST_AUTHI);
+    my @authentries = freenasParseListing($FREENAS_CLI_VERB_IST_AUTHI);
 
     my $maxtag = 1;
 
@@ -1052,7 +844,7 @@ sub getVlan($) {
     return undef
 	if (!defined($vtag) || $vtag !~ /^(\d+)$/);
 
-    my @vlans = parseFreeNASListing($CLI_VERB_VLAN);
+    my @vlans = freenasParseListing($FREENAS_CLI_VERB_VLAN);
 
     my $retval = undef;
     foreach my $vlan (@vlans) {
@@ -1140,7 +932,7 @@ sub createVlanInterface($$) {
     # vlan does not exist.
     else {
 	# Create the vlan entry in FreeNAS.
-	eval { runFreeNASCmd($CLI_VERB_VLAN,
+	eval { freenasRunCmd($FREENAS_CLI_VERB_VLAN,
 			     "add $piface $viface $vtag $lname") };
 	if ($@) {
 	    warn("*** ERROR: blockstore_createVlanInterface: ". 
@@ -1149,7 +941,7 @@ sub createVlanInterface($$) {
 	}
 
 	# Create the vlan interface.
-	eval { runFreeNASCmd($CLI_VERB_IFACE,
+	eval { freenasRunCmd($FREENAS_CLI_VERB_IFACE,
 			     "add $viface $lname") };
 	if ($@) {
 	    warn("*** ERROR: blockstore_createVlanInterface: ".
@@ -1243,7 +1035,7 @@ sub removeVlanInterface($$) {
 
     if (!addressExists($viface)) {
 	# No more addresses: Delete the vlan interface.
-	eval { runFreeNASCmd($CLI_VERB_VLAN,
+	eval { freenasRunCmd($FREENAS_CLI_VERB_VLAN,
 			     "del $viface") };
 	if ($@) {
 	    warn("*** ERROR: blockstore_removeVlanInterface: ".
@@ -1267,7 +1059,7 @@ sub unexportSlice($$$$) {
 
     # Remove iSCSI target.  This will also zap the target-to-extent
     # association.
-    eval { runFreeNASCmd($CLI_VERB_IST_TARGET,
+    eval { freenasRunCmd($FREENAS_CLI_VERB_IST_TARGET,
 			 "del $iqn") };
     if ($@) {
 	warn("*** WARNING: blockstore_unexportSlice: $volname: ".
@@ -1278,7 +1070,7 @@ sub unexportSlice($$$$) {
     my $tag = findAuthITag($vnode_id);
     if ($tag && $tag =~ /^(\d+)$/) {
 	$tag = $1; # untaint.
-	eval { runFreeNASCmd($CLI_VERB_IST_AUTHI,
+	eval { freenasRunCmd($FREENAS_CLI_VERB_IST_AUTHI,
 			     "del $tag") };
 	if ($@) {
 	    warn("*** WARNING: blockstore_unexportSlice: $volname: ".
@@ -1287,7 +1079,7 @@ sub unexportSlice($$$$) {
     }
 
     # Remove iSCSI extent.
-    eval { runFreeNASCmd($CLI_VERB_IST_EXTENT, 
+    eval { freenasRunCmd($FREENAS_CLI_VERB_IST_EXTENT, 
 			 "del $iqn") };
     if ($@) {
 	warn("*** WARNING: blockstore_unexportSlice: $volname: ".
@@ -1300,8 +1092,8 @@ sub unexportSlice($$$$) {
 
 sub deallocSlice($$$$) {
     my ($vnode_id, $sconf, $vnconfig, $priv) = @_;
-    my $bsid = $sconf->{'BSID'};
 
+    my $bsid = $sconf->{'BSID'};
     my $volname = $sconf->{'VOLNAME'};
     $volname = "UNKNOWN" if (!$volname);
 
@@ -1311,7 +1103,7 @@ sub deallocSlice($$$$) {
     # sure it exists, but do nothing else.
     #
     if ($bsid =~ /^lease-\d+$/) {
-	my $volumes = getVolumeList();
+	my $volumes = freenasVolumeList(0);
 	if (exists($volumes->{$bsid})) {
 	    return 0;
 	}
@@ -1320,56 +1112,7 @@ sub deallocSlice($$$$) {
 	return -1;
     }
 
-    # Deallocate slice.  Wrap in loop to enable retries.
-    my $count;
-    for ($count = 1; $count <= $MAX_RETRY_COUNT; $count++) {
-	eval { runFreeNASCmd($CLI_VERB_VOLUME, 
-			     "del $bsid $vnode_id") };
-	# Process exceptions thrown during deletion attempt.  Retry on
-	# some errors.
-	if ($@) { 
-	    if ($@ =~ /dataset is busy/) {
-		warn("*** WARNING: blockstore_deallocSlice: $volname: ".
-		     "Slice is busy.  Waiting a bit before trying ".
-		     "to free again (count=$count).");
-		sleep $SLICE_BUSY_WAIT;
-	    }
-	    elsif ($@ =~ /does not exist/) {
-		if ($count < $MAX_RETRY_COUNT) {
-		    warn("*** WARNING: blockstore_deallocSlice: $volname: ".
-			 "Blockstore slice seems to be gone, retrying.");
-		    # Bump counter to just under termination to try once more.
-		    $count = $MAX_RETRY_COUNT-1;
-		    sleep $SLICE_GONE_WAIT;
-		} else {
-		    warn("*** WARNING: blockstore_deallocSlice: $volname: ".
-			 "Blockstore slice still seems to be gone.");
-		    # Bail now because we don't want to report this as an
-		    # error to the caller.
-		    return 0;
-		}
-	    } 
-	    else {
-		warn("*** ERROR: blockstore_deallocSlice: $volname: a".
-		     "slice removal failed: $@");
-		return -1;
-	    }
-	} else {
-	    # No error condition - jump out of loop.
-	    last;
-	}
-    }
-
-    # Note: Checks for lingering slices will be performed separately in
-    # consistency checking routines.
-
-    if ($count > $MAX_RETRY_COUNT) {
-	warn("*** WARNING: blockstore_deallocSlice: $volname: ".
-	     "Could not free slice after several attempts!");
-	return -1;
-    }
-
-    return 0;
+    return freenasVolumeDestroy($bsid, $vnode_id);
 }
 
 # Required perl foo

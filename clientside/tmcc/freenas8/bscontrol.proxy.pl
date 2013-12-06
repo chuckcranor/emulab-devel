@@ -116,7 +116,7 @@ sub pools()
 #
 sub volumes()
 {
-    my $vref = freenasVolumeList();
+    my $vref = freenasVolumeList(1);
     foreach my $vol (keys %{$vref}) {
 	my $pool = $vref->{$vol}->{'pool'};
 	my $iname = $vref->{$vol}->{'iname'};
