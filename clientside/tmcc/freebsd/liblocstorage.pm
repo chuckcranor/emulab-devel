@@ -918,7 +918,7 @@ sub os_check_storage_element($$)
 		    return -1;
 		}
 		# fsck it in case of an abrupt shutdown
-		if (mysystem("$FSCK -p /dev/$dev $redir")) {
+		if (mysystem("$FSCK -t ufs -p /dev/$dev $redir")) {
 		    warn("*** $bsid: fsck of /dev/$dev failed\n");
 		    return -1;
 		}
@@ -1111,9 +1111,21 @@ sub os_create_storage($$)
 	}
 
 	#
-	# Create the filesystem
+	# If this is a persistent iSCSI disk, we never create the filesystem!
+	# Instead, we fsck it in case it was not shutdown cleanly in its
+	# previous existence.
 	#
-	if (mysystem("$MKFS -b $UFSBS $mdev $redir")) {
+	if ($href->{'CLASS'} eq "SAN" && $href->{'PROTO'} eq "iSCSI" &&
+	    $href->{'PERSIST'} != 0) {
+	    if (mysystem("$FSCK -t ufs -p $mdev $redir")) {
+		warn("*** $lv: fsck of persistent store $mdev failed\n");
+		return 0;
+	    }
+	}
+	#
+	# Otherwise, create the filesystem
+	#
+	elsif (mysystem("$MKFS -b $UFSBS $mdev $redir")) {
 	    warn("*** $lv: could not create FS$logmsg\n");
 	    return 0;
 	}

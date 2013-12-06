@@ -772,6 +772,7 @@ sub os_check_storage_slice($$)
 sub os_create_storage($$)
 {
     my ($so,$href) = @_;
+    my $fstype;
     my $rv = 0;
 
     # record all the output for debugging
@@ -801,30 +802,54 @@ sub os_create_storage($$)
 	}
 
 	#
-	# Create the filesystem:
+	# If this is a persistent iSCSI disk, we never create the filesystem!
+	# Instead, we fsck it in case it was not shutdown cleanly in its
+	# previous existence.
+	#
+	if ($href->{'CLASS'} eq "SAN" && $href->{'PROTO'} eq "iSCSI" &&
+	    $href->{'PERSIST'} != 0) {
+	    # figure out what the fstype is
+	    $fstype = `blkid -s TYPE -o value $mdev`;
+	    chomp($fstype);
+	    if ($fstype =~ /^(ext\d)$/) {
+		$fstype = $1;
+	    } else {
+		warn("*** $lv: could not determine FS type for persistent store on $mdev, assuming ext4\n");
+		$fstype = "ext4";
+	    }
+
+	    if (mysystem("$FSCK -p $mdev $redir")) {
+		warn("*** $lv: fsck of persistent store $mdev failed\n");
+		return 0;
+	    }
+
+	}
+	#
+	# Otherwise, create the filesystem:
 	#
 	# Start by trying ext4 which is much faster when creating large FSes.
 	# Otherwise fall back on ext3 and then ext2.
 	#
-	my $failed = 1;
-	my $fstype;
-	my $fsopts = "-F -q";
-	if ($failed) {
-	    $fstype = "ext4";
-	    $fsopts .= " -E lazy_itable_init=1";
-	    $failed = mysystem("$MKFS -t $fstype $fsopts $mdev $redir");
-	}
-	if ($failed) {
-	    $fstype = "ext3";
-	    $failed = mysystem("$MKFS -t $fstype $fsopts $mdev $redir");
-	}
-	if ($failed) {
-	    $fstype = "ext2";
-	    $failed = mysystem("$MKFS -t $fstype $fsopts $mdev $redir");
-	}
-	if ($failed) {
-	    warn("*** $lv: could not create FS\n");
-	    return 0;
+	else {
+	    my $failed = 1;
+	    my $fsopts = "-F -q";
+	    if ($failed) {
+		$fstype = "ext4";
+		$fsopts .= " -E lazy_itable_init=1";
+		$failed = mysystem("$MKFS -t $fstype $fsopts $mdev $redir");
+	    }
+	    if ($failed) {
+		$fstype = "ext3";
+		$failed = mysystem("$MKFS -t $fstype $fsopts $mdev $redir");
+	    }
+	    if ($failed) {
+		$fstype = "ext2";
+		$failed = mysystem("$MKFS -t $fstype $fsopts $mdev $redir");
+	    }
+	    if ($failed) {
+		warn("*** $lv: could not create FS\n");
+		return 0;
+	    }
 	}
 
 	#

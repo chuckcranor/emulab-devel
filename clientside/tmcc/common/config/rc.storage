@@ -105,16 +105,22 @@ SWITCH: for ($action) {
 	#
 	# XXX this should be docleanup(3), but we have not implemented
 	# the nasty temporary removal of LVM/ZFS/etc state from the
-	# imageable filesystems.
+	# imageable filesystems for local blockstores.
 	#
-	# So for now we just do a shutdown. This is correct in the SYSVOL
-	# case where you want that blockstore to be included in the image.
+	# So for now we just do a shutdown. This will do the right thing
+	# for SAN-based blockstores which only use traditional filesystem
+	# mounts (i.e., no volume manager) and thus have no local disk
+	# state (as SAN mounts do not appear in /etc/fstab).
+	#
+	# It is also the right thing for the local SYSVOL case in which
+	# you want the blockstore to be included in the image.
+	#
 	# It is not correct for other blockstores, where you will get
 	# partial state in the image (e.g., in /etc/lvm or /etc/zfs).
 	#
 	# The moral is: if you are going to do a custom image, you should
-	# only create a SYSVOL blockstore and you should take a whole-disk
-	# image!
+	# only use persistent SAN-based blockstores or create a SYSVOL local
+	# blockstore and take a whole-disk image!
 	#
 	docleanup(0);
 	last SWITCH;
@@ -396,7 +402,9 @@ sub process($$$$)
 		warn("*** Invalid iSCSI target name '".$href->{'UUID'}."'\n");
 		return 0;
 	    }
-
+	    if (!exists($href->{'PERSIST'})) {
+		$href->{'PERSIST'} = 0;
+	    }
 	}
 	elsif ($class eq "local") {
 	    if ($href->{'HOSTID'} ne "localhost" ||
@@ -452,7 +460,12 @@ sub process($$$$)
 		my $msg;
 
 		if ($href->{'CLASS'} eq "SAN" && $href->{'PROTO'} eq "iSCSI") {
-		    $msg = "iSCSI node";
+		    if ($href->{'PERSIST'}) {
+			$msg = "persistent ";
+		    } else {
+			$msg = "";
+		    }
+		    $msg .= "iSCSI node";
 		} elsif ($href->{'CLASS'} eq "local") {
 		    $msg = "local disk";
 		}
@@ -511,7 +524,11 @@ sub process($$$$)
 
 	if ($href->{'CMD'} eq "ELEMENT") {
 	    if ($href->{'CLASS'} eq "SAN" && $href->{'PROTO'} eq "iSCSI") {
-		print "  $vname: iSCSI node attached as $dev";
+		my $msg = "$vname:";
+		if ($href->{'PERSIST'}) {
+		    $msg .= " persistent";
+		}
+		print "  $msg iSCSI node attached as $dev";
 	    }
 	}
 	elsif ($href->{'CMD'} eq "SLICE") {

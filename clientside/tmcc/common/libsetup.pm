@@ -3384,6 +3384,8 @@ sub getarpinfo($;$)
 #   \d+ -- size in mebibytes. Informational; could be used for sanity checking.
 # PERMS :=
 #   (RO|RW) -- i.e., read-only or read-write.
+# PERSIST :=
+#   (0|1) -- 1 if this is a persistent (across swapins) storage element.
 # 
 # if CLASS=="local" :
 # IDX :=
@@ -3448,6 +3450,7 @@ sub getstorageconfig($;$) {
 	'HOSTID'  => '[-\w\.]+',
 	'MOUNTPOINT' => '\/[-\w\/\.]+',
 	'PERMS'	  => '(RO|RW)',
+	'PERSIST' => '(0|1)',
 	'PROTO'	  => '(iSCSI|local|SCSI|SAS|SATA|PATA|IDE)',
 	'UUID'	  => '[-\w\.:]+',
 	'UUID_TYPE'=> '(iqn|serial)',
