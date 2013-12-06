@@ -523,6 +523,29 @@ done:
     return -1;
 }
 
+#
+# Return the remaining unallocated space
+#
+sub AvailableCapacity($)
+{
+    my ($self) = @_;
+    my $bsidx = $self->bsidx();
+
+    my $query_result =
+	DBQueryWarn("select b.total_size,s.remaining_capacity ".
+		    "from blockstores as b left join blockstore_state as s ".
+		    "on b.bsidx=s.bsidx where b.bsidx='$bsidx'");
+    return -1
+	if (!$query_result || !$query_result->numrows);
+
+    #
+    # If remaining_capacity is NULL, then the blockstore is unused
+    # and we just return the total size.
+    #
+    my ($size,$avail) = $query_result->fetchrow_array();
+    return (defined($avail) ? $avail : $size);
+}
+
 ############################################################################
 #
 # Package to describe a specific reservation of a blockstore.
