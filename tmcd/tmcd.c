@@ -254,7 +254,7 @@ typedef struct {
 static int	iptonodeid(struct in_addr, tmcdreq_t *, char*);
 static int	checkdbredirect(tmcdreq_t *);
 static int      sendstoreconf(int sock, int tcp, tmcdreq_t *reqp, char *bscmd, 
-			      char *vname);
+			      char *vname, int dopersist);
 
 #ifdef EVENTSYS
 int			myevent_send(address_tuple_t address);
@@ -4235,7 +4235,7 @@ COMMAND_PROTOTYPE(dostorageconfig)
 		OUTPUT(buf, sizeof(buf), 
 		       "CMD=EXPORT IDX=%d VOLNAME=%s",
 		       cmdidx++, vname);
-		rv = sendstoreconf(sock, tcp, reqp, buf, vname);
+		rv = sendstoreconf(sock, tcp, reqp, buf, vname, 0);
 
 		mysql_free_result(res);
 		return rv;
@@ -4357,7 +4357,7 @@ COMMAND_PROTOTYPE(dostorageconfig)
 		OUTPUT(buf, sizeof(buf), 
 		       "CMD=SLICE IDX=%d VOLNAME=%s VOLSIZE=%d", 
 		       cmdidx++, vname, volsize);
-		sendstoreconf(sock, tcp, reqp, buf, vname);
+		sendstoreconf(sock, tcp, reqp, buf, vname, 0);
 	}
 	mysql_free_result(res);
 	
@@ -4428,7 +4428,7 @@ COMMAND_PROTOTYPE(dostorageconfig)
 		OUTPUT(buf, sizeof(buf), 
 		       "CMD=ELEMENT IDX=%d HOSTID=%s VOLNAME=%s VOLSIZE=%d", 
 		       cmdidx++, hostid, vname, volsize);
-		sendstoreconf(sock, tcp, reqp, buf, vname);
+		sendstoreconf(sock, tcp, reqp, buf, vname, 1);
 	}
 	mysql_free_result(res);
 	
@@ -4438,7 +4438,8 @@ COMMAND_PROTOTYPE(dostorageconfig)
 
 /* Helper function for "dostorageconfig" */
 static int 
-sendstoreconf(int sock, int tcp, tmcdreq_t *reqp, char *bscmd, char *vname)
+sendstoreconf(int sock, int tcp, tmcdreq_t *reqp, char *bscmd, char *vname,
+	      int dopersist)
 {
         MYSQL_RES	*res;
 	MYSQL_ROW	row;
@@ -4446,7 +4447,7 @@ sendstoreconf(int sock, int tcp, tmcdreq_t *reqp, char *bscmd, char *vname)
 	char            *bufp, *ebufp = &buf[sizeof(buf)];
 	char            iqn[BS_IQN_MAXSIZE];
 	char            *mynodeid;
-	char            *class, *protocol, *placement, *mountpoint;
+	char            *class, *protocol, *placement, *mountpoint, *lease;
 	int		nrows, nattrs;
 
 	/* Remember the nodeid we care about up front. */
@@ -4467,7 +4468,7 @@ sendstoreconf(int sock, int tcp, tmcdreq_t *reqp, char *bscmd, char *vname)
 	/* Find out what type of blockstore we are dealing with and
 	   grab some additional attributes. */
 	nrows = nattrs = (int) mysql_num_rows(res);
-	class = protocol = placement = mountpoint = "\0";
+	class = protocol = placement = mountpoint = lease = "\0";
 	while (nrows--) {
 		char *key, *val;
 		row = mysql_fetch_row(res);
@@ -4481,6 +4482,8 @@ sendstoreconf(int sock, int tcp, tmcdreq_t *reqp, char *bscmd, char *vname)
 			placement = val;
 		} else if (strcmp(key,"mountpoint") == 0) {
 			mountpoint = val;
+		} else if (strcmp(key,"lease") == 0) {
+			lease = val;
 		}
 	}
 
@@ -4505,6 +4508,22 @@ sendstoreconf(int sock, int tcp, tmcdreq_t *reqp, char *bscmd, char *vname)
 		if (strlen(mountpoint)) {
 			bufp += OUTPUT(bufp, ebufp-bufp, " MOUNTPOINT=%s",
 				       mountpoint);
+		}
+
+		/*
+		 * XXX we only put out the PERSIST flag if it is set.
+		 * Since the client-side is stupid-picky about unknown
+		 * attributes, this will cause an older client to fail
+		 * when the attribute is passed. Believe it or not,
+		 * that is a good thing! This will cause an older
+		 * client to fail if presented with a persistent
+		 * blockstore. If it did not fail, the client would
+		 * proceed to unconditionally create a filesystem on
+		 * the blockstore, wiping out what was previously
+		 * there.
+		 */
+		if (dopersist && strlen(lease) && atoi(lease) != 0) {
+			bufp += OUTPUT(bufp, ebufp-bufp, " PERSIST=1");
 		}
 
 		bufp += OUTPUT(bufp, ebufp-bufp, "\n");
