@@ -28,7 +28,8 @@ use Exporter;
 use vars qw(@ISA @EXPORT @EXPORT_OK
 	    $VTOP_FLAGS_UPDATE $VTOP_FLAGS_VERBOSE $VTOP_FLAGS_QUIET
 	    $VTOP_FLAGS_FIXNODES $VTOP_FLAGS_IMPOTENT $VTOP_FLAGS_ALLOCONLY
-	    $VTOP_FLAGS_REGRESSION $VTOP_FLAGS_FIXLANNODES);
+	    $VTOP_FLAGS_REGRESSION $VTOP_FLAGS_FIXLANNODES
+	    $VTOP_FLAGS_PREASSIGN);
 
 @ISA    = "Exporter";
 @EXPORT = qw( );
@@ -44,6 +45,7 @@ use NodeType;
 use Lan;
 use OSinfo;
 use Blockstore;
+use Lease;
 use Image;
 use Port;
 use English;
@@ -83,10 +85,12 @@ $VTOP_FLAGS_REGRESSION  = 0x10;
 $VTOP_FLAGS_QUIET       = 0x20;
 $VTOP_FLAGS_ALLOCONLY	= 0x40;
 $VTOP_FLAGS_FIXLANNODES	= 0x80;
+$VTOP_FLAGS_PREASSIGN	= 0x100;
 
 @EXPORT_OK = qw($VTOP_FLAGS_UPDATE $VTOP_FLAGS_VERBOSE $VTOP_FLAGS_FIXNODES
 		$VTOP_FLAGS_IMPOTENT $VTOP_FLAGS_REGRESSION $VTOP_FLAGS_QUIET
-		$VTOP_FLAGS_ALLOCONLY $VTOP_FLAGS_FIXLANNODES);
+		$VTOP_FLAGS_ALLOCONLY $VTOP_FLAGS_FIXLANNODES
+		$VTOP_FLAGS_PREASSIGN);
 
 #
 # Create an object representing the stuff we need to create the vtop file.
@@ -230,6 +234,7 @@ sub fixlanodes($)	{ return $_[0]->flags() & $VTOP_FLAGS_FIXLANNODES; }
 sub impotent($)		{ return $_[0]->flags() & $VTOP_FLAGS_IMPOTENT; }
 sub alloconly($)	{ return $_[0]->flags() & $VTOP_FLAGS_ALLOCONLY; }
 sub regression($)	{ return $_[0]->flags() & $VTOP_FLAGS_REGRESSION; }
+sub preassign($)	{ return $_[0]->flags() & $VTOP_FLAGS_PREASSIGN; }
 sub printdb($$)		{ print $_[1] if ($_[0]->verbose()); return 1; }
 
 # We name delay nodes internally as they are needed.
@@ -1607,6 +1612,30 @@ sub LoadVirtNodes($)
 	my $attrkey = $virt_bs_attr->attrkey();
 	my $attrval = $virt_bs_attr->attrvalue();
 	my $isdesire = $virt_bs_attr->isdesire();
+
+	#
+	# If this is a persistent blockstore (identified by a lease index
+	# attribute) then make sure the user/pid have access to the lease
+	# and that the associated blockstore is not already mapped.
+	# If it is currently in use, the remaining capacity will be zero.
+	# Note: we do not make this check during a pre-assign pass.
+	#
+	if ($attrkey eq "lease" && !$self->preassign()) {
+	    my $lease = Lease->Lookup($attrval);
+	    # XXX need to use the lease_permissions table here
+	    # XXX right now only the project of a lease can access it
+	    if (!$lease || $pid != $lease->pid()) {
+		warn("Lease $attrval for blockstore $vname does not exist!\n")
+		    if (!$lease);
+		tberror("Persistent blockstore $vname cannot be used by $pid\n");
+		return -1;
+	    }
+	    my $bs = Blockstore->LookupByLease($attrval);
+	    if ($bs && $bs->AvailableCapacity() == 0) {
+		tberror("Persistent blockstore $vname is already in use.\n");
+		return -1;
+	    }
+	}
 
 	# Skip any blockstores that don't have a corresponding entry in the
 	# 'blockstores' libvtop hash.  Also skip any attributes that are not

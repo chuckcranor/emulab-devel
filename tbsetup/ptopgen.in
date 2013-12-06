@@ -1429,13 +1429,13 @@ foreach $node (@nodenames) {
 # Print out all blockstores
 #
 if ($useblockstore) {
-    $result = DBQueryFatal("select b.node_id, b.bs_id, b.type, ".
+    $result = DBQueryFatal("select b.node_id, b.bs_id, b.lease_idx, b.type, ".
 			   "s.remaining_capacity ".
 			   "from blockstores as b ".
 			   "left join blockstore_state as s ".
 			   "on b.bsidx=s.bsidx ".
 			   "where s.ready=1");
-    while (my ($nodeId, $bsId, $typeName,
+    while (my ($nodeId, $bsId, $leaseIdx, $typeName,
 	       $capacity) = $result->fetchrow_array) {
 	my $type = BlockstoreType->Lookup($typeName);
 	if (defined($type)) {
@@ -1453,6 +1453,19 @@ if ($useblockstore) {
 	    if (defined($divisible) && $divisible) {
 		$slots = "*";
 	    }
+
+	    #
+	    # If this is a persistent block store, i.e. has a non-zero
+	    # lease_idx, we need to ensure that only someone explicitly
+	    # asking for it gets it. We use a unique feature, based on
+	    # the lease index, with a weight of one. This is matched by
+	    # a desire put into the vtop file when someone requests
+	    # mapping of the blockstore.
+	    #
+	    if ($leaseIdx > 0) {
+		push(@features, "bs-lease-$leaseIdx:1.0");
+	    }
+
 	    push(@features, "+bs-capacity:$capacity");
 	    print_node("$nodeId:$bsId", ["blockstore:$slots"], \@features,
 		       ["subnode_of:$nodeId"], "", $nodetointerface{$nodeId},
