@@ -1,13 +1,34 @@
+Update /etc/default/xen for the XL tool stack.
+
+Comment out xend start/stop/restart /etc/init.d/xen
+
+*** brdige-utils.
+sudo 
+apt-get install bridge-utils.
+
+*** install kpartx
+
+*** install isc-dhcp-server
+
+*** install ethtool
+
+**** Symlinks in /boot to the current kernel/ramdisk to use for XEN-STD.
+cd /boot
+sudo ln -s vmlinuz-3.2.46 vmlinuz-xenU 
+sudo ln -s initrd.img-3.2.46 initrd-xenU
+
+*** Create /usr/lib/xen-default symlink.
+-----
+
 Add this to /etc/defaults/grub
 
-GRUB_CMDLINE_XEN_DEFAULT="dom0_mem=512M"
+GRUB_CMDLINE_XEN_DEFAULT="dom0_mem=512M gnttab_max_nr_frames=64"
 
 then run update-grub
 
 Set the default kernel in grub.cfg.
 
-Change default toolstack.
-
 Create /usr/lib/xen-default symlink.
 
-install bridge-utils
+Install openvswitch and run depmod
+
