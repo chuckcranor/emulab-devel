@@ -375,6 +375,35 @@ sub parseattrs($)
 }
 
 #
+# Augment pool atrributes with Emulab blockstore attributes.
+#
+sub get_poolattrs($)
+{
+    my ($attrs) = @_;
+
+    my $server = $attrs->{'server'};
+    my $pool = $attrs->{'pool'};
+    my $bstore = Blockstore->Lookup($server, $pool);
+    if ($bstore) {
+	my $bsidx = $bstore->bsidx();
+	my $result =
+	    DBQueryFatal("SELECT attrvalue FROM blockstore_attributes ".
+			 "WHERE bsidx='$bsidx' and attrkey='allowed_bstores'");
+	if ($result && $result->numrows) {
+	    my ($allows) = $result->fetchrow_array;
+	    $attrs->{'allowed'} = $allows;
+	} else {
+	    # XXX if nothing specified, assume non-persistent blockstores
+	    $attrs->{'allowed'} = "volatile";
+	}
+    } else {
+	print STDERR "WARNING: no blockstore object for $server/$pool\n";
+    }
+
+    return $attrs;
+}
+
+#
 # Augment volume attributes with Emulab blockstore attributes gleaned
 # from the volume attributes.
 #
@@ -463,6 +492,7 @@ sub getpools($$)
 		my $pool = $attrs->{'pool'};
 		if (!defined($dpool) || $dpool eq $pool) {
 		    $attrs->{'server'} = $srv;
+		    $attrs = get_poolattrs($attrs);
 		    $pools{"$srv/$pool"} = $attrs;
 		}
 	    }
@@ -523,6 +553,13 @@ sub getblockstores($$)
 		my $attrs = get_bsattrs(parseattrs($vstr));
 		if (!defined($dpool) || $dpool eq $attrs->{'pool'}) {
 		    $attrs->{'server'} = $srv;
+
+		    if (!exists($attrs->{'uname'})) {
+			$attrs->{'uname'} = "NON-EMULAB/$srv-" .
+			    $attrs->{'pool'} . "-" . $attrs->{'volume'};
+			$attrs->{'type'} = "--";
+		    }
+
 		    $bstores{$attrs->{'uname'}} = $attrs;
 		}
 	    }
@@ -551,16 +588,16 @@ sub bs_avail($$$@)
     my $poolref = getpools($dsrv, $dpool);
 
     if (keys(%{$poolref}) > 0) {
-	printf("%-12s %-12s %10s %10s %-5s\n",
-	       "Server", "Pool", "Size", "Avail", "Free %");
+	printf("%-12s %-12s %10s %10s %-5s %-s\n",
+	       "Server", "Pool", "Size", "Avail", "Free %", "Allows");
 
 	foreach my $pstr (sort keys(%{$poolref})) {
 	    my $attrs = $poolref->{$pstr};
 	    my $size = ($attrs->{'size'} ? $attrs->{'size'} : 1);
 	    my $pct = $attrs->{'avail'} / $size * 100;
-	    printf("%-12s %-12s %10s %10s %5.1f\n",
+	    printf("%-12s %-12s %10s %10s %5.1f %-s\n",
 		   $attrs->{'server'}, $attrs->{'pool'},
-		   $size, $attrs->{'avail'}, $pct);
+		   $size, $attrs->{'avail'}, $pct, $attrs->{'allowed'});
 	}
     }
 
@@ -623,7 +660,7 @@ sub bs_create($$$@)
 	}
     }
 
-    # eliminate those without enough space
+    # eliminate those without enough space or that don't allow the type
     my %servercount = ();
     my @pools = ();
     foreach my $pstr (sort keys(%{$poolref})) {
@@ -633,8 +670,10 @@ sub bs_create($$$@)
 	} else {
 	    $servercount{$attrs->{'server'}}++;
 	}
-	push(@pools, $attrs) 
-	    if ($attrs->{'size'} >= $size);
+	if ($attrs->{'size'} >= $size &&
+	    $attrs->{'allowed'} =~ /$type/) {
+	    push(@pools, $attrs);
+	}
     }
 
     # if none qualify, quit
