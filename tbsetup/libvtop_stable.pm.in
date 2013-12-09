@@ -1590,11 +1590,21 @@ sub LoadVirtNodes($)
 
 	#
 	# If this is a persistent blockstore (identified by a lease index
-	# attribute) then make sure the blockstore is not already mapped.
+	# attribute) then make sure the user/pid have access to the lease
+	# and that the associated blockstore is not already mapped.
 	# If it is currently in use, the remaining capacity will be zero.
 	# Note: we do not make this check during a pre-assign pass.
 	#
 	if ($attrkey eq "lease" && !$self->preassign()) {
+	    my $lease = Lease->Lookup($attrval);
+	    # XXX need to use the lease_permissions table here
+	    # XXX right now only the project of a lease can access it
+	    if (!$lease || $pid ne $lease->pid()) {
+		warn("Lease $attrval for blockstore $vname does not exist!\n")
+		    if (!$lease);
+		tberror("Persistent blockstore $vname cannot be used by $pid\n");
+		return -1;
+	    }
 	    my $bs = Blockstore->LookupByLease($attrval);
 	    if ($bs && $bs->AvailableCapacity() == 0) {
 		tberror("Persistent blockstore $vname is already in use.\n");

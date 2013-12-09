@@ -1624,7 +1624,7 @@ sub LoadVirtNodes($)
 	    my $lease = Lease->Lookup($attrval);
 	    # XXX need to use the lease_permissions table here
 	    # XXX right now only the project of a lease can access it
-	    if (!$lease || $pid != $lease->pid()) {
+	    if (!$lease || $pid ne $lease->pid()) {
 		warn("Lease $attrval for blockstore $vname does not exist!\n")
 		    if (!$lease);
 		tberror("Persistent blockstore $vname cannot be used by $pid\n");
