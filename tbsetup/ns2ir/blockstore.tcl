@@ -322,6 +322,23 @@ Blockstore instproc finalize {} {
 	    perror "A remote blockstore must be connected to one, and only one, link/lan: $self"
 	    return -1
 	}
+	#
+	# For the lanlink we are connected to, find all the non-blockstore
+	# nodes that are attached and schedule a program-agent to do an
+	# rc.storage fullreset.
+	#
+	set link [lindex [$node set portlist] 0]
+	set nlist [$link set nodelist]
+	foreach pair $nlist {
+	    set lnode [lindex $pair 0]
+	    if {[$lnode set type] != "blockstore"} {
+		if {[$lnode set bstore_agent] == 0} {
+		    $lnode set bstore_agent 1
+		    set pa [$lnode program-agent -command "sudo /usr/local/etc/emulab/rc/rc.storage fullreset"]
+		    $sim at "swapout" "$pa run"
+		}
+	    }
+	}
     }
 
     #

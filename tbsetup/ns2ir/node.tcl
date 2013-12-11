@@ -1,6 +1,6 @@
 # -*- tcl -*-
 #
-# Copyright (c) 2000-2012 University of Utah and the Flux Group.
+# Copyright (c) 2000-2013 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -143,6 +143,9 @@ Node instproc init {s} {
 
     # This is a mote thing.
     $self set numeric_id {}
+
+    # This is a blockstore thing.
+    $self set bstore_agent 0
 }
 
 Bridge instproc init {s} {
@@ -707,7 +710,7 @@ Node instproc get-desire {desire} {
 }
 
 #
-# Add a key/value pair to the nide.
+# Add a key/value pair to the node.
 #
 Node instproc add-attribute {key val} {
     $self instvar attributes

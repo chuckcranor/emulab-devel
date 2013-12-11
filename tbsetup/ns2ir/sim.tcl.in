@@ -1003,8 +1003,8 @@ Simulator instproc at {time eventstring} {
     } else {
        set ptime [::GLOBALS::reltime-to-secs $time]
        if {$ptime == -1} {
-  u            perror "Invalid time spec: $time"
-               return
+	   perror "Invalid time spec: $time"
+	   return
        }
        set time $ptime
     }
