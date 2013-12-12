@@ -43,6 +43,7 @@ use overload ('""' => 'Stringify');
 
 my @QUOTA_TYPES  = ("ltdataset",);
 my $MAXQUOTASIZE = 1024 * 1024 * 1024; # 1 pebibyte
+my $UNLIMITED    = -1;
 
 # cache of instances to avoid regenerating them.
 my %quotas	= ();
@@ -101,6 +102,8 @@ sub Lookup($$;$)
     }
 
     my $self              = {};
+    $self->{"LOCKED"}     = 0;
+    $self->{"LOCKER_PID"} = 0;
 
     # Load quota from DB, if it exists. Otherwise, return undef.
     my $query_result =
@@ -154,6 +157,8 @@ sub LookupSync($$;$) {
 sub DESTROY($) {
     my ($self) = @_;
 
+    $self->{'LOCKED'} = undef;
+    $self->{'LOCKER_PID'} = undef;
     $self->{'DBROW'} = undef;
 }
 
@@ -392,14 +397,48 @@ sub IncreaseSize($$) {
     return -1
 	if (!ref($self));
 
-    if ($incr < 0 || $self->size() + $incr > $MAXQUOTASIZE) {
+    my $cursize = $self->size();
+    if ($cursize == $UNLIMITED) {
+	print STDERR "Quota->IncreaseSize: quota is currently unlimited.\n";
+	return -1;
+    }
+    if ($incr < 0 || $cursize + $incr > $MAXQUOTASIZE) {
 	print STDERR "Quota->IncreaseSize: Size increment is either negative or the new total is too big ($MAXQUOTASIZE).\n";
 	return -1
     }
 
     my $idx = $self->idx();
-    my $newsize = $self->size() + $incr;
+    my $newsize = $cursize + $incr;
     DBQueryWarn("update project_quotas set size=$newsize where quota_idx=$idx")
+	or return -1;
+
+    $self->Refresh();
+    return 0;
+}
+
+#
+# Make checking/setting a quota for/to "unlimited" an explicit operation
+# so that we can change how we implement this as necessary.
+# Right now, a size of -1 means unlimited.
+#
+sub IsUnlimited($)
+{
+    my ($self) = @_;
+
+    return 0
+	if (!ref($self));
+    return ($self->size == $UNLIMITED);
+}
+
+sub SetUnlimited($)
+{
+    my ($self) = @_;
+
+    return -1
+	if (!ref($self));
+    my $idx = $self->idx();
+    my $size = $UNLIMITED;
+    DBQueryWarn("update project_quotas set size=$size where quota_idx=$idx")
 	or return -1;
 
     $self->Refresh();
@@ -440,6 +479,95 @@ sub Stringify($)
     my $size = $self->size();
 
     return "[Quota: $pid/$quota_id/${size}MiB]";
+}
+
+#
+# Lock and Unlock
+#
+sub Lock($)
+{
+    my ($self) = @_;
+
+    # Must be a real reference. 
+    return -1
+	if (! ref($self));
+
+    # Already locked?
+    if ($self->GotLock()) {
+	return 0;
+    }
+
+    return -1
+	if (!DBQueryWarn("lock tables project_quotas write"));
+
+    my $idx = $self->idx();
+
+    my $query_result =
+	DBQueryWarn("update project_quotas set locked=now(),locker_pid=$PID " .
+		    "where quota_idx=$idx and locked is null");
+
+    if (! $query_result ||
+	$query_result->numrows == 0) {
+	DBQueryWarn("unlock tables");
+	return -1;
+    }
+    DBQueryWarn("unlock tables");
+    $self->{'LOCKED'} = time();
+    $self->{'LOCKER_PID'} = $PID;
+    return 0;
+}
+
+sub Unlock($)
+{
+    my ($self) = @_;
+
+    # Must be a real reference. 
+    return -1
+	if (! ref($self));
+
+    my $idx   = $self->idx();
+
+    return -1
+	if (! DBQueryWarn("update project_quotas set locked=null,locker_pid=0 " .
+			  "where quota_idx=$idx"));
+    
+    $self->{'LOCKED'} = 0;
+    $self->{'LOCKER_PID'} = 0;
+    return 0;
+}
+
+sub GotLock($)
+{
+    my ($self) = @_;
+
+    return 1
+	if ($self->{'LOCKED'} &&
+	    $self->{'LOCKER_PID'} == $PID);
+    
+    return 0;
+}
+
+#
+# Wait to get lock.
+#
+sub WaitLock($$)
+{
+    my ($self, $seconds) = @_;
+
+    # Must be a real reference. 
+    return -1
+	if (! ref($self));
+
+    while ($seconds > 0) {
+	return 0
+	    if ($self->Lock() == 0);
+
+	# Sleep and try again.
+	sleep(5);
+	$seconds -= 5;
+    }
+    # One last try.
+    return $self->Lock();
 }
 
 # _Always_ make sure that this 1 is at the end of the file...

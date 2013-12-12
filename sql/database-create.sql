@@ -3572,6 +3572,8 @@ CREATE TABLE `project_quotas` (
   `type` enum('ltdataset','unknown') NOT NULL default 'unknown',
   `size` int(10) unsigned NOT NULL default '0',
   `last_update` timestamp NOT NULL default CURRENT_TIMESTAMP on update CURRENT_TIMESTAMP,
+  `locked` datetime default NULL, 
+  `locker_pid` int(11) default '0',
   `notes` tinytext,
   PRIMARY KEY (`quota_idx`),
   UNIQUE KEY `qpid` (`pid`,`quota_id`)
