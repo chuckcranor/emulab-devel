@@ -714,6 +714,7 @@ ScriptAlias /cvsweb/ "/usr/testbed/www/cvsweb/"
 Alias /jabber/ "/usr/testbed/www/jabber/"
 
 ScriptAlias /spewrpmtar  /usr/testbed/cgi-bin/spewrpmtar_cgi
+ScriptAlias /d77e8041d1ad /usr/testbed/cgi-bin/shellinabox.pl
 
 <Directory "/usr/testbed/cgi-bin">
     Options FollowSymLinks
