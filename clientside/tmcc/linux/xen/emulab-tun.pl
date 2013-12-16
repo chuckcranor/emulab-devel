@@ -54,6 +54,7 @@ use libsetup;
 use libtmcc;
 use libutil;
 use libtestbed;
+use libgenvnode;
 use libvnode;
 
 #
@@ -94,11 +95,22 @@ sub Online()
     mysystem2("$IPBIN link set $vif mtu 1450");
 
     #
+    # We need to allow fowarding. vif-bridge does this, but since
+    # we are doing our own bridge setup, we have to do this here. 
+    #
+    DoIPtables("-A FORWARD -m physdev --physdev-is-bridged --physdev-in ".
+	       " $vif -j ACCEPT")
+	== 0 or return -1;
+    DoIPtables("-A FORWARD -m physdev --physdev-is-bridged --physdev-out ".
+	       " $vif -j ACCEPT")
+	== 0 or return -1;
+	       
+    #
     # Add the veth to the OVS bridge. 
     #
     mysystem2("$OVSCTL add-port $bridge $vif") == 0
 	or return -1;
-    
+
     # Ug, tell xen hotplug that we really did what was needed.
     mysystem2("xenstore-write '$XENBUS_PATH/hotplug-status' connected");
     return 0;
@@ -106,6 +118,11 @@ sub Online()
 
 sub Offline()
 {
+    DoIPtables("-D FORWARD -m physdev --physdev-is-bridged --physdev-in ".
+	       " $vif -j ACCEPT");
+    DoIPtables("-D FORWARD -m physdev --physdev-is-bridged --physdev-out ".
+	       " $vif -j ACCEPT");
+	       
     mysystem2("$OVSCTL del-port $bridge $vifname") == 0
 	or return -1;
     
