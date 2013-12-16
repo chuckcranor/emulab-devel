@@ -59,6 +59,7 @@ my $TBLOGFACIL       = "@TBLOGFACIL@";
 my $CERTFILE         = "/usr/local/etc/apache22/ssl.crt/users.emulab.net.crt";
 my $KEYFILE          = "/usr/local/etc/apache22/ssl.key/users.emulab.net.key";
 my $APTDIR           = "/var/apt/users";
+my $CONSOLEBIN       = "$TB/bin/console.bin";
 
 # Testbed libraries.
 use lib '@prefix@/lib';
@@ -71,7 +72,7 @@ $| = 1;
 #
 # Untaint the path
 #
-$ENV{'PATH'} = '/bin:/usr/bin:/usr/local/bin';
+$ENV{'PATH'} = '/bin:/usr/bin:/usr/sbin:/usr/local/bin';
 delete @ENV{'IFS', 'CDPATH', 'ENV', 'BASH_ENV'};
 
 # Locals
@@ -147,17 +148,27 @@ else {
 }
 
 #
-# Recreate the signature and compare. 
+# Recreate the signature and compare. We do a different check for
+# a console vs ssh request.
 #
-my $sigtocheck =
-   $auth->{'uid'} . $auth->{'stuff'} . $auth->{'nodeid'} . $auth->{'timestamp'};
+my $sigtocheck = 
+    $auth->{'uid'} . $auth->{'stuff'} .
+    $auth->{'nodeid'} . $auth->{'timestamp'};
+if (exists($auth->{'console'})) {
+    $sigtocheck .= " " .
+	$auth->{'console'}->{"server"} . "," .
+	$auth->{'console'}->{"portnum"} . "," .
+	$auth->{'console'}->{"keylen"} . "," .
+	$auth->{'console'}->{"keydata"} . "," .
+	$auth->{'console'}->{"certhash"};
+}
 my $signature = hmac_sha1_hex($sigtocheck, $sshauthkey);
 if ($signature ne $auth->{'signature'}) {
     fatal("Bad signature: $signature");
 }
 my $uid      = $auth->{'uid'};
 my $nodeid   = $auth->{'nodeid'};
-my $port     = "";
+my $port;
 # Silly taint check stuff.
 if ($uid =~ /^([-\w]*)$/) {
     $uid = $1;
@@ -168,28 +179,69 @@ if ($nodeid =~ /^([-\.\w]*)$/) {
 }
 elsif ($nodeid =~ /^([-\.\w]*):(\d*)$/) {
     $nodeid = $1;
-    $port   = "-p $2";
+    $port   = $2;
 }
-my $who      = "${uid}\@${nodeid}";
 my $where    = "HOME";
-my $sshopts  = "";
+my $tempfile;
+my $command;
 
 # shellinabox wants the gid to be the default for the user.
 my (undef,undef,$gid) = getpwnam($uid);
-# No gid, see if a phony user.
-if (!defined($gid)) {
-    if (-e "$APTDIR/$uid") {
-	$sshopts  = "-i $APTDIR/$uid/id_rsa ";
-	$sshopts .= "-q -o BatchMode=yes -o StrictHostKeyChecking=no ";
-	$sshopts .= "-o UserKnownHostsFile=${APTDIR}/$uid/known_hosts";
-	$where    = "$APTDIR/$uid";
+
+if (exists($auth->{'console'})) {
+    if (!defined($gid)) {
+	$where    = "/tmp";
 	# Switch to nobody for below.
 	$uid = "nobody";
 	$gid = "nobody";
     }
-    else {
-	fatal("$uid is not in the passwd file or $APTDIR");
+    #
+    # Make a temp file for the acl.
+    #
+    $ENV{'TMPDIR'} = "/tmp";
+
+    $tempfile = `mktemp -t tipacl`;
+    if ($?) {
+	fatal("Could not create a temporary file!");
     }
+    # Silly taint check for below.
+    if ($tempfile =~ /^([-\w\/\.]*)$/) {
+	$tempfile = $1;
+    }
+    else {
+	fatal("Bad data in filensame: $tempfile");
+    }
+    open(TMP, ">$tempfile")
+	or fatal("Could not open $tempfile for writing");
+    foreach my $key (keys(%{ $auth->{'console'} })) {
+	my $val = $auth->{'console'}->{$key};
+
+	print TMP "$key:  $val\n";
+    }
+    close(TMP);
+    system("chown $uid:$gid $tempfile");
+    $command = "$CONSOLEBIN -e -a $tempfile $nodeid";
+}
+else {
+    my $sshopts = "";
+    
+    # No gid, see if a phony user.
+    if (!defined($gid)) {
+	if (-e "$APTDIR/$uid") {
+	    $sshopts  = "-i $APTDIR/$uid/id_rsa ";
+	    $sshopts .= "-q -o BatchMode=yes -o StrictHostKeyChecking=no ";
+	    $sshopts .= "-o UserKnownHostsFile=${APTDIR}/$uid/known_hosts";
+	    $where    = "$APTDIR/$uid";
+	    # Switch to nobody for below.
+	    $uid = "nobody";
+	    $gid = "nobody";
+	}
+	else {
+	    fatal("$uid is not in the passwd file or $APTDIR");
+	}
+    }
+    $command = "/usr/bin/ssh" . ($port ? "-p $port" : "") . " " .
+	"$sshopts ${uid}\@${nodeid}";
 }
 
 # Silly taint check stuff.
@@ -205,7 +257,7 @@ print "Access-Control-Allow-Origin: *\n";
 
 my $cmd = "shellinaboxd " . ($debug ? "-d" : "-v") . " " .
     "--certfile=${CERTFILE} --keyfile=${KEYFILE} ".
-    "--cgi -c $TB/etc -s '/:$uid:$gid:$where:/usr/bin/ssh $port $sshopts $who'";
+    "--cgi -c $TB/etc -s '/:$uid:$gid:$where:$command'";
 
 info($cmd);
 
