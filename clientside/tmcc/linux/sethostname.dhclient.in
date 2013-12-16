@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2000-2005 University of Utah and the Flux Group.
+# Copyright (c) 2000-2013 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -97,11 +97,19 @@ else {
 }
 
 #
-# Set hostname. This output is redirected to log file by caller. 
+# Watch for setting to something > 64 chars; breaks almost everywhere.
+# Use just the nickname, which will still resolve properly cause of the
+# search clause in /etc/resolv.conf. It *CANNOT* be just the vname, since
+# that would conflict with experimental interface names in /etc/hosts.
 #
-print STDERR "Resetting hostname to ${nickname}${domain} ... ";
+my $newhostname = "${nickname}${domain}";
+if (!$USEPNAME && length($newhostname) > 64) {
+    $newhostname = $nickname;
+}
+    
+print STDERR "Resetting hostname to $newhostname ... ";
 
-system("/bin/hostname ${nickname}${domain}");
+system("/bin/hostname $newhostname");
 if ($?) {
     print STDERR "*** FAILED!\n";
     exit 1;

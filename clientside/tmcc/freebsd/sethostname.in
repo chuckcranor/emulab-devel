@@ -112,9 +112,20 @@ if (! $nickname) {
 }
 $nickname = lc($nickname);
 
-print STDERR "Resetting hostname to ${nickname}${domain} ... ";
+#
+# Watch for setting to something > 64 chars; breaks almost everywhere.
+# Use just the nickname, which will still resolve properly cause of the
+# search clause in /etc/resolv.conf. It *CANNOT* be just the vname, since
+# that would conflict with experimental interface names in /etc/hosts.
+#
+my $newhostname = "${nickname}${domain}";
+if (!$USEPNAME && length($newhostname) > 64) {
+    $newhostname = $nickname;
+}
+    
+print STDERR "Resetting hostname to $newhostname ... ";
 
-if (system("hostname", "${nickname}${domain}")) {
+if (system("hostname", $newhostname)) {
     print STDERR "*** FAILED!\n";
     exit 1;
 }
