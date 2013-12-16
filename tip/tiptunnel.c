@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2004, 2005, 2006 University of Utah and the Flux Group.
+ * Copyright (c) 2004-2013 University of Utah and the Flux Group.
  * 
  * {{{EMULAB-LICENSE
  * 
@@ -161,6 +161,7 @@ int main( int argc, char ** argv )
   char * aclfile = (char *) NULL;
   int op;
   int oldflags;
+  int securelocalmode = 0;
   struct termios tios;
 
 #if defined(LOCALBYDEFAULT) || defined(TIPPTY)
@@ -170,7 +171,7 @@ int main( int argc, char ** argv )
 #endif
 #endif
 
-  while ((op = getopt( argc, argv, "hlp:rdu:c:a:os:" )) != -1) {
+  while ((op = getopt( argc, argv, "hlp:rdu:c:a:os:e" )) != -1) {
     switch (op) {
       case 'h':
         usage(name);
@@ -180,6 +181,9 @@ int main( int argc, char ** argv )
         break;
       case 'l':
 	localmode++;
+	break;
+      case 'e':
+	securelocalmode++;
 	break;
       case 'p':
         tunnelPort = atoi( optarg );
@@ -376,11 +380,14 @@ int main( int argc, char ** argv )
 
     if (localmode) {
       if (!fork()) {
-	char * foo[4];
-	foo[0] = "telnet";
-	foo[1] = "localhost";
-	foo[2] = portString;
-	foo[3] = NULL;
+	char *foo[5], **fp = foo;
+
+	*fp++ = "telnet";
+	if (securelocalmode)
+		*fp++ = "-E";
+	*fp++ = "localhost";
+	*fp++ = portString;
+	*fp++ = NULL;
 	execvp( "telnet", foo );
 	exit(666);
       }
