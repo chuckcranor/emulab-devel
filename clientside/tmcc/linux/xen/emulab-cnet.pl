@@ -188,14 +188,31 @@ sub Online()
 	my $tty = `xenstore-read /local/domain/$domid/console/tty`;
 	if (! $?) {
 	    chomp($tty);
-	    $tty =~ s,\/dev\/,,;	    
+	    $tty =~ s,\/dev\/,,;
+
+	    # unlink so that we know when capture is ready.
+	    my $acl = "/var/log/tiplogs/$vnode_id.acl";
+	    unlink($acl)
+		if (-e $acl);
 	    mysystem2("$BINDIR/capture -C -n -i $vnode_id $tty");
 	    #
 	    # We need to tell tmcd about it. But do not hang, use timeout.
+	    # Also need to wait for the acl file, since capture is running
+	    # in the background. 
 	    #
 	    if (! $?) {
-		mysystem2("$BINDIR/tmcc.bin -n $vnode_id -t 5 ".
-			  "  -f /var/log/tiplogs/$vnode_id.acl tiplineinfo");
+		for (my $i = 0; $i < 10; $i++) {
+		    sleep(1);
+		    next
+			if (! -e $acl);
+		}
+		if (! -e $acl) {
+		    print STDERR "$acl does not exist\n";
+		}
+		else {
+		    mysystem2("$BINDIR/tmcc.bin -n $vnode_id -t 5 ".
+			      "   -f $acl tiplineinfo");
+		}
 	    }
 	}
     }
