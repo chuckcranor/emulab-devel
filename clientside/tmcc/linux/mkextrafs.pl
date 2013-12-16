@@ -202,8 +202,9 @@ if ($mounted =~ /^$fsdevice on (\S*)/) {
 
 #
 # Check for valid DOS partition table, since might be secondary disk.
+# Used to use "sfdisk -V" but that seems to have quirks.
 #
-if (system("sfdisk -q -V $diskdev")) {
+if (system("parted -s $diskdev print >/dev/null 2>&1")) {
     system("parted -s $diskdev mklabel msdos");
     if ($?) {
 	die("*** $0:\n".
@@ -220,7 +221,7 @@ if (system("sfdisk -q -V $diskdev")) {
 	$disksize = (1024 * 1024 * 1024);
 	print "Disk really big! cutting back to $disksize blocks.\n";
     }
-    system("echo '0,$disksize' | sfdisk $diskdev -N$slice -u B");
+    system("echo '0,$disksize' | sfdisk --force $diskdev -N$slice -u B");
     if ($?) {
 	die("*** $0:\n".
 	    "    Could not initialize primary partition on $diskdev!\n");
