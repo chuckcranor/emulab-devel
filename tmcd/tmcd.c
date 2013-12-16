@@ -353,6 +353,7 @@ COMMAND_PROTOTYPE(donodeattributes);
 COMMAND_PROTOTYPE(dodisks);
 COMMAND_PROTOTYPE(doarpinfo);
 COMMAND_PROTOTYPE(dohwinfo);
+COMMAND_PROTOTYPE(dotiplineinfo);
 #if PROTOGENI_SUPPORT
 COMMAND_PROTOTYPE(dogeniclientid);
 COMMAND_PROTOTYPE(dogenisliceurn);
@@ -483,6 +484,7 @@ struct command {
 	{ "disks",	  FULLCONFIG_ALL, 0, dodisks},
 	{ "arpinfo",	  FULLCONFIG_NONE, 0, doarpinfo},
 	{ "hwinfo",	  FULLCONFIG_NONE, 0, dohwinfo},
+	{ "tiplineinfo",  FULLCONFIG_ALL,  F_ALLOCATED, dotiplineinfo},
 #if PROTOGENI_SUPPORT
 	{ "geni_client_id", FULLCONFIG_NONE, 0, dogeniclientid },
 	{ "geni_slice_urn", FULLCONFIG_NONE, 0, dogenisliceurn },
@@ -12260,3 +12262,104 @@ getImageInfo(char *path, char *nodeid, char *pid, char *imagename,
 	*chunks = sb.st_size / (1024*1024);
 	return 0;
 }
+
+/*
+ * Allow virtual host nodes to upload capture (tiptunnel) info.
+ */
+COMMAND_PROTOTYPE(dotiplineinfo)
+{
+#define MAXINFO		128
+#define HOST_STR	"host:"
+#define PORT_STR	"port:"
+#define KEYLEN_STR	"keylen:"
+#define KEY_STR		"key:"
+
+	char	*bp, host[MAXINFO], port[MAXINFO], keylen[MAXINFO],
+		key[MAXINFO];
+#if 0
+	printf("%s", rdata);
+#endif
+	if (!reqp->isvnode) {
+		return 0;
+	}
+
+	/*
+	 * The maximum length we accept is 128 bytes.
+	 */
+	host[0] = port[0] = keylen[0] = key[0] = 0;
+
+	/*
+	 * Sheesh, perl string matching would be so much easier!
+	 */
+	bp = rdata;
+	while (*bp) {
+		char	*ep, *sp, *tp;
+
+		while (*bp == ' ')
+			bp++;
+		if (! *bp)
+			break;
+
+		if (! strncasecmp(bp, HOST_STR, strlen(HOST_STR))) {
+			tp = host;
+			ep = tp + sizeof(host);
+			bp += strlen(HOST_STR);
+		}
+		else if (! strncasecmp(bp, PORT_STR, strlen(PORT_STR))) {
+			tp = port;
+			ep = tp + sizeof(port);
+			bp += strlen(PORT_STR);
+		}
+		else if (! strncasecmp(bp, KEYLEN_STR, strlen(KEYLEN_STR))) {
+			tp = keylen;
+			ep = tp + sizeof(keylen);
+			bp += strlen(KEYLEN_STR);
+		}
+		else if (! strncasecmp(bp, KEY_STR, strlen(KEY_STR))) {
+			tp = key;
+			ep = tp + sizeof(key);
+			bp += strlen(KEY_STR);
+		}
+		else {
+			error("TIPLINEINFO: %s: "
+			      "Unrecognized key type '%.8s ...'\n",
+			      reqp->nodeid, bp);
+			if (verbose)
+				error("TIPLINEINFO: %s\n", rdata);
+			return 1;
+		}
+		sp = tp;
+		while (*bp && isspace(*bp))
+			bp++;
+		while (*bp && *bp != '\n') {
+			if (! (isalnum(*bp) || *bp == '.' || *bp == '-')) {
+				error("TIPLINEINFO: %s: bad data!\n",
+				      reqp->nodeid);
+				return 1;
+			}
+			if (tp >= ep) {
+				error("TIPLINEINFO: %s: data too long!\n",
+				      reqp->nodeid);
+				return 1;
+			}
+			*tp++ = *bp++;
+		}
+		*tp = '\0';
+		// Skip the newline we stopped at above.
+		bp++;
+		fprintf(stderr, "%s\n", sp);
+	}
+	/*
+	 * We do not need to escape the stuff; we checked above to
+	 * confirm that the strings contained only alphanumeric, dot, dash.
+	 */
+	if (mydb_update("replace into tiplines set "
+			"       tipname='%s',node_id='%s',server='%s', "
+			"       portnum='%s',keylen='%s',keydata='%s'",
+			reqp->nodeid,reqp->nodeid,host,port,keylen,key)) {
+		error("TIPLINEINFO: %s: setting hostkeys!\n", reqp->nodeid);
+		return 1;
+	}
+	return 0;
+}
+
