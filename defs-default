@@ -151,3 +151,7 @@ WINDOWS_TIMEZONE="Mountain Standard Time"
 # Windows License Keys
 #
 WINDOWS_KEY_7PRO_X86=""
+#
+# Fancy new browser in the console support
+#
+BROWSER_CONSOLE_ENABLE=1
