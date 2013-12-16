@@ -168,32 +168,29 @@ function SPITFORM($username, $email, $sshkey, $profile, $newuser, $errors)
                        style='color: red'
                        for='sshkey'>$sshkey_error</label>
             </div>
-            <div class='form-group'>
-                <select class='pull-left' id='profile_name'
-                        name='profile'
-                        onChange='ShowProfile(0);'>
-                <option value=''>Select Profile</option>\n";
-    while (list ($id, $title) = each ($profile_array)) {
-	$selected = "";
-	
-	if ($profile_value == $id)
-	    $selected = "selected";
-	
-	echo "<option $selected value='$id'>$title </option>\n";
-    }
-    echo "       </select>
-	        <label
+            <div id='profile_well' class='form-group well well-md'>
+
+            <span id='selected_profile_text' class='pull-left'>
+
+            </span>
+
+              <button id='profile' class='btn btn-primary btn-xs pull-right' 
+              type='button' name='profile' onClick='ShowModal(\"#quickvm_topomodal\")'>
+              Select a Profile
+              </button>\n";
+    echo " <label
                        style='color: red'
                        for='profile'>$profile_error</label>
             </div>
-            <button class='btn btn-primary pull-right'
-	            type='submit' name='create'>Create!
-	          </button>
+            <button class='btn btn-primary btn-sm pull-left'
+                type='button' name='reset'
+                      onclick='formReset(); return false;'>
+                      Reset Form</button>
+            <button class='btn btn-success pull-right'
+              type='submit' name='create'>Create!
+            </button>
             <br> 
-            <button class='btn btn-primary btn-xs pull-left'
-	            type='button' name='reset'
-                    onclick='formReset(); return false;'>
-                    Reset Form</button>
+            
         </div>
         </div>
         </div>
@@ -242,45 +239,67 @@ function SPITFORM($username, $email, $sshkey, $profile, $newuser, $errors)
 
     echo "<!-- This is the topology view modal -->
           <div id='quickvm_topomodal' class='modal fade'>
-            <div class='modal-dialog'  id='showtopo_dialog'>
+          <div class='modal-dialog'  id='showtopo_dialog'>
+
             <div class='modal-content'>
                <div class='modal-header'>
                 <button type='button' class='close' data-dismiss='modal'
-                   aria-hidden='true'>&times;</button>
-                <span id='showtopo_title'></span>
+                   aria-hidden='true'>
+                   &times;</button>
+                <h3>Select a Profile</h3>
                </div>
                <div class='modal-body'>
+
                  <!-- This topo diagram goes inside this div -->
                  <div class='panel panel-default'
                             id='showtopo_container'>
-                  <div class='panel-body'>
-                   <div id='showtopo_div'></div>
-                  </div>
-                 </div>
-	         <div id='scrollright'
-                     class='pull-right' style='cursor: pointer; ".
-	           "margin-bottom: 0px; margin-right: 5px;'>
-                   <span class='glyphicon glyphicon-arrow-right'></span>
-                 </div>
-                 <div id='scrollleft'
-                     class='pull-left' style='cursor: pointer; ".
-	            "margin-bottom: 0px; margin-right: 5px;'>
-                  <span class='glyphicon glyphicon-arrow-left'></span>
-                 </div>
-               </div>
-               <div class='modal-footer'>
-                 <span class='pull-left' id='showtopo_description'></span>
-                 <div class='pull-right'>
-                   <button id='showtopo_select'
-                         class='btn btn-primary btn-xs'
-                         type='submit' name='select'>
-                            Select</button>
-                 </div>
-               </div>
-            </div>
-            </div>
-         </div>\n";
+                  <div class='form-group pull-left'>
+                    <ul class='list-group' id='profile_name'
+                            name='profile'
+                            >\n";
+                      while (list ($id, $title) = each ($profile_array)) {
+                      $selected = "";
+                      
+                      if ($profile_value == $id)
+                          $selected = "selected";
+                      
+                      echo "<li class='list-group-item' $selected value='$id' 
+                                onClick='ShowProfileList(this);'>$title </li>\n";
+                        }
 
+                        echo "</ul>
+                          <label
+                         style='color: red'
+                         for='profile'>$profile_error</label>
+                  </div> 
+                  <div class='pull-right'>
+                    <span id='showtopo_title'></span>
+                    <div class='panel-body'>
+                     <div id='showtopo_div'></div>
+                     <span class='pull-left' id='showtopo_description'></span>
+                    </div>
+                   </div>
+                 </div>
+                 <div id='showtopo_buttons' class='pull-right'>
+                     <button id='showtopo_select'
+                           class='btn btn-primary btn-sm'
+                           type='submit' name='select' 
+                           onClick='UpdateProfileSelection($(\".selected\"))'>
+                              Select Profile</button>
+                      <button type='button' class='btn btn-default btn-sm' 
+                      data-dismiss='modal' aria-hidden='true'>
+                     Cancel</button>
+                    </div>
+               </div>
+            </div>
+          </div>
+       </div>\n";
+    echo "<script type='text/javascript'>
+            $(UpdateProfileSelection($('#profile_name li:eq(0)')));
+            $('#quickvm_topomodal').on('hidden.bs.modal', function() {
+              ShowProfileList($('.current'))
+            });
+          </script>";
     echo "<SCRIPT LANGUAGE=JavaScript>
                window.onload = InitProfileSelector;
           </SCRIPT>\n";

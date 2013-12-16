@@ -36,8 +36,142 @@ body {
     margin-top: 15px; !important;
 }
 
-.modal-dialog {
-  width: 800px;
+
+#quickvm_topomodal #profile_name {
+  height: 402px;
+  margin-bottom: 0;
+  overflow-y: scroll;
+}
+
+#quickvm_topomodal #profile_name li {
+  cursor: pointer;
+  border-right: 0;
+  border-left: 0;
+  padding-right: 15px;
+  padding-left: 15px;
+}
+
+#quickvm_topomodal #profile_name > li:first-child {
+  border-top: 0;
+}
+
+#quickvm_topomodal #profile_name .selected {
+  background-color: #3276B1;
+  color: #FFF;
+}
+
+#showtopo_container .form-group {
+  margin: 0;
+  height: 402px;
+}
+
+#profile_well {
+  height: 32px;
+  padding: 0 0 0 9px;
+}
+
+#profile_well #selected_profile_text {
+  margin-top: 5px;
+}
+
+#profile_well #profile {
+  padding: 5px;
+}
+
+@media (min-width: 970px) {
+  .modal-dialog {
+  width: 950px;
+}
+
+#showtopo_div {
+  width: 643px;
+}
+}
+
+@media (max-width: 969px) {
+  .modal-dialog {
+  width: auto;
+}
+}
+
+@media (min-width: 910px) and (max-width: 969px) {
+  #showtopo_div {
+  width: 610px;
+}
+}
+
+@media (min-width: 850px) and (max-width: 909px) {
+  #showtopo_div {
+  width: 560px;
+}
+}
+
+@media (min-width: 790px) and (max-width: 849px) {
+  #showtopo_div {
+  width: 510px;
+}
+}
+
+@media (min-width: 768px) and (max-width: 789px) {
+  #showtopo_div {
+  width: 500px;
+}
+}
+
+@media (min-width: 740px) and (max-width: 767px) {
+  #showtopo_div {
+  width: 470px;
+}
+}
+
+@media (min-width: 690px) and (max-width: 739px) {
+  #showtopo_div {
+  width: 430px;
+}
+}
+
+@media (max-width: 689px) {
+  #showtopo_container > div {
+    width: 100%;
+  }
+
+  #showtopo_container .form-group {
+    height: 180px;
+    border-bottom: 1px solid #DDD;
+  }
+
+  #quickvm_topomodal #profile_name {
+  height: 180px;
+  overflow-y: scroll;
+}
+}
+
+.modal-dialog .form-group {
+  width: 24%;
+  float: left;
+}
+
+.modal-dialog .modal-content {
+  overflow: hidden;
+}
+
+#showtopo_title h3 {
+  margin-left: 15px;
+  margin-top: 15px;
+}
+
+#quickvm_topomodal #showtopo_container {
+  overflow: hidden;
+  margin-bottom: 10px;
+}
+
+#quickvm_topomodal .modal-header h3 {
+  margin-top: 0;
+  margin-bottom: 0;
+}
+
+#showtopo_buttons {
+  margin-bottom: 10px;
 }
 
 .panel-body {
@@ -98,4 +232,3 @@ body {
     stroke-opacity: 1.0;
     stroke-width: 2;
 }
-

@@ -127,12 +127,61 @@ function ShowTopo(uuid)
 	console.log(topo);
 
 	$("#showtopo_container").removeClass("invisible");
-	maketopmap("#showtopo_div",
-		   $("#showtopo_div").width(), 300, topo);
+	maketopmap("#topo-container",
+		   $("#showtopo_div").width() - 30,
+		   300, topo);
 
     }
     console.log(uuid);
     var $xmlthing = CallMethod("manifest", null, uuid, null);
+    $xmlthing.done(callback);
+}
+
+function UpdateProfileSelection(selectedElement)
+{
+	var profile = $(selectedElement).attr('value');
+	$('#selected_profile_text').html("" + profile);
+
+	if (!$(selectedElement).hasClass('current'))
+	{
+		$('#profile_name li').each(function() {
+			$(this).removeClass('current');
+		});
+
+		$(selectedElement).addClass('current');
+	}
+
+	ShowProfileList(selectedElement);
+}
+
+function ShowProfileList(selectedElement)
+{
+	var profile = $(selectedElement).attr('value');
+
+	if (!$(selectedElement).hasClass('selected'))
+	{
+		$('#profile_name li').each(function() {
+			$(this).removeClass('selected');
+		});
+
+		$(selectedElement).addClass('selected');
+	}
+
+	var callback = function(json) {
+	console.log(json.value);
+	var xmlDoc = $.parseXML(json.value.rspec);
+	var xml    = $(xmlDoc);
+	var topo   = ConvertManifestToJSON(profile, xml);
+	console.log(topo);
+    
+	$('#showtopo_title').html("<h3>" + profile + "</h3>");
+	$('#showtopo_description').html(json.value.description);
+
+	maketopmap("#showtopo_div",
+		   ($("#showtopo_div").outerWidth()),
+		   300, topo);
+    }
+    var $xmlthing = CallMethod("getprofile", null, 0, profile);
     $xmlthing.done(callback);
 }
 
