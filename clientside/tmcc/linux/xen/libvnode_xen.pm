@@ -234,7 +234,7 @@ sub restartDHCP();
 sub formatDHCP($$$);
 sub fixupMac($);
 sub createControlNetworkScript($$$);
-sub createExpNetworkScript($$$$$$$);
+sub createExpNetworkScript($$$$$$$$);
 sub createTunnelScript($$$$);
 sub createExpBridges($$$);
 sub destroyExpBridges($$);
@@ -947,9 +947,8 @@ sub vnodeCreate($$$$)
 		ExtractKernelFromLinuxImage($vnode_id, "$VMDIR/$vnode_id");
 
 	    if (defined($kernel)) {
-		$image{'kernel'}  = $kernel;
-		$image{'ramdisk'} = $ramdisk;
-
+		my $usebootloader = 1;
+		
 		#
 		# If this is an Ubuntu ramdisk, we have to make sure it
 		# will boot as a XEN guest, by changing the ramdisk. YUCK!
@@ -957,9 +956,21 @@ sub vnodeCreate($$$$)
 		if ($imagemetadata->{'PARTOS'} =~ /ubuntu/i ||
 		    $imagename =~ /ubuntu/i ||
 		    system("strings $kernel | grep -q -i ubuntu") == 0) {
-		    if (FixRamFs($vnode_id, $ramdisk)) {
+		    my $ramres = FixRamFs($vnode_id, $ramdisk);
+		    if ($ramres < 0) {
 			fatal("xen_vnodeCreate: Failed to fix ramdisk");
 		    }
+		    elsif ($ramres == 0) {
+			# Ramfs needed to be changed, so cannot use pygrub.
+			$usebootloader = 0;
+		    }
+		}
+		if ($usebootloader) {
+		    $image{'bootloader'}  = 'pygrub';
+		}
+		else {
+		    $image{'kernel'}  = $kernel;
+		    $image{'ramdisk'} = $ramdisk;
 		}
 	    }
 	    # Use the booted kernel. Works sometimes. 
@@ -1029,12 +1040,18 @@ sub vnodeCreate($$$$)
 
     my $kernel = $image{'kernel'};
     my $ramdisk = $image{'ramdisk'};
+    my $bootloader = $image{'bootloader'};
 
     addConfig($vninfo, "# Xen configuration script for $os vnode $vnode_id", 2);
     addConfig($vninfo, "name = '$vnode_id'", 2);
-    addConfig($vninfo, "kernel = '$kernel'", 2);
-    addConfig($vninfo, "ramdisk = '$ramdisk'", 2)
-	if (defined($ramdisk));
+    if (defined($bootloader)) {
+	addConfig($vninfo, "bootloader = 'pygrub'", 2);
+    }
+    else {
+	addConfig($vninfo, "kernel = '$kernel'", 2);
+	addConfig($vninfo, "ramdisk = '$ramdisk'", 2)
+	    if (defined($ramdisk));
+    }
     addConfig($vninfo, "disk = [" . join(",", @alldisks) . "]", 2);
 
     if ($os eq "FreeBSD") {
@@ -1053,6 +1070,20 @@ sub vnodeCreate($$$$)
     #
     if (exists($attributes->{'VM_VCPUS'}) && $attributes->{'VM_VCPUS'} > 1) {
 	addConfig($vninfo, "vcpus = " . $attributes->{'VM_VCPUS'}, 2);
+    }
+
+    #
+    # VNC console setup. Not very useful since on shared nodes there
+    # is no local account for the users to log in and connect to
+    # the port, and we definitely do not want export it since there
+    # is no password and no encryption. So, leave out for now.
+    #
+    if (0) {
+	addConfig($vninfo, "vfb = ['vnc=1,vncdisplay=$vmid,vncunused=0']", 2);
+	addConfig($vninfo,
+		  "device_model_version = 'qemu-xen-traditional'", 2);
+	addConfig($vninfo,
+		  "device_model_override = '/usr/lib/xen-4.3/bin/qemu-dm'",2);
     }
     
     #
@@ -1364,7 +1395,7 @@ sub vnodePreConfigExpNetwork($$$$)
 		my $tag = "$vnode_id:" . $ldinfo->{'LINKNAME'};
 		my $ifb = pop(@$ifbs);
 
-		createExpNetworkScript($vmid, $interface,
+		createExpNetworkScript($vmid, $interface, $brname,
 				       $ldinfo, "ifb$ifb", $script, $sh, $log);
 	    }
 	}
@@ -1505,6 +1536,21 @@ sub vnodeConfigResources($$$$){
 sub vnodeConfigDevices($$$$)
 {
     my ($vnode_id, $vmid, $vnconfig, $private) = @_;
+    my $vninfo = $private;
+
+    # DHCP entry...
+    if (exists($vninfo->{'dhcp'})) {
+	my $name = $vninfo->{'dhcp'}->{'name'};
+	my $ip = $vninfo->{'dhcp'}->{'ip'};
+	my $mac = $vninfo->{'dhcp'}->{'mac'};
+	addDHCP($name, $ip, $mac, 1) == 0
+	    or die("libvnode_xen: vnodeBoot $vnode_id: dhcp setup error!");
+    }
+
+    # physical bridge devices...
+    if (createExpBridges($vmid, $vninfo->{'links'}, $private)) {
+	die("libvnode_xen: vnodeBoot $vnode_id: could not create bridges");
+    }
     return 0;
 }
 
@@ -1533,7 +1579,8 @@ sub vnodeBoot($$$$)
     my $vninfo = $private;
 
     if (!exists($vninfo->{'cffile'})) {
-	die("libvnode_xen: vnodeBoot $vnode_id: no essential state!?");
+	print STDERR "vnodeBoot $vnode_id: no essential state!\n";
+	return -1;
     }
 
     #
@@ -1543,24 +1590,12 @@ sub vnodeBoot($$$$)
     my $config = configFile($vnode_id);
     if ($vninfo->{'cfchanged'}) {
 	if (createXenConfig($config, $vninfo->{'cffile'})) {
-	    die("libvnode_xen: vnodeBoot $vnode_id: could not create $config");
+	    print STDERR "vnodeBoot $vnode_id: could not create $config\n";
+	    return -1;
 	}
     } elsif (! -e $config) {
-	die("libvnode_xen: vnodeBoot $vnode_id: $config file does not exist!");
-    }
-
-    # DHCP entry...
-    if (exists($vninfo->{'dhcp'})) {
-	my $name = $vninfo->{'dhcp'}->{'name'};
-	my $ip = $vninfo->{'dhcp'}->{'ip'};
-	my $mac = $vninfo->{'dhcp'}->{'mac'};
-	addDHCP($name, $ip, $mac, 1) == 0
-	    or die("libvnode_xen: vnodeBoot $vnode_id: dhcp setup error!");
-    }
-
-    # physical bridge devices...
-    if (createExpBridges($vmid, $vninfo->{'links'}, $private)) {
-	die("libvnode_xen: vnodeBoot $vnode_id: could not create bridges");
+	print STDERR "vnodeBoot $vnode_id: $config file does not exist!\n";
+	return -1;
     }
 
     # notify stated that we are about to boot
@@ -1568,13 +1603,6 @@ sub vnodeBoot($$$$)
 
     # and finally, create the VM
     my $status = RunWithLock("xmtool", "$XM create $config");
-    
-    # We have a problem with intermittent failures. 
-    if ($status) {
-	print "Guest failure: retrying after a short wait.\n";
-	sleep(20);
-	$status = RunWithLock("xmtool", "$XM create $config");
-    }
     if ($status) {
 	print STDERR "$XM create failed: $status\n";
 	return -1;
@@ -2669,9 +2697,9 @@ sub createTunnelScript($$$$)
     return 0;
 }
 
-sub createExpNetworkScript($$$$$$$)
+sub createExpNetworkScript($$$$$$$$)
 {
-    my ($vmid,$ifc,$info,$ifb,$wrapper,$file,$lfile) = @_;
+    my ($vmid,$ifc,$bridge,$info,$ifb,$wrapper,$file,$lfile) = @_;
     my $TC = "/sbin/tc";
 
     if (! open(FILE, ">$wrapper")) {
@@ -2691,6 +2719,7 @@ sub createExpNetworkScript($$$$$$$)
     }
     print FILE "#!/bin/sh\n";
     print FILE "OP=\$1\n";
+    print FILE "export bridge=$bridge\n";
     print FILE "/etc/xen/scripts/vif-bridge \$*\n";
     print FILE "STAT=\$?\n";
     print FILE "if [ \$STAT -ne 0 -o \"\$OP\" != \"online\" ]; then\n";
@@ -3726,6 +3755,7 @@ sub FixRamFs($$)
     my ($vnode_id, $ramfspath)  = @_;
     my $tempdir = "$EXTRAFS/$vnode_id/ramfs";
     my $modules = "$EXTRAFS/$vnode_id/ramfs/conf/modules";
+    my $rval    = 0;
 
     return -1
 	if (-e $tempdir && mysystem2("/bin/rm -rf $tempdir"));
@@ -3743,6 +3773,8 @@ sub FixRamFs($$)
     #
     if (-e $modules) {
 	if (mysystem2("grep -q xen-blkfront $modules") == 0) {
+	    # Tell caller ramfs was okay. 
+	    $rval = 1;
 	    goto done;
 	}
     }
@@ -3752,7 +3784,7 @@ sub FixRamFs($$)
 	if ($?);
 done:
     mysystem2("/bin/rm -rf $tempdir");
-    return 0;
+    return $rval;
 }
 
 #
