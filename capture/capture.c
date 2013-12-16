@@ -1377,7 +1377,9 @@ cleanup(void)
 		(void) kill(pid, SIGTERM);
 #endif
 	(void) unlink(Pidname);
+#ifdef USESOCKETS
 	(void) unlink(Aclname);
+#endif
 }
 
 char *
@@ -2305,7 +2307,6 @@ handshake(void)
 	signal(SIGALRM, SIG_DFL);
 	return err;
 }
-#endif
 
 #ifdef WITH_TELNET
 #include <libtelnet.h>
@@ -2457,3 +2458,4 @@ dumpcircbuf()
 	circp = circbuf;
 	circcount = 0;
 }
+#endif /* USESOCKBUF */
