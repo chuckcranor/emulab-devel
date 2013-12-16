@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2000-2012 University of Utah and the Flux Group.
+ * Copyright (c) 2000-2013 University of Utah and the Flux Group.
  * 
  * {{{EMULAB-LICENSE
  * 
@@ -144,6 +144,7 @@ char	*Devname;
 char	*Machine;
 int	logfd = -1, runfd, devfd = -1, ptyfd = -1;
 int	hwflow = 0, speed = B9600, debug = 0, runfile = 0, standalone = 0;
+int     nologfile = 0;
 int	stampinterval = -1;
 int	stamplast = 0;
 sigset_t actionsigmask;
@@ -172,6 +173,11 @@ int		   needshake;
 gid_t		   tipgid;
 uid_t		   tipuid;
 char		  *uploadCommand;
+
+int		   docircbuf = 0;
+void		   initcircbuf();
+void		   addtocircbuf(const char *bp, int cc);
+void		   dumpcircbuf();
 
 int	Devproto;
 #define PROTO_RAW	1
@@ -357,7 +363,7 @@ main(int argc, char **argv)
 	else
 		Progname = *argv;
 
-	while ((op = getopt(argc, argv, "rds:Hb:ip:c:T:aou:v:PmL")) != EOF)
+	while ((op = getopt(argc, argv, "rds:Hb:ip:c:T:aonu:v:PmLC")) != EOF)
 		switch (op) {
 #ifdef	USESOCKETS
 #ifdef  WITHSSL
@@ -365,6 +371,9 @@ main(int argc, char **argv)
 		        certfile = optarg;
 			break;
 #endif  /* WITHSSL */
+		case 'C':
+		        docircbuf = 1;
+			break;
 		case 'b':
 			Bossnode = optarg;
 			break;
@@ -397,6 +406,9 @@ main(int argc, char **argv)
 			if ((i = atoi(optarg)) == 0 ||
 			    (speed = val2speed(i)) == 0)
 				usage();
+			break;
+		case 'n':
+			nologfile = 1;
 			break;
 		case 'L':
 			stamplast = 1;
@@ -555,6 +567,10 @@ main(int argc, char **argv)
 	if (gethostname(ourhostname, sizeof(ourhostname)) < 0)
 		die("gethostname(): %s", geterr(errno));
 
+	if (docircbuf) {
+		initcircbuf();
+	}
+
 	createkey();
 	dolog(LOG_NOTICE, "Ready! Listening on TCP port %d", portnum);
 
@@ -621,7 +637,7 @@ main(int argc, char **argv)
 		die("%s: open: %s", Ptyname, geterr(errno));
 #endif
 	
-	if (!relay_snd) {
+	if (!(relay_snd || nologfile)) {
 		if ((logfd = open(Logname,O_WRONLY|O_CREAT|O_APPEND,0640)) < 0)
 			die("%s: open: %s", Logname, geterr(errno));
 		if (chmod(Logname, 0640) < 0)
@@ -679,8 +695,10 @@ in(void)
 		}
 		sigprocmask(SIG_BLOCK, &actionsigmask, &omask);
 
-		if (write(logfd, buf, cc) < 0)
-			die("%s: write: %s", Logname, geterr(errno));
+		if (logfd >= 0) {
+			if (write(logfd, buf, cc) < 0)
+				die("%s: write: %s", Logname, geterr(errno));
+		}
 
 		if (runfile) {
 			if (write(runfd, buf, cc) < 0)
@@ -858,7 +876,9 @@ send_to_logfile(const char *buf, int cc)
 				snprintf(stampbuf, sizeof stampbuf,
 					 "\nSTAMP{%s}\n",
 					 cts);
-			write(logfd, stampbuf, strlen(stampbuf));
+			if (logfd >= 0) {
+				(void) write(logfd, stampbuf, strlen(stampbuf));
+			}
 		}
 		laststamp = now;
 	}
@@ -1044,10 +1064,14 @@ capture(void)
 					/* got EOF from client */
 					if (!tipactive) {
 						send_to_logfile(buf, cc);
+						addtocircbuf(buf, cc);
 						sigprocmask(SIG_SETMASK,
 							    &omask, NULL);
 						goto disconnected;
 					}
+				}
+				else {
+					addtocircbuf(buf, cc);
 				}
 				send_to_logfile(buf, cc);
 			}
@@ -1165,13 +1189,16 @@ reinit(int sig)
 	 * We know that the any pending write to the log file completed
 	 * because we blocked SIGHUP during the write.
 	 */
-	close(logfd);
-	
-	if ((logfd = open(Logname, O_WRONLY|O_CREAT|O_APPEND, 0640)) < 0)
-		die("%s: open: %s", Logname, geterr(errno));
-	if (chmod(Logname, 0640) < 0)
-		die("%s: chmod: %s", Logname, geterr(errno));
-	
+	if (logfd >= 0) {
+		close(logfd);
+	}
+	if (!nologfile) {
+		if ((logfd = open(Logname,
+				  O_WRONLY|O_CREAT|O_APPEND, 0640)) < 0)
+			die("%s: open: %s", Logname, geterr(errno));
+		if (chmod(Logname, 0640) < 0)
+			die("%s: chmod: %s", Logname, geterr(errno));
+	}
 	dolog(LOG_NOTICE, "new log started");
 
 	if (runfile)
@@ -1350,6 +1377,7 @@ cleanup(void)
 		(void) kill(pid, SIGTERM);
 #endif
 	(void) unlink(Pidname);
+	(void) unlink(Aclname);
 }
 
 char *
@@ -1899,11 +1927,13 @@ clientconnect(void)
 
 	  dolog(LOG_NOTICE, "got key" );
 	}
-	else if (!tipactive) {
+	else 
+#endif /* WITHSSL */
+	if (!tipactive) {
 		tipclient = sin;
 		ptyfd = newfd;
-	}
-#endif /* WITHSSL */
+	}	
+
 	/*
 	 * Is there a better way to do this? I suppose we
 	 * could shut the main socket down, and recreate
@@ -1991,6 +2021,9 @@ clientconnect(void)
 		fdcount++;
 	}
 	tipactive = 1;
+	if (docircbuf) {
+		dumpcircbuf();
+	}
 
 	dolog(LOG_INFO, "%s connecting", inet_ntoa(tipclient.sin_addr));
 	return 0;
@@ -2023,11 +2056,11 @@ handleupload(void)
 		drop = 1;
 		close(devfd);
 		/* XXX run uisp */
-		system(buffer);
+		(void) system(buffer);
 		rawmode(Devname, speed);
 	}
 	else {
-		write(upfilefd, buffer, rc);
+		(void) write(upfilefd, buffer, rc);
 		upfilesize += rc;
 	}
 
@@ -2363,3 +2396,64 @@ proto_telnet_init(void)
 }
 
 #endif
+
+/*
+ * Store last output in a circular buffer so we can return it
+ * at connect. Nice to provide some context. But we simplify this
+ * by not storing any data when there is a connection, only when
+ * no one is listening. Then on connection, dump the contents of
+ * the buffer and reset back to the beginning. 
+ */
+#define CIRCBUFSIZE (8 * 1024)
+char *circp;    // Next place to write.
+int  circcount; // How much in the buffer.
+char *circbuf;
+
+void
+initcircbuf()
+{
+	circbuf = calloc(1, CIRCBUFSIZE);
+	if (! circbuf) {
+		die("Could not allocate circbuf");
+	}
+	circp = circbuf;
+}
+
+void
+addtocircbuf(const char *bp, int cc)
+{
+	char	*ep = circbuf + CIRCBUFSIZE;
+
+	if (!docircbuf)
+		return;
+	
+	while (cc) {
+		*circp++ = *bp++;
+		if (circp == ep) {
+			circp = circbuf;
+		}
+		if (circcount < CIRCBUFSIZE) {
+			circcount++;
+		}
+		cc--;
+	}
+}
+
+void
+dumpcircbuf()
+{
+	if (! (circcount && docircbuf))
+		return;
+	
+	if (circcount < CIRCBUFSIZE) {
+		send_to_client(circbuf, circcount);
+	}
+	else {
+		int cc = CIRCBUFSIZE - (circp - circbuf);
+		send_to_client(circp, cc);
+		send_to_client(circbuf, circcount - cc);
+	}
+	// Reset to empty for next time we disconnect.
+	circp = circbuf;
+	circcount = 0;
+}
