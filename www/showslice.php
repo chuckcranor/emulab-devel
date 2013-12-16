@@ -121,6 +121,9 @@ if ($experiment) {
 $geniuser = GeniUser::Lookup($showtype, $slice->creator_uuid());
 if ($geniuser) {
     $rows[] = array("Creator" => $geniuser->urn());
+    if ($geniuser->email()) {
+	$rows[] = array("Email" => $geniuser->email());
+    }
 }
 else {
     $user = User::LookupByUUID($slice->creator_uuid());
