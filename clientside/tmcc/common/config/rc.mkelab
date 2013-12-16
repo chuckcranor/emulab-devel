@@ -178,6 +178,9 @@ my $SINGLE_CONTROLNET = 0;
 # Support a shared filesystem between fs server and nodes
 my $SHAREDFS   = 1;
 
+# When there is a shared FS via NFS, does it have the mountd race?
+my $NFSRACY = 1;
+
 # Start up the frisbee master server to act as an IGMP querier
 # so that frisbee works (if there is no other querier running).
 # -1 means let the system decide.
@@ -242,6 +245,7 @@ my %emulabconfig = (
     "CONFIG_USERDB"     => !$NOCOLLAB,
     "CONFIG_WIKI"       => !$NOCOLLAB,
     "CONFIG_SHAREDFS"	=> $SHAREDFS,
+    "CONFIG_NFSRACY"	=> $NFSRACY,
     "CONFIG_QUERIER"	=> $NEEDQUERIER,
     "CONFIG_OPSVM"	=> $OPSVM,
     "CONFIG_NODBINIT"   => 0,
@@ -391,6 +395,10 @@ sub doboot()
 	$emulabconfig{"MFSVERSION"} = "72";
     } else {
 	$emulabconfig{"MFSVERSION"} = "62";
+    }
+
+    if ($FBSD_VERSION >= 9.2) {
+	$emulabconfig{"CONFIG_NFSRACY"} = 0;
     }
 
     # Determine if a XEN VM.
@@ -3279,6 +3287,14 @@ sub CreateDefsFile($)
 			print OUTDEFS "NOSHAREDFS=0\n";
 		    } else {
 			print OUTDEFS "NOSHAREDFS=1\n";
+		    }
+		    last SWITCH;
+		};
+		/^NFSRACY$/ && do {
+		    if ($emulabconfig{"CONFIG_NFSRACY"}) {
+			print OUTDEFS "NFSRACY=1\n";
+		    } else {
+			print OUTDEFS "NFSRACY=0\n";
 		    }
 		    last SWITCH;
 		};

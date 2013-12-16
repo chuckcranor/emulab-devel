@@ -21,8 +21,14 @@ sub Install($$$)
 		qq|mountd_enable="YES"|,
 		qq|nfs_server_enable="YES"|,
 		qq|nfs_server_flags="-u -t -n 16"|,
-		qq|mountd_flags="-r -p 900"|,
 		qq|syslogd_flags=""|);
+
+    # No more NFS races as of 9.2!
+    if ($FBSD_MAJOR > 9 || ($FBSD_MAJOR == 9 && $FBSD_MINOR > 1)) {
+	push(@adds, qq|mountd_flags="-r -p 900 -S"|);
+    } else {
+	push(@adds, qq|mountd_flags="-r -p 900"|);
+    }
 
     if (ISFS($server)) {
 	if ($WINSUPPORT) {
