@@ -889,8 +889,10 @@ class Image
 	
 	if ($does) {
 	    $parentosinfo = OSinfo::LookupByName("emulab-ops",
-						 "XEN41-64-STD");
+						 "XEN43-64-STD");
 	    if (!$parentosinfo) {
+		$parentosinfo = OSinfo::LookupByName("emulab-ops",
+						     "XEN41-64-STD");
 		return -1;
 	    }
 	    $parentosid = $parentosinfo->osid();

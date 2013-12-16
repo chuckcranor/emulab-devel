@@ -1004,9 +1004,11 @@ if (!isset($submit)) {
 	#
         # XXX Need to fix this.
         # 
-	$def_parentosinfo = OSinfo::LookupByName("emulab-ops", "XEN41-64-STD");
+	$def_parentosinfo = OSinfo::LookupByName("emulab-ops", "XEN43-64-STD");
 	if (! $def_parentosinfo) {
-	    TBERROR("Could not lookup osinfo object for XEN41-64-STD", 1);
+	    $def_parentosinfo = OSinfo::LookupByName("emulab-ops",
+						     "XEN41-64-STD");
+	    TBERROR("Could not lookup osinfo object for XEN image", 1);
 	}
 	$defaults["def_parentosid"]   = $def_parentosinfo->osid();
 
