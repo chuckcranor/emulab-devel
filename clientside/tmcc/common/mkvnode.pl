@@ -41,6 +41,7 @@ use Errno;
 use POSIX qw(strftime);
 use POSIX qw(:sys_wait_h);
 use POSIX qw(:signal_h);
+use POSIX qw(setsid);
 use Data::Dumper;
 use Storable;
 use vars qw($vnstate);
@@ -676,13 +677,18 @@ if ($childpid) {
     }
 }
 else {
+    #
+    # We want to call this as clean as possible.
+    #
     $SIG{TERM} = 'DEFAULT';
     $SIG{INT}  = 'DEFAULT';
     $SIG{USR1} = 'DEFAULT';
     $SIG{USR2} = 'DEFAULT';
     $SIG{HUP}  = 'DEFAULT';
+    POSIX::setsid();
 
-    if (safeLibOp('vnodeBoot', 1, 1)) {
+    if ($libops{$vmtype}{"vnodeBoot"}->($vnodeid, $vmid,
+				\%vnconfig, $vnstate->{'private'})) {
 	print STDERR "*** ERROR: vnodeBoot failed\n";
 	exit(1);
     }
@@ -735,9 +741,29 @@ while (1) {
     }
     if ($ret ne VNODE_STATUS_RUNNING()) {
 	print "Container is no longer running.\n";
-	# Rebooted from inside, but not cause we told it to, so leave intact.
-	$leaveme = $LEAVEME_REBOOT
-	    if (!$cleaning);
+	if (!$cleaning) {
+	    #
+	    # Rebooted from inside, but not cause we told it to, so
+	    # leave intact.
+	    #
+	    # But before we fold, lets wait a moment and check again
+	    # since in XEN, the user can type reboot, which causes the
+	    # domain to disappear for a while. We do not want to be
+	    # fooled by that. Halt is another issue; if the user halts
+	    # from inside the container it iss never coming back and the 
+	    # user has screwed himself. Need to restart from the frontend.
+	    #
+	    sleep(15);
+	    ($ret,$err) = safeLibOp('vnodeState', 0, 0);
+	    if ($err) {
+		fatal("*** ERROR: vnodeState: $err\n");
+	    }
+	    if ($ret eq VNODE_STATUS_RUNNING()) {
+		print "Container has restarted itself.\n";
+		next;
+	    }
+	    $leaveme = $LEAVEME_REBOOT;
+	}
 	last;
     }
 }
