@@ -340,25 +340,22 @@ function SHOWNODES($pid, $eid, $sortby, $showclass) {
                         <img src=\"ssh.gif\" alt=s></a>
                     </td>\n";
 
-	    if ($isvirtnode || !isset($tipname) || $tipname = '') {
+	    if (!isset($tipname) || $tipname == '') {
 		echo "  <td>&nbsp;</td>\n";
-
-		if ($isvirtnode) {
-		    echo "  <td align=center>
-                                <a href='bootlog.php3?node_id=$node_id'>
-                                <img src=\"/icons/f.gif\" alt='boot log'></a>
-                            </td>\n";
-		}
-		else {
-		    echo "  <td>&nbsp;</td>\n";
-		}
 	    }
 	    else {
 		echo "  <td align=center>
                             <a href='nodetipacl.php3?node_id=$node_id'>
                             <img src=\"console.gif\" alt=c></a>
                         </td>\n";
-
+	    }
+	    if ($isvirtnode) {
+		echo "  <td align=center>
+                            <a href='bootlog.php3?node_id=$node_id'>
+                            <img src=\"/icons/f.gif\" alt='boot log'></a>
+                         </td>\n";
+	    }
+	    else {
 		echo "  <td align=center>
                             <a href='showconlog.php3?node_id=$node_id".
 		                  "&linecount=200'>
