@@ -2599,7 +2599,10 @@ sub DeleteVnodes(@)
 	# Slothd updates/creates these records.
 	DBQueryWarn("delete from node_activity where node_id='$vnodeid'");
 	DBQueryWarn("delete from node_idlestats where node_id='$vnodeid'");
-	DBQueryWarn("delete from iface_counters where node_id='$vnodeid'");    }
+	DBQueryWarn("delete from iface_counters where node_id='$vnodeid'");
+	# We do this for XEN VMs.
+	DBQueryWarn("delete from tiplines where node_id='$vnodeid'");
+    }
 
     return 0;
 }
