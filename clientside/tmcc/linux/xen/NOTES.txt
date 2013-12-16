@@ -12,6 +12,10 @@ apt-get install bridge-utils.
 
 *** install ethtool
 
+*** install qemu and tightvncserver
+
+*** install capture (no ssl version)
+
 **** Symlinks in /boot to the current kernel/ramdisk to use for XEN-STD.
 cd /boot
 sudo ln -s vmlinuz-3.2.46 vmlinuz-xenU 
@@ -31,4 +35,5 @@ Set the default kernel in grub.cfg.
 Create /usr/lib/xen-default symlink.
 
 Install openvswitch and run depmod
+
 
