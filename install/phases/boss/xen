@@ -11,7 +11,7 @@ use EmulabConstants;
 
 my $UTAHURL       = "http://www.emulab.net/downloads";
 my $DESCRIPTORS   = "$TOP_SRCDIR/install/descriptors-xen.xml";
-my $XENIMAGE      = "XEN41-64-STD";
+my $XENIMAGE      = "XEN43-64-STD";
 my $STDIMAGESURL  = "$UTAHURL/images-STD";
 
 sub Install($$$)
