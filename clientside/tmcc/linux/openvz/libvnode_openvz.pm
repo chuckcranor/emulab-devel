@@ -554,6 +554,17 @@ sub vz_rootPreConfig($)
 	TBScriptUnlock();
 	return -1;
     }
+    #
+    # Need these to avoid overflowing the NAT tables.
+    #
+    mysystem("sysctl -w ".
+	     "  net.netfilter.nf_conntrack_generic_timeout=120");
+    mysystem("sysctl -w ".
+	     "  net.netfilter.nf_conntrack_tcp_timeout_established=54000");
+    mysystem("sysctl -w ".
+	     "  net.netfilter.nf_conntrack_max=131071");
+    mysystem("echo 16384 > /sys/module/nf_conntrack/parameters/hashsize");
+
     mysystem("touch /var/run/openvz.ready");
     TBScriptUnlock();
     return 0;
