@@ -79,7 +79,29 @@ my $vnode_ip = shift(@ARGV);
 my $vif         = $ENV{'vif'};
 my $XENBUS_PATH = $ENV{'XENBUS_PATH'};
 my $bridge      = `xenstore-read "$XENBUS_PATH/bridge"`;
+#
+# Well, this is interesting; we could get called with the XEN store
+# gone and so not able to find the bridge. vif-bridge does the same
+# thing and just ignores it! So if we cannot get, default to what
+# currently think is the control network bridge.
+#
+if ($?) {
+    $bridge = "xenbr0";
+    # For vif-bridge
+    $ENV{"bridge"} = $bridge;
+}
 chomp($bridge);
+
+#
+# We need the domid below; we can figure that out from the XENBUS_PATH.
+#
+my $domid;
+if ($XENBUS_PATH =~ /vif\/(\d*)\//) {
+    $domid = $1;
+}
+else {
+    die("Could not determine domid from $XENBUS_PATH\n");
+}
 
 my ($bossdomain) = tmccbossinfo();
 die("Could not get bossname from tmcc!")
@@ -159,6 +181,23 @@ sub Online()
 	       "  -X $host_ip:$local_tmcd_port -s $boss_ip -p $TMCD_PORT ".
 	       "  -o $LOGDIR/tmccproxy.$vnode_id.log");
 	die("Failed to exec tmcc proxy"); 
+    }
+
+    # Start a capture for the serial console.
+    if (-e "$BINDIR/capture") {
+	my $tty = `xenstore-read /local/domain/$domid/console/tty`;
+	if (! $?) {
+	    chomp($tty);
+	    $tty =~ s,\/dev\/,,;	    
+	    mysystem2("$BINDIR/capture -C -n -i $vnode_id $tty");
+	    #
+	    # We need to tell tmcd about it. But do not hang, use timeout.
+	    #
+	    if (! $?) {
+		mysystem2("$BINDIR/tmcc.bin -n $vnode_id -t 5 ".
+			  "  -f /var/log/tiplogs/$vnode_id.acl tiplineinfo");
+	    }
+	}
     }
 
     # Reroute tmcd calls to the proxy on the physical host
@@ -267,6 +306,12 @@ sub Offline()
 
     if (-e "/var/run/tmccproxy-$vnode_id.pid") {
 	my $pid = `cat /var/run/tmccproxy-$vnode_id.pid`;
+	chomp($pid);
+	mysystem2("/bin/kill $pid");
+    }
+
+    if (-e "/var/log/tiplogs/$vnode_id.pid") {
+	my $pid = `cat /var/log/tiplogs/$vnode_id.pid`;
 	chomp($pid);
 	mysystem2("/bin/kill $pid");
     }
