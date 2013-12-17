@@ -7,6 +7,7 @@ use installvars;
 
 my @LOGFILES  = ("/var/log/logins","/var/log/tiplogs/capture.log",
 		 "/var/log/mountd.log", "$LOGDIR/pubsubd.log",
+		 "$LOGDIR/shellinabox.log",
 		 "$LOGDIR/elvin_gateway.log");
 
 sub Install($$$)
@@ -102,6 +103,8 @@ sub Install($$$)
 	    print SC "*.*\t\t\t\t\t\t${LOGDIR}/pubsubd.log\n";
 	    print SC "!elvin_gateway\n";
 	    print SC "*.*\t\t\t\t\t\t${LOGDIR}/elvin_gateway.log\n";
+	    print SC "!shellinabox\n";
+	    print SC "*.*\t\t\t\t\t\t${LOGDIR}/shellinabox.log\n";
 	    if ($PROTOGENI_GENIRACK) {
 		print SC "!foam\n";
 		print SC "*.*\t\t\t\t\t\t/var/log/foam.log\n";
@@ -153,6 +156,7 @@ sub Install($$$)
 		"/var/log/tiplogs/capture.log\t\t644  7     *    168   Z",
 		"/var/log/foam.log\t\t640  7     *    168   Z",
 		"/var/log/flowvisor.log\t\t640  7    1000 *    Z",
+		"$LOGDIR/shellinabox.log\t\t640  7    1000 *    Z",
 		);
 	};
     };
