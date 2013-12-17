@@ -23,7 +23,6 @@
 #
 use English;
 use Getopt::Std;
-require 'ctime.pl';
 use POSIX ":sys_wait_h";
 use Data::Dumper;
 

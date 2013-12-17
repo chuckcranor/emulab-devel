@@ -1,7 +1,7 @@
 #!/usr/bin/perl -w
 
 #
-# Copyright (c) 2000-2011 University of Utah and the Flux Group.
+# Copyright (c) 2000-2013 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -48,7 +48,6 @@ if ($#ARGV >= 1 || $#ARGV < 0) {
 use lib '@prefix@/lib';
 use libtestbed;
 use emdb;
-require "ctime.pl";
 
 my $display = shift;
 
@@ -56,7 +55,7 @@ my $v = 0; # Verbose
 
 my @tbls = map { $_ =~ s/.*\.//; $_ } emdb::DBHandle()->tables();
 
-my $date = &ctime(time);
+my $date = &localtime();
 
 $date =~ s/[ \t]+/ /;
 $date =~ s/\n//;

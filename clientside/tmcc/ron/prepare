@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2000-2003 University of Utah and the Flux Group.
+# Copyright (c) 2000-2013 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -22,7 +22,6 @@
 # }}}
 #
 use English;
-require 'ctime.pl';
 
 # Drag in path stuff so we can find emulab stuff.
 BEGIN { require "/etc/emulab/paths.pm"; import emulabpaths; }
@@ -94,7 +93,7 @@ open(DMP, ">$DUMPDATES") or
 while (<TAB>) {
     if ($_ =~ /^([\w\/]+).*(\d).*\d$/) {
 	if ($2 != 0) {
-	    my $t = localtime(time);
+	    my $t = localtime();
 	    print DMP "$1                          0 $t\n";
 	}
     }
