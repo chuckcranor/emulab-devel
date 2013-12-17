@@ -159,13 +159,13 @@ function ConsoleAuthObject($uid, $nodeid, $console)
     #
     $fp = fopen($file, "r");
     if (! $fp) {
-	TBERROR("Error opening $file", 0);
+	TBERROR("Error opening $file", 1);
 	return null;
     }
     $key = fread($fp, 128);
     fclose($fp);
     if (!$key) {
-	TBERROR("Could not get key from $file", 0);
+	TBERROR("Could not get key from $file", 1);
 	return null;
     }
     $key   = chop($key);
