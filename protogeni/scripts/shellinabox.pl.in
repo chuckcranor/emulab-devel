@@ -56,8 +56,9 @@ my $TBOPS            = "@TBOPSEMAIL@";
 my $TBLOGS           = "@TBLOGSEMAIL@";
 my $TBBASE           = "@TBBASE@";
 my $TBLOGFACIL       = "@TBLOGFACIL@";
-my $CERTFILE         = "/usr/local/etc/apache22/ssl.crt/users.emulab.net.crt";
-my $KEYFILE          = "/usr/local/etc/apache22/ssl.key/users.emulab.net.key";
+my $USERNODE         = "@USERNODE@";
+my $CERTFILE         = "/usr/local/etc/apache22/ssl.crt/${USERNODE}.crt";
+my $KEYFILE          = "/usr/local/etc/apache22/ssl.key/${USERNODE}.key";
 my $APTDIR           = "/var/apt/users";
 my $CONSOLEBIN       = "$TB/bin/console.bin";
 
@@ -186,7 +187,7 @@ my $tempfile;
 my $command;
 
 # shellinabox wants the gid to be the default for the user.
-my (undef,undef,$gid) = getpwnam($uid);
+my (undef,undef,undef,$gid) = getpwnam($uid);
 
 if (exists($auth->{'console'})) {
     if (!defined($gid)) {
@@ -260,6 +261,10 @@ my $cmd = "shellinaboxd " . ($debug ? "-d" : "-v") . " " .
     "--cgi -c $TB/etc -s '/:$uid:$gid:$where:$command'";
 
 info($cmd);
+if ($debug) {
+    system($cmd);
+    exit(0);
+}
 
 #
 # The point of this is to capture the initial STDERR of shellinaboxd
@@ -281,6 +286,8 @@ if ($pid) {
 	info("Timed out waiting for $pid to say something");
 	waitpid($pid, 0);
 	info("After waitpid: $?");
+	unlink($tempfile)
+	    if (defined($tempfile));
 	exit($? >> 0);
     };
     alarm 30;
@@ -291,6 +298,8 @@ if ($pid) {
     info("Before waitpid for $pid");
     waitpid($pid, 0);
     info("After waitpid: $?");
+    unlink($tempfile)
+	if (defined($tempfile));
     exit($? >> 0);
 }
 else {
