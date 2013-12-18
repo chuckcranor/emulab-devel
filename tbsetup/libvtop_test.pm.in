@@ -1400,6 +1400,12 @@ sub LoadVirtNodes($)
 		$attr->attrkey() eq "MEMORYSIZE") {
 		$vnode->_desires()->{"?+ram"} = $attr->attrvalue();
 	    }
+	    elsif ($attr->attrkey() eq "XEN_CORES") {
+		# Overridden below for shared nodes.
+		$self->experiment()->SetVirtNodeAttribute($vname,
+							  "VM_VCPUS",
+							  $attr->attrvalue());
+	    }
 	}
 	$vnode->_atttributes($attrs);
 
@@ -1449,7 +1455,7 @@ sub LoadVirtNodes($)
 
 	    # We will deal with later, but set a default=1 for now.
 	    $self->experiment()->SetVirtNodeAttribute($vname, "VM_VCPUS", 1)
-		if (!$self->user()->IsAdmin());
+		if ($vnode->_sharedokay() && !$self->user()->IsAdmin());
 	}
 
 	#
