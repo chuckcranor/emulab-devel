@@ -189,7 +189,7 @@ function ConsoleAuthObject($uid, $nodeid, $console)
 }
 $console_auth = ConsoleAuthObject($uid, $node_id, $console);
 
-PAGEHEADER("$nodeid Console");
+PAGEHEADER("$node_id Console");
 
 $referrer = $_SERVER['HTTP_REFERER'];
 
@@ -261,11 +261,11 @@ function StartConsole(id, authobject)
 </script>
 
 <?php
-echo "<div id='${nodeid}_console' style='width: 100%;'></div>";
-echo "<center><button type=button id='${nodeid}_console_kill'>Close</button>" .
+echo "<div id='${node_id}_console' style='width: 100%;'></div>";
+echo "<center><button type=button id='${node_id}_console_kill'>Close</button>" .
      "</center>\n";
 echo "<script language=JavaScript>
-      StartConsole('${nodeid}_console', '$console_auth');
+      StartConsole('${node_id}_console', '$console_auth');
       </script>\n";
 
 PAGEFOOTER();
