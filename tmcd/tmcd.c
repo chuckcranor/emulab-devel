@@ -484,7 +484,7 @@ struct command {
 	{ "disks",	  FULLCONFIG_ALL, 0, dodisks},
 	{ "arpinfo",	  FULLCONFIG_NONE, 0, doarpinfo},
 	{ "hwinfo",	  FULLCONFIG_NONE, 0, dohwinfo},
-	{ "tiplineinfo",  FULLCONFIG_ALL,  F_ALLOCATED, dotiplineinfo},
+	{ "tiplineinfo",  FULLCONFIG_NONE,  F_ALLOCATED, dotiplineinfo},
 #if PROTOGENI_SUPPORT
 	{ "geni_client_id", FULLCONFIG_NONE, 0, dogeniclientid },
 	{ "geni_slice_urn", FULLCONFIG_NONE, 0, dogenisliceurn },
