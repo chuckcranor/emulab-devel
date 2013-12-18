@@ -203,10 +203,10 @@ sub Online()
 	    if (! $?) {
 		for (my $i = 0; $i < 10; $i++) {
 		    sleep(1);
-		    next
-			if (! -e $acl);
+		    last
+			if (-e $acl && -s $acl);
 		}
-		if (! -e $acl) {
+		if (! (-e $acl && -s $acl)) {
 		    print STDERR "$acl does not exist\n";
 		}
 		else {
