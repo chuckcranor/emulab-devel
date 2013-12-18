@@ -176,6 +176,7 @@ char		  *uploadCommand;
 
 int		   docircbuf = 0;
 void		   initcircbuf();
+void		   clearcircbuf();
 void		   addtocircbuf(const char *bp, int cc);
 void		   dumpcircbuf();
 
@@ -1224,6 +1225,8 @@ newrun(int sig)
 		die("%s: open: %s", Runname, geterr(errno));
 
 #ifdef  USESOCKETS
+	if (docircbuf)
+		clearcircbuf();
 	/*
 	 * Set owner/group of the new run file. Avoid race in which a
 	 * user can get the new file before the chmod, by creating 0600
@@ -1263,6 +1266,9 @@ terminate(int sig)
 	if (runfile)
 		newrun(sig);
 
+	if (docircbuf)
+		clearcircbuf();
+	
 	/* Must be done *after* all the above stuff is done! */
 	createkey();
 #else
@@ -2091,6 +2097,7 @@ createkey(void)
 {
 	int			cc, i, fd;
 	unsigned char		buf[BUFSIZ];
+	char			tmpname[BUFSIZE];
 	FILE		       *fp;
 
 	if (relay_snd)
@@ -2144,8 +2151,14 @@ createkey(void)
 	 * Sure, could change the umask, but I hate that function.
 	 */
 	(void) unlink(Aclname);
-	if ((fd = open(Aclname, O_WRONLY|O_CREAT|O_TRUNC, 0600)) < 0)
-		die("%s: open: %s", Aclname, geterr(errno));
+
+	/*
+	 * Avoid race; open as different name and rename when done.
+	 */
+	(void) snprintf(tmpname, sizeof(tmpname), "%s.tmp", Aclname);
+	
+	if ((fd = open(tmpname, O_WRONLY|O_CREAT|O_TRUNC, 0600)) < 0)
+		die("%s: open: %s", tmpname, geterr(errno));
 
 	/*
 	 * Set owner/group of the new run file. Avoid race in which a
@@ -2158,7 +2171,7 @@ createkey(void)
 		die("%s: fchmod: %s", Runname, geterr(errno));
 	
 	if ((fp = fdopen(fd, "w")) == NULL)
-		die("fdopen(%s)", Aclname, geterr(errno));
+		die("fdopen(%s)", tmpname, geterr(errno));
 
 	fprintf(fp, "host:   %s\n", ourhostname);
 	fprintf(fp, "port:   %d\n", portnum);
@@ -2169,6 +2182,9 @@ createkey(void)
 	fprintf(fp, "keylen: %d\n", secretkey.keylen);
 	fprintf(fp, "key:    %s\n", secretkey.key);
 	fclose(fp);
+	if (rename(tmpname, Aclname)) {
+		die("%s: rename: %s", Aclname, geterr(errno));
+	}
 
 	/*
 	 * Send the info over.
@@ -2421,6 +2437,13 @@ initcircbuf()
 }
 
 void
+clearcircbuf()
+{
+	circp = circbuf;
+	circcount = 0;
+}
+
+void
 addtocircbuf(const char *bp, int cc)
 {
 	char	*ep = circbuf + CIRCBUFSIZE;
@@ -2455,7 +2478,6 @@ dumpcircbuf()
 		send_to_client(circbuf, circcount - cc);
 	}
 	// Reset to empty for next time we disconnect.
-	circp = circbuf;
-	circcount = 0;
+	clearcircbuf();
 }
 #endif /* USESOCKBUF */
