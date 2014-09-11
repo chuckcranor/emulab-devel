@@ -70,8 +70,8 @@
 #include <sys/endian.h>
 #endif
 
-#define IZ_BYTE_ORDER	_BIG_ENDIAN
-//#define IZ_BYTE_ORDER	_LITTLE_ENDIAN
+//#define IZ_BYTE_ORDER	_BIG_ENDIAN
+#define IZ_BYTE_ORDER	_LITTLE_ENDIAN
 
 #if IZ_BYTE_ORDER == _LITTLE_ENDIAN
 #define htoiz16(x)	htole16(x)

@@ -60,8 +60,8 @@
 #endif
 
 /* XXX temporary for testing: DO NOT CHANGE FROM _LITTLE_ENDIAN OTHERWISE */
-#define FRIS_BYTE_ORDER	_BIG_ENDIAN
-//#define FRIS_BYTE_ORDER	_LITTLE_ENDIAN
+//#define FRIS_BYTE_ORDER	_BIG_ENDIAN
+#define FRIS_BYTE_ORDER	_LITTLE_ENDIAN
 
 #if FRIS_BYTE_ORDER == _LITTLE_ENDIAN
 #define htofris16(x)	htole16(x)
