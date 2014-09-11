@@ -49,6 +49,7 @@
 
 #include "imagehdr.h"
 #include "imagehash.h"
+#include "header.h"
 #include "queue.h"
 
 #ifndef linux
@@ -522,7 +523,7 @@ spewhash(unsigned char *h, int hlen)
 
 #ifdef TIMEIT
 #include <machine/cpufunc.h>
-static u_int64_t rcycles, hcycles, ccycles, dcycles;
+static unsigned long long rcycles, hcycles, ccycles, dcycles;
 #endif
 
 static int
@@ -981,6 +982,7 @@ hashchunk(int chunkno, char *chunkbufp, struct hashinfo **hinfop)
 	 * Grab the header. It is uncompressed, and holds the real
 	 * image size and the magic number. Advance the pointer too.
 	 */
+	header_from_std(chunkbufp);
 	blockhdr = (blockhdr_t *)chunkbufp;
 	chunkbufp += DEFAULTREGIONSIZE;
 	nregions += (uint32_t)blockhdr->regioncount;

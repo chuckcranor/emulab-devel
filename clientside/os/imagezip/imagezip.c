@@ -59,6 +59,7 @@
 #include "sliceinfo.h"
 #include "global.h"
 #include "checksum.h"
+#include "header.h"
 #include "range.h"
 #ifdef WITH_HASH
 #include "hashmap/hashmap.h"
@@ -618,6 +619,8 @@ main(int argc, char *argv[])
 
 	if (version || debug) {
 		fprintf(stderr, "%s\n", build_info);
+		fprintf(stderr, "Image format: %s-endian\n",
+			(IZ_BYTE_ORDER == _LITTLE_ENDIAN) ? "little" : "big");
 		if (version) {
 			fprintf(stderr, "Supports");
 			for (ch = 1; fsmap[ch].type != -1; ch++)
@@ -2306,10 +2309,18 @@ compress_image(void)
 		 * with the compression.
 		 */
 		if (do_checksum) {
-			assert(!compat);
+			int32_t rsize = blkhdr->regionsize;
+
 			checksum_start(blkhdr, csumalg);
-			checksum_chunk(output_buffer,
-				       blkhdr->size + blkhdr->regionsize);
+
+			/* Checksum the header after first standardizing it */
+			header_to_std(output_buffer);
+			checksum_chunk(output_buffer, rsize);
+			header_from_std(output_buffer);
+
+			/* Checksum the rest */
+			checksum_chunk(output_buffer + rsize, blkhdr->size);
+
 			checksum_finish(blkhdr);
 		}
 #endif
@@ -2327,8 +2338,10 @@ compress_image(void)
 #endif
 
 		/*
-		 * Write out the finished chunk to disk.
+		 * Write out the finished chunk to disk after first
+		 * standarizing the header.
 		 */
+		header_to_std(output_buffer);
 		cc = devwrite(outfd, output_buffer, sizeof(output_buffer));
 		if (cc != sizeof(output_buffer)) {
 			if (cc < 0)
@@ -2446,10 +2459,18 @@ compress_image(void)
 		 * with the compression.
 		 */
 		if (do_checksum) {
-			assert(!compat);
+			int32_t rsize = blkhdr->regionsize;
+
 			checksum_start(blkhdr, csumalg);
-			checksum_chunk(output_buffer,
-				       blkhdr->size + blkhdr->regionsize);
+
+			/* Checksum the header after first standardizing it */
+			header_to_std(output_buffer);
+			checksum_chunk(output_buffer, rsize);
+			header_from_std(output_buffer);
+
+			/* Checksum the rest */
+			checksum_chunk(output_buffer + rsize, blkhdr->size);
+
 			checksum_finish(blkhdr);
 		}
 #endif
@@ -2467,9 +2488,11 @@ compress_image(void)
 #endif
 
 		/*
-		 * Write out the finished chunk to disk, and
-		 * start over from the beginning of the buffer.
+		 * Write out the finished chunk to disk after first
+		 * standarizing the header, and start over from the
+		 * beginning of the buffer.
 		 */
+		header_to_std(output_buffer);
 		cc = devwrite(outfd, output_buffer, sizeof(output_buffer));
 		if (cc != sizeof(output_buffer)) {
 			if (cc < 0)
@@ -2850,6 +2873,37 @@ compress_finish(uint32_t *subblksize)
 	return 1;
 }
 
+static void
+output_uuid(char *imagename, char *uuidstr)
+{
+	FILE *file;
+	char *fname;
+
+	if (strcmp(imagename, "-")) {
+		fname = malloc(strlen(imagename) + 8);
+		if (fname == NULL) {
+			fprintf(stderr, "No memory\n");
+			exit(1);
+		}
+		strcpy(fname, imagename);
+		strcat(fname, ".uuid");
+	} else {
+		fname = strdup("stdout.uuid");
+	}
+
+	file = fopen(fname, "w");
+	if (file == NULL) {
+		fprintf(stderr, "Cannot create keyfile %s\n", fname);
+		exit(1);
+	}
+
+	fprintf(file, "%s\n", uuidstr);
+	fclose(file);
+
+	fprintf(stderr, "UUID written to %s\n", fname);
+	free(fname);
+}
+
 #ifdef WITH_CRYPTO
 /*
  * Checksum functions
@@ -2952,37 +3006,6 @@ output_public_key(char *imagename, RSA *key)
 	free(fname);
 }
 #endif
-
-static void
-output_uuid(char *imagename, char *uuidstr)
-{
-	FILE *file;
-	char *fname;
-
-	if (strcmp(imagename, "-")) {
-		fname = malloc(strlen(imagename) + 8);
-		if (fname == NULL) {
-			fprintf(stderr, "No memory\n");
-			exit(1);
-		}
-		strcpy(fname, imagename);
-		strcat(fname, ".uuid");
-	} else {
-		fname = strdup("stdout.uuid");
-	}
-
-	file = fopen(fname, "w");
-	if (file == NULL) {
-		fprintf(stderr, "Cannot create keyfile %s\n", fname);
-		exit(1);
-	}
-
-	fprintf(file, "%s\n", uuidstr);
-	fclose(file);
-
-	fprintf(stderr, "UUID written to %s\n", fname);
-	free(fname);
-}
 
 void
 checksum_chunk(uint8_t *buf, off_t size)

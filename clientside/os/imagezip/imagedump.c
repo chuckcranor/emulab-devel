@@ -56,6 +56,7 @@
 #endif
 #include "imagehdr.h"
 #include "checksum.h"
+#include "header.h"
 
 static int detail = 0;
 static int dumpmap = 0;
@@ -275,6 +276,7 @@ dumpfile(char *name, int fd)
 			count -= cc;
 			bp += cc;
 		}
+		header_from_std(chunkbuf);
 		if (chunkno == 0) {
 			blockhdr_t *hdr = (blockhdr_t *)chunkbuf;
 

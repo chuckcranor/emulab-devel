@@ -107,7 +107,7 @@ CLIENTLIBS	= -lrt -lz $(PTHREADLIBS)
 else
 CLIENTLIBS	= -lz $(PTHREADLIBS)
 endif
-CLIENTOBJS	= client.o frisbee.o checksum.o disksize.o $(SHAREDOBJS)
+CLIENTOBJS	= client.o frisbee.o checksum.o disksize.o header.o $(SHAREDOBJS)
 
 SERVERFLAGS	= $(CFLAGS)
 SERVERLIBS	= $(PTHREADLIBS)
@@ -149,7 +149,7 @@ MSERVEROBJS	+= config_emulab.o
 MSERVERLIBS	+= $(TESTBED_LIBOBJDIR)/libtb/libtb.a $(MYSQLLIBS)
 endif
 
-CFLAGS		= -O2 -g -Wall -fno-builtin-log $(LDSTATIC) $(PTHREADCFLAGS) -DSTATS -DMASTER_SERVER
+CFLAGS		= -O2 -g -Wall -fno-builtin-log $(LDSTATIC) $(PTHREADCFLAGS) -DSTATS -DMASTER_SERVER -DENDIAN_HACK
 LDFLAGS		= $(LDSTATIC)
 
 IUZFLAGS	= -DFRISBEE
@@ -265,6 +265,9 @@ disksize.o:	$(FRISBEEDIR)/disksize.c
 
 checksum.o:	$(FRISBEEDIR)/checksum.c
 	$(CC) -c $(CFLAGS) $(IUZFLAGS) -I$(FRISBEEDIR) -o checksum.o $<
+
+header.o:	$(FRISBEEDIR)/header.c
+	$(CC) -c $(CFLAGS) $(IUZFLAGS) -I$(FRISBEEDIR) -o header.o $<
 
 frisbee.o:	$(FRISBEEDIR)/imageunzip.c
 	$(CC) -c $(CFLAGS) $(IUZFLAGS) -I$(FRISBEEDIR) -o frisbee.o $<

@@ -50,6 +50,46 @@
 #define COMPRESSED_MAGIC_CURRENT	COMPRESSED_V4
 
 /*
+ * Standard "endian"ness of image metadata.
+ *
+ * Speaking of retrofits, we didn't consider endianness initially.
+ * Now, in the interest of backward compatibility and optimizing for
+ * the common case (which currently is 100% of our images), we declare
+ * little endian to be the "standard" format of imagezip images.
+ *
+ * The only reason it is configurable here is so that I can do some
+ * basic testing.
+ */
+#ifdef __linux__
+#include <endian.h>
+#define _LITTLE_ENDIAN __LITTLE_ENDIAN
+#define _BIG_ENDIAN __BIG_ENDIAN
+#define _LITTLE_ENDIAN __LITTLE_ENDIAN
+#define _BYTE_ORDER __BYTE_ORDER
+#else
+#include <sys/endian.h>
+#endif
+
+#define IZ_BYTE_ORDER	_BIG_ENDIAN
+//#define IZ_BYTE_ORDER	_LITTLE_ENDIAN
+
+#if IZ_BYTE_ORDER == _LITTLE_ENDIAN
+#define htoiz16(x)	htole16(x)
+#define htoiz32(x)	htole32(x)
+#define htoiz64(x)	htole64(x)
+#define iztoh16(x)	le16toh(x)
+#define iztoh32(x)	le32toh(x)
+#define iztoh64(x)	le64toh(x)
+#else
+#define htoiz16(x)	htobe16(x)
+#define htoiz32(x)	htobe32(x)
+#define htoiz64(x)	htobe64(x)
+#define iztoh16(x)	be16toh(x)
+#define iztoh32(x)	be32toh(x)
+#define iztoh64(x)	be64toh(x)
+#endif
+
+/*
  * Each compressed block of the file has this little header on it.
  * Since each block is independently compressed, we need to know
  * its internal size (it will probably be shorter than 1MB) since we

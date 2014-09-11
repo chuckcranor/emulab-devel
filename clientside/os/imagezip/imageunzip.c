@@ -46,6 +46,7 @@
 #include "imagehdr.h"
 #include "queue.h"
 #include "checksum.h"
+#include "header.h"
 #ifndef NOTHREADS
 #include <pthread.h>
 #endif
@@ -1398,6 +1399,7 @@ inflate_subblock(const char *chunkbufp)
 	 * Grab the header. It is uncompressed, and holds the real
 	 * image size and the magic number. Advance the pointer too.
 	 */
+	header_from_std((void *)chunkbufp);
 	blockhdr    = (const blockhdr_t *) chunkbufp;
 	chunkbufp  += DEFAULTREGIONSIZE;
 

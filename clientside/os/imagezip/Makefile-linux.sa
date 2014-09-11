@@ -116,16 +116,16 @@ endif
 
 all:	imagezip imageunzip imagedump
 
-imagezip: imagezip.o checksum.o version.o $(FSOBJS) $(FSLIBS)
+imagezip: imagezip.o checksum.o version.o header.o $(FSOBJS) $(FSLIBS)
 	$(CC) $(CFLAGS) $^ $(LIBS) -o imagezip
 
-imageunzip: imageunzip.o checksum.o crc.o version.o disksize.o
+imageunzip: imageunzip.o checksum.o crc.o version.o disksize.o header.o
 	$(CC) $(CFLAGS) $^ $(UNZIPLIBS) -o imageunzip
 
 imageunzip.o: imageunzip.c
 	$(CC) -c $(UNZIPCFLAGS) -o $@ $<
 
-imagedump: imagedump.o checksum.o version.o
+imagedump: imagedump.o checksum.o version.o header.o
 	$(CC) $(CFLAGS) $^ $(LIBS) -o imagedump
 
 version.c: imagezip.c imageunzip.c imagedump.c

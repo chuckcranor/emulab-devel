@@ -44,6 +44,43 @@
 #include <sys/select.h>
 #endif
 
+/*
+ * Make the client/server explicitly speak little endian over the net.
+ * This is oh so wrong, but avoid compatibility issues for the moment.
+ */
+#ifdef ENDIAN_HACK
+#ifdef __linux__
+#include <endian.h>
+#define _LITTLE_ENDIAN __LITTLE_ENDIAN
+#define _BIG_ENDIAN __BIG_ENDIAN
+#define _LITTLE_ENDIAN __LITTLE_ENDIAN
+#define _BYTE_ORDER __BYTE_ORDER
+#else
+#include <sys/endian.h>
+#endif
+
+/* XXX temporary for testing: DO NOT CHANGE FROM _LITTLE_ENDIAN OTHERWISE */
+#define FRIS_BYTE_ORDER	_BIG_ENDIAN
+//#define FRIS_BYTE_ORDER	_LITTLE_ENDIAN
+
+#if FRIS_BYTE_ORDER == _LITTLE_ENDIAN
+#define htofris16(x)	htole16(x)
+#define htofris32(x)	htole32(x)
+#define htofris64(x)	htole64(x)
+#define fristoh16(x)	le16toh(x)
+#define fristoh32(x)	le32toh(x)
+#define fristoh64(x)	le64toh(x)
+#else
+#define htofris16(x)	htobe16(x)
+#define htofris32(x)	htobe32(x)
+#define htofris64(x)	htobe64(x)
+#define fristoh16(x)	be16toh(x)
+#define fristoh32(x)	be32toh(x)
+#define fristoh64(x)	be64toh(x)
+#endif
+
+#endif
+
 #ifdef STATS
 unsigned long nonetbufs;
 #define DOSTAT(x)	(x)
@@ -92,7 +129,6 @@ GetIP(char *str, struct in_addr *in)
 int
 GetSockbufSize(void)
 {
-
 	static int sbsize = 0;
 
 	if (sbsize == 0) {
@@ -416,6 +452,218 @@ NetMCKeepAlive(void)
 }
 
 /*
+ * Convert from wire format to host format.
+ *
+ * If there are any problems just stop and return,
+ * the caller will deal with errors.
+ */
+static void
+PacketFromWire(Packet_t *p, int mlen)
+{
+#ifdef ENDIAN_HACK
+#if _BYTE_ORDER != FRIS_BYTE_ORDER
+	if (mlen < sizeof(p->hdr))
+		return;
+
+	p->hdr.type = fristoh32(p->hdr.type);
+	p->hdr.subtype = fristoh32(p->hdr.subtype);
+	p->hdr.datalen = fristoh32(p->hdr.datalen);
+	p->hdr.srcip = fristoh32(p->hdr.srcip);
+
+	switch (p->hdr.subtype) {
+	case PKTSUBTYPE_BLOCK:
+		if (p->hdr.datalen < sizeof(p->msg.block))
+			return;
+		p->msg.block.chunk = fristoh32(p->msg.block.chunk);
+		p->msg.block.block = fristoh32(p->msg.block.block);
+		break;
+	case PKTSUBTYPE_REQUEST:
+		if (p->hdr.datalen < sizeof(p->msg.request))
+			return;
+		p->msg.request.chunk = fristoh32(p->msg.request.chunk);
+		p->msg.request.block = fristoh32(p->msg.request.block);
+		p->msg.request.count = fristoh32(p->msg.request.count);
+		break;
+	case PKTSUBTYPE_PREQUEST:
+		if (p->hdr.datalen < sizeof(p->msg.prequest))
+			return;
+		p->msg.prequest.chunk = fristoh32(p->msg.prequest.chunk);
+		p->msg.prequest.retries = fristoh32(p->msg.prequest.retries);
+		/* I think the blockmap is okay */
+		break;
+	case PKTSUBTYPE_JOIN:
+		if (p->hdr.datalen < sizeof(p->msg.join))
+			return;
+		p->msg.join.clientid = fristoh32(p->msg.join.clientid);
+		break;
+	case PKTSUBTYPE_JOIN2:
+		if (p->hdr.datalen < sizeof(p->msg.join2))
+			return;
+		p->msg.join2.clientid = fristoh32(p->msg.join2.clientid);
+		p->msg.join2.blockcount = fristoh32(p->msg.join2.blockcount);
+		p->msg.join2.chunksize = fristoh32(p->msg.join2.chunksize);
+		p->msg.join2.blocksize = fristoh32(p->msg.join2.blocksize);
+		p->msg.join2.bytecount = fristoh64(p->msg.join2.bytecount);
+		break;
+	case PKTSUBTYPE_LEAVE:
+		if (p->hdr.datalen < sizeof(p->msg.leave))
+			return;
+		p->msg.leave.clientid = fristoh32(p->msg.leave.clientid);
+		p->msg.leave.elapsed = fristoh32(p->msg.leave.elapsed);
+		break;
+	case PKTSUBTYPE_LEAVE2:
+		if (p->hdr.datalen < sizeof(p->msg.leave2))
+			return;
+		p->msg.leave2.clientid = fristoh32(p->msg.leave2.clientid);
+		p->msg.leave2.elapsed = fristoh32(p->msg.leave2.elapsed);
+#define TWEAK32(F) p->msg.leave2.stats.u.v1.F = fristoh32(p->msg.leave2.stats.u.v1.F)
+#define TWEAK64(F) p->msg.leave2.stats.u.v1.F = fristoh64(p->msg.leave2.stats.u.v1.F)
+		TWEAK32(runsec);
+		TWEAK32(runmsec);
+		TWEAK32(delayms);
+		TWEAK64(rbyteswritten);
+		TWEAK64(ebyteswritten);
+		TWEAK32(chunkbufs);
+		TWEAK32(maxreadahead);
+		TWEAK32(maxinprogress);
+		TWEAK32(pkttimeout);
+		TWEAK32(startdelay);
+		TWEAK32(idletimer);
+		TWEAK32(idledelay);
+		TWEAK32(redodelay);
+		TWEAK32(randomize);
+		TWEAK32(nochunksready);
+		TWEAK32(nofreechunks);
+		TWEAK32(dupchunk);
+		TWEAK32(dupblock);
+		TWEAK32(prequests);
+		TWEAK32(recvidles);
+		TWEAK32(joinattempts);
+		TWEAK32(requests);
+		TWEAK32(decompblocks);
+		TWEAK32(writeridles);
+		TWEAK32(writebufmem);
+		TWEAK32(lostblocks);
+		TWEAK32(rerequests);
+		TWEAK32(partialdrops);
+		TWEAK32(fullrerequests);
+#undef TWEAK32
+#undef TWEAK64
+		break;
+	}
+#endif
+#endif
+}
+
+/*
+ * Convert to wire format from host format.
+ *
+ * If there are any problems just stop and return,
+ * the caller will deal with errors.
+ */
+static void
+PacketToWire(Packet_t *p, int mlen)
+{
+#ifdef ENDIAN_HACK
+#if _BYTE_ORDER != FRIS_BYTE_ORDER
+	int32_t subtype, datalen;
+
+	if (mlen < sizeof(p->hdr))
+		return;
+
+	subtype = p->hdr.subtype;
+	datalen = p->hdr.datalen;
+	p->hdr.type = htofris32(p->hdr.type);
+	p->hdr.subtype = htofris32(p->hdr.subtype);
+	p->hdr.datalen = htofris32(p->hdr.datalen);
+	p->hdr.srcip = htofris32(p->hdr.srcip);
+
+	switch (subtype) {
+	case PKTSUBTYPE_BLOCK:
+		if (datalen < sizeof(p->msg.block))
+			return;
+		p->msg.block.chunk = htofris32(p->msg.block.chunk);
+		p->msg.block.block = htofris32(p->msg.block.block);
+		break;
+	case PKTSUBTYPE_REQUEST:
+		if (datalen < sizeof(p->msg.request))
+			return;
+		p->msg.request.chunk = htofris32(p->msg.request.chunk);
+		p->msg.request.block = htofris32(p->msg.request.block);
+		p->msg.request.count = htofris32(p->msg.request.count);
+		break;
+	case PKTSUBTYPE_PREQUEST:
+		if (datalen < sizeof(p->msg.prequest))
+			return;
+		p->msg.prequest.chunk = htofris32(p->msg.prequest.chunk);
+		p->msg.prequest.retries = htofris32(p->msg.prequest.retries);
+		/* I think the blockmap is okay */
+		break;
+	case PKTSUBTYPE_JOIN:
+		if (datalen < sizeof(p->msg.join))
+			return;
+		p->msg.join.clientid = htofris32(p->msg.join.clientid);
+		break;
+	case PKTSUBTYPE_JOIN2:
+		if (datalen < sizeof(p->msg.join2))
+			return;
+		p->msg.join2.clientid = htofris32(p->msg.join2.clientid);
+		p->msg.join2.blockcount = htofris32(p->msg.join2.blockcount);
+		p->msg.join2.chunksize = htofris32(p->msg.join2.chunksize);
+		p->msg.join2.blocksize = htofris32(p->msg.join2.blocksize);
+		p->msg.join2.bytecount = htofris64(p->msg.join2.bytecount);
+		break;
+	case PKTSUBTYPE_LEAVE:
+		if (datalen < sizeof(p->msg.leave))
+			return;
+		p->msg.leave.clientid = htofris32(p->msg.leave.clientid);
+		p->msg.leave.elapsed = htofris32(p->msg.leave.elapsed);
+		break;
+	case PKTSUBTYPE_LEAVE2:
+		if (datalen < sizeof(p->msg.leave2))
+			return;
+		p->msg.leave2.clientid = htofris32(p->msg.leave2.clientid);
+		p->msg.leave2.elapsed = htofris32(p->msg.leave2.elapsed);
+#define TWEAK32(F) p->msg.leave2.stats.u.v1.F = htofris32(p->msg.leave2.stats.u.v1.F)
+#define TWEAK64(F) p->msg.leave2.stats.u.v1.F = htofris64(p->msg.leave2.stats.u.v1.F)
+		TWEAK32(runsec);
+		TWEAK32(runmsec);
+		TWEAK32(delayms);
+		TWEAK64(rbyteswritten);
+		TWEAK64(ebyteswritten);
+		TWEAK32(chunkbufs);
+		TWEAK32(maxreadahead);
+		TWEAK32(maxinprogress);
+		TWEAK32(pkttimeout);
+		TWEAK32(startdelay);
+		TWEAK32(idletimer);
+		TWEAK32(idledelay);
+		TWEAK32(redodelay);
+		TWEAK32(randomize);
+		TWEAK32(nochunksready);
+		TWEAK32(nofreechunks);
+		TWEAK32(dupchunk);
+		TWEAK32(dupblock);
+		TWEAK32(prequests);
+		TWEAK32(recvidles);
+		TWEAK32(joinattempts);
+		TWEAK32(requests);
+		TWEAK32(decompblocks);
+		TWEAK32(writeridles);
+		TWEAK32(writebufmem);
+		TWEAK32(lostblocks);
+		TWEAK32(rerequests);
+		TWEAK32(partialdrops);
+		TWEAK32(fullrerequests);
+#undef TWEAK32
+#undef TWEAK64
+		break;
+	}
+#endif
+#endif
+}
+
+/*
  * Look for a packet on the socket. Propogate the errors back to the caller
  * exactly as the system call does. Remember that we set up a socket timeout
  * above, so we will get EWOULDBLOCK errors when no data is available. 
@@ -458,6 +706,8 @@ PacketReceive(Packet_t *p)
 			return -1;
 		FrisPfatal("PacketReceive(recvfrom)");
 	}
+
+	PacketFromWire(p, mlen);
 
 	/*
 	 * Basic integrity checks
@@ -521,6 +771,8 @@ PacketSend(Packet_t *p, int *resends)
 	to.sin_port        = sndportnum;
 	to.sin_addr.s_addr = mcastaddr.s_addr;
 
+	PacketToWire(p, len);
+
 	delays = 0;
 	while ((rc = sendto(sock, (void *)p, len, MSG_DONTWAIT,
 			    (struct sockaddr *)&to, sizeof(to))) <= 0) {
@@ -566,6 +818,8 @@ PacketReply(Packet_t *p)
 	to.sin_port        = sndportnum;
 	to.sin_addr.s_addr = p->hdr.srcip;
 	p->hdr.srcip       = myipaddr.s_addr;
+
+	PacketToWire(p, len);
 
 	while (sendto(sock, (void *)p, len, 0, 
 		      (struct sockaddr *)&to, sizeof(to)) < 0) {

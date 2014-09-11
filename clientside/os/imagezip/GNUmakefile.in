@@ -208,23 +208,23 @@ endif
 
 include $(TESTBED_SRCDIR)/GNUmakerules
 
-imagezip: $(SUBDIRS) imagezip.o disksize.o checksum.o version.o $(ZIPLIBS)
-	$(CC) $(CFLAGS) imagezip.o disksize.o checksum.o version.o $(ZIPLIBS) $(LIBS) -o imagezip
+imagezip: $(SUBDIRS) imagezip.o disksize.o checksum.o version.o header.o $(ZIPLIBS)
+	$(CC) $(CFLAGS) imagezip.o disksize.o checksum.o version.o header.o $(ZIPLIBS) $(LIBS) -o imagezip
 
 imagezip.o:	imagezip.c
 	$(CC) -c $(ZIPCFLAGS) -o imagezip.o $<
 
-imageunzip: imageunzip.o disksize.o checksum.o crc.o version.o 
-	$(CC) $(CFLAGS) imageunzip.o disksize.o checksum.o crc.o version.o $(UNZIPLIBS) -o imageunzip
+imageunzip: imageunzip.o disksize.o checksum.o crc.o version.o header.o
+	$(CC) $(CFLAGS) imageunzip.o disksize.o checksum.o crc.o version.o header.o $(UNZIPLIBS) -o imageunzip
 
 imageunzip.o:	imageunzip.c
 	$(CC) -c $(UNZIPCFLAGS) -o imageunzip.o $<
 
-imagedump: imagedump.o checksum.o version.o
-	$(CC) $(CFLAGS) imagedump.o checksum.o version.o $(LIBS) -o imagedump
+imagedump: imagedump.o checksum.o version.o header.o
+	$(CC) $(CFLAGS) imagedump.o checksum.o version.o header.o $(LIBS) -o imagedump
 
-imagehash: imagehash.o version.o
-	$(CC) $(CFLAGS) imagehash.o version.o $(HASHLIBS) -o imagehash
+imagehash: imagehash.o version.o header.o
+	$(CC) $(CFLAGS) imagehash.o version.o header.o $(HASHLIBS) -o imagehash
 
 imagehash.o:	imagehash.c
 	$(CC) -c $(HASHCFLAGS) -o imagehash.o $<

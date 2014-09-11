@@ -42,6 +42,9 @@ PTHREADCFLAGS	= -D_THREAD_SAFE -pthread
 LINUXOPTS	= -D_FILE_OFFSET_BITS=64 -D_GNU_SOURCE \
 		  -D_XOPEN_SOURCE=500 -D_BSD_SOURCE=1
 
+# XXX hack test of endian-ness
+LINUXOPTS	+= -DENDIAN_HACK
+
 #
 # STATIC = yes|no|fail
 #
@@ -66,7 +69,7 @@ endif
 
 CLIENTFLAGS	= $(CFLAGS)
 CLIENTLIBS	= -lz -lrt $(PTHREADLIBS)
-CLIENTOBJS	= client.o frisbee.o checksum.o disksize.o $(SHAREDOBJS)
+CLIENTOBJS	= client.o frisbee.o checksum.o disksize.o header.o $(SHAREDOBJS)
 
 SERVERFLAGS	= $(CFLAGS)
 SERVERLIBS	= $(PTHREADLIBS)
@@ -140,6 +143,9 @@ frisbee.o:	$(IMAGEZIPDIR)/imageunzip.c
 
 checksum.o:	$(IMAGEZIPDIR)/checksum.c
 	$(CC) -c $(CFLAGS) $(IUZFLAGS) -DFRISBEE -I$(IMAGEZIPDIR) -o checksum.o $<
+
+header.o:	$(IMAGEZIPDIR)/header.c
+	$(CC) -c $(CFLAGS) $(IUZFLAGS) -DFRISBEE -I$(IMAGEZIPDIR) -o header.o $<
 
 client.o:	decls.h log.h utils.h trace.h
 server.o:	decls.h log.h utils.h trace.h
