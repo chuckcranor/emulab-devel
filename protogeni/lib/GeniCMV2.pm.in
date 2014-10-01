@@ -1755,7 +1755,7 @@ sub BindToSlice($)
 	my $manifest = $aggregate->GetManifest(0);
 	foreach my $ref (GeniXML::FindNodes("n:node",
 					    $manifest)->get_nodelist()) {
-
+	    my $virt_id   = GeniXML::GetVirtualId($ref);
 	    my $sliver_id = GeniXML::GetSliverId($ref);
 	    next
 		if (!defined($sliver_id));
@@ -1766,7 +1766,8 @@ sub BindToSlice($)
 	    my $node_manifest = $sliver->AnnotateManifest();
 	    if (defined($node_manifest)) {
 		# And store into the new manifest.
-		GeniXML::ReplaceNode($ref, $node_manifest);
+		my $oldnode = GeniXML::GetNodeByVirtualId($virt_id, $manifest);
+		GeniXML::ReplaceNode($oldnode, $node_manifest);
 	    }
 	}
 	$aggregate->UpdateManifest($manifest);

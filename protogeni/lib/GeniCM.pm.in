@@ -1816,6 +1816,9 @@ sub GetTicketAuxAux($$$$$$$$$$)
 	#
 	if (GeniXML::HasTagSetting($linkref)) {
 	    $encap = (IsTaggedLan($linkref) ? "vlan" : "default");
+	    if (IsTaggedLan($linkref)) {
+		$trivial_ok = 0;
+	    }
 	}
 
 	#
@@ -3892,18 +3895,6 @@ sub SliverWorkAux($$$$$$$$)
 				 $sliver->sliver_urn());
 		GeniXML::SetText($macName, $outref, $macAddress)
 		    if (defined($macAddress));
-
-		#
-		# All this stuff above should move into GeniSliver, since
-		# now that we changed the node manifest, we have to store
-		# it back into the DB so that we do not lose it later.
-		#
-		if (!GeniXML::IsVersion0($ifaceref) && defined($nodesliver) &&
-		    $nodesliver->UpdateRspec($outref)) {
-		    $message = "Could not store annotated manifest for ".
-			"node $nodesliver\n";
-		    goto bad;
-		}
 	    }
 	    
 	    if (!$inaggregate &&
@@ -3917,6 +3908,23 @@ sub SliverWorkAux($$$$$$$$)
 	my $oldlink = GeniXML::GetLinkByVirtualId($linkname, $manifest);
 	GeniXML::ReplaceNode($oldlink, $linkref);
 	
+    }
+    #
+    # We have to go back through the nodes and store the manifest again,
+    # since we might have changed the interfaces down inside the node in
+    # the loop above. 
+    #
+    foreach my $ref (GeniXML::FindNodes("n:node",
+					$manifest)->get_nodelist()) {
+	my $node_id = GeniXML::GetVirtualId($ref);
+
+	if (exists($nodemap{$node_id})) {
+	    my $nodesliver = $nodemap{$node_id};
+
+	    if ($nodesliver->UpdateRspec($ref)) {
+		print STDERR "Could not store manifest for $nodesliver\n";
+	    }
+	}
     }
   skiplinks:
     #
