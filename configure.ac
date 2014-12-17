@@ -1481,6 +1481,7 @@ outfiles="$outfiles clientside/GNUmakefile clientside/setversion \
  clientside/os/imagezip/ffs/GNUmakefile \
  clientside/os/imagezip/extfs/GNUmakefile \
  clientside/os/imagezip/hashmap/GNUmakefile \
+ clientside/os/imagezip/libndz/GNUmakefile \
  clientside/os/capture/GNUmakefile \
  clientside/protogeni/GNUmakefile"
  
