@@ -293,6 +293,7 @@ outfiles="Makeconf GNUmakefile setversion \
 	  os/growdisk/GNUmakefile \
 	  os/zapdisk/GNUmakefile \
 	  os/imagezip/GNUmakefile \
+	  os/imagezip/libndz/GNUmakefile \
 	  os/imagezip/mbr/GNUmakefile \
 	  os/imagezip/gpt/GNUmakefile \
 	  os/imagezip/ffs/GNUmakefile \
