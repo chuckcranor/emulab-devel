@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2000-2014 University of Utah and the Flux Group.
+ * Copyright (c) 2000-2015 University of Utah and the Flux Group.
  * 
  * {{{EMULAB-LICENSE
  * 
@@ -20,6 +20,8 @@
  * 
  * }}}
  */
+#ifndef _IMAGEHASH_H_
+#define _IMAGEHASH_H_
 
 #define HASH_VERSION_1	0x20031107
 #define HASH_VERSION_2	0x20140618
@@ -52,3 +54,5 @@ struct hashinfo {
 #define HASH_TYPE_MD5	1
 #define HASH_TYPE_SHA1	2
 #define HASH_TYPE_RAW	3
+
+#endif /* _IMAGEHASH_H_ */
