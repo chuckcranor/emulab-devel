@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2000-2014 University of Utah and the Flux Group.
+ * Copyright (c) 2000-2015 University of Utah and the Flux Group.
  * 
  * {{{EMULAB-LICENSE
  * 
@@ -385,7 +385,7 @@ readhashinfo(char *name, struct hashinfo **hinfop)
 {
 	struct hashinfo hi, *hinfo;
 	char *hname;
-	int fd, nregbytes, cc;
+	int fd, nbytes, cc;
 
 	hname = signame(name);
 	fd = open(hname, O_RDONLY, 0666);
@@ -394,13 +394,15 @@ readhashinfo(char *name, struct hashinfo **hinfop)
 		free(hname);
 		return -1;
 	}
-	cc = read(fd, &hi, sizeof(hi));
-	if (cc != sizeof(hi)) {
+	nbytes = sizeof(hi);
+	cc = read(fd, &hi, nbytes);
+	if (cc != nbytes) {
 	readbad:
 		if (cc < 0)
 			perror(hname);
 		else
-			fprintf(stderr, "%s: too short\n", hname);
+			fprintf(stderr, "%s: too short (%d != %d)\n",
+				hname, cc, nbytes);
 	bad:
 		close(fd);
 		free(hname);
@@ -411,15 +413,15 @@ readhashinfo(char *name, struct hashinfo **hinfop)
 		fprintf(stderr, "%s: not a valid signature file\n", hname);
 		goto bad;
 	}
-	nregbytes = hi.nregions * sizeof(struct hashregion);
-	hinfo = malloc(sizeof(hi) + nregbytes);
+	nbytes = hi.nregions * sizeof(struct hashregion);
+	hinfo = malloc(sizeof(hi) + nbytes);
 	if (hinfo == 0) {
 		fprintf(stderr, "%s: not enough memory for info\n", hname);
 		goto bad;
 	}
 	*hinfo = hi;
-	cc = read(fd, hinfo->regions, nregbytes);
-	if (cc != nregbytes) {
+	cc = read(fd, hinfo->regions, nbytes);
+	if (cc != nbytes) {
 		free(hinfo);
 		goto readbad;
 	}
