@@ -51,7 +51,7 @@
 #include "imagehash.h"
 #include "queue.h"
 
-//#define TERSE_DUMP_OUTPUT
+#define TERSE_DUMP_OUTPUT
 #define HANDLE_SPLIT_HASH
 
 #ifndef linux
@@ -88,6 +88,7 @@ static int sanity = 0;
 #ifdef HANDLE_SPLIT_HASH
 static int splithash = 0;
 #endif
+static int quiet = 0;
 
 static char chunkbuf[CHUNKSIZE];
 
@@ -130,7 +131,7 @@ main(int argc, char **argv)
 	extern char build_info[];
 	struct hashinfo *hashinfo = 0;
 
-	while ((ch = getopt(argc, argv, "cCb:dvhno:rD:NVRF:SX")) != -1)
+	while ((ch = getopt(argc, argv, "cCb:dvhno:rD:NVRF:SXq")) != -1)
 		switch(ch) {
 		case 'b':
 			hashblksize = atol(optarg);
@@ -198,6 +199,9 @@ main(int argc, char **argv)
 #else
 			fprintf(stderr, "-X not supported, ignored\n");
 #endif
+			break;
+		case 'q':
+			quiet = 1;
 			break;
 		case 'h':
 		case '?':
@@ -464,13 +468,12 @@ readhashinfo(char *name, struct hashinfo **hinfop)
 #define REGPERBLK	8192	/* ~256KB -- must be power of 2 */
 
 static void
-addhash(struct hashinfo **hinfop, int chunkno, uint32_t start, uint32_t size,
-	unsigned char hash[HASH_MAXSIZE])
+addhash(struct hashinfo **hinfop, uint32_t chunkno, uint32_t start,
+	uint32_t size, unsigned char hash[HASH_MAXSIZE])
 {
 	struct hashinfo *hinfo = *hinfop;
 	int nreg;
 
-	assert(chunkno >= 0);
 	if (report) {
 		printf("%s\t%u\t%u",
 		       spewhash(hash, hashlen), start, size);
@@ -649,11 +652,13 @@ createhash(char *name, struct hashinfo **hinfop)
 		fprintf(stderr, "%s: WARNING: could not set mtime (%s)\n",
 			hfile, strerror(errno));
 
-	dump_stats(0);
+	if (!quiet) {
+		dump_stats(0);
 #ifdef TIMEIT
-	printf("%qu bytes: inflate cycles: %llu\n",
-	       ndatabytes, (unsigned long long)dcycles);
+		printf("%qu bytes: inflate cycles: %llu\n",
+		       ndatabytes, (unsigned long long)dcycles);
 #endif
+	}
 	free(hfile);
 	return 0;
 }
@@ -846,18 +851,22 @@ checkhash(char *name, struct hashinfo *hinfo)
 
 	stopreader();
 
-	dump_stats(0);
-	if (badhashes)
-		printf("%s: %u regions (%d chunks) had bad hashes, "
-		       "%llu bytes affected\n",
-		       name, badhashes, badchunks,
-		       (unsigned long long)badhashdata);
-	dump_readbufs();
+	if (!quiet) {
+		dump_stats(0);
+		if (badhashes)
+			printf("%s: %u regions (%d chunks) had bad hashes, "
+			       "%llu bytes affected\n",
+			       name, badhashes, badchunks,
+			       (unsigned long long)badhashdata);
+		dump_readbufs();
 #ifdef TIMEIT
-	printf("%llu bytes: read cycles: %llu, hash cycles: %llu, cmp cycles: %llu\n",
-	       ndatabytes, (unsigned long long)rcycles,
-	       (unsigned long long)hcycles, (unsigned long long)ccycles);
+		printf("%llu bytes: read cycles: "
+		       "%llu, hash cycles: %llu, cmp cycles: %llu\n",
+		       ndatabytes, (unsigned long long)rcycles,
+		       (unsigned long long)hcycles,
+		       (unsigned long long)ccycles);
 #endif
+	}
 	return badhashes;
 }
 
