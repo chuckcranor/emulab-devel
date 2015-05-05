@@ -145,11 +145,8 @@ if ($UID && !$user->IsAdmin()) {
 # If we have to copy them back, we might also have to update the path in
 # the database.
 #
-my $updatepath   = 0;
-my $copytofile   = undef;
-my $copyfromfile = undef;
-my $copyfromsig  = undef;
-my $copytosig    = undef;
+my $updatepath   = undef;
+my %copyfiles    = ();
 my $version0;
 
 #
@@ -169,45 +166,57 @@ else {
     $version0 = $image;
 }
 if ($version0->path() =~ /^\/usr\/testbed/) {
-    $copytofile = "/usr/testbed/images/" . basename($image->path());
-    $copyfromfile = $image->path();
+    my $vers0dest = "$PROJROOT/" . $image->pid() . "/images/";
+    #
+    # For version 0 of the image, create_image sticks the file out on /proj,
+    # but does not change the image path. 
+    #
+    $copyfiles{"fillimagefile"} =
+	[($image->version() ?
+	  "/usr/testbed/images/" . basename($image->FullImageFile()) :
+	  $vers0dest . basename($image->FullImageFile())),
+	 $image->FullImageFile()];
+    $copyfiles{"deltaimagefile"} =	
+	[($image->version() ?
+	  "/usr/testbed/images/" . basename($image->DeltaImageFile()) :
+	  $vers0dest . basename($image->DeltaImageFile())),
+	 $image->DeltaImageFile()];
+    $copyfiles{"fullsigfile"} =
+	[($image->version() ?
+	  "/usr/testbed/images/" . basename($image->FullImageSigFile()) :
+	  $vers0dest . basename($image->FullImageSigFile())),
+	 $image->FullImageSigFile()];
+    $copyfiles{"deltasigfile"} =
+	[($image->version() ?
+	  "/usr/testbed/images/" . basename($image->DeltaImageSigFile()) :
+	  $vers0dest . basename($image->FullImageSigFile())),
+	 $image->DeltaImageSigFile()];
+    
     if ($image->version()) {
-	$updatepath = 1;
-    }
-    else {
-	#
-	# For version 0 of the image, create_image sticks the file out on /proj,
-	# but does not change the image path. 
-	#
-	$copyfromfile = "$PROJROOT/" .
-	    $image->pid() . "/images/" . basename($image->path());
-    }
-    $copytosig   = $copytofile . ".sig";
-    $copyfromsig = $copyfromfile . ".sig";
-}
-if (defined($copytofile)) {
-    unlink($copytofile)
-	if (-e $copytofile);
-    unlink($copytosig)
-	if (-e $copytosig);
-
-    if (!$quiet) {
-	print "Copying ${FSNODE}:$copyfromfile $copytofile\n";
-    }
-    system("$SUDO $SCP -p ${FSNODE}:$copyfromfile $copytofile");
-    if ($?) {
-	$image->Unlock();
-	fatal("Failed to scp ${FSNODE}:$copyfromfile $copytofile");
-    }
-    if (-e $copyfromsig) {
-	system("$SUDO $SCP -p ${FSNODE}:$copyfromsig $copytosig");
-	if ($?) {
-	    $image->Unlock();
-	    fatal("Failed to scp ${FSNODE}:$copyfromsig $copytosig");
+	if ($image->IsDirPath()) {
+	    $updatepath = "/usr/testbed/image";
+	}
+	else {
+	    $updatepath = $image->FullImageFile();
 	}
     }
-    if ($updatepath) {
-	if ($image->Update({"path" => $copytofile})) {
+    foreach my $key (keys(%copyfiles)) {
+	my ($from, $to) = @{$copyfiles{$key}};
+
+	next
+	    if (! -e $from);
+
+	if (!$quiet) {
+	    print "Copying ${FSNODE}:$from $to\n";
+	}
+	system("$SUDO $SCP -p ${FSNODE}:$from $to");
+	if ($?) {
+	    $image->Unlock();
+	    fatal("Failed to scp ${FSNODE}:$from $to");
+	}
+    }
+    if (defined($updatepath)) {
+	if ($image->Update({"path" => $updatepath})) {
 	    $image->Unlock();
 	    fatal("Failed to update path");
 	}
@@ -230,13 +239,19 @@ if ($image->Release()) {
 }
 
 # If everything worked, remove the copies on ops to avoid unsightly clutter
-if (defined($copytofile)) {
-    my $hfile = $copyfromfile . ".sha1";
+if (keys(%copyfiles)) {
+    my @todelete = ();
+    
+    foreach my $key (keys(%copyfiles)) {
+	my ($from, $to) = @{$copyfiles{$key}};
 
+	push(@todelete, $from);
+	push(@todelete, $from . ".sha1");
+    }
     if (!$quiet) {
 	print "Removing temporary copy on $FSNODE\n";
     }
-    system("$SUDO $SSH ${FSNODE} rm -f $copyfromfile $copyfromsig $hfile");
+    system("$SUDO $SSH ${FSNODE} rm -f @todelete");
 }
 
 $image->Unlock();    

@@ -33,13 +33,14 @@ use Data::Dumper;
 sub usage()
 {
     print("Usage: dumpdescriptor ".
-	  "[-d] [-e] [-i <imageid> [-t]] | [-o <osid>]\n");
+	  "[-d] [-e] [-v clientvers] [-i <imageid> [-t]] | [-o <osid>]\n");
     exit(-1);
 }
-my $optlist = "di:o:te";
-my $debug   = 0;
-my $dotypes = 0;
-my $export  = 0;
+my $optlist    = "di:o:tev:";
+my $debug      = 0;
+my $dotypes    = 0;
+my $export     = 0;
+my $clientvers = 0;
 
 #
 # Configure variables
@@ -50,6 +51,13 @@ my $TBAUDIT	= "@TBAUDITEMAIL@";
 my $TBGROUP_DIR	= "@GROUPSROOT_DIR@";
 my $TBPROJ_DIR	= "@PROJROOT_DIR@";
 my $TBBASE	= "@TBBASE@";
+
+#
+# When fetching the metadata, we now tell the server what client
+# version of the software we are so it gives something we can handle.
+# Be sure to update this if you change the version in image_import
+#
+my $METADATA_SERVERVERSION = 1;
 
 #
 # Untaint the path
@@ -95,6 +103,10 @@ if (defined($options{"t"})) {
 if (defined($options{"e"})) {
     $export = 1;
 }
+if (defined($options{"v"})) {
+    $clientvers = $options{"v"};
+}
+
 if (@ARGV) {
     usage();
 }
@@ -135,13 +147,22 @@ sub DumpImage($)
     $xmlfields{"loadpart"}     = $image->loadpart();
     $xmlfields{"global"}       = $image->global();
     $xmlfields{"shared"}       = $image->shared();
-    $xmlfields{"path"}         = $image->path()
-    	if (defined($image->path()) && $image->path() ne "");
+    if (defined($image->path()) && $image->path() ne "") {
+	#
+	# Old clients cannot handle directory based paths, so give them
+	# a filename instead.
+	#
+	my $path = $image->path();
+	if ($clientvers == 0) {
+	    $path .= $image->imagename() . ".ndz" .
+		($image->version() ? ":" . $image->version() : "");
+	}
+	$xmlfields{"path"} = $path;
+    }
     $xmlfields{"hash"}         = $image->hash()
     	if ($export && defined($image->hash()) && $image->hash() ne "");
     $xmlfields{"mbr_version"}  = $image->mbr_version();
-    if (0) {
-	# Not yet, backwards compatability problem.
+    if ($clientvers > 0) {
 	$xmlfields{"isdataset"}    = $image->isdataset();
     }
 
@@ -235,8 +256,16 @@ sub DumpImage($)
 	    $xmlfields{"mtype_$type"} = "1";
 	}
     }
-    
-    print "<image>\n";
+
+    #
+    # Old sites cannot handle a version element.
+    #
+    if ($clientvers > 0) {
+	print "<image metadata_version=\"${METADATA_SERVERVERSION}\">\n";
+    }
+    else {
+	print "<image>\n";
+    }
     foreach my $key (sort keys(%xmlfields)) {
 	my $val = $xmlfields{$key};
 

@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2003-2014 University of Utah and the Flux Group.
+# Copyright (c) 2003-2015 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -34,22 +34,29 @@ function SPITERROR($code, $msg)
 # Verify page arguments.
 #
 $reqargs = RequiredPageArguments("uuid",    PAGEARG_STRING);
-$optargs = OptionalPageArguments("version", PAGEARG_INTEGER);
+$optargs = OptionalPageArguments("version", PAGEARG_INTEGER,
+                                 "clientversion", PAGEARG_INTEGER);
 if (!isset($version)) {
     $version = NULL;
+}
+if (!isset($clientversion)) {
+    $clientversion = 0;
+}
+elseif ($clientversion < 0) {
+    SPITERROR(404, "Bad client version argument!");
 }
 
 $image = Image::LookupByUUID($uuid, $version);
 if (! isset($image)) {
     SPITERROR(404, "Could not find $uuid!");
 }
-if (! $image->isglobal()) {
+if (0 && ! $image->isglobal()) {
     SPITERROR(403, "No permission to access image");
 }
 
 # Pass imageid:version to backend script.
 $fp = popen("$TBSUEXEC_PATH nobody nobody webdumpdescriptor ".
-	    "-e -i " . $image->versid(), "r");
+	    "-e -v $clientversion -i " . $image->versid(), "r");
 if (! $fp) {
     SPITERROR(404, "Could not get metadata for $uuid!");
 }

@@ -81,7 +81,9 @@ my $GROUPROOT    = "@GROUPSROOT_DIR@";
 my $CREATEIMAGE  = "$TB/bin/create_image";
 my $NEWIMAGEEZ   = "$TB/bin/newimageid_ez";
 my $DOPROVENANCE = @IMAGEPROVENANCE@;
+my $DOIMAGEDIRS  = @IMAGEDIRECTORIES@;
 my $doprovenance = 0;
+my $doimagedirs  = 0;
 
 #
 # Untaint the path
@@ -235,6 +237,12 @@ if ($DOPROVENANCE) {
     }
 }
 
+# See if enabled. 
+if ($DOIMAGEDIRS ||
+    EmulabFeatures->FeatureEnabled("ImageDirectories", $this_user, $group)) {
+    $doimagedirs = 1;
+}
+
 #
 # The simple case is that the descriptor already exists. So it is just
 # a simple snapshot to the image file. 
@@ -348,7 +356,11 @@ if (defined($image)) {
 	    if ($image->path() =~ /^$TB/) {
 		my $path = $PROJROOT . "/" . $image->pid() . "/images/" .
 		    basename($image->path());
-
+		# Watch for directory in original path, since basename
+		# drops he trailing slash.
+		if ($image->path() =~ /^\/$/) {
+		    $path .= "/";
+		}
 		if ($image->Update({"path" => $path})) {
 		    $image->DeleteVersion();
 		    fatal("Could not update path!");
@@ -429,8 +441,14 @@ if (Image->LookupByName($imagename) && !$this_user->IsAdmin()) {
 # Subgroups change the path, but a global image should still
 # go into the project image directory. 
 my $path = ($experiment->pid() eq $experiment->gid() || $global ?
-	    "$PROJROOT/$pid/images/${imagename}.ndz" :
-	    "$GROUPROOT/$pid/$gid/images/${imagename}.ndz");
+	    "$PROJROOT/$pid/images/" :
+	    "$GROUPROOT/$pid/$gid/images/");
+if ($doimagedirs) {
+    $path .= "${imagename}/".
+}
+else {
+    $path .= "${imagename}.ndz".
+}
 
 #
 # Create the image descriptor. We use the backend script to do the

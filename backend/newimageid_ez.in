@@ -541,7 +541,12 @@ elsif (! $isadmin) {
 	UserError("Path: Invalid Path");
     }
 }
-if (-d $newimageid_args{"path"}) {
+if ($newimageid_args{"path"} =~ /\/$/) {
+    if (-e $newimageid_args{"path"} && ! -d $newimageid_args{"path"}) {
+	UserError("Path: invalid path, it should be a directory");	
+    }
+}
+elsif (-d $newimageid_args{"path"} =~ /\/$/) {
     UserError("Path: invalid path, its a directory");
 }
 

@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2000-2014 University of Utah and the Flux Group.
+# Copyright (c) 2000-2015 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -68,10 +68,8 @@ my $TBLOADWAIT  = (10 * 60);
 
 my $osselect	    = "$TB/bin/os_select";
 my $TBUISP	    = "$TB/bin/tbuisp";
-my $IMAGEINFO	    = "$TB/sbin/imageinfo";
 
 # Locals
-my %imageinfo       = ();	# Per imageid DB info.
 my $debug           = 0;
 my %children        = ();	# Child pids in when asyncmode=1
 my $remote_mult     = 5;        # Wait lots longer for remote nodes!
@@ -97,7 +95,6 @@ sub osload ($$) {
     my $failures    = 0;
     my $usedefault  = 1;
     my $mereuser    = 0;
-    my $rowref;
     my $this_user;
 
     if (!defined($args->{'nodelist'})) {
@@ -388,26 +385,30 @@ sub osload ($$) {
 		if $debug;
 
 	    #
-	    # We try to avoid repeated queries to DB for info that
-	    # does not change by caching the image info on the first
-	    # use.  GetImageInfo() will perform various one-time
-	    # checks as well.
-	    # 
-	    if (!exists($imageinfo{$image->imageid()}) &&
-		!GetImageInfo($image,$node)) {
+	    # We can have both a full image and/or a delta image. We
+	    # always prefer the full image if we have it.
+	    #
+	    if (! ($image->HaveFullImage() || $image->HaveDeltaImage())) {
+		tberror "$node: no full or delta image file!";
 		goto failednode;
 	    }
-	    $rowref = $imageinfo{$image->imageid()};
-	    if ($rowref eq 'BADIMAGE') {
-		goto failednode;
-	    }
-	    
-	    my $loadpart   = $rowref->{'loadpart'};
-	    my $loadlen    = $rowref->{'loadlength'};
-	    my $imagepath  = $rowref->{'path'};
-	    my $imagepid   = $rowref->{'pid'};
-	    $maxwait += $rowref->{'maxloadwait'};
-	    $access_keys[$i] = $rowref->{'access_key'};
+	    my $isfull     = $image->HaveFullImage();
+	    my $loadpart   = $image->loadpart();
+	    my $loadlen    = $image->loadlength();
+	    my $imagepid   = $image->pid();
+	    my $imagesize  = ($isfull ? $image->size() : $image->deltasize());
+	    #
+	    # Compute a maxwait time based on the image size plus a constant
+	    # factor for the reboot cycle.  This is used later in
+	    # WaitTillReloadDone().  Arguably, this should be part of the
+	    # image DB state, so we store it in the imageinfo array too.
+	    #
+	    # size may be > 2^31, shift is unsigned
+	    #
+	    my $chunks = $imagesize >> 20;
+	    $maxwait += int((($chunks / 100.0) * 65)) + $TBLOADWAIT;
+    
+	    $access_keys[$i] = $image->access_key();
 
 	    #
 	    # Set the default boot OSID.
@@ -415,8 +416,8 @@ sub osload ($$) {
 	    # last image.
 	    #
 	    if ($i == $imageidxs[-1]) {
-		$defosid = $rowref->{'default_osid'};
-		$defvers = $rowref->{'default_vers'};
+		$defosid = $image->default_osid();
+		$defvers = $image->default_vers();
 
 		my $osinfo = OSinfo->Lookup($defosid, $defvers);
 		if (!defined($osinfo)) {
@@ -464,12 +465,12 @@ sub osload ($$) {
 	    # If image MBR is incompatible with what is on the disk right
 	    # now, invalidate all the existing partitions ("...UNLESS" above).
 	    #
-	    if (defined($rowref->{'mbr_version'})) {
-		if ($rowref->{'mbr_version'} && $curmbrvers &&
-		    $rowref->{'mbr_version'} != $curmbrvers) {
+	    if (defined($image->mbr_version())) {
+		if ($image->mbr_version() && $curmbrvers &&
+		    $image->mbr_version() != $curmbrvers) {
 		    %partitions = ();
 		}
-		$curmbrvers = $rowref->{'mbr_version'};
+		$curmbrvers = $image->mbr_version();
 	    }
 
 	    #
@@ -480,8 +481,8 @@ sub osload ($$) {
 		my $partname = "part${i}_osid";
 		my $partvers = "part${i}_vers";
 
-		my $osid = $rowref->{$partname};
-		my $vers = $rowref->{$partvers};
+		my $osid = $image->DBData()->{$partname};
+		my $vers = $image->DBData()->{$partvers};
 		if (defined($osid)) {
 		    my $osinfo = OSinfo->Lookup($osid, $vers);
 		    if (!defined($osinfo)) {
@@ -583,7 +584,7 @@ sub osload ($$) {
 	if ($WITHPROVENANCE && $WITHDELTAS) {
 	    my $founddelta = 0;
 	    foreach my $image (@images) {
-		if ($image->isdelta()) {
+		if (!$image->HaveFullImage()) {
 		    my $pimage = $image;
 		    my @ilist = ();
 		    do {
@@ -594,7 +595,7 @@ sub osload ($$) {
 			    goto failednode;
 			}
 			push(@ilist, $pimage);
-		    } while ($pimage->isdelta());
+		    } while (!$pimage->HaveFullImage());
 		    push @allimages, reverse(@ilist);
 		    $founddelta = 1;
 		}
@@ -655,7 +656,6 @@ sub osload ($$) {
 		    && !defined($access_keys[$i])) {
 		    $access_keys[$i] = TBGenSecretKey();
 		    
-		    $rowref->{'access_key'} = $access_keys[$i];
 		    if ($allimages[$i]->Update({'access_key' => $access_keys[$i]}) != 0) {
 			tberror "$node: Could not initialize image access key";
 			goto failednode;
@@ -897,92 +897,17 @@ sub osload ($$) {
     return $failures;
 }
 
-#
-# Fetch information for a specified image the first time it is used
-# (for the indicated node).  This info is cached for use by all other
-# nodes that require the image.  Returns 1 on success, 0 on failure.
-#
-sub GetImageInfo($$)
+sub DumpImageInfo($)
 {
-    my ($image, $node) = @_;
-    my $imagesize = 0;
-
-    my $imageid = $image->imageid();
-    my $rowref  = $image->DBData();
-    if (!defined($rowref)) {
-	tberror("No DBData for $image!");
-	$imageinfo{$imageid} = 'BADIMAGE';
-	return 0;
-    }
-    $imageinfo{$imageid} = $rowref;
-
-    my $imagepath = $rowref->{'path'};
-
-    #
-    # Perform a few validity checks: imageid should have a file name
-    # and that file should exist.
-    #
-    if (!defined($imagepath)) {
-	tberror "No filename associated with $image!";
-	$imageinfo{$imageid} = 'BADIMAGE';
-	return 0;
-    }
-
-    if (! -R $imagepath) {
-	#
-	# There are two reasons why a legit image might not be readable.
-	# One is that we are in an elabinelab and the image has just not
-	# been downloaded yet. The other is that we are attempting to
-	# access a shared (via the grantimage mechanism) image which the
-	# caller cannot directly access.
-	#
-	# For either case, making a proxy query request via frisbee will
-	# tell us whether the image is accessible and, if so, its size.
-	# "imageinfo" makes that call for us.
-	#
-	my $frisimageid = $rowref->{'pid'} . "/" . $rowref->{'imagename'};
-	my $sizestr = `$IMAGEINFO -qs -N $node $frisimageid`;
-	if ($sizestr =~ /^(\d+)$/) {
-	    $imagesize = $1;
-	} else {
-	    tberror "$image: access not allowed or image does not exist.";
-	    $imageinfo{$imageid} = 'BADIMAGE';
-	    return 0;
-	}
-    } else {
-	$imagesize = stat($imagepath)->size;
-    }
-
-    #
-    # A zero-length image cannot be right and will result in much confusion
-    # if allowed to pass: the image load will succeed, but the disk will be
-    # unchanged, making it appear that os_load loaded the default image.
-    #
-    if ($imagesize == 0) {
-	tberror "$imagepath is empty!";
-	$imageinfo{$imageid} = 'BADIMAGE';
-	return 0;
-    }
-
-    #
-    # Compute a maxwait time based on the image size plus a constant
-    # factor for the reboot cycle.  This is used later in
-    # WaitTillReloadDone().  Arguably, this should be part of the
-    # image DB state, so we store it in the imageinfo array too.
-    #
-    if (!defined($rowref->{'maxloadwait'})) {
-	my $chunks = $imagesize >> 20; # size may be > 2^31, shift is unsigned
-
-	$rowref->{'maxloadwait'} = int((($chunks / 100.0) * 65)) + $TBLOADWAIT;
-    }
-
+    my ($image) = @_;
+    
     print STDERR
-	"$image: loadpart=", $rowref->{'loadpart'},
-	", loadlen=", $rowref->{'loadlength'},
-	", imagepath=", $rowref->{'path'},
-	", imagesize=", $imagesize,
-	", defosid=", $rowref->{'default_osid'},
-	", maxloadwait=", $rowref->{'maxloadwait'}, "\n"
+	"$image: loadpart=", $image->loadpart(),
+	", loadlen=", $image->loadlength(),
+	", imagepath=", $image->path(),
+	", imagesize=", $image->size(),
+	", defosid=", $image->default_osid(),
+	", maxloadwait=", $image->_maxloadwait(), "\n"
 	    if ($debug);
 
     return 1;

@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2000-2012 University of Utah and the Flux Group.
+# Copyright (c) 2000-2015 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -490,7 +490,14 @@ elsif (! $isadmin) {
 	UserError("Path: Invalid Path");
     }
 }
-
+if ($newimageid_args{"path"} =~ /\/$/) {
+    if (-e $newimageid_args{"path"} && ! -d $newimageid_args{"path"}) {
+	UserError("Path: invalid path, it should be a directory");	
+    }
+}
+elsif (-d $newimageid_args{"path"} =~ /\/$/) {
+    UserError("Path: invalid path, its a directory");
+}
 #
 # See what node types this image will work on. Must be at least one!
 #

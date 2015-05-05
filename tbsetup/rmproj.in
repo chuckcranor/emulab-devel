@@ -236,8 +236,6 @@ $EUID = 0;
 # 
 DBQueryFatal("delete FROM last_reservation where pid_idx='$pid_idx'");
 DBQueryFatal("delete FROM node_reservations where pid_idx='$pid_idx'");
-DBQueryFatal("delete FROM images where pid_idx='$pid_idx'");
-DBQueryFatal("delete FROM os_info where pid_idx='$pid_idx'");
 DBQueryFatal("delete FROM nodetypeXpid_permissions where pid_idx='$pid_idx'");
 DBQueryFatal("delete FROM project_stats where pid_idx='$pid_idx'");
 DBQueryFatal("delete FROM group_stats where pid_idx='$pid_idx'");

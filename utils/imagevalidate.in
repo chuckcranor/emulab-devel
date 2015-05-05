@@ -246,7 +246,7 @@ sub doimage($)
 	return 1;
     }
 
-    my $path = $image->path();
+    my $path = $image->FullImageFile();
     $path = ""
 	if (!defined($path));
 

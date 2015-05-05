@@ -281,8 +281,8 @@ function SPITFORM($formfields, $errors)
                       }
                   }
                   else if (theform['formfields[imagename]'].value != '') {
-                      var filename = theform['formfields[imagename]'].value +
-                                     '.$filename_extension';
+                      var filename =
+                           theform['formfields[imagename]'].value + '/';
 
                       if (global) {
     	                  theform['formfields[path]'].value =
@@ -484,7 +484,7 @@ function SPITFORM($formfields, $errors)
     # Path to image.
     #
     echo "<tr>
-              <td>Filename (full path) of Image:<br>
+              <td>Directory for Image:<br>
                   (must reside in $TBPROJ_DIR)</td>
               <td class=left>
                   <input type=text
