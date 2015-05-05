@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2010-2012 University of Utah and the Flux Group.
+# Copyright (c) 2010-2015 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -99,49 +99,58 @@ if (!defined($image)) {
     fatal("No such image exists");
 }
 my $imageid = $image->imageid();
-my $path    = $image->path();
-my $hash    = $image->hash();
-    
-if ($showhash) {
-    $hash = "No hash yet" if (!defined($hash));
-    
-    print "$path = $hash\n";
-    exit(0);
-}
 
-fatal("$path does not exist")
-    if (! -e $path);
+sub UpdateHash($)
+{
+    my ($which) = @_;
+    my ($path, $hash);
 
-if ($path =~ /(.*)\.ndz$/) {
-    $hashfile = "${1}.sha1";
-}
-else {
-    $hashfile = "${path}.sha1";
-}
-my $filehash = `$SHA1 $path`;
-if ($?) {
-    fatal("Could not generate sha1 hash of $path");
-}
-if ($filehash =~ /^SHA1.*= (\w*)$/) {
-    $hash = $1;
-    if (!$impotent) {
-	$image->SetHash($1) == 0
-	    or fatal("Failed to set the hash for $image");
+    if ($which eq "full") {
+	$path      = $image->FullImageFile();
+	$hash      = $image->hash();
+	$hashfile  = $image->FullImageSHA1File()
     }
-}
-else {
-    fatal("Could not parse the sha1 hash: '$filehash'")
-}
-if (!$impotent) {
-    unlink($hashfile)
-	if (-e $hashfile);
-    open(HASH, ">$hashfile") or
-	fatal("Could not open $hashfile for writing: $!");
-    print HASH $filehash;
-    close($hashfile);
-}
+    else {
+	$path      = $image->DeltaImageFile();
+	$hash      = $image->deltahash();
+	$hashfile  = $image->DeltaImageSHA1File()
+    }
+    if ($showhash) {
+	$hash = "No hash yet" if (!defined($hash));
+    
+	print "$path = $hash\n";
+	exit(0);
+    }
+    return
+	if (! -e $path);
 
-print "$path = $hash\n";
+    my $filehash = `$SHA1 $path`;
+    if ($?) {
+	fatal("Could not generate sha1 hash of $path");
+    }
+    if ($filehash =~ /^SHA1.*= (\w*)$/) {
+	$hash = $1;
+	if (!$impotent) {
+	    $image->SetHash($1) == 0
+		or fatal("Failed to set the hash for $image");
+	}
+    }
+    else {
+	fatal("Could not parse the sha1 hash: '$filehash'")
+    }
+    if (!$impotent) {
+	unlink($hashfile)
+	    if (-e $hashfile);
+	open(HASH, ">$hashfile") or
+	    fatal("Could not open $hashfile for writing: $!");
+	print HASH $filehash;
+	close($hashfile);
+    }
+    print "$path = $hash\n";
+}
+UpdateHash("full");
+UpdateHash("delta");
+
 exit(0);
 
 sub fatal($)

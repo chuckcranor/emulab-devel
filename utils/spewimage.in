@@ -144,8 +144,8 @@ exit(0);
 #
 sub SpewImage()
 {
-    my $file = $image->path();
-    $file   .= ".sig" if ($sigfile);
+    my $file = ($sigfile ?
+		$image->FullImageSigFile() : $image->FullImageFile());
 
     open(FD, "< $file")
 	or fatal("Could not open $file!\n");
@@ -209,8 +209,8 @@ sub VerifyImage()
     # The current user needs to be able to read the image file and must
     # have provided proper access key. 
     #
-    my $file = $image->path();
-    $file   .= ".sig" if ($sigfile);
+    my $file = ($sigfile ?
+		$image->FullImageSigFile() : $image->FullImageFile());
     
     if (! -r $file) {
 	if ($debug) {

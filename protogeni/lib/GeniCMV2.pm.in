@@ -2881,7 +2881,8 @@ sub ImageInfo($)
 	}
     }
     else {
-	my $path = $image->path();
+	my $path = ($image->HaveDeltaImage() ?
+		    $image->DeltaImageFile() : $image->FullImageFile());
 
 	if (-r $path) {
 	    my $size = File::stat::stat($path)->size;

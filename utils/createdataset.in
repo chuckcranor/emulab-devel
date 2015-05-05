@@ -534,8 +534,8 @@ sub HandleIMDataset()
 {
     my $global = (defined($read_access) && $read_access eq "global" ? 1 : 0);
     my $path   = ($pid eq $gid || $global ?
-		  "$TBPROJ_DIR/$pid/images/${lname}.ndz" :
-		  "$TBGROUP_DIR/$pid/$gid/images/${lname}.ndz");
+		  "$TBPROJ_DIR/$pid/images/${lname}/" :
+		  "$TBGROUP_DIR/$pid/$gid/images/${lname}/);
 
     #
     # See if we are going to take a snapshot right away, and verify the

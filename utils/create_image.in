@@ -147,6 +147,7 @@ my $TBLOGS      = "@TBLOGSEMAIL@";
 my $BOSSIP	= "@BOSSNODE_IP@";
 my $CONTROL     = "@USERNODE@";
 my $NONFS	= @NOSHAREDFS@;
+my $PROJROOT    = "@PROJROOT_DIR@";
 my $WITHPROVENANCE= @IMAGEPROVENANCE@;
 my $WITHDELTAS  = @IMAGEDELTAS@;
 my $ISFS        = ("@BOSSNODE_IP@" eq "@FSNODE_IP@") ? 1 : 0;
@@ -223,7 +224,6 @@ my $isvirtnode  = 0;
 my $isxenhost   = 0;
 my $isec2node   = 0;
 my $onsharednode= 0;
-my $didbackup   = 0;
 my $node_id;
 my $node;
 my ($experiment,$pid);
@@ -529,8 +529,7 @@ else {
     #
     $experiment = $node->Reservation();
     if (!defined($experiment)) {
-	die("*** $0:\n".
-	    "    Could not map $node to its experiment object!\n");
+	fatal("Could not map $node to its experiment object!");
     }
     $pid = $experiment->pid();
 
@@ -576,7 +575,7 @@ else {
 	    (undef, $srcimage) = $node->RunningOsImage();
 	}
 	if (defined($srcimage)) {
-	    $srcsigfile = $srcimage->path() . ".sig";
+	    $srcsigfile = $srcimage->FullImageSigFile();
 	    if (! -e "$srcsigfile") {
 		# XXX user may not have direct access to a shared image
 		my $SAVEUID = $UID;
@@ -603,22 +602,6 @@ else {
     }
 
     #
-    # If we are creating a signature file for this image, look up the path
-    # so we derive the signature file name.
-    #
-    if ($signature) {
-	if (defined($image->path())) {
-	    $dstsigfile = $image->path() . ".sig";
-	} else {
-	    if ($signature == 1) {
-		print "*** WARNING: no path for image, ".
-		    "cannot create signature file.\n";
-	    }
-	    $signature = 0;
-	}
-    }
-
-    #
     # To avoid blowing a cavernous hole ("allow all TCP ports to boss")
     # in the per-experiment firewall, we don't use the frisbee uploader if
     # the node is firewalled.
@@ -640,22 +623,24 @@ else {
 # Make sure that the directory exists and is writeable for the user.
 # We test this by creating the file. Its going to get wiped anyway.
 #
-my $filename  = $image->path();
+my $filename  = $image->TempImageFile();
 my $isglobal  = $image->global();
 my $usepath   = 0;
 my $isdataset = $image->isdataset();
+my $hackprefix= $PROJROOT . "/" . $image->pid() . "/images/";
+
+#
+# If we are creating a signature file for this image, get the
+# signature file name.
+#
+if ($signature) {
+    # We want to use the temp filename.
+    $dstsigfile = $filename . ".sig";
+}
 
 #
 # Redirect pathname for global images. See equiv code in clone_image.
-# XXX if the project of the experiment creating the image is not emulab-ops,
-# we make a feeble attempt to avoid clobbering existing files.
 #
-my $hackprefix;
-if ($pid eq TBOPSPID()) {
-    $hackprefix = PROJROOT() . "/$pid/images/";
-} else {
-    $hackprefix = PROJROOT() . "/$pid/images/E_O_";
-}
 if ($isglobal && ($filename =~ /^$TB/)) {
     $filename = $hackprefix . basename($filename);
     print "*** WARNING: Writing global descriptor to $filename instead!\n";
@@ -685,9 +670,8 @@ if ($srcsigfile && ($srcsigfile =~ /^$TB/)) {
     my $osrcsigfile = $srcsigfile;
     $srcsigfile = $hackprefix . basename($srcsigfile);
     if (system("cp -fp $osrcsigfile $srcsigfile")) {
-	die("*** $0:\n".
-	    "    Could not copy source signature file ".
-	    "$osrcsigfile to $srcsigfile\n");
+	fatal("Could not copy source signature file ".
+	      "$osrcsigfile to $srcsigfile");
     }
     # XXX remember so we can cleanup later
     $hacksigfile = $srcsigfile;
@@ -708,13 +692,11 @@ if ($translated =~ /^([-\w\.\/\+:]+)$/) {
     $filename = $1;
 }
 else {
-    die("*** $0:\n".
-	"    Bad data returned by realpath: $translated\n");
+    fatal("Bad data returned by realpath: $translated");
 }
 # Make sure not a directory.
 if (-d $filename) {
-    die("*** $0:\n".
-	"    $filename is a directory! Must be a plain file.\n");
+    fatal("$filename is a directory! Must be a plain file.");
 }
 
 #
@@ -723,23 +705,20 @@ if (-d $filename) {
 # the user is allowed to use. 
 #
 if (! TBValidUserDir($filename, $ISFS)) {
-    die("*** $0:\n".
-	"    $filename does not resolve to an allowed directory!\n");
+    fatal("$filename does not resolve to an allowed directory!");
 }
 
 #
 # Before we do anything destructive, we lock the image.
 #
 if ($image->Lock()) {
-    die("*** $0:\n".
-	"    Image is locked, please try again later!\n");
+    fatal("Image is locked, please try again later!");
 }
 $needunlock = 1;
 
 if ($doprovenance && !$isdataset && $image->ready()) {
     $image->Unlock();
-    die("*** $0:\n".
-	"    $image ready flag is set, this is inconsistent!\n");
+    fatal("$image ready flag is set, this is inconsistent!");
 }
 
 # See if a web task is tracking this image creation.
@@ -761,50 +740,27 @@ if ($pid ne TBOPSPID()) {
     }
 }
 
-if (-e $filename) {
-    #
-    # Back it up in case of failure. Note that the frisbee upload server
-    # does this, so we do it only for the ssh/nfs case.
-    #
-    if (!$usefup) {
-	system("/bin/mv -f $filename ${filename}.bak");
-	if ($?) {
-	    fatal("Could not back up $filename");
-	}
-	$didbackup = 1;
-    }
+#
+# We want to confirm the user can create the temp file in the target
+# directory, so create a zero length file. But first, need to make
+# sure the target directory exists in the image path is a directory.
+#
+# Make sure the path directory exists.
+if ($image->IsDirPath() && ! -e $image->path() && !mkdir($image->path(), 0775)){
+    fatal("Could not mkdir " . $image->path() . ": $!");
 }
-
-#
-# We want to truncate the file (we backed it up above), which also
-# confirms the user can really create a new file.
-#
-# XXX The problem is that frisbee upload server does this too, which
-# is why we have a lot of zero length backup files. So, in uploader
-# mode, make sure the user can create the tmp file that the uploader
-# uses.
-#
-if ($usefup) {
-    $tmp = "$filename.tmp";
-    if (-e "$tmp") {
-	unlink("$tmp") ||
-	    fatal("Could not remove $tmp: $!");
-    }
-} else {
-    $tmp = $filename;
-}
-open(FILE, "> $tmp") or
-    fatal("Could not create $tmp: $!");
+open(FILE, "> $filename") or
+    fatal("Could not create $filename: $!");
 close(FILE) or
-    fatal("Could not truncate $tmp: $!");
+    fatal("Could not truncate $filename: $!");
 #
 # XXX this script runs as the user creating the image.
 # However, in the uploader case, the uploader runs as the creator of
 # the image. In the case those two are not the same, we need to make
 # sure that the file we create here is group writable.
 #
-chmod(0664, $tmp) or
-    fatal("Could not make $tmp group writable: $!");
+chmod(0664, $filename) or
+    fatal("Could not make $filename group writable: $!");
 
 if (! ($isvirtnode || $isec2node || $isdataset)) {
     #
@@ -1076,6 +1032,10 @@ if (! $foreground) {
 # reboot the source node.
 #
 $needcleanup = 1;
+
+# This tells the master server what uploader path to use.
+$image->SetUploaderPath($filename) == 0
+    or fatal("Could not set the uploader path");
 
 # Clear the bootlog; see below.
 $node->ClearBootLog()
@@ -1360,6 +1320,19 @@ if ($delta && $deltapct > 0 && defined($logfile)) {
 }
 
 #
+# The upload completed okay, so move the files into place so that
+# imagevalidate finds them in the correct place.
+#
+if (! (system("/bin/mv -f $filename " .
+	      ($delta ?
+	       $image->DeltaImageFile() : $image->FullImageFile())) &&
+       system("/bin/mv -f $dstsigfile " .
+	      ($delta ?
+	       $image->FullImageSigFile() : $image->FullImageSigFile())))) {
+    fatal("Could not move new files into place");
+}
+
+#
 # Update fields in the DB related to the image.
 #
 # Note that we do not do this for "standard" images since they get uploaded
@@ -1453,6 +1426,8 @@ sub cleanup ()
     if (defined($hacksigfile)) {
 	unlink($hacksigfile);
     }
+    # Mike says it is a good idea to clear this.
+    $image->ClearUploaderPath();
 
     if ($isvirtnode || $isec2node || $isdataset) {
 	#
@@ -1515,7 +1490,11 @@ sub fatal($)
 	$logfile->Close();
 	$image->ClearLogFile();
     }
-    
+
+    # This is a temporary file.
+    if (defined($filename)) {
+	unlink($filename);
+    }
     if (defined($webtask)) {
 	$webtask->status("failed");
 	$webtask->imagesize(0);
@@ -1523,10 +1502,6 @@ sub fatal($)
     }
     $image->Unlock()
 	if ($needunlock);
-    # Restore old image file. 
-    if ($didbackup) {
-	system("/bin/mv -f ${filename}.bak $filename");
-    }
     exit(-1);
 }
 
@@ -1545,15 +1520,6 @@ sub check_progress($$)
 	print "$node_id: started image capture for '$filename', ".
 	    "waiting up to " . int($maxwait/60) . " minutes total or ".
 	    int($idlewait/60) . " minutes idle.\n";
-    }
-
-    #
-    # XXX frisbee uploader uploads into a temporary file and then moves
-    # it into place. So track that tmp file here.
-    #
-    my $fname = $filename;
-    if ($usefup) {
-	$fname .= ".tmp";
     }
 
     #
@@ -1582,26 +1548,15 @@ sub check_progress($$)
     # Also, check to see if the (somewhat arbitrary) maximum filesize has 
     # been exceeded.
     #
-    my $cursize = (stat($fname))[7];
+    my $cursize = (stat($filename))[7];
     if (!defined($cursize)) {
-	#
-	# XXX avoid an ugly race.
-	# When done, frisuploadd moves foo.tmp -> foo
-	# If we didn't find foo.tmp, try foo now.
-	#
-	if ($usefup) {
-	    $fname =~ s/\.tmp$//;
-	    $cursize = (stat($fname))[7];
-	}
 	#
 	# XXX avoid an ugly uninitialized value.
 	# This should not happen, since we created the file,
 	# but just in case, if the file doesn't exist set the size to 0.
 	# We will eventually timeout.
 	#
-	if (!defined($cursize)) {
-	    $cursize = 0;
-	}
+	$cursize = 0;
     }
     if (defined($webtask)) {
 	$webtask->imagesize($cursize / 1024);

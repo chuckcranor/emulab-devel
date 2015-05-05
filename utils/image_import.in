@@ -78,7 +78,15 @@ my $SAVEUID	= $UID;
 my $IMAGEVALIDATE = "$TB/sbin/imagevalidate";
 my $DELETEIMAGE   = "$TB/sbin/delete_image";
 my $WITHPROVENANCE= @IMAGEPROVENANCE@;
+my $DOIMAGEDIRS   = @IMAGEDIRECTORIES@;
 my $doprovenance  = 0;
+
+#
+# When fetching the metadata, we now tell the server what client
+# version of the software we are so it gives something we can handle.
+# Be sure to update this if you change the version in dumpdescriptor.
+#
+my $METADATA_CLIENTVERSION = 1;
 
 #
 # Untaint the path
@@ -293,7 +301,7 @@ if ($getimage) {
     }
     # Run as root to access /proj
     $EUID = $UID = 0;
-    if (! -e $image->path() || $newhash ne $image->hash() || $force) {
+    if (! -e $image->FullImageFile() || $newhash ne $image->hash() || $force) {
 	$EUID = $UID = $SAVEUID;
 	#
 	# When updating an image ... 
@@ -439,12 +447,17 @@ sub CreateImage($$$$$)
     }
     # do not trust path coming in.
     if ($global && $user->IsAdmin()) {
-	$xmlparse->{'attribute'}->{"path"}->{'value'} =
-	    "$TB/images/${imagename}.ndz";
+	$xmlparse->{'attribute'}->{"path"}->{'value'} = "$TB/images/";
     }
     else {
 	$xmlparse->{'attribute'}->{"path"}->{'value'} =
-	    "$TBPROJ_DIR/" . $group->pid() . "/images/${imagename}.ndz";
+	    "$TBPROJ_DIR/" . $group->pid() . "/images/";
+    }
+    if ($DOIMAGEDIRS) {
+	$xmlparse->{'attribute'}->{"path"}->{'value'} .= "${imagename}/".
+    }
+    else {
+	$xmlparse->{'attribute'}->{"path"}->{'value'} .= "${imagename}.ndz".
     }
     
     #
@@ -499,7 +512,7 @@ sub DownLoadImage($$$$)
 {
     my ($image, $newhash, $user, $group) = @_;
     my $image_url = uri_unescape($image->imagefile_url());
-    my $localfile = $image->path() . ".new";
+    my $localfile = $image->FullImageFile() . ".new";
 
     if (FetchImageFile($image_url, $localfile)) {
 	return -1;
@@ -542,8 +555,8 @@ sub DownLoadImage($$$$)
     #
     # Now rename the image files and update the hash file.
     #
-    my $hashfile = $image->path() . ".sha1";
-    my $ndzfile  = $image->path();
+    my $hashfile = $image->FullImageSHA1File();
+    my $ndzfile  = $image->FullImageFile();
     unlink($hashfile)
 	if (-e $hashfile);
     system("/bin/mv -f $newhashfile $hashfile");
@@ -636,6 +649,7 @@ sub FetchImageFile($$)
 sub FetchMetadata($)
 {
     my ($url) = @_;
+    $url .= "&clientversion=" . $METADATA_CLIENTVERSION;
     my $safe_url = User::escapeshellarg($url);
     my $xml  = "";
     my $opts = ($debug ? "" : "-q");
@@ -680,8 +694,8 @@ sub FetchSigFile($)
 {
     my ($image) = @_;
     my $image_url  = uri_unescape($image->imagefile_url()) . "&sigfile=1";
-    my $localfile  = $image->path() . ".sig.new";
-    my $sigfile    = $image->path() . ".sig";
+    my $localfile  = $image->FullImageSigFile() . ".new";
+    my $sigfile    = $image->FullImageSigFile();
     
     if (! FetchImageFile($image_url, $localfile)) {
 	system("/bin/mv -f $localfile $sigfile");

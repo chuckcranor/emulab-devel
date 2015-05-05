@@ -37,6 +37,7 @@ use EmulabConstants;
 use libtestbed;
 use English;
 use Data::Dumper;
+use File::Basename;
 use overload ('""' => 'Stringify');
 
 # Configure variables
@@ -86,6 +87,7 @@ sub BlessRow($$)
     my $self           = {};
     my $imageid        = $row->{"imageid"};
     $self->{'IMAGE'}   = $row;
+    $self->{'HASH'}    = {};
 
     bless($self, $class);
     return $self;
@@ -259,7 +261,20 @@ AUTOLOAD {
 
     # A DB row proxy method call.
     if (exists($self->{'IMAGE'}->{$name})) {
+	# Allow update.
+	if (scalar(@_) == 2) {
+	    $self->{'IMAGE'}->{$name} = $_[1];
+	}
 	return $self->{'IMAGE'}->{$name};
+    }
+    # Or it is for a local storage slot.
+    if ($name =~ /^_.*$/) {
+	if (scalar(@_) == 2) {
+	    return $self->{'HASH'}->{$name} = $_[1];
+	}
+	elsif (exists($self->{'HASH'}->{$name})) {
+	    return $self->{'HASH'}->{$name};
+	}
     }
     carp("No such slot '$name' field in class $type");
     return undef;
@@ -270,6 +285,7 @@ sub DESTROY {
     my $self = shift;
 
     $self->{'IMAGE'} = undef;
+    $self->{'HASH'}  = undef;
 }
 
 #
@@ -781,11 +797,13 @@ sub NewVersion($$$$)
     # Fix up the path by appending the version number.
     #
     my $path = $self->path();
+    if (0) {
     if ($path =~ /^(.*):\d+$/) {
 	$path = $1 . ":${clone_vers}";
     }
     else {
 	$path .= ":${clone_vers}";
+    }
     }
     
     if (!$isdataset) {
@@ -1577,21 +1595,46 @@ sub MarkUpdate($$;$)
 #
 # Set the hash.
 #
-sub SetHash($$)
+sub SetFullHash($$)
 {
     my ($self, $hash) = @_;
 
     return $self->Update({"hash" => $hash});
 }
+sub SetDeltaHash($$)
+{
+    my ($self, $hash) = @_;
+
+    return $self->Update({"deltahash" => $hash});
+}
 
 #
 # Set the size.
 #
-sub SetSize($$)
+sub SetFullSize($$)
 {
     my ($self, $size) = @_;
 
     return $self->Update({"size" => $size});
+}
+sub SetDeltaSize($$)
+{
+    my ($self, $size) = @_;
+
+    return $self->Update({"deltasize" => $size});
+}
+
+sub SetUploaderPath($$)
+{
+    my ($self, $path) = @_;
+
+    return $self->Update({"uploader_path" => $path});
+}
+sub ClearUploaderPath($)
+{
+    my ($self) = @_;
+
+    return $self->Update({"uploader_path" => ''});
 }
 
 #
@@ -2166,6 +2209,103 @@ sub LocalVersionURL($)
     my $uuid = $self->uuid();
 
     return "$TBBASE/image_metadata.php?uuid=$uuid";
+}
+
+#
+# Path and Directory stuff.
+#
+# Images are stored as directories now. Inside the directory are base
+# and delta images for each version, as well as sig and sha1 files. 
+#
+sub IsDirPath($)
+{
+    my ($self) = @_;
+    #
+    # Does the path indicate a directory or a file.
+    #
+    if (!defined($self->path())) {
+	print STDERR "No path is set for $self\n";
+	return 0;
+    }
+    return 1
+	if ($self->path() =~ /\/$/);
+    return 0;
+}
+sub FullImagePath($)
+{
+    my ($self) = @_;
+    my $path   = $self->path();
+    my $vers   = $self->version();
+    my $name   = $self->imagename();
+    
+    if ($self->IsDirPath()) {
+	return $path . $name . ".ndz" . ($vers ? ":$vers" : "");
+    }
+    return $path;
+}
+sub DeltaImagePath($)
+{
+    my ($self) = @_;
+    my $path   = $self->path();
+    my $vers   = $self->version();
+    my $name   = $self->imagename();
+    
+    if ($self->IsDirPath()) {
+	return $path . $name . ".ddz" . ($vers ? ":$vers" : "");
+    }
+    return $path;
+}
+sub FullImageFile($)
+{
+    my ($self) = @_;
+    return $self->FullImagePath();
+}
+sub DeltaImageFile($)
+{
+    my ($self) = @_;
+    return $self->DeltaImagePath();
+}
+sub TempImageFile($)
+{
+    my ($self) = @_;
+    my $path   = $self->path();
+    my $vers   = $self->version();
+    my $name   = $self->imagename();
+
+    if ($self->IsDirPath()) {
+	return $path . $name . ".ddz" . ($vers ? ":$vers" : "") . ".tmp";
+    }
+    return $path . ".tmp";
+}
+sub FullImageSHA1File($)
+{
+    my ($self) = @_;
+    return $self->FullImagePath() . ".sha1";
+}
+sub DeltaImageSHA1File($)
+{
+    my ($self) = @_;
+    return $self->DeltaImagePath() . ".sha1";
+}
+sub FullImageSigFile($)
+{
+    my ($self) = @_;
+    return $self->FullImagePath() . ".sig";
+}
+sub DeltaImageSigFile($)
+{
+    my ($self) = @_;
+    return $self->DeltaImagePath() . ".sig";
+}
+sub HaveFullImage($)
+{
+    my ($self) = @_;
+    return $self->size() ? 1 : 0;
+}
+sub HaveDeltaImage($)
+{
+    my ($self) = @_;
+    return $self->deltasize() ? 1 : 0;
 }
 
 # _Always_ make sure that this 1 is at the end of the file...

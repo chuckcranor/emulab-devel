@@ -60,7 +60,6 @@ my $WITHDELTAS	= @IMAGEDELTAS@;
 
 # Paths to binaries
 my $TBUISP	    = "$TB/bin/tbuisp";
-my $IMAGEINFO	    = "$TB/sbin/imageinfo";
 
 # XXX windows load
 my $MAKECONF	    = "$TB/sbin/dhcpd_makeconf";
@@ -98,7 +97,6 @@ sub New($$$;@)
     $self->{'FLAGS'}      = {};
     $self->{'NODEFLAGS'}  = {};
     $self->{'NODEINFO'}   = {};
-    $self->{'IMAGEINFO'}  = {};
     $self->{'OSMAP'}      = {};
     $self->{'FAILED'}     = {};
     $self->{'FAILCOUNT'}  = 0;
@@ -238,22 +236,6 @@ sub nodeflag($$$;$)
     return $retval;
 }
     
-# Get/Set the imageid->images mapping. Nice to keep this to avoid lookups.
-sub imageinfo($$;$)
-{
-    my ($self,$imageid,$imageinfo) = @_;
-    if (defined($imageinfo)) {
-	# set it
-	$self->{'IMAGEINFO'}->{$imageid} = $imageinfo;
-	return $imageinfo;
-    }
-
-    return $self->{'IMAGEINFO'}->{$imageid}
-        if (exists($self->{'IMAGEINFO'}->{$imageid}));
-
-    return undef;
-}
-
 # Get/Set the osid->osinfo mapping. Nice to keep this to avoid lookups.
 sub osmap($$;$)
 {
@@ -680,7 +662,6 @@ sub osload($$$) {
 	    elsif ($nodeobject->isremotenode() && !defined($access_keys{$image})) {
 		$access_keys{$image} = TBGenSecretKey();
 		
-		$rowref->{'access_key'} = $access_keys{$image};
 		if ($image->Update({'access_key' => $access_keys{$image}}) != 0) {
 		    tberror "$self ($node): Could not initialize image access key";
 		    goto failednode;
@@ -947,86 +928,6 @@ sub AddNode($$$$)
     $self->{'NODES'}->{$node_id}    = $nodeobject;
     $self->{'NODEFLAGS'}->{$node_id}    = $args;
     $self->{'IMAGES'}->{$node_id}   = $imagelist;
-
-    return 0;
-}
-
-#
-# Fetch information for a specified image the first time it is used.
-# This info is cached for use by all other 
-# nodes that require the image.  Returns 1 on success, 0 on failure.
-#
-sub GetImageInfo($$$$)
-{
-    my ($self, $image, $node, $rowrefptr) = @_;
-    my $imagesize = 0;
-
-    my $imageid = $image->imageid();
-    my $rowref  = $image->DBData();
-    if (!defined($rowref)) {
-	tberror("No DBData for $image!");
-	$$rowrefptr = 'BADIMAGE';
-	return -1;
-    }
-    $$rowrefptr = $rowref;
-
-    my $imagepath = $rowref->{'path'};
-
-    #
-    # Perform a few validity checks: imageid should have a file name
-    # and that file should exist.
-    #
-    if (!defined($imagepath)) {
-	tberror "No filename associated with $image!";
-	$$rowrefptr = 'BADIMAGE';
-	return -1;
-    }
-
-    if (! -R $imagepath) {
-	#
-	# There are two reasons why a legit image might not be readable.
-	# One is that we are in an elabinelab and the image has just not
-	# been downloaded yet. The other is that we are attempting to
-	# access a shared (via the grantimage mechanism) image which the
-	# caller cannot directly access.
-	#
-	# For either case, making a proxy query request via frisbee will
-	# tell us whether the image is accessible and, if so, its size.
-	# "imageinfo" makes that call for us.
-	#
-	my $frisimageid = $rowref->{'pid'} . "/" . $rowref->{'imagename'};
-	my $sizestr = `$IMAGEINFO -qs -N $node $frisimageid`;
-	if ($sizestr =~ /^(\d+)$/) {
-	    $imagesize = $1;
-	} else {
-	    tberror "$image: access not allowed or image does not exist.";
-	    $$rowrefptr = 'BADIMAGE';
-	    return -1;
-	}
-    }
-    else {
-	(undef,undef,undef,undef,undef,undef,undef,$imagesize,
-	 undef,undef,undef,undef,undef) = stat($imagepath);
-    }
-
-    # cache as long as we just looked!
-    $rowref->{size} = $imagesize;
-
-    #
-    # A zero-length image cannot be right and will result in much confusion
-    # if allowed to pass: the image load will succeed, but the disk will be
-    # unchanged, making it appear that os_load loaded the default image.
-    #
-    if ($imagesize == 0) {
-	tberror "$imagepath is empty!";
-	$$rowrefptr = 'BADIMAGE';
-	return -1;
-    }
-
-    $self->dprint(3,"GetImageInfo($image): loadpart=", $rowref->{'loadpart'},
-		  ", loadlen=", $rowref->{'loadlength'},
-		  ", imagepath=", $rowref->{'path'},
-		  ", defosid=", $rowref->{'default_osid'});
 
     return 0;
 }
@@ -1825,25 +1726,18 @@ sub _CheckImages($$)
 	$self->dprint(1,"_CheckImages($node_id): using $image");
 
 	#
-	# We try to avoid repeated queries to DB for info that
-	# does not change by caching the image info on the first
-	# use.  GetImageInfo() will perform various one-time
-	# checks as well.
-	# 
-	my $rowref = $self->imageinfo($imageid);
-	if (!defined($rowref)) {
-	    my $retval = $self->GetImageInfo($image,$node_id,\$rowref);
-	    # save it off!
-	    $self->imageinfo($imageid,$rowref);
-	    if ($retval) {
-		return -1;
-	    }
-	}
-	if ($rowref eq 'BADIMAGE') {
+	# We can have both a full image and/or a delta image. We
+	# always prefer the full image if we have it.
+	#
+	if (! ($image->HaveFullImage() || $image->HaveDeltaImage())) {
+	    tberror "$image: no full or delta image file!";
 	    return -1;
 	}
-
-	$self->dprint(2,"_CheckImages($node_id): imageinfo for $imageid: " . Dumper($rowref));
+	if (! ($image->size() || $image->deltasize())) {
+	    tberror "$image: no size info!";
+	    return -1;
+	}
+	$self->dprint(2,"_CheckImages($node_id): imageinfo for $imageid:\n");
     }
 
     return 0;
@@ -1863,9 +1757,8 @@ sub SetBootOS($$)
     #
     my $image = $images[-1];
     my $imageid = $image->imageid();
-    my $rowref = $self->imageinfo($imageid);
 
-    my $defosid = $rowref->{'default_osid'};
+    my $defosid = $image->default_osid();
     my $osinfo = OSinfo->Lookup($defosid);
     if (!defined($osinfo)) {
 	tberror("$self SetBootOS($node_id): could not map OSID $defosid to its object!");
@@ -2052,11 +1945,10 @@ sub UpdatePartitions($$)
 	my $imageid = $imageids[$i];
 	my $image = $images[$i];
 
-	my $rowref = $self->imageinfo($imageid);
-	my $loadpart   = $rowref->{'loadpart'};
-	my $loadlen    = $rowref->{'loadlength'};
-	my $imagepath  = $rowref->{'path'};
-	my $imagepid   = $rowref->{'pid'};
+	my $loadpart   = $image->loadpart();
+	my $loadlen    = $image->loadlength();
+	my $imagepath  = $image->path();
+	my $imagepid   = $image->pid();
 
 	#
 	# Assign partition table entries for each partition in the image
@@ -2086,12 +1978,12 @@ sub UpdatePartitions($$)
 	# If image MBR is incompatible with what is on the disk right
 	# now, invalidate all the existing partitions ("...UNLESS" above).
 	#
-	if (defined($rowref->{'mbr_version'})) {
-	    if ($rowref->{'mbr_version'} && $curmbrvers &&
-		$rowref->{'mbr_version'} != $curmbrvers) {
+	if (defined($image->mbr_version())) {
+	    if ($image->mbr_version() && $curmbrvers &&
+		$image->mbr_version() != $curmbrvers) {
 		%partitions = ();
 	    }
-	    $curmbrvers = $rowref->{'mbr_version'};
+	    $curmbrvers = $image->mbr_version();
 	}
 
 	#
@@ -2195,9 +2087,7 @@ sub ComputeMaxLoadWaitTime($$)
 	# WaitTillReloadDone().  Arguably, this should be part of the
 	# image DB state, so we store it in the imageinfo array too.
 	#
-	my $rowref = $self->imageinfo($imageid);
-
-	my $chunks = $rowref->{size} >> 20; # size may be > 2^31, shift is unsigned
+	my $chunks = $image->size() >> 20;# size may be > 2^31, shift is unsigned
 
 	# XXX aren't we multi-counting reboots??
 	# ok, moved constant factor out.
@@ -2400,12 +2290,7 @@ sub SetupReload($$)
 	my $zerofree0 = $image->isdelta() ? 0: $zerofree;
 
 	# XXX windows load
-	my $rowref = $self->imageinfo($imageid);
-	if (!defined($rowref)) {
-	    tberror "$self: Mike make a bad assumption!";
-	    return -1;
-	}
-	my $format = $rowref->{'format'};
+	my $format = $image->format();
 	if (defined($format) && $format eq "wim") {
 	    $needswinpe++;
 	}
@@ -2594,13 +2479,12 @@ sub SetupReload($$)
     }
 
     my $imageid = $images[0]->imageid();
-    my $rowref = $self->imageinfo($imageid);
-    my $osid = $rowref->{'default_osid'};
+    my $osid = $image->default_osid();
 
     #
     # Get the path to the image
     #
-    my $path = $rowref->{'path'};
+    my $path = $image->path();
 
     #
     # Tell stated that we're about to start reloading
@@ -2637,13 +2521,12 @@ sub Reload($$)
 
     my @images = @{$self->GetImages($nodeobject)};
     my $imageid = $images[0]->imageid();
-    my $rowref = $self->imageinfo($imageid);
-    my $osid = $rowref->{'default_osid'};
+    my $osid = $image->default_osid();
 
     #
     # Get the path to the image
     #
-    my $path = $rowref->{'path'};
+    my $path = $image->path();
 
     TBSetNodeEventState($node_id,TBDB_NODESTATE_RELOADING);
 

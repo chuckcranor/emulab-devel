@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2012-2014 University of Utah and the Flux Group.
+# Copyright (c) 2012-2015 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -43,12 +43,14 @@ sub usage()
 	  "   -q        Don't print message on error, just exit non-zero\n".
 	  "   -s        Just print the size of the image in bytes\n".
 	  "   -m        Just print the modtime of the image in seconds since epoch\n".
-	  "   -r	Print the range of sectors covered by the image\n");
+	  "   -r	Print the range of sectors covered by the image\n".
+          "   -x        Show delta image info instead of full image info\n");
     exit(-1);
 }
 my $optlist   = "dsmN:qr";
 my $debug     = 0;
 my $quiet     = 0;
+my $forcedelta= 0;
 my $showall   = 1;
 my $showsize  = 0;
 my $showmtime  = 0;
@@ -70,6 +72,14 @@ sub fatal($);
 #
 $ENV{'PATH'} = "$TB/bin:$TB/sbin:/bin:/usr/bin:/usr/bin:/usr/sbin";
 delete @ENV{'IFS', 'CDPATH', 'ENV', 'BASH_ENV'};
+
+#
+# We don't want to run this script unless its the real version.
+#
+if ($EUID != 0) {
+    die("*** $0:\n".
+	"    Must be setuid! Maybe its a development version?\n");
+}
 
 #
 # Turn off line buffering on output
@@ -96,6 +106,9 @@ if (defined($options{"d"})) {
 }
 if (defined($options{"q"})) {
     $quiet = 1;
+}
+if (defined($options{"x"})) {
+    $forcedelta = 1;
 }
 if (defined($options{"s"})) {
     $showsize = 1;
@@ -124,16 +137,29 @@ if (!defined($image)) {
     fatal("No such image exists");
 }
 my $imagename = $image->imagename();
-my $imagepid = $image->pid();
-my $imagepath = $image->path();
+my $imagepid  = $image->pid();
+my $imagepath;
+if ($forcedelta) {
+    if (!$image->HaveDeltaImage()) {
+	fatal("There is not delta for this image");
+    }
+    $imagepath = $image->DeltaImageFile();
+}
+else {
+    if ($image->HaveFullImage()) {
+	$imagepath = $image->FullImageFile();
+    }
+    else {
+	$imagepath = $image->DeltaImageFile();
+    }
+}
     
 if (! -R $imagepath) {
     if (!defined($nodeid)) {
-	fatal("$imagepid/$imagename: image file is not readable, ".
-	      "must use -N\n");
+	fatal("$imagepath: file is not readable, must use -N\n");
     }
     if ($showrange) {
-	fatal("$imagepid/$imagename: image file is not readable, ".
+	fatal("$imagepath: image file is not readable, ".
 	      "cannot determine sector range\n");
     }
 }
@@ -181,6 +207,7 @@ if (!defined($nodeid)) {
 } else {
     print STDERR "Using frisbee on $imagepid/$imagename\n"
 	if ($debug);
+    $EUID = $UID;
     my $attr = `$frisbee -S localhost -Q $imagepid/$imagename -P $nodeid`;
     if ($attr =~ /error=0/) {
 	if ($attr =~ /size=(\d+)/) {

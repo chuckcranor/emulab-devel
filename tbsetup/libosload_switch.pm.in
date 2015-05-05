@@ -235,8 +235,7 @@ sub PreSetupReload($$)
     my @images = @{$self->GetImages($nodeobject)};
     my $newimageid = $images[0]->imageid();
     my $newpart = $images[0]->loadpart();
-    my $rowref = $self->imageinfo($newimageid);
-    my $newosid = $rowref->{'default_osid'};
+    my $newosid = $images[0]->default_osid();
 
     #
     # Grab the existing partitions first, THEN overwrite them!
@@ -319,8 +318,7 @@ sub SetupReload($$)
     my @images = @{$self->GetImages($nodeobject)};
     my $newimageid = $images[0]->imageid();
     my $newpart = $images[0]->loadpart();
-    my $rowref = $self->imageinfo($newimageid);
-    my $newosid = $rowref->{'default_osid'};
+    my $newosid = $image->default_osid();
 
     if (@images > 1) {
 	tbwarn "$self ($node_id): switches can load only one image; using first!";
@@ -672,9 +670,8 @@ sub Reload($$)
 
     my @images = @{$self->GetImages($nodeobject)};
     my $imageid = $images[0]->imageid();
-    my $rowref = $self->imageinfo($imageid);
-    my $filename = $rowref->{'path'};
-    my $osid = $rowref->{'default_osid'};
+    my $filename = $images[0]->path();
+    my $osid = $images[0]->default_osid();
 
     if (defined($self->nodeinfo($nodeobject,'reloadchildpid'))) {
 	tberror "$self Reload($node_id): is a reload already in progress?\n";
