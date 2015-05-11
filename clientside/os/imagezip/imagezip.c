@@ -1102,7 +1102,7 @@ read_image(int fd)
 	 */
 	if (!slicemode) {
 		iz_lba dlow = disk.lodata;
-		iz_lba dhigh = disk.hidata;
+		iz_lba dhigh = maxmode ? (inputmaxsec-1) : disk.hidata;
 		iz_lba losect = disk.losect;
 		iz_lba hisect = disk.hisect;
 
@@ -1220,14 +1220,14 @@ read_image(int fd)
 	if (!slicemode) {
 		if (dstart != inputminsec) {
 			fprintf(stderr,
-				"partitioner value (%lu) different than "
+				"partitioner low value (%lu) different than "
 				"computed value (%lu); using the former\n",
 				(unsigned long)dstart, inputminsec);
 			inputminsec = dstart;
 		}
 		if (!maxmode && dstart+dsize != inputmaxsec) {
 			fprintf(stderr,
-				"partitioner value (%lu) different than "
+				"partitioner high value (%lu) different than "
 				"computed value (%lu); using the former\n",
 				(unsigned long)(dstart+dsize), inputmaxsec);
 			inputmaxsec = dstart + dsize;
