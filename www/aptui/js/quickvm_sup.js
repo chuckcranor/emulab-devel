@@ -55,6 +55,7 @@ function maketopmap(divname, xml, sshcallback, writeable)
 	jacksInstance = new window.Jacks({
 	    mode: 'viewer',
 	    source: 'rspec',
+	    multiSite: true,
 	    root: divname,
 	    nodeSelect: writeable,
 	    readyCallback: function (input, output) {

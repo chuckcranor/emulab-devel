@@ -561,8 +561,8 @@ function SPITFORM($formfields, $newuser, $errors)
 	    $am_options .= 
 		"<option $selected value='$am'>$am</option>\n";
 	}
-        $html =
-                "<div class='form-horizontal' id='aggregate_selector'>
+        $html = "<div id='aggregate_selector'>
+                  <div class='form-horizontal' id='nosite_selector'>
                    <div class='form-group'>
                    <label class='col-sm-4 control-label'
                       style='text-align: right;'>
@@ -572,8 +572,9 @@ function SPITFORM($formfields, $newuser, $errors)
 		              id='profile_where' class='form-control'>
                        $am_options</select><br>
 		       <div class='alert alert-warning' id='where-warning' style='display: none'>This profile only works on some clusters. Incompatible clusters are unselectable.</div>
-</div></div><div>\n";
-            echo $html;
+</div></div></div>";
+        $html = $html . "<div id='site_selector' class='hidden'></div></div>";
+        echo $html;
     }
     echo "</fieldset>
            <div class='form-group row'>
@@ -819,18 +820,29 @@ if ($profile && $profile->isParameterized() &&
 # Allow admin users to select the Aggregate. Experimental.
 #
 $aggregate_urn = "";
+$sitemap = array();
 
 if ($this_user && ($ISCLOUD || ISADMIN() || STUDLY())) {
-    if (isset($formfields["where"]) && $formfields["where"] != "") {
-	if (array_key_exists($formfields["where"], $am_array)) {
+    if (isset($formfields["sites"]) && is_array($formfields["sites"])) {
+        while (list($siteid, $am) = each($formfields["sites"])) {
+            if (array_key_exists($am, $am_array)) {
+                $sitemap[$siteid] = $am_array[$am];
+            }
+            else {
+                $errors["sites"] = "Invalid Aggregate";
+                break;
+            }
+        }
+    }
+    elseif (isset($formfields["where"]) &&
+            $formfields["where"] != "" &&
+            array_key_exists($formfields["where"], $am_array)) {
 	    $aggregate_urn = $am_array[$formfields["where"]];
-	}
-	else {
-	    $errors["where"] = "Invalid Aggregate";
-	}
+    }
+    else {
+        $errors["where"] = "Invalid Aggregate";
     }
 }
-
 if (count($errors)) {
     SPITFORM($formfields, false, $errors);
     SPITFOOTER();
@@ -929,7 +941,16 @@ if (!$this_user &&
 }
 
 # Admins can change aggregate.
-$options      = ($aggregate_urn != "" ? " -a '$aggregate_urn'" : "");
+$options = "";
+
+if ($aggregate_urn != "") {
+    $options = " -a '$aggregate_urn'";
+}
+elseif (count($sitemap)) {
+    while (list($siteid, $urn) = each($sitemap)) {
+        $options .= "--site 'site:${siteid}=${urn}' ";
+    }
+}
 
 #
 # Invoke the backend.

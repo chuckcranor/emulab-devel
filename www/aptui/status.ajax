@@ -94,30 +94,35 @@ function Do_GetInstanceStatus()
     }
     $blob = array();
     $blob["status"] = $instance->status();
-    # Indicate that we have a manifest and so we can view it.
-    $blob["havemanifest"] = ($instance->manifest() ? 1 : 0);
-    # Provide PublicURL so that we can show the sliver info button
-    if ($instance->public_url()) {
-        $blob["publicURL"] = $instance->public_url();
-    }
+    $blob["sliverstatus"] = array();
+    $blob["sliverurls"]   = array();
     
-    $webtask = WebTask::LookupByObject($instance->uuid());
-    if ($webtask) {
-        if ($webtask->exited()) {
-            # Reflect errors back to the user.
-            if ($webtask->exitcode() == 26) {
-                $blob["reason"] = "Not enough free nodes, ".
-                    "please try again later.";
-            }
-            else {
-                $blob["reason"] = htmlentities($webtask->TaskValue("output"));
+    #
+    # If we have all of our manifests, the client can request them
+    # and show the topology.
+    #
+    $havemanifests = 1;
+
+    foreach ($instance->slivers() as $sliver) {
+        if (!$sliver->manifest()) {
+            $havemanifests = 0;
+        }
+        else {
+            $webtask = WebTask::Lookup($sliver->webtask_id());
+            if ($webtask) {
+                $sliverstatus = $webtask->TaskValue("sliverstatus");
+                if ($sliverstatus) {
+                    $blob["sliverstatus"][$sliver->aggregate_urn()] =
+                        $sliverstatus;
+                }
             }
         }
-        $sliverstatus = $webtask->TaskValue("sliverstatus");
-        if ($sliverstatus) {
-            $blob["sliverstatus"] = $sliverstatus;
+        if ($sliver->public_url()) {
+            $blob["sliverurls"][$sliver->aggregate_urn()] =
+                $sliver->public_url();
         }
     }
+    $blob["havemanifests"] = $havemanifests;
     SPITAJAX_RESPONSE($blob);
 }
 
@@ -167,24 +172,14 @@ function Do_TerminateInstance()
     }
     # This needs work.
     $retval = SUEXEC("nobody", "nobody",
-                     "webmanage_instance -t $webtask_id -- terminate $uuid",
+                     "webmanage_instance terminate $uuid",
                      SUEXEC_ACTION_CONTINUE);
-    $webtask = WebTask::Lookup($webtask_id);
 
     if ($retval == 0) {
 	SPITAJAX_RESPONSE("");
-	if ($webtask) {
-	    $webtask->Delete();
-	}
 	return;
     }
-    if ($webtask && $webtask->exited()) {
-	SPITAJAX_ERROR(1, $webtask->TaskValue("output"));
-	$webtask->Delete();
-    }
-    else {
-	SPITAJAX_ERROR(-1, "Internal Error. Please try again later");
-    }
+    SPITAJAX_ERROR(-1, "Unable to Terminate; please try again later");
 }
 
 #
@@ -198,7 +193,14 @@ function Do_GetInstanceManifest()
 	return;
     }
 
-    SPITAJAX_RESPONSE($instance->manifest());
+    $blob = array();
+
+    foreach ($instance->slivers() as $sliver) {
+        if ($sliver->manifest()) {
+            $blob[$sliver->aggregate_urn()] = $sliver->manifest();
+        }
+    }
+    SPITAJAX_RESPONSE($blob);
 }
 
 #
@@ -747,12 +749,7 @@ function Do_Refresh()
 	}
 	return;
     }
-    $blob = array();
-    if ($webtask) {
-        $blob = $webtask->TaskValue("sliverstatus");
-	$webtask->Delete();
-    }
-    SPITAJAX_RESPONSE($blob);
+    SPITAJAX_RESPONSE("Success");
 }
 
 #

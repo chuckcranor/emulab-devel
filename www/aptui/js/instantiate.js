@@ -17,6 +17,7 @@ function (_, Constraints, sup, ppstart, aboutaptString, aboutcloudString, waitwa
     var webonly       = 0;
     var portal        = null;
     var registered    = false;
+    var JACKS_NS      = "http://www.protogeni.net/resources/rspec/ext/jacks/1";
     var jacks = {
       instance: null,
       input: null,
@@ -217,6 +218,8 @@ function (_, Constraints, sup, ppstart, aboutaptString, aboutcloudString, waitwa
 		$('#instantiate_submit').attr('disabled', false);
 	    }
 
+	    CreateAggregateSelectors(rspec);
+
 	    // Hide the aggregate picker for a parameterized profile.
 	    // Shown later.
 	    if (ispprofile) {
@@ -303,6 +306,73 @@ function (_, Constraints, sup, ppstart, aboutaptString, aboutcloudString, waitwa
 		  "configuration will not be used if you Create this " +
 		  "experiment.");
 	}
+    }
+
+    /*
+     * Build up a list of Aggregate selectors. Normally just one, but for
+     * a multisite aggregate, need more then one.
+     */
+    function CreateAggregateSelectors(rspec)
+    {
+	var xmlDoc = $.parseXML(rspec);
+	var xml    = $(xmlDoc);
+	var sites  = {};
+	var html   = "";
+
+	/*
+	 * Find the sites. Might not be any if not a multisite topology
+	 */
+	$(xml).find("node").each(function() {
+	    var node_id = $(this).attr("client_id");
+	    var site   = this.getElementsByTagNameNS(JACKS_NS, 'site');
+
+	    if (! site.length) {
+		return;
+	    }
+	    var siteid = $(site).attr("id");
+	    if (siteid === undefined) {
+		console.log("No site ID in " + site);
+		return;
+	    }
+	    sites[siteid] = siteid;
+	});
+
+	if (Object.keys(sites) == 0) {
+	    $("#site_selector").addClass("hidden");
+	    $("#nosite_selector").removeClass("hidden");
+	    // Clear the form data.
+	    $("#site_selector").html("");
+	    return;
+	}
+
+	// Create the dropdown selection list. First the options which
+	// are duplicated in each dropdown.
+	var options = "";
+	_.each(amlist, function(name) {
+	    options = options +
+		"<option value='" + name + "'>" + name + "</option>";
+	});
+
+	for (var siteid in sites) {
+	    html = html +
+		"<div class='form-horizontal'>" +
+		"  <div class='form-group'>" +
+		"    <label class='col-sm-4 control-label' " +
+		"           style='text-align: right;'>"+
+		"       <a href=cluster-status.php " +
+		"          target=_blank>Site " + siteid  + " Cluster:</a>" +
+		"    </label> " +
+		"    <div class='col-sm-6'>" +
+		"      <select name=\"formfields[sites][" + siteid + "]\"" +
+		"              class='form-control'>" + options +
+		"      </select>" +
+		"</div></div><div>";
+	}
+	html = html + "<br>";
+	console.info(html);
+	$("#nosite_selector").addClass("hidden");
+	$("#site_selector").removeClass("hidden");
+	$("#site_selector").html(html);
     }
 
     var constraints;

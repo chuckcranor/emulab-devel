@@ -306,10 +306,20 @@ function (_, sup, moment, marked, UriTemplate, ShowImagingModal,
     }
 
     // Periodically ask the server for the status and update the display.
+    // We sometimes want to trigger this before the next wakeup, so use
+    // a flag to prevent more then one at a time.
+    var statusbusy = 0;
+    
     function GetStatus(uuid)
     {
+	// One at a time
+	if (statusbusy)
+	    return;
+	statusbusy = 1;
+	
 	var callback = function(json) {
 	    StatusWatchCallBack(uuid, json);
+	    statusbusy = 0;
 	}
 	var xmlthing = sup.CallServerMethod(ajaxurl,
 					    "status",
@@ -321,6 +331,8 @@ function (_, sup, moment, marked, UriTemplate, ShowImagingModal,
     // Call back for above.
     function StatusWatchCallBack(uuid, json)
     {
+	console.info(json);
+	
 	// Flag to indicate that we have seen ready and do not
 	// need to do initial stuff. We need this cause the
 	// the staus can change later, back to busy for a while.
@@ -344,7 +356,7 @@ function (_, sup, moment, marked, UriTemplate, ShowImagingModal,
 	    //
 	    // As soon as we have a manifest, show the topology.
 	    // 
-	    if (! StatusWatchCallBack.active && json.value.havemanifest) {
+	    if (! StatusWatchCallBack.active && json.value.havemanifests) {
 		ShowTopo(uuid);
 		StatusWatchCallBack.active = 1;
 	    }
@@ -427,7 +439,7 @@ function (_, sup, moment, marked, UriTemplate, ShowImagingModal,
 	//
 	// Look for a sliverstatus blob.
 	//
-	if (json.value.havemanifest && _.has(json.value, "sliverstatus")) {
+	if (json.value.havemanifests && _.has(json.value, "sliverstatus")) {
 	    UpdateSliverStatus(json.value.sliverstatus);
 	}
 	lastStatus = status;
@@ -651,7 +663,8 @@ function (_, sup, moment, marked, UriTemplate, ShowImagingModal,
 		sup.SpitOops("oops", "Failed to refresh status: " + json.value);
 		return;
 	    }
-	    UpdateSliverStatus(json.value);
+	    // Trigger status update.
+	    GetStatus(uuid);
 	}
 	sup.ShowModal('#waitwait-modal');
 	var xmlthing = sup.CallServerMethod(ajaxurl,
@@ -661,19 +674,26 @@ function (_, sup, moment, marked, UriTemplate, ShowImagingModal,
 	xmlthing.done(callback);
     }
     // Helper for above and called from the status callback.
-    function UpdateSliverStatus(blob)
+    function UpdateSliverStatus(oblob)
     {
-	$.each(blob , function(node_id, details) {
-	    if (details.status == "ready") {
-		// Bootstrap bg-success color
-		$('#' + jacksIDs[node_id] + ' .node .nodebox')
-		    .css("fill", "#dff0d8");
-	    }
-	    else if (details.status == "failed") {
-		// Bootstrap bg-danger color
-		$('#' + jacksIDs[node_id] + ' .node .nodebox')
-		    .css("fill", "#f2dede");
-	    }
+	$.each(oblob , function(urn, iblob) {
+	    $.each(iblob , function(node_id, details) {
+		if (details.status == "ready") {
+		    // Bootstrap bg-success color
+		    $('#' + jacksIDs[node_id] + ' .node .nodebox')
+			.css("fill", "#dff0d8");
+		}
+		else if (details.status == "failed") {
+		    // Bootstrap bg-danger color
+		    $('#' + jacksIDs[node_id] + ' .node .nodebox')
+			.css("fill", "#f2dede");
+		}
+		else {
+		    // Bootstrap bg-warning color
+		    $('#' + jacksIDs[node_id] + ' .node .nodebox')
+			.css("fill", "#fcf8e3");
+		}
+	    });
 	});
     }	
 	
@@ -689,9 +709,8 @@ function (_, sup, moment, marked, UriTemplate, ShowImagingModal,
 		sup.SpitOops("oops", "Failed to reboot: " + json.value);
 		return;
 	    }
-	    // bootstrap bg-warning color.
-	    $('#' + jacksIDs[node_id] + ' .node .nodebox').css("fill",
-							       "#fcf8e3");
+	    // Trigger status to change the nodes.
+	    GetStatus(uuid);
 	}
 	sup.ShowModal('#waitwait-modal');
 	var xmlthing = sup.CallServerMethod(ajaxurl,
@@ -709,7 +728,7 @@ function (_, sup, moment, marked, UriTemplate, ShowImagingModal,
     {
 	// Handler for hide modal to unbind the click handler.
 	$('#confirm_reload_modal').on('hidden.bs.modal', function (event) {
-	    console.info("reload hide");
+	    //console.info("reload hide");
 	    $(this).unbind(event);
 	    $('#confirm_reload_button').unbind("click.reload");
 	});
@@ -717,7 +736,7 @@ function (_, sup, moment, marked, UriTemplate, ShowImagingModal,
 	// Throw up a confirmation modal, with handler bound to confirm.
 	$('#confirm_reload_button').bind("click.reload", function (event) {
 	    sup.HideModal('#confirm_reload_modal');
-	    console.info("Reload confirm");
+	    //console.info("Reload confirm");
 	    var callback = function(json) {
 		sup.HideModal('#waitwait-modal');
 	    
@@ -725,9 +744,8 @@ function (_, sup, moment, marked, UriTemplate, ShowImagingModal,
 		    sup.SpitOops("oops", "Failed to reload: " + json.value);
 		    return;
 		}
-		// bootstrap bg-warning color.
-		$('#' + jacksIDs[node_id] + ' .node .nodebox').css("fill",
-								   "#fcf8e3");
+		// Trigger status update.
+		GetStatus(uuid);
 	    }
 	    sup.ShowModal('#waitwait-modal');
 	    var xmlthing = sup.CallServerMethod(ajaxurl,
@@ -968,14 +986,12 @@ function (_, sup, moment, marked, UriTemplate, ShowImagingModal,
     //    
     function ShowTopo(uuid)
     {
-	var callback = function(json) {
-	    //console.info(json);
-
-	    ShowManifest(json.value);
-
-	    var xmlDoc = $.parseXML(json.value);
-	    var xml = $(xmlDoc);
-
+	//
+	// Maybe this should come from rspec? Anyway, we might have
+	// multiple manifests, but only need to do this once, on any
+	// one of the manifests.
+	//
+	var UpdateInstructions = function(xml) {
 	    var instructionRenderer = new marked.Renderer();
 	    instructionRenderer.defaultLink = instructionRenderer.link;
 	    instructionRenderer.link = function (href, title, text) {
@@ -998,17 +1014,21 @@ function (_, sup, moment, marked, UriTemplate, ShowImagingModal,
 		    $('#instructions_panel').removeClass("hidden");
 		});
 	    });
+	}
+
+	//
+	// Process the nodes in a single manifest.
+	//
+	var ProcessNodes = function(aggregate_urn, xml) {
 	    // Find all of the nodes, and put them into the list tab.
 	    // Clear current table.
-	    //
-	    // Special case for a topology of a single node; start the
-	    // ssh tab right away.
-	    //
-	    var nodehostport = null;
-	    var nodename = null;
-	    
-            $('#listview_table > tbody').html("");
 	    $(xml).find("node").each(function() {
+		// Only nodes that match the aggregate being processed,
+		// since we send the same rspec to every aggregate.
+		var manager_urn = $(this).attr("component_manager_id");
+		if (!manager_urn.length || manager_urn != aggregate_urn) {
+		    return;
+		}
 		var node   = $(this).attr("client_id");
 		var login  = $(this).find("login");
 		var coninfo= this.getElementsByTagNameNS(EMULAB_NS, 'console');
@@ -1052,10 +1072,6 @@ function (_, sup, moment, marked, UriTemplate, ShowImagingModal,
 			    NewSSHTab(hostport, node);
 			    return false;
 			});		    
-		    
-		    // For the autostart SSH, see below. 
-		    nodehostport = hostport;
-		    nodename = node;
 		}
 
 		//
@@ -1119,10 +1135,33 @@ function (_, sup, moment, marked, UriTemplate, ShowImagingModal,
 		
 		nodecount++;
 	    });
+	}
+	
+	var callback = function(json) {
+	    //console.info(json);
 
+	    // Pass all the manifests to the viewer.
 	    $("#showtopo_container").removeClass("invisible");
 	    $('#quicktabs_ul a[href="#profile"]').tab('show');
 	    ShowViewer('#showtopo_statuspage', json.value);
+
+	    // Process all the manifests to create the list view.
+	    // Clear the list view table before adding nodes. Not needed?
+            $('#listview_table > tbody').html("");
+
+	    // Add the instructions from only one manifest.
+	    var gottour = 0;
+
+	    _.each(json.value, function(manifest, aggregate_urn) {
+		var xmlDoc = $.parseXML(manifest);
+		var xml = $(xmlDoc);
+
+		if (!gottour) {
+		    UpdateInstructions(xml);
+		    gottour = 1;
+		}
+		ProcessNodes(aggregate_urn, xml);
+	    });
 
 	    /*
 	     * If a single node, show the clone button and maybe the
@@ -1139,9 +1178,11 @@ function (_, sup, moment, marked, UriTemplate, ShowImagingModal,
 	    }
 
 	    // Bind a function to start up ssh for one node topologies.
-	    if (nodecount == 1 && nodehostport && !oneonly && dossh) {
+	    if (nodecount == 1 && !oneonly && dossh) {
 		startOneSSH = function () {
-		    NewSSHTab(nodehostport, nodename);
+		    var nodename = hostportlist.keys()[0];
+		    var hostport = hostportlist[nodename];
+		    NewSSHTab(hostport, nodename);
 		};
 	    }
 	    // There is enough asynchrony that we have to watch for the
@@ -1166,6 +1207,7 @@ function (_, sup, moment, marked, UriTemplate, ShowImagingModal,
 	var mode   = "text/xml";
 
 	$("#manifest_textarea").css("height", "300");
+	$('#manifest_textarea .CodeMirror').remove();
 
 	var myCodeMirror = CodeMirror(function(elt) {
 	    $('#manifest_textarea').prepend(elt);
@@ -1431,13 +1473,18 @@ function (_, sup, moment, marked, UriTemplate, ShowImagingModal,
     var jacksOutput;
     var jacksRspecs;
 
-    function ShowViewer(divname, xml)
+    function ShowViewer(divname, manifest_object)
     {
+	var manifests       = _.values(manifest_object);
+	var first_manifest  = _.first(manifests);
+	var rest            = _.rest(manifests);
+	
 	if (! jacksInstance)
 	{
 	    jacksInstance = new window.Jacks({
 		mode: 'viewer',
 		source: 'rspec',
+		multiSite: true,
 		root: divname,
 		nodeSelect: false,
 		readyCallback: function (input, output) {
@@ -1449,11 +1496,19 @@ function (_, sup, moment, marked, UriTemplate, ShowImagingModal,
 			_.each(object.nodes, function (node) {
 			    jacksIDs[node.client_id] = node.id;
 			});
-			//console.log(jacksIDs);
+			console.log(jacksIDs);
+			ShowManifest(object.rspec);
 		    });
 		
 		    jacksInput.trigger('change-topology',
-				       [{ rspec: xml }]);
+				       [{ rspec: first_manifest }]);
+
+		    if (rest.length) {
+			_.each(rest, function(manifest) {
+			    jacksInput.trigger('add-topology',
+					       [{ rspec: manifest }]);
+			});
+		    }
 
 		    jacksOutput.on('click-event', function (jacksevent) {
 			if (jacksevent.type === 'node') 
@@ -1474,7 +1529,14 @@ function (_, sup, moment, marked, UriTemplate, ShowImagingModal,
 	else if (jacksInput)
 	{
 	    jacksInput.trigger('change-topology',
-			       [{ rspec: xml }]);
+			       [{ rspec: first_manifest }]);
+
+	    if (rest.length) {
+		_.each(rest, function(manifest) {
+		    jacksInput.trigger('add-topology',
+				       [{ rspec: manifest }]);
+		});
+	    }
 	}
     }
 

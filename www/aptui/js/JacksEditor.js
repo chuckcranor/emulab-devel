@@ -101,6 +101,7 @@ function (_, editModalString)
 		mode: this.mode,
 		source: 'rspec',
 		root: '#edit_nopicker',
+		multiSite: true,
 		nodeSelect: true,
 		readyCallback: _.bind(this.jacksReady, this),
 		show: {

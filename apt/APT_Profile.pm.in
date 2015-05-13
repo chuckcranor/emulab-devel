@@ -781,85 +781,12 @@ sub UpdateDiskImage($$@)
     return 0;
 }
 
-#
-# We need to convert from using URNs to using URLs for disk images,
-# since we want to support choosing the backend. This list is the
-# list as of the conversion, at the APT. Before we instantiate, look
-# at the rspec and update the URNs to URLs based on this list.
-#
-my %APTImages = (
-    'urn:publicid:IDN+utahddc.geniracks.net+image+emulab-net:demo-profile' => 'https://www.apt.emulab.net/image_metadata.php?uuid=39383c39-7b2f-11e4-9439-db9edc46fe2c',
-    'urn:publicid:IDN+utahddc.geniracks.net+image+emulab-net:docker' => 'https://www.apt.emulab.net/image_metadata.php?uuid=5ae53ff8-7b2f-11e4-9439-db9edc46fe2c',
-    'urn:publicid:IDN+utahddc.geniracks.net+image+emulab-net:docker-running-env' => 'https://www.apt.emulab.net/image_metadata.php?uuid=a1317423-7b2f-11e4-9439-db9edc46fe2c',
-    'urn:publicid:IDN+utahddc.geniracks.net+image+emulab-net:docker-running-env-02' => 'https://www.apt.emulab.net/image_metadata.php?uuid=f30e8657-7b2f-11e4-9439-db9edc46fe2c',
-    'urn:publicid:IDN+utahddc.geniracks.net+image+emulab-net:Docker1' => 'https://www.apt.emulab.net/image_metadata.php?uuid=31d9f5c1-7b30-11e4-9439-db9edc46fe2c',
-    'urn:publicid:IDN+utahddc.geniracks.net+image+emulab-net:ESA' => 'https://www.apt.emulab.net/image_metadata.php?uuid=72d94622-7b35-11e4-9439-db9edc46fe2c',
-    'urn:publicid:IDN+utahddc.geniracks.net+image+emulab-net:firstclone' => 'https://www.apt.emulab.net/image_metadata.php?uuid=d49e30a8-7b31-11e4-9439-db9edc46fe2c',
-    'urn:publicid:IDN+utahddc.geniracks.net+image+emulab-net:FPTaylorVM' => 'https://www.apt.emulab.net/image_metadata.php?uuid=f2e99dbe-7b31-11e4-9439-db9edc46fe2c',
-    'urn:publicid:IDN+utahddc.geniracks.net+image+emulab-net:FrequentDirection' => 'https://www.apt.emulab.net/image_metadata.php?uuid=1c6b4e98-7b32-11e4-9439-db9edc46fe2c',
-    'urn:publicid:IDN+utahddc.geniracks.net+image+emulab-net:geni-lib' => 'https://www.apt.emulab.net/image_metadata.php?uuid=441fc279-7b32-11e4-9439-db9edc46fe2c',
-    'urn:publicid:IDN+utahddc.geniracks.net+image+emulab-net:gimiovsomf6' => 'https://www.apt.emulab.net/image_metadata.php?uuid=626184be-7b32-11e4-9439-db9edc46fe2c',
-    'urn:publicid:IDN+utahddc.geniracks.net+image+emulab-net:hadoop' => 'https://www.apt.emulab.net/image_metadata.php?uuid=ffa8f859-3524-11e4-8944-81966d62745f',
-    'urn:publicid:IDN+utahddc.geniracks.net+image+emulab-net:hg' => 'https://www.apt.emulab.net/image_metadata.php?uuid=91dcd7d5-7b32-11e4-9439-db9edc46fe2c',
-    'urn:publicid:IDN+utahddc.geniracks.net+image+emulab-net:imageusage' => 'https://www.apt.emulab.net/image_metadata.php?uuid=adc61bad-7b32-11e4-9439-db9edc46fe2c',
-    'urn:publicid:IDN+utahddc.geniracks.net+image+emulab-net:Iperf' => 'https://www.apt.emulab.net/image_metadata.php?uuid=d0c8aba4-7b32-11e4-9439-db9edc46fe2c',
-    'urn:publicid:IDN+utahddc.geniracks.net+image+emulab-net:labwikiXORP' => 'https://www.apt.emulab.net/image_metadata.php?uuid=eee5f68d-7b32-11e4-9439-db9edc46fe2c',
-    'urn:publicid:IDN+utahddc.geniracks.net+image+emulab-net:myapt' => 'https://www.apt.emulab.net/image_metadata.php?uuid=13baa069-7b33-11e4-9439-db9edc46fe2c',
-    'urn:publicid:IDN+utahddc.geniracks.net+image+emulab-net:myclone' => 'https://www.apt.emulab.net/image_metadata.php?uuid=301d4978-7b33-11e4-9439-db9edc46fe2c',
-    'urn:publicid:IDN+utahddc.geniracks.net+image+emulab-net:myimage' => 'https://www.apt.emulab.net/image_metadata.php?uuid=03a342be-7b2c-11e4-9439-db9edc46fe2c',
-    'urn:publicid:IDN+utahddc.geniracks.net+image+emulab-net:myvm' => 'https://www.apt.emulab.net/image_metadata.php?uuid=6334cf1c-7a59-11e4-9439-db9edc46fe2c',
-    'urn:publicid:IDN+utahddc.geniracks.net+image+emulab-net:myvm2' => 'https://www.apt.emulab.net/image_metadata.php?uuid=aa8b3638-7a79-11e4-9439-db9edc46fe2c',
-    'urn:publicid:IDN+utahddc.geniracks.net+image+emulab-net:ricci-cav-2014' => 'https://www.apt.emulab.net/image_metadata.php?uuid=b3d6f6f7-7b35-11e4-9439-db9edc46fe2c',
-    'urn:publicid:IDN+utahddc.geniracks.net+image+emulab-net:rob-profile' => 'https://www.apt.emulab.net/image_metadata.php?uuid=31278fc7-7b34-11e4-9439-db9edc46fe2c',
-    'urn:publicid:IDN+utahddc.geniracks.net+image+emulab-net:robtestimage' => 'https://www.apt.emulab.net/image_metadata.php?uuid=4d43d6bb-7b34-11e4-9439-db9edc46fe2c',
-    'urn:publicid:IDN+utahddc.geniracks.net+image+emulab-net:singlenodelime' => 'https://www.apt.emulab.net/image_metadata.php?uuid=60905cf9-7b34-11e4-9439-db9edc46fe2c',
-    'urn:publicid:IDN+utahddc.geniracks.net+image+emulab-net:singlenodelime-2' => 'https://www.apt.emulab.net/image_metadata.php?uuid=8db24268-7b34-11e4-9439-db9edc46fe2c',
-    'urn:publicid:IDN+utahddc.geniracks.net+image+emulab-net:singlevmlime' => 'https://www.apt.emulab.net/image_metadata.php?uuid=b192a572-7b34-11e4-9439-db9edc46fe2c',
-    'urn:publicid:IDN+utahddc.geniracks.net+image+emulab-net:smack-cav2014-test' => 'https://www.apt.emulab.net/image_metadata.php?uuid=a4594b69-7b36-11e4-9439-db9edc46fe2c',
-    'urn:publicid:IDN+utahddc.geniracks.net+image+emulab-net:ubuntu1204maas' => 'https://www.apt.emulab.net/image_metadata.php?uuid=e532f26d-7b36-11e4-9439-db9edc46fe2c',
-    'urn:publicid:IDN+utahddc.geniracks.net+image+emulab-net:Ubuntu1404' => 'https://www.apt.emulab.net/image_metadata.php?uuid=0838c611-7b37-11e4-9439-db9edc46fe2c'
-);
-
-sub ConvertDiskImages($)
-{
-    my ($self) = @_;
-    my $modified = 0;
-
-    my $rspec = GeniXML::Parse($self->rspec());
-    if (! defined($rspec)) {
-	print STDERR "Could not parse rspec\n";
-	return -1;
-    }
-    foreach my $ref (GeniXML::FindNodes("n:node", $rspec)->get_nodelist()) {
-	my $diskref = GeniXML::GetDiskImage($ref);
-	next
-	    if (!defined($diskref));
-	my $imageurn = GeniXML::GetText("name", $diskref);
-	next
-	    if (!defined($imageurn));
-	if (exists($APTImages{$imageurn})) {
-	    GeniXML::SetDiskImage($ref, $APTImages{$imageurn});
-	    $modified = 1;
-	}
-    }
-    if ($modified) {
-	$self->{'DBROW'}->{'rspec'} = GeniXML::Serialize($rspec);
-
-	my $profileid  = $self->profileid();
-	my $version    = $self->version();
-	my $safe_rspec = DBQuoteSpecial($self->rspec());
-	DBQueryWarn("update apt_profile_versions set rspec=$safe_rspec ".
-		    "where profileid='$profileid' and version='$version'")
-	    if (1);
-    }
-    return 0;
-}
-
 # Total nonsense, to be thrown away.
 sub CheckNodeConstraints($$$)
 {
-    my ($self, $iscloudlab, $pmsg) = @_;
+    my ($self, $default_aggregate_urn, $pmsg) = @_;
     my $cloudwww = "www.utah.cloudlab.us";
+    my $cloudurn = "urn:publicid:IDN+utah.cloudlab.us+authority+cm";
     require URI;
 
     my $rspec = GeniXML::Parse($self->rspec());
@@ -870,6 +797,11 @@ sub CheckNodeConstraints($$$)
     foreach my $ref (GeniXML::FindNodes("n:node", $rspec)->get_nodelist()) {
 	my $client_id = GetVirtualId($ref);
 	my $virtualization_type = GeniXML::GetVirtualizationSubtype($ref);
+	my $manager_urn = GetManagerId($ref);
+	if (! defined($manager_urn)) {
+	    $manager_urn = $default_aggregate_urn;
+	}
+	my $iscloudlab = ($manager_urn eq $cloudurn ? 1 : 0);
 
 	if (defined($virtualization_type) && $iscloudlab &&
 	    $virtualization_type eq "emulab-xen") {
@@ -1009,6 +941,38 @@ sub CheckDatasets($$$)
 	    #
 	}
     }
+    return 0;
+}
+
+#
+# Set the component_manager_urn for the sites.
+#
+sub SetSites($$$)
+{
+    my ($prspecstr, $sitemap, $perrmsg) = @_;
+
+    my $rspec = GeniXML::Parse($$prspecstr);
+    if (! defined($rspec)) {
+	$$perrmsg = "Could not parse rspec\n";
+	return -1;
+    }
+    foreach my $ref (GeniXML::FindNodes("n:node", $rspec)->get_nodelist()) {
+	my $client_id   = GetVirtualId($ref);
+	my $site_id     = GeniXML::GetJacksSiteId($ref);
+
+	if (!defined($site_id)) {
+	    $$perrmsg = "No site ID for $client_id";
+	    return -1;
+	}
+	my $site_mid = "site:" . $site_id;
+	if (!exists($sitemap->{$site_mid})) {
+	    $$perrmsg = "No site mapping for $client_id ($site_id)";
+	    return -1;
+	}
+	GeniXML::SetManagerId($ref, $sitemap->{$site_mid});
+	GeniXML::SetJacksSiteManagerId($ref, $sitemap->{$site_mid});
+    }
+    $$prspecstr = GeniXML::Serialize($rspec);
     return 0;
 }
 
