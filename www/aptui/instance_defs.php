@@ -68,9 +68,15 @@ class Instance
 	    $this->instance = null;
 	    return;
 	}
-	$this->instance = mysql_fetch_array($query_result);
+	$this->instance  = mysql_fetch_array($query_result);
+        $this->slivers   = InstanceSliver::LookupForInstance($this);
+        if (!count($this->slivers) && $this->aggregate_urn()) {
+            $this->slivers =
+                array(InstanceSliver::Lookup($this, $this->aggregate_urn()));
+        }
     }
     # accessors
+    function slivers()      { return $this->slivers; }
     function field($name) {
 	return (is_null($this->instance) ? -1 : $this->instance[$name]);
     }
@@ -431,4 +437,85 @@ class Instance
       }
     }
 }
+
+class InstanceSliver
+{
+    var	$sliver;
+    
+    #
+    # Constructor by lookup on unique index.
+    #
+    function InstanceSliver($instance, $urn) {
+	$uuid = $instance->uuid();
+
+	$query_result =
+	    DBQueryWarn("select * from apt_instance_aggregates ".
+			"where uuid='$uuid' and aggregate_urn='$urn'");
+
+	if (!$query_result || !mysql_num_rows($query_result)) {
+	    $this->sliver = null;
+	    return;
+	}
+	$this->sliver = mysql_fetch_array($query_result);
+    }
+    # accessors
+    function field($name) {
+	return (is_null($this->sliver) ? -1 : $this->sliver[$name]);
+    }
+    function uuid()	    { return $this->field('uuid'); }
+    function name()	    { return $this->field('name'); }
+    function aggregate_urn(){ return $this->field('aggregate_urn'); }
+    function status()	    { return $this->field('status'); }
+    function public_url()   { return $this->field('public_url'); }
+    function webtask_id()   { return $this->field('webtask_id'); }
+    function manifest()	    { return $this->field('manifest'); }
+
+    # Hmm, how does one cause an error in a php constructor?
+    function IsValid() {
+	return !is_null($this->sliver);
+    }
+
+    function Lookup($instance, $urn) {
+	$foo = new InstanceSliver($instance, $urn);
+
+	if ($foo->IsValid()) {
+            return $foo;
+        }
+        #
+        # Backwards compat for a while, create a fake one. 
+        #
+        $webtask = WebTask::LookupByObject($instance->uuid());
+        $foo->sliver = array(
+            "uuid" => $instance->uuid(),
+            "name" => $instance->name(),
+            "aggregate_urn" => $instance->aggregate_urn(),
+            "status" => $instance->status(),
+            "public_url" => $instance->public_url(),
+            "manifest" => $instance->manifest(),
+            "webtask_id" => $webtask->task_id(),
+        );
+        return $foo;
+    }
+
+    #
+    # Lookup all slivers for an instance
+    #
+    function LookupForInstance($instance) {
+        $result = array();
+        $uuid   = $instance->uuid();
+
+        $query_result =
+            DBQueryFatal("select aggregate_urn from apt_instance_aggregates ".
+                         "where uuid='$uuid'");
+
+	while ($row = mysql_fetch_array($query_result)) {
+            $sliver = InstanceSliver::Lookup($instance, $row['aggregate_urn']);
+            if ($sliver) {
+                $result[] = $sliver;
+            }
+        }
+        return $result;
+    }
+}
+
 ?>

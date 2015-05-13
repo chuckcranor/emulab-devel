@@ -208,9 +208,6 @@ sub DoSnapshot()
     if (!defined($slice)) {
 	fatal("No slice for quick VM: $uuid");
     }
-    my $authority = $instance->GetGeniAuthority();
-    my $cmurl     = $authority->url();
-    $cmurl =~ s/protogeni/protogeni\/stoller/ if ($usemydevtree);
     
     # The web interface (and in the future the xmlrpc interface) sets this.
     my $this_user = User->ImpliedUser();
@@ -225,6 +222,8 @@ sub DoSnapshot()
     # Might be a clone (manage_profile).
     #
     my $sliver_urn;
+    my $aggregate;
+    my $node;
     
     my $profile = APT_Profile->Lookup($instance->profile_id());
     if (!defined($profile)) {
@@ -245,31 +244,54 @@ sub DoSnapshot()
 	    $imagename = $profile->name();
 	}
     }
-    
+
     #
-    # Sanity check to make sure there is just one node. 
+    # Sanity checks. 
     #
-    my $manifest = GeniXML::Parse($instance->manifest());
-    if (! defined($manifest)) {
-	fatal("Could not parse manifest");
+    my @aggs = @{ $instance->AggregateList() };
+    if (! @aggs) {
+	fatal("No slivers for instance!");
     }
-    my $node;
-    my @nodes = GeniXML::FindNodes("n:node", $manifest)->get_nodelist();
     if (!defined($node_id)) {
 	# We snapshot the one node in the instance.
+	if (@aggs != 1) {
+	    fatal("Too many aggregates (> 1) to snapshot");
+	}
+	my ($agg) = @aggs;
+	my $manifest = GeniXML::Parse($agg->manifest());
+	if (! defined($manifest)) {
+	    fatal("Could not parse manifest for $agg");
+	}
+	my @nodes = GeniXML::FindNodes("n:node", $manifest)->get_nodelist();
 	if (@nodes != 1) {
 	    fatal("Too many nodes (> 1) to snapshot");
 	}
 	($node)     = @nodes;
 	$sliver_urn = GeniXML::GetSliverId($node);
+	$aggregate     = $agg;
     }
     else {
-	foreach my $ref (@nodes) {
-	    my $client_id = GeniXML::GetVirtualId($ref);
-	    if ($node_id eq $client_id) {
-		$sliver_urn = GeniXML::GetSliverId($ref);
-		$node = $ref;
-		last;
+	# Find the node in its manifest.
+	foreach my $agg (@aggs) {
+	    my $manifest = GeniXML::Parse($agg->manifest());
+	    if (! defined($manifest)) {
+		fatal("Could not parse manifest for $agg");
+	    }
+	    foreach my $ref (GeniXML::FindNodes("n:node",
+						$manifest)->get_nodelist()) {
+		my $client_id  = GeniXML::GetVirtualId($ref);
+		my $urn        = GeniXML::GetSliverId($ref);
+
+		# No sliver urn or a different aggregate.
+		next
+		    if (! (defined($urn) && $urn eq $agg->aggregate_urn()));
+
+		if ($node_id eq $client_id) {
+		    $node = $ref;
+		    $sliver_urn = $urn;
+		    $aggregate = $agg;
+		    last;
+		}
 	    }
 	}
 	if (!defined($sliver_urn)) {
@@ -285,6 +307,7 @@ sub DoSnapshot()
     if (defined($update_profile)) {
 	my $diskref = GeniXML::GetDiskImage($node);
 	if (defined($diskref)) {
+	    my $authority = $aggregate->GetGeniAuthority();
 	    my $image_url = GeniXML::GetText("url", $diskref);
 	    if (defined($image_url)) {
 		require URI;
@@ -330,38 +353,12 @@ sub DoSnapshot()
 	$webtask->AutoStore(1);
     }
 
-    my $geniuser  = $instance->GetGeniUser();
-    my $context   = APT_Geni::GeniContext();
-    if (! (defined($geniuser) && defined($authority) &&
-	   defined($slice) && defined($context))) {
-	$errmsg = "Internal error getting instance objects";
-	goto bad;
-    }
-    my ($slice_credential, $speaksfor_credential) =
-	APT_Geni::GenCredentials($slice, $geniuser);
-    if (! (defined($speaksfor_credential) && defined($slice_credential))) {
-	$errmsg = "Internal error getting credentials";
-	goto bad;
-    }
-    $instance->SetStatus("imaging");
-
-    my $args = {
-	"slice_urn"   => $slice->urn(),
-	"imagename"   => $imagename,
-	"sliver_urn"  => $sliver_urn,
-	"global"      => 1,
-	"credentials" => [$slice_credential->asString(),
-			  $speaksfor_credential->asString()],
-    };
-    if ($update_prepare) {
-	$args->{'update_prepare'} = 1;
-    }
     #
     # This returns pretty fast, and then the imaging takes place in
     # the background at the aggregate. 
     #
-    my $response = Genixmlrpc::CallMethod($cmurl,
-					  $context, "CreateImage", $args);
+    my $response =
+	$aggregate->CreateImage($sliver_urn, $imagename, $update_prepare);
     if (!defined($response)) {
 	$errmsg = "Internal error creating image";
 	$instance->SetStatus($old_status);
@@ -407,24 +404,17 @@ sub DoSnapshot()
     #
     # Poll for a reasonable amount of time.
     #
-    my $seconds  = 1200;
-    my $interval = 5;
+    my $seconds  = 1500;
+    my $interval = 10;
     my $ready    = 0;
     my $sliver_ready = 0;
     my $failed   = 0;
-    # do not want this in the args for calls below.
-    delete($args->{'sliver_urn'});
-    delete($args->{'imagename'});
-    # But we need this;
-    $args->{'image_urn'} = $image_urn;
 
     while ($seconds > 0) {
 	sleep($interval);
 	$seconds -= $interval;
     
-	my $response =
-	    Genixmlrpc::CallMethod($cmurl, $context, "SliverStatus", $args);
-
+	my $response = $aggregate->SliverStatus();
 	if ($response->code() != GENIRESPONSE_SUCCESS &&
 	    $response->code() != GENIRESPONSE_BUSY) {
 	    $errmsg = "Sliverstatus failed: ". $response->output() . "\n";
@@ -436,20 +426,25 @@ sub DoSnapshot()
 
 	my $blob = $response->value();
 	if (defined($webtask)) {
-	    # Always stick in full status for web interface.
-	    my $statusblob = {};
+	    # Special for imaging status display
 	    foreach my $urn (keys(%{$blob->{'details'}})) {
 		my $details = $blob->{'details'}->{$urn};
-		my $node_id = $details->{'client_id'};
-		$statusblob->{$node_id} = $details;
-		# Special for imaging status display
+		
 		if ($urn eq $sliver_urn) {
 		    $webtask->state($details->{'state'});
 		    $webtask->rawstate($details->{'rawstate'});
 		}
 	    }
-	    $webtask->sliverstatus($statusblob)
 	}
+	# This is the per-aggregate status, we always set this for web UI.
+	my $statusblob = {};
+	foreach my $urn (keys(%{$blob->{'details'}})) {
+	    my $details = $blob->{'details'}->{$urn};
+	    my $node_id = $details->{'client_id'};
+	    $statusblob->{$node_id} = $details;
+	}
+	$aggregate->webtask()->sliverstatus($statusblob);
+	
 	if ($blob->{'status'} eq "failed") {
 	    $failed = 1;
 	    last;
@@ -461,9 +456,7 @@ sub DoSnapshot()
 	#
 	# We are watching for the image status to report ready or failed.
 	#
-	$response =
-	    Genixmlrpc::CallMethod($cmurl, $context, "ImageInfo", $args);
-
+	$response = $aggregate->ImageInfo($image_urn);
 	if ($response->code() != GENIRESPONSE_SUCCESS &&
 	    $response->code() != GENIRESPONSE_BUSY) {
 	    $errmsg = "Imageinfo failed: ". $response->output() . "\n";
@@ -585,26 +578,37 @@ sub DoConsole()
     # we need its sliver urn to ask for the console url.
     #
     my $sliver_urn;
-    my $manifest = GeniXML::Parse($instance->manifest());
-    if (! defined($manifest)) {
-	fatal("Could not parse manifest");
-    }
-    my @nodes = GeniXML::FindNodes("n:node", $manifest)->get_nodelist();
-    foreach my $node (@nodes) {
-	my $client_id = GeniXML::GetVirtualId($node);
-	if ($node_id eq $client_id) {
-	    $sliver_urn = GeniXML::GetSliverId($node);
+    my $sliver;
+    foreach my $obj (@{ $instance->AggregateList() }) {
+	my $manifest = GeniXML::Parse($obj->manifest());
+	if (! defined($manifest)) {
+	    fatal("Could not parse manifest for $obj");
+	}
+	my @nodes = GeniXML::FindNodes("n:node", $manifest)->get_nodelist();
+	foreach my $node (@nodes) {
+	    my $client_id  = GeniXML::GetVirtualId($node);
+	    my $sliver_urn = GeniXML::GetSliverId($node);
+
+	    # No sliver urn or a different aggregate.
+	    next
+		if (! (defined($sliver_urn) &&
+		       $sliver_urn eq $obj->aggregate_urn()));
+
+	    if ($node_id eq $client_id) {
+		$sliver_urn = GeniXML::GetSliverId($node);
+		$sliver = $obj;
+	    }
 	}
     }
     if (!defined($sliver_urn)) {
 	fatal("Could not find node '$node_id' in manifest");
     }
-    my $response = $instance->ConsoleInfo($sliver_urn);
+    my $response = $sliver->ConsoleInfo($sliver_urn);
     if (!defined($response)) {
 	fatal("RPC Error calling ConsoleInfo");
     }
     if ($response->code() != GENIRESPONSE_SUCCESS) {
-	$response = $instance->ConsoleURL($sliver_urn);
+	$response = $sliver->ConsoleURL($sliver_urn);
 	if (!defined($response)) {
 	    fatal("RPC Error calling ConsoleURL");
 	}
@@ -670,22 +674,13 @@ sub DoTerminate()
     if ($slice->Lock()) {
 	fatal("Slice is busy, cannot lock it");
     }
-    # So we can communicate errors back to the web interface.
-    if (defined($webtask_id)) {
-	$webtask = WebTask->LookupOrCreate($instance->uuid(), $webtask_id);
-	if (!defined($webtask)) {
-	    $slice->UnLock();
-	    fatal("Could not lookup/create webtask for $webtask_id");
-	}
-	$webtask->AutoStore(1);
-    }
     my $old_status = $instance->status();
     $instance->SetStatus("terminating");
 
     #
     # Exit and let caller poll for status.
     #
-    if (defined($webtask) && !$debug) {
+    if (!$debug) {
         $logfile = TBMakeLogname("terminate");
 	
 	if (my $childpid = TBBackGround($logfile)) {
@@ -704,39 +699,65 @@ sub DoTerminate()
 	    exit($status);
 	}
     }
-    my $response = $instance->Terminate();
-    if (!defined($response)) {
-	$errmsg = "RPC Error calling Terminate";
-	goto bad;
-    }
+    my $coderef = sub {
+	my ($sliver) = @_;
+	my $errmsg;
 
-    # SEARCHFAILED is success.
-    if ($response->code() != GENIRESPONSE_SUCCESS &&
-	$response->code() != GENIRESPONSE_SEARCHFAILED) {
-	if ($response->code() == GENIRESPONSE_BUSY) {
-	    $errmsg = "Slice was busy for too long; try again later?";
+	my $response = $sliver->Terminate();
+	if (!defined($response)) {
+	    $errmsg = "RPC Error calling Terminate";
 	    goto bad;
 	}
-	$errmsg = "Could not delete slice: ". $response->output();
+
+	# SEARCHFAILED is success.
+	if ($response->code() != GENIRESPONSE_SUCCESS &&
+	    $response->code() != GENIRESPONSE_SEARCHFAILED) {
+	    if ($response->code() == GENIRESPONSE_BUSY) {
+		$errmsg = "Slice was busy for too long; try again later?";
+		goto bad;
+	    }
+	    $errmsg = "Could not delete slice: ". $response->output();
+	    goto bad;
+	}
+	return 0;
+      bad:
+	print STDERR "$errmsg\n";
+	return -1;
+    };
+    my @return_codes = ();
+    my @agglist =      @{ $instance->AggregateList() };
+    if (ParRun({"maxwaittime" => 99999,
+		"maxchildren" => scalar(@agglist)},
+	    \@return_codes, $coderef, @agglist)) {
+	#
+	# The parent caught a signal. Leave things intact so that we can
+	# kill things cleanly later.
+	#
+	$errmsg = "Internal error calling Terminate()";
 	goto bad;
     }
+    #
+    # Check the exit codes. 
+    #
+    foreach my $code (@return_codes) {
+	if ($code) {
+	    $errmsg = "Some slivers would not terminate";
+	    goto bad;
+	}
+    }
+    
     $slice->Delete();
     $instance->RecordHistory();
   killit:
     $instance->Delete();
-    $webtask->Exited(0)
-	if (defined($webtask));
     unlink($logfile)
 	if (defined($logfile));
     exit(0);
+    
   bad:
     print STDERR $errmsg . "\n";
     $instance->SetStatus($old_status);
     $slice->UnLock();
-    if (defined($webtask)) {
-	$webtask->output($errmsg);
-	$webtask->Exited(1);
-    }
     if (defined($logfile)) {
 	SENDMAIL($TBOPS,
 		 "Unable to terminate instance $uuid",
@@ -798,25 +819,59 @@ sub DoExtend()
     # Need to update slice before creating new credential. 
     $slice->AddToExpiration($seconds);
     my $new_expires = $slice->ExpirationGMT();
-    
-    my $response = $instance->Extend($new_expires);
-    if (!defined($response)) {
-	$slice->UnLock();
-	fatal("Internal error calling Extend");
-    }
-    if ($response->code() != GENIRESPONSE_SUCCESS) {
-	# Reset back to original expiration, sorry.
-	$slice->SetExpiration($oldexpires);
-	$slice->UnLock();
-	# This is something the user should see.
-	if ($response->code() == GENIRESPONSE_REFUSED ||
-	    $response->code() == GENIRESPONSE_BUSY) {
-	    print STDERR $response->output() . "\n";
-	    # For web interface.
-	    exit(1);
+
+    my $coderef = sub {
+	my ($sliver) = @_;
+	my $webtask  = $sliver->webtask();
+	my $errmsg;
+
+	my $response = $sliver->Extend($new_expires);
+	if (!defined($response)) {
+	    $errmsg = "Internal error calling Extend";
+	    goto bad;
 	}
-	fatal("Failed to extend slice: ". $response->output())
+	if ($response->code() != GENIRESPONSE_SUCCESS) {
+	    # This is something the user should see.
+	    if ($response->code() == GENIRESPONSE_REFUSED ||
+		$response->code() == GENIRESPONSE_BUSY) {
+		print STDERR $response->output() . "\n";
+		# For web interface.
+		$webtask->output($response->output());
+		$webtask->Exited(1);
+		return 1;
+	    }
+	    $errmsg = "Failed to extend slice: ". $response->output();
+	    goto bad;
+	}
+	return 0;
+      bad:
+	print STDERR "$errmsg\n";
+	$webtask->output($errmsg);
+	$webtask->Exited(-1);
+	return -1;
+    };
+    my @return_codes = ();
+    my @agglist =      @{ $instance->AggregateList() };
+    if (ParRun({"maxwaittime" => 99999,
+		"maxchildren" => scalar(@agglist)},
+	    \@return_codes, $coderef, @agglist)) {
+	#
+	# The parent caught a signal. Leave things intact so that we can
+	# kill things cleanly later.
+	#
+	print STDERR "Internal error calling Extend\b";
+	goto bad;
     }
+    #
+    # Check the exit codes. 
+    #
+    foreach my $code (@return_codes) {
+	if ($code) {
+	    print STDERR "Some slivers could not be extended\n";
+	    goto bad;
+	}
+    }
+    # Lockdown.
     if (defined($this_user) && $this_user->IsAdmin() &&
 	($seconds / (24 * 60 * 60)) > 10) {
 	if (DoLockdownInternal("set", "admin")) {
@@ -829,6 +884,12 @@ sub DoExtend()
     }
     $slice->UnLock();
     exit(0);
+
+  bad:
+    # Reset back to original expiration, sorry.
+    $slice->SetExpiration($oldexpires);
+    $slice->UnLock();
+    exit(-1);
 }
 
 #
@@ -863,46 +924,77 @@ sub DoRefresh()
 	$webtask->AutoStore(1);
     }
 
-    my $response = $instance->SliceStatus();
-    if (!defined($response)) {
-	$errmsg = "RPC Error calling SliceStatus";
-	goto bad;
-    }
+    my $coderef = sub {
+	my ($sliver) = @_;
+	my $webtask  = $sliver->webtask();
+	my $errmsg;
 
-    if ($response->code() != GENIRESPONSE_SUCCESS) {
-	if ($response->code() == GENIRESPONSE_SEARCHFAILED) {
-	    $errmsg = "Slice is gone";
+	my $response = $sliver->SliceStatus();
+	if (!defined($response)) {
+	    $errmsg = "RPC Error calling SliceStatus";
 	    goto bad;
 	}
-	if ($response->code() == GENIRESPONSE_BUSY) {
-	    $errmsg = "Slice is busy; try again later";
+
+	if ($response->code() != GENIRESPONSE_SUCCESS) {
+	    if ($response->code() == GENIRESPONSE_SEARCHFAILED) {
+		$errmsg = "Slice is gone";
+		goto bad;
+	    }
+	    if ($response->code() == GENIRESPONSE_BUSY) {
+		$errmsg = "Slice is busy; try again later";
+		goto bad;
+	    }
+	    $errmsg = "Could not get status: ". $response->output();
 	    goto bad;
 	}
-	$errmsg = "Could not get status: ". $response->output();
+	my $blob = $response->value();
+	if ($blob->{'status'} eq "ready") {
+	    $sliver->SetStatus("ready");
+	}
+	elsif ($blob->{'status'} eq "failed") {
+	    $sliver->SetStatus("failed");
+	}
+	#
+	# Convert to something smaller, with info the web interface
+	# cares about. 
+	#
+	my $statusblob = {};
+	foreach my $urn (keys(%{$blob->{'details'}})) {
+	    my $details = $blob->{'details'}->{$urn};
+	    my $node_id = $details->{'client_id'};
+	    $statusblob->{$node_id} = $details;
+	}
+	$webtask->sliverstatus($statusblob);
+	if ($debug) {
+	    print STDERR Dumper($statusblob);
+	}
+	return 0;
+      bad:
+	print STDERR "$errmsg\n";
+	$webtask->output($errmsg);
+	$webtask->Exited(1);
+	return 1;
+    };
+    my @return_codes = ();
+    my @agglist =      @{ $instance->AggregateList() };
+    if (ParRun({"maxwaittime" => 99999,
+		"maxchildren" => scalar(@agglist)},
+	    \@return_codes, $coderef, @agglist)) {
+	#
+	# The parent caught a signal. Leave things intact so that we can
+	# kill things cleanly later.
+	#
+	$errmsg = "Internal error calling Refresh";
 	goto bad;
     }
-    my $blob = $response->value();
-    if ($blob->{'status'} eq "ready") {
-	$instance->SetStatus("ready");
-    }
-    elsif ($blob->{'status'} eq "failed") {
-	$instance->SetStatus("failed");
-    }
     #
-    # Convert to something smaller, with info the web interface
-    # cares about. 
+    # Check the exit codes. 
     #
-    my $statusblob = {};
-    foreach my $urn (keys(%{$blob->{'details'}})) {
-	my $details = $blob->{'details'}->{$urn};
-	my $node_id = $details->{'client_id'};
-	$statusblob->{$node_id} = $details;
-    }
-    if (defined($webtask)) {
-	$webtask->sliverstatus($statusblob);
-    }
-    if ($debug) {
-	print STDERR Dumper($statusblob);
+    foreach my $code (@return_codes) {
+	if ($code) {
+	    $errmsg = "Some slivers could not be refreshed";
+	    goto bad;
+	}
     }
     $slice->UnLock();
     exit(0);
@@ -927,7 +1019,6 @@ sub DoRebootOrReload($)
 {
     my ($which) = @_;
     my $errmsg;
-    my @slivers = ();
     
     usage()
 	if (!@ARGV);
@@ -938,19 +1029,29 @@ sub DoRebootOrReload($)
 	goto killit;
     }
 
-    my $manifest = GeniXML::Parse($instance->manifest());
-    if (! defined($manifest)) {
-	fatal("Could not parse manifest");
-    }
-    my @nodes = GeniXML::FindNodes("n:node", $manifest)->get_nodelist();
-    foreach my $node (@nodes) {
-	my $client_id = GeniXML::GetVirtualId($node);
-	if (grep {$_ eq $client_id} @ARGV) {
-	    my $sliver_urn = GeniXML::GetSliverId($node);
-	    if (!defined($sliver_urn)) {
-		fatal("No sliver id for $client_id");
+    my %sliver_urns = ();
+    my @slivers     = ();
+    foreach my $obj (@{ $instance->AggregateList() }) {
+	my $manifest = GeniXML::Parse($obj->manifest());
+	if (! defined($manifest)) {
+	    fatal("Could not parse manifest");
+	}
+	my @nodes = GeniXML::FindNodes("n:node", $manifest)->get_nodelist();
+	foreach my $node (@nodes) {
+	    my $client_id = GeniXML::GetVirtualId($node);
+	    if (grep {$_ eq $client_id} @ARGV) {
+		my $sliver_urn = GeniXML::GetSliverId($node);
+
+		# No sliver urn, means a different aggregate.
+		next
+		    if (!defined($sliver_urn));
+
+		if (!exists($sliver_urns{$obj->aggregate_urn()})) {
+		    $sliver_urns{$obj->aggregate_urn()} = [];
+		    push(@slivers, $obj);
+		}
+		push(@{ $sliver_urns{$obj->aggregate_urn()} }, $sliver_urn);
 	    }
-	    push(@slivers, $sliver_urn);
 	}
     }
     
@@ -973,23 +1074,59 @@ sub DoRebootOrReload($)
 	$webtask->AutoStore(1);
     }
 
-    my $response = $instance->SliverAction($which, @slivers);
-    if (!defined($response)) {
-	$errmsg = "RPC Error calling SliverAction";
+    my $coderef = sub {
+	my ($sliver) = @_;
+	my $webtask  = $sliver->webtask();
+	my @urns     = @{ $sliver_urns{$sliver->aggregate_urn()} };
+	my $errmsg;
+
+	# Clear this so that web interface will not update it.
+	$webtask->sliverstatus({});
+
+	my $response = $sliver->SliverAction($which, @urns);
+	if (!defined($response)) {
+	    $errmsg = "RPC Error calling SliverAction";
+	    goto bad;
+	}
+	if ($response->code() != GENIRESPONSE_SUCCESS) {
+	    if ($response->code() == GENIRESPONSE_SEARCHFAILED) {
+		$errmsg = "Slice is gone";
+		goto bad;
+	    }
+	    if ($response->code() == GENIRESPONSE_BUSY) {
+		$errmsg = "Experiment is busy; try again later";
+		goto bad;
+	    }
+	    $errmsg = $response->output();
+	    goto bad;
+	}
+	return 0;
+      bad:
+	print STDERR "$errmsg\n";
+	$webtask->output($errmsg);
+	$webtask->Exited(1);
+	return 1;
+    };
+
+    my @return_codes = ();
+    if (ParRun({"maxwaittime" => 99999,
+		"maxchildren" => scalar(@slivers)},
+	    \@return_codes, $coderef, @slivers)) {
+	#
+	# The parent caught a signal. Leave things intact so that we can
+	# kill things cleanly later.
+	#
+	$errmsg = "Internal error calling SliverAction";
 	goto bad;
     }
-
-    if ($response->code() != GENIRESPONSE_SUCCESS) {
-	if ($response->code() == GENIRESPONSE_SEARCHFAILED) {
-	    $errmsg = "Slice is gone";
+    #
+    # Check the exit codes. 
+    #
+    foreach my $code (@return_codes) {
+	if ($code) {
+	    $errmsg = "Some slivers could not be ${which}'ed";
 	    goto bad;
 	}
-	if ($response->code() == GENIRESPONSE_BUSY) {
-	    $errmsg = "Experiment is busy; try again later";
-	    goto bad;
-	}
-	$errmsg = $response->output();
-	goto bad;
     }
     $slice->UnLock();
     if (defined($webtask)) {
@@ -1025,6 +1162,7 @@ sub StartMonitor()
 {
     my $logfile;
     my $needunlock = 0;
+    my $signaled   = 0;
     
     my $slice = $instance->GetGeniSlice();
     if (!defined($slice)) {
@@ -1047,46 +1185,20 @@ sub StartMonitor()
     }
     $instance->Update({"monitor_pid" => '$PID'});
     
-    #
-    # Need a TERM handler to clean things up.
-    #
-    my $handler = sub {
-	unlink($logfile)
-	    if (defined($logfile));
-	$slice->UnLock()
-	    if ($needunlock);
-	exit(0);
-    };
-    local $SIG{TERM} = $handler;
-    if ($debug) {
-	local $SIG{INT} = $handler;
-    }
     my $seconds  = 1500;
     my $interval = 15;
     # Shorten default timeout now.
-    Genixmlrpc->SetTimeout(60);
+    Genixmlrpc->SetTimeout(30);
 
-    while ($seconds > 0) {
-	sleep($interval);
-	$seconds -= $interval;
+    my $coderef = sub {
+	my ($sliver) = @_;
+	my $webtask  = $sliver->webtask();
+	my $errmsg;
 
-	#
-	# Lock the slice in case it is doing something else, like taking
-	# a disk image. Just skip this turn.
-	#
-	next
-	    if ($slice->Lock());
-	$needunlock = 1;
-
-	if (defined($webtask_id)) {
-	    $webtask = WebTask->LookupOrCreate($instance->uuid(), $webtask_id);
-	    # Convenient.
-	    $webtask->AutoStore(1);
-	}
-	my $response = $instance->SliceStatus();
+	my $response = $sliver->SliceStatus();
 	if (!defined($response)) {
 	    print STDERR "RPC Error calling SliceStatus\n";
-	    goto skip;
+	    return GENIRESPONSE_RPCERROR;
 	}
 	if (($response->code() != GENIRESPONSE_SUCCESS &&
 	     $response->code() != GENIRESPONSE_BUSY)) {
@@ -1102,12 +1214,12 @@ sub StartMonitor()
 		    $webtask->output($response->output());
 		}
 	    }
-	    $slice->UnLock();
-	    $needunlock = 0;
-	    last;
+	    return -1;
 	}
-	goto skip
-	    if ($response->code() == GENIRESPONSE_BUSY);
+	if ($response->code() == GENIRESPONSE_BUSY) {
+	    # Indicate not done.
+	    return GENIRESPONSE_BUSY;
+	}
     
 	my $blob = $response->value();
 	#
@@ -1123,20 +1235,65 @@ sub StartMonitor()
 	if ($debug) {
 	    print STDERR Dumper($statusblob);
 	}
-	$webtask->sliverstatus($statusblob)
-	    if (defined($webtask));
+	$webtask->sliverstatus($statusblob);
+
 	#
-	# We poll until the status goes ready, to avoid continuous polling
-	# for dozens of instances. Needs more thought.
+	# We poll until the status goes ready. Might not be a good idea.
 	#
 	if ($blob->{'status'} eq "ready") {
+	    return 0;
+	}
+	# Not done yet. 
+	return 1;
+    };
+
+    while ($seconds > 0) {
+	$seconds -= $interval;
+
+	#
+	# Lock the slice in case it is doing something else, like taking
+	# a disk image. Just skip this turn.
+	#
+	next
+	    if ($slice->Lock());
+
+	my $handler = sub {
+	    # This is so we can catch when Parrun gets signaled, but not
+	    # exit till it exits.
+	    $signaled = 1;
+	};
+	local $SIG{TERM} = $handler;
+	if ($debug) {
+	    local $SIG{INT} = $handler;
+	}
+	my @return_codes = ();
+	my @agglist =      @{ $instance->AggregateList() };
+	if (ParRun({"maxwaittime" => 99999,
+		    "maxchildren" => scalar(@agglist)},
+		   \@return_codes, $coderef, @agglist)) {
+	    print STDERR "Internal error calling Status()\n";
 	    $slice->UnLock();
-	    $needunlock = 0;
 	    last;
 	}
-      skip:
+	local $SIG{TERM} = 'DEFAULT';
+	local $SIG{INT}  = 'DEFAULT';
 	$slice->UnLock();
-	$needunlock = 0;
+	
+	#
+	# Check the exit codes. 
+	#
+	my $done = 1;
+	foreach my $code (@return_codes) {
+	    if ($code) {
+		last
+		    if ($code < 0);
+		$done = 0;
+	    }
+	}
+	last
+	    if ($done);
+	
+	sleep($interval);
     }
     unlink($logfile)
 	if (defined($logfile));
@@ -1176,19 +1333,43 @@ sub DoLockdownInternal($$)
 	return -1
     }
     #
-    # And tell the backend cluster to lockdown the slice.
+    # And tell the backend clusters to lockdown the slice.
     #
-    my $response = $instance->Lockdown($clear);
-    if (!defined($response)) {
-	print STDERR "RPC Error calling Lockdown\n";
+    my $coderef = sub {
+	my ($sliver) = @_;
+
+	my $response = $sliver->Lockdown($clear);
+	if (!defined($response)) {
+	    print STDERR "RPC Error calling Lockdown\n";
+	    return -1;
+	}
+	if ($response->code() != GENIRESPONSE_SUCCESS) {
+	    print STDERR "Could not lockdown sliver: ".
+		$response->output() . "\n";
+	    return -1;
+	}
+	return 0;
+    };
+    my @return_codes = ();
+    my @agglist =      @{ $instance->AggregateList() };
+    if (ParRun({"maxwaittime" => 99999,
+		"maxchildren" => scalar(@agglist)},
+	       \@return_codes, $coderef, @agglist)) {
+	print STDERR "Internal error calling Lockdown()\n";
 	return -1;
     }
-    if ($response->code() != GENIRESPONSE_SUCCESS) {
-	print STDERR "Could not lockdown sliver: ". $response->output() . "\n";
-	return -1;
+    #
+    # Check the exit codes. 
+    #
+    foreach my $code (@return_codes) {
+	if ($code) {
+	    print STDERR "Some slivers could not be locked down.\n";
+	    return -1;
+	}
     }
-    return 0;
+    exit(0);
 }
+
 sub DoLockdown()
 {
     usage()
@@ -1202,9 +1383,18 @@ sub DoLockdown()
     fatal("Must specify either 'set' or 'clear'")
 	if ($setclr !~ /^(set|clear)$/);
 
+    my $slice = $instance->GetGeniSlice();
+    if (!defined($slice)) {
+	fatal("No slice for instance");
+    }
+    if ($slice->Lock()) {
+	fatal("Experiment is busy, cannot lock it. Please try again later");
+    }
     if (DoLockdownInternal($setclr, $which)) {
+	$slice->UnLock();
 	fatal("Could not lockdown instance!");
     }
+    $slice->UnLock();
     exit(0);
 }
 

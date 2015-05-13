@@ -167,7 +167,7 @@ sub DoCreate()
     my $read_access;
     my $write_access;
     # imdataset snapshot info.
-    my ($instance,$nodeid,$bsname);
+    my ($instance,$aggregate,$nodeid,$bsname);
     
     my $optlist = "ds:t:e:f:w:p:R:W:I:i:";
     my %options = ();
@@ -196,12 +196,14 @@ sub DoCreate()
 	if (!defined($instance)) {
 	    fatal("Instance does not exist!");
 	}
-	$aggregate_urn = $instance->aggregate_urn();
-	
 	($nodeid,$bsname) = split(",", $options{"I"});
 	if (! (defined($nodeid) && defined($bsname))) {
 	    print STDERR "Improper -I opton for imdatasets\n";
 	    &$usage();
+	}
+	$aggregate = $instance->FindAggregateByNodeId($nodeid);
+	if (!defined($aggregate)) {
+	    fatal("Could not find aggregate for $nodeid");
 	}
     }
     if (defined($options{"f"})) {
@@ -696,7 +698,7 @@ sub DoSnapShotInternal($$$$$)
 	goto failed;
     }
     my $response = $instance->CreateImage($sliver_urn,
-					  $dataset->dataset_id(), $bsname);
+					  $dataset->dataset_id(), 0, $bsname);
     if ($response->code() != GENIRESPONSE_SUCCESS) {
 	$errmsg = "SnapshotDataset failed: ". $response->output() . "\n";
 	goto failed;
