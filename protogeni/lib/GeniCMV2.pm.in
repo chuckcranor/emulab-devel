@@ -3930,9 +3930,10 @@ sub Lockdown($)
     #
     # Only the SA for the slice can do this.
     #
-    my $caller = $credential->owner_urnOBJ();
-    if (! ($caller->IsSA() &&
-	   $caller->domain() eq $slice->urnOBJ()->domain())) {
+    my $caller = GeniHRN->new($credential->owner_urn());
+    my ($tmp) = split(":", $slice->urnOBJ()->domain());
+    if (! ($caller->IsSA() && 
+	   $caller->domain() eq $tmp)) {
 	return GeniResponse->Create(GENIRESPONSE_FORBIDDEN, undef,
 			    "Not enough permission to set/clr lockdown");
     }
