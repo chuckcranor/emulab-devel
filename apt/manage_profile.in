@@ -51,6 +51,8 @@ my $rspec;
 my $script;
 my $profile;
 my $instance;
+my $aggregate;
+my $node_id;
 my $webtask;
 my $webtask_id;
 
@@ -318,13 +320,24 @@ if ($snap) {
     if (!defined($instance)) {
 	fatal("Could not look up instance $uuid");
     }
-    my $manifest = GeniXML::Parse($instance->manifest());
+    if (@{ $instance->AggregateList() } != 1) {
+	$errors{"error"} = "Must be only one aggregate to snapshot";
+	UserError();
+    }
+    ($aggregate) = @{ $instance->AggregateList() };
+    my $manifest = GeniXML::Parse($aggregate->manifest());
     if (! defined($manifest)) {
 	fatal("Could not parse manifest");
     }
     my @nodes = GeniXML::FindNodes("n:node", $manifest)->get_nodelist();
     if (@nodes != 1) {
 	$errors{"error"} = "Too many nodes (> 1) to snapshot";
+	UserError();
+    }
+    my $sliver_urn = GeniXML::GetSliverId($nodes[0]);
+    $node_id       = GeniXML::GetVirtualId($nodes[0]);
+    if (! (defined($sliver_urn) && $sliver_urn eq $aggregate->aggregate_urn())){
+	$errors{"error"} = "$node_id is not at " . $aggregate->aggregate_urn();
 	UserError();
     }
 }
@@ -405,13 +418,6 @@ else {
 # Now do the snapshot operation.
 #
 if (defined($instance)) {
-    my $manifest = GeniXML::Parse($instance->manifest());
-    if (! defined($manifest)) {
-	fatal("Could not parse manifest");
-    }
-    my ($node) = GeniXML::FindNodes("n:node", $manifest)->get_nodelist();
-    my $sliver_urn = GeniXML::GetSliverId($node);
-    my $node_id    = GeniXML::GetVirtualId($node);
     my $apt_uuid   = $instance->uuid();
     my $imagename  = $profile->name();
 
