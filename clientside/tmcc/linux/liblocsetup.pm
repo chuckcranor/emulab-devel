@@ -758,12 +758,6 @@ sub os_ifconfig_line($$$$$$$$;$$$)
     else {
 	$uplines  .= sprintf($IFCONFIG, $iface, $inet, $mask);
 	$downlines = "$IFCONFIGBIN $iface down";
-
-	#
-	# XXX make sure we don't do reverse path filtering on the interface;
-	# our current route generator which will produce asymmetric routes.
-	#
-	$uplines .= "\n    /sbin/sysctl net.ipv4.conf.$iface.rp_filter=0";
     }
 
     return ($uplines, $downlines);
@@ -918,11 +912,6 @@ sub os_ifconfig_veth($$$$$;$$$$%)
 	# configure the MAC address.
 	$uplines   .= "\n    $IFCONFIGBIN $vdev hw ether $vmac"
 	    if ($vmac);
-	#
-	# XXX make sure we don't do reverse path filtering on the interface;
-	# our current route generator which will produce asymmetric routes.
-	#
-	$uplines .= "\n    /sbin/sysctl net.ipv4.conf.$vdev.rp_filter=0";
 
 	$downlines .= "$IFCONFIGBIN $vdev down\n    ";
 	$downlines .= "$VLANCONFIG rem $vdev";

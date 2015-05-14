@@ -203,6 +203,9 @@ sysetc-install:	dir-install ifcfgs
 	if [ "$(RCDIR)" != "$(SYSETCDIR)" ]; then \
 	    ln -sf $(RRCDIR)/rc.local $(SYSETCDIR)/rc.local; \
         fi
+	if [ -e $(SYSETCDIR)/sysctl.conf ]; then \
+		cat $(SRCDIR)/sysctl.conf.tail >> $(SYSETCDIR)/sysctl.conf; \
+	fi
 
 sysetc-remove:
 	-rm -f $(RCDIR)/*/S95anacron $(RCDIR)/*/K05anacron 
