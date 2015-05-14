@@ -12,7 +12,7 @@ sub DoUpdate($$$)
 	DBQueryFatal("CREATE TABLE `apt_instance_aggregates` ( ".
 		     "  `uuid` varchar(40) NOT NULL default '', ".
 		     "  `name` varchar(16) default NULL, ".
-		     "  `aggregate_urn` varchar(128) default NULL, ".
+		     "  `aggregate_urn` varchar(128) NOT NULL default '', ".
 		     "  `status` varchar(32) default NULL, ".
 		     "  `public_url` tinytext, ".
 		     "  `webtask_id` varchar(128) NOT NULL default '', ".
