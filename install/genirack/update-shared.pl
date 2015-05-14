@@ -13,11 +13,13 @@ sub usage {
     print "-t type  - xen or openvz\n";
     exit(1);
 }
-my $optlist    = "l:t:f:";
+my $optlist    = "l:t:f:c";
 my $limit      = 0;
+my $docounts   = 0;
 my $type;
 my $fname;
 my @nodes      = ();
+my %osnames    = ();
 
 #
 # Turn off line buffering on output
@@ -39,11 +41,17 @@ if (defined($options{"t"})) {
 }
 if (defined($options{"f"})) {
     $fname = $options{"f"};
+    if ($fname eq "docounts") {
+	$docounts = 1;
+    }
+}
+if (defined($options{"c"})) {
+    $docounts = 1;
 }
 usage()
     if (!defined($type) || !($type eq "xen" || $type eq "openvz"));
 usage()
-    if (!defined($fname));
+    if (!(defined($fname) || $docounts));
 
 if (@ARGV) {
     @nodes = @ARGV;
@@ -52,32 +60,51 @@ else {
     #
     # Set the limit=1 when using the rebuild function.
     #
-    if ($fname eq "BuildClientSide") {
+    if (defined($fname) && $fname eq "BuildClientSide") {
 	$limit = 1;
     }
 
     #
     # Get list of nodes in the shared pool, for the given type.
     #
-    my $osname = ($type eq "xen" ? "XEN43-64-STD" : "FEDORA15-OPENVZ-STD");
-    
+    my $osclause;
+    if ($type eq "xen") {
+	$osclause = "(o.osname='XEN43-64-STD' or o.osname='XEN44-64-BIGFS' or ".
+	    "o.osname='XEN44-64-GENIRACK')";
+    }
+    else {
+	$osclause = "o.osname='FEDORA15-OPENVZ-STD'";
+    }
     my $query_result =
-	DBQueryFatal("select r.node_id,r.vname from reserved as r ".
+	DBQueryFatal("select r.node_id,r.vname,o.osname from reserved as r ".
 		     "left join nodes as n on n.node_id=r.node_id ".
 		     "left join os_info as o on o.osid=n.def_boot_osid ".
 		     "where r.sharing_mode is not null and ".
 		     "      n.phys_nodeid=n.node_id and ".
-		     "      o.osname='$osname' order by r.node_id ".
+		     "      $osclause order by r.node_id ".
 		     ($limit ? "limit $limit" : ""));
-    while (my ($nodeid) = $query_result->fetchrow_array()) {
+    while (my ($nodeid,undef,$osname) = $query_result->fetchrow_array()) {
 	push(@nodes, $nodeid);
+	$osnames{$nodeid} = $osname;
     }
+}
+if ($docounts) {
+    foreach my $nodeid (@nodes) {
+	my $query_result =
+	    DBQueryFatal("select count(n.node_id) from nodes as n ".
+			 "where n.phys_nodeid='$nodeid' and ".
+			 "      n.phys_nodeid!=n.node_id");
+	my ($count) = $query_result->fetchrow_array();
+	my $osname  = $osnames{$nodeid};
+	print "$nodeid ($osname): $count\n";
+    }
+    exit(0);
 }
 print "Updating shared node: @nodes\n";
 
 my $opts   = "-q -o BatchMode=yes -o StrictHostKeyChecking=no";
 my $eltb   = "/users/elabman/emulab-devel";
-my $objdir = ($type eq "xen" ? "obj-ubuntu12" : "obj-fc15");
+my $objdir = ($type eq "xen" ? "obj-xen" : "obj-fc15");
 
 sub echo($)	{ print "echo\n"; }
 
@@ -125,10 +152,8 @@ sub UpdateClientSide($)
 	if ($?);
 
     system("sudo ssh $opts $node ".
-	   " 'cd $eltb/$objdir/os/imagezip; ".
-	   "    make client-install >& /tmp/install-imagezip.log; ".
-	   "  cd $eltb/$objdir/os/frisbee.redux; ".
-	   "    make client-install >& /tmp/install-frisbee.log' ");
+	   " 'cd $eltb/$objdir/os; ".
+	   "    make client-install >& /tmp/install-os.log'");
     
     return -1
 	if ($?);
@@ -139,7 +164,27 @@ sub UpdateClientSide($)
     return -1
 	if ($?);
 
+    system("sudo ssh $opts $node ".
+	   " 'cd $eltb/$objdir/os/capture; ".
+	   "    make client-install >& /tmp/install.log'");
+    return -1
+	if ($?);
+
     return 0;
+}
+
+#
+# Update the client side,
+#
+sub UpdateSpecial($)
+{
+    my ($node) = @_;
+    
+    system("sudo ssh $opts $node ".
+	   " 'cp -fp $eltb/emulab-devel/clientside/tmcc/common/mkvnode.pl ".
+	   "    /usr/local/etc/emulab'");
+    return -1
+	if ($?);
 }
 
 #
@@ -237,6 +282,59 @@ sub UpdateVZGuest($)
 
     system("sudo scp $opts $eltb/emulab-devel/stuff/emulab-default.tar.gz ".
 	   "    ${node}:/vz.save/template/cache");
+    return -1
+	if ($?);
+
+    return 0;
+}
+
+sub EnableVIFRouting($)
+{
+    my ($node) = @_;
+    
+    system("sudo ssh $opts $node ".
+	   " 'echo 1 >/proc/sys/net/ipv4/conf/xenbr0/proxy_arp; ".
+	   "  echo 1 >/proc/sys/net/ipv4/ip_forward; ".
+	   "  echo 1 >/proc/sys/net/ipv4/ip_nonlocal_bind'");
+    
+    return -1
+	if ($?);
+
+    return 0;
+}
+
+sub CheckVolumes($)
+{
+    my ($node) = @_;
+    
+    system("sudo ssh $opts $node pvs");
+    return -1
+	if ($?);
+
+    return 0;
+}
+
+sub RestartClusterd($)
+{
+    my ($node) = @_;
+    
+    system("sudo ssh $opts $node killall clusterd");
+    sleep(1);
+    system("sudo ssh $opts $node /usr/local/libexec/clusterd -s event-server");
+    return -1
+	if ($?);
+
+    return 0;
+}
+
+sub FixMounts($)
+{
+    my ($node) = @_;
+    
+    system("sudo ssh $opts $node /usr/local/etc/emulab/rc/rc.mounts shutdown");
+    return -1
+	if ($?);
+    system("sudo ssh $opts $node /usr/local/etc/emulab/rc/rc.mounts boot");
     return -1
 	if ($?);
 

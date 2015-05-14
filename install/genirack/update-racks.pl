@@ -18,15 +18,14 @@ sub usage {
     print "-R dir  -   (rsync specific directory (say, install/genirack)\n";
     print "-b      - Build the software (with reconfig).\n";
     print "-i      - Install on each rack.\n";
-    print "-l      - List all racks.\n";
     print "-p arg  - Update shared pool on each rack.\n";
     print "          arg is type,func where type=xen|openvz\n";
     print "-u      - Do Utah rack.\n";
     print "-d      - Do DDC rack.\n";
     print "-a      - Do APT rack.\n";
+    print "-l      - Do Cloudlab (Utah) rack.\n";
     print "-U      - Skip Utah rack.\n";
     print "-D      - Skip DDC rack.\n";
-    print "-A      - Skip APT rack.\n";
     print "-7      - Just G7 racks.\n";
     print "-8      - Just G8 racks.\n";
     print "-f      - Run function instead. Add -F to shutdown testbed\n";
@@ -37,7 +36,7 @@ sub usage {
     print "rack    - Specific rack, or all racks\n";
     exit(1);
 }
-my $optlist    = "binuUdDhfForlc78tsp:aAR:C";
+my $optlist    = "binuUdDhfForlc78tsp:aAR:CL";
 my $rebuild    = 0;
 my $install    = 0;
 my $rsync      = 0;
@@ -50,13 +49,30 @@ my $nopar      = 0;
 my $dopool;
 my $rack;
 
-my $TB       = "/usr/testbed";
-my $UTAHBOSS = "boss.utah.geniracks.net";
-my $UTAHCTRL = "control.utah.geniracks.net";
-my $DDCBOSS  = "boss.utahddc.geniracks.net",
-my $DDCCTRL  = "control.utahddc.geniracks.net",
-my $APTBOSS  = "boss.apt.emulab.net",
-my $APTCTRL  = "boss.apt.emulab.net",
+my $TB            = "/usr/testbed";
+my $UTAHBOSS      = "boss.utah.geniracks.net";
+my $UTAHCTRL      = "control.utah.geniracks.net";
+my $DDCBOSS       = "boss.utahddc.geniracks.net";
+my $DDCCTRL       = "control.utahddc.geniracks.net";
+my $STITCHBOSS    = "boss.utahddc.geniracks.net";
+my $APTBOSS       = "boss.apt.emulab.net";
+my $APTCTRL       = "";
+my $UTAHCLOUDBOSS = "boss.utah.cloudlab.us";
+my $UTAHCLOUDCTRL = "";
+my $CLEMCLOUDBOSS = "boss.clemson.cloudlab.us";
+my $CLEMCLOUDCTRL = "";
+my $WISCCLOUDBOSS = "boss.wisc.cloudlab.us";
+my $WISCCLOUDCTRL = "";
+
+my %CLOUDCLUSTERS = ("apt"     => [ $APTBOSS, $APTCTRL ],
+		     "utah"    => [ $UTAHCLOUDBOSS, $UTAHCLOUDCTRL ],
+		     "wisc"    => [ $WISCCLOUDBOSS, $WISCCLOUDCTRL ],
+		     "clemson" => [ $CLEMCLOUDBOSS, $CLEMCLOUDCTRL ],
+);
+my %UTAHCLUSTERS =  ("utahig"  => [ $UTAHBOSS, $UTAHCTRL ],
+		     "utahddc" => [ $DDCBOSS, $DDCCTRL ],
+		     "stitch"  => [ $STITCHBOSS, $DDCCTRL ],
+);
 my %G7RACKS  = ("bbn"       => [ "boss.instageni.gpolab.bbn.com",
 				 "gpolab.control-nodes.geniracks.net" ],
 		"nwu"       => [ "boss.instageni.northwestern.edu",
@@ -71,8 +87,8 @@ my %G7RACKS  = ("bbn"       => [ "boss.instageni.gpolab.bbn.com",
 				 "princeton.control-nodes.geniracks.net" ],
 		"clemson"   => [ "boss.instageni.clemson.edu",
 				 "clemson.control-nodes.geniracks.net" ],
-		"kansas"    => [ "boss.instageni.ku.gpeni.net",
-				 "kansas.control-nodes.geniracks.net" ],
+#		"kansas"    => [ "boss.instageni.ku.gpeni.net",
+#				 "kansas.control-nodes.geniracks.net" ],
 		"nyu"       => [ "boss.genirack.nyu.edu",
 				 "nyu.control-nodes.geniracks.net" ],
 # Off the air.
@@ -125,6 +141,10 @@ my %G8RACKS = ("max"        => [ "boss.instageni.maxgigapop.net",
 #				 "cisco.control-nodes.geniracks.net" ],
 	       "uw"         => [ "boss.instageni.washington.edu",
 				 "uw.control-nodes.geniracks.net" ],
+	       "utc"        => [ "boss.instageni.utc.edu",
+				 "utc.control-nodes.geniracks.net" ],
+	       "vt"         => [ "boss.instageni.arc.vt.edu",
+				 "vt.control-nodes.geniracks.net" ],
 );
 
 sub fatal($)
@@ -157,19 +177,15 @@ my $which    = (defined($options{"c"}) ? 1 : 0);
 my $UTAHRACK = (defined($options{"c"}) ? $UTAHCTRL : $UTAHBOSS);
 my $DDCRACK  = (defined($options{"c"}) ? $DDCCTRL  : $DDCBOSS);
 my $APTRACK  = (defined($options{"c"}) ? $APTCTRL  : $APTBOSS);
+my $CLOUDRACK= (defined($options{"c"}) ? $UTAHCLOUDCTRL  : $UTAHCLOUDBOSS);
 my @G7RACKS  = map { $G7RACKS{$_}[$which] } keys(%G7RACKS);
 my @G8RACKS  = map { $G8RACKS{$_}[$which] } keys(%G8RACKS);
+my @ALLCLOUD = map { $CLOUDCLUSTERS{$_}[$which] } keys(%CLOUDCLUSTERS);
 my @ALLRACKS = (@G7RACKS, @G8RACKS);
 my @TODO     = ($UTAHRACK, $DDCRACK, @ALLRACKS);
 my %SKIP     = ();
 my $HOME     = "/home/stoller";
 
-if (defined($options{"l"})) {
-    foreach my $name (@ALLRACKS) {
-	print "$name\n";
-    }
-    exit(0);
-}
 if (defined($options{"i"})) {
     $install = 1;
 }
@@ -191,10 +207,6 @@ if (defined($options{"b"})) {
 if (defined($options{"r"})) {
     $rsync = 1;
 }
-if (defined($options{"C"})) {
-    $rsync = 1;
-    $doscp = 1;
-}
 if (defined($options{"R"})) {
     $rsync    = 1;
     $rsyncdir = $options{"R"};
@@ -204,8 +216,10 @@ if (defined($options{"p"})) {
     $dofunc = 1;
 }
 if (defined($options{"u"}) || defined($options{"d"}) ||
-    defined($options{"a"})) {
+    defined($options{"a"}) || defined($options{"l"})) {
     @TODO = ();
+    push(@TODO, $CLOUDRACK)
+	if (defined($options{"l"}));
     push(@TODO, $APTRACK)
 	if (defined($options{"a"}));
     push(@TODO, $UTAHRACK)
@@ -225,6 +239,22 @@ elsif (defined($options{"8"})) {
 	@TODO = ($DDCRACK, @TODO);
     }
 }
+elsif (defined($options{"C"})) {
+    if (@ARGV) {
+	@TODO = ();
+	foreach my $arg (@ARGV) {
+	    if (exists($CLOUDCLUSTERS{$arg})) {
+		push(@TODO, $CLOUDCLUSTERS{$arg}[$which]);
+	    }
+	    else {
+		fatal("No such rack: $arg");
+	    }
+	}
+    }
+    else {
+	@TODO = @ALLCLOUD;
+    }
+}
 elsif (@ARGV) {
     @TODO = ();
     
@@ -237,6 +267,9 @@ elsif (@ARGV) {
 	}
 	elsif (exists($G8RACKS{$arg})) {
 	    push(@TODO, $G8RACKS{$arg}[$which]);
+	}
+	elsif (exists($UTAHCLUSTERS{$arg})) {
+	    push(@TODO, $UTAHCLUSTERS{$arg}[$which]);
 	}
 	else {
 	    fatal("No such rack: $arg");
@@ -299,6 +332,14 @@ if ($dofunc && !$install) {
 	    $command = "cd $devel/stuff; sudo perl osupdctrl.pl";
 	}
 	elsif (0) {
+	    $command = "cd pubsub; sudo gmake client install; ".
+		"sudo /usr/local/etc/rc.d/2.pubsubd.sh stop; ".
+		"sudo /usr/local/etc/rc.d/2.pubsubd.sh start";
+	}
+	elsif (0) {
+	    $command = "cd pubsub; ./configure; gmake clean; gmake client";
+	}
+	elsif (0) {
 	    $command = "cd $devel/stuff; ".
 		"sudo pkg_delete bash-4.2.20; sudo pkg_add bash-4.3.27.tbz";
 	}
@@ -343,18 +384,21 @@ if ($dofunc && !$install) {
 	}
 	elsif (0) {
 	    $command =
-		"cd emulab-devel/obj/tbsetup/snmpit_test; sudo gmake install";
+		"cd emulab-devel/obj/named; rm -f mail.access; gmake; ".
+		"sudo gmake install-head; /usr/testbed/sbin/named_setup";
 	}
 	elsif (0) {
-	    $command = "cd emulab-devel/obj/db; ".
-		"sudo gmake /usr/testbed/lib/Image.pm; ".
-		"cd ../utils; sudo gmake install";
+	    $command = "cd emulab-devel/obj/apache; sudo gmake install; ".
+		"sudo /usr/local/etc/rc.d/apache22 restart ";
 	}
 	elsif (0) {
-	    $command =
-		"ssh ops \"(cd emulab-devel/obj/ntpd; ".
+	    $command = "cd emulab-devel/obj/node_usage; sudo gmake install";
+	}
+	elsif (0) {
+	    $command = "cd emulab-devel/obj/apache; ".
 		"sudo gmake control-install; ".
-		"sudo /etc/rc.d/ntpd restart)\"";
+		"sudo /usr/local/etc/rc.d/apache22 restart ";
+	    $command = "ssh ops \"($command)\"";
 	}
 	elsif (0) {
 	    $command =
@@ -363,23 +407,44 @@ if ($dofunc && !$install) {
 	    "  sudo scp $devel/capture-nossl ".
 	    "    vhost3.shared-nodes.emulab-ops:/usr/local/etc/emulab/capture";
 	}
+	elsif (1) {
+	    $command = "sudo /usr/testbed/sbin/protogeni/getcacerts ";
+	}
 	elsif (0) {
 	    $command = "/usr/testbed/sbin/wap ".
-	      "/usr/testbed/sbin/grantimage -a -x emulab-ops,UBUNTU14-64-STD; ".
-	      "cat $devel/stuff/fee.sql | mysql tbdb; ".
-	      "$devel/stuff/runsonxen.pl emulab-ops,UBUNTU14-64-STD";
-	}
-	elsif (1) {
-	    $command = "cat $devel/stuff/fee.sql | mysql tbdb; ".
-		"sudo touch /usr/testbed/images/UBUNTU14-64-STD.ndz";
+	      "/usr/testbed/sbin/grantimage -a -x emulab-ops,CENTOS63-64-STD";
 	}
 	elsif (0) {
-		$command = "cd emulab-devel/obj/; sudo gmake update-rcd";
+	    $command = "/usr/testbed/sbin/wap ".
+	      "/usr/testbed/sbin/grantimage -a -x ".
+	      "   emulab-ops,UBUNTU14-OVS2.31; ".
+	      "/usr/testbed/sbin/wap ".
+	      "  /usr/testbed/sbin/runsonxen emulab-ops,UBUNTU14-OVS2.31; ".
+	      "/usr/testbed/sbin/imagevalidate -u emulab-ops,UBUNTU14-OVS2.31;".
+	      "cat $devel/stuff/fee.sql | mysql tbdb";
+	}
+	elsif (0) {
+	    $command = "cat $devel/stuff/fee.sql | mysql tbdb; ";
+	}
+	elsif (0) {
+	    $command = "/usr/testbed/sbin/wap /usr/testbed/bin/editnodetype ".
+		"$devel/stuff/ubuntu.sql";
 	}	    
-	else {
+	elsif (0) {
+	    $command = "/usr/testbed/sbin/wap /usr/testbed/sbin/setsitevar ".
+		"protogeni/default_osname UBUNTU14-64-STD";
+	}	    
+	elsif (0) {
+		$command = "sudo /usr/testbed/sbin/getimages";
+	}	    
+	elsif (0) {
 	    $command =
-		"cat emulab-devel/emulab-devel/stuff/closed.sql | ".
+		"cat emulab-devel/emulab-devel/stuff/novz.sql | ".
 		"   mysql tbdb";
+	}
+	else {
+	    $command = "sudo /usr/testbed/sbin/testbed-control shutdown; ".
+		"sleep 5; sudo /usr/testbed/sbin/testbed-control boot";
 	}
 	#$command = "($command >& /tmp/function.log)";
 
