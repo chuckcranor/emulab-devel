@@ -1465,6 +1465,7 @@ outfiles="$outfiles clientside/GNUmakefile clientside/setversion \
  clientside/tmcc/ubuntu10/GNUmakefile \
  clientside/tmcc/ubuntu11/GNUmakefile \
  clientside/tmcc/ubuntu14/GNUmakefile \
+ clientside/tmcc/ubuntu15/GNUmakefile \
  clientside/tmcc/linux-ms/GNUmakefile \
  clientside/tmcc/freebsd5/GNUmakefile clientside/tmcc/freebsd5/supfile \
  clientside/tmcc/freebsd6/GNUmakefile clientside/tmcc/freebsd6/supfile \

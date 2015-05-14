@@ -4537,6 +4537,7 @@ outfiles="Makeconf GNUmakefile setversion \
 	  tmcc/ubuntu10/GNUmakefile \
 	  tmcc/ubuntu11/GNUmakefile \
 	  tmcc/ubuntu14/GNUmakefile \
+	  tmcc/ubuntu15/GNUmakefile \
 	  tmcc/linux-ms/GNUmakefile \
 	  tmcc/freebsd5/GNUmakefile tmcc/freebsd5/supfile \
 	  tmcc/freebsd6/GNUmakefile tmcc/freebsd6/supfile \
