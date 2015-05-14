@@ -79,7 +79,35 @@ function maketopmap(divname, xml, sshcallback, writeable)
 		version: false,
 		selectInfo: writeable,
 		menu: false
-	    }
+	    },
+	  canvasOptions: {
+	    "aggregates": [
+	      {
+		"id": "urn:publicid:IDN+utah.cloudlab.us+authority+cm",
+		"name": "Cloudlab Utah"
+	      },
+	      {
+		"id": "urn:publicid:IDN+wisc.cloudlab.us+authority+cm",
+		"name": "Cloudlab Wisconsin"
+	      },
+	      {
+		"id": "urn:publicid:IDN+clemson.cloudlab.us+authority+cm",
+		"name": "Cloudlab Clemson"
+	      },
+	      {
+		"id": "urn:publicid:IDN+utahddc.geniracks.net+authority+cm",
+		"name": "IG UtahDDC"
+	      },
+	      {
+		"id": "urn:publicid:IDN+apt.emulab.net+authority+cm",
+		"name": "Apt Utah"
+	      },
+	      {
+		"id": "urn:publicid:IDN+emulab.net+authority+cm",
+		"name": "PG Utah"
+	      }
+	    ]
+	  }
 	});
     }
     else if (jacksInput)
