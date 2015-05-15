@@ -2195,6 +2195,26 @@ sub SetDelta($$)
     return 0;
 }
 
+sub SetSize($$)
+{
+    my ($self, $size) = @_;
+
+    return -1
+	if (! $self->Update({'size' => $size}));
+
+    return 0;
+}
+
+sub SetHash($$)
+{
+    my ($self, $hash) = @_;
+
+    return -1
+	if (! $self->Update({'hash' => $hash}));
+
+    return 0;
+}
+
 sub LocalURL($)
 {
     my ($self) = @_;
