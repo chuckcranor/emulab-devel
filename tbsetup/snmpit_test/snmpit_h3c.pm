@@ -167,6 +167,15 @@ sub new($$$;$) {
 	$self->{DOJUMBO} = 0;
     }
 
+    # module offset hack?
+    if (exists($options->{'module_offset'})
+	&& int($options->{'module_offset'}) > 0) {
+	$self->{MODULE_OFFSET} = $options->{'module_offset'};
+	print "$self->{NAME}: Using custom module offset: ".
+	      "$self->{MODULE_OFFSET}\n"
+	      if $self->{DEBUG};
+    }
+
     #
     # set up hashes for internal use
     #
@@ -1786,8 +1795,15 @@ my %blade_sizes = (
 
 sub calcModPort($$) {
     my ($self, $ifindex) = @_;
-    my ($j, $port, $mod);
-    my $bladesize = $blade_sizes{$self->{HPTYPE}};
+    my ($j, $port, $mod, $bladesize);
+
+    # Check to see if a module offset option was passed in during
+    # initialization (this is a hack...).
+    if (exists($self->{MODULE_OFFSET}) && $self->{MODULE_OFFSET}) {
+	$bladesize = $self->{MODULE_OFFSET};
+    } else {
+	$bladesize = $blade_sizes{$self->{HPTYPE}};
+    }
     if (defined($bladesize)) {
 	$j = $ifindex - 1;
 	$port = 1 + ($j % $bladesize);
