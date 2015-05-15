@@ -1323,12 +1323,12 @@ if ($delta && $deltapct > 0 && defined($logfile)) {
 # The upload completed okay, so move the files into place so that
 # imagevalidate finds them in the correct place.
 #
-if (! (system("/bin/mv -f $filename " .
-	      ($delta ?
-	       $image->DeltaImageFile() : $image->FullImageFile())) &&
-       system("/bin/mv -f $dstsigfile " .
-	      ($delta ?
-	       $image->FullImageSigFile() : $image->FullImageSigFile())))) {
+if (system("/bin/mv -f $filename " .
+	   ($delta ?
+	    $image->DeltaImageFile() : $image->FullImageFile())) ||
+    system("/bin/mv -f $dstsigfile " .
+	   ($delta ?
+	    $image->FullImageSigFile() : $image->FullImageSigFile()))) {
     fatal("Could not move new files into place");
 }
 
