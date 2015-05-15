@@ -444,10 +444,10 @@ my $path = ($experiment->pid() eq $experiment->gid() || $global ?
 	    "$PROJROOT/$pid/images/" :
 	    "$GROUPROOT/$pid/$gid/images/");
 if ($doimagedirs) {
-    $path .= "${imagename}/".
+    $path .= "${imagename}/";
 }
 else {
-    $path .= "${imagename}.ndz".
+    $path .= "${imagename}.ndz";
 }
 
 #

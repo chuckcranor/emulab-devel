@@ -454,10 +454,10 @@ sub CreateImage($$$$$)
 	    "$TBPROJ_DIR/" . $group->pid() . "/images/";
     }
     if ($DOIMAGEDIRS) {
-	$xmlparse->{'attribute'}->{"path"}->{'value'} .= "${imagename}/".
+	$xmlparse->{'attribute'}->{"path"}->{'value'} .= "${imagename}/";
     }
     else {
-	$xmlparse->{'attribute'}->{"path"}->{'value'} .= "${imagename}.ndz".
+	$xmlparse->{'attribute'}->{"path"}->{'value'} .= "${imagename}.ndz";
     }
     
     #
