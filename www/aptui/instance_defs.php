@@ -425,8 +425,15 @@ class Instance
       }
       else
       {
-        return mysql_fetch_array(DBQueryFatal("select value from version_info ".
-                                              "where name='commithash'"))[0];
+          $query_result =
+              DBQueryFatal("select value from version_info ".
+                           "where name='commithash'");
+          
+          if (!$query_result || !mysql_num_rows($query_result)) {
+              return date('Y-m-d-H:i:s');
+          }
+          $row = mysql_fetch_array($query_result);
+          return $row[0];
       }
     }
 }
