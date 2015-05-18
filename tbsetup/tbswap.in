@@ -1686,7 +1686,6 @@ sub doSwapin($) {
 	    }
 	}
 
-	if (0) {
 	if (($update_Eventsys_restart || 
 	    ($type != MODIFY && $type != MODIFY_RECOVER))) {
 	    print "Starting the event system.\n";
@@ -1711,7 +1710,6 @@ sub doSwapin($) {
 		}
 	    }
 	    TBDebugTimeStamp("eventsys_control finished");
-	}
 	}
     }
 
