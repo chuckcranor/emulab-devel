@@ -46,6 +46,7 @@ my $dofuncops  = 0;
 my $doscp      = 0;
 my $dotag      = 0;
 my $nopar      = 0;
+my $doctrl     = 0;
 my $dopool;
 my $rack;
 
@@ -188,6 +189,9 @@ my $HOME     = "/home/stoller";
 
 if (defined($options{"i"})) {
     $install = 1;
+}
+if (defined($options{"c"})) {
+    $doctrl = 1;
 }
 if (defined($options{"s"})) {
     $nopar = 1;
@@ -407,7 +411,7 @@ if ($dofunc && !$install) {
 	    "  sudo scp $devel/capture-nossl ".
 	    "    vhost3.shared-nodes.emulab-ops:/usr/local/etc/emulab/capture";
 	}
-	elsif (1) {
+	elsif (0) {
 	    $command = "sudo /usr/testbed/sbin/protogeni/getcacerts ";
 	}
 	elsif (0) {
@@ -441,6 +445,15 @@ if ($dofunc && !$install) {
 	    $command =
 		"cat emulab-devel/emulab-devel/stuff/novz.sql | ".
 		"   mysql tbdb";
+	}
+	elsif (1) {
+	    $command = 
+		"/usr/testbed/sbin/withadminprivs /usr/testbed/sbin/image_import -g ".
+		"  'https://www.apt.emulab.net/image_metadata.php\\\\\?uuid=61e7048a-fb33-11e4-8b63-2f7555356a5c'; ".
+		"/usr/testbed/sbin/withadminprivs /usr/testbed/sbin/image_import -g ".
+		"  'https://www.apt.emulab.net/image_metadata.php\\\\\?uuid=91f6150a-fb33-11e4-8b63-2f7555356a5c'; ".
+		"/usr/testbed/sbin/withadminprivs /usr/testbed/sbin/image_import -g ".
+		"  'https://www.apt.emulab.net/image_metadata.php\\\\\?uuid=7de9c920-fb33-11e4-8b63-2f7555356a5c' ";
 	}
 	else {
 	    $command = "sudo /usr/testbed/sbin/testbed-control shutdown; ".
@@ -517,16 +530,30 @@ if ($rsync) {
 	    $rsyncdir = "install/genirack"
 		if ($rsyncdir eq "");
 	    my $dir = dirname($rsyncdir);
-	    
-	    print "-> rsyncing emulab-devel/$rsyncdir\n";
-	    system("rsync -a --timeout=60 --delete ".
-		   "--exclude-from $HOME/.rsyncignore ".
-		   "     $HOME/testbed-noelvin/emulab-devel/$rsyncdir ".
-		   "  elabman\@${rack}:emulab-devel/emulab-devel/$dir");
-	    if ($?) {
-		print STDERR "** $rack: ".
-		    "error rsyncing emulab-devel/$rsyncdir\n";
-		return 1;
+
+	    if ($doctrl) {
+		print "-> rsyncing $rsyncdir\n";
+		system("rsync -a --timeout=60 --delete ".
+		       "--exclude-from $HOME/.rsyncignore ".
+		       "     $HOME/testbed-noelvin/$rsyncdir ".
+		       "  elabman\@${rack}:$dir");
+		if ($?) {
+		    print STDERR "** $rack: ".
+			"error rsyncing emulab-devel/$rsyncdir\n";
+		    return 1;
+		}
+	    }
+	    else {
+		print "-> rsyncing emulab-devel/$rsyncdir\n";
+		system("rsync -a --timeout=60 --delete ".
+		       "--exclude-from $HOME/.rsyncignore ".
+		       "     $HOME/testbed-noelvin/emulab-devel/$rsyncdir ".
+		       "  elabman\@${rack}:emulab-devel/emulab-devel/$dir");
+		if ($?) {
+		    print STDERR "** $rack: ".
+			"error rsyncing emulab-devel/$rsyncdir\n";
+		    return 1;
+		}
 	    }
 	    return 0;
 	}
