@@ -34,7 +34,8 @@ $debug = 0;
 RedirectSecure();
 $this_user = CheckLogin($check_status);
 if (isset($this_user)) {
-    CheckLoginOrDie();
+    # Allow unapproved users to join multiple groups ...
+    CheckLoginOrDie(CHECKLOGIN_UNAPPROVED);
 }
 
 #

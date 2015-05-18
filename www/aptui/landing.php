@@ -50,7 +50,10 @@ $optargs = OptionalPageArguments("asguest", PAGEARG_BOOLEAN,
 # Redirect logged in user.
 #
 if ($this_user) {
-    if (Instance::UserHasInstances($this_user)) {
+    if ($CHECKLOGIN_STATUS & CHECKLOGIN_UNAPPROVED) {
+        header("Location: $APTBASE/signup.php");
+    }
+    elseif (Instance::UserHasInstances($this_user)) {
 	header("Location: $APTBASE/myexperiments.php");
     }
     else {
