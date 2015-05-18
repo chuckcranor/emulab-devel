@@ -398,7 +398,6 @@ sub CreateImage($$$$$)
 	if (defined($parent)) {
 	    $xmlparse->{'attribute'}->{"mtype_pcvm"} = {};
 	    $xmlparse->{'attribute'}->{"mtype_pcvm"}->{'value'} = 1;
-	    $alltypes = "";
 	}
 	else {
 	    delete($xmlparse->{'attribute'}->{"def_parentosid"});

@@ -397,7 +397,18 @@ my $types_querystring;
 if ($allpc) {
     $types_querystring = "select nt.type,nt.class from node_types as nt ".
 	"left join node_type_attributes as a on a.type=nt.type ".
-	"where a.attrkey='imageable' and a.attrvalue!='0'";
+	"where a.attrkey='imageable' and a.attrvalue!='0' ";
+
+    #
+    # Restrict by sitevar, but still do query to avoid mistakes.
+    #
+    my $default_typelist = TBGetSiteVar("images/default_typelist");
+    if (defined($default_typelist) && $default_typelist != "") {
+	$types_querystring .=
+	    "and (".
+	    join(" or ", map("nt.type='$_'", split(",", $default_typelist))) .
+	    ") ";
+    }
 }
 else {
     $types_querystring = "select distinct n.type,nt.class from nodes as n ".

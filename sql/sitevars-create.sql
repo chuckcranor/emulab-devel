@@ -156,6 +156,7 @@ INSERT INTO sitevariables VALUES ('cloudlab/message',NULL,'','Message to display
 INSERT INTO sitevariables VALUES ('aptui/autoextend_maximum',NULL,'7','Maximum number of days requested that will automaticaly be granted; zero means only admins can extend an experiment.',0);
 INSERT INTO sitevariables VALUES ('aptui/autoextend_maxage',NULL,'14','Maximum age (in days) of an experiment before all extension requests require admin approval.',0);
 INSERT INTO sitevariables VALUES ('node/nfs_transport',NULL,'udp','Transport protocol to be used by NFS mounts on clients. One of: udp, tcp, or osdefault, where osdefault means use the client OS default setting.',0);
+INSERT INTO sitevariables VALUES ('images/default_typelist',NULL,'','List of types to associate with an imported image when it is not appropriate to associate all existing types.',0);
 
 /*!40103 SET TIME_ZONE=@OLD_TIME_ZONE */;
 
