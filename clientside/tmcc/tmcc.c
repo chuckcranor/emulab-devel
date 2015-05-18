@@ -143,6 +143,16 @@ static int progress  = 0;
 static int waitfor   = 0;
 static sigjmp_buf progtimo;
 
+/*
+ * do{tcp,udp} all open a socket for sending a request and getting a reply.
+ * If we timeout during one of those functions, that socket will be left open.
+ * For a normal use of tmcc, we will immediately exit if a timeout happens so
+ * this is not a problem. However, in the proxy case, a timeout is not fatal,
+ * so we will have to close the socket. Note that the proxy does not use
+ * dounix, so we do not augment that function.
+ */
+volatile int reqsock = -1;
+
 static void
 tooktoolong(void)
 {
@@ -657,6 +667,9 @@ dotcp(char *data, int outfd, struct in_addr serverip)
 				return -1;
 			}
 
+			/* XXX see comment on declaration of reqsock */
+			reqsock = sock;
+
 			/* Create name. */
 			name.sin_family = AF_INET;
 			name.sin_addr   = serverip;
@@ -669,9 +682,11 @@ dotcp(char *data, int outfd, struct in_addr serverip)
 			if (errno != ECONNREFUSED) {
 				perror("connecting stream socket");
 				CLOSE(sock);
+				reqsock = -1;
 				return -1;
 			}
 			CLOSE(sock);
+			reqsock = -1;
 		}
 		if (debug) 
 			fprintf(stderr,
@@ -744,6 +759,7 @@ dotcp(char *data, int outfd, struct in_addr serverip)
 				goto bad;
 			}
 			CLOSE(sock);
+			reqsock = -1;
 			goto again;
 		}
 		progress += cc;
@@ -751,9 +767,11 @@ dotcp(char *data, int outfd, struct in_addr serverip)
 			goto bad;
 	}
 	CLOSE(sock);
+	reqsock = -1;
 	return 0;
  bad:
 	CLOSE(sock);
+	reqsock = -1;
 	return -1;
 }
 
@@ -775,6 +793,9 @@ doudp(char *data, int outfd, struct in_addr serverip, int portnum)
 		return -1;
 	}
 
+	/* XXX see comment on declaration of reqsock */
+	reqsock = sock;
+
 	/* Create name. */
 	name.sin_family = AF_INET;
 	name.sin_addr   = serverip;
@@ -791,6 +812,7 @@ doudp(char *data, int outfd, struct in_addr serverip, int portnum)
 		else
 			fprintf(stderr, "short write (%d != %d)\n", cc, n);
 		close(sock);
+		reqsock = -1;
 		return -1;
 	}
 	connected = 1;
@@ -801,9 +823,11 @@ doudp(char *data, int outfd, struct in_addr serverip, int portnum)
 	if (cc < 0) {
 		perror("Reading from socket");
 		close(sock);
+		reqsock = -1;
 		return -1;
 	}
 	close(sock);
+	reqsock = -1;
 	progress += cc;
 	if (dooutput(outfd, buf, cc) < 0)
 		return -1;
@@ -1044,7 +1068,7 @@ beproxy(int tcpsock, int udpsock, struct in_addr serverip, char *partial)
 	 */
 	while (1) {
 		int	rval;
-		volatile int useudp = 0;
+		volatile int usingudp = 0;
 		fd_set	fds;
 		
 		fds = rfds;
@@ -1093,7 +1117,7 @@ beproxy(int tcpsock, int udpsock, struct in_addr serverip, char *partial)
 					close(newsock);
 					continue;
 				}
-				useudp = 1;
+				usingudp = 1;
 			} else
 				newsock = -1;
 		} else {
@@ -1127,7 +1151,7 @@ beproxy(int tcpsock, int udpsock, struct in_addr serverip, char *partial)
 			    strstr(bp, "VNODEID="))
 				continue;
 			if (strstr(bp, "USEUDP=1")) {
-				useudp = 1;
+				usingudp = 1;
 				continue;
 			}
 			strcat(command, bp);
@@ -1136,8 +1160,7 @@ beproxy(int tcpsock, int udpsock, struct in_addr serverip, char *partial)
 
 		if (debug) {
 			fprintf(stderr, "%sREQ: %s\n",
-				(udpsock >= 0 || useudp ? "UDP " : "TCP "),
-				command);
+				usingudp ? "UDP " : "TCP ", command);
 			fflush(stderr);
 		}
 
@@ -1147,16 +1170,26 @@ beproxy(int tcpsock, int udpsock, struct in_addr serverip, char *partial)
 		if (waitfor) {
 			if (sigsetjmp(progtimo, 1) != 0) {
 				fprintf(stderr,
-					"Server request timeout on: %s\n",
-					command);
+					"Server %s request timeout on: %s\n",
+					usingudp ? "UDP" : "TCP", command);
 				if (newsock >= 0)
 					close(newsock);
+				if (reqsock >= 0) {
+					fprintf(stderr,
+						"Closing service socket %d\n",
+						reqsock);
+					if (usingudp)
+						close(reqsock);
+					else
+						CLOSE(reqsock);
+					reqsock = -1;
+				}
 				continue;
 			}
 			signal(SIGALRM, (sig_t)tooktoolong);
 			alarm(waitfor);
 		}
-		if (useudp)
+		if (usingudp)
 			rval = doudp(command, newsock, serverip, portlist[0]);
 		else
 			rval = dotcp(command, newsock, serverip);
