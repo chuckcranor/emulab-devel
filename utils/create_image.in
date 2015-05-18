@@ -1325,11 +1325,14 @@ if ($delta && $deltapct > 0 && defined($logfile)) {
 #
 if (system("/bin/mv -f $filename " .
 	   ($delta ?
-	    $image->DeltaImageFile() : $image->FullImageFile())) ||
+	    $image->DeltaImageFile() : $image->FullImageFile()))) {
+    fatal("Could not move new image file into place");
+}
+if ($dstsigfile &&
     system("/bin/mv -f $dstsigfile " .
 	   ($delta ?
 	    $image->FullImageSigFile() : $image->FullImageSigFile()))) {
-    fatal("Could not move new files into place");
+    fatal("Could not move new signature file into place");
 }
 
 #
