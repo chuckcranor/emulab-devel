@@ -43,7 +43,7 @@ sub usage()
     print STDERR " -t       - Do not call snmpit to set trunk mode\n";
     print STDERR " -r       - Delete interface\n";
     print STDERR " -f       - (with -r) force deletion, even if iface used\n";
-    print STDERR " -b speed - Interface speed; 100Mb, 1Gb, 10Gb or 40Gb \n";
+    print STDERR " -b speed - Interface speed; 100Mb,1Gb,10Gb,40Gb,100Gb\n";
     print STDERR " -s info  - switchname,switchcard,switchport\n";
     print STDERR " iface_id - eth0, eth1, etc (must end in an integer)\n";
     exit(-1);
@@ -118,7 +118,7 @@ if (defined($options{'b'})) {
     $speed = $options{'b'};
     usage()
 	if ($speed ne "1Gb" && $speed ne "100Mb" && $speed ne "10Gb" &&
-	    $speed ne "40Gb");
+	    $speed ne "40Gb" && $speed ne "100Gb");
 }
 if (defined($options{'s'})) {
     $switchinfo = $options{"s"};
@@ -244,6 +244,9 @@ if( $speed eq "100Mb" ) {
 } elsif( $speed eq "40Gb" ) {
     $type = "generic_40G";
     $max_speed = "40000000";
+} elsif( $speed eq "100Gb" ) {
+    $type = "generic_100G";
+    $max_speed = "100000000";
 } else { # default is 1G for backward compatibility
     $type = "generic_1G";
     $max_speed = "1000000";
