@@ -196,8 +196,7 @@ find_disks() {
 
 #
 # Wipe out the superblocks on any partitions by zeroing the first 16 sectors.
-# This implementation doesn't suffer the limitations of the FreeBSD one in
-# that:
+# This implementation doesn't suffer the limitations of the FreeBSD one in that:
 # A) All partitions get zapped, even if not DOS MBR partitions
 # B) We can zap the partition device since Linux isn't overprotective of
 #    superblocks, unlike FreeBSD.
@@ -231,6 +230,7 @@ loadone() {
     _NUM=$4
 
     echo "Loading image #$_NUM"
+    echo "  LOADINFO=\"$_LOADINFO\""
 
     ADDR=`getvar ADDR "$_LOADINFO"`;
     SERVER=`getvar SERVER "$_LOADINFO" $BOSSIP`;
@@ -239,7 +239,7 @@ loadone() {
     MBRVERS=`getvar MBRVERS "$_LOADINFO" 101`;
     PREPARE=`getvar PREPARE "$_LOADINFO" 0`;
     IMAGEID=`getvar IMAGEID "$_LOADINFO"`;
-    KEEPALIVE=`getvar KEEPALIVE "$_LOADINFO" 0`;
+    KEEPALIVE=`getvar KEEPALIVE "$_LOADINFO"`;
     OSVERSION=`getvar OSVERSION "$_LOADINFO" 0`;
 
     #
@@ -495,12 +495,7 @@ fixone() {
 
     echo "`date`: Adjusting slice-related files on $_DISK slice $_PART"
 
-    export SLICEFIX_ACPI=`getvar ACPI "$iline" unknown`
-    export SLICEFIX_ASF=`getvar ASF "$iline" unknown`
-    export SLICEFIX_NOCLFLUSH=`getvar NOCLFLUSH "$iline" unknown`
-    export SLICEFIX_VGAONLY=`getvar VGAONLY "$iline" unknown`
     export SLICEFIX_CONSOLE=`getvar CONSOLE "$iline" unknown`
-    export SLICEFIX_BIOSDISK=`getvar BIOSDISK "$iline"`
     export SLICEFIX_DOM0MEM=`getvar DOM0MEM "$iline" unknown`
     export SLICEFIX_TRIM=`getvar TRIM "$iline" 0`
 

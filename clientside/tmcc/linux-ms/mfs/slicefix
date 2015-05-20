@@ -74,13 +74,6 @@ esac
 # DOM0MEM is optional
 DOM0MEM=$SLICEFIX_DOM0MEM
 
-if [ -r $ETCDIR/bossnode ]; then
-    bossnode=`cat $ETCDIR/bossnode`;
-    setboss=1
-else
-    setboss=0
-fi
-
 # TRIM is optional
 TRIM=${SLICEFIX_TRIM:-'0'}
 case $TRIM in
@@ -94,6 +87,13 @@ esac
 
 # XXX hack to determine the root FS partition
 RPART=$SLICEFIX_RPART
+
+if [ -r $ETCDIR/bossnode ]; then
+    bossnode=`cat $ETCDIR/bossnode`;
+    setboss=1
+else
+    setboss=0
+fi
 
 # Indicates the MFS has been properly localized and we can copy stuff
 # into the image.
@@ -154,9 +154,7 @@ dolinux() {
     RUUID=`dumpe2fs $rootdev 2>/dev/null | grep UUID: | \
 	sed -e 's/.*UUID:  *\([^ ]*\).*/\1/'`
     #
-    # To be pedantic, we should do the following (generate a new
-    # UUID). Note that this will cause the root FS to be fsck'ed
-    # everytime (see needfsck below).
+    # Generate a new UUID.
     #
     if [ -n "$RUUID" ]; then
 	# generate/install a new random UUID with tune2fs
@@ -165,6 +163,15 @@ dolinux() {
 	RUUID=`dumpe2fs $rootdev 2>/dev/null | grep UUID: | \
 	    sed -e 's/.*UUID:  *\([^ ]*\).*/\1/'`
     fi
+
+    #
+    # XXX we have had problems with unclean FSes.
+    # The situation gets much worse if we don't clean it up here.
+    #
+    fsck -y $rootdev || {
+	echo "Failed to fsck root filesystem $rootdev"
+	return 1
+    }
 
     #
     # Attempt to mount filesystem   
