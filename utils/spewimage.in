@@ -38,7 +38,7 @@ sub usage()
 	"Spew an image file to a (widearea) node.\n";
     exit(-1);
 }
-my $optlist   = "t:k:hs";
+my $optlist   = "t:k:hsd";
 my $debug     = 0;
 my $headonly  = 0;
 my $sigfile   = 0;
@@ -98,6 +98,9 @@ if (! getopts($optlist, \%options)) {
 }
 if (defined($options{"h"})) {
     $headonly = 1;
+}
+if (defined($options{"d"})) {
+    $debug = 1;
 }
 if (defined($options{"s"})) {
     $sigfile = 1;
