@@ -239,7 +239,7 @@ loadone() {
     MBRVERS=`getvar MBRVERS "$_LOADINFO" 101`;
     PREPARE=`getvar PREPARE "$_LOADINFO" 0`;
     IMAGEID=`getvar IMAGEID "$_LOADINFO"`;
-    KEEPALIVE=`getvar KEEPALIVE "$_LOADINFO"`;
+    KEEPALIVE=`getvar KEEPALIVE "$_LOADINFO" 0`;
     OSVERSION=`getvar OSVERSION "$_LOADINFO" 0`;
 
     #
@@ -457,10 +457,10 @@ loadone() {
 
     if [ x"$imagefile" != x ]; then
 	echo "`date`: Running $BINDIR/imageunzip -f -o -O -W 32 $ZFILL $imagefile /dev/${_DISK}${_PART}"
-	$BINDIR/imageunzip -o -O -W 32 $ZFILL $imagefile /dev/${_DISK}${_PART}
+	$BINDIR/imageunzip -f -o -O -W 32 $ZFILL $imagefile /dev/${_DISK}${_PART}
     else
 	echo "`date`: Running $BINDIR/frisbee -f -S $SERVER $MEMARGS $KA $ZFILL $SLICE $IMAGEID /dev/$_DISK"
-	$BINDIR/frisbee -S $SERVER $MEMARGS $KA $ZFILL $SLICE $IMAGEID /dev/$_DISK
+	$BINDIR/frisbee -f -S $SERVER $MEMARGS $KA $ZFILL $SLICE $IMAGEID /dev/$_DISK
     fi
     fstat=$?
 
