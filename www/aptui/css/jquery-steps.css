@@ -267,10 +267,6 @@ left: -999em;
 	margin-bottom: 20px;
 }
 
-.wizard #finalize_options {
-	min-height: 100px;
-}
-
 .wizard #inline_container {
 	padding: 0;
 	margin-bottom: 20px;
