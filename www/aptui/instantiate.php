@@ -506,7 +506,8 @@ function SPITFORM($formfields, $newuser, $errors)
     # Spit out a project selection list if more then one project membership
     #
     if ($this_user && !$this_user->webonly()) {
-        if (count($projlist) == 1) {
+        # Changed to 0 for testing, change back
+        if (count($projlist) == 0) {
             echo "<input id='profile_pid' type='hidden'
                      name='formfields[pid]'
                      value='" . $formfields["pid"] . "'>\n";
