@@ -32,6 +32,7 @@ function (_, sup, filesize, JacksEditor, ShowImagingModal, moment, ppstart,
     var myCodeMirror = null;
     var genilibwarned= false;
     var isppprofile  = false;
+    var isadmin      = 0;
     var manageTemplate    = _.template(manageString);
     var waitwaitTemplate  = _.template(waitwaitString);
     var rendererTemplate  = _.template(rendererString);
@@ -51,6 +52,7 @@ function (_, sup, filesize, JacksEditor, ShowImagingModal, moment, ppstart,
 	profile_uuid  = window.PROFILE_UUID;
 	ajaxurl       = window.AJAXURL;
 	isppprofile   = window.ISPPPROFILE;
+	isadmin       = window.ISADMIN;
 
 	var fields   = JSON.parse(_.unescape($('#form-json')[0].textContent));
 	var errors   = JSON.parse(_.unescape($('#error-json')[0].textContent));
@@ -115,7 +117,8 @@ function (_, sup, filesize, JacksEditor, ShowImagingModal, moment, ppstart,
 	$('#waitwait_div').html(waitwait_html);
     	var showtopo_html = showtopoTemplate({});
 	$('#showtopomodal_div').html(showtopo_html);
-	editor = new JacksEditor($('#editmodal_div'));
+	editor = new JacksEditor($('#editmodal_div'),
+				 false, false, false, false, !isadmin);
     	var renderer_html = rendererTemplate({});
 	$('#renderer_div').html(renderer_html);
     	var oops_html = oopsTemplate({});

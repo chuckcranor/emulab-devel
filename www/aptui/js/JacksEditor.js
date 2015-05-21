@@ -67,8 +67,11 @@ function (_, editModalString, editInlineString)
 	alert('Failed to fetch Jacks context from ' + contextUrl);
     }
 
-    function JacksEditor (root, isViewer, isInline, withoutSelection, withoutMenu)
+    function JacksEditor (root, isViewer, isInline,
+			  withoutSelection, withoutMenu, withoutMultiSite)
     {
+	console.info("foo");
+	console.info(withoutMultiSite);
 	this.root = root;
 	this.instance = null;
 	this.input = null;
@@ -77,6 +80,7 @@ function (_, editModalString, editInlineString)
 	this.mode = 'editor';
 	this.selectionPane = true;
 	this.menu = true;
+	this.multisite = true;
 	if (isViewer)
 	{
 	    this.mode = 'viewer';
@@ -93,6 +97,9 @@ function (_, editModalString, editInlineString)
 	}
 	if (withoutMenu) {
 		this.menu = false;
+	}
+	if (withoutMultiSite) {
+		this.multisite = false;
 	}
 	this.render();
     }
@@ -122,7 +129,7 @@ function (_, editModalString, editInlineString)
 		mode: this.mode,
 		source: 'rspec',
 		root: '#edit_nopicker',
-		multiSite: true,
+		multiSite: this.multisite,
 		nodeSelect: this.selectionPane,
 		readyCallback: _.bind(this.jacksReady, this),
 		show: {

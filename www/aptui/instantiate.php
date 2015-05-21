@@ -470,7 +470,7 @@ function SPITFORM($formfields, $newuser, $errors)
     # Spit out an experient name box, which is optional and prefilled
     # with a default.
     #
-    if ($this_user && ISADMIN()) {
+    if ($this_user) {
         $thisclass = "form-group";
         if ($errors && array_key_exists("name", $errors)) {
             $thisclass .= " has-error";
@@ -657,6 +657,8 @@ function SPITFORM($formfields, $newuser, $errors)
     if ($newuser) {
 	echo "window.APT_OPTIONS.isNewUser = true;\n";
     }
+    $isadmin = (isset($this_user) && ISADMIN() ? 1 : 0);
+    echo "    window.ISADMIN    = $isadmin;\n";
     echo "</script>\n";
     echo "<script src='js/lib/jquery-2.0.3.min.js'></script>\n";
     echo "<script src='js/lib/bootstrap.js'></script>\n";
