@@ -5,6 +5,7 @@ window.APT_OPTIONS.configObject = {
     paths: {
 	'jquery-ui': 'js/lib/jquery-ui',
 	'jquery-grid':'js/lib/jquery.appendGrid-1.3.1.min',
+	'jquery-steps': 'js/lib/jquery.steps.min',
 	'formhelpers': 'js/lib/bootstrap-formhelpers',
 	'dateformat': 'js/lib/date.format',
 	'd3': 'js/lib/d3.v3',
@@ -20,6 +21,7 @@ window.APT_OPTIONS.configObject = {
     shim: {
 	'jquery-ui': { },
 	'jquery-grid': { deps: ['jquery-ui'] },
+	'jquery-steps': { },
 	'formhelpers': { },
 	'dateformat': { exports: 'dateFormat' },
 	'd3': { exports: 'd3' },
