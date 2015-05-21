@@ -45,6 +45,7 @@ sub usage()
     print("Usage: manage_instance reload instance node_id [node_id ...]\n");
     print("Usage: manage_instance monitor instance\n");
     print("Usage: manage_instance lockdown instance set|clear user|admin\n");
+    print("Usage: manage_instance writecreds instance directory\n");
     exit(-1);
 }
 my $optlist     = "dt:";
@@ -104,6 +105,7 @@ sub DoRefresh();
 sub DoReboot();
 sub DoReload();
 sub DoLockdown();
+sub WriteCredentials();
 sub StartMonitor();
 
 #
@@ -159,6 +161,9 @@ elsif ($action eq "monitor") {
 }
 elsif ($action eq "lockdown") {
     DoLockdown()
+}
+elsif ($action eq "writecreds") {
+    WriteCredentials()
 }
 else {
     usage();
@@ -248,7 +253,7 @@ sub DoSnapshot()
     #
     # Sanity checks. 
     #
-    my @aggs = @{ $instance->AggregateList() };
+    my @aggs = $instance->AggregateList();
     if (! @aggs) {
 	fatal("No slivers for instance!");
     }
@@ -279,12 +284,15 @@ sub DoSnapshot()
 	    }
 	    foreach my $ref (GeniXML::FindNodes("n:node",
 						$manifest)->get_nodelist()) {
-		my $client_id  = GeniXML::GetVirtualId($ref);
-		my $urn        = GeniXML::GetSliverId($ref);
+		my $client_id   = GeniXML::GetVirtualId($ref);
+		my $manager_urn = GetManagerId($ref);
+		my $urn          = GeniXML::GetSliverId($ref);
 
 		# No sliver urn or a different aggregate.
 		next
-		    if (! (defined($urn) && $urn eq $agg->aggregate_urn()));
+		    if (! (defined($urn) &&
+			   defined($manager_urn) &&
+			   $manager_urn eq $agg->aggregate_urn()));
 
 		if ($node_id eq $client_id) {
 		    $node = $ref;
@@ -414,7 +422,7 @@ sub DoSnapshot()
 	sleep($interval);
 	$seconds -= $interval;
     
-	my $response = $aggregate->SliverStatus();
+	my $response = $aggregate->SliceStatus();
 	if ($response->code() != GENIRESPONSE_SUCCESS &&
 	    $response->code() != GENIRESPONSE_BUSY) {
 	    $errmsg = "Sliverstatus failed: ". $response->output() . "\n";
@@ -579,7 +587,7 @@ sub DoConsole()
     #
     my $sliver_urn;
     my $sliver;
-    foreach my $obj (@{ $instance->AggregateList() }) {
+    foreach my $obj ($instance->AggregateList()) {
 	my $manifest = GeniXML::Parse($obj->manifest());
 	if (! defined($manifest)) {
 	    fatal("Could not parse manifest for $obj");
@@ -725,7 +733,7 @@ sub DoTerminate()
 	return -1;
     };
     my @return_codes = ();
-    my @agglist =      @{ $instance->AggregateList() };
+    my @agglist =      $instance->AggregateList();
     if (ParRun({"maxwaittime" => 99999,
 		"maxchildren" => scalar(@agglist)},
 	    \@return_codes, $coderef, @agglist)) {
@@ -851,7 +859,7 @@ sub DoExtend()
 	return -1;
     };
     my @return_codes = ();
-    my @agglist =      @{ $instance->AggregateList() };
+    my @agglist =      $instance->AggregateList();
     if (ParRun({"maxwaittime" => 99999,
 		"maxchildren" => scalar(@agglist)},
 	    \@return_codes, $coderef, @agglist)) {
@@ -976,7 +984,7 @@ sub DoRefresh()
 	return 1;
     };
     my @return_codes = ();
-    my @agglist =      @{ $instance->AggregateList() };
+    my @agglist =      $instance->AggregateList();
     if (ParRun({"maxwaittime" => 99999,
 		"maxchildren" => scalar(@agglist)},
 	    \@return_codes, $coderef, @agglist)) {
@@ -1031,7 +1039,7 @@ sub DoRebootOrReload($)
 
     my %sliver_urns = ();
     my @slivers     = ();
-    foreach my $obj (@{ $instance->AggregateList() }) {
+    foreach my $obj ($instance->AggregateList()) {
 	my $manifest = GeniXML::Parse($obj->manifest());
 	if (! defined($manifest)) {
 	    fatal("Could not parse manifest");
@@ -1083,7 +1091,7 @@ sub DoRebootOrReload($)
 	# Clear this so that web interface will not update it.
 	$webtask->sliverstatus({});
 
-	my $response = $sliver->SliverAction($which, @urns);
+	my $response = $sliver->SliverAction(\$errmsg, $which, @urns);
 	if (!defined($response)) {
 	    $errmsg = "RPC Error calling SliverAction";
 	    goto bad;
@@ -1267,7 +1275,7 @@ sub StartMonitor()
 	    local $SIG{INT} = $handler;
 	}
 	my @return_codes = ();
-	my @agglist =      @{ $instance->AggregateList() };
+	my @agglist =      $instance->AggregateList();
 	if (ParRun({"maxwaittime" => 99999,
 		    "maxchildren" => scalar(@agglist)},
 		   \@return_codes, $coderef, @agglist)) {
@@ -1351,7 +1359,7 @@ sub DoLockdownInternal($$)
 	return 0;
     };
     my @return_codes = ();
-    my @agglist =      @{ $instance->AggregateList() };
+    my @agglist =      $instance->AggregateList();
     if (ParRun({"maxwaittime" => 99999,
 		"maxchildren" => scalar(@agglist)},
 	       \@return_codes, $coderef, @agglist)) {
@@ -1396,6 +1404,22 @@ sub DoLockdown()
     }
     $slice->UnLock();
     exit(0);
+}
+
+#
+# Write instance credentials to files.
+#
+sub WriteCredentials()
+{
+    usage()
+	if (!@ARGV);
+    my $directory = shift(@ARGV);
+    fatal("$directory does not exist")
+	if (! -e $directory);
+    fatal("$directory is not a directory")
+	if (! -d $directory);
+
+    return $instance->WriteCredentials($directory);
 }
 
 sub fatal($)

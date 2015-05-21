@@ -205,6 +205,7 @@ sub DoCreate()
 	if (!defined($aggregate)) {
 	    fatal("Could not find aggregate for $nodeid");
 	}
+	$aggregate_urn = $aggregate->aggregate_urn();
     }
     if (defined($options{"f"})) {
 	$fstype = $options{"f"};
@@ -345,7 +346,7 @@ sub DoCreate()
     # Handoff to snapshot if an imdataset.
     #
     if ($type eq "imdataset" &&
-	DoSnapShotInternal($dataset, $instance,
+	DoSnapShotInternal($dataset, $aggregate,
 			   $bsname, $nodeid, \$errmsg)) {
 	$instance->Unlock();
 	goto failed;
@@ -624,6 +625,10 @@ sub DoSnapshot()
     if (!defined($instance)) {
 	fatal("No such instance");
     }
+    my $aggregate = $instance->FindAggregateByNodeId($nodeid);
+    if (!defined($aggregate)) {
+	fatal("Could not find aggregate for $nodeid");
+    }
     if ($dataset->Lock()) {
 	fatal("dataset is busy, cannot lock it");
     }
@@ -639,7 +644,7 @@ sub DoSnapshot()
 	# Convenient.
 	$webtask->AutoStore(1);
     }
-    if (DoSnapShotInternal($dataset, $instance, $bsname, $nodeid, \$errmsg)) {
+    if (DoSnapShotInternal($dataset, $aggregate, $bsname, $nodeid, \$errmsg)) {
 	goto failed;
     }
     if (PollDatasetStatus($dataset, \$errmsg)) {
@@ -659,10 +664,10 @@ sub DoSnapshot()
 
 sub DoSnapShotInternal($$$$$)
 {
-    my ($dataset, $instance, $bsname, $nodeid, $perrmsg) = @_;
+    my ($dataset, $aggregate, $bsname, $nodeid, $perrmsg) = @_;
     my $errmsg;
     
-    my $manifest = GeniXML::Parse($instance->manifest());
+    my $manifest = GeniXML::Parse($aggregate->manifest());
     if (! defined($manifest)) {
 	$errmsg = "Could not parse manifest";
 	goto failed;
@@ -697,8 +702,8 @@ sub DoSnapShotInternal($$$$$)
 	$errmsg = "Could not find node '$nodeid' in manifest";
 	goto failed;
     }
-    my $response = $instance->CreateImage($sliver_urn,
-					  $dataset->dataset_id(), 0, $bsname);
+    my $response = $aggregate->CreateImage($sliver_urn,
+					   $dataset->dataset_id(), 0, $bsname);
     if ($response->code() != GENIRESPONSE_SUCCESS) {
 	$errmsg = "SnapshotDataset failed: ". $response->output() . "\n";
 	goto failed;

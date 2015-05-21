@@ -180,7 +180,7 @@ function (_, Constraints, sup, ppstart, aboutaptString, aboutcloudString, waitwa
 	var continuation = function(rspec, description, name, amdefault, ispp) {
 	    $('#showtopo_title').html("<h3>" + name + "</h3>");
 	    $('#showtopo_description').html(description);
-	    sup.maketopmap('#showtopo_div', rspec, null);
+	    sup.maketopmap('#showtopo_div', rspec, false);
 	};
 	GetProfile($(selectedElement).attr('value'), continuation);
     }

@@ -90,7 +90,7 @@ function (_, sup, moment, ppstart,
 	});
         $('#quickvm_topomodal').on('shown.bs.modal', function() {
 	    sup.maketopmap("#showtopo_nopicker",
-			   $('#profile_rspec_textarea').val(), null, true);
+			   $('#profile_rspec_textarea').val(), true);
         });
 	
 	// The Show Source button.

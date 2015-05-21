@@ -1478,13 +1478,14 @@ function (_, sup, moment, marked, UriTemplate, ShowImagingModal,
 	var manifests       = _.values(manifest_object);
 	var first_manifest  = _.first(manifests);
 	var rest            = _.rest(manifests);
+	var multisite       = rest.length ? true : false;
 	
 	if (! jacksInstance)
 	{
 	    jacksInstance = new window.Jacks({
 		mode: 'viewer',
 		source: 'rspec',
-		multiSite: true,
+		multiSite: multisite,
 		root: divname,
 		nodeSelect: false,
 		readyCallback: function (input, output) {
