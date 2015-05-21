@@ -375,7 +375,10 @@ sub DiscoverResources($)
     if (! (defined($credentials))) {
 	return GeniResponse->MalformedArgsResponse("Missing arguments");
     }
-    my ($credential,$speaksfor,@morecreds) = GeniStd::CheckCredentials($credentials);
+    my ($credential,$speaksfor,@morecreds) =
+	GeniStd::CheckCredentials($credentials);
+    return GeniResponse->MalformedArgsResponse("Missing arguments")
+	if (!defined($credential));
     return $credential
 	if (GeniResponse::IsResponse($credential));
 
