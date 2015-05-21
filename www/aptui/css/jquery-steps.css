@@ -267,6 +267,10 @@ left: -999em;
 	margin-bottom: 20px;
 }
 
+.wizard #finalize_options {
+	min-height: 100px;
+}
+
 .wizard #inline_container {
 	padding: 0;
 	margin-bottom: 20px;
@@ -283,8 +287,28 @@ left: -999em;
 	z-index: 20;
 }
 
+.wizard #inline_container #inline_overlay span {
+	color: #aaa;
+	top: 100%;
+	left: 17px;
+	margin-top: -19px;
+	position: absolute;
+}
+
 #inline_large_container button.close {
 	padding: 1px 5px 0 0;
+}
+
+#about_div {
+	padding-right: 30px;
+}
+
+#about_div .panel {
+	margin-left: -14px;
+}
+
+#where_warming {
+	margin-bottom: 0;
 }
 
 @media (min-width: 768px) {
