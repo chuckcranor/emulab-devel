@@ -19,6 +19,7 @@ function(_, sup, JacksEditor, ppmodalString, ppbodyString, chooserString)
 	var amlist        = null;
 	var amdefault     = null;
 	var registered    = true;
+	var isadmin       = 0;
 	var callback_done = null;
 	var button_label  = "Instantiate";
 	var RSPEC	  = null;
@@ -247,6 +248,7 @@ function(_, sup, JacksEditor, ppmodalString, ppbodyString, chooserString)
 	    registered = args.registered;
 	    amlist = args.amlist;
 	    amdefault = args.amdefault;
+	    isadmin = args.isadmin;
 	    
 	    if (bodyTemplate) {
 		GenerateModalBody(defaults, null);
@@ -254,7 +256,8 @@ function(_, sup, JacksEditor, ppmodalString, ppbodyString, chooserString)
 		return;
 	    }
 	    // Caller might already have an editor instance.
-	    editor = new JacksEditor($('#inline_jacks'), true, true, true, true);
+	    editor = new JacksEditor($('#inline_jacks'), true, true,
+				     true, true, !isadmin);
 	    // Callback; instead of instantiate, send rspec to callback.
 	    if (_.has(args, "callback")) {
 		callback_done = args.callback;

@@ -15,6 +15,7 @@ function (_, Constraints, sup, ppstart, JacksEditor, aboutaptString, aboutcloudS
     var selected_rspec = null;
     var ispprofile    = 0;
     var webonly       = 0;
+    var isadmin       = 0;
     var portal        = null;
     var registered    = false;
     var JACKS_NS      = "http://www.protogeni.net/resources/rspec/ext/jacks/1";
@@ -40,6 +41,9 @@ function (_, Constraints, sup, ppstart, JacksEditor, aboutaptString, aboutcloudS
     window.APT_OPTIONS.initialize(ppstart);
     registered = window.REGISTERED;
 	webonly    = window.WEBONLY;
+	console.info("bar");
+	isadmin    = window.ISADMIN;
+	console.info(isadmin);
 	portal     = window.PORTAL;
     ajaxurl = window.AJAXURL;
 
@@ -55,6 +59,7 @@ function (_, Constraints, sup, ppstart, JacksEditor, aboutaptString, aboutcloudS
 						$('#stepsContainer-p-1 > div').attr('style','display:block');
 						ppstart.StartPP({uuid         : selected_uuid,
 							 registered   : registered,
+							 isadmin      : isadmin,
 							 amlist       : amlist,
 							 amdefault    : amdefault,
 							 callback     : ConfigureDone,
@@ -330,14 +335,15 @@ function (_, Constraints, sup, ppstart, JacksEditor, aboutaptString, aboutcloudS
 	var continuation = function(rspec, description, name, amdefault, ispp) {
 	    $('#showtopo_title').html("<h3>" + name + "</h3>");
 	    $('#showtopo_description').html(description);
-	    sup.maketopmap('#showtopo_div', rspec, false);
+	    sup.maketopmap('#showtopo_div', rspec, false, !isadmin);
 	};
 	GetProfile($(selectedElement).attr('value'), continuation);
     }
 
     // Used to generate the topology on Tab 3 of the wizard for non-pp profiles
     function ShowProfileSelectionInline(selectedElement, root, selectionPane) {
-    editor = new JacksEditor(root, true, true, selectionPane, true);
+	editor = new JacksEditor(root, true, true,
+				 selectionPane, true, !isadmin);
 	var continuation = function(rspec, description, name, amdefault, ispp) {
 	    editor.show(rspec);
 	};
@@ -494,7 +500,7 @@ function (_, Constraints, sup, ppstart, JacksEditor, aboutaptString, aboutcloudS
 	    sites[siteid] = siteid;
 	});
 
-	if (Object.keys(sites) == 0) {
+	if (!isadmin || Object.keys(sites) == 0) {
 	    $("#site_selector").addClass("hidden");
 	    $("#nosite_selector").removeClass("hidden");
 	    // Clear the form data.

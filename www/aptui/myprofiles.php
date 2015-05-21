@@ -221,6 +221,8 @@ echo "<!-- This is the topology view modal -->
 
 echo "<script type='text/javascript'>\n";
 echo "    window.AJAXURL  = 'server-ajax.php';\n";
+$isadmin = (isset($this_user) && ISADMIN() ? 1 : 0);
+echo "    window.ISADMIN    = $isadmin;\n";
 echo "</script>\n";
 echo "<script src='js/lib/jquery-2.0.3.min.js'></script>\n";
 echo "<script src='js/lib/jquery.tablesorter.min.js'></script>\n";

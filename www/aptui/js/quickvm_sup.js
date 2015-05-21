@@ -45,14 +45,14 @@ var jacksInstance;
 var jacksInput;
 var jacksOutput;
 
-function maketopmap(divname, xml, showinfo)
+function maketopmap(divname, xml, showinfo, withoutMultiSite)
 {
     if (! jacksInstance)
     {
 	jacksInstance = new window.Jacks({
 	    mode: 'viewer',
 	    source: 'rspec',
-	    multiSite: true,
+	    multiSite: (withoutMultiSite ? false : true),
 	    root: divname,
 	    nodeSelect: showinfo,
 	    readyCallback: function (input, output) {
