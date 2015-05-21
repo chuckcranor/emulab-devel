@@ -266,7 +266,8 @@ function SPITFORM($formfields, $newuser, $errors)
     SPITHEADER(1);
 
     echo "<div id='ppviewmodal_div'></div>\n";
-    echo "<div class='row'>
+    echo "<div id='stepsContainer' class='row'>
+          <h3>Select a Profile</h3>
           <div class='col-lg-6  col-lg-offset-3
                       col-md-6  col-md-offset-3
                       col-sm-8  col-sm-offset-2
@@ -282,15 +283,22 @@ function SPITFORM($formfields, $newuser, $errors)
 	echo "<div class='panel panel-default'>
                 <div class='panel-heading'>
                    <h3 class='panel-title'>\n";
-    }
-    else {
-	echo "<h3 style='margin-top: 0px;'>";
-    }
     echo "<center>Start Experiment";
     if (isset($profilename)) {
         echo " using profile &quot;$profilename&quot";
     }
     echo "</center></h3>\n";
+    }
+    else {
+    # Will only show header when linked to a profile
+    if (isset($profilename)) {
+        echo "<h3 style='margin: 0px;'>";
+        echo "<center>Start Experiment";
+        echo " using profile &quot;$profilename&quot";
+        echo "</center></h3>\n";
+    }
+    }
+
     if (!$this_user) {
 	echo "   </div>
 	      <div class='panel-body'>\n";
@@ -453,35 +461,11 @@ function SPITFORM($formfields, $newuser, $errors)
         $thisuuid = $profile->uuid();
 	echo "<input type='hidden' name='profile' value='$thisuuid'>\n";
     }
-    if (isset($this_user) && !$this_user->webonly()) {
-        echo "<div class='panel panel-info'>\n";
-        echo "  <div class='panel-body bg-info' style='padding: 5px;'>\n";
-        #
-        # Local users, show a link to the ssh keys page.
-        # Nonlocal users, remind them ssh keys go into their portal.
-        #
-        if ($this_user->IsNonLocal()) {
-            echo "<div>";
-            echo "  <div>
-                    GENI Users; be sure to add ssh keys at <b>your</b> portal if
-                    you want to log in from your desktop, else you
-	            will be limited to using a shell window in your browser. 
-                    </div>
-                  </div>\n";
-        }
-        else {
-            echo "<div>";
-            echo "  <div>
-                     <a href='ssh-keys.php'>Manage your SSH keys</a> if
-                     you want to log in from your desktop, else you
-		     will be limited to using a shell window in your browser. 
-                    </div>
-                  </div>\n";
-        }
-        echo "  </div>\n";
-        echo "</div>\n";
-    }
 
+    #
+    # Container for the inputs that get copied to the last step of the wizard
+    #
+    echo "<div id='experiment_options' class='hidden'>\n";
     #
     # Spit out an experient name box, which is optional and prefilled
     # with a default.
@@ -491,15 +475,15 @@ function SPITFORM($formfields, $newuser, $errors)
         if ($errors && array_key_exists("name", $errors)) {
             $thisclass .= " has-error";
         }
-        echo "<div class='form-horizontal'>
+        echo "<div id='name_selector' class='form-horizontal experiment_option'>
                 <div class='$thisclass'>
                   <label class='col-sm-4 control-label'
                          style='text-align: right;'>Name:</label>
                   <div class='col-sm-6'
                        data-toggle='popover'
-		       data-delay='{hide:1500, show:500}'
-		       data-html='true'
-		       data-content='Provide a unique name to identity your
+               data-delay='{hide:1500, show:500}'
+               data-html='true'
+               data-content='Provide a unique name to identity your
                            new experiment. If you are in
                            the habit of starting more then one experiment at
                            a time this is really handy when trying to tell
@@ -522,7 +506,8 @@ function SPITFORM($formfields, $newuser, $errors)
     # Spit out a project selection list if more then one project membership
     #
     if ($this_user && !$this_user->webonly()) {
-        if (count($projlist) == 1) {
+        # Changed to 0 for testing, change back
+        if (count($projlist) == 0) {
             echo "<input id='profile_pid' type='hidden'
                      name='formfields[pid]'
                      value='" . $formfields["pid"] . "'>\n";
@@ -538,7 +523,7 @@ function SPITFORM($formfields, $newuser, $errors)
                     "<option $selected value='$pid'>$pid</option>\n";
             }
             $html =
-                "<div class='form-horizontal'><div class='form-group'>
+                "<div class='form-horizontal experiment_option' id='profile_selector'><div class='form-group'>
                    <label class='col-sm-4 control-label'
                       style='text-align: right;'>Project:</label>
                    <div class='col-sm-6'>
@@ -561,8 +546,9 @@ function SPITFORM($formfields, $newuser, $errors)
 	    $am_options .= 
 		"<option $selected value='$am'>$am</option>\n";
 	}
+
         $html = "<div id='aggregate_selector'>
-                  <div class='form-horizontal' id='nosite_selector'>
+                  <div class='form-horizontal experiment_option' id='nosite_selector'>
                    <div class='form-group'>
                    <label class='col-sm-4 control-label'
                       style='text-align: right;'>
@@ -576,22 +562,59 @@ function SPITFORM($formfields, $newuser, $errors)
         $html = $html . "<div id='site_selector' class='hidden'></div></div>";
         echo $html;
     }
+    echo "</div>\n";
     echo "</fieldset>
-           <div class='form-group row'>
+           <div class='form-group row hidden'>
            <div class='col-sm-6 col-sm-offset-3'>
+           
            <button class='btn btn-primary btn-block hidden'
               id='configurator_button'
               type='button'>Configure
            </button>
-           <button class='btn btn-success btn-block' id='instantiate_submit'
+           <button class='btn btn-success btn-block hidden' id='instantiate_submit'
               type='submit' name='create'>Create!
            </button>
            </div>
-           </div>
-        </div>\n";
+           </div>\n";
+
+    # This is for a PP rspec.
+    echo "<textarea name='formfields[pp_rspec]'
+            id='pp_rspec_textarea'
+                    class='form-control hidden'
+                    type='textarea'></textarea>\n";
+    echo "</form>\n
+          </div>\n";
     if (!isset($this_user)) {
         echo "</div>
               </div>\n";
+    }
+    echo "<h3>Parameterize</h3><div class='col-lg-6  col-lg-offset-3
+                                    col-md-6  col-md-offset-3
+                                    col-sm-8  col-sm-offset-2
+                                    col-xs-12 col-xs-offset-0'></div>\n";
+    echo "<h3>Finalize</h3><div class='col-lg-6  col-lg-offset-3
+                                    col-md-6  col-md-offset-3
+                                    col-sm-8  col-sm-offset-2
+                                    col-xs-12 col-xs-offset-0'>
+                            <div id='finalize_container' class='col-lg-8 col-md-8 col-sm-8 col-xs-12'>
+                                <div class='panel panel-default'>
+                                    <div class='panel-heading'>Please review the selections below and then click Finish.</div>
+                                    <div class='panel-body'>
+                                        <div id='finalize_options'></div>
+                                    </div>
+                                </div>
+                            </div>
+                            <div id='inline_container' class='col-lg-4 col-md-4 col-sm-4 col-xs-12'>
+                                <a id='inline_overlay' href='#'></a> 
+                                <div id='inline_jacks'></div>
+                            </div>
+                                    </div>\n";
+    echo "</div>\n";
+    echo "<button class='btn btn-primary btn-sm'
+        style='display:block;visibility:hidden;'
+                id='modal_profile_continue_button'
+                type='button' name='create'>Continue</button>\n";
+    if (!isset($this_user)) {
 	SpitVerifyModal("verify_modal", "Create");
     
 	if ($newuser) {
@@ -610,13 +633,6 @@ function SPITFORM($formfields, $newuser, $errors)
 	    echo "<input type='hidden' name='stuffing' value='$stuffing' />";
 	}
     }
-    echo "</div>\n";
-    # This is for a PP rspec.
-    echo "<textarea name='formfields[pp_rspec]'
-		    id='pp_rspec_textarea'
-                    class='form-control hidden'
-                    type='textarea'></textarea>\n";
-    echo "</form>\n";
 
     SpitTopologyViewModal("quickvm_topomodal", $profile_array);
     echo "<div id='waitwait_div'></div>\n";

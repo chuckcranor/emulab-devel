@@ -167,6 +167,7 @@ $PAGEHEADER_FUNCTION = function($thinheader = 0, $ignore1 = NULL,
         <link rel='stylesheet' href='css/$APTSTYLE'>";
     echo "<script>APT_CACHE_TOKEN='" . Instance::CacheToken() . "';</script>";
     echo "<script src='js/common.js'></script>
+        <link rel='stylesheet' href='css/jquery-steps.css'>
         <script src='https://www.emulab.net/emulab_sup.js'></script>
       </head>
     <body style='display: none;'>\n";

@@ -1,5 +1,5 @@
-define(['underscore', 'js/lib/text!template/edit-modal.html'],
-function (_, editModalString)
+define(['underscore', 'js/lib/text!template/edit-modal.html', 'js/lib/text!template/edit-inline.html'],
+function (_, editModalString, editInlineString)
 {
     'use strict';
 
@@ -67,7 +67,7 @@ function (_, editModalString)
 	alert('Failed to fetch Jacks context from ' + contextUrl);
     }
 
-    function JacksEditor (root, isViewer)
+    function JacksEditor (root, isViewer, isInline, withoutSelection, withoutMenu)
     {
 	this.root = root;
 	this.instance = null;
@@ -75,24 +75,45 @@ function (_, editModalString)
 	this.output = null;
 	this.xml = null;
 	this.mode = 'editor';
+	this.selectionPane = true;
+	this.menu = true;
 	if (isViewer)
 	{
 	    this.mode = 'viewer';
 	}
-        this.shown = false;
-        this.render();
+    this.shown = false;
+
+	if (isInline) {
+		this.inline = 'inline';
+	}
+	// A little backward, but I didn't want the addition of these parameters to
+	// mess up code elsewhere. The previous values for these parts of the context was true.
+	if (withoutSelection) {
+		this.selectionPane = false;
+	}
+	if (withoutMenu) {
+		this.menu = false;
+	}
+	this.render();
     }
 
     JacksEditor.prototype = {
 
 	render: function ()
 	{
-	    this.root.html(editModalString);
+		if (this.inline == 'inline')
+		{
+			this.root.html(editInlineString);
+		}
+		else
+		{
+	    	this.root.html(editModalString);
+	    	this.root.find('#quickvm_editmodal').on('shown.bs.modal', _.bind(this.handleShown, this));
+		}
 	    if (this.mode !== 'editor')
 	    {
 		this.root.find('.modal-header h3').html('Topology Viewer');
 	    }
-	    this.root.find('#quickvm_editmodal').on('shown.bs.modal', _.bind(this.handleShown, this));
 	    this.root.find('#edit-save').click(_.bind(this.fetchXml, this));
 	    this.root.find('#edit-cancel, #edit-dismiss')
 	      .click(_.bind(this.cancelEdit, this));
@@ -102,14 +123,14 @@ function (_, editModalString)
 		source: 'rspec',
 		root: '#edit_nopicker',
 		multiSite: true,
-		nodeSelect: true,
+		nodeSelect: this.selectionPane,
 		readyCallback: _.bind(this.jacksReady, this),
 		show: {
 		    rspec: false,
 		    tour: false,
 		    version: false,
-		    menu: true,
-		    selectInfo: true
+		    menu: this.menu,
+		    selectInfo: this.selectionPane
 		},
 		canvasOptions: context.canvasOptions,
 		constraints: context.constraints
@@ -144,7 +165,12 @@ function (_, editModalString)
 	    }
 	    if (this.input)
 	    {
-		this.root.find('#quickvm_editmodal').modal('show');
+	    	if (this.inline == 'inline') {
+	    		this.handleShown();
+	    	}
+	    	else {
+				this.root.find('#quickvm_editmodal').modal('show');
+	    	}
 	    }
 	},
 

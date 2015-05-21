@@ -1,10 +1,10 @@
 require(window.APT_OPTIONS.configObject,
-	['underscore', 'constraints', 'js/quickvm_sup', 'js/ppstart',
+	['underscore', 'constraints', 'js/quickvm_sup', 'js/ppwizardstart', 'js/JacksEditor',
 	 'js/lib/text!template/aboutapt.html',
 	 'js/lib/text!template/aboutcloudlab.html',
 	 'js/lib/text!template/waitwait-modal.html',
-         'formhelpers', 'filestyle', 'marked', 'jacks'],
-function (_, Constraints, sup, ppstart, aboutaptString, aboutcloudString, waitwaitString)
+         'formhelpers', 'filestyle', 'marked', 'jacks', 'jquery-steps'],
+function (_, Constraints, sup, ppstart, JacksEditor, aboutaptString, aboutcloudString, waitwaitString)
 {
     'use strict';
 
@@ -23,21 +23,140 @@ function (_, Constraints, sup, ppstart, aboutaptString, aboutcloudString, waitwa
       input: null,
       output: null
     };
+    var editor        = null;
+    var loaded_uuid	  = null;
+    var ppchanged     = false;
+
 
     function initialize()
     {
-	// Get context for constraints
+    // Get context for constraints
 	var contextUrl = 'https://www.emulab.net/protogeni/jacks-context/cloudlab-utah.json';
         $('#profile_where').prop('disabled', true);
         $('#instantiate_submit').prop('disabled', true);
         $.get(contextUrl).then(contextReady, contextFail);
 
-	window.APT_OPTIONS.initialize(sup);
-	registered = window.REGISTERED;
+    window.APT_OPTIONS.initialize(sup);
+    window.APT_OPTIONS.initialize(ppstart);
+    registered = window.REGISTERED;
 	webonly    = window.WEBONLY;
 	portal     = window.PORTAL;
-	ajaxurl    = window.AJAXURL;
-	
+    ajaxurl = window.AJAXURL;
+
+	$('#stepsContainer').steps({
+		headerTag: "h3",
+		bodyTag: "div",
+		transitionEffect: "slideLeft",
+		autoFocus: true,
+		onStepChanging: function(event, currentIndex, newIndex) {
+			if (currentIndex == 0 && newIndex == 1) {
+				if (ispprofile) {
+					if (selected_uuid != loaded_uuid) {
+						$('#stepsContainer-p-1 > div').attr('style','display:block');
+						ppstart.StartPP({uuid         : selected_uuid,
+							 registered   : registered,
+							 amlist       : amlist,
+							 amdefault    : amdefault,
+							 callback     : ConfigureDone,
+							 button_label : "Accept"});
+						loaded_uuid = selected_uuid;
+						ppchanged = true;
+					}
+				}
+				else {
+					$('#stepsContainer-p-1 > div').attr('style','display:none');
+				}
+			}
+			else if (currentIndex == 1 && newIndex == 2) {
+				// Set up the Finalize tab
+				$('#stepsContainer-p-2 #finalize_options').html('');
+				// Each .experiment_option in the form is copied to the last page.
+				// When the finish button is pressed, these values are copied back.
+				$('#experiment_options .experiment_option').each(function() {
+					if (!$(this).hasClass('hidden')) {
+						var fieldId = $(this).attr('id');
+						var fieldHTML = $(this).html();
+
+						$('#stepsContainer-p-2 #finalize_options').append(''
+							+'<div class="'+fieldId+'">'
+							+'<div class="form-horizontal">'
+							+fieldHTML
+							+'</div></div>');
+					}
+				});
+			}
+
+			if (currentIndex == 2) {
+				SwitchJacks('small');
+			}
+
+			if (currentIndex == 0 && selected_uuid == null) {
+				return false;
+			}
+			return true;
+		},
+		onStepChanged: function(event, currentIndex, priorIndex) {
+			var cIndex = currentIndex;
+			if (currentIndex == 1) {
+				// If the profile isn't parameterized, skip the second step
+				if (!ispprofile) {
+					if (priorIndex < currentIndex) {
+						// Generate the profile on the third tab
+						ShowProfileSelectionInline($('#profile_name .current'), $('#stepsContainer-p-2 #inline_jacks'), true);
+
+						$(this).steps('next');
+						$('#stepsContainer-t-1').parent().removeClass('done').addClass('disabled');
+					}
+					if (priorIndex > currentIndex) {
+						$(this).steps('previous');
+						cIndex--;
+					}
+				}
+				$('#pp_form input').change(function() {
+					ppchanged = true;
+				});
+				$('#pp_form select').change(function() {
+					ppchanged = true;
+				});
+			}
+			else if (currentIndex == 2 && priorIndex == 1) {
+				// Keep the two panes the same height
+				$('#inline_container').css('height', $('#finalize_container').outerHeight());
+				if (ispprofile && ppchanged) {
+					ppstart.HandleSubmit();
+					ppchanged = false;
+				}
+			}
+
+			if (currentIndex < priorIndex) {
+				// Disable going forward by clicking on the labels
+				for (var i = cIndex+1; i < $('.steps > ul > li').length; i++) {
+					$('#stepsContainer-t-'+i).parent().removeClass('done').addClass('disabled');
+				}
+			}
+		}
+	});
+
+	// Set up wizard final page formatting
+	$('#stepsContainer .steps').addClass('col-lg-6 col-lg-offset-3 col-md-6 col-md-offset-3 col-sm-8 col-sm-offset-2 col-xs-12 col-xs-offset-0');
+	$('#stepsContainer .actions').addClass('col-lg-6 col-lg-offset-3 col-md-6 col-md-offset-3 col-sm-8 col-sm-offset-2 col-xs-12 col-xs-offset-0');
+
+	// Set up jacks swap
+	$('#stepsContainer #inline_overlay').click(function() {
+		SwitchJacks('large');
+	});
+
+	// Set up the Finish button to submit the form
+	$('#stepsContainer .actions a[href="#finish"]').click(function() {
+		$('#stepsContainer-p-2 #finalize_options > div').each(function() {
+			var fieldId = $(this).attr('class');
+			$('#'+fieldId+' .form-control').val($('.'+fieldId+' .form-control').val());
+		});
+		if (!ispprofile) {
+			$('#instantiate_submit').click();
+		}
+	});
+
 	if ($('#amlist-json').length) {
 	    amlist  = JSON.parse(_.unescape($('#amlist-json')[0].textContent));
 	}
@@ -64,7 +183,7 @@ function (_, Constraints, sup, ppstart, aboutaptString, aboutcloudString, waitwa
 	    $('#verify_modal').modal('show');
 	}
         $('#quickvm_topomodal').on('shown.bs.modal', function() {
-            ShowProfileSelection($('.current'))
+            ShowProfileSelection($('#profile_name .current'))
         });
 
 	$('button#reset-form').click(function (event) {
@@ -81,8 +200,9 @@ function (_, Constraints, sup, ppstart, aboutaptString, aboutcloudString, waitwa
 	});
 	$('button#showtopo_select').click(function (event) {
 	    event.preventDefault();
-	    ChangeProfileSelection($('.selected'));
+	    ChangeProfileSelection($('#quickvm_topomodal .selected'));
 	    $('#quickvm_topomodal').modal('hide');
+	    $('.steps .error').removeClass('error');
 	});
 	$('#instantiate_submit').click(function (event) {
 	    if (webonly != 0) {
@@ -98,18 +218,6 @@ function (_, Constraints, sup, ppstart, aboutaptString, aboutcloudString, waitwa
 	    }
 	    $("#waitwait-modal").modal('show');
 	    return true;
-	});
-	$('#configurator_button').click(function (event) {
-	    if (ispprofile) {
-		event.preventDefault();
-		ppstart({uuid         : selected_uuid,
-			 registered   : registered,
-			 amlist       : amlist,
-			 amdefault    : amdefault,
-			 callback     : ConfigureDone,
-			 button_label : "Accept"});
-	    }
-	    return false;
 	});
 	$('#profile_copy_button').click(function (event) {
 	    event.preventDefault();
@@ -165,6 +273,48 @@ function (_, Constraints, sup, ppstart, aboutaptString, aboutcloudString, waitwa
 	_.delay(function () {$('.dropdown-toggle').dropdown();}, 500);
     }
 
+    function SwitchJacks(which) {
+    	if (which == 'small' && $('#stepsContainer-p-2 #inline_jacks').html() == '') {
+			$('#stepsContainer #finalize_container').removeClass('col-lg-12 col-md-12 col-sm-12');
+    		$('#stepsContainer #finalize_container').addClass('col-lg-8 col-md-8 col-sm-8');
+			$('#stepsContainer #inline_large_jacks').html('');
+			$('#inline_large_container').addClass('hidden');
+			if (ispprofile) {
+				ppstart.ChangeJacksRoot($('#stepsContainer-p-2 #inline_jacks'), true);
+			}
+			else {
+				ShowProfileSelectionInline($('#profile_name .current'), $('#stepsContainer-p-2 #inline_jacks'), true);
+			}
+			$('#stepsContainer-p-2 #inline_container').removeClass('hidden');
+    	}
+    	else if (which == 'large') {
+    		// Sometimes the steps library will clean up the added elements
+    		if ($('#inline_large_container').length === 0) {	
+	    		$('<div id="inline_large_container" class="hidden"></div>').insertAfter('#stepsContainer .content');
+				$('#inline_large_container').html(''
+					+'<button id="closeLargeInline" type="button" class="close" data-dismiss="alert" aria-label="Close"><span aria-hidden="true">&times;</span></button>'
+					+'<div id="inline_large_jacks"></div>');
+				$('#stepsContainer #inline_large_container').addClass('col-lg-8 col-lg-offset-2 col-md-8 col-md-offset-2 col-sm-10 col-sm-offset-1 col-xs-12 col-xs-offset-0');
+    		
+				$('#closeLargeInline').click(function() {
+					SwitchJacks('small');
+				});
+    		}
+
+    		$('#stepsContainer #finalize_container').removeClass('col-lg-8 col-md-8 col-sm-8');
+			$('#stepsContainer #finalize_container').addClass('col-lg-12 col-md-12 col-sm-12');
+			$('#stepsContainer-p-2 #inline_jacks').html('');
+			$('#stepsContainer-p-2 #inline_container').addClass('hidden');
+			if (ispprofile) {
+				ppstart.ChangeJacksRoot($('#stepsContainer #inline_large_jacks'), false);
+			}
+			else {
+				ShowProfileSelectionInline($('#profile_name .current'), $('#stepsContainer #inline_large_jacks'), false);
+			}
+			$('#inline_large_container').removeClass('hidden');
+    	}
+    }
+
     function resetForm($form) {
 	$form.find('input:text, input:password, select, textarea').val('');
     }
@@ -181,6 +331,15 @@ function (_, Constraints, sup, ppstart, aboutaptString, aboutcloudString, waitwa
 	    $('#showtopo_title').html("<h3>" + name + "</h3>");
 	    $('#showtopo_description').html(description);
 	    sup.maketopmap('#showtopo_div', rspec, false);
+	};
+	GetProfile($(selectedElement).attr('value'), continuation);
+    }
+
+    // Used to generate the topology on Tab 3 of the wizard for non-pp profiles
+    function ShowProfileSelectionInline(selectedElement, root, selectionPane) {
+    editor = new JacksEditor(root, true, true, selectionPane, true);
+	var continuation = function(rspec, description, name, amdefault, ispp) {
+	    editor.show(rspec);
 	};
 	GetProfile($(selectedElement).attr('value'), continuation);
     }
@@ -210,11 +369,9 @@ function (_, Constraints, sup, ppstart, aboutaptString, aboutcloudString, waitwa
 
 	    // Show the configuration button, disable the create button.
 	    if (ispprofile) {
-		$("#configurator_button").removeClass("hidden");
 		$('#instantiate_submit').attr('disabled', true);
 	    }
 	    else {
-		$("#configurator_button").addClass("hidden");
 		$('#instantiate_submit').attr('disabled', false);
 	    }
 
@@ -355,7 +512,7 @@ function (_, Constraints, sup, ppstart, aboutaptString, aboutcloudString, waitwa
 
 	for (var siteid in sites) {
 	    html = html +
-		"<div class='form-horizontal'>" +
+		"<div id='site"+siteid+"cluster' class='form-horizontal experiment_option'>" +
 		"  <div class='form-group'>" +
 		"    <label class='col-sm-4 control-label' " +
 		"           style='text-align: right;'>"+
@@ -366,9 +523,8 @@ function (_, Constraints, sup, ppstart, aboutaptString, aboutcloudString, waitwa
 		"      <select name=\"formfields[sites][" + siteid + "]\"" +
 		"              class='form-control'>" + options +
 		"      </select>" +
-		"</div></div><div>";
+		"</div></div></div>";
 	}
-	html = html + "<br>";
 	console.info(html);
 	$("#nosite_selector").addClass("hidden");
 	$("#site_selector").removeClass("hidden");
