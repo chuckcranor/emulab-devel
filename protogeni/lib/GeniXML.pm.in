@@ -542,6 +542,18 @@ sub SetManagerId($$)
     return $node;
 }
 
+sub AddManagerToLink($$)
+{
+    my ($link, $urn) = @_;
+
+    my $ref = AddElement("component_manager", $link);
+    return undef
+	if (!defined($ref));
+
+    GeniXML::SetText("name", $ref, $urn);
+    return $link;
+}
+
 sub GetColocate($)
 {
     my ($node) = @_;

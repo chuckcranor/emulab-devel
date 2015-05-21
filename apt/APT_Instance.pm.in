@@ -87,21 +87,22 @@ sub Lookup($$;$)
     $self->{'INSTANCE'}   = $query_result->fetchrow_hashref();
     $self->{'BRAND'}      = Brand->Create($self->{'INSTANCE'}->{'servername'});
     $self->{'HASH'}       = {};
-    $self->{'AGGREGATES'} = [];
+    $self->{'AGGREGATES'} = {};
     bless($self, $class);
 
     #
     # Lookup existing aggregates.
     #
-    my @aggregates = APT_Instance::Aggregate->LookupForInstance($self);
-    if (!@aggregates && defined($self->aggregate_urn())) {
+    my $aggregates = APT_Instance::Aggregate->LookupForInstance($self);
+    if (!keys(%{$aggregates}) && defined($self->aggregate_urn())) {
 	#
 	# Make up a fake one; eventually the old ones will die or
 	# I will create entries for them. Not worrying about it now.
 	#
-	@aggregates = (APT_Instance::Aggregate->GenTemp($self));
+	$aggregates = {$self->aggregate_urn() =>
+			   APT_Instance::Aggregate->GenTemp($self)};
     }
-    $self->{'AGGREGATES'} = \@aggregates;
+    $self->{'AGGREGATES'} = $aggregates;
     
     # Add to cache. 
     $instances{"$uuid"} = $self;
@@ -134,7 +135,8 @@ AUTOLOAD {
 sub Brand($)	{ return $_[0]->{'BRAND'}; }
 sub isAPT($)	{ return $_[0]->Brand()->isAPT() ? 1 : 0; }
 sub isCloud($)	{ return $_[0]->Brand()->isCloud() ? 1 : 0; }
-sub AggregateList($) { return $_[0]->{'AGGREGATES'}; }
+sub AggregateList($) { return values(%{ $_[0]->{'AGGREGATES'} }); }
+sub AggregateHash($) { return $_[0]->{'AGGREGATES'}; }
 
 # Break circular reference someplace to avoid exit errors.
 sub DESTROY {
@@ -302,7 +304,7 @@ sub Delete($)
     my ($self) = @_;
     my $uuid = $self->uuid();
 
-    foreach my $agg (@{ $self->AggregateList() }) {
+    foreach my $agg ($self->AggregateList()) {
 	$agg->Delete() == 0
 	    or return -1;
     }
@@ -540,7 +542,7 @@ sub ComputeNodeCounts($)
     my ($self) = @_;
     my $physnode_count = 0;
     my $virtnode_count = 0;
-    my @slivers = @{ $self->AggregateList() };
+    my @slivers = $self->AggregateList();
     if (!@slivers) {
 	print STDERR "No slivers for $self\n";
 	return -1;
@@ -554,6 +556,12 @@ sub ComputeNodeCounts($)
 	foreach my $ref (GeniXML::FindNodes("n:node",
 					    $manifest)->get_nodelist()) {
 	    my $virtualization_type = GeniXML::GetVirtualizationSubtype($ref);
+	    my $manager_urn = GetManagerId($ref);
+
+	    # Combined rspec.
+	    next
+		if (!defined($manager_urn) ||
+		    $manager_urn ne $sliver->aggregate_urn());
 
 	    if (defined($virtualization_type) &&
 		$virtualization_type eq "emulab-xen") {
@@ -580,7 +588,7 @@ sub AddAggregate($$)
     return undef
 	if (!defined($aggobj));
 
-    push(@{ $self->{'AGGREGATES'} }, $aggobj);
+    $self->{'AGGREGATES'}->{$aggregate_urn} = $aggobj;
     return $aggobj;
 }
 
@@ -590,7 +598,7 @@ sub AddAggregate($$)
 sub FindAggregateByNodeId($$)
 {
     my ($self, $node_id) = @_;
-    my @slivers = @{ $self->AggregateList() };
+    my @slivers = $self->AggregateList();
     if (!@slivers) {
 	return undef;
     }
@@ -612,6 +620,43 @@ sub FindAggregateByNodeId($$)
 	}
     }
     return undef;
+}
+
+sub WriteCredentials($$)
+{
+    my ($self, $directory) = @_;
+    my $geniuser  = $self->GetGeniUser();
+    my $slice     = $self->GetGeniSlice();
+    my $context   = APT_Geni::GeniContext();
+
+    if (! (defined($geniuser) && defined($slice))) {
+	fatal("Could not lookup geniuser or slice");
+    }
+
+    my ($slice_credential, $speaksfor_credential) =
+	APT_Geni::GenCredentials($slice, $geniuser);
+    if (! (defined($speaksfor_credential) &&
+	   defined($slice_credential))) {
+	fatal("Could not create credentials");
+    }
+
+    my $credfile = "$directory/slicecred.xml";
+    unlink($credfile)
+	if (-e $credfile);
+    open(XML, ">$credfile") or
+	fatal("Could not create $credfile");
+    print XML $slice_credential->asString();
+    close(XML);
+    
+    $credfile = "$directory/speaksforcred.xml";
+    unlink($credfile)
+	if (-e $credfile);
+    open(XML, ">$credfile") or
+	fatal("Could not create $credfile");
+    print XML $speaksfor_credential->asString();
+    close(XML);
+    
+    return 0;
 }
 
 ###################################################################
@@ -714,7 +759,7 @@ sub GenTemp($$)
 sub LookupForInstance($$)
 {
     my ($class, $instance) = @_;
-    my @result = ();
+    my $result = {};
     my $uuid   = $instance->uuid();
 
     my $query_result =
@@ -729,9 +774,9 @@ sub LookupForInstance($$)
 	    print STDERR "No apt_instance_aggregate for $uuid/$aggregate_urn\n";
 	    return ();
 	}
-	push(@result, $agg);
+	$result->{$aggregate_urn} = $agg;
     }
-    return @result;
+    return $result;
 }
 
 # Break circular reference someplace to avoid exit errors.
@@ -1100,6 +1145,131 @@ sub SliceStatus($)
 }
 
 #
+# Ask for the manifest
+#
+sub GetManifest($)
+{
+    my ($self) = @_;
+    my $authority = $self->GetGeniAuthority();
+    my $urn       = $self->aggregate_urn();
+    my $geniuser  = $self->instance()->GetGeniUser();
+    my $slice     = $self->instance()->GetGeniSlice();
+    my $context   = APT_Geni::GeniContext();
+    return undef
+	if (! (defined($geniuser) && defined($authority) &&
+	       defined($slice) && defined($context)));
+
+    my ($slice_credential, $speaksfor_credential) =
+	APT_Geni::GenCredentials($slice, $geniuser);
+    return undef
+	if (! (defined($speaksfor_credential) &&
+	       defined($slice_credential)));
+
+    my $args = {
+	"urn"   => $slice->urn(),
+	"credentials" => [$slice_credential->asString(),
+			  $speaksfor_credential->asString()],
+    };
+    my $cmurl = $authority->url();
+    $cmurl =~ s/protogeni/protogeni\/stoller/ if ($usemydevtree);
+
+    my $tries = 10;
+    my $response;
+    while ($tries) {
+	$response =
+	    Genixmlrpc::CallMethod($cmurl, $context, "Resolve", $args);
+
+	if (!defined($response) || $response->code() != GENIRESPONSE_SUCCESS) {
+	    if (defined($response) &&
+		($response->code() == GENIRESPONSE_SERVER_UNAVAILABLE ||
+		 $response->code() == GENIRESPONSE_BUSY) &&
+		$tries >= 0) {
+		print STDERR "Server for $urn reports too busy or slice busy, ".
+		    "waiting a while ...\n";
+		sleep(int(rand(20)) + 10);
+		$tries--;
+		next;
+	    }
+	    print STDERR "Resolve failed on $urn: ".
+		(defined($response) ? $response->output() : "") . "\n";
+	    return undef;
+	}
+	last;
+    }
+    return undef
+	if (! exists($response->value()->{'manifest'}));
+    
+    return $response->value()->{'manifest'};
+}
+
+sub Provision($$$)
+{
+    my ($self, $perrmsg, $keys) = @_;
+    my $authority = $self->GetGeniAuthority();
+    my $urn       = $self->aggregate_urn();
+    my $geniuser  = $self->instance()->GetGeniUser();
+    my $slice     = $self->instance()->GetGeniSlice();
+    my $context   = APT_Geni::GeniContext();
+    return -1
+	if (! (defined($geniuser) && defined($authority) &&
+	       defined($slice) && defined($context)));
+
+    my ($slice_credential, $speaksfor_credential) =
+	APT_Geni::GenCredentials($slice, $geniuser);
+    return -1
+	if (! (defined($speaksfor_credential) &&
+	       defined($slice_credential)));
+
+    #
+    # AM V3 API.
+    #
+    my @params = ([$slice->urn()],
+		  [{"geni_type" => "geni_sfa",
+		    "geni_version" => 3,
+		    "geni_value" => $speaksfor_credential->asString()},
+		   {"geni_type" => "geni_sfa",
+		    "geni_version" => 3,
+		    "geni_value" => $slice_credential->asString()},
+		  ],		 
+		  # Options array.
+		  {"speaking_for" => $geniuser->urn(),
+		   "geni_speaking_for" => $geniuser->urn(),
+		   "geni_users" => [{'urn'   => $geniuser->urn(),
+				     'keys'  => $keys }],
+		  });
+ 
+    my $cmurl = $authority->url();
+    # Convert URL.
+    $cmurl =~ s/\/cm$/\/am/;
+    $cmurl =~ s/protogeni/protogeni\/stoller/ if ($usemydevtree);
+    $cmurl .= "/3.0";
+
+    my $tries = 10;
+    while ($tries) {
+	my $response =
+	    Genixmlrpc::CallMethod($cmurl, $context, "Provision", @params);
+
+	if (!defined($response) || $response->code() != GENIRESPONSE_SUCCESS) {
+	    if (defined($response) &&
+		($response->code() == GENIRESPONSE_SERVER_UNAVAILABLE ||
+		 $response->code() == GENIRESPONSE_BUSY) &&
+		$tries >= 0) {
+		print STDERR "Server for $urn reports too busy or slice busy, ".
+		    "waiting a while ...\n";
+		sleep(int(rand(20)) + 10);
+		$tries--;
+		next;
+	    }
+	    $$perrmsg = $response->output()
+		if (defined($response));
+	    return -1;
+	}
+	last;
+    }
+    return 0;
+}
+
+#
 # Ask aggregate for the console URL for a node.
 #
 sub ConsoleInfo($$)
@@ -1205,11 +1375,13 @@ sub CreateImage($$$$;$)
 #
 # Reboot some nodes
 #
-sub SliverAction($$@)
+sub SliverAction($$$@)
 {
-    my ($self, $which, @slivers) = @_;
-    my $method    = ($which eq "reboot" ? "RestartSliver" : "ReloadSliver");
+    my ($self, $perrmsg, $which, @slivers) = @_;
+    my $method    = ($which eq "reboot" ? "RestartSliver" :
+		     ($which eq "start" ? "StartSliver" : "ReloadSliver"));
     my $authority = $self->GetGeniAuthority();
+    my $urn       = $self->aggregate_urn();
     my $geniuser  = $self->instance()->GetGeniUser();
     my $slice     = $self->instance()->GetGeniSlice();
     my $context   = APT_Geni::GeniContext();
@@ -1224,14 +1396,41 @@ sub SliverAction($$@)
 	       defined($slice_credential)));
 
     my $args = {
-	"sliver_urns" => \@slivers,
 	"credentials" => [$slice_credential->asString(),
 			  $speaksfor_credential->asString()],
     };
+    if (@slivers) {
+	$args->{"sliver_urns"} = \@slivers;
+    }
+    else {
+	$args->{"slice_urn"} = $slice->urn();
+    }
     my $cmurl = $authority->url();
     $cmurl =~ s/protogeni/protogeni\/stoller/ if ($usemydevtree);
 
-    return Genixmlrpc::CallMethod($cmurl, $context, $method, $args);
+    my $response;
+    my $tries = 5;
+    while ($tries) {
+	$response = Genixmlrpc::CallMethod($cmurl, $context, $method, $args);
+	
+	if (!defined($response) || $response->code() != GENIRESPONSE_SUCCESS) {
+	    if (defined($response) &&
+		($response->code() == GENIRESPONSE_SERVER_UNAVAILABLE ||
+		 $response->code() == GENIRESPONSE_BUSY) &&
+		$tries >= 0) {
+		print STDERR "Server for $urn reports too busy or slice busy, ".
+		    "waiting a while ...\n";
+		sleep(int(rand(20)) + 10);
+		$tries--;
+		next;
+	    }
+	    $$perrmsg = $response->output()
+		if (defined($response));
+	    return $response;
+	}
+	last;
+    }
+    return $response;
 }
 
 #
@@ -1291,7 +1490,7 @@ sub ImageInfo($$)
     my $cmurl = $authority->url();
     $cmurl =~ s/protogeni/protogeni\/stoller/ if ($usemydevtree);
 
-    return Genixmlrpc::CallMethod($cmurl, $context, "SliverStatus", $args);
+    return Genixmlrpc::CallMethod($cmurl, $context, "ImageInfo", $args);
 }
 
 # _Always_ make sure that this 1 is at the end of the file...

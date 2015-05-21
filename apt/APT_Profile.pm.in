@@ -947,9 +947,9 @@ sub CheckDatasets($$$)
 #
 # Set the component_manager_urn for the sites.
 #
-sub SetSites($$$)
+sub SetSites($$$$)
 {
-    my ($prspecstr, $sitemap, $perrmsg) = @_;
+    my ($prspecstr, $sitemap, $pneedstitcher, $perrmsg) = @_;
 
     my $rspec = GeniXML::Parse($$prspecstr);
     if (! defined($rspec)) {
@@ -961,16 +961,59 @@ sub SetSites($$$)
 	my $site_id     = GeniXML::GetJacksSiteId($ref);
 
 	if (!defined($site_id)) {
-	    $$perrmsg = "No site ID for $client_id";
+	    $$perrmsg = "No site ID for node $client_id";
 	    return -1;
 	}
 	my $site_mid = "site:" . $site_id;
 	if (!exists($sitemap->{$site_mid})) {
-	    $$perrmsg = "No site mapping for $client_id ($site_id)";
+	    $$perrmsg = "No site mapping for node $client_id ($site_id)";
 	    return -1;
 	}
 	GeniXML::SetManagerId($ref, $sitemap->{$site_mid});
 	GeniXML::SetJacksSiteManagerId($ref, $sitemap->{$site_mid});
+    }
+    foreach my $ref (GeniXML::FindNodes("n:link", $rspec)->get_nodelist()) {
+	my %linksites = ();
+	my $client_id = GetVirtualId($ref);
+
+	foreach my $siteref (GeniXML::FindNodesNS("n:site", $ref,
+					  $GeniXML::JACKS_NS)->get_nodelist()) {
+	    my $site_id = GeniXML::GetText("id", $siteref);
+
+	    if (!defined($site_id)) {
+		$$perrmsg = "No site ID for link $client_id";
+		return -1;
+	    }
+	    my $site_mid = "site:" . $site_id;
+	    if (!exists($sitemap->{$site_mid})) {
+		$$perrmsg = "No site mapping for link $client_id ($site_id)";
+		return -1;
+	    }
+	    GeniXML::AddManagerToLink($ref, $sitemap->{$site_mid});
+	    $linksites{$sitemap->{$site_mid}} = 1;
+	}
+	# if more then one site for a link, must use the stitcher.
+	$$pneedstitcher = 1
+	    if (keys(%linksites) > 1);
+    }
+    $$prspecstr = GeniXML::Serialize($rspec);
+    return 0;
+}
+
+#
+# Set the component_manager_urn for the rspec
+#
+sub BindRspec($$$)
+{
+    my ($prspecstr, $aggregate_urn, $perrmsg) = @_;
+
+    my $rspec = GeniXML::Parse($$prspecstr);
+    if (! defined($rspec)) {
+	$$perrmsg = "Could not parse rspec\n";
+	return -1;
+    }
+    foreach my $ref (GeniXML::FindNodes("n:node", $rspec)->get_nodelist()) {
+	GeniXML::SetManagerId($ref, $aggregate_urn);
     }
     $$prspecstr = GeniXML::Serialize($rspec);
     return 0;

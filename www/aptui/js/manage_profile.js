@@ -835,17 +835,6 @@ function (_, sup, filesize, JacksEditor, ShowImagingModal, moment, ppstart,
     }
 
     //
-    // Show the rspec text in the modal.
-    //
-    function ShowRspecTopo(xml)
-    {
-	sup.ShowModal("#quickvm_topomodal");
-        $('#quickvm_topomodal').one('shown.bs.modal', function() {
-	    sup.maketopmap("#showtopo_nopicker", xml, null);
-        });
-    }
-
-    //
     // Instantiate a profile as a guest User.
     //
     function InstantiateAsGuest()

@@ -320,11 +320,11 @@ if ($snap) {
     if (!defined($instance)) {
 	fatal("Could not look up instance $uuid");
     }
-    if (@{ $instance->AggregateList() } != 1) {
+    if ($instance->AggregateList() != 1) {
 	$errors{"error"} = "Must be only one aggregate to snapshot";
 	UserError();
     }
-    ($aggregate) = @{ $instance->AggregateList() };
+    ($aggregate) = $instance->AggregateList();
     my $manifest = GeniXML::Parse($aggregate->manifest());
     if (! defined($manifest)) {
 	fatal("Could not parse manifest");

@@ -46,6 +46,10 @@ my $MAINSITE      = @TBMAINSITE@;
 my $TBOPS         = "@TBOPSEMAIL@";
 my $SACERT	  = "$TB/etc/genisa.pem";
 
+# Cache credentials so we do not keep regenerating down inside the
+# libraries that make the XMLRPC calls.
+my %credcache = ();
+
 #
 # Generate the credentials we need. 
 #
@@ -64,6 +68,15 @@ sub GenCredentials($$;$)
     #
     if (!$geniuser->IsLocal() && $MAINSITE) {
 	$speaker_signer = "/usr/testbed/etc/utah-apt.sa";
+    }
+
+    #
+    # Check cache.
+    #
+    my $cachetag = $target->urn() . "::" . $geniuser->urn();
+    if (exists($credcache{$cachetag})) {
+	($credential,$speaksfor) = @{ $credcache{$cachetag} };
+	goto cached;
     }
 
     #
@@ -139,6 +152,10 @@ sub GenCredentials($$;$)
 	print STDERR "Could not sign $target credential\n";
 	goto bad;
     }
+    if ($wantspeaksfor) {
+	$credcache{$cachetag} = [$credential, $speaksfor];
+    }
+  cached:
     if (wantarray) {
 	return ($credential, $speaksfor);
     }

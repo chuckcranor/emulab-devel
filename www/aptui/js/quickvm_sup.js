@@ -45,11 +45,8 @@ var jacksInstance;
 var jacksInput;
 var jacksOutput;
 
-function maketopmap(divname, xml, sshcallback, writeable)
+function maketopmap(divname, xml, showinfo)
 {
-    if (writeable === undefined) {
-	writeable = false;
-    }
     if (! jacksInstance)
     {
 	jacksInstance = new window.Jacks({
@@ -57,27 +54,18 @@ function maketopmap(divname, xml, sshcallback, writeable)
 	    source: 'rspec',
 	    multiSite: true,
 	    root: divname,
-	    nodeSelect: writeable,
+	    nodeSelect: showinfo,
 	    readyCallback: function (input, output) {
 		jacksInput = input;
 		jacksOutput = output;
 		jacksInput.trigger('change-topology',
 				   [{ rspec: xml }]);
-		if (sshcallback)
-		{
-		    jacksOutput.on('click-event', function (event) {
-			if (event.type === 'node')
-			{
-			    sshcallback(event.ssh, event.client_id);
-			}
-		    });
-		}
 	    },
 	    show: {
 		rspec: false,
 		tour: false,
 		version: false,
-		selectInfo: writeable,
+		selectInfo: showinfo,
 		menu: false
 	    },
 	  canvasOptions: {
