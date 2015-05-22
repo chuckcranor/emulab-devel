@@ -835,6 +835,8 @@ sub WaitForSliver($)
 	if (exists($repblob->{'public_url'})) {
 	    $public_url = $repblob->{'public_url'};
 	    $aggobj->SetPublicURL($public_url);
+	    # Temporary until web interface catches up.
+	    $instance->SetPublicURL($public_url);
 	}
 	if ($repblob->{'status'} eq "ready") {
 	    $ready = 1;
