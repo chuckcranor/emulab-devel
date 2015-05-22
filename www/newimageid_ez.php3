@@ -483,7 +483,8 @@ function SPITFORM($formfields, $errors)
     #
     # Path to image.
     #
-    echo "<tr>
+    $style = ($isadmin ? "" : "style='display:none;'");
+    echo "<tr $style>
               <td>Directory for Image:<br>
                   (must reside in $TBPROJ_DIR)</td>
               <td class=left>

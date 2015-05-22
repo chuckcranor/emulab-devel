@@ -677,7 +677,7 @@ fi
 #
 if [ $reboot -eq 1 ]; then
     # XXX let serial output drain
-    sleep 1
+    sleep 2
     $BINDIR/tmcc state RELOADDONEV2
     echo "`date`: Waiting for server to reboot us ..."
     sleep 30

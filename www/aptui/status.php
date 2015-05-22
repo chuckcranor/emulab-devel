@@ -137,6 +137,11 @@ else {
 }
 if ($slice) {
     $slice_urn       = $slice->urn();
+    $instance_name   = $instance->name();
+    # Until old instances are gone.
+    if (!$instance_name) {
+        $instance_name = $slice_urn;
+    }
     $slice_expires   = DateStringGMT($slice->expires());
     $slice_expires_text = gmdate("m-d\TH:i\Z", strtotime($slice->expires()));
     $slice_created   = DateStringGMT($instance->created());
@@ -146,6 +151,7 @@ else {
     $slice_expires = "";
     $slice_expires_text = ""; 
     $slice_created  = "";
+    $instance_name  = "";
 }
 $registered      = (isset($this_user) ? "true" : "false");
 $snapping        = 0;
@@ -192,6 +198,7 @@ echo "<div id='status-body'></div>\n";
 
 echo "<script type='text/javascript'>\n";
 echo "  window.APT_OPTIONS.uuid = '" . $uuid . "';\n";
+echo "  window.APT_OPTIONS.name = '" . $instance_name . "';\n";
 echo "  window.APT_OPTIONS.instanceStatus = '" . $instance_status . "';\n";
 echo "  window.APT_OPTIONS.profileName = '" . $profile_name . "';\n";
 echo "  window.APT_OPTIONS.profileUUID = '" . $profile_uuid . "';\n";

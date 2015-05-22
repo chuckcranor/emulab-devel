@@ -266,15 +266,18 @@ function SPITFORM($formfields, $newuser, $errors)
     SPITHEADER(1);
 
     echo "<div id='ppviewmodal_div'></div>\n";
+    # Placeholder for the "about" panel, which is now a template file.
+    echo "<div id='about_div' class='col-lg-8  col-lg-offset-2
+                                      col-md-8  col-md-offset-2
+                                      col-sm-10  col-sm-offset-1
+                                      col-xs-12 col-xs-offset-0'></div>\n";
     echo "<div id='stepsContainer' class='row'>
           <h3>Select a Profile</h3>
-          <div class='col-lg-6  col-lg-offset-3
-                      col-md-6  col-md-offset-3
-                      col-sm-8  col-sm-offset-2
+          <div class='col-lg-8  col-lg-offset-2
+                      col-md-8  col-md-offset-2
+                      col-sm-10  col-sm-offset-1
                       col-xs-12 col-xs-offset-0'>\n";
 
-    # Placeholder for the "about" panel, which is now a template file.
-    echo "<div id='about_div'></div>\n";
 
     echo "<form id='quickvm_form' role='form'
             enctype='multipart/form-data'
@@ -556,6 +559,7 @@ function SPITFORM($formfields, $newuser, $errors)
                        <select name=\"formfields[where]\"
 		              id='profile_where' class='form-control'>
                        $am_options</select><br>
+                </div><div class='col-sm-10 col-sm-offset-1' style='text-align: center'>
 		       <div class='alert alert-warning' id='where-warning' style='display: none'>This profile only works on some clusters. Incompatible clusters are unselectable.</div>
 </div></div></div>";
         $html = $html . "<div id='site_selector' class='hidden'></div></div>";
@@ -587,13 +591,13 @@ function SPITFORM($formfields, $newuser, $errors)
         echo "</div>
               </div>\n";
     }
-    echo "<h3>Parameterize</h3><div class='col-lg-6  col-lg-offset-3
-                                    col-md-6  col-md-offset-3
-                                    col-sm-8  col-sm-offset-2
+    echo "<h3>Parameterize</h3><div class='col-lg-8  col-lg-offset-2
+                                    col-md-8  col-md-offset-2
+                                    col-sm-10  col-sm-offset-1
                                     col-xs-12 col-xs-offset-0'></div>\n";
-    echo "<h3>Finalize</h3><div class='col-lg-6  col-lg-offset-3
-                                    col-md-6  col-md-offset-3
-                                    col-sm-8  col-sm-offset-2
+    echo "<h3>Finalize</h3><div class='col-lg-8  col-lg-offset-2
+                                    col-md-8  col-md-offset-2
+                                    col-sm-10  col-sm-offset-1
                                     col-xs-12 col-xs-offset-0'>
                             <div id='finalize_container' class='col-lg-8 col-md-8 col-sm-8 col-xs-12'>
                                 <div class='panel panel-default'>
@@ -604,7 +608,7 @@ function SPITFORM($formfields, $newuser, $errors)
                                 </div>
                             </div>
                             <div id='inline_container' class='col-lg-4 col-md-4 col-sm-4 col-xs-12'>
-                                <a id='inline_overlay' href='#'></a> 
+                                <a id='inline_overlay' href='#'><span class='glyphicon glyphicon-fullscreen' aria-hidden='true'></span></a> 
                                 <div id='inline_jacks'></div>
                             </div>
                                     </div>\n";

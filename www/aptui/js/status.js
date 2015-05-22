@@ -62,6 +62,7 @@ function (_, sup, moment, marked, UriTemplate, ShowImagingModal,
 	// Generate the templates.
 	var template_args = {
 	    uuid:		uuid,
+	    name:		window.APT_OPTIONS.name,
 	    profileName:	window.APT_OPTIONS.profileName,
 	    profileUUID:	window.APT_OPTIONS.profileUUID,
 	    sliceURN:		window.APT_OPTIONS.sliceURN,
@@ -1180,8 +1181,8 @@ function (_, sup, moment, marked, UriTemplate, ShowImagingModal,
 	    // Bind a function to start up ssh for one node topologies.
 	    if (nodecount == 1 && !oneonly && dossh) {
 		startOneSSH = function () {
-		    var nodename = hostportlist.keys()[0];
-		    var hostport = hostportlist[nodename];
+		    var nodename = hostportList.keys()[0];
+		    var hostport = hostportList[nodename];
 		    NewSSHTab(hostport, nodename);
 		};
 	    }

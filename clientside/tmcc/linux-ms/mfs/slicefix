@@ -168,7 +168,7 @@ dolinux() {
     # XXX we have had problems with unclean FSes.
     # The situation gets much worse if we don't clean it up here.
     #
-    fsck -y $rootdev || {
+    e2fsck -y $rootdev || {
 	echo "Failed to fsck root filesystem $rootdev"
 	return 1
     }

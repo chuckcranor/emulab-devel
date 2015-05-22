@@ -322,7 +322,7 @@ $PAGEHEADER_FUNCTION = function($thinheader = 0, $ignore1 = NULL,
     if ($login_user) {
         list($pcount, $phours) = Instance::CurrentUsage($login_user);
         if ($pcount) {
-            $average = $phours / $pcount;
+            $average = sprintf("%.2f", $phours / $pcount);
             
             echo "<center style='margin-bottom: 5px; margin-top: -8px'>
               <span class=text-warning>

@@ -70,6 +70,7 @@ function (_, Constraints, sup, ppstart, JacksEditor, aboutaptString, aboutcloudS
 				}
 				else {
 					$('#stepsContainer-p-1 > div').attr('style','display:none');
+					loaded_uuid = selected_uuid;
 				}
 			}
 			else if (currentIndex == 1 && newIndex == 2) {
@@ -89,6 +90,14 @@ function (_, Constraints, sup, ppstart, JacksEditor, aboutaptString, aboutcloudS
 							+'</div></div>');
 					}
 				});
+				$('#stepsContainer-p-2 #finalize_options').append(''
+					+'<div id="cluster_status_link" class="hidden"><center>'
+						+'<a target="_blank" href="cluster-status.php">Check Cluster Status</a>'
+					+'</center></div>');
+
+				if ($('#nosite_selector').length || $('#site_selector').length) {
+					$('#cluster_status_link').removeClass('hidden');
+				}
 			}
 
 			if (currentIndex == 2) {
@@ -143,8 +152,8 @@ function (_, Constraints, sup, ppstart, JacksEditor, aboutaptString, aboutcloudS
 	});
 
 	// Set up wizard final page formatting
-	$('#stepsContainer .steps').addClass('col-lg-6 col-lg-offset-3 col-md-6 col-md-offset-3 col-sm-8 col-sm-offset-2 col-xs-12 col-xs-offset-0');
-	$('#stepsContainer .actions').addClass('col-lg-6 col-lg-offset-3 col-md-6 col-md-offset-3 col-sm-8 col-sm-offset-2 col-xs-12 col-xs-offset-0');
+	$('#stepsContainer .steps').addClass('col-lg-8 col-lg-offset-2 col-md-8 col-md-offset-2 col-sm-10 col-sm-offset-1 col-xs-12 col-xs-offset-0');
+	$('#stepsContainer .actions').addClass('col-lg-8 col-lg-offset-2 col-md-8 col-md-offset-2 col-sm-10 col-sm-offset-1 col-xs-12 col-xs-offset-0');
 
 	// Set up jacks swap
 	$('#stepsContainer #inline_overlay').click(function() {
@@ -206,6 +215,8 @@ function (_, Constraints, sup, ppstart, JacksEditor, aboutaptString, aboutcloudS
 	$('button#showtopo_select').click(function (event) {
 	    event.preventDefault();
 	    ChangeProfileSelection($('#quickvm_topomodal .selected'));
+	    selected_uuid = $('#quickvm_topomodal .selected').attr('value');
+	    console.log(selected_uuid);
 	    $('#quickvm_topomodal').modal('hide');
 	    $('.steps .error').removeClass('error');
 	});
@@ -522,8 +533,7 @@ function (_, Constraints, sup, ppstart, JacksEditor, aboutaptString, aboutcloudS
 		"  <div class='form-group'>" +
 		"    <label class='col-sm-4 control-label' " +
 		"           style='text-align: right;'>"+
-		"       <a href=cluster-status.php " +
-		"          target=_blank>Site " + siteid  + " Cluster:</a>" +
+		"          Site " + siteid  + " Cluster:</a>" +
 		"    </label> " +
 		"    <div class='col-sm-6'>" +
 		"      <select name=\"formfields[sites][" + siteid + "]\"" +
@@ -531,7 +541,7 @@ function (_, Constraints, sup, ppstart, JacksEditor, aboutaptString, aboutcloudS
 		"      </select>" +
 		"</div></div></div>";
 	}
-	console.info(html);
+	//console.info(html);
 	$("#nosite_selector").addClass("hidden");
 	$("#site_selector").removeClass("hidden");
 	$("#site_selector").html(html);

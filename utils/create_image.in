@@ -682,19 +682,38 @@ if ($srcsigfile && ($srcsigfile =~ /^$TB/)) {
 # image is created on the nodes, and it NFS mounts directories on ops.
 # Writing the image to anyplace else is just going to break things.
 #
-# Use realpath to validate the path. The still use the original path
-# for passing to the client-side since boss and the client may not have
-# the same real path for a file.
+# Use realpath on the directory part of the path to validate. If we ran
+# realpath on the filename, it would return null since $filename (a temp
+# file) won't exist. Note that we can use dirname/basename here since
+# $filename is well formed (both dir and file components).
+#
+# We still use the original path for passing to the client-side since
+# boss and the client may not have the same real path for a file.
 #
 my $ofilename = $filename;
-my $translated = realpath($filename);
-if ($translated =~ /^([-\w\.\/\+:]+)$/) {
+my $tdir = dirname($filename);
+my $translated = realpath($tdir);
+if ($translated && $translated =~ /^([-\w\.\/\+:]+)$/) {
+    my $tfile = basename($filename);
+
     $filename = $1;
+    # XXX check the last component
+    if ($tfile =~ /^([-\w\.\+:]+)$/) {
+	$filename = "$filename/$1";
+    } else {
+	fatal("Bad characters in image filename");
+    }
 }
 else {
-    fatal("Bad data returned by realpath: $translated");
+    if ($translated) {
+	fatal("Bad characters in image pathname");
+    }
+    fatal("Image directory does not exist");
 }
-# Make sure not a directory.
+# Make sure the result (really the final component) is not a symlink or dir
+if (-l $filename) {
+    fatal("$filename is a symlink! Must be a plain file.");
+}
 if (-d $filename) {
     fatal("$filename is a directory! Must be a plain file.");
 }

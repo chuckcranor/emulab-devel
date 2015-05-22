@@ -56,6 +56,7 @@ my $TBPROJ_DIR	= "@PROJROOT_DIR@";
 my $CREATEIMAGE = "$TB/bin/create_image";
 my $CLONEIMAGE  = "$TB/sbin/clone_image";
 my $RUNSONXEN   = "$TB/sbin/runsonxen";
+my $DOIMAGEDIRS = @IMAGEDIRECTORIES@;
 
 #
 # Untaint the path
@@ -79,6 +80,7 @@ use Project;
 use Image;
 use OSinfo;
 use Node;
+use EmulabFeatures;
 
 # Protos
 sub fatal($);
@@ -551,6 +553,17 @@ elsif (! $isadmin) {
     if (index($newimageid_args{"path"}, $pdef) < 0) {
 	UserError("Path: Invalid Path");
     }
+}
+#
+# Image path from the web interface does not respect the
+# IMAGEDIRECTORIES feature or config variable. We fix it up here.
+#
+if ($newimageid_args{"path"} =~ /\/$/ &&
+    (! $DOIMAGEDIRS ||
+     ! ($isadmin ||
+	EmulabFeatures->FeatureEnabled("ImageDirectories",
+				       $this_user, $group)))) {
+    $newimageid_args{"path"} =~ s/\/$/.ndz/;
 }
 if ($newimageid_args{"path"} =~ /\/$/) {
     if (-e $newimageid_args{"path"} && ! -d $newimageid_args{"path"}) {

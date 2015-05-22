@@ -335,8 +335,10 @@ if ($snap) {
 	UserError();
     }
     my $sliver_urn = GeniXML::GetSliverId($nodes[0]);
+    my $manager_urn= GeniXML::GetManagerId($nodes[0]);
     $node_id       = GeniXML::GetVirtualId($nodes[0]);
-    if (! (defined($sliver_urn) && $sliver_urn eq $aggregate->aggregate_urn())){
+    if (! (defined($sliver_urn) &&
+	   $manager_urn eq $aggregate->aggregate_urn())) {
 	$errors{"error"} = "$node_id is not at " . $aggregate->aggregate_urn();
 	UserError();
     }
