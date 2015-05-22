@@ -27,6 +27,7 @@ function (_, Constraints, sup, ppstart, JacksEditor, aboutaptString, aboutcloudS
     var editor        = null;
     var loaded_uuid	  = null;
     var ppchanged     = false;
+    var show_status_link = false;
 
 
     function initialize()
@@ -87,6 +88,14 @@ function (_, Constraints, sup, ppstart, JacksEditor, aboutaptString, aboutcloudS
 							+'</div></div>');
 					}
 				});
+				$('#stepsContainer-p-2 #finalize_options').append(''
+					+'<div id="cluster_status_link" class="hidden"><center>'
+						+'<a target="_blank" href="cluster-status.php">Check Cluster Status</a>'
+					+'</center></div>');
+
+				if (show_status_link) {
+					$('#cluster_status_link').removeClass('hidden');
+				}
 			}
 
 			if (currentIndex == 2) {
@@ -500,6 +509,7 @@ function (_, Constraints, sup, ppstart, JacksEditor, aboutaptString, aboutcloudS
 
 	if (!isadmin || Object.keys(sites) == 0) {
 	    $("#site_selector").addClass("hidden");
+	    show_status_link = false;
 	    $("#nosite_selector").removeClass("hidden");
 	    // Clear the form data.
 	    $("#site_selector").html("");
@@ -520,8 +530,7 @@ function (_, Constraints, sup, ppstart, JacksEditor, aboutaptString, aboutcloudS
 		"  <div class='form-group'>" +
 		"    <label class='col-sm-4 control-label' " +
 		"           style='text-align: right;'>"+
-		"       <a href=cluster-status.php " +
-		"          target=_blank>Site " + siteid  + " Cluster:</a>" +
+		"          Site " + siteid  + " Cluster:</a>" +
 		"    </label> " +
 		"    <div class='col-sm-6'>" +
 		"      <select name=\"formfields[sites][" + siteid + "]\"" +
@@ -532,6 +541,7 @@ function (_, Constraints, sup, ppstart, JacksEditor, aboutaptString, aboutcloudS
 	//console.info(html);
 	$("#nosite_selector").addClass("hidden");
 	$("#site_selector").removeClass("hidden");
+	show_status_link = true;
 	$("#site_selector").html(html);
     }
 
