@@ -27,7 +27,6 @@ function (_, Constraints, sup, ppstart, JacksEditor, aboutaptString, aboutcloudS
     var editor        = null;
     var loaded_uuid	  = null;
     var ppchanged     = false;
-    var show_status_link = false;
 
 
     function initialize()
@@ -93,7 +92,7 @@ function (_, Constraints, sup, ppstart, JacksEditor, aboutaptString, aboutcloudS
 						+'<a target="_blank" href="cluster-status.php">Check Cluster Status</a>'
 					+'</center></div>');
 
-				if (show_status_link) {
+				if ($('#nosite_selector').length || $('#site_selector').length) {
 					$('#cluster_status_link').removeClass('hidden');
 				}
 			}
@@ -509,7 +508,6 @@ function (_, Constraints, sup, ppstart, JacksEditor, aboutaptString, aboutcloudS
 
 	if (!isadmin || Object.keys(sites) == 0) {
 	    $("#site_selector").addClass("hidden");
-	    show_status_link = false;
 	    $("#nosite_selector").removeClass("hidden");
 	    // Clear the form data.
 	    $("#site_selector").html("");
@@ -541,7 +539,6 @@ function (_, Constraints, sup, ppstart, JacksEditor, aboutaptString, aboutcloudS
 	//console.info(html);
 	$("#nosite_selector").addClass("hidden");
 	$("#site_selector").removeClass("hidden");
-	show_status_link = true;
 	$("#site_selector").html(html);
     }
 
