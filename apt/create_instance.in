@@ -670,8 +670,14 @@ if (!defined($instance)) {
     fatal(defined($errmsg) ? $errmsg :
 	  "Could not create instance record for $quickvm_uuid");
 }
-# To keep stuff happy until finished.
-$instance->Update({'aggregate_urn' => $default_aggregate_urn});
+# To keep stuff happy until multisite support finished.
+if (keys(%{$sitemap})) {
+    my ($temp_aggregate_urn) = values(%{$sitemap});
+    $instance->Update({'aggregate_urn' => $temp_aggregate_urn});
+}
+else {
+    $instance->Update({'aggregate_urn' => $default_aggregate_urn});
+}
 
 # We use this list of references for ParRun below.
 my @aggregate_list = ();

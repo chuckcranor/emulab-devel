@@ -70,8 +70,6 @@ function (_, editModalString, editInlineString)
     function JacksEditor (root, isViewer, isInline,
 			  withoutSelection, withoutMenu, withoutMultiSite)
     {
-	console.info("foo");
-	console.info(withoutMultiSite);
 	this.root = root;
 	this.instance = null;
 	this.input = null;

@@ -41,9 +41,7 @@ function (_, Constraints, sup, ppstart, JacksEditor, aboutaptString, aboutcloudS
     window.APT_OPTIONS.initialize(ppstart);
     registered = window.REGISTERED;
 	webonly    = window.WEBONLY;
-	console.info("bar");
 	isadmin    = window.ISADMIN;
-	console.info(isadmin);
 	portal     = window.PORTAL;
     ajaxurl = window.AJAXURL;
 
@@ -531,7 +529,7 @@ function (_, Constraints, sup, ppstart, JacksEditor, aboutaptString, aboutcloudS
 		"      </select>" +
 		"</div></div></div>";
 	}
-	console.info(html);
+	//console.info(html);
 	$("#nosite_selector").addClass("hidden");
 	$("#site_selector").removeClass("hidden");
 	$("#site_selector").html(html);
