@@ -68,6 +68,7 @@ function (_, Constraints, sup, ppstart, JacksEditor, aboutaptString, aboutcloudS
 				}
 				else {
 					$('#stepsContainer-p-1 > div').attr('style','display:none');
+					loaded_uuid = selected_uuid;
 				}
 			}
 			else if (currentIndex == 1 && newIndex == 2) {
@@ -212,6 +213,8 @@ function (_, Constraints, sup, ppstart, JacksEditor, aboutaptString, aboutcloudS
 	$('button#showtopo_select').click(function (event) {
 	    event.preventDefault();
 	    ChangeProfileSelection($('#quickvm_topomodal .selected'));
+	    selected_uuid = $('#quickvm_topomodal .selected').attr('value');
+	    console.log(selected_uuid);
 	    $('#quickvm_topomodal').modal('hide');
 	    $('.steps .error').removeClass('error');
 	});
