@@ -28,43 +28,72 @@ include("quickvm_sup.php");
 $page_title = "Cluster Status";
 
 SPITHEADER(1);
-echo "  <center><table>
-    <tr>
-      <td valign=middle align=left>Cloudlab Utah</td>
-      <td valign=middle align=center>
-	<img width=350
-	   src='http://www.utah.cloudlab.us/node_usage/freenodes.svg'>
-	</td>
-    </tr>
-    <tr>
-      <td valign=middle align=left>APT (Utah)</td>
-      <td valign=middle align=center>
-	<img width=350
-	   src='http://www.apt.emulab.net/node_usage/freenodes.svg'>
-	</td>
-    </tr>
-    <tr>
-      <td valign=middle align=left>Cloudlab Wisconsin</td>
-      <td valign=middle align=center>
-	<img width=350
-	   src='http://www.wisc.cloudlab.us/node_usage/freenodes.svg'>
-	</td>
-    </tr>
-    <tr>
-      <td valign=middle align=left>Cloudlab Clemson</td>
-      <td valign=middle align=center>
-	<img width=350
-	   src='http://www.clemson.cloudlab.us/node_usage/freenodes.svg'>
-	</td>
-    </tr>
-    <tr>
-      <td valign=middle align=left>Emulab PG</td>
-      <td valign=middle align=center>
-	<img width=350
-	   src='http://www.emulab.net/node_usage/freenodes.svg'>
-	</td>
-    </tr>
-  <table></center>\n";
+
+?>
+
+<div class='container row col-sm-4 col-sm-offset-4'>
+
+  <div class='panel panel-default'>
+    <div class='panel-heading'>
+      <h3 class='panel-title'>Cluster Status</h3>
+    </div> <!-- panel-heading -->
+    <div class='panel-body'>
+      <table class="table table-condensed">
+        <tr>
+          <td>CloudLab Utah</td>
+          <td>
+            <span class="text-success">
+              <span class="glyphicon glyphicon-ok"></span>
+              </span>
+            </td>
+          <td>
+            <div class="progress" style="width: 50px; height: 1em; margin-top: 5px; margin-bottom: 5px">
+              <div class="progress-bar progress-bar-warning" role="progressbar" style="width: 30%;">
+              </div>
+            </div>
+          </td>
+        </tr>
+        <tr>
+          <td>InstaGENI UtahDDC</td>
+          <td>
+            <span class="text-success">
+              <span class="glyphicon glyphicon-ok"></span>
+              </span>
+            </td>
+          <td>
+            <div class="progress" style="width: 20px; height: 1em; margin-top: 5px; margin-bottom: 5px">
+              <div class="progress-bar progress-bar-success" role="progressbar" style="width: 80%;">
+              </div>
+            </div>
+          </td>
+        </tr>
+        <tr>
+          <td>CloudLab Wisconsin</td>
+          <td><span class="text-warning"><span class="glyphicon glyphicon-minus"></span></span></td>
+          <td>
+            <div class="progress" style="width: 50px; height: 1em; margin-top: 5px; margin-bottom: 5px">
+              <div class="progress-bar progress-bar-success" role="progressbar" style="width: 80%;">
+              </div>
+            </div>
+          </td>
+        </tr>
+        <tr>
+          <td>CloudLab Clemson</td>
+          <td><span class="text-danger"><span class="glyphicon glyphicon-remove"></span></span></td>
+          <td>
+            <div class="progress" style="width: 50px; height: 1em; margin-top: 5px; margin-bottom: 5px">
+              <div class="progress-bar progress-bar-danger" role="progressbar" style="width: 5%;">
+              </div>
+            </div>
+          </td>
+        </tr>
+      </table>
+    </div> <!-- panel-body -->
+  </div> <!-- panel -->
+
+</div> <!-- main container -->
+
+<?
 
 SPITNULLREQUIRE();
 SPITFOOTER();
