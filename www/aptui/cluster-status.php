@@ -38,7 +38,7 @@ SPITHEADER(1);
       <h3 class='panel-title'>Cluster Status</h3>
     </div> <!-- panel-heading -->
     <div class='panel-body'>
-      <table class="table table-condensed">
+      <table class="table table-condensed table-hover"><tbody>
         <tr>
           <td>CloudLab Utah</td>
           <td>
@@ -87,7 +87,7 @@ SPITHEADER(1);
             </div>
           </td>
         </tr>
-      </table>
+      </tbody></table>
     </div> <!-- panel-body -->
   </div> <!-- panel -->
 
