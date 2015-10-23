@@ -1,10 +1,13 @@
 require(window.APT_OPTIONS.configObject,
 	['underscore', 'js/quickvm_sup', 'moment',
-	 'js/lib/text!template/dashboard.html'],
-function (_, sup, moment, dashboardString)
+	 'js/lib/text!template/dashboard.html',
+	 'js/lib/text!template/dashboard-recent.html'],
+function (_, sup, moment, dashboardString, dashboardRecentString)
 {
     'use strict';
     var isadmin           = 0;
+
+    var dashboardRecent = _.template(dashboardRecentString);
     var dashboardTemplate = _.template(dashboardString);
 
     function initialize()
@@ -23,7 +26,8 @@ function (_, sup, moment, dashboardString)
 	    console.log(json);
 	    
 	    var dashboard_html = dashboardTemplate({"dashboard": json.value,
-						    "isadmin": isadmin});
+						    "isadmin": isadmin,
+                                                    "dashboardRecent" : dashboardRecent});
 	    $('#page-body').html(dashboard_html);
 	    $('#last-refresh').data("time",new Date());
 	    

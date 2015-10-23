@@ -1,0 +1,40 @@
+<div class='panel panel-default' id='experiments-latest-panel'>
+  <div class="panel-heading">
+    <h5><center>Latest Experiments</center></h5>
+  </div>
+  <div class='panel-body panel-body-dashboard'>
+    <table class="table table-condensed table-bordered table-dashboard"
+           id='experiments-latest-table'>
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Creator</th>
+          <th>Profile</th>
+          <th>Cluster</th>
+          <th>PCs</th>
+          <th>Created</th>
+        </tr>
+      </thead>
+      <tbody>
+        <% _.each(dashboard.latest, function(value, key) { %>
+          <tr>
+            <% if (!isadmin) { %>
+              <td><%- value.name %></td>
+              <td><%- value.creator %></td>
+            <% } %>
+            <% if (isadmin) { %>
+              <td><a href="status.php?uuid=<%- value.uuid %>">
+                <%- value.name %></a></td>
+              <td><a href="https://www.emulab.net/showuser.php3?user=<%- value.creator_idx %>"><%- value.creator %></a></td>
+            <% } %>
+            <td><a href="show-profile.php?uuid=<%- value.profile_uuid %>">
+              <%- value.profile_name %></a></td>
+            <td><%- value.cluster %></td>
+            <td><%- value.physnode_count %></td>
+            <td class="format-date"><%- value.created %></td>
+          </tr>
+        <% }); %>
+      </tbody>
+    </table>
+  </div>
+</div>
