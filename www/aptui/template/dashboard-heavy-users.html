@@ -1,0 +1,31 @@
+<div class='panel panel-default' id='experiments-users-panel'>
+  <div class="panel-heading">
+    <h5><center>Heaviest Users (Current)</center></h5>
+  </div>
+  <div class='panel-body panel-body-dashboard'>
+    <table class="table table-condensed table-bordered table-dashboard"
+           id='experiments-latest-table'>
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Nodes</th>
+          <th>Expts</th>
+        </tr>
+      </thead>
+      <tbody>
+        <% _.each(dashboard.heaviest_users, function(value, key) { %>
+          <tr>
+            <% if (!isadmin) { %>
+              <td><%- key %></td>
+            <% } %>
+            <% if (isadmin) { %>
+              <td><a href="https://www.emulab.net/showuser.php3?user=<%- value.creator_idx %>"><%- key %></a></td>
+            <% } %>
+            <td><%- value.physnode_count %></td>
+            <td><%- value.experiment_count %></td>
+          </tr>
+        <% }); %>
+      </tbody>
+    </table>
+  </div>
+</div>

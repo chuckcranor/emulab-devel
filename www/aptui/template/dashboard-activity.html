@@ -1,0 +1,50 @@
+<div class='panel panel-default' id='experiments-started-panel'>
+  <div class="panel-heading">
+    <h5><center>Experiment Activity</center></h5>
+  </div>
+  <div class='panel-body panel-body-dashboard'>
+    <table class="table table-condensed table-bordered table-dashboard"
+           id='experiments-started-table'>
+      <thead>
+        <tr>
+          <td></td>
+          <% _.each(dashboard.started, function(value, key) { %>
+            <th><%- key %></th>
+          <% }); %>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>Started</td>
+          <% _.each(dashboard.started, function(value, key) { %>
+            <td><%- value %></td>
+          <% }); %>
+        </tr>
+        <tr>
+          <td>Errors</td>
+          <% _.each(dashboard.errors, function(value, key) { %>
+            <td><%- value %></td>
+          <% }); %>
+        </tr>
+        <tr>
+          <td class="text-right">Mapping</td>
+          <% _.each(dashboard.breakdown.mapping, function(value, key) { %>
+            <td><%- value %></td>
+          <% }); %>
+        </tr>
+        <tr>
+          <td class="text-right">Timed Out</td>
+          <% _.each(dashboard.breakdown.timedout, function(value, key) { %>
+            <td><%- value %></td>
+          <% }); %>
+        </tr>
+        <tr>
+          <td class="text-right">Other</td>
+          <% _.each(dashboard.breakdown.other, function(value, key) { %>
+            <td><%- value %></td>
+          <% }); %>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</div>

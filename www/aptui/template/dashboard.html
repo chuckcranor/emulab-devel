@@ -25,56 +25,7 @@
 </style>
 <div class='row'>
   <div class='col-sm-5'>
-    <div class='panel panel-default' id='experiments-started-panel'>
-      <div class="panel-heading">
-	<h5><center>Experiment Activity</center></h5>
-      </div>
-      <div class='panel-body panel-body-dashboard'>
-	<table class="table table-condensed table-bordered table-dashboard"
-	       id='experiments-started-table'>
-	  <thead>
-	    <tr>
-	      <td></td>
-	      <% _.each(dashboard.started, function(value, key) { %>
-		<th><%- key %></th>
-	      <% }); %>
-	    </tr>
-	  </thead>
-	  <tbody>
-	    <tr>
-	      <td>Started</td>
-	      <% _.each(dashboard.started, function(value, key) { %>
-		<td><%- value %></td>
-	      <% }); %>
-	    </tr>
-	    <tr>
-	      <td>Errors</td>
-	      <% _.each(dashboard.errors, function(value, key) { %>
-		<td><%- value %></td>
-	      <% }); %>
-	    </tr>
-	    <tr>
-	      <td class="text-right">Mapping</td>
-	      <% _.each(dashboard.breakdown.mapping, function(value, key) { %>
-		<td><%- value %></td>
-	      <% }); %>
-	    </tr>
-	    <tr>
-	      <td class="text-right">Timed Out</td>
-	      <% _.each(dashboard.breakdown.timedout, function(value, key) { %>
-		<td><%- value %></td>
-	      <% }); %>
-	    </tr>
-	    <tr>
-	      <td class="text-right">Other</td>
-	      <% _.each(dashboard.breakdown.other, function(value, key) { %>
-		<td><%- value %></td>
-	      <% }); %>
-	    </tr>
-	  </tbody>
-	</table>
-      </div>
-    </div>
+    <%= dashboardActivity({"dashboard": dashboard, "isadmin": isadmin}) %>
   </div>
   <div class='col-sm-7'>
     <%= dashboardRecent({"dashboard": dashboard, "isadmin": isadmin}) %>
@@ -82,150 +33,18 @@
 </div>
 <div class='row'>
   <div class='col-sm-4'>
-    <div class='panel panel-default' id='experiments-users-panel'>
-      <div class="panel-heading">
-	<h5><center>Heaviest Users (Current)</center></h5>
-      </div>
-      <div class='panel-body panel-body-dashboard'>
-	<table class="table table-condensed table-bordered table-dashboard"
-	       id='experiments-latest-table'>
-	  <thead>
-	    <tr>
-	      <th>Name</th>
-	      <th>Nodes</th>
-	      <th>Expts</th>
-	    </tr>
-	  </thead>
-	  <tbody>
-	    <% _.each(dashboard.heaviest_users, function(value, key) { %>
-	      <tr>
-		<% if (!isadmin) { %>
-		  <td><%- key %></td>
-		<% } %>
-		<% if (isadmin) { %>
-		  <td><a href="https://www.emulab.net/showuser.php3?user=<%- value.creator_idx %>"><%- key %></a></td>
-   	        <% } %>
-		<td><%- value.physnode_count %></td>
-		<td><%- value.experiment_count %></td>
-	      </tr>
-	    <% }); %>
-	  </tbody>
-	</table>
-      </div>
-    </div>
+    <%= dashboardHeavyUsers({"dashboard": dashboard, "isadmin": isadmin}) %>
   </div>
   <div class='col-sm-4'>
-    <div class='panel panel-default' id='experiments-projects-panel'>
-      <div class="panel-heading">
-	<h5><center>Heaviest Projects (Current)</center></h5>
-      </div>
-      <div class='panel-body panel-body-dashboard'>
-	<table class="table table-condensed table-bordered table-dashboard"
-	       id='experiments-latest-table'>
-	  <thead>
-	    <tr>
-	      <th>Name</th>
-	      <th>Nodes</th>
-	      <th>Expts</th>
-	    </tr>
-	  </thead>
-	  <tbody>
-	    <% _.each(dashboard.heaviest_projects, function(value, key) { %>
-	      <tr>
-		<% if (!isadmin) { %>
-		  <td><%- key %></td>
-		<% } %>
-		<% if (isadmin) { %>
-		  <td><a href="https://www.emulab.net/showproject.php3?pid=<%- key %>"><%- key %></a></td>
-   	        <% } %>
-		<td><%- value.physnode_count %></td>
-		<td><%- value.experiment_count %></td>
-	      </tr>
-	    <% }); %>
-	  </tbody>
-	</table>
-      </div>
-    </div>
+    <%= dashboardHeavyProjects({"dashboard": dashboard, "isadmin": isadmin}) %>
   </div>
   <div class='col-sm-4'>
-    <div class='panel panel-default' id='profiles-panel'>
-      <div class="panel-heading">
-	<h5><center>Popular Profiles (Epoch)</center></h5>
-      </div>
-      <div class='panel-body panel-body-dashboard'>
-	<table class="table table-condensed table-bordered table-dashboard">
-	  <thead>
-	    <tr>
-	      <th>Name</th>
-	      <th>Count</th>
-	    </tr>
-	  </thead>
-	  <tbody>
-	    <% _.each(dashboard.heaviest_profiles, function(value, key) { %>
-	      <tr>
-		<td><a href="show-profile.php?uuid=<%- value.uuid %>">
-		  <%- value.name %></a></td>
-		<td><%- value.count %></td>
-	      </tr>
-	    <% }); %>
-	  </tbody>
-	</table>
-      </div>
-    </div>
+    <%= dashboardProfiles({"dashboard": dashboard, "isadmin": isadmin}) %>
   </div>
 </div>
 <div class='row'>
   <div class='col-sm-10 col-sm-offset-1'>
-    <div class='panel panel-default' id='error-details-panel'>
-      <div class="panel-heading">
-	<h5><center>Recent Errors (Details)</center></h5>
-      </div>
-      <div class='panel-body panel-body-dashboard'>
-	<table class="table table-condensed table-bordered table-dashboard">
-	  <thead>
-	    <tr>
-	      <th>Name</th>
-	      <th>When</th>
-	      <th>Profile</th>
-	      <th>Cluster</th>
-	      <th>Reason (Code)</th>
-	      <th>Log</th>
-	    </tr>
-	  </thead>
-	  <tbody>
-	    <% _.each(dashboard.error_details, function(value, key) { %>
-	      <tr>
-		<% if (value.active) { %>
-		  <td><a href="status.php?uuid=<%- value.uuid %>">
-		    <%- value.name %></a></td>
-		<% }else { %>
-		<td><%- value.name %></td>
-	    <% } %>
-	    <td class="format-date"><%- value.created %></td>
-	    <td><a href="show-profile.php?uuid=<%- value.profile_uuid %>">
-	      <%- value.profile_name %></a></td>
-	    <td><%- value.cluster %></td>
-	    <% if (value.message && value.message != "") { %>
-	      <td><span style="text-decoration: underline;"
-			data-toggle='popover'
-			data-delay='{"hide":100, "show":500}'
-			data-html='true'
-			    data-uuid="<%- value.uuid %>"
-			    data-content=""><%- value.reason %></span></td>
-		<% } else { %>
-		  <td><%- value.reason %></td>
-		<% }%>
-		<% if (value.url) { %>
-		  <td><a href="<%- value.url%>">Log</a></td>
-		<% }else { %>
-		<td>N/A</td>
-		<% } %>
-	      </tr>
-	    <% }); %>
-	  </tbody>
-	</table>
-      </div>
-    </div>
+    <%= dashboardErrors({"dashboard": dashboard, "isadmin" : isadmin}) %>
   </div>
 </div>
 <div class='row'>
