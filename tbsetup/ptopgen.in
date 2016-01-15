@@ -79,12 +79,13 @@ sub usage()
 	  "       -l specifies the location of the type limit file\n" .
           "       -1 Print an rspec containing only the node component-name\n" .
 	  "       -z Randomize node output order\n" .
+	  "       -G Omit 10G node-switch links\n" .
 	  "       -Z Force old ptopgen\n" .
 	  "       -f This is generating an advertisement rather than an internal file\n");
         exit(-1);
 }
 
-my $optlist = "s:e:m:vp:rSan:c:uxg:h1:l:zZCbf";
+my $optlist = "s:e:m:vp:rSan:c:uxg:h1:l:zZCbfG";
 my $is_advertisement = 0;
 my $mfactor;
 my $virtstuff = 0;
@@ -101,6 +102,7 @@ my $useblockstore = 0;
 my $component_name = undef;
 my $randomize = 0;
 my $usecontrol= 0;
+my $printFastLinks = 1;
 
 my $OURDOMAIN = "@OURDOMAIN@";
 my $MAINSITE  = @TBMAINSITE@;
@@ -326,6 +328,9 @@ if (defined($options{"z"})) {
 }
 if (defined($options{"f"})) {
     $is_advertisement = 1;
+}
+if (defined($options{"G"})) {
+    $printFastLinks = 0;
 }
 
 if ($is_advertisement && !$allnodes)
@@ -2045,9 +2050,11 @@ while (($node1,$card1,$port1,$node2,$card2,$port2) =
 		}
 	    }
 
-	    print_simple_link($node1, $iface1,
-			      $node2, $iface2,
-			      $bw, 0, 0, \@types);
+	    if ($bw < 10000000 || $printFastLinks) {
+		print_simple_link($node1, $iface1,
+				  $node2, $iface2,
+				  $bw, 0, 0, \@types);
+	    }
 	}
     } 
 }
