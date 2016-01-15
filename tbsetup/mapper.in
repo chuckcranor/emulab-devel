@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2000-2015 University of Utah and the Flux Group.
+# Copyright (c) 2000-2016 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -71,7 +71,7 @@ sub usage ()
     print STDERR " -A   - Tell ptopgen all nodes are free; only with -n\n";
     exit($WRAPPER_FAILED);
 }
-my $optlist    = "dvunfprqczxm:ko:altzZACFNL:S:";
+my $optlist    = "dvunfprqczxm:ko:altzZACFNL:S:G";
 my $verbose    = 0;
 my $debug      = 0;
 my $fixmode    = 0;
@@ -83,6 +83,7 @@ my $allnodesfree = 0;
 my $toponly    = 0;
 my $prepass    = 0;
 my $alloconly  = 0;
+my $gblinkcheck= 0;
 my $outfile;
 my $mfactor;
 my $packoption;
@@ -201,6 +202,9 @@ if (defined($options{"f"})) {
 }
 if (defined($options{"F"})) {
     $fixlannodes = 1;
+}
+if (defined($options{"G"})) {
+    $gblinkcheck = 1;
 }
 if (defined($options{"S"})) {
     $packoption = $options{"S"};
@@ -679,7 +683,12 @@ sub RunAssign($$)
     }
     $ptopargs .= "-z "
 	if ($project->IsNonLocal() || $vtop->sharednodecount());
-    $ptopargs .= "-l $typelimitfile"
+    if ($gblinkcheck) {
+	if ($vtop->mgblinks() == 0) {
+	    $ptopargs .= "-G ";
+	}
+    }
+    $ptopargs .= "-l $typelimitfile "
 	if (scalar(keys(%admission_control)));
 
     chat("ptopargs: '$ptopargs'\n");

@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2005-2015 University of Utah and the Flux Group.
+# Copyright (c) 2005-2016 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -268,6 +268,8 @@ sub simnodecount($)	{ return $_[0]->counter("simcount"); }
 sub remotenodecount($)	{ return $_[0]->counter("remotecount"); }
 sub sharednodecount($)	{ return $_[0]->counter("sharedcount"); }
 sub bstorecount($)	{ return $_[0]->counter("bstorecount"); }
+sub gblinks($)		{ return $_[0]->counter("Gblinks"); }
+sub mgblinks($)		{ return $_[0]->counter("MGblinks"); }
 
 sub createLink($$$$$$$$$)
 {
@@ -2613,6 +2615,8 @@ sub PrintSummaryStats($)
 	if ($reserved_physcount) {
 	    print "Reserved pnodes   = $reserved_physcount\n";
 	}
+	print "<= 1G links       = " . $self->counters()->{'Gblinks'} . "\n";
+	print " > 1G links       = " . $self->counters()->{'MGblinks'} . "\n";
     }
     return 0;
 }
@@ -3317,6 +3321,23 @@ sub GenVirtLans($)
 	    }
 
 	    #
+	    # Lets see how many <=1Gb and >1Gb links we have. HACK!
+	    #
+	    if (!$emulated && ($bandwidth > 0 || $rbandwidth)) {
+		# Must convert this to kbps like everything else is.
+		my $OneGb = 1000 * 1000;
+		
+		my $maxbw = max($bw, $rbw);
+
+		if ($maxbw <= $OneGb) {
+		    $self->counters()->{'Gblinks'}++;
+		}
+		elsif ($maxbw > $OneGb) {
+		    $self->counters()->{'MGblinks'}++;
+		}
+	    }
+
+	    #
 	    # See if the link is really being shaped, or if just need
 	    # a delay node cause of tracing/monitoring.
 	    #
@@ -3735,6 +3756,22 @@ sub GenVirtLans($)
 		my $bandwidth  = $self->getbandwidth($member,$vlan,$bw);
 		my $rbandwidth = $self->getbandwidth($member,$vlan,$rbw);
 
+		#
+		# Lets see how many <=1Gb and >1Gb links we have. HACK!
+		#
+		if (!$emulated && ($bandwidth > 0 || $rbandwidth)) {
+		    # Must convert this to kbps like everything else is.
+		    my $OneGb = 1000 * 1000;
+		    my $maxbw = max($bw, $rbw);
+
+		    if ($maxbw <= $OneGb) {
+			$self->counters()->{'Gblinks'}++;
+		    }
+		    elsif ($maxbw > $OneGb) {
+			$self->counters()->{'MGblinks'}++;
+		    }
+		}
+		
 		if (($shaped || ($traced && !$trace_endnode)) &&
 		    # Ignore for bridged links.
 		    !$vlan->_bridged() &&
@@ -4107,6 +4144,8 @@ sub CreateVtop($)
     $self->{'COUNTERS'}->{'sharedcount'} = 0;
     $self->{'COUNTERS'}->{'bstorecount'} = 0;
     $self->{'COUNTERS'}->{'physcount'}   = 0;
+    $self->{'COUNTERS'}->{'Gblinks'}     = 0;
+    $self->{'COUNTERS'}->{'MGblinks'}    = 0;
 
     #
     # Experiment wide options.
