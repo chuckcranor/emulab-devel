@@ -1231,9 +1231,11 @@ sub PerformOperationalAction
 	    my @user_keys = ();
 	    
 	    foreach my $key (@{ $user->{'keys'} }) {
-		# The CMV2 does not like newlines at the end of the keys.
-		chomp($key);
-		push(@user_keys, {'type' => 'ssh', 'key' => $key});
+                if (defined($key)) {
+                    # The CMV2 does not like newlines at the end of the keys.
+                    chomp($key);
+                    push(@user_keys, {'type' => 'ssh', 'key' => $key});
+                }
 	    }
 	    push(@{$sliver_keys}, {'urn'  => $user_urn,
 				   'keys' => \@user_keys});
