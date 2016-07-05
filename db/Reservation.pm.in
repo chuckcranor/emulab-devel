@@ -31,10 +31,12 @@ use vars qw(@ISA @EXPORT);
 @EXPORT = qw ( );
 
 use English;
+use Date::Parse;
 use emdb;
 use libtestbed;
 use Project;
 use User;
+use Experiment;
 use overload ('""' => 'Stringify');
 
 # Configure variables
@@ -236,7 +238,7 @@ sub BeginTransaction($$)
     return 0;
 }
 
-sub EndTransaction($$)
+sub EndTransaction($)
 {
     DBQueryFatal( "UPDATE reservation_version SET version=version+1" );
     DBQueryFatal( "UNLOCK TABLES" );
@@ -431,7 +433,7 @@ sub IsFeasible($$;$)
 
 	if( defined( $reservation->eid() ) ) {
 	    # A swapped-in experiment.  Already using nodes (so no
-	    # need to save a start event), and Will later release real nodes.
+	    # need to save a start event), and will later release real nodes.
 	    $end = { 'pid' => $reservation->pid(),
 		     't' => $reservation->end(),
 		     'used' => -$reservation->nodes(),
@@ -489,6 +491,79 @@ sub IsFeasible($$;$)
     }
     
     return 1;
+}
+
+#
+# Attempt to adjust the expiration time of an existing slice.
+#
+# Reservation->ExtendSlice( $slice, $new_expire, $error, $impotent, $force )
+#
+# $slice must be a reference to a GeniSlice object.
+# $new_expire is a Unix time_t for the requested new expiration time
+# (can be earlier or later than the current expiration time -- in principle
+# an earlier time will always succeed, but a later time might fail
+# depending on resource availability).
+# $error (if defined) is a reference to a scalar; if defined and extension is
+# not possible, a reason will be given here.
+# $impotent (if defined and true) will attempt a hypothetical extension and
+# return success or failure, but make no actual change to any state.
+# $force (if defined and true) will make the change to the slice expiration
+# even if it violates admission control constraints.
+sub ExtendSlice($$$;$$$) {
+
+    my ($class, $slice, $new_expire, $error, $impotent, $force) = @_;
+
+    my $forced = 0;
+    
+    if( $new_expire <= str2time( $slice->expires() ) ) {
+	if( $impotent ) {
+	    return 0;
+	} else {
+	    return $slice->SetExpiration( $new_expire );
+	}
+    }
+
+    my $exptidx = $slice->exptidx();
+    my $expt = Experiment->Lookup( $exptidx );
+	
+    my @types;
+    my $query_result = DBQueryFatal( "SELECT DISTINCT( n.type ) FROM " .
+				     "reserved AS r, nodes AS n WHERE " .
+				     "r.node_id=n.node_id AND " .
+				     "r.exptidx='$exptidx'" );
+    while( my($type) = $query_result->fetchrow_array() ) {
+	push( @types, $type );
+    }
+    
+    while( 1 ) {
+	my $version = GetVersion( $class );
+	foreach my $type ( @types ) {
+	    my $reservations = LookupAll( $class, $type );
+	    foreach my $res ( @$reservations ) {
+		if( defined( $res->pid() ) && defined( $res->eid() ) &&
+		    $res->pid() eq $expt->pid() &&
+		    $res->eid() eq $expt->eid() ) {
+		    $res->{'END'} = $new_expire;
+		    last;
+		}
+	    }
+	    if( !IsFeasible( $class, $reservations, $error ) ) {
+		if( $force && !$impotent ) {
+		    $forced = 1;
+		} else {
+		    return -1;
+		}
+	    }
+	}
+	return 0
+	    if( $impotent );
+	next if( !defined( BeginTransaction( $class, $version ) ) );
+	$slice->SetExpiration( $new_expire );
+	EndTransaction( $class );
+	last;
+    }
+
+    return $forced ? -1 : 0;
 }
 
 # _Always_ make sure that this 1 is at the end of the file...

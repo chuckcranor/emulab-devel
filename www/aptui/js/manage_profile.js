@@ -127,9 +127,10 @@ function (_, sup, filesize, JacksEditor, ShowImagingModal, moment, aptforms,
     	var waitwait_html = waitwaitTemplate({});
 	$('#waitwait_div').html(waitwait_html);
     	var showtopo_html = showtopoTemplate({});
-	$('#showtopomodal_div').html(showtopo_html);
+        $('#showtopomodal_div').html(showtopo_html);
+        var isViewer = gotscript;
 	editor = new JacksEditor($('#editmodal_div'),
-				 false, false, false, false, !multisite);
+				 isViewer, false, false, false, !multisite);
     	var renderer_html = rendererTemplate({});
 	$('#renderer_div').html(renderer_html);
     	var oops_html = oopsTemplate({});

@@ -77,12 +77,12 @@ int parse_ptop(tb_pgraph &pg, tb_sgraph &sg, istream& input)
 {
   int num_nodes = 0;
   int line=0,errors=0;
-  char inbuf[16384];
+  char inbuf[32768];
   string_vector parsed_line;
 
   while (!input.eof()) {
     line++;
-    input.getline(inbuf,16384);
+    input.getline(inbuf,32768);
     parsed_line = split_line(inbuf,' ');
     if (parsed_line.size() == 0) {continue;}
 
