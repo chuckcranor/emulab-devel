@@ -652,16 +652,44 @@ sub RequireAuthorizationForSlice($$$$) {
             'RequireAuthorizationForSlice called without $slice_urn');
     }
 
-    my ($credential, $speaksfor) = GeniStd::CheckCredentials(
+    my ($first_credential, $speaksfor, @other_credentials) = GeniStd::CheckCredentials(
         GeniStd::FilterCredentials($credential_args));
-    #not needed, because needs slice credential instead of user cred: 
-    #   ($credential, $speaksfor) = GeniStd::AddUserCredWhenSpeaksForOnly($credential, $speaksfor);
-    return $credential if (GeniResponse::IsResponse($credential));
+    if (GeniResponse::IsResponse($first_credential)) {
+        return $first_credential;
+    }
 
-    $credential->HasPrivilege( "pi" ) or
-	$credential->HasPrivilege( "bind" ) or
+    if (!defined($first_credential)) {
+	return GeniResponse->Create( GENIRESPONSE_FORBIDDEN, undef, 
+            "Did not find needed credential" );
+    }
+
+    my $best_credential = $first_credential;
+    foreach my $cred (@other_credentials) {
+        my $cur_ok = $best_credential->target_urn() eq $slice_urn;
+        my $new_ok = $cred->target_urn() eq $slice_urn;
+        if (!$cur_ok and $new_ok) {
+            #this is a better one
+            $best_credential = $cred;
+        } else {
+            if ($cur_ok) {
+                $cur_ok = $best_credential->HasPrivilege( "pi" ) 
+                    or $best_credential->HasPrivilege( "bind" );
+                $new_ok = $cred->HasPrivilege( "pi" ) 
+                    or $cred->HasPrivilege( "bind" );
+                if (!$cur_ok and $new_ok) {
+                    #this is a better one
+                    $best_credential = $cred;
+                }
+            }
+        }
+    }
+    my $credential = $best_credential;
+
+    if ((!$credential->HasPrivilege( "pi" )) and
+        (!$credential->HasPrivilege( "bind" ))) {
 	return GeniResponse->Create( GENIRESPONSE_FORBIDDEN, undef, 
             "Insufficient privilege" );
+    }
 
     if ($credential->target_urn() ne $slice_urn) {
         return GeniResponse->Create(GENIRESPONSE_FORBIDDEN, undef, 
@@ -730,6 +758,11 @@ sub RequireUserAuthorization($$$$$) {
     ($credential, $speaksfor) = GeniStd::AddUserCredWhenSpeaksForOnly($credential, $speaksfor);
     if (GeniResponse::IsResponse($credential)) {
         return $credential;
+    }
+
+    if (!defined($credential)) {
+	return GeniResponse->Create( GENIRESPONSE_FORBIDDEN, undef, 
+            "Did not find needed credential" );
     }
 
     $credential->HasPrivilege( "authority" ) or
