@@ -309,7 +309,7 @@ foreach my $node (@nodes) {
 	else {
 	    $eid = $RELOADEID;
 	}
-	my $cmd = "$nalloc $RELOADPID $eid $pc";
+	my $cmd = "$nalloc -f $RELOADPID $eid $pc";
 
         if ( system($cmd) != 0 ) {
 	    print STDERR "WARNING: Could not reserve $pc!\n";

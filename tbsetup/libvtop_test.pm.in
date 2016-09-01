@@ -5305,7 +5305,7 @@ sub AllocNodes($)
 	    tberror("Could not move nodes to old reserved holding\n");
 	    return -1;
 	}
-	system("$NALLOC $pid $eid @nodeids");
+	system("$NALLOC -f $pid $eid @nodeids");
 	if ($?) {
 	    tberror("Could not move nodes back from old reserved holding\n");
 	    return -1;
