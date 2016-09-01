@@ -541,7 +541,7 @@ NODE: foreach my $node_id (@node_ids) {
     # Put it into hwdown for now - I would put them in reloading, but I'm
     # afraid the reload_daemon might do the wrong thing to them
     #
-    system "$nalloc $pid $eid $node_id";
+    system "$nalloc -f $pid $eid $node_id";
 
     #
     # Remove the node from the new_ tables

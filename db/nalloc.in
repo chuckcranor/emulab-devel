@@ -34,13 +34,15 @@ use Getopt::Std;
 #
 sub usage()
 {
-    print("Usage: nalloc [-d] [-p] <pid> <eid> <node> <node> <...>\n".
+    print("Usage: nalloc [-d] [-f] [-p] <pid> <eid> <node> <node> <...>\n".
 	  "		-p enables partial allocation mode\n".
+	  "             -f forces allocation, overriding admission control\n" .
 	  "		-d enables debugging output\n");
     exit(-1);
 }
-my $optlist = "dp";
+my $optlist = "dfp";
 my $debug   = 0;
+my $force   = 0;
 my $partial = 0;
 
 #
@@ -83,6 +85,9 @@ if (! getopts($optlist, \%options)) {
 }
 if (defined($options{"d"})) {
     $debug = 1;
+}
+if (defined($options{"f"})) {
+    $force = 1;
 }
 if (defined($options{"p"})) {
     $partial = 1;
@@ -262,6 +267,13 @@ foreach my $type ( keys( %types ) ) {
     }
     if( !Reservation->IsFeasible( $reservations, \$error ) ) {
 	print "Admission control violation for type $type: $error\n";
+	if( $force ) {
+	    print "Forcing allocation anyway...\n";
+	    print STDERR "WARNING: SCHEDULED RESERVATIONS ARE NOW INFEASIBLE!\n";
+	    # FIXME notify admins about violation
+	} else {
+	    # FIXME once we enforce admission control, we will abort here!
+	}
 	goto admissionfailure;
     }
 }
