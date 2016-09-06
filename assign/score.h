@@ -45,6 +45,7 @@ class violated_info {
 	o << "  trivial mix: " << vinfo.trivial_mix << endl;
 	o << "  subnodes:    " << vinfo.subnodes << endl;
 	o << "  max_types:   " << vinfo.max_types << endl;
+	o << "  mult_types:  " << vinfo.mult_types << endl;
 #ifdef FIX_PLINK_ENDPOINTS
 	o << "  endpoints:   " << vinfo.incorrect_endpoints << endl;
 #endif
@@ -55,13 +56,14 @@ class violated_info {
 	violated_info():
 	    unassigned(0), pnode_load(0), no_connection(0), link_users(0),
 	    bandwidth(0), desires(0), vclass(0), delay(0),
-	    incorrect_endpoints(0), trivial_mix(0), subnodes(0), max_types(0)
+	    incorrect_endpoints(0), trivial_mix(0), subnodes(0), max_types(0),
+	    mult_types(0)
 	{ }
 	
 	int count_violations() const {
 	    return unassigned + pnode_load + no_connection + link_users + bandwidth
 		+ desires + vclass + delay + incorrect_endpoints + trivial_mix 
-		+ subnodes + max_types;
+		+ subnodes + max_types + mult_types;
 	}
 
 	int unassigned;
@@ -76,6 +78,7 @@ class violated_info {
 	int trivial_mix;
 	int subnodes;
 	int max_types;
+	int mult_types;
 };
 
 extern int violated;
