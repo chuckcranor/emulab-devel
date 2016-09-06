@@ -164,6 +164,10 @@ bool strategy_balance = false;
 // as possible onto pnodes
 bool strategy_pack = false;
 
+// If true, turn the use of multiple ptypes from a scoring penalty into a
+// violation
+bool scoring_type_violation = false;
+
 // Use XML for file input
 // bool xml_input = false;
 #ifdef WITH_XML
@@ -498,6 +502,7 @@ void print_help() {
   cout << "  -R          - Randomize order of nodes in pclasses" << endl;
   cout << "  -S <str>    - Set vnode packing strategy. Currently supported" << endl;
   cout << "                values are 'balance' and 'pack'" << endl;
+  cout << "  -Y          - Turn use of multiple physical types into a violation" << endl;
   cout << "  cparams     - You probably don't want to touch these!" << endl;
   cout << "                If you must, see config.h in the source for a list"
        << endl;
@@ -901,9 +906,9 @@ int main(int argc,char **argv) {
 	char* ptopFileFormat;
 	char* vtopFileFormat;
 	char* delims = "/";
-	char* flags = "s:v:l:t:rpPTdH:oguc:nx:y:W:FDf:RS:";
+	char* flags = "s:v:l:t:rpPTdH:oguc:nx:y:W:FDf:RS:Y";
 #else
-	char* flags = "s:v:l:t:rpPTdH:oguc:nx:y:FDRS:";
+	char* flags = "s:v:l:t:rpPTdH:oguc:nx:y:FDRS:Y";
 #endif
 
   while ((ch = getopt(argc,argv,flags)) != -1) {
@@ -1059,6 +1064,10 @@ int main(int argc,char **argv) {
           } else {
               print_help();
           }
+          break;
+
+        case 'Y':
+          scoring_type_violation = true;
           break;
 
 	default:
