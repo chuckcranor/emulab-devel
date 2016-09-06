@@ -52,6 +52,7 @@ extern switch_pred_map_map switch_preds;
 extern bool disable_pclasses;
 extern bool strategy_balance;
 extern bool strategy_pack;
+extern bool scoring_type_violation;
 
 double score;			// The score of the current mapping
 int violated;			// How many times the restrictions
@@ -966,6 +967,9 @@ void remove_node(vvertex vv)
 	  && (pnode->my_class->used_members == 0)) {
     SDEBUG(cerr << "  freeing pclass" << endl);
     SSUB(SCORE_PCLASS);
+    if (scoring_type_violation) {
+        vinfo.mult_types--;
+    }
   }
 
   // vclass
@@ -1518,6 +1522,9 @@ int add_node(vvertex vv,pvertex pv, bool deterministic, bool is_fixed, bool skip
 	  (pnode->my_class->used_members == 0)) {
     SDEBUG(cerr << "  new pclass" << endl);
     SADD(SCORE_PCLASS);
+    if (scoring_type_violation) {
+        vinfo.mult_types++;
+    }
   }
 
   // vclass
