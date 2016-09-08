@@ -446,9 +446,9 @@ sub LookupAll($$)
     return $cache{$type};
 }
 
-sub IsFeasible($$;$)
+sub IsFeasible($$;$$)
 {
-    my ($class, $reservations, $error) = @_;
+    my ($class, $reservations, $error, $conflicttime) = @_;
 
     my @timeline = ();
     my $free;
@@ -511,12 +511,31 @@ sub IsFeasible($$;$)
 		$$error = "Insufficient free nodes at $time " .
 		    "($needed more needed).";
 	    }
+	    if( ref( $conflicttime ) ) {
+		$$conflicttime = $event->{'t'};
+	    }
 	    
 	    return 0;
 	}
     }
     
     return 1;
+}
+
+sub ExptTypes($) {
+    my ($exptidx) = @_;
+    
+    my $query_result = DBQueryFatal( "SELECT DISTINCT( n.type ) FROM " .
+				     "reserved AS r, nodes AS n WHERE " .
+				     "r.node_id=n.node_id AND " .
+				     "r.exptidx='$exptidx'" );
+
+    my @types;
+    while( my($type) = $query_result->fetchrow_array() ) {
+	push( @types, $type );
+    }
+
+    return @types;
 }
 
 #
@@ -552,14 +571,7 @@ sub ExtendSlice($$$;$$$) {
     my $exptidx = $slice->exptidx();
     my $expt = Experiment->Lookup( $exptidx );
 	
-    my @types;
-    my $query_result = DBQueryFatal( "SELECT DISTINCT( n.type ) FROM " .
-				     "reserved AS r, nodes AS n WHERE " .
-				     "r.node_id=n.node_id AND " .
-				     "r.exptidx='$exptidx'" );
-    while( my($type) = $query_result->fetchrow_array() ) {
-	push( @types, $type );
-    }
+    my @types = ExptTypes( $exptidx );
     
     while( 1 ) {
 	my $version = GetVersion( $class );
@@ -590,6 +602,53 @@ sub ExtendSlice($$$;$$$) {
     }
 
     return $forced ? -1 : 0;
+}
+
+#
+# Compute a maximum length for the time a slice could be extended.
+#
+# Reservation->MaxSliceExtension( $slice, $max, $error )
+#
+# Will put the unix time stamp in $$max and return 0 if the slice can be
+# extended, or -1 with $$error set.
+#
+# Of course, this comes with no guarantees... for instance, somebody else
+# could make a conflicting reservation/extension before this call returns,
+# or before the caller has a chance to do anything useful with the result...
+sub MaxSliceExtension($$$;$) {
+
+    my ($class, $slice, $max, $error) = @_;
+
+    my $cur_expire = str2time( $slice->expires() );
+    my $max_expire = $cur_expire + 60 * 24 * 180;
+    
+    my $exptidx = $slice->exptidx();
+    my $expt = Experiment->Lookup( $exptidx );
+	
+    my @types = ExptTypes( $exptidx );
+    
+    foreach my $type ( @types ) {
+	my $reservations = LookupAll( $class, $type );
+	foreach my $res ( @$reservations ) {
+	    if( defined( $res->pid() ) && defined( $res->eid() ) &&
+		$res->pid() eq $expt->pid() &&
+		$res->eid() eq $expt->eid() ) {
+		$res->{'END'} = $max_expire;
+		last;
+	    }
+	}
+	IsFeasible( $class, $reservations, undef, $max_expire );
+    }
+
+    if( $max_expire <= $cur_expire ) {
+	if( ref( $error ) ) {
+	    $$error = "No extension possible.";
+	}
+	return -1;
+    } else {
+	$$max = $max_expire;
+	return 0;
+    }
 }
 
 # _Always_ make sure that this 1 is at the end of the file...
