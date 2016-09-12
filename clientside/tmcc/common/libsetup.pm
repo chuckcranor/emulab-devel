@@ -3319,6 +3319,40 @@ sub getenvvars($)
 }
 
 #
+# Return the service info in a key/value array.
+#
+sub getserviceinfo($)
+{
+    my ($rptr) = @_;
+    my @tmccresults = ();
+    my %result = ();
+    my $issharedhost = SHAREDHOST();
+
+    my %tmccopts = ();
+    if ($issharedhost) {
+	$tmccopts{"nocache"} = 1;
+    }
+
+    if (tmcc(TMCCCMD_SERVINCEINFO, undef, \@tmccresults, %tmccopts) < 0) {
+	warn("*** WARNING: Could not get service info from server!\n");
+	%$rptr = ();
+	return -1;
+    }
+
+    foreach my $line (@tmccresults) {
+	foreach my $token (split(/\s+/, $line)) {
+	    if ($token =~ /^(.*)="(.*)"$/ ||
+		$token =~ /^(.*)=(.+)$/) {
+		$result{$1} = $2;
+	    }
+	}
+    }
+
+    %$rptr = %result;
+    return 0;
+}
+
+#
 # Return the hostname or IP to use for a local event server.
 # Defaults to "localhost" for most nodes or the physical host IP for Xen VMs.
 # The value can be overridden on a per-host basis via a local file.
