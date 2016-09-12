@@ -34,6 +34,7 @@ use vars qw(@ISA @EXPORT);
 	     TBGetUniqueIndex ParRun VersionInfo UpdateVersionInfo
 	     SpanningTree GenFakeMac BackTraceOnWarning PassWordHash
              SSHwithTimeout TBDateStringGMT TBDateStringLocal runBusyLoop
+	     MapEventType MapEventObjectType MapEventTriggerType
 );
 
 use emdb;
@@ -945,6 +946,47 @@ sub runBusyLoop($)
 	}
     }
     return -1;
+}
+
+#
+# A couple of helpers to map agent strings to their numeric values.
+# Making these numeric was my really dumb idea about 15 years ago.
+#
+sub MapEventType($)
+{
+    my ($arg) = @_;
+    return undef
+	if ($arg !~ /^[-\w]+$/);
+    my $query_result =
+	DBQueryWarn("select idx from event_eventtypes where type='$arg'");
+    return undef
+	if (!$query_result || !$query_result->numrows);
+    my ($idx) = $query_result->fetchrow_array();
+    return $idx;
+}
+sub MapEventObjectType($)
+{
+    my ($arg) = @_;
+    return undef
+	if ($arg !~ /^[-\w]+$/);
+    my $query_result =
+	DBQueryWarn("select idx from event_objecttypes where type='$arg'");
+    return undef
+	if (!$query_result || !$query_result->numrows);
+    my ($idx) = $query_result->fetchrow_array();
+    return $idx;
+}
+sub MapEventTriggerType($)
+{
+    my ($arg) = @_;
+    return undef
+	if ($arg !~ /^[-\w]+$/);
+    my $query_result =
+	DBQueryWarn("select idx from event_triggertypes where type='$arg'");
+    return undef
+	if (!$query_result || !$query_result->numrows);
+    my ($idx) = $query_result->fetchrow_array();
+    return $idx;
 }
 
 # _Always_ make sure that this 1 is at the end of the file...
