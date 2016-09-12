@@ -1478,6 +1478,26 @@ sub GetTicketAuxAux($$$$$$$$$$$)
 		goto bad;
 	    }
 	}
+	# Program agents.
+	if (my @progagents = GeniXML::GetProgramAgents($ref)) {
+	    foreach my $agent (@progagents) {
+		$response = AddProgramAgent($virtexperiment,
+					    $node_nickname, $agent);
+		goto bad
+		    if (GeniResponse::IsError($response));
+	    }
+	}
+	else {
+	    # Stub program agent. Needed to keep everything happy, I think.
+	    $virtexperiment->NewTableRow("virt_programs",
+					 {"vnode"   => $node_nickname,
+					  "vname"   => "${node_nickname}-program",
+					  "command" => "",
+					  "dir"     => "",
+					  "timeout" => 0,
+					  "expected_exit_code" => 0});
+	}
+	
 	# Tarball and startup command.
 	if (defined($tarfiles)) {
 	    if (! TBcheck_dbslot($tarfiles, "virt_nodes", "tarfiles",
@@ -1714,15 +1734,6 @@ sub GetTicketAuxAux($$$$$$$$$$$)
 					  "weight"   => 1.0})
 	}
 
-	# Stub program agent.
-	$virtexperiment->NewTableRow("virt_programs",
-				     {"vnode"   => $node_nickname,
-				      "vname"   => "${node_nickname}-program",
-				      "command" => "",
-				      "dir"     => "",
-				      "timeout" => 0,
-				      "expected_exit_code" => 0});
-	
 	# Store reference so we can munge it below. 
 	$nodemap{$node_nickname} = {"rspec"    => $ref,
 				    "virtnode" => $virtnode,
@@ -7839,6 +7850,77 @@ sub AnnotateAddressPools($$)
 	    }
 	}
     }
+}
+
+#
+# Helper function to add a program agent to the virt topology.
+#
+sub AddProgramAgent($$$)
+{
+    my ($virtexperiment, $vnode, $args) = @_;
+    my $objecttype  = MapEventObjectType("PROGRAM");
+    my $eventtype   = MapEventType("START");
+    my $triggertype = MapEventTriggerType("TIMER");
+    my $vname       = $args->{"name"};
+    my $command     = $args->{"command"};
+    my $directory   = $args->{"directory"};
+    my $onexpstart  = $args->{"onexpstart"};
+
+    my $baddog = sub {
+	my ($msg) = @_;
+	return GeniResponse->MalformedArgsResponse($msg);
+    };
+    if (!defined($vname)) {
+	return &$baddog("No name for program agent");
+    }
+    return &$baddog("Invalid name for program agent: " . TBFieldErrorString())
+	if (! TBcheck_dbslot($vname, "virt_programs", "vname",
+			     TBDB_CHECKDBSLOT_WARN|TBDB_CHECKDBSLOT_ERROR));
+    if (!defined($command)) {
+	return &$baddog("No command for program agent");
+    }
+    return &$baddog("Invalid command for program agent: " .TBFieldErrorString())
+	if (! TBcheck_dbslot($command, "virt_programs", "command",
+			     TBDB_CHECKDBSLOT_WARN|TBDB_CHECKDBSLOT_ERROR));
+    if (defined($directory)) {
+	return &$baddog("Invalid directory for program agent: " .
+			TBFieldErrorString())
+	    if (! TBcheck_dbslot($directory, "virt_programs", "dir",
+				 TBDB_CHECKDBSLOT_WARN|TBDB_CHECKDBSLOT_ERROR));
+    }
+    else {
+	$directory = "";
+    }
+    #
+    # We use the onexpstart flag to indicate that this is the equivalent of
+    # an Emulab startupcmd. Which means we have to wrap it with the icky
+    # startcmddone thing. 
+    #
+    if ($onexpstart) {
+	$command = "($command ; /usr/local/etc/emulab/startcmddone \$\?)";
+    }
+    $virtexperiment->NewTableRow("virt_programs",
+				 {"vnode"   => $vnode,
+				  "vname"   => $vname,
+				  "command" => $command,
+				  "dir"     => $directory,
+				  "timeout" => 0,
+				  "expected_exit_code" => 0});
+    $virtexperiment->NewTableRow("virt_agents",
+				 {"vnode"      => $vnode,
+				  "vname"      => $vname,
+				  "objecttype" => $objecttype});
+    if ($onexpstart) {
+	$virtexperiment->NewTableRow("eventlist",
+				     {"vnode"      => $vnode,
+				      "vname"      => $vname,
+				      "time"       => "0.0",
+				      "arguments"  => "COMMAND=$command",
+				      "objecttype" => $objecttype,
+				      "eventtype"  => $eventtype,
+				      "triggertype"=> $triggertype});
+    }
+    return 0;
 }
 
 # _Always_ make sure that this 1 is at the end of the file...
