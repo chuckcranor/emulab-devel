@@ -123,6 +123,11 @@ function (_, sup, moment, ShowIdleGraphs,
 		return;
 	    }
 	    LoadFirstRow();
+	    // Make it harder to repeat action unintentionally. 
+	    if (action == "extend" || action == "terminate") {
+		$('#days').val("0");
+	    }
+	    sup.ShowModal("#success-modal");
 	};
 	sup.ShowModal("#waitwait-modal");
 	var xmlthing = sup.CallServerMethod(null, "status", method,
