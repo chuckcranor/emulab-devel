@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2009-2015 University of Utah and the Flux Group.
+# Copyright (c) 2009-2016 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -120,6 +120,11 @@ while (<XM>) {
 close(XM);
 # Filled in later.
 $xminfo{"disksizes"} = "";
+
+# For safety, only local vnc
+if (exists($xminfo{"vnc"})) {
+    $xminfo{"vnclisten"} = "127.0.0.1";
+}
 
 #
 # Copy the kernel (and ramdisk) into the directory and change xminfo.
