@@ -625,6 +625,37 @@ sub GetServices($)
     return @result;
 }
 
+#
+# Program agents are also in the services element, but they are in the
+# Emulab name space.
+#
+sub GetProgramAgents($)
+{
+    my ($node) = @_;
+    my @result = ();
+    my @services = FindNodes("n:services", $node)->get_nodelist();
+
+    foreach my $service (@services) {
+	my @agents = FindNodesNS("n:program-agent",
+				 $service, $EMULAB_NS)->get_nodelist();
+	foreach my $agent (@agents) {
+	    my $name       = GetText("name", $agent);
+	    my $command    = GetText("command", $agent);
+	    my $directory  = GetText("directory", $agent);
+	    my $start      = GetText("onexpstart", $agent);
+
+	    my $item = {"name"       => $name,
+			"command"    => $command,
+			"dir"        => $directory,
+			"onexpstart" => (defined($start) &&
+					 lc("$start") eq "true" ? 1 : 0),
+	    };
+	    push(@result, $item);
+	}
+    }
+    return @result;
+}
+
 sub GetNodeAttributes($)
 {
     my ($node) = @_;
