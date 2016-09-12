@@ -49,11 +49,15 @@ function ClassicExperimentList($which, $target, $state = "active")
         $whereclause = "where e.pid='$target_pid'";
     }
     $whereclause .= " and e.geniflags=0";
+    $whereclause .= " and t.tid is null";
     $results = array();
 
     $query_result =
         DBQueryFatal("select idx from experiments as e ".
-                     "$whereclause $stateclause order by e.eid");
+                     "left join experiment_templates as t on ".
+                     "     t.pid=e.pid and t.eid=e.eid ".
+                     "$whereclause $stateclause ".
+                     "order by e.eid");
 
     while ($row = mysql_fetch_array($query_result)) {
         $idx = $row["idx"];
