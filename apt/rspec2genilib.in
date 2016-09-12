@@ -353,6 +353,24 @@ foreach my $noderef (GeniXML::FindNodes("n:node", $rspec)->get_nodelist()) {
 	}
     }
     #
+    # Program Agents.
+    #
+    foreach my $agent (GeniXML::GetProgramAgents($noderef)) {
+	my $vname       = $agent->{"name"};
+	my $command     = $agent->{"command"};
+	my $directory   = $agent->{"directory"};
+	my $onexpstart  = $agent->{"onexpstart"} ? "True" : "False";
+	if (defined($directory) && $directory ne "") {
+	    $directory = "'" . $directory . "'";
+	}
+	else {
+	    $directory = "None";
+	}
+	AddNodeStatement($client_id,
+		 "addService(emulab.ProgramAgent('$vname', '$command', ".
+		 "$directory, $onexpstart))");
+    }
+    #
     # Desires.
     #
     foreach my $desire (GeniXML::FindNodesNS("n:fd", $noderef,

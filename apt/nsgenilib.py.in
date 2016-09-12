@@ -36,7 +36,7 @@ TB        = "@prefix@";
 OURDOMAIN = "@OURDOMAIN@";
 
 # Testbed specific stuff
-if False:
+if True:
     sys.path.append(TB + "/opsdir/lib/geni-lib")
 else:
     sys.path.append("/usr/local/lib/geni-lib")
@@ -45,7 +45,7 @@ else:
 import geni.portal as portal
 import geni.rspec.pg as RSpec
 import geni.rspec.igext as IG
-import geni.rspec.emulab
+import geni.rspec.emulab as emulab
 import geni.urn as URN
 import geni.namespaces as GNS
 
@@ -92,6 +92,7 @@ blockstores = {}
 lanifaces   = {}
 ifacecounts = {}
 bridged     = {}
+programs    = {}
 
 for child in tree.getroot():
     if child.tag == "virt_nodes":
@@ -192,6 +193,42 @@ for child in tree.getroot():
             ifacecounts[vname] = 0
             pass
         ifacecounts[vname] = ifacecounts[vname] + 1
+        pass
+    #
+    # Find the program agents before we try to process the event list.
+    # The event list is how we tell the difference between a startcmd
+    # and other program agents. 
+    #
+    if child.tag == "virt_programs":
+        row = child.find("row")
+        vnode = row.find("vnode").text
+        vname = row.find("vname").text
+        cmd   = row.find("command").text
+        directory = row.find("dir").text
+        #
+        # Strip out the startcmd stuff, we want just the command.
+        #
+        foo = re.match(r"^\((.*) ; /usr/local/etc/emulab.*\)", cmd);
+        if foo:
+            parser = HTMLParser.HTMLParser()
+            cmd = parser.unescape(foo.group(1));
+            pass
+        #
+        # Watch for access to builting Emulab ENV variables, those
+        # are not supported when converting.
+        #
+        for var in ["PID", "EID", "EXPDIR", "NODE", "NODEIP",
+                    "NODECNET", "NODECNETIP"]:
+            if (re.search("\$" + var + "[^\w]", cmd, re.MULTILINE) or
+                re.search("\$" + var + "$", cmd, re.MULTILINE)):
+                Fatal("Unsupported use of environment variable $" +
+                      var + " in startup command or program agent")
+                pass
+            pass
+        programs[vname] = {"vname" : vname, "vnode" : vnode,
+                           "cmd" : cmd, "directory" : directory,
+                           # We will set this when we process the event list.
+                           "onexpstart" : False}
         pass
     pass
 
@@ -542,10 +579,9 @@ for child in tree.getroot():
             pass
         pass
     #
-    # We only do the startup command right now, since there is no
-    # event mechanism. We trigger on the time=0 to determine which ones
-    # to consider, which might get more then just the startup command,
-    # but that is fine.
+    # We only consider program agents. We want to find any that have time=0
+    # and mark the program with onexpstart=True. We spit out the program
+    # agent list below.
     #
     if child.tag == "eventlist":
         row = child.find("row")
@@ -554,7 +590,6 @@ for child in tree.getroot():
         etype = row.find("eventtype").text
         vnode = row.find("vnode").text
         vname = row.find("vname").text
-        cmd   = row.find("arguments").text
         if otype == "4":
             if etype != "1" and etype != "20":
                 Fatal("Unsupported program object event for " + vname)
@@ -562,23 +597,7 @@ for child in tree.getroot():
             if time != "0":
                 Fatal("Unsupported program object event time!=0 for " + vname)
                 pass
-            foo = re.match(r"^COMMAND=\((.*) ; /usr/local/etc/emulab.*\)", cmd);
-            if foo:
-                parser = HTMLParser.HTMLParser()
-                cmd = parser.unescape(foo.group(1));
-                #
-                # Watch for access to builting Emulab ENV variables, those
-                # are not supported when converting.
-                #
-                for var in ["PID", "EID", "EXPDIR", "NODE", "NODEIP",
-                            "NODECNET", "NODECNETIP"]:
-                    if (re.search("\$" + var + "[^\w]", cmd, re.MULTILINE) or
-                        re.search("\$" + var + "$", cmd, re.MULTILINE)):
-                        Fatal("Unsupported use of environment variable $" +
-                              var + " in startup command")
-                        pass
-                    pass
-                nodes[vnode].addService(RSpec.Execute("csh", cmd))
+            programs[vname]["onexpstart"] = True
         else:
             Fatal("Unsupported event type for " + vname)
             pass
@@ -628,5 +647,17 @@ for child in tree.getroot():
         Fatal("Unsupported use of " + child.tag)
         pass
     pass
+
+#
+# Add the rest of the program agents
+#
+for vname, program in programs.iteritems():
+    cmd = program["cmd"]
+    directory = program["directory"]
+    node = program["vnode"]
+    onexpstart = program["onexpstart"]
+    nodes[node].addService(emulab.ProgramAgent(vname, cmd,
+                                                directory, onexpstart));
+    pass;
 
 pc.printRequestRSpec(rspec)
