@@ -1623,23 +1623,6 @@ sub Action($$$;$)
 	    goto bad;
 	}
     }
-    #
-    # Start the event scheduler.
-    #
-    if (!$reload) {
-	my $action = ($restart ? "replay" : "start");
-	system("$EVENTSYS $action $pid,$eid");
-	if ($?) {
-	    $msg .= "Failed to (re)start the event system";
-	    if ($TB ne "/usr/testbed") {
-		# Not sure why this is failing.
-		print STDERR "$msg\n";
-	    }
-	    else {
-		goto bad;
-	    }
-	}
-    }
 
     #
     # Worked? Set the new state. Needs more thought ...
@@ -1672,6 +1655,29 @@ sub Action($$$;$)
 	if (system("$ELAB_SETUP $pid $eid")) {
 	    print STDERR "Failed to setup elabinelab!\n";
 	    return -1;
+	}
+    }
+    elsif ($action eq "start" || $action eq "restart") {
+	$self->ComputeState();
+	
+	if ($self->status() eq "ready") {
+	    #
+	    # Start the event scheduler. Note that the experiment is already
+	    # in the ACTIVE state, so the scheduler is going to fire off the
+	    # timeline automatically. 
+	    #
+	    my $action = ($restart ? "replay" : "start");
+	    system("$EVENTSYS $action $pid,$eid");
+	    if ($?) {
+		$msg .= "Failed to (re)start the event system";
+		if ($TB ne "/usr/testbed") {
+		    # Not sure why this is failing.
+		    print STDERR "$msg\n";
+		}
+		else {
+		    goto bad;
+		}
+	    }
 	}
     }
     return 0;
