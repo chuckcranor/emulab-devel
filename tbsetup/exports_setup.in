@@ -78,6 +78,7 @@ my $WITHZFS     = @WITHZFS@;
 my $ZFS_NOEXPORT= @ZFS_NOEXPORT@;
 my $WITHAMD     = @WITHAMD@;
 my $INC_MOUNTD  = @INCREMENTAL_MOUNTD@;
+my $NOVNODENFS	= @NOVIRTNFSMOUNTS@;
 
 # XXX for TESTMODE: output to stdout
 my $TOSTDOUT	= 0;
@@ -374,6 +375,10 @@ while ($row = $nodes_result->fetchrow_hashref) {
     next
 	if ($isvirt && !$shared);
     
+    # Skip shared virtnode nodes too, if NFS disabled for them.
+    next
+	if ($NOVNODENFS && $isvirt && $shared);
+
     if ($lastpid eq $pid && $lastgid eq $gid && $lasterole eq $erole &&
 	(!$ISOLATEADMIN || $lastadmin eq $admin)) {
 	# If this is for the same proj and group again, don't requery the db 
