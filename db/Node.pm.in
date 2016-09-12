@@ -946,7 +946,7 @@ sub GetAllocState($$)
 #
 # We do this cause we always want to go to the DB.
 #
-sub GetEventState($$;$)
+sub GetEventState($;$$)
 {
     my ($self, $pstate, $popmode) = @_;
     my $node_id = $self->node_id();
@@ -965,7 +965,8 @@ sub GetEventState($$;$)
 
     $self->{'DBROW'}->{'eventstate'} = $state
 	if (defined($self->{'DBROW'}));
-    $$pstate = $state;
+    $$pstate = $state
+     	if (defined($pstate));
     $$popmode= $op_mode
  	if (defined($popmode));
     return 0;
@@ -1325,6 +1326,7 @@ sub sharing_mode($)	{ return L__reservation($_[0], 'sharing_mode'); }
 sub erole($)		{ return L__reservation($_[0], 'erole'); }
 sub eid($)              { return L__reservation($_[0], 'eid'); }
 sub pid($)              { return L__reservation($_[0], 'pid'); }
+sub exptidx($)          { return L__reservation($_[0], 'exptidx'); }
 sub genisliver_idx($)   { return L__reservation($_[0], 'genisliver_idx'); }
 sub external_resource_index($) {
     return L__reservation($_[0], 'external_resource_index'); }
@@ -4286,6 +4288,20 @@ sub RusageData($)
 				"300"  => $row->{"load_5min"},
 				"900"  => $row->{"load_15min"}}};
     return $blob;
+}
+
+sub HasStartupAgent($)
+{
+    my ($self)  = @_;
+    my $vname   = $self->vname();
+    my $exptidx = $self->exptidx();
+    my $query_result =
+	DBQueryWarn("select arguments from eventlist ".
+		    "where exptidx='$exptidx' and vnode='$vname' and time=0");
+    return 0
+	if (!$query_result);
+
+    return $query_result->numrows;
 }
 
 # _Always_ make sure that this 1 is at the end of the file...
