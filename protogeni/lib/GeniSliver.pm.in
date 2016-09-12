@@ -1398,6 +1398,8 @@ sub ComputeStatus($;$)
 	print STDERR "$node was already released from $self\n";
 	return -1;
     }
+    # Make sure our object has the updated state.
+    $node->GetEventState();
     
     #
     # Special state for updating user accounts. We never go into the
@@ -1581,7 +1583,8 @@ sub GenerateStatusBlob($)
     # Startup command info.
     #
     if (defined($node) &&
-	defined($node->startupcmd()) && $node->startupcmd() ne "") {
+	((defined($node->startupcmd()) && $node->startupcmd() ne "") ||
+	 $node->HasStartupAgent())) {
 	if (defined($node->startstatus()) &&
 	    $node->startstatus() ne "none") {
 	    $blob->{'execute_state'}   = "exited";
