@@ -51,6 +51,8 @@ my $VARACCTSDIR = "/var/log/sa";
 my $IFTAB       = "/etc/iftab";
 my $ANACRON     = "/usr/sbin/anacron";
 my $GRUBDEF	= "/etc/default/grub";
+my $PUBSUBCONF  = "/usr/local/etc/pubsub-clusterd.conf";
+my $PUBSUBEXPR  = "/usr/local/etc/pubsub-clusterd.expr";
 
 #
 # Dead wood in $BINDIR
@@ -455,6 +457,16 @@ if (-e $SSHDCONFIG) {
     system("sed -i.bak -e '/^# EmulabJail/,\$d' $SSHDCONFIG");
     warn("*** Could not remove Port lines\n")
 	if ($?);
+}
+
+print "Removing pubsubd clustering config file\n";
+if (-e $PUBSUBCONF) {
+    unlink($PUBSUBCONF) or
+	warn("*** could not remove $PUBSUBCONF\n");
+}
+if (-e $PUBSUBEXPR) {
+    unlink($PUBSUBEXPR) or
+	warn("*** could not remove $PUBSUBEXPR\n");
 }
 
 # Leave this print statement here; create_image depends on it.

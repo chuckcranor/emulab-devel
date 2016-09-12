@@ -47,7 +47,10 @@ my $SFSHOSTKEY  = "/etc/sfs/sfs_host_key";
 my $MOUNTINFO	= "/var/db/mounttab";
 my $ENTROPY	= "/var/db/entropy/*";
 my $LOADERCONF	= "/boot/loader.conf";
+my $PUBSUBCONF  = "/usr/local/etc/pubsub-clusterd.conf";
+my $PUBSUBEXPR  = "/usr/local/etc/pubsub-clusterd.expr";
 
+#
 #
 # Dead wood in $BINDIR
 # If you remove/move a script, list it here so that it goes away when the
@@ -321,6 +324,16 @@ system("rm -f /etc/start_if*");
 if (-x "/usr/libexec/locate.updatedb") {
     print "Building the locate database ... Be patient, will ya!\n";
     system("/usr/libexec/locate.updatedb");
+}
+
+print "Removing pubsubd clustering config file\n";
+if (-e $PUBSUBCONF) {
+    unlink($PUBSUBCONF) or
+	warn("*** could not remove $PUBSUBCONF\n");
+}
+if (-e $PUBSUBEXPR) {
+    unlink($PUBSUBEXPR) or
+	warn("*** could not remove $PUBSUBEXPR\n");
 }
 
 # Leave this print statement here; create_image depends on it.
