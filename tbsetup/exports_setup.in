@@ -242,13 +242,17 @@ $nodes_result =
 		 "       e.nonfsmounts as enonfs,n.nonfsmounts as nnonfs,".
 		 "       i.IP,u.admin,r.sharing_mode,r.erole,nt.isvirtnode, ".
 		 "       e.nfsmounts as e_nfsmounts, ".
-		 "       n.nfsmounts as n_nfsmounts ".
+		 "       n.nfsmounts as n_nfsmounts, ".
+		 "       va.attrvalue as routable_ip ".
 		 "from reserved as r ".
 		 "left join experiments as e on r.pid=e.pid and r.eid=e.eid ".
 		 "left join nodes as n on r.node_id=n.node_id ".
 		 "left join node_types as nt on nt.type=n.type ".
 		 "left join interfaces as i on r.node_id=i.node_id ".
 		 "left join users as u on e.swapper_idx=u.uid_idx ".
+		 "left join virt_node_attributes as va on ".
+		 "  va.pid=r.pid and va.eid=r.eid and va.vname=r.vname ".
+		 "    and va.attrkey='routable_control_ip' ".
 		 " where i.IP!='NULL' and ".
 		 "       i.role='" . TBDB_IFACEROLE_CONTROL() . "' ".
 		 "       and (n.role='testnode' or n.role='virtnode')".
@@ -353,6 +357,8 @@ while ($row = $nodes_result->fetchrow_hashref) {
     my $nnonfs  = $row->{'nnonfs'};
     my $enfs    = $row->{'e_nfsmounts'};
     my $nnfs    = $row->{'n_nfsmounts'};
+    my $routable= ((defined($row->{'routable_ip'}) &&
+		    $row->{'routable_ip'} eq "true") ? 1 : 0);
     my %fslist = ();
     my @dirlist = ();
     my @smbshares = ();
@@ -375,9 +381,9 @@ while ($row = $nodes_result->fetchrow_hashref) {
     next
 	if ($isvirt && !$shared);
     
-    # Skip shared virtnode nodes too, if NFS disabled for them.
+    # Skip shared virtnode nodes too, if NFS disabled and non-routable IP
     next
-	if ($NOVNODENFS && $isvirt && $shared);
+	if ($NOVNODENFS && $isvirt && $shared && !$routable);
 
     if ($lastpid eq $pid && $lastgid eq $gid && $lasterole eq $erole &&
 	(!$ISOLATEADMIN || $lastadmin eq $admin)) {

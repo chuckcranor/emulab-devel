@@ -241,6 +241,7 @@ typedef struct {
 	int		allocated;
 	int		jailflag;
 	int		isvnode;
+	int		isroutable_vnode; /* only valid if isvnode==1 */
 	int		asvnode;
 	int		issubnode;
 	int		islocal;
@@ -5002,7 +5003,8 @@ COMMAND_PROTOTYPE(domounts)
 		client_writeback(sock, buf, strlen(buf), tcp);
 	}
 #ifdef NOVIRTNFSMOUNTS
-	if (reqp->sharing_mode[0] && reqp->isvnode) {
+	if (reqp->sharing_mode[0] && reqp->isvnode &&
+	    !reqp->isroutable_vnode) {
 		return 0;
 	}
 #endif
@@ -7454,7 +7456,7 @@ iptonodeid(struct in_addr ipaddr, tmcdreq_t *reqp, char* nodekey)
 				 " n.nonfsmounts,e.nonfsmounts AS enonfs, "
 				 " r.erole, n.taint_states, "
 				 " n.nfsmounts,e.nfsmounts AS enfsmounts, "
-				 " p.nonlocal_id "
+				 " p.nonlocal_id,NULL "
 				 "FROM nodes AS n "
 				 "LEFT JOIN reserved AS r ON "
 				 "  r.node_id=n.node_id "
@@ -7485,7 +7487,7 @@ iptonodeid(struct in_addr ipaddr, tmcdreq_t *reqp, char* nodekey)
 				 "     (SELECT node_id FROM widearea_nodeinfo "
 				 "      WHERE privkey='%s') "
 				 "  AND notmcdinfo_types.attrvalue IS NULL",
-				 42, nodekey);
+				 43, nodekey);
 	}
 	else if (reqp->isvnode) {
 		char	clause[BUFSIZ];
@@ -7524,7 +7526,7 @@ iptonodeid(struct in_addr ipaddr, tmcdreq_t *reqp, char* nodekey)
 				 " nv.nonfsmounts,e.nonfsmounts AS enonfs, "
 				 " r.erole, nv.taint_states, "
 				 " nv.nfsmounts,e.nfsmounts AS enfsmounts, "
-				 " p.nonlocal_id "
+				 " p.nonlocal_id,va.attrvalue "
 				 "from nodes as nv "
 				 "left join nodes as np on "
 				 " np.node_id=nv.phys_nodeid "
@@ -7546,8 +7548,12 @@ iptonodeid(struct in_addr ipaddr, tmcdreq_t *reqp, char* nodekey)
 				 " nk.node_id=nv.node_id "
 				 "left join users as u on "
 				 " u.uid_idx=e.swapper_idx "
+				 "left join virt_node_attributes as va on "
+				 " va.pid=r.pid and va.eid=r.eid and "
+				 " va.vname=r.vname and "
+				 " va.attrkey='routable_control_ip' "
 				 "where nv.node_id='%s' and (%s)",
-				 42, reqp->vnodeid, clause);
+				 43, reqp->vnodeid, clause);
 	}
 	else {
 		char	clause[BUFSIZ];
@@ -7579,7 +7585,7 @@ iptonodeid(struct in_addr ipaddr, tmcdreq_t *reqp, char* nodekey)
 				 " n.nonfsmounts,e.nonfsmounts AS enonfs, "
 				 " r.erole, n.taint_states, "
 				 " n.nfsmounts,e.nfsmounts AS enfsmounts, "
-				 " p.nonlocal_id "
+				 " p.nonlocal_id,NULL "
 				 "from interfaces as i "
 				 "left join nodes as n on n.node_id=i.node_id "
 				 "left join reserved as r on "
@@ -7609,7 +7615,7 @@ iptonodeid(struct in_addr ipaddr, tmcdreq_t *reqp, char* nodekey)
 				 "  on n.type=dedicated_wa_types.type "
 				 "where (%s) "
 				 "  and notmcdinfo_types.attrvalue is NULL",
-				 42, clause);
+				 43, clause);
 	}
 
 	if (!res) {
@@ -7766,6 +7772,12 @@ iptonodeid(struct in_addr ipaddr, tmcdreq_t *reqp, char* nodekey)
 		}
 	}
 	
+	/* Do we have a routable IP */
+	if (reqp->isvnode && row[42] && strcmp(row[42], "true") == 0)
+		reqp->isroutable_vnode = 1;
+	else
+		reqp->isroutable_vnode = 0;
+
 	/* If a vnode, copy into the nodeid. Eventually split this properly */
 	strcpy(reqp->pnodeid, reqp->nodeid);
 	if (reqp->isvnode) {
