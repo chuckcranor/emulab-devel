@@ -916,6 +916,7 @@ sub GetTicketAuxAux($$$$$$$$$$$)
     my %bridgemap= ();
     my @nodeids  = ();
     my %lannodes = ();
+    my %allnodes = ();
     # For stitching, keep track of external nodes and links.
     my %external_nodemap  = ();
     my %external_linkmap  = ();
@@ -926,6 +927,31 @@ sub GetTicketAuxAux($$$$$$$$$$$)
 
     # Always do this to avoid buildup.
     $slice_experiment->ClearBackupState();
+
+    #
+    # Find all the node client ids, so we can support binding VMs to other
+    # nodes in the topology. We could enforce that the rspec has to put
+    # those nodes first, but that would be annoying to users. And me.
+    #
+    foreach my $ref (GeniXML::FindNodes("n:node", $rspec)->get_nodelist()) {
+	# Let remote nodes pass through.
+	next
+	    if (!GeniXML::IsLocalNode($ref));
+
+	# Skip lan nodes; they are fake.
+	next
+	    if (GeniXML::IsLanNode($ref));
+
+	my $node_nickname = GeniXML::GetVirtualId($ref);
+
+	# Might as well do a duplicate check while we are here.
+	if (exists($allnodes{lc($node_nickname)})) {
+	    $response = GeniResponse->Create(GENIRESPONSE_BADARGS, undef,
+					     "Duplicate node $node_nickname");
+	    goto bad;
+	}
+	$allnodes{lc($node_nickname)} = 1;
+    }
     
     #
     # If this is a ticket update, we want to seed the namemap with
@@ -1002,8 +1028,6 @@ sub GetTicketAuxAux($$$$$$$$$$$)
 
     print GeniXML::Serialize($rspec);
 
-    my %nodeexistsmap = ();
-
     foreach my $ref (GeniXML::FindNodes("n:node", $rspec)->get_nodelist()) {
 	my $component_id  = GeniXML::GetNodeId($ref);
 	my $vnode_id      = GeniXML::GetVnodeId($ref);
@@ -1011,6 +1035,7 @@ sub GetTicketAuxAux($$$$$$$$$$$)
 	my $node_nickname = GeniXML::GetVirtualId($ref);
 	my $colocate      = GeniXML::GetColocate($ref);
 	my $subnode_of    = GeniXML::GetSubnodeOf($ref);
+	my $instantiate_on= GeniXML::GetInstantiateOn($ref);
 	my $virtualization_type = GeniXML::GetVirtualizationType($ref);
 	
 	my $virtualization_subtype
@@ -1026,14 +1051,6 @@ sub GetTicketAuxAux($$$$$$$$$$$)
 	my $xensettings;
 	my $fwsettings;
 	
-	if (exists($nodeexistsmap{lc($node_nickname)})) {
-	    $response =
-		GeniResponse->Create(GENIRESPONSE_BADARGS, undef,
-				     "Duplicate node $node_nickname");
-	    goto bad;
-	}
-	$nodeexistsmap{lc($node_nickname)} = 1;
-
 	# Always populate iface2node mapping, even if we let the node
 	# pass through.
 	foreach my $linkref (GeniXML::FindNodes("n:interface",
@@ -1417,6 +1434,30 @@ sub GetTicketAuxAux($$$$$$$$$$$)
 	}
 
 	#
+	# Check to see if a XEN pcvm is bound to another node in the
+	# virtual topology (not a testbed physical node). This becomes
+	# the "fixed" slot in the virt_nodes table, even on an update
+	# (we bound $node above) cause this is how libvtop wants it.
+	#
+	if (defined($instantiate_on)) {
+	    if (defined($virtualization_subtype) &&
+		$virtualization_subtype eq "emulab-xen") {
+
+		if (!exists($allnodes{$instantiate_on})) {
+		    $response =
+			GeniResponse->Create(GENIRESPONSE_BADARGS, undef,
+			     "Bad binding of $node_nickname to $subnode_of");
+		    goto bad;
+		}
+	    }
+	    else {
+		$response =
+		    GeniResponse->Create(GENIRESPONSE_BADARGS, undef,
+			     "Only Xen nodes can use 'instantiate_on'");
+		goto bad;
+	    }
+	}
+	#
 	# If no osname, check for protogeni default osname
 	#
 	if (! defined($osname) && !GeniXML::UseTypeDefaultImage($ref)) {
@@ -1452,9 +1493,10 @@ sub GetTicketAuxAux($$$$$$$$$$$)
 			"ips"     => '', # deprecated
 			"cmd_line"=> '', # bogus
 			"routertype" => $routertype,
-			"fixed"   => (defined($subnode_of) ? $subnode_of :
-				      defined($node) ? $node->node_id() : ""),
-			    
+			"fixed"   =>
+			    (defined($subnode_of) ? $subnode_of :
+			     defined($instantiate_on) ? $instantiate_on :
+			     defined($node) ? $node->node_id() : ""),
 			};
 	
 	if (defined($parent_osname)) {
@@ -2984,6 +3026,7 @@ sub GetTicketAuxAux($$$$$$$$$$$)
 	my $node           = GeniUtil::LookupNode($vnode_id);
 	my $colocate       = GeniXML::GetColocate($rspec);
 	my $subnode_of     = GeniXML::GetSubnodeOf($rspec);
+	my $instantiate_on = GeniXML::GetInstantiateOn($rspec);
 
 	# Need to do this after the mapper has run.
 	$node->Refresh();
@@ -3028,7 +3071,7 @@ sub GetTicketAuxAux($$$$$$$$$$$)
 	# Also update the virtexperiment table row.
 	# Do not update subnodes; they are fixed to the parent,
 	# while the parent is fixed to an actual node.
-	if (!defined($subnode_of)) {
+	if (! (defined($subnode_of) || defined($instantiate_on))) {
 	    # Remember, we fix to the physnode not the virtual.
 	    $virtnode->fixed(($node->isvirtnode() ?
 			      $node->phys_nodeid() : $node->node_id()));

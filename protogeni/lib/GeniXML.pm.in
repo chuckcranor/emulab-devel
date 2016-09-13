@@ -588,6 +588,23 @@ sub GetSubnodeOf($)
     }
     return $result;
 }
+sub GetInstantiateOn($)
+{
+    my ($node) = @_;
+    my $result = undef;
+    if (IsVersion0($node)) {
+	$result = GetText("instantiate_on", $node);
+    } else {
+	my @relations = FindNodes("n:relation", $node)->get_nodelist();
+	foreach my $current (@relations) {
+	    if (GetText("type", $current) == "instantiate_on") {
+		$result = GetText("client_id", $current);
+		last;
+	    }
+	}
+    }
+    return $result;
+}
 
 sub GetServices($)
 {

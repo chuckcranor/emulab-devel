@@ -270,6 +270,11 @@ foreach my $noderef (GeniXML::FindNodes("n:node", $rspec)->get_nodelist()) {
 	    my $ptype = GeniXML::XenPtype($noderef);
 	    AddNodeStatement($client_id, "xen_ptype = '$ptype'");
 	}
+	if (defined(GeniXML::GetInstantiateOn($noderef))) {
+	    my $vhost = GeniXML::GetInstantiateOn($noderef);
+	    
+	    AddNodeStatement($client_id, "InstantiateOn('$vhost')");
+	}
     }
     elsif ($sliver_type eq "emulab-blockstore") {
 	AddNode($client_id, "emulab-blockstore");
@@ -573,7 +578,7 @@ foreach my $noderef (GeniXML::FindNodes("n:node", $rspec)->get_nodelist()) {
     my @code        = ("# Node $client_id");
 
     if ($node->{'type'} eq "emulab-xen") {
-	push(@code, "$ntag = emulab.XenVM('$client_id')");
+	push(@code, "$ntag = request.XenVM('$client_id')");
     }
     elsif ($node->{'type'} eq "emulab-blockstore") {
 	my $mount = $node->{'blockstores'}->{$client_id}->{'mount'};

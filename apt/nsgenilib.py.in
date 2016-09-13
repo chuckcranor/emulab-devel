@@ -36,7 +36,7 @@ TB        = "@prefix@";
 OURDOMAIN = "@OURDOMAIN@";
 
 # Testbed specific stuff
-if True:
+if False:
     sys.path.append(TB + "/opsdir/lib/geni-lib")
 else:
     sys.path.append("/usr/local/lib/geni-lib")
@@ -137,8 +137,6 @@ for child in tree.getroot():
                     osname = osname.replace("/", "//");
                     pass
                 node.disk_image = "urn:publicid:IDN+" + OURDOMAIN + "+image+" + osname
-            elif element.tag == "fixed" and element.text != None:
-                node.component_id = URN.Node(OURDOMAIN, element.text)
             elif element.tag == "ips" and element.text != None:
                 ips = element.text.split()
                 for token in ips:
@@ -261,6 +259,18 @@ for child in tree.getroot():
         # record that these links are bridged by bridge
         bridged[vlink] = {"bridge" : vname, "vport" : vport}
         pass
+    if child.tag == "virt_nodes":
+        row = child.find("row")
+        vname = row.find("vname").text
+        for element in row:
+            if element.tag == "fixed" and element.text != None:
+                #
+                # Watch for binding to another node in the topology.
+                #
+                if vname in nodes:
+                    nodes[vname].InstantiateOn(nodes[element.text])
+                else:
+                    node.component_id = URN.Node(OURDOMAIN, element.text)
     pass
 
 #
