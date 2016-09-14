@@ -40,7 +40,7 @@ sub usage()
     print STDERR " -f       - force, modify path for existing interfaces\n";
     print STDERR " -n       - Dry run mode\n";
     print STDERR " node_id  - ue1, ue2, etc\n";
-    print STDERR " path     - attenuator path (must be an integer)\n";
+    print STDERR " path     - attenuator path (comma-separated integers)\n";
     print STDERR " iface_id - rf0, rf1, etc (must end in an integer)\n";
     exit(-1);
 }
@@ -171,7 +171,7 @@ if (!$impotent) {
 	or $force or fatal("Could not create interface entry");
 }
 
-DBQueryWarn( "INSERT INTO wires SET cable=$path, type='Node', " .
+DBQueryWarn( "INSERT INTO wires SET external_wire='$path', type='Node', " .
 	     "node_id1='$node_id1', card1=$card1, port1=1, " .
 	     "node_id2='$node_id2', card2=$card2, port2=1" );	     
 

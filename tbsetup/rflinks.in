@@ -144,7 +144,7 @@ foreach my $lan (@lans) {
 	next;
     }
 
-    my $path = $wire->field( 'cable' );
+    my $path = $wire->field( 'external_wire' );
 
     if( !defined( $path ) ) {
 	tbwarn( "rflinks: RF wire for $pid/$eid $node_id:$iface has " .
@@ -158,8 +158,10 @@ foreach my $lan (@lans) {
     my $val = $remove ? 95 : 0;
     
     if( !$impotent ) {
-	if( system( "$ATTEN $path $val" ) ) {
-	    tbwarn( "rflinks: failed to modify attenuator $path" );
+	foreach my $p ( split( ",", $path ) ) {
+	    if( system( "$ATTEN $p $val" ) ) {
+		tbwarn( "rflinks: failed to modify attenuator $path" );
+	    }
 	}
     }
 }
