@@ -804,7 +804,7 @@ function (_, Constraints, sup, ppstart, JacksEditor, wt,
     function ClearFormErrors() {
 	$('.step-forms').find('.format-me').each(function () {
 	    var input = $(this).find(":input")[0];
-	    var label = $(this).find(".control-label")[0];
+	    var label = $(this).find(".control-error")[0];
 	    var key   = $(input).data("key");
 	    if (key) {
 		$(this).removeClass("has-error");
