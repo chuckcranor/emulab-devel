@@ -2177,6 +2177,26 @@ CREATE TABLE `ifaces` (
 ) ENGINE=MyISAM DEFAULT CHARSET=latin1;
 
 --
+-- Table structure for table `image_aliases`
+--
+
+DROP TABLE IF EXISTS `image_aliases`;
+CREATE TABLE `image_aliases` (
+  `imagename` varchar(30) NOT NULL default '',
+  `imageid` int(8) unsigned NOT NULL default '0',
+  `pid` varchar(48) NOT NULL default '',
+  `pid_idx` mediumint(8) unsigned NOT NULL default '0',
+  `gid` varchar(32) NOT NULL default '',
+  `gid_idx` mediumint(8) unsigned NOT NULL default '0',
+  `uuid` varchar(40) NOT NULL default '',
+  `target_imagename` varchar(30) NOT NULL default '',
+  `target_imageid` int(8) unsigned NOT NULL default '0',
+  PRIMARY KEY  (`imageid`),
+  UNIQUE KEY `pid` (`pid`,`imagename`),
+  KEY `uuid` (`uuid`)
+) ENGINE=MyISAM DEFAULT CHARSET=latin1;
+
+--
 -- Table structure for table `image_boot_status`
 --
 
@@ -2373,6 +2393,7 @@ CREATE TABLE `image_updates` (
 DROP TABLE IF EXISTS `images`;
 CREATE TABLE `images` (
   `imagename` varchar(30) NOT NULL default '',
+  `architecture` varchar(30) default NULL,
   `version` int(8) unsigned NOT NULL default '0',
   `imageid` int(8) unsigned NOT NULL default '0',
   `pid` varchar(48) NOT NULL default '',
@@ -3230,6 +3251,7 @@ DROP TABLE IF EXISTS `node_types`;
 CREATE TABLE `node_types` (
   `class` varchar(30) default NULL,
   `type` varchar(30) NOT NULL default '',
+  `architecture` varchar(30) default NULL,
   `modelnetcore_osid` varchar(35) default NULL,
   `modelnetedge_osid` varchar(35) default NULL,
   `isvirtnode` tinyint(4) NOT NULL default '0',
