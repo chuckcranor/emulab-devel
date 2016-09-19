@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2000-2015 University of Utah and the Flux Group.
+# Copyright (c) 2000-2016 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -110,6 +110,7 @@ my $need_consetup = 0;
 my @need_history  = ();
 my @need_clearbl  = ();
 my @need_pxeconfig= ();
+my $errormsg      = "";
 
 TBDebugTimeStamp("nalloc started");
 
@@ -242,8 +243,8 @@ foreach my $node (@nodes) {
 }
 foreach my $type ( keys( %types ) ) {
     my $reservations = Reservation->LookupAll( $type );
-    if( !Reservation->IsFeasible( $reservations, \$error ) ) {
-	print "Existing admission control violation for type $type: $error\n";
+    if( !Reservation->IsFeasible( $reservations, \$errormsg ) ) {
+	print "Existing admission control violation for type $type: $errormsg\n";
 	print "Omitting admission control verification.\n";
 	goto admissionfailure;
     }
@@ -265,8 +266,8 @@ foreach my $type ( keys( %types ) ) {
 	    push( @$reservations, $res );
 	}
     }
-    if( !Reservation->IsFeasible( $reservations, \$error ) ) {
-	print "Admission control violation for type $type: $error\n";
+    if( !Reservation->IsFeasible( $reservations, \$errormsg ) ) {
+	print "Admission control violation for type $type: $errormsg\n";
 	if( $force ) {
 	    print "Forcing allocation anyway...\n";
 	    print STDERR "WARNING: SCHEDULED RESERVATIONS ARE NOW INFEASIBLE!\n";
