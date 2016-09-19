@@ -2271,7 +2271,8 @@ sub UnProvision($;$)
     # first to avoid work when tearing down the nodes.
     #
     my @links  = ();
-    my @nodes  = ();
+    my %pnodes = ();
+    my %vnodes = ();
     my @shared = ();
 
     foreach my $sliver (@slivers) {
@@ -2294,11 +2295,38 @@ sub UnProvision($;$)
 		print STDERR "Could not map $sliver to its a node\n";
 		next;
 	    }
-	    if ($node->isvirtnode() && $node->sharing_mode()) {
-		push(@shared, $sliver);
+	    if ($node->isvirtnode()) {
+		my $pnode_id = $node->phys_nodeid();
+		my $pnode    = Node->Lookup($pnode_id);
+		if (!defined($pnode)) {
+		    print STDERR "Could not get pnode object for $pnode_id\n";
+		    next;
+		}
+		if ($node->sharing_mode()) {
+		    push(@shared, $sliver);
+		}
+		else {
+		    #
+		    # The physical host might be another node in the topo
+		    # or it might a libvtop allocated node that is not a
+		    # part of the topo (this in itself is a problem). The
+		    # former can happen when the user allocates a phys node
+		    # and assigns a virtnode to it.
+		    #
+		    # Anyway, if the physnode is actually in the topology,
+		    # then we cannot delete it before the VMs, we want to
+		    # be careful to delete the VMs first. But if we are
+		    # going to unprovision the pnode, then no need to do
+		    # the VMs, they will just get killed anyway. 
+		    #
+		}
+		if (!exists($vnodes{$pnode_id})) {
+		    $vnodes{$pnode_id} = [];
+		}
+		push(@{ $vnodes{$pnode_id} }, $sliver);
 	    }
 	    else {
-		push(@nodes, $sliver);
+		$pnodes{$node->node_id()} = $sliver;
 	    }
 	}
     }
@@ -2309,7 +2337,27 @@ sub UnProvision($;$)
 	    next;
 	}
     }
-    foreach my $sliver (@nodes) {
+    #
+    # Process the virtnodes first. If we are going to unprovision the
+    # physical node, then do not bother since they will all get zapped.
+    #
+    foreach my $pnode_id (keys(%vnodes)) {
+	my @sliverlist = @{ $vnodes{$pnode_id} };
+	next
+	    if (exists($pnodes{$pnode_id}));
+
+	#
+	# Unprovision all of the vnodes. 
+	#
+	foreach my $sliver (@sliverlist) {
+	    if ($sliver->UnProvision($nophysfree) != 0) {
+		print STDERR "Could not unprovision $sliver in $self\n";
+		$sliver->SetStatus("broken");
+		next;
+	    }
+	}
+    }
+    foreach my $sliver (values(%pnodes)) {
 	if ($sliver->UnProvision($nophysfree) != 0) {
 	    print STDERR "Could not unprovision $sliver in $self\n";
 	    $sliver->SetStatus("broken");
