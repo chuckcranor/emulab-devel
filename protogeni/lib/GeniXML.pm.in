@@ -580,7 +580,7 @@ sub GetSubnodeOf($)
     } else {
 	my @relations = FindNodes("n:relation", $node)->get_nodelist();
 	foreach my $current (@relations) {
-	    if (GetText("type", $current) == "subnode_of") {
+	    if (GetText("type", $current) eq "subnode_of") {
 		$result = GetText("client_id", $current);
 		last;
 	    }
@@ -597,7 +597,7 @@ sub GetInstantiateOn($)
     } else {
 	my @relations = FindNodes("n:relation", $node)->get_nodelist();
 	foreach my $current (@relations) {
-	    if (GetText("type", $current) == "instantiate_on") {
+	    if (GetText("type", $current) eq "instantiate_on") {
 		$result = GetText("client_id", $current);
 		last;
 	    }
