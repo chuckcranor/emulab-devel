@@ -605,7 +605,7 @@ sub ExtendSlice($$$;$$$) {
 }
 
 #
-# Compute a maximum length for the time a slice could be extended.
+# Estimate an upper bound for permissible expiry times on a slice.
 #
 # Reservation->MaxSliceExtension( $slice, $max, $error )
 #
