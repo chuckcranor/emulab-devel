@@ -7488,6 +7488,7 @@ sub HandleBlockstore($$$$$$$@)
     my $class     = GeniXML::GetText("class", $blockref);
     my $mount     = GeniXML::GetText("mountpoint", $blockref);
     my $readonly  = GeniXML::GetText("readonly", $blockref);
+    my $rwclone   = GeniXML::GetText("rwclone", $blockref);
     my $dataset_id= GeniXML::GetText("dataset", $blockref);
     my $placement = GeniXML::GetText("placement", $blockref);
     my $btype     = "";
@@ -7518,6 +7519,12 @@ sub HandleBlockstore($$$$$$$@)
     }
     else {
 	$readonly = ($readonly eq "true" ? 1 : 0);
+    }
+    if (!defined($rwclone)) {
+	$rwclone = 0;
+    }
+    else {
+	$rwclone = ($rwclone eq "true" ? 1 : 0);
     }
     if (defined($placement)) {
 	if (lc($placement) !~ /^(any|sysvol|nonsysvol)$/i) {
@@ -7698,6 +7705,7 @@ sub HandleBlockstore($$$$$$$@)
     if ($class eq "remote") {
 	$fixed = $bsname = $nodename;
 	push(@attributes, ["protocol", "iSCSI", 1]);
+	push(@attributes, ["rwclone", $rwclone, 0]) if ($rwclone);
 
 	if (defined($dataset_id)) {
 	    if (!GeniHRN::IsValid($dataset_id)) {
