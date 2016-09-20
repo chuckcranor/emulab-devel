@@ -2779,8 +2779,14 @@ sub StartMonitorInternal(;$@)
 	# Lock the slice in case it is doing something else, like taking
 	# a disk image. Just skip this turn.
 	#
-	goto delay
-	    if ($slice->Lock());
+	if ($slice->Lock()) {
+	    #
+	    # Lets make sure the instance still exists. It could disappear
+	    # during the sleep, which would cause the Lock() to fail. 
+	    last
+		if ($instance->Refresh());
+	    goto delay;
+	}
 
 	my $handler = sub {
 	    # This is so we can catch when Parrun gets signaled, but not
