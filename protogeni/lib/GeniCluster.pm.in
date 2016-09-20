@@ -540,5 +540,34 @@ sub SliceCheckReservation($)
     Reservation->FlushAll();
     return GeniResponse->Create(GENIRESPONSE_SUCCESS);
 }
+
+#
+# Get maximum allowed extension for a slice.
+#
+sub SliceMaxExtension($)
+{
+    my ($argref)  = @_;
+    my $slice_urn = $argref->{'slice_urn'};
+    my %blob      = ();
+    my $max;
+    my $reserror;
+
+    my $hasperm = CheckPermission();
+    return $hasperm
+	if (GeniResponse::IsError($hasperm));
+
+    my $slice = GeniSlice->Lookup($slice_urn);    
+    return GeniResponse->Create(GENIRESPONSE_SEARCHFAILED)
+	if (!defined($slice));
+
+    if (Reservation->MaxSliceExtension($slice, \$max, \$reserror)) {
+	Reservation->FlushAll();
+	return GeniResponse->Create(GENIRESPONSE_REFUSED, undef, $reserror);
+    }
+    Reservation->FlushAll();
+    $max = TBDateStringGMT($max);
+    return GeniResponse->Create(GENIRESPONSE_SUCCESS, $max);
+}
+
 # _Always_ make sure that this 1 is at the end of the file...
 1;

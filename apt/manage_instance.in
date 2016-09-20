@@ -53,6 +53,7 @@ sub usage()
     print("Usage: manage_instance extend instance [-m message] days [filename]\n");
     print("Usage: manage_instance denyextension instance [-m message] [filename]\n");
     print("Usage: manage_instance checkreservation instance days\n");
+    print("Usage: manage_instance maxextension instance\n");
     print("Usage: manage_instance moreinfo instance [-m message] [filename]\n");
     print("Usage: manage_instance extendold instance [-f] seconds\n");
     print("Usage: manage_instance utilization instance\n");
@@ -136,6 +137,7 @@ sub DoIdleData();
 sub DoOpenstack();
 sub DoCheckReservation();
 sub CheckReservationInternal($$$);
+sub DoMaxExtension();
 sub WriteCredentials();
 sub StartMonitor();
 sub StartMonitorInternal(;$@);
@@ -251,6 +253,9 @@ elsif ($action eq "openstackstats") {
 }
 elsif ($action eq "checkreservation") {
     DoCheckReservation()
+}
+elsif ($action eq "maxextension") {
+    DoMaxExtension()
 }
 else {
     usage();
@@ -1816,6 +1821,116 @@ sub CheckReservationInternal($$$)
   bad:
     $$perrmsg = $errmsg;
     return $errcode;
+}
+#
+# Ask the reservation system for the maximum date to which this experiment
+# can be extended.
+#
+sub DoMaxExtension()
+{
+    my $slice = $instance->GetGeniSlice();
+    my $errcode = -1;
+    my $errmsg;
+    my $newmax;
+
+    #
+    # Create the webtask object; the web interface gave us an anonymous
+    # webtask, so we can use it before lock.
+    #
+    if (defined($webtask_id)) {
+	$webtask = WebTask->Lookup($webtask_id);
+	fatal("Could not lookup webtask object")
+	    if (!defined($webtask));
+	# Convenient.
+	$webtask->AutoStore(1);
+    }
+    if ($slice->Lock()) {
+	print STDERR "Experiment is busy, cannot lock it. Try again later.\n";
+	exit(GENIRESPONSE_BUSY);
+    }
+    my $coderef = sub {
+	my ($sliver) = @_;
+	my $webtask  = $sliver->webtask();
+	my $domain   = $sliver->domain();
+	my $errmsg;
+
+	return 0
+	    if ($sliver->isAL2S());
+
+	my $response = $sliver->MaxExtension();
+	if (!defined($response)) {
+	    $errmsg = "Internal error calling MaxExtension at $domain";
+	    goto bad;
+	}
+	if ($response->code() != GENIRESPONSE_SUCCESS) {
+	    $errmsg = "Failed to get max extension at $domain: ".
+		$response->output();
+	    
+	    # This is something the user should see.
+	    if ($response->code() == GENIRESPONSE_REFUSED ||
+		$response->code() == GENIRESPONSE_SERVER_UNAVAILABLE ||
+		$response->code() == GENIRESPONSE_BUSY) {
+		$webtask->output($errmsg);
+		$webtask->Exited($response->code());
+		return 1;
+	    }
+	    goto bad;
+	}
+	$webtask->MaxExtension($response->value());
+	return 0;
+      bad:
+	print STDERR "$errmsg\n";
+	$webtask->output($errmsg);
+	$webtask->Exited(-1);
+	return -1;
+    };
+    my @return_codes = ();
+    my @agglist =      $instance->AggregateList();
+    if (ParRun({"maxwaittime" => 99999,
+		"maxchildren" => scalar(@agglist)},
+	    \@return_codes, $coderef, @agglist)) {
+	#
+	# The parent caught a signal. Leave things intact so that we can
+	# kill things cleanly later.
+	#
+	$errmsg = "Internal error calling MaxExtension\n";
+	goto bad;
+    }
+    #
+    # Check the exit codes. 
+    #
+    foreach my $agg (@agglist) {
+	my $code = shift(@return_codes);
+
+	$agg->webtask()->Refresh();
+	if ($code) {
+	    $errmsg  = $agg->webtask()->output();
+	    $errcode = $agg->webtask()->exitcode();
+	    goto bad;
+	}
+	my $max = str2time($agg->webtask()->MaxExtension());
+	$newmax = $max
+	    if (!defined($newmax));
+	$newmax = $max
+	    if ($max < $newmax);
+    }
+    if ($debug) {
+	print "Max extension: " . TBDateStringLocal($newmax)  . "\n";
+    }
+    if (defined($webtask)) {
+	$webtask->MaxExtension(TBDateStringGMT($newmax));
+	$webtask->Exited(0);
+    }
+    $slice->UnLock();
+    exit(0);
+  bad:
+    $slice->UnLock();
+    if (defined($webtask)) {
+	$webtask->output($errmsg);
+	$webtask->Exited($errcode);
+    }
+    exit($errcode);
+    
 }
 
 #

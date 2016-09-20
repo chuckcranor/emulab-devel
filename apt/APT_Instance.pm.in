@@ -2681,5 +2681,32 @@ sub CheckReservation($$)
     return undef;
 }
 
+#
+# Ask the cluster for the maximum extension allowed; return a GMT of
+#
+sub MaxExtension($$)
+{
+    my ($self, $pmax) = @_;
+    my $authority = $self->GetGeniAuthority();
+    my $context   = APT_Geni::RootContext();
+    my $slice     = $self->instance()->GetGeniSlice();
+    return undef
+	if (! (defined($authority) && defined($context) &&
+	       defined($slice)));
+
+    my $args = {
+	"slice_urn"   => $slice->urn(),
+    };
+    my $cmurl = $authority->url();
+    $cmurl =~ s/\/cm$/\/cluster/;
+    $cmurl = devurl($cmurl) if ($usemydevtree);
+
+    my $response = Genixmlrpc::CallMethod($cmurl, $context,
+					  "SliceMaxExtension", $args);
+    return $response;
+  bad:
+    return undef;
+}
+
 # _Always_ make sure that this 1 is at the end of the file...
 1;
