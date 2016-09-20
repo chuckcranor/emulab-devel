@@ -4721,7 +4721,7 @@ sendstoreconf(int sock, int tcp, tmcdreq_t *reqp, char *bscmd, char *vname,
 	char            *mynodeid;
 	char            *class, *protocol, *placement, *mountpoint, *lease;
 	char		*dataset, *server;
-	int		nrows, nattrs, ro;
+	int		nrows, nattrs, ro, clone;
 
 	/* Remember the nodeid we care about up front. */
 	mynodeid = reqp->isvnode ? reqp->vnodeid : reqp->nodeid;
@@ -4742,7 +4742,7 @@ sendstoreconf(int sock, int tcp, tmcdreq_t *reqp, char *bscmd, char *vname,
 	   grab some additional attributes. */
 	nrows = nattrs = (int) mysql_num_rows(res);
 	class = protocol = placement = mountpoint = lease = dataset = "\0";
-	ro = 0;
+	ro = clone = 0;
 	while (nrows--) {
 		char *key, *val;
 		row = mysql_fetch_row(res);
@@ -4762,6 +4762,8 @@ sendstoreconf(int sock, int tcp, tmcdreq_t *reqp, char *bscmd, char *vname,
 			ro = (strcmp(val, "0") == 0) ? 0 : 1;
 		} else if (strcmp(key,"dataset") == 0) {
 			dataset = val;
+		} else if (strcmp(key,"rwclone") == 0) {
+			clone = (strcmp(val, "0") == 0) ? 0 : 1;
 		}
 	}
 
@@ -4814,7 +4816,11 @@ sendstoreconf(int sock, int tcp, tmcdreq_t *reqp, char *bscmd, char *vname,
 		bufp += OUTPUT(bufp, ebufp-bufp,
 			       "%s CLASS=%s PROTO=%s UUID=%s UUID_TYPE=iqn",
 			       bscmd, class, protocol, iqn);
-		bufp += OUTPUT(bufp, ebufp-bufp, " PERMS=%s", ro? "RO" : "RW");
+		/* XXX only return CLONE type to blockstore vnodes */
+		if (clone && strcmp(reqp->type, BS_VNODE_TYPE) != 0)
+			clone = 0;
+		bufp += OUTPUT(bufp, ebufp-bufp, " PERMS=%s",
+			       ro ? "RO" : (clone ? "CLONE" : "RW"));
 
 		if (strlen(mountpoint)) {
 			bufp += OUTPUT(bufp, ebufp-bufp, " MOUNTPOINT=%s",
