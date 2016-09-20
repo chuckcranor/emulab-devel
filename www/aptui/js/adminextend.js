@@ -168,6 +168,8 @@ function (_, sup, moment, ShowIdleGraphs,
 					 trigger: 'hover',
 					 placement: 'auto',
 				     });
+				     // Update the Max Extension
+				     DoMaxExtension();
 				 }
 			     });
     }
@@ -255,6 +257,24 @@ function (_, sup, moment, ShowIdleGraphs,
 	var xmlthing = sup.CallServerMethod(null, "status", "Lockdown",
 					     {"uuid" : window.UUID,
 					      "lockdown" : lockdown});
+	xmlthing.done(callback);
+    }
+
+    //
+    // Get Max Extension and update the table.
+    //
+    function DoMaxExtension()
+    {
+	var callback = function(json) {
+	    if (json.code) {
+		alert("Failed to change lockdown: " + json.value);
+		return;
+	    }
+	    $('#max-extension').html(moment(json.value)
+				     .format("LLL"));
+	}
+	var xmlthing = sup.CallServerMethod(null, "status", "MaxExtension",
+					    {"uuid" : window.UUID});
 	xmlthing.done(callback);
     }
 

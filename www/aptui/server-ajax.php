@@ -160,6 +160,8 @@ $routing = array("myprofiles" =>
 						     "Do_Linktest",
 						 "OpenstackStats" =>
 						     "Do_OpenstackStats",
+						 "MaxExtension" =>
+						     "Do_MaxExtension",
 						 "dismissExtensionDenied" =>
 						     "Do_DismissExtensionDenied")),
 		 "approveuser" =>

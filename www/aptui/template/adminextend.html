@@ -354,22 +354,25 @@ pre {
 		   data-delay='{"hide":1000, "show":500}'
 		   data-content="When checked, only administrator can extend
 				 this experiment. No free time is granted to
-				 user at all.">Lockout:</span></td>
-		<td><input type="checkbox" id="lockout-checkbox"
-			   <% if (expinfo.lockout) { %>checked<% } %> >
+				 user at all.">Lockout:</span>
+		   <input type="checkbox" id="lockout-checkbox"
+			  <% if (expinfo.lockout) { %>checked<% } %> >
 		</td>
 		<td>
-		  <span data-toggle='popover'
-		    data-delay='{"hide":1000, "show":500}'
-		    data-content="When checked, the experiment 
+		   <span data-toggle='popover'
+			 data-delay='{"hide":1000, "show":500}'
+			 data-content="When checked, the experiment 
 				  cannot be terminated until the lockdown bit
 				  is cleared by an admininstrator, or if the 
 				  user verifies 
 				  the lockdown code when clicking the Terminate
-				  button.">Lockdown:</span></td>
-		<td><input type="checkbox" id="lockdown-checkbox"
-			   <% if (expinfo.lockdown) { %>checked<% } %> >
+				  button.">Lockdown:</span>
+		   <input type="checkbox" id="lockdown-checkbox"
+			  <% if (expinfo.lockdown) { %>checked<% } %> >
 		</td>
+		<td>Max Ext:</td>
+		<td id="max-extension">...</td>
+		<td></td>
 	    </tbody>
 	  </table>
 	</div>

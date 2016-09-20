@@ -1861,6 +1861,45 @@ function Do_OpenstackStats()
     SPITAJAX_RESPONSE($blob);
 }
 
+#
+# Max extension allowed.
+#
+function Do_MaxExtension()
+{
+    global $instance, $creator, $TBADMINGROUP;
+
+    if (StatusSetupAjax(0)) {
+	return;
+    }
+    $uuid = $instance->uuid();
+    $webtask = WebTask::CreateAnonymous();
+    # XXX Need to do this as elabman cause of emulab.key. Pondering.
+    $retval = SUEXEC("elabman", $TBADMINGROUP,
+		     "webmanage_instance -t " . $webtask->task_id() . " -- ".
+                     "  maxextension $uuid",
+		     SUEXEC_ACTION_IGNORE);
+    $webtask->Refresh();
+
+    if ($retval != 0) {
+        if ($webtask->exited()) {
+            SPITAJAX_ERROR($webtask->exitcode(), $webtask->TaskValue("output"));
+        }
+        elseif ($retval < 0) {
+            SPITAJAX_ERROR($retval, "Internal error, cannot proceed.");
+            # Notify tbops.
+            SUEXECERROR(SUEXEC_ACTION_CONTINUE);
+        }
+        else {
+            SPITAJAX_ERROR($retval, $suexec_output);
+        }
+        $webtask->Delete();
+        return;
+    }
+    $blob = $webtask->TaskValue("MaxExtension");
+    $webtask->Delete();
+    SPITAJAX_RESPONSE($blob);
+}
+
 # Local Variables:
 # mode:php
 # End:
