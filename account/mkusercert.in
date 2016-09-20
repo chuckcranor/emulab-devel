@@ -43,7 +43,7 @@ sub usage()
     print("Usage: mkusercert [-d] [-o] [-r] [-g] [-p password] <user>\n");
     exit(-1);
 }
-my $optlist  = "dp:ogrc:C";
+my $optlist  = "dp:ogrc:CP";
 my $debug    = 0;
 my $output   = 0;
 my $password = "";
@@ -150,24 +150,8 @@ if (defined($options{"r"})) {
 if (defined($options{"g"})) {
     $geniflag = 1;
 }
-if (defined($options{"p"})) {
-    $password = $options{"p"};
-
-    #
-    # Make sure its all escaped since any printable char is allowed.
-    #
-    if ($password =~ /^([\040-\176]*)$/) {
-	$password = $1;
-    }
-    else {
-	die("Tainted argument: $password\n");
-    }
-    $db_password = DBQuoteSpecial($password);
-    $sh_password = $password;
-    $sh_password =~ s/\'/\'\\\'\'/g;
-    $sh_password = "$sh_password";
+if (defined($options{"p"}) || defined($options{"P"})) {
     $encrypted = 1;
-    $days      = 365;
 }
 if (@ARGV != 1) {
     usage();
@@ -200,6 +184,29 @@ if (! defined($target_user)) {
 my $this_user = User->LookupByUnixId($UID);
 if (! defined($this_user)) {
     fatal("You ($UID) do not exist!");
+}
+
+if (defined($options{"p"}) || defined($options{"P"})) {
+    if (defined($options{"p"})) {
+	$password = $options{"p"};
+    }
+    elsif ($target_user->SSLPassPhrase(1, \$password)) {
+	fatal("No stored passphrase for -P option");
+    }
+
+    #
+    # Make sure its all escaped since any printable char is allowed.
+    #
+    if ($password =~ /^([\040-\176]*)$/) {
+	$password = $1;
+    }
+    else {
+	die("Tainted argument: $password\n");
+    }
+    $db_password = DBQuoteSpecial($password);
+    $sh_password = $password;
+    $sh_password =~ s/\'/\'\\\'\'/g;
+    $sh_password = "$sh_password";
 }
 
 # Might need the target user (-C options).
