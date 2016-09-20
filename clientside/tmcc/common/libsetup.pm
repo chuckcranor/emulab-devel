@@ -3564,7 +3564,7 @@ sub getstorageconfig($;$) {
 	'CLASS'	  => '(SAN|local)',
 	'HOSTID'  => '[-\w\.]+',
 	'MOUNTPOINT' => '\/[-\w\/\.]+',
-	'PERMS'	  => '(RO|RW)',
+	'PERMS'	  => '(RO|RW|CLONE)',
 	'PERSIST' => '(0|1)',
 	'PROTO'	  => '(iSCSI|local|SCSI|SAS|SATA|PATA|IDE)',
 	'UUID'	  => '[-\w\.:]+',
@@ -3597,9 +3597,13 @@ sub getstorageconfig($;$) {
 	    #
 	    # Validate the info and untaint.
 	    #
+	    # Ignore unknown keywords (for compat), fail on unknown values.
+	    # XXX we could also ignore unknown values, but that might leave
+	    # us with an undefined/unexpected/undesirable default value.
+	    #
 	    if (!exists($fields{$key})) {
-		warn("*** WARNING: invalid keyword in storageinfo: '$key'\n");
-		return -1;
+		warn("*** WARNING: invalid keyword '$key' in storageinfo ignored\n");
+		next;
 	    }
 	    if ($val !~ /^$fields{$key}$/) {
 		warn("*** WARNING: invalid value for $key in storageinfo: '$val'\n");

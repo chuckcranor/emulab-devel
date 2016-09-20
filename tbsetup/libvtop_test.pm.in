@@ -1626,14 +1626,19 @@ sub LoadVirtNodes($)
     }
 
     #
-    # Make a quick pass of the virt_blockstores looking for RO attributes.
+    # Make a quick pass of the virt_blockstores looking for RO and RW clone
+    # attributes.
     # We do this before we make the main pass below so that we have this
     # info available when we lookup a lease.
     #
     my %roleases = ();
+    my %cloneleases = ();
     foreach my $virt_bs_attr ($self->virt_blockstore_attributes()->Rows()) {
 	if ($virt_bs_attr->attrkey() eq "readonly") {
 	    $roleases{$virt_bs_attr->vname()} = $virt_bs_attr->attrvalue();
+	}
+	elsif ($virt_bs_attr->attrkey() eq "rwclone") {
+	    $cloneleases{$virt_bs_attr->vname()} = $virt_bs_attr->attrvalue();
 	}
     }
 
@@ -1699,19 +1704,21 @@ sub LoadVirtNodes($)
 	    }
 
 	    # Do sanity/permission checks based on requested mode (RW/RO)
-	    if (exists($roleases{$vname}) && $roleases{$vname} == 1) {
-		# Does user have RO rights to this lease?
+	    if (exists($roleases{$vname}) && $roleases{$vname} == 1 ||
+		exists($cloneleases{$vname}) && $cloneleases{$vname} == 1) {
+		# Does user have read rights to this lease?
 		if (!$lease->AccessCheck($self->realuser(),
 					 LEASE_ACCESS_READ())) {
-		    tberror("Not allowed to use dataset $lease in RO mode\n");
+		    tberror("Not allowed to use dataset $lease in ".
+			    "RO or RW-clone mode\n");
 		    return -1;
 		}
 
 		# For shared use, a snapshot must exist
 		if (!$exclusive) {
 		    if (!$snapshot) {
-			tberror("Dataset $lease has no snapshot ".
-				"and cannot be mapped RO at this time.\n");
+			tberror("Dataset $lease has no snapshot and cannot ".
+				"be mapped RO or cloned at this time.\n");
 			return -1;
 		    }
 		}

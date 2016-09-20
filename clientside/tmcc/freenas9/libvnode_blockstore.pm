@@ -706,17 +706,23 @@ sub exportSlice($$$$) {
     my $iqn = lc($1);
 
     my $isro = "false";
-    if (exists($sconf->{'PERMS'}) && $sconf->{'PERMS'} eq "RO") {
-	$isro = "true";
+    my $isclone = "false";
+    if (exists($sconf->{'PERMS'})) {
+	if ($sconf->{'PERMS'} eq "RO") {
+	    $isclone = "true";
+	    $isro = "true";
+	}
+	elsif ($sconf->{'PERMS'} eq "CLONE") {
+	    $isclone = "true";
+	}
     }
 
     #
-    # XXX hack temporary support for RO sharing of persistent blockstores.
+    # If the mapping to a persistent store is RO or CLONE, then we will
+    # create a read-only (RO) or read-write (CLONE) ephemeral clone for
+    # each such mapping.
     #
-    # If the mapping to a persistent store is RO, then we will create
-    # an ephemeral clone for each such mapping.
-    #
-    if ($volume =~ /^lease-\d+$/ && $isro eq "true") {
+    if ($volume =~ /^lease-\d+$/ && $isclone eq "true") {
 	#
 	# If no snapshot exists, create one. VolumeClone must have
 	# a snapshot to hang the clone on. If a snapshot already exists
@@ -735,7 +741,7 @@ sub exportSlice($$$$) {
 	    $tstamp = time();
 	    if (freenasVolumeSnapshot($pool, $volume, $tstamp)) {
 		warn("*** ERROR: blockstore_exportSlice: $volname: ".
-		     "Could not create snapshot for RO mapping");
+		     "Could not create snapshot for RO/Clone mapping");
 		return -1;
 	    }
 	} else {
@@ -751,7 +757,7 @@ sub exportSlice($$$$) {
 	#
 	if (freenasVolumeClone($pool, $volume, $vnode_id)) {
 	    warn("*** ERROR: blockstore_exportSlice: $volname: ".
-		 "Could not create clone for RO mapping");
+		 "Could not create clone for RO/Clone mapping");
 	    if ($tstamp) {
 		freenasVolumeDesnapshot($pool, $volume, $tstamp);
 	    }
@@ -886,7 +892,7 @@ sub exportSlice($$$$) {
 	return -1;
 
 	# Check requested perms.
-	if ($isro eq "false") {
+	if ($isclone eq "false") {
 	    warn("*** ERROR: blockstore_exportSlice: $volname: ".
 		 "Cannot re-export in-use dataset as RW!");
 	    return -1;

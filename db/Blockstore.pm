@@ -760,8 +760,16 @@ sub IsReadOnly($) {
 }
 
 #
+# Is this reservation a RW clone?
+#
+sub IsRWClone($) {
+    my ($self) = @_;
+
+    return $self->HowUsed()->{'rwclone'};
+}
+
+#
 # How is the associated blockstore used in this reservation?
-# Currently the only thing returned in the hash is the "readonly" flag.
 #
 sub HowUsed($) {
     my ($self) = @_;
@@ -769,6 +777,7 @@ sub HowUsed($) {
 
     my $rethash = {
 	'readonly' => 0,
+	'rwclone' => 0,
     };
 
     my $virtexpt = VirtExperiment->Lookup(Experiment->Lookup($self->exptidx()));
@@ -778,9 +787,15 @@ sub HowUsed($) {
     }
 
     my @attrs = ($self->vname(), "readonly");
-    my $rorow = $virtexpt->Find("virt_blockstore_attributes", @attrs);
-    if ($rorow) {
-	$rethash->{'readonly'} = int($rorow->attrvalue());
+    my $row = $virtexpt->Find("virt_blockstore_attributes", @attrs);
+    if ($row) {
+	$rethash->{'readonly'} = int($row->attrvalue());
+    }
+
+    @attrs = ($self->vname(), "rwclone");
+    $row = $virtexpt->Find("virt_blockstore_attributes", @attrs);
+    if ($row) {
+	$rethash->{'rwclone'} = int($row->attrvalue());
     }
 
     return $rethash;
