@@ -1577,7 +1577,7 @@ sub GenerateStatusBlob($)
     my $node = Node->LookupSync($resource_id);
     if (!defined($node)) {
 	print STDERR "Could not map node $resource_id to its object\n";
-	return -1;
+	return undef;
     }
     my ($nodestatus) = $node->GetStatus() || "unknown";
 
