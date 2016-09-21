@@ -112,8 +112,7 @@ CREATE TABLE `apt_datasets` (
   `credential_string` text,
   PRIMARY KEY (`idx`),
   UNIQUE KEY `plid` (`pid_idx`,`dataset_id`),
-  UNIQUE KEY `uuid` (`uuid`),
-  UNIQUE KEY `remote_uuid` (`remote_uuid`)
+  UNIQUE KEY `uuid` (`uuid`)
 ) ENGINE=MyISAM DEFAULT CHARSET=latin1;
 
 --
