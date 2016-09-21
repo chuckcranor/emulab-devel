@@ -339,7 +339,7 @@ sub DoCreate()
 
     my $dataset = APT_Dataset->Create($blob);
     if (!defined($dataset)) {
-	fatal("Internal error creating dataset object");
+	fatal("Error creating dataset object");
     }
     
     # new dataset is returned locked. If we have instance, try to lock

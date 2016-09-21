@@ -182,6 +182,8 @@ sub Refresh($)
 sub Create($$)
 {
     my ($class, $argref) = @_;
+    my $pid = $argref->{'pid'};
+    my $id  = $argref->{'dataset_id'};
     my $uuid;
 
     if (exists($argref->{'uuid'})) {
@@ -205,6 +207,16 @@ sub Create($$)
     if ($query_result->numrows) {
 	DBQueryWarn("unlock tables");
 	tberror("Dataset uuid $uuid already exists!");
+	return undef;
+    }
+
+    $query_result =
+	DBQueryWarn("select uuid from apt_datasets ".
+		    "where pid='$pid' and dataset_id='$id'");
+
+    if ($query_result->numrows) {
+	DBQueryWarn("unlock tables");
+	tberror("Dataset $pid/$id already exists!");
 	return undef;
     }
 
