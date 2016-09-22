@@ -180,7 +180,7 @@ class Profile
 	else {
 	    $safe_version = addslashes($version);
 	    $query_result =
-		DBQueryWarn("select i.profileid,i.version ".
+		DBQueryWarn("select i.profileid,v.version ".
 			    "  from apt_profiles as i ".
 			    "left join apt_profile_versions as v on ".
 			    "     v.profileid=i.profileid ".
