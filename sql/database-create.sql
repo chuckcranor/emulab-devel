@@ -4299,6 +4299,23 @@ CREATE TABLE `reposition_status` (
 ) ENGINE=MyISAM DEFAULT CHARSET=latin1;
 
 --
+-- Table structure for table `reservation_history`
+--
+
+DROP TABLE IF EXISTS `reservation_history`;
+CREATE TABLE `reservation_history` (
+  `pid` varchar(48) NOT NULL DEFAULT '',
+  `nodes` smallint(5) NOT NULL DEFAULT '0',
+  `type` varchar(30) NOT NULL DEFAULT '',
+  `start` datetime DEFAULT NULL,
+  `end` datetime DEFAULT NULL,
+  `uid` varchar(8) NOT NULL DEFAULT '',
+  `notes` mediumtext,
+  `admin_notes` mediumtext,
+  KEY `start` (`start`)
+) ENGINE=MyISAM DEFAULT CHARSET=latin1;
+
+--
 -- Table structure for table `reservation_version`
 --
 
