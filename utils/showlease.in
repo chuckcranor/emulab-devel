@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2013-2014 University of Utah and the Flux Group.
+# Copyright (c) 2013-2016 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -37,6 +37,7 @@ sub usage()
     print STDERR "   -d      Print additional debug info\n";
     print STDERR "   -a      Show all leases (admin only)\n";
     print STDERR "   -g      Show only leases in the 'grace' state\n";
+    print STDERR "   -l      Long listing\n";
     print STDERR "   -L      Show lock holders (admin only)\n";
     print STDERR "   -D      Describe the system-wide limits on leases\n";
     print STDERR "   -p pid  Show all leases for project <pid>\n";
@@ -44,7 +45,7 @@ sub usage()
     print STDERR "   lid ... Show named leases (name is <pid>/<id>)\n";
     exit(-1);
 }
-my $optlist  = "dhaLDp:u:g";
+my $optlist  = "dhaLDp:u:gl";
 my $debug = 0;
 my $pid;
 my $uid;
@@ -52,6 +53,7 @@ my $showall;
 my $showgrace;
 my $showlockers;
 my $showsitevars;
+my $verbose = 0;
 my @lids = ();
 my %sitevars = ();
 
@@ -104,6 +106,9 @@ if (defined($options{a})) {
 }
 if (defined($options{g})) {
     $showgrace = 1;
+}
+if (defined($options{l})) {
+    $verbose = 1;
 }
 if (defined($options{L})) {
     $showlockers = 1;
@@ -217,19 +222,23 @@ if (@lids > 0) {
     my $fmt;
 
     if ($showlockers) {
-	$fmt = "%-24s %-8s %-10s %-6s %-15s %s\n";
+	$fmt = "%-50s %-8s %-10s %-6s %-15s %s\n";
 
-	printf $fmt, "Pid/Name", "Owner", "Type", "State",
+	printf $fmt, "Pid/Gid/Name", "Owner", "Type", "State",
 	    "Lock Time", "Locker Proc ID";
     } elsif ($showgrace) {
-	$fmt = "%-24s %-8s %-10s %-11s %-15s %-15s %-15s %-15s %-15s\n";
+	$fmt = "%-50s %-8s %-10s %-11s %-15s %-15s %-15s %-15s %-15s\n";
 
-	printf $fmt, "Pid/Name", "Owner", "Type", "Exp Policy", "Grace Start", "Grace End", "Last Checked", "Last Used", "Expiration";
-    } else {
-	$fmt = "%-24s %-8s %-10s %-6s %3s %3s %-15s %-15s %-15s %s\n";
+	printf $fmt, "Pid/Gid/Name", "Owner", "Type", "Exp Policy", "Grace Start", "Grace End", "Last Checked", "Last Used", "Expiration";
+    } elsif ($verbose) {
+	$fmt = "%-50s %-8s %-10s %-6s %3s %3s %-15s %-15s %-15s %s\n";
 
-	printf $fmt, "Pid/Name", "Owner", "Type", "State", "Use", "Ext",
+	printf $fmt, "Pid/Gid/Name", "Owner", "Type", "State", "Use", "Ext",
 	    "Inception", "End", "Last used", "Attrs";
+    } else {
+	$fmt = "%-50s %-8s %-10s %-6s %3s\n";
+
+	printf $fmt, "Pid/Gid/Name", "Owner", "Type", "State", "Use";
     }
 
     foreach my $lease (@lids) {
@@ -311,9 +320,14 @@ if (@lids > 0) {
 	if (!$lusers) {
 	    $lusers = ();
 	}
-	printf $fmt, $lname, $lease->owner(), $lease->type(),
-	    $states{$lease->state()}, int(@$lusers), $lease->renewals(),
-	    $stime, $etime, $ltime, $attrstr;
+	if ($verbose) {
+	    printf $fmt, $lname, $lease->owner(), $lease->type(),
+		$states{$lease->state()}, int(@$lusers), $lease->renewals(),
+		$stime, $etime, $ltime, $attrstr;
+	} else {
+	    printf $fmt, $lname, $lease->owner(), $lease->type(),
+		$states{$lease->state()}, int(@$lusers);
+	}
     }
 }
 

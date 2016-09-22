@@ -6089,6 +6089,11 @@ class dataset:
                     argstr += " -a "
                     pass
                 pass
+            elif opt == "verbose":
+                if xbool(val):
+                    argstr += " -l "
+                    pass
+                pass
             elif opt == "proj":
                 argstr += " -p "
                 argstr += escapeshellarg(val)
