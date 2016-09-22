@@ -171,3 +171,12 @@ window.APT_OPTIONS.fetchTemplate = function (name) {
   }
   return result;
 };
+
+window.APT_OPTIONS.fetchTemplateList = function (nameList) {
+  var result = {};
+  for (var name in nameList)
+  {
+    result[name] = window.APT_OPTIONS.fetchTemplate(name);
+  }
+  return result;
+};

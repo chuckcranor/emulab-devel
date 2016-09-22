@@ -40,6 +40,8 @@ if (isset($_REQUEST["embedded"]) && $_REQUEST["embedded"]) {
     $embedded = 1;
 }
 
+$PORTAL_TEMPLATES = array();
+
 # Flag to signal that a requires was spit. For errors.
 $spatrequired = 0;
 
@@ -475,7 +477,7 @@ function GET_ANNOUNCEMENTS($user)
 }
 
 $PAGEFOOTER_FUNCTION = function($ignored = NULL) {
-    global $PORTAL_HELPFORUM, $PORTAL_NSFNUMBER, $embedded;
+    global $PORTAL_HELPFORUM, $PORTAL_NSFNUMBER, $embedded, $PORTAL_TEMPLATES;
 
     echo "</div>
       </div>\n";
@@ -509,8 +511,9 @@ $PAGEFOOTER_FUNCTION = function($ignored = NULL) {
         </div>
        </div>
       </div>
-      <!-- Placed at the end of the document so the pages load faster -->
-     </body></html>\n";
+      <!-- Placed at the end of the document so the pages load faster -->\n";
+    EchoTemplateList($PORTAL_TEMPLATES);
+    echo "</body></html>\n";
 };
 
 function SPITFOOTER($ignored = null)

@@ -10,10 +10,11 @@ function (_, sup, aptforms)//,
 {
   'use strict';
 
-  var pageString = APT_OPTIONS.fetchTemplate('genilib-editor');
-  var oopsString = APT_OPTIONS.fetchTemplate('oops-modal');
-  var waitwaitString = APT_OPTIONS.fetchTemplate('waitwait-modal');
-  var manageString = APT_OPTIONS.fetchTemplate('manage-profile');
+  var templates = APT_OPTIONS.fetchTemplateList('genilib-editor', 'oops-modal', 'waitwait-modal', 'manage-profile');
+  var pageString = templates['genilib-editor'];
+  var oopsString = templates['oops-modal'];
+  var waitwaitString = templates['waitwait-modal'];
+  var manageString = templates['manage-profile'];
   
   var editor;
   var isWaiting = false;
