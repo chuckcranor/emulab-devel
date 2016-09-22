@@ -222,21 +222,21 @@ if (@lids > 0) {
     my $fmt;
 
     if ($showlockers) {
-	$fmt = "%-50s %-8s %-10s %-6s %-15s %s\n";
+	$fmt = "%-48s %-8s %-10s %-6s %-15s %s\n";
 
 	printf $fmt, "Pid/Gid/Name", "Owner", "Type", "State",
 	    "Lock Time", "Locker Proc ID";
     } elsif ($showgrace) {
-	$fmt = "%-50s %-8s %-10s %-11s %-15s %-15s %-15s %-15s %-15s\n";
+	$fmt = "%-48s %-8s %-10s %-11s %-15s %-15s %-15s %-15s %-15s\n";
 
 	printf $fmt, "Pid/Gid/Name", "Owner", "Type", "Exp Policy", "Grace Start", "Grace End", "Last Checked", "Last Used", "Expiration";
     } elsif ($verbose) {
-	$fmt = "%-50s %-8s %-10s %-6s %3s %3s %-15s %-15s %-15s %s\n";
+	$fmt = "%-48s %-8s %-10s %-6s %3s %3s %-15s %-15s %-15s %s\n";
 
 	printf $fmt, "Pid/Gid/Name", "Owner", "Type", "State", "Use", "Ext",
 	    "Inception", "End", "Last used", "Attrs";
     } else {
-	$fmt = "%-50s %-8s %-10s %-6s %3s\n";
+	$fmt = "%-48s %-8s %-10s %-6s %3s\n";
 
 	printf $fmt, "Pid/Gid/Name", "Owner", "Type", "State", "Use";
     }
