@@ -355,12 +355,63 @@ sub GetAttribute($$)
     return $value;
 }
 
+#
+# Archive any reservations whose times have passed.  This should be
+# called occasionally to maintain performance (avoid clogging up the
+# future_reservations table with things that don't matter any more, and
+# to keep proper records in the reservation_history table), but isn't
+# actually required for correctness.
+#
+sub Tidy($)
+{
+    my ($class) = @_;
+
+    my $query_result = DBQueryWarn( "SELECT now()" );
+    return undef
+	if( !$query_result || !$query_result->numrows );
+
+    my ($stamp) = $query_result->fetchrow_array();
+    
+    $query_result = DBQueryWarn( "SELECT COUNT(*) FROM " .
+				    "future_reservations WHERE " .
+				    "end < '$stamp'" );
+    return undef
+	if( !$query_result || !$query_result->numrows );
+
+    my ($count) = $query_result->fetchrow_array();
+
+    if( !$count ) {
+	# no tidying required
+	return 0;
+    }
+
+    DBQueryFatal( "LOCK TABLES future_reservations WRITE, " .
+		  "reservation_history WRITE, " .
+		  "future_reservation_attributes AS a WRITE, " .
+		  "future_reservations AS r READ" );
+    DBQueryFatal( "INSERT INTO reservation_history( pid, nodes, type, " .
+		  "start, end, uid, notes, admin_notes ) " .
+		  "SELECT pid, nodes, type, start, end, uid, notes, " .
+		  "admin_notes FROM future_reservations WHERE " .
+		  "end < '$stamp'" );
+    DBQueryFatal( "DELETE FROM future_reservations WHERE " .
+		  "end < '$stamp'" );
+    DBQueryFatal( "DELETE a FROM future_reservation_attributes AS a " .
+		  "LEFT OUTER JOIN future_reservations AS r ON " .
+		  "a.reservation_idx=r.idx WHERE r.idx IS NULL" );
+    DBQueryFatal( "UNLOCK TABLES" );
+
+    return 1;
+}
+
 sub LookupAll($$)
 {
     my ($class, $type) = @_;
     
     return $cache{$type} if( exists( $cache{$type} ) );
 
+    Tidy( $class );
+    
     my @reservations = ();
 
     my $query = $PGENISUPPORT ? "SELECT COUNT(*), e.pid, e.eid, " .
