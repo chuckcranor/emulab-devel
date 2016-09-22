@@ -267,11 +267,24 @@ function (_, sup, moment, ShowIdleGraphs,
     {
 	var callback = function(json) {
 	    if (json.code) {
-		alert("Failed to change lockdown: " + json.value);
+		console.info("Failed to get max extension: " + json.value);
 		return;
 	    }
 	    $('#max-extension').html(moment(json.value)
 				     .format("LLL"));
+
+	    /*
+	     * Look to see if the number of days requested is going to be
+	     * greater then the max slice extension. If it is, then we want
+	     * to make sure that is noticed.
+	     */
+	    var now = new Date();
+	    var max = new Date(json.value);
+	    now.setDate(now.getDate() + window.DAYS);
+	    if (now.getTime() > max.getTime()) {
+		alert("Granting this full extension would violate the " +
+		      "current maximum allowed extension.");
+	    }
 	}
 	var xmlthing = sup.CallServerMethod(null, "status", "MaxExtension",
 					    {"uuid" : window.UUID});
