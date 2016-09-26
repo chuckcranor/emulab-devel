@@ -944,7 +944,15 @@ sub LoadPhysInfo($)
 sub interfacespeedmbps($$$)
 {
     my ($self, $type, $which) = @_;
-        
+
+    if (!exists($self->{'IFACECAPS'}->{$type})) {
+	print STDERR "interfacespeedmbps: $type does not exist\n";
+	return 0;
+    }
+    if (!exists($self->{'IFACECAPS'}->{$type}->{"${which}_defspeed"})) {
+	print STDERR "interfacespeedmbps: $type $which does not exist\n";
+	return 0;
+    }
     return $self->{'IFACECAPS'}->{$type}->{"${which}_defspeed"}/1000.0;
 }
 
