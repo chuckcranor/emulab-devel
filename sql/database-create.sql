@@ -2264,6 +2264,7 @@ CREATE TABLE `image_notifications` (
   `imageid` int(8) unsigned NOT NULL default '0',
   `version` int(8) unsigned NOT NULL default '0',
   `origin_uuid` varchar(64) default NULL,
+  `notified` datetime default NULL,
   PRIMARY KEY  (`imageid`,`version`)
 ) ENGINE=MyISAM DEFAULT CHARSET=latin1;
 
@@ -2380,6 +2381,7 @@ CREATE TABLE `image_updates` (
   `updater` varchar(8) default NULL,
   `updater_idx` mediumint(8) unsigned NOT NULL default '0',
   `updater_urn` varchar(128) default NULL,
+  `updated` datetime default NULL,
   `url` varchar(255) NOT NULL default '',
   `credential_string` text,
   PRIMARY KEY  (`imageid`)

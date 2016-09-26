@@ -3687,7 +3687,7 @@ sub TriggerImageUpdate($)
     }
     emdb::DBQueryWarn("insert into image_updates set ".
 		      "  imageid='$imageid',url=$safe_url, ".
-		      "  updater_urn=$safe_urn $update_fields");
+		      "  updater_urn=$safe_urn,updated=now() $update_fields");
     $localimage->Unlock();
 
     #

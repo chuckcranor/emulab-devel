@@ -1498,7 +1498,7 @@ if (! ($isglobal && $pid eq TBOPSPID()) || !$doprovenance) {
 if (defined($origin_uuid)) {
     DBQueryWarn("replace into image_notifications set ".
 		"  imageid='$imageid',version='$version', ".
-		"  origin_uuid='$origin_uuid'");
+		"  origin_uuid='$origin_uuid',notified=now()");
     # This can fail, we will catch it later from the CM daemon when
     # we try again. Use the nolock option since we have it.
     system("$TRIGGERUPDATE -l $imageid");

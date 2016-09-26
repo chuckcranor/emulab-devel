@@ -157,7 +157,7 @@ if ($force) {
 
 	emdb::DBQueryWarn("replace into image_notifications set ".
 			  "  imageid='$imageid',version='$version', ".
-			  "  origin_uuid='$origin_uuid'");
+			  "  origin_uuid='$origin_uuid',notified=now()");
     }
 }
 if (GeniImage::TriggerUpdate($image, \$errormsg)) {
