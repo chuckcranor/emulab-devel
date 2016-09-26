@@ -76,7 +76,7 @@ if (0) {
 my $IMS_credential;
 
 # Debugging
-my $usemydevtree  = 1;
+my $usemydevtree  = 0;
 
 # Export.
 sub IMSURL()
