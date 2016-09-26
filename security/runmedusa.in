@@ -204,7 +204,8 @@ sub RunMedusa($$)
     }
     if ($?) {
 	if ($? == 15) {
-	    fatal("$MEDUSA runaway was just killed!");
+	    print STDERR "$MEDUSA runaway was just killed!\n";
+	    exit(-1);
 	}
 	else {
 	    fatal("$MEDUSA exited with status $?");
