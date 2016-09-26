@@ -195,6 +195,9 @@ sub PostImageInfo($)
 			"Not allowed to postimageinfo for the image domain")
 	if ($image_hrn->domain() ne $caller_hrn->domain());
 
+    return GeniResponse->MalformedArgsResponse("IMINDS is messed up")
+	if (0 && $image_hrn->domain() eq "wall1.ilabt.iminds.be");
+
     InitDBHandle();
 
     #
@@ -258,6 +261,13 @@ sub VerifyBlob($)
     foreach my $key ("urn", "creator_urn", "project_urn") {
 	return GeniResponse->MalformedArgsResponse("Missing $key")
 	    if (! (exists($blob->{$key}) && defined($blob->{$key})));
+
+	return GeniResponse->MalformedArgsResponse("URN too long $key")
+	    if (length($blob->{$key}) >= 128);
+
+	my @tokens = split(/[\n\r]/, $blob->{$key});
+	return GeniResponse->MalformedArgsResponse("URN has newlines $key")
+	    if (scalar(@tokens) > 1);
 
 	return GeniResponse->MalformedArgsResponse("Malformed URN: $key")
 	    if (!GeniHRN::IsValid($blob->{$key}));
@@ -459,16 +469,18 @@ sub NewImage($)
 	return GeniResponse->Create(GENIRESPONSE_ERROR);
     }
     if ($query_result->numrows) {
-	print STDERR "Deleting existing image $image_urn with ".
-	    "stale uuid $image_uuid\n";
+	while (my ($old_uuid) = $query_result->fetchrow_array()) {
+	    print STDERR "Deleting existing image $image_urn with ".
+		"stale uuid $old_uuid\n";
 	
-	$DB->QueryWarn("delete images,image_versions from images ".
-		       "inner join image_versions on ".
-		       "      images.urn=image_versions.urn and ".
-		       "      images.image_uuid=image_versions.image_uuid ".
-		       "where images.urn=$safe_urn and ".
-		       "      images.image_uuid=$safe_uuid")
-	    or GeniResponse->Create(GENIRESPONSE_ERROR);
+	    $DB->QueryWarn("delete images,image_versions from images ".
+			   "inner join image_versions on ".
+			   "      images.urn=image_versions.urn and ".
+			   "      images.image_uuid=image_versions.image_uuid ".
+			   "where images.urn=$safe_urn and ".
+			   "      images.image_uuid='$old_uuid'")
+		or GeniResponse->Create(GENIRESPONSE_ERROR);
+	}
     }
 
     #
