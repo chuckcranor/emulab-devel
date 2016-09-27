@@ -1,5 +1,5 @@
 #
-# Copyright (c) 2000-2012 University of Utah and the Flux Group.
+# Copyright (c) 2000-2013, 2016 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -24,7 +24,7 @@
 SRCDIR		= @srcdir@
 TESTBED_SRCDIR	= @top_srcdir@
 OBJDIR		= ../..
-SUBDIR		= tbsetup/snmpit_old
+SUBDIR		= tbsetup/snmpit
 ISMAINSITE	= @TBMAINSITE@
 SYSTEM         := $(shell uname -s)
 
@@ -32,12 +32,16 @@ include $(OBJDIR)/Makeconf
 
 SUBDIRS		= 
 
-BIN_STUFF	= snmpit_old snmpit_ancient 
-LIB_STUFF       = portstats snmpit_intel.pm \
+BIN_STUFF	= snmpit portstats
+LIB_STUFF       = snmpit_intel.pm \
                   snmpit_cisco.pm snmpit_lib.pm \
 		  snmpit_cisco_stack.pm snmpit_intel_stack.pm \
 		  snmpit_foundry.pm snmpit_stack.pm snmpit_remote.pm \
-		  snmpit_nortel.pm snmpit_hp.pm snmpit_apcon.pm
+		  snmpit_nortel.pm snmpit_hp.pm snmpit_apcon.pm \
+		  snmpit_arista.pm snmpit_arista_switch_daemon.py \
+		  snmpit_mellanox.pm MLNX_XMLGateway.pm \
+                  snmpit_force10.pm force10_expect.pm snmpit_h3c.pm \
+                  snmpit_libNetconf.pm
 
 #
 # Force dependencies on the scripts so that they will be rerun through
@@ -49,8 +53,9 @@ include $(TESTBED_SRCDIR)/GNUmakerules
 
 install: all script-install
 
-script-install:	 $(addprefix $(INSTALL_LIBDIR)/snmpit_old/, $(LIB_STUFF)) \
-		$(addprefix $(INSTALL_BINDIR)/, $(BIN_STUFF))
+script-install: \
+	$(addprefix $(INSTALL_LIBDIR)/snmpit/, $(LIB_STUFF)) \
+	$(addprefix $(INSTALL_BINDIR)/, $(BIN_STUFF))
 
 control-install:
 
@@ -60,14 +65,12 @@ tipserv-install:
 
 clrhouse-install:
 
-clean:	
+clean:
+	rm -f snmpit_arista_switch_daemon.py snmpit_remote.pm \
+		snmpit portstats snmpit_arista.pm
 
-$(INSTALL_DIR)/lib/snmpit_old/%: %
+$(INSTALL_LIBDIR)/snmpit/%: %
 	@echo "Installing $<"
-	-mkdir -p $(INSTALL_DIR)/lib/snmpit_old
+	-mkdir -p $(INSTALL_LIBDIR)/snmpit
 	$(INSTALL) $< $@
 
-$(INSTALL_DIR)/lib/snmpit_old/portstats: portstats
-	@echo "Installing $<"
-	-mkdir -p $(INSTALL_DIR)/lib/snmpit_old
-	$(INSTALL_PROGRAM) $< $@

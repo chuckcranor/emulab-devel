@@ -1,5 +1,5 @@
 #
-# Copyright (c) 2000-2015 University of Utah and the Flux Group.
+# Copyright (c) 2000-2016 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -35,17 +35,17 @@ SYSTEM         := $(shell uname -s)
 include $(OBJDIR)/Makeconf
 
 SUBDIRS		= checkpass ns2ir nseparse checkup template_cvsroot \
-		  snmpit_test snmpit_old
+		  snmpit
 ifeq ($(NSVERIFY),1)
 SUBDIRS		+= nsverify
 endif
 
-BIN_STUFF	= power snmpit tbend tbprerun tbreport \
+BIN_STUFF	= power tbend tbprerun tbreport \
 		  os_load endexp batchexp swapexp \
 		  node_reboot nscheck node_update savelogs node_control \
 		  checkports eventsys_control os_select tbrestart \
 		  tbswap nseswap tarfiles_setup node_history tbrsync \
-		  pxe_select portstats \
+		  pxe_select \
 		  archive_control template_create \
 		  template_swapin template_swapout template_graph \
 		  template_exprun template_delete template_metadata \
@@ -172,11 +172,8 @@ checkpass:
 ns2ir:
 	@$(MAKE) -C ns2ir all
 
-snmpit_test:
-	@$(MAKE) -C snmpit_test all
-
-snmpit_old:
-	@$(MAKE) -C snmpit_old all
+snmpit:
+	@$(MAKE) -C snmpit all
 
 nsverify:
 	@$(MAKE) -C nsverify all
@@ -232,8 +229,7 @@ ifeq ($(IPASSIGN),Yes)
 	@$(MAKE) -C ipassign install
 endif
 	@$(MAKE) -C checkup install
-	@$(MAKE) -C snmpit_test install
-	@$(MAKE) -C snmpit_old install
+	@$(MAKE) -C snmpit install
 
 script-install:	$(addprefix $(INSTALL_BINDIR)/, $(BIN_STUFF)) \
 	 $(addprefix $(INSTALL_SBINDIR)/, $(SBIN_STUFF)) \
@@ -344,8 +340,7 @@ subdir-clean:
 	@$(MAKE) -C plab clean
 	@$(MAKE) -C ipassign clean
 	@$(MAKE) -C checkup clean
-	@$(MAKE) -C snmpit_test clean
-	@$(MAKE) -C snmpit_old clean
+	@$(MAKE) -C snmpit clean
 
 distclean:	subdir-distclean
 
@@ -357,8 +352,7 @@ subdir-distclean:
 	@$(MAKE) -C plab distclean
 	@$(MAKE) -C ipassign distclean
 	@$(MAKE) -C checkup distclean
-	@$(MAKE) -C snmpit_test distclean
-	@$(MAKE) -C snmpit_old distclean
+	@$(MAKE) -C snmpit distclean
 
 #
 # XXX Create non .tcl files.

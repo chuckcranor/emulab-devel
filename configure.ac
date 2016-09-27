@@ -1210,6 +1210,18 @@ else
 fi
 
 #
+# Check to see if snmpit is a plain file, delete it if so. It is now
+# a directory. This only matters when reconfiguring an existing tree.
+#
+if test -f "tbsetup/snmpit"; then
+    echo "Removing old snmpit file, now a directory";
+    /bin/rm -f tbsetup/snmpit
+    if test $? -ne 0; then
+        AC_MSG_ERROR([Cannot remove old tbsetup/snmpit file]);
+    fi 
+fi
+
+#
 # Determine the timezone (stupidity in PHP5, see apache/php.ini)
 #
 if test -e "$srcdir/utils/gettimezone.pl"; then
@@ -1285,8 +1297,7 @@ outfiles="$outfiles Makeconf GNUmakefile \
 	backend/editnodetype backend/editsitevars backend/newimageid \
 	backend/editgroup backend/newimageid_ez \
 	tbsetup/GNUmakefile tbsetup/console_setup tbsetup/spewlogfile \
-	tbsetup/snmpit_test/GNUmakefile  \
-	tbsetup/snmpit_old/GNUmakefile  \
+	tbsetup/snmpit/GNUmakefile  \
 	tbsetup/spewrpmtar tbsetup/gentopofile tbsetup/power_sgmote.pm \
 	tbsetup/console_reset tbsetup/bwconfig tbsetup/power_rpc27.pm \
 	tbsetup/power_mail.pm tbsetup/power_whol.pm \
