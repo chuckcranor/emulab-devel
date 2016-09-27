@@ -92,7 +92,6 @@ function ShowByCreator()
 
     while ($row = mysql_fetch_array($query_result)) {
         $uid    = $row["creator"];
-        $ecount = $row["ecount"];
         $urn    = $row["aggregate_urn"];
         $cluster= $urn_mapping[$urn];
         $ecount = $row["ecount"];
@@ -101,7 +100,7 @@ function ShowByCreator()
     
         if (!array_key_exists($uid, $uid_array)) {
             $uid_array[$uid] = array("ecount" => 0,
-                                     "pnodes" => 0,
+                                     "pcount" => 0,
                                      "phours" => 0,
                                      "Utah"   => array("ecount" => 0,
                                                        "pcount" => 0,
@@ -114,17 +113,20 @@ function ShowByCreator()
                                                        "phours" => 0),
                                      "APT"    => array("ecount" => 0,
                                                        "pcount" => 0,
+                                                       "phours" => 0),
+                                     "DDC"    => array("ecount" => 0,
+                                                       "pcount" => 0,
+                                                       "phours" => 0),
+                                     "Emulab" => array("ecount" => 0,
+                                                       "pcount" => 0,
                                                        "phours" => 0));
-        }
-        if ($cluster == "Emulab" || $cluster == "DDC") {
-            next;
         }
         $uid_array[$uid]["ecount"] += $ecount;
         $uid_array[$uid]["pcount"] += $pcount;
         $uid_array[$uid]["phours"] += $phours;
-        $uid_array[$uid][$cluster]["ecount"] = $ecount;
-        $uid_array[$uid][$cluster]["pcount"] = $pcount;
-        $uid_array[$uid][$cluster]["phours"] = $phours;
+        $uid_array[$uid][$cluster]["ecount"] += $ecount;
+        $uid_array[$uid][$cluster]["pcount"] += $pcount;
+        $uid_array[$uid][$cluster]["phours"] += $phours;
     }
     echo "<div id='output_dropdown'></div>\n";
     echo "<input class='form-control search' type='search' data-column='0'
@@ -138,6 +140,8 @@ function ShowByCreator()
            <th colspan=3>Utah</th>
            <th colspan=3>Wisc</th>
            <th colspan=3>Clem</th>
+           <th colspan=3>Emulab</th>
+           <th colspan=3>DDC</th>
           </tr>
           <tr>
            <th class='filter-false sorter-false'
@@ -157,9 +161,23 @@ function ShowByCreator()
            <th>Expt</th>
            <th>PCs</th>
            <th>PHours</th>
+           <th>Expt</th>
+           <th>PCs</th>
+           <th>PHours</th>
+           <th>Expt</th>
+           <th>PCs</th>
+           <th>PHours</th>
           </tr>
           <tr>
            <th class='filter-false sorter-false' data-math='col-count'>0</th>
+           <th class='filter-false sorter-false' data-math='col-sum'>0</th>
+           <th class='filter-false sorter-false' data-math='col-sum'>0</th>
+           <th class='filter-false sorter-false' 
+                  data-math='col-sum' data-math-mask='##0'>0</th>
+           <th class='filter-false sorter-false' data-math='col-sum'>0</th>
+           <th class='filter-false sorter-false' data-math='col-sum'>0</th>
+           <th class='filter-false sorter-false' 
+                  data-math='col-sum' data-math-mask='##0'>0</th>
            <th class='filter-false sorter-false' data-math='col-sum'>0</th>
            <th class='filter-false sorter-false' data-math='col-sum'>0</th>
            <th class='filter-false sorter-false' 
@@ -205,6 +223,14 @@ function ShowByCreator()
            <th class='filter-false sorter-false' data-math='col-sum'>0</th>
            <th class='filter-false sorter-false' 
                   data-math='col-sum' data-math-mask='##0'>0</th>
+           <th class='filter-false sorter-false' data-math='col-sum'>0</th>
+           <th class='filter-false sorter-false' data-math='col-sum'>0</th>
+           <th class='filter-false sorter-false' 
+                  data-math='col-sum' data-math-mask='##0'>0</th>
+           <th class='filter-false sorter-false' data-math='col-sum'>0</th>
+           <th class='filter-false sorter-false' data-math='col-sum'>0</th>
+           <th class='filter-false sorter-false' 
+                  data-math='col-sum' data-math-mask='##0'>0</th>
           </tr>
          </tfoot>\n";
 
@@ -229,6 +255,12 @@ function ShowByCreator()
             "<td>" . $ref["Clem"]["ecount"] . "</td> ".
             "<td>" . $ref["Clem"]["pcount"] . "</td> ".
             "<td>" . $ref["Clem"]["phours"] . "</td> ".
+            "<td>" . $ref["Emulab"]["ecount"] . "</td> ".
+            "<td>" . $ref["Emulab"]["pcount"] . "</td> ".
+            "<td>" . $ref["Emulab"]["phours"] . "</td> ".
+            "<td>" . $ref["DDC"]["ecount"] . "</td> ".
+            "<td>" . $ref["DDC"]["pcount"] . "</td> ".
+            "<td>" . $ref["DDC"]["phours"] . "</td> ".
             "</tr>\n";
     }
     echo "</table>";
@@ -283,7 +315,7 @@ function ShowByProject()
     
         if (!array_key_exists($pid, $pid_array)) {
             $pid_array[$pid] = array("ecount" => 0,
-                                     "pnodes" => 0,
+                                     "pcount" => 0,
                                      "phours" => 0,
                                      "Utah"   => array("ecount" => 0,
                                                        "pcount" => 0,
@@ -296,17 +328,20 @@ function ShowByProject()
                                                        "phours" => 0),
                                      "APT"    => array("ecount" => 0,
                                                        "pcount" => 0,
+                                                       "phours" => 0),
+                                     "Emulab" => array("ecount" => 0,
+                                                       "pcount" => 0,
+                                                       "phours" => 0),
+                                     "DDC"    => array("ecount" => 0,
+                                                       "pcount" => 0,
                                                        "phours" => 0));
-        }
-        if ($cluster == "Emulab" || $cluster == "DDC") {
-            next;
         }
         $pid_array[$pid]["ecount"] += $ecount;
         $pid_array[$pid]["pcount"] += $pcount;
         $pid_array[$pid]["phours"] += $phours;
-        $pid_array[$pid][$cluster]["ecount"] = $ecount;
-        $pid_array[$pid][$cluster]["pcount"] = $pcount;
-        $pid_array[$pid][$cluster]["phours"] = $phours;
+        $pid_array[$pid][$cluster]["ecount"] += $ecount;
+        $pid_array[$pid][$cluster]["pcount"] += $pcount;
+        $pid_array[$pid][$cluster]["phours"] += $phours;
     }
     echo "<div id='output_dropdown'></div>\n";
     echo "<input class='form-control search' type='search' data-column='0'
@@ -320,10 +355,18 @@ function ShowByProject()
            <th colspan=3>Utah</th>
            <th colspan=3>Wisc</th>
            <th colspan=3>Clem</th>
+           <th colspan=3>Emulab</th>
+           <th colspan=3>DDC</th>
           </tr>
           <tr>
            <th class='filter-false sorter-false'
                style='padding-left:1px; text-align:left'>Total</th>
+           <th>Expt</th>
+           <th>PCs</th>
+           <th>Phours</th>
+           <th>Expt</th>
+           <th>PCs</th>
+           <th>Phours</th>
            <th>Expt</th>
            <th>PCs</th>
            <th>Phours</th>
@@ -346,6 +389,14 @@ function ShowByProject()
            <th class='filter-false sorter-false' data-math='col-sum'>0</th>
            <th class='filter-false sorter-false' 
                   data-math='col-sum' data-math-mask='##0'>0</th>
+           <th class='filter-false sorter-false' data-math='col-sum'>0</th>
+           <th class='filter-false sorter-false' data-math='col-sum'>0</th>
+           <th class='filter-false sorter-false' 
+                  data-math='col-sum' data-math-mask='##0.00'>0</th>
+           <th class='filter-false sorter-false' data-math='col-sum'>0</th>
+           <th class='filter-false sorter-false' data-math='col-sum'>0</th>
+           <th class='filter-false sorter-false' 
+                  data-math='col-sum' data-math-mask='##0.00'>0</th>
            <th class='filter-false sorter-false' data-math='col-sum'>0</th>
            <th class='filter-false sorter-false' data-math='col-sum'>0</th>
            <th class='filter-false sorter-false' 
@@ -387,6 +438,14 @@ function ShowByProject()
            <th class='filter-false sorter-false' data-math='col-sum'>0</th>
            <th class='filter-false sorter-false' 
                   data-math='col-sum' data-math-mask='##0.00'>0</th>
+           <th class='filter-false sorter-false' data-math='col-sum'>0</th>
+           <th class='filter-false sorter-false' data-math='col-sum'>0</th>
+           <th class='filter-false sorter-false' 
+                  data-math='col-sum' data-math-mask='##0.00'>0</th>
+           <th class='filter-false sorter-false' data-math='col-sum'>0</th>
+           <th class='filter-false sorter-false' data-math='col-sum'>0</th>
+           <th class='filter-false sorter-false' 
+                  data-math='col-sum' data-math-mask='##0.00'>0</th>
           </tr>
          </tfoot>\n";
 
@@ -412,6 +471,12 @@ function ShowByProject()
             "<td>" . $ref["Clem"]["ecount"] . "</td> ".
             "<td>" . $ref["Clem"]["pcount"] . "</td> ".
             "<td>" . $ref["Clem"]["phours"] . "</td> ".
+            "<td>" . $ref["Emulab"]["ecount"] . "</td> ".
+            "<td>" . $ref["Emulab"]["pcount"] . "</td> ".
+            "<td>" . $ref["Emulab"]["phours"] . "</td> ".
+            "<td>" . $ref["DDC"]["ecount"] . "</td> ".
+            "<td>" . $ref["DDC"]["pcount"] . "</td> ".
+            "<td>" . $ref["DDC"]["phours"] . "</td> ".
             "</tr>\n";
     }
     echo "</table>";
