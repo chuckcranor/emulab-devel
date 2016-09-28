@@ -1309,7 +1309,7 @@ sub RunStitcher()
 	# We do not want these two files defaulting to user home dir.
 	"--GetVersionCacheName=$tmpdir/get_version_cache.json ".
 	"--AggNickCacheName=$tmpdir/agg_nick_cache ".
-	"--scsURL https://nutshell.maxgigapop.net:8443/geni/xmlrpc  ".
+	"--scsURL http://scs.scs.scs.emulab.net:8081/geni/xmlrpc  ".
 	"--speaksfor $speaksfor_urn -V3 allocate $slice_urn $rspecfile";
 
     return -1
