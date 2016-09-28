@@ -1,16 +1,11 @@
 require(window.APT_OPTIONS.configObject,
 ['underscore', 'js/quickvm_sup', 'js/aptforms',
-// 'js/lib/text!template/genilib-editor.html',	 
-// 'js/lib/text!template/oops-modal.html',
-// 'js/lib/text!template/waitwait-modal.html',
-// 'js/lib/text!template/manage-profile.html',
  'jacks'],
-function (_, sup, aptforms)//,
-//	  pageString, oopsString, waitwaitString, manageString)
+function (_, sup, aptforms)
 {
   'use strict';
 
-  var templates = APT_OPTIONS.fetchTemplateList('genilib-editor', 'oops-modal', 'waitwait-modal', 'manage-profile');
+  var templates = APT_OPTIONS.fetchTemplateList(['genilib-editor', 'oops-modal', 'waitwait-modal', 'manage-profile']);
   var pageString = templates['genilib-editor'];
   var oopsString = templates['oops-modal'];
   var waitwaitString = templates['waitwait-modal'];

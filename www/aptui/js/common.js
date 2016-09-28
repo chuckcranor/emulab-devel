@@ -174,8 +174,10 @@ window.APT_OPTIONS.fetchTemplate = function (name) {
 
 window.APT_OPTIONS.fetchTemplateList = function (nameList) {
   var result = {};
-  for (var name in nameList)
+  var i = 0;
+  for (; i < nameList.length; i += 1)
   {
+    var name = nameList[i];
     result[name] = window.APT_OPTIONS.fetchTemplate(name);
   }
   return result;
