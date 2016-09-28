@@ -5,11 +5,11 @@
 -- these is not idempotent, since a site may have changed them for some reason.
 --
 
-INSERT IGNORE INTO `node_types` VALUES ('pc','pc',NULL,NULL,0,0,0,0,0,0,0,0,0,0,0,0);
+INSERT IGNORE INTO `node_types` VALUES ('pc','pc',NULL,NULL,NULL,0,0,0,0,0,0,0,0,0,0,0,0);
 INSERT IGNORE INTO`node_type_attributes` VALUES ('pc','imageable','1','boolean');
-INSERT IGNORE INTO `node_types` VALUES ('pcvm','pcvm',NULL,NULL,1,0,1,1,0,0,0,0,0,0,0,0);
+INSERT IGNORE INTO `node_types` VALUES ('pcvm','pcvm',NULL,NULL,NULL,1,0,1,1,0,0,0,0,0,0,0,0);
 INSERT IGNORE INTO`node_type_attributes` VALUES ('pcvm','rebootable','1','boolean');
-INSERT IGNORE INTO `node_types` VALUES ('pcvwa','pcvwa',NULL,NULL,1,0,0,1,1,0,0,0,0,0,0,0);
+INSERT IGNORE INTO `node_types` VALUES ('pcvwa','pcvwa',NULL,NULL,NULL,1,0,0,1,1,0,0,0,0,0,0,0);
 INSERT IGNORE INTO `node_type_attributes` VALUES ('pcvwa','default_osid','0','integer');
 
 INSERT IGNORE INTO os_boot_cmd VALUES ('FreeBSD','4.10','delay','/kernel.delay');
@@ -51,8 +51,8 @@ INSERT INTO `interface_types` VALUES ('ipmi15',0,1,'IPMI','IPMI 1.5',1,'RJ45');
 INSERT INTO `interface_types` VALUES ('ipmi20',0,1,'IPMI','IPMI 2.0',1,'RJ45');
 
 -- For the external link support.
-INSERT INTO `node_types` VALUES ('bbgeni','bbgeni',NULL,NULL,0,0,0,0,0,0,0,0,0,0,0,0);
-INSERT INTO `node_types` VALUES ('bbgenivm','bbgenivm',NULL,NULL,1,0,0,1,0,0,0,0,0,0,0,0);
+INSERT INTO `node_types` VALUES ('bbgeni','bbgeni',NULL,NULL,NULL,0,0,0,0,0,0,0,0,0,0,0,0);
+INSERT INTO `node_types` VALUES ('bbgenivm','bbgenivm',NULL,NULL,NULL,1,0,0,1,0,0,0,0,0,0,0,0);
 INSERT INTO `node_type_attributes` VALUES ('bbgeni','rebootable','0','boolean');
 INSERT INTO `node_type_attributes` VALUES ('bbgeni','imageable','0','boolean');
 INSERT INTO `node_type_attributes` VALUES ('bbgenivm','rebootable','0','boolean');
