@@ -605,6 +605,11 @@ sub allocSlice($$$$) {
     my $size = $sconf->{'VOLSIZE'};
 
     #
+    # By default, we will create "best effort" ephemeral volumes.
+    #
+    my $sparse = 1;
+
+    #
     # If this is a use of a persistent store, the BSID is a unique
     # volume name based on the lease ID. Look up the volume to make
     # sure it exists, but do nothing else other than stash away some
@@ -644,7 +649,7 @@ sub allocSlice($$$$) {
 
     $priv->{'pool'} = $bsid;
     $priv->{'volume'} = $vnode_id;
-    return freenasVolumeCreate($bsid, $vnode_id, $size);
+    return freenasVolumeCreate($bsid, $vnode_id, $size, $sparse);
 }
 
 # Setup device export.
