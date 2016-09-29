@@ -394,6 +394,10 @@ left: -999em;
 	background-color: #c9302c;
 }
 
+.cluster_picker_status .resource_inactive .circle {
+    background-color: #ddd;
+}
+
 .cluster_picker_status .status_healthy .circle {
 	border-color: #398439;
 }
@@ -405,6 +409,10 @@ left: -999em;
 .cluster_picker_status .status_down .circle {
 	border-color: #ac2925;
 	background-color: #c9302c;
+}
+
+.cluster_picker_status .status_inactive .circle {
+    border-color: #ccc;
 }
 
 .cluster_picker_status .resource_healthy .tooltip.right .tooltip-inner, .cluster_picker_status .status_healthy .tooltip.left .tooltip-inner {
@@ -432,6 +440,24 @@ left: -999em;
 .cluster_picker_status .resource_down .tooltip.right .tooltip-arrow, .cluster_picker_status .status_down .tooltip.left .tooltip-arrow {
 	border-right-color: #ac2925;
 	border-left-color: #ac2925;
+}
+
+.cluster_picker_status .resource_down .tooltip.right .tooltip-inner, .cluster_picker_status .status_down .tooltip.left .tooltip-inner {
+    background-color: #ac2925;
+}
+
+.cluster_picker_status .resource_down .tooltip.right .tooltip-arrow, .cluster_picker_status .status_down .tooltip.left .tooltip-arrow {
+    border-right-color: #ac2925;
+    border-left-color: #ac2925;
+}
+
+.cluster_picker_status .resource_inactive .tooltip.right .tooltip-inner, .cluster_picker_status .status_inactive .tooltip.left .tooltip-inner {
+    background-color: #ccc;
+}
+
+.cluster_picker_status .resource_inactive .tooltip.right .tooltip-arrow, .cluster_picker_status .status_inactive .tooltip.left .tooltip-arrow {
+    border-right-color: #ccc;
+    border-left-color: #ccc;
 }
 
 .cluster_picker_status .selected {
