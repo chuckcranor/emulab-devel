@@ -1770,7 +1770,7 @@ sub LoadVirtNodes($)
 			    return -1;
 			}
 			tbwarn("Dataset $lease has no snapshot ".
-			       "and cannot be mapped RW at this time.\n");
+			       "and cannot be cloned at this time.\n");
 		    }
 		}
 	    }
