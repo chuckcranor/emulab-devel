@@ -795,9 +795,14 @@ sub restartDHCP()
         if (mysystem2("/sbin/initctl restart $dhcpd_service") != 0) {
             mysystem2("/sbin/initctl start $dhcpd_service");
         }
-    } else {
-        #sysvinit
+    } elsif (-x '/bin/systemctl') {
+	# systemd
+	mysystem2("/bin/systemctl restart $dhcpd_service.service");
+    } elsif (-x '/etc/init.d/$dhcpd_service') {
+        # sysvinit
         mysystem2("/etc/init.d/$dhcpd_service restart");
+    } else {
+	print STDERR "restartDHCP: could not restart dhcpd!\n";
     }
 }
 

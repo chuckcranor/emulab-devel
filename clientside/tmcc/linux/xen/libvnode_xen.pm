@@ -128,6 +128,16 @@ my $IMAGEDUMP   = "/usr/local/bin/imagedump";
 my $XM          = "/usr/sbin/xm";
 my $debug  = 0;
 my $lockdebug = 0;
+my $sleepdebug = 0;
+
+#
+# Set to enable vnodesetup to exit before vnode is completely up
+# (see vnodesetup::hackwaitandexit). Allows more parallelism during
+# boot-time vnode setup. Note that concurrency may still be constrained
+# by $MAXCONCURRENT (defined below) which limits how many new VMs can
+# be created at once.
+#
+my $vsrelease = "immediate";	# or "early" or "none"
 
 #
 # Some commands/subsystems have evolved in incompatible ways over time,
@@ -135,6 +145,18 @@ my $lockdebug = 0;
 #
 my $newsfdisk = 0;
 my $newlvm = 0;
+
+#
+# Image wait time.
+#
+# How long (seconds) we will wait to when trying to grab a lock on
+# an image. Should be set to the max time you think it could take frisbee
+# to download the largest (compressed) OS image you will support in a VM.
+# Also consider that there could be multiple frisbees running at once for
+# multiple images (currently limited by the vnode create lock concurrency
+# ($MAXCONCURRENT) below.
+#
+my $MAXIMAGEWAIT = 1800;
 
 #
 # Serial console handling. We fire up a capture per active vnode.
@@ -308,10 +330,6 @@ my $VIFROUTING   = ((-e "$ETCDIR/xenvifrouting") ? 1 : 0);
 
 my $TMCD_PORT	 = 7777;
 
-# Number of concurrent containers set up in parallel. We bump this up
-# a bit down in doingThinLVM().
-my $MAXCONCURRENT = 3;
-
 #
 # Information about the running Xen hypervisor
 #
@@ -369,6 +387,118 @@ sub getXenInfo()
     close XM;
 }
 
+#
+# Things that matter:
+#
+# - RAM in dom0.
+#   Swapping is deadly. Looks like 1024MB is NOT enough based on experience
+#   noted below. 4096MB is plenty and seems to override most of the other
+#   concerns.
+#
+# - Number of CPUs.
+#   Have not seen any appreciable difference with 32 CPUs vs. 4. Other
+#   things cause problems well before this.
+#
+# - The number of disks in the VG.
+#   LVM performance is generally unpredicable. More than one disk is
+#   good, but haven't seen much improvement with, e.g., 6 instead of 2.
+#   The killer is concurrent frisbees (write to LVM) and even more so,
+#   imageunzips (read from and write to LVM).
+#
+# - The BW from the frisbee server.
+#   Possibly an issue if nothing else stands in the way, due to subboss
+#   disk speed that tops out at about 150MB/sec. Given random I/O and
+#   multiple images, probably going to get less than 50MB/sec.
+#
+# Random proposal based on tests run on Emulab d710/d820/d430 nodes and
+# Apt c6220 nodes:
+#
+# * Change the arbitrary 164MB write buf memory to an equally arbitrary,
+#   but more aestetically pleasing, 128MB (where the hell did 164 come from?)
+#
+# * Adjust concurrency based on:
+#
+# if (dom0 physical RAM < 1GB) MAX = 1;
+# if (any swap activity) MAX = 1;
+#
+#    This captures pc3000s/other old machines and overloaded (RAM) machines.
+#
+# if (# physical CPUs <= 2) MAX = 3;
+# if (# physical spindles == 1) MAX = 3;
+# if (dom0 physical RAM <= 2GB) MAX = 3;
+#
+#    This captures d710s, Apt r320, and Cloudlab m510s. We may need to
+#    reconsider the latter since its single drive is an NVMe device.
+#    But first we have to get Xen working with them (UEFI issues)...
+#
+# MAX = 5;
+#
+#    This captures Emulab d430/d820s, Apt c6220s, and probably all
+#    Clemson and Wisconsin Cloudlab nodes.
+#
+# Random observations based on waaay too much time spent on d710s:
+#
+# Observation: d710 with 5 vnodes and all different images does not
+# boot first time with MAXCONCURRENT==5. 4 vnodes appear to be downloading
+# their disk image when the BSD domU tries to boot--qemu times out.
+# Restarting the vnode later works fine. The reason for this is that dom0
+# starts swapping due to imageunzip processes running. 164MB of write
+# buffering per imageunzip is too much for 3 imageunzips and 1GB of dom0 mem.
+# Even dropping to 128MB of write buffering is not enough. Single-threading
+# imageunzip (-n -W 1) works fine, but things go really slow. We need a
+# buffering based on the available dom0 RAM and the max number of concurrent
+# imageunzips (MAXCONCURRENT) independent of how the latter is calculated.
+#
+# Observation: qemu processes blow up huge when they first start (500MB) but
+# don't require that much afterward (20MB). So most of our d710 problems
+# stem from qemu blasting off while imageunzips are running. This happens
+# because qemu is outside of the MAXCONCURRENT lock.
+#
+# Empirically, based on a d710 with 1GB of dom0 RAM, we can pull off 3
+# imageunzips + 1 qemu with just a tad of swapping--not enough to cause
+# the qemu to timeout. Full imageunzips seem to be about 32MB + writebuf
+# memory. No swapping until the qemu starts. The number of qemus we launch
+# will be implicitly constrained by this limit as qemu startups (vnodeBoot)
+# take less time than vnodeCreate so we should not have more than MAXCONCURRENT
+# vnodes in vnodeBoot at once.
+#
+
+#
+# Historic concurrency value. Should get overwritten in setConcurrency.
+#
+my $MAXCONCURRENT = 3;
+
+#
+# Number of concurrent containers set up in parallel. See the big, long
+# navel-gazing comment just above...
+#
+sub setConcurrency($)
+{
+    my ($maxval) = @_;
+   
+    if ($maxval) {
+	$MAXCONCURRENT = 5;
+    } else {
+	my ($ram,$cpus) = domain0Resources();
+	my $disks = $STRIPE_COUNT;
+	my $hasswapped = domain0Swapping();
+
+	print STDERR "setConcurrency: cpus=$cpus, ram=$ram, disks=$disks hasswapped=$hasswapped\n"
+	    if ($debug);
+
+	if ($cpus > 0 && $disks > 0 && $ram > 0) {
+	    if ($ram < 1024 || (!SHAREDHOST() && $hasswapped)) {
+		$MAXCONCURRENT = 1;
+	    } elsif ($cpus <= 2 || $disks == 1 || $ram <= 2048) {
+		$MAXCONCURRENT = 3;
+	    } else {
+		$MAXCONCURRENT = 5;
+	    }
+	}
+    }
+    print STDERR "Limiting to $MAXCONCURRENT concurrent vnode creations.\n";
+}
+
 sub init($)
 {
     my ($pnode_id,) = @_;
@@ -416,6 +546,10 @@ sub setDebug($)
 {
     $debug = shift;
     libvnode::setDebug($debug);
+    $lockdebug = 1;
+    if ($debug > 1) {
+	$sleepdebug = 1;
+    }
     print "libvnode_xen: debug=$debug\n"
 	if ($debug);
 }
@@ -855,6 +989,11 @@ sub rootPreConfigNetwork($$$$)
     TBDebugTimeStamp("  releasing global lock")
 	if ($lockdebug);
     TBScriptUnlock();
+    # XXX let vnodesetup exit early
+    if ($vsrelease eq "immediate") {
+	TBDebugTimeStamp("rootPreConfigNetwork: touching $VMS/$vnode_id/running");
+	mysystem2("touch $VMS/$vnode_id/running");
+    }
     return 0;
 bad:
     TBScriptUnlock();
@@ -893,6 +1032,27 @@ sub vnodeCreate($$$$)
     }
     $vninfo->{'vmid'} = $vmid;
 
+    #
+    # XXX future optimization possibility.
+    #
+    # Try to be smart about holding the vnode creation lock which is not
+    # a single lock, but rather a small set of locks intended to limit
+    # concurrency in the vnode creation process. Specifically, if we grab
+    # a create_vnode lock and then block waiting for our image lock, then
+    # we might prevent someone else (using a different image) from making 
+    # progress. So we could instead: grab a create_vnode lock, make a short
+    # attempt (5-10 seconds) to grab the image lock and, failing that, back
+    # off of the create_vnode lock, wait and then try the whole process again.
+    #
+    # The problem is that we may block again down in downloadOneImage when
+    # we try to grab the image lock exclusively. Not sure we can back all
+    # the way out easily in that case!
+    #
+    # This is also a bit of a de-optimization when we have a set of vnodes
+    # all using the same image. We just cause a bit of excess context
+    # switching in that (probably more common) case.
+    #
+
     if (CreateVnodeLock() != 0) {
 	fatal("CreateVnodeLock()");
     }
@@ -907,7 +1067,7 @@ sub vnodeCreate($$$$)
 	if ($lockdebug);
     if (TBScriptLock($imagelockname,
 		     TBSCRIPTLOCK_INTERRUPTIBLE()|TBSCRIPTLOCK_SHAREDLOCK(),
-		     1800) != TBSCRIPTLOCK_OKAY()) {
+		     $MAXIMAGEWAIT) != TBSCRIPTLOCK_OKAY()) {
 	fatal("Could not get $imagelockname lock!");
     }
     TBDebugTimeStamp("  got image lock")
@@ -942,8 +1102,8 @@ sub vnodeCreate($$$$)
 	    TBScriptUnlock();	    
 	    TBDebugTimeStamp("grabbing image lock $imagelockname exclusive")
 		if ($lockdebug);
-	    if (TBScriptLock($imagelockname, TBSCRIPTLOCK_INTERRUPTIBLE(), 1800)
-		!= TBSCRIPTLOCK_OKAY()) {
+	    if (TBScriptLock($imagelockname, TBSCRIPTLOCK_INTERRUPTIBLE(),
+			     $MAXIMAGEWAIT) != TBSCRIPTLOCK_OKAY()) {
 		fatal("Could not get $imagelockname write lock!");
 	    }
 	    TBDebugTimeStamp("  got image lock")
@@ -962,7 +1122,7 @@ sub vnodeCreate($$$$)
 		if ($lockdebug);
 	    if (TBScriptLock($imagelockname,
 			     TBSCRIPTLOCK_INTERRUPTIBLE()|
-			     TBSCRIPTLOCK_SHAREDLOCK(), 1800)
+			     TBSCRIPTLOCK_SHAREDLOCK(), $MAXIMAGEWAIT)
 		!= TBSCRIPTLOCK_OKAY()) {
 		fatal("Could not get $imagelockname lock back ".
 		      "after a long time!");
@@ -1000,6 +1160,8 @@ sub vnodeCreate($$$$)
 	libutil::setState("RELOADING");
 
 	if (createImageDisk($imagename, $vnode_id, $raref, $dothinlv)) {
+	    # XXX not strictly necessary since our caller will send TBFAILED
+	    libutil::setState("RELOADFAILED");
 	    TBScriptUnlock();
 	    fatal("xen_vnodeCreate: ".
 		  "cannot create logical volume for $imagename");
@@ -1036,6 +1198,9 @@ sub vnodeCreate($$$$)
 	}
 	if ($inreload) {
 	    libutil::setState("RELOADDONE");
+	    # XXX why do we need to wait for this to take effect?
+	    print "waiting 4 sec after asserting RELOADDONE...\n"
+		if ($sleepdebug);
 	    sleep(4);
 	}
 	
@@ -1201,6 +1366,7 @@ sub vnodeCreate($$$$)
     #
     # Create the snapshot LVM.
     #
+    my $mustsleep = 0;
     if (!lvmFindVolume($vnode_id)) {
 	#
 	# Need to create a new disk for the container. But lets see
@@ -1295,22 +1461,24 @@ okay:
 		#
 		if ($loadslice == 0 && !exists($imagemetadata->{'BOOTPART'})) {
 		    my @tmp;
+		    my $gotit = 0;
 
 		    #
 		    # XXX If may take a while for the state change above to
 		    # take effect and set the bootwhat info. Sleep a short
-		    # time and try. If that fails, sleep longer and try
-		    # one more time.
+		    # time and try a couple of times as necessary.
 		    #
-		    sleep(1);
-		    my $rv = getbootwhat(\@tmp);
-		    if ($rv || !scalar(@tmp) || !exists($tmp[0]->{"WHAT"})) {
-			sleep(4);
-			$rv = getbootwhat(\@tmp);
+		    foreach my $sl (1, 2, 2) { 
+			print "waiting $sl sec to make getbootwhat call...\n"
+			    if ($sleepdebug);
+			sleep($sl);
+			my $rv = getbootwhat(\@tmp);
+			if (!$rv && @tmp > 0 && exists($tmp[0]->{"WHAT"})) {
+			    $gotit = 1;
+			    last;
+			}
 		    }
-
-		    if ($rv || !scalar(@tmp) || !exists($tmp[0]->{"WHAT"}) ||
-			$tmp[0]->{"WHAT"} !~ /^\d*$/) {
+		    if (!$gotit || $tmp[0]->{"WHAT"} !~ /^\d*$/) {
 			print STDERR Dumper(\@tmp);
 			TBScriptUnlock();
 			fatal("libvnode_xen: could not get bootwhat info");
@@ -1335,8 +1503,9 @@ okay:
 	    TBScriptUnlock();
 	    fatal("libvnode_xen: could not add /dev/mapper entries");
 	}
+
 	# Hmm, some kind of kpartx race ...
-	sleep(2);
+	$mustsleep = 2;
     }
     # Need to tell slicefix where to find the root partition.
     # Naming convention is a pain.
@@ -1357,6 +1526,13 @@ okay:
     TBScriptUnlock();
     CreateVnodeUnlock();
     
+    # Sleep outside of the vnode/image locks
+    if ($mustsleep) {
+	print "waiting $mustsleep sec after kpartx call...\n"
+	    if ($sleepdebug);
+	sleep($mustsleep);
+    }
+
     #
     # Extract kernel and ramdisk.
     #
@@ -1648,15 +1824,27 @@ sub vnodePreConfig($$$$$){
     }
 
     #
-    # We rely on the UFS module (with write support compiled in) to
-    # deal with FBSD filesystems. 
+    # XXX because of the squirrelly nature of the write-enabled UFS module
+    # in Linux, we try to avoid write mounting the FS as much as possible.
+    # So we first mount RO and see if we have already been customized.
     #
     if ($vninfo->{'os'} eq "FreeBSD") {
-	mysystem2("mount -t ufs -o ufstype=44bsd $dev $vnoderoot >/dev/null 2>&1");
+	my $utype = "44bsd";
+	mysystem2("mount -t ufs -o ro,ufstype=$utype $dev $vnoderoot ".
+		  ">/dev/null 2>&1");
 	if ($?) {
 	    # try UFS2
-	    mysystem("mount -t ufs -o ufstype=ufs2 $dev $vnoderoot");
+	    $utype = "ufs2";
+	    mysystem("mount -t ufs -o ro,ufstype=$utype $dev $vnoderoot");
 	}
+	if (-e "$vnoderoot/etc/emulab/genvmtype") {
+	    print STDERR "vnodePreConfig: $vnode_id root already localized\n";
+	    goto done;
+	}
+
+	# needs to be customized, remount RW
+	mysystem("umount $dev");
+	mysystem("mount -t ufs -o ufstype=$utype $dev $vnoderoot");
     }
     else {
 	mysystem("mount $dev $vnoderoot");
@@ -1671,8 +1859,7 @@ sub vnodePreConfig($$$$$){
 	print STDERR
 	    "vnodePreConfig: WARNING: $vnode_id appears to be a configured ".
 	    "elabinelab server; skipping localizations\n";
-	mysystem("umount $dev");
-	return 0;
+	goto done;
     }
 
     # XXX We need to get rid of this or get it from tmcd!
@@ -1882,6 +2069,11 @@ sub vnodePreConfig($$$$$){
     $retval = &$callback($vnoderoot);
   done:
     mysystem("umount $dev");
+    # XXX let vnodesetup exit early
+    if ($vsrelease eq "early" && $retval == 0) {
+	TBDebugTimeStamp("vnodePreConfig: touching $VMS/$vnode_id/running");
+	mysystem2("touch $VMS/$vnode_id/running");
+    }
     return $retval;
   bad:
     mysystem("umount $dev");
@@ -2430,6 +2622,14 @@ sub vnodeBoot($$$$)
     libutil::setState("BOOTING");
 
     #
+    # XXX in the future, there may be conditions under which we need to
+    # throttle back vnode boot concurrency (e.g., HVM vnodes that require
+    # QEMU or in general to avoid overload of Emulab servers). If so,
+    # we can add a BootVnodeLock/Unlock() here mirroring the CreateVnode
+    # versions. For now though, we are just going to let them rip...
+    #
+
+    #
     # We are going to watch for a busted control network interface, which
     # happens a lot. There is a problem with the control vif not working,
     # no idea why, some kind of XEN bug. But the symptom is easy enough
@@ -2440,7 +2640,7 @@ sub vnodeBoot($$$$)
 	my $status = RunWithLock("xmtool", "nice $XM create $config");
 	if ($status) {
 	    print STDERR "$XM create failed: $status\n";
-	    return -1;
+	    last;
 	}
 
 	#
@@ -2465,6 +2665,10 @@ sub vnodeBoot($$$$)
 	# before giving up.
 	#
 	my $countdown = 20;
+	if ($vninfo->{'ishvm'}) {
+	    # XXX allow longer for emulated BIOS and boot loaders
+	    $countdown += 10;
+	}
 	while ($countdown > 0) {
 	    TBDebugTimeStamp("Pinging $ip for up to five seconds ...");
 	    system("ping -q -c 1 -w 5 $ip > /dev/null 2>&1");
@@ -3154,12 +3358,12 @@ sub CreatePrimaryDisk($$$$;$)
 	    my $ndzfile = $imagemetadata->{'FROMFILE'};
 	    
 	    mysystem2("time $IMAGEUNZIP -s $loadslice -f -o ".
-		      "                 -W 164 $ndzfile $rootvndisk");
+		      "                 -W 128 $ndzfile $rootvndisk");
 	}
 	else {
 	    mysystem2("nice dd if=$basedisk bs=1M count=$chunks | ".
 		      "nice $IMAGEUNZIP -s $loadslice -f -o ".
-		      "                 -W 164 - $rootvndisk");
+		      "                 -W 128 - $rootvndisk");
 	    goto fail
 		if ($?);
 
@@ -3174,7 +3378,7 @@ sub CreatePrimaryDisk($$$$;$)
 	    
 		mysystem2("nice dd if=$basedisk bs=1M count=$chunks | ".
 			  "nice $IMAGEUNZIP -s $loadslice -f -o ".
-			  "                 -W 164 - $rootvndisk");
+			  "                 -W 128 - $rootvndisk");
 
 		goto fail
 		    if ($?);
@@ -3183,7 +3387,7 @@ sub CreatePrimaryDisk($$$$;$)
     }
     else {
 	mysystem2("nice dd if=$basedisk bs=1M count=$chunks | ".
-		  "nice $IMAGEUNZIP -f -o -W 164 - $rootvndisk");
+		  "nice $IMAGEUNZIP -f -o -W 128 - $rootvndisk");
 	goto fail
 	    if ($?);
 
@@ -3197,7 +3401,7 @@ sub CreatePrimaryDisk($$$$;$)
 	    $chunks   = $delta_metadata->{'IMAGECHUNKS'};
 	    
 	    mysystem2("nice dd if=$basedisk bs=1M count=$chunks | ".
-		      "nice $IMAGEUNZIP -f -o -W 164 - $rootvndisk");
+		      "nice $IMAGEUNZIP -f -o -W 128 - $rootvndisk");
 
 	    goto fail
 		if ($?);
@@ -3410,7 +3614,7 @@ sub createImageDisk($$$$)
 	if ($lockdebug);
     if (TBScriptLock($imagelockname,
 		     TBSCRIPTLOCK_INTERRUPTIBLE()|TBSCRIPTLOCK_SHAREDLOCK(),
-		     1800) != TBSCRIPTLOCK_OKAY()) {
+		     $MAXIMAGEWAIT) != TBSCRIPTLOCK_OKAY()) {
 	print STDERR "Could not get $imagelockname lock back!\n";
 	return -1;
     }
@@ -3446,8 +3650,8 @@ sub downloadOneImage($$$)
 
     TBDebugTimeStamp("grabbing image lock $imagelockname exclusive")
 	if ($lockdebug);
-    if (TBScriptLock($imagelockname, TBSCRIPTLOCK_INTERRUPTIBLE(), 1800)
-	!= TBSCRIPTLOCK_OKAY()) {
+    if (TBScriptLock($imagelockname, TBSCRIPTLOCK_INTERRUPTIBLE(),
+		     $MAXIMAGEWAIT) != TBSCRIPTLOCK_OKAY()) {
 	print STDERR "Could not get $imagelockname write lock!\n";
 	return -1;
     }
@@ -3762,6 +3966,18 @@ sub configFile($)
 }
 
 #
+# Return MB of memory and cores allocated to dom0.
+#
+sub domain0Resources()
+{
+    my $res = `$XM list 0 | grep Domain-0`;
+    if ($res =~ /^Domain-0\s+\d+\s+(\d+)\s+(\d+)/) {
+	return ($1,$2);
+    }
+    die("Could not find RAM/CPUs for domain 0!");
+}
+
+#
 # Return MB of memory used by dom0
 # Give it at least 256MB of memory.
 #
@@ -3792,6 +4008,42 @@ sub totalMemory()
         return $mem - domain0Memory();
     }
     die("Could not find what the total physical memory on this machine is!");
+}
+
+#
+# Return non-zero if domain0 has swapped to disk.
+#
+# XXX beware all ye callers! Note that this returns non-zero if domain0 has
+# *ever* swapped, not just if it has swapped as a result of recent activity.
+# So once a node swaps that first time, for any reason, this will return
+# non-zero til the next boot.
+#
+sub domain0Swapping()
+{
+    my ($total,$free) = (0,0);
+    my @lines = `grep Swap /proc/meminfo`;
+    chomp(@lines);
+    foreach my $line (@lines) {
+	if ($line =~ /^SwapTotal:\s*(\d+)\s(\w+)/) {
+	    my $num = $1;
+	    my $type = $2;
+	    if ($type eq "kB") {
+		$num /= 1024;
+	    }
+	    $total = int($num);
+	    next;
+	}
+	if ($line =~ /^SwapFree:\s*(\d+)\s(\w+)/) {
+	    my $num = $1;
+	    my $type = $2;
+	    if ($type eq "kB") {
+		$num /= 1024;
+	    }
+	    $free = int($num);
+	    next;
+	}
+    }
+    return ($free < $total) ? 1 : 0;
 }
 
 #
@@ -3875,9 +4127,10 @@ sub captureStart($)
     #
     if (! $?) {
 	for (my $i = 0; $i < 10; $i++) {
-	    sleep(1);
 	    last
 		if (-e $acl && -s $acl);
+	    print "waiting 1 sec for capture ACL file...\n" if ($sleepdebug);
+	    sleep(1);
 	}
 	if (! (-e $acl && -s $acl)) {
 	    print STDERR "WARNING: $acl does not exist after 10 seconds; ".
@@ -4874,7 +5127,6 @@ sub doingThinLVM()
 	$usethin = 0;
 	return 0;
     }
-    $MAXCONCURRENT = 5;
     return 1;
 }
 
@@ -5556,6 +5808,7 @@ sub RunWithLock($$)
     }
     mysystem2($command);
     my $status = $?;
+    print "waiting 1 sec after RunWithLock...\n" if ($sleepdebug);
     sleep(1);
 
     TBScriptUnlock($lockref);
@@ -5585,6 +5838,9 @@ my $createvnode_lockref;
 sub CreateVnodeLock()
 {
     my $tries = 1000;
+
+    # Figure out how many vnodeCreates we can support at once
+    setConcurrency(0);
 
     while ($tries) {
 	for (my $i = 0; $i < $MAXCONCURRENT; $i++) {
@@ -5627,6 +5883,9 @@ sub CreateVnodeLockAll()
     my @locks;
     my $lockref;
     
+    # Determine the maximum concurrency
+    setConcurrency(1);
+
     for (my $i = 0; $i < $MAXCONCURRENT; $i++) {
 	my $token  = "createvnode_${i}";
 	if (TBScriptLock($token, TBSCRIPTLOCK_NONBLOCKING(), 0, \$lockref) ==

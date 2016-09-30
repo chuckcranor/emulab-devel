@@ -356,6 +356,7 @@ sub handler ($) {
     my ($signame) = @_;
     
     print STDERR "vnodesetup ($PID) caught a SIG${signame}!\n";
+    TBDebugTimeStampWithDate("vnodesetup shutting down ...");
 
     $SIG{USR1} = 'IGNORE';
     $SIG{USR2} = 'IGNORE';
