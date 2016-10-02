@@ -5,18 +5,18 @@ require(window.APT_OPTIONS.configObject,
 function (_, sup, clusterString)
 {
     'use strict';
-    var mainsite = false;
+    var usefancy = false;
     var template = _.template(clusterString);
 
     function initialize()
     {
 	window.APT_OPTIONS.initialize(sup);
-	mainsite = window.MAINSITE;
+	usefancy = window.USEFANCY;
 
 	$('#cluster-graphs')
-	    .html(template({"mainsite" : mainsite}));
+	    .html(template({"usefancy" : usefancy}));
 
-	if (mainsite) {
+	if (usefancy) {
 	    bilevelAsterGraph("/cloudlab-nofed.json",
 			      "#status-nofed","auto","large");
 	    bilevelAsterGraph("/cloudlab-fedonly.json",
@@ -33,7 +33,7 @@ function (_, sup, clusterString)
      */
     function Refresh()
     {
-	if (mainsite) {
+	if (usefancy) {
 	    $('#status-fedonly').html("");
 	    $('#status-nofed').html("");
 	    $("div").remove(".d3-tip");
