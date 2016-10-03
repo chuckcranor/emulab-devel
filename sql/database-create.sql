@@ -2191,7 +2191,6 @@ CREATE TABLE `image_aliases` (
   `target_imagename` varchar(30) NOT NULL default '',
   `target_imageid` int(8) unsigned NOT NULL default '0',
   PRIMARY KEY  (`imageid`,`target_imageid`),
-  UNIQUE KEY `pid` (`pid`,`imagename`),
   KEY `uuid` (`uuid`)
 ) ENGINE=MyISAM DEFAULT CHARSET=latin1;
 
