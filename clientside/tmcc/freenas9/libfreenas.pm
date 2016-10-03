@@ -847,7 +847,7 @@ sub volumeDestroy($$$$) {
     # Volume must not have snapshots
     if (exists($vref->{'snapshots'})) {
 	warn("*** ERROR: $tag: ".
-	     "Volume '$volname' has clones, cannot destroy");
+	     "Volume '$volname' has clones and/or snapshots, cannot destroy");
 	return -1;
     }
  
