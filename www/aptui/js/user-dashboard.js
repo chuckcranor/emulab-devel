@@ -4,13 +4,14 @@ require(window.APT_OPTIONS.configObject,
 	 'js/lib/text!template/experiment-list.html',
 	 'js/lib/text!template/profile-list.html',
 	 'js/lib/text!template/project-list.html',
+	 'js/lib/text!template/dataset-list.html',
 	 'js/lib/text!template/user-profile.html',
 	 'js/lib/text!template/oops-modal.html',
 	 'js/lib/text!template/waitwait-modal.html',
 	 'js/lib/text!template/classic-explist.html',
 	],
 function (_, sup, moment, mainString,
-	  experimentString, profileListString, projectString,
+	  experimentString, profileListString, projectString, datasetString,
 	  profileString, oopsString, waitwaitString, classicString)
 {
     'use strict';
@@ -56,6 +57,8 @@ function (_, sup, moment, mainString,
 	LoadClassicProfiles();
 	LoadProjectsTab();
 	LoadProfileTab();
+	LoadDatasetTab();
+	LoadClassicDatasets();
 
 	/*
 	 * Handlers for inline operations.
@@ -373,6 +376,83 @@ function (_, sup, moment, mainString,
 	var xmlthing = sup.CallServerMethod(null,
 					    "user-dashboard", "AccountDetails",
 					    {"uid" : window.TARGET_USER});
+	xmlthing.done(callback);
+    }
+
+    function LoadDatasetTab()
+    {
+	var callback = function(json) {
+	    console.info("datasets", json);
+
+	    if (json.code) {
+		console.info(json.value);
+		return;
+	    }
+	    if (json.value.length == 0) {
+		$('#datasets_nodatasets').removeClass("hidden");
+		return;
+	    }
+	    var template = _.template(datasetString);
+
+	    $('#datasets_content')
+		.html(template({"datasets"    : json.value,
+				"showuser"    : false,
+				"showproject" : true}));
+	    
+	    // Format dates with moment before display.
+	    $('#datasets_content .tablesorter .format-date').each(function(){
+		var date = $.trim($(this).html());
+		if (date != "") {
+		    $(this).html(moment($(this).html()).format("ll"));
+		}
+	    });
+	    var table = $('#datasets_content .tablesorter')
+		.tablesorter({
+		    theme : 'green',
+		});
+	}
+	var xmlthing =
+	    sup.CallServerMethod(null,
+				 "user-dashboard", "DatasetList",
+				 {"uid" : window.TARGET_USER});
+	xmlthing.done(callback);
+    }
+
+    function LoadClassicDatasets()
+    {
+	var callback = function(json) {
+	    console.info("classic datasets", json);
+
+	    if (json.code) {
+		console.info(json.value);
+		return;
+	    }
+	    if (json.value.length == 0) {
+		return
+	    }
+	    $('#classic_datasets_content').removeClass("hidden");
+	    var template = _.template(datasetString);
+
+	    $('#classic_datasets_content_div')
+		.html(template({"datasets"    : json.value,
+				"showuser"    : false,
+				"showproject" : true}));
+	    
+	    $('#classic_datasets_content .format-date').each(function() {
+		var date = $.trim($(this).html());
+		if (date != "") {
+		    $(this).html(moment($(this).html()).format("ll"));
+		}
+	    });
+	    var table = $('#classic_datasets_content .tablesorter')
+		.tablesorter({
+		    theme : 'green',
+		});
+	};
+	var xmlthing =
+	    sup.CallServerMethod(null,
+				 "user-dashboard", "ClassicDatasetList",
+				 {"uid" : window.TARGET_USER});
 	xmlthing.done(callback);
     }
 

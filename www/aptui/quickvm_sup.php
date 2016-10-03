@@ -270,7 +270,8 @@ $PAGEHEADER_FUNCTION = function($thinheader = 0, $ignore1 = NULL,
                    <li><a href='signup.php'>Start/Join Project</a></li>";
         if ($login_user->IsActive()) {
             echo " <li class='divider'></li>
-	           <li><a href='list-datasets.php'>List Datasets</a></li>
+                   <li><a href='user-dashboard.php#datasets'>
+	                 My Datasets</a></li>
 	           <li><a href='create-dataset.php'>Create Dataset</a></li>
 	           <li><a href='images.php'>List Images</a></li>";
             echo "      <li class='divider'></li>\n";
