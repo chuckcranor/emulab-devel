@@ -2105,6 +2105,11 @@ COMMAND_PROTOTYPE(doifconfig)
 			if (strcmp(role, TBDB_IFACEROLE_EXPERIMENT))
 				goto skipit;
 
+			/* Do not send along info for RF links (PhantomNet) */
+			if (strcmp(type, "P2PLTE") == 0) {
+				goto skipit;
+			}
+
 			/* Do this after above test to avoid error in log */
 			mask = CHECKMASK(row[8]);
 
