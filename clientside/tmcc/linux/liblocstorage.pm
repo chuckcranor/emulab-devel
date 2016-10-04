@@ -195,11 +195,12 @@ sub init_serial_map()
     # XXX this is a total hack and maybe distro dependent?
     #
     my %snmap = ();
-    my @lines = `ls -l /sys/block/sd[a-z] /sys/block/sd[a-z][a-z] 2>&1`;
+    my @lines = `ls -l /sys/block/sd[a-z] /sys/block/sd[a-z][a-z] /sys/block/nvme[0-9]* 2>&1`;
     foreach (@lines) {
 	# XXX if a pci device, assume a local disk
 	# XXX for moonshots (arm64), it is different
 	if (m#/sys/block/(sd[a-z][a-z]?) -> ../devices/pci\d+# ||
+	    m#/sys/block/(nvme\d+n\d+) -> ../devices/pci\d+# ||
 	    m#/sys/block/(sd[a-z][a-z]?) -> ../devices/soc.\d+#) {
 	    my $dev = $1;
 	    $sn = find_serial($dev);
@@ -235,7 +236,9 @@ sub get_bootdisk()
 
     if ($line && $line =~ qr{^(/dev/\S+) on /}) {
 	my $device = abs_path($1);
-	if ($device && $device =~ qr{^/dev/(\S+)\d+}) {
+	if ($device &&
+	    ($device =~ qr{^/dev/(nvme\S+)p\d+} ||
+	     $device =~ qr{^/dev/(\S+)\d+})) {
 	    $disk = $1;
 	}
     }
@@ -253,7 +256,7 @@ sub get_ptabtype($)
     }
 
     # if sfdisk fails, assume unknown
-    my $pinfo = `$SFDISK -l /dev/sda 2>&1`;
+    my $pinfo = `$SFDISK -l /dev/$dev 2>&1`;
     if ($?) {
 	return "unknown";
     }
@@ -282,7 +285,8 @@ sub get_partsize($)
 	return $size;
     }
     while (<FD>) {
-	if (/^\s+\d+\s+\d+\s+(\d+)\s+(sd[a-z][a-z]?(?:\d+)?)/) {
+	if (/^\s+\d+\s+\d+\s+(\d+)\s+((?:xvd|sd)[a-z][a-z]?)(?:\d+)?/ ||
+	    /^\s+\d+\s+\d+\s+(\d+)\s+(nvme\d+n\d+)(?:p\d+)?/) {
 	    my ($_size,$_dev) = ($1,$2);
 
 	    if ($dev eq $_dev) {
@@ -387,8 +391,9 @@ sub get_diskinfo()
 	return undef;
     }
     while (<FD>) {
-	if (/^\s+\d+\s+\d+\s+(\d+)\s+((xvd|sd)[a-z][a-z]?)(\d+)?/) {
-	    my ($size,$dev,$part) = ($1,$2,$4);
+	if (/^\s+\d+\s+\d+\s+(\d+)\s+((?:xvd|sd)[a-z][a-z]?)(\d+)?/ ||
+	    /^\s+\d+\s+\d+\s+(\d+)\s+(nvme\d+n\d+)(?:p(\d+))?/) {
+	    my ($size,$dev,$part) = ($1,$2,$3);
 	    # DOS partition
 	    if (defined($part)) {
 		my $pttype = "MBR";
@@ -400,6 +405,9 @@ sub get_diskinfo()
 		next if ($pttype eq "MBR" && ($part < 1 || $part > 4));
 
 		my $pdev = "$dev$part";
+		if ($dev =~ /^nvme/) {
+		    $pdev = "${dev}p${part}";
+		}
 		$geominfo{$pdev}{'level'} = 1;
 		$geominfo{$pdev}{'type'} = "PART";
 		$geominfo{$pdev}{'size'} = int($size / 1024);
@@ -430,7 +438,7 @@ sub get_diskinfo()
 	return undef;
     }
     while (<FD>) {
-	if (/^\/dev\/((xvd|sd)\S+)/) {
+	if (/^\/dev\/((?:xvd|sd|nvme)\S+)/) {
 	    my $dev = $1;
 	    if (exists($geominfo{$dev}) && $geominfo{$dev}{'inuse'} == 0) {
 		$geominfo{$dev}{'inuse'} = -1;
@@ -446,7 +454,7 @@ sub get_diskinfo()
     foreach my $dev (keys %geominfo) {
 	if ($geominfo{$dev}{'type'} eq "PART" &&
 	    $geominfo{$dev}{'level'} == 1 &&
-	    $dev =~ /^(.*)\d+$/) {
+	    ($dev =~ /^(nvme\d+n\d+)p\d+$/ || $dev =~ /^(.*)\d+$/)) {
 	    if (exists($geominfo{$1}) && $geominfo{$1}{'inuse'} == 0) {
 		$geominfo{$1}{'inuse'} = 1;
 	    }
@@ -1047,7 +1055,11 @@ sub os_check_storage_slice($$)
 
 	# figure out the device of interest
 	if ($bsid eq "SYSVOL") {
-	    $dev = $rdev = "${bdisk}4";
+	    my $pchr = "";
+	    if ($bdisk =~ /^nvme/) {
+		$pchr = "p";
+	    }
+	    $dev = $rdev = "${bdisk}${pchr}4";
 	    $devtype = "PART";
 	    $pttype = $ginfo->{$bdisk}->{'ptabtype'};
 	} else {
@@ -1472,7 +1484,11 @@ sub os_create_storage_slice($$$)
 	# dostype -f /dev/sda 4 131
 	#
 	if ($bsid eq "SYSVOL") {
-	    $mdev = "$bdisk" . "4";
+	    my $pchr = "";
+	    if ($bdisk =~ /^nvme/) {
+		$pchr = "p";
+	    }
+	    $mdev = "${bdisk}${pchr}4";
 
 	    if ($ginfo->{$bdisk}->{'ptabtype'} eq "GPT") {
 		if (exists($ginfo->{$mdev})) {
@@ -1518,7 +1534,11 @@ sub os_create_storage_slice($$$)
 		my $dev;
 
 		if ($bsid eq "ANY") {
-		    $dev = $bdisk . "4";
+		    my $pchr = "";
+		    if ($bdisk =~ /^nvme/) {
+			$pchr = "p";
+		    }
+		    $dev = "${bdisk}${pchr}4";
 
 		    if ($ginfo->{$bdisk}->{'ptabtype'} eq "GPT") {
 			if (exists($ginfo->{$dev})) {
@@ -1715,7 +1735,11 @@ sub os_remove_storage_slice($$$)
 	# figure out the device of interest
 	my ($dev, $devtype, $mdev);
 	if ($bsid eq "SYSVOL") {
-	    $dev = $mdev = "${bdisk}4";
+	    my $pchr = "";
+	    if ($bdisk =~ /^nvme/) {
+		$pchr = "p";
+	    }
+	    $dev = $mdev = "${bdisk}${pchr}4";
 	    $devtype = "PART";
 	} else {
 	    $dev = "emulab/$lv";

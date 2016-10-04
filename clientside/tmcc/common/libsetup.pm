@@ -3520,7 +3520,7 @@ sub getarpinfo($;$)
 #
 # SLICE format:
 #
-# CMD=SLICE IDX=<index> CLASS=local PROTO=<SAS|SCSI|SATA> \
+# CMD=SLICE IDX=<index> CLASS=local PROTO=<SAS|SCSI|SATA|NVMe> \
 #   BSID=<local-disk-id> VOLNAME=<id> VOLSIZE=<size-in-MiB> MOUNTPOINT=<dir>
 #
 # Where:
@@ -3566,7 +3566,7 @@ sub getstorageconfig($;$) {
 	'MOUNTPOINT' => '\/[-\w\/\.]+',
 	'PERMS'	  => '(RO|RW|CLONE)',
 	'PERSIST' => '(0|1)',
-	'PROTO'	  => '(iSCSI|local|SCSI|SAS|SATA|PATA|IDE)',
+	'PROTO'	  => '(iSCSI|local|SCSI|SAS|SATA|PATA|IDE|NVMe)',
 	'UUID'	  => '[-\w\.:]+',
 	'UUID_TYPE'=> '(iqn|serial)',
 	'VOLNAME' => '[-\w]+',

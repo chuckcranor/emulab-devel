@@ -206,6 +206,15 @@ sub find_serial($)
     # Try using "smartctl -i" first
     #
     if (-x "$SMARTCTL") {
+	# XXX for NVMe devices we have to use a control device
+	# XXX assumes namespace 1
+	if ($dev =~ /^nvd(\d+)/) {
+	    my $nvmedev = "nvme" . $1 . "ns1";
+	    if (-e "/dev/$nvmedev") {
+		$dev = $nvmedev;
+	    }
+	}
+
 	@lines = `$SMARTCTL -i /dev/$dev 2>&1`;
 	foreach (@lines) {
 	    if (/^serial number:\s+(\S.*)/i) {
@@ -229,13 +238,13 @@ sub init_serial_map()
 {
     my %snmap = ();
 
-    my @lines = `ls /dev/ad* /dev/da* /dev/mfid* /dev/mfisyspd* 2>&1`;
+    my @lines = `ls /dev/ad* /dev/da* /dev/mfid* /dev/mfisyspd* /dev/nvd* 2>&1`;
     foreach (@lines) {
 	# XXX just use the /dev/ad? traditional names for now
 	if (m#^/dev/ada\d+$#) {
 	    next;
 	}
-	if (m#^/dev/((?:da|ad|mfid|mfisyspd)\d+)$#) {
+	if (m#^/dev/((?:da|ad|mfid|mfisyspd|nvd)\d+)$#) {
 	    my $dev = $1;
 	    $sn = find_serial($dev);
 	    if ($sn) {
