@@ -402,7 +402,7 @@ function Do_RequestExtension()
     $blob = array("expiration" => 
                   date("Y-m-d H:i:s T", strtotime($slice->expires())));
     $webtask->Delete();
-    SPITAJAX_RESPONSE(blob);
+    SPITAJAX_RESPONSE($blob);
 bad:
 delay:
     sleep(1);
