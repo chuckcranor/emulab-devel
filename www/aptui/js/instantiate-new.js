@@ -204,6 +204,7 @@ function (_, Constraints, sup, ppstart, JacksEditor, wt,
 		return Instantiate(this, event);
 	    },
 	});
+
 	// This activates the popover subsystem. 
 	$('[data-toggle="popover"]').popover({
 	    trigger: 'hover',
@@ -368,7 +369,12 @@ function (_, Constraints, sup, ppstart, JacksEditor, wt,
 	    
 	var startProfile = $('#profile_name li[value = ' + window.PROFILE + ']:first');
 	ChangeProfileSelection(startProfile);
-	_.delay(function () {$('.dropdown-toggle').dropdown();}, 500);
+	_.delay(function () {
+	    $('.dropdown-toggle').dropdown();
+	    if (window.SKIPFIRSTSTEP) {
+		$('#stepsContainer').steps('next');
+	    }
+	}, 500);
 
 	// Set up the click function for expanding and collapsing profile groups
 	$('#profile_name > span').click(function() {
