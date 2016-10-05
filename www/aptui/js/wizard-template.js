@@ -123,9 +123,9 @@ function(_) {
 		return [health, rating, tooltip];
 	}
 
-    function InactiveRating() {
-        return [0, 0, ['','Testbed status unavailable']]
-    }
+	function InactiveRating() {
+		return [0, 0, ['','Testbed status unavailable']]
+	}
 
 	function AssignStatusClass(health, rating) {
 		var result = [];
@@ -152,9 +152,9 @@ function(_) {
 		return result;
 	}
 
-    function AssignInactiveClass() {
-        return ['status_inactive', 'resource_inactive']
-    }
+	function AssignInactiveClass() {
+		return ['status_inactive', 'resource_inactive']
+	}
 
 	function StatsLineHTML(classes, title) {
 		var title1 = '';
@@ -174,7 +174,9 @@ function(_) {
 		ClusterStatusHTML: ClusterStatusHTML,
 		StatusClickEvent: StatusClickEvent,
 		CalculateRating: CalculateRating,
+		InactiveRating: InactiveRating,
 		AssignStatusClass: AssignStatusClass,
+		AssignInactiveClass: AssignInactiveClass,
 		StatsLineHTML: StatsLineHTML
 	};
 }
