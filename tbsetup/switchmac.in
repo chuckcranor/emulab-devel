@@ -1,7 +1,7 @@
 #!/usr/bin/perl -w
 
 #
-# Copyright (c) 2003-2012 University of Utah and the Flux Group.
+# Copyright (c) 2003-2016 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -48,7 +48,7 @@ use Getopt::Long;
 use strict;
 
 # Optional alternate version of libraries.
-use lib '@prefix@/lib/snmpit_test';
+use lib '@prefix@/lib/snmpit';
 use snmpit_lib;
 use snmpit_cisco;
 use snmpit_foundry;

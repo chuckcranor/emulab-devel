@@ -27,6 +27,7 @@ use English;
 use Data::Dumper;
 use POSIX qw(setsid);
 use POSIX ":sys_wait_h";
+use POSIX ":signal_h";
 use Socket;
 
 #
@@ -302,6 +303,9 @@ sub Online()
     else {
 	POSIX::setsid();
 	
+	# XXX make sure we can kill the proxy when done
+	local $SIG{TERM} = 'DEFAULT';
+
 	exec("$BINDIR/tmcc.bin -d -t 15 -n $vnode_id ".
 	       "  -X $host_ip:$local_tmcd_port -s $boss_ip -p $TMCD_PORT ".
 	       "  -o $LOGDIR/tmccproxy.$vnode_id.log");

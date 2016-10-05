@@ -217,6 +217,10 @@ $routing = array("myprofiles" =>
 						      "Do_ClassicExperimentList",
                                                  "ClassicProfileList" =>
 						      "Do_ClassicProfileList",
+                                                 "DatasetList" =>
+						      "Do_DatasetList",
+                                                 "ClassicDatasetList" =>
+						      "Do_ClassicDatasetList",
                                                  "ProjectList" =>
                                                       "Do_ProjectList",
                                                  "UsageSummary" =>
@@ -246,6 +250,10 @@ $routing = array("myprofiles" =>
 						      "Do_ClassicExperimentList",
                                                  "ClassicProfileList" =>
 						      "Do_ClassicProfileList",
+                                                 "DatasetList" =>
+						      "Do_DatasetList",
+                                                 "ClassicDatasetList" =>
+						      "Do_ClassicDatasetList",
                                                  "ProfileList" =>
                                                       "Do_ProfileList",
                                                  "MemberList" =>

@@ -1641,12 +1641,16 @@ sub LoadVirtNodes($)
     #
     my %roleases = ();
     my %cloneleases = ();
+    my %prereserves = ();
     foreach my $virt_bs_attr ($self->virt_blockstore_attributes()->Rows()) {
 	if ($virt_bs_attr->attrkey() eq "readonly") {
 	    $roleases{$virt_bs_attr->vname()} = $virt_bs_attr->attrvalue();
 	}
 	elsif ($virt_bs_attr->attrkey() eq "rwclone") {
 	    $cloneleases{$virt_bs_attr->vname()} = $virt_bs_attr->attrvalue();
+	}
+	elsif ($virt_bs_attr->attrkey() eq "prereserve") {
+	    $prereserves{$virt_bs_attr->vname()} = $virt_bs_attr->attrvalue();
 	}
     }
 
@@ -1685,8 +1689,8 @@ sub LoadVirtNodes($)
 	# upon termination of any RW mapping (see Blockstore->Release).
 	# Snapshot creation may be explicit in the future.
 	#
-	# A RO mapping of a dataset always gets the most recent snapshot
-	# of the dataset. This is true whether the dataset is currently
+	# A RW clone or a RO mapping of a dataset always gets the most recent
+	# snapshot of the dataset. This is true whether the dataset is currently
 	# in use or not. If the dataset does not have a snapshot, it is
 	# an error.
 	#
@@ -1730,6 +1734,12 @@ sub LoadVirtNodes($)
 			return -1;
 		    }
 		}
+
+		#
+		# XXX we want the attribute to get listed as "bs-clone-<lease>"
+		# rather than bs-lease-<lease> in the vtop file.
+		#
+		$attrkey = "clone";
 	    } else {
 		# Does user have RW rights?
 		if (!$lease->AccessCheck($self->realuser(),
@@ -1760,7 +1770,7 @@ sub LoadVirtNodes($)
 			    return -1;
 			}
 			tbwarn("Dataset $lease has no snapshot ".
-			       "and cannot be mapped RW at this time.\n");
+			       "and cannot be cloned at this time.\n");
 		    }
 		}
 	    }
@@ -1797,6 +1807,19 @@ sub LoadVirtNodes($)
 
 	my $fixnode = $self->blockstores()->{$vname};
 	$fixnode->_blockstore_attributes()->{$attrkey} = $attrval;
+
+	# Make it easier to figure out our perms later on
+	if (exists($roleases{$vname}) && $roleases{$vname} == 1) {
+	    $fixnode->_bsperms("RO");
+	} elsif (exists($cloneleases{$vname}) && $cloneleases{$vname} == 1) {
+	    if (exists($prereserves{$vname}) && $prereserves{$vname} == 1) {
+		$fixnode->_bsperms("CLONE-PRERES");
+	    } else {
+		$fixnode->_bsperms("CLONE");
+	    }
+	} else {
+	    $fixnode->_bsperms("RW");
+	}
     }
     return 0;
 }
@@ -2336,9 +2359,34 @@ sub GenVirtNodes($)
 	if (defined($vnode->_blockstore())) {
 	    my $virt_bs  = $vnode->_blockstore();
 	    my $bs_vname = $virt_bs->vname();
+	    my $size     = $virt_bs->size();
+
+	    #
+	    # RO clones have no cost in capacity.
+	    #
+	    # RW clones come in two flavors: best-effort (zero bytes) or
+	    # guaranteed (full size of cloned dataset). The former is
+	    # signaled by CLONE, the latter by CLONE-PRERES.
+	    #
+	    if ($vnode->_bsperms() eq "RO") {
+	    	$size = 0;
+	    }
+	    elsif ($vnode->_bsperms() eq "CLONE") {
+	    	$size = 0;
+	    }
+	    # XXX "zfs clone" or the FreeNAS API does not have an interface
+	    # for creating a pre-allocated clone. You can do it (I think!)
+	    # by using "zfs set refreserved=..." after the clone call, but
+	    # I am not ready to go there yet, so we ignore the "prereserve"
+	    # attribute for now.
+	    #
+	    elsif ($vnode->_bsperms() eq "CLONE-PRERES") {
+		$size = 0;
+	    }
+	    $vnode->_bsallocsize($size);
 
 	    # This is an additive desire. 
-	    $desires->{"bs-capacity"} = ['+', $virt_bs->size()];
+	    $desires->{"bs-capacity"} = ['+', $size];
 
 	    # The rest come from the attributes.
 	    foreach my $attrkey (keys(%{ $vnode->_blockstore_attributes() })) {
@@ -9582,10 +9630,25 @@ sub UploadBlockstores($)
 	my $vvnode   = $self->solution_v2v()->{$vname};
 	my $vpnode   = $virtnode->_pnode();
 	my $pnode    = $vpnode->phys_nodeid();
-	my $size     = $virtnode->_blockstore()->size();
+
+	#
+	# If this is a blockstore clone, then bstore will be the storage
+	# pool that the clone is allocating space from. We need this to
+	# charge resources to. However, what we record in the DB is the
+	# blockstore that we are cloning since that is what is needed later
+	# in tmcd for passing to the storage server.
+	#
+	my $pool = $bstore;
+	if ($virtnode->_bsperms() ne "RW") {
+	    my $bsattr = $virtnode->_blockstore_attributes();
+	    if ($bsattr && exists($bsattr->{'clone'})) {
+		$bstore = "lease-" . $bsattr->{'clone'};
+	    }
+	}
+	my $size = $virtnode->_bsallocsize();
 
 	$self->printdb("BlockStore: ".
-		       "$vname, $bstore, $size, $vvnode, $vpnode, $pnode\n");
+		       "$vname, $bstore ($pool), $size, $vvnode, $vpnode, $pnode\n");
 
 	my $blockstore = Blockstore->Lookup($pnode, $bstore);
 	if (!defined($blockstore)) {

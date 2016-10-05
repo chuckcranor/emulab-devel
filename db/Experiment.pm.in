@@ -5769,7 +5769,7 @@ sub SyncPortLans($)
 	}
 
 	print "Syncing target vlan $idx in $experiment\n";
-	mysystem("$TB/bin/snmpit_test -f --redirect-err -X $pid $eid $idx");
+	mysystem("$TB/bin/snmpit -f --redirect-err -X $pid $eid $idx");
 	if ($?) {
 	    $portvlan->Unlock();
 	    return -1;
@@ -6012,7 +6012,7 @@ sub ClearPortLans($;$@)
 	my $lanid = $portvlan->lanid();
 	
 	print "Syncing target vlan $lanid in $experiment\n";
-	mysystem("$TB/bin/snmpit_test -f --redirect-err -X $pid $eid $lanid");
+	mysystem("$TB/bin/snmpit -f --redirect-err -X $pid $eid $lanid");
 	if ($?) {
 	    $portvlan->Unlock()
 		if (!$nolock);

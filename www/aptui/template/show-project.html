@@ -55,6 +55,9 @@
 		  <a href="#profiles" role="tab"
 		     data-toggle="tab">Profiles</a></li>
 		<li role="presentation">
+		  <a href="#datasets" role="tab"
+		     data-toggle="tab">Datasets</a></li>
+		<li role="presentation">
 		  <a href="#members" role="tab"
 		     data-toggle="tab">Members</a></li>
 		<li role="presentation">
@@ -100,8 +103,19 @@
 		      No profiles to show you.
 		    </div>
 		  </div>
-		  <br>
 		  <div id="classic_profiles_content"></div>
+		</div>
+		<div role="tabpanel" class="tab-pane" id="datasets">
+		  <div id="datasets_content">
+	      	    <div class="hidden" id="datasets_nodatasets">
+		      <br>
+		      No datasets to show you.
+		    </div>
+		  </div>
+		  <div id="classic_datasets_content" class="hidden">
+		    <center><h4>Classic Datasets</h4></center>
+		    <div id="classic_datasets_content_div"></div>
+		  </div>
 		</div>
 		<div role="tabpanel" class="tab-pane" id="members">
 		  <div id="members_content"></div>

@@ -1099,9 +1099,11 @@ REPLACE INTO table_regex VALUES ('images','relocatable','text','redirect','defau
 REPLACE INTO table_regex VALUES ('images','origin_uuid','text','regex','^\\w+\\-\\w+\\-\\w+\\-\\w+\\-\\w+$',0,64,NULL);
 REPLACE INTO table_regex VALUES ('images','origin_name','text','regex','^[-\\w\\.+:\\/]+$',0,128,NULL);
 REPLACE INTO table_regex VALUES ('images','origin_urn','text','redirect','projects:manager_urn',0,0,NULL);
+REPLACE INTO table_regex VALUES ('images','architecture','text','regex','^[\\w,]*$',0,0,NULL);
 REPLACE INTO table_regex VALUES ('node_types','new_type','text','redirect','default:tinytext',0,0,NULL);
 REPLACE INTO table_regex VALUES ('node_types','node_type','text','regex','^[-\\w]+$',1,30,NULL);
 REPLACE INTO table_regex VALUES ('node_types','class','text','regex','^[\\w]+$',1,30,NULL);
+REPLACE INTO table_regex VALUES ('node_types','architecture','text','regex','^[\\w,]*$',0,0,NULL);
 REPLACE INTO table_regex VALUES ('node_types','isvirtnode','text','redirect','default:boolean',0,0,NULL);
 REPLACE INTO table_regex VALUES ('node_types','isjailed','text','redirect','default:boolean',0,0,NULL);
 REPLACE INTO table_regex VALUES ('node_types','isswitch','text','redirect','default:boolean',0,0,NULL);
