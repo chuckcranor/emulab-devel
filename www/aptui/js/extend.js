@@ -3,43 +3,29 @@
 //
 define(['underscore', 'js/quickvm_sup',
 	'js/lib/text!template/user-extend-modal.html',
-	'js/lib/text!template/admin-extend-modal.html',
 	'js/lib/text!template/guest-extend-modal.html'],
 	
-    function(_, sup, userExtendString, adminExtendString, guestExtendString)
+    function(_, sup, userExtendString, guestExtendString)
     {
 	'use strict';
 	var modalname  = '#extend_modal';
 	var divname    = '#extend_div';
 	var slidername = "#extend_slider";
-	var isadmin    = 0;
 	var isguest    = 0;
 	var uuid       = 0;
 	var callback   = null;
+	var maxextend  = null;
 	var howlong    = 1; // Number of days being requested.
 	var physnode_count  = 0;
 	var physnode_hours  = 0;
 
 	function Initialize()
 	{
-	    howlong  = 1;
-	    
 	    // Click handler.
 	    $('button#request-extension').click(function (event) {
 		event.preventDefault();
 		RequestExtension();
 	    });
-	    if (isadmin) {
-		$('#howlong_extend').change(function() {
-		    EnableSubmitButton();
-		});
-		// Button handler.
-		$('button#deny-extension').click(function (event) {
-		    event.preventDefault();
-		    DenyExtension();
-		});
-	    }
-
 	    /*
 	     * If the modal contains the slider, set it up.
 	     */
@@ -63,7 +49,7 @@ define(['underscore', 'js/quickvm_sup',
 			$("#datepicker").focus();
 			return false;
 		    }
-		    var howlong = DateToDays();
+		    var howlong = DateToDays($('#datepicker').val());
 		    $('#future_usage').val(Math.round(physnode_count * howlong * 24));
 		});
 	    }
@@ -71,18 +57,16 @@ define(['underscore', 'js/quickvm_sup',
 	    /*
 	     * Countdown for text box.
 	     */
-	    if (! isadmin) {
-		$('#why_extend').on('focus keyup', function (e) {
-		    UpdateCountdown();
-		});
-		// Clear existing text.
-		$('#why_extend').val('');
-		// Current usage.
-		if (physnode_count) {
-		    $("#extend_usage").removeClass("hidden");
-		    $('#current_usage').val(Math.round(physnode_hours));
-		    $('#future_usage').val(Math.round(physnode_count * 24));
-		}
+	    $('#why_extend').on('focus keyup', function (e) {
+		UpdateCountdown();
+	    });
+	    // Clear existing text.
+	    $('#why_extend').val('');
+	    // Current usage.
+	    if (physnode_count) {
+		$("#extend_usage").removeClass("hidden");
+		$('#current_usage').val(Math.round(physnode_hours));
+		$('#future_usage').val(Math.round(physnode_count * 24));
 	    }
 	}
 
@@ -98,10 +82,10 @@ define(['underscore', 'js/quickvm_sup',
 	    $(slidername).slider({value:0,
 			   max: 100,
 			   slide: function(event, ui) {
-			       SliderChanged(ui.value);
+			       return SliderChanged(event, ui.value);
 			   },
 			   start: function(event, ui) {
-			       SliderChanged(ui.value);
+			       SliderChanged(event, ui.value);
 			   },
 			   stop: function(event, ui) {
 			       SliderStopped(ui.value);
@@ -143,6 +127,44 @@ define(['underscore', 'js/quickvm_sup',
 		// after the slider create a containing div with the p tags.
 		$(slidername).after(html);
 	    }
+
+	    /*
+	     * Shade out the right side of the slider, where we will not
+	     * let the user slide to, since it is beyond the maximum
+	     * allowed extension (cause of a reservation).
+	     */
+	    if (maxextend != null && maxextend < 84) {
+		var setvalue = DayToSetvalue(maxextend);
+		var block = $( "<div id='maxextend-div'>" )
+		    .appendTo($(slidername));
+		block.addClass('ui-slider-range');
+		block.addClass('ui-slider-range-max');
+		block.css("background", "grey");
+		block.css("width", "" + (100-setvalue)/100 * 100 + "%");
+
+		var message = "You may not extend this experiment " +
+		    "beyond " + maxextend + " day(s) " +
+		    "because of a pre-scheduled resource reservation. " +
+		    "Please be sure to save your " +
+		    "work before your experiment is terminated!";
+
+		$('#maxextend-div').popover({
+		    trigger:   'manual',
+		    placement: 'auto',
+		    container: 'body',
+		    html:      true,
+		    content:   message,
+		});
+		$('#maxextend-div').data("popped", 0);
+
+		$(modalname).on('hide.bs.modal', function (e) {
+		    if ($('#maxextend-div').data("popped")) {
+			$('#maxextend-div').popover("hide");
+			$('#maxextend-div').data("popped", 0);
+		    }
+		    $(modalname).off('hide.bs.modal');
+		});
+	    }
 	}
 
 	/*
@@ -169,6 +191,29 @@ define(['underscore', 'js/quickvm_sup',
 	    return 2;
 	}
 
+	function DayToSetvalue(day)
+	{
+	    var setvalue = 0;
+
+	    if (day == 0) {
+		setvalue = 0;
+	    }
+	    else if (day > 0 && day <= 6) {
+		setvalue = Math.floor((day - 1) * (33 / 6.0));
+	    }
+	    else if (day <= 20) {
+		setvalue = Math.round((day - 7) * (33 / 20.0)) + 33;
+	    }
+	    else if (day <= 84) {
+		setvalue = Math.round(((day / 7) - 4) * (33 / 8.0)) + 66;
+	    }
+	    else {
+		setvalue = 100;
+	    }
+	    console.info("setvalue", day, setvalue);
+	    return setvalue;
+	}
+
 	/*
 	 * User has changed the slider. Show new instructions.
 	 */
@@ -176,12 +221,12 @@ define(['underscore', 'js/quickvm_sup',
 	var lastvalue = 0;   // Last callback value.
 	var lastlabel = 0;   // So we know which div to hide.
 	var setvalue  = 0;   // where to jump the slider to after stop.
-	function SliderChanged(which) {
+	function SliderChanged(event, which) {
 	    var slider   = $(slidername);
 	    var label    = 0;
 
 	    if (lastvalue == which) {
-		return;
+		return false;
 	    }
 
 	    /*
@@ -220,6 +265,31 @@ define(['underscore', 'js/quickvm_sup',
 		// it out. 
 		howlong      = null;
 	    }
+	    if (maxextend != null) {
+		if (howlong && howlong >= maxextend) {
+		    if (! $('#maxextend-div').data("popped")) {
+			$('#maxextend-div').popover("show");
+			$('#maxextend-div').data("popped", 1);
+		    }
+		}
+		else {
+		    if ($('#maxextend-div').data("popped")) {
+			$('#maxextend-div').popover("hide");
+			$('#maxextend-div').data("popped", 0);
+		    }
+		}
+		if ((howlong == null && maxextend < 84) ||
+		    howlong > maxextend) {
+		    event.preventDefault();
+		    howlong = maxextend;
+		    setvalue = DayToSetvalue(maxextend);
+		    $(slidername).slider("value", setvalue);
+		    // "trigger" another slider changed event
+		    SliderChanged(event, $(slidername).slider("value"));
+		    return;
+		}
+	    }
+	    console.info(howlong);
 	    $('#extend_value').html(extend_value);
 
 	    $('#label' + lastlabel + "_request").addClass("hidden");
@@ -235,6 +305,7 @@ define(['underscore', 'js/quickvm_sup',
 
 	    lastvalue = which;
 	    lastlabel = label;
+	    return true;
 	}
 
 	// Jump to closest stop when user finishes moving.
@@ -270,11 +341,11 @@ define(['underscore', 'js/quickvm_sup',
 	/*
 	 * Convert date to howlong in days.
 	 */
-	function DateToDays()
+	function DateToDays(str)
 	{
 	    var days  = 0;
 	    var today = new Date();
-	    var later = new Date($('#datepicker').val());
+	    var later = new Date(str);
 	    var diff  = (later - today);
 	    if (diff < 0) {
 		alert("No time travel to the past please");
@@ -293,37 +364,32 @@ define(['underscore', 'js/quickvm_sup',
 	{
 	    var reason  = "";
 
-	    if (isadmin) {
-		howlong = $("#howlong_extend").val();
-		reason  = $("#extend_message").val();
-	    }
-	    else {
-		if (howlong == null) {
-		    /*
-		     * The value comes from the datepicker.
-		     */
-		    if ($('#datepicker').val() == "") {
-			alert("You have to specify a date!");
-			$("#datepicker").focus();
-			return;
-		    }
-		    howlong = DateToDays();
-		}
-		reason = $("#why_extend").val();
-		if (reason.trim().length == 0) {
-		    $("#why_extend").val("");
-		    DisableSubmitButton();
-		    alert("Come on, say something useful please, " +
-			  "we really do read these!");
+	    if (howlong == null) {
+		/*
+		 * The value comes from the datepicker.
+		 */
+		if ($('#datepicker').val() == "") {
+		    alert("You have to specify a date!");
+		    $("#datepicker").focus();
 		    return;
 		}
-		if (reason.length < minchars) {
-		    alert("Your reason is too short. Say more please, " +
-			  "we really do read these!");
-		    return;
-		}
-		$('#extension_reason').val(reason);
+		howlong = DateToDays($('#datepicker').val());
 	    }
+	    reason = $("#why_extend").val();
+	    if (reason.trim().length == 0) {
+		$("#why_extend").val("");
+		DisableSubmitButton();
+		alert("Come on, say something useful please, " +
+		      "we really do read these!");
+		return;
+	    }
+	    if (reason.length < minchars) {
+		alert("Your reason is too short. Say more please, " +
+		      "we really do read these!");
+		return;
+	    }
+	    $('#extension_reason').val(reason);
+
 	    sup.HideModal('#extend_modal');
 	    sup.ShowModal("#waitwait-modal");
 	    var xmlthing = sup.CallServerMethod(null,
@@ -340,28 +406,35 @@ define(['underscore', 'js/quickvm_sup',
 	    });
 	}
 	
-	function DenyExtension()
+	//
+	// Request as much time as possible, up to the maximum allowed
+	// by the reservation system. Put up a modal for confirmation.
+	//
+	function RequestMaxExtension(hours)
 	{
-	    var message  = $("#extend_message").val();
+	    $('#restricted_extend_modal #hours').html(hours);
 
-	    sup.HideModal('#extend_modal');
-	    if (!isadmin) {
-		return;
-	    }
-	    var deny_callback = function(json) {
+	    // Throw it back to the caller when done.
+	    var requestcallback = function(json) {
 		sup.HideModal("#waitwait-modal");
-		if (json.code) {
-		    sup.SpitOops("oops", "Failed to Deny: " + json.value);
-		    return;
-		}
-	    }
-	    sup.ShowModal("#waitwait-modal");
-	    var xmlthing = sup.CallServerMethod(null,
-						"status",
-						"DenyExtension",
-						{"uuid"   : uuid,
-						 "message" : message});
-	    xmlthing.done(deny_callback);
+		console.info(json.value);
+		callback(json);
+		return;
+	    };
+	    // Setup a handler for the confirm button.
+	    $('#restricted_extend_modal #confirm-max').click(function(event) {
+		sup.HideModal('#restricted_extend_modal');
+		sup.ShowModal("#waitwait-modal");
+
+		var xmlthing = sup.CallServerMethod(null,
+						    "status",
+						    "RequestExtension",
+						    {"uuid"   : uuid,
+						     "howlong": hours,
+						     "inhours":  1});
+		xmlthing.done(requestcallback);
+	    });
+	    sup.ShowModal('#restricted_extend_modal');
 	}
 
 	function EnableSubmitButton()
@@ -381,55 +454,32 @@ define(['underscore', 'js/quickvm_sup',
 		$(button).attr("disabled", "disabled");
 	    }
 	}
-	return function(thisuuid, func, admin, guest, extendfor,
-			url, needapproval, pcount, phours)
+	return function(thisuuid, func, studly, guest, pcount, phours)
 	{
-	    isadmin  = admin;
 	    isguest  = guest;
 	    uuid     = thisuuid;
 	    callback = func;
 	    physnode_count = pcount;
 	    physnode_hours = phours;
 
-	    console.info(needapproval);
-	    
-	    $('#extend_div').html(isadmin ?
-				  adminExtendString : isguest ?
+	    $('#extend_div').html(isguest ?
 				  guestExtendString : userExtendString);
 
+	    // Fill in the mailto links.
+	    var mailto  = "mailto:" + window.SUPPORT;
+	    var support = window.APTTILE + " support";
+	    $('.supportmail').attr("href", mailto);
+	    $('.supportmail').html(support);
 
 	    // We have to wait till the modal is shown to actually set up
 	    // some of the content, since we need to know its width.
 	    $(modalname).on('shown.bs.modal', function (e) {
 		Initialize();
-		if (admin) {
-		    if (extendfor) {
-			$("#howlong_extend").val(extendfor);
-			EnableSubmitButton();
-		    }
-		    else {
-			DisableSubmitButton();
-		    }
-		}
 		if ($('#extension_reason').length) {
 		    $("#why_extend").text($('#extension_reason').val());
 		    $("#why_extend_div").removeClass("hidden");
 		}
-		if (admin && $('#extensions-json').length) {
-		    var extensions =
-			JSON.parse(_.unescape($('#extensions-json')[0].textContent));
-		    var template = _.template($('#history-template', html).html());
-		    var html = template({"extensions" : extensions});
-		    $("#extend_history").html(html);
-		    $("#extend_history_div").removeClass("hidden");
-		}
-		if (admin && url) {
-		    $("#extend_graphs_img").attr("src", url);
-		}
-		if (admin && needapproval) {
-		    $("#deny-extension").removeClass("hidden");
-		}
-		if (! (admin || guest)) {
+		if (! guest) {
 		    $('#myusage-popover').popover({
 			trigger: 'hover',
 			placement: 'right',
@@ -437,7 +487,65 @@ define(['underscore', 'js/quickvm_sup',
 		}
 		$(modalname).off('shown.bs.modal');
 	    });
-	    $(modalname).modal('show');
+
+	    /*
+	     * We have to request the max extension before we can setup
+	     * the slider. 
+	     */
+	    var maxcallback = function(json) {
+		sup.HideModal('#waitwait-modal');
+		if (json.code) {
+		    console.info("Failed to get max extension: " + json.value);
+		    return;		    
+		}
+		/*
+		 * Allow override for testing.
+		 */
+		var later;
+		
+		if (window.APT_OPTIONS.MAXEXTEND != null) {
+		    later = new Date();
+		    later = new Date(later.getTime() + 60 +
+				     (window.APT_OPTIONS.MAXEXTEND*3600*1000));
+		}
+		else {
+		    later = new Date(json.value);
+		}
+		console.info("Max extension date:", later);
+		
+		/*
+		 * See if the difference is less then a day.
+		 */
+		var now   = new Date();
+		var hours = Math.floor((later.getTime() -
+					now.getTime()) / (1000 * 3600.0));
+	
+		if (hours == 0) {
+		    sup.ShowModal('#no_extend_modal');
+		}
+		else if (hours < 24) {
+		    console.info("Max extension hours: ", hours);
+		    
+		    // Different path; request as much as we can get.
+		    RequestMaxExtension(hours);
+		}
+		else {
+		    maxextend = DateToDays(later);
+		    console.info("Max extension days: ", maxextend);
+		    // Show the modal, it is initialized above. 
+		    $(modalname).modal('show');
+		}
+	    }
+	    if (studly) {
+		sup.ShowModal('#waitwait-modal');
+		var xmlthing =
+		    sup.CallServerMethod(null, "status", "MaxExtension",
+					 {"uuid" : uuid});
+		xmlthing.done(maxcallback);
+	    }
+	    else {
+		$(modalname).modal('show');
+	    }
 	}
     }
 );

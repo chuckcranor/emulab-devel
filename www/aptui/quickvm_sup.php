@@ -86,7 +86,7 @@ $PAGEHEADER_FUNCTION = function($thinheader = 0, $ignore1 = NULL,
     global $PORTAL_MANUAL, $PORTAL_MOTD_SITEVAR, $PORTAL_HELPFORUM;
     global $TBMAINSITE, $APTTITLE, $FAVICON, $APTLOGO, $APTSTYLE, $ISAPT;
     global $GOOGLEUA, $ISCLOUD, $ISPNET, $ISEMULAB, $TBBASE, $ISEMULAB;
-    global $login_user, $login_status;
+    global $login_user, $login_status, $SUPPORT;
     global $disable_accounts, $page_title, $drewheader, $embedded;
     $cleanmode = (isset($_COOKIE['cleanmode']) &&
                   $_COOKIE['cleanmode'] == 1 ? 1 : 0);
@@ -134,6 +134,8 @@ $PAGEHEADER_FUNCTION = function($thinheader = 0, $ignore1 = NULL,
     echo "    window.HELPFORUM = " .
         "'https://groups.google.com/d/forum/${PORTAL_HELPFORUM}';\n";
     echo "    window.EMBEDDED = $embedded;\n";
+    echo "    window.SUPPORT  = '$SUPPORT';\n";
+    echo "    window.APTTILE  = '$APTTITLE';\n";
     echo "</script>\n";
     
     if ($TBMAINSITE && !$embedded && file_exists("../google-analytics.php")) {

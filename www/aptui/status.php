@@ -50,9 +50,9 @@ $isfadmin = 0;
 #
 # Verify page arguments.
 #
-$reqargs = OptionalPageArguments("uuid",    PAGEARG_STRING,
-				 "extend",  PAGEARG_INTEGER,
-				 "oneonly", PAGEARG_BOOLEAN);
+$reqargs = OptionalPageArguments("uuid",      PAGEARG_STRING,
+                                 "maxextend", PAGEARG_INTEGER,
+				 "oneonly",   PAGEARG_BOOLEAN);
 
 if (!isset($uuid)) {
     SPITHEADER(1);
@@ -268,10 +268,13 @@ echo "  window.APT_OPTIONS.physnode_hours = " .
     sprintf("%.2f;\n", $instance->physnode_count() *
             ((time() - strtotime($instance->created())) / 3600));
 echo "  window.APT_OPTIONS.freenodesurl = '$freenodes_url';\n";
-if (isset($extend) && $extend != "") {
-    echo "  window.APT_OPTIONS.extend = $extend;\n";
+if (isset($maxextend) && $maxextend != "") {
+    # Assumed to be hours.
+    echo "  window.APT_OPTIONS.MAXEXTEND = $maxextend;\n";
 }
-echo "var FOO = null;\n";
+else {
+    echo "  window.APT_OPTIONS.MAXEXTEND = null;\n";
+}
 echo "</script>\n";
 echo "<script src='js/lib/d3.v3.js'></script>\n";
 echo "<script src='js/lib/nv.d3.js'></script>\n";

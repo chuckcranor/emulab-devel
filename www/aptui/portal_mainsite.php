@@ -40,6 +40,7 @@ if ($_SERVER["SERVER_NAME"] == "www.aptlab.net") {
     $WWWHOST      = "www.aptlab.net";
     $APTBASE      = "https://www.aptlab.net";
     $APTMAIL      = "APT Operations <portal-ops@aptlab.net>";
+    $SUPPORT      = "portal-ops@aptlab.net";
     $APTTITLE     = "APT";
     $FAVICON      = "aptlab.ico";
     $APTLOGO      = "aptlogo.png";
@@ -70,6 +71,7 @@ elseif ($_SERVER["SERVER_NAME"] == "www.cloudlab.us") {
     $WWWHOST      = "www.cloudlab.us";
     $APTBASE      = "https://www.cloudlab.us";
     $APTMAIL      = "CloudLab Operations <portal-ops@cloudlab.us>";
+    $SUPPORT      = "portal-ops@cloudlab.us";
     $APTTITLE     = "CloudLab";
     $FAVICON      = "cloudlab.ico";
     $APTLOGO      = "cloudlogo.png";
@@ -101,6 +103,7 @@ elseif ($ISALTDOMAIN && $_SERVER["SERVER_NAME"] == "www.phantomnet.org") {
     $WWWHOST      = "www.phantomnet.org";
     $APTBASE      = "https://www.phantomnet.org";
     $APTMAIL      = "PhantomNet Operations <portal-ops@phantomnet.org>";
+    $SUPPORT      = "portal-ops@phantomnet.org";
     $APTTITLE     = "PhantomNet";
     $FAVICON      = "phantomnet.ico";
     $APTLOGO      = "phantomlogo.png";
