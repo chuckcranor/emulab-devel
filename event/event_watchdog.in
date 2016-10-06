@@ -89,6 +89,17 @@ if (! $debug) {
 }
 
 #
+# Setup a signal handler to kill children and exit.
+#
+sub handler()
+{
+    print "Caught a TERM. Killing children and exiting\n";
+    Cleanup();
+    exit(0);
+}
+$SIG{TERM} = \&handler;
+
+#
 # Delay at startup to allow ops time to boot. Hopefully this
 # will prevent too many false alarms at system startup time.
 #
@@ -96,16 +107,6 @@ sleep(60)
     if (!$debug);
 
 my ($opswatcher,$bosswatcher,$psdwatcher,$deadpid);
-
-#
-# Setup a signal handler to kill children and exit.
-#
-sub handler()
-{
-    fatal("Caught a TERM. Killing children and exiting\n")
-	if ($debug);
-}
-$SIG{TERM} = \&handler;
 
 while (1) {
     #
@@ -258,6 +259,21 @@ sub notify($)
 	     $TBOPS);
 }
 
+sub Cleanup()
+{
+    if (defined($opswatcher)) {
+	kill('TERM', $opswatcher);
+    }
+    if (defined($bosswatcher)) {
+	kill('TERM', $bosswatcher);
+    }
+    if (defined($psdwatcher)) {
+	kill('TERM', $psdwatcher);
+    }
+    MarkDaemonStopped("event_watchdog")
+	if (!$debug);
+}
+
 sub fatal($)
 {
     my ($msg) = @_;
@@ -270,18 +286,8 @@ sub fatal($)
 	     $msg,
 	     $TBOPS);
 
-    if (defined($opswatcher)) {
-	kill('TERM', $opswatcher);
-    }
-    if (defined($bosswatcher)) {
-	kill('TERM', $bosswatcher);
-    }
-    if (defined($psdwatcher)) {
-	kill('TERM', $psdwatcher);
-    }
-    MarkDaemonStopped("event_watchdog")
-	if (!$debug);
-    
+    Cleanup();
+
     die("*** $0:\n".
 	"    $msg\n");
 }
