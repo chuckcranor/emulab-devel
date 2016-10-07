@@ -265,10 +265,6 @@ sub GenCredentials($$;$$)
 		$speaksfor->SetType("speaksfor");
 		if ($speaksfor->Sign($speaker_signer)) {
 		    print STDERR "Could not sign speaksfor credential\n";
-		    print STDERR Dumper($speaksfor) . "\n";
-		    print STDERR Dumper($geniuser) . "\n";
-		    print STDERR Dumper($sa_authority) . "\n";
-		    print STDERR Dumper($speaker_signer) . "\n";
 		    goto bad;
 		}
 	    }
