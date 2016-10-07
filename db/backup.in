@@ -1,6 +1,6 @@
-#!/usr/bin/perl -wT
+#!/usr/bin/perl -w
 #
-# Copyright (c) 2000-2015 University of Utah and the Flux Group.
+# Copyright (c) 2000-2016 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -55,7 +55,8 @@ my $clean   = 0;
 my $TB		= "@prefix@";
 my $DBNAME	= "@TBDBNAME@";
 my $TBOPS       = "@TBOPSEMAIL@";
-
+my $MAINSITE    = @TBMAINSITE@;
+my $PGENISUPPORT= @PROTOGENI_SUPPORT@;
 my $BACKUPDIR	= "$TB/backup";
 my $LOGDIR	= "$TB/log/mysql";
 my $HOTCOPY     = "/usr/local/bin/mysqlhotcopy";
@@ -280,8 +281,14 @@ else {
     #
     # Do a mysqldump. This will reset the log files.
     #
+    my @DBNAMES = ($DBNAME);
+    push(@DBNAMES, "ims")
+	if ($MAINSITE);
+    push(@DBNAMES, ("geni", "geni-cm", "geni-ch"))
+	if ($PGENISUPPORT);
+    
     if (system("$MYSQLDUMP --create-options ".
-	       "--flush-logs --lock-tables $DBNAME > $backname")) {
+	       "--flush-logs --lock-tables --databases @DBNAMES > $backname")) {
 	fatal("mysqldump failed!");
     }
 
