@@ -72,6 +72,7 @@ delete @ENV{'IFS', 'CDPATH', 'ENV', 'BASH_ENV'};
 sub fatal($);
 sub GetServerCredential();
 sub PostImageInfo($);
+sub PostImageAlias($);
 
 #
 # Turn off line buffering on output
@@ -89,10 +90,9 @@ use GeniHRN;
 use Genixmlrpc;
 use GeniRegistry;
 use libEmulab;
-use Image;
+use OSImage;
 use User;
 use Group;
-use OSinfo;
 use emdb qw();
 use EmulabFeatures;
 use GeniImage;
@@ -165,22 +165,30 @@ Genixmlrpc->SetTimeout(15);
 
 if (@ARGV) {
     foreach my $imageid (@ARGV) {
-	my $image = Image->Lookup($imageid);
+	my $image = OSImage->Lookup($imageid);
 	if (!defined($image)) {
 	    print STDERR "Could not lookup image: $imageid\n";
 	    $errors++;
 	    next;
 	}
-	# We post all versions with -a
-	my @allversions = ($image);
-	if ($allvers && $image->AllVersions(\@allversions)) {
-	    print STDERR "Could not lookup all versions for image: $imageid\n";
-	    $errors++;
-	    next;
-	}
-	foreach my $tmp (@allversions) {
-	    if (PostImageInfo($tmp)) {
+	if ($image->isImageAlias()) {
+	    if (PostImageAlias($image)) {
 		$errors++;
+	    }
+	}
+	else {
+	    # We post all versions with -a
+	    my @allversions = ($image);
+	    if ($allvers && $image->AllVersions(\@allversions)) {
+		print STDERR
+		    "Could not lookup all versions for image: $imageid\n";
+		$errors++;
+		next;
+	    }
+	    foreach my $tmp (@allversions) {
+		if (PostImageInfo($tmp)) {
+		    $errors++;
+		}
 	    }
 	}
     }
@@ -212,7 +220,7 @@ else {
 			   "order by v.imageid,v.version");
 
     while (my ($imageid,$version) = $query_result->fetchrow_array()) {
-	my $image = Image->Lookup($imageid,$version);
+	my $image = OSImage->Lookup($imageid,$version);
 	if (!defined($image)) {
 	    print STDERR "Could not lookup image: $imageid,$version\n";
 	    $errors++;
@@ -234,13 +242,7 @@ sub PostImageInfo($)
     my $version = $image->version();
 
     if (!$image->isdataset()) {
-	my $osinfo  = OSinfo->Lookup($imageid,$version);
-	if (!defined($osinfo)) {
-	    print STDERR "Could not lookup osinfo: $imageid,$version\n";
-	    # Just skip, something is very wrong.
-	    return 0;
-	}
-	$osfeatures = $osinfo->osfeatures();
+	$osfeatures = $image->osfeatures();
     }
     my $project = $image->GetProject();
     if (!defined($project)) {
@@ -455,6 +457,61 @@ sub PostImageInfo($)
     }
     # Mark as reported.
     $image->MarkIMSReported();
+    return 0;
+}
+
+sub PostImageAlias($)
+{
+    my ($image) = @_;
+    my @target_urns = ();
+
+    # Does not return if error.
+    my $credential = GetServerCredential();
+
+    foreach my $tmp ($image->imagelist()) {
+	push(@target_urns, $tmp->urn());
+    }
+    my $blob = {"client_version" => $CLIENTVERS,
+		"isimagealias"   => 1,
+		"urn"		 => $image->urn(),
+		"uuid"           => $image->uuid(),
+		"target_urns"    => \@target_urns,
+
+    };
+    print Dumper($blob)
+	if ($debug);
+    if ($impotent) {
+	print "Would push $image\n";
+	return 0;
+    }
+
+    if ($verbose) {
+	print "Pushing $image\n";
+    }
+    #
+    # Push the blob to the image server.
+    #
+    my $response =
+	Genixmlrpc::CallMethod(IMSURL(), undef, "PostImageInfo",
+			       {"credential" => $credential->asString(),
+				"imageinfo"  => $blob});
+    if (!defined($response) || $response->code()) {
+	my $msg = "PostImageInfo failed for $image:";
+	
+	if (!defined($response)) {
+	    # Bail, we will try again later.
+	    print STDERR "$msg RPC error\n";
+	    return -1;
+	}
+	elsif (defined($response->output())) {
+	    print STDERR "$msg " . $response->output() . "\n";
+	    return -1;
+	}
+	else {
+	    print STDERR "$msg " . $response->code() . "\n";
+	    return -1;
+	}
+    }
     return 0;
 }
 

@@ -73,8 +73,7 @@ use libtestbed;
 use libtblog;
 use NodeType;
 use Experiment;
-use Image;
-use OSinfo;
+use OSImage;
 use User;
 use Node;
 use EmulabFeatures;
@@ -559,8 +558,8 @@ if (defined $tally{reload}) {
     $users_fault = 0;
 
     foreach my $osid (sort keys %{$tally{reload}}) {
-	my $osinfo  = OSinfo->Lookup($osid);
-	my $osname  = $osinfo->osname();
+	my $osimage = OSImage->Lookup($osid);
+	my $osname  = $osimage->imagename();
 	
 	my %d     = %{$tally{reload}{$osid}{any_type}};
 	my $total = $total{$osid}{any_type};
@@ -578,9 +577,9 @@ if (defined $tally{reload}) {
     $users_fault = 1;
 
     foreach my $osid (sort keys %{$tally{boot}}) {
-	my $osinfo     = OSinfo->Lookup($osid);
-	my $osname     = $osinfo->osname();
-	my $user_image = ($osinfo->pid() eq TBOPSPID() ? 0 : 1);
+	my $osimage    = OSImage->Lookup($osid);
+	my $osname     = $osimage->imagename();
+	my $user_image = ($osimage->pid() eq TBOPSPID() ? 0 : 1);
 	
 	add_defaults($tally{boot}{$osid}{any_type});
 	my %d   = %{$tally{boot}{$osid}{any_type}};
@@ -683,8 +682,8 @@ if ($exit_code == 0) {
 	    }
 	}
     }
-    Image->RecordImageHistory($experiment, 'os_setup',
-			      tblog_session(), $impotent, \%todo);
+    OSImage->RecordImageHistory($experiment, 'os_setup',
+				tblog_session(), $impotent, \%todo);
 }
 
 #

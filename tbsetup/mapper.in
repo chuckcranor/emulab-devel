@@ -102,6 +102,7 @@ my $userspec   = 0;
 my $usecontrol = 0;
 my $use_old_ptopgen  = 0;
 my $vtop;
+my $retval;
 
 #
 # Configure variables
@@ -138,7 +139,7 @@ sub chat($);
 sub RunAssign($$);
 sub FinalizeRegression($);
 sub AssignLoop();
-sub MapperWrapper();
+sub MapperWrapper(;$);
 sub PrintSolution();
 
 # un-taint path
@@ -341,7 +342,71 @@ $vtopflags |= $libvtop::VTOP_FLAGS_ALLOCONLY
 $vtopflags |= $libvtop::VTOP_FLAGS_REGRESSION
     if ($regression);
 
-MapperWrapper();
+if (1 || IsMultiPCArchitecture()) {
+    my @architectures = PCArchitectures();
+
+    $vtop = libvtop->Create($experiment, $this_user, $vtopflags, $real_user);
+    if (!defined($vtop)) {
+	fatal("Could not create vtop structure for $experiment");
+    }
+    $vtop->CreateVtop() == 0
+	or fatal("Could not create vtop for $experiment");
+
+    #
+    # If all nodes are explicitly typed, we run the mapper normally.
+    #
+    if ($vtop->AllNodesTyped()) {
+	$retval = MapperWrapper();
+    }
+    else {
+	#
+	# If all of the typed nodes are of one type, then try assign with
+	# that type first. In other words, set the order in which to try the
+	# different types, according to how many nodes of that architecture.
+	#
+	my %architectures = map { $_ => 0 } @architectures;
+
+	foreach my $type (keys(%{ $vtop->types() })) {
+	    $type = NodeType->Lookup($type);
+	    $architectures{$type->architecture()} +=
+		$vtop->types()->{$type->type()};
+	}
+	# sort the array.
+	@architectures = sort { $architectures{$b} <=>
+				    $architectures{$a} } keys(%architectures);
+
+	#
+	# Run through each architecture.
+	#
+	foreach my $architecture (@architectures) {
+	    $retval = MapperWrapper($architecture);
+	    last
+		if (!$retval);
+	    #
+	    # If we managed to reserve any nodes, we have to free them
+	    # before moving onto the next architecture. 
+	    #
+	    if ($vtop->newreservednodes()) {
+		my @newreservednodes = $vtop->newreservednodes();
+		if (system("$NFREE -x $pid $eid @newreservednodes")) {
+		    fatal("Could not release new nodes after $architecture");
+		}
+		# Kill this, we are done with it now that nodes are released
+		# (do not want to release them again). 
+		$vtop = undef;
+	    }
+	}
+    }
+    if (ref($retval)) {
+	fatal(@{ $retval });
+    }
+}
+else {
+    my $retval = MapperWrapper();
+    if (ref($retval)) {
+	fatal(@{ $retval });
+    }
+}
 if ($regression) {
     if (0) {
 	$updating   = 1;
@@ -359,10 +424,14 @@ PrintSolution()
     if ($outfile);
 exit(0);
 
-sub MapperWrapper()
+sub MapperWrapper(;$)
 {
+    my ($architecture) = @_;
+    
     chat("Starting the new and improved mapper wrapper.\n")
 	if (!$toponly);
+    chat("Forcing untyped nodes to $architecture\n")
+	if (defined($architecture));
 
     # Need to do this cause libvtop will add them again.
     # Must be done before nodes are released.
@@ -377,7 +446,7 @@ sub MapperWrapper()
     TBDebugTimeStamp("Create libvtop ended");
 
     TBDebugTimeStamp("vtopgen started");
-    $vtop->CreateVtop() == 0
+    $vtop->CreateVtop($architecture) == 0
 	or fatal("Could not create vtop for $experiment");
     TBDebugTimeStamp("vtopgen finished");
     
@@ -397,9 +466,7 @@ sub MapperWrapper()
 	    fatal("Not allowed to mix <=1Gb and >1Gb links");
 	}
     }
-
-    AssignLoop();
-    return 0;
+    return AssignLoop();
 }
 
 #
@@ -501,9 +568,9 @@ sub AssignLoop()
 	    FinalizeRegression(1)
 		if ($regression);
 
-	    fatal({type => 'primary', severity => SEV_ERROR,
-		   error => ['unretriable_assign_error']},
-		  "Unretriable error. Giving up.");
+	    return [{type  => 'primary', severity => SEV_ERROR,
+		     error => ['unretriable_assign_error']},
+		    "Unretriable error. Giving up."];
 	}
     
 	#
@@ -522,15 +589,15 @@ sub AssignLoop()
 	    $impotent  = 1;
 	    my $retval = RunAssign(1, $prefix . ".empty");
 	    if ($retval != 0) {
-		fatal({type=>'extra', cause=>'user', severity=>SEV_ERROR,
-	           error=>['infeasible_resource_assignment']}, 
-		  "This experiment cannot be instantiated on this ".
-                  "testbed. You have most likely asked for hardware ".
-                  "this testbed does not have, such as nodes of a type ".
-                  "it does not contain, or nodes with too many network ".
-                  "interfaces.  You will need to modify this experiment ".
-                  "before it can be swapped in - re-submitting the ".
-                  "experiment as-is will always result in failure.");
+		return [{type=>'extra', cause=>'user', severity=>SEV_ERROR,
+			 error=>['infeasible_resource_assignment']}, 
+			"This experiment cannot be instantiated on this ".
+			"testbed. You have most likely asked for hardware ".
+			"this testbed does not have, such as nodes of a type ".
+			"it does not contain, or nodes with too many network ".
+			"interfaces.  You will need to modify this experiment ".
+			"before it can be swapped in - re-submitting the ".
+			"experiment as-is will always result in failure."];
 	    }
 	    chat("Assign succeeded on an empty testbed.\n");
 	    $impotent = $save_impotent;
@@ -540,9 +607,9 @@ sub AssignLoop()
 	# always changing. But once we hit the maxrun, we continue
 	# only if progress on the last loop.
 	if ($currentrun >= $maxrun && !$progress) {
-	    fatal({type => 'primary', severity => SEV_ERROR,
-		   error => ['reached_assign_run_limit']},
-		  "Reached run limit. Giving up.");
+	    return [{type => 'primary', severity => SEV_ERROR,
+		     error => ['reached_assign_run_limit']},
+		    "Reached run limit. Giving up."];
 	}
 	# See if we made progress or not.
 	# Keep going if we allocated some nodes.

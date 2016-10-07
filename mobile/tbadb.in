@@ -38,7 +38,7 @@ use libjsonrpc;
 use tbadb_rpc;
 use User;
 use Node;
-use Image;
+use OSImage;
 use EmulabConstants;
 
 # Func prototypes
@@ -185,7 +185,7 @@ sub cmd_loadimage($@) {
     }
 
     # Lookup image and extract some info.
-    my $image = Image->Lookup($imagepid, $imagename);
+    my $image = OSImage->Lookup($imagepid, $imagename);
     die "tbadb::cmd_loadimage: No such image descriptor $imagename in project $imagepid!\n"
 	if (!defined($image));
     my $imageid = $image->imageid();

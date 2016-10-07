@@ -124,8 +124,7 @@ $| = 1;
 #
 use lib "@prefix@/lib";
 use EmulabConstants;
-use Image;
-use OSinfo;
+use OSImage;
 use User;
 use Project;
 
@@ -184,7 +183,7 @@ sub doimage($)
 {
     my ($pidimage) = @_;
 
-    my $image = Image->Lookup($pidimage);
+    my $image = OSImage->Lookup($pidimage);
     if (!defined($image)) {
 	print STDERR "$pidimage: no such image\n";
 	return 1;
@@ -445,7 +444,7 @@ sub createfull($$$)
     }
 
     $vers--;
-    my $pimage = Image->Lookup("$iname:$vers");
+    my $pimage = OSImage->Lookup("$iname:$vers");
     if (!$pimage) {
 	print STDERR "$iname: could not lookup version $vers!?\n";
 	return 1;
@@ -530,7 +529,7 @@ sub createfullchain($$)
 
     # Find the most recent version with a full image file
     for ($pvers = $vers - 1; $pvers >= 0; $pvers--) {
-	my $pimage = Image->Lookup("$iname:$pvers");
+	my $pimage = OSImage->Lookup("$iname:$pvers");
 	if (!$pimage) {
 	    print STDERR "$iname: could not lookup version $pvers!?\n";
 	    return 1;
@@ -549,7 +548,7 @@ sub createfullchain($$)
 
     while ($pvers != $vers) {
 	my $nvers = $pvers + 1;
-	my $nimage = Image->Lookup("$iname:$nvers");
+	my $nimage = OSImage->Lookup("$iname:$nvers");
 	my $keepfull = ($nvers == $vers ? 1 : 0);
 	if (createfull($iname, $nimage, $keepfull)) {
 	    print STDERR "$iname: could not create intermediate full version $nvers\n";
@@ -629,7 +628,7 @@ sub createdelta($$$)
     }
 
     $vers--;
-    my $pimage = Image->Lookup("$iname:$vers");
+    my $pimage = OSImage->Lookup("$iname:$vers");
     if (!$pimage) {
 	print STDERR "$iname: could not lookup version $vers!?\n";
 	return 1;

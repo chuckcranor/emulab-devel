@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2000-2014 University of Utah and the Flux Group.
+# Copyright (c) 2000-2016 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -67,7 +67,7 @@ use libdb;
 use libtestbed;
 use User;
 use Project;
-use Image;
+use OSImage;
 
 # Protos
 sub fatal($);
@@ -161,6 +161,7 @@ my %xmlfields =
      "mtype_*"		=> ["mtype",		$SLOT_OPTIONAL],
      "hash",		=> ["hash",		$SLOT_ADMINONLY],
      "notes",		=> ["notes",		$SLOT_ADMINONLY],
+     "architecture"	=> ["architecture",	$SLOT_OPTIONAL],
     );
 #
 # Need a list of node types. We join this over the nodes table so that
@@ -319,8 +320,8 @@ UserError()
 # Now do special checks.
 #
 
-my $image = Image->Lookup($editimageid_args{"imageid"},
-			  $editimageid_args{"version"});
+my $image = OSImage->Lookup($editimageid_args{"imageid"},
+			    $editimageid_args{"version"});
 if (!defined($image)) {
     UserError("Image: No such image");
 }
@@ -369,6 +370,16 @@ if (!$isadmin && exists($editimageid_args{"path"})) {
     }
 }
 
+if ($image->architecture() ||
+    (exists($editimageid_args{"architecture"}) &&
+     $editimageid_args{"architecture"} ne "")) {
+    foreach my $arch (split(",", $editimageid_args{"architecture"})) {
+	if (!exists($OSImage::IMAGE_ARCHITECTURES{$arch})) {
+	    UserError("Architecture: Not a valid Architecture: $arch");
+	}
+    }
+}
+else {
 #
 # See what node types this image will work on. Must be at least one!
 #
@@ -446,7 +457,7 @@ if (defined($osidclause)) {
 		  " and make the necessary changes!\n $msg");
     }
 }
-
+}
 exit(0)
     if ($verify);
 
@@ -459,8 +470,8 @@ exit(0)
 delete($editimageid_args{"imageid"});
 
 my $usrerr;
-my $editimageid_val = Image->EditImageid($image,
-					 \%editimageid_args, \$usrerr);
+my $editimageid_val = OSImage->EditImageid($image,
+					   \%editimageid_args, \$usrerr);
 UserError($usrerr)
     if (defined($usrerr));
 fatal("Could not create new Image!")

@@ -274,6 +274,27 @@ AUTOLOAD {
     carp("No such slot '$name' field in class $type");
     return undef;
 }
+sub field($$) {
+    my ($self, $name) = @_;
+    
+    if (exists($self->{'OSINFO'}->{$name})) {
+	return $self->{'OSINFO'}->{$name};
+    }
+    return undef;
+}
+sub fieldExists($$) {
+    my ($self, $name) = @_;
+
+    return 1
+	if (exists($self->{'OSINFO'}->{$name}));
+    return 0;
+}
+sub fieldSet($$$) {
+    my ($self, $name, $value) = @_;
+
+    $self->{'OSINFO'}->{$name} = $value;
+    return $value;
+}
 
 # Break circular reference someplace to avoid exit errors.
 sub DESTROY {
@@ -736,6 +757,16 @@ sub SetParentOS($$)
     return $self->Update({"def_parentosid" => $parent->osid()});
 }
 
+sub DefaultParent($)
+{
+    my ($self) = @_;
+
+    return undef
+	if (!defined($self->def_parentosid()));
+
+    return OSinfo->Lookup($self->def_parentosid());
+}
+
 #
 # Check if a particular feature is supported.
 #
@@ -837,7 +868,7 @@ sub SetRunsOnParent($$)
 sub MapToImage($$)
 {
     my ($self, $type) = @_;
-    require Image;
+    require OSImage;
 
     if (ref($type)) {
 	$type = $type->type();
@@ -852,9 +883,9 @@ sub MapToImage($$)
 
     my ($imageid) = $query_result->fetchrow_array();
     # Look for corresponding image version. 
-    my $image = Image->Lookup($imageid, $self->vers());
+    my $image = OSImage->Lookup($imageid, $self->vers());
     if (!defined($image)) {
-	$image = Image->Lookup($imageid);
+	$image = OSImage->Lookup($imageid);
     }
     return $image;
 }

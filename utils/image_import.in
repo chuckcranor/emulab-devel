@@ -128,8 +128,7 @@ use libtestbed;
 use User;
 use Project;
 use Group;
-use Image;
-use OSinfo;
+use OSImage;
 
 # Locals;
 my $url;
@@ -217,7 +216,7 @@ if ($update) {
     usage()
 	if (!@ARGV);
 
-    $image = Image->Lookup(shift(@ARGV));
+    $image = OSImage->Lookup(shift(@ARGV));
     if (!defined($image)) {
 	fatal("Image descriptor does not exist");
     }
@@ -362,7 +361,7 @@ if (!$update) {
 	!$query_result->numrows) {
 	fatal("Could not get the SQL lock for a long time!");
     }
-    $image = Image->LookupByURL($url);
+    $image = OSImage->LookupByURL($url);
     if (!defined($image)) {
 	$image = CreateImage($url, $xmlparse, $user, $group, $imagename);
     }
@@ -568,7 +567,7 @@ sub CreateImage($$$$$)
 	# This can be set later via the web interface. 
 	#
 	my $posid  = $xmlparse->{'attribute'}->{"def_parentosid"}->{'value'};
-	my $parent = Image->Lookup($posid);
+	my $parent = OSImage->Lookup($posid);
 	if (defined($parent)) {
 	    $xmlparse->{'attribute'}->{"mtype_pcvm"} = {};
 	    $xmlparse->{'attribute'}->{"mtype_pcvm"}->{'value'} = 1;
@@ -601,14 +600,14 @@ sub CreateImage($$$$$)
 	$xmlparse->{'attribute'}->{"imagename"}->{'value'} = 
 	    substr(TBGenSecretKey(), 0, 12);
     }
-    elsif (Image->Lookup($group->pid(),
+    elsif (OSImage->Lookup($group->pid(),
 			 $xmlparse->{'attribute'}->{"imagename"}->{'value'})) {
 	my $index = 1;
 	my $imagename;
 	do {
 	    $imagename = $xmlparse->{'attribute'}->{"imagename"}->{'value'};
 	    $imagename .= "_" . $index++;
-	} while ($index < 100 && Image->Lookup($group->pid(), $imagename));
+	} while ($index < 100 && OSImage->Lookup($group->pid(), $imagename));
 	if ($index >= 100) {
 	    fatal("Could not generate a unique image name");
 	}
@@ -669,7 +668,7 @@ sub CreateImage($$$$$)
 	fatal("Could not create new image from xml");
     }
 
-    my $image = Image->LookupByURL($url);
+    my $image = OSImage->LookupByURL($url);
     if (!defined($image)) {
 	fatal("Could not lookup new image for $url");
     }

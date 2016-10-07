@@ -89,10 +89,9 @@ use GeniUser;
 use GeniHRN;
 use Genixmlrpc;
 use libEmulab;
-use Image;
+use OSImage;
 use User;
 use Group;
-use OSinfo;
 
 if (!$PGENISUPPORT) {
     print STDERR "You are not a protogeni site\n";
@@ -126,7 +125,7 @@ if (defined($options{"u"})) {
 usage()
     if (! (@ARGV && $outfile));
 
-my $image = Image->Lookup($ARGV[0]);
+my $image = OSImage->Lookup($ARGV[0]);
 fatal("No such image")
     if (!defined($image));
 

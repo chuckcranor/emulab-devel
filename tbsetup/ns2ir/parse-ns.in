@@ -114,7 +114,7 @@ use User;
 use BlockstoreType;
 use Blockstore;
 use Lease;
-use OSinfo;
+use OSImage;
 
 use constant false => 0;
 use constant true  => 1;
@@ -531,10 +531,10 @@ sub GenDefsFile($)
 	print TCL "set issubnode($class) $issub\n";
 
 	if (defined($osid) && $osid ne "") {
-	    my $osinfo = OSinfo->Lookup($osid);
-	    if (defined($osinfo)) {
-		my $osname = $osinfo->osname();
-		print TCL "set default_osids($type) \"$osname\"\n"
+	    my $osimage = OSImage->Lookup($osid);
+	    if (defined($osimage)) {
+		my $name = $osimage->osname();
+		print TCL "set default_osids($type) \"$name\"\n"
 	    }
 	}
     }
@@ -555,10 +555,10 @@ sub GenDefsFile($)
 	print TCL "set issubnode($type) $issub\n";
 
 	if (defined($osid) && $osid ne "") {
-	    my $osinfo = OSinfo->Lookup($osid);
-	    if (defined($osinfo)) {
-		my $osname = $osinfo->osname();
-		print TCL "set default_osids($type) \"$osname\"\n"
+	    my $osimage = OSImage->Lookup($osid);
+	    if (defined($osimage)) {
+		my $name = $osimage->osname();
+		print TCL "set default_osids($type) \"$name\"\n"
 	    }
 	}
     }
@@ -740,6 +740,20 @@ sub GenDefsFile($)
 	    }
 	    print TCL "set subosids($osname) [list $parentlist]\n";
 	    print TCL "set subosids($pid/$osname) \$subosids($osname)\n";
+	}
+	print TCL "\n";
+    }
+
+    # Look for image aliases.
+    my @aliases = OSImageAlias->ListAll();
+    if (@aliases) {
+	print TCL "# Aliases\n";
+	foreach my $alias (@aliases) {
+	    my $imagename = $alias->imagename();
+	    my $pid       = $alias->pid();
+	    
+	    print TCL "set osids($imagename) 1\n";
+	    print TCL "set osids($pid/$imagename) 1\n";
 	}
 	print TCL "\n";
     }

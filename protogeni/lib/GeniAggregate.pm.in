@@ -1001,8 +1001,7 @@ sub Action($$$;$)
     my $reload  = ($action eq "reload" ? 1 : 0);
     $flags      = 0 if (!defined($flags));
     require Lan;
-    require OSinfo;
-    require Image;
+    require OSImage;
 
     return -1
 	if (! ref($self));
@@ -1142,8 +1141,8 @@ sub Action($$$;$)
 		#
 		# We now allow the user to specify the OS for vnodes.
 		#
-		my $osinfo = OSinfo->Lookup($vnode->def_boot_osid(),
-					    $vnode->def_boot_osid_vers());
+		my $osinfo = OSImage->Lookup($vnode->def_boot_osid(),
+					     $vnode->def_boot_osid_vers());
 					    
 		if (!defined($osinfo)) {
 		    $msg .= "Could not get osinfo for $vnode";
@@ -1259,8 +1258,8 @@ sub Action($$$;$)
 	    #
 	    # See if the node is running the requested OS.
 	    #
-	    my $osinfo = OSinfo->Lookup($node->def_boot_osid(),
-					$node->def_boot_osid_vers());
+	    my $osinfo = OSImage->Lookup($node->def_boot_osid(),
+					 $node->def_boot_osid_vers());
 	    if (!defined($osinfo)) {
 		$msg .= "Could not get osinfo for $node";
 		goto bad;
@@ -1361,7 +1360,7 @@ sub Action($$$;$)
 	}
     }
     # Record image stats
-    Image->RecordImageHistory($experiment, 'os_setup', undef, 0, \%imageinfo);
+    OSImage->RecordImageHistory($experiment, 'os_setup', undef, 0, \%imageinfo);
     
     # See "bad" label below.
     $sliver = undef;

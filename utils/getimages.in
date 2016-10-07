@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2003-2015 University of Utah and the Flux Group.
+# Copyright (c) 2003-2016 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -76,8 +76,7 @@ if ($FBSD_VERSION >= 9.3) {
 use lib "@prefix@/lib";
 use emdb;
 use User;
-use Image;
-use OSinfo;
+use OSImage;
 use libaudit;
 use EmulabConstants;
 use libEmulab;
@@ -179,7 +178,7 @@ foreach my $imageid (keys(%{ $xmlparse->{'image'} })) {
     #
     # Lookup will sanity check the imageid string.
     #
-    my $image = Image->Lookup(TBOPSPID(), $imageid);
+    my $image = OSImage->Lookup(TBOPSPID(), $imageid);
     if (defined($image)) {
 	print "Local descriptor found: $image\n"
 	    if ($debug);
@@ -242,7 +241,7 @@ foreach my $imageid (keys(%{ $xmlparse->{'image'} })) {
     fatal("Could not import image from $metaurl")
 	if ($?);
 
-    $image = Image->Lookup(TBOPSPID(), $imageid);
+    $image = OSImage->Lookup(TBOPSPID(), $imageid);
     if (!defined($image)) {
 	fatal("Could not lookup image even though import succeeded");
     }

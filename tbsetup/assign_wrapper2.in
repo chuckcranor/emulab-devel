@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2000-2005, 2009 University of Utah and the Flux Group.
+# Copyright (c) 2000-2016 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -30,7 +30,7 @@
 BEGIN {$FAKE_SCRIPTNAME = $ARGV[0];}
 
 use lib "@prefix@/lib";
-use OSinfo;  # To look up OS by idx.
+use OSImage;  # To look up OS by idx.
 use libtblog qw(:DEFAULT dblog *SOUT *SERR);
 
 $ENV{'PATH'} = "/usr/bin:@prefix@/libexec";
@@ -62,7 +62,7 @@ while (<P>) {
     # we log the error messages here and want them to be right.
     #
     if (/(.*)No physical nodes have feature OS-(\d+)!(.*)/) {
-	my $OS = OSinfo->Lookup($2);
+	my $OS = OSImage->Lookup($2);
 	my $os_tag =  $OS->pid() . "/" . $OS->osname();
 	$_ = "$1 OS '$os_tag' (OS-$2) does not run on this hardware type!\n$3"
 	    if (defined($OS));
