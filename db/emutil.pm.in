@@ -400,6 +400,9 @@ sub ParRun($$$@)
 		$SIG{TERM} = 'DEFAULT';
 		$SIG{QUIT} = 'DEFAULT';
 		$SIG{HUP}  = 'DEFAULT';
+
+		# So randomness is not the same in different children
+		srand();
 		
 		# So we get the event system fork too ...
 		event::EventFork();
