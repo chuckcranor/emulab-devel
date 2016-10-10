@@ -5213,6 +5213,8 @@ sub RunLinktest($)
     }
     else {
 	my $command = "$LINKTEST -e -l $level -t 3600 ";
+	$command .= "-N "
+	    if ($experiment->HasNoNFSMounts());
 	$command .= "-o " . $logfile->filename() . " "
 	    if (defined($async));
 	$command .= "$pid $eid";

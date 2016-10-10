@@ -1,7 +1,7 @@
 #!/usr/bin/perl -w
 
 #
-# Copyright (c) 2000-2011 University of Utah and the Flux Group.
+# Copyright (c) 2000-2016 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -37,11 +37,11 @@ use POSIX ":sys_wait_h";
 #
 sub usage()
 {
-    print "Usage: linktest.proxy [-d level] -u user -p unix_pid -g unix_gid -e pid/eid ".
+    print "Usage: linktest.proxy [-d level] [-N] -u user -p unix_pid -g unix_gid -e pid/eid ".
 	"-l level -o logfile -t timeout -r\n";
     exit(-1);
 }
-my $optlist = "d:u:g:e:l:o:t:rp:";
+my $optlist = "d:u:g:e:l:o:t:rp:N";
 my $debug   = 0;
 my $user;
 my $pid;
@@ -50,6 +50,7 @@ my $level;
 my $logfile;
 my $timeout;
 my $reportonly = 0;
+my $nonfs = 0;
 my $unix_gid;
 my $unix_pid;
 
@@ -128,6 +129,9 @@ if (defined($options{"o"})) {
 if (defined($options{"r"})) {
     $reportonly = $options{"r"};
 }
+if (defined($options{"N"})) {
+    $nonfs = 1
+}
 
 #
 # Okay, now flip to user before running linktest. Must put the user
@@ -163,6 +167,8 @@ push(@cmdandargs, ("-o", $output))
     if (defined($output));
 push(@cmdandargs, "-r")
     if ($reportonly);
+push(@cmdandargs, "-N")
+    if ($nonfs);
 
 exec(@cmdandargs);
 die("*** $0:\n".

@@ -3156,6 +3156,20 @@ sub NoNFSMounts($)
     return 0;
 }
 
+sub HasNoNFSMounts($)
+{
+    my ($self) = @_;
+    my $idx   = $self->idx();
+    
+    my $query_result = 
+	DBQueryWarn("select nonfsmounts,nfsmounts from experiments ".
+		    "where idx='$idx' and ".
+		    "      (nonfsmounts=1 or nfsmounts='none')");
+    return 1
+	if (!$query_result);
+    return $query_result->numrows;
+}
+
 #
 # Clear the panic bit.
 #

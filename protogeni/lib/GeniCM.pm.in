@@ -4449,14 +4449,13 @@ sub SliverWorkAux($$$$$$$$)
 		$message = "Inconsistent ifacemap; $node_id,$iface_id";
 		goto bad;
 	    }
+	    if (GeniHRN::IsValid($iface_name)) {
+		my (undef, undef, $short_iface) =
+		    GeniHRN::ParseInterface($iface_name);
+		$iface_name = $short_iface;
+	    }
 	    my $interface;
-
 	    if ($iface_name ne "lo0") {
-		if (GeniHRN::IsValid($iface_name)) {
-		    my ($authority, $short_node, $short_iface) =
-			GeniHRN::ParseInterface($iface_name);
-		    $iface_name = $short_iface;
-		}
 		$interface = Interface->LookupByIface($node, $iface_name);
 		if (!defined($interface)) {
 		    $message = "No such interface $iface_name on $node";
