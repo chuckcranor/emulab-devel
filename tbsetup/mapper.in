@@ -342,7 +342,7 @@ $vtopflags |= $libvtop::VTOP_FLAGS_ALLOCONLY
 $vtopflags |= $libvtop::VTOP_FLAGS_REGRESSION
     if ($regression);
 
-if (1 || IsMultiPCArchitecture()) {
+if (IsMultiPCArchitecture()) {
     my @architectures = PCArchitectures();
 
     $vtop = libvtop->Create($experiment, $this_user, $vtopflags, $real_user);
