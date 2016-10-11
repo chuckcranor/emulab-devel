@@ -4449,7 +4449,7 @@ sub requires_delay($$$$)
     }
 
     if (! $virtnode->_isvtyped()) {
-	$node_class = $virtnode->typeinfo()->class();
+	$node_class = $virtnode->_typeinfo()->class();
 	
 	if (!exists($linkbws->{$node_class}{$protocol})) {
 	    warn("requires_delay(): $virtnode - invalid class $node_class!\n");
