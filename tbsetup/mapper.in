@@ -359,6 +359,8 @@ if (IsMultiPCArchitecture()) {
 	$retval = MapperWrapper();
     }
     else {
+	my $ordered = 0;
+	
 	#
 	# If all of the typed nodes are of one type, then try assign with
 	# that type first. In other words, set the order in which to try the
@@ -370,6 +372,24 @@ if (IsMultiPCArchitecture()) {
 	    $type = NodeType->Lookup($type);
 	    $architectures{$type->architecture()} +=
 		$vtop->types()->{$type->type()};
+
+	    $ordered += $vtop->types()->{$type->type()};
+	}
+	#
+	# If no types specified, and thus no implied ordering, then we
+	# fall back to the ordering specified in the sitevar.
+	#
+	if (!$ordered) {
+	    my $string   = GetSiteVar("general/architecture_priority");
+	    my @archs    = split(",", $string);
+	    my $count    = scalar(@archs);
+
+	    print "Forcing architecture ordering: @archs\n";
+	    
+	    foreach my $arch (@archs) {
+		# Set decreasing count for sort below.
+		$architectures{$arch} = $count--;
+	    }
 	}
 	# sort the array.
 	@architectures = sort { $architectures{$b} <=>
