@@ -1314,8 +1314,10 @@ use vars qw(@ISA @EXPORT $AUTOLOAD);
 @ISA    = "Exporter";
 @EXPORT = qw ( );
 
+use libtestbed;
 use libdb;
 use EmulabConstants;
+use emutil;
 use Image;
 use OSinfo;
 use overload ('""' => 'Stringify');
@@ -1388,6 +1390,55 @@ sub imagelist($)    { return values(%{ $_[0]->{'IMAGES'} }); }
 sub isImageAlias($) { return 1; }
 sub IsGeneric($)    { return 0; }
 sub path($)         { return undef; }
+
+#
+# Create a new Image Alias.
+#
+sub Create($$$@)
+{
+    my ($class, $name, $group, @targets) = @_;
+
+    #
+    # Grab unique ID. Table already locked.
+    # 
+    my $imageid = TBGetUniqueIndex("next_osid");
+    my $uuid    = NewUUID();
+    my $pid     = $group->pid();
+    my $pid_idx = $group->pid_idx();
+    my $gid     = $group->gid();
+    my $gid_idx = $group->gid_idx();
+
+    foreach my $target (@targets) {
+	my $target_name    = $target->imagename();
+	my $target_imageid = $target->imageid();
+
+	DBQueryWarn("insert into image_aliases set ".
+		    "  imagename='$name',imageid='$imageid',uuid='$uuid', ".
+		    "  pid='$pid',pid_idx='$pid_idx',".
+		    "  gid='$gid',gid_idx='$gid_idx',".
+		    "  target_imagename='$target_name',".
+		    "  target_imageid='$target_imageid'")
+	    or goto bad;
+    }
+    return OSImageAlias->Lookup($imageid);
+  bad:
+    DBQueryWarn("delete from image_aliases where imageid='$imageid'");
+    return -1;
+}
+
+#
+# Delete.
+#
+sub Delete($)
+{
+    my ($self) = @_;
+    my $imageid = $self->imageid();
+
+    return -1
+	if (!DBQueryWarn("delete from image_aliases ".
+			 "where imageid='$imageid'"));
+    return 0;
+}
 
 #
 # Lookup a "system" image, meaning one in the emulab-ops project.
