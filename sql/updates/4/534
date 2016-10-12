@@ -8,7 +8,9 @@ sub DoUpdate($$$)
     #
     # No one is using this table yet.
     #
-    DBQueryFatal("ALTER TABLE image_aliases DROP KEY `pid`");
+    if (DBKeyExists("image_aliases", "pid")) {
+	DBQueryFatal("ALTER TABLE image_aliases DROP KEY `pid`");
+    }
     DBQueryFatal("ALTER TABLE image_aliases DROP PRIMARY KEY");
     DBQueryFatal("ALTER TABLE image_aliases ADD PRIMARY KEY ".
 		 "(`imageid`,`target_imageid`)");
