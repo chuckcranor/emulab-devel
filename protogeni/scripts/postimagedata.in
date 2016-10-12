@@ -48,7 +48,7 @@ my $debug    = 0;
 my $verbose  = 0;
 my $errors   = 0;
 my $allvers  = 0;
-my $datasets = 1;
+my $datasets = 0;
 
 #
 # Configure variables
