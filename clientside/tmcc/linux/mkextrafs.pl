@@ -62,6 +62,10 @@ my $GPTUNUSED    = "00000000-0000-0000-0000-000000000000";
 my $GPTLINUXDATA = "0FC63DAF-8483-4772-8E79-3D69D8477DE4";
 my $GPTLINUXLVM  = "E6D6D379-F507-44C2-A23C-238F2A3DF928";
 
+# Does the partitioned device have a 'p' before the partition number?
+# We try to detect that, rather than hardcoding specific formats.
+my $NEEDSPFORMAT = 0;
+
 #
 # Turn off line buffering on output
 #
@@ -157,16 +161,44 @@ if (!$lvm || ($lvm && $lmonster)) {
 if (defined($diskopt)) {
     $disk = $diskopt;
     $disk =~ s/^\/dev\///;
+    if ($disk =~ /^nvme\dn\d+$/) {
+	$NEEDSPFORMAT = 1;
+    }
 }
 else {
     my $rootdev = `df | egrep '/\$' | grep -v rootfs`;
     if ($rootdev =~ /^\/dev\/([a-z]+)\d+\s+/) {
 	$disk = $1;
+	print "disk = $disk\n";
+    }
+    elsif ($rootdev =~ /^\/dev\/(nvme\dn\d+)p\d+\s+/) {
+	$disk = $1;
+	$NEEDSPFORMAT = 1;
+	print "nvme disk = $disk\n";
+    }
+    else {
+	my $rpartdev = `blkid -L /`;
+	chomp($rpartdev);
+	if ($? == 0 && $rpartdev =~ /^\/dev\/(.*)$/) {
+	    my $bpath = `readlink -f /sys/class/block/$1`;
+	    chomp($bpath);
+	    if ($? == 0) {
+		if ($bpath =~ /.+\/([^\/]+)\/([^\/]+)$/) {
+		    $disk = "$1";
+		    if ($disk =~ /^nvme\dn\d+$/) {
+			$NEEDSPFORMAT = 1;
+		    }
+		}
+	    }
+	}
     }
 }
 
 my $diskdev    = "/dev/${disk}";
 my $fsdevice   = "${diskdev}${slice}";
+if ($NEEDSPFORMAT) {
+    $fsdevice = "${diskdev}p${slice}";
+}
 
 #
 # For LVM, just exit if the physical volume already exists
