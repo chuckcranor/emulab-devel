@@ -824,7 +824,8 @@ sub NewVersion($$$$)
     #
     DBQueryWarn("lock tables images write, image_versions write, ".
 		"            os_info write, os_info_versions write, ".
-		"            emulab_indicies write, osidtoimageid read")
+		"            emulab_indicies write, osidtoimageid read, ".
+		"            node_types read")
 	or return undef;
 
     my $query_result =
@@ -1970,7 +1971,6 @@ sub TypeList($;$)
     # anything found in the osidtoimageid.
     #
     if ($self->architecture()) {
-	
 	$query_result =
 	    DBQueryWarn("select distinct node_types.type from images ".
 			# The image architecture could be a short list.
