@@ -3389,6 +3389,15 @@ sub ResetNextOpMode($$)
     if ($bootosid == 0) {
 	return 0;
     }
+    #
+    # XXX this has only ever happened once, when a newnode failed to boot
+    # up properly, but since it will cause stated to die, let's check for it.
+    # I have no idea if this is the correct thing to set it to, but we do
+    # this below as well, so I am going with it...
+    #
+    if (!defined($bootopmode)) {
+	$bootopmode = "";
+    }
 
     print STDERR "Bootwhat says: $nodeid => $bootosid,$bootopmode\n"
 	if ($debug);
