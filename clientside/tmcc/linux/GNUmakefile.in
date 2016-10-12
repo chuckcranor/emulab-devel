@@ -161,6 +161,8 @@ dir-install:
 	$(INSTALL) -m 755 -o root -g $(DIRGROUP) -d $(RCDIR)/rc6.d
 	$(INSTALL) -m 755 -o root -g $(DIRGROUP) -d $(ETCDIR)
 	$(INSTALL) -m 755 -o root -g $(DIRGROUP) -d $(BINDIR)
+	$(INSTALL) -m 755 -o root -g $(DIRGROUP) -d $(BINDIR)/prepare.pre.d
+	$(INSTALL) -m 755 -o root -g $(DIRGROUP) -d $(BINDIR)/prepare.post.d
 	$(INSTALL) -m 755 -o root -g $(DIRGROUP) -d $(RCDIR)
 	$(INSTALL) -m 755 -o root -g $(DIRGROUP) -d $(VARDIR)
 	$(INSTALL) -m 755 -o root -g $(DIRGROUP) -d $(VARDIR)/db
