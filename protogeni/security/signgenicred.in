@@ -196,6 +196,7 @@ while(<TMP>) {
 }
 if (!close(TMP)) {
     print STDERR $xmlint_output;
+    system("/bin/cat $capfile");
     fatal("$capfile does not conform to schema $SCHEMA");
 }
 

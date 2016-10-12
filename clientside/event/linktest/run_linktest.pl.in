@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2000-2012 University of Utah and the Flux Group.
+# Copyright (c) 2000-2016 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -255,7 +255,7 @@ if (!defined($keyfile)) {
 }
 # path to linktest data.
 my $linktest_path = "$expdata_path/linktest";
-if ($NOSHAREDFS) {
+if ($NOSHAREDFS || $nodelogdir ne "") {
     #
     # We have to make the log directory since it is not in a shared FS
     # (normally the "master" linktest node would do this).
@@ -585,14 +585,12 @@ sub run_loghole(;$$) {
     if (!$remdir || !$localdir) {
 	$remdir = "/var/emulab/logs";
 	$localdir = "$PROJROOT/$pid/exp/$eid/tbdata/ltlogs";
-	print "Downloading logs...\n";
     }
-
+    print "Downloading logs ... patience please.\n";
     system("rm -rf $localdir");
     system("mkdir -p $localdir");
     system("chmod 775 $localdir");
-    system("$LOGHOLE -e $pid/$eid sync -P -n -l $localdir -r $remdir ".
-	   "> $localdir/loghole.out 2>&1");
+    system("$LOGHOLE -e $pid/$eid sync -P -n -l $localdir -r $remdir");
 }
 
 sub TBTimeStamp {
