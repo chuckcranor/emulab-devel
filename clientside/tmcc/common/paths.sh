@@ -1,6 +1,6 @@
 #!/bin/sh
 #
-# Copyright (c) 2000-2004 University of Utah and the Flux Group.
+# Copyright (c) 2000-2004, 2016 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -35,8 +35,10 @@ if [ -d /usr/local/etc/emulab ]; then
 	BINDIR=/usr/local/etc/emulab
 	if [ -e /etc/emulab/client.pem ]; then
 	    ETCDIR=/etc/emulab
+	    STATICRUNDIR=/etc/emulab/run
 	else
 	    ETCDIR=/usr/local/etc/emulab
+	    STATICRUNDIR=/usr/local/etc/emulab/run
 	fi
 	VARDIR=/var/emulab
 	BOOTDIR=/var/emulab/boot
@@ -51,16 +53,20 @@ elif [ -d /etc/testbed ]; then
 	LOGDIR=/tmp
 	LOCKDIR=/tmp
 	DBDIR=/etc/testbed
+	STATICRUNDIR=/etc/testbed/run
 elif [ -d /etc/rc.d/testbed ]; then
 	ETCDIR=/etc/rc.d/testbed
 	BINDIR=/etc/rc.d/testbed
 	VARDIR=/etc/rc.d/testbed
 	BOOTDIR=/etc/rc.d/testbed
 	DBDIR=/etc/rc.d/testbed
+	STATICRUNDIR=/etc/rc.d/testbed/run
 else
         echo "$0: Cannot find proper emulab paths!"
 	exit 1
 fi
+
+DYNRUNDIR=/var/run/emulab
 
 export ETCDIR
 export BINDIR
@@ -69,5 +75,7 @@ export BOOTDIR
 export LOGDIR
 export DBDIR
 export LOCKDIR
+export STATICRUNDIR
+export DYNRUNDIR
 PATH=$BINDIR:/bin:/sbin:/usr/bin:/usr/sbin:/usr/local/bin:/usr/local/sbin:\
 /usr/site/bin:/usr/site/sbin

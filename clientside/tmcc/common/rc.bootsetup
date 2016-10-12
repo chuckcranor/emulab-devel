@@ -170,7 +170,7 @@ if ($action eq "boot" || $action eq "reconfig") {
 # run (or not) its hooks.
 #
 my %manifest;
-getmanifest(\%manifest);
+getrcmanifest(\%manifest);
 
 # Execute the action.
 SWITCH: for ($action) {

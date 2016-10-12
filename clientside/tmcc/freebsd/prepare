@@ -88,6 +88,21 @@ if (getopts("N", \%options)) {
 }
 
 #
+# Really first, look for user prepare prehooks and run them.
+#
+my @PHOOKSDIRS = ("$DYNRUNDIR/prepare.pre.d","$BINDIR/prepare.pre.d");
+for my $pdir (@PHOOKSDIRS) {
+    my @sfiles = ();
+    my $rc = sortedlistallfilesindir($pdir,\@sfiles,1);
+    if (defined($rc) && $rc == 0) {
+	for my $file (@sfiles) {
+	    print "Running prepare hook $file ...\n";
+	    system("$file");
+	}
+    }
+}
+
+#
 # First clean up the node as it would be if free.
 #
 cleanup_node(1);
@@ -334,6 +349,21 @@ if (-e $PUBSUBCONF) {
 if (-e $PUBSUBEXPR) {
     unlink($PUBSUBEXPR) or
 	warn("*** could not remove $PUBSUBEXPR\n");
+}
+
+#
+# Really finally, look for user prepare posthooks and run them.
+#
+@PHOOKSDIRS = ("$DYNRUNDIR/prepare.post.d","$BINDIR/prepare.post.d");
+for my $pdir (@PHOOKSDIRS) {
+    my @sfiles = ();
+    my $rc = sortedlistallfilesindir($pdir,\@sfiles,1);
+    if (defined($rc) && $rc == 0) {
+	for my $file (@sfiles) {
+	    print "Running prepare hook $file ...\n";
+	    system("$file");
+	}
+    }
 }
 
 # Leave this print statement here; create_image depends on it.

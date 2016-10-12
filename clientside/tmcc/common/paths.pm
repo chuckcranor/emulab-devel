@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2000-2003 University of Utah and the Flux Group.
+# Copyright (c) 2000-2003, 2016 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -24,7 +24,9 @@
 package emulabpaths;
 use Exporter;
 @ISA = qw(Exporter);
-@EXPORT = qw( $BINDIR $ETCDIR $VARDIR $BOOTDIR $DBDIR $LOGDIR $LOCKDIR $BLOBDIR);
+@EXPORT = qw( $BINDIR $ETCDIR $VARDIR $BOOTDIR $DBDIR $LOGDIR $LOCKDIR $BLOBDIR
+              $DYNRUNDIR $STATICRUNDIR
+            );
 
 #
 # This path stuff will go away when the world is consistent. Until then
@@ -44,9 +46,11 @@ if (-d "/usr/local/etc/emulab") {
     unshift(@INC, "/usr/local/etc/emulab");
     if (-d "/etc/emulab") {
 	$ETCDIR = "/etc/emulab";
+	$STATICRUNDIR = "/etc/emulab/run";
     }
     else {
 	$ETCDIR = "/usr/local/etc/emulab";
+	$STATICRUNDIR = "/usr/local/etc/emulab/run";
     }
     $VARDIR  = "/var/emulab";
     $BOOTDIR = "/var/emulab/boot";
@@ -61,6 +65,7 @@ elsif (-d "/etc/testbed") {
     $VARDIR  = "/etc/testbed";
     $BOOTDIR = "/etc/testbed";
     $DBDIR   = "/etc/testbed";
+    $STATICRUNDIR = "/etc/testbed/run";
 }
 elsif (-d "/etc/rc.d/testbed") {
     unshift(@INC, "/etc/rc.d/testbed");
@@ -69,6 +74,7 @@ elsif (-d "/etc/rc.d/testbed") {
     $VARDIR  = "/etc/rc.d/testbed";
     $BOOTDIR = "/etc/rc.d/testbed";
     $DBDIR   = "/etc/rc.d/testbed";
+    $STATICRUNDIR = "/etc/rc.d/testbed/run";
 }
 else {
     print "$0: Cannot find proper emulab paths!\n";
@@ -76,6 +82,7 @@ else {
 }
 
 $BLOBDIR = $BOOTDIR;
+$DYNRUNDIR = "/var/run/emulab";
 
 #
 # Untaint path
