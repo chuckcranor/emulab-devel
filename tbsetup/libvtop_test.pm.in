@@ -3635,16 +3635,13 @@ sub GenVirtLans($)
 	    }
 	    else {
 		my $plink = "linksimple/$vname/$member0,$member1";
-		my $bw = '';
+		my $vtbw   = max($top_bw,$top_rbw);
 		my $others = {'isgeninode' => $vlan->_geninodes()};
 		my $wiretype = $vlan->_wiretype();
 
-		if ($emulated) {
-		    $bw = max($top_bw,$top_rbw);
-		}
-		else {
+		if (!$emulated) {
 		    # Let assign choose bw if top_bw is zero.
-		    $bw = ($top_bw == 0 ? "*" : $top_bw);
+		    $vtbw = ($top_bw == 0 ? "*" : $vtbw);
 		    $wiretype = $self->GetWiretype($wiretype,
 						   max($top_bw, $top_rbw));
 		}
@@ -3709,7 +3706,7 @@ sub GenVirtLans($)
 				       'virtual_interface_id' =>"$member0" },
 				      {'virtual_node_id' => $vname1,
 				       'virtual_interface_id' =>"$member1" },
-				      $bw, $wiretype, $others);
+				      $vtbw, $wiretype, $others);
 		}
 	    }
 	}
@@ -4521,7 +4518,10 @@ sub virtlantopbw($$$) {
 	# bandwidth - otherwise, we put in the bandwidth of the type
 	# of physical interface it is likely to get mapped to
 	#
-	if ($virtlan->_emulated()) {
+        my $shaped = $virtlan->membershaped($member);
+
+	if ($virtlan->_emulated() ||
+	    $self->virtlan_use_linkdelay($virtlan, $shaped)) {
 	    $return_rbw = $rbw;
 	}
 	else {

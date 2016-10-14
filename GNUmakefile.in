@@ -235,6 +235,8 @@ endif
 
 subboss: 
 	@$(MAKE) -C clientside subboss
+	@$(MAKE) -C tbsetup subboss
+	@$(MAKE) -C db subboss
 	@$(MAKE) -C os subboss
 ifneq ($(SYSTEM),CYGWIN_NT-5.1)
 	@$(MAKE) -C tip client
@@ -243,6 +245,7 @@ endif
 
 subboss-install: subboss
 	@$(MAKE) -C clientside subboss-install
+	@$(MAKE) -C tbsetup subboss-install
 	@$(MAKE) -C os subboss-install
 ifneq ($(SYSTEM),CYGWIN_NT-5.1)
 	@$(MAKE) -C tip client-install
