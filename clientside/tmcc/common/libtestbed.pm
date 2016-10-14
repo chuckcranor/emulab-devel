@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2000-2015 University of Utah and the Flux Group.
+# Copyright (c) 2000-2016 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -37,6 +37,7 @@ use Exporter;
 	      TBSCRIPTLOCK_WOULDBLOCK TBSCRIPTLOCK_INTERRUPTED
 	      TBSCRIPTLOCK_INTERRUPTIBLE
 	      TBTimeStamp TBTimeStampWithDate TBBackGround ReOpenLog
+   	      CheckDaemonRunning MarkDaemonRunning MarkDaemonStopped);
 	    );
 
 # Must come after package declaration!
@@ -463,6 +464,55 @@ sub TBScriptUnlock(;$)
 	close($lockhandle);
 	undef($lockhandle);
     }
+}
+
+#
+# Check for the existence of a pid file and see if that file is
+# running. Mostly cause of devel tree versions.
+#
+sub CheckDaemonRunning($)
+{
+    my ($name) = @_;
+    my $pidfile = "/var/run/${name}.pid";
+
+    if (-e $pidfile) {
+	my $opid = `cat $pidfile`;
+	if ($opid =~ /^(\d*)$/) {
+	    $opid = $1;
+	}
+	else {
+	    print STDERR "$pidfile exists, but $opid is malformed\n";
+	    return 1;
+	}
+	if (kill(0, $opid)) {
+	    print STDERR "$pidfile exists, and process $opid is running\n";
+	    return 1;
+	}
+	unlink($pidfile);
+    }
+    return 0;
+}
+#
+# Mark a daemon as running.
+#
+sub MarkDaemonRunning($)
+{
+    my ($name) = @_;
+    my $pidfile = "/var/run/${name}.pid";
+
+    if (system("echo '$PID' > $pidfile")) {
+	print STDERR "Could not create $pidfile\n";
+	return -1;
+    }
+    return 0;
+}
+sub MarkDaemonStopped($)
+{
+    my ($name) = @_;
+    my $pidfile = "/var/run/${name}.pid";
+
+    unlink($pidfile);
+    return 0;
 }
 
 1;
