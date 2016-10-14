@@ -1,6 +1,6 @@
-#!/usr/bin/perl -wT
+#!/usr/bin/perl -w
 #
-# Copyright (c) 2000-2012 University of Utah and the Flux Group.
+# Copyright (c) 2000-2016 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -48,6 +48,7 @@ my $restart = 0;
 my $TBOPS       = "@TBOPSEMAIL@";
 my $CBINDIR	= "@CLIENT_BINDIR@";
 my $CLOGDIR	= "@CLIENT_VARDIR@/logs";
+my $CDBDIR	= "@CLIENT_VARDIR@/db";
 
 # un-taint path
 $ENV{'PATH'} = '/bin:/usr/bin:/usr/sbin:/usr/local/bin';
@@ -71,6 +72,7 @@ my $PXELINUXCONFIG  = "pxelinux.cfg";
 # XXX hack for now to support gpxelinux as well
 my $GPXELINUXPREFIX = "$PXEBOOTDIR/gpxelinux";
 my $GPXELINUXBOOT   = "gpxelinux.0";
+my $NODEMAPDB       = "$CDBDIR/nodemap";
 
 sub SetupPXEBoot($$$$);
 sub ClearPXEBoot($$);
@@ -174,6 +176,25 @@ sub gendhcpdconf($$)
 
 		push @nodes, $node;
 	}
+
+	#
+	# Generate a new node mapping DBM file, that maps IP to node_id.
+	# This is used by reportboot.
+	#
+	if (!dbmopen(%DB, $NODEMAPDB, 0660)) {
+	    warn("Could not open $NODEMAPDB");
+	    return 1;
+	}
+	for my $row (@nodes) {
+	    my $ip  = $$row{"IP"};
+	    my $mac = $$row{"MAC"};
+	    my $key = "$ip/$mac";
+	    my $hostname = $$row{"HOSTNAME"};
+
+	    $DB{$key} = $hostname;
+	    $DB{$hostname} = $key;
+	}
+	dbmclose(%DB);
 
 	if (!open(OF, ">$tmpfile")) {
 		warn("Could not open $tmpfile\n");

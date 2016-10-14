@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2000-2014 University of Utah and the Flux Group.
+ * Copyright (c) 2000-2016 University of Utah and the Flux Group.
  * 
  * {{{EMULAB-LICENSE
  * 
@@ -100,7 +100,7 @@ bootinfo(struct in_addr ipaddr, char *node_id, struct boot_info *boot_info,
 	case BIOPCODE_BOOTWHAT_KEYED_REQUEST:
 		info("%s: KEYED REQUEST (key=[%s], vers %d)\n",
 			inet_ntoa(ipaddr), boot_info->data, boot_info->version);
-#ifdef	EVENTSYS
+#if defined(EVENTSYS) && defined(BOOTINFO_PXEEVENTS)
 		needevent = bicache_needevent(ipaddr);
 		if (!no_event_send && needevent &&
 		    bievent_send(ipaddr, opaque, TBDB_NODESTATE_PXEBOOTING)) {
@@ -116,7 +116,7 @@ bootinfo(struct in_addr ipaddr, char *node_id, struct boot_info *boot_info,
 	case BIOPCODE_BOOTWHAT_INFO:
 		info("%s: REQUEST (vers %d)\n",
 		     inet_ntoa(ipaddr), boot_info->version);
-#ifdef	EVENTSYS
+#if defined(EVENTSYS) && defined(BOOTINFO_PXEEVENTS)
 		needevent = bicache_needevent(ipaddr);
 		if (!no_event_send && needevent &&
 		    bievent_send(ipaddr, opaque, TBDB_NODESTATE_PXEBOOTING)) {
@@ -156,9 +156,11 @@ bootinfo(struct in_addr ipaddr, char *node_id, struct boot_info *boot_info,
 				info("%s: retry failed PXEBOOTING event\n",
 				     inet_ntoa(ipaddr));
 				bicache_needevent(ipaddr);
+#if defined(BOOTINFO_PXEEVENTS)
 				if (bievent_send(ipaddr, opaque,
 						 TBDB_NODESTATE_PXEBOOTING))
 					bicache_clearevent(ipaddr);
+#endif
 			}
 			switch (boot_whatp->type) {
 			case BIBOOTWHAT_TYPE_PART:
@@ -166,8 +168,10 @@ bootinfo(struct in_addr ipaddr, char *node_id, struct boot_info *boot_info,
 			case BIBOOTWHAT_TYPE_SYSID:
 			case BIBOOTWHAT_TYPE_MB:
 			case BIBOOTWHAT_TYPE_MFS:
+#if defined(BOOTINFO_PXEEVENTS)
 				bievent_send(ipaddr, opaque,
 					     TBDB_NODESTATE_BOOTING);
+#endif
 				break;
 					
 			case BIBOOTWHAT_TYPE_WAIT:

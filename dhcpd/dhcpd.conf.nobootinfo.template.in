@@ -58,29 +58,19 @@ class "PXE" {
 }
 
 on commit {
-    set clip = binary-to-ascii(10, 8, ".", leased-address);
-    set clhw = binary-to-ascii(16, 8, ":", substring(hardware, 1, 6));
-    if (substring (option vendor-class-identifier, 0, 9) = "PXEClient") {
-	set boot = "PXE";
-    } elsif (substring (option vendor-class-identifier, 0, 6) = "U-boot") {
-	set boot = "UBOOT";
-    } else {
-	set boot = "OS";
+    if (@BOOTINFO_EVENTS@ = 0) {
+	if (substring (option vendor-class-identifier, 0, 9) = "PXEClient") {
+	    set boot = "PXE";
+        } elsif (substring (option vendor-class-identifier, 0, 6) = "U-boot") {
+	    set boot = "PXE";
+        } else {
+	    set boot = "OS";
+        }
+        set clip = binary-to-ascii(10, 8, ".", leased-address);
+    	set clhw = binary-to-ascii(16, 8, ":", substring(hardware, 1, 6));
+
+	execute("@prefix@/sbin/reportboot", clip, clhw, boot);
     }
-
-    ## If you want to send an event on both PXE and OS contacts, use this
-    #execute("@prefix@/sbin/reportboot", "-bD", clip, clhw, boot);
-
-    ## If you want to send both events on the PXE or U-boot contact, use this
-    #if (boot != "OS") {
-    #	execute("@prefix@/sbin/reportboot", "-bDC", clip, clhw, boot);
-    #}
-
-    # If you want to send both events on just U-boot contact, use this
-    if (boot = "UBOOT") {
-	execute("@prefix@/sbin/reportboot", "-bDU", clip, clhw, boot);
-    }
-
 }
 
 @DHCPD_CONTROLNET_DECL@
