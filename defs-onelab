@@ -449,3 +449,29 @@ DISABLE_NSE=1
 # Sometimes the main page is down in a directory on WWWHOST
 # No trailing '/'!
 #WWW=www.example.emulab.net/emulab-www
+
+#
+# Various Cloudlab/Federation stuff.
+#
+PROTOGENI_SUPPORT=1
+PROTOGENI_DOMAIN="onelab"
+PROTOGENI_LOCALUSER=1
+PROTOGENI_GENIWEBLOGIN=0
+PROTOGENI_MAXSERVERLOAD=24
+PROTOGENI_NONFSMOUNTS=0
+# Portal for the Cloudlab Cluster.
+CLUSTER_PORTAL="boss.emulab.net"
+CLUSTER_PUBSUBD_PORT=16506
+FANCYBANNER=1
+ISOLATEADMINS=0
+#
+# Fancy new browser in the console support
+#
+BROWSER_CONSOLE_ENABLE=1
+
+#
+# If enabled, needs setup, see:
+#   http://users.emulab.net/trac/emulab/wiki/NodeUsageInstall
+#
+NODE_USAGE_SUPPORT=1
+
