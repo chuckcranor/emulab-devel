@@ -407,6 +407,10 @@ FRISEBEENUMPORTS=100
 #
 NOSTACKMIB=0
 
+# Image versioning and deltas.
+IMAGEPROVENANCE=1
+IMAGEDELTAS=0
+
 # ZFS -- added by hibler 12/17/15
 WITHZFS=1
 ZFS_ROOT=storage
