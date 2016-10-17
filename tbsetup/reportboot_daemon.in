@@ -38,6 +38,7 @@ sub usage()
     print "Usage: $0 [-dUDC]\n";
     print("Options:\n");
     print(" -d      - Turn on debugging\n");
+    print(" -f      - Do not daemonize, as for daemon_wrapper\n");
     print(" -C      - Combine PXEBOOTING/BOOTING on PXE or U-boot boots;\n");
     print("           Send nothing on an OS boot.");
     print(" -D      - Record event times in a DB to moderate send rate\n");
@@ -47,13 +48,15 @@ sub usage()
  
     exit(1);
 }
-my $optlist    = "dCDUn";
+my $optlist    = "dCDUnf";
 my $debug      = 0;
+my $nodaemon   = 0;
 my $impotent   = 0;
 my $combined   = 0;
 my $ubootonly  = 0;
 my $issubboss  = 0;
 my $usedb      = 0;
+my $event_handle;
 
 #
 # Functions
@@ -139,11 +142,14 @@ if (defined($options{"D"})) {
 if (defined($options{"d"})) {
     $debug = 1;
 }
+if (defined($options{"f"})) {
+    $nodaemon = 1;
+}
 if (defined($options{"n"})) {
     $impotent = 1;
 }
 
-if (!$debug) {
+if (! ($debug || $nodaemon)) {
     if (CheckDaemonRunning("reportboot_daemon")) {
 	fatal("Not starting another reportboot daemon!");
     }
@@ -160,14 +166,10 @@ if (!$debug) {
 #
 sub handler()
 {
-    my $SAVEEUID = $EUID;
-    
-    $EUID = 0;
     ReOpenLog($LOGFILE);
-    $EUID = $SAVEEUID;
 }
 $SIG{HUP} = \&handler
-    if (! $debug);
+    if (! ($debug || $nodaemon));
 
 #
 # We use a unix domain socket to talk to the client that is invoked
@@ -348,11 +350,13 @@ sub sendevent($$)
     }
     my $URL = "elvin://$EVSERVER";
 
-    # Connect to the event system, and subscribe the the events we want
-    my $handle = event_register($URL, 0);
-    if (!$handle) {
-	logit("$node: unable to register with event system");
-	return 1;
+    # Connect to the event system. We might want to do our own failover.
+    if (!defined($event_handle)) {
+	$event_handle = event_register($URL, 0);
+	if (!$event_handle) {
+	    logit("$node: unable to register with event system");
+	    return 1;
+	}
     }
     my $tuple = address_tuple_alloc();
     if (!$tuple) {
@@ -365,23 +369,17 @@ sub sendevent($$)
 		eventtype => $event,
 		host => "boss");
 
-    my $notification = event_notification_alloc($handle, $tuple);
+    my $notification = event_notification_alloc($event_handle, $tuple);
     if (!$notification) {
 	logit("$node: could not allocate notification");
 	return 1;
     }
 
-    if (!event_notify($handle, $notification)) {
+    if (!event_notify($event_handle, $notification)) {
 	logit("$node: could not send $event notification");
 	return 1;
     }
-
-    event_notification_free($handle, $notification);
-
-    if (event_unregister($handle) == 0) {
-	logit("$node: WARNING: could not unregister with event system");
-    }
-
+    event_notification_free($event_handle, $notification);
     return 0;
 }
 
@@ -403,9 +401,10 @@ sub fatal($)
 		 "reportboot daemon died on $me",
 		 $msg,
 		 $TBOPS);
-
-	MarkDaemonStopped("reportboot_daemon");
     }
+    MarkDaemonStopped("reportboot_daemon")
+	if (! ($debug || $nodaemon));
+    
     die("*** $0:\n".
 	"    $msg\n");
 }
