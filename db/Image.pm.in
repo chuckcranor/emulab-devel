@@ -820,6 +820,15 @@ sub NewVersion($$$$)
     my $imtablename = "image_versions"  . $tableid;
 
     #
+    # Grab the current type list. Do this before table locking.
+    #
+    if (!$isdataset) {
+	my @typelist = $self->TypeList();
+	$typelist = join(",", @typelist)
+	    if (@typelist);
+    }
+
+    #
     # The pid/imageid has to be unique, so lock the table for the check/insert.
     #
     DBQueryWarn("lock tables images write, image_versions write, ".
@@ -842,13 +851,6 @@ sub NewVersion($$$$)
 			"  where osid='$osid' and vers='$version'");
 	goto bad
 	    if (!$query_result);
-
-	#
-	# Grab the current type list.
-	#
-	my @typelist = $self->TypeList();
-	$typelist = join(",", @typelist)
-	    if (@typelist);
 
 	#
 	# Update the type list in the image being cloned. Better to do this
@@ -1312,6 +1314,8 @@ sub Delete($;$)
     
     my $imageid   = $self->imageid();
     my $uuid      = $self->image_uuid();
+    # Do this before table locking.
+    my @typelist  = $self->TypeList();
 
     DBQueryWarn("lock tables images write, image_versions write, ".
 		"            os_info write, os_info_versions write, ".
@@ -1327,7 +1331,6 @@ sub Delete($;$)
     # current type list so we can recall it later. 
     #
     if (!$purge && $DOPROVENANCE && !defined($self->nodetypes())) {
-	my @typelist = $self->TypeList();
 	if (@typelist) {
 	    my $typelist = join(",", @typelist);
 	    DBQueryWarn("update image_versions set nodetypes='$typelist' ".
