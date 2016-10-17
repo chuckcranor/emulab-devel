@@ -34,7 +34,7 @@ SYSTEM         := $(shell uname -s)
 
 include $(OBJDIR)/Makeconf
 
-SUBBOSS_SBIN_SCRIPTS = reportboot report_boot_daemon
+SUBBOSS_SBIN_SCRIPTS = reportboot reportboot_daemon
 SUBDIRS		= checkpass ns2ir nseparse checkup template_cvsroot \
 		  snmpit
 ifeq ($(NSVERIFY),1)
@@ -66,7 +66,7 @@ SBIN_STUFF	= resetvlans console_setup.proxy sched_reload named_setup \
 		  nfstrace plabinelab smbpasswd_setup smbpasswd_setup.proxy \
 		  rmproj snmpit.proxynew snmpit.proxyv2 pool_daemon \
 		  checknodes_daemon snmpit.proxyv3 image_setup tcpp \
-		  arplockdown bscontrol reportboot report_boot_daemon \
+		  arplockdown bscontrol reportboot reportboot_daemon \
 		  nfsmfs_setup nfsmfs_setup.proxy
 
 ifeq ($(ISMAINSITE),1)
