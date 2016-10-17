@@ -100,14 +100,16 @@ bootinfo(struct in_addr ipaddr, char *node_id, struct boot_info *boot_info,
 	case BIOPCODE_BOOTWHAT_KEYED_REQUEST:
 		info("%s: KEYED REQUEST (key=[%s], vers %d)\n",
 			inet_ntoa(ipaddr), boot_info->data, boot_info->version);
-#if defined(EVENTSYS) && defined(BOOTINFO_PXEEVENTS)
+#ifdef	EVENTSYS
 		needevent = bicache_needevent(ipaddr);
+#if defined(BOOTINFO_PXEEVENTS)
 		if (!no_event_send && needevent &&
 		    bievent_send(ipaddr, opaque, TBDB_NODESTATE_PXEBOOTING)) {
 			/* send failed, clear the cache entry */
 			bicache_clearevent(ipaddr);
 			eventfailed = 1;
 		}
+#endif
 #endif
 		err = query_bootinfo_db(ipaddr, node_id, boot_info->version, 
 					boot_whatp, boot_info->data);
@@ -116,14 +118,16 @@ bootinfo(struct in_addr ipaddr, char *node_id, struct boot_info *boot_info,
 	case BIOPCODE_BOOTWHAT_INFO:
 		info("%s: REQUEST (vers %d)\n",
 		     inet_ntoa(ipaddr), boot_info->version);
-#if defined(EVENTSYS) && defined(BOOTINFO_PXEEVENTS)
+#ifdef	EVENTSYS
 		needevent = bicache_needevent(ipaddr);
+#if defined(BOOTINFO_PXEEVENTS)
 		if (!no_event_send && needevent &&
 		    bievent_send(ipaddr, opaque, TBDB_NODESTATE_PXEBOOTING)) {
 			/* send failed, clear the cache entry */
 			bicache_clearevent(ipaddr);
 			eventfailed = 1;
 		}
+#endif
 #endif
 		err = query_bootinfo_db(ipaddr, node_id,
 					boot_info->version, boot_whatp, NULL);
