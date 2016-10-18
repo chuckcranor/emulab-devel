@@ -10,6 +10,8 @@ sub DoUpdate($$$)
 
     DBQueryFatal("REPLACE INTO state_timeouts VALUES ".
 		 "('PXEKERNEL','PXEBOOTING',120,'REBOOT')");
+    DBQueryFatal("REPLACE INTO state_timeouts VALUES ".
+		 "('PXEKERNEL','PXEWAKEUP',120,'REBOOT')");
     DBQueryFatal("REPLACE INTO state_transitions VALUES ".
 		 "('NORMALv2','BOOTING','PXEWAIT','MoonshotPxeWait')");
     DBQueryFatal("REPLACE INTO state_transitions VALUES ".
