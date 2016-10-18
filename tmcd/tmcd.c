@@ -2655,7 +2655,7 @@ COMMAND_PROTOTYPE(doaccounts)
 {
 	MYSQL_RES	*res;
 	MYSQL_ROW	row;
-	char		buf[MYBUFSIZE];
+	char		buf[MYBUFSIZE], leader[TBDB_FLEN_UID];
 	int		nrows, gidint;
 	int		tbadmin, didwidearea = 0, nodetypeprojects = 0;
 	int		didnonlocal = 0;
@@ -2672,6 +2672,31 @@ COMMAND_PROTOTYPE(doaccounts)
 	if ((reqp->islocal || reqp->isvnode) && !reqp->allocated) {
 		error("%s: accounts: Invalid request from free node\n",
 		      reqp->nodeid);
+		return 1;
+	}
+
+	/*
+	 * We need the group leader below.
+	 */
+	res = mydb_query("select leader from groups "
+			 "where pid='%s' and gid='%s'",
+			 1, reqp->pid, reqp->gid);
+	if (res) {
+		row = mysql_fetch_row(res);
+		if (row[0]) {
+			strcpy(leader, row[0]);
+		}
+		else {
+			error("%s: accounts: No leader for %s/%s\n",
+			      reqp->nodeid, reqp->pid, reqp->gid);
+			mysql_free_result(res);
+			return 1;
+		}
+		mysql_free_result(res);
+	}
+	else {
+		error("%s: accounts: Could not get leader for %s/%s\n",
+		      reqp->nodeid, reqp->pid, reqp->gid);
 		return 1;
 	}
 
@@ -3077,14 +3102,14 @@ COMMAND_PROTOTYPE(doaccounts)
 		MYSQL_RES	*pubkeys_res;
 		MYSQL_RES	*sfskeys_res;
 		int		pubkeys_nrows, sfskeys_nrows, i, root = 0;
-		int		auxgids[128], gcount = 0, leader;
+		int		auxgids[128], gcount = 0, isleader;
 		char		glist[BUFSIZ];
 		char		*bufp = buf, *ebufp = &buf[sizeof(buf)];
 		char		*pswd, *wpswd, wpswd_buf[9];
 
 		gidint     = -1;
 		tbadmin    = root = atoi(row[8]);
-		leader     = 0;
+		isleader   = 0;
 		gcount     = 0;
 
 		while (1) {
@@ -3107,8 +3132,9 @@ COMMAND_PROTOTYPE(doaccounts)
 				    (strcmp(row[4], "group_root") == 0) ||
 				    (strcmp(row[4], "project_root") == 0))
 					root = 1;
-				if (strcmp(row[4], "project_root") == 0)
-					leader = 1;
+				
+				if (strcmp(leader, row[0]) == 0) 
+					isleader = 1;
 			}
 			else {
 				int k, newgid = atoi(row[7]);
@@ -3210,7 +3236,7 @@ COMMAND_PROTOTYPE(doaccounts)
 		 * of the ssh accounts that came in with the Geni API call.
 		 */
 		if (reqp->genisliver_idx && reqp->isnonlocal_pid &&
-		    !didnonlocal && !leader)
+		    !didnonlocal && !isleader)
 			goto skipkeys;
 		
 		if (gidint == -1) {
