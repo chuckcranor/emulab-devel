@@ -46,7 +46,9 @@ sub fatal($);
 #
 # Configure variables
 #
-my $TB		 = "@prefix@";
+my $TB  	  = "@prefix@";
+my $PGENISUPPORT  = @PROTOGENI_SUPPORT@;
+my $POSTIMAGEDATA = "$TB/sbin/protogeni/postimagedata";
 
 #
 # Testbed Support libraries
@@ -55,6 +57,7 @@ use lib "@prefix@/lib";
 use emdb;
 use EmulabConstants;
 use libtestbed;
+use libEmulab;
 use Project;
 use Group;
 use User;
@@ -127,6 +130,16 @@ my $image = OSImageAlias->Create($imagename,
 				 $project->GetProjectGroup(), @targets);
 fatal("Could not create image alias")
     if (!defined($image));
+
+if ($PGENISUPPORT &&
+    GetSiteVar("protogeni/use_imagetracker")) {
+    my $imageid = $image->imageid();
+    print "Posting image alias $imageid to the image server ...\n";
+    system("$POSTIMAGEDATA $imageid");
+    if ($?) {
+	print STDERR "Could not post alias to the image server\n";
+    }
+}
 exit(0);
 
 sub fatal($)
