@@ -7509,8 +7509,10 @@ sub HandleBlockstore($$$$$$$@)
 	    goto bad;
 	}
     }
-    if (!defined($mount)) {
-	$message = "Missing blockstore mount point";
+    if (defined($mount) &&
+	!TBcheck_dbslot($mount, "os_info", "path",
+			TBDB_CHECKDBSLOT_WARN|TBDB_CHECKDBSLOT_ERROR)) {
+	$message = "Invalid mountpoint for blockstore";
 	goto bad;
     }
     if (!defined($readonly)) {
@@ -7696,7 +7698,8 @@ sub HandleBlockstore($$$$$$$@)
 	    goto bad;
 	}
     }
-    push(@attributes, ["mountpoint", $mount, 0]);
+    push(@attributes, ["mountpoint", $mount, 0])
+	if (defined($mount) && $mount ne "");
     push(@attributes, ["placement", $placement, 0]);
     push(@attributes, ["readonly", $readonly, 0]);
     push(@attributes, ["class", ($class eq "local" ? "local" : "SAN"), 1]);
