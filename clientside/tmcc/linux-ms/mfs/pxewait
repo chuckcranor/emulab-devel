@@ -64,6 +64,8 @@ mfs:*frisbee)
     ;;
 *)
     echo "rebooting..."
+    $BINDIR/tmcc state SHUTDOWN
+    sleep 1
     reboot
     ;;
 esac
