@@ -205,7 +205,7 @@ while ($row = mysql_fetch_array($query_result)) {
 	"value='$mac'></td>\n";
     echo "<td><input type='text' name='iface${card}_type' size=5 " .
 	"value='$type'></td>\n";
-    echo "<td><input type='text' name='iface${card}_switch_id' size=10 " .
+    echo "<td><input type='text' name='iface${card}_switch_id' size=16 " .
 	"value='$switch_id'></td>\n";
     echo "<td><input type='text' name='iface${card}_switch_card' size=3 " .
 	"value='$switch_card'></td>\n";
