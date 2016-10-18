@@ -482,3 +482,7 @@ NODE_USAGE_SUPPORT=1
 # Do not send events from bootinfo, we do it from dhcpd instead
 # (ARM nodes don't call bootinfo).
 BOOTINFO_EVENTS=0
+
+# Enable idle stats collection (RRD files)
+SDCOLLECTD_DOSTATS=1
+SDCOLLECTD_USE_RRDTOOL=1
