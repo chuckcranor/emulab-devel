@@ -44,12 +44,11 @@ all: $(DHCPD_FILES)
 include $(TESTBED_SRCDIR)/GNUmakerules
 
 ifeq ($(DISABLE_DHCPD_INSTALL),0)
+install:		install-real
 ifeq ($(BOOTINFO_EVENTS),0)
-install:		install-nobootinfo-real
 subboss-install:
 	@echo "Must have BOOTINFO_EVENTS to support a subboss right now"
 else
-install:		install-real
 subboss-install:	subboss-install-real
 endif
 else
@@ -67,11 +66,6 @@ subboss-install-real: \
 
 install-real: \
 	$(ETCDIR)/dhcpd.conf.template $(ETCDIR)/dhcpd.conf.subboss.template
-	-chmod 664 $(ETCDIR)/dhcpd.conf.template
-
-install-nobootinfo-real: \
-	dhcpd.conf.nobootinfo.template
-	$(INSTALL) dhcpd.conf.nobootinfo.template $(ETCDIR)/dhcpd.conf.template
 	-chmod 664 $(ETCDIR)/dhcpd.conf.template
 
 clean: 
