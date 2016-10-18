@@ -469,7 +469,22 @@ sub PostImageAlias($)
     my $credential = GetServerCredential();
 
     foreach my $tmp ($image->imagelist()) {
-	push(@target_urns, $tmp->urn());
+	my $target_urn;
+	if ($tmp->IsLocal()) {
+	    $target_urn = $tmp->urn();
+	}
+	else {
+	    #
+	    # Need to provide the URN it is known by. Need a better way
+	    # to get this. 
+	    #
+	    my $authurn = GeniHRN->new($tmp->origin_urn());
+	    my ($ospid,$os,undef,$vers) =
+		($tmp->origin_name() =~ m{([^/]+)/([^:]+)(:(\d+))?});
+	    $target_urn = GeniHRN::Generate($authurn->authority(), "image",
+					    "${ospid}//${os}");
+	}
+	push(@target_urns, $target_urn);
     }
     my $blob = {"client_version" => $CLIENTVERS,
 		"isimagealias"   => 1,
