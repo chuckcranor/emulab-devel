@@ -1270,12 +1270,28 @@ sub handleCtrlEvent($$) {
 			       "Giving up until it boots sucessfully.\n");
 			$nodes{$node}{noretry} = 1;
 		    } else {
+			#
 			# XXX Temporary!  For now notify instead of
 			# really rebooting, until the timeout/retry
 			# stuff is gone from os_setup and os_load
-			notify("Node $node has timed out in state ".
-			       "$mode/$state - REBOOT requested\n");
-			#handleCommand($node,$TBREBOOT,$timedout,1);
+			#
+			# XXX "temporary" is going on 13 years now and the
+			# lack of reboot does cause us grief. In particular,
+			# the case of NORMALv2/BOOTING, we can wind up here
+			# if a PXEWAKEUP at swap in is unsuccessful. We have
+			# seen this when IPMI SOL issues have caused the
+			# console and OS to hang up in the post-wakeup boot
+			# process or if the PXEWAKEUP is lost. Since there is
+			# only the overarching swapin timeout at this point,
+			# and that is typically quite large, we'll risk a
+			# bad timeout interaction.
+			#
+			if ("$mode/$state" eq "NORMALv2/BOOTING") {
+			    handleCommand($node,$TBREBOOT,$timedout,1);
+			} else {
+			    notify("Node $node has timed out in state ".
+				   "$mode/$state - REBOOT requested\n");
+			}
 		    }
 		    last; };
 		/^$TBTIMEOUTNOTIFY/ && do {
