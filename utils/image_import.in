@@ -428,7 +428,7 @@ if ($update && $newhash ne $image->hash()) {
 	}
     }
     # Update these in the descriptor.
-    my @slots = ("imagefile_url");
+    my @slots = ("imagefile_url", "origin_name");
     foreach my $key (@slots) {
 	next
 	    if (!exists($xmlparse->{'attribute'}->{$key}));
