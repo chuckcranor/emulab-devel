@@ -1286,7 +1286,15 @@ sub handleCtrlEvent($$) {
 			# and that is typically quite large, we'll risk a
 			# bad timeout interaction.
 			#
-			if ("$mode/$state" eq "NORMALv2/BOOTING") {
+			# XXX recent changes have allowed us to better
+			# differentiate PXEBOOTING (PXE ROM making a DHCP
+			# request) from BOOTING (OS making a DHCP request)
+			# so we can detect nodes stuck booting the OS.
+			# We include those here in the "really reboot"
+			# catagory.
+			#
+			if ("$mode/$state" eq "NORMALv2/BOOTING" ||
+			    $state eq "PXEBOOTING") {
 			    handleCommand($node,$TBREBOOT,$timedout,1);
 			} else {
 			    notify("Node $node has timed out in state ".
