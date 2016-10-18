@@ -28,7 +28,7 @@ SUBDIR		= dhcpd
 
 ETCDIR          = /usr/local/etc
 
-DHCPD_FILES	= dhcpd.conf.template dhcpd.conf.nobootinfo.template
+DHCPD_FILES	= dhcpd.conf.template
 SUBBOSS_DHCPD_FILES	= dhcpd.conf.subboss.template
 DISABLE_DHCPD_INSTALL   = @DISABLE_DHCPD_INSTALL@
 BOOTINFO_EVENTS = @BOOTINFO_EVENTS@
