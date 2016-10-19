@@ -246,7 +246,7 @@ if (!$ajax_request && !isset($login)) {
 	header("Location: $APTBASE/landing.php");
 	return;
     }
-    if (NOLOGINS()) {
+    if (NOLOGINS() && !$adminmode) {
         SPITHEADER();
         SPITUSERERROR("Sorry, logins are temporarily disabled, ".
                       "please try again later.");
