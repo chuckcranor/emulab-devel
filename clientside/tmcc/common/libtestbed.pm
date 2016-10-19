@@ -37,7 +37,7 @@ use Exporter;
 	      TBSCRIPTLOCK_WOULDBLOCK TBSCRIPTLOCK_INTERRUPTED
 	      TBSCRIPTLOCK_INTERRUPTIBLE
 	      TBTimeStamp TBTimeStampWithDate TBBackGround ReOpenLog
-   	      CheckDaemonRunning MarkDaemonRunning MarkDaemonStopped);
+   	      CheckDaemonRunning MarkDaemonRunning MarkDaemonStopped
 	    );
 
 # Must come after package declaration!
