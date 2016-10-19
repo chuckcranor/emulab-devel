@@ -545,8 +545,7 @@ sub GetTicketAuxAux($$$$$$$$$$$)
     my $response    = undef;
     my $restorevirt = 0;	# Flag to restore virtual state
     my $restorephys = 0;	# Flag to restore physical state
-    require OSinfo;
-    require Image;
+    require OSImage;
     require VirtExperiment;
 
     #
@@ -1139,7 +1138,7 @@ sub GetTicketAuxAux($$$$$$$$$$$)
 					 "Malformed image URN: $dname");
 		    goto bad;
 		}
-		$osinfo = OSinfo->Lookup($ospid, $os, $vers);
+		$osinfo = OSImage->Lookup($ospid, $os, $vers);
 		if (!defined($osinfo)) {
 		    if ($use_imagetracker) {
 			my $image = GeniImage::MapToLocalImage($dname, $pid);
@@ -1166,8 +1165,7 @@ sub GetTicketAuxAux($$$$$$$$$$$)
 		    if (! ($osinfo->shared() ||
 			   $osinfo->pid() eq $slice_experiment->pid())) {
 			if ($PROTOGENI_LOCALUSER && $user->IsLocal()) {
-			    require Image;
-			    my $image = Image->Lookup($ospid,$os,$vers);
+			    my $image = OSImage->Lookup($ospid,$os,$vers);
 			    if (!defined($image)) {
 				$response =
 				    GeniResponse->Create(GENIRESPONSE_BADARGS,
@@ -1474,7 +1472,7 @@ sub GetTicketAuxAux($$$$$$$$$$$)
 	#
 	if (defined($node) && !defined($osname)) {
 	    if (defined($node->default_osid())) {
-		my $default_osinfo = OSinfo->Lookup($node->default_osid());
+		my $default_osinfo = OSImage->Lookup($node->default_osid());
 		$osname = $default_osinfo->osname()
 		    if (defined($default_osinfo));
 	    }

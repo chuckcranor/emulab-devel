@@ -65,7 +65,6 @@ use lib "@prefix@/lib";
 use libdb;
 use libtestbed;
 use libEmulab;
-use Image;
 
 #
 # Parse command arguments.

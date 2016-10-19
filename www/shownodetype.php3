@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2013 University of Utah and the Flux Group.
+# Copyright (c) 2000-2016 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -87,6 +87,14 @@ echo "<tr>
       <td>Class:</td>
       <td class=left>$class</td>
           </tr>\n";
+
+if (isset($noderow["architecture"])) {
+    $arch = $noderow["architecture"];
+    echo "<tr>
+            <td>Architecture:</td>
+            <td class=left>$arch</td>
+          </tr>\n";
+}
 
 foreach ($options as $option) {
     $value = $noderow[$option];

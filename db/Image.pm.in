@@ -321,6 +321,20 @@ sub field($$) {
     }
     return undef;
 }
+sub fieldExists($$) {
+    my ($self, $name) = @_;
+
+    return 1
+	if (exists($self->{'IMAGE'}->{$name}));
+    return 0;
+}
+sub fieldSet($$$) {
+    my ($self, $name, $value) = @_;
+
+    $self->{'IMAGE'}->{$name} = $value;
+    return $value;
+}
+sub isImageAlias($)	{ return 0; }
 
 # Break circular reference someplace to avoid exit errors.
 sub DESTROY {
@@ -485,33 +499,6 @@ sub LookupByAuthorityURN($$)
 }
 
 #
-# Get a list of all running frisbee images.
-# XXX if this is actually used, it will have to be fixed; DB no longer
-# tracks running frisbee daemons.
-#
-sub ActiveImages($)
-{
-    my ($class) = @_;
-    my @result  = ();
-
-    my $query_result =
-	DBQueryWarn("select imageid,imageid_version from frisbee_blobs ".
-		    "where frisbee_pid!=0");
-    return undef
-	if (!defined($query_result));
-
-    while (my ($imageid,$version) = $query_result->fetchrow_array()) {
-	my $image = Image->Lookup($imageid, $version);
-	if (!defined($image)) {
-	    print STDERR "*** Could not find DB object for image $imageid\n";
-	    return undef;
-	}
-	push(@result, $image);
-    }
-    return \@result;
-}
-
-#
 # Return a list of all images of the given format for the given pid.
 # If format is NULL, return all formats. If pid is NULL, return for all pids.
 # List is names of the form "pid/imagename".
@@ -620,6 +607,8 @@ sub Create($$$$$$$$)
     my $isadmin = $creator->IsAdmin();
     my $isdataset = (exists($argref->{"isdataset"}) ?
 		     $argref->{"isdataset"} : 0);
+    my $architecture = $argref->{'architecture'}
+        if (defined($argref->{'architecture'}));
 
     # We may ignore particular partN_osid's by deleting them.
     my @arg_slots = grep(/^part[1-4]_osid$/, keys(%{$argref}));
@@ -720,9 +709,13 @@ sub Create($$$$$$$$)
     $bquery .= ",pid='$pid',pid_idx='$pid_idx'";
     $bquery .= ",gid='$gid',gid_idx='$gid_idx'";
 
+    # image_versions include all the images stuff.
     my $query = "insert into image_versions set $bquery, ".
 	join(",", map("$_='" . $argref->{$_} . "'", @arg_slots));
-    
+    # except for this. 
+    $bquery .= ",architecture='$architecture'"
+	if (defined($architecture));
+
     $query .= ",creator='$uid',creator_idx='$uid_idx'";
     $query .= ",uuid='$version_uuid'";
     $query .= ",created=now()";
@@ -766,7 +759,8 @@ sub Create($$$$$$$$)
     # Create the osidtoimageid mapping.  Admins have an option to do it or not.
     my $makedefault = exists($argref->{"makedefault"}) && 
 	$argref->{"makedefault"} eq "1";
-    if (!$isdataset && (!$isadmin || $makedefault)) {
+
+    if (!$isdataset && !defined($architecture) && (!$isadmin || $makedefault)){
 	#
 	# Dig out the mtypes we want to turn on. The caller has already
 	# sanity checked them to make sure the types actually exist, and
@@ -826,11 +820,21 @@ sub NewVersion($$$$)
     my $imtablename = "image_versions"  . $tableid;
 
     #
+    # Grab the current type list. Do this before table locking.
+    #
+    if (!$isdataset) {
+	my @typelist = $self->TypeList();
+	$typelist = join(",", @typelist)
+	    if (@typelist);
+    }
+
+    #
     # The pid/imageid has to be unique, so lock the table for the check/insert.
     #
     DBQueryWarn("lock tables images write, image_versions write, ".
 		"            os_info write, os_info_versions write, ".
-		"            emulab_indicies write, osidtoimageid read")
+		"            emulab_indicies write, osidtoimageid read, ".
+		"            node_types read")
 	or return undef;
 
     my $query_result =
@@ -847,22 +851,6 @@ sub NewVersion($$$$)
 			"  where osid='$osid' and vers='$version'");
 	goto bad
 	    if (!$query_result);
-
-	#
-	# Grab the current type list.
-	#
-	$query_result =
-	    DBQueryWarn("select distinct type from osidtoimageid ".
-			"where imageid='$osid'");
-    
-	goto bad
-	    if (!$query_result);
-
-	my @types = ();
-	while (my ($type) = $query_result->fetchrow_array()) {
-	    push(@types, $type);
-	}
-	$typelist = join(",", @types);
 
 	#
 	# Update the type list in the image being cloned. Better to do this
@@ -1116,9 +1104,9 @@ sub Release($)
 sub EditImageid($$$$)
 {
     my ($class, $image, $argref, $usrerr_ref) = @_;
-
     my %mods;
     my $noreport;
+    require NodeType;
 
     my $imageid = $image->imageid();
 
@@ -1127,47 +1115,55 @@ sub EditImageid($$$$)
     # (Others above already did their own updates.)
     #
     my %updates;
-    foreach my $col ("description", "path", "mbr_version", "hash", "notes") {
+    foreach my $col ("description", "path", "mbr_version", "hash",
+		     "notes") {
 	# Copy args we want so that others can't get through.
 	if (exists($argref->{$col})) {
 	    $updates{$col} = $mods{$col} = $argref->{$col};
 	}
     }
-    # See mtype_$type args below.
-
-    #
-    # Need a list of node types. We join this over the nodes table so that
-    # we get a list of just the nodes that are currently in the testbed, not
-    # just in the node_types table.
-    #
-    my $types_result =
-	DBQueryWarn("select distinct n.type from nodes as n ".
-		     "left join node_type_attributes as a on a.type=n.type ".
-		     "where a.attrkey='imageable' and ".
-		     "      a.attrvalue!='0'");
-    my @mtypes_array;
-    my @map_updates;
     my $redo_map = 0;
-    while (my ($type) = $types_result->fetchrow_array()) {
-	push(@mtypes_array, $type);
+    my @map_updates;
+    
+    if (exists($argref->{"architecture"})) {
+	# This is in the images table, so done separately.
+	$mods{"architecture"} = $argref->{"architecture"};
     }
-    #
-    # Special hack to allow pcvm type -- see SetupReload in os_setup
-    #
-    push @mtypes_array, "pcvm";
+    else {
+	# See mtype_$type args below.
 
-    foreach my $type (@mtypes_array) {
-	# Remember when we get one of the mtype_$type args.  These aren't DB
-	# columns to update, but instead control re-creating the rows in the
-	# osidtoimageid table for this imageid, below.
-	my $mtype = "mtype_$type";
-	if (exists($argref->{$mtype})) {
-	    my $value = $argref->{$mtype};
-	    ##printf "argref->{$mtype} %s\n", $value;
-	    $mods{$mtype} = $value;
-	    if ($value eq "1") {
-		push(@map_updates, $type);
-		$redo_map = 1;
+	#
+	# Need a list of node types. We join this over the nodes table so that
+	# we get a list of just the nodes that are currently in the testbed, not
+	# just in the node_types table.
+	#
+	my $types_result =
+	    DBQueryWarn("select distinct n.type from nodes as n ".
+			"left join node_type_attributes as a on a.type=n.type ".
+			"where a.attrkey='imageable' and ".
+			"      a.attrvalue!='0'");
+	my @mtypes_array;
+	while (my ($type) = $types_result->fetchrow_array()) {
+	    push(@mtypes_array, $type);
+	}
+	#
+	# Special hack to allow pcvm type -- see SetupReload in os_setup
+	#
+	push @mtypes_array, "pcvm";
+
+	foreach my $type (@mtypes_array) {
+	    # Remember when we get one of the mtype_$type args.  These aren't DB
+	    # columns to update, but instead control re-creating the rows in the
+	    # osidtoimageid table for this imageid, below.
+	    my $mtype = "mtype_$type";
+	    if (exists($argref->{$mtype})) {
+		my $value = $argref->{$mtype};
+		##printf "argref->{$mtype} %s\n", $value;
+		$mods{$mtype} = $value;
+		if ($value eq "1") {
+		    push(@map_updates, $type);
+		    $redo_map = 1;
+		}
 	    }
 	}
     }
@@ -1180,7 +1176,7 @@ sub EditImageid($$$$)
 	}
     }
 
-    if (keys %updates || $redo_map) {
+    if (keys(%mods) || $redo_map) {
 	DBQueryWarn("lock tables images write, image_versions write, ".
 		    "     images as i write, image_versions as v write, ".
 		    "     os_info write, os_info_versions write, ".
@@ -1193,6 +1189,24 @@ sub EditImageid($$$$)
 	    return undef;
 	}
     }
+    if (exists($argref->{"architecture"})) {
+	my $arch = $argref->{"architecture"};
+
+	if (!DBQueryWarn("update images set architecture='$arch' ".
+			 "where imageid='$imageid'")) {
+	    $$usrerr_ref = "DB: Error updating the images table";
+	    DBQueryWarn("unlock tables");
+	    return undef;
+	}
+	if (0 &&
+	    NodeType->LookupArchitectureTypes($arch) &&
+	    !DBQueryWarn("delete from osidtoimageid ".
+			      "where imageid='$imageid'")) {
+	    $$usrerr_ref = "DB: Error updating the osidtoimageid table";
+	    DBQueryWarn("unlock tables");
+	    return undef;
+	}
+    }    
     if ($redo_map) {
 	#
 	# Update the osidtoimageid table too.
@@ -1221,7 +1235,7 @@ sub EditImageid($$$$)
 	    }
 	}
     }
-    if (keys %updates || $redo_map) {
+    if (keys(%mods) || $redo_map) {
 	DBQueryWarn("unlock tables");
     }
 
@@ -1300,6 +1314,8 @@ sub Delete($;$)
     
     my $imageid   = $self->imageid();
     my $uuid      = $self->image_uuid();
+    # Do this before table locking.
+    my @typelist  = $self->TypeList();
 
     DBQueryWarn("lock tables images write, image_versions write, ".
 		"            os_info write, os_info_versions write, ".
@@ -1315,7 +1331,6 @@ sub Delete($;$)
     # current type list so we can recall it later. 
     #
     if (!$purge && $DOPROVENANCE && !defined($self->nodetypes())) {
-	my @typelist = $self->TypeList();
 	if (@typelist) {
 	    my $typelist = join(",", @typelist);
 	    DBQueryWarn("update image_versions set nodetypes='$typelist' ".
@@ -1929,12 +1944,13 @@ sub WaitLock($$)
 }
 
 #
-# Get the type list.
+# Get the type list. 
 #
 sub TypeList($;$)
 {
     my ($self, $osinfo) = @_;
     my @result  = ();
+    my $query_result;
     require NodeType;
 
     #
@@ -1949,15 +1965,31 @@ sub TypeList($;$)
 	    }
 	}
 	return @result;
-    }
-
+    } 
     my $imageid = $self->imageid();
-    my $clause  = (defined($osinfo) ?
-		   "and osid='" . $osinfo->osid() . "'" : "");
+   
+    #
+    # If there is an architecture set in the image, we use that to
+    # find the matching types in the node_types table. This overrides
+    # anything found in the osidtoimageid.
+    #
+    if ($self->architecture()) {
+	$query_result =
+	    DBQueryWarn("select distinct node_types.type from images ".
+			# The image architecture could be a short list.
+			"inner join node_types on ".
+			"   FIND_IN_SET(node_types.architecture,".
+			"               images.architecture) ".
+			"where images.imageid='$imageid'");
+    }
+    else {
+	my $clause  = (defined($osinfo) ?
+		       "and osid='" . $osinfo->osid() . "'" : "");
 
-    my $query_result =
-	DBQueryWarn("select distinct type from osidtoimageid ".
-		    "where imageid='$imageid' $clause");
+	$query_result =
+	    DBQueryWarn("select distinct type from osidtoimageid ".
+			"where imageid='$imageid' $clause");
+    }
     return undef
 	if (!defined($query_result));
 
@@ -1966,6 +1998,17 @@ sub TypeList($;$)
 	push(@result, $typeinfo)
 	    if (defined($typeinfo));
     }
+    if ($self->architecture()) {
+	require OSinfo;
+	my $osinfo = OSinfo->Lookup($self->imageid());
+	if (defined($osinfo) && defined($osinfo->def_parentosid())) {
+	    my $pcvm = NodeType->Lookup("pcvm");
+	    if (defined($pcvm)) {
+		push(@result, $pcvm);
+	    }
+	}
+    }
+    
     return @result;
 }
 

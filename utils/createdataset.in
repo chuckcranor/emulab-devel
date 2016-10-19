@@ -110,7 +110,7 @@ use Lease;
 use Project;
 use Group;
 use User;
-use Image;
+use Image;  # For datasets
 use Node;
 
 #

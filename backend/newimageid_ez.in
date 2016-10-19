@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2000-2015 University of Utah and the Flux Group.
+# Copyright (c) 2000-2016 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -77,6 +77,7 @@ use libdb;
 use libtestbed;
 use User;
 use Project;
+use OSImage;
 use Image;
 use OSinfo;
 use Node;
@@ -223,6 +224,7 @@ my %xmlfields =
      "lba_low",    	=> ["lba_low",		$SLOT_OPTIONAL],
      "lba_high",	=> ["lba_high",		$SLOT_OPTIONAL],
      "lba_size",	=> ["lba_size",		$SLOT_OPTIONAL],
+     "architecture",	=> ["architecture",	$SLOT_OPTIONAL],
 );
 
 #
@@ -420,7 +422,8 @@ if ($allpc) {
     }
 }
 else {
-    $types_querystring = "select distinct n.type,nt.class from nodes as n ".
+    $types_querystring =
+	"select distinct n.type,nt.class,nt.architecture from nodes as n ".
 	"left join node_types as nt on n.type=nt.type ".
 	"left join node_type_attributes as a on a.type=n.type ".
 	"where a.attrkey='imageable' and ".
@@ -433,9 +436,11 @@ my $types_result = DBQueryFatal($types_querystring);
 
 # Save the valid types in a new array for later.
 my %mtypes_array;
+my %mtypes_arch;
 
 if ($types_result->numrows) {
-    while (my ($type,$class) = $types_result->fetchrow_array()) {
+    while (my ($type,$class,$arch) = $types_result->fetchrow_array()) {
+	$mtypes_arch{$type}  = $arch if (defined($arch));
 	$mtypes_array{$type} = $class;
 	$xmlfields{"mtype_$type"} = ["mtype", $SLOT_OPTIONAL];
     }
@@ -642,81 +647,67 @@ if (!$isdataset &&
 #
 # See what node types this image will work on. Must be at least one!
 #
-UserError("Node Types: Must have at least one node type")
+UserError("Node Types: Must have at least one node type defined")
     if (!$isdataset && !keys(%mtypes_array));
+
 my $node_types_selected = 0;
 
-# Check validity of mtype_* args, since the keys are dynamically generated.
-my @mtype_keys = grep(/^mtype_/, keys(%newimageid_args));
-foreach $key (@mtype_keys) {
-    my $value = $newimageid_args{$key};
-    print STDERR "mtype: '$key' -> '$value'\n"
-	if ($debug);
-
-    my $type = $key;
-    $type =~ s/^mtype_//;
-    
-    # Treat pcvm special for now.
-    if ($type eq "pcvm" ||
-	grep(/^${type}$/, keys(%mtypes_array))) {
-	$node_types_selected++
-	    if ($value eq "1");
-    }
-    else {
-	$errors{$key} = "Illegal node type."
-    }
-}
 #
-# When -a specified, add mappings for all pc types, does not matter if
-# there are nodes of that type. Skip the stub pc/pc entry though.
+# If we have architectures defined in the node_types table, and we got
+# an architecture in the xml file for the image, we use those. Otherwise
+# fall back to the old method.
 #
-if ($allpc) {
-    foreach my $type (keys(%mtypes_array)) {
-	my $class = $mtypes_array{$type};
-	next
-	    if ($class ne "pc" || $type eq $class);
+if (keys(%mtypes_arch) &&
+    (exists($newimageid_args{"architecture"}) && 
+     $newimageid_args{"architecture"} ne "")) {
 
-	$newimageid_args{"mtype_${type}"} = "1";
-	$node_types_selected++;
-    }
-}
-
-UserError("Node Types: Must select at least one node type")
-    if ($node_types_selected == 0 && !($force || $isdataset));
-
-#
-# We perform a further check for non-admins.  When a node to snapshot
-# has been specified, we check the OSID of the appropriate partition
-# and see which node types it is appropriate for, and further restrict
-# the list as necessary.  This prevents creation of custom images based on
-# old OSes from being checked as runnable on newer HW where they do not
-# stand a chance.
-#
-if (!($isadmin || $isdataset) && defined($node) && !$node->isvirtnode()) {
-    my $query_result =
-	DBQueryFatal("select oi.type from osidtoimageid as oi ".
-		     "left join partitions as p on oi.osid=p.osid ".
-		     "where p.node_id='$node_id' and p.partition=$loadpart");
-    if ($query_result->numrows != 0) {
-	my %otypes;
-	while (my ($ntype) = $query_result->fetchrow_array()) {
-	    $otypes{$ntype} = 1;
+    foreach my $arch (split(",", $newimageid_args{"architecture"})) {
+	if (!exists($OSImage::IMAGE_ARCHITECTURES{$arch})) {
+	    UserError("Architecture: Not a valid Architecture: $arch");
 	}
-	my @invalid_node_types;
-	foreach my $ntype (@mtype_keys) {
-	    $ntype =~ s/^mtype_//;
-	    if (!exists($otypes{$ntype})) {
-	        push @invalid_node_types, $ntype;
-	    }
-        }
-	if (@invalid_node_types) {
-	    UserError("Node Types: Current image on $node_id".
-		      " cannot run on the following node types: ". 
-		      join(' ', @invalid_node_types));
-        }
-    } else {
-	UserError("Partition: No image originally loaded in partition $loadpart on $node_id; this is probably not the partition you meant to save");
     }
+}
+else {
+    # Clear this since not using Architectures
+    delete($newimageid_args{"architecture"})
+	if (exists($newimageid_args{"architecture"}));
+    
+    # Check validity of mtype_* args, since the keys are dynamically generated.
+    my @mtype_keys = grep(/^mtype_/, keys(%newimageid_args));
+    foreach $key (@mtype_keys) {
+	my $value = $newimageid_args{$key};
+	print STDERR "mtype: '$key' -> '$value'\n"
+	    if ($debug);
+
+	my $type = $key;
+	$type =~ s/^mtype_//;
+    
+	# Treat pcvm special for now.
+	if ($type eq "pcvm" ||
+	    grep(/^${type}$/, keys(%mtypes_array))) {
+	    $node_types_selected++
+		if ($value eq "1");
+	}
+	else {
+	    $errors{$key} = "Illegal node type."
+	}
+    }
+    #
+    # When -a specified, add mappings for all pc types, does not matter if
+    # there are nodes of that type. Skip the stub pc/pc entry though.
+    #
+    if ($allpc) {
+	foreach my $type (keys(%mtypes_array)) {
+	    my $class = $mtypes_array{$type};
+	    next
+		if ($class ne "pc" || $type eq $class);
+
+	    $newimageid_args{"mtype_${type}"} = "1";
+	    $node_types_selected++;
+	}
+    }
+    UserError("Node Types: Must select at least one node type")
+	if ($node_types_selected == 0 && !($force || $isdataset));
 }
 
 # XXX  Allowable OS types, OS features, and OpModes need to be
@@ -786,13 +777,6 @@ if (!$isdataset) {
 	if (defined($usrerr));
     fatal("Could not create new OSID!")
 	if (!defined($new_osinfo));
-
-    #
-    # Insert a submap entry.
-    #
-    if (defined($parentos)) {
-	$new_osinfo->SetRunsOnParent($parentos);
-    }
 
     $newimageid_args{"path"} = $ipath;
     $osid = $new_osinfo->osid();

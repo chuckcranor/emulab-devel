@@ -82,7 +82,7 @@ $| = 1;
 use lib "@prefix@/lib";
 use emutil;
 use Node;
-use Image;
+use OSImage;
 use User;
 
 #
@@ -229,7 +229,7 @@ sub ConvertImage($)
 }
 
 if ($doall) {
-    my @images = Image->ListAll(undef, undef);
+    my @images = OSImage->ListAll(undef, undef);
 
     if ($WITHZFS && $ZFS_NOEXPORT) {
 	#
@@ -237,7 +237,7 @@ if ($doall) {
 	# See ZFS code in exports_setup
 	#
 	foreach my $imagename (@images) {
-	    my $image = Image->Lookup($imagename);
+	    my $image = OSImage->Lookup($imagename);
 	    my $project = $image->GetProject();
 
 	    $project->BumpActivity();
@@ -246,7 +246,7 @@ if ($doall) {
 	    fatal("$EXPORTSSETUP failed");
     }
     foreach my $imagename (@images) {
-	my $image = Image->Lookup($imagename);
+	my $image = OSImage->Lookup($imagename);
 	next
 	    if (!defined($image->path()));
 	
@@ -266,7 +266,7 @@ if ($doall) {
     }
 }
 else {
-    my $image = Image->Lookup($ARGV[0]);
+    my $image = OSImage->Lookup($ARGV[0]);
     if (!defined($image)) {
 	fatal("No such image exists");
     }

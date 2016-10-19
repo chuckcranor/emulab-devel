@@ -167,8 +167,8 @@ use libadminmfs;
 use Experiment;
 use Node;
 use User;
-use Image;
-use OSinfo;
+use OSImage;
+use Image;  # Cause of datasets.
 use Logfile;
 use WebTask;
 use Project;
@@ -231,6 +231,7 @@ my $isec2node   = 0;
 my $onsharednode= 0;
 my $node_id;
 my $node;
+my $image;
 my ($experiment,$pid);
 my $doprovenance = 0;
 my $hacksigfile;
@@ -393,10 +394,26 @@ if ($UID && ! $this_user->IsAdmin()) {
 # mostly to avoid hard to track errors that would result if the user picked
 # the wrong one (which is likely to happen no matter what I do).
 #
-my $image = Image->Lookup($imagepid, $imagename);
-if (!defined($image)) {
-    die("*** $0:\n".
-	"    No such image descriptor $imagename in project $imagepid!\n");
+if (defined($bsname)) {
+    #
+    # Datasets are still special, they have no osinfo. 
+    #
+    $image = Image->Lookup($imagepid, $imagename);
+    if (!defined($image)) {
+	die("*** $0:\n".
+	    "Dataset must does not exist\n");
+    }
+    elsif (!$image->isdataset()) {
+	die("*** $0:\n".
+	    "$image is not a dataset for $bsname\n");
+    }
+}
+else {
+    $image = OSImage->Lookup($imagepid, $imagename);
+    if (!defined($image)) {
+	die("*** $0:\n".
+	    "    No such image descriptor $imagename in project $imagepid!\n");
+    }
 }
 my $imageid = $image->imageid();
 my $version = $image->version();
@@ -542,12 +559,12 @@ else {
 	#
 	# Need to know this is a xen-host to tailor method below.
 	#
-	my $pnode  = Node->Lookup($node->phys_nodeid());
-	my $osinfo = OSinfo->Lookup($pnode->def_boot_osid());
-	if (!defined($osinfo)) {
-	    fatal("Could not get osinfo for $pnode");
+	my $pnode   = Node->Lookup($node->phys_nodeid());
+	my $osimage = OSImage->Lookup($pnode->def_boot_osid());
+	if (!defined($osimage)) {
+	    fatal("Could not get OSImage for $pnode");
 	}
-	if ($osinfo->FeatureSupported("xen-host")) {
+	if ($osimage->FeatureSupported("xen-host")) {
 	    $isxenhost = 1;
 
 	    if ($image->mbr_version() == 99) {
@@ -954,9 +971,9 @@ else {
     #
     my $needrelocs = 0;
     if ($image->loadpart()) {
-	my $pnode  = Node->Lookup($node->phys_nodeid());
-	my $osinfo = OSinfo->Lookup($pnode->def_boot_osid());
-	if (defined($osinfo) && $osinfo->OS() eq "FreeBSD") {
+	my $pnode   = Node->Lookup($node->phys_nodeid());
+	my $osimage = OSImage->Lookup($pnode->def_boot_osid());
+	if (defined($osimage) && $osimage->OS() eq "FreeBSD") {
 	    $needrelocs = 1;
 	}
     }

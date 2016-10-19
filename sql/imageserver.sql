@@ -15,6 +15,17 @@
 /*!40101 SET @OLD_SQL_MODE=@@SQL_MODE, SQL_MODE='NO_AUTO_VALUE_ON_ZERO' */;
 /*!40111 SET @OLD_SQL_NOTES=@@SQL_NOTES, SQL_NOTES=0 */;
 
+--
+-- Table structure for table `image_permissions`
+--
+
+DROP TABLE IF EXISTS `image_aliases`;
+CREATE TABLE `image_aliases` (
+  `urn` varchar(128) default NULL,
+  `uuid` varchar(40) NOT NULL default '',
+  `target_urn` varchar(128) NOT NULL default '',
+  PRIMARY KEY  (`urn`,`target_urn`)
+) ENGINE=MyISAM DEFAULT CHARSET=latin1;
 
 --
 -- Table structure for table `image_permissions`

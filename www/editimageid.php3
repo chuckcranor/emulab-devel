@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2014 University of Utah and the Flux Group.
+# Copyright (c) 2000-2014, 2016 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -255,29 +255,47 @@ function SPITFORM($image, $formfields, $errors)
               </td>
           </tr>\n";
 
+    echo "<tr>
+              <td>Architecture:</td>
+              <td class=left>
+                 <input type=text
+                        name=\"formfields[architecture]\"
+                        value=\"" . $formfields["architecture"] . "\"
+                        size=30>
+              </td>
+         </tr>\n";
+
     #
     # Node Types.
     #
     echo "<tr>
               <td>Node Types:</td>
               <td>\n";
+    #
+    # Is using the architecture, types are not editable. Instead, we allow
+    # editing of the architecture.
+    #
+    if ($image->architecture()) {
+        echo implode(",", $image->TypeList());
+    }
+    else {
+        foreach ($types_array as $type) {
+            $checked = "";
 
-    foreach ($types_array as $type) {
-        $checked = "";
+            if (isset($formfields["mtype_$type"]) &&
+                $formfields["mtype_$type"] == "Yep") {
+                $checked = "checked";
 
-        if (isset($formfields["mtype_$type"]) &&
-	    $formfields["mtype_$type"] == "Yep") {
-	    $checked = "checked";
-
-	    if ("mtype_$type" == "mtype_pcvm") {
-		$doespcvm = 1;
-	    }
-	}
+                if ("mtype_$type" == "mtype_pcvm") {
+                    $doespcvm = 1;
+                }
+            }
     
-        echo "<input $checked type=checkbox
+            echo "<input $checked type=checkbox
                      value=Yep name=\"formfields[mtype_$type]\">
                      $type &nbsp
               </input>\n";
+        }
     }
     echo "    </td>
           </tr>\n";
@@ -379,27 +397,6 @@ if (count($errors)) {
 }
 
 #
-# See what node types this image will work on. Must be at least one!
-# Store the valid types in a new array for simplicity.
-#
-$mtypes_array = array();
-foreach ($types_array as $type) {
-    #
-    # Look for a post variable with name.
-    # 
-    if (isset($formfields["mtype_$type"]) &&
-	$formfields["mtype_$type"] == "Yep") {
-	$mtypes_array[] = $type;
-	if ("mtype_$type" == "mtype_pcvm") {
-	    $doespcvm = 1;
-	}
-    }
-}
-if (! count($mtypes_array)) {
-    $errors["Node Types"] = "Must select at least one type";
-}
-
-#
 # Build up argument array to pass along.
 #
 $args = array();
@@ -431,63 +428,109 @@ if (isset($formfields["notes"])) {
     }
 }
 
-# The mtype_* checkboxes are dynamically generated.
-foreach ($mtypes_array as $type) {
-    # Filter booleans from checkbox values, send if different.
-    $checked = isset($formfields["mtype_$type"]) &&
-	strcmp($formfields["mtype_$type"], "Yep") == 0;
-    if ($checked != array_search("mtype_$type", $mtypes_array)) {
-	$args["mtype_$type"] = $checked ? "1" : "0";
-    }
-}
-
 #
-# Mereusers are not allowed to create more than one osid/imageid mapping
-# for each machinetype. They cannot actually do that through the EZ form
-# since the osid/imageid has to be unique, but it can happen by mixed
-# use of the long form and the short form, or with multiple uses of the
-# long form.
-
-# Can't check this unless we have at least one mtype!
-if (!count($mtypes_array) || count($errors)) {
-    SPITFORM($image, $formfields, $errors);
-    PAGEFOOTER();
-    return;
-}
-    
-$typeclause = "type=" . "'$mtypes_array[0]'";
-for ($i = 1; $i < count($mtypes_array); $i++) {
-    $typeclause = "$typeclause or type=" . "'$mtypes_array[$i]'";
-}
-
-unset($osidclause);
-$osid_array = array();
-for ($i = 1; $i <= 4; $i++) {
-    # Local variable dynamically created.    
-    $foo      = "part${i}_osid";
-
-    if (isset($defaults[$foo])) {
-	if (isset($osidclause))
-	    $osidclause = "$osidclause or osid='" . $defaults[$foo] . "' ";
-	else 
-	    $osidclause = "osid='" . $defaults[$foo] . "' ";
-
-	$osid_array[] = $defaults[$foo];
+# See what node types this image will work on. Must be at least one!
+# Store the valid types in a new array for simplicity.
+#
+if ($image->architecture()) {
+    if (! (isset($formfields["architecture"]) &&
+           $formfields["architecture"] != "")) {
+	$errors["Architecture"] = "Must set the Architecture";
+    }
+    else {
+        foreach (preg_split("/,/", $formfields["architecture"]) as $arch) {
+            if (!array_key_exists($arch, $image_architectures)) {
+                $errors["Architecture"] = "Not a valid Architecture";
+            }
+            else {
+                #
+                # If no node types of this arch, reject it.
+                #
+                $query_result = DBQueryFatal("select type from node_types ".
+                                             "where architecture='$arch'");
+                if (!mysql_num_rows($query_result)) {
+                    $errors["Architecture"] =
+                        "No node types of this architecture.";
+                }
+            }
+        }
+	$args["architecture"] = $formfields["architecture"];
     }
 }
-if (isset($osidclause)) {
-    DBQueryFatal("lock tables images write, os_info write, osidtoimageid write");
-    $query_result =
-	DBQueryFatal("select osidtoimageid.*,images.pid,images.imagename ".
-		     " from osidtoimageid ".
-		     "left join images on ".
-		     " images.imageid=osidtoimageid.imageid ".
-		     "where ($osidclause) and ($typeclause) and ".
-		     "      images.imageid!='$imageid'");
-    DBQueryFatal("unlock tables");
+else {
+    $mtypes_array = array();
+    foreach ($types_array as $type) {
+        #
+        # Look for a post variable with name.
+        # 
+        if (isset($formfields["mtype_$type"]) &&
+            $formfields["mtype_$type"] == "Yep") {
+            $mtypes_array[] = $type;
+            if ("mtype_$type" == "mtype_pcvm") {
+                $doespcvm = 1;
+            }
+        }
+    }
+    if (! count($mtypes_array)) {
+        $errors["Node Types"] = "Must select at least one type";
+    }
 
-    if (mysql_num_rows($query_result)) {
-	echo "<center>
+    # The mtype_* checkboxes are dynamically generated.
+    foreach ($mtypes_array as $type) {
+        # Filter booleans from checkbox values, send if different.
+        $checked = isset($formfields["mtype_$type"]) &&
+                 strcmp($formfields["mtype_$type"], "Yep") == 0;
+        if ($checked != array_search("mtype_$type", $mtypes_array)) {
+            $args["mtype_$type"] = $checked ? "1" : "0";
+        }
+    }
+    #
+    # Mereusers are not allowed to create more than one osid/imageid mapping
+    # for each machinetype. They cannot actually do that through the EZ form
+    # since the osid/imageid has to be unique, but it can happen by mixed
+    # use of the long form and the short form, or with multiple uses of the
+    # long form.
+
+    # Can't check this unless we have at least one mtype!
+    if (!count($mtypes_array) || count($errors)) {
+        SPITFORM($image, $formfields, $errors);
+        PAGEFOOTER();
+        return;
+    }
+    $typeclause = "type=" . "'$mtypes_array[0]'";
+    for ($i = 1; $i < count($mtypes_array); $i++) {
+        $typeclause = "$typeclause or type=" . "'$mtypes_array[$i]'";
+    }
+
+    unset($osidclause);
+    $osid_array = array();
+    for ($i = 1; $i <= 4; $i++) {
+        # Local variable dynamically created.    
+        $foo      = "part${i}_osid";
+
+        if (isset($defaults[$foo])) {
+            if (isset($osidclause))
+                $osidclause = "$osidclause or osid='" . $defaults[$foo] . "' ";
+            else 
+                $osidclause = "osid='" . $defaults[$foo] . "' ";
+
+            $osid_array[] = $defaults[$foo];
+        }
+    }
+    if (isset($osidclause)) {
+        DBQueryFatal("lock tables images write, os_info write, ".
+                     "    osidtoimageid write");
+        $query_result =
+            DBQueryFatal("select osidtoimageid.*,images.pid,images.imagename ".
+                         " from osidtoimageid ".
+                         "left join images on ".
+                         " images.imageid=osidtoimageid.imageid ".
+                         "where ($osidclause) and ($typeclause) and ".
+                         "      images.imageid!='$imageid'");
+        DBQueryFatal("unlock tables");
+
+        if (mysql_num_rows($query_result)) {
+	    echo "<center>
               There are other image descriptors that specify the 
 	      same OS descriptors for the same node types.<br>
               There must be a
@@ -497,32 +540,39 @@ if (isset($osidclause)) {
               this new Image descriptor.
               </center><br>\n";
 
-	echo "<table border=1 cellpadding=2 cellspacing=2 align='center'>\n";
+            echo "<table border=1 cellpadding=2 cellspacing=2 align='center'>\n";
 
-	echo "<tr>
+            echo "<tr>
                   <td align=center>OSID</td>
                   <td align=center>Type</td>
                   <td align=center>ImageID</td>
              </tr>\n";
 
-	while ($row = mysql_fetch_array($query_result)) {
-	    $imageid   = $row['imageid'];
-	    $url       = CreateURL("showimageid", URLARG_IMAGEID, $imageid);
-	    $osid      = $row["osid"];
-	    $type      = $row["type"];
-	    $imagename = $row["imagename"];
+            while ($row = mysql_fetch_array($query_result)) {
+                $imageid   = $row['imageid'];
+                $url       = CreateURL("showimageid", URLARG_IMAGEID, $imageid);
+                $osid      = $row["osid"];
+                $type      = $row["type"];
+                $imagename = $row["imagename"];
 	    
-	    echo "<tr>
+                echo "<tr>
                       <td>$osid</td>
 	              <td>$type</td>
                       <td><A href='$url'>$imagename</A></td>
 	          </tr>\n";
-	}
-	echo "</table><br><br>\n";
-    
-	USERERROR("Please check the other Image descriptors and make the ".
-		  "necessary changes!", 1);
+           }
+            echo "</table><br><br>\n";
+            
+            USERERROR("Please check the other Image descriptors and make the ".
+                      "necessary changes!", 1);
+        }
     }
+}
+# Can't check this unless we have at least one mtype!
+if (count($errors)) {
+    SPITFORM($image, $formfields, $errors);
+    PAGEFOOTER();
+    return;
 }
 
 # Send to the backend for more checking, and eventually, to update the DB.

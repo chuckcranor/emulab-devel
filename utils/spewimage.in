@@ -72,7 +72,7 @@ my $TBLOGS      = "@TBLOGSEMAIL@";
 use lib "@prefix@/lib";
 use libdb;
 use libtestbed;
-use Image;
+use OSImage;
 
 # Locals
 my $bytelen = 0;
@@ -133,7 +133,7 @@ if (@ARGV != 1 || !defined($access_key)) {
     usage();
 }
 my $imageid = $ARGV[0];
-my $image   = Image->Lookup($ARGV[0]);
+my $image   = OSImage->Lookup($ARGV[0]);
 if (!defined($image)) {
     die("*** $0:\n".
 	"    $imageid does not exist!\n");

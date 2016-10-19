@@ -5,7 +5,7 @@ use strict;
 use libinstall;
 use installvars;
 use EmulabConstants;
-use Image;
+use OSImage;
 use OSinfo;
 
 my $UTAHURL       = "http://www.emulab.net/downloads";
@@ -80,7 +80,7 @@ sub Install($$$)
 	    my $url = $STDIMAGES{$imagename};
 	    
 	    Phase "$imagename", "Fetching $imagename. Patience!", sub {
-		my $image = Image->Lookup(TBOPSPID(), $imagename);
+		my $image = OSImage->Lookup(TBOPSPID(), $imagename);
 		PhaseSkip("already fetched")
 		    if (defined($image));
 

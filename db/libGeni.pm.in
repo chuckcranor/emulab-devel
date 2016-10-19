@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2009, 2010, 2011 University of Utah and the Flux Group.
+# Copyright (c) 2009-2016 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -46,7 +46,6 @@ use emutil;
 use NodeType;
 use Interface;
 use Experiment;
-use OSinfo;
 use Lan;
 use GeniEmulabUtil;
 use GeniResource;

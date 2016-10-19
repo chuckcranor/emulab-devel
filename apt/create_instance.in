@@ -118,7 +118,7 @@ use Experiment;
 use User;
 use Project;
 use Group;
-use OSinfo;
+use Image;
 use emutil;
 use libEmulab;
 use GeniDB;

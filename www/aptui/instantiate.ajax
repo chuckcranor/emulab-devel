@@ -175,34 +175,42 @@ function Do_GetImageInfo()
             #
             $urn = preg_replace('/:\d+$/', "", $urn);
             $safe_urn = addslashes($urn);
-
-         again:
             if (is_null($version)) {
                 if ($proj == "emulab-ops") {
-                    list ($a,$b,$c) = Instance::ParseURN($urn);
-                    $safe_urn = addslashes("urn:publicid:IDN+%+image+${c}");
-                    $innerclause = "urn like '$safe_urn'";
+                    $safe_urn = addslashes("urn:publicid:IDN+%+image+${id}");
+                    $innerclause = "innerclause.urn like '$safe_urn'";
                 }
                 else {
-                    $innerclause = "urn='$safe_urn'";
+                    $innerclause = "innerclause.urn='$safe_urn'";
                 }
-                $query_result =
-                    DBQueryFatal("select i.*,v.* from image_versions as v ".
-                                 "   inner join ".
-                                 "      (select urn,max(version) as version ".
-                                 "         from image_versions ".
-                                 "       where $innerclause ".
-                                 "       group by urn) as ij ".
-                                 "   on v.urn=ij.urn and v.version=ij.version ".
-                                 "left join images as i on i.urn=v.urn",
-                                $dblink);
+                $query_result = DBQueryFatal(
+                    "(select i.*,v.* from image_versions as v ".
+                    "  inner join ".
+                    "    (select iv.urn,max(version) as version ".
+                    "       from image_aliases as innerclause ".
+                    "     left join image_versions as iv on ".
+                    "           iv.urn=innerclause.target_urn ".
+                    "     where $innerclause ".
+                    "     group by iv.urn) as ij ".
+                    "  on v.urn=ij.urn and v.version=ij.version ".
+                    " left join images as i on i.urn=v.urn) ".
+                    "union ".
+                    "(select i.*,v.* from image_versions as v ".
+                    "   inner join ".
+                    "      (select urn,max(version) as version ".
+                    "         from image_versions as innerclause ".
+                    "       where $innerclause ".
+                    "       group by urn) as ij ".
+                    "   on v.urn=ij.urn and v.version=ij.version ".
+                    " left join images as i on i.urn=v.urn)", $dblink);
             }
             else {
                 $query_result =
                     DBQueryFatal("select i.*,v.* from image_versions as v ".
-                                "left join images as i on ".
-                                "     i.image_uuid=v.image_uuid ".
-                                "where v.urn='$safe_urn' and v.version='$version'",
+                                 "left join images as i on ".
+                                 "     i.image_uuid=v.image_uuid ".
+                                 "where v.urn='$safe_urn' and ".
+                                 "      v.version='$version'",
                                 $dblink);
             }
         }

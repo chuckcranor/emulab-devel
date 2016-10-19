@@ -16,8 +16,7 @@ use libEmulab;
 use emdb;
 use User;
 use NodeType;
-use OSinfo;
-use Image;
+use OSImage;
 use Node;
 use EmulabFeatures;
 
@@ -272,9 +271,9 @@ sub Install($$$)
 	# A reasonable default image.
 	#
 	Phase "sitevar1", "Setting sitevar $PGOSSITEVAR", sub {
-	    my $osinfo = OSinfo->LookupByName($DEFAULTOSID);
+	    my $osimage = OSImage->LookupByName($DEFAULTOSID);
 	    PhaseFail("Could not look up $DEFAULTOSID osid")
-		if (!defined($osinfo));
+		if (!defined($osimage));
 	    
 	    ExecQuietFatal("$PREFIX/sbin/setsitevar ".
 			   "'$PGOSSITEVAR' '$DEFAULTOSID'");
@@ -599,10 +598,10 @@ sub Install($$$)
 
 	foreach my $osid (@EXPORTEDOSIDS) {
 	    Phase "$osid", "Enabling protogeni export for $osid", sub {
-		my $osinfo = OSinfo->LookupByName($osid);
-		PhaseFail("No such osid")
-		    if (!defined($osinfo));
-		$osinfo->Update({"protogeni_export" => 1}) == 0
+		my $osimage = OSImage->LookupByName($osid);
+		PhaseFail("No such image $osid")
+		    if (!defined($osimage));
+		$osimage->Update({"protogeni_export" => 1}) == 0
 		    or PhaseFail("DB query failed");
 	    };
 	}

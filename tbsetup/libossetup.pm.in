@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2000-2015 University of Utah and the Flux Group.
+# Copyright (c) 2000-2016 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -40,6 +40,7 @@ use libdb;
 use libtestbed;
 use libreboot;
 use libosload;
+use OSImage;
 use Node;
 use NodeType;
 use libtblog;
@@ -47,7 +48,6 @@ use Logfile;
 use English;
 use Data::Dumper;
 use EmulabFeatures;
-use Image;
 
 # Configure variables
 my $TB		= "@prefix@";
@@ -176,10 +176,10 @@ sub node($$)
 # Get/Set the osid->osinfo mapping. Nice to keep this to avoid lookups.
 sub osmap($$;$)
 {
-    my ($self, $osid, $osinfo) = @_;
+    my ($self, $osid, $osimage) = @_;
 
-    if (defined($osinfo)) {
-	return $self->{'OSMAP'}->{$osid} = $osinfo;
+    if (defined($osimage)) {
+	return $self->{'OSMAP'}->{$osid} = $osimage;
     }
     elsif (exists($self->{'OSMAP'}->{$osid})) {
 	return $self->{'OSMAP'}->{$osid};
@@ -220,7 +220,7 @@ sub OperationList($)
 #
 sub SetupReload($$$$)
 {
-    my ($self, $node, $osinfo, $auxload) = @_;
+    my ($self, $node, $osimage, $auxload) = @_;
     my $type = $node->type();
 
     #
@@ -235,7 +235,7 @@ sub SetupReload($$$$)
 	$type = "pcvm";
     }
 
-    if ((my $image = $osinfo->MapToImage($type))) {
+    if ((my $image = $osimage->MapToImage($type))) {
 	#
 	# We support aux image loading, but have to distingush between a boot
 	# load and an aux load, since an aux load should not change what is
@@ -255,11 +255,14 @@ sub SetupReload($$$$)
 	}
 	$node->_setupoperation($RELOAD);
 	$node->_reloaded(1);
+	if ($self->debug()) {
+	    print STDERR "SetupReload: $node:$image auxload:$auxload\n";
+	}
     }
     else {
 	die_noretry({type => 'primary', severity => SEV_ERROR,
-		     error => ['file_not_found', 'image', $osinfo, $node]},
-		    "No image can be found for $osinfo on $node ($type)!");
+		     error => ['file_not_found', 'image', $osimage, $node]},
+		    "No image can be found for $osimage on $node ($type)!");
     }
 }
 
@@ -397,16 +400,16 @@ sub SetOS($$)
     my $imageable     = $node->imageable();
     my $osid          = $node->def_boot_osid();
     my $osid_vers     = $node->def_boot_osid_vers();
-    my $osinfo        = OSinfo->Lookup($osid, $osid_vers);
+    my $osimage       = OSImage->Lookup($osid, $osid_vers);
     my $loadlist      = $node->loadlist();
     my $experiment    = $self->experiment();
     my $pid           = $experiment->pid();
 
     die_noretry("Could not map $osid to its object!")
-	if (!defined($osinfo));
+	if (!defined($osimage));
 
-    # Lets remember the osinfo for later.
-    $self->osmap($osid, $osinfo);
+    # Lets remember the osimage for later.
+    $self->osmap($osid, $osimage);
 
     # Set the canfail bit.
     $node->_canfail($node->failureaction() eq NODEFAILMODE_FATAL() ? 0 : 1);
@@ -416,14 +419,14 @@ sub SetOS($$)
     # really is going to be reloaded... even though virtnode types are
     # not typically imageable.
     #
-    if ($node->isvirtnode() && $osinfo->def_parentosid()) {
+    if ($node->isvirtnode() && $osimage->def_parentosid()) {
 	#
 	# But, if the subos is static (like OPENVZ-STD), there is
 	# no reload, cause it is already on the parent image. Lets use 
 	# the fact that no image link exists, to distinguish this case.
 	#
 	$imageable = 1
-	    if (defined($osinfo->MapToImage($node->type())));
+	    if (defined($osimage->MapToImage($node->type())));
     }
 
     if ($imageable) {
@@ -431,10 +434,10 @@ sub SetOS($$)
 	# These checks are not necessary if the front end and web page
 	# are doing the right thing, but lets be careful anyway.
 	#
-	if (! $osinfo) {
+	if (! $osimage) {
 	    die_noretry("$node has no bootpath and no def_boot_osid set!");
 	}
-	$self->SetOSAux($node, $osinfo, 0, $loadlist);
+	$self->SetOSAux($node, $osimage, 0, $loadlist);
 
 	#
 	# Now look for additional loads. 
@@ -443,20 +446,20 @@ sub SetOS($$)
 	    my @osnamelist = split(",", $loadlist);
 
 	    foreach my $osname (@osnamelist) {
-		my $osinfo = OSinfo->Lookup($pid, $osname) ||
-		    OSinfo->LookupByName($osname);
+		my $osimage = OSImage->Lookup($pid, $osname) ||
+		    OSImage->LookupByName($osname);
 
 		die_noretry("Could not map $osname to its object!")
-		    if (!defined($osinfo));
+		    if (!defined($osimage));
 
-		$self->SetOSAux($node, $osinfo, 1, 1);
+		$self->SetOSAux($node, $osimage, 1, 1);
 	    }
 	}
     }
     # Remember this for later. 
-    $node->_bootosinfo($osinfo);
+    $node->_bootosinfo($osimage);
     
-    print STDERR "$node_id - $osinfo\n"
+    print STDERR "$node_id - $osimage\n"
 	if ($self->debug());
 }
 
@@ -471,9 +474,9 @@ sub SetOSAux($$$$$)
     my $pid           = $experiment->pid();
     
     #
-    # If there is an actual path, its an OSKit kernel not an image.
+    # No more oskit kernels, just MFSs.
     #
-    if (! defined($osinfo->path()) || $osinfo->path() eq "") {
+    if (! $osinfo->mfs()) {
 	my $nextosinfo;
 	    
 	#
@@ -502,6 +505,9 @@ sub SetOSAux($$$$$)
 	my $isloaded = $node->IsOSLoaded($osinfo);
 	if ($isloaded < 0) {
 	    die_noretry("Error determining if $osinfo is loaded on $node\n");
+	}
+	if ($self->debug()) {
+	    print STDERR "$node:$osinfo: isloaded:$isloaded\n";
 	}
 	if ($isloaded) {
 	    #

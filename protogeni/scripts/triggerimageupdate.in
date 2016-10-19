@@ -83,8 +83,7 @@ use GeniAuthority;
 use GeniImage;
 use GeniHRN;
 use libEmulab;
-use Image;
-use OSinfo;
+use OSImage;
 require emdb;
 
 if (!$PGENISUPPORT) {
@@ -115,7 +114,7 @@ if (defined($options{"f"})) {
 usage()
     if (!@ARGV);
 
-my $image = Image->Lookup($ARGV[0]);
+my $image = OSImage->Lookup($ARGV[0]);
 fatal("No such image")
     if (!defined($image));
 

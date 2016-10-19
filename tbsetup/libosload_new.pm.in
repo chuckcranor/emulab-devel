@@ -40,9 +40,8 @@ use libreboot;
 use libtblog;
 use Node;
 use NodeType;
-use Image;
+use OSImage;
 use User;
-use OSinfo;
 use English;
 use event;
 use Data::Dumper;
@@ -501,7 +500,7 @@ sub osload($$$) {
 
     if (@imageids) {
 	foreach my $imageid (@imageids) {
-	    my $image = Image->Lookup($imageid);
+	    my $image = OSImage->Lookup($imageid);
 	    if (!defined($image)) {
 		tberror("No such imageid $imageid");
 		return -1;
@@ -512,7 +511,7 @@ sub osload($$$) {
 
     foreach my $i (0 .. $#imageids) {
 	my $imageid = $imageids[$i];
-	$images[$i] = Image->Lookup($imageid);
+	$images[$i] = OSImage->Lookup($imageid);
 	my $image = $images[$i];
 	if (!defined($image)) {
 	    tberror("Could not map $imageid to its object!");
@@ -652,6 +651,24 @@ sub osload($$$) {
 	#if (exists($nargs{nowait})) {
 	#    $nargs{waitmode} = $nargs{nowait};
 	#}
+	if (@images) {
+	    my $node_id = $nodeobject->node_id();
+	    my @tmp = ();
+
+	    foreach my $image (@images) {
+		if ($image->isImageAlias()) {
+		    my $im = $image->MapToImage($nodeobject->type());
+		    if (!defined($im)) {
+			tberror("Could not map $image to an image ".
+				"for $node_id!");
+			return -1;
+		    }
+		    $image = $im;
+		}
+		push(@tmp, $image);
+	    }
+	    @images = @tmp;
+	}
 
 	#
 	# Add the node with the given images and arguments
@@ -1397,7 +1414,7 @@ sub osload_setupswapinfo($$$;@)
 		if (!$allnodes);
 	    return 1;
 	}
-	my $image = Image->Lookup($imageid, $imageid_version);
+	my $image = OSImage->Lookup($imageid, $imageid_version);
 	if (!defined($image)) {
 	    print "*** swapinfo: Image $imageid,$imageid_version not found!\n";
 	    next
@@ -1625,7 +1642,7 @@ use libtestbed;
 use libdb;
 use libtblog;
 use Node;
-use Image;
+use OSImage;
 use English;
 use Data::Dumper;
 use overload ('""' => 'Stringify');
@@ -1673,7 +1690,7 @@ sub _LoadDefaultImages($$)
     my @default_imageids = split(/,/, $default_imageid);
     my @default_images;
     foreach my $default_imageid (@default_imageids) {
-	my $default_image = Image->Lookup($default_imageid);
+	my $default_image = OSImage->Lookup($default_imageid);
 	if (!defined($default_image)) {
 	    tberror("Could not find $default_imageid in the DB!");
 	    return -1;
@@ -1697,14 +1714,14 @@ sub _LoadCurrentImages($$)
 
     my $def_boot_osid  = $nodeobject->def_boot_osid();
     my $def_boot_vers  = $nodeobject->def_boot_osid_vers();
-    my $osinfo = OSinfo->Lookup($def_boot_osid, $def_boot_vers);
-    if (! defined($osinfo)) {
+    my $osimage = OSImage->Lookup($def_boot_osid, $def_boot_vers);
+    if (! defined($osimage) {
 	tberror("Could not find OS $def_boot_osid in the DB!");
 	return undef;
     }
-    my $best_image = $osinfo->MapToImage($nodeobject->type());
+    my $best_image = $osimage->MapToImage($nodeobject->type());
     if (!defined($best_image)) {
-	tberror("Could not map $osinfo to an image for $node_id!");
+	tberror("Could not map $osimage to an image for $node_id!");
 	return undef;
     }
 
@@ -1766,7 +1783,7 @@ sub AddNode($$$$)
 
     if ($self->nodeflag($nodeobject,'usedefault')) {
 	if (defined($imagelistref) && scalar(@$imagelistref)) {
-	    tbwarn("$self AddNode($node_id): we were given $imagelist, but are " . 
+		    tbwarn("$self AddNode($node_id): we were given $imagelist, but are " . 
 		   " going to use the default OS instead!");
 	}
 
@@ -1810,6 +1827,7 @@ sub _CheckImages($$)
     my @images = @$imagelistref;
     my @imageids = map { $_->imageid() } @images;
     my @imageidxs = (0 .. $#imageids);
+    my @images = ();
 
     foreach my $i (@imageidxs) {
 	my $imageid = $imageids[$i];
@@ -1828,7 +1846,7 @@ sub _CheckImages($$)
 	    #
 	    if ($self->GetImageSize($image, $nodeobject)) {
 		tberror "$nodeobject: no full or delta image file!";
-		goto failednode;
+		return -1;
 	    }
 	}
 	if (! ($image->size() || $image->deltasize())) {
@@ -1850,22 +1868,22 @@ sub SetBootOS($$)
 
     my @images = @{$self->GetImages($nodeobject)};
     #
-    # When loading multiple images, use the osinfo from the
+    # When loading multiple images, use the osimage from the
     # last image
     #
     my $image = $images[-1];
     my $imageid = $image->imageid();
 
     my $defosid = $image->default_osid();
-    my $osinfo = OSinfo->Lookup($defosid);
-    if (!defined($osinfo)) {
+    my $osimage = OSImage->Lookup($defosid);
+    if (!defined($osimage)) {
 	tberror("$self SetBootOS($node_id): could not map OSID $defosid to its object!");
 	return -1;
     }
 
-    print "$self SetBootOS($node_id): changing default OS to $osinfo\n";
+    print "$self SetBootOS($node_id): changing default OS to $osimage\n";
     if (!$TESTMODE) {
-	if ($nodeobject->OSSelect($osinfo,"def_boot_osid",$self->debug())) {
+	if ($nodeobject->OSSelect($osimage,"def_boot_osid",$self->debug())) {
 	    tberror "$self SetBootOS($node_id): os_select $defosid failed!";
 	    return -1;
 	}
@@ -1880,7 +1898,7 @@ sub SetBootOS($$)
 	$ocmdline = $nodeobject->def_boot_cmd_line();
 	$ocmdline = ""
 	    if (!defined($ocmdline));
-	$osinfo->OSBootCmd("delay", \$ncmdline);
+	$osimage->OSBootCmd("delay", \$ncmdline);
 	$ncmdline = ""
 	    if (!defined($ncmdline));
 	if ($ocmdline ne $ncmdline) {
@@ -2088,23 +2106,26 @@ sub UpdatePartitions($$)
 	# Now we loop through the image partitions and set/clear
 	# the existing partition info as appropriate.
 	#
+	# NOTE: We no longer do multi-os images ... but this loop
+	# is harmless. 
+	#
 	for (my $i = $startpart; $i < $endpart; $i++) {
 	    my $partname = "part${i}_osid";
 	    my $partvers = "part${i}_vers";
 
-	    my $osid = $image->DBData()->{$partname};
-	    my $vers = $image->DBData()->{$partvers};
+	    my $osid = $image->field($partname);
+	    my $vers = $image->field($partvers);
 	    if (defined($osid)) {
-		my $osinfo = OSinfo->Lookup($osid, $vers);
-		if (!defined($osinfo)) {
-		    tberror "No OSinfo found for osid $osid!\n";
+		my $osimage = OSImage->Lookup($osid, $vers);
+		if (!defined($osimage)) {
+		    tberror "No OSImage found for osid $osid!\n";
 		    return -1;
 		}
 		my %part = (
 		    'node_id' => $node_id,
 		    'partition' => $i,
 		    'osid' => $osid,
-		    'osid_vers' => $osinfo->vers(),
+		    'osid_vers' => $osimage->version(),
 		    'imageid' => $imageid,
 		    'imageid_version' => $image->version(),
 		    'imagepid' => $imagepid,
@@ -2299,7 +2320,7 @@ use libtestbed;
 use libdb;
 use libtblog;
 use Node;
-use Image;
+use OSImage;
 use English;
 use Data::Dumper;
 use overload ('""' => 'Stringify');
@@ -2318,7 +2339,7 @@ sub SetupReload($$)
 {
     my ($self,$nodeobject) = @_;
     my $node_id = $nodeobject->node_id();
-    my $osinfo;
+    my $osimage;
 
     $self->dprint(0,"SetupReload($node_id): setting up reload");
 
@@ -2411,13 +2432,13 @@ sub SetupReload($$)
 	    return -1;
 	}
 	# Look up the magic osid for the imageX loader
-	$osinfo = OSinfo->Lookup(TB_OPSPID, $IMAGEX_OSNAME);
+	$osimage = OSImage->Lookup(TB_OPSPID, $IMAGEX_OSNAME);
     }
     else {
-	$osinfo = OSinfo->Lookup($osid);
+	$osimage = OSImage->Lookup($osid);
     }
 
-    if ($nodeobject->OSSelect($osinfo,"next_boot_osid",$self->debug())) {
+    if ($nodeobject->OSSelect($osimage,"next_boot_osid",$self->debug())) {
 	tberror "$self: os_select $osid failed!";
 	return -1;
     }
@@ -2533,7 +2554,7 @@ use libtestbed;
 use libdb;
 use libtblog;
 use Node;
-use Image;
+use OSImage;
 use English;
 use Data::Dumper;
 use overload ('""' => 'Stringify');
@@ -2641,9 +2662,8 @@ sub Reload($$)
     #
     TBSetNodeEventState($node_id,TBDB_NODESTATE_RELOADDONE);
 
-
-    my $osinfo = OSinfo->Lookup($osid);
-    if ($nodeobject->OSSelect($osinfo,"def_boot_osid",$self->debug())) {
+    my $osimage = OSImage->Lookup($osid);
+    if ($nodeobject->OSSelect($osimage,"def_boot_osid",$self->debug())) {
 	tberror "$self Reload($node_id): os_select $osid failed!";
 	return -1;
     }

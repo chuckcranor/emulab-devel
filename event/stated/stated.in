@@ -58,7 +58,7 @@ $| = 1;
 use event;
 use libdb;
 use Node;
-use OSinfo;
+use OSImage;
 use libtestbed;
 use TimeoutQueue;
 use Getopt::Std;
@@ -1017,9 +1017,9 @@ sub stateTransition($$) {
             };
 	    /^RELOADOLDMFS$/ && do {
 		my $frisbee_osid = TBNodeDiskloadOSID($node);
-		my $osinfo = OSinfo->Lookup($frisbee_osid);
-		my $frisbee_name = (defined($osinfo) ?
-				    $osinfo->osame() : $frisbee_osid);
+		my $osimage = OSImage->Lookup($frisbee_osid);
+		my $frisbee_name = (defined($osimage) ?
+				    $osimage->osame() : $frisbee_osid);
 		my $msg = 
 		    ("Attempted to load multiple images on $node using an old Frisbee MFS.\n".
 		     "To make this work please update the $frisbee_name MFS image.\n");

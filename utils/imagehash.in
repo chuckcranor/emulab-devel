@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2010-2015 University of Utah and the Flux Group.
+# Copyright (c) 2010-2016 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -70,8 +70,7 @@ $| = 1;
 # Load the Testbed support stuff.
 #
 use lib "@prefix@/lib";
-use Image;
-use OSinfo;
+use OSImage;
 use User;
 
 #
@@ -94,7 +93,7 @@ if (defined($options{"p"})) {
 usage() 
     if (@ARGV != 1);
 
-my $image   = Image->Lookup($ARGV[0]);
+my $image   = OSImage->Lookup($ARGV[0]);
 if (!defined($image)) {
     fatal("No such image exists");
 }

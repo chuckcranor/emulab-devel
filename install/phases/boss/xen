@@ -6,7 +6,7 @@ use libinstall;
 use installvars;
 use NodeType;
 use OSinfo;
-use Image;
+use OSImage;
 use EmulabConstants;
 
 my $DESCRIPTORS   = "$TOP_SRCDIR/install/descriptors-xen.xml";
@@ -80,7 +80,7 @@ sub Install($$$)
 	Phase "guests", "Updating images to run as a xen guest", sub {
 	    foreach my $imagename (@images) {
 		Phase "$imagename", "Updating $imagename", sub {
-		    my $image = Image->Lookup(TBOPSPID(), $imagename);
+		    my $image = OSImage->Lookup(TBOPSPID(), $imagename);
 		    
 		    PhaseSkip("does not exist")
 			if (!defined($image));

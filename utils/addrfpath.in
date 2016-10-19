@@ -67,7 +67,6 @@ use emutil;
 use User;
 use Node;
 use NodeType;
-use OSinfo;
 use Interface;
 
 #

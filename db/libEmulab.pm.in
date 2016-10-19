@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2000-2015 University of Utah and the Flux Group.
+# Copyright (c) 2000-2016 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -27,7 +27,8 @@ use Exporter;
 use vars qw(@ISA @EXPORT);
 @ISA    = qw(Exporter);
 @EXPORT = qw(SiteVarExists CreateSiteVar GetSiteVar SetSiteVar
-	     GetSiteVarDesc SetSiteVarDesc NoLogins IsShutDown);
+	     GetSiteVarDesc SetSiteVarDesc NoLogins IsShutDown.
+	     IsMultiPCArchitecture PCArchitectures);
 
 use emdb;
 
@@ -347,6 +348,34 @@ sub EmulabCountUnlock($)
 	or return -1;
 
     return 0;
+}
+
+#
+# Are we multi architecture (pc class only). Only consider an architecture
+# if we have actual nodes for it.
+#
+sub IsMultiPCArchitecture()
+{
+    my $query_result =
+	DBQueryWarn("select distinct architecture from node_types as nt ".
+		    "left join nodes as n on n.type=nt.type ".
+		    "where architecture is not null and class='pc' and ".
+		    "   n.node_id is not null and n.role='testnode'");
+    return $query_result->numrows > 1 ? 1 : 0;
+}
+sub PCArchitectures()
+{
+    my @results = ();
+    
+    my $query_result =
+	DBQueryWarn("select distinct architecture from node_types as nt ".
+		    "left join nodes as n on n.type=nt.type ".
+		    "where architecture is not null and class='pc' and ".
+		    "   n.node_id is not null and n.role='testnode'");
+    while (my ($architecture) = $query_result->fetchrow_array()) {
+	push(@results, $architecture);
+    }
+    return @results;
 }
 
 1;

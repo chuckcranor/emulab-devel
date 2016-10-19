@@ -126,8 +126,7 @@ $| = 1;
 #
 use lib "@prefix@/lib";
 use EmulabConstants;
-use Image;
-use OSinfo;
+use OSImage;
 use User;
 use Project;
 
@@ -225,7 +224,7 @@ if ($doall) {
 	    fatal("No such project '$doallpid'");
 	}
     }
-    @images = Image->ListAllVersions("ndz", $doallpid);
+    @images = OSImage->ListAllVersions("ndz", $doallpid);
     if (@images > 50 && ($validate{"hash"} || $dosig)) {
 	print STDERR "WARNING: processing ", int(@images),
 	" images, will take a LONG time!\n";
@@ -255,7 +254,7 @@ my $errs = 0;
 # - version 0 must be a full image
 #
 if ($allvers) {
-    my $image = Image->Lookup($images[0]);
+    my $image = OSImage->Lookup($images[0]);
     if (!$image) {
 	print STDERR "$images[0]: no such image\n";
 	exit(1);
@@ -310,7 +309,7 @@ sub doimage($)
 
     print STDERR "Checking image '$pidimage' ...\n"
 	if ($debug);
-    my $image = Image->Lookup($pidimage);
+    my $image = OSImage->Lookup($pidimage);
     if (!defined($image)) {
 	print STDERR "$pidimage: no such image\n";
 	return 1;

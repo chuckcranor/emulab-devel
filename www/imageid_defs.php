@@ -23,6 +23,12 @@
 #
 include_once("osinfo_defs.php");	# For SpitOSIDLink() below.
 
+# Default architectures.
+$image_architectures		= array();
+$image_architectures["i386"]	= "i386";
+$image_architectures["x86_64"]	= "x86_64";
+$image_architectures["aarch64"]	= "aarch64";
+
 class Image
 {
     var	$image;
@@ -66,20 +72,6 @@ class Image
 	    return;
 	}
 	$this->image = mysql_fetch_array($query_result);
-
-	#
-	# Load the type info.
-	#
-	$types = array();
-	
-	$query_result = 
-	    DBQueryFatal("select distinct type from osidtoimageid ".
-			 "where imageid='$safe_id'");
-	
-	while ($row = mysql_fetch_array($query_result)) {
-	    $types[] = $row['type'];
-	}
-	$this->types = $types;
 
 	# Load lazily;
 	$this->group      = null;
@@ -187,30 +179,19 @@ class Image
 	$image_uuid = $this->image_uuid();
 	
 	$query_result =
-	    DBQueryWarn("select * from image_versions ".
-			"where imageid='$imageid' and version='$version'");
+            DBQueryWarn("select i.*,v.*,i.uuid as image_uuid,".
+                        "  i.locked as image_locked".
+                        "  from image_versions as v ".
+                        "left join images as i on ".
+                        "     i.imageid=v.imageid ".
+                        "where v.imageid='$safe_id' and ".
+                        "      v.version='$safe_version'");
     
 	if (!$query_result || !mysql_num_rows($query_result)) {
 	    $this->imageid = NULL;
 	    return -1;
 	}
 	$this->image = mysql_fetch_array($query_result);
-	$this->image["image_uuid"] = $image_uuid;
-
-	#
-	# Reload the type info.
-	#
-	$types = array();
-	
-	$query_result = 
-	    DBQueryFatal("select distinct type from osidtoimageid ".
-			 "where imageid='$imageid'");
-	
-	while ($row = mysql_fetch_array($query_result)) {
-	    $types[] = $row['type'];
-	}
-	$this->types = $types;
-	
 	return 0;
     }
 
@@ -392,7 +373,7 @@ class Image
 
 	# Unlink this here, so that the file is left behind in case of error.
 	# We can then create the image by hand from the xmlfile, if desired.
-	#unlink($xmlname);
+	unlink($xmlname);
 	return true;
     }
 
@@ -409,6 +390,7 @@ class Image
     }
     function imagename()	{ return $this->field("imagename"); }
     function version()		{ return $this->field("version"); }
+    function architecture()	{ return $this->field("architecture"); }
     function pid()		{ return $this->field("pid"); }
     function gid()		{ return $this->field("gid"); }
     function pid_idx()		{ return $this->field("pid_idx"); }
@@ -460,11 +442,12 @@ class Image
     function lba_low()		{ return $this->field("lba_low"); }
     function lba_high()		{ return $this->field("lba_high"); }
     function lba_size()		{ return $this->field("lba_size"); }
+    function nodeetypes()	{ return $this->field("nodetypes"); }
 
     # Return the DB data.
     function DBData()		{ return $this->image; }
     # and the types array
-    function Types()		{ reset($this->types); return $this->types; }
+    function Types()		{ return $this->TypeList(); }
 
     # Concat id/vers.
     function versid() { return $this->imageid() . ":" . $this->version(); }
@@ -820,6 +803,13 @@ class Image
               </tr>\n";
 
         if (!$isdataset) {
+            if ($this->architecture()) {
+                echo "<tr>
+                        <td>Architecture: </td>
+                        <td class=left>" . $this->architecture();
+                echo "  </td>
+                     </tr>\n";
+            }
             echo "<tr>
                       <td>Types: </td>
                       <td class=left>\n";
@@ -1081,6 +1071,55 @@ class Image
 	    return 1;
 	}
 	return 0;
+    }
+
+    function TypeList() {
+	$imageid = $this->imageid();
+        $version = $this->version();
+        $result  = array();
+
+        #
+        # Deleted images stash a list in the descriptor.
+        #
+        $deleted = $this->deleted();
+        if (isset($deleted)) {
+            $nodetypes = $this->nodetypes();
+            if (isset($nodetypes)) {
+                foreach (preg_split("/,/", $this->nodetypes()) as $type) {
+                    $result[] = $type;
+                }
+            }
+            return $result;
+        }
+        #
+        # If there is an architecture set in the image, we use that to
+        # find the matching types in the node_types table. This overrides
+        # anything found in the osidtoimageid.
+        #
+        $arch = $this->architecture();
+        if (isset($arch)) {
+            $query_result =
+                DBQueryFatal("select distinct nt.type from images as i ".
+                             # The image architecture could be a short list.
+                             "inner join node_types as nt on ".
+                             "   FIND_IN_SET(nt.architecture,i.architecture) ".
+                             "where i.imageid='$imageid'");
+
+            $osinfo = OSinfo::Lookup($imageid, $version);
+            if ($osinfo && $osinfo->def_parentosid()) {
+                $result[] = "pcvm";
+            }
+        }
+        else {
+            $query_result =
+                DBQueryFatal("select distinct type from osidtoimageid ".
+                             "where imageid='$imageid'");
+        }
+        while ($row = mysql_fetch_array($query_result)) {
+            $type = $row['type'];
+            $result[] = $type;
+        }
+	return $result;
     }
 
     function GetLogfile() {

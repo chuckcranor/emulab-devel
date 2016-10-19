@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2015 University of Utah and the Flux Group.
+# Copyright (c) 2000-2016 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -82,8 +82,7 @@ $query =
     "left join image_versions as iv on ".
     "          iv.imageid=i.imageid and iv.version=i.version ".
     "left join os_info_versions as ov on ".
-    "          i.imageid=ov.osid and ov.vers=i.version ".
-    "left join osidtoimageid as map on map.osid=i.imageid ";
+    "          i.imageid=ov.osid and ov.vers=i.version ";
 
 #
 # Tack on the permission clause for mere users. 

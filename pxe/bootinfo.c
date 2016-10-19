@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2000-2014 University of Utah and the Flux Group.
+ * Copyright (c) 2000-2016 University of Utah and the Flux Group.
  * 
  * {{{EMULAB-LICENSE
  * 
@@ -102,12 +102,14 @@ bootinfo(struct in_addr ipaddr, char *node_id, struct boot_info *boot_info,
 			inet_ntoa(ipaddr), boot_info->data, boot_info->version);
 #ifdef	EVENTSYS
 		needevent = bicache_needevent(ipaddr);
+#if defined(BOOTINFO_PXEEVENTS)
 		if (!no_event_send && needevent &&
 		    bievent_send(ipaddr, opaque, TBDB_NODESTATE_PXEBOOTING)) {
 			/* send failed, clear the cache entry */
 			bicache_clearevent(ipaddr);
 			eventfailed = 1;
 		}
+#endif
 #endif
 		err = query_bootinfo_db(ipaddr, node_id, boot_info->version, 
 					boot_whatp, boot_info->data);
@@ -118,12 +120,14 @@ bootinfo(struct in_addr ipaddr, char *node_id, struct boot_info *boot_info,
 		     inet_ntoa(ipaddr), boot_info->version);
 #ifdef	EVENTSYS
 		needevent = bicache_needevent(ipaddr);
+#if defined(BOOTINFO_PXEEVENTS)
 		if (!no_event_send && needevent &&
 		    bievent_send(ipaddr, opaque, TBDB_NODESTATE_PXEBOOTING)) {
 			/* send failed, clear the cache entry */
 			bicache_clearevent(ipaddr);
 			eventfailed = 1;
 		}
+#endif
 #endif
 		err = query_bootinfo_db(ipaddr, node_id,
 					boot_info->version, boot_whatp, NULL);
@@ -156,9 +160,11 @@ bootinfo(struct in_addr ipaddr, char *node_id, struct boot_info *boot_info,
 				info("%s: retry failed PXEBOOTING event\n",
 				     inet_ntoa(ipaddr));
 				bicache_needevent(ipaddr);
+#if defined(BOOTINFO_PXEEVENTS)
 				if (bievent_send(ipaddr, opaque,
 						 TBDB_NODESTATE_PXEBOOTING))
 					bicache_clearevent(ipaddr);
+#endif
 			}
 			switch (boot_whatp->type) {
 			case BIBOOTWHAT_TYPE_PART:
@@ -166,8 +172,10 @@ bootinfo(struct in_addr ipaddr, char *node_id, struct boot_info *boot_info,
 			case BIBOOTWHAT_TYPE_SYSID:
 			case BIBOOTWHAT_TYPE_MB:
 			case BIBOOTWHAT_TYPE_MFS:
+#if defined(BOOTINFO_PXEEVENTS)
 				bievent_send(ipaddr, opaque,
 					     TBDB_NODESTATE_BOOTING);
+#endif
 				break;
 					
 			case BIBOOTWHAT_TYPE_WAIT:

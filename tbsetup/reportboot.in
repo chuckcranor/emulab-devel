@@ -22,9 +22,7 @@
 # }}}
 #
 use English;
-use Getopt::Std;
-use POSIX qw(strftime);
-use Sys::Syslog;
+use Socket;
 
 #
 # This script is invoked on a dhcpd "commit" event.
@@ -34,280 +32,46 @@ use Sys::Syslog;
 
 sub usage()
 {
-    print "Usage: $0 [-bdCD] IP MAC boot-type\n";
-    print("Options:\n");
-    print(" -b      - Run in the background\n");
-    print(" -d      - Turn on debugging\n");
-    print(" -C      - Combine PXEBOOTING/BOOTING on PXE or U-boot boots;\n");
-    print("           Send nothing on an OS boot.");
-    print(" -D      - Record event times in a DB to moderate send rate\n");
-    print(" -U      - Combine PXEBOOTING/BOOTING on U-boot boots only;\n");
-    print("           Send nothing on an PXE or OS boot.");
+    print "Usage: $0 IP MAC boot-type\n";
     print("boot-type is one of OS, PXE, UBOOT.\n");
  
     exit(1);
 }
-my $optlist    = "bdCDU";
-my $background = 0;
-my $debug      = 0;
-my $combined   = 0;
-my $ubootonly  = 0;
-my $usedb      = 0;
-
-#
-# Functions
-#
-sub findnode($$);
-sub logit($);
-sub sendevent($$);
+sub fatal($);
 
 #
 # Configure variables
 #
-my $TB       = "@prefix@";
-my $TBOPS    = "@TBOPSEMAIL@";
-my $EVPORT   = @BOSSEVENTPORT@;
-my $EVSERVER = "boss";
-my $EVDB     = "$TB/db/reportboot";
-
-#
-# Minimum time between events.
-# In bootinfo, this is 10 seconds!
-#
-my $EVMININT = 5;
-
-# Locals
-my $logfile  = "$TB/log/reportboot.log";
+my $SOCKETFILE    = "/var/run/reportboot.sock";
 
 #
 # Turn off line buffering on output
 #
 $| = 1;
 
-#
-# Untaint the path
-# 
-$ENV{'PATH'} = "$TB/bin:$TB/sbin:/bin:/usr/bin:/sbin:/usr/sbin";
-delete @ENV{'IFS', 'CDPATH', 'ENV', 'BASH_ENV'};
-
-#
-# Testbed Support libraries
-#
-use lib "@prefix@/lib";
-use libtestbed;
-use libdb;
-use libtblog;
-use event;
-use Interface;
-
 if ($UID != 0) {
-    die("Must be root to run this script\n");
-}
-
-my %options = ();
-if (! getopts($optlist, \%options)) {
-    usage();
-}
-if (defined($options{"C"})) {
-    $combined = 1;
-    $ubootonly = 0;
-}
-if (defined($options{"U"})) {
-    $combined = 1;
-    $ubootonly = 1;
-}
-if (defined($options{"D"})) {
-    $usedb = 1;
-}
-if (defined($options{"b"})) {
-    $background = 1;
-}
-if (defined($options{"d"})) {
-    $debug = 1;
+    fatal("Must be root to run this script");
 }
 if (@ARGV != 3) {
     usage();
 }
-my ($IP,$MAC,$boottype);
-if ($ARGV[0] =~ /^([0-9]+\.[0-9]+\.[0-9]+\.[0-9]+)$/) {
-    $IP = $1;
-} else {
-    print STDERR "'$ARGV[0]' is not an IP address\n";
-    usage();
+my ($ip,$mac,$which) = @ARGV;
+
+if (! -e $SOCKETFILE) {
+    fatal("$SOCKETFILE does not exist!");
 }
-$MAC = lc($ARGV[1]);
-if ($MAC =~ /^([0-9a-f]+):([0-9a-f]+):([0-9a-f]+):([0-9a-f]+):([0-9a-f]+):([0-9a-f]+)$/) {
-    # dhcpd will return an octet like "02" as "2", so we have to compensate
-    $MAC = sprintf("%02x%02x%02x%02x%02x%02x",
-		   hex($1), hex($2), hex($3), hex($4), hex($5), hex($6));
-} else {
-    print STDERR "'$ARGV[1]' is not a MAC address\n";
-    usage();
-}
-if ($ARGV[2] =~ /^(PXE|OS|UBOOT)$/) {
-    $boottype = $1;
-} else {
-    print STDERR "Invalid boot-type '$ARGV[2]'\n";
-    usage();
-}
-
-if ($background) {
-    my $cpid = fork();
-    if (!defined($cpid)) {
-	die "$0: could not fork!";
-    }
-    if ($cpid) {
-	exit(0);
-    }
-    open(STDIN, "< /dev/null") or
-	die("opening /dev/null for STDIN: $!");
-    POSIX::setsid() or
-	die("setsid failed: $!");
-}
-
-my $nodeid = findnode($IP, $MAC);
-if (!$nodeid) {
-    logit("Ignoring unknown node $IP");
-    exit(0);
-}
-
-#
-# See if we need to send events.
-# We won't send more than one event per second.
-#
-if ($usedb) {
-    my %DB;
-    my $lasttime = 0;
-    my $now = time();
-    my $key = "$IP/$boottype";
-
-    if (!dbmopen(%DB, $EVDB, 0660)) {
-	logit("$nodeid: could not open $EVDB");
-	exit(1);
-    }
-
-    my $needone = 1;
-    if (defined($DB{$key})) {
-	$lasttime = $DB{$key};
-	# XXX watch for time going backward
-	if ($now >= $lasttime &&
-	    $now < ($lasttime + $EVMININT)) {
-	    $needone = 0;
-	}
-    }
-    if ($needone) {
-	$DB{$key} = $now;
-    }
-    dbmclose(%DB);
-
-    if (!$needone) {
-	logit("$nodeid: NOT sending BOOTING event (too soon)");
-	exit(0);
-    }
-}
-
-#
-# Combine reporting of PXEBOOTING and BOOTING on the PXE event, reporting
-# nothing on the OS event. Use this if you have problems with later
-# OS-generated events happening before the BOOTING gets reported.
-# Note that this is essentially the same as what bootinfo does.
-#
-if ($combined) {
-    if ($boottype eq "UBOOT" || ($boottype eq "PXE" && !$ubootonly)) {
-	if (sendevent($nodeid, "PXEBOOTING") ||
-	    sendevent($nodeid, "BOOTING")) {
-	    logit("$nodeid: could not send PXEBOOTING/BOOTING events");
-	    exit(1);
-	}
-	logit("$nodeid: $boottype: sent PXEBOOTING and BOOTING events");
-    } else {
-	logit("$nodeid: $boottype: NOT sending BOOTING event (combo mode)");
-    }
-} else {
-    my $event = ($boottype eq "OS") ? "BOOTING" : "PXEBOOTING";
-    if (sendevent($nodeid, $event)) {
-	logit("$nodeid: $boottype: could not send $event event");
-	exit(1);
-    }
-    logit("$nodeid: $boottype: sent $event event");
-}
-
+socket(SOCK, PF_UNIX, SOCK_STREAM, 0)
+    or fatal("Could not create socket");
+connect(SOCK, sockaddr_un($SOCKETFILE))
+    or fatal("Could not connect socket");
+print SOCK "$ip,$mac,$which\n";
+close(SOCK);
 exit(0);
 
-sub findnode($$)
+sub fatal($)
 {
-    my ($IP,$mac) = @_;
-
-    my $iface = Interface->LookupByIP($IP);
-    return undef
-	if (!$iface);
-
-    # XXX this should never happen since dhcpd looked up the IP by mac.
-    if ($iface->mac() ne $mac) {
-	logit("$IP: came in on $mac but expected " . $iface->mac());
-	return undef;
-    }
-
-    return $iface->node_id();
-}
-
-sub logit($)
-{
-    my $message = shift;
-
-    # Time stamp log messages like:
-    # Sep 20 09:36:00 $message
-    my $tstamp = strftime("%b %e %H:%M:%S", localtime);
-
-    if (open(LOG, ">>$logfile")) {
-	print LOG "$tstamp: $message\n";
-	close(LOG);
-    } else {
-	print STDERR "Could not append to $logfile\n";
-    }
-
-    print STDERR "$message\n" if ($debug);
-}
-
-sub sendevent($$)
-{
-    my ($node,$event) = @_;
-
-    my $URL = "elvin://$EVSERVER:$EVPORT";
-
-    # Connect to the event system, and subscribe the the events we want
-    my $handle = event_register($URL, 0);
-    if (!$handle) {
-	logit("$node: unable to register with event system");
-	return 1;
-    }
-    my $tuple = address_tuple_alloc();
-    if (!$tuple) {
-	logit("$node: could not allocate an address tuple");
-	return 1;
-    }
-
-    %$tuple = ( objtype => "TBNODESTATE",
-		objname => $node,
-		eventtype => $event,
-		host => "boss");
-
-    my $notification = event_notification_alloc($handle, $tuple);
-    if (!$notification) {
-	logit("$node: could not allocate notification");
-	return 1;
-    }
-
-    if (!event_notify($handle, $notification)) {
-	logit("$node: could not send $event notification");
-	return 1;
-    }
-
-    event_notification_free($handle, $notification);
-
-    if (event_unregister($handle) == 0) {
-	logit("$node: WARNING: could not unregister with event system");
-    }
-
-    return 0;
+    my ($msg) = @_;
+    
+    die("*** $0:\n".
+	"    $msg\n");
 }
