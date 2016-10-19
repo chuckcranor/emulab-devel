@@ -43,12 +43,14 @@ use Reservation;
 
 sub usage()
 {
-    print STDERR "Usage: reserve [-c] [-f] [-n] -t type [-s start] [-e end] " .
+    print STDERR "Usage: reserve [-C] [-f] [-n] -t type [-s start] [-e end] " .
 	"pid count\n";
+    print STDERR "       reserve -c idx\n";
     print STDERR "       reserve -i pid\n";
     print STDERR "       reserve -l\n";
     print STDERR "   -h   This message\n";
-    print STDERR "   -c   Clear existing reservation for project\n";
+    print STDERR "   -c   Clear existing reservation for project (by id)\n";
+    print STDERR "   -C   Clear existing reservation for project (by date)\n";
     print STDERR "   -f   Force reservation into schedule, even if " .
 	"overcommitted\n";
     print STDERR "   -n   Check feasibility only; don't actually reserve\n";
@@ -69,11 +71,12 @@ sub fatal($)
 	"    $mesg\n");
 }
 
-my $optlist   = "hdcfnt:ile:s:";
+my $optlist   = "hdc:Cfnt:ile:s:";
 my $debug     = 0;
 my $info      = 0;
 my $list      = 0;
 my $clear     = 0;
+my $clear_idx = undef;
 my $force     = 0;
 my $impotent  = 0;
 my $starttime = time; # default to starting immediately
@@ -105,6 +108,12 @@ if (defined($options{h})) {
     usage();
 }
 if (defined($options{c})) {
+    $clear_idx = $options{c};
+    unless( $clear_idx =~ /^[0-9]+$/ ) {
+	fatal( "Invalid reservation index." );
+    }
+}
+if (defined($options{C})) {
     $clear = 1;
 }
 if (defined($options{d})) {
@@ -151,6 +160,9 @@ if ($info) {
 elsif ($list) {
     usage() if(@ARGV);
 }
+elsif( defined( $clear_idx ) ) {
+    usage() if(@ARGV);
+}
 else {
     usage() if( @ARGV < 2 || !defined( $type ) );
     
@@ -178,50 +190,54 @@ else {
 # List all pending reservations.
 #
 if ($list) {
-    my $query = $type ? "SELECT pid, nodes, type, start, end FROM " .
+    my $query = $type ? "SELECT idx, pid, nodes, type, start, end FROM " .
 	"future_reservations WHERE type='$type' ORDER BY start" :
-	"SELECT pid, nodes, type, start, end FROM future_reservations " .
+	"SELECT idx, pid, nodes, type, start, end FROM future_reservations " .
 	"ORDER BY start";
 
     my $query_result = DBQueryFatal( $query );
 
     if( $query_result->numrows ) {
-	print "Start               End                 Project             Nodes Type\n";
-	print "-----               ---                 -------             ----- ----\n";
+	print "Index Start               End                 Project             Nodes Type\n";
+	print "----- -----               ---                 -------             ----- ----\n";
     }
 
     while( my $row = $query_result->fetchrow_hashref() ) {
+	my $idx = $row->{'idx'};
 	my $pid = $row->{'pid'};
 	my $nodes = $row->{'nodes'};
 	my $type = $row->{'type'};
 	my $start = $row->{'start'};
 	my $end = $row->{'end'};
 
-	printf( "%19s %19s %-19s %5d %s\n", $start, $end, $pid, $nodes, $type );
+	printf( "%5d %19s %19s %-19s %5d %s\n", $idx, $start, $end, $pid, $nodes, $type );
     }
     
     exit(0);
 }
 
-if ($pid =~ /^(.*):(.*)$/) {
-    require GeniHRN;
+my $pid_idx;
+if( !defined( $clear_idx ) ) {
+    if ($pid =~ /^(.*):(.*)$/) {
+	require GeniHRN;
 
-    my $urn = GeniHRN::Generate($pid, "authority", "sa");
+	my $urn = GeniHRN::Generate($pid, "authority", "sa");
 
-    $project = Project->LookupNonLocal($urn);
-    if (!defined($project)) {
-	fatal("No such nonlocal project $pid\n");
+	$project = Project->LookupNonLocal($urn);
+	if (!defined($project)) {
+	    fatal("No such nonlocal project $pid\n");
+	}
+	$pid = $project->pid();
     }
-    $pid = $project->pid();
-}
-else {
-    $project = Project->Lookup($pid);
+    else {
+	$project = Project->Lookup($pid);
 
-    if (!defined($project)) {
-	fatal("No such project $pid\n");
+	if (!defined($project)) {
+	    fatal("No such project $pid\n");
+	}
     }
+    $pid_idx = $project->pid_idx();
 }
-my $pid_idx = $project->pid_idx();
 
 #
 # Show and exit.
@@ -269,9 +285,15 @@ if ($UID) {
 #
 # Clear and exit.
 #
-if ($clear) {
-    my $res = Reservation->Lookup( $pid, $starttime, $endtime, $type, $count );
+if ($clear || $clear_idx) {
+    my $res;
 
+    if( $clear_idx ) {
+	$res = Reservation->Lookup( $clear_idx );
+    } else {
+	$res = Reservation->Lookup( $pid, $starttime, $endtime, $type, $count );
+    }
+    
     if( !defined( $res ) ) {
 	print STDERR "reserve: no matching reservation found.\n";
 	
