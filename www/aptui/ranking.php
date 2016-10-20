@@ -25,6 +25,7 @@ chdir("..");
 include("defs.php3");
 chdir("apt");
 include("quickvm_sup.php");
+include("require.php");
 # Must be after quickvm_sup.php since it changes the auth domain.
 $page_title = "Ranking";
 
@@ -117,10 +118,14 @@ function SpitRankList($target, $days)
 SpitRankList("user", $days);
 SpitRankList("project", $days);
 
-SPITREQUIRE("ranking",
+REQUIRE_UNDERSCORE();
+REQUIRE_SUP();
+SPITREQUIRE("js/ranking.js",
             "<script src='js/lib/jquery.tablesorter.min.js'></script>".
             "<script src='js/lib/jquery.tablesorter.widgets.min.js'></script>".
             "<script src='js/lib/sugar.min.js'></script>".
             "<script src='js/lib/jquery.tablesorter.parser-date.js'></script>");
+
+AddTemplate("ranking");
 SPITFOOTER();
 ?>

@@ -1,19 +1,19 @@
 //
 // Progress Modal
 //
-define(['underscore', 'js/quickvm_sup', 'filesize',
-       	'js/lib/text!template/imaging-modal.html'],
-    function(_, sup, filesize, imagingString)
+//define(['underscore', 'js/quickvm_sup', 'filesize'],
+window.ShowImagingModal = (function()
     {
 	'use strict';
 
+        var imagingString = APT_OPTIONS.fetchTemplate('imaging-modal');
 	var imagingTemplate = null;
 	var imaging_modal_display = true;
 	var imaging_modal_active  = false;
 	var status_callback;
 	var completion_callback;
 
-	function ShowImagingModal()
+	function ShowImagingModalSecret()
 	{
 	    var laststatus = "preparing";
 	    
@@ -152,14 +152,14 @@ define(['underscore', 'js/quickvm_sup', 'filesize',
 		}
 	    
 		// And check again in a little bit.
-		setTimeout(function f() { ShowImagingModal() }, 5000);
+		setTimeout(function f() { ShowImagingModalSecret() }, 5000);
 	    }
 
 	    var $xmlthing = status_callback();
 	    $xmlthing.done(callback);
 	}
 
-	return function(s_callback, c_callback)
+        return function(s_callback, c_callback)
 	{
 	    status_callback = s_callback;
 	    completion_callback = c_callback;
@@ -178,10 +178,10 @@ define(['underscore', 'js/quickvm_sup', 'filesize',
 		$('#imaging_div').html(imaging_html);
 		
 		imaging_modal_display = true;	    
-		ShowImagingModal();
+		ShowImagingModalSecret();
 	    };
 	    var $xmlthing = status_callback();
 	    $xmlthing.done(callback);
 	}
     }
-);
+)();

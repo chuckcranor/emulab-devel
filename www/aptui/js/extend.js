@@ -1,15 +1,21 @@
 //
 // Progress Modal
 //
-define(['underscore', 'js/quickvm_sup',
-	'js/lib/text!template/user-extend-modal.html',
-	'js/lib/text!template/admin-extend-modal.html',
-	'js/lib/text!template/guest-extend-modal.html'],
+//define(['underscore', 'js/quickvm_sup',
+//	'js/lib/text!template/user-extend-modal.html',
+//	'js/lib/text!template/admin-extend-modal.html',
+//	'js/lib/text!template/guest-extend-modal.html'],
 	
-    function(_, sup, userExtendString, adminExtendString, guestExtendString)
+window.ShowExtendModal = (function(/*_, sup, userExtendString, adminExtendString, guestExtendString*/)
     {
 	'use strict';
-	var modalname  = '#extend_modal';
+
+        var templates = APT_OPTIONS.fetchTemplateList(['user-extend-modal', 'admin-extend-modal', 'guest-extend-modal']);
+        var userExtendString = templates['user-extend-modal'];
+        var adminExtendString = templates['admin-extend-modal'];
+        var guestExtendString = templates['guest-extend-modal'];
+      
+        var modalname  = '#extend_modal';
 	var divname    = '#extend_div';
 	var slidername = "#extend_slider";
 	var isadmin    = 0;
@@ -440,4 +446,4 @@ define(['underscore', 'js/quickvm_sup',
 	    $(modalname).modal('show');
 	}
     }
-);
+)();

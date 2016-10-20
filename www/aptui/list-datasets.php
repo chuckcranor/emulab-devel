@@ -28,6 +28,7 @@ include("blockstore_defs.php");
 include("imageid_defs.php");
 chdir("apt");
 include("quickvm_sup.php");
+include("require.php");
 include("dataset_defs.php");
 $page_title = "My Datasets";
 
@@ -223,7 +224,10 @@ echo "</div></div>\n";
 echo "<script type='text/javascript'>\n";
 echo "    window.AJAXURL  = 'server-ajax.php';\n";
 echo "</script>\n";
-SPITREQUIRE("list-datasets",
+
+REQUIRE_SUP();
+REQUIRE_MOMENT();
+SPITREQUIRE("js/list-datasets.js",
          "<script src='js/lib/jquery.tablesorter.min.js'></script>\n".
          "<script src='js/lib/jquery.tablesorter.widgets.min.js'></script>\n");
 SPITFOOTER();

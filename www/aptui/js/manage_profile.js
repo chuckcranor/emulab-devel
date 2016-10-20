@@ -1,4 +1,4 @@
-require(window.APT_OPTIONS.configObject,
+/*require(window.APT_OPTIONS.configObject,
 	['underscore', 'js/quickvm_sup', 'filesize', 'js/JacksEditor',
 	 'js/image', 'moment', 'js/aptforms',
 	 'js/lib/text!template/manage-profile.html',
@@ -13,13 +13,28 @@ require(window.APT_OPTIONS.configObject,
 	 'js/lib/text!template/share-modal.html',
 	 // jQuery modules
 	 'filestyle','marked'],
-function (_, sup, filesize, JacksEditor, ShowImagingModal, moment, aptforms,
+*/
+$(function (/*_, sup, filesize, JacksEditor, ShowImagingModal, moment, aptforms,
 	  manageString, waitwaitString, 
 	  rendererString, showtopoString, oopsString, rspectextviewString,
 	  guestInstantiateString, publishString, instantiateString,
-	  shareString)
+	  shareString*/)
 {
     'use strict';
+
+    var templates = APT_OPTIONS.fetchTemplateList(['manage-profile', 'waitwait-modal', 'renderer-modal', 'showtopo-modal', 'oops-modal', 'rspectextview-modal', 'guest-instantiate', 'publish-modal', 'instantiate-modal', 'share-modal']);
+    var manageString = templates['manage-profile'];
+    var waitwaitString = templates['waitwait-modal'];
+    var rendererString = templates['renderer-modal'];
+    var showtopoString = templates['showtopo-modal'];
+    var oopsString = templates['oops-modal'];
+    var rspectextviewString = templates['rspectextview-modal'];
+    var guestInstantiateString = templates['guest-instantiate'];
+    var publishString = templates['publish-modal'];
+    var instantiateString = templates['instantiate-modal'];
+    var shareString = templates['share-modal'];
+
+
     var profile_uuid = null;
     var profile_name = '';
     var profile_pid = '';
@@ -955,7 +970,8 @@ function (_, sup, filesize, JacksEditor, ShowImagingModal, moment, aptforms,
     //
     function ShowProgressModal()
     {
-	ShowImagingModal(function()
+        ShowImagingModal(
+		         function()
 			 {
 			     return sup.CallServerMethod(ajaxurl,
 							 "manage_profile",

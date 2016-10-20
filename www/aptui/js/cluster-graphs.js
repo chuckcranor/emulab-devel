@@ -1,12 +1,12 @@
-require(window.APT_OPTIONS.configObject,
-	['underscore', 'js/quickvm_sup',
-	 'js/lib/text!template/cluster-graphs.html',
-	 'js/bilevel', 'js/liquidFillGauge'],
-function (_, sup, clusterString)
+//require(window.APT_OPTIONS.configObject,
+//	['underscore', 'js/quickvm_sup',
+//	 'js/bilevel', 'js/liquidFillGauge'],
+$(function ()
 {
     'use strict';
     var mainsite = false;
-    var template = _.template(clusterString);
+    var templateList = APT_OPTIONS.fetchTemplateList(['cluster-graphs']);
+    var template = _.template(templateList['cluster-graphs']);
 
     function initialize()
     {

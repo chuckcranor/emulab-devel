@@ -27,6 +27,7 @@ include("lease_defs.php");
 include("imageid_defs.php");
 chdir("apt");
 include("quickvm_sup.php");
+include("require.php");
 include_once("dataset_defs.php");
 include_once("instance_defs.php");
 include_once("profile_defs.php");
@@ -168,11 +169,19 @@ echo "    window.CANAPPROVE = $canapprove;\n";
 echo "    window.CANREFRESH = $canrefresh;\n";
 echo "    window.CANSNAPSHOT= $cansnapshot;\n";
 echo "</script>\n";
-SPITREQUIRE("show-dataset",
+
+REQUIRE_UNDERSCORE();
+REQUIRE_SUP();
+REQUIRE_MOMENT();
+REQUIRE_APTFORMS();
+REQUIRE_IMAGE();
+SPITREQUIRE("js/show-dataset.js",
             "<script src='js/lib/jquery-ui.js'></script>\n");            
 # For progress bubbles in the imaging modal.
 echo "<link rel='stylesheet' href='css/progress.css'>\n";
 echo "<link rel='stylesheet' href='css/codemirror.css'>\n";
+
+AddTemplateList(array("show-dataset", "snapshot-dataset", "oops-modal", "waitwait-modal"));
 SPITFOOTER();
 
 ?>

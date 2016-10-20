@@ -25,7 +25,9 @@ chdir("..");
 include("defs.php3");
 chdir("apt");
 include("quickvm_sup.php");
+include("require.php");
 $page_title = "Login";
+AddTemplate("waitwait-modal");
 
 #
 # Get current user in case we need an error message.
@@ -92,7 +94,7 @@ if (NOLOGINS() && !$adminmode) {
 		  "please try again later.");
     echo "<script src='js/lib/jquery-2.0.3.min.js'></script>\n";
     echo "<script src='js/lib/bootstrap.js'></script>\n";
-    echo "<script src='js/lib/require.js' data-main='js/main'></script>";
+    SPITNULLREQUIRE();
     SPITFOOTER();
     return;
 }
@@ -230,7 +232,10 @@ function SPITFORM($uid, $referrer, $error)
     echo "<div id='waitwait_div'></div>\n";
     echo "<script src='js/lib/jquery-2.0.3.min.js'></script>\n";
     echo "<script src='js/lib/bootstrap.js'></script>\n";
-    echo "<script src='js/lib/require.js' data-main='js/login'></script>";
+
+    REQUIRE_UNDERSCORE();
+    REQUIRE_SUP();
+    SPITREQUIRE("js/login.js");
     SPITFOOTER();
     return;
 }
@@ -280,7 +285,7 @@ else {
               </h4>\n";
         echo "<script src='js/lib/jquery-2.0.3.min.js'></script>\n";
         echo "<script src='js/lib/bootstrap.js'></script>\n";
-        echo "<script src='js/lib/require.js' data-main='js/main'></script>";
+	SPITNULLREQUIRE();
 	SPITFOOTER();
 	return;
     }
@@ -296,7 +301,7 @@ else {
               </h4>\n";
         echo "<script src='js/lib/jquery-2.0.3.min.js'></script>\n";
         echo "<script src='js/lib/bootstrap.js'></script>\n";
-        echo "<script src='js/lib/require.js' data-main='js/main'></script>";
+	SPITNULLREQUIRE();
 	SPITFOOTER();
 	return;
     }

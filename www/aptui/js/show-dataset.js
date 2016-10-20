@@ -1,13 +1,21 @@
-require(window.APT_OPTIONS.configObject,
+/*require(window.APT_OPTIONS.configObject,
 	['underscore', 'js/quickvm_sup', 'moment', 'js/aptforms', 'js/image',
 	 'js/lib/text!template/show-dataset.html',
 	 'js/lib/text!template/snapshot-dataset.html',
 	 'js/lib/text!template/oops-modal.html',
-	 'js/lib/text!template/waitwait-modal.html'],
-function (_, sup, moment, aptforms, ShowImagingModal,
-	  mainString, snapshotString, oopsString, waitwaitString)
+	 'js/lib/text!template/waitwait-modal.html'],*/
+$(function (/*_, sup, moment, aptforms, ShowImagingModal,
+	  mainString, snapshotString, oopsString, waitwaitString*/)
 {
     'use strict';
+
+    var templates = APT_OPTIONS.fetchTemplateList(['show-dataset', 'snapshot-dataset', 'oops-modal', 'waitwait-modal']);
+    var mainString = templates['show-dataset'];
+    var snapshotString = templates['snapshot-dataset'];
+    var oopsString = templates['oops-modal'];
+    var waitwaitString = templates['waitwait-modal'];
+
+
     var mainTemplate    = _.template(mainString);
     var snapTemplate    = _.template(snapshotString);
     var dataset_uuid    = null;
@@ -146,7 +154,7 @@ function (_, sup, moment, aptforms, ShowImagingModal,
     
     function ShowProgressModal()
     {
-	ShowImagingModal(
+        ShowImagingModal(
 	    function()
 	    {
 		return sup.CallServerMethod(null,

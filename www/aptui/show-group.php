@@ -25,6 +25,7 @@ chdir("..");
 include("defs.php3");
 chdir("apt");
 include("quickvm_sup.php");
+include("require.php");
 # Must be after quickvm_sup.php since it changes the auth domain.
 $page_title = "Show Group";
 
@@ -72,11 +73,16 @@ echo "</script>\n";
 # Place to hang the toplevel template.
 echo "<div id='main-body'></div>\n";
 
-SPITREQUIRE("show-group",
+REQUIRE_UNDERSCORE();
+REQUIRE_SUP();
+REQUIRE_MOMENT();
+REQUIRE_APTFORMS();
+SPITREQUIRE("js/show-group.js",
             "<script src='js/lib/jquery.tablesorter.min.js'></script>".
             "<script src='js/lib/jquery.tablesorter.widgets.min.js'></script>".
             "<script src='js/lib/sugar.min.js'></script>".
             "<script src='js/lib/jquery.tablesorter.parser-date.js'></script>");
-            
+
+AddTemplateList(array("show-group", "experiment-list", "member-list", "group-profile", "classic-explist", "oops-modal", "waitwait-modal"));
 SPITFOOTER();
 ?>

@@ -28,6 +28,7 @@ include_once("geni_defs.php");
 include_once("webtask.php");
 chdir("apt");
 include("quickvm_sup.php");
+include("require.php");
 include_once("profile_defs.php");
 include_once("instance_defs.php");
 $page_title = "Experiment Status";
@@ -279,7 +280,19 @@ echo "<script src='js/lib/jquery-2.0.3.min.js'></script>\n";
 echo "<script src='js/lib/jquery-ui.js'></script>\n";
 echo "<script src='js/lib/codemirror-min.js'></script>\n";
 echo "<script src='js/lib/bootstrap.js'></script>\n";
-echo "<script src='js/lib/require.js' data-main='js/status'></script>";
+
+REQUIRE_UNDERSCORE();
+REQUIRE_SUP();
+REQUIRE_MOMENT();
+REQUIRE_MARKED();
+REQUIRE_URITEMPLATE();
+REQUIRE_IMAGE();
+REQUIRE_EXTEND();
+REQUIRE_IDLEGRAPHS();
+REQUIRE_OPENSTACKGRAPHS();
+REQUIRE_CONTEXTMENU();
+SPITREQUIRE("js/status.js");
+
 echo "<link rel='stylesheet'
             href='css/jquery-ui-1.10.4.custom.min.css'>\n";
 # For progress bubbles in the imaging modal.
@@ -299,5 +312,6 @@ if ($extension_denied_reason != "") {
    echo "<pre class='hidden' id='extension_denied_reason'>$extension_denied_reason</pre>\n";
 }
 
+AddTemplateList(array("status", "waitwait-modal", "oops-modal", "register-modal", "terminate-modal", "clone-help", "snapshot-help", "oneonly-modal", "approval-modal", "linktest-modal");
 SPITFOOTER();
 ?>

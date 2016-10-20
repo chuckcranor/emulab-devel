@@ -1,0 +1,63 @@
+    <div class='col-sm-8 col-sm-offset-2'>
+      <div class='panel panel-default'>
+	<div class="panel-heading text-center">
+	  Experiment info for <%= expinfo.name %>
+	</div>
+	<div class="panel-body">
+	  <table class="table table-condensed">
+	    <tbody>
+	      <tr>
+		<td>Name:</td>
+		<td><a href='status.php?uuid=<%- uuid %>'><%- expinfo.name %></a></td>
+		<td>Profile:</td>
+		<% if (expinfo.profile_uuid) { %>
+		  <td><a href='show-profile.php?uuid=<%- expinfo.profile_uuid %>'>
+		    <%- expinfo.profile_name %></a></td>
+		<% } else { %>
+		  <td><%- expinfo.profile_name %></td>
+   	        <% } %>
+	      </tr>
+	      <tr>
+		<td>Creator:</td>
+		<td><a href='user-dashboard.php?user=<%- expinfo.creator %>'>
+		  <%- expinfo.creator %></a></td>
+		<td>Project:</td>
+		<td><a href='show-project.php?project=<%- expinfo.project %>'>
+		  <%- expinfo.project %></a></td>
+	      </tr>
+	      <tr>
+		<td>Created:</td>
+		<td class="format-date"><%- expinfo.created %></td>
+		<td>Expires:</td>
+		<td class="format-date"><%- expinfo.expires %></td>
+	      </tr>
+	      <tr>
+		<td>
+		  <span data-toggle='popover'
+		   data-delay='{"hide":1000, "show":500}'
+		   data-content="When checked, only administrator can extend
+				 this experiment. No free time is granted to
+				 user at all.">Lockout:</span>
+		   <input type="checkbox" id="lockout-checkbox"
+			  <% if (expinfo.lockout) { %>checked<% } %> >
+		</td>
+		<td>
+		   <span data-toggle='popover'
+			 data-delay='{"hide":1000, "show":500}'
+			 data-content="When checked, the experiment 
+				  cannot be terminated until the lockdown bit
+				  is cleared by an admininstrator, or if the 
+				  user verifies 
+				  the lockdown code when clicking the Terminate
+				  button.">Lockdown:</span>
+		   <input type="checkbox" id="lockdown-checkbox"
+			  <% if (expinfo.lockdown) { %>checked<% } %> >
+		</td>
+		<td>Max Ext:</td>
+		<td id="max-extension">...</td>
+		<td></td>
+	    </tbody>
+	  </table>
+	</div>
+      </div>
+    </div>

@@ -27,6 +27,7 @@ include("lease_defs.php");
 include("imageid_defs.php");
 chdir("apt");
 include("quickvm_sup.php");
+include("require.php");
 include_once("dataset_defs.php");
 include_once("instance_defs.php");
 include_once("profile_defs.php");
@@ -77,7 +78,7 @@ if (!$dataset->AccessCheck($this_user, $LEASE_ACCESS_MODIFY)) {
 #
 function SPITFORM($formfields, $errors)
 {
-    global $this_user, $projlist, $embedded, $this_idx;
+    global $this_user, $projlist, $embedded, $this_idx, $PORTAL_TEMPLATES;
     $button_label = "Save";
     $title        = "Modify Dataset";
     $isadmin      = (ISADMIN() ? "true" : "false");
@@ -125,7 +126,8 @@ function SPITFORM($formfields, $errors)
     echo "    window.BUTTONLABEL = '$button_label';\n";
     echo "</script>\n";
 
-    SPITREQUIRE("create-dataset");
+    SPITREQUIRE_DATASET();
+    AddTemplateList(array("create-dataset", "dataset-help", "oops-modal", "waitwait-modal"));
     SPITFOOTER();
 }
 

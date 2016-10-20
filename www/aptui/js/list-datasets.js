@@ -1,6 +1,6 @@
-require(window.APT_OPTIONS.configObject,
-	['js/quickvm_sup', 'moment'],
-function (sup, moment)
+//require(window.APT_OPTIONS.configObject,
+//	['js/quickvm_sup', 'moment'],
+$(function ()
 {
     'use strict';
     var ajaxurl = null;

@@ -1,0 +1,33 @@
+    <div class='col-sm-6 col-sm-offset-3'>
+      <div class='panel panel-default'>
+	<div class="panel-heading text-center">
+	  Node usage summary
+	</div>
+	<div class="panel-body">
+	  <table class="table table-condensed">
+	    <thead>
+	      <tr>
+		<th>Type</th>
+		<th>Cluster</th>
+		<th>Used</th>
+		<th>Free</th>
+		<th>Total</th>
+	      </tr>
+	    </thead>
+	    <tbody>
+	      <%  _.each(utilization, function(site, name) { %>
+		<%  _.each(site.typeinfo, function(info, type) { %>
+		  <tr>
+		    <td><%- type %></td>
+		    <td><%- name %></td>
+		    <td><%- info.count %></td>
+		    <td><%- info.free %></td>
+		    <td><%- info.total %></td>
+		  </tr>
+		<% }); %>
+	      <% }); %>
+	    </tbody>
+	  </table>
+	</div>
+      </div>
+    </div>

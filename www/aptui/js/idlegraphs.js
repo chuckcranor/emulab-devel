@@ -1,8 +1,9 @@
 //
 // Slothd graphs
 //
-define(['underscore', 'js/quickvm_sup', 'moment'],
-    function(_, sup, moment)
+//define(['underscore', 'js/quickvm_sup', 'moment'],
+//    function(_, sup, moment)
+window.ShowIdleGraphs = (function ()
     {
 	'use strict';
 	var uuid       = null;
@@ -498,4 +499,4 @@ define(['underscore', 'js/quickvm_sup', 'moment'],
 	    LoadIdleData();
 	}
     }
-);
+)();

@@ -1,4 +1,4 @@
-require(window.APT_OPTIONS.configObject,
+/*require(window.APT_OPTIONS.configObject,
 	['underscore', 'js/quickvm_sup', 'moment',
 	 'js/lib/text!template/show-profile.html',
 	 'js/lib/text!template/waitwait-modal.html',
@@ -10,13 +10,25 @@ require(window.APT_OPTIONS.configObject,
 	 'js/lib/text!template/oops-modal.html',
 	 'js/lib/text!template/share-modal.html',
 	 // jQuery modules
-	 'marked'],
-function (_, sup, moment,
+	 'marked'],*/
+function (/*_, sup, moment,
 	  showString, waitwaitString, 
 	  rendererString, showtopoString, rspectextviewString,
-	  guestInstantiateString, instantiateString, oopsString, shareString)
+	  guestInstantiateString, instantiateString, oopsString, shareString*/)
 {
     'use strict';
+
+    var templates = APT_OPTIONS.fetchTemplateList(['show-profile', 'waitwait-modal', 'renderer-modal', 'showtopo-modal', 'rspectextview-modal', 'guest-instantiate', 'instantiate-modal', 'oops-modal', 'share-modal']);
+    var showString = templates['show-profile'];
+    var waitwaitString = templates['waitwait-modal'];
+    var rendererString = templates['renderer-modal'];
+    var showtopoString = templates['showtopo-modal'];
+    var rspectextviewString = templates['rspectextview-modal'];
+    var guestInstantiateString = templates['guest-instantiate'];
+    var instantiateString = templates['instantiate-modal'];
+    var oopsString = templates['oops-modal'];
+    var shareString = templates['share-modal'];
+  
     var profile_uuid = null;
     var profile_name = '';
     var profile_pid = '';

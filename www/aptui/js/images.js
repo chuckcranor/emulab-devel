@@ -1,11 +1,11 @@
-require(window.APT_OPTIONS.configObject,
-	['underscore', 'js/quickvm_sup', 'moment',
-	 'js/lib/text!template/images.html'
-	 ],
-	function (_, sup, moment, mainString)
+//require(window.APT_OPTIONS.configObject,
+//	['underscore', 'js/quickvm_sup', 'moment'],
+$(function ()
 {
     'use strict';
-    var mainTemplate = _.template(mainString);
+
+    var templates = APT_OPTIONS.fetchTemplateList(['images']);
+    var mainTemplate = _.template(templates['images']);
 
     function initialize()
     {

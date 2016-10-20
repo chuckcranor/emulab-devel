@@ -28,6 +28,7 @@ include_once("geni_defs.php");
 include_once("webtask.php");
 chdir("apt");
 include("quickvm_sup.php");
+include("require.php");
 include_once("instance_defs.php");
 include_once("profile_defs.php");
 # Must be after quickvm_sup.php since it changes the auth domain.
@@ -437,11 +438,21 @@ function SPITFORM($formfields, $newuser, $errors)
     echo "    window.PORTAL_NAME = '$PORTAL_NAME';\n";
     echo "    window.CLASSIC = " . ($classic ? "true" : "false") . ";\n";
     echo "</script>\n";
-    echo "<script src='js/lib/jquery-2.0.3.min.js?nocache=asdfasdf'></script>\n";
-    echo "<script src='js/lib/bootstrap.js?nocache=asdfasdf'></script>\n";
-    echo "<script src='js/lib/require.js?nocache=asdfasdf' ".
-        "data-main='js/instantiate" . ($classic ? "" : "-new") .
-        ".js?nocache=asdfasdf'></script>";
+    echo "<script src='js/lib/jquery-2.0.3.min.js'></script>\n";
+    echo "<script src='js/lib/bootstrap.js'></script>\n";
+
+    REQUIRE_UNDERSCORE();
+    REQUIRE_CONSTRAINTS();
+    REQUIRE_SUP();
+    REQUIRE_PPWIZARDSTART();
+    REQUIRE_JACKS_EDITOR();
+    REQUIRE_WIZARD_TEMPLATE();
+    REQUIRE_FORMHELPERS();
+    REQUIRE_FILESTYLE();
+    REQUIRE_MARKED();
+    REQUIRE_JACKS();
+    REQUIRE_JQUERY_STEPS();
+    SPITREQUIRE("js/instantiate" . ($classic ? "" : "-new") . ".js");
 }
 
 if (!isset($create)) {
@@ -517,6 +528,8 @@ if (!isset($create)) {
 
     SPITFORM($defaults, false, array());
     echo "<div style='display: none'><div id='jacks-dummy'></div></div>\n";
+
+    AddTemplateList(array("instantiate", "instantiate-new", "aboutapt", "aboutcloudlab", "aboutpnet", "waitwait-modal", "rspectextview-modal"));
     SPITFOOTER();
     return;
 }

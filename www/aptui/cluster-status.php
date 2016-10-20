@@ -26,6 +26,7 @@ include("defs.php3");
 include_once("geni_defs.php");
 chdir("apt");
 include("quickvm_sup.php");
+include("require.php");
 include_once("instance_defs.php");
 include_once("aggregate_defs.php");
 $page_title = "Cluster Status";
@@ -73,10 +74,15 @@ echo "<script type='text/plain' id='agglist-json'>\n";
 echo htmlentities(json_encode($aggregates)) . "\n";
 echo "</script>\n";
 
-SPITREQUIRE("cluster-status",
+REQUIRE_UNDERSCORE();
+REQUIRE_SUP();
+REQUIRE_MOMENT();
+SPITREQUIRE("js/cluster-status.js",
             "<script src='js/lib/jquery.tablesorter.min.js'></script>".
             "<script src='js/lib/jquery.tablesorter.widgets.min.js'></script>".
             "<script src='js/lib/sugar.min.js'></script>".
             "<script src='js/lib/jquery.tablesorter.parser-date.js'></script>");
+
+AddTemplateList(array("cluster-status", "cluster-status-templates"));
 SPITFOOTER();
 ?>

@@ -1,12 +1,20 @@
-require(window.APT_OPTIONS.configObject,
-	['underscore', 'js/quickvm_sup', 'moment', 'js/idlegraphs',
-	 'js/lib/text!template/adminextend.html',
-	 'js/lib/text!template/waitwait-modal.html',
-	 'js/lib/text!template/oops-modal.html'],
-function (_, sup, moment, ShowIdleGraphs,
-	  mainString, waitwaitString, oopsString)
+//require(window.APT_OPTIONS.configObject,
+//	['underscore', 'js/quickvm_sup', 'moment', 'js/idlegraphs'],
+//function (_, sup, moment, ShowIdleGraphs)
+$(function ()
 {
     'use strict';
+
+  var templates = APT_OPTIONS.fetchTemplateList(['adminextend', 'waitwait-modal', 'oops-modal', 'admin-history', 'admin-firstrow', 'admin-secondrow', 'admin-utilization', 'admin-summary']);
+    var mainString = templates['adminextend'];
+    var waitwaitString = templates['waitwait-modal'];
+    var oopsString = templates['oops-modal'];
+    var historyString = templates['admin-history'];
+    var firstrowString = templates['admin-firstrow'];
+    var secondrowString = templates['admin-secondrow'];
+    var utilizationString = templates['admin-utilization'];
+    var summaryString = templates['admin-summary'];
+
     var extensions         = null;
     var firstrowTemplate   = null;
     var secondrowTemplate  = null;
@@ -20,9 +28,9 @@ function (_, sup, moment, ShowIdleGraphs,
 	$('#waitwait_div').html(waitwaitString);
 	$('#oops_div').html(oopsString);
 
-	firstrowTemplate = _.template($('#firstrow-template', html).html());
-	secondrowTemplate = _.template($('#secondrow-template', html).html());
-	extensionsTemplate = _.template($('#history-template', html).html());
+	firstrowTemplate = _.template(firstrowString);
+	secondrowTemplate = _.template(secondrowString);
+	extensionsTemplate = _.template(historyString);
 
 	LoadUtilization();
 	LoadIdleData();
@@ -175,10 +183,8 @@ function (_, sup, moment, ShowIdleGraphs,
     }
 
     function LoadUtilization() {
-	var util = $('#utilization-template', "html").html();
-	var summary = $('#summary-template', "html").html();
-	var utilizationTemplate = _.template(util);
-	var summaryTemplate = _.template(summary);
+	var utilizationTemplate = _.template(utilizationString);
+	var summaryTemplate = _.template(summaryString);
 	
 	var callback = function(json) {
 	    console.info(json);
@@ -330,6 +336,7 @@ function (_, sup, moment, ShowIdleGraphs,
     function decodejson(id) {
 	return JSON.parse(_.unescape($(id)[0].textContent));
     }
-    
-    $(document).ready(initialize);
+
+    initialize();
+//    $(document).ready(initialize);
 });

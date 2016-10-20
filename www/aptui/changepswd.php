@@ -25,6 +25,7 @@ chdir("..");
 include("defs.php3");
 chdir("apt");
 include("quickvm_sup.php");
+include("require.php");
 $page_title = "Change Password";
 
 RedirectSecure();
@@ -136,6 +137,7 @@ function SPITFORM($password1, $password2, $errors)
     };
 
     SPITHEADER(1);
+    REQUIRE_SUP();
     SPITNULLREQUIRE();
     
     echo "<div class='row'>
@@ -231,6 +233,7 @@ if (isset($key)) {
 # Header after cookie.
 SPITHEADER(1);
 SpitWaitModal("waitwait");
+REQUIRE_SUP();
 SPITREQUIRE("async");
 echo "<script>ShowWaitModal('waitwait');</script>\n";
 flush();

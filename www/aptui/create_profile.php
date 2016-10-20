@@ -26,6 +26,7 @@ include("defs.php3");
 include_once("geni_defs.php");
 chdir("apt");
 include("quickvm_sup.php");
+include("require.php");
 $dblink = GetDBLink("sa");
 
 #

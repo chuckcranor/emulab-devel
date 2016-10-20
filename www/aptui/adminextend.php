@@ -25,6 +25,7 @@ chdir("..");
 include("defs.php3");
 chdir("apt");
 include("quickvm_sup.php");
+include("require.php");
 # Must be after quickvm_sup.php since it changes the auth domain.
 $page_title = "Extend";
 
@@ -112,7 +113,12 @@ echo "<link rel='stylesheet'
 # Place to hang the toplevel template.
 echo "<div id='main-body'></div>\n";
 
-SPITREQUIRE("adminextend",
+REQUIRE_UNDERSCORE();
+REQUIRE_SUP();
+REQUIRE_MOMENT();
+REQUIRE_IDLE_GRAPHS();
+
+SPITREQUIRE("js/adminextend.js",
             "<script src='js/lib/d3.v3.js'></script>".
             "<script src='js/lib/nv.d3.js'></script>".
             "<script src='js/lib/jquery.tablesorter.min.js'></script>".
@@ -136,5 +142,7 @@ if (count($extensions)) {
     echo json_encode($foo, JSON_HEX_APOS|JSON_HEX_QUOT|JSON_HEX_TAG|JSON_HEX_TAG);
     echo "</script>\n";
 }
+
+AddTemplateList(array("adminextend", "oops-modal", "waitwait-modal", "admin-history", "admin-firstrow", "admin-secondrow", "admin-utilization", "admin-summary"));
 SPITFOOTER();
 ?>

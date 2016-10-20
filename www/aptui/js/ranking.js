@@ -1,11 +1,12 @@
-require(window.APT_OPTIONS.configObject,
+/*require(window.APT_OPTIONS.configObject,
 	['underscore', 'js/quickvm_sup',
 	 'js/lib/text!template/ranking.html'
-	],
-function (_, sup, mainString)
+	],*/
+$(function ()
 {
     'use strict';
-    var mainTemplate    = _.template(mainString);
+    var templates = APT_OPTIONS.fetchTemplateList(['ranking']);
+    var mainTemplate    = _.template(templates['ranking']);
     
     function initialize()
     {

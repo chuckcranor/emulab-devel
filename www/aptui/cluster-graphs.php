@@ -25,6 +25,7 @@ chdir("..");
 include("defs.php3");
 chdir("apt");
 include("quickvm_sup.php");
+include("require.php");
 $page_title = "Cluster Graphs";
 
 SPITHEADER(1);
@@ -38,5 +39,12 @@ echo "</script>\n";
 # Place to hang the toplevel template.
 echo "<div id='cluster-graphs'></div>\n";
 
-SPITREQUIRE("cluster-graphs");
+REQUIRE_SUP();
+REQUIRE_UNDERSCORE();
+REQUIRE_BILEVEL();
+REQUIRE_LIQUIDFILLGAUGE();
+SPITREQUIRE("js/cluster-graphs.js");
+
+AddTemplate("cluster-graphs");
+SPITFOOTER();
 ?>

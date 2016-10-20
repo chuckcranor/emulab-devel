@@ -1,19 +1,18 @@
-require(window.APT_OPTIONS.configObject,
-	['underscore', 'constraints', 'js/quickvm_sup',
-	 'js/ppwizardstart', 'js/JacksEditor', 'js/wizard-template',
-	 'js/lib/text!template/instantiate.html',
-	 'js/lib/text!template/aboutapt.html',
-	 'js/lib/text!template/aboutcloudlab.html',
-	 'js/lib/text!template/aboutpnet.html',
-	 'js/lib/text!template/waitwait-modal.html',
-	 'js/lib/text!template/rspectextview-modal.html',
-	 'formhelpers', 'filestyle', 'marked', 'jacks', 'jquery-steps'],
-function (_, Constraints, sup, ppstart, JacksEditor, wt,
-	  instantiateString, aboutaptString, aboutcloudString, aboutpnetString,
-	  waitwaitString, rspecviewString)
+//require(window.APT_OPTIONS.configObject,
+//	['underscore', 'constraints', 'js/quickvm_sup',
+//	 'js/ppwizardstart', 'js/JacksEditor', 'js/wizard-template',
+//	 'formhelpers', 'filestyle', 'marked', 'jacks', 'jquery-steps'],
+$(function (_, Constraints, sup, ppstart, JacksEditor, wt)
 {
     'use strict';
 
+    var templates = APT_OPTIONS.fetchTemplateList(['instantiate', 'aboutapt', 'aboutcloudlab', 'aboutpnet', 'waitwait-modal', 'rspectextview-modal']);
+    var instantiateString = templates['instantiate'];
+    var aboutaptString = templates['aboutapt'];
+    var aboutcloudString = templates['aboutcloudlab'];
+    var aboutpnetString = templates['aboutpnet'];
+    var waitwaitString = templates['waitwait-modal'];
+    var rspecviewString = templates['rspectextview-modal'];
     var ajaxurl;
     var amlist        = null;
     var projlist      = null;

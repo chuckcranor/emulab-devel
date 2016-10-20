@@ -26,6 +26,7 @@ include("defs.php3");
 include_once("geni_defs.php");
 chdir("apt");
 include("quickvm_sup.php");
+include("require.php");
 include_once("instance_defs.php");
 $page_title = "Dash Board";
 
@@ -53,5 +54,11 @@ echo "</script>\n";
 echo "<script src='js/lib/bootstrap.js'></script>\n";
 echo "<script src='js/lib/require.js' data-main='js/dashboard'></script>\n";
 
+REQUIRE_UNDERSCORE();
+REQUIRE_SUP();
+REQUIRE_MOMENT();
+SPITREQUIRE("js/dashboard.js");
+
+AddTemplate("dashboard");
 SPITFOOTER();
 ?>

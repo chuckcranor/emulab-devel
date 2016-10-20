@@ -1,11 +1,13 @@
-require(window.APT_OPTIONS.configObject,
+/*require(window.APT_OPTIONS.configObject,
 	['underscore', 'js/quickvm_sup',
-	 'js/lib/text!template/profile-activity.html'],
-function (_, sup, profileString)
+	 'js/lib/text!template/profile-activity.html'],*/
+$(function ()
 {
     'use strict';
+
+    var templates = APT_OPTIONS.fetchTemplateList(['profile-activity']);
     var ajaxurl = null;
-    var profileTemplate = _.template(profileString);
+    var profileTemplate = _.template(templates['profile-activity']);
 
     function initialize()
     {

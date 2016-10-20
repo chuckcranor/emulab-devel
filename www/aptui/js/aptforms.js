@@ -1,8 +1,8 @@
 //
 // Progress Modal
 //
-define(['underscore', 'js/quickvm_sup'],
-    function(_, sup)
+//define(['underscore', 'js/quickvm_sup'],
+window.aptforms = (function()
     {
 	'use strict';
 
@@ -262,4 +262,4 @@ define(['underscore', 'js/quickvm_sup'],
 	    "DisableUnsavedWarning"      : DisableUnsavedWarning,
 	};
     }
-);
+)();

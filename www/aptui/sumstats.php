@@ -26,6 +26,7 @@ include("defs.php3");
 include_once("geni_defs.php");
 chdir("apt");
 include("quickvm_sup.php");
+include("require.php");
 include_once("instance_defs.php");
 $page_title = "Summary Stats";
 
@@ -546,7 +547,11 @@ echo "<script src='js/lib/jquery.tablesorter.widgets.min.js'></script>\n";
 echo "<script src='js/lib/jquery.tablesorter.widget-math.js'></script>\n";
 echo "<script src='js/lib/jquery.tablesorter.widget-output.js'></script>\n";
 echo "<script src='js/lib/bootstrap.js'></script>\n";
-echo "<script src='js/lib/require.js' data-main='js/sumstats'></script>\n";
 
+REQUIRE_SUP();
+REQUIRE_MOMENT();
+SPITREQUIRE("js/sumstats.js");
+
+AddTemplate("output-dropdown");
 SPITFOOTER();
 ?>

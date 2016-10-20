@@ -26,6 +26,7 @@ include("defs.php3");
 include_once("webtask.php");
 chdir("apt");
 include("quickvm_sup.php");
+include("require.php");
 include_once("profile_defs.php");
 include_once("instance_defs.php");
 $page_title = "Show Profile";
@@ -142,9 +143,15 @@ echo "</script>\n";
 
 echo "<script src='js/lib/codemirror-min.js'></script>\n";
 
-SPITREQUIRE("show-profile",
+REQUIRE_UNDERSCORE();
+REQUIRE_SUP();
+REQUIRE_MOMENT();
+REQUIRE_MARKED();
+SPITREQUIRE("js/show-profile.js",
             "<script src='js/lib/jquery-ui.js'></script>\n".
             "<script src='js/lib/jquery.appendGrid-1.3.1.min.js'></script>");
+
+AddTemplateList(array("show-profile", "waitwait-modal", "renderer-modal", "showtopo-modal", "rspectextview-modal", "guest-instantiate", "instantiate-modal", "oops-modal", "share-modal"));
 SPITFOOTER();
 
 ?>

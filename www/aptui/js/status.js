@@ -1,4 +1,4 @@
-require(window.APT_OPTIONS.configObject,
+/*require(window.APT_OPTIONS.configObject,
 	['underscore', 'js/quickvm_sup', 'moment',
 	 'marked', 'js/lib/uritemplate', 'js/image', 'js/extend',
 	 'js/idlegraphs', 'js/openstackgraphs',
@@ -12,15 +12,29 @@ require(window.APT_OPTIONS.configObject,
 	 'js/lib/text!template/oneonly-modal.html',
 	 'js/lib/text!template/approval-modal.html',
 	 'js/lib/text!template/linktest-modal.html',
-	 'contextmenu'],
-function (_, sup, moment, marked, UriTemplate, ShowImagingModal,
+	 'contextmenu'],*/
+$(function (/*_, sup, moment, marked, UriTemplate, ShowImagingModal,
 	  ShowExtendModal, ShowIdleGraphs, ShowOpenstackGraphs,
 	  statusString, waitwaitString, oopsString,
 	  registerString, terminateString,
 	  cloneHelpString, snapshotHelpString, oneonlyString,
-	  approvalString, linktestString)
+	  approvalString, linktestString*/)
 {
     'use strict';
+
+    var templates = APT_OPTIONS.fetchTemplateList(['status', 'waitwait-modal', 'oops-modal', 'register-modal', 'terminate-modal', 'clone-help', 'snapshot-help', 'oneonly-modal', 'approval-modal', 'linktest-modal']);
+
+    var statusString = templates['status'];
+    var waitwaitString = templates['waitwait-modal'];
+    var oopsString = templates['oops-modal'];
+    var registerString = templates['register-modal'];
+    var terminateString = templates['terminate-modal'];
+    var cloneHelpString = templates['clone-help'];
+    var snapshotHelpString = templates['snapshot-help'];
+    var oneonlyString = templates['oneonly-modal'];
+    var approvalString = templates['approval-modal'];
+    var linktestString = templates['linktest-modal'];
+
     var nodecount   = 0;
     var ajaxurl     = null;
     var uuid        = null;
@@ -1847,7 +1861,8 @@ function (_, sup, moment, marked, UriTemplate, ShowImagingModal,
 
     function ShowProgressModal()
     {
-	ShowImagingModal(function()
+        ShowImagingModal(
+		         function()
 			 {
 			     return sup.CallServerMethod(ajaxurl,
 							 "status",

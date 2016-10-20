@@ -41,6 +41,7 @@ if (isset($_REQUEST["embedded"]) && $_REQUEST["embedded"]) {
 }
 
 $PORTAL_TEMPLATES = array();
+$PORTAL_LIBRARIES = array();
 
 # Flag to signal that a requires was spit. For errors.
 $spatrequired = 0;
@@ -551,17 +552,20 @@ function SPITAJAX_ERROR($code, $msg)
 
 function SPITREQUIRE($main, $extras = "")
 {
-    global $spatrequired;
+    global $spatrequired, $PORTAL_LIBRARIES;
     
     echo $extras;
     echo "<script src='js/lib/bootstrap.js'></script>\n";
-    echo "<script src='js/lib/require.js' data-main='js/$main'></script>\n";
+    AddLibrary($main);
+    EchoLibraryList($PORTAL_LIBRARIES);
+    #echo "<script src='js/lib/require.js' data-main='js/$main'></script>\n";
     $spatrequired = 1;
 }
 
 function SPITNULLREQUIRE()
 {
-    SPITREQUIRE("main");
+    REQUIRE_SUP();
+    SPITREQUIRE("js/main.js");
 }
 
 #
@@ -896,6 +900,42 @@ function EchoTemplateList($nameList)
 {
     foreach ($nameList as $index => $name) {
         EchoTemplate($name);
+    }
+}
+
+function AddTemplate($baseName)
+{
+  global $PORTAL_TEMPLATES;
+  array_push($PORTAL_TEMPLATES, $baseName);
+}
+
+function AddTemplateList($nameList)
+{
+  global $PORTAL_TEMPLATES;
+  foreach ($nameList as $index => $name) {
+    array_push($PORTAL_TEMPLATES, $name);
+  }
+}
+
+function AddLibrary($baseName)
+{
+  global $PORTAL_LIBRARIES;
+  $found = 0;
+  foreach ($PORTAL_LIBRARIES as $index => $name) {
+    if ($name === $baseName) {
+      $found = 1;
+      break;
+    }
+  }
+  if ($found != 1) {
+    array_push($PORTAL_LIBRARIES, $baseName);
+  }
+}
+
+function EchoLibraryList($nameList)
+{
+    foreach ($nameList as $index => $name) {
+      echo "<script src='$name'></script>\n";
     }
 }
 

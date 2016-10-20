@@ -25,6 +25,7 @@ chdir("..");
 include("defs.php3");
 chdir("apt");
 include("quickvm_sup.php");
+include("require.php");
 include("profile_defs.php");
 $page_title = "My Profiles";
 
@@ -110,7 +111,11 @@ echo json_encode($profiles);
 echo "</script>\n";
 echo "<script src='js/lib/jquery-2.0.3.min.js'></script>\n";
 echo "<script src='js/lib/bootstrap.js'></script>\n";
-echo "<script src='js/lib/require.js' data-main='js/profile-history'></script>\n";
 
+REQUIRE_UNDERSCORE();
+REQUIRE_SUP();
+SPITREQUIRE("js/profile-history.js");
+
+AddTemplate("profile-history");
 SPITFOOTER();
 ?>

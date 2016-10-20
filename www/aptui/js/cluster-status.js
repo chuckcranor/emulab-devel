@@ -1,10 +1,12 @@
-require(window.APT_OPTIONS.configObject,
-	['underscore', 'js/quickvm_sup', 'moment',
-	 'js/lib/text!template/cluster-status.html',
-	 'js/lib/text!template/cluster-status-templates.html'],
-function (_, sup, moment, mainString, templateString)
+//require(window.APT_OPTIONS.configObject,
+//	['underscore', 'js/quickvm_sup', 'moment'],
+$(function ()
 {
     'use strict';
+
+    var templateList = APT_OPTIONS.fetchTemplateList(['cluster-status', 'cluster-status-templates']);
+    var mainString = templateList['cluster-status'];
+    var templateString = templateList['cluster-status-templates'];
     var isadmin        = 0;
     var mainTemplate   = _.template(mainString);
     var countsTemplate = null;

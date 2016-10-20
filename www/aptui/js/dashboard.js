@@ -1,10 +1,10 @@
-require(window.APT_OPTIONS.configObject,
-	['underscore', 'js/quickvm_sup', 'moment',
-	 'js/lib/text!template/dashboard.html'],
-function (_, sup, moment, dashboardString)
+//require(window.APT_OPTIONS.configObject,
+//	['underscore', 'js/quickvm_sup', 'moment'],
+$(function ()
 {
     'use strict';
-    var dashboardTemplate = _.template(dashboardString);
+    var templates = APT_OPTIONS.fetchTemplateList(['dashboard']);
+    var dashboardTemplate = _.template(templates['dashboard']);
     var clusterFiles      = ["cloudlab-nofed.json", "cloudlab-fedonly.json"];
     var clusterStats      = {};
     

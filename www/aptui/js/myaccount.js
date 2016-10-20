@@ -1,4 +1,4 @@
-require(window.APT_OPTIONS.configObject,
+/*require(window.APT_OPTIONS.configObject,
 	['underscore', 'js/quickvm_sup', 'js/aptforms',
 	 'js/lib/text!template/myaccount.html',
 	 'js/lib/text!template/verify-modal.html',
@@ -6,11 +6,17 @@ require(window.APT_OPTIONS.configObject,
 	 'js/lib/text!template/waitwait-modal.html',
 	 // jQuery modules
 	 'formhelpers'],
-function (_, sup, aptforms,
-	  myaccountString, verifyString, oopsString, waitwaitString)
+*/
+$(function (/*_, sup, aptforms,
+	  myaccountString, verifyString, oopsString, waitwaitString*/)
 {
     'use strict';
 
+    var templates = APT_OPTIONS.fetchTemplateList(['myaccount', 'verify-modal', 'oops-modal', 'waitwait-modal']);
+    var myaccountString = templates['myaccount'];
+    var verifyString = templates['verify-modal'];
+    var oopsString = templates['oops-modal'];
+    var waitwaitString = templates['waitwait-modal'];
     var myaccountTemplate = _.template(myaccountString);
     var verifyTemplate    = _.template(verifyString);
 

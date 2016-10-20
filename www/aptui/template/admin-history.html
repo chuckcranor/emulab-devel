@@ -1,0 +1,32 @@
+    <table class="table table-condensed">
+      <thead>
+	<tr>
+	  <th>Date</th>
+	  <th>Action</th>
+	  <th>Wanted</th>
+	  <th>Granted</th>
+	</tr>
+      </thead>
+      <tbody>
+	<%  _.each(extensions, function(extension, idx) { %>
+	  <tr>
+	    <td rowspan="2" class="history-tstamp"><%- extension.tstamp %></td>
+	    <td>
+	      <% if (extension.action == "request" && extension.admin == "1") { %>
+		admin<% } else { %><%- extension.action %><% } %>
+	    </td>
+	    <% if (extension.action == "request") { %>
+	      <td><%- extension.wanted %></td>
+	      <td><%- extension.granted %></td>
+	    <% } else { %>
+	      <td>n/a</td>
+	      <td>n/a</td>
+	    <% } %>
+	  </tr>
+	  <tr>
+	    <td colspan="3"><pre class="history-reason"><%- extension.reason %></pre>
+	    </td>
+	  </tr>
+	<% }); %>
+      </tbody>
+    </table>

@@ -1,5 +1,5 @@
-define(['dateformat', 'marked', 'jacks'],
-function () {
+//define(['dateformat', 'marked', 'jacks'],
+window.sup = (function () {
 
 function ShowModal(which) 
 {
@@ -274,4 +274,4 @@ return {
     StartGeniLogin: StartGeniLogin,
     InitGeniLogin: InitGeniLogin,
 };
-});
+})();

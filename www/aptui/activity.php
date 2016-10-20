@@ -25,6 +25,7 @@ chdir("..");
 include("defs.php3");
 chdir("apt");
 include("quickvm_sup.php");
+include("require.php");
 include("profile_defs.php");
 $page_title = "My Profiles";
 
@@ -197,8 +198,13 @@ echo "<script src='js/lib/jQRangeSlider/jQRuler.js'></script>\n";
 echo "<script src='js/lib/jquery.tablesorter.min.js'></script>\n";
 echo "<script src='js/lib/jquery.tablesorter.widgets.min.js'></script>\n";
 echo "<script src='js/lib/jquery.tablesorter.widget-math.js'></script>\n";
-echo "<script src='js/lib/bootstrap.js'></script>\n";
-echo "<script src='js/lib/require.js' data-main='js/activity'></script>\n";
+
+REQUIRE_UNDERSCORE();
+REQUIRE_SUP();
+REQUIRE_MOMENT();
+SPITREQUIRE("js/activity.js");
+
+AddTemplate("activity");
 
 SPITFOOTER();
 ?>

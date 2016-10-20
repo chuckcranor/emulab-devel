@@ -25,6 +25,7 @@ chdir("..");
 include("defs.php3");
 chdir("apt");
 include("quickvm_sup.php");
+jinclude("require.php");
 $page_title = "Forgot Your Password";
 
 RedirectSecure();

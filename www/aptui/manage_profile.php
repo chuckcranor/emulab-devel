@@ -26,6 +26,7 @@ include("defs.php3");
 include_once("webtask.php");
 chdir("apt");
 include("quickvm_sup.php");
+include("require.php");
 include_once("profile_defs.php");
 include_once("instance_defs.php");
 # Must be after quickvm_sup.php since it changes the auth domain.
@@ -210,8 +211,17 @@ function SPITFORM($formfields, $errors)
     echo "<script src='js/lib/jquery.appendGrid-1.3.1.min.js'></script>\n";
     echo "<script src='js/lib/codemirror-min.js'></script>\n";
     echo "<script src='js/lib/bootstrap.js'></script>\n";
-    echo "<script src='js/lib/require.js' data-main='js/manage_profile'>
-          </script>";
+
+    REQUIRE_UNDERSCORE();
+    REQUIRE_SUP();
+    REQUIRE_FILESIZE();
+    REQUIRE_JACKS_EDITOR();
+    REQUIRE_IMAGE();
+    REQUIRE_MOMENT();
+    REQUIRE_APTFORMS();
+    REQUIRE_FILESTYLE();
+    REQUIRE_MARKED();
+    SPITREQUIRE("js/manage_profile.js");
     
     SPITFOOTER();
 }

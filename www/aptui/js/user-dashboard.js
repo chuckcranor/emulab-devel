@@ -1,4 +1,4 @@
-require(window.APT_OPTIONS.configObject,
+/*require(window.APT_OPTIONS.configObject,
 	['underscore', 'js/quickvm_sup', 'moment',
 	 'js/lib/text!template/user-dashboard.html',
 	 'js/lib/text!template/experiment-list.html',
@@ -8,12 +8,23 @@ require(window.APT_OPTIONS.configObject,
 	 'js/lib/text!template/oops-modal.html',
 	 'js/lib/text!template/waitwait-modal.html',
 	 'js/lib/text!template/classic-explist.html',
-	],
-function (_, sup, moment, mainString,
+	],*/
+$(function (/*_, sup, moment, mainString,
 	  experimentString, profileListString, projectString,
-	  profileString, oopsString, waitwaitString, classicString)
+	  profileString, oopsString, waitwaitString, classicString*/)
 {
     'use strict';
+
+    var templates = APT_OPTIONS.fetchTemplateList(['user-dashboard', 'experiment-list', 'profile-list', 'project-list', 'user-profile', 'oops-modal', 'waitwait-modal', 'classic-explist']);
+    var mainString = templates['user-dashboard'];
+    var experimentString = templates['experiment-list'];
+    var profileListString = templates['profile-list'];
+    var projectString = templates['project-list'];
+    var profileString = templates['user-profile'];
+    var oopsString = templates['oops-modal'];
+    var waitwaitString = templates['waitwait-modal'];
+    var classicString = templates['classic-explist'];
+
     var mainTemplate = _.template(mainString);
 
     function initialize()

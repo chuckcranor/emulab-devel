@@ -1,11 +1,11 @@
-require(window.APT_OPTIONS.configObject,
-	['underscore', 'js/quickvm_sup',
-	 'js/lib/text!template/lists.html'
-	],
-function (_, sup, mainString)
+//require(window.APT_OPTIONS.configObject,
+//	['underscore', 'js/quickvm_sup'],
+$(function ()
 {
     'use strict';
-    var mainTemplate    = _.template(mainString);
+  
+    var templates = fetchTemplateList(['lists']);
+    var mainTemplate    = _.template(templates['lists']);
     
     function initialize()
     {

@@ -1,4 +1,4 @@
-require(window.APT_OPTIONS.configObject,
+/*require(window.APT_OPTIONS.configObject,
 	['underscore', 'js/quickvm_sup', 'js/aptforms',
 	 'js/lib/text!template/about-account.html',
 	 'js/lib/text!template/verify-modal.html',
@@ -7,23 +7,24 @@ require(window.APT_OPTIONS.configObject,
 	 'js/lib/text!template/signup.html',
 	 'js/lib/text!template/toomany-modal.html',
 	 // jQuery modules
-	 'formhelpers'],
-function (_, sup, aptforms,
+	 'formhelpers'],*/
+$(function (/*_, sup, aptforms,
 	  aboutString, verifyString, personalString,
-	  projectString, signupString, toomanyString)
+	  projectString, signupString, toomanyString*/)
 {
     'use strict';
 
-    var aboutTemplate = _.template(aboutString);
-    var verifyTemplate = _.template(verifyString);
-    var personalTemplate = _.template(personalString);
-    var projectTemplate = _.template(projectString);
-    var signupTemplate = _.template(signupString);
+    var templates = APT_OPTIONS.fetchTemplateList(['about-account', 'verify-modal', 'signup-personal', 'signup-project', 'signup', 'toomany-modal']);
+    var aboutTemplate = _.template(templates['about-account']);
+    var verifyTemplate = _.template(templates['verify-modal']);
+    var personalTemplate = _.template(templates['signup-personal']);
+    var projectTemplate = _.template(templates['signup-project']);
+    var signupTemplate = _.template(templates['signup']);
 
     function initialize()
     {
 	window.APT_OPTIONS.initialize(sup);
-	$('#toomany_div').html(toomanyString);
+	$('#toomany_div').html(templates['toomany-modal']);
 
 	var fields = JSON.parse(_.unescape($('#form-json')[0].textContent));
 	var errors = JSON.parse(_.unescape($('#error-json')[0].textContent));

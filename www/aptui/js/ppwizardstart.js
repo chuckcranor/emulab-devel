@@ -1,15 +1,19 @@
 //
 // Start a Parameterized Profile
 //
-define(['underscore', 'js/quickvm_sup', 'js/JacksEditor',
-       	'js/lib/text!template/ppform-wizard.html',
-       	'js/lib/text!template/ppform-wizard-body.html',
-       	'js/lib/text!template/choose-am.html',
-       ],
-function(_, sup, JacksEditor, ppmodalString, ppbodyString, chooserString)
+//define(['underscore', 'js/quickvm_sup', 'js/JacksEditor',
+//       	'js/lib/text!template/ppform-wizard.html',
+//       	'js/lib/text!template/ppform-wizard-body.html',
+//       	'js/lib/text!template/choose-am.html',
+//       ],
+window.ppstart = (function()
     {
 	'use strict';
 
+        var templates = APT_OPTIONS.fetchTemplateList(['ppform-wizard', 'ppform-wizard-body', 'choose-am']);
+        var ppmodalString = templates['ppform-wizard'];
+        var ppbodyString = templates['ppform-wizard-body'];
+        var chooserString = templates['choose-am'];
 	var bodyTemplate  = null;
 	var chooseTemplate= null;
 	var editor        = null;
@@ -742,4 +746,4 @@ function(_, sup, JacksEditor, ppmodalString, ppbodyString, chooserString)
 		ChangeJacksRoot: ChangeJacksRoot,
 	};
     }
-);
+)();

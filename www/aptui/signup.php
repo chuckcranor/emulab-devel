@@ -25,6 +25,7 @@ chdir("..");
 include("defs.php3");
 chdir("apt");
 include("quickvm_sup.php");
+include("require.php");
 # Do not create anything, just do the checks.
 $debug = 0;
 # Update mode.
@@ -119,7 +120,14 @@ function SPITFORM($formfields, $showverify, $errors)
 
     echo "<script src='js/lib/jquery-2.0.3.min.js'></script>\n";
     echo "<script src='js/lib/bootstrap.js'></script>\n";
-    echo "<script src='js/lib/require.js' data-main='js/signup'></script>";
+
+    REQUIRE_UNDERSCORE();
+    REQUIRE_SUP();
+    REQUIRE_APTFORMS();
+    REQUIRE_FORMHELPERS();
+    SPITREQUIRE("js/signup.js");
+
+    AddTemplateList(array("about-account", "verify-modal", "signup-personal", "signup-project", "signup", "toomany-modal"));
     SPITFOOTER();
 }
 

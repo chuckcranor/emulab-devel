@@ -1,13 +1,13 @@
-require(window.APT_OPTIONS.configObject,
-	['underscore', 'js/quickvm_sup', 'moment', 'js/aptforms',
-	 'js/lib/text!template/create-group.html',
-	 'js/lib/text!template/oops-modal.html',
-	 'js/lib/text!template/waitwait-modal.html'],
-function (_, sup, moment, aptforms,
-	  mainString, oopsString, waitwaitString)
+//require(window.APT_OPTIONS.configObject,
+//	['underscore', 'js/quickvm_sup', 'moment', 'js/aptforms'],
+$(function ()
 {
     'use strict';
 
+    var templates = APT_OPTIONS.fetchTemplateList(['create-group', 'oops-modal', 'waitwait-modal']);
+    var mainString = templates['create-group'];
+    var oopsString = templates['oops-modal'];
+    var waitwaitString = templates['waitwaitString'];
     var mainTemplate = _.template(mainString);
     var fields       = null;
     var isadmin      = false;

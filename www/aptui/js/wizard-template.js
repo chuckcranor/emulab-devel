@@ -1,5 +1,5 @@
-define(['underscore'],
-function(_) {
+//define(['underscore'],
+window.wt = (function() {
 
 	function ClusterStatusHTML(options, fedlist) {
 		var html = $('<div class="cluster_picker_status btn-group">'
@@ -170,4 +170,4 @@ function(_) {
 		StatsLineHTML: StatsLineHTML
 	};
 }
-);
+)();

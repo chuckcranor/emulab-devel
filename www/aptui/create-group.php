@@ -25,6 +25,7 @@ chdir("..");
 include("defs.php3");
 chdir("apt");
 include("quickvm_sup.php");
+include("require.php");
 # Must be after quickvm_sup.php since it changes the auth domain.
 $page_title = "Create Group";
 
@@ -74,8 +75,14 @@ echo "</script>\n";
 echo "<script type='text/javascript'>\n";
 echo "    window.ISADMIN  = $isadmin;\n";
 echo "</script>\n";
-    
-SPITREQUIRE("create-group");
+
+REQUIRE_UNDERSCORE();
+REQUIRE_SUP();
+REQUIRE_MOMENT();
+REQUIRE_APTFORMS();
+SPITREQUIRE("js/create-group.js");
+
+AddTemplateList(array("create-group", "oops-modal", "waitwait-modal"));
 SPITFOOTER();
 
 ?>

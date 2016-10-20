@@ -25,6 +25,7 @@ chdir("..");
 include("defs.php3");
 chdir("apt");
 include("quickvm_sup.php");
+include("require.php");
 include_once("profile_defs.php");
 include_once("instance_defs.php");
 # Must be after quickvm_sup.php since it changes the auth domain.
@@ -48,7 +49,7 @@ $optargs = OptionalPageArguments("create",      PAGEARG_STRING,
 #
 function SPITFORM($formfields, $errors)
 {
-    global $this_user, $projlist, $embedded, $this_idx;
+    global $this_user, $projlist, $embedded, $this_idx, $PORTAL_TEMPLATES;
     $button_label = "Create";
     $title        = "Create Dataset";
 
@@ -130,8 +131,8 @@ function SPITFORM($formfields, $errors)
     echo "    window.BUTTONLABEL = '$button_label';\n";
     echo "</script>\n";
 
-    SPITREQUIRE("create-dataset",
-                "<script src='js/lib/jquery-ui.js'></script>");
+    SPITREQUIRE_DATASET();
+    AddTemplateList(array("create-dataset", "dataset-help", "oops-modal", "waitwait-modal"));
     SPITFOOTER();
 }
 

@@ -25,6 +25,7 @@ chdir("..");
 include("defs.php3");
 chdir("apt");
 include("quickvm_sup.php");
+include("require.php");
 $page_title = "Approve User";
 
 #
@@ -95,6 +96,7 @@ echo "</script>\n";
 
 echo "<script src='js/lib/jquery-2.0.3.min.js'></script>\n";
 echo "<script src='js/lib/bootstrap.js'></script>\n";
-echo "<script src='js/lib/require.js' data-main='js/approveuser'></script>\n";
+REQUIRE_SUP();
+SPITREQUIRE("js/approveuser.js");
 
 SPITFOOTER();

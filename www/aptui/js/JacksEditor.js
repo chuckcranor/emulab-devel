@@ -1,8 +1,11 @@
-define(['underscore', 'js/lib/text!template/edit-modal.html', 'js/lib/text!template/edit-inline.html'],
-function (_, editModalString, editInlineString)
+//define(['underscore', 'js/lib/text!template/edit-modal.html', 'js/lib/text!template/edit-inline.html'],
+window.JacksEditor = function ()
 {
     'use strict';
 
+    var templates = APT_OPTIONS.fetchTemplateList(['edit-modal', 'edit-inline']);
+    var editModalString = templates['edit-modal'];
+    var editInlineString = templates['edit-inline'];
     var context = {
 	canvasOptions: {
 	    "defaults": [
@@ -272,4 +275,4 @@ function (_, editModalString, editInlineString)
     }
 
     return JacksEditor;
-});
+})();

@@ -1,7 +1,7 @@
-require(window.APT_OPTIONS.configObject,
-['underscore', 'js/quickvm_sup', 'js/aptforms',
- 'jacks'],
-function (_, sup, aptforms)
+//require(window.APT_OPTIONS.configObject,
+//['underscore', 'js/quickvm_sup', 'js/aptforms',
+// 'jacks'],
+$(function ()
 {
   'use strict';
 

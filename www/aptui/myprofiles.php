@@ -25,6 +25,7 @@ chdir("..");
 include("defs.php3");
 chdir("apt");
 include("quickvm_sup.php");
+include("require.php");
 $page_title = "My Profiles";
 
 #
@@ -228,7 +229,10 @@ echo "<script src='js/lib/jquery-2.0.3.min.js'></script>\n";
 echo "<script src='js/lib/jquery.tablesorter.min.js'></script>\n";
 echo "<script src='js/lib/jquery.tablesorter.widgets.min.js'></script>\n";
 echo "<script src='js/lib/bootstrap.js'></script>\n";
-echo "<script src='js/lib/require.js' data-main='js/myprofiles'></script>\n";
+
+REQUIRE_SUP();
+REQUIRE_MOMENT();
+SPITREQUIRE("js/myprofiles.js");
 
 SPITFOOTER();
 ?>
