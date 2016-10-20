@@ -1690,15 +1690,42 @@ foreach $node (@nodenames) {
 #
 # Print out all blockstores
 #
+# XXX we should try to narrow down the list of lease blockstores to only
+# those accessible by this user/project.
+#
 if ($useblockstore) {
     $result = DBQueryFatal("select b.node_id, b.bs_id, b.lease_idx, b.type, ".
-			   "s.remaining_capacity ".
+			   "s.remaining_capacity, b2.bs_id as pool ".
 			   "from blockstores as b ".
 			   "left join blockstore_state as s ".
 			   "on b.bsidx=s.bsidx ".
+			   "left join blockstore_trees as t ".
+			   "on b.bsidx=t.bsidx ".
+			   "left join blockstores as b2 ".
+			   "on t.aggidx=b2.bsidx ".
 			   "where s.ready=1");
+    #
+    # Pass 1: associate leases with pools
+    #
+    my @rows = ();
+    my %bspools = ();
     while (my ($nodeId, $bsId, $leaseIdx, $typeName,
-	       $capacity) = $result->fetchrow_array) {
+	       $capacity, $pool) = $result->fetchrow_array) {
+	if ($pool) {
+	    my $key = "$nodeId/$pool";
+	    if (!exists($bspools{$key})) {
+		$bspools{$key} = [];
+	    }
+	    push(@{$bspools{$key}}, $leaseIdx);
+	}
+	push(@rows, [ $nodeId, $bsId, $leaseIdx, $typeName, $capacity ]);
+    }
+
+    #
+    # Pass 2: output the blockstores
+    #
+    foreach my $row (@rows) {
+	my ($nodeId, $bsId, $leaseIdx, $typeName, $capacity) = @$row;
 	my $type = BlockstoreType->Lookup($typeName);
 	if (defined($type)) {
 	    my @features = ();
@@ -1726,6 +1753,16 @@ if ($useblockstore) {
 	    #
 	    if ($leaseIdx > 0) {
 		push(@features, "bs-lease-$leaseIdx:1.0");
+	    }
+	    #
+	    # If it is not a lease, we need to see if it is the home
+	    # of any leases. If so we output a unique feature to say
+	    # that this pool supports clones of the indicated lease.
+	    #
+	    elsif (exists($bspools{"$nodeId/$bsId"})) {
+		foreach my $lidx (@{$bspools{"$nodeId/$bsId"}}) {
+		    push(@features, "bs-clone-$lidx:0.5");
+		}
 	    }
 
 	    push(@features, "+bs-capacity:$capacity");
