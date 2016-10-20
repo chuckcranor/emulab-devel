@@ -1959,6 +1959,7 @@ CREATE TABLE `future_reservations` (
   `uid_idx` mediumint(8) unsigned NOT NULL DEFAULT '0',
   `notes` mediumtext,
   `admin_notes` mediumtext,
+  `created` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (`idx`)
 ) ENGINE=MyISAM DEFAULT CHARSET=latin1;
 
