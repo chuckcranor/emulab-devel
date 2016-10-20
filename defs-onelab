@@ -420,6 +420,9 @@ ZFS_QUOTA_GROUP="10G"
 WITHAMD=1
 AMD_ROOT=/.amd_mnt/ops
 
+# Use this with ZFS
+ZFS_NOEXPORT=1
+
 #
 # Only supported on the Mother Ship (emulab.net) right now.
 #
