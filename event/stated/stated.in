@@ -1019,7 +1019,7 @@ sub stateTransition($$) {
 		my $frisbee_osid = TBNodeDiskloadOSID($node);
 		my $osimage = OSImage->Lookup($frisbee_osid);
 		my $frisbee_name = (defined($osimage) ?
-				    $osimage->osame() : $frisbee_osid);
+				    $osimage->osname() : $frisbee_osid);
 		my $msg = 
 		    ("Attempted to load multiple images on $node using an old Frisbee MFS.\n".
 		     "To make this work please update the $frisbee_name MFS image.\n");
