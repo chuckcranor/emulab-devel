@@ -1,0 +1,16 @@
+#
+# Update BOOTING timeout for NORMALv2. Issues with storage servers...
+#
+use strict;
+use libdb;
+
+sub DoUpdate($$$)
+{
+    my ($dbhandle, $dbname, $version) = @_;
+
+    DBQueryFatal("REPLACE INTO state_timeouts VALUES ".
+		 "('NORMALv2','BOOTING',240,'REBOOT')");
+
+    return 0;
+}
+1;
