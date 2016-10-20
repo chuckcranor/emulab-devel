@@ -35,11 +35,10 @@ if [ -d /usr/local/etc/emulab ]; then
 	BINDIR=/usr/local/etc/emulab
 	if [ -e /etc/emulab/client.pem ]; then
 	    ETCDIR=/etc/emulab
-	    STATICRUNDIR=/etc/emulab/run
 	else
 	    ETCDIR=/usr/local/etc/emulab
-	    STATICRUNDIR=/usr/local/etc/emulab/run
 	fi
+	STATICRUNDIR=/usr/local/etc/emulab/run
 	VARDIR=/var/emulab
 	BOOTDIR=/var/emulab/boot
 	LOGDIR=/var/emulab/logs

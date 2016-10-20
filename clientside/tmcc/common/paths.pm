@@ -46,12 +46,11 @@ if (-d "/usr/local/etc/emulab") {
     unshift(@INC, "/usr/local/etc/emulab");
     if (-d "/etc/emulab") {
 	$ETCDIR = "/etc/emulab";
-	$STATICRUNDIR = "/etc/emulab/run";
     }
     else {
 	$ETCDIR = "/usr/local/etc/emulab";
-	$STATICRUNDIR = "/usr/local/etc/emulab/run";
     }
+    $STATICRUNDIR = "/usr/local/etc/emulab/run";
     $VARDIR  = "/var/emulab";
     $BOOTDIR = "/var/emulab/boot";
     $LOGDIR  = "/var/emulab/logs";
