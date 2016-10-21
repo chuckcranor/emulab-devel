@@ -1530,8 +1530,8 @@ handle_request(int sock, struct sockaddr_in *client, char *rdata, int rdatalen, 
 		client_writeback_done(sock,
 				      redirect ? &redirect_client : client);
 
-	if (byteswritten &&
-	    (verbose || (command_array[i].flags & F_MINLOG) == 0))
+	if (verbose ||
+	    (byteswritten && (command_array[i].flags & F_MINLOG) == 0))
 		info("%s: %s wrote %d bytes\n",
 		     reqp->nodeid, command_array[i].cmdname,
 		     byteswritten);
@@ -7453,6 +7453,10 @@ mydb_update(char *query, ...)
 
 /*
  * Map IP to node ID (plus other info).
+ *
+ * N.B. This function may be called when a node is not in an experiment.
+ * So any fields extracted from the reserved or experiment tables could be
+ * NULL. Handle them accordingly!
  */
 static int
 iptonodeid(struct in_addr ipaddr, tmcdreq_t *reqp, char* nodekey)
@@ -7716,8 +7720,14 @@ iptonodeid(struct in_addr ipaddr, tmcdreq_t *reqp, char* nodekey)
 		else
 			strcpy(reqp->nickname, reqp->nodeid);
 
-		strcpy(reqp->creator, row[11]);
-		reqp->creator_idx = atoi(row[26]);
+		if (row[11]) 
+			strcpy(reqp->creator, row[11]);
+		else
+			strcpy(reqp->creator, "elabman");
+		if (row[26])
+			reqp->creator_idx = atoi(row[26]);
+		else
+			reqp->creator_idx = 0;
 		if (row[12]) {
 			strcpy(reqp->swapper, row[12]);
 			reqp->swapper_idx = atoi(row[27]);
@@ -7782,12 +7792,16 @@ iptonodeid(struct in_addr ipaddr, tmcdreq_t *reqp, char* nodekey)
 	reqp->iscontrol = (! strcasecmp(row[10], "ctrlnode") ? 1 : 0);
 
 	/* nfsmounts - per-experiment disable overrides per-node setting */
-	if (strcmp(row[40], "none") == 0)
+	if (row[40]) {
+		if (strcmp(row[40], "none") == 0)
+			strcpy(reqp->nfsmounts, "none");
+		else if (row[39])
+			strcpy(reqp->nfsmounts, row[39]);
+		else
+			strcpy(reqp->nfsmounts, row[40]);
+	} else {
 		strcpy(reqp->nfsmounts, "none");
-	else if (row[39])
-		strcpy(reqp->nfsmounts, row[39]);
-	else
-		strcpy(reqp->nfsmounts, row[40]);
+	}
 
         /* taintstates - find the strings and set the bits.  */
         reqp->taintstates = 0;
@@ -8124,7 +8138,7 @@ COMMAND_PROTOTYPE(doisalive)
  */
 COMMAND_PROTOTYPE(doipodinfo)
 {
-	char		buf[MYBUFSIZE], hashbuf[BUFSIZ];
+	char		buf[MYBUFSIZE], hashbuf[32+1];
 
 	if (!tcp) {
 		error("IPODINFO: %s: Cannot do this in UDP mode!\n",
@@ -8445,7 +8459,7 @@ COMMAND_PROTOTYPE(dojailconfig)
 	if ((nrows = (int)mysql_num_rows(res))) {
 		row = mysql_fetch_row(res);
 		if (row[0] && row[0][0]) {
-			char saltbuf[BUFSIZ], *bp;
+			char saltbuf[8+1], *bp;
 
 			if (getrandomchars(saltbuf, 8) != 0) {
 				snprintf(saltbuf, sizeof(saltbuf),
@@ -10341,7 +10355,7 @@ COMMAND_PROTOTYPE(dorootpswd)
 {
 	MYSQL_RES	*res;
 	MYSQL_ROW	row;
-	char		buf[BUFSIZ], hashbuf[BUFSIZ], saltbuf[BUFSIZ], *bp;
+	char		buf[BUFSIZ], hashbuf[BUFSIZ], saltbuf[8+1], *bp;
 	char		*nodeid = reqp->pnodeid;
 
 	/*
@@ -10371,7 +10385,8 @@ COMMAND_PROTOTYPE(dorootpswd)
 	}
 	else {
 		row = mysql_fetch_row(res);
-		strcpy(hashbuf, row[0]);
+		strncpy(hashbuf, row[0], sizeof(hashbuf)-1);
+		hashbuf[sizeof(hashbuf)-1] = '\0';
 	}
 	if (res)
 		mysql_free_result(res);
@@ -13461,32 +13476,43 @@ COMMAND_PROTOTYPE(dotiplineinfo)
 	return 0;
 }
 
+/*
+ * Get a 'len' character random string.
+ * 'buf' had better be at least len+1 chars because we null terminate.
+ */
 static int
 getrandomchars(char *buf, int len)
 {
 	unsigned char	randdata[MYBUFSIZE];
-	int		fd, cc, i;
+	int		fd, cc, i, j, rdlen;
 	char		*bp;
+
+	rdlen = len / 2;
+	if (len <= 0 || (len & 1) == 1 || rdlen >= MYBUFSIZE) {
+		error("Bad buffer size in getrandomchars");
+		return 1;
+	}
 
 	if ((fd = open("/dev/urandom", O_RDONLY)) < 0) {
 		errorc("opening /dev/urandom");
 		return 1;
 	}
-	if ((cc = read(fd, randdata, len)) < 0) {
+	if ((cc = read(fd, randdata, rdlen)) < 0) {
 		errorc("reading /dev/urandom");
 		close(fd);
 		return 1;
 	}
-	if (cc != len) {
-		error("Short read from /dev/urandom: %d", len);
+	if (cc != rdlen) {
+		error("Short read from /dev/urandom: %d", rdlen);
 		close(fd);
 		return 1;
 	}
 	bp = buf;
-	for (i = 0; i < len;) {
-		cc = sprintf(bp, "%02x", randdata[i]);
+	for (i = 0, j = 0; i < len;) {
+		cc = sprintf(bp, "%02x", randdata[j]);
 		i  += cc;
 		bp += cc;
+		j++;
 	}
 	buf[len] = '\0';
 	
