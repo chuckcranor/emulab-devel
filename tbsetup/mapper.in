@@ -370,9 +370,12 @@ if (IsMultiPCArchitecture()) {
 
 	foreach my $type (keys(%{ $vtop->types() })) {
 	    $type = NodeType->Lookup($type);
-	    $architectures{$type->architecture()} +=
-		$vtop->types()->{$type->type()};
 
+	    # If no architecture defined for this type, then we do not count.
+	    if (defined($type->architecture())) {
+		$architectures{$type->architecture()} +=
+		    $vtop->types()->{$type->type()};
+	    }
 	    $ordered += $vtop->types()->{$type->type()};
 	}
 	#
