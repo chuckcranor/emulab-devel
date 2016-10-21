@@ -800,7 +800,7 @@ my $defaultosidquery =
 # No need to use osidtoimageid here cause:
 # 1. We only support EZ images now (osid=imageid).
 #
-my $subosidquery =
+my $subosidquery1 =
     "select distinct o.osid,o.parent_osid,ov1.def_parentosid ".
     "   from os_submap as o " .
     "left join images as i1 on i1.imageid = o.osid ".
@@ -823,19 +823,30 @@ my $subosidquery =
     "     ip2.permission_type='user' and ip2.permission_idx=u2.uid_idx ".
     "where (i1.imageid is null or iv1.global = 1";
 if ($pid) {
-    $subosidquery .= " or i1.pid='$pid' or g1.pid='$pid'";
+    $subosidquery1 .= " or i1.pid='$pid' or g1.pid='$pid'";
 }
 if ($this_user) {
-    $subosidquery .= " or u1.uid='$this_user'"
+    $subosidquery1 .= " or u1.uid='$this_user'"
 }
 $subosidquery .= ") and (iv2.global = 1";
 if ($pid) {
-    $subosidquery .= " or i2.pid='$pid' or g2.pid='$pid'";
+    $subosidquery1 .= " or i2.pid='$pid' or g2.pid='$pid'";
 }
 if ($this_user) {
     $subosidquery .= " or u2.uid='$this_user'"
 }
-$subosidquery .= ")";
+$subosidquery1 .= ")";
+
+my $subosidquery2 =
+    "select distinct o.osid,o.parent_osid,ov.def_parentosid ".
+    "   from os_submap as o " .
+    "left join os_info as oi on oi.osid = o.osid ".
+    "left join os_info_versions as ov on ".
+    "     ov.osid=oi.osid and ov.vers=oi.version ".
+    "left join os_info as oip on oip.osid = o.parent_osid ".
+    "left join os_info_versions as ovp on ".
+    "     ovp.osid=oip.osid and ovp.vers=oip.version ".
+    "where (ov.shared=1 and ovp.shared=1 and ov.ezid=0 and ovp.ezid=0)";
 
 our %node_type_osids;
 our %osid_node_types;
@@ -916,16 +927,18 @@ sub processOs
 #
 # XXX Note below that for now, subosids cannot redirect to other subosids.
 #
-$result = DBQueryFatal($subosidquery);
-while (my ($subosid,$osid,$defparent) = $result->fetchrow()) {
-    if ($osid_subosids{$osid}) {
-	push @{$osid_subosids{$osid}}, $subosid;
-    } else {
-	$osid_subosids{$osid} = [$subosid];
-    }
-    # This is default parent. See below, used for image aliases.
-    if (defined($defparent) && $defparent == $osid) {
-	$osid_defparent{$subosid} = $defparent;
+foreach my $q ($subosidquery1, $subosidquery2) {
+    $result = DBQueryFatal($q);
+    while (my ($subosid,$osid,$defparent) = $result->fetchrow()) {
+	if ($osid_subosids{$osid}) {
+	    push @{$osid_subosids{$osid}}, $subosid;
+	} else {
+	    $osid_subosids{$osid} = [$subosid];
+	}
+	# This is default parent. See below, used for image aliases.
+	if (defined($defparent) && $defparent == $osid) {
+	    $osid_defparent{$subosid} = $defparent;
+	}
     }
 }
 
