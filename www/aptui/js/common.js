@@ -61,7 +61,6 @@ window.APT_OPTIONS.configObject = {
 
 window.APT_OPTIONS.initialize = function (sup)
 {
-    var geniauth = "https://www.emulab.net/protogeni/speaks-for/geni-auth.js";
     var embedded = window.EMBEDDED;
 
     // Eventually make this download without having to follow a link.
@@ -97,10 +96,7 @@ window.APT_OPTIONS.initialize = function (sup)
 	    if (window.ISCLOUD || window.ISPNET) {
 		console.info("Loading geni auth code");
 		sup.InitGeniLogin(embedded);
-		require([geniauth], function() {
-		    console.info("Geni auth code has been loaded");
-		    $('#quickvm_geni_login_button').removeAttr("disabled");
-		});
+	        $('#quickvm_geni_login_button').removeAttr("disabled");
 	    }
 	    return false;
 	});

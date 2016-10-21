@@ -25,7 +25,6 @@ chdir("..");
 include("defs.php3");
 chdir("apt");
 include("quickvm_sup.php");
-include("require.php");
 $page_title = "Invite a User";
 
 #
@@ -46,7 +45,7 @@ $optargs = OptionalPageArguments("invite",       PAGEARG_STRING,
 #
 function SPITFORM($formfields, $errors)
 {
-    global $projlist, $PORTAL_TEMPLATES;
+    global $projlist;
     
     SPITHEADER(1);
 
@@ -69,7 +68,6 @@ function SPITFORM($formfields, $errors)
     echo "</script>\n";
     
     echo "<script src='js/lib/jquery-2.0.3.min.js'></script>\n";
-    echo "<script src='js/lib/bootstrap.js'></script>\n";
 
     REQUIRE_UNDERSCORE();
     REQUIRE_SUP();

@@ -872,7 +872,6 @@ $(function (_, Constraints, sup, ppstart, JacksEditor, wt)
 	    var description = null;
 	    $(xml).find("rspec_tour").each(function() {
 		$(this).find("description").each(function() {
-		    var marked = require("marked");
 		    description = marked($(this).text());
 		});
 	    });

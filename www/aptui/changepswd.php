@@ -25,7 +25,6 @@ chdir("..");
 include("defs.php3");
 chdir("apt");
 include("quickvm_sup.php");
-include("require.php");
 $page_title = "Change Password";
 
 RedirectSecure();

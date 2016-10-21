@@ -10,7 +10,7 @@ $(function ()
 
     var templates = APT_OPTIONS.fetchTemplateList(['rspec2genilib', 'waitwait-modal', 'oops-modal']);
     var mainString = templates['rspec2genilib'];
-    var waitwaitString = templates['waitwait-modal'];
+    var waitString = templates['waitwait-modal'];
     var oopsString = templates['oops-modal'];
     var mainTemplate    = _.template(mainString);
     

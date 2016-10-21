@@ -25,7 +25,6 @@ chdir("..");
 include("defs.php3");
 chdir("apt");
 include("quickvm_sup.php");
-include("require.php");
 $page_title = "My SSH Keys";
 
 #
@@ -75,7 +74,6 @@ echo "    window.TARGET_UID  = '$target_uid';\n";
 echo "    window.NONLOCAL    = $nonlocal;\n";
 echo "</script>\n";
 echo "<script src='js/lib/jquery-2.0.3.min.js'></script>\n";
-echo "<script src='js/lib/bootstrap.js'></script>\n";
 
 REQUIRE_UNDERSCORE();
 REQUIRE_SUP();

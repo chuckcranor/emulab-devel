@@ -28,7 +28,6 @@ include("blockstore_defs.php");
 include("imageid_defs.php");
 chdir("apt");
 include("quickvm_sup.php");
-include("require.php");
 include("dataset_defs.php");
 $page_title = "My Datasets";
 

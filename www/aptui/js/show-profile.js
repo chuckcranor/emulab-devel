@@ -11,7 +11,7 @@
 	 'js/lib/text!template/share-modal.html',
 	 // jQuery modules
 	 'marked'],*/
-function (/*_, sup, moment,
+$(function (/*_, sup, moment,
 	  showString, waitwaitString, 
 	  rendererString, showtopoString, rspectextviewString,
 	  guestInstantiateString, instantiateString, oopsString, shareString*/)
@@ -258,12 +258,10 @@ function (/*_, sup, moment,
 	
 	$(xml).find("rspec_tour > description").each(function() {
 	    var text = $(this).text();
-	    var marked = require("marked");
 	    $('#profile_description').html(marked(text));
 	});
 	$(xml).find("rspec_tour > instructions").each(function() {
 	    var text = $(this).text();
-	    var marked = require("marked");
 	    $('#profile_instructions').html(marked(text));
 	});
     }

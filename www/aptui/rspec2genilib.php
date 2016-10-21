@@ -25,7 +25,6 @@ chdir("..");
 include("defs.php3");
 chdir("apt");
 include("quickvm_sup.php");
-include("require.php");
 # Must be after quickvm_sup.php since it changes the auth domain.
 $page_title = "Convert RSpec to GeniLib";
 
@@ -39,7 +38,7 @@ echo "<div id='main-body'></div>\n";
 REQUIRE_UNDERSCORE();
 REQUIRE_SUP();
 REQUIRE_FILESTYLE();
-SPITREQUIRE("rspec2genilib");
+SPITREQUIRE("js/rspec2genilib.js");
 
 AddTemplateList(array("rspec2genilib", "waitwait-modal", "oops-modal"));
 SPITFOOTER();

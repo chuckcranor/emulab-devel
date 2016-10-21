@@ -27,7 +27,6 @@ include("lease_defs.php");
 include("imageid_defs.php");
 chdir("apt");
 include("quickvm_sup.php");
-include("require.php");
 include_once("dataset_defs.php");
 include_once("instance_defs.php");
 include_once("profile_defs.php");
@@ -78,7 +77,7 @@ if (!$dataset->AccessCheck($this_user, $LEASE_ACCESS_MODIFY)) {
 #
 function SPITFORM($formfields, $errors)
 {
-    global $this_user, $projlist, $embedded, $this_idx, $PORTAL_TEMPLATES;
+    global $this_user, $projlist, $embedded, $this_idx;
     $button_label = "Save";
     $title        = "Modify Dataset";
     $isadmin      = (ISADMIN() ? "true" : "false");

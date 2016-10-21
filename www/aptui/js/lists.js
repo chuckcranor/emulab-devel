@@ -4,7 +4,7 @@ $(function ()
 {
     'use strict';
   
-    var templates = fetchTemplateList(['lists']);
+    var templates = APT_OPTIONS.fetchTemplateList(['lists']);
     var mainTemplate    = _.template(templates['lists']);
     
     function initialize()

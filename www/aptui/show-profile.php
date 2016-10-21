@@ -26,7 +26,6 @@ include("defs.php3");
 include_once("webtask.php");
 chdir("apt");
 include("quickvm_sup.php");
-include("require.php");
 include_once("profile_defs.php");
 include_once("instance_defs.php");
 $page_title = "Show Profile";

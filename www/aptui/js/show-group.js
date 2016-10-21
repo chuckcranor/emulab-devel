@@ -21,7 +21,7 @@ $(function (/*_, sup, moment, aptforms, mainString,
     var detailsString = templates['group-profile'];
     var classicString = templates['classic-explist'];
     var oopsString = templates['oops-modal'];
-    var waitwaitString = templates['waitwait-modal'];
+    var waitString = templates['waitwait-modal'];
   
     var mainTemplate    = _.template(mainString);
     

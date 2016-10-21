@@ -25,7 +25,6 @@ chdir("..");
 include("defs.php3");
 chdir("apt");
 include("quickvm_sup.php");
-include("require.php");
 $page_title = "Login";
 AddTemplate("waitwait-modal");
 
@@ -93,7 +92,6 @@ if (NOLOGINS() && !$adminmode) {
     SPITUSERERROR("Sorry, logins are temporarily disabled, ".
 		  "please try again later.");
     echo "<script src='js/lib/jquery-2.0.3.min.js'></script>\n";
-    echo "<script src='js/lib/bootstrap.js'></script>\n";
     SPITNULLREQUIRE();
     SPITFOOTER();
     return;
@@ -231,7 +229,6 @@ function SPITFORM($uid, $referrer, $error)
     }
     echo "<div id='waitwait_div'></div>\n";
     echo "<script src='js/lib/jquery-2.0.3.min.js'></script>\n";
-    echo "<script src='js/lib/bootstrap.js'></script>\n";
 
     REQUIRE_UNDERSCORE();
     REQUIRE_SUP();
@@ -284,7 +281,6 @@ else {
               Please do not attempt to login again; it will not work!
               </h4>\n";
         echo "<script src='js/lib/jquery-2.0.3.min.js'></script>\n";
-        echo "<script src='js/lib/bootstrap.js'></script>\n";
 	SPITNULLREQUIRE();
 	SPITFOOTER();
 	return;
@@ -300,7 +296,6 @@ else {
               Please do not attempt to login again; it will not work!
               </h4>\n";
         echo "<script src='js/lib/jquery-2.0.3.min.js'></script>\n";
-        echo "<script src='js/lib/bootstrap.js'></script>\n";
 	SPITNULLREQUIRE();
 	SPITFOOTER();
 	return;

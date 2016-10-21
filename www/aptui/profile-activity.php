@@ -25,7 +25,6 @@ chdir("..");
 include("defs.php3");
 chdir("apt");
 include("quickvm_sup.php");
-include("require.php");
 include("profile_defs.php");
 $page_title = "My Profiles";
 
@@ -119,7 +118,6 @@ echo "<script type='text/plain' id='instances-json'>\n";
 echo json_encode($instances);
 echo "</script>\n";
 echo "<script src='js/lib/jquery-2.0.3.min.js'></script>\n";
-echo "<script src='js/lib/bootstrap.js'></script>\n";
 
 REQUIRE_UNDERSCORE();
 REQUIRE_SUP();

@@ -23,6 +23,7 @@
 #
 include_once("portal_defs.php");
 include_once("instance_defs.php");
+include_once("require.php");
 
 #
 # Global flag to disable accounts. We do this on some pages which
@@ -39,12 +40,6 @@ $embedded = 0;
 if (isset($_REQUEST["embedded"]) && $_REQUEST["embedded"]) {
     $embedded = 1;
 }
-
-$PORTAL_TEMPLATES = array();
-$PORTAL_LIBRARIES = array();
-
-# Flag to signal that a requires was spit. For errors.
-$spatrequired = 0;
 
 # For backend scripts to know how they were invoked.
 if (isset($_SERVER['SERVER_NAME'])) { 
@@ -73,9 +68,7 @@ $PAGEERROR_HANDLER = function($msg, $status_code = 0) {
     echo "</script>\n";
     if (!$spatrequired) {
 	echo "<script src='js/lib/jquery-2.0.3.min.js'></script>\n";
-	echo "<script src='js/lib/bootstrap.js'></script>\n";
-	echo "<script src='js/lib/require.js' data-main='js/null.js'>
-                 </script>\n";
+	SPITNULLREQUIRE();
     }
     SPITFOOTER();
     die("");
@@ -207,6 +200,7 @@ $PAGEHEADER_FUNCTION = function($thinheader = 0, $ignore1 = NULL,
                         "  <a class='btn btn-primary navbar-btn apt-navbar-btn'
                                     id='loginbutton'>Login</a></li>\n";
 		}
+		REQUIRE_GENI_AUTH();
 	    }
 	    else {
                 $navbar_right .=
@@ -550,24 +544,6 @@ function SPITAJAX_ERROR($code, $msg)
     echo json_encode($results);
 }
 
-function SPITREQUIRE($main, $extras = "")
-{
-    global $spatrequired, $PORTAL_LIBRARIES;
-    
-    echo $extras;
-    echo "<script src='js/lib/bootstrap.js'></script>\n";
-    AddLibrary($main);
-    EchoLibraryList($PORTAL_LIBRARIES);
-    #echo "<script src='js/lib/require.js' data-main='js/$main'></script>\n";
-    $spatrequired = 1;
-}
-
-function SPITNULLREQUIRE()
-{
-    REQUIRE_SUP();
-    SPITREQUIRE("js/main.js");
-}
-
 #
 # Spit out an info tooltip.
 #
@@ -882,61 +858,6 @@ function CheckLoginOrRedirect($modifier = 0)
     }
     CheckLoginConditions($check_status & ~($modifier|CHECKLOGIN_NONLOCAL));
     return $this_user;
-}
-
-#
-# Echos a plaintext <script> tag with a base64-encoded template inside.
-# The <script> tag has an id of $baseName. The template is loaded from
-# the path 'template/$baseName.html'
-#
-function EchoTemplate($baseName)
-{
-    echo "\n<script type='text/plain' id='" . $baseName . "'>\n";
-    echo base64_encode(file_get_contents("template/" . $baseName . ".html")) . "\n";
-    echo "</script>\n";
-}
-
-function EchoTemplateList($nameList)
-{
-    foreach ($nameList as $index => $name) {
-        EchoTemplate($name);
-    }
-}
-
-function AddTemplate($baseName)
-{
-  global $PORTAL_TEMPLATES;
-  array_push($PORTAL_TEMPLATES, $baseName);
-}
-
-function AddTemplateList($nameList)
-{
-  global $PORTAL_TEMPLATES;
-  foreach ($nameList as $index => $name) {
-    array_push($PORTAL_TEMPLATES, $name);
-  }
-}
-
-function AddLibrary($baseName)
-{
-  global $PORTAL_LIBRARIES;
-  $found = 0;
-  foreach ($PORTAL_LIBRARIES as $index => $name) {
-    if ($name === $baseName) {
-      $found = 1;
-      break;
-    }
-  }
-  if ($found != 1) {
-    array_push($PORTAL_LIBRARIES, $baseName);
-  }
-}
-
-function EchoLibraryList($nameList)
-{
-    foreach ($nameList as $index => $name) {
-      echo "<script src='$name'></script>\n";
-    }
 }
 
 ?>

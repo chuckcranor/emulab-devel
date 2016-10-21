@@ -25,7 +25,6 @@ chdir("..");
 include("defs.php3");
 chdir("apt");
 include("quickvm_sup.php");
-include("require.php");
 # Must be after quickvm_sup.php since it changes the auth domain.
 $page_title = "Show Group";
 

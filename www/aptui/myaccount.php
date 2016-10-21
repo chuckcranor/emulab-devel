@@ -25,7 +25,6 @@ chdir("..");
 include("defs.php3");
 chdir("apt");
 include("quickvm_sup.php");
-include("require.php");
 
 #
 # Get current user.
@@ -95,7 +94,6 @@ echo "<script type='text/plain' id='form-json'>\n";
 echo htmlentities(json_encode($defaults)) . "\n";
 echo "</script>\n";
 echo "<script src='js/lib/jquery-2.0.3.min.js'></script>\n";
-echo "<script src='js/lib/bootstrap.js'></script>\n";
 
 REQUIRE_UNDERSCORE();
 REQUIRE_SUP();

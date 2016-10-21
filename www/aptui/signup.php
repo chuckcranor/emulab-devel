@@ -25,7 +25,6 @@ chdir("..");
 include("defs.php3");
 chdir("apt");
 include("quickvm_sup.php");
-include("require.php");
 # Do not create anything, just do the checks.
 $debug = 0;
 # Update mode.
@@ -119,7 +118,6 @@ function SPITFORM($formfields, $showverify, $errors)
     echo "</script>\n";
 
     echo "<script src='js/lib/jquery-2.0.3.min.js'></script>\n";
-    echo "<script src='js/lib/bootstrap.js'></script>\n";
 
     REQUIRE_UNDERSCORE();
     REQUIRE_SUP();

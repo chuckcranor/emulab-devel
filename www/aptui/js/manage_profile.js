@@ -451,14 +451,12 @@ $(function (/*_, sup, filesize, JacksEditor, ShowImagingModal, moment, aptforms,
 	 */
 	$('#profile_instructions').dblclick(function() {
 	    var text = $(this).val();
-	    var marked = require("marked");
 	    $('#renderer_modal_div').html(marked(text));
 	    sup.ShowModal("#renderer_modal");
 	});
 	// Ditto the description.
 	$('#profile_description').dblclick(function() {
 	    var text = $(this).val();
-	    var marked = require("marked");
 	    $('#renderer_modal_div').html(marked(text));
 	    sup.ShowModal("#renderer_modal");
 	});

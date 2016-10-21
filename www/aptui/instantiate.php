@@ -28,7 +28,6 @@ include_once("geni_defs.php");
 include_once("webtask.php");
 chdir("apt");
 include("quickvm_sup.php");
-include("require.php");
 include_once("instance_defs.php");
 include_once("profile_defs.php");
 # Must be after quickvm_sup.php since it changes the auth domain.
@@ -439,7 +438,6 @@ function SPITFORM($formfields, $newuser, $errors)
     echo "    window.CLASSIC = " . ($classic ? "true" : "false") . ";\n";
     echo "</script>\n";
     echo "<script src='js/lib/jquery-2.0.3.min.js'></script>\n";
-    echo "<script src='js/lib/bootstrap.js'></script>\n";
 
     REQUIRE_UNDERSCORE();
     REQUIRE_CONSTRAINTS();

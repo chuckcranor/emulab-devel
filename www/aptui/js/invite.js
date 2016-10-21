@@ -1,6 +1,6 @@
 //require(window.APT_OPTIONS.configObject,
 //	['underscore', 'js/quickvm_sup', 'js/aptforms'],
-$(function (_, sup, aptforms)
+$(function ()
 {
     'use strict';
 

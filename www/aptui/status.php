@@ -28,7 +28,6 @@ include_once("geni_defs.php");
 include_once("webtask.php");
 chdir("apt");
 include("quickvm_sup.php");
-include("require.php");
 include_once("profile_defs.php");
 include_once("instance_defs.php");
 $page_title = "Experiment Status";
@@ -279,7 +278,6 @@ echo "<script src='js/lib/nv.d3.js'></script>\n";
 echo "<script src='js/lib/jquery-2.0.3.min.js'></script>\n";
 echo "<script src='js/lib/jquery-ui.js'></script>\n";
 echo "<script src='js/lib/codemirror-min.js'></script>\n";
-echo "<script src='js/lib/bootstrap.js'></script>\n";
 
 REQUIRE_UNDERSCORE();
 REQUIRE_SUP();
@@ -312,6 +310,7 @@ if ($extension_denied_reason != "") {
    echo "<pre class='hidden' id='extension_denied_reason'>$extension_denied_reason</pre>\n";
 }
 
-AddTemplateList(array("status", "waitwait-modal", "oops-modal", "register-modal", "terminate-modal", "clone-help", "snapshot-help", "oneonly-modal", "approval-modal", "linktest-modal");
+AddTemplateList(array("status", "waitwait-modal", "oops-modal", "register-modal", "terminate-modal", "clone-help", "snapshot-help", "oneonly-modal", "approval-modal", "linktest-modal"));
+AddTemplateKey("linktest.md", "template/linktest.md");
 SPITFOOTER();
 ?>

@@ -25,7 +25,6 @@ chdir("..");
 include("defs.php3");
 chdir("apt");
 include("quickvm_sup.php");
-include("require.php");
 $page_title = "Image List";
 
 #
@@ -172,7 +171,6 @@ echo "</script>\n";
 echo "<script src='js/lib/jquery-2.0.3.min.js'></script>\n";
 echo "<script src='js/lib/jquery.tablesorter.min.js'></script>\n";
 echo "<script src='js/lib/jquery.tablesorter.widgets.min.js'></script>\n";
-echo "<script src='js/lib/bootstrap.js'></script>\n";
 
 REQUIRE_UNDERSCORE();
 REQUIRE_SUP();

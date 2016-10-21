@@ -25,7 +25,6 @@ chdir("..");
 include("defs.php3");
 chdir("apt");
 include("quickvm_sup.php");
-include("require.php");
 
 #
 # Verify page arguments.
@@ -46,7 +45,6 @@ if ($this_user) {
 	    SPITHEADER();
 	    echo "<center><font color=red>Logout failed!</font></failed>\n";
             echo "<script src='js/lib/jquery-2.0.3.min.js'></script>\n";
-            echo "<script src='js/lib/bootstrap.js'></script>\n";
 	    SPITNULLREQUIRE();
 	    SPITFOOTER();
 	}

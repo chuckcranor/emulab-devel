@@ -22,7 +22,7 @@ $(function (/*_, sup, moment, marked, UriTemplate, ShowImagingModal,
 {
     'use strict';
 
-    var templates = APT_OPTIONS.fetchTemplateList(['status', 'waitwait-modal', 'oops-modal', 'register-modal', 'terminate-modal', 'clone-help', 'snapshot-help', 'oneonly-modal', 'approval-modal', 'linktest-modal']);
+    var templates = APT_OPTIONS.fetchTemplateList(['status', 'waitwait-modal', 'oops-modal', 'register-modal', 'terminate-modal', 'clone-help', 'snapshot-help', 'oneonly-modal', 'approval-modal', 'linktest-modal', 'linktest.md']);
 
     var statusString = templates['status'];
     var waitwaitString = templates['waitwait-modal'];
@@ -2380,12 +2380,10 @@ $(function (/*_, sup, moment, marked, UriTemplate, ShowImagingModal,
 	if (hidelinktest || !showlinktest) {
 	    return;
 	}
-	require(['js/lib/text!template/linktest.md'],
-		function(md) {
-		    console.info(md);
-		    console.info(marked(md));
-		    $('#linktest-help').html(marked(md));
-		});
+        var md = templates['linktest.md'];
+        console.info(md);
+        console.info(marked(md));
+        $('#linktest-help').html(marked(md));
 
 	// Handler for the linktest modal button
 	$('button#linktest-modal-button').click(function (event) {
