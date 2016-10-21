@@ -306,7 +306,8 @@ sub IsClass($$)
     my (undef, $class) = @_;
 
     my $query_result =
-	DBQueryWarn("select type from node_types where class='$class' limit 1");
+	DBQueryWarn("select type from node_types ".
+		    "where class='$class' and class!=type limit 1");
 
     return $query_result->numrows;
 }
