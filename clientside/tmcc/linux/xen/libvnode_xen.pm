@@ -1821,6 +1821,9 @@ sub vnodePreConfig($$$$$){
 	if (RunWithLock("kpartx", "kpartx -av $rootvndisk")) {
 	    fatal("libvnode_xen: could not add /dev/mapper entries");
 	}
+	print "waiting 2 sec after kpartx call...\n"
+	    if ($sleepdebug);
+	sleep(2);
     }
 
     #
