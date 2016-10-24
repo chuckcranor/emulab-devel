@@ -314,6 +314,6 @@ if ($extension_denied_reason != "") {
 }
 
 AddTemplateList(array("status", "waitwait-modal", "oops-modal", "register-modal", "terminate-modal", "clone-help", "snapshot-help", "oneonly-modal", "approval-modal", "linktest-modal"));
-AddTemplateKey("linktest.md", "template/linktest.md");
+AddTemplateKey("linktest-md", "template/linktest.md");
 SPITFOOTER();
 ?>

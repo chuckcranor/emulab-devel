@@ -2,7 +2,7 @@ $(function ()
 {
     'use strict';
 
-    var templates = APT_OPTIONS.fetchTemplateList(['status', 'waitwait-modal', 'oops-modal', 'register-modal', 'terminate-modal', 'clone-help', 'snapshot-help', 'oneonly-modal', 'approval-modal', 'linktest-modal', 'linktest.md']);
+    var templates = APT_OPTIONS.fetchTemplateList(['status', 'waitwait-modal', 'oops-modal', 'register-modal', 'terminate-modal', 'clone-help', 'snapshot-help', 'oneonly-modal', 'approval-modal', 'linktest-modal', 'linktest-md']);
 
     var statusString = templates['status'];
     var waitwaitString = templates['waitwait-modal'];
@@ -2366,7 +2366,7 @@ $(function ()
 	}
 
         linktestsetup = 1;
-        var md = templates['linktest.md'];
+        var md = templates['linktest-md'];
         $('#linktest-help').html(marked(md));
 
 	// Handler for the linktest modal button
