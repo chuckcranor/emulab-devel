@@ -1,5 +1,6 @@
 //define(['underscore', 'js/lib/text!template/edit-modal.html', 'js/lib/text!template/edit-inline.html'],
-window.JacksEditor = (function ()
+$(function () {
+  window.JacksEditor = (function ()
 {
     'use strict';
 
@@ -276,3 +277,4 @@ window.JacksEditor = (function ()
 
     return JacksEditor;
 })();
+});

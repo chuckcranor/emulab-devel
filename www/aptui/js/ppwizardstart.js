@@ -6,7 +6,8 @@
 //       	'js/lib/text!template/ppform-wizard-body.html',
 //       	'js/lib/text!template/choose-am.html',
 //       ],
-window.ppstart = (function()
+$(function () {
+  window.ppstart = (function()
     {
 	'use strict';
 
@@ -747,3 +748,4 @@ window.ppstart = (function()
 	};
     }
 )();
+});

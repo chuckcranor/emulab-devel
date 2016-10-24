@@ -44,11 +44,6 @@ function REQUIRE_BILEVEL()
   AddLibrary("js/bilevel.js");
 }
 
-function REQUIRE_CONSTRAINTS()
-{
-  AddLibrary("https://www.emulab.net/protogeni/jacks-utah/js/Constraints.js");
-}
-
 function REQUIRE_CONTEXTMENU()
 {
   AddLibrary("js/lib/bootstrap-contextmenu.js");

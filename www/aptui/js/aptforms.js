@@ -2,7 +2,8 @@
 // Progress Modal
 //
 //define(['underscore', 'js/quickvm_sup'],
-window.aptforms = (function()
+$(function () {
+  window.aptforms = (function()
     {
 	'use strict';
 
@@ -263,3 +264,4 @@ window.aptforms = (function()
 	};
     }
 )();
+});

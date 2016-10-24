@@ -2,12 +2,12 @@
 //	['underscore', 'constraints', 'js/quickvm_sup',
 //	 'js/ppwizardstart', 'js/JacksEditor', 'js/wizard-template',
 //	 'formhelpers', 'filestyle', 'marked', 'jacks', 'jquery-steps'],
-$(function (_, Constraints, sup, ppstart, JacksEditor, wt)
+$(function (/*_, Constraints, sup, ppstart, JacksEditor, wt*/)
 {
     'use strict';
 
     var templates = APT_OPTIONS.fetchTemplateList(['instantiate-new', 'aboutapt', 'aboutcloudlab', 'aboutpnet', 'waitwait-modal', 'rspectextview-modal']);
-    var instantiateString = templates['instantiate'];
+    var instantiateString = templates['instantiate-new'];
     var aboutaptString = templates['aboutapt'];
     var aboutcloudString = templates['aboutcloudlab'];
     var aboutpnetString = templates['aboutpnet'];
@@ -1369,7 +1369,6 @@ $(function (_, Constraints, sup, ppstart, JacksEditor, wt)
       {
 	delete context.canvasOptions.defaults;
       }
-      constraints = new Constraints(context);
       jacks.instance = new window.Jacks({
 	mode: 'viewer',
 	source: 'rspec',
@@ -1380,6 +1379,7 @@ $(function (_, Constraints, sup, ppstart, JacksEditor, wt)
 	  jacks.output = output;
 	  jacks.output.on('found-images', onFoundImages);
 	  jacks.output.on('found-types', onFoundTypes);
+          constraints = new JACKS_LOADER.Constraints(context);
 	  updateWhere();
 	},
 	canvasOptions: context.canvasOptions,
@@ -1428,7 +1428,7 @@ $(function (_, Constraints, sup, ppstart, JacksEditor, wt)
 	    // is not what actually comes back. Copy before print.
 	    var mycopy = $.extend(true, {}, json.value);
 	    //console.log('json', mycopy);
-	    constraints = new Constraints(context);
+	    constraints = new JACKS_LOADER.Constraints(context);
 	    constraints.addPossibles({ images: foundImages });
 	    allowWithSites(json.value[0].images, json.value[0].constraints);
 	    CreateAggregateSelectors(selected_rspec);

@@ -1,6 +1,6 @@
 //require(window.APT_OPTIONS.configObject,
 //	['underscore', 'js/quickvm_sup'],
-$(function (_, sup)
+$(function (/*_, sup*/)
 {
     'use strict';
     var templates = APT_OPTIONS.fetchTemplateList(['waitwait-modal']);

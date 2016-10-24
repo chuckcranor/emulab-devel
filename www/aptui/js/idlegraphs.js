@@ -3,6 +3,7 @@
 //
 //define(['underscore', 'js/quickvm_sup', 'moment'],
 //    function(_, sup, moment)
+$(function () {
 window.ShowIdleGraphs = (function ()
     {
 	'use strict';
@@ -500,3 +501,4 @@ window.ShowIdleGraphs = (function ()
 	}
     }
 )();
+});

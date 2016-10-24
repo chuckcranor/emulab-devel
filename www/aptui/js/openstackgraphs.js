@@ -2,6 +2,7 @@
 // Slothd graphs
 //
 //define(['underscore', 'js/quickvm_sup', 'moment'],
+$(function () {
 window.ShowOpenstackGraphs = (function()
     {
 	'use strict';
@@ -530,3 +531,4 @@ window.ShowOpenstackGraphs = (function()
 	}
     }
 )();
+});

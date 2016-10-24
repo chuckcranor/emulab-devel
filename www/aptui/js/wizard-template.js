@@ -1,4 +1,5 @@
 //define(['underscore'],
+$(function () {
 window.wt = (function() {
 
 	function ClusterStatusHTML(options, fedlist) {
@@ -171,3 +172,4 @@ window.wt = (function() {
 	};
 }
 )();
+});

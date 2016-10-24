@@ -5,7 +5,8 @@
 //	'js/lib/text!template/user-extend-modal.html',
 //	'js/lib/text!template/admin-extend-modal.html',
 //	'js/lib/text!template/guest-extend-modal.html'],
-	
+
+$(function () {
 window.ShowExtendModal = (function(/*_, sup, userExtendString, adminExtendString, guestExtendString*/)
     {
 	'use strict';
@@ -447,3 +448,4 @@ window.ShowExtendModal = (function(/*_, sup, userExtendString, adminExtendString
 	}
     }
 )();
+});
