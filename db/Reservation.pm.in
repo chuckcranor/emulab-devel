@@ -298,9 +298,9 @@ sub Book($)
 		     "end=FROM_UNIXTIME($end), " .
 		     "uid='$uid', " .
 		     "uid_idx='$uid_idx' " .
-		     ( defined( $notes ) ? ", notes='$notes'" : "" ) .
+		     ( defined( $notes ) ? ", notes=$notes" : "" ) .
 		     ( defined( $admin_notes ) ?
-		       ", admin_notes='$admin_notes'" : "" ) )
+		       ", admin_notes=$admin_notes" : "" ) )
 	or return -1;
 
     $self->{'IDX'} = $query_result->insertid();

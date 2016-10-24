@@ -43,8 +43,8 @@ use Reservation;
 
 sub usage()
 {
-    print STDERR "Usage: reserve [-C] [-f] [-n] -t type [-s start] [-e end] " .
-	"pid count\n";
+    print STDERR "Usage: reserve [-C] [-f] [-n] -t type [-s start] [-e end]\n" .
+	"            [-N file] [-A file] pid count\n";
     print STDERR "       reserve -c idx\n";
     print STDERR "       reserve -i pid\n";
     print STDERR "       reserve -l\n";
@@ -71,20 +71,31 @@ sub fatal($)
 	"    $mesg\n");
 }
 
-my $optlist   = "hdc:Cfnt:ile:s:";
-my $debug     = 0;
-my $info      = 0;
-my $list      = 0;
-my $clear     = 0;
-my $clear_idx = undef;
-my $force     = 0;
-my $impotent  = 0;
-my $starttime = time; # default to starting immediately
-my $endtime   = time + 24 * 60 * 60; # default to ending tomorrow
+my $optlist    = "c:de:fhilns:t:A:CN:";
+my $debug      = 0;
+my $info       = 0;
+my $list       = 0;
+my $clear      = 0;
+my $clear_idx  = undef;
+my $force      = 0;
+my $impotent   = 0;
+my $starttime  = time; # default to starting immediately
+my $endtime    = time + 24 * 60 * 60; # default to ending tomorrow
+my $notes      = undef;
+my $adminnotes = undef;
 my $type;
 my $pid;
 my $count;
 my $project;
+
+sub readfile($) {
+    local $/ = undef;
+    my ($filename) = @_;
+    open( FILE, $filename ) or die "$filename: $!";
+    my $contents = <FILE>;
+    close( FILE );
+    return $contents;
+}
 
 #
 # Turn off line buffering on output
@@ -150,6 +161,12 @@ if (defined($options{"s"})) {
     if( !defined( $starttime ) ) {
 	fatal("Could not parse -s option.");
     }
+}
+if (defined($options{"N"})) {
+    $notes = readfile( $options{"N"} );
+}
+if (defined($options{"A"})) {
+    $adminnotes = readfile( $options{"A"} );
 }
 
 if ($info) {
@@ -316,6 +333,8 @@ my $uid_idx = $this_user->uid_idx();
 
 my $res = Reservation->Create( $pid, $uid, $starttime, $endtime, $type,
 			       $count );
+$res->SetNotes( $notes ) if( defined( $notes ) );
+$res->SetAdminNotes( $adminnotes ) if( defined( $adminnotes ) );
 
 print "$res\n" if( $debug );
 
