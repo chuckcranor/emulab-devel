@@ -59,6 +59,9 @@ endif
 ifeq ($(FBSDVERSION),FreeBSD11)
 FSUBDIR	       = 11
 endif
+ifeq ($(FBSDVERSION),FreeBSD12)
+FSUBDIR	       = 12
+endif
 SUBDIRS	       = $(FSUBDIR)
 
 all:
