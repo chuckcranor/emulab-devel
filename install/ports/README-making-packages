@@ -94,6 +94,9 @@ with 2015Q3 and I have updated through 2016Q2.
    # for 10.2
    DEFAULT_VERSIONS=perl5=5.20 python=2.7 php=5.6 mysql=5.5 apache=2.2 tcltk=8.6
 
+   # as of 2016Q3 ports, add:
+   DEFAULT_VERSIONS+=ssl=base
+
 5. Set non-standard options on some ports.
 
     * Perl. For perl 5.20 make sure that THREADS is defined. It should be,
