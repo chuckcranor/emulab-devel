@@ -1,6 +1,3 @@
-/*require(window.APT_OPTIONS.configObject,
-	['underscore', 'js/quickvm_sup',
-	 'js/lib/text!template/profile-activity.html'],*/
 $(function ()
 {
     'use strict';

@@ -1,7 +1,3 @@
-/*require(window.APT_OPTIONS.configObject,
-	['underscore', 'js/quickvm_sup',
-	 'js/lib/text!template/ranking.html'
-	],*/
 $(function ()
 {
     'use strict';

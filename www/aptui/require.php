@@ -186,7 +186,6 @@ function SPITREQUIRE($main, $extras = "")
     echo "<script src='js/lib/bootstrap.js'></script>\n";
     AddLibrary($main);
     EchoLibraryList($PORTAL_LIBRARIES);
-    #echo "<script src='js/lib/require.js' data-main='js/$main'></script>\n";
     $spatrequired = 1;
 }
 

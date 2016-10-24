@@ -1,6 +1,3 @@
-//require(window.APT_OPTIONS.configObject,
-//	['underscore', 'js/quickvm_sup', 'moment', 'js/idlegraphs'],
-//function (_, sup, moment, ShowIdleGraphs)
 $(function ()
 {
     'use strict';

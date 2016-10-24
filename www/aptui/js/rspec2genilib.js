@@ -1,9 +1,3 @@
-/*require(window.APT_OPTIONS.configObject,
-	['underscore', 'js/quickvm_sup',
-	 'js/lib/text!template/rspec2genilib.html',
-	 'js/lib/text!template/waitwait-modal.html',
-	 'js/lib/text!template/oops-modal.html', "filestyle"
-	],*/
 $(function ()
 {
     'use strict';

@@ -1,7 +1,6 @@
 //
 // Progress Modal
 //
-//define(['underscore', 'js/quickvm_sup'],
 $(function () {
   window.aptforms = (function()
     {

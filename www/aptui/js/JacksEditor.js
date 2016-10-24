@@ -1,4 +1,3 @@
-//define(['underscore', 'js/lib/text!template/edit-modal.html', 'js/lib/text!template/edit-inline.html'],
 $(function () {
   window.JacksEditor = (function ()
 {

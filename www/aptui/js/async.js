@@ -1,5 +1,3 @@
-//require(window.APT_OPTIONS.configObject,
-//	['js/quickvm_sup'],
 $(function ()
 {
     'use strict';

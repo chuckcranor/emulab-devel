@@ -1,4 +1,3 @@
-//define(['dateformat', 'marked', 'jacks'],
 $(function () {
 window.sup = (function () {
 

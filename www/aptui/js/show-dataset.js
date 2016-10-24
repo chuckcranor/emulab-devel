@@ -1,11 +1,4 @@
-/*require(window.APT_OPTIONS.configObject,
-	['underscore', 'js/quickvm_sup', 'moment', 'js/aptforms', 'js/image',
-	 'js/lib/text!template/show-dataset.html',
-	 'js/lib/text!template/snapshot-dataset.html',
-	 'js/lib/text!template/oops-modal.html',
-	 'js/lib/text!template/waitwait-modal.html'],*/
-$(function (/*_, sup, moment, aptforms, ShowImagingModal,
-	  mainString, snapshotString, oopsString, waitwaitString*/)
+$(function ()
 {
     'use strict';
 

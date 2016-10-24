@@ -1,7 +1,4 @@
-//require(window.APT_OPTIONS.configObject,
-//	['js/quickvm_sup', 'moment',
-//	 'js/lib/text!template/output-dropdown.html'],
-$(function (/*sup, moment, dropdownString*/)
+$(function ()
 {
     'use strict';
 

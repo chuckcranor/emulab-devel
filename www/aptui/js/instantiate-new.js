@@ -1,8 +1,4 @@
-//require(window.APT_OPTIONS.configObject,
-//	['underscore', 'constraints', 'js/quickvm_sup',
-//	 'js/ppwizardstart', 'js/JacksEditor', 'js/wizard-template',
-//	 'formhelpers', 'filestyle', 'marked', 'jacks', 'jquery-steps'],
-$(function (/*_, Constraints, sup, ppstart, JacksEditor, wt*/)
+$(function ()
 {
     'use strict';
 

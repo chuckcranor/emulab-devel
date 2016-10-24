@@ -1,18 +1,4 @@
-/*require(window.APT_OPTIONS.configObject,
-	['underscore', 'js/quickvm_sup', 'moment',
-	 'js/lib/text!template/show-project.html',
-	 'js/lib/text!template/experiment-list.html',
-	 'js/lib/text!template/profile-list.html',
-	 'js/lib/text!template/member-list.html',
-	 'js/lib/text!template/project-profile.html',
-	 'js/lib/text!template/classic-explist.html',
-	 'js/lib/text!template/group-list.html',
-	 'js/lib/text!template/waitwait-modal.html',
-	 'js/lib/text!template/oops-modal.html',
-	],*/
-$(function (/*_, sup, moment, mainString,
-	  experimentString, profileString, memberString, detailsString,
-	  classicString, groupsString, waitString, oopsString*/)
+$(function ()
 {
     'use strict';
 

@@ -1,14 +1,4 @@
-/*require(window.APT_OPTIONS.configObject,
-	['underscore', 'js/quickvm_sup', 'js/aptforms',
-	 'js/lib/text!template/myaccount.html',
-	 'js/lib/text!template/verify-modal.html',
-	 'js/lib/text!template/oops-modal.html',
-	 'js/lib/text!template/waitwait-modal.html',
-	 // jQuery modules
-	 'formhelpers'],
-*/
-$(function (/*_, sup, aptforms,
-	  myaccountString, verifyString, oopsString, waitwaitString*/)
+$(function ()
 {
     'use strict';
 

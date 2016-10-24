@@ -1,13 +1,8 @@
 //
 // Progress Modal
 //
-//define(['underscore', 'js/quickvm_sup',
-//	'js/lib/text!template/user-extend-modal.html',
-//	'js/lib/text!template/admin-extend-modal.html',
-//	'js/lib/text!template/guest-extend-modal.html'],
-
 $(function () {
-window.ShowExtendModal = (function(/*_, sup, userExtendString, adminExtendString, guestExtendString*/)
+window.ShowExtendModal = (function()
     {
 	'use strict';
 

@@ -1,8 +1,6 @@
 //
 // Slothd graphs
 //
-//define(['underscore', 'js/quickvm_sup', 'moment'],
-//    function(_, sup, moment)
 $(function () {
 window.ShowIdleGraphs = (function ()
     {

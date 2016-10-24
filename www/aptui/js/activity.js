@@ -1,6 +1,3 @@
-//require(window.APT_OPTIONS.configObject,
-//	['underscore', 'js/quickvm_sup', 'moment'],
-//function (_, sup, moment)
 $(function () {
     'use strict';
     var ajaxurl = null;

@@ -1,11 +1,6 @@
 //
 // Start a Parameterized Profile
 //
-//define(['underscore', 'js/quickvm_sup', 'js/JacksEditor',
-//       	'js/lib/text!template/ppform-wizard.html',
-//       	'js/lib/text!template/ppform-wizard-body.html',
-//       	'js/lib/text!template/choose-am.html',
-//       ],
 $(function () {
   window.ppstart = (function()
     {

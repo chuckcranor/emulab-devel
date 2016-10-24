@@ -1,20 +1,4 @@
-/*require(window.APT_OPTIONS.configObject,
-	['underscore', 'js/quickvm_sup', 'moment',
-	 'js/lib/text!template/show-profile.html',
-	 'js/lib/text!template/waitwait-modal.html',
-	 'js/lib/text!template/renderer-modal.html',
-	 'js/lib/text!template/showtopo-modal.html',
-	 'js/lib/text!template/rspectextview-modal.html',
-	 'js/lib/text!template/guest-instantiate.html',
-	 'js/lib/text!template/instantiate-modal.html',
-	 'js/lib/text!template/oops-modal.html',
-	 'js/lib/text!template/share-modal.html',
-	 // jQuery modules
-	 'marked'],*/
-$(function (/*_, sup, moment,
-	  showString, waitwaitString, 
-	  rendererString, showtopoString, rspectextviewString,
-	  guestInstantiateString, instantiateString, oopsString, shareString*/)
+$(function ()
 {
     'use strict';
 

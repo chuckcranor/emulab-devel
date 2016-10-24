@@ -1,6 +1,3 @@
-//require(window.APT_OPTIONS.configObject,
-//	['underscore', 'js/quickvm_sup',
-//	 'js/bilevel', 'js/liquidFillGauge'],
 $(function ()
 {
     'use strict';

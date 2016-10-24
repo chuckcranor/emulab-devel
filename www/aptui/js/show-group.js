@@ -1,16 +1,4 @@
-/*require(window.APT_OPTIONS.configObject,
-	['underscore', 'js/quickvm_sup', 'moment', 'js/aptforms',
-	 'js/lib/text!template/show-group.html',
-	 'js/lib/text!template/experiment-list.html',
-	 'js/lib/text!template/member-list.html',
-	 'js/lib/text!template/group-profile.html',
-	 'js/lib/text!template/classic-explist.html',
-	 'js/lib/text!template/oops-modal.html',
-	 'js/lib/text!template/waitwait-modal.html',
-	],*/
-$(function (/*_, sup, moment, aptforms, mainString,
-	  experimentString, memberString, detailsString,
-	  classicString, oopsString, waitString*/)
+$(function ()
 {
   'use strict';
 

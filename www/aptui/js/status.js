@@ -1,24 +1,4 @@
-/*require(window.APT_OPTIONS.configObject,
-	['underscore', 'js/quickvm_sup', 'moment',
-	 'marked', 'js/lib/uritemplate', 'js/image', 'js/extend',
-	 'js/idlegraphs', 'js/openstackgraphs',
-	 'js/lib/text!template/status.html',
-	 'js/lib/text!template/waitwait-modal.html',
-	 'js/lib/text!template/oops-modal.html',
-	 'js/lib/text!template/register-modal.html',
-	 'js/lib/text!template/terminate-modal.html',
-	 'js/lib/text!template/clone-help.html',
-	 'js/lib/text!template/snapshot-help.html',
-	 'js/lib/text!template/oneonly-modal.html',
-	 'js/lib/text!template/approval-modal.html',
-	 'js/lib/text!template/linktest-modal.html',
-	 'contextmenu'],*/
-$(function (/*_, sup, moment, marked, UriTemplate, ShowImagingModal,
-	  ShowExtendModal, ShowIdleGraphs, ShowOpenstackGraphs,
-	  statusString, waitwaitString, oopsString,
-	  registerString, terminateString,
-	  cloneHelpString, snapshotHelpString, oneonlyString,
-	  approvalString, linktestString*/)
+$(function ()
 {
     'use strict';
 

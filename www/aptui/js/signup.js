@@ -1,16 +1,4 @@
-/*require(window.APT_OPTIONS.configObject,
-	['underscore', 'js/quickvm_sup', 'js/aptforms',
-	 'js/lib/text!template/about-account.html',
-	 'js/lib/text!template/verify-modal.html',
-	 'js/lib/text!template/signup-personal.html',
-	 'js/lib/text!template/signup-project.html',
-	 'js/lib/text!template/signup.html',
-	 'js/lib/text!template/toomany-modal.html',
-	 // jQuery modules
-	 'formhelpers'],*/
-$(function (/*_, sup, aptforms,
-	  aboutString, verifyString, personalString,
-	  projectString, signupString, toomanyString*/)
+$(function ()
 {
     'use strict';
 
