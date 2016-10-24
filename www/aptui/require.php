@@ -22,6 +22,65 @@
 # }}}
 #
 
+# require.php
+# -----------
+#
+# A simple library for managing dependencies with libraries and templates. Libraries are JavaScript code that is included with <script src="something.js"></script>. Templates are raw text blobs that are directly included in the DOM.
+#
+# ---------
+# Libraries
+# ---------
+#
+# Every top-level PHP file that uses JS code should contain a block of code near the end that prints out all script tags for all libraries. It looks like this:
+#    REQUIRE_LIBRARY();
+#    REQUIRE_OTHER_LIBRARY();
+#    SPITREQUIRE("js/somemain.js");
+#
+# The REQUIRE_* functions are defined below to include the specified library and all dependencies. SPITREQUIRE() is used to include the main JS file for this page. If there is no main JS file, SPITNULLREQUIRE() includes a default 'main.js' which provides the minimum amount of javascript to make it behave like other pages.
+# REQUIRE_* function must be invoked before SPITREQUIRE(). Both of these must be invoked before SPITFOOTER().
+#
+# ---------
+# Templates
+# ---------
+# Templates are embedded by adding them to the template dependency list at any point before SPITFOOTER(). The key is used as the id for the script tag and is is used to look up the template in the JS code. So the key should only be alphanumeric characters plus '-' and use of that id elsewhere in the page should be avoided.
+#    # Creates a template with key 'foo' from text at path 'template/foo.html'
+#    AddTemplate("foo");
+#    # Creates templates with keys 'foo' and 'bar' from text at paths 'template/foo.html' and 'template/bar.html'
+#    AddTemplateList(array("foo", "bar")); 
+#    # Creates a template with key 'arbitrary-key' from text at 'arbitrary/path/here.something'
+#    AddTemplateKey("arbitrary-key", "arbitrary/path/here.something");
+#    # Actually spit out the encoded text files along with the page footer.
+#    SPITFOOTER()
+#
+# Both libraries and templates will only ever be included once per page. Library includes happen before including the main JS file and each libraries dependencies will be included before it is. Templates are included at the very end of the resulting file.
+#
+# ------------------
+# Creating Libraries
+# ------------------
+#
+# Most standard JS libraries can be included simply by adding a REQUIRE_LIBRARY() function below which adds them to the dependency list. Whatever symbols are exported to the global (window) namespace in JS will be available to use to any page which invokes the REQUIRE_LIBRARY() function. If a library has dependencies on other libraries, its REQUIRE_LIBRARY() function simply needs to invoke the REQUIRE_ function for those other libraries.
+#
+# Custom libraries can use both other libraries and templates. Their REQUIRE_ functions will include appropriate AddTemplate calls. Then they simply need this boilerplate around them in their JS file:
+#
+#   $(function() {
+#     var templates = APT_OPTIONS.fetchTemplateList(['template-foo', 'template-bar']);
+#     // templates['template-foo'] and templates['template-bar'] can now be used whenever the text is required.
+#     window.SOME_SYMBOL = ...;
+#     // Libraries that this library is dependant on can be accessed using their global 'window' symbols.
+#   });
+#
+# ------------
+# Main JS File
+# ------------
+#
+# The Main JS File should have this boilerplate:
+#
+#   $(function () {
+#     var templates = APT_OPTIONS.fetchTemplateList(['template-foo', 'template-bar']);
+#     // templates['template-foo'] and templates['template-bar'] can now be used whenever the text is required.
+#     // Libraries that this main file is dependant on can be accessed using their global 'window' symbols.
+#   });
+
 # Dependency lists
 
 $PORTAL_TEMPLATES = array();
