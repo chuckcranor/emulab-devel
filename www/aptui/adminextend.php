@@ -115,7 +115,7 @@ echo "<div id='main-body'></div>\n";
 REQUIRE_UNDERSCORE();
 REQUIRE_SUP();
 REQUIRE_MOMENT();
-REQUIRE_IDLE_GRAPHS();
+REQUIRE_IDLEGRAPHS();
 
 SPITREQUIRE("js/adminextend.js",
             "<script src='js/lib/d3.v3.js'></script>".

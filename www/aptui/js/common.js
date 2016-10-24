@@ -160,7 +160,7 @@ window.APT_OPTIONS.nagPI = function (pid) {
 
 window.APT_OPTIONS.fetchTemplate = function (name) {
   var result = '';
-  var element = document.getElementById(name);
+  var element = document.querySelector('script#' + name);
   if (element)
   {
     result = atob(element.innerHTML);

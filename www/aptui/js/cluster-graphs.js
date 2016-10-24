@@ -13,7 +13,7 @@ $(function ()
 	window.APT_OPTIONS.initialize(sup);
 	mainsite = window.MAINSITE;
 
-	$('#cluster-graphs')
+	$('div#cluster-graphs')
 	    .html(template({"mainsite" : mainsite}));
 
 	if (mainsite) {
