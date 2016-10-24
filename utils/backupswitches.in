@@ -1,6 +1,6 @@
 #!/usr/bin/perl
 #
-# Copyright (c) 2005, 2006 University of Utah and the Flux Group.
+# Copyright (c) 2005-2016 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -28,7 +28,7 @@ my $GRAB = "@prefix@/sbin/grabswitchconfig";
 
 use lib '@prefix@/lib';
 use libdb;
-use lib '@prefix@/lib/snmpit_test';
+use lib '@prefix@/lib/snmpit';
 use snmpit_lib;
 
 use strict;

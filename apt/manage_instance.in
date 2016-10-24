@@ -50,7 +50,8 @@ sub usage()
     print("Usage: manage_instance linktest instance [-k | level]\n");
     print("Usage: manage_instance writecreds instance directory\n");
     print("Usage: manage_instance updatekeys instance [uid] \n");
-    print("Usage: manage_instance extend instance [-m message] days [filename]\n");
+    print("Usage: manage_instance extend instance ".
+	  "[-M] [-m message | -f filename] days\n");
     print("Usage: manage_instance denyextension instance [-m message] [filename]\n");
     print("Usage: manage_instance checkreservation instance days\n");
     print("Usage: manage_instance maxextension instance\n");
@@ -1240,25 +1241,28 @@ sub DoExtend()
     my $extensions    = $instance->Brand()->ExtensionsEmailAddress();
     my $granted       = 0;
     my $needapproval  = 0;
+    my $inhours       = 0;
     my $message;
     my $reason;
     my $errmsg;
     
     usage()
 	if (!@ARGV);
+
+    my $optlist = "m:f:h";
+    my %options = ();
+    if (! getopts($optlist, \%options)) {
+	usage();
+    }
+    usage()
+	if (!@ARGV);
     my $wanted = shift(@ARGV);
 
-    if (@ARGV == 2) {
-	my $arg = shift(@ARGV);
-	if ($arg eq "-m") {
-	    $reason = shift(@ARGV);
-	}
-	else {
-	    usage();
-	}
+    if (defined($options{"m"})) {
+	$reason = $options{"m"};
     }
-    elsif (@ARGV == 1) {
-	my $filename = shift(@ARGV);
+    elsif (defined($options{"f"})) {
+	my $filename = $options{"f"};
 	if (! -e $filename) {
 	    fatal("$filename does not exist");
 	}
@@ -1270,6 +1274,9 @@ sub DoExtend()
 	    $reason .= $_;
 	}
 	close(MSG);
+    }
+    if (defined($options{"h"})) {
+	$inhours = 1;
     }
     #
     # Create the webtask object; the web interface gave us an anonymous
@@ -1353,9 +1360,21 @@ sub DoExtend()
     }
 
     #
+    # If extension is in hours, always grant if < 24 hours.
+    #
+    if ($inhours) {
+	if ($wanted >= 24) {
+	    $errmsg = "If you want more then 24 hours, use days instead.";
+	    goto bad;
+	}
+	$message = "Short extension granted for $wanted hours.";
+	$reason  = $message;
+	$granted = $wanted;
+    }
+    #
     # Guest users are treated differently.
     #
-    if (!defined($this_user)) {
+    elsif (!defined($this_user)) {
 	# Only extend for 24 hours. 
 	$granted = 1;
 
@@ -1466,8 +1485,10 @@ sub DoExtend()
     # Do the extension.
     #
     if ($granted) {
-	if ($errcode = ExtendInternal($slice,
-				      $granted * 3600 * 24, 0, \$errmsg)) {
+	my $seconds = $granted * 3600;
+	$seconds *= 24 if (!$inhours);
+	    
+	if ($errcode = ExtendInternal($slice, $seconds, 0, \$errmsg)) {
 	    goto bad;
 	}
     }
@@ -1478,6 +1499,16 @@ sub DoExtend()
     my $now     = POSIX::strftime("20%y-%m-%d %H:%M:%S %Z", localtime());
     my $before  = POSIX::strftime("20%y-%m-%d %H:%M:%S %Z",
 				  localtime($expires_time));
+
+    #
+    # XXX If in hours, change to 1. Need to come back and fix this.
+    # Make these fields in the database hours or seconds.
+    #
+    if ($inhours) {
+	$wanted  = 1;
+	$granted = 1;
+    }
+    
     #
     # New extension mechanism
     #

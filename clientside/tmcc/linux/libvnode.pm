@@ -177,16 +177,22 @@ sub isSSD($)
     my ($dev) = @_;
     my $isssd = 0;
 
-    if (-e "/dev/$dev" && -x "/sbin/hdparm" &&
-	open(HFD, "/sbin/hdparm -I /dev/$dev 2>/dev/null |")) {
-	while (my $line = <HFD>) {
-	    chomp($line);
-	    if ($line =~ /:\s+solid state device$/i) {
-		$isssd = 1;
-		last;
-	    }
+    if (-e "/dev/$dev") {
+	# hdparm doesn't seem to handle NVMe
+	if ($dev =~ /^nvme\d+n\d+/) {
+	    $isssd = 1;
 	}
-	close(HFD);
+	elsif (-x "/sbin/hdparm" &&
+	    open(HFD, "/sbin/hdparm -I /dev/$dev 2>/dev/null |")) {
+	    while (my $line = <HFD>) {
+		chomp($line);
+		if ($line =~ /:\s+solid state device$/i) {
+		    $isssd = 1;
+		    last;
+		}
+	    }
+	    close(HFD);
+	}
     }
 
     return $isssd;
@@ -294,13 +300,22 @@ sub findSpareDisks($;$) {
 	# device otherwise it is a disk device. But that got screwed up by,
 	# e.g., the cciss device where "c0d0" is a disk while "c0d0p1" is a
 	# partition. The new fallible heuristic is: if it ends in a digit
-	# but is of the form cNdN then it is a disk!
+	# but is of the form cNdN then it is a disk! And now there is
+	# "nvme0n1" and "nvme0n1p1" to consider!
 	#
 	if ($devpart =~ /^(\S+)(\d+)$/) {
 	    my ($dev,$part) = ($1,$2);
 
 	    # cNdN(pN) format
 	    if ($devpart =~ /(.*c\d+d\d+)(p\d+)?$/) {
+		if (!defined($2)) {
+		    goto isdisk;
+		}
+		$dev = $1;
+	    }
+
+	    # nvmeNnN(pN) format
+	    elsif ($devpart =~ /(.*nvme\d+n\d+)(p\d+)?$/) {
 		if (!defined($2)) {
 		    goto isdisk;
 		}
@@ -355,6 +370,7 @@ sub findSpareDisks($;$) {
 		# one final check: partition id
 		my $output = `sfdisk $sfcmd /dev/$dev $part 2>/dev/null`;
 		chomp($output);
+		$output =~ s/^\s+//;
 		if ($?) {
 		    print STDERR "WARNING: findSpareDisks: error running 'sfdisk $sfcmd /dev/$dev $part': $! ... ignoring /dev/$devpart\n";
 		}
@@ -370,20 +386,21 @@ isdisk:
 	    next
 		if ($skipssds && isSSD($devpart));
 
-	    if (!defined($mounts{"/dev/$devpart"}) &&
-		!defined($ftents{"/dev/$devpart"}) &&
+	    if (!exists($mounts{"/dev/$devpart"}) &&
+		!exists($ftents{"/dev/$devpart"}) &&
 		$size >= $minsize) {
 		$retval{$devpart}{"size"} = $BLKSIZE * $size;
 		$retval{$devpart}{"path"} = "/dev/$devpart";
 	    }
 	}
     }
+    close(PFD);
+
     foreach my $d (keys(%retval)) {
 	if (scalar(keys(%{$retval{$d}})) == 0) {
 	    delete $retval{$d};
 	}
     }
-    close(PFD);
 
     return %retval;
 }
@@ -795,9 +812,14 @@ sub restartDHCP()
         if (mysystem2("/sbin/initctl restart $dhcpd_service") != 0) {
             mysystem2("/sbin/initctl start $dhcpd_service");
         }
-    } else {
-        #sysvinit
+    } elsif (-x '/bin/systemctl') {
+	# systemd
+	mysystem2("/bin/systemctl restart $dhcpd_service.service");
+    } elsif (-x '/etc/init.d/$dhcpd_service') {
+        # sysvinit
         mysystem2("/etc/init.d/$dhcpd_service restart");
+    } else {
+	print STDERR "restartDHCP: could not restart dhcpd!\n";
     }
 }
 

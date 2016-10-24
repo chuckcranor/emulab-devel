@@ -57,7 +57,8 @@ $optargs = OptionalPageArguments("create",        PAGEARG_STRING,
 				 "project",       PAGEARG_PROJECT,
 				 "asguest",       PAGEARG_BOOLEAN,
 				 "default",       PAGEARG_STRING,
-                                 "classic",       PAGEARG_STRING,
+				 "classic",       PAGEARG_STRING,
+				 "from",          PAGEARG_STRING,
 				 "formfields",    PAGEARG_ARRAY);
 
 if ($ISAPT && !$this_user) {
@@ -78,6 +79,11 @@ if ($ISAPT && !$this_user) {
                    urlencode($_SERVER['REQUEST_URI']));
 	}
     }
+}
+
+$skipfirststep = 0;
+if (isset($from) && ($from == "manage-profile" || $from == "show-profile")) {
+    $skipfirststep = 1;
 }
 
 #
@@ -333,7 +339,7 @@ function SPITFORM($formfields, $newuser, $errors)
 {
     global $TBBASE, $APTMAIL, $ISAPT, $ISCLOUD, $ISPNET, $PORTAL_NAME;
     global $profile_array, $this_user, $profilename, $profile, $am_array;
-    global $projlist, $classic, $TBMAINSITE;
+    global $projlist, $skipfirststep, $classic, $TBMAINSITE;
     
     $amlist     = array();
     $fedlist    = array();
@@ -434,6 +440,7 @@ function SPITFORM($formfields, $newuser, $errors)
     $doconstraints = (isset($this_user) &&
                       (ISADMINISTRATOR() || STUDLY()) ? 1 : 0);
     echo "    window.DOCONSTRAINTS = 1;\n";
+    echo "    window.SKIPFIRSTSTEP = " . ($skipfirststep ? "true" : "false") . ";\n";
     echo "    window.PORTAL_NAME = '$PORTAL_NAME';\n";
     echo "    window.CLASSIC = " . ($classic ? "true" : "false") . ";\n";
     echo "</script>\n";

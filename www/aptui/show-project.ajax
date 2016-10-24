@@ -108,6 +108,28 @@ function Do_ProfileList()
     SPITAJAX_RESPONSE($results);
 }
 
+function Do_DatasetList()
+{
+    global $this_user, $target_project;
+
+    if (CheckPageArgs()) {
+        return;
+    }
+    $results = DatasetList("project", $target_project);
+    SPITAJAX_RESPONSE($results);
+}
+
+function Do_ClassicDatasetList()
+{
+    global $this_user, $target_project;
+
+    if (CheckPageArgs()) {
+        return;
+    }
+    $results = ClassicDatasetList("project", $target_project);
+    SPITAJAX_RESPONSE($results);
+}
+
 function Do_MemberList()
 {
     global $this_user, $target_project;

@@ -40,9 +40,8 @@ use libreboot;
 use libtblog;
 use Node;
 use NodeType;
-use Image;
+use OSImage;
 use User;
-use OSinfo;
 use EmulabConstants;
 use English;
 use event;
@@ -82,7 +81,7 @@ sub osload ($$) {
 
     # These come in from the caller.
     my @imageids;
-    my @images;
+    my @reqimages;
     my $waitmode    = 1;
     my $usecurrent  = 0;
     my @nodes       = ();
@@ -120,11 +119,11 @@ sub osload ($$) {
 	$usedefault = 0;
     }
     if (defined($args->{'image'})) {
-	@images = split(/,/, $args->{'image'});
+	@reqimages = split(/,/, $args->{'image'});
 	$usedefault = $usecurrent = 0;
     }
     elsif (defined($args->{'images'})) {
-	@images = @{$args->{'images'}};
+	@reqimages = @{$args->{'images'}};
 	$usedefault = $usecurrent = 0;
     }
     elsif (defined($args->{'imageids'})) {
@@ -182,17 +181,17 @@ sub osload ($$) {
 
     if (@imageids) {
 	foreach my $imageid (@imageids) {
-	    my $image = Image->Lookup($imageid);
+	    my $image = OSImage->Lookup($imageid);
 	    if (!defined($image)) {
 		tberror("No such imageid $imageid");
 		return -1;
 	    }
-	    push(@images, $image);
+	    push(@reqimages, $image);
 	}
     }
 
-    foreach my $i (0 .. $#images) {
-	my $image = $images[$i];
+    foreach my $i (0 .. $#reqimages) {
+	my $image = $reqimages[$i];
 
 	#
 	# Check permission to use the imageid.
@@ -258,6 +257,7 @@ sub osload ($$) {
 
     # Loop for each node.
     foreach my $node (@nodes) {
+	my @images;
 	# All nodes start out as being successful; altered later as needed.
 	$result->{$node} = 0;
 
@@ -296,7 +296,7 @@ sub osload ($$) {
 		my @default_imageids = split(/,/, $default_imageid);
 		my @default_images;
 		foreach my $default_imageid (@default_imageids) {
-		    my $default_image = Image->Lookup($default_imageid);
+		    my $default_image = OSImage->Lookup($default_imageid);
 		    if (!defined($default_image)) {
 			tberror("Could not find $default_imageid in the DB!");
 			goto failednode;
@@ -310,18 +310,31 @@ sub osload ($$) {
 	elsif ($usecurrent) {
 	    my $def_boot_osid  = $nodeobject->def_boot_osid();
 	    my $def_boot_vers  = $nodeobject->def_boot_osid_vers();
-	    my $osinfo = OSinfo->Lookup($def_boot_osid, $def_boot_vers);
+	    my $osimage = OSImage->Lookup($def_boot_osid, $def_boot_vers);
 
-	    if (! defined($osinfo)) {
+	    if (! defined($osimage)) {
 		tberror("Could not find OS $def_boot_osid in the DB!");
 		goto failednode;
 	    }
-	    my $best_image = $osinfo->MapToImage($nodeobject->type());
+	    my $best_image = $osimage->MapToImage($nodeobject->type());
 	    if (!defined($best_image)) {
-		tberror("Could not map $osinfo to an image for $node!");
+		tberror("Could not map $osimage to an image for $node!");
 		goto failednode;
 	    }
 	    @images   = ($best_image);
+	}
+	else {
+	    foreach my $image (@reqimages) {
+		if ($image->isImageAlias()) {
+		    my $tmp = $image->MapToImage($nodeobject->type());
+		    if (!defined($tmp)) {
+			tberror("Could not map $image to an image for $node!");
+			goto failednode;
+		    }
+		    $image = $tmp;
+		}
+		push(@images, $image);
+	    }
 	}
 	
 	my @imageidxs = (0 .. $#images);
@@ -421,24 +434,14 @@ sub osload ($$) {
 
 	    #
 	    # Set the default boot OSID.
-	    # Note: when loading multiple images, use the osinfo from the
-	    # last image.
+	    # Note: when loading multiple images, use the last image.
 	    #
 	    if ($i == $imageidxs[-1]) {
-		$defosid = $image->default_osid();
-		$defvers = $image->default_vers();
-
-		my $osinfo = OSinfo->Lookup($defosid, $defvers);
-		if (!defined($osinfo)) {
-		    tberror("Could map map OSID $defosid to its object!");
-		    goto failednode;
-		}
-		
 		print "osload ($node): Loading $image\n" if $i > 0;
-		print "osload ($node): Changing default OS to $osinfo\n";
+		print "osload ($node): Changing default OS to $image\n";
 		if (!$TESTMODE) {
-		    if ($nodeobject->OSSelect($osinfo, "def_boot_osid", 0)) {
-			tberror "$node: os_select $defosid failed!";
+		    if ($nodeobject->OSSelect($image, "def_boot_osid", 0)) {
+			tberror "$node: os_select $image failed!";
 			goto failednode;
 		    }
 		}
@@ -486,25 +489,28 @@ sub osload ($$) {
 	    # Now we loop through the image partitions and set/clear
 	    # the existing partition info as appropriate.
 	    #
+	    # NOTE: We no longer do multi-os images ... but this loop
+	    # is harmless. 
+	    #
 	    for (my $i = $startpart; $i < $endpart; $i++) {
 		my $partname = "part${i}_osid";
 		my $partvers = "part${i}_vers";
 
-		my $osid = $image->DBData()->{$partname};
-		my $vers = $image->DBData()->{$partvers};
+		my $osid = $image->field($partname);
+		my $vers = $image->field($partvers);
 		if (defined($osid)) {
-		    my $osinfo = OSinfo->Lookup($osid, $vers);
-		    if (!defined($osinfo)) {
-			tberror "No OSinfo found for osid $osid!\n";
+		    my $osimage = OSImage->Lookup($osid, $vers);
+		    if (!defined($osimage)) {
+			tberror "No OSImage found for $osid!\n";
 			goto failednode;
 		    }
 		    my %part = (
 			'node_id' => $node,
 			'partition' => $i,
 			'osid' => $osid,
-			'osid_vers' => $osinfo->vers(),
-			'imageid' => $image->imageid(),
-			'imageid_version' => $image->version(),
+			'osid_vers' => $osimage->version(),
+			'imageid' => $osimage->imageid(),
+			'imageid_version' => $osimage->version(),
 			'imagepid' => $imagepid,
 			'mbr_version' => $curmbrvers
 		    );
@@ -553,13 +559,13 @@ sub osload ($$) {
 	# XXX we only do this for delay nodes.
 	#
 	if ($defosid && $nodeobject->erole() eq "delaynode") {
-	    my $osinfo = OSinfo->Lookup($defosid, $defvers);
-	    if ($osinfo) {
+	    my $osimage = OSImage->Lookup($defosid, $defvers);
+	    if ($osimage) {
 		my ($ocmdline,$ncmdline);
 		$ocmdline = $nodeobject->def_boot_cmd_line();
 		$ocmdline = ""
 		    if (!defined($ocmdline));
-		$osinfo->OSBootCmd("delay", \$ncmdline);
+		$osimage->OSBootCmd("delay", \$ncmdline);
 		$ncmdline = ""
 		    if (!defined($ncmdline));
 		if ($ocmdline ne $ncmdline) {
@@ -1188,9 +1194,9 @@ sub SetupReloadFrisbee($)
     # on the node. Since we have already checked for LOADIMAGE permission,
     # which requires the same user privilege, we do not need to check further.
     #
-    my $osinfo = OSinfo->Lookup($osid);
-    if (!defined($osinfo) ||
-	$nodeobject->OSSelect($osinfo, "next_boot_osid", 0)) {
+    my $osimage = OSImage->Lookup($osid);
+    if (!defined($osimage) ||
+	$nodeobject->OSSelect($osimage, "next_boot_osid", 0)) {
 	tberror "os_select $osid failed!";
 	return -1;
     }
@@ -1510,7 +1516,7 @@ sub osload_setupswapinfo($$;@)
 		if (!$allnodes);
 	    return 1;
 	}
-	my $image = Image->Lookup($imageid, $imageid_version);
+	my $image = OSImage->Lookup($imageid, $imageid_version);
 	if (!defined($image)) {
 	    print "*** swapinfo: Image $imageid,$imageid_version not found!\n";
 	    next

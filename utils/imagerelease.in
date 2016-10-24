@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2014-2015 University of Utah and the Flux Group.
+# Copyright (c) 2014-2016 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -81,8 +81,7 @@ $| = 1;
 use lib "@prefix@/lib";
 use EmulabConstants;
 use User;
-use Image;
-use OSinfo;
+use OSImage;
 
 #
 # Parse command arguments. Once we return from getopts, all that should be
@@ -117,9 +116,9 @@ if ($UID) {
     $user_uid = $user->uid();
 }
 
-my $image = Image->Lookup($imageid);
+my $image = OSImage->Lookup($imageid);
 if (!defined($image)) {
-    $image = Image->LookupByName($imageid);
+    $image = OSImage->LookupByName($imageid);
 }
 if (!defined($image)) {
     fatal("No such image!");
@@ -166,7 +165,7 @@ if ($image->Lock()) {
     fatal("Image is locked, please try again later!\n");
 }
 if ($image->version()) {
-    $version0 = Image->Lookup($image->imageid(), 0);
+    $version0 = OSImage->Lookup($image->imageid(), 0);
     if (!defined($version0)) {
 	$image->Unlock();
 	fatal("Cannot lookup version zero of $image");

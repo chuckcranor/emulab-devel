@@ -75,7 +75,7 @@ use Node;
 use Interface;
 
 # XXX Needs to be fixed. 
-use lib '@prefix@/lib/snmpit_test';
+use lib '@prefix@/lib/snmpit';
 use snmpit_lib;
 
 #

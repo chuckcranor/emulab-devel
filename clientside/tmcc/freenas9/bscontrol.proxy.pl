@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2013-2015 University of Utah and the Flux Group.
+# Copyright (c) 2013-2016 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -300,6 +300,9 @@ sub create($$$;$)
 {
     my ($pool,$vol,$size,$fstype) = @_;
 
+    # XXX create non-sparse (pre-allocated) volumes
+    my $sparse = 0;
+
     if (defined($pool) && $pool =~ /^([-\w]+)$/) {
 	$pool = $1;
     } else {
@@ -327,7 +330,7 @@ sub create($$$;$)
 	return 1;
     }
 
-    my $rv = freenasVolumeCreate($pool, $vol, $size);
+    my $rv = freenasVolumeCreate($pool, $vol, $size, $sparse);
     if ($rv == 0 && $fstype ne "none") {
 	$rv = freenasFSCreate($pool, $vol, $fstype);
     }

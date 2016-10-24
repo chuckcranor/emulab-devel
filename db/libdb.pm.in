@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2000-2014 University of Utah and the Flux Group.
+# Copyright (c) 2000-2014, 2016 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -50,7 +50,6 @@ use vars qw(@ISA @EXPORT);
 	 ExpNodes ExpNodeVnames ExpNodesOldReserved
 	 DBDateTime DefaultImageID 
 	 TBSetNodeLogEntry
-	 MapNodeOSID 
 	 TBOSID TBOSMaxConcurrent TBOSCountInstances
 	 TBResolveNextOSID TBOsidToPid TBOSIDRebootWaittime
 	 TBOSLoadMaxOkay TBImageLoadMaxOkay TBImageID 
@@ -734,13 +733,12 @@ sub DefaultImageID ($$) {
 #
 sub TBOSID($$) {
     my ($pid, $osname) = @_;
+    require OSImage;
 
-    require OSinfo;
-
-    my $osinfo = OSinfo->Lookup($pid, $osname);
+    my $osimage = OSImage->Lookup($pid, $osname);
     return 0
-	if (!defined($osinfo));
-    return $osinfo->osid();
+	if (!defined($osimage));
+    return $osimage->osid();
 }
 
 #
@@ -752,13 +750,12 @@ sub TBOSID($$) {
 #
 sub TBOsidToPid ($$) {
     my($osid, $ppid) = @_;
+    require OSImage;
 
-    require OSinfo;
-
-    my $osinfo = OSinfo->Lookup($osid);
+    my $osimage = OSImage->Lookup($osid);
     return 0
-	if (!defined($osinfo));
-    $$ppid = $osinfo->pid();
+	if (!defined($osimage));
+    $$ppid = $osimage->pid();
     return 1;
 }
 
@@ -773,13 +770,12 @@ sub TBOsidToPid ($$) {
 sub TBOSMaxConcurrent ($)
 {
     my ($osid) = @_;
+    require OSImage;
 
-    require OSinfo;
-
-    my $osinfo = OSinfo->Lookup($osid);
+    my $osimage = OSImage->Lookup($osid);
     return 0
-	if (!defined($osinfo));
-    return $osinfo->max_concurrent();
+	if (!defined($osimage));
+    return $osimage->max_concurrent();
 }
 
 #
@@ -821,7 +817,7 @@ sub TBResolveNextOSID($;$$)
     my ($osid,$pid,$eid) = @_;
     my $experiment;
 
-    require OSinfo;
+    require OSImage;
 
     if (defined($pid) && defined($eid)) {
 	$experiment = LocalExpLookup($pid, $eid);
@@ -830,15 +826,15 @@ sub TBResolveNextOSID($;$$)
 	    return undef;
 	}
     }
-    my $osinfo = OSinfo->Lookup($osid);
-    if (! defined($osinfo)) {
+    my $osimage = OSImage->Lookup($osid);
+    if (! defined($osimage)) {
 	warn "TBResolveNextOSID: No such osid $osid\n";
 	return undef;
     }
-    my $nextosinfo = $osinfo->ResolveNextOSID($experiment);
+    my $nextosimage = $osimage->ResolveNextOSID($experiment);
     return undef
-	if (!defined($nextosinfo));
-    return $nextosinfo->osid();
+	if (!defined($nextosimage));
+    return $nextosimage->osid();
 }
 
 #
@@ -2495,69 +2491,6 @@ sub MapNumericUID($)
 	$name = $uid;
     }
     return $name;
-}
-
-#
-# Map a generic OSID to a specific OSID for the actual node in question.
-# The intent is that, for example, RHL-STD needs to be mapped to the
-# specific version of RHL that is loaded on the machine. This bit of code
-# does that mapping, return 0 if no mapping could be made.
-#
-# usage: MapNodeOSID(char *node, char *osid)
-#        Return the new osid if mapping successful (or actual osid loaded).
-#        Return 0 for all errors and if mapping not possible.
-#
-sub MapNodeOSID($$)
-{
-    my ($node, $osid) = @_;
-    require OSinfo;
-
-    #
-    # See if this OSID is actually loaded on the machine.
-    #
-    my $p_result =
-	DBQueryWarn("select osid_vers from partitions ".
-		    "where node_id='$node' and osid='$osid'");
-    if (!$p_result) {
-	return 0;
-    }
-    if ($p_result->numrows) {
-	return $osid;
-    }
-
-    #
-    # Get OSID info.
-    #
-    my ($vers) = $p_result->fetchrow_array();
-    my $osinfo = OSinfo->Lookup($osid, $vers);
-    return 0
-	if (!defined($osinfo));
-
-    #
-    # If its a specific Version, and its not loaded on the machine,
-    # nothing to do.
-    #
-    return 0
-	if (defined($osinfo->version()) && $osinfo->version() ne "");
-
-    #
-    # Try to map from a generic name to the specific name of the OS
-    # that *is* loaded.
-    #
-    my $o_result =
-	DBQueryWarn("select ov1.osid from partitions as p ".
-		    "left join os_info_versions as ov1 on ".
-		    "   ov1.osid=p.osid and ov1.vers=p.osid_vers and ".
-		    "   ov1.deleted is null ".
-		    "left join os_info_versions as ov2 on ".
-		    "   ov2.OS=ov1.OS and ov2.deleted is null ".
-		    "where p.node_id='$node' and ov2.osid='$osid'");
-
-    if (!$o_result || $o_result->numrows == 0) {
-	return 0;
-    }
-    my ($n_osid) = $o_result->fetchrow_array();
-    return $n_osid;
 }
 
 #

@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2004, 2005, 2006 University of Utah and the Flux Group.
+# Copyright (c) 2004, 2005, 2006, 2016 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -125,6 +125,11 @@ sub Pcleanup($)
           " [$PID]: wrapper exiting\n";
     exit(0);
 }
+# Signal handler for newsyslog.
+sub Loghandler()
+{
+    ReOpenLog($logfile);
+}
 
 # Daemonize;
 if (!$debug && TBBackGround($logfile)) {
@@ -141,6 +146,9 @@ system("echo '$PID' > $pidfile") == 0 or
 
 # Okay, cleanup function.
 $SIG{TERM} = \&Pcleanup;
+# And reopen logfile for newsyslog.
+$SIG{HUP} = \&Loghandler
+    if (! $debug);
 
 # Fully disconnect from bootup. 
 setsid();

@@ -74,6 +74,6 @@ SPITREQUIRE("js/show-project.js",
             "<script src='js/lib/sugar.min.js'></script>".
             "<script src='js/lib/jquery.tablesorter.parser-date.js'></script>");
 
-AddTemplateList(array("show-project", "experiment-list", "profile-list", "member-list", "project-profile", "classic-explist", "group-list", "waitwait-modal", "oops-modal"));
+AddTemplateList(array("show-project", "experiment-list", "profile-list", "member-list", "dataset-list", "project-profile", "classic-explist", "group-list", "waitwait-modal", "oops-modal"));
 SPITFOOTER();
 ?>

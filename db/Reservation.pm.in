@@ -122,38 +122,51 @@ sub CreateImmediate($$$$$$$)
     return CreateCommon( $class, $pid, $eid, $uid, 0, $end, $type, $nodes );
 }
     
-sub Lookup($$$$$$)
+sub Lookup($$;$$$$)
 {
     my ($class, $pid, $start, $end, $type, $nodes) = @_;
-
-    my $project = Project->Lookup( $pid );
-    if( !defined( $project ) ) {
-	return undef;
-    }
-
-    my $pid_idx = $project->pid_idx();
+    my $query_result;
     
-    my $query_result = DBQueryWarn( "SELECT * FROM future_reservations WHERE " .
-				    "pid_idx='$pid_idx' AND " .
-				    "nodes='$nodes' AND " .
-				    "type='$type' AND " .
-				    "start=FROM_UNIXTIME($start) AND " .
-				    "end=FROM_UNIXTIME($end)" );
+    if( defined( $start ) ) {
+	# Look up by time and project.
+	my $project = Project->Lookup( $pid );
+	if( !defined( $project ) ) {
+	    return undef;
+	}
 
-    return undef
-	if (!$query_result || !$query_result->numrows);
+	my $pid_idx = $project->pid_idx();
+    
+	$query_result = DBQueryWarn( "SELECT * FROM future_reservations " .
+				     "WHERE pid_idx='$pid_idx' AND " .
+				     "nodes='$nodes' AND " .
+				     "type='$type' AND " .
+				     "start=FROM_UNIXTIME($start) AND " .
+				     "end=FROM_UNIXTIME($end)" );
 
+	return undef
+	    if (!$query_result || !$query_result->numrows);
+    } else {
+	# Look up by ID.
+	my $idx = $_[ 1 ];
+
+	$query_result = DBQueryWarn( "SELECT * FROM future_reservations " .
+				     "WHERE idx='$idx'" );
+
+	return undef
+	    if (!$query_result || !$query_result->numrows);
+    }
+    
     my $record = $query_result->fetchrow_hashref();
     
     my $self               = {};
     $self->{'IDX'}         = $record->{'idx'};
-    $self->{'PID'}         = $pid;
-    $self->{'PID_IDX'}     = $pid_idx;
-    $self->{'EID'}         = $record->{'eid'};
-    $self->{'START'}       = $start;
-    $self->{'END'}         = $end;
-    $self->{'TYPE'}        = $type;
-    $self->{'NODES'}       = $nodes;
+    $self->{'PID'}         = $record->{'pid'};
+    $self->{'PID_IDX'}     = $record->{'pid_idx'};
+    $self->{'EID'}         = undef;
+    $self->{'START'}       = $record->{'start'};
+    $self->{'END'}         = $record->{'end'};
+    $self->{'TYPE'}        = $record->{'type'};
+    $self->{'NODES'}       = $record->{'nodes'};
     $self->{'UID'}         = $record->{'uid'};
     $self->{'UID_IDX'}     = $record->{'uid_idx'};
     $self->{'NOTES'}       = $record->{'notes'};
@@ -285,9 +298,9 @@ sub Book($)
 		     "end=FROM_UNIXTIME($end), " .
 		     "uid='$uid', " .
 		     "uid_idx='$uid_idx' " .
-		     ( defined( $notes ) ? ", notes='$notes'" : "" ) .
+		     ( defined( $notes ) ? ", notes=$notes" : "" ) .
 		     ( defined( $admin_notes ) ?
-		       ", admin_notes='$admin_notes'" : "" ) )
+		       ", admin_notes=$admin_notes" : "" ) )
 	or return -1;
 
     $self->{'IDX'} = $query_result->insertid();

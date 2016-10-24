@@ -58,7 +58,7 @@ function REQUIRE_EXTEND()
 {
   REQUIRE_UNDERSCORE();
   REQUIRE_SUP();
-  AddTemplateList(array("user-extend-modal", "admin-extend-modal", "guest-extend-modal"));
+  AddTemplateList(array("user-extend-modal", "guest-extend-modal"));
   AddLibrary("js/extend.js");
 }
 

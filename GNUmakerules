@@ -111,7 +111,7 @@ default-clean:
 # This is to avoid warnings about duplicate targets.
 default-install-notusing:
 ifeq ($(ISMAINSITE),1)
-ifeq ($(TBROOT),/usr/testbed/devel/stoller)
+ifeq ($(TBROOT),/usr/testbed)
 	(cd $(SRCDIR) ; \
 	  git status --porcelain -s -b | head -1 | grep -q -s current)
 else

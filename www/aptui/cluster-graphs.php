@@ -27,12 +27,24 @@ chdir("apt");
 include("quickvm_sup.php");
 $page_title = "Cluster Graphs";
 
+#
+# The Emulab portal does not use the fancy statsus stuff, we fall
+# back to the simple bar graphs
+#
+if ($PORTAL_GENESIS == "emulab") {
+    $usefancy = 0;
+              }
+else {
+    $usefancy = 1;
+}
+
 SPITHEADER(1);
 echo "<script type='text/javascript' src='js/lib/d3.v3.js'></script>";
 echo "<script type='text/javascript' src='js/lib/d3.tip.v0.6.3.js'></script>";
 echo "<script type='text/javascript'>\n";
 echo "   window.JACKS_LOADER = { params: { source: 'devel' } };\n";
 echo "   window.MAINSITE = $TBMAINSITE;\n";
+echo "   window.USEFANCY = $usefancy;\n";
 echo "</script>\n";
 
 # Place to hang the toplevel template.

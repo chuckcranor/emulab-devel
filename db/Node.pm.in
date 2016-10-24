@@ -379,7 +379,7 @@ sub Create($$$$)
     my ($class, $node_id, $experiment, $argref) = @_;
     my ($control_iface,$virtnode_capacity,$adminmfs,$adminmfs_osid);
     my ($priority, $osid, $osid_vers, $opmode, $state);
-    require OSinfo;
+    require OSImage;
     require NodeType;
 
     # Defaults. Leave these here to avoid startup costs of libdb.
@@ -428,15 +428,15 @@ sub Create($$$$)
 	    if (defined($typeinfo->default_osid())) {
 		$osid = $typeinfo->default_osid();
 		
-		my $osinfo = OSinfo->Lookup($osid);
-		if (!defined($osinfo)) {
+		my $osimage = OSImage->Lookup($osid);
+		if (!defined($osimage)) {
 		    print STDERR
-			"*** Could not find OSinfo object for $osid!\n";
+			"*** Could not find OSImage object for $osid!\n";
 		    return undef;
 		}
-		$osid      = $osinfo->osid();
-		$osid_vers = $osinfo->vers();
-		$opmode    = $osinfo->op_mode();
+		$osid      = $osimage->osid();
+		$osid_vers = $osimage->version();
+		$opmode    = $osimage->op_mode();
 	    }
 	}
 	else {
@@ -446,18 +446,18 @@ sub Create($$$$)
 	    }
 	    # Find object for the adminfs.
 	    if (defined($adminmfs_osid)) {
-		$adminmfs = OSinfo->Lookup($adminmfs_osid);
+		$adminmfs = OSImage->Lookup($adminmfs_osid);
 	    }
 	    else {
-		$adminmfs = OSinfo->Lookup(TBOPSPID(), $MFS_INITIAL);
+		$adminmfs = OSImage->Lookup(TBOPSPID(), $MFS_INITIAL);
 	    }
 	    if (!defined($adminmfs)) {
 		print STDERR
-		    "*** Could not find OSinfo object for adminmfs!\n";
+		    "*** Could not find OSImage object for adminmfs!\n";
 		return undef;
 	    }
 	    $osid      = $adminmfs->osid();
-	    $osid_vers = $adminmfs->vers();
+	    $osid_vers = $adminmfs->version();
 	    $opmode    = $adminmfs->op_mode();
 	}
     }
@@ -1598,6 +1598,7 @@ sub default_osid($;$) {
 sub adminmfs_osid($;$) {
     my ($self,$stuff) = @_;
     my $val = undef;
+    require OSImage;
 
     if (NodeAttribute($self, "adminmfs_osid", \$val) == 0 &&
 	defined($val)) {
@@ -1607,12 +1608,13 @@ sub adminmfs_osid($;$) {
 	defined($val)) {
 	return $val;
     }
-    return OSinfo->Lookup(TBOPSPID(), TB_OSID_FREEBSD_MFS())->osid();
+    return OSImage->Lookup(TBOPSPID(), TB_OSID_FREEBSD_MFS())->osid();
 }
 
 sub diskloadmfs_osid($;$) {
     my ($self,$stuff) = @_;
     my $val = undef;
+    require OSImage;
 
     if (NodeAttribute($self, "diskloadmfs_osid", \$val) == 0 &&
 	defined($val)) {
@@ -1622,7 +1624,7 @@ sub diskloadmfs_osid($;$) {
 	defined($val)) {
 	return $val;
     }
-    return OSinfo->Lookup(TBOPSPID(), TB_OSID_FRISBEE_MFS())->osid();
+    return OSImage->Lookup(TBOPSPID(), TB_OSID_FRISBEE_MFS())->osid();
 }
 
 sub default_imageid($;$) {
@@ -2315,13 +2317,13 @@ sub CreateVnodes($$$)
     # table. 
     #
     my $osid = $nodetype->default_osid();
-    my $osinfo = OSinfo->Lookup($osid);
-    if (!defined($osinfo)) {
+    my $osimage = OSImage->Lookup($osid);
+    if (!defined($osimage)) {
 	print STDERR "*** CreateVnodes: No such OSID '$osid'\n";
 	return -1;
     }
-    my ($opmode)  = $osinfo->op_mode();
-    my $osid_vers = $osinfo->vers();
+    my ($opmode)  = $osimage->op_mode();
+    my $osid_vers = $osimage->version();
 
     #
     # Need IP for jailed nodes.
@@ -3256,47 +3258,47 @@ sub GetStatus($)
 #
 sub OSSelect($$$$)
 {
-    my ($self, $osinfo, $field, $debug) = @_;
+    my ($self, $osimage, $field, $debug) = @_;
     my $nodeid  = $self->node_id();
     my $curmode = $self->op_mode();
-    require OSinfo;
+    require OSImage;
 
     # Why? When will this happen?
     return 0
 	if (!$curmode);
 
     # Special token, sorry.
-    if (defined($osinfo) && "$osinfo" eq "<DEFAULT>") {
-	$osinfo = OSinfo->Lookup($self->default_osid());
-	if (!defined($osinfo)) {
+    if (defined($osimage) && "$osimage" eq "<DEFAULT>") {
+	$osimage = OSImage->Lookup($self->default_osid());
+	if (!defined($osimage)) {
 	    print STDERR "Could not map default_osid for $nodeid\n";
 	    return -1;
 	}
-	my $nextosinfo = $osinfo->ResolveNextOSID();
-	if (!defined($nextosinfo)) {
-	    print STDERR "Could not resolve nextosid for $osinfo\n";
+	my $nextosimage = $osimage->ResolveNextOSID();
+	if (!defined($nextosimage)) {
+	    print STDERR "Could not resolve nextosid for $osimage\n";
 	    return -1;
 	}
-	$osinfo = $nextosinfo;
+	$osimage = $nextosimage;
     }
 
     # Make sure the node is tainted if the OS selected is tainted.
-    if (defined($osinfo) && $osinfo->IsTainted()) {
-	if ($self->InheritTaintStates($osinfo) != 0) {
-	    print STDERR "Could not inherit taint states from $osinfo\n";
+    if (defined($osimage) && $osimage->IsTainted()) {
+	if ($self->InheritTaintStates($osimage) != 0) {
+	    print STDERR "Could not inherit taint states from $osimage\n";
 	    return -1;
 	}
     }
     
-    if (defined($osinfo) && !defined($field)) {
+    if (defined($osimage) && !defined($field)) {
 	print STDERR "No field specified for OSSelect on $nodeid\n";
 	return -1;
     }
 
     if ($debug) {
 	print STDERR "Current opmode for $nodeid is $curmode.\n";
-	if (defined($osinfo)) {
-	    print STDERR "Setting $field for $nodeid to $osinfo.\n";
+	if (defined($osimage)) {
+	    print STDERR "Setting $field for $nodeid to $osimage\n";
 	} elsif (defined($field)) {
 	    print STDERR "Clearing $field for $nodeid.\n";
 	} else {
@@ -3315,8 +3317,8 @@ sub OSSelect($$$$)
 	    or return -1;
     } else {
 	# Set/Clear the osid.
-	my $osid = (defined($osinfo) ? "'" . $osinfo->osid() . "'" : "NULL");
-	my $vers = (defined($osinfo) ? "'" . $osinfo->vers() . "'" : "'0'");
+	my $osid = (defined($osimage) ? "'" . $osimage->osid() . "'" : "NULL");
+	my $vers = (defined($osimage) ? "'" . $osimage->version() . "'" : "'0'");
 	
 	DBQueryWarn("update nodes set ${field}=$osid,${field}_vers=$vers ".
 		    "where node_id='$nodeid'")
@@ -3388,6 +3390,15 @@ sub ResetNextOpMode($$)
     #
     if ($bootosid == 0) {
 	return 0;
+    }
+    #
+    # XXX this has only ever happened once, when a newnode failed to boot
+    # up properly, but since it will cause stated to die, let's check for it.
+    # I have no idea if this is the correct thing to set it to, but we do
+    # this below as well, so I am going with it...
+    #
+    if (!defined($bootopmode)) {
+	$bootopmode = "";
     }
 
     print STDERR "Bootwhat says: $nodeid => $bootosid,$bootopmode\n"
@@ -3580,19 +3591,19 @@ sub LookupWideArea($$)
 #
 sub IsOSLoaded($$)
 {
-    my ($self, $osinfo) = @_;
-    require OSinfo;
+    my ($self, $osimage) = @_;
+    require OSImage;
 
-    if (!ref($osinfo)) {
-	my $tmp = OSinfo->Lookup($osinfo);
+    if (!ref($osimage)) {
+	my $tmp = OSImage->Lookup($osimage);
 	if (!defined($tmp)) {
-	    print STDERR "Cannot lookup osinfo for $osinfo\n";
+	    print STDERR "Cannot lookup osimage for $osimage\n";
 	    return -1;
 	}
-	$osinfo = $tmp;
+	$osimage = $tmp;
     }
-    my $osid   = $osinfo->osid();
-    my $vers   = $osinfo->vers();
+    my $osid   = $osimage->osid();
+    my $vers   = $osimage->version();
     my $nodeid = $self->node_id();
 
     my $query_result =
@@ -3934,37 +3945,19 @@ sub GetOutletAuthInfo($$)
 #
 sub RunningOsImage($)
 {
-    require OSinfo;
-    require Image;
+    require OSImage;
 
     my ($self)  = @_;
     my $nodeid  = $self->node_id();
     my $osid    = $self->def_boot_osid();
     my $vers    = $self->def_boot_osid_vers();
-    my $image;
     
-    my $osinfo = OSinfo->Lookup($osid, $vers);
+    my $osimage = OSImage->Lookup($osid, $vers);
     return ()
-	if (!defined($osinfo));
+	if (!defined($osimage));
 
-    #
-    # No partition entries for virtnodes, they are plain EZ images.
-    #
-    if ($self->isvirtnode()) {
-	# XXX No version info, need that.
-	$image = Image->Lookup($osid, $vers);
-    }
-    else {
-	my $query_result =
-	    DBQueryWarn("select imageid,imageid_version from partitions as p ".
-			"where p.node_id='$nodeid' and p.osid='$osid'");
-	return ()
-	    if (!$query_result || !$query_result->numrows);
-
-	my ($imageid,$version) = $query_result->fetchrow_array();
-	$image = Image->Lookup($imageid, $version);	
-    }
-    return ($osinfo, $image);
+    # Backwards compatibility; callers want old osinfo and image separately.
+    return ($osimage, $osimage);
 }
 
 #
@@ -4106,10 +4099,10 @@ sub RemoveTaintState($;$) {
     return libTaintStates::RemoveTaintState($self, $taint);
 }
 sub InheritTaintStates($$) {
-    my ($self, $osinfo) = @_;
+    my ($self, $osimage) = @_;
     require libTaintStates;
 
-    return libTaintStates::InheritTaintStates($self, $osinfo);
+    return libTaintStates::InheritTaintStates($self, $osimage);
 }
 
 
@@ -4122,7 +4115,7 @@ sub SyncDiskPartitionTaintStates($)
 {
     my ($self) = @_;
     my $error = 0;
-    require OSinfo;
+    require OSImage;
 
     my $node_id = $self->node_id();
 
@@ -4133,9 +4126,9 @@ sub SyncDiskPartitionTaintStates($)
 	if (!$query_result);
 
     while (my ($osid, $vers) = $query_result->fetchrow_array()) {
-	my $osinfo = OSinfo->Lookup($osid, $vers);
-	if (defined($osinfo) && $osinfo->IsTainted()) {
-	    $error += $self->InheritTaintStates($osinfo);
+	my $osimage = OSImage->Lookup($osid, $vers);
+	if (defined($osimage) && $osimage->IsTainted()) {
+	    $error += $self->InheritTaintStates($osimage);
 	}
     }
 

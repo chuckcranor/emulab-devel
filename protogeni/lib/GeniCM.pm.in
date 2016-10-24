@@ -109,7 +109,7 @@ my $IPASSIGN       = "$TB/libexec/ipassign_wrapper";
 my $TARFILES_SETUP = "$TB/bin/tarfiles_setup";
 my $MAPPER         = "$TB/bin/mapper";
 my $VTOPGEN        = "$TB/bin/vtopgen";
-my $SNMPIT         = "$TB/bin/snmpit_test";
+my $SNMPIT         = "$TB/bin/snmpit";
 my $RESERVEVLANS   = "$TB/sbin/protogeni/reservevlans";
 my $NEWGROUP       = "$TB/bin/newgroup";
 my $NEWPROJECT     = "$TB/sbin/newproj";
@@ -545,8 +545,7 @@ sub GetTicketAuxAux($$$$$$$$$$$)
     my $response    = undef;
     my $restorevirt = 0;	# Flag to restore virtual state
     my $restorephys = 0;	# Flag to restore physical state
-    require OSinfo;
-    require Image;
+    require OSImage;
     require VirtExperiment;
 
     #
@@ -1139,7 +1138,7 @@ sub GetTicketAuxAux($$$$$$$$$$$)
 					 "Malformed image URN: $dname");
 		    goto bad;
 		}
-		$osinfo = OSinfo->Lookup($ospid, $os, $vers);
+		$osinfo = OSImage->Lookup($ospid, $os, $vers);
 		if (!defined($osinfo)) {
 		    if ($use_imagetracker) {
 			my $image = GeniImage::MapToLocalImage($dname, $pid);
@@ -1166,8 +1165,7 @@ sub GetTicketAuxAux($$$$$$$$$$$)
 		    if (! ($osinfo->shared() ||
 			   $osinfo->pid() eq $slice_experiment->pid())) {
 			if ($PROTOGENI_LOCALUSER && $user->IsLocal()) {
-			    require Image;
-			    my $image = Image->Lookup($ospid,$os,$vers);
+			    my $image = OSImage->Lookup($ospid,$os,$vers);
 			    if (!defined($image)) {
 				$response =
 				    GeniResponse->Create(GENIRESPONSE_BADARGS,
@@ -1474,7 +1472,7 @@ sub GetTicketAuxAux($$$$$$$$$$$)
 	#
 	if (defined($node) && !defined($osname)) {
 	    if (defined($node->default_osid())) {
-		my $default_osinfo = OSinfo->Lookup($node->default_osid());
+		my $default_osinfo = OSImage->Lookup($node->default_osid());
 		$osname = $default_osinfo->osname()
 		    if (defined($default_osinfo));
 	    }
@@ -4449,14 +4447,13 @@ sub SliverWorkAux($$$$$$$$)
 		$message = "Inconsistent ifacemap; $node_id,$iface_id";
 		goto bad;
 	    }
+	    if (GeniHRN::IsValid($iface_name)) {
+		my (undef, undef, $short_iface) =
+		    GeniHRN::ParseInterface($iface_name);
+		$iface_name = $short_iface;
+	    }
 	    my $interface;
-
 	    if ($iface_name ne "lo0") {
-		if (GeniHRN::IsValid($iface_name)) {
-		    my ($authority, $short_node, $short_iface) =
-			GeniHRN::ParseInterface($iface_name);
-		    $iface_name = $short_iface;
-		}
 		$interface = Interface->LookupByIface($node, $iface_name);
 		if (!defined($interface)) {
 		    $message = "No such interface $iface_name on $node";
@@ -7510,8 +7507,10 @@ sub HandleBlockstore($$$$$$$@)
 	    goto bad;
 	}
     }
-    if (!defined($mount)) {
-	$message = "Missing blockstore mount point";
+    if (defined($mount) &&
+	!TBcheck_dbslot($mount, "os_info", "path",
+			TBDB_CHECKDBSLOT_WARN|TBDB_CHECKDBSLOT_ERROR)) {
+	$message = "Invalid mountpoint for blockstore";
 	goto bad;
     }
     if (!defined($readonly)) {
@@ -7697,7 +7696,8 @@ sub HandleBlockstore($$$$$$$@)
 	    goto bad;
 	}
     }
-    push(@attributes, ["mountpoint", $mount, 0]);
+    push(@attributes, ["mountpoint", $mount, 0])
+	if (defined($mount) && $mount ne "");
     push(@attributes, ["placement", $placement, 0]);
     push(@attributes, ["readonly", $readonly, 0]);
     push(@attributes, ["class", ($class eq "local" ? "local" : "SAN"), 1]);

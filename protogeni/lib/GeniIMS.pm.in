@@ -82,7 +82,7 @@ my $SERVERVERSION = 1;
 #
 my @X86TYPES = ("C240M4","C220M4","pcvm","r320","c6220","dl360","r720",
 		"c8220","c8220x","d2100","d710","d820","d430","pc3000",
-		"c220g2", "c6320");
+		"c220g2", "c6320", "m510");
 
 # We are using a different DB.
 my $DB;
@@ -156,6 +156,7 @@ sub PostImageInfo($)
     my ($argref) = @_;
     my $cred  = $argref->{'credential'};
     my $blob  = $argref->{'imageinfo'};
+    my $response;
     
     if (! defined($cred)) {
 	return GeniResponse->MalformedArgsResponse("Where's the credential?");
@@ -181,7 +182,12 @@ sub PostImageInfo($)
     #
     # Verify all the right stuff exists in the blob.
     #
-    my $response = VerifyBlob($blob);
+    if (exists($blob->{"isimagealias"}) && $blob->{"isimagealias"}) {
+	$response = VerifyAliasBlob($blob);
+    }
+    else {
+	$response = VerifyBlob($blob);
+    }
     return $response
 	if (GeniResponse::IsResponse($response));
 
@@ -195,9 +201,6 @@ sub PostImageInfo($)
 			"Not allowed to postimageinfo for the image domain")
 	if ($image_hrn->domain() ne $caller_hrn->domain());
 
-    return GeniResponse->MalformedArgsResponse("IMINDS is messed up")
-	if (0 && $image_hrn->domain() eq "wall1.ilabt.iminds.be");
-
     InitDBHandle();
 
     #
@@ -205,8 +208,17 @@ sub PostImageInfo($)
     #
     return GeniResponse->Create(GENIRESPONSE_ERROR)
 	if (! $DB->QueryWarn("lock tables images write, ".
+			     "     image_aliases write, ".
 			     "     image_versions write, ".
 			     "     image_permissions write"));
+
+    #
+    # Image aliases are special.
+    #
+    if (exists($blob->{"isimagealias"}) && $blob->{"isimagealias"}) {
+	$response = HandleImageAlias($blob);
+	goto done;
+    }
     
     #
     # If the image exists, we allow certain updates to be made.
@@ -218,6 +230,7 @@ sub PostImageInfo($)
     else {
 	$response = NewImage($blob);
     }
+  done:
     $DB->QueryWarn("unlock tables");
     return $response;
 }
@@ -342,6 +355,46 @@ sub VerifyBlob($)
 			!defined($hrn->subauth()));
 	    }
 	}
+    }
+    return 0;
+  bad:
+    return GeniResponse->MalformedArgsResponse($error);
+}
+
+#
+# Verify the blob.
+#
+sub VerifyAliasBlob($)
+{
+    my ($blob) = @_;
+    my $error;
+
+    # UUID checks.
+    foreach my $key ("uuid") {
+	return GeniResponse->MalformedArgsResponse("Missing $key")
+	    if (! (exists($blob->{$key}) && defined($blob->{$key})));
+
+	return GeniResponse->MalformedArgsResponse("Malformed UUID: $key")
+	    if ($blob->{$key} !~ /^\w+\-\w+\-\w+\-\w+\-\w+$/);
+    }
+    #
+    # URN checks. Note that there will be a list of target urns in the
+    # blob, so check all of them.
+    #
+    return GeniResponse->MalformedArgsResponse("Missing urn")
+	if (! (exists($blob->{"urn"}) && defined($blob->{"urn"})));
+
+    return GeniResponse->MalformedArgsResponse("Missing target urns")
+	if (! (exists($blob->{"target_urns"}) &&
+	       defined($blob->{"target_urns"}) &&
+	       ref($blob->{"target_urns"}) eq "ARRAY"));
+
+    foreach my $urn ($blob->{"urn"}, @{ $blob->{"target_urns"} }) {
+	return GeniResponse->MalformedArgsResponse("URN too long: $urn")
+	    if (length($urn) >= 128);
+
+	return GeniResponse->MalformedArgsResponse("Malformed URN: $urn")
+	    if (!GeniHRN::IsValid($urn));
     }
     return 0;
   bad:
@@ -593,6 +646,59 @@ sub NewImage($)
     return GeniResponse->Create(GENIRESPONSE_SUCCESS);
 }
 
+#
+# Handle an image alias. 
+#
+sub HandleImageAlias($)
+{
+    my ($blob) = @_;
+    my $image_urn    = $blob->{'urn'};
+    my $image_uuid   = $blob->{'uuid'};
+    my $safe_urn     = DBQuoteSpecial($image_urn);
+    my $safe_uuid    = DBQuoteSpecial($image_uuid);
+
+    #
+    # Make sure each of the targets exist here.
+    #
+    foreach my $target_urn (@{ $blob->{'target_urns'} }) {
+	my $safe_target = DBQuoteSpecial($target_urn);
+	
+	my $query_result =
+	    $DB->QueryWarn("select imagename from images ".
+			   "where urn=$safe_target");
+	return GeniResponse->Create(GENIRESPONSE_BADARGS, undef,
+				    "Target $target_urn does not exist here")
+	    if (!$query_result->numrows);
+    }
+
+    #
+    # Okay, we have to deal with an alias that was deleted at the origin
+    # cluster, and then recreated before we got the deletion message.
+    # To keep the logic simple, we just delete the existing alias and
+    # create a new one each time. These rarely change.
+    #
+    $DB->QueryWarn("delete from image_aliases ".
+		   "where urn=$safe_urn")
+	or GeniResponse->Create(GENIRESPONSE_ERROR);
+
+    #
+    # Create new entries in the aliases table for each target.
+    #
+    foreach my $target_urn (@{ $blob->{'target_urns'} }) {
+	my $safe_target = DBQuoteSpecial($target_urn);
+
+	if (! $DB->QueryWarn("insert into image_aliases set ".
+			     "  urn=$safe_urn,uuid=$safe_uuid,".
+			     "  target_urn=$safe_target")) {
+	    $DB->QueryWarn("delete from image_aliases ".
+			   "where urn=$safe_urn");
+	    return GeniResponse->Create(GENIRESPONSE_ERROR, undef,
+		  "Error inserting alias $target_urn for $image_urn");
+	}
+    }
+    return GeniResponse->Create(GENIRESPONSE_SUCCESS);
+}
+
 sub GetImageInfo($)
 {
     my ($argref) = @_;
@@ -600,6 +706,7 @@ sub GetImageInfo($)
     my $urn    = $argref->{'urn'};
     my $url    = $argref->{'url'};
     my $query_result;
+    my $blob;
 
     if (! defined($cred)) {
 	return GeniResponse->MalformedArgsResponse("Where's the credential?");
@@ -626,6 +733,46 @@ sub GetImageInfo($)
     # IMS database handle.
     InitDBHandle();
 
+    my $createBlob = sub ($) {
+	my ($row) = @_;
+
+	my $blob = {"server_version" => $SERVERVERSION,
+		    "urn"            => $row->{'urn'},
+		    "imagename"      => $row->{'imagename'},
+		    "version"        => $row->{'version'},
+		    "version_uuid"   => $row->{'version_uuid'},
+		    "image_uuid"     => $row->{'image_uuid'},
+		    "metadata_url"   => $row->{'metadata_url'},
+		    "sha1hash"	     => $row->{'hash'},
+		    "isdataset"      => $row->{'isdataset'},
+		    "isversioned"    => $row->{'isversioned'},
+		    "issystem"       => $row->{'issystem'},
+		    "project_urn"    => $row->{'project_urn'},
+	};
+	#
+	# This is for the portal; for a versioned image, lets find the highest
+	# numbered version for the caller so it can formulate a next version
+	# URN. This is an odd way to do this, but the Portal has to know what
+	# to call the new image so it can edit the profile.
+	#
+	if ($row->{'isversioned'}) {
+	    my $safe_urn = DBQuoteSpecial($row->{'urn'});
+	
+	    my $query_result = 
+		$DB->QueryWarn("select v.version from image_versions as v ".
+			       "where v.urn=$safe_urn ".
+			       "order by v.version desc limit 1");
+	    if (!defined($query_result) ||
+		!$query_result->numrows()) {
+		return GeniResponse->Create(GENIRESPONSE_ERROR, undef,
+				    "Could not look up highest version");
+	    }
+	    my $row = $query_result->fetchrow_hashref();
+	    $blob->{'maxversion'} = $row->{"version"};
+	}
+	return $blob;
+    };
+
     if (defined($urn)) {
 	my $hrn = GeniHRN->new($urn);
 	return GeniResponse->MalformedArgsResponse("Could not parse URN")
@@ -649,14 +796,60 @@ sub GetImageInfo($)
 	$urn =~ s/\/\//:/;
 	my $safe_urn = DBQuoteSpecial($urn);
 
-	$query_result = 
-	    $DB->QueryWarn("select i.*,v.* from image_versions as v ".
-			   "left join images as i on ".
-			   "     i.image_uuid=v.image_uuid ".
-			   "where v.urn=$safe_urn ".
-			   (defined($version) ?
-			    "and v.version='$version' " :
-			    "order by v.version desc limit 1"));
+	#
+	# Check the image aliases table first.
+	#
+	$query_result =
+	    $DB->QueryWarn("select * from image_aliases  ".
+			   "where urn=$safe_urn");
+
+	if ($query_result->numrows) {
+	    my %target_images = ();
+	    
+	    $blob = {
+		"server_version" => $SERVERVERSION,
+		"urn"            => $urn,
+		"isimagealias"   => 1,
+	    };
+	    while (my $row = $query_result->fetchrow_hashref()) {
+		my $target_urn  = $row->{'target_urn'};
+		my $safe_target = DBQuoteSpecial($target_urn);
+
+		my $target_result = 
+		    $DB->QueryWarn("select i.*,v.* from image_versions as v ".
+				   "left join images as i on ".
+				   "     i.image_uuid=v.image_uuid ".
+				   "where v.urn=$safe_target ".
+				   "order by v.version desc limit 1");
+
+		return GeniResponse->Create(GENIRESPONSE_SEARCHFAILED)
+		    if (!defined($target_result) ||
+			!$target_result->numrows());
+
+		my $target_blob =
+		    &$createBlob($target_result->fetchrow_hashref());
+		    
+		return $target_blob
+		    if (GeniResponse::IsResponse($target_blob));
+		$target_images{$target_urn} = $target_blob;
+	    }
+	    $blob->{'target_images'} = \%target_images;
+	}
+	else {
+	    $query_result = 
+		$DB->QueryWarn("select i.*,v.* from image_versions as v ".
+			       "left join images as i on ".
+			       "     i.image_uuid=v.image_uuid ".
+			       "where v.urn=$safe_urn ".
+			       (defined($version) ?
+				"and v.version='$version' " :
+				"order by v.version desc limit 1"));
+
+	    return GeniResponse->Create(GENIRESPONSE_SEARCHFAILED)    
+		if (!defined($query_result) ||
+		    !$query_result->numrows());
+	    $blob = &$createBlob($query_result->fetchrow_hashref());
+	}
     }
     else {
 	my $safe_url = DBQuoteSpecial($url);
@@ -690,53 +883,15 @@ sub GetImageInfo($)
 				 "     i.image_uuid=v.image_uuid");
 	    }
 	}
-    }
-    return GeniResponse->Create(GENIRESPONSE_SEARCHFAILED)    
-	if (!defined($query_result) ||
-	    !$query_result->numrows());
-
-    #
-    # Return a blob. We have to generate the URL to be used for
-    # image_import.
-    #
-    my $row = $query_result->fetchrow_hashref();
-
-    my $blob = {"server_version" => $SERVERVERSION,
-		"urn"            => $row->{'urn'},
-		"imagename"      => $row->{'imagename'},
-		"version"        => $row->{'version'},
-		"version_uuid"   => $row->{'version_uuid'},
-		"image_uuid"     => $row->{'image_uuid'},
-		"metadata_url"   => $row->{'metadata_url'},
-		"sha1hash"	 => $row->{'hash'},
-		"isdataset"      => $row->{'isdataset'},
-		"isversioned"    => $row->{'isversioned'},
-		"issystem"       => $row->{'issystem'},
-		"project_urn"    => $row->{'project_urn'},
-    };
-
-    #
-    # This is for the portal; for a versioned image, lets find the highest
-    # numbered version for the caller so it can formulate a next version
-    # URN. This is an odd way to do this, but the Portal has to know what
-    # to call the new image so it can edit the profile.
-    #
-    if ($row->{'isversioned'}) {
-	my $safe_urn = DBQuoteSpecial($row->{'urn'});
-	
-	$query_result = 
-	    $DB->QueryWarn("select v.version from image_versions as v ".
-			   "where v.urn=$safe_urn ".
-			   "order by v.version desc limit 1");
-	if (!defined($query_result) ||
-	    !$query_result->numrows()) {
-	    return GeniResponse->Create(GENIRESPONSE_ERROR, undef,
-					"Could not look up highest version");
-	}
-	my $row = $query_result->fetchrow_hashref();
-	$blob->{'maxversion'} = $row->{"version"};
+	return GeniResponse->Create(GENIRESPONSE_SEARCHFAILED)    
+	    if (!defined($query_result) ||
+		!$query_result->numrows());
+	$blob = &$createBlob($query_result->fetchrow_hashref());
     }
     print STDERR Dumper($blob);
+    
+    return $blob
+	if (GeniResponse::IsResponse($blob));
 
     return GeniResponse->Create(GENIRESPONSE_SUCCESS, $blob);
 }

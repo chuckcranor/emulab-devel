@@ -1959,6 +1959,7 @@ CREATE TABLE `future_reservations` (
   `uid_idx` mediumint(8) unsigned NOT NULL DEFAULT '0',
   `notes` mediumtext,
   `admin_notes` mediumtext,
+  `created` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (`idx`)
 ) ENGINE=MyISAM DEFAULT CHARSET=latin1;
 
@@ -2190,8 +2191,7 @@ CREATE TABLE `image_aliases` (
   `uuid` varchar(40) NOT NULL default '',
   `target_imagename` varchar(30) NOT NULL default '',
   `target_imageid` int(8) unsigned NOT NULL default '0',
-  PRIMARY KEY  (`imageid`),
-  UNIQUE KEY `pid` (`pid`,`imagename`),
+  PRIMARY KEY  (`imageid`,`target_imageid`),
   KEY `uuid` (`uuid`)
 ) ENGINE=MyISAM DEFAULT CHARSET=latin1;
 

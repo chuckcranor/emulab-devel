@@ -418,9 +418,9 @@ REPLACE INTO state_timeouts VALUES ('PXEFBSD','REBOOTING',120,'REBOOT');
 REPLACE INTO state_timeouts VALUES ('PXEFBSD','REBOOTED',60,'NOTIFY');
 REPLACE INTO state_timeouts VALUES ('PXEFBSD','BOOTING',180,'REBOOT');
 REPLACE INTO state_timeouts VALUES ('NORMALv2','TBSETUP',600,'NOTIFY');
-REPLACE INTO state_timeouts VALUES ('NORMALv2','BOOTING',180,'REBOOT');
+REPLACE INTO state_timeouts VALUES ('NORMALv2','BOOTING',240,'REBOOT');
 REPLACE INTO state_timeouts VALUES ('GARCIA-STARGATEv1','TBSETUP',600,'NOTIFY');
-REPLACE INTO state_timeouts VALUES ('PXEKERNEL','PXEWAKEUP',20,'REBOOT');
+REPLACE INTO state_timeouts VALUES ('PXEKERNEL','PXEWAKEUP',120,'REBOOT');
 REPLACE INTO state_timeouts VALUES ('SECUREBOOT','BOOTING',300,'STATE:SECVIOLATION');
 REPLACE INTO state_timeouts VALUES ('SECUREBOOT','GPXEBOOTING',60,'STATE:SECVIOLATION');
 REPLACE INTO state_timeouts VALUES ('SECUREBOOT','PXEBOOTING',60,'STATE:SECVIOLATION');
@@ -439,6 +439,7 @@ REPLACE INTO state_timeouts VALUES ('WIMRELOAD','SHUTDOWN',240,'REBOOT');
 REPLACE INTO state_timeouts VALUES ('WIMRELOAD','RELOADSETUP',60,'NOTIFY');
 REPLACE INTO state_timeouts VALUES ('WIMRELOAD','RELOADING',1800,'NOTIFY');
 REPLACE INTO state_timeouts VALUES ('WIMRELOAD','RELOADDONE',60,'NOTIFY');
+REPLACE INTO state_timeouts VALUES ('PXEKERNEL','PXEBOOTING',120,'REBOOT');
 
 --
 -- Dumping data for table `state_transitions`
@@ -707,6 +708,8 @@ REPLACE INTO state_transitions VALUES ('RELOAD-PCVM','RELOADING','RELOADFAILED',
 REPLACE INTO state_transitions VALUES ('RELOAD-PCVM','RELOADFAILED','SHUTDOWN','');
 REPLACE INTO state_transitions VALUES ('RELOAD-UE','RELOADING','RELOADDONE','ReloadDone');
 REPLACE INTO state_transitions VALUES ('RELOAD-UE','SHUTDOWN','RELOADING','Booting');
+REPLACE INTO state_transitions VALUES ('NORMALv2','BOOTING','PXEWAIT','MoonshotPxeWait');
+REPLACE INTO state_transitions VALUES ('PXEKERNEL','PXEWAKEUP','SHUTDOWN','MoonshotBootDisk');
 
 --
 -- Dumping data for table `state_triggers`
@@ -741,6 +744,7 @@ REPLACE INTO state_triggers VALUES ('*','WIMRELOAD','PXEBOOTING','REBOOT');
 REPLACE INTO state_triggers VALUES ('*','WIMRELOAD','BOOTING','REBOOT');
 REPLACE INTO state_triggers VALUES ('*','WIMRELOAD','ISUP','REBOOT');
 REPLACE INTO state_triggers VALUES ('*','RELOAD-UE','RELOADDONE','RELOADDONE');
+REPLACE INTO state_triggers VALUES ('*','NORMALv2','PXEWAIT','PXEBOOT');
 
 --
 -- Dumping data for table `table_regex`
@@ -1099,9 +1103,11 @@ REPLACE INTO table_regex VALUES ('images','relocatable','text','redirect','defau
 REPLACE INTO table_regex VALUES ('images','origin_uuid','text','regex','^\\w+\\-\\w+\\-\\w+\\-\\w+\\-\\w+$',0,64,NULL);
 REPLACE INTO table_regex VALUES ('images','origin_name','text','regex','^[-\\w\\.+:\\/]+$',0,128,NULL);
 REPLACE INTO table_regex VALUES ('images','origin_urn','text','redirect','projects:manager_urn',0,0,NULL);
+REPLACE INTO table_regex VALUES ('images','architecture','text','regex','^[\\w,]*$',0,0,NULL);
 REPLACE INTO table_regex VALUES ('node_types','new_type','text','redirect','default:tinytext',0,0,NULL);
 REPLACE INTO table_regex VALUES ('node_types','node_type','text','regex','^[-\\w]+$',1,30,NULL);
 REPLACE INTO table_regex VALUES ('node_types','class','text','regex','^[\\w]+$',1,30,NULL);
+REPLACE INTO table_regex VALUES ('node_types','architecture','text','regex','^[\\w,]*$',0,0,NULL);
 REPLACE INTO table_regex VALUES ('node_types','isvirtnode','text','redirect','default:boolean',0,0,NULL);
 REPLACE INTO table_regex VALUES ('node_types','isjailed','text','redirect','default:boolean',0,0,NULL);
 REPLACE INTO table_regex VALUES ('node_types','isswitch','text','redirect','default:boolean',0,0,NULL);

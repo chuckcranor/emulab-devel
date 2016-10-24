@@ -42,8 +42,9 @@ use Exporter;
          getlinkdelayconfig getloadinfo getbootwhat getnodeattributes
 	 copyfilefromnfs getnodeuuid getarpinfo
 	 getstorageconfig getstoragediskinfo getimagesize
-         getmanifest fetchmanifestblobs runbootscript runhooks 
+         getrcmanifest fetchrcmanifestblobs runbootscript runhooks 
          build_fake_macs getenvvars getpnetnodeattrs
+         sortedlistallfilesindir sortedreadallfilesindir
 
 	 TBDebugTimeStamp TBDebugTimeStampWithDate
 	 TBDebugTimeStampsOn TBDebugTimeStampsOff
@@ -803,40 +804,114 @@ sub donodeuuid()
     return 0;
 }
 
+sub rcordersort($$) {
+    my ($a,$b) = @_;
+    my $ca = substr($a,0,1);
+    my $cb = substr($b,0,1);
+    my $na = ($ca ge '0' && $ca le '9');
+    my $nb = ($cb ge '0' && $cb le '9');
+
+    if ($na && $nb) {
+	return int($a) <=> int($b);
+    }
+    elsif ($na && !$nb) {
+	return -1;
+    }
+    elsif (!$na && $nb) {
+	return 1;
+    }
+    else {
+	return $a cmp $b;
+    }
+}
+
+sub sortedlistallfilesindir($$;$) {
+    my ($dir,$rptr,$qualify) = @_;
+
+    my $DIRH;
+    my $rc = opendir($DIRH,$dir);
+    if (!$rc) {
+	return $rc;
+    }
+    my @files = grep { /^[^\.\#].*[^\~]$/ && -f "$dir/$_" } readdir($DIRH);
+    closedir($DIRH);
+    my @sfiles = sort rcordersort @files;
+    if (defined($qualify) && $qualify != 0) {
+	my @tfiles = ();
+	for my $file (@sfiles) {
+	    push(@tfiles,"$dir/$file");
+	}
+	@sfiles = @tfiles;
+    }
+    @$rptr = @sfiles;
+
+    return 0;
+}
+
+sub sortedreadallfilesindir($$) {
+    my ($dir,$rptr) = @_;
+
+    my @sfiles = ();
+    my $rc = sortedlistallfilesindir($dir,\@sfiles,1);
+    return $rc if ($rc);
+    for my $file (@sfiles) {
+	my $FH;
+	if (!open($FH,"$file")) {
+	    next;
+	}
+	my @lines = <$FH>;
+	close($FH);
+	push(@$rptr,@lines);
+    }
+
+    return 0;
+}
+
 #
 # Get the boot script manifest -- whether scripts are enabled, or hooked, and 
 # how and when they or their hooks run!
 #
-sub getmanifest($;$)
+sub getrcmanifest($;$)
 {
     my ($rptr,$nofetch) = @_;
-    my @tmccresults;
+    my @tmccresults = ();
     my %manifest = ();
+    my $retval = 0;
 
     print "Checking manifest...\n";
 
     if (tmcc(TMCCCMD_MANIFEST, undef, \@tmccresults) < 0) {
 	warn("*** WARNING: Could not get manifest from server!\n");
 	%$rptr = ();
-	return -1;
+	$retval = -1;
     }
+    # Always allow local manifests to be run, so add them into our results.
+    sortedreadallfilesindir("$DYNRUNDIR/rcmanifest.d",\@tmccresults);
+    sortedreadallfilesindir("$STATICRUNDIR/rcmanifest.d",\@tmccresults);
     if (@tmccresults == 0) {
 	%$rptr = ();
-	return 0;
+	return $retval;
     }
 
     my $servicepat = q(SERVICE NAME=([\w\.\-]+) ENV=(\w+) WHENCE=(\w+));
     $servicepat   .= q( ENABLED=(0|1) HOOKS_ENABLED=(0|1));
-    $servicepat   .= q( FATAL=(0|1) BLOBID=([\w\-]*));
+    $servicepat   .= q( FATAL=(0|1) (BLOBID)=([\w\-]*));
+    my $servicepatfile = q(SERVICE NAME=([\w\.\-]+) ENV=(\w+) WHENCE=(\w+));
+    $servicepatfile   .= q( ENABLED=(0|1) HOOKS_ENABLED=(0|1));
+    $servicepatfile   .= q( FATAL=(0|1) (FILE)=([^ ]*));
 
     my $hookpat = q(HOOK SERVICE=([\w\.\-]+) ENV=(\w+) WHENCE=(\w+));
     $hookpat   .= q( OP=(\w+) POINT=(\w+));
-    $hookpat   .= q( FATAL=(0|1) BLOBID=([\w\-]+));
+    $hookpat   .= q( FATAL=(0|1) (BLOBID)=([\w\-]+));
     $hookpat   .= q( ARGV="([^"]*)");
+    my $hookpatfile = q(HOOK SERVICE=([\w\.\-]+) ENV=(\w+) WHENCE=(\w+));
+    $hookpatfile   .= q( OP=(\w+) POINT=(\w+));
+    $hookpatfile   .= q( FATAL=(0|1) (FILE)=([^ ]+));
+    $hookpatfile   .= q( ARGV="([^"]*)");
 
     my @loadinforesults = ();
     if (tmcc(TMCCCMD_LOADINFO, undef, \@loadinforesults) < 0) {
-	warn("*** WARNING: getmanifest could not get loadinfo from server,\n".
+	warn("*** WARNING: getrcmanifest could not get loadinfo from server,\n".
 	     "             unsure if node is in MFS and reloading, continuing!\n");
     }
 
@@ -872,12 +947,16 @@ sub getmanifest($;$)
 	my $line = $tmccresults[$i];
 	my %service;
 
-	if ($line =~ /^$servicepat/) {
+	if ($line =~ /^$servicepat/ || $line =~ /^$servicepatfile/) {
 	    my %service = ( 'ENABLED' => $4,
 			    'HOOKS_ENABLED' => $5,
-			    'BLOBID' => $7,
+			    "$7" => $8,
 			    'WHENCE' => $3,
 			    'FATAL' => $6 );
+	    if (exists($service{'FILE'})) {
+		$service{'BLOBPATH'} = $service{'FILE'};
+	    }
+
 	    #
 	    # Filter the service part of the manifest so that only the 
 	    # settings that apply here are passed to scripts.
@@ -905,7 +984,7 @@ sub getmanifest($;$)
 		next;
 	    }
 	}
-	elsif ($line =~ /^$hookpat/) {
+	elsif ($line =~ /^$hookpat/ || $line =~ /^$hookpatfile/) {
 	    #
 	    # Filter the service part of the manifest so that only the 
 	    # settings that apply here are passed to scripts.
@@ -916,11 +995,14 @@ sub getmanifest($;$)
 		    $manifest{$1}{$hookstr} = [];
 		}
 
-		my $hook = { 'BLOBID' => $7,
+		my $hook = { "$7" => $8,
 			     'OP' => $4, 
 			     'WHENCE' => $3, 
 			     'FATAL' => $6, 
-			     'ARGV' => $8 };
+			     'ARGV' => $9 };
+		if (exists($hook->{'FILE'})) {
+		    $hook->{'BLOBPATH'} = $hook->{'FILE'};
+		}
 
 		$manifest{$1}{$hookstr}->[@{$manifest{$1}{$hookstr}}] = $hook;
 	    }
@@ -935,19 +1017,19 @@ sub getmanifest($;$)
 	}
     }
 
-    my $retval = 0;
+    $retval = 0;
 
     if (!defined($nofetch) || $nofetch != 1) {
 	print "Downloading any manifest blobs...\n";
 	%$rptr = %manifest;
-	$retval = fetchmanifestblobs($rptr,undef,'manifest');
+	$retval = fetchrcmanifestblobs($rptr,undef,'manifest');
     }
 
     %$rptr = %manifest;
     return $retval;
 }
 
-sub fetchmanifestblobs($;$$)
+sub fetchrcmanifestblobs($;$$)
 {
     my ($manifest,$savedir,$basename) = @_;
     if (!defined($savedir)) {
@@ -968,7 +1050,7 @@ sub fetchmanifestblobs($;$$)
 	    $retval = libtmcc::blob::getblob($manifest->{$script}{'BLOBID'},
 					     $bpath);
 	    if ($retval == -1) {
-		print STDERR "ERROR(fetchmanifestblobs): could not fetch " . 
+		print STDERR "ERROR(fetchrcmanifestblobs): could not fetch " . 
 		    $manifest->{$script}{'BLOBID'} . "!\n";
 		++$failed;
 	    }
@@ -982,13 +1064,14 @@ sub fetchmanifestblobs($;$$)
 	my @hooktypes = ('_PREHOOKS','_POSTHOOKS');
 	foreach my $hooktype (@hooktypes) {
 	    next 
-		if (!exists($manifest->{$script}{$hooktype}));
+		if (!exists($manifest->{$script}{$hooktype})
+		    || !exists($manifest->{$script}{'BLOBID'}));
 
 	    foreach my $hook (@{$manifest->{$script}{$hooktype}}) {
 		my $bpath = $blobpath . "." . $hook->{'BLOBID'};
 		$retval = libtmcc::blob::getblob($hook->{'BLOBID'},$bpath);
 		if ($retval == -1) {
-		    print STDERR "ERROR(fetchmanifestblobs): could not fetch " . 
+		    print STDERR "ERROR(fetchrcmanifestblobs): could not fetch " . 
 			$hook->{'BLOBID'} . "!\n";
 		    ++$failed;
 		}
@@ -1023,6 +1106,13 @@ sub runhooks($$$$)
 
 	for (my $i = 0; $i < @{$manifest->{$script}{$hookstr}}; ++$i) {
 	    my $hook = $manifest->{$script}{$hookstr}->[$i];
+
+	    if (!exists($hook->{'BLOBID'}) && exists($hook->{'BLOBPATH'})) {
+		# This is a local manifest hook; turn the path into an ID.
+		$hook->{'BLOBID'} = $hook->{'BLOBPATH'};
+		$hook->{'BLOBID'} =~ tr/\//_/;
+	    }
+
 	    my $blobid = $hook->{'BLOBID'};
 	    my $argv = $hook->{'ARGV'};
 	    my $hookrunfile = "$VARDIR/db/$script.${which}hook.$blobid.run";
@@ -1140,7 +1230,7 @@ sub runbootscript($$$$;@)
 	else {
 	    $argv .= " $what";
 	}
-	if ($havemanifest && $manifest->{$script}{'BLOBID'} ne '') {
+	if ($havemanifest && $manifest->{$script}{'BLOBPATH'} ne '') {
 	    my $blobpath = $manifest->{$script}{'BLOBPATH'};
 	    print "  Running $blobpath (instead of $path/$script)\n";
 	    system("$blobpath $argv");
@@ -1594,6 +1684,22 @@ sub genhostsfile($@)
 	return 1;
     }
 
+    #
+    # Read any hosts.head files.  We prefer /etc/hosts.head ; then
+    # $DYNRUNDIR/hosts.head ; then $STATICRUNDIR/hosts.head .  However,
+    # we'll take from all three places, so all three had better be
+    # correct!
+    #
+    my @hdirs = ("/etc",$DYNRUNDIR,$STATICRUNDIR);
+    foreach my $dir (@hdirs) {
+	next if (! -f "$dir/hosts.head");
+	if (!open(my $FH,"$dir/hosts.head") == 0) {
+	    my @lines = <$FH>;
+	    close($FH);
+	    print HOSTS @lines;
+	}
+    }
+
     my $localaliases = "loghost";
 
     #
@@ -1632,6 +1738,22 @@ sub genhostsfile($@)
 	    warn("Ignoring bad hosts line: $str");
 	}
     }
+
+    #
+    # Read any hosts.tail files.  We prefer /etc/hosts.tail ; then
+    # $DYNRUNDIR/hosts.tail ; then $STATICRUNDIR/hosts.tail .  However,
+    # we'll take from all three places, so all three had better be
+    # correct!
+    #
+    foreach my $dir (@hdirs) {
+	next if (! -f "$dir/hosts.tail");
+	if (!open(my $FH,"$dir/hosts.tail") == 0) {
+	    my @lines = <$FH>;
+	    close($FH);
+	    print HOSTS @lines;
+	}
+    }
+
     close(HOSTS);
     system("mv -f $HTEMP $pathname");
     if ($?) {
@@ -3520,7 +3642,7 @@ sub getarpinfo($;$)
 #
 # SLICE format:
 #
-# CMD=SLICE IDX=<index> CLASS=local PROTO=<SAS|SCSI|SATA> \
+# CMD=SLICE IDX=<index> CLASS=local PROTO=<SAS|SCSI|SATA|NVMe> \
 #   BSID=<local-disk-id> VOLNAME=<id> VOLSIZE=<size-in-MiB> MOUNTPOINT=<dir>
 #
 # Where:
@@ -3566,7 +3688,7 @@ sub getstorageconfig($;$) {
 	'MOUNTPOINT' => '\/[-\w\/\.]+',
 	'PERMS'	  => '(RO|RW|CLONE)',
 	'PERSIST' => '(0|1)',
-	'PROTO'	  => '(iSCSI|local|SCSI|SAS|SATA|PATA|IDE)',
+	'PROTO'	  => '(iSCSI|local|SCSI|SAS|SATA|PATA|IDE|NVMe)',
 	'UUID'	  => '[-\w\.:]+',
 	'UUID_TYPE'=> '(iqn|serial)',
 	'VOLNAME' => '[-\w]+',

@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2012-2015 University of Utah and the Flux Group.
+# Copyright (c) 2012-2016 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -91,7 +91,7 @@ $| = 1;
 #
 use lib "@prefix@/lib";
 use Node;
-use Image;
+use OSImage;
 
 #
 # Parse command arguments. Once we return from getopts, all that should be
@@ -132,7 +132,7 @@ if (defined($options{"N"})) {
 usage() 
     if (@ARGV != 1);
 
-my $image   = Image->Lookup($ARGV[0]);
+my $image   = OSImage->Lookup($ARGV[0]);
 if (!defined($image)) {
     fatal("No such image exists");
 }

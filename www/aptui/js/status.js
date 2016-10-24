@@ -167,9 +167,7 @@ $(function ()
 		window.location.replace("adminextend.php?uuid=" + uuid);
 		return;
 	    }
-            ShowExtendModal(uuid, RequestExtensionCallback, isadmin,
-                            isguest, null, window.APT_OPTIONS.freenodesurl,
-                            window.APT_OPTIONS.extension_requested,
+            ShowExtendModal(uuid, RequestExtensionCallback, isstud, isguest,
                             window.APT_OPTIONS.physnode_count,
                             window.APT_OPTIONS.physnode_hours);
 	});
@@ -333,10 +331,7 @@ $(function ()
 		window.location.replace("adminextend.php?uuid=" + uuid);
 		return;
 	    }
-	    ShowExtendModal(uuid, RequestExtensionCallback, isadmin, isguest,
-			    window.APT_OPTIONS.extend,
-			    window.APT_OPTIONS.freenodesurl,
-			    window.APT_OPTIONS.extension_requested,
+	    ShowExtendModal(uuid, RequestExtensionCallback, isstud, isguest,
 			    window.APT_OPTIONS.physnode_count,
 			    window.APT_OPTIONS.physnode_hours);
 	}
@@ -1698,11 +1693,15 @@ $(function ()
 		 * No point in showing linktest if no links at any site.
 		 * For the moment, we do not count links if they span sites
 		 * since linktest does not work across stitched links.
+		 *
+		 * We reset showlinktest cause we get called again after
+		 * a deletenode.
 		 */
+		showlinktest = false;
 		$(xml).find("link").each(function() {
 		    var managers = $(this).find("component_manager");
 		    if (managers.length == 1)
-			showlinktest++;
+			showlinktest = true;
 		});
 		SetupLinktest(instanceStatus);
 	    }
@@ -2356,13 +2355,18 @@ $(function ()
     //
     // Linktest support.
     //
+    var linktestsetup = 0;
     function SetupLinktest(status) {
 	if (hidelinktest || !showlinktest) {
-	    return;
+	    // We might remove a node that removes last link.
+	    return ToggleLinktestButtons(status);
 	}
+	if (linktestsetup) {
+	    return ToggleLinktestButtons(status);
+	}
+
+        linktestsetup = 1;
         var md = templates['linktest.md'];
-        console.info(md);
-        console.info(marked(md));
         $('#linktest-help').html(marked(md));
 
 	// Handler for the linktest modal button
@@ -2392,6 +2396,7 @@ $(function ()
     }
     function ToggleLinktestButtons(status) {
 	if (hidelinktest || !showlinktest) {
+	    $('#linktest-modal-button').addClass("hidden");
 	    DisableButton("start-linktest");
 	    return;
 	}

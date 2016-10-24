@@ -176,7 +176,7 @@ $(function ()
 	 */
 	$('#profile_instantiate_button').click(function (event) {
 	    window.location.replace("instantiate.php?profile=" +
-				    version_uuid);
+				    version_uuid + "&from=show-profile");
 	});
 	// Handler for normal instantiate submit button, which is in
 	// the modal.

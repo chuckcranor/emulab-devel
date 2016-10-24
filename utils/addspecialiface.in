@@ -65,7 +65,7 @@ sub fatal($);
 # Configure variables
 #
 my $TB          = "@prefix@";
-my $SNMPIT      = "$TB/bin/snmpit_test";
+my $SNMPIT      = "$TB/bin/snmpit";
 
 #
 # Testbed Support libraries

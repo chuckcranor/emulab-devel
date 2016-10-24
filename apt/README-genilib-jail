@@ -1,0 +1,52 @@
+How to setup update the genilib-jail environment.
+
+We use a combination of iocage and our own hand-rolled script to efficiently
+spawn up environments in which we can interpret geni-lib scripts. Right now
+we only have to do this at Utah, but down the road, if other sites start
+running their own portal, this will be needed.
+
+0. Convert your ops node to using ZFS.
+   Ugh.
+   
+1. Make sure the "iocage" package is installed.
+   We are using version 1.7.4.
+
+   pkg install iocage
+
+2. Setup the "base" jail.
+
+   iocage fetch release=10.2-RELEASE
+   iocage create -c release=10.2-RELEASE tag=py-cage-new
+
+   # if you want to be able to start it up with IP addr
+   iocage set ip4_addr='ix0|155.98.33.87' py-cage-new 
+   iocage set host_hostname='py-cage-new.emulab.net' py-cage-new
+
+   iocage set compression=off py-cage-new
+   iocage set quota=10G py-cage-new
+
+3. Install packages:
+
+   cd /iocage/jails/<UUID>/root
+   chroot . pkg install ca_root_nss
+
+   cat >etc/pkg/Emulab-devel.conf <<EOF
+Emulab-devel: {
+  url: "https://www.emulab.net/FreeBSD/10.2-devel/packages",
+  mirror_type: NONE,
+  enabled: yes
+}
+EOF
+
+   chroot . pkg install -r Emulab-devel emulab-genilib
+
+4. Make it a template
+
+   iocage set template=yes py-cage-new
+
+Updating your iocage:
+
+1. Fetch the appropriate release:
+
+   sudo iocage fetch release=10.2-RELEASE
+

@@ -2983,7 +2983,7 @@ sub CreateImage($)
     my $copyback_uuid;
 
     require EmulabConstants;
-    require Image;
+    require OSImage;
     require WebTask;
     require GeniEvent;
     
@@ -3099,13 +3099,13 @@ sub CreateImage($)
     # On this path, we do not allow system images to be shadowed.
     # We define system images as those in the emulab-ops project.
     #
-    if (Image->LookupByName($imagename)) {
+    if (OSImage->LookupByName($imagename)) {
 	return GeniResponse->Create(GENIRESPONSE_FORBIDDEN, undef,
 				    "Not allowed to shadow system images; ".
 				    "use a different name for your image");
     }
     # See if it already exists and check ownership permission.
-    my $image = Image->Lookup($experiment->pid(), $imagename);
+    my $image = OSImage->Lookup($experiment->pid(), $imagename);
     if (defined($image)) {
 	if (!((defined($image->creator_urn()) &&
 	       ($image->creator_urn() eq $user->urn() ||
@@ -3136,7 +3136,7 @@ sub CreateImage($)
 	    return GeniResponse->Create(GENIRESPONSE_BADARGS, undef,
 				"No dataset associated with $bsname on $node");
 	}
-	$image = Image->Lookup($blockstore->{'attributes'}->{'dataset'});
+	$image = OSImage->Lookup($blockstore->{'attributes'}->{'dataset'});
 	if (!defined($image)) {
 	    return GeniResponse->Create(GENIRESPONSE_SEARCHFAILED, undef,
 				"Dataset for $bsname does not exist");
@@ -3159,7 +3159,7 @@ sub CreateImage($)
 	    return GeniResponse->Create(GENIRESPONSE_ERROR, undef,
 				"Could not create new dataset descriptor");
 	}
-	my $clone = Image->Lookup("$pid/$imagename");
+	my $clone = OSImage->Lookup("$pid/$imagename");
 	if (!defined($clone)) {
 	    print STDERR "Could not look up clone: $pid/$imagename\n";
 	    return GeniResponse->Create(GENIRESPONSE_ERROR, undef,
@@ -3221,7 +3221,7 @@ sub CreateImage($)
     # Make sure we can get the image descriptor.
     #
     if (!defined($image)) {
-	$image = Image->Lookup($experiment->pid(), $imagename);
+	$image = OSImage->Lookup($experiment->pid(), $imagename);
 	if (!defined($image)) {
 	    $slice->UnLock();
 	    print STDERR "Cannot lookup descriptor for $imagename\n";
@@ -3393,7 +3393,7 @@ sub DeleteImage($)
 			$argref->{'creator_urn'} : undef);
     my ($imagename,$imagepid);
 
-    require Image;
+    require OSImage;
     
     if (! (defined($credentials) && defined($image_urn))) {
 	return GeniResponse->MalformedArgsResponse("Missing arguments");
@@ -3430,7 +3430,7 @@ sub DeleteImage($)
     #
     # Make sure we can get the image descriptor.
     #
-    my $image = Image->Lookup($imagepid, $imagename);
+    my $image = OSImage->Lookup($imagepid, $imagename);
     if (!defined($image)) {
 	return GeniResponse->Create(GENIRESPONSE_SEARCHFAILED, undef,
 				    "No such image");
@@ -3485,7 +3485,7 @@ sub ImageInfo($)
     my $credentials  = $argref->{'credentials'};
     my ($imagename,$imagepid);
 
-    require Image;
+    require OSImage;
     require File::stat;
     require WebTask;
     
@@ -3524,7 +3524,7 @@ sub ImageInfo($)
     #
     # Make sure we can get the image descriptor.
     #
-    my $image = Image->Lookup($imagepid, $imagename);
+    my $image = OSImage->Lookup($imagepid, $imagename);
     if (!defined($image)) {
 	return GeniResponse->Create(GENIRESPONSE_SEARCHFAILED, undef,
 				    "No such image");
@@ -3582,7 +3582,7 @@ sub TriggerImageUpdate($)
     my ($argref) = @_;
     my $blob         = $argref->{'info'};
     my $credentials  = $argref->{'credentials'};
-    require Image;
+    require OSImage;
     require emdb;
 
     if (! (defined($credentials) && defined($blob))) {
@@ -3617,12 +3617,12 @@ sub TriggerImageUpdate($)
 				"invalid updater urn")
 	if (! GeniHRN::IsValid($blob->{'updater_urn'}));
     
-    my $localimage = Image->Lookup($blob->{'origin_uuid'});
+    my $localimage = OSImage->Lookup($blob->{'origin_uuid'});
     return GeniResponse->Create(GENIRESPONSE_SEARCHFAILED)
 	if (!defined($localimage));
 
     # Need the most recent version of the image.
-    my $currentimage = Image->Lookup($localimage->image_uuid());
+    my $currentimage = OSImage->Lookup($localimage->image_uuid());
     return GeniResponse->Create(GENIRESPONSE_ERROR, undef,
 				"Internal error getting most current image")
 	if (!defined($currentimage));
@@ -3715,7 +3715,7 @@ sub ListImages($)
     my ($argref) = @_;
     my $user_urn     = $argref->{'user_urn'};
     my $credentials  = $argref->{'credentials'};
-    require Image;
+    require OSImage;
     
     if (! defined($credentials)) {
 	return GeniResponse->MalformedArgsResponse("Missing arguments");
@@ -3753,7 +3753,7 @@ sub ListImages($)
     else {
 	$user_urn = $user->urn();
     }
-    my @images = Image->ListForURN($user_urn);
+    my @images = OSImage->ListForURN($user_urn);
     return GeniResponse->Create(GENIRESPONSE_SUCCESS, [])
 	if (!@images);
 
@@ -5213,6 +5213,8 @@ sub RunLinktest($)
     }
     else {
 	my $command = "$LINKTEST -e -l $level -t 3600 ";
+	$command .= "-N "
+	    if ($experiment->HasNoNFSMounts());
 	$command .= "-o " . $logfile->filename() . " "
 	    if (defined($async));
 	$command .= "$pid $eid";

@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2010-2015 University of Utah and the Flux Group.
+# Copyright (c) 2010-2016 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -67,11 +67,10 @@ $| = 1;
 #
 # Load the Testbed support stuff.
 #
-use lib "/usr/testbed/lib";
+use lib "@prefix@/lib";
 use emdb;
 use libEmulab;
-use Image;
-use OSinfo;
+use OSImage;
 
 # Default parent for this site is a sitevar.
 my $DEFAULT_PARENT = GetSiteVar("general/default_xen_parentosid");
@@ -114,13 +113,13 @@ if ($doall) {
 		     "      FIND_IN_SET('xen-host', v2.osfeatures)");
 
     while (my ($osid) = $query_result->fetchrow_array()) {
-	my $image = Image->Lookup($osid);
+	my $image = OSImage->Lookup($osid);
 	push(@images, $image)
 	    if (defined($image));
     }
 }
 else {
-    my $image = Image->Lookup($ARGV[0]);
+    my $image = OSImage->Lookup($ARGV[0]);
     if (!defined($image)) {
 	fatal("No such image");
     }
@@ -129,12 +128,8 @@ else {
 
 if ($clear) {
     foreach my $image (@images) {
-	my $osinfo = OSinfo->Lookup($image->imageid());
-	if (!defined($osinfo)) {
-	    fatal("Could not find osinfo for $image");
-	}
 	my $imageid = $image->imageid();
-	my $osid    = $osinfo->osid();
+	my $osid    = $image->osid();
 	if ($impotent) {
 	    print "Would clear parents for $image\n";
 	}
@@ -151,39 +146,30 @@ if ($clear) {
 #
 # Find the "default" parent image and the list of others parents.
 #
-my $parent_image = Image->Lookup($parent);
+my $parent_image = OSImage->Lookup($parent);
 if (!defined($parent_image)) {
-    $parent_image = Image->LookupByName($parent);
+    $parent_image = OSImage->LookupByName($parent);
     if (!defined($parent_image)) {
 	fatal("No such parent $parent");
     }
 }
-my $parent_osinfo = OSinfo->Lookup($parent_image->imageid());
-if (!defined($parent_osinfo)) {
-    fatal("No osinfo for $parent");
-}
-    
 my @other_parents = ();
 foreach my $imagename (@OTHER_PARENTS) {
-    my $osinfo = OSinfo->LookupByName($imagename);
-    push(@other_parents, $osinfo)
-	if (defined($osinfo));
+    my $osimage = OSImage->LookupByName($imagename);
+    push(@other_parents, $osimage)
+	if (defined($osimage));
 }
 
 #
 # Loop through all images. 
 #
 foreach my $image (@images) {
-    my $osinfo = OSinfo->Lookup($image->imageid());
-    if (!defined($osinfo)) {
-	fatal("Could not find osinfo for $image");
-    }
     if ($impotent) {
-	print "Would set $image to run on $parent_osinfo (default)\n";
+	print "Would set $image to run on $parent_image (default)\n";
     }
     else {
-	$osinfo->SetParentOS($parent_osinfo);
-	$osinfo->SetRunsOnParent($parent_osinfo);
+	$image->SetParentOS($parent_image);
+	$image->SetRunsOnParent($parent_image);
     }
     # And the rest of the parents.
     foreach my $other_parent (@other_parents) {
@@ -191,7 +177,7 @@ foreach my $image (@images) {
 	    print "  Would set $image to run on $other_parent\n";
 	}
 	else {
-	    $osinfo->SetRunsOnParent($other_parent);
+	    $image->SetRunsOnParent($other_parent);
 	}
     }
     if ($impotent) {

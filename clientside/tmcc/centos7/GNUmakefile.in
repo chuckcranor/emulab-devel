@@ -134,7 +134,7 @@ sysetc-onceonly-install:
 	@echo "sysetc-onceonly-install"
 
 script-install:	dir-install $(SCRIPTS)
-	$(INSTALL) -m 755 $(SRCDIR)/delaysetup $(BINDIR)/delaysetup
+	@echo "no centos-specific script files"
 
 sfs-install:
 	@echo "no centos-specific sfs files"

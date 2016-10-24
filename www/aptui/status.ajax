@@ -302,6 +302,7 @@ function Do_RequestExtension()
 {
     global $instance, $creator, $this_user, $suexec_output;
     global $ajax_args;
+    $inhours = 0;
     $autoextend_maximum = TBGetSiteVar("aptui/autoextend_maximum");
 
     if (StatusSetupAjax(1)) {
@@ -348,6 +349,16 @@ function Do_RequestExtension()
             $reason = $ajax_args["reason"];
         }
     }
+    elseif (isset($ajax_args["inhours"])) {
+        #
+        # For short extensions, no reason necessary.
+        #
+        $inhours = 1;
+        if ($wanted >= 24) {
+            SPITAJAX_ERROR(1, "Too big for hourly update");
+            goto bad;
+        }
+    }
     else {
 	if (!isset($ajax_args["reason"]) || $ajax_args["reason"] == "") {
 	    SPITAJAX_ERROR(1, "Missing reason");
@@ -368,8 +379,9 @@ function Do_RequestExtension()
     $webtask = WebTask::CreateAnonymous();
     $retval = SUEXEC("nobody", "nobody",
 		     "webmanage_instance -t " . $webtask->task_id() . " -- ".
-                     "  extend $uuid $wanted ".
-                        (isset($filename) ? $filename : ""),
+                     "  extend $uuid " .
+                     (isset($filename) ? "-f $filename " : "").
+                     ($inhours ? "-h " : "") . "$wanted",
 		     SUEXEC_ACTION_IGNORE);
     $webtask->Refresh();
     if (isset($filename)) {
@@ -402,7 +414,7 @@ function Do_RequestExtension()
     $blob = array("expiration" => 
                   date("Y-m-d H:i:s T", strtotime($slice->expires())));
     $webtask->Delete();
-    SPITAJAX_RESPONSE(blob);
+    SPITAJAX_RESPONSE($blob);
 bad:
 delay:
     sleep(1);

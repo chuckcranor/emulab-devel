@@ -142,7 +142,7 @@ use emutil;
 use libEmulab;
 use Logfile;
 use Project;
-use Image;
+use OSImage;
 
 #
 # So we know who/what we are acting as.
@@ -1318,7 +1318,7 @@ sub HandleImageTracking()
 	if (!$query_result);
     while (my $row = $query_result->fetchrow_hashref()) {
 	my $imageid = $row->{'imageid'};
-	my $image   = Image->Lookup($imageid);
+	my $image   = OSImage->Lookup($imageid);
 	if (!defined($image)) {
 	    print STDERR "$imageid no longer exists. Skipping notification.\n";
 	    next;
@@ -1360,7 +1360,7 @@ sub HandleImageTracking()
     
     while (my $row = $query_result->fetchrow_hashref()) {
 	my $imageid = $row->{'imageid'};
-	my $image   = Image->Lookup($imageid);
+	my $image   = OSImage->Lookup($imageid);
 	
 	if (!defined($image)) {
 	    print STDERR "$imageid no longer exists. Skipping update ...\n";

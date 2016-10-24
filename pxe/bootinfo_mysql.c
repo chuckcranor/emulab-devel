@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2000-2015 University of Utah and the Flux Group.
+ * Copyright (c) 2000-2016 University of Utah and the Flux Group.
  * 
  * {{{EMULAB-LICENSE
  * 
@@ -83,8 +83,8 @@ findnode_bootinfo_db(struct in_addr ipaddr, int *events)
 	}
 
 	row = mysql_fetch_row(res);
-	if ((row[0] && strcmp(row[0], "pxelinux") == 0) ||
-	    (row[1] && strcmp(row[1], "pxelinux") == 0))
+	if ((row[1] && strcmp(row[1], "pxelinux") == 0) ||
+	    (row[2] && strcmp(row[2], "pxelinux") == 0))
 		*events = 0;
 	else
 		*events = 1;

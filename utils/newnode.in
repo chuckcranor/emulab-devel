@@ -1,7 +1,7 @@
 #!/usr/bin/perl -w
 
 #
-# Copyright (c) 2003-2014 University of Utah and the Flux Group.
+# Copyright (c) 2003-2016 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -34,7 +34,7 @@ use libtestbed;
 use libxmlrpc;
 use NodeType;
 use English;
-use OSinfo;
+use OSImage;
 use Getopt::Std;
 use EmulabFeatures;
 
@@ -242,10 +242,10 @@ NODE: foreach my $node_id (@node_ids) {
 
     # Find object for the adminfs.
     if (defined($adminmfs_osid)) {
-	$adminmfs = OSinfo->Lookup($adminmfs_osid);
+	$adminmfs = OSImage->Lookup($adminmfs_osid);
     }
     else {
-	$adminmfs = OSinfo->Lookup(TBOPSPID(), $MFS_INITIAL);
+	$adminmfs = OSImage->Lookup(TBOPSPID(), $MFS_INITIAL);
     }
 
     #
@@ -328,16 +328,16 @@ NODE: foreach my $node_id (@node_ids) {
     my ($osid,$osid_vers,$opmode);
     
     if ($role eq "ctrlnode") {
-	my $osinfo = OSinfo->Lookup(TBOPSPID(), $OS_OPSNODE);
+	my $osimage = OSImage->Lookup(TBOPSPID(), $OS_OPSNODE);
 
-	$osid   = $osinfo->osid();
-	$osid_vers = $osinfo->vers();
-	$opmode = $osinfo->op_mode();
+	$osid      = $osimage->osid();
+	$osid_vers = $osimage->version();
+	$opmode    = $osimage->op_mode();
     }
     else {
-	$osid   = $adminmfs->osid();
+	$osid      = $adminmfs->osid();
 	$osid_vers = $adminmfs->vers();
-	$opmode = $adminmfs->op_mode();
+	$opmode    = $adminmfs->op_mode();
     }
 
     #

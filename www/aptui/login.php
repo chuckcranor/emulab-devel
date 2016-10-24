@@ -186,10 +186,6 @@ function SPITFORM($uid, $referrer, $error)
              </div>
              <div class='form-group'>
                <div class='col-sm-offset-2 col-sm-10'>
-                 <a class='btn btn-info btn-sm pull-left'
-		    type='button' href='forgotpswd.php'
-                    style='margin-right: 10px;'>
-                    Forgot Password?</a>
 <?php
     if ($ISCLOUD || $ISPNET) {
 	?>
@@ -213,6 +209,14 @@ function SPITFORM($uid, $referrer, $error)
                          type='submit' name='login'>Login</button>
                </div>
              </div>
+	     <div class='form-group'>
+<!--	       <div class="col-sm-12"> -->
+                 <a class='pull-right'
+		    type='button' href='forgotpswd.php'
+                    style='margin-right: 10px;'>
+                    Forgot Password?</a>
+<!--	       </div> -->
+	     </div>
 <?php
     echo "
             <br> 
@@ -244,7 +248,7 @@ if (!$ajax_request && !isset($login)) {
 	header("Location: $APTBASE/landing.php");
 	return;
     }
-    if (NOLOGINS()) {
+    if (NOLOGINS() && !$adminmode) {
         SPITHEADER();
         SPITUSERERROR("Sorry, logins are temporarily disabled, ".
                       "please try again later.");

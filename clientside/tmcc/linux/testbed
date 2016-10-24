@@ -1,6 +1,6 @@
 #!/bin/bash
 #
-# Copyright (c) 2000-2015 University of Utah and the Flux Group.
+# Copyright (c) 2000-2016 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -102,6 +102,9 @@ case "$1" in
 	echo
 	echo -n "  tippty: "
 	killproc tippty
+	echo
+	echo -n "  capture-nossl: "
+	killproc capture-nossl
 	echo
         if [ ! -f /var/lock/subsys/tbprepare ]; then
 	    echo "Informing the testbed we're rebooting ..."

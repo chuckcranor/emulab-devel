@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2000-2015 University of Utah and the Flux Group.
+# Copyright (c) 2000-2016 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -35,10 +35,10 @@ use POSIX qw(strftime);
 #
 sub usage()
 {
-    print "Usage: bootvnodes [-d] [-f] [-k | -h | -r | -b | -c]\n";
+    print STDERR "Usage: bootvnodes [-w sec] [-d] [-f] [-k|-h|-r|-b|-c]\n";
     exit(1);
 }
-my $optlist = "kdfhrcb";
+my $optlist = "kdfhrcbw:";
 
 #
 # Turn off line buffering on output
@@ -62,6 +62,7 @@ my $vndir   = "$VARDIR/jails";
 my $debug   = 0;
 my $daemon  = 1;
 my $reconfig= 0;
+my $waittime = 0;
 my $action;
 
 # Prototypes
@@ -104,6 +105,13 @@ if (defined($options{"b"})) {
 }
 if (defined($options{"c"})) {
     $reconfig = 1;
+}
+if (defined($options{"w"})) {
+    if ($options{"w"} !~ /^(\d+)$/) {
+	print STDERR "Invalid wait time for -w\n";
+	usage();
+    }
+    $waittime = $1;
 }
 if (@ARGV) {
     usage();
@@ -154,6 +162,20 @@ if (GENVNODE() &&
 }
 
 #
+# Sort by vnode number if it follows are convention. We need this because
+# we don't use a fixed field width for the vnode number.
+# XXX I am sure there are more perl-ish ways to do this.
+#
+sub byvnode {
+    if ($a =~ /^(.*)-(\d+)$/ && ($apre = $1) && ($anum = $2) &&
+	$b =~ /^(.*)-(\d+)$/ && ($bpre = $1) && ($bnum = $2) &&
+	$apre eq $bpre) {
+	return $anum <=> $bnum;
+    }
+    return $a cmp $b;
+}
+
+#
 # This applies to whatever vnodes are running. Do it and exit.
 # 
 if (defined($action) && !$reconfig) {
@@ -162,10 +184,22 @@ if (defined($action) && !$reconfig) {
     my @files = readdir(DIR);
     closedir(DIR);
 
+    #
+    # XXX make a feeble effort to weed out random files.
+    #
+    # We used to do this by making sure the name was of the form
+    # pcvm<foo>-<num>, but not all clusters use the "pc" naming scheme.
+    # So now, the best we can do is ensure that the name is like
+    # <foo>vm<bar>-<num> and is a directory.
+    #
+    my @vnfiles = ();
     foreach my $file (@files) {
-	if ($file =~ /^((?:pc|homenet)vm[-\w]*)$/) {
-	    bootvnode($1, $action, (-e "$vndir/$file/fakejail" ? 0 : 1));
+	if ($file =~ /^([-\w]+vm[-\w]*-\d+)$/ && -d "$vndir/$file") {
+	    push(@vnfiles, $1);
 	}
+    }
+    foreach my $file (sort byvnode @vnfiles) {
+	bootvnode($file, $action, (-e "$vndir/$file/fakejail" ? 0 : 1));
     }
     exit(0);
 }
@@ -190,22 +224,8 @@ foreach my $str (@tmccresults) {
 	    if ($2 eq "0");
     }
     else {
-	warn("*** WARNING: Skipping bad subnodeid: '$str'\n");
+	warn("*** WARNING: Skipping bad VNODEID: '$str'\n");
     }
-}
-
-#
-# Sort by vnode number if it follows are convention. We need this because
-# we don't use a fixed field width for the vnode number.
-# XXX I am sure there are more perl-ish ways to do this.
-#
-sub byvnode {
-    if ($a =~ /^(.*)-(\d+)$/ && ($apre = $1) && ($anum = $2) &&
-	$b =~ /^(.*)-(\d+)$/ && ($bpre = $1) && ($bnum = $2) &&
-	$apre eq $bpre) {
-	return $anum <=> $bnum;
-    }
-    return $a cmp $b;
 }
 
 #
@@ -218,14 +238,19 @@ if ($reconfig) {
     my @files = readdir(DIR);
     closedir(DIR);
 
+    # XXX make a feeble effort to weed out random files.
+    my @vnfiles = ();
     foreach my $file (@files) {
-	if ($file =~ /^((?:pc|homenet)vm[-\w]*)$/) {
-	    if (-e "$vndir/$file/fakejail") {
-		$fakejails++;
-		$curvnodelist{$1} = 0;
-	    } else {
-		$curvnodelist{$1} = 1;
-	    }
+	if ($file =~ /^([-\w]+vm[-\w]*-\d+)$/ && -d "$vndir/$file") {
+	    push(@vnfiles, $1);
+	}
+    }
+    foreach my $file (sort byvnode @vnfiles) {
+	if (-e "$vndir/$file/fakejail") {
+	    $fakejails++;
+	    $curvnodelist{$file} = 0;
+	} else {
+	    $curvnodelist{$file} = 1;
 	}
     }
 
@@ -360,7 +385,7 @@ sub bootvnode($$$)
     my ($vnode, $action, $jailed) = @_;
     my $opt;
     my $act;
-    my $extrawait;
+    my $extrawait = $waittime;
 
     if ($action eq "halt") {
 	$opt = "-h";
@@ -369,8 +394,8 @@ sub bootvnode($$$)
     elsif ($action eq "reboot") {
 	$opt = "-r";
 	$act = "Rebooting";
-	$extrawait = 20
-	    if (GENVNODETYPE() eq "xen");
+	## XXX should no longer be needed
+	#$extrawait = 20 if (GENVNODETYPE() eq "xen");
     }
     elsif ($action eq "kill") {
 	$opt = "-k";
@@ -379,8 +404,8 @@ sub bootvnode($$$)
     else {
 	$opt = "-b";
 	$act = "Booting";
-	$extrawait = 20
-	    if (GENVNODETYPE() eq "xen");
+	## XXX should no longer be needed
+	#$extrawait = 20 if (GENVNODETYPE() eq "xen");
     }
     $opt .= ($jailed ? " -jVt" : " -i");
     
@@ -390,6 +415,6 @@ sub bootvnode($$$)
     return($?)
 	if ($?);
     sleep($extrawait)
-	if (defined($extrawait));
+	if ($extrawait > 0);
     return 0;
 }

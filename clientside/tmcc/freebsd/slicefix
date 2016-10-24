@@ -898,9 +898,13 @@ dolinux() {
 		;;
 	# NVM disks
 	nvd[0-9])
-		dtype="nvme0n1"
+		dtype="nvme"
 		dunit=`echo $disk | sed -e 's/nvd\([0-9][0-9]*\)$/\1/'`
 		lrootdev="8${dunit}${part}"
+
+		# XXX assume "n1"
+		ldisk="${dtype}${dunit}n1p"
+		rootdev="/dev/${ldisk}${part}"
 		;;
 	# SCSI
 	da[0-7])
@@ -930,9 +934,12 @@ dolinux() {
 		return 1
 		;;
 	esac
-	dunit=`echo $dunit | sed -e 'y/01234567/abcdefgh/'`;
-	ldisk=$dtype$dunit
-	rootdev=/dev/${disk}s${part}
+
+	dunit=`echo $dunit | sed -e 'y/0123456789/abcdefghij/'`;
+	if [ "$dtype" != "nvme" ]; then
+	    ldisk=$dtype$dunit
+	    rootdev=/dev/${disk}s${part}
+	fi
 
 	#
 	# See if there is a valid filesystem UUID to use in fstab and grub.
@@ -991,7 +998,13 @@ dolinux() {
 
 	# change the devices in fstab
 	echo "  updating /etc/fstab"
-	sed -i .preemulab -e "s;^/dev/[hs]d.\([0-7]\);/dev/${ldisk}\1;" /mnt/etc/fstab || {
+	sed -i .preemulab -e "s;^/dev/[hs]d.\([0-9]\);/dev/${ldisk}\1;" /mnt/etc/fstab || {
+	    echo "Failed to update /etc/fstab"
+	    umount $rootdev
+	    return 1
+	}
+	# XXX handle NVMe too...
+	sed -i '' -e "s;^/dev/nvme.n1p\([0-9]\);/dev/${ldisk}\1;" /mnt/etc/fstab || {
 	    echo "Failed to update /etc/fstab"
 	    umount $rootdev
 	    return 1

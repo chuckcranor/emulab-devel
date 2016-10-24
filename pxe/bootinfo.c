@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2000-2014 University of Utah and the Flux Group.
+ * Copyright (c) 2000-2016 University of Utah and the Flux Group.
  * 
  * {{{EMULAB-LICENSE
  * 
@@ -86,14 +86,16 @@ bootinfo(struct in_addr ipaddr, char *node_id, struct boot_info *boot_info,
 	int		err;
 #ifdef	EVENTSYS
 	int		needevent = 0, eventfailed = 0;
-	int		doevents = 0;
+	int		doevents = 0, no_boot_event_send = no_event_send;
 
 	/*
-	 * We are not going to send events for nodes we don't know about
-	 * or that are "pxelinux" nodes.
+	 * We are not going to send any events for nodes we don't know about,
+	 * or PXEBOOTING/BOOTING events for "pxelinux" nodes.
 	 */
-	if (!findnode_bootinfo_db(ipaddr, &doevents) || doevents == 0)
-		no_event_send = 1;
+	if (!findnode_bootinfo_db(ipaddr, &doevents))
+		no_boot_event_send = no_event_send = 1;
+	else if (!no_event_send)
+		no_boot_event_send = doevents ? 0 : 1;
 #endif
 
 	switch (boot_info->opcode) {
@@ -101,12 +103,17 @@ bootinfo(struct in_addr ipaddr, char *node_id, struct boot_info *boot_info,
 		info("%s: KEYED REQUEST (key=[%s], vers %d)\n",
 			inet_ntoa(ipaddr), boot_info->data, boot_info->version);
 #ifdef	EVENTSYS
-		needevent = bicache_needevent(ipaddr);
-		if (!no_event_send && needevent &&
-		    bievent_send(ipaddr, opaque, TBDB_NODESTATE_PXEBOOTING)) {
-			/* send failed, clear the cache entry */
-			bicache_clearevent(ipaddr);
-			eventfailed = 1;
+		if (!no_event_send) {
+			needevent = bicache_needevent(ipaddr);
+#if defined(BOOTINFO_PXEEVENTS)
+			if (!no_boot_event_send && needevent &&
+			    bievent_send(ipaddr, opaque,
+					 TBDB_NODESTATE_PXEBOOTING)) {
+				/* send failed, clear the cache entry */
+				bicache_clearevent(ipaddr);
+				eventfailed = 1;
+			}
+#endif
 		}
 #endif
 		err = query_bootinfo_db(ipaddr, node_id, boot_info->version, 
@@ -117,12 +124,17 @@ bootinfo(struct in_addr ipaddr, char *node_id, struct boot_info *boot_info,
 		info("%s: REQUEST (vers %d)\n",
 		     inet_ntoa(ipaddr), boot_info->version);
 #ifdef	EVENTSYS
-		needevent = bicache_needevent(ipaddr);
-		if (!no_event_send && needevent &&
-		    bievent_send(ipaddr, opaque, TBDB_NODESTATE_PXEBOOTING)) {
-			/* send failed, clear the cache entry */
-			bicache_clearevent(ipaddr);
-			eventfailed = 1;
+		if (!no_event_send) {
+			needevent = bicache_needevent(ipaddr);
+#if defined(BOOTINFO_PXEEVENTS)
+			if (!no_boot_event_send && needevent &&
+			    bievent_send(ipaddr, opaque,
+					 TBDB_NODESTATE_PXEBOOTING)) {
+				/* send failed, clear the cache entry */
+				bicache_clearevent(ipaddr);
+				eventfailed = 1;
+			}
+#endif
 		}
 #endif
 		err = query_bootinfo_db(ipaddr, node_id,
@@ -143,7 +155,7 @@ bootinfo(struct in_addr ipaddr, char *node_id, struct boot_info *boot_info,
 	else {
 		boot_info->status = BISTAT_SUCCESS;
 #ifdef	EVENTSYS
-		if (!no_event_send && needevent) {
+		if (needevent) {
 			/*
 			 * Retry a failed PXEBOOTING event.
 			 *
@@ -151,14 +163,16 @@ bootinfo(struct in_addr ipaddr, char *node_id, struct boot_info *boot_info,
 			 * the road as stated gets out of sync. So pause
 			 * here and try to stay on track.
 			 */
-			if (eventfailed) {
+			if (!no_boot_event_send && eventfailed) {
 				sleep(1);
 				info("%s: retry failed PXEBOOTING event\n",
 				     inet_ntoa(ipaddr));
 				bicache_needevent(ipaddr);
+#if defined(BOOTINFO_PXEEVENTS)
 				if (bievent_send(ipaddr, opaque,
 						 TBDB_NODESTATE_PXEBOOTING))
 					bicache_clearevent(ipaddr);
+#endif
 			}
 			switch (boot_whatp->type) {
 			case BIBOOTWHAT_TYPE_PART:
@@ -166,8 +180,14 @@ bootinfo(struct in_addr ipaddr, char *node_id, struct boot_info *boot_info,
 			case BIBOOTWHAT_TYPE_SYSID:
 			case BIBOOTWHAT_TYPE_MB:
 			case BIBOOTWHAT_TYPE_MFS:
-				bievent_send(ipaddr, opaque,
-					     TBDB_NODESTATE_BOOTING);
+#if defined(BOOTINFO_PXEEVENTS)
+				if (!no_boot_event_send) {
+					bievent_send(ipaddr, opaque,
+						     TBDB_NODESTATE_BOOTING);
+					break;
+				}
+#endif
+				needevent = 0;
 				break;
 					
 			case BIBOOTWHAT_TYPE_WAIT:
@@ -183,6 +203,7 @@ bootinfo(struct in_addr ipaddr, char *node_id, struct boot_info *boot_info,
 			default:
 				error("%s: invalid boot directive: %d\n",
 				      inet_ntoa(ipaddr), boot_whatp->type);
+				needevent = 0;
 				break;
 			}
 		}

@@ -232,6 +232,17 @@ Blockstore instproc set-rwclone {flag} {
     return
 }
 
+Blockstore instproc set-prereserve {flag} {
+    $self instvar attributes
+
+    if {$flag != 0} {
+	set flag 1
+    }
+
+    set attributes(prereserve) $flag
+    return
+}
+
 #
 # Alias for procedure below
 #
@@ -331,6 +342,18 @@ Blockstore instproc finalize {} {
 	}
     }
     set attributes(rwclone) $rwclone
+
+    # Check prereserve
+    set prereserve 0
+    if {[info exists attributes(prereserve)]} {
+	set prereserve $attributes(prereserve)
+	# Prereserve only applies to RW clones
+	if {$rwclone == 0 && $prereserve} {
+	    puts stderr "*** WARNING: space pre-reservation only applies to RW-clones, ignoring setting on $self"
+	    set prereserve 0
+	}
+    }
+    set attributes(prereserve) $prereserve
 
     # If the blockstore is associated with a lease, disallow/override certain
     # explicitly-specified values

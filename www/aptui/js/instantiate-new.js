@@ -199,6 +199,7 @@ $(function ()
 		return Instantiate(this, event);
 	    },
 	});
+
 	// This activates the popover subsystem. 
 	$('[data-toggle="popover"]').popover({
 	    trigger: 'hover',
@@ -363,7 +364,12 @@ $(function ()
 	    
 	var startProfile = $('#profile_name li[value = ' + window.PROFILE + ']:first');
 	ChangeProfileSelection(startProfile);
-	_.delay(function () {$('.dropdown-toggle').dropdown();}, 500);
+	_.delay(function () {
+	    $('.dropdown-toggle').dropdown();
+	    if (window.SKIPFIRSTSTEP) {
+		$('#stepsContainer').steps('next');
+	    }
+	}, 500);
 
 	// Set up the click function for expanding and collapsing profile groups
 	$('#profile_name > span').click(function() {
@@ -933,18 +939,22 @@ $(function ()
 
 	    _.each(amlist, function(name, key) {
 		var data = monitor[key];
+		var rating, classes;
 		var target = $('#'+which+' .cluster_picker_status .dropdown-menu .enabled a:contains("'+name+'")');
 		if (data && !$.isEmptyObject(data)) {
 		    // Calculate testbed rating and set up tooltips.
-		    var rating = wt.CalculateRating(data, resourceTypes);
-		    
-		    target.parent().attr('data-health', rating[0]).attr('data-rating', rating[1]);
-		    
-		    var classes = wt.AssignStatusClass(rating[0], rating[1]);
-		    target.addClass(classes[0]).addClass(classes[1]);
-
-		    target.append(wt.StatsLineHTML(classes, rating[2]));
+		    rating = wt.CalculateRating(data, resourceTypes);
+		    classes = wt.AssignStatusClass(rating[0], rating[1]);
 		}
+		else {
+		    rating = wt.InactiveRating();
+		    classes = wt.AssignInactiveClass();
+		}
+		target.parent().attr('data-health', rating[0]).attr('data-rating', rating[1]);
+		    
+		target.addClass(classes[0]).addClass(classes[1]);
+
+		target.append(wt.StatsLineHTML(classes, rating[2]));
 	    });
 
 	    var sort = function (a, b) {

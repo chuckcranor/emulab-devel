@@ -628,7 +628,7 @@ if (! -e "$VNDIR/vnode.info") {
 
     ($ret,$err) = safeLibOp('vnodeCreate',0,0);
     if ($err) {
-	MyFatal("vnodeCreate failed");
+	MyFatal("vnodeCreate failed: $err");
     }
     $vmid = $ret;
 

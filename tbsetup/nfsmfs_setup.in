@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2000-2014 University of Utah and the Flux Group.
+# Copyright (c) 2000-2016 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -95,7 +95,7 @@ use libdb;
 use libtestbed;
 use Data::Dumper;
 use Node;
-use OSinfo;
+use OSImage;
 
 #
 # Check args.
@@ -152,7 +152,7 @@ foreach my $nodeid (@ARGV) {
     }
 
     if (!$nocheck) {
-	if (OSinfo->Lookup($nodeobj->adminmfs_osid())->IsNfsMfs()) {
+	if (OSImage->Lookup($nodeobj->adminmfs_osid())->IsNfsMfs()) {
 	    push @nodes, $nodeid;
 	}
     } else {

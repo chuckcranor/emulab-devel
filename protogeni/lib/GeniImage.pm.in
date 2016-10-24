@@ -46,8 +46,8 @@ use GeniHRN;
 use Genixmlrpc;
 use GeniResponse;
 use GeniUtil;
-use Image;
-use OSinfo;
+use OSImage;
+use Image; # For datasets.
 use emutil;
 use Node;
 use English;
@@ -268,7 +268,7 @@ sub MapToLocalImage($$)
 	print STDERR "Bad version number in $urn\n";
 	return undef;
     }
-    my $image = Image->Lookup($pid,$imagename);
+    my $image = OSImage->Lookup($pid,$imagename);
     if (defined($image)) {
 	#
 	# So, we might not have all the versions of the image, and in fact
@@ -290,7 +290,7 @@ sub MapToLocalImage($$)
     }
 
     # Now look for the URL. It will be updated later if it needs to be.
-    $image = Image->LookupByURL($url);
+    $image = OSImage->LookupByURL($url);
     if (defined($image)) {
 	#
 	# Update this field.
@@ -308,7 +308,7 @@ sub MapToLocalImage($$)
     # that image got it from that project, and it was updated in that).
     #
     if (0) {
-    $image = Image->LookupByOriginUUID("GeniSlices", $blob->{'image_uuid'});
+    $image = OSImage->LookupByOriginUUID("GeniSlices", $blob->{'image_uuid'});
     if (defined($image)) {
 	#
 	# Invoke the importer to update our shadow of the origin,
@@ -319,7 +319,7 @@ sub MapToLocalImage($$)
 	    return GeniResponse->Create(GENIRESPONSE_ERROR, undef,
 				    "Image importer failure for $urn");
 	}
-	$image = Image->LookupByURL($url);
+	$image = OSImage->LookupByURL($url);
 	if (!defined($image)) {
 	    print STDERR "Could not lookup image after import: $url\n";
 	    return GeniResponse->Create(GENIRESPONSE_ERROR, undef,
@@ -363,7 +363,7 @@ sub MapToLocalImage($$)
 	return GeniResponse->Create(GENIRESPONSE_ERROR, undef,
 				    "Image importer failure for $urn");
     }
-    $image = Image->LookupByURL($url);
+    $image = OSImage->LookupByURL($url);
     if (!defined($image)) {
 	print STDERR "Could not lookup image after import: $url\n";
 	return GeniResponse->Create(GENIRESPONSE_ERROR, undef,

@@ -1530,8 +1530,8 @@ handle_request(int sock, struct sockaddr_in *client, char *rdata, int rdatalen, 
 		client_writeback_done(sock,
 				      redirect ? &redirect_client : client);
 
-	if (byteswritten &&
-	    (verbose || (command_array[i].flags & F_MINLOG) == 0))
+	if (verbose ||
+	    (byteswritten && (command_array[i].flags & F_MINLOG) == 0))
 		info("%s: %s wrote %d bytes\n",
 		     reqp->nodeid, command_array[i].cmdname,
 		     byteswritten);
@@ -2105,6 +2105,11 @@ COMMAND_PROTOTYPE(doifconfig)
 			if (strcmp(role, TBDB_IFACEROLE_EXPERIMENT))
 				goto skipit;
 
+			/* Do not send along info for RF links (PhantomNet) */
+			if (strcmp(type, "P2PLTE") == 0) {
+				goto skipit;
+			}
+
 			/* Do this after above test to avoid error in log */
 			mask = CHECKMASK(row[8]);
 
@@ -2650,7 +2655,7 @@ COMMAND_PROTOTYPE(doaccounts)
 {
 	MYSQL_RES	*res;
 	MYSQL_ROW	row;
-	char		buf[MYBUFSIZE];
+	char		buf[MYBUFSIZE], leader[TBDB_FLEN_UID];
 	int		nrows, gidint;
 	int		tbadmin, didwidearea = 0, nodetypeprojects = 0;
 	int		didnonlocal = 0;
@@ -2667,6 +2672,31 @@ COMMAND_PROTOTYPE(doaccounts)
 	if ((reqp->islocal || reqp->isvnode) && !reqp->allocated) {
 		error("%s: accounts: Invalid request from free node\n",
 		      reqp->nodeid);
+		return 1;
+	}
+
+	/*
+	 * We need the group leader below.
+	 */
+	res = mydb_query("select leader from groups "
+			 "where pid='%s' and gid='%s'",
+			 1, reqp->pid, reqp->gid);
+	if (res) {
+		row = mysql_fetch_row(res);
+		if (row[0]) {
+			strcpy(leader, row[0]);
+		}
+		else {
+			error("%s: accounts: No leader for %s/%s\n",
+			      reqp->nodeid, reqp->pid, reqp->gid);
+			mysql_free_result(res);
+			return 1;
+		}
+		mysql_free_result(res);
+	}
+	else {
+		error("%s: accounts: Could not get leader for %s/%s\n",
+		      reqp->nodeid, reqp->pid, reqp->gid);
 		return 1;
 	}
 
@@ -3072,14 +3102,14 @@ COMMAND_PROTOTYPE(doaccounts)
 		MYSQL_RES	*pubkeys_res;
 		MYSQL_RES	*sfskeys_res;
 		int		pubkeys_nrows, sfskeys_nrows, i, root = 0;
-		int		auxgids[128], gcount = 0, leader;
+		int		auxgids[128], gcount = 0, isleader;
 		char		glist[BUFSIZ];
 		char		*bufp = buf, *ebufp = &buf[sizeof(buf)];
 		char		*pswd, *wpswd, wpswd_buf[9];
 
 		gidint     = -1;
 		tbadmin    = root = atoi(row[8]);
-		leader     = 0;
+		isleader   = 0;
 		gcount     = 0;
 
 		while (1) {
@@ -3102,8 +3132,9 @@ COMMAND_PROTOTYPE(doaccounts)
 				    (strcmp(row[4], "group_root") == 0) ||
 				    (strcmp(row[4], "project_root") == 0))
 					root = 1;
-				if (strcmp(row[4], "project_root") == 0)
-					leader = 1;
+				
+				if (strcmp(leader, row[0]) == 0) 
+					isleader = 1;
 			}
 			else {
 				int k, newgid = atoi(row[7]);
@@ -3205,7 +3236,7 @@ COMMAND_PROTOTYPE(doaccounts)
 		 * of the ssh accounts that came in with the Geni API call.
 		 */
 		if (reqp->genisliver_idx && reqp->isnonlocal_pid &&
-		    !didnonlocal && !leader)
+		    !didnonlocal && !isleader)
 			goto skipkeys;
 		
 		if (gidint == -1) {
@@ -7422,6 +7453,10 @@ mydb_update(char *query, ...)
 
 /*
  * Map IP to node ID (plus other info).
+ *
+ * N.B. This function may be called when a node is not in an experiment.
+ * So any fields extracted from the reserved or experiment tables could be
+ * NULL. Handle them accordingly!
  */
 static int
 iptonodeid(struct in_addr ipaddr, tmcdreq_t *reqp, char* nodekey)
@@ -7685,8 +7720,14 @@ iptonodeid(struct in_addr ipaddr, tmcdreq_t *reqp, char* nodekey)
 		else
 			strcpy(reqp->nickname, reqp->nodeid);
 
-		strcpy(reqp->creator, row[11]);
-		reqp->creator_idx = atoi(row[26]);
+		if (row[11]) 
+			strcpy(reqp->creator, row[11]);
+		else
+			strcpy(reqp->creator, "elabman");
+		if (row[26])
+			reqp->creator_idx = atoi(row[26]);
+		else
+			reqp->creator_idx = 0;
 		if (row[12]) {
 			strcpy(reqp->swapper, row[12]);
 			reqp->swapper_idx = atoi(row[27]);
@@ -7751,12 +7792,16 @@ iptonodeid(struct in_addr ipaddr, tmcdreq_t *reqp, char* nodekey)
 	reqp->iscontrol = (! strcasecmp(row[10], "ctrlnode") ? 1 : 0);
 
 	/* nfsmounts - per-experiment disable overrides per-node setting */
-	if (strcmp(row[40], "none") == 0)
+	if (row[40]) {
+		if (strcmp(row[40], "none") == 0)
+			strcpy(reqp->nfsmounts, "none");
+		else if (row[39])
+			strcpy(reqp->nfsmounts, row[39]);
+		else
+			strcpy(reqp->nfsmounts, row[40]);
+	} else {
 		strcpy(reqp->nfsmounts, "none");
-	else if (row[39])
-		strcpy(reqp->nfsmounts, row[39]);
-	else
-		strcpy(reqp->nfsmounts, row[40]);
+	}
 
         /* taintstates - find the strings and set the bits.  */
         reqp->taintstates = 0;
@@ -8093,7 +8138,7 @@ COMMAND_PROTOTYPE(doisalive)
  */
 COMMAND_PROTOTYPE(doipodinfo)
 {
-	char		buf[MYBUFSIZE], hashbuf[BUFSIZ];
+	char		buf[MYBUFSIZE], hashbuf[32+1];
 
 	if (!tcp) {
 		error("IPODINFO: %s: Cannot do this in UDP mode!\n",
@@ -8414,7 +8459,7 @@ COMMAND_PROTOTYPE(dojailconfig)
 	if ((nrows = (int)mysql_num_rows(res))) {
 		row = mysql_fetch_row(res);
 		if (row[0] && row[0][0]) {
-			char saltbuf[BUFSIZ], *bp;
+			char saltbuf[8+1], *bp;
 
 			if (getrandomchars(saltbuf, 8) != 0) {
 				snprintf(saltbuf, sizeof(saltbuf),
@@ -10310,7 +10355,7 @@ COMMAND_PROTOTYPE(dorootpswd)
 {
 	MYSQL_RES	*res;
 	MYSQL_ROW	row;
-	char		buf[BUFSIZ], hashbuf[BUFSIZ], saltbuf[BUFSIZ], *bp;
+	char		buf[BUFSIZ], hashbuf[BUFSIZ], saltbuf[8+1], *bp;
 	char		*nodeid = reqp->pnodeid;
 
 	/*
@@ -10340,7 +10385,8 @@ COMMAND_PROTOTYPE(dorootpswd)
 	}
 	else {
 		row = mysql_fetch_row(res);
-		strcpy(hashbuf, row[0]);
+		strncpy(hashbuf, row[0], sizeof(hashbuf)-1);
+		hashbuf[sizeof(hashbuf)-1] = '\0';
 	}
 	if (res)
 		mysql_free_result(res);
@@ -13430,32 +13476,43 @@ COMMAND_PROTOTYPE(dotiplineinfo)
 	return 0;
 }
 
+/*
+ * Get a 'len' character random string.
+ * 'buf' had better be at least len+1 chars because we null terminate.
+ */
 static int
 getrandomchars(char *buf, int len)
 {
 	unsigned char	randdata[MYBUFSIZE];
-	int		fd, cc, i;
+	int		fd, cc, i, j, rdlen;
 	char		*bp;
+
+	rdlen = len / 2;
+	if (len <= 0 || (len & 1) == 1 || rdlen >= MYBUFSIZE) {
+		error("Bad buffer size in getrandomchars");
+		return 1;
+	}
 
 	if ((fd = open("/dev/urandom", O_RDONLY)) < 0) {
 		errorc("opening /dev/urandom");
 		return 1;
 	}
-	if ((cc = read(fd, randdata, len)) < 0) {
+	if ((cc = read(fd, randdata, rdlen)) < 0) {
 		errorc("reading /dev/urandom");
 		close(fd);
 		return 1;
 	}
-	if (cc != len) {
-		error("Short read from /dev/urandom: %d", len);
+	if (cc != rdlen) {
+		error("Short read from /dev/urandom: %d", rdlen);
 		close(fd);
 		return 1;
 	}
 	bp = buf;
-	for (i = 0; i < len;) {
-		cc = sprintf(bp, "%02x", randdata[i]);
+	for (i = 0, j = 0; i < len;) {
+		cc = sprintf(bp, "%02x", randdata[j]);
 		i  += cc;
 		bp += cc;
+		j++;
 	}
 	buf[len] = '\0';
 	

@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2014 University of Utah and the Flux Group.
+# Copyright (c) 2014-2016 University of Utah and the Flux Group.
 # 
 # {{{GENIPUBLIC-LICENSE
 # 
@@ -100,7 +100,7 @@ use Experiment;
 use Interface;
 use Lan;
 use Node;
-use OSinfo;
+use OSImage;
 use GeniHRN;
 
 # Connect to the monitoring DB.
@@ -347,10 +347,10 @@ while (1) {
 
     foreach my $n ( @nodes ) {
 	my $node = Node->Lookup( $n );
-	my $os = OSinfo->Lookup( $node->def_boot_osid(),
-				 $node->def_boot_osid_vers() );
+	my $osimage = OSImage->Lookup( $node->def_boot_osid(),
+				       $node->def_boot_osid_vers() );
 
-	next unless $os->osname =~ /XEN/;
+	next unless $osimage->imagename() =~ /XEN/;
 
 	my $mem = $node->memory() * 1024;
 

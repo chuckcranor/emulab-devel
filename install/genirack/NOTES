@@ -253,9 +253,9 @@ Setting up an InstaGeni Rack. First, we need the following info:
 
 * Fire up the VMs. Ops has to be first, followed by boss.
 
-	sudo xm create ~elabman/ops/xm.conf
+	sudo xl create ~elabman/ops/xm.conf
 	sleep 30
-	sudo xm create ~elabman/boss/xm.conf
+	sudo xl create ~elabman/boss/xm.conf
 
 * It is possible that ops will hang on fixarp, because tmcd is not
   running on boss yet. Log into boss (as elabman) and do:
@@ -456,7 +456,7 @@ Setting up an InstaGeni Rack. First, we need the following info:
 
   Now create and share the openflow vlan:
 
-	boss> wap snmpit_test --vlan_tag=1750 -m mesoscale-openflow \
+	boss> wap snmpit --vlan_tag=1750 -m mesoscale-openflow \
 		emulab-ops openflow-vlans interconnect-geni-core:eth0
 	boss> wap sharevlan -f -o emulab-ops,openflow-vlans \
 		mesoscale-openflow mesoscale-openflow

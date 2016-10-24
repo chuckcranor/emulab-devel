@@ -472,7 +472,7 @@ $(function ()
 	 */
 	$('#profile_instantiate_button').click(function (event) {
 	    window.location.replace("instantiate.php?profile=" +
-				    version_uuid);
+				    version_uuid + "&from=manage-profile");
 	});
 	
 	/*

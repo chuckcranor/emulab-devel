@@ -53,7 +53,8 @@ if ($TBMAINSITE) {
               "APT"       => "urn:publicid:IDN+apt.emulab.net+authority+cm",
               "Wisconsin" => "urn:publicid:IDN+wisc.cloudlab.us+authority+cm",
               "Clemson"   => "urn:publicid:IDN+clemson.cloudlab.us+authority+cm",
-              "Utah"      => "urn:publicid:IDN+utah.cloudlab.us+authority+cm");
+              "Utah"      => "urn:publicid:IDN+utah.cloudlab.us+authority+cm",
+              "OneLab"    => "urn:publicid:IDN+lab.onelab.eu+authority+cm");
 }
 else {
     $aggregates = array_keys($urn_mapping);

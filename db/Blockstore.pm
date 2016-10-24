@@ -643,14 +643,14 @@ sub LoadEstimate($)
 {
     my ($blockstore) = @_;
     my $bsname = $blockstore->vname();
-    require Image;
+    require OSImage;
 
     if (!exists($blockstore->{'attributes'}->{"dataset"})) {
 	print STDERR "No dataset attribute for $bsname\n";
 	return -1;
     }
     my $dataset = $blockstore->{'attributes'}->{"dataset"};
-    my $image   = Image->Lookup($dataset);
+    my $image   = OSImage->Lookup($dataset);
     if (!defined($image)) {
 	print STDERR "No image for dataset $dataset for $bsname\n";
 	return -1;
