@@ -265,15 +265,7 @@ sub PostImageInfo($)
     if (!defined($perms_result)) {
 	return -1;
     }
-    #
-    # Grab the current type list.
-    #
-    my $types_result =
-	emdb::DBQueryWarn("select distinct type from osidtoimageid ".
-			  "where imageid='$imageid'");
-    if (!defined($types_result)) {
-	return -1;
-    }
+
     # Does not return if error.
     my $credential = GetServerCredential();
     
@@ -284,7 +276,8 @@ sub PostImageInfo($)
     if (!$image->isdataset()) {
 	$arch  = "x86_64";
 	$virtualization = "raw-pc";
-	while (my ($type) = $types_result->fetchrow_array()) {
+	foreach my $nodetype ($image->TypeList()) {
+	    my $type = $nodetype->type();
 	    push(@types, $type);
 	    if ($type eq "m400") {
 		$arch = "aarch64";
