@@ -71,6 +71,7 @@ CREATE TABLE `apt_aggregates` (
   `updated` datetime NOT NULL default '0000-00-00 00:00:00',
   `weburl` tinytext,
   `has_datasets` tinyint(1) NOT NULL default '0',
+  `reservations` tinyint(1) NOT NULL default '0',
   `portals` set('emulab','aptlab','cloudlab','phantomnet') default NULL,
   `jsondata` text,
   PRIMARY KEY  (`urn`)
