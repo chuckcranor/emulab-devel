@@ -267,6 +267,7 @@ sub fix_swap_partitions
 	}
 
 	@buffer = grep {!/^[^#].*\bswap\b.*$/} <FSTAB>;
+	push @buffer, "# the following swap devices added by linux_slicefix\n";
 	for (@swapdevs) {
 		push @buffer, "$_\tnone\tswap\tsw\t0 0\n";
 	}
