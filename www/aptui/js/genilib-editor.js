@@ -45,7 +45,7 @@ function (_, sup, aptforms)
     window.onbeforeunload = null;
 
     $('#waitwait-modal').modal({ backdrop: 'static', keyboard: false, show: false });
-    $('#saveButton').on('click', save);
+    sup.DownloadOnClick($('#saveButton'), getSaveText, 'saved.py', saveComplete);
     $('#loadButton').on('click', load);
     $('#runButton').on('click', clickRun);
     $('#settingsButton').on('click', toggleSettings);
@@ -94,23 +94,23 @@ function (_, sup, aptforms)
     window.onbeforeunload = beforeUnload;
   }
 
-  function save()
+  function getSaveText()
   {
     if (! isWaiting)
     {
-      var scriptString = editor.getValue();
-      var file = new Blob([scriptString],
-			  { type: 'application/octet-stream' });
-      var a = document.createElement('a');
-      a.href = window.URL.createObjectURL(file); 
-      a.download = 'saved.py';
-      document.body.appendChild(a);
-      a.click();
-      $('a').last().remove();
-      window.onbeforeunload = null;
+      return editor.getValue();
+    }
+    else
+    {
+      return null;
     }
   }
 
+  function saveComplete()
+  {
+    window.onbeforeunload = null;
+  }
+  
   function load()
   {
     if (! isWaiting)

@@ -36,6 +36,40 @@ function CallServerMethod(url, route, method, args, callback)
   return APT_OPTIONS.CallServerMethod(url, route, method, args, callback);
 }
 
+// button is a jQuery object containing the button(s) to add event to
+// getText is a function to fetch the text to be saved. Invoked per click with no arguments and expects a string result. If getText returns null or undefined, no save will happen and no callback will be called.
+// filename is the default filename used
+// callback is invoked with button, text, and filename as arguments after download.
+//
+// This function will unset all other onclick events.
+function DownloadOnClick(button, getText, filename, callback)
+{
+  button.off('click');
+  button.on('click', function () {
+    var text = getText();
+    if (text !== undefined && text !== null)
+    {
+      var file = new Blob([text],
+			  { type: 'application/octet-stream' });
+      var a = document.createElement('a');
+      a.href = window.URL.createObjectURL(file); 
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      $('a').last().remove();
+      if (callback !== undefined && callback !== null)
+      {
+	callback(button, text, filename);
+      }
+    }
+  });
+}
+
+function ClearDownloadOnClick(button)
+{
+  button.off('click');
+}
+  
 var jacksInstance;
 var jacksInput;
 var jacksOutput;
@@ -269,6 +303,8 @@ return {
     ShowWaitWait: ShowWaitWait,
     HideWaitWait: HideWaitWait,
     CallServerMethod: CallServerMethod,
+    DownloadOnClick: DownloadOnClick,
+    ClearDownloadOnClick: ClearDownloadOnClick,
     maketopmap: maketopmap,
     SpitOops: SpitOops,
     StartGeniLogin: StartGeniLogin,
