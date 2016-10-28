@@ -1763,7 +1763,7 @@ sub GetTicketAuxAux($$$$$$$$$$$)
 				 $GeniXML::EMULAB_NS)->get_nodelist();
 	if (defined($chassis)) {
 	    my $chnum = GetText("chassis", $chassis);
-	    if ($chnum !~ /^\d+$/ || $chnum < 0 || $chnum > 8) {
+	    if ($chnum !~ /^\d+$/ || $chnum < 1 || $chnum > 13) {
 		$response = GeniResponse->Create(GENIRESPONSE_BADARGS, undef,
 						 "Bad chassis number");
 		goto bad;
