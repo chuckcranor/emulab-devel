@@ -7407,6 +7407,15 @@ sub InitializePhysNode($$$)
 	#
 	my ($cmdline,$rpms,$startupcmd,$tarfiles,$loadlist,
 	    $failureaction,$routertype) = @{ $virtnode->_settings() };
+
+	if ($virtnode->_isbridge()) {
+	    # Allow user to override defaults on a per-node basis.
+	    if (! defined($virtnode->_osinfo())) {
+		$osid = ($self->option("delay_osid") ||
+			 $pnode->delay_osid());
+		undef($osinfo);
+	    }
+	}
 	
 	# Do not want to lose version info, so use osinfo when we have it.
 	if (defined($virtnode->_osinfo())) {
@@ -7414,8 +7423,21 @@ sub InitializePhysNode($$$)
 	    $osid   = $osinfo->osid();
 	}
 	else {
-	    $osid = $pnode->default_osid();
+	    $osid   = $pnode->default_osid();
+	    $osinfo = OSImage->Lookup($osid);
+	    if (!defined($osinfo)) {
+		tberror("Could not map $osid to OSimage object\n");
+		return -1;
+	    }
 	}
+	if ($osinfo->isImageAlias()) {
+	    #
+	    # Map the alias to the type specific image.
+	    #
+	    $osinfo = $osinfo->MapToImage($pnode->type());
+	    $osid = $osinfo->osid();
+	}
+	
 	my $vname           = $vnodename;
 	my $inner_elab_role = $virtnode->inner_elab_role();
 	my $plab_role       = $virtnode->plab_role();
