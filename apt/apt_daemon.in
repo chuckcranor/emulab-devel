@@ -368,7 +368,17 @@ sub UpdateAggregateGraphs()
 	}
 	while (<CSV>) {
 	    if ($_ =~ /^([-\w]+),(\d+),(\d+)$/) {
+		my $count = $2 + $3;
 		$freeblob->{$name}->{$1} = {"inuse" => $2, "free" => $3};
+
+		if ($impotent) {
+		    print "$urn: $1, $count, $3\n";
+		}
+		else {
+		    DBQueryWarn("replace into apt_aggregate_nodetypes set ".
+				" urn='$urn',type='$1',".
+				" count='$count',free='$3'");
+		}
 	    }
 	}
 	close(CSV);
@@ -561,7 +571,7 @@ sub GatherOpenstackUtilization()
 }
 
 if ($oneshot) {
-    GatherOpenstackUtilization();
+    UpdateAggregateGraphs();
     exit(0);
 }
 
