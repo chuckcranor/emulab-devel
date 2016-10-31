@@ -115,8 +115,11 @@ $(function ()
 		var href   = "show-profile.php?uuid=" + profile_uuid;
 
 	        source = $.trim($('#profile_script_textarea').val());
-	        $('#rspec_modal_download_button')
-		  .attr("href", href + "&source=true");
+	        sup.DownloadOnClick($('#rspec_modal_download_button'),
+				    function () { return source; },
+				    'profile.py');
+/*	        $('#rspec_modal_download_button')
+		  .attr("href", href + "&source=true");*/
 	        if (! source || ! source.length) {
 		    isScript = false;
 		}
@@ -124,8 +127,11 @@ $(function ()
 		    $(this).attr("id") != "show_source_modal_button") {
 		  
 		    source = $.trim($('#profile_rspec_textarea').val());
-		    $('#rspec_modal_download_button')
-		      .attr("href", href + "&rspec=true");
+	            sup.DownloadOnClick($('#rspec_modal_download_button'),
+				        function () { return source; },
+				        'profile.xml');
+//		    $('#rspec_modal_download_button')
+//		      .attr("href", href + "&rspec=true");
 		}
 	        if ($(this).attr("id") == "show_source_modal_button" && isScript) {
 		    openEditor();

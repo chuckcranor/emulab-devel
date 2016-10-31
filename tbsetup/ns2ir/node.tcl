@@ -313,7 +313,8 @@ Node instproc updatedb {DB} {
         if { [regexp {:} $parent_osid] } {
 	    set pos [lindex [split $parent_osid {:}] 0]
 	}
-	if {[lsearch -exact $subosids($os) $pos] == -1} {
+	if {![info exists subosids($os)] ||
+	    [lsearch -exact $subosids($os) $pos] == -1} {
 	    perror "subOSID $osid does not run on parent OSID $parent_osid!"
 	    return
 	}

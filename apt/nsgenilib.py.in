@@ -267,7 +267,7 @@ for child in tree.getroot():
                 #
                 # Watch for binding to another node in the topology.
                 #
-                if vname in nodes:
+                if element.text in nodes:
                     nodes[vname].InstantiateOn(nodes[element.text])
                 else:
                     node.component_id = URN.Node(OURDOMAIN, element.text)

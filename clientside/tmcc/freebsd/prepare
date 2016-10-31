@@ -162,9 +162,11 @@ if (!$noumount) {
 }
 
 #
-# Remove any auto generated fstab swap line
+# Remove any auto generated fstab swap line.
+# XXX assumes there is only one!
 #
 print "Removing auto-generated /etc/fstab swap line ...\n";
+system("sed -i -e '/^# the following swap devices added by /,+1d' $FSTAB");
 system("sed -i -e '/^# the following added by .*rc.freebsd/,+1d' $FSTAB");
 
 #

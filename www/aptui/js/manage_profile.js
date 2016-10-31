@@ -250,13 +250,17 @@ $(function ()
 		  type = "rspec";
 		}
 	        if (profile_uuid) {
-		    $('#rspec_modal_download_button')
+	            sup.DownloadOnClick($('#rspec_modal_download_button'),
+				        function () { return source; },
+				        'profile.xml');
+/*		    $('#rspec_modal_download_button')
 		        .attr("href",
 			      "show-profile.php?uuid=" + profile_uuid +
-			      "&" + type + "=true");
+			      "&" + type + "=true");*/
 	        }
 	        else {
-		    $('#rspec_modal_download_button').addClass("hidden");
+	            sup.ClearDownloadOnClick($('#rspec_modal_download_button'));
+//		    $('#rspec_modal_download_button').addClass("hidden");
 	        }	    
 	        $('#rspec_modal_upload_span').removeClass("hidden");
 	        $('#rspec_modal_editbuttons').removeClass("hidden");
@@ -277,12 +281,16 @@ $(function ()
 	    var source = $.trim($('#profile_rspec_textarea').val());
 
 	    if (profile_uuid) {
-		$('#rspec_modal_download_button')
+	        sup.DownloadOnClick($('#rspec_modal_download_button'),
+				    function () { return source; },
+				    'profile.xml');
+/*		$('#rspec_modal_download_button')
 		    .attr("href",
 			  "show-profile.php?uuid=" + profile_uuid +
-			  "&rspec=true");
+			  "&rspec=true");*/
 	    }
 	    else {
+	        sup.ClearDownloadOnClick($('#rspec_modal_download_button'));
 		$('#rspec_modal_download_button').addClass("hidden");
 	    }	    
 	    $('#rspec_modal_upload_span').addClass("hidden");
@@ -1147,6 +1155,7 @@ $(function ()
 			     "</code></pre>");
 		return;
 	    }
+	    sup.ClearDownloadOnClick($('#rspec_modal_download_button'));
 	    $('#rspec_modal_download_button').addClass("hidden");
 	    $('#rspec_modal_editbuttons').removeClass("hidden");
 	    $('#rspec_modal_viewbuttons').addClass("hidden");
