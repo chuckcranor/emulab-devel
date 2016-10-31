@@ -7,7 +7,8 @@
    "color": "#ca3737",
    "size": 315,
    "howfull": 315,
-   "children": [ { "name": "m400", "size": 315, "howfull": 200, "url": "http://docs.cloudlab.us/hardware.html#%28part._cloudlab-utah%29" } ],
+   "children": [ { "name": "m400", "size": 315, "howfull": 200, "url": "http://docs.cloudlab.us/hardware.html#%28part._cloudlab-utah%29" },
+		 { "name": "m510", "size": 270, "howfull": 200, "url": "http://docs.cloudlab.us/hardware.html#%28part._cloudlab-utah%29" } ],
    "url": "http://docs.cloudlab.us/hardware.html#%28part._cloudlab-utah%29"
   },
   {
