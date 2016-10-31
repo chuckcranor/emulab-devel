@@ -116,7 +116,7 @@ class Aggregate
             $name      = $row["name"];
             $adminonly = $row["adminonly"];
 
-            if ($adminonly && !ISADMIN()) {
+            if ($adminonly && !(ISADMIN() || STUDLY())) {
                 continue;
             }
             $am_array[$name] = $urn;
