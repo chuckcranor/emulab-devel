@@ -55,6 +55,20 @@ CREATE TABLE `active_checkups` (
 ) ENGINE=MyISAM DEFAULT CHARSET=latin1;
 
 --
+-- Table structure for table `apt_aggregate_nodetypes`
+--
+
+DROP TABLE IF EXISTS `apt_aggregate_nodetypes`;
+CREATE TABLE `apt_aggregate_nodetypes` (
+  `urn` varchar(128) NOT NULL default '',
+  `type` varchar(30) NOT NULL default '',
+  `count` int(11) default '0',
+  `free` int(11) default '0',
+  `updated` datetime default NULL,
+  PRIMARY KEY  (`urn`,`type`)
+) ENGINE=MyISAM DEFAULT CHARSET=latin1;
+
+--
 -- Table structure for table `apt_aggregates`
 --
 
