@@ -1586,6 +1586,20 @@ sub AccessCheck($$$)
     return $allowed;
 }
 
+# All images have to be shared.
+sub shared($)
+{
+    my ($self) = @_;
+    my $shared = 1;
+    my $coderef = sub {
+	$shared = 0
+	    if (!$_[0]->shared());
+	return 0;
+    };
+    $self->ImageIterate($coderef);
+    return $shared;
+}
+
 #
 # Get the combined type list.
 #
