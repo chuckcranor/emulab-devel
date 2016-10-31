@@ -477,6 +477,7 @@ exit(0);
 sub GenDefsFile($)
 {
     my($fname) = $_[0];
+    my %parent_osids = ();
 
     open(TCL, "> $fname")
 	or die("Could not open TCL defs file for writing: $!\n");
@@ -740,6 +741,10 @@ sub GenDefsFile($)
 	    }
 	    print TCL "set subosids($osname) [list $parentlist]\n";
 	    print TCL "set subosids($pid/$osname) \$subosids($osname)\n";
+	    #
+	    # Need this for image aliases below.
+	    #
+	    $parent_osids{$osname} = [split(/\s+/, $parentlist)];
 	}
 	print TCL "\n";
     }
@@ -754,6 +759,23 @@ sub GenDefsFile($)
 	    
 	    print TCL "set osids($imagename) 1\n";
 	    print TCL "set osids($pid/$imagename) 1\n";
+
+	    # Add subosid mappings for the alias name.
+	    my %parents = ();
+	    foreach my $image ($alias->imagelist()) {
+		my $parent_imagename = $image->imagename();
+		
+		if (exists($parent_osids{$parent_imagename})) {
+		    foreach my $p (@{$parent_osids{$parent_imagename}}) {
+			$parents{$p} = $p;
+		    }
+		}
+	    }
+	    if (values(%parents)) {
+		my $parentlist = join(" ", values(%parents));
+		print TCL "set subosids($imagename) [list $parentlist]\n";
+		print TCL "set subosids($pid/$imagename) \$subosids($imagename)\n";
+	    }
 	}
 	print TCL "\n";
     }
