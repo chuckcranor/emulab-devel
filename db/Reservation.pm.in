@@ -136,7 +136,10 @@ sub Lookup($$;$$$$)
 
 	my $pid_idx = $project->pid_idx();
     
-	$query_result = DBQueryWarn( "SELECT * FROM future_reservations " .
+	$query_result = DBQueryWarn( "SELECT *, UNIX_TIMESTAMP(start) AS s, " .
+				     "UNIX_TIMESTAMP(end) AS e, " .
+				     "UNIX_TIMESTAMP(created) AS c " .
+				     "FROM future_reservations " .
 				     "WHERE pid_idx='$pid_idx' AND " .
 				     "nodes='$nodes' AND " .
 				     "type='$type' AND " .
@@ -149,7 +152,10 @@ sub Lookup($$;$$$$)
 	# Look up by ID.
 	my $idx = $_[ 1 ];
 
-	$query_result = DBQueryWarn( "SELECT * FROM future_reservations " .
+	$query_result = DBQueryWarn( "SELECT *, UNIX_TIMESTAMP(start) AS s, " .
+				     "UNIX_TIMESTAMP(end) AS e, " .
+				     "UNIX_TIMESTAMP(created) AS c " .
+				     "FROM future_reservations " .
 				     "WHERE idx='$idx'" );
 
 	return undef
@@ -163,8 +169,9 @@ sub Lookup($$;$$$$)
     $self->{'PID'}         = $record->{'pid'};
     $self->{'PID_IDX'}     = $record->{'pid_idx'};
     $self->{'EID'}         = undef;
-    $self->{'START'}       = $record->{'start'};
-    $self->{'END'}         = $record->{'end'};
+    $self->{'START'}       = $record->{'s'};
+    $self->{'END'}         = $record->{'e'};
+    $self->{'CREATED'}     = $record->{'c'};
     $self->{'TYPE'}        = $record->{'type'};
     $self->{'NODES'}       = $record->{'nodes'};
     $self->{'UID'}         = $record->{'uid'};
@@ -183,6 +190,7 @@ sub pid_idx($)     { return $_[0]->{"PID_IDX"}; }
 sub eid($)         { return $_[0]->{"EID"}; }
 sub start($)       { return $_[0]->{"START"}; }
 sub end($)         { return $_[0]->{"END"}; }
+sub created($)     { return $_[0]->{"CREATED"}; }
 sub type($)        { return $_[0]->{"TYPE"}; }
 sub nodes($)       { return $_[0]->{"NODES"}; }
 sub uid($)         { return $_[0]->{"UID"}; }
@@ -304,6 +312,7 @@ sub Book($)
 	or return -1;
 
     $self->{'IDX'} = $query_result->insertid();
+    $self->{'CREATED'} = time();
 
     delete $cache{$type};
     

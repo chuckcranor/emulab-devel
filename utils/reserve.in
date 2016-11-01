@@ -25,6 +25,7 @@ use strict;
 use English;
 use Getopt::Std;
 use Date::Parse;
+use POSIX;
 
 #
 # Configure variables
@@ -95,6 +96,12 @@ sub readfile($) {
     my $contents = <FILE>;
     close( FILE );
     return $contents;
+}
+
+sub convert($) {
+    my ($unixtime) = @_;
+
+    return strftime( "%Y-%m-%d %H:%M", localtime( $unixtime ) );
 }
 
 #
@@ -207,16 +214,18 @@ else {
 # List all pending reservations.
 #
 if ($list) {
-    my $query = $type ? "SELECT idx, pid, nodes, type, start, end FROM " .
-	"future_reservations WHERE type='$type' ORDER BY start" :
-	"SELECT idx, pid, nodes, type, start, end FROM future_reservations " .
-	"ORDER BY start";
+    my $query = $type ? "SELECT idx, pid, nodes, type, " .
+	"UNIX_TIMESTAMP( start ) AS s, UNIX_TIMESTAMP( end ) AS e FROM " .
+	"future_reservations WHERE type='$type' ORDER BY s" :
+	"SELECT idx, pid, nodes, type, UNIX_TIMESTAMP( start ) AS s, " .
+	"UNIX_TIMESTAMP( end ) AS e FROM future_reservations " .
+	"ORDER BY s";
 
     my $query_result = DBQueryFatal( $query );
 
     if( $query_result->numrows ) {
-	print "Index Start               End                 Project             Nodes Type\n";
-	print "----- -----               ---                 -------             ----- ----\n";
+	print "Index Start            End              Project             Nodes Type\n";
+	print "----- -----            ---              -------             ----- ----\n";
     }
 
     while( my $row = $query_result->fetchrow_hashref() ) {
@@ -224,10 +233,10 @@ if ($list) {
 	my $pid = $row->{'pid'};
 	my $nodes = $row->{'nodes'};
 	my $type = $row->{'type'};
-	my $start = $row->{'start'};
-	my $end = $row->{'end'};
+	my $start = convert( $row->{'s'} );
+	my $end = convert( $row->{'e'} );
 
-	printf( "%5d %19s %19s %-19s %5d %s\n", $idx, $start, $end, $pid, $nodes, $type );
+	printf( "%5d %16s %16s %-19s %5d %s\n", $idx, $start, $end, $pid, $nodes, $type );
     }
     
     exit(0);
@@ -260,26 +269,28 @@ if( !defined( $clear_idx ) ) {
 # Show and exit.
 #
 if ($info) {
-    my $query = $type ? "SELECT uid, nodes, type, start, end FROM " .
+    my $query = $type ? "SELECT uid, nodes, type, " .
+	"UNIX_TIMESTAMP( start ) AS s, UNIX_TIMESTAMP( end ) AS e FROM " .
 	"future_reservations WHERE type='$type' AND pid_idx=$pid_idx " .
-	"ORDER BY start" : "SELECT uid, nodes, type, start, end FROM " .
-	"future_reservations WHERE pid_idx=$pid_idx ORDER BY start";
+	"ORDER BY s" : "SELECT uid, nodes, type, " .
+	"UNIX_TIMESTAMP( start ) AS s, UNIX_TIMESTAMP( end ) AS e FROM " .
+	"future_reservations WHERE pid_idx=$pid_idx ORDER BY s";
 
     my $query_result = DBQueryFatal( $query );
 
     if( $query_result->numrows ) {
-	print "Start               End                 User                Nodes Type\n";
-	print "-----               ---                 ----                ----- ----\n";
+	print "Start            End              User                Nodes Type\n";
+	print "-----            ---              ----                ----- ----\n";
     }
 
     while( my $row = $query_result->fetchrow_hashref() ) {
 	my $uid = $row->{'uid'};
 	my $nodes = $row->{'nodes'};
 	my $type = $row->{'type'};
-	my $start = $row->{'start'};
-	my $end = $row->{'end'};
+	my $start = convert( $row->{'s'} );
+	my $end = convert( $row->{'e'} );
 
-	printf( "%19s %19s %-19s %5d %s\n", $start, $end, $uid, $nodes, $type );
+	printf( "%16s %16s %-19s %5d %s\n", $start, $end, $uid, $nodes, $type );
     }
     
     exit(0);
