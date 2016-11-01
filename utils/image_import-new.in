@@ -127,8 +127,7 @@ use libtestbed;
 use User;
 use Project;
 use Group;
-use Image;
-use OSinfo;
+use OSImage;
 
 # Locals;
 my $url;
@@ -227,7 +226,7 @@ usage()
 #
 if ($ARGV[0] =~ /^http/) {
     $url = $ARGV[0];
-    if (Image->LookupByURL($url)) {
+    if (OSImage->LookupByURL($url)) {
 	fatal("Image already exists for URL, please use the id to update");
     }
     # We know this is valid, but must taint check anyway for shell command.
@@ -242,7 +241,7 @@ if ($ARGV[0] =~ /^http/) {
     }
 }
 else {
-    $image = Image->Lookup(shift(@ARGV));
+    $image = OSImage->Lookup(shift(@ARGV));
     if (!defined($image)) {
 	fatal("Image does not exist, maybe you need to import by url first");
     }
@@ -371,9 +370,30 @@ if (!$update) {
 	!$query_result->numrows) {
 	fatal("Could not get the SQL lock for a long time!");
     }
-    $image = Image->LookupByURL($url);
+    $image = OSImage->LookupByURL($url);
+    #
+    # Look inside the metadata. If we get a non-version specific URL,
+    # we can use that to look at our images to see if we already have
+    # a different version of the image. If we do, we can shift to
+    # update mode and add the later versions to our image history,
+    # thus bringing them into sync.
+    #
     if (!defined($image)) {
-	$image = CreateImage($url, $xmlparse, $user, $group, $imagename);
+	if ($doprovenance &&
+	    exists($xmlparse->{'attribute'}->{"image_metadata_url"})) {
+	    my $image_url =
+		$xmlparse->{'attribute'}->{"image_metadata_url"}->{'value'};
+	
+	    $image = OSImage->LookupByURL($image_url);
+	    if (defined($image)) {
+		print "Another version of this image is already imported.\n";
+		print "Shifting to update mode\n";
+		$update = 1;
+	    }
+	}
+	if (!defined($image)) {
+	    $image = CreateImage($url, $xmlparse, $user, $group, $imagename);
+	}
     }
     DBQueryWarn("select RELEASE_LOCK($safe_url)");
 }
@@ -466,12 +486,11 @@ if ($update) {
 	    }
 
 	    #
-	    # Go through the prior version list and make sure we have
-	    # a local version created. This will take us up to, but not
-	    # include, the version denoted by the xmlparse data.
+	    # Go through the version list and make sure we have a
+	    # local version created.
 	    #
-	    for (my $i = 1; $i < scalar(@versions); $i++) {
-		my $clone = Image->Lookup($image->imageid(), $i);
+	    for (my $i = 1; $i <= scalar(@versions); $i++) {
+		my $clone = OSImage->Lookup($image->imageid(), $i);
 
 		if (!defined($clone)) {
 		    $clone = CloneFromMetadata($image, $versions[$i], $user);
@@ -491,38 +510,28 @@ if ($update) {
 			$image->Unlock();
 			fatal("Image out of sync wrt url at version $i");
 		    }
-		    my $hash = $attributes->{"hash"}->{'value'}
-		        if (exists($attributes->{"hash"}));
-		    my $dhash = $attributes->{"deltahash"}->{'value'}
-		        if (exists($attributes->{"deltahash"}));
+		    foreach my $attribute ("hash", "deltahash",
+					   "size", "deltasize") {
+			my $xmlval = $attributes->{$attribute}->{'value'}
+		            if (exists($attributes->{$attribute}));
+			my $curval = $image->field($attribute);
 
-		    if (defined($clone->hash()) &&
-			(!defined($hash) || $clone->hash() ne $hash)) {
-			$image->Unlock();
-			fatal("Image out of sync wrt hash at version $i");
-		    }
-		    if (defined($clone->deltahash()) &&
-			!(defined($dhash) || $clone->deltahash() ne $dhash)) {
-			$image->Unlock();
-			fatal("Image out of sync wrt deltahash at version $i");
+			if (defined($curval) &&
+			    !(defined($xmlval) || "$xmlval" ne "$curval")) {
+			    
+			    $image->Unlock();
+			    fatal("Image out of sync wrt $attribute at ".
+				  "version $i: $xmlval != $curval");
+			}
 		    }
 		}
 		$image = $clone;
 	    }
 	    #
-	    # Okay, image is now the version prior to the one we are about
-	    # to import. Create a clone for it if do not already have it.
+	    # Image now points to the clone for the highest numbered
+	    # version, which might have been the image we started
+	    # with.
 	    #
-	    my $clone = Image->Lookup($image->imageid(),
-		       $xmlparse->{'attribute'}->{"image_version"}->{'value'});
-	    if (!defined($clone)) {
-		$clone = CloneFromMetadata($image, $xmlparse, $user);
-		if (!defined($clone)) {
-		    $image->Unlock();
-		    fatal("Could not clone image descriptor $image");
-		}
-	    }
-	    $image = $clone;
 	}
 	#
 	# We are doing provenance (obviously), but the other side might
@@ -825,7 +834,7 @@ sub CreateImage($$$$$)
 	# This can be set later via the web interface. 
 	#
 	my $posid  = $xmlparse->{'attribute'}->{"def_parentosid"}->{'value'};
-	my $parent = Image->Lookup($posid);
+	my $parent = OSImage->Lookup($posid);
 	if (defined($parent)) {
 	    $xmlparse->{'attribute'}->{"mtype_pcvm"} = {};
 	    $xmlparse->{'attribute'}->{"mtype_pcvm"}->{'value'} = 1;
@@ -858,14 +867,14 @@ sub CreateImage($$$$$)
 	$xmlparse->{'attribute'}->{"imagename"}->{'value'} = 
 	    substr(TBGenSecretKey(), 0, 12);
     }
-    elsif (Image->Lookup($group->pid(),
+    elsif (OSImage->Lookup($group->pid(),
 			 $xmlparse->{'attribute'}->{"imagename"}->{'value'})) {
 	my $index = 1;
 	my $imagename;
 	do {
 	    $imagename = $xmlparse->{'attribute'}->{"imagename"}->{'value'};
 	    $imagename .= "_" . $index++;
-	} while ($index < 100 && Image->Lookup($group->pid(), $imagename));
+	} while ($index < 100 && OSImage->Lookup($group->pid(), $imagename));
 	if ($index >= 100) {
 	    fatal("Could not generate a unique image name");
 	}
@@ -946,7 +955,7 @@ sub CreateImage($$$$$)
 	fatal("Could not create new image from xml");
     }
 
-    my $image = Image->LookupByURL($metadata_url);
+    my $image = OSImage->LookupByURL($metadata_url);
     if (!defined($image)) {
 	fatal("Could not lookup new image for $url");
     }
@@ -1058,9 +1067,6 @@ sub CloneFromMetadata($$$)
 sub UpdateImageFromMetadata($$)
 {
     my ($image, $xmlparse) = @_;
-    my $osinfo = OSinfo->Lookup($image->imageid(), $image->version());
-    return -1
-	if (!defined($osinfo));
     
     my @imslots = ("imagefile_url", "metadata_url", "hash", "deltahash",
 		   "size", "deltasize");
@@ -1089,7 +1095,7 @@ sub UpdateImageFromMetadata($$)
 		"Illegal value for $key: " . TBFieldErrorString() . "\n";
 	    return -1;
 	}
-	$osinfo->Update({$key => $value});
+	$image->Update({$key => $value});
     }
     return 0;
 }
