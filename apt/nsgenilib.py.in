@@ -270,7 +270,7 @@ for child in tree.getroot():
                 if element.text in nodes:
                     nodes[vname].InstantiateOn(nodes[element.text])
                 else:
-                    node.component_id = URN.Node(OURDOMAIN, element.text)
+                    nodes[vname].component_id = URN.Node(OURDOMAIN,element.text)
     pass
 
 #
