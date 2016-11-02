@@ -45,12 +45,7 @@ include $(TESTBED_SRCDIR)/GNUmakerules
 
 ifeq ($(DISABLE_DHCPD_INSTALL),0)
 install:		install-real
-ifeq ($(BOOTINFO_EVENTS),0)
-subboss-install:
-	@echo "Must have BOOTINFO_EVENTS to support a subboss right now"
-else
 subboss-install:	subboss-install-real
-endif
 else
 install:	
 	@echo "Refusing to install cause DISABLE_DHCPD_INSTALL=1"
