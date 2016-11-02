@@ -710,6 +710,7 @@ REPLACE INTO state_transitions VALUES ('RELOAD-UE','RELOADING','RELOADDONE','Rel
 REPLACE INTO state_transitions VALUES ('RELOAD-UE','SHUTDOWN','RELOADING','Booting');
 REPLACE INTO state_transitions VALUES ('NORMALv2','BOOTING','PXEWAIT','MoonshotPxeWait');
 REPLACE INTO state_transitions VALUES ('PXEKERNEL','PXEWAKEUP','SHUTDOWN','MoonshotBootDisk');
+REPLACE INTO state_transitions VALUES ('PXEKERNEL','PXEWAKEUP','BOOTING','PxeBootWakeup');
 
 --
 -- Dumping data for table `state_triggers`
