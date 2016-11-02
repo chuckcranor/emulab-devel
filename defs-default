@@ -207,3 +207,6 @@ BS_IQN_PREFIX=iqn.2000-10.net.emulab
 
 # Programmable RF attenuator (for PhantomNet).
 ATTENUATOR=patten1
+
+# Do not send events from bootinfo, we do it from dhcpd instead.
+BOOTINFO_EVENTS=0
