@@ -44,12 +44,13 @@ use Reservation;
 
 sub usage()
 {
-    print STDERR "Usage: reserve [-C] [-f] [-n] -t type [-s start] [-e end]\n" .
+    print STDERR "Usage: reserve [-u] [-C] [-f] [-n] -t type [-s start] [-e end]\n" .
 	"            [-N file] [-A file] pid count\n";
     print STDERR "       reserve -c idx\n";
-    print STDERR "       reserve -i pid\n";
-    print STDERR "       reserve -l\n";
+    print STDERR "       reserve [-u] -i pid\n";
+    print STDERR "       reserve [-u] -l\n";
     print STDERR "   -h   This message\n";
+    print STDERR "   -u   Interpret/display all times in UTC\n";
     print STDERR "   -c   Clear existing reservation for project (by id)\n";
     print STDERR "   -C   Clear existing reservation for project (by date)\n";
     print STDERR "   -f   Force reservation into schedule, even if " .
@@ -72,7 +73,7 @@ sub fatal($)
 	"    $mesg\n");
 }
 
-my $optlist    = "c:de:fhilns:t:A:CN:";
+my $optlist    = "c:de:fhilns:t:uA:CN:";
 my $debug      = 0;
 my $info       = 0;
 my $list       = 0;
@@ -121,6 +122,10 @@ $ENV{'PATH'} = "/bin:/sbin:/usr/bin:";
 my %options = ();
 if (! getopts($optlist, \%options)) {
     usage();
+}
+if (defined($options{"u"})) {
+    # handle this option ASAP, since it affects parsing of other options!
+    $ENV{ "TZ" } = "UTC";
 }
 if (defined($options{h})) {
     usage();
