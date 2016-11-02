@@ -1160,9 +1160,9 @@ sub GetTicketAuxAux($$$$$$$$$$$)
 		else {
 		    #
 		    # The OS must be in the current project, or it must
-		    # be global (okay, shared).
+		    # be global.
 		    #
-		    if (! ($osinfo->shared() ||
+		    if (! ($osinfo->global() ||
 			   $osinfo->pid() eq $slice_experiment->pid())) {
 			if ($PROTOGENI_LOCALUSER && $user->IsLocal()) {
 			    my $image = OSImage->Lookup($ospid,$os,$vers);
