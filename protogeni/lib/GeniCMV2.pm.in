@@ -4482,6 +4482,14 @@ sub DeleteDataset($)
 	if (GeniResponse::IsResponse($dataset));
 
     if (ref($dataset) eq "Lease") {
+	#
+	# If the lease is in use, return a busy error.
+	# We make this test unlocked, but that is okay. 
+	#
+	if ($dataset->InUse()) {
+	    return GeniResponse->Create(GENIRESPONSE_BUSY, undef,
+					"$dataset is in use, try again later");
+	}
 	$cmd = "$DELETEDATASET -b -f " .
 	    $dataset->pid() . "/" . $dataset->gid() . "/" . $dataset->lease_id();
     }
