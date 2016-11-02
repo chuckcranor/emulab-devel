@@ -229,7 +229,7 @@ sub report($$$)
     }
     my $nodeid = findnode($IP, $MAC);
     if (!$nodeid) {
-	logit("Ignoring unknown node $IP");
+	logit("Ignoring unknown node $IP,$MAC");
 	return -1;
     }
 
