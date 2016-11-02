@@ -2479,9 +2479,10 @@ sub GenVirtNodes($)
 			['', 1.000000];
 		}
 	    }
-	    else {
+	    elsif (!$osinfo->mfs()) {
 		#
-		# Regarding path; we no longer have oskit kernels.
+		# Regarding path; we no longer have oskit kernels, but we
+		# have some special cases where we specify an MFS (APT).
 		#
 		if (!defined($posinfo)) {
 		    $desires->{"OS-" . $osinfo->osid()} = ['', 1.000000];
