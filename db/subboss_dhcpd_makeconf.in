@@ -187,7 +187,7 @@ sub gendhcpdconf($$)
 	}
 	for my $row (@nodes) {
 	    my $ip  = $$row{"IP"};
-	    my $mac = $$row{"MAC"};
+	    my $mac = lc($$row{"MAC"});
 	    my $key = "$ip/$mac";
 	    my $hostname = $$row{"HOSTNAME"};
 
