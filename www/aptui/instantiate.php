@@ -308,6 +308,7 @@ while (list ($uuid, $title) = each ($profile_array)) {
         $tmp_array[$uuid] =
             array("name"     => $tmp->name(),
                   "project"  => $tmp->pid(),
+                  "creator"  => $tmp->creator(),
                   "favorite" => $tmp->isFavorite($this_user),
                   "lastused" => $lastused,
                   "usecount" => $count);
