@@ -331,6 +331,8 @@ CREATE TABLE `apt_profile_versions` (
   `gid_idx` mediumint(8) unsigned NOT NULL default '0',
   `creator` varchar(8) NOT NULL default '',
   `creator_idx` mediumint(8) unsigned NOT NULL default '0',
+  `updater` varchar(8) NOT NULL default '',
+  `updater_idx` mediumint(8) unsigned NOT NULL default '0',
   `created` datetime default NULL,
   `published` datetime default NULL,
   `deleted` datetime default NULL,
