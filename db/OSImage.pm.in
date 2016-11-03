@@ -39,6 +39,7 @@ use libdb;
 use EmulabConstants;
 use libtestbed;
 use Image;
+use NodeType;
 use OSinfo;
 use overload ('""' => 'Stringify');
 
@@ -1089,11 +1090,25 @@ sub MapToImage($$)
 {
     my ($self, $type) = @_;
 
+    #
+    # If we are using architectures this is not necessary. In fact, since
+    # we do not do multi-os images, I think we can flush it completely.
+    #
+    if (!ref($type)) {
+	my $nodetype = NodeType->Lookup($type);
+	if (!defined($nodetype)) {
+	    print STDERR "Could not map $type to an object\n";
+	    return undef;
+	}
+	$type = $nodetype;
+    }
+    return $self
+	if ($self->architecture() && $type->architecture());
+    
+    # This returns an OSimage.
     my $image = $self->osinfo()->MapToImage($type);
     return undef
 	if (!defined($image));
-
-    return OSImage->Lookup($image->imageid(), $image->version());
 }
 
 #
