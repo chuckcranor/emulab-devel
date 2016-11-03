@@ -144,6 +144,16 @@ sub Create($$;$)
     return WebTask->Lookup($task_id);
 }
 
+#
+# Create an anonymous web task (not associated with an object). This
+# is useful when using a webtask to create a new object via a backend
+# script.
+#
+sub CreateAnonymous()
+{
+    return WebTask->Create(TBGenSecretKey());
+}
+
 sub Delete($)
 {
     my ($self)  = @_;
