@@ -1418,6 +1418,7 @@ sub uuid($)	    { return $_[0]->{'ALIAS'}->{'uuid'}; }
 sub imagelist($)    { return values(%{ $_[0]->{'IMAGES'} }); }
 sub isImageAlias($) { return 1; }
 sub IsGeneric($)    { return 0; }
+sub mfs($)          { return 0; }
 sub path($)         { return undef; }
 
 #
@@ -1625,6 +1626,19 @@ sub shared($)
     };
     $self->ImageIterate($coderef);
     return $shared;
+}
+# All images have to be global.
+sub global($)
+{
+    my ($self) = @_;
+    my $global = 1;
+    my $coderef = sub {
+	$global = 0
+	    if (!$_[0]->global());
+	return 0;
+    };
+    $self->ImageIterate($coderef);
+    return $global;
 }
 
 #
