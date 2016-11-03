@@ -701,9 +701,9 @@ sub Reserve($)
 	if (!defined($webtask));
 
     my $args = ($check ? "-n " : "") .
-	(defined($update) ? "-u $update " : "") .
+	(defined($update) ? "-m $update " : "") .
 	"-T " . $webtask->task_id() . " ".
-	"-u $uid -t $type -s $start -e $end $pid $count";
+	"-U $uid -t $type -s $start -e $end $pid $count";
 
     # Write the reason to a tempfile to pass in. This will auto unlink.
     my $fp;
