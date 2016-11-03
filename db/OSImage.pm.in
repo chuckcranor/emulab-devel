@@ -347,7 +347,21 @@ sub versname($)
 sub urn($)
 {
     return $_[0]->image()->urn();
-}    
+}
+
+#
+# Global is odd. If an image, we use that slot. If just an OSinfo, we
+# use shared.
+#
+sub global($)
+{
+    my ($self) = @_;
+
+    return $self->image()->global()
+	if (defined($self->image()));
+    
+    return $self->osinfo()->shared();
+}
 
 #
 # Return a list of all images of the given format for the given pid.
@@ -1106,9 +1120,7 @@ sub MapToImage($$)
 	if ($self->architecture() && $type->architecture());
     
     # This returns an OSimage.
-    my $image = $self->osinfo()->MapToImage($type);
-    return undef
-	if (!defined($image));
+    return $self->osinfo()->MapToImage($type);
 }
 
 #
