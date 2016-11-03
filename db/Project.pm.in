@@ -49,6 +49,8 @@ my $TBAPPROVAL  = "@TBAPPROVALEMAIL@";
 my $TBAUDIT	= "@TBAUDITEMAIL@";
 my $TBBASE      = "@TBBASE@";
 my $TBWWW       = "@TBWWW@";
+my $OURDOMAIN   = "@OURDOMAIN@";
+my $PGENISUPPORT= @PROTOGENI_SUPPORT@;
 my $WIKISUPPORT = @WIKISUPPORT@;
 my $WITHZFS     = @WITHZFS@;
 my $WITHAMD     = @WITHAMD@;
@@ -588,6 +590,25 @@ sub GetProjectGroup($)
 	if (! ref($self));
 
     return $self->{'GROUP'};
+}
+
+#
+# Generate a URN.
+#
+sub urn($)
+{
+    my ($self) = @_;
+    my $pid  = $self->pid();
+    return undef
+	if (!$PGENISUPPORT);
+
+    if ($self->IsNonLocal()) {
+	return $self->nonlocal_id();
+    }
+    require GeniHRN;
+
+    my $domain = "${OURDOMAIN}:${pid}";
+    return GeniHRN::Generate($domain, "project", $pid);
 }
 
 #

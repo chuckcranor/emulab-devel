@@ -59,6 +59,7 @@ my $WITHAMD        = @WITHAMD@;
 my $BOSSNODE       = "@BOSSNODE@";
 my $CONTROL	   = "@USERNODE@";
 my $OURDOMAIN      = "@OURDOMAIN@";
+my $PGENISUPPORT   = @PROTOGENI_SUPPORT@;
 my $MIN_UNIX_UID   = @MIN_UNIX_UID@;
 my $MIN_UNIX_GID   = @MIN_UNIX_GID@;
 my $tbacct	   = "$TB/sbin/tbacct";
@@ -248,6 +249,24 @@ sub SetTempData($$) {
     $self->{'USER'}->{"tempdata"} = $value;
 
     return 0;
+}
+
+#
+# Generate a URN.
+#
+sub urn($)
+{
+    my ($self) = @_;
+    my $uid    = $self->uid();
+
+    return undef
+	if (!$PGENISUPPORT);
+    require GeniHRN;
+
+    my $urn = ($self->IsNonLocal() ? $self->nonlocal_id() :
+	       GeniHRN::Generate($OURDOMAIN, "user", $uid));
+
+    return GeniHRN->new($urn);
 }
 
 #
