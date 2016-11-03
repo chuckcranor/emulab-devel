@@ -1213,7 +1213,7 @@ class User
 
 	$uid_idx     = $this->uid_idx();
 	$result      = array();
-	$user_clause = "where uid_idx='$uid_idx' and";
+	$user_clause = "where uid_idx='$uid_idx' and p.nonlocal_id is null and";
 	$trust_clause= "";
 
 	# Constants.
@@ -1251,8 +1251,10 @@ class User
 	}
     
 	$query_result =
-	    DBQueryFatal("SELECT distinct pid,gid FROM group_membership ".
-			 "$user_clause $trust_clause order by pid");
+	    DBQueryFatal("SELECT distinct g.pid,g.gid ".
+                         "   FROM group_membership as g ".
+                         "left join projects as p on p.pid=g.pid ".
+			 "$user_clause $trust_clause order by g.pid");
 
 	if (mysql_num_rows($query_result) == 0) {
 	    return $result;
