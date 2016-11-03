@@ -835,7 +835,7 @@ sub urn($)
 {
     my ($self) = @_;
 
-    return GeniHRN::Generate("@OURDOMAIN@", "user", $self->uid());
+    return $self->emulab_user()->urn();
 }
 
 #
