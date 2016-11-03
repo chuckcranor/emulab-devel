@@ -37,13 +37,18 @@ use vars qw(@ISA @EXPORT $AUTOLOAD);
 use EmulabConstants;
 use emdb;
 use libtestbed;
+use GeniHRN;
 use GeniCertificate;
 use GeniCredential;
+use GeniAuthority;
+use GeniResponse;
 
 # Configure variables
 my $TB		  = "@prefix@";
 my $MAINSITE      = @TBMAINSITE@;
 my $TBOPS         = "@TBOPSEMAIL@";
+my $OURDOMAIN     = "@OURDOMAIN@";
+my $PGENIDOMAIN   = "@PROTOGENI_DOMAIN@";
 my $SACERT	  = "$TB/etc/genisa.pem";
 my $EMCERT	  = "$TB/etc/emulab.pem";
 my $EMKEY	  = "$TB/etc/emulab.key";
@@ -56,6 +61,9 @@ my %speakcache = ();
 
 # Use real abac credentials (which means we can do speaks-for at ALS2).
 my $USEABACCREDS  = 0;
+
+# Debugging;
+my $usemydevtree  = 0;
 
 #
 # Check credential/certificate status early, looking for expired certs.
@@ -436,6 +444,79 @@ sub GenABACCredential($$)
     $cred->SetTargetCert($geniuser->GetCertificate());
     $cred->SetOwnerCert($speaker->GetCertificate());
     return $cred;
+}
+
+#
+# Generate a project credential for a user. 
+#
+sub GenProjectCredential($$)
+{
+    my ($project, $geniuser) = @_;
+    my $pid    = $project->pid();
+    my $urn    = $project->urn();
+    my $error;
+
+    my $certificate =
+	GeniCertificate->Create({'urn'  => $urn,
+				 'hrn'  => "${PGENIDOMAIN}.project.${pid}",
+				 'email'=> $TBOPS,
+				 "nostore" => 1,
+				}, \$error);
+    if (!defined($certificate)) {
+	print STDERR "Could not create new certificate for $urn\n";
+	return undef;
+    }
+    my ($credential, $speaksfor) = GenCredentials($certificate, $geniuser);
+    return undef
+	if (!defined($credential));
+
+    return ($credential, $speaksfor);
+}
+
+#
+# Generate a user (self) credential for a user.
+#
+sub GenUserCredential($)
+{
+    my ($geniuser) = @_;
+
+    my ($credential, $speaksfor) = GenCredentials($geniuser, $geniuser);
+    return undef
+	if (!defined($credential));
+
+    return ($credential, $speaksfor);
+}
+
+#
+# RPC to the Cluster RPC server.
+#
+sub PortalRPC($$$@)
+{
+    my ($authority, $context, $method, @args) = @_;
+    my $cmurl = $authority->url();
+    $cmurl =~ s/\/cm$/\/cluster/;
+    if ($usemydevtree) {
+	$cmurl =~ s/protogeni/protogeni\/stoller/;
+    }
+
+    #
+    # We use the root context to talk to the Cluster RPC server
+    #
+    if (!defined($context)) {
+	$context = RootContext();
+	if (!defined($context)) {
+	    return GeniResponse->Create(GENIRESPONSE_RPCERROR(), undef,
+					"Could not get root context for RPC");
+	}
+    }
+    my $response = Genixmlrpc::CallMethod($cmurl, $context, $method, @args);
+    if ($response->code() != GENIRESPONSE_SUCCESS()) {
+	if (!defined($response->output())) {
+	    $response->output("Operation failed, returned " .
+			      $response->code());
+	}
+    }
+    return $response;
 }
 
 # _Always_ make sure that this 1 is at the end of the file...
