@@ -23,9 +23,13 @@
 #
 #
 
+#
+# This needs to go into the DB.
+#
 class Aggregate
 {
     var	$aggregate;
+    var $typeinfo;
     
     #
     # Constructor by lookup by urn
@@ -41,6 +45,19 @@ class Aggregate
 	    return;
 	}
 	$this->aggregate = mysql_fetch_array($query_result);
+        $this->typeinfo  = array();
+
+        #
+        # Get the type info
+        #
+        $query_result =
+            DBQueryWarn("select * from apt_aggregate_nodetypes ".
+                        "where urn='$safe_urn'");
+	while ($row = mysql_fetch_array($query_result)) {
+	    $type = $row["type"];
+            $this->typeinfo[$type] = array("count" => $row["count"],
+                                           "free"  => $row["free"]);
+        }
     }
     # accessors
     function field($name) {
@@ -52,6 +69,7 @@ class Aggregate
     function abbreviation() { return $this->field('abbreviation'); }
     function weburl()	    { return $this->field('weburl'); }
     function has_datasets() { return $this->field('has_datasets'); }
+    function reservations() { return $this->field('reservations'); }
     function isfederate()   { return $this->field('isfederate'); }
     function portals()      { return $this->field('portals'); }
 
@@ -68,6 +86,22 @@ class Aggregate
 	    return $foo;
 	}	
 	return null;
+    }
+
+    function LookupByNickname($nickname) {
+	$safe_nickname = addslashes($nickname);
+
+	$query_result =
+            DBQueryWarn("select urn from apt_aggregates ".
+                        "where nickname='$safe_nickname'");
+
+	if (!$query_result || !mysql_num_rows($query_result)) {
+	    return null;
+	}
+	$row = mysql_fetch_array($query_result);
+	$urn = $row['urn'];
+
+        return Aggregate::Lookup($urn);
     }
 
     #
@@ -92,6 +126,30 @@ class Aggregate
 
 	    if (! ($aggregate = Aggregate::Lookup($urn))) {
 		TBERROR("Aggregate::SupportsDatasetsList: ".
+			"Could not load aggregate $urn!", 1);
+	    }
+	    $result[] = $aggregate;
+	}
+        return $result;
+    }
+
+    #
+    # Return a list of aggregates supporting reservations,
+    #
+    function SupportsReservations() {
+	$result  = array();
+        global $PORTAL_GENESIS;
+
+        $query_result =
+            DBQueryFatal("select urn from apt_aggregates ".
+                         "where disabled=0 and reservations=1 and ".
+                         "      FIND_IN_SET('$PORTAL_GENESIS', portals)");
+        
+	while ($row = mysql_fetch_array($query_result)) {
+	    $urn = $row["urn"];
+
+	    if (! ($aggregate = Aggregate::Lookup($urn))) {
+		TBERROR("Aggregate::SupportsReservations: ".
 			"Could not load aggregate $urn!", 1);
 	    }
 	    $result[] = $aggregate;

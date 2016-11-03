@@ -1,0 +1,154 @@
+<?php
+#
+# Copyright (c) 2000-2016 University of Utah and the Flux Group.
+# 
+# {{{EMULAB-LICENSE
+# 
+# This file is part of the Emulab network testbed software.
+# 
+# This file is free software: you can redistribute it and/or modify it
+# under the terms of the GNU Affero General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or (at
+# your option) any later version.
+# 
+# This file is distributed in the hope that it will be useful, but WITHOUT
+# ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
+# FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Affero General Public
+# License for more details.
+# 
+# You should have received a copy of the GNU Affero General Public License
+# along with this file.  If not, see <http://www.gnu.org/licenses/>.
+# 
+# }}}
+#
+chdir("..");
+include("defs.php3");
+include_once("geni_defs.php");
+chdir("apt");
+include("quickvm_sup.php");
+include_once("instance_defs.php");
+include_once("aggregate_defs.php");
+$page_title = "Reservations";
+
+#
+# Get current user.
+#
+RedirectSecure();
+$this_user = CheckLoginOrRedirect();
+$isadmin   = (ISADMIN() ? 1 : 0);
+$isfadmin  = (ISFOREIGN_ADMIN() ? 1 : 0);
+
+if (!ISADMIN()) {
+    SPITUSERERROR("You do not have permission to view this page");
+    exit();
+}
+
+#
+# Verify page arguments. Cluster is a domain that we turn into a URN.
+#
+$optargs = OptionalPageArguments("edit",     PAGEARG_BOOLEAN,
+                                 "cluster",  PAGEARG_STRING,
+                                 "idx",      PAGEARG_INTEGER);
+
+if ($edit) {
+    if (! (isset($cluster) && isset($idx))) {
+        SPITUSERERROR("Missing arguments for edit mode");
+        exit();
+    }
+    $aggregate = Aggregate::LookupByNickname($cluster);
+    if (!$aggregate) {
+        SPITUSERERROR("No such cluster: $cluster");
+        exit();
+    }
+}
+
+SPITHEADER(1);
+
+echo "<link rel='stylesheet'
+            href='css/jquery-ui.min.css'>\n";
+echo "<link rel='stylesheet'
+            href='css/tablesorter.css'>\n";
+
+# Place to hang the toplevel template.
+echo "<div id='main-body'></div>\n";
+
+# Place to hang the modals for now
+echo "<div id='oops_div'></div>
+      <div id='waitwait_div'></div>
+      <div id='confirm_div'></div>\n";
+
+#
+# See what projects the user can do this in.
+#
+$projlist = $this_user->ProjectAccessList($TB_PROJECT_CREATEEXPT);
+
+#
+# Pass project list through. Need to convert to list without groups.
+# When editing, pass through a single value. The template treats a
+# a single value as a read-only field.
+#
+$plist = array();
+while (list($project) = each($projlist)) {
+    $plist[] = $project;
+}
+echo "<script type='text/plain' id='projects-json'>\n";
+echo htmlentities(json_encode($plist));
+echo "</script>\n";
+
+# List of clusters.
+if ($edit) {
+    $ams = array($aggregate);
+}
+else {
+    $ams = Aggregate::SupportsReservations();
+}
+$amlist  = array();
+while (list($index, $aggregate) = each($ams)) {
+    $urn = $aggregate->urn();
+    $am  = $aggregate->name();
+    
+    $amlist[$urn] = array("urn"      => $urn,
+                          "name"     => $am,
+                          "nickname" => $aggregate->nickname(),
+                          "typeinfo" => $aggregate->typeinfo);
+}
+echo "<script type='text/plain' id='amlist-json'>\n";
+echo htmlentities(json_encode($amlist));
+echo "</script>\n";
+
+$defaults = array();
+$defaults["pid"]   = '';
+# Default project.
+if (count($projlist) == 1) {
+    list($project, $grouplist) = each($projlist);
+    $defaults["pid"] = $project;
+}
+echo "<script type='text/plain' id='form-json'>\n";
+echo htmlentities(json_encode($defaults)) . "\n";
+echo "</script>\n";
+
+echo "<script type='text/javascript'>\n";
+if ($edit) {
+    echo "   window.EDITING  = true;\n";
+    echo "   window.CLUSTER  = '$cluster';\n";
+    echo "   window.IDX      = $idx;\n";
+}
+else {
+    echo "   window.EDITING  = false;\n";
+}
+echo "</script>\n";
+
+REQUIRE_UNDERSCORE();
+REQUIRE_SUP();
+REQUIRE_MOMENT();
+REQUIRE_APTFORMS();
+AddTemplateList(array("reserve-request", "reservation-list",
+                      "oops-modal", "waitwait-modal"));
+SPITREQUIRE("js/reserve.js",
+            "<script src='js/lib/jquery.tablesorter.min.js'></script>\n".
+            "<script src='js/lib/jquery.tablesorter.widgets.min.js'></script>".
+            "<script src='js/lib/sugar.min.js'></script>".
+            "<script src='js/lib/jquery.tablesorter.parser-date.js'></script>".
+            "<script src='js/lib/jquery-ui.js'></script>");
+SPITFOOTER();
+?>

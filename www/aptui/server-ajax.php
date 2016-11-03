@@ -294,7 +294,20 @@ $routing = array("myprofiles" =>
                               "methods" => array("Dismiss" =>
                                                      "Do_Dismiss",
                                                  "Click" =>
-                                                     "Do_Click"))
+                                                     "Do_Click")),
+		 "reserve" =>
+			array("file"    => "reserve.ajax",
+			      "guest"   => false,
+			      "methods" => array("Reserve" =>
+                                                     "Do_Reserve",
+                                                 "Validate" =>
+                                                     "Do_Validate",
+                                                 "ListReservations" =>
+                                                     "Do_ListReservations",
+                                                 "GetReservation" =>
+                                                     "Do_GetReservation",
+                                                 "Delete" =>
+                                                     "Do_Delete")),
 );
 
 #

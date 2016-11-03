@@ -246,6 +246,9 @@ ProtoGeniDefs::AddModule("cluster",
 		  "SliceOpenstackData"   => \&GeniCluster::SliceOpenstackData,
 		  "SliceCheckReservation"=> \&GeniCluster::SliceCheckReservation,
 		  "SliceMaxExtension"    => \&GeniCluster::SliceMaxExtension,
+		  "Reserve"              => \&GeniCluster::Reserve,
+		  "Reservations"         => \&GeniCluster::Reservations,
+		  "DeleteReservation"    => \&GeniCluster::DeleteReservation,
 	      }},
 	  });
 

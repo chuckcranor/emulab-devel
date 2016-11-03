@@ -1,0 +1,82 @@
+<style>
+ .panel-body-dashboard {
+     padding: 2px;
+ }
+ .table-dashboard {
+     margin: 1px;
+ }
+ .popover{
+     max-width: 800px;
+ }
+ .table-condensed > thead > tr > th,
+ .table-condensed > tbody > tr > th,
+ .table-condensed > tfoot > tr > th,
+ .table-condensed > thead > tr > td,
+ .table-condensed > tbody > tr > td,
+ .table-condensed > tfoot > tr > td {
+     padding: 2px;
+ }
+ .panel-heading-list {
+     padding: 2px;
+ }
+</style>
+<div>
+  <div class='panel panel-default'>
+    <div class="panel-heading panel-heading-list">
+      <h5>
+	<center><%- name %> Reservations</center>
+      </h5>
+    </div>
+    <div class='panel-body panel-body-dashboard'>
+      <table class='tablesorter' id='reservations-table-<%- name %>'>
+	<thead>
+	  <tr>
+	    <% if (showidx) { %><th>IDX</th><% } %>
+	    <% if (showuser) { %><th>Creator</th><% } %>
+	    <% if (showproject) { %><th>Project</th><% } %>
+	    <th>Type</th>
+	    <th>Count</th>
+	    <th>Starts</th>
+	    <th>Ends</th>
+	  </tr>
+	</thead>
+	<tbody>
+	  <% _.each(reservations, function(value, idx) { %>
+	    <tr <% if (showidx) { %> data-idx="<%- value.idx %>"
+				     data-pid="<%- value.pid %>"
+				     data-cluster="<%- value.cluster %>"<% } %>>
+	      <% if (showidx) { %>
+		<td><%- value.idx %>
+		  <a href="#" class="delete-button">
+		    <span class='glyphicon glyphicon-remove pull-right'
+			  style='color: red; margin-left: 3px;
+				 margin-bottom: 4px;'></span>
+		  </a>
+		  <a href="reserve.php?edit=1&cluster=<%- value.cluster %>&idx=<%- value.idx %>"
+		     class="edit-button">
+		    <span class='glyphicon glyphicon-pencil pull-right'
+			  style='color: red; margin-bottom: 4px;'></span>
+		  </a>
+		</td>
+	      <% } %>	    
+	      <% if (showuser) { %>	  
+		<td style='white-space: nowrap;'>
+		  <a href='user-dashboard.php?user=<%- value.creator_uid %>'>
+		    <%- value.creator_uid %></a></td>
+	      <% } %>	    
+	      <% if (showproject) { %>	  
+		<td style='white-space: nowrap;'>
+		  <a href='show-project.php?project=<%- value.pid %>'>
+		    <%- value.pid %></a></td>
+	      <% } %>
+	      <td><%- value.type %></td>
+	      <td><%- value.count %></td>
+	      <td class="format-date"><%- value.start %></td>
+	      <td class="format-date"><%- value.end %></td>
+	    </tr>
+	  <% }); %>
+	</tbody>
+      </table>
+    </div>
+  </div>
+</div>

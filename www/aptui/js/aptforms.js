@@ -53,11 +53,15 @@ $(function () {
 		if (item.dataset) {
   		    var key = item.dataset['key'];
 		    var margin  = 15;
-		    var colsize = 12;
+		    var colsize = null;
 
 		    // Squeeze vertical space for this field.
 		    if (_.has(item.dataset, "compact")) {
 			margin = 5;
+		    }
+		    // Column size per row,
+		    if (_.has(item.dataset, "colsize")) {
+			colsize = item.dataset['colsize'];;
 		    }
 
 		    /*
@@ -94,7 +98,9 @@ $(function () {
 			}
 			label_text = label_text + "</label>";
 			wrapper.append($(label_text));
-			colsize = (wide ? 9 : 6);
+			if (!colsize) {
+			    colsize = (wide ? 9 : 6);
+			}
 		    }
 		    var innerdiv =
 			$("<div class='col-sm-" + colsize + "'></div>");
@@ -148,26 +154,29 @@ $(function () {
 	 * the page. Only allows a single form, but that would be easy
 	 * to change if we needed it.
 	 */
+	var form_modified = false;
+	
 	function EnableUnsavedWarning(form, modified_callback) {
-	    var modified = false;
-
 	    $(form + ' :input').change(function () {
-		console.info("changed");
+		//console.info("changed");
 		if (modified_callback) {
 		    modified_callback();
 		}
-		modified = true;
+		form_modified = true;
 	    });
 
 	    // Warn user if they have not saved changes.
 	    window.onbeforeunload = function() {
-		if (! modified)
+		if (! form_modified)
 		    return null;
 		return "You have unsaved changes!";
 	    }
 	}
 	function DisableUnsavedWarning(form) {
 	    window.onbeforeunload = null;
+	}
+	function MarkFormUnsaved() {
+	    form_modified = true;
 	}
 
 	function ClearFormErrors(form) {
@@ -182,6 +191,19 @@ $(function () {
 			$(this).parent().removeClass("has-error");
 		    }
 		}
+	    });
+	    $('#general_error').html("");
+	}
+
+	/*
+	 * Update a form contents from an array.
+	 */
+	function UpdateForm(form, formfields) {
+	    _.each(formfields, function(value, name) {
+		$(form).find("[name=" + name + "]").each(function () {
+		    console.log(this, this.type);
+		    $(this).val(value);
+		});
 	    });
 	}
 
@@ -202,7 +224,7 @@ $(function () {
 	    ClearFormErrors(form);
 
 	    var checkonly_callback = function(json) {
-		console.info(json);
+		console.info("CheckForm", json);
 
 		/*
 		 * We deal with these errors, the caller handles other errors.
@@ -236,8 +258,8 @@ $(function () {
 		formfields[field.name] = field.value;
 	    });
 	    var submit_callback = function(json) {
-		console.info(json);
-		sup.HideModal("#waitwait-modal");
+		console.info("SubmitForm", json);
+		sup.HideWaitWait();
 		DisableUnsavedWarning(form);
 		callback(json);
 	    };
@@ -260,6 +282,8 @@ $(function () {
 	    "GenerateFormErrors"         : GenerateFormErrors,
 	    "EnableUnsavedWarning"       : EnableUnsavedWarning,
 	    "DisableUnsavedWarning"      : DisableUnsavedWarning,
+	    "MarkFormUnsaved"            : MarkFormUnsaved,
+	    "UpdateForm"                 : UpdateForm,
 	};
     }
 )();

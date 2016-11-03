@@ -1,0 +1,450 @@
+#!/usr/bin/perl -w
+#
+# Copyright (c) 2000-2016 University of Utah and the Flux Group.
+# 
+# {{{EMULAB-LICENSE
+# 
+# This file is part of the Emulab network testbed software.
+# 
+# This file is free software: you can redistribute it and/or modify it
+# under the terms of the GNU Affero General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or (at
+# your option) any later version.
+# 
+# This file is distributed in the hope that it will be useful, but WITHOUT
+# ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
+# FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Affero General Public
+# License for more details.
+# 
+# You should have received a copy of the GNU Affero General Public License
+# along with this file.  If not, see <http://www.gnu.org/licenses/>.
+# 
+# }}}
+#
+use English;
+use strict;
+use Getopt::Std;
+use XML::Simple;
+use Data::Dumper;
+use CGI;
+use POSIX ":sys_wait_h";
+use Date::Parse;
+
+#
+# Back-end script to manage APT profiles.
+#
+sub usage()
+{
+    print("Usage: manage_reservations [-a <urn>] list [-u uid | -p pid]\n");
+    print("Usage: manage_reservations [-a <urn>] delete pid idx\n");
+    exit(-1);
+}
+my $optlist     = "dt:a:";
+my $debug       = 0;
+my $webtask_id;
+my $webtask;
+my $authority;
+
+#
+# Configure variables
+#
+my $TB		= "@prefix@";
+my $TBOPS       = "@TBOPSEMAIL@";
+my $OURDOMAIN	= "@OURDOMAIN@";
+my $MYURN	= "urn:publicid:IDN+${OURDOMAIN}+authority+cm";
+
+#
+# Untaint the path
+#
+$ENV{'PATH'} = "$TB/bin:$TB/sbin:/bin:/usr/bin:/usr/bin:/usr/sbin";
+delete @ENV{'IFS', 'CDPATH', 'ENV', 'BASH_ENV'};
+
+#
+# Turn off line buffering on output
+#
+$| = 1;
+
+#
+# Load the Testbed support stuff.
+#
+use lib "@prefix@/lib";
+use EmulabConstants;
+use emdb;
+use emutil;
+use User;
+use Project;
+use Reservation;
+use EmulabConstants;
+use libEmulab;
+use libtestbed;
+use WebTask;
+use APT_Geni;
+use GeniResponse;
+use GeniUser;
+
+# Protos
+sub fatal($);
+sub DoReserve();
+sub DoList();
+sub DoDelete();
+sub readfile($);
+
+#
+# Parse command arguments. Once we return from getopts, all that should be
+# left are the required arguments.
+#
+my %options = ();
+if (! getopts($optlist, \%options)) {
+    usage();
+}
+if (defined($options{"t"})) {
+    $webtask_id = $options{"t"};
+    $webtask = WebTask->Lookup($webtask_id);
+    if (!defined($webtask)) {
+	fatal("Could not lookup webtask $webtask_id");
+    }
+    # Convenient.
+    $webtask->AutoStore(1);
+}
+if (defined($options{"d"})) {
+    $debug++;
+}
+if (@ARGV < 1) {
+    usage();
+}
+my $action = shift(@ARGV);
+
+#
+# Default to local cluster
+#
+if (defined($options{"a"})) {
+    $authority = APT_Geni::GetAuthority($options{"a"});
+}
+else {
+    $authority = APT_Geni::GetAuthority($MYURN);
+}
+if (!defined($authority)) {
+    fatal("Could not look up authority");
+}
+# For credentials.
+my $this_user = User->ThisUser();
+if (! defined($this_user)) {
+    fatal("You ($UID) do not exist!");
+}
+my $geniuser = GeniUser->CreateFromLocal($this_user);
+
+if ($action eq "reserve") {
+    DoReserve();
+}
+elsif ($action eq "list") {
+    DoList();
+}
+elsif ($action eq "delete") {
+    DoDelete();
+}
+else {
+    usage();
+}
+exit(0);
+
+#
+# Create a reservation.
+#
+sub DoReserve()
+{
+    #
+    # We allow for a user or project argument.
+    #
+    my $optlist = "t:s:e:nN:u:";
+    my ($start, $end, $type, $reason, $update);
+    my $checkonly = 0;
+    my %rpcargs = ();
+    my $context;
+    my ($credential,$speaksfor);
+    
+    my %options = ();
+    if (! getopts($optlist, \%options)) {
+	usage();
+    }
+    usage()
+	if (@ARGV < 2);
+    my $project = Project->Lookup($ARGV[0]);
+    my $count   = $ARGV[1];
+
+    if (defined($options{"s"})) {
+	$start = $options{"s"};
+    }
+    if (defined($options{"e"})) {
+	$end = $options{"e"};
+    }
+    if (defined($options{"t"})) {
+	$type = $options{"t"};
+    }
+    if (defined($options{"u"})) {
+	$update = $options{"u"};
+    }
+    if (defined($options{"N"})) {
+	$reason = readfile($options{"N"});
+    }
+    if (defined($options{"n"})) {
+	$checkonly = 1;
+    }
+    usage()
+	if (! (defined($project) && defined($count) && defined($type) &&
+	       defined($start) && defined($end)));
+
+    if ($count !~ /^\d+$/) {
+	fatal("Count is not an integer");
+    }
+    if ($type !~ /^[-\w]+$/) {
+	fatal("Type is not a string");
+    }
+    if (! ($start =~ /^\d+$/ || str2time($start))) {
+	fatal("Start is not a datetime");
+    }
+    if (! ($end =~ /^\d+$/ || str2time($end))) {
+	fatal("End is not a datetime");
+    }
+    $rpcargs{"start"} = TBDateStringGMT($start);
+    $rpcargs{"end"}   = TBDateStringGMT($end);
+    $rpcargs{"count"} = $count;
+    $rpcargs{"type"}  = $type;
+    $rpcargs{"check"} = $checkonly;
+    $rpcargs{"reason"}= $reason if (defined($reason));
+    $rpcargs{"update"}= $update if (defined($update));
+    
+    $context = APT_Geni::GeniContext();
+    if ($this_user->IsAdmin()) {
+	#
+	# We do not have a very good notion of cross site admin.
+	#
+	($credential,$speaksfor) =
+	    APT_Geni::GenUserCredential($geniuser);
+	$rpcargs{"project_urn"} = $project->urn();
+    }
+    else {
+	if (!$project->AccessCheck($this_user, TB_PROJECT_CREATEEXPT())) {
+	    fatal("No permission to access reservation list for $project")
+	}
+	($credential,$speaksfor) =
+	    APT_Geni::GenProjectCredential($project, $geniuser);
+    }
+    fatal("Could not generate credentials")
+	if (!defined($credential));
+    my $credentials = [$credential->asString()];
+    if (defined($speaksfor)) {
+	$credentials = [@$credentials, $speaksfor->asString()];
+    }
+    $rpcargs{"credentials"} = $credentials;
+    
+    my $response =
+	APT_Geni::PortalRPC($authority, $context, "Reserve", \%rpcargs);
+    if (GeniResponse::IsError($response)) {
+	#
+	# All errors are fatal.
+	#
+	fatal($response->output());
+    }
+    print Dumper($response);
+    exit(0);
+}
+
+#
+# Ask for a list of reservations.
+#
+sub DoList()
+{
+    #
+    # We allow for a user or project argument.
+    #
+    my $optlist = "u:p:Ai:";
+    my $anon    = 0;
+    my $idx;
+    my $project;
+    my $user = $this_user;
+    my %rpcargs = ();
+    my $context;
+    
+    my %options = ();
+    if (! getopts($optlist, \%options)) {
+	usage();
+    }
+    if (defined($options{"A"})) {
+	$anon = 1;
+    }
+    if (defined($options{"i"})) {
+	$idx = $options{"i"};
+    }
+    if (defined($options{"u"})) {
+	$user = User->Lookup($options{"u"});
+	if (!defined($user)) {
+	    fatal("No such user");
+	}
+	if (!$this_user->IsAdmin() && !$this_user->SameUser($user)) {
+	    fatal("No permission to access reservation list for $user")
+	}
+	$geniuser = $this_user->CreateFromLocal($user);
+    }
+    if (defined($options{"p"})) {
+	$project = Project->Lookup($options{"p"});
+
+	if (!defined($project)) {
+	    fatal("No such project");
+	}
+	if (!$this_user->IsAdmin() &&
+	    !$project->AccessCheck($user, TB_PROJECT_CREATEEXPT())) {
+	    fatal("No permission to access reservation list for $project")
+	}
+    }
+    if ($this_user->IsAdmin() || $anon) {
+	#
+	# We do not have a very good notion of cross site admin. Get
+	# the entire list, we will filter here.
+	#
+    }
+    else {
+	my ($credential,$speaksfor);
+	
+	if (defined($project)) {
+	    ($credential,$speaksfor) =
+		APT_Geni::GenProjectCredential($project, $geniuser);
+	}
+	else {
+	    ($credential,$speaksfor) =
+		APT_Geni::GenUserCredential($geniuser);
+	}
+	fatal("Could not generate credentials")
+	    if (!defined($credential));
+	
+	my $credentials = [$credential->asString()];
+	if (defined($speaksfor)) {
+	    $credentials = [@$credentials, $speaksfor->asString()];
+	}
+	$rpcargs{"credentials"} = $credentials;
+	$context = APT_Geni::GeniContext();
+    }
+    if (defined($idx)) {
+	$rpcargs{"idx"} = $idx;
+    }
+    my $response =
+	APT_Geni::PortalRPC($authority, $context, "Reservations", (\%rpcargs));
+    if (GeniResponse::IsError($response)) {
+	#
+	# All errors are fatal.
+	#
+	fatal($response->output());
+    }
+    my $list = $response->value()->{'reservations'};
+    #
+    # Map remote URNs to local projects and users. Not all of them can
+    # be mapped of course, we leave those as is. 
+    #
+    foreach my $details (values(%$list)) {
+	my $geniuser = GeniUser->Lookup($details->{'user'}, 1);
+	if (defined(($geniuser))) {
+	    $details->{'uid'}     = $geniuser->uid();
+	    $details->{'uid_idx'} = $geniuser->uid_idx();
+	}
+	my $projhrn = GeniHRN->new($details->{'project'});
+	if ($projhrn->domain() eq $OURDOMAIN && defined($projhrn->project())) {
+	    my $project = Project->Lookup($projhrn->project());
+	    if (defined(($project))) {
+		$details->{'pid'}     = $project->pid();
+		$details->{'pid_idx'} = $project->pid_idx();
+	    }
+	}
+    }
+    #
+    # Strip out unwanted results if we asked as an admin for a specific
+    # user or project.
+    #
+    if ($this_user->IsAdmin()) {
+
+    }
+    if (defined($webtask)) {
+	$webtask->value($list);
+	$webtask->Exited(0);
+    }
+    else {
+	print Dumper($list);
+    }
+    exit(0);
+}
+
+#
+# Delete a reservation.
+#
+sub DoDelete()
+{
+    usage()
+	if (@ARGV != 2);
+    my $pid = shift(@ARGV);
+    my $idx = shift(@ARGV);
+    
+    # Check this since Reservation->Lookup() does not validate.
+    fatal("Invalid index")
+	if ($idx !~ /^\d+$/);
+
+    my $project = Project->Lookup($pid);
+    fatal("No such project")
+	if (!defined($project));
+    
+    if (!$this_user->IsAdmin() &&
+	!$project->AccessCheck($this_user, TB_PROJECT_CREATEEXPT())) {
+	fatal("No permission to access reservation list for $project")
+    }
+    my $response =
+	APT_Geni::PortalRPC($authority, undef, "DeleteReservation",
+			    {"idx" => $idx,
+			     "project" => $project->urn()});
+    if (GeniResponse::IsError($response)) {
+	#
+	# All errors are fatal.
+	#
+	fatal($response->output());
+    }
+    if (defined($webtask)) {
+	$webtask->Exited(0);
+    }
+    else {
+	print Dumper($response);
+    }
+    exit(0);
+}
+
+sub fatal($)
+{
+    my ($mesg) = @_;
+
+    if (defined($webtask)) {
+	$webtask->output($mesg);
+	$webtask->code(-1);
+    }
+    print STDERR "*** $0:\n".
+	         "    $mesg\n";
+    # Exit with negative status so web interface treats it as system error.
+    exit(-1);
+}
+
+sub UserError($)
+{
+    my ($mesg) = @_;
+
+    if (defined($webtask)) {
+	$webtask->output($mesg);
+	$webtask->code(1);
+    }
+    print STDERR "*** $0:\n".
+	         "    $mesg\n";
+    exit(1);
+}
+
+sub readfile($) {
+    local $/ = undef;
+    my ($filename) = @_;
+    open(FILE, $filename) or fatal("Could not open $filename: $!");
+    my $contents = <FILE>;
+    close(FILE);
+    return $contents;
+}
+

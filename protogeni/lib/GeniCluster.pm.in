@@ -42,18 +42,23 @@ use vars qw(@ISA @EXPORT);
 # Must come after package declaration!
 use emdb;
 use emutil;
+use WebTask;
 use libtestbed;
 use libEmulab;
 use GeniResponse;
 use GeniSlice;
+use GeniCM;
 use GeniHRN;
 use GeniUtil;
 use Reservation;
+use GeniCredential;
+use GeniStd;
 use English;
 use Data::Dumper;
 use Date::Parse;
 use POSIX qw(strftime);
 use Time::Local;
+use File::Temp qw(tempfile);
 use Project;
 use NodeType;
 
@@ -72,8 +77,9 @@ my $API_VERSION    = 1.0;
 # Check permission. At the moment, only the Mothership can issue requests
 # and only the Cloudlab clusters will accept them.
 #
-sub CheckPermission()
+sub CheckPermission($)
 {
+    my ($rootonly) = @_;
     my $myurn = $ENV{"MYURN"};
 
     my $hrn = GeniHRN->new($ENV{"GENIURN"});
@@ -84,9 +90,14 @@ sub CheckPermission()
     return GeniResponse->Create(GENIRESPONSE_FORBIDDEN, undef,
 				"Only the Mothership or local cluster ".
 				"can access this interface")
-	if (! ($hrn->IsAuthority() && $hrn->IsRoot() &&
-	       ($hrn->authority() eq "emulab.net" ||
-		$hrn->authority() eq $OURDOMAIN)));
+	if (! ($hrn->authority() eq "emulab.net" ||
+	       $hrn->authority() eq $OURDOMAIN));
+
+    return GeniResponse->Create(GENIRESPONSE_FORBIDDEN, undef,
+				"Only the root authority ".
+				"can access this interface")
+	if (defined($rootonly) && $rootonly &&
+	    ! ($hrn->IsAuthority() && $hrn->IsRoot()));
 
     return GeniResponse->Create(GENIRESPONSE_FORBIDDEN, undef,
 			"Only Cloudlab clusters permit this interface")
@@ -107,7 +118,7 @@ sub CheckPermission()
 #
 sub GetVersion()
 {
-    my $hasperm = CheckPermission();
+    my $hasperm = CheckPermission(0);
     return $hasperm
 	if (GeniResponse::IsError($hasperm));
 	    
@@ -119,7 +130,7 @@ sub GetVersion()
 #
 sub InUse()
 {
-    my $hasperm = CheckPermission();
+    my $hasperm = CheckPermission(1);
     return $hasperm
 	if (GeniResponse::IsError($hasperm));
     my $autoswap_max;
@@ -212,7 +223,7 @@ sub InUse()
 sub PreReservations()
 {
     my @blob = ();
-    my $hasperm = CheckPermission();
+    my $hasperm = CheckPermission(1);
     return $hasperm
 	if (GeniResponse::IsError($hasperm));
 
@@ -305,7 +316,7 @@ sub SliceUtilizationData($)
     my $slice_urn = $argref->{'slice_urn'};
     my %blob      = ();
     
-    my $hasperm = CheckPermission();
+    my $hasperm = CheckPermission(1);
     return $hasperm
 	if (GeniResponse::IsError($hasperm));
 
@@ -399,7 +410,7 @@ sub SliceIdleData($)
     my $slice_urn = $argref->{'slice_urn'};
     my %blob      = ();
     
-    my $hasperm = CheckPermission();
+    my $hasperm = CheckPermission(1);
     return $hasperm
 	if (GeniResponse::IsError($hasperm));
 
@@ -452,7 +463,7 @@ sub SliceOpenstackData($)
     my $client_id = $argref->{'client_id'};
     my %blob      = ();
 
-    my $hasperm = CheckPermission();
+    my $hasperm = CheckPermission(1);
     return $hasperm
 	if (GeniResponse::IsError($hasperm));
 
@@ -513,7 +524,7 @@ sub SliceCheckReservation($)
     my %blob      = ();
     my $reserror;
 
-    my $hasperm = CheckPermission();
+    my $hasperm = CheckPermission(1);
     return $hasperm
 	if (GeniResponse::IsError($hasperm));
 
@@ -553,7 +564,7 @@ sub SliceMaxExtension($)
     my $max;
     my $reserror;
 
-    my $hasperm = CheckPermission();
+    my $hasperm = CheckPermission(1);
     return $hasperm
 	if (GeniResponse::IsError($hasperm));
 
@@ -568,6 +579,354 @@ sub SliceMaxExtension($)
     Reservation->FlushAll();
     $max = TBDateStringGMT($max);
     return GeniResponse->Create(GENIRESPONSE_SUCCESS, $max);
+}
+
+#
+# Attempt a reservation.
+#
+sub Reserve($)
+{
+    my ($argref)  = @_;
+    my %blob      = ();
+    my $reserror;
+
+    my $hasperm = CheckPermission(0);
+    return $hasperm
+	if (GeniResponse::IsError($hasperm));
+
+    #
+    # We want to support admins creating reservations for projects they
+    # are not a member of. But we need to have a local account for that
+    # remote admin, and for that we need a user credential. But we also
+    # need a local project, but for that we just need the project urn.
+    #
+    # Otherwise we get a project credential issued to a user in that
+    # project.
+    #
+    if (!exists($argref->{'credentials'})) {
+	return GeniResponse->MalformedArgsResponse("Missing credentials")
+    }
+    my ($geniuser, $project) =
+	Credential2UserProject($argref->{'credentials'});
+
+    return $geniuser
+	if (GeniResponse::IsResponse($geniuser));
+
+    #
+    # No project, we need to have a project urn.
+    #
+    if (!defined($project)) {
+	return GeniResponse->MalformedArgsResponse("Missing project URN")
+	    if (!exists($argref->{'project_urn'}));
+	return GeniResponse->MalformedArgsResponse("Invalid project URN")
+	    if (!GeniHRN::IsValid($argref->{'project_urn'}));
+	my $hrn = GeniHRN->new($argref->{'project_urn'});
+	return GeniResponse->MalformedArgsResponse("Mismatching project URN")
+	    if ($hrn->domain() ne $geniuser->urn()->domain());
+
+	my $group = GeniUtil::GetHoldingProject($hrn,undef,1);
+	return $group
+	    if (GeniResponse::IsResponse($group));
+	$project = $group->GetProject();
+    }
+    my $pid = $project->pid();
+    my $uid = $geniuser->emulab_user()->uid();
+
+    #
+    # Required arguments.
+    #
+    foreach my $field ("count", "start", "end", "type") {
+	return GeniResponse->MalformedArgsResponse("Missing $field")
+	    if (! (exists($argref->{$field}) && $argref->{$field} ne ""));
+    }
+    my $count = $argref->{"count"};
+    my $start = $argref->{"start"};
+    my $end   = $argref->{"end"};
+    my $type  = $argref->{"type"};
+    my $check = (exists($argref->{"check"}) && $argref->{"check"} ? 1 : 0);
+    my $reason= (exists($argref->{"reason"}) ? $argref->{"reason"} : undef);
+    my $update= (exists($argref->{"update"}) ? $argref->{"update"} : undef);
+
+    return GeniResponse->MalformedArgsResponse("Invalid count")
+	if ($count !~ /^\d+$/);
+    return GeniResponse->MalformedArgsResponse("Invalid type")
+	if ($type !~ /^[-\w]+$/);
+    return GeniResponse->MalformedArgsResponse("Invalid update")
+	if (defined($update) && $update !~ /^\d+$/);
+
+    if (defined($reason) &&
+	!TBcheck_dbslot($reason, "default", "tinytext",
+			TBDB_CHECKDBSLOT_WARN|TBDB_CHECKDBSLOT_ERROR)) {
+	return GeniResponse->MalformedArgsResponse("Invalid reason")
+    }
+    # Gack, why does Frontier do this. It is stupid.
+    if (ref($start) eq 'Frontier::RPC2::DateTime::ISO8601') {
+	$start = $start->value;
+    }
+    if (ref($end) eq 'Frontier::RPC2::DateTime::ISO8601') {
+	$end = $end->value;
+    }
+    # Convert to a localtime.
+    $start = eval { timegm(strptime($start)); };
+    if ($@) {
+	return GeniResponse->MalformedArgsResponse("Start time: $@");
+    }
+    return GeniResponse->MalformedArgsResponse("Start time: ".
+					       "Could not parse date")
+	if (!defined($start));
+    $end = eval { timegm(strptime($end)); };
+    if ($@) {
+	return GeniResponse->MalformedArgsResponse("End time: $@");
+    }
+    return GeniResponse->MalformedArgsResponse("End time: Could not parse date")
+	if (!defined($end));
+
+    my $nodetype = NodeType->Lookup($type);
+    return GeniResponse->SearchFailedResponse("No such type")
+	if (!defined($type));
+
+    #
+    # It would be great to check permission here if an update, but without
+    # a concept of remote admin, this is not possible.
+    #
+    if (defined($update)) {
+	my $reservation = Reservation->Lookup($update);
+	return GeniResponse->SearchFailedResponse("No such reservation")
+	    if (!defined($reservation));
+    }
+
+    # Use a webtask to get back output.
+    my $webtask = WebTask->CreateAnonymous();
+    return GeniResponse->Create(GENIRESPONSE_ERROR)
+	if (!defined($webtask));
+
+    my $args = ($check ? "-n " : "") .
+	(defined($update) ? "-u $update " : "") .
+	"-T " . $webtask->task_id() . " ".
+	"-u $uid -t $type -s $start -e $end $pid $count";
+
+    # Write the reason to a tempfile to pass in. This will auto unlink.
+    my $fp;
+    if (defined($reason)) {
+	$fp = File::Temp->new();
+	print $fp $reason;
+	$args = "-N $fp $args";
+	chmod(0755, "$fp");
+    }
+
+    GeniUtil::FlipToElabMan();
+    my $output = GeniUtil::ExecQuiet("$WAP $TB/sbin/reserve $args");
+    
+    if ($?) {
+	GeniUtil::FlipToGeniUser();
+	$webtask->Refresh();
+	my $code = $webtask->code();
+	my $mesg = $webtask->output();
+	$webtask->Delete();
+	if (!defined($mesg)) {
+	    $mesg = $output;
+	}
+	return GeniResponse->Create(GENIRESPONSE_REFUSED, $code, $mesg);
+    }
+    GeniUtil::FlipToGeniUser();
+    $webtask->Delete();
+    return GeniResponse->Create(GENIRESPONSE_SUCCESS);
+}
+
+#
+# Reservation list or just one.
+#
+sub Reservations($)
+{
+    my ($argref)  = @_;
+    my %results   = ();
+    my $reserror;
+    my $query_result;
+    my $idx;
+
+    my $hasperm = CheckPermission(0);
+    return $hasperm
+	if (GeniResponse::IsError($hasperm));
+
+    if (exists($argref->{'idx'})) {
+	$idx = $argref->{'idx'};
+
+	return GeniResponse->MalformedArgsResponse("Invalid idx")
+	    if ($idx !~ /^\d+$/);
+    }
+
+    #
+    # If the root authority is asking, then no perm checks are necessary.
+    # and we send back the entire list. Otherwise return only those
+    # reservations granted by the credential, which should be a project
+    # credential or a user (self) credential.
+    #
+    if (!exists($argref->{'credentials'})) {
+	my $hrn = GeniHRN->new($ENV{"GENIURN"});
+	return GeniResponse->Create(GENIRESPONSE_FORBIDDEN)
+	    if (! ($hrn->IsAuthority() && $hrn->IsRoot()));
+	
+	$query_result =
+	    DBQueryWarn("select *,UNIX_TIMESTAMP(start) as start, ".
+			"   UNIX_TIMESTAMP(end) as end, ".
+			"   UNIX_TIMESTAMP(created) as created ".
+			"  from future_reservations ".
+			(defined($idx) ? "where idx='$idx' " : "") .
+			"order BY start");
+    }
+    else {
+	my $credentials = $argref->{'credentials'};	
+	my ($geniuser,$project) = Credential2UserProject($credentials);
+
+	return $geniuser
+	    if (GeniResponse::IsResponse($geniuser));
+
+	if (defined($project)) {
+	    my $pid = $project->pid();
+	    $query_result =
+		DBQueryWarn("select *,UNIX_TIMESTAMP(start) as start, ".
+			    "   UNIX_TIMESTAMP(end) as end, ".
+			    "   UNIX_TIMESTAMP(created) as created ".
+			    "  from future_reservations ".
+			    "where pid='$pid' ".
+			    (defined($idx) ? "and idx='$idx'" : ""));
+	}
+	else {
+	    my $uid = $geniuser->uid();
+	    $query_result =
+		DBQueryWarn("select *,UNIX_TIMESTAMP(start) as start, ".
+			    "   UNIX_TIMESTAMP(end) as end, ".
+			    "   UNIX_TIMESTAMP(created) as created ".
+			    "  from future_reservations ".
+			    "where uid='$uid'");
+	}
+    }
+    return GeniResponse->Create(GENIRESPONSE_ERROR)
+	if (!$query_result);
+
+    return GeniResponse->Create(GENIRESPONSE_SEARCHFAILED)
+	if (defined($idx) && !$query_result->numrows);
+
+    while (my $row = $query_result->fetchrow_hashref()) {
+	my $blob = {};
+   	my $idx  = $row->{'idx'};
+	my $pid  = $row->{'pid'};
+	my $uid  = $row->{'uid'};
+	
+	my $project = Project->Lookup($pid);
+	if (!defined($project)) {
+	    print STDERR "Reservations: No such project $pid\n";
+	    next;
+	}
+	my $user = User->Lookup($uid);
+	if (!defined($user)) {
+	    print STDERR "Reservations: No such user $uid\n";
+	    next;
+	}
+	$blob->{"idx"}         = $idx;
+	$blob->{"project"}     = $project->urn();
+	$blob->{"user"}        = $user->urn();
+	$blob->{"nodes"}       = $row->{'nodes'};
+	$blob->{"type"}        = $row->{'type'};
+	$blob->{"created"}     = TBDateStringGMT($row->{'created'});
+	$blob->{"start"}       = TBDateStringGMT($row->{'start'});
+	$blob->{"start"}       = TBDateStringGMT($row->{'start'});
+	$blob->{"end"}         = TBDateStringGMT($row->{'end'});
+	$blob->{"notes"}       = $row->{'notes'} || "";
+	$results{"$idx"}       = $blob;
+    }
+    my $blob = {"api_version"  => $API_VERSION,
+		"reservations" => \%results,
+    };
+    return GeniResponse->Create(GENIRESPONSE_SUCCESS, $blob);
+}
+
+#
+# Delete a reservation.
+#
+sub DeleteReservation($)
+{
+    my ($argref)  = @_;
+    my $project;
+
+    my $hasperm = CheckPermission(0);
+    return $hasperm
+	if (GeniResponse::IsError($hasperm));
+
+    return GeniResponse->MalformedArgsResponse("Missing reservation ID")
+	if (! (exists($argref->{"idx"}) && $argref->{"idx"} ne ""));
+
+    my $idx = $argref->{"idx"};
+    return GeniResponse->MalformedArgsResponse("Illegal reservation ID")
+	if ($idx !~ /^\d+$/);
+
+    return GeniResponse->MalformedArgsResponse("Missing project")
+	if (! (exists($argref->{"project"}) && $argref->{"project"} ne ""));
+
+    my $urn = $argref->{"project"};
+    return GeniResponse->MalformedArgsResponse("Illegal project URN")
+	if (!GeniHRN::IsValid($urn));
+    my $hrn = GeniHRN->new($urn);
+
+    if ($hrn->domain() eq $OURDOMAIN) {
+	$project = Project->Lookup($hrn->id());
+    }
+    else {
+	#
+	# We got a project URN but we need to lookup using the SA urn.
+	#
+	my $purn = GeniHRN::Generate($hrn->authority(), "authority", "sa");
+	$project = Project->LookupNonLocal($purn);
+    }
+    return GeniResponse->MalformedArgsResponse("No such project")
+	if (!$project);
+
+    my $reservation = Reservation->Lookup($idx);
+    return GeniResponse->Create(GENIRESPONSE_SEARCHFAILED)
+	if (!defined($reservation));
+
+    return GeniResponse->Create(GENIRESPONSE_FORBIDDEN)
+	if ($reservation->pid() ne $project->pid());
+    
+    $reservation->Cancel() == 0
+	or GeniResponse->Create(GENIRESPONSE_ERROR);
+    
+    return GeniResponse->Create(GENIRESPONSE_SUCCESS);
+}
+
+#
+# Map a project credential to local user/project.
+#
+sub Credential2UserProject($)
+{
+    my ($credentials) = @_;
+
+    my ($credential,$speaksfor) = GeniStd::CheckCredentials($credentials);
+    return $credential
+	if (GeniResponse::IsResponse($credential));
+
+    return GeniResponse->MalformedArgsResponse("Not a project/user credential")
+	if ($credential->target_urn()->type() ne "project" &&
+	    $credential->target_urn()->type() ne "user");
+
+    #
+    # This will create a local user if it does not exist.
+    #
+    my $geniuser = GeniCM::CreateUserFromCertificate($credential);
+    return $geniuser
+	if (GeniResponse::IsResponse($geniuser));
+    return ($geniuser)
+	if ($credential->target_urn()->type() eq "user");	
+    
+    #
+    # This will create a local project if it does not exist. 
+    #
+    my $group =
+	GeniUtil::GetHoldingProject($credential->target_urn(), $geniuser, 1);
+    return $group
+	if (GeniResponse::IsResponse($group));
+    
+    return ($geniuser, $group->GetProject());
 }
 
 # _Always_ make sure that this 1 is at the end of the file...
