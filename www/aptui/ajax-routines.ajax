@@ -85,6 +85,7 @@ function ClassicExperimentList($which, $target, $state = "active")
         $blob["idx"]      = $idx;
         $blob["pid"]      = "<a href='show-project.php?project=$pid'>$pid</a>";
         $blob["eid"]      = "<a href='$url'>$eid</a>";
+        $blob["uuid"]     = $experiment->uuid();
 
         if (ISADMIN() || $which == "project") {
             $blob["creator"] =

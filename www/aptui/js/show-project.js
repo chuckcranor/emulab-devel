@@ -2,7 +2,7 @@ $(function ()
 {
     'use strict';
 
-  var templates = APT_OPTIONS.fetchTemplateList(['show-project', 'experiment-list', 'profile-list', 'member-list', 'dataset-list', 'project-profile', 'classic-explist', 'group-list', 'waitwait-modal', 'oops-modal']);
+    var templates = APT_OPTIONS.fetchTemplateList(['show-project', 'experiment-list', 'profile-list', 'member-list', 'dataset-list', 'project-profile', 'classic-explist', 'group-list', 'waitwait-modal', 'oops-modal','conversion-help-modal']);
     var mainString = templates['show-project'];
     var experimentString = templates['experiment-list'];
     var profileString = templates['profile-list'];
@@ -13,7 +13,7 @@ $(function ()
     var groupsString = templates['group-list'];
     var waitString = templates['waitwait-modal'];
     var oopsString = templates['oops-modal'];
-
+    var converterHelpTemplate = _.template(templates['conversion-help-modal']);
     var mainTemplate    = _.template(mainString);
     
     function initialize()
@@ -29,6 +29,7 @@ $(function ()
 	$('#main-body').html(html);
 	$('#waitwait_div').html(waitString);
 	$('#oops_div').html(oopsString);
+	$('#conversion_help_div').html(converterHelpTemplate({}));
 
         // Javascript to enable link to tab
         var hash = document.location.hash;
