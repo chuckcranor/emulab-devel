@@ -41,11 +41,12 @@ use emdb;
 use libtestbed;
 use Project;
 use Reservation;
+use WebTask;
 
 sub usage()
 {
-    print STDERR "Usage: reserve [-u] [-C] [-f] [-n] -t type [-s start] [-e end]\n" .
-	"            [-N file] [-A file] pid count\n";
+    print STDERR "Usage: reserve [-C] [-f] [-n] -t type [-s start] [-e end]\n" .
+	"            [-u] [-U uid] [-N file] [-A file] pid count\n";
     print STDERR "       reserve -c idx\n";
     print STDERR "       reserve [-u] -i pid\n";
     print STDERR "       reserve [-u] -l\n";
@@ -56,24 +57,16 @@ sub usage()
     print STDERR "   -f   Force reservation into schedule, even if " .
 	"overcommitted\n";
     print STDERR "   -n   Check feasibility only; don't actually reserve\n";
+    print STDERR "   -U   Mark reservation as being created by uid\n";
     print STDERR "   -t   Node type\n";
     print STDERR "   -i   Show existing reservation for project\n";
     print STDERR "   -l   List all existing reservations\n";
     print STDERR "   -s   Start time when reservation begins\n";
     print STDERR "   -e   End time when reservation expires\n";
-    exit( 1 );
+    exit( -1 );
 }
 
-
-sub fatal($)
-{
-    my ($mesg) = $_[0];
-
-    die("*** $0:\n".
-	"    $mesg\n");
-}
-
-my $optlist    = "c:de:fhilns:t:uA:CN:";
+my $optlist    = "c:de:fhilns:t:uA:CN:U:T:";
 my $debug      = 0;
 my $info       = 0;
 my $list       = 0;
@@ -89,6 +82,20 @@ my $type;
 my $pid;
 my $count;
 my $project;
+my $webtask;
+my $target_user;
+
+sub fatal($)
+{
+    my ($mesg) = $_[0];
+
+    if (defined($webtask)) {
+	$webtask->Exited(-1);
+	$webtask->output($mesg);
+    }
+    die("*** $0:\n".
+	"    $mesg\n");
+}
 
 sub readfile($) {
     local $/ = undef;
@@ -160,18 +167,29 @@ if (defined($options{i})) {
 if (defined($options{l})) {
     $list = 1;
 }
+if (defined($options{T})) {
+    $webtask = WebTask->Lookup($options{T});
+    if (!defined($webtask)) {
+	fatal("No such webtask: " . $options{T});
+    }
+    $webtask->AutoStore(1);
+}
 if (defined($options{"e"})) {
-    $endtime = str2time( $options{"e"} );
-
-    if( !defined( $endtime ) ) {
-	fatal("Could not parse -e option.");
+    $endtime = $options{"e"};
+    if ($endtime !~ /^\d+$/) {
+	$endtime = str2time($endtime);
+	if( !defined( $endtime ) ) {
+	    fatal("Could not parse -e option.");
+	}
     }
 }
 if (defined($options{"s"})) {
-    $starttime = str2time( $options{"s"} );
-
-    if( !defined( $starttime ) ) {
-	fatal("Could not parse -s option.");
+    $starttime = $options{"s"};
+    if ($starttime !~ /^\d+$/) {
+	$starttime = str2time($starttime);
+	if( !defined( $starttime ) ) {
+	    fatal("Could not parse -s option.");
+	}
     }
 }
 if (defined($options{"N"})) {
@@ -180,7 +198,11 @@ if (defined($options{"N"})) {
 if (defined($options{"A"})) {
     $adminnotes = readfile( $options{"A"} );
 }
-
+if (defined($options{"U"})) {
+    $target_user = User->Lookup($options{"U"});
+    fatal("No such user")
+	if (!defined($target_user));
+}
 if ($info) {
     usage() if( @ARGV != 1 );
     
@@ -314,6 +336,7 @@ if ($UID) {
 	fatal("You are not a testbed administrator!");
     }
 }
+$target_user = $this_user if (!defined($target_user));
 
 #
 # Clear and exit.
@@ -344,8 +367,8 @@ if ($clear || $clear_idx) {
 if ($UID == 0) {
     fatal("Please do not run this as root!");
 }
-my $uid = $this_user->uid();
-my $uid_idx = $this_user->uid_idx();
+my $uid = $target_user->uid();
+my $uid_idx = $target_user->uid_idx();
 
 my $res = Reservation->Create( $pid, $uid, $starttime, $endtime, $type,
 			       $count );
@@ -364,6 +387,10 @@ while( 1 ) {
 	if( $force ) {
 	    print STDERR "Continuing anyway!\n";
 	} else {
+	    if (defined($webtask)) {
+		$webtask->Exited(1);
+		$webtask->output($error);
+	    }
 	    exit( 1 );
 	}
     }
