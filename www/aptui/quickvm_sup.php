@@ -303,8 +303,11 @@ $PAGEHEADER_FUNCTION = function($thinheader = 0, $ignore1 = NULL,
 	             <li><a href='images.php?all=1'>
                             All Images</a></li>
 	             <li><a href='lists.php'>
-                            Users/Projects</a></li>";
-           
+                            Users/Projects</a></li>
+	             <li><a href='list-reservations.php'>
+                            List Reservations</a></li>
+	             <li><a href='reserve.php'>
+                            Create Reservation</a></li>";
            echo " </ul>
                 </li>\n";
         }
