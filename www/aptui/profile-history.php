@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2015 University of Utah and the Flux Group.
+# Copyright (c) 2000-2016 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -72,7 +72,7 @@ while ($row = mysql_fetch_array($query_result)) {
     $pid     = $row["pid"];
     $created = $row["created"];
     $published = $row["published"];
-    $creator = $row["creator"];
+    $creator = ($version == 0 ? $row["creator"] : $row["updater"]);
     $rspec   = $row["rspec"];
     $desc    = '';
 

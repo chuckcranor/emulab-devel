@@ -16,13 +16,13 @@
 	  </tr>
 	  <tr>
 	    <td>Version:</td><td>
-	  <% if (history) { %>
-	  <a href='profile-history.php?uuid=<%= profile_uuid %>'>
-	  	    <%- fields.profile_version %></a>
-	  <% } else { %>
-	    <%- fields.profile_version %>
-	  <% } %>
-	  </td></tr>
+	      <% if (history) { %>
+		<a href='profile-history.php?uuid=<%= profile_uuid %>'>
+	  	  <%- fields.profile_version %></a>
+	      <% } else { %>
+		<%- fields.profile_version %>
+	      <% } %>
+	    </td></tr>
 	  <tr>
 	    <td>Project:</td>
 	    <td><%- fields.profile_pid %></td>
@@ -31,8 +31,18 @@
 	    <td>Creator:</td>
 	    <td><%- fields.profile_creator %></td>
 	  </tr>
+	  <% if (fields.profile_version != 0) { %>
+	    <tr>
+	      <td>Updated by:</td>
+	      <td><%- fields.profile_updater %></td>
+	    </tr>
+	  <% } %>
 	  <tr>
-	    <td>Created:</td>
+	    <% if (fields.profile_version == 0) { %>
+	      <td>Created:</td>
+	    <% } else { %>
+	      <td>Updated:</td>
+	    <% } %>
 	    <td class='format-date' style='word-wrap:break-word;'>
 	      <%- fields.profile_created %></td>
 	  </tr>

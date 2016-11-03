@@ -377,6 +377,7 @@ if (! isset($create)) {
 		$defaults["profile_script"] = $profile->script();
 	    }
 	    $defaults["profile_creator"]     = $profile->creator();
+	    $defaults["profile_updater"]     = $profile->updater();
 	    $defaults["profile_created"]     =
 		DateStringGMT($profile->created());
 	    $defaults["profile_published"]   =

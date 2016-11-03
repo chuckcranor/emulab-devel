@@ -105,6 +105,8 @@ class Profile
     function version()      { return $this->field('version'); }
     function creator()	    { return $this->field('creator'); }
     function creator_idx()  { return $this->field('creator_idx'); }
+    function updater()	    { return $this->field('updater'); }
+    function updater_idx()  { return $this->field('updater_idx'); }
     function pid()	    { return $this->field('pid'); }
     function pid_idx()	    { return $this->field('pid_idx'); }
     function created()	    { return $this->field('created'); }

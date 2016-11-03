@@ -405,11 +405,13 @@ sub NewVersion($$)
     goto bad
 	if (! DBQueryWarn("insert into apt_profile_versions ".
 			  "  (name,profileid,version,pid,pid_idx, ".
-			  "   creator,creator_idx,created,uuid, ".
+			  "   creator,creator_idx,updater,updater_idx, ".
+			  "   created,uuid, ".
 			  "   parent_profileid,parent_version,rspec, ".
 			  "   script,paramdefs) ".
 			  "select name,profileid,'$newvers',pid,pid_idx, ".
-			  "  '$uid','$uid_idx',now(),uuid(),'$profileid', ".
+			  "  creator,creator_idx,'$uid','$uid_idx',".
+			  "  now(),uuid(),'$profileid', ".
 			  "  '$version',rspec,script,paramdefs ".
 			  "from apt_profile_versions as v ".
 			  "where v.profileid='$profileid' and ".

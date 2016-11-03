@@ -90,6 +90,7 @@ $defaults["profile_name"]        = $profile->name();
 $defaults["profile_rspec"]       = $profile->rspec();
 $defaults["profile_version"]     = $profile->version();
 $defaults["profile_creator"]     = $profile->creator();
+$defaults["profile_updater"]     = $profile->updater();
 $defaults["profile_pid"]         = $profile->pid();
 $defaults["profile_created"]     = DateStringGMT($profile->created());
 $defaults["profile_published"]   = DateStringGMT($profile->published());

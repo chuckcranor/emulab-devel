@@ -40,8 +40,19 @@
 	    <td><a href='user-dashboard.php?user=<%= formfields.profile_creator %>'>
 	      <%- formfields.profile_creator %></a></td>
 	  </tr>
+	  <% if (formfields.profile_version != 0) { %>
+	    <tr>
+	      <td>Updated by:</td>
+	      <td><a href='user-dashboard.php?user=<%= formfields.profile_updater %>'>
+		<%- formfields.profile_updater %></a></td>
+	    </tr>
+	  <% } %>
 	  <tr>
-	    <td>Created:</td>
+	    <% if (formfields.profile_version == 0) { %>
+	      <td>Created:</td>
+	    <% } else { %>
+	      <td>Updated:</td>
+	    <% } %>
 	    <td class='format-date' style='word-wrap:break-word;'>
 	      <%- formfields.profile_created %></td>
 	  </tr>
