@@ -325,6 +325,9 @@ function Do_GetImageInfo()
             $description = $row["description"];
         }
         if (count($types)) {
+            if (isset($types["pcvm"])) {
+                $virts["emulab-xen"] = "emulab-xen";
+            }
             # These are reversed from what they should mean!
             $typelist = implode(",", array_keys($types));
             $virtlist = implode(",", array_keys($virts));
