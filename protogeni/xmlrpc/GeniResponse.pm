@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2008-2015 University of Utah and the Flux Group.
+# Copyright (c) 2008-2016 University of Utah and the Flux Group.
 # 
 # {{{GENIPUBLIC-LICENSE
 # 
@@ -204,10 +204,16 @@ sub Create($$;$$)
 sub field($$)           { return ($_[0]->{$_[1]}); }
 sub code($)		{ return field($_[0], "code"); }
 sub value($)		{ return field($_[0], "value"); }
-sub output($)		{ return field($_[0], "output"); }
 # This is very optional.
 sub logurl($) {
     return (exists($_[0]->{"logurl"}) ? $_[0]->{"logurl"} : undef);
+}
+sub output($;$) {
+    my ($self,$string) = @_;
+    if (defined($string)) {
+	$self->{'output'} = $string;
+    }
+    return field($_[0], "output");
 }
 
 # Check for response object. Very bad, but the XML encoder does not
@@ -299,6 +305,16 @@ sub BadArgsResponse(;$)
 	if (!defined($msg));
     
     return GeniResponse->Create(GENIRESPONSE_BADARGS, undef, $msg);
+}
+
+sub SearchFailedResponse(;$)
+{
+    my ($msg) = @_;
+
+    $msg = "Search Failure"
+	if (!defined($msg));
+    
+    return GeniResponse->Create(GENIRESPONSE_SEARCHFAILED, undef, $msg);
 }
 
 # _Always_ make sure that this 1 is at the end of the file...
