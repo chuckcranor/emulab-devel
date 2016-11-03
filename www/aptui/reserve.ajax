@@ -87,16 +87,10 @@ function Do_Reserve()
     if (!$start) {
         $errors["start"] = "Cannot parse date";
     }
-    else {
-        error_log("Start: $start_ascii, $start");
-    }
     $end_ascii = $formfields["end"];
     $end = strtotime($formfields["end"]);
     if (!$end) {
         $errors["end"] = "Cannot parse date";
-    }
-    else {
-        error_log("End: $end_ascii, $end");
     }
     if (isset($start) && isset($end) && $end < $start) {
         $errors["end"] = "End is before start";
