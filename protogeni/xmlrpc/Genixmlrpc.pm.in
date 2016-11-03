@@ -375,7 +375,9 @@ sub CallMethodInternal($$$$@)
     # Sigh.
     if (!ref($goo)) {
         print STDERR "Error in XMLRPC parse: $xmlgoo\n";
-        return undef;
+	$code   = GENIRESPONSE_RPCERROR();
+	$value  = undef;
+	$output = "Could not parse XMLRPC return value: $xmlgoo";
     }
     elsif ($goo->value()->is_fault() 
 	|| (ref($goo->value()) && UNIVERSAL::isa($goo->value(),"HASH") 
