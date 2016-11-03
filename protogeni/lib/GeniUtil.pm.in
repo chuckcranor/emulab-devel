@@ -293,10 +293,11 @@ sub ExecQuiet($)
 # Lookup and create project and group for a given SA domain.
 # Return the group, the caller can get the project from it.
 #
-sub GetHoldingProject($$)
+sub GetHoldingProject($$;$)
 {
-    my ($urn, $creator) = @_;
+    my ($urn, $creator, $noexports) = @_;
     my ($project, $group);
+    $noexports = 0 if (!defined($noexports));
 
     require Project;
     require Group;
@@ -336,12 +337,7 @@ sub GetHoldingProject($$)
 		    return GeniResponse->Create(GENIRESPONSE_BADARGS, undef,
 						"local group does not exist");
 		}
-		if ($creator->IsLocal() &&
-		    $creator->emulab_user()->IsLocal() &&
-		    defined($group->LookupUser($creator->emulab_user()))) {
-		    goto done;
-		}
-		# XXX Need to do something here.
+		goto done;
 	    }
 	    
 	    #
@@ -537,7 +533,7 @@ sub GetHoldingProject($$)
 	    }
 	}
     }
-    if ($PROTOGENI_LOCALUSER) {
+    if ($PROTOGENI_LOCALUSER && $creator) {
 	#
 	# The user is added to both the holding project, and the group
 	# if a sub authority is provided. 
@@ -565,10 +561,12 @@ sub GetHoldingProject($$)
 	$ENV{'EMULAB_REAL_USER'} = $creator->emulab_user()->uid_idx();
     }
   done:
-    if ($creator->IsLocal()) {
-	$creator->UpdateExports();
+    if (!$noexports) {
+	if (defined($creator) && $creator->IsLocal()) {
+	    $creator->UpdateExports();
+	}
+	$project->UpdateExports();
     }
-    $project->UpdateExports();
     return $group;
 }
 
