@@ -364,6 +364,23 @@ sub global($)
 }
 
 #
+# Version is a bit of a pain. version() in OSinfo is an OS string we rarely
+# care about (IsGeneric() does). vers() is the actual version. Normally this
+# does not matter, but if the OSImage is encapsulating an OSinfo without
+# an Image (which happens, think MFS), then version() will get the wrong
+# thing (from the osinfo instead of the image).
+#
+sub version()
+{
+    my ($self) = @_;
+
+    return $self->image()->version()
+	if (defined($self->image()));
+
+    return $self->osinfo()->vers();
+}
+
+#
 # Return a list of all images of the given format for the given pid.
 # If format is NULL, return all formats. If pid is NULL, return for all pids.
 # List is names of the form "pid/imagename".
