@@ -1300,7 +1300,11 @@ sub LoadVirtNodes($)
 	    $self->types()->{$type}++;
 	}
 	elsif (defined($self->forcedarchitecture())) {
-	    $vnode->_forcedarchitecture($self->forcedarchitecture());
+	    my $arch = $self->forcedarchitecture();
+	    if ($isvirt) {
+		$arch .= "-vm";
+	    }
+	    $vnode->_forcedarchitecture($arch);
 	}
 
 	$self->printdb("  $vname type:$type ips:$ips\n");
