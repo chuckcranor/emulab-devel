@@ -1547,7 +1547,7 @@ sub DoExtend()
 	"Before: $before\n".
 	"After $expires\n".
 	"Reason:\n".
-	$reason . "\n\n".
+	(defined($reason) ? "$reason\n\n" : "\n") .
 	"-----------------------------------------------\n";
     $instance->AddExtensionHistory($text);
 
@@ -1559,10 +1559,11 @@ sub DoExtend()
     }
     $instance->Brand()->SendEmail($creator->email(),
 		"Experiment Extension: $name",
-               ($this_user->IsAdmin() ? "$message\n\n$reason" :
+               ($this_user->IsAdmin() ?
+		"$message\n\n" . (defined($reason) ? $reason : "") :
                 "A request to extend your experiment was made and ".
                 "granted.\n".
-                "Your reason was:\n\n". $reason) .
+		(defined($reason) ? "Your reason was:\n\n${reason}" : "")) .
                "\n\n".
                "Your experiment was started on $created\n".
  	       "Your experiment will now expire at $expires\n".
