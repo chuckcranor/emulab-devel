@@ -2625,9 +2625,6 @@ sub ComputeState($)
 	elsif ($state eq "updating_users") {
 	    $updating++;
 	}
-	elsif ($state eq "restarting") {
-	    $restarting++;
-	}
 	else {
 	    $unknown++;
 	}
