@@ -370,7 +370,9 @@ sub PCArchitectures()
     my $query_result =
 	DBQueryWarn("select distinct architecture from node_types as nt ".
 		    "left join nodes as n on n.type=nt.type ".
-		    "where architecture is not null and class='pc' and ".
+		    "where architecture is not null and ".
+		    "   architecture!='' and ".
+		    "   class='pc' and ".
 		    "   n.node_id is not null and n.role='testnode'");
     while (my ($architecture) = $query_result->fetchrow_array()) {
 	push(@results, $architecture);
