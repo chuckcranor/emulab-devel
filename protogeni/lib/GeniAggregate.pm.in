@@ -2226,6 +2226,187 @@ sub Stop($$;$)
 }
 
 #
+# For efficiency, we really want to do restart (and maybe reload) in a
+# batch instead of individually calling GeniSliver->Action() for each
+# one, since each one can take 15-60 seconds depending on what the
+# node is doing or if it needs to be power cycled, etc. So lets do a
+# very small subset of what Action() is doing above, on a list of
+# slivers. Might change my mind and roll this back into Action above.
+#
+sub BatchAction($$@)
+{
+    my ($self, $action, @slivers) = @_;
+    my $msg = "Internal Error: ";
+    my $restart = ($action eq "restart" ? 1 : 0);
+    my $reload  = ($action eq "reload" ? 1 : 0);
+
+    # Clear last error.
+    $self->SetErrorLog("");    
+
+    my $experiment = Experiment->Lookup($self->slice_uuid());
+    if (!defined($experiment)) {
+	$msg .= "Could not map $self to its experiment";
+	goto bad;
+    }
+    my $pid = $experiment->pid();
+    my $eid = $experiment->eid();
+
+    my %pnodes  = ();
+    my %vnodes  = ();
+    my %reloads = ();
+    my %reboots = ();
+    my %starts  = ();
+    my %poweron = ();
+    my %states  = ();
+    
+    foreach my $sliver (@slivers) {
+	next
+	    if (ref($sliver) ne "GeniSliver::Node");
+	$states{"$sliver->idx()"} = $sliver->state();
+
+	my $node = Node->Lookup($sliver->resource_id());
+	if (!defined($node)) {
+	    $msg .= "Could not map $sliver to a node";
+	    goto bad;
+	}
+	my $node_id = $node->node_id();
+	
+	my $reservation = $node->Reservation();
+	if (!defined($reservation)) {
+	    $msg .= "$node no longer belongs to $self";
+	    goto bad;
+	}
+	if ($reservation->SameExperiment($experiment)) {
+	    # These are used in WaitForNodes();
+	    $node->_reloaded(0);
+	    $node->_rebooted(0);
+	    $node->_sliver($sliver);
+	    $node->_image(undef);
+	    
+	    #
+	    # We reload current image only.
+	    #
+	    if ($reload) {
+		$reloads{$node_id} = $sliver;
+	    }
+	    if ($node->isvirtnode()) {
+		$vnodes{$node_id} = $node;
+		
+		if ($sliver->state() eq "stopped") {
+		    $starts{$node_id} = $node;
+		}
+		elsif ($restart) {
+		    $reboots{$node_id} = $node;
+		}
+	    }
+	    else {
+		$pnodes{$node_id} = $node;
+		
+		#
+		# Look to see if local physical node was stopped (powered off).
+		#
+		if ($sliver->state() eq "stopped") {
+		    $poweron{$node_id} = $node;
+		}
+		elsif ($restart) {
+		    $reboots{$node_id} = $node;
+		}
+	    }
+	}
+	else {
+	    $msg .= "$node is reserved to another, not $self";
+	    goto bad;
+	}
+    }
+    #
+    # Cull out vnodes that are going to get rebooted/restarted cause the
+    # physnode is getting rebooted. 
+    #
+    foreach my $vnode (values(%vnodes)) {
+	my $node_id = $vnode->node_id();
+	
+	if (exists($reboots{$vnode->phys_nodeid()}) ||
+	    exists($poweron{$vnode->phys_nodeid()})) {
+	    delete($reboots{$node_id})
+		if (exists($reboots{$node_id}));
+	    delete($starts{$node_id})
+		if (exists($starts{$node_id}));
+	}
+    }
+    # We do this so the slivers no longer say "ready" in the status.
+    foreach my $sliver (@slivers) {
+	$sliver->SetState("restarting");
+    }
+    
+    if ($reload) {
+	my @node_ids = keys(%reloads);
+
+	# Mark them as being reloaded See below.
+	map { $_->_reloaded(1) } values(%reloads);
+	
+	system("$OSLOAD -c -s @node_ids");
+	return -1
+	    if ($?);
+    }
+    #
+    # Then power on any physical nodes that had been stopped.
+    # Then reboot the physical nodes, then any leftover virtual nodes.
+    #
+    if (keys(%poweron)) {
+	my @node_ids = keys(%poweron);
+
+	system("$POWER on @node_ids");
+	if ($?) {
+	    $msg .= "Failed to power on @node_ids";
+	    goto bad;
+	}
+    }
+    if (keys(%reboots)) {
+	my @node_ids = keys(%reboots);
+
+	# Mark them as being rebooted. See below.
+	map { $_->_rebooted(1) } values(%reboots);
+
+	system("$NODEREBOOT @node_ids");
+	if ($?) {
+	    $msg .= "Failed to reboot @node_ids";
+	    goto bad;
+	}
+    }
+    if (keys(%starts)) {
+	my @node_ids = keys(%starts);
+
+	#
+	# There are so many ways this can throw an error, lets
+	# not give up here, but go ahead and use the monitor
+	# to wait for nodes since some might actually boot. Unless
+	# the exit code indicates abject failure (-1).
+	#
+	system("$VNODESETUP -j -m $pid $eid @node_ids");
+	if ($? && $? >> 8 == 256) {
+	    $msg .= "Failed to set up vnodes @node_ids";
+	    goto bad;
+	}
+    }
+    foreach my $sliver (@slivers) {
+	$sliver->SetState("started");
+    }
+    return 0;
+
+  bad:
+    foreach my $sliver (@slivers) {
+	if (exists($states{$sliver->idx()})) {
+	    $sliver->SetState($states{$sliver->idx()});
+	}
+    }
+    if (defined($msg)) {
+	$self->SetErrorLog($msg);
+	print STDERR "$msg\n";
+    }
+    return -1;
+}
+
+#
 # Provision all the slivers in the aggregate.
 #
 sub Provision($;$)
@@ -2443,6 +2624,9 @@ sub ComputeState($)
 	}
 	elsif ($state eq "updating_users") {
 	    $updating++;
+	}
+	elsif ($state eq "restarting") {
+	    $restarting++;
 	}
 	else {
 	    $unknown++;

@@ -2112,6 +2112,10 @@ sub SliverAction($$$;@)
     else {
 	$args->{"slice_urn"} = $slice->urn();
     }
+    # Experimental.
+    if ($which eq "reboot" || $which eq "reload") {
+	$args->{"asyncmode"} = 1;
+    }
     my $cmurl = $authority->url();
     $cmurl = devurl($cmurl) if ($usemydevtree);
 

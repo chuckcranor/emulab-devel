@@ -896,7 +896,7 @@ sub StartSliver($)
     my $manifest     = $argref->{'manifest'};
     
     return SliverAction("start",
-			$slice_urn, $sliver_urns, $credentials, $manifest);
+			$slice_urn, $sliver_urns, $credentials, $manifest, 0);
 }
 
 sub StopSliver($)
@@ -907,7 +907,7 @@ sub StopSliver($)
     my $credentials  = $argref->{'credentials'};
 
     return SliverAction("stop",
-			$slice_urn, $sliver_urns, $credentials, undef);
+			$slice_urn, $sliver_urns, $credentials, undef, 0);
 }
 
 sub RestartSliver($)
@@ -917,9 +917,12 @@ sub RestartSliver($)
     my $sliver_urns  = $argref->{'sliver_urns'} || $argref->{'component_urns'};
     my $credentials  = $argref->{'credentials'};
     my $manifest     = $argref->{'manifest'};
+    my $asyncmode    = (exists($argref->{'asyncmode'}) ?
+			$argref->{'asyncmode'} : 0);
 
     return SliverAction("restart",
-			$slice_urn, $sliver_urns, $credentials, $manifest);
+			$slice_urn, $sliver_urns, $credentials, $manifest,
+			$asyncmode);
 }
 
 sub ReloadSliver($)
@@ -930,12 +933,13 @@ sub ReloadSliver($)
     my $credentials  = $argref->{'credentials'};
 
     return SliverAction("reload",
-			$slice_urn, $sliver_urns, $credentials, undef);
+			$slice_urn, $sliver_urns, $credentials, undef, 0);
 }
 
-sub SliverAction($$$$$)
+sub SliverAction($$$$$$)
 {
-    my ($action, $slice_urn, $sliver_urns, $credentials, $manifest) = @_;
+    my ($action, $slice_urn, $sliver_urns, $credentials,
+	$manifest, $asyncmode) = @_;
     my $response;
     my $isasync = 0;
 
@@ -1061,7 +1065,7 @@ sub SliverAction($$$$$)
 	return 0;
     };
     my $PerformAction = sub {
-	my ($object, $action) = @_;
+	my ($object, $action, @slivers) = @_;
 
 	my $exitval = 0;
 
@@ -1072,10 +1076,20 @@ sub SliverAction($$$$$)
 	    $exitval = $object->Stop($API_VERSION);
 	}
 	elsif ($action eq "restart") {
-	    $exitval = $object->Restart($API_VERSION);
+	    if (@slivers) {
+		$exitval = $object->BatchAction("restart", @slivers);
+	    }
+	    else {
+		$exitval = $object->Restart($API_VERSION);
+	    }
 	}
 	elsif ($action eq "reload") {
-	    $exitval = $object->Reload($API_VERSION);
+	    if (@slivers) {
+		$exitval = $object->BatchAction("reload", @slivers);
+	    }
+	    else {
+		$exitval = $object->Reload($API_VERSION);
+	    }
 	}
 	return GeniResponse->Create(GENIRESPONSE_ERROR, 
 				    "Could not $action sliver")
@@ -1159,12 +1173,38 @@ sub SliverAction($$$$$)
 		    goto bad;
 		}
 	    }
-	    $response = &$PerformAction($sliver, $action);
+	}
+	if ($asyncmode && $action =~ /^(restart|reload)$/) {
+	    #
+	    # At this point we want to return and let the startsliver proceed
+	    # in the background
+	    #
+	    my $mypid = main::WrapperFork();
+	    if ($mypid) {
+		return GeniResponse->Create(GENIRESPONSE_SUCCESS);
+	    }
+	    # Remember our pid in case callee forks again.
+	    $isasync = $PID;
+
+	    $response = &$PerformAction($aggregate, $action, @slivers);
 	    goto bad
 		if (GeniResponse::IsResponse($response));
+
+	    # Callee did not fork again, we can unlock.
+	    if ($isasync == $PID) {
+		$slice->UnLock();
+	    }
+	}
+	else {
+	    foreach my $sliver (@slivers) {
+		$response = &$PerformAction($sliver, $action);
+		goto bad
+		    if (GeniResponse::IsResponse($response));
+	    }
 	}
 	$slice->UnLock();
-	return GeniResponse->Create(GENIRESPONSE_SUCCESS);
+	return ($isasync ? GENIRESPONSE_SUCCESS :
+		GeniResponse->Create(GENIRESPONSE_SUCCESS));
     }
   bad:
     $slice->UnLock();

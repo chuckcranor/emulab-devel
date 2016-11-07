@@ -1434,7 +1434,7 @@ sub ComputeStatus($;$)
 	    $self->SetState("started");
 	}
     }
-    if ($self->state() eq "imaging") {
+    if ($self->state() eq "imaging" || $self->state() eq "restarting") {
 	$status = "changing";
 	goto done;
     }
