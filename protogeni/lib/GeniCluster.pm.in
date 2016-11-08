@@ -260,7 +260,8 @@ sub PreReservations()
 	# Which nodes have actually been pre-reserved.
 	my $current_result =
 	    DBQueryWarn("select node_id,type from nodes ".
-			"where reserved_pid='$pid'");
+			"where reserved_pid='$pid' and ".
+			"      reservation_name='$name'");
 	return GeniResponse->Create(GENIRESPONSE_ERROR)
 	    if (!$current_result);
 	while (my ($node_id, $ntype) = $current_result->fetchrow_array()) {
