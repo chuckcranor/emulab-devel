@@ -74,8 +74,11 @@ function Do_ExperimentList()
     if (CheckPageArgs()) {
         return;
     }
-    $results = ExperimentList("user", $target_user);
-    SPITAJAX_RESPONSE($results);
+    $blob = array("user_experiments" =>
+                     ExperimentList("user", $target_user),
+                  "project_experiments" =>
+                     ExperimentList("membership", $target_user));
+    SPITAJAX_RESPONSE($blob);
 }
 
 function Do_ClassicExperimentList()

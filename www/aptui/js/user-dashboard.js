@@ -113,36 +113,56 @@ $(function ()
 
     function LoadExperimentTab()
     {
+	var template = _.template(experimentString);
+	
 	var callback = function(json) {
-	    console.info(json);
+	    console.info("experiments", json);
 
 	    if (json.code) {
 		console.info(json.value);
 		return;
 	    }
-	    if (json.value.length == 0) {
+	    if (json.value.user_experiments.length == 0) {
 		$('#experiments_loading').addClass("hidden");
 		$('#experiments_noexperiments').removeClass("hidden");
-		return;
 	    }
-	    var template = _.template(experimentString);
-
-	    $('#experiments_content')
-		.html(template({"experiments" : json.value,
-				"showCreator" : false,
-				"showProject" : true}));
-	    
+	    else {
+		$('#experiments_content')
+		    .html(template({"experiments" : json.value.user_experiments,
+				    "showCreator" : false,
+				    "showProject" : true}));
+	    }
+	    if (json.value.project_experiments.length != 0) {
+		$('#project_experiments_content')
+		    .html("<div><h4 class='text-center'>" +
+			  "Experiments in my Projects</h4>" +
+			  template({"experiments" :
+				        json.value.project_experiments,
+				    "showCreator" : true,
+				    "showProject" : true}) +
+			  "</div>");
+	    }
 	    // Format dates with moment before display.
-	    $('#experiments_table .format-date').each(function() {
+	    $('#experiments_content .format-date, ' +
+	      '#project_experiments_content .format-date')
+		.each(function() {
 		var date = $.trim($(this).html());
 		if (date != "") {
 		    $(this).html(moment($(this).html()).format("ll"));
 		}
 	    });
-	    var table = $('#experiments_table')
-		.tablesorter({
-		    theme : 'green',
-		});
+	    if (json.value.user_experiments.length != 0) {
+		$('#experiments_content #experiments_table')
+		    .tablesorter({
+			theme : 'green',
+		    });
+	    }
+	    if (json.value.project_experiments.length != 0) {
+		$('#project_experiments_content #experiments_table')
+		    .tablesorter({
+			theme : 'green',
+		    });
+	    }
 	}
 	var xmlthing = sup.CallServerMethod(null,
 					    "user-dashboard", "ExperimentList",

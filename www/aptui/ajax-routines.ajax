@@ -114,6 +114,7 @@ function ExperimentList($which, $target)
 {
     global $urn_mapping, $TBBASE;
     global $this_user;
+    $extraclause = "";
 
     if ($which == "user") {
         $target_uuid = $target->uuid();
@@ -123,6 +124,15 @@ function ExperimentList($which, $target)
         $target_pid = $target->pid();
         $target_gid = $target->gid();
         $whereclause = "where a.pid='$target_pid' and a.gid='$target_gid'";
+    }
+    elseif ($which == "membership") {
+        $target_uuid = $target->uuid();
+        $target_idx  = $target->idx();
+        $whereclause = "where a.creator_uuid='$target_uuid' or ".
+                       "      g.uid_idx is not null ";
+        $extraclause = "left join group_membership as g on ".
+                       "     g.uid_idx='$target_idx' and  ".
+                       "     g.pid_idx=a.pid_idx ";
     }
     else {
         $target_pid = $target->pid();
@@ -149,6 +159,7 @@ function ExperimentList($which, $target)
                      "left join geni.geni_slices as s on ".
                      "     s.uuid=a.slice_uuid ".
                      "left join geni.geni_users as u on u.uuid=a.creator_uuid ".
+                     "$extraclause ".
                      "$whereclause");
 
     while ($row = mysql_fetch_array($query_result)) {
