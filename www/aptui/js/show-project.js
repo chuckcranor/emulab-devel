@@ -134,7 +134,7 @@ $(function ()
 	    });
 	    var table = $('#experiments_table')
 		.tablesorter({
-		    theme : 'blue',
+		    theme : 'green',
 		});
 	}
 	var xmlthing = sup.CallServerMethod(null,
@@ -171,7 +171,7 @@ $(function ()
 	    });
 	    var table = $('#classic_experiments_content .tablesorter')
 		.tablesorter({
-		    theme : 'blue',
+		    theme : 'green',
 		});
 	};
 	var xmlthing = sup.CallServerMethod(null,
@@ -207,6 +207,11 @@ $(function ()
 		    $(this).html(moment($(this).html()).format("ll"));
 		}
 	    });
+	    // This activates the tooltip subsystem.
+	    $('[data-toggle="tooltip"]').tooltip({
+		delay: {"hide" : 500, "show" : 500},
+		placement: 'auto',
+	    });
 	    // Display the topo.
 	    $('.showtopo_modal_button').click(function (event) {
 		event.preventDefault();
@@ -215,7 +220,7 @@ $(function ()
 	    
 	    var table = $('#profiles_table')
 		.tablesorter({
-		    theme : 'blue',
+		    theme : 'green',
 		    widgets: ["filter"],
 		    widgetOptions: {
 			// include child row content while filtering, if true
@@ -268,7 +273,7 @@ $(function ()
 	    });
 	    var table = $('#classic_profiles_content .tablesorter')
 		.tablesorter({
-		    theme : 'blue',
+		    theme : 'green',
 		});
 	};
 	var xmlthing = sup.CallServerMethod(null,
@@ -356,7 +361,7 @@ $(function ()
 	    
 	    var table = $('#members_table')
 		.tablesorter({
-		    theme : 'blue',
+		    theme : 'green',
 		});
 
 	    // Do this after converting table.
@@ -472,7 +477,7 @@ $(function ()
 	    
 	    var table = $('#groups_table')
 		.tablesorter({
-		    theme : 'blue',
+		    theme : 'green',
 		});
 	}
 	var xmlthing = sup.CallServerMethod(null,
@@ -537,7 +542,7 @@ $(function ()
 	    });
 	    var table = $('#datasets_content .tablesorter')
 		.tablesorter({
-		    theme : 'blue',
+		    theme : 'green',
 		});
 	}
 	var xmlthing =
@@ -576,7 +581,7 @@ $(function ()
 	    });
 	    var table = $('#classic_datasets_content .tablesorter')
 		.tablesorter({
-		    theme : 'blue',
+		    theme : 'green',
 		});
 	};
 	var xmlthing =

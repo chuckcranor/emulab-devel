@@ -53,7 +53,7 @@ $emulablink = "$TBBASE/showproject.php3?project=" . $project->pid();
 $canapprove = $project->AccessCheck($this_user, $TB_PROJECT_ADDUSER) ? 1 : 0;
 
 echo "<link rel='stylesheet'
-            href='css/tablesorter-blue.css'>\n";
+            href='css/tablesorter.css'>\n";
 
 echo "<script type='text/javascript'>\n";
 echo "  window.ISADMIN        = $isadmin;\n";

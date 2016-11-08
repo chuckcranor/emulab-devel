@@ -234,6 +234,11 @@ $(function ()
 		    $(this).html(moment($(this).html()).format("ll"));
 		}
 	    });
+	    // This activates the tooltip subsystem.
+	    $('[data-toggle="tooltip"]').tooltip({
+		delay: {"hide" : 500, "show" : 500},
+		placement: 'auto',
+	    });
 	    // Display the topo.
 	    $('.showtopo_modal_button').click(function (event) {
 		event.preventDefault();
