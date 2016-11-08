@@ -47,7 +47,7 @@ SPITHEADER(1);
 # The apt_aggregates table should tell us what clusters, but for
 # now it is always the local cluster
 #
-if ($TBMAINSITE) {
+if ($TBMAINSITE && !$ISEMULAB) {
     $aggregates =
         array("Emulab"    => "urn:publicid:IDN+emulab.net+authority+cm",
               "APT"       => "urn:publicid:IDN+apt.emulab.net+authority+cm",
@@ -57,7 +57,8 @@ if ($TBMAINSITE) {
               "OneLab"    => "urn:publicid:IDN+lab.onelab.eu+authority+cm");
 }
 else {
-    $aggregates = array_keys($urn_mapping);
+    $aggregate  = Aggregate::Lookup($DEFAULT_AGGREGATE_URN);
+    $aggregates = array($aggregate->nickname() => $aggregate->urn());
 }
 echo "<link rel='stylesheet'
             href='css/tablesorter.css'>\n";

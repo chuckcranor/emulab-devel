@@ -41,7 +41,7 @@
     </thead>
     <tbody>
       <% prereslist.forEach(function(value, index) { %>
-	<% var expando_target = cluster_name + "-" + value.pid + "-collapse"; %>
+	<% var expando_target = cluster_name + "-" + value.pid + "-" + value.name + "-collapse"; %>
 	<tr>
 	  <td>
 	    <% if (value.prereserved.length) { %>
