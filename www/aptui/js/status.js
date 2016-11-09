@@ -1862,7 +1862,7 @@ $(function ()
     //
     // Request to start a snapshot. This assumes a single node of course.
     //
-    function StartSnapshot(node_id, update_profile, update_prepare)
+    function StartSnapshot(node_id, update_profile, update_prepare, imagename)
     {
 	sup.ShowModal('#waitwait-modal');
 
@@ -1882,6 +1882,9 @@ $(function ()
 		    "update_prepare" : update_prepare};
 	if (node_id !== undefined) {
 	    args["node_id"] = node_id;
+	}
+	if (imagename && imagename != "") {
+	    args["imagename"] = imagename;
 	}
 	var xmlthing =
 	    sup.CallServerMethod(ajaxurl, "status", "SnapShot", args);
@@ -1903,6 +1906,7 @@ $(function ()
 	// Default to update unless checkbox says otherwise.
 	var update_profile = 1;
 	var update_prepare = 0;
+	var imagename      = null;
 
 	// Default to unchecked any time we show the modal.
 	$('#snapshot_update_prepare').prop("checked", false);
@@ -1921,6 +1925,9 @@ $(function ()
 	    else {
 		$('#snapshot_update_profile_div').removeClass("hidden");
 		$('#snapshot_update_script_div').addClass("hidden");
+	    }
+	    if (isadmin || isstud) {
+		$('#snapshot_modal #nameyourimage_div').removeClass("hidden");
 	    }
 	}
 	else {
@@ -1942,8 +1949,11 @@ $(function ()
 	    if ($('#snapshot_update_prepare').is(':checked')) {
 		update_prepare = 1;
 	    }
+	    if ($('#snapshot_modal #nameyourimage_name').val() != "") {
+		imagename = $('#snapshot_modal #nameyourimage_name').val();
+	    }
 	    sup.HideModal('#snapshot_modal');
-	    StartSnapshot(node_id, update_profile, update_prepare);
+	    StartSnapshot(node_id, update_profile, update_prepare, imagename);
 	});
 
 	// Handler for hide modal to unbind the click handler.

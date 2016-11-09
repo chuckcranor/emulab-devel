@@ -944,6 +944,13 @@ function Do_Snapshot()
         $ajax_args["update_prepare"]) {
         $optargs .= " -U ";
     }
+    if (isset($ajax_args["imagename"]) && $ajax_args["imagename"] != "") {
+        if (!TBvalid_imagename($ajax_args["imagename"])) {
+            SPITAJAX_ERROR(1, "Not a valid imagename, alphanumeric only");
+            return;
+        }
+        $optargs .= " -i " . escapeshellarg($ajax_args["imagename"]);
+    }
     
     #
     # Call out to the backend.
