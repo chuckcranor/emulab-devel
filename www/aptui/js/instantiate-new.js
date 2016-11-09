@@ -944,6 +944,11 @@ $(function ()
 		if (data && !$.isEmptyObject(data)) {
 		    // Calculate testbed rating and set up tooltips.
 		    rating = wt.CalculateRating(data, resourceTypes);
+		    // TODO: Remove this when we have actual stats again
+		    console.log(name, rating);
+		    if (name === 'APT Utah' || name === 'Emulab') {
+		      rating = ["100", 100, ["<div>Testbed is healthy</div>", "<div>PCs available</div>"]];
+		    }
 		    classes = wt.AssignStatusClass(rating[0], rating[1]);
 		}
 		else {
