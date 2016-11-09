@@ -220,7 +220,7 @@ sub DoReserve()
 	#
 	($credential,$speaksfor) =
 	    APT_Geni::GenUserCredential($geniuser);
-	$rpcargs{"project_urn"} = $project->urn();
+	$rpcargs{"project_urn"} = $project->urn()->asString();
     }
     else {
 	if (!$project->AccessCheck($this_user, TB_PROJECT_CREATEEXPT())) {
@@ -396,7 +396,7 @@ sub DoDelete()
     my $response =
 	APT_Geni::PortalRPC($authority, undef, "DeleteReservation",
 			    {"idx" => $idx,
-			     "project" => $project->urn()});
+			     "project" => $project->urn()->asString()});
     if (GeniResponse::IsError($response)) {
 	#
 	# All errors are fatal.

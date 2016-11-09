@@ -612,6 +612,8 @@ sub Reserve($)
 
     return $geniuser
 	if (GeniResponse::IsResponse($geniuser));
+    return GeniResponse->MalformedArgsResponse("Not a local user")
+	if (!$geniuser->IsLocal());
 
     #
     # No project, we need to have a project urn.
@@ -623,7 +625,8 @@ sub Reserve($)
 	    if (!GeniHRN::IsValid($argref->{'project_urn'}));
 	my $hrn = GeniHRN->new($argref->{'project_urn'});
 	return GeniResponse->MalformedArgsResponse("Mismatching project URN")
-	    if ($hrn->domain() ne $geniuser->urn()->domain());
+	    if ($hrn->domain() ne
+		$geniuser->emulab_user()->nonlocalurn()->domain());
 
 	my $group = GeniUtil::GetHoldingProject($hrn,undef,1);
 	return $group
@@ -825,8 +828,8 @@ sub Reservations($)
 	    next;
 	}
 	$blob->{"idx"}         = $idx;
-	$blob->{"project"}     = $project->urn();
-	$blob->{"user"}        = $user->urn();
+	$blob->{"project"}     = $project->nonlocalurn();
+	$blob->{"user"}        = $user->nonlocalurn();
 	$blob->{"nodes"}       = $row->{'nodes'};
 	$blob->{"type"}        = $row->{'type'};
 	$blob->{"created"}     = TBDateStringGMT($row->{'created'});

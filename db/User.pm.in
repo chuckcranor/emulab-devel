@@ -263,10 +263,20 @@ sub urn($)
 	if (!$PGENISUPPORT);
     require GeniHRN;
 
-    my $urn = ($self->IsNonLocal() ? $self->nonlocal_id() :
-	       GeniHRN::Generate($OURDOMAIN, "user", $uid));
+    return GeniHRN->new(GeniHRN::Generate($OURDOMAIN, "user", $uid));
+}
+sub nonlocalurn($)
+{
+    my ($self) = @_;
+    
+    return undef
+	if (!$PGENISUPPORT);
+    require GeniHRN;
 
-    return GeniHRN->new($urn);
+    if ($self->IsNonLocal()) {
+	return GeniHRN->new($self->nonlocal_id());
+    }
+    return $self->urn();
 }
 
 #

@@ -599,16 +599,26 @@ sub urn($)
 {
     my ($self) = @_;
     my $pid  = $self->pid();
+
     return undef
 	if (!$PGENISUPPORT);
-
-    if ($self->IsNonLocal()) {
-	return $self->nonlocal_id();
-    }
     require GeniHRN;
 
     my $domain = "${OURDOMAIN}:${pid}";
-    return GeniHRN::Generate($domain, "project", $pid);
+    return GeniHRN->new(GeniHRN::Generate($domain, "project", $pid));
+}
+sub nonlocalurn($)
+{
+    my ($self) = @_;
+    
+    return undef
+	if (!$PGENISUPPORT);
+    require GeniHRN;
+
+    if ($self->IsNonLocal()) {
+	return GeniHRN->new($self->nonlocal_id());
+    }
+    return $self->urn();
 }
 
 #
