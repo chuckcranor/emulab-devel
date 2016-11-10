@@ -176,18 +176,28 @@ static unsigned int ipod_hook_fn(
     struct iphdr *iph;
     struct icmphdr *icmph;
     int doit = 0;
+    int hlen = 0;
     char *data;
 
     if (!sysctl_ipod_enabled) 
 	return NF_ACCEPT;
 
-    if (!pskb_may_pull(skb,sizeof(*iph) + sizeof(*icmph)))
+    hlen = sizeof(*iph);
+    if (!pskb_may_pull(skb,hlen))
 	return NF_ACCEPT;
 
     iph = (struct iphdr *)skb_network_header(skb);
 
     if (iph->protocol != IPPROTO_ICMP)
 	return NF_ACCEPT;
+
+    /* Check again based on the IP header length. */
+    hlen = iph->ihl * 4 + sizeof(*icmph);
+    if (!pskb_may_pull(skb,hlen))
+	return NF_ACCEPT;
+
+    /* Grab this again to guard against skb linearization in pskb_may_pull . */
+    iph = (struct iphdr *)skb_network_header(skb);
 
     /*
      * icmp_hdr(skb) seems invalid (yet) since the hook is
@@ -211,10 +221,15 @@ static unsigned int ipod_hook_fn(
 	 * enough data or key is otherwise invalid, ignore.
 	 */
 	if (IPOD_CHECK_KEY()) {
-	    data = (char *)((char *)icmph + sizeof(*icmph));
-	    if (pskb_may_pull(skb,sizeof(sysctl_ipod_key) - 1)
-		&& IPOD_VALID_KEY(data)) 
-		doit = 1;
+	    if (pskb_may_pull(skb,hlen + sizeof(sysctl_ipod_key) - 1)) {
+		/* Guard against linearization, again. */
+		iph = (struct iphdr *)skb_network_header(skb);
+		icmph = (struct icmphdr *)((char *)iph + iph->ihl * 4);
+		data = (char *)((char *)icmph + sizeof(*icmph));
+
+		if ((IPOD_VALID_KEY(data)))
+		    doit = 1;
+	    }
 	}
 	else 
 	    doit = 1;
