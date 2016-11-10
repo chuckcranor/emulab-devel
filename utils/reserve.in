@@ -48,6 +48,8 @@ sub usage()
     print STDERR "Usage: reserve [-C] [-f] [-n] -t type [-s start] [-e end]\n" .
 	"            [-u] [-U uid] [-N file] [-A file] pid count\n";
     print STDERR "       reserve -c idx\n";
+    print STDERR "       reserve [-f] [-n] [-s start] [-e end] [-u]\n" .
+	"            [-U uid] [-N file] [-A file] [-S size] -m idx \n";
     print STDERR "       reserve [-u] -i pid\n";
     print STDERR "       reserve [-u] -l\n";
     print STDERR "   -h   This message\n";
@@ -63,10 +65,12 @@ sub usage()
     print STDERR "   -l   List all existing reservations\n";
     print STDERR "   -s   Start time when reservation begins\n";
     print STDERR "   -e   End time when reservation expires\n";
+    print STDERR "   -m   Modify existing reservation\n";
+    print STDERR "   -S   Specify new size of modified reservation\n";
     exit( -1 );
 }
 
-my $optlist    = "c:de:fhilns:t:uA:CN:U:T:";
+my $optlist    = "c:de:fhilm:ns:t:uA:CN:S:U:T:";
 my $debug      = 0;
 my $info       = 0;
 my $list       = 0;
@@ -74,6 +78,7 @@ my $clear      = 0;
 my $clear_idx  = undef;
 my $force      = 0;
 my $impotent   = 0;
+my $modify_idx = undef;
 my $starttime  = time; # default to starting immediately
 my $endtime    = time + 24 * 60 * 60; # default to ending tomorrow
 my $notes      = undef;
@@ -143,6 +148,12 @@ if (defined($options{c})) {
 	fatal( "Invalid reservation index." );
     }
 }
+if (defined($options{m})) {
+    $modify_idx = $options{m};
+    unless( $modify_idx =~ /^[0-9]+$/ ) {
+	fatal( "Invalid reservation index." );
+    }
+}
 if (defined($options{C})) {
     $clear = 1;
 }
@@ -203,6 +214,12 @@ if (defined($options{"U"})) {
     fatal("No such user")
 	if (!defined($target_user));
 }
+if (defined($options{S})) {
+    $count = $options{S};
+    unless( $count =~ /^[0-9]+$/ ) {
+	fatal( "Invalid reservation size." );
+    }
+}
 if ($info) {
     usage() if( @ARGV != 1 );
     
@@ -215,11 +232,26 @@ elsif( defined( $clear_idx ) ) {
     usage() if(@ARGV);
 }
 else {
-    usage() if( @ARGV < 2 || !defined( $type ) );
-    
-    $pid     = shift(@ARGV);
-    $count   = shift(@ARGV);
+    if( defined( $modify_idx ) ) {
+	usage() if( @ARGV || defined( $type ) );
+	
+	my $oldres = Reservation->Lookup( $modify_idx );
+	if( !defined( $oldres ) ) {
+	    fatal( "Could not find existing reservation." );
+	}
 
+	$pid = $oldres->pid();
+	$type = $oldres->type();
+	$count = $oldres->nodes() unless( defined( $count ) );
+	$starttime = $oldres->start() unless( defined( $starttime ) );
+	$endtime = $oldres->end() unless( defined( $endtime ) );
+    } else {
+	usage() if( @ARGV < 2 || !defined( $type ) );
+	
+	$pid     = shift(@ARGV);
+	$count   = shift(@ARGV);
+    }
+    
     if( $count < 1 ) {
 	fatal( "Must reserve at least one node." );
     }
@@ -370,8 +402,16 @@ if ($UID == 0) {
 my $uid = $target_user->uid();
 my $uid_idx = $target_user->uid_idx();
 
-my $res = Reservation->Create( $pid, $uid, $starttime, $endtime, $type,
-			       $count );
+my $res;
+if( defined( $modify_idx ) ) {
+    $res = Reservation->Lookup( $modify_idx );
+    $res->SetStart( $starttime );
+    $res->SetEnd( $endtime );
+    $res->SetNodes( $count );
+} else {
+    $res = Reservation->Create( $pid, $uid, $starttime, $endtime, $type,
+				$count );
+}
 $res->SetNotes( $notes ) if( defined( $notes ) );
 $res->SetAdminNotes( $adminnotes ) if( defined( $adminnotes ) );
 
@@ -380,7 +420,20 @@ print "$res\n" if( $debug );
 while( 1 ) {
     my $version = Reservation->GetVersion();
     my $reservations = Reservation->LookupAll( $type );
-    push( @$reservations, $res );
+    if( defined( $modify_idx ) ) {
+	my $i;
+
+	for( $i = 0; $i < @$reservations; $i++ ) {
+	    my $r = $$reservations[ $i ];
+
+	    if( defined( $r->idx() ) && $r->idx() == $modify_idx ) {
+		$$reservations[ $i ] = $res;
+		last;
+	    }
+	}
+    } else {
+	push( @$reservations, $res );
+    }
     my $error;
     if( !Reservation->IsFeasible( $reservations, \$error ) ) {
 	print STDERR "reserve: $error\n";
@@ -396,7 +449,7 @@ while( 1 ) {
     }
     exit( 0 ) if( $impotent );
     next if( !defined( Reservation->BeginTransaction( $version ) ) );
-    $res->Book();
+    $res->Book( $modify_idx );
     Reservation->EndTransaction();
     last;
 }

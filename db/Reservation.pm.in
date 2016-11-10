@@ -212,6 +212,27 @@ sub Stringify($)
     return "[Reservation: $pid, ${nodes}x${type}, ${start}-${end}]";
 }
 
+sub SetStart($$)
+{
+    my ($self, $start) = @_;
+
+    $self->{'START'} = $start;
+}  
+
+sub SetEnd($$)
+{
+    my ($self, $end) = @_;
+
+    $self->{'END'} = $end;
+}  
+
+sub SetNodes($$)
+{
+    my ($self, $nodes) = @_;
+
+    $self->{'NODES'} = $nodes;
+}  
+
 sub SetNotes($$)
 {
     my ($self, $notes) = @_;
@@ -281,9 +302,9 @@ sub EndTransaction($)
 # consistency requirements, this is permitted ONLY inside a
 # BeginTransaction()/EndTransaction() pair, following either
 # admission control satisfaction or admin override.
-sub Book($)
+sub Book($;$)
 {
-    my ($self) = @_;
+    my ($self,$idx) = @_;
 
     my $pid = $self->pid();
     my $pid_idx = $self->pid_idx();
@@ -296,9 +317,7 @@ sub Book($)
     my $notes = DBQuoteSpecial( $self->notes() );
     my $admin_notes = DBQuoteSpecial( $self->admin_notes() );
 
-    my $query_result =
-	DBQueryWarn( "INSERT INTO future_reservations SET " .
-		     "pid='$pid', " .
+    my $base_query = "SET pid='$pid', " .
 		     "pid_idx='$pid_idx', " .
 		     "nodes='$nodes', " .
 		     "type='$type', " .
@@ -308,8 +327,13 @@ sub Book($)
 		     "uid_idx='$uid_idx' " .
 		     ( defined( $notes ) ? ", notes=$notes" : "" ) .
 		     ( defined( $admin_notes ) ?
-		       ", admin_notes=$admin_notes" : "" ) )
-	or return -1;
+		       ", admin_notes=$admin_notes" : "" );
+
+    my $query_result =
+	DBQueryWarn( defined( $idx ) ? "UPDATE future_reservations " .
+		     $base_query . " WHERE idx='$idx'" :
+		     "INSERT INTO future_reservations " . $base_query )
+        or return -1;
 
     $self->{'IDX'} = $query_result->insertid();
     $self->{'CREATED'} = time();
@@ -506,11 +530,12 @@ sub LookupAll($$)
     }
     
     $query_result = DBQueryWarn( "SELECT pid, uid, UNIX_TIMESTAMP( start ), " .
-				 "UNIX_TIMESTAMP( end ), nodes FROM " .
+				 "UNIX_TIMESTAMP( end ), nodes, idx FROM " .
 				 "future_reservations WHERE type='$type'" );
-    while( my ($pid, $uid, $start, $end, $nodes) =
+    while( my ($pid, $uid, $start, $end, $nodes, $idx) =
 	   $query_result->fetchrow_array() ) {
 	my $res = Create( $class, $pid, $uid, $start, $end, $type, $nodes );
+	$res->{'IDX'} = $idx;
 	push( @reservations, $res );
     }
 
