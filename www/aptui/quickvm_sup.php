@@ -103,6 +103,10 @@ $PAGEHEADER_FUNCTION = function($thinheader = 0, $ignore1 = NULL,
         $showmenus = 1;
     }
 
+    header("Expires: Mon, 26 Jul 1997 05:00:00 GMT");
+    header("Cache-Control: no-cache, must-revalidate");
+    header("Pragma: no-cache");
+
     echo "<html>
       <head>
         <title>$title</title>
