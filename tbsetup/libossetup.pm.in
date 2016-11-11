@@ -80,7 +80,6 @@ sub die_noretry($;$)
     $parms = shift if ref $_[0] eq 'HASH';
     my ($mesg) = shift;
     tberror($parms, $mesg);
-    KillChildren();
     exit(-1);
 }
 
