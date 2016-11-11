@@ -38,6 +38,7 @@ $isadmin   = ISADMIN();
 $optargs = OptionalPageArguments("searchfor", PAGEARG_STRING,
 				 "searchby",  PAGEARG_STRING);
 $extraclause = "";
+$extrajoin   = "";
 
 #
 # Standard Testbed Header
@@ -52,10 +53,12 @@ if (isset($searchfor) && isset($searchby)) {
 	$tokens = array();
 	
 	foreach (preg_split("/,/", $searchfor) as $type) {
-	    $tokens[] = "type='$type'";
+	    $tokens[] = "oi.type='$type'";
 	}
 	$extraclause = join(" or ", $tokens);
 	$extraclause = "and ($extraclause)";
+        $extrajoin   = "left join osidtoimageid as oi on ".
+                     "oi.osid=i.imageid and oi.imageid=i.imageid ";
     }
     elseif ($searchby == "features") {
 	$tokens = array();
@@ -82,7 +85,8 @@ $query =
     "left join image_versions as iv on ".
     "          iv.imageid=i.imageid and iv.version=i.version ".
     "left join os_info_versions as ov on ".
-    "          i.imageid=ov.osid and ov.vers=i.version ";
+    "          i.imageid=ov.osid and ov.vers=i.version ".
+    $extrajoin;
 
 #
 # Tack on the permission clause for mere users. 
