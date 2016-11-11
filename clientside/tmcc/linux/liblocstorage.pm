@@ -492,7 +492,7 @@ sub get_diskinfo()
     if ($gotvgs &&
 	open(FD, "lvs -o vg_name,lv_name,lv_size,lv_attr --units m --noheadings|")) {
 	while (<FD>) {
-	    if (/^\s+(\S+)\s+(\S+)\s+(\d+)\.\d+m\s+([-a-zA-Z]{9})$/) {
+	    if (/^\s+(\S+)\s+(\S+)\s+(\d+)\.\d+m\s+([-a-zA-Z]{9,})$/) {
 		my $vg = $1;
 		my $lv = $2;
 		my $size = $3;
@@ -503,7 +503,7 @@ sub get_diskinfo()
 		$geominfo{$dev}{'type'} = "LVM";
 		$geominfo{$dev}{'size'} = $size;
 		$geominfo{$dev}{'inuse'} = 1;
-		if ($attrs =~ /^....a....$/) {
+		if ($attrs =~ /^....a/) {
 		    $geominfo{$dev}{'active'} = 1;
 		} else {
 		    $geominfo{$dev}{'active'} = 0;
@@ -1065,7 +1065,9 @@ sub os_check_storage_slice($$)
 	} else {
 	    $dev = "emulab/$lv";
 	    # XXX the real path is returned by mount
-	    $rdev = "mapper/emulab-$lv";
+	    # XXX note that any '-'s in the mapper name are doubled
+	    (my $rlv = $lv) =~ s/-/--/g;
+	    $rdev = "mapper/emulab-$rlv";
 	    $devtype = "LVM";
 	    # XXX LVM rounds up to physical extent size (4 MiB)
 	    # on every physical volume that is in the VG
@@ -1595,7 +1597,7 @@ sub os_create_storage_slice($$$)
 		# pvcreate /dev/sdb			(NONSYSVOL)
 		# vgcreate emulab /dev/sdb		(NONSYSVOL)
 		#
-		if (mysystem("pvcreate @devs $redir")) {
+		if (mysystem("pvcreate -f @devs $redir")) {
 		    warn("*** $lv: could not create PVs '@devs'$logmsg\n");
 		    return 0;
 		}
@@ -1743,7 +1745,9 @@ sub os_remove_storage_slice($$$)
 	    $devtype = "PART";
 	} else {
 	    $dev = "emulab/$lv";
-	    $mdev = "mapper/emulab-$lv";
+	    # XXX note that any '-'s in the mapper name are doubled
+	    (my $rlv = $lv) =~ s/-/--/g;
+	    $mdev = "mapper/emulab-$rlv";
 	    $devtype = "LVM";
 	}
 
