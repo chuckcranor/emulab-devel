@@ -43,10 +43,10 @@ use VirtExperiment;
 use Node;
 use NodeType;
 use Lan;
-use OSinfo;
+use OSImage;
+use Image;   # For datasets.
 use Blockstore;
 use Lease;
-use Image;
 use Port;
 use English;
 use emutil qw(SpanningTree GenFakeMac);
@@ -114,6 +114,7 @@ sub Create($$$$;$)
     $self->{'REALUSER'}   = $realuser;
     $self->{'VIRTEXPT'}   = $virtexperiment;
     $self->{'FLAGS'}      = $flags;
+    $self->{'TYPES'}      = {};
     $self->{'VNODES'}     = {};
     $self->{'DELAYNODES'} = {};
     $self->{'LANNODES'}   = {};
@@ -139,6 +140,9 @@ sub Create($$$$;$)
     $self->{'RSPEC'}      = {};
     $self->{'GENIRSPEC'}  = undef;
 
+    # For forcing untyped nodes to an architecture.
+    $self->{'FORCEARCH'}  = undef;
+    
     # Mostly for update mode.
     $self->{'FIXEDNODES'}  = {};
     $self->{'CURRENT_V2P'} = {};
@@ -169,6 +173,7 @@ sub user($)             { return $_[0]->{'USER'}; }
 sub realuser($)         { return $_[0]->{'REALUSER'}; }
 sub virtexperiment($)   { return $_[0]->{'VIRTEXPT'}; }
 sub flags($)            { return $_[0]->{'FLAGS'}; }
+sub types($)            { return $_[0]->{'TYPES'}; }
 sub vnodes($)           { return $_[0]->{'VNODES'}; }
 sub delaynodes($)       { return $_[0]->{'DELAYNODES'}; }
 sub bridges($)          { return $_[0]->{'BRIDGES'}; }
@@ -198,6 +203,7 @@ sub fixednodes($)       { return $_[0]->{'FIXEDNODES'}; }
 sub newreserved($)      { return $_[0]->{'NEWRESERVED'}; }
 sub rspec($)            { return $_[0]->{'RSPEC'}; }
 sub genirspec($)        { return $_[0]->{'GENIRSPEC'}; }
+sub forcedarchitecture($){ return $_[0]->{'FORCEARCH'}; }
 sub newreservednodes($) { return keys(%{ $_[0]->{'NEWRESERVED'} }); }
 sub oldreservednodes($) { return $_[0]->{'OLDRSRVCLEAN_NODES'}; }
 sub norecover($)        { return $_[0]->{'norecover'}; }
@@ -268,6 +274,8 @@ sub simnodecount($)	{ return $_[0]->counter("simcount"); }
 sub remotenodecount($)	{ return $_[0]->counter("remotecount"); }
 sub sharednodecount($)	{ return $_[0]->counter("sharedcount"); }
 sub bstorecount($)	{ return $_[0]->counter("bstorecount"); }
+sub gblinks($)		{ return $_[0]->counter("Gblinks"); }
+sub mgblinks($)		{ return $_[0]->counter("MGblinks"); }
 
 sub createLink($$$$$$$$$)
 {
@@ -942,7 +950,15 @@ sub LoadPhysInfo($)
 sub interfacespeedmbps($$$)
 {
     my ($self, $type, $which) = @_;
-        
+
+    if (!exists($self->{'IFACECAPS'}->{$type})) {
+	print STDERR "interfacespeedmbps: $type does not exist\n";
+	return 0;
+    }
+    if (!exists($self->{'IFACECAPS'}->{$type}->{"${which}_defspeed"})) {
+	print STDERR "interfacespeedmbps: $type $which does not exist\n";
+	return 0;
+    }
     return $self->{'IFACECAPS'}->{$type}->{"${which}_defspeed"}/1000.0;
 }
 
@@ -1105,6 +1121,7 @@ sub LoadVirtNodes($)
 	my $desires  = {};
 	my $attrs    = {};
 	my $startloc = undef;
+	my $nodetype = undef;
 
 	# Other fields we need.
 	my $ips     = $vnode->ips() || "";
@@ -1130,7 +1147,7 @@ sub LoadVirtNodes($)
 	my $isgeni  = 0;
 
 	# If we have a real type or auxtype ...
-	my $nodetype = NodeType->LookupAny($type);
+	$nodetype = NodeType->LookupAny($type);
 	if (!defined($nodetype)) {
 	    my $vtype = $self->virttypeisvtype($type);
 	    if (!defined($vtype)) {
@@ -1146,7 +1163,7 @@ sub LoadVirtNodes($)
 	    $nodetype = NodeType->LookupAny($vtypename);
 	    if (!defined($nodetype)) {
 		warn("Improper type $vtypename in vtypes for node $vnode!\n");
-		return -1;
+		    return -1;
 	    }
 	    $isvtyped = 1;
 	}
@@ -1184,6 +1201,7 @@ sub LoadVirtNodes($)
 	$vnode->_blockstore(undef);
 	$vnode->_blockstore_attributes(undef);
 	$vnode->_sanhostname(undef);
+	$vnode->_forcedarchitecture(undef);
 
 	#
 	# Explicit type request desire to match feature.
@@ -1272,8 +1290,27 @@ sub LoadVirtNodes($)
 	    $vnode->_cmurn($mycmurn);
 	}
 
+	#
+	# Record the type selections for the mapper.
+	#
+	if (!NodeType->IsClass($type)) {
+	    if (!defined($self->types()->{$type})) {
+		$self->types()->{$type} = 0;
+	    }
+	    $self->types()->{$type}++;
+	}
+	elsif (defined($self->forcedarchitecture())) {
+	    my $arch = $self->forcedarchitecture();
+	    if ($isvirt) {
+		$arch .= "-vm";
+	    }
+	    $vnode->_forcedarchitecture($arch);
+	}
+
 	$self->printdb("  $vname type:$type ips:$ips\n");
 	$self->printdb("         isrem:$isremote isvirt:$isvirt");
+	$self->printdb(" architecture:" . $vnode->_forcedarchitecture())
+	    if (defined($vnode->_forcedarchitecture()));
 	$self->printdb(" fixed:$fixed")
 	    if (defined($fixed) && $fixed ne "");
 	$self->printdb("\n");
@@ -1302,61 +1339,58 @@ sub LoadVirtNodes($)
 	# use the default for the type of phys node that assign picks.
 	#
 	if (defined($osname) && $osname ne "") {
-	    my $osinfo;
+	    my $osimage;
 	    
 	    if ($osname =~ /^(ftp|http|https):/) {
-		my $image = Image->LookupByURL($osname);
-		if (!defined($image)) {
-		    tberror("Invalid os url $osname!\n");
-		}
-		$osinfo = OSinfo->Lookup($image->imageid());
+		$osimage = OSImage->LookupByURL($osname);
 	    }
 	    elsif ($osname =~ /^(.*)\/(.*)$/) {
-		$osinfo = OSinfo->Lookup($osname);
+		$osimage = OSImage->Lookup($osname);
 	    }
 	    else {
-		$osinfo = OSinfo->Lookup($pid, $osname);
-		if (!defined($osinfo)) {
-		    $osinfo = OSinfo->LookupByName($osname);
+		$osimage = OSImage->Lookup($pid, $osname);
+		if (!defined($osimage)) {
+		    $osimage = OSImage->LookupByName($osname);
 		}
 	    }
-	    if (!defined($osinfo)) {
+	    if (!defined($osimage)) {
 		tberror({cause => 'user', type => 'primary',
 			 severity => SEV_ERROR,
 			 error => ['invalid_os', undef, $osname, $pid]},
 			"Invalid OS $osname!");
 		return -1;
 	    }
-	    $vnode->_osinfo($osinfo);
+	    $vnode->_osinfo($osimage);
 	}
 	elsif ($isvirt) {
-	    my $osinfo;
+	    my $osimage;
+	    
 	    if ($nodetype->type() eq "pcvm") {
 		# Silly default.
-		$osinfo = OSinfo->LookupByName("OPENVZ-STD");
+		$osimage = OSImage->LookupByName("OPENVZ-STD");
 	    }
 	    else {
 		# Grab it from the typeinfo.
-		$osinfo = OSinfo->Lookup($nodetype->default_osid());
+		$osimage = OSImage->Lookup($nodetype->default_osid());
 	    }
-	    $vnode->_osinfo($osinfo);
+	    $vnode->_osinfo($osimage);
 	}
 
 	#
 	# Map the parent_osname to an OSID now.
 	#
 	if (defined($parent_osname) && $parent_osname ne "") {
-	    my $osinfo;
+	    my $osimage;
 	    
 	    if ($parent_osname =~ /^(.*)\/(.*)$/) {
-		$osinfo = OSinfo->Lookup($parent_osname);
+		$osimage = OSImage->Lookup($parent_osname);
 	    }
 	    else {
-		$osinfo = OSinfo->LookupByName($pid, $parent_osname);
-		if (!defined($osinfo)) {
-		    $osinfo = OSinfo->LookupByName($parent_osname);
+		$osimage = OSImage->LookupByName($pid, $parent_osname);
+		if (!defined($osimage)) {
+		    $osimage = OSImage->LookupByName($parent_osname);
 		}
-		if (!defined($osinfo)) {
+		if (!defined($osimage)) {
 		    tberror({cause => 'user', type => 'primary',
 			     severity => SEV_ERROR,
 			     error => ['invalid_os', undef, $parent_osname, $pid]},
@@ -1364,16 +1398,16 @@ sub LoadVirtNodes($)
 		    return -1;
 		}
 	    }
-	    $vnode->_parent_osinfo($osinfo);
+	    $vnode->_parent_osinfo($osimage);
 	}
-	elsif ($isvirt && defined($vnode->_osinfo()->def_parentosid())) {
-	    my $osinfo = OSinfo->Lookup($vnode->_osinfo()->def_parentosid());
-	    if (!defined($osinfo)) {
-		tberror("Invalid def_parentosid in " .
+	elsif ($isvirt && $vnode->_osinfo()->DefaultParent()) {
+	    my $osimage = $vnode->_osinfo()->DefaultParent();
+	    if (!defined($osimage)) {
+		tberror("Invalid default parent os for " .
 			$vnode->_osinfo() . "\n");
 		return -1;
 	    }
-	    $vnode->_parent_osinfo($osinfo);
+	    $vnode->_parent_osinfo($osimage);
 	}
 
 	#
@@ -1430,7 +1464,7 @@ sub LoadVirtNodes($)
 	    my $maxmem = 128;
 
 	    if (defined($vnode->_parent_osinfo())
-		&& $vnode->_parent_osinfo()->osname() =~ /xen/i) {
+		&& $vnode->_parent_osinfo()->FeatureSupported("xen-host")) {
 		$defmem = 1024;
 		$minmem = 256;
 		$maxmem = 1024 * 16;
@@ -1552,23 +1586,25 @@ sub LoadVirtNodes($)
 	    $vnode->_fixedvm(undef);
 	    next;
 	}
-	my $osinfo;
+	my $osimage;
 
 	if (defined($vnode->_parent_osinfo())) {
-	    $osinfo = $vnode->_parent_osinfo();
+	    $osimage = $vnode->_parent_osinfo();
+	}
+	elsif ($self->option("jail_osid")) {
+	    $osimage = OSImage->Lookup($self->option("jail_osid"));
 	}
 	else {
-	    $osinfo = OSinfo->Lookup($self->option("jail_osid") ||
-				     $self->nodejailosid($vnode));
+	    $osimage = $self->nodejailosinfo($vnode);
 	}
 	return -1
-	    if (!defined($osinfo));
+	    if (!defined($osimage));
 	
-	$fixnode->_osinfo($osinfo);
+	$fixnode->_osinfo($osimage);
 	# Convert from the name to the local object.
 	$vnode->_fixedvm($fixnode);
 
-	$self->printdb("Fixing VM $vname to $fixnode, $osinfo\n");
+	$self->printdb("Fixing VM $vname to $fixnode, $osimage\n");
     }
 
     #
@@ -1628,12 +1664,16 @@ sub LoadVirtNodes($)
     #
     my %roleases = ();
     my %cloneleases = ();
+    my %prereserves = ();
     foreach my $virt_bs_attr ($self->virt_blockstore_attributes()->Rows()) {
 	if ($virt_bs_attr->attrkey() eq "readonly") {
 	    $roleases{$virt_bs_attr->vname()} = $virt_bs_attr->attrvalue();
 	}
 	elsif ($virt_bs_attr->attrkey() eq "rwclone") {
 	    $cloneleases{$virt_bs_attr->vname()} = $virt_bs_attr->attrvalue();
+	}
+	elsif ($virt_bs_attr->attrkey() eq "prereserve") {
+	    $prereserves{$virt_bs_attr->vname()} = $virt_bs_attr->attrvalue();
 	}
     }
 
@@ -1672,8 +1712,8 @@ sub LoadVirtNodes($)
 	# upon termination of any RW mapping (see Blockstore->Release).
 	# Snapshot creation may be explicit in the future.
 	#
-	# A RO mapping of a dataset always gets the most recent snapshot
-	# of the dataset. This is true whether the dataset is currently
+	# A RW clone or a RO mapping of a dataset always gets the most recent
+	# snapshot of the dataset. This is true whether the dataset is currently
 	# in use or not. If the dataset does not have a snapshot, it is
 	# an error.
 	#
@@ -1717,6 +1757,12 @@ sub LoadVirtNodes($)
 			return -1;
 		    }
 		}
+
+		#
+		# XXX we want the attribute to get listed as "bs-clone-<lease>"
+		# rather than bs-lease-<lease> in the vtop file.
+		#
+		$attrkey = "clone";
 	    } else {
 		# Does user have RW rights?
 		if (!$lease->AccessCheck($self->realuser(),
@@ -1747,7 +1793,7 @@ sub LoadVirtNodes($)
 			    return -1;
 			}
 			tbwarn("Dataset $lease has no snapshot ".
-			       "and cannot be mapped RW at this time.\n");
+			       "and cannot be cloned at this time.\n");
 		    }
 		}
 	    }
@@ -1784,6 +1830,19 @@ sub LoadVirtNodes($)
 
 	my $fixnode = $self->blockstores()->{$vname};
 	$fixnode->_blockstore_attributes()->{$attrkey} = $attrval;
+
+	# Make it easier to figure out our perms later on
+	if (exists($roleases{$vname}) && $roleases{$vname} == 1) {
+	    $fixnode->_bsperms("RO");
+	} elsif (exists($cloneleases{$vname}) && $cloneleases{$vname} == 1) {
+	    if (exists($prereserves{$vname}) && $prereserves{$vname} == 1) {
+		$fixnode->_bsperms("CLONE-PRERES");
+	    } else {
+		$fixnode->_bsperms("CLONE");
+	    }
+	} else {
+	    $fixnode->_bsperms("RW");
+	}
     }
     return 0;
 }
@@ -1842,6 +1901,7 @@ sub LoadVirtLans($)
 	my $isemulated     = $vlanmember->emulated();
 	my $uselinkdelay   = $vlanmember->uselinkdelay();
 	my $nobwshaping    = $vlanmember->nobwshaping();
+	my $nointerswitch  = $vlanmember->nointerswitch();
 	my $trivial_ok     = $vlanmember->trivial_ok();
 	my $protocol       = $vlanmember->protocol();
 	my $mustdelay      = $vlanmember->mustdelay();
@@ -1878,6 +1938,7 @@ sub LoadVirtLans($)
 	$virtlan->_encapstyle($encap);
 	# User has said that colocating is okay. Not typical.
 	$virtlan->_trivial_ok($trivial_ok);
+	$virtlan->_nointerswitch($nointerswitch);
 	# Link is connected to a remote node, and gets a tunnel.
 	$virtlan->_tunnel(0);
 	# Netmask for the entire lan.
@@ -1894,7 +1955,7 @@ sub LoadVirtLans($)
 	$virtlan->_implemented_by($implemented_by);
 	$virtlan->_vpath(undef);
 	$virtlan->_bridged(0);
-	$virtlan->_wiretype("ethernet");
+	$virtlan->_wiretype( $protocol eq "P2PLTE" ? $protocol : "ethernet");
 	if ($vlanmember->ofenabled()) {
 	    $virtlan->_ofenabled(1);
 	    $virtlan->_ofcontroller($vlanmember->ofcontroller());
@@ -1956,6 +2017,7 @@ sub LoadVirtLans($)
 	$vlanmember->_shaped(0);
 	$virtlan->_delayed(0);
 	$vlanmember->_bridged(0);
+	$vlanmember->_virtiface(undef);
 
 	#
 	# Look for a sharedvlan setting, which is the name of the
@@ -1989,7 +2051,7 @@ sub LoadVirtLans($)
 	#       resets this to 100Mbs.
 	#
 	my $portbw = $self->getbandwidth($vlanmember, $virtlan, $bandwidth);
-	$self->portbw()->{"$vlanmember"} = $portbw;
+	$self->portbw()->{"$vlanmember"} = 0;
 	
 	$self->printdb("  $vlanname $vlanmember portbw:$portbw - ".
 		       "$delay $bandwidth $lossrate ".
@@ -2032,6 +2094,9 @@ sub LoadVirtLans($)
 					       $virtlan->vname());
 	    if (defined($tag) && $tag > 1000) {
 		$virtlan->_wiretype("ethernet-highvlan");
+	    }
+	    elsif ($virtlan->_protocol =~ /^ethernet-/) {
+		$virtlan->_wiretype($virtlan->_protocol());
 	    }
 	}
     }
@@ -2317,9 +2382,34 @@ sub GenVirtNodes($)
 	if (defined($vnode->_blockstore())) {
 	    my $virt_bs  = $vnode->_blockstore();
 	    my $bs_vname = $virt_bs->vname();
+	    my $size     = $virt_bs->size();
+
+	    #
+	    # RO clones have no cost in capacity.
+	    #
+	    # RW clones come in two flavors: best-effort (zero bytes) or
+	    # guaranteed (full size of cloned dataset). The former is
+	    # signaled by CLONE, the latter by CLONE-PRERES.
+	    #
+	    if ($vnode->_bsperms() eq "RO") {
+	    	$size = 0;
+	    }
+	    elsif ($vnode->_bsperms() eq "CLONE") {
+	    	$size = 0;
+	    }
+	    # XXX "zfs clone" or the FreeNAS API does not have an interface
+	    # for creating a pre-allocated clone. You can do it (I think!)
+	    # by using "zfs set refreserved=..." after the clone call, but
+	    # I am not ready to go there yet, so we ignore the "prereserve"
+	    # attribute for now.
+	    #
+	    elsif ($vnode->_bsperms() eq "CLONE-PRERES") {
+		$size = 0;
+	    }
+	    $vnode->_bsallocsize($size);
 
 	    # This is an additive desire. 
-	    $desires->{"bs-capacity"} = ['+', $virt_bs->size()];
+	    $desires->{"bs-capacity"} = ['+', $size];
 
 	    # The rest come from the attributes.
 	    foreach my $attrkey (keys(%{ $vnode->_blockstore_attributes() })) {
@@ -2363,12 +2453,16 @@ sub GenVirtNodes($)
 	if (defined($vnode->_startloc())) {
 	    $desires->{"area-" . $vnode->_startloc()} = ['', 1.000000];
 	}
+	# Tell assign to favor nodes that are pre-reserved to the project.
+	$desires->{'prereserved'} = ['', 0.2];
+	
 	# Require that this vnode be placed onto a pnode that supports
 	# the OS it is going to run. However, if the OS is one with a
 	# 'path' (like an OSKit kernel), we don't have an entry in
 	# osidtoimageid for it, and thus we leave it off of the desire list
 	if (defined($vnode->_osinfo()) && !defined($vnode->_blockstore())) {
 	    my $osinfo = $vnode->_osinfo();
+
 	    #
 	    # Support subOSes with a multi-OS desire.  Since the pnodes
 	    # will have features like OS-parent and OS-parent-subos, we 
@@ -2379,8 +2473,8 @@ sub GenVirtNodes($)
 	    
 	    if ($vnode->_sharedokay()) {
 		if (!defined($posinfo)) {
-		    my $jailosid = $self->nodejailosid($vnode);
-		    $desires->{"OS-" . $jailosid} = ['', 1.000000];
+		    my $jailosinfo = $self->nodejailosinfo($vnode);
+		    $desires->{"OS-" . $jailosinfo->osid()} = ['', 1.000000];
 		    
 		}
 		else {
@@ -2389,7 +2483,11 @@ sub GenVirtNodes($)
 			['', 1.000000];
 		}
 	    }
-	    elsif (!defined($osinfo->path()) || $osinfo->path() eq "") {
+	    elsif (!$osinfo->mfs()) {
+		#
+		# Regarding path; we no longer have oskit kernels, but we
+		# have some special cases where we specify an MFS (APT).
+		#
 		if (!defined($posinfo)) {
 		    $desires->{"OS-" . $osinfo->osid()} = ['', 1.000000];
 		}
@@ -2397,53 +2495,6 @@ sub GenVirtNodes($)
 		    $desires->{"OS-" . $posinfo->osid()} = ['', 1.000000];
 		    $desires->{"OS-" . $posinfo->osid() . "-" . $osinfo->osid()} =
 			['', 1.000000];
-		}
-	    }
-	}
-	#
-	# Some stuff for geni. 
-	#
-	if ($vnode->_isgeninode()) {
-	    $others->{'isgeninode'}  = 1;
-	    $others->{'request_urn'} = $vnode->fixed();
-
-	    #
-	    # Gack; no features and desires in 0.2, so have to use a fixnode.
-	    #
-	    if (exists($self->current_v2p()->{$vname})) {
-		my $pnode_id = $self->current_v2p()->{$vname};
-		my $pnode = $self->oldreservednodes()->{$pnode_id};
-		$others->{'request_urn'} = $pnode->WideAreaInfo("external_node_id");
-	    }
-	    
-	    if ($vnode->_isvirtnode()) {
-		$others->{'virtualization_type'}    = 'emulab-vnode';
-		$others->{'virtualization_subtype'} = 'emulab-openvz';
-		$others->{'exclusive'} = 0
-		    if ($vnode->_sharedokay());
-		$type = "pcvm";
-	    }
-	    else {
-		$others->{'virtualization_type'} = 'raw';
-		$others->{'exclusive'} = 1;
-		$type = "pc";
-
-		if (defined($vnode->_osinfo())) {
-		    my $osname = $vnode->_osinfo()->osname();
-
-		    #
-		    # If this is the default image, then do not put
-		    # this in; let the other side do what it wants.
-		    #
-		    my $default_osinfo =
-			OSinfo->Lookup($vnode->_typeinfo()->default_osid());
-		    if (!defined($default_osinfo)) {
-			tberror("Could not find default osinfo for $vnode\n");
-			return -1;
-		    }
-		    if ($osname ne $default_osinfo->osname()) {
-			$others->{'disk_image'} = {"name" => $osname};
-		    }
 		}
 	    }
 	}
@@ -2478,12 +2529,14 @@ sub GenVirtNodes($)
 	    }
 	}
 	elsif ($vnode->_isbridge()) {
-	    $type = ($type eq "pc" ? "delay" : "delay-" . $type);
+	    $type = ($type eq "pc" ? "bridge" : "bridge-" . $type);
+	}
+	elsif (defined($vnode->_forcedarchitecture())) {
+	    $type = $vnode->_forcedarchitecture();
 	}
 	if ($vnode->_explicit_type_request()) {
 	    $desires->{"$type" . "-explicit"} = ['', 1.0];
 	}
-	
 	$self->createNode($vname, $vnode->_cmurn(),
 			  $type, $nodeweight, $desires, $others, \@interfaces);
     }
@@ -2499,7 +2552,7 @@ sub GenVirtNodes($)
 	my $osinfo = $vnode->_osinfo();
 
 	if ($vnode->_issubnode() && $type eq "ixp-bveil" && !defined($osinfo)){
-	    my $osinfo = OSinfo->LookupByName("RHL73-IXPHOST");
+	    my $osinfo = OSImage->LookupByName("RHL73-IXPHOST");
 	    $vnode->_osinfo($osinfo);
 	}
     }
@@ -2620,6 +2673,8 @@ sub PrintSummaryStats($)
 	if ($reserved_physcount) {
 	    print "Reserved pnodes   = $reserved_physcount\n";
 	}
+	print "<= 1G links       = " . $self->counters()->{'Gblinks'} . "\n";
+	print " > 1G links       = " . $self->counters()->{'MGblinks'} . "\n";
     }
     return 0;
 }
@@ -2740,6 +2795,7 @@ sub GenVirtLans($)
         my $uselinkdelay = $vlan->_uselinkdelay();
 	my $mustdelay    = $vlan->_mustdelay();
 	my $nobwshaping  = $vlan->_nobwshaping();
+	my $nointerswitch= $vlan->_nointerswitch();
 	my $protocol     = $vlan->_protocol();
 	my $linkencap    = $vlan->_encapstyle();
 	my $layer        = $vlan->_layer();
@@ -2805,16 +2861,11 @@ sub GenVirtLans($)
 			$osid = $osinfo->osid();
 		    }
 		    elsif (defined($virtnode->_osinfo())) {
-			$osid = $self->nodejailosid($virtnode);
-			if (!defined($osid)) {
-			    tberror("No jailosid for $virtnode\n");
-			    return -1;
-			}
-			$osinfo = OSinfo->Lookup($osid);
+			$osinfo = $self->nodejailosinfo($virtnode);
 			if (!defined($osinfo)) {
-			    tberror("No mapping for osid $osid\n");
 			    return -1;
 			}
+			$osid = $osinfo->osid();
 		    }
 		}
 		else {
@@ -2891,7 +2942,7 @@ sub GenVirtLans($)
 	# Just a wire.
 	#
 	if ($layer == 1 &&
-	    ($trivial_ok || $emulated || $uselinkdelay ||
+	    ($trivial_ok || $emulated || $uselinkdelay || $nointerswitch ||
 	     $mustdelay || $nobwshaping || $sharednodes || $simnodes)) {
 	    tberror("$vname is a layer 1 link, no options please.\n");
 	    return -1;
@@ -3201,10 +3252,10 @@ sub GenVirtLans($)
 		next;
 	    }
 	}
-	if ($protocol !~ /^ethernet/) {
+	if ($protocol !~ /^ethernet/ && $protocol !~ /^P2PLTE/ ) {
 	    #
 	    # This arrangement is temporary. For now, if its not a
-	    # regular ethernet, then create a lan attached to a fake
+	    # regular ethernet or LTE, then create a lan attached to a fake
 	    # switch. See ptopgen.  We label them differently though,
 	    # since these do not get vlans.  Some other special
 	    # treatment applies as well.
@@ -3280,7 +3331,7 @@ sub GenVirtLans($)
 				  $bw, $vlan->_wiretype(), $others);
 	    }
 	}
-	elsif (@members == 2 && !$vlan->_bridged()) {
+	elsif (@members == 2) {
 	    #
 	    # We treat LANs with two members specially - they are just links
 	    #
@@ -3324,6 +3375,23 @@ sub GenVirtLans($)
 	    }
 
 	    #
+	    # Lets see how many <=1Gb and >1Gb links we have. HACK!
+	    #
+	    if (!$emulated && ($bandwidth || $rbandwidth)) {
+		# Must convert this to kbps like everything else is.
+		my $OneGb = 1000 * 1000;
+		
+		my $maxbw = max($bw, $rbw);
+
+		if ($maxbw <= $OneGb) {
+		    $self->counters()->{'Gblinks'}++;
+		}
+		elsif ($maxbw > $OneGb) {
+		    $self->counters()->{'MGblinks'}++;
+		}
+	    }
+
+	    #
 	    # See if the link is really being shaped, or if just need
 	    # a delay node cause of tracing/monitoring.
 	    #
@@ -3343,6 +3411,8 @@ sub GenVirtLans($)
 		 $mustdelay ||
 		 # Global force, or per-link force. 
 		 $self->option('forcelinkdelays') || $uselinkdelay) &&
+		# No shaping on bridged lans.
+		!$vlan->_bridged() &&
 		# No shaping of geni nodes.
 		$vlan->_geninodes() == 0) {
 		# Need a delay node and its really a shaped link.
@@ -3430,12 +3500,14 @@ sub GenVirtLans($)
 	    my ($top_bw0, $top_rbw0) = $self->virtlantopbw($vlan, $member0);
 	    my ($top_bw1, $top_rbw1) = $self->virtlantopbw($vlan, $member1);
 
-	    my $top_bw  = min($top_bw0, $top_rbw1);
-	    my $top_rbw = min($top_rbw0, $top_bw1);
+	    my $top_bw  = max($top_bw0, $top_rbw1);
+	    my $top_rbw = max($top_rbw0, $top_bw1);
 
 	    if (($shaped ||
 		 (($traced || $rtraced) &&
 		  !($trace_endnode && $rtrace_endnode))) &&
+		# Ignore for bridged links.
+		!$vlan->_bridged() &&
 		# XXX simulated nodes hack. We don't want to put delay nodes
 		# between simulated nodes. If there is a link between a
 		# simulated and a real node, we might need to put in delay
@@ -3461,6 +3533,9 @@ sub GenVirtLans($)
 		    if ($trivial_ok) {
 			$others->{'trivial_ok'} = 1;
 		    }
+		    if ($nointerswitch) {
+			$others->{'nointerswitch'} = 1;
+		    }
 		    #
 		    # If the virtnode is a VM and it has been fixed to
 		    # a topology node, then we have to use that node
@@ -3485,10 +3560,12 @@ sub GenVirtLans($)
 				     'virtual_interface_id' => "$member0" },
 				    {'virtual_node_id' => $vname1,
 				     'virtual_interface_id' => "$member1" },
-				      ($top_bw == 0 ? "*" : 
-				       max($top_bw, $top_rbw)),
-				      $vlan->_wiretype(),
-				      $others);
+				    ($top_bw == 0 ? "*" : 
+				     max($top_bw, $top_rbw)),
+				    ($emulated ? $vlan->_wiretype() :
+				     $self->GetWiretype($vlan->_wiretype(),
+						 max($top_bw, $top_rbw))),
+				    $others);
 		    }
 		    my @delayinfo = ($delay,$bw,$backfill,$loss,
 				     $rdelay,$rbw,$rbackfill,$rloss, 0);
@@ -3527,7 +3604,9 @@ sub GenVirtLans($)
 				      {'virtual_node_id' => $delayname,
 				       'virtual_interface_id' => "$member1" },
 				      ($top_bw == 0 ? "*" : $top_bw), 
-				      $vlan->_wiretype(), $others);
+				      $self->GetWiretype($vlan->_wiretype(),
+						  max($top_bw, $top_rbw)),
+				      $others);
 		    
 		    $self->createLink($vname,
 				      "linksdelaydst/$vname/$member1,$member0",
@@ -3536,8 +3615,10 @@ sub GenVirtLans($)
 				       'virtual_interface_id' => "$member1" },
 				      {'virtual_node_id' => $delayname,
 				       'virtual_interface_id' =>"$member0" },
-				      ($top_bw == 0 ? "*" : $top_bw), 
-				      $vlan->_wiretype(), $others);
+				      ($top_bw == 0 ? "*" : $top_rbw), 
+				      $self->GetWiretype($vlan->_wiretype(),
+						  max($top_bw, $top_rbw)),
+				      $others);
 		    
 		    $self->printdb("Delay node $plink ($delayname) = " . 
 				   join(" ", @delayinfo) . "\n");
@@ -3552,22 +3633,22 @@ sub GenVirtLans($)
 		# could not tell earlier if the link was going to get a real
 		# delay node or just a delaywithswitch.
 		#
-		$self->portbw()->{$member0} =
-		    $self->getbandwidth($member0,$vlan,$bandwidth);
-		$self->portbw()->{$member1} =
-		    $self->getbandwidth($member1,$vlan,$rbandwidth);
+		#$self->portbw()->{$member0} =
+		#    $self->getbandwidth($member0,$vlan,$bandwidth);
+		#$self->portbw()->{$member1} =
+		#    $self->getbandwidth($member1,$vlan,$rbandwidth);
 	    }
 	    else {
 		my $plink = "linksimple/$vname/$member0,$member1";
-		my $bw = '';
+		my $vtbw   = max($top_bw,$top_rbw);
 		my $others = {'isgeninode' => $vlan->_geninodes()};
+		my $wiretype = $vlan->_wiretype();
 
-		if ($emulated) {
-		    $bw = max($top_bw,$top_rbw);
-		}
-		else {
+		if (!$emulated) {
 		    # Let assign choose bw if top_bw is zero.
-		    $bw = ($top_bw == 0 ? "*" : $top_bw);
+		    $vtbw = ($top_bw == 0 ? "*" : $vtbw);
+		    $wiretype = $self->GetWiretype($wiretype,
+						   max($top_bw, $top_rbw));
 		}
 		if ($emulated) {
 		    $others->{'emulated'} = 1
@@ -3575,7 +3656,7 @@ sub GenVirtLans($)
 		    $others->{'virtualization_type'} = $vlan->_encapstyle();
 		}
 		if ($layer == 1) {
-		    $vlan->_wiretype("wire");
+		    $wiretype = "wire";
 		}
 		
 		if ($trivial_ok) {
@@ -3595,6 +3676,9 @@ sub GenVirtLans($)
 			    [$delay,$bw,$backfill,$loss,
 			     $rdelay,$rbw,$rbackfill,$rloss,1.000000];
 		    }
+		}
+		if ($nointerswitch) {
+		    $others->{'nointerswitch'} = 1;
 		}
 		if (defined($vlan->_implemented_by())) {
 		    #
@@ -3627,7 +3711,7 @@ sub GenVirtLans($)
 				       'virtual_interface_id' =>"$member0" },
 				      {'virtual_node_id' => $vname1,
 				       'virtual_interface_id' =>"$member1" },
-				      $bw, $vlan->_wiretype(), $others);
+				      $vtbw, $wiretype, $others);
 		}
 	    }
 	}
@@ -3742,6 +3826,22 @@ sub GenVirtLans($)
 		my $bandwidth  = $self->getbandwidth($member,$vlan,$bw);
 		my $rbandwidth = $self->getbandwidth($member,$vlan,$rbw);
 
+		#
+		# Lets see how many <=1Gb and >1Gb links we have. HACK!
+		#
+		if (!$emulated && ($bandwidth || $rbandwidth)) {
+		    # Must convert this to kbps like everything else is.
+		    my $OneGb = 1000 * 1000;
+		    my $maxbw = max($bw, $rbw);
+
+		    if ($maxbw <= $OneGb) {
+			$self->counters()->{'Gblinks'}++;
+		    }
+		    elsif ($maxbw > $OneGb) {
+			$self->counters()->{'MGblinks'}++;
+		    }
+		}
+		
 		if (($shaped || ($traced && !$trace_endnode)) &&
 		    # Ignore for bridged links.
 		    !$vlan->_bridged() &&
@@ -3772,6 +3872,9 @@ sub GenVirtLans($)
 			if ($trivial_ok) {
 			    $others->{'trivial_ok'} = 1;
 			}
+			if ($nointerswitch) {
+			    $others->{'nointerswitch'} = 1;
+			}
 			#
 			# If the virtnode is a VM and it has been fixed to
 			# a topology node, then we have to use that node
@@ -3785,9 +3888,12 @@ sub GenVirtLans($)
 					  {'virtual_node_id' => $vnodevname,
 					   'virtual_interface_id' =>"$member" },
 					  {'virtual_node_id' => "$lannode" },
-					  $top_bw == 0 ? "*" : 
-					  max($top_bw,$top_rbw),
-					  $vlan->_wiretype(), $others);
+					  ($top_bw == 0 ? "*" : 
+					   max($top_bw,$top_rbw)),
+					  ($emulated ? $vlan->_wiretype() :
+					  $self->GetWiretype($vlan->_wiretype(),
+						      max($top_bw, $top_rbw))),
+					  $others);
 			
 			$self->printdb("Delay link $plink = " .
 				       join(" ", @delayinfo) . "\n");
@@ -3821,8 +3927,10 @@ sub GenVirtLans($)
 					 'virtual_interface_id' =>"$member" },
 				       {'virtual_node_id' => $delayname,
 					 'virtual_interface_id' =>"$member" },
-					  $top_bw == 0 ? "*" : $top_bw,
-					  $vlan->_wiretype(), $others);
+				       $top_bw == 0 ? "*" : $top_bw,
+				       $self->GetWiretype($vlan->_wiretype(),
+							  $top_bw),
+				       $others);
 				
 			$self->createLink($vname,
 					  "linkdelaydst/$vname/$member",
@@ -3831,8 +3939,10 @@ sub GenVirtLans($)
 					 'virtual_interface_id' =>"$member" },
 					{'virtual_node_id' => $delayname,
 					 'virtual_interface_id' =>"$member" },
-					  $top_bw == 0 ? "*" : $top_bw,
-					  $vlan->_wiretype(), {});
+					$top_bw == 0 ? "*" : $top_bw,
+				        $self->GetWiretype($vlan->_wiretype(),
+							   $top_bw),
+					$others);
 			
 			$self->printdb("Delay node $plink ($delayname) = " .
 				       join(" ", @delayinfo) . "\n");
@@ -3852,18 +3962,26 @@ sub GenVirtLans($)
 		    # going to get a real delay node or just a
 		    # delaywithswitch.
 		    #
-		    $self->portbw()->{$member} = $bandwidth;	    
+		    #$self->portbw()->{$member} = $bandwidth;	    
 		}
 		else {
 		    my $plink = "linklan/$vname/$member";
 		    my $others = {'isgeninode' => $vlan->_geninodes()};
+		    my $wiretype = $vlan->_wiretype();
+		    
 		    if ($emulated) {
 			$others->{'emulated'} = 1 if ($member->_emulated());
 			$others->{'virtualization_type'} =
 			    $member->_encapstyle();
 		    }
+		    else {
+			$wiretype = $self->GetWiretype($wiretype, $top_bw);
+		    }
 		    if ($trivial_ok) {
 			$others->{'trivial_ok'} = 1;
+		    }
+		    if ($nointerswitch) {
+			$others->{'nointerswitch'} = 1;
 		    }
 		    #
 		    # If the virtnode is a VM and it has been fixed to
@@ -3899,7 +4017,7 @@ sub GenVirtLans($)
 				       'virtual_interface_id' =>"$member" },
 				      {'virtual_node_id' => $lannode },
 				      ($top_bw == 0 ? "*" : $top_bw), 
-				      $vlan->_wiretype(), $others);
+				      $wiretype, $others);
 		}
 	    }
 	}
@@ -3982,6 +4100,9 @@ sub PrintTop($;$)
 	}
 	if (exists($link->{'trivial_ok'})) {
 	    $output .= 'trivial_ok' . ' ';
+	}
+	if (exists($link->{'nointerswitch'})) {
+	    $output .= 'no_interswitch' . ' ';
 	}
 	if (exists($link->{'interface_ref'}->[0]->{'virtual_interface_id'})) {
 	    my $if1 = $link->{'interface_ref'}->[0]->{'virtual_interface_id'};
@@ -4069,10 +4190,15 @@ sub PrintRspec($;$)
 #
 # One time initialization for a vtop. 
 #
-sub CreateVtop($)
+sub CreateVtop($;$)
 {
-    my ($self) = @_;
+    my ($self, $architecture) = @_;
     my $pid = $self->experiment()->pid();
+
+    # For forcing untyped nodes to a particular arch.
+    if (defined($architecture)) {
+	$self->{'FORCEARCH'} = $architecture;
+    }
 
     #
     # This is for stats gathering. It might duplicate other stuff, but
@@ -4114,6 +4240,8 @@ sub CreateVtop($)
     $self->{'COUNTERS'}->{'sharedcount'} = 0;
     $self->{'COUNTERS'}->{'bstorecount'} = 0;
     $self->{'COUNTERS'}->{'physcount'}   = 0;
+    $self->{'COUNTERS'}->{'Gblinks'}     = 0;
+    $self->{'COUNTERS'}->{'MGblinks'}    = 0;
 
     #
     # Experiment wide options.
@@ -4140,18 +4268,25 @@ sub CreateVtop($)
     # Allow override of delay osid.
     if (defined($self->virtexperiment()->delay_osname())) {
 	my $osname = $self->virtexperiment()->delay_osname();
-	my $osinfo = OSinfo->Lookup($pid, $osname);
-	if (!defined($osinfo)) {
-	    $osinfo = OSinfo->LookupByName($osname);
-	    if (!defined($osinfo)) {
-		tberror({cause => 'user',
-			 type => 'primary', severity => SEV_ERROR,
-			 error => ['invalid_os', 'delay', $osname, $pid]},
-			"Invalid OS $osname in project $pid!");
-		return -1;
+	my $osimage;
+
+	if ($osname =~ /^(.*)\/(.*)$/) {
+	    $osimage = OSImage->Lookup($osname);
+	}
+	else {
+	    $osimage = OSImage->Lookup($pid, $osname);
+	    if (!defined($osimage)) {
+		$osimage = OSImage->LookupByName($osname);
 	    }
 	}
-	my $osid = $osinfo->osid();
+	if (!defined($osimage)) {
+	    tberror({cause => 'user',
+		     type => 'primary', severity => SEV_ERROR,
+		     error => ['invalid_os', 'delay', $osname, $pid]},
+		    "Invalid OS $osname in project $pid!");
+	    return -1;
+	}
+	my $osid = $osimage->osid();
 	$self->options()->{'delay_osid'} = $osid;
 	# Keep a desire string we can use to make sure that the node
 	# type picked for the delay node can load the right OS.
@@ -4168,10 +4303,10 @@ sub CreateVtop($)
     # Allow override of jail osid.
     if (defined($self->virtexperiment()->jail_osname())) {
 	my $osname = $self->virtexperiment()->jail_osname();
-	my $osinfo = OSinfo->Lookup($pid, $osname);
-	if (!defined($osinfo)) {
-	    $osinfo = OSinfo->LookupByName($osname);
-	    if (!defined($osinfo)) {
+	my $osimage= OSImage->Lookup($pid, $osname);
+	if (!defined($osimage)) {
+	    $osimage = OSImage->LookupByName($osname);
+	    if (!defined($osimage)) {
 		tberror({cause => 'user',
 			 type => 'primary', severity => SEV_ERROR,
 			 error => ['invalid_os', 'jail', $osname, $pid]},
@@ -4179,18 +4314,18 @@ sub CreateVtop($)
 		return -1;
 	    }
 	}
-	$self->options()->{'jail_osid'} = $osinfo->osid();
+	$self->options()->{'jail_osid'} = $osimage->osid();
     }
 
     # XXX woeful NSE hack
     my $sim_osname = "FBSD-NSE";
     if (defined($sim_osname)) {
-	my $osinfo = OSinfo->Lookup($pid, $sim_osname);
-	if (!defined($osinfo)) {
-	    $osinfo = OSinfo->LookupByName($sim_osname);
+	my $osimage = OSImage->Lookup($pid, $sim_osname);
+	if (!defined($osimage)) {
+	    $osimage = OSImage->LookupByName($sim_osname);
 	}
-	if (defined($osinfo)) {
-	    $self->options()->{'sim_osid'} = $osinfo->osid();
+	if (defined($osimage)) {
+	    $self->options()->{'sim_osid'} = $osimage->osid();
 	}
 	elsif (exists($self->options()->{'jail_osid'})) {
 	    $self->options()->{'sim_osid'} = $self->options()->{'jail_osid'};
@@ -4388,7 +4523,10 @@ sub virtlantopbw($$$) {
 	# bandwidth - otherwise, we put in the bandwidth of the type
 	# of physical interface it is likely to get mapped to
 	#
-	if ($virtlan->_emulated()) {
+        my $shaped = $virtlan->membershaped($member);
+
+	if ($virtlan->_emulated() ||
+	    $self->virtlan_use_linkdelay($virtlan, $shaped)) {
 	    $return_rbw = $rbw;
 	}
 	else {
@@ -4836,6 +4974,30 @@ sub ReadTextSolution($$)
 		$nodeportB =~ s/\//:/;
 		($nodeB,$portB) = split(":", $nodeportB);
 	    }
+	    
+	    if( $direct ) {
+		# Ensure the mapping of direct links is in the same order
+		# as the virt members...
+		my ($vlinktype, $vlinkname, $vlinkmembers) = split( "/", $vlink );
+		my ($vmem0, $vmem1) = split( ",", $vlinkmembers );
+		my ($vmem0node, $vmem0port) = split( ":", $vmem0 );
+
+		my $mapped0 = $self->solution_v2p()->{ $vmem0node };
+		
+		if( $mapped0 eq $nodeB ) {
+		    # It isn't.  Flip the order of the nodes to avoid
+		    # horrible confusion later.
+		    my ($nodeT, $portT);
+
+		    $nodeT = $nodeB;
+		    $portT = $portB;
+		    $nodeB = $nodeA;
+		    $portB = $portA;
+		    $nodeA = $nodeT;
+		    $portA = $portT;
+		}
+	    }
+	    
 	}
 	$self->AddLinkToSolution($vlink, $trivial, $direct,
 				 $nodeA, $portA, $nodeB, $portB, $swpath);
@@ -5189,7 +5351,7 @@ sub AllocNodes($)
 	    tberror("Could not move nodes to old reserved holding\n");
 	    return -1;
 	}
-	system("$NALLOC $pid $eid @nodeids");
+	system("$NALLOC -f $pid $eid @nodeids");
 	if ($?) {
 	    tberror("Could not move nodes back from old reserved holding\n");
 	    return -1;
@@ -7116,6 +7278,27 @@ sub InitializePhysNodes($)
 	    return -1;
 	}
     }
+
+    #
+    # XXX Similarly, all of the vnames need to be setup before this
+    # config step for UE nodes can run since we allow vnames to be used
+    # as the adb target.  This probably isn't the greatest place for
+    # this, but I'm not sure where is better.  This task has to happen
+    # inside the mapper run so that the result is picked up when the
+    # GENI manifest is created.
+    #
+    if (!($self->impotent() || $self->alloconly())) {
+	foreach my $pnodename (keys(%{ $self->solution_p2v() })) {
+	    my $pnode = $self->pnodes()->{$pnodename};
+	    # Do some limited early setup for UE class nodes to get necessary
+	    # information into the PG manifest.
+	    if ($pnode->class eq "ue") {
+		$pnode->UEConfig() == 0
+		    or return -1;
+	    }
+	}
+    }
+
     return 0;
 }
 
@@ -7128,7 +7311,7 @@ sub InitializePhysNode($$$)
     my ($self, $pnodename, $role, $vnodename) = @_;
     my $pnode = $self->pnodes()->{$pnodename};
 
-    $self->printdb("InitPnode: $pnodename,$vnodename\n");
+    $self->printdb("InitPnode: $pnodename,$role,$vnodename\n");
 
     # If this is a node in the topology (in the vnodes() array) then
     # there must be a virtual physical node (which might be the same
@@ -7183,9 +7366,11 @@ sub InitializePhysNode($$$)
 		# have it.
 		$osinfo = $virtnode->_parent_osinfo();
 	    }
+	    elsif ($self->option("jail_osid")) {
+		$osinfo = OSImage->Lookup($self->option("jail_osid"));
+	    }
 	    else {
-		$osid  = ($self->option("jail_osid") ||
-			  $self->nodejailosid($virtnode));
+		$osinfo = $self->nodejailosinfo($virtnode)
 	    }
 	    $vname        = $self->newvname($pnodename, "vhost");
 	    $routertype   = TBDB_ROUTERTYPE_MANUAL;
@@ -7227,6 +7412,15 @@ sub InitializePhysNode($$$)
 	#
 	my ($cmdline,$rpms,$startupcmd,$tarfiles,$loadlist,
 	    $failureaction,$routertype) = @{ $virtnode->_settings() };
+
+	if ($virtnode->_isbridge()) {
+	    # Allow user to override defaults on a per-node basis.
+	    if (! defined($virtnode->_osinfo())) {
+		$osid = ($self->option("delay_osid") ||
+			 $pnode->delay_osid());
+		undef($osinfo);
+	    }
+	}
 	
 	# Do not want to lose version info, so use osinfo when we have it.
 	if (defined($virtnode->_osinfo())) {
@@ -7234,8 +7428,21 @@ sub InitializePhysNode($$$)
 	    $osid   = $osinfo->osid();
 	}
 	else {
-	    $osid = $pnode->default_osid();
+	    $osid   = $pnode->default_osid();
+	    $osinfo = OSImage->Lookup($osid);
+	    if (!defined($osinfo)) {
+		tberror("Could not map $osid to OSimage object\n");
+		return -1;
+	    }
 	}
+	if ($osinfo->isImageAlias()) {
+	    #
+	    # Map the alias to the type specific image.
+	    #
+	    $osinfo = $osinfo->MapToImage($pnode->type());
+	    $osid = $osinfo->osid();
+	}
+	
 	my $vname           = $vnodename;
 	my $inner_elab_role = $virtnode->inner_elab_role();
 	my $plab_role       = $virtnode->plab_role();
@@ -7252,8 +7459,12 @@ sub InitializePhysNode($$$)
 		$cmdline = $self->osidbootcmd($osid, "linkdelay", "");
 	    }
 	    elsif ($virtnode->_isbridge()) {
-		$osid = ($self->option("delay_osid") || $pnode->delay_osid());
-		undef($osinfo);
+		# Allow user to override defaults on a per-node basis.
+		if (! defined($virtnode->_osinfo())) {
+		    $osid = ($self->option("delay_osid") ||
+			     $pnode->delay_osid());
+		    undef($osinfo);
+		}
 		$cmdline = $self->osidbootcmd($osid, "delay", "");
 		$role = TBDB_RSRVROLE_DELAYNODE();
 		$routertype = TBDB_ROUTERTYPE_NONE;
@@ -7283,7 +7494,6 @@ sub InitializePhysNode($$$)
 	# because they are now handled by tarfiles_setup
 	#
 	%nodesets = ("def_boot_cmd_line" => $cmdline,
-		     "startstatus"       => 'none',
 		     "bootstatus"        => 'unknown',
 		     # This is no longer used for anything.
 		     "deltas"            => '', 
@@ -7292,7 +7502,9 @@ sub InitializePhysNode($$$)
 		     "loadlist"          => $loadlist || '',
 		     "failureaction"     => $failureaction,
 		     "routertype"        => $routertype);
-
+	$nodesets{"startstatus"} = 'none'
+	    if (!exists($self->oldreservednodes()->{$pnodename}));
+		
 	%rsrvsets = ("vname"             => $vnodename,
 		     "erole"             => $role,
 		     "plab_role"         => $plab_role);
@@ -7300,6 +7512,7 @@ sub InitializePhysNode($$$)
 	    if (defined($inner_elab_role));
 	$rsrvsets{"sharing_mode"} = $sharing_mode
 	    if (defined($sharing_mode));
+
 
     }
     $self->printdb("InitPnode: Storing info for $pnodename,$vnodename\n");
@@ -7329,12 +7542,12 @@ sub InitializePhysNode($$$)
     #
     if (defined($osid) && (!$pnode->isremotenode()
 			   || $pnode->isdedicatedremote())) {
-	# osselect wants an osinfo object, but we do not always have
+	# osselect wants an osinfo/osimage object, but we do not always have
 	# that. See above.
 	if (!defined($osinfo)) {
-	    $osinfo = OSinfo->Lookup($osid);
+	    $osinfo = OSImage->Lookup($osid);
 	    if (!defined($osinfo)) {
-		tberror("Could not map $osid to osinfo object\n");
+		tberror("Could not map $osid to OSimage object\n");
 		return -1;
 	    }
 	}
@@ -7347,10 +7560,32 @@ sub InitializePhysNode($$$)
 		tberror("Could not resolve specific osid for $osinfo on $pnode!\n");
 		return -1;
 	    }
-	    # If the specific OS is already loaded, go ahead and set to that
-	    # so that we do not cause a boot problem on the node.
-	    if ($pnode->IsOSLoaded($tmp)) {
-		$osinfo = $tmp;
+	    $osinfo = $tmp;
+	}
+	elsif ($osinfo->isImageAlias()) {
+	    #
+	    # Map the alias to the type specific image.
+	    #
+	    $osinfo = $osinfo->MapToImage($pnode->type());
+	}
+	#
+	# If the node is in RES_READY (already in the experiment, this
+	# is a swapmod), check to see if the node is running an older
+	# version of the same OS. If it is, we do not want to change it,
+	# since then it will get reloaded. Consider, if a system image
+	# is updated and released (version number changes), any nodes
+	# running the previously released image in an experiment, will
+	# get reloaded during a swapmod, and 99.9 percent of the time,
+	# that is not what users expect or want.
+	#
+	if ($pnode->allocstate() eq TBDB_ALLOCSTATE_RES_READY()) {
+	    my ($curosinfo) = $pnode->RunningOsImage();
+	    if (defined($curosinfo) &&
+		$curosinfo->osid() == $osinfo->osid() &&
+		$curosinfo->vers() != $osinfo->vers()) {
+		$self->printdb("  Not changing to different version ".
+			       "of $curosinfo\n");
+		$osinfo = $curosinfo;
 	    }
 	}
 	
@@ -7379,7 +7614,7 @@ sub InitializePhysNode($$$)
 # This is special. Look at the osid of the virtnodes on this pnode and
 # map to a suitable osid.
 #
-sub nodejailosid($$)
+sub nodejailosinfo($$)
 {
     my ($self, $virtnode) = @_;
 
@@ -7389,7 +7624,6 @@ sub nodejailosid($$)
     # features/desires). 
     #
     my $osinfo    = $virtnode->_osinfo();
-    my $nextosinfo;
 
     $self->printdb("nodejailosid: $virtnode, $osinfo\n");
 
@@ -7397,50 +7631,33 @@ sub nodejailosid($$)
     # The old method was to use nextosid, but the new method uses
     # the subos stuff.
     #
-    if (defined($osinfo->def_parentosid())) {
-	$nextosinfo = OSinfo->Lookup($osinfo->def_parentosid());
-	if (!defined($nextosinfo)) {
-	    tbwarn("nodejailosid: could not resolve parent osid for $osinfo\n");
-	    return undef;
-	}
-    }
-    else {
-	if (!defined($osinfo->nextosid())) {
-	    tbwarn("nodejailosid: no nextosid defined for $osinfo\n");
-	    return $osinfo->osid();
-	}
-	$nextosinfo = $osinfo->ResolveNextOSID($self->experiment());
-	if (!defined($nextosinfo)) {
-	    tbwarn("nodejailosid: could not resolve nextosid for $osinfo\n");
-	    return undef;
-	}
-    }
+    my $nextosinfo = $osinfo->DefaultParent();
     if (defined($nextosinfo)) {
 	$self->printdb("Mapping VM osinfo $osinfo to ".
 		       "$nextosinfo on $virtnode\n");
     }
     else {
-	tbwarn("nodejailosid: Could not map to real osid on $virtnode\n");
+	tbwarn("nodejailosid: Could not map $osinfo on $virtnode\n");
     }
-    return $nextosinfo->osid();
+    return $nextosinfo;
 }
 
 sub osidbootcmd($$$$)
 {
     my ($self, $osid, $role, $default) = @_;
 
-    my $osinfo = OSinfo->Lookup($osid);
-    if (!defined($osinfo)) {
+    my $osimage = OSImage->Lookup($osid);
+    if (!defined($osimage)) {
 	tbwarn("No such OSID $osid\n");
 	return undef;
     }
-    if (defined($osinfo->nextosid())) {
-	$osinfo = $osinfo->ResolveNextOSID($self->experiment());
+    if (defined($osimage->nextosid())) {
+	$osimage = $osimage->ResolveNextOSID($self->experiment());
 	return undef
-	    if (!defined($osinfo));
+	    if (!defined($osimage));
     }
     return undef
-	if ($osinfo->OSBootCmd($role, \$default) != 0);
+	if ($osimage->OSBootCmd($role, \$default) != 0);
     return $default;
 }
 
@@ -7933,6 +8150,16 @@ sub AddBridge($$$$)
     $rbandwidth = 0
 	if ($member1->nobwshaping());
 
+    # We now allow bridges to work with vinterfaces (vlan encap).
+    my $viface_unit0 = "null";
+    my $viface_unit1 = "null";
+    if (defined($member0->_virtiface())) {
+	$viface_unit0 = $member0->_virtiface()->unit();
+    }
+    if (defined($member1->_virtiface())) {
+	$viface_unit1 = $member1->_virtiface()->unit();
+    }
+
     #
     # We are inserting the bridge, but it might not be for shaping.
     # Maybe for tracing. We use the estimated bandwidth field to
@@ -7947,7 +8174,7 @@ sub AddBridge($$$$)
     
     DBQueryWarn("insert into delays " .
 		" (pid,eid,exptidx,node_id,vname,noshaping,iface0,iface1" .
-		",vlan0,vlan1,isbridge".
+		",vlan0,vlan1,isbridge,viface_unit0,viface_unit1".
 		",vnode0,pipe0,delay0,bandwidth0,backfill0,lossrate0" .
 		",vnode1,pipe1,delay1,bandwidth1,backfill1,lossrate1" .
 		",q0_limit,q0_maxthresh,q0_minthresh,q0_weight,q0_linterm" .
@@ -7958,6 +8185,7 @@ sub AddBridge($$$$)
 		",q1_droptail,q1_red,q1_gentle)" .
 		" values ('$pid','$eid','$idx','$pnodename','$vname' ".
 		",$noshaping,'$iface0','$iface1','$lan0','$lan1',1".
+		",$viface_unit0,$viface_unit1".
 		",'$vnodename0',$pipe0,$delay,$bandwidth,$backfill,$lossrate".
 		",'$vnodename1',$pipe1,$rdelay,$rbandwidth,$rbackfill".
 		",$rlossrate".
@@ -8039,6 +8267,9 @@ sub AddBridge($$$$)
     my $speed1 =
 	$self->interfacespeedmbps(physinterfacetype($pnode, $iface1),
 				  "ethernet");
+
+    $self->portbw()->{$member0} = $speed0 * 1000;
+    $self->portbw()->{$member1} = $speed1 * 1000;
 
     $self->printdb("  Setting port speeds on $pnodename: ".
 		   "$iface0:$speed0 $iface1:$speed1\n");
@@ -8834,19 +9065,21 @@ sub UploadVlans($)
 		    return -1;
 		}
 
+		my $interface = Interface->LookupByIface($pnodename, $iface);
+		if (!defined($interface)) {
+		    tberror("No such interface $pnodename:$iface\n");
+		    return -1;
+		}
+		
 		#
 		# This happens when the user asks assign to give it the
 		# default speed ("*" bw in the NS file). Need to assign it
 		# from the interface info.
 		#
 		if (! $speed) {
-		    my $interface = Interface->LookupByIface($pnodename,
-							     $iface);
-		    if (!defined($interface)) {
-			tberror("No such interface $pnodename:$iface\n");
-			return -1;
-		    }
 		    $speed = $self->interfacespeedmbps($interface->type(),
+						       $interface->type() eq
+						       "P2PLTE" ? "P2PLTE" :
 						       "ethernet");
 		}
 		else {
@@ -8855,9 +9088,22 @@ sub UploadVlans($)
 		    $speed = $speed / 1000;
 		}
 	    }
-	    my $dbgline = "Interface: $pnodename:$iface";
+	    my $ifacetype = $interface->type();
+	    my $dbgline = "Interface: $pnodename:$iface type:$ifacetype";
+	    my $max_speed;
+
+	    my $itype_result =
+		DBQueryWarn("select max_speed / 1000 from interface_types ".
+			    "where type='$ifacetype'");
+	    if ($itype_result && $itype_result->numrows) {
+		($max_speed) = int($itype_result->fetchrow_array());
+		$dbgline .= " max:$max_speed";
+	    }
 
 	    if ($speed) {
+		if (defined($max_speed) && $speed > $max_speed) {
+		    tbwarn("Illegal interface speed for $pnodename:$iface\n");
+		}
 		$dbgline .= " speed:$speed";
 		$args->{'current_speed'} = $speed;
 	    }
@@ -9379,10 +9625,25 @@ sub UploadBlockstores($)
 	my $vvnode   = $self->solution_v2v()->{$vname};
 	my $vpnode   = $virtnode->_pnode();
 	my $pnode    = $vpnode->phys_nodeid();
-	my $size     = $virtnode->_blockstore()->size();
+
+	#
+	# If this is a blockstore clone, then bstore will be the storage
+	# pool that the clone is allocating space from. We need this to
+	# charge resources to. However, what we record in the DB is the
+	# blockstore that we are cloning since that is what is needed later
+	# in tmcd for passing to the storage server.
+	#
+	my $pool = $bstore;
+	if ($virtnode->_bsperms() ne "RW") {
+	    my $bsattr = $virtnode->_blockstore_attributes();
+	    if ($bsattr && exists($bsattr->{'clone'})) {
+		$bstore = "lease-" . $bsattr->{'clone'};
+	    }
+	}
+	my $size = $virtnode->_bsallocsize();
 
 	$self->printdb("BlockStore: ".
-		       "$vname, $bstore, $size, $vvnode, $vpnode, $pnode\n");
+		       "$vname, $bstore ($pool), $size, $vvnode, $vpnode, $pnode\n");
 
 	my $blockstore = Blockstore->Lookup($pnode, $bstore);
 	if (!defined($blockstore)) {
@@ -9516,8 +9777,11 @@ sub newvname($$$)
 	next
 	    if (exists($self->current_v2v->{$vname}));
 
-	return $vname
-	    if ($pnodename eq $self->current_v2p->{$vname});
+	if ($pnodename eq $self->current_v2p->{$vname}) {
+	    return $vname
+		if ($pnodename ne $vname);
+	    last;
+	}
     }
     
     while (1) {
@@ -10009,5 +10273,54 @@ sub AddToSwitchPath($$)
     my $rval = join(" ", @cur);
     return $rval;
 }
+
+#
+# Wiretypes.
+#
+sub GetWiretype($$$)
+{
+    my ($self, $wiretype, $bandwidth) = @_;
+
+    return $wiretype
+	if (!$MAINSITE);
+
+    return $wiretype
+	if ($wiretype =~ /^ethernet-/ || $wiretype !~ /^ethernet/);
+
+    if ($bandwidth == 0) {
+	$wiretype = "ethernet";
+    }
+    elsif ($bandwidth <= 100000) {
+	# 100 Mbit
+	$wiretype = "ethernet-100000";
+    }
+    elsif ($bandwidth <= 1000000) {
+	# 1 Gbit
+	$wiretype = "ethernet-1000000";
+    }
+    else {
+	# 10 Gbit
+	$wiretype = "ethernet-10000000";
+    }
+    return $wiretype;
+}
+
+#
+# Are all nodes explicitly typed.
+#
+sub AllNodesTyped($)
+{
+    my ($self) = @_;
+    my $nodecount = $self->nodecount();
+    my $typecount = 0;
+
+    foreach my $type (keys(%{ $self->types() })) {
+	$typecount += $self->types()->{$type};
+    }
+    return 1
+	if ($nodecount == $typecount);
+    return 0;
+}
+
 
 1;
