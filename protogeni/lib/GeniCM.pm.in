@@ -2710,9 +2710,11 @@ sub GetTicketAuxAux($$$$$$$$$$$)
     }
 
     # Do IP assignment.
-    system("$IPASSIGN -d $pid $eid");
+    my $poutput = GeniUtil::ExecQuiet("$IPASSIGN $pid $eid");
     if ($?) {
-	$response = GeniResponse->Create(GENIRESPONSE_ERROR, undef);
+	print STDERR $poutput;
+	$response = GeniResponse->Create(GENIRESPONSE_BADARGS, undef,
+					 $poutput);
 	goto bad;
     }
 
