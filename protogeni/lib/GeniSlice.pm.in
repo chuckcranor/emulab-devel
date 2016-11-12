@@ -758,6 +758,7 @@ sub Flush($)
 {
     my ($self) = @_;
 
+    $self->GetCertificate()->Flush();
     delete($slices{$self->idx()});
 }
 

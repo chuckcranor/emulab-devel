@@ -312,6 +312,7 @@ sub LookupBySlice($$)
 	return undef
 	    if (!defined($slice));
 	$slice_uuid = $slice->uuid();
+	$slice->Flush();
     }
     else {
 	return undef;
