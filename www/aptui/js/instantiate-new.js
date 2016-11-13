@@ -11,6 +11,7 @@ $(function ()
     var rspecviewString = templates['rspectextview-modal'];
     var ajaxurl;
     var amlist        = null;
+    var amstatus      = null;
     var projlist      = null;
     var sysprojlist   = ['emulab-ops', 'emulab-ops-test'];
     var psysprojlist  = ['PhantomNet', 'testproject'];
@@ -66,6 +67,8 @@ $(function ()
 	    _.each(_.keys(amlist), function (key) {
 		amValueToKey[amlist[key]] = key;
 	    });
+	    amstatus = decodejson('#amstatus-json');
+	    console.info(amstatus);
 	}
 	if ($('#projects-json').length) {
 	    projlist = decodejson('#projects-json');

@@ -116,7 +116,10 @@ $am_array = Instance::DefaultAggregateList();
 $amlist   = array();
 $amdefault = "";
 if (($ISCLOUD || ISADMIN() || STUDLY())) {
-    while (list($am) = each($am_array)) {
+    while (list($index, $aggregate) = each($am_array)) {
+        $urn = $aggregate->urn();
+        $am  = $aggregate->name();
+        
 	$amlist[] = $am;
     }
     $amdefault = $DEFAULT_AGGREGATE;

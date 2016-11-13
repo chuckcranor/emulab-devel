@@ -129,7 +129,9 @@ function SPITFORM($formfields, $errors)
     $amlist = array();
     $amdefault = "";
     if ($viewing && ($ISCLOUD || ISADMIN() || STUDLY())) {
- 	while (list($am) = each($am_array)) {
+        while (list($index, $aggregate) = each($am_array)) {
+            $urn = $aggregate->urn();
+            $am  = $aggregate->name();
 	    $amlist[] = $am;
 	}
 	$amdefault = $DEFAULT_AGGREGATE;

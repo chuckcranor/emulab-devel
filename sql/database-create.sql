@@ -69,6 +69,23 @@ CREATE TABLE `apt_aggregate_nodetypes` (
 ) ENGINE=MyISAM DEFAULT CHARSET=latin1;
 
 --
+-- Table structure for table `apt_aggregate_status`
+--
+
+DROP TABLE IF EXISTS `apt_aggregate_status`;
+CREATE TABLE `apt_aggregate_status` (
+  `urn` varchar(128) NOT NULL default '',
+  `status` enum("up","down","unknown") NOT NULL default "unknown",
+  `last_success` datetime default NULL,
+  `last_attempt` datetime default NULL,
+  `pcount` int(11) default '0',
+  `pfree` int(11) default '0',
+  `vcount` int(11) default '0',
+  `last_error` text,
+  PRIMARY KEY  (`urn`)
+) ENGINE=MyISAM DEFAULT CHARSET=latin1;
+
+--
 -- Table structure for table `apt_aggregates`
 --
 
@@ -82,6 +99,7 @@ CREATE TABLE `apt_aggregates` (
   `isfederate` tinyint(1) NOT NULL default '0',
   `disabled` tinyint(1) NOT NULL default '0',
   `noupdate` tinyint(1) NOT NULL default '0',
+  `nomonitor` tinyint(1) NOT NULL default '0',
   `updated` datetime NOT NULL default '0000-00-00 00:00:00',
   `weburl` tinytext,
   `has_datasets` tinyint(1) NOT NULL default '0',

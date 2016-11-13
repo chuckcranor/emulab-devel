@@ -564,8 +564,15 @@ function CheckStep2()
 	return -1;
     }
     $formfields = $ajax_args["formfields"];
-    $am_array   = Instance::DefaultAggregateList();
+    $amlist     = Instance::DefaultAggregateList();
+    $am_array   = array();
     $errors     = array();
+
+    while (list($index, $aggregate) = each($amlist)) {
+        $urn  = $aggregate->urn();
+        $name = $aggregate->name();
+        $am_array[$name] = $urn;
+    }
 
     session_start();
     #
@@ -786,10 +793,17 @@ function Do_Submit()
         return;
     }
     $formfields = $ajax_args["formfields"];
-    $am_array   = Instance::DefaultAggregateList();
+    $amlist     = Instance::DefaultAggregateList();
+    $am_array   = array();
     $errors     = array();
     $args       = array("portal" => $PORTAL_GENESIS);
     $profile    = Profile::Lookup($formfields["profile"]);
+
+    while (list($index, $aggregate) = each($amlist)) {
+        $urn  = $aggregate->urn();
+        $name = $aggregate->name();
+        $am_array[$name] = $urn;
+    }
 
     #
     # SSH keys are optional for guest users; they just have to

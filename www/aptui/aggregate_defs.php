@@ -30,6 +30,7 @@ class Aggregate
 {
     var	$aggregate;
     var $typeinfo;
+    var $statusinfo;
     
     #
     # Constructor by lookup by urn
@@ -58,6 +59,16 @@ class Aggregate
             $this->typeinfo[$type] = array("count" => $row["count"],
                                            "free"  => $row["free"]);
         }
+
+        #
+        # And the status info.
+        #
+        $query_result =
+            DBQueryWarn("select * from apt_aggregate_status ".
+                        "where urn='$safe_urn'");
+	if ($query_result || mysql_num_rows($query_result)) {
+            $this->statusinfo = mysql_fetch_array($query_result);
+        }
     }
     # accessors
     function field($name) {
@@ -72,6 +83,18 @@ class Aggregate
     function reservations() { return $this->field('reservations'); }
     function isfederate()   { return $this->field('isfederate'); }
     function portals()      { return $this->field('portals'); }
+
+    # accessors for the status info.
+    function sfield($name) {
+	return (is_null($this->statusinfo) ? null : $this->statusinfo[$name]);
+    }
+    function status()       { return $this->sfield('status'); }
+    function last_success() { return $this->sfield('last_success'); }
+    function last_attempt() { return $this->sfield('last_attempt'); }
+    function pcount()       { return $this->sfield('pcount'); }
+    function pfree()        { return $this->sfield('pfree'); }
+    function vcount()       { return $this->sfield('vcount'); }
+    function last_error()   { return $this->sfield('last_error'); }
 
     # Hmm, how does one cause an error in a php constructor?
     function IsValid() {
@@ -171,13 +194,16 @@ class Aggregate
         
 	while ($row = mysql_fetch_array($query_result)) {
             $urn       = $row["urn"];
-            $name      = $row["name"];
             $adminonly = $row["adminonly"];
 
             if ($adminonly && !(ISADMIN() || STUDLY())) {
                 continue;
             }
-            $am_array[$name] = $urn;
+	    if (! ($aggregate = Aggregate::Lookup($urn))) {
+		TBERROR("Aggregate::SupportsReservations: ".
+			"Could not load aggregate $urn!", 1);
+	    }
+	    $am_array[$urn] = $aggregate;
         }
         return $am_array;
     }

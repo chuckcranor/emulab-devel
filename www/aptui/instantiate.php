@@ -48,6 +48,8 @@ elseif (!$ISAPT) {
     RedirectLoginPage();
 }
 
+error_log("A: " . time());
+
 #
 # Verify page arguments.
 #
@@ -149,6 +151,8 @@ else {
 }
 $profile_array  = array();
 $am_array       = Instance::DefaultAggregateList();
+
+error_log("B: " . time());
 
 #
 # if using the super secret URL, make sure the profile exists, and
@@ -292,6 +296,8 @@ else {
     }
 }
 
+error_log("C: " . time());
+
 #
 # Rebuild the array with extra info for the profile picker.
 #
@@ -314,6 +320,8 @@ while (list ($uuid, $title) = each ($profile_array)) {
                   "usecount" => $count);
     }
 }
+error_log("D: " . time());
+
 #
 # Now we want to order the list.
 #
@@ -334,6 +342,8 @@ else {
     });
 }
 $profile_array = $tmp_array;
+error_log("E: " . time());
+
 #TBERROR(print_r($profile_array, true), 0);
 
 function SPITFORM($formfields, $newuser, $errors)
@@ -344,6 +354,7 @@ function SPITFORM($formfields, $newuser, $errors)
     
     $amlist     = array();
     $fedlist    = array();
+    $status     = array();
     $showabout  = ($ISAPT && !$this_user ? 1 : 0);
     $registered = (isset($this_user) ? "true" : "false");
     # We use webonly to mark users that have no project membership
@@ -404,18 +415,37 @@ function SPITFORM($formfields, $newuser, $errors)
     #
     if (isset($this_user) && !$this_user->webonly() && !$ISAPT && !$ISPNET) {
 	$am_options = "";
-	while (list($am, $urn) = each($am_array)) {
+        while (list($ignore, $aggregate) = each($am_array)) {
+            $urn = $aggregate->urn();
+            $am  = $aggregate->name();
 	    $amlist[$urn] = $am;
             #
             # We need to mark federated sites for the cluster dropdown.
             #
-            $aggregate = Aggregate::Lookup($urn);
-            if ($aggregate && $aggregate->isfederate()) {
+            if ($aggregate->isfederate()) {
                 $fedlist[] = "'" . $aggregate->name() . "'";
+            }
+            #
+            # generate the status blob.
+            #
+            if ($aggregate->status()) {
+                $status[$urn] = array(
+                    "rawPCsAvailable"  => $aggregate->pfree(),
+                    "rawPCsTotal"      => $aggregate->pcount(),
+                    "VMsAvailable"     => "0",
+                    "VMsTotal"         => $aggregate->vcount(),
+                    "health"           => ($aggregate->status() == "up" ? 100 :
+                                           ($aggregate->status() == "down" ?
+                                            0 : 50)),
+                    "status"           => ($aggregate->status() != "down" ?
+                                           "SUCCESS" : "FAILED"));
             }
         }
 	echo "<script type='text/plain' id='amlist-json'>\n";
 	echo htmlentities(json_encode($amlist));
+	echo "</script>\n";
+	echo "<script type='text/plain' id='amstatus-json'>\n";
+	echo htmlentities(json_encode($status));
 	echo "</script>\n";
         echo "<script type='text/javascript'>\n";
         echo "    window.FEDERATEDLIST  = [". implode(",", $fedlist) . "];\n";
@@ -531,11 +561,15 @@ if (!isset($create)) {
     session_start();
     session_unset();
 
+    error_log("AA: " . time());
     SPITFORM($defaults, false, array());
     echo "<div style='display: none'><div id='jacks-dummy'></div></div>\n";
+    error_log("AB: " . time());
 
     AddTemplateList(array("instantiate", "instantiate-new", "aboutapt", "aboutcloudlab", "aboutpnet", "waitwait-modal", "rspectextview-modal"));
     SPITFOOTER();
+    error_log("AC: " . time());
+    
     return;
 }
 ?>
