@@ -151,6 +151,11 @@ case "$1" in
 			echo -n " apt_checkup"
 			@prefix@/sbin/apt_checkup
 		fi
+		
+		if [ -x @prefix@/sbin/portal_monitor ]; then
+			echo -n " portal_monitor"
+			@prefix@/sbin/portal_monitor
+		fi
 		#
 		# Could trigger experiment creation, so make sure everything
 		# else is setup first; i.e., run this last!
@@ -280,6 +285,9 @@ case "$1" in
 		fi
 		if [ -r /var/run/apt_checkup.pid ]; then
 			kill `cat /var/run/apt_checkup.pid`
+		fi
+		if [ -r /var/run/portal_monitor.pid ]; then
+			kill `cat /var/run/portal_monitor.pid`
 		fi
 		if [ -r /var/run/attend.pid ]; then
 			kill `cat /var/run/attend.pid`
