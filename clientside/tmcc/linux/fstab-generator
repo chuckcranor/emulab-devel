@@ -102,8 +102,14 @@ fi
 # Fedora with the final grep for a real /dev device, because Fedora
 # registers multiple mounts of /).
 rootdev=`cat /proc/mounts | cut -d ' ' -f 1,2 | grep ' \/$' | cut -d ' ' -f 1 | grep '\/dev'`
-# Strip its partition.
-rootdisk=`echo $rootdev | sed -n -r -e 's/^(.*[^0-9])[0-9]*$/\1/p'`
+# See if this is an NVME device (or any device with a pX style name).
+partdev=`echo $rootdev | sed -n -r -e 's/^.*[0-9]+(p)[0-9]+$/\1/p'`
+if [ "x$partdev" = "x" ]; then
+    # Strip its partition.
+    rootdisk=`echo $rootdev | sed -n -r -e 's/^(.*[^0-9])[0-9]*$/\1/p'`
+else
+    rootdisk=`echo $rootdev | sed -n -r -e 's/^(.*[0-9]+)p[0-9]+$/\1/p'`
+fi
 emulabswapdev=""
 if [ -n "$rootdisk" ]; then
     emulabswapdev=`fdisk -l $rootdisk | grep 'Linux swap' | cut -d ' ' -f 1`
