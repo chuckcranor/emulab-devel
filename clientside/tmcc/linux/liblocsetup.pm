@@ -2424,7 +2424,30 @@ sub os_mountextrafs($)
     my $part = "";
 
     #
-    # If the extrafs file was written, use the info from there.
+    # Parse /etc/fstab
+    #
+    my %fses = ();
+    if (open(FD, "</etc/fstab")) {
+	while (<FD>) {
+	    if (/^#/) {
+		next;
+	    }
+	    if (/^(\S+)\s+(\S+)/) {
+		$fses{$2} = $1;
+	    }
+	}
+	close(FD);
+    }
+
+    #
+    # If the desired directory name is already a mount point, just use it.
+    #
+    if (exists($fses{$dir})) {
+	return $dir;
+    }
+
+    #
+    # Otherwise, if the extrafs file was written, use the info from there.
     #
     my $extrafs = libsetup::TMEXTRAFS();
     if (-f "$extrafs" && open(FD, "<$extrafs")) {
@@ -2447,20 +2470,23 @@ sub os_mountextrafs($)
     }
 
     #
-    # XXX this is a most bogus hack right now, we look for partition 4
-    # in /etc/fstab.
+    # Finally, we look for partition 4 of the root disk and use that!
+    # XXX this is a most bogus hack.
     #
-    my $fstabline = `grep -E '(hda|sda|xvda)4' /etc/fstab`;
-    if ($fstabline =~ /^\/dev\/\S*4\s+(\S+)\s+/) {
-	$mntpt = $1;
-	return $mntpt;
+    foreach $mntpt (keys %fses) {
+	if ($fses{$mntpt} =~ /^\/dev\/(hd|sd|xvd)a4$/) {
+	    return $mntpt;
+	}
     }
+
+    print STDERR "os_mountextrafs: no suitable device found!\n";
+    return "";
 
 makeit:
     my $args = "-f";
 
     if ($part) {
-	if ($part =~ /^((?:hd|sd)[a-z])(\d+)$/) {
+	if ($part =~ /^((?:hd|sd|xvd)[a-z])(\d+)$/) {
 	    $args .= " -r $1 -s $2";
 	}
     } elsif ($disk) {

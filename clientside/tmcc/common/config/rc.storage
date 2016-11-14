@@ -366,14 +366,16 @@ sub doboot()
 	#
 	# First see if there is an unused partition or disk.
 	# Remember the largest.
+	# XXX make sure it is at least 10MB.
 	#
 	my $edev;
 	my $isdisk = 0;
-	$size = 0;
+	$size = 9;
 	foreach my $dev (keys %$dinfo) {
 	    my $href = $dinfo->{$dev};
 	    if ($href->{'inuse'} == 0 && $href->{'size'} > $size) {
 		$edev = $dev;
+		$size = $href->{'size'};
 		if ($href->{'type'} eq "DISK") {
 		    $isdisk = 1;
 		}
