@@ -138,13 +138,22 @@ tweakmbr() {
     dd if=/etc/emulab/mbr${_NEW}.dd of=/dev/$_DSK bs=512 count=1
 }
 
+#
+# XXX Use sysctl info if available.
+# Do to the async nature of activity in booting, dmesg.boot info may be
+# interleaved. E.g., we often see:
+#    da1: 300.000MB/s transfersda0: 476940MB (976773168 512 byte sectors)
+# which means we won't see da0 as a disk using the sed RE.
+#
 find_disks() {
-    _DISKS=""
-    for d in `sed -n 's/^\([a-z]*[0-9][0-9]*\): [0-9][0-9]*MB/\1/p' /var/run/dmesg.boot`; do
-	case $d in
-	    ad*|da*|ar*|aacd*|amrd*|mfid*|mfisyspd*|nvd*) _DISKS="$_DISKS $d"
-	esac
-    done
+    _DISKS=`sysctl -n kern.disks 2>/dev/null`
+    if [ -z "$_DISKS" ]; then
+	for d in `sed -n 's/^\([a-z]*[0-9][0-9]*\): [0-9][0-9]*MB.*/\1/p' /var/run/dmesg.boot`; do
+	    case $d in
+		ad*|da*|ar*|aacd*|amrd*|mfid*|mfisyspd*|nvd*) _DISKS="$_DISKS $d"
+	    esac
+	done
+    fi
 
     echo $_DISKS
 }
@@ -692,8 +701,32 @@ for dev in $devs; do
 done
 echo "`date`: slicefix run(s) done"
 
+#
+# Note that if growdisk succeeds, then the newly defined partition might
+# contain metadata from a previous use. We would not have picked up on this
+# earlier because the partition was not defined yet. So in our usual paranoid
+# fashion, zap that partition if and only if we are in the reloading experiment.
+#
 echo "`date`: Resizing final disk partition"
-$BINDIR/growdisk -vW /dev/$DISK
+out=`$BINDIR/growdisk -vW /dev/$DISK`
+stat=$?
+echo $out
+if [ $INRELOADING -eq 1 -a $stat -eq 0 ]; then
+    xpart=`echo $out | sed -n -e 's/.*defining partition \([0-9]\) .*/\1/p'`
+    if [ -n "$xpart" ]; then
+	echo "Zapping newly created extra partition $xpart"
+	if [ -x "$BINDIR/zapdisk" ]; then
+	    echo "Invalidating superblocks and MBR/GPT on $DISK partition $xpart"
+	    $BINDIR/zapdisk -v -p $xpart -SZ /dev/$DISK
+	else
+	    off=`echo $out | sed -n -e 's/.*start=\([0-9][0-9]*\),.*/\1/p'`
+            dd if=/dev/zero of=/dev/$DISK oseek=$off count=16 >/dev/null 2>&1
+	fi
+	if [ $? -ne 0 ]; then
+	    echo "WARNING: failed to invalidate extra partition $xpart at $off"
+	fi
+    fi
+fi
 
 #
 # If requested to reboot, do so.
