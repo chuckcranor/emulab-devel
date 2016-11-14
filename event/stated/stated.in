@@ -53,6 +53,13 @@ my $TBLOG = "@TBLOGFACIL@";
 my $LOGFILE = "$TB/log/stated.log";
 my $MAILFILE = "$TB/log/stated-mail.log";
 
+#
+# XXX if bootinfo is not sending the BOOTING event, then dhcpd is sending them
+# and we have to watch out for spurrious BOOTING events caused by a node
+# making runtime dhcp calls (e.g., it is running dhclient).
+#
+my $BIEVENTS = @BOOTINFO_EVENTS@;
+
 $| = 1;
 
 use event;
@@ -702,6 +709,17 @@ sub stateTransition($$) {
 	notify("Invalid transition for node $node from $mode/$oldstate " .
 	       "to $newstate\n");
 	
+	#
+	# XXX hack ignore spurious BOOTING transitions caused by dhcp
+	#
+	if (!$BIEVENTS &&
+	    $mode eq TBDB_NODEOPMODE_NORMALv2 &&
+	    $oldstate eq TBDB_NODESTATE_ISUP &&
+	    $newstate eq TBDB_NODESTATE_BOOTING) {
+	    notify("$node: Ignored spurious BOOTING transition\n");
+	    return;
+	}
+
 	#
 	# Machines in the secure boot path are not allowed to jump
 	# willy-nilly into unknown states.
