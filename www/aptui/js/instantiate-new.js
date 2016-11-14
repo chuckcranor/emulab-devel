@@ -165,17 +165,11 @@ $(function ()
 
 
 	// Check if the browser has cookies stating what they previoiusly had minimized.
-	CookieCollapse('#profile_name > span', 'pp_collpased');
-
-	var jqxhr =
-	    $.get('https://ops.emulab.net/servicemon/?names=urn')
-	    .done(function(data) {
-		monitor = JSON.parse(data);
-		CreateClusterStatus();
-	    }).error(function(a) {
-		console.log(a);
-	    });
-
+        CookieCollapse('#profile_name > span', 'pp_collpased');
+        _.defer(function () {
+	    monitor = JSON.parse(_.unescape($('script#amstatus-json').html()));
+	    CreateClusterStatus();
+        });
 	$('#waitwait_div').html(waitwaitString);
         $('#waitwait-modal').modal({ backdrop: 'static', keyboard: false, show: false });
 	$('#rspecview_div').html(rspecviewString);
@@ -947,11 +941,6 @@ $(function ()
 		if (data && !$.isEmptyObject(data)) {
 		    // Calculate testbed rating and set up tooltips.
 		    rating = wt.CalculateRating(data, resourceTypes);
-		    // TODO: Remove this when we have actual stats again
-		    console.log(name, rating);
-		    if (name === 'APT Utah' || name === 'Emulab') {
-		      rating = ["100", 100, ["<div>Testbed is healthy</div>", "<div>PCs available</div>"]];
-		    }
 		    classes = wt.AssignStatusClass(rating[0], rating[1]);
 		}
 		else {
