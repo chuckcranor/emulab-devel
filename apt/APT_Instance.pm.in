@@ -206,7 +206,7 @@ sub Flush($)
     # Break circular dependency so that the object is released
     # (the aggregate object points back to the instance).
     #
-    $self->{'AGGREGATES'} = undef;
+    #$self->{'AGGREGATES'} = undef;
 
     delete($instances{$self->uuid()});
 }
