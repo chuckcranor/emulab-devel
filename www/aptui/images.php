@@ -112,12 +112,17 @@ $query =
 $query_result = DBQueryFatal($query);
 
 $images = array();
+$domain = $OURDOMAIN;
+if ($TBMAINSITE)
+{
+  $domain = "emulab.net";
+}
 
 while ($row = mysql_fetch_array($query_result)) {
 	$imageid = $row["imageid"];
         $name    = $row["imagename"];
         $pid     = $row["pid"];
-        $urn     = "urn:publicid:IDN+${OURDOMAIN}+image+${pid}//${name}";
+        $urn     = "urn:publicid:IDN+${domain}+image+${pid}//${name}";
         $blob    = array();
 
         #
