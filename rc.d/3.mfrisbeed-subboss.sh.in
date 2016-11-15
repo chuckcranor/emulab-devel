@@ -14,6 +14,24 @@
 MCBASEADDR="239.192.1"
 
 #
+# Set to use unicast when downloading from boss
+#
+UNICAST=
+#UNICAST=yes
+
+#
+# Set to the max bandwidth any instance of frisbeed should use (Mb/sec)
+#
+BANDWIDTH=
+#BANDWIDTH=100000000
+
+#
+# Run as an IGMPv2 querier. You should only have one of these per VLAN.
+#
+MCQUERIER=
+#MCQUERIER=yes
+
+#
 # Set to run with debugging enabled.
 #
 #DEBUG=
@@ -73,18 +91,37 @@ echo -n " mfrisbeed"
 rm -f /var/run/frisbeed-*.pid
 
 args="-C null -S @BOSSNODE_IP@ -I /z/image_cache -A -M -R"
-if [ -n "$MCBASEADDR" ]; then
-    args="$args -O mcaddr=$MCBASEADDR"
+if [ -n "$UNICAST" ]; then
+    args="$args -X ucast"
+fi
+if [ -n "$MCQUERIER" ]; then
+    args="$args -Q 30"
+    # XXX it is a v2 querier
+    sysctl net.inet.igmp.default_version=2
+    sysctl net.inet.igmp.legacysupp=1
+    sysctl net.inet.igmp.v2enable=1
 fi
 if [ -n "$DEBUG" ]; then
    args="-ddD $args"
 fi
 
+opts=""
+if [ -n "$MCBASEADDR" ]; then
+    opts="-O mcaddr=$MCBASEADDR"
+fi
+if [ -n "$BANDWIDTH" ]; then
+    if [ -z "$opts" ]; then
+	opts="-O bandwidth=$BANDWIDTH"
+    else
+	opts="$opts,bandwidth=$BANDWIDTH"
+    fi
+fi
+
 if [ -z "$DEBUG" -a -x @prefix@/sbin/daemon_wrapper ]; then
     @prefix@/sbin/daemon_wrapper -i 30 -l @prefix@/log/mfrisbeed_wrapper.log \
-	@prefix@/sbin/mfrisbeed -d $args
+	@prefix@/sbin/mfrisbeed -d $args $opts
 else
-    @prefix@/sbin/mfrisbeed $args
+    @prefix@/sbin/mfrisbeed $args $opts
 fi
 
 exit $?
