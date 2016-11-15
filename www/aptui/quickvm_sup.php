@@ -486,37 +486,36 @@ $PAGEFOOTER_FUNCTION = function($ignored = NULL) {
 
     echo "</div>
       </div>\n";
-    if ($embedded) {
-	return;
+    if (!$embedded) {
+        if ($PORTAL_NSFNUMBER) {
+            SpitNSFModal();
+        }
+        echo "
+          <!--- Footer -->
+          <div>
+           <div id='footer'>
+            <div class='pull-left'>
+              <a href='http://www.emulab.net' target='_blank'>
+                 Powered by
+                 <img src='images/emulab-whiteout.png' id='elabpower'></a>
+            </div>
+            <span>Question or comment? Join the
+               <a href='https://groups.google.com/forum/#!forum/${PORTAL_HELPFORUM}'
+                  target='_blank'>Help Forum</a></span>
+               <div class='pull-right'>\n";
+        if ($PORTAL_NSFNUMBER) {
+            echo " <a data-toggle='modal' style='margin-right: 10px;'
+                   href='#nsf_supported_modal'
+	           data-target='#nsf_supported_modal'>Supported by NSF</a>\n";
+        }
+        echo "&copy; 2016
+              <a href='http://www.utah.edu' target='_blank'>
+                 The University of Utah</a>
+            </div>
+           </div>
+          </div>
+          <!-- Placed at the end of the document so the pages load faster -->\n";
     }
-    if ($PORTAL_NSFNUMBER) {
-        SpitNSFModal();
-    }
-    echo "
-      <!--- Footer -->
-      <div>
-       <div id='footer'>
-        <div class='pull-left'>
-          <a href='http://www.emulab.net' target='_blank'>
-             Powered by
-             <img src='images/emulab-whiteout.png' id='elabpower'></a>
-        </div>
-	<span>Question or comment? Join the
-           <a href='https://groups.google.com/forum/#!forum/${PORTAL_HELPFORUM}'
-              target='_blank'>Help Forum</a></span>
-           <div class='pull-right'>\n";
-    if ($PORTAL_NSFNUMBER) {
-        echo " <a data-toggle='modal' style='margin-right: 10px;'
-              href='#nsf_supported_modal'
-	      data-target='#nsf_supported_modal'>Supported by NSF</a>\n";
-    }
-    echo "&copy; 2016
-          <a href='http://www.utah.edu' target='_blank'>
-             The University of Utah</a>
-        </div>
-       </div>
-      </div>
-      <!-- Placed at the end of the document so the pages load faster -->\n";
     EchoTemplateList($PORTAL_TEMPLATES);
     echo "</body></html>\n";
 };
