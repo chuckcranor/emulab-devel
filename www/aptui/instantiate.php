@@ -48,8 +48,6 @@ elseif (!$ISAPT) {
     RedirectLoginPage();
 }
 
-error_log("A: " . time());
-
 #
 # Verify page arguments.
 #
@@ -151,8 +149,6 @@ else {
 }
 $profile_array  = array();
 $am_array       = Instance::DefaultAggregateList();
-
-error_log("B: " . time());
 
 #
 # if using the super secret URL, make sure the profile exists, and
@@ -296,8 +292,6 @@ else {
     }
 }
 
-error_log("C: " . time());
-
 #
 # Rebuild the array with extra info for the profile picker.
 #
@@ -320,7 +314,6 @@ while (list ($uuid, $title) = each ($profile_array)) {
                   "usecount" => $count);
     }
 }
-error_log("D: " . time());
 
 #
 # Now we want to order the list.
@@ -342,7 +335,6 @@ else {
     });
 }
 $profile_array = $tmp_array;
-error_log("E: " . time());
 
 #TBERROR(print_r($profile_array, true), 0);
 
@@ -561,15 +553,11 @@ if (!isset($create)) {
     session_start();
     session_unset();
 
-    error_log("AA: " . time());
     SPITFORM($defaults, false, array());
     echo "<div style='display: none'><div id='jacks-dummy'></div></div>\n";
-    error_log("AB: " . time());
 
     AddTemplateList(array("instantiate", "instantiate-new", "aboutapt", "aboutcloudlab", "aboutpnet", "waitwait-modal", "rspectextview-modal"));
     SPITFOOTER();
-    error_log("AC: " . time());
-    
     return;
 }
 ?>
