@@ -9185,7 +9185,7 @@ COMMAND_PROTOTYPE(dodoginfo)
 	char		buf[MYBUFSIZE], *bp;
 	int		nrows, *iv;
 	int		iv_interval, iv_isalive, iv_ntpdrift, iv_cvsup;
-	int		iv_rusage, iv_hkeys, iv_dhcpdconf;
+	int		iv_rusage, iv_hkeys, iv_dhcpdconf, iv_rootpswd;
 
 	/*
 	 * XXX sitevar fetching should be a library function
@@ -9200,7 +9200,12 @@ COMMAND_PROTOTYPE(dodoginfo)
 	}
 
 	iv_interval = iv_isalive = iv_ntpdrift = iv_cvsup =
-		iv_rusage = iv_hkeys = -1;
+		iv_rusage = iv_hkeys = iv_dhcpdconf = -1;
+#ifdef DYNAMICROOTPASSWORDS
+	iv_rootpswd = 60;
+#else
+	iv_rootpswd = 0;
+#endif
 	while (nrows) {
 		iv = 0;
 		row = mysql_fetch_row(res);
@@ -9216,6 +9221,8 @@ COMMAND_PROTOTYPE(dodoginfo)
 			iv = &iv_hkeys;
 		} else if (strcmp(row[0], "watchdog/dhcpdconf") == 0) {
 			iv = &iv_dhcpdconf;
+		} else if (strcmp(row[0], "watchdog/rootpswd") == 0) {
+			iv = &iv_rootpswd;
 		} else if (strcmp(row[0], "watchdog/isalive/local") == 0) {
 			if (reqp->islocal && !reqp->isvnode)
 				iv = &iv_isalive;
@@ -9237,6 +9244,9 @@ COMMAND_PROTOTYPE(dodoginfo)
 			/* else check for default value */
 			else if (row[2] && row[2][0])
 				*iv = atoi(row[2]) * 60;
+			/* XXX backward compat: use compiled in default */
+			else if (*iv >= 0)
+				*iv *= 60;
 			else
 				error("WATCHDOGINFO: sitevar %s not set\n",
 				      row[0]);
@@ -9253,6 +9263,8 @@ COMMAND_PROTOTYPE(dodoginfo)
 	 * - local nodes do not cvsup
 	 * - only a plab node service slice reports rusage
 	 *   (which it uses in place of isalive)
+	 * - only enforce root password reset if DYNAMICROOTPASSWORDS
+	 *   is defined (handled above)
 	 */
 	if ((reqp->islocal && reqp->isvnode) || reqp->isplabdslice) {
 		iv_ntpdrift = iv_cvsup = 0;
@@ -9274,14 +9286,9 @@ COMMAND_PROTOTYPE(dodoginfo)
 		     "RUSAGE=%d HOSTKEYS=%d DHCPDCONF=%d",
 		     iv_interval, iv_isalive, iv_ntpdrift, iv_cvsup,
 		     iv_rusage, iv_hkeys, iv_dhcpdconf);
-	if (vers >= 29) {
-	        int rootpswdinterval = 0;
-#ifdef DYNAMICROOTPASSWORDS
-	        rootpswdinterval = 3600;
-#endif
+	if (vers >= 29)
 		OUTPUT(bp, sizeof(buf) - (bp - buf), " SETROOTPSWD=%d\n",
-		       rootpswdinterval);
-	}
+		       iv_rootpswd);
 	else
 		OUTPUT(bp, sizeof(buf) - (bp - buf), "\n");
 

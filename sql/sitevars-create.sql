@@ -42,6 +42,7 @@ INSERT INTO sitevariables VALUES ('plab/setup/vnode_batch_size',NULL,'40','Numbe
 INSERT INTO sitevariables VALUES ('plab/setup/vnode_wait_time','300','960','Number of seconds to wait for a plab node to setup',0);
 INSERT INTO sitevariables VALUES ('watchdog/rusage','30','300','Interval in _seconds_ between node resource usage reports (0==never report)',0);
 INSERT INTO sitevariables VALUES ('watchdog/hostkeys',NULL,'999999','Interval in minutes between host key reports (0=never report, 999999=once only)',0);
+INSERT INTO sitevariables VALUES ('watchdog/rootpswd',NULL,'60','Interval in minutes between forced resets of root password to Emulab-assigned value (0=never reset)',0);
 INSERT INTO sitevariables VALUES ('plab/message',NULL,'','Message to display at the top of the plab_ez page',0);
 INSERT INTO sitevariables VALUES ('node/ssh_pubkey','ssh-rsa AAAAB3NzaC1yc2EAAAABIwAAAIEA5pIVUkDhVdgGUcsUTQgmI/N4AhJba05gGn7/Ja46OorcKH12sbn9uH4XImdXRF16VVPMTytcOUAqsMsQ20cUcGyvXHnmmNANrLO2htCzNUdrbPkx5X63FNujjp7mLgdlnwzh/Zuoxw65DVXeVp3T5+9Ad25O4u9ybYsHFc8RmBM= root@boss.emulab.net','','Boss SSH public key to install on nodes',0);
 INSERT INTO sitevariables VALUES ('web/banner',NULL,'','Message to place in large lettering at top of home page (typically a special message)',0);
