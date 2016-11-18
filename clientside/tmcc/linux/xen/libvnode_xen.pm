@@ -2507,6 +2507,19 @@ sub vnodePreConfigExpNetwork($$$$)
 	TBScriptUnlock();
     }
 
+    #
+    # XXX grab any extra statically configured devices
+    #
+    if (-e "$VMDIR/$vnode_id/extravifs" &&
+	open(XVIF, "<$VMDIR/$vnode_id/extravifs")) {
+	while (<XVIF>) {
+	    chomp;
+	    if ($_ ne "") {
+		$vifstr .= ", $_";
+	    }
+	}
+	close(XVIF);
+    }
     # push out config file line for all interfaces
     # XXX note that we overwrite since a modify might add/sub IFs
     $vifstr .= "]";
