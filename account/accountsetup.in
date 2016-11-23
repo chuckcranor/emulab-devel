@@ -1023,11 +1023,12 @@ sub runBusyLoop($)
 {
     my $command   = shift;
     my $maxtries  = 10;
+    my $stime     = time();
 
     print STDERR "accountsetup: '$command'\n";
 
     if (open(FD, ">>/usr/testbed/log/accountsetup.log")) {
-	my $tstamp = POSIX::strftime("%b %e %H:%M:%S", localtime());
+	my $tstamp = POSIX::strftime("%b %e %H:%M:%S", localtime($stime));
 	print FD "$tstamp: $command\n";
 	close(FD);
     }
@@ -1052,8 +1053,19 @@ sub runBusyLoop($)
 	    }
 	    close(PIPE);
 	    print $output;
-	    return 0
-		if (!$?);
+	    if (!$?) {
+		if ($command =~ /^$PW .*/) {
+		    if (open(FD, ">>/usr/testbed/log/accountsetup.log")) {
+			my $etime = time();
+			my $tstamp = POSIX::strftime("%b %e %H:%M:%S",
+						     localtime($etime));
+			$etime -= $stime;
+			print FD "$tstamp: $PW done in $etime seconds\n";
+			close(FD);
+		    }
+		}
+		return 0
+	    }
 	    if ($output =~ /(group|db) file is busy/m) {
 		print "runBusyLoop; waiting a few seconds before trying again\n";
 		sleep(3);
