@@ -463,11 +463,21 @@ if (!isset($create)) {
     $defaults["profile"]  = (isset($profile) ?
                              $profile->uuid() : $profile_default);
     $defaults["where"]    = $DEFAULT_AGGREGATE;
+    #
+    # If the user is in the same project as the profile, default to that
+    # project, else use the first in the list (which is ordered by last
+    # time the user instantiated in it).
+    #
     if ($this_user && count($projlist)) {
-	list($project, $grouplist) = each($projlist);
+        if (array_key_exists($profile->pid(), $projlist)) {
+            $project = $profile->pid();
+        }
+        else {
+            list($project, $grouplist) = each($projlist);
+            reset($projlist);
+        }
         $defaults["pid"] = $project;
         $defaults["gid"] = $project;
-        reset($projlist);
     }
     else {
         $defaults["pid"] = "";
