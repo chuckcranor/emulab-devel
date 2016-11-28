@@ -66,6 +66,8 @@ $(function ()
 	    disabled:           window.DISABLED,
 	    withpublishing:     window.WITHPUBLISHING,
 	});
+	show_html = aptforms.FormatFormFieldsHorizontal(show_html,
+							{"wide" : true});
 	$('#page-body').html(show_html);
 
 	$('#waitwait_div').html(waitwaitString);

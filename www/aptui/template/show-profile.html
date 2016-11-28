@@ -88,71 +88,69 @@
               col-xs-12'>
     <div class='panel panel-default'>
       <div class='panel-body'>
-	<div class='panel-body'>
-	  <table class='table nospaceafter border-none'>
-	  <tr>
-	    <td>Topology:</td>
-	    <td>
-		  <button class='btn btn-primary btn-xs
-			  type='button'
-			  style='margin-right: 10px;'
-			  id='edit_topo_modal_button'>
-                    Visualize</button>
-		  <button class='btn btn-primary btn-xs'
-			  type='button'
-			  style='margin-right: 10px;'
-			  id='show_source_modal_button'>
-                    Source</button>
-		  <button class='btn btn-primary btn-xs hidden'
-			  type='button'
-			  style='margin-right: 10px;'
-			  id='show_xml_modal_button'>
-                    XML</button>
-	    </td>
-	  </tr>
-	  <tr>
-	    <td>Description:</td>
-	    <td>
-	      <div style='border: solid #000 1px;'>
-		<div id='profile_description'
-		     style='padding-left: 2px; padding-right: 2px;'>
+	<form id="profile-form" class='form-horizontal' role='form'
+	      data-format="wide">
+	  <fieldset>
+	    <div class="form-group">
+	      <div class='format-me'
+		   data-key='profile_rspec' data-label='Topology'>
+		<div class='row'>
+                  <div class='col-xs-12'>
+		    <button class='btn btn-primary btn-xs'
+			    type='button'
+			    style='margin-right: 10px;'
+			    id='edit_topo_modal_button'>
+                      Visualize</button>
+		    <button class='btn btn-primary btn-xs'
+			    type='button'
+			    style='margin-right: 10px;'
+			    id='show_source_modal_button'>
+                      Source</button>
+		    <button class='btn btn-primary btn-xs hidden'
+			    type='button'
+			    style='margin-right: 10px;'
+			    id='show_xml_modal_button'>
+                      XML</button>
+		  </div>
 		</div>
 	      </div>
-	    </td>
-	  </tr>
-	  <tr>
-	    <td>Instructions:</td>
-	    <td>
-	      <div style='border: solid #000 1px;'>
-		<div id='profile_instructions'
-		     style='padding-left: 2px; padding-right: 2px;'>
-		</div>
+	    </div>
+	    <div class="form-group">
+	      <div class='form-control format-me'
+		   id="profile_description"
+		   data-key='profile_description' data-label='Description'>
 	      </div>
-	    </td>
-	  </tr>
-	  </table>
-	  <% if (!disabled) { %>
-	  <button class='btn btn-primary btn-sm pull-right'
+	    </div>
+	    <div class="form-group">
+	      <div class='form-control format-me'
+		   id="profile_instructions"
+		   data-key='profile_instructions' data-label='Instructions'>
+	      </div>
+	    </div>
+	  </fieldset>
+	</form>
+	<% if (!disabled) { %>
+	  <button class='btn btn-primary btn-xs pull-right'
              id='profile_instantiate_button'
              style='margin-right: 10px;'
              name='create'>Instantiate
 	  </button>
-	  <a class='btn btn-primary btn-sm pull-right'
+	  <a class='btn btn-primary btn-xs pull-right'
              style='margin-right: 10px;'
              type='button'
 	     href='manage_profile.php?action=copy&uuid=<%= version_uuid %>'>
             Copy
 	  </a>
-	  <% } %>
-	  <% if (canedit) { %>
-	  <a class='btn btn-primary btn-sm pull-right'
+	<% } %>
+	<% if (canedit) { %>
+	  <a class='btn btn-primary btn-xs pull-right'
              style='margin-right: 10px;'
              type='button'
 	     href='manage_profile.php?action=edit&uuid=<%= version_uuid %>'>
             Edit
 	  </a>
-	  <% } %>
-	  <% if (!disabled) { %>
+	<% } %>
+	<% if (!disabled) { %>
 	  <span class='pull-right''
 		data-toggle='popover'
 		data-delay='{"hide":1500, "show":250}'
@@ -160,7 +158,7 @@
 		data-content="Share this profile with other users by
 			      sending them a link to instantiate it.
 			      Click for more info.">
-	    <button class='btn btn-info btn-sm'
+	    <button class='btn btn-info btn-xs'
 		    id='profile_share_button'
      		    data-toggle='modal' data-target='#share_profile_modal'
 		    style='margin-right: 10px;'
@@ -168,33 +166,32 @@
               Share
 	    </button>
 	  </span>
-	  <% } %>
-	</div>
+	<% } %>
       </div>
     </div>
-    <textarea name="formfields[profile_rspec]"
-	      id='profile_rspec_textarea'
-              class='form-control hidden'
-              type='textarea'
-	      data-key='profile_rspec'
-	      rows=5><%- fields.profile_rspec %></textarea>
-    <textarea name="formfields[profile_script]"
-	      id='profile_script_textarea'
-              class='form-control hidden'
-              type='textarea'
-	      data-key='profile_script'
-	      rows=5><%- fields.profile_script %></textarea>
   </div>
-  <!-- place to hang the modals  -->
-  <div id='showtopomodal_div'></div>
-  <div id='editmodal_div'></div>
-  <div id='waitwait_div'></div>
-  <div id='imaging_div'></div>
-  <div id='renderer_div'></div>
-  <div id='oops_div'></div>
-  <div id='guest_div'></div>
-  <div id='publish_div'></div>
-  <div id='instantiate_div'></div>
-  <div id='rspectext_div'></div>
-  <div id='share_div'>
+  <textarea name="formfields[profile_rspec]"
+	    id='profile_rspec_textarea'
+            class='form-control hidden'
+            type='textarea'
+	    data-key='profile_rspec'
+	    rows=5><%- fields.profile_rspec %></textarea>
+  <textarea name="formfields[profile_script]"
+	    id='profile_script_textarea'
+            class='form-control hidden'
+            type='textarea'
+	    data-key='profile_script'
+	    rows=5><%- fields.profile_script %></textarea>
 </div>
+<!-- place to hang the modals  -->
+<div id='showtopomodal_div'></div>
+<div id='editmodal_div'></div>
+<div id='waitwait_div'></div>
+<div id='imaging_div'></div>
+<div id='renderer_div'></div>
+<div id='oops_div'></div>
+<div id='guest_div'></div>
+<div id='publish_div'></div>
+<div id='instantiate_div'></div>
+<div id='rspectext_div'></div>
+<div id='share_div'>

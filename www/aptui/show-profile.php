@@ -149,6 +149,7 @@ echo "<script src='js/lib/codemirror-min.js'></script>\n";
 REQUIRE_UNDERSCORE();
 REQUIRE_SUP();
 REQUIRE_MOMENT();
+REQUIRE_APTFORMS();
 REQUIRE_MARKED();
 SPITREQUIRE("js/show-profile.js",
             "<script src='js/lib/jquery-ui.js'></script>\n".
