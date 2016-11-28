@@ -190,25 +190,36 @@ sub DoReserve()
 	$checkonly = 1;
     }
     usage()
-	if (! (defined($project) && defined($count) && defined($type) &&
-	       defined($start) && defined($end)));
-
-    if ($count !~ /^\d+$/) {
+	if (!defined($project));
+    
+    if (defined($update)) {
+	usage()
+	    if (! (defined($count) || defined($start) || defined($end)));
+    }
+    else {
+	usage()
+	    if (! (defined($count) && defined($type) &&
+		   defined($start) && defined($end)));
+	
+	if ($type !~ /^[-\w]+$/) {
+	    fatal("Type is not a string");
+	}
+    }
+    if (defined($count) && $count !~ /^\d+$/) {
 	fatal("Count is not an integer");
     }
-    if ($type !~ /^[-\w]+$/) {
-	fatal("Type is not a string");
+    if (defined($start) &&
+	!($start =~ /^\d+$/ || str2time($start))) {
+	fatal("Start is not a unix timestamp or datetime");
     }
-    if (! ($start =~ /^\d+$/ || str2time($start))) {
-	fatal("Start is not a datetime");
+    if (defined($end) &&
+	!($end =~ /^\d+$/ || str2time($end))) {
+	fatal("End is not a unix timestamp or datetime");
     }
-    if (! ($end =~ /^\d+$/ || str2time($end))) {
-	fatal("End is not a datetime");
-    }
-    $rpcargs{"start"} = TBDateStringGMT($start);
-    $rpcargs{"end"}   = TBDateStringGMT($end);
-    $rpcargs{"count"} = $count;
-    $rpcargs{"type"}  = $type;
+    $rpcargs{"start"} = TBDateStringGMT($start) if (defined($start));
+    $rpcargs{"end"}   = TBDateStringGMT($end) if (defined($end));
+    $rpcargs{"count"} = $count if (defined($count));
+    $rpcargs{"type"}  = $type if (!defined($update));
     $rpcargs{"check"} = $checkonly;
     $rpcargs{"reason"}= $reason if (defined($reason));
     $rpcargs{"update"}= $update if (defined($update));

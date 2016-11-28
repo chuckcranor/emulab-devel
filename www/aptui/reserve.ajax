@@ -115,8 +115,8 @@ function Do_Reserve()
     #
     # Update mode; we get the idx of the current reservation.
     #
-    if (isset($ajax_args["idx"])) {
-        $idx = $ajax_args["idx"];
+    if (isset($formfields["idx"])) {
+        $idx = $formfields["idx"];
         if (!TBvalid_integer($idx)) {
             $errors["error"] = "Bad index for reservation update";
         }
@@ -141,7 +141,7 @@ function Do_Reserve()
     # make sure it is allowed.
     #
     $args = "-t " . escapeshellarg($formfields["type"]) . " ".
-          (defined($idx) ? "-u $idx " : "") .
+          (isset($idx) ? "-u $idx " : "") .
           "-s $start -e $end $pid " . $formfields["count"];
 
     #
@@ -415,6 +415,8 @@ function Do_GetReservation()
     $blob["end"]         = $details['end'];
     $blob["notes"]       = $details['notes'];
     $blob["cluster"]     = $aggregate->urn();
+    # For display.
+    $blob["cluster_id"]  = $ajax_args["cluster"];
     $webtask->Delete();
     SPITAJAX_RESPONSE($blob);
 }

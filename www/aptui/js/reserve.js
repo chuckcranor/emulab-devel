@@ -54,7 +54,7 @@ $(function ()
 	    projects:           projlist,
 	    amlist:		amlist,
 	    isadmin:		isadmin,
-	    editing:		false,
+	    editing:		editing,
 	});
 	html = aptforms.FormatFormFieldsHorizontal(html);
 	$('#main-body').html(html);
@@ -265,10 +265,11 @@ $(function ()
 	    }
 	    // Messy.
 	    var details = json.value;
+	    $('#reserve-request-form [name=idx]').val(details.idx);
 	    $('#reserve-request-form [name=pid]').val(details.pid);
 	    $('#reserve-request-form [name=count]').val(details.count);
 	    $('#reserve-request-form [name=cluster]').val(details.cluster);
-	    HandleClusterChange(details.cluster);
+	    $('#reserve-request-form [name=cluster_id]').val(details.cluster_id);
 	    $('#reserve-request-form [name=type]').val(details.type);
 	    $('#reserve-request-form [name=reason]')
 		.val(_.escape(details.notes));
