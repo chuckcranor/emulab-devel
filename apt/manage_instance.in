@@ -3600,7 +3600,7 @@ sub DoUtilization()
 	    $errmsg = "Could not get utilization from some slivers";
 	    if ($agg->webtask()->output()) {
 		$errmsg .= ": " . $agg->webtask()->output();
-		$errcode = $agg->webtask()->output();
+		$errcode = $agg->webtask()->exitcode();
 	    }
 	    goto bad;
 	}
