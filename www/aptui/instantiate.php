@@ -57,7 +57,6 @@ $optargs = OptionalPageArguments("create",        PAGEARG_STRING,
 				 "project",       PAGEARG_PROJECT,
 				 "asguest",       PAGEARG_BOOLEAN,
 				 "default",       PAGEARG_STRING,
-				 "classic",       PAGEARG_STRING,
 				 "from",          PAGEARG_STRING,
 				 "formfields",    PAGEARG_ARRAY);
 
@@ -84,29 +83,6 @@ if ($ISAPT && !$this_user) {
 $skipfirststep = 0;
 if (isset($from) && ($from == "manage-profile" || $from == "show-profile")) {
     $skipfirststep = 1;
-}
-
-#
-# Alternate version of the picker, temporary.
-#
-if (isset($classic)) {
-    #
-    # This file is the default picker.
-    #
-    if ($classic == "true") {
-        setcookie("picker", "classic", 0, "/", $TBAUTHDOMAIN, 0);
-        $classic = 1;
-    }
-    else {
-        setcookie("picker", "new", 0, "/", $TBAUTHDOMAIN, 0);
-        $classic = 0;
-    }
-}
-elseif (isset($_COOKIE['picker'])) {
-    $classic = ($_COOKIE['picker'] == "classic" ? 1 : 0);
-}
-else {
-    $classic = 0;
 }
 
 if ($this_user) {
@@ -342,7 +318,7 @@ function SPITFORM($formfields, $newuser, $errors)
 {
     global $TBBASE, $APTMAIL, $ISAPT, $ISCLOUD, $ISPNET, $PORTAL_NAME;
     global $profile_array, $this_user, $profilename, $profile, $am_array;
-    global $projlist, $skipfirststep, $classic, $TBMAINSITE;
+    global $projlist, $skipfirststep, $TBMAINSITE;
     
     $amlist     = array();
     $fedlist    = array();
@@ -367,9 +343,7 @@ function SPITFORM($formfields, $newuser, $errors)
     }
     SPITHEADER(1);
 
-    if (!$classic) {
-        echo "<link rel='stylesheet' href='css/picker.css'>\n";
-    }
+    echo "<link rel='stylesheet' href='css/picker.css'>\n";
 
     # I think this will take care of XSS prevention?
     echo "<script type='text/plain' id='form-json'>\n";
@@ -465,7 +439,6 @@ function SPITFORM($formfields, $newuser, $errors)
     echo "    window.DOCONSTRAINTS = 1;\n";
     echo "    window.SKIPFIRSTSTEP = " . ($skipfirststep ? "true" : "false") . ";\n";
     echo "    window.PORTAL_NAME = '$PORTAL_NAME';\n";
-    echo "    window.CLASSIC = " . ($classic ? "true" : "false") . ";\n";
     echo "</script>\n";
     echo "<script src='js/lib/jquery-2.0.3.min.js'></script>\n";
 
@@ -479,7 +452,7 @@ function SPITFORM($formfields, $newuser, $errors)
     REQUIRE_MARKED();
     REQUIRE_JACKS();
     REQUIRE_JQUERY_STEPS();
-    SPITREQUIRE("js/instantiate" . ($classic ? "" : "-new") . ".js");
+    SPITREQUIRE("js/instantiate-new.js");
 }
 
 if (!isset($create)) {

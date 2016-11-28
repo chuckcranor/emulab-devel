@@ -131,39 +131,6 @@ $(function ()
 	if (projlist)
 	    UpdateGroupSelector();
 
-	// TEMPORARY BUTTON FOR CLASSIC PICKER
-	// To be removed when the new picker becomes default
-	
-	// Quick and dirty
-	var btntext = 'Use Classic Picker';
-	var btnhtml = window.location.href;
-	var whichchar = (btnhtml.indexOf('?') > -1) ? '&' : '?';
-
-	if (window.CLASSIC === undefined || window.CLASSIC) {
-	    btntext = 'Try the New Picker!';
-	    btnhtml = btnhtml.replace('classic=true','');
-	    btnhtml += whichchar + 'classic=false';
-	}
-	else {
-	    btnhtml = btnhtml.replace('classic=false','');
-	    btnhtml += whichchar + 'classic=true';
-	}
-	btnhtml = btnhtml.replace('&&','&').replace('?&','?');
-	btnhtml.replace('#','');
-
-	$('#quickvm_topomodal #showtopo_dialog .modal-header').append('<a '+
-		' href="'+btnhtml+'"'+
-		'>'+
-		'<button'+
-		' id="whichPicker"'+
-		' class="btn btn-info btn-sm"'+
-		' style="position: absolute;top:14px;right:40px"'+
-		'>'+btntext+'</button>'+
-		'</a>');
-
-	// END TEMPORARY BUTTON
-
-
 	// Check if the browser has cookies stating what they previoiusly had minimized.
         CookieCollapse('#profile_name > span', 'pp_collpased');
         _.defer(function () {
