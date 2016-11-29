@@ -469,7 +469,8 @@ if (!isset($create)) {
     # time the user instantiated in it).
     #
     if ($this_user && count($projlist)) {
-        if (array_key_exists($profile->pid(), $projlist)) {
+        if (isset($profile) &&
+            array_key_exists($profile->pid(), $projlist)) {
             $project = $profile->pid();
         }
         else {
