@@ -92,7 +92,8 @@ $(function () {
 				" data-html='true' " +
 				" data-delay='{\"hide\":1000}' " +
 				" data-content='" + item.dataset['help'] + "'>"+
-				"<span class='glyphicon " +
+				"<span style='margin-bottom: 4px;' " +
+				"  class='glyphicon " +
 				"      glyphicon-question-sign'>" +
 				" </span></a>";
 			}
