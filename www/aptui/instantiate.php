@@ -124,7 +124,6 @@ else {
           $profile_default) = explode(',', $portal_default_profile);
 }
 $profile_array  = array();
-$am_array       = Instance::DefaultAggregateList();
 
 #
 # if using the super secret URL, make sure the profile exists, and
@@ -317,12 +316,9 @@ $profile_array = $tmp_array;
 function SPITFORM($formfields, $newuser, $errors)
 {
     global $TBBASE, $APTMAIL, $ISAPT, $ISCLOUD, $ISPNET, $PORTAL_NAME;
-    global $profile_array, $this_user, $profilename, $profile, $am_array;
+    global $profile_array, $this_user, $profilename, $profile;
     global $projlist, $skipfirststep, $TBMAINSITE;
     
-    $amlist     = array();
-    $fedlist    = array();
-    $status     = array();
     $showabout  = ($ISAPT && !$this_user ? 1 : 0);
     $registered = (isset($this_user) ? "true" : "false");
     # We use webonly to mark users that have no project membership
@@ -380,42 +376,7 @@ function SPITFORM($formfields, $newuser, $errors)
     # And AM list if that is allowed.
     #
     if (isset($this_user) && !$this_user->webonly() && !$ISAPT && !$ISPNET) {
-	$am_options = "";
-        while (list($ignore, $aggregate) = each($am_array)) {
-            $urn = $aggregate->urn();
-            $am  = $aggregate->name();
-	    $amlist[$urn] = $am;
-            #
-            # We need to mark federated sites for the cluster dropdown.
-            #
-            if ($aggregate->isfederate()) {
-                $fedlist[] = "'" . $aggregate->name() . "'";
-            }
-            #
-            # generate the status blob.
-            #
-            if ($aggregate->status()) {
-                $status[$urn] = array(
-                    "rawPCsAvailable"  => $aggregate->pfree(),
-                    "rawPCsTotal"      => $aggregate->pcount(),
-                    "VMsAvailable"     => "0",
-                    "VMsTotal"         => $aggregate->vcount(),
-                    "health"           => ($aggregate->status() == "up" ? 100 :
-                                           ($aggregate->status() == "down" ?
-                                            0 : 50)),
-                    "status"           => ($aggregate->status() != "down" ?
-                                           "SUCCESS" : "FAILED"));
-            }
-        }
-	echo "<script type='text/plain' id='amlist-json'>\n";
-	echo htmlentities(json_encode($amlist));
-	echo "</script>\n";
-	echo "<script type='text/plain' id='amstatus-json'>\n";
-	echo htmlentities(json_encode($status));
-	echo "</script>\n";
-        echo "<script type='text/javascript'>\n";
-        echo "    window.FEDERATEDLIST  = [". implode(",", $fedlist) . "];\n";
-        echo "</script>\n";
+        SpitAggregateStatus();
     }
     SpitOopsModal("oops");
     echo "<script type='text/javascript'>\n";

@@ -23,6 +23,10 @@
 #
 #
 
+# Set this variable when fetching health status of portal
+# aggregates instead of using them.
+$PORTAL_HEALTH = 0;
+
 #
 # This needs to go into the DB.
 #
@@ -184,19 +188,24 @@ class Aggregate
     # Return the list of allowed aggregates based on the portal in use.
     #
     function DefaultAggregateList() {
-        global $PORTAL_GENESIS;
+        global $PORTAL_GENESIS, $PORTAL_HEALTH;
+	$genesis = $PORTAL_GENESIS;
+	if ($PORTAL_HEALTH)
+	{
+	  $genesis = "cloudlab";
+	}
         $am_array = array();
 
         $query_result =
             DBQueryFatal("select urn,name,adminonly from apt_aggregates ".
                          "where disabled=0 and ".
-                         "      FIND_IN_SET('$PORTAL_GENESIS', portals)");
+                         "      FIND_IN_SET('$genesis', portals)");
         
 	while ($row = mysql_fetch_array($query_result)) {
             $urn       = $row["urn"];
             $adminonly = $row["adminonly"];
 
-            if ($adminonly && !(ISADMIN() || STUDLY())) {
+            if ($adminonly && !(ISADMIN() || STUDLY() || $PORTAL_HEALTH)) {
                 continue;
             }
 	    if (! ($aggregate = Aggregate::Lookup($urn))) {

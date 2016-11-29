@@ -900,4 +900,51 @@ class ExtensionInfo
     }
 }
 
+# $amlist, $fedlist, and $status are all output arrays
+function CalculateAggregateStatus(&$amlist, &$fedlist, &$status) {
+    $am_array = Instance::DefaultAggregateList();
+    while (list($ignore, $aggregate) = each($am_array)) {
+        $urn = $aggregate->urn();
+        $am  = $aggregate->name();
+        $amlist[$urn] = $am;
+        #
+        # We need to mark federated sites for the cluster dropdown.
+        #
+        if ($aggregate->isfederate()) {
+            $fedlist[] = "'" . $aggregate->name() . "'";
+        }
+        #
+        # generate the status blob.
+        #
+        if ($aggregate->status()) {
+            $status[$urn] = array(
+                "rawPCsAvailable"  => $aggregate->pfree(),
+                "rawPCsTotal"      => $aggregate->pcount(),
+                "VMsAvailable"     => "0",
+                "VMsTotal"         => $aggregate->vcount(),
+                "health"           => ($aggregate->status() == "up" ? 100 :
+                                       ($aggregate->status() == "down" ?
+                                        0 : 50)),
+                "status"           => ($aggregate->status() != "down" ?
+                                       "SUCCESS" : "FAILED"));
+        }
+    }
+}
+
+function SpitAggregateStatus() {
+    $amlist     = array();
+    $fedlist    = array();
+    $status     = array();
+    CalculateAggregateStatus($amlist, $fedlist, $status);
+    echo "<script type='text/plain' id='amlist-json'>\n";
+    echo htmlentities(json_encode($amlist));
+    echo "</script>\n";
+    echo "<script type='text/plain' id='amstatus-json'>\n";
+    echo htmlentities(json_encode($status));
+    echo "</script>\n";
+    echo "<script type='text/javascript'>\n";
+    echo "    window.FEDERATEDLIST  = [". implode(",", $fedlist) . "];\n";
+    echo "</script>\n";
+}
+
 ?>

@@ -1919,6 +1919,19 @@ function Do_MaxExtension()
     SPITAJAX_RESPONSE($blob);
 }
 
+# Fetch overall cluster aggregate health status.
+# Can be done without logging in (for front page status).
+function Do_GetHealthStatus()
+{
+    global $ajax_args, $PORTAL_HEALTH;
+    $amlist     = array();
+    $fedlist    = array();
+    $status     = array();
+    $PORTAL_HEALTH = 1;
+    CalculateAggregateStatus($amlist, $fedlist, $status);
+    SPITAJAX_RESPONSE($status);
+}
+
 # Local Variables:
 # mode:php
 # End:
