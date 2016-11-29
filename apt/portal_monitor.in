@@ -187,23 +187,33 @@ sub CheckAggregates()
 
     my $markError = sub($$) {
 	my ($aggregate, $error) = @_;
-	$aggregate->last_error($error);
 	print STDERR $error . "\n";
+	
 	#
 	# Decide if aggregate should be marked as down. 
 	#
+	my $status;
+	
 	if (!defined($aggregate->last_contact())) {
-	    $aggregate->status("down");
-	    return;
-	}
-	my $last_attempt = str2time($aggregate->last_attempt());
-	my $last_contact = str2time($aggregate->last_contact());
-
-	if ($last_attempt - $last_contact < 600) {
-	    $aggregate->status("unknown");
+	    $status = "down";
 	}
 	else {
-	    $aggregate->status("down");
+	    my $last_attempt = str2time($aggregate->last_attempt());
+	    my $last_contact = str2time($aggregate->last_contact());
+
+	    if ($last_attempt - $last_contact < 600) {
+		$status = "unknown";
+	    }
+	    else {
+		$status = "down";
+	    }
+	}
+	if ($impotent) {
+	    print STDERR "Would mark $aggregate as $status\n";
+	}
+	else {
+	    $aggregate->status($status);
+	    $aggregate->last_error($error);
 	}
     };
 
@@ -231,7 +241,8 @@ sub CheckAggregates()
 	#
 	# Mark as trying to contact.
 	#
-	$aggregate->last_attempt(time());
+	$aggregate->last_attempt(time())
+	    if (!$impotent);
 
 	#
 	# Do a quick test to see if we can even get there.
@@ -289,13 +300,20 @@ sub CheckAggregates()
 	# Mark that we could get the advertisement. Also mark it as up.
 	# Not sure about when to mark it down though.
 	#
-	$aggregate->last_success($aggregate->last_attempt());
-	$aggregate->status("up");
-	$aggregate->last_error("");
+	if ($impotent) {
+	    print "Would mark $aggregate as up\n";
+	}
+	else {
+	    $aggregate->last_success($aggregate->last_attempt());
+	    $aggregate->status("up");
+	    $aggregate->last_error("");
+	}
 	
 	my $pcount = 0;
 	my $pavail = 0;
 	my $vcount = 0;
+	my %type_count = ();
+	my %type_avail = ();
 
 	foreach my $ref (GeniXML::FindNodes("n:node",
 					    $manifest)->get_nodelist()) {
@@ -311,6 +329,38 @@ sub CheckAggregates()
 			$pcount++;
 			$pavail++
 			    if (GeniXML::IsAvailable($ref));
+
+			foreach my $htype (FindNodes("n:hardware_type",
+						     $ref)->get_nodelist()) {
+			    my $hname = GeniXML::GetText("name", $htype);
+			    next
+				if (!defined($hname) || $hname eq "" || 
+				    $hname eq "pcvm" || $hname eq "pc" ||
+				    $hname =~ /^delay/ ||
+				    # Protect DB.
+				    $hname !~ /^[-\w]+$/);
+			    
+			    my $ntype =
+				GeniXML::FindNodesNS("n:node_type",
+					     $htype,
+					     $GeniXML::EMULAB_NS)->pop();
+			    next
+				if (!$ntype);
+
+			    my $slots = GeniXML::GetText("type_slots", $ntype);
+			    next
+				if (!defined($slots) || $slots !~ /^\d+$/);
+			    next
+				if ($slots > 1);
+
+			    if (!exists($type_count{$hname})) {
+				$type_count{$hname} = 0;
+				$type_avail{$hname} = 0;
+			    }
+			    $type_count{$hname} += 1;
+			    $type_avail{$hname} += 1
+				if (GeniXML::IsAvailable($ref));
+			}
 		    }
 		    elsif ($name eq "emulab-xen") {
 			my $exclusive = GeniXML::GetExclusive($ref);
@@ -352,9 +402,23 @@ sub CheckAggregates()
 	    }
 	}
 	print "$nickname: pcount:$pcount, pfree:$pavail, vcount:$vcount\n";
-	$aggregate->pcount($pcount);
-	$aggregate->pfree($pavail);
-	$aggregate->vcount($vcount);
+	foreach my $type (keys(%type_count)) {
+	    my $count = $type_count{$type};
+	    my $avail = $type_avail{$type};
+	    if ($debug || $impotent) {
+		print "$type $count:$avail\n";
+	    }
+	    if (!$impotent) {
+		DBQueryWarn("replace into apt_aggregate_nodetypes set ".
+			    " urn='$urn',type='$type',".
+			    " count='$count',free='$avail'");
+	    }
+	}
+	if (!$impotent) {
+	    $aggregate->pcount($pcount);
+	    $aggregate->pfree($pavail);
+	    $aggregate->vcount($vcount);
+	}
     }
     return 0;
 }

@@ -336,62 +336,44 @@ sub ReportLockdownExpired()
 }
 
 #
-# Gather up aggregate info. At the moment, there is still a lot of
-# Utah specific goings on here. 
+# Update the json files that are used to build the fancy cluster graphs.
 #
 sub UpdateAggregateGraphs()
 {
     my $freeblob = {};
 
     my $query_result =
-	DBQueryWarn("select * from apt_aggregates where noupdate=0");
+	DBQueryWarn("select urn from apt_aggregates where noupdate=0");
 
     return 0
 	if (!$query_result->numrows);
 
-    while (my $row = $query_result->fetchrow_hashref()) {
-	my $urn  = $row->{'urn'};
-	my $url  = $row->{'weburl'} . "/node_usage/freenodes.csv";
-	my $name = $row->{'nickname'};
+    while (my ($urn) = $query_result->fetchrow_array()) {
+	my $aggregate = APT_Aggregate->Lookup($urn);
+	if (!defined($aggregate)) {
+	    print STDERR "Could not lookup aggregate: $urn\n";
+	    next;
+	}
+	my $name = $aggregate->nickname();
 
-	system("$WGET --no-check-certificate ".
-	       "--timeout=30 --waitretry=30 --retry-connrefused ".
-	       "-q -O /tmp/freenodes.csv '$url'");
+	#
+	# Load the nodetype info that the portal_monitor gathers.
+	#
+	my $types_result =
+	    DBQueryWarn("select type,count,free from apt_aggregate_nodetypes ".
+			"where urn='$urn'");
 	next
-	    if ($?);
+	    if (!$types_result || !$types_result->numrows());
 
-	if (-z "/tmp/freenodes.csv") {
-	    print STDERR "Zero length csv file for $urn\n";
-	    next;
+	$freeblob->{$name} = {};
+	while (my ($type,$count,$free) = $types_result->fetchrow_array()) {
+	    $freeblob->{$name}->{$type} =
+	        {"count" => $count, "free" => $free};
 	}
-	if (!open(CSV, "/tmp/freenodes.csv")) {
-	    print STDERR "Could not open csv file for $urn\n";
-	    next;
-	}
-	my $line = <CSV>;
-	if ($line !~ /^Type,Inuse,Free$/) {
-	    print STDERR "Invalid first line in csv file for $urn\n";
-	    close(CSV);
-	    next;
-	}
-	while (<CSV>) {
-	    if ($_ =~ /^([-\w]+),(\d+),(\d+)$/) {
-		my $count = $2 + $3;
-		$freeblob->{$name}->{$1} = {"inuse" => $2, "free" => $3};
-
-		if ($impotent) {
-		    print "$urn: $1, $count, $3\n";
-		}
-		else {
-		    DBQueryWarn("replace into apt_aggregate_nodetypes set ".
-				" urn='$urn',type='$1',".
-				" count='$count',free='$3'");
-		}
-	    }
-	}
-	close(CSV);
     }
-    #print Dumper($freeblob);
+    if ($debug && $oneshot) {
+	print Dumper($freeblob);
+    }
 
     #
     # We are currently operating from two master json files. We make a
@@ -427,8 +409,8 @@ sub UpdateAggregateGraphs()
 			print STDERR "$name: Did not get a count for $type\n";
 			next;
 		    }
-		    my $inuse = $freeblob->{$name}->{$type}->{'inuse'};
-		    my $size  = $freeblob->{$name}->{$type}->{'free'} + $inuse;
+		    my $size  = $freeblob->{$name}->{$type}->{'count'};
+		    my $inuse = $size - $freeblob->{$name}->{$type}->{'free'};
 
 		    $child->{'howfull'} = int($inuse);
 		    $child->{'size'}    = int($size);
@@ -439,7 +421,12 @@ sub UpdateAggregateGraphs()
 		$cluster->{'howfull'} = int($total_size);
 		$cluster->{'size'}    = int($total_size);
 	    }
-	    #print Dumper($obj);
+	    if ($debug || $oneshot) {
+		print Dumper($obj);
+	    }
+	    next
+		if ($impotent);
+	    
 	    #
 	    # Write out new file for web ui.
 	    #
@@ -646,8 +633,7 @@ sub KillStaleDatasets()
 }
 
 if ($oneshot) {
-    KillInstances();
-    KillStaleDatasets();
+    UpdateAggregateGraphs();
     exit(0);
 }
 

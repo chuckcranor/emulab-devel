@@ -144,6 +144,17 @@ sub Refresh($)
 
     $self->{'AGGREGATE'} = $query_result->fetchrow_hashref();
 
+    #
+    # Grab new status row.
+    #
+    $query_result = 
+	DBQueryWarn("select * from apt_aggregate_status where urn=$safe_urn");
+    return -1
+	if (!$query_result);
+
+    if ($query_result->numrows) {
+	$self->{'STATUS'} = $query_result->fetchrow_hashref();
+    }
     return 0;
 }
 
