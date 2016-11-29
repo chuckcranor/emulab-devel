@@ -34,7 +34,8 @@ package GeniAggregate;
 #
 use strict;
 use Exporter;
-use vars qw(@ISA @EXPORT @EXPORT_OK $ACTION_FLAGS_SYNCVLANS);
+use vars qw(@ISA @EXPORT @EXPORT_OK
+	    $ACTION_FLAGS_SYNCVLANS $ACTION_FLAGS_NOEVENTSTART);
 
 @ISA    = qw(Exporter);
 @EXPORT = qw();
@@ -98,9 +99,10 @@ my %aggregates     = ();
 BEGIN { use GeniUtil; GeniUtil::AddCache(\%aggregates); }
 
 # Action() flags.
-$ACTION_FLAGS_SYNCVLANS	= 0x01;
+$ACTION_FLAGS_SYNCVLANS	        = 0x01;
+$ACTION_FLAGS_NOEVENTSTART	= 0x02;
 
-@EXPORT_OK = qw($ACTION_FLAGS_SYNCVLANS);
+@EXPORT_OK = qw($ACTION_FLAGS_SYNCVLANS $ACTION_FLAGS_NOEVENTSTART);
 
 #
 # Lookup by URN, idx, or uuid.
@@ -1656,7 +1658,8 @@ sub Action($$$;$)
 	    return -1;
 	}
     }
-    elsif ($action eq "start" || $action eq "restart") {
+    elsif (($action eq "start" || $action eq "restart") &&
+	   ($flags & $ACTION_FLAGS_NOEVENTSTART) == 0) {
 	$self->ComputeState();
 	
 	if ($self->status() eq "ready") {

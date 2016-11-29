@@ -1008,20 +1008,26 @@ sub Provision($;$)
 	    print STDERR "Could not get pnode object for $node\n";
 	    return -1;
 	}
+	# This would typically happen in libvtop, but we call the mapper
+	# in a way that causes it to not happen. Do not do this after
+	# initial provisioning.
+	$node->ResetStartStatus()
+	    if (!$node->genisliver_idx());
 
 	# Mark
 	$node->ModifyReservation({"genisliver_idx" => $self->idx()});
-	# This would typically happen in libvtop, but we call the mapper
-	# in a way that causes it to not happen.
-	$node->ResetStartStatus();
 
 	my $subtype = GeniXML::GetVirtualizationSubtype($self->rspec());
 	if (defined($subtype)) {
 	    if (!$pnode->sharing_mode()) {
-		$pnode->ModifyReservation({"genisliver_idx" => $self->idx()});
 		# This would typically happen in libvtop, but we call the mapper
-		# in a way that causes it to not happen.
-		$node->ResetStartStatus();
+		# in a way that causes it to not happen. Do not do this after
+		# initial provisioning.
+		$pnode->ResetStartStatus()
+		    if (!$pnode->genisliver_idx());
+
+		# Mark
+		$pnode->ModifyReservation({"genisliver_idx" => $self->idx()});
 	    }
 	}
     }
@@ -1030,12 +1036,17 @@ sub Provision($;$)
 	# For a "raw" node, there is no vnode, so this is the pnode
 	# we need to mark for tmcd.
 	#
+	# This would typically happen in libvtop, but we call the mapper
+	# in a way that causes it to not happen. Do not do this after
+	# initial provisioning.
+	#
+	$node->ResetStartStatus()
+	    if (!$node->genisliver_idx());
+
+	# Mark
 	if ($node->ModifyReservation({"genisliver_idx" => $self->idx()})) {
 	    return -1;
 	}
-	# This would typically happen in libvtop, but we call the mapper
-	# in a way that causes it to not happen.
-	$node->ResetStartStatus();
     }
     return 0;
 }

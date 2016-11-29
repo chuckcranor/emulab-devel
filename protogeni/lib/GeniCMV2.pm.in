@@ -2004,7 +2004,8 @@ sub AddNodes($)
     $mypid = $PID;
     
     if ($aggregate->Start($API_VERSION,
-			  $GeniAggregate::ACTION_FLAGS_SYNCVLANS) != 0) {
+			  $GeniAggregate::ACTION_FLAGS_SYNCVLANS|
+			  $GeniAggregate::ACTION_FLAGS_NOEVENTSTART) != 0) {
 	if ($PID == $mypid) {
 	    $slice->UnLock();
 	    print STDERR "Could not start sliver.\n";
@@ -2189,7 +2190,8 @@ sub DeleteNodes($)
     $mypid = $PID;
     
     if ($aggregate->Start($API_VERSION,
-			  $GeniAggregate::ACTION_FLAGS_SYNCVLANS) != 0) {
+			  $GeniAggregate::ACTION_FLAGS_SYNCVLANS|
+			  $GeniAggregate::ACTION_FLAGS_NOEVENTSTART) != 0) {
 	if ($PID == $mypid) {
 	    $slice->UnLock();
 	    print STDERR "Could not start sliver.\n";
