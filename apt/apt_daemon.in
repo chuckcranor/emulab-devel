@@ -57,11 +57,12 @@ my $TBLOGS           = "@TBLOGSEMAIL@";
 my $MAINSITE         = @TBMAINSITE@;
 my $LOGFILE          = "$TB/log/apt_daemon.log";
 my $MANAGEINSTANCE   = "$TB/bin/manage_instance";
+my $MANAGEDATASET    = "$TB/bin/manage_dataset";
 my $PROTOUSER	     = "elabman";
 my $SUDO	     = "/usr/local/bin/sudo";
 my $WGET             = "/usr/local/bin/wget";
 my $SLEEP_INTERVAL   = 300;
-my $REPORT_INTERVAL  = 24 * 3600;
+my $DAILY_INTERVAL   = 24 * 3600;
 my $OPENSTACK_INTERVAL = 600;
 
 # un-taint path
@@ -107,6 +108,7 @@ use emutil;
 use libEmulab;
 use GeniResponse;
 use APT_Instance;
+use APT_Dataset;
 use POSIX qw(strftime ceil);
 
 if (!$oneshot) {
@@ -139,15 +141,22 @@ $SIG{HUP} = \&handler
     if (! ($debug || $oneshot));
 
 #
-# Kill failed instances.
+# Kill instances that need to be killed. 
 #
-sub KillFailedInstances()
+sub KillInstances()
 {
+    #
+    # Do not bother to try and terminate a locked slice. It will just fail.
+    #
     my $query_result =
-	DBQueryWarn("select uuid,status from apt_instances ".
-		    "where status='failed' and ".
-		    "      (UNIX_TIMESTAMP(now()) - ".
-		    "       UNIX_TIMESTAMP(created) > 7200)");
+	DBQueryWarn("select a.uuid,a.status from apt_instances as a ".
+		    "left join geni.geni_slices as s on s.uuid=a.slice_uuid ".
+		    "where (a.canceled!=0 or ".
+		    "       (a.status='failed' and ".
+		    "        (UNIX_TIMESTAMP(now()) - ".
+		    "         UNIX_TIMESTAMP(a.created) > 7200))) and ".
+		    # Not locked or corresponding slice does not exist.
+		    "      (s.locked is null or s.idx is null)");
     return
 	if (!$query_result);
 
@@ -164,8 +173,7 @@ sub KillFailedInstances()
 	# we are going to call manage_instance to do the termination.
 	# So, manage_instance might collide with the sa_daemon which
 	# locks the underlying slice, but if that happens we will just
-	# try again after a short wait. If it still fails, then
-	# something is wrong and we will notify.
+	# try again after a short wait. 
 	#
 	if ($impotent) {
 	    print STDERR "Would try to terminate $instance\n";
@@ -570,8 +578,76 @@ sub GatherOpenstackUtilization()
     }
 }
 
+#
+# Kill off stale datasets (that were deleted at the cluster). They are
+# gone, no point in keeping them around.
+#
+sub KillStaleDatasets()
+{
+    my $query_result =
+	DBQueryWarn("select uuid,expires from apt_datasets as d ".
+		    "where (type='stdataset' or type='ltdataset') and ".
+		    "      (UNIX_TIMESTAMP(now()) > ".
+		    "       UNIX_TIMESTAMP(expires))");
+    return
+	if (!$query_result);
+
+    while (my ($uuid,$expires) = $query_result->fetchrow_array()) {
+	my $dataset = APT_Dataset->Lookup($uuid);
+	if (!defined($dataset)) {
+	    print STDERR "No such dataset $uuid\n";
+	    next;
+	}
+	my $pid = $dataset->pid();
+	my $id  = $dataset->dataset_id();
+	my $agg = $dataset->aggregate_urn();
+	print STDERR "Dataset $pid/$id at $agg expired at $expires. ".
+	    "Asking for new info ...\n";
+
+	#
+	# Try to refresh the dataset. We might get back a new expiration,
+	# or we might get back a search failure. If we do get back a search
+	# failure, kill the local record for it.
+	#
+	my $output = emutil::ExecQuiet("$SUDO -u $PROTOUSER ".
+				       "$MANAGEDATASET -d refresh $uuid");
+	#
+	# No error means it is still there. Did the expiration change?
+	#
+	if (!$?) {
+	    $dataset->Refresh();
+	    if ($dataset->IsExpired()) {
+		# Still expired, not sure what to do here. 
+		print STDERR "Dataset is still expired after refresh?\n";
+	    }
+	    else {
+		print STDERR "Dataset is no longer expired after refresh.\n";
+	    }
+	    next;
+	}
+	if ($?) {
+	    print STDERR $output;
+	}
+	# Do nothing here, probably an RPC error.
+	next
+	    if ($? >> 8 != GENIRESPONSE_SEARCHFAILED);
+	    
+	if ($impotent) {
+	    print STDERR "Would try to delete $dataset\n";
+	    next;
+	}
+	print STDERR "Trying to delete $dataset\n";
+	$output = emutil::ExecQuiet("$SUDO -u $PROTOUSER ".
+				    "$MANAGEDATASET -d delete $uuid");
+	if ($?) {
+	    print STDERR $output;
+	}
+    }
+}
+
 if ($oneshot) {
-    UpdateAggregateGraphs();
+    KillInstances();
+    KillStaleDatasets();
     exit(0);
 }
 
@@ -594,7 +670,7 @@ while (1) {
     print "Running at ".
 	POSIX::strftime("20%y-%m-%d %H:%M:%S", localtime()) . "\n";
 
-    KillFailedInstances();
+    KillInstances();
     FixFailedImaging();
     ExpireInstances();
     if ($MAINSITE) {
@@ -602,15 +678,10 @@ while (1) {
     }
     PushUpdates();
 
-    if ($reportcounter >= $REPORT_INTERVAL) {
+    if ($reportcounter >= $DAILY_INTERVAL) {
 	ReportLockdownExpired();
 	$reportcounter = 0;
     }
-    if (0 && $reportcounter >= $OPENSTACK_INTERVAL) {
-	GatherOpenstackUtilization();
-	$reportcounter = 0;
-    }
-    
     exit(0)
 	if ($oneshot);
     

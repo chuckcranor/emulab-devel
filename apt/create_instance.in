@@ -930,9 +930,12 @@ print "$slice_urn\n";
 # are going to do a terminate.
 #
 if ($instance->IsCanceled()) {
-    $instance->SetStatus("canceled");
     $slice->UnLock();
 
+    #
+    # If someone gets the lock, this will fail. But the apt daemon will
+    # see the canceled flag too and fire off a termination. 
+    #
     system("$MANAGEINSTANCE -t $webtask_id terminate $quickvm_uuid");
     exit(0);
 }
