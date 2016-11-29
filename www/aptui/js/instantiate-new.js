@@ -1110,8 +1110,16 @@ $(function ()
 	    selected_version = profile_blob.version;
 	    amdefault        = profile_blob.amdefault;
 
+	    /*
+	     * Change the project; if the user's project list includes
+	     * the project the profile belongs to, that becomes the default.
+	     */
+	    if (projlist && _.has(projlist, profile_blob.pid)) {
+		$('#project_selector #profile_pid').val(profile_blob.pid);
+		UpdateGroupSelector();
+	    }
 	    CreateAggregateSelectors(selected_rspec);
-	    
+    
 	    // Set the default aggregate.
 	    if ($('#profile_where').length) {
 		// Deselect current option.

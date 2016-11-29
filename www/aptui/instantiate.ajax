@@ -64,6 +64,7 @@ function Do_GetProfile()
     #
     SPITAJAX_RESPONSE(array('rspec'       => $profile->rspec(),
 			    'name'        => $profile->name(),
+                            'pid'         => $profile->pid(),
                             'version'     => $profile->version(),
                             'lastused'    => $lastused,
                             'usecount'    => $count,
