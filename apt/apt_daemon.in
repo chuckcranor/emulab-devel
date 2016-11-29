@@ -166,7 +166,13 @@ sub KillInstances()
 	    print STDERR "No such instance $uuid\n";
 	    next;
 	}
-	print STDERR "$instance is in the $status state\n";
+	print "$instance is in the $status state\n";
+	print "$instance has its canceled flag set\n"
+	    if ($instance->canceled());
+	if ($instance->canceled() && $status eq "ready") {
+	    print "Ignoring canceled flag since instance is ready\n";
+	    next;
+	}
 
 	#
 	# Try to terminate the instance. We cannot take the lock since
@@ -633,7 +639,8 @@ sub KillStaleDatasets()
 }
 
 if ($oneshot) {
-    UpdateAggregateGraphs();
+    KillInstances();
+    KillStaleDatasets();
     exit(0);
 }
 
@@ -657,6 +664,7 @@ while (1) {
 	POSIX::strftime("20%y-%m-%d %H:%M:%S", localtime()) . "\n";
 
     KillInstances();
+    KillStaleDatasets();
     FixFailedImaging();
     ExpireInstances();
     if ($MAINSITE) {
