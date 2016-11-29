@@ -187,7 +187,9 @@ sub CheckAggregates()
 
     my $markError = sub($$) {
 	my ($aggregate, $error) = @_;
-	print STDERR $error . "\n";
+	my $nickname  = $aggregate->nickname();
+
+	print STDERR "$nickname: $error\n";
 	
 	#
 	# Decide if aggregate should be marked as down. 
@@ -253,7 +255,8 @@ sub CheckAggregates()
 	    Genixmlrpc::CallMethod($cmurl, $context, "GetVersion");
 
 	if ($response->code() != GENIRESPONSE_SUCCESS) {
-	    &$markError("$nickname GetVersion error: " . $response->output());
+	    &$markError($aggregate,
+			"GetVersion error: " . $response->output());
 	    next;
 	}
 	
@@ -268,7 +271,8 @@ sub CheckAggregates()
 	    Genixmlrpc::CallMethod($cmurl, $context, "ListResources", @params);
 
 	if ($response->code() != GENIRESPONSE_SUCCESS) {
-	    &$markError("$nickname ListResources error: ". $response->output());
+	    &$markError($aggregate,
+			"ListResources error: ". $response->output());
 	    next;
 	}
 	if ($debug > 1) {
@@ -280,12 +284,12 @@ sub CheckAggregates()
 	#
 	my $decoded = eval { decode_base64($response->value()); };
 	if ($@) {
-	    &$markError("$nickname: Could not base64 decode response");
+	    &$markError($aggregate, "Could not base64 decode response");
 	    next;
 	}
 	my $xml = eval { uncompress($decoded); };
 	if ($@) {
-	    &$markError("$nickname: Could not uncompress response");
+	    &$markError($aggregate, "Could not uncompress response");
 	    next;
 	}
 	if ($debug > 1) {
@@ -293,7 +297,7 @@ sub CheckAggregates()
 	}
 	my $manifest = GeniXML::Parse($xml);
 	if (!defined($manifest)) {
-	    &$markError("$nickname: Could not parse manifest");
+	    &$markError($aggregate, "Could not parse manifest");
 	    next;
 	}
 	#
