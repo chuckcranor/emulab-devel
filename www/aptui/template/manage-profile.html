@@ -158,7 +158,8 @@
 		<a href='#' class='btn btn-xs'
 		   data-toggle='popover'
 		   data-content='alphanumeric, dash, underscore, no whitespace'>
-		  <span class='glyphicon glyphicon-question-sign'></span>
+		  <span style='margin-bottom: 4px;'
+			class='glyphicon glyphicon-question-sign'></span>
 		</a>
 	      </label>
 	      <div class='col-sm-3'>
@@ -262,31 +263,52 @@
                       type='textarea'
 		      data-key='profile_script'
 		      rows=5><%- formfields.profile_script %></textarea>
+	  </fieldset>
+	  <fieldset>
 	    <div class="form-group">
-	      <textarea name=formfields[profile_description]
-		      id='profile_description'
-		      rows=3
-                      class='form-control format-me'
-                      type='textarea'
-		      data-key='profile_description'
-		      data-label='Description'
-		      data-help='Briefly describe what this profile
-		      does. Use <a href="https://github.com/adam-p/markdown-here/wiki/Markdown-Cheatsheet" target=_blank>Markdown format</a>, double click
-		      to see a rendering.'
-		      ><%- formfields.profile_description %></textarea>
+	      <div class="format-me"
+		   data-key='profile_description'
+		   data-label='Description'
+		   data-help='Briefly describe what this profile
+			      does. Use <a href="https://github.com/adam-p/markdown-here/wiki/Markdown-Cheatsheet" target=_blank>Markdown format</a>, double click
+			      to see a rendering.'>
+		<textarea name=formfields[profile_description]
+			  id='profile_description'
+			  rows=3
+			  class='form-control'
+			  type='textarea'></textarea>
+		<div class="geni-lib-warning hidden"><small class="pull-right">
+		  Description set by geni-lib script
+		  <a href='#' class='btn btn-xs'
+		     data-toggle='modal'
+		     data-target="#docstring-help-modal">
+		    <span style='margin-bottom: 4px; margin-left: 0px;'
+			  class='glyphicon glyphicon-question-sign'></span></a>
+		</small></div>
+	      </div>
 	    </div>
 	    <div class="form-group">
+	      <div class='format-me'
+		   data-key='profile_instructions'
+		   data-label='Instructions'
+		   data-help='Briefly describe how to use this
+		              profile after it starts.
+		              Use <a href="https://github.com/adam-p/markdown-here/wiki/Markdown-Cheatsheet" target=_blank>Markdown format</a>, double click
+ 		              to see a rendering.'>
 	      <textarea name=formfields[profile_instructions]
-		      id='profile_instructions'
-		      rows=3
-                      class='form-control format-me'
-		      data-key='profile_instructions'
-		      data-label='Instructions'
-		      data-help='Briefly describe how to use this
-		                 profile after it starts.
-		                 Use <a href="https://github.com/adam-p/markdown-here/wiki/Markdown-Cheatsheet" target=_blank>Markdown format</a>, double click
- 		                 to see a rendering.'
-                      type='textarea'></textarea>
+			id='profile_instructions'
+			class='form-control'
+			rows=3
+			type='textarea'></textarea>
+	      <div class="geni-lib-warning hidden"><small class="pull-right">
+		Instructions set by geni-lib script
+		<a href='#' class='btn btn-xs'
+		   data-toggle='modal'
+		   data-target="#docstring-help-modal">
+		  <span style='margin-bottom: 4px; margin-left: 0px;'
+			class='glyphicon glyphicon-question-sign'></span></a>
+	      </small></div>
+	      </div>
 	    </div>
 
 	    <!-- Tour Table; hidden until the table is initialized
@@ -590,6 +612,38 @@
             <button class='btn btn-primary btn-sm'
 		    id='reuse_tour_button'
 		    type='button'>Reuse Tour</button>
+	  </center>
+	</div>
+      </div>
+    </div>
+  </div>
+  <!-- Docstring help -->
+  <div id='docstring-help-modal' class='modal fade'
+       data-keyboard='false' data-backdrop='static'>
+    <div class='modal-dialog'>
+      <div class='modal-content'>
+	<div class='modal-body'>
+	  <p>
+	    When using a geni-lib python script, you set the profile
+	    description and instructions <b>within</b> the script source using
+	    a <a href="https://en.wikipedia.org/wiki/Docstring">
+	    python module docstring</a>, typically at the very beginning of
+	    the script. For example:
+	  </p>
+	  <pre>
+"""This is a description of your profile, it can be multi-line.
+Every profile must include a description. 
+
+Instructions:
+These are instructions for using your profile after it is instantiated.
+Instructions are optional.
+"""	  </pre>
+	  <br>
+          <center>
+            <button type='button'
+                    class='btn btn-default btn-sm' 
+                    data-dismiss='modal'>
+	      Close</button>
 	  </center>
 	</div>
       </div>

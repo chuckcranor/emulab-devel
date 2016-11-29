@@ -497,6 +497,7 @@ $(function ()
 	        //$('#edit_copy_button').removeClass("hidden");
 		$('#profile_instructions').prop("readonly", true);
 		$('#profile_description').prop("readonly", true);
+		$('.geni-lib-warning').removeClass("hidden");
 	    }
 	}
 	else {
