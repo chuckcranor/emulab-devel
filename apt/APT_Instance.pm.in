@@ -202,13 +202,23 @@ sub Flush($)
 {
     my ($self) = @_;
 
+    delete($instances{$self->uuid()});
+}
+#
+# We use this in long running daemons, since we have a circular dependency
+# that causes the perl GC to leak memory. Normally not a problem, but the
+# aptevent_daemon runs for a long time! 
+#
+sub Purge($)
+{
+    my ($self) = @_;
+
     #
     # Break circular dependency so that the object is released
-    # (the aggregate object points back to the instance).
+    # (the aggregate objects point back to the instance).
     #
-    #$self->{'AGGREGATES'} = undef;
-
-    delete($instances{$self->uuid()});
+    $self->{'AGGREGATES'} = undef;
+    $self->Flush();
 }
 
 #

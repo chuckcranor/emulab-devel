@@ -182,7 +182,7 @@ sub callback($$$)
 	goto done;
     }
 done:
-    $instance->Flush();
+    $instance->Purge();
 }
 
 #
