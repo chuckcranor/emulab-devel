@@ -361,6 +361,8 @@ sub sendevent($$)
     my $tuple = address_tuple_alloc();
     if (!$tuple) {
 	logit("$node: could not allocate an address tuple");
+	event_unregister($event_handle);
+	$event_handle = undef;
 	return 1;
     }
 
@@ -372,11 +374,15 @@ sub sendevent($$)
     my $notification = event_notification_alloc($event_handle, $tuple);
     if (!$notification) {
 	logit("$node: could not allocate notification");
+	event_unregister($event_handle);
+	$event_handle = undef;
 	return 1;
     }
 
     if (!event_notify($event_handle, $notification)) {
 	logit("$node: could not send $event notification");
+	event_unregister($event_handle);
+	$event_handle = undef;
 	return 1;
     }
     event_notification_free($event_handle, $notification);
