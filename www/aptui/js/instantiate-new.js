@@ -110,6 +110,7 @@ $(function ()
 	var html = mainTemplate({
 	    formfields:         decodejson('#form-json'),
 	    profiles:           profilelist,
+	    myprofiles:         projcategories.myprofiles,
 	    projprofiles:       projcategories.inproj,
 	    systemprofiles:        projcategories.sysproj,
 	    otherprofiles:      projcategories.otherproj,
@@ -382,7 +383,7 @@ $(function ()
 
     // Put profiles into the correct categories to be built in the template
     function MakeProfileCategories(profiles) {
-      var result = {favorite:{},inproj:{},sysproj:{},otherproj:{}};
+      var result = {favorite:{},myprofiles:{},inproj:{},sysproj:{},otherproj:{}};
 
       // This section should probably be rethought as it's not very clean. 
       // Didn't have time to refactor for initial release.
@@ -397,9 +398,15 @@ $(function ()
 		result.favorite[key] = obj;
 	      }
 	    }
+
+	    if (window.USERNAME == obj.creator) {
+		result.myprofiles[key] = obj;
+	    }
+
 	    if (isSystem) {
 	      result.sysproj[key] = obj;
 	    }
+
 	    if (projlist && _.has(projlist, obj.project)) {
 	      if (!result.inproj[obj.project]) {
 		result.inproj[obj.project] = {};

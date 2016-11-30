@@ -400,6 +400,7 @@ function SPITFORM($formfields, $newuser, $errors)
     echo "    window.DOCONSTRAINTS = 1;\n";
     echo "    window.SKIPFIRSTSTEP = " . ($skipfirststep ? "true" : "false") . ";\n";
     echo "    window.PORTAL_NAME = '$PORTAL_NAME';\n";
+    echo "    window.USERNAME = '" . $formfields["username"] . "';\n";
     echo "</script>\n";
     echo "<script src='js/lib/jquery-2.0.3.min.js'></script>\n";
 
