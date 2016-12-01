@@ -1625,6 +1625,11 @@ $(function ()
 		    $(clone).find("li[id=console]").addClass("disabled");
 		    $(clone).find("li[id=consolelog]").addClass("disabled");
 		}
+		// If a vhost, then grey out options.
+		if (isvhost) {
+		    $(clone).find("li[id=snapshot]").addClass("disabled");
+		    $(clone).find("li[id=delete]").addClass("disabled");
+		}
 		contextMenus[node] = clone;
 		
 		nodecount++;

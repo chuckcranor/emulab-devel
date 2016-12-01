@@ -250,7 +250,7 @@ window.ShowIdleGraphs = (function ()
 		    var xmlDoc = $.parseXML(manifest);
 		    var xml = $(xmlDoc);
 
-		    $(xml).find("node").each(function() {
+		    $(xml).find("node, emulab\\:vhost").each(function() {
 			// Only nodes that match the aggregate being processed,
 			// since we send the same rspec to every aggregate.
 			var manager_urn = $(this).attr("component_manager_id");
