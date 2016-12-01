@@ -154,10 +154,23 @@ sub GetXmlVersion($)
 
 sub IsVersion0($)
 {
+    my ($node) = @_;
+    
+    #
+    # Yuck, we call this all over the place, but if the thing we call
+    # it on (say, an emulab:vhost) is in its own namespace, then the
+    # test above in GetXmlVersion makes no sense and fails.
+    #
+    my $ns = $node->namespaceURI();
+    return 0
+	if (defined($ns) &&
+	    $ns !~ /protogeni.net\/resources\/rspec\/[\d\.]+$/);
+    
     my $version = GetXmlVersion($_[0]);
     return defined($version)
 	&& ($version eq $RSPEC_0_1 || $version eq $RSPEC_0_2);
 }
+
 
 # Returns a NodeList for a given XPath using a given node as
 # context. 'n' is defined to be the prefix for the namespace of the
@@ -280,6 +293,14 @@ sub GetNodeByVirtualId($$)
 {
     my ($name, $node) = @_;
     return GetElementByVirtualId($name, 'node', $node);
+}
+
+sub GetVhostByVirtualId($$)
+{
+    my ($name, $node) = @_;
+
+    return FindNodesNS('n:vhost[@client_id = "'.$name.'"]',
+		       $node, $EMULAB_NS)->pop();
 }
 
 sub GetLinkByVirtualId($$)

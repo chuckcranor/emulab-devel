@@ -916,6 +916,8 @@ sub GetTicketAuxAux($$$$$$$$$$$)
     my @nodeids  = ();
     my %lannodes = ();
     my %allnodes = ();
+    # Extra nodes (like XEN vhosts).
+    my %internal_nodemap  = ();
     # For stitching, keep track of external nodes and links.
     my %external_nodemap  = ();
     my %external_linkmap  = ();
@@ -3039,9 +3041,18 @@ sub GetTicketAuxAux($$$$$$$$$$$)
 	#
 	my $exclusive = (defined($node->sharing_mode()) ? "0" : "1");
 
+	#
+	# Watch for dedicated XEN vhost nodes. We add those to the manifest
+	# later, and as real sliver objects when the ticket is redeemed.
+	#
+	if ($node->isvirtnode() && $exclusive && !defined($instantiate_on)) {
+	    # Marker for below.
+	    $internal_nodemap{$node->phys_nodeid()} = undef;
+	}
+
 	# Set sliver urns in ticket
 	my $sliver_idx = TBGetUniqueIndex('next_sliver', 1);
-	my $sliver_urn = GeniHRN::Generate( "@OURDOMAIN@", "sliver", $sliver_idx );
+	my $sliver_urn = GeniHRN::Generate($OURDOMAIN, "sliver", $sliver_idx);
 	
 	if (GeniXML::IsVersion0($rspec)) {
 	    GeniXML::SetText("component_urn", $rspec,
@@ -3123,6 +3134,23 @@ sub GetTicketAuxAux($$$$$$$$$$$)
 		goto bad;
 	    }
 	}
+    }
+
+    #
+    # Add the internal nodes to the manifest.
+    #
+    foreach my $nodeid (keys(%internal_nodemap)) {
+	my $pnode = Node->Lookup($nodeid);
+	if (!defined($pnode)) {
+	    $response = GeniResponse->Create(GENIRESPONSE_ERROR, undef);
+	    goto bad;
+	}
+	my $vhost = AddInternalNodeToRspec($rspec, $pnode);
+	if (!defined($vhost)) {
+	    $response = GeniResponse->Create(GENIRESPONSE_ERROR, undef);
+	    goto bad;
+	}
+	$internal_nodemap{$nodeid} = $vhost;
     }
 
     # Store the virt topo again since we changed it above.
@@ -3714,6 +3742,9 @@ sub SliverWorkAux($$$$$$$$)
     my @freelinks= ();
     my %iface2node = ();
     my $needplabslice = 0;
+    # Extra nodes (like XEN vhosts).
+    my %internal_nodemap = ();
+    my @freevhosts       = ();
     # For stitching, keep track of external nodes and links.
     my %external_nodemap = ();
     my %external_linkmap = ();
@@ -3758,6 +3789,9 @@ sub SliverWorkAux($$$$$$$$)
 	foreach my $s (@slivers) {
 	    if (ref($s) eq "GeniSliver::Node") {
 		$nodemap{$s->nickname()} = $s;
+	    }
+	    if (ref($s) eq "GeniSliver::Vhost") {
+		$internal_nodemap{$s->nickname()} = $s;
 	    }
 	    elsif (ref($s) eq "GeniAggregate::Link" ||
 		   ref($s) eq "GeniAggregate::Tunnel") {
@@ -3916,6 +3950,26 @@ sub SliverWorkAux($$$$$$$$)
 		goto bad;
 	    }
 	    push(@freenodes, $sliver);
+	}
+    }
+
+    #
+    # What vhost slivers need to be deleted. 
+    #
+    foreach my $nickname (keys(%internal_nodemap)) {
+	my $sliver   = $internal_nodemap{$nickname};
+	my $needfree = 1;
+	
+	foreach my $ref (GeniXML::FindNodesNS("n:vhost", $rspec,
+				      $GeniXML::EMULAB_NS)->get_nodelist()) {
+	    my $virtual_id = GeniXML::GetVirtualId($ref);
+	    if (defined($virtual_id) && $nickname eq $virtual_id) {
+		$needfree = 0;
+		last;
+	    }
+	}
+	if ($needfree) {
+	    push(@freevhosts, $sliver);
 	}
     }
 
@@ -4187,6 +4241,59 @@ sub SliverWorkAux($$$$$$$$)
 		$ifacexml{$virtual_iface_id} = $linkref;
 	    }
 	}
+    }
+    #
+    # Create slivers for internal nodes.
+    #
+    foreach my $ref (GeniXML::FindNodesNS("n:vhost", $rspec,
+				$GeniXML::EMULAB_NS)->get_nodelist()) {
+	my $resource_id   = GeniXML::GetNodeId($ref);
+	my $vnode_id      = GeniXML::GetVnodeId($ref);
+	my $virtual_id    = GeniXML::GetVirtualId($ref);
+	my $manager_id    = GeniXML::GetManagerId($ref);
+	my $inaggregate   = 0;
+	my $sliver;
+
+	my $node = GeniUtil::LookupNode($vnode_id);
+	if (!defined($node)) {
+	    $message = "Unknown vnode_id in ticket: $vnode_id";
+	    goto bad;
+	}
+	# Must do this after mapper has run
+	$node->Refresh();
+
+	if (grep {$_ eq $virtual_id} keys(%internal_nodemap)) {
+	    #
+	    # Already in the aggregate, so reuse sliver.
+	    #
+	    $inaggregate = 1;
+	    $sliver = $internal_nodemap{$virtual_id};
+	}
+	else {
+	    $sliver = GeniSliver::Vhost->Create($slice, $owner, $node, $ref);
+	    if (!defined($sliver)) {
+		$message = "Could not create GeniSliver object for $virtual_id";
+		goto bad;
+	    }
+	    $slivers{$sliver->uuid()} = $sliver;
+	    $internal_nodemap{$virtual_id} = $sliver;
+
+	    # Add to the aggregate.
+	    if ($sliver->SetAggregate($aggregate) != 0) {
+		$message = "Could not set aggregate for $sliver to $aggregate";
+		goto bad;
+	    }
+	}
+
+	my $node_manifest = $sliver->AnnotateManifest();
+	if (! defined($node_manifest)) {
+	    $message = "Could not annotate sliver for $virtual_id";
+	    goto bad;
+	}
+
+	# And store into the new manifest.
+	my $oldnode = GeniXML::GetVhostByVirtualId($virtual_id, $manifest);
+	my $newnode = GeniXML::ReplaceNode($oldnode, $node_manifest);
     }
 
     #
@@ -4801,6 +4908,10 @@ sub SliverWorkAux($$$$$$$$)
     foreach my $snode (@freenodes) {
 	$snode->UnProvision();
 	$snode->Delete(0);
+    }
+    foreach my $svhost (@freevhosts) {
+	$svhost->UnProvision();
+	$svhost->Delete(0);
     }
     $ticket->Redeem()
 	if (defined($ticket));
@@ -6686,6 +6797,7 @@ sub CleanupDeadSlice($;$)
 	    return -1;
 	}
 	if ($ticket->Release(TICKET_PURGED)) {
+	    # Leave it locked.
 	    print STDERR "CleanupDeadSlice: Could not release $ticket\n";
 	    return -1;
 	}
@@ -7974,6 +8086,39 @@ sub AddProgramAgent($$$)
 				      "triggertype"=> $triggertype});
     }
     return 0;
+}
+
+#
+# Add a node to an rspec at top level. The rspec is the document and
+# the node is an emulab Node object. The rspec is modified, we return
+# the new node element.
+#
+sub AddInternalNodeToRspec($$)
+{
+    my ($rspec, $node) = @_;
+
+    my $newnode = GeniXML::AddElement("vhost", $rspec, $GeniXML::EMULAB_NS);
+    return undef
+	if (!defined($newnode));
+
+    GeniXML::SetText('client_id', $newnode, $node->vname());
+    # I am assuming that we would never do this for a shared node.
+    GeniXML::SetText('exclusive', $newnode, "1");
+    GeniXML::SetText('component_manager_id', $newnode, $ENV{'MYURN'});
+    GeniXML::SetText("component_id", $newnode,
+		     GeniHRN::Generate($OURDOMAIN, "node",
+				       $node->phys_nodeid()));
+    # Extra stuff in Emulab namespace.
+    my $vnoderef = GeniXML::AddElement("vnode", $newnode, $GeniXML::EMULAB_NS);
+    GeniXML::SetText("name", $vnoderef, $node->node_id());
+    GeniXML::SetText("hardware_type", $vnoderef, $node->type());
+
+    # Set sliver urns in ticket
+    my $sliver_idx = TBGetUniqueIndex('next_sliver', 1);
+    my $sliver_urn = GeniHRN::Generate("@OURDOMAIN@", "sliver", $sliver_idx);
+    GeniXML::SetText("sliver_id", $newnode, $sliver_urn);
+    
+    return $newnode;
 }
 
 # _Always_ make sure that this 1 is at the end of the file...

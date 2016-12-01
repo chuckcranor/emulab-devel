@@ -739,7 +739,10 @@ sub ComputeNodeCounts($)
 	my $vcount = 0;
 	
 	foreach my $ref (GeniXML::FindNodes("n:node",
-					    $manifest)->get_nodelist()) {
+					    $manifest)->get_nodelist(),
+			 GeniXML::FindNodesNS("n:vhost",
+				      $manifest,
+				      $GeniXML::EMULAB_NS)->get_nodelist()) {
 	    my $virtualization_type = GeniXML::GetVirtualizationSubtype($ref);
 	    my $manager_urn = GetManagerId($ref);
 

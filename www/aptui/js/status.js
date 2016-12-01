@@ -1484,22 +1484,28 @@ $(function ()
 	var ProcessNodes = function(aggregate_urn, xml) {
 	    // Find all of the nodes, and put them into the list tab.
 	    // Clear current table.
-	    $(xml).find("node").each(function() {
+	    $(xml).find("node, emulab\\:vhost").each(function() {
 		// Only nodes that match the aggregate being processed,
 		// since we send the same rspec to every aggregate.
 		var manager_urn = $(this).attr("component_manager_id");
 		if (!manager_urn.length || manager_urn != aggregate_urn) {
 		    return;
 		}
+		var tag    = $(this).prop("tagName");
+		var isvhost= (tag == "emulab:vhost" ? 1 : 0);
 		var node   = $(this).attr("client_id");
-		var login  = $(this).find("login");
 		var stype  = $(this).find("sliver_type");
+		var login  = $(this).find("login");
 		var coninfo= this.getElementsByTagNameNS(EMULAB_NS, 'console');
 		var vnode  = this.getElementsByTagNameNS(EMULAB_NS, 'vnode');
 		var href   = "n/a";
 		var ssh    = "n/a";
 		var cons   = "n/a";
 		var clone  = $(listview_row);
+		// Cause of nodes in the emulab namespace (vhost).
+		if (!login.length) {
+		    login = this.getElementsByTagNameNS(EMULAB_NS, 'login');
+		}
 
 		// Change the ID of the clone so its unique.
 		clone.attr('id', 'listview-row-' + node);
@@ -1525,8 +1531,8 @@ $(function ()
 		
 		if (login.length && dossh) {
 		    var user   = window.APT_OPTIONS.thisUid;
-		    var host   = login.attr("hostname");
-		    var port   = login.attr("port");
+		    var host   = $(login).attr("hostname");
+		    var port   = $(login).attr("port");
 		    var url    = "ssh://" + user + "@" + host + ":" + port +"/";
 		    var sshcmd = "ssh -p " + port + " " + user + "@" + host;
 		    href       = "<a href='" + url + "'><kbd>" + sshcmd +
@@ -1579,20 +1585,29 @@ $(function ()
 		    $('#listview-row-' + node + ' [name=console]')
 			.parent().addClass('disabled');		    
 		}
-		//
-		// And a handler for the snapshot action.
-		//
-		$('#listview-row-' + node + ' [name=snapshot]')
-		    .click(function (e) {
-			ActionHandler("snapshot", [node]);
-		    });
-		//
-		// Ditto the delete button,
-		//
-		$('#listview-row-' + node + ' [name=delete]')
-		    .click(function (e) {
-			ActionHandler("delete", [node]);
-		    });
+		if (!isvhost) {
+		    //
+		    // And a handler for the snapshot action.
+		    //
+		    $('#listview-row-' + node + ' [name=snapshot]')
+			.click(function (e) {
+			    ActionHandler("snapshot", [node]);
+			});
+		    //
+		    // Ditto the delete button,
+		    //
+		    $('#listview-row-' + node + ' [name=delete]')
+			.click(function (e) {
+			    ActionHandler("delete", [node]);
+			});
+		}
+		else {
+		    // Need to do this on the context menu too, but painful.
+		    $('#listview-row-' + node + ' [name=snapshot]')
+			.parent().addClass('disabled');		    
+		    $('#listview-row-' + node + ' [name=delete]')
+			.parent().addClass('disabled');		    
+		}
 
 		/*
 		 * Make a copy of the master context menu and init.

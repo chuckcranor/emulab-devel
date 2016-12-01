@@ -747,10 +747,13 @@ sub resource_urn($)
     return GeniHRN::Generate("@OURDOMAIN@", "node", $self->resource_id())
 }
 
-sub Create($$$$$$)
+sub Create($$$$$;$)
 {
     # $rspec is a LibXML element representing a single node.
-    my ($class, $slice, $user, $node, $rspec) = @_;
+    my ($class, $slice, $user, $node, $rspec, $resource_type) = @_;
+    $resource_type = "Node"
+	if (!defined($resource_type));
+    
     my $virtualization_type = GeniXML::GetVirtualizationType($rspec);
     if (!defined($virtualization_type)) {
 	print STDERR "Node does not contain a virtualization_type\n";
@@ -789,7 +792,8 @@ sub Create($$$$$$)
     my $resource_id   = $node->node_id();
     my $hrn           = "${PGENIDOMAIN}." . $node->node_id();
 
-    my $sliver = GeniSliver->Create($slice, $user, $resource_uuid, "Node",
+    my $sliver = GeniSliver->Create($slice, $user, $resource_uuid,
+				    $resource_type,
 				    $resource_id, $hrn, $nickname, $rspec);
     return undef
 	if (!defined($sliver));
@@ -1631,6 +1635,36 @@ sub GenerateStatusBlob($)
 	}
     }
     return $blob;
+}
+
+##########################################################################
+#
+package GeniSliver::Vhost;
+use vars qw(@ISA);
+@ISA = "GeniSliver::Node";
+
+use GeniDB;
+use GeniComponent;
+use GeniSlice;
+use GeniCredential;
+use GeniCertificate;
+use GeniUtil;
+
+#
+# This is a wrapper so that we can represent internally added hosts
+# but not treat them like normal nodes when doing rspec/manifest things.
+#
+sub Create($$$$$)
+{
+    my ($class, $slice, $user, $node, $rspec) = @_;
+
+    return GeniSliver::Node->Create($slice, $user, $node, $rspec, "Vhost");
+}
+
+# Nothing to do right now.
+sub UnProvision($$)
+{
+    return 0;
 }
 
 ##########################################################################

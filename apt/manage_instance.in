@@ -970,7 +970,9 @@ sub DoConsole()
 	if (! defined($manifest)) {
 	    fatal("Could not parse manifest for $obj");
 	}
-	my @nodes = GeniXML::FindNodes("n:node", $manifest)->get_nodelist();
+	my @nodes = (GeniXML::FindNodes("n:node", $manifest)->get_nodelist(),
+		     GeniXML::FindNodesNS("n:vhost", $manifest,
+					  $GeniXML::EMULAB_NS)->get_nodelist());
 	foreach my $node (@nodes) {
 	    my $client_id   = GeniXML::GetVirtualId($node);
 	    my $urn         = GeniXML::GetSliverId($node);
@@ -2350,7 +2352,9 @@ sub DoRebootOrReload($)
 	if (! defined($manifest)) {
 	    fatal("Could not parse manifest");
 	}
-	my @nodes = GeniXML::FindNodes("n:node", $manifest)->get_nodelist();
+	my @nodes = (GeniXML::FindNodes("n:node", $manifest)->get_nodelist(),
+		     GeniXML::FindNodesNS("n:vhost", $manifest,
+					  $GeniXML::EMULAB_NS)->get_nodelist());
 	foreach my $node (@nodes) {
 	    my $client_id = GeniXML::GetVirtualId($node);
 	    if (grep {$_ eq $client_id} @ARGV) {
