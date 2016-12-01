@@ -34,13 +34,13 @@ $(function ()
 	$("input[id='startorjoin']").change(function(e){
 	    if ($(this).val() == "join") {
 		$('#start_project_rollup').addClass("hidden");
-		$('#submit_button').text("Submit Request");
-		$('#signup_panel_title').text("Request to join a project");
+		$('#submit_button').text("Join Project");
+		$('#signup_panel_title').text("Join Project");
 	    }
 	    else {
 		$('#start_project_rollup').removeClass("hidden");
-		$('#submit_button').text("Submit Request");
-		$('#signup_panel_title').text("Request to start a project");
+		$('#submit_button').text("Start Project");
+		$('#signup_panel_title').text("Start Project");
 	    }
 	});
 	if (window.APT_OPTIONS.toomany) {
@@ -51,16 +51,11 @@ $(function ()
     function renderForm(formfields, errors, joinproject, showVerify,
 			thisUser, promoting)
     {
-	var buttonLabel = "Submit Request";
-	var pageTitle   = (joinproject ?
-			   "Request to join a project" :
-			   "Request to start a project");
-	
+	var buttonLabel = (joinproject ? "Join Project" : "Start Project");
 	var about = aboutTemplate({});
 	var verify = verifyTemplate({
 	    id: 'verify_modal',
-	    label: buttonLabel,
-	    title: pageTitle
+	    label: buttonLabel
 	});
 	var personal_html = personalTemplate({
 	    formfields: formfields,
@@ -72,7 +67,6 @@ $(function ()
 	});
 	var signup = signupTemplate({
 	    button_label: buttonLabel,
-	    pagetitle: pageTitle,
 	    general_error: (errors.error || ''),
 	    about_account: (window.ISAPT && !thisUser ? about : null),
 	    this_user: thisUser,
