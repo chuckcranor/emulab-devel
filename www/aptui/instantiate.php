@@ -227,8 +227,7 @@ else {
 		     "     v.version=p.version ".
 		     "$joinclause ".
 		     "where locked is null and p.disabled=0 and ".
-                     "      v.disabled=0 and ($whereclause) ".
-		     "order by p.topdog desc");
+                     "      v.disabled=0 and ($whereclause) ");
     while ($row = mysql_fetch_array($query_result)) {
 	$profile_array[$row["uuid"]] = $row["name"];
         if ($row["pid"] == $profile_default_pid &&
