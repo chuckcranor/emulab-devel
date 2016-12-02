@@ -221,7 +221,7 @@ else {
     }
 
     $query_result =
-	DBQueryFatal("select p.*,v.* from apt_profiles as p ".
+	DBQueryFatal("select p.uuid,p.name,p.pid from apt_profiles as p ".
 		     "left join apt_profile_versions as v on ".
 		     "     v.profileid=p.profileid and ".
 		     "     v.version=p.version ".

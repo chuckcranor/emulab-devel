@@ -17,6 +17,11 @@ $(function ()
 	    sup.InitGeniLogin(embedded);
 	}
 	window.APT_OPTIONS.initialize(sup);
+
+	// Login takes more then non-trivial time, say something soothing.
+	$('#quickvm_login_modal_button').click(function () {
+	    sup.ShowWaitWait("We are logging you in, patience please");
+	});
     }
     $(document).ready(initialize);
 });

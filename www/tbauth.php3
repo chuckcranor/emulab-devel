@@ -1040,7 +1040,7 @@ function DOLOGIN_MAGIC($uid, $uid_idx, $email = null,
     # Ug. When using ZFS in NOEXPORT mode, we have to call exports_setup
     # to get the mounts exported to back to boss. We do not want to do this
     # every time the user logs in of course, and since exports_setup is 
-    # using one week as its threshold, we can just do it on a daily basis.
+    # using one week as its threshold, we can use that as the limit.
     #
     if ($WITHZFS && $ZFS_NOEXPORT) {
         $query_result =
@@ -1054,7 +1054,7 @@ function DOLOGIN_MAGIC($uid, $uid_idx, $email = null,
 		$lastlogin    = $lastrow[0];
 		$lastloginstr = $lastrow[1];
 	
-		if (time() - $lastlogin > (24 * 3600)) {
+		if (time() - $lastlogin > (24 * 3600 * 6)) {
 			# Update weblogin_last first so exports_setup
 			# will do something.
 			DBQueryFatal("update user_stats set ".
