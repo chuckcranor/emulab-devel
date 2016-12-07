@@ -76,11 +76,13 @@ sub usage()
 	"  -n jailname  Name of jail; default is 'py-cage-<pid>'.\n".
 	"  -d           Turn on debugging.\n".
 	"  -C           Just create the jail; use 'jexec' to run commands.\n".
-	"  -R           Remove an existing (left-over) jail; must specify a name (-n)\n";
+	"  -R           Remove an existing (left-over) jail; must specify a name (-n)\n".
+	"  -B base      Which base to use (see /iocage/tags); default: 'py-cage'.\n";
  
     exit(-1);
 }
-my $optlist = "du:p:o:n:CR";
+my $optlist = "du:p:o:n:CRB:";
+my $basename = "py-cage";
 my $jailname = "py-cage-$$";
 my $user = "nobody";
 my $uid;
@@ -203,6 +205,14 @@ if (defined($options{"n"})) {
 	usage();
     }
 }
+if (defined($options{"B"})) {
+    my $base = $options{"B"};
+    if (! -e "/iocage/tags/$base") {
+	print STDERR "No such base '$base'\n";
+	usage();
+    }
+    $basename = $base;
+}
 
 #
 # Extract params from the environment (if invoked via rungenilib.proxy).
@@ -263,7 +273,7 @@ if ($action != 2 && -e "$JAILROOT/$jailname") {
 # XXX figure out the appropriate snapshot.
 # This is marginally better than hardwiring a UUID.
 #
-my $path = readlink("/iocage/tags/py-cage");
+my $path = readlink("/iocage/tags/$basename");
 if (!$path || $path !~ /(\w{8}-\w{4}-\w{4}-\w{4}-\w{12})$/) {
     die("*** $0:\n".
 	"    Cannot find UUID for base FS");
@@ -294,7 +304,7 @@ if (mysystem("zfs snapshot $ZFSBASE/$jailuuid/root\@$jailname")) {
 }
 msg("Snapshotting done");
 $snapshot = "$ZFSBASE/$jailuuid/root\@$jailname";
-msg("Cloning py-cage FS");
+msg("Cloning $basename FS");
 if (mysystem("zfs clone $zfsattrs $snapshot $ZFSBASE/$jailname")) {
     print STDERR "Could not create geni-lib jail FS\n";
     exit(-1);

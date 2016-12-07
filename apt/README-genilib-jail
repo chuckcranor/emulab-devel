@@ -1,4 +1,4 @@
-How to setup update the genilib-jail environment.
+A. How to setup update the genilib-jail environment.
 
 We use a combination of iocage and our own hand-rolled script to efficiently
 spawn up environments in which we can interpret geni-lib scripts. Right now
@@ -40,13 +40,24 @@ EOF
 
    chroot . pkg install -r Emulab-devel emulab-genilib
 
-4. Make it a template
+4. Take care of some riff-raff
+   # mount point for geni-lib stuff
+   mkdir -p usr/testbed/lib/geni-lib
+   # symlinks we use
+   ln -sf python2.7 usr/local/bin/python2
+   ln -sf python2.7 usr/local/bin/python
+   # if perl is loaded
+   ln -sf /usr/local/bin/perl5 usr/bin/perl
+
+5. Make it a template
 
    iocage set template=yes py-cage-new
 
-Updating your iocage:
+
+B. Updating your iocage:
 
 1. Fetch the appropriate release:
 
    sudo iocage fetch release=10.2-RELEASE
 
+2. to be finished...
