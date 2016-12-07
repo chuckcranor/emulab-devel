@@ -279,6 +279,15 @@ $PAGEHEADER_FUNCTION = function($thinheader = 0, $ignore1 = NULL,
             $then = time() - (90 * 3600 * 24);
             echo "      <li><a href='activity.php?user=$login_uid&min=$then'>
                             My History</a></li>\n";
+            if (ISADMIN() && HaveNews()) {
+                echo "  <li><a href='news.php'>News ";
+                if (NewNews()) {
+                    echo "<span class='glyphicon glyphicon-asterisk ".
+                         "             text-success' ".
+                         "      style='margin-bottom: 4px;'></span> ";
+                }
+                echo "     </a></li>\n";
+            }
         }
         echo "    </ul>
                 </li>\n";
@@ -311,7 +320,9 @@ $PAGEHEADER_FUNCTION = function($thinheader = 0, $ignore1 = NULL,
 	             <li><a href='list-reservations.php'>
                             List Reservations</a></li>
 	             <li><a href='reserve.php'>
-                            Create Reservation</a></li>";
+                            Create Reservation</a></li>
+	             <li><a href='edit-news.php'>
+                            Add a news item</a></li>";
            echo " </ul>
                 </li>\n";
         }
@@ -867,6 +878,25 @@ function CheckLoginOrRedirect($modifier = 0)
     }
     CheckLoginConditions($check_status & ~($modifier|CHECKLOGIN_NONLOCAL));
     return $this_user;
+}
+
+#
+# See if there is recent news and news of any kind.
+#
+function HaveNews()
+{
+    $query_result = DBQueryFatal("select idx from apt_news limit 1");
+    return mysql_num_rows($query_result);
+}
+function NewNews()
+{
+    # Within the last week.
+    $query_result = 
+	DBQueryFatal("select idx from apt_news ".
+                     "where (UNIX_TIMESTAMP(now()) - ".
+                     "       UNIX_TIMESTAMP(created)) < (24 * 3600 * 7) ".
+                     "limit 1");
+    return mysql_num_rows($query_result);
 }
 
 ?>

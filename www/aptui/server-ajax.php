@@ -310,6 +310,17 @@ $routing = array("myprofiles" =>
                                                      "Do_GetReservation",
                                                  "Delete" =>
                                                      "Do_Delete")),
+		 "news" =>
+			array("file"    => "news.ajax",
+			      "guest"   => true,
+			      "methods" => array("create" =>
+						      "Do_CreateNews",
+						 "modify" =>
+						      "Do_ModifyNews",
+						 "delete" =>
+						      "Do_DeleteNews",
+						 "getnews" =>
+						      "Do_GetNews")),
 );
 
 #

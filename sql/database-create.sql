@@ -322,6 +322,22 @@ CREATE TABLE `apt_instances` (
 ) ENGINE=MyISAM DEFAULT CHARSET=latin1;
 
 --
+-- Table structure for table `apt_news`
+--
+
+DROP TABLE IF EXISTS `apt_news`;
+CREATE TABLE `apt_news` (
+  `idx` int(11) NOT NULL auto_increment,
+  `title` tinytext,
+  `created` datetime default NULL,
+  `author` varchar(32) default NULL,
+  `author_idx` mediumint(8) unsigned NOT NULL default '0',
+  `portals` set('emulab','aptlab','cloudlab','phantomnet') default NULL,
+  `body` text,
+  PRIMARY KEY  (`idx`)
+) ENGINE=MyISAM DEFAULT CHARSET=latin1;
+
+--
 -- Table structure for table `apt_profile_favorites`
 --
 
