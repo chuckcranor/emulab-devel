@@ -1460,7 +1460,8 @@ sub GetTicketAuxAux($$$$$$$$$$$)
 	#
 	# If no osname, check for protogeni default osname
 	#
-	if (! defined($osname) && !GeniXML::UseTypeDefaultImage($ref)) {
+	if (!defined($osname) &&
+	    !GeniXML::UseTypeDefaultImage($ref) && !$isbridge) {
 	    my $protogeni_os = undef;
 	    if (GetSiteVar('protogeni/default_osname', \$protogeni_os)
 		&& $protogeni_os ne ""
@@ -1472,7 +1473,7 @@ sub GetTicketAuxAux($$$$$$$$$$$)
 	#
 	# If no osname by this point, try for the default.
 	#
-	if (defined($node) && !defined($osname)) {
+	if (defined($node) && !defined($osname) && !$isbridge) {
 	    if (defined($node->default_osid())) {
 		my $default_osinfo = OSImage->Lookup($node->default_osid());
 		$osname = $default_osinfo->osname()
