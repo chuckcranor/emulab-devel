@@ -316,7 +316,7 @@ else {
 
 header("Last-Modified: " . gmdate("D, d M Y H:i:s") . " GMT");
 header("Expires: Mon, 26 Jul 1997 05:00:00 GMT");
-header("Cache-Control: no-cache, max-age=0, must-revalidate, no-store");
+header("Cache-Control: no-cache, must-revalidate");
 header("Pragma: no-cache");
 
 #
