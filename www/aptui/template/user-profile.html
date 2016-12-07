@@ -34,6 +34,10 @@
       <td>City</td>
       <td><%= fields.city %></td>
     </tr>
+    <tr>
+      <td>Last Login</td>
+      <td class="format-date"><%= fields.last_weblogin %></td>
+    </tr>
     <% if (isadmin) { %>
       <% if (fields.portal) { %>
 	<tr>

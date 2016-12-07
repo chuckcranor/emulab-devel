@@ -222,6 +222,7 @@ function Do_AccountDetails()
         $results["web_frozen"]    = $target_user->weblogin_frozen()? true:false;
         $results["nonlocal_id"]   = ($target_user->nonlocal_id() ?
                                      $target_user->nonlocal_id() : "");
+        $results["last_weblogin"] = DateStringGMT(LASTWEBLOGIN($target_idx));
     }
 
     SPITAJAX_RESPONSE($results);
