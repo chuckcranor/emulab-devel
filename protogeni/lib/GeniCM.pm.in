@@ -3048,7 +3048,10 @@ sub GetTicketAuxAux($$$$$$$$$$$)
 	#
 	if ($node->isvirtnode() && $exclusive && !defined($instantiate_on)) {
 	    # Marker for below.
-	    $internal_nodemap{$node->phys_nodeid()} = undef;
+	    if (!exists($internal_nodemap{$node->phys_nodeid()})) {
+		$internal_nodemap{$node->phys_nodeid()} = [];
+	    }
+	    push(@{ $internal_nodemap{$node->phys_nodeid()} }, $node);
 	}
 
 	# Set sliver urns in ticket
@@ -3141,12 +3144,13 @@ sub GetTicketAuxAux($$$$$$$$$$$)
     # Add the internal nodes to the manifest.
     #
     foreach my $nodeid (keys(%internal_nodemap)) {
-	my $pnode = Node->Lookup($nodeid);
+	my @vnodes = @{ $internal_nodemap{$nodeid} };
+	my $pnode  = Node->Lookup($nodeid);
 	if (!defined($pnode)) {
 	    $response = GeniResponse->Create(GENIRESPONSE_ERROR, undef);
 	    goto bad;
 	}
-	my $vhost = AddInternalNodeToRspec($rspec, $pnode);
+	my $vhost = AddInternalNodeToRspec($rspec, $pnode, @vnodes);
 	if (!defined($vhost)) {
 	    $response = GeniResponse->Create(GENIRESPONSE_ERROR, undef);
 	    goto bad;
@@ -8094,9 +8098,9 @@ sub AddProgramAgent($$$)
 # the node is an emulab Node object. The rspec is modified, we return
 # the new node element.
 #
-sub AddInternalNodeToRspec($$)
+sub AddInternalNodeToRspec($$$)
 {
-    my ($rspec, $node) = @_;
+    my ($rspec, $node, @vnodes) = @_;
 
     my $newnode = GeniXML::AddElement("vhost", $rspec, $GeniXML::EMULAB_NS);
     return undef
@@ -8118,7 +8122,16 @@ sub AddInternalNodeToRspec($$)
     my $sliver_idx = TBGetUniqueIndex('next_sliver', 1);
     my $sliver_urn = GeniHRN::Generate("@OURDOMAIN@", "sliver", $sliver_idx);
     GeniXML::SetText("sliver_id", $newnode, $sliver_urn);
-    
+
+    #
+    # Add the list of vnodes. 
+    #
+    my $vmlistref = GeniXML::AddElement("vmlist", $newnode,$GeniXML::EMULAB_NS);
+    foreach my $vnode (@vnodes) {
+	my $vmref = GeniXML::AddElement("vm", $vmlistref, $GeniXML::EMULAB_NS);
+	GeniXML::SetText("client_id", $vmref, $vnode->vname());
+	GeniXML::SetText("vnode", $vmref, $vnode->node_id());
+    }
     return $newnode;
 }
 
