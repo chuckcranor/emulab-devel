@@ -1291,9 +1291,11 @@ sub LoadVirtNodes($)
 	}
 
 	#
-	# Record the type selections for the mapper.
+	# Record the type selections for the mapper. If this was a vtype,
+	# then we selected the first real type from the list. Might not be
+	# what we want to do.
 	#
-	if (!NodeType->IsClass($type)) {
+	if (!$vnode->_typeinfo()->IsClass()) {
 	    if (!defined($self->types()->{$type})) {
 		$self->types()->{$type} = 0;
 	    }

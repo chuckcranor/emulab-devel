@@ -301,13 +301,14 @@ sub Stringify($)
 #
 # Is the argument a class instead of a type.
 #
-sub IsClass($$)
+sub IsClass($)
 {
-    my (undef, $class) = @_;
+    my ($self) = @_;
+    my $type   = $self->type();
 
     my $query_result =
 	DBQueryWarn("select type from node_types ".
-		    "where class='$class' and class!=type limit 1");
+		    "where class='$type' and class!=type limit 1");
 
     return $query_result->numrows;
 }
