@@ -2011,6 +2011,8 @@ CREATE TABLE `future_reservations` (
   `notes` mediumtext,
   `admin_notes` mediumtext,
   `created` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `approved` datetime DEFAULT NULL,
+  `approver` varchar(8) DEFAULT NULL,
   PRIMARY KEY (`idx`)
 ) ENGINE=MyISAM DEFAULT CHARSET=latin1;
 
