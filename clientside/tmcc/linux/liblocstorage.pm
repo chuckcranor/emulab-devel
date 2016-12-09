@@ -1143,6 +1143,10 @@ sub os_check_storage_slice($$)
 		# additional sanity checks (right now fsck'ing the alleged FS)
 		# and if it passes, re-add the mount line.
 		#
+		# XXX It might also be because we have re-loaded the OS
+		# and not only the fstab line but the mountpoint might be
+		# missing. We attempt to repair this case as well.
+		#
 		$line = `grep '^/dev/$dev\[\[:space:\]\]' /etc/fstab`;
 		if (!$line) {
 		    warn("  $lv: mount of /dev/$dev missing from fstab; sanity checking and re-adding...\n");
@@ -1159,6 +1163,14 @@ sub os_check_storage_slice($$)
 			return -1;
 		    }
 		    undef $href->{'LVDEV'};
+
+		    # make sure the mount point exists (case of reloaded OS)
+		    if (! -d "$mpoint" &&
+			mysystem("$MKDIR -p $mpoint")) {
+			warn("*** $lv: could not create mountpoint '$mpoint'\n");
+			return -1;
+		    }
+
 		    if (!open(FD, ">>/etc/fstab")) {
 			warn("*** $lv: could not add mount to /etc/fstab\n");
 			return -1;
