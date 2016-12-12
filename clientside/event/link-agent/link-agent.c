@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2000-2014 University of Utah and the Flux Group.
+ * Copyright (c) 2000-2016 University of Utah and the Flux Group.
  * 
  * {{{EMULAB-LICENSE
  * 
@@ -70,17 +70,6 @@ usage()
 		"Usage: %s [-s server] [-p port] [-k keyfile] [-l logfile] "
 		"[-i pidfile] -e pid/eid [names ...]\n", progname);
 	exit(-1);
-}
-
-static inline void
-upcase(char *str)
-{
-	if (str) {
-		while (*str) {
-			*str = toupper(*str);
-			str++;
-		}
-	}
 }
 
 int
