@@ -36,7 +36,7 @@ sub usage()
 {
     print("Usage: nalloc [-d] [-f] [-p] <pid> <eid> <node> <node> <...>\n".
 	  "		-p enables partial allocation mode\n".
-	  "             -f forces allocation, overriding admission control\n" .
+	  "		-f forces allocation, overriding admission control\n" .
 	  "		-d enables debugging output\n");
     exit(-1);
 }
@@ -102,15 +102,16 @@ my @node_names	= @ARGV;
 #
 # Locals
 # 
-my $error	  = 0;
-my $noalloc	  = 0;
-my @oldnodes	  = ();
-my @nodes	  = ();
-my $need_consetup = 0;
-my @need_history  = ();
-my @need_clearbl  = ();
-my @need_pxeconfig= ();
-my $errormsg      = "";
+my $error	   = 0;
+my $noalloc	   = 0;
+my @oldnodes	   = ();
+my @nodes	   = ();
+my $need_consetup  = 0;
+my @need_history   = ();
+my @need_clearbl   = ();
+my @need_pxeconfig = ();
+my $errormsg       = "";
+my $admission_ctrl = 0;
 
 TBDebugTimeStamp("nalloc started");
 
@@ -141,6 +142,9 @@ if (!$experiment->AccessCheck($this_user, TB_EXPT_MODIFY)) {
     die("*** $0:\n".
 	"    You do not have permission to allocate nodes in $pid/$eid\n");
 }
+
+$admission_ctrl = TBGetSiteVar( "general/admission_control" );
+$admission_ctrl = defined( $admission_ctrl ) && $admission_ctrl;
 
 #
 # Before locking any tables, do a quick check to make sure the project
@@ -231,10 +235,15 @@ if ($debug) {
     print "List Ready: @nodes\nError=$error\n";
 }
 
-# Admission control check -- advisory only, for now.
+# Admission control check -- advisory only, unless sitevar
+# general/admission_control is turned on.
 
 if ($debug) {
-    print "Running advisory admission control verification...\n";
+    if( $admission_ctrl ) {
+	print "Running admission control verification...\n";
+    } else {
+	print "Running advisory admission control verification...\n";
+    }
 }
 
 my %types = ();
@@ -245,6 +254,9 @@ foreach my $type ( keys( %types ) ) {
     my $reservations = Reservation->LookupAll( $type );
     if( !Reservation->IsFeasible( $reservations, \$errormsg ) ) {
 	print "Existing admission control violation for type $type: $errormsg\n";
+	if( $admission_ctrl ) {
+	    $noalloc++;
+	}
 	print "Omitting admission control verification.\n";
 	goto admissionfailure;
     }
@@ -273,7 +285,9 @@ foreach my $type ( keys( %types ) ) {
 	    print STDERR "WARNING: SCHEDULED RESERVATIONS ARE NOW INFEASIBLE!\n";
 	    # FIXME notify admins about violation
 	} else {
-	    # FIXME once we enforce admission control, we will abort here!
+	    if( $admission_ctrl ) {
+		$noalloc++;
+	    }
 	}
 	goto admissionfailure;
     }

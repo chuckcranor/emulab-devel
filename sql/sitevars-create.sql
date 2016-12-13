@@ -173,6 +173,7 @@ INSERT INTO sitevariables VALUES ('reload/failtime',NULL,'0','If a node has been
 INSERT INTO sitevariables VALUES ('reload/warnonretry',NULL,'1','If non-zero send e-mail to testbed-ops when a retry is attempted.',0);
 INSERT INTO sitevariables VALUES ('reload/hwdownaction',NULL,'nothing','What to do when nodes are moved to hwdown. One of: poweroff, adminmode, or nothing.',0);
 INSERT INTO sitevariables VALUES ('general/architecture_priority',NULL,'x86_64,aarch64','Default mapper ordering for multi architecture testbeds.',0);
+INSERT INTO sitevariables VALUES ('general/admission_control','0','0','When set, refuse node allocation if reservation admission control fails.',0);
 
 /*!40103 SET TIME_ZONE=@OLD_TIME_ZONE */;
 
