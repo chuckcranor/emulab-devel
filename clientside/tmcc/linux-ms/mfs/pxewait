@@ -60,6 +60,12 @@ echo "`date`: pxewait returns: $bootwhat"
 case $bootwhat in
 mfs:*frisbee)
     echo "continuing with frisbee..."
+    #
+    # XXX we might have been forced out of the BOOTING state when we
+    # waited, so force us back in again (and more importantly, make sure
+    # we are in the RELOAD opmode.
+    #
+    $BINDIR/tmcc state BOOTING
     exit 0
     ;;
 *)
