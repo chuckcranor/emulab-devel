@@ -42,6 +42,7 @@ use Node;
 use NodeType;
 use OSImage;
 use User;
+use EmulabConstants;
 use English;
 use event;
 use Data::Dumper;
@@ -59,9 +60,6 @@ my $WITHPROVENANCE= @IMAGEPROVENANCE@;
 my $WITHDELTAS	= @IMAGEDELTAS@;
 my $IMAGEINFO	= "$TB/sbin/imageinfo";
 
-# Paths to binaries
-my $TBUISP	    = "$TB/bin/tbuisp";
-
 # XXX windows load
 my $MAKECONF	    = "$TB/sbin/dhcpd_makeconf";
 my $IMAGEX_OSNAME   = "IMAGEX-MFS";
@@ -72,6 +70,11 @@ my $IMAGEX_PXEPATH  = "/tftpboot/pxelinux/winpe";
 # for the occasional pxeboot failure.
 #
 $MAXRETRIES  = 1;
+
+#
+# This could also be a sitevar, but let's not right now.
+#
+my $DEFAULT_DEBUG_LEVEL = 10;
 
 #
 # Hack constant factor (slop) to add to the max reload wait time for any node
@@ -113,7 +116,7 @@ sub New($$$;@)
     bless($self, $class);
 
     # We need this guy right away!
-    $self->debug(0);
+    $self->debug($DEFAULT_DEBUG_LEVEL);
 
     return $self;
 }
@@ -509,14 +512,8 @@ sub osload($$$) {
 	}
     }
 
-    foreach my $i (0 .. $#imageids) {
-	my $imageid = $imageids[$i];
-	$images[$i] = OSImage->Lookup($imageid);
+    foreach my $i (0 .. $#images) {
 	my $image = $images[$i];
-	if (!defined($image)) {
-	    tberror("Could not map $imageid to its object!");
-	    return -1;
-	}
 
 	#
 	# Check permission to use the imageid.
@@ -930,6 +927,14 @@ sub osload($$$) {
     my $failures = $self->failed();
     print "$self: Done! There were $failures failures.\n";
 
+    #
+    # Since we use this in long running daemons, be sure to release
+    # the event system connection, or else we stack up lots of handles
+    # and socket connections to the event server.
+    #
+    event_unregister($evhandle)
+	if (defined($evhandle));
+
     if ($flags{asyncmode}) {
 	$self->dprint(3,"osload: asyncmode osload writing results");
 	#
@@ -989,7 +994,7 @@ sub WaitTillReloadDone($$$$$@)
 
     foreach my $node ( @nodes ) {
 	my $nodeobject = $self->node($node);
-	if (1 && !$self->nodeflag($nodeobject,'nowait')) {
+	if (!$self->nodeflag($nodeobject,'nowait')) {
 	    $done{$node} = 0;
 	}
 	else {
@@ -1153,6 +1158,7 @@ sub WaitTillReloadDone($$$$$@)
 		if ($waittime > $maxwait ||
 		    $eventstate eq TBDB_NODESTATE_TBFAILED() ||
 		    $eventstate eq TBDB_NODESTATE_PXEFAILED() ||
+		    $eventstate eq TBDB_NODESTATE_RELOADFAILED() ||
 		    $isstuck) {
 
 		    #
@@ -1173,6 +1179,7 @@ sub WaitTillReloadDone($$$$$@)
 			"it has been $t minutes since it was rebooted.";
 
 		    if ($eventstate eq TBDB_NODESTATE_TBFAILED() ||
+			$eventstate eq TBDB_NODESTATE_RELOADFAILED() ||
 			$eventstate eq TBDB_NODESTATE_PXEFAILED()) {
 			tbnotice("$self: $node is stuck in $eventstate.");
 		    }
@@ -1214,6 +1221,7 @@ sub WaitTillReloadDone($$$$$@)
 				     (60*6),
 				     \$actual_state,
 				     (TBDB_NODESTATE_TBFAILED,
+				      TBDB_NODESTATE_RELOADFAILED,
 				      TBDB_NODESTATE_PXEFAILED,
 				      TBDB_NODESTATE_ISUP))) {
 		    $done{$node} = $waitmode;
@@ -1522,10 +1530,8 @@ sub osload_setupswapinfo($$$;@)
 	if (! -r $basesig) {
 	    $mustcopy = 1;
 	} elsif (!defined($gotsig{$basesig})) {
-	    my (undef,undef,undef,undef,undef,undef,undef,undef,
-		undef,$fromtime,undef,undef,undef) = stat("$sigdir/$signame");
-	    my (undef,undef,undef,undef,undef,undef,undef,undef,
-		undef,$totime,undef,undef,undef) = stat($basesig);
+	    my $fromtime = stat("$sigdir/$signame")->mtime;
+	    my $totime = stat($basesig)->mtime;
 	    if ($fromtime > $totime) {
 		print "*** swapinfo: WARNING: ".
 		    "$rimagename.sig out of date, updating...\n";
@@ -1715,7 +1721,7 @@ sub _LoadCurrentImages($$)
     my $def_boot_osid  = $nodeobject->def_boot_osid();
     my $def_boot_vers  = $nodeobject->def_boot_osid_vers();
     my $osimage = OSImage->Lookup($def_boot_osid, $def_boot_vers);
-    if (! defined($osimage) {
+    if (! defined($osimage)) {
 	tberror("Could not find OS $def_boot_osid in the DB!");
 	return undef;
     }
@@ -1783,7 +1789,7 @@ sub AddNode($$$$)
 
     if ($self->nodeflag($nodeobject,'usedefault')) {
 	if (defined($imagelistref) && scalar(@$imagelistref)) {
-		    tbwarn("$self AddNode($node_id): we were given $imagelist, but are " . 
+	    tbwarn("$self AddNode($node_id): we were given $imagelist, but are " .
 		   " going to use the default OS instead!");
 	}
 
@@ -1793,7 +1799,7 @@ sub AddNode($$$$)
     }
     elsif ($self->nodeflag($nodeobject,'usecurrent')) {
 	if (defined($imagelistref) && scalar(@$imagelistref)) {
-	    tbwarn("$self AddNode($node_id): we were given $imagelist, but are " . 
+	    tbwarn("$self AddNode($node_id): we were given $imagelist, but are " .
 		   " going to use the current OS instead!");
 	}
 
@@ -1827,7 +1833,6 @@ sub _CheckImages($$)
     my @images = @$imagelistref;
     my @imageids = map { $_->imageid() } @images;
     my @imageidxs = (0 .. $#imageids);
-    my @images = ();
 
     foreach my $i (@imageidxs) {
 	my $imageid = $imageids[$i];
@@ -1883,7 +1888,7 @@ sub SetBootOS($$)
 
     print "$self SetBootOS($node_id): changing default OS to $osimage\n";
     if (!$TESTMODE) {
-	if ($nodeobject->OSSelect($osimage,"def_boot_osid",$self->debug())) {
+	if ($nodeobject->OSSelect($image,"def_boot_osid",$self->debug())) {
 	    tberror "$self SetBootOS($node_id): os_select $defosid failed!";
 	    return -1;
 	}
@@ -2063,7 +2068,6 @@ sub UpdatePartitions($$)
 
 	my $loadpart   = $image->loadpart();
 	my $loadlen    = $image->loadlength();
-	my $imagepath  = $image->path();
 	my $imagepid   = $image->pid();
 
 	#
@@ -2126,8 +2130,8 @@ sub UpdatePartitions($$)
 		    'partition' => $i,
 		    'osid' => $osid,
 		    'osid_vers' => $osimage->version(),
-		    'imageid' => $imageid,
-		    'imageid_version' => $image->version(),
+		    'imageid' => $osimage->imageid(),
+		    'imageid_version' => $osimage->version(),
 		    'imagepid' => $imagepid,
 		    'mbr_version' => $curmbrvers
 		    );
@@ -2200,13 +2204,15 @@ sub ComputeMaxLoadWaitTime($$)
     my @images = @{$self->GetImages($nodeobject)};
     foreach my $image (@images) {
 	my $imageid = $image->imageid();
+	my $isfull     = $image->HaveFullImage();
+	my $imagesize  = ($isfull ? $image->size() : $image->deltasize());
 	#
 	# Compute a maxwait time based on the image size plus a constant
 	# factor for the reboot cycle.  This is used later in
 	# WaitTillReloadDone().  Arguably, this should be part of the
 	# image DB state, so we store it in the imageinfo array too.
 	#
-	my $chunks = $image->size() >> 20;# size may be > 2^31, shift is unsigned
+	my $chunks = $imagesize >> 20;# size may be > 2^31, shift is unsigned
 
 	# XXX aren't we multi-counting reboots??
 	# ok, moved constant factor out.
@@ -2363,7 +2369,7 @@ sub SetupReload($$)
 		    $pimage = $pimage->Parent();
 		    if (!$pimage) {
 			tberror "$node_id: delta image $image has no parent!";
-			goto failednode;
+			return -1;
 		    }
 		    push(@ilist, $pimage);
 		} while (!$pimage->HaveFullImage());
@@ -2373,10 +2379,29 @@ sub SetupReload($$)
 	    push(@allimages, $image);
 	}
 	#
-	# XXX we need to recompute access keys here.
+	# NB: we need to recompute access keys here.  Needs a refactor...
 	#
 	if ($founddelta) {
-	    ;
+	    #
+	    # This is a bad place for access_keys handling as stated above...
+	    #
+	    my %access_keys = ();
+	    foreach my $image (@allimages) {
+		# This is passed along so that remote node can request the file.
+		# Make sure the image object has an access key defined.
+		if (defined($image->access_key()) && $image->access_key() ne '') {
+		    $access_keys{$image} = $image->access_key();
+		}
+		elsif ($nodeobject->isremotenode()
+		       && !defined($access_keys{$image})) {
+		    $access_keys{$image} = TBGenSecretKey();
+
+		    if ($image->Update({'access_key' => $access_keys{$image}}) != 0) {
+			tberror "$self ($node_id): Could not initialize image access key";
+			return -1;
+		    }
+		}
+	    }
 	}
     } else {
 	@allimages = @images;
@@ -2438,7 +2463,13 @@ sub SetupReload($$)
 	$osimage = OSImage->Lookup($osid);
     }
 
-    if ($nodeobject->OSSelect($osimage,"next_boot_osid",$self->debug())) {
+    #
+    # We used to invoke os_select here and it checks for MODIFYINFO permission
+    # on the node. Since we have already checked for LOADIMAGE permission,
+    # which requires the same user privilege, we do not need to check further.
+    #
+    if (!defined($osimage)
+	|| $nodeobject->OSSelect($osimage,"next_boot_osid",$self->debug())) {
 	tberror "$self: os_select $osid failed!";
 	return -1;
     }
@@ -2494,11 +2525,15 @@ sub New($$;$)
 }
 
 # NOTE that virtnodes don't have default imageids -- they are only 
-# loaded (and thus arrive here) if the user specifically set a loadable
+# loaded (and thus arrive in osload) if the user specifically set a loadable
 # subOS for the node.
 sub _LoadDefaultImages($$)
 {
-    return 0;
+    my ($self,$nodeobject) = @_;
+
+    my $node_id = $nodeobject->node_id();
+    tberror("virtnodes do not have default images; bug? ($node_id)");
+    return -1;
 }
 #
 # But we *do* want the user to be able to simply reload the current OS.
@@ -2547,6 +2582,27 @@ sub ComputeMaxLoadWaitTime($$)
     return $maxwait;
 }
 
+package libosload_pcvm;
+use base qw(libosload_virtnode);
+
+use libdb;
+use libtestbed;
+use libtblog;
+use Node;
+use English;
+use Data::Dumper;
+use overload ('""' => 'Stringify');
+
+sub New($$)
+{
+    my ($class, $parent, $type) = @_;
+
+    my $self = $class->SUPER::New($parent,defined($type)?$type:"pcvm");
+    bless($self, $class);
+
+    return $self;
+}
+
 package libosload_mote;
 use base qw(libosload_common);
 
@@ -2558,6 +2614,8 @@ use OSImage;
 use English;
 use Data::Dumper;
 use overload ('""' => 'Stringify');
+
+my $TBUISP	    = "$TB/bin/tbuisp";
 
 sub New($$;$)
 {
@@ -2613,6 +2671,8 @@ sub SetupReload($$)
     # The mote goes 'down', then starts to reload
     #
     TBSetNodeEventState($node_id,TBDB_NODESTATE_SHUTDOWN);
+
+    return 0;
 }
 
 sub Reload($$) 
