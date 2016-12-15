@@ -81,6 +81,7 @@ CREATE TABLE `apt_aggregate_status` (
   `pcount` int(11) default '0',
   `pfree` int(11) default '0',
   `vcount` int(11) default '0',
+  `vfree` int(11) default '0',
   `last_error` text,
   PRIMARY KEY  (`urn`)
 ) ENGINE=MyISAM DEFAULT CHARSET=latin1;
