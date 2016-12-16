@@ -98,6 +98,7 @@ class Aggregate
     function pcount()       { return $this->sfield('pcount'); }
     function pfree()        { return $this->sfield('pfree'); }
     function vcount()       { return $this->sfield('vcount'); }
+    function vfree()        { return $this->sfield('vfree'); }
     function last_error()   { return $this->sfield('last_error'); }
 
     # Hmm, how does one cause an error in a php constructor?

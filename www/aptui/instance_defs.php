@@ -920,7 +920,7 @@ function CalculateAggregateStatus(&$amlist, &$fedlist, &$status) {
             $status[$urn] = array(
                 "rawPCsAvailable"  => $aggregate->pfree(),
                 "rawPCsTotal"      => $aggregate->pcount(),
-                "VMsAvailable"     => "0",
+                "VMsAvailable"     => $aggregate->vfree(),
                 "VMsTotal"         => $aggregate->vcount(),
                 "health"           => ($aggregate->status() == "up" ? 100 :
                                        ($aggregate->status() == "down" ?
