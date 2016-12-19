@@ -32,7 +32,8 @@ sub DoUpdate($$$)
         DBQueryFatal("alter table apt_instances " .
 		     " add `repourl` tinytext after privkey, ".
 		     " add `reponame` varchar(40) default NULL after repourl, ".
-		     " add `repohash` varchar(64) default NULL after reponame");
+		     " add `reporef` varchar(128) default NULL after reponame,".
+		     " add `repohash` varchar(64) default NULL after reporef");
     }
     if (!DBSlotExists("apt_instance_history", "repourl")) {
         DBQueryFatal("alter table apt_instance_history " .

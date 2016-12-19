@@ -322,6 +322,7 @@ CREATE TABLE `apt_instances` (
   `privkey` mediumtext,
   `repourl` tinytext,
   `reponame` varchar(40) default NULL,
+  `reporef` varchar(128) default NULL,
   `repohash` varchar(64) default NULL,
   `rspec` mediumtext,
   `script` mediumtext,
