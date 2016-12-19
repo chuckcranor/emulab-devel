@@ -131,8 +131,11 @@ with 2015Q3 and I have updated through 2016Q2.
       /var/db/ports/emacs/options. NOTE! For FBSD10, the WITHOUT_foo options
       no longer do anything. Until further notice you will have to "make
       config" manually and uncheck:
-        DBUS, GCONF, GIF, GSETTINGS, M17N, MAGICK, OTF, PNG, SCROLLBARS,
-        SOUND, SVG, TIFF, XFT, XIM, XPM, GTK2
+        DBUS,
+	GIF, MAGICK, PNG, SVG, TIFF, XPM,
+        GCONF, GSETTINGS, M17N, OTF, SCROLLBARS, XFT, XIM,
+	OSS,
+	GTK2
       and check:
         XAW
     * Samba. This should be handled by the emulab-fs/Makefile, but to be
