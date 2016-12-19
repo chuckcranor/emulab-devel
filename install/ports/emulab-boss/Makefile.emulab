@@ -12,11 +12,15 @@ OSARCH != /usr/bin/uname -m
 EMULAB_PORTVERSION=	UNSUPPORTED
 
 .if ${OSMAJOR} >= 10
-. if ${OSMINOR} >= 2
-EMULAB_PORTVERSION=	6.2
+. if ${OSMINOR} >= 3
+EMULAB_PORTVERSION=	6.3
 . else
-.  if ${OSMINOR} >= 1
+.  if ${OSMINOR} >= 2
+EMULAB_PORTVERSION=	6.2
+.  else
+.   if ${OSMINOR} >= 1
 EMULAB_PORTVERSION=	6.1
+.   endif
 .  endif
 . endif
 .endif
