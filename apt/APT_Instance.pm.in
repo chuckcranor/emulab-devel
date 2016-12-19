@@ -615,7 +615,7 @@ sub RecordHistory($$)
 		"       created,now(),$expired, ".
 		"       extension_count,extension_days, ".
 		"       physnode_count,virtnode_count, ".
-		"       servername,rspec,params,manifest ".
+		"       servername,rspec,script,paramdefs,params,manifest ".
 		" from apt_instances where uuid='$uuid'")
 	or return -1;
 
