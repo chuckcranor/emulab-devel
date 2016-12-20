@@ -1,7 +1,7 @@
 #!/usr/bin/perl -w
 
 #
-# Copyright (c) 2000-2014 University of Utah and the Flux Group.
+# Copyright (c) 2000-2016 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -34,18 +34,19 @@ use POSIX qw(:signal_h);
 sub usage()
 {
     print STDOUT
-	"Usage: rungenilib.proxy [-J] -u user [args ...]\n".
+	"Usage: rungenilib.proxy [-J [-B iocagepath]] -u user [args ...]\n".
         "Where options and arguments are those required by geni-lib,\n".
 	"except for -J which says to run script in a jail.\n";
  
     exit(-1);
 }
-my $optlist = "u:vpb:WJ";
+my $optlist = "u:vpb:WJB:";
 my $user;
 my $getparams= 0;
 my $paramsize;
 my $warningsfatal = 0;
 my $usejail = 0;
+my $iocagepath;
 
 #
 # Configure variables
@@ -109,6 +110,9 @@ if (defined($options{"W"})) {
 }
 if (defined($options{"J"})) {
     $usejail = 1;
+    if (defined($options{"B"})) {
+	$iocagepath = $options{"B"};
+    }
 }
 
 #
@@ -222,6 +226,8 @@ if ($warningsfatal) {
 
 my $exit_status;
 if ($usejail) {
+    my $bopt = (defined($iocagepath) ? "-B $iocagepath" : "");
+
     #
     # We are executing the command in a jail, fire off the jail script.
     # Note that the directory with all the files is owned by root and
@@ -234,8 +240,7 @@ if ($usejail) {
     # name space. Those copies will be owned by the user so they can be
     # read/written.
     #
-
-    $exit_status = system("$JAILPROG -u $user $ifile");
+    $exit_status = system("$JAILPROG $bopt -u $user $ifile");
 
     #
     # Now that we are done with the files, chown them to the user and
