@@ -41,7 +41,7 @@
     <value>mlinks,vlans</value>
   </attribute>
   <attribute name="version">
-    <value></value>
+    <value>1.1</value>
   </attribute>
   <attribute name="reboot_waittime">
     <value>60</value>
