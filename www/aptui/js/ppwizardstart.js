@@ -654,6 +654,16 @@ $(function () {
 	    // This clears any errors before new submit. Needs more thought.
 	    GenerateModalBody(formfields, null);
 
+	    //
+	    // XXX: Look for paramdefs/script in the main form and pass along.
+	    // This is for repo-based profiles.
+	    //
+	    if ($('#paramdefs').val() !== undefined) {
+		formfields["paramdefs"] = $('#paramdefs').val();
+		formfields["script"]    = $('#script_textarea').val();
+	    }
+	    console.info("formfields", formfields);
+
 	    // Not in checkform mode, this will take time.
 	    if (!checkonly) {
 		sup.ShowModal("#waitwait-modal");
@@ -714,9 +724,16 @@ $(function () {
 		    ShowEditor();
 		}
 	    }
+	    var blob = {"uuid" : uuid};
+	    //
+	    // XXX: Look for paramdefs/script in the form and pass that along.
+	    // This is for repo-based profiles.
+	    //
+	    if ($('#paramdefs').val() !== undefined) {
+		blob["paramdefs"] = $('#paramdefs').val();
+	    }
 	    var xmlthing = sup.CallServerMethod(null, "instantiate",
-						"GetParameters",
-						{"uuid"       : uuid});
+						"GetParameters", blob);
 	    xmlthing.done(callback);
 	}
 

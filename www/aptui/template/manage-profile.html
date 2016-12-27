@@ -1,3 +1,8 @@
+<style>
+.popover {
+    max-width: none;
+}
+</style>
 <div class='row'>
  <% if (viewing) { %>
   <div class='col-lg-3
@@ -15,21 +20,23 @@
 	    <td>Name:</td>
 	    <td><%- formfields.profile_name %></td>
 	  </tr>
-	  <tr>
-	    <td>Version:</td><td>
-	  <% if (history) { %>
-	  <a href='profile-history.php?uuid=<%= profile_uuid %>'>
+	  <% if (!fromrepo) { %>
+	    <tr>
+	      <td>Version:</td><td>
+		<% if (history) { %>
+		  <a href='profile-history.php?uuid=<%= profile_uuid %>'>
 	  	    <%- formfields.profile_version %></a>
-	  <% } else { %>
-	    <%- formfields.profile_version %>
+		<% } else { %>
+		  <%- formfields.profile_version %>
+		<% } %>
+		<% if (version_uuid != latest_uuid) { %>
+		  (Latest:
+		  <a href='manage_profile.php?action=edit&uuid=<%= latest_uuid %>'>
+		    <%- latest_version %></a>)
+		<% } %>
+	      </td>
+	    </tr>
 	  <% } %>
-	  <% if (version_uuid != latest_uuid) { %>
-	    (Latest:
-	    <a href='manage_profile.php?action=edit&uuid=<%= latest_uuid %>'>
-	       <%- latest_version %></a>)
-	  <% } %>
-	    </td>
-	  </tr>
 	  <tr>
 	    <td>Project:</td>
 	    <td><a href='show-project.php?pid=<%= formfields.profile_pid %>'>
@@ -100,6 +107,45 @@
 	<% } %>
       </div>
     </div>
+    <% if (fromrepo) { %>
+      <div class='panel panel-default hidden' id="repoinfo-panel">
+	<div class='panel-heading'>
+          <h4 class='panel-title text-center'>Repository Info</h4>
+	</div>
+	<div class='panel-body'
+	     style='overflow: hidden; padding-left: 5px; padding-right: 5px'>
+	  <table class='table-condensed nospaceafter'
+		 style='font-size:12px;'>
+	    <tr>
+	      <td>Refspec:</td>
+	      <td class="commit-refspec"></td>
+	    </tr>
+	    <tr>
+	      <td>Commit:</td>
+	      <td class="commit-hash"></td>
+	    </tr>
+	    <tr>
+	      <td>Date:</td>
+	      <td class="commit-date"></td>
+	    </tr>
+	    <tr>
+	      <td>Author:</td>
+	      <td class="commit-author"></td>
+	    </tr>
+	    <tr>
+	      <td>Log:</td>
+	      <td class="commit-log">
+		<span class="commit-log-start"></span>
+		<button type="button" class="hidden log btn btn-xs"
+		   data-toggle='popover'
+		   data-html="true"
+		   data-delay='{"hide":1000, "show":250}'>...</button>
+	      </td>
+	    </tr>
+	  </table>
+	</div>
+      </div>
+    <% } %>
   </div>
   <div class='col-lg-9
               col-md-9
@@ -137,10 +183,13 @@
 	        <input type='hidden' name='copyuuid' value='<%= copyuuid %>'>
 	      <% } %>
 	      <% if (snapuuid) { %>
-	          <input type='hidden' name='snapuuid' value='<%= snapuuid %>'>
+	        <input type='hidden' name='snapuuid' value='<%= snapuuid %>'>
 	      <% } %>
 	    </div>
 	  </div>
+	  <input type='hidden' id="repourl"
+		 name='formfields[profile_repourl]'
+		 value='<%- formfields.profile_repourl %>'>
 	  <% if (viewing) { %>
 	    <input type='hidden' name='uuid' value='<%= version_uuid %>'>
 	    <input type='hidden' name='formfields[profile_name]'
@@ -219,22 +268,27 @@
 			      profile source code.'>
 		<div class='row'>
                   <div class='col-xs-12'>
-                    <input class='filestyle' type='file'
-			 name='sourcefile' id='sourcefile' 
-			 data-classButton='btn btn-primary btn-xs'
-			 data-input='false'
-			 style='margin-right: 10px;'
-			 data-buttonText='Choose file'>
+		    <% if (!fromrepo) { %>
+		      <span id="sourcefile-button-div"
+			    style='margin-right: 10px;'>
+			<input class='filestyle' type='file'
+			       name='sourcefile' id='sourcefile' 
+			       data-classButton='btn btn-primary btn-xs'
+			       data-input='false'
+			       data-buttonText='Choose file'>
+		      </span>
+		    <% } %>
 		    <button class='btn btn-primary btn-xs'
 			  type='button'
-			  style='margin-right: 10px; margin-left: 10px;'
+			  style='margin-right: 10px;'
 			  id='edit_topo_modal_button'>
                       Topology</button>
 		    <button class='btn btn-primary btn-xs'
 			  type='button'
 			  style='margin-right: 10px;'
 			  id='show_source_modal_button'>
-		      <% if (viewing && canmodify) { %>Edit <% } %>Source
+		      <% if (viewing && canmodify && !fromrepo) { %>Edit <% } %>
+		      Source
 		    </button>
 		    <button class='btn btn-primary btn-xs pull-right hidden'
 			    type='button'
@@ -246,10 +300,39 @@
 			  style='margin-right: 10px;'
 			  id='show_xml_modal_button'>
                       XML</button>
+		    <% if (!viewing) { %>
+		      or 
+		      <button class='btn btn-primary btn-xs'
+     			      data-toggle='modal'
+			      data-target='#git-repo-modal'
+			      type='button'
+			      style='margin-left: 10px;'
+			      id='git-repo-button'>
+			Git Repo</button>
+		    <% } %>
 		  </div>
 		</div>
 	      </div>
 	    </div>
+	    <% } %>
+	    <% if (viewing && fromrepo) { %>
+	      <div class="form-group">
+		<div class="format-me"
+		     data-key='profile_repourl'
+		     data-label='Repository'>
+		  <span>
+		    <input type="text"
+			   class="form-control" readonly
+			   style="width: 75%; display: inline;"
+			   value='<%- formfields.profile_repourl %>'>
+		    <button class='btn btn-primary btn-xs'
+			    id="git-repo-update-button"
+			    type='button'
+			    style='margin-left: 10px;'>
+		      Update</button>
+		  </span>
+		</div>
+	      </div>
 	    <% } %>
  	    <textarea name="formfields[profile_rspec]"
 		      id='profile_rspec_textarea'
@@ -552,7 +635,7 @@
 	    </div>
 	  </div>
 	  <div id='rspectext_div'></div>
-	  </form>
+	</form>
       </div>
     </div>
   </div>
@@ -612,6 +695,43 @@
             <button class='btn btn-primary btn-sm'
 		    id='reuse_tour_button'
 		    type='button'>Reuse Tour</button>
+	  </center>
+	</div>
+      </div>
+    </div>
+  </div>
+  <!-- Git Repo -->
+  <div id='git-repo-modal' class='modal fade'
+       data-keyboard='false' data-backdrop='static'>
+    <div class='modal-dialog'>
+      <div class='modal-content'>
+	<div class='modal-body'>
+	  <p>
+	    Provide a git url to a public repo, and we will create your
+	    profile from the repository. More info coming real soon!
+	  </p>
+	  <div class="row">
+	    <div class='col-sm-8 col-sm-offset-2'>
+	      <div class="form-group">
+		<input id="git-repo-url" type="text" class="form-control"
+		       <% if (fromrepo) { %>
+		       value='<%- formfields.profile_repourl %>'
+		       <% } %> >
+		<label class="control-label hidden"
+		       for="git-repo-url"></label>
+	      </div>
+	    </div>
+	  </div>
+          <center>
+            <button class='btn btn-success btn-sm'
+		    id='git-repo-confirm'
+		    style='margin-right: 10px;'
+		    type='button' name='delete'>Confirm
+	    </button>
+            <button class='btn btn-default btn-sm'
+		    data-dismiss='modal'
+                    type='button'>Cancel
+	    </button>
 	  </center>
 	</div>
       </div>
@@ -686,7 +806,7 @@ Instructions are optional.
   <div id='publish_div'></div>
   <div id='instantiate_div'></div>
   <div id='ppmodal_div'></div>
-  <div id='share_div'>
+  <div id='share_div'></div>
 </div>
 <% if (viewing && versions.length > 1) { %>
 <div class='row'>
@@ -700,7 +820,7 @@ Instructions are optional.
 	  <thead>
 	    <tr>
 	      <th>Vers</th>
-	      <th>Description</th>
+	      <th style="width: 85%">Description</th>
 	      <th style='white-space: nowrap;'>
 		Created&nbsp;&nbsp;&nbsp;&nbsp;</th>
 	      <% if (withpublishing) { %>
@@ -744,3 +864,15 @@ Instructions are optional.
   </div>
 </div>
 <% } %>
+<div class='row hidden' id="gitpicker-div">
+  <div class='col-sm-12'>
+    <div class='panel panel-default'>
+      <div class='panel-heading'>
+        <h4 class='panel-title text-center'>Repository</h4>
+      </div>
+      <div id="gitrepo-picker" class='panel-body'>
+      </div>
+    </div>
+  </div>
+</div>
+

@@ -2,7 +2,7 @@ $(function ()
 {
     'use strict';
 
-    var templates = APT_OPTIONS.fetchTemplateList(['manage-profile', 'waitwait-modal', 'renderer-modal', 'showtopo-modal', 'oops-modal', 'rspectextview-modal', 'guest-instantiate', 'publish-modal', 'instantiate-modal', 'share-modal']);
+    var templates = APT_OPTIONS.fetchTemplateList(['manage-profile', 'waitwait-modal', 'renderer-modal', 'showtopo-modal', 'oops-modal', 'rspectextview-modal', 'guest-instantiate', 'publish-modal', 'instantiate-modal', 'share-modal', 'gitrepo-picker']);
     var manageString = templates['manage-profile'];
     var waitwaitString = templates['waitwait-modal'];
     var rendererString = templates['renderer-modal'];
@@ -13,7 +13,7 @@ $(function ()
     var publishString = templates['publish-modal'];
     var instantiateString = templates['instantiate-modal'];
     var shareString = templates['share-modal'];
-
+    var gitrepoString = templates['gitrepo-picker'];
 
     var profile_uuid = null;
     var profile_name = '';
@@ -23,6 +23,8 @@ $(function ()
     var snapping     = 0;
     var gotrspec     = 0;
     var gotscript    = 0;
+    var fromrepo     = 0;
+    var repohash     = null;
     var ajaxurl      = "";
     var amlist       = null;
     var modified     = false;
@@ -41,6 +43,7 @@ $(function ()
     var guestInstTemplate = _.template(guestInstantiateString);
     var InstTemplate      = _.template(instantiateString);
     var shareTemplate     = _.template(shareString);
+    var gitrepoTemplate   = _.template(gitrepoString);
     var stepsInitialized  = false;
 
     var pythonRe = /^import/m;
@@ -74,6 +77,12 @@ $(function ()
 	// Ditto a script.
 	if (_.has(fields, "profile_script") && fields["profile_script"] != "") {
 	    gotscript = 1;
+	}
+	// Ditto a repourl
+	if (_.has(fields, "profile_repourl") &&
+	    fields["profile_repourl"] != "") {
+	    fromrepo = 1;
+	    repohash = fields["profile_repohash"];
 	}
 
         // If this is an existing profile, stash the name/project
@@ -127,7 +136,9 @@ $(function ()
 	    disabled:           window.DISABLED,
 	    versions:	        versions,
 	    withpublishing:     window.WITHPUBLISHING,
-	    genilib_editor:     false
+	    genilib_editor:     false,
+	    canrepo:            window.CANREPO,
+	    fromrepo:           fromrepo
 	});
 	manage_html = aptforms.FormatFormFieldsHorizontal(manage_html,
 							  {"wide" : true});
@@ -154,6 +165,11 @@ $(function ()
     	var rspectext_html = rspectextTemplate({});
 	$('#rspectext_div').html(rspectext_html);
 	$('#share_div').html(shareTemplate({formfields: fields}))
+
+	// Fireoff repo stuff now.
+	if (fromrepo) {
+	    SetupRepo();
+	}
 	
 	//
 	// Fix for filestyle problem; not a real class I guess, it
@@ -214,21 +230,6 @@ $(function ()
 	    reader.readAsText(this.files[0]);
 	});
 
-	// Handler for all paths to rspec change (file upload, jacks, edit).
-	function changeRspec(newRspec)
-	{
-	    if (pythonRe.test(newRspec) || tclRe.test(newRspec)) {
-		//
-		// A geni-lib script. We are going to pass the script to
-		// the server to be "run", which returns XML.
-		//
-		if (newRspec != $('#profile_script_textarea').val()) {
-		    checkScript(newRspec);
-		}
-		return;
-	    }
-	    NewRspecHandler(newRspec);
-	}
 	$('#edit_topo_modal_button').click(function (event) {
 	    event.preventDefault();
 	    editor.show($('#profile_rspec_textarea').val(), changeRspec);
@@ -242,7 +243,7 @@ $(function ()
 	    var source = $.trim($('#profile_script_textarea').val());
 	    var type   = "source";
 
-	    if (source.length > 0 && window.ACTION === 'edit') {
+	    if (source.length > 0 && window.ACTION === 'edit' && !fromrepo) {
 		openEditor();
 	    } else {
 	        if (source.length === 0) {
@@ -261,11 +262,20 @@ $(function ()
 	        else {
 	            sup.ClearDownloadOnClick($('#rspec_modal_download_button'));
 //		    $('#rspec_modal_download_button').addClass("hidden");
-	        }	    
-	        $('#rspec_modal_upload_span').removeClass("hidden");
-	        $('#rspec_modal_editbuttons').removeClass("hidden");
-	        $('#rspec_modal_viewbuttons').addClass("hidden");
-	        $('#modal_profile_rspec_textarea').prop("readonly", false);	    
+	        }
+		if (!fromrepo) {
+	            $('#rspec_modal_upload_span').removeClass("hidden");
+	            $('#rspec_modal_editbuttons').removeClass("hidden");
+	            $('#rspec_modal_viewbuttons').addClass("hidden");
+	            $('#modal_profile_rspec_textarea').prop("readonly", false);
+		}
+		else {
+		    // No editing repo-based profiles
+	            $('#rspec_modal_upload_span').addClass("hidden");
+	            $('#rspec_modal_editbuttons').addClass("hidden");
+	            $('#rspec_modal_viewbuttons').removeClass("hidden");
+	            $('#modal_profile_rspec_textarea').prop("readonly", true);
+		}
 	        $('#modal_profile_rspec_textarea').val(source);
 	        $('#rspec_modal').modal({'backdrop':'static','keyboard':false});
 	        $('#rspec_modal').modal('show');
@@ -309,7 +319,7 @@ $(function ()
         $('#rspec_modal').on('shown.bs.modal', function() {
 	    var source   = $('#modal_profile_rspec_textarea').val();
 	    var mode     = "text/xml";
-	    var readonly = window.CLONING ||
+	    var readonly = window.CLONING || fromrepo ||
 		$('#modal_profile_rspec_textarea').prop("readonly");
 
 	    // Need to determine the mode.
@@ -327,7 +337,7 @@ $(function ()
 		$('#modal_profile_rspec_div').prepend(elt);
 	    }, {
 		value: source,
-                lineNumbers: false,
+                lineNumbers: true,
 		smartIndent: true,
 		autofocus: true,
                 mode: mode,
@@ -385,6 +395,17 @@ $(function ()
 	$('#delete-confirm').click(function (event) {
 	    event.preventDefault();
 	    DeleteProfile();
+	});
+
+	// Git repo URL modal.
+	$('#git-repo-confirm').click(function (event) {
+	    event.preventDefault();
+	    HandleGitRepoChange();
+	});
+	// Git repo update button
+	$('#git-repo-update-button').click(function (event) {
+	    event.preventDefault();
+	    HandleGitRepoUpdate();
 	});
 
 	//
@@ -549,6 +570,21 @@ $(function ()
 		ConvertFromExperiment();
 	    }
 	}
+    }
+    // Handler for all paths to rspec change (file upload, jacks, edit).
+    function changeRspec(newRspec, callback)
+    {
+	if (pythonRe.test(newRspec) || tclRe.test(newRspec)) {
+	    //
+	    // A geni-lib script. We are going to pass the script to
+	    // the server to be "run", which returns XML.
+	    //
+	    if (newRspec != $('#profile_script_textarea').val()) {
+		checkScript(newRspec, callback);
+	    }
+	    return;
+	}
+	NewRspecHandler(newRspec, callback);
     }
 
     //
@@ -779,7 +815,7 @@ $(function ()
      * use the original tour section. Once we get confirmation, we can
      * continue with the update.
      */
-    function NewRspecHandler(newrspec)
+    function NewRspecHandler(newrspec, finish_callback)
     {
 	newrspec     = $.trim(newrspec);
 	var oldrspec = $.trim($('#profile_rspec_textarea').val());
@@ -807,7 +843,11 @@ $(function ()
 	    $('#profile_rspec_textarea').val(newrspec);
 	    ExtractFromRspec();
 	    SyncSteps();
-	    ProfileModified();
+	    if (!fromrepo)
+		ProfileModified();
+	    if (finish_callback !== undefined) {
+		finish_callback(true);
+	    }
 	    if (gotscript) {
 		$('#profile_instructions').prop("readonly", true);
 		$('#profile_description').prop("readonly", true);
@@ -867,8 +907,8 @@ $(function ()
 	if (xmlDoc == null)
 	    return;
 	var xml    = $(xmlDoc);
-	console.info(rspec);
-	console.info(xml);
+	//console.info(rspec);
+	//console.info(xml);
 	
 	$('#profile_description').val("");
 	$(xml).find("rspec_tour > description").each(function() {
@@ -917,7 +957,7 @@ $(function ()
 	    window.location.replace(url);
 	}
 	sup.HideModal("#guest_instantiate_modal");
-	sup.ShowModal("#waitwait-modal");
+	WaitWait();
 	var xmlthing = sup.CallServerMethod(ajaxurl,
 					    "manage_profile",
 					    "InstantiateAsGuest",
@@ -945,7 +985,7 @@ $(function ()
 	if (amlist.length) {
 	    blob.where = $('#instantiate_where').val();
 	}
-	sup.ShowModal("#waitwait-modal");
+	WaitWait();
 	var xmlthing = sup.CallServerMethod(ajaxurl,
 					    "instantiate",
 					    "Instantiate", blob);
@@ -979,9 +1019,9 @@ $(function ()
     //
     // Show the waitwait modal.
     //
-    function WaitWait()
+    function WaitWait(message)
     {
-	sup.ShowModal('#waitwait-modal');
+	sup.ShowWaitWait(message);
     }
 
     //
@@ -1045,7 +1085,7 @@ $(function ()
 	    window.location.replace(json.value);
 	}
 	sup.HideModal('#delete_modal');
-	sup.ShowModal("#waitwait-modal");
+	WaitWait();
 	var xmlthing = sup.CallServerMethod(ajaxurl,
 					    "manage_profile",
 					    "DeleteProfile",
@@ -1074,7 +1114,7 @@ $(function ()
 	    $('#profile_published').html(json.value.published);
 	}
 	sup.HideModal('#publish_modal');
-	sup.ShowModal("#waitwait-modal");
+	WaitWait();
 	var xmlthing = sup.CallServerMethod(ajaxurl,
 					    "manage_profile",
 					    "PublishProfile",
@@ -1097,7 +1137,7 @@ $(function ()
     //
     // Pass a geni-lib script to the server to run (convert to XML).
     //
-    function checkScript(script)
+    function checkScript(script, rspechandler_callback)
     {
 	// Save for later.
 	$('#profile_script_textarea').val(script);
@@ -1115,10 +1155,11 @@ $(function ()
 	    }
 	    if (json.value.rspec != "") {
 		gotscript = 1;
-		NewRspecHandler(json.value.rspec);
+		NewRspecHandler(json.value.rspec, rspechandler_callback);
 		// Force this; the script is obviously different, but the
-		// the XML might be exactly same. Still want to save it. 
-		ProfileModified();
+		// the XML might be exactly same. Still want to save it.
+		if (!fromrepo)
+		    ProfileModified();
 		// Show the XML source button.
 		$('#show_xml_modal_button').removeClass("hidden");
 	    }
@@ -1130,13 +1171,148 @@ $(function ()
 	 * If this is a modification to an existing profile, we still
 	 * have the project name in the same variable.
 	 */
-	sup.ShowWaitWait("We are converting your geni-lib script to an rspec");
+	WaitWait("We are converting your geni-lib script to an rspec");
 	var xmlthing = sup.CallServerMethod(ajaxurl,
 					    "manage_profile",
 					    "CheckScript",
 					    {"script"   : script,
 					     "pid"      : $('#profile_pid').val()});
 	xmlthing.done(callback);
+    }
+
+    /*
+     * User is requesting to create a profile from a git repo.
+     * Try to clone that repo and get the script/rspec out of it.
+     */
+    function HandleGitRepoChange()
+    {
+	var repourl = $('#git-repo-url').val();
+	// Do nothing until we have something.
+	if (repourl == "") {
+	    return;
+	}
+	if (repourl.substring(0,8) != "https://") {
+	    $('#git-repo-modal [for=git-repo-url]').removeClass("hidden");
+	    $('#git-repo-modal .form-group').addClass("has-error");
+	    $('#git-repo-modal [for=git-repo-url]')
+		.text("URL must start with https://");
+	    return;
+	}
+	// Clear errors
+	$('#git-repo-modal [for=git-repo-url]').addClass("hidden");
+	$('#git-repo-modal .form-group').removeClass("has-error");
+	sup.HideModal('#git-repo-modal');
+	
+	var callback = function(json) {
+	    console.info(json);
+
+	    if (json.code) {
+		sup.HideWaitWait();
+		sup.SpitOops(json.value);
+		return;
+	    }
+	    fromrepo = 1;
+	    // Lets not show this anymore.
+	    $('#sourcefile-button-div').addClass("hidden");
+	    // Add the url to the form.
+	    $('#quickvm_create_profile_form #repourl').val(repourl);
+	    sup.HideWaitWait(function() {
+		changeRspec(json.value.script);
+	    });
+	}
+	WaitWait("We are attempting to clone your repository. " +
+		 "Patience please.");
+	var xmlthing = sup.CallServerMethod(ajaxurl,
+					    "manage_profile",
+					    "GetRepository",
+					    {repourl : repourl});
+					    
+	xmlthing.done(callback);
+    }
+
+    /*
+     * Update from origin repository, possibly getting a new script or rspec
+     * cause HEAD changed at the origin.
+     */
+    function HandleGitRepoUpdate()
+    {
+	var callback = function(blob) {
+	    console.info("HandleGitRepoUpdate", blob);
+	    if (blob) {
+		/*
+		 * The point of this callback is to process the script/rspec
+		 * before trying to change the profile to use the new source.
+		 * The processing is going to catch script/rspec errors, so
+		 * we want to wait till that is done before telling the backend
+		 * to record the new source in the profile descriptor. 
+		 */
+		changeRspec(blob.source, function(changed) {
+		    console.info("changerspec callback", changed, repohash);
+		    if (changed) {
+			if (blob.hash != repohash) {
+			    /*
+			     * If the commit hash for HEAD has not changed, we
+			     * do not need to do this.
+			     */
+			    UpdateProileFromMaster(blob.hash);
+			}
+		    }
+		});
+		// Reset the list of tags and branches whenever we successfully
+		// update our clone.
+		SetupRepo();
+	    }
+	};
+	gitrepo.UpdateRepo(version_uuid, callback);
+    }
+
+    function SetupRepo()
+    {
+	gitrepo.InitRepoPicker(version_uuid,
+			       function(which) {
+				   SelectRepoTarget(which);
+			       });
+	// This updates the info panel on the left side.
+	gitrepo.GetCommitInfo(version_uuid);
+    }
+
+    /*
+     * User has clicked on a branch/tag. We need to get that branch/tag
+     * source code and update the page.
+     */
+    function SelectRepoTarget(which)
+    {
+	var callback = function (source, hash) {
+	    if (source) {
+		console.info(source);
+		changeRspec(source);
+	    }
+	};
+	gitrepo.GetRepoSource(version_uuid, which, callback);
+    }
+
+    /*
+     * Force an update to repo-based profile with new script and/or rspec.
+     */
+    function UpdateProileFromMaster(newhash)
+    {
+	var update_callback = function(json) {
+	    if (json.code) {
+		console.info("UpdateProileFromMaster", json.value);
+		alert("Could not update profile from new master");
+	    }
+	    // Mark as HEAD in the page so we do not update again.
+	    repohash = newhash;
+	};
+	var args = {"uuid"  : version_uuid,
+		    "rspec" : $('#profile_rspec_textarea').val()};
+	if ($('#profile_script_textarea').val() != "") {
+	    args["script"] = $('#profile_script_textarea').val();
+	}
+	var xmlthing = sup.CallServerMethod(ajaxurl,
+					    "manage_profile",
+					    "UpdateFromMaster", args);
+	xmlthing.done(update_callback);
     }
 
     /*
@@ -1172,7 +1348,7 @@ $(function ()
 	 * If this is a modification to an existing profile, we still
 	 * have the project name in the same variable.
 	 */
-	sup.ShowWaitWait("We are converting your NS file to geni-lib");
+	WaitWait("We are converting your NS file to geni-lib");
 	var xmlthing = sup.CallServerMethod(ajaxurl,
 					    "manage_profile",
 					    "ConvertClassic",
@@ -1180,7 +1356,6 @@ $(function ()
 					     "pid"    : $('#profile_pid').val()});
 	xmlthing.done(callback);
     }
-
 
     function openEditor()
     {

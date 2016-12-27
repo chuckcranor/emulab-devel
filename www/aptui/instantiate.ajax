@@ -103,11 +103,22 @@ function Do_GetParameters()
 	SPITAJAX_ERROR(1, "Not enough permission to instantiate profile");
 	return;
     }
-    if (!$profile->isParameterized()) {
+    #
+    # For a repo-based profile, the paramdefs will be passed in.
+    # Note that different refspecs might be parameterized, but others not.
+    #
+    if ($profile->repourl() &&
+        isset($ajax_args["paramdefs"]) && $ajax_args["paramdefs"] != "") {
+        $paramdefs = $ajax_args["paramdefs"];
+    }
+    elseif (!$profile->isParameterized()) {
 	SPITAJAX_ERROR(1, "Not a parameterized profile");
 	return;
     }
-    list ($formfrag, $defaults) = $profile->GenerateFormFragment();
+    else {
+        $paramdefs = $profile->paramdefs();
+    }
+    list ($formfrag, $defaults) = $profile->GenerateFormFragment($paramdefs);
     SPITAJAX_RESPONSE(array("formfrag" => htmlentities($formfrag),
 			    "defaults" => $defaults));
 }
@@ -820,8 +831,29 @@ function Do_Submit()
     # we could get an rspec.
     #
     if ($profile->isParameterized() && $this_user &&
-        isset($formfields["pp_rspec"]) && $formfields["pp_rspec"] != "") {
-        $args["rspec"] = $formfields["pp_rspec"];
+        isset($formfields["rspec"]) && $formfields["rspec"] != "") {
+        $args["rspec"] = $formfields["rspec"];
+    }
+
+    #
+    # For a repo-based profile, we might get an rspec and/or a script.
+    # Need to deal with the paramdefs block too.
+    #
+    if ($profile->repourl() && $this_user) {
+        if (isset($formfields["script"]) && $formfields["script"] != "") {
+            $args["script"] = $formfields["script"];
+        }
+        if (isset($formfields["rspec"]) && $formfields["rspec"] != "") {
+            $args["rspec"] = $formfields["rspec"];
+        }
+        # If the user is instantiating the profile version, we will not
+        # get these.
+        if (isset($formfields["reporef"]) && $formfields["reporef"] != "") {
+            $args["reporef"] = $formfields["reporef"];
+        }
+        if (isset($formfields["repohash"]) && $formfields["repohash"] != "") {
+            $args["repohash"] = $formfields["repohash"];
+        }
     }
 
     $aggregate_urn = "";

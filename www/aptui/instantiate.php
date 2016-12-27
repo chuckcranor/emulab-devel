@@ -58,6 +58,7 @@ $optargs = OptionalPageArguments("create",        PAGEARG_STRING,
 				 "asguest",       PAGEARG_BOOLEAN,
 				 "default",       PAGEARG_STRING,
 				 "from",          PAGEARG_STRING,
+				 "refspec",       PAGEARG_STRING,
 				 "formfields",    PAGEARG_ARRAY);
 
 if ($ISAPT && !$this_user) {
@@ -317,6 +318,7 @@ function SPITFORM($formfields, $newuser, $errors)
     global $TBBASE, $APTMAIL, $ISAPT, $ISCLOUD, $ISPNET, $PORTAL_NAME;
     global $profile_array, $this_user, $profilename, $profile;
     global $projlist, $skipfirststep, $TBMAINSITE;
+    global $refspec;
     
     $showabout  = ($ISAPT && !$this_user ? 1 : 0);
     $registered = (isset($this_user) ? "true" : "false");
@@ -400,6 +402,15 @@ function SPITFORM($formfields, $newuser, $errors)
     echo "    window.SKIPFIRSTSTEP = " . ($skipfirststep ? "true" : "false") . ";\n";
     echo "    window.PORTAL_NAME = '$PORTAL_NAME';\n";
     echo "    window.USERNAME = '" . $formfields["username"] . "';\n";
+    if (isset($profile) && $profile->repourl()) {
+        echo "    window.FROMREPO = true;\n";
+        if (isset($refspec)) {
+            echo "    window.REFSPEC = '$refspec';\n";
+        }
+    }
+    else {
+        echo "    window.FROMREPO = false;\n";
+    }
     echo "</script>\n";
     echo "<script src='js/lib/jquery-2.0.3.min.js'></script>\n";
 
@@ -411,8 +422,10 @@ function SPITFORM($formfields, $newuser, $errors)
     REQUIRE_FORMHELPERS();
     REQUIRE_FILESTYLE();
     REQUIRE_MARKED();
+    REQUIRE_MOMENT();
     REQUIRE_JACKS();
     REQUIRE_JQUERY_STEPS();
+    AddLibrary("js/gitrepo.js");
     SPITREQUIRE("js/instantiate-new.js");
 }
 

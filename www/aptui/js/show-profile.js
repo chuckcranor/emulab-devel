@@ -19,6 +19,7 @@ $(function ()
     var profile_version = '';
     var version_uuid = null;
     var gotscript    = 0;
+    var fromrepo     = 0;
     var ajaxurl      = "";
     var amlist       = null;
     var isppprofile  = false;
@@ -54,6 +55,10 @@ $(function ()
         if (_.has(fields, "profile_version")) {
 	    profile_version = fields['profile_version'];
         }
+	if (_.has(fields, "profile_repourl") &&
+	    fields["profile_repourl"] != "") {
+	    fromrepo = 1;
+	}
       
 	// Generate the templates.
 	var show_html   = showTemplate({
@@ -65,6 +70,7 @@ $(function ()
 	    canedit:            window.CANEDIT,
 	    disabled:           window.DISABLED,
 	    withpublishing:     window.WITHPUBLISHING,
+	    fromrepo:           fromrepo
 	});
 	show_html = aptforms.FormatFormFieldsHorizontal(show_html,
 							{"wide" : true});
@@ -80,6 +86,11 @@ $(function ()
 	$('#oops_div').html(oopsString);
 	$('#share_div').html(shareTemplate({formfields: fields}))
 
+	// Fireoff repo stuff now.
+	if (fromrepo) {
+	    SetupRepo();
+	}
+	
 	// This activates the popover subsystem.
 	$('[data-toggle="popover"]').popover({
 	    trigger: 'hover',
@@ -135,7 +146,8 @@ $(function ()
 //		    $('#rspec_modal_download_button')
 //		      .attr("href", href + "&rspec=true");
 		}
-	        if ($(this).attr("id") == "show_source_modal_button" && isScript) {
+	        if ($(this).attr("id") == "show_source_modal_button" &&
+		    isScript && !fromrepo) {
 		    openEditor();
 		}
 	        else
@@ -165,7 +177,7 @@ $(function ()
 		$('#modal_profile_rspec_div').prepend(elt);
 	    }, {
 		value: source,
-                lineNumbers: false,
+                lineNumbers: true,
 		smartIndent: true,
 		autofocus: false,
 		readOnly: true,
@@ -275,5 +287,68 @@ $(function ()
       window.location.href = 'genilib-editor.php?profile=' + profile_name + '&project=' + profile_pid + '&version=' + profile_version;
     }
 
+    function SetupRepo()
+    {
+	gitrepo.InitRepoPicker(version_uuid,
+			       function(which) {
+				   SelectRepoTarget(which);
+			       });
+	gitrepo.GetCommitInfo(version_uuid);
+    }
+    /*
+     * User has clicked on a branch/tag. We need to get that branch/tag
+     * source code and update the page.
+     */
+    function SelectRepoTarget(which)
+    {
+	var callback = function (source, hash) {
+	    console.info(source);
+
+	    // Need to put the source into correct hidden textarea.
+	    // But if its a script, we have to convert it first.
+	    if (pythonRe.test(source)) {
+		$('#profile_script_textarea').val(source);
+		ConvertScript(source);
+	    }
+	    else {
+		$('#profile_rspec_textarea').val(source);
+		ExtractFromRspec();
+	    }
+	};
+	gitrepo.GetRepoSource(version_uuid, which, callback);
+    }
+
+    //
+    // Pass a geni-lib script to the server to run (convert to XML).
+    //
+    function ConvertScript(script)
+    {
+	// Save for later.
+	$('#profile_script_textarea').val(script);
+
+	var callback = function(json) {
+	    sup.HideWaitWait();
+	    //console.info(json.value);
+
+	    if (json.code) {
+		sup.SpitOops("oops",
+			     "<pre><code>" +
+			     $('<div/>').text(json.value).html() +
+			     "</code></pre>");
+		return;
+	    }
+	    if (json.value.rspec != "") {
+		$('#profile_rspec_textarea').val(json.value.rspec);
+		ExtractFromRspec();
+	    }
+	}
+	sup.ShowWaitWait("We are converting the geni-lib script");
+	var xmlthing = sup.CallServerMethod(ajaxurl,
+					    "manage_profile",
+					    "CheckScript",
+					    {"script"   : script});
+	xmlthing.done(callback);
+    }
+    
     $(document).ready(initialize);
 });

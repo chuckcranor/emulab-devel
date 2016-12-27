@@ -106,7 +106,21 @@ $routing = array("myprofiles" =>
 						 "BindParameters" =>
 						     "Do_BindParameters",
 						 "ConvertClassic" =>
-                                                     "Do_ConvertClassic")),
+                                                     "Do_ConvertClassic",
+						 "UpdateRepository" =>
+                                                     "Do_UpdateRepository",
+						 "UpdateFromMaster" =>
+                                                     "Do_UpdateMaster",
+						 "GetRepository" =>
+                                                     "Do_GetRepository",
+						 "GetRepoSource" =>
+                                                     "Do_GetRepoSource",
+						 "GetBranchList" =>
+                                                     "Do_GetBranchList",
+						 "GetCommitInfo" =>
+                                                     "Do_GetCommitInfo",
+						 "GetCommitList" =>
+                                                     "Do_GetCommitList")),
 		 "status" =>
 			array("file"    => "status.ajax",
 			      "guest"   => true,

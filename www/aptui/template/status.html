@@ -76,6 +76,15 @@ pre {
 		 <%- profileName %></a></td>
 	  </tr>
 	  <% } %>
+	  <% if (reporef !== undefined) { %>
+	    <tr>
+	      <td class='border-none'>RefSpec:</td>
+	      <td class='border-none'>
+		<span><%= reporef %></span>
+		(<%= repohash %>)
+	      </td>
+	    </tr>
+	  <% } %>
 	  <% if (isadmin) { %>
 	    <tr>
 	      <td class='border-none'>Creator:</td>

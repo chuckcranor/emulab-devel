@@ -124,6 +124,9 @@ class Profile
     function status()	    { return $this->field('locked'); }
     function topdog()	    { return $this->field('topdog'); }
     function disabled()	    { return $this->field('disabled'); }
+    function repourl()	    { return $this->field('repourl'); }
+    function reponame()	    { return $this->field('reponame'); }
+    function repohash()	    { return $this->field('repohash'); }
     function profile_disabled()    { return $this->field('profile_disabled'); }
     function parent_profileid()    { return $this->field('parent_profileid'); }
     function parent_version()      { return $this->field('parent_version'); }
@@ -611,9 +614,10 @@ class Profile
 	return null;
     }
 
-    function GenerateFormFragment() {
-	$json_data = $this->paramdefs();
-	
+    function GenerateFormFragment($json_data = null) {
+        if (is_null($json_data)) {
+            $json_data = $this->paramdefs();
+        }
 	if (!$json_data || $json_data == "") {
 	    return "";
 	}

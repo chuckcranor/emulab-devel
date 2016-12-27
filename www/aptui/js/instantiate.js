@@ -24,6 +24,7 @@ $(function ()
     var doconstraints = 0;
     var amValueToKey  = {};
     var showpicker    = 0;
+    var fromrepo      = false;
     var portal        = null;
     var registered    = false;
     var JACKS_NS      = "http://www.protogeni.net/resources/rspec/ext/jacks/1";
@@ -53,6 +54,7 @@ $(function ()
 	multisite  = window.MULTISITE;
 	portal     = window.PORTAL;
 	ajaxurl    = window.AJAXURL;
+	fromrepo   = window.FROMREPO;
 	doconstraints = window.DOCONSTRAINTS;
 	showpicker    = window.SHOWPICKER;
 
@@ -860,7 +862,7 @@ $(function ()
 	    var xml    = $(xmlDoc);
     
 	    /*
-	     * We now use the desciption from inside the rspec, unless there
+	     * We now use the description from inside the rspec, unless there
 	     * is none, in which case look to see if the we got one in the
 	     * rpc reply, which we will until all profiles converted over to
 	     * new format rspecs.
@@ -882,7 +884,28 @@ $(function ()
 	var $xmlthing = sup.CallServerMethod(ajaxurl,
 					     "instantiate", "GetProfile",
 					     {"uuid" : profile});
-	$xmlthing.done(callback);
+	/*
+	 * If a repo-based and we got a specific branch/tag, we have to
+	 * get the source for that, since it will be different then what
+	 * is stored in the profile descriptor.
+	 */
+	console.info("fee", fromrepo, window.BRANCH, window.TAG);
+	
+	if (fromrepo &&
+	    (window.BRANCH !== undefined || window.TAG !== undefined)) {
+	    var which =
+		(window.BRANCH !== undefined ? window.BRANCH : window.TAG);
+	    
+	    $xmlthing.done(function(json) {
+		gitrepo.GetRepoSource(uuid, which, function(source) {
+		    console.info("foo");
+		    callback(json);
+		});
+	    });
+	}
+	else {
+	    $xmlthing.done(callback);
+	}
     }
 
     /*
@@ -892,7 +915,7 @@ $(function ()
 	// If not a registered user, we do not get an rspec back, since
 	// the user is not allowed to change the configuration.
 	if (newRspec) {
-	    $('#pp_rspec_textarea').val(newRspec);
+	    $('#rspec_textarea').val(newRspec);
 	    selected_rspec = newRspec;
 	    CreateAggregateSelectors(newRspec);
 	}

@@ -392,11 +392,19 @@
 	  </a> 
 	  <div id='inline_jacks' style="min-height: 150px;"></div>
 	</div>
-	<!-- This is for a PP rspec. -->
-	<textarea name='pp_rspec'
-		  id='pp_rspec_textarea'
+	<!-- This is for a PP rspec or a repo-based profile -->
+	<textarea name='rspec'
+		  id='rspec_textarea'
 		  class='form-control hidden'
 		  type='textarea'></textarea>
+	<textarea name='script'
+		  id='script_textarea'
+		  class='form-control hidden'
+		  type='textarea'></textarea>
+	<!-- JS code sets these for repo based profiles -->
+	<input id='reporef' type='hidden' name='reporef'>
+	<input id='repohash' type='hidden' name='repohash'>
+	<input id='paramdefs' type='hidden' name='paramdefs'>
       </form>
     </div>
   </div>

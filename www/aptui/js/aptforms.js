@@ -63,6 +63,10 @@ $(function () {
 		    if (_.has(item.dataset, "colsize")) {
 			colsize = item.dataset['colsize'];;
 		    }
+		    // Override wide setting per field
+		    if (_.has(item.dataset, "wide")) {
+			wide = item.dataset['wide'];;
+		    }
 
 		    /*
 		     * Wrap in a div we can name. We assume the form

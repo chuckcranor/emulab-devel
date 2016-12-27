@@ -131,6 +131,9 @@ class Instance
     function servername()   { return $this->field('servername'); }
     function aggregate_urn(){ return $this->field('aggregate_urn'); }
     function private_key()  { return $this->field('privkey'); }
+    function repourl()	    { return $this->field('repourl'); }
+    function reporef()	    { return $this->field('reporef'); }
+    function repohash()	    { return $this->field('repohash'); }
     function isopenstack()  { return $this->field('isopenstack'); }
     function openstack_utilization() {
         return $this->field('openstack_utilization');

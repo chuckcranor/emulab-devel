@@ -99,6 +99,9 @@ $(function ()
 	    lockdown_code:      lockdown_code,
 	    // The status panel starts out collapsed.
 	    status_panel_show:  (instanceStatus == "ready" ? false : true),
+	    repourl:		window.APT_OPTIONS.repourl,
+	    reporef:		window.APT_OPTIONS.reporef,
+	    repohash:		window.APT_OPTIONS.repohash,
 	};
 	var status_html   = statusTemplate(template_args);
 	$('#status-body').html(status_html);
@@ -265,8 +268,11 @@ $(function ()
 		    return;
 		}
 		// This is considered the home page, for now.
-		window.location.replace('instantiate.php?default=' +
-					profile_uuid);
+		var url = 'instantiate.php?default=' + profile_uuid;
+		if (window.APT_OPTIONS.REFSPEC !== undefined) {
+		    url += "&refspec=" + window.APT_OPTIONS.REFSPEC;
+		}
+		window.location.replace(url);
 	    }
 	    sup.ShowModal("#waitwait-modal");
 
@@ -2173,7 +2179,7 @@ $(function ()
 			    jacksIDs[node.client_id] = node.id;
 			});
 			//console.log("jacksIDs");
-			//console.log(jacksIDs);
+			console.log(jacksIDs);
 			ShowManifest(object.rspec);
 		    });
 		
@@ -2188,8 +2194,9 @@ $(function ()
 		    }
 
 		    jacksOutput.on('click-event', function (jacksevent) {
-			if (jacksevent.type === 'node') 
-			{
+			if (jacksevent.type === 'node' ||
+			    jacksevent.type === 'host') {
+			    console.log(jacksevent);
 			    ContextMenuShow(jacksevent);
 			}
 		    });

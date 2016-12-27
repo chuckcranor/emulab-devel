@@ -275,6 +275,14 @@ if (isset($maxextend) && $maxextend != "") {
 else {
     echo "  window.APT_OPTIONS.MAXEXTEND = null;\n";
 }
+if ($instance->repourl()) {
+    echo "  window.APT_OPTIONS.repourl = '" . $instance->repourl() . "';\n";
+    if ($instance->reporef()) {
+        echo "  window.APT_OPTIONS.reporef = '" . $instance->reporef() . "';\n";
+        echo "  window.APT_OPTIONS.repohash = '" .
+                substr($instance->repohash(),0,8) . "';\n";
+    }
+}
 echo "</script>\n";
 echo "<script src='js/lib/d3.v3.js'></script>\n";
 echo "<script src='js/lib/nv.d3.js'></script>\n";

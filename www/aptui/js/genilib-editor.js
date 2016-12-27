@@ -412,7 +412,9 @@ $(function ()
       disabled: true,
       versions: [],
       withpublishing: false,
-      genilib_editor: true
+      genilib_editor: true,
+      canrepo: false,
+      fromrepo: false
     });
     manage_html = aptforms.FormatFormFieldsHorizontal(manage_html,
 						      {"wide": false });
@@ -464,7 +466,9 @@ $(function ()
       disabled: true,
       versions: [],
       withpublishing: false,
-      genilib_editor: true
+      genilib_editor: true,
+      canrepo: false,
+      fromrepo: false
     });
     manage_html = aptforms.FormatFormFieldsHorizontal(manage_html,
 						      {'wide': false });
