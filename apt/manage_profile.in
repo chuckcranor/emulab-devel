@@ -42,11 +42,13 @@ sub usage()
     print("Usage: manage_profile delete <profile> [all]\n");
     exit(-1);
 }
-my $optlist     = "ds:t:c:";
+my $optlist     = "ds:t:c:m";
 my $debug       = 0;
 my $update      = 0;
 my $snap        = 0;
 my $copy        = 0;
+my $fromrepo    = 0;
+my $updatemaster= 0;
 my $copyuuid;
 my $uuid;
 my $rspec;
@@ -66,6 +68,7 @@ my $TB		    = "@prefix@";
 my $TBOPS           = "@TBOPSEMAIL@";
 my $TBLOGS	    = "@TBLOGSEMAIL@";
 my $MANAGEINSTANCE  = "$TB/bin/manage_instance";
+my $MANAGEGITREPO   = "$TB/bin/manage_gitrepo";
 my $RUNGENILIB      = "$TB/bin/rungenilib";
 
 #
@@ -87,6 +90,7 @@ use EmulabConstants;
 use emdb;
 use emutil;
 use libEmulab;
+use libtestbed;
 use User;
 use Project;
 use APT_Profile;
@@ -210,6 +214,7 @@ my %xmlfields =
 			                          $SLOT_UPDATE|$SLOT_ADMINONLY],
      "rspec"		   => ["rspec",		$SLOT_REQUIRED|$SLOT_UPDATE],
      "script"		   => ["script",	$SLOT_OPTIONAL|$SLOT_UPDATE],
+     "repourl"		   => ["repourl",	$SLOT_OPTIONAL],
 );
 
 #
@@ -332,6 +337,60 @@ if (defined($rspec)) {
     }
 }
 
+if ($update) {
+    $profile = APT_Profile->Lookup($uuid);
+    if (!defined($profile)) {
+	fatal("Could not lookup profile for update $uuid");
+    }
+}
+
+#
+# Look for repourl. We already cloned it once to get the source, but
+# need to clone to for real now that we can assign a name to it. Only
+# for new profiles of course, the user cannot change the url later.
+#
+if (exists($new_args{'repourl'})) {
+    my $reponame;
+    my $repohash;
+    
+    if ($update) {
+	$reponame = $profile->reponame();
+	# Ignore.
+	delete($new_args{'repourl'});
+    }
+    else {
+	my $repourl  = $new_args{'repourl'};
+	$reponame = NewUUID();
+
+	my $output =
+	    emutil::ExecQuiet("$MANAGEGITREPO clone -n $reponame '$repourl'");
+	if ($?) {
+	    print STDERR $output;
+	    $errors{"error"} = $output;
+	    UserError();
+	}
+	$new_args{'reponame'} = $reponame;
+    }
+    #
+    # Get the commit hash for the HEAD commit.
+    #
+    my $output = emutil::ExecQuiet("$MANAGEGITREPO hash -n $reponame");
+    if ($?) {
+	print STDERR $output;
+	$errors{"error"} = $output;
+	UserError();
+    }
+    $repohash = $output;
+    chomp($repohash);
+    if ($update) {
+	$update_args{'repohash'} = $repohash;
+    }
+    else {
+	$new_args{'repohash'} = $repohash;
+    }
+    $fromrepo = 1;
+}
+
 #
 # See if this is a Parameterized Profile. Generate and store the form
 # data if it is. Only python scripts of course.
@@ -400,10 +459,6 @@ elsif ($copy) {
 }
 
 if ($update) {
-    $profile = APT_Profile->Lookup($uuid);
-    if (!defined($profile)) {
-	fatal("Could not lookup profile for update $uuid");
-    }
     # Kill the description.. No longer used.
     delete($update_args{"description"});
 
@@ -422,8 +477,11 @@ if ($update) {
 	if ((exists($update_args{"rspec"}) &&
 	     $update_args{"rspec"} ne $profile->rspec()) ||
 	    (exists($update_args{"script"}) &&
-	     $update_args{"script"} ne $profile->script())) {
-	    if ($doversions) {
+	     $update_args{"script"} ne $profile->script()) ||
+	    (defined($profile->repourl()) &&
+	     exists($update_args{"repohash"}) &&
+	     $update_args{"repohash"} ne $profile->repohash())) {
+	    if ($doversions && !$fromrepo) {
 		$profile = $profile->NewVersion($this_user);
 		if (!defined($profile)) {
 		    fatal("Could not create new version of the profile");
@@ -432,19 +490,15 @@ if ($update) {
 		$webtask->newProfile($profile->uuid())
 		    if (defined($webtask));
 	    }
-	    $profile->UpdateVersion({"rspec" => $update_args{"rspec"}})
-		if (exists($update_args{"rspec"}));
-	    $profile->UpdateVersion({"script" => $update_args{"script"}})
-		if (exists($update_args{"script"}));
-	    $profile->UpdateVersion({"paramdefs" => $update_args{"paramdefs"}})
-		if (exists($update_args{"paramdefs"}));
+	    foreach my $key ("rspec", "script", "paramdefs", "repohash") {
+		$profile->UpdateVersion({$key => $update_args{$key}})
+		    if (exists($update_args{$key}));
+	    }
 	}
-	delete($update_args{"rspec"})
-	    if (exists($update_args{"rspec"}));
-	delete($update_args{"script"})
-	    if (exists($update_args{"script"}));
-	delete($update_args{"paramdefs"})
-	    if (exists($update_args{"paramdefs"}));
+	foreach my $key ("rspec", "script", "paramdefs", "repohash") {
+	    delete($update_args{$key})
+		if (exists($update_args{$key}));
+	}
     }
     $profile->UpdateMetaData(\%update_args) == 0 or
 	fatal("Could not update profile record");

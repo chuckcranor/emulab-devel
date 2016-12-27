@@ -262,7 +262,7 @@ foreach my $key ("username", "email", "profile", "portal") {
 #
 my ($value, $user_urn, $user_uid, $user_hrn, $user_email, $project, $pid,
     $gid, $group, $sshkey, $profile, $profileid, $version, $rspecstr, $errmsg,
-    $userslice_id, $portal);
+    $userslice_id, $portal, $script, $reporef, $repohash);
 
 # This is used internally to determine which portal was used.
 $portal = $xmlparse->{'attribute'}->{"portal"}->{'value'};
@@ -312,13 +312,50 @@ $profileid = $profile->profileid();
 $version   = $profile->version();
 
 #
-# Optional rspec, as for a Parameterized Profile.
+# Optional rspec, as for a Parameterized Profile or a repo-based profile.
 #
 if (exists($xmlparse->{'attribute'}->{"rspec"})) {
     $rspecstr  = $xmlparse->{'attribute'}->{"rspec"}->{'value'};
 }
 else {
     $rspecstr  = $profile->CheckFirewall(!$localuser);
+}
+#
+# Optional rspec and/or script, as for a repo-based profile.
+#
+if ($profile->repourl()) {
+    if (exists($xmlparse->{'attribute'}->{"script"})) {
+	$script = $xmlparse->{'attribute'}->{"script"}->{'value'};	
+
+	if (! TBcheck_dbslot($script, "apt_profiles", "script",
+			     TBDB_CHECKDBSLOT_WARN|TBDB_CHECKDBSLOT_ERROR)) {
+	    fatal("Illegal script for repo-based profile");
+	}
+	if (!exists($xmlparse->{'attribute'}->{"reporef"})) {
+	    fatal("Missing refspec for repository");
+	}
+    }
+    if (exists($xmlparse->{'attribute'}->{"reporef"})) {
+	if (!exists($xmlparse->{'attribute'}->{"repohash"})) {
+	    fatal("Missing hash for repository");
+	}
+	$reporef  = $xmlparse->{'attribute'}->{"reporef"}->{'value'};
+	$repohash = $xmlparse->{'attribute'}->{"repohash"}->{'value'};
+
+	if (! TBcheck_dbslot($repohash, "apt_profiles", "repohash",
+			     TBDB_CHECKDBSLOT_WARN|TBDB_CHECKDBSLOT_ERROR)) {
+	    fatal("Illegal repository hash");
+	}
+	if (! TBcheck_dbslot($reporef, "default", "tinytext",
+			     TBDB_CHECKDBSLOT_WARN|TBDB_CHECKDBSLOT_ERROR)) {
+	    fatal("Illegal repository refspec");
+	}
+    }
+    my $tmp = APT_Profile::SetRepo(\$rspecstr, $profile->repourl(),
+				   $reporef, $repohash, \$errmsg);
+    if ($tmp) {
+	($tmp < 0 ? fatal($errmsg) : UserError($errmsg));
+    }
 }
 
 #
@@ -763,6 +800,21 @@ my $blob = {'uuid'         => $quickvm_uuid,
 	    'cert'         => $alt_certificate->cert(),
 	    'privkey'      => $alt_certificate->PrivKeyDelimited(),
 };
+if ($profile->repourl()) {
+    if (defined($script)) {
+	$blob->{"script"}  = $script;
+    }
+    $blob->{"repourl"}   = $profile->repourl();
+    # These come in from the instantiate page.
+    if (defined($reporef)) {
+	$blob->{"reporef"}   = $reporef;
+	$blob->{"repohash"}  = $repohash;
+    }
+    else {
+	# Otherwise we are instantiating whatever the profile itself references.
+	$blob->{"repohash"}  = $profile->repohash();
+    }
+}
 if (defined($project)) {
     $blob->{"pid"}     = $project->pid();
     $blob->{"pid_idx"} = $project->pid_idx();
