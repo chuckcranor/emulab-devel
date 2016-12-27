@@ -56,6 +56,7 @@ my $TBOPS    = "@TBOPSEMAIL@";
 my $TESTMODE = 0;
 my $GENILIB  = "$TB/lib/geni-lib/";
 my $JAILPROG = "$TB/libexec/genilib-jail";
+my $TAR      = "/usr/bin/tar";
 my $debug    = 0;
 
 # Locals
@@ -215,7 +216,7 @@ chmod(0644, $ifile);
 $ENV{'GENILIB_PORTAL_MODE'} = "Yep";
 $ENV{'GENILIB_PORTAL_REQUEST_PATH'} = $ofile;
 if ($getparams) {
-    $ENV{'GENILIB_PORTAL_DUMPPARAMS_PATH'} = $ofile;
+    $ENV{'GENILIB_PORTAL_DUMPPARAMS_PATH'} = $pfile;
 }
 elsif (defined($paramsize) && $paramsize) {
     $ENV{'GENILIB_PORTAL_PARAMS_PATH'} = $pfile;
@@ -322,8 +323,27 @@ elsif (! -s $ofile)  {
     $exit_status = 1;
 }
 else {
-    # Send the rspec output to stdout (back to boss).
-    system("cat $ofile");
+    if ($getparams) {
+	if (! -e $pfile) {
+	    if (system("egrep -q -s 'defineParameter' $ifile")) {
+		# No parameters
+		system("touch $pfile");
+	    }
+	    else {
+		print STDERR
+		    "Cannot find the params, did you call bindParameters?\n";
+		$exit_status = 1;
+	    }
+	}
+	if (!$exit_status) {
+	    # Send back both params and rspec as a tar file.
+	    system("$TAR cf - $pfile $ofile");
+	}
+    }
+    else {
+	# Send the rspec output to stdout (back to boss).
+	system("cat $ofile");
+    }
 }
 unless($debug) {
     if (-d $tempdir) {
