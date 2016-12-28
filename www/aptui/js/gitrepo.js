@@ -58,7 +58,7 @@ $(function () {
 	    
 		if (json.code) {
 		    sup.HideWaitWait();
-		    sup.SpitOops(json.value);
+		    sup.SpitOops("oops", json.value);
 		    caller_callback(null);
 		    return;
 		}
@@ -148,7 +148,7 @@ $(function () {
 	    
 		if (json.code) {
 		    sup.HideWaitWait();
-		    sup.SpitOops(json.value);
+		    sup.SpitOops("oops", json.value);
 		    caller_callback(null);
 		    return;
 		}

@@ -1208,7 +1208,7 @@ $(function ()
 
 	    if (json.code) {
 		sup.HideWaitWait();
-		sup.SpitOops(json.value);
+		sup.SpitOops("oops", json.value);
 		return;
 	    }
 	    fromrepo = 1;
