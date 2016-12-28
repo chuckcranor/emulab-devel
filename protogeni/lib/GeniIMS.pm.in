@@ -526,12 +526,16 @@ sub NewImage($)
 	    print STDERR "Deleting existing image $image_urn with ".
 		"stale uuid $old_uuid\n";
 	
-	    $DB->QueryWarn("delete images,image_versions from images ".
-			   "inner join image_versions on ".
-			   "      images.urn=image_versions.urn and ".
-			   "      images.image_uuid=image_versions.image_uuid ".
-			   "where images.urn=$safe_urn and ".
-			   "      images.image_uuid='$old_uuid'")
+	    $DB->QueryWarn("delete images,image_versions,image_permissions ".
+		   " from images ".
+		   "inner join image_versions on ".
+		   "      images.urn=image_versions.urn and ".
+		   "      images.image_uuid=image_versions.image_uuid ".
+		   "inner join image_permissions on ".
+		   "      images.urn=image_permissions.urn and ".
+		   "      images.image_uuid=image_permissions.image_uuid ".
+		   "where images.urn=$safe_urn and ".
+		   "      images.image_uuid='$old_uuid'")
 		or GeniResponse->Create(GENIRESPONSE_ERROR);
 	}
     }
@@ -966,10 +970,14 @@ sub DeleteImageInfo($)
     # creation (image created, deleted, created again). 
     #
     $query_result =
-	$DB->QueryWarn("delete images,image_versions from images ".
+	$DB->QueryWarn("delete images,image_versions,image_permissions ".
+		       "  from images ".
 		       "inner join image_versions on ".
 		       "      images.urn=image_versions.urn and ".
 		       "      images.image_uuid=image_versions.image_uuid ".
+		       "inner join image_permissions on ".
+		       "      images.urn=image_permissions.urn and ".
+		       "      images.image_uuid=image_permissions.image_uuid ".
 		       "where images.urn=$safe_urn and ".
 		       "      images.image_uuid='$uuid'");
     
