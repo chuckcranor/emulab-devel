@@ -1217,7 +1217,15 @@ $(function ()
 	    // Add the url to the form.
 	    $('#quickvm_create_profile_form #repourl').val(repourl);
 	    sup.HideWaitWait(function() {
-		changeRspec(json.value.script);
+		/*
+		 * The point of this callback is to process the script/rspec
+		 * before trying to mark the page as "modified".
+		 */
+		changeRspec(json.value.script, function(changed) {
+		    if (changed) {
+			ProfileModified();
+		    }
+		});
 	    });
 	}
 	WaitWait("We are attempting to clone your repository. " +
