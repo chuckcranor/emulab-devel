@@ -747,6 +747,16 @@ sub GetTagList($)
     chdir("$REPODIR/$reponame") or
 	fatal("Could not chdir to $REPODIR/$reponame");
 
+    # See if any tags to list.
+    my $taglist = emutil::ExecQuiet("$GIT tag --list");
+    if ($?) {
+	print STDERR $taglist;
+	fatal("Could not check for tag list from repository");
+    }
+    if ($taglist =~/^$/) {
+	return [];
+    }
+
     #
     # First we need a list of tags and their hash. Note dereference option
     # here; we need to dereference annotated tags. This complicates the
