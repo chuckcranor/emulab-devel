@@ -53,6 +53,7 @@ use libtestbed;
 use Lease;
 use English;
 use Data::Dumper;
+use File::Basename;
 use File::Temp qw(tempfile :mktemp tmpnam :POSIX);
 use overload ('""' => 'Stringify');
 
@@ -342,6 +343,11 @@ sub Create($$$$$$)
 	    $vquery .= ",paramdefs=" . DBQuoteSpecial($argref->{'paramdefs'});
 	}
     }
+    if (exists($argref->{'repourl'}) && $argref->{'repourl'} ne "") {
+	$vquery .= ",repourl="  . DBQuoteSpecial($argref->{'repourl'});
+	$vquery .= ",reponame=" . DBQuoteSpecial($argref->{'reponame'});
+	$vquery .= ",repohash=" . DBQuoteSpecial($argref->{'repohash'});
+    }
 
     # Back to the main table.
     $cquery .= ",uuid='$puuid'";
@@ -408,11 +414,12 @@ sub NewVersion($$)
 			  "   creator,creator_idx,updater,updater_idx, ".
 			  "   created,uuid, ".
 			  "   parent_profileid,parent_version,rspec, ".
-			  "   script,paramdefs) ".
+			  "   script,paramdefs,reponame,repourl) ".
 			  "select name,profileid,'$newvers',pid,pid_idx, ".
 			  "  creator,creator_idx,'$uid','$uid_idx',".
 			  "  now(),uuid(),'$profileid', ".
-			  "  '$version',rspec,script,paramdefs ".
+			  "  '$version',rspec,script,paramdefs, ".
+			  "  reponame,repourl ".
 			  "from apt_profile_versions as v ".
 			  "where v.profileid='$profileid' and ".
 			  "      v.version='$version'"));
@@ -1118,6 +1125,65 @@ sub SetSites($$$$$$)
     }
     $$prspecstr = GeniXML::Serialize($rspec);
     @$paggregate_urns = keys(%aggregates);
+    return 0;
+}
+
+#
+# Set the repository for the rspec. This is a top level element. At
+# some point we can think about per-node repos.
+#
+sub SetRepo($$$$$)
+{
+    my ($prspecstr, $repourl, $reporef, $repohash, $perrmsg) = @_;
+    my $reponame = basename($repourl);
+
+    my $rspec = GeniXML::Parse($$prspecstr);
+    if (! defined($rspec)) {
+	$$perrmsg = "Could not parse rspec\n";
+	return -1;
+    }
+    my $repo = GeniXML::FindNodesNS("n:repository", $rspec,
+				    $GeniXML::EMULAB_NS)->pop();
+    if (! defined($repo)) {
+	$repo = GeniXML::AddElement("repository", $rspec, $GeniXML::EMULAB_NS);
+	GeniXML::SetText("type", $repo, "git");
+	GeniXML::SetText("url", $repo, $repourl);
+	GeniXML::SetText("refspec", $repo, $reporef);
+	GeniXML::SetText("commit", $repo, $repohash);
+    }
+    #
+    # Temporary, lets just throw an execute service onto each node.
+    # We put it before any existing execute services.
+    #
+    if ($reponame =~ /([^.]+)\.git$/) {
+	$reponame = $1;
+    }
+    my $command = "cd /local; sudo chmod 777 .;".
+	"git clone $repourl repository && cd repository; git checkout ";
+    if ($reporef =~ /heads/) {
+	my $branchname = basename($reporef);
+	$command .= "-B $branchname $repohash";
+    }
+    else {
+	$command .= "--detach $repohash";
+    }
+    
+    foreach my $node (GeniXML::FindNodes("n:node", $rspec)->get_nodelist()) {
+	my $service;
+	my $services = FindNodes("n:services", $node)->shift();
+	if (!defined($services)) {
+	    $services = GeniXML::AddElement("services", $node);
+	    $service  = GeniXML::AddElement("execute", $services);
+	}
+	else {
+	    $service = XML::LibXML::Element->new("execute");
+	    $services->insertBefore($service,
+				    FindNodes("n:execute", $services)->shift());
+	}
+	GeniXML::SetText("shell", $service, "/bin/sh");
+	GeniXML::SetText("command", $service, $command);
+    }
+    $$prspecstr = GeniXML::Serialize($rspec);
     return 0;
 }
 
