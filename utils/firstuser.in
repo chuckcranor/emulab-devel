@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2000-2012, 2015 University of Utah and the Flux Group.
+# Copyright (c) 2000-2016 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -44,6 +44,8 @@ my $mkproj  = '@prefix@/sbin/mkproj';
 my $mkgroup = '@prefix@/sbin/mkgroup';
 my $mkacct  = '@prefix@/sbin/tbacct';
 my $modgrps = '@prefix@/sbin/modgroups';
+
+my $acctproxy = '@prefix@/sbin/accountsetup';
 
 my $protouser       = 'elabman';
 my $protouser_name  = 'Emulab Manager';
@@ -176,9 +178,13 @@ if (!defined($opts{u})) {
 }
 
 print "Creating user on boss...\n";
+my $makeopt = "";
+if ($CONTROL eq $BOSSNODE) {
+    $makeopt = "-m";
+}
 if (system("/usr/sbin/pw useradd $protouser -u $uid -g $agid ".
 	   "-G \"$Ggid\" -h - " .
-	   "-m -d $HOMEDIR/$protouser -s $binshell ".
+	   "$makeopt -d $HOMEDIR/$protouser -s $binshell ".
 	   "-c \"$protouser_name\"")) {
     die "Unable to add user to the password file!\n";
 }
@@ -187,9 +193,10 @@ if ($CONTROL ne $BOSSNODE) {
     print "Creating user on ops...\n";
     
     if (system("ssh -2 $CONTROL ".
-	       "'/usr/sbin/pw useradd $protouser -u $uid -g $agid ".
-	       "-G \"$Ggid\" -h - -d $HOMEDIR/$protouser -s $binshell ".
-	       "-c \"$protouser_name\"'")) {
+	       "'$acctproxy adduser $protouser $uid \"$protouser_name\" ".
+	       "$HOMEDIR/$protouser $agid $binshell'") ||
+	system("ssh -2 $CONTROL ".
+	       "'$acctproxy setgroups $protouser $agid $Ggid'")) {
 	die "Unable to add user to the ops password file!\n";
     }
 }

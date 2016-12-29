@@ -1,5 +1,5 @@
 #
-# Copyright (c) 2004-2013 University of Utah and the Flux Group.
+# Copyright (c) 2004-2016 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -166,4 +166,27 @@ if {[info exists ::TBCOMPAT::elabinelab_nodeos("ops")]} {
     }
 } else {
     tb-set-node-os $myops FBSD83-STD
+}
+
+#
+# When using ZFS for the ops node, we let blockstores do all the work.
+#  * Use "sysvol" (aka, boot disk partition 4) for /usr/testbed
+#  * Use "nonsysvol" (aka, all other disks) to force creation of a
+#    zpool that inner ops will use.
+#
+set usezfs [tb-get-elabinelab-role-attribute "ops" "CONFIG_ZFS"]
+if { $usezfs != {} } {
+   set opstb [$ns blockstore]
+   $opstb set-class       "local"
+   $opstb set-size        "10000MiB"
+   $opstb set-placement   SYSVOL
+   $opstb set-node        $myops
+   $opstb set-mount-point "/usr/testbed"
+
+   # XXX note that the volume is not actually used, we only want the zpool
+   set opszfs [$ns blockstore]
+   $opszfs set-class       "local"
+   $opszfs set-size        "1MiB"
+   $opszfs set-placement   NONSYSVOL
+   $opszfs set-node        $myops
 }

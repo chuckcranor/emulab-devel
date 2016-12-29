@@ -2298,6 +2298,9 @@ sub os_remove_storage_slice($$$)
 	# care so much about full images.
 	#
 	if ($teardown == 3) {
+	    if ($bsid eq "SYSVOL") {
+		return 1;
+	    }
 	    if (get_zpool_active_datasets("emulab") == 0 &&
 		mysystem("$ZPOOL export emulab $redir")) {
 		    warn("*** $lv: could not export zpool 'emulab'\n");

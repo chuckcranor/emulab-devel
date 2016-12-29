@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2004-2015 University of Utah and the Flux Group.
+# Copyright (c) 2004-2016 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -148,6 +148,11 @@ my $OPSMOUNTDIR = "/ops";
 # Hardwired?
 my $TBDIR = "/usr/testbed";
 
+# ZFS support
+my $ZPOOLCMD = "/sbin/zpool";
+my $ZFSCMD =   "/sbin/zfs";
+my $ZFSPOOL =  "emulab";
+
 #
 # Support for Windows nodes.
 # XXX here for compat; replaced by emulabconfig option.
@@ -214,10 +219,15 @@ my %emulabconfig = (
     #   CONFIG_NOSETUP	  debug option: don't do most of rc.mkelab activities.
     #   CONFIG_SCRATCHFS  configure a separate "scratch" filesystem.
     #   CONFIG_SINGLECNET use the real cnet as the inner cnet.
-    #	CONFIG_ELVIN	support Elvin compatibility
+    #	CONFIG_ELVIN	support Elvin compatibility (obsolete)
     #	CONFIG_WINDOWS	support Windows OS on nodes
-    #	CONFIG_SHAREDFS	support shared filesystem	    
+    #	CONFIG_SHAREDFS	support shared filesystem
     #	CONFIG_QUERIER	configure mfrisbeed to act as IGMP querier
+    #	CONFIG_OPSVM	configure ops node to be jail on boss (obsolete)
+    #	CONFIG_NODBINIT	do not load DB state on boss
+    #	CONFIG_GENIRACK	configure as a GENI rack
+    #	CONFIG_ZFS	configure fs node to use ZFS
+    #	CONFIG_AUTOFS	configure autofs instead of amd for boss ZFS mounts
     #
     "CONFIG_NOSETUP"    => $NOSETUP,
     "CONFIG_SCRATCHFS"  => $SCRATCHFS,
@@ -230,6 +240,8 @@ my %emulabconfig = (
     "CONFIG_OPSVM"	=> $OPSVM,
     "CONFIG_NODBINIT"   => 0,
     "CONFIG_GENIRACK"   => 0,
+    "CONFIG_ZFS"	=> 0,
+    "CONFIG_AUTOFS"	=> 0,
 
     # Default protogeni package if LOAD_PROTOGENI is enabled.
     "PGENI_PKG"		=> "emulab-protogeni-1.0",
@@ -499,6 +511,20 @@ sub doboot()
 	if ($emulabconfig{"CONFIG_SINGLECNET"});
 
     #
+    # Only support ZFS right now on ZFS-savvy ops+fs node.
+    #
+    if ($emulabconfig{"CONFIG_ZFS"} != 0) {
+	# XXX don't support this yet
+	if ($emulabconfig{"ROLE"} eq "fs") {
+	    SetupFatal("Do not support ZFS in standalone FS yet.");
+	}
+	if ($emulabconfig{"ROLE"} eq "ops+fs" &&
+	    (! -x $ZPOOLCMD || system("kldload -n zfs.ko"))) {
+	    SetupFatal("Image does not support ZFS.");
+	}
+    }
+    
+    #
     # XXX not-so-temporary: adjust package info.
     #
     # There are defaults in sitevars passed via emulabconfig,
@@ -631,7 +657,7 @@ sub doboot()
 	$emulabconfig{EXTRA_PKG}    = "emulab-extras-6.1";
 	$emulabconfig{PACKAGE_TARBALL} = "FreeBSD-10.1-packages${suf}.tar.gz";
 	$emulabconfig{PGENI_PKG}    = "emulab-protogeni-6.1";
-    } elsif ($FBSD_VERSION >= 10.2) {
+    } elsif ($FBSD_VERSION == 10.2) {
 	my $suf = ($FBSD_ARCH eq "amd64") ? "-64" : "";
 	$emulabconfig{FS_PKG_DIR} = "/share/freebsd/10.2/packages${suf}";
 	$emulabconfig{OPS_PKG_DIR}  = $emulabconfig{FS_PKG_DIR};
@@ -643,6 +669,18 @@ sub doboot()
 	$emulabconfig{EXTRA_PKG}    = "emulab-extras-6.2";
 	$emulabconfig{PACKAGE_TARBALL} = "FreeBSD-10.2-packages${suf}.tar.gz";
 	$emulabconfig{PGENI_PKG}    = "emulab-protogeni-6.2";
+    } elsif ($FBSD_VERSION >= 10.3) {
+	my $suf = ($FBSD_ARCH eq "amd64") ? "-64" : "";
+	$emulabconfig{FS_PKG_DIR} = "/share/freebsd/10.3/packages${suf}";
+	$emulabconfig{OPS_PKG_DIR}  = $emulabconfig{FS_PKG_DIR};
+	$emulabconfig{BOSS_PKG_DIR} = $emulabconfig{FS_PKG_DIR};
+	$emulabconfig{EXTRA_PKG_DIR}= $emulabconfig{FS_PKG_DIR};
+	$emulabconfig{FS_PKG}       = "emulab-fs-6.3";
+	$emulabconfig{OPS_PKG}      = "emulab-ops-6.3";
+	$emulabconfig{BOSS_PKG}     = "emulab-boss-6.3";
+	$emulabconfig{EXTRA_PKG}    = "emulab-extras-6.3";
+	$emulabconfig{PACKAGE_TARBALL} = "FreeBSD-10.3-packages${suf}.tar.gz";
+	$emulabconfig{PGENI_PKG}    = "emulab-protogeni-6.3";
     }
     #
     # If there is a package tarball, prefer that and grab it now.
@@ -1286,19 +1324,42 @@ sub SetupOpsNode($)
     my $fromscratch =
 	($emulabconfig{"LOAD_ELABSOURCE"} && $emulabconfig{"LOAD_MFS"});
     my $installpkgs = $emulabconfig{"LOAD_PACKAGES"};
+    my $usezfs = $emulabconfig{"CONFIG_ZFS"};
 
     #
     # Create filesystems for fs use.  We need:
     #  * /usr/testbed		 => disk0s2e
-    # for a "from scratch" build and:
+    # for a "from scratch" build, and:
     #  * /q (proj,users,scratch) => disk0s4e
     #  * /share			 => disk0s4f
-    # for ops+fs and fs-only nodes.
+    # for ops+fs and fs-only nodes without ZFS, and:
+    #  * /q (proj,users,scratch,share) => "emulab" zpool
+    # for ops+fs with ZFS.
     #
     if ($fromscratch) {
 	SetupTBDir($TBDIR);
     }
-    if ($isfs) {
+    if (!$isfs) {
+	goto skipfs;
+    }
+
+    #
+    # For ZFS, we look for an existing "emulab" zpool and use that if
+    # it exists (since it was set up just for us!). Otherwise, we look
+    # for an extra disk targetted for /q and create the zpool there.
+    #
+    if ($usezfs) {
+	if (system("$ZPOOLCMD list -H -o name | grep -q '^${ZFSPOOL}\$'")) {
+	    my $fsdev = FindExtraFSConfig($FSMOUNTDIR);
+	    if (!$fsdev) {
+		SetupFatal("Could not find space for ZFS zpool.");
+	    }
+	    if (system("$ZPOOLCMD create -m none $ZFSPOOL /dev/$fsdev")) {
+		SetupFatal("Could not create ZFS zpool on /dev/$fsdev.");
+	    }
+	}
+    }
+    else {
 	#
 	# Look for a specified /share, otherwise do the -2 trick to
 	# split $FSDIR
@@ -1354,6 +1415,7 @@ sub SetupOpsNode($)
 	}
     }
 
+  skipfs:
     #
     # Download Emulab source if necessary
     #
@@ -1490,6 +1552,14 @@ sub SetupOpsNode($)
     }
 
     #
+    # XXX me again: prepare also hides our local blockstores;
+    # put them back!
+    #
+    if ($usezfs && -x "$BINDIR/rc/rc.storagelocal") {
+	mysystem("$BINDIR/rc/rc.storagelocal boot");
+    }
+    
+    #
     # Remove the outer testbed startup script.
     #
     mysystem("rm -f /usr/local/etc/rc.d/testbed.sh");
@@ -1621,33 +1691,44 @@ sub SetupOpsNode($)
     RecreateDir("/groups", 0);
     RecreateDir("/share", 0);
 
-    mysystem("mkdir $FSDIR/users $FSDIR/proj $FSDIR/groups $FSDIR/share");
-    if ($isfs) {
-	mysystem("ln -s $FSDIR/users /users");
-	mysystem("ln -s $FSDIR/proj /proj");
-	mysystem("ln -s $FSDIR/groups /groups");
+    if ($usezfs) {
+	my $zo = "-o setuid=off -o sharenfs='boss -maproot=root'";
 
-	#
-	# Mount /share. The partition and filesystem were created above.
-	#
-	if (defined($sharefsdev)) {
-	    mysystem("mkdir /share");
-	    mysystem("mount /share");
-	}
-	else {
-	    mysystem("mount $FSDIR/share");
-	    mysystem("ln -s $FSDIR/share /share");
-	}
-    }
-
-    #
-    # And the optional /scratch which share the same FS as /proj, et.al.
-    #
-    if ($emulabconfig{"CONFIG_SCRATCHFS"}) {
-	RecreateDir("/scratch", 0);
-	mysystem("mkdir $FSDIR/scratch");
+	mysystem("$ZFSCMD create $zo -o mountpoint=/users $ZFSPOOL/users");
+	mysystem("$ZFSCMD create $zo -o mountpoint=/proj $ZFSPOOL/proj");
+	mysystem("$ZFSCMD create $zo -o mountpoint=/groups $ZFSPOOL/groups");
+	mysystem("$ZFSCMD create $zo -o mountpoint=/share $ZFSPOOL/share");
+	mysystem("$ZFSCMD create $zo -o mountpoint=/scratch $ZFSPOOL/scratch")
+	    if ($emulabconfig{"CONFIG_SCRATCHFS"});
+    } else {
+	mysystem("mkdir $FSDIR/users $FSDIR/proj $FSDIR/groups $FSDIR/share");
 	if ($isfs) {
-	    mysystem("ln -s $FSDIR/scratch /scratch");
+	    mysystem("ln -s $FSDIR/users /users");
+	    mysystem("ln -s $FSDIR/proj /proj");
+	    mysystem("ln -s $FSDIR/groups /groups");
+
+	    #
+	    # Mount /share. The partition and filesystem were created above.
+	    #
+	    if (defined($sharefsdev)) {
+		mysystem("mkdir /share");
+		mysystem("mount /share");
+	    }
+	    else {
+		mysystem("mount $FSDIR/share");
+		mysystem("ln -s $FSDIR/share /share");
+	    }
+	}
+
+	#
+	# And the optional /scratch which share the same FS as /proj, et.al.
+	#
+	if ($emulabconfig{"CONFIG_SCRATCHFS"}) {
+	    RecreateDir("/scratch", 0);
+	    mysystem("mkdir $FSDIR/scratch");
+	    if ($isfs) {
+		mysystem("ln -s $FSDIR/scratch /scratch");
+	    }
 	}
     }
 
@@ -1704,6 +1785,9 @@ sub SetupOpsNode($)
     print RC "nfs_server_enable=\"YES\"\n";
     print RC "nfs_server_flags=\"-u -t -n 8\"\n";
     print RC "nfs_client_enable=\"YES\"\n";
+    if ($usezfs) {
+	print RC "zfs_enable=\"YES\"\n";
+    }
     if ($isfs && $emulabconfig{"CONFIG_WINDOWS"}) {
 	#
 	# As of 10/2012, the startup for samba changed.
@@ -3136,6 +3220,8 @@ sub CreateDefsFile($)
 {
     my ($defsfile) = @_;
     my $opsvm = $emulabconfig{"CONFIG_OPSVM"};
+    my $usezfs = $emulabconfig{"CONFIG_ZFS"};
+    my $useautofs = $emulabconfig{"CONFIG_AUTOFS"};
     
     print "Creating defs file from stub defs file\n";
     
@@ -3478,6 +3564,27 @@ sub CreateDefsFile($)
 		    last SWITCH;
 		};
 
+		/^WITHAMD$/ && do {
+		    if (!$usezfs || $useautofs) {
+			print OUTDEFS "WITHAMD=0\n";
+		    } else {
+			print OUTDEFS "WITHAMD=1\n";
+		    }
+		    last SWITCH;
+		};
+		/^WITHZFS$/ && do {
+		    if ($usezfs) {
+			print OUTDEFS "WITHZFS=1\n";
+		    } else {
+			print OUTDEFS "WITHZFS=0\n";
+		    }
+		    last SWITCH;
+		};
+		/^ZFS_ROOT$/ && do {
+		    print OUTDEFS "ZFS_ROOT=\"$ZFSPOOL\"\n";
+		    last SWITCH;
+		};
+
 		print OUTDEFS $line;
 	    }
 	}
@@ -3646,12 +3753,15 @@ sub SetupTBDir($)
 {
     my ($TBDIR) = @_;
 
-    RecreateDir($TBDIR, 1);
-    if (my $dev = FindExtraFSConfig($TBDIR)) {
-	mysystem("$BINDIR/mkextrafs.pl -f -s 0 -r $dev -f $TBDIR");
-	goto done;
+    # If using ZFS, then /usr/testbed should already be setup
+    if ($emulabconfig{"CONFIG_ZFS"} == 0) {
+	RecreateDir($TBDIR, 1);
+	if (my $dev = FindExtraFSConfig($TBDIR)) {
+	    mysystem("$BINDIR/mkextrafs.pl -f -s 0 -r $dev -f $TBDIR");
+	    goto done;
+	}
+	mysystem("$BINDIR/mkextrafs.pl -s 2 -f $TBDIR");
     }
-    mysystem("$BINDIR/mkextrafs.pl -s 2 -f $TBDIR");
   done:
     mysystem("mkdir $TBDIR/src $TBDIR/obj");
 }

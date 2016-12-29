@@ -104,6 +104,15 @@ OPSVM_MOUNTPOINT=changeme
 MIN_UNIX_UID=2000
 MIN_UNIX_GID=2000
 
+# use ZFS
+WITHZFS=changeme
+ZFS_ROOT=changeme
+ZFS_QUOTA_USER="none"
+ZFS_QUOTA_PROJECT="none"
+ZFS_QUOTA_GROUP="none"
+WITHAMD=changeme
+AMD_ROOT=/.amd_mnt/ops
+
 # Which console to use in the MFS. We need to set this for GeniRacks.
 NODECONSOLE=changeme
 # Which version of the MFS.

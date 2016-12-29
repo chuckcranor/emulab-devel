@@ -240,7 +240,8 @@ elsif ($server eq "boss") {
 	      'boss/ports', 'boss/portfix', 'boss/patches', 'cracklib',
 	      'apache', 'boss/rcfiles', 'ntpd', 'boss/rcconf', 'boss/syslog',
 	      'boss/database', 'etchosts', 'resolvetest',
-	      'exports', 'nfsmounts', 'boss/mibs', 'boss/crontab', 'sudoers',
+	      'exports', 'automount', 'nfsmounts',
+	      'boss/mibs', 'boss/crontab', 'sudoers',
 	      'samba', 'boss/ssh', 'boss/hostkeys',
 	      'boss/rndc', 'boss/loaderconf', 'boss/sysctlconf',
 	      'boss/sslcerts', 'boss/pubsub', 'boss/software', 
@@ -265,7 +266,8 @@ elsif ($server eq "fs") {
 elsif ($server eq "ops") {
     @files = ('perl', 'usersgroups', 'dirs', 'etchosts', 'resolvetest',
 	      'ops/ports', 'ops/portfix', 'ops/patches', 'ntpd', 'ops/rcconf',
-	      'ops/sendmail', 'ops/syslog', 'exports', 'nfsmounts',
+	      'ops/sendmail', 'ops/syslog',
+	      'exports', 'automount', 'nfsmounts',
 	      'ops/crontab', 'sudoers', 'samba', 'ops/ssh', 'capture',
 	      'ops/rcfiles', 'apache', 'ops/database',
 	      'ops/cvsd', 'ops/flyspray', 'ops/twiki', 'ops/firewall'
