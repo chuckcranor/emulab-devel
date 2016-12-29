@@ -365,9 +365,7 @@ if (exists($new_args{'repourl'})) {
 	my $output =
 	    emutil::ExecQuiet("$MANAGEGITREPO clone -n $reponame '$repourl'");
 	if ($?) {
-	    print STDERR $output;
-	    $errors{"error"} = $output;
-	    UserError();
+	    UserError($output);
 	}
 	$new_args{'reponame'} = $reponame;
     }
@@ -376,9 +374,7 @@ if (exists($new_args{'repourl'})) {
     #
     my $output = emutil::ExecQuiet("$MANAGEGITREPO hash -n $reponame");
     if ($?) {
-	print STDERR $output;
-	$errors{"error"} = $output;
-	UserError();
+	UserError($output);	
     }
     $repohash = $output;
     chomp($repohash);

@@ -153,9 +153,7 @@ sub Clone()
     
     if (system("$GIT cat-file -e refs/heads/master:profile.py") &&
 	system("$GIT cat-file -e refs/heads/master:profile.rspec")) {
-	chdir("$REPODIR");
-	system("/bin/rm -rf $REPODIR/$reponame");
-	fatal("No geni-lib script or rspec in this repository");
+	print STDERR "No geni-lib script or rspec in this repository\n";
     }
     return 0;
 }
@@ -192,7 +190,7 @@ sub Update()
     }
     if (system("$GIT cat-file -e refs/heads/master:profile.py") &&
 	system("$GIT cat-file -e refs/heads/master:profile.rspec")) {
-	fatal("No geni-lib script or rspec in this repository");
+	print STDERR "No geni-lib script or rspec in this repository\n";
     }
     return 0;
 }
