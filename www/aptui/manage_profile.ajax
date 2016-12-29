@@ -393,7 +393,10 @@ function Do_CheckScript()
     else {
         $blob = array("rspec"  => file_get_contents($outfname));
         if (isset($pfname)) {
-            $blob["paramdefs"] = file_get_contents($pfname);
+            $paramdefs = file_get_contents($pfname);
+            if ($paramdefs != "") {
+                $blob["paramdefs"] = $paramdefs;
+            }
         }
 	SPITAJAX_RESPONSE($blob);
     }

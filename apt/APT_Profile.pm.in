@@ -465,7 +465,10 @@ sub UpdateVersion($$)
     my $version   = $self->version();
 
     my $query = "update apt_profile_versions set ".
-	join(",", map("$_=" . DBQuoteSpecial($argref->{$_}), keys(%{$argref})));
+	join(",", map("$_=" .
+		      (defined($argref->{$_}) ?
+		       DBQuoteSpecial($argref->{$_}) : "NULL"),
+		      keys(%{$argref})));
 
     $query .= " where profileid='$profileid' and version='$version'";
 

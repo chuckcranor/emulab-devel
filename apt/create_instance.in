@@ -351,6 +351,11 @@ if ($profile->repourl()) {
 	    fatal("Illegal repository refspec");
 	}
     }
+    else {
+	# Otherwise we are instantiating whatever the profile itself references.
+	$reporef  = "refs/heads/master";
+	$repohash = $profile->repohash();
+    }
     my $tmp = APT_Profile::SetRepo(\$rspecstr, $profile->repourl(),
 				   $reporef, $repohash, \$errmsg);
     if ($tmp) {
@@ -805,15 +810,8 @@ if ($profile->repourl()) {
 	$blob->{"script"}  = $script;
     }
     $blob->{"repourl"}   = $profile->repourl();
-    # These come in from the instantiate page.
-    if (defined($reporef)) {
-	$blob->{"reporef"}   = $reporef;
-	$blob->{"repohash"}  = $repohash;
-    }
-    else {
-	# Otherwise we are instantiating whatever the profile itself references.
-	$blob->{"repohash"}  = $profile->repohash();
-    }
+    $blob->{"reporef"}   = $reporef;
+    $blob->{"repohash"}  = $repohash;
 }
 if (defined($project)) {
     $blob->{"pid"}     = $project->pid();

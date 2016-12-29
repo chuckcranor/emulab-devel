@@ -400,13 +400,12 @@ if (defined($script) && $script ne "" && $script =~ /^import/m) {
     fatal("$RUNGENILIB failed")
 	if ($?);
     chomp($paramdefs);
-    if ($paramdefs ne "") {
-	if ($update) {
-	    $update_args{"paramdefs"} = $paramdefs;
-	}
-	else {
-	    $new_args{"paramdefs"} = $paramdefs;
-	}
+    if ($update) {
+	# No versioning so need to clear existing paramdefs.
+	$update_args{"paramdefs"} = ($paramdefs ne "" ? $paramdefs : undef);
+    }
+    elsif ($paramdefs ne "") {
+	$new_args{"paramdefs"} = $paramdefs;
     }
 }
 
