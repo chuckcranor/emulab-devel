@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2016 University of Utah and the Flux Group.
+# Copyright (c) 2000-2017 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -1121,7 +1121,7 @@ function Do_ReloadTopology()
     global $this_user, $instance, $suexec_output;
     global $ajax_args;
 
-    if (StatusSetupAjax(1)) {
+    if (StatusSetupAjax(0)) {
 	return;
     }
     $this_idx = $this_user->uid_idx();
