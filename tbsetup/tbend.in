@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2000-2010 University of Utah and the Flux Group.
+# Copyright (c) 2000-2010, 2017 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -102,13 +102,6 @@ if (!$force && $state ne EXPTSTATE_TERMINATING) {
     tbdie("Experiment is in the wrong state: $state.\n");
 }
 
-if ($PGENISUPPORT) {
-    require libGeni;
-
-    if (libGeni::UnRegister($experiment)) {
-	tbdie("Could not delete protogeni slice\n");
-    }
-}
 print "Clearing out virtual state.\n";
 $experiment->RemoveVirtualState() == 0 or $errors++;
 
