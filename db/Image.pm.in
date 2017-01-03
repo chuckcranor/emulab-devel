@@ -1861,6 +1861,40 @@ sub SetRange($$$;$$)
 }
 
 #
+# Compute a rough approximation of the partition size needed for an image.
+# Return megabytes.
+#
+sub PartitionSize($)
+{
+    my ($self) = @_;
+    my $lba_size = $self->lba_size();
+    my $lba_low  = $self->lba_low();
+    my $lba_high = $self->lba_high();
+
+    return undef
+	if (!(defined($lba_size) && defined($lba_low) && defined($lba_high)));
+
+    return (($lba_high - $lba_low + 1) / (1024 / $lba_size)) / 1024;
+}
+
+#
+# Chunks, the amount of space needed to store the image, say in an LVM.
+# Return megabytes.
+#
+sub Chunks($)
+{
+    my ($self) = @_;
+    my $size   = $self->size();
+    return undef
+	if (!defined($size));
+    
+    # XXX assumes chunksize of 1MB
+    my $chunks = int((($size + 1024 * 1024 - 1) / (1024 * 1024)) + 0.5);
+
+    return $chunks;
+}
+
+#
 # Lock and Unlock. We lock the entire chain (all versions) of the
 # image. 
 #

@@ -632,6 +632,19 @@ sub GetDiskOffset($)
     return $self->image()->GetDiskOffset();
 }
 
+sub PartitionSize($)
+{
+    my ($self) = @_;
+
+    return $self->image()->PartitionSize();
+}
+sub Chunks($)
+{
+    my ($self) = @_;
+
+    return $self->image()->Chunks();
+}
+
 #
 # Return updated time for image as a UNIX timestamp via the passed ref.
 # Return 0 on success, non-zero otherwise.
