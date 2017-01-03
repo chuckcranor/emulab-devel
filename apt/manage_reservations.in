@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2000-2016 University of Utah and the Flux Group.
+# Copyright (c) 2000-2017 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -351,10 +351,14 @@ sub DoList()
     # be mapped of course, we leave those as is. 
     #
     foreach my $details (values(%$list)) {
+	my $userhrn  = GeniHRN->new($details->{'user'});
 	my $geniuser = GeniUser->Lookup($details->{'user'}, 1);
 	if (defined(($geniuser))) {
 	    $details->{'uid'}     = $geniuser->uid();
 	    $details->{'uid_idx'} = $geniuser->uid_idx();
+	}
+	else {
+	    $details->{'uid'}     = $userhrn->id();
 	}
 	my $projhrn = GeniHRN->new($details->{'project'});
 	if ($projhrn->domain() eq $OURDOMAIN && defined($projhrn->project())) {
@@ -363,6 +367,9 @@ sub DoList()
 		$details->{'pid'}     = $project->pid();
 		$details->{'pid_idx'} = $project->pid_idx();
 	    }
+	}
+	else {
+	    $details->{'pid'} = $projhrn->id();
 	}
     }
     #
