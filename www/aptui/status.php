@@ -136,7 +136,7 @@ if ($profile = Profile::Lookup($instance->profile_id(),
 		       ISADMIN() ? 1 : 0);
     $public_url     = ($instance->public_url() ?
 		       "'" . $instance->public_url() . "'" : "null");
-    $ispprofile     = $profile->script() ? 1 : 0;
+    $ispprofile     = $profile->isParameterized() ? 1 : 0;
 }
 else {
     $profile_name   = "";
