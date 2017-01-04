@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2000-2016 University of Utah and the Flux Group.
+# Copyright (c) 2000-2017 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -53,7 +53,7 @@ my $OURDOMAIN	= "@OURDOMAIN@";
 my $CONTROL     = "@USERNODE@";
 my $TBADMINGROUP= "@TBADMINGROUP@";
 my $MAINSITE    = @TBMAINSITE@;
-my $REPODIR     = "$TB/opsdir/repositories";
+my $REPODIR     = "/repos";
 my $PROXY       = "$TB/libexec/gitrepo.proxy";
 my $SSH	        = "$TB/bin/sshtb";
 my $GIT         = "/usr/local/bin/git";
@@ -225,13 +225,15 @@ sub DoCheckRemote()
 # Clone a repo. This is done on the control node.
 # Use -o to write the file to stdout or a file.
 # Use -r to remove repo after getting the script/rspec.
+# Add -u to update if repo is already cloned.
 #
 sub DoClone()
 {
-    my $optlist = "o:rn:";
+    my $optlist = "o:rn:u";
     my $ofile;
     my $remove;
     my $reponame;
+    my $update;
 
     my %options = ();
     if (! getopts($optlist, \%options)) {
@@ -251,6 +253,12 @@ sub DoClone()
     if (defined($options{"r"})) {
 	$remove = 1;
     }
+    if (defined($options{"u"})) {
+	$update = 1;
+	if (!defined($options{"n"})) {
+	    fatal("Must provide reponame (-n) with -u option");
+	}
+    }
     if (defined($options{"n"})) {
 	$reponame = $options{"n"};
 	# Taint check.
@@ -261,7 +269,13 @@ sub DoClone()
     else {
 	$reponame = NewUUID();
     }
-    my $cmd = "$SSH -host $CONTROL $PROXY -n $reponame clone '$repourl'";
+    my $cmd = "$SSH -host $CONTROL $PROXY ";
+    if ($update && -e "$REPODIR/$reponame") {
+	$cmd .= "-n $reponame update";
+    }
+    else {
+	$cmd .= "-n $reponame clone '$repourl'";
+    }
     if ($debug) {
 	print "'$cmd'\n";
     }

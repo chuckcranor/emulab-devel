@@ -1,7 +1,7 @@
 #!/usr/bin/perl -w
 
 #
-# Copyright (c) 2000-2016 University of Utah and the Flux Group.
+# Copyright (c) 2000-2017 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -49,7 +49,7 @@ my $reponame;
 #
 my $TB         = "@prefix@";
 my $TBOPS      = "@TBOPSEMAIL@";
-my $REPODIR    = "$TB/repositories";
+my $REPODIR    = "/repos";
 my $GIT        = "/usr/local/bin/git";
 
 # Locals
@@ -76,7 +76,6 @@ delete @ENV{'IFS', 'CDPATH', 'ENV', 'BASH_ENV'};
 # Testbed Support libraries
 #
 use lib "@prefix@/lib";
-use libtestbed;
 
 #
 # Parse command arguments. Once we return from getopts, all that should
