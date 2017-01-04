@@ -2557,7 +2557,7 @@ CREATE TABLE `interfaces` (
   `role` enum('ctrl','expt','jail','fake','other','gw','outer_ctrl','mngmnt') default NULL,
   `current_speed` enum('0','10','100','1000','4000','10000','40000','100000') NOT NULL default '0',
   `duplex` enum('full','half') NOT NULL default 'full',
-  `fixedmode` tinyint(1) NOT NULL default '0',
+  `noportcontrol` tinyint(1) NOT NULL default '0',
   `rtabid` smallint(5) unsigned NOT NULL default '0',
   `vnode_id` varchar(32) default NULL,
   `whol` tinyint(4) NOT NULL default '0',

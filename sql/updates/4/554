@@ -14,7 +14,7 @@ sub DoUpdate($$$)
     }
     if (!DBSlotExists("interfaces", "fixedmode")) {
         DBQueryFatal("alter table interfaces " .
-		     " add `fixedmode` tinyint(1) NOT NULL default '0' ".
+		     " add `noportcontrol` tinyint(1) NOT NULL default '0' ".
 		     "   after duplex");
     }
     return 0;
