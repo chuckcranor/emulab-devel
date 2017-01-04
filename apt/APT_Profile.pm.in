@@ -1138,7 +1138,6 @@ sub SetSites($$$$$$)
 sub SetRepo($$$$$)
 {
     my ($prspecstr, $repourl, $reporef, $repohash, $perrmsg) = @_;
-    my $reponame = basename($repourl);
 
     my $rspec = GeniXML::Parse($$prspecstr);
     if (! defined($rspec)) {
@@ -1158,17 +1157,14 @@ sub SetRepo($$$$$)
     # Temporary, lets just throw an execute service onto each node.
     # We put it before any existing execute services.
     #
-    if ($reponame =~ /([^.]+)\.git$/) {
-	$reponame = $1;
-    }
-    my $command = "cd /local; sudo chmod 777 .;".
-	"git clone $repourl repository && cd repository; git checkout ";
-    if ($reporef =~ /heads/) {
-	my $branchname = basename($reporef);
-	$command .= "-B $branchname $repohash";
-    }
-    else {
-	$command .= "--detach $repohash";
+    my $command = "cd /local&&sudo chmod 777 .&&".
+	"git clone -n $repourl repository&&" .
+	"cd repository&&" .
+	"git checkout $repohash";
+    if ($reporef =~ m"^(refs/|)heads/(.+)") {
+	my $branchname = $2;
+	$command .= "&&git branch -ft $branchname origin/$branchname" .
+	    "&&git checkout -B $branchname HEAD";
     }
     
     foreach my $node (GeniXML::FindNodes("n:node", $rspec)->get_nodelist()) {
