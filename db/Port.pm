@@ -204,7 +204,7 @@ sub ParseCardPortString($;$)
 {
     my ($c, $cp) = @_;
 
-    if (!defiend($cp)) {
+    if (!defined($cp)) {
 	$cp = $c;
     }
 

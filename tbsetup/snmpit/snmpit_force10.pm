@@ -279,8 +279,18 @@ sub new($$$;$) {
     # packets to and from the switch. Test that by grabbing an OID that should
     # be on every switch. Let it retry a bunch, to hide transient failures
     #
-    my $OS_details = snmpitGetFatal($self->{SESS},["sysDescr",0],30);
-    print "Switch $self->{NAME} is running $OS_details\n" if $self->{DEBUG};
+    my $sysdetails = snmpitGetFatal($self->{SESS},["sysDescr",0],30);
+    if ($sysdetails !~ /Application Software Version:\s+(\d+)\.(\d+)(\S+)/i) {
+	warn "Could not determine FTOS version for $self->{NAME}!\n";
+	return undef;
+    }
+    $self->{OSVER} = "$1.$2$3";
+    $self->{OSMAJOR} = int($1);
+    $self->{OSMINOR} = int($2);
+    $self->{DO_RFC2579} =
+	($self->{OSMAJOR} > 9 ||
+	 ($self->{OSMAJOR} == 9 && $self->{OSMINOR} >= 10)) ? 1 : 0;
+    print "Switch $self->{NAME} is running $self->{OSVER}\n" if $self->{DEBUG};
 
     #
     # The bless needs to occur before readifIndex(), since it's a class 
@@ -870,6 +880,7 @@ sub getMemberBitmask($$;$) {
 sub setPortMembership($$$$$) {
         my ($self, $onoff, $eportmask, $uportmask, $vlifindex) = @_;
 	my $id = "$self->{NAME}::setPortMembership()";
+	my $status = 0;
 
 	# Sanity checks
 	if (!defined($onoff) || !defined($eportmask) || 
@@ -908,10 +919,27 @@ sub setPortMembership($$$$$) {
 	    ["dot1qVlanStaticUntaggedPorts", $vlifindex, 
 	     $uportmask, "OCTETSTR"]);
 
+	# Take vlan out of service, if necessary.
+	if ($self->{DO_RFC2579}) {
+	    $status = snmpitGetWarn($self->{SESS}, 
+				    ["dot1qVlanStaticRowStatus", $vlifindex]);
+	    $self->debug("$id: vlan $vlifindex status is: $status\n");
+	    if ($status =~ /active/i) {
+		$status = snmpitSetWarn($self->{SESS}, 
+					["dot1qVlanStaticRowStatus",
+					 $vlifindex, "notInService",
+					 "INTEGER"]);
+		if (!$status) {
+		    warn "$id: ERROR: failed to take vlan $vlifindex out of service\n";
+		    return $setcount;
+		}
+	    }
+	}
+
 	# XXX: Can't use snmpitSetWarn since these port set operations
 	# routinely return an "undoFailed" status on the Force10
 	# platform (even when successful).  Not sure why this happens...
-	my $status = $self->{SESS}->set($snmpvars);
+	$status = $self->{SESS}->set($snmpvars);
 
 	# Since the return value cannot be trusted, we do our own
 	# little investigation to see if the set command succeeded.
@@ -936,6 +964,19 @@ sub setPortMembership($$$$$) {
 	if ($failcount) {
 		warn "$id: Could not manipulate $failcount ".
 		     "ports in vlan with ifindex $vlifindex!\n";
+	}
+
+	# Put vlan back in service, if necessary. Don't attempt if
+	# all ports have been removed.
+	if ($self->{DO_RFC2579} && unpack("%32b*", $newmask)) {
+	    $status = snmpitSetWarn($self->{SESS}, 
+				    ["dot1qVlanStaticRowStatus",
+				     $vlifindex, "active",
+				     "INTEGER"]);
+	    if (!$status) {
+		warn "$id: ERROR: failed to put vlan $vlifindex back in service\n";
+		return $setcount;
+	    }
 	}
 
 	return $failcount; # should be 0
@@ -1308,8 +1349,9 @@ sub createVlan($$$;$) {
     }
 
     # Create VLAN
+    my $valstr = $self->{DO_RFC2579} ? "createAndWait" : "createAndGo";
     my $RetVal = snmpitSetWarn($self->{SESS},["dot1qVlanStaticRowStatus", 
-					      $vlan_number, "createAndGo", 
+					      $vlan_number, $valstr,
 					      "INTEGER"]);
     # $RetVal will be undefined if the set failed, or "1" if it succeeded.
     if (! defined($RetVal) )  { 
@@ -1328,7 +1370,7 @@ sub createVlan($$$;$) {
     # Prepend a string to the numeric id as Force10 doesn't allow all numberic
     # for a vlan name.
     $vlan_id = addVlanPrefix($vlan_id);
-    $RetVal = snmpitSetWarn($self->{SESS},["dot1qVlanStaticName", 
+    $RetVal = snmpitSetWarn($self->{SESS},["dot1qVlanStaticName",
 					   $vlifindex,
 					   $vlan_id,
 					   "OCTETSTR"]);
@@ -2004,6 +2046,7 @@ sub setVlansOnTrunk($$$$) {
     # Different code is called to manipulate the trunk depending on whether
     # the interface is a regular port or a port channel.
     foreach my $vlan (@vlan_numbers) {
+	next unless $self->vlanNumberExists($vlan);
 	if ($value == 1) {
 	    if (exists($self->{POIFINDEX}{$ifindex})) {
 		$errors += $self->setChannelVlan($vlan, $ifindex);
