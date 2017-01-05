@@ -426,7 +426,8 @@ function Do_DenyOrMoreinfo($action)
     global $ajax_args;
     $extrargs = "";
 
-    if (StatusSetupAjax(1)) {
+    # Really, only admins can do this.
+    if (StatusSetupAjax(0)) {
 	goto bad;
     }
     $uuid = $instance->uuid();
@@ -888,13 +889,26 @@ function Do_Snapshot()
     global $this_user, $instance, $suexec_output;
     global $ajax_args;
 
-    if (StatusSetupAjax(1)) {
+    if (StatusSetupAjax(0)) {
 	return;
     }
     if (!isset($this_user)) {
 	SPITAJAX_ERROR(1, "Only registered users can snapshot nodes");
 	return;
     }
+    #
+    # As per Rob, if an experiment is locked down, then only the creator,
+    # project leader, or an admininstrator.
+    #
+    if ($instance->admin_lockdown() || $instance->user_lockdown()) {
+        if ($this_idx != $instance->creator_idx() && !ISADMIN() &&
+            !$instance->Project()->IsLeader($this_user)) {
+            SPITAJAX_ERROR(1, "Not enough permission, ".
+                           "experiment is locked down. Maybe Clone instead?");
+            return;
+        }
+    }
+    
     $this_idx = $this_user->uid_idx();
     $uuid = $ajax_args["uuid"];
     
@@ -996,7 +1010,7 @@ function Do_SnapshotStatus()
     global $this_user, $instance;
     global $ajax_args;
 
-    if (StatusSetupAjax(1)) {
+    if (StatusSetupAjax(0)) {
 	return;
     }
     if (!isset($this_user)) {
@@ -1166,12 +1180,24 @@ function Do_RebootOrReload($which)
     global $this_user, $instance, $suexec_output;
     global $ajax_args;
 
-    if (StatusSetupAjax(1)) {
+    if (StatusSetupAjax(0)) {
 	return;
     }
     if (!isset($this_user)) {
 	SPITAJAX_ERROR(1, "Only registered users can reboot/reload nodes");
 	return;
+    }
+    #
+    # As per Rob, if an experiment is locked down, then only the creator,
+    # project leader, or an admininstrator.
+    #
+    if ($instance->admin_lockdown() || $instance->user_lockdown()) {
+        if ($this_idx != $instance->creator_idx() && !ISADMIN() &&
+            !$instance->Project()->IsLeader($this_user)) {
+            SPITAJAX_ERROR(1, "Not enough permission, ".
+                           "experiment is locked down");
+            return;
+        }
     }
     $this_idx = $this_user->uid_idx();
     $uuid = $ajax_args["uuid"];
@@ -1326,7 +1352,7 @@ function Do_DecryptBlocks()
     global $this_user, $instance, $suexec_output;
     global $ajax_args;
 
-    if (StatusSetupAjax(1)) {
+    if (StatusSetupAjax(0)) {
 	return;
     }
     if (!isset($ajax_args["blocks"])) {
