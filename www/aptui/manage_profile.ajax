@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2016 University of Utah and the Flux Group.
+# Copyright (c) 2000-2017 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -330,6 +330,17 @@ function Do_CheckScript()
     $this_idx = $this_user->uid_idx();
     $this_uid = $this_user->uid();
 
+    if (isset($ajax_args["repoupdate"])) {
+        $profile = Profile::Lookup($ajax_args["repoupdate"]);
+        if (!$profile) {
+            SPITAJAX_ERROR(1, "Unknown profile uuid");
+            return;
+        }
+        if ($this_idx != $profile->creator_idx() && !ISADMIN()) {
+            SPITAJAX_ERROR(1, "Not enough permission");
+            return;
+        }
+    }
     if (!isset($ajax_args["script"])) {
 	SPITAJAX_ERROR(1, "Missing script");
 	return;
@@ -398,7 +409,10 @@ function Do_CheckScript()
                 $blob["paramdefs"] = $paramdefs;
             }
         }
-	SPITAJAX_RESPONSE($blob);
+        if (!isset($profile) ||
+            UpdateMaster($profile, $ajax_args["script"], $blob["rspec"]) == 0) {
+            SPITAJAX_RESPONSE($blob);
+        }
     }
     unlink($infname);
     unlink($outfname);
@@ -783,6 +797,10 @@ function Do_UpdateRepository()
 	SPITAJAX_ERROR(1, "Unknown profile uuid");
 	return;
     }
+    if ($this_idx != $profile->creator_idx() && !ISADMIN()) {
+	SPITAJAX_ERROR(1, "Not enough permission");
+	return;
+    }
     $webtask = WebTask::CreateAnonymous();
     if (!$webtask) {
 	SPITAJAX_ERROR(-1, "Internal webtask Error");
@@ -815,13 +833,22 @@ function Do_UpdateRepository()
                   "hash"    => $webtask->TaskValue("hash"));
     $webtask->Delete();
     unlink($outfname);
+
+    #
+    # If the source is an rspec, update the profile now.
+    #
+    if (! preg_match("/^import/m", $blob["source"])) {
+        if (UpdateMaster($profile, null, $source)) {
+            return;
+        }
+    }
     SPITAJAX_RESPONSE($blob);
 }
 
 #
 # Save new master into the profile (no profile versioning on repos).
 #
-function Do_UpdateMaster()
+function UpdateMaster($profile, $script, $rspec)
 {
     global $this_user;
     global $ajax_args;
@@ -829,29 +856,10 @@ function Do_UpdateMaster()
     $this_idx = $this_user->uid_idx();
     $this_uid = $this_user->uid();
 
-    if (!isset($ajax_args["uuid"])) {
-	SPITAJAX_ERROR(1, "Missing profile uuid");
-	return;
-    }
-    $profile = Profile::Lookup($ajax_args["uuid"]);
-    if (!$profile) {
-	SPITAJAX_ERROR(1, "Unknown profile uuid");
-	return;
-    }
-    if (!isset($ajax_args["rspec"]) || $ajax_args["rspec"] == "") {
-	SPITAJAX_ERROR(1, "Missing rspec uuid");
-	return;
-    }
-    $rspec = $ajax_args["rspec"];
-    # Script is optional of course.
-    if (isset($ajax_args["script"]) && $ajax_args["script"] != "") {
-	$script = $ajax_args["script"];
-    }
-    
     $webtask = WebTask::CreateAnonymous();
     if (!$webtask) {
 	SPITAJAX_ERROR(-1, "Internal webtask Error");
-	return;
+	return -1;
     }
     $fname = tempnam("/tmp", "updateprofile");
     $fp = fopen($fname, "w");
@@ -866,11 +874,9 @@ function Do_UpdateMaster()
     fwrite($fp, "<attribute name='rspec'>");
     fwrite($fp, "  <value>" . htmlspecialchars($rspec) . "</value>");
     fwrite($fp, "</attribute>\n");
-    if (isset($script)) {
+    if ($script) {
 	fwrite($fp, "<attribute name='script'>");
-	fwrite($fp, "  <value>" .
-	       htmlspecialchars($formfields["profile_script"]) .
-	       "</value>");
+	fwrite($fp, "  <value>" . htmlspecialchars($script) . "</value>");
 	fwrite($fp, "</attribute>\n");
     }
     fwrite($fp, "</profile>\n");
@@ -894,11 +900,10 @@ function Do_UpdateMaster()
         $webtask->Delete();
         unlink($fname);
 	SPITAJAX_ERROR(1, $error);
-	return;
+	return -1;
     }
-    $webtask->Delete();
     unlink($fname);
-    SPITAJAX_RESPONSE($blob);
+    return 0;
 }
 
 #

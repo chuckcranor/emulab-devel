@@ -11,7 +11,7 @@ $(function () {
 	function InitRepoPicker(uuid, change_callback)
 	{
 	    var callback = function(json) {
-		console.info(json);
+		console.info("InitRepoPicker", json);
 	    
 		if (json.code) {
 		    console.info(json.value);
@@ -54,7 +54,7 @@ $(function () {
 	function GetRepoSource(uuid, refspec, caller_callback)
 	{
 	    var callback = function(json) {
-		console.info(json);
+		console.info("GetRepoSource", json);
 	    
 		if (json.code) {
 		    sup.HideWaitWait();
@@ -86,6 +86,7 @@ $(function () {
 	    $('#repoinfo-panel .commit-hash').text(blob.hash);
 	    $('#repoinfo-panel .commit-author').html(blob.author);
 	    $('#repoinfo-panel .commit-refspec').html(blob.refspec);
+	    $('#repoinfo-panel .commit-size').html(blob.size);
 	    $('#repoinfo-panel .commit-date')
 		.html(moment(blob.date).format("lll"));
 
@@ -120,7 +121,7 @@ $(function () {
 		refspec = "refs/heads/master";
 	    }
 	    var callback = function(json) {
-		console.info(json);
+		console.info("GetCommitInfo", json);
 		
 		if (json.code) {
 		    console.info("GetCommitInfo", json.value);
@@ -144,7 +145,7 @@ $(function () {
 	function UpdateRepo(uuid, caller_callback)
 	{
 	    var callback = function(json) {
-		console.info(json);
+		console.info("UpdateRepo", json);
 	    
 		if (json.code) {
 		    sup.HideWaitWait();

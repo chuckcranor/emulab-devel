@@ -572,7 +572,7 @@ $(function ()
 	}
     }
     // Handler for all paths to rspec change (file upload, jacks, edit).
-    function changeRspec(newRspec, callback)
+    function changeRspec(newRspec, repoupdate_callback)
     {
 	if (pythonRe.test(newRspec) || tclRe.test(newRspec)) {
 	    //
@@ -580,11 +580,11 @@ $(function ()
 	    // the server to be "run", which returns XML.
 	    //
 	    if (newRspec != $('#profile_script_textarea').val()) {
-		checkScript(newRspec, callback);
+		checkScript(newRspec, repoupdate_callback);
 	    }
 	    return;
 	}
-	NewRspecHandler(newRspec, callback);
+	NewRspecHandler(newRspec);
     }
 
     //
@@ -815,7 +815,7 @@ $(function ()
      * use the original tour section. Once we get confirmation, we can
      * continue with the update.
      */
-    function NewRspecHandler(newrspec, finish_callback)
+    function NewRspecHandler(newrspec)
     {
 	newrspec     = $.trim(newrspec);
 	var oldrspec = $.trim($('#profile_rspec_textarea').val());
@@ -845,9 +845,6 @@ $(function ()
 	    SyncSteps();
 	    if (!fromrepo)
 		ProfileModified();
-	    if (finish_callback !== undefined) {
-		finish_callback(true);
-	    }
 	    if (gotscript) {
 		$('#profile_instructions').prop("readonly", true);
 		$('#profile_description').prop("readonly", true);
@@ -1137,7 +1134,7 @@ $(function ()
     //
     // Pass a geni-lib script to the server to run (convert to XML).
     //
-    function checkScript(script, rspechandler_callback)
+    function checkScript(script, repoupdate_callback)
     {
 	// Save for later.
 	$('#profile_script_textarea').val(script);
@@ -1155,11 +1152,15 @@ $(function ()
 	    }
 	    if (json.value.rspec != "") {
 		gotscript = 1;
-		NewRspecHandler(json.value.rspec, rspechandler_callback);
+		NewRspecHandler(json.value.rspec);
 		// Force this; the script is obviously different, but the
 		// the XML might be exactly same. Still want to save it.
-		if (!fromrepo)
+		if (!fromrepo || window.ACTION == "create") {
 		    ProfileModified();
+		}
+		if (repoupdate_callback !== undefined) {
+		    repoupdate_callback();
+		}
 		// Show the XML source button.
 		$('#show_xml_modal_button').removeClass("hidden");
 	    }
@@ -1171,12 +1172,18 @@ $(function ()
 	 * If this is a modification to an existing profile, we still
 	 * have the project name in the same variable.
 	 */
+	var args = {
+	    "script"   : script,
+	    "pid"      : $('#profile_pid').val(),
+	};
+	if (repoupdate_callback !== undefined) {
+	    // Pass along uuid as a flag to update repo.
+	    args["repoupdate"] = version_uuid;
+	}
 	WaitWait("We are converting your geni-lib script to an rspec");
 	var xmlthing = sup.CallServerMethod(ajaxurl,
 					    "manage_profile",
-					    "CheckScript",
-					    {"script"   : script,
-					     "pid"      : $('#profile_pid').val()});
+					    "CheckScript", args);
 	xmlthing.done(callback);
     }
 
@@ -1204,7 +1211,7 @@ $(function ()
 	sup.HideModal('#git-repo-modal');
 	
 	var callback = function(json) {
-	    console.info(json);
+	    console.info("HandleGitRepoChange", json);
 
 	    if (json.code) {
 		sup.HideWaitWait();
@@ -1217,15 +1224,7 @@ $(function ()
 	    // Add the url to the form.
 	    $('#quickvm_create_profile_form #repourl').val(repourl);
 	    sup.HideWaitWait(function() {
-		/*
-		 * The point of this callback is to process the script/rspec
-		 * before trying to mark the page as "modified".
-		 */
-		changeRspec(json.value.script, function(changed) {
-		    if (changed) {
-			ProfileModified();
-		    }
-		});
+		changeRspec(json.value.script);
 	    });
 	}
 	WaitWait("We are attempting to clone your repository. " +
@@ -1248,27 +1247,35 @@ $(function ()
 	    console.info("HandleGitRepoUpdate", blob);
 	    if (blob) {
 		/*
-		 * The point of this callback is to process the script/rspec
-		 * before trying to change the profile to use the new source.
-		 * The processing is going to catch script/rspec errors, so
-		 * we want to wait till that is done before telling the backend
-		 * to record the new source in the profile descriptor. 
+		 * If the source was an rspec, we updated the profile
+		 * to match the current repo right away. But to make things
+		 * nicer for script based profiles, we wait until the
+		 * script is converted to an rspec. Cause of workflow, we
+		 * end up doing this later so that the user sees a short
+		 * delay when hitting the update button for a script based
+		 * profile. 
 		 */
-		changeRspec(blob.source, function(changed) {
-		    console.info("changerspec callback", changed, repohash);
-		    if (changed) {
-			if (blob.hash != repohash) {
-			    /*
-			     * If the commit hash for HEAD has not changed, we
-			     * do not need to do this.
-			     */
-			    UpdateProileFromMaster(blob.hash);
-			}
-		    }
+		if (!pythonRe.test(blob.source)) {
+		    NewRspecHandler(blob.source);
+		    // Mark as HEAD in the page.
+		    repohash = blob.hash;
+		    // Reset the list of tags and branches whenever we
+		    // successfully update our clone.
+		    SetupRepo();
+		    return;
+		}
+		/*
+		 * Else we wait till the script converted, the call back
+		 * is invoked after CheckScript() finishes. The server
+		 * side the profile update, no ww can finish things up.
+		 */
+		changeRspec(blob.source, function() {
+		    // Mark as HEAD in the page.
+		    repohash = blob.hash;
+		    // Reset the list of tags and branches whenever we
+		    // successfully update our clone.
+		    SetupRepo();
 		});
-		// Reset the list of tags and branches whenever we successfully
-		// update our clone.
-		SetupRepo();
 	    }
 	};
 	gitrepo.UpdateRepo(version_uuid, callback);
@@ -1292,35 +1299,10 @@ $(function ()
     {
 	var callback = function (source, hash) {
 	    if (source) {
-		console.info(source);
 		changeRspec(source);
 	    }
 	};
 	gitrepo.GetRepoSource(version_uuid, which, callback);
-    }
-
-    /*
-     * Force an update to repo-based profile with new script and/or rspec.
-     */
-    function UpdateProileFromMaster(newhash)
-    {
-	var update_callback = function(json) {
-	    if (json.code) {
-		console.info("UpdateProileFromMaster", json.value);
-		alert("Could not update profile from new master");
-	    }
-	    // Mark as HEAD in the page so we do not update again.
-	    repohash = newhash;
-	};
-	var args = {"uuid"  : version_uuid,
-		    "rspec" : $('#profile_rspec_textarea').val()};
-	if ($('#profile_script_textarea').val() != "") {
-	    args["script"] = $('#profile_script_textarea').val();
-	}
-	var xmlthing = sup.CallServerMethod(ajaxurl,
-					    "manage_profile",
-					    "UpdateFromMaster", args);
-	xmlthing.done(update_callback);
     }
 
     /*
