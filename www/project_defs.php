@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2006-2016 University of Utah and the Flux Group.
+# Copyright (c) 2006-2017 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -480,6 +480,14 @@ class Project
 	    TBERROR("Could not find user object for $head_idx", 1);
 	}
 	return $leader;
+    }
+    # Boolean test.
+    function IsLeader($user) {
+        $leader = $this->GetLeader();
+        if ($user->SameUser($leader)) {
+            return 1;
+        }
+        return 0;
     }
 
     #
