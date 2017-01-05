@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2000-2016 University of Utah and the Flux Group.
+# Copyright (c) 2000-2017 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -349,7 +349,7 @@ if ($update) {
 # need to clone to for real now that we can assign a name to it. Only
 # for new profiles of course, the user cannot change the url later.
 #
-if (exists($new_args{'repourl'})) {
+if (exists($new_args{'repourl'}) || ($update && $profile->IsRepoBased())) {
     my $reponame;
     my $repohash;
     
@@ -495,8 +495,10 @@ if ($update) {
 		if (exists($update_args{$key}));
 	}
     }
-    $profile->UpdateMetaData(\%update_args) == 0 or
-	fatal("Could not update profile record");
+    if (keys(%update_args)) {
+	$profile->UpdateMetaData(\%update_args) == 0 or
+	    fatal("Could not update profile record");
+    }
 
     #
     # Disable operates on current version or all versions.
