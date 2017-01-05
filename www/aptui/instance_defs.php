@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2006-2016 University of Utah and the Flux Group.
+# Copyright (c) 2006-2017 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -233,6 +233,12 @@ class Instance
 	$this->instance = mysql_fetch_array($query_result);
 	return 0;
     }
+
+    # Project of instance.
+    function Project() {
+        return Project::Lookup($this->pid_idx());
+    }
+    
     #
     # Class function to create a new Instance
     #
