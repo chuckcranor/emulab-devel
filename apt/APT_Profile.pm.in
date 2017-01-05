@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2007-2016 University of Utah and the Flux Group.
+# Copyright (c) 2007-2017 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -254,6 +254,12 @@ sub DESTROY {
     my $self = shift;
 
     $self->{'DBROW'} = undef;
+}
+
+sub IsRepoBased($) {
+    my ($self) = @_;
+
+    return (defined($self->repourl()) ? 1 : 0);
 }
 
 #
