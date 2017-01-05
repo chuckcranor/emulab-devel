@@ -305,7 +305,7 @@ sub DoClone()
 	RemoveRepo($reponame);
 	fatal("Could not estimate repository size");
     }
-    if ($size > 5) {
+    if ($size > 50) {
 	RemoveRepo($reponame);
 	UserError("Repository is too big: greate then 5MiB");
     }
@@ -432,7 +432,7 @@ sub DoUpdate()
     if (!defined($size)) {
 	fatal("Could not estimate repository size");
     }
-    if ($size > 5) {
+    if ($size > 50) {
 	UserError("Repository is too big: greater then 5MiB");
     }
     
