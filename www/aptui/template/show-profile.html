@@ -1,3 +1,8 @@
+<style>
+.popover {
+    max-width: none;
+}
+</style>
 <div class='row'>
   <div class='col-lg-3
               col-md-3
@@ -108,6 +113,20 @@
 	    <tr>
 	      <td>Author:</td>
 	      <td class="commit-author"></td>
+	    </tr>
+	    <tr>
+	      <td>Est. Size:</td>
+	      <td class="commit-size"></td>
+	    </tr>
+	    <tr>
+	      <td>Log:</td>
+	      <td class="commit-log">
+		<span class="commit-log-start"></span>
+		<button type="button" class="hidden log btn btn-xs"
+			data-toggle='popover'
+			data-html="true"
+			data-delay='{"hide":1000, "show":250}'>...</button>
+	      </td>
 	    </tr>
 	  </table>
 	</div>
