@@ -15,11 +15,6 @@ sub DoUpdate($$$)
 		     " add `webtask_id` varchar(128) NOT NULL default '' ".
 		     "   after uuid");
     }
-    if (!DBSlotExists("apt_profile_versions", "webtask_id")) {
-        DBQueryFatal("alter table apt_profile_versions " .
-		     " add `webtask_id` varchar(128) NOT NULL default '' ".
-		     "   after uuid");
-    }
     if (!DBSlotExists("images", "webtask_id")) {
         DBQueryFatal("alter table images " .
 		     " add `webtask_id` varchar(128) NOT NULL default '' ".
