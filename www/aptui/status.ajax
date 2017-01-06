@@ -908,14 +908,9 @@ function Do_Snapshot()
             return;
         }
     }
-    
     $this_idx = $this_user->uid_idx();
     $uuid = $ajax_args["uuid"];
     
-    if ($this_idx != $instance->creator_idx() && !ISADMIN()) {
-	SPITAJAX_ERROR(1, "Not enough permission. Maybe Clone instead?");
-	return;
-    }
     if ($instance->status() != "ready") {
 	SPITAJAX_ERROR(1, "Experiment is currently busy");
 	return;
@@ -1213,10 +1208,6 @@ function Do_RebootOrReload($which)
             return;
         }
         $nodelist .= " " . escapeshellarg($node_id);
-    }
-    if ($this_idx != $instance->creator_idx() && !ISADMIN()) {
-	SPITAJAX_ERROR(1, "Not enough permission. Maybe Clone instead?");
-	return;
     }
     if ($instance->status() != "ready" && $instance->status() != "failed") {
 	SPITAJAX_ERROR(1, "Experiment is currently busy");
