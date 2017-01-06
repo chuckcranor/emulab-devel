@@ -255,7 +255,7 @@ foreach my $type ( keys( %types ) ) {
     if( !Reservation->IsFeasible( $reservations, \$errormsg ) ) {
 	print "Existing admission control violation for type $type: $errormsg\n";
 	if( $admission_ctrl ) {
-	    $noalloc++;
+	    $error++;
 	}
 	print "Omitting admission control verification.\n";
 	goto admissionfailure;
@@ -286,7 +286,7 @@ foreach my $type ( keys( %types ) ) {
 	    # FIXME notify admins about violation
 	} else {
 	    if( $admission_ctrl ) {
-		$noalloc++;
+		$error++;
 	    }
 	}
 	goto admissionfailure;
@@ -296,7 +296,7 @@ foreach my $type ( keys( %types ) ) {
  admissionfailure:
 
 # Now make the reservations in the DB.
-if ((!$noalloc || $partial) && (@nodes || @oldnodes)) {
+if ((!$noalloc || $partial) && (@nodes || @oldnodes) && !$error) {
     print "Reserving nodes...\n"
 	if ($debug);
 
