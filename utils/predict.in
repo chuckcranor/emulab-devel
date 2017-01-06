@@ -1,0 +1,201 @@
+#!/usr/bin/perl -w
+#
+# Copyright (c) 2016 University of Utah and the Flux Group.
+# 
+# {{{EMULAB-LICENSE
+# 
+# This file is part of the Emulab network testbed software.
+# 
+# This file is free software: you can redistribute it and/or modify it
+# under the terms of the GNU Affero General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or (at
+# your option) any later version.
+# 
+# This file is distributed in the hope that it will be useful, but WITHOUT
+# ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
+# FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Affero General Public
+# License for more details.
+# 
+# You should have received a copy of the GNU Affero General Public License
+# along with this file.  If not, see <http://www.gnu.org/licenses/>.
+# 
+# }}}
+#
+use strict;
+use English;
+use Getopt::Std;
+use Date::Parse;
+use POSIX;
+
+#
+# Configure variables
+#
+my $TB		 = "@prefix@";
+my $TBOPS        = "@TBOPSEMAIL@";
+
+#
+# Testbed Support libraries
+#
+use lib "@prefix@/lib";
+use emdb;
+use libtestbed;
+use Project;
+use Reservation;
+
+sub usage()
+{
+    print STDERR "Usage: predict [-p] [-u] [-t time] type\n";
+    print STDERR "   -h   This message\n";
+    print STDERR "   -p   Identify by pid only, not pid/eid\n";
+    print STDERR "   -t   Give time/date for prediction (defaults to now)\n";
+    print STDERR "   -u   Interpret/display all times in UTC\n";
+    
+    exit( -1 );
+}
+
+my $optlist    = "dhpt:";
+my $debug      = 0;
+my $time       = time; # default to now
+my $pidonly    = 0;
+my $type;
+
+sub fatal($)
+{
+    my ($mesg) = $_[0];
+
+    die("*** $0:\n".
+	"    $mesg\n");
+}
+
+sub convert($) {
+    my ($unixtime) = @_;
+
+    return strftime( "%Y-%m-%d %H:%M", localtime( $unixtime ) );
+}
+
+#
+# Turn off line buffering on output
+#
+$| = 1;
+
+#
+# Untaint the path
+# 
+$ENV{'PATH'} = "/bin:/sbin:/usr/bin:";
+
+#
+# Parse command arguments. Once we return from getopts, all that should be
+# left are the required arguments.
+#
+my %options = ();
+if (! getopts($optlist, \%options)) {
+    usage();
+}
+if (defined($options{"u"})) {
+    # handle this option ASAP, since it affects parsing of other options!
+    $ENV{ "TZ" } = "UTC";
+}
+if (defined($options{h})) {
+    usage();
+}
+if (defined($options{p})) {
+    $pidonly = 1;
+}
+if (defined($options{"t"})) {
+    $time = $options{"t"};
+    if ($time !~ /^\d+$/) {
+	$time = str2time($time);
+	if( !defined( $time ) ) {
+	    fatal("Could not parse -t option.");
+	}
+    }
+}
+usage() if( @ARGV != 1 );
+$type = shift( @ARGV );
+unless( $type =~ /^[-\w]+$/ ) {
+    fatal( "Invalid node type." );
+}
+
+my $reservations = Reservation->LookupAll( $type );
+my @timeline = ();
+my $free;
+my %used = ();
+my %reserved = ();
+
+foreach my $reservation ( @$reservations ) {
+    my $start;
+    my $end;
+
+    if( defined( $reservation->eid() ) ) {
+	# A swapped-in experiment.  Already using nodes (so no
+	# need to save a start event), and will later release real nodes.
+	my $pid = $reservation->pid();
+	my $eid = $reservation->eid();
+	my $id = $pidonly ? $pid : "$pid/$eid";
+	if( !exists( $used{ $id } ) ) {
+	    $used{ $id } = 0;
+	    $reserved{ $id } = 0;
+	}
+	$used{ $id } += $reservation->nodes();
+	$end = { 'id' => $id,
+		 't' => $reservation->end(),
+		 'used' => -$reservation->nodes(),
+		 'reserved' => 0 };
+    } elsif( defined( $reservation->pid() ) ) {
+	# A reservation.  Uses then releases reserved nodes.
+	$start = { 'id' => $reservation->pid(),
+		   't' => $reservation->start(),
+		   'used' => 0,
+		   'reserved' => $reservation->nodes() };
+	$end = { 'id' => $reservation->pid(),
+		 't' => $reservation->end(),
+		 'used' => 0,
+		 'reserved' => -$reservation->nodes() };
+    } else {
+	# Available resources.  Provides nodes for all time.
+	$free = $reservation->nodes();
+    }
+
+    push( @timeline, $start ) if( defined( $start->{'t'} ) );
+    push( @timeline, $end ) if( defined( $end->{'t'} ) );
+}
+
+my @events = sort { $a->{'t'} <=> $b->{'t'} } @timeline;
+    
+foreach my $event ( @events ) {
+    last if( $event->{'t'} > $time );
+		     
+    my $id = $event->{'id'};
+    if( !exists( $used{ $id } ) ) {
+	$used{ $id } = 0;
+	$reserved{ $id } = 0;
+    }
+
+    my $oldsum = $used{ $id } + $reserved{ $id };
+
+    $used{ $id } += $event->{ 'used' };
+    $reserved{ $id } += $event->{ 'reserved' };
+
+    my $newsum = $used{ $id } + $reserved{ $id };
+
+    $free += $oldsum - $newsum;
+}
+
+foreach my $used ( sort { $used{$b} <=> $used{$a} } keys( %used ) ) {
+    my $val = $used{ $used };
+    print "$used: $val\n" if( $val > 0 );
+}
+
+foreach my $reserved ( sort { $reserved{$b} <=> $reserved{$a} }
+		       keys( %reserved ) ) {
+    my $val = $reserved{ $reserved };
+    print "[$reserved: $val]\n" if( $val > 0 );
+}
+
+if( $free >= 0 ) {
+    print $free . " free node";
+    print ( $free == 1 ? ".\n" : "s.\n" );
+} else {
+    print "Overbooked by " . -$free . " node";
+    print ( $free == -1 ? ".\n" : "s.\n" );
+}
