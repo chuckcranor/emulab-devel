@@ -665,6 +665,9 @@ $project->SendEmail($portalLogs, "New Profile Created",
 	 "UUID:     ". $profile->uuid() . "\n".
 	 "URL:      ". $profile->AdminURL() . "\n");
 
+# Make sure we delete Anonymous webtask,
+$webtask->Delete()
+    if (defined($webtask) && !defined($webtask_id));
 exit(0);
 
 sub fatal($)
@@ -672,8 +675,14 @@ sub fatal($)
     my ($mesg) = @_;
 
     if (defined($webtask)) {
-	$webtask->output($mesg);
-	$webtask->Exited(-1);
+	# Anonymous webtask, delete.
+	if (!defined($webtask_id)) {
+	    $webtask->Delete();
+	}
+	else {
+	    $webtask->output($mesg);
+	    $webtask->Exited(-1);
+	}
     }
     print STDERR "*** $0:\n".
 	         "    $mesg\n";
@@ -707,6 +716,10 @@ sub UserError(;$)
 	    $webtask->output($xml);
 	}
 	else {
+	    # Anonymous webtask, delete.
+	    if (defined($webtask)) {
+		$webtask->Delete();
+	    }
 	    foreach my $key (keys(%errors)) {
 		print "$key: " . $errors{$key} . "\n";
 	    }
