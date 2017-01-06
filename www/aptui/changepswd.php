@@ -233,7 +233,7 @@ if (isset($key)) {
 SPITHEADER(1);
 SpitWaitModal("waitwait");
 REQUIRE_SUP();
-SPITREQUIRE("async");
+SPITNULLREQUIRE();
 echo "<script>ShowWaitModal('waitwait');</script>\n";
 flush();
 
