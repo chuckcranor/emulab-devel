@@ -118,7 +118,7 @@ unless( $type =~ /^[-\w]+$/ ) {
 
 my $reservations = Reservation->LookupAll( $type );
 my @timeline = ();
-my $free;
+my $free = 0;
 my %used = ();
 my %reserved = ();
 
