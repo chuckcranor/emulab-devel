@@ -473,17 +473,18 @@ function Do_BindParameters()
     # If this is a repo-based profile, look in the form for the script
     # and the paramdefs.
     #
-    if (isset($formfields["script"]) && $formfields["script"] != "" &&
+    if ($profile->repourl() &&
+        isset($formfields["script"]) && $formfields["script"] != "" &&
         isset($formfields["paramdefs"]) && $formfields["paramdefs"] != "") {
         $script    = $formfields["script"];
         $paramdefs = $formfields["paramdefs"];
-        unset($formfields["script"]);
-        unset($formfields["paramdefs"]);
     }
     else {
         $script    = $profile->script();
         $paramdefs = $profile->paramdefs();
     }
+    unset($formfields["script"]);
+    unset($formfields["paramdefs"]);
     
     if (Do_CheckForm($formfields, $paramdefs, $rval)) {
         # Special return value for JS code.
@@ -570,11 +571,17 @@ function Do_CheckForm($formfields, $paramdefs, &$rval)
     $fields = json_decode($paramdefs);
 
     while (list ($name, $def) = each ($fields)) {
+        $type    = $def->type;
+        $defval  = $def->defaultValue;
+        $options = $def->legalValues;
+
+        # Watch for checkboxes that are not submitted when not checked.
+        if ($type == "boolean" &&
+            !array_key_exists($name, $formfields)) {
+            $formfields[$name] = $defval;
+        }
 	if (array_key_exists($name, $formfields)) {
-	    $val     = $formfields[$name];
-	    $type    = $def->type;
-	    $defval  = $def->defaultValue;
-	    $options = $def->legalValues;
+	    $val = $formfields[$name];
 
 	    if ($type == "pubkey") {
                 if (GenGenilibKey()) {
