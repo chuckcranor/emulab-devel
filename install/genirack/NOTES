@@ -204,6 +204,10 @@ Setting up an InstaGeni Rack. First, we need the following info:
   5400(config)> no snmp-server community public
   5400(config)> snmp-server community XXXXX manager unrestricted
   5400(config)> password all (type in same password for manager/operator)
+
+  HP 5406R ONLY 
+  HP 5406R(config)>no allow-v2-modules 
+
   5400(config)> write memory
   5400(config)> reload
   
@@ -339,27 +343,27 @@ Setting up an InstaGeni Rack. First, we need the following info:
 	sudo ln -s ~elabman/ops/xm.conf 1.ops.conf
 	sudo ln -s ~elabman/boss/xm.conf 2.boss.conf
 
-* Next we want to update the firmware on the data plane switch to the
+* HP 5406 ONLY: Next we want to update the firmware on the data plane switch to the
   one that supports openflow. First copy the firmware from Utah to the
   local tftp directory on boss.
 
 	cd /tftpboot
 	sudo wget http://www.emulab.net/downloads/K_15_06_5008.swi
 
-* Log into procurve2 using the password in /usr/testbed/etc/switch.pswd
+* HP 5406 ONLY: Log into procurve2 using the password in /usr/testbed/etc/switch.pswd
   We then want to make a copy of the current config in case we have to
   revert back.
 
 	5406> show config files
 	5406> copy config config1 config config-save
        
-* Now load the openflow firmware into the primary flash. First make
+* HP 5406 ONLY: Now load the openflow firmware into the primary flash. First make
   sure the secondary has a copy of the primary. 
 
 	5406> show flash
 	5406> copy tftp flash 10.3.1.1 K_15_06_5008.swi
 
-* And if that works, reboot the switch.
+* HP5406 ONLY: And if that works, reboot the switch.
 
 	5406> reload
 
@@ -386,7 +390,7 @@ Setting up an InstaGeni Rack. First, we need the following info:
 	2620(config)> copy tftp pub-key-file 10.1.1.1 id_rsa.pub manager
         2620(config)> write memory
 
-* Telnet to procurve2 (/usr/testbed/etc/switch.pswd):
+* HP 5406 ONLY: Telnet to procurve2 (/usr/testbed/etc/switch.pswd):
 
 	5400> config
         5400(config)> ip ssh
@@ -394,6 +398,13 @@ Setting up an InstaGeni Rack. First, we need the following info:
         5400(config)> aaa authentication ssh enable public-key none
         5400(config)> copy tftp pub-key-file 10.3.1.1 id_rsa.pub manager
 	5400(config)> write memory
+
+* HP 5406R ONLY: Telnet to procurve2 (/usr/testbed/etc/switch.pswd):
+
+        HP 5406R> config
+        HP 5406R(config)> aaa authentication ssh login local
+        HP 5406R(config)> aaa authentication ssh enable local
+        HP 5406R(config)> write memory
 
 * Add the public IP space, if appropriate. See the site survey response.
   This needs to go into the image baking script.
@@ -433,7 +444,7 @@ Setting up an InstaGeni Rack. First, we need the following info:
 
 	boss> wap /usr/testbed/sbin/protogeni/register_resources
 
-* At this point, contact the GPO infrastructure people to find out
+* HP 5406 ONLY: At this point, contact the GPO infrastructure people to find out
   what port and what vlan number to use for the mesoscale vlan. The
   instructions below use port 24 and vlan 1750, but that MIGHT NOT BE
   THE CASE. 
@@ -463,6 +474,35 @@ Setting up an InstaGeni Rack. First, we need the following info:
 
 * Send email to local admin with pointer to instructions on getting their
   admin account on boss: http://www.protogeni.net/wiki/RackAdminAccounts
+
+
+Below are the instructions replacing the HP 5406 switch with the HP 5406R in the rack:
+
+*  Install the perl module for expect:
+
+   boss> cd /usr/ports/lang/p5-Expect
+   boss> sudo sudo make install 
+
+*  Add user credentials for the "manager" user in the DB.
+
+   boss> sudo mysql tbdb
+   mysql>  insert into node_attributes values ('procurve2','snmpit_username','manager');
+   mysql> insert into node_attributes values ('procurve2','snmpit_password','<PASSWORD>');
+
+   such that PASSWORD exists in /usr/testbed/etc/switch.pswd on boss.
+
+*  Modify the type for procurve2 to hp5406r:
+
+   boss> mysql tbdb -e 'update nodes set type="hp5406r" where node_id="procurve2"'
+
+*  Copy running config from old switch to new.
+
+*  Ensure that the geniuser is able to log into the switch using PASSWORD:
+
+   sudo -u geniuser ssh -l manager procurve2
+
+   Once again, PASSWORD exits in /usr/testbed/etc/switch.pswd
+
 
 ---
 TODO:
