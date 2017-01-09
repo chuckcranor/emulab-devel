@@ -76,9 +76,10 @@ sub new($$$$) {
     }
 
     if ($self->{DEBUG}) {
-        print "Switch_expect initializing for $self->{NAME}, " .
+        print "force10_expect initializing for $self->{NAME}, " .
             "debug level $self->{DEBUG}\n" ;
     }
+
     $self->{CLI_PROMPT} = "$self->{NAME}#";
     if ($self->{NAME} =~ /procurve/i){
         $self->{CLI_PROMPT} = "HP 5406R#";
@@ -129,9 +130,6 @@ sub createExpectObject($)
 	  sub { my $e = shift;
 		$e->send($self->{PASSWORD}."\n");
 		exp_continue;}],
-         ["Press any key to continue" =>
-          sub { my $e = shift;
-               $e->send("\r");}],
          ["Permission denied" => sub { $error = "Password incorrect!";} ],
          [ timeout => sub { $error = "Timeout connecting to switch!";} ],
          $self->{CLI_PROMPT} );
@@ -434,6 +432,7 @@ sub doCLICmd($$;$$)
         $self->debug("exp before: " . ($exp->before()) . "\n",2);
         $self->debug("exp after:  " . ($exp->after()) . "\n",2);
     }
+
     # After running a configuration command, no data is returned from the terminal 
     # until "\nend\n" is sent.
     sleep (2);
@@ -464,12 +463,14 @@ sub createExpectObject($)
     my $id = "$self->{NAME}::createExpectObject()";
     my $error = 0;
     my $spawn_cmd = "ssh -l $self->{USERNAME} $self->{NAME}";
+
     # Create Expect object and initialize it:
     my $exp = new Expect();
     if (!$exp) {
         # upper layer will check this
         return undef;
     }
+
     $exp->raw_pty(0);
     $exp->log_stdout(0);
 
@@ -482,6 +483,7 @@ sub createExpectObject($)
         warn "$id: Cannot spawn $spawn_cmd: $!\n";
         return undef;
     }
+
     $exp->expect($CONN_TIMEOUT,
          ["'s password:" =>
           sub { my $e = shift;
