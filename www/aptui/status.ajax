@@ -896,6 +896,9 @@ function Do_Snapshot()
 	SPITAJAX_ERROR(1, "Only registered users can snapshot nodes");
 	return;
     }
+    $this_idx = $this_user->uid_idx();
+    $uuid = $ajax_args["uuid"];
+
     #
     # As per Rob, if an experiment is locked down, then only the creator,
     # project leader, or an admininstrator.
@@ -908,9 +911,6 @@ function Do_Snapshot()
             return;
         }
     }
-    $this_idx = $this_user->uid_idx();
-    $uuid = $ajax_args["uuid"];
-    
     if ($instance->status() != "ready") {
 	SPITAJAX_ERROR(1, "Experiment is currently busy");
 	return;
@@ -1013,11 +1013,7 @@ function Do_SnapshotStatus()
 	return;
     }
     $this_idx = $this_user->uid_idx();
-
-    if ($this_idx != $instance->creator_idx() && !ISADMIN()) {
-	SPITAJAX_ERROR(1, "Not enough permission");
-	return;
-    }
+    
     $webtask = WebTask::LookupByObject($instance->uuid());
     if (!$webtask) {
 	SPITAJAX_ERROR(1, "No status descriptor found");
@@ -1182,6 +1178,9 @@ function Do_RebootOrReload($which)
 	SPITAJAX_ERROR(1, "Only registered users can reboot/reload nodes");
 	return;
     }
+    $this_idx = $this_user->uid_idx();
+    $uuid = $ajax_args["uuid"];
+
     #
     # As per Rob, if an experiment is locked down, then only the creator,
     # project leader, or an admininstrator.
@@ -1194,8 +1193,6 @@ function Do_RebootOrReload($which)
             return;
         }
     }
-    $this_idx = $this_user->uid_idx();
-    $uuid = $ajax_args["uuid"];
 
     if (!isset($ajax_args["node_ids"])) {
 	SPITAJAX_ERROR(1, "Missing node_id list");
