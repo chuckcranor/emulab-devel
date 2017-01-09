@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2000-2016 University of Utah and the Flux Group.
+# Copyright (c) 2000-2017 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -676,6 +676,7 @@ $opts   .= "-F " if ($nodelta);
 $opts   .= "-U " if ($update_prepare);
 $opts   .= "-B $origin_uuid " if (defined($origin_uuid));
 $opts   .= "-b $bsname " if (defined($bsname));
+$output  = emutil::ExecQuiet("$CREATEIMAGE $opts $imagename $node_id");
 if ($?) {
     print STDERR $output;
     fatal("Failed to create image");
