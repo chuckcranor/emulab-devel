@@ -366,7 +366,8 @@ sub doimage($)
 	if (havedeltaimage($image)) {
 	    $dpath = $image->DeltaImageFile();
 	}
-	$hash = $image->hash();
+	# XXX $image->hash() returns a ref to the internal 'HASH' hash.
+	$hash = $image->field('hash');
 	$dhash = $image->deltahash();
     } else {
 	$isdir = 0;
@@ -392,7 +393,7 @@ sub doimage($)
 	else {
 	    if ($image->HaveFullImage()) {
 		$path = $image->FullImageFile();
-		$hash = $image->hash();
+		$hash = $image->field('hash');
 	    } elsif ($image->HaveDeltaImage()) {
 		$dpath = $image->DeltaImageFile();
 		$dhash = $image->deltahash();
@@ -406,7 +407,7 @@ sub doimage($)
 	    #
 	    elsif ($accessfs && -e $image->FullImagePath()) {
 		$path = $image->FullImageFile();
-		$hash = $image->hash();
+		$hash = $image->field('hash');
 	    }
 	}
     }

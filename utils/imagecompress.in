@@ -290,7 +290,7 @@ sub doimage($)
 		my $nhash = `$SHA1 $path`;
 		if ($? == 0 && $nhash =~ /^SHA1.*= ([\da-fA-F]+)$/) {
 		    $nhash = lc($1);
-		    if ($nhash ne $imobj->hash()) {
+		    if ($nhash ne $imobj->field('hash')) {
 			print STDERR "$iname: file hash != DB hash for version $vers!\n";
 			print STDERR "  use 'sudo imagevalidate -uU -V hash $fqname' to correct\n";
 			return 1;
