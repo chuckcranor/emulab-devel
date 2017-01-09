@@ -76,11 +76,13 @@ sub new($$$$) {
     }
 
     if ($self->{DEBUG}) {
-        print "force10_expect initializing for $self->{NAME}, " .
+        print "Switch_expect initializing for $self->{NAME}, " .
             "debug level $self->{DEBUG}\n" ;
     }
-
     $self->{CLI_PROMPT} = "$self->{NAME}#";
+    if ($self->{NAME} =~ /procurve/i){
+        $self->{CLI_PROMPT} = "HP 5406R#";
+    }
 
     # Make it a class object
     bless($self, $class);
@@ -127,6 +129,9 @@ sub createExpectObject($)
 	  sub { my $e = shift;
 		$e->send($self->{PASSWORD}."\n");
 		exp_continue;}],
+         ["Press any key to continue" =>
+          sub { my $e = shift;
+               $e->send("\r");}],
          ["Permission denied" => sub { $error = "Password incorrect!";} ],
          [ timeout => sub { $error = "Timeout connecting to switch!";} ],
          $self->{CLI_PROMPT} );
@@ -303,3 +308,201 @@ sub debug($$;$) {
         print STDERR $string;
     }
 }
+
+
+#
+# Class method
+# This class inherits methods from force10_expect
+
+package hp_5406r_expect;
+use force10_expect;
+use strict;
+
+$| = 1; # Turn off line buffering on output
+
+use English;
+use Expect;
+
+our @ISA = qw(force10_expect);
+
+#
+# Run a CLI command (or config command), checking for errors.
+#
+# Parameters:
+# $cmd - The CLI command to run in the given context.
+# $confmode - Is this a configuration command? 1 for yes, 0 for no
+# $iface - Name of interface to exec config command against.
+#
+sub doCLICmd($$;$$)
+{
+    my ($self, $cmd, $confmode, $iface) = @_;
+    $confmode ||= 0;
+    $iface    ||= "";
+
+    my $output = "";
+    my $error = "";
+    my @active_sets;
+
+    my $exp = $self->{SESS};
+    my $id = "$self->{NAME}::doCLICmd()";
+
+    $self->debug("$id: called with: '$cmd', '$confmode', '$iface'\n",1);
+
+    if (!$exp) {
+        #
+        # Create the Expect object, lazy initialization.
+        #
+        # We'd better set a long timeout on Apcon switch
+        # to keep the connection alive.
+        $self->{SESS} = $self->createExpectObject();
+        if (!$self->{SESS}) {
+            warn "WARNING: Unable to connect to $self->{NAME}\n";
+            return (1, "Unable to connect to switch $self->{NAME}.");
+        }
+        $exp = $self->{SESS};
+    }
+
+    # Common patterns
+    my $incomplete_pat   = [""=> sub { my $e = shift;
+                                     $e->send("\nend\n");}];
+    my $timeout_pat      = [timeout => sub { $error = "timed out.";}];
+    my $get_output_pat   = [$self->{CLI_PROMPT}, sub {my $e = shift;
+                                                  $output = $e->before();}];
+
+    # Common pattern sets
+    my $get_output_set = [$get_output_pat];
+
+    #
+    # Sets of pattern sets for execution follow.
+    #
+
+    # Just pop off one command without going into config mode.
+    my @single_command_sets = ();
+    push (@single_command_sets,
+          [
+             [$self->{CLI_PROMPT}, sub {my $e = shift; $e->send("$cmd\n end \n")}]
+          ],
+          $get_output_pat
+        );
+
+    # Perform a single config operation (go into config mode).
+    my @single_config_sets = ();
+    push (@single_config_sets,
+          [
+             [$self->{CLI_PROMPT}, sub {my $e = shift;
+                                        $e->send("conf t\n$cmd\nend\n");}]
+          ],
+          $get_output_pat
+        );
+
+    # Do an interface config operation (go into iface-specific config mode).
+    my @iface_config_sets = ();
+    push (@iface_config_sets,
+          [
+             [$self->{CLI_PROMPT}, sub {my $e = shift;
+                                        $e->send("conf t\ninterface $iface\n$cmd\nend\n");}]
+          ],
+          $get_output_pat
+        );
+
+    # Pick "set of sets" to use with Expect based on how this method
+    # was called.
+    if ($confmode) {
+        if ($iface) {
+            @active_sets = @iface_config_sets;
+        } else {
+            @active_sets = @single_config_sets;
+        }
+    } else {
+        @active_sets = @single_command_sets;
+    }
+
+    # Match across the selected set of patterns.
+    my $i = 1;
+    foreach my $patset (@active_sets) {
+        $self->debug("Match set: $i.\n",2);
+        $i++;
+        $exp->expect($CLI_TIMEOUT,
+                     @$patset,
+                     $timeout_pat);
+        if ($error || $exp->error()) {
+            $self->debug("error string: $error\n",2);
+            $self->debug("exp error: " . ($exp->error()) . "\n",2);
+        } else {
+            $self->debug("exp match:  " . ($exp->match()) . "\n",2);
+        }
+        $self->debug("exp before: " . ($exp->before()) . "\n",2);
+        $self->debug("exp after:  " . ($exp->after()) . "\n",2);
+    }
+    # After running a configuration command, no data is returned from the terminal 
+    # until "\nend\n" is sent.
+    sleep (2);
+    if ($confmode == 1) {
+        $exp->expect($CLI_TIMEOUT,$incomplete_pat);
+    } 
+
+    if (!$error && $exp->error()) {
+        $error = $exp->error();
+    }
+
+    if ($error) {
+        $self->debug("$id: Error in doCLICmd: $error\n",1);
+        return (1, $error);
+    } else {
+        return (0, $output);
+    }
+}
+
+
+#
+# Create an Expect object that spawns the ssh process
+# to switch.
+#
+sub createExpectObject($)
+{
+    my $self = shift;
+    my $id = "$self->{NAME}::createExpectObject()";
+    my $error = 0;
+    my $spawn_cmd = "ssh -l $self->{USERNAME} $self->{NAME}";
+    # Create Expect object and initialize it:
+    my $exp = new Expect();
+    if (!$exp) {
+        # upper layer will check this
+        return undef;
+    }
+    $exp->raw_pty(0);
+    $exp->log_stdout(0);
+
+    if ($self->{DEBUG} > 1) {
+        $exp->log_file($DEBUG_LOG,"w");
+        $exp->debug(1);
+    }
+
+    if (!$exp->spawn($spawn_cmd)) {
+        warn "$id: Cannot spawn $spawn_cmd: $!\n";
+        return undef;
+    }
+    $exp->expect($CONN_TIMEOUT,
+         ["'s password:" =>
+          sub { my $e = shift;
+                $e->send($self->{PASSWORD}."\n"),
+                 exp_continue;}],
+         ["Press any key to continue" =>
+          sub { my $e = shift;
+               $e->send("\r");}],
+         ["Permission denied" => sub { $error = "Password incorrect!";} ],
+         [ timeout => sub { $error = "Timeout connecting to switch!";} ],
+         $self->{CLI_PROMPT} );
+
+    if (!$error && $exp->error()) {
+        $error = $exp->error();
+    }
+
+    if ($error) {
+        warn "$id: Could not connect to switch: $error\n";
+        return undef;
+    }
+
+    return $exp;
+}
+

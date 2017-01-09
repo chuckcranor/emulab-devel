@@ -1625,7 +1625,7 @@ sub snap($) {
 	my $devicename = $self->{NAME};
 	my $type = $self->{TYPE};
 	my $device;
-
+        
 	if ($self->{DEBUG}) { print "snapping $devicename \n"; }
 
 	#
@@ -1651,6 +1651,12 @@ sub snap($) {
 		$device = new snmpit_nortel($devicename,$self->{DEBUG});
 		last;
 		}; # /nortel.*/
+            (/hp5406r/)
+                 && do {
+                require snmpit_hp;
+                $device = new snmpit_hp_5406r($devicename,$self->{DEBUG});
+                last;
+                }; # /hp5406r.*/
 	    (/hp/)
 		    && do {
 		require snmpit_hp;

@@ -190,8 +190,9 @@ sub new($$$;$) {
     &SNMP::addMibDirs($mibpath);
     &SNMP::addMibFiles("$mibpath/SNMPv2-SMI.txt", "$mibpath/SNMPv2-TC.txt", 
 	               "$mibpath/SNMPv2-MIB.txt", "$mibpath/IANAifType-MIB.txt",
-		       "$mibpath/IF-MIB.txt", "$mibpath/BRIDGE-MIB.txt", 
-		       "$mibpath/HP-ICF-OID.txt");
+		       "$mibpath/IF-MIB.txt", "$mibpath/BRIDGE-MIB.txt",
+                       "$mibpath/HP-ICF-OID-v1.txt",
+                       "$mibpath/HP-SWITCH-CONFIG.txt");  
     $SNMP::save_descriptions = 1; # must be set prior to mib initialization
     SNMP::initMib();		  # parses default list of Mib modules 
     $SNMP::use_enums = 1;	  # use enum values instead of only ints
@@ -213,20 +214,20 @@ sub new($$$;$) {
     # method
     #
     bless($self,$class);
-
     #
     # Sometimes the SNMP session gets created when there is no connectivity
     # to the device so let's try something simple
     #
     my $test_case = $self->get1("sysObjectID", 0);
+    
     if (!defined($test_case)) {
 	warn "WARNING: Unable to retrieve via SNMP from $self->{NAME}\n";
 	return undef;
     }
     $self->{HPTYPE} = SNMP::translateObj($test_case);
-
+    
     $self->readifIndex();
-
+ 
     # Utah debugging.
     $self->{DEBUG} = 0;    
     return $self;
@@ -1900,7 +1901,8 @@ sub disablePortTrunking($$) {
     return 1;
 }
 
-my %blade_sizes = ( 
+my %blade_sizes = (
+   hpSwitchJ9850A => 24, # hp5406r 
    hpSwitchJ8697A => 24, # hp5406zl
    hpSwitchJ8698A => 24, # hp5412zl
    hpSwitchJ8770A => 24, # hp4204
@@ -2188,6 +2190,437 @@ sub isOpenflowSupported($) {
     } else {
 	return 0;
     }
+}
+
+
+#
+# Class method
+# This class inherits methods from snmpit_hp. It also overides all OF
+# methods to support the HP 5406r.
+#
+
+package snmpit_hp_5406r;
+use snmpit_hp;
+use strict;
+use force10_expect;
+use SNMP;
+use snmpit_lib;
+our @ISA = qw(snmpit_hp);
+
+# OpenFlow constants
+
+# Maximum number of OF instances supported
+my $MAX_OF_ID = 128;
+
+# Maximum number of VLANs supported
+my $MAX_VLAN_ID = 2048;
+
+# Managemenet VLAN ID
+my $MGMT_VLAN_ID = 10;
+
+# Maximum backoff for an instance before reconnecting to the controller.
+my $MAX_BACKOFF = 10;
+
+# Default OpenFlow version number: For version 1, set value to 1.0
+my $VERSION_OF = 1.3;
+
+sub new{
+    my ($class) = @_;
+
+    my $self = $class->SUPER::new( $_[1], $_[2], $_[3] );
+
+    # Mapping from OF instances to vlans.
+    $self->{OFMAP} = undef;
+
+    #
+    # Get config options from the database
+    #
+    my $options = getDeviceOptions($self->{NAME});
+    if (!$options) {
+        warn "ERROR: Getting switch options for $self->{NAME}\n";
+        return undef;
+    }
+    # This does not immediately connect to the switch.
+    if (exists($options->{"username"}) && exists($options->{"password"})) {
+        my $swcreds = $options->{"username"} . ":" . $options->{"password"};
+        $self->{EXP_OBJ} = hp_5406r_expect->new($self->{NAME},$self->{DEBUG},
+                                               $swcreds);
+        if (!$self->{EXP_OBJ}) {
+            warn "Could not create Expect object for $self->{NAME}\n";
+            return undef;
+        }
+    } else {
+        warn "WARNING: No credentials found for force10 switch $self->{NAME}\n";
+        warn "\tPortchannel manipulation will not be possible!\n";
+    }
+    
+    bless $self, $class;
+    $self->readifIndex();
+
+    return $self;
+}
+
+
+sub readifIndex($) {
+    my $self = shift;
+    my ($maxport, $maxtrunk, $name, $ifindex, $iidoid, $port, $mod, $j) = (0,0);
+
+    $self->debug($self->{NAME} . "::readifIndex:\n", 2);
+
+    my $bladesize = $blade_sizes{$self->{HPTYPE}};
+
+    my ($rows) = snmpitBulkwalkFatal($self->{SESS}, ["hpSwitchPortTrunkGroup"]);
+    my $t_off = $self->{TRUNKOFFSET} = 288;
+
+    foreach my $rowref (@$rows) {
+        ($name,$ifindex,$iidoid) = @$rowref;
+        $self->debug("got $name, $ifindex, iidoid $iidoid\n", 2);
+        $self->{TRUNKINDEX}{$ifindex} = $iidoid;
+        if ($iidoid) { push @{$self->{TRUNKS}{$iidoid}}, $ifindex; }
+        if ($ifindex > $maxport) { $maxport = $ifindex;}
+        if ($iidoid > $maxtrunk) { $maxtrunk = $iidoid;}
+    }
+    while (($ifindex, $iidoid) = each %{$self->{TRUNKINDEX}}) {
+        if (defined($bladesize)) {
+            $j = $ifindex - 9;
+            $port = 1 + ($j % $bladesize);
+            $mod = int ($j / $bladesize);
+        } else
+            { $mod = 1; $port = $ifindex; }
+        my $modport = "$mod.$port";
+        my $portindex = $iidoid ? ($t_off + $iidoid) : $ifindex ;
+        $self->{IFINDEX}{$modport} = $portindex;
+        $self->{IFINDEX}{$ifindex} = $modport;
+        $self->debug("$ifindex, $modport\n", 2);
+    }
+    foreach $j (keys %{$self->{TRUNKS}}) {
+        $ifindex = $j + $t_off;
+        if (my $lref = $self->{TRUNKS}{$j}) {
+            $port = $self->{IFINDEX}{@$lref[0]}; #actually modport
+        } else {  $port = "1." . $ifindex; } # the else should never happen
+        $self->{IFINDEX}{$ifindex} = $port;
+        $self->{IFINDEX}{$port} = $ifindex;
+        $self->{TRUNKINDEX}{$ifindex} = 0; # simplifies convertPortIndex
+        $self->debug("$ifindex, $port\n", 2);
+    }
+    $self->{MAXPORT} = $maxport;
+    $self->{MAXTRUNK} = $maxtrunk;
+
+}
+
+
+#
+# Get current set of OF instances - utility function
+#
+sub getOFInstances($) {
+    my $self = shift;
+
+    # If we've already fetched the OF instances mapping, return it.
+    # Functions that manipulate this mapping need to keep it up to date!
+    if ($self->{OFMAP}) {
+        return $self->{OFMAP};
+    }
+
+    my $cmd = "show openflow";
+    my ($fail, $output) = $self->{EXP_OBJ}->doCLICmd($cmd,0);
+    if ($fail){
+        warn "ERROR: show openflow did not return any data. \n"; 
+        return undef;
+    }
+    sleep(2);
+
+    $self->{OFMAP} = {};
+    
+    # Add all OpenFlow instances to OFMAP 
+    my $curinst = 0;
+    foreach my $ofln (split(/\n/, $output)) {
+        chomp $ofln;
+        $self->debug("getOFInstances: considering output line: $ofln\n",2);
+        OFLN: for ($ofln) {
+            /instance_(\d+)/ && do {
+                $curinst = $1;
+                $self->{OFMAP}->{$curinst} = 0;
+
+                last OFLN;
+            };
+        }
+    }
+
+    # For each OpenFlow instance, find associated VLANs
+    foreach my $k (keys %{$self->{OFMAP}}){
+        my $inst  = "instance_".$k;
+
+        # Get instance
+        my $cmd = "show openflow instance $inst";
+        my ($fail, $output) = $self->{EXP_OBJ}->doCLICmd($cmd,0);
+        if ($fail){
+            return undef;
+        }
+        sleep(2);
+  
+        # Add VLAN to OFMAP 
+        foreach my $ofln (split(/\n/, $output)) {
+            chomp $ofln;
+            $self->debug("getOFInstances: considering output line2: $ofln\n",2);
+ 
+            OFLN: for ($ofln) {
+                /VLAN (\d+)/ && do {
+                    my $vlan = $1;
+                    $self->{OFMAP}->{$k} = $vlan;
+                    last OFLN;
+                };
+            }
+        }
+
+    }
+
+    return $self->{OFMAP};
+}
+
+
+#
+# Get the OF ID for a given VLAN - utility function
+#
+sub vlan2OFID($$) {
+    my $self = shift;
+    my $vlan = shift;
+    my $ofid = -1;
+
+    # Find the OFID for the given vlan.
+    my $ofmap = $self->getOFInstances();
+
+    if (!defined($ofmap)) {
+        warn "ERROR: Unable to get OF instance map for $self->{NAME}\n";
+        return 0;
+    }
+
+
+    foreach my $k (keys %{$ofmap}) {
+        if ($ofmap->{$k} == $vlan) {
+            $ofid = $k;
+            last;
+        }
+    }
+    return $ofid;
+}
+
+#
+# Create OF-associated vlan - specialized version of createVlan()
+#
+sub createOFVlan($$$) {
+    my $self = shift;
+    my $vlan_id = shift;
+    my $vlan_number = shift;
+    my $ofid = -1;
+    my $id = "$self->{NAME}::createOFVlan";
+
+    $self->debug("$id: Creating OF-enabled VLAN ($vlan_number)\n");
+
+    # Find a free OFID
+    my $ofmap = $self->getOFInstances();
+    if (!defined($ofmap)) {
+        warn "ERROR: Unable to get OF instance map for $self->{NAME}!\n";
+        return 0;
+    }
+    for (my $i = 1; $i <= $MAX_OF_ID; $i++) {
+        if (!exists($ofmap->{$i})) {
+            $ofid = $i;
+            last;
+        }
+    }
+    if ($ofid < 1) {
+        warn "ERROR: No free OF instances on $self->{NAME}!\n";
+        return 0;
+    }
+   
+    $self->{OFMAP}->{$ofid} = $vlan_number;
+
+    # Create the OF instance.  Enable all of the goodies. Set to type "vlan".
+    my @cmds = ("openflow instance instance_$ofid",
+                "max-backoff-interval $MAX_BACKOFF",
+                "member vlan $vlan_number",
+                "version $VERSION_OF");
+
+    my $cmdstr = join("\n", @cmds);
+    my ($fail, $output) = $self->{EXP_OBJ}->doCLICmd($cmdstr,1);
+    if ($fail) {
+        warn "ERROR: Failed to create OF instance with ID $ofid on $self->{NAME}!\n";
+        return 0
+    }
+    # Allow some time for the instance to be created, otherwise
+    # subsequent call to enable the controller will fail.
+    sleep(10);
+
+    return $vlan_number;
+}
+
+#
+# Enable Openflow: This function enables a specified instance
+# that exists.  
+#
+sub enableOpenflow($$) {
+    my $self = shift;
+    my $vlan = shift;
+    my $ofid = $self->vlan2OFID($vlan);
+
+    if ($ofid < 1) {
+        warn "ERROR: Unable to lookup OFID for vlan $vlan on $self->{NAME}\n";
+        return 0;
+    }
+
+    # Instance and vlan should have already been created.  Enable away!
+    my @cmds = ("openflow instance instance_$ofid",
+                "enable");
+    my $cmdstr = join("\n", @cmds);
+    my ($fail, $output) = $self->{EXP_OBJ}->doCLICmd($cmdstr, 1);
+    if ($fail) {
+        warn "ERROR: Failed to enable OFID $ofid for vlan $vlan on $self->{NAME}: $output\n";
+        return 0;
+    }
+
+    return 1;
+}
+
+#
+# Disable Openflow: This fuction disables and removes the
+# specified openflow instance. This implies that a new
+# instance MUST obviously be created before enabling 
+# it. 
+#
+sub disableOpenflow($$) {
+    my $self = shift;
+    my $vlan = shift;
+    my $ofid = $self->vlan2OFID($vlan);
+
+    if ($ofid < 1) {
+        warn "ERROR: Unable to lookup OFID for vlan $vlan on $self->{NAME}\n";
+        return 0;
+    }
+
+    # Delete the OF instance
+    my @cmds = ("openflow instance instance_$ofid",
+                "disable",
+                "no openflow instance instance_$ofid",
+                "no openflow controller-id $ofid");
+    my $cmdstr = join("\n", @cmds);
+    my ($fail, $output) = $self->{EXP_OBJ}->doCLICmd($cmdstr, 1);
+    if ($fail) {
+        warn "ERROR: Failed to disable OFID $ofid for vlan $vlan on $self->{NAME}: $output\n";
+        return 0;
+    } else {
+        delete $self->{OFMAP}->{$ofid};
+    }
+
+    return 1;
+}
+
+
+#
+# Set controller
+#
+sub setOpenflowController($$$) {
+    my $self = shift;
+    my $vlan_number = shift;
+    my $controller = shift;
+    my $vlan_id; 
+    my $vlan_id_flag = 0; 
+    my ($name, $vlan_num, $vlan_name);
+
+    my ($rows) = $self->{SESS}->bulkwalk(0,32, ["dot1qVlanStaticName"]);
+
+    foreach my $rowref (@$rows) {
+        ($name,$vlan_num,$vlan_name) = @$rowref;
+        if ($name =~ /$vlan_number/i){
+            $vlan_id = $vlan_name;
+            $vlan_id_flag = 1;
+        }
+    }
+
+    if ($vlan_id_flag == 0) {
+        warn "ERROR: Unable to obtain vlan_id for vlan $vlan_number on $self->{NAME}\n";
+        return 0;
+    }
+ 
+    my $retVal = $self->createOFVlan($vlan_id, $vlan_number);
+
+    if ($retVal < 1) {
+        warn "ERROR: Unable to create OpenFlow Instance on $self->{NAME}\n";
+        return 0;
+    }
+    
+    my $ofid = $self->vlan2OFID($vlan_number);
+
+    if ($ofid < 1) {
+        warn "ERROR: Unable to lookup OFID for vlan $vlan_number on $self->{NAME}\n";
+        return 0;
+    }
+
+    # Parse out controller string
+    my (undef, $controller_ip, $port) = split(/:/, $controller);
+
+    # Instance and vlan_number should have already been created.
+    # The 5406r has the notion of controller id. We will simply set
+    # this value to be the same as the instance id.
+    my @cmds = ("openflow controller-id $ofid ip $controller_ip port $port controller-interface vlan $MGMT_VLAN_ID",
+                "openflow instance instance_$ofid controller-id $ofid");
+    my $cmdstr = join("\n", @cmds);
+    my ($fail, $output) = $self->{EXP_OBJ}->doCLICmd($cmdstr, 1);
+    if ($fail) {
+        warn "ERROR: Failed to enable OFID $ofid for vlan $vlan_number on $self->{NAME}: $output\n";
+        return 0;
+    }
+    # Allow some time for the command above to be executed
+    sleep(2);
+
+    return 1;
+}
+
+#
+# Set listener
+#
+sub setOpenflowListener($$$) {
+    my $self = shift;
+    my $vlan = shift;
+    my $listener = shift;
+    my $RetVal;
+
+    # Warn, but do not return an error.
+    warn "WARNING: HP5406r doesn't support OpenFlow listeners.\n";
+    return 1;
+}
+
+
+#
+# Get used listener ports
+#
+sub getUsedOpenflowListenerPorts($) {
+    my $self = shift;
+    my %ports = ();
+
+    # Warn and return an empty hash.
+    warn "WARNING: HP 5406r doesn't support OpenFlow listeners.\n";
+    return %ports;
+}
+
+
+#
+# Check if Openflow is supported on this switch
+#
+sub isOpenflowSupported($) {
+    my $self = shift;
+
+    my $cmd = "show openflow";
+    my ($fail, $output) = $self->{EXP_OBJ}->doCLICmd($cmd,0);
+    if ($fail) {
+        $self->debug("'show openflow' returned error: $output\n");
+        return 0;
+    }
+
+    # See if there is output talking about OpenFlow support.
+    return 1
+        if ($output =~ /OpenFlow/i);
+    return 0;
+    
 }
 
 # End with true
