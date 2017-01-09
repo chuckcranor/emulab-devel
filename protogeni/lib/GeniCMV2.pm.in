@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2008-2016 University of Utah and the Flux Group.
+# Copyright (c) 2008-2017 University of Utah and the Flux Group.
 # 
 # {{{GENIPUBLIC-LICENSE
 # 
@@ -3250,6 +3250,8 @@ sub CreateImage($)
 	# Force shared (within project). 
 	$opt .= " -r 1";
     }
+    print STDERR "CM: '$CLONEIMAGE $opt -s $imagename $node_id'\n";
+    
     my $output =
 	GeniUtil::ExecQuiet("$CLONEIMAGE $opt -s $imagename $node_id");
     # Not a typical op, so always print debugging info;
@@ -3375,6 +3377,9 @@ sub CreateImage($)
 	waitpid($mypid, &WNOHANG);
 	return 0;
     }
+    print STDERR "CM: '$CREATEIMAGE -F -e -f $opt ".
+	"-p $pid $imagename $node_id'\n";
+    
     $output =
 	GeniUtil::ExecQuiet("$CREATEIMAGE -F -e -f $opt ".
 			    "   -p $pid $imagename $node_id");
