@@ -143,6 +143,7 @@ CREATE TABLE `apt_datasets` (
   `shared` tinyint(1) NOT NULL default '0',
   `locked` datetime default NULL, 
   `locker_pid` int(11) default '0',
+  `webtask_id` varchar(128) NOT NULL default '',
   `credential_string` text,
   PRIMARY KEY (`idx`),
   UNIQUE KEY `plid` (`pid_idx`,`dataset_id`),
