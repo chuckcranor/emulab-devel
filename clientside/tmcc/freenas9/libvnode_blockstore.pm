@@ -1454,7 +1454,7 @@ sub deallocSlice($$$$) {
 
 		#
 		# If we are a clone of the most recent snapshot, just Destroy
-		# which leaves the clone; otherwise Declone and attempt to
+		# which leaves the snapshot; otherwise Declone and attempt to
 		# remove the old snapshot.
 		#
 		# Note that we do not use the cached 'lastsnapshot' in our
