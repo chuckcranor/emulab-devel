@@ -112,6 +112,7 @@ my @need_clearbl   = ();
 my @need_pxeconfig = ();
 my $errormsg       = "";
 my $admission_ctrl = 0;
+my $slice_expires;
 
 TBDebugTimeStamp("nalloc started");
 
@@ -128,6 +129,14 @@ my $project = $experiment->GetProject();
 if (!defined($project)) {
     die("*** $0:\n".
 	"    Could not get project for experiment $experiment!\n");
+}
+
+if( $PGENISUPPORT ) {
+    require GeniSlice;
+    my $slice = GeniSlice->LookupByExperiment( $experiment );
+    if( defined( $slice ) ) {
+	$slice_expires = $slice->expires();
+    }
 }
     
 #
@@ -215,14 +224,6 @@ foreach my $n (@node_names) {
 	    next;
 	}
     }
-    else {
-	# Freshly allocated nodes need a history entry.
-	push(@need_history, $node);
-        # ... and need to have their bootlogs purged.
-        push(@need_clearbl, $node);
-	# ... and may need to recreate its pxelinux conf
-	push(@need_pxeconfig, $node);
-    }
 
     #
     # Add info the list of nodes to reserve; done in a single query below.
@@ -247,6 +248,7 @@ if ($debug) {
 }
 
 my %types = ();
+my %unavail_types = ();
 foreach my $node (@nodes) {
     $types{ $node->type() } = 1;
 }
@@ -254,18 +256,17 @@ foreach my $type ( keys( %types ) ) {
     my $reservations = Reservation->LookupAll( $type );
     if( !Reservation->IsFeasible( $reservations, \$errormsg ) ) {
 	print "Existing admission control violation for type $type: $errormsg\n";
-	if( $admission_ctrl ) {
-	    $error++;
-	}
-	print "Omitting admission control verification.\n";
-	goto admissionfailure;
+	print "Omitting $type admission control verification.\n";
+	$unavail_types{ $type } = 1;
     }
 }
 
 my $endtime = $experiment->autoswap() ?
-    time() + $experiment->autoswap_timeout * 60 : undef;
+    time() + $experiment->autoswap_timeout * 60 : $slice_expires;
 
 foreach my $type ( keys( %types ) ) {
+    next if( $unavail_types{ $type } );
+    
     my $reservations = Reservation->LookupAll( $type );
     foreach my $node (@nodes) {
 	if( $node->type() eq $type ) {
@@ -280,20 +281,40 @@ foreach my $type ( keys( %types ) ) {
     }
     if( !Reservation->IsFeasible( $reservations, \$errormsg ) ) {
 	print "Admission control violation for type $type: $errormsg\n";
+	
 	if( $force ) {
 	    print "Forcing allocation anyway...\n";
 	    print STDERR "WARNING: SCHEDULED RESERVATIONS ARE NOW INFEASIBLE!\n";
 	    # FIXME notify admins about violation
-	} else {
-	    if( $admission_ctrl ) {
-		$error++;
-	    }
 	}
-	goto admissionfailure;
+	$unavail_types{ $type } = 1;
     }
 }
 
- admissionfailure:
+if( $admission_ctrl && !$force ) {
+    my @goodnodes = ();
+
+    foreach my $node (@nodes) {
+	if( !exists( $unavail_types{ $node->type() } ) ) {
+	    push( @goodnodes, $node );
+	} else {
+	    # FIXME if some but not all nodes of a given type are
+	    # admissable, it would be nice to try harder
+	    $noalloc++;
+	}
+    }
+
+    @nodes = @goodnodes;
+}
+
+foreach my $node (@nodes) {
+    # Freshly allocated nodes need a history entry.
+    push(@need_history, $node);
+    # ... and need to have their bootlogs purged.
+    push(@need_clearbl, $node);
+    # ... and may need to recreate its pxelinux conf
+    push(@need_pxeconfig, $node);
+}
 
 # Now make the reservations in the DB.
 if ((!$noalloc || $partial) && (@nodes || @oldnodes) && !$error) {
