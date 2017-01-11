@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2013-2016 University of Utah and the Flux Group.
+# Copyright (c) 2013-2017 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -999,10 +999,14 @@ sub bs_destroy($$$@)
     my $outref;
 
     #
-    # First destroy any snapshots
+    # First destroy any snapshots.
     #
-    if (exists($volattrs->{'snapshots'}) &&
-	bsserver_cmd($srv, "$PROXYCMD desnapshot $pool $name", \$outref)) {
+    # We do this regardless of whether $volattrs indicates there are
+    # any snapshots. That state only includes blockstore related snapshots
+    # and we need to make sure all snapshots are gone, even explicitly
+    # created ones (e.g., for backup purposes).
+    #
+    if (bsserver_cmd($srv, "$PROXYCMD desnapshotall $pool $name", \$outref)) {
 	print STDERR "*** destroy: ".
 	    "could not destroy snapshots for '$name' on $srv/$pool:";
 	goto fail;

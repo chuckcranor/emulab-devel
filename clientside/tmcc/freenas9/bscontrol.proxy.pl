@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2013-2016 University of Utah and the Flux Group.
+# Copyright (c) 2013-2017 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -47,6 +47,8 @@ sub usage()
     print STDERR "            Destroy <vol> in <pool>\n";
     print STDERR "   desnapshot <pool> <vol> [ <tstamp> ]\n";
     print STDERR "            Destroy snapshot <vol>/<pool>@<tstamp>; if <tstamp> is not given, destroy all snapshots\n";
+    print STDERR "   desnapshotall <pool> <vol>\n";
+    print STDERR "            Like desnapshot, but removes non-blockstore related snapshots as well\n";
     print STDERR "   declone <pool> <vol>\n";
     print STDERR "            Destroy clone <vol> in <pool>; also destroys associated snapshot if this is the last clone\n";
     print STDERR "iSCSI-related debugging commands:\n";
@@ -91,6 +93,7 @@ my %cmds = (
     "nextaitag"  => \&nexttag,
     "targets"    => \&targets,
     "assocs"     => \&assocs,
+    "desnapshotall" => \&desnapshotall,
 );
 
 #
@@ -389,7 +392,27 @@ sub desnapshot($$$)
 	}
     }
 
-    return freenasVolumeDesnapshot($pool, $vol, $tstamp);
+    return freenasVolumeDesnapshot($pool, $vol, $tstamp, 0);
+}
+
+sub desnapshotall($$)
+{
+    my ($pool,$vol) = @_;
+
+    if (defined($pool) && $pool =~ /^([-\w]+)$/) {
+	$pool = $1;
+    } else {
+	print STDERR "bscontrol_proxy: bogus pool arg\n";
+	return 1;
+    }
+    if (defined($vol) && $vol =~ /^([-\w]+)$/) {
+	$vol = $1;
+    } else {
+	print STDERR "bscontrol_proxy: bogus volume arg\n";
+	return 1;
+    }
+
+    return freenasVolumeDesnapshot($pool, $vol, undef, 1);
 }
 
 sub clone($$$;$)
