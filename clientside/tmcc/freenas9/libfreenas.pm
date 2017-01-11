@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2013-2016 University of Utah and the Flux Group.
+# Copyright (c) 2013-2017 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -392,6 +392,9 @@ sub freenasVolumeList($;$)
 	foreach my $snap (@$sinfo) {
 	    my $vol = $snap->{'filesystem'};
 	    next if (!$vol);
+
+	    # XXX only track snapshots we create (10 digit timestamp)
+	    next if ($snap->{'name'} !~ /^\d{10}$/);
 
 	    # XXX only handle zvols right now
 	    next if ($snap->{'parent_type'} ne 'volume');
