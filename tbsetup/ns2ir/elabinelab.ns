@@ -1,5 +1,5 @@
 #
-# Copyright (c) 2004-2016 University of Utah and the Flux Group.
+# Copyright (c) 2004-2016 , 2017University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -36,14 +36,14 @@ if {[info exists ::TBCOMPAT::elabinelab_hardware("boss")]} {
         tb-set-hardware $myboss $elabinelab_hardware("boss")
     }
 } else {
-    tb-set-hardware $myboss pc850
+    tb-set-hardware $myboss d710
 }
 if {[info exists ::TBCOMPAT::elabinelab_hardware("ops")]} {
     namespace eval TBCOMPAT {
         tb-set-hardware $myops $elabinelab_hardware("ops")
     }
 } else {
-    tb-set-hardware $myops pc850
+    tb-set-hardware $myops d710
 }
 
 if {[info exists ::TBCOMPAT::elabinelab_fixnodes("boss")]} {
@@ -89,7 +89,7 @@ if {$myops_tarfiles != ""} {
     tb-set-node-tarfiles $myops $myops_tarfiles
 }
 
-tb-make-soft-vtype pcslow {pc600 pc850}
+tb-make-soft-vtype pcslow {pc3000}
 
 #
 # This is passed in by the parser, when wrapping an existing experiment.
@@ -153,7 +153,7 @@ if {[info exists ::TBCOMPAT::elabinelab_nodeos("boss")]} {
 	tb-set-node-os $myboss $sitevariables(elabinelab/boss_osid)
     }
 } else {
-    tb-set-node-os $myboss FBSD83-STD
+    tb-set-node-os $myboss FBSD102-64-STD
 }
 
 if {[info exists ::TBCOMPAT::elabinelab_nodeos("ops")]} {
@@ -165,7 +165,7 @@ if {[info exists ::TBCOMPAT::elabinelab_nodeos("ops")]} {
 	tb-set-node-os $myops $sitevariables(elabinelab/ops_osid)
     }
 } else {
-    tb-set-node-os $myops FBSD83-STD
+    tb-set-node-os $myops FBSD102-64-STD
 }
 
 #
