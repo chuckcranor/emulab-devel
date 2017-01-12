@@ -1366,7 +1366,7 @@ $(function ()
 		"      </select>" +
 		"    </div>" +
 		"<div class='col-sm-4'></div>" +
-		"<div class='col-sm-6 alert alert-danger' id='where-nowhere' style='display: none; margin-top: 5px; margin-bottom: 5px'>This profile <b>will not work on any clusters</b>. All clusters are unselectable.</div>" +
+		"<div class='col-sm-6 alert alert-danger' id='where-nowhere' style='display: none; margin-top: 5px; margin-bottom: 5px'>This profile <b>will not work on any clusters</b>. Please check your profile or parameters for errors. If you are sure they are correct, you can report the problem to support@cloudlab.us and make sure to link to the problematic profile.</div>" +
 		"  </div>" +
 		"</div>";
 	}
