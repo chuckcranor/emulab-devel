@@ -40,12 +40,13 @@ sub usage()
     print STDERR "   -a   Create a new announcement with the given announcement text.\n";
     print STDERR "   -p   Set the portal to be the one given. Should be one of 'cloudlab', 'emulab', 'aptlab', 'phantomnet'.\n";
     print STDERR "   -s   Set the style of the overall announcement box. Should normally be one of bootstraps alert-* classes. Defaults to 'alert-info'.\n";
+    print STDERR "        Common styles: 'alert-success' -> green, 'alert-info' -> blue, 'alert-warning' -> yellow, 'alert-danger' -> red\n\n";
     print STDERR "   -b   If there is an action associated with this announcement, this is the text which goes into the action button. Can include HTML. If it is unset, there is no action button.\n";
     print STDERR "   -u   URL of action associated with this announcement. {uid_idx} and {uid} can be used as URL templates to generate a different URL on a per-user basis. If it is unset, there is no action button.\n";
     print STDERR "   -m   The maximum number of times that this announcement will appear to a user. Every page view (even those in a single session) counts. A value of '0' indicates that the announcement should keep appearing indefinitely until dismissed by the user or an action is taken. Defaults to 20.\n";
     print STDERR "   -l   List global announcements. Defaults to listing active announcements.\n";
     print STDERR "   -r   Retire announcement with the given idx. A retired announcement will no longer be displayed to users.\n";
-    print STDERR "   -i   Info about a particular announcement.\n";
+    print STDERR "   -i   Info about a particular announcement.\n\n";
     exit(-1);
 }
 my $optlist  = "hap:s:b:u:m:lr:i:";
@@ -133,11 +134,21 @@ if (defined($options{"m"})) {
     $max_seen = $options{"m"};
 }
 
-if ($add_mode + $list_mode + $retire_mode + $info_mode != 1) {
-    usage();
+if ($add_mode)
+{
+    if (! defined($portal)) {
+	print STDERR "Portal must be defined when adding an announcement\n\n";
+	usage();
+    }
+    elsif ($portal ne "cloudlab" && $portal ne "emulab" &&
+	$portal ne "aptlab" && $portal ne "phantomnet") {
+	print STDERR "Portal $portal is invalid. Must be cloudlab, emulab, aptlab, or phantomnet.\n\n";
+	usage();
+    }
 }
 
-if ($add_mode and ! defined($portal)) {
+if ($add_mode + $list_mode + $retire_mode + $info_mode != 1) {
+    print STDERR "No mode selected. Must use one of -a, -r, -l, or -i\n\n";
     usage();
 }
 
