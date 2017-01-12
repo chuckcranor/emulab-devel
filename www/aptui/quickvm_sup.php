@@ -77,7 +77,7 @@ $PAGEERROR_HANDLER = function($msg, $status_code = 0) {
 $PAGEHEADER_FUNCTION = function($thinheader = 0, $ignore1 = NULL,
 				 $ignore2 = NULL, $ignore3 = NULL)
 {
-    global $PORTAL_MANUAL, $PORTAL_MOTD_SITEVAR, $PORTAL_HELPFORUM;
+    global $PORTAL_MANUAL, $PORTAL_HELPFORUM;
     global $TBMAINSITE, $APTTITLE, $FAVICON, $APTLOGO, $APTSTYLE, $ISAPT;
     global $GOOGLEUA, $ISCLOUD, $ISPNET, $ISEMULAB, $TBBASE, $ISEMULAB;
     global $login_user, $login_status, $SUPPORT;
@@ -349,14 +349,6 @@ $PAGEHEADER_FUNCTION = function($thinheader = 0, $ignore1 = NULL,
     }
     if (NOLOGINS()) {
         $message = TBGetSiteVar("web/message");
-    }
-    else {
-        #
-        # Put the special message, if any, right below the header. Note that
-        # the  negative margin is to put it flush below the navbar without
-        # having to permanently remove the bottom margin on the navbar
-        #
-        $message = TBGetSiteVar($PORTAL_MOTD_SITEVAR);
     }
     if ($message && $message != "" && !$cleanmode) {
         echo "<div class='alert alert-warning alert-dismissible'

@@ -31,9 +31,9 @@ use Date::Parse;
 #
 sub usage()
 {
-    print STDERR "Usage: announce -a <-p portal> [-s alert_style] [-b button_label] [-u action_url] [-m max_seen_count] <announcement_text>\n";
+    print STDERR "Usage: announce -a <-p portal> [-c] [-s alert_style] [-b button_label] [-u action_url] [-m max_seen_count] <announcement_text>\n";
     print STDERR "       announce -l [active|retired|all]\n";
-    print STDERR "       announce -r idx\n";
+    print STDERR "       announce -r idx [-c]\n";
     print STDERR "       announce -i idx\n";
     print STDERR "       announce -h\n";
     print STDERR "   -h   This message\n";
@@ -46,10 +46,11 @@ sub usage()
     print STDERR "   -m   The maximum number of times that this announcement will appear to a user. Every page view (even those in a single session) counts. A value of '0' indicates that the announcement should keep appearing indefinitely until dismissed by the user or an action is taken. Defaults to 20.\n";
     print STDERR "   -l   List global announcements. Defaults to listing active announcements.\n";
     print STDERR "   -r   Retire announcement with the given idx. A retired announcement will no longer be displayed to users.\n";
-    print STDERR "   -i   Info about a particular announcement.\n\n";
+    print STDERR "   -i   Info about a particular announcement.\n";
+    print STDERR "   -c   Compatibility mode. When adding in compatibility mode, the sitevar is changed, thus setting the legacy Emulab announcement. When removing in compatibility mode, the sitevar is cleared.\n";
     exit(-1);
 }
-my $optlist  = "hap:s:b:u:m:lr:i:";
+my $optlist  = "hacp:s:b:u:m:lr:i:";
 my $add_mode = 0;
 my $list_mode = 0;
 my $retire_mode = 0;
@@ -63,6 +64,7 @@ my $retire_idx = undef;
 my $info_idx = undef;
 my $text = undef;
 my $list_type = "active";
+my $compatibility = 0;
 
 my $query_result;
 
@@ -81,6 +83,7 @@ my $TBOPS        = "@TBOPSEMAIL@";
 use lib "@prefix@/lib";
 use emdb;
 use libtestbed;
+use libdb;
 use User;
 
 #
@@ -133,6 +136,9 @@ if (defined($options{"u"})) {
 if (defined($options{"m"})) {
     $max_seen = $options{"m"};
 }
+if (defined($options{"c"})) {
+    $compatibility = 1;
+}
 
 if ($add_mode)
 {
@@ -179,6 +185,10 @@ if ($add_mode) {
 	$query .= ", link_url=" . DBQuoteSpecial($url);
     }
     DBQueryFatal($query);
+    if ($compatibility)
+    {
+	TBSetSiteVar("web/banner", DBQuoteSpecial($text));
+    }
 } elsif ($list_mode) {
     #
     # List announcements
@@ -209,6 +219,10 @@ if ($add_mode) {
 	DBQueryFatal("update apt_announcements ".
 		     "set retired=1 where idx=".
 		     DBQuoteSpecial($retire_idx));
+    if ($compatibility)
+    {
+	TBSetSiteVar("web/banner", "");
+    }
 } elsif ($info_mode) {
     #
     # Details about an announcement

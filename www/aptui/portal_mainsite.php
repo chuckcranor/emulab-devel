@@ -54,7 +54,6 @@ if ($_SERVER["SERVER_NAME"] == "www.aptlab.net") {
         $APTBASE .= "/" . $matches[1];
     }
     $PORTAL_MANUAL         = "http://docs.aptlab.net";
-    $PORTAL_MOTD_SITEVAR   = "aptlab/message";
     $PORTAL_HELPFORUM      = "apt-users";
     $PORTAL_PASSWORD_HELP  = "Aptlab.net or Emulab.net Username";
     $PORTAL_NSFNUMBER      = "CNS-1338155";
@@ -87,7 +86,6 @@ elseif ($_SERVER["SERVER_NAME"] == "www.cloudlab.us") {
 	$APTBASE .= "/" . $matches[1];
     }
     $PORTAL_MANUAL       = "http://docs.cloudlab.us";
-    $PORTAL_MOTD_SITEVAR = "cloudlab/message";
     $PORTAL_HELPFORUM    = "cloudlab-users";
     $PORTAL_PASSWORD_HELP= "CloudLab.us or Emulab.net Username";
     $PORTAL_NSFNUMBER    = "CNS-1302688";
@@ -119,7 +117,6 @@ elseif ($ISALTDOMAIN && $_SERVER["SERVER_NAME"] == "www.phantomnet.org") {
 	$APTBASE .= "/" . $matches[1];
     }
     $PORTAL_MANUAL         = "http://docs.phantomnet.org";
-    $PORTAL_MOTD_SITEVAR   = "phantomnet/message";
     $PORTAL_HELPFORUM      = "phantomnet-users";
     $PORTAL_PASSWORD_HELP  = "PhantomNet.org or Emulab.net Username";
     $PORTAL_NSFNUMBER      = "CNS-1305384";
