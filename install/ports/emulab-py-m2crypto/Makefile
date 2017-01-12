@@ -13,3 +13,8 @@ PATCHDIR=	$(PORTSDIR)/security/py-m2crypto/files
 
 PKGORIGIN=		misc/emulab-py-m2crypto
 .include "../../security/py-m2crypto/Makefile"
+
+.if ${PORTVERSION} == "0.25.1"
+# Missing dependency for 0.25 (and beyond?)
+RUN_DEPENDS+=   ${PYTHON_PKGNAMEPREFIX}typing>0:${PORTSDIR}/devel/py-typing
+.endif
