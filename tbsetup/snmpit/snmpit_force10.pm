@@ -287,9 +287,21 @@ sub new($$$;$) {
     $self->{OSVER} = "$1.$2$3";
     $self->{OSMAJOR} = int($1);
     $self->{OSMINOR} = int($2);
-    $self->{DO_RFC2579} =
-	($self->{OSMAJOR} > 9 ||
-	 ($self->{OSMAJOR} == 9 && $self->{OSMINOR} >= 10)) ? 1 : 0;
+
+    # Forward- and backward-compat-breaking updates by Dell to comply 
+    # with RFC2579. FTOS 9.10+
+    $self->{DO_RFC2579} = 
+	($self->{OSMAJOR} >= 10 || 
+	 ($self->{OSMAJOR} == 9 && $self->{OSMINOR} >= 10))
+	? 1 : 0;
+    # Forward- and backward-compat-breaking updates by Dell to fix
+    # port removal logic to be standards-compliant (has been wrong for
+    # years). FTOS 9.11+
+    $self->{DO_COMPLIANT_PORTSETS} = 
+	($self->{OSMAJOR} >= 10 ||
+	 ($self->{OSMAJOR} == 9 && $self->{OSMINOR} >= 11))
+	? 1 : 0;
+
     print "Switch $self->{NAME} is running $self->{OSVER}\n" if $self->{DEBUG};
 
     #
@@ -1497,23 +1509,33 @@ sub removeSomePortsFromVlan($$@) {
 	    return scalar(@ports);
 	}
 
-	# Warning - wacky bitmath ahead! Removing a port from a vlan is
-	# done differently for tagged vs. untagged ports.  To remove a tagged
-	# port, the port's bit needs to be '0' in both egress and untagged
-	# PortSets.  To remove an untagged port, the port's egress bit must
-	# be a '0', while the untagged bit must be a '1'.  Gross.
+	my ($uBits, $eBits);
 	my ($curEbits, $curUbits) = $self->getMemberBitmask($vlanIfindex,1);
-	# The set of currently tagged ports have a '1' in the egress
-	# PortSet and a '0' in the untagged PortSet.  Tagged ports
-	# have a '1' in both sets, and non-members are '0' in both. XOR!
-	my $tagBits = $curEbits ^ $curUbits;
-	# Set the egress PortSet to zeros where we are removing ports, but
-	# set to '1' for tagged ports that are not to be removed. gawd.
-	my $eBits = ($bitmaskToRemove & $tagBits) ^ $tagBits;
-	# To create the untagged PortSet, we clear the tagged port
-	# bits in the input PortSet, leaving just the untagged ports
-	# with their bits set.
-	my $uBits = $curUbits & $bitmaskToRemove;
+	if $self->{DO_COMPLIANT_PORTSETS} {
+	    # Standards compliant PortSet behavior starting with FTOS 9.11.
+	    # Just zero the bits for ports that are to be removed in both
+	    # bitmasks.
+	    $eBits = $curEbits & ~$bitmaskToRemove;
+	    $uBits = $curUbits & ~$bitmaskToRemove;
+	} else {
+	    # Warning - wacky bitmath ahead! Removing a port from a vlan is done
+	    # differently for tagged vs. untagged ports.  To remove a tagged
+	    # port, the port's bit needs to be '0' in both egress and untagged
+	    # PortSets.  To remove an untagged port, the port's egress bit must
+	    # be a '0', while the untagged bit must be a '1'.  Gross.
+	    #
+	    # The set of currently tagged ports have a '1' in the egress
+	    # PortSet and a '0' in the untagged PortSet.  Tagged ports
+	    # have a '1' in both sets, and non-members are '0' in both. XOR!
+	    my $tagBits = $curEbits ^ $curUbits;
+	    # Set the egress PortSet to zeros where we are removing ports, but
+	    # set to '1' for tagged ports that are not to be removed. gawd.
+	    $eBits = ($bitmaskToRemove & $tagBits) ^ $tagBits;
+	    # To create the untagged PortSet, we clear the tagged port
+	    # bits in the input PortSet, leaving just the untagged ports
+	    # with their bits set.
+	    $uBits = $curUbits & $bitmaskToRemove;
+	}
 
 	return $self->setPortMembership("off", $eBits, $uBits, $vlanIfindex);
 }
