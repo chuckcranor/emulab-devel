@@ -1511,7 +1511,7 @@ sub removeSomePortsFromVlan($$@) {
 
 	my ($uBits, $eBits);
 	my ($curEbits, $curUbits) = $self->getMemberBitmask($vlanIfindex,1);
-	if $self->{DO_COMPLIANT_PORTSETS} {
+	if ($self->{DO_COMPLIANT_PORTSETS}) {
 	    # Standards compliant PortSet behavior starting with FTOS 9.11.
 	    # Just zero the bits for ports that are to be removed in both
 	    # bitmasks.
