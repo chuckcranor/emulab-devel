@@ -755,6 +755,27 @@ function Do_GetRepository()
 	SPITAJAX_ERROR(-1, "Internal webtask Error");
 	return;
     }
+    #
+    # First an existence/access check.
+    #
+    $retval = SUEXEC($this_uid, "tbadmin",
+		     "webmanage_gitrepo -t " . $webtask->task_id() . " " .
+                     "  check  $repourl",
+		     SUEXEC_ACTION_IGNORE);
+    $webtask->Refresh();
+    if ($retval != 0) {
+        if ($retval < 0) {
+            $error = $webtask->TaskValue("output");
+	    SUEXECERROR(SUEXEC_ACTION_CONTINUE);
+        }
+        else {
+            $error = $webtask->TaskValue("output");
+        }
+        $webtask->Delete();
+	SPITAJAX_ERROR(1, $error);
+	return;
+    }
+    $webtask->Reset();
     $outfname = tempnam("/tmp", "repofile");
     chmod($outfname, 0666);
     
