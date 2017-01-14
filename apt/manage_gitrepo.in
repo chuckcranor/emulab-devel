@@ -218,7 +218,7 @@ sub DoCheckRemote()
     my $output =
 	emutil::ExecQuiet("$GIT ls-remote --exit-code '$repourl' HEAD");
     if ($?) {
-	fatal($output)
+	UserError($output)
     }
     if (defined($webtask)) {
 	$webtask->output("");
@@ -560,12 +560,20 @@ sub GetRepoSource($;$)
 	print STDERR "Could not find source code in the repository\n";
 	return undef;
     }
+    #
+    # Do this seemingly odd cat-file, simply cause its the only way
+    # --follow-symlinks works. It adds the commit hash as the first
+    # line of output, so see below where that first line is killed.
+    #
     my $stuff =
-      emutil::ExecQuiet("$GIT cat-file blob $refspec:$source");
+      emutil::ExecQuiet("echo '$refspec:$source' | ".
+			"  $GIT cat-file --batch --follow-symlinks");
     if ($?) {
 	print STDERR $stuff;
 	return undef;
     }
+    # Kill first line.
+    $stuff =~ s/^(?:.*\n){1}//;
     return $stuff;
 }
 
