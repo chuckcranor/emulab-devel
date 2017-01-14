@@ -182,8 +182,9 @@ sub Update()
     }
     chdir("$REPODIR/$reponame") or
 	fatal("Could not chdir to $REPODIR/$reponame");
-    
-    my $status = RunCommand("$GIT fetch -t origin '+refs/*:refs/*'");
+
+    # -p prunes deleted branches. But tags are not pruned. 
+    my $status = RunCommand("$GIT fetch -p -t origin '+refs/*:refs/*'");
     if ($status) {
 	fatal("Not able to update repo");
     }
