@@ -582,6 +582,9 @@ $(function ()
 	    if (newRspec != $('#profile_script_textarea').val()) {
 		checkScript(newRspec, repoupdate_callback);
 	    }
+	    else if (repoupdate_callback !== undefined) {
+		repoupdate_callback(false /* unmodified. */);
+	    }
 	    return;
 	}
 	NewRspecHandler(newRspec);
@@ -1159,7 +1162,7 @@ $(function ()
 		    ProfileModified();
 		}
 		if (repoupdate_callback !== undefined) {
-		    repoupdate_callback();
+		    repoupdate_callback(true /* modified */);
 		}
 		// Show the XML source button.
 		$('#show_xml_modal_button').removeClass("hidden");
@@ -1265,11 +1268,11 @@ $(function ()
 		    return;
 		}
 		/*
-		 * Else we wait till the script converted, the call back
-		 * is invoked after CheckScript() finishes. The server
-		 * side the profile update, no ww can finish things up.
+		 * Else we wait till the script converted, the call back is
+		 * invoked after CheckScript() finishes. The server side
+		 * has done the profile update, so we can finish things up.
 		 */
-		changeRspec(blob.source, function() {
+		changeRspec(blob.source, function(modified) {
 		    // Mark as HEAD in the page.
 		    repohash = blob.hash;
 		    // Reset the list of tags and branches whenever we
