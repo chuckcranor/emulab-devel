@@ -136,6 +136,12 @@
 	      <td>Est. Size:</td>
 	      <td class="commit-size"></td>
 	    </tr>
+	    <% if (isadmin) { %>
+	      <tr>
+		<td>RepoName:</td>
+		<td class="commit-reponame" style="font-size: 60%;"></td>
+	      </tr>
+	    <% } %>
 	    <tr>
 	      <td>Log:</td>
 	      <td class="commit-log">
