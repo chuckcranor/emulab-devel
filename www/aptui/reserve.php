@@ -47,6 +47,7 @@ if (!ISADMIN()) {
 # Verify page arguments. Cluster is a domain that we turn into a URN.
 #
 $optargs = OptionalPageArguments("edit",     PAGEARG_BOOLEAN,
+                                 "debug",    PAGEARG_BOOLEAN,
                                  "cluster",  PAGEARG_STRING,
                                  "project",  PAGEARG_PROJECT,
                                  "idx",      PAGEARG_INTEGER);
@@ -102,6 +103,9 @@ echo "</script>\n";
 # List of clusters.
 if ($edit) {
     $ams = array($aggregate);
+}
+elseif (isset($debug) && $debug) {
+    $ams = array(Aggregate::ThisAggregate());
 }
 else {
     $ams = Aggregate::SupportsReservations();

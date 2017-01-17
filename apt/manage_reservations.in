@@ -198,8 +198,7 @@ sub DoReserve()
     }
     else {
 	usage()
-	    if (! (defined($count) && defined($type) &&
-		   defined($start) && defined($end)));
+	    if (! (defined($count) && defined($type) && defined($end)));
 	
 	if ($type !~ /^[-\w]+$/) {
 	    fatal("Type is not a string");

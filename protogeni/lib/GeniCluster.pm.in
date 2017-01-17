@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2008-2016 University of Utah and the Flux Group.
+# Copyright (c) 2008-2017 University of Utah and the Flux Group.
 # 
 # {{{GENIPUBLIC-LICENSE
 # 
@@ -647,12 +647,12 @@ sub Reserve($)
     my ($count,$start,$end,$type);
     
     if (!$update) {
-	foreach my $field ("count", "start", "end", "type") {
+	foreach my $field ("count", "end", "type") {
 	    return GeniResponse->MalformedArgsResponse("Missing $field")
 		if (! (exists($argref->{$field}) && $argref->{$field} ne ""));
 	}
 	$count = $argref->{"count"};
-	$start = $argref->{"start"};
+	$start = $argref->{"start"} if (exists($argref->{"start"}));
 	$end   = $argref->{"end"};
 	$type  = $argref->{"type"};
 

@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2006-2016 University of Utah and the Flux Group.
+# Copyright (c) 2006-2017 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -216,6 +216,17 @@ class Aggregate
 	    $am_array[$urn] = $aggregate;
         }
         return $am_array;
+    }
+
+    function ThisAggregate()
+    {
+        global $DEFAULT_AGGREGATE_URN;
+
+        if (! ($aggregate = Aggregate::Lookup($DEFAULT_AGGREGATE_URN))) {
+            TBERROR("Aggregate::SupportsReservations: ".
+                    "Could not load aggregate $urn!", 1);
+        }
+        return $aggregate;
     }
 }
 

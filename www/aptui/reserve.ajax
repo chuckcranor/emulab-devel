@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2016 University of Utah and the Flux Group.
+# Copyright (c) 2000-2017 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -55,16 +55,26 @@ function Do_Reserve()
     $formfields = $ajax_args["formfields"];
     $errors     = array();
 
+    error_log(print_r($formfields, TRUE));
+
     #
     # All fields required,
     #
-    $required = array("pid", "count", "start", "end",
-                      "cluster", "type");
+    $required = array("pid", "count", "end", "cluster", "type");
 
     foreach ($required as $field) {
 	if (!isset($formfields[$field]) || $formfields[$field] == "") {
 	    $errors[$field] = "Missing field";
 	}
+    }
+    #
+    # Update mode; we get the idx of the current reservation.
+    #
+    if (isset($formfields["idx"])) {
+        $idx = $formfields["idx"];
+        if (!TBvalid_integer($idx)) {
+            $errors["error"] = "Bad index for reservation update";
+        }
     }
     # Admins do not need a reason.
     if (!ISADMIN() &&
@@ -82,10 +92,16 @@ function Do_Reserve()
     if (!TBvalid_integer($formfields["count"])) {
         $errors["count"] = TBFieldErrorString();
     }
-    $start_ascii = $formfields["start"];
-    $start = strtotime($formfields["start"]);
-    if (!$start) {
-        $errors["start"] = "Cannot parse date";
+    if (isset($formfields["start"]) && $formfields["start"] != "") {
+        $start_ascii = $formfields["start"];
+        $start = strtotime($formfields["start"]);
+        if (!$start) {
+            $errors["start"] = "Cannot parse date";
+        }
+        elseif ($start < time() && !isset($idx)) {
+            # In update mode, just let it through.
+            $errors["start"] = "In the past";
+        }
     }
     $end_ascii = $formfields["end"];
     $end = strtotime($formfields["end"]);
@@ -112,15 +128,6 @@ function Do_Reserve()
         !$project->AccessCheck($this_user, $TB_PROJECT_CREATEEXPT)) {
 	$errors["error"] = "Not enough permission in project";
     }
-    #
-    # Update mode; we get the idx of the current reservation.
-    #
-    if (isset($formfields["idx"])) {
-        $idx = $formfields["idx"];
-        if (!TBvalid_integer($idx)) {
-            $errors["error"] = "Bad index for reservation update";
-        }
-    }
     if (count($errors)) {
 	SPITAJAX_ERROR(2, $errors);
 	return;
@@ -142,7 +149,8 @@ function Do_Reserve()
     #
     $args = "-t " . escapeshellarg($formfields["type"]) . " ".
           (isset($idx) ? "-u $idx " : "") .
-          "-s $start -e $end $pid " . $formfields["count"];
+          (isset($start) ? "-s $start " : "") .
+          " -e $end $pid " . $formfields["count"];
 
     #
     # Do a precheck. 

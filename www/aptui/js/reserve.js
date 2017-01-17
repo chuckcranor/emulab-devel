@@ -91,10 +91,20 @@ $(function ()
 
 	// Insert datepickers after html inserted.
 	$("#reserve-request-form #start_day").datepicker({
+	    minDate: 0,		/* earliest date is today */
 	    showButtonPanel: true,
+	    onSelect: function (dateString, dateobject) {
+		DateChange("#start_day");
+		modified_callback();
+	    }
 	});
 	$("#reserve-request-form #end_day").datepicker({
+	    minDate: 0,		/* earliest date is today */
 	    showButtonPanel: true,
+	    onSelect: function (dateString, dateobject) {
+		DateChange("#end_day");
+		modified_callback();
+	    }
 	});
 	/*
 	 * Callback when something changes so that we can toggle the
@@ -109,6 +119,44 @@ $(function ()
 	LoadReservations();
     }
     
+    /*
+     * When the date selected is today, need to disable the hours
+     * before the current hour.
+     */
+    function DateChange(which)
+    {
+	var date = $("#reserve-request-form " + which).datepicker("getDate");
+	var now = new Date();
+	var selecter;
+
+	if (which == "#start_day") {
+	    selecter = "#reserve-request-form #start_hour";
+	}
+	else {
+	    selecter = "#reserve-request-form #end_hour";
+	}
+	if (moment(date).isSame(Date.now(), "day")) {
+	    for (var i = 0; i <= now.getHours(); i++) {
+
+		/*
+		 * Before we disable the option, see if it is selected.
+		 * If so, we want make the user re-select the hour.
+		 */
+		if ($(selecter + " option:selected").val() == i) {
+		    $(selecter).val("");
+		}
+		$(selecter + " option[value='" + i + "']")
+		    .attr("disabled", "disabled");
+	    }
+	}
+	else {
+	    for (var i = 0; i <= now.getHours(); i++) {
+		$(selecter + " option[value='" + i + "']")
+		    .removeAttr("disabled");
+	    }
+	}
+    }
+
     //
     // Check form validity. This does not check whether the reservation
     // is valid.
@@ -130,18 +178,36 @@ $(function ()
 	 */
 	var start_day  = $('#reserve-request-form [name=start_day]').val();
 	var start_hour = $('#reserve-request-form [name=start_hour]').val();
-	if (start_day && start_hour) {
+	if (start_day && !start_hour) {
+	    aptforms.GenerateFormErrors('#reserve-request-form',
+					{"start" : "Missing hour"});
+	    return;
+	}
+	else if (!start_day && start_hour) {
+	    aptforms.GenerateFormErrors('#reserve-request-form',
+					{"start" : "Missing day"});
+	    return;
+	}
+	else if (start_day && start_hour) {
 	    var start = moment(start_day, "MM/DD/YYYY");
 	    start.hour(start_hour);
-	    console.log("start", start);
 	    $('#reserve-request-form [name=start]').val(start.format());
 	}
 	var end_day  = $('#reserve-request-form [name=end_day]').val();
 	var end_hour = $('#reserve-request-form [name=end_hour]').val();
-	if (end_day && end_hour) {
+	if (end_day && !end_hour) {
+	    aptforms.GenerateFormErrors('#reserve-request-form',
+					{"end" : "Missing hour"});
+	    return;
+	}
+	else if (!end_day && end_hour) {
+	    aptforms.GenerateFormErrors('#reserve-request-form',
+					{"end" : "Missing day"});
+	    return;
+	}
+	else if (end_day && end_hour) {
 	    var end = moment(end_day, "MM/DD/YYYY");
 	    end.hour(end_hour);
-	    console.log("end", end);
 	    $('#reserve-request-form [name=end]').val(end.format());
 	}
 	aptforms.CheckForm('#reserve-request-form', "reserve",
@@ -284,6 +350,12 @@ $(function ()
 	    $('#reserve-request-form [name=end_hour]')
 		.val(end.format("H"));
 	    console.log(start, end);
+
+	    // Set the hour selectors properly in the datepicker object.
+	    $("#reserve-request-form #start_day")
+		.datepicker("setDate", start.format("MM/DD/YYYY"));
+	    $("#reserve-request-form #end_day")
+		.datepicker("setDate", end.format("MM/DD/YYYY"));
 	};
 	sup.ShowWaitWait();
 	var xmlthing = sup.CallServerMethod(null, "reserve",
