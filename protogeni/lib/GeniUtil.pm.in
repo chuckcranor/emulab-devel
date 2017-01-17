@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2008-2016 University of Utah and the Flux Group.
+# Copyright (c) 2008-2017 University of Utah and the Flux Group.
 # 
 # {{{GENIPUBLIC-LICENSE
 # 
@@ -280,12 +280,26 @@ sub ExecQuiet($)
     #
     my ($command) = @_;
     my $output    = "";
-    
-    open(PIPE,"$command 2>&1 |") or return -1;
-    while (<PIPE>) {
-	$output .= $_;
+
+    my $pid = open(PIPE, "-|");
+    if (!defined($pid)) {
+	print STDERR "ExecQuiet Failure; popen failed!\n";
+	return -1;
     }
-    close(PIPE);
+    if ($pid) {
+	while (<PIPE>) {
+	    $output .= $_;
+	}
+	close(PIPE);
+    }
+    else {
+	open(STDERR, ">&STDOUT");
+	for (my $i = 3; $i < 256; $i++) {
+	    POSIX::close($i);
+	}
+	exec($command);
+	die("ExecQuiet: Could not exec('$command')");
+    }
     return $output;
 }
 
