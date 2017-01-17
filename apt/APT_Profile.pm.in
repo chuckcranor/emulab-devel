@@ -1141,9 +1141,9 @@ sub SetSites($$$$$$)
 # Set the repository for the rspec. This is a top level element. At
 # some point we can think about per-node repos.
 #
-sub SetRepo($$$$$)
+sub SetRepo($$$$$$)
 {
-    my ($prspecstr, $repourl, $reporef, $repohash, $perrmsg) = @_;
+    my ($prspecstr, $repourl, $reporef, $repohash, $geniuser, $perrmsg) = @_;
 
     my $rspec = GeniXML::Parse($$prspecstr);
     if (! defined($rspec)) {
@@ -1163,14 +1163,14 @@ sub SetRepo($$$$$)
     # Temporary, lets just throw an execute service onto each node.
     # We put it before any existing execute services.
     #
-    my $command = "cd /local&&sudo chmod 777 .&&".
-	"git clone -n $repourl repository&&" .
-	"cd repository&&" .
+    my $command = "cd /local && sudo chmod 777 . && umask 002 && ".
+	"git clone -n '$repourl' repository && " .
+	"cd repository && " .
 	"git checkout $repohash";
     if ($reporef =~ m"^(refs/|)heads/(.+)") {
 	my $branchname = $2;
-	$command .= "&&git branch -ft $branchname origin/$branchname" .
-	    "&&git checkout -B $branchname HEAD";
+	$command .= "&& git branch -ft $branchname origin/$branchname" .
+	    "&& git checkout -B $branchname HEAD";
     }
     
     foreach my $node (GeniXML::FindNodes("n:node", $rspec)->get_nodelist()) {
