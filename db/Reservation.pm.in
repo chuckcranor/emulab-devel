@@ -38,6 +38,7 @@ use emutil;
 use Project;
 use User;
 use Experiment;
+use NodeType;
 use overload ('""' => 'Stringify');
 
 # Configure variables
@@ -110,7 +111,20 @@ sub Create($$$$$$$)
 }
 
 #
-# Return an object representing a hypothetical immediate reservation.    
+# Return an object representing a hypothetical existing experiment.    
+#
+# This DOES NOT actually check the feasibility of, guarantee,
+# or record the reservation.
+#
+sub CreateExisting($$$$$$$)
+{
+    my ($class, $pid, $eid, $uid, $end, $type, $nodes) = @_;
+
+    return CreateCommon( $class, $pid, $eid, $uid, 0, $end, $type, $nodes );
+}
+    
+#
+# Return an object representing a hypothetical immediate experiment.    
 #
 # This DOES NOT actually check the feasibility of, guarantee,
 # or record the reservation.
@@ -119,7 +133,8 @@ sub CreateImmediate($$$$$$$)
 {
     my ($class, $pid, $eid, $uid, $end, $type, $nodes) = @_;
 
-    return CreateCommon( $class, $pid, $eid, $uid, 0, $end, $type, $nodes );
+    return CreateCommon( $class, $pid, $eid, $uid, time(), $end, $type,
+			 $nodes );
 }
     
 sub Lookup($$;$$$$)
@@ -517,8 +532,8 @@ sub LookupAll($$)
 	    # Handle the case where an experiment is swapped in.  The
 	    # nodes aren't free right now, but at some time in the
 	    # future they will become so.
-	    my $res = CreateImmediate( $class, $pid, $eid, $uid, $end, $type,
-				       $count );
+	    my $res = CreateExisting( $class, $pid, $eid, $uid, $end, $type,
+				      $count );
 	    push( @reservations, $res );
 	} else {
 	    # Physical nodes with no reservations whatsoever... treat
@@ -544,9 +559,9 @@ sub LookupAll($$)
     return $cache{$type};
 }
 
-sub IsFeasible($$;$$)
+sub IsFeasible($$;$$$)
 {
-    my ($class, $reservations, $error, $conflicttime) = @_;
+    my ($class, $reservations, $error, $conflicttime, $conflictcount) = @_;
 
     my @timeline = ();
     my $free;
@@ -556,8 +571,14 @@ sub IsFeasible($$;$$)
 	my $end;
 
 	if( defined( $reservation->eid() ) ) {
-	    # A swapped-in experiment.  Already using nodes (so no
-	    # need to save a start event), and will later release real nodes.
+	    if( $reservation->start() ) {
+		# An unmapped experiment.  Not yet using physical nodes.
+		$start = { 'pid' => $reservation->pid(),
+			   't' => $reservation->start(),
+			   'used' => $reservation->nodes(),
+			   'reserved' => 0 };
+	    }
+	    # Will later release real nodes.
 	    $end = { 'pid' => $reservation->pid(),
 		     't' => $reservation->end(),
 		     'used' => -$reservation->nodes(),
@@ -592,12 +613,14 @@ sub IsFeasible($$;$$)
 	    $reserved{ $pid } = 0;
 	}
 
-	my $oldsum = $used{ $pid } + $reserved{ $pid };
+	my $oldsum = $used{ $pid } > $reserved{ $pid } ? $used{ $pid } :
+	    $reserved{ $pid };
 
 	$used{ $pid } += $event->{ 'used' };
 	$reserved{ $pid } += $event->{ 'reserved' };
 
-	my $newsum = $used{ $pid } + $reserved{ $pid };
+	my $newsum = $used{ $pid } > $reserved{ $pid } ? $used{ $pid } :
+	    $reserved{ $pid };
 
 	$free += $oldsum - $newsum;
 
@@ -611,6 +634,9 @@ sub IsFeasible($$;$$)
 	    }
 	    if( ref( $conflicttime ) ) {
 		$$conflicttime = $event->{'t'};
+	    }
+	    if( ref( $conflictcount ) ) {
+		$$conflictcount = -$free;
 	    }
 	    
 	    return 0;
@@ -747,6 +773,87 @@ sub MaxSliceExtension($$$;$) {
 	$$max = $max_expire;
 	return 0;
     }
+}
+
+sub ExpectedEnd($$) {
+    
+    my ($class, $experiment) = @_;
+    my $slice_expires;
+    
+    if( $PGENISUPPORT ) {
+	require GeniSlice;
+	my $slice = GeniSlice->LookupByExperiment( $experiment );
+	if( defined( $slice ) ) {
+	    $slice_expires = $slice->expires();
+	}
+    }
+    return $experiment->autoswap() ? time() +
+	$experiment->autoswap_timeout * 60 : $slice_expires;    
+}
+
+#
+# Estimate an upper bound for node type count available for an experiment.
+#
+# Reservation->MaxSwapIn( $experiment, $type )
+#
+# Will return estimated number of available nodes.
+sub MaxSwapIn($$$) {
+
+    my ($class, $experiment, $type) = @_;
+    my $reservation;
+    my $MAX = 10000;
+    my $overflow;
+    
+    my $reservations = LookupAll( $class, $type );
+    foreach my $res ( @$reservations ) {
+	if( defined( $res->pid() ) && defined( $res->eid() ) &&
+	    $res->pid() eq $experiment->pid() &&
+	    $res->eid() eq $experiment->eid() ) {
+	    $reservation = $res;
+	    last;
+	}
+    }
+
+    if( defined( $reservation ) ) {
+	$reservation->SetNodes( $MAX );
+    } else {
+	$reservation = CreateImmediate( $class, $experiment->pid(),
+					$experiment->eid(),
+					$experiment->swapper(),
+					ExpectedEnd( $class, $experiment ),
+					$type, $MAX );
+
+	push( @$reservations, $reservation );
+    }
+
+    while( $reservation->nodes() > 0 &&
+	   !IsFeasible( $class, $reservations, undef, undef, \$overflow ) ) {
+	$reservation->SetNodes( $reservation->nodes() - $overflow );
+    }
+
+    return $reservation->nodes() > 0 ? $reservation->nodes() : 0;
+}
+
+#
+# Estimate an upper bound for node counts (by type) available for an experiment.
+#
+# Reservation->MaxSwapInMap( $experiment )
+#
+# Will return a hash of estimated number of available nodes, keyed by type.
+sub MaxSwapInMap($$) {
+
+    my ($class, $experiment) = @_;
+    my %counts = ();
+    
+    foreach my $typeinfo ( NodeType->AllTypes() ) {
+	next if( $typeinfo->isvirtnode() || $typeinfo->isdynamic() );
+	
+	my $type = $typeinfo->type();
+
+	$counts{ $type } = MaxSwapIn( $class, $experiment, $type );
+    }
+
+    return \%counts;
 }
 
 # _Always_ make sure that this 1 is at the end of the file...

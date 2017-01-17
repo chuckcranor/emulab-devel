@@ -131,6 +131,7 @@ use libadminctrl;
 use libEmulab;
 use User;
 use EmulabFeatures;
+use Reservation;
 
 # Protos
 sub fatal(@);
@@ -728,6 +729,18 @@ sub RunAssign($$)
 	}
     }
 
+    # Bound the results to avoid future reservation conflicts.
+    my $reservation_bounds = Reservation->MaxSwapInMap( $experiment );
+    foreach my $type ( keys( %$reservation_bounds ) ) {
+	if( exists( $admission_control{ $type } ) ) {
+	    if( $reservation_bounds->{ $type } < $admission_control{ $type } ) {
+		$admission_control{ $type } = $reservation_bounds->{ $type };
+	    }
+	} else {
+	    $admission_control{ $type } = $reservation_bounds->{ $type };
+	}
+    }
+    
     #
     # Append this admission control results to ptopgen.
     #
