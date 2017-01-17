@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2008-2016 University of Utah and the Flux Group.
+# Copyright (c) 2008-2017 University of Utah and the Flux Group.
 # 
 # {{{GENIPUBLIC-LICENSE
 # 
@@ -96,15 +96,6 @@ use Crypt::X509;
 use Crypt::OpenSSL::X509;
 use Time::HiRes qw( gettimeofday tv_interval );
 use Carp qw(cluck confess);
-
-# Yack. apache does not close fds before the exec, and if this dies
-# we are left with a giant mess.
-BEGIN {
-    no warnings;
-    for (my $i = 3; $i < 1024; $i++) {
-      POSIX:close($i);
-    }
-}
 
 # Configure variables
 my $MAINSITE 	     = @TBMAINSITE@;
