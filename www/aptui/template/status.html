@@ -20,7 +20,15 @@ pre {
 	white-space: pre-wrap;
 }
 .panel-body-nopad {
-	padding: 5px;
+    padding: 5px;
+ }
+.table-condensed > thead > tr > th,
+.table-condensed > tbody > tr > th,
+.table-condensed > tfoot > tr > th,
+.table-condensed > thead > tr > td,
+.table-condensed > tbody > tr > td,
+.table-condensed > tfoot > tr > td {
+    padding: 3px;
 }
 </style>
 <div class='row'>
@@ -125,6 +133,24 @@ pre {
 		  <%- sliceExpires %></span>
 		(<span id='quickvm_countdown'></span>)
 	      </span>
+	    </td>
+	  </tr>
+	  <tr>
+	    <td class='border-none'>Extendable:</td>
+	    <td class='border-none maximum-extension hidden'>
+	      <span id="maximum-extension-string"></span>
+	      <a href='#' class='btn btn-xs'
+		 data-toggle='popover'
+		 data-html='true'
+		 data-delay='{"hide":500}'
+		 data-content="This is the maximum extension that is
+			       <em>possible</em> because of future reservation
+			       promises for the resources you are using. It
+			       does not mean you will be granted an extension
+			       till this date.">
+		<span class='glyphicon glyphicon-question-sign'
+		      style='margin-bottom: 4px;'></span>
+	      </a>
 	    </td>
 	  </tr>
 	  </table>

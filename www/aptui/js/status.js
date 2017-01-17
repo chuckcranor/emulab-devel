@@ -122,6 +122,10 @@ $(function ()
 	});
 	ProgressBarUpdate();
 
+	// Periodic check for max allowed extension
+	LoadMaxExtension();
+	setInterval(LoadMaxExtension, 3600 * 1000);
+
 	// This activates the popover subsystem.
 	$('[data-toggle="popover"]').popover({
 	    trigger: 'hover',
@@ -2664,6 +2668,51 @@ $(function ()
 			"exptID"   : "#expt-traffic-panel-div",
 			"refreshID": "#graphs-refresh-button",
 			"callback" : callback});
+    }
+
+    /*
+     * Get the max allowed extension and show a warning if its below
+     * a couple of days.
+     */
+    function LoadMaxExtension()
+    {
+	var maxcallback = function(json) {
+	    if (json.code) {
+		console.info("Failed to get max extension: " + json.value);
+		return;		    
+	    }
+	    var maxdate = new Date(json.value);
+	    //console.info("Max extension date:", maxdate);
+		    
+	    /*
+	     * See if the difference is less then two days
+	     */
+	    var now   = new Date();
+	    var hours = Math.floor((maxdate.getTime() -
+				    now.getTime()) / (1000 * 3600.0));
+	    if (hours < (7 * 24)) {
+		return;
+	    }
+	    //console.info("Max allowed extension hours: ", hours);
+	    
+	    var when    = moment(maxdate).format('lll');
+	    var fromnow = moment(maxdate).fromNow(true) + " from now";
+	
+	    $('#maximum-extension-string').html(when + " (" + fromnow + ")");
+	    if (hours < 48) {
+		$('#maximum-extension-string').removeClass("text-warning");
+		$('#maximum-extension-string').addClass("text-danger");
+	    }
+	    else {
+		$('#maximum-extension-string').removeClass("text-danger");
+		$('#maximum-extension-string').addClass("text-warning");
+	    }
+	    $('.maximum-extension').removeClass("hidden");
+	}
+	var xmlthing =
+	    sup.CallServerMethod(null, "status", "MaxExtension",
+				 {"uuid" : uuid});
+	xmlthing.done(maxcallback);
     }
 
     // Helper.
