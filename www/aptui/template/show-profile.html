@@ -87,6 +87,14 @@
            type='button'>Version History
 	</a>
 	<% } %>
+	<% if (isadmin) { %>
+	  <a class='btn btn-info btn-xs pull-left'
+             id='profile_history_button'
+             style='margin-right: 10px; font-size: 12px'
+             href='profile-activity.php?uuid=<%= profile_uuid %>'
+             type='button'>Activity
+	  </a>
+	<% } %>
       </div>
     </div>
     <% if (fromrepo) { %>
@@ -118,6 +126,12 @@
 	      <td>Est. Size:</td>
 	      <td class="commit-size"></td>
 	    </tr>
+	    <% if (isadmin) { %>
+	      <tr>
+		<td>RepoName:</td>
+		<td class="commit-reponame" style="font-size: 60%;"></td>
+	      </tr>
+	    <% } %>
 	    <tr>
 	      <td>Log:</td>
 	      <td class="commit-log">
