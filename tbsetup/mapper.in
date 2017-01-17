@@ -413,6 +413,8 @@ if (IsMultiPCArchitecture()) {
 	    if ($vtop->newreservednodes()) {
 		my @newreservednodes = $vtop->newreservednodes();
 		if (system("$NFREE -x $pid $eid @newreservednodes")) {
+		    # Clear this so that we do not try again in fatal();
+		    $vtop->clearnewreserved();
 		    fatal("Could not release new nodes after $architecture");
 		}
 		# Kill this, we are done with it now that nodes are released
