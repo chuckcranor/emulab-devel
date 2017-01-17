@@ -373,6 +373,7 @@ sub DoUpdate()
     my $optlist = "o:n:p:";
     my $ofile;
     my $reponame;
+    my $repourl;
 
     my %options = ();
     if (! getopts($optlist, \%options)) {
@@ -404,11 +405,24 @@ sub DoUpdate()
 	    fatal("No such repository associated with profile");
 	}
 	$reponame = $profile->reponame();
+	$repourl  = $profile->repourl();
     }
     else {
 	usage();
     }
 
+    #
+    # Make sure still accessible.
+    #
+    if (defined($repourl)) {
+	$ENV{"GIT_ASKPASS"} = "true";
+	my $output =
+	    emutil::ExecQuiet("$GIT ls-remote --exit-code '$repourl' HEAD");
+	if ($?) {
+	    UserError($output)
+	}
+    }
+    
     my $cmd = "$SSH -host $CONTROL $PROXY -n $reponame update";
     if ($debug) {
 	print "'$cmd'\n";
@@ -717,7 +731,9 @@ sub GetBranchList($)
 	fatal("Could not chdir to $REPODIR/$reponame");
 
     #
-    # First we need a list of branches and their hash. 
+    # First we need a list of branches and their hash. But notice that
+    # multiple branches can point to the same hash, so we have to record
+    # the list for the second step below.
     #
     my $output = emutil::ExecQuiet("$GIT show-ref --abbrev --heads");
     if ($?) {
@@ -734,8 +750,14 @@ sub GetBranchList($)
 	    my $blob = {"hash"  => $1,
 			"name"  => $name,
 			"ref"   => $2};
+	    # This is the list we return.
 	    push(@{ $branches }, $blob);
-	    $branches{$1} = $blob;
+
+	    # See comment above, its a many to one relationship.
+	    if (!exists($branches{$1})) {
+		$branches{$1} = [];
+	    }
+	    push(@{ $branches{$1} }, $blob);
 	}
     }
     #
@@ -758,8 +780,11 @@ sub GetBranchList($)
 		    if ($_ =~ /^\@FF\@$/);
 		$log .= $_;
 	    }
-	    $branches{$hash}->{"log"} = $log
-		if (exists($branches{$hash}));
+	    if (exists($branches{$hash})) {
+		foreach my $blob (@{ $branches{$hash} }) {
+		    $blob->{"log"} = $log;
+		}
+	    }
 	}
     }
     close(GIT);
@@ -979,11 +1004,12 @@ sub DoCommitInfo()
     if (!defined($size)) {
 	$size = "???";
     }
-    my $blob = {"hash"   => $hash,
-		"author" => $author,
-		"when"   => $when,
-		"log"    => $log,
-		"size"   => "$size MiB"};
+    my $blob = {"hash"      => $hash,
+		"author"    => $author,
+		"when"      => $when,
+		"log"       => $log,
+		"reponame"  => $reponame,
+		"size"      => "$size MiB"};
 
     if (defined($webtask)) {
 	$webtask->commitinfo($blob);
