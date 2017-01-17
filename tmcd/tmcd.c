@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2000-2016 University of Utah and the Flux Group.
+ * Copyright (c) 2000-2017 University of Utah and the Flux Group.
  * 
  * {{{EMULAB-LICENSE
  * 
@@ -5863,7 +5863,7 @@ COMMAND_PROTOTYPE(doloadinfo)
 	int		nrows, zfill;
 	char		*server, *disktype, *useacpi, *useasf, *noclflush;
 	char		*vgaonly, *consoletype, *dom0mem, *disableif;
-	int		disknum, biosdisknum, dotrim;
+	int		disknum, biosdisknum, dotrim, heartbeat;
 
 	/*
 	 * Get the address the node should contact to load its image
@@ -5908,6 +5908,28 @@ COMMAND_PROTOTYPE(doloadinfo)
 	 */
 	if (nrows > 1 && vers <= 29)
 		goto updatemfs;
+
+	/*
+	 * See if we want the client to send periodic reports
+	 */
+	heartbeat = 0;
+	if (vers >= 41) {
+		MYSQL_RES	*res2;
+		MYSQL_ROW	row2;
+
+		res2 = mydb_query("select value,defaultvalue "
+				  "from sitevariables "
+				  "where name='images/frisbee/heartbeat'", 2);
+		if (res2 && (int)mysql_num_rows(res2) > 0) {
+			row2 = mysql_fetch_row(res2);
+			if (row2[0] && row2[0][0])
+				heartbeat = (unsigned int)atoi(row2[0]);
+			else if (row2[1] && row2[1][0])
+				heartbeat = (unsigned int)atoi(row2[1]);
+		}
+		if (res2)
+			mysql_free_result(res2);
+	}
 
 	/*
 	 * Get all the other node-specific info just once.
@@ -6061,6 +6083,10 @@ COMMAND_PROTOTYPE(doloadinfo)
 		if (dotrim > 0) {
 			bufp += OUTPUT(bufp, ebufp - bufp,
 				       " TRIM=%d", dotrim);
+		}
+		if (heartbeat > 0) {
+			bufp += OUTPUT(bufp, ebufp - bufp,
+				       " HEARTBEAT=%d", heartbeat);
 		}
 
 		/*
