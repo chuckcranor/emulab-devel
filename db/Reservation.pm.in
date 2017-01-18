@@ -844,12 +844,10 @@ sub MaxSwapInMap($$) {
 
     my ($class, $experiment) = @_;
     my %counts = ();
-    
-    foreach my $typeinfo ( NodeType->AllTypes() ) {
-	next if( $typeinfo->isvirtnode() || $typeinfo->isdynamic() );
-	
-	my $type = $typeinfo->type();
 
+    my $query_result = DBQueryFatal( "SELECT DISTINCT( type ) FROM " .
+				     "future_reservations" );
+    while( my ($type) = $query_result->fetchrow_array() ) {
 	$counts{ $type } = MaxSwapIn( $class, $experiment, $type );
     }
 
