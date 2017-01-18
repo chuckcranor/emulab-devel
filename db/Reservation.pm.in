@@ -218,6 +218,11 @@ sub Stringify($)
     my ($self) = @_;
     
     my $pid = $self->pid();
+    $pid = "(free)" if( !defined( $pid ) );
+    
+    if( defined( $self->eid() ) ) {
+	$pid = $pid . "/" . $self->eid();
+    }
     my $nodes = $self->nodes();
     my $type = $self->type();
     my $start = defined( $self->start() ) ? localtime( $self->start() ) :

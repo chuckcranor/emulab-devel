@@ -268,19 +268,28 @@ foreach my $type ( keys( %types ) ) {
     next if( $unavail_types{ $type } );
     
     my $reservations = Reservation->LookupAll( $type );
+    my $count = 0;
     foreach my $node (@nodes) {
-	if( $node->type() eq $type ) {
-	    my $res = Reservation->CreateImmediate( $pid, undef,
-						    $this_user->uid(),
-						    $endtime, $type, 1 );
-	    if ($debug) {
-		print "$res\n";
-	    }
-	    push( @$reservations, $res );
-	}
+	$count++ if( $node->type() eq $type );
     }
+    
+    my $res = Reservation->CreateImmediate( $pid, $eid,
+					    $this_user->uid(),
+					    $endtime, $type, $count );
+    if ($debug) {
+	print "$res\n";
+    }
+    
+    push( @$reservations, $res );
+    
     if( !Reservation->IsFeasible( $reservations, \$errormsg ) ) {
 	print "Admission control violation for type $type: $errormsg\n";
+
+	if( $debug ) {
+	    foreach my $res (@$reservations) {
+		print "$res\n";
+	    }
+	}
 	
 	if( $force ) {
 	    print "Forcing allocation anyway...\n";
