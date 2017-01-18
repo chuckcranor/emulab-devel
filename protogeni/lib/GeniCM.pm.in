@@ -3803,7 +3803,7 @@ sub SliverWorkAux($$$$$$$$)
 	    if (ref($s) eq "GeniSliver::Node") {
 		$nodemap{$s->nickname()} = $s;
 	    }
-	    if (ref($s) eq "GeniSliver::Vhost") {
+	    elsif (ref($s) eq "GeniSliver::Vhost") {
 		$internal_nodemap{$s->nickname()} = $s;
 	    }
 	    elsif (ref($s) eq "GeniAggregate::Link" ||
