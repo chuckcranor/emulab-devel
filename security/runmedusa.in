@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2008-2016 University of Utah and the Flux Group.
+# Copyright (c) 2008-2017 University of Utah and the Flux Group.
 # 
 # {{{GENIPUBLIC-LICENSE
 # 
@@ -63,6 +63,8 @@ use emdb;
 use emutil;
 use libtestbed;
 use User;
+use Experiment;
+use Project;
 
 # Protos
 sub RunMedusa($$);
@@ -96,7 +98,7 @@ if (defined($options{"d"})) {
 }
 
 my $query_result =
-    DBQueryFatal("select r.node_id,i.IP from reserved as r ".
+    DBQueryFatal("select r.node_id,i.IP,r.pid,r.eid from reserved as r ".
 		 "left join nodes as n on n.node_id=r.node_id ".
 		 "left join node_types as t on t.type=n.type ".
 		 "left join interfaces as i on ".
@@ -112,9 +114,18 @@ my $query_result =
 open(HOSTS, ">$HOSTFILE")
     or fatal("Could not open $HOSTFILE for writing");
 
-while (my ($node_id,$IP) = $query_result->fetchrow_array()) {
+while (my ($node_id,$IP,$pid,$eid) = $query_result->fetchrow_array()) {
     print HOSTS "$IP\n";
-    $nodes{$IP} = $node_id;
+    
+    $nodes{$IP} = {"node_id" => $node_id};
+
+    my $experiment = Experiment->Lookup($pid,$eid);
+    my $project    = Project->Lookup($pid);
+    if ($experiment && $project) {
+	$nodes{$IP}->{"experiment"} = $experiment;
+	$nodes{$IP}->{"project"} = $project;
+	$nodes{$IP}->{"url"} = "@TBBASE@" . "/showexp.php3?pid=$pid&eid=$eid";
+    }
 }
 
 #
@@ -122,12 +133,20 @@ while (my ($node_id,$IP) = $query_result->fetchrow_array()) {
 # in our nodes table.
 #
 $query_result =
-    DBQueryFatal("select pool_id,IP from virt_node_public_addr ".
+    DBQueryFatal("select pool_id,IP,pid,eid from virt_node_public_addr ".
 		 "where pool_id is not null");
 
-while (my ($pool_id,$IP) = $query_result->fetchrow_array()) {
+while (my ($pool_id,$IP,$pid,$eid) = $query_result->fetchrow_array()) {
     print HOSTS "$IP\n";
-    $pools{$IP} = $pool_id;
+    $pools{$IP} = {"pool_id" => $pool_id};
+    
+    my $experiment = Experiment->Lookup($pid,$eid);
+    my $project    = Project->Lookup($pid);
+    if ($experiment && $project) {
+	$pools{$IP}->{"experiment"} = $experiment;
+	$pools{$IP}->{"project"} = $project;
+	$pools{$IP}->{"url"} = "@TBBASE@" . "/showexp.php3?pid=$pid&eid=$eid";
+    }
 }
 close(HOSTS);
 
@@ -180,10 +199,20 @@ sub RunMedusa($$)
 
 	if ($_ =~ /^ACCOUNT FOUND:[^\d]+([\d\.]+)\s+(.*)$/) {
 	    if (exists($nodes{$1})) {
-		$warnings .= "Node: ". $nodes{$1} . ":$1 $2\n";
+		my $nodeinfo = $nodes{$1};
+		my $node_id  = $nodeinfo->{"node_id"};
+		my $url      = $nodeinfo->{"url"};
+		
+		$warnings .= "Node: $node_id:$1 $2\n";
+		$warnings .= "      $url\n" if (defined($url));
 	    }
 	    elsif (exists($pools{$1})) {
-		$warnings .= "Pool: ". $pools{$1} . ":$1 $2\n";
+		my $poolinfo = $pools{$1};
+		my $pool_id  = $poolinfo->{"pool_id"};
+		my $url      = $poolinfo->{"url"};
+		
+		$warnings .= "Pool: $pool_id:$1 $2\n";
+		$warnings .= "      $url\n" if (defined($url));
 	    }
 	    else {
 		$warnings .= $_;
