@@ -2161,11 +2161,6 @@ $(function ()
 			_.each(object.nodes, function (node) {
 			    jacksIDs[node.client_id] = node.id;
 			});
-			// Temporary.
-			$('.hostlabelgroup').each(function() {
-			    jacksIDs[$(this).find('.hosttext').text()] = 
-				$(this).attr("id");
-			});
 			//console.log("jacksIDs", object, jacksIDs);
 			ShowManifest(object.rspec);
 		    });
