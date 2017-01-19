@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2008-2016 University of Utah and the Flux Group.
+# Copyright (c) 2008-2017 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -674,8 +674,11 @@ sub downloadImage($$$$) {
 	    $todiskopt = "-N";
 	}
 	if ($server && $imageid) {
-	    $command = "$FRISBEE -f -M 64 $proxyopt $todiskopt ".
-		"         -S $server -B 30 -F $imageid $imagepath";
+	    # Allow the server to enable heartbeat reports in the client
+	    my $heartbeat = "-H 0";
+
+	    $command = "$FRISBEE -f -M 64 $proxyopt $heartbeat $todiskopt ".
+		"-S $server -B 30 -F $imageid $imagepath";
 	}
 	else {
 	    print STDERR "Could not parse frisbee loadinfo\n";

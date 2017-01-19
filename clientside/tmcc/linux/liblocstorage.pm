@@ -1296,8 +1296,11 @@ sub os_create_storage($$)
 		$proxyopt = "-P $nodeid";
 	    }
 
-	    my $command = "$FRISBEE -f -M 128 $proxyopt ".
-		"         -S $server -B 30 -F $imageid $imagepath";
+	    # Allow the server to enable heartbeat reports in the client
+	    my $heartbeat = "-H 0";
+
+	    my $command = "$FRISBEE -f -M 128 $proxyopt $heartbeat ".
+		"-S $server -B 30 -F $imageid $imagepath";
 
 	    print STDERR "$command\n";
 
