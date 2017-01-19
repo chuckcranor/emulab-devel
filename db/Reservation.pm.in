@@ -569,7 +569,7 @@ sub IsFeasible($$;$$$)
     my ($class, $reservations, $error, $conflicttime, $conflictcount) = @_;
 
     my @timeline = ();
-    my $free;
+    my $free = 0;
 
     foreach my $reservation ( @$reservations ) {
 	my $start;
@@ -600,7 +600,7 @@ sub IsFeasible($$;$$$)
 		     'reserved' => -$reservation->nodes() };
 	} else {
 	    # Available resources.  Provides nodes for all time.
-	    $free = $reservation->nodes();
+	    $free += $reservation->nodes();
 	}
 
 	push( @timeline, $start ) if( defined( $start->{'t'} ) );
@@ -805,7 +805,6 @@ sub ExpectedEnd($$) {
 sub MaxSwapIn($$$) {
 
     my ($class, $experiment, $type) = @_;
-    my $reservation;
     my $MAX = 10000;
     my $overflow;
     
@@ -814,22 +813,23 @@ sub MaxSwapIn($$$) {
 	if( defined( $res->pid() ) && defined( $res->eid() ) &&
 	    $res->pid() eq $experiment->pid() &&
 	    $res->eid() eq $experiment->eid() ) {
-	    $reservation = $res;
-	    last;
+	    # Found existing nodes already reserved to the experiment we're
+	    # trying to allocate.  In this context, they should be considered
+	    # as available.
+	    $res->{'PID'} = undef;
+	    $res->{'EID'} = undef;
+	    $res->SetStart( -1 );
+	    $res->SetEnd( undef );
 	}
     }
 
-    if( defined( $reservation ) ) {
-	$reservation->SetNodes( $MAX );
-    } else {
-	$reservation = CreateImmediate( $class, $experiment->pid(),
-					$experiment->eid(),
-					$experiment->swapper(),
-					ExpectedEnd( $class, $experiment ),
-					$type, $MAX );
+    my $reservation = CreateImmediate( $class, $experiment->pid(),
+				       $experiment->eid(),
+				       $experiment->swapper(),
+				       ExpectedEnd( $class, $experiment ),
+				       $type, $MAX );
 
-	push( @$reservations, $reservation );
-    }
+    push( @$reservations, $reservation );
 
     while( $reservation->nodes() > 0 &&
 	   !IsFeasible( $class, $reservations, undef, undef, \$overflow ) ) {

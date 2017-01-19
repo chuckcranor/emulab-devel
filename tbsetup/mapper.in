@@ -730,6 +730,7 @@ sub RunAssign($$)
     }
 
     # Bound the results to avoid future reservation conflicts.
+    Reservation->FlushAll();
     my $reservation_bounds = Reservation->MaxSwapInMap( $experiment );
     foreach my $type ( keys( %$reservation_bounds ) ) {
 	if( exists( $admission_control{ $type } ) ) {
