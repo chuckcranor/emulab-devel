@@ -2690,7 +2690,7 @@ $(function ()
 	    var now   = new Date();
 	    var hours = Math.floor((maxdate.getTime() -
 				    now.getTime()) / (1000 * 3600.0));
-	    if (hours < (7 * 24)) {
+	    if (hours > (7 * 24)) {
 		return;
 	    }
 	    //console.info("Max allowed extension hours: ", hours);
