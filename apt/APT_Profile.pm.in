@@ -1163,6 +1163,7 @@ sub SetRepo($$$$$$)
     # Temporary, lets just throw an execute service onto each node.
     # We put it before any existing execute services.
     #
+    my $owner   = $geniuser->uid();
     my $command = "cd /local && sudo chmod 777 . && umask 002 && ".
 	"git clone -n '$repourl' repository && " .
 	"cd repository && " .
@@ -1170,8 +1171,9 @@ sub SetRepo($$$$$$)
     if ($reporef =~ m"^(refs/|)heads/(.+)") {
 	my $branchname = $2;
 	$command .= "&& git branch -ft $branchname origin/$branchname" .
-	    "&& git checkout -B $branchname HEAD";
+	    "&& git checkout -B $branchname HEAD ";
     }
+    $command .= "&& sudo chown -R $owner .";
     
     foreach my $node (GeniXML::FindNodes("n:node", $rspec)->get_nodelist()) {
 	my $service;
