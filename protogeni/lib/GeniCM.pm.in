@@ -722,6 +722,17 @@ sub GetTicketAuxAux($$$$$$$$$$$)
 	$slice_experiment = undef;
 	goto bad;
     }
+    #
+    # Mark the expires slot in the experiment, for admission control
+    # during the mapper run. 
+    #
+    if ($slice_experiment->SetExpiration(defined($expires) ? $expires :
+					 $slice->expires())) {
+	$response = GeniResponse->Create(GENIRESPONSE_ERROR, undef,
+					 "set experiment expiration");
+	print STDERR "Could not set experiment expiration\n";
+	goto bad;
+    }
     my $realuser = FlipToUser($slice, $user);
     if (! (defined($realuser) && $realuser)) {
 	$response = GeniResponse->Create(GENIRESPONSE_ERROR, undef,
@@ -7587,9 +7598,20 @@ sub SetSliceExpiration($$$$@)
 	    goto bad;
 	}
     }
-    if (!$checkonly && $slice->SetExpiration($when) != 0) {
-	$message = "could not set expiration time";
-	goto bad;
+    if (!$checkonly) {
+	if ($slice->SetExpiration($when) != 0) {
+	    $message = "could not set expiration time";
+	    goto bad;
+	}
+	#
+	# Mark the expires slot in the experiment, for admission control
+	# during the mapper run. 
+	#
+	if (defined($slice_experiment) &&
+	    $slice_experiment->SetExpiration($when)) {
+	    $message = "could not set slice experiment expiration time";
+	    goto bad;
+	}
     }
     return 0;
     
