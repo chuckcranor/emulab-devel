@@ -4608,6 +4608,19 @@ CREATE TABLE `state_triggers` (
 ) ENGINE=MyISAM DEFAULT CHARSET=latin1;
 
 --
+-- Table structure for table `subboss_attributes`
+--
+
+DROP TABLE IF EXISTS `subboss_attributes`;
+CREATE TABLE `subboss_attributes` (
+  `subboss_id` varchar(32) NOT NULL default '',
+  `service` varchar(20) NOT NULL default '',
+  `attrkey` varchar(32) NOT NULL default '',
+  `attrvalue` tinytext,
+  PRIMARY KEY  (`subboss_id`,`service`)
+) ENGINE=MyISAM DEFAULT CHARSET=latin1;
+
+--
 -- Table structure for table `subboss_images`
 --
 
