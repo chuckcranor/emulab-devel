@@ -1167,7 +1167,8 @@ sub SetRepo($$$$$$)
     my $command = "cd /local && sudo chmod 777 . && umask 002 && ".
 	"git clone -n '$repourl' repository && " .
 	"cd repository && " .
-	"git checkout $repohash";
+	"git config --add core.sharedRepository group && ".
+	"git checkout $repohash ";
     if ($reporef =~ m"^(refs/|)heads/(.+)") {
 	my $branchname = $2;
 	$command .= "&& git branch -ft $branchname origin/$branchname" .
