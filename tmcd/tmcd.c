@@ -394,6 +394,7 @@ COMMAND_PROTOTYPE(doimageid);
 COMMAND_PROTOTYPE(doimagesize);
 COMMAND_PROTOTYPE(dopnetnodeattrs);
 COMMAND_PROTOTYPE(doserviceinfo);
+COMMAND_PROTOTYPE(dosubbossinfo);
 #if PROTOGENI_SUPPORT
 COMMAND_PROTOTYPE(dogeniclientid);
 COMMAND_PROTOTYPE(dogenisliceurn);
@@ -531,7 +532,8 @@ struct command {
 	{ "imageinfo",      FULLCONFIG_NONE,  F_ALLOCATED, doimageid},
 	{ "imagesize",   FULLCONFIG_NONE,  F_ALLOCATED, doimagesize},
 	{ "pnetnodeattrs", FULLCONFIG_NONE, F_ALLOCATED, dopnetnodeattrs},
-	{ "serviceinfo",   FULLCONFIG_NONE, 0, doserviceinfo },
+	{ "serviceinfo",  FULLCONFIG_NONE, 0, doserviceinfo },
+	{ "subbossinfo",  FULLCONFIG_NONE, 0, dosubbossinfo },
 #if PROTOGENI_SUPPORT
 	{ "geni_client_id", FULLCONFIG_NONE, 0, dogeniclientid },
 	{ "geni_slice_urn", FULLCONFIG_NONE, 0, dogenisliceurn },
@@ -13759,7 +13761,7 @@ COMMAND_PROTOTYPE(dopnetnodeattrs)
 }
 
 /*
- * Return service (subboss) into to a node/
+ * Return service (subboss) info to a node.
  */
 COMMAND_PROTOTYPE(doserviceinfo)
 {
@@ -13807,5 +13809,79 @@ COMMAND_PROTOTYPE(doserviceinfo)
 	OUTPUT(buf, sizeof(buf), "TFTP=%s DHCP=%s FRISBEE=%s PUBSUB=%s\n",
 	       tftp, dhcp, frisbee, pubsub);
 	client_writeback(sock, buf, strlen(buf), tcp);
+	return 0;
+}
+
+/*
+ * Return subboss configuration info to a subboss.
+ */
+COMMAND_PROTOTYPE(dosubbossinfo)
+{
+	MYSQL_RES   *res;
+	MYSQL_ROW   row;
+	int         nrows = 0;
+	char	    buf[MYBUFSIZE];
+	char	    *bufp = buf, *ebufp = &buf[sizeof(buf)];
+	char	    *curservice;
+
+	/* make sure caller is a subboss */
+	res = mydb_query("select erole from reserved "
+			 "where node_id='%s' and erole='subboss'",
+			 1, reqp->nodeid);
+	if (!res) {
+		error("dosubbossinfo: %s: "
+		      "DB Error checking for reserved.erole\n",
+		      reqp->nodeid);
+		return 1;
+	}
+	if (mysql_num_rows(res) == 0) {
+		mysql_free_result(res);
+		return 0;
+	}
+	mysql_free_result(res);
+
+	/*
+	 * Get info for all services, one line per service
+	 */
+	res = mydb_query("select service,attrkey,attrvalue "
+			 " from subboss_attributes where subboss_id='%s' "
+			 " order by service,attrkey",
+			 3, reqp->nodeid);
+	if (!res) {
+		error("dosubbossinfo: %s: DB error getting attributes!\n",
+		      reqp->nodeid);
+		return 1;
+	}
+
+	curservice = NULL;
+	nrows = (int)mysql_num_rows(res);
+	while (nrows-- > 0) {
+		row = mysql_fetch_row(res);
+		if (!(row[0] && *row[0] &&
+		      row[1] && *row[1])) {
+			continue;
+		}
+		if (curservice == NULL || strcmp(curservice, row[0]) != 0) {
+			if (curservice) {
+				OUTPUT(bufp, ebufp - buf, "\n");
+				client_writeback(sock, buf, strlen(buf), tcp);
+				bufp = buf;
+				free(curservice);
+			}
+			curservice = mystrdup(row[0]);
+			bufp += OUTPUT(bufp, ebufp - bufp, "%s", curservice);
+		}
+		bufp += OUTPUT(bufp, ebufp - bufp, " %s=\"%s\"",
+			       row[1], row[2] ? row[2] : "");
+	}
+	mysql_free_result(res);
+
+	if (bufp != buf) {
+		OUTPUT(bufp, ebufp - buf, "\n");
+		client_writeback(sock, buf, strlen(buf), tcp);
+	}
+	if (curservice)
+		free(curservice);
+
 	return 0;
 }
