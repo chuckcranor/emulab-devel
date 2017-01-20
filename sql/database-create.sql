@@ -4617,7 +4617,7 @@ CREATE TABLE `subboss_attributes` (
   `service` varchar(20) NOT NULL default '',
   `attrkey` varchar(32) NOT NULL default '',
   `attrvalue` tinytext,
-  PRIMARY KEY  (`subboss_id`,`service`)
+  PRIMARY KEY  (`subboss_id`,`service`,`attrkey`)
 ) ENGINE=MyISAM DEFAULT CHARSET=latin1;
 
 --
