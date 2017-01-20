@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2000-2016 University of Utah and the Flux Group.
+# Copyright (c) 2000-2017 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -187,9 +187,9 @@ TBDebugTimeStamp("nalloc checked all node permissions");
 # low-level library routines; this is a horrible violation of abstraction;
 # and it's all MySQL's fault...
 if( $PGENISUPPORT ) {
-    DBQueryFatal("lock tables reserved write, users read, groups read, projects read, future_reservations read, nodes as n read, reserved as r read, experiments as e read, next_reserve as nr read, `geni-cm`.geni_slices as s read");
+    DBQueryFatal("lock tables reserved write, users read, groups read, projects read, future_reservations read, nodes as n read, reserved as r read, experiments as e read, next_reserve as nr read, `geni-cm`.geni_slices as s read, reservation_version write");
 } else {
-    DBQueryFatal("lock tables reserved write, users read, groups read, projects read, future_reservations read, nodes as n read, reserved as r read, experiments as e read, next_reserve as nr read");
+    DBQueryFatal("lock tables reserved write, users read, groups read, projects read, future_reservations read, nodes as n read, reserved as r read, experiments as e read, next_reserve as nr read, reservation_version write");
 }
 TBDebugTimeStamp("nalloc locked tables");
 
@@ -330,6 +330,11 @@ if ((!$noalloc || $partial) && (@nodes || @oldnodes) && !$error) {
     print "Reserving nodes...\n"
 	if ($debug);
 
+    # Must do this while we have the tables locked and before we apply
+    # any updates, otherwise concurrent readers might fail to detect
+    # inconsistencies.
+    DBQueryFatal( "UPDATE reservation_version SET version=version+1" );
+    
     # Generate strings for a single query. Could use perl map().
     if (@nodes) {
 	my @values = ();
