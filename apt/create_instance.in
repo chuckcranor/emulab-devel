@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2008-2016 University of Utah and the Flux Group.
+# Copyright (c) 2008-2017 University of Utah and the Flux Group.
 # 
 # {{{GENIPUBLIC-LICENSE
 # 
@@ -356,11 +356,6 @@ if ($profile->repourl()) {
 	$reporef  = "refs/heads/master";
 	$repohash = $profile->repohash();
     }
-    my $tmp = APT_Profile::SetRepo(\$rspecstr, $profile->repourl(),
-				   $reporef, $repohash, \$errmsg);
-    if ($tmp) {
-	($tmp < 0 ? fatal($errmsg) : UserError($errmsg));
-    }
 }
 
 #
@@ -641,6 +636,12 @@ elsif (!$localuser) {
 	fatal("Project $pid does not exist");
     }
 }
+$tmp = APT_Profile::SetRepo(\$rspecstr, $profile->repourl(),
+			    $reporef, $repohash, $geniuser, \$errmsg);
+if ($tmp) {
+    ($tmp < 0 ? fatal($errmsg) : UserError($errmsg));
+}
+
 #
 # Now we know where to send to logs.
 #
