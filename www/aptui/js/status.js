@@ -2707,7 +2707,7 @@ $(function ()
 		$('#maximum-extension-string').removeClass("text-danger");
 		$('#maximum-extension-string').addClass("text-warning");
 	    }
-	    $('.maximum-extension').removeClass("hidden");
+	    $('#maximum-extension').removeClass("hidden");
 	}
 	var xmlthing =
 	    sup.CallServerMethod(null, "status", "MaxExtension",
