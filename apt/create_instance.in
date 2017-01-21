@@ -636,10 +636,12 @@ elsif (!$localuser) {
 	fatal("Project $pid does not exist");
     }
 }
-$tmp = APT_Profile::SetRepo(\$rspecstr, $profile->repourl(),
-			    $reporef, $repohash, $geniuser, \$errmsg);
-if ($tmp) {
-    ($tmp < 0 ? fatal($errmsg) : UserError($errmsg));
+if (defined($profile->repourl())) {
+    $tmp = APT_Profile::SetRepo(\$rspecstr, $profile->repourl(),
+				$reporef, $repohash, $geniuser, \$errmsg);
+    if ($tmp) {
+	($tmp < 0 ? fatal($errmsg) : UserError($errmsg));
+    }
 }
 
 #
