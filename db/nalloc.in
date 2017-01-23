@@ -112,7 +112,6 @@ my @need_clearbl   = ();
 my @need_pxeconfig = ();
 my $errormsg       = "";
 my $admission_ctrl = 0;
-my $slice_expires;
 
 TBDebugTimeStamp("nalloc started");
 
@@ -131,14 +130,6 @@ if (!defined($project)) {
 	"    Could not get project for experiment $experiment!\n");
 }
 
-if( $PGENISUPPORT ) {
-    require GeniSlice;
-    my $slice = GeniSlice->LookupByExperiment( $experiment );
-    if( defined( $slice ) ) {
-	$slice_expires = $slice->expires();
-    }
-}
-    
 #
 # User must have permission to modify the experiment.
 #
@@ -182,6 +173,8 @@ foreach my $n (@node_names) {
     }
 }
 TBDebugTimeStamp("nalloc checked all node permissions");
+
+my $endtime = Reservation->ExpectedEnd( $experiment );
 
 # Argh, MySQL locking rules are horrendous!  These locks are required by
 # low-level library routines; this is a horrible violation of abstraction;
@@ -260,9 +253,6 @@ foreach my $type ( keys( %types ) ) {
 	$unavail_types{ $type } = 1;
     }
 }
-
-my $endtime = $experiment->autoswap() ?
-    time() + $experiment->autoswap_timeout * 60 : $slice_expires;
 
 foreach my $type ( keys( %types ) ) {
     next if( $unavail_types{ $type } );

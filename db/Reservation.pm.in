@@ -307,13 +307,19 @@ sub BeginTransaction($$)
 	return undef;
     }
 
+    # Eagerly update the version.  This isn't always strictly necessary,
+    # but it is always safe.  And doing it now instead of at EndTransaction
+    # time guards against undetected inconsistencies in the case where a
+    # process applies persistent updates while it has the tables locked, but
+    # then dies for some reason before it can EndTransaction.
+    DBQueryFatal( "UPDATE reservation_version SET version=version+1" );
+    
     # We're good.
     return 0;
 }
 
 sub EndTransaction($)
 {
-    DBQueryFatal( "UPDATE reservation_version SET version=version+1" );
     DBQueryFatal( "UNLOCK TABLES" );
 }
 
@@ -543,7 +549,7 @@ sub LookupAll($$)
 	} else {
 	    # Physical nodes with no reservations whatsoever... treat
 	    # them as free since the beginning of time.
-	    my $res = CreateCommon( $class, undef, undef, undef, -1, undef,
+	    my $res = CreateCommon( $class, undef, undef, undef, 0, undef,
 				    $type, $count );
 	    push( @reservations, $res );
 	}
@@ -687,13 +693,17 @@ sub ExtendSlice($$$;$$$) {
 
     my ($class, $slice, $new_expire, $error, $impotent, $force) = @_;
 
-    my $forced = 0;
-    
     if( $new_expire <= str2time( $slice->expires() ) ) {
 	if( $impotent ) {
 	    return 0;
 	} else {
-	    return $slice->SetExpiration( $new_expire );
+	    my $result = $slice->SetExpiration( $new_expire );
+
+	    if( $result < 0 && ref( $error ) ) {
+		$$error = "Couldn't update slice expiration";
+	    }
+
+	    return $result;
 	}
     }
 
@@ -714,23 +724,24 @@ sub ExtendSlice($$$;$$$) {
 		    last;
 		}
 	    }
-	    if( !IsFeasible( $class, $reservations, $error ) ) {
-		if( $force && !$impotent ) {
-		    $forced = 1;
-		} else {
-		    return -1;
-		}
+	    if( !$force && !IsFeasible( $class, $reservations, $error ) ) {
+		return -1;
 	    }
 	}
 	return 0
 	    if( $impotent );
 	next if( !defined( BeginTransaction( $class, $version ) ) );
-	$slice->SetExpiration( $new_expire );
-	EndTransaction( $class );
-	last;
-    }
 
-    return $forced ? -1 : 0;
+	my $result = $slice->SetExpiration( $new_expire );
+
+	if( $result < 0 && ref( $error ) ) {
+	    $$error = "Couldn't update slice expiration";
+	}
+	
+	EndTransaction( $class );
+	
+	return $result;
+    }
 }
 
 #
@@ -783,17 +794,9 @@ sub MaxSliceExtension($$$;$) {
 sub ExpectedEnd($$) {
     
     my ($class, $experiment) = @_;
-    my $slice_expires;
     
-    if( $PGENISUPPORT ) {
-	require GeniSlice;
-	my $slice = GeniSlice->LookupByExperiment( $experiment );
-	if( defined( $slice ) ) {
-	    $slice_expires = $slice->expires();
-	}
-    }
     return $experiment->autoswap() ? time() +
-	$experiment->autoswap_timeout * 60 : $slice_expires;    
+	$experiment->autoswap_timeout * 60 : $experiment->expt_expires();    
 }
 
 #
@@ -818,7 +821,7 @@ sub MaxSwapIn($$$) {
 	    # as available.
 	    $res->{'PID'} = undef;
 	    $res->{'EID'} = undef;
-	    $res->SetStart( -1 );
+	    $res->SetStart( 0 );
 	    $res->SetEnd( undef );
 	}
     }
