@@ -90,6 +90,7 @@ function Do_ChangePassword()
         return;
     }
     $formfields = $ajax_args["formfields"];
+    $this_uid   = $this_user->uid();
     $target_uid = $target_user->uid();
 
     if (isset($formfields["key"])) {
@@ -164,7 +165,7 @@ function Do_ChangePassword()
                          SUEXEC_ACTION_CONTINUE);
     }
     else {
-        $retval = SUEXEC($target_uid, "nobody",
+        $retval = SUEXEC($this_uid, "nobody",
                          "webtbacct passwd $target_uid $safe_encoding",
                          SUEXEC_ACTION_CONTINUE);
     }
