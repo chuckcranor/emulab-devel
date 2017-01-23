@@ -260,11 +260,11 @@ $(function ()
 		    modified = true;
 		});
 	    // Warn user if they have not saved changes.
-	    window.onbeforeunload = function() {
+	    $(window).on('beforeunload.portal', function() {
 		if (! modified)
 		    return null;
 		return "You have unsaved changes!";
-	    }
+	    });
 	}
 	var xmlthing = sup.CallServerMethod(null,
 					    "groups", "MemberList",

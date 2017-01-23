@@ -171,14 +171,15 @@ $(function () {
 	    });
 
 	    // Warn user if they have not saved changes.
-	    window.onbeforeunload = function() {
+	    $(window).on('beforeunload.portal',
+	    function() {
 		if (! form_modified)
-		    return null;
+		    return undefined;
 		return "You have unsaved changes!";
-	    }
+	    });
 	}
 	function DisableUnsavedWarning(form) {
-	    window.onbeforeunload = null;
+	    $(window).off('beforeunload.portal');
 	}
 	function MarkFormUnsaved() {
 	    form_modified = true;

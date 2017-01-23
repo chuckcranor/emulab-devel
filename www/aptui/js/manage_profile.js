@@ -102,11 +102,11 @@ $(function ()
 	}
 
 	// Warn user if they have not saved changes.
-	window.onbeforeunload = function() {
+        $(window).on('beforeunload.portal', function() {
 	    if (! modified)
-		return null;
+		return undefined;
 	    return "You have unsaved changes!";
-	}
+        });
 
 	// Generate the templates.
 	var manage_html   = manageTemplate({
@@ -425,7 +425,7 @@ $(function ()
 		return false;
 	    }
 	    // Disable the Stay on Page alert above.
-	    window.onbeforeunload = null;
+	    $(window).off('beforeunload.portal');
 	    WaitWait();
 	    return true;
 	});
