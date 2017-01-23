@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2005-2016 University of Utah and the Flux Group.
+# Copyright (c) 2005-2017 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -1872,9 +1872,21 @@ sub GList($$)
     # of the list Order matters here, or we won't pick up all the groups
     # we need.
     #
-    my @glist = grep {$_ != $default} split(/\s/, $glist);
-    $glist = $default . " " . $default . " @glist";
+    if (ref($default)) {
+	#
+	# If we got an actual group object, we want the project unix gid
+	# at the beginning and the group unix gid next.
+	#
+	my $pid_gid = $default->GetProject()->unix_gid();
+	my $gid_gid = $default->unix_gid();
 
+	my @glist = grep {$_ != $pid_gid && $_ != $gid_gid} split(/\s/, $glist);
+	$glist = "$pid_gid $pid_gid $gid_gid @glist";
+    }
+    else {
+	my @glist = grep {$_ != $default} split(/\s/, $glist);
+	$glist = $default . " " . $default . " @glist";
+    }
     return $glist;
 }
 
@@ -1914,7 +1926,7 @@ sub UnixGroupList($$)
 #
 sub FlipTo($$)
 {
-    my ($self, $default_gid) = @_;
+    my ($self, $default_group) = @_;
 
     # Must be a real reference. 
     return -1
@@ -1924,10 +1936,13 @@ sub FlipTo($$)
     # to flip to a different user in the case we already flipped.
     $EUID = 0;
 
-    my $glist = $self->GList($default_gid);
+    my $glist = $self->GList($default_group);
     return -1
 	if (!defined($glist));
 
+    my @tmp = split(/\s/, $glist);
+    my $default_gid = $tmp[0];
+    
     $GID            = $default_gid;
     $EGID           = $glist;
     $EUID = $UID    = $self->unix_uid();

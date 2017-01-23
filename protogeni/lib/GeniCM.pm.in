@@ -6947,7 +6947,7 @@ sub GeniExperiment($;$)
     # a member. That means we have to run as the local user.
     #
     if ($project->IsLocal()) {
-	$creator->FlipTo($group->unix_gid());
+	$creator->FlipTo($group);
     }
     elsif (defined($group)) {
 	GeniUtil::FlipToGeniUser($group->unix_gid());
@@ -7042,7 +7042,7 @@ sub FlipToUser($$)
     }
   flip:
     return undef
-	if ($user->FlipTo($group->unix_gid()));
+	if ($user->FlipTo($group));
     return $user;
 }
 
