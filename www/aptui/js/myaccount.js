@@ -36,7 +36,6 @@ $(function ()
 	var myaccount = aptforms.FormatFormFields(myaccountTemplate({
 	    formfields: formfields,
 	    verify_modal: verify,
-	    nopassword: window.APT_OPTIONS.nopassword,
 	}));
 	
 	$('#page-body').html(myaccount);

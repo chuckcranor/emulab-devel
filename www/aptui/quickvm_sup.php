@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2016 University of Utah and the Flux Group.
+# Copyright (c) 2000-2017 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -268,6 +268,7 @@ $PAGEHEADER_FUNCTION = function($thinheader = 0, $ignore1 = NULL,
                    <li><a href='ssh-keys.php'>Manage SSH Keys</a></li>";
         }
         echo "     <li><a href='myaccount.php'>Manage Account</a></li>
+                   <li><a href='changepswd.php'>Change Password</a></li>
                    <li><a href='signup.php'>Start/Join Project</a></li>";
         if ($login_user->IsActive()) {
             echo " <li class='divider'></li>
