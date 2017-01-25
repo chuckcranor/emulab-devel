@@ -55,7 +55,6 @@ use Lease;
 use English;
 use Data::Dumper;
 use File::Basename;
-use URI:URL;
 use File::Temp qw(tempfile :mktemp tmpnam :POSIX);
 use overload ('""' => 'Stringify');
 
