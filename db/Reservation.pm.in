@@ -794,9 +794,14 @@ sub MaxSliceExtension($$$;$) {
 sub ExpectedEnd($$) {
     
     my ($class, $experiment) = @_;
-    
-    return $experiment->autoswap() ? time() +
-	$experiment->autoswap_timeout * 60 : $experiment->expt_expires();    
+
+    if( $experiment->autoswap() ) {
+	return time() + $experiment->autoswap_timeout * 60;
+    } elsif( defined( $experiment->expt_expires() ) ) {
+	return str2time( $experiment->expt_expires() );
+    } else {
+	return undef;
+    }
 }
 
 #
