@@ -56,6 +56,7 @@ use English;
 use Data::Dumper;
 use File::Basename;
 use File::Temp qw(tempfile :mktemp tmpnam :POSIX);
+use URI::URL;
 use overload ('""' => 'Stringify');
 
 # Configure variables
@@ -1213,7 +1214,19 @@ sub SetRepo($$$$$$)
 	$command .= "&& git branch -ft $branchname origin/$branchname" .
 	    "&& git checkout -B $branchname HEAD ";
     }
-    $command .= "&& sudo chown -R $owner .";
+    $command .= "&& sudo chown -R $owner . ";
+
+    #
+    # Generate an SSH url and make that the push url so users can easily
+    # push up (assuming they have the proper credentials loaded).
+    #
+    my $url = new URI::URL $repourl;
+    my $host = $url->host();
+    my ($org,$project) = ($url->path() =~ /^\/([^\/]+)(\/.*)$/);
+    if (defined($org) && defined($project)) {
+	my $sshurl = "git\@${host}:${org}${project}";
+	$command .= "&& git remote set-url --push origin '$sshurl'";
+    }
     
     foreach my $node (GeniXML::FindNodes("n:node", $rspec)->get_nodelist()) {
 	my $service;
