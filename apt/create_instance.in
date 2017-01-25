@@ -90,6 +90,7 @@ my $STITCHER      = "$TB/gcf/src/stitcher.py";
 my $OPENSSL       = "/usr/bin/openssl";
 my $MANAGEINSTANCE= "$TB/bin/manage_instance";
 my $MANAGEDATASET = "$TB/bin/manage_dataset";
+my $MANAGEGITREPO = "$TB/bin/manage_gitrepo";
 my $DEFAULT_URN   = "urn:publicid:IDN+$OURDOMAIN+authority+cm";
 my $GUEST_URN     = "urn:publicid:IDN+apt.emulab.net+authority+cm";
 my $PROTOGENI_LOCALUSER= @PROTOGENI_LOCALUSER@;
@@ -637,6 +638,14 @@ elsif (!$localuser) {
     }
 }
 if (defined($profile->repourl())) {
+    #
+    # Make sure the repo is still accessible.
+    #
+    my $check = emutil::ExecQuiet("$MANAGEGITREPO check ".
+				  "'" . $profile->repourl() . "'");
+    if ($?) {
+	UserError($check);
+    }
     $tmp = APT_Profile::SetRepo(\$rspecstr, $profile->repourl(),
 				$reporef, $repohash, $geniuser, \$errmsg);
     if ($tmp) {
