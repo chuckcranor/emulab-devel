@@ -419,8 +419,8 @@ if (! isset($create)) {
 	    # clone task. If there is one, we have to tell
 	    # the js code to show the status of the clone.
 	    #
-	    $webtask = WebTask::LookupByObject($profile->uuid());
-	    if ($webtask && ! $webtask->exited()) {
+	    $webtask = $profile->webtask();
+	    if ($webtask->TaskValue("cloning")) {
 		$notifyclone = 1;
 	    }
 	}

@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2006-2016 University of Utah and the Flux Group.
+# Copyright (c) 2006-2017 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -110,6 +110,7 @@ class Dataset
     function write_access()  { return $this->field("write_access"); }
     function ispublic()      { return $this->field("public"); }
     function shared()        { return $this->field("shared"); }
+    function webtask_id()    { return $this->field('webtask_id'); }
     function islocal()       { return 0; }
 
     #
@@ -190,6 +191,27 @@ class Dataset
     }
     function grantCommand() {
 	return  "webmanage_dataset modify ";
+    }
+
+    # Grab the webtask. Backwards compat mode, see if there is one associated
+    # with the object, use that. Otherwise create a new one.
+    function WebTask() {
+        if ($this->webtask_id()) {
+            return WebTask::Lookup($this->webtask_id());
+        }
+        $webtask = WebTask::LookupByObject($this->uuid());
+        if (!$webtask) {
+            $webtask = WebTask::CreateAnonymous();
+            if (!$webtask) {
+                return null;
+            }
+        }
+        $idx  = $this->idx();
+        $webtask_id = $webtask->task_id();
+        DBQueryFatal("update apt_datasets set ".
+                         "  webtask_id='$webtask_id' ".
+                         "where idx='$idx'");
+        return $webtask;
     }
 }
 

@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2016 University of Utah and the Flux Group.
+# Copyright (c) 2000-2017 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -205,7 +205,7 @@ $dossh =
 # cannot show that progress. Needs more thought.
 #
 if ($instance_status == "imaging") {
-    $webtask = WebTask::LookupByObject($instance->uuid());
+    $webtask = $instance->WebTask();
     if ($webtask && ! $webtask->exited()) {
 	$snapping = 1;
     }

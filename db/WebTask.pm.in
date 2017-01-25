@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2013-2016 University of Utah and the Flux Group.
+# Copyright (c) 2013-2017 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -133,7 +133,7 @@ sub Create($$;$)
 
     $task_id = TBGenSecretKey()
 	if (!defined($task_id));
-    # XXX
+    # Anonymous webtask.
     $object_uuid = $task_id
 	if (!defined($object_uuid));
 
@@ -151,7 +151,13 @@ sub Create($$;$)
 #
 sub CreateAnonymous()
 {
-    return WebTask->Create(TBGenSecretKey());
+    # We want task_id=object_uuid
+    return WebTask->Create(undef, TBGenSecretKey());
+}
+sub IsAnonymous($)
+{
+    my ($self)  = @_;
+    return ($self->task_id() eq $self->object_uuid() ? 1 : 0);
 }
 
 sub Delete($)

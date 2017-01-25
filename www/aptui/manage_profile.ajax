@@ -44,16 +44,21 @@ function Do_CloneStatus()
     }
     $profile = Profile::Lookup($ajax_args["uuid"]);
     if (!$profile) {
-	SPITAJAX_ERROR(1, "Clone operation failed, could not create disk image");
+	SPITAJAX_ERROR(1, "Clone operation failed, ".
+                       "could not create disk image");
 	return;
     }
     if ($this_idx != $profile->creator_idx() && !ISADMIN()) {
 	SPITAJAX_ERROR(1, "Not enough permission");
 	return;
     }
-    $webtask = WebTask::LookupByObject($profile->uuid());
+    $webtask = $profile->WebTask();
     if (!$webtask) {
 	SPITAJAX_ERROR(1, "No status descriptor found");
+	return;
+    }
+    if (!$webtask->TaskValue("cloning")) {
+	SPITAJAX_ERROR(1, "Cloning has terminated");
 	return;
     }
     $taskdata = $webtask->TaskData();
@@ -755,6 +760,7 @@ function Do_GetRepository()
 	SPITAJAX_ERROR(-1, "Internal webtask Error");
 	return;
     }
+
     #
     # First an existence/access check.
     #
@@ -930,6 +936,7 @@ function UpdateMaster($profile, $script, $rspec)
 	SPITAJAX_ERROR(1, $error);
 	return -1;
     }
+    $webtask->Delete();
     unlink($fname);
     return 0;
 }
@@ -1155,6 +1162,7 @@ function Do_GetCommitInfo()
 	SPITAJAX_ERROR(1, $error);
 	return;
     }
+    $webtask->Delete();
     SPITAJAX_RESPONSE($webtask->TaskValue("commitinfo"));
 }
 

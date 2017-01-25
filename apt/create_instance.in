@@ -822,9 +822,22 @@ if (defined($project)) {
     $blob->{"gid"}     = $group->gid();
     $blob->{"gid_idx"} = $group->gid_idx();
 }
+#
+# Create a webtask so that we can store additional information about
+# the sliver while we wait.
+#
+$webtask = WebTask->Create($quickvm_uuid);
+if (!defined($webtask)) {
+    fatal("Could not create a webtask!");
+}
+$webtask_id = $webtask->task_id();
+$webtask->AutoStore(1);
+$blob->{"webtask_id"} = $webtask_id;
+
 $errmsg = undef;
 $instance = APT_Instance->Create($blob, \$errmsg);
 if (!defined($instance)) {
+    $webtask->Delete();
     fatal(defined($errmsg) ? $errmsg :
 	  "Could not create instance record for $quickvm_uuid");
 }
@@ -872,17 +885,6 @@ foreach my $aggregate_urn (@aggregate_urns) {
 
 # To keep stuff happy until multisite support finished.
 $instance->Update({'aggregate_urn' => $aggregate_urns[0]});
-
-#
-# Create a webtask so that we can store additional information about
-# the sliver while we wait.
-#
-$webtask = WebTask->Create($instance->uuid());
-if (!defined($webtask)) {
-    fatal("Could not create a webtask!");
-}
-$webtask_id = $webtask->task_id();
-$webtask->AutoStore(1);
 
 print STDERR "\n";
 print STDERR "User:    $user_urn\n";

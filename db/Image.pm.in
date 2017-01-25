@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2007-2016 University of Utah and the Flux Group.
+# Copyright (c) 2007-2017 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -35,6 +35,7 @@ use vars qw(@ISA @EXPORT $AUTOLOAD);
 use libdb;
 use EmulabConstants;
 use libtestbed;
+use WebTask;
 use English;
 use Data::Dumper;
 use File::Basename;
@@ -114,6 +115,11 @@ sub BlessRow($$)
     $self->{'HASH'}    = {};
 
     bless($self, $class);
+
+    # Grab the webtask. For images these are transient.
+    if (defined($self->webtask_id())) {
+	$self->{'WEBTASK'} = WebTask->Lookup($self->webtask_id());
+    }
     return $self;
 }
 
@@ -340,9 +346,11 @@ sub isImageAlias($)	{ return 0; }
 sub DESTROY {
     my $self = shift;
 
-    $self->{'IMAGE'} = undef;
-    $self->{'HASH'}  = undef;
+    $self->{'IMAGE'}    = undef;
+    $self->{'HASH'}     = undef;
+    $self->{'WEBTASK'}  = undef;
 }
+sub webtask($)  { return $_[0]->{'WEBTASK'}; }
 
 #
 # Lookup by URL.
@@ -703,7 +711,6 @@ sub Create($$$$$$$$)
     if (exists($argref->{'description'})) {
 	$desc = DBQuoteSpecial($argref->{'description'});
     }
-    
     my $bquery = "imagename='$imagename'";
     $bquery .= ",imageid='$imageid'";
     $bquery .= ",pid='$pid',pid_idx='$pid_idx'";
@@ -712,7 +719,7 @@ sub Create($$$$$$$$)
     # image_versions include all the images stuff.
     my $query = "insert into image_versions set $bquery, ".
 	join(",", map("$_='" . $argref->{$_} . "'", @arg_slots));
-    # except for this. 
+    # except for this.
     $bquery .= ",architecture='$architecture'"
 	if (defined($architecture));
 
@@ -792,7 +799,6 @@ sub Create($$$$$$$$)
 			     "        '$imageid')";
 		 ##print "$query\n";
 		 if (! DBQueryWarn($query)) {
-		     DBQueryWarn("unlock tables");
 		     tberror("Error inserting new ostoimageid mapping for ".
 			     "$pid/$imagename!");
 		     return undef;
@@ -1351,6 +1357,8 @@ sub Delete($;$)
 	or goto bad;
     DBQueryWarn("delete from image_updates where imageid='$imageid'")
 	or goto bad;
+    $self->webtask()->Delete()
+	if (defined($self->webtask()));
     
     if ($purge || !$DOPROVENANCE) {
 	goto bad
@@ -1839,6 +1847,27 @@ sub ClearUploaderPath($)
     my ($self) = @_;
 
     return $self->Update({"uploader_path" => ''});
+}
+
+# Webtask.
+sub SetWebTask($$)
+{
+    my ($self,$webtask) = @_;
+    my $imageid = $self->imageid();
+
+    if (defined($webtask)) {
+	my $webtask_id = $webtask->task_id();
+	
+	DBQueryWarn("update images set webtask_id='$webtask_id' " .
+		    "where imageid='$imageid'")
+	    or return -1;
+    }
+    else {
+	DBQueryWarn("update images set webtask_id=NULL " .
+		    "where imageid='$imageid'")
+	    or return -1;
+    }
+    return 0;
 }
 
 #

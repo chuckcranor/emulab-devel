@@ -1290,7 +1290,8 @@ sub SliverStatus($)
 		if (! (ref($sliver) eq "GeniAggregate::Link" ||
 		       ref($sliver) eq "GeniAggregate::Tunnel"));
 	}
-	elsif ($sliver->resource_type() ne "Node") {
+	elsif ($sliver->resource_type() ne "Node" &&
+	       $sliver->resource_type() ne "Vhost") {
 	    next;
 	}
 	my $sliver_urn = $sliver->sliver_urn();
@@ -3023,8 +3024,10 @@ sub CreateImage($)
     my $update_prepare = 0;
     my ($bsname,$blockstore);
     my $copyback_uuid;
+    my $response;
 
     require EmulabConstants;
+    require Logfile;
     require OSImage;
     require WebTask;
     require GeniEvent;
@@ -3293,42 +3296,30 @@ sub CreateImage($)
 	$image->image_uuid();
     my $version_url = "$TBBASE/image_metadata.php?uuid=" .
 	$image->uuid();
+    # This goes back to the caller.
+    my $retval = [$image_urn, $image_url, $version_urn, $version_url];
+
+    #
+    # Create a web task for this. We pass the id to create image so
+    # that we do not change the image descriptor until it is locked.
+    #
+    my $webtask = WebTask->CreateAnonymous();
+    if (!defined($webtask)) {
+	print STDERR "Could not create web task\n";
+	return GeniResponse->Create(GENIRESPONSE_ERROR);
+    }
+    $webtask->status("preparing");
+    $webtask->imagesize(0);
+    $webtask->Store();
 
     # Mark the sliver for sliver status calls. We can also unlock
     # since the state will prevent anything from being done.
     $sliver->SetState("imaging");
 
     #
-    # Create a task object to track the status. The backend
-    # updates the task structure as the imaging proceeds, and
-    # ImageInfo below can reference that status.
-    #
-    my $webtask = WebTask->Create($image->image_uuid());
-    if (!defined($webtask)) {
-	print STDERR "Could not create new web task structure\n";
-	return GeniResponse->Create(GENIRESPONSE_ERROR);
-    }
-    $webtask->status("preparing");
-    $webtask->imagesize(0);
-    $webtask->Store();
-    
-    #
-    # We used the -s (nosnapshot) option above, to get the descriptor
-    # built, so now run create_image so that we can capture its output.
-    # At some point this might change to let clone do the snapshot,
-    # but when that happens, the email is sent to geniuser.
-    #
-    my $mypid = main::WrapperFork();
-    if ($mypid) {
-	my @blob = ($image_urn, $image_url, $version_urn, $version_url);
-	return GeniResponse->Create(GENIRESPONSE_SUCCESS, \@blob);
-    }
-    $slice->UnLock();
-
-    #
     # Do the snapshot.
     #
-    $opt  = "";
+    $opt  = " -t " . $webtask->task_id();
     $opt .= " -b $bsname" if (defined($bsname));
     $opt .= " -B $copyback_uuid" if (defined($copyback_uuid));
     $opt .= " -U " if ($update_prepare);
@@ -3337,70 +3328,105 @@ sub CreateImage($)
     # was handled in clone_image.
     $imagename = $image->imagename() . ":" . $image->version();
 
+    print STDERR "CreateImage(): '$CREATEIMAGE -F -e $opt -q ".
+	"-p $pid $imagename $node_id'\n";
+
+    $output = GeniUtil::ExecQuiet("$CREATEIMAGE -F -e $opt -q ".
+				  "   -p $pid $imagename $node_id");
+    # Not a typical op, so always print debugging info;
+    print STDERR $output;
+    if ($?) {
+	$slice->UnLock();
+	$response = GeniResponse->Create(GENIRESPONSE_ERROR, undef, $output);
+	goto bad;
+    }
     #
-    # Okay we are going to fork again and watch the webtask for
-    # size changes (and exit of course) and generate Geni style
-    # events.
-    #
-    $mypid = main::WrapperFork();
+    # The imaging operation is running in the background. We can return
+    # the blob and wait for it to finish.
+    # 
+    my $mypid = main::WrapperFork();
     if ($mypid) {
-	my $lastsize = 0;
-	my $laststatus = "";
-	
-	do {
-	    sleep(5);
-	    # Probably deleted.
-	    $webtask->Refresh() == 0
-		or last;
-	    # Check the child, if it is gone we want to stop too.
-	    if (kill(0, $mypid) == 0) {
-		last
-		    if ($!{ESRCH});
+	return GeniResponse->Create(GENIRESPONSE_SUCCESS, $retval);
+    }
+    $slice->UnLock();
+
+    #
+    # We want to read the output file and splat it into this log file. 
+    #
+    my $logfile = $image->GetLogFile();
+    if (!defined($logfile)) {
+	print STDERR "Cannot find logfile $image\n";
+    }
+    elsif ($logfile->OpenFile()) {
+	$logfile = undef;
+    }
+
+    #
+    # Now wait and watch the web task for exit and for size changes
+    # and generate Geni style events.
+    #
+    my $lastsize = 0;
+    my $laststatus = "";
+
+    while (!$webtask->HasExited()) {
+	#
+	# Watch for writes to the logfile, spew to STDERR.
+	#
+	if (defined($logfile)) {
+	    my $buf;
+	    my $cc = $logfile->ReadFile(\$buf);
+	    if (defined($cc) && $cc && defined($buf)) {
+		print STDERR $buf;
+		$output .= $buf;
 	    }
-	    if ($webtask->imagesize() != $lastsize ||
-		$webtask->status() ne $laststatus) {
-		GeniEvent->SendEvent({"type"    => "IMAGESTATUS",
-				      "slice"   => $slice->urn(),
-				      "urn"     => $image_urn,
-				      "details" =>
+	    elsif (!defined($cc)) {
+		# The file was closed, nothing else to do.
+		$logfile = undef;
+	    }
+	}
+	if ($webtask->imagesize() != $lastsize ||
+	    $webtask->status() ne $laststatus) {
+	    GeniEvent->SendEvent({"type"    => "IMAGESTATUS",
+				  "slice"   => $slice->urn(),
+				  "urn"     => $image_urn,
+				  "details" =>
 				          { "utc"    => time(),
 					    "size"   => $webtask->imagesize(),
 					    "status" => $webtask->status()}});
-		$lastsize   = $webtask->imagesize();
-		$laststatus = $webtask->status();
-	    }
-	} while (!$webtask->HasExited());
-	# Sleep a little while to give the caller time to pick up status
-	# since it is polling. Then delete the webtask.
-	sleep(30);
-	$webtask->Delete();
-	waitpid($mypid, &WNOHANG);
-	return 0;
+	    $lastsize   = $webtask->imagesize();
+	    $laststatus = $webtask->status();
+	}
+	sleep(5);
+	# Deleted, but not supposed to happen.
+	if ($webtask->Refresh()) {
+	    print STDERR "$webtask was deleted, not supposed to happen\n";
+	    $webtask = undef;
+	    last;
+	}
     }
-    print STDERR "CM: '$CREATEIMAGE -F -e -f $opt ".
-	"-p $pid $imagename $node_id'\n";
-    
-    $output =
-	GeniUtil::ExecQuiet("$CREATEIMAGE -F -e -f $opt ".
-			    "   -p $pid $imagename $node_id");
-    # Not a typical op, so always print debugging info;
-    print STDERR $output;
     # Return to normal state even if it failed.
     $sliver->SetState("started");
-    if ($?) {
-	print STDERR "Failed to take the snapshot of $node_id\n";
-	$slice->UnLock();
-	if ($user->email()) {
-	    libtestbed::SENDMAIL($user->email(),
-				 ($image->isdataset() ?
-				 "Failed to snapshot dataset" :
-				 "Failed to clone image"),
-				 "$output\n",
-				 $user->email(),
-				 "Bcc: $TBOPS");
+
+    # If we still have the logfile opened read the rest.
+    if (defined($logfile)) {
+	while (1) {
+	    my $buf;
+	    my $cc = $logfile->ReadFile(\$buf);
+	    if (!defined($cc) || $cc == 0) {
+		last;
+	    }
+	    if (defined($buf)) {
+		print STDERR $buf;
+		$output .= $buf;
+	    }
 	}
-	return -1;
+	$logfile->CloseFile();
     }
+    if (!defined($webtask) || $webtask->exitcode()) {
+	print STDERR "Failed to take the snapshot of $node_id\n";
+	goto bad;
+    }
+    
     #
     # If we are using the image tracker, but but not copying the image
     # back (copyback_uuid) then post the image data to the IMS. We do
@@ -3410,6 +3436,13 @@ sub CreateImage($)
     if (GetSiteVar("protogeni/use_imagetracker") && !defined($copyback_uuid)) {
 	system("$POSTIMAGEDATA " . $image->versname());
 	# Failure is okay, the daemon will pick it up.
+    }
+    
+    # Sleep a little while to give the caller time to pick up status
+    # since it is polling. Then delete the webtask.
+    if (defined($webtask)) {
+	sleep(30);
+	# $webtask->Delete();
     }
     
     if ($user->email()) {
@@ -3426,6 +3459,27 @@ sub CreateImage($)
 			     "Bcc: $TBOPS");
     }
     return 0;
+  bad:
+    # Return to normal state even if it failed.
+    $sliver->SetState("started");
+    
+    print STDERR "Failed to take the snapshot of $node_id\n";
+    if ($user->email()) {
+	libtestbed::SENDMAIL($user->email(),
+			     ($image->isdataset() ?
+			      "Failed to snapshot dataset" :
+			      "Failed to clone image"),
+			     "$output\n",
+			     $user->email(),
+			     "Bcc: $TBOPS");
+    }
+    # Sleep a little while to give the caller time to pick up status
+    # since it is polling. Then delete the webtask.
+    sleep(30);
+    $webtask->Delete()
+	if (defined($webtask));
+    
+    return (defined($response) ? $response : -1);
 }
 
 #
@@ -3602,7 +3656,7 @@ sub ImageInfo($)
     # Is there an active webtask, then we are taking a snapshot, so
     # report that info. Otherwise the current file.
     #
-    my $webtask = WebTask->LookupByObject($image->image_uuid());
+    my $webtask = $image->webtask();
     if (defined($webtask)) {
 	$blob->{'size'}   = $webtask->imagesize() . "KB";
 	$blob->{'status'} = $webtask->status();
@@ -3650,7 +3704,7 @@ sub TriggerImageUpdate($)
     }
 
     # Force debugging log.
-    print STDERR Dumper($blob);
+    #print STDERR Dumper($blob);
 
     # Must have all these:
     foreach my $key ("origin_uuid", "imagename", "metadata_url",
@@ -4709,27 +4763,14 @@ sub DescribeDataset($)
 	# Is there an active webtask, then we are taking a snapshot, so
 	# report that info. 
 	#
-	my $webtask = WebTask->LookupByObject($image->image_uuid());
+	my $webtask = $image->webtask();
 	if (defined($webtask)) {
+	    print STDERR Dumper($webtask);
+	    
 	    $blob->{'image_size'}   = $webtask->imagesize() . "KB";
 	    $blob->{'image_status'} = $webtask->status();
 
-	    #
-	    # We have reported status, kill it. So if two parties are
-	    # trying to determine the status, one gets nothing. Maybe
-	    # we need a notion of staleness.
-	    #
-	    if ($webtask->HasExited()) {
-		# Final size.
-		if ($image->size()) {
-		    my $kbytes = int(($image->lba_high() -
-				      $image->lba_low() + 1) /
-				     (1024 / $image->lba_size()));
-		    $blob->{'image_size'} = $kbytes . "KB";
-		}
-		$webtask->Delete();
-	    }
-	    else {
+	    if (!$webtask->HasExited()) {
 		$blob->{'state'} = "allocating";
 		$blob->{'busy'}  = 1;
 	    }
@@ -4741,7 +4782,7 @@ sub DescribeDataset($)
 	    $blob->{'size'} =
 		Blockstore::ConvertToMebi("$kbytes" . "KB");
 	}
-	print STDERR Dumper($blob);
+	#print STDERR Dumper($blob);
     }
     return GeniResponse->Create(GENIRESPONSE_SUCCESS, $blob);
 }

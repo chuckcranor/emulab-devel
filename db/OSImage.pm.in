@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2007-2016 University of Utah and the Flux Group.
+# Copyright (c) 2007-2017 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -738,6 +738,14 @@ sub SetRange($$$;$$)
     return $self->image()->SetRange($start,$end,$ssize,$isreloc);
 }
 
+# WebTask
+sub SetWebTask($$)
+{
+    my ($self,$webtask) = @_;
+
+    return $self->image()->SetWebTask($webtask);
+}
+
 #
 # Lock and Unlock. We lock the entire chain (all versions) of the
 # image. 
@@ -954,6 +962,16 @@ sub IsNewest($)
     my ($self) = @_;
 
     return $self->image()->IsNewest();
+}
+
+#
+# Grab webtask from image.
+#
+sub webtask($)
+{
+    my ($self) = @_;
+
+    return $self->image()->webtask();
 }
 
 #

@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2000-2016 University of Utah and the Flux Group.
+# Copyright (c) 2000-2017 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -175,6 +175,17 @@ if (!defined($instance)) {
 if (!defined($instance)) {
     fatal("No such instance $uuid");
 }
+#
+# Grab the webtask object.
+#
+if (defined($webtask_id)) {
+    $webtask = WebTask->Lookup($webtask_id);
+    if (!defined($webtask)) {
+	fatal("Could not lookup/create webtask for profile");
+    }
+    $webtask->AutoStore(1);
+}
+
 if (getpwuid($UID) eq "nobody") {
     $this_user = User->ImpliedUser();
 }
@@ -517,19 +528,20 @@ sub DoSnapshot()
     $needunlock = 1;
 
     #
-    # Create the webtask object, but AFTER locking the slice so we do
-    # not destroy one in use.
+    # Grab the webtask, but only after we have it locked, since we are
+    # going to modify it. This is a different webtask then the one we
+    # got on the command line. The command line webtask is for reporting
+    # he results of the command, while the instance webtask is used to
+    # report ongoing status of the imaging operation (to the web UI).
     #
-    if (defined($webtask_id)) {
-	$webtask = WebTask->LookupOrCreate($instance->uuid(), $webtask_id);
-	# Convenient.
-	$webtask->AutoStore(1);
-	# This is convenience for the web server.
-	if (defined($webtask)) {
-	    $webtask->aggregate_urn($aggregate->aggregate_urn());
-	    $webtask->client_id($node_id);
-	}
-    }
+    my $swebtask = $instance->webtask();
+    # We reuse this so clear it.
+    $swebtask->Reset();
+    $swebtask->AutoStore(1);
+    # This is convenience for the web server.
+    $swebtask->aggregate_urn($aggregate->aggregate_urn());
+    $swebtask->client_id($node_id);
+    
     $instance->SetStatus("imaging");
     $aggregate->SetStatus("imaging");
 
@@ -562,9 +574,9 @@ sub DoSnapshot()
 	$version_urn = $image_urn;
 	$version_url = $image_url
     }
-    if (defined($webtask)) {
-	$webtask->image_urn($version_urn);
-	$webtask->image_url($version_url);
+    if (defined($swebtask)) {
+	$swebtask->image_urn($version_urn);
+	$swebtask->image_url($version_url);
 	my $image_name;
 
 	if ($usetracker) {
@@ -580,12 +592,12 @@ sub DoSnapshot()
 	else {
 	    $image_name = $version_url;
 	}
-	$webtask->image_name($image_name);
+	$swebtask->image_name($image_name);
 
 	# We tell the web interface that the image has to be copied
 	# back,
 	if (defined($copyback_uuid)) {
-	    $webtask->copyback_uuid($copyback_uuid);
+	    $swebtask->copyback_uuid($copyback_uuid);
 	}
     }
     else {
@@ -607,8 +619,8 @@ sub DoSnapshot()
     }
     # Bind the process id. This is important when the caller is
     # manage_profile, doing a clone.
-    $webtask->SetProcessID($PID)
-	if (defined($webtask));
+    $swebtask->SetProcessID($PID)
+	if (defined($swebtask));
 
     #
     # Poll for a reasonable amount of time.
@@ -667,7 +679,7 @@ sub DoSnapshot()
 		$response->code() == GENIRESPONSE_RPCERROR);
 
 	my $imageblob = $response->value();
-	if (defined($webtask)) {
+	if (defined($swebtask)) {
 	    my %blobcopy = %{ $imageblob };
 
 	    #
@@ -691,8 +703,8 @@ sub DoSnapshot()
 	}
     }
     # Cause of image status events.
-    $webtask->Refresh()
-	if (defined($webtask));
+    $swebtask->Refresh()
+	if (defined($swebtask));
     
     if ($failed) {
 	$errmsg = "Imaging failed"
@@ -767,15 +779,15 @@ sub DoSnapshot()
 	    $errcode = 1;
 	    goto bad;
 	}
-	elsif (defined($webtask)) {
-	    $webtask->image_status("ready");
+	elsif (defined($swebtask)) {
+	    $swebtask->image_status("ready");
 	}
     }
-    # We garbage collect these later, so anyone waiting has a chance
-    # to see the exit status
+    $swebtask->Exited(0);
     $webtask->Exited(0)
 	if (defined($webtask));
     $slice->UnLock();
+    
     if (defined($logfile) && -s $logfile) {
 	SENDMAIL($TBOPS,
 		 "Instance Snapshot Complete",
@@ -815,6 +827,9 @@ sub DoSnapshot()
 	$webtask->Exited($errcode);
 	$webtask->output($errmsg);
     }
+    # For display in the imaging modal.
+    $swebtask->Exited($errcode);
+    $swebtask->output($errmsg);
     $slice->UnLock()
 	if ($needunlock);
 
@@ -950,15 +965,6 @@ sub DoConsole()
 	if (!@ARGV);
     my $node_id = shift(@ARGV);
 
-    if (defined($webtask_id)) {
-	$webtask = WebTask->LookupOrCreate(undef, $webtask_id);
-	if (!defined($webtask)) {
-	    fatal("Could not lookup/create webtask for $webtask_id");
-	}
-	# Convenient.
-	$webtask->AutoStore(1);
-    }
-    
     #
     # Sanity check to make sure the node is really in the rspec, since
     # we need its sliver urn to ask for the console url.
@@ -1280,17 +1286,7 @@ sub DoExtend()
     if (defined($options{"h"})) {
 	$inhours = 1;
     }
-    #
-    # Create the webtask object; the web interface gave us an anonymous
-    # webtask, so we can use it before lock.
-    #
-    if (defined($webtask_id)) {
-	$webtask = WebTask->Lookup($webtask_id);
-	fatal("Could not lookup webtask object")
-	    if (!defined($webtask));
-	# Convenient.
-	$webtask->AutoStore(1);
-    }
+
     #
     # Lock the slice in case it is doing something else, like taking
     # a disk image.
@@ -1740,17 +1736,7 @@ sub DoCheckReservation()
     my $expiration = POSIX::strftime("20%y-%m-%d %H:%M:%S %Z",
 				     localtime(str2time($slice->expires()) +
 					       3600 * 24 * $wanted));
-    #
-    # Create the webtask object; the web interface gave us an anonymous
-    # webtask, so we can use it before lock.
-    #
-    if (defined($webtask_id)) {
-	$webtask = WebTask->Lookup($webtask_id);
-	fatal("Could not lookup webtask object")
-	    if (!defined($webtask));
-	# Convenient.
-	$webtask->AutoStore(1);
-    }
+
     if ($slice->Lock()) {
 	print STDERR "Experiment is busy, cannot lock it. Try again later.\n";
 	exit(GENIRESPONSE_BUSY);
@@ -1867,17 +1853,6 @@ sub DoMaxExtension()
     my $errmsg;
     my $newmax;
 
-    #
-    # Create the webtask object; the web interface gave us an anonymous
-    # webtask, so we can use it before lock.
-    #
-    if (defined($webtask_id)) {
-	$webtask = WebTask->Lookup($webtask_id);
-	fatal("Could not lookup webtask object")
-	    if (!defined($webtask));
-	# Convenient.
-	$webtask->AutoStore(1);
-    }
     if ($slice->Lock()) {
 	print STDERR "Experiment is busy, cannot lock it. Try again later.\n";
 	exit(GENIRESPONSE_BUSY);
@@ -2232,16 +2207,6 @@ sub DoRefresh()
 	$errmsg = "Experiment is busy, cannot lock it. Please try again later";
 	goto bad;
     }
-    #
-    # Create the webtask object, but AFTER locking the slice so we do
-    # not destroy one in use.
-    #
-    if (defined($webtask_id)) {
-	$webtask = WebTask->LookupOrCreate($instance->uuid(), $webtask_id);
-	# Convenient.
-	$webtask->AutoStore(1);
-    }
-
     my $coderef = sub {
 	my ($sliver) = @_;
 	my $webtask  = $sliver->webtask();
@@ -2506,16 +2471,6 @@ sub DoManifests()
 	$errmsg = "Experiment is busy, cannot lock it. Please try again later";
 	goto bad;
     }
-    #
-    # Create the webtask object, but AFTER locking the slice so we do
-    # not destroy one in use.
-    #
-    if (defined($webtask_id)) {
-	$webtask = WebTask->LookupOrCreate($instance->uuid(), $webtask_id);
-	# Convenient.
-	$webtask->AutoStore(1);
-    }
-
     my $coderef = sub {
 	my ($sliver) = @_;
 	my $webtask  = $sliver->webtask();
@@ -2639,17 +2594,6 @@ sub DoDeleteNodes()
 	$errmsg = "Experiment is busy, cannot lock it. Please try again later";
 	goto bad;
     }
-
-    #
-    # Create the webtask object, but AFTER locking the slice so we do
-    # not destroy one in use.
-    #
-    if (defined($webtask_id)) {
-	$webtask = WebTask->LookupOrCreate($instance->uuid(), $webtask_id);
-	# Convenient.
-	$webtask->AutoStore(1);
-    }
-
     my $coderef = sub {
 	my ($sliver) = @_;
 	my $webtask  = $sliver->webtask();
@@ -2803,15 +2747,6 @@ sub StartMonitor()
     
     if (@ARGV && $ARGV[0] eq "-w") {
 	$waitforstartup = 1;
-    }
-
-    if (defined($webtask_id)) {
-	$webtask = WebTask->LookupOrCreate($instance->uuid(), $webtask_id);
-	if (!defined($webtask)) {
-	    fatal("Could not lookup/create webtask for $webtask_id");
-	}
-	# Convenient.
-	$webtask->AutoStore(1);
     }
     return StartMonitorInternal($waitforstartup);
 }
@@ -3117,16 +3052,6 @@ sub DoPanic()
 	fatal("Experiment is busy, cannot lock it. Please try again later");
     }
     #
-    # Create the webtask object, but AFTER locking the slice so we do
-    # not destroy one in use.
-    #
-    if (defined($webtask_id)) {
-	$webtask = WebTask->LookupOrCreate($instance->uuid(), $webtask_id);
-	# Convenient.
-	$webtask->AutoStore(1);
-    }
-
-    #
     # And tell the backend clusters to lockdown the slice.
     #
     my $coderef = sub {
@@ -3230,16 +3155,6 @@ sub DoLinktest()
 	    fatal("Linktest is not running!");
 	}
     }
-    #
-    # Create the webtask object, but AFTER locking the slice so we do
-    # not destroy one in use.
-    #
-    if (defined($webtask_id)) {
-	$webtask = WebTask->LookupOrCreate($instance->uuid(), $webtask_id);
-	# Convenient.
-	$webtask->AutoStore(1);
-    }
-
     #
     # And tell the backend clusters to run linktest
     #
@@ -3443,16 +3358,6 @@ sub DoUpdateKeys()
 	fatal("Slice is busy, cannot lock it");
     }
     #
-    # Create the webtask object, but AFTER locking the slice so we do
-    # not destroy one in use.
-    #
-    if (defined($webtask_id)) {
-	$webtask = WebTask->LookupOrCreate($instance->uuid(), $webtask_id);
-	# Convenient.
-	$webtask->AutoStore(1);
-    }
-
-    #
     # And tell the backend clusters to do the update.
     #
     my $coderef = sub {
@@ -3524,18 +3429,6 @@ sub DoUtilization()
     my $errmsg;
     my $errcode = 1;
     
-    #
-    # Create the webtask object; the web interface gave us an anonymous
-    # webtask, so we can use it before lock.
-    #
-    if (defined($webtask_id)) {
-	$webtask = WebTask->Lookup($webtask_id);
-	fatal("Could not lookup webtask object")
-	    if (!defined($webtask));
-	# Convenient.
-	$webtask->AutoStore(1);
-    }
-
     #
     # Get the nodeid to client id mapping
     #
@@ -3641,18 +3534,6 @@ sub DoOpenstack()
     my $errcode = 1;
     
     #
-    # Create the webtask object; the web interface gave us an anonymous
-    # webtask, so we can use it before lock.
-    #
-    if (defined($webtask_id)) {
-	$webtask = WebTask->Lookup($webtask_id);
-	fatal("Could not lookup webtask object")
-	    if (!defined($webtask));
-	# Convenient.
-	$webtask->AutoStore(1);
-    }
-
-    #
     # Need to look inside the rspec to find the name of the controller node.
     #
     if (scalar($instance->AggregateList()) > 1) {
@@ -3735,18 +3616,6 @@ sub DoIdleData()
     my $errmsg;
     my $errcode = 1;
     
-    #
-    # Create the webtask object; the web interface gave us an anonymous
-    # webtask, so we can use it before lock.
-    #
-    if (defined($webtask_id)) {
-	$webtask = WebTask->Lookup($webtask_id);
-	fatal("Could not lookup webtask object")
-	    if (!defined($webtask));
-	# Convenient.
-	$webtask->AutoStore(1);
-    }
-
     #
     # And ask the backend clusters for the data.
     #
@@ -3864,17 +3733,6 @@ sub DoSchedTerminate()
 	    $reason .= $_;
 	}
 	close(MSG);
-    }
-    #
-    # Create the webtask object; the web interface gave us an anonymous
-    # webtask, so we can use it before lock.
-    #
-    if (defined($webtask_id)) {
-	$webtask = WebTask->Lookup($webtask_id);
-	fatal("Could not lookup webtask object")
-	    if (!defined($webtask));
-	# Convenient.
-	$webtask->AutoStore(1);
     }
     #
     # Lock the slice in case it is doing something else, like taking

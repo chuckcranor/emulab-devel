@@ -139,7 +139,7 @@ function Do_GetInstanceStatus()
     $blob["haveopenstackstats"] = $haveopenstack;
 
     # Reflect errors back to the user.
-    $webtask = WebTask::LookupByObject($instance->uuid());
+    $webtask = $instance->WebTask();
     if ($webtask && $webtask->exited()) {
         if ($webtask->exitcode() == GENIRESPONSE_INSUFFICIENT_NODES) {
             $blob["reason"]  = "Not enough free nodes, please try again later.";
@@ -194,7 +194,8 @@ function Do_TerminateInstance()
 	return;
     }
     $uuid = $instance->uuid();
-    $webtask_id = WebTask::GenerateID();
+    $webtask = WebTask::CreateAnonymous();
+    $webtask_id = $webtask->task_id();
 
     if ($instance->admin_lockdown() || $instance->user_lockdown()) {
         if (! (isset($this_user) &&
@@ -208,6 +209,7 @@ function Do_TerminateInstance()
         if (! (isset($ajax_args["lockdown_override"]) &&
                $ajax_args["lockdown_override"] == $override)) {
             SPITAJAX_ERROR(1, "Lockdown override is incorrect");
+            $webtask->Delete();
             return;
         }
         $retval = SUEXEC($this_user->uid(), "nobody",
@@ -215,7 +217,7 @@ function Do_TerminateInstance()
                          "  lockdown $uuid clear all",
                          SUEXEC_ACTION_CONTINUE);
         if ($retval) {
-            $webtask = WebTask::Lookup($webtask_id);
+            $webtask->Refresh();
 
             if ($webtask && $webtask->exited()) {
                 SPITAJAX_ERROR(1, $webtask->TaskValue("output"));
@@ -224,22 +226,27 @@ function Do_TerminateInstance()
             else {
                 SPITAJAX_ERROR(-1, "Internal Error. Please try again later");
             }
+            $webtask->Delete();
             return;
         }
     }
+    $webtask->Reset();
+    
     # We do not want to see the busy errors, and that is the only error
     # that gets returned, that is not also emailed by the script. So just
     # use the ignore option.
     $retval = SUEXEC("nobody", "nobody",
-                     "webmanage_instance terminate $uuid",
+                     "webmanage_instance -t $webtask_id terminate $uuid",
                      SUEXEC_ACTION_IGNORE);
 
     if ($retval == 0) {
 	SPITAJAX_RESPONSE("");
-	return;
     }
-    SPITAJAX_ERROR(-1, "Your experiment is probably busy, ".
-        "please try again later.");
+    else {
+        SPITAJAX_ERROR(-1, "Your experiment is probably busy, ".
+                       "please try again later.");
+    }
+    $webtask->Delete();
 }
 
 #
@@ -845,12 +852,13 @@ function Do_ConsoleURL()
 	SPITAJAX_ERROR(1, "no slice for instance");
 	return 1;
     }
-    $webtask_id = WebTask::GenerateID();
+    $webtask = WebTask::CreateAnonymous();
     $retval = SUEXEC("nobody", "nobody",
-		     "webmanage_instance -t $webtask_id -- consoleurl $uuid " .
+		     "webmanage_instance -t " . $webtask->task_id() . " ".
+                     "  consoleurl $uuid " .
 		     escapeshellarg($node),
 		     SUEXEC_ACTION_IGNORE);
-    $webtask = WebTask::Lookup($webtask_id);
+    $webtask->Refresh();
 
     if ($retval == 0) {
         $taskdata = $webtask->TaskData();
@@ -869,16 +877,8 @@ function Do_ConsoleURL()
     elseif ($retval < 0) {
         SUEXECERROR(SUEXEC_ACTION_CONTINUE);
     }
-    if ($webtask) {
-	SPITAJAX_ERROR(1, $webtask->TaskValue("output"));
-	$webtask->Delete();
-    }
-    elseif ($suexec_output != "") {
-        SPITAJAX_ERROR(1, $suexec_output);
-    }
-    else {
-	SPITAJAX_ERROR(-1, "Internal Error. Please try again later");
-    }
+    SPITAJAX_ERROR(1, $webtask->TaskValue("output"));
+    $webtask->Delete();
 }
 
 #
@@ -964,12 +964,12 @@ function Do_Snapshot()
     #
     # Call out to the backend.
     #
-    $webtask_id = WebTask::GenerateID();
+    $webtask = WebTask::CreateAnonymous();
     $retval = SUEXEC($this_user->uid(), "nobody",
-		     "webmanage_instance -t $webtask_id -- ".
+		     "webmanage_instance -t " . $webtask->task_id() . " " .
                      "  snapshot $uuid $optargs",
 		     SUEXEC_ACTION_IGNORE);
-    $webtask = WebTask::Lookup($webtask_id);
+    $webtask->Refresh();
 
     if ($retval != 0) {
 	if ($retval < 0) {
@@ -977,23 +977,13 @@ function Do_Snapshot()
 	    # Notify tbops.
 	    SUEXECERROR(SUEXEC_ACTION_CONTINUE);
 	}
-	elseif ($webtask) {
-	    SPITAJAX_ERROR(1, $webtask->TaskValue("output"));
-	}
-	elseif ($suexec_output != "") {
-	    SPITAJAX_ERROR(1, $suexec_output);
+        else {
+            SPITAJAX_ERROR(1, $webtask->TaskValue("output"));
         }
-	else {
-	    SPITAJAX_ERROR(-1, "Internal Error. Please try again later");
-	}
-	if ($webtask) {
-	    $webtask->Delete();
-	}
+        $webtask->Delete();
 	return;
     }
-    if ($webtask && $webtask->exited()) {
-	$webtask->Delete();
-    }
+    $webtask->Delete();
     SPITAJAX_RESPONSE("Success");
 }
 
@@ -1013,8 +1003,11 @@ function Do_SnapshotStatus()
 	return;
     }
     $this_idx = $this_user->uid_idx();
-    
-    $webtask = WebTask::LookupByObject($instance->uuid());
+    if ($this_idx != $instance->creator_idx() && !ISADMIN()) {
+	SPITAJAX_ERROR(1, "Not enough permission");
+	return;
+    }
+    $webtask = $instance->WebTask();
     if (!$webtask) {
 	SPITAJAX_ERROR(1, "No status descriptor found");
 	return;
@@ -1065,7 +1058,6 @@ function Do_SnapshotStatus()
         if (isset($taskdata["image_name"])) {
             $blob["image_name"] = $taskdata["image_name"];
         }
-	$webtask->Delete();
     }
     SPITAJAX_RESPONSE($blob);
 }
@@ -1089,11 +1081,12 @@ function Do_Refresh()
     #
     # Call out to the backend.
     #
-    $webtask_id = WebTask::GenerateID();
+    $webtask = WebTask::CreateAnonymous();
     $retval = SUEXEC("nobody", "nobody",
-		     "webmanage_instance -t $webtask_id -- refresh $uuid",
+		     "webmanage_instance -t " . $webtask->task_id() .
+                     " refresh $uuid",
 		     SUEXEC_ACTION_IGNORE);
-    $webtask = WebTask::Lookup($webtask_id);
+    $webtask->Refresh();
 
     if ($retval != 0) {
 	if ($retval < 0) {
@@ -1101,20 +1094,13 @@ function Do_Refresh()
 	    # Notify tbops.
 	    SUEXECERROR(SUEXEC_ACTION_CONTINUE);
 	}
-	elseif ($webtask) {
-	    SPITAJAX_ERROR(1, $webtask->TaskValue("output"));
-	}
-	elseif ($suexec_output != "") {
-	    SPITAJAX_ERROR(1, $suexec_output);
+        else {
+            SPITAJAX_ERROR(1, $webtask->TaskValue("output"));
         }
-	else {
-	    SPITAJAX_ERROR(-1, "Internal Error. Please try again later");
-	}
-	if ($webtask) {
-	    $webtask->Delete();
-	}
+        $webtask->Delete();
 	return;
     }
+    $webtask->Delete();
     SPITAJAX_RESPONSE("Success");
 }
 
@@ -1134,11 +1120,12 @@ function Do_ReloadTopology()
     #
     # Call out to the backend.
     #
-    $webtask_id = WebTask::GenerateID();
+    $webtask = WebTask::CreateAnonymous();
     $retval = SUEXEC("nobody", "nobody",
-		     "webmanage_instance -t $webtask_id -- getmanifests $uuid",
+		     "webmanage_instance -t " . $webtask->task_id() .
+                     "  getmanifests $uuid",
 		     SUEXEC_ACTION_IGNORE);
-    $webtask = WebTask::Lookup($webtask_id);
+    $webtask-Refresh();
 
     if ($retval != 0) {
 	if ($retval < 0) {
@@ -1146,20 +1133,13 @@ function Do_ReloadTopology()
 	    # Notify tbops.
 	    SUEXECERROR(SUEXEC_ACTION_CONTINUE);
 	}
-	elseif ($webtask) {
-	    SPITAJAX_ERROR(1, $webtask->TaskValue("output"));
-	}
-	elseif ($suexec_output != "") {
-	    SPITAJAX_ERROR(1, $suexec_output);
+        else {
+            SPITAJAX_ERROR(1, $webtask->TaskValue("output"));
         }
-	else {
-	    SPITAJAX_ERROR(-1, "Internal Error. Please try again later");
-	}
-	if ($webtask) {
-	    $webtask->Delete();
-	}
+        $webtask->Delete();
 	return;
     }
+    $webtask->Delete();
     SPITAJAX_RESPONSE("Success");
 }
 
@@ -1214,12 +1194,12 @@ function Do_RebootOrReload($which)
     #
     # Call out to the backend.
     #
-    $webtask_id = WebTask::GenerateID();
+    $webtask = WebTask::CreateAnonymous();
     $retval = SUEXEC("nobody", "nobody",
-		     "webmanage_instance -t $webtask_id -- ".
+		     "webmanage_instance -t " . $webtask->task_id() .
                      "  $which $uuid $nodelist",
 		     SUEXEC_ACTION_IGNORE);
-    $webtask = WebTask::Lookup($webtask_id);
+    $webtask->Refresh();
 
     if ($retval != 0) {
 	if ($retval < 0) {
@@ -1227,24 +1207,13 @@ function Do_RebootOrReload($which)
 	    # Notify tbops.
 	    SUEXECERROR(SUEXEC_ACTION_CONTINUE);
 	}
-	elseif ($webtask) {
-	    SPITAJAX_ERROR(1, $webtask->TaskValue("output"));
-	}
-	elseif ($suexec_output != "") {
-	    SPITAJAX_ERROR(1, $suexec_output);
-        }
         else {
-	    SUEXECERROR(SUEXEC_ACTION_CONTINUE);
-	    SPITAJAX_ERROR(-1, "Internal Error. Please try again later");
-	}
-	if ($webtask) {
-	    $webtask->Delete();
-	}
+            SPITAJAX_ERROR(1, $webtask->TaskValue("output"));
+        }
+        $webtask->Delete();
 	return;
     }
-    if ($webtask) {
-	$webtask->Delete();
-    }
+    $webtask->Delete();
     SPITAJAX_RESPONSE("Success");
 }
 function Do_Reboot()
@@ -1298,12 +1267,12 @@ function Do_DeleteNodes()
     #
     # Call out to the backend.
     #
-    $webtask_id = WebTask::GenerateID();
+    $webtask = WebTask::CreateAnonymous();
     $retval = SUEXEC("nobody", "nobody",
-		     "webmanage_instance -t $webtask_id -- ".
+		     "webmanage_instance -t " . $webtask->task_id() .
                      "  deletenodes $uuid $nodelist",
 		     SUEXEC_ACTION_IGNORE);
-    $webtask = WebTask::Lookup($webtask_id);
+    $webtask->Refresh();
 
     if ($retval != 0) {
 	if ($retval < 0) {
@@ -1311,24 +1280,13 @@ function Do_DeleteNodes()
 	    # Notify tbops.
 	    SUEXECERROR(SUEXEC_ACTION_CONTINUE);
 	}
-	elseif ($webtask) {
-	    SPITAJAX_ERROR(1, $webtask->TaskValue("output"));
-	}
-	elseif ($suexec_output != "") {
-	    SPITAJAX_ERROR(1, $suexec_output);
-        }
         else {
-	    SUEXECERROR(SUEXEC_ACTION_CONTINUE);
-	    SPITAJAX_ERROR(-1, "Internal Error. Please try again later");
-	}
-	if ($webtask) {
-	    $webtask->Delete();
-	}
+            SPITAJAX_ERROR(1, $webtask->TaskValue("output"));
+        }
+        $webtask->Delete();
 	return;
     }
-    if ($webtask) {
-	$webtask->Delete();
-    }
+    $webtask->Delete();
     SPITAJAX_RESPONSE("Success");
 }
 
@@ -1460,12 +1418,12 @@ function Do_Lockdown()
     #
     # Call out to the backend.
     #
-    $webtask_id = WebTask::GenerateID();
+    $webtask = WebTask::CreateAnonymous();
     $retval = SUEXEC("nobody", "nobody",
-		     "webmanage_instance -t $webtask_id -- ".
+		     "webmanage_instance -t " . $webtask->task_id() .
                      "  lockdown $uuid $action admin ",
 		     SUEXEC_ACTION_IGNORE);
-    $webtask = WebTask::Lookup($webtask_id);
+    $webtask->Refresh();
 
     if ($retval != 0) {
 	if ($retval < 0) {
@@ -1473,24 +1431,13 @@ function Do_Lockdown()
 	    # Notify tbops.
 	    SUEXECERROR(SUEXEC_ACTION_CONTINUE);
 	}
-	elseif ($webtask) {
-	    SPITAJAX_ERROR(1, $webtask->TaskValue("output"));
-	}
-	elseif ($suexec_output != "") {
-	    SPITAJAX_ERROR(1, $suexec_output);
-        }
         else {
-	    SUEXECERROR(SUEXEC_ACTION_CONTINUE);
-	    SPITAJAX_ERROR(-1, "Internal Error. Please try again later");
-	}
-	if ($webtask) {
-	    $webtask->Delete();
-	}
+            SPITAJAX_ERROR(1, $webtask->TaskValue("output"));
+        }
+        $webtask->Delete();
 	return;
     }
-    if ($webtask) {
-	$webtask->Delete();
-    }
+    $webtask->Delete();
     SPITAJAX_RESPONSE("Success");
 }
 
@@ -1524,11 +1471,12 @@ function Do_Quarantine()
 	return;
     }
 
-    $webtask_id = WebTask::GenerateID();
+    $webtask = WebTask::CreateAnonymous();
     $retval = SUEXEC($this_user->uid(), "nobody",
-		     "webmanage_instance -t $webtask_id -- panic $uuid $which",
+		     "webmanage_instance -t " . $webtask->task_id() . 
+                     "  panic $uuid $which",
 		     SUEXEC_ACTION_IGNORE);
-    $webtask = WebTask::Lookup($webtask_id);
+    $webtask->Refresh();
 
     if ($retval != 0) {
 	if ($retval < 0) {
@@ -1536,24 +1484,13 @@ function Do_Quarantine()
 	    # Notify tbops.
 	    SUEXECERROR(SUEXEC_ACTION_CONTINUE);
 	}
-	elseif ($webtask) {
+	else {
 	    SPITAJAX_ERROR(1, $webtask->TaskValue("output"));
-	}
-	elseif ($suexec_output != "") {
-	    SPITAJAX_ERROR(1, $suexec_output);
         }
-        else {
-	    SUEXECERROR(SUEXEC_ACTION_CONTINUE);
-	    SPITAJAX_ERROR(-1, "Internal Error. Please try again later");
-	}
-	if ($webtask) {
-	    $webtask->Delete();
-	}
+        $webtask->Delete();
 	return;
     }
-    if ($webtask) {
-	$webtask->Delete();
-    }
+    $webtask->Delete();
     SPITAJAX_RESPONSE("Success");
 }
 
@@ -1586,12 +1523,12 @@ function Do_Linktest()
             SPITAJAX_ERROR(1, "Linktest already running");
             return;
         }
-        $webtask_id = WebTask::GenerateID();
+        $webtask = WebTask::CreateAnonymous();
         $retval = SUEXEC("nobody", "nobody",
-                         "webmanage_instance -t $webtask_id -- ".
-                         "linktest $uuid $level",
+                         "webmanage_instance -t " . $webtask->task_id() .
+                         " linktest $uuid $level",
                          SUEXEC_ACTION_IGNORE);
-        $webtask = WebTask::Lookup($webtask_id);
+        $webtask->Refresh();
 
         if ($retval != 0) {
             if ($retval < 0) {
@@ -1599,16 +1536,10 @@ function Do_Linktest()
                 # Notify tbops.
                 SUEXECERROR(SUEXEC_ACTION_CONTINUE);
             }
-            elseif ($webtask) {
+            else {
                 SPITAJAX_ERROR(1, $webtask->TaskValue("output"));
             }
-            else {
-                SUEXECERROR(SUEXEC_ACTION_CONTINUE);
-                SPITAJAX_ERROR(-1, "Internal Error. Please try again later");
-            }
-            if ($webtask) {
-                $webtask->Delete();
-            }
+            $webtask->Delete();
             return;
         }
         # This one does not tell us anything.
@@ -1639,12 +1570,12 @@ function Do_Linktest()
             SPITAJAX_RESPONSE(0);
             return;
         }
-        $webtask_id = WebTask::GenerateID();
+        $webtask = WebTask::CreateAnonymous();
         $retval = SUEXEC("nobody", "nobody",
-                         "webmanage_instance -t $webtask_id -- ".
-                         "linktest $uuid -k",
+                         "webmanage_instance -t " . $webtask->task_id() .
+                         "  linktest $uuid -k",
                          SUEXEC_ACTION_IGNORE);
-        $webtask = WebTask::Lookup($webtask_id);
+        $webtask->Refresh();
 
         if ($retval != 0) {
             if ($retval < 0) {
@@ -1652,19 +1583,14 @@ function Do_Linktest()
                 # Notify tbops.
                 SUEXECERROR(SUEXEC_ACTION_CONTINUE);
             }
-            elseif ($webtask) {
+            else {
                 SPITAJAX_ERROR(1, $webtask->TaskValue("output"));
             }
-            else {
-                SUEXECERROR(SUEXEC_ACTION_CONTINUE);
-                SPITAJAX_ERROR(-1, "Internal Error. Please try again later");
-            }
-            if ($webtask) {
-                $webtask->Delete();
-            }
+            $webtask->Delete();
             return;
         }
         SPITAJAX_RESPONSE(0);
+        $webtask->Delete();
     }
     else {
        SPITAJAX_ERROR(-1, "Improper lintest action"); 
@@ -1899,7 +1825,7 @@ function Do_OpenstackStats()
 #
 function Do_MaxExtension()
 {
-    global $instance, $creator, $TBADMINGROUP;
+    global $instance, $creator, $TBADMINGROUP, $suexec_output;
 
     if (StatusSetupAjax(0)) {
 	return;

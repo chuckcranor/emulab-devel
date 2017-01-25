@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2007-2016 University of Utah and the Flux Group.
+# Copyright (c) 2007-2017 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -149,6 +149,27 @@ sub Lookup($$)
 			   APT_Instance::Aggregate->GenTemp($self)};
     }
     $self->{'AGGREGATES'} = $aggregates;
+
+    #
+    # Grab the webtask. Backwards compat mode, see if there is one associated
+    # with the object, use that. Otherwise create a new one.
+    #
+    my $webtask;
+    
+    if (defined($self->webtask_id())) {
+	$webtask = WebTask->Lookup($self->webtask_id());
+    }
+    if (!defined($webtask)) {
+	$webtask = WebTask->LookupByObject($self->uuid());
+	if (!defined($webtask)) {
+	    $webtask = WebTask->Create();
+	    return undef
+		if (!defined($webtask));
+	}
+	$self->Update({"webtask_id" => $webtask->task_id()}) == 0
+	    or return undef;
+    }
+    $self->{'WEBTASK'} = $webtask;
     
     # Add to cache. 
     $instances{$self->uuid()} = $self;
@@ -182,6 +203,7 @@ sub Brand($)	{ return $_[0]->{'BRAND'}; }
 sub isAPT($)	{ return $_[0]->Brand()->isAPT() ? 1 : 0; }
 sub isCloud($)	{ return $_[0]->Brand()->isCloud() ? 1 : 0; }
 sub isPNet($)	{ return $_[0]->Brand()->isPNet() ? 1 : 0; }
+sub webtask($)  { return $_[0]->{'WEBTASK'}; }
 sub AggregateList($) { return values(%{ $_[0]->{'AGGREGATES'} }); }
 sub AggregateHash($) { return $_[0]->{'AGGREGATES'}; }
 
@@ -193,6 +215,7 @@ sub DESTROY {
     $self->{'BRAND'}      = undef;
     $self->{'AGGREGATES'} = undef;
     $self->{'HASH'}       = undef;
+    $self->{'WEBTASK'}    = undef;
 }
 
 #
@@ -369,10 +392,6 @@ sub Update($$)
     return Refresh($self);
 }
 
-#
-# NOTE: We should delete the webtask, but the web UI needs it to
-# report status back to the user when an experiment is terminated.
-#
 sub Delete($)
 {
     my ($self) = @_;
@@ -382,6 +401,7 @@ sub Delete($)
 	$agg->Delete() == 0
 	    or return -1;
     }
+    $self->webtask()->Delete();
     DBQueryWarn("delete from apt_instance_extension_info where uuid='$uuid'") or
 	return -1;
     DBQueryWarn("delete from apt_instances where uuid='$uuid'") or
@@ -967,7 +987,7 @@ sub UpdateImageStatus($$)
     if ($self->status() ne "imaging") {
 	goto done;
     }
-    my $webtask = WebTask->LookupByObject($self->uuid());
+    my $webtask = $self->webtask();
     if (!defined($webtask)) {
 	goto done;
     }
@@ -1267,7 +1287,7 @@ sub isAL2S($)           { return $_[0]->{'ISAL2S'}; }
 sub GenTemp($$)
 {
     my ($class, $instance) = @_;
-    my $webtask = WebTask->LookupByObject($instance->uuid());
+    my $webtask = $instance->webtask();
     if (!defined($webtask)) {
 	$webtask = WebTask->Create($instance->uuid());
     }
@@ -1351,6 +1371,8 @@ sub Create($$$)
     my $instance_uuid = $instance->uuid();
     my $instance_name = $instance->name();
 
+    # XXX Anonymous is the wrong thing to do here, but we do not have
+    # a unique uuid to use.
     my $webtask = WebTask->Create(undef);
     return undef
 	if (!defined($webtask));
@@ -1374,7 +1396,9 @@ sub Delete($)
     my $uuid = $self->uuid();
     my $urn  = $self->aggregate_urn();
     
-    $self->webtask()->Delete();
+    $self->webtask()->Delete()
+	if ($self->webtask()->Delete());
+    
     return 0
 	if ($self->{'FAKE'});
     
