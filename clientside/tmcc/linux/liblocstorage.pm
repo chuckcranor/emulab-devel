@@ -285,8 +285,8 @@ sub get_partsize($)
 	return $size;
     }
     while (<FD>) {
-	if (/^\s+\d+\s+\d+\s+(\d+)\s+((?:xvd|sd)[a-z][a-z]?)(?:\d+)?/ ||
-	    /^\s+\d+\s+\d+\s+(\d+)\s+(nvme\d+n\d+)(?:p\d+)?/) {
+	if (/^\s+\d+\s+\d+\s+(\d+)\s+((?:xvd|sd)[a-z][a-z]?(?:\d+)?)/ ||
+	    /^\s+\d+\s+\d+\s+(\d+)\s+(nvme\d+n\d+(?:p\d+)?)/) {
 	    my ($_size,$_dev) = ($1,$2);
 
 	    if ($dev eq $_dev) {
