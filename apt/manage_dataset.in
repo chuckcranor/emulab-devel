@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2000-2016 University of Utah and the Flux Group.
+# Copyright (c) 2000-2017 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -120,9 +120,9 @@ if (defined($options{"d"})) {
 }
 if (defined($options{"t"})) {
     $webtask_id = $options{"t"};
-    $webtask = WebTask->LookupOrCreate(undef, $webtask_id);
+    $webtask = WebTask->Lookup($webtask_id);
     if (!defined($webtask)) {
-	fatal("Could not create webtask object");
+	fatal("Could not get webtask object");
     }
     $webtask->AutoStore(1);
 }
@@ -337,8 +337,21 @@ sub DoCreate()
     $blob->{"write_access"} = $write_access
 	if (defined($write_access));
 
+    #
+    # Always create a webtask for tracking image or allocation status.
+    # This is an internal webtask, not the one used on the command line.
+    #
+    my $dwebtask = WebTask->Create();
+    if (!defined($dwebtask)) {
+	$errmsg = "Could not create webtask object";
+	goto failed;
+    }
+    $dwebtask->AutoStore(1);
+    $blob->{"webtask_id"} = $dwebtask->task_id();
+
     my $dataset = APT_Dataset->Create($blob);
     if (!defined($dataset)) {
+	$dwebtask->Delete();
 	fatal("Error creating dataset object");
     }
     
@@ -350,16 +363,6 @@ sub DoCreate()
 	    goto failed;
 	}
     }
-    #
-    # Always create a webtask for tracking image or allocation status.
-    #
-    $webtask = WebTask->Create($dataset->uuid());
-    if (!defined($webtask)) {
-	$errmsg = "Could not create webtask object";
-	goto failed;
-    }
-    $webtask->AutoStore(1);
-
     #
     # Ask the aggregate to create the dataset. 
     #
@@ -527,24 +530,22 @@ sub DoRefreshInternal($$)
     if ($blob->{"busy"}) {
 	$dataset->Update({"state" => "busy"});
 	if ($dataset->type() eq "imdataset") {
-	    if (defined($webtask)) {
-		$webtask->image_size($blob->{'image_size'}) 	
-		    if (exists($blob->{'image_size'}));
-		$webtask->image_status($blob->{'image_status'})
-		    if (exists($blob->{'image_status'}));
-	    }
+	    $dataset->webtask()->image_size($blob->{'image_size'}) 	
+		if (exists($blob->{'image_size'}));
+	    $dataset->webtask()->image_status($blob->{'image_status'})
+		if (exists($blob->{'image_status'}));
+	    $dataset->webtask()->Store();
 	}
     }
     else {
 	$dataset->Update({"state" => $blob->{"state"}});
 	if ($dataset->type() eq "imdataset") {
 	    $dataset->Update({"size" => $blob->{"size"}});
-	    if (defined($webtask)) {
-		$webtask->image_size($blob->{'image_size'}) 	
-		    if (exists($blob->{'image_size'}));
-		$webtask->image_status($blob->{'image_status'})
-		    if (exists($blob->{'image_status'}));
-	    }
+	    $dataset->webtask()->image_size($blob->{'image_size'}) 	
+		if (exists($blob->{'image_size'}));
+	    $dataset->webtask()->image_status($blob->{'image_status'})
+		if (exists($blob->{'image_status'}));
+	    $dataset->webtask()->Store();
 	}
     }
     return 0;
@@ -726,36 +727,24 @@ sub DoSnapshot()
 	$dataset->Unlock();
 	uerror("instance is busy, cannot lock it");
     }
-    #
-    # Always create a webtask for tracking imaging status. Must be
-    # associated with the object.
-    #
-    if (defined($webtask)) {
-	if ($webtask->object_uuid() ne $dataset->uuid()) {
-	    $errmsg = "Webtask not associated with dataset!";
-	    goto failed;
-	}
-    }
-    else {
-	$webtask = WebTask->LookupByObject($dataset->uuid());
-	if (!defined($webtask)) {
-	    $webtask = WebTask->Create($dataset->uuid());
-	    if (!defined($webtask)) {
-		$errmsg = "Could not create webtask object!";
-		goto failed;
-	    }
-	}
-	$webtask->AutoStore(1);
-    }
-    $webtask->Reset();
+    # Clear the webtask, starting a new snapshot.
+    $dataset->webtask()->Reset();
+    # These three are convenience for the web server to give feedback.
+    $dataset->webtask()->aggregate_urn($aggregate->aggregate_urn());
+    $dataset->webtask()->client_id($nodeid);
+    $dataset->webtask()->instance($instance->uuid());
+    
     if (defined($copyback_uuid)) {
 	# Tell the imaging modal.
-	$webtask->copyback_uuid($copyback_uuid);
+	$dataset->webtask()->copyback_uuid($copyback_uuid);
 	# For polling below.
 	$dataset->_copyback_uuid($copyback_uuid);
 	$dataset->_sha1hash("$sha1hash");
 	$dataset->_copying(0);
     }
+    $dataset->webtask()->Store();
+    $dataset->webtask()->AutoStore(1);
+    
     if (DoSnapShotInternal($dataset, $aggregate, $bsname, $nodeid, \$errmsg)) {
 	goto failed;
     }
@@ -863,8 +852,7 @@ sub PollDatasetStatus($$$)
 	# Let parent exit;
 	sleep(2);
     }
-    $webtask->SetProcessID($PID)
-	if (defined($webtask));
+    $dataset->webtask()->SetProcessID($PID);
 
     print "State: " . $dataset->state() . "\n";
     if (defined($dataset->_copyback_uuid())) {
@@ -897,17 +885,13 @@ sub PollDatasetStatus($$$)
 			"Your dataset is now ready to use",
 			"Dataset '$dname' is now ready to use.\n",
 				$project->LogsEmailAddress(), undef, $logfile);
-	    $webtask->Exited(0)
-		if (defined($webtask));
+	    $dataset->webtask()->Exited(0);
 	    last;
 	}
 	sleep($interval);
     }
-    $webtask->Exited(-1)
-	if (defined($webtask) && $seconds <= 0);
-    
-#    unlink($logfile)
-#	if (defined($logfile));
+    $dataset->webtask()->Exited(-1)
+	if ($seconds <= 0);
     return 0;
 }
 
@@ -1052,16 +1036,18 @@ sub PollImageStatus($$$)
 	    print STDERR $perrmsg . "\n";
 	    # Give up.
 	    $dataset->Update({"state" => "valid"});
-	    $webtask->image_status("ready");
+	    $dataset->webtask()->image_status("ready");
 	}
 	if ("$sha1hash" eq $dataset->_sha1hash()) {
 	    # Done!
 	    $dataset->Update({"state" => "valid"});
-	    $webtask->image_status("ready");
+	    $dataset->webtask()->image_status("ready");
 	}
 	return 0;
     }
     else {
+	print "Getting Image Info\n";
+	
 	my $response = $aggregate->ImageInfo($image_urn);
 	if ($response->code() != GENIRESPONSE_SUCCESS &&
 	    $response->code() != GENIRESPONSE_RPCERROR &&
@@ -1076,15 +1062,15 @@ sub PollImageStatus($$$)
 		$response->code() == GENIRESPONSE_RPCERROR);
 
 	my $blob = $response->value();
-	print Dumper($blob);
+	print Dumper($response->value());
     
-	$webtask->image_size($blob->{'size'})
+	$dataset->webtask()->image_size($blob->{'size'})
 	    if (exists($blob->{'size'}));
-	$webtask->image_status($blob->{'status'})
+	$dataset->webtask()->image_status($blob->{'status'})
 	    if (exists($blob->{'status'}));
 	if ($blob->{'status'} eq "ready") {
 	    if ($copyback_uuid) {
-		$webtask->image_status("copying");
+		$dataset->webtask()->image_status("copying");
 		$dataset->_copying(1);
 	    }
 	    else {

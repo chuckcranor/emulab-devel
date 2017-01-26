@@ -498,6 +498,7 @@ window.ShowExtendModal = (function()
 		sup.HideModal('#waitwait-modal');
 		if (json.code) {
 		    console.info("Failed to get max extension: " + json.value);
+		    $(modalname).modal('show');
 		    return;		    
 		}
 		/*
@@ -538,7 +539,7 @@ window.ShowExtendModal = (function()
 		    $(modalname).modal('show');
 		}
 	    }
-	    if (studly) {
+	    if (1) {
 		sup.ShowModal('#waitwait-modal');
 		var xmlthing =
 		    sup.CallServerMethod(null, "status", "MaxExtension",

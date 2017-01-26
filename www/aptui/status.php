@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2016 University of Utah and the Flux Group.
+# Copyright (c) 2000-2017 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -136,7 +136,7 @@ if ($profile = Profile::Lookup($instance->profile_id(),
 		       ISADMIN() ? 1 : 0);
     $public_url     = ($instance->public_url() ?
 		       "'" . $instance->public_url() . "'" : "null");
-    $ispprofile     = $profile->script() ? 1 : 0;
+    $ispprofile     = $profile->isParameterized() ? 1 : 0;
 }
 else {
     $profile_name   = "";
@@ -205,7 +205,7 @@ $dossh =
 # cannot show that progress. Needs more thought.
 #
 if ($instance_status == "imaging") {
-    $webtask = WebTask::LookupByObject($instance->uuid());
+    $webtask = $instance->WebTask();
     if ($webtask && ! $webtask->exited()) {
 	$snapping = 1;
     }
@@ -274,6 +274,14 @@ if (isset($maxextend) && $maxextend != "") {
 }
 else {
     echo "  window.APT_OPTIONS.MAXEXTEND = null;\n";
+}
+if ($instance->repourl()) {
+    echo "  window.APT_OPTIONS.repourl = '" . $instance->repourl() . "';\n";
+    if ($instance->reporef()) {
+        echo "  window.APT_OPTIONS.reporef = '" . $instance->reporef() . "';\n";
+        echo "  window.APT_OPTIONS.repohash = '" .
+                substr($instance->repohash(),0,8) . "';\n";
+    }
 }
 echo "</script>\n";
 echo "<script src='js/lib/d3.v3.js'></script>\n";

@@ -951,6 +951,31 @@ sub AnnotateManifest($)
     $node->NodeAttribute( "sim_imsi", \$sim_imsi );
     GeniXML::SetText( "sim_imsi", $rspec, $sim_imsi )
 	if( defined( $sim_imsi ) );
+
+    #
+    # Add Emulab extension that says which virtnodes are instantiated
+    # on this physical host.
+    #
+    if (!$node->isvirtnode() && $node->HasVirtualNodes()) {
+	my @vnodes = ();
+	if ($node->VirtualNodes(\@vnodes)) {
+	    print STDERR "Could not get virtnode list for $node\n";
+	    return undef;
+	}
+	my $vmlistref = GeniXML::FindNodesNS("n:vmlist", $rspec,
+					     $GeniXML::EMULAB_NS)->pop();
+	if (defined($vmlistref)) {
+	    $rspec->removeChild($vmlistref);
+	}
+	$vmlistref = GeniXML::AddElement("vmlist", $rspec,
+					 $GeniXML::EMULAB_NS);
+	foreach my $child (@vnodes) {
+	    my $vmref = GeniXML::AddElement("vm", $vmlistref,
+					    $GeniXML::EMULAB_NS);
+	    GeniXML::SetText("client_id", $vmref, $child->vname());
+	    GeniXML::SetText("vnode", $vmref, $child->node_id());
+	}
+    }
     
     if ($self->UpdateRspec($rspec)) {
 	print STDERR "Could not insert annotated manifest for node $self ".

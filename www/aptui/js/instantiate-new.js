@@ -31,6 +31,7 @@ $(function ()
     var amValueToKey  = {};
     var showpicker    = 0;
     var portal        = null;
+    var fromrepo      = false;
     var registered    = false;
     var JACKS_NS      = "http://www.protogeni.net/resources/rspec/ext/jacks/1";
     var jacks = {
@@ -59,6 +60,7 @@ $(function ()
 	multisite  = window.MULTISITE;
 	portal     = window.PORTAL;
 	ajaxurl    = window.AJAXURL;
+	fromrepo   = window.FROMREPO;
 	doconstraints = window.DOCONSTRAINTS;
 	showpicker    = window.SHOWPICKER;
 
@@ -1172,7 +1174,86 @@ $(function ()
 	var $xmlthing = sup.CallServerMethod(ajaxurl,
 					     "instantiate", "GetProfile",
 					     {"uuid" : profile});
-	$xmlthing.done(callback);
+
+	/*
+	 * If a repo-based and we got a specific branch/tag, we have to
+	 * get the source for that, since it will be different then what
+	 * is stored in the profile descriptor.
+	 */
+	if (fromrepo && window.REFSPEC !== undefined) {
+	    var which = window.REFSPEC;
+	    
+	    $xmlthing.done(function(json) {
+		gitrepo.GetRepoSource(profile, which, function(source, hash) {
+		    var pythonRe = /^import/m;
+		    
+		    $('#repohash').val(hash);
+		    $('#reporef').val(which);
+
+		    if (pythonRe.test(source)) {
+			ConvertScript(source, function(rspec, paramdefs) {
+			    // Need to pass these along at submit.
+			    $('#rspec_textarea').val(rspec);
+			    $('#script_textarea').val(source);
+			    json.value.rspec      = rspec;
+			    json.value.isscript   = true;
+			    //
+			    // We can get a parameterized profile, or not.
+			    //
+			    if (paramdefs === undefined) {
+				json.value.ispprofile = false;
+			    }
+			    else {
+				$('#paramdefs').val(paramdefs);
+				json.value.ispprofile = true;
+			    }
+			    callback(json);
+			});
+		    }
+		    else {
+			// New rspec, proceed
+			json.value.rspec = source;
+			// Need to pass this along at submit.
+			$('#rspec_textarea').val(source);
+			callback(json);
+		    }
+		});
+	    });
+	}
+	else {
+	    $xmlthing.done(callback);
+	}
+    }
+
+    //
+    // Pass a geni-lib script to the server to run (convert to XML).
+    // We use this on repo-based profiles, where we have to get the
+    // source code from the repo, and convert to an rspec. 
+    //
+    function ConvertScript(script, continuation)
+    {
+	var callback = function(json) {
+	    sup.HideWaitWait();
+
+	    if (json.code) {
+		sup.SpitOops("oops",
+			     "<pre><code>" +
+			     $('<div/>').text(json.value).html() +
+			     "</code></pre>");
+		return;
+	    }
+	    if (json.value.rspec != "") {
+		continuation(json.value.rspec, json.value.paramdefs);
+	    }
+	}
+	sup.ShowWaitWait("We are converting the geni-lib script to an rspec. " +
+			 "Patience please.");
+	var xmlthing = sup.CallServerMethod(null,
+					    "manage_profile",
+					    "CheckScript",
+					    {"script"     : script,
+					     "getparams"  : true});
+	xmlthing.done(callback);
     }
 
     /*
@@ -1182,7 +1263,7 @@ $(function ()
 	// If not a registered user, we do not get an rspec back, since
 	// the user is not allowed to change the configuration.
 	if (newRspec) {
-	    $('#pp_rspec_textarea').val(newRspec);
+	    $('#rspec_textarea').val(newRspec);
 	    selected_rspec = newRspec;
 	    CreateAggregateSelectors(newRspec);
 	}
@@ -1285,7 +1366,7 @@ $(function ()
 		"      </select>" +
 		"    </div>" +
 		"<div class='col-sm-4'></div>" +
-		"<div class='col-sm-6 alert alert-danger' id='where-nowhere' style='display: none; margin-top: 5px; margin-bottom: 5px'>This profile <b>will not work on any clusters</b>. All clusters are unselectable.</div>" +
+		"<div class='col-sm-6 alert alert-danger' id='where-nowhere' style='display: none; margin-top: 5px; margin-bottom: 5px'>This profile <b>will not work on any clusters</b>. Please check your profile or parameters for errors. If you are sure they are correct, you can report the problem to support@cloudlab.us and make sure to link to the problematic profile.</div>" +
 		"  </div>" +
 		"</div>";
 	}

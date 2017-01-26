@@ -2264,7 +2264,8 @@ sub BatchAction($$@)
     
     foreach my $sliver (@slivers) {
 	next
-	    if (ref($sliver) ne "GeniSliver::Node");
+	    if (ref($sliver) ne "GeniSliver::Node" &&
+		ref($sliver) ne "GeniSliver::Vhost");
 	$states{"$sliver->idx()"} = $sliver->state();
 
 	my $node = Node->Lookup($sliver->resource_id());

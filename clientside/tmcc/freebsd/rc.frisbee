@@ -1,6 +1,6 @@
 #!/bin/sh
 #
-# Copyright (c) 2000-2016 University of Utah and the Flux Group.
+# Copyright (c) 2000-2017 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -222,6 +222,7 @@ loadone() {
     IMAGEID=`getvar IMAGEID "$_LOADINFO"`
     KEEPALIVE=`getvar KEEPALIVE "$_LOADINFO"`
     OSVERSION=`getvar OSVERSION "$_LOADINFO" 0`
+    HEARTBEAT=`getvar HEARTBEAT "$_LOADINFO" 0`
 
     #
     # XXX If KEEPALIVE is not explicitly set, attempt to intuit a value.
@@ -393,6 +394,26 @@ loadone() {
     fi
 
     #
+    # HEARTBEAT==0: no heartbeat
+    # ow: send report at specified interval (<= one hour)
+    #
+    HB=""
+    case "$HEARTBEAT" in
+	''|*[!0-9]*)
+	    echo "Ignoring bogus HEARTBEAT value \"$HEARTBEAT\""
+	    ;;
+	*)
+	    if [ $HEARTBEAT -le 0 -o $HEARTBEAT -gt 3600 ]; then
+		if [ $HEARTBEAT -ne 0 ]; then
+		    echo "Ignoring bad HEARTBEAT value \"$HEARTBEAT\""
+		fi
+	    else
+		HB="-H $HEARTBEAT"
+	    fi
+	    ;;
+    esac
+
+    #
     # Make sure the write-cache is enabled on SCSI disks.  It makes a
     # huge difference.  We don't worry about data corruption in the
     # case of a crash, because we will just reload the disk again anyway
@@ -470,8 +491,9 @@ loadone() {
 	echo "`date`: Running /usr/local/bin/imageunzip -o -O -W 32 $ZFILL $imagefile /dev/${DISK}s${PART}"
 	/usr/local/bin/imageunzip -o -O -W 32 $ZFILL $imagefile /dev/${DISK}s${PART}
     else
-	echo "`date`: Running $BINDIR/frisbee -S $SERVER $MEMARGS $KA $ZFILL $SLICE $IMAGEID /dev/$DISK"
-	$BINDIR/frisbee -S $SERVER $MEMARGS $KA $ZFILL $SLICE $IMAGEID /dev/$DISK
+	_ARGS="-S $SERVER $MEMARGS $KA $HB $ZFILL $SLICE"
+	echo "`date`: Running $BINDIR/frisbee $_ARGS $IMAGEID /dev/$DISK"
+	$BINDIR/frisbee $_ARGS $IMAGEID /dev/$DISK
     fi
     fstat=$?
 

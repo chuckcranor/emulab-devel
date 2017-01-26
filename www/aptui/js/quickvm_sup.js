@@ -3,14 +3,19 @@ window.sup = (function () {
 
 function ShowModal(which) 
 {
-//   console.log('Showing modal ' + which);
-    $( which ).modal('show');
+    $(which).modal('show');
 }
     
-function HideModal(which) 
+function HideModal(which, continuation) 
 {
-//   console.log('Hide modal ' + which);
-    $( which ).modal('hide');
+    var callback = function() {
+	$(which).off('hidden.bs.modal', callback);
+	continuation();
+    };
+    if (continuation !== undefined) {
+	$(which).on('hidden.bs.modal', callback);
+    }
+    $(which).modal('hide');
 }
 
 function ShowWaitWait(message)
@@ -23,11 +28,15 @@ function ShowWaitWait(message)
 	ShowModal('#waitwait-modal-withmessage');
     }
 }
-function HideWaitWait()
+function HideWaitWait(continuation)
 {
-    $('#waitwait-modal-withmessage-message').html("");
-    HideModal('#waitwait-modal-withmessage');
-    HideModal('#waitwait-modal');
+    if ($('#waitwait-modal').is(':visible')) {
+	HideModal('#waitwait-modal', continuation);
+    }
+    else {
+	$('#waitwait-modal-withmessage-message').html("");
+	HideModal('#waitwait-modal-withmessage', continuation);
+    }
 }
     
 function CallServerMethod(url, route, method, args, callback)

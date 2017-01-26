@@ -70,6 +70,7 @@ function SPITFORM($formfields, $errors)
     $activity   = 0;
     $ispp       = 0;
     $isadmin    = (ISADMIN() ? 1 : 0);
+    $canrepo    = (ISADMIN() || STUDLY() ? 1 : 0);
     $multisite  = 1;
     $cloning    = 0;
     $disabled   = 0;
@@ -207,6 +208,7 @@ function SPITFORM($formfields, $errors)
     if (isset($fromexp)) {
 	echo "    window.EXPUUID = '$fromexp';\n";
     }
+    echo "    window.CANREPO = $canrepo;\n";
     echo "</script>\n";
     echo "<script src='js/lib/jquery-ui.js'></script>\n";
     echo "<script src='js/lib/jquery.appendGrid-1.3.1.min.js'></script>\n";
@@ -221,9 +223,10 @@ function SPITFORM($formfields, $errors)
     REQUIRE_APTFORMS();
     REQUIRE_FILESTYLE();
     REQUIRE_MARKED();
+    AddLibrary("js/gitrepo.js");
     SPITREQUIRE("js/manage_profile.js");
 
-    AddTemplateList(array('manage-profile', 'waitwait-modal', 'renderer-modal', 'showtopo-modal', 'oops-modal', 'rspectextview-modal', 'guest-instantiate', 'publish-modal', 'instantiate-modal', 'share-modal'));
+    AddTemplateList(array('manage-profile', 'waitwait-modal', 'renderer-modal', 'showtopo-modal', 'oops-modal', 'rspectextview-modal', 'guest-instantiate', 'publish-modal', 'instantiate-modal', 'share-modal', 'gitrepo-picker'));
     SPITFOOTER();
 }
 
@@ -282,6 +285,7 @@ if (isset($action) && ($action == "edit" || $action == "copy")) {
             $pversion= $row["parent_version"];
             $created = $row["created"];
             $published = $row["published"];
+            $repourl = $row["repourl"];
             $rspec   = $row["rspec"];
             $desc    = '';
             $obj     = array();
@@ -305,7 +309,6 @@ if (isset($action) && ($action == "edit" || $action == "copy")) {
             $obj["published"]   = $published;
             $obj["parent_uuid"] = $puuid;
             $obj["parent_version"] = $pversion;
-            
             $version_array[] = $obj;
         }
     }
@@ -378,6 +381,11 @@ if (! isset($create)) {
 	    if ($profile->script() && $profile->script() != "") {
 		$defaults["profile_script"] = $profile->script();
 	    }
+	    if ($profile->repourl() && $profile->repourl() != "") {
+		$defaults["profile_repourl"]  = $profile->repourl();
+                # Need this so JS code knows when HEAD changes.
+		$defaults["profile_repohash"]  = $profile->repohash();
+	    }
 	    $defaults["profile_creator"]     = $profile->creator();
 	    $defaults["profile_updater"]     = $profile->updater();
 	    $defaults["profile_created"]     =
@@ -411,8 +419,8 @@ if (! isset($create)) {
 	    # clone task. If there is one, we have to tell
 	    # the js code to show the status of the clone.
 	    #
-	    $webtask = WebTask::LookupByObject($profile->uuid());
-	    if ($webtask && ! $webtask->exited()) {
+	    $webtask = $profile->webtask();
+	    if ($webtask->TaskValue("cloning")) {
 		$notifyclone = 1;
 	    }
 	}
@@ -514,6 +522,15 @@ else {
     }
 }
 
+# Sanity check repourl.
+if (!isset($action) &&
+    isset($formfields["profile_repourl"]) &&
+    $formfields["profile_repourl"] != "") {
+    if (!TBvalid_URL($formfields["profile_repourl"])) {
+	$errors["error"] = "Invalid repository URL!";
+    }
+}
+
 #
 # Sanity check the snapuuid argument when doing a clone.
 #
@@ -577,6 +594,14 @@ else {
 	fwrite($fp, "<attribute name='script'>");
 	fwrite($fp, "  <value>" .
 	       htmlspecialchars($formfields["profile_script"]) .
+	       "</value>");
+	fwrite($fp, "</attribute>\n");
+    }
+    if (isset($formfields["profile_repourl"]) &&
+	$formfields["profile_repourl"] != "") {
+	fwrite($fp, "<attribute name='repourl'>");
+	fwrite($fp, "  <value>" .
+	       htmlspecialchars($formfields["profile_repourl"]) .
 	       "</value>");
 	fwrite($fp, "</attribute>\n");
     }

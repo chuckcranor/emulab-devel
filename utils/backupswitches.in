@@ -81,8 +81,8 @@ foreach my $switch (@ARGV) {
     }
     if ($type =~ /force10/ ) {
 	system "ssh toor\@$switch write terminal \> $BACKUPDIR/$switch.in\n"
-	    and die "Unable to grab and save config for $switch\n";
-        system "egrep -v \\#\\|Current $BACKUPDIR/$switch.in \> $BACKUPDIR/$switch-$datestr\n"
+	    and "Unable to grab and save config for $switch\n";
+        system "egrep -v \\#\\|Current\\|SupportAssist $BACKUPDIR/$switch.in \> $BACKUPDIR/$switch-$datestr\n"
 	    and die "Unable to strip first and last lines for $switch\n";
 	system "rm -f  $BACKUPDIR/$switch.in\n"
 	        and die "rm $BACKUPDIR/$switch.in failed\n"

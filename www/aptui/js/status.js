@@ -99,6 +99,9 @@ $(function ()
 	    lockdown_code:      lockdown_code,
 	    // The status panel starts out collapsed.
 	    status_panel_show:  (instanceStatus == "ready" ? false : true),
+	    repourl:		window.APT_OPTIONS.repourl,
+	    reporef:		window.APT_OPTIONS.reporef,
+	    repohash:		window.APT_OPTIONS.repohash,
 	};
 	var status_html   = statusTemplate(template_args);
 	$('#status-body').html(status_html);
@@ -118,6 +121,10 @@ $(function ()
 	    }
 	});
 	ProgressBarUpdate();
+
+	// Periodic check for max allowed extension
+	LoadMaxExtension();
+	setInterval(LoadMaxExtension, 3600 * 1000);
 
 	// This activates the popover subsystem.
 	$('[data-toggle="popover"]').popover({
@@ -265,8 +272,11 @@ $(function ()
 		    return;
 		}
 		// This is considered the home page, for now.
-		window.location.replace('instantiate.php?default=' +
-					profile_uuid);
+		var url = 'instantiate.php?default=' + profile_uuid;
+		if (window.APT_OPTIONS.REFSPEC !== undefined) {
+		    url += "&refspec=" + window.APT_OPTIONS.REFSPEC;
+		}
+		window.location.replace(url);
 	    }
 	    sup.ShowModal("#waitwait-modal");
 
@@ -1033,37 +1043,22 @@ $(function ()
     }
 	
     //
-    // Request a node reboot from the backend cluster.
+    // Request a node reboot or reload from the backend cluster.
     //
     function DoReboot(nodeList)
     {
-	var callback = function(json) {
-	    sup.HideModal('#waitwait-modal');
-	    
-	    if (json.code) {
-		sup.SpitOops("oops", "Failed to reboot: " + json.value);
-		return;
-	    }
-	    // Trigger status to change the nodes.
-	    GetStatus();
-	}
-	sup.ShowModal('#waitwait-modal');
-	var xmlthing = sup.CallServerMethod(ajaxurl,
-					    "status",
-					    "Reboot",
-					     {"uuid"     : uuid,
-					      "node_ids" : nodeList});
-	xmlthing.done(callback);
+	DoRebootReload("reboot", nodeList);
     }
-	
-    //
-    // Request a node reload from the backend cluster.
-    //
     function DoReload(nodeList)
     {
+	DoRebootReload("reload", nodeList);
+    }
+    function DoRebootReload(which, nodeList)
+    {
+	var tag = (which == "reload" ? "Reload" : "Reboot");
+	
 	// Handler for hide modal to unbind the click handler.
 	$('#confirm_reload_modal').on('hidden.bs.modal', function (event) {
-	    //console.info("reload hide");
 	    $(this).unbind(event);
 	    $('#confirm_reload_button').unbind("click.reload");
 	});
@@ -1071,25 +1066,24 @@ $(function ()
 	// Throw up a confirmation modal, with handler bound to confirm.
 	$('#confirm_reload_button').bind("click.reload", function (event) {
 	    sup.HideModal('#confirm_reload_modal');
-	    //console.info("Reload confirm");
 	    var callback = function(json) {
 		sup.HideModal('#waitwait-modal');
 	    
 		if (json.code) {
-		    sup.SpitOops("oops", "Failed to reload: " + json.value);
+		    sup.SpitOops("oops",
+				 "Failed to " + which + ": " + json.value);
 		    return;
 		}
 		// Trigger status update.
 		GetStatus();
 	    }
 	    sup.ShowModal('#waitwait-modal');
-	    var xmlthing = sup.CallServerMethod(ajaxurl,
-						"status",
-						"Reload",
+	    var xmlthing = sup.CallServerMethod(ajaxurl, "status", tag,
 						{"uuid"     : uuid,
 						 "node_ids" : nodeList});
 	    xmlthing.done(callback);
 	});
+	$('#confirm_reload_modal #confirm-which').html(tag);
 	sup.ShowModal('#confirm_reload_modal');
     }
 	
@@ -2168,12 +2162,10 @@ $(function ()
 		    jacksOutput = output;
 
 		    jacksOutput.on('modified-topology', function (object) {
-			//console.log(object);
 			_.each(object.nodes, function (node) {
 			    jacksIDs[node.client_id] = node.id;
 			});
-			//console.log("jacksIDs");
-			//console.log(jacksIDs);
+			//console.log("jacksIDs", object, jacksIDs);
 			ShowManifest(object.rspec);
 		    });
 		
@@ -2188,8 +2180,9 @@ $(function ()
 		    }
 
 		    jacksOutput.on('click-event', function (jacksevent) {
-			if (jacksevent.type === 'node') 
-			{
+			if (jacksevent.type === 'node' ||
+			    jacksevent.type === 'host') {
+			    console.log(jacksevent);
 			    ContextMenuShow(jacksevent);
 			}
 		    });
@@ -2675,6 +2668,51 @@ $(function ()
 			"exptID"   : "#expt-traffic-panel-div",
 			"refreshID": "#graphs-refresh-button",
 			"callback" : callback});
+    }
+
+    /*
+     * Get the max allowed extension and show a warning if its below
+     * a couple of days.
+     */
+    function LoadMaxExtension()
+    {
+	var maxcallback = function(json) {
+	    if (json.code) {
+		console.info("Failed to get max extension: " + json.value);
+		return;		    
+	    }
+	    var maxdate = new Date(json.value);
+	    //console.info("Max extension date:", maxdate);
+		    
+	    /*
+	     * See if the difference is less then two days
+	     */
+	    var now   = new Date();
+	    var hours = Math.floor((maxdate.getTime() -
+				    now.getTime()) / (1000 * 3600.0));
+	    if (hours > (7 * 24)) {
+		return;
+	    }
+	    //console.info("Max allowed extension hours: ", hours);
+	    
+	    var when    = moment(maxdate).format('lll');
+	    var fromnow = moment(maxdate).fromNow(true) + " from now";
+	
+	    $('#maximum-extension-string').html(when + " (" + fromnow + ")");
+	    if (hours < 48) {
+		$('#maximum-extension-string').removeClass("text-warning");
+		$('#maximum-extension-string').addClass("text-danger");
+	    }
+	    else {
+		$('#maximum-extension-string').removeClass("text-danger");
+		$('#maximum-extension-string').addClass("text-warning");
+	    }
+	    $('#maximum-extension').removeClass("hidden");
+	}
+	var xmlthing =
+	    sup.CallServerMethod(null, "status", "MaxExtension",
+				 {"uuid" : uuid});
+	xmlthing.done(maxcallback);
     }
 
     // Helper.

@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2008-2016 University of Utah and the Flux Group.
+# Copyright (c) 2008-2017 University of Utah and the Flux Group.
 # 
 # {{{GENIPUBLIC-LICENSE
 # 
@@ -90,6 +90,7 @@ my $STITCHER      = "$TB/gcf/src/stitcher.py";
 my $OPENSSL       = "/usr/bin/openssl";
 my $MANAGEINSTANCE= "$TB/bin/manage_instance";
 my $MANAGEDATASET = "$TB/bin/manage_dataset";
+my $MANAGEGITREPO = "$TB/bin/manage_gitrepo";
 my $DEFAULT_URN   = "urn:publicid:IDN+$OURDOMAIN+authority+cm";
 my $GUEST_URN     = "urn:publicid:IDN+apt.emulab.net+authority+cm";
 my $PROTOGENI_LOCALUSER= @PROTOGENI_LOCALUSER@;
@@ -262,7 +263,7 @@ foreach my $key ("username", "email", "profile", "portal") {
 #
 my ($value, $user_urn, $user_uid, $user_hrn, $user_email, $project, $pid,
     $gid, $group, $sshkey, $profile, $profileid, $version, $rspecstr, $errmsg,
-    $userslice_id, $portal);
+    $userslice_id, $portal, $script, $reporef, $repohash);
 
 # This is used internally to determine which portal was used.
 $portal = $xmlparse->{'attribute'}->{"portal"}->{'value'};
@@ -312,13 +313,50 @@ $profileid = $profile->profileid();
 $version   = $profile->version();
 
 #
-# Optional rspec, as for a Parameterized Profile.
+# Optional rspec, as for a Parameterized Profile or a repo-based profile.
 #
 if (exists($xmlparse->{'attribute'}->{"rspec"})) {
     $rspecstr  = $xmlparse->{'attribute'}->{"rspec"}->{'value'};
 }
 else {
     $rspecstr  = $profile->CheckFirewall(!$localuser);
+}
+#
+# Optional rspec and/or script, as for a repo-based profile.
+#
+if ($profile->repourl()) {
+    if (exists($xmlparse->{'attribute'}->{"script"})) {
+	$script = $xmlparse->{'attribute'}->{"script"}->{'value'};	
+
+	if (! TBcheck_dbslot($script, "apt_profiles", "script",
+			     TBDB_CHECKDBSLOT_WARN|TBDB_CHECKDBSLOT_ERROR)) {
+	    fatal("Illegal script for repo-based profile");
+	}
+	if (!exists($xmlparse->{'attribute'}->{"reporef"})) {
+	    fatal("Missing refspec for repository");
+	}
+    }
+    if (exists($xmlparse->{'attribute'}->{"reporef"})) {
+	if (!exists($xmlparse->{'attribute'}->{"repohash"})) {
+	    fatal("Missing hash for repository");
+	}
+	$reporef  = $xmlparse->{'attribute'}->{"reporef"}->{'value'};
+	$repohash = $xmlparse->{'attribute'}->{"repohash"}->{'value'};
+
+	if (! TBcheck_dbslot($repohash, "apt_profiles", "repohash",
+			     TBDB_CHECKDBSLOT_WARN|TBDB_CHECKDBSLOT_ERROR)) {
+	    fatal("Illegal repository hash");
+	}
+	if (! TBcheck_dbslot($reporef, "default", "tinytext",
+			     TBDB_CHECKDBSLOT_WARN|TBDB_CHECKDBSLOT_ERROR)) {
+	    fatal("Illegal repository refspec");
+	}
+    }
+    else {
+	# Otherwise we are instantiating whatever the profile itself references.
+	$reporef  = "refs/heads/master";
+	$repohash = $profile->repohash();
+    }
 }
 
 #
@@ -599,6 +637,22 @@ elsif (!$localuser) {
 	fatal("Project $pid does not exist");
     }
 }
+if (defined($profile->repourl())) {
+    #
+    # Make sure the repo is still accessible.
+    #
+    my $check = emutil::ExecQuiet("$MANAGEGITREPO check ".
+				  "'" . $profile->repourl() . "'");
+    if ($?) {
+	UserError($check);
+    }
+    $tmp = APT_Profile::SetRepo(\$rspecstr, $profile->repourl(),
+				$reporef, $repohash, $geniuser, \$errmsg);
+    if ($tmp) {
+	($tmp < 0 ? fatal($errmsg) : UserError($errmsg));
+    }
+}
+
 #
 # Now we know where to send to logs.
 #
@@ -763,15 +817,36 @@ my $blob = {'uuid'         => $quickvm_uuid,
 	    'cert'         => $alt_certificate->cert(),
 	    'privkey'      => $alt_certificate->PrivKeyDelimited(),
 };
+if ($profile->repourl()) {
+    if (defined($script)) {
+	$blob->{"script"}  = $script;
+    }
+    $blob->{"repourl"}   = $profile->repourl();
+    $blob->{"reporef"}   = $reporef;
+    $blob->{"repohash"}  = $repohash;
+}
 if (defined($project)) {
     $blob->{"pid"}     = $project->pid();
     $blob->{"pid_idx"} = $project->pid_idx();
     $blob->{"gid"}     = $group->gid();
     $blob->{"gid_idx"} = $group->gid_idx();
 }
+#
+# Create a webtask so that we can store additional information about
+# the sliver while we wait.
+#
+$webtask = WebTask->Create($quickvm_uuid);
+if (!defined($webtask)) {
+    fatal("Could not create a webtask!");
+}
+$webtask_id = $webtask->task_id();
+$webtask->AutoStore(1);
+$blob->{"webtask_id"} = $webtask_id;
+
 $errmsg = undef;
 $instance = APT_Instance->Create($blob, \$errmsg);
 if (!defined($instance)) {
+    $webtask->Delete();
     fatal(defined($errmsg) ? $errmsg :
 	  "Could not create instance record for $quickvm_uuid");
 }
@@ -819,17 +894,6 @@ foreach my $aggregate_urn (@aggregate_urns) {
 
 # To keep stuff happy until multisite support finished.
 $instance->Update({'aggregate_urn' => $aggregate_urns[0]});
-
-#
-# Create a webtask so that we can store additional information about
-# the sliver while we wait.
-#
-$webtask = WebTask->Create($instance->uuid());
-if (!defined($webtask)) {
-    fatal("Could not create a webtask!");
-}
-$webtask_id = $webtask->task_id();
-$webtask->AutoStore(1);
 
 print STDERR "\n";
 print STDERR "User:    $user_urn\n";

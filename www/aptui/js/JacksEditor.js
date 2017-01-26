@@ -44,16 +44,20 @@ $(function () {
     var contextFetched = false;
 
     var contextUrl = "";
-    if (window.ISCLOUD || window.ISEMULAB)
+    if (window.ISCLOUD)
     {
-	contextUrl = 'https://www.emulab.net/protogeni/jacks-context/cloudlab-utah.json';
+        contextUrl = 'https://www.emulab.net/protogeni/jacks-context/cloudlab-utah.json';
+    }
+    else if (window.ISEMULAB)
+    {
+	contextUrl = 'https://www.emulab.net/protogeni/jacks-context/emulab.json';
     }
     else if (window.ISPNET)
     {
 	contextUrl = 'https://www.emulab.net/protogeni/jacks-context/phantomnet.json';
     }
 
-    if (window.ISCLOUD || window.ISPNET)
+    if (window.ISCLOUD || window.ISPNET || window.ISEMULAB)
     {
 	$('#edit_topo_modal_button').prop('disabled', true);
 	$.get(contextUrl).then(contextReady, contextFail);

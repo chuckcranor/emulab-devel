@@ -1,5 +1,5 @@
 #
-# Copyright (c) 2004-2014, 2016 University of Utah and the Flux Group.
+# Copyright (c) 2004-2017 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -40,14 +40,14 @@ if {[info exists ::TBCOMPAT::elabinelab_hardware("boss")]} {
         tb-set-hardware $myboss $elabinelab_hardware("boss")
     }
 } else {
-    tb-set-hardware $myboss pcvm3000
+    tb-set-hardware $myboss d710-vm
 }
 if {[info exists ::TBCOMPAT::elabinelab_hardware("ops")]} {
     namespace eval TBCOMPAT {
         tb-set-hardware $myops $elabinelab_hardware("ops")
     }
 } else {
-    tb-set-hardware $myops pcvm3000
+    tb-set-hardware $myops d710-vm
 }
 
 if {[info exists ::TBCOMPAT::elabinelab_fixnodes("boss")]} {
@@ -93,7 +93,7 @@ if {$myops_tarfiles != ""} {
     tb-set-node-tarfiles $myops $myops_tarfiles
 }
 
-#tb-make-soft-vtype pcslow {pc600 pc850}
+#tb-make-soft-vtype pcslow {pc3000}
 
 #
 # This is passed in by the parser, when wrapping an existing experiment.
@@ -158,7 +158,7 @@ if {[info exists ::TBCOMPAT::elabinelab_nodeos("boss")]} {
         tb-set-node-os $myboss $elabinelab_nodeos("boss") $xenos
     }
 } else {
-    tb-set-node-os $myboss XEN-GUEST-FBSD90-STD $xenos
+    tb-set-node-os $myboss FBSD102-64-STD $xenos
 }
 
 if {[info exists ::TBCOMPAT::elabinelab_nodeos("ops")]} {
@@ -166,7 +166,7 @@ if {[info exists ::TBCOMPAT::elabinelab_nodeos("ops")]} {
         tb-set-node-os $myops $elabinelab_nodeos("ops") $xenos
     }
 } else {
-    tb-set-node-os $myops XEN-GUEST-FBSD90-STD $xenos
+    tb-set-node-os $myops FBSD102-64-STD $xenos
 }
 
 #
@@ -213,17 +213,30 @@ if { $opsfw != {} } {
 #
 # We need to tell the XEN host to add some disks to the guests. 
 #
+# There is no particular reason to be conservative here. We use only
+# dedicated nodes for elabinelab VMs, and at a minimum we should have
+# 120GB of disk available.
+#
+# Boss: 
+#  disk1: 10G  (/usr/testbed)
+#  disk2: 40G  (/usr/testbed/data, primarily images)
+#  disk3: 10G  (/usr/testbed/log)
+# Ops:
+#  disk1: 10G  (/usr/testbed)
+#  disk2: 40G  (/q, including users/proj/groups)
+#  disk3: 10G  (/share)
+#
 set bossdisks [tb-get-elabinelab-role-attribute "boss" "XEN_EXTRADISKS"]
 if { $bossdisks != {} } {
     $myboss add-attribute XEN_EXTRADISKS $bossdisks
 } else {
-    $myboss add-attribute XEN_EXTRADISKS "disk1:10G,disk2:10G,disk3:10G"
+    $myboss add-attribute XEN_EXTRADISKS "disk1:10G,disk2:40G,disk3:10G"
 }
 set opsdisks [tb-get-elabinelab-role-attribute "ops" "XEN_EXTRADISKS"]
 if { $opsdisks != {} } {
     $myops add-attribute XEN_EXTRADISKS $opsdisks
 } else {
-    $myops add-attribute XEN_EXTRADISKS "disk1:4G,disk2:10G,disk3:10G"
+    $myops add-attribute XEN_EXTRADISKS "disk1:10G,disk2:40G,disk3:10G"
 }
 
 #

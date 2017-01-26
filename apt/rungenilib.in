@@ -46,7 +46,7 @@ sub usage()
  
     exit(-1);
 }
-my $optlist    = "do:pb:W";
+my $optlist    = "do:pP:b:W";
 my $debug      = 0;
 my $getparams  = 0;
 my $paramfile;
@@ -60,6 +60,7 @@ my $TB       = "@prefix@";
 my $TBOPS    = "@TBOPSEMAIL@";
 my $CONTROL  = "@USERNODE@";
 my $MAINSITE = @TBMAINSITE@;
+my $TAR      = "/usr/bin/tar";
 
 # Locals
 my $SAVEUID  = $UID;
@@ -112,6 +113,17 @@ if (defined($options{"d"})) {
 }
 if (defined($options{"p"})) {
     $getparams = 1;
+}
+if (defined($options{"P"})) {
+    $getparams = 1;
+    $paramfile = $options{"P"};
+    # Must taint check!
+    if ($paramfile =~ /^([-\w\/\.]+)$/) {
+	$paramfile = $1;
+    }
+    else {
+	die("Bad data in argument: $paramfile.");
+    }
 }
 if (defined($options{"W"})) {
     $warningsfatal = 1;
@@ -167,7 +179,8 @@ $EUID = $UID;
 # are any define_parameter calls. If so, run the script to get the
 # JSON block.
 #
-if ($getparams && system("egrep -q -s 'defineParameter' $file")) {
+if ($getparams && !$paramfile &&
+    system("egrep -q -s 'defineParameter' $file")) {
     # No parameters, return empty block.
     if (defined($ofile)) {
 	system("echo '' > $ofile");
@@ -204,7 +217,7 @@ $cmdargs .= ($warningsfatal ? " -W " : "");
 # We want to send over both files via STDIN, so combine them, and pass
 # the first file size with the -b option
 #
-if ($paramfile) {
+if ($paramfile && !$getparams) {
     system("cat $paramfile > $infile") == 0
 	or fatal("Could not copy $paramfile to $infile");
 
@@ -279,6 +292,41 @@ if ($exit_status) {
     # We want to pass along the exit status, since it indicates an internal
     # vs script error.
     exit($exit_status >> 8);
+}
+#
+# When getting the params, we get back a tar file. First file has the
+# paramdefs and the other is the rspec. Break them apart.
+#
+if ($getparams) {
+    my $files  = `$TAR tf $outfile`;
+    my ($p,$r) = split(/\n/, $files);
+    # Taint check.
+    if ($p =~ /^([-\w\/\.]+)$/) {
+	$p = $1;
+    }
+    else {
+	fatal("Bad data in argument: $p.");
+    }
+    if ($r =~ /^([-\w\/\.]+)$/) {
+	$r = $1;
+    }
+    else {
+	fatal("Bad data in argument: $r.");
+    }
+    my $tfile = tmpnam();
+
+    # Suck out params.
+    system("$TAR -xOf $outfile $p > $tfile");
+    if ($paramfile) {
+	system("cat $tfile > $paramfile");
+	system("$TAR -xOf $outfile $r > $tfile");
+	system("/bin/mv $tfile $outfile");
+	# We also write out the rspec below.
+    }
+    else {
+	# Caller wants only the paramfile.
+	system("/bin/mv $tfile $outfile");
+    }
 }
 if (defined($ofile)) {
     system("cat $outfile > $ofile");

@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2013-2016 University of Utah and the Flux Group.
+# Copyright (c) 2013-2017 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -738,19 +738,17 @@ sub exportSlice($$$$) {
 	# wind up creating multiple snapshots for the same volume.
 	# That does not matter right now, but something to watch out for.
 	#
-	my $tstamp;
 	if (!exists($priv->{'lastsnapshot'})) {
 	    # XXX this will be an error
 	    warn("*** WARNING: blockstore_exportSlice: $volname: ".
 		 "no snapshot found; created one for now");
-	    $tstamp = time();
+	    my $tstamp = time();
 	    if (freenasVolumeSnapshot($pool, $volume, $tstamp)) {
 		warn("*** ERROR: blockstore_exportSlice: $volname: ".
 		     "Could not create snapshot for RO/Clone mapping");
 		return -1;
 	    }
-	} else {
-	    $tstamp = $priv->{'lastsnapshot'};
+	    $priv->{'lastsnapshot'} = $tstamp;
 	}
 
 	#
@@ -763,9 +761,6 @@ sub exportSlice($$$$) {
 	if (freenasVolumeClone($pool, $volume, $vnode_id)) {
 	    warn("*** ERROR: blockstore_exportSlice: $volname: ".
 		 "Could not create clone for RO/Clone mapping");
-	    if ($tstamp) {
-		freenasVolumeDesnapshot($pool, $volume, $tstamp);
-	    }
 	    return -1;
 	}
 	$volume = $vnode_id;
@@ -1454,7 +1449,7 @@ sub deallocSlice($$$$) {
 
 		#
 		# If we are a clone of the most recent snapshot, just Destroy
-		# which leaves the clone; otherwise Declone and attempt to
+		# which leaves the snapshot; otherwise Declone and attempt to
 		# remove the old snapshot.
 		#
 		# Note that we do not use the cached 'lastsnapshot' in our

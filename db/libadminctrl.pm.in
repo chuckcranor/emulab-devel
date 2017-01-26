@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2000-2016 University of Utah and the Flux Group.
+# Copyright (c) 2000-2017 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -246,18 +246,7 @@ my $PLUS_GIDIDX		= 999999;
 #
 # The current usage data structure, filled in below.
 #
-my %curusage =
-    ("experiments"	=> {"user"    =>  0,
-			    "project" =>  0,
-			    "group"   =>  0},
-     "nodes"    	=> {"user"    =>  0,
-			    "project" =>  0,
-			    "group"   =>  0,
-			    "expt"   =>   0},
-     # Arrays of user/project/group counts, indexed by type and class. 
-     "class"		=> {},
-     "type"		=> {},
-    );
+my %curusage = ();
 
 # Output useful info.
 sub Declare($)
@@ -276,6 +265,27 @@ sub Debug($)
 	print "*** - $msg\n";
     }
 }
+
+# We can call this mulitple times from the mapper, need to make
+# sure global state is clean.
+sub InitVars()
+{
+    %assign_classes = ();
+    
+    %curusage = ("experiments"	=> {"user"    =>  0,
+				    "project" =>  0,
+				    "group"   =>  0},
+		 "nodes"    	=> {"user"    =>  0,
+				    "project" =>  0,
+				    "group"   =>  0,
+				    "expt"   =>   0},
+		 # Arrays of user/project/group counts, indexed by
+		 # type and class.
+		 "class"	=> {},
+		 "type"		=> {},
+	);
+}
+InitVars();
 
 # Update assign number.
 sub UpdateForAssign($$$$)
@@ -1079,6 +1089,7 @@ sub TBAdmissionControlCheck($$$)
 {
     my ($user, $experiment, $ptypearray) = @_;
     my $gid = $experiment->gid();
+    InitVars();
 
     $assignflag = 1
 	if (defined($ptypearray));

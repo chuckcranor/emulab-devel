@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2000-2015 University of Utah and the Flux Group.
+ * Copyright (c) 2000-2017 University of Utah and the Flux Group.
  * 
  * {{{EMULAB-LICENSE
  * 
@@ -629,7 +629,7 @@ PacketReceive(Packet_t *p)
 	/*
 	 * Basic integrity checks
 	 */
-	if (mlen < sizeof(p->hdr) + p->hdr.datalen) {
+	if ((uint32_t)mlen < sizeof(p->hdr) + p->hdr.datalen) {
 		FrisLog("Bad message length (%d != %d)",
 			mlen, p->hdr.datalen);
 		return 1;
@@ -654,9 +654,21 @@ PacketReceive(Packet_t *p)
 	/*
 	 * XXX accept packets from the MC address. This will be the case with
 	 * newer clients that bind to the MC address instead of INADDR_ANY.
+	 *
+	 * Note that on a client, certain packets should only come from the
+	 * server. These include: BLOCK replies and PROGRESS requests.
+	 * Don't rewrite the address in these cases so that the following
+	 * check will catch them (or a later caller check on hdr.srcip).
 	 */
-	if (from.sin_addr.s_addr == mcastaddr.s_addr)
-		from.sin_addr.s_addr = p->hdr.srcip;
+	if (from.sin_addr.s_addr == mcastaddr.s_addr) {
+		if (isclient &&
+		    (p->hdr.subtype == PKTSUBTYPE_BLOCK ||
+		     (p->hdr.subtype == PKTSUBTYPE_PROGRESS &&
+		      p->hdr.type == PKTTYPE_REQUEST)))
+			;
+		else
+			from.sin_addr.s_addr = p->hdr.srcip;
+	}
 
 	if (p->hdr.srcip != from.sin_addr.s_addr) {
 		FrisLog("Bad message source (%x != %x)",
@@ -819,10 +831,11 @@ PacketSend(Packet_t *p, int *resends)
  * multicast packets that are not destined for us, but for someone else.
  */
 void
-PacketReply(Packet_t *p)
+PacketReply(Packet_t *p, int firenforget)
 {
 	struct sockaddr_in to;
-	int		   len;
+	int		len;
+	int		fd = sock;
 
 	len = sizeof(p->hdr) + p->hdr.datalen;
 
@@ -831,10 +844,19 @@ PacketReply(Packet_t *p)
 	to.sin_addr.s_addr = p->hdr.srcip;
 	p->hdr.srcip       = myipaddr.s_addr;
 
-	while (sendto(sock, (void *)p, len, 0, 
+#ifdef USE_REUSEADDR_COMPAT
+	/* send out selfsock so the source IP is ours and not the MC addr */
+	if (selfsock >= 0)
+		fd = selfsock;
+#endif
+
+	while (sendto(fd, (void *)p, len, 0, 
 		      (struct sockaddr *)&to, sizeof(to)) < 0) {
 		if (errno != ENOBUFS && errno != EAGAIN)
-			FrisPfatal("PacketSend(sendto)");
+			FrisPfatal("PacketReply(sendto)");
+
+		if (firenforget)
+			break;
 
 		/*
 		 * ENOBUFS means we ran out of mbufs. Okay to sleep a bit
@@ -898,6 +920,10 @@ PacketValid(Packet_t *p, int nchunks)
 		break;
 	case PKTSUBTYPE_LEAVE2:
 		if (p->hdr.datalen < sizeof(p->msg.leave2))
+			return 0;
+		break;
+	case PKTSUBTYPE_PROGRESS:
+		if (p->hdr.datalen < sizeof(p->msg.progress.hdr))
 			return 0;
 		break;
 	default:

@@ -1,5 +1,5 @@
 #
-# Copyright (c) 2000-2015 University of Utah and the Flux Group.
+# Copyright (c) 2000-2017 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -62,12 +62,29 @@ subboss-install: client client-mkdirs subboss-install-subdirs
 post-install:	post-install-subdirs
 clean:		clean-subdirs
 distclean:	distclean-subdirs
-mfs:		mfs-subdirs
-mfs-install:	client-mkdirs mfs-install-subdirs
-frisbee-mfs:	frisbee-mfs-subdirs
-frisbee-mfs-install:	client-mkdirs frisbee-mfs-install-subdirs
-newnode-mfs:	newnode-mfs-subdirs
-newnode-mfs-install:	client-mkdirs newnode-mfs-install-subdirs
+
+destdircheck:
+	@if [ -z "$(DESTDIR)" ]; then \
+	    echo "You must define DESTDIR for this target!"; \
+	    false; \
+	fi
+	@if [ "$(DESTDIR)" = "/" ]; then \
+	    echo "DESTDIR is '/', really really bad idea!"; \
+	    false; \
+	fi
+
+mfsoscheck:
+	@if [ `uname -s` != "FreeBSD" ]; then \
+	    echo "Must build CDROM/MFS files on a FreeBSD system!"; \
+	    false; \
+	fi
+
+mfs:		mfsoscheck mfs-subdirs
+mfs-install:	destdircheck mfs client-mkdirs mfs-install-subdirs
+frisbee-mfs:	mfsoscheck frisbee-mfs-subdirs
+frisbee-mfs-install:	destdircheck frisbee-mfs client-mkdirs frisbee-mfs-install-subdirs
+newnode-mfs:	mfsoscheck newnode-mfs-subdirs
+newnode-mfs-install:	destdircheck newnode-mfs client-mkdirs newnode-mfs-install-subdirs
 
 TARBALLDESTDIR = /var/tmp/emulab-client
 tarball-check:

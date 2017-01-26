@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2000-2016 University of Utah and the Flux Group.
+# Copyright (c) 2000-2017 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -42,11 +42,13 @@ sub usage()
     print("Usage: manage_profile delete <profile> [all]\n");
     exit(-1);
 }
-my $optlist     = "ds:t:c:";
+my $optlist     = "ds:t:c:m";
 my $debug       = 0;
 my $update      = 0;
 my $snap        = 0;
 my $copy        = 0;
+my $fromrepo    = 0;
+my $updatemaster= 0;
 my $copyuuid;
 my $uuid;
 my $rspec;
@@ -66,6 +68,7 @@ my $TB		    = "@prefix@";
 my $TBOPS           = "@TBOPSEMAIL@";
 my $TBLOGS	    = "@TBLOGSEMAIL@";
 my $MANAGEINSTANCE  = "$TB/bin/manage_instance";
+my $MANAGEGITREPO   = "$TB/bin/manage_gitrepo";
 my $RUNGENILIB      = "$TB/bin/rungenilib";
 
 #
@@ -87,6 +90,7 @@ use EmulabConstants;
 use emdb;
 use emutil;
 use libEmulab;
+use libtestbed;
 use User;
 use Project;
 use APT_Profile;
@@ -158,26 +162,12 @@ elsif ($action ne "create") {
 my $xmlfile = shift(@ARGV);
 
 #
-# Create the webtask object, even though we do not have a profile
-# object yet, we will set it below. We use the webtask to pass the
-# errors back to the web interface before the profile is created.
+# Grab the webtask object.
 #
-# Note that if we fail, we want to leave the webtask around for the
-# web interface, it will need to delete it. 
-#
-# If doing a snapshot, we always create one since that is the easiest
-# way to communicate with the manage_instance script, even if we ran
-# this from the command line. 
-#
-if (defined($webtask_id) || $snap) {
-    if (defined($webtask_id)) {
-	$webtask = WebTask->Lookup($webtask_id);
-    }
-    else {
-	$webtask = WebTask->Create(undef);
-    }
+if (defined($webtask_id)) {
+    $webtask = WebTask->Lookup($webtask_id);
     if (!defined($webtask)) {
-	fatal("Could not create webtask for profile");
+	fatal("Could not lookup/create webtask for profile");
     }
     $webtask->AutoStore(1);
 }
@@ -210,6 +200,7 @@ my %xmlfields =
 			                          $SLOT_UPDATE|$SLOT_ADMINONLY],
      "rspec"		   => ["rspec",		$SLOT_REQUIRED|$SLOT_UPDATE],
      "script"		   => ["script",	$SLOT_OPTIONAL|$SLOT_UPDATE],
+     "repourl"		   => ["repourl",	$SLOT_OPTIONAL],
 );
 
 #
@@ -332,6 +323,56 @@ if (defined($rspec)) {
     }
 }
 
+if ($update) {
+    $profile = APT_Profile->Lookup($uuid);
+    if (!defined($profile)) {
+	fatal("Could not lookup profile for update $uuid");
+    }
+}
+
+#
+# Look for repourl. We already cloned it once to get the source, but
+# need to clone to for real now that we can assign a name to it. Only
+# for new profiles of course, the user cannot change the url later.
+#
+if (exists($new_args{'repourl'}) || ($update && $profile->IsRepoBased())) {
+    my $reponame;
+    my $repohash;
+    
+    if ($update) {
+	$reponame = $profile->reponame();
+	# Ignore.
+	delete($new_args{'repourl'});
+    }
+    else {
+	my $repourl  = $new_args{'repourl'};
+	$reponame = NewUUID();
+
+	my $output =
+	    emutil::ExecQuiet("$MANAGEGITREPO clone -n $reponame '$repourl'");
+	if ($?) {
+	    UserError($output);
+	}
+	$new_args{'reponame'} = $reponame;
+    }
+    #
+    # Get the commit hash for the HEAD commit.
+    #
+    my $output = emutil::ExecQuiet("$MANAGEGITREPO hash -n $reponame");
+    if ($?) {
+	UserError($output);	
+    }
+    $repohash = $output;
+    chomp($repohash);
+    if ($update) {
+	$update_args{'repohash'} = $repohash;
+    }
+    else {
+	$new_args{'repohash'} = $repohash;
+    }
+    $fromrepo = 1;
+}
+
 #
 # See if this is a Parameterized Profile. Generate and store the form
 # data if it is. Only python scripts of course.
@@ -345,13 +386,12 @@ if (defined($script) && $script ne "" && $script =~ /^import/m) {
     fatal("$RUNGENILIB failed")
 	if ($?);
     chomp($paramdefs);
-    if ($paramdefs ne "") {
-	if ($update) {
-	    $update_args{"paramdefs"} = $paramdefs;
-	}
-	else {
-	    $new_args{"paramdefs"} = $paramdefs;
-	}
+    if ($update) {
+	# No versioning so need to clear existing paramdefs.
+	$update_args{"paramdefs"} = ($paramdefs ne "" ? $paramdefs : undef);
+    }
+    elsif ($paramdefs ne "") {
+	$new_args{"paramdefs"} = $paramdefs;
     }
 }
 
@@ -400,10 +440,6 @@ elsif ($copy) {
 }
 
 if ($update) {
-    $profile = APT_Profile->Lookup($uuid);
-    if (!defined($profile)) {
-	fatal("Could not lookup profile for update $uuid");
-    }
     # Kill the description.. No longer used.
     delete($update_args{"description"});
 
@@ -422,8 +458,11 @@ if ($update) {
 	if ((exists($update_args{"rspec"}) &&
 	     $update_args{"rspec"} ne $profile->rspec()) ||
 	    (exists($update_args{"script"}) &&
-	     $update_args{"script"} ne $profile->script())) {
-	    if ($doversions) {
+	     $update_args{"script"} ne $profile->script()) ||
+	    (defined($profile->repourl()) &&
+	     exists($update_args{"repohash"}) &&
+	     $update_args{"repohash"} ne $profile->repohash())) {
+	    if ($doversions && !$fromrepo) {
 		$profile = $profile->NewVersion($this_user);
 		if (!defined($profile)) {
 		    fatal("Could not create new version of the profile");
@@ -432,22 +471,20 @@ if ($update) {
 		$webtask->newProfile($profile->uuid())
 		    if (defined($webtask));
 	    }
-	    $profile->UpdateVersion({"rspec" => $update_args{"rspec"}})
-		if (exists($update_args{"rspec"}));
-	    $profile->UpdateVersion({"script" => $update_args{"script"}})
-		if (exists($update_args{"script"}));
-	    $profile->UpdateVersion({"paramdefs" => $update_args{"paramdefs"}})
-		if (exists($update_args{"paramdefs"}));
+	    foreach my $key ("rspec", "script", "paramdefs", "repohash") {
+		$profile->UpdateVersion({$key => $update_args{$key}})
+		    if (exists($update_args{$key}));
+	    }
 	}
-	delete($update_args{"rspec"})
-	    if (exists($update_args{"rspec"}));
-	delete($update_args{"script"})
-	    if (exists($update_args{"script"}));
-	delete($update_args{"paramdefs"})
-	    if (exists($update_args{"paramdefs"}));
+	foreach my $key ("rspec", "script", "paramdefs", "repohash") {
+	    delete($update_args{$key})
+		if (exists($update_args{$key}));
+	}
     }
-    $profile->UpdateMetaData(\%update_args) == 0 or
-	fatal("Could not update profile record");
+    if (keys(%update_args)) {
+	$profile->UpdateMetaData(\%update_args) == 0 or
+	    fatal("Could not update profile record");
+    }
 
     #
     # Disable operates on current version or all versions.
@@ -479,10 +516,6 @@ else {
 	}
 	fatal("Could not create new profile");
     }
-    # Had to wait to do this, see comment above.
-    $webtask->SetObject($profile->uuid())
-	if (defined($webtask));
-    
     if (!$this_user->IsAdmin()) {
 	$profile->Publish();
     }
@@ -495,13 +528,14 @@ if (defined($instance)) {
     my $apt_uuid   = $instance->uuid();
     my $imagename  = $profile->name();
     my $new_uuid   = $profile->uuid();
+    # We want to use the webtask associated with the new profile.
+    my $pwebtask   = $profile->webtask();
 
     if ($profile->Lock()) {
 	$profile->Delete(1);
 	fatal("Could not lock new profile");
     }
-
-    my $command = "$MANAGEINSTANCE -t " . $webtask->task_id() . " -- ".
+    my $command = "$MANAGEINSTANCE -t " . $pwebtask->task_id() . " ".
 	"snapshot $apt_uuid -c $new_uuid -n $node_id -i $imagename";
     
     #
@@ -515,8 +549,6 @@ if (defined($instance)) {
 	my $stat = $? >> 8;
 	
 	$profile->Delete(1);
-	$webtask->Delete()
-	    if (!defined($webtask_id));
 	print STDERR $output . "\n";
 	if ($stat < 0) {
 	    fatal("Failed to create disk image!");
@@ -526,25 +558,26 @@ if (defined($instance)) {
     #
     # The script helpfully put the new image urn in the webtask.
     #
-    $webtask->Refresh();
+    $pwebtask->Refresh();
+
     my $newimage;
 
     if (GetSiteVar("protogeni/use_imagetracker") &&	
 	EmulabFeatures->FeatureEnabled("APT_UseImageTracker",
 				       $this_user, $project)) {
-	$newimage = $webtask->image_urn();
+	$newimage = $pwebtask->image_urn();
     }
     else {
-	$newimage = $webtask->image_url();
+	$newimage = $pwebtask->image_url();
     }
     if (!defined($newimage) ||
 	$profile->UpdateDiskImage($node_id, $newimage, 0)) {
-	$webtask->Delete()
-	    if (!defined($webtask_id));
 	$profile->Delete(1);
 	fatal("Could not update image URN in rspec");
     }
-
+    # Tell web interface cloning has started.
+    $pwebtask->cloning(1);
+    
     #
     # Exit and leave child to poll.
     #
@@ -571,33 +604,34 @@ if (defined($instance)) {
     while (1) {
 	sleep(10);
 	
-	$webtask->Refresh();
+	$pwebtask->Refresh();
 	last
-	    if (defined($webtask->exited()));
+	    if (defined($pwebtask->exited()));
 
 	#
 	# See if the process is still running. If not then it died badly.
 	# Mark the webtask as exited.
 	#
-	my $pid = $webtask->process_id();
+	my $pid = $pwebtask->process_id();
 	if (! kill(0, $pid)) {
 	    # Check again in case it just exited.
-	    $webtask->Refresh();
-	    if (! defined($webtask->exited())) {
-		$webtask->Exited(-1);
+	    $pwebtask->Refresh();
+	    if (! defined($pwebtask->exited())) {
+		$pwebtask->Exited(-1);
 	    }
 	    last;
 	}
     }
-    if ($webtask->exitcode()) {
+    # When the profile is deleted, the web task will be deleted. The
+    # web interface will see that of course and return an error to the
+    # client JS code. 
+    if ($pwebtask->exitcode()) {
 	$profile->Delete(1);
-	$webtask->Delete()
-	    if (!defined($webtask_id));
 	exit(1);
     }
+    # Tell web interface cloning has finished
+    $pwebtask->cloning(0);
     $profile->Unlock();
-    $webtask->Delete()
-	if (!defined($webtask_id));
     exit(0);
 }
 
@@ -620,7 +654,7 @@ sub fatal($)
 {
     my ($mesg) = @_;
 
-    if (defined($webtask)) {
+    if (defined($webtask_id)) {
 	$webtask->output($mesg);
 	$webtask->Exited(-1);
     }
@@ -689,13 +723,6 @@ sub DeleteProfile($)
     if (!defined($profile)) {
 	fatal("No such profile exists");
     }
-    if (defined($webtask_id)) {
-	$webtask = WebTask->LookupOrCreate(undef, $webtask_id);
-	if (!defined($webtask)) {
-	    fatal("Could not lookup/create webtask");
-	}
-	$webtask->AutoStore(1);
-    }
     if (!$profile->IsHead()) {
 	$errmsg = "Only allowed to delete the most recent profile";
 	goto uerror;
@@ -715,9 +742,7 @@ sub DeleteProfile($)
 	$profile->Delete(0) == 0 or
 	    fatal("Could not delete profile");
     }
-    # No need for this anonymous webtask anymore.
-    $webtask->Delete()
-	if (defined($webtask));
+    # The web UI will delete the anonymous webtask.
     return 0;
   uerror:
     if (defined($webtask)) {
@@ -739,13 +764,6 @@ sub PublishProfile($)
     my $profile = APT_Profile->Lookup($name);
     if (!defined($profile)) {
 	fatal("No such profile exists");
-    }
-    if (defined($webtask_id)) {
-	$webtask = WebTask->LookupOrCreate(undef, $webtask_id);
-	if (!defined($webtask)) {
-	    fatal("Could not lookup/create webtask");
-	}
-	$webtask->AutoStore(1);
     }
     if (!$profile->IsHead()) {
 	$errmsg = "Only allowed to publish the most recent profile";

@@ -241,6 +241,11 @@ foreach my $token (@userlist) {
 	print "Skipping $uid; nonlocal account!\n";
 	next;
     }
+    if ($ELABINELAB &&
+	$user->status() eq USERSTATUS_FROZEN && !getpwnam($user->uid())) {
+	print "Skipping $uid; initially frozen elabinelab account!\n";
+	next;
+    }
     # want to skip nonlocal/webonly in second loop below.
     push(@modusers, $user);
 

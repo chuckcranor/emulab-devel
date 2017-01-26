@@ -99,6 +99,9 @@ $defaults["profile_profile_url"] = $profile->ProfileURL();
 if ($profile->script() && $profile->script() != "") {
     $defaults["profile_script"] = $profile->script();
 }
+if ($profile->repourl() && $profile->repourl() != "") {
+    $defaults["profile_repourl"] = $profile->repourl();
+}
 
 # Place to hang the toplevel template.
 echo "<div id='page-body'></div>\n";
@@ -151,11 +154,12 @@ REQUIRE_SUP();
 REQUIRE_MOMENT();
 REQUIRE_APTFORMS();
 REQUIRE_MARKED();
+AddLibrary("js/gitrepo.js");
 SPITREQUIRE("js/show-profile.js",
             "<script src='js/lib/jquery-ui.js'></script>\n".
             "<script src='js/lib/jquery.appendGrid-1.3.1.min.js'></script>");
 
-AddTemplateList(array("show-profile", "waitwait-modal", "renderer-modal", "showtopo-modal", "rspectextview-modal", "guest-instantiate", "instantiate-modal", "oops-modal", "share-modal"));
+AddTemplateList(array("show-profile", "waitwait-modal", "renderer-modal", "showtopo-modal", "rspectextview-modal", "guest-instantiate", "instantiate-modal", "oops-modal", "share-modal", "gitrepo-picker"));
 SPITFOOTER();
 
 ?>

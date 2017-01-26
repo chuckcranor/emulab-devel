@@ -220,8 +220,13 @@ if (defined($options{"B"})) {
 if (!$ofile && exists($ENV{'GENILIB_PORTAL_REQUEST_PATH'})) {
     $ofile = $ENV{'GENILIB_PORTAL_REQUEST_PATH'};
 }
-if (!$pfile && exists($ENV{'GENILIB_PORTAL_PARAMS_PATH'})) {
-    $pfile = $ENV{'GENILIB_PORTAL_PARAMS_PATH'};
+if (!$pfile) {
+    if (exists($ENV{'GENILIB_PORTAL_PARAMS_PATH'})) {
+	$pfile = $ENV{'GENILIB_PORTAL_PARAMS_PATH'};
+    }
+    elsif (exists($ENV{'GENILIB_PORTAL_DUMPPARAMS_PATH'})) {
+	$pfile = $ENV{'GENILIB_PORTAL_DUMPPARAMS_PATH'};
+    }
 }
 
 if ($action == 4) {
@@ -348,7 +353,8 @@ if ($action != 1) {
 
     msg("Stashing files");
     if (mysystem("cp -p $ifile $jailrootdir$j_ifile") ||
-	($pfile && mysystem("cp -p $pfile $jailrootdir$j_pfile")) ||
+	($pfile && -e $pfile &&
+	 mysystem("cp -p $pfile $jailrootdir$j_pfile")) ||
 	mysystem("chown -R $uid:$gid $jailrootdir$tempdir")) {
 	print STDERR "Could not populate jail\n";
 	exit(-1);
@@ -359,9 +365,9 @@ if ($action != 1) {
     #
     $ENV{'GENILIB_PORTAL_REQUEST_PATH'} = $j_ofile;
     if (exists($ENV{'GENILIB_PORTAL_DUMPPARAMS_PATH'})) {
-	$ENV{'GENILIB_PORTAL_DUMPPARAMS_PATH'} = $j_ofile;
+	$ENV{'GENILIB_PORTAL_DUMPPARAMS_PATH'} = $j_pfile;
     }
-    if ($pfile) {
+    elsif (exists($ENV{'GENILIB_PORTAL_PARAMS_PATH'})) {
 	$ENV{'GENILIB_PORTAL_PARAMS_PATH'} = $j_pfile;
     }
 
@@ -453,6 +459,14 @@ if ($action != 1) {
 	if (-l "$jailrootdir$j_ofile" ||
 	    mysystem("cp $jailrootdir$j_ofile $ofile")) {
 	    print STDERR "Could not copy back results of command\n";
+	    exit(-1);
+	}
+    }
+    if (exists($ENV{'GENILIB_PORTAL_DUMPPARAMS_PATH'}) &&
+	-e "$jailrootdir$j_pfile") {
+	if (-l "$jailrootdir$j_pfile" ||
+	    mysystem("cp $jailrootdir$j_pfile $pfile")) {
+	    print STDERR "Could not copy back parameter block\n";
 	    exit(-1);
 	}
     }

@@ -39,7 +39,7 @@ $(function ()
     var source = document.getElementById('source').innerHTML;
     editor.setValue(atob(source));
     editor.selection.clearSelection();
-    window.onbeforeunload = null;
+    $(window).off('beforeunload.portal');
 
     $('#waitwait-modal').modal({ backdrop: 'static', keyboard: false, show: false });
     sup.DownloadOnClick($('#saveButton'), getSaveText, 'saved.py', saveComplete);
@@ -88,7 +88,7 @@ $(function ()
     {
       removeSplit();
     }
-    window.onbeforeunload = beforeUnload;
+    $(window).on('beforeunload.portal', beforeUnload);
   }
 
   function getSaveText()
@@ -105,7 +105,7 @@ $(function ()
 
   function saveComplete()
   {
-    window.onbeforeunload = null;
+    $(window).off('beforeunload.portal');
   }
   
   function load()
@@ -122,7 +122,7 @@ $(function ()
             var contents = e.target.result;
 	    editor.setValue(contents);
 	    editor.selection.clearSelection();
-	    window.onbeforeunload = null;
+	    $(window).off('beforeunload.portal');
 	    removeSplit();
 //            jacksInput.trigger('change-topology', [{ rspec: contents }]);
           };
@@ -412,7 +412,9 @@ $(function ()
       disabled: true,
       versions: [],
       withpublishing: false,
-      genilib_editor: true
+      genilib_editor: true,
+      canrepo: false,
+      fromrepo: false
     });
     manage_html = aptforms.FormatFormFieldsHorizontal(manage_html,
 						      {"wide": false });
@@ -464,7 +466,9 @@ $(function ()
       disabled: true,
       versions: [],
       withpublishing: false,
-      genilib_editor: true
+      genilib_editor: true,
+      canrepo: false,
+      fromrepo: false
     });
     manage_html = aptforms.FormatFormFieldsHorizontal(manage_html,
 						      {'wide': false });
@@ -523,14 +527,14 @@ $(function ()
 
   function submitEdit(event)
   {
-    window.onbeforeunload = null;
+    $(window).off('beforeunload.portal');
     $('#waitwait-modal').modal('show');
     return true;
   }
 
   function submitCreate(event)
   {
-    window.onbeforeunload = null;
+    $(window).off('beforeunload.portal');
     $('#waitwait-modal').modal('show');
     return true;
   }

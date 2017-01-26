@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2016 University of Utah and the Flux Group.
+# Copyright (c) 2000-2017 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -106,7 +106,19 @@ $routing = array("myprofiles" =>
 						 "BindParameters" =>
 						     "Do_BindParameters",
 						 "ConvertClassic" =>
-                                                     "Do_ConvertClassic")),
+                                                     "Do_ConvertClassic",
+						 "UpdateRepository" =>
+                                                     "Do_UpdateRepository",
+						 "GetRepository" =>
+                                                     "Do_GetRepository",
+						 "GetRepoSource" =>
+                                                     "Do_GetRepoSource",
+						 "GetBranchList" =>
+                                                     "Do_GetBranchList",
+						 "GetCommitInfo" =>
+                                                     "Do_GetCommitInfo",
+						 "GetCommitList" =>
+                                                     "Do_GetCommitList")),
 		 "status" =>
 			array("file"    => "status.ajax",
 			      "guest"   => true,
@@ -202,7 +214,14 @@ $routing = array("myprofiles" =>
 			      "guest"   => false,
                               "unapproved" => true,
 			      "methods" => array("update" =>
-                                                 "Do_Update")),
+                                                     "Do_Update")),
+		 "changepswd" =>
+			array("file"    => "changepswd.ajax",
+			      "guest"   => false,
+                              "unapproved" => true,
+                              "notloggedinokay" => true,
+			      "methods" => array("changepswd" =>
+                                                     "Do_ChangePassword")),
 		 "lists" =>
 			array("file"    => "lists.ajax",
 			      "guest"   => false,
@@ -349,12 +368,16 @@ function CheckLoginForAjax($route)
     global $this_user, $check_status;
     $guestokay = false;
     $unapprovedokay = false;
+    $notloggedinokay = false;
     
     if (array_key_exists("guest", $route)) {
         $guestokay = $route["guest"];
     }
     if (array_key_exists("unapproved", $route)) {
         $unapprovedokay = $route["unapproved"];
+    }
+    if (array_key_exists("notloggedinokay", $route)) {
+        $notloggedinokay = $route["notloggedinokay"];
     }
 
     # Known user, but timed out.
@@ -394,7 +417,7 @@ function CheckLoginForAjax($route)
         }
 	return;
     }
-    if (!$guestokay) {
+    if (!($guestokay || $notloggedinokay)) {
 	SPITAJAX_ERROR(2, "You are not logged in");	
 	exit(2);
     }

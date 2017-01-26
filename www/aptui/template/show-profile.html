@@ -1,3 +1,8 @@
+<style>
+.popover {
+    max-width: none;
+}
+</style>
 <div class='row'>
   <div class='col-lg-3
               col-md-3
@@ -14,16 +19,19 @@
 	    <td>Name:</td>
 	    <td><%- fields.profile_name %></td>
 	  </tr>
-	  <tr>
-	    <td>Version:</td><td>
-	      <% if (history) { %>
-		<a href='profile-history.php?uuid=<%= profile_uuid %>'>
-	  	  <%- fields.profile_version %></a>
-	      <% } else { %>
-		<%- fields.profile_version %>
-	      <% } %>
-	    </td></tr>
-	  <tr>
+	  <% if (!fromrepo) { %>
+	    <tr>
+	      <td>Version:</td><td>
+		<% if (history) { %>
+		  <a href='profile-history.php?uuid=<%= profile_uuid %>'>
+	  	    <%- fields.profile_version %></a>
+		<% } else { %>
+		  <%- fields.profile_version %>
+		<% } %>
+	      </td>
+	    </tr>
+	  <% } %>
+	    <tr>
 	    <td>Project:</td>
 	    <td><%- fields.profile_pid %></td>
 	  </tr>
@@ -79,8 +87,65 @@
            type='button'>Version History
 	</a>
 	<% } %>
+	<% if (isadmin) { %>
+	  <a class='btn btn-info btn-xs pull-left'
+             id='profile_history_button'
+             style='margin-right: 10px; font-size: 12px'
+             href='profile-activity.php?uuid=<%= profile_uuid %>'
+             type='button'>Activity
+	  </a>
+	<% } %>
       </div>
     </div>
+    <% if (fromrepo) { %>
+      <div class='panel panel-default hidden' id="repoinfo-panel">
+	<div class='panel-heading'>
+          <h4 class='panel-title text-center'>Repository Info</h4>
+	</div>
+	<div class='panel-body'
+	     style='overflow: hidden; padding-left: 5px; padding-right: 5px'>
+	  <table class='table-condensed nospaceafter'
+		 style='font-size:12px;'>
+	    <tr>
+	      <td>Refspec:</td>
+	      <td class="commit-refspec"></td>
+	    </tr>
+	    <tr>
+	      <td>Commit:</td>
+	      <td class="commit-hash"></td>
+	    </tr>
+	    <tr>
+	      <td>Date:</td>
+	      <td class="commit-date"></td>
+	    </tr>
+	    <tr>
+	      <td>Author:</td>
+	      <td class="commit-author"></td>
+	    </tr>
+	    <tr>
+	      <td>Est. Size:</td>
+	      <td class="commit-size"></td>
+	    </tr>
+	    <% if (isadmin) { %>
+	      <tr>
+		<td>RepoName:</td>
+		<td class="commit-reponame" style="font-size: 60%;"></td>
+	      </tr>
+	    <% } %>
+	    <tr>
+	      <td>Log:</td>
+	      <td class="commit-log">
+		<span class="commit-log-start"></span>
+		<button type="button" class="hidden log btn btn-xs"
+			data-toggle='popover'
+			data-html="true"
+			data-delay='{"hide":1000, "show":250}'>...</button>
+	      </td>
+	    </tr>
+	  </table>
+	</div>
+      </div>
+    <% } %>
   </div>
   <div class='col-lg-9
               col-md-9
@@ -115,6 +180,16 @@
 		</div>
 	      </div>
 	    </div>
+	    <% if (fromrepo) { %>
+	      <div class="form-group">
+		<div class='form-control format-me'
+		     style="height: auto;"
+		     id="profile_repourl"
+		     data-key='profile_repourl' data-label='Repository'>
+		  <%- fields.profile_repourl %>
+		</div>
+	      </div>
+	    <% } %>
 	    <div class="form-group">
 	      <div class='form-control format-me'
 		   style="height: auto;"
@@ -134,7 +209,7 @@
 	<% if (!disabled) { %>
 	  <button class='btn btn-primary btn-xs pull-right'
              id='profile_instantiate_button'
-             style='margin-right: 10px;'
+		  style='margin-right: 10px;'
              name='create'>Instantiate
 	  </button>
 	  <a class='btn btn-primary btn-xs pull-right'
@@ -172,28 +247,42 @@
       </div>
     </div>
   </div>
-  <textarea name="formfields[profile_rspec]"
-	    id='profile_rspec_textarea'
-            class='form-control hidden'
-            type='textarea'
-	    data-key='profile_rspec'
-	    rows=5><%- fields.profile_rspec %></textarea>
-  <textarea name="formfields[profile_script]"
-	    id='profile_script_textarea'
-            class='form-control hidden'
-            type='textarea'
-	    data-key='profile_script'
-	    rows=5><%- fields.profile_script %></textarea>
+  <!-- place to hang the modals  -->
+  <div id='showtopomodal_div'></div>
+  <div id='editmodal_div'></div>
+  <div id='waitwait_div'></div>
+  <div id='imaging_div'></div>
+  <div id='renderer_div'></div>
+  <div id='oops_div'></div>
+  <div id='guest_div'></div>
+  <div id='publish_div'></div>
+  <div id='instantiate_div'></div>
+  <div id='rspectext_div'></div>
+  <div id='share_div'>
+  </div>
 </div>
-<!-- place to hang the modals  -->
-<div id='showtopomodal_div'></div>
-<div id='editmodal_div'></div>
-<div id='waitwait_div'></div>
-<div id='imaging_div'></div>
-<div id='renderer_div'></div>
-<div id='oops_div'></div>
-<div id='guest_div'></div>
-<div id='publish_div'></div>
-<div id='instantiate_div'></div>
-<div id='rspectext_div'></div>
-<div id='share_div'>
+<div class='row hidden' id="gitpicker-div">
+  <div class='col-sm-12'>
+    <div class='panel panel-default'>
+      <div class='panel-heading'>
+        <h4 class='panel-title text-center'>Repository</h4>
+      </div>
+      <div id="gitrepo-picker" class='panel-body'>
+      </div>
+    </div>
+  </div>
+</div>
+<textarea name="formfields[profile_rspec]"
+	  id='profile_rspec_textarea'
+          class='form-control hidden'
+          type='textarea'
+	  data-key='profile_rspec'
+	  rows=5><%- fields.profile_rspec %></textarea>
+<textarea name="formfields[profile_script]"
+	  id='profile_script_textarea'
+          class='form-control hidden'
+          type='textarea'
+	  data-key='profile_script'
+	  rows=5><%- fields.profile_script %></textarea>
+
+  

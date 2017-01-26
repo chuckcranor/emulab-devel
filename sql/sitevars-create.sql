@@ -110,10 +110,11 @@ INSERT INTO sitevariables VALUES ('images/create/maxwait',NULL,'72','Max time (m
 INSERT INTO sitevariables VALUES ('images/create/idlewait',NULL,'8','Max time (minutes) to allow between periods of progress (image file getting larger) when saving an image (should be <= maxwait)',0);
 INSERT INTO sitevariables VALUES ('images/create/maxsize',NULL,'6','Max size (GB) of a created image',0);
 INSERT INTO sitevariables VALUES ('general/testbed_shutdown',NULL,'0','Non-zero value indicates that the testbed is shutdown and scripts should not do anything when they run. DO NOT SET THIS BY HAND!',0);
-INSERT INTO sitevariables VALUES ('images/frisbee/maxrate_std',NULL,'72000000','Max bandwidth (Bytes/sec) at which to distribute standard images from the /usr/testbed/images directory.',0);
-INSERT INTO sitevariables VALUES ('images/frisbee/maxrate_usr',NULL,'54000000','Max bandwidth (Bytes/sec) at which to distribute user-defined images from the /proj/.../images directory.',0);
+INSERT INTO sitevariables VALUES ('images/frisbee/maxrate_std',NULL,'72000000','Max bandwidth (Bits/sec) at which to distribute standard images from the /usr/testbed/images directory.',0);
+INSERT INTO sitevariables VALUES ('images/frisbee/maxrate_usr',NULL,'54000000','Max bandwidth (Bits/sec) at which to distribute user-defined images from the /proj/.../images directory.',0);
 INSERT INTO sitevariables VALUES ('images/frisbee/maxrate_dyn',NULL,'0','If non-zero, use bandwidth throttling on all frisbee servers; maxrate_{std,usr} serve as initial BW values.',0);
 INSERT INTO sitevariables VALUES ('images/frisbee/maxlinger',NULL,'180','Seconds to wait after last request before exiting; 0 means never exit, -1 means exit after last client leaves.',0);
+INSERT INTO sitevariables VALUES ('images/frisbee/heartbeat',NULL,'0','Interval at which frisbee client should report progress (0==never report).',0);
 INSERT INTO sitevariables VALUES ('general/idlepower_enable',NULL,'0','Enable idle power down to conserve electricity',0);
 INSERT INTO sitevariables VALUES ('general/idlepower_idletime',NULL,'3600','Maximum number of seconds idle before a node is powered down to conserve electricity',0);
 INSERT INTO sitevariables VALUES ('general/autoswap_max',NULL,'120','Maximum number of hours for the experiment autoswap limit.',0);

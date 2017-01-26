@@ -94,6 +94,7 @@ RUN_DEPENDS+=	\
 	neato:${PORTSDIR}/graphics/graphviz \
 	otclsh:${PORTSDIR}/misc/otcl \
 	rpm:${PORTSDIR}/archivers/rpm4 \
+	rrdtool:${PORTSDIR}/databases/rrdtool \
 	rsync:${PORTSDIR}/net/rsync \
 	swig2.0:${PORTSDIR}/devel/swig20 \
 	sudo:${PORTSDIR}/security/sudo \

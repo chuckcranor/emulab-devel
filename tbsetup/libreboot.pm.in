@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2000-2016 University of Utah and the Flux Group.
+# Copyright (c) 2000-2017 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -115,9 +115,6 @@ use event;
 use POSIX qw(strftime);
 use IO::Handle;
 use Fcntl;
-if ($PGENISUPPORT) {
-    require libGeni;
-}
 
 # External Programs
 my $ssh		= "$TB/bin/sshtb -n";
@@ -381,6 +378,8 @@ sub nodereboot($$)
     # Fire off the geninode reboots. 
     #
     if (keys(%geninodes)) {
+	require libGeni;
+	
 	my $this_user = User->ThisUser();
 	if (!defined($this_user)) {
 	    tbdie("Could not determine current user for libGeni\n");

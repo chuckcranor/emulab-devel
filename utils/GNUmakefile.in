@@ -56,7 +56,8 @@ SBIN_SCRIPTS	= vlandiff vlansync withadminprivs export_tables cvsupd.pl \
 		  mktestbedtest fixrootcert addservers poolmonitor \
 		  node_exclude managetaint shutdown-shared imagerelease \
 		  runsonxen pxelinux_makeconf attend atten \
-		  addrfdevice addrfpath reserve announce createimagealias
+		  addrfdevice addrfpath reserve announce createimagealias \
+		  predict test-reserve
 
 WEB_SBIN_SCRIPTS= webnewnode webdeletenode webspewconlog webarchive_list \
                   webwanodecheckin webspewimage webdumpdescriptor webemulabfeature \

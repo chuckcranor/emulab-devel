@@ -52,6 +52,7 @@ sub Install($$$)
 			PhaseSkip("named not running!?");
 		    }
 		}
+		sleep 1;
 	    };
 	    Phase "starting", "Starting named", sub {
 		#

@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2013-2016 University of Utah and the Flux Group.
+# Copyright (c) 2013-2017 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -167,7 +167,7 @@ sub freenasRunCmd($$);
 sub freenasParseListing($);
 
 sub freenasVolumeSnapshot($$;$);
-sub freenasVolumeDesnapshot($$;$);
+sub freenasVolumeDesnapshot($$;$$);
 sub freenasVolumeClone($$$;$);
 sub freenasVolumeDeclone($$);
 
@@ -392,6 +392,10 @@ sub freenasVolumeList($;$)
 	foreach my $snap (@$sinfo) {
 	    my $vol = $snap->{'filesystem'};
 	    next if (!$vol);
+
+	    # XXX only track snapshots we create (10 digit timestamp)
+	    # XXX note that we do return these if $snapinfo==2
+	    next if ($snap->{'name'} !~ /^\d{10}$/ && $snapinfo != 2);
 
 	    # XXX only handle zvols right now
 	    next if ($snap->{'parent_type'} ne 'volume');
@@ -623,9 +627,9 @@ sub freenasVolumeSnapshot($$;$)
     return 0;
 }
 
-sub freenasVolumeDesnapshot($$;$)
+sub freenasVolumeDesnapshot($$;$$)
 {
-    my ($pool, $volname, $tstamp) = @_;
+    my ($pool, $volname, $tstamp, $force) = @_;
 
     # Untaint arguments that are passed to a command execution
     $pool = untaintHostname($pool);
@@ -642,7 +646,7 @@ sub freenasVolumeDesnapshot($$;$)
     }
 
     # Get volume and snapshot info
-    my $vollist = freenasVolumeList(0, 1);
+    my $vollist = freenasVolumeList(0, ($force ? 2 : 1));
 
     # The base volume must exist
     my $vref = $vollist->{$volname};

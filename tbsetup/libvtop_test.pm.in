@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2005-2016 University of Utah and the Flux Group.
+# Copyright (c) 2005-2017 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -201,6 +201,7 @@ sub current_v2pmap($)   { return $_[0]->{'CURRENT_V2PMAP'}; }
 sub pnodes($)           { return $_[0]->{'PNODES'}; }
 sub fixednodes($)       { return $_[0]->{'FIXEDNODES'}; }
 sub newreserved($)      { return $_[0]->{'NEWRESERVED'}; }
+sub clearnewreserved($) { $_[0]->{'NEWRESERVED'} = {}; }
 sub rspec($)            { return $_[0]->{'RSPEC'}; }
 sub genirspec($)        { return $_[0]->{'GENIRSPEC'}; }
 sub forcedarchitecture($){ return $_[0]->{'FORCEARCH'}; }
@@ -1295,7 +1296,7 @@ sub LoadVirtNodes($)
 	# then we selected the first real type from the list. Might not be
 	# what we want to do.
 	#
-	if (!$vnode->_typeinfo()->IsClass()) {
+	if (!$vnode->_typeinfo()->IsClass() || defined($fixed)) {
 	    if (!defined($self->types()->{$type})) {
 		$self->types()->{$type} = 0;
 	    }
@@ -5373,7 +5374,7 @@ sub AllocNodes($)
     #
     # If nalloc failed with a fatal error, lets give it up. No retry.
     # 
-    if ($exitval < 0) {
+    if ($exitval < 0 || $exitval == 255) {
 	tberror("Failed to reserve any nodes.\n");
 	return -1; 
     }

@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2010-2016 University of Utah and the Flux Group.
+# Copyright (c) 2010-2017 University of Utah and the Flux Group.
 # 
 # {{{GENIPUBLIC-LICENSE
 # 
@@ -1620,6 +1620,33 @@ sub GetProfileParameters($)
 	    "name" => $name,
 	    "value" => $value
 	      } );
+    }
+    return $result;
+}
+
+sub HasRepositories($)
+{
+    my ($rspec) = @_;
+    
+    return FindNodesNS("n:repository", $rspec, $EMULAB_NS)->pop();
+}
+
+sub GetRepositories($)
+{
+    my ($rspec) = @_;
+    my $result = [];
+    
+    foreach my $repo (FindNodesNS("n:repository", $rspec,
+				  $EMULAB_NS)->get_nodelist()) {
+	my $type    = GetText("type", $repo);
+	my $url     = GetText("url", $repo);
+	my $refspec = GetText("refspec", $repo);
+	my $commit  = GetText("commit", $repo);
+	
+	push(@{ $result }, { "type"     => $type,
+			     "url "     => $url,
+			     "refspec " => $refspec,
+			     "commit"   => $commit});
     }
     return $result;
 }

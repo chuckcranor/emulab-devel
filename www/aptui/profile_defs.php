@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2006-2016 University of Utah and the Flux Group.
+# Copyright (c) 2006-2017 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -124,6 +124,10 @@ class Profile
     function status()	    { return $this->field('locked'); }
     function topdog()	    { return $this->field('topdog'); }
     function disabled()	    { return $this->field('disabled'); }
+    function repourl()	    { return $this->field('repourl'); }
+    function reponame()	    { return $this->field('reponame'); }
+    function repohash()	    { return $this->field('repohash'); }
+    function webtask_id()   { return $this->field('webtask_id'); }
     function profile_disabled()    { return $this->field('profile_disabled'); }
     function parent_profileid()    { return $this->field('parent_profileid'); }
     function parent_version()      { return $this->field('parent_version'); }
@@ -140,7 +144,26 @@ class Profile
     function isDisabled() {
 	return ($this->disabled() || $this->profile_disabled());
     }
-    
+    # Grab the webtask. Backwards compat mode, see if there is one associated
+    # with the object, use that. Otherwise create a new one.
+    function WebTask() {
+        if ($this->webtask_id()) {
+            return WebTask::Lookup($this->webtask_id());
+        }
+        $webtask = WebTask::LookupByObject($this->uuid());
+        if (!$webtask) {
+            $webtask = WebTask::CreateAnonymous();
+            if (!$webtask) {
+                return null;
+            }
+        }
+        $profileid  = $this->profileid();
+        $webtask_id = $webtask->task_id();
+        DBQueryFatal("update apt_profiles set ".
+                     "  webtask_id='$webtask_id' ".
+                     "where profileid='$profileid'");
+        return $webtask;
+    }
     # Hmm, how does one cause an error in a php constructor?
     function IsValid() {
 	return !is_null($this->profile);
@@ -611,9 +634,10 @@ class Profile
 	return null;
     }
 
-    function GenerateFormFragment() {
-	$json_data = $this->paramdefs();
-	
+    function GenerateFormFragment($json_data = null) {
+        if (is_null($json_data)) {
+            $json_data = $this->paramdefs();
+        }
 	if (!$json_data || $json_data == "") {
 	    return "";
 	}

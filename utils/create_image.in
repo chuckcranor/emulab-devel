@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2000-2016 University of Utah and the Flux Group.
+# Copyright (c) 2000-2017 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -125,7 +125,7 @@ sub usage()
 	  "<node>      - nodeid to create the image from\n");
     exit(-1);
 }
-my $optlist  = "p:wsNdfeDSMA:Fb:UB:";
+my $optlist  = "p:wsNdfeDSMA:Fb:UB:t:q";
 my $waitmode = 0;
 my $usessh   = 0;
 my $usenfs   = 0;
@@ -134,12 +134,32 @@ my $noemail  = 0;
 my $delta    = 0;
 my $nodelta  = 0;
 my $nomfs    = 0;
+my $quiet    = 0;
 my $signature= 0;
 my $deltapct = 0;
 my $update_prepare = 0;
 my $bsname;
 my $origin_uuid;
 my $webtask;
+
+#
+# We need an END block to make sure the web task is set.
+#
+END {
+    my $saved_exitcode = $?;
+    
+    # Watch for abnormal termination. 
+    if ($? && defined($webtask)) {
+	# Cause of the fork in run_with_ssh.
+	$webtask->Refresh();
+	if (!$webtask->HasExited()) {
+	    $webtask->status("failed");
+	    $webtask->imagesize(0);
+	    $webtask->Exited(-1);
+	}
+    }
+    $? = $saved_exitcode;
+}
 
 #
 # Configure variables
@@ -266,6 +286,9 @@ if (defined($options{"N"})) {
 if (defined($options{"d"})) {
     $debug = 1;
 }
+if (defined($options{"q"})) {
+    $quiet = 1;
+}
 if (defined($options{"f"})) {
     $foreground = 1;
     $waitmode = 0;
@@ -291,6 +314,15 @@ if (defined($options{"b"})) {
 	die("*** $0:\n".
 	    "    Bad data in $bsname.\n");
     }
+}
+if (defined($options{"t"})) {
+    my $webtask_id = $options{"t"};
+    $webtask = WebTask->Lookup($webtask_id);
+    if (!defined($webtask)) {
+	die("*** $0:\n".
+	    "    No such webtask\n");
+    }
+    $webtask->AutoStore(1);
 }
 if (defined($options{"D"})) {
     if (!$WITHDELTAS) {
@@ -764,15 +796,14 @@ if ($image->Lock()) {
 }
 $needunlock = 1;
 
+# Now we can set the webtask.
+if (defined($webtask)) {
+    $image->SetWebTask($webtask);
+}
+
 if ($doprovenance && !$isdataset && $image->ready()) {
     $image->Unlock();
     fatal("$image ready flag is set, this is inconsistent!");
-}
-
-# See if a web task is tracking this image creation.
-$webtask = WebTask->LookupByObject($image->image_uuid());
-if (defined($webtask)) {
-    $webtask->AutoStore(1);
 }
 
 #
@@ -1038,7 +1069,8 @@ if (! $foreground) {
 	if (!$waitmode) {
 	    print("Your image from $target is being created\n".
 		  "You will be notified via email when the image has been\n".
-		  "completed, and you can load the image on another node.\n");
+		  "completed, and you can load the image on another node.\n")
+		if (!$quiet);
 	    exit(0);
 	}
 	print("Waiting for image creation to complete\n");
@@ -1064,15 +1096,6 @@ if (! $foreground) {
 	print("Done. Exited with status: $?\n");
 	exit($? >> 8);
     }
-}
-
-#
-# New process group since we get called from the web interface,
-# and so the child does not get zapped if the user types ^C
-# in waitmode. 
-#
-if (! $foreground) {
-    POSIX::setsid();
 }
 
 #
@@ -1317,6 +1340,8 @@ if (!$isdataset) {
     }
 }
 if (defined($webtask)) {
+    # Cause of the fork in run_with_ssh.
+    $webtask->Refresh();
     $webtask->status("finishing");
 }
 if (! cleanup()) {
@@ -1490,6 +1515,8 @@ if (defined($logfile)) {
     $image->ClearLogFile();
 }
 if (defined($webtask)) {
+    # Cause of the fork in run_with_ssh.
+    $webtask->Refresh();
     $webtask->status("ready");
     $webtask->Exited(0);
 }
@@ -1600,6 +1627,8 @@ sub fatal($)
 	unlink($filename);
     }
     if (defined($webtask)) {
+	# Cause of the fork in run_with_ssh.
+	$webtask->Refresh();
 	$webtask->status("failed");
 	$webtask->imagesize(0);
 	$webtask->Exited(1);

@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2016 University of Utah and the Flux Group.
+# Copyright (c) 2000-2017 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -70,21 +70,8 @@ $defaults["state"]       = $target_user->state();
 $defaults["country"]     = $target_user->country();
 $defaults["affiliation"] = $target_user->affil();
 
-#
-# See the comment in signup.php about "promoting" geni users to
-# local users that can start projects. These users do not get a
-# password change box, we do not want them coming in that way,
-# they have to use the trusted signer. As noted in signup.php,
-# we need a flag for this kind of user.
-#
-$nopassword = 0;
-if (!$target_user->country() || $target_user->country() == "") {
-    $nopassword = 1;
-}
-
 SPITHEADER(1);
 echo "<script>\n";
-echo "window.APT_OPTIONS.nopassword = $nopassword;\n";
 echo "</script>\n";
 echo "<link rel='stylesheet' href='css/bootstrap-formhelpers.min.css'>\n";
 echo "<div id='page-body'></div>\n";

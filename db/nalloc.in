@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2000-2016 University of Utah and the Flux Group.
+# Copyright (c) 2000-2017 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -129,7 +129,7 @@ if (!defined($project)) {
     die("*** $0:\n".
 	"    Could not get project for experiment $experiment!\n");
 }
-    
+
 #
 # User must have permission to modify the experiment.
 #
@@ -174,13 +174,15 @@ foreach my $n (@node_names) {
 }
 TBDebugTimeStamp("nalloc checked all node permissions");
 
+my $endtime = Reservation->ExpectedEnd( $experiment );
+
 # Argh, MySQL locking rules are horrendous!  These locks are required by
 # low-level library routines; this is a horrible violation of abstraction;
 # and it's all MySQL's fault...
 if( $PGENISUPPORT ) {
-    DBQueryFatal("lock tables reserved write, users read, groups read, projects read, future_reservations read, nodes as n read, reserved as r read, experiments as e read, next_reserve as nr read, `geni-cm`.geni_slices as s read");
+    DBQueryFatal("lock tables reserved write, users read, groups read, projects read, future_reservations read, nodes as n read, reserved as r read, experiments as e read, next_reserve as nr read, `geni-cm`.geni_slices as s read, reservation_version write");
 } else {
-    DBQueryFatal("lock tables reserved write, users read, groups read, projects read, future_reservations read, nodes as n read, reserved as r read, experiments as e read, next_reserve as nr read");
+    DBQueryFatal("lock tables reserved write, users read, groups read, projects read, future_reservations read, nodes as n read, reserved as r read, experiments as e read, next_reserve as nr read, reservation_version write");
 }
 TBDebugTimeStamp("nalloc locked tables");
 
@@ -215,14 +217,6 @@ foreach my $n (@node_names) {
 	    next;
 	}
     }
-    else {
-	# Freshly allocated nodes need a history entry.
-	push(@need_history, $node);
-        # ... and need to have their bootlogs purged.
-        push(@need_clearbl, $node);
-	# ... and may need to recreate its pxelinux conf
-	push(@need_pxeconfig, $node);
-    }
 
     #
     # Add info the list of nodes to reserve; done in a single query below.
@@ -247,6 +241,7 @@ if ($debug) {
 }
 
 my %types = ();
+my %unavail_types = ();
 foreach my $node (@nodes) {
     $types{ $node->type() } = 1;
 }
@@ -254,52 +249,82 @@ foreach my $type ( keys( %types ) ) {
     my $reservations = Reservation->LookupAll( $type );
     if( !Reservation->IsFeasible( $reservations, \$errormsg ) ) {
 	print "Existing admission control violation for type $type: $errormsg\n";
-	if( $admission_ctrl ) {
-	    $noalloc++;
-	}
-	print "Omitting admission control verification.\n";
-	goto admissionfailure;
+	print "Omitting $type admission control verification.\n";
+	$unavail_types{ $type } = 1;
     }
 }
 
-my $endtime = $experiment->autoswap() ?
-    time() + $experiment->autoswap_timeout * 60 : undef;
-
 foreach my $type ( keys( %types ) ) {
+    next if( $unavail_types{ $type } );
+    
     my $reservations = Reservation->LookupAll( $type );
+    my $count = 0;
     foreach my $node (@nodes) {
-	if( $node->type() eq $type ) {
-	    my $res = Reservation->CreateImmediate( $pid, undef,
-						    $this_user->uid(),
-						    $endtime, $type, 1 );
-	    if ($debug) {
-		print "$res\n";
-	    }
-	    push( @$reservations, $res );
-	}
+	$count++ if( $node->type() eq $type );
     }
+    
+    my $res = Reservation->CreateImmediate( $pid, $eid,
+					    $this_user->uid(),
+					    $endtime, $type, $count );
+    if ($debug) {
+	print "$res\n";
+    }
+    
+    push( @$reservations, $res );
+    
     if( !Reservation->IsFeasible( $reservations, \$errormsg ) ) {
 	print "Admission control violation for type $type: $errormsg\n";
+
+	if( $debug ) {
+	    foreach my $res (@$reservations) {
+		print "$res\n";
+	    }
+	}
+	
 	if( $force ) {
 	    print "Forcing allocation anyway...\n";
 	    print STDERR "WARNING: SCHEDULED RESERVATIONS ARE NOW INFEASIBLE!\n";
 	    # FIXME notify admins about violation
-	} else {
-	    if( $admission_ctrl ) {
-		$noalloc++;
-	    }
 	}
-	goto admissionfailure;
+	$unavail_types{ $type } = 1;
     }
 }
 
- admissionfailure:
+if( $admission_ctrl && !$force ) {
+    my @goodnodes = ();
+
+    foreach my $node (@nodes) {
+	if( !exists( $unavail_types{ $node->type() } ) ) {
+	    push( @goodnodes, $node );
+	} else {
+	    # FIXME if some but not all nodes of a given type are
+	    # admissable, it would be nice to try harder
+	    $noalloc++;
+	}
+    }
+
+    @nodes = @goodnodes;
+}
+
+foreach my $node (@nodes) {
+    # Freshly allocated nodes need a history entry.
+    push(@need_history, $node);
+    # ... and need to have their bootlogs purged.
+    push(@need_clearbl, $node);
+    # ... and may need to recreate its pxelinux conf
+    push(@need_pxeconfig, $node);
+}
 
 # Now make the reservations in the DB.
-if ((!$noalloc || $partial) && (@nodes || @oldnodes)) {
+if ((!$noalloc || $partial) && (@nodes || @oldnodes) && !$error) {
     print "Reserving nodes...\n"
 	if ($debug);
 
+    # Must do this while we have the tables locked and before we apply
+    # any updates, otherwise concurrent readers might fail to detect
+    # inconsistencies.
+    DBQueryFatal( "UPDATE reservation_version SET version=version+1" );
+    
     # Generate strings for a single query. Could use perl map().
     if (@nodes) {
 	my @values = ();

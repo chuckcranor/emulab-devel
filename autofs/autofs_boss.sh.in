@@ -1,6 +1,6 @@
 #!/bin/sh
 #
-# Copyright (c) 2000-2015 University of Utah and the Flux Group.
+# Copyright (c) 2014-2016 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -60,6 +60,10 @@ if [ $# -eq 0 ]; then
     exit 0
 fi
 
+#
+# XXX if the validmounts file does not exist, we force it to try. This has
+# a nasty side-effect of returning empty dirs for non-existent server dirs.
+#
 key=$1
 if test -f "$TB/etc/validmounts.txt" &&
     ! grep -q "^/$map/$key\$" $TB/etc/validmounts.txt; then

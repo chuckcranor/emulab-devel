@@ -63,6 +63,10 @@ $(function () {
 		    if (_.has(item.dataset, "colsize")) {
 			colsize = item.dataset['colsize'];;
 		    }
+		    // Override wide setting per field
+		    if (_.has(item.dataset, "wide")) {
+			wide = item.dataset['wide'];;
+		    }
 
 		    /*
 		     * Wrap in a div we can name. We assume the form
@@ -167,14 +171,15 @@ $(function () {
 	    });
 
 	    // Warn user if they have not saved changes.
-	    window.onbeforeunload = function() {
+	    $(window).on('beforeunload.portal',
+	    function() {
 		if (! form_modified)
-		    return null;
+		    return undefined;
 		return "You have unsaved changes!";
-	    }
+	    });
 	}
 	function DisableUnsavedWarning(form) {
-	    window.onbeforeunload = null;
+	    $(window).off('beforeunload.portal');
 	}
 	function MarkFormUnsaved() {
 	    form_modified = true;

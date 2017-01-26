@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2007-2013 University of Utah and the Flux Group.
+# Copyright (c) 2007-2013, 2017 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -35,7 +35,11 @@ use emdb;
 use emutil;
 use libtestbed;
 use English;
+use Errno;
+use Fcntl;
+use POSIX;
 use Data::Dumper;
+use overload ('""' => 'Stringify');
 
 # Configure variables
 my $TB		  = "@prefix@";
@@ -69,6 +73,7 @@ sub Lookup($$)
 
     my $self                = (ref($class) ? $class : {});
     $self->{'LOGFILE'}      = $query_result->fetchrow_hashref();
+    $self->{'FP'}           = (ref($class) ? $class->{'FP'} : undef);
     $self->{'METADATA'}     = undef;
     # Ordered list.
     $self->{'METADATALIST'} = undef;
@@ -103,6 +108,7 @@ sub date_created($)     { return field($_[0], "date_created"); }
 sub public($)           { return field($_[0], "public"); }
 sub compressed($)       { return field($_[0], "compressed"); }
 sub stored($)           { return field($_[0], "stored"); }
+sub filedescriptor($)	{ return $_[0]->{'FP'}; }
 sub Metadata($)		{ return $_[0]->{'METADATA'}; }
 sub MetadataList($)	{ return $_[0]->{'METADATALIST'}; }
 
@@ -113,6 +119,19 @@ sub DESTROY {
     $self->{"LOGFILE"}       = undef;
     $self->{"METADATA"}      = undef;
     $self->{"METADATALIST"}  = undef;
+    $self->{"FP"}            = undef;
+}
+
+#
+# Stringify for output.
+#
+sub Stringify($)
+{
+    my ($self) = @_;
+    
+    my $logid = $self->logid();
+
+    return "[Logfile: $logid]";
 }
 
 #
@@ -414,6 +433,77 @@ sub SetMetadata($$$)
 			      "  logidx='$logidx',metakey=$key,metaval=$val"));
     }
     return 0;
+}
+
+#
+# Open/Close the file for reading (if its currently being written) and
+# store the descriptor in the object.
+#
+sub OpenFile($)
+{
+    my ($self) = @_;
+
+    DBQueryWarn("lock tables logfiles write, logfile_metadata write")
+	or return undef;
+    if ($self->Refresh()) {
+	DBQueryWarn("unlock tables");
+	return -1;
+    }
+    if (!$self->isopen()) {
+	print STDERR "$self is no long open\n";
+	DBQueryWarn("unlock tables");
+	return -1;
+    }
+    my $filename = $self->filename();
+    if (! -e $filename) {
+	print STDERR "$self: $filename does not exist\n";
+	DBQueryWarn("unlock tables");
+	return -1;
+    }
+    local *LOG;
+    if (! sysopen(LOG, $filename, O_RDONLY | O_NONBLOCK)) {
+	print STDERR "$self: could not open $filename: $!\n";
+	DBQueryWarn("unlock tables");
+	return -1;
+    }
+    $self->{"FP"} = *LOG;
+    DBQueryWarn("unlock tables");
+    return 0;
+}
+sub CloseFile($)
+{
+    my ($self) = @_;
+    return 0
+	if (!defined($self->filedescriptor()));
+
+    close($self->filedescriptor());
+    $self->{"FP"} = undef;
+    return 0;
+}
+sub ReadFile($$)
+{
+    my ($self, $pbuf) = @_;
+    my $buf;
+
+    return undef
+	if (!defined($self->filedescriptor()));
+
+    my $cc = sysread($self->filedescriptor(), $buf, 2048 * 4);
+    if (!defined($cc)) {
+	if ($!{EAGAIN}) {
+	    # Nothing to read
+	    return 0;
+	}
+	print STDERR "Closing A\n";
+	$self->CloseFile();
+	return undef;
+    }
+    if ($cc == 0) {
+	# Nothing to read. 
+	return 0;
+    }
+    $$pbuf = $buf;
+    return $cc;
 }
 
 # _Always_ make sure that this 1 is at the end of the file...

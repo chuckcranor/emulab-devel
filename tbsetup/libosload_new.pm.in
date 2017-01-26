@@ -221,21 +221,25 @@ sub nodeflag($$$;$)
     my ($self,$nodeobject,$flagname,$flagval) = @_;
 
     my $retval;
+    my $dbgop = '';
 
     my $node_id = $nodeobject->node_id();
     if (defined($flagval)) {
 	$self->{NODEFLAGS}->{$node_id}->{$flagname} = $flagval;
 	$retval = $flagval;
+	$dbgop = 'w';
     }
     elsif (exists($self->{NODEFLAGS}->{$node_id}->{$flagname})) {
 	$retval = $self->{NODEFLAGS}->{$node_id}->{$flagname};
+	$dbgop = 'rn';
     }
     elsif (exists($self->{FLAGS}->{$flagname})) {
 	$retval = $self->{FLAGS}->{$flagname};
+	$dbgop = 'rg';
     }
 
     my $pretval = defined($retval) ? $retval : "undef";
-    $self->dprint(2,"nodeflag($node_id,$flagname) -> $pretval");
+    $self->dprint(2,"nodeflag($node_id,$flagname) ($dbgop) -> $pretval");
 
     return $retval;
 }
@@ -678,7 +682,6 @@ sub osload($$$) {
 	if ($self->AddNode($nodeobject,\@images,\%nargs)) {
 	    goto failednode;
 	}
-	$self->typeobject($nodeobject,$object);
 	
 	#
 	# Setup a bunch of database state before setting up the actual reload:
@@ -2632,13 +2635,19 @@ sub AddNode($$$$)
     my ($self, $nodeobject, $imagelist, $args) = @_;
     my $node_id = $nodeobject->node_id();
 
-    # Motes don't support these flags, so clear them so libosload doesn't
-    # try to do anything with them!
-    if (defined($self->nodeflag($nodeobject,'reboot'))) {
-	$self->nodeflag($nodeobject,'reboot',0);
-    }
+    #
+    # First, initialize our flags and image list.
+    #
+    my $rc = $self->SUPER::AddNode($nodeobject, $imagelist, $args);
 
-    return $self->SUPER::AddNode($nodeobject, $imagelist, $args);
+    #
+    # Now setup our custom flags.
+    #
+    # Motes don't support reboot, so set the noreboot bit so libosload doesn't
+    # try to do anything with them!
+    $self->nodeflag($nodeobject,'noreboot',1);
+
+    return $rc;
 }
 
 #

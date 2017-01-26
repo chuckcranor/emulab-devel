@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2000-2016 University of Utah and the Flux Group.
+# Copyright (c) 2000-2017 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -131,6 +131,7 @@ use libadminctrl;
 use libEmulab;
 use User;
 use EmulabFeatures;
+use Reservation;
 
 # Protos
 sub fatal(@);
@@ -412,6 +413,8 @@ if (IsMultiPCArchitecture()) {
 	    if ($vtop->newreservednodes()) {
 		my @newreservednodes = $vtop->newreservednodes();
 		if (system("$NFREE -x $pid $eid @newreservednodes")) {
+		    # Clear this so that we do not try again in fatal();
+		    $vtop->clearnewreserved();
 		    fatal("Could not release new nodes after $architecture");
 		}
 		# Kill this, we are done with it now that nodes are released
@@ -550,7 +553,7 @@ sub AssignLoop()
 	}
 	# Hack for Kirk.
 	if (!($impotent || $regression) &&
-	    ($pid eq "GLOBECOMTutorial" || $project->IsNonLocal())) {
+	    ($pid eq "CCNC2017Tutorial" || $project->IsNonLocal())) {
 	    while (1) {
 		if (libEmulab::EmulabCountLock("mapperlock", 3) == 0) {
 		    $seriallock = 1;
@@ -728,6 +731,19 @@ sub RunAssign($$)
 	}
     }
 
+    # Bound the results to avoid future reservation conflicts.
+    Reservation->FlushAll();
+    my $reservation_bounds = Reservation->MaxSwapInMap( $experiment );
+    foreach my $type ( keys( %$reservation_bounds ) ) {
+	if( exists( $admission_control{ $type } ) ) {
+	    if( $reservation_bounds->{ $type } < $admission_control{ $type } ) {
+		$admission_control{ $type } = $reservation_bounds->{ $type };
+	    }
+	} else {
+	    $admission_control{ $type } = $reservation_bounds->{ $type };
+	}
+    }
+    
     #
     # Append this admission control results to ptopgen.
     #

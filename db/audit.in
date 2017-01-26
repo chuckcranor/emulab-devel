@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2000-2016 University of Utah and the Flux Group.
+# Copyright (c) 2000-2017 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -467,20 +467,15 @@ while (my $row = $query_result->fetchrow_hashref()) {
 	if (time() - $lastactive > (24 * 3600 * 90));
 
     print STDERR
-	"Encrypted Certificate for $uid expires on $expires, sending mail.\n";
+	"Encrypted Certificate for $uid expires on $expires. Regenerating\n";
 
     if (!$impotent) {
-	my $phrase = (time() > $stamp ? "expired" : "is going to expire");
-
-	my $user = User->Lookup($uid_idx);
-	$user->SendEmail("Emulab SSL Certificate Expiring!",
-			 "Your encrypted emulab certificate $phrase ".
-			 "on $expires.\n".
-			 "To generate a new certificate, please go to:\n\n".
-			 "    $TBBASE/gensslcert.php3?user=$uid_idx\n");
-	DBQueryWarn("update user_sslcerts set warned=now() ".
-		    "where uid_idx='$uid_idx' and idx='$serial'");
-
+	system("$SUDO -u $PROTOUSER $MKCERT -P $uid_idx");
+	if ($?) {
+	    SENDMAIL($TBOPS, "Error regenerating certificate for $uid",
+		     "Error regenerating encrypted certificate for $uid", 
+		     $TBOPS)
+	}
     }
 }
 

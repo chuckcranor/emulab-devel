@@ -101,6 +101,8 @@ window.APT_OPTIONS.initialize = function (sup)
 	    return false;
 	});
     }
+    window.APT_OPTIONS.startPage();
+    $(window).on('beforeunload.common', APT_OPTIONS.endPage);
     $('body').show();
 };
 
@@ -178,3 +180,15 @@ window.APT_OPTIONS.fetchTemplateList = function (nameList) {
   }
   return result;
 };
+
+window.APT_OPTIONS.startPage = function () {
+  if (window.parent) {
+    window.parent.postMessage({ url: window.location.href}, '*')
+  }
+}
+
+window.APT_OPTIONS.endPage = function () {
+  if (window.parent) {
+    window.parent.postMessage({ url: "None"}, '*')
+  }
+}

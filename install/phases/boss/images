@@ -12,24 +12,32 @@ my $UTAHURL       = "http://www.emulab.net/downloads";
 my $DESCRIPTORS   = "$TOP_SRCDIR/install/descriptors-v4.xml";
 my $GENDEV        = "$TOP_SRCDIR/install/descriptors-gendev.xml";
 my @MBRS          = ("emulab-mbr.dd", "emulab-mbr2.dd", "emulab-mbr3.dd");
-my $DEFAULTIMAGE  = "UBUNTU14-64-STD";
+
+my $LINUXSTDIMAGE = "UBUNTU14-64-STD";
+my $FBSDSTDIMAGE  = "FBSD102-64-STD";
+my $DEFAULTIMAGE  = $LINUXSTDIMAGE;
 
 #
 # We now use image import.
 #
 my %STDIMAGES     = (
-    $DEFAULTIMAGE      => "https://www.emulab.net/image_metadata.php?uuid=0a29c738-32b3-11e4-b30a-001143e453fe",
-    "CENTOS71-64-STD"  => "https://www.emulab.net/image_metadata.php?uuid=c74d9fc1-e54b-11e4-97ea-38eaa71273fa",
+    "UBUNTU14-64-STD"  => "https://www.emulab.net/image_metadata.php?uuid=0a29c738-32b3-11e4-b30a-001143e453fe",
+    "CENTOS7-64-STD"   => "https://www.emulab.net/image_metadata.php?uuid=6fa68fd6-9163-11e6-ac8c-90e2ba22fee4",
     "FBSD102-64-STD"   => "https://www.emulab.net/image_metadata.php?uuid=57e6bf53-4376-11e5-bf03-38eaa71273fa",
     "XEN44-64-STD"     => "https://www.emulab.net/image_metadata.php?uuid=6f5e573e-83f3-11e5-bf03-38eaa71273fa",
+);
+
+my %NEWIMAGES     = (
+    "UBUNTU16-64-STD"  => "https://www.emulab.net/image_metadata.php?uuid=7683ca8e-5e37-11e6-ac8a-90e2ba22fee4",
+    "FBSD103-64-STD"   => "https://www.emulab.net/image_metadata.php?uuid=f3866e90-2464-11e6-bdf0-d1afad303f71",
 );
 
 #
 # Old style mappings, but probably still in use someplace.
 #
 my %STDMAPPINGS = (
-    "RHL-STD"   => $DEFAULTIMAGE,
-    "FBSD-STD"  => "FBSD102-64-STD",
+    "RHL-STD"   => $LINUXSTDIMAGE,
+    "FBSD-STD"  => $FBSDSTDIMAGE,
 );
 
 sub Install($$$)

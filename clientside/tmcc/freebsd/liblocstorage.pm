@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2013-2016 University of Utah and the Flux Group.
+# Copyright (c) 2013-2017 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -70,6 +70,7 @@ my $GPART	= "/sbin/gpart";
 my $GVINUM	= "/sbin/gvinum";
 my $ZPOOL	= "/sbin/zpool";
 my $ZFS		= "/sbin/zfs";
+my $FRISBEE     = "/usr/local/bin/frisbee";
 
 my $TUNEFS	= "/sbin/tunefs";
 my $EXT_TUNEFS	= "/usr/local/sbin/tune2fs";
@@ -1563,6 +1564,31 @@ sub os_create_storage($$)
 		return 0;
 	    }
 	}
+	elsif (exists($href->{'DATASET'})) {
+	    #
+	    # Load with the dataset.
+	    #
+	    my $imageid    = $href->{'DATASET'};
+	    my $imagepath  = $mdev;
+	    my $server     = $href->{'SERVER'};
+
+	    # Allow the server to enable heartbeat reports in the client
+	    my $heartbeat = "-H 0";
+
+	    my $command = "$FRISBEE -f -M 128 $heartbeat ".
+		"-S $server -B 30 -F $imageid $imagepath";
+
+	    print STDERR "$command\n";
+
+	    if (mysystem($command)) {
+		warn("*** $lv: frisbee of dataset to $mdev failed!\n");
+		return 0;
+	    }
+	    $fstype = get_fstype($href, $mdev);
+	    if (!$fstype) {
+		return 0;
+	    }
+	}
 	#
 	# Otherwise, create the filesystem
 	#
@@ -2298,6 +2324,9 @@ sub os_remove_storage_slice($$$)
 	# care so much about full images.
 	#
 	if ($teardown == 3) {
+	    if ($bsid eq "SYSVOL") {
+		return 1;
+	    }
 	    if (get_zpool_active_datasets("emulab") == 0 &&
 		mysystem("$ZPOOL export emulab $redir")) {
 		    warn("*** $lv: could not export zpool 'emulab'\n");

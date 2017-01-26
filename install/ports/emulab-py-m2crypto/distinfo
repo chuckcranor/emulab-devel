@@ -4,3 +4,5 @@ SHA256 (M2Crypto-0.22.5.tar.gz) = b5ce9b09062a2c453e9d9c28dde96b7f90834313e60f41
 SIZE (M2Crypto-0.22.5.tar.gz) = 80986
 SHA256 (M2Crypto-0.24.0.tar.gz) = 80a56441a1d2c0cf27e725be7554c92598b938fc8767ee2c71fdbc2fdc055ee8
 SIZE (M2Crypto-0.24.0.tar.gz) = 184457
+SHA256 (M2Crypto-0.25.1.tar.gz) = ac303a1881307a51c85ee8b1d87844d9866ee823b4fdbc52f7e79187c2d9acef
+SIZE (M2Crypto-0.25.1.tar.gz) = 300904

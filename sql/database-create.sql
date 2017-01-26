@@ -81,6 +81,7 @@ CREATE TABLE `apt_aggregate_status` (
   `pcount` int(11) default '0',
   `pfree` int(11) default '0',
   `vcount` int(11) default '0',
+  `vfree` int(11) default '0',
   `last_error` text,
   PRIMARY KEY  (`urn`)
 ) ENGINE=MyISAM DEFAULT CHARSET=latin1;
@@ -142,6 +143,7 @@ CREATE TABLE `apt_datasets` (
   `shared` tinyint(1) NOT NULL default '0',
   `locked` datetime default NULL, 
   `locker_pid` int(11) default '0',
+  `webtask_id` varchar(128) default NULL,
   `credential_string` text,
   PRIMARY KEY (`idx`),
   UNIQUE KEY `plid` (`pid_idx`,`dataset_id`),
@@ -260,7 +262,12 @@ CREATE TABLE `apt_instance_history` (
   `physnode_count` smallint(5) unsigned NOT NULL default '0',
   `virtnode_count` smallint(5) unsigned NOT NULL default '0',
   `servername` tinytext,
+  `repourl` tinytext,
+  `reponame` varchar(40) default NULL,
+  `reporef` varchar(128) default NULL,
+  `repohash` varchar(64) default NULL,
   `rspec` mediumtext,
+  `script` mediumtext,
   `params` mediumtext,
   `manifest` mediumtext,
   PRIMARY KEY (`uuid`),
@@ -287,6 +294,7 @@ CREATE TABLE `apt_instances` (
   `gid_idx` mediumint(8) unsigned NOT NULL default '0',
   `aggregate_urn` varchar(128) default NULL,
   `public_url` tinytext,
+  `webtask_id` varchar(128) default NULL,
   `created` datetime default NULL,
   `status` varchar(32) default NULL,
   `status_timestamp` datetime default NULL,
@@ -314,7 +322,12 @@ CREATE TABLE `apt_instances` (
   `logfileid` varchar(40) default NULL,
   `cert` mediumtext,
   `privkey` mediumtext,
+  `repourl` tinytext,
+  `reponame` varchar(40) default NULL,
+  `reporef` varchar(128) default NULL,
+  `repohash` varchar(64) default NULL,
   `rspec` mediumtext,
+  `script` mediumtext,
   `params` mediumtext,
   `manifest` mediumtext,
   `openstack_utilization` mediumtext,
@@ -375,6 +388,9 @@ CREATE TABLE `apt_profile_versions` (
   `parent_profileid` int(8) unsigned default NULL,
   `parent_version` int(8) unsigned default NULL,
   `status` varchar(32) default NULL,
+  `repourl` tinytext,
+  `reponame` varchar(40) default NULL,
+  `repohash` varchar(64) default NULL,
   `rspec` mediumtext,
   `script` mediumtext,
   `paramdefs` mediumtext,
@@ -396,6 +412,7 @@ CREATE TABLE `apt_profiles` (
   `gid` varchar(32) NOT NULL default '',
   `gid_idx` mediumint(8) unsigned NOT NULL default '0',
   `uuid` varchar(40) NOT NULL,
+  `webtask_id` varchar(128) default NULL,
   `public` tinyint(1) NOT NULL default '0',
   `shared` tinyint(1) NOT NULL default '0',
   `listed` tinyint(1) NOT NULL default '0',
@@ -2455,6 +2472,7 @@ CREATE TABLE `images` (
   `gid` varchar(32) NOT NULL default '',
   `gid_idx` mediumint(8) unsigned NOT NULL default '0',
   `uuid` varchar(40) NOT NULL default '',
+  `webtask_id` varchar(128) default NULL,
   `nodelta` tinyint(1) NOT NULL default '0',
   `noversioning` tinyint(1) NOT NULL default '0',
   `metadata_url` tinytext,
@@ -2543,6 +2561,7 @@ CREATE TABLE `interfaces` (
   `role` enum('ctrl','expt','jail','fake','other','gw','outer_ctrl','mngmnt') default NULL,
   `current_speed` enum('0','10','100','1000','4000','10000','40000','100000') NOT NULL default '0',
   `duplex` enum('full','half') NOT NULL default 'full',
+  `noportcontrol` tinyint(1) NOT NULL default '0',
   `rtabid` smallint(5) unsigned NOT NULL default '0',
   `vnode_id` varchar(32) default NULL,
   `whol` tinyint(4) NOT NULL default '0',
@@ -4586,6 +4605,19 @@ CREATE TABLE `state_triggers` (
   `state` varchar(20) NOT NULL default '',
   `trigger` tinytext NOT NULL,
   PRIMARY KEY  (`node_id`,`op_mode`,`state`)
+) ENGINE=MyISAM DEFAULT CHARSET=latin1;
+
+--
+-- Table structure for table `subboss_attributes`
+--
+
+DROP TABLE IF EXISTS `subboss_attributes`;
+CREATE TABLE `subboss_attributes` (
+  `subboss_id` varchar(32) NOT NULL default '',
+  `service` varchar(20) NOT NULL default '',
+  `attrkey` varchar(32) NOT NULL default '',
+  `attrvalue` tinytext,
+  PRIMARY KEY  (`subboss_id`,`service`,`attrkey`)
 ) ENGINE=MyISAM DEFAULT CHARSET=latin1;
 
 --

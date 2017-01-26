@@ -1,7 +1,7 @@
 #!/usr/bin/perl -w
 
 #
-# Copyright (c) 2000-2016 University of Utah and the Flux Group.
+# Copyright (c) 2000-2017 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -749,18 +749,6 @@ sub doSwapout($) {
 	if ($soaction{'command'} && doSwapoutAction($pid, $eid, %soaction)) {
 	    tblog_set_cleanup(0);
 	    return 1;
-	}
-
-	#
-	# Clear away Geni slivers. Do not proceed if this fails.
-	#
-	if ($PGENISUPPORT) {
-	    require libGeni;
-	    
-	    if (libGeni::DeleteAllSlivers($experiment, $this_user)) {
-		tberror("Could not delete slivers\n");
-		return 1;
-	    }
 	}
 
 	#

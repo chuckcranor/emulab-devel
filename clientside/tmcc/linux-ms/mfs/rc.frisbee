@@ -1,6 +1,6 @@
 #!/bin/sh
 #
-# Copyright (c) 2000-2016 University of Utah and the Flux Group.
+# Copyright (c) 2000-2017 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -195,7 +195,7 @@ find_disks() {
 }
 
 #
-# Wipe out the superblocks on any partitions by zeroing the first 16 sectors.
+# Wipe out the superblocks on any partitions by zeroing the first 4MB.
 # This implementation doesn't suffer the limitations of the FreeBSD one in that:
 # A) All partitions get zapped, even if not DOS MBR partitions
 # B) We can zap the partition device since Linux isn't overprotective of
@@ -214,7 +214,7 @@ zapsuperblocks()
 	# XXX fall back to the old way
 	partitions=`echo /sys/block/$disk/$disk* 2>/dev/null`
 	for part in $partitions; do
-	    dd if=/dev/zero of=/dev/${part##*/} bs=512 count=16 >/dev/null 2>&1
+	    dd if=/dev/zero of=/dev/${part##*/} bs=512 count=8192 >/dev/null 2>&1
 	done
 
 	return 0
@@ -232,15 +232,16 @@ loadone() {
     echo "Loading image #$_NUM"
     echo "  LOADINFO=\"$_LOADINFO\""
 
-    ADDR=`getvar ADDR "$_LOADINFO"`;
-    SERVER=`getvar SERVER "$_LOADINFO" $BOSSIP`;
-    PARTOS=`getvar PARTOS "$_LOADINFO" unknown`;
-    ZFILL=`getvar ZFILL "$_LOADINFO" 0`;
-    MBRVERS=`getvar MBRVERS "$_LOADINFO" 101`;
-    PREPARE=`getvar PREPARE "$_LOADINFO" 0`;
-    IMAGEID=`getvar IMAGEID "$_LOADINFO"`;
-    KEEPALIVE=`getvar KEEPALIVE "$_LOADINFO" 0`;
-    OSVERSION=`getvar OSVERSION "$_LOADINFO" 0`;
+    ADDR=`getvar ADDR "$_LOADINFO"`
+    SERVER=`getvar SERVER "$_LOADINFO" $BOSSIP`
+    PARTOS=`getvar PARTOS "$_LOADINFO" unknown`
+    ZFILL=`getvar ZFILL "$_LOADINFO" 0`
+    MBRVERS=`getvar MBRVERS "$_LOADINFO" 101`
+    PREPARE=`getvar PREPARE "$_LOADINFO" 0`
+    IMAGEID=`getvar IMAGEID "$_LOADINFO"`
+    KEEPALIVE=`getvar KEEPALIVE "$_LOADINFO" 0`
+    OSVERSION=`getvar OSVERSION "$_LOADINFO" 0`
+    HEARTBEAT=`getvar HEARTBEAT "$_LOADINFO" -1`
 
     #
     # One of ADDR or IMAGEID must be set.
@@ -397,6 +398,27 @@ loadone() {
     fi
 
     #
+    # 
+    # HEARTBEAT==0: no heartbeat
+    # ow: send report at specified interval (<= one hour)
+    #
+    HB=""
+    case "$HEARTBEAT" in
+	''|*[!0-9]*)
+	    echo "Ignoring bogus HEARTBEAT value \"$HEARTBEAT\""
+	    ;;
+	*)
+	    if [ $HEARTBEAT -le 0 -o $HEARTBEAT -gt 3600 ]; then
+		if [ $HEARTBEAT -ne 0 ]; then
+		    echo "Ignoring bad HEARTBEAT value \"$HEARTBEAT\""
+		fi
+	    else
+		HB="-H $HEARTBEAT"
+	    fi
+	    ;;
+    esac
+
+    #
     # For slice images, ensure that the GPT is the correct version
     # and replace if not.
     #
@@ -459,8 +481,9 @@ loadone() {
 	echo "`date`: Running $BINDIR/imageunzip -f -o -O -W 32 $ZFILL $imagefile /dev/${_DISK}${_PART}"
 	$BINDIR/imageunzip -f -o -O -W 32 $ZFILL $imagefile /dev/${_DISK}${_PART}
     else
-	echo "`date`: Running $BINDIR/frisbee -f -S $SERVER $MEMARGS $KA $ZFILL $SLICE $IMAGEID /dev/$_DISK"
-	$BINDIR/frisbee -f -S $SERVER $MEMARGS $KA $ZFILL $SLICE $IMAGEID /dev/$_DISK
+	_ARGS="-f -S $SERVER $MEMARGS $KA $HB $ZFILL $SLICE"
+	echo "`date`: Running $BINDIR/frisbee $_ARGS $IMAGEID /dev/$_DISK"
+	$BINDIR/frisbee $_ARGS $IMAGEID /dev/$_DISK
     fi
     fstat=$?
 

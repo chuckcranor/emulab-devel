@@ -316,6 +316,7 @@ sub CheckAggregates()
 	my $pcount = 0;
 	my $pavail = 0;
 	my $vcount = 0;
+	my $vfree  = 0;
 	my %type_count = ();
 	my %type_avail = ();
 
@@ -399,13 +400,20 @@ sub CheckAggregates()
 			    next
 				if (!defined($slots) || $slots !~ /^\d+$/);
 
-			    $vcount += $slots;
+			    #
+			    # Yuck, we do not get the total available on
+			    # shared node, only how many still avail. Kludge
+			    # it for now. 
+			    #
+			    $vcount += 50;
+			    $vfree  += $slots;
 			}
 		    }
 		}
 	    }
 	}
-	print "$nickname: pcount:$pcount, pfree:$pavail, vcount:$vcount\n";
+	print "$nickname: pcount:$pcount, pfree:$pavail, ".
+	  "vcount:$vcount vfree:$vfree\n";
 	foreach my $type (keys(%type_count)) {
 	    my $count = $type_count{$type};
 	    my $avail = $type_avail{$type};
@@ -422,6 +430,7 @@ sub CheckAggregates()
 	    $aggregate->pcount($pcount);
 	    $aggregate->pfree($pavail);
 	    $aggregate->vcount($vcount);
+	    $aggregate->vfree($vfree);
 	}
     }
     return 0;

@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2008-2016 University of Utah and the Flux Group.
+# Copyright (c) 2008-2017 University of Utah and the Flux Group.
 # 
 # {{{GENIPUBLIC-LICENSE
 # 
@@ -82,7 +82,7 @@ my $SERVERVERSION = 1;
 #
 my @X86TYPES = ("C240M4","C220M4","pcvm","r320","c6220","dl360","r720",
 		"c8220","c8220x","d2100","d710","d820","d430","pc3000",
-		"c220g2", "c6320", "m510");
+		"c220g1", "c220g2", "c6320", "m510");
 
 # We are using a different DB.
 my $DB;
@@ -526,12 +526,16 @@ sub NewImage($)
 	    print STDERR "Deleting existing image $image_urn with ".
 		"stale uuid $old_uuid\n";
 	
-	    $DB->QueryWarn("delete images,image_versions from images ".
-			   "inner join image_versions on ".
-			   "      images.urn=image_versions.urn and ".
-			   "      images.image_uuid=image_versions.image_uuid ".
-			   "where images.urn=$safe_urn and ".
-			   "      images.image_uuid='$old_uuid'")
+	    $DB->QueryWarn("delete images,image_versions,image_permissions ".
+		   " from images ".
+		   "inner join image_versions on ".
+		   "      images.urn=image_versions.urn and ".
+		   "      images.image_uuid=image_versions.image_uuid ".
+		   "inner join image_permissions on ".
+		   "      images.urn=image_permissions.urn and ".
+		   "      images.image_uuid=image_permissions.image_uuid ".
+		   "where images.urn=$safe_urn and ".
+		   "      images.image_uuid='$old_uuid'")
 		or GeniResponse->Create(GENIRESPONSE_ERROR);
 	}
     }
@@ -966,10 +970,14 @@ sub DeleteImageInfo($)
     # creation (image created, deleted, created again). 
     #
     $query_result =
-	$DB->QueryWarn("delete images,image_versions from images ".
+	$DB->QueryWarn("delete images,image_versions,image_permissions ".
+		       "  from images ".
 		       "inner join image_versions on ".
 		       "      images.urn=image_versions.urn and ".
 		       "      images.image_uuid=image_versions.image_uuid ".
+		       "inner join image_permissions on ".
+		       "      images.urn=image_permissions.urn and ".
+		       "      images.image_uuid=image_permissions.image_uuid ".
 		       "where images.urn=$safe_urn and ".
 		       "      images.image_uuid='$uuid'");
     

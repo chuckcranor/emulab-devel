@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2006-2016 University of Utah and the Flux Group.
+# Copyright (c) 2006-2017 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -131,6 +131,10 @@ class Instance
     function servername()   { return $this->field('servername'); }
     function aggregate_urn(){ return $this->field('aggregate_urn'); }
     function private_key()  { return $this->field('privkey'); }
+    function webtask_id()   { return $this->field('webtask_id'); }
+    function repourl()	    { return $this->field('repourl'); }
+    function reporef()	    { return $this->field('reporef'); }
+    function repohash()	    { return $this->field('repohash'); }
     function isopenstack()  { return $this->field('isopenstack'); }
     function openstack_utilization() {
         return $this->field('openstack_utilization');
@@ -143,6 +147,26 @@ class Instance
     }
     function IsPNet() {
 	return preg_match('/phantomnet/', $this->servername());
+    }
+    # Grab the webtask. Backwards compat mode, see if there is one associated
+    # with the object, use that. Otherwise create a new one.
+    function WebTask() {
+        if ($this->webtask_id()) {
+            return WebTask::Lookup($this->webtask_id());
+        }
+        $webtask = WebTask::LookupByObject($this->uuid());
+        if (!$webtask) {
+            $webtask = WebTask::CreateAnonymous();
+            if (!$webtask) {
+                return null;
+            }
+        }
+        $uuid = $this->uuid();
+        $webtask_id = $webtask->task_id();
+        DBQueryFatal("update apt_instances set ".
+                     "  webtask_id='$webtask_id' ".
+                     "where uuid='$uuid'");
+        return $webtask;
     }
     function aggregate_name() {
         global $urn_mapping;
@@ -230,6 +254,12 @@ class Instance
 	$this->instance = mysql_fetch_array($query_result);
 	return 0;
     }
+
+    # Project of instance.
+    function Project() {
+        return Project::Lookup($this->pid_idx());
+    }
+    
     #
     # Class function to create a new Instance
     #
@@ -920,7 +950,7 @@ function CalculateAggregateStatus(&$amlist, &$fedlist, &$status) {
             $status[$urn] = array(
                 "rawPCsAvailable"  => $aggregate->pfree(),
                 "rawPCsTotal"      => $aggregate->pcount(),
-                "VMsAvailable"     => "0",
+                "VMsAvailable"     => $aggregate->vfree(),
                 "VMsTotal"         => $aggregate->vcount(),
                 "health"           => ($aggregate->status() == "up" ? 100 :
                                        ($aggregate->status() == "down" ?

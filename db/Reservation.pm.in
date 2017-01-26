@@ -38,6 +38,7 @@ use emutil;
 use Project;
 use User;
 use Experiment;
+use NodeType;
 use overload ('""' => 'Stringify');
 
 # Configure variables
@@ -110,7 +111,20 @@ sub Create($$$$$$$)
 }
 
 #
-# Return an object representing a hypothetical immediate reservation.    
+# Return an object representing a hypothetical existing experiment.    
+#
+# This DOES NOT actually check the feasibility of, guarantee,
+# or record the reservation.
+#
+sub CreateExisting($$$$$$$)
+{
+    my ($class, $pid, $eid, $uid, $end, $type, $nodes) = @_;
+
+    return CreateCommon( $class, $pid, $eid, $uid, 0, $end, $type, $nodes );
+}
+    
+#
+# Return an object representing a hypothetical immediate experiment.    
 #
 # This DOES NOT actually check the feasibility of, guarantee,
 # or record the reservation.
@@ -119,7 +133,8 @@ sub CreateImmediate($$$$$$$)
 {
     my ($class, $pid, $eid, $uid, $end, $type, $nodes) = @_;
 
-    return CreateCommon( $class, $pid, $eid, $uid, 0, $end, $type, $nodes );
+    return CreateCommon( $class, $pid, $eid, $uid, time(), $end, $type,
+			 $nodes );
 }
     
 sub Lookup($$;$$$$)
@@ -203,6 +218,11 @@ sub Stringify($)
     my ($self) = @_;
     
     my $pid = $self->pid();
+    $pid = "(free)" if( !defined( $pid ) );
+    
+    if( defined( $self->eid() ) ) {
+	$pid = $pid . "/" . $self->eid();
+    }
     my $nodes = $self->nodes();
     my $type = $self->type();
     my $start = defined( $self->start() ) ? localtime( $self->start() ) :
@@ -287,13 +307,19 @@ sub BeginTransaction($$)
 	return undef;
     }
 
+    # Eagerly update the version.  This isn't always strictly necessary,
+    # but it is always safe.  And doing it now instead of at EndTransaction
+    # time guards against undetected inconsistencies in the case where a
+    # process applies persistent updates while it has the tables locked, but
+    # then dies for some reason before it can EndTransaction.
+    DBQueryFatal( "UPDATE reservation_version SET version=version+1" );
+    
     # We're good.
     return 0;
 }
 
 sub EndTransaction($)
 {
-    DBQueryFatal( "UPDATE reservation_version SET version=version+1" );
     DBQueryFatal( "UNLOCK TABLES" );
 }
 
@@ -517,13 +543,13 @@ sub LookupAll($$)
 	    # Handle the case where an experiment is swapped in.  The
 	    # nodes aren't free right now, but at some time in the
 	    # future they will become so.
-	    my $res = CreateImmediate( $class, $pid, $eid, $uid, $end, $type,
-				       $count );
+	    my $res = CreateExisting( $class, $pid, $eid, $uid, $end, $type,
+				      $count );
 	    push( @reservations, $res );
 	} else {
 	    # Physical nodes with no reservations whatsoever... treat
 	    # them as free since the beginning of time.
-	    my $res = CreateCommon( $class, undef, undef, undef, -1, undef,
+	    my $res = CreateCommon( $class, undef, undef, undef, 0, undef,
 				    $type, $count );
 	    push( @reservations, $res );
 	}
@@ -544,20 +570,26 @@ sub LookupAll($$)
     return $cache{$type};
 }
 
-sub IsFeasible($$;$$)
+sub IsFeasible($$;$$$)
 {
-    my ($class, $reservations, $error, $conflicttime) = @_;
+    my ($class, $reservations, $error, $conflicttime, $conflictcount) = @_;
 
     my @timeline = ();
-    my $free;
+    my $free = 0;
 
     foreach my $reservation ( @$reservations ) {
 	my $start;
 	my $end;
 
 	if( defined( $reservation->eid() ) ) {
-	    # A swapped-in experiment.  Already using nodes (so no
-	    # need to save a start event), and will later release real nodes.
+	    if( $reservation->start() ) {
+		# An unmapped experiment.  Not yet using physical nodes.
+		$start = { 'pid' => $reservation->pid(),
+			   't' => $reservation->start(),
+			   'used' => $reservation->nodes(),
+			   'reserved' => 0 };
+	    }
+	    # Will later release real nodes.
 	    $end = { 'pid' => $reservation->pid(),
 		     't' => $reservation->end(),
 		     'used' => -$reservation->nodes(),
@@ -574,7 +606,7 @@ sub IsFeasible($$;$$)
 		     'reserved' => -$reservation->nodes() };
 	} else {
 	    # Available resources.  Provides nodes for all time.
-	    $free = $reservation->nodes();
+	    $free += $reservation->nodes();
 	}
 
 	push( @timeline, $start ) if( defined( $start->{'t'} ) );
@@ -592,12 +624,14 @@ sub IsFeasible($$;$$)
 	    $reserved{ $pid } = 0;
 	}
 
-	my $oldsum = $used{ $pid } + $reserved{ $pid };
+	my $oldsum = $used{ $pid } > $reserved{ $pid } ? $used{ $pid } :
+	    $reserved{ $pid };
 
 	$used{ $pid } += $event->{ 'used' };
 	$reserved{ $pid } += $event->{ 'reserved' };
 
-	my $newsum = $used{ $pid } + $reserved{ $pid };
+	my $newsum = $used{ $pid } > $reserved{ $pid } ? $used{ $pid } :
+	    $reserved{ $pid };
 
 	$free += $oldsum - $newsum;
 
@@ -611,6 +645,9 @@ sub IsFeasible($$;$$)
 	    }
 	    if( ref( $conflicttime ) ) {
 		$$conflicttime = $event->{'t'};
+	    }
+	    if( ref( $conflictcount ) ) {
+		$$conflictcount = -$free;
 	    }
 	    
 	    return 0;
@@ -656,13 +693,17 @@ sub ExtendSlice($$$;$$$) {
 
     my ($class, $slice, $new_expire, $error, $impotent, $force) = @_;
 
-    my $forced = 0;
-    
     if( $new_expire <= str2time( $slice->expires() ) ) {
 	if( $impotent ) {
 	    return 0;
 	} else {
-	    return $slice->SetExpiration( $new_expire );
+	    my $result = $slice->SetExpiration( $new_expire );
+
+	    if( $result < 0 && ref( $error ) ) {
+		$$error = "Couldn't update slice expiration";
+	    }
+
+	    return $result;
 	}
     }
 
@@ -683,23 +724,24 @@ sub ExtendSlice($$$;$$$) {
 		    last;
 		}
 	    }
-	    if( !IsFeasible( $class, $reservations, $error ) ) {
-		if( $force && !$impotent ) {
-		    $forced = 1;
-		} else {
-		    return -1;
-		}
+	    if( !$force && !IsFeasible( $class, $reservations, $error ) ) {
+		return -1;
 	    }
 	}
 	return 0
 	    if( $impotent );
 	next if( !defined( BeginTransaction( $class, $version ) ) );
-	$slice->SetExpiration( $new_expire );
-	EndTransaction( $class );
-	last;
-    }
 
-    return $forced ? -1 : 0;
+	my $result = $slice->SetExpiration( $new_expire );
+
+	if( $result < 0 && ref( $error ) ) {
+	    $$error = "Couldn't update slice expiration";
+	}
+	
+	EndTransaction( $class );
+	
+	return $result;
+    }
 }
 
 #
@@ -747,6 +789,82 @@ sub MaxSliceExtension($$$;$) {
 	$$max = $max_expire;
 	return 0;
     }
+}
+
+sub ExpectedEnd($$) {
+    
+    my ($class, $experiment) = @_;
+
+    if( $experiment->autoswap() ) {
+	return time() + $experiment->autoswap_timeout * 60;
+    } elsif( defined( $experiment->expt_expires() ) ) {
+	return str2time( $experiment->expt_expires() );
+    } else {
+	return undef;
+    }
+}
+
+#
+# Estimate an upper bound for node type count available for an experiment.
+#
+# Reservation->MaxSwapIn( $experiment, $type )
+#
+# Will return estimated number of available nodes.
+sub MaxSwapIn($$$) {
+
+    my ($class, $experiment, $type) = @_;
+    my $MAX = 10000;
+    my $overflow;
+    
+    my $reservations = LookupAll( $class, $type );
+    foreach my $res ( @$reservations ) {
+	if( defined( $res->pid() ) && defined( $res->eid() ) &&
+	    $res->pid() eq $experiment->pid() &&
+	    $res->eid() eq $experiment->eid() ) {
+	    # Found existing nodes already reserved to the experiment we're
+	    # trying to allocate.  In this context, they should be considered
+	    # as available.
+	    $res->{'PID'} = undef;
+	    $res->{'EID'} = undef;
+	    $res->SetStart( 0 );
+	    $res->SetEnd( undef );
+	}
+    }
+
+    my $reservation = CreateImmediate( $class, $experiment->pid(),
+				       $experiment->eid(),
+				       $experiment->swapper(),
+				       ExpectedEnd( $class, $experiment ),
+				       $type, $MAX );
+
+    push( @$reservations, $reservation );
+
+    while( $reservation->nodes() > 0 &&
+	   !IsFeasible( $class, $reservations, undef, undef, \$overflow ) ) {
+	$reservation->SetNodes( $reservation->nodes() - $overflow );
+    }
+
+    return $reservation->nodes() > 0 ? $reservation->nodes() : 0;
+}
+
+#
+# Estimate an upper bound for node counts (by type) available for an experiment.
+#
+# Reservation->MaxSwapInMap( $experiment )
+#
+# Will return a hash of estimated number of available nodes, keyed by type.
+sub MaxSwapInMap($$) {
+
+    my ($class, $experiment) = @_;
+    my %counts = ();
+
+    my $query_result = DBQueryFatal( "SELECT DISTINCT( type ) FROM " .
+				     "future_reservations" );
+    while( my ($type) = $query_result->fetchrow_array() ) {
+	$counts{ $type } = MaxSwapIn( $class, $experiment, $type );
+    }
+
+    return \%counts;
 }
 
 # _Always_ make sure that this 1 is at the end of the file...

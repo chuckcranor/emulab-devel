@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2007-2016 University of Utah and the Flux Group.
+# Copyright (c) 2007-2017 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -45,6 +45,7 @@ use vars qw(@ISA @EXPORT $AUTOLOAD);
 # Must come after package declaration!
 use EmulabConstants;
 use emutil;
+use WebTask;
 use emdb;
 use APT_Dataset;
 use GeniXML;
@@ -53,7 +54,9 @@ use libtestbed;
 use Lease;
 use English;
 use Data::Dumper;
+use File::Basename;
 use File::Temp qw(tempfile :mktemp tmpnam :POSIX);
+use URI::URL;
 use overload ('""' => 'Stringify');
 
 # Configure variables
@@ -84,8 +87,32 @@ sub BlessRow($$)
     
     my $self           = {};
     $self->{'DBROW'}   = $row;
-
     bless($self, $class);
+
+    #
+    # Grab the webtask. Backwards compat mode, see if there is one associated
+    # with the object, use that. Otherwise create a new one.
+    #
+    my $webtask;
+    
+    if (defined($self->webtask_id())) {
+	$webtask = WebTask->Lookup($self->webtask_id());
+    }
+    if (!defined($webtask)) {
+	$webtask = WebTask->LookupByObject($self->uuid());
+	if (!defined($webtask)) {
+	    $webtask = WebTask->Create();
+	    return undef
+		if (!defined($webtask));
+	}
+	my $profileid  = $self->profileid();
+	my $webtask_id = $webtask->task_id();
+	
+	DBQueryWarn("update apt_profiles set webtask_id='$webtask_id' ".
+		    "where profileid='$profileid'")
+	    or return undef;
+    }
+    $self->{'WEBTASK'} = $webtask;
     return $self;
 }
 
@@ -252,8 +279,16 @@ AUTOLOAD {
 sub DESTROY {
     my $self = shift;
 
-    $self->{'DBROW'} = undef;
+    $self->{'WEBTASK'} = undef;
+    $self->{'DBROW'}   = undef;
 }
+
+sub IsRepoBased($) {
+    my ($self) = @_;
+
+    return (defined($self->repourl()) ? 1 : 0);
+}
+sub webtask($)  { return $_[0]->{'WEBTASK'}; }
 
 #
 # Refresh a class instance by reloading from the DB.
@@ -294,27 +329,33 @@ sub Create($$$$$$)
     my $gid_idx = $project->pid_idx();
     my $uid     = $creator->uid();
     my $uid_idx = $creator->uid_idx();
+    my $puuid   = NewUUID();
+    my $vuuid   = NewUUID();
+    my $webtask = WebTask->Create();
+    return undef
+	if (!defined($webtask));
 
     #
     # The pid/imageid has to be unique, so lock the table for the check/insert.
     #
-    DBQueryWarn("lock tables apt_profiles write, apt_profile_versions write, ".
-		"            emulab_indicies write")
-	or return undef;
-
+    if (!DBQueryWarn("lock tables apt_profiles write, ".
+		     "     apt_profile_versions write, ".
+		     "     emulab_indicies write")) {
+	$webtask->Delete();
+	return undef;
+    }
     my $query_result =
 	DBQueryWarn("select name from apt_profiles ".
 		    "where pid_idx='$pid_idx' and name=$name");
 
     if ($query_result->numrows) {
 	DBQueryWarn("unlock tables");
+	$webtask->Delete();
 	$$usrerr_ref = "Profile already exists in project!";
 	return undef;
     }
     
     my $profileid = TBGetUniqueIndex("next_profile", undef, 1);
-    my $puuid     = NewUUID();
-    my $vuuid     = NewUUID();
     my $rspec     = DBQuoteSpecial($argref->{'rspec'});
     my $cquery    = "";
     my $vquery    = "";
@@ -342,9 +383,15 @@ sub Create($$$$$$)
 	    $vquery .= ",paramdefs=" . DBQuoteSpecial($argref->{'paramdefs'});
 	}
     }
+    if (exists($argref->{'repourl'}) && $argref->{'repourl'} ne "") {
+	$vquery .= ",repourl="  . DBQuoteSpecial($argref->{'repourl'});
+	$vquery .= ",reponame=" . DBQuoteSpecial($argref->{'reponame'});
+	$vquery .= ",repohash=" . DBQuoteSpecial($argref->{'repohash'});
+    }
 
     # Back to the main table.
     $cquery .= ",uuid='$puuid'";
+    $cquery .= ",webtask_id="  . DBQuoteSpecial($webtask->task_id());
     $cquery .= ",public=1"
 	if (exists($argref->{'public'}) && $argref->{'public'});
     $cquery .= ",listed=1"
@@ -358,6 +405,7 @@ sub Create($$$$$$)
     if (! DBQueryWarn("insert into apt_profiles set $cquery")) {
 	DBQueryWarn("unlock tables");
 	tberror("Error inserting new apt_profiles record!");
+	$webtask->Delete();
 	return undef;
     }
     # And the versions entry.
@@ -365,6 +413,7 @@ sub Create($$$$$$)
 	DBQueryWarn("delete from apt_profiles where profileid='$profileid'");
 	DBQueryWarn("unlock tables");
 	tberror("Error inserting new apt_profile_versions record!");
+	$webtask->Delete();
 	return undef;
     }
     DBQueryWarn("unlock tables");
@@ -408,11 +457,12 @@ sub NewVersion($$)
 			  "   creator,creator_idx,updater,updater_idx, ".
 			  "   created,uuid, ".
 			  "   parent_profileid,parent_version,rspec, ".
-			  "   script,paramdefs) ".
+			  "   script,paramdefs,reponame,repourl) ".
 			  "select name,profileid,'$newvers',pid,pid_idx, ".
 			  "  creator,creator_idx,'$uid','$uid_idx',".
 			  "  now(),uuid(),'$profileid', ".
-			  "  '$version',rspec,script,paramdefs ".
+			  "  '$version',rspec,script,paramdefs, ".
+			  "  reponame,repourl ".
 			  "from apt_profile_versions as v ".
 			  "where v.profileid='$profileid' and ".
 			  "      v.version='$version'"));
@@ -458,7 +508,10 @@ sub UpdateVersion($$)
     my $version   = $self->version();
 
     my $query = "update apt_profile_versions set ".
-	join(",", map("$_=" . DBQuoteSpecial($argref->{$_}), keys(%{$argref})));
+	join(",", map("$_=" .
+		      (defined($argref->{$_}) ?
+		       DBQuoteSpecial($argref->{$_}) : "NULL"),
+		      keys(%{$argref})));
 
     $query .= " where profileid='$profileid' and version='$version'";
 
@@ -546,11 +599,14 @@ sub Delete($$)
 	DBQueryWarn("update apt_profile_versions set deleted=now() ".
 		    "where profileid='$profileid'")
 	    or goto bad;
-	# Delete any leftover webtasks.
+	# Delete any leftover webtasks. These are old ones.
 	DBQueryWarn("delete web_tasks from apt_profile_versions ".
 		    "left join web_tasks on ".
 		    "   web_tasks.object_uuid=apt_profile_versions.uuid ".
 		    "where apt_profile_versions.profileid='$profileid'");
+	# Primary webtask.
+	$self->webtask()->Delete()
+	    if ($self->webtask());
     }
     DBQueryWarn("delete from apt_profile_favorites ".
 		"where profileid='$profileid'")
@@ -1118,6 +1174,76 @@ sub SetSites($$$$$$)
     }
     $$prspecstr = GeniXML::Serialize($rspec);
     @$paggregate_urns = keys(%aggregates);
+    return 0;
+}
+
+#
+# Set the repository for the rspec. This is a top level element. At
+# some point we can think about per-node repos.
+#
+sub SetRepo($$$$$$)
+{
+    my ($prspecstr, $repourl, $reporef, $repohash, $geniuser, $perrmsg) = @_;
+
+    my $rspec = GeniXML::Parse($$prspecstr);
+    if (! defined($rspec)) {
+	$$perrmsg = "Could not parse rspec\n";
+	return -1;
+    }
+    my $repo = GeniXML::FindNodesNS("n:repository", $rspec,
+				    $GeniXML::EMULAB_NS)->pop();
+    if (! defined($repo)) {
+	$repo = GeniXML::AddElement("repository", $rspec, $GeniXML::EMULAB_NS);
+	GeniXML::SetText("type", $repo, "git");
+	GeniXML::SetText("url", $repo, $repourl);
+	GeniXML::SetText("refspec", $repo, $reporef);
+	GeniXML::SetText("commit", $repo, $repohash);
+    }
+    #
+    # Temporary, lets just throw an execute service onto each node.
+    # We put it before any existing execute services.
+    #
+    my $owner   = $geniuser->uid();
+    my $command = "cd /local && sudo chmod 777 . && umask 002 && ".
+	"git clone -n '$repourl' repository && " .
+	"cd repository && " .
+	"git config --add core.sharedRepository group && ".
+	"git checkout $repohash ";
+    if ($reporef =~ m"^(refs/|)heads/(.+)") {
+	my $branchname = $2;
+	$command .= "&& git branch -ft $branchname origin/$branchname" .
+	    "&& git checkout -B $branchname HEAD ";
+    }
+    $command .= "&& sudo chown -R $owner . ";
+
+    #
+    # Generate an SSH url and make that the push url so users can easily
+    # push up (assuming they have the proper credentials loaded).
+    #
+    my $url = new URI::URL $repourl;
+    my $host = $url->host();
+    my ($org,$project) = ($url->path() =~ /^\/([^\/]+)(\/.*)$/);
+    if (defined($org) && defined($project)) {
+	my $sshurl = "git\@${host}:${org}${project}";
+	$command .= "&& git remote set-url --push origin '$sshurl'";
+    }
+    
+    foreach my $node (GeniXML::FindNodes("n:node", $rspec)->get_nodelist()) {
+	my $service;
+	my $services = FindNodes("n:services", $node)->shift();
+	if (!defined($services)) {
+	    $services = GeniXML::AddElement("services", $node);
+	    $service  = GeniXML::AddElement("execute", $services);
+	}
+	else {
+	    $service = XML::LibXML::Element->new("execute");
+	    $services->insertBefore($service,
+				    FindNodes("n:execute", $services)->shift());
+	}
+	GeniXML::SetText("shell", $service, "/bin/sh");
+	GeniXML::SetText("command", $service, $command);
+    }
+    $$prspecstr = GeniXML::Serialize($rspec);
     return 0;
 }
 

@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2006-2016 University of Utah and the Flux Group.
+# Copyright (c) 2006-2017 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -98,6 +98,7 @@ class Aggregate
     function pcount()       { return $this->sfield('pcount'); }
     function pfree()        { return $this->sfield('pfree'); }
     function vcount()       { return $this->sfield('vcount'); }
+    function vfree()        { return $this->sfield('vfree'); }
     function last_error()   { return $this->sfield('last_error'); }
 
     # Hmm, how does one cause an error in a php constructor?
@@ -215,6 +216,17 @@ class Aggregate
 	    $am_array[$urn] = $aggregate;
         }
         return $am_array;
+    }
+
+    function ThisAggregate()
+    {
+        global $DEFAULT_AGGREGATE_URN;
+
+        if (! ($aggregate = Aggregate::Lookup($DEFAULT_AGGREGATE_URN))) {
+            TBERROR("Aggregate::SupportsReservations: ".
+                    "Could not load aggregate $urn!", 1);
+        }
+        return $aggregate;
     }
 }
 

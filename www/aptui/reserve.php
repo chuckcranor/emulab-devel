@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2016 University of Utah and the Flux Group.
+# Copyright (c) 2000-2017 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -47,7 +47,9 @@ if (!ISADMIN()) {
 # Verify page arguments. Cluster is a domain that we turn into a URN.
 #
 $optargs = OptionalPageArguments("edit",     PAGEARG_BOOLEAN,
+                                 "debug",    PAGEARG_BOOLEAN,
                                  "cluster",  PAGEARG_STRING,
+                                 "project",  PAGEARG_PROJECT,
                                  "idx",      PAGEARG_INTEGER);
 
 if ($edit) {
@@ -88,8 +90,11 @@ $projlist = $this_user->ProjectAccessList($TB_PROJECT_CREATEEXPT);
 # a single value as a read-only field.
 #
 $plist = array();
-while (list($project) = each($projlist)) {
-    $plist[] = $project;
+while (list($p) = each($projlist)) {
+    $plist[] = $p;
+}
+if (ISADMIN() && isset($project)) {
+    $plist[] = $project->pid();
 }
 echo "<script type='text/plain' id='projects-json'>\n";
 echo htmlentities(json_encode($plist));
@@ -98,6 +103,9 @@ echo "</script>\n";
 # List of clusters.
 if ($edit) {
     $ams = array($aggregate);
+}
+elseif (isset($debug) && $debug) {
+    $ams = array(Aggregate::ThisAggregate());
 }
 else {
     $ams = Aggregate::SupportsReservations();
@@ -119,7 +127,10 @@ echo "</script>\n";
 $defaults = array();
 $defaults["pid"]   = '';
 # Default project.
-if (count($projlist) == 1) {
+if (ISADMIN() && isset($project)) {
+    $defaults["pid"]   = $project->pid();
+}
+elseif (count($projlist) == 1) {
     list($project, $grouplist) = each($projlist);
     $defaults["pid"] = $project;
 }

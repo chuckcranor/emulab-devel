@@ -29,6 +29,11 @@ sub Install($$$)
 	push(@LOGFILES, "$LOGDIR/flowvisor.log");
     }
 
+    # Autofs logs
+    if ($WITHZFS && !$WITHAMD) {
+	push(@LOGFILES, "$LOGDIR/autofs.log");
+    }
+
     Phase "syslog", "Setting up syslog", sub {
 	Phase "sysconf", "Editing $SYSLOG_CONF", sub {
 	    DoneIfEdited($SYSLOG_CONF);
@@ -110,6 +115,14 @@ sub Install($$$)
 			"!foam",      "*.*\t\t\t\t\t\t$LOGDIR/foam.log",
 			"!flowvisor", "*.*\t\t\t\t\t\t$LOGDIR/flowvisor.log");
 	    }
+
+	    if ($WITHZFS && !$WITHAMD) {
+		@syslog_lines = (@syslog_lines,
+			"!automount",    "*.*\t\t\t\t\t\t$LOGDIR/autofs.log",
+			"!automountd",   "*.*\t\t\t\t\t\t$LOGDIR/autofs.log",
+			"!autounmountd", "*.*\t\t\t\t\t\t$LOGDIR/autofs.log");
+	    }
+
 	    AppendToFileFatal($SYSLOG_CONF, @syslog_lines);
 	};
 
@@ -141,60 +154,70 @@ sub Install($$$)
 
 	Phase "newsyslog", "Setting up $NEWSYSLOG_CONF", sub {
 	    DoneIfEdited($NEWSYSLOG_CONF);
-	    AppendToFileFatal($NEWSYSLOG_CONF,
-		      "$LOGDIR/tmcd.log               640  9     1000 *     Z",
-		      "$LOGDIR/tmcd-meta.log          640  9     1000 *     Z",
-		      "$LOGDIR/stated.log             640  9     1000 *     Z ".
-		      "/var/run/stated.pid 31",
-		      "$LOGDIR/stated-mail.log        640  9     1000 *     Z ".
-		      "/var/run/stated.pid 31",
-		      "$LOGDIR/checknodes.log         640  14    300  *     Z ".
-		      "/var/run/checknodes_daemon.pid",
-		      "$LOGDIR/osselect.log           640  9     300  *     Z",
-		      "$LOGDIR/power.log              640  7     300  *     Z",
-		      "$LOGDIR/frisbeed.log           640  7     300  *     Z",
-		      "$LOGDIR/frisuploadd.log        640  7     300  *     Z",
-		      "$LOGDIR/mfrisbeed.log          640  7     1000 *     Z",
-		      "$LOGDIR/tftpd.log              640  7     200  *     Z",
-		      "$LOGDIR/named.log              640  7     200  *     Z",
-		      "$LOGDIR/dhcpd.log              640  7     200  *     Z",
-		      "$LOGDIR/bootinfo.log           640  7     200  *     Z",
-		      "$LOGDIR/capserver.log          640  5     200  *     Z",
-		      "$LOGDIR/pubsubd.log            640  5     1000 *     Z",
-		      "$LOGDIR/suexec.log             640  3     200  *     Z",
-		      "$LOGDIR/genlastlog.log         640  3     200  *     Z",
-		      "$LOGDIR/genlastlog             640  3     200  *     Z " .
-		      "/var/run/lastlog_daemon.pid",
-		      "$LOGDIR/xmlrpcbag.log          640  7     300  *     Z",
-		      "$LOGDIR/sslxmlrpc.log          640  7     300  *     Z",
-		      "$LOGDIR/idlemail.log           640  14    1000 *     Z",
-		      "$LOGDIR/reloadlog              640  9     1000 *     Z ".
-		      "/var/run/reload_daemon.pid",
-		      "$LOGDIR/checkuplog             640  9     1000 *     Z ".
-		      "/var/run/checkup_daemon.pid",
-		      "$LOGDIR/poollog                640  9     1000 *     Z ".
-		      "/var/run/pool_daemon.pid",
-		      "$LOGDIR/expire_daemon.log      640  9     1000 *     Z ".
-		      "/var/run/expire_daemon.pid",
-		      "$LOGDIR/sa_daemon.log          640  9     1000 *     Z ".
-		      "/var/run/sa_daemon.pid",
-		      "$LOGDIR/foam.log               640  7     *    168   Z",
-		      "$LOGDIR/flowvisor.log          640  7    1000  *     Z",
-		      "$LOGDIR/poolmonitor.log        644  7    2000  *     Z ".
-			      "/var/run/poolmonitor.pid",
-		      "$LOGDIR/lease_daemon.log       644  14   1000  *     Z ".
-		      "/var/run/lease_daemon.pid",
-		      "$LOGDIR/apache_access_log      644  7   10000  *    BZ ".
-			      "/var/run/httpd.pid",
-		      "$LOGDIR/apache_error_log       644  7   10000  *    BZ ".
-			      "/var/run/httpd.pid",
-		      "$LOGDIR/apache_ssl_engine_log  644  7   10000  *    BZ ".
-			      "/var/run/httpd.pid",
-		      "$LOGDIR/apache_ssl_request_log 644  7   10000  *    BZ ".
-			      "/var/run/httpd.pid",
-		      "$LOGDIR/apache_ssl_access_log  644  7   10000  *    BZ ".
-			      "/var/run/httpd.pid"
-		);
+	    my @nsyslog_lines = (
+		"$LOGDIR/tmcd.log               640  9     1000 *     Z",
+		"$LOGDIR/tmcd-meta.log          640  9     1000 *     Z",
+		"$LOGDIR/stated.log             640  9     1000 *     Z ".
+		"/var/run/stated.pid 31",
+		"$LOGDIR/stated-mail.log        640  9     1000 *     Z ".
+		"/var/run/stated.pid 31",
+		"$LOGDIR/checknodes.log         640  14    300  *     Z ".
+		"/var/run/checknodes_daemon.pid",
+		"$LOGDIR/osselect.log           640  9     300  *     Z",
+		"$LOGDIR/power.log              640  7     300  *     Z",
+		"$LOGDIR/frisbeed.log           640  7     300  *     Z",
+		"$LOGDIR/frisuploadd.log        640  7     300  *     Z",
+		"$LOGDIR/mfrisbeed.log          640  7     1000 *     Z",
+		"$LOGDIR/tftpd.log              640  7     200  *     Z",
+		"$LOGDIR/named.log              640  7     200  *     Z",
+		"$LOGDIR/dhcpd.log              640  7     200  *     Z",
+		"$LOGDIR/bootinfo.log           640  7     200  *     Z",
+		"$LOGDIR/capserver.log          640  5     200  *     Z",
+		"$LOGDIR/pubsubd.log            640  5     1000 *     Z",
+		"$LOGDIR/suexec.log             640  3     200  *     Z",
+		"$LOGDIR/genlastlog.log         640  3     200  *     Z",
+		"$LOGDIR/genlastlog             640  3     200  *     Z ".
+		"/var/run/lastlog_daemon.pid",
+		"$LOGDIR/xmlrpcbag.log          640  7     300  *     Z",
+		"$LOGDIR/sslxmlrpc.log          640  7     300  *     Z",
+		"$LOGDIR/idlemail.log           640  14    1000 *     Z",
+		"$LOGDIR/reloadlog              640  9     1000 *     Z ".
+		"/var/run/reload_daemon.pid",
+		"$LOGDIR/checkuplog             640  9     1000 *     Z ".
+		"/var/run/checkup_daemon.pid",
+		"$LOGDIR/poollog                640  9     1000 *     Z ".
+		"/var/run/pool_daemon.pid",
+		"$LOGDIR/expire_daemon.log      640  9     1000 *     Z ".
+		"/var/run/expire_daemon.pid",
+		"$LOGDIR/sa_daemon.log          640  9     1000 *     Z ".
+		"/var/run/sa_daemon.pid",
+		"$LOGDIR/poolmonitor.log        644  7    2000  *     Z ".
+		"/var/run/poolmonitor.pid",
+		"$LOGDIR/lease_daemon.log       644  14   1000  *     Z ".
+		"/var/run/lease_daemon.pid",
+		"$LOGDIR/apache_access_log      644  7   10000  *    BZ ".
+		"/var/run/httpd.pid",
+		"$LOGDIR/apache_error_log       644  7   10000  *    BZ ".
+		"/var/run/httpd.pid",
+		"$LOGDIR/apache_ssl_engine_log  644  7   10000  *    BZ ".
+		"/var/run/httpd.pid",
+		"$LOGDIR/apache_ssl_request_log 644  7   10000  *    BZ ".
+		"/var/run/httpd.pid",
+		"$LOGDIR/apache_ssl_access_log  644  7   10000  *    BZ ".
+		"/var/run/httpd.pid");
+
+    	    if ($PROTOGENI_GENIRACK) {
+		@nsyslog_lines = (@nsyslog_lines,
+		  "$LOGDIR/foam.log               640  7     *    168   Z",
+		  "$LOGDIR/flowvisor.log          640  7    1000  *     Z");
+	    }
+
+	    if ($WITHZFS && !$WITHAMD) {
+		@nsyslog_lines = (@nsyslog_lines,
+		  "$LOGDIR/autofs.log             640  14   1000  *     Z");
+	    }
+
+	    AppendToFileFatal($NEWSYSLOG_CONF, @nsyslog_lines);
 	};
     };
 

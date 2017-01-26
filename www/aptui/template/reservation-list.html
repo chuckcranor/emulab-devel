@@ -59,15 +59,25 @@
 		  </a>
 		</td>
 	      <% } %>	    
-	      <% if (showuser) { %>	  
+	      <% if (showuser) { %>
 		<td style='white-space: nowrap;'>
-		  <a href='user-dashboard.php?user=<%- value.creator_uid %>'>
-		    <%- value.creator_uid %></a></td>
+		  <% if (value.creator_idx) { %>
+		    <a href='user-dashboard.php?user=<%- value.creator_uid %>'>
+		      <%- value.creator_uid %></a>
+		  <% } else { %>
+		    <%- value.creator_uid %>
+		  <% } %>
+		</td>
 	      <% } %>	    
 	      <% if (showproject) { %>	  
 		<td style='white-space: nowrap;'>
-		  <a href='show-project.php?project=<%- value.pid %>'>
-		    <%- value.pid %></a></td>
+		  <% if (value.pid_idx) { %>
+		    <a href='show-project.php?project=<%- value.pid %>'>
+		      <%- value.pid %></a>
+		  <% } else { %>
+		    <%- value.pid %>
+		  <% } %>
+		</td>
 	      <% } %>
 	      <td><%- value.type %></td>
 	      <td><%- value.count %></td>

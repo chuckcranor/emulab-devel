@@ -1,6 +1,6 @@
 #!/bin/sh
 #
-# Copyright (c) 2000-2016 University of Utah and the Flux Group.
+# Copyright (c) 2000-2017 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -213,6 +213,7 @@ write_image()
 	local ptype=$5
 	local server=$6
 	local keepalive=$7
+	local heartbeat=$8
 	local imageid=""
 	local imagefile=""
 	local frisbee_opts="$FRISBEE_OPTS"
@@ -227,6 +228,9 @@ write_image()
 
 	if [ "$keepalive" -ne 0 ]; then
 		frisbee_opts="$frisbee_opts -K $keepalive"
+	fi
+	if [ "$heartbeat" -ne 0 ]; then
+		frisbee_opts="$frisbee_opts -H $heartbeat"
 	fi
 
 	if [ $slice -ne 0 ]; then
@@ -347,6 +351,8 @@ handle_loadinfo()
 	ZFILL=${ZFILL:-'0'}
 	local KEEPALIVE=`get_value "$LOADINFO" KEEPALIVE`
 	KEEPALIVE=${KEEPALIVE:-'0'}
+	local HEARTBEAT=`get_value "$LOADINFO" HEARTBEAT`
+	HEARTBEAT=${HEARTBEAT:-'0'}
 
 	local ACPI=`get_value "$LOADINFO" ACPI`
 	local ASF=`get_value "$LOADINFO" ASF`
@@ -394,6 +400,23 @@ handle_loadinfo()
 		esac
 	fi
 
+	#
+	# HEARTBEAT==0: no heartbeat
+	# ow: send report at specified interval (<= one hour)
+	#
+	case "$HEARTBEAT" in
+	    ''|*[!0-9]*)
+		echo "Ignoring bogus HEARTBEAT value \"$HEARTBEAT\""
+		HEARTBEAT=0
+		;;
+	    *)
+		if [ $HEARTBEAT -lt 0 -o $HEARTBEAT -gt 3600 ]; then
+		    echo "Ignoring bad HEARTBEAT value \"$HEARTBEAT\""
+		    HEARTBEAT=0
+		fi
+		;;
+	esac
+
 	# For slice images, ensure that the MBR is the correct version
 	# and replace if not.
 	if [ -z "$FIRSTMBR" ]; then
@@ -424,7 +447,7 @@ handle_loadinfo()
 		zapsuperblocks /dev/$DISK
 	fi
 
-	write_image "$ADDRESS" "/dev/$DISK" "$PARTITION" "$ZFILL" "$PTYPE" "$SERVER" "$KEEPALIVE"
+	write_image "$ADDRESS" "/dev/$DISK" "$PARTITION" "$ZFILL" "$PTYPE" "$SERVER" "$KEEPALIVE" "$HEARTBEAT"
 	rc=$?
 	if [ $rc -ne 0 ]; then
 		echo "Failed to write image to disk, status $rc"

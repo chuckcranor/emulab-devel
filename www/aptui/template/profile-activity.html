@@ -10,6 +10,7 @@
 	  <th>Creator</th>
 	  <th>Created</th>
 	  <th>Destroyed</th>
+	  <th>Logs</th>
 	</tr>
       </thead>
       <tbody>
@@ -22,6 +23,8 @@
 	  <td><%- instance.creator %></td>
 	  <td><%- instance.created %></td>
 	  <td><%- instance.destroyed %></td>
+	  <td><a href='<%- instance.public_url %>' target="_blank">
+	    <span class="glyphicon glyphicon-link"></span></a></td>
 	</tr>
 	<% }); %>
       </tbody>

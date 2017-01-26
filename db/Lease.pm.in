@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2012-2016 University of Utah and the Flux Group.
+# Copyright (c) 2012-2017 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -499,7 +499,7 @@ sub InUseReadWrite() {
     my $resvref = $self->GetReservations();
     if ($resvref) {
 	foreach my $ref (@$resvref) {
-	    if (!$ref->IsReadOnly()) {
+	    if (!$ref->IsReadOnly() && !$ref->IsRWClone()) {
 		$rw = 1;
 		last;
 	    }

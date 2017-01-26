@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2008-2016 University of Utah and the Flux Group.
+# Copyright (c) 2008-2017 University of Utah and the Flux Group.
 # 
 # {{{GENIPUBLIC-LICENSE
 # 
@@ -720,6 +720,17 @@ sub GetTicketAuxAux($$$$$$$$$$$)
     if (GeniResponse::IsResponse($slice_experiment)) {
 	$response = $slice_experiment;
 	$slice_experiment = undef;
+	goto bad;
+    }
+    #
+    # Mark the expires slot in the experiment, for admission control
+    # during the mapper run. 
+    #
+    if ($slice_experiment->SetExpiration(defined($expires) ? $expires :
+					 $slice->expires())) {
+	$response = GeniResponse->Create(GENIRESPONSE_ERROR, undef,
+					 "set experiment expiration");
+	print STDERR "Could not set experiment expiration\n";
 	goto bad;
     }
     my $realuser = FlipToUser($slice, $user);
@@ -1584,75 +1595,83 @@ sub GetTicketAuxAux($$$$$$$$$$$)
 		}
 	    }
 
-	    if ($startupCount == 1 && defined($startupCommand)) {
-		if (! TBcheck_dbslot($startupCommand, "virt_nodes","startupcmd",
-				TBDB_CHECKDBSLOT_WARN|TBDB_CHECKDBSLOT_ERROR)) {
-		    $response =
-			GeniResponse->Create(GENIRESPONSE_BADARGS, undef,
-			   "Invalid startup command: " . TBFieldErrorString());
-		    goto bad;
-		}
-		$nodeblob->{'startupcmd'} = $startupCommand;
-
-	    } else { # BEGIN TEMPORARY ELSE
-	    my $count = 0;
-	    my $startfile = $slice_experiment->UserDir() .
-		"/geni_startup." . $node_nickname;
-	    $nodeblob->{'startupcmd'} = $startfile;
-	    
-	    if (!open(STARTUP, ">$startfile")) {
-		$response = GeniResponse->Create(GENIRESPONSE_ERROR, undef,
-						 "Error creating startfile");
-		goto bad;
-	    }
-	    print STARTUP "#!/bin/sh\n\n";
-	    print STARTUP "# Redirect all output to a file\n";
-	    print STARTUP "exec &> /var/tmp/startup.log\n\n";
-
-	    #
-	    # It would be nice to interleave "install" with "execute", but
-	    # Emulab's tarfiles support arranges to copy the files locally,
-	    # and rewrites the names. Need to hook into that support somehow,
-	    # but for now tarfiles are all installed as a block above. 
-	    #
-	    foreach my $service (@services) {
-		my $type = $service->{'type'};
-
-		if ($type eq "execute") {
-		    my $shell = $service->{'shell'};
-		    my $cmd   = $service->{'cmd'};
-		    my $log   = "/var/tmp/startup-${count}.txt";
-		    my $stat  = "/var/tmp/startup-${count}.status";
-
-		    #
-		    # Support only sh and csh. Maybe perl later.
-		    #
-		    if (! (defined($shell) &&
-			   ($shell eq "csh" || $shell eq "sh" ||
-			    $shell eq "/bin/csh" || $shell eq "/bin/sh"))) {
+	    if ($startupCount) {
+		if ($startupCount == 1 && length($startupCommand) < 240) {
+		    if (! TBcheck_dbslot($startupCommand,
+					 "virt_nodes", "startupcmd",
+				TBDB_CHECKDBSLOT_WARN|TBDB_CHECKDBSLOT_ERROR)){
 			$response =
 			    GeniResponse->Create(GENIRESPONSE_BADARGS, undef,
-						 "Invalid shell in execute");
+				 "Invalid startup command: " .
+						 TBFieldErrorString());
 			goto bad;
 		    }
-		    if (! ($shell =~ /bin/)) {
-			$shell = "/bin/$shell";
+		    $nodeblob->{'startupcmd'} = $startupCommand;
+		}
+		else { 
+		    my $count = 0;
+		    my $startfile = $slice_experiment->UserDir() .
+			"/geni_startup." . $node_nickname;
+		    $nodeblob->{'startupcmd'} = $startfile;
+	    
+		    if (!open(STARTUP, ">$startfile")) {
+			$response =
+			    GeniResponse->Create(GENIRESPONSE_ERROR, undef,
+						 "Error creating startfile");
+			goto bad;
 		    }
-		    print STARTUP "echo -n 'Services execution $count at '\n";
-		    print STARTUP "date\n\n";
-		    print STARTUP "$shell -c \"$cmd\" >$log 2>&1\n";
-		    print STARTUP "status=\$?\n";
-		    print STARTUP "echo \"\$status\" > $stat\n";
-		    print STARTUP
-		      "echo \"Execution $count exited with status \$status\"\n";
-		    print STARTUP "echo '----------------------------------'\n";
-		    $count++;
+		    print STARTUP "#!/bin/sh\n\n";
+		    print STARTUP "# Redirect all output to a file\n";
+		    print STARTUP "exec &> /var/tmp/startup.log\n\n";
+
+		    #
+		    # It would be nice to interleave "install" with
+		    # "execute", but Emulab's tarfiles support arranges to
+		    # copy the files locally, and rewrites the names. Need to
+		    # hook into that support somehow, but for now tarfiles are
+		    # all installed as a block above.
+		    #
+		    foreach my $service (@services) {
+			my $type = $service->{'type'};
+			
+			if ($type eq "execute") {
+			    my $shell = $service->{'shell'};
+			    my $cmd   = $service->{'cmd'};
+			    my $log   = "/var/tmp/startup-${count}.txt";
+			    my $stat  = "/var/tmp/startup-${count}.status";
+
+			    #
+			    # Support only sh and csh. Maybe perl later.
+			    #
+			    if (! (defined($shell) &&
+				   ($shell eq "csh" || $shell eq "sh" ||
+				    $shell eq "/bin/csh" ||
+				    $shell eq "/bin/sh"))) {
+				$response =
+				    GeniResponse->Create(GENIRESPONSE_BADARGS,
+						 undef,
+						 "Invalid shell in execute");
+				goto bad;
+			    }
+			    if (! ($shell =~ /bin/)) {
+				$shell = "/bin/$shell";
+			    }
+			    print STARTUP "echo -n 'Services execution $count at '\n";
+			    print STARTUP "date\n\n";
+			    print STARTUP "$shell -c \"$cmd\" >$log 2>&1\n";
+			    print STARTUP "status=\$?\n";
+			    print STARTUP "echo \"\$status\" > $stat\n";
+			    print STARTUP
+				"echo \"Execution $count exited with status \$status\"\n";
+			    print STARTUP "echo '----------------------------------'\n";
+			    $count++;
+			}
+		    }
+		    print STARTUP "exit 0\n";
+		    close(STARTUP);
+		    chmod(0755, $startfile);
 		}
 	    }
-	    print STARTUP "exit 0\n";
-	    close(STARTUP);
-	    chmod(0755, $startfile);
-	    } # END TEMPORARY ELSE
 	}
 
 	my $elabsettings = GeniXML::GetElabInElabSettings($ref);
@@ -3795,7 +3814,7 @@ sub SliverWorkAux($$$$$$$$)
 	    if (ref($s) eq "GeniSliver::Node") {
 		$nodemap{$s->nickname()} = $s;
 	    }
-	    if (ref($s) eq "GeniSliver::Vhost") {
+	    elsif (ref($s) eq "GeniSliver::Vhost") {
 		$internal_nodemap{$s->nickname()} = $s;
 	    }
 	    elsif (ref($s) eq "GeniAggregate::Link" ||
@@ -6533,6 +6552,11 @@ sub RegisterAux($$)
 	$aggregate->SetRegistered(1);
 	return 0;
     }
+    if ($authority->urn()->domain() eq "ch.geni.net") {
+	print STDERR "Skipping slice registration at $authority\n";
+	$aggregate->SetRegistered(1);
+	return 0;
+    }
     #
     # Ask for the version number to see how we need to do this.
     #
@@ -6923,7 +6947,7 @@ sub GeniExperiment($;$)
     # a member. That means we have to run as the local user.
     #
     if ($project->IsLocal()) {
-	$creator->FlipTo($group->unix_gid());
+	$creator->FlipTo($group);
     }
     elsif (defined($group)) {
 	GeniUtil::FlipToGeniUser($group->unix_gid());
@@ -7018,7 +7042,7 @@ sub FlipToUser($$)
     }
   flip:
     return undef
-	if ($user->FlipTo($group->unix_gid()));
+	if ($user->FlipTo($group));
     return $user;
 }
 
@@ -7574,9 +7598,20 @@ sub SetSliceExpiration($$$$@)
 	    goto bad;
 	}
     }
-    if (!$checkonly && $slice->SetExpiration($when) != 0) {
-	$message = "could not set expiration time";
-	goto bad;
+    if (!$checkonly) {
+	if ($slice->SetExpiration($when) != 0) {
+	    $message = "could not set expiration time";
+	    goto bad;
+	}
+	#
+	# Mark the expires slot in the experiment, for admission control
+	# during the mapper run. 
+	#
+	if (defined($slice_experiment) &&
+	    $slice_experiment->SetExpiration($when)) {
+	    $message = "could not set slice experiment expiration time";
+	    goto bad;
+	}
     }
     return 0;
     
@@ -7824,6 +7859,18 @@ sub HandleBlockstore($$$$$$$@)
     if ($class eq "remote") {
 	$fixed = $bsname = $nodename;
 	push(@attributes, ["protocol", "iSCSI", 1]);
+
+	#
+	# The "rwclone" attribute allows you to map a writable copy of the
+	# indicated SAN-based dataset. In this way, multiple nodes can map
+	# the same dataset simultaneously. In many situations, this is more
+	# useful than a "readonly" mapping. For example, a dataset
+	# containing a Linux source tree could be mapped into multiple
+	# nodes, each of which could do its own independent,
+	# non-conflicting configure and build in their respective copies.
+	# Currently, rwclones are "ephemeral" in that any changes made are
+	# lost when the experiment mapping the clone is terminated.
+	#
 	push(@attributes, ["rwclone", $rwclone, 0]) if ($rwclone);
 
 	if (defined($dataset_id)) {

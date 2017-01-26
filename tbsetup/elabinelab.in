@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2004-2014 University of Utah and the Flux Group.
+# Copyright (c) 2004-2014, 2017 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -897,7 +897,8 @@ sub DumpDBGoo()
 		    "where (gm.pid='$pid' or ".
 		    "       gm.pid='" . TBOPSPID() . "') and gm.gid=gm.pid ".
 		    " and t.uid_idx is not NULL and ".
-		    " u.status='" . USERSTATUS_ACTIVE() . "'")
+		    " (u.status='" . USERSTATUS_ACTIVE() . "' or ".
+		    "  u.status='" . USERSTATUS_INACTIVE() . "')")
 	    or die("*** $0:\n".
 		   "    Could not create table temp_$table\n");
 
@@ -946,7 +947,8 @@ sub DumpDBGoo()
 		"left join users as u on u.uid_idx=gm.uid_idx ".
 		"where (gm.pid='$pid' or ".
 		"       (gm.pid='" . TBOPSPID() . "' and gm.pid=gm.gid)) and ".
-		" u.status='" . USERSTATUS_ACTIVE() . "' and ".
+		" (u.status='" . USERSTATUS_ACTIVE() . "' or ".
+		"  u.status='" . USERSTATUS_INACTIVE() . "') and ".
 		" gm.uid!='elabman' and gm.uid!='elabckup' and ".
 		" gm.uid!='operator' ".
 		"into outfile '$statedir/group_membership'")

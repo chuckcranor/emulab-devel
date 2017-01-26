@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2014 University of Utah and the Flux Group.
+# Copyright (c) 2000-2014, 2017 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -56,25 +56,31 @@ $instances = array();
 #
 $query1_result =
     DBQueryFatal("select i.uuid,i.profile_version,i.created,'' as destroyed, ".
-		 "   i.creator,p.uuid as profile_uuid,u.email ".
+		 "   i.creator,p.uuid as profile_uuid,u.email,ia.public_url, ".
+                 "   i.slice_uuid ".
 		 "  from apt_instances as i ".
+                 "left join apt_instance_aggregates as ia ".
+                 "     on ia.uuid=i.uuid ".
 		 "left join apt_profile_versions as p on ".
 		 "     p.profileid=i.profile_id and ".
 		 "     p.version=i.profile_version ".
 		 "left join geni.geni_users as u on u.uuid=i.creator_uuid ".
 		 "where i.profile_id='$profileid' ".
-		 "order by i.created desc");
+		 "group by i.uuid order by i.created desc");
 
 $query2_result =
     DBQueryFatal("select h.uuid,h.profile_version,h.created,h.destroyed, ".
-		 "    h.creator,p.uuid as profile_uuid,u.email ".
+		 "    h.creator,p.uuid as profile_uuid,u.email,ia.public_url, ".
+                 "    h.slice_uuid ".
 		 "  from apt_instance_history as h ".
+                 "left join apt_instance_aggregate_history as ia ".
+                 "     on ia.uuid=h.uuid ".
 		 "left join apt_profile_versions as p on ".
 		 "     p.profileid=h.profile_id and ".
 		 "     p.version=h.profile_version ".
 		 "left join geni.geni_users as u on u.uuid=h.creator_uuid ".
 		 "where h.profile_id='$profileid' ".
-		 "order by h.created desc");
+		 "group by h.uuid order by h.created desc");
 
 if (mysql_num_rows($query1_result) == 0 &&
     mysql_num_rows($query2_result) == 0) {
@@ -92,11 +98,19 @@ foreach (array($query1_result, $query2_result) as $query_result) {
 	$destroyed = $row["destroyed"];
 	$creator   = $row["creator"];
 	$email     = $row["email"];
+        $public_url= $row["public_url"];
+        $slice_uuid= $row["slice_uuid"];
 	# If a guest user, use email instead.
 	if (isset($email)) {
 	    $creator = $email;
 	}
-
+        #
+        # If the slice is gone, the public url needs to be replaced.
+        #
+        if ($destroyed != "" && preg_match("/publicid=\w*/", $public_url)) {
+            $public_url = "https://" . parse_url($public_url, PHP_URL_HOST) .
+                        "/showslicelogs.php?slice_uuid=" . $slice_uuid;
+        }
 	$instance = array();
 	$instance["uuid"]        = $uuid;
 	$instance["p_uuid"]      = $puuid;
@@ -104,6 +118,7 @@ foreach (array($query1_result, $query2_result) as $query_result) {
 	$instance["creator"]     = $creator;
 	$instance["created"]     = $created;
 	$instance["destroyed"]   = $destroyed;
+	$instance["public_url"]  = $public_url;
 	$instances[] = $instance;
     }
 }

@@ -20,7 +20,15 @@ pre {
 	white-space: pre-wrap;
 }
 .panel-body-nopad {
-	padding: 5px;
+    padding: 5px;
+ }
+.table-condensed > thead > tr > th,
+.table-condensed > tbody > tr > th,
+.table-condensed > tfoot > tr > th,
+.table-condensed > thead > tr > td,
+.table-condensed > tbody > tr > td,
+.table-condensed > tfoot > tr > td {
+    padding: 3px;
 }
 </style>
 <div class='row'>
@@ -76,6 +84,15 @@ pre {
 		 <%- profileName %></a></td>
 	  </tr>
 	  <% } %>
+	  <% if (reporef !== undefined) { %>
+	    <tr>
+	      <td class='border-none'>RefSpec:</td>
+	      <td class='border-none'>
+		<span><%= reporef %></span>
+		(<%= repohash %>)
+	      </td>
+	    </tr>
+	  <% } %>
 	  <% if (isadmin) { %>
 	    <tr>
 	      <td class='border-none'>Creator:</td>
@@ -116,6 +133,24 @@ pre {
 		  <%- sliceExpires %></span>
 		(<span id='quickvm_countdown'></span>)
 	      </span>
+	    </td>
+	  </tr>
+	  <tr id="maximum-extension" class="hidden">
+	    <td class='border-none'>Extendable:</td>
+	    <td class='border-none'>
+	      <span id="maximum-extension-string"></span>
+	      <a href='#' class='btn btn-xs'
+		 data-toggle='popover'
+		 data-html='true'
+		 data-delay='{"hide":500}'
+		 data-content="This is the maximum extension that is
+			       <em>possible</em> because of future reservation
+			       promises for the resources you are using. It
+			       does not mean you will be granted an extension
+			       till this date.">
+		<span class='glyphicon glyphicon-question-sign'
+		      style='margin-bottom: 4px;'></span>
+	      </a>
 	    </td>
 	  </tr>
 	  </table>
@@ -338,7 +373,7 @@ pre {
 			  id='linktest-modal-button' type=button>
 		    Run Linktest</button>
 		</span>
-		<% if (isadmin || isstud || isfadmin) { %>
+		<% if (1) { %>
 		  <span>
 		    <button class='btn btn-xs btn-success pull-right'
 			    disabled
@@ -717,7 +752,7 @@ pre {
     <div class='modal-dialog'>
       <div class='modal-content'>
 	<div class='modal-body'>
-          <center><h3>Confirm Node Reload</h3>
+          <center><h3>Confirm Node <span id="confirm-which"></span></h3>
             <button type='button' style='margin-right: 20px;'
                     class='btn btn-primary btn-sm' 
                     data-dismiss='modal' aria-hidden='true'>

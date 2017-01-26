@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2000-2016 University of Utah and the Flux Group.
+# Copyright (c) 2000-2017 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -191,8 +191,13 @@ if (@ARGV) {
 		die("*** $0:\n".
 		    "    Could not get virtual node list for $node\n");
 	    }
-	    push(@nodes, @virtuals)
-		if (@virtuals);
+	    # Watch for virtuals that were also on the command line, do not
+	    # want a node in this list twice.
+	    #
+	    foreach my $vnode (@virtuals) {
+		push(@nodes, $vnode)
+		    if (! grep {$_->node_id() eq $vnode->node_id()} @nodes);
+	    }
 	}
     }
 }
