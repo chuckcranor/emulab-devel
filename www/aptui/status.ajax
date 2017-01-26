@@ -1125,7 +1125,7 @@ function Do_ReloadTopology()
 		     "webmanage_instance -t " . $webtask->task_id() .
                      "  getmanifests $uuid",
 		     SUEXEC_ACTION_IGNORE);
-    $webtask-Refresh();
+    $webtask->Refresh();
 
     if ($retval != 0) {
 	if ($retval < 0) {

@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2014 University of Utah and the Flux Group.
+# Copyright (c) 2000-2017 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -39,7 +39,7 @@ $optargs = OptionalPageArguments("target_user",   PAGEARG_STRING,
 
 $url = 'apt/list-datasets.php?embedded=1';
 if (isset($target_user)) {
-    $url .= "&target_user=$target_user";
+    $url .= "&user=$target_user";
 }
 if (isset($all)) {
     $url .= "&all=$all";
