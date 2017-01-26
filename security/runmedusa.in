@@ -204,12 +204,12 @@ close(HOSTS);
 
 RunMedusa("$SSHOPTS $MEDUSAOPTS", 1200,
 	  "Insecure passwords for SSH");
-RunMedusa("$VNCOPTS -n 5900 $MEDUSAOPTS",
-	  "Insecure VNC password on port 5900", 500);
-RunMedusa("$VNCOPTS -n 5901 $MEDUSAOPTS", 
-	  "Insecure VNC password on port 5901", 500);
-RunMedusa("$VNCOPTS -n 5902 $MEDUSAOPTS", 
-	  "Insecure VNC password on port 5902", 500);
+RunMedusa("$VNCOPTS -n 5900 $MEDUSAOPTS", 500,
+	  "Insecure VNC password on port 5900");
+RunMedusa("$VNCOPTS -n 5901 $MEDUSAOPTS", 500,
+	  "Insecure VNC password on port 5901");
+RunMedusa("$VNCOPTS -n 5902 $MEDUSAOPTS", 500,
+	  "Insecure VNC password on port 5902");
 exit(0);
 
 #
