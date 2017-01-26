@@ -13,8 +13,8 @@ $(function ()
     var amlist        = null;
     var amstatus      = null;
     var projlist      = null;
-    var sysprojlist   = ['emulab-ops', 'emulab-ops-test'];
-    var psysprojlist  = ['PhantomNet', 'testproject'];
+    var sysprojlist   = ['emulab-ops', 'PortalProfiles', 'emulab-ops-test'];
+    var psysprojlist  = ['PhantomNet', 'PortalProfiles', 'testproject'];
     var profilelist   = null;
     var recentcount   = 5;
     var amdefault     = null;
