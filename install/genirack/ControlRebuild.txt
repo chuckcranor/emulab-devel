@@ -44,9 +44,12 @@ disk image cause that would destroy the lvms in partition four.
 Copy the two ndz files to someplace on the public network that you can get
 to with http or ftp (from the control node being rebuilt).
 
-Might be a good idea to delete the file from /tmp since it has a password
-in it. But make sure you have stored a copy someplace safe and encrypted to
-be safe.
+Also copy /var/tmp/boot.sdb from the Utah control node to the control
+node you are rebuilding before you reboot it (see more below).
+
+Might be a good idea to delete the data file from /tmp since it has a
+password in it. But make sure you have stored a copy someplace safe and
+encrypted to be safe.
 
 -----------
 
@@ -61,6 +64,24 @@ These three might not exist. If not, skip the restore commands below.
 	~elabman/openvpn/openvpn-server.pem
 	~elabman/openvpn/openvpn-dh.pem
 	~elabman/openvpn/emulab.pem
+
+Save the old boot blocks someplace safe (on another machine): 
+
+	sudo dd if=/dev/sda of=mbr.old count=62
+
+Grab the first part of new MBR (see above):
+
+	sudo dd if=boot.sdb bs=1 count=444 > boot.new
+	
+Tack on the current partition table:
+
+	sudo dd if=/dev/sda bs=1 skip=444 count=68 >> boot.new
+
+Tack on the rest of the new boot code:
+
+	sudo dd if=boot.sdb skip=1 count=61 >> boot.new
+
+Copy boot.new to the same public server as the two ndz files above.
 
 Log into the boss VM and run
 
@@ -106,11 +127,24 @@ control nodes.
   The Control_IP is *NOT* the iLo IP you used above. It is the IP you
   have assigned to the control node itself.
 
-* Transfer the control node image from where ever you stashed them:
+* Transfer the control node images from where ever you stashed them:
 
 	cd /tmp
 	wget http:/xxx.xxx.xxx.xxx/sdb1.ndz
 	wget http:/xxx.xxx.xxx.xxx/sdb2.ndz
+	wget http:/xxx.xxx.xxx.xxx/boot.new
+
+* Run fdisk to see what the old partition table looks like. Save the
+  output:
+
+	fdisk -l /dev/cciss/c0d0
+
+* Then write the new boot blocks to the disk:
+
+	dd if=boot.new of=/dev/cciss/c0d0 count=62
+
+* Then run fdisk again and confirm the partition tables are identical.  If
+  so then proceed. If not, find the nearest bar and drown your sorrows.
 
 * Write the image files to the disk using the Emulab decompression tool:
 
@@ -129,26 +163,6 @@ control nodes.
 
   Still there? Yes, keep going. No, find the nearest bar and drown your
   sorrows.
-
-* Now upgrade the control node to Ubuntu14:
-
-	sudo apt-get update
-	sudo apt-get upgrade
-	sudo apt-get install update-manager-core
-	sudo do-release-upgrade
-
-	For the release upgrade you can use the default for all of the
-	prompts and configuration screens except:
-
-	* For the one that disables root ssh login via password; we want to
-	  disallow root ssh login by password.
-	* Answer I to install updated /etc/init.d/xen
-	* Answer O to keep old version of /etc/init.d/xend-config.sxp
-	* Answer O to keep old version of /etc/sudoers
-	* Answer O to keep old version of /etc/sysctl.conf
-	* Answer O to keep old version of /etc/default/xendomains
-	* Install the new /etc/default/xen
-	* Install the new /etc/default/grub
 
 * Restore the openvpn files to ~elabman/openvpn and start the server:
 
