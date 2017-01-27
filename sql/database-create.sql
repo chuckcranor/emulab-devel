@@ -4516,7 +4516,7 @@ CREATE TABLE `scheduled_reloads` (
 DROP TABLE IF EXISTS `scripts`;
 CREATE TABLE `scripts` (
   `script` smallint(3) NOT NULL auto_increment,
-  `script_name` varchar(24) NOT NULL default '',
+  `script_name` varchar(64) NOT NULL default '',
   PRIMARY KEY  (`script`),
   UNIQUE KEY `id` (`script_name`)
 ) ENGINE=MyISAM DEFAULT CHARSET=latin1;
