@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2005-2016 University of Utah and the Flux Group.
+# Copyright (c) 2005-2017 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -1338,6 +1338,13 @@ sub inner_elab_role($) {
     return L__reservation($_[0], 'inner_elab_role'); }
 sub inner_elab_boot($) {
     return L__reservation($_[0], 'inner_elab_boot'); }
+sub OnSharedNode($) {
+    my ($self) = @_;
+    my $sharing_mode = $self->sharing_mode();
+    return 1
+	if (defined($sharing_mode) && $sharing_mode eq "using_shared_local");
+    return 0;
+}
 
 #
 # Load all attributes from the node_attributes table, 
