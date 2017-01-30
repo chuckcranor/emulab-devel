@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2000-2016 University of Utah and the Flux Group.
+# Copyright (c) 2000-2017 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -40,8 +40,10 @@ use libreboot;
 use libtblog;
 use Node;
 use NodeType;
+use Interface;
 use OSImage;
 use User;
+use Blockstore; # For ConvertToMebi();
 use EmulabConstants;
 use English;
 use event;
@@ -116,7 +118,7 @@ sub New($$$;@)
     bless($self, $class);
 
     # We need this guy right away!
-    $self->debug($DEFAULT_DEBUG_LEVEL);
+    # $self->debug($DEFAULT_DEBUG_LEVEL);
 
     return $self;
 }
@@ -420,6 +422,8 @@ sub osload($$$) {
     my @imageids;
     my @nodes       = ();
     my %nodeflags   = ();
+    # For frisbee events, which come with IP.
+    my %iptonode    = ();
 
     # Locals
     my $mereuser    = 0;
@@ -590,6 +594,21 @@ sub osload($$$) {
 	if (!defined($nodeobject)) {
 	    tberror "$node: Could not map to object!";
 	    goto failednode;
+	}
+
+	# For frisbee events.
+	my $interface = Interface->LookupControl($nodeobject);
+	if (!defined($interface)) {
+	    print STDERR "*** No control interface for $node\n";
+	}
+	else {
+	    my $ctrlip = $interface->IP();
+	    if (!defined($ctrlip) || $ctrlip eq "") {
+		print STDERR "*** No control IP for $node\n";
+	    }
+	    else {
+		$iptonode{$ctrlip} = $node;
+	    }
 	}
 
 	#
@@ -811,17 +830,37 @@ sub osload($$$) {
     
 	my $node_id = event_notification_get_objname($handle,$notification);
 	my $event   = event_notification_get_eventtype($handle,$notification);
+	my $objtype = event_notification_get_objtype($handle,$notification);
 
 	return
 	    if (!defined($eventnodes));
 
 	$eventnodes->{'GOTONE'} = 1;
+
+	# These events have IP instead of node_id.
+	if ($objtype eq "FRISBEESTATUS") {
+	    return
+		if (!exists($iptonode{$node_id}));
+	    
+	    $node_id = $iptonode{$node_id};
+	}
 	if (exists($eventnodes->{$node_id})) {
 	    my $et = time();
 	    if ($self->debug()) {
-		print "$self: eventhandler: $node_id => $event @ $et\n"
+		print STDERR "$self: eventhandler: $node_id => $event @ $et\n"
 	    }
 	    $eventnodes->{$node_id} = $et;
+
+	    if ($objtype eq "FRISBEESTATUS") {
+		my $nodeobject = $self->node($node_id);
+		my $wbytes = event_notification_get_string($handle,
+							   $notification,
+							   "BYTES_WRITTEN");
+		$self->nodeinfo($nodeobject, 'frisbeestatus',
+				{"when"    => $et,
+				 "wbytes"  => $wbytes,
+				 "image"   => $event});
+	    }
 	}
     };
     my $evhandle = $self->SetupEventHandler($handler);
@@ -834,6 +873,13 @@ sub osload($$$) {
 	goto done;
     }
 
+    # Prime the event handler above.
+    $eventnodes = {} if (!defined($eventnodes));
+    foreach my $node (@nodes) {
+	$eventnodes->{$node} = 0;
+    }
+    $self->dprintts("event handler enabled");
+
     while (@nodes) {
 	my ($reboot_nodes, $noreboot_nodes)
 	    = $self->GetNodesRequiringReboot(@nodes);
@@ -842,13 +888,6 @@ sub osload($$$) {
 	    print "$self: ".
 		"Issuing reboot for @$reboot_nodes and then waiting ...\n";
 
-	    # Prime the event handler above.
-	    $eventnodes = {} if (!defined($eventnodes));
-	    foreach my $node (@$reboot_nodes) {
-		$eventnodes->{$node} = 0;
-	    }
-	    $self->dprintts("event handler enabled");
-	    
 	    my %reboot_args     = ();
 	    my %reboot_failures = ();
 
@@ -870,6 +909,8 @@ sub osload($$$) {
 		    }
 		    else {
 			push(@temp, $node);
+			# Mark node as being rebooted for waitloop
+			$self->nodeinfo($self->node($node), 'rebooted',1);
 		    }
 		}
 		@nodes = (@temp,@$noreboot_nodes);
@@ -1153,10 +1194,45 @@ sub WaitTillReloadDone($$$$$@)
 		$waittime = time - $startwait;
 		
 		# If the node doesn't made a transition within $REBOOTWAIT
-		# minutes of booting, we declare it stuck.
+		# minutes of booting, we declare it stuck. 
 		my $isstuck = ($minutes > $REBOOTWAIT &&
 			       exists($eventnodes->{$node}) &&
+			       $self->nodeinfo($nodeobject, 'rebooted') &&
 			       $eventnodes->{$node} == 0);
+
+		#
+		# But, if we are in reloading, then we obviously missed
+		# a state transition in our handler. Probably just
+		# need to increase $MAXEVENTS above.
+		#
+		if ($isstuck &&
+		    $eventstate eq TBDB_NODESTATE_RELOADING()) {
+		    tbnotice("$self: missed state transition to RELOADING".
+			     " for $node; faking it.");
+		    $eventnodes->{$node} = time();
+		    goto okay;
+		}
+
+		#
+		# Another form of being stuck is no frisbee events for
+		# too long. But only if we are getting frisbee events
+		# and only if we are still in the RELOADING state.
+		#
+		if (! $isstuck &&
+		    $eventstate eq TBDB_NODESTATE_RELOADING()) {
+		    my $frisbeestatus =
+			$self->nodeinfo($nodeobject, "frisbeestatus");
+		    if (defined($frisbeestatus)) {
+			my $lastevent = $frisbeestatus->{'when'};
+			my $diff = time() - $lastevent;
+			if ($diff > 180) {
+			    $isstuck = 1;
+			    print STDERR "$self: $node: ".
+				"Frisbee events have stopped coming in.\n"
+				if ($self->debug());
+			}
+		    }
+		}
 
 		if ($waittime > $maxwait ||
 		    $eventstate eq TBDB_NODESTATE_TBFAILED() ||
@@ -1164,36 +1240,53 @@ sub WaitTillReloadDone($$$$$@)
 		    $eventstate eq TBDB_NODESTATE_RELOADFAILED() ||
 		    $isstuck) {
 
-		    #
-		    # If we are in reloading, then we obviously missed
-		    # a state transition in our handler. Probably just
-		    # need to increase $MAXEVENTS above.
-		    #
-		    if ($isstuck &&
-			$eventstate eq TBDB_NODESTATE_RELOADING()) {
-			tbnotice("$self: missed state transition to RELOADING".
-				 " for $node; faking it.");
-			$eventnodes->{$node} = time();
-			goto okay;
-		    }
-
 		    my $t = (int ($waittime / 60));
-		    tbnotice "$self: $node appears wedged; ".
-			"it has been $t minutes since it was rebooted.";
+		    my $msg = "$self: $node appears wedged; ".
+			"it has been $t minutes since it was rebooted.\n";
 
 		    if ($eventstate eq TBDB_NODESTATE_TBFAILED() ||
 			$eventstate eq TBDB_NODESTATE_RELOADFAILED() ||
 			$eventstate eq TBDB_NODESTATE_PXEFAILED()) {
-			tbnotice("$self: $node is stuck in $eventstate.");
-		    }
-		    elsif ($eventstate eq TBDB_NODESTATE_RELOADING()) {
-			tbnotice("$self: $node did not finish reloading.");
+			$msg .= "$self: $node is stuck in $eventstate.";
 		    }
 		    elsif ($isstuck) {
-			tbnotice("$self: $node failed to make a state ".
-				 "transition after $REBOOTWAIT minutes; ".
-				 "stuck in $eventstate.");
+			if ($eventstate eq TBDB_NODESTATE_RELOADING()) {
+			    $msg .= "$self: $node has not made any ".
+				"frisbee progress in a long time.";
+			}
+			else {
+			    $msg .= "$self: $node failed to make a state ".
+				"transition after $REBOOTWAIT minutes; ".
+				"stuck in $eventstate.";
+			}
 		    }
+		    else {
+			#
+			# We have waited longer then maxwait. If we are
+			# getting frisbee events then we ignore that limit
+			# since that is soooo old school. Now frisbee tells
+			# us it is making progress, so we wait until there
+			# have been no frisbee events (no progress) for too
+			# long, and then call it stuck.
+			#
+			my $frisbeestatus =
+			    $self->nodeinfo($nodeobject, "frisbeestatus");
+			if (defined($frisbeestatus)) {
+			    my $lastevent = $frisbeestatus->{'when'};
+			    my $diff = time() - $lastevent;
+			    if ($diff < 120) {
+				print STDERR "$self: $node: ".
+				    "waiting for another frisbee event.\n"
+				    if ($self->debug());
+				goto okay;
+			    }
+			    print STDERR "$self: $node: ".
+				"Frisbee events have stopped coming in.\n"
+				if ($self->debug());
+			}
+			$msg .= "$self: $node did not finish reloading.";
+		    }
+		    tbnotice($msg);
 		    TBNodeConsoleTail($node, *STDERR);
 
 		    $count--;
@@ -1205,7 +1298,16 @@ sub WaitTillReloadDone($$$$$@)
 		if (int($waittime / 60) > $minutes) {
 		    $minutes = int($waittime / 60);
 		    print STDERR "$self ($node): still waiting; ".
-			"it has been $minutes minute(s)\n";
+			"it has been $minutes minute(s). ";
+
+		    my $frisbeestatus =
+			$self->nodeinfo($nodeobject, "frisbeestatus");
+		    if (defined($frisbeestatus)) {
+			my $wbytes = $frisbeestatus->{"wbytes"};
+			my $mebi = Blockstore::ConvertToMebi("${wbytes}B");
+			print STDERR "$mebi MiB written.";
+		    }
+		    print STDERR "\n";
 		}
 	    }
 	}
@@ -1347,6 +1449,17 @@ sub osload_wait($$)
     $self->dprintts("osload_wait($childpid) finished");
 
     return $retval;
+}
+
+sub osload_kill($$)
+{
+    my ($self,$childpid) = @_;
+
+    $self->dprintts("osload_kill($childpid): starting");
+    kill('TERM', $childpid);
+    waitpid($childpid, 0);
+    $self->dprintts("osload_kill($childpid) finished");
+    return 0;
 }
 
 #
@@ -1626,6 +1739,17 @@ sub SetupEventHandler($$)
 		eventtype => join(",", @states),
 	      );
     
+    if (!event_subscribe($EVhandle, $handler, $tuple)) {
+	print STDERR "*** event: Could not subscribe to events\n";
+	return undef;
+    }
+    
+    $tuple = address_tuple_alloc();
+    if (!$tuple) {
+	print STDERR "*** event: Could not allocate an address tuple\n";
+	return undef;
+    }
+    %$tuple = (objtype   => "FRISBEESTATUS");
     if (!event_subscribe($EVhandle, $handler, $tuple)) {
 	print STDERR "*** event: Could not subscribe to events\n";
 	return undef;
@@ -2578,7 +2702,7 @@ sub ComputeMaxLoadWaitTime($$)
     # given how synchronous our scripts are, so give it 8 mins 
     # for now.
     #
-    if (!$nodeobject->_onsharednode()) {
+    if (!$nodeobject->OnSharedNode()) {
 	$maxwait += 8 * 60;
     }
 

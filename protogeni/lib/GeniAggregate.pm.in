@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2008-2016 University of Utah and the Flux Group.
+# Copyright (c) 2008-2017 University of Utah and the Flux Group.
 # 
 # {{{GENIPUBLIC-LICENSE
 # 
@@ -55,6 +55,7 @@ use GeniEvent;
 use GeniXML;
 use emutil;
 use EmulabConstants;
+use EmulabFeatures;
 use Node;
 use Logfile;
 use libtestbed;
@@ -824,7 +825,7 @@ sub GetCreator($)
 }
 
 #
-# Create a signed credential for this aggregate, issued to the provided user.
+# Create a signed credential for this aggregate, issued to the provided user
 # The credential will grant all permissions for now.
 #
 # Should we store these credentials in the DB, recording what we hand out?
@@ -1044,6 +1045,9 @@ sub Action($$$;$)
     my @waitpnodes = ();
     # See "bad" label below; want to know what sliver failed (if any).
     my $sliver;
+    # For reload.
+    my $osload_object;
+    my @reload_children = ();
 
     #
     # Download the images. If this fails, we have wasted our time,
@@ -1386,19 +1390,15 @@ sub Action($$$;$)
     %vnodes = %tmp;
 
     #
-    # Setup the reloads. We do not reboot the nodes until below.
+    # Figure out which osload library to use.
     #
     if (keys(%reloads)) {
-	foreach my $imageid (keys(%reloads)) {
-	    my @nodes = @{ $reloads{$imageid} };
-	    my @node_ids = map { $_->node_id() } @nodes;
-
-	    # No wait, no reboot. reload runs completely in the background.
-	    system("$OSLOAD -s -r -m $imageid @node_ids");
-	    if ($?) {
-		$msg .= "Failed to setup reload: $imageid on @node_ids";
-		goto bad;
-	    }
+	if (1 || EmulabFeatures->FeatureEnabled("NewOsload",
+						GeniUtil::GeniUser(),
+						undef, undef)) {
+	    require libosload_new;
+	    $osload_object = libosload_new->New();
+	    $osload_object->debug(1);
 	}
     }
 
@@ -1568,6 +1568,68 @@ sub Action($$$;$)
 	    goto bad;
 	}
     }
+    
+    #
+    # Setup the reloads. We do not reboot the nodes until below.
+    # Here we do it the old way, new way is below.
+    #
+    if (keys(%reloads) && !defined($osload_object)) {
+	foreach my $imageid (keys(%reloads)) {
+	    my @nodes = @{ $reloads{$imageid} };
+	    my @node_ids = map { $_->node_id() } @nodes;
+
+	    # No wait, no reboot. reload runs completely in the background.
+	    system("$OSLOAD -s -r -m $imageid @node_ids");
+	    if ($?) {
+		$msg .= "Failed to setup reload: $imageid on @node_ids";
+		goto bad;
+	    }
+	}
+    }
+
+    #
+    # Ug, if we have reloads then the library is going to fork off
+    # some children that we have to wait for. But since we cannot wait
+    # for grandchildren processes, we cannot do the wrapperfork later in
+    # WaitForNodes() cause then the parent of the osload children exits,
+    # and the WaitForNodes is now running once-removed from the osload
+    # children.
+    #
+    # So wrapperfork() here and return. This does not substantially change
+    # things, since most callers have already wrapperforked and returned to
+    # the client, who are polling for status.
+    #
+    my $childpid = main::WrapperFork();
+    if ($childpid) {
+	return 0;
+    }
+
+    #
+    # Setup the reloads. We do not reboot the nodes until below.
+    # This is the new way. 
+    #
+    if (keys(%reloads) && defined($osload_object)) {
+	foreach my $imageid (keys(%reloads)) {
+	    my @nodes = @{ $reloads{$imageid} };
+	    my ($pid, $waiter, $failhash) =
+		StartOsLoad($osload_object, $imageid, @nodes);
+
+	    #
+	    # If we have fired off some of the reloads, we cannot just
+	    # return since we have children running.
+	    #
+	    if ($pid > 0) {
+		push(@reload_children, [$pid, $waiter, $failhash]);
+		next;
+	    }
+	    #
+	    # If we have failures, call it quits now.
+	    # The children are killed below.
+	    #
+	    $msg .= "Failed to setup reload: $imageid on @nodes";
+	    goto bad;
+	}
+    }
 
     #
     # Then power on any physical nodes that had been stopped.
@@ -1633,13 +1695,10 @@ sub Action($$$;$)
 	    if (ref($sliver) eq "GeniSliver::Node");
     }
     my @failed   = ();
-    my $childpid = $self->WaitForNodes(\@failed, @waitpnodes, @waitvnodes);
-    # Parent returns
-    return 0
-	if ($childpid > 0);
     return -1
-	if ($childpid < 0);
-
+	if ($self->WaitForNodes(\@failed, $osload_object, \@reload_children,
+				@waitpnodes, @waitvnodes));
+    
     # Waiting is done. 
     if ($experiment->elab_in_elab()) {
 	#
@@ -1685,6 +1744,14 @@ sub Action($$$;$)
     return 0;
 
   bad:
+    # Only for the new way of loading.
+    while (@reload_children) {
+	my ($pid) = @{ pop(@reload_children) };
+
+	if (defined($osload_object)) {
+	    $osload_object->osload_kill($childpid);	
+	}
+    }
     $self->SetBootFailure();
     if (defined($msg)) {
 	$self->SetErrorLog($msg);
@@ -1698,11 +1765,44 @@ sub Action($$$;$)
 }
 
 #
+# Fire off a reload asynchronously, the same way ossetup does.
+# We use with libosload_new only.
+#
+sub StartOsLoad($$@)
+{
+    my ($loadobj, $imageid, @nodes) = @_;
+    my @list = ();
+
+    foreach my $node (@nodes) {
+	my $node_id = $node->node_id();
+	# The osload library gets ids.
+	push(@list, $node_id);
+    }
+    my %reload_args     = ();
+    my $reload_failures = {};
+    $reload_args{'debug'}     = 1;
+    $reload_args{'noreboot'}  = 1;
+    $reload_args{'asyncmode'} = 1;
+    $reload_args{'imageid'}   = $imageid;
+    $reload_args{'nodelist'}  = [ @list ];
+
+    #
+    # New osload library.
+    #
+    my $pid = $loadobj->osload(\%reload_args, $reload_failures);
+    my $coderef = sub {
+	my $childpid = shift;
+	return $loadobj->osload_wait($childpid);
+    };
+    return ($pid, $coderef, $reload_failures);
+}
+
+#
 # Wait for nodes
 #
-sub WaitForNodes($$@)
+sub WaitForNodes($$$$@)
 {
-    my ($self, $pfailed, @nodes) = @_;
+    my ($self, $pfailed, $osload_object, $reload_children, @nodes) = @_;
     my %nodes = ();
     my @waitstates = (TBDB_NODESTATE_TBFAILED, TBDB_NODESTATE_RELOADFAILED,
 		      TBDB_NODESTATE_ISUP);
@@ -1734,14 +1834,7 @@ sub WaitForNodes($$@)
 	return -1;
     }
 
-    #
-    # At this point we want to return and let the startsliver proceed
-    # in the background. 
-    #
-    my $mypid = main::WrapperFork();
-    if ($mypid) {
-	return $mypid;
-    }
+    # We are now a monitor.
     $slice->SetMonitorPid($PID);
 
     #
@@ -1773,8 +1866,15 @@ sub WaitForNodes($$@)
     }
     # Set the waitmax time for each node. 
     foreach my $node (@nodes) {
-	$node->_maxwait(1000 + ($node->_reloaded() ? 600 : 0));
-	
+	$node->_maxwait(1000);
+
+	#
+	# If using the old osload method, we have to tack on tine to wait
+	# for the osload to finish. 
+	#
+	if (defined($osload_object) && $node->_reloaded()) {
+	    $node->_maxwait($node->_maxwait() + 600);
+	}
 	if ($node->isvirtnode()) {
 	    #
 	    # Bump waitime according to number of virtnodes on each physnode.
@@ -1809,6 +1909,34 @@ sub WaitForNodes($$@)
 		}
 		print "Adding $extra seconds for blockstore $bsname\n";
 		$node->_maxwait($node->_maxwait() + $extra);
+	    }
+	}
+    }
+
+    #
+    # First thing we do is wait for the reloads to finish. This tells us
+    # which nodes not to wait for below cause the reloads failed.
+    #
+    if (@{ $reload_children }) {
+	my @children = @{ $reload_children };
+	
+	while (@children) {
+	    my ($pid, $waitfunc, $failhash) = @{ pop(@children) };
+
+	    next
+		if (! &$waitfunc($pid));
+	    
+	    #
+	    # Failure. Remove the failed nodes from the wait list.
+	    #
+	    foreach my $node_id (keys(%{ $failhash })) {
+		my $node = $nodes{$node_id};
+		
+		$node->_bootstatus("reloadfail");
+		$node->_sliver()->SetStatus("failed")
+		    if (defined($node->_sliver()));
+		
+		delete($nodes{$node_id});
 	    }
 	}
     }

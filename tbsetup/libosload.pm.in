@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2000-2016 University of Utah and the Flux Group.
+# Copyright (c) 2000-2017 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -1438,6 +1438,16 @@ sub osload_wait($)
     # 
     waitpid($childpid, 0);
     return $? >> 8;
+}
+
+sub osload_kill($)
+{
+    my ($childpid) = @_;
+
+    print STDERR "osload_kill($childpid): starting\n";
+    kill('TERM', $childpid);
+    waitpid($childpid, 0);
+    return 0;
 }
 
 #
