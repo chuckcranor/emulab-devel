@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2016 University of Utah and the Flux Group.
+# Copyright (c) 2000-2017 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -256,6 +256,14 @@ else {
             if ($obj->isDisabled()) {
                 SPITUSERERROR("This profile is disabled!");
                 exit();
+            }
+            #
+            # See if we have the version or profile uuid in the list
+            # already, do not add twice since we do not show versions
+            # in the picker list.
+            #
+            if (array_key_exists($obj->profile_uuid(), $profile_array)) {
+                unset($profile_array[$obj->profile_uuid()]);
             }
             $profile_array[$obj->uuid()] = $obj->name();
             $profile_default = $obj->uuid();
