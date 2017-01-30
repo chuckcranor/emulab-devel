@@ -941,6 +941,9 @@ sub SetRunsOnNodeType($$)
 {
     my ($self, $type) = @_;
 
+    return 0
+	if (!defined($self->image()));
+
     return $self->image()->SetRunsOnNodeType($type);
 }
 
