@@ -46,6 +46,7 @@ use Time::Local;
 use GeniHRN;
 use GeniResponse;
 use EmulabConstants;
+use User;
 
 # Configure variables
 my $TB		       = "@prefix@";
@@ -134,6 +135,14 @@ sub FlipToElabMan()
 {
     $EUID = 0;
     return FlipToUser($PROTOUSER, $PROTOPROJ);
+}
+
+#
+# Lookup the geniuser.
+#
+sub GeniUser()
+{
+    return User->Lookup($GENIUSER);
 }
 
 #
