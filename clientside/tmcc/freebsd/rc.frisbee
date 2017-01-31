@@ -394,8 +394,9 @@ loadone() {
     fi
 
     #
+    # Current semantics:
     # HEARTBEAT==0: no heartbeat
-    # ow: send report at specified interval (<= one hour)
+    # ow: enable heartbeat, but let server dictate (-H 0)
     #
     HB=""
     case "$HEARTBEAT" in
@@ -403,12 +404,8 @@ loadone() {
 	    echo "Ignoring bogus HEARTBEAT value \"$HEARTBEAT\""
 	    ;;
 	*)
-	    if [ $HEARTBEAT -le 0 -o $HEARTBEAT -gt 3600 ]; then
-		if [ $HEARTBEAT -ne 0 ]; then
-		    echo "Ignoring bad HEARTBEAT value \"$HEARTBEAT\""
-		fi
-	    else
-		HB="-H $HEARTBEAT"
+	    if [ $HEARTBEAT -gt 0 ]; then
+		HB="-H 0"
 	    fi
 	    ;;
     esac
