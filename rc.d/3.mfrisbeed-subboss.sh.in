@@ -24,6 +24,13 @@
 #     Unset to use mfrisbeed default.
 # BANDWIDTH: maximum bandwidth any instance of frisbeed should use (Mb/sec).
 #     Unset to use mfrisbeed default.
+# DYNAMICBW: use *experimental* dynamic bandwidth control. If non-zero,
+#     uses an additive-increase, multiplicitive-decrease algorithm based
+#     on congestion detection. Here BANDWIDTH represents the maximum to allow.
+#     Unset or zero disables.
+# MAXLINGER: how long (seconds) to wait around after the last report/request
+#     has been received. 0 means exit when last client leaves, -1 means
+#     wait forever. Unset to use mfrisbeed default.
 # UNICAST: use unicast rather than multicast when downloading from our parent.
 # MCQUERIER: run as an IGMPv2 querier.
 #     You should only have one of these per broadcast domain.
@@ -36,6 +43,8 @@
 #
 MCBASEADDR=239.192.1
 BANDWIDTH=100000000
+DYNAMICBW=
+MAXLINGER=180
 UNICAST=false
 MCQUERIER=false
 EVENTSERVER=boss
@@ -116,6 +125,12 @@ if [ $? -eq 0 ]; then
 	    BANDWIDTH)
 		BANDWIDTH=$v
 		;;
+	    DYNAMICBW)
+		DYNAMICBW=$v
+		;;
+	    MAXLINGER)
+		MAXLINGER=$v
+		;;
 	    UNICAST)
 		UNICAST=$v
 		;;
@@ -162,6 +177,20 @@ if [ -n "$BANDWIDTH" ]; then
 	opts="-O bandwidth=$BANDWIDTH"
     else
 	opts="$opts,bandwidth=$BANDWIDTH"
+    fi
+fi
+if [ -n "$DYNAMICBW" ]; then
+    if [ -z "$opts" ]; then
+	opts="-O dynamicbw=$DYNAMICBW"
+    else
+	opts="$opts,dynamicbw=$DYNAMICBW"
+    fi
+fi
+if [ -n "$MAXLINGER" ]; then
+    if [ -z "$opts" ]; then
+	opts="-O maxlinger=$MAXLINGER"
+    else
+	opts="$opts,maxlinger=$MAXLINGER"
     fi
 fi
 if [ -n "$CLIENTREPORT" ]; then
