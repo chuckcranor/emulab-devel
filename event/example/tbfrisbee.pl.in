@@ -99,7 +99,7 @@ sub callbackFunc($$$) {
 	my $seq     = event_notification_get_string($handle, $note, "SEQUENCE");
 	my $rchunks = event_notification_get_string($handle, $note, "CHUNKS_RECV");
 	my $dchunks = event_notification_get_string($handle, $note, "CHUNKS_DECOMP");
-	my $wbytes  = event_notification_get_string($handle, $note, "BYTES_WRITTEN");
+	my $wmbytes = event_notification_get_string($handle, $note, "MBYTES_WRITTEN");
 
 	if (!exists($images{$image})) {
 	    my $isize = `imageinfo -s $image`;
@@ -111,7 +111,7 @@ sub callbackFunc($$$) {
 		$usize = 0;
 	    }
 	    $images{$image}{'chunks'} = int($isize / 1048576);
-	    $images{$image}{'bytes'} = int($usize);
+	    $images{$image}{'mbytes'} = int($usize / 1048576);
 	}
 	my ($rpct,$dpct,$wpct);
 	$rpct = $dpct = $wpct = "??";
@@ -119,9 +119,9 @@ sub callbackFunc($$$) {
 	    $rpct = sprintf "%.1f", $rchunks / $images{$image}{'chunks'} * 100;
 	    $dpct = sprintf "%.1f", $dchunks / $images{$image}{'chunks'} * 100;
 	}
-	if ($images{$image}{'bytes'} > 0) {
-	    $wpct = sprintf "%.1f", $wbytes / $images{$image}{'bytes'} * 100;
+	if ($images{$image}{'mbytes'} > 0) {
+	    $wpct = sprintf "%.1f", $wmbytes / $images{$image}{'mbytes'} * 100;
 	}
 	print "$node\@$tstamp: image=$image seq=$seq recv=$rchunks ($rpct\%)".
-	    " decomp=$dchunks ($dpct\%) bwritten=$wbytes ($wpct\%)\n";
+	    " decomp=$dchunks ($dpct\%) bwritten=$wmbytes ($wpct\%)\n";
 }
