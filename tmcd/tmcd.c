@@ -13895,7 +13895,7 @@ COMMAND_PROTOTYPE(dosubbossinfo)
 			}
 			curservice = mystrdup(row[0]);
 			bufp += OUTPUT(bufp, ebufp - bufp, "%s", curservice);
-			if (strncmp(curservice, "frisbee") == 0)
+			if (strcmp(curservice, "frisbee") == 0)
 				isfrisbee = 1;
 			else
 				isfrisbee = 0;
@@ -13904,7 +13904,7 @@ COMMAND_PROTOTYPE(dosubbossinfo)
 		 * Just remember frisbee clientreport value for now.
 		 * XXX note that per subboss attribute overrides sitevar.
 		 */
-		if (isfrisbee && strncmp(row[1], "clientreport") == 0)
+		if (isfrisbee && strcmp(row[1], "clientreport") == 0)
 			fcreport = row[2] ? atoi(row[2]) : -1;
 		else
 			bufp += OUTPUT(bufp, ebufp - bufp, " %s=\"%s\"",
