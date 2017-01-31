@@ -13823,6 +13823,7 @@ COMMAND_PROTOTYPE(dosubbossinfo)
 	char	    buf[MYBUFSIZE];
 	char	    *bufp = buf, *ebufp = &buf[sizeof(buf)];
 	char	    *curservice;
+	int	    isfrisbee, fcreport = -1;
 
 	/* make sure caller is a subboss */
 	res = mydb_query("select erole from reserved "
@@ -13839,6 +13840,26 @@ COMMAND_PROTOTYPE(dosubbossinfo)
 		return 0;
 	}
 	mysql_free_result(res);
+
+	/*
+	 * XXX make sure subbosses respect sitevar for frisbee client reports.
+	 * Note again that a heartbeat of zero means disabled.
+	 *
+	 * It is debatable whether this should override the attributes value.
+	 * Right now it doesn't. It only takes effect if no frisbee
+	 * "clientreport" attribute is specified.
+	 */
+	res = mydb_query("select value,defaultvalue from sitevariables "
+			 "where name='images/frisbee/heartbeat'", 2);
+	if (res && (int)mysql_num_rows(res) > 0) {
+		row = mysql_fetch_row(res);
+		if (row[0] && row[0][0])
+			fcreport = atoi(row[0]);
+		else if (row[1] && row[1][0])
+			fcreport = atoi(row[1]);
+	}
+	if (res)
+		mysql_free_result(res);
 
 	/*
 	 * Get info for all services, one line per service
@@ -13863,6 +13884,10 @@ COMMAND_PROTOTYPE(dosubbossinfo)
 		}
 		if (curservice == NULL || strcmp(curservice, row[0]) != 0) {
 			if (curservice) {
+				if (isfrisbee && fcreport >= 0)
+					bufp += OUTPUT(bufp, ebufp - bufp,
+						       " clientreport=\"%d\"",
+						       fcreport);
 				OUTPUT(bufp, ebufp - buf, "\n");
 				client_writeback(sock, buf, strlen(buf), tcp);
 				bufp = buf;
@@ -13870,13 +13895,27 @@ COMMAND_PROTOTYPE(dosubbossinfo)
 			}
 			curservice = mystrdup(row[0]);
 			bufp += OUTPUT(bufp, ebufp - bufp, "%s", curservice);
+			if (strncmp(curservice, "frisbee") == 0)
+				isfrisbee = 1;
+			else
+				isfrisbee = 0;
 		}
-		bufp += OUTPUT(bufp, ebufp - bufp, " %s=\"%s\"",
-			       row[1], row[2] ? row[2] : "");
+		/*
+		 * Just remember frisbee clientreport value for now.
+		 * XXX note that per subboss attribute overrides sitevar.
+		 */
+		if (isfrisbee && strncmp(row[1], "clientreport") == 0)
+			fcreport = row[2] ? atoi(row[2]) : -1;
+		else
+			bufp += OUTPUT(bufp, ebufp - bufp, " %s=\"%s\"",
+				       row[1], row[2] ? row[2] : "");
 	}
 	mysql_free_result(res);
 
 	if (bufp != buf) {
+		if (isfrisbee && fcreport >= 0)
+			bufp += OUTPUT(bufp, ebufp - bufp,
+				       " clientreport=\"%d\"", fcreport);
 		OUTPUT(bufp, ebufp - buf, "\n");
 		client_writeback(sock, buf, strlen(buf), tcp);
 	}
