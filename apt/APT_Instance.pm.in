@@ -1568,6 +1568,13 @@ sub UpdateWebStatus($$)
 	    !exists($current->{$node_id}->{"utc"}) ||
 	    !exists($details->{"utc"}) ||
 	    $details->{"utc"} >= $current->{$node_id}->{"utc"}) {
+	    #
+	    # Keep frisbeestatus, see below.
+	    #
+	    if (exists($current->{$node_id}->{"frisbeestatus"})) {
+		$details->{"frisbeestatus"} =
+		    $current->{$node_id}->{"frisbeestatus"};
+	    }
 	    $current->{$node_id} = $details;
 	}
     }
