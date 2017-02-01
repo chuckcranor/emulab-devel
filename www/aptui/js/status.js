@@ -928,6 +928,17 @@ $(function ()
 		        "<td class='border-none'>" +
 		        details.rawstate + "</td></tr>";
 
+		if (_.has(details, "frisbeestatus")) {
+		    var mb_written = details.frisbeestatus.MB_written;
+		    var imagename  = details.frisbeestatus.imagename;
+		    html = html +
+			"<tr><td class='border-none'>Image:</td>" +
+		        "    <td class='border-none'>" +
+		              imagename + "</td></tr>" +
+			"<tr><td class='border-none'>Written:</td>" +
+		        "    <td class='border-none'>" +
+		              mb_written + " MB</td></tr>";			
+		}
 		if (_.has(details, "execute_state")) {
 		    var tag;
 		    var icon;

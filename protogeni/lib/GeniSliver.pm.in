@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2008-2016 University of Utah and the Flux Group.
+# Copyright (c) 2008-2017 University of Utah and the Flux Group.
 # 
 # {{{GENIPUBLIC-LICENSE
 # 
@@ -1598,6 +1598,33 @@ sub SendStatusEvent($)
 			      "urn"     => $self->sliver_urn(),
 			      "details" => $blob});
     }
+    return 0;
+}
+
+#
+# Like above, but send frisbee status stuff.
+#
+sub SendFrisbeeEvent($$$)
+{
+    my ($self, $imagename, $mb_written) = @_;
+    my $slice = $self->GetSlice();
+    return -1
+	if (!defined($slice));
+
+    my $resource_id   = $self->resource_id();
+    my $nickname      = $self->nickname() || "";
+
+    my $blob = {
+	"component_urn" => $resource_id,
+	"client_id"     => $nickname,
+	"imagename"     => $imagename,
+	"MB_written"    => $mb_written,
+	"utc"           => time(),
+    };
+    GeniEvent->SendEvent({"type"    => "FRISBEESTATUS",
+			  "slice"   => $slice->urn(),
+			  "urn"     => $self->sliver_urn(),
+			  "details" => $blob});
     return 0;
 }
 

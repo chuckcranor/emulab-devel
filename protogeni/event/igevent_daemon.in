@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2008-2016 University of Utah and the Flux Group.
+# Copyright (c) 2008-2017 University of Utah and the Flux Group.
 # 
 # {{{GENIPUBLIC-LICENSE
 # 
@@ -39,10 +39,10 @@ use POSIX qw(strftime);
 # 
 sub usage()
 {
-    print "Usage: igevent_daemon [-d] [-i]\n";
+    print "Usage: igevent_daemon [-d] [-n]\n";
     exit(1);
 }
-my $optlist   = "di";
+my $optlist   = "dn";
 my $debug     = 0;
 my $impotent  = 0;
 
@@ -92,7 +92,7 @@ if (! getopts($optlist, \%options)) {
 if (defined($options{"d"})) {
     $debug++;
 }
-if (defined($options{"i"})) {
+if (defined($options{"n"})) {
     $impotent++;
 }
 
@@ -114,6 +114,7 @@ use GeniResponse;
 use Experiment;
 use EmulabConstants;
 use Node;
+use Interface;
 use libtestbed;
 use emutil;
 use libEmulab;
@@ -177,7 +178,7 @@ sub callback($$$)
     my ($handle, $notification, $data) = @_;
     $gotone++;
 
-    my $site = event_notification_get_site($handle, $notification);
+    my $site    = event_notification_get_site($handle, $notification);
     my $objtype = event_notification_get_objtype($handle, $notification);
     
     #
@@ -195,10 +196,11 @@ sub callback($$$)
 	    ($objtype ne TBDB_TBEVENT_NODESTATE() &&
 	     $objtype ne TBDB_TBEVENT_NODESTARTSTATUS() &&
 	     $objtype ne TBDB_TBEVENT_NODESTATUS() &&
-	     $objtype ne TBDB_TBEVENT_NODEACCOUNTS()));
+	     $objtype ne TBDB_TBEVENT_NODEACCOUNTS() &&
+	     $objtype ne TBDB_TBEVENT_FRISBEESTATUS()));
 
+    my $event   = event_notification_get_eventtype($handle,$notification);
     my $node_id = event_notification_get_objname($handle, $notification);
-    my $state   = event_notification_get_eventtype($handle, $notification);
 
     #
     # We do not care about nodes that are not allocated to Geni experiments.
@@ -206,17 +208,22 @@ sub callback($$$)
     # seems like a lot of overhead, but these events are not coming in all
     # that fast.
     #
+    # Frisbee status events come in with the IP of the node, not the node_id.
+    #
+    if ($objtype eq TBDB_TBEVENT_FRISBEESTATUS()) {
+	my $interface = Interface->LookupByIP($node_id);
+	if (!defined($interface)) {
+	    print STDERR "Unknown node $node_id\n";
+	    goto done;
+	}
+	$node_id = $interface->node_id();
+	$interface->Flush();
+    }
     my $node = Node->Lookup($node_id);
     if (!defined($node)) {
 	print STDERR "Unknown node $node_id\n";
 	goto done;
     }
-    #
-    # If this is a state change and nothing changed, then do nothing.
-    #
-    goto done
-	if (0 && $objtype && TBDB_TBEVENT_NODESTATE() &&
-	    $state eq $node->eventstate());
 
     # We want this so we can flush it from the cache.
     my $experiment = $node->Reservation();
@@ -229,6 +236,17 @@ sub callback($$$)
     goto done
 	if (!$sliver);
 
+    if ($debug) {
+	my $slice = $sliver->GetSlice();
+	my $slice_urn = $slice->urn();
+	$slice->Flush();
+	goto done
+	    if (0 && $slice_urn !~ /stoller/);
+    }
+    if ($debug) {
+	print "$node_id:$objtype " . ($event ? $event : "") . "\n";
+    }
+    
     #
     # This will generate a new event, which we will get here later,
     # and forward directly (above).
@@ -239,18 +257,30 @@ sub callback($$$)
 	my $oldstatus = $sliver->status();
 	my $newstatus;
 
-	#
-	# The point here, is that we do not want to send an event if
-	# ComputeStatus sent one, but since the rawstate has probably
-	# changed, we want to make sure an event goes out. 
-	#
-	if ($sliver->ComputeStatus(\$newstatus) == 0 &&
-	    $oldstatus eq $newstatus) {
-	    $sliver->SendStatusEvent();
-	}
 	if ($debug) {
-	    print "State/Status sent for $node_id\n";
+	    print "State/Status event for $node_id\n";
 	}
+	if (!$impotent) {
+	    #
+	    # The point here, is that we do not want to send an event if
+	    # ComputeStatus sent one, but since the rawstate has probably
+	    # changed, we want to make sure an event goes out. 
+	    #
+	    if ($sliver->ComputeStatus(\$newstatus) == 0 &&
+		$oldstatus eq $newstatus) {
+		$sliver->SendStatusEvent();
+	    }
+	}
+    }
+    elsif ($objtype eq TBDB_TBEVENT_FRISBEESTATUS()) {
+	my $image  = $event;
+	my $mbytes = event_notification_get_string($handle,
+						   $notification,
+						   "MBYTES_WRITTEN");
+	if ($debug) {
+	    print "Frisbee status event for $node_id: $event $mbytes MB\n";
+	}
+	$sliver->SendFrisbeeEvent($image, $mbytes);
     }
     else {
 	#
@@ -260,7 +290,9 @@ sub callback($$$)
 	if ($debug) {
 	    print "Start Command event for $node_id\n";
 	}
-	$sliver->SendStatusEvent();
+	if (!$impotent) {
+	    $sliver->SendStatusEvent();
+	}
     }
     $sliver->Flush();
   done:

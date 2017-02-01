@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2008-2016 University of Utah and the Flux Group.
+# Copyright (c) 2008-2017 University of Utah and the Flux Group.
 # 
 # {{{GENIPUBLIC-LICENSE
 # 
@@ -63,6 +63,7 @@ delete @ENV{'IFS', 'CDPATH', 'ENV', 'BASH_ENV'};
 # Protos
 sub HandleSliverStatus($$$);
 sub HandleImageStatus($$$);
+sub HandleFrisbeeStatus($$$);
 sub fatal($);
 	  
 #
@@ -166,6 +167,10 @@ sub callback($$$)
     if ($slice =~ /^\"(.*)\"$/) {
 	$slice = $1;
     }
+    # Debugging.
+    return
+	if (0 && $slice !~ /stoller/);
+    
     if ($debug) {
 	print "Event: $time $site $type $urn $slice $details\n";
     }
@@ -179,6 +184,10 @@ sub callback($$$)
     }
     elsif ($type eq "IMAGESTATUS") {
 	HandleImageStatus($site, $instance, $details);
+	goto done;
+    }
+    elsif ($type eq "FRISBEESTATUS") {
+	HandleFrisbeeStatus($site, $instance, $details);
 	goto done;
     }
 done:
@@ -232,6 +241,32 @@ sub HandleImageStatus($$$)
 		return;
 	    }
 	    $instance->UpdateImageStatus($details);
+	}
+    }
+}
+
+#
+# Handle an FRISBEESTATUS event.
+#
+sub HandleFrisbeeStatus($$$)
+{
+    my ($site, $instance, $details) = @_;
+
+    if (exists($instance->AggregateHash()->{$site})) {
+	my $sliver = $instance->AggregateHash()->{$site};
+	if (0 && $impotent) {
+	    print "Would update frisbee status for $sliver from details\n";
+	}
+	else {
+	    if ($debug) {
+		print "Updating frisbee status for sliver from $details\n";
+	    }
+	    $details = eval { decode_json($details) };
+	    if ($@) {
+		print STDERR "Could not decode json data: $details\n";
+		return;
+	    }
+	    $sliver->UpdateFrisbeeStatus({$site => $details});
 	}
     }
 }

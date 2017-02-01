@@ -1570,11 +1570,13 @@ sub UpdateWebStatus($$)
 	    !exists($details->{"utc"}) ||
 	    $details->{"utc"} >= $current->{$node_id}->{"utc"}) {
 	    #
-	    # Keep frisbeestatus, see below.
+	    # Keep frisbeestatus for reloading, but we want to clear
+	    # it otherwise.
 	    #
 	    if (exists($current->{$node_id}->{"frisbeestatus"}) &&
-		exists($details->{"rawstate"}) &&
-		$details->{"rawstate"} eq TBDB_NODESTATE_RELOADING()) {
+		exists($details->{"rawstate"}) && 
+		($details->{"rawstate"} eq TBDB_NODESTATE_RELOADING() ||
+		 $details->{"rawstate"} eq TBDB_NODESTATE_TBSETUP())) {
 		$details->{"frisbeestatus"} =
 		    $current->{$node_id}->{"frisbeestatus"};
 	    }
@@ -1583,6 +1585,51 @@ sub UpdateWebStatus($$)
     }
     $self->webtask()->sliverstatus($current);
     DBQueryWarn("unlock tables");
+    return $current;
+}
+
+#
+# Update the frisbee status in the webtask. 
+#
+sub UpdateFrisbeeStatus($$)
+{
+    my ($self, $hash) = @_;
+
+    DBQueryWarn("lock tables web_tasks write")
+	or return {};
+
+    $self->webtask()->Refresh();
+    my $current = $self->webtask()->sliverstatus();
+    if (!defined($current)) {
+	$current = {};
+    }
+
+    #
+    # Frisbee events come in via the pubsub channel only, not by polling.
+    # But we still have to lock the table (see UpdateWebStatus() above).
+    # 
+    foreach my $urn (keys(%{ $hash })) {
+	my $details = $hash->{$urn};
+	my $node_id = $details->{'client_id'};
+
+	# This would be unsual.
+	next
+	    if (!exists($current->{$node_id}));
+
+	#
+	# Strip the version info for now, will cause confusion.
+	#
+	if (exists($details->{"imagename"})) {
+	    my $imagename = $details->{"imagename"};
+	    if ($imagename =~ /^([^:]+)(:\d*)$/) {
+		$details->{"imagename"} = $1;
+	    }
+	}
+	$current->{$node_id}->{"frisbeestatus"} = $details;
+    }
+    $self->webtask()->sliverstatus($current);
+    DBQueryWarn("unlock tables");
+    print STDERR Dumper($current);
     return $current;
 }
 
@@ -2559,6 +2606,8 @@ sub WaitForSliver($)
 	# interface can show changes.
 	#
 	my $statusblob = $aggobj->UpdateWebStatus($repblob->{'details'});
+
+	#print STDERR Dumper($statusblob);
 	
 	my $changed = 0;
 	foreach my $urn (keys(%{$repblob->{'details'}})) {
@@ -2580,12 +2629,28 @@ sub WaitForSliver($)
 			if ($seconds < 600);
 		}
 		else {
-		    if (exists($details->{"rawstate"}) &&
-			$laststatus->{$node_id}->{"rawstate"} ne
-			$details->{"rawstate"}) {
-			# This is IG specific.
-			$seconds = 300
-			    if ($seconds < 300);
+		    if (exists($details->{"rawstate"})) {
+			# rawstate is generated Emulab based aggregates.
+			if ($laststatus->{$node_id}->{"rawstate"} ne
+			    $details->{"rawstate"}) {
+			    $seconds = 300
+				if ($seconds < 300);
+			}
+			#
+			# See if we are continuing to get frisbee events.
+			# This implies forward progress, keep waiting.
+			#
+			elsif (exists($details->{"frisbeestatus"})) {
+			    my $stamp = $details->{"frisbeestatus"}->{"utc"};
+			    if (time() - $stamp < 120) {
+				$seconds = 300
+				    if ($seconds < 300);
+				print STDERR
+				    "Got a recent frisbee event for ".
+				    $details->{"frisbeestatus"}->{"imagename"} .
+				    "\n";
+			    }
+			}
 		    }
 		    elsif ($laststatus->{$node_id}->{"status"} ne
 			   $details->{"status"}) {
