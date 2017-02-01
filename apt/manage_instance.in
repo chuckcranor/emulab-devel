@@ -828,8 +828,10 @@ sub DoSnapshot()
 	$webtask->output($errmsg);
     }
     # For display in the imaging modal.
-    $swebtask->Exited($errcode);
-    $swebtask->output($errmsg);
+    if (defined($errmsg) && defined($swebtask)) {
+	$swebtask->Exited($errcode);
+	$swebtask->output($errmsg);
+    }
     $slice->UnLock()
 	if ($needunlock);
 
