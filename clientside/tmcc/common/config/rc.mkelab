@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2004-2016 University of Utah and the Flux Group.
+# Copyright (c) 2004-2017 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -210,7 +210,7 @@ my %emulabconfig = (
     "JAILIPBASE"  => "172.16.0.0",
     "JAILIPMASK"  => "255.240.0.0",
     "MFSTARBALL"  => "tftpboot-elabinelab.tar.gz",
-    "MFSVERSION"  => "62",
+    "MFSVERSION"  => "8-64",
     "MFSCONSOLE"  => "sio",
 
     #
@@ -387,16 +387,8 @@ sub doboot()
 	if ("$0" ne "$BINDIR/rc/rc.mkelab");
     
     #
-    # FreeBSD version specific adjustments for defaults.
+    # NFS race condition was fixed in FreeBSD 9.
     #
-    if ($FBSD_VERSION >= 8.2) {
-	$emulabconfig{"MFSVERSION"} = "82";
-    } elsif ($FBSD_VERSION >= 7.2) {
-	$emulabconfig{"MFSVERSION"} = "72";
-    } else {
-	$emulabconfig{"MFSVERSION"} = "62";
-    }
-
     if ($FBSD_VERSION >= 9.2) {
 	$emulabconfig{"CONFIG_NFSRACY"} = 0;
     }
@@ -1035,7 +1027,7 @@ sub SetupFsNode()
 
 	if ($FBSD_VERSION >= 10.1) {
 	    print "Removing ALL packages.\n";
-	    DelAllPackages();
+	    DelAllPackages($emulabconfig{FS_PKG_DIR});
 	}
 
 	print "Installing the fs metaport.\n";
@@ -1604,7 +1596,7 @@ sub SetupOpsNode($)
 	
 	if ($FBSD_VERSION >= 10.1) {
 	    print "Removing ALL packages.\n";
-	    DelAllPackages();
+	    DelAllPackages($emulabconfig{OPS_PKG_DIR});
 	} else {
 	    print "Removing conflicting packages.\n";
 	    $ENV{"PYEASYINSTALL_UNINSTALLARGS"} = "-H None";
@@ -2341,7 +2333,7 @@ sub SetupBossNode($)
 	#
 	if ($FBSD_VERSION >= 10.1) {
 	    print "Removing ALL packages.\n";
-	    DelAllPackages();
+	    DelAllPackages($emulabconfig{BOSS_PKG_DIR});
 	} else {
 	    print "Removing conflicting packages.\n";
 	    $ENV{"PYEASYINSTALL_UNINSTALLARGS"} = "-H None";
@@ -3043,7 +3035,7 @@ sub SetupOpsJail()
 
 	if ($FBSD_VERSION >= 10.1) {
 	    print "Removing ALL packages.\n";
-	    DelAllPackages();
+	    DelAllPackages("/packages");
 	} else {
 	    print "Removing conflicting packages.\n";
 	    $ENV{"PYEASYINSTALL_UNINSTALLARGS"} = "-H None";
@@ -3222,6 +3214,7 @@ sub CreateDefsFile($)
     my $opsvm = $emulabconfig{"CONFIG_OPSVM"};
     my $usezfs = $emulabconfig{"CONFIG_ZFS"};
     my $useautofs = $emulabconfig{"CONFIG_AUTOFS"};
+    my $mntprefix = ($usezfs ? "" : $FSMOUNTDIR);
     
     print "Creating defs file from stub defs file\n";
     
@@ -3292,7 +3285,12 @@ sub CreateDefsFile($)
     my $dynrange_high   = inet_ntoa(inet_aton($control_network) |
 				    inet_aton("0.0.0.250"));
     my ($a,$b,$c,$d)    = ($bossnode_ip =~ /(\d+).(\d+).(\d+).(\d+)/);
-    my $frismcastaddr   = "235.${d}.${c}";
+
+    # XXX avoid flood addresses 239.{0,128}.0.x
+    if ($c == 0 && ($d == 0 || $d == 128)) {
+	$d++;
+    }
+    my $frismcastaddr   = "239.${d}.${c}";
 
     open(INDEFS, $defsfile) or
 	SetupFatal("Could not open stub defs-elabinelab: $!");
@@ -3447,9 +3445,21 @@ sub CreateDefsFile($)
 		#
 		# Configurable options
 		#
+		/^FSDIR_GROUPS$/ && do {
+		    print OUTDEFS "FSDIR_GROUPS=$mntprefix/groups\n";
+		    last SWITCH;
+		};
+		/^FSDIR_PROJ$/ && do {
+		    print OUTDEFS "FSDIR_PROJ=$mntprefix/proj\n";
+		    last SWITCH;
+		};
+		/^FSDIR_USERS$/ && do {
+		    print OUTDEFS "FSDIR_USERS=$mntprefix/users\n";
+		    last SWITCH;
+		};
 		/^FSDIR_SCRATCH$/ && do {
 		    if ($emulabconfig{"CONFIG_SCRATCHFS"}) {
-			print OUTDEFS "FSDIR_SCRATCH=$FSMOUNTDIR/scratch\n";
+			print OUTDEFS "FSDIR_SCRATCH=$mntprefix/scratch\n";
 		    } else {
 			print OUTDEFS "FSDIR_SCRATCH=\n";
 		    }
@@ -3927,8 +3937,47 @@ EOF
     }
 }
 
-sub DelAllPackages()
+#
+# Locate the proper version of a package to install by looking
+# at the available package tarballs. Note that we do "ls -t"
+# so that if there is more than one package, we will return the latest.
+#
+# XXX adapted from libinstall.pm.
+#
+sub GetPackage($$) {
+    my ($prefix, $packagedir) = @_;
+
+    my @pname = `ls -t $packagedir/$prefix-*.txz 2>/dev/null`;
+    if ($?) {
+	@pname = `ls -t $packagedir/$prefix-*.tbz 2>/dev/null`;
+	if ($?) {
+	    @pname = `ls -t $packagedir/$prefix-*.tgz 2>/dev/null`;
+	    SetupFatal("Cannot find $prefix package in $packagedir!")
+		if ($?);
+	}
+    }
+    chomp(@pname);
+
+    if (@pname > 1) {
+	# if it matched more than one package, find one with exactly one '-'
+	foreach my $pn (@pname) {
+	    if ($pn =~ /^$packagedir\/$prefix-[^-]+\.t[bgx]z$/) {
+		return $pn;
+	    }
+	}
+    }
+
+    return $pname[0];
+}
+
+#
+# Delete all packages except for perl (that we are using).
+# Re-installs an "appropriate" version of the pkg tool as well.
+#
+sub DelAllPackages($)
 {
+    my ($pkgdir) = @_;
+
     # Only do this where it has been tested
     if ($FBSD_VERSION < 10.1) {
 	return;
@@ -3939,16 +3988,27 @@ sub DelAllPackages()
 
     # cannot remove perl since we are running a perl script!
     if (system("pkg lock -yq perl5")) {
-	SetupFatal("Could not lock perl5 and pkg!");
+	SetupFatal("Could not lock perl5!");
     }
     if (system("pkg delete -af >>/tmp/rperrs 2>&1")) {
 	SetupFatal("Could not delete old packages!");
     }
 
-    # force the reinstall of pkg
-    if (system("pkg info >/dev/null 2>&1")) {
+    #
+    # Force the reinstall of pkg.
+    #
+    # XXX must make sure we get a version of pkg compatible with this OS.
+    # To do that we install the pkg from the package repository!
+    #
+    # XXX must also set SIGNATURE_TYPE=NONE to prevent a signature check.
+    #
+    $pkgpkg = GetPackage("pkg", $pkgdir);
+    my $oenv = $ENV{"SIGNATURE_TYPE"};
+    $ENV{"SIGNATURE_TYPE"} = "NONE";
+    if (system("pkg add -f $pkgpkg >/dev/null 2>&1")) {
 	SetupFatal("Yargh!! Could not reinstall 'pkg'!");
     }
+    $ENV{"SIGNATURE_TYPE"} = $oenv;
 
     system("pkg unlock -aq");
 }
