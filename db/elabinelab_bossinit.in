@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2000-2016 University of Utah and the Flux Group.
+# Copyright (c) 2000-2017 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -224,10 +224,10 @@ if (TBSiteVarExists("images/frisbee/maxrate_usr")) {
 #
 # Fixup pxeboot and MFS info.
 #
-# Right now we only load the standard BSD-based pxeboot and MFSes into
-# an elabinelab, but many of our node types use the Linux-based tools instead.
-# So for the moment, we tweak the DB to rewrite everything to use the BSD
-# tools.
+# Right now we only load versions of the standard BSD-based pxeboot and the
+# standard BSD-based MFSes into an elabinelab. But many of our node types use
+# the Linux-based tools instead so, for the moment, we tweak the DB to rewrite
+# everything to use the BSD tools.
 #
 # Note that re-writing the pxe_boot_path doesn't have any effect for elabs
 # NOT using the SINGLE_CONTROLNET setting.  This is because as long as
@@ -239,8 +239,8 @@ if (TBSiteVarExists("images/frisbee/maxrate_usr")) {
 #
 # Anyway, the way we work around the non-SINGLE_CONTROLNET problem is to
 # find all the custom pxe_boot_path values (in nodes or node_type_attributes)
-# and "create" them on the inner boss by symlinking them to the standard
-# pxeboot.  SWEET!
+# and, if they do not exist, "create" them on the inner boss by symlinking
+# them to the standard pxeboot.  SWEET!
 #
 # XXX this should go away if/when we settle on a single set of tools.
 #
@@ -273,21 +273,29 @@ if (1) {
 		       "where attrkey='pxe_boot_path' and attrvalue!='' ".
 		       "group by attrvalue");
     while (my ($path) = $qr->fetchrow_array()) {
-	push @bogoboots, $path;
+	# XXX we will install the various pxeboot.emu* files, so allow those
+	if ($path !~ /^\/tftpboot\/pxeboot.emu/) {
+	    push @bogoboots, $path;
+	}
     }
     # ..and then from nodes
     $qr = DBQueryFatal("select pxe_boot_path from nodes ".
 		       "where pxe_boot_path is not NULL and role='testnode'");
     while (my ($path) = $qr->fetchrow_array()) {
-	push @bogoboots, $path;
+	# XXX we will install the various pxeboot.emu* files, so allow those
+	if ($path !~ /^\/tftpboot\/pxeboot.emu-/) {
+	    push @bogoboots, $path;
+	}
     }
 
     # and find all the node types and update their attributes.
     $qr = DBQueryFatal("select type from node_types where class='pc'");
     while (my ($ntype) = $qr->fetchrow_array()) {
 	# XXX assumes that BSD version is the default in dhcpd.conf.template
+	# XXX and again we can handle the assorted versions of pxeboot.emu
 	DBQueryFatal("delete from node_type_attributes ".
-		     "  where attrkey='pxe_boot_path' and type='$ntype'");
+		     "  where attrkey='pxe_boot_path' and type='$ntype' ".
+		     "  and not attrvalue like '/tftpboot/pxeboot.emu-%%'");
 	DBQueryFatal("update node_type_attributes set attrvalue='$amfs' ".
 		     "  where attrkey='adminmfs_osid' and type='$ntype'");
 	DBQueryFatal("update node_type_attributes set attrvalue='$dmfs' ".
@@ -302,10 +310,17 @@ if (1) {
 		 "  where next_pxe_boot_path is not NULL");
 
     #
-    # Now symlink all the alternate boots to pxeboot.emu
-    # XXX we assume everything is at the top level of /tftpboot right now.
+    # Make all versions of pxeboot.emu-* available
+    # XXX only worry about the most recent versions.
     #
     $EUID = 0;
+    system("cp -fp /tftpboot/pxeboot72/pxeboot.emu-* /tftpboot/")
+	if (-d "/tftpboot/pxeboot72");
+
+    #
+    # Now symlink all the unknown alternate boots to pxeboot.emu
+    # XXX we assume everything is at the top level of /tftpboot right now.
+    #
     foreach my $boot (@bogoboots) {
 	if ($boot =~ /^\/tftpboot\/([^\/]+)$/) {
 	    $boot = $1;

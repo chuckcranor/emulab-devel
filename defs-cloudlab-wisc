@@ -394,6 +394,19 @@ SPEWFROMOPS=1
 NODECONSOLE="sio"
 
 #
+# Set the version of the MFSes used. Determines the version of FreeBSD
+# used for the binaries and kernel.
+#
+# Note that you may need multiple versions of an MFS if you have really old
+# and really new hardware. Such configurations will have to be setup manually.
+#
+# "72"    Really old FreeBSD 7.2, 32-bit; do not use unless you have old nodes
+# "82"    Semi-old FreeBSD 8.2, 32-bit; use if you have 32-bit nodes
+# "8-64"  Semi-old FreeBSD 8.2, 64-bit; use if you have ALL 64-bit nodes
+#
+MFSVERSION="8-64"
+
+#
 # Set this if you are running:
 #	- Perl 5.8
 #	- Perl 5.10 with SelfLoader version 1.18 or greater
