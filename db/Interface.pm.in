@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2005-2014, 2016 University of Utah and the Flux Group.
+# Copyright (c) 2005-2017 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -299,6 +299,18 @@ sub LookupRow($$$)
     $all_interfaces{"$nodeid:$iface"}      = $interface;
 
     return $interface;
+}
+
+sub Flush($)
+{
+    my ($self) = @_;
+    my $nodeid  = $self->node_id();
+    my $iface   = $self->iface();
+    my $card    = $self->card();
+    my $port    = $self->port();
+
+    delete($all_interfaces{"$nodeid:$card:$port"});
+    delete($all_interfaces{"$nodeid:$iface"});
 }
 
 #
