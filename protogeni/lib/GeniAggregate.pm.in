@@ -1393,9 +1393,9 @@ sub Action($$$;$)
     # Figure out which osload library to use.
     #
     if (keys(%reloads)) {
-	if (1 || EmulabFeatures->FeatureEnabled("NewOsload",
-						GeniUtil::GeniUser(),
-						undef, undef)) {
+	if (EmulabFeatures->FeatureEnabled("NewOsload",
+					   GeniUtil::GeniUser(),
+					   undef, undef)) {
 	    require libosload_new;
 	    $osload_object = libosload_new->New();
 	    $osload_object->debug(1);
