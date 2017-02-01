@@ -1204,6 +1204,7 @@ sub Update($$)
 ###################################################################
 package APT_Instance::Aggregate;
 use emdb;
+use EmulabConstants;
 use WebTask;
 use libtestbed;
 use Carp;
@@ -1571,7 +1572,9 @@ sub UpdateWebStatus($$)
 	    #
 	    # Keep frisbeestatus, see below.
 	    #
-	    if (exists($current->{$node_id}->{"frisbeestatus"})) {
+	    if (exists($current->{$node_id}->{"frisbeestatus"}) &&
+		exists($details->{"rawstate"}) &&
+		$details->{"rawstate"} eq TBDB_NODESTATE_RELOADING()) {
 		$details->{"frisbeestatus"} =
 		    $current->{$node_id}->{"frisbeestatus"};
 	    }
