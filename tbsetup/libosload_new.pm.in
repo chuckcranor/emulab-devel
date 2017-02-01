@@ -838,7 +838,7 @@ sub osload($$$) {
 	$eventnodes->{'GOTONE'} = 1;
 
 	# These events have IP instead of node_id.
-	if ($objtype eq "FRISBEESTATUS") {
+	if ($objtype eq TBDB_TBEVENT_FRISBEESTATUS()) {
 	    return
 		if (!exists($iptonode{$node_id}));
 	    
@@ -851,7 +851,7 @@ sub osload($$$) {
 	    }
 	    $eventnodes->{$node_id} = $et;
 
-	    if ($objtype eq "FRISBEESTATUS") {
+	    if ($objtype eq TBDB_TBEVENT_FRISBEESTATUS()) {
 		my $nodeobject = $self->node($node_id);
 		my $wbytes = event_notification_get_string($handle,
 							   $notification,
@@ -1749,7 +1749,7 @@ sub SetupEventHandler($$)
 	print STDERR "*** event: Could not allocate an address tuple\n";
 	return undef;
     }
-    %$tuple = (objtype   => "FRISBEESTATUS");
+    %$tuple = (objtype   => TBDB_TBEVENT_FRISBEESTATUS());
     if (!event_subscribe($EVhandle, $handler, $tuple)) {
 	print STDERR "*** event: Could not subscribe to events\n";
 	return undef;
