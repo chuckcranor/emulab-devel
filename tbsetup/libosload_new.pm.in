@@ -43,7 +43,6 @@ use NodeType;
 use Interface;
 use OSImage;
 use User;
-use Blockstore; # For ConvertToMebi();
 use EmulabConstants;
 use English;
 use event;
@@ -855,7 +854,7 @@ sub osload($$$) {
 		my $nodeobject = $self->node($node_id);
 		my $wbytes = event_notification_get_string($handle,
 							   $notification,
-							   "BYTES_WRITTEN");
+							   "MBYTES_WRITTEN");
 		$self->nodeinfo($nodeobject, 'frisbeestatus',
 				{"when"    => $et,
 				 "wbytes"  => $wbytes,
@@ -1304,8 +1303,7 @@ sub WaitTillReloadDone($$$$$@)
 			$self->nodeinfo($nodeobject, "frisbeestatus");
 		    if (defined($frisbeestatus)) {
 			my $wbytes = $frisbeestatus->{"wbytes"};
-			my $mebi = Blockstore::ConvertToMebi("${wbytes}B");
-			print STDERR "$mebi MiB written.";
+			print STDERR "${wbytes}MB written.";
 		    }
 		    print STDERR "\n";
 		}
