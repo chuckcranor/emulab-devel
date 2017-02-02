@@ -570,6 +570,7 @@ function CheckStep2()
     global $ajax_args;
     global $ISAPT, $ISPNET, $ISCLOUD, $ISEMULAB;
     global $TB_PROJECT_CREATEEXPT;
+    $durationlimit = 16;
 
     if (!isset($ajax_args["formfields"])) {
 	SPITAJAX_ERROR(-1, "Missing formfields");
@@ -682,6 +683,16 @@ function CheckStep2()
                     Instance::LookupByName($project, $formfields["name"])) {
                 $errors["name"] = "Already in use by another experiment";
             }
+        }
+
+        if (!isset($formfields["duration"]) || $formfields["duration"] == "") {
+            $errors["duration"] = "Must set an experiment duration";
+        }
+        elseif (!ctype_digit($formfields["duration"]) ) {
+            $errors["duration"] = "Must be an integer between 1 and ".$durationlimit;
+        }
+        elseif (((int)$formfields["duration"]) <= 0 || ((int)$formfields["duration"]) > $durationlimit) {
+            $errors["duration"] = "Must be an integer between 1 and ".$durationlimit;
         }
     }
     if (count($errors)) {
