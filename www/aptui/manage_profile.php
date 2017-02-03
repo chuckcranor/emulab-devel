@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2016 University of Utah and the Flux Group.
+# Copyright (c) 2000-2017 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -412,18 +412,17 @@ if (! isset($create)) {
 		session_destroy();
 		session_commit();
 	    }
-
-	    #
-	    # See if we have a task running in the background
-	    # for this profile. At the moment it can only be a
-	    # clone task. If there is one, we have to tell
-	    # the js code to show the status of the clone.
-	    #
-	    $webtask = $profile->webtask();
-	    if ($webtask->TaskValue("cloning")) {
-		$notifyclone = 1;
-	    }
 	}
+        #
+        # See if we have a task running in the background
+        # for this profile. At the moment it can only be a
+        # clone task. If there is one, we have to tell
+        # the js code to show the status of the clone.
+        #
+        $webtask = $profile->webtask();
+        if ($webtask->TaskValue("cloning")) {
+            $notifyclone = 1;
+        }
     }
     else {
 	# Default the project if in only one project.

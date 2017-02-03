@@ -619,8 +619,8 @@ sub DoSnapshot()
     }
     # Bind the process id. This is important when the caller is
     # manage_profile, doing a clone.
-    $swebtask->SetProcessID($PID)
-	if (defined($swebtask));
+    $webtask->SetProcessID($PID)
+	if (defined($webtask));
 
     #
     # Poll for a reasonable amount of time.

@@ -530,7 +530,9 @@ if (defined($instance)) {
     my $new_uuid   = $profile->uuid();
     # We want to use the webtask associated with the new profile.
     my $pwebtask   = $profile->webtask();
-
+    # But the image details are stored in the instance webtask.
+    my $iwebtask   = $instance->webtask();
+    
     if ($profile->Lock()) {
 	$profile->Delete(1);
 	fatal("Could not lock new profile");
@@ -558,17 +560,19 @@ if (defined($instance)) {
     #
     # The script helpfully put the new image urn in the webtask.
     #
+    $pwebtask->AutoStore(1);
     $pwebtask->Refresh();
+    $iwebtask->Refresh();
 
     my $newimage;
 
     if (GetSiteVar("protogeni/use_imagetracker") &&	
 	EmulabFeatures->FeatureEnabled("APT_UseImageTracker",
 				       $this_user, $project)) {
-	$newimage = $pwebtask->image_urn();
+	$newimage = $iwebtask->image_urn();
     }
     else {
-	$newimage = $pwebtask->image_url();
+	$newimage = $iwebtask->image_url();
     }
     if (!defined($newimage) ||
 	$profile->UpdateDiskImage($node_id, $newimage, 0)) {
@@ -577,6 +581,8 @@ if (defined($instance)) {
     }
     # Tell web interface cloning has started.
     $pwebtask->cloning(1);
+    # And what is being cloned.
+    $pwebtask->cloning_instance($instance->uuid());
     
     #
     # Exit and leave child to poll.
@@ -631,6 +637,7 @@ if (defined($instance)) {
     }
     # Tell web interface cloning has finished
     $pwebtask->cloning(0);
+    $pwebtask->cloning_instance(undef);
     $profile->Unlock();
     exit(0);
 }

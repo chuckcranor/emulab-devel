@@ -61,7 +61,21 @@ function Do_CloneStatus()
 	SPITAJAX_ERROR(1, "Cloning has terminated");
 	return;
     }
-    $taskdata = $webtask->TaskData();
+    if (!$webtask->TaskValue("cloning_instance")) {
+	SPITAJAX_ERROR(1, "The cloned experiment is gone");
+	return;
+    }
+    $instance = Instance::Lookup($webtask->TaskValue("cloning_instance"));
+    if (!$instance) {
+	SPITAJAX_ERROR(1, "The cloned experiment is no where");
+	return 1;
+    }
+    $instance_webtask = $instance->WebTask();
+    if (!$instance_webtask) {
+	SPITAJAX_ERROR(1, "No status descriptor found for instance");
+	return;
+    }
+    $taskdata = $instance_webtask->TaskData();
     $blob = array();
 
     #
@@ -97,10 +111,10 @@ function Do_CloneStatus()
             }
         }
     }
-    if ($webtask->exited()) {
+    if ($instance_webtask->exited()) {
 	# Success, but not sure what to report. Come back to this later.
-	$blob["exited"]   = $webtask->exited();
-	$blob["exitcode"] = $webtask->exitcode();
+	$blob["exited"]   = $instance_webtask->exited();
+	$blob["exitcode"] = $instance_webtask->exitcode();
         if (isset($taskdata["image_name"])) {
             $blob["image_name"] = $taskdata["image_name"];
         }
