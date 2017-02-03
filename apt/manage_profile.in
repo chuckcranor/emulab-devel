@@ -583,6 +583,7 @@ if (defined($instance)) {
     $pwebtask->cloning(1);
     # And what is being cloned.
     $pwebtask->cloning_instance($instance->uuid());
+    $pwebtask->image_name($iwebtask->image_name());
     
     #
     # Exit and leave child to poll.
@@ -635,9 +636,10 @@ if (defined($instance)) {
 	$profile->Delete(1);
 	exit(1);
     }
-    # Tell web interface cloning has finished
+    # Tell web interface cloning has finished. But leave cloning_instance
+    # set since otherwise the web interface will no longer be able to
+    # figure out what to tell the user.
     $pwebtask->cloning(0);
-    $pwebtask->cloning_instance(undef);
     $profile->Unlock();
     exit(0);
 }

@@ -57,10 +57,6 @@ function Do_CloneStatus()
 	SPITAJAX_ERROR(1, "No status descriptor found");
 	return;
     }
-    if (!$webtask->TaskValue("cloning")) {
-	SPITAJAX_ERROR(1, "Cloning has terminated");
-	return;
-    }
     if (!$webtask->TaskValue("cloning_instance")) {
 	SPITAJAX_ERROR(1, "The cloned experiment is gone");
 	return;
