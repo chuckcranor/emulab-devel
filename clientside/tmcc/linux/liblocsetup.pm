@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2000-2016 University of Utah and the Flux Group.
+# Copyright (c) 2000-2017 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -1424,28 +1424,70 @@ sub os_fwconfig_line($@) {
 		$upline .= "brctl addbr br0\n";
 		$upline .= "brctl stp br0 on\n";
 		$upline .= "ifconfig br0 up\n";
-		$upline .= "brctl addif br0 $pdev\n";
-		$upline .= "brctl addif br0 $vlandev\n";
-
-		$upline .= "ifconfig br0 $myip netmask $mymask\n";
-		$upline .= "ip route flush dev br0\n";
+		#
+		# This is very, very messy.  We have to save the
+		# existing routes for $pdev, but in an order that they
+		# can be restored without failing, before we move
+		# $pdev into br0.  Then the restored routes must be
+		# rewritten in terms of br0 instead of $pdev.
+		#
+		# Finally, we have to collect these routes prior to 1)
+		# assigning $pdev's IP to br0, and 2) moving $pdev
+		# into br0, and 3) prior to *deleting* any routes.
+		# All these conditions seem necessary to me.
+		#
+		# ip route show does not necessarily display routes in
+		# restoreable order.  In particular, the thing that
+		# bites is that the default route is (now, as of
+		# Ubuntu16, at least) displayed *prior to* the scope
+		# link (broadcast route) for a device).  So, we first
+		# harvest the scope link routes for $pdev (i.e., the
+		# natural ones that come into being as a side affect
+		# of assiging an IP address to a link); then we
+		# harvest all other routes associated with $pdev; then
+		# we remove all routes associated with $pdev.  Then we
+		# do the mucking about with bridge membership and
+		# transfer IP from $pdev to bridge, and finally,
+		# restore the routes we saved (modified to br0, of
+		# course).
+		#
+		$upline .= "ROUTECMDS=\$(ip route show scope link | while read line; do\n";
+		$upline .= "    echo \$line | grep 'dev $pdev' > /dev/null || continue\n";
+		$upline .= "    echo 'ip route add '`echo \$line | sed s/$pdev/br0/`\n";
+		$upline .= "done)\n";
+		$upline .= "ROUTECMDS=\"\$ROUTECMDS\\n\"\$(ip route show | while read line; do\n";
+		$upline .= "    echo \$line | grep 'dev $pdev' > /dev/null || continue\n";
+		$upline .= "    echo \$line | grep 'scope link' > /dev/null && continue\n";
+		$upline .= "    echo 'ip route add '`echo \$line | sed s/$pdev/br0/`\n";
+		$upline .= "done)\n";
 		$upline .= "ip route show | while read line; do\n";
 		$upline .= "    echo \$line | grep 'dev $pdev' > /dev/null || continue\n";
-		$upline .= "    new_route=`echo \$line | sed s/$pdev/br0/`\n";
 		$upline .= "    ip route del \$line\n";
-		$upline .= "    ip route add \$new_route\n";
 		$upline .= "done\n";
+		$upline .= "brctl addif br0 $pdev\n";
+		$upline .= "brctl addif br0 $vlandev\n";
+		$upline .= "ifconfig br0 $myip netmask $mymask\n";
+		$upline .= "ip route flush dev br0\n";
 		$upline .= "ifconfig $pdev 0.0.0.0\n";
+		$upline .= "/bin/echo -e \"\$ROUTECMDS\" | sh\n";
 
+		$downline .= "ROUTECMDS=\$(ip route show scope link | while read line; do\n";
+		$downline .= "    echo \$line | grep 'dev br0' > /dev/null || continue\n";
+		$downline .= "    echo 'ip route add '`echo \$line | sed s/br0/$pdev/`\n";
+		$downline .= "done)\n";
+		$downline .= "ROUTECMDS=\"\$ROUTECMDS\\n\"\$(ip route show | while read line; do\n";
+		$downline .= "    echo \$line | grep 'dev br0' > /dev/null || continue\n";
+		$downline .= "    echo \$line | grep 'scope link' > /dev/null && continue\n";
+		$downline .= "    echo 'ip route add '`echo \$line | sed s/br0/$pdev/`\n";
+		$downline .= "done)\n";
+		$downline .= "ip route show | while read line; do\n";
+		$downline .= "    echo \$line | grep 'dev br0' > /dev/null || continue\n";
+		$downline .= "    ip route del \$line\n";
+		$downline .= "done\n";
 		$downline .= "    ifconfig $pdev $myip netmask $mymask\n";
 		$downline .= "    ip route flush dev $pdev\n";
-		$downline .= "    ip route show | while read line; do\n";
-		$downline .= "        echo \$line | grep 'dev br0' > /dev/null || continue\n";
-		$downline .= "        new_route=`echo \$line | sed s/br0/$pdev/`\n";
-		$downline .= "        ip route del \$line\n";
-		$downline .= "        ip route add \$new_route\n";
-		$downline .= "    done\n";
 		$downline .= "    ip route flush dev br0\n";
+		$downline .= "/bin/echo -e \"\$ROUTECMDS\" | sh\n";
 		$downline .= "    ifconfig br0 down\n";
 		$downline .= "    ifconfig $vlandev down\n";
 		$downline .= "    brctl delif br0 $vlandev\n";
