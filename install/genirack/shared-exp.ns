@@ -5,19 +5,19 @@ source tb_compat.tcl
 set ns [new Simulator]
 
 set vhost1 [$ns node]
-tb-set-node-os $vhost1 XEN43-64-STD
+tb-set-node-os $vhost1 XEN46-64-STD
 tb-set-node-sharingmode $vhost1 "shared_local"
 $vhost1 add-attribute xenvifrouting yes
 $vhost1 set-fw-style "closed"
 
 set vhost2 [$ns node]
-tb-set-node-os $vhost2 XEN43-64-STD
+tb-set-node-os $vhost2 XEN46-64-STD
 tb-set-node-sharingmode $vhost2 "shared_local"
 $vhost2 add-attribute xenvifrouting yes
 $vhost2 set-fw-style "closed"
 
 set vhost3 [$ns node]
-tb-set-node-os $vhost3 XEN43-64-STD
+tb-set-node-os $vhost3 XEN46-64-STD
 tb-set-node-sharingmode $vhost3 "shared_local"
 $vhost3 add-attribute xenvifrouting yes
 $vhost3 set-fw-style "closed"
