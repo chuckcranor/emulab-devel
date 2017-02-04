@@ -22,6 +22,13 @@
 #     Subbosses in the same broadcast domain should use different values to
 #     avoid confusion; e.g., 239.193.1, 239.194.1, etc.
 #     Unset to use mfrisbeed default.
+# MCBASEPORT: base multicast port number.
+#     Zero means any ephemeral port.
+#     Unset to use mfrisbeed default.
+# MCNUMPORT: number of ports to allow.
+#     Range will be MCBASEPORT to MCBASEPORT+MCNUMPORT.
+#     Zero means any ephemeral port above the base.
+#     Unset to use mfrisbeed default.
 # BANDWIDTH: maximum bandwidth any instance of frisbeed should use (Mb/sec).
 #     Unset to use mfrisbeed default.
 # DYNAMICBW: use *experimental* dynamic bandwidth control. If non-zero,
@@ -42,6 +49,8 @@
 # DEBUG: set to run with debugging enabled.
 #
 MCBASEADDR=239.192.1
+MCBASEPORT=
+MCNUMPORT=
 BANDWIDTH=100000000
 DYNAMICBW=
 MAXLINGER=180
@@ -122,6 +131,12 @@ if [ $? -eq 0 ]; then
 	    MCBASEADDR)
 		MCBASEADDR=$v
 		;;
+	    MCBASEPORT)
+		MCBASEPORT=$v
+		;;
+	    MCNUMPORT)
+		MCNUMPORT=$v
+		;;
 	    BANDWIDTH)
 		BANDWIDTH=$v
 		;;
@@ -171,6 +186,20 @@ fi
 opts=""
 if [ -n "$MCBASEADDR" ]; then
     opts="-O mcaddr=$MCBASEADDR"
+fi
+if [ -n "$MCBASEPORT" ]; then
+    if [ -z "$opts" ]; then
+	opts="-O mcportbase=$MCBASEPORT"
+    else
+	opts="$opts,mcportbase=$MCBASEPORT"
+    fi
+fi
+if [ -n "$MCNUMPORT" ]; then
+    if [ -z "$opts" ]; then
+	opts="-O mcportnum=$MCNUMPORT"
+    else
+	opts="$opts,mcportnum=$MCNUMPORT"
+    fi
 fi
 if [ -n "$BANDWIDTH" ]; then
     if [ -z "$opts" ]; then
