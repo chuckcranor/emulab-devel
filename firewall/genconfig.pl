@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2005-2014 University of Utah and the Flux Group.
+# Copyright (c) 2005-2017 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -50,18 +50,23 @@ my %fwvars;
 
 sub getfwvars()
 {
-    # XXX for Utah Emulab as of 04/14
+    # XXX for Utah Emulab as of 02/17
     $fwvars{EMULAB_GWIP} = "155.98.36.1";
+    $fwvars{EMULAB_GWMAC} = "c0:ea:e4:b1:b4:04";
     $fwvars{EMULAB_VGWIP} = "172.16.0.1";
     # XXX assume vnode GW MAC same as GW MAC
-    $fwvars{EMULAB_GWMAC} = "00:d0:bc:f4:14:f8";
     $fwvars{EMULAB_NS} = "155.98.32.70";
     $fwvars{EMULAB_CNET} = "155.98.36.0/22";
-    $fwvars{EMULAB_VNET} = "172.16.0.0/12";
-    $fwvars{EMULAB_BOSSES} = "boss,subboss,subboss2";
-    $fwvars{EMULAB_SERVERS} = "boss,subboss,subboss2,ops";
-    $fwvars{EMULAB_MCADDR} = "234.0.0.0/8";
-    $fwvars{EMULAB_MCPORT} = "1025-65535";
+    $fwvars{EMULAB_VCNET} = "172.16.0.0/12";
+    $fwvars{EMULAB_VCNET_BOSS} = "172.17.254.254";
+    $fwvars{EMULAB_VCNET_OPS} = "172.17.253.254";
+    $fwvars{EMULAB_VCBOSS} = "172.17.254.254";
+    $fwvars{EMULAB_VCOPS} = "172.17.253.254";
+    $fwvars{EMULAB_FSIPS} = "155.98.33.74,172.17.253.254";
+    $fwvars{EMULAB_BOSSES} = "boss,subboss,subboss2,subboss3";
+    $fwvars{EMULAB_SERVERS} = "boss,subboss,subboss2,subboss3,ops";
+    $fwvars{EMULAB_MCADDR} = "234.0.0.0/8,239.0.0.0/8";
+    $fwvars{EMULAB_MCPORT} = "21700-21799";
 }
 
 sub expandfwvars($)
@@ -136,8 +141,6 @@ sub doconfig($)
 	    }
 	}
     }
-
-    print "\n";
 }
 
 %options = ();

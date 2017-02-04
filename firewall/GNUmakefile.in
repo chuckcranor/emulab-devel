@@ -59,22 +59,53 @@ iptables-domU-%.sql: genconfig-iptables.pl iptables-fw-domU-rules
 %.sql: genconfig.pl
 	$(SRCDIR)/genconfig.pl -f $(SRCDIR)/fw-rules -M $* > $@
 
-insertvars: initfwvars.pl
-	@if ! `mysqldump $(MDOPTS) $(TBDB) default_firewall_vars >vars.old`; then \
+insertvars: initfwvars.pl dumpoldvars
+	chmod +x ./initfwvars.pl
+	./initfwvars.pl
+
+insertrules: $(FW_FILES) dumpoldrules
+	cat $(FW_FILES) | mysql $(TBDB)
+	echo 'FW rules updated in DB'
+
+dumpold: dumpoldvars dumpoldrules
+
+dumpoldvars:
+	@if ! `mysqldump $(MDOPTS) -w "1 order by name" $(TBDB) default_firewall_vars >vars.old`; then \
 		echo -n '*** default_firewall_vars table does not exist, '; \
 		echo 'see sql/database-migrate.txt'; \
 		exit 1; \
-	else \
-		chmod +x ./initfwvars.pl; \
-		./initfwvars.pl; \
 	fi
 
-insertrules: $(FW_FILES)
+dumpoldrules:
 	@if ! `mysqldump $(MDOPTS) -w "1 order by type,style,ruleno" $(TBDB) default_firewall_rules >rules.old`; then \
 		echo -n '*** default_firewall_rules table does not exist, '; \
 		echo 'see sql/database-migrate.txt'; \
 		exit 1; \
-	else \
-		cat $(FW_FILES) | mysql $(TBDB); \
-		echo 'FW rules updated in DB'; \
 	fi
+
+dumpnew: dumpnewvars dumpnewrules
+
+dumpnewvars: initfwvars.pl
+	chmod +x ./initfwvars.pl
+	initfwvars.pl -n >vars.new
+
+dumpnewrules: $(FW_FILES)
+	cat open.sql closed.sql basic.sql elabinelab.sql | \
+	    grep -v 'DELETE FROM' >rules.new
+	cat iptables-vlan-open.sql iptables-vlan-closed.sql \
+	    iptables-vlan-basic.sql iptables-vlan-elabinelab.sql | \
+	    grep -v 'DELETE FROM' >>rules.new
+	cat iptables-dom0-open.sql iptables-dom0-closed.sql \
+	    iptables-dom0-basic.sql | \
+	    grep -v 'DELETE FROM' >>rules.new
+	cat iptables-domU-open.sql iptables-domU-closed.sql \
+	    iptables-domU-basic.sql | \
+	    grep -v 'DELETE FROM' >>rules.new
+
+dump: dumpvars dumprules
+dumpvars: dumpoldvars dumpnewvars
+dumprules: dumpoldrules dumpnewrules
+
+clean:
+	rm -f *.old *.new *.sql initfwvars.pl
+

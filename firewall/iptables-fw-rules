@@ -1,5 +1,5 @@
 #
-# Copyright (c) 2005-2014 University of Utah and the Flux Group.
+# Copyright (c) 2005-2017 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -250,6 +250,7 @@ iptables -A INSIDE -p tcp -s myboss -d EMULAB_BOSSES --dport 64494 --syn -m conn
 #
 # Frisbee multicast with boss
 #  * nodes mcast everything to boss (joins, leaves and requests): 60046
+#  * except for reports, which are unicast to boss: 60046
 #  * boss mcasts blocks to same mcaddr/port: 60047
 #  * boss unicasts join replies to same port: 60048
 #  * node and switch need to IGMP: 60049
@@ -269,7 +270,7 @@ iptables -A INSIDE -p tcp -s myboss -d EMULAB_BOSSES --dport 64494 --syn -m conn
 # from 60047).
 #
 
-iptables -A INSIDE -p udp -d EMULAB_MCADDR --dport EMULAB_MCPORT -j ACCEPT # BASIC,CLOSED
+iptables -A INSIDE -p udp -d EMULAB_MCADDR,EMULAB_BOSSES --dport EMULAB_MCPORT -j ACCEPT # BASIC,CLOSED
 iptables -A OUTSIDE -p udp -s EMULAB_BOSSES --sport EMULAB_MCPORT -d EMULAB_MCADDR --dport EMULAB_MCPORT -j ACCEPT # BASIC,CLOSED,ELABINELAB
 iptables -A OUTSIDE -p udp -s EMULAB_BOSSES --sport EMULAB_MCPORT --dport EMULAB_MCPORT -m conntrack --ctstate NEW -j ACCEPT # BASIC,CLOSED
 iptables -A INSIDE -p udp -s myboss -d EMULAB_MCADDR --dport EMULAB_MCPORT -j ACCEPT # ELABINELAB

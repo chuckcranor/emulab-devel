@@ -1,5 +1,5 @@
 #
-# Copyright (c) 2005-2014 University of Utah and the Flux Group.
+# Copyright (c) 2005-2017 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -368,9 +368,9 @@ allow tcp from myboss to EMULAB_BOSSES 64494 in via vlan0 setup keep-state # 600
 # from 60047).
 #
 allow udp from any to EMULAB_MCADDR EMULAB_MCPORT in via vlan0		   # 60046: BASIC,CLOSED
+allow udp from myboss to EMULAB_MCADDR EMULAB_MCPORT in via vlan0	   # 60046: ELABINELAB
 allow udp from EMULAB_BOSSES EMULAB_MCPORT to EMULAB_MCADDR EMULAB_MCPORT  # 60047: BASIC,CLOSED,ELABINELAB
 allow udp from EMULAB_BOSSES EMULAB_MCPORT to any EMULAB_MCPORT keep-state # 60048: BASIC,CLOSED
-allow udp from myboss to EMULAB_MCADDR EMULAB_MCPORT in via vlan0	   # 60046: ELABINELAB
 allow udp from EMULAB_BOSSES EMULAB_MCPORT to myboss EMULAB_MCPORT keep-state # 60048: ELABINELAB
 allow igmp from any to any						   # 60049: BASIC,CLOSED,ELABINELAB
 
