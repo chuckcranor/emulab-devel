@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2012-2016 University of Utah and the Flux Group.
+# Copyright (c) 2012-2017 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -175,7 +175,7 @@ sub ConvertImage($)
 	my $filename = $imageversion->path();
 	my $basename = basename($filename);
 
-	if ($imageversion->isdelta()) {
+	if ($imageversion->isdelta() || $imageversion->HaveDeltaImage()) {
 	    $basename =~ s/\.ndz/\.ddz/;
 	}
 
