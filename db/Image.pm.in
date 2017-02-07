@@ -553,10 +553,10 @@ sub ListAllVersions($$$)
 
     my $clause = "";
     if (defined($format) && $format =~ /^([-\w]+)$/) {
-	$clause .= "and v.format='$1'";
+	$clause .= "and v.format='$1' ";
     }
     if (defined($pid) && $pid =~ /^([-\w]+)$/) {
-	$clause .= "and v.pid='$1'";
+	$clause .= "and v.pid='$1' ";
     }
 
     my $query_result =
@@ -1761,6 +1761,26 @@ sub MarkUpdate($$;$)
     return -1
 	if (! DBQueryWarn("update image_versions set updated=$stamp " .
 			  "  $updater $updater_idx $updater_urn ".
+			  "where imageid='$imageid' and version='$version'"));
+
+    return 0;
+}
+
+sub MarkDeleted($;$)
+{
+    my ($self, $stamp) = @_;
+
+    my $imageid     = $self->imageid();
+    my $version     = $self->version();
+
+    if (defined($stamp)) {
+	$stamp      = "FROM_UNIXTIME($stamp)";
+    } else {
+	$stamp      = "now()";
+    }
+
+    return -1
+	if (! DBQueryWarn("update image_versions set deleted=$stamp " .
 			  "where imageid='$imageid' and version='$version'"));
 
     return 0;

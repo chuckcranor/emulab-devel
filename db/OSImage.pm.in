@@ -666,6 +666,13 @@ sub MarkUpdate($$;$)
     return $self->image()->MarkUpdate($user, $stamp);
 }
 
+sub MarkDeleted($;$)
+{
+    my ($self, $stamp) = @_;
+
+    return $self->image()->MarkDeleted($stamp);
+}
+
 #
 # Mark the IMS update time in the record,
 #
