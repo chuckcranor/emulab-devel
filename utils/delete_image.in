@@ -225,7 +225,7 @@ if ($purge || $rename) {
 	}
 	else {
 	    my $newname = dirname($dirname) . "/" . basename($dirname) .
-		":" . $image->imageid();
+		"," . $image->imageid();
 
 	    if ($impotent) {
 		print "Would rename $dirname to $newname\n" if (-e $dirname);
@@ -317,7 +317,7 @@ if ($purge || $rename) {
 	$EUID = 0;
 	if (@torename) {
 	    my $dirname = dirname($imageversion->path()) .
-		"/" . $image->imagename() . ":" . $image->imageid();
+		"/" . $image->imagename() . "," . $image->imageid();
 
 	    if (! -e $dirname && !$impotent) {
 		if (! mkdir("$dirname", 0775)) {
