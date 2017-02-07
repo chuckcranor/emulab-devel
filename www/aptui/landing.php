@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2016 University of Utah and the Flux Group.
+# Copyright (c) 2000-2017 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -27,6 +27,7 @@ include_once("geni_defs.php");
 chdir("apt");
 include("quickvm_sup.php");
 include_once("instance_defs.php");
+include_once("profile_defs.php");
 
 #
 # Get current user but make sure coming in on SSL.
@@ -57,6 +58,9 @@ if ($this_user) {
     }
     elseif (Instance::UserHasInstances($this_user)) {
 	header("Location: $APTBASE/user-dashboard.php");
+    }
+    elseif (Profile::UserHasProfiles($this_user)) {
+	header("Location: $APTBASE/user-dashboard.php#profiles");
     }
     else {
 	header("Location: $APTBASE/instantiate.php");

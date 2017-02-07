@@ -264,6 +264,16 @@ class Profile
 	return 0;
     }
 
+    function UserHasProfiles($user) {
+	$uid = $user->uid();
+
+	$query_result =
+	    DBQueryFatal("select profileid from apt_profile_versions ".
+			 "where creator='$uid' and deleted is null");
+
+	return mysql_num_rows($query_result);
+    }
+
     #
     # URL. To the specific version of the profile.
     #

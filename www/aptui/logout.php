@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2014 University of Utah and the Flux Group.
+# Copyright (c) 2000-2017 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -54,5 +54,5 @@ if ($ajax_request) {
     SPITAJAX_RESPONSE("");
     exit();
 }
-header("Location: instantiate.php");
+header("Location: landing.php");
 ?>
