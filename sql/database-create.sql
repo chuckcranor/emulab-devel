@@ -417,6 +417,7 @@ CREATE TABLE `apt_profiles` (
   `shared` tinyint(1) NOT NULL default '0',
   `listed` tinyint(1) NOT NULL default '0',
   `topdog` tinyint(1) NOT NULL default '0',
+  `no_image_versions tinyint(1) NOT NULL default '0',
   `disabled` tinyint(1) NOT NULL default '0',
   `locked` datetime default NULL,
   `locker_pid` int(11) default '0',
