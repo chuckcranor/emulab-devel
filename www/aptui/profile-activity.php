@@ -55,7 +55,8 @@ $instances = array();
 # First existing instances and then the history table.
 #
 $query1_result =
-    DBQueryFatal("select i.uuid,i.profile_version,i.created,'' as destroyed, ".
+    DBQueryFatal("select 1 as active, ".
+                 "   i.uuid,i.profile_version,i.created,'' as destroyed, ".
 		 "   i.creator,p.uuid as profile_uuid,u.email,ia.public_url, ".
                  "   i.slice_uuid ".
 		 "  from apt_instances as i ".
@@ -69,7 +70,8 @@ $query1_result =
 		 "group by i.uuid order by i.created desc");
 
 $query2_result =
-    DBQueryFatal("select h.uuid,h.profile_version,h.created,h.destroyed, ".
+    DBQueryFatal("select 0 as active, ".
+                 "    h.uuid,h.profile_version,h.created,h.destroyed, ".
 		 "    h.creator,p.uuid as profile_uuid,u.email,ia.public_url, ".
                  "    h.slice_uuid ".
 		 "  from apt_instance_history as h ".
@@ -91,6 +93,7 @@ if (mysql_num_rows($query1_result) == 0 &&
 
 foreach (array($query1_result, $query2_result) as $query_result) {
     while ($row = mysql_fetch_array($query_result)) {
+        $active    = $row["active"];
 	$uuid      = $row["uuid"];
 	$puuid     = $row["profile_uuid"];
 	$pversion  = $row["profile_version"];
@@ -112,6 +115,7 @@ foreach (array($query1_result, $query2_result) as $query_result) {
                         "/showslicelogs.php?slice_uuid=" . $slice_uuid;
         }
 	$instance = array();
+        $instance["active"]      = intval($active);
 	$instance["uuid"]        = $uuid;
 	$instance["p_uuid"]      = $puuid;
 	$instance["p_version"]   = $pversion;
