@@ -1073,6 +1073,36 @@ sub root_adbd($$) {
     return $self->wait_for_adbd($node_id);
 }
 
+# Helper that grabs the IMSI from the phone
+sub _get_imsi($) {
+    my ($node_id) = @_;
+
+    # Find serial number to target
+    my $serial = $NMAP{$node_id};
+    if (! $serial) {
+	warn "No serial number for $node_id!\n";
+	return 0;
+    }
+
+    my $imsi_qres = `$ADB -s $serial shell service call iphonesubinfo 3`;
+    if ($?) {
+	warn "Failed to obtain IMSI data on $node_id\n";
+	return undef;
+    }
+
+    # Extract out the decoded ASCII from the "parcel" response.
+    my @lines = split(/\n/, $imsi_qres);
+    shift @lines;
+    my $imsi = join "", map { s/^.+'([\d\.]+)\s*'.*$/$1/; s/\.//g; $_ } @lines;
+
+    if ($imsi !~ /^\d{15}$/) {
+	warn "Extracted IMSI for $node_id is malformed: '$imsi'\n";
+	return undef;
+    }
+
+    return $imsi;
+}
+
 # Helper to add PhantomNet APN profile and set it as default.
 sub add_apn_profile($$) {
     my ($self, $node_id) = @_;
@@ -1101,7 +1131,17 @@ sub add_apn_profile($$) {
 
     # If no existing APN profile, insert one and use that.
     if ($newapn eq "No result found.") {
-	my $status = system("$ADB -s $serial shell content insert --uri content://telephony/carriers --bind name:s:\"phantomnet\" --bind numeric:s:\"00101\" --bind mcc:s:\"001\" --bind mnc:s:\"01\" --bind apn:s:\"internet\" --bind mmsc:s:\"\" --bind type:s:\"\" --bind current:i:1");
+	# Grab IMSI from phone and extract PLMN, MCC, and MNC
+	my $imsi = _get_imsi($node_id);
+	if (!$imsi) {
+	    # Failed to get IMSI.
+	    warn "Could not get IMSI. Cannot proceed.\n";
+	    return 0;
+	}
+	$imsi =~ /^((\d{3})(\d{2}))/;
+	my ($plmn, $mcc, $mnc) = ($1, $2, $3);
+
+	my $status = system("$ADB -s $serial shell content insert --uri content://telephony/carriers --bind name:s:\"phantomnet\" --bind numeric:s:\"$plmn\" --bind mcc:s:\"$mcc\" --bind mnc:s:\"$mnc\" --bind apn:s:\"internet\" --bind mmsc:s:\"\" --bind type:s:\"\" --bind current:i:1");
 	if ($status) {
 	    warn "Could not insert APN profile\n";
 	    return 0;
