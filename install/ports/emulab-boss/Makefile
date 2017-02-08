@@ -152,6 +152,10 @@ RUN_DEPENDS+=	\
 	dhcpd:${PORTSDIR}/net/isc-dhcp43-server \
 	${LOCALBASE}/sbin/rndc:${PORTSDIR}/dns/bind99
 
+# XXX For building loghole doc from www/tutorial
+RUN_DEPENDS+=	\
+	man2html:${PORTSDIR}/textproc/man2html
+
 USE_PERL5=	yes
 USES=		python:2.7
 
