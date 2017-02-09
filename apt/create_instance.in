@@ -60,6 +60,7 @@ my $privkeyfile;
 my $slice;
 my $sitemap;
 my $usetracker = 0;
+my $maxduration = 3; # Hours. For guests. Need to make this a site variable.
 my @aggregate_urns = ();
 
 # Protos
@@ -182,6 +183,7 @@ if (getpwuid($UID) ne "nobody") {
 	fatal("You ($UID) do not exist!");
     }
     $localuser = 1;
+    $maxduration = 16; # Hours.
 }
 if (!defined($this_user) || !$this_user->IsAdmin()) {
     if ($xmlfile =~ /^([-\w\.\/]+)$/) {
@@ -251,7 +253,7 @@ fatal($@)
 #
 # Make sure all the required arguments were provided.
 #
-foreach my $key ("username", "email", "profile", "portal") {
+foreach my $key ("username", "email", "profile", "portal", "duration") {
     fatal("Missing required attribute '$key'")
 	if (! (exists($xmlparse->{'attribute'}->{"$key"}) &&
 	       defined($xmlparse->{'attribute'}->{"$key"}) &&
@@ -263,10 +265,20 @@ foreach my $key ("username", "email", "profile", "portal") {
 #
 my ($value, $user_urn, $user_uid, $user_hrn, $user_email, $project, $pid,
     $gid, $group, $sshkey, $profile, $profileid, $version, $rspecstr, $errmsg,
-    $userslice_id, $portal, $script, $reporef, $repohash);
+    $userslice_id, $portal, $script, $reporef, $repohash, $duration);
 
 # This is used internally to determine which portal was used.
 $portal = $xmlparse->{'attribute'}->{"portal"}->{'value'};
+
+# User specified duration.
+$duration = $xmlparse->{'attribute'}->{"duration"}->{'value'};
+if ($duration !~ /^\d+$/) {
+    fatal("Duration is not an integer");
+}
+if ($duration < 1 || $duration > $maxduration) {
+    UserError("Duration must be at least 1 hour but ".
+	      "not more then $maxduration hour(s)");
+}
 
 #
 # Username and email has to be acceptable to Emulab user system.
@@ -731,7 +743,7 @@ if (!defined($slice)) {
     fatal("Could not create new slice object for $slice_urn");
 }
 # These get quick expirations, unless it is a real user.
-if ($slice->SetExpiration(time() + (($localuser ? 16 : 3) * 3600)) != 0) {
+if ($slice->SetExpiration(time() + ($duration * 3600)) != 0) {
     fatal("Could not set the slice expiration for $slice_urn");
 }
 my $slice_uuid = $slice->uuid();

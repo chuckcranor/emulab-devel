@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2016 University of Utah and the Flux Group.
+# Copyright (c) 2000-2017 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -907,6 +907,7 @@ function Do_Submit()
             $args["auth_token"] = $_SESSION["auth_token"];
         }
     }
+    $args["duration"]  = $formfields["duration"];
 
     if (0) {
         TBERROR(print_r($args, true), 0);
