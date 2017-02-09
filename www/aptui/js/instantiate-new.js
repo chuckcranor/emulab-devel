@@ -13,8 +13,8 @@ $(function ()
     var amlist        = null;
     var amstatus      = null;
     var projlist      = null;
-    var sysprojlist   = ['emulab-ops', 'PortalProfiles', 'emulab-ops-test'];
-    var psysprojlist  = ['PhantomNet', 'PortalProfiles', 'testproject'];
+    var sysprojlist   = ['emulab-ops', 'PortalProfiles'];
+    var psysprojlist  = ['PhantomNet', 'PortalProfiles'];
     var profilelist   = null;
     var recentcount   = 5;
     var amdefault     = null;
@@ -129,6 +129,7 @@ $(function ()
 	    cancopy:            window.CANCOPY,
 	    clustername:        window.PORTAL_NAME,
 	    admin:		isadmin,
+	    maxduration:        window.MAXDURATION,
 	});
 	$('#main-body').html(html);
 	if (projlist)

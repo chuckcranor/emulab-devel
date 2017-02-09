@@ -27,6 +27,9 @@ chdir("apt");
 include_once("profile_defs.php");
 include_once("instance_defs.php");
 
+# Need to make non-hardcoded
+$maxduration = 16;
+
 #
 # Return info about specific profile.
 #
@@ -570,6 +573,7 @@ function CheckStep2()
     global $ajax_args;
     global $ISAPT, $ISPNET, $ISCLOUD, $ISEMULAB;
     global $TB_PROJECT_CREATEEXPT;
+    global $maxduration;
 
     if (!isset($ajax_args["formfields"])) {
 	SPITAJAX_ERROR(-1, "Missing formfields");
@@ -682,6 +686,13 @@ function CheckStep2()
                     Instance::LookupByName($project, $formfields["name"])) {
                 $errors["name"] = "Already in use by another experiment";
             }
+        }
+
+        if (!isset($formfields["duration"]) || $formfields["duration"] == "") {
+            $errors["duration"] = "Must set an experiment duration";
+        }
+        elseif (!ctype_digit($formfields["duration"]) || (((int)$formfields["duration"]) <= 0 || ((int)$formfields["duration"]) > $maxduration)) {
+            $errors["duration"] = "Must be an integer between 1 and ".$maxduration;
         }
     }
     if (count($errors)) {
