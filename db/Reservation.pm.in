@@ -519,30 +519,38 @@ sub LookupAll($$)
     
     while( my($count, $pid, $eid, $uid, $end, $autoswap, $next_reserve,
 	      $slice_expire, $slice_lockdown ) =
-	   $query_result->fetchrow_array() ) {	
-	# If a node has an outstanding next_reserve, assume it's
-	# unavailable until further notice -- treat it as if it doesn't
-	# exist.
-	next if( defined( $next_reserve ) );
-
-	if( defined( $slice_expire ) ) {
-	    # A GENI slice: its end time is the slice expiration...
-	    $end = $slice_expire;
-
-	    # ...unless it's locked down, in which we consider the
-	    # node unavailable:
-	    next if( $slice_lockdown );
-	} else {
-	    # Not a GENI slice... if it's not marked autoswap, assume
-	    # the nodes aren't coming back (hwdown looks like this, for
-	    # example).
-	    next if( defined( $pid ) && !$autoswap );
-	}
+	   $query_result->fetchrow_array() ) {
+	my $endtime;
 	
-	if( defined( $pid ) ) {
+	if( defined( $slice_expire ) ) {
+	    # Node(s) allocated to a GENI slice.  Treat as unavailable
+	    # if locked down, otherwise assume released at slice expiry
+	    # time.
+	    $endtime = $slice_lockdown ? undef : $slice_expire;
+	} else {
+	    # A non-GENI slice.  Use the computed autoswap duration,
+	    # if autoswap is enabled.
+	    $endtime = $autoswap ? $end : undef;
+	}
+
+	# If next_reserve is set, assume unavailable indefinitely.
+	# FIXME can we obtain more precise predictions by doing a
+	# CreateExisting() for the current experiment then something
+	# else at $endtime?
+	if( defined( $next_reserve ) ) {
+	    $endtime = undef;
+	}
+
+	# Consider nodes in reloading to be available.  One important
+	# reason for doing so is that if a project has a current reservation
+	# and swaps one experiment out and a replacement in, then during
+	# the transition period, sufficient nodes must be considered available
+	# for assignment to that project.
+	if( defined( $pid ) && ( $pid ne "emulab-ops" ||
+				 $eid ne "reloading" ) ) {
 	    # Handle the case where an experiment is swapped in.  The
 	    # nodes aren't free right now, but at some time in the
-	    # future they will become so.
+	    # future they could become so.
 	    my $res = CreateExisting( $class, $pid, $eid, $uid, $end, $type,
 				      $count );
 	    push( @reservations, $res );
@@ -570,14 +578,19 @@ sub LookupAll($$)
     return $cache{$type};
 }
 
-sub IsFeasible($$;$$$)
+sub IsFeasible($$;$$$$$)
 {
-    my ($class, $reservations, $error, $conflicttime, $conflictcount) = @_;
+    my ($class, $reservations, $error, $conflicttime, $conflictcount,
+	$projlist, $forecast) = @_;
 
     my @timeline = ();
     my $free = 0;
-
+    my %used = ();
+    my %reserved = ();
+    my $answer = 1;
+    
     foreach my $reservation ( @$reservations ) {
+	my $pid = $reservation->pid();
 	my $start;
 	my $end;
 
@@ -588,7 +601,15 @@ sub IsFeasible($$;$$$)
 			   't' => $reservation->start(),
 			   'used' => $reservation->nodes(),
 			   'reserved' => 0 };
+	    } else {
+		# A mapped experiment.  Using physical nodes now.
+		if( defined( $used{ $pid } ) ) {
+		    $used{ $pid } += $reservation->nodes();
+		} else {
+		    $used{ $pid } = $reservation->nodes();
+		}
 	    }
+	    
 	    # Will later release real nodes.
 	    $end = { 'pid' => $reservation->pid(),
 		     't' => $reservation->end(),
@@ -596,6 +617,10 @@ sub IsFeasible($$;$$$)
 		     'reserved' => 0 };
 	} elsif( defined( $reservation->pid() ) ) {
 	    # A reservation.  Uses then releases reserved nodes.
+
+	    # Ignore reservations for listed projects.
+	    next if( grep( $_ eq $reservation->pid(), @$projlist ) );
+		      
 	    $start = { 'pid' => $reservation->pid(),
 		       't' => $reservation->start(),
 		       'used' => 0,
@@ -614,15 +639,12 @@ sub IsFeasible($$;$$$)
     }
 
     my @events = sort { $a->{'t'} <=> $b->{'t'} } @timeline;
-    my %used = ();
-    my %reserved = ();
     
     foreach my $event ( @events ) {
 	my $pid = $event->{'pid'};
-	if( !exists( $used{ $pid } ) ) {
-	    $used{ $pid } = 0;
-	    $reserved{ $pid } = 0;
-	}
+
+	$used{ $pid } = 0 if( !exists( $used{ $pid } ) );
+	$reserved{ $pid } = 0 if( !exists( $reserved{ $pid } ) );
 
 	my $oldsum = $used{ $pid } > $reserved{ $pid } ? $used{ $pid } :
 	    $reserved{ $pid };
@@ -635,6 +657,18 @@ sub IsFeasible($$;$$$)
 
 	$free += $oldsum - $newsum;
 
+	if( defined( $forecast ) ) {
+	    my %used_ = %used;
+	    my %reserved_ = %reserved;
+	    my %stamp = (
+		t => $event->{'t'},
+		used => \%used_,
+		reserved => \%reserved_,
+		free => $free
+		);
+	    push( @$forecast, \%stamp );
+	}
+	
 	if( $free < 0 ) {
 	    # Insufficient resources.
 	    if( ref( $error ) ) {
@@ -649,12 +683,63 @@ sub IsFeasible($$;$$$)
 	    if( ref( $conflictcount ) ) {
 		$$conflictcount = -$free;
 	    }
-	    
-	    return 0;
+
+	    if( defined( $forecast ) ) {
+		$answer = 0;
+	    } else {
+		return 0;
+	    }
 	}
     }
     
-    return 1;
+    return $answer;
+}
+
+#
+# Generate a heuristic "count" of free nodes of a given type.  For each
+# "free forever" physical node (i.e., a node never required for future
+# reservations), the count is incremented by one.  Each node currently
+# assigned to an experiment is ignored (doesn't affect the count).  Each
+# node currently free but later required for a reservation increments the
+# count by some fractional value depending how far into the future the
+# reservation is.
+#
+# Reservation->FreeCount( $type, $projlist )
+#
+# $type must be a valid node type.
+# $projlist is an optional reference to a list of PIDs, and reservations
+#     for any projects in the list will be ignored (i.e., the nodes are
+#     assumed free -- useful if a user wants to consider nodes reserved
+#     to their own projects as available).
+sub FreeCount($$) {
+    my ($class, $type, $projlist) = @_;
+
+    my $reservations = LookupAll( $class, $type );
+    my @forecast = ();
+    my $t = time();    
+    
+    IsFeasible( $class, $reservations, undef, undef, undef, $projlist,
+		\@forecast );
+
+    my $free = $forecast[ 0 ]->{'free'};
+    my $answer = $free;
+
+    foreach my $f ( @forecast ) {
+	if( $f->{'free'} < $free ) {
+	    my $deltat = $f->{'t'} - $t;
+
+	    $deltat = 0 if( $deltat < 0 );
+
+	    # Weight the nodes based on how far into the future the
+	    # reservation is.  The 0x10000 is chosen so that a node available
+	    # for the next 24 hours only is worth about half a node available
+	    $answer -= ( ( $free - $f->{'free'} ) * exp( -$deltat / 0x10000 ) );
+	    
+	    $free = $f->{'free'};
+	}
+    }
+
+    return $answer;
 }
 
 sub ExptTypes($) {
