@@ -129,6 +129,7 @@ $(function ()
 	    cancopy:            window.CANCOPY,
 	    clustername:        window.PORTAL_NAME,
 	    admin:		isadmin,
+	    maxduration:        window.MAXDURATION,
 	});
 	$('#main-body').html(html);
 	if (projlist)

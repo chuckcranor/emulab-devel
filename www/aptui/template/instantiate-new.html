@@ -374,13 +374,13 @@
 			       data-delay='{hide:1500, show:500}'
 			       data-html='true'
 			       data-content="Sets the intial amount of time that the 
-			       experiment will run. Limit: 16 hours. If more time is needed, the duration can be extended after the
+			       experiment will run. Limit: <%- maxduration %> hours. If more time is needed, the duration can be extended after the
 			       experiment has been created.">
 			    <input id='experiment_duration'
 				   class='form-control'
 				   data-key='duration'
 				   name='duration'
-				   value='16'>
+				   value='<%- maxduration %>'>
 			    <label style='position: absolute;
 					  top: 6px;
 					  right: 22px;

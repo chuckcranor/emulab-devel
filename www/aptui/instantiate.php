@@ -81,6 +81,9 @@ if ($ISAPT && !$this_user) {
     }
 }
 
+# Need to make non-hardcoded
+$maxduration = 16;
+
 $skipfirststep = 0;
 if (isset($from) && ($from == "manage-profile" || $from == "show-profile")) {
     $skipfirststep = 1;
@@ -317,7 +320,7 @@ function SPITFORM($formfields, $newuser, $errors)
 {
     global $TBBASE, $APTMAIL, $ISAPT, $ISCLOUD, $ISPNET, $PORTAL_NAME;
     global $profile_array, $this_user, $profilename, $profile;
-    global $projlist, $skipfirststep, $TBMAINSITE;
+    global $projlist, $skipfirststep, $maxduration, $TBMAINSITE;
     global $refspec;
     
     $showabout  = ($ISAPT && !$this_user ? 1 : 0);
@@ -391,6 +394,7 @@ function SPITFORM($formfields, $newuser, $errors)
     echo "    window.WEBONLY    = $webonly;\n";
     echo "    window.PORTAL     = '$portal';\n";
     echo "    window.SHOWPICKER = $showpicker;\n";
+    echo "    window.MAXDURATION = $maxduration;\n";
     echo "    window.CANCOPY = $cancopy;\n";
     $isadmin = (isset($this_user) && ISADMIN() ? 1 : 0);
     echo "    window.ISADMIN    = $isadmin;\n";
