@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2016 University of Utah and the Flux Group.
+# Copyright (c) 2000-2017 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -53,6 +53,10 @@ $emulablink = "$TBBASE/showgroup.php3?group=" . $group->gid_idx();
 $canapprove = $group->AccessCheck($this_user, $TB_PROJECT_ADDUSER) ? 1 : 0;
 $candelete  = $group->AccessCheck($this_user, $TB_PROJECT_DELGROUP) ? 1 : 0;
 $canedit    = $group->AccessCheck($this_user, $TB_PROJECT_EDITGROUP) ? 1 : 0;
+# Never allowed to delete project group.
+if ($group->pid() == $group->gid()) {
+    $candelete = 0;
+}
 
 echo "<link rel='stylesheet'
             href='css/tablesorter-blue.css'>\n";

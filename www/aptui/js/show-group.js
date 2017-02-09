@@ -262,7 +262,7 @@ $(function ()
 	    // Warn user if they have not saved changes.
 	    $(window).on('beforeunload.portal', function() {
 		if (! modified)
-		    return null;
+		    return undefined;
 		return "You have unsaved changes!";
 	    });
 	}
