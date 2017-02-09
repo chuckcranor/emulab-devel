@@ -742,6 +742,60 @@ sub FreeCount($$;$) {
     return $answer;
 }
 
+#
+# Generate a time series of counts of nodes of a given type.
+sub Forecast($$;$) {
+    my ($class, $type, $projlist) = @_;
+
+    my $reservations = LookupAll( $class, $type );
+    my @forecast = ();
+    my @answer = ();
+    my $t = time();
+    
+    IsFeasible( $class, $reservations, undef, undef, undef, undef, \@forecast );
+
+    foreach my $f ( @forecast ) {
+	my $unavailable = 0;
+	my $held = 0;
+	my $free = $f->{'free'};
+
+	foreach my $pid ( keys( %{$f->{'used'}} ) ) {
+	    $unavailable += $f->{'used'}->{$pid};
+	}
+	
+	foreach my $pid ( keys( %{$f->{'reserved'}} ) ) {
+	    my $r = $f->{'reserved'}->{$pid};
+	    my $u = $f->{'used'}->{$pid};
+
+	    if( $r > $u ) {
+		if( grep( $_ eq $pid, @$projlist ) ) {
+		    $held += $r - $u;
+		} else {
+		    $unavailable += $r - $u;
+		}
+	    }
+	}
+	
+	my %r = (
+	    t => $f->{'t'},
+	    unavailable => $unavailable,
+	    held => $held,
+	    free => $free
+	    );
+
+	if( $r{'t'} < $t ) {
+	    # event in the past; overwrite initial result in list but do
+	    # not append
+	    $r{'t'} = $t;
+	    $answer[ 0 ] = \%r;
+	} else {
+	    push( @answer, \%r );
+	}
+    }
+    
+    return @answer;
+}
+
 sub ExptTypes($) {
     my ($exptidx) = @_;
     

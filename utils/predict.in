@@ -46,8 +46,11 @@ sub usage()
 {
     print STDERR "Usage: predict [-p] [-u] [-t time] type\n";
     print STDERR "       predict -c type [pid...]\n";
+    print STDERR "       predict -l type [pid...]\n";
     print STDERR "   -h   This message\n";
     print STDERR "   -c   Give an oversimplified free node count\n";
+    print STDERR "   -l   Give a list of node allocation status counts " .
+	"over time\n";
     print STDERR "   -p   Identify by pid only, not pid/eid\n";
     print STDERR "   -t   Give time/date for prediction (defaults to now)\n";
     print STDERR "   -u   Interpret/display all times in UTC\n";
@@ -55,11 +58,12 @@ sub usage()
     exit( -1 );
 }
 
-my $optlist    = "cdhpt:";
+my $optlist    = "cdhlpt:";
 my $debug      = 0;
 my $time       = time; # default to now
 my $pidonly    = 0;
 my $countonly  = 0;
+my $timeseries = 0;
 my $type;
 
 sub fatal($)
@@ -116,7 +120,10 @@ if (defined($options{"t"})) {
 if (defined($options{"c"})) {
     $countonly = 1;
 }
-usage() if( $countonly ? @ARGV < 1 : @ARGV != 1 );
+if (defined($options{"l"})) {
+    $timeseries = 1;
+}
+usage() if( ( $countonly || $timeseries ) ? @ARGV < 1 : @ARGV != 1 );
 $type = shift( @ARGV );
 unless( $type =~ /^[-\w]+$/ ) {
     fatal( "Invalid node type." );
@@ -124,6 +131,19 @@ unless( $type =~ /^[-\w]+$/ ) {
 
 if( $countonly ) {
     print( int( Reservation->FreeCount( $type, \@ARGV ) + 0.5 ) . "\n" );
+    
+    exit( 0 );
+}
+
+if( $timeseries ) {
+    print "Time       Unavailable  Held  Free\n";
+    print "----------       -----  ----  ----\n";
+    
+    foreach my $rec ( Reservation->Forecast( $type, \@ARGV ) ) {
+	printf( "%s %5d %5d %5d\n",
+		strftime( "%Y-%m-%d %H:%M", localtime( $rec->{'t'} ) ),
+		$rec->{'unavailable'}, $rec->{'held'}, $rec->{'free'} );
+    }
     
     exit( 0 );
 }
