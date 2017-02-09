@@ -711,7 +711,7 @@ sub IsFeasible($$;$$$$$)
 #     for any projects in the list will be ignored (i.e., the nodes are
 #     assumed free -- useful if a user wants to consider nodes reserved
 #     to their own projects as available).
-sub FreeCount($$) {
+sub FreeCount($$;$) {
     my ($class, $type, $projlist) = @_;
 
     my $reservations = LookupAll( $class, $type );
