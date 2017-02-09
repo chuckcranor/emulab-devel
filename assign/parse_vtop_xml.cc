@@ -83,7 +83,7 @@ bool populate_vclasses (DOMElement* root, tb_vgraph &vg);
 
 int bind_vtop_subnodes (tb_vgraph &vg);
 
-int parse_vtop_xml(tb_vgraph &vg, char* filename) {
+int parse_vtop_xml(tb_vgraph &vg, char const * filename) {
     
     /*
      * Initialize the XML parser

@@ -105,7 +105,7 @@ DOMElement* appendChildTagWithData (DOMElement* parent,
 string generate_virtualNodeId (string virtual_id);
 string generate_virtualIfaceId(string node_name, int interface_number);
 
-int parse_request(tb_vgraph &vg, char *filename) {
+int parse_request(tb_vgraph &vg, char const * filename) {
   /* 
    * Fire up the XML domParser
    */

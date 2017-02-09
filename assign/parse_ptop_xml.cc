@@ -74,7 +74,7 @@ int parse_fds_xml (const DOMElement* tag, node_fd_set *fd_set);
 
 map<string, DOMElement*>* ptop_elements = new map<string, DOMElement*>();
 
-int parse_ptop_xml(tb_pgraph &pg, tb_sgraph &sg, char *filename) {
+int parse_ptop_xml(tb_pgraph &pg, tb_sgraph &sg, char const * filename) {
     /* 
      * Fire up the XML parser
      */

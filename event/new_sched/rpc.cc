@@ -182,7 +182,7 @@ RPC_disconnect(xmlrpc_c::clientXmlTransport **transport)
 }
 
 int
-RPC_invoke(char *method,
+RPC_invoke(char const *method,
 	   emulab::EmulabResponse *er_out,
 	   emulab::spa_attr_t tag,
 	   ...)
@@ -237,7 +237,7 @@ RPC_invoke(char *method,
 }
 
 int
-RPC_invoke(char *pid, char *eid, char *method, emulab::EmulabResponse *er)
+RPC_invoke(char *pid, char *eid, char const *method, emulab::EmulabResponse *er)
 {
 	int retval = 0;
 	xmlrpc_c::clientXmlTransport *transport;

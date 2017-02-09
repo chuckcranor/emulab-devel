@@ -30,7 +30,7 @@
 extern "C" {
 #endif
 
-int	loginit(int usesyslog, char *name);
+int	loginit(int usesyslog, char const *name);
 void	logsyslog(void);
 void	logflush(void);
 void	info(const char *fmt, ...);

@@ -49,6 +49,9 @@
 static int	bicache_init(void);
 #ifdef	EVENTSYS
 static int	bicache_needevent(struct in_addr ipaddr);
+#ifdef __clang__
+__attribute__((unused)) /* Suppress warning */
+#endif
 static void	bicache_clearevent(struct in_addr ipaddr);
 #endif
 
@@ -305,6 +308,9 @@ bicache_needevent(struct in_addr ipaddr)
  * Clear a timestamp in the cache.
  * We call this if an event send fails.
  */
+#ifdef __clang__
+__attribute__((unused)) /* Suppress warning */
+#endif
 static void
 bicache_clearevent(struct in_addr ipaddr)
 {

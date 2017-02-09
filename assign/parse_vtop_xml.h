@@ -47,7 +47,7 @@
 #include <xercesc/sax2/XMLReaderFactory.hpp>
 XERCES_CPP_NAMESPACE_USE
 
-int parse_vtop_xml(tb_vgraph &VG, char* filename);
+int parse_vtop_xml(tb_vgraph &VG, char const * filename);
 
 #endif // for __PARSE_VTOP_XML_H
 

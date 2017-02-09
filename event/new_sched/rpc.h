@@ -34,7 +34,7 @@
 #include <iostream>
 #include "emulab_proxy.h"
 
-int RPC_invoke(char *method,
+int RPC_invoke(char const *method,
 	       emulab::EmulabResponse *er_out,
 	       emulab::spa_attr_t tag,
 	       ...);

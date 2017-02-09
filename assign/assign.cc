@@ -215,7 +215,7 @@ string annotated_filename (const char* filepath)
 }
 
 // Read in the .ptop file
-void read_physical_topology(char *filename) {
+void read_physical_topology(char const * filename) {
   ifstream ptopfile;
   ptopfile.open(filename);
   if (!ptopfile.is_open()) {
@@ -336,7 +336,7 @@ void calculate_switch_MST() {
 }
 
 // Read in the .top file
-void read_virtual_topology(char *filename) {
+void read_virtual_topology(char const * filename) {
   ifstream topfile;
   topfile.open(filename);
   if (!topfile.is_open()) {
@@ -517,7 +517,7 @@ int type_precheck(int round) {
      * the precheck is looking for available pnodes, the second is looking for
      * sutiable nodes (ie. at least one vnode could map to it)
      */
-    char *round_str;
+    char const * round_str;
     if (round == 1) {
         round_str = "available";
     } else {
@@ -893,17 +893,17 @@ int main(int argc,char **argv) {
   timelimit = 0.0;
   timetarget = 0.0;
 
-  char* ptopFilename = "";
-  char* vtopFilename = "";
+  char const * ptopFilename = "";
+  char const * vtopFilename = "";
   char* vtopOutputFilename = 0;
 
 #ifdef WITH_XML
 	char* ptopFileFormat;
 	char* vtopFileFormat;
-	char* delims = "/";
-	char* flags = "s:v:l:t:rpPTdH:oguc:nx:y:W:FDf:RS:";
+	char const * delims = "/";
+	char const * flags = "s:v:l:t:rpPTdH:oguc:nx:y:W:FDf:RS:";
 #else
-	char* flags = "s:v:l:t:rpPTdH:oguc:nx:y:FDRS:";
+	char const * flags = "s:v:l:t:rpPTdH:oguc:nx:y:FDRS:";
 #endif
 
   while ((ch = getopt(argc,argv,flags)) != -1) {

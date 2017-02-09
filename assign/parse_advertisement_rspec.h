@@ -43,7 +43,7 @@
 #include <xercesc/sax/HandlerBase.hpp>
 XERCES_CPP_NAMESPACE_USE
 
-int parse_advertisement(tb_pgraph &PG, tb_sgraph &SG, char *filename);
+int parse_advertisement(tb_pgraph &PG, tb_sgraph &SG, char const * filename);
 
 #endif // for __PARSE_ADVERTISEMENT_RSPEC_H
 

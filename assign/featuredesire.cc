@@ -124,7 +124,7 @@ tb_featuredesire::tb_featuredesire(fstring _my_name,
 	    break;
 	case featuredesire::FD_TYPE_GLOBAL_MORE_THAN_ONE:
 	    global = true;
-	    g_more_than_one;
+	    g_more_than_one = true;
     }
 	
 	

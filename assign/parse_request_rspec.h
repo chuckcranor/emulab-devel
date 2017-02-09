@@ -42,7 +42,7 @@
 #include <xercesc/parsers/XercesDOMParser.hpp>
 #include <xercesc/sax/HandlerBase.hpp>
 
-int parse_request(tb_vgraph &VG, char *filename);
+int parse_request(tb_vgraph &VG, char const * filename);
 
 #endif // for __PARSE_REQUEST_RSPEC_H
 

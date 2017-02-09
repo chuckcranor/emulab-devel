@@ -121,7 +121,7 @@ int simulator_agent_invariant(simulator_agent_t sa);
  */
 int add_report_data(simulator_agent_t sa,
 		    sa_report_data_kind_t rdk,
-		    char *data,
+		    char const *data,
 		    unsigned long flags);
 
 /**

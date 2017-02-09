@@ -102,7 +102,7 @@ static bool populate_links(DOMElement *root, tb_pgraph &pg, tb_sgraph &sg,
 static bool populate_type_limits(DOMElement *root,tb_pgraph &pg,tb_sgraph &sg);
 static bool populate_policies (DOMElement*root, tb_pgraph &pg, tb_sgraph &sg);
 
-int parse_advertisement(tb_pgraph &pg, tb_sgraph &sg, char *filename) {
+int parse_advertisement(tb_pgraph &pg, tb_sgraph &sg, char const * filename) {
   /* 
    * Fire up the XML parser
    */
