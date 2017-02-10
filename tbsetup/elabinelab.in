@@ -697,25 +697,6 @@ sub DumpDBGoo()
 	"    Could not get elabinelab attributes\n")
 	if (!defined($attributes));
 
-    if (exists($attributes->{'CONFIG_OPSVM'}) && $attributes->{'CONFIG_OPSVM'}){
-	#
-	# Need to assign an IP to the ops node for the jail.
-	#
-	my $pnode = Node->Lookup($bossnode);
-	die("*** $0:\n".
-	    "    Could not lookup $bossnode\n")
-	    if (!defined($pnode));
-	my ($ip,$ipmask) = $pnode->GetJailIP();
-	die("*** $0:\n".
-	    "    Could not generate an IP for OPS jail\n")
-	    if (!defined($ip));
-	
-	print "Setting the IP for OPS jail to $ip\n";
-	$experiment->SetElabInElabAttr("boss", "OPSIP", $ip);
-	$experiment->SetElabInElabAttr("ops",  "OPSIP", $ip);
-	$experiment->SetElabInElabAttr("fs",   "OPSIP", $ip);
-    }
-
     #
     # These tables are dumped completely.
     #
