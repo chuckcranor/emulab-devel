@@ -24,7 +24,7 @@ my %STDIMAGES     = (
     "UBUNTU14-64-STD"  => "https://www.emulab.net/image_metadata.php?uuid=0a29c738-32b3-11e4-b30a-001143e453fe",
     "CENTOS7-64-STD"   => "https://www.emulab.net/image_metadata.php?uuid=6fa68fd6-9163-11e6-ac8c-90e2ba22fee4",
     "FBSD102-64-STD"   => "https://www.emulab.net/image_metadata.php?uuid=57e6bf53-4376-11e5-bf03-38eaa71273fa",
-    "XEN44-64-STD"     => "https://www.emulab.net/image_metadata.php?uuid=6f5e573e-83f3-11e5-bf03-38eaa71273fa",
+    "XEN46-64-STD"     => "https://www.emulab.net/image_metadata.php?uuid=61799d52-4dff-11e6-ac8a-90e2ba22fee4",
 );
 
 my %NEWIMAGES     = (

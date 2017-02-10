@@ -11,7 +11,7 @@ use EmulabConstants;
 
 my $DESCRIPTORS   = "$TOP_SRCDIR/install/descriptors-xen.xml";
 # See the images phase file if you change this.
-my $XENIMAGE      = "XEN44-64-STD";
+my $XENIMAGE      = "XEN46-64-STD";
 
 sub Install($$$)
 {
@@ -27,6 +27,11 @@ sub Install($$$)
     my @images = ("UBUNTU14-64-STD", "CENTOS71-64-STD", "FBSD102-64-STD");
 
     Phase "xen", "Adding XEN Support", sub {
+	Phase "sitevar", "Setting default_xen_parentosid sitevar", sub {
+	    ExecQuietFatal("$PREFIX/sbin/setsitevar ".
+		   "general/default_xen_parentosid emulab-ops,$XENIMAGE");
+	};
+	
 	#
 	# Load up the initial descriptors. 
 	# Load up the images from boss.
