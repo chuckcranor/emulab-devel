@@ -1,7 +1,7 @@
 #!/usr/bin/perl -wT
 
 #
-# Copyright (c) 2000-2015 University of Utah and the Flux Group.
+# Copyright (c) 2000-2017 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -1109,10 +1109,16 @@ elsif ($inout eq "modify") {
     # Yep, we allow reswap without changing the NS file. For Shashi and SIM.
     # Note that tbprerun kills the renderer if its running.
     #
+    # Note also that whenever a new NS file is presented, we need to do some
+    # checks on the firewall to make sure the user is not trying to do
+    # something "unsafe". 
+    #
     if (defined($modnsfile)) {
-	if ($experiment->PreRun($modnsfile) != 0) {
-	    print STDOUT "Modify Error: tbprerun failed.\n";
-	  FWHOSED:
+	my $fwfail = 0;
+	if ($experiment->PreRun($modnsfile) != 0 ||
+	    ($fwfail = CheckFWinfo($estate)) != 0) {
+	    print STDOUT "Modify Error: tbprerun failed.\n"
+		if (!$fwfail);
 	    print STDOUT "Recovering experiment state...\n";
 
 	    if ($experiment->RemoveVirtualState() ||
@@ -1134,15 +1140,6 @@ elsif ($inout eq "modify") {
 		   error => ['update_aborted', 'virtual_state_restored']},
 		  $modifyError);
 	    # Never returns;
-	}
-	#
-	# Okay, whenever a new NS file is presented, we need to do some
-	# checks on the firewall to make sure the user is not trying to
-	# do something "unsafe". 
-	#
-	if (CheckFWinfo($estate) != 0) {
-	    # All the stuff for recovering is right above, so go there. 
-	    goto FWHOSED;
 	}
     }
     elsif ($genimode) {
@@ -1731,8 +1728,9 @@ sub CheckFWinfo($)
 	goto noway;
     }
 
-    # Not allowed to change the type of the firewall at all yet.
-    if ($fwtype ne $new_fwtype) {
+    # Admins can change the type of the firewall while swapped out.
+    if ($fwtype ne $new_fwtype &&
+	($curstate eq EXPTSTATE_ACTIVE() || !$isadmin))) {
 	$msg = "Not allowed to change the type of the firewall!";
 	goto noway;
     }
@@ -1745,7 +1743,7 @@ sub CheckFWinfo($)
     }
 
     # Okay, while experiment is swapped, can only go from less firewalled
-    # to more firewalled.
+    # to more firewalled unless the user is an admin.
     if ($curstate eq EXPTSTATE_SWAPPED() && $fwstyle ne $new_fwstyle) {
 	if (!exists($fwstyle_mapping{$new_fwstyle})) {
 	    $msg = "Unknown firewall style (level): '$new_fwstyle'!";
@@ -1755,7 +1753,8 @@ sub CheckFWinfo($)
 	    $msg = "Unknown firewall style (level): '$fwstyle'!";
 	    goto noway;
 	}
-	if ($fwstyle_mapping{$new_fwstyle} < $fwstyle_mapping{$fwstyle}) {
+	if ($fwstyle_mapping{$new_fwstyle} < $fwstyle_mapping{$fwstyle} &&
+	    !$isadmin) {
 	    tbreport(SEV_ERROR, 'modify_firewall_not_allowed', 'reduce_level', undef);
 	    $msg = "Not allowed to reduce the firewall level!";
 	    goto noway;
