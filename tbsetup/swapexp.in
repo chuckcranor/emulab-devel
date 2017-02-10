@@ -1730,7 +1730,7 @@ sub CheckFWinfo($)
 
     # Admins can change the type of the firewall while swapped out.
     if ($fwtype ne $new_fwtype &&
-	($curstate eq EXPTSTATE_ACTIVE() || !$isadmin))) {
+	($curstate eq EXPTSTATE_ACTIVE() || !$isadmin)) {
 	$msg = "Not allowed to change the type of the firewall!";
 	goto noway;
     }
