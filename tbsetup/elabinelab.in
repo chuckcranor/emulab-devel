@@ -23,6 +23,7 @@
 #
 # TODO: ntpinfo table.
 #       Current source directory? From where?
+#       need to remove management (IPMI) interfaces from interfaces/wires.
 #
 use English;
 use Getopt::Std;
