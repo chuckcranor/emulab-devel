@@ -1021,6 +1021,36 @@ sub wait_for_adbd($$) {
     return 1;
 }
 
+# Helper that grabs the IMSI from the phone
+sub _get_imsi($) {
+    my ($node_id) = @_;
+
+    # Find serial number to target
+    my $serial = $NMAP{$node_id};
+    if (! $serial) {
+	warn "No serial number for $node_id!\n";
+	return 0;
+    }
+
+    my $imsi_qres = `$ADB -s $serial shell service call iphonesubinfo 3`;
+    if ($?) {
+	# warn "Failed to obtain IMSI data on $node_id\n";
+	return undef;
+    }
+
+    # Extract out the decoded ASCII from the "parcel" response.
+    my @lines = split(/\n/, $imsi_qres);
+    shift @lines;
+    my $imsi = join "", map { s/^.+'([\d\.]+)\s*'.*$/$1/; s/\.//g; $_ } @lines;
+
+    if ($imsi !~ /^\d{15}$/) {
+	# warn "Extracted IMSI for $node_id is malformed: '$imsi'\n";
+	return undef;
+    }
+
+    return $imsi;
+}
+
 # Helper that waits (bounded by a timeout) for the device to become available.
 # It does this by checking for a content query to succeed.
 sub wait_for_boot($$) {
@@ -1033,11 +1063,7 @@ sub wait_for_boot($$) {
     }
 
     my $stime = time();
-    while (1) {
-	my $state = `$ADB -s $serial shell content query --uri content://telephony/carriers --where "name=\\'phantomnet\\'"`;
-	if ($state =~ /name=phantomnet/ || $state =~ /No result found/) {
-	    last;
-	} 
+    while (!_get_imsi($node_id)) {
 	if (time() - $stime > $ANDROID_BOOT_TMO) {
 	    warn "Timed out waiting for $node_id to boot!\n";
 	    return 0;
@@ -1071,36 +1097,6 @@ sub root_adbd($$) {
     warn "adbd restarted as root on $node_id\n";
 
     return $self->wait_for_adbd($node_id);
-}
-
-# Helper that grabs the IMSI from the phone
-sub _get_imsi($) {
-    my ($node_id) = @_;
-
-    # Find serial number to target
-    my $serial = $NMAP{$node_id};
-    if (! $serial) {
-	warn "No serial number for $node_id!\n";
-	return 0;
-    }
-
-    my $imsi_qres = `$ADB -s $serial shell service call iphonesubinfo 3`;
-    if ($?) {
-	warn "Failed to obtain IMSI data on $node_id\n";
-	return undef;
-    }
-
-    # Extract out the decoded ASCII from the "parcel" response.
-    my @lines = split(/\n/, $imsi_qres);
-    shift @lines;
-    my $imsi = join "", map { s/^.+'([\d\.]+)\s*'.*$/$1/; s/\.//g; $_ } @lines;
-
-    if ($imsi !~ /^\d{15}$/) {
-	warn "Extracted IMSI for $node_id is malformed: '$imsi'\n";
-	return undef;
-    }
-
-    return $imsi;
 }
 
 # Helper to add PhantomNet APN profile and set it as default.
