@@ -907,7 +907,9 @@ function Do_Submit()
             $args["auth_token"] = $_SESSION["auth_token"];
         }
     }
-    $args["duration"]  = $formfields["duration"];
+    if ($this_user) {
+        $args["duration"]  = $formfields["duration"];
+    }
 
     if (0) {
         TBERROR(print_r($args, true), 0);

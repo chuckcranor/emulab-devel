@@ -253,7 +253,7 @@ fatal($@)
 #
 # Make sure all the required arguments were provided.
 #
-foreach my $key ("username", "email", "profile", "portal", "duration") {
+foreach my $key ("username", "email", "profile", "portal") {
     fatal("Missing required attribute '$key'")
 	if (! (exists($xmlparse->{'attribute'}->{"$key"}) &&
 	       defined($xmlparse->{'attribute'}->{"$key"}) &&
@@ -271,13 +271,20 @@ my ($value, $user_urn, $user_uid, $user_hrn, $user_email, $project, $pid,
 $portal = $xmlparse->{'attribute'}->{"portal"}->{'value'};
 
 # User specified duration.
-$duration = $xmlparse->{'attribute'}->{"duration"}->{'value'};
-if ($duration !~ /^\d+$/) {
-    fatal("Duration is not an integer");
+if (exists($xmlparse->{'attribute'}->{"duration"}) &&
+    defined($xmlparse->{'attribute'}->{"duration"}) &&
+    $xmlparse->{'attribute'}->{"duration"}->{'value'} ne "") {
+    $duration = $xmlparse->{'attribute'}->{"duration"}->{'value'};
+    if ($duration !~ /^\d+$/) {
+	fatal("Duration is not an integer");
+    }
+    if ($duration < 1 || $duration > $maxduration) {
+	UserError("Duration must be at least 1 hour but ".
+		  "not more then $maxduration hour(s)");
+    }
 }
-if ($duration < 1 || $duration > $maxduration) {
-    UserError("Duration must be at least 1 hour but ".
-	      "not more then $maxduration hour(s)");
+else {
+    $duration = $maxduration; 
 }
 
 #
