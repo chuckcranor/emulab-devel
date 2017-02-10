@@ -28,6 +28,9 @@
 set myboss [$ns node]
 set myops  [$ns node]
 
+set srvtype  pcvm
+set nodetype pcslow
+
 tb-set-node-inner-elab-role $myboss boss+router
 tb-set-node-inner-elab-role $myops  ops+fs
 tb-set-colocate-factor 2
@@ -40,14 +43,14 @@ if {[info exists ::TBCOMPAT::elabinelab_hardware("boss")]} {
         tb-set-hardware $myboss $elabinelab_hardware("boss")
     }
 } else {
-    tb-set-hardware $myboss d710-vm
+    tb-set-hardware $myboss $srvtype
 }
 if {[info exists ::TBCOMPAT::elabinelab_hardware("ops")]} {
     namespace eval TBCOMPAT {
         tb-set-hardware $myops $elabinelab_hardware("ops")
     }
 } else {
-    tb-set-hardware $myops d710-vm
+    tb-set-hardware $myops $srvtype
 }
 
 if {[info exists ::TBCOMPAT::elabinelab_fixnodes("boss")]} {
@@ -93,8 +96,6 @@ if {$myops_tarfiles != ""} {
     tb-set-node-tarfiles $myops $myops_tarfiles
 }
 
-#tb-make-soft-vtype pcslow {pc3000}
-
 #
 # This is passed in by the parser, when wrapping an existing experiment.
 # The parser wrapper gets info about the wrapped experiment and passes it
@@ -131,7 +132,7 @@ for {set i 1} {$i <= $maxpcs} {incr i} {
 		tb-set-hardware [set $name] $elabinelab_hardware($name)
 	    }
 	} else {
-	    tb-set-hardware [set $name] pcslow
+	    tb-set-hardware [set $name] $nodetype
 	}
 }
 

@@ -1,5 +1,5 @@
 #
-# Copyright (c) 2004-2016 , 2017University of Utah and the Flux Group.
+# Copyright (c) 2004-2017 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -28,6 +28,10 @@
 set myboss [$ns node]
 set myops  [$ns node]
 
+set srvtype  pc
+set nodetype pcslow
+set srvos    FBSD102-64-STD
+
 tb-set-node-inner-elab-role $myboss boss+router
 tb-set-node-inner-elab-role $myops  ops+fs
 
@@ -35,25 +39,41 @@ if {[info exists ::TBCOMPAT::elabinelab_hardware("boss")]} {
     namespace eval TBCOMPAT {
         tb-set-hardware $myboss $elabinelab_hardware("boss")
     }
+} elseif {[info exists ::TBCOMPAT::elabinelab_hardware(boss)]} {
+    namespace eval TBCOMPAT {
+        tb-set-hardware $myboss $elabinelab_hardware(boss)
+    }
 } else {
-    tb-set-hardware $myboss d710
+    tb-set-hardware $myboss $srvtype
 }
 if {[info exists ::TBCOMPAT::elabinelab_hardware("ops")]} {
     namespace eval TBCOMPAT {
         tb-set-hardware $myops $elabinelab_hardware("ops")
     }
+} elseif {[info exists ::TBCOMPAT::elabinelab_hardware(ops)]} {
+    namespace eval TBCOMPAT {
+        tb-set-hardware $myops $elabinelab_hardware(ops)
+    }
 } else {
-    tb-set-hardware $myops d710
+    tb-set-hardware $myops $srvtype
 }
 
 if {[info exists ::TBCOMPAT::elabinelab_fixnodes("boss")]} {
     namespace eval TBCOMPAT {
         tb-fix-node $myboss $elabinelab_fixnodes("boss")
     }
+} elseif {[info exists ::TBCOMPAT::elabinelab_fixnodes(boss)]} {
+    namespace eval TBCOMPAT {
+        tb-fix-node $myboss $elabinelab_fixnodes(boss)
+    }
 }
 if {[info exists ::TBCOMPAT::elabinelab_fixnodes("ops")]} {
     namespace eval TBCOMPAT {
         tb-fix-node $myops $elabinelab_fixnodes("ops")
+    }
+} elseif {[info exists ::TBCOMPAT::elabinelab_fixnodes(ops)]} {
+    namespace eval TBCOMPAT {
+        tb-fix-node $myops $elabinelab_fixnodes(ops)
     }
 }
 
@@ -73,6 +93,13 @@ if {[info exists ::TBCOMPAT::elabinelab_tarfiles("boss")]} {
     namespace eval TBCOMPAT {
 	append myboss_tarfiles $elabinelab_tarfiles("boss")
     }
+} elseif {[info exists ::TBCOMPAT::elabinelab_tarfiles(boss)]} {
+    if {$myboss_tarfiles != ""} {
+	append myboss_tarfiles " "
+    }
+    namespace eval TBCOMPAT {
+	append myboss_tarfiles $elabinelab_tarfiles(boss)
+    }
 }
 if {[info exists ::TBCOMPAT::elabinelab_tarfiles("ops")]} {
     if {$myops_tarfiles != ""} {
@@ -81,6 +108,13 @@ if {[info exists ::TBCOMPAT::elabinelab_tarfiles("ops")]} {
     namespace eval TBCOMPAT {
 	append myops_tarfiles $elabinelab_tarfiles("ops")
     }
+} elseif {[info exists ::TBCOMPAT::elabinelab_tarfiles(ops)]} {
+    if {$myops_tarfiles != ""} {
+	append myops_tarfiles " "
+    }
+    namespace eval TBCOMPAT {
+	append myops_tarfiles $elabinelab_tarfiles(ops)
+    }
 }
 if {$myboss_tarfiles != ""} {
     tb-set-node-tarfiles $myboss $myboss_tarfiles
@@ -88,8 +122,6 @@ if {$myboss_tarfiles != ""} {
 if {$myops_tarfiles != ""} {
     tb-set-node-tarfiles $myops $myops_tarfiles
 }
-
-tb-make-soft-vtype pcslow {pc3000}
 
 #
 # This is passed in by the parser, when wrapping an existing experiment.
@@ -124,7 +156,7 @@ for {set i 1} {$i <= $maxpcs} {incr i} {
 		tb-set-hardware [set $name] $elabinelab_hardware($name)
 	    }
 	} else {
-	    tb-set-hardware [set $name] pcslow
+	    tb-set-hardware [set $name] $nodetype
 	}
 }
 
@@ -148,24 +180,32 @@ if {[info exists ::TBCOMPAT::elabinelab_nodeos("boss")]} {
     namespace eval TBCOMPAT {
         tb-set-node-os $myboss $elabinelab_nodeos("boss")
     }
+} elseif {[info exists ::TBCOMPAT::elabinelab_nodeos(boss)]} {
+    namespace eval TBCOMPAT {
+        tb-set-node-os $myboss $elabinelab_nodeos(boss)
+    }
 } elseif {[info exists ::TBCOMPAT::sitevariables(elabinelab/boss_osid)]} {
     namespace eval TBCOMPAT {
 	tb-set-node-os $myboss $sitevariables(elabinelab/boss_osid)
     }
 } else {
-    tb-set-node-os $myboss FBSD102-64-STD
+    tb-set-node-os $myboss $srvos
 }
 
 if {[info exists ::TBCOMPAT::elabinelab_nodeos("ops")]} {
     namespace eval TBCOMPAT {
         tb-set-node-os $myops $elabinelab_nodeos("ops")
     }
+} elseif {[info exists ::TBCOMPAT::elabinelab_nodeos(ops)]} {
+    namespace eval TBCOMPAT {
+        tb-set-node-os $myops $elabinelab_nodeos(ops)
+    }
 } elseif {[info exists ::TBCOMPAT::sitevariables(elabinelab/ops_osid)]} {
     namespace eval TBCOMPAT {
 	tb-set-node-os $myops $sitevariables(elabinelab/ops_osid)
     }
 } else {
-    tb-set-node-os $myops FBSD102-64-STD
+    tb-set-node-os $myops $srvos
 }
 
 #
