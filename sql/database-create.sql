@@ -364,6 +364,30 @@ CREATE TABLE `apt_profile_favorites` (
 ) ENGINE=MyISAM DEFAULT CHARSET=latin1;
 
 --
+-- Table structure for table `apt_profile_images`
+--
+
+DROP TABLE IF EXISTS `apt_profile_images`;
+CREATE TABLE `apt_profile_images` (
+  `name` varchar(64) NOT NULL default '',
+  `profileid` int(10) unsigned NOT NULL default '0',  
+  `version` int(8) unsigned NOT NULL default '0',
+  `pid` varchar(48) NOT NULL default '',
+  `pid_idx` mediumint(8) unsigned NOT NULL default '0',
+  `gid` varchar(32) NOT NULL default '',
+  `gid_idx` mediumint(8) unsigned NOT NULL default '0',
+  `client_id` varchar(32) NOT NULL default '',
+  `authority` varchar(64) default NULL,
+  `ospid` varchar(64) default NULL,
+  `os` varchar(128) default NULL,
+  `osvers` int(8) default NULL,
+  `local_pid` varchar(48) default NULL,
+  `image` varchar(256) NOT NULL default '',
+  PRIMARY KEY (`profileid`,`version`,`client_id`),
+  KEY `image` (`image`)
+) ENGINE=MyISAM DEFAULT CHARSET=latin1;
+
+--
 -- Table structure for table `apt_profile_versions`
 --
 
