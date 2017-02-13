@@ -724,21 +724,6 @@ if ($isglobal && ($filename =~ /^$TB/)) {
 }
 
 #
-# For the source signature file, we actually have to copy it to
-# somewhere where we can read it as well as just fixup the path.
-#
-if ($srcsigfile && ($srcsigfile =~ /^$TB/)) {
-    my $osrcsigfile = $srcsigfile;
-    $srcsigfile = $hackprefix . basename($srcsigfile);
-    if (system("cp -fp $osrcsigfile $srcsigfile")) {
-	fatal("Could not copy source signature file ".
-	      "$osrcsigfile to $srcsigfile");
-    }
-    # XXX remember so we can cleanup later
-    $hacksigfile = $srcsigfile;
-}
-
-#
 # Make sure real path is someplace that makes sense; remember that the
 # image is created on the nodes, and it NFS mounts directories on ops.
 # Writing the image to anyplace else is just going to break things.
@@ -840,6 +825,22 @@ close(FILE) or
 #
 chmod(0664, $filename) or
     fatal("Could not make $filename group writable: $!");
+
+#
+# For the source signature file of global images, we actually have to copy
+# it to somewhere where frisbee can access it (in case NFS is being used).
+# Note that we wait to do this until after we are sure the imagedir exists.
+#
+if ($srcsigfile && ($srcsigfile =~ /^$TB/)) {
+    my $osrcsigfile = $srcsigfile;
+    $srcsigfile = $hackprefix . basename($srcsigfile);
+    if (system("cp -fp $osrcsigfile $srcsigfile")) {
+	fatal("Could not copy source signature file ".
+	      "$osrcsigfile to $srcsigfile");
+    }
+    # XXX remember so we can cleanup later
+    $hacksigfile = $srcsigfile;
+}
 
 if (! ($isvirtnode || $isec2node || $isdataset)) {
     #
