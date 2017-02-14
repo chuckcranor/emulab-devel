@@ -46,10 +46,10 @@ use WebTask;
 sub usage()
 {
     print STDERR "Usage: reserve [-C] [-f] [-n] -t type [-s start] [-e end]\n" .
-	"            [-u] [-U uid] [-N file] [-A file] pid count\n";
+	"            [-u] [-U uid] [-N file] [-A file] [-a] pid count\n";
     print STDERR "       reserve -c idx\n";
     print STDERR "       reserve [-f] [-n] [-s start] [-e end] [-u]\n" .
-	"            [-U uid] [-N file] [-A file] [-S size] -m idx \n";
+	"            [-U uid] [-N file] [-A file] [-S size] [-a] -m idx \n";
     print STDERR "       reserve [-u] -i pid\n";
     print STDERR "       reserve [-u] -l\n";
     print STDERR "   -h   This message\n";
@@ -65,12 +65,13 @@ sub usage()
     print STDERR "   -l   List all existing reservations\n";
     print STDERR "   -s   Start time when reservation begins\n";
     print STDERR "   -e   End time when reservation expires\n";
+    print STDERR "   -a   Approve reservation (auto for small, otherwise admin-only)\n";
     print STDERR "   -m   Modify existing reservation\n";
     print STDERR "   -S   Specify new size of modified reservation\n";
     exit( -1 );
 }
 
-my $optlist    = "c:de:fhilm:ns:t:uA:CN:S:U:T:";
+my $optlist    = "ac:de:fhilm:ns:t:uA:CN:S:U:T:";
 my $debug      = 0;
 my $info       = 0;
 my $list       = 0;
@@ -83,6 +84,7 @@ my $starttime  = time; # default to starting immediately
 my $endtime    = time + 24 * 60 * 60; # default to ending tomorrow
 my $notes      = undef;
 my $adminnotes = undef;
+my $approve    = 0;
 my $type;
 my $pid;
 my $count;
@@ -220,6 +222,9 @@ if (defined($options{S})) {
 	fatal( "Invalid reservation size." );
     }
 }
+if (defined($options{'a'})) {
+    $approve = 1;
+}
 if ($info) {
     usage() if( @ARGV != 1 );
     
@@ -273,18 +278,18 @@ else {
 # List all pending reservations.
 #
 if ($list) {
-    my $query = $type ? "SELECT idx, pid, nodes, type, " .
+    my $query = $type ? "SELECT idx, pid, nodes, type, approved, " .
 	"UNIX_TIMESTAMP( start ) AS s, UNIX_TIMESTAMP( end ) AS e FROM " .
 	"future_reservations WHERE type='$type' ORDER BY s" :
-	"SELECT idx, pid, nodes, type, UNIX_TIMESTAMP( start ) AS s, " .
+	"SELECT idx, pid, nodes, type, approved, UNIX_TIMESTAMP( start ) AS s, " .
 	"UNIX_TIMESTAMP( end ) AS e FROM future_reservations " .
 	"ORDER BY s";
 
     my $query_result = DBQueryFatal( $query );
 
     if( $query_result->numrows ) {
-	print "Index Start            End              Project             Nodes Type\n";
-	print "----- -----            ---              -------             ----- ----\n";
+	print "A Index Start            End              Project             Nodes Type\n";
+	print "- ----- -----            ---              -------             ----- ----\n";
     }
 
     while( my $row = $query_result->fetchrow_hashref() ) {
@@ -294,8 +299,9 @@ if ($list) {
 	my $type = $row->{'type'};
 	my $start = convert( $row->{'s'} );
 	my $end = convert( $row->{'e'} );
+	my $approved = defined( $row->{'approved'} ) ? "Y" : " ";
 
-	printf( "%5d %16s %16s %-19s %5d %s\n", $idx, $start, $end, $pid, $nodes, $type );
+	printf( "%1s %5d %16s %16s %-19s %5d %s\n", $approved, $idx, $start, $end, $pid, $nodes, $type );
     }
     
     exit(0);
@@ -328,18 +334,18 @@ if( !defined( $clear_idx ) ) {
 # Show and exit.
 #
 if ($info) {
-    my $query = $type ? "SELECT uid, nodes, type, " .
+    my $query = $type ? "SELECT uid, nodes, type, approved, " .
 	"UNIX_TIMESTAMP( start ) AS s, UNIX_TIMESTAMP( end ) AS e FROM " .
 	"future_reservations WHERE type='$type' AND pid_idx=$pid_idx " .
-	"ORDER BY s" : "SELECT uid, nodes, type, " .
+	"ORDER BY s" : "SELECT uid, nodes, type, approved, " .
 	"UNIX_TIMESTAMP( start ) AS s, UNIX_TIMESTAMP( end ) AS e FROM " .
 	"future_reservations WHERE pid_idx=$pid_idx ORDER BY s";
 
     my $query_result = DBQueryFatal( $query );
 
     if( $query_result->numrows ) {
-	print "Start            End              User                Nodes Type\n";
-	print "-----            ---              ----                ----- ----\n";
+	print "A Start            End              User                Nodes Type\n";
+	print "- -----            ---              ----                ----- ----\n";
     }
 
     while( my $row = $query_result->fetchrow_hashref() ) {
@@ -348,8 +354,9 @@ if ($info) {
 	my $type = $row->{'type'};
 	my $start = convert( $row->{'s'} );
 	my $end = convert( $row->{'e'} );
+	my $approved = defined( $row->{'approved'} ) ? "Y" : " ";
 
-	printf( "%16s %16s %-19s %5d %s\n", $start, $end, $uid, $nodes, $type );
+	printf( "%1s %16s %16s %-19s %5d %s\n", $approved, $start, $end, $uid, $nodes, $type );
     }
     
     exit(0);
@@ -393,6 +400,14 @@ if ($clear || $clear_idx) {
     exit( 0 );
 }
 
+# For now, auto-approve reservation requests up to 64 node-hours.
+# Later we'll probably want this threshold to vary based on the node type,
+# how far into the future the reservation starts, the phase of the moon...
+# who knows.
+if( $count * ( $endtime - $starttime ) / 3600 <= 0x40 ) {
+    $approve = 1;
+}
+
 #
 # Do not allow this as root; we want proper history.
 #
@@ -414,6 +429,7 @@ if( defined( $modify_idx ) ) {
 }
 $res->SetNotes( $notes ) if( defined( $notes ) );
 $res->SetAdminNotes( $adminnotes ) if( defined( $adminnotes ) );
+$res->Approve( $target_user ) if( $approve );
 
 print "$res\n" if( $debug );
 
@@ -451,5 +467,28 @@ while( 1 ) {
     next if( !defined( Reservation->BeginTransaction( $version ) ) );
     $res->Book( $modify_idx );
     Reservation->EndTransaction();
-    last;
+    if( $approve ) {
+	exit( 0 );
+    } else {
+	# We just booked a reservation we didn't pre-approve.  It requires
+	# admin attention to be made effective.
+	my $s = convert( $starttime );
+	my $e = convert( $endtime );
+	my $idx = $res->idx();
+
+	print STDERR "reserve: reservation is feasible but has NOT yet been approved.\n";
+	
+	SENDMAIL( $TBOPS, "Reservation request pending",
+		  "User \"$uid\" has requested a reservation for $count $type nodes,\n" .
+		  "starting at $s and ending at $e.\n" .
+		  "\n" .
+		  "The request was feasible at the time it was made, but administrator\n" .
+		  "approval is required to hold the resources.\n" .
+		  "\n" .
+		  "You can approve the request by invoking:\n" .
+		  "    reserve -a -m $idx\n" .
+		  "on boss.\n" );
+	
+	exit( 2 );
+    }
 }

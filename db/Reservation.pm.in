@@ -90,6 +90,8 @@ sub CreateCommon($$$$$$$$)
     $self->{'UID_IDX'}     = $user->uid_idx();
     $self->{'NOTES'}       = undef;
     $self->{'ADMIN_NOTES'} = undef;
+    $self->{'APPROVED'}    = undef;
+    $self->{'APPROVER'}    = undef;
 	
     bless($self, $class);
     
@@ -193,6 +195,8 @@ sub Lookup($$;$$$$)
     $self->{'UID_IDX'}     = $record->{'uid_idx'};
     $self->{'NOTES'}       = $record->{'notes'};
     $self->{'ADMIN_NOTES'} = $record->{'admin_notes'};
+    $self->{'APPROVED'}    = $record->{'approved'};
+    $self->{'APPROVER'}    = $record->{'approver'};
 	
     bless($self, $class);
     
@@ -212,6 +216,8 @@ sub uid($)         { return $_[0]->{"UID"}; }
 sub uid_idx($)     { return $_[0]->{"UID_IDX"}; }
 sub notes($)       { return $_[0]->{"NOTES"}; }
 sub admin_notes($) { return $_[0]->{"ADMIN_NOTES"}; }
+sub approved($)    { return $_[0]->{"APPROVED"}; }
+sub approver($)    { return $_[0]->{"APPROVER"}; }
 
 sub Stringify($)
 {
@@ -265,6 +271,19 @@ sub SetAdminNotes($$)
     my ($self, $notes) = @_;
 
     $self->{'ADMIN_NOTES'} = $notes;
+}
+
+# Mark the reservation as approved.  This DOES NOT update the database
+# state: to do so requires an admission control check!  See BeginTransaction(),
+# IsFeasible(), Book(), etc.
+sub Approve($;$)
+{
+    my ($self, $user) = @_;
+
+    $user = User->ThisUser() if( !defined( $user ) );
+
+    $self->{'APPROVED'} = time();
+    $self->{'APPROVER'} = $user->uid() if defined( $user );
 }
 
 # Retrieve the current reservation database version.  This version must
@@ -342,6 +361,8 @@ sub Book($;$)
     my $uid_idx = $self->uid_idx();
     my $notes = DBQuoteSpecial( $self->notes() );
     my $admin_notes = DBQuoteSpecial( $self->admin_notes() );
+    my $approved = $self->approved();
+    my $approver = $self->approver();
 
     my $base_query = "SET pid='$pid', " .
 		     "pid_idx='$pid_idx', " .
@@ -353,7 +374,10 @@ sub Book($;$)
 		     "uid_idx='$uid_idx' " .
 		     ( defined( $notes ) ? ", notes=$notes" : "" ) .
 		     ( defined( $admin_notes ) ?
-		       ", admin_notes=$admin_notes" : "" );
+		       ", admin_notes=$admin_notes" : "" ) .
+		     ( defined( $approved ) ?
+		       ", approved=FROM_UNIXTIME($approved)" : "" ) .
+		     ( defined( $approver ) ? ", approver='$approver'" : "" );
 
     my $query_result =
 	DBQueryWarn( defined( $idx ) ? "UPDATE future_reservations " .
@@ -476,9 +500,9 @@ sub Tidy($)
     return 1;
 }
 
-sub LookupAll($$)
+sub LookupAll($$;$)
 {
-    my ($class, $type) = @_;
+    my ($class, $type, $include_pending) = @_;
     
     return $cache{$type} if( exists( $cache{$type} ) );
 
@@ -565,7 +589,10 @@ sub LookupAll($$)
     
     $query_result = DBQueryWarn( "SELECT pid, uid, UNIX_TIMESTAMP( start ), " .
 				 "UNIX_TIMESTAMP( end ), nodes, idx FROM " .
-				 "future_reservations WHERE type='$type'" );
+				 "future_reservations WHERE type='$type'" .
+				 ( $include_pending ? "" :
+				   " AND approved IS NOT NULL" ) );
+
     while( my ($pid, $uid, $start, $end, $nodes, $idx) =
 	   $query_result->fetchrow_array() ) {
 	my $res = Create( $class, $pid, $uid, $start, $end, $type, $nodes );
@@ -733,6 +760,7 @@ sub FreeCount($$;$) {
 	    # Weight the nodes based on how far into the future the
 	    # reservation is.  The 0x10000 is chosen so that a node available
 	    # for the next 24 hours only is worth about half a node available
+	    # indefinitely.
 	    $answer -= ( ( $free - $f->{'free'} ) * exp( -$deltat / 0x10000 ) );
 	    
 	    $free = $f->{'free'};
