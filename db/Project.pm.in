@@ -837,6 +837,48 @@ sub UpdateStats($$$$$)
 }
 
 #
+# Return last activity as a unix timestamp.
+#
+sub GetActivity($)
+{
+    my ($self) = @_;
+    my $stamp;
+
+    # Must be a real reference. 
+    return undef
+	if (! ref($self));
+
+    my $pid_idx = $self->pid_idx();
+    my $query_result =
+	DBQueryWarn("select UNIX_TIMESTAMP(last_activity) from project_stats ".
+		    "where pid_idx='$pid_idx'");
+    if ($query_result->numrows) {
+	($stamp) = $query_result->fetchrow_array();
+    }
+
+    return $stamp;
+}
+
+sub SetActivity($$)
+{
+    my ($self,$stamp) = @_;
+	
+    # Must be a real reference. 
+    return -1
+	if (! ref($self));
+
+    if ($stamp !~ /^\d+$/ || $stamp < 0 || $stamp > time()) {
+	return -1;
+    }
+
+    my $pid_idx = $self->pid_idx();
+    DBQueryWarn("update project_stats set last_activity=FROM_UNIXTIME($stamp)".
+		" where pid_idx='$pid_idx'");
+
+    return 0;
+}
+
+#
 # Bump last activity
 #
 sub BumpActivity($)
