@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2014-2016 University of Utah and the Flux Group.
+# Copyright (c) 2014-2017 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -66,11 +66,14 @@ sub usage()
 	  "               fields: 'hash', 'range', 'size', 'all', 'sig'; default is 'all'\n".
 	  "               NOTE: 'sig' is special as it is not a DB field and\n".
 	  "               thus is not included in the 'all' option.\n".
+	  "       -D      Validate/update the deleted status of image versions.\n".
+	  "               WARNING: if image is marked as deleted in the DB,\n".
+	  "               update will remove image files from the disk!\n".
 	  "       -S      Validate/update the image signature\n".
 	  "               This is the same as specifying \"-V sig\".\n");
     exit(-1);
 }
-my $optlist    = "dfnupqRaP:UH:V:FSA";
+my $optlist    = "dfnupqRaP:UH:V:FSDA";
 my $debug      = 0;
 my $showinfo   = 0;
 my $update     = 0;
@@ -81,12 +84,16 @@ my $doall      = 0;
 my $doallpid;
 my $allvers    = 0;
 my $dosig      = 0;
+my $dodeleted  = 0;
 my $nouser     = 0;
 my %validate   = ();
 my @images     = ();
 my $userperm;
 my $newhash;
-my $accessfs   = 1;
+my $accessfs   = $UID ? 0 : 1;
+my %imagedir   = ();
+
+my $warnonfixable = 0;
 
 #
 # Configure variables
@@ -94,12 +101,15 @@ my $accessfs   = 1;
 my $TB		= "@prefix@";
 my $SHA1	= "/sbin/sha1";
 my $IMAGEINFO	= "$TB/sbin/imageinfo";
+my $PROJROOT    = "@PROJROOT_DIR@";
 
 # XXX note: bin not sbin, /usr/testbed/sbin/imagehash is something 
 # entirely different!
 my $IMAGEHASH   = "$TB/bin/imagehash";
 
 # Protos
+sub checkdeadimages($);
+sub getallversions($);
 sub doimage($);
 sub makehashfile($$$$);
 sub removehashfile($$);
@@ -129,6 +139,7 @@ use EmulabConstants;
 use OSImage;
 use User;
 use Project;
+use libdb;
 
 #
 # Parse command arguments. Once we return from getopts, all that should be
@@ -195,6 +206,10 @@ if (defined($options{"V"})) {
 if (defined($options{"S"}) || $validate{"sig"}) {
     $dosig = 1;
 }
+if (defined($options{"D"})) {
+    $dodeleted = 1;
+    $allvers = 1;
+}
 @images = @ARGV;
 
 my $fixit = 0;
@@ -224,24 +239,185 @@ if ($doall) {
 	    fatal("No such project '$doallpid'");
 	}
     }
-    @images = OSImage->ListAllVersions("ndz", $doallpid);
-    if (@images > 50 && ($validate{"hash"} || $dosig)) {
-	print STDERR "WARNING: processing ", int(@images),
-	" images, will take a LONG time!\n";
+    if ($allvers) {
+	@images = OSImage->ListAll("ndz", $doallpid);
+    } else {
+	@images = OSImage->ListAllVersions("ndz", $doallpid);
     }
 }
 
 if (!$doall && @images == 0) {
     usage();
 }
+if ($allvers && @images == 0) {
+    fatal("-A option needs at least one image");
+}
 if (defined($newhash) && @images > 1) {
     fatal("-H option can only be used with a single image");
 }
-if ($allvers && @images > 1) {
-    fatal("-A option can only be used with a single image");
-}
 
 my $errs = 0;
+
+if ($allvers) {
+    # check all dead images
+    if ($doall && $dodeleted && $accessfs) {
+	checkdeadimages($doallpid);
+	exit(0);
+    }
+
+    my @nimages = ();
+    foreach my $pidimage (@images) {
+	# XXX OSImage->Lookup blows up on old multi-partition images
+	my $image = Image->Lookup($pidimage);
+	if ($image && $image->ezid()) {
+	    $image = OSImage->Lookup($pidimage);
+	}
+	if (!$image) {
+	    print STDERR "$pidimage: no such image, ignoring\n";
+	    next;
+	}
+	push(@nimages, getallversions($image));
+    }
+    @images = @nimages;
+}
+
+if (@images > 50 && ($validate{"hash"} || $dosig)) {
+    print STDERR "WARNING: processing ", int(@images),
+    " images, will take a LONG time!\n";
+}
+
+print STDERR "Will process ", int(@images), " images\n";
+foreach my $pidimage (@images) {
+    $errs += doimage($pidimage);
+}
+exit($errs);
+
+#
+# Dead image versions exist only in the image_versions table and
+# have no corresponding imageid entry in the images table.
+# For dead images:
+#
+# - all versions should be deleted
+# - image file path should point to deleted image directory
+#
+# XXX We really cannot delete the image files as the path might be wrong
+# and point to the image files for the live "pid/imagename"
+#
+# XXX uses naked DB queries since Image lookup functions won't work.
+#
+sub checkdeadimages($)
+{
+    my ($pid) = @_;
+
+    my $clause = "";
+    if (defined($pid)) {
+	$clause = "AND v.pid='$pid'";
+    }
+    my $subquery = "SELECT v.imageid FROM image_versions AS v ".
+	"  LEFT JOIN images AS i ON v.imageid=i.imageid ".
+	"  WHERE i.imageid IS NULL $clause ".
+	"  GROUP BY v.imageid";
+
+    my $query_result =
+	DBQueryWarn("SELECT pid,imagename,version,imageid,deleted,path".
+		    "  FROM image_versions ".
+		    "  WHERE imageid IN ($subquery) ".
+		    "  ORDER BY pid,imagename,imageid,version");
+
+    my %fixdirs = ();
+    while (my ($pid,$name,$vers,$id,$del,$path) =
+	   $query_result->fetchrow_array()) {
+	my $iname = "DEAD $pid/$name ($id)";
+	print STDERR "Checking dead image $id ('$pid/$name:$vers') ...\n"
+	    if ($debug);
+	if (!$del) {
+	    print "$iname: version $vers not deleted ";
+	    if ($update) {
+		if (!DBQueryWarn("UPDATE image_versions SET deleted=now() ".
+				 "WHERE imageid='$id' AND version='$vers'")) {
+		    print "[FAILED]";
+		} else {
+		    print "[FIXED]";
+		}
+	    }
+	    print "\n";
+	}
+	#
+	# Figure out if the path is already in the correct form.
+	# There is a limited amount we can do here since the path may
+	# incorrectly point to the current incarnation of the image.
+	#
+	# If the directory part of the path contains a ':', we convert
+	# it to a ',' in keeping with the new convention. If such a path
+	# references a valid file, we rename the file as well.
+	#
+	if (defined($path)) {
+	    my $dpath;
+
+	    # XXX duplicate FullImagePath() method
+	    if ($path =~ /\/$/) {
+		$dpath = "$path$name.ddz" . ($vers ? ":$vers" : "");
+		$path = "$path$name.ndz" . ($vers ? ":$vers" : "");
+	    }
+	    # XXX deleted versions always have a full path
+	    elsif ($path =~ /^(.*):(\d+)\/([^\/]*)$/) {
+		my ($iname,$oid,$ofile) = ($1,$2,$3);
+		my $npath = "$iname,$oid/$ofile";
+		print "$iname: version $vers changing path to '$npath' ";
+		if ($update) {
+		    if (!DBQueryWarn("UPDATE image_versions SET path='$npath'".
+				     " WHERE imageid='$id' AND version='$vers'")) {
+			print "[FAILED]";
+		    } else {
+			print "[FIXED]";
+		    }
+		}
+		print "\n";
+
+		my $old = "$iname:$oid";
+		if (!exists($fixdirs{$old})) {
+		    $fixdirs{$old}{'iname'} = $iname;
+		    $fixdirs{$old}{'ndir'} = "$iname,$oid";
+		}
+	    }
+
+	    #
+	    # If path exists AND it is in the top-level images directory AND
+	    # no one else references the path, then we could rename/delete it.
+	    # But not even I am that anal...
+	    #
+	    if (-e "$path") {
+		print STDERR "$iname: WARNING: version $vers full image '$path' exists\n";
+	    }
+	    if (defined($dpath) && -e "$dpath") {
+		print STDERR "$iname: WARNING: version $vers delta image '$dpath' exists\n";
+	    }
+	}
+    }
+
+    #
+    # Check for directories that had old-style names and convert them
+    # to the new style (':' -> ',').
+    #
+    foreach my $odir (keys %fixdirs) {
+	my $iname = $fixdirs{$odir}{'iname'};
+	my $ndir = $fixdirs{$odir}{'ndir'};
+
+	print STDERR "Processing old image dir '$odir' ...\n"
+	    if ($debug);
+	if (-d "$odir") {
+	    print "$iname: renaming image directory to '$ndir' ";
+	    if ($update) {
+		if (!rename($odir, $ndir)) {
+		    print "[FAILED]";
+		} else {
+		    print "[FIXED]";
+		}
+	    }
+	    print "\n";
+	}
+    }
+}
 
 #
 # Check all versions of a single image.
@@ -249,17 +425,17 @@ my $errs = 0;
 # In addition to putting all the versions in our list to check
 # individually, perform some aggregate checks:
 #
-# - make sure there is SOME version of the image
+# - current version of the image must exist (there must be an image file)
+#   this also implies that some version of an image exists
 # - all versions from 0 to current must exist in DB
-# - version 0 must be a full image
+# - delta images must be preceded by a full version with no intermediate
+#   deleted versions
 #
-if ($allvers) {
-    my $image = OSImage->Lookup($images[0]);
-    if (!$image) {
-	print STDERR "$images[0]: no such image\n";
-	exit(1);
-    }
+sub getallversions($)
+{
+    my ($image) = @_;
 
+    my $headvers = $image->version();
     my @iversions;
     $image->AllVersions(\@iversions);
 
@@ -270,7 +446,51 @@ if ($allvers) {
 	print STDERR "$iname: no version exists!\n";
 	exit(1);
     }
+
+    #
+    # XXX make sure the imagedir exists for this project.
+    # If not, the project may be inactive and the directory not exported
+    # to boss.
+    #
+    my $idir = "$PROJROOT/" . $image->pid();
+    if (!exists($imagedir{$idir})) {
+	if (! -d "$idir") {
+	    print STDERR $image->pid() . ": WARNING: project image directory does not exist (project may be inactive)!\n";
+	    $imagedir{$idir} = 0;
+	} else {
+	    $imagedir{$idir} = 1;
+	}
+    }
+    if (!$imagedir{$idir}) {
+	print STDERR "$iname: WARNING: image directory does not exist, ignoring\n";
+	return ();
+    }
+
+    # Skip certain images that do not conform to our rules
+    if (!$image->isdataset() && (!$image->ezid() || $image->mfs())) {
+	my $msg;
+	if (!$image->ezid()) {
+	    $msg = "legacy image";
+	} else {
+	    $msg = "MFS";
+	}
+	print STDERR "$iname: $msg, ignoring\n";
+	return ();
+    }
+
+    my $ready = $iversions[0]->ready();
+    my $released = $iversions[0]->released();
+    my $lastvers = $iversions[0]->version();
+    if ($lastvers != $headvers) {
+	if ($lastvers != $headvers + 1) {
+	    printf STDERR "$iname: WARNING head version $headvers more than one rev away from latest version $lastvers\n";
+	} elsif ($ready && $released) {	
+	    print STDERR "$iname: WARNING: head version $headvers does not correspond to latest ready/released version $lastvers\n";
+	}
+    }
     my $vers = 0;
+    my $gotfull = 0;
+    my $gotundeleted = 0;
     my @nimages = ();
     @iversions = reverse @iversions;
     foreach my $imobj (@iversions) {
@@ -278,31 +498,126 @@ if ($allvers) {
 	if ($imobj->version() != $vers) {
 	    my $ivers = $imobj->version() - 1;
 	    if ($vers == $ivers) {
-		print STDERR "$iname: version $vers missing\n";
+		print STDERR "$iname: WARNING: version $vers missing in DB\n";
 	    } else {
-		print STDERR "$iname: versions $vers-$ivers missing\n";
+		print STDERR "$iname: WARNING: versions $vers-$ivers missing in DB\n";
 	    }
 	    $vers = $imobj->version();
-	    $errs++;
-	    next;
 	}
 
-	if ($vers == 0 && !havefullimage($imobj)) {
-	    print STDERR "$iname: no full initial version!\n";
-	    $errs++;
+	$ready = $imobj->ready();
+	$released = $imobj->released();
+	my $deleted = ($imobj->deleted() ? 1 : 0);
+
+	#
+	# Head version should be:
+	# - not deleted
+	# - image file should exist
+	# - ready and released
+	#
+	if ($vers == $headvers) {
+	    if ($deleted) {
+		print STDERR "$iname: WARNING: head version $vers deleted\n";
+		# if the head is deleted, all previous versions should be too
+		if ($gotundeleted) {
+		    print STDERR "$iname: WARNING: not all previous versions delted\n";
+		}
+	    } elsif (!havefullimage($imobj) && !havedeltaimage($imobj)) {
+		print STDERR "$iname: WARNING: head version $vers has no image file\n"
+		    if ($warnonfixable);
+	    } elsif (!$ready || !$released) {
+		print STDERR "$iname: WARNING: head version $vers is not ready ($ready) or released ($released)!\n";
+	    }
+	}
+
+	#
+	# For non-deleted images:
+	#
+	# Inform them if the latest version is not ready or released.
+	# This is not an error, just something to be aware of.
+	#
+	# Released images should always be ready.
+	#
+	elsif (!$deleted) {
+	    if ($released) {
+		if (!$ready) {
+		    print STDERR "$iname: WARNING: released version $vers is not ready\n";
+		}
+	    }
+	    elsif (!$ready) {
+		if ($released) {
+		    print STDERR "$iname: WARNING: released version $vers is not ready\n";
+		}
+		if ($vers == $lastvers) {
+		    print STDERR "$iname: WARNING: latest version ($lastvers) is not ready\n";
+		} else {
+		    print STDERR "$iname: WARNING: version $vers is not ready and not latest version ($lastvers)\n";
+		}
+	    }
+	    elsif (!$released) {
+		if ($vers == $lastvers) {
+		    print STDERR "$iname: WARNING: latest version ($lastvers) is not released\n";
+		}
+	    }
+	}
+
+	if ($deleted) {
+	    # deleted image breaks any delta chain
+	    $gotfull = 0;
+	} else {
+	    # keep track of non-deleted image prior to head image
+	    $gotundeleted++;
+	}
+	
+	if (havefullimage($imobj)) {
+	    $gotfull = 1;
+	} elsif (havedeltaimage($imobj)) {
+	    if (!$gotfull) {
+		print STDERR "$iname: WARNING: no full image precedes delta version $vers\n";
+	    }
+	} elsif (!$deleted && $vers != $headvers) {
+	    print STDERR "$iname: WARNING: no image file for version $vers\n";
 	}
 
 	push @nimages, $fqname;
 	$vers++;
     }
-    @images = @nimages;
+    return @nimages;
 }
 
-foreach my $pidimage (@images) {
-    $errs += doimage($pidimage);
-}
-exit($errs);
-
+#
+# XXX we have all kinds of existential issues here, i.e., what is a
+# real image? We would like to think that if it has a row in the DB
+# and the image file exists, it is a real image and we can validate
+# based on the properties of the image file.
+#
+# But if we are not root, we may not be able to access the image file
+# of a valid image directly even though we have permission to use the
+# image. If so, then there is very little we can validate and nothing
+# we can fix.
+#
+# A valid image may also have one or both of a delta and full version.
+# If we don't have access to the image file(s), how do we know which
+# "exists"?
+#
+# A valid image version may also be deleted. If so, it should have the
+# deleted date set and one or both of the delta/full size/hash image
+# attributes may be set so that we could verifiably restore the image
+# at some point. But if the deleted flag is not set and no image file
+# is present (or we cannot access it), is it deleted or not?
+#
+# And to top it all off, the DB path may represent either the image
+# file itself, or a directory that the image is in (if it ends with '/').
+#
+# Here is the strategy.
+#
+# If we are root or otherwise have read/search access to the directory
+# of the image, then we should be able to stat any image files and thus
+# the files provide "ground truth."
+#
+# If we do not have access to the files ($accessfs == 0) then all we
+# can do is check the internal consistency of some DB fields.
+#
 sub doimage($)
 {
     my ($pidimage) = @_;
@@ -333,10 +648,12 @@ sub doimage($)
 	my $statme;
 	if ($image->IsDirPath()) {
 	    $statme = $image->path();
-	} elsif ($image->path() =~ /^(.*\/)[^\/]*$/) {
+	} elsif ($image->path() =~ /^(.*\/)[^\/]+$/) {
 	    $statme = $1;
 	}
-	if ($statme && -e "$statme") {
+	# directory should be a directory, readable and searchable
+	if ($statme &&
+	    -d "$statme" && -r "$statme" && -x "$statme") {
 	    $accessfs = 1;
 	} else {
 	    print STDERR "$pidimage: WARNING: cannot access image directory '$statme', some validations disabled.\n";
@@ -432,7 +749,15 @@ sub doimage($)
     $stamp = 0
 	if (!defined($stamp));
 
+    my $deleted = defined($image->deleted()) ? 1 : 0;
+    if ($deleted && !$dodeleted) {
+	return 0;
+    }
+
     if ($showinfo) {
+	if ($deleted) {
+	    print "$pidimage: DELETED on $deleted\n";
+	}
 	print "$pidimage: mtime: $stamp\n";
 	print "$pidimage: path: $path\n"
 	    if ($path);
@@ -481,6 +806,101 @@ sub doimage($)
 	if (@afiles > 0) {
 	    print "$pidimage: files: ", join(", ", @afiles), "\n";
 	}
+
+	return 0;
+    }
+
+    #
+    # Make sure the deleted status is correct. We must have access to
+    # the files in order to really do this.
+    #
+    # Here are the possibilities:
+    #
+    # 1. Database image_versions.deleted in null:
+    #    A. If one or both of the path targets exist, all is well
+    #    B. Otherwise, version should be marked as deleted
+    # 2. Database image_versions.deleted is not null:
+    #    A. If neither path target exists, all is well
+    #    B. If a path target exists but indicates a deleted version
+    #       (i.e., we are renaming rather than deleting files), all is well
+    #
+    if ($dodeleted) {
+	if (!$accessfs) {
+	    print STDERR "$pidimage: no access to image, ".
+		"cannot determine deleted status\n";
+	    return 1;
+	}
+
+	#
+	# XXX for deleted, we are interested in the existance of the
+	# image file, not just whether path/dpath is set or not.
+	#
+	my $epath = ($path && -e $path) ? 1 : 0;
+	my $edpath = ($dpath && -e $dpath) ? 1 : 0;
+
+	if ($deleted) {
+	    if (!$epath && !$edpath) {
+		return 0;
+	    }
+	    # Check for renamed images.
+	    if (($epath && $path =~ /,/) || ($edpath && $dpath =~ /,/)) {
+		print STDERR "$pidimage: found renamed image\n";
+		return 0;
+	    }
+	    # Check for !ready images.
+	    if (!$image->ready()) {
+		print STDERR "$pidimage: not-ready deleted image has image files\n";
+	    }
+	}
+	if (!$deleted && ($epath || $edpath)) {
+	    # Check for !ready images.
+	    if (!$image->ready()) {
+		print STDERR "$pidimage: not-ready image has image files\n";
+	    }
+	    return 0;
+	}
+
+	my $ifs = "";
+	if (!$deleted) {
+	    $ifs = "no";
+	} elsif ($epath) {
+	    if ($edpath) {
+		$ifs = "Full/delta";
+	    } else {
+		$ifs = "Full";
+	    }
+	} else {
+	    $ifs = "Delta";
+	}
+	print("$pidimage: deleted: DB says " . ($deleted ? "" : "not ") .
+	      "deleted but $ifs image file(s) exist")
+	    if (!$quiet);
+	if ($update) {
+	    if ($deleted) {
+		my $suf = ",$imageid";
+		my $failed = 0;
+
+		# XXX scary, so let's just move the image files aside
+		if ($epath && !rename($path, "$path$suf")) {
+		    print " [ could not rename $path ]"
+			if (!$quiet);
+		    $failed++;
+		}
+		if ($edpath && !rename($dpath, "$dpath$suf")) {
+		    print " [ could not rename $dpath ]"
+			if (!$quiet);
+		    $failed++;
+		}
+		print " [FIXED]"
+		    if (!$quiet && !$failed);
+	    } else {
+		$image->MarkDeleted();
+		print " [FIXED]"
+		    if (!$quiet);
+	    }
+	}
+	print "\n"
+	    if (!$quiet);
 
 	return 0;
     }
@@ -628,21 +1048,22 @@ sub doimage($)
     #
     # Check/fix mtime.
     #
-    if ((!$path || $stamp == $ftime) && (!$dpath || $stamp == $dftime)) {
+    if ((!$path || abs($stamp - $ftime)) < 2 &&
+	(!$dpath || abs($stamp - $dftime)) < 2) {
 	if ($fastupdate) {
 	    print STDERR "$pidimage: skipping due to time stamp\n"
 		if ($debug);
 	    return 0;
 	}
     } else {
-	if ($path && $stamp != $ftime) {
+	if ($path && abs($stamp - $ftime) > 1) {
 	    print("$pidimage: mtime: DB timestamp ($stamp) != mtime ($ftime)\n")
 		if (!$update || !$quiet);
 	    if ($update) {
 		$changed = 1;
 	    }
 	}
-	if ($dpath && $stamp != $dftime) {
+	if ($dpath && abs($stamp - $dftime) > 1) {
 	    print("$pidimage: mtime: DB timestamp ($stamp) != delta mtime ($dftime)\n")
 		if (!$update || !$quiet);
 	    if ($update) {
