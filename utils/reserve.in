@@ -46,7 +46,7 @@ use WebTask;
 sub usage()
 {
     print STDERR "Usage: reserve [-C] [-f] [-n] -t type [-s start] [-e end]\n" .
-	"            [-u] [-U uid] [-N file] [-A file] [-a] pid count\n";
+	"            [-u] [-U uid] [-N file] [-A file] [-a|-p] pid count\n";
     print STDERR "       reserve -c idx\n";
     print STDERR "       reserve [-f] [-n] [-s start] [-e end] [-u]\n" .
 	"            [-U uid] [-N file] [-A file] [-S size] [-a] -m idx \n";
@@ -66,12 +66,13 @@ sub usage()
     print STDERR "   -s   Start time when reservation begins\n";
     print STDERR "   -e   End time when reservation expires\n";
     print STDERR "   -a   Approve reservation (auto for small, otherwise admin-only)\n";
+    print STDERR "   -p   Create pending reservation (do not auto-approve)\n";
     print STDERR "   -m   Modify existing reservation\n";
     print STDERR "   -S   Specify new size of modified reservation\n";
     exit( -1 );
 }
 
-my $optlist    = "ac:de:fhilm:ns:t:uA:CN:S:U:T:";
+my $optlist    = "ac:de:fhilm:nps:t:uA:CN:S:U:T:";
 my $debug      = 0;
 my $info       = 0;
 my $list       = 0;
@@ -85,6 +86,7 @@ my $endtime    = time + 24 * 60 * 60; # default to ending tomorrow
 my $notes      = undef;
 my $adminnotes = undef;
 my $approve    = 0;
+my $pending    = 0;
 my $type;
 my $pid;
 my $count;
@@ -224,6 +226,9 @@ if (defined($options{S})) {
 }
 if (defined($options{'a'})) {
     $approve = 1;
+}
+if (defined($options{'p'})) {
+    $pending = 1;
 }
 if ($info) {
     usage() if( @ARGV != 1 );
@@ -407,6 +412,9 @@ if ($clear || $clear_idx) {
 if( $count * ( $endtime - $starttime ) / 3600 <= 0x40 ) {
     $approve = 1;
 }
+
+# If they said "-p", don't approve no matter what.
+$approve = 0 if( $pending );
 
 #
 # Do not allow this as root; we want proper history.
