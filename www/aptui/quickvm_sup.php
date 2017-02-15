@@ -51,7 +51,7 @@ if (isset($_SERVER['SERVER_NAME'])) {
 #
 $PAGEERROR_HANDLER = function($msg, $status_code = 0) {
     global $drewheader, $ISCLOUD, $ISPNET, $ISEMULAB, $ISAPT, $PORTAL_HELPFORUM;
-    global $spatrequired;
+    global $spatrequired, $TBMAINSITE;
 
     if (! $drewheader) {
 	SPITHEADER();
@@ -63,6 +63,7 @@ $PAGEERROR_HANDLER = function($msg, $status_code = 0) {
     echo "    window.ISCLOUD   = " . ($ISCLOUD  ? "1" : "0") . ";\n";
     echo "    window.ISPNET    = " . ($ISPNET   ? "1" : "0") . ";\n";
     echo "    window.ISAPT     = " . ($ISAPT    ? "1" : "0") . ";\n";
+    echo "    window.MAINSITE  = " . ($TBMAINSITE ? "1" : "0") . ";\n";
     echo "    window.HELPFORUM = " .
         "'https://groups.google.com/d/forum/${PORTAL_HELPFORUM}';\n";
     echo "</script>\n";
@@ -128,6 +129,7 @@ $PAGEHEADER_FUNCTION = function($thinheader = 0, $ignore1 = NULL,
     echo "    window.ISCLOUD  = " . ($ISCLOUD  ? "1" : "0") . ";\n";
     echo "    window.ISPNET   = " . ($ISPNET   ? "1" : "0") . ";\n";
     echo "    window.ISAPT    = " . ($ISAPT    ? "1" : "0") . ";\n";
+    echo "    window.MAINSITE = " . ($TBMAINSITE ? "1" : "0") . ";\n";
     echo "    window.MANUAL   = '$PORTAL_MANUAL';\n";
     echo "    window.HELPFORUM = " .
         "'https://groups.google.com/d/forum/${PORTAL_HELPFORUM}';\n";

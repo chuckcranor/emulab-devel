@@ -48,7 +48,7 @@ $(function () {
     {
         contextUrl = 'https://www.emulab.net/protogeni/jacks-context/cloudlab-utah.json';
     }
-    else if (window.ISEMULAB)
+    else if (window.ISEMULAB && window.MAINSITE)
     {
 	contextUrl = 'https://www.emulab.net/protogeni/jacks-context/emulab.json';
     }
@@ -57,7 +57,7 @@ $(function () {
 	contextUrl = 'https://www.emulab.net/protogeni/jacks-context/phantomnet.json';
     }
 
-    if (window.ISCLOUD || window.ISPNET || window.ISEMULAB)
+    if (window.ISCLOUD || window.ISPNET || (window.ISEMULAB && window.MAINSITE))
     {
 	$('#edit_topo_modal_button').prop('disabled', true);
 	$.get(contextUrl).then(contextReady, contextFail);
