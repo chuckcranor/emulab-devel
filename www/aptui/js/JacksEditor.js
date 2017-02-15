@@ -6,12 +6,12 @@ $(function () {
     var templates = APT_OPTIONS.fetchTemplateList(['edit-modal', 'edit-inline']);
     var editModalString = templates['edit-modal'];
     var editInlineString = templates['edit-inline'];
-    var context = {
+    var aptContext = {
 	canvasOptions: {
 	    "defaults": [
 		{
 		    "name": "Add VM",
-		    "image": "urn:publicid:IDN+utahddc.geniracks.net+image+emulab-ops:UBUNTU12-64-STD",
+		    "image": "urn:publicid:IDN+utahddc.geniracks.net+image+emulab-ops:UBUNTU14-64-STD",
 		    "type": "emulab-xen"
 		}
 	    ],
@@ -23,8 +23,8 @@ $(function () {
 			},
 */
 		{
-		    "id": "urn:publicid:IDN+utahddc.geniracks.net+image+emulab-ops:UBUNTU12-64-STD",
-		    "name": "Ubuntu 12.04 LTS 64-bit"
+		    "id": "urn:publicid:IDN+utahddc.geniracks.net+image+emulab-ops:UBUNTU14-64-STD",
+		    "name": "Ubuntu 14.04 LTS 64-bit"
 		}/*,
 			{
 			    "id": "urn:publicid:IDN+utahddc.geniracks.net+image+emulab-ops:UBUNTU14-64-STD",
@@ -40,10 +40,44 @@ $(function () {
 	}
     };
 
+    var localContext = {
+	canvasOptions: {
+	    "defaults": [
+		{
+		    "name": "Xen VM",
+		    "image": "urn:publicid:IDN+utahddc.geniracks.net+image+emulab-ops:UBUNTU14-64-STD",
+		    "type": "emulab-xen"
+		},
+		{
+		    "name": "Bare Metal PC",
+		    "image": "urn:publicid:IDN+utahddc.geniracks.net+image+emulab-ops:UBUNTU14-64-STD",
+		    "type": "raw-pc"
+		}
+	    ],
+	    "images": [
+		{
+		    "id": "urn:publicid:IDN+utahddc.geniracks.net+image+emulab-ops:UBUNTU14-64-STD",
+		    "name": "Ubuntu 14.04 LTS 64-bit"
+		}
+	    ],
+	    "types": [
+		{
+		    "id": "emulab-xen",
+		    "name": "Xen VM"
+		},
+		{
+		    "id": "raw-pc",
+		    "name": "Bare Metal PC"
+		}
+	    ]
+	}
+    };
+
     var waitingInstances = [];
     var contextFetched = false;
 
     var contextUrl = "";
+    var context = aptContext;
     if (window.ISCLOUD)
     {
         contextUrl = 'https://www.emulab.net/protogeni/jacks-context/cloudlab-utah.json';
@@ -51,6 +85,10 @@ $(function () {
     else if (window.ISEMULAB && window.MAINSITE)
     {
 	contextUrl = 'https://www.emulab.net/protogeni/jacks-context/emulab.json';
+    }
+    else if (window.ISEMULAB && ! window.MAINSITE)
+    {
+        context = localContext;
     }
     else if (window.ISPNET)
     {
