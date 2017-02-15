@@ -327,8 +327,12 @@ $routing = array("myprofiles" =>
                                                      "Do_ListReservations",
                                                  "GetReservation" =>
                                                      "Do_GetReservation",
+                                                 "Approve" =>
+                                                     "Do_Approve",
                                                  "Delete" =>
-                                                     "Do_Delete")),
+                                                     "Do_Delete",
+                                                 "ReservationInfo" =>
+                                                     "Do_ReservationInfo")),
 		 "news" =>
 			array("file"    => "news.ajax",
 			      "guest"   => true,
