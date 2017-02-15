@@ -665,6 +665,14 @@ sub IsFeasible($$;$$$$$)
 	push( @timeline, $end ) if( defined( $end->{'t'} ) );
     }
 
+    if( defined( $forecast ) ) {
+	my %origin = (
+	    t => 0,
+	    free => $free
+	    );
+	push( @$forecast, \%origin );
+    }
+
     my @events = sort { $a->{'t'} <=> $b->{'t'} } @timeline;
     
     foreach my $event ( @events ) {
