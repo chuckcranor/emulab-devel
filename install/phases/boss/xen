@@ -64,6 +64,9 @@ sub Install($$$)
 	    if (!defined($diskload_osinfo));
 
 	Phase "pcvm", "Updating the PCVM node type", sub {
+	    $pcvm->SetAttribute("default_osid", $osinfo->osid()) == 0
+		or PhaseFail("Could not update the pcvm node type");
+	    
 	    $pcvm->SetAttribute("diskloadmfs_osid",
 				$diskload_osinfo->osid()) == 0
 		or PhaseFail("Could not update the pcvm node type");
