@@ -886,14 +886,20 @@ my @aggregate_list = ();
 foreach my $aggregate_urn (@aggregate_urns) {
     my $aptaggregate = APT_Aggregate->Lookup($aggregate_urn);
     if (!defined($aptaggregate)) {
+	$slice->Delete();
+	$instance->Delete();
         UserError("$aggregate_urn is not a valid (known) aggregate");
     }
     # Check for disabled/adminonly aggregates.
     if ($aptaggregate->disabled()) {
+	$slice->Delete();
+	$instance->Delete();
         UserError("$aggregate_urn is currently offline, try again later");
     }
     if ($aptaggregate->adminonly() &&
         !(defined($this_user) && $this_user->IsAdmin())) {
+	$slice->Delete();
+	$instance->Delete();
         UserError("Only administrators may use $aggregate_urn");
     }
     my $authority = GeniAuthority->Lookup($aggregate_urn);
