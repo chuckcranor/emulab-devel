@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2007-2016 University of Utah and the Flux Group.
+# Copyright (c) 2007-2017 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -197,6 +197,35 @@ sub STATUS($$;$)
 
     $self->{'STATUS'}->{$name} = $newval;
     return $self->{'STATUS'}->{$name};
+}
+
+#
+# Lookup all aggregates for a portal.
+#
+sub LookupForPortal($$)
+{
+    my ($class, $portal) = @_;
+    my @result = ();
+
+    if ($portal !~ /^[-\w]+$/) {
+	return undef;
+    }
+    my $query_result =
+	DBQueryWarn("select urn from apt_aggregates ".
+		    "where disabled=0 and reservations=1 and ".
+		    "      FIND_IN_SET('$portal', portals)");
+    return ()
+	if (!$query_result);
+    return ()
+	if (!$query_result->numrows);
+
+    while (my ($aggregate_urn) = $query_result->fetchrow_array()) {
+	my $aggregate = Lookup($class, $aggregate_urn);
+	next
+	    if (!defined($aggregate));
+	push(@result, $aggregate);
+    }
+    return @result;
 }
 
 # _Always_ make sure that this 1 is at the end of the file...
