@@ -44,6 +44,7 @@ $(function ()
     var ppchanged     = false;
     var monitor       = null;
     var types         = null;
+    var resinfo       = null;
     var mainTemplate  = _.template(instantiateString);
 
     function initialize()
@@ -107,7 +108,10 @@ $(function ()
 		}
 	    }
 	});
-	var projcategories = MakeProfileCategories(profilelist);	
+	var projcategories = MakeProfileCategories(profilelist);
+
+	// Fire this off right away.
+	LoadReservationInfo();
 
 	var html = mainTemplate({
 	    formfields:         decodejson('#form-json'),
@@ -1730,6 +1734,21 @@ $(function ()
 	});
 	$('#group_selector #profile_gid').html(html);
 	$('#group_selector').removeClass("hidden");
+    }
+
+    function LoadReservationInfo()
+    {
+	var callback = function(json) {
+	    if (json.code) {
+		console.info("Could not get reservation info: " + json.value);
+		return;
+	    }
+	    console.info(json.value);
+	    resinfo = json.value;
+	};
+	var $xmlthing =
+	    sup.CallServerMethod(null, "reserve", "ReservationInfo", null);
+	$xmlthing.done(callback);
     }
 
     $(document).ready(initialize);

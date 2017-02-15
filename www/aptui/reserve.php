@@ -142,6 +142,7 @@ echo "<script type='text/javascript'>\n";
 if ($edit) {
     echo "   window.EDITING  = true;\n";
     echo "   window.CLUSTER  = '$cluster';\n";
+    echo "   window.ISADMIN  = $isadmin;\n";
     echo "   window.IDX      = $idx;\n";
 }
 else {

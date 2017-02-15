@@ -317,7 +317,27 @@ $(function ()
 			    "Reserve", reserve_callback,
 			    "Submitting your reservation request; "+
 			    "patience please");
-			    
+    }
+
+    /*
+     * Approve a reservation
+     */
+    function Approve()
+    {
+	var callback = function(json) {
+	    sup.HideWaitWait();
+	    if (json.code) {
+		sup.SpitOops("oops", json.value);
+		return;
+	    }
+	    window.location.reload(true);
+	};
+	sup.ShowWaitWait();
+	var xmlthing = sup.CallServerMethod(null, "reserve",
+					    "Approve",
+					    {"cluster" : window.CLUSTER,
+					     "idx"     : window.IDX});
+	xmlthing.done(callback);
     }
 
     function PopulateReservation()
@@ -356,6 +376,21 @@ $(function ()
 		.datepicker("setDate", start.format("MM/DD/YYYY"));
 	    $("#reserve-request-form #end_day")
 		.datepicker("setDate", end.format("MM/DD/YYYY"));
+
+	    if (!details.approved) {
+		$('#unapproved-warning').removeClass("hidden");
+	    }
+	    /*
+	     * If this is an admin looking at an unapproved reservation,
+	     * show the approve button
+	     */
+	    if (isadmin && !details.approved) {
+		$('#reserve-approve-button').removeClass("hidden");
+		$('#reserve-approve-button').click(function(event) {
+		    event.preventDefault();
+		    Approve();
+		});
+	    }
 	};
 	sup.ShowWaitWait();
 	var xmlthing = sup.CallServerMethod(null, "reserve",
@@ -395,6 +430,9 @@ $(function ()
 	    $('#reserve-submit-button').text("Check");
 	    $('#reserve-submit-button').removeClass("btn-success");
 	    $('#reserve-submit-button').addClass("btn-primary");
+	    if (editing) {
+		$('#reserve-approve-button').attr("disabled", "disabled");
+	    }
 	}
 	if (enable) {
 	    $('#reserve-submit-button').removeAttr("disabled");

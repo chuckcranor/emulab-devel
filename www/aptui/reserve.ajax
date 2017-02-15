@@ -294,6 +294,55 @@ function Do_Delete()
 }
 
 #
+# Approve a reservation.
+#
+function Do_Approve()
+{
+    global $this_user;
+    global $ajax_args;
+    global $TB_PROJECT_CREATEEXPT, $suexec_output;
+    
+    if (!isset($ajax_args["idx"])) {
+	SPITAJAX_ERROR(-1, "Missing idx");
+	return -1;
+    }
+    $idx = $ajax_args["idx"];
+    if (!TBvalid_integer($idx)) {
+        SPITAJAX_ERROR(-1, "Invalid index");
+	return;
+    }
+    if (!isset($ajax_args["cluster"])) {
+	SPITAJAX_ERROR(-1, "Missing cluster");
+	return;
+    }
+    if (!preg_match("/^[-\w]+$/", $ajax_args["cluster"])) {
+        SPITAJAX_ERROR(-1, "Invalid cluster name");
+        return;
+    }
+    $aggregate = Aggregate::LookupByNickname($ajax_args["cluster"]);
+    if (!$aggregate) {
+        SPITAJAX_ERROR(-1, "No such cluster");
+        return;
+    }
+    if (!ISADMIN()) {
+	SPITAJAX_ERROR(-1, "Only administrators can approve reservations");
+	return;
+    }
+    $this_uid = $this_user->uid();
+    $urn = $aggregate->urn();
+
+    $retval = SUEXEC($this_uid, "nobody",
+                     "webmanage_reservations -a '$urn' approve $idx",
+                     SUEXEC_ACTION_CONTINUE);
+    
+    if ($retval) {
+        SPITAJAX_ERROR(-1, $suexec_output);
+	return;
+    }
+    SPITAJAX_RESPONSE("list-reservations.php");
+}
+
+#
 # List reservations at a cluster (for a user).
 #
 function Do_ListReservations()
@@ -349,6 +398,12 @@ function Do_ListReservations()
             $blob["pid_idx"]     = $details['pid_idx'];
             $blob["creator_uid"] = $details['uid'];
             $blob["creator_idx"] = $details['uid_idx'];
+        }
+        if (isset($details['approved']) && $details['approved'] != "") {
+            $blob["approved"] = $details["approved"];
+        }
+        else {
+            $blob["approved"] = null;
         }
         $blob["count"]       = $details['nodes'];
         $blob["type"]        = $details['type'];
@@ -423,8 +478,41 @@ function Do_GetReservation()
     $blob["end"]         = $details['end'];
     $blob["notes"]       = $details['notes'];
     $blob["cluster"]     = $aggregate->urn();
+    if (isset($details['approved']) && $details['approved'] != "") {
+        $blob["approved"] = $details["approved"];
+    }
+    else {
+        $blob["approved"] = null;
+    }
     # For display.
     $blob["cluster_id"]  = $ajax_args["cluster"];
+    $webtask->Delete();
+    SPITAJAX_RESPONSE($blob);
+}
+
+#
+# Ask for reservation system info, for a specific aggregate
+#
+function Do_ReservationInfo()
+{
+    global $this_user;
+    global $ajax_args;
+    global $PORTAL_GENESIS;
+
+    $webtask = WebTask::CreateAnonymous();
+    $webtask_id = $webtask->task_id();
+
+    $retval = SUEXEC($this_user->uid(), "nobody",
+                     "webmanage_reservations ".
+                     "   -t $webtask_id systeminfo -p '$PORTAL_GENESIS'",
+                     SUEXEC_ACTION_CONTINUE);
+    if ($retval) {
+        $webtask->Delete();
+        SPITAJAX_ERROR(-1, $suexec_output);
+	return;
+    }
+    $webtask->Refresh();
+    $blob = $webtask->TaskValue("value");
     $webtask->Delete();
     SPITAJAX_RESPONSE($blob);
 }

@@ -4,7 +4,14 @@
     <div class='panel panel-default'>
       <div class='panel-heading'>
         <h3 class='panel-title'>
-	  <% if (editing) { %>Modify <% } %>Reservation Request</h3>
+	  <% if (editing) { %>Modify <% } %>Reservation Request
+	  <% if (editing) { %>
+	    <span class="hidden pull-right text-danger small"
+		  id="unapproved-warning">
+	      <span class="text-danger">This reservation is unapproved!</span>
+	    </span>
+	  <% } %>
+	</h3>
       </div>
       <div class='panel-body'>
 	<div>
@@ -241,6 +248,12 @@
               <button class='btn btn-primary btn-sm pull-right' disabled
                       id='reserve-submit-button'
                       type='submit' name='submit'>Check</button>
+	      <% if (editing) { %>
+		<button class='hidden btn btn-primary btn-sm pull-right'
+			style="margin-right: 10px"
+			id='reserve-approve-button'
+			type='submit' name='submit'>Approve</button>
+	      <% } %>
 	    </div>
 	  </div>
 	</form>

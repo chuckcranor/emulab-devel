@@ -38,6 +38,7 @@
 	    <th>Count</th>
 	    <th>Starts</th>
 	    <th>Ends</th>
+	    <th>Pending</th>
 	  </tr>
 	</thead>
 	<tbody>
@@ -83,6 +84,11 @@
 	      <td><%- value.count %></td>
 	      <td class="format-date"><%- value.start %></td>
 	      <td class="format-date"><%- value.end %></td>
+	      <% if (value.approved) { %>
+		<td>No</td>
+	      <% } else {%>
+		<td><span class="text-danger">Yes</span></td>
+	      <% } %>
 	    </tr>
 	  <% }); %>
 	</tbody>
