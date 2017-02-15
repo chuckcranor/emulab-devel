@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2013-2016 University of Utah and the Flux Group.
+# Copyright (c) 2013-2017 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -42,6 +42,8 @@ use Cwd 'abs_path';
 use libsetup;
 use libtmcc;
 
+my $VGNAME;
+
 # Load up the paths. Its conditionalized to be compatabile with older images.
 # Note this file has probably already been loaded by the caller.
 BEGIN
@@ -51,10 +53,19 @@ BEGIN
 	import emulabpaths;
     }
     else {
-	my $ETCDIR  = "/etc/rc.d/testbed";
-	my $BINDIR  = "/etc/rc.d/testbed";
-	my $VARDIR  = "/etc/rc.d/testbed";
-	my $BOOTDIR = "/etc/rc.d/testbed";
+	$ETCDIR  = "/etc/rc.d/testbed";
+	$BINDIR  = "/etc/rc.d/testbed";
+	$VARDIR  = "/etc/rc.d/testbed";
+	$BOOTDIR = "/etc/rc.d/testbed";
+    }
+
+    $VGNAME = "emulab";
+    if (INXENVM() && -r "$VARDIR/boot/vmname") {
+	my $vname = `cat $VARDIR/boot/vmname`;
+	chomp $vname;
+	if ($vname =~ /^([-\w]+)$/) {
+	    $VGNAME = "emulab-$1";
+	}
     }
 }
 
@@ -354,10 +365,10 @@ sub is_lvm_initialized($)
 {
     my $pvsp = shift;
 
-    my $vg = `vgs -o vg_name,pv_count --noheadings emulab 2>/dev/null`;
+    my $vg = `vgs -o vg_name,pv_count --noheadings $VGNAME 2>/dev/null`;
     if ($vg) {
 	if ($pvsp) {
-	    if ($vg =~ /emulab\s+(\d+)/) {
+	    if ($vg =~ /${VGNAME}\s+(\d+)/) {
 		$$pvsp = $1;
 	    } else {
 		$$pvsp = 1;
@@ -1063,11 +1074,11 @@ sub os_check_storage_slice($$)
 	    $devtype = "PART";
 	    $pttype = $ginfo->{$bdisk}->{'ptabtype'};
 	} else {
-	    $dev = "emulab/$lv";
+	    $dev = "$VGNAME/$lv";
 	    # XXX the real path is returned by mount
 	    # XXX note that any '-'s in the mapper name are doubled
 	    (my $rlv = $lv) =~ s/-/--/g;
-	    $rdev = "mapper/emulab-$rlv";
+	    $rdev = "mapper/${VGNAME}-$rlv";
 	    $devtype = "LVM";
 	    # XXX LVM rounds up to physical extent size (4 MiB)
 	    # on every physical volume that is in the VG
@@ -1616,7 +1627,7 @@ sub os_create_storage_slice($$$)
 		    warn("*** $lv: could not create PVs '@devs'$logmsg\n");
 		    return 0;
 		}
-		if (mysystem("vgcreate emulab @devs $redir")) {
+		if (mysystem("vgcreate $VGNAME @devs $redir")) {
 		    warn("*** $lv: could not create VG from '@devs'$logmsg\n");
 		    return 0;
 		}
@@ -1633,7 +1644,7 @@ sub os_create_storage_slice($$$)
 	    # lvcreate -n h2d2 -L 100m emulab
 	    #
 	    if ($lvsize == 0) {
-		my $sz = `vgs -o vg_size --units m --noheadings emulab`;
+		my $sz = `vgs -o vg_size --units m --noheadings $VGNAME`;
 		if ($sz =~ /([\d\.]+)/) {
 		    $lvsize = int($1);
 		} else {
@@ -1643,16 +1654,16 @@ sub os_create_storage_slice($$$)
 	    # try a striped LV first
 	    my $pvs = $so->{'LVM_VGDEVS'};
 	    if (defined($pvs) && $pvs > 1 &&
-		!mysystem("lvcreate -i $pvs -n $lv -L ${lvsize}m emulab $redir")) {
-		$href->{'LVDEV'} = "/dev/emulab/$lv";
+		!mysystem("lvcreate -i $pvs -n $lv -L ${lvsize}m $VGNAME $redir")) {
+		$href->{'LVDEV'} = "/dev/$VGNAME/$lv";
 		return 1;
 	    }
-	    if (mysystem("lvcreate -n $lv -L ${lvsize}m emulab $redir")) {
+	    if (mysystem("lvcreate -n $lv -L ${lvsize}m $VGNAME $redir")) {
 		warn("*** $lv: could not create LV$logmsg\n");
 		return 0;
 	    }
 
-	    $mdev = "emulab/$lv";
+	    $mdev = "$VGNAME/$lv";
 	}
 
 	$href->{'LVDEV'} = "/dev/$mdev";
@@ -1759,10 +1770,10 @@ sub os_remove_storage_slice($$$)
 	    $dev = $mdev = "${bdisk}${pchr}4";
 	    $devtype = "PART";
 	} else {
-	    $dev = "emulab/$lv";
+	    $dev = "$VGNAME/$lv";
 	    # XXX note that any '-'s in the mapper name are doubled
 	    (my $rlv = $lv) =~ s/-/--/g;
-	    $mdev = "mapper/emulab-$rlv";
+	    $mdev = "mapper/${VGNAME}-$rlv";
 	    $devtype = "LVM";
 	}
 
@@ -1892,7 +1903,7 @@ sub os_remove_storage_slice($$$)
 	    #
 	    # lvremove -f emulab/h2d2
 	    #
-	    if (mysystem("lvremove -f emulab/$lv $redir")) {
+	    if (mysystem("lvremove -f $VGNAME/$lv $redir")) {
 		warn("*** $lv: could not destroy$logmsg\n");
 	    }
 
@@ -1905,12 +1916,12 @@ sub os_remove_storage_slice($$$)
 	    #  pvremove -f /dev/sda4 /dev/sdb
 	    #
 	    my $gotlvs = 0;
-	    my $lvs = `lvs -o vg_name --noheadings emulab 2>/dev/null`;
+	    my $lvs = `lvs -o vg_name --noheadings $VGNAME 2>/dev/null`;
 	    if ($lvs) {
 		return 1;
 	    }
 
-	    if (mysystem("vgremove -f emulab $redir")) {
+	    if (mysystem("vgremove -f $VGNAME $redir")) {
 		warn("*** $lv: could not destroy VG$logmsg\n");
 	    }
 
