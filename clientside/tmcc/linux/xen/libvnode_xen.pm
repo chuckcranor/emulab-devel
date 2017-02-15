@@ -2901,6 +2901,23 @@ sub vnodeDestroy($$$$)
     ReleaseIFBs($vmid, $private)
 	if (exists($private->{'ifbs'}));
 
+    #
+    # XXX before we destroy disks, we need to tear down any LVM VG/PVs
+    # that were setup inside the vnode by the storage subsystem. There
+    # should only be one VG but possibly multiple PVs.
+    #
+    my $vnodevg = "emulab-$vnode_id";
+    my @vnodepvs = `pvs -o vg_name,pv_name --noheadings | grep $vnodevg`;
+    if (@vnodepvs > 0) {
+	chomp @vnodepvs;
+	mysystem2("vgremove -f $vnodevg");
+	foreach my $vnodepv (@vnodepvs) {
+	    if ($vnodepv =~ /$vnodevg\s+(\S+)$/) {
+		mysystem2("pvremove -f $1");
+	    }
+	}
+    }
+
     # Destroy the all the disks.
     foreach my $key (keys(%{ $private->{'disks'} })) {
 	my $lvname;
