@@ -2233,6 +2233,8 @@ sub DoRefresh()
 	    goto bad;
 	}
 	my $blob = $response->value();
+	#print Dumper($blob);
+
 	if ($blob->{'status'} eq "ready") {
 	    $sliver->SetStatus("ready");
 	}
@@ -2721,7 +2723,7 @@ sub DoDeleteNodes()
 	    else {
 		$errmsg = "WaitforSliver Failure at ".$aggobj->aggregate_urn();
 	    }
-	    $errcode = $aggobj->webtask()->output();
+	    $errcode = $aggobj->webtask()->exitcode();
 	    goto bad;
 	}
     }
