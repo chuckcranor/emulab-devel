@@ -1297,10 +1297,12 @@ sub LoadVirtNodes($)
 	# what we want to do.
 	#
 	if (!$vnode->_typeinfo()->IsClass() || defined($fixed)) {
-	    if (!defined($self->types()->{$type})) {
-		$self->types()->{$type} = 0;
+	    my $t = $vnode->_typeinfo()->type();
+	    
+	    if (!exists($self->types()->{$t})) {
+		$self->types()->{$t} = 0;
 	    }
-	    $self->types()->{$type}++;
+	    $self->types()->{$t}++;
 	}
 	elsif (defined($self->forcedarchitecture())) {
 	    my $arch = $self->forcedarchitecture();
