@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2000-2016 University of Utah and the Flux Group.
+# Copyright (c) 2000-2017 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -722,10 +722,13 @@ if (!$TESTMODE) {
       }
 
       #
-      # Move the new boss autofs mount map in place.
+      # Move the new boss autofs mount map in place and flush the cache.
       #
       if ($bossdirlist) {
 	  rename("$bossmountfile.new", $bossmountfile);
+	  if (-x "/usr/sbin/automount") {
+	      system("/usr/sbin/automount -c");
+	  }
       }
   }
 
