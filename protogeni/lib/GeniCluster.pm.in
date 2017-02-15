@@ -61,6 +61,7 @@ use Time::Local;
 use File::Temp qw(tempfile);
 use Project;
 use NodeType;
+use Node;
 
 # Configure variables
 my $TB		   = "@prefix@";
@@ -749,9 +750,9 @@ sub Reserve($)
     }
 
     GeniUtil::FlipToElabMan();
-    my $output = GeniUtil::ExecQuiet("$WAP $TB/sbin/reserve $args");
+    my $output = GeniUtil::ExecQuiet("$WAP $TB/sbin/reserve -p $args");
     
-    if ($?) {
+    if ($? && $? >> 8 != 2) {
 	GeniUtil::FlipToGeniUser();
 	print STDERR "$args\n";
 	$webtask->Refresh();
@@ -763,9 +764,10 @@ sub Reserve($)
 	}
 	return GeniResponse->Create(GENIRESPONSE_REFUSED, $code, $mesg);
     }
+    my $approved = ($? >> 8 == 2 ? 0 : 1);
     GeniUtil::FlipToGeniUser();
     $webtask->Delete();
-    return GeniResponse->Create(GENIRESPONSE_SUCCESS);
+    return GeniResponse->Create(GENIRESPONSE_SUCCESS, $approved);
 }
 
 #
@@ -868,12 +870,47 @@ sub Reservations($)
 	$blob->{"start"}       = TBDateStringGMT($row->{'start'});
 	$blob->{"end"}         = TBDateStringGMT($row->{'end'});
 	$blob->{"notes"}       = $row->{'notes'} || "";
+	$blob->{"approved"}    = $row->{'approved'} || "";
 	$results{"$idx"}       = $blob;
     }
     my $blob = {"api_version"  => $API_VERSION,
 		"reservations" => \%results,
     };
     return GeniResponse->Create(GENIRESPONSE_SUCCESS, $blob);
+}
+
+#
+# Approve a pending reservation.
+#
+sub ApproveReservation($)
+{
+    my ($argref)  = @_;
+
+    my $hasperm = CheckPermission(1);
+    return $hasperm
+	if (GeniResponse::IsError($hasperm));
+
+    return GeniResponse->MalformedArgsResponse("Missing reservation ID")
+	if (! (exists($argref->{"idx"}) && $argref->{"idx"} ne ""));
+
+    my $idx = $argref->{"idx"};
+    return GeniResponse->MalformedArgsResponse("Illegal reservation ID")
+	if ($idx !~ /^\d+$/);
+
+    my $reservation = Reservation->Lookup($idx);
+    return GeniResponse->Create(GENIRESPONSE_SEARCHFAILED)
+	if (!defined($reservation));
+
+    GeniUtil::FlipToElabMan();
+    my $output = GeniUtil::ExecQuiet("$WAP $TB/sbin/reserve -a -m $idx");
+    
+    if ($?) {
+	GeniUtil::FlipToGeniUser();
+	print STDERR "$output\n";
+	return GeniResponse->Create(GENIRESPONSE_REFUSED, undef, $output);
+    }
+    GeniUtil::FlipToGeniUser();
+    return GeniResponse->Create(GENIRESPONSE_SUCCESS);
 }
 
 #
@@ -927,6 +964,53 @@ sub DeleteReservation($)
 	or GeniResponse->Create(GENIRESPONSE_ERROR);
     
     return GeniResponse->Create(GENIRESPONSE_SUCCESS);
+}
+
+#
+# Reservation info
+#
+sub ReservationSystemInfo($)
+{
+    my ($argref)  = @_;
+
+    my $hasperm = CheckPermission(1);
+    return $hasperm
+	if (GeniResponse::IsError($hasperm));
+
+    my $fblob = {};
+    my $pblob = {};
+
+    my @alltypes = NodeType->AllTypes();
+    foreach my $type (@alltypes) {
+	next
+	    if ($type->class() ne "pc");
+	
+	my $type = $type->type();
+	
+	#
+	# Skip if no physical testnodes of this type.
+	#
+	my $query_result =
+	    DBQueryWarn("select count(node_id) from nodes ".
+			"where type='$type' and ".
+			"      role='" . $Node::NODEROLE_TESTNODE . "'");
+		
+	return GeniResponse->Create(GENIRESPONSE_ERROR)
+	    if (!$query_result);
+	next
+	    if (!$query_result->numrows);
+	my ($count) = $query_result->fetchrow_array();
+	next
+	    if (!$count);
+
+	$fblob->{$type} = Reservation->FreeCount($type);
+	$pblob->{$type} = [ Reservation->Forecast($type) ];
+    }
+    my $blob = {
+	"freecounts" => $fblob,
+	"forecast"   => $pblob,
+    };
+    return GeniResponse->Create(GENIRESPONSE_SUCCESS, $blob);
 }
 
 #
