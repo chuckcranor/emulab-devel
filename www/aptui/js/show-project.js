@@ -376,8 +376,8 @@ $(function ()
 	    });
 	    
 	    // Enable the remove button when users are selected.
-	    $('#members_table .subgroup-checkbox').change(function () {
-		$('#subgroup-delete-button').removeAttr("disabled");
+	    $('#members_table .remove-checkbox').change(function () {
+		$('#remove-users-button').removeAttr("disabled");
 	    });
 	    // Handler for the remove button.
 	    $('#confirm-remove-users').click(function () {

@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2016 University of Utah and the Flux Group.
+# Copyright (c) 2000-2017 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -381,15 +381,15 @@ function Do_EditMembership()
             SPITAJAX_ERROR(-1, "User is still heading up experiments: $uid");
             return -1;
         }
-        # Check trust values.
-        if (!array_key_exists($trust, $newTrustMap)) {
+        # Check trust values unless removing from the group/project.
+        if ($action != "remove" &&
+            !array_key_exists($trust, $newTrustMap)) {
             SPITAJAX_ERROR(-1, "Invalid privilege: $trust");
             return -1;
         }
     }
     reset($users);
     foreach ($users as $uid => $trust) {
-        $trust       = $newTrustMap[$trust];
         $target_user = User::LookupByUid($uid);
         if (!$target_user) {
             SPITAJAX_ERROR(-1, "Unknown target user uid: $uid");
@@ -405,6 +405,7 @@ function Do_EditMembership()
                        $action == "add" ? "-a" : "-r");
             $args = "$pid:$gid";
             if ($action == "add" || $action == "approve") {
+                $trust = $newTrustMap[$trust];
                 $args .= ":$trust";
             }
             $retval = SUEXEC($this_user->uid(), $pid,
