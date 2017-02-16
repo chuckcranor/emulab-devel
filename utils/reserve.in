@@ -471,7 +471,7 @@ while( 1 ) {
 	    exit( 1 );
 	}
     }
-    exit( 0 ) if( $impotent );
+    exit( $approve ? 0 : 2 ) if( $impotent );
     next if( !defined( Reservation->BeginTransaction( $version ) ) );
     $res->Book( $modify_idx );
     Reservation->EndTransaction();
