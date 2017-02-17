@@ -5,6 +5,11 @@
       <div class='panel-heading'>
         <h3 class='panel-title'>
 	  <% if (editing) { %>Modify <% } %>Reservation Request
+	  <a href='#' class='btn btn-xs'
+	     data-toggle='modal'
+	     data-target="#reservation-help-modal">
+	    <span style='margin-bottom: 4px; margin-left: 0px;'
+		  class='glyphicon glyphicon-question-sign'></span></a>
 	  <% if (editing) { %>
 	    <span class="hidden pull-right text-danger small"
 		  id="unapproved-warning">
@@ -274,14 +279,78 @@
       <div class='modal-body'>
         <button type='button' class='close' data-dismiss='modal'
                 aria-hidden='true'>&times;</button>
-        <center><h3>Would you like to Commit this reservation?</h3>
+        <center>
+	  <h4>Would you like to submit this reservation request?</h4>
           <button style='margin-right: 20px;'
                   class='btn btn-primary btn-sm'
                   data-dismiss='modal' aria-hidden='true'>Cancel</button>
           <button class='btn btn-success btn-sm'
 		  id='commit-reservation'
-		  data-dismiss='modal' aria-hidden='true'>Reserve</button>
+		  data-dismiss='modal' aria-hidden='true'>Submit</button>
 	</center>
+	<div style="margin-top: 5px;" class="needs-approval hidden">
+	  NOTE: This reservation request can be accomodated, but the
+	  size and/or duration means that the reservation needs to
+	  be approved by an administrator before it is fully active.
+	  The administrator has been been notified and will be acting
+	  on this request shortly.</div>
+      </div>
+    </div>
+  </div>
+</div>
+<!-- Help -->
+<div id='reservation-help-modal' class='modal fade'>
+  <div class='modal-dialog'>
+    <div class='modal-content'>
+      <div class='modal-body'>
+        <button type='button' class='close' data-dismiss='modal'
+                aria-hidden='true'>&times;</button>
+	<p>
+	  Use this form to request that resources be set aside for
+	  your experiments at a future time. A reservation request
+	  consists of these specific elements:
+	  <ul>
+	    <li> Project; what project your experiment is going to be
+	    run in. If you are member of only one project, then do
+	      not worry about this.</li>
+	    <li> Count; How many nodes you need for your experiment. </li>
+	    <li> Start date/time; when you would like the resources to
+  	      be available for you to use.</li>
+	    <li> End date/time; when you expect to be finished. This is
+	      a <em>hard</em> deadline; if the resources have been
+	      promised to another user you will not be allowed to keep
+	      them past the end of the reservation (requests to extend
+	      your experiment will be denied).</li>
+	    <li> Cluster; at what cluster you want resources. If you
+	      need resources at multiple clusters, you need to submit a
+	      request for each cluster.</li>
+	    <li> Node type; reservations are for specific node types. You
+	      might not care what node type you get, but the reservation
+	      system requires it.</li>
+	    <li> Description; a reasonable explanation of why you need
+	      these resources. Most reservations need administrator
+	      approval, so the more details you provide, the better
+	      the chances your request will be approved.
+	    </li>
+	  </ul>
+	  <p>
+	    When you click on <b>Check</b> a preliminary query is made
+	    to see if the request is <em>feasible</em> given the
+	    current set of reservations at the cluster. If not, you can
+	    modify your request and check again. Once you get to a
+	    feasible reservation request, you will then want to <b>Submit</b>
+	    it. The request might still fail, say if someone else got
+	    in and captured those resources before you, but we expect
+	    that to be very rare.
+	  </p>
+	  <p>
+	    If your request is unusually large or long in duration, it
+	    is possible that the reservation will be recorded in a
+	    <em>pending</em> state; an administrator will need to
+	    review the request and approve it. Your list of
+	    reservations will indicate which requests are pending
+	    approval. 
+	  </p>
       </div>
     </div>
   </div>

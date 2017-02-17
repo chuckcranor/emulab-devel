@@ -283,6 +283,7 @@ $(function ()
     function ValidateReservation()
     {
 	var callback = function(json) {
+	    // Three indicates success but needs admin approval.
 	    if (json.code) {
 		if (json.code != 2) {
 		    sup.SpitOops("oops", json.value);		    
@@ -293,6 +294,14 @@ $(function ()
 	    ToggleSubmit(true, "submit");
 	    // Make sure we still warn about an unsaved form.
 	    aptforms.MarkFormUnsaved();
+	    if (json.value == 3) {
+		$('#confirm-reservation .needs-approval')
+		    .removeClass("hidden");
+	    }
+	    else {
+		$('#confirm-reservation .needs-approval')
+		    .addClass("hidden");
+	    }
 	    sup.ShowModal('#confirm-reservation');
 	};
 	aptforms.SubmitForm('#reserve-request-form', "reserve",
@@ -311,7 +320,7 @@ $(function ()
 		sup.SpitOops("oops", json.value);
 		return;
 	    }
-	    window.location.replace(json.value);
+	    window.location.replace("list-reservations.php");
 	};
 	aptforms.SubmitForm('#reserve-request-form', "reserve",
 			    "Reserve", reserve_callback,
@@ -422,7 +431,7 @@ $(function ()
     // Toggle the button between check and submit.
     function ToggleSubmit(enable, which) {
 	if (which == "submit") {
-	    $('#reserve-submit-button').text("Reserve");
+	    $('#reserve-submit-button').text("Submit");
 	    $('#reserve-submit-button').addClass("btn-success");
 	    $('#reserve-submit-button').removeClass("btn-primary");
 	}

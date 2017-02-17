@@ -73,6 +73,7 @@ use lib "@prefix@/lib";
 use EmulabConstants;
 use emdb;
 use emutil;
+use Brand;
 use User;
 use Project;
 use Reservation;
@@ -166,9 +167,11 @@ sub DoReserve()
     #
     # We allow for a user or project argument.
     #
-    my $optlist = "t:s:e:nN:u:";
+    my $optlist = "t:s:e:nN:u:p:";
     my ($start, $end, $type, $reason, $update);
     my $checkonly = 0;
+    my $portal;
+    my $brand;
     my %rpcargs = ();
     my $context;
     my ($credential,$speaksfor);
@@ -194,6 +197,9 @@ sub DoReserve()
     if (defined($options{"u"})) {
 	$update = $options{"u"};
     }
+    if (defined($options{"p"})) {
+	$portal = $options{"p"};
+    }
     if (defined($options{"N"})) {
 	$reason = readfile($options{"N"});
     }
@@ -202,7 +208,11 @@ sub DoReserve()
     }
     usage()
 	if (!defined($project));
-    
+    # Need brand for email. No portal argument means emulab brand.
+    $brand = Brand->Create($portal);
+    if (!defined($brand)) {
+	fatal("Bad branding");
+    }
     if (defined($update)) {
 	usage()
 	    if (! (defined($count) || defined($start) || defined($end)));
@@ -267,7 +277,37 @@ sub DoReserve()
 	fatal($response->output());
     }
     print Dumper($response);
-    exit(0);
+    #
+    # Exit with different status if the reservation is feasible but
+    # needs to be approved. The value is a boolean indicating
+    # approved.  Note that this applies even in "check" mode; the
+    # approval code indicates if the request is feasible and will be
+    # immediately approved.
+    #
+    if ($response->value()) {
+	# approved right away
+	exit(0);
+    }
+    #
+    # Needs to be approved, exit with special status.
+    #
+    # If this was not $checkonly, then we want to send email locally
+    # since the email was generated to the tbops but not the portal
+    # email lists.
+    #
+    if (!$checkonly) {
+	my $this_uid   = $this_user->uid();
+	my $this_email = $this_user->email();
+	my $url        = $brand->wwwBase() . "/list-reservations.php";
+    
+	$brand->SendEmail($brand->ExtensionsEmailAddress(),
+	  "Pending reservation request needs approval",
+	  "A reservation request was made by $this_uid, but it needs approval.".
+	  "\n\n".
+	  "See: $url", $this_email);
+    }
+    
+    exit(2);
 }
 
 #

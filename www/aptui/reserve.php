@@ -38,11 +38,6 @@ $this_user = CheckLoginOrRedirect();
 $isadmin   = (ISADMIN() ? 1 : 0);
 $isfadmin  = (ISFOREIGN_ADMIN() ? 1 : 0);
 
-if (!ISADMIN()) {
-    SPITUSERERROR("You do not have permission to view this page");
-    exit();
-}
-
 #
 # Verify page arguments. Cluster is a domain that we turn into a URN.
 #

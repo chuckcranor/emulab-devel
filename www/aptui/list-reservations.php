@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2016 University of Utah and the Flux Group.
+# Copyright (c) 2000-2017 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -75,6 +75,10 @@ echo "<link rel='stylesheet'
 echo "<div id='main-body'>
         <div id='spinner'>
           <center id='spinner'><img src='images/spinner.gif' /></center><br>
+        </div>
+        <div id='noreservations' class=hidden>
+          You do not have any reservations. Would you like to
+           <a href='reserve.php'>create</a> one?
         </div>
       </div>\n";
 

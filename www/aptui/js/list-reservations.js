@@ -28,15 +28,16 @@ $(function ()
      */
     function LoadData()
     {
-	var count = Object.keys(amlist).length;
+	var amcount  = Object.keys(amlist).length;
+	var rescount = 0;
 	
 	_.each(amlist, function(urn, name) {
 	    var callback = function(json) {
 		console.log(json);
 		
 		// Kill the spinner.
-		count--;
-		if (count <= 0) {
+		amcount--;
+		if (amcount <= 0) {
 		    $('#spinner').addClass("hidden");
 		}
 		if (json.code) {
@@ -45,8 +46,15 @@ $(function ()
 		    return;
 		}
 		var reservations = json.value;
-		if (reservations.length == 0) 
+		rescount += reservations.length;
+		
+		if (reservations.length == 0) {
+		    if (amcount == 0 && rescount == 0) {
+			// No reservations at all, show the message.
+			$('#noreservations').removeClass("hidden");
+		    }
 		    return;
+		}
 
 		// Generate the main template.
 		var html = listTemplate({
