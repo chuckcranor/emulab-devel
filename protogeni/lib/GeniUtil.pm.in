@@ -37,6 +37,7 @@ use vars qw(@ISA @EXPORT);
 @EXPORT = qw(GENI_PURGEFLAG FindHostname FindVHostname);
 
 use English;
+use Carp;
 use Data::Dumper;
 use XML::Simple;
 use File::Temp qw(tempfile);
@@ -616,8 +617,11 @@ sub CreateLocalUser($$)
 				    "Could not create local user")
     }
     FlipToGeniUser();
+    User->FlushAll();
+    GeniUser->FlushAll();
     my $user = GeniUser->Lookup($urn, 1);
     if (!defined($user)) {
+	Carp::cluck("Could not lookup '$urn' after creategeniuser");
 	return GeniResponse->Create(GENIRESPONSE_ERROR, undef,
 				    "Could not lookup local user after create")
     }

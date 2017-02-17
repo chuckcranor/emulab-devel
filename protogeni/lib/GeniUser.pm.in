@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2008-2016 University of Utah and the Flux Group.
+# Copyright (c) 2008-2017 University of Utah and the Flux Group.
 # 
 # {{{GENIPUBLIC-LICENSE
 # 
@@ -300,6 +300,12 @@ sub Flush($)
     my ($self) = @_;
 
     delete($users{$self->idx()});
+}
+sub FlushAll($)
+{
+    my ($class) = @_;
+    
+    %users = ();
 }
 
 # Return the URN.
