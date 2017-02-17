@@ -262,7 +262,6 @@ if ($allvers) {
     # check all dead images
     if ($doall && $dodeleted && $accessfs) {
 	checkdeadimages($doallpid);
-	exit(0);
     }
 
     my @nimages = ();
