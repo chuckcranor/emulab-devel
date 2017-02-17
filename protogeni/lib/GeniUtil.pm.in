@@ -617,15 +617,15 @@ sub CreateLocalUser($$)
 				    "Could not create local user")
     }
     FlipToGeniUser();
-    User->FlushAll();
-    GeniUser->FlushAll();
-    my $user = GeniUser->Lookup($urn, 1);
+    # Direct user lookup since GeniUser->Lookup is going to look in
+    # geni-cm database, and the new user is not there. 
+    my $user = User->LookupNonLocal($urn);
     if (!defined($user)) {
-	Carp::cluck("Could not lookup '$urn' after creategeniuser");
+	Carp::cluck("Could not lookup localuser '$urn' after creategeniuser");
 	return GeniResponse->Create(GENIRESPONSE_ERROR, undef,
 				    "Could not lookup local user after create")
     }
-    return $user;
+    return GeniUser->CreateFromLocal($user);
 }    
 
 sub escapeshellarg($)
