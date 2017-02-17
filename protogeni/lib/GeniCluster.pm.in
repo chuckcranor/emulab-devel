@@ -750,7 +750,7 @@ sub Reserve($)
     }
 
     GeniUtil::FlipToElabMan();
-    my $output = GeniUtil::ExecQuiet("$WAP $TB/sbin/reserve $args");
+    my $output = GeniUtil::ExecQuiet("$WAP $TB/sbin/reserve -p $args");
     
     if ($? && $? >> 8 != 2) {
 	GeniUtil::FlipToGeniUser();
