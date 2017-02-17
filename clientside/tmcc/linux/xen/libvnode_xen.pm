@@ -126,6 +126,7 @@ my $IMAGEZIP    = "/usr/local/bin/imagezip";
 my $IMAGEUNZIP  = "/usr/local/bin/imageunzip";
 my $IMAGEDUMP   = "/usr/local/bin/imagedump";
 my $XM          = "/usr/sbin/xm";
+my $FSCKUFS	= "/sbin/fsck.ufs";
 my $debug  = 0;
 my $lockdebug = 0;
 my $sleepdebug = 0;
@@ -1288,6 +1289,7 @@ sub vnodeCreate($$$$)
 
 	# XXX we assume that all 10.0 and above will be PVHVM
 	if ($imagemetadata->{'OSVERSION'} >= 10) {
+	    $vdiskprefix = "hd";
 	    $ishvm = 1;
 	}
     }
@@ -1835,10 +1837,15 @@ sub vnodePreConfig($$$$$){
 	my $utype = "44bsd";
 	mysystem2("mount -t ufs -o ro,ufstype=$utype $dev $vnoderoot ".
 		  ">/dev/null 2>&1");
+	# failed, try UFS2 instead
 	if ($?) {
-	    # try UFS2
 	    $utype = "ufs2";
-	    mysystem("mount -t ufs -o ro,ufstype=$utype $dev $vnoderoot");
+	    mysystem2("mount -t ufs -o ro,ufstype=$utype $dev $vnoderoot");
+	    # still failed, try fsck.ufs if it exists
+	    if ($? && -x "$FSCKUFS") {
+		mysystem("$FSCKUFS -y $dev");
+		mysystem("mount -t ufs -o ro,ufstype=$utype $dev $vnoderoot");
+	    }
 	}
 	if (-e "$vnoderoot/etc/emulab/genvmtype") {
 	    print STDERR "vnodePreConfig: $vnode_id root already localized\n";
@@ -1993,6 +2000,9 @@ sub vnodePreConfig($$$$$){
 		if ($?);
 	
 	my $ldisk = "da";
+	if ($vninfo->{'ishvm'}) {
+	    $ldisk = "ada";
+	}
 	if (-e "$vnoderoot/etc/dumpdates") {
 	    mysystem2("sed -i.bak -e 's;^/dev/\\(ada\\|ad\\);/dev/$ldisk;' ".
 		      "  $vnoderoot/etc/dumpdates");
@@ -2255,8 +2265,14 @@ sub vnodePreConfigExpNetwork($$$$)
     # Keep track of links (and implicitly, bridges) that need to be created
     my @links = ();
 
+    # XXX for HVM we are assuming PVHVM so avoid an emulated device
+    my $viftype = "'";
+    if ($vninfo->{'ishvm'}) {
+	$viftype .= "type=vif,";
+    }
+
     # Build up a config file line for all interfaces, starting with cnet
-    my $vifstr = "vif = ['" .
+    my $vifstr = "vif = [$viftype " .
 	"mac=" . $vninfo->{'cnet'}->{'mac'} . ", " .
 	# This tells vif-bridge to use antispoofing iptable rules.
 	"ip=" . $vninfo->{'cnet'}->{'ip'} . ", " .
@@ -2365,7 +2381,7 @@ sub vnodePreConfigExpNetwork($$$$)
 	}
 
 	# add interface to config file line
-	$vifstr .= ", 'vifname=$ifname, mac=" .
+	$vifstr .= ", $viftype vifname=$ifname, mac=" .
 	    fixupMac($mac) . ", bridge=$brname";
 	if ($script ne "") {
 	    $vifstr .= ", script=$script";
@@ -3029,7 +3045,7 @@ sub vnodeHalt($$$$)
 	# Temporarily unblock and set to default so we die. 
 	#
 	local $SIG{TERM} = 'DEFAULT';
-	my $status = RunWithLock("xmtool", "$XM shutdown -w $vnode_id");
+	my $status = RunWithLock("xmtool", "$XM shutdown -F -w $vnode_id");
 	exit($status >> 8);
     }
     return 0;
