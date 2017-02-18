@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2008-2016 University of Utah and the Flux Group.
+# Copyright (c) 2008-2017 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -218,6 +218,8 @@ while (my %row = $query_result->fetchhash()) {
     print "$pc "
 	if ($debug);
 }
+print "\n"
+    if ($debug);
 
 my %before = ();
 if ($interval > 0) {
@@ -352,7 +354,9 @@ sub gather($$)
 	open(PS, "$portstats $arg -p $slist 2>&1 |") or
 	    die "Could not get portstats\n";
 	while (<PS>) {
-	    next if ($_ !~ /^\w+:\d/);
+	    # XXX ignore warnings from snmpit
+	    next if ($_ =~ /^WARNING:/);
+	    next if ($_ !~ /^[-\w]+:\d/);
 	    my ($node, @counts) = split;
 	    if (@counts != 6) {
 		print STDERR "*** $node: invalid portstats!?\n"; 
