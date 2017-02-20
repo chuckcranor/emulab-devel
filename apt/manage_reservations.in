@@ -575,7 +575,7 @@ sub DoSystemInfo()
 		$webtask->Exited(-1);
 	    }
 	    else {
-		print STDERR $response->output() . "\n";
+		print STDERR "$authority: " . $response->output() . "\n";
 	    }
 	    return -1;
 	}
@@ -623,7 +623,7 @@ sub DoSystemInfo()
 	$wtask->Refresh();
 
 	if ($code) {
-	    $errmsg  = $wtask->output();
+	    $errmsg  = "$auth: " . $wtask->output();
 	    goto bad;
 	}
 	$blob->{$auth->urn()} = $wtask->value();
