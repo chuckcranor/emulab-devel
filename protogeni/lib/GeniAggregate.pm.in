@@ -1394,7 +1394,7 @@ sub Action($$$;$)
     #
     if (keys(%reloads)) {
 	if (EmulabFeatures->FeatureEnabled("NewOsload",
-					   GeniUtil::GeniUser(),
+					   GeniUtil::GetGeniUser(),
 					   undef, undef)) {
 	    require libosload_new;
 	    $osload_object = libosload_new->New();

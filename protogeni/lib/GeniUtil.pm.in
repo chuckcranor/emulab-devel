@@ -141,7 +141,7 @@ sub FlipToElabMan()
 #
 # Lookup the geniuser.
 #
-sub GeniUser()
+sub GetGeniUser()
 {
     return User->Lookup($GENIUSER);
 }
