@@ -810,8 +810,8 @@ if ($pid ne TBOPSPID()) {
 # sure the target directory exists in the image path is a directory.
 #
 # Make sure the path directory exists.
-if ($image->IsDirPath() && ! -e $image->path() && !mkdir($image->path(), 0775)){
-    fatal("Could not mkdir " . $image->path() . ": $!");
+if ($image->CreateImageDir()) {
+    fatal("Could not create image directory");
 }
 open(FILE, "> $filename") or
     fatal("Could not create $filename: $!");

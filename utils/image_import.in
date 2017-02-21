@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2010-2016 University of Utah and the Flux Group.
+# Copyright (c) 2010-2017 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -450,6 +450,11 @@ if ($getimage) {
     # Run as root to access /proj
     $EUID = $UID = 0;
     if (! -e $image->FullImageFile() || $newhash ne $image->hash() || $force) {
+	# Make sure the path directory exists.
+	if ($image->CreateImageDir()) {
+	    $image->Unlock();
+	    exit(1);
+	}
 	$EUID = $UID = $SAVEUID;
 
 	if (DownLoadImage($image, $newhash, $user, $group)) {

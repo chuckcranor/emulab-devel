@@ -2764,6 +2764,28 @@ sub CreateImageDir($)
 	print STDERR "Could not mkdir " . $self->path() . ": $!";
 	return -1;
     }
+    # If we are root and had to create the directory, then the owner
+    # and group are going to be set wrong.
+    if ($EUID == 0) {
+	my $group = $self->GetGroup();
+	if (!defined($group)) {
+	    print STDERR "Could not get group for $self\n";
+	    return -1;
+	}
+	my $leader = $group->GetLeader();
+	if (!defined($leader)) {
+	    print STDERR "Could not get leader for $group\n";
+	    return -1;
+	}
+	my $uid = $leader->unix_uid();
+	my $gid = $group->unix_gid();
+
+        if (! chown($uid, $gid, $self->path())) {
+	    print STDERR "Could not chown($uid,$gid) " .
+		$self->path()  . ": $!\n";
+	    return -1;
+	}
+    }
     return 0;
 }
 
