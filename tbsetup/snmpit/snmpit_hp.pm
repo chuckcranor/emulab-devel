@@ -214,12 +214,12 @@ sub new($$$;$) {
     # method
     #
     bless($self,$class);
+
     #
     # Sometimes the SNMP session gets created when there is no connectivity
     # to the device so let's try something simple
     #
     my $test_case = $self->get1("sysObjectID", 0);
-    
     if (!defined($test_case)) {
 	warn "WARNING: Unable to retrieve via SNMP from $self->{NAME}\n";
 	return undef;
@@ -1932,7 +1932,7 @@ sub readifIndex($) {
 
     my ($rows) = snmpitBulkwalkFatal($self->{SESS}, ["hpSwitchPortTrunkGroup"]);
     my $t_off = $self->{TRUNKOFFSET} = 288;
-
+    
     foreach my $rowref (@$rows) {
 	($name,$ifindex,$iidoid) = @$rowref;
 	$self->debug("got $name, $ifindex, iidoid $iidoid\n", 2);
@@ -2271,20 +2271,31 @@ sub readifIndex($) {
 
     my ($rows) = snmpitBulkwalkFatal($self->{SESS}, ["hpSwitchPortTrunkGroup"]);
     my $t_off = $self->{TRUNKOFFSET} = 288;
-
+    my $ifindex_first = 0;
+ 
     foreach my $rowref (@$rows) {
         ($name,$ifindex,$iidoid) = @$rowref;
         $self->debug("got $name, $ifindex, iidoid $iidoid\n", 2);
+        if ($ifindex == 1) { $ifindex_first = 1;}
         $self->{TRUNKINDEX}{$ifindex} = $iidoid;
         if ($iidoid) { push @{$self->{TRUNKS}{$iidoid}}, $ifindex; }
         if ($ifindex > $maxport) { $maxport = $ifindex;}
         if ($iidoid > $maxtrunk) { $maxtrunk = $iidoid;}
     }
+    
     while (($ifindex, $iidoid) = each %{$self->{TRUNKINDEX}}) {
+        
         if (defined($bladesize)) {
-            $j = $ifindex - 9;
-            $port = 1 + ($j % $bladesize);
-            $mod = int ($j / $bladesize);
+            if ($ifindex_first == 1){
+                $j = $ifindex - 1;
+                $port = 1 + ($j % $bladesize);
+                $mod = 1 + int ($j / $bladesize);
+            } else   
+                {
+                  $j = $ifindex - 9;
+                  $port = 1 + ($j % $bladesize);
+                  $mod = int ($j / $bladesize);
+                }  
         } else
             { $mod = 1; $port = $ifindex; }
         my $modport = "$mod.$port";
@@ -2527,10 +2538,9 @@ sub setOpenflowController($$$) {
     my ($name, $vlan_num, $vlan_name);
 
     my ($rows) = $self->{SESS}->bulkwalk(0,32, ["dot1qVlanStaticName"]);
-
     foreach my $rowref (@$rows) {
         ($name,$vlan_num,$vlan_name) = @$rowref;
-        if ($name =~ /$vlan_number/i){
+        if ( ($name =~ /$vlan_number/i) || ($vlan_num == $vlan_number) ){
             $vlan_id = $vlan_name;
             $vlan_id_flag = 1;
         }
