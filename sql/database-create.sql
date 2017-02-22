@@ -408,6 +408,7 @@ CREATE TABLE `apt_profile_versions` (
   `published` datetime default NULL,
   `deleted` datetime default NULL,
   `disabled` tinyint(1) NOT NULL default '0',
+  `nodelete` tinyint(1) NOT NULL default '0',
   `uuid` varchar(40) NOT NULL,
   `parent_profileid` int(8) unsigned default NULL,
   `parent_version` int(8) unsigned default NULL,
