@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2016 University of Utah and the Flux Group.
+# Copyright (c) 2016-2017 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -35,6 +35,7 @@ use Date::Parse;
 use emdb;
 use libtestbed;
 use emutil;
+use EmulabConstants;
 use Project;
 use User;
 use Experiment;
@@ -1040,6 +1041,41 @@ sub MaxSwapInMap($$) {
     }
 
     return \%counts;
+}
+
+#
+# Reservable types for reservation system. Class Method.
+#
+sub ReservableTypes($)
+{
+    my ($class)  = @_;
+    my @result   = ();
+    my @alltypes = NodeType->AllTypes();
+    
+    foreach my $type (@alltypes) {
+	next
+	    if ($type->class() ne "pc");
+	
+	my $typename = $type->type();
+	
+	#
+	# Skip if no physical testnodes of this type.
+	#
+	my $query_result =
+	    DBQueryWarn("select count(node_id) from nodes ".
+			"where type='$typename' and ".
+			"    role='" . $Node::NODEROLE_TESTNODE . "'");
+	return ()
+	    if (!$query_result);
+	next
+	    if (!$query_result->numrows);
+	
+	my ($count) = $query_result->fetchrow_array();
+	next
+	    if (!$count);
+	push(@result, $type);
+    }
+    return @result;
 }
 
 # _Always_ make sure that this 1 is at the end of the file...

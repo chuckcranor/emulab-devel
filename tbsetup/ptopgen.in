@@ -1,7 +1,7 @@
 #!/usr/bin/perl -w
 
 #
-# Copyright (c) 2000-2016 University of Utah and the Flux Group.
+# Copyright (c) 2000-2017 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -218,6 +218,7 @@ use NodeType;
 use Lan;
 use BlockstoreType;
 use User;
+use Reservation;
 
 tblog_stop_capture('stdout');
 
@@ -2570,6 +2571,16 @@ sub print_header {
             print "<location country='$default_country' ".
 		"longitude='$default_long' latitude='$default_lat'/>\n";
 	    print "</site_info>\n";
+	    #
+	    # Reservable types for reservation system.
+	    #
+	    my @reservable = Reservation->ReservableTypes();
+	    print "<emulab:reservable_types>";
+	    foreach my $type (@reservable) {
+		my $typename = $type->type();
+		print "<emulab:type name='$typename' />";
+	    }
+	    print "</emulab:reservable_types>\n";
 	}
     }
 }

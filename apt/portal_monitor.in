@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2008-2016 University of Utah and the Flux Group.
+# Copyright (c) 2008-2017 University of Utah and the Flux Group.
 # 
 # {{{GENIPUBLIC-LICENSE
 # 
@@ -312,6 +312,24 @@ sub CheckAggregates()
 	    $aggregate->status("up");
 	    $aggregate->last_error("");
 	}
+
+	#
+	# Get the list of reservable types. Need to be backwards compat
+	# here until all clusters updated with this element. See below.
+	#
+	my $reservable_types;
+
+	if (my $ref = GeniXML::FindNodesNS("n:reservable_types",
+					   $manifest,
+					   $GeniXML::EMULAB_NS)->pop()) {
+	    $reservable_types = {};
+	    
+	    foreach my $t (GeniXML::FindNodesNS("n:type", $ref,
+					$GeniXML::EMULAB_NS)->get_nodelist()) {
+		my $typename = GeniXML::GetText("name", $t);
+		$reservable_types->{$typename} = $typename;
+	    }
+	}
 	
 	my $pcount = 0;
 	my $pavail = 0;
@@ -338,13 +356,19 @@ sub CheckAggregates()
 			foreach my $htype (FindNodes("n:hardware_type",
 						     $ref)->get_nodelist()) {
 			    my $hname = GeniXML::GetText("name", $htype);
-			    next
-				if (!defined($hname) || $hname eq "" || 
-				    $hname eq "pcvm" || $hname eq "pc" ||
-				    $hname =~ /^delay/ ||
-				    # Protect DB.
-				    $hname !~ /^[-\w]+$/);
-			    
+			    if (defined($reservable_types)) {
+				next
+				    if (!exists($reservable_types->{$hname}));
+			    }
+			    else {
+				# This can be deleted when clusters updated.
+				next
+				    if (!defined($hname) || $hname eq "" || 
+					$hname eq "pcvm" || $hname eq "pc" ||
+					$hname =~ /^delay/ ||
+					# Protect DB.
+					$hname !~ /^[-\w]+$/);
+			    }
 			    my $ntype =
 				GeniXML::FindNodesNS("n:node_type",
 					     $htype,
