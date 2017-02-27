@@ -25,6 +25,7 @@ use English;
 use strict;
 use Getopt::Std;
 use File::stat;
+use bigint;
 
 #
 # Get basic info for an image.
@@ -45,10 +46,11 @@ sub usage()
 	  "   -u        Print just the uncompressed data size of the image (if available)\n".
 	  "   -m        Print just the modtime of the image in seconds since epoch\n".
 	  "   -r        Print the range of sectors covered by the image\n".
+          "   -U k|m    Show sizes in KB or MB instead of bytes\n".
           "   -x        Show delta image info instead of full image info\n");
     exit(-1);
 }
-my $optlist   = "dsumN:qr";
+my $optlist   = "dsumN:qrU:";
 my $debug     = 0;
 my $quiet     = 0;
 my $forcedelta= 0;
@@ -57,6 +59,7 @@ my $showsize  = 0;
 my $showusize = 0;
 my $showmtime  = 0;
 my $showrange = 0;
+my $units;
 my $nodeid;
 
 #
@@ -111,6 +114,12 @@ if (defined($options{"q"})) {
 }
 if (defined($options{"x"})) {
     $forcedelta = 1;
+}
+if (defined($options{"U"})) {
+    $units = $options{"U"};
+    if ($units ne "k" && $units ne "m") {
+	usage();
+    }
 }
 if (defined($options{"s"})) {
     $showsize = 1;
@@ -238,6 +247,17 @@ if (!defined($nodeid)) {
 	}
     } else {
 	fatal("$imagepid/$imagename: access not allowed or image does not exist");
+    }
+}
+
+if (defined($units)) {
+    if ($units eq "k") {
+	$isize = $isize / 1024;
+	$usize = $usize / 1024;
+    }
+    elsif ($units eq "m") {
+	$isize = $isize / (1024 * 1024);
+	$usize = $usize / (1024 * 1024);
     }
 }
 
