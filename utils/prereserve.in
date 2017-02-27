@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2003-2016 University of Utah and the Flux Group.
+# Copyright (c) 2003-2017 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -672,11 +672,11 @@ sub StartReservation($$)
 		#
 		# Someone else still has it, skip.
 		#
-		print "$node_id is still reserved to project $curpid, will".
-		    "be done later.\n"
+		print "$node_id is still reserved to project $curpid, ".
+		    "will be done later.\n"
 		    if (defined($curpid));
-		print "$node_id is still pre-reserved to project $rpid, will".
-		    "be done later.\n"
+		print "$node_id is still pre-reserved to project $rpid, ".
+		    "will be done later.\n"
 		    if (defined($rpid));
 		next;
 	    }
