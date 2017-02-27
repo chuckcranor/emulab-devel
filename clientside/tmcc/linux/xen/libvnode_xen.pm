@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2008-2016 University of Utah and the Flux Group.
+# Copyright (c) 2008-2017 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -302,6 +302,9 @@ my $MAXROUTETTABLE = 255;
 
 # Striping
 my $STRIPE_COUNT   = 1;
+
+# Setup a RAID10 underneath the LVM
+my $LVM_RAID = SHAREDHOST() ? 1 : 0;
 
 # Avoid using SSDs unless there are only SSDs
 my $LVM_AVOIDSSD = 1;
@@ -763,15 +766,22 @@ sub rootPreConfig($)
 	# Find available devices of sufficient size, prepare them,
 	# and incorporate them into a volume group.
 	#
+      again:
 	my $totalSize = 0;
+	my $minSize;
 	my @blockdevs = ();
 	foreach my $dev (sort keys(%devs)) {
 	    #
 	    # Whole disk is available, use it.
 	    #
 	    if (defined($devs{$dev}{"size"})) {
+		my $psize = $devs{$dev}{"size"};
+
 		push(@blockdevs, $devs{$dev}{"path"});
-		$totalSize += $devs{$dev}{"size"};
+		$totalSize += $psize;
+		if (!defined($minSize) || $psize < $minSize) {
+		    $minSize = $psize;
+		}
 		next;
 	    }
 
@@ -790,7 +800,7 @@ sub rootPreConfig($)
 		# the available space (e.g., Utah d710s), this is a bad
 		# idea.
 		#
-		if ($LVM_FULLDISKONLY) {
+		if ($LVM_FULLDISKONLY || $LVM_RAID) {
 		    print STDERR
 			"WARNING: not using partition $ppath for LVM\n";
 		    next;
@@ -829,10 +839,16 @@ sub rootPreConfig($)
 		#
 		push(@blockdevs, $ppath);
 		$totalSize += $psize;
+		if (!defined($minSize) || $psize < $minSize) {
+		    $minSize = $psize;
+		}
 	    }
 	    if ($LVM_ONEPARTPERDISK && defined($lppath)) {
 		push(@blockdevs, $lppath);
 		$totalSize += $lpsize;
+		if (!defined($minSize) || $lpsize < $minSize) {
+		    $minSize = $lpsize;
+		}
 	    }
 	}
 	if (@blockdevs == 0) {
@@ -842,6 +858,37 @@ sub rootPreConfig($)
 	}
 		    
 	my $blockdevstr = join(' ', sort @blockdevs);
+
+	#
+	# If we are doing a reliable LVM setup, setup an mdadm RAID10
+	# with two copies. This seems to be the least expensive form
+	# of redundancy we can get (as opposed to using RAID5 when there
+	# are three or more disks).
+	#
+	# Note that this setup is unique to mdadm and is equivalent to
+	# RAID1 with two disks, and equivalent to RAID1+0 (i.e., what is
+	# typically referred to as "RAID10") with four disks.
+	#
+	if ($LVM_RAID) {
+	    my $rdev = "/dev/md/xen";
+	    my $rargs;
+	    my $ndevs = int(@blockdevs);
+
+	    if ($ndevs == 1) {
+		print STDERR "WARNING: only one disk/partition available, ".
+		    "not configuring RAID.\n";
+		$LVM_RAID = 0;
+		goto again;
+	    }
+	    mysystem("mdadm --create --verbose $rdev ".
+		     "--level=10 --raid-devices=$ndevs $blockdevstr");
+	    sleep(1);
+	    # XXX raid5 config lists parity drive as spare til initialized
+	    mysystem("mdadm --detail --scan | sed -e 's/spares=1//' ".
+		     ">>/etc/mdadm/mdadm.conf");
+	    $blockdevstr = $rdev;
+	}
+
 	mysystem("pvcreate $blockdevstr");
 	mysystem("vgcreate $VGNAME $blockdevstr");
 
