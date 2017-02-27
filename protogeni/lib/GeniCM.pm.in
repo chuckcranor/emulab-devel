@@ -6991,20 +6991,27 @@ sub GeniExperiment($;$)
 #
 sub FlipToUser($$)
 {
-    my ($slice, $user) = @_;
+    my ($object, $user) = @_;
+    my ($project,$group,$creator, $experiment, $image);
     my $debug = 1;
 
-    my $experiment = $slice->GetExperiment();
-    # No experiment, no reason to flip.
-    return 0
-	if (!defined($experiment));
-    my $project = $experiment->GetProject();
+    if (ref($object) eq "GeniSlice") {
+	$experiment = $object->GetExperiment();
+	# No experiment, no reason to flip.
+	return 0
+	    if (!defined($experiment));
+	$project = $experiment->GetProject();
+	$group   = $experiment->GetGroup();
+	$creator = $experiment->GetCreator();
+    }
+    elsif (ref($object) eq "OSImage" || ref($object) eq "Image") {
+	$image   = $object;
+	$project = $object->GetProject();
+	$group   = $object->GetGroup();
+	$creator = $object->GetCreator();	
+    }
     return undef
-	if (!defined($project));
-    my $group   = $experiment->GetGroup();
-    my $creator = $experiment->GetCreator();
-    return undef
-	if (!defined($creator));
+	if (! (defined($project) && defined($group) && defined($creator)));
     $creator = GeniUser::LocalUser->Create($creator);
 
     #
@@ -7036,9 +7043,17 @@ sub FlipToUser($$)
     # this will happen if a credential is delegated or if the
     # creator binds a user to a slice. 
     #
-    if (!$experiment->AccessCheck($user->emulab_user(),
-				  $Experiment::EXPT_ACCESS_MODIFY)) {
-	$user = $creator;
+    if (defined($experiment)) {
+	if (!$experiment->AccessCheck($user->emulab_user(),
+				      $Experiment::EXPT_ACCESS_MODIFY)) {
+	    $user = $creator;
+	}
+    }
+    else {
+	if (!$image->AccessCheck($user->emulab_user(),
+				 TB_IMAGEID_MODIFYINFO())) {
+	    $user = $creator;
+	}
     }
   flip:
     return undef

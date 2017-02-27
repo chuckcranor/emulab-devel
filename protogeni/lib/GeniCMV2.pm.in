@@ -113,6 +113,7 @@ my $SHAREVLAN      = "$TB/sbin/sharevlan";
 my $PANIC          = "$TB/sbin/panic";
 my $LINKTEST       = "$TB/sbin/linktest_control";
 my $XMLLINT	   = "/usr/local/bin/xmllint";
+my $IMAGEINFO      = "$TB/sbin/imageinfo";
 my $PRERENDER      = "$TB/libexec/vis/prerender";
 my $IMPORTER       = "$TB/sbin/image_import";
 my $POSTIMAGEDATA  = "$TB/sbin/protogeni/postimagedata";
@@ -3086,6 +3087,7 @@ sub CreateImage($)
     my $credentials  = $argref->{'credentials'};
     my $imagename    = $argref->{'imagename'};
     my $sliver_urn   = $argref->{'sliver_urn'};
+    my $no_versions  = 0;
     my $wholedisk    = 0;
     my $update_prepare = 0;
     my ($bsname,$blockstore);
@@ -3105,6 +3107,8 @@ sub CreateImage($)
     if (! ($imagename =~ /^[-\w\.\+]*$/)) {
 	return GeniResponse->MalformedArgsResponse("Improper name argument");
     }
+    $no_versions = 1
+	if (exists($argref->{'no_versions'}) && $argref->{'no_versions'});
     $wholedisk = 1
 	if (exists($argref->{'wholedisk'}) && $argref->{'wholedisk'});
     $update_prepare = 1
@@ -3556,9 +3560,10 @@ sub DeleteImage($)
     my ($argref) = @_;
     my $image_urn    = $argref->{'image_urn'};
     my $credentials  = $argref->{'credentials'};
+    my $impotent     = $argref->{'impotent'};
     my $overide_urn  = (exists($argref->{'creator_urn'}) ?
 			$argref->{'creator_urn'} : undef);
-    my ($imagename,$imagepid);
+    my ($imagename,$imagepid,$imagevers);
 
     require OSImage;
     
@@ -3582,25 +3587,21 @@ sub DeleteImage($)
     return $authority
 	if (GeniResponse::IsResponse($authority));
 
-    my ($auth,undef,$id) = GeniHRN::Parse($image_urn);
-    return GeniResponse->MalformedArgsResponse("Malformed URN")
-	if (!defined($id));
+    my ($auth, $ospid, $os, $vers) = GeniHRN::ParseImage($image_urn);
+    return GeniResponse->MalformedArgsResponse("Malformed URN: $image_urn")
+	if (!defined($os));
     
-    if ($id =~ m{(.*)//(.*)}) {
-	$imagepid  = $1;
-	$imagename = $2;
-    }
-    else {
-	return GeniResponse->MalformedArgsResponse("Could not parse $id");
-    }
+    $imagepid  = $ospid;
+    $imagename = $os;
+    $imagevers = $vers;
 
     #
     # Make sure we can get the image descriptor.
     #
-    my $image = OSImage->Lookup($imagepid, $imagename);
+    my $image = OSImage->Lookup($imagepid, $imagename, $imagevers);
     if (!defined($image)) {
 	return GeniResponse->Create(GENIRESPONSE_SEARCHFAILED, undef,
-				    "No such image");
+				    "No such image: $image_urn");
     }
     my $imageid     = $image->imageid();
     my $creator_urn = $image->creator_urn();
@@ -3631,7 +3632,18 @@ sub DeleteImage($)
 		    "Not your image; please specify original creator urn")
 	    if (!defined($overide_urn) || $overide_urn ne $creator_urn);
     }
-    my $output = GeniUtil::ExecQuiet("$DELETEIMAGE -p $imageid"); 
+
+    if (!defined(GeniCM::FlipToUser($image, $user))) {
+	return GeniResponse->Create(GENIRESPONSE_ERROR, undef,
+				    "FlipToUser failed");
+    }
+    
+    # Delete only the version if directed to.
+    my $opt = (defined($imagevers) ? "-V" : "");
+    $opt   .= (defined($impotent) && $impotent ? " -n" : "");
+    $opt   .= " $imageid";
+    $opt   .= (defined($imagevers) ? ":$imagevers" : "");
+    my $output = GeniUtil::ExecQuiet("$DELETEIMAGE -p $opt");
     print STDERR $output;
     if ($?) {
 	print STDERR $output;
@@ -3929,9 +3941,35 @@ sub ListImages($)
 	my $image_urn = GeniHRN::Generate($OURDOMAIN, "image",
 				  $image->pid() . "//" . $image->imagename());
 	my $image_url = "$TBBASE/image_metadata.php?uuid=" . $image->uuid();
+
+	my $blob = {"urn"     => $image_urn . ":" . $image->version(),
+		    "url"     => $image_url,
+		    "created" => emutil::TBDateStringGMT($image->created()),
+		    "updated" => emutil::TBDateStringGMT($image->updated()),
+	};
 	
-	push(@result, {"urn" => $image_urn,
-		       "url" => $image_url});
+	#
+	# Get the file size on disk.
+	#
+	if ($image->size()) {
+	    $blob->{"filesize"} = $image->size() / (1024 * 1024) . "MB";
+	}
+	else {
+	    my $iname = $image->versname();
+	    my $isize = `$IMAGEINFO -s -U m $iname`;
+	    if (!$?) {
+		chomp($isize);
+		$blob->{"filesize"} = "${isize}MB";
+	    }
+	}
+	#
+	# Add the project URN, that the caller can map to a local project.
+	#
+	my $project = $image->GetProject();
+	if (defined($project)) {
+	    $blob->{'project_urn'} = $project->nonlocalurn();
+	}
+	push(@result, $blob);
     }
     print STDERR "Image for $user_urn:\n";
     print STDERR Dumper(\@result);
