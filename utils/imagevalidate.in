@@ -436,7 +436,7 @@ sub getallversions($)
 
     my $headvers = $image->version();
     my @iversions;
-    $image->AllVersions(\@iversions);
+    $image->AllVersions(\@iversions, 1);
 
     # Get the canonical name, sans version, for reporting.
     my $iname = $image->pid() . "/" . $image->imagename();

@@ -128,7 +128,7 @@ sub ConvertImage($)
 	return 0;
     }
     my @images = ();
-    if ($image->AllVersions(\@images)) {
+    if ($image->AllVersions(\@images, 1)) {
 	print STDERR "Could not get list of (versions) for $image\n";
 	return -1;
     }
