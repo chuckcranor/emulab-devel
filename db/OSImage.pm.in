@@ -458,15 +458,15 @@ sub LookupMostRecent($)
 #
 # Return a list of all image versions.
 #
-sub AllVersions($$)
+sub AllVersions($$;$)
 {
-    my ($self, $pref)  = @_;
+    my ($self, $pref, $deleted)  = @_;
     my $imageid = $self->image()->imageid();
     my @images  = ();
     my @result  = ();
 
     return -1
-	if ($self->image()->AllVersions(\@images));
+	if ($self->image()->AllVersions(\@images, $deleted));
 
     foreach my $image (@images) {
 	my $version = $image->version();
@@ -578,6 +578,16 @@ sub GetProject($)
     my ($self) = @_;
 
     return $self->image()->GetProject();
+}
+
+#
+# Load the user object for an image
+#
+sub GetCreator($)
+{
+    my ($self) = @_;
+
+    return $self->image()->GetCreator();
 }
 
 #

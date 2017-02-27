@@ -380,7 +380,7 @@ if (defined($image)) {
 		    $path .= "/";
 		}
 		if ($image->Update({"path" => $path})) {
-		    $image->DeleteVersion();
+		    $image->PurgeVersion();
 		    fatal("Could not update path!");
 		}
 	    }
@@ -427,7 +427,7 @@ if (defined($image)) {
     
     my $output = emutil::ExecQuiet("$CREATEIMAGE $opts $imagename $node_id");
     if ($?) {
-	$image->DeleteVersion()
+	$image->PurgeVersion()
 	    if ($needdelete);
 	print STDERR $output;
 	fatal("Failed to create image");
