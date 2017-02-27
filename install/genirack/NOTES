@@ -407,6 +407,12 @@ Setting up an InstaGeni Rack. First, we need the following info:
 	boss> wap /usr/testbed/sbin/update_sitevars 
 	boss> wap /usr/testbed/sbin/addservers
 
+* Insert the firewall rules for the shared node pool:
+
+	boss> cd emulab-devel/obj/firewall
+	boss> gmake
+	boss> gmake insertvars insertrules
+
 * Create the shared-pool experiment. Use this NS file:
 
 	testbed/install/genirack/shared-exp.ns
