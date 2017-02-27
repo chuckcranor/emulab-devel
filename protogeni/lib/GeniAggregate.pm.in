@@ -1168,6 +1168,15 @@ sub Action($$$;$)
 		if (!$isloaded || $reload) {
 		    my $image = $osinfo->MapToImage("pcvm");
 		    if (defined($image)) {
+			#
+			# For now, not allowed to use a deleted image.
+			# Revisit later.
+			#
+			if (defined($image->deleted())) {
+			    $msg = "$vnode needs to load $image, ".
+				"but it has been deleted";
+			    goto bad;
+			}
 			print STDERR "Setting $vnode to load $image\n";
 		    
 			if (!exists($reloads{$image->versid()})) {
@@ -1297,6 +1306,15 @@ sub Action($$$;$)
 		my $image = $osinfo->MapToImage($node->type());
 		if (!defined($image)) {
 		    $msg .= "  No image for $osinfo on $node";
+		    goto bad;
+		}
+		#
+		# For now, not allowed to use a deleted image.
+		# Revisit later.
+		#
+		if (defined($image->deleted())) {
+		    $msg = "$node needs to load $image, ".
+			"but it has been deleted";
 		    goto bad;
 		}
 		if (!exists($reloads{$image->versid()})) {
@@ -1760,6 +1778,8 @@ sub Action($$$;$)
     # Mark the offending sliver as failed.
     if (defined($sliver)) {
 	$sliver->SetStatus("failed");
+	$sliver->SetErrorLog($msg)
+	    if (defined($msg));
     }
     return -1;
 }
