@@ -330,8 +330,10 @@ sub Stringify($)
     my ($self) = @_;
     
     my $uuid  = $self->uuid();
+    my $pid   = $self->pid();
+    my $name  = $self->name();
 
-    return "[APT_Instance: $uuid]";
+    return "[APT_Instance: $pid,$name]";
 }
 
 sub LookupBySlice($$)
@@ -2675,8 +2677,12 @@ sub WaitForSliver($)
 	}
 	elsif ($repblob->{'status'} eq "failed") {
 	    $failed = 1;
+	    my $msg = $repblob->{'error'}
+	        if (defined($repblob->{'error'}) && $repblob->{'error'} ne "");
 	    print STDERR "*** $urn failed\n";
-	    $webtask->output("Experiment setup on $urn failed");
+	    print STDERR "    " .  $repblob->{'error'} . "\n" if ($msg);
+	    $webtask->output("Experiment setup on $urn failed" .
+			     ($msg ? ": $msg" : "."));
 	    last;
 	}
 	elsif ($aggobj->instance()->IsCanceled()) {
@@ -2689,7 +2695,11 @@ sub WaitForSliver($)
     }
     if ($failed || !$ready) {
 	$aggobj->SetStatus("failed");
-	if (!$ready) {
+	if ($failed) {
+	    # Output set above.
+	    $webtask->Exited(GENIRESPONSE_ERROR);
+	}
+	elsif (!$ready) {
 	    # XXX Need better handling for timeout.
 	    print STDERR "*** $urn timed out.\n";
 	    $webtask->output("Experiment setup on $urn timed out");
