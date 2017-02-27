@@ -574,6 +574,16 @@ sub SliceMaxExtension($)
     return GeniResponse->Create(GENIRESPONSE_SEARCHFAILED)
 	if (!defined($slice));
 
+    #
+    # Make sure the experiment exists before calling into the Reservation
+    # library, it does not like it when the slice is really new and not
+    # fully setup yet.
+    #
+    my $experiment = $slice->GetExperiment();
+    if (!defined($experiment)) {
+	return GeniResponse->Create(GENIRESPONSE_BUSY);
+    }
+
     if (Reservation->MaxSliceExtension($slice, \$max, \$reserror)) {
 	Reservation->FlushAll();
 	return GeniResponse->Create(GENIRESPONSE_REFUSED, undef, $reserror);
