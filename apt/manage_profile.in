@@ -754,11 +754,12 @@ sub escapeshellarg($)
 #
 sub DeleteProfile()
 {
-    my $optlist    = "akfn";
+    my $optlist    = "akfnm";
     my $all        = 0;
     my $keepimages = 0;
     my $force      = 0;
-    my $impotent   = 1;
+    my $impotent   = 0;
+    my $mereuser   = 0;
     my $errmsg;
     my %images;
     my @versions;
@@ -779,6 +780,9 @@ sub DeleteProfile()
     if (defined($options{"n"})) {
 	$impotent = 1;
     }
+    if (defined($options{"m"})) {
+	$mereuser = 1;
+    }
     usage()
 	if (!@ARGV);
 
@@ -794,6 +798,9 @@ sub DeleteProfile()
 	$errmsg = "Not allowed to delete this profile (version)";
 	goto uerror;
     }
+    # For now, mere users do not see new image deletion stuff.
+    $keepimages = 1 if ($mereuser);
+    
     #
     # Get all the image references for this profile. If we are deleting all
     # of the version, we need all image references across all versions.
