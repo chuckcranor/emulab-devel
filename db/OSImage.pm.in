@@ -152,7 +152,7 @@ sub Lookup($$;$$)
 }
 sub image($)		{ return $_[0]->{'IMAGE'}; }
 sub osinfo($)		{ return $_[0]->{'OSINFO'}; }
-sub hash($)		{ return $_[0]->{'HASH'}; }
+sub temphash($)		{ return $_[0]->{'HASH'}; }
 sub isImageAlias($)	{ return 0; }
 
 # Break circular references to avoid exit errors.
