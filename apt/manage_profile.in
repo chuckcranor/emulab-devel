@@ -30,6 +30,7 @@ use Data::Dumper;
 use CGI;
 use POSIX ":sys_wait_h";
 use POSIX qw(setsid);
+use Carp qw(cluck);
 
 #
 # Back-end script to manage APT profiles.
@@ -39,7 +40,9 @@ sub usage()
     print("Usage: manage_profile create [-s uuid | -c uuid] <xmlfile>\n");
     print("Usage: manage_profile update <profile> <xmlfile>\n");
     print("Usage: manage_profile publish <profile>\n");
-    print("Usage: manage_profile delete <profile> [all]\n");
+    print("Usage: manage_profile delete -a <profile>\n");
+    print("Usage: manage_profile undelete pid,name:version\n");
+    print("Usage: manage_profile listimages <profile>\n");
     exit(-1);
 }
 my $optlist     = "ds:t:c:m";
@@ -69,6 +72,7 @@ my $TBOPS           = "@TBOPSEMAIL@";
 my $TBLOGS	    = "@TBLOGSEMAIL@";
 my $MANAGEINSTANCE  = "$TB/bin/manage_instance";
 my $MANAGEGITREPO   = "$TB/bin/manage_gitrepo";
+my $MANAGEIMAGES    = "$TB/bin/manage_images";
 my $RUNGENILIB      = "$TB/bin/rungenilib";
 
 #
@@ -95,6 +99,7 @@ use User;
 use Project;
 use APT_Profile;
 use APT_Instance;
+use APT_Aggregate;
 use GeniXML;
 use GeniHRN;
 use WebTask;
@@ -103,9 +108,12 @@ use EmulabFeatures;
 # Protos
 sub fatal($);
 sub UserError(;$);
-sub DeleteProfile($);
-sub CanDelete($);
+sub DeleteProfile();
+sub UnDeleteProfile($);
+sub CanDelete($$);
 sub PublishProfile($);
+sub InsertImageRecords($);
+sub ListImages();
 
 # Parse args below.
 if (@ARGV < 2) {
@@ -143,6 +151,14 @@ if (defined($options{"c"})) {
 }
 if (defined($options{"t"})) {
     $webtask_id = $options{"t"};
+    #
+    # Grab the webtask object.
+    #
+    $webtask = WebTask->Lookup($webtask_id);
+    if (!defined($webtask)) {
+	fatal("Could not lookup/create webtask for profile");
+    }
+    $webtask->AutoStore(1);
 }
 if ($action eq "update") {
     usage()
@@ -151,26 +167,24 @@ if ($action eq "update") {
     $uuid = shift(@ARGV);
 }
 elsif ($action eq "delete") {
-    exit(DeleteProfile(shift(@ARGV)));
+    exit(DeleteProfile());
+}
+elsif ($action eq "undelete") {
+    exit(UnDeleteProfile(shift(@ARGV)));
 }
 elsif ($action eq "publish") {
     exit(PublishProfile(shift(@ARGV)));
+}
+elsif ($action eq "insertimages") {
+    exit(InsertImageRecords(shift(@ARGV)));
+}
+elsif ($action eq "listimages") {
+    exit(ListImages());
 }
 elsif ($action ne "create") {
     usage();
 }
 my $xmlfile = shift(@ARGV);
-
-#
-# Grab the webtask object.
-#
-if (defined($webtask_id)) {
-    $webtask = WebTask->Lookup($webtask_id);
-    if (!defined($webtask)) {
-	fatal("Could not lookup/create webtask for profile");
-    }
-    $webtask->AutoStore(1);
-}
 
 #
 # These are the fields that we allow to come in from the XMLfile.
@@ -197,6 +211,10 @@ my %xmlfields =
      "profile_disabled"    => ["disabled",	$SLOT_OPTIONAL|
 			                          $SLOT_UPDATE|$SLOT_ADMINONLY],
      "profile_disable_all" => ["disable_all",	$SLOT_OPTIONAL|$SLOT_MODIFIER,
+			                          $SLOT_UPDATE|$SLOT_ADMINONLY],
+     "profile_nodelete"    => ["nodelete",	$SLOT_OPTIONAL|
+			                          $SLOT_UPDATE|$SLOT_ADMINONLY],
+     "profile_nodelete_all"=> ["nodelete_all",	$SLOT_OPTIONAL|$SLOT_MODIFIER,
 			                          $SLOT_UPDATE|$SLOT_ADMINONLY],
      "rspec"		   => ["rspec",		$SLOT_REQUIRED|$SLOT_UPDATE],
      "script"		   => ["script",	$SLOT_OPTIONAL|$SLOT_UPDATE],
@@ -496,6 +514,16 @@ if ($update) {
 	}
 	$profile->UpdateVersion({"disabled" => $update_args{"disabled"}});
     }
+    #
+    # Ditto the nodelete flag.
+    #
+    if ($this_user->IsAdmin() &&
+	exists($update_args{"nodelete"})) {
+	if (exists($modifiers{"nodelete_all"}) && $modifiers{"nodelete_all"}) {
+	    $profile->UpdateAll({"nodelete" => $update_args{"nodelete"}});
+	}
+	$profile->UpdateVersion({"nodelete" => $update_args{"nodelete"}});
+    }
 
     # Bump the modtime.
     $profile->MarkModified();
@@ -644,6 +672,11 @@ if (defined($instance)) {
     exit(0);
 }
 
+#
+# Insert image records for the new profile (version).
+#
+$profile->InsertImageRecords();
+
 my $portalLogs =
     ($project->isAPT() ? "aptnet-logs\@flux.utah.edu" :
      $project->isCloud() ? "cloudlab-logs\@flux.utah.edu" : 
@@ -719,40 +752,370 @@ sub escapeshellarg($)
 #
 # Delete a profile.
 #
-sub DeleteProfile($)
+sub DeleteProfile()
 {
-    my ($name)  = @_;
+    my $optlist    = "akfn";
+    my $all        = 0;
+    my $keepimages = 0;
+    my $force      = 0;
+    my $impotent   = 1;
     my $errmsg;
-    #
-    # Extra flag; user is allowed to delete the entire profile, all versions.
-    # 
-    my $all = (@ARGV && $ARGV[0] eq "all" ? 1 : 0);
-    
-    my $profile = APT_Profile->Lookup($name);
+    my %images;
+    my @versions;
+
+    my %options = ();
+    if (! getopts($optlist, \%options)) {
+	usage();
+    }
+    if (defined($options{"a"})) {
+	$all = 1;
+    }
+    if (defined($options{"k"})) {
+	$keepimages = 1;
+    }
+    if (defined($options{"f"})) {
+	$force = 1;
+    }
+    if (defined($options{"n"})) {
+	$impotent = 1;
+    }
+    usage()
+	if (!@ARGV);
+
+    my $profile = APT_Profile->Lookup($ARGV[0]);
     if (!defined($profile)) {
 	fatal("No such profile exists");
     }
-    if (!$profile->IsHead()) {
-	$errmsg = "Only allowed to delete the most recent profile";
+    if ($profile->isLocked()) {
+	$errmsg = "This profile has its nodelete flag set.";
 	goto uerror;
     }
-    if (!CanDelete($profile)) {
+    if (!CanDelete($profile, $this_user)) {
 	$errmsg = "Not allowed to delete this profile (version)";
 	goto uerror;
     }
     #
-    # Version zero is special of course.
+    # Get all the image references for this profile. If we are deleting all
+    # of the version, we need all image references across all versions.
     #
-    if ($profile->version() && !$all) {
-	$profile->DeleteVersion() == 0 or
-	    fatal("Could not delete profile version");
+    if ($keepimages) {
+	# We do not care who is using the images if we are not deleting them.
+	@versions = ();
+    }
+    elsif ($all) {
+	@versions = $profile->AllVersions();
     }
     else {
+	@versions = ($profile);
+    }
+
+    #
+    # Find all images used for each version in the list.
+    #
+    foreach my $version (@versions) {
+	my $ilist;
+	
+	if (APT_Profile::ImageInfo->LookupForProfile($version, \$ilist)) {
+	    fatal("Could not get image reference list for $version");
+	}
+	if (keys(%{ $ilist })) {
+	    #
+	    # We want to know which images are from snapshots of this profile
+	    # or nodes in this profile. 
+	    #
+	    foreach my $client_id (keys(%{ $ilist })) {
+		my $imageinfo = $ilist->{$client_id};   
+		# 
+		# We do not ever care about system images.
+		#
+		next
+		    if ($imageinfo->ospid() eq "emulab-ops");
+
+		my $snapname = $profile->name() . "." . $client_id;
+
+		if ($imageinfo->os() eq $profile->name() ||
+		    $imageinfo->os() eq $snapname) {
+		    $images{$imageinfo->image()} = $imageinfo;
+		}
+	    }
+	}
+    }
+    #
+    # Now find other profiles using these images. 
+    #
+    if (keys(%images) && !$force) {
+	my %using = ();
+
+	foreach my $imageinfo (values(%images)) {
+	    my @profiles;
+	    $imageinfo->FindProfilesUsing(\@profiles);
+	    foreach my $tmp (@profiles) {
+		#
+		# Skip the profile version we are working on.
+		#
+		next
+		    if ($tmp->profileid() == $profile->profileid() &&
+			($all || $tmp->version() == $profile->version()));
+
+		if (!exists($using{$imageinfo->image()})) {
+		    $using{$imageinfo->image()} = [];
+		}
+		push(@{ $using{$imageinfo->image()} }, $tmp);
+	    }
+	}
+	#
+	# Generate a return blob that that lists the images and any
+	# profiles using them. We list all the images so we can tell
+	# the user exactly what is going to happen.
+	#
+	my $blob = {};
+	foreach my $imageinfo (values(%images)) {
+	    my $imageurn = $imageinfo->image();
+	    my @profiles = ();
+	    if (exists($using{$imageurn})) {
+		@profiles = map { $_->uuid() } @{ $using{$imageurn} };
+	    }
+	    $blob->{$imageurn} = \@profiles;
+	    if (!defined($webtask)) {
+		print "$imageurn\n";
+		foreach my $p (@{ $using{$imageurn} }) {
+		    print "--> $p\n";
+		}
+	    }
+	}
+	if (defined($webtask)) {
+	    $webtask->images($blob);
+	    $webtask->Exited(2);
+	    print Dumper($blob);
+	}
+	exit(2);
+    }
+    #
+    # Okay, if we have images and in force mode, we want to delete
+    # them at the target cluster.
+    #
+    if (keys(%images) && $force) {
+	foreach my $imageinfo (values(%images)) {
+	    my $agg = APT_Aggregate->LookupByAuthName($imageinfo->authority());
+	    if (!defined($agg)) {
+		print STDERR "Skipping $imageinfo cause no aggregate.\n";
+		next;
+	    }
+	    my $aggurn = $agg->urn();
+	    my $urn    = $imageinfo->image();
+	    my $opt    = ($impotent ? "-n" : "");
+
+	    my $output =
+		emutil::ExecQuiet("$MANAGEIMAGES delete -a $aggurn $opt $urn");
+	    print STDERR $output;
+	    if ($?) {
+		fatal("Could not delete $imageinfo");
+	    }
+	}
+    }
+    if ($impotent) {
+	return 0;
+    }
+    if ($all || $profile->VersionCount() == 1) {
 	$profile->Delete(0) == 0 or
 	    fatal("Could not delete profile");
     }
+    else {
+	$profile->DeleteVersion() == 0 or
+	    fatal("Could not delete profile version");
+    }
     # The web UI will delete the anonymous webtask.
     return 0;
+  uerror:
+    if (defined($webtask)) {
+	$webtask->Exited(1);
+	$webtask->output($errmsg);
+    }
+    print STDERR "$errmsg\n";
+    return 1;
+}
+
+#
+# Recover a profile version. Not for users.
+# Images are not recoverable of course.
+#
+# XXX We cannot recover fully deleted profiles yet.
+#
+sub UnDeleteProfile($)
+{
+    my ($token)  = @_;
+    my ($pid,$name,$version);
+
+    if ($token =~ /^([-\w]*),([-\w\.\+]*):(\d*)$/) {
+	$pid = $1;
+	$name = $2;
+	$version = $3;
+    }
+    else {
+	usage();
+    }
+    if (APT_Profile->Lookup($pid, $name, $version)) {
+	fatal("Profile is not a deleted profile");
+    }
+    my $profile = APT_Profile->Lookup($pid, $name);
+    if (!defined($profile)) {
+	fatal("All versions have been deleted, cannot undelete.");
+    }
+    if ($profile->UnDeleteProfile($version)) {
+	fatal("Could not undelete profile");
+    }
+    return 0;
+}
+
+#
+# List images
+#
+sub ListImages()
+{
+    my $errmsg;
+
+    my $optlist = "ia";
+    my $inuse   = 0;
+    my $all     = 0;
+    my %options = ();
+    if (! getopts($optlist, \%options)) {
+	usage();
+    }
+    if (defined($options{"i"})) {
+	$inuse = 1;
+    }
+    if (defined($options{"a"})) {
+	$all = 1;
+    }
+    usage()
+	if (!$all && !@ARGV);
+
+    my $helper = sub {
+	my ($profile) = @_;
+	my $name = $profile->name();
+	my $pid  = $profile->pid();
+	my $vers = $profile->version();
+	my $printed_header = 0;
+
+	if ($inuse) {
+	    #
+	    # List images that are associated with this profile, but are used
+	    # by other profiles. 
+	    #
+	    foreach my $client_id (keys(%{ $profile->images() })) {
+		my $imageinfo = $profile->images($client_id);
+		#
+		# We want to consider just the images that are directly
+		# associated with this profile. We know this by naming
+		# convention; images created by snapshot or clone are named
+		# by the profile name.  Snapshots of specific nodes in the
+		# profile are named by the profile name, with the client_id
+		# appended.
+		#
+		my $snapname = $profile->name() . "." . $client_id;
+	    
+		next
+		    if ($imageinfo->os() ne $profile->name() &&
+			$imageinfo->os() ne $snapname);
+		next
+		    if ($imageinfo->ospid() eq "emulab-ops" ||
+			$imageinfo->ospid() eq "PhantomNet");
+
+		#
+		# Look to see if any other profiles besides this one uses it.
+		#
+		my @profiles;
+		$imageinfo->FindProfilesUsing(\@profiles);
+
+		# We want *only* profiles in other projects.
+		my @tmp = ();
+		foreach my $profile (@profiles) {
+		    push(@tmp, $profile)
+			if ($profile->pid() ne $imageinfo->pid());
+		}
+		@profiles = @tmp;
+		
+		next
+		    if (!@profiles);
+
+		if ($all) {
+		    if (!$printed_header) {
+			print "Profile: $pid,$name,$vers\n";
+			$printed_header = 1;
+		    }
+		    print "  ";
+		}
+		print "$client_id - " . $imageinfo->image() . "\n";
+
+		foreach my $profile (@profiles) {
+		    if ($all) {
+			print "  ";
+		    }
+		    print "  $profile\n";
+		}
+	    }
+	    return 0;
+	}
+	foreach my $client_id (keys(%{ $profile->images() })) {
+	    my $imageinfo = $profile->images($client_id);
+	    if ($all) {
+		if (!$printed_header) {
+		    print "Profile: $pid,$name,$vers\n";
+		    $printed_header = 1;
+		}
+		print "  ";
+	    }
+	    print "$client_id - " . $imageinfo->image() . "\n";
+	}
+	return 0;
+    };
+
+    if ($all) {
+	my $query_result =
+	    DBQueryWarn("select profileid,version from apt_profiles ".
+			"order by profileid,version");
+	while (my ($profileid,$version) = $query_result->fetchrow_array()) {
+	    my $profile = APT_Profile->Lookup($profileid,$version);
+	    if (!defined($profile)) {
+		print STDERR "No such profile: $profileid,$version\n";
+	    }
+	    &$helper($profile);
+	}
+    }
+    else {
+	my $profile = APT_Profile->Lookup($ARGV[0]);
+	if (!defined($profile)) {
+	    fatal("No such profile exists");
+	}
+	&$helper($profile);
+    }
+    return 0;
+    
+  uerror:
+    if (defined($webtask)) {
+	$webtask->Exited(1);
+	$webtask->output($errmsg);
+    }
+    print STDERR "$errmsg\n";
+    return 1;
+}
+
+#
+# Process Images
+#
+sub InsertImageRecords($)
+{
+    my ($name)  = @_;
+    my $errmsg;
+
+    my $profile = APT_Profile->Lookup($name);
+    if (!defined($profile)) {
+	fatal("No such profile exists");
+    }
+    $profile->InsertImageRecords(\$errmsg) == 0 or
+	fatal("Could not insert image records");
+    return 0;
+    
   uerror:
     if (defined($webtask)) {
 	$webtask->Exited(1);
@@ -794,21 +1157,20 @@ sub PublishProfile($)
 #
 #
 #
-sub CanDelete($)
+sub CanDelete($$)
 {
-    my ($profile) = @_;
-    
+    my ($profile,$user) = @_;
+
     # Want to know if the project is APT or Cloud/Emulab. APT projects
     # may not delete profiles (yet).
     my $project = Project->Lookup($profile->pid_idx());
     return 0
 	if (!defined($project));
+    return 0
+        if ($project->isAPT());
     return 1
-	if ($this_user->IsAdmin() || $this_user->stud());
+	if ($user->IsAdmin());
     return 1
-        if (!$project->isAPT());
-    # APT profiles may not be deleted if published.
-    return 1
-        if (!$profile->published());
+	if ($user->uid_idx() == $profile->creator_idx());
     return 0;
 }
