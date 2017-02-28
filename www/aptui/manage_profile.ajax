@@ -159,7 +159,7 @@ function Do_DeleteProfile()
         }
     }
     # Mere users do not see new path.
-    if (! ($this_user->admin() || $this_user_stud())) {
+    if (! ($this_user->admin() || $this_user->stud())) {
         $opt .= "-m ";
     }
     $webtask = WebTask::CreateAnonymous();
