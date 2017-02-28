@@ -642,7 +642,8 @@ sub Delete($$)
 	if (!defined($purge));
     
     DBQueryWarn("lock tables apt_profiles write, apt_profile_versions write, ".
-		"     web_tasks write, apt_profile_favorites write")
+		"     web_tasks write, apt_profile_favorites write, ".
+		"     apt_profile_images write")
 	or return -1;
 
     if ($purge) {
@@ -692,7 +693,8 @@ sub DeleteVersion($)
     my ($self) = @_;
 
     DBQueryWarn("lock tables apt_profile_versions write, ".
-		"     apt_profiles write, web_tasks write")
+		"     apt_profiles write, web_tasks write, ".
+		"     apt_profile_images write")
 	or return -1;
 
     my $profileid = $self->profileid();
