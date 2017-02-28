@@ -1,8 +1,15 @@
 $(function () {
 window.sup = (function () {
 
-function ShowModal(which) 
+function ShowModal(which, hidefunction) 
 {
+    var callback = function() {
+	$(which).off('hidden.bs.modal', callback);
+	hidefunction();
+    };
+    if (hidefunction !== undefined) {
+	$(which).on('hidden.bs.modal', callback);
+    }
     $(which).modal('show');
 }
     

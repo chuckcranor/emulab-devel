@@ -2,7 +2,7 @@ $(function ()
 {
     'use strict';
 
-    var templates = APT_OPTIONS.fetchTemplateList(['manage-profile', 'waitwait-modal', 'renderer-modal', 'showtopo-modal', 'oops-modal', 'rspectextview-modal', 'guest-instantiate', 'publish-modal', 'instantiate-modal', 'share-modal', 'gitrepo-picker']);
+    var templates = APT_OPTIONS.fetchTemplateList(['manage-profile', 'waitwait-modal', 'renderer-modal', 'showtopo-modal', 'oops-modal', 'rspectextview-modal', 'guest-instantiate', 'publish-modal', 'instantiate-modal', 'share-modal', 'gitrepo-picker','profile-list-modal','confirm-delete-profile']);
     var manageString = templates['manage-profile'];
     var waitwaitString = templates['waitwait-modal'];
     var rendererString = templates['renderer-modal'];
@@ -14,6 +14,8 @@ $(function ()
     var instantiateString = templates['instantiate-modal'];
     var shareString = templates['share-modal'];
     var gitrepoString = templates['gitrepo-picker'];
+    var plistString = templates['profile-list-modal'];
+    var deleteString = templates['confirm-delete-profile'];
 
     var profile_uuid = null;
     var profile_name = '';
@@ -44,6 +46,7 @@ $(function ()
     var InstTemplate      = _.template(instantiateString);
     var shareTemplate     = _.template(shareString);
     var gitrepoTemplate   = _.template(gitrepoString);
+    var plistTemplate     = _.template(plistString);
     var stepsInitialized  = false;
 
     var pythonRe = /^import/m;
@@ -64,9 +67,14 @@ $(function ()
 	var errors   = JSON.parse(_.unescape($('#error-json')[0].textContent));
 	var projlist = JSON.parse(_.unescape($('#projects-json')[0].textContent));
 	var versions = null;
+	var sorted_versions = null;
 	if (window.VIEWING) {
 	    versions =
 		JSON.parse(_.unescape($('#versions-json')[0].textContent));
+
+	    sorted_versions = _.sortBy(versions, function(profile) {
+		return versions.length - profile.version;
+	    });
 	}
 	amlist = JSON.parse(_.unescape($('#amlist-json')[0].textContent));
 
@@ -134,7 +142,9 @@ $(function ()
 	    general_error:      (errors.error || ''),
 	    isapt:              window.ISAPT,
 	    disabled:           window.DISABLED,
+	    nodelete:           window.NODELETE,
 	    versions:	        versions,
+	    sorted_versions:    sorted_versions,
 	    withpublishing:     window.WITHPUBLISHING,
 	    genilib_editor:     false,
 	    canrepo:            window.CANREPO,
@@ -165,6 +175,7 @@ $(function ()
     	var rspectext_html = rspectextTemplate({});
 	$('#rspectext_div').html(rspectext_html);
 	$('#share_div').html(shareTemplate({formfields: fields}))
+	$('#confirm_delete_div').html(deleteString);
 
 	// Fireoff repo stuff now.
 	if (fromrepo) {
@@ -392,7 +403,7 @@ $(function ()
 	})
 	
 	// Confirm Delete profile.
-	$('#delete-confirm').click(function (event) {
+	$('#confirm-delete-button').click(function (event) {
 	    event.preventDefault();
 	    DeleteProfile();
 	});
@@ -453,6 +464,7 @@ $(function ()
 	$('#profile_who_private').change(function() { ProfileModified(); });
 	$('#profile_topdog').change(function() { ProfileModified(); });
 	$('#profile_disabled').change(function() { ProfileModified(); });
+	$('#profile_nodelete').change(function() { ProfileModified(); });
 	
 	/*
 	 * A double click handler that will render the instructions
@@ -1070,27 +1082,49 @@ $(function ()
     //
     // Delete profile.
     //
-    function DeleteProfile()
+    function DeleteProfile(force, keepimages)
     {
 	var delete_all = $('#delete-all-versions').is(':checked') ? 1 : 0;
-	
+
 	var callback = function(json) {
-	    sup.HideModal("#waitwait-modal");
-	    //console.info(json.value);
+	    sup.HideWaitWait();
+	    console.info(json.value);
 
 	    if (json.code) {
+		if (json.code == 2) {
+		    ShowDeletionWarning(json.value);
+		    return;
+		}
 		sup.SpitOops("oops", json.value);
 		return;
 	    }
 	    window.location.replace(json.value);
 	}
-	sup.HideModal('#delete_modal');
-	WaitWait();
-	var xmlthing = sup.CallServerMethod(ajaxurl,
-					    "manage_profile",
-					    "DeleteProfile",
-					    {"uuid"   : version_uuid,
-					     "all"    : delete_all});
+	var args = {
+	    "uuid"   : version_uuid,
+	    "all"    : delete_all,
+	};
+	if (force) {
+	    args["force"] = 1;
+	    if (keepimages) {
+		args["keepimages"] = 1;
+	    }
+	}
+	console.info("DeleteProfile", args);
+	
+	var xmlthing = sup.CallServerMethod(null, "manage_profile",
+					    "DeleteProfile", args);
+
+	// Came from ShowDeletionWarning() if force is set.
+	if (!force) {
+	    sup.HideModal('#confirm-delete-profile-modal');
+	}
+	if (force && !keepimages) {
+	    WaitWait("Deleting images takes a minute; patience please");
+	}
+	else {
+	    WaitWait();
+	}
 	xmlthing.done(callback);
     }
 
@@ -1353,6 +1387,44 @@ $(function ()
     function openEditor()
     {
       window.location.href = 'genilib-editor.php?profile=' + profile_name + '&project=' + profile_pid + '&version=' + profile_version;
+    }
+
+    function ShowDeletionWarning(images)
+    {
+	/*
+	 * See if we have any profiles to warn about. If only images, then
+	 * the warning is different.
+	 */
+	var noprofiles = 1;
+	_.each(images, function(profiles, imagename) {
+	    _.each(profiles, function(value, name) {
+		noprofiles = 0;
+	    });
+	});
+	
+	var html = plistTemplate({
+	    "images"     : images,
+	    "noprofiles" : noprofiles,
+	});
+	$('#profile_list_modal_div').html(html);
+	
+	/*
+	 * Bind a handler for the force delete button.
+	 */
+	$('#confirm-force-delete').click(function (event) {
+	    event.preventDefault();
+	    // Keep images option.
+	    var keepimages = $('#keep-profile-images').is(':checked') ? 1 : 0;
+
+	    sup.HideModal('#profile-list-modal',
+			  function () { DeleteProfile(true, keepimages); });
+	})
+	sup.ShowModal('#profile-list-modal',
+		      // Delete handler no matter how it hides.
+		      function () {
+			  console.info("unbinding handler");
+			  $('#confirm-force-delete').off("click");
+		      });
     }
 
     $(document).ready(initialize);

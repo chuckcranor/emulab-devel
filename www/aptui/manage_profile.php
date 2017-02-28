@@ -64,6 +64,7 @@ function SPITFORM($formfields, $errors)
     global $version_array, $WITHPUBLISHING;
     $viewing    = 0;
     $candelete  = 0;
+    $nodelete   = 0;
     $canmodify  = 0;
     $canpublish = 0;
     $history    = 0;
@@ -85,6 +86,7 @@ function SPITFORM($formfields, $errors)
 	$version_uuid = "'" . $profile->uuid() . "'";
 	$profile_uuid = "'" . $profile->profile_uuid() . "'";
 	$candelete    = ($profile->CanDelete($this_user) ? 1 : 0);
+	$nodelete     = ($profile->isLocked() ? 1 : 0);
 	$history      = ($profile->HasHistory() ? 1 : 0);
 	$canmodify    = ($profile->CanModify() ? 1 : 0);
 	$canpublish   = ($profile->CanPublish() ? 1 : 0);
@@ -186,6 +188,7 @@ function SPITFORM($formfields, $errors)
     echo "    window.AJAXURL  = 'server-ajax.php';\n";
     echo "    window.ACTION   = '$action';\n";
     echo "    window.CANDELETE= $candelete;\n";
+    echo "    window.NODELETE = $nodelete;\n";
     echo "    window.CANMODIFY= $canmodify;\n";
     echo "    window.CANPUBLISH= $canpublish;\n";
     echo "    window.DISABLED= $disabled;\n";
@@ -226,7 +229,7 @@ function SPITFORM($formfields, $errors)
     AddLibrary("js/gitrepo.js");
     SPITREQUIRE("js/manage_profile.js");
 
-    AddTemplateList(array('manage-profile', 'waitwait-modal', 'renderer-modal', 'showtopo-modal', 'oops-modal', 'rspectextview-modal', 'guest-instantiate', 'publish-modal', 'instantiate-modal', 'share-modal', 'gitrepo-picker'));
+    AddTemplateList(array('manage-profile', 'waitwait-modal', 'renderer-modal', 'showtopo-modal', 'oops-modal', 'rspectextview-modal', 'guest-instantiate', 'publish-modal', 'instantiate-modal', 'share-modal', 'gitrepo-picker', 'profile-list-modal', 'confirm-delete-profile'));
     SPITFOOTER();
 }
 
@@ -250,7 +253,7 @@ if (isset($action) && ($action == "edit" || $action == "copy")) {
 	    SPITUSERERROR("Profile is currently locked!");
 	}
 	else if ($profile->deleted()) {
-	    SPITUSERERROR("Profile is has been deleted!");
+	    SPITUSERERROR("Profile has been deleted!");
 	}
 	if ($action == "edit") {
 	    if ($this_idx != $profile->creator_idx() && !ISADMIN()) {
@@ -274,9 +277,8 @@ if (isset($action) && ($action == "edit" || $action == "copy")) {
                          "     v.parent_profileid is not null and ".
                          "     vp.profileid=v.parent_profileid and ".
                          "     vp.version=v.parent_version ".
-                         "where v.profileid='$profileid' and ".
-                         "      v.deleted is null ".
-                         "order by v.created desc");
+                         "where v.profileid='$profileid' ".
+                         "order by v.version asc");
 
         while ($row = mysql_fetch_array($query_result)) {
             $uuid    = $row["uuid"];
@@ -284,6 +286,7 @@ if (isset($action) && ($action == "edit" || $action == "copy")) {
             $version = $row["version"];
             $pversion= $row["parent_version"];
             $created = $row["created"];
+            $deleted = (isset($row["deleted"]) ? 1 : 0);
             $published = $row["published"];
             $repourl = $row["repourl"];
             $rspec   = $row["rspec"];
@@ -306,10 +309,11 @@ if (isset($action) && ($action == "edit" || $action == "copy")) {
             $obj["version"] = $version;
             $obj["description"] = $desc;
             $obj["created"]     = $created;
+            $obj["deleted"]     = $deleted;
             $obj["published"]   = $published;
             $obj["parent_uuid"] = $puuid;
             $obj["parent_version"] = $pversion;
-            $version_array[] = $obj;
+            $version_array[]  = $obj;
         }
     }
 }
@@ -404,6 +408,8 @@ if (! isset($create)) {
 		($profile->topdog() ? "checked" : "");
 	    $defaults["profile_disabled"]      =
 		($profile->isDisabled() ? "checked" : "");
+	    $defaults["profile_nodelete"]      =
+		($profile->isLocked() ? "checked" : "");
 
 	    # Warm fuzzy message.
 	    if (isset($_SESSION["notifyupdate"])) {
@@ -651,6 +657,24 @@ else {
 	fwrite($fp, "<attribute name='profile_disable_all'><value>");
 	if (isset($formfields["profile_disable_all"]) &&
 	    $formfields["profile_disable_all"] == "checked") {
+	    fwrite($fp, "1");
+	}
+	else {
+	    fwrite($fp, "0");
+	}
+	fwrite($fp, "</value></attribute>\n");
+	fwrite($fp, "<attribute name='profile_nodelete'><value>");
+	if (isset($formfields["profile_nodelete"]) &&
+	    $formfields["profile_nodelete"] == "checked") {
+	    fwrite($fp, "1");
+	}
+	else {
+	    fwrite($fp, "0");
+	}
+	fwrite($fp, "</value></attribute>\n");
+	fwrite($fp, "<attribute name='profile_nodelete_all'><value>");
+	if (isset($formfields["profile_nodelete_all"]) &&
+	    $formfields["profile_nodelete_all"] == "checked") {
 	    fwrite($fp, "1");
 	}
 	else {

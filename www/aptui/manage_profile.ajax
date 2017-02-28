@@ -146,10 +146,22 @@ function Do_DeleteProfile()
 	return;
     }
     $opt = "";
+    # Delete all profiles.
     if (isset($ajax_args["all"]) && $ajax_args["all"]) {
-        $opt = "all";
+        $opt = "-a ";
     }
-
+    # Force mode; user has seen the warnings
+    if (isset($ajax_args["force"]) && $ajax_args["force"]) {
+        $opt .= "-f ";
+        # But user says to leave the images behind.
+        if (isset($ajax_args["keepimages"]) && $ajax_args["keepimages"]) {
+            $opt .= "-k ";
+        }
+    }
+    # Mere users do not see new path.
+    if (! ($this_user->admin() || $this_user_stud())) {
+        $opt .= "-m ";
+    }
     $webtask = WebTask::CreateAnonymous();
     if (!$webtask) {
 	SPITAJAX_ERROR(-1, "Internal webtask Error");
@@ -157,21 +169,48 @@ function Do_DeleteProfile()
     }
     $retval = SUEXEC($this_uid, $profile->pid(),
 		     "webmanage_profile delete -t " . $webtask->task_id() . 
-                     " " . $profile->uuid() . " $opt",
+                     " -- $opt " . $profile->uuid(),
 		     SUEXEC_ACTION_IGNORE);
 
     if ($retval != 0) {
         $webtask->Refresh();
+        $code = 1;
         if ($retval < 0) {
             $error  = "Internal Error; please try again later\n\n";
             $error .= $webtask->TaskValue("output");
+            $code   = -1;
 	    SUEXECERROR(SUEXEC_ACTION_CONTINUE);
+        }
+        elseif ($webtask->exitcode() == 2) {
+            $blob = array();
+            
+            foreach ($webtask->TaskValue("images") as $urn => $plist) {
+                $profilelist = array();
+                
+                foreach ($plist as $uuid) {
+                    $tmp = Profile::Lookup($uuid);
+                    if ($tmp) {
+                        $plob = array();
+                        $plob["uuid"]    = $uuid;
+                        $plob["name"]    = $tmp->name();
+                        $plob["version"] = $tmp->version();
+                        $plob["creator"] = $tmp->creator();
+                        $plob["created"] = $tmp->created();
+                        $plob["project"] = $tmp->pid();
+                        $profilelist[$uuid] = $plob;
+                    }
+                }
+                $blob[$urn] = $profilelist;
+            }
+            $error = $blob;
+            $code  = 2;
         }
         else {
             $error = $webtask->TaskValue("output");
+            $code  = 1;
         }
         $webtask->Delete();
-	SPITAJAX_ERROR(1, $error);
+	SPITAJAX_ERROR($code, $error);
 	return;
     }
     $webtask->Delete();

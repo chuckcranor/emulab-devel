@@ -47,7 +47,8 @@ class Profile
 	    #
 	    $query_result =
 		DBQueryWarn("select i.*,v.*,i.uuid as profile_uuid, ".
-                            "    i.disabled as profile_disabled ".
+                            "    i.disabled as profile_disabled, ".
+                            "    i.nodelete as profile_nodelete ".
 			    "  from apt_profiles as i ".
 			    "left join apt_profile_versions as v on ".
 			    "     v.profileid=i.profileid and ".
@@ -57,7 +58,8 @@ class Profile
 	    if (!$query_result || !mysql_num_rows($query_result)) {
 		$query_result =
 		    DBQueryWarn("select i.*,v.*,i.uuid as profile_uuid, ".
-                                "    i.disabled as profile_disabled ".
+                                "    i.disabled as profile_disabled, ".
+                                "    i.nodelete as profile_nodelete ".
 				"  from apt_profile_versions as v ".
 				"left join apt_profiles as i on ".
 				"     v.profileid=i.profileid ".
@@ -68,7 +70,8 @@ class Profile
 	elseif (is_null($version)) {
 	    $query_result =
 		DBQueryWarn("select i.*,v.*,i.uuid as profile_uuid, ".
-                            "    i.disabled as profile_disabled ".
+                            "    i.disabled as profile_disabled, ".
+                            "    i.nodelete as profile_nodelete ".
 			    "  from apt_profiles as i ".
 			    "left join apt_profile_versions as v on ".
 			    "     v.profileid=i.profileid and ".
@@ -79,7 +82,8 @@ class Profile
 	    $safe_version = addslashes($version);
 	    $query_result =
 	        DBQueryWarn("select i.*,v.*,i.uuid as profile_uuid, ".
-                            "    i.disabled as profile_disabled ".
+                            "    i.disabled as profile_disabled, ".
+                            "    i.nodelete as profile_nodelete ".
 			    "  from apt_profile_versions as v ".
 			    "left join apt_profiles as i on ".
 			    "     i.profileid=v.profileid ".
@@ -124,6 +128,7 @@ class Profile
     function status()	    { return $this->field('locked'); }
     function topdog()	    { return $this->field('topdog'); }
     function disabled()	    { return $this->field('disabled'); }
+    function nodelete()	    { return $this->field('nodelete'); }
     function repourl()	    { return $this->field('repourl'); }
     function reponame()	    { return $this->field('reponame'); }
     function repohash()	    { return $this->field('repohash'); }
@@ -131,6 +136,7 @@ class Profile
     function profile_disabled()    { return $this->field('profile_disabled'); }
     function parent_profileid()    { return $this->field('parent_profileid'); }
     function parent_version()      { return $this->field('parent_version'); }
+    function profile_nodelete()    { return $this->field('profile_nodelete'); }
 
     # Private means only in the same project.
     function IsPrivate() {
@@ -143,6 +149,10 @@ class Profile
     # A profile is disabled if version is disabled or entire profile is disabled
     function isDisabled() {
 	return ($this->disabled() || $this->profile_disabled());
+    }
+    # Ditto nodelete.
+    function isLocked() {
+	return ($this->nodelete() || $this->profile_nodelete());
     }
     # Grab the webtask. Backwards compat mode, see if there is one associated
     # with the object, use that. Otherwise create a new one.
@@ -463,24 +473,20 @@ class Profile
         return 0;
     }
     function CanDelete($user) {
+        if ($this->nodelete()) {
+            return 0;
+        }
 	# Want to know if the project is APT or Cloud/Emulab. APT projects
         # may not delete profiles (yet).
 	$project = Project::Lookup($this->pid_idx());
 	if (!$project) {
 	    return 0;
 	}
-        if (!$this->IsHead()) {
+        if ($project->isAPT()) {
             return 0;
         }
-        if (ISADMIN() || STUDLY()) {
-            return 1;
-        }
-        if (!$project->isAPT()) {
-            return 1;
-        }
-        # APT profiles may not be deleted if published.
-        if (!$this->published()) {
-            return 1;
+        if ($this->creator_idx() == $user->uid_idx() || ISADMIN()) {
+	    return 1;
         }
         return 0;
     }
