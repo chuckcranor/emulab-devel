@@ -1755,8 +1755,14 @@ sub AddNodes($)
     #  {"node45" : {"diskimage" : "urn...",
     #               "startup"   : "/bin/echo",
     #               "tarballs"  : ["tarball1", "tarball2", ...],
-    #               "lans"      : ["lan1", "lan2", ...]
+    #               "lans"      : ["lan1", "lan2", ...],
+    #               "hardware_type" : "type",
     #               "node"      : "pc189"}}
+    #
+    # "tarballs" may also be a list of ["tarball","installpath"] tuples.
+    # "lans" may also be a a list of hashes, where each hash looks like
+    # {'name':'lan-1','address':'10.0.0.1','netmask':'255.0.0.0','type':'ipv4'}
+    # or similar.
     #
     if (ref($nodelist) ne "HASH") {
 	return GeniResponse->MalformedArgsResponse("nodes is not a hash");
@@ -1835,10 +1841,19 @@ sub AddNodes($)
 						       "is not a list");
 	}
 	foreach my $lan (@{ $blob->{'lans'} }) {
-	    if (!exists($ifacestoaddtolans{$lan})) {
-		$ifacestoaddtolans{$lan} = [];
+	    if (ref($lan) eq 'HASH') {
+		my $lanname = $lan->{'name'};
+		if (!exists($ifacestoaddtolans{$lanname})) {
+		    $ifacestoaddtolans{$lanname} = [];
+		}
+		push(@{ $ifacestoaddtolans{$lanname} }, "$nodeid:$lanname");
 	    }
-	    push(@{ $ifacestoaddtolans{$lan} }, "$nodeid:$lan");
+	    else {
+		if (!exists($ifacestoaddtolans{$lan})) {
+		    $ifacestoaddtolans{$lan} = [];
+		}
+		push(@{ $ifacestoaddtolans{$lan} }, "$nodeid:$lan");
+	    }
 	}
     }
     # But make sure all these lans exist.
@@ -1886,6 +1901,10 @@ sub AddNodes($)
 	    $xml .= "    <disk_image name='$urn'/>\n";
 	}
 	$xml .= "  </sliver_type>\n";
+	if (exists($blob->{'hardware_type'})) {
+	    my $hwtype = $blob->{'hardware_type'};
+	    $xml .= "  <hardware_type name='$hwtype'/>\n";
+	}
 	if (exists($blob->{'tarballs'}) || exists($blob->{'startup'})) {
 	    $xml .= "  <services>\n";
 
@@ -1895,19 +1914,66 @@ sub AddNodes($)
 							   "is not a list");
 	    }
 	    foreach my $tarball (@{ $blob->{'tarballs'} }) {
-		$xml .= "      <install url='$tarball' install_path='/' />\n";
+		if (ref($tarball) eq "ARRAY") {
+		    if (@$tarball == 2) {
+			$xml .= "      <install url='".@{$tarball}[0]."'".
+			    " install_path='".@{$tarball}[1]."' />\n";
+		    }
+		    else {
+			my $resp = "tarballs (for $nodeid) malformed; tarballs".
+			    " is a list of tarballs, or a list of [ tarball,".
+			    " install-path ] tuples!";
+			return GeniResponse->MalformedArgsResponse($resp);
+		    }
+		}
+		else {
+		    $xml .= "      <install url='$tarball' install_path='/' />\n";
+		}
 	    }
 	    if (exists($blob->{'startup'})) {
 		my $command = $blob->{'startup'};
 		
-		$xml .= "      <execute shell='/bin/bash' ".
-		    "command='$command' />\n";
+		if (ref($command) eq "ARRAY") {
+		    if (@$command == 2) {
+			$xml .= "      <execute shell='".@{$command}[1]."'".
+			    " command='".@{$command}[0]."' />\n";
+		    }
+		    else {
+			my $resp = "startup commands (for $nodeid) malformed;".
+			    " startup commands is a list of startup commands,".
+			    " or a list of [ command, shell ] tuples!";
+			return GeniResponse->MalformedArgsResponse($resp);
+		    }
+		}
+		else {
+		    $xml .= "      <execute shell='/bin/bash' ".
+			"command='$command' />\n";
+		}
 	    }
 	    $xml .= "  </services>\n";
 	}
 	if (exists($blob->{'lans'})) {
 	    foreach my $lan (@{ $blob->{'lans'} }) {
-		$xml .= "    <interface client_id='$nodeid:$lan' />\n";
+		if (ref($lan) eq 'HASH') {
+		    my $lanname = $lan->{'name'};
+		    $xml .= "    <interface client_id='$nodeid:$lanname'";
+		    if (exists($lan->{'address'})) {
+			$xml .= " address='" . $lan->{'address'} . "'";
+		    }
+		    if (exists($lan->{'netmask'})) {
+			$xml .= " netmask='" . $lan->{'netmask'} . "'";
+		    }
+		    if (exists($lan->{'type'})) {
+			$xml .= " type='" . $lan->{'type'} . "'";
+		    }
+		    else {
+			$xml .= " type='ipv4'";
+		    }
+		    $xml .= " />\n";
+		}
+		else {
+		    $xml .= "    <interface client_id='$nodeid:$lan' />\n";
+		}
 	    }
 	}
 	$xml .= "</node>";
