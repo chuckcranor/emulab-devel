@@ -1650,6 +1650,9 @@ sub Terminate($)
 	if (! (defined($geniuser) && defined($authority) &&
 	       defined($slice) && defined($context)));
 
+    # Bump default timeout, this can take a while for a response
+    Genixmlrpc->SetTimeout(900);
+
     # We might change this below.
     my $cmurl = $authority->url();
 
