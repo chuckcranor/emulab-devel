@@ -683,7 +683,7 @@ sub doimage($)
 	    $dpath = $image->DeltaImageFile();
 	}
 	# XXX $image->hash() returns a ref to the internal 'HASH' hash.
-	$hash = $image->field('hash');
+	$hash = $image->hash();
 	$dhash = $image->deltahash();
     } else {
 	$isdir = 0;
@@ -709,7 +709,7 @@ sub doimage($)
 	else {
 	    if ($image->HaveFullImage()) {
 		$path = $image->FullImageFile();
-		$hash = $image->field('hash');
+		$hash = $image->hash();
 	    } elsif ($image->HaveDeltaImage()) {
 		$dpath = $image->DeltaImageFile();
 		$dhash = $image->deltahash();
@@ -723,7 +723,7 @@ sub doimage($)
 	    #
 	    elsif ($accessfs && -e $image->FullImagePath()) {
 		$path = $image->FullImageFile();
-		$hash = $image->field('hash');
+		$hash = $image->hash();
 	    }
 	}
     }
@@ -815,7 +815,8 @@ sub doimage($)
     #
     # Here are the possibilities:
     #
-    # 1. Database image_versions.deleted in null:
+    # 0. If a path target exists but is zero length, remove it
+    # 1. Database image_versions.deleted is null:
     #    A. If one or both of the path targets exist, all is well
     #    B. Otherwise, version should be marked as deleted
     # 2. Database image_versions.deleted is not null:
@@ -836,6 +837,45 @@ sub doimage($)
 	#
 	my $epath = ($path && -e $path) ? 1 : 0;
 	my $edpath = ($dpath && -e $dpath) ? 1 : 0;
+
+	if ($epath) {
+	    my $fsize = stat($path)->size;
+	    if ($fsize == 0) {
+		print "$pidimage: zero-length full image file"
+		    if (!$quiet);
+		if ($update) {
+		    if (unlink($path)) {
+			$epath = 0;
+			print " [FIXED]"
+			    if (!$quiet);
+		    } else {
+			print " [ could not unlink $path ]"
+			    if (!$quiet);
+		    }
+		}
+		print "\n"
+		    if (!$quiet);
+	    }
+	}
+	if ($edpath) {
+	    my $fsize = stat($dpath)->size;
+	    if ($fsize == 0) {
+		print "$pidimage: zero-length delta image file"
+		    if (!$quiet);
+		if ($update) {
+		    if (unlink($dpath)) {
+			$edpath = 0;
+			print " [FIXED]"
+			    if (!$quiet);
+		    } else {
+			print " [ could not unlink $dpath ]"
+			    if (!$quiet);
+		    }
+		}
+		print "\n"
+		    if (!$quiet);
+	    }
+	}
 
 	if ($deleted) {
 	    if (!$epath && !$edpath) {
