@@ -490,6 +490,7 @@ sub getallversions($)
     my $vers = 0;
     my $gotfull = 0;
     my $gotundeleted = 0;
+    my $gotdeleted = 0;
     my @nimages = ();
     @iversions = reverse @iversions;
     foreach my $imobj (@iversions) {
@@ -507,6 +508,10 @@ sub getallversions($)
 	$ready = $imobj->ready();
 	$released = $imobj->released();
 	my $deleted = ($imobj->deleted() ? 1 : 0);
+
+	if ($deleted) {
+	    $gotdeleted++;
+	}
 
 	#
 	# Head version should be:
@@ -581,6 +586,27 @@ sub getallversions($)
 	push @nimages, $fqname;
 	$vers++;
     }
+
+    #
+    # If all versions are deleted we can delete the entire image.
+    #
+    if ($dodeleted && $gotdeleted == int(@iversions)) {
+	if ($update) {
+	    print "$iname: all versions deleted, image can be deleted"
+		if (!$quiet);
+	    if ($image->Delete(0) == 0) {
+		@nimages = ();
+		print " [FIXED]\n"
+		    if (!$quiet);
+	    } else {
+		print " [FAILED]\n"
+		    if (!$quiet);
+	    }
+	} else {
+	    print STDERR "$iname: WARNING: all versions are deleted\n";
+	}
+    }
+    
     return @nimages;
 }
 
