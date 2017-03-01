@@ -158,7 +158,7 @@ function Do_DeleteImage()
 
     $retval = SUEXEC($uid, "nobody",
                      "webmanage_images -t $webtask_id ".
-                     "  delete -a '$aggurn' -n $pdarg $image_urn",
+                     "  delete -a '$aggurn' $pdarg $image_urn",
                      SUEXEC_ACTION_CONTINUE);
 
     if ($retval) {
