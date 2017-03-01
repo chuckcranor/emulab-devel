@@ -3946,6 +3946,11 @@ sub ListImages($)
     }
     my @result = ();
     foreach my $image (@images) {
+	# Do not include imported images in this list, user cannot delete them.
+	# Need to think about this.
+	next
+	    if (!$image->IsLocal());
+	
 	my $image_urn = GeniHRN::Generate($OURDOMAIN, "image",
 				  $image->pid() . "//" . $image->imagename());
 	my $image_url = "$TBBASE/image_metadata.php?uuid=" . $image->uuid();
