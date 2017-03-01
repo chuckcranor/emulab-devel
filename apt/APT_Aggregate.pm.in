@@ -231,17 +231,17 @@ sub LookupForPortal($$)
 #
 # Lookup using the short auth name (emulab.net).
 #
-sub LookupByAuthName($$)
+sub LookupByDomain($$)
 {
-    my ($class, $authname) = @_;
+    my ($class, $domain) = @_;
     my @result = ();
 
-    if ($authname !~ /^[-\w\.]+$/) {
+    if ($domain !~ /^[-\w\.]+$/) {
 	return undef;
     }
     my $query_result =
 	DBQueryWarn("select urn from apt_aggregates ".
-		    "where urn like 'urn:publicid:IDN+${authname}+%'");
+		    "where urn like 'urn:publicid:IDN+${domain}+%'");
     return undef
 	if (!$query_result);
     return undef

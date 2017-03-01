@@ -1702,6 +1702,26 @@ sub AllVersions($)
     return @result;
 }
 
+#
+# List of node client ids for a profile.
+#
+sub NodeClientIDs($)
+{
+    my ($self) = @_;
+    my %result = ();
+
+    my $rspec = GeniXML::Parse($self->rspec());
+    if (! defined($rspec)) {
+	print STDERR "NodeClientIDs: Could not parse rspec\n";
+	return -1;
+    }
+    foreach my $ref (GeniXML::FindNodes("n:node", $rspec)->get_nodelist()) {
+	my $client_id = GeniXML::GetVirtualId($ref);
+	$result{$client_id} = $client_id;
+    }
+    return values(%result);
+}
+
 ###################################################################
 package APT_Profile::ImageInfo;
 use emdb;
@@ -1792,6 +1812,35 @@ sub FindProfilesUsing($$)
 	next
 	    if (!defined($profile));
 	push(@result, $profile);
+    }
+    @$pref = @result;
+    return 0;
+}
+
+#
+# Find Images by local_pid,osname so we can figure out who is using
+# images created in a profile, any version.
+#
+sub FindImagesByName($$$$)
+{
+    my ($class, $lpid, $osname, $pref) = @_;
+    my @result        = ();
+
+    my $safe_lpid   = DBQuoteSpecial($lpid);
+    my $safe_osname = DBQuoteSpecial($osname);
+
+    my $query_result =
+	DBQueryWarn("select distinct * from apt_profile_images ".
+		    "where local_pid=$safe_lpid and os=$safe_osname ".
+		    "order by name,version");
+    return -1
+	if (!$query_result);
+
+    while (my $row = $query_result->fetchrow_hashref()) {
+	my $self           = {};
+	$self->{'DBROW'}   = $row;
+	bless($self, $class);
+	push(@result, $self);
     }
     @$pref = @result;
     return 0;

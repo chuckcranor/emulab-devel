@@ -758,10 +758,11 @@ sub DeleteProfile()
     my $all        = 0;
     my $keepimages = 0;
     my $force      = 0;
-    my $impotent   = 0;
+    my $impotent   = 1;
     my $mereuser   = 0;
     my $errmsg;
     my %images;
+    my %snapnames  = ();
     my @versions;
 
     my %options = ();
@@ -800,6 +801,11 @@ sub DeleteProfile()
     }
     # For now, mere users do not see new image deletion stuff.
     $keepimages = 1 if ($mereuser);
+
+    # If deleting the only version of a profile, then force $all.
+    if ($profile->VersionCount() == 1) {
+	$all = 1;
+    }
     
     #
     # Get all the image references for this profile. If we are deleting all
@@ -817,45 +823,145 @@ sub DeleteProfile()
     }
 
     #
-    # Find all images used for each version in the list.
+    # Images do not matter if $keepimages is set; we just delete the
+    # profile. 
     #
-    foreach my $version (@versions) {
+    if (!$keepimages) {
 	my $ilist;
 	
-	if (APT_Profile::ImageInfo->LookupForProfile($version, \$ilist)) {
-	    fatal("Could not get image reference list for $version");
+	#
+	# If we are deleting all versions of the profile we have to
+	# find any other profiles using any possible image associated
+	# with this profile. That includes any version of the image
+	# named by the profile, plus any version of images named by
+	# the node ids (snapshots).
+	#
+	# XXX: There is no way to know for sure what images to delete,
+	# since none of the profile versions might actually be using
+	# the associated images. We cannot just make up a urn unless
+	# we want to try it at every cluster. We might end up doing that
+	# but for now, these missed images can be culled from the image
+	# management page instead.
+	#
+	# Aside; the above problem is specific to the Cloudlab Portal
+	# that talks to multiple clusters. The Emulab portal talks to
+	# to just one, so we could figure this out. We could also ask
+	# the image server. Revist this later.
+	#
+	if ($all) {
+	    my %imagenames = ($profile->name() => $profile->name());
+
+	    #
+	    # We need to know the names of all the clients so that we can
+	    # find node snapshots.
+	    #
+	    foreach my $version (@versions) {
+		my @clients = $version->NodeClientIDs();
+		foreach my $id (@clients) {
+		    my $name = $profile->name() . "." . $id;
+		    $imagenames{$name} = $name;
+		}
+	    }
+
+	    #
+	    # Now search everything.
+	    #
+	    my $sentinel = 0;
+	    
+	    foreach my $name (values(%imagenames)) {
+		last if ($sentinel);
+		
+		my $pid = $profile->pid();
+		my @others;
+		
+		if (APT_Profile::ImageInfo->FindImagesByName($pid,
+							     $name,
+							     \@others)) {
+		    fatal("Could not look up named image use for $name");
+		}
+		foreach my $imageinfo (@others) {
+		    if ($force) {
+			#
+			# If forceibly deleting images, then we really just
+			# want to operate on the naked images so that all
+			# versions are removed. Its slow enough, doing them
+			# individually will be much worse. So now that we
+			# have one, we now where the images live, and can
+			# generate the proper urns.
+			#
+			#
+			my $hrn = GeniHRN->new($imageinfo->image());
+
+			foreach my $name (values(%imagenames)) {
+			    my $urn = GeniHRN::Generate($hrn->authority(),
+							$hrn->type(),
+							$imageinfo->ospid() .
+							"//" . $name);
+			    $images{$urn} = $urn;
+			    print "$urn\n";
+			}
+			$sentinel = 1;
+			last;
+		    }
+		    else {
+			$images{$imageinfo->image()} = $imageinfo->image();
+		    }
+
+		}
+	    }
 	}
-	if (keys(%{ $ilist })) {
+	else {
 	    #
-	    # We want to know which images are from snapshots of this profile
-	    # or nodes in this profile. 
+	    # For a specific version of the profile, we need to find
+	    # other profiles using images defined in this profile, since
+	    # those are the only ones we are going to delete. If the
+	    # to be deleted profile is not using any associated images,
+	    # then nothing will be deleted.
 	    #
-	    foreach my $client_id (keys(%{ $ilist })) {
-		my $imageinfo = $ilist->{$client_id};   
-		# 
-		# We do not ever care about system images.
+	    if (APT_Profile::ImageInfo->LookupForProfile($profile, \$ilist)) {
+		fatal("Could not get image reference list for $profile");
+	    }
+	    if (keys(%{ $ilist })) {
 		#
-		next
-		    if ($imageinfo->ospid() eq "emulab-ops");
+		# We want to know which images are from snapshots of this
+		# profile or nodes in this profile.
+		#
+		foreach my $client_id (keys(%{ $ilist })) {
+		    my $imageinfo = $ilist->{$client_id};   
 
-		my $snapname = $profile->name() . "." . $client_id;
+		    # We do not ever care about system images.
+		    next
+			if ($imageinfo->ospid() eq "emulab-ops");
 
-		if ($imageinfo->os() eq $profile->name() ||
-		    $imageinfo->os() eq $snapname) {
-		    $images{$imageinfo->image()} = $imageinfo;
+		    #
+		    # Skip the naked image; we do not want to delete the
+		    # naked image since that would delete the entire image,
+		    # all versions. 
+		    #
+		    next
+			if (!defined($imageinfo->osvers()));
+
+		    # Per-node snapshot image name.
+		    my $snapname = $profile->name() . "." . $client_id;
+
+		    if ($imageinfo->os() eq $profile->name() ||
+			$imageinfo->os() eq $snapname) {
+			$images{$imageinfo->image()} = $imageinfo->image();
+		    }
 		}
 	    }
 	}
     }
+
     #
     # Now find other profiles using these images. 
     #
     if (keys(%images) && !$force) {
 	my %using = ();
 
-	foreach my $imageinfo (values(%images)) {
+	foreach my $imageurn (values(%images)) {
 	    my @profiles;
-	    $imageinfo->FindProfilesUsing(\@profiles);
+	    APT_Profile::ImageInfo::FindProfilesUsing($imageurn, \@profiles);
 	    foreach my $tmp (@profiles) {
 		#
 		# Skip the profile version we are working on.
@@ -864,10 +970,10 @@ sub DeleteProfile()
 		    if ($tmp->profileid() == $profile->profileid() &&
 			($all || $tmp->version() == $profile->version()));
 
-		if (!exists($using{$imageinfo->image()})) {
-		    $using{$imageinfo->image()} = [];
+		if (!exists($using{$imageurn})) {
+		    $using{$imageurn} = [];
 		}
-		push(@{ $using{$imageinfo->image()} }, $tmp);
+		push(@{ $using{$imageurn} }, $tmp);
 	    }
 	}
 	#
@@ -876,8 +982,7 @@ sub DeleteProfile()
 	# the user exactly what is going to happen.
 	#
 	my $blob = {};
-	foreach my $imageinfo (values(%images)) {
-	    my $imageurn = $imageinfo->image();
+	foreach my $imageurn (values(%images)) {
 	    my @profiles = ();
 	    if (exists($using{$imageurn})) {
 		@profiles = map { $_->uuid() } @{ $using{$imageurn} };
@@ -902,21 +1007,24 @@ sub DeleteProfile()
     # them at the target cluster.
     #
     if (keys(%images) && $force) {
-	foreach my $imageinfo (values(%images)) {
-	    my $agg = APT_Aggregate->LookupByAuthName($imageinfo->authority());
+	foreach my $imageurn (values(%images)) {
+	    my $hrn = GeniHRN->new($imageurn);
+	    my $agg = APT_Aggregate->LookupByDomain($hrn->domain());
 	    if (!defined($agg)) {
-		print STDERR "Skipping $imageinfo cause no aggregate.\n";
+		print STDERR "Skipping $imageurn cause no aggregate.\n";
 		next;
 	    }
 	    my $aggurn = $agg->urn();
-	    my $urn    = $imageinfo->image();
+	    my $urn    = $imageurn;
 	    my $opt    = ($impotent ? "-n" : "");
+
+	    print "Deleting $imageurn\n";
 
 	    my $output =
 		emutil::ExecQuiet("$MANAGEIMAGES delete -a $aggurn $opt $urn");
 	    print STDERR $output;
 	    if ($?) {
-		fatal("Could not delete $imageinfo");
+		fatal("Could not delete $imageurn");
 	    }
 	}
     }

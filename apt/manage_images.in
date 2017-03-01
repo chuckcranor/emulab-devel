@@ -504,7 +504,7 @@ sub DoDeleteImage()
     }
     Genixmlrpc->SetContext($context);
     # Shorten default timeout.
-    Genixmlrpc->SetTimeout(60);
+    Genixmlrpc->SetTimeout(90);
 
     my $authority = GeniAuthority->Lookup($aggregate_urn);
     if (!defined($authority)) {
