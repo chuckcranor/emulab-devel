@@ -167,13 +167,16 @@ $(function ()
 		    });
 		};
 		// Only init/show tables that have something in them.
-		if ($('#images-table-no-profiles tbody').children().length) {
+		if ($('#' + name + ' #images-table-no-profiles tbody')
+		    .children().length) {
 		    TableInit('images-table-no-profiles');
 		}
-		if ($('#images-table-one-profile tbody').children().length) {
+		if ($('#' + name + ' #images-table-one-profile tbody')
+		    .children().length) {
 		    TableInit('images-table-one-profile');
 		}
-		if ($('#images-table-multi-profile tbody').children().length) {
+		if ($('#' + name + ' #images-table-multi-profile tbody')
+		    .children().length) {
 		    TableInit('images-table-multi-profile');
 		}
 
