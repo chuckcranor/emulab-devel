@@ -833,6 +833,117 @@ sub Forecast($$;$) {
     return @answer;
 }
 
+#
+# Find any future periods with smaller predicted availability than the
+# present.
+sub FuturePressure($$;$) {
+    my ($class, $typelist, $projlist) = @_;
+
+    my @reservations = ();
+    
+    foreach my $type ( @$typelist ) {
+	my $typeres = LookupAll( $class, $type );
+
+	push( @reservations, @$typeres );
+    }
+
+    my @forecast = ();
+    my @answer = ();
+    my $t = time();
+    my $maxused = 0;    
+    my $under_pressure = 0;
+    my $period;
+    
+    IsFeasible( $class, \@reservations, undef, undef, undef, undef,
+		\@forecast );
+
+    foreach my $f ( @forecast ) {
+	my $unavailable = 0;
+	my $held = 0;
+	my $free = $f->{'free'};
+
+	foreach my $pid ( keys( %{$f->{'used'}} ) ) {
+	    $unavailable += $f->{'used'}->{$pid};
+	}
+	
+	foreach my $pid ( keys( %{$f->{'reserved'}} ) ) {
+	    my $r = $f->{'reserved'}->{$pid};
+	    my $u = $f->{'used'}->{$pid};
+
+	    if( $r > $u ) {
+		if( grep( $_ eq $pid, @$projlist ) ) {
+		    $held += $r - $u;
+		} else {
+		    $unavailable += $r - $u;
+		}
+	    }
+	}
+
+	if( $f->{'t'} <= $t ) {
+	    $maxused = $unavailable if( $unavailable > $maxused );
+	} elsif( $under_pressure ) {
+	    if( $unavailable <= $maxused ) {
+		$under_pressure = 0;
+		push( @answer, [ $period, $f->{'t'} ] );
+	    }
+	} else {
+	    if( $unavailable > $maxused ) {
+		$under_pressure = 1;
+		$period = $f->{'t'};
+	    }
+	}
+    }
+
+    return @answer;
+}
+
+#
+# Find the earliest unfulfilled reservation for any of the specified projects.
+# (If a project is using at least as many nodes as it has reserved,
+# reservation(s) will be considered fulfilled and ignored as a possible
+# result.)  Optionally limited to particular node type(s), otherwise
+# reservations for any node type are returned.
+#
+# Returns a timestamp if any unfulfilled reservation exists, otherwise undef.
+sub OutstandingReservation($$;$) {
+    my ($class, $projlist, $typelist ) = @_;
+    my $earliest = undef;
+    
+    foreach ( @$projlist ) {
+	# reject illegal PIDs
+	return undef unless /^[-\w]+$/;
+    }
+    
+    my $query_result = DBQueryFatal( "SELECT DISTINCT(type) FROM " .
+				     "future_reservations WHERE pid IN ('" .
+				     join( "','", @$projlist ) . "')" );
+
+    while( my($type) = $query_result->fetchrow_array() ) {
+	my $reservations = LookupAll( $class, $type );
+
+	my @forecast = ();
+    
+	IsFeasible( $class, $reservations, undef, undef, undef, undef,
+		    \@forecast );
+
+	foreach my $f ( @forecast ) {
+	    foreach my $pid ( keys ( %{$f->{'reserved'}} ) ) {
+		if( grep( $_ eq $pid, @$projlist ) &&
+		    ( !exists( $f->{'used'}->{$pid} ) ||
+		      $f->{'used'}->{$pid} < $f->{'reserved'}->{$pid} ) ) {
+		    # Found an unfulfilled reservation.
+		    my $t = $f->{'t'};
+
+		    $earliest = $t if( !defined( $earliest ) ||
+				       $t < $earliest );
+		}
+	    }
+	}
+    }
+
+    return $earliest;
+}
+
 sub ExptTypes($) {
     my ($exptidx) = @_;
     
