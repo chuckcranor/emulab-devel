@@ -31,7 +31,7 @@
       </h5>
     </div>
     <div class='panel-body panel-body-dashboard'>
-      <table class='tablesorter' id='images-table-no-profiles'>
+      <table class='tablesorter hidden' id='images-table-no-profiles'>
 	<caption>
 	  <center>Images not used by any of your profiles
 	    <a href='#' class='btn btn-xs'
@@ -93,7 +93,7 @@
 	  <% }); %>
 	</tbody>
       </table>
-      <table class='tablesorter' id='images-table-one-profile'>
+      <table class='tablesorter hidden' id='images-table-one-profile'>
 	<caption>
 	  <center>Images used by only a single profile
 	    <a href='#' class='btn btn-xs'
@@ -163,13 +163,21 @@
 		     href="show-profile.php?uuid=<%- version.using[0].uuid %>">
 		    <%- version.using[0].name %>
 		  </a>
-		  (<%- version.using[0].versions.length %> versions)
+		  <% if (version.using[0].versions.length == 1) { %>
+		    (Version
+		    <a target="_blank"
+		       href="show-profile.php?uuid=<%- version.using[0].versions[0].uuid %>">
+		    <%- version.using[0].versions[0].version %>
+		    </a>)
+		  <% } else { %>
+		    (<%- version.using[0].versions.length %> versions)
+		  <% } %>
 	      </tr>
 	    <% }); %>
 	  <% }); %>
 	</tbody>
       </table>
-      <table class='tablesorter' id='images-table-multi-profile'>
+      <table class='tablesorter hidden' id='images-table-multi-profile'>
 	<caption>
 	  <center>Images used by more then one profile
 	    <a href='#' class='btn btn-xs'

@@ -75,6 +75,8 @@ $(function ()
 		});
 
 		var TableInit = function(tablename) {
+		    $('#' + name + ' #' + tablename).removeClass("hidden");
+		    
 		    var table =
 			$('#' + name + ' #' + tablename)
 			.tablesorter({
@@ -164,9 +166,16 @@ $(function ()
 			return false;
 		    });
 		};
-		TableInit('images-table-no-profiles');
-		TableInit('images-table-one-profile');
-		TableInit('images-table-multi-profile');
+		// Only init/show tables that have something in them.
+		if ($('#images-table-no-profiles tbody').children().length) {
+		    TableInit('images-table-no-profiles');
+		}
+		if ($('#images-table-one-profile tbody').children().length) {
+		    TableInit('images-table-one-profile');
+		}
+		if ($('#images-table-multi-profile tbody').children().length) {
+		    TableInit('images-table-multi-profile');
+		}
 
 		// This activates the popover subsystem.
 		$('#' + name + ' [data-toggle="popover"]').popover({
