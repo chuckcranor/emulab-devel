@@ -293,7 +293,7 @@ $(function ()
 	$('#confirm-delete-image-modal #confirm-delete-image')
 	    .click(function () {
 		sup.HideModal('#confirm-delete-image-modal');
-		sup.ShowWaitWait('It take a moment to delete an image; ' +
+		sup.ShowWaitWait('It takes a moment to delete an image; ' +
 				 'patience please');
 
 		var xmlthing = sup.CallServerMethod(null, "images",
