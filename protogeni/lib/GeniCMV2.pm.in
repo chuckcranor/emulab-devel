@@ -3894,6 +3894,7 @@ sub ListImages($)
     my ($argref) = @_;
     my $user_urn     = $argref->{'user_urn'};
     my $credentials  = $argref->{'credentials'};
+    my @images       = ();
     require OSImage;
     
     if (! defined($credentials)) {
@@ -3928,14 +3929,21 @@ sub ListImages($)
 	return GeniResponse->Create(GENIRESPONSE_FORBIDDEN, undef,
 				    "No permission to list images")
 	    if ($userauth ne $thisauth && !$isadmin);
+
+	@images = OSImage->ListForURN($user_urn);
+	return GeniResponse->Create(GENIRESPONSE_SUCCESS, [])
+	    if (!@images);
     }
     else {
 	$user_urn = $user->urn();
+	@images = OSImage->ListForURN($user_urn);
+	if (!@images) {
+	    $user_urn = $credential->owner_urn();
+	    @images = OSImage->ListForURN($user_urn);
+	    return GeniResponse->Create(GENIRESPONSE_SUCCESS, [])
+		if (!@images);
+	}
     }
-    my @images = OSImage->ListForURN($user_urn);
-    return GeniResponse->Create(GENIRESPONSE_SUCCESS, [])
-	if (!@images);
-
     my @result = ();
     foreach my $image (@images) {
 	my $image_urn = GeniHRN::Generate($OURDOMAIN, "image",
