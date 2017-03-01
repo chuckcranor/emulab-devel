@@ -758,7 +758,7 @@ sub DeleteProfile()
     my $all        = 0;
     my $keepimages = 0;
     my $force      = 0;
-    my $impotent   = 1;
+    my $impotent   = 0;
     my $mereuser   = 0;
     my $errmsg;
     my %images;
