@@ -761,6 +761,25 @@ sub Register($)
 					$self->cert());
 }
 
+#
+# Send email. 
+#
+sub SendEmail($$$;$)
+{
+    my ($self, $subject, $body, $from) = @_;
+    require libtestbed;
+
+    $from = $TBOPS
+	if (!defined($from));
+
+    my $user_email = $self->email();
+    my $user_name  = $self->name();
+
+    libtestbed::SENDMAIL("$user_name <$user_email>",
+			 $subject, $body, $from, "Bcc: $TBAUDIT");
+    return 0;
+}
+
 ############################################################################
 #
 # Wrapper for local users.
