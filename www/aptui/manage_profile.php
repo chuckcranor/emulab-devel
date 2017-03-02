@@ -77,6 +77,7 @@ function SPITFORM($formfields, $errors)
     $disabled   = 0;
     $version_uuid = "null";
     $profile_uuid = "null";
+    $this_version = "null";
     $latest_uuid    = "null";
     $latest_version = "null";
 
@@ -93,6 +94,7 @@ function SPITFORM($formfields, $errors)
 	$activity     = ($profile->HasActivity() ? 1 : 0);
 	$ispp         = ($profile->isParameterized() ? 1 : 0);
         $disabled     = ($profile->isDisabled() ? 1 : 0);
+        $this_version = $profile->version();
 	if ($canmodify) {
 	    $title    = "Modify Profile";
 	}
@@ -183,6 +185,7 @@ function SPITFORM($formfields, $errors)
     echo "    window.PROFILE_UUID = $profile_uuid;\n";
     echo "    window.LATEST_UUID = $latest_uuid;\n";
     echo "    window.LATEST_VERSION = $latest_version;\n";
+    echo "    window.THIS_VERSION = $this_version;\n";
     echo "    window.UPDATED  = $notifyupdate;\n";
     echo "    window.SNAPPING = $notifyclone;\n";
     echo "    window.AJAXURL  = 'server-ajax.php';\n";

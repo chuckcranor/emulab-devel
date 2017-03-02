@@ -297,6 +297,7 @@ sub DoListImages()
 	my %tmp = ();
 	foreach my $profile (@nakedusing) {
 	    my $profile_uuid = $profile->profile_uuid();
+	    my $headversion  = $profile->HeadVersionNumber();
 
 	    if (!exists($tmp{$profile_uuid})) {
 		$tmp{$profile_uuid} = {
@@ -308,9 +309,10 @@ sub DoListImages()
 		};
 	    }
 	    push(@{$tmp{$profile_uuid}->{'versions'}},
-		 {"uuid"    => $profile->uuid(),
-		  "version" => $profile->version(),
-		  "created" => $profile->created(),
+		 {"uuid"     => $profile->uuid(),
+		  "version"  => $profile->version(),
+		  "created"  => $profile->created(),
+		  "iscurrent"=> ($profile->version() == $headversion ? 1 : 0),
 		 });
 	}
 	$ref->{'using'} = [ values(%tmp) ];
@@ -357,6 +359,7 @@ sub DoListImages()
 	    %tmp = ();
 	    foreach my $profile (@using) {
 		my $profile_uuid = $profile->profile_uuid();
+		my $headversion  = $profile->HeadVersionNumber();
 
 		if (!exists($tmp{$profile_uuid})) {
 		    $tmp{$profile_uuid} = {
@@ -368,9 +371,11 @@ sub DoListImages()
 		    };
 		}
 		push(@{$tmp{$profile_uuid}->{'versions'}},
-		     {"uuid"    => $profile->uuid(),
-		      "version" => $profile->version(),
-		      "created" => $profile->created(),
+		     {"uuid"     => $profile->uuid(),
+		      "version"  => $profile->version(),
+		      "created"  => $profile->created(),
+		      "iscurrent"=> ($profile->version() ==
+				     $headversion ? 1 :0),
 		     });
 	    }
 	    $image->{'using'} = [ values(%tmp) ];

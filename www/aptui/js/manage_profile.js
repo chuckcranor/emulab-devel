@@ -176,6 +176,10 @@ $(function ()
 	$('#rspectext_div').html(rspectext_html);
 	$('#share_div').html(shareTemplate({formfields: fields}))
 	$('#confirm_delete_div').html(deleteString);
+	// Extra warning in the confirm delete modal.
+	if (window.THIS_VERSION == window.LATEST_VERSION) {
+	    $('#confirm-delete-profile-warning').removeClass("hidden");
+	}
 
 	// Fireoff repo stuff now.
 	if (fromrepo) {

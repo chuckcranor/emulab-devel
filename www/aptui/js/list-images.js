@@ -33,7 +33,7 @@ $(function ()
 	
 	_.each(amlist, function(urn, name) {
 	    var callback = function(json) {
-		console.info(json);
+		console.info(name, json);
 
 		// Kill the spinner.
 		count--;

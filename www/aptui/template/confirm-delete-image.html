@@ -18,6 +18,7 @@
 	  </button>
 	</center>
 	<br>
+	<% var warn = 0; %>
 	Note: This operation is not reversible, your image will be
 	permanently deleted, freeing up the disk space it using.
 	<div id="profile-list"
@@ -27,7 +28,7 @@
 	  deleted since they are using this image and will no longer
 	  work after the image is deleted.
 	  <div class="table-responsive">
-	    <table class='table table-condensed'>
+	    <table class='table table-condensed' style="margin-bottom: 10px;">
 	      <thead>
 		<tr>
 		  <th>Name</th>
@@ -46,6 +47,10 @@
 			<td>
 			  <a href="show-profile.php?uuid=<%- version.uuid %>"
 			     target="_blank"><%- version.version %></a>
+			  <% if (version.iscurrent) { warn = 1; %>
+			    <span class="text-danger
+					 glyphicon glyphicon-asterisk"></span>
+			  <% } %>
 		      </td>
 		      <td><%= profile.creator %></td>
 		      <td><%= profile.project %></td>
@@ -57,6 +62,13 @@
 		<% } %>
 	      </tbody>
 	    </table>
+	    <% if (warn) { %>
+	      <span class="text-danger
+			   glyphicon glyphicon-asterisk"></span>
+	      <span class="text-danger">
+		This is the most recent version of profile. Are you sure
+		you want to delete it?</span>
+	    <% } %>
 	  </div>  
 	</div>
       </div>
