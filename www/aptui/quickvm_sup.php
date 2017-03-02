@@ -278,6 +278,10 @@ $PAGEHEADER_FUNCTION = function($thinheader = 0, $ignore1 = NULL,
 	                 My Datasets</a></li>
 	           <li><a href='create-dataset.php'>Create Dataset</a></li>
 	           <li><a href='images.php'>List Images</a></li>";
+            echo " <li class='divider'></li>
+                   <li><a href='reserve.php'>Reserve Nodes</a></li>
+	           <li><a href='list-reservations.php'>
+                          List Reservations</a></li>";
             echo "      <li class='divider'></li>\n";
             $then = time() - (90 * 3600 * 24);
             echo "      <li><a href='activity.php?user=$login_uid&min=$then'>
