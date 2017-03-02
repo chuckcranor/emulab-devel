@@ -59,6 +59,7 @@ my $TB             = "@prefix@";
 my $PROJROOT       = "@PROJROOT_DIR@";
 my $TBOPS          = "@TBOPSEMAIL@";
 my $friskiller     = "$TB/sbin/frisbeehelper";
+my $PGENISUPPORT   = @PROTOGENI_SUPPORT@;
 my $WITHPROVENANCE = @IMAGEPROVENANCE@;
 my $doprovenance   = 0;
 
@@ -91,6 +92,12 @@ use libEmulab;
 use libtestbed;
 use User;
 use OSImage;
+if ($PGENISUPPORT) {
+    use vars qw($GENI_DBNAME);
+    $GENI_DBNAME = "geni-cm";
+    require GeniHRN;
+    require GeniUser;
+}
 
 # Protos
 sub fatal($);
@@ -169,6 +176,30 @@ my $imagevers = $image->version();
 # Sanity check; cannot delete a deleted version.
 if ($versonly && defined($image->deleted())) {
     fatal("Image version is already deleted");
+}
+
+#
+# We want to send email to the creator. Also, watch for an image created
+# on the Geni path; the creator urn tells us who the creator is, rather
+# then who is calling the script. When PROTOGENI_LOCALUSER=0 there is no
+# local creator, but when set there is a local shadow user we can use.
+#
+my $notifyuser = $image->GetCreator();
+if (!defined($notifyuser)) {
+    $notifyuser = $this_user;
+}
+if (defined($image->creator_urn())) {
+    my $geniuser = GeniUser->Lookup($image->creator_urn(), 1);
+    if (defined($geniuser) && $geniuser->IsLocal()) {
+	$notifyuser = $geniuser->emulab_user();
+    }
+    else {
+	# This is okay, it is just for email below.
+	$notifyuser = $geniuser;
+    }
+}
+if ($debug) {
+    print STDERR "Will send email to $notifyuser\n";
 }
 
 #
@@ -393,9 +424,9 @@ if (!$versonly) {
     if ($image->Delete() != 0) {
 	fatal("Could not delete image!");
     }
-    $this_user->SendEmail("delete_image: Image has been deleted",
-			  "Image $imagepid,$imagename ($imageid) has ".
-			  "been deleted by $this_user\n");
+    $notifyuser->SendEmail("delete_image: Image has been deleted",
+			   "Image $imagepid,$imagename ($imageid) has ".
+			   "been deleted by $this_user\n");
 }
 else {
     if ($image->DeleteVersion() != 0) {
@@ -403,9 +434,9 @@ else {
     }
     # I know, we are unlocking something we just deleted. Its okay, relax.
     $image->Unlock();
-    $this_user->SendEmail("delete_image: Image Version has been deleted",
-			  "Version $imagevers of image $imagepid,$imagename".
-			  "($imageid)\nhas been deleted by $this_user\n");
+    $notifyuser->SendEmail("delete_image: Image Version has been deleted",
+			   "Version $imagevers of image $imagepid,$imagename".
+			   "($imageid)\nhas been deleted by $this_user\n");
 }
 exit(0);
 
