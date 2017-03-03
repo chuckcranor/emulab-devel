@@ -919,6 +919,8 @@ sub OutstandingReservation($$;$) {
 				     join( "','", @$projlist ) . "')" );
 
     while( my($type) = $query_result->fetchrow_array() ) {
+	next if( defined( $typelist ) && !grep( $_ eq $type, @$typelist ) );
+	
 	my $reservations = LookupAll( $class, $type );
 
 	my @forecast = ();
