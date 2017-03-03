@@ -1308,6 +1308,22 @@ sub GetTicketAuxAux($$$$$$$$$$$)
 			$pctype   = undef;
 		    }
 		    elsif ($virtualization_subtype eq "firewall") {
+			# 
+			# A sitevar controls whether we actually can do it.
+			#
+			my $cnet_firewalls = 0;
+			if (!GetSiteVar('general/cnet_firewalls',
+					\$cnet_firewalls)){
+			    # Cannot get the value, say no.
+			    $cnet_firewalls = 0;
+			}
+			if (!$cnet_firewalls) {
+			    $response
+				= GeniResponse->Create(GENIRESPONSE_BADARGS,
+						       undef,
+				       "Firewalls are not supported here");
+			    goto bad;
+			}
 			$isfirewall = 1;
 			# Corresponds to iptables-vlan, see below.
 			$osname     = "FW-IPTABLES";
