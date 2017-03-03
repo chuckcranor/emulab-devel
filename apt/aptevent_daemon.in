@@ -41,9 +41,10 @@ sub usage()
     print "Usage: aptevent_daemon [-d] [-s] [-n]\n";
     exit(1);
 }
-my $optlist   = "dns";
+my $optlist   = "dnsv";
 my $debug     = 0;
 my $impotent  = 0;
+my $verbose   = 0;
 
 #
 # Configure variables
@@ -91,6 +92,9 @@ if (defined($options{"d"})) {
 if (defined($options{"n"})) {
     $impotent = 1;
 }
+if (defined($options{"v"})) {
+    $verbose = 1;
+}
 
 # Do this early so that we talk to the right DB.
 use vars qw($GENI_DBNAME);
@@ -99,6 +103,7 @@ $GENI_DBNAME = "geni-cm";
 # Load the Testbed support stuff.
 use lib "@prefix@/lib";
 use emdb;
+require GeniUtil;
 require GeniDB;
 require GeniSlice;
 require GeniSliver;
@@ -171,7 +176,7 @@ sub callback($$$)
     return
 	if (0 && $slice !~ /stoller/);
     
-    if ($debug) {
+    if ($debug || $verbose) {
 	print "Event: $time $site $type $urn $slice $details\n";
     }
     my $instance = APT_Instance->LookupBySlice($slice);
@@ -190,8 +195,9 @@ sub callback($$$)
 	HandleFrisbeeStatus($site, $instance, $details);
 	goto done;
     }
-done:
-    $instance->Purge();
+  done:
+    emutil::FlushCaches();
+    GeniUtil::FlushCaches();
 }
 
 #
@@ -207,7 +213,7 @@ sub HandleSliverStatus($$$)
 	    print "Would update sliver status for $sliver from details\n";
 	}
 	else {
-	    if ($debug) {
+	    if ($debug || $verbose) {
 		print "Updating sliver status for sliver from $details\n";
 	    }
 	    $details = eval { decode_json($details) };
@@ -232,7 +238,7 @@ sub HandleImageStatus($$$)
 	    print "Would update image status for $instance from details\n";
 	}
 	else {
-	    if ($debug) {
+	    if ($debug || $verbose) {
 		print "Updating image status for instance from $details\n";
 	    }
 	    $details = eval { decode_json($details) };
@@ -258,7 +264,7 @@ sub HandleFrisbeeStatus($$$)
 	    print "Would update frisbee status for $sliver from details\n";
 	}
 	else {
-	    if ($debug) {
+	    if ($debug || $verbose) {
 		print "Updating frisbee status for sliver from $details\n";
 	    }
 	    $details = eval { decode_json($details) };
