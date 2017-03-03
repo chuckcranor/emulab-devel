@@ -425,6 +425,9 @@ function Do_CheckScript()
             }
             $command .= " -p " . $ajax_args["pid"];
         }
+        else {
+            $command .= " -a ";
+        }
     }
     else {
 	SPITAJAX_ERROR(1, "Unknown script type");
