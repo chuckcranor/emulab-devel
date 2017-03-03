@@ -74,6 +74,7 @@ my $GENIUSER      = "geniuser";
 
 # Cache of instances to avoid regenerating them.
 my %instances  = ();
+BEGIN { use emutil; emutil::AddCache(\%instances); }
 my $debug      = 0;
 
 # Debugging
@@ -1549,6 +1550,9 @@ sub UpdateWebStatus($$)
 	$current = {};
     }
 
+#    print Dumper($hash);
+#    print Dumper($current);
+
     #
     # This will need to change; we can get updates from polling or
     # from the event stream. The events are processed out of band from
@@ -1585,6 +1589,7 @@ sub UpdateWebStatus($$)
 	    $current->{$node_id} = $details;
 	}
     }
+#    print Dumper($current);
     $self->webtask()->sliverstatus($current);
     DBQueryWarn("unlock tables");
     return $current;
@@ -1631,7 +1636,7 @@ sub UpdateFrisbeeStatus($$)
     }
     $self->webtask()->sliverstatus($current);
     DBQueryWarn("unlock tables");
-    print STDERR Dumper($current);
+#    print STDERR Dumper($current);
     return $current;
 }
 
