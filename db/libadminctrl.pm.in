@@ -206,6 +206,7 @@ use vars qw(@ISA @EXPORT);
 
 # Must come after package declaration!
 use English;
+use Data::Dumper;
 use libdb;
 use libtestbed;
 use libtblog_simple;
@@ -817,7 +818,8 @@ sub TestPolicies($$$$)
 
     $query_result =
 	DBQueryWarn("select distinct * from group_policies ".
-		    "where (pid='$pid' and (pid=gid or gid='$gid')) or ".
+		    "where (pid='$pid' and ".
+		    "       (pid=gid or gid='$gid' or gid='*')) or ".
 		    "      pid='' or pid='-' ".
 		    "order by pid,gid desc");
     return -1
@@ -882,6 +884,10 @@ sub TestPolicies($$$$)
 	my $global  = ($ppid eq $pid ? 0 : 1);
 	my $result;
 
+	# If the group is a wildcard, then we want the project limit.
+	if ($pgid eq "*") {
+	    $gid = $pid;
+	}
 	$result = TestGroupPolicy($pid, $gid,
 				  $policy, $count, $auxdata, $global);
 	
@@ -1000,6 +1006,7 @@ sub UpdateNodeTypeXpidPermissions()
 	if (!$query_result);
 
     while (my $rowref = $query_result->fetchrow_hashref()) {
+	my $pid_idx = $rowref->{'pid_idx'};
 	my $gid_idx = $rowref->{'gid_idx'};
 	my $ppid    = $rowref->{'pid'};
 	my $pgid    = $rowref->{'gid'};
@@ -1011,7 +1018,13 @@ sub UpdateNodeTypeXpidPermissions()
 	    if (! ($policy eq TBADMINCTRL_POLICY_TYPE()));
 
 	if ($debug) {
-	    print "Type Perm: $ppid, $pgid, $count, $auxdata\n";
+	    print "Type Perm: $ppid ($pid_idx), $pgid ($gid_idx), ".
+		"$count, $auxdata\n";
+	}
+
+	if ($pgid eq "*") {
+	    $pgid    = $ppid;
+	    $gid_idx = $pid_idx;
 	}
 
 	my $group = Group->Lookup($gid_idx);
@@ -1031,6 +1044,10 @@ sub UpdateNodeTypeXpidPermissions()
 	    next;
 	}
 	$permissions{"$gid_idx"}->{$auxdata} = 1;
+    }
+    if ($debug) {
+	print Dumper(\%permissions);
+	return -1;
     }
 
     #
@@ -1297,8 +1314,7 @@ sub LoadCurrent($$$$)
 		     "left join node_types as nt on nt.type=n.type ".
 		     "left join experiments as e on ".
 		     "     e.pid=r.pid and e.eid=r.eid ".
-		     "where (e.expt_swap_uid='$uid' or ".
-		     "       r.pid='$pid' and e.gid='$gid') and ".
+		     "where (e.expt_swap_uid='$uid' or r.pid='$pid') and ".
 		     "      r.pid!='" . TBOPSPID() . "' and ".
 		     "      n.role='testnode'");
     return undef

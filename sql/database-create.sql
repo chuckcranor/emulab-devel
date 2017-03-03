@@ -2169,7 +2169,7 @@ CREATE TABLE `group_policies` (
   `policy` varchar(32) NOT NULL default '',
   `auxdata` varchar(64) NOT NULL default '',
   `count` int(10) NOT NULL default '0',
-  PRIMARY KEY  (`gid_idx`,`policy`,`auxdata`),
+  PRIMARY KEY  (`pid_idx`,`gid_idx`,`policy`,`auxdata`),
   UNIQUE KEY `pid` (`pid`,`gid`,`policy`,`auxdata`)
 ) ENGINE=MyISAM DEFAULT CHARSET=latin1;
 
