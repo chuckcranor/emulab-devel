@@ -1309,9 +1309,18 @@ sub GetTicketAuxAux($$$$$$$$$$$)
 		    }
 		    elsif ($virtualization_subtype eq "firewall") {
 			$isfirewall = 1;
-			$osname     = "FW-IPFW2";
-			$pctype     = "pc";
-			goto raw;
+			# Corresponds to iptables-vlan, see below.
+			$osname     = "FW-IPTABLES";
+			# Default firewall type is a global vtype if it exists.
+			if (scalar(NodeType->GlobalVtypeTypes("pcfw"))) {
+			    $pctype = "pcfw";
+			}
+			else {
+			    $pctype = "pc";
+			}
+			# Lets force to exclusive node just in case.
+			GeniXML::SetExclusive($ref, 1);
+			$exclusive = 1;
 		    }
 		    else {
 			$response
@@ -1494,11 +1503,11 @@ sub GetTicketAuxAux($$$$$$$$$$$)
 	# The slot does not like to be NULL.
 	$osname = ""
 	    if (!defined($osname));
-	
+
 	# Need some kind of default.
 	$pctype = "pc"
 	    if (!defined($pctype));
-	
+
 	my $nodeblob = {"vname"   => $node_nickname,
 			"type"    => $pctype,
 			"osname"  => $osname,
@@ -1522,10 +1531,9 @@ sub GetTicketAuxAux($$$$$$$$$$$)
 		$response = GeniResponse->Create(GENIRESPONSE_ERROR);
 		goto bad;
 	    }
-	    $nodeblob->{'cmd_line'} = '/kernel.fw';
 	    if (!defined($virtexperiment->NewTableRow("virt_firewalls",
 						  {"fwname" => $node_nickname,
-						   "type"   => "ipfw2-vlan",
+						   "type"   => "iptables-vlan",
 						   "style"  => "basic"}))) {
 		$response = GeniResponse->Create(GENIRESPONSE_ERROR, undef,
 				     "Error creating firewall definition");

@@ -1023,12 +1023,17 @@ sub Action($$$;$)
     #
     # Look for a firewall that needs to be setup first.
     #
-    my ($firewall, $firewall_sliver);
-    my $firewalled = $experiment->IsFirewalled(\$firewall);
-    if ($firewalled && !defined($firewall)) {
+    my %firewallinfo = (
+	"node_id" => undef,
+	"node"    => undef,
+	"sliver"  => undef,
+	"image"   => undef,
+    );
+    my $firewalled = $experiment->IsFirewalled(\$firewallinfo{"node_id"});
+    if ($firewalled && !defined($firewallinfo{"node_id"})) {
 	$msg .= "Could not determine firewall for experiment";
 	goto bad;
-    }
+    }    
 
     my @slivers = ();
     if ($self->SliverList(\@slivers) != 0) {
@@ -1097,11 +1102,6 @@ sub Action($$$;$)
 		or return -1;
 	    next;
 	}
-	# Remember which sliver is the firewall. 
-	if ($firewalled && $firewall eq $sliver->resource_id()) {
-	    $firewall_sliver = $sliver;
-	}
-
 	my $node = Node->Lookup($sliver->resource_id());
 	if (!defined($node)) {
 	    $msg .= "Could not map $sliver to a node";
@@ -1117,6 +1117,12 @@ sub Action($$$;$)
 	# Backpointer used in WaitForNodes().
 	$node->_sliver($sliver);
 	$node->_image(undef);
+
+	# Remember firewall stuff;
+	if ($firewalled && $firewallinfo{"node_id"} eq $node->node_id()) {
+	    $firewallinfo{"sliver"} = $sliver;
+	    $firewallinfo{"node"}   = $node;
+	}
 	
 	if ($reservation->SameExperiment($experiment)) {
 	    my $vnode;
@@ -1317,10 +1323,16 @@ sub Action($$$;$)
 			"but it has been deleted";
 		    goto bad;
 		}
-		if (!exists($reloads{$image->versid()})) {
-		    $reloads{$image->versid()} = [ ];
-		} 
-		push(@{ $reloads{$image->versid()} }, $node);
+		if ($firewalled &&
+		    $firewallinfo{"node_id"} eq $node->node_id()) {
+		    $firewallinfo{"image"} = $image;
+		}
+		else {
+		    if (!exists($reloads{$image->versid()})) {
+			$reloads{$image->versid()} = [ ];
+		    }
+		    push(@{ $reloads{$image->versid()} }, $node);
+		}
 		$node->_reloaded(1);
 		$node->_image($image);
 
@@ -1331,7 +1343,11 @@ sub Action($$$;$)
 		# Reload means reboot or power on.
 		# But skip the firewall; that is done specially since
 		# it has to come up before everything else.
-		if (!defined($vnode) && $sliver->state() eq "stopped") {
+		if ($firewalled &&
+		    $firewallinfo{"node_id"} eq $node->node_id()) {
+		    print STDERR "Skipping reboot/poweron of firewall node\n";
+		}
+		elsif (!defined($vnode) && $sliver->state() eq "stopped") {
 		    $poweron{$node->node_id} = $node;
 		}
 		else {
@@ -1513,50 +1529,58 @@ sub Action($$$;$)
     }
 
     #
-    # Before anything, the firewall has to be turned on or rebooted.
-    # Then we have to wait for it to come up before we can let the
-    # rest of the nodes go. 
+    # Before anything, the firewall has to be reload or powered on or
+    # rebooted. Then we have to wait for it to come up before we can
+    # let the rest of the nodes go.
     #
     if ($firewalled &&
-	(exists($poweron{$firewall}) || exists($reboots{$firewall}))) {
-	my $node_id;
+	(defined($firewallinfo{"image"}) ||
+	 exists($poweron{$firewallinfo{"node_id"}}) ||
+	 exists($reboots{$firewallinfo{"node_id"}}))) {
+	my $node_id  = $firewallinfo{"node_id"};
+	my $node     = $firewallinfo{"node"};
 	require StateWait;
 	require EmulabConstants;
 
-	if (exists($poweron{$firewall})) {
-	    my $node = $poweron{$firewall};
-	    $node_id = $node->node_id();
+	if (defined($firewallinfo{"image"})) {
+	    my $image   = $firewallinfo{"image"};
+	    my $imageid = $image->versid();
 	    
+	    # Normal reload for firewall, let it do reboot/wait
+	    system("$OSLOAD -m $imageid $node_id");
+	    if ($?) {
+		$msg .= "Failed to reload firewall: $imageid on $node_id";
+		goto bad;
+	    }
+	}
+	elsif (exists($poweron{$node_id})) {
 	    print STDERR "Powering on the firewall: $node_id\n";
 	
 	    system("$POWER on $node_id");
 	    if ($?) {
 		$msg .= "Failed to power on firewall: $node_id";
-		$firewall_sliver->SetStatus("failed");
+		$firewallinfo{"sliver"}->SetStatus("failed");
 		goto bad;
 	    }
-	    delete($poweron{$firewall});
+	    delete($poweron{$node_id});
 	}
-	else {
-	    my $node = $reboots{$firewall};
-	    $node_id = $node->node_id();
-	    
+	elsif (exists($reboots{$node_id})) {
 	    print STDERR "Rebooting the firewall: $node_id\n";
 	    
 	    system("$NODEREBOOT $node_id");
 	    if ($?) {
 		$msg .= "Failed to reboot firewall: $node_id";
-		$firewall_sliver->SetStatus("failed");
+		$firewallinfo{"sliver"}->SetStatus("failed");
 		goto bad;
 	    }
-	    delete($reboots{$firewall});
+	    delete($reboots{$node_id});
 	}
 	$StateWait::debug = 0;
 	my @states = (EmulabConstants::TBDB_NODESTATE_ISUP());
 
 	if (StateWait::initStateWait(\@states, $node_id)) {
 	    $msg .=  "Failed to initialize the statewait library!";
-	    $firewall_sliver->SetStatus("failed");
+	    $firewallinfo{"sliver"}->SetStatus("failed");
 	    goto bad;
 	}
 	my @finished = ();
@@ -1567,7 +1591,7 @@ sub Action($$$;$)
 	
 	if (StateWait::waitForState(\@finished, \@failed, (15 * 60))) {
 	    $msg .= "Failed in waitForState for firewall: $node_id!";
-	    $firewall_sliver->SetStatus("failed");
+	    $firewallinfo{"sliver"}->SetStatus("failed");
 	    goto bad;
 	}
 	StateWait::endStateWait();
@@ -1582,7 +1606,7 @@ sub Action($$$;$)
 
 	if (@failed) {
 	    $msg .= "Firewall failed to boot properly: $node_id!";
-	    $firewall_sliver->SetStatus("failed");
+	    $firewallinfo{"sliver"}->SetStatus("failed");
 	    goto bad;
 	}
     }

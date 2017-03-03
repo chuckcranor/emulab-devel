@@ -1506,6 +1506,7 @@ $(function ()
 		var href   = "n/a";
 		var ssh    = "n/a";
 		var cons   = "n/a";
+		var isfw   = 0;
 		var clone  = $(listview_row);
 		// Cause of nodes in the emulab namespace (vhost).
 		if (!login.length) {
@@ -1532,6 +1533,10 @@ $(function ()
 		    $(stype).attr("name") === "emulab-blockstore") {
 		    $('#listview-row-' + node + " [name=menu]").text("n/a");
 		    return;
+		}
+		if (stype.length &&
+		    $(stype).attr("name") === "firewall") {
+		    isfw = 1;
 		}
 		
 		if (login.length && dossh) {
@@ -1590,7 +1595,7 @@ $(function ()
 		    $('#listview-row-' + node + ' [name=console]')
 			.parent().addClass('disabled');		    
 		}
-		if (!isvhost) {
+		if (!isvhost && !isfw) {
 		    //
 		    // And a handler for the snapshot action.
 		    //
@@ -1631,7 +1636,7 @@ $(function ()
 		    $(clone).find("li[id=consolelog]").addClass("disabled");
 		}
 		// If a vhost, then grey out options.
-		if (isvhost) {
+		if (isvhost || isfw) {
 		    $(clone).find("li[id=snapshot]").addClass("disabled");
 		    $(clone).find("li[id=delete]").addClass("disabled");
 		}
