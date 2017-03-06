@@ -2,7 +2,7 @@ $(function ()
 {
     'use strict';
 
-    var template_list   = ["reserve-request", "reservation-list",
+    var template_list   = ["reserve-request", "reserve-faq", "reservation-list",
 			   "oops-modal", "waitwait-modal"];
     var templates       = APT_OPTIONS.fetchTemplateList(template_list);    
     var mainString      = templates["reserve-request"];
@@ -58,6 +58,18 @@ $(function ()
 	});
 	html = aptforms.FormatFormFieldsHorizontal(html);
 	$('#main-body').html(html);
+	$('.faq-contents').html(templates["reserve-faq"]);
+
+	// Handler for the FAQ link.
+	$('#reservation-faq-button').click(function (event) {
+	    event.preventDefault();
+	    sup.HideModal('#reservation-help-modal',
+			  function () {
+			      sup.ShowModal('#reservation-faq-modal');
+			  });
+	});
+	// Set the manual link since the FAQ is not a template.
+	$('#reservation-manual').attr("href", window.MANUAL);
 
 	// This activates the popover subsystem.
 	$('[data-toggle="popover"]').popover({
