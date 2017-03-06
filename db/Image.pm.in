@@ -316,6 +316,7 @@ AUTOLOAD {
 	    return $self->{'HASH'}->{$name};
 	}
     }
+    print STDERR Dumper($self);
     carp("No such slot '$name' field in class $type");
     return undef;
 }
