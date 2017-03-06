@@ -288,6 +288,10 @@ $(function ()
 		if (json.code != 2) {
 		    sup.SpitOops("oops", json.value);		    
 		}
+		aptforms.GenerateFormErrors('#reserve-request-form',
+					    json.value);		
+		// Make sure we still warn about an unsaved form.
+		aptforms.MarkFormUnsaved();
 		return;
 	    }
 	    // User can submit.

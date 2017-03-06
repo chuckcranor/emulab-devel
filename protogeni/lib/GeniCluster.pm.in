@@ -750,8 +750,8 @@ sub Reserve($)
 		return GeniResponse->Create(GENIRESPONSE_ERROR);
 	    }
 	    if ($count > $maximum) {
-		return GeniResponse->Create(GENIRESPONSE_FORBIDDEN, undef,
-					    "Admission Control says limited "/
+		return GeniResponse->Create(GENIRESPONSE_REFUSED, undef,
+					    "Admission Control says limited ".
 					    "to $maximum nodes");
 	    }
 	}

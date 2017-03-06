@@ -266,7 +266,9 @@ $(function () {
 	    var submit_callback = function(json) {
 		console.info("SubmitForm", json);
 		sup.HideWaitWait();
-		DisableUnsavedWarning(form);
+		if (!json.code) {
+		    DisableUnsavedWarning(form);
+		}
 		callback(json);
 	    };
 	    sup.ShowWaitWait(message);

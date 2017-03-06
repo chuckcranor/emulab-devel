@@ -277,8 +277,11 @@ sub DoReserve()
 	APT_Geni::PortalRPC($authority, $context, "Reserve", \%rpcargs);
     if (GeniResponse::IsError($response)) {
 	#
-	# All errors are fatal.
+	# Watch for a refused error, we want to tell the user that.
 	#
+	if ($response->code() == GENIRESPONSE_REFUSED) {
+	    UserError($response->output());
+	}
 	fatal($response->output());
     }
     print Dumper($response);
