@@ -497,7 +497,7 @@ function Do_GetReservation()
 }
 
 #
-# Ask for reservation system info, for a specific aggregate
+# Ask for reservation system info, for a specific portal.
 #
 function Do_ReservationInfo()
 {
@@ -510,7 +510,7 @@ function Do_ReservationInfo()
 
     $retval = SUEXEC($this_user->uid(), "nobody",
                      "webmanage_reservations ".
-                     "   -t $webtask_id systeminfo -p '$PORTAL_GENESIS'",
+                     "   -t $webtask_id prediction -p '$PORTAL_GENESIS'",
                      SUEXEC_ACTION_CONTINUE);
     if ($retval) {
         $webtask->Delete();

@@ -251,6 +251,7 @@ ProtoGeniDefs::AddModule("cluster",
 		  "ApproveReservation"   => \&GeniCluster::ApproveReservation,
 		  "DeleteReservation"    => \&GeniCluster::DeleteReservation,
 		  "ReservationSystemInfo"=> \&GeniCluster::ReservationSystemInfo,
+		  "ReservationPrediction"=> \&GeniCluster::ReservationPrediction,
 	      }},
 	  });
 

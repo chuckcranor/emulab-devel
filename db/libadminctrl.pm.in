@@ -228,6 +228,10 @@ my %node_types    = ();	 # Indexed by type, gives class
 my %node_classes  = ();	 # Indexed by class, gives class
 my $assignflag    = 0;
 my %assign_classes= ();  # For assign (wrapper).
+# Policy tables.
+my %user_policies   = ();
+my %group_policies  = ();
+my %global_policies = ();
 
 # Constants.
 sub TBADMINCTRL_TYPE_USER()		{ "user"; }
@@ -750,15 +754,11 @@ sub TestGlobalPolicy($$$$$)
 }
 
 #
-# Test policies that apply.
+# Load the policies.
 #
-sub TestPolicies($$$$)
+sub LoadPolicies($$$)
 {
-    my ($uid, $pid, $eid, $gid) = @_;
-    my $failcount       = 0;
-    my %user_policies   = ();
-    my %group_policies  = ();
-    my %global_policies = ();
+    my ($uid, $pid, $gid) = @_;
 
     #
     # Get the global policies. 
@@ -785,41 +785,45 @@ sub TestPolicies($$$$)
     #
     # Get user policies that apply. Ordering by uid will put the global
     # policies last, which makes it easier in the loop below.
-    # 
-    $query_result =
-	DBQueryWarn("select * from user_policies ".
-		    "where uid='$uid' or uid='+' or uid='-' ".
-		    "order by uid desc");
-    return -1
-	if (!$query_result);
+    #
+    if (defined($uid)) {
+	$query_result =
+	    DBQueryWarn("select * from user_policies ".
+			"where uid='$uid' or uid='+' or uid='-' ".
+			"order by uid desc");
+	return -1
+	    if (!$query_result);
 
-    while (my $rowref = $query_result->fetchrow_hashref()) {
-	my $puid    = $rowref->{'uid'};
-	my $policy  = $rowref->{'policy'};
-	my $auxdata = $rowref->{'auxdata'};
-	my $count   = $rowref->{'count'};
+	while (my $rowref = $query_result->fetchrow_hashref()) {
+	    my $puid    = $rowref->{'uid'};
+	    my $policy  = $rowref->{'policy'};
+	    my $auxdata = $rowref->{'auxdata'};
+	    my $count   = $rowref->{'count'};
 
-	if ($debug) {
-	    print "User Policy: $puid, $policy, $count, $auxdata\n";
-	}
+	    if ($debug) {
+		print "User Policy: $puid, $policy, $count, $auxdata\n";
+	    }
 
-	if ($puid eq "+") {
-	    $user_policies{"$policy:$auxdata"} = $rowref;
-	}
-	elsif ($puid eq "-") {
-	    # Allow existing user policy to override this.
-	    $user_policies{"$policy:$auxdata"} = $rowref
-		if (!exists($user_policies{"$policy:$auxdata"}));
-	}
-	else {
-	    $user_policies{"$policy:$auxdata"} = $rowref;
+	    if ($puid eq "+") {
+		$user_policies{"$policy:$auxdata"} = $rowref;
+	    }
+	    elsif ($puid eq "-") {
+		# Allow existing user policy to override this.
+		$user_policies{"$policy:$auxdata"} = $rowref
+		    if (!exists($user_policies{"$policy:$auxdata"}));
+	    }
+	    else {
+		$user_policies{"$policy:$auxdata"} = $rowref;
+	    }
 	}
     }
-
+    my $gidclause = "pid=gid or gid='*'";
+    if (defined($gid)) {
+	$gidclause .= "or gid='$gid'";
+    }
     $query_result =
 	DBQueryWarn("select distinct * from group_policies ".
-		    "where (pid='$pid' and ".
-		    "       (pid=gid or gid='$gid' or gid='*')) or ".
+		    "where (pid='$pid' and ($gidclause)) or ".
 		    "      pid='' or pid='-' ".
 		    "order by pid,gid desc");
     return -1
@@ -832,7 +836,8 @@ sub TestPolicies($$$$)
 	my $count   = $rowref->{'count'};
 
 	if ($debug) {
-	    print "Group Policy: $pid, $gid, $policy, $count, $auxdata\n";
+	    print "Group Policy: $pid, ".
+		(defined($gid) ? "$gid" : "") . ", $policy, $count, $auxdata\n";
 	}
 	
 	if ($ppid eq "+") {
@@ -847,6 +852,18 @@ sub TestPolicies($$$$)
 	    $group_policies{"$policy:$auxdata"} = $rowref;
 	}
     }
+    return 0;
+}
+
+#
+# Test policies that apply.
+#
+sub TestPolicies($$$)
+{
+    my ($uid, $pid, $gid) = @_;
+    my $failcount       = 0;
+
+    LoadPolicies($uid, $pid, $gid);
 
     #
     # Now test the policies. Test them all so that we get feedback on
@@ -913,6 +930,34 @@ sub TestPolicies($$$$)
     return 0
 	if ($failcount);
     return 1;
+}
+
+#
+# For the reservation system, check to see if a node type has a maximum
+# allowed allocation value in a given project or user.
+#
+sub MaximumAllowed($$)
+{
+    my ($project, $type) = @_;
+    my $pid = $project->pid();
+
+    return -1
+	if (LoadPolicies(undef, $pid, undef));
+
+    foreach my $key (keys(%group_policies)) {
+	my $pref    = $group_policies{$key};
+	my $ppid    = $pref->{'pid'};
+	my $policy  = $pref->{'policy'};
+	my $count   = $pref->{'count'};
+	my $auxdata = $pref->{'auxdata'};
+
+	next if
+	    ($policy ne TBADMINCTRL_POLICY_TYPE());
+
+	return $count
+	    if ($ppid eq $pid && $auxdata eq $type);
+    }
+    return undef;
 }
 
 #
@@ -1153,7 +1198,7 @@ sub TBAdmissionControlCheck($$$)
     LoadVirtNodeTypes($pid, $eid);
     LoadCurrent($uid, $pid, $gid, $eid);
 
-    my $rval = TestPolicies($uid, $pid, $eid, $gid);
+    my $rval = TestPolicies($uid, $pid, $gid);
     
     if ($debug && $assignflag) {
 	print "Assign type/class max counts:\n";

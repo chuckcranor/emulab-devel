@@ -51,6 +51,7 @@ use GeniCM;
 use GeniHRN;
 use GeniUtil;
 use Reservation;
+use libadminctrl;
 use GeniCredential;
 use GeniStd;
 use English;
@@ -734,6 +735,26 @@ sub Reserve($)
 
 	return GeniResponse->Create(GENIRESPONSE_FORBIDDEN)
 	    if ($reservation->pid() ne $project->pid());
+
+	my $type = $reservation->type();
+    }
+
+    #
+    # If admission control says they cannot have as many as wanted, then
+    # the reservation is rejected.
+    #
+    if (defined($count)) {
+	my $maximum = libadminctrl::MaximumAllowed($project, $type);
+	if (defined($maximum)) {
+	    if ($maximum < 0) {
+		return GeniResponse->Create(GENIRESPONSE_ERROR);
+	    }
+	    if ($count > $maximum) {
+		return GeniResponse->Create(GENIRESPONSE_FORBIDDEN, undef,
+					    "Admission Control says limited "/
+					    "to $maximum nodes");
+	    }
+	}
     }
 
     # Use a webtask to get back output.
@@ -744,7 +765,7 @@ sub Reserve($)
     my $args = ($check ? "-n " : "") .
 	(defined($update) ? "-m $update " : "") .
 	"-T " . $webtask->task_id() . " ".
-	(defined($type) ? "-t $type " : "") .
+	(!defined($update) ? "-t $type " : "") .
 	(defined($start) ? "-s $start " : "") .
 	(defined($end) ? "-e $end " : "") .
 	(defined($update) && defined($count) ? "-S $count " : "") .
@@ -990,35 +1011,104 @@ sub ReservationSystemInfo($)
     my $fblob = {};
     my $pblob = {};
 
-    my @alltypes = NodeType->AllTypes();
-    foreach my $type (@alltypes) {
-	next
-	    if ($type->class() ne "pc");
-	
+    my @types = Reservation->ReservableTypes();
+    foreach my $type (@types) {
 	my $type = $type->type();
 	
-	#
-	# Skip if no physical testnodes of this type.
-	#
-	my $query_result =
-	    DBQueryWarn("select count(node_id) from nodes ".
-			"where type='$type' and ".
-			"      role='" . $Node::NODEROLE_TESTNODE . "'");
-		
-	return GeniResponse->Create(GENIRESPONSE_ERROR)
-	    if (!$query_result);
-	next
-	    if (!$query_result->numrows);
-	my ($count) = $query_result->fetchrow_array();
-	next
-	    if (!$count);
-
 	$fblob->{$type} = Reservation->FreeCount($type);
 	$pblob->{$type} = [ Reservation->Forecast($type) ];
     }
     my $blob = {
 	"freecounts" => $fblob,
 	"forecast"   => $pblob,
+    };
+    return GeniResponse->Create(GENIRESPONSE_SUCCESS, $blob);
+}
+
+#
+# Get the Future Pressure and Outstanding Reservations.
+#
+sub ReservationPrediction($)
+{
+    my ($argref)  = @_;
+
+    #my $hasperm = CheckPermission(1);
+    #return $hasperm
+    #   if (GeniResponse::IsError($hasperm));
+
+    return GeniResponse->MalformedArgsResponse("Missing project list")
+	if (!(exists($argref->{"projlist"}) && defined($argref->{"projlist"})));
+    
+    my $projlist = $argref->{"projlist"};
+    if (ref($projlist) ne "ARRAY") {
+	return GeniResponse->MalformedArgsResponse("Malformed project list")
+    }
+    #
+    # Convert to local projects, skip if we do not have one yet,
+    # clearly no reservations for it.
+    #
+    my @projlist = ();
+    foreach my $projurn (@{$projlist}) {
+	my $project;
+	my $hrn = GeniHRN->new($projurn);
+	next
+	    if (!defined($hrn));
+
+	if ($hrn->domain() eq $OURDOMAIN) {
+	    $project = Project->Lookup($hrn->id());
+	}
+	else {
+	    #
+	    # We got a project URN but we need to lookup using the SA urn.
+	    #
+	    my $purn = GeniHRN::Generate($hrn->authority(), "authority", "sa");
+	    $project = Project->LookupNonLocal($purn);
+	}
+	next
+	    if (!defined($project)); 
+
+	push(@projlist, $project->pid());
+    }
+    my $pressure    = {};
+    my $outstanding = {};
+    my $freecounts  = {};
+    my $forecast    = {};
+
+    my @types = Reservation->ReservableTypes();
+    foreach my $type (@types) {
+	my $type = $type->type();
+	
+	$freecounts->{$type} = Reservation->FreeCount($type);
+	$forecast->{$type}   = [ Reservation->Forecast($type) ];
+    }
+    foreach my $type (Reservation->ReservableTypes())  {
+	my $type = $type->type();
+	
+	foreach my $pid (@projlist) {
+	    my @pairs = Reservation->FuturePressure([$type],[$pid]);
+	    next
+		if (!@pairs);
+	    #print STDERR "P: $pid,$type,@pairs\n";
+
+	    $pressure->{$type}->{$pid} = \@pairs;
+	}
+    }
+    foreach my $pid (@projlist) {
+	foreach my $type (Reservation->ReservableTypes())  {
+	    my $type = $type->type();
+	    my $stamp = Reservation->OutstandingReservation([$pid],[$type]);
+	    next
+		if (!$stamp);
+	    #print STDERR "O: $pid,$type,$stamp\n";
+
+	    $outstanding->{$pid}->{$type} = $stamp;
+	}
+    }
+    my $blob = {
+	"freecounts"   => $freecounts,
+	"forecast"     => $forecast,
+	"pressure"     => $pressure,
+	"reservations" => $outstanding,
     };
     return GeniResponse->Create(GENIRESPONSE_SUCCESS, $blob);
 }
