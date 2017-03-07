@@ -2319,8 +2319,8 @@ DROP TABLE IF EXISTS `image_deletions`;
 CREATE TABLE `image_deletions` (
   `urn` varchar(128) default NULL,
   `image_uuid` varchar(40) NOT NULL default '',
-  `deleted` datetime default NULL,
-  PRIMARY KEY  (`image_uuid`)
+  `version` int(8) unsigned default NULL,
+  `deleted` datetime default NULL
 ) ENGINE=MyISAM DEFAULT CHARSET=latin1;
 
 --

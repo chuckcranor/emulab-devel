@@ -1,0 +1,19 @@
+use strict;
+use libdb;
+
+sub DoUpdate($$$)
+{
+    my ($dbhandle, $dbname, $version) = @_;
+
+    if (!DBSlotExists("image_deletions", "version")) {
+	DBQueryFatal("alter table image_deletions add ".
+		     " `version` int(8) unsigned default NULL ".
+		     "    after image_uuid");
+    }    
+    DBQueryFatal("alter table image_deletions drop primary key");
+    return 0;
+}
+
+# Local Variables:
+# mode:perl
+# End:
