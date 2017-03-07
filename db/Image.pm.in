@@ -585,9 +585,10 @@ sub Refresh($)
 
     my $imageid = $self->imageid();
     my $version = $self->version();
-    
+
     my $query_result =
-	DBQueryWarn("select v.*,i.uuid as image_uuid,i.locked,i.locker_pid ".
+	DBQueryWarn("select i.*,v.*,i.uuid as image_uuid, ".
+		    "   i.metadata_url as image_metadata_url ".
 		    "  from image_versions as v ".
 		    "left join images as i on ".
 		    "     v.imageid=i.imageid ".
@@ -826,11 +827,22 @@ sub NewVersion($$$$)
     my $ostablename = "os_info_versions" . $tableid;
     my $imtablename = "image_versions"  . $tableid;
 
-    if ($self->IsNewest()) {
+    #
+    # This should not happen but lets make sure.
+    #
+    if (defined($self->deleted())) {
+	print STDERR "Not allowed to clone deleted image $self\n";
+	return undef;
+    }
+    #
+    # We should always be called with the latest version. $baseimage is
+    # what we are actually basing the new image on.
+    #
+    if (!$self->IsNewest()) {
 	print STDERR "Image::NewVersion: $self is not the head version\n";
 	return undef;
     }
-
+    
     #
     # Grab the current type list. Do this before table locking.
     #
@@ -2593,9 +2605,8 @@ sub SchedIMSDeletion($)
 #
 sub IsNewest($)
 {
-    my ($self) = @_;
-
-    my $imageid   = $self->pid();
+    my ($self)  = @_;
+    my $imageid = $self->imageid();
     
     my $query_result =
 	DBQueryWarn("select max(version) from image_versions ".
