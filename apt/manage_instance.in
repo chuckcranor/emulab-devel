@@ -1880,7 +1880,8 @@ sub DoMaxExtension()
 	    # This is something the user should see.
 	    if ($response->code() == GENIRESPONSE_REFUSED ||
 		$response->code() == GENIRESPONSE_SERVER_UNAVAILABLE ||
-		$response->code() == GENIRESPONSE_BUSY) {
+		$response->code() == GENIRESPONSE_BUSY ||
+		$response->code() == GENIRESPONSE_SEARCHFAILED) {
 		$webtask->output($errmsg);
 		$webtask->Exited($response->code());
 		return 1;
