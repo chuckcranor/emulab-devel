@@ -5,12 +5,9 @@ sub DoUpdate($$$)
 {
     my ($dbhandle, $dbname, $version) = @_;
 
-    if (!DBSlotExists("image_deletions", "version")) {
-	DBQueryFatal("alter table image_deletions add ".
-		     " `version` int(8) unsigned default NULL ".
-		     "    after image_uuid");
-    }    
-    DBQueryFatal("alter table image_deletions drop primary key");
+    #
+    # This has been nullified; made a mistake.
+    #
     return 0;
 }
 
