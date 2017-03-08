@@ -525,15 +525,16 @@ sub NewImage($)
 	while (my ($old_uuid) = $query_result->fetchrow_array()) {
 	    print STDERR "Deleting existing image $image_urn with ".
 		"stale uuid $old_uuid\n";
-	
-	    $DB->QueryWarn("delete images,image_versions,image_permissions ".
-		   " from images ".
+
+	    return GeniResponse->Create(GENIRESPONSE_ERROR)    
+		if (! $DB->QueryWarn("delete from image_permissions ".
+				     "where urn=$safe_urn and ".
+				     "      image_uuid='$old_uuid'"));
+	    
+	    $DB->QueryWarn("delete images,image_versions from images ".
 		   "inner join image_versions on ".
 		   "      images.urn=image_versions.urn and ".
 		   "      images.image_uuid=image_versions.image_uuid ".
-		   "inner join image_permissions on ".
-		   "      images.urn=image_permissions.urn and ".
-		   "      images.image_uuid=image_permissions.image_uuid ".
 		   "where images.urn=$safe_urn and ".
 		   "      images.image_uuid='$old_uuid'")
 		or GeniResponse->Create(GENIRESPONSE_ERROR);
@@ -950,9 +951,9 @@ sub DeleteImageInfo($)
 	if ($hrn->domain() ne $caller_hrn->domain());
 
     # The id might be version specific.
-    my (undef,undef,undef,$version) = $hrn->ParseImage();
+    my (undef,undef,undef,$checkversion) = $hrn->ParseImage();
 
-    if (defined($version)) {
+    if (defined($checkversion)) {
 	return GeniResponse->MalformedArgsResponse("Not allowed to delete ".
 						   "an image version");
     }
@@ -963,24 +964,53 @@ sub DeleteImageInfo($)
     # This // vs : thing is a pain.
     $urn =~ s/\/\//:/;
     my $safe_urn  = DBQuoteSpecial($urn);
+    my $version;
 
     #
-    # We use the uuid in this deletion so we do not delete a current
-    # image cause the deletion came in out of order with a new image
-    # creation (image created, deleted, created again). 
+    # We can get a uuid for the image or for a version of the image.
+    # Check the DB.
     #
-    $query_result =
-	$DB->QueryWarn("delete images,image_versions,image_permissions ".
-		       "  from images ".
-		       "inner join image_versions on ".
-		       "      images.urn=image_versions.urn and ".
-		       "      images.image_uuid=image_versions.image_uuid ".
-		       "inner join image_permissions on ".
-		       "      images.urn=image_permissions.urn and ".
-		       "      images.image_uuid=image_permissions.image_uuid ".
-		       "where images.urn=$safe_urn and ".
-		       "      images.image_uuid='$uuid'");
-    
+    my $query_result =
+	$DB->QueryWarn("select image_uuid from images ".
+		       "where urn=$safe_urn and image_uuid='$uuid'");
+    if (!$query_result) {
+	return GeniResponse->Create(GENIRESPONSE_ERROR);
+    }
+    if ($query_result->numrows) {
+	# We will delete the entire version.
+    }
+    else {
+	my $image = LookupImage($uuid);
+	if (!defined($image)) {
+	    return GeniResponse->Create(GENIRESPONSE_SUCCESS);
+	}
+	$version = $image->{'version'};
+    }
+    if (defined($version)) {
+	$query_result =
+	    $DB->QueryWarn("delete from image_versions ".
+			   "where image_versions.urn=$safe_urn and ".
+			   "      image_versions.version_uuid='$uuid' and ".
+			   "      image_versions.version='$version'");
+    }
+    else {
+	#
+	# We use the uuid in this deletion so we do not delete a current
+	# image cause the deletion came in out of order with a new image
+	# creation (image created, deleted, created again). 
+	#
+	return GeniResponse->Create(GENIRESPONSE_ERROR)    
+	    if (! $DB->QueryWarn("delete from image_permissions ".
+				 "where urn=$safe_urn and ".
+				 "      image_uuid='$uuid'"));
+	$query_result =
+	    $DB->QueryWarn("delete images,image_versions from images ".
+			   "inner join image_versions on ".
+			   "      images.urn=image_versions.urn and ".
+			   "      images.image_uuid=image_versions.image_uuid ".
+			   "where images.urn=$safe_urn and ".
+			   "      images.image_uuid='$uuid'");
+    }
     return GeniResponse->Create(GENIRESPONSE_ERROR)    
 	if (!defined($query_result));
 
