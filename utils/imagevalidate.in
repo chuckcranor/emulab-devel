@@ -102,10 +102,14 @@ my $TB		= "@prefix@";
 my $SHA1	= "/sbin/sha1";
 my $IMAGEINFO	= "$TB/sbin/imageinfo";
 my $PROJROOT    = "@PROJROOT_DIR@";
+my $FSNODE      = "@FSNODE@";
 
 # XXX note: bin not sbin, /usr/testbed/sbin/imagehash is something 
 # entirely different!
 my $IMAGEHASH   = "$TB/bin/imagehash";
+
+# for efficient computation of hashes, we ssh to the FS node
+my $SSH		= "$TB/bin/sshtb -n -l root -host $FSNODE";
 
 # Protos
 sub checkdeadimages($);
@@ -119,6 +123,7 @@ sub removesigfile($$);
 sub havefullimage($);
 sub havedeltaimage($);
 sub fatal($);
+sub hashit($);
 
 #
 # Untaint the path
@@ -1036,7 +1041,7 @@ sub doimage($)
 	if ($path) {
 	    print "$pidimage: fixing hash file\n";
 	    if ($hash eq "") {
-		$hash = `$SHA1 $path`;
+		$hash = hashit($path);
 		if ($?) {
 		    print("$pidimage: hash: could not generate SHA1 hash of '$path'\n");
 		    return 1;
@@ -1062,7 +1067,7 @@ sub doimage($)
 	if ($dpath) {
 	    print "$pidimage: fixing delta hash file\n";
 	    if ($dhash eq "") {
-		$dhash = `$SHA1 $dpath`;
+		$dhash = hashit($dpath);
 		if ($?) {
 		    print("$pidimage: hash: could not generate SHA1 hash of '$path'\n");
 		    return 1;
@@ -1214,7 +1219,7 @@ sub doimage($)
 	my $filehash = $newhash;
 	if ($path) {
 	    if (!defined($filehash)) {
-		$filehash = `$SHA1 $path`;
+		$filehash = hashit($path);
 		if ($?) {
 		    print("$pidimage: hash: could not generate SHA1 hash of '$path'\n");
 		    $filehash = "";
@@ -1264,7 +1269,7 @@ sub doimage($)
 
 	if ($dpath) {
 	    if (!defined($filehash)) {
-		$filehash = `$SHA1 $dpath`;
+		$filehash = hashit($dpath);
 		if ($?) {
 		    print("$pidimage: hash: could not generate SHA1 hash of '$dpath'\n");
 		    $filehash = "";
@@ -1583,6 +1588,24 @@ sub doimage($)
 sub partoffset($$)
 {
     my ($part,$mbroff) = @_;
+}
+
+#
+# Compute the SHA1 of the indicated file.
+# To optimize, if it is an NFS file, ssh over to the server and do
+# the computation rather than blasting the control network.
+#
+sub hashit($)
+{
+    my ($file) = @_;
+    my $hash;
+
+    if ($file =~ /^\/(proj|groups)/) {
+	$hash = `$SSH $SHA1 $file`;
+    } else {
+	$hash = `$SHA1 $file`;
+    }
+    return $? ? undef : $hash;
 }
 
 # Return 0 if action is successful
