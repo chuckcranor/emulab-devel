@@ -244,6 +244,11 @@ sub ConvertImage($)
 if ($doall || $doallpid) {
     my @images = OSImage->ListAll(undef, $doallpid);
 
+    if ($doallpid && @images == 0) {
+	print "No images in project '$doallpid'\n";
+	exit(0);
+    }
+
     my %lastactive = ();
     if ($WITHZFS && $ZFS_NOEXPORT) {
 	#
