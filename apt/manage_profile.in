@@ -664,6 +664,9 @@ if (defined($instance)) {
 	$profile->Delete(1);
 	exit(1);
     }
+    $profile->Refresh();
+    $profile->InsertImageRecords();
+    
     # Tell web interface cloning has finished. But leave cloning_instance
     # set since otherwise the web interface will no longer be able to
     # figure out what to tell the user.

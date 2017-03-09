@@ -741,6 +741,7 @@ sub DoSnapshot()
 				  (defined($copyback_urn) ?
 				   $copyback_urn : $version_url),
 				  ($update_profile eq "all" ? 1 : 0));
+	$profile->InsertImageRecords();
     }
     $instance->SetStatus("ready");
     $aggregate->SetStatus("ready");
