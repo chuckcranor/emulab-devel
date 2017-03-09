@@ -191,7 +191,7 @@ RPC_invoke(char const *method,
 	va_list args;
 	xmlrpc_c::clientXmlTransport *transport = NULL;
 
-	cout << "Beginning call to " << method << "\n";
+	cout << "Beginning call to " << method << std::endl;
 	RPC_connect(&transport);
 
 	va_start(args, tag);
@@ -232,7 +232,7 @@ RPC_invoke(char const *method,
 	
 	RPC_disconnect(&transport);
 
-	cout << "Finished with call to " << method << "\n";
+	cout << "Finished with call to " << method << std::endl;
 	return retval;
 }
 
@@ -249,7 +249,7 @@ RPC_invoke(char *pid, char *eid, char const *method, emulab::EmulabResponse *er)
 
 	transport = NULL;
 	
-	cout << "Beginning call to " << method << "\n";
+	cout << "Beginning call to " << method << std::endl;
 	RPC_connect(&transport);
 	
 	try
@@ -290,7 +290,7 @@ RPC_invoke(char *pid, char *eid, char const *method, emulab::EmulabResponse *er)
 	}
 
 	RPC_disconnect(&transport);
-	cout << "Finished with call to " << method << "\n";
+	cout << "Finished with call to " << method << std::endl;
 
 	return retval;
 }
