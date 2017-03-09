@@ -159,21 +159,25 @@ $PAGEHEADER_FUNCTION = function($thinheader = 0, $ignore1 = NULL,
     # 
     $navbar_status = "";
     $navbar_right  = "";
+    $aptmargin = "";
+    if (!$ISCLOUD && !$ISPNET && !$ISEMULAB)
+    {
+        $aptmargin = "margin-top: 7px;";
+    }
 
     if (!$disable_accounts) {
         if ($login_user && ISADMINISTRATOR() && !$cleanmode) {
-	    # Extra top margin to align with the rest of the buttons.
             $navbar_status .= 
-                "<li class='apt-left' style='margin-top:7px'>\n";
+                "<li class='apt-left admin-toggle-container'>\n";
             
 	    if (ISADMIN()) {
 		$url = CreateURL("toggle", $login_user,
 				 "type", "adminon", "value", 0);
 
                 $navbar_status .=
-                    "<a href='/$url'>
+                    "<a href='/$url' class='admin-toggle'>
                           <img src='images/redball.gif'
-                               style='height: 10px;'
+                               style='height: 10px; $aptmargin'
                                border='0' alt='Admin On'></a>\n";
 	    }
 	    else {
@@ -181,40 +185,27 @@ $PAGEHEADER_FUNCTION = function($thinheader = 0, $ignore1 = NULL,
 				 "type", "adminon", "value", 1);
 
                 $navbar_status .=
-                    "<a href='/$url'>
+                    "<a href='/$url' class='admin-toggle'>
                           <img src='images/greenball.gif'
-                               style='height: 10px;'
+                               style='height: 10px; $aptmargin'
                                border='0' alt='Admin Off'></a>\n";
 	    }
             $navbar_status .= "</li>\n";
 	}
-        # Extra top margin to align with the rest of the buttons.
-        if (!$cleanmode) {
-	    $navbar_status .=
-                "<li id='loginstatus' class='apt-left' style='margin-top:7px'>".
-	           ($login_user ? "<p class='navbar-text'>".
-                    "$login_uid logged in</p>" : "") . "</li>\n";
-        }
 	if (!NOLOGINS()) {
 	    if (!$login_user) {
                 $navbar_right .=
                     "<li id='signupitem' class='apt-left'>" .
-                    "  <a class='btn btn-primary navbar-btn apt-navbar-btn'
+                    "  <a class='btn btn-success navbar-btn apt-navbar-btn'
                                 id='signupbutton'
                                 href='signup.php'>Sign Up</a></li>\n";
 		if ($page_title != "Login") {
                     $navbar_right .=
                         "<li id='loginitem' class='apt-left'>" .
-                        "  <a class='btn btn-primary navbar-btn apt-navbar-btn'
+                        "  <a class='btn btn-quickvm-home navbar-btn apt-navbar-btn'
                                     id='loginbutton'>Login</a></li>\n";
 		}
 		REQUIRE_GENI_AUTH();
-	    }
-	    else {
-                $navbar_right .=
-                    "<li class='apt-left hidden-xs'>" .
-                    "  <a class='btn btn-primary navbar-btn apt-navbar-btn'
-                                href='logout.php'>Logout</a></li>\n";
 	    }
 	}
     }
@@ -223,120 +214,7 @@ $PAGEHEADER_FUNCTION = function($thinheader = 0, $ignore1 = NULL,
     # and turn them on inside the action menu.
     $hiddenxs = ($showmenus ? "hidden-xs" : "");
     
-    echo "
-         <div class='navbar navbar-static-top' style='margin-bottom: 10px'
-              role='navigation'>
-            <div class='navbar-inner'>
-             <div class='brand'>
-                 <img src='images/$APTLOGO'/>
-             </div>
-             <ul class='nav navbar-nav navbar-right apt-right'>
-              $navbar_status
-              $navbar_right
-             </ul>
-             <ul class='nav navbar-nav navbar-left apt-left'>
-                <li class='apt-left $hiddenxs'>
-                    <a class='btn btn-quickvm-home navbar-btn'
-                       href='landing.php'>Home</a></li>\n";
-    echo "      <li class='apt-left $hiddenxs'>".
-        "           <a class='btn btn-quickvm-home navbar-btn' ".
-        "              href='$PORTAL_MANUAL' target='_blank'> ".
-        ($ISEMULAB ? "Wiki" : "Manual") . "</a></li>\n";
-
-    if ($login_user && !($login_status & CHECKLOGIN_WEBONLY)) {
-	echo "  <li id='quickvm_actions_menu' class='dropdown apt-left'> ".
-	         "<a href='#'
-                    class='dropdown-toggle btn btn-quickvm-home navbar-btn'
-                       data-toggle='dropdown'>
-                    Actions <b class='caret'></b></a>
-                  <ul class='dropdown-menu'>
-                   <li class='visible-xs navbar-nav-shortcuts'>
-                       <a href='landing.php'>Home</a></li>
-                   <li class='visible-xs navbar-nav-shortcuts'>
-                       <a href='$PORTAL_MANUAL' target='_blank'> ".
-                      ($ISEMULAB || $ISPNET ? "Wiki" : "Manual") . "</a></li>
-                   <li class='visible-xs navbar-nav-shortcuts'>
-                       <a href='logout.php'>Logout</a></li>";
-        if ($login_user->IsActive()) {
-            echo " <li><a href='user-dashboard.php'>Dashboard</a></li>
-                   <li><a href='user-dashboard.php#profiles'>
-                         My Profiles</a></li>
-                   <li><a href='user-dashboard.php#experiments'>
-                         My Experiments</a></li>
-                   <li><a href='manage_profile.php'>Create Profile</a></li>
-                   <li><a href='instantiate.php'>Start Experiment</a></li>
-                   <li class='divider'></li>
-                   <li><a href='getcreds.php'>Download Credentials</a></li>
-                   <li><a href='ssh-keys.php'>Manage SSH Keys</a></li>";
-        }
-        echo "     <li><a href='myaccount.php'>Manage Account</a></li>
-                   <li><a href='changepswd.php'>Change Password</a></li>
-                   <li><a href='signup.php'>Start/Join Project</a></li>";
-        if ($login_user->IsActive()) {
-            echo " <li class='divider'></li>
-                   <li><a href='user-dashboard.php#datasets'>
-	                 My Datasets</a></li>
-	           <li><a href='create-dataset.php'>Create Dataset</a></li>
-	           <li><a href='images.php'>List Images</a></li>";
-            echo " <li class='divider'></li>
-                   <li><a href='reserve.php'>Reserve Nodes</a></li>
-	           <li><a href='list-reservations.php'>
-                          List Reservations</a></li>";
-            echo "      <li class='divider'></li>\n";
-            $then = time() - (90 * 3600 * 24);
-            echo "      <li><a href='activity.php?user=$login_uid&min=$then'>
-                            My History</a></li>\n";
-            if (ISADMIN() && HaveNews()) {
-                echo "  <li><a href='news.php'>News ";
-                if (NewNews()) {
-                    echo "<span class='glyphicon glyphicon-asterisk ".
-                         "             text-success' ".
-                         "      style='margin-bottom: 4px;'></span> ";
-                }
-                echo "     </a></li>\n";
-            }
-        }
-        echo "    </ul>
-                </li>\n";
-        if ($login_user->IsActive() && (ISADMIN() || ISFOREIGN_ADMIN())) {
-           echo "<li id='quickvm_actions_menu' class='dropdown apt-left'>
-	            <a href='#'
-                        class='dropdown-toggle btn btn-quickvm-home navbar-btn'
-                        data-toggle='dropdown'>
-                    Admin <b class='caret'></b></a>
-                  <ul class='dropdown-menu'>\n";
-           echo "  <li><a href='dashboard.php'>DashBoard</a></li>";
-           echo "  <li><a href='cluster-status.php'>Cluster Status</a></li>";
-           $then = time() - (30 * 3600 * 24);
-           echo "  <li><a href='activity.php?min=$then'>
-                            History Data</a></li>
-	           <li><a href='sumstats.php?min=$then'>Summary Stats</a></li>
-	           <li><a href='ranking.php'>User/Proj Ranking</a></li>";
-           echo "<li><a href='myexperiments.php?extend=1'>
-                            Extension Requests</a></li>";
-           echo "<li><a href='myexperiments.php?all=1'>
-                            All Experiments</a></li>
-	             <li><a href='myprofiles.php?all=1'>
-                            All Profiles</a></li>
-	             <li><a href='list-datasets.php?all=1'>
-                            All Datasets</a></li>
-	             <li><a href='images.php?all=1'>
-                            All Images</a></li>
-	             <li><a href='lists.php'>
-                            Users/Projects</a></li>
-	             <li><a href='list-reservations.php'>
-                            List Reservations</a></li>
-	             <li><a href='reserve.php'>
-                            Create Reservation</a></li>
-	             <li><a href='edit-news.php'>
-                            Add a news item</a></li>";
-           echo " </ul>
-                </li>\n";
-        }
-    }
-    echo "   </ul>
-          </div>
-         </div>\n";
+    SPITNAV($hiddenxs, $navbar_status, $navbar_right, $login_uid);
 
     # Put announcements, if any, right below the header.
     if (!$cleanmode && $login_user && $login_user->IsActive() &&
@@ -452,6 +330,158 @@ function SPITHEADER($thinheader = 0,
     global $PAGEHEADER_FUNCTION;
 
     $PAGEHEADER_FUNCTION($thinheader, $ignore1, $ignore2, $ignore3);
+}
+
+function SPITNAV($hiddenxs, $navbar_status, $navbar_right, $login_uid)
+{
+   global $PORTAL_MANUAL, $APTLOGO, $login_status, $login_user, $TBMAINSITE, $THISHOMEBASE;
+   $hiddenxs = "";
+echo "
+
+<div class='navbar portal-navbar' role='navigation'>
+   <div class='navbar-header'>
+      <button type='button' class='navbar-toggle collapsed' data-toggle='collapse' data-target='#main-navbar-collapse' aria-expanded='false'>
+        <span class='sr-only'>Toggle navigation</span>
+        <span class='icon-bar'></span>
+        <span class='icon-bar'></span>
+        <span class='icon-bar'></span>
+      </button>
+      <a class='navbar-brand' href='landing.php'><img src='images/$APTLOGO'/></a>";
+echo "
+    </div>
+
+<div class='collapse navbar-collapse navbar-inner' id='main-navbar-collapse'>";
+echo "  <ul class='nav navbar-nav navbar-left apt-left'>";
+    if (! $TBMAINSITE) {
+    #if (1) {
+      echo "<li class='local-name apt-left apt-nav-item'>" . $THISHOMEBASE . "</li>";
+    }
+
+   if ($login_user && !($login_status & CHECKLOGIN_WEBONLY)) {
+
+    if ($login_user->IsActive()) {
+      $then = time() - (90 * 3600 * 24);
+    
+echo "
+    <li id='quickvm_actions_menu' class='dropdown apt-left apt-nav-item $hiddenxs'> 
+      <a href='#'
+	 class='dropdown-toggle btn btn-quickvm-home navbar-btn'
+	 data-toggle='dropdown'>
+	Experiments <b class='caret'></b></a>
+      <ul class='dropdown-menu'>
+	<li><a href='instantiate.php'>Start Experiment</a></li>
+	<li><a href='manage_profile.php'>Create Experiment Profile</a></li>
+	<li><a href='user-dashboard.php#experiments'>
+	    My Experiments</a></li>
+	<li><a href='user-dashboard.php#profiles'>
+            My Profiles</a></li>
+	<li><a href='activity.php?user=$login_uid&min=$then'>
+                            My History</a></li>
+	";
+echo " <li class='divider'></li>
+       <li><a href='reserve.php'>Reserve Nodes</a></li>
+       <li><a href='list-reservations.php'>
+         List Reservations</a></li>";
+      echo "
+    </ul>
+    </li>
+    <li id='quickvm_actions_menu' class='dropdown apt-left apt-nav-item $hiddenxs'> 
+      <a href='#'
+	 class='dropdown-toggle btn btn-quickvm-home navbar-btn'
+	 data-toggle='dropdown'>
+	Storage <b class='caret'></b></a>
+      <ul class='dropdown-menu'>
+	<li><a href='create-dataset.php'>Create Dataset</a></li>
+	<li><a href='user-dashboard.php#datasets'>
+	    My Datasets</a></li>
+	<li><a href='images.php'>List Disk Images</a></li>
+      </ul>
+    </li>
+    ";
+    }
+
+    if ($login_user->IsActive() && (ISADMIN() || ISFOREIGN_ADMIN())) {
+               echo "<li id='quickvm_actions_menu' class='dropdown apt-left apt-nav-item'>
+                  <a href='#'
+                        class='dropdown-toggle btn btn-quickvm-home navbar-btn'
+                        data-toggle='dropdown'>
+                    Admin <b class='caret'></b></a>
+                  <ul class='dropdown-menu'>\n";
+ 	       if (ISADMIN() && HaveNews()) {
+	           echo "  <li><a href='news.php'>News ";
+	           if (NewNews()) {
+	               echo "<span class='glyphicon glyphicon-asterisk ".
+		            "             text-success' ".
+		            "      style='margin-bottom: 4px;'></span> ";
+	           }
+	           echo "     </a></li>\n";
+	       }
+		    echo "  <li><a href='dashboard.php'>DashBoard</a></li>";
+		    echo "  <li><a href='cluster-status.php'>Cluster Status</a></li>";
+		    $then = time() - (30 * 3600 * 24);
+		               echo "  <li><a href='activity.php?min=$then'>
+                            History Data</a></li>
+		               <li><a href='sumstats.php?min=$then'>Summary Stats</a></li>
+		    <li><a href='ranking.php'>User/Proj Ranking</a></li>";
+		               echo "<li><a href='myexperiments.php?extend=1'>
+                        Extension Requests</a></li>";
+		               echo "<li><a href='myexperiments.php?all=1'>
+                            All Experiments</a></li>
+		                 <li><a href='myprofiles.php?all=1'>
+                            All Profiles</a></li>
+				              <li><a href='list-datasets.php?all=1'>
+                            All Datasets</a></li>
+					                   <li><a href='images.php?all=1'>
+                            All Images</a></li>
+							                <li><a href='lists.php'>
+                            Users/Projects</a></li>
+									             <li><a href='list-reservations.php'>
+                            List Reservations</a></li>
+										                  <li><a href='reserve.php'>
+                            Create Reservation</a></li>
+												               <li><a href='edit-news.php'>
+														   Add a news item</a></li>";
+													                  echo " </ul>
+    </li>\n";
+    }
+    
+    }
+echo "</ul>";
+echo "  <ul class='nav navbar-nav navbar-right apt-right'>
+    $navbar_status
+    $navbar_right
+    <li class='apt-left'>
+      <a class='btn btn-quickvm-home navbar-btn' href='$PORTAL_MANUAL' target='_blank'>Docs</a>
+    </li>
+";
+    if ($login_user && ! ($login_status & CHECKLOGIN_WEBONLY)) {
+echo "
+    <li id='quickvm_actions_menu' class='dropdown apt-left apt-nav-item'> 
+      <a href='#'
+	 class='dropdown-toggle btn btn-quickvm-home navbar-btn'
+	 data-toggle='dropdown'>
+	$login_uid <b class='caret'></b></a>
+      <ul class='dropdown-menu'>
+	<li><a href='myaccount.php'>Manage Account</a></li>
+	<li><a href='signup.php'>Start/Join Project</a></li>
+	<li><a href='changepswd.php'>Change Password</a></li>
+	";
+	if ($login_user->isActive()) {
+echo "
+        <li><a href='getcreds.php'>Download Credentials</a></li>
+	<li><a href='ssh-keys.php'>Manage SSH Keys</a></li>
+        <li class='divider'></li>
+	<li><a href='logout.php'>Logout</a></li>
+";
+	}
+    }
+
+echo "
+      </ul>
+    </li>
+  </ul>";
+  echo "</div></div>";
+
 }
 
 function GET_ANNOUNCEMENTS($user)
