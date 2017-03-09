@@ -201,8 +201,9 @@ $(function ()
      */
     function DeleteImage(cluster, row) {
 	var urn      = $(row).attr('data-urn');
+	var index    = parseInt($(row).attr('data-index'));
 	var table    = $(row).closest("table");
-	console.info(cluster, urn);
+	console.info(cluster, urn, index);
 
 	// Callback for the delete request.
 	var callback = function (json) {
@@ -214,6 +215,8 @@ $(function ()
 	    }
 	    // Now to delete the row. This has a little trickiness.
 	    if ($(row).hasClass("image-version")) {
+		var imageindex = parseInt($(row).attr('data-imageindex'));
+		
 		//
 		// Individual version, delete the row. There should not be
 		// a following profile versions row, but watch for it
@@ -236,16 +239,23 @@ $(function ()
 		    $(prev).remove();
 		}
 		$(row).remove();
+
+		// Mark the image version as deleted in the data object.
+		imagelist[cluster][imageindex]
+		    .versions[index]["deleted"] = true;
 	    }
 	    else {
-		//
-		// Entire image delete (all versions). Need to delete the
-		// main row and all rows up to the next image.
-		//
+		/*
+		 * Entire image delete (all versions). Need to delete the
+		 * main row and all rows up to the next image.
+		 */
 		$(row).closest('tr')
 		    .nextUntil('tr.tablesorter-hasChildRow', '.image-version')
 		    .remove();
 		$(row).remove();
+
+		// Mark the entire image as deleted in the data object.
+		imagelist[cluster][index]["deleted"] = true;
 	    }
 	    table.trigger('update');
 	};
@@ -277,8 +287,39 @@ $(function ()
 		});
 	    });
 	}
+	/*
+	 * Some extra text for the title of the confirm modal.
+	 */
+	var titletext = "";
+
+	if ($(row).hasClass("naked-image")) {
+	    // Extra warn about deleting the entire image.
+	    titletext = " all versions of ";
+	}
+	else if ($(row).hasClass("image-version")) {
+	    /*
+	     * Warn about deleting highest numbered (most recent) version.
+	     * Need to check the version list to see if this is the case,
+	     * keeping in mind that versions might already have been marked
+	     * as deleted.
+	     */
+	    var imageindex = parseInt($(row).attr('data-imageindex'));
+	    var version    = parseInt($(row).attr('data-version'));
+	    var max        = 0;
+
+	    _.each(imagelist[cluster][imageindex].versions,
+		   function(image, index) {
+		       if (!image.deleted && image.version > max) {
+			   max = image.version;
+		       }
+		   });
+	    if (version >= max) {
+		titletext = " the most recent version of ";
+	    }
+	}
 	var html = confirmTemplate({
-	    "profiles" : profiles,
+	    "profiles"  : profiles,
+	    "titletext" : titletext,
 	});
 	$('#confirm_div').html(html);
 	// Format dates with moment before display.

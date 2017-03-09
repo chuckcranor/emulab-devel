@@ -58,9 +58,10 @@
 	  </tr>
 	</thead>
 	<tbody>
-	  <% _.each(images, function(image, index) { %>
+	  <% _.each(images, function(image, imageindex) { %>
 	    <% if (! (image.candelete || image.inactive)) { return; } %>
-	    <tr data-urn="<%- image.urn %>">
+	    <tr data-urn="<%- image.urn %>" class="naked-image"
+		data-index="<%- imageindex %>">
 	      <td>
 		<a href="" class="toggle-image">
 		  <span class="glyphicon glyphicon-chevron-right"></span></a>
@@ -74,10 +75,13 @@
 	      <td class="format-date"><%- image.versions[0].created %></td>
 	      <td class="image-filesize"></td>
 	    </tr>
-	    <% _.each(image.versions, function(version, index) { %>
+	    <% _.each(image.versions, function(version, versionindex) { %>
 	      <% if (! version.candelete) { return; } %>
 	      <tr class="hidden tablesorter-childRow-versions image-version"
-		  data-urn="<%- version.urn %>">
+		  data-urn="<%- version.urn %>"
+		  data-version="<%- version.version %>"
+		  data-index="<%- versionindex %>"
+		  data-imageindex="<%- imageindex %>">
 		<td>
 		  <span style="padding-left: 15px"><%- version.urn %></span>
 		  <% if (version.candelete) { %>
@@ -125,7 +129,7 @@
 	  </tr>
 	</thead>
 	<tbody>
-	  <% _.each(images, function(image, index) { %>
+	  <% _.each(images, function(image, imageindex) { %>
 	    <% if (image.candelete) { return; } %>
 	    <%
 	    var skip = 1;
@@ -134,7 +138,8 @@
 	    }
 	    if (skip) { return; }
 	    %>
-	    <tr data-urn="<%- image.urn %>">
+	    <tr data-urn="<%- image.urn %>" class="naked-image"
+		data-index="<%- imageindex %>">
 	      <td>
 		<a href="" class="toggle-image">
 		  <span class="glyphicon glyphicon-chevron-right"></span></a>
@@ -144,11 +149,14 @@
 	      <td class="image-filesize"></td>
 	      <td></td>
 	    </tr>
-	    <% _.each(image.versions, function(version, index) { %>
+	    <% _.each(image.versions, function(version, versionindex) { %>
 	      <% if (version.candelete) { return; } %>
 	      <% if (version.using.length != 1) { return; } %>
 	      <tr class="hidden tablesorter-childRow-versions image-version"
-		  data-urn="<%- version.urn %>">
+		  data-urn="<%- version.urn %>"
+		  data-version="<%- version.version %>"
+		  data-index="<%- versionindex %>"
+		  data-imageindex="<%- imageindex %>">
 		<td>
 		  <span style="padding-left: 15px"><%- version.urn %></span>
 		  <a href="" class="delete-button pull-right">
@@ -201,7 +209,7 @@
 	  </tr>
 	</thead>
 	<tbody>
-	  <% _.each(images, function(image, index) { %>
+	  <% _.each(images, function(image, imageindex) { %>
 	    <% if (image.candelete) { return; } %>
 	    <%
 	    var skip = 1;
@@ -219,7 +227,7 @@
 	      <td class="format-date"><%- image.versions[0].created %></td>
 	      <td class="image-filesize"></td>
 	    </tr>
-	    <% _.each(image.versions, function(version, index) { %>
+	    <% _.each(image.versions, function(version, versionindex) { %>
 	      <% if (version.candelete) { return; } %>
 	      <% if (version.using.length <= 1) { return; } %>
 	      <tr class="hidden tablesorter-childRow-versions image-version"

@@ -228,7 +228,7 @@ sub DoListImages()
 	# Default to version zero, for old sites not reporting version.
 	my $vers = (defined($osvers) ? $osvers : 0);
 	# Put it into the object so that PHP/JS code can find it easy.
-	$image->{'version'} = $vers;
+	$image->{'version'} = int($vers);
 
 	# Try and set a local project, but use remote pid otherwise.
 	$image->{'pid'} = $ospid;
@@ -290,6 +290,8 @@ sub DoListImages()
 	$ref->{'candelete'} = (@nakedusing ? 0 : 1);
 	# How many of the children are inactive (can be deleted).
 	$ref->{'inactive'}  = 0;
+	# Marker.
+	$ref->{'deleted'} = 0;
 
 	#
 	# List of profiles, with a list of versions of each.
@@ -310,7 +312,7 @@ sub DoListImages()
 	    }
 	    push(@{$tmp{$profile_uuid}->{'versions'}},
 		 {"uuid"     => $profile->uuid(),
-		  "version"  => $profile->version(),
+		  "version"  => int($profile->version()),
 		  "created"  => $profile->created(),
 		  "iscurrent"=> ($profile->version() == $headversion ? 1 : 0),
 		 });
@@ -320,30 +322,15 @@ sub DoListImages()
 	#
 	# And for each version of the image.
 	#
-	# The last version of the image is special; it gets any profile
-	# references for the naked image, since that is what a naked image
-	# means; use the most recent image. So if we have naked references,
-	# mark the last image for the loop below so we can extend the list
-	#
-	if (@nakedusing) {
-	    $versions[scalar(@versions) - 1]->{'islast'} = 1;
-	}
 	foreach my $image (@versions) {
 	    my $urn = $image->{'urn'};
 	    my @using = ();
 	    $image->{'using'} = [];
 	    $image->{'candelete'} = 0;
+	    $image->{'deleted'} = 0;
 
 	    next
 		if (APT_Profile::ImageInfo::FindProfilesUsing($urn, \@using));
-
-	    # Combine the lists.
-	    if ($image->{'islast'}) {
-		foreach my $p (@nakedusing) {
-		    push(@using, $p)
-			if (!grep {$_->profileid() == $p->profileid()} @using);
-		}
-	    }
 
 	    #
 	    # No references *currently* means we can delete the image. 
@@ -372,7 +359,7 @@ sub DoListImages()
 		}
 		push(@{$tmp{$profile_uuid}->{'versions'}},
 		     {"uuid"     => $profile->uuid(),
-		      "version"  => $profile->version(),
+		      "version"  => int($profile->version()),
 		      "created"  => $profile->created(),
 		      "iscurrent"=> ($profile->version() ==
 				     $headversion ? 1 :0),
