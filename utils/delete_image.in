@@ -418,7 +418,7 @@ exit(0)
 if (!$versonly) {
     # Do this before delete().
     if (GetSiteVar("protogeni/use_imagetracker")) {
-	$image->SchedIMSDeletion() == 0
+	$image->SchedIMSDeletion(1) == 0
 	    or fatal("Could not schedule IMS deletion");
     }
     if ($image->Delete() != 0) {
@@ -429,6 +429,11 @@ if (!$versonly) {
 			   "been deleted by $this_user\n");
 }
 else {
+    # Do this before delete().
+    if (GetSiteVar("protogeni/use_imagetracker")) {
+	$image->SchedIMSDeletion(0) == 0
+	    or fatal("Could not schedule IMS deletion");
+    }
     if ($image->DeleteVersion() != 0) {
 	fatal("Could not delete image version!");
     }

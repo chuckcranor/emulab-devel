@@ -2586,11 +2586,11 @@ sub SetRunsOnNodeType($$)
 #
 # If using the image tracker, have to notify the IMS.
 #
-sub SchedIMSDeletion($)
+sub SchedIMSDeletion($$)
 {
-    my ($self) = @_;
+    my ($self,$allversions) = @_;
     my $urn  = $self->urn();
-    my $uuid = $self->image_uuid();
+    my $uuid = ($allversions ? $self->image_uuid() : $self->uuid());
 
     # The expire daemon will pick this up.
     DBQueryWarn("replace into image_deletions set ".

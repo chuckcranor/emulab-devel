@@ -967,11 +967,11 @@ sub SetRunsOnNodeType($$)
 #
 # If using the image tracker, have to notify the IMS.
 #
-sub SchedIMSDeletion($)
+sub SchedIMSDeletion($$)
 {
-    my ($self) = @_;
+    my ($self,$allversions) = @_;
 
-    return $self->image()->SchedIMSDeletion();
+    return $self->image()->SchedIMSDeletion($allversions);
 }
 
 #
