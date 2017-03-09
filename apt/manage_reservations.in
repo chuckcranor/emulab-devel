@@ -411,9 +411,10 @@ sub DoList()
     foreach my $details (values(%$list)) {
 	my $userhrn  = GeniHRN->new($details->{'user'});
 	my $geniuser = GeniUser->Lookup($details->{'user'}, 1);
-	if (defined(($geniuser))) {
+	if (defined($geniuser) && $geniuser->IsLocal()) {
+	    print Dumper($geniuser);
 	    $details->{'uid'}     = $geniuser->uid();
-	    $details->{'uid_idx'} = $geniuser->uid_idx();
+	    $details->{'uid_idx'} = $geniuser->idx();
 	}
 	else {
 	    $details->{'uid'}     = $userhrn->id();
@@ -449,6 +450,8 @@ sub DoList()
 
 #
 # Delete a reservation.
+#
+# This is not doing proper permission checks or credentials. Need to fix.
 #
 sub DoDelete()
 {
