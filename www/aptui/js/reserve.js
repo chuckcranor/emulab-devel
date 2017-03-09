@@ -394,7 +394,7 @@ $(function ()
 		.val(end.format("MM/DD/YYYY"));
 	    $('#reserve-request-form [name=end_hour]')
 		.val(end.format("H"));
-	    console.log(start, end);
+	    //console.log(start, end);
 
 	    // Set the hour selectors properly in the datepicker object.
 	    $("#reserve-request-form #start_day")
@@ -405,6 +405,17 @@ $(function ()
 	    if (!details.approved) {
 		$('#unapproved-warning').removeClass("hidden");
 	    }
+	    // Local user gets a link.
+	    if (_.has(details, 'creator_idx')) {
+		$('#reserve-requestor').html(
+		    "<a target=_blank href='user-dashboard.php?user=" +
+			details.creator_idx + "'>" +
+			details.creator_uid + "</a>");
+	    }
+	    else {
+		$('#reserve-requestor').html(details.creator_uid);
+	    }
+	    
 	    /*
 	     * If this is an admin looking at an unapproved reservation,
 	     * show the approve button

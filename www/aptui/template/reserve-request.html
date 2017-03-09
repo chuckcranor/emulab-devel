@@ -1,3 +1,13 @@
+<style>
+.form-control-fake {
+  display: block;
+  width: 100%;
+  height: 34px;
+  padding: 7px 0px;
+  font-size: 14px;
+  line-height: 1.42857143;
+}
+</style>  
 <div class='row'>
   <div class='col-lg-7
               col-md-7'>
@@ -5,7 +15,7 @@
       <div class='panel-heading'>
         <h3 class='panel-title'>
 	  <% if (editing) { %>Modify <% } %>Reservation Request
-	  <a href='#' class='btn btn-xs'
+	  <a hrexsf='#' class='btn btn-xs'
 	     data-toggle='modal'
 	     data-target="#reservation-help-modal">
 	    <span style='margin-bottom: 4px; margin-left: 0px;'
@@ -37,6 +47,15 @@
 	  <% } %>
 	  <div class='row'>
 	    <div class='col-sm-12'>
+	      <% if (editing) { %>
+		<div class="form-group">
+		  <div class="form-control-fake format-me"
+		       data-label="User"
+		       id="reserve-requestor"
+		       data-key="uid">
+		  </div>
+		</div>
+	      <% } %>
 	      <% if (1 || projects) { %>
 	        <% if (projects.length == 1 || editing) { %>
 		  <div class="form-group">
