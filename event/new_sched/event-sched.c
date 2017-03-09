@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2000-2015 University of Utah and the Flux Group.
+ * Copyright (c) 2000-2017 University of Utah and the Flux Group.
  * 
  * {{{EMULAB-LICENSE
  * 
@@ -114,10 +114,13 @@ static struct agent ns_swapout_agent; /* Used during experiment swapout */
 static timeline_agent_t ns_swapout;
 static struct agent ns_timeline_agent; /* Used for timeline in the experiment */
 static timeline_agent_t ns_timeline;
+static event_handle_t handle;
 
 static void sigpass(int sig)
 {
-	info("event-sched[%d]: received signal %d, exiting\n", getpid(), sig);
+	time_t ts = time(NULL);
+	info("event-sched[%d]: received signal %d at %s",
+	     getpid(), sig, ctime(&ts));
 	
 	if (emcd_pid != -1)
 		kill(emcd_pid, sig);
@@ -126,6 +129,12 @@ static void sigpass(int sig)
 	if (rmcd_pid != -1)
 		kill(rmcd_pid, sig);
 
+	/* Unregister with the event system: */
+	if (handle && event_unregister(handle) == 0) {
+		warning("could not unregister with event system");
+	}
+
+	info("event-sched[%d]: exiting\n", getpid());
 	exit(0);
 }
 
@@ -237,7 +246,6 @@ int
 main(int argc, char *argv[])
 {
 	address_tuple_t tuple;
-	event_handle_t handle;
 	char *server = NULL;
 	char *port = NULL;
 	char *log = NULL;
