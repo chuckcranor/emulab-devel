@@ -194,6 +194,17 @@ sub email($)
 	return $1
 	    if ($1 ne "");
     }
+    # Normally the email is in the DN (subject name), but fall back on
+    # the subject alt name for compatibility with onelab certificates.
+    if (exists($self->{'email'})) {
+	return $self->{'email'};
+    }
+    if ($self->{'stored'}) {
+	my $cert = GeniCertificate->LoadFromString($self->cert());
+	if (exists($cert->{'email'})) {
+	    return $cert->{'email'};
+	}
+    }
     print STDERR "Cannot find email inside DN: '" . $self->DN() . "'\n";
     return "unknown";
 }
@@ -573,6 +584,7 @@ sub LoadFromArray($$@)
     my $altname = 0;
     my $accessinfo = 0;
     my $uuid = undef;
+    my $email = undef;
     while (@certlines) {
 	my $line = shift(@certlines);
 	last
@@ -588,11 +600,13 @@ sub LoadFromArray($$@)
 		    and $alturi = $1;
 		m'^\s*URI:urn:uuid:([-\w]+)\s*$'
 		    and $uuid = $1;
+		m'^\s*email:([^\s]+)\s*$'
+		    and $email = $1;
 	    }
 	    $altname = 0;
 	} elsif( $accessinfo ) {
-	    m'^\s*[0-9.]+ - URI:([-!#$%()*+,./0-9:;=?@A-Z_a-z~]+)\s*$' 
-		and $accessuri = $1 foreach split( /, /, $line );
+	    m'^\s*([0-9.]+|CA Issuers) - URI:([-!#$%()*+,./0-9:;=?@A-Z_a-z~]+)\s*$' 
+		and $accessuri = $2 foreach split( /, /, $line );
 	    $accessinfo = 0;
 	}
     }
@@ -641,6 +655,9 @@ sub LoadFromArray($$@)
     $self->{'stored'} = 0;
     bless($self, $class);
 
+    if (defined($email)) {
+	$self->{'email'} = $email;
+    }
     $self->{'CERT'}->{'uuid'}      = $uuid;
     $self->{'CERT'}->{'cert'}      = $contents;
     $self->{'CERT'}->{'DN'}        = $DN;
@@ -666,7 +683,7 @@ sub LoadFromArray($$@)
 sub LoadFromStringFast($$)
 {
     my ($class, $string) = @_;
-    my ($urn,$uuid);
+    my ($urn,$uuid,$email);
 
     if (! ($string =~ /^[\012\015\040-\176]*$/)) {
 	print STDERR "Improper chars in certificate string\n";
@@ -720,6 +737,9 @@ sub LoadFromStringFast($$)
 	elsif ($tmp =~ /^uniformResourceIdentifier=urn:uuid:([-\w]+)$/) {
 	    $uuid = $1;
 	}
+	elsif ($tmp =~ /^rfc822Name=(.*)$/) {
+	    $email = $1;
+	}
     }
     # Ditto if the SubjectAltName does not have a URN in it.
     if (!defined($urn) || !GeniHRN::IsValid($urn)) {
@@ -752,6 +772,9 @@ sub LoadFromStringFast($$)
     $self->{'stored'} = 0;
     bless($self, $class);
 
+    if (defined($email)) {
+	$self->{'email'} = $email;
+    }
     $self->{'CERT'}->{'uuid'}      = $uuid;
     $self->{'CERT'}->{'cert'}      = $string;
     $self->{'CERT'}->{'DN'}        = $DN;
@@ -1006,7 +1029,7 @@ sub URL($)
 		foreach split( /, / );
 	    $altname = 0;
 	} elsif( $accessinfo ) {
-	    m'^\s*[0-9.]+ - URI:([-!#$%()*+,./0-9:;=?@A-Z_a-z~]+)\s*$' and $accessurl = $1
+	    m'^\s*([0-9.]+|CA Issuers) - URI:([-!#$%()*+,./0-9:;=?@A-Z_a-z~]+)\s*$' and $accessurl = $2
 		foreach split( /, / );
 	    $accessinfo = 0;
 	}
