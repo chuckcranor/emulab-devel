@@ -831,6 +831,7 @@ sub Create($$)
 
 sub emulab_user()       { return $_[0]->{'USER'}; }
 sub idx($)		{ return $_[0]->{'USER'}->uid_idx(); }
+sub uid_idx($)		{ return $_[0]->{'USER'}->uid_idx(); }
 sub uid($)		{ return $_[0]->{'USER'}->uid(); }
 sub uuid                { return $_[0]->{'USER'}->uuid(); }
 sub created($)		{ return $_[0]->{'USER'}->created(); }
