@@ -2852,9 +2852,14 @@ sub CreateImageDir($)
 	if (!$self->IsDirPath() || -e $self->path());
 
     if (!mkdir($self->path(), 0775)) {
-	print STDERR "Could not mkdir " . $self->path() . ": $!";
+	print STDERR "Could not mkdir " . $self->path() . ": $!\n";
 	return -1;
     }
+    if (!chmod(0775, $self->path())) {
+	print STDERR "Could not chown " . $self->path() . ": $!\n";
+	return -1;
+    }
+    
     # If we are root and had to create the directory, then the owner
     # and group are going to be set wrong.
     if ($EUID == 0) {

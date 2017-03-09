@@ -175,6 +175,10 @@ sub ConvertImage($)
 		print STDERR "Could not mkdir $newpath: $!\n";
 		return -1;
 	    }
+	    if (! chmod(0775, "$newpath")) {
+		print STDERR "Could not chown $newpath: $!\n";
+		return -1;
+	    }
 	    if (! chown($uid, $gid, $newpath)) {
 		print STDERR "Could not chown($uid,$gid) $newpath: $!\n";
 		return -1;
