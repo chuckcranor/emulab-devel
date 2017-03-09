@@ -63,7 +63,7 @@ sub usage()
 	  "       -U      Do not modify updater_uid in DB\n".
 	  "       -H hash Use the provided hash rather than recalculating\n".
 	  "       -V str  Comma separated list of fields to validate/update\n".
-	  "               fields: 'hash', 'range', 'size', 'all', 'sig'; default is 'all'\n".
+	  "               fields: 'hash', 'range', 'size', 'perm', 'all', 'sig'; default is 'all'\n".
 	  "               NOTE: 'sig' is special as it is not a DB field and\n".
 	  "               thus is not included in the 'all' option.\n".
 	  "       -D      Validate/update the deleted status of image versions.\n".
@@ -92,6 +92,8 @@ my $userperm;
 my $newhash;
 my $accessfs   = $UID ? 0 : 1;
 my %imagedir   = ();
+my %piddirperms   = ();
+my %imagedirperms = ();
 
 my $warnonfixable = 0;
 
@@ -654,7 +656,12 @@ sub doimage($)
 
     print STDERR "Checking image '$pidimage' ...\n"
 	if ($debug);
-    my $image = OSImage->Lookup($pidimage);
+
+    # XXX OSImage->Lookup blows up on old multi-partition images
+    my $image = Image->Lookup($pidimage);
+    if ($image && $image->ezid()) {
+	$image = OSImage->Lookup($pidimage);
+    }
     if (!defined($image)) {
 	print STDERR "$pidimage: no such image\n";
 	return 1;
@@ -973,6 +980,93 @@ sub doimage($)
 	    if (!$quiet);
 
 	return 0;
+    }
+
+    #
+    # Check image directory permissions.
+    #
+    # The 'images' directory for a project should be 0775, owned by the
+    # image creator and in the group of the project.
+    #
+    # The 'images' directory for a subgroup in a project should be 0775,
+    # owned by the image creator and in the group of the particular project
+    # subgroup.
+    #
+    # In the IMAGEDIRECTORIES world, the individual image subdirectories
+    # should be 0775, owned by the image creator and in the group of the
+    # containing directory.
+    #
+    # XXX right now, I only check the directory permissions and not the
+    # user/groups. Too lazy.
+    #
+    if (($validate{"all"} || $validate{"perm"}) &&
+	$accessfs && ($path || $dpath)) {
+	my $ipid = $image->pid();
+	my $igid = $image->gid();
+
+	my $idir;
+	if ($ipid eq $igid) {
+	    $idir = "/proj/$ipid/images/";
+	} else {
+	    $idir = "/groups/$ipid/$igid/images/";
+	}
+
+	# Just check the project/group main image dir once
+	my $pidgid = "$ipid/$igid";
+	if (!exists($piddirperms{$pidgid})) {
+	    $piddirperms{$pidgid} = 1;
+
+	    if (! -d $idir) {
+		print STDERR "$pidimage: mode: image dir '$idir' does not exist?!\n";
+	    } else {
+		my $mode = (stat($idir)->mode & 0777);
+		if ($mode != 0770) {
+		    my $mstr = sprintf "0%o", $mode;
+		    print("$pidimage: mode: '$idir' mode $mstr != 0770\n")
+			if (!$update || !$quiet);
+		    if ($update) {
+			print("$pidimage: mode: ")
+			    if (!$quiet);
+			if (chmod(0770, $idir)) {
+			    print "[FIXED]\n"
+				if (!$quiet);
+			} else {
+			    print "[FAILED]\n"
+				if (!$quiet);
+			}
+		    }
+		}
+	    }
+	}
+
+	# Check image sub directory
+	if ($image->IsDirPath()) {
+	    $idir = $image->path();
+	    if (!exists($imagedirperms{$idir})) {
+		$imagedirperms{$idir} = 1;
+		if (! -d $idir) {
+		    print STDERR "$pidimage: mode: image subdir '$idir' does not exist?!\n";
+		} else {
+		    my $mode = (stat($idir)->mode & 0777);
+		    if ($mode != 0775) {
+			my $mstr = sprintf "0%o", $mode;
+			print("$pidimage: mode: '$idir' mode $mstr != 0775\n")
+			    if (!$update || !$quiet);
+			if ($update) {
+			    print("$pidimage: mode: ")
+				if (!$quiet);
+			    if (chmod(0775, $idir)) {
+				print "[FIXED]\n"
+				    if (!$quiet);
+			    } else {
+				print "[FAILED]\n"
+				    if (!$quiet);
+			    }
+			}
+		    }
+		}
+	    }
+	}
     }
 
     #
