@@ -1694,7 +1694,7 @@ sub hashit($)
     my ($file) = @_;
     my $hash;
 
-    if ($file =~ /^\/(proj|groups)/) {
+    if ($UID == 0 && $file =~ /^\/(proj|groups)/) {
 	$hash = `$SSH $SHA1 $file`;
     } else {
 	$hash = `$SHA1 $file`;
