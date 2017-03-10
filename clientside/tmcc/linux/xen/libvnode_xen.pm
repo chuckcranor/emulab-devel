@@ -855,6 +855,12 @@ sub rootPreConfig($)
 		}
 	    }
 	}
+	if ($LVM_RAID && @blockdevs < 2) {
+	    print STDERR "WARNING: not enough disks available, ".
+		"not configuring RAID.\n";
+	    $LVM_RAID = 0;
+	    goto again;
+	}
 	if (@blockdevs == 0) {
 	    print STDERR "ERROR: findSpareDisks found no disks for LVM!\n";
 	    TBScriptUnlock();
@@ -878,12 +884,6 @@ sub rootPreConfig($)
 	    my $rargs;
 	    my $ndevs = int(@blockdevs);
 
-	    if ($ndevs == 1) {
-		print STDERR "WARNING: only one disk/partition available, ".
-		    "not configuring RAID.\n";
-		$LVM_RAID = 0;
-		goto again;
-	    }
 	    mysystem("mdadm --create --verbose $rdev ".
 		     "--level=10 --raid-devices=$ndevs $blockdevstr");
 	    sleep(1);
