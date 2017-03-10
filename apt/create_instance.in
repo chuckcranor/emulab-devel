@@ -1315,6 +1315,22 @@ sub CreateSliver($)
 	print STDERR "CreateSliver $urn: No manifest returned\n";
 	return -1;
     }
+    #
+    # This needs to be done differently; passing an extra credential
+    # and setting the valid_until in the rspec. 
+    #
+    if ($duration > $maxduration) {
+	print "Forcing correct slice expiration\n";
+	$response = $aggobj->Extend($slice->ExpirationGMT(), $this_user);
+	if (!defined($response) ||
+	    $response->code() != GENIRESPONSE_SUCCESS) {
+	    $aggobj->SetStatus("failed");
+	    $webtask->output("Renew failed on $urn");
+	    $webtask->Exited(-1);
+	    print STDERR "Renew failed on $urn\n";
+	    return -1;
+	}
+    }
     $aggobj->SetStatus("provisioned");
     $aggobj->SetManifest($manifest);
     return 0;
