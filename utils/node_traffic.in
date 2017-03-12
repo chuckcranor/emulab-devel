@@ -39,6 +39,7 @@ sub usage()
     print STDERR "-s	     Show only traffic sent by each node\n";
     print STDERR "-i seconds Show stats over a <seconds>-period interval\n";
     print STDERR "-E	     Aggregate by experiment\n";
+    print STDERR "-R	     Report rate rather than count over interval\n";
     print STDERR "-d         Debugging output\n";
 #    print STDERR "-C	     Show control net traffic\n";
     exit(-1);
@@ -46,13 +47,14 @@ sub usage()
 
 sub gather($$);
 
-my $optlist  = "CEi:aArsd";
+my $optlist  = "CERi:aArsd";
 my $debug = 0;
 my $interval = 0;
 my $doall = 0;
 my $send = 1;
 my $recv = 1;
 my $byexpt = 0;
+my $byrate = 0;
 
 # XXX only does control net right now
 my $controlnet = 1;
@@ -119,12 +121,18 @@ if (defined($options{"s"})) {
 }
 if (defined($options{"i"})) {
     $interval = int($options{"i"});
-    if ($interval < 0) {
+    if ($interval <= 0) {
 	die("Bogus interval $interval\n");
     }
 }
 if (defined($options{"E"})) {
     $byexpt = 1;
+}
+if (defined($options{"R"})) {
+    if ($interval == 0) {
+	die("Must specify interval (-i) when using -r\n");
+    }
+    $byrate = 1;
 }
 if (defined($options{"C"})) {
     $controlnet = 1;
@@ -230,6 +238,21 @@ if ($interval > 0) {
 my %after = ();
 gather(\%pcs, \%after);
 
+my $divisor = 1;
+if ($interval > 0) {
+    my $tstamp = $interval;
+    if (exists($before{'tstamp'}) && exists($after{'tstamp'})) {
+	$tstamp = $after{'tstamp'} - $before{'tstamp'};
+    }
+    if ($byrate) {
+	$divisor = $tstamp;
+	print "Average rate over";
+    } else {
+	print "Total count after";
+    }
+    print " $tstamp seconds\n";
+}
+
 my %expcounts = ();
 
 # weed out bad boys
@@ -306,10 +329,10 @@ if ($byexpt) {
 	   "Experiment", "Tot Pkts", "Unicast", "Non-Uni", "Tot Bytes");
     foreach my $exp (sort esortem keys %expcounts) {
 	printf("%25s %12d %12d %12d %12d\n",
-	       $exp, $expcounts{$exp}->[3],
-	       $expcounts{$exp}->[1],
-	       $expcounts{$exp}->[2],
-	       $expcounts{$exp}->[0]);
+	       $exp, $expcounts{$exp}->[3]/$divisor,
+	       $expcounts{$exp}->[1]/$divisor,
+	       $expcounts{$exp}->[2]/$divisor,
+	       $expcounts{$exp}->[0]/$divisor);
     }
 } else {
     @list = sort sortem @list;
@@ -322,7 +345,8 @@ if ($byexpt) {
 	my $s = $pcs{$node}{'state'};
 
 	printf("%12s %25s %12d %12d %12d %12d\n",
-	       $node, $exp, $tot->[3], $tot->[1], $tot->[2], $tot->[0]);
+	       $node, $exp, $tot->[3]/$divisor, $tot->[1]/$divisor,
+	       $tot->[2]/$divisor, $tot->[0]/$divisor);
     }
 }
 
@@ -351,13 +375,14 @@ sub gather($$)
     foreach my $switch (keys %switches) {
 	my $slist = join(' ', @{$switches{$switch}});
 	my $arg = $byexpt ? "" : "-c";
-	open(PS, "$portstats $arg -p $slist 2>&1 |") or
+	open(PS, "$portstats $arg -r -l -p $slist 2>&1 |") or
 	    die "Could not get portstats\n";
 	while (<PS>) {
+	    chomp;
 	    # XXX ignore warnings from snmpit
 	    next if ($_ =~ /^WARNING:/);
 	    next if ($_ !~ /^[-\w]+:\d/);
-	    my ($node, @counts) = split;
+	    my ($node, @counts) = split ',';
 	    if (@counts != 6) {
 		print STDERR "*** $node: invalid portstats!?\n"; 
 		next;
@@ -379,6 +404,7 @@ sub gather($$)
 	}
 	close(PS);
     }
+    $resref->{'tstamp'} = time();
 }
 
 exit(0);
