@@ -239,11 +239,22 @@ elsif ($cancel) {
 
 my @hosed = ();
 $experiment->LinkTestCapable(\@hosed);
-if (@hosed > 0) {
+
+# XXX eliminate blockstore hosts
+my @nonbs = ();
+foreach my $vname (@hosed) {
+    my $node = $experiment->VnameToNode($vname);
+    if ($node && $node->type() eq "blockstore") {
+	;
+    } else {
+	push @nonbs, $vname;
+    }
+}
+if (@nonbs > 0) {
     print STDERR
 	"*** Nodes running an OSID that does not support linktest:\n";
     print STDERR
-	"***   ", join(' ', @hosed), "\n";
+	"***   ", join(' ', @nonbs), "\n";
     if (!$forcerun) {
 	die("*** $0:\n".
 	    "    Aborting linktest since not all nodes support it!\n");
