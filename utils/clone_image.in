@@ -376,7 +376,7 @@ if (defined($image)) {
 		    basename($image->path());
 		# Watch for directory in original path, since basename
 		# drops he trailing slash.
-		if ($image->path() =~ /^\/$/) {
+		if ($image->IsDirPath()) {
 		    $path .= "/";
 		}
 		if ($image->Update({"path" => $path})) {
