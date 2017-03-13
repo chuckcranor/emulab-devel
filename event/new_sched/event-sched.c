@@ -121,7 +121,7 @@ static void sigpass(int sig)
 	time_t ts = time(NULL);
 	info("event-sched[%d]: received signal %d at %s",
 	     getpid(), sig, ctime(&ts));
-	
+
 	if (emcd_pid != -1)
 		kill(emcd_pid, sig);
 	if (vmcd_pid != -1)
@@ -252,6 +252,7 @@ main(int argc, char *argv[])
 	char *keyfile = NULL;
 	char buf[BUFSIZ];
 	int c;
+	sigset_t mask;
 
 	// sleep(600);
 
@@ -360,6 +361,12 @@ main(int argc, char *argv[])
 	if (log)
 		loginit(0, log);
 
+	sigemptyset(&mask);
+	sigaddset(&mask, SIGTERM);
+	sigaddset(&mask, SIGINT);
+	sigaddset(&mask, SIGQUIT);
+	sigaddset(&mask, SIGHUP);
+
 	signal(SIGTERM, sigpass);
 	signal(SIGINT, sigpass);
 	signal(SIGQUIT, sigpass);
@@ -384,11 +391,16 @@ main(int argc, char *argv[])
 		 (port ? port : ""));
 	server = buf;
 
+	/* XXX make sure we don't catch signals in event (pubsub) dispatcher */
+	pthread_sigmask(SIG_BLOCK, &mask, NULL);
+
 	/* Register with the event system: */
 	handle = event_register_withkeyfile(server, 1, keyfile);
 	if (handle == NULL) {
 		fatal("could not register with event system");
 	}
+
+	pthread_sigmask(SIG_UNBLOCK, &mask, NULL);
 
 	/* Make a (not yet populated) list of things to do after initial swapin */
 	ns_sequence = create_timeline_agent(TA_SEQUENCE);
