@@ -83,6 +83,7 @@ use APT_Profile;
 
 # Protos
 sub fatal($);
+sub UserError($);
 sub DoListImages();
 sub DoDeleteImage();
 
@@ -438,40 +439,54 @@ sub DoDeleteImage()
 	    
 	    foreach my $client_id (keys(%irefs)) {
 		my $imageinfo = $irefs{$client_id};
-		# 
+		
 		# We do not ever care about system images.
-		#
 		next
 		    if ($imageinfo->ospid() eq "emulab-ops");
 
-		my $snapname = $profile->name() . "." . $client_id;
-
-		next
-		    if (! ($imageinfo->os() eq $profile->name() ||
-			   $imageinfo->os() eq $snapname));
-
+		# The image we are trying to delete is okay
 		if ($imageinfo->image() eq $image_urn) {
 		    $usingimage = 1;
+		    next;
 		}
-		else {
+
+		my $snapname = $profile->name() . "." . $client_id;
+		if ($imageinfo->os() eq $profile->name() ||
+		    $imageinfo->os() eq $snapname) {
 		    $conflict = $imageinfo->image();
 		}
 	    }
 	    if ($usingimage && $conflict) {
-		fatal("Version " . $version->version() . " of the " .
-		      $version->name() . " profile has another ".
-		      "image that would be deleted as well: $conflict. ".
-		      "You will need to go to the profile page and delete ".
-		      "that profile version before you can delete this image.");
+		my $mesg =
+		    "Version " . $version->version() . " of the " .
+		    $version->name() . " profile has another ".
+		    "image that would be deleted as well: $conflict. ".
+		    "You will need to go to the profile page and delete ".
+		    "that profile version before you can delete this image.";
+
+		if ($webtask) {
+		    $webtask->reason("conflict");
+		    $webtask->profile($version->uuid());
+		    $webtask->image($conflict->image());
+		}
+		UserError($mesg);
 	    }
 	    if ($usingimage && $version->isLocked()) {
-		fatal("Version " . $version->version() . " is locked ".
-		      "down, cannot delete it.");
+		my $mesg =
+		    "Version " . $version->version() . " of the " .
+		    $version->name() . " profile is locked down, ".
+		    "cannot delete it.";
+		
+		if ($webtask) {
+		    $webtask->reason("locked");
+		    $webtask->profile($version->uuid());
+		}
+		UserError($mesg);
 	    }
 	    if ($usingimage) {
 		push(@todelete, $version);
-		print "Would delete profile version " .
-		    $version->version() . "\n";
+		print "Would delete version " . $version->version() .
+		    " of profile " . $profile->name() . "\n";
 	    }
 	}
 	foreach my $version (@todelete) {
@@ -560,6 +575,18 @@ sub fatal($)
     print STDERR "$mesg\n";
     # Exit with negative status so web interface treats it as system error.
     exit(-1);
+}
+sub UserError($)
+{
+    my ($mesg) = @_;
+
+    if (defined($webtask)) {
+	$webtask->output($mesg);
+	$webtask->Exited(1);
+    }
+    print STDERR "$mesg\n";
+    # Exit with positive status so web interface treats it as user error
+    exit(1);
 }
 
 sub escapeshellarg($)
