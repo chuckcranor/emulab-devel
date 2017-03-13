@@ -830,7 +830,13 @@ sub NewVersion($$$$)
     #
     # This should not happen but lets make sure.
     #
-    if (defined($self->deleted())) {
+    # We cannot make this test cause of image deletion; we might have
+    # deleted the head version. But this code below assumes we are
+    # making a copy of the highest numbered version of the image. I think
+    # we can change this, but do not want to attempt that now. Needs more
+    # thought
+    #
+    if (0 && defined($self->deleted())) {
 	print STDERR "Not allowed to clone deleted image $self\n";
 	return undef;
     }
