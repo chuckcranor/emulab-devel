@@ -602,10 +602,13 @@ if (defined($instance)) {
     else {
 	$newimage = $iwebtask->image_url();
     }
-    if (!defined($newimage) ||
-	$profile->UpdateDiskImage($node_id, $newimage, 0)) {
+    if (!defined($newimage)) {
+	fatal("Did not get an image for $node_id");
 	$profile->Delete(1);
-	fatal("Could not update image URN in rspec");
+    }
+    if ($profile->UpdateDiskImage($node_id, $newimage, 0)) {
+	$profile->Delete(1);
+	fatal("Could not update image in rspec for $node_id; $newimage;");
     }
     # Tell web interface cloning has started.
     $pwebtask->cloning(1);
@@ -757,12 +760,11 @@ sub escapeshellarg($)
 #
 sub DeleteProfile()
 {
-    my $optlist    = "akfnm";
+    my $optlist    = "akfn";
     my $all        = 0;
     my $keepimages = 0;
     my $force      = 0;
     my $impotent   = 0;
-    my $mereuser   = 0;
     my $errmsg;
     my %images;
     my %snapnames  = ();
@@ -784,9 +786,6 @@ sub DeleteProfile()
     if (defined($options{"n"})) {
 	$impotent = 1;
     }
-    if (defined($options{"m"})) {
-	$mereuser = 1;
-    }
     usage()
 	if (!@ARGV);
 
@@ -802,8 +801,15 @@ sub DeleteProfile()
 	$errmsg = "Not allowed to delete this profile (version)";
 	goto uerror;
     }
-    # For now, mere users do not see new image deletion stuff.
-    $keepimages = 1 if ($mereuser);
+    # For now, mere users do not see new image deletion stuff unless
+    # feature enabled. 
+    if (! ($this_user->admin() || $this_user->stud())) {
+	my $project = Project->Lookup($profile->pid_idx());
+	if (! EmulabFeatures->FeatureEnabled("APT_ImageDeletion",
+					     $this_user, $project)) {
+	    $keepimages = 1;
+	}
+    }
 
     # If deleting the only version of a profile, then force $all.
     if ($profile->VersionCount() == 1) {
@@ -1032,6 +1038,7 @@ sub DeleteProfile()
 	}
     }
     if ($impotent) {
+	print "Not deleting profile, as requested.\n";
 	return 0;
     }
     if ($all || $profile->VersionCount() == 1) {

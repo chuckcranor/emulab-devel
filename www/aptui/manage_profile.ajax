@@ -158,10 +158,6 @@ function Do_DeleteProfile()
             $opt .= "-k ";
         }
     }
-    # Mere users do not see new path.
-    if (! ($this_user->admin() || $this_user->stud())) {
-        $opt .= "-m ";
-    }
     $webtask = WebTask::CreateAnonymous();
     if (!$webtask) {
 	SPITAJAX_ERROR(-1, "Internal webtask Error");
