@@ -86,7 +86,6 @@ my $NEWIMAGEEZ   = "$TB/bin/newimageid_ez";
 my $DOPROVENANCE = @IMAGEPROVENANCE@;
 my $DOIMAGEDIRS  = @IMAGEDIRECTORIES@;
 my $doprovenance = $DOPROVENANCE;
-my $doimagedirs  = $DOIMAGEDIRS;
 
 #
 # Untaint the path
@@ -247,15 +246,6 @@ if ($DOPROVENANCE) {
     # Temporary override for all geni projects until we can export deltas.
     if ($project->IsNonLocal()) {
 	$nodelta = 1;
-    }
-}
-
-# See if enabled. 
-if ($DOIMAGEDIRS) {
-    # But allow feature override.
-    if (EmulabFeatures->Lookup("ImageDirectories")) {
-	$doimagedirs =
-	    EmulabFeatures->FeatureEnabled("ImageDirectories", undef, $group);
     }
 }
 
@@ -476,7 +466,7 @@ if (Image->LookupByName($imagename) && !$this_user->IsAdmin()) {
 my $path = ($experiment->pid() eq $experiment->gid() || $global ?
 	    "$PROJROOT/$pid/images/" :
 	    "$GROUPROOT/$pid/$gid/images/");
-if ($doimagedirs) {
+if ($DOIMAGEDIRS) {
     $path .= "${imagename}/";
 }
 else {
