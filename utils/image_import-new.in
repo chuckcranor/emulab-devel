@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2010-2016 University of Utah and the Flux Group.
+# Copyright (c) 2010-2017 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -87,7 +87,6 @@ my $DOIMAGEDIRS   = @IMAGEDIRECTORIES@;
 my $PGENISUPPORT  = @PROTOGENI_SUPPORT@;
 my $doprovenance  = $WITHPROVENANCE;
 my $dodeltas      = $WITHDELTAS;
-my $doimagedirs   = $DOIMAGEDIRS;
 
 #
 # When fetching the metadata, we now tell the server what client
@@ -349,13 +348,6 @@ if ($WITHPROVENANCE) {
 }
 if (!$doprovenance && $getallimages) {
     fatal("-G option requires IMAGE_PROVENANCE to be enabled");
-}
-if ($DOIMAGEDIRS) {
-    # But allow feature override.
-    if (EmulabFeatures->Lookup("ImageDirectories")) {
-	$doimagedirs =
-	    EmulabFeatures->FeatureEnabled("ImageDirectories", undef, $group);
-    }
 }
 
 #
@@ -896,7 +888,7 @@ sub CreateImage($$$$$)
 	$xmlparse->{'attribute'}->{"path"}->{'value'} =
 	    "$TBPROJ_DIR/" . $group->pid() . "/" . $group->gid() . "/images/";
     }
-    if ($doimagedirs) {
+    if ($DOIMAGEDIRS) {
 	$xmlparse->{'attribute'}->{"path"}->{'value'} .= "${imagename}/";
     }
     else {

@@ -753,7 +753,18 @@ function Do_RunScript()
 	    return;
         }
     }
-    
+
+    if (preg_match("/^import/m", $script)) {
+        $command = "webrungenilib";
+    }
+    elseif (preg_match("/^source tb_compat/m", $script)) {
+        $command = "webns2rspec -a";
+    }
+    else {
+	SPITAJAX_ERROR(1, "Unknown script type");
+	return;
+    }
+
     $infname   = tempnam("/tmp", "genilibin");
     $outfname  = tempnam("/tmp", "genilibout");
 
@@ -767,7 +778,7 @@ function Do_RunScript()
     # Invoke the backend.
     #
     $retval = SUEXEC($this_uid, "nobody",
-		     "webrungenilib -o $outfname $infname",
+		     "$command -o $outfname $infname",
 		     SUEXEC_ACTION_IGNORE);
     
     if ($retval != 0) {

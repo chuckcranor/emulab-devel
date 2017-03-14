@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2010-2016 University of Utah and the Flux Group.
+# Copyright (c) 2010-2017 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -236,6 +236,11 @@ sub DumpImage($)
 		$xmlfields{'origin_urn'}  =
 		    GeniHRN::Generate($OURDOMAIN, "authority", "cm");
 	    }
+	    # Send the architecture if it is set here.
+	    if ($image->architecture()) {
+		$xmlfields{'architecture'} = $image->architecture();
+	    }
+	    
 	    #
 	    # Send along the history so that the caller can get all
 	    # the versions, which is important for delta based images.
@@ -279,7 +284,7 @@ sub DumpImage($)
 		    my @tmp;
 		    
 		    # This returns a reverse ordered list.
-		    if ($image->AllVersions(\@tmp)) {
+		    if ($image->AllVersions(\@tmp, 1)) {
 			fatal("Could not get image version list");
 		    }
 		    #

@@ -169,6 +169,13 @@ $(function () {
 		}
 		form_modified = true;
 	    });
+	    $(form + ' :input').on("input", function () {
+		//console.info("changed");
+		if (modified_callback) {
+		    modified_callback();
+		}
+		form_modified = true;
+	    });
 
 	    // Warn user if they have not saved changes.
 	    $(window).on('beforeunload.portal',
@@ -266,7 +273,9 @@ $(function () {
 	    var submit_callback = function(json) {
 		console.info("SubmitForm", json);
 		sup.HideWaitWait();
-		DisableUnsavedWarning(form);
+		if (!json.code) {
+		    DisableUnsavedWarning(form);
+		}
 		callback(json);
 	    };
 	    sup.ShowWaitWait(message);

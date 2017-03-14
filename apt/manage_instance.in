@@ -741,6 +741,7 @@ sub DoSnapshot()
 				  (defined($copyback_urn) ?
 				   $copyback_urn : $version_url),
 				  ($update_profile eq "all" ? 1 : 0));
+	$profile->InsertImageRecords();
     }
     $instance->SetStatus("ready");
     $aggregate->SetStatus("ready");
@@ -902,11 +903,14 @@ sub DoImageTrackerStuff($$$$$$)
 	}
     }
     #
-    # System Image? We use the URN we get back from CreateSliver().
+    # System Image? We use the URN we get back from CreateImage().
     # The cluster will be the origin for the new image.
     #
     return 0
-	if ($blob->{'issystem'});
+	if (exists($blob->{'issystem'}) && $blob->{'issystem'});
+    # Image aliases are also considered system images.
+    return 0
+	if (exists($blob->{'isimagealias'}) && $blob->{'isimagealias'});
 
     my $image_urn     = $blob->{'urn'};
     my $copyback_uuid = $blob->{'version_uuid'};
@@ -1880,7 +1884,8 @@ sub DoMaxExtension()
 	    # This is something the user should see.
 	    if ($response->code() == GENIRESPONSE_REFUSED ||
 		$response->code() == GENIRESPONSE_SERVER_UNAVAILABLE ||
-		$response->code() == GENIRESPONSE_BUSY) {
+		$response->code() == GENIRESPONSE_BUSY ||
+		$response->code() == GENIRESPONSE_SEARCHFAILED) {
 		$webtask->output($errmsg);
 		$webtask->Exited($response->code());
 		return 1;

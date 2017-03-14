@@ -1,7 +1,7 @@
 #!/usr/bin/perl
 
 #
-# Copyright (c) 2000-2016 University of Utah and the Flux Group.
+# Copyright (c) 2000-2017 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -72,6 +72,7 @@ Usage: $0 [-h] <-p | <pid> <eid> > [vname ...] [vname:port ...]
 -s    Ports are specified in switch.port syntax.
       No pid,eid should be given when using this option.
 -C    List control net, rather than experimental net, ports
+-H    Show high-capacity (64-bit) counters (implies -c, !-z right now)
 
 If only pid and eid are given, prints out information about all ports in the
 experiment. Otherwise, output is limited to the nodes and/or ports given.
@@ -92,7 +93,7 @@ END
 #
 my %opt = ();
 Getopt::Long::Configure("no_ignore_case");
-GetOptions(\%opt,'h','a','e','p','b','z','q','c','s','C','r','l');
+GetOptions(\%opt,'h','a','e','p','b','z','q','c','s','C','r','l','H');
 
 if ($opt{h}) {
     exit &usage;
@@ -107,6 +108,14 @@ if ($opt{a}) {
 } elsif ($opt{e}) {
     @oids = ('ifInDiscards', 'ifInErrors', 'ifInUnknownProtos', 'ifOutDiscards',
 	     'ifOutErrors');
+} elsif ($opt{H}) {
+    @oids = ('ifHCInOctets', 'ifHCInUcastPkts', 'ifHCInMulticastPkts',
+	     'ifHCInBroadcastPkts',
+	     'ifHCOutOctets', 'ifHCOutUcastPkts', 'ifHCOutMulticastPkts',
+	     'ifHCOutBroadcastPkts');
+    # XXX database is only 32-bit counters - so don't do anything involving it
+    $opt{c} = 1;
+    $opt{z} = 0;
 } else {
     @oids = ('ifInOctets', 'ifInUcastPkts', 'ifInNUcastPkts',
 	     'ifOutOctets', 'ifOutUcastPkts', 'ifOutNUcastPkts');
@@ -169,18 +178,26 @@ foreach my $arg (@ARGV) {
 }
 
 #
-# This hash is used to create colmn headers and the format string
+# This hash is used to create column headers and the format string
 #
 my %oids = (
     'ifInOctets'        => [['        In','    Octets'], '@>>>>>>>>>'],
     'ifInUcastPkts'     => [[' InUnicast','   Packets'], '@>>>>>>>>>'],
     'ifInNUcastPkts'    => [['InNUnicast','   Packets'], '@>>>>>>>>>'],
+    'ifHCInOctets'        => [['            In','        Octets'], '@>>>>>>>>>>>>>'],
+    'ifHCInUcastPkts'     => [['  InUnicast','    Packets'], '@>>>>>>>>>>'],
+    'ifHCInMulticastPkts' => [['InMulticast','    Packets'], '@>>>>>>>>>>'],
+    'ifHCInBroadcastPkts' => [['InBroadcast','    Packets'], '@>>>>>>>>>>'],
     'ifInDiscards'      => [['        In','  Discards'], '@>>>>>>>>>'],
     'ifInErrors'        => [['        In','    Errors'], '@>>>>>>>>>'],
     'ifInUnknownProtos' => [['   Unknown','  Protocol'], '@>>>>>>>>>'],
     'ifOutOctets'       => [['       Out','    Octets'], '@>>>>>>>>>'],
     'ifOutUcastPkts'    => [['OutUnicast','   Packets'], '@>>>>>>>>>'],
     'ifOutNUcastPkts'   => [[' OutNUcast','   Packets'], '@>>>>>>>>>'],
+    'ifHCOutOctets'       => [['           Out','        Octets'], '@>>>>>>>>>>>>>'],
+    'ifHCOutUcastPkts'    => [['OutUnicast','   Packets'], '@>>>>>>>>>'],
+    'ifHCOutMulticastPkts'=> [['OutMulticast','     Packets'], '@>>>>>>>>>>>'],
+    'ifHCOutBroadcastPkts'=> [['OutBroadcast','     Packets'], '@>>>>>>>>>>>'],
     'ifOutDiscards'     => [['       Out','  Discards'], '@>>>>>>>>>'],
     'ifOutErrors'       => [['       Out','    Errors'], '@>>>>>>>>>'],
     'ifOutQLen'         => [['  OutQueue','    Length'], '@>>>>>>>>>']

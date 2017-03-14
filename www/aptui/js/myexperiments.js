@@ -22,15 +22,24 @@ $(function ()
     {
 	var tablename  = "#tablesorter_" + name;
 	var searchname = "#experiment_search_" + name;
+
+	// Watch for just one table.
+	if (!$(tablename).length) {
+	    return;
+	}
 	
 	var table = $(tablename)
 		.tablesorter({
 		    theme : 'green',
 		    
-		    //cssChildRow: "tablesorter-childRow",
-
 		    // initialize zebra and filter widgets
 		    widgets: ["zebra", "filter", "resizable"],
+
+		    headers: {
+			0: {
+			    sorter : "text",
+			}
+		    },
 
 		    widgetOptions: {
 			// include child row content while filtering, if true

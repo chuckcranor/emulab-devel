@@ -29,6 +29,19 @@ include("quickvm_sup.php");
 include_once("../session.php");
 
 #
+# We need all errors to come back to us so that we can report the error
+# to the user.
+# 
+function handle_error($message, $death)
+{
+    SPITAJAX_ERROR(-1, $message);
+    # Always exit; ignore $death.
+    exit(1);
+}
+$session_errorhandler = 'handle_error';
+$session_interactive  = 0;
+
+#
 # Poor man routing description.
 #
 $routing = array("myprofiles" =>
@@ -333,6 +346,13 @@ $routing = array("myprofiles" =>
                                                      "Do_Delete",
                                                  "ReservationInfo" =>
                                                      "Do_ReservationInfo")),
+		 "images" =>
+			array("file"    => "images.ajax",
+			      "guest"   => false,
+			      "methods" => array("ListImages" =>
+                                                     "Do_ListImages",
+                                                 "DeleteImage" =>
+                                                     "Do_DeleteImage")),
 		 "news" =>
 			array("file"    => "news.ajax",
 			      "guest"   => true,

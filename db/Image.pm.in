@@ -53,6 +53,8 @@ my $OURDOMAIN     = "@OURDOMAIN@";
 my $PGENISUPPORT  = @PROTOGENI_SUPPORT@;
 my $DOPROVENANCE  = @IMAGEPROVENANCE@;
 my $TBWWW         = "@TBWWW@";
+my $PROJROOT      = "@PROJROOT_DIR@";
+my $GROUPROOT     = "@GROUPSROOT_DIR@";
 
 # Cache of instances to avoid regenerating them.
 my %images    = ();
@@ -316,6 +318,7 @@ AUTOLOAD {
 	    return $self->{'HASH'}->{$name};
 	}
     }
+    print STDERR Dumper($self);
     carp("No such slot '$name' field in class $type");
     return undef;
 }
@@ -584,9 +587,10 @@ sub Refresh($)
 
     my $imageid = $self->imageid();
     my $version = $self->version();
-    
+
     my $query_result =
-	DBQueryWarn("select v.*,i.uuid as image_uuid,i.locked,i.locker_pid ".
+	DBQueryWarn("select i.*,v.*,i.uuid as image_uuid, ".
+		    "   i.metadata_url as image_metadata_url ".
 		    "  from image_versions as v ".
 		    "left join images as i on ".
 		    "     v.imageid=i.imageid ".
@@ -826,6 +830,28 @@ sub NewVersion($$$$)
     my $imtablename = "image_versions"  . $tableid;
 
     #
+    # This should not happen but lets make sure.
+    #
+    # We cannot make this test cause of image deletion; we might have
+    # deleted the head version. But this code below assumes we are
+    # making a copy of the highest numbered version of the image. I think
+    # we can change this, but do not want to attempt that now. Needs more
+    # thought
+    #
+    if (0 && defined($self->deleted())) {
+	print STDERR "Not allowed to clone deleted image $self\n";
+	return undef;
+    }
+    #
+    # We should always be called with the latest version. $baseimage is
+    # what we are actually basing the new image on.
+    #
+    if (!$self->IsNewest()) {
+	print STDERR "Image::NewVersion: $self is not the head version\n";
+	return undef;
+    }
+    
+    #
     # Grab the current type list. Do this before table locking.
     #
     if (!$isdataset) {
@@ -942,7 +968,7 @@ sub NewVersion($$$$)
     
     if (!$isdataset) {
 	DBQueryWarn("update $ostablename set ".
-		    "  uuid=uuid(), ".
+		    "  uuid=uuid(),deleted=null, ".
 		    "  vers='$clone_vers',".
 		    "  parent_osid=$parent_imageid,".
 		    "  parent_vers=$parent_version ".
@@ -950,7 +976,7 @@ sub NewVersion($$$$)
 	    or goto bad;
     }
     DBQueryWarn("update $imtablename set ".
-		"  uuid=uuid(),ready=0,path='$path',released=0, ".
+		"  uuid=uuid(),ready=0,path='$path',released=0,deleted=null, ".
 		"  $part_vers default_vers='$clone_vers', ".
 		"  version='$clone_vers',last_used=NULL, ".
 		"  created=now(),nodetypes='$typelist', ".
@@ -1010,6 +1036,8 @@ sub SetProvenance($$)
 # Highest number version, rather then what is deemed most recent by the
 # images table.
 #
+# We must include deleted images here.
+#
 sub LookupMostRecent($)
 {
     my ($self) = @_;
@@ -1029,15 +1057,18 @@ sub LookupMostRecent($)
 #
 # Return a list of all image versions.
 #
-sub AllVersions($$)
+sub AllVersions($$;$)
 {
-    my ($self, $pref)  = @_;
+    my ($self, $pref, $deleted)  = @_;
     my @result  = ();
     my $imageid = $self->imageid();
+    $deleted = 0 if (!defined($deleted));
 
     my $query_result =
 	DBQueryWarn("select version from image_versions ".
-		    "where imageid='$imageid' order by version desc");
+		    "where imageid='$imageid' ".
+		    ($deleted ? "" : "and deleted is null ") .
+		    "order by version desc");
     return -1
 	if (!$query_result);
     
@@ -1412,10 +1443,60 @@ sub Delete($;$)
 }
 
 #
-# Delete a version of an image. This is not to be used, except when there
-# is an error during clone, and we want to undo the creation of a new version.
+# Mark a version as deleted. Since we are allowing the head version to
+# be deleted, we might have to reset the current image/osinfo pointers.
 #
 sub DeleteVersion($)
+{
+    my ($self) = @_;
+    my $imageid   = $self->imageid();
+    my $version   = $self->version();
+
+    DBQueryWarn("lock tables images write, image_versions write, ".
+		"            os_info write, os_info_versions write")
+	or return -1;
+
+    #
+    # Find the new head version; the highest numbered version that
+    # is not deleted,
+    #
+    my $query_result =
+	DBQueryWarn("select max(version) from image_versions ".
+		    "where imageid='$imageid' and deleted is null and ".
+		    "      version!='$version'");
+    goto bad
+	if (!$query_result);
+
+    if (!$query_result->numrows) {
+	print STDERR "Image::DeleteVersion: Cannot find a new head version\n";
+	goto bad;
+    }
+    my ($head) = $query_result->fetchrow_array();
+    
+    goto bad
+	if (! (DBQueryWarn("update image_versions set deleted=now() ".
+			   "where imageid='$imageid' and version='$version'") &&
+	       DBQueryWarn("update os_info_versions set deleted=now() ".
+			   "where osid='$imageid' and vers='$version'") &&
+	       DBQueryWarn("update os_info set version='$head' ".
+			   "where osid='$imageid'") &&
+	       DBQueryWarn("update images set version='$head' ".
+			   "where imageid='$imageid'")));
+
+    DBQueryWarn("unlock tables")
+	or return -1;
+    return 0;
+
+  bad:
+    DBQueryWarn("unlock tables");
+    return -1;
+}
+
+#
+# Purge a version of an image. This is not to be used, except when there
+# is an error during clone, and we want to undo the creation of a new version.
+#
+sub PurgeVersion($)
 {
     my ($self) = @_;
 
@@ -1426,7 +1507,7 @@ sub DeleteVersion($)
 	or return -1;
 
     #
-    # We do not allow the deletion if it is not the "head" version of the
+    # We do not allow the purge if it is not the "head" version of the
     # image_versions. Maybe later.
     #
     my $query_result =
@@ -1437,7 +1518,7 @@ sub DeleteVersion($)
 
     my ($version) = $query_result->fetchrow_array();
     if ($version != $self->version()) {
-	print STDERR "Image::DeleteVersion: not the head version of $self\n";
+	print STDERR "Image::PurgeVersion: not the head version of $self\n";
 	goto bad;
     }
 
@@ -1496,6 +1577,23 @@ sub GetGroup($)
 	return undef;
     }
     return $group;
+}
+
+#
+# Load the creator object for an image
+#
+sub GetCreator($)
+{
+    my ($self) = @_;
+    require User;
+
+    my $user = User->Lookup($self->creator_idx());
+    
+    if (! defined($user)) {
+	print("*** WARNING: Could not lookup user object for $self!\n");
+	return undef;
+    }
+    return $user;
 }
 
 #
@@ -2355,12 +2453,14 @@ sub ListForURN($$)
 	if (! GeniHRN::IsValid($urn));
 
     my $query_result =
-	DBQueryWarn("select distinct pid,imagename from image_versions ".
-		    "where creator_urn='$urn' and deleted is null");
+	DBQueryWarn("select imageid,version from image_versions ".
+		    "where creator_urn='$urn' and deleted is null and ".
+		    "      isdataset=0 ".
+		    "order by pid,imagename,version");
 
-    while (my ($pid,$imagename) = $query_result->fetchrow_array()) {
+    while (my ($imageid,$version) = $query_result->fetchrow_array()) {
 	# Want latest version.
-	my $image = Image->Lookup($pid, $imagename);
+	my $image = Image->Lookup($imageid, $version);
 	next
 	    if (!defined($image));
 
@@ -2494,11 +2594,11 @@ sub SetRunsOnNodeType($$)
 #
 # If using the image tracker, have to notify the IMS.
 #
-sub SchedIMSDeletion($)
+sub SchedIMSDeletion($$)
 {
-    my ($self) = @_;
+    my ($self,$allversions) = @_;
     my $urn  = $self->urn();
-    my $uuid = $self->image_uuid();
+    my $uuid = ($allversions ? $self->image_uuid() : $self->uuid());
 
     # The expire daemon will pick this up.
     DBQueryWarn("replace into image_deletions set ".
@@ -2511,11 +2611,13 @@ sub SchedIMSDeletion($)
 #
 # Is the image the newest version of the image.
 #
+# This needs to include deleted images, we only care about max version
+# number right now. 
+#
 sub IsNewest($)
 {
-    my ($self) = @_;
-
-    my $imageid   = $self->pid();
+    my ($self)  = @_;
+    my $imageid = $self->imageid();
     
     my $query_result =
 	DBQueryWarn("select max(version) from image_versions ".
@@ -2753,17 +2855,53 @@ sub HaveDeltaImage($)
     my ($self) = @_;
     return $self->deltasize() ? 1 : 0;
 }
+sub IsSystemImage($)
+{
+    my ($self) = @_;
+
+    # Yuck.
+    return ($self->path() =~ /^\/usr\/testbed\// ? 1 : 0);
+}
+#
+# When images are stored in sub directories.
+#
 sub CreateImageDir($)
 {
     my ($self) = @_;
     
     return 0
-	if (!$self->IsDirPath() || -e $self->path());
+	if (!$self->IsDirPath());
 
-    if (!mkdir($self->path(), 0775)) {
-	print STDERR "Could not mkdir " . $self->path() . ": $!";
+    return -1
+	if ($self->CreateDirectory($self->path()));
+
+    #
+    # For system images that are written to $TB, we still need a place
+    # to write new (unreleased) images in /proj. 
+    #
+    if ($self->IsSystemImage()) {
+	return -1
+	    if ($self->CreateDirectory($self->SaveDir()));
+    }
+    return 0;
+}
+
+sub CreateDirectory($$)
+{
+    my ($self, $directory) = @_;
+
+    return 0
+	if (-e $self->path());
+    
+    if (!mkdir($directory, 0775)) {
+	print STDERR "Could not mkdir $directory: $!\n";
 	return -1;
     }
+    if (!chmod(0775, $directory)) {
+	print STDERR "Could not chmod $directory: $!\n";
+	return -1;
+    }
+    
     # If we are root and had to create the directory, then the owner
     # and group are going to be set wrong.
     if ($EUID == 0) {
@@ -2780,13 +2918,35 @@ sub CreateImageDir($)
 	my $uid = $leader->unix_uid();
 	my $gid = $group->unix_gid();
 
-        if (! chown($uid, $gid, $self->path())) {
-	    print STDERR "Could not chown($uid,$gid) " .
-		$self->path()  . ": $!\n";
+        if (! chown($uid, $gid, $directory)) {
+	    print STDERR "Could not chown($uid,$gid) $directory: $!\n";
 	    return -1;
 	}
     }
     return 0;
+}
+
+#
+# Where we write the new files. 
+# I think cause we do not trust the path in the descriptor since the
+# user can set it. This is probably the crux; we should not let the
+# user set the path.
+#
+sub SaveDir($)
+{
+    my ($self) = @_;
+
+    my $savedir =
+	($self->pid() eq $self->gid() ||
+	 $self->global() || $self->IsSystemImage() ? 
+	 $PROJROOT . "/" . $self->pid() . "/images/" :
+	 $GROUPROOT . "/" . $self->pid() . "/" . $self->gid() . "/images/");
+    
+    # Add in the directory.
+    $savedir .= basename($self->path()) . "/"
+	if ($self->IsDirPath());
+
+    return $savedir;
 }
 
 # _Always_ make sure that this 1 is at the end of the file...

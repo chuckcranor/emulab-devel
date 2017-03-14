@@ -152,7 +152,7 @@ sub Lookup($$;$$)
 }
 sub image($)		{ return $_[0]->{'IMAGE'}; }
 sub osinfo($)		{ return $_[0]->{'OSINFO'}; }
-sub hash($)		{ return $_[0]->{'HASH'}; }
+sub temphash($)		{ return $_[0]->{'HASH'}; }
 sub isImageAlias($)	{ return 0; }
 
 # Break circular references to avoid exit errors.
@@ -458,15 +458,15 @@ sub LookupMostRecent($)
 #
 # Return a list of all image versions.
 #
-sub AllVersions($$)
+sub AllVersions($$;$)
 {
-    my ($self, $pref)  = @_;
+    my ($self, $pref, $deleted)  = @_;
     my $imageid = $self->image()->imageid();
     my @images  = ();
     my @result  = ();
 
     return -1
-	if ($self->image()->AllVersions(\@images));
+	if ($self->image()->AllVersions(\@images, $deleted));
 
     foreach my $image (@images) {
 	my $version = $image->version();
@@ -569,6 +569,12 @@ sub DeleteVersion($)
 
     return $self->image()->DeleteVersion();
 }
+sub PurgeVersion($)
+{
+    my ($self) = @_;
+
+    return $self->image()->PurgeVersion();
+}
 
 #
 # Load the project object for an image
@@ -578,6 +584,16 @@ sub GetProject($)
     my ($self) = @_;
 
     return $self->image()->GetProject();
+}
+
+#
+# Load the user object for an image
+#
+sub GetCreator($)
+{
+    my ($self) = @_;
+
+    return $self->image()->GetCreator();
 }
 
 #
@@ -957,11 +973,11 @@ sub SetRunsOnNodeType($$)
 #
 # If using the image tracker, have to notify the IMS.
 #
-sub SchedIMSDeletion($)
+sub SchedIMSDeletion($$)
 {
-    my ($self) = @_;
+    my ($self,$allversions) = @_;
 
-    return $self->image()->SchedIMSDeletion();
+    return $self->image()->SchedIMSDeletion($allversions);
 }
 
 #
@@ -1149,6 +1165,18 @@ sub CreateImageDir($)
     my ($self) = @_;
 
     return $self->image()->CreateImageDir();
+}
+sub SaveDir($)
+{
+    my ($self) = @_;
+
+    return $self->image()->SaveDir();
+}
+sub IsSystemImage($)
+{
+    my ($self) = @_;
+
+    return $self->image()->IsSystemImage();
 }
 
 ################################################################################

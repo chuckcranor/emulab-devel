@@ -1,3 +1,13 @@
+<style>
+.form-control-fake {
+  display: block;
+  width: 100%;
+  height: 34px;
+  padding: 7px 0px;
+  font-size: 14px;
+  line-height: 1.42857143;
+}
+</style>  
 <div class='row'>
   <div class='col-lg-7
               col-md-7'>
@@ -5,7 +15,7 @@
       <div class='panel-heading'>
         <h3 class='panel-title'>
 	  <% if (editing) { %>Modify <% } %>Reservation Request
-	  <a href='#' class='btn btn-xs'
+	  <a hrexsf='#' class='btn btn-xs'
 	     data-toggle='modal'
 	     data-target="#reservation-help-modal">
 	    <span style='margin-bottom: 4px; margin-left: 0px;'
@@ -19,7 +29,7 @@
 	</h3>
       </div>
       <div class='panel-body'>
-	<div>
+	<div style="margin-bottom: 10px;">
 	  <center><span id="general_error" style="color:red;"></span></center>
 	</div>
 	<form id='reserve-request-form'
@@ -37,6 +47,15 @@
 	  <% } %>
 	  <div class='row'>
 	    <div class='col-sm-12'>
+	      <% if (editing) { %>
+		<div class="form-group">
+		  <div class="form-control-fake format-me"
+		       data-label="User"
+		       id="reserve-requestor"
+		       data-key="uid">
+		  </div>
+		</div>
+	      <% } %>
 	      <% if (1 || projects) { %>
 	        <% if (projects.length == 1 || editing) { %>
 		  <div class="form-group">
@@ -292,8 +311,8 @@
 	  NOTE: This reservation request can be accomodated, but the
 	  size and/or duration means that the reservation needs to
 	  be approved by an administrator before it is fully active.
-	  The administrator has been been notified and will be acting
-	  on this request shortly.</div>
+	  The administrator will be notified when you submit this
+	  request, and will act on this request as soon as possible.</div>
       </div>
     </div>
   </div>
@@ -321,9 +340,7 @@
 	      promised to another user you will not be allowed to keep
 	      them past the end of the reservation (requests to extend
 	      your experiment will be denied).</li>
-	    <li> Cluster; at what cluster you want resources. If you
-	      need resources at multiple clusters, you need to submit a
-	      request for each cluster.</li>
+	    <li> Cluster; at what cluster you want resources.</li>
 	    <li> Node type; reservations are for specific node types. You
 	      might not care what node type you get, but the reservation
 	      system requires it.</li>
@@ -351,7 +368,27 @@
 	    reservations will indicate which requests are pending
 	    approval. 
 	  </p>
+	  <p>
+	    More info can be found in the
+	    <a id="reservation-faq-button" href="#">reservation FAQ.</a>
+	  </p>
       </div>
     </div>
   </div>
 </div>
+<!-- FAQ -->
+<div id='reservation-faq-modal' class='modal fade'>
+  <div class='modal-dialog'>
+    <div class='modal-content'>
+      <div class='modal-body'>
+        <button type='button' class='close' data-dismiss='modal'
+                aria-hidden='true'>&times;</button>
+	<div class="clearfix"></div>
+	<center><h4>Reservation FAQ</h4></center>
+	<div class="faq-contents"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+	  

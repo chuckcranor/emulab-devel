@@ -128,7 +128,7 @@ sub ConvertImage($)
 	return 0;
     }
     my @images = ();
-    if ($image->AllVersions(\@images)) {
+    if ($image->AllVersions(\@images, 1)) {
 	print STDERR "Could not get list of (versions) for $image\n";
 	return -1;
     }
@@ -173,6 +173,10 @@ sub ConvertImage($)
 	else {
 	    if (! mkdir("$newpath", 0775)) {
 		print STDERR "Could not mkdir $newpath: $!\n";
+		return -1;
+	    }
+	    if (! chmod(0775, "$newpath")) {
+		print STDERR "Could not chown $newpath: $!\n";
 		return -1;
 	    }
 	    if (! chown($uid, $gid, $newpath)) {
@@ -243,6 +247,11 @@ sub ConvertImage($)
 
 if ($doall || $doallpid) {
     my @images = OSImage->ListAll(undef, $doallpid);
+
+    if ($doallpid && @images == 0) {
+	print "No images in project '$doallpid'\n";
+	exit(0);
+    }
 
     my %lastactive = ();
     if ($WITHZFS && $ZFS_NOEXPORT) {

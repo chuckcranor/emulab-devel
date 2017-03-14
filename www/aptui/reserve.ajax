@@ -47,6 +47,7 @@ function Do_Reserve()
     global $this_user;
     global $ajax_args;
     global $suexec_output, $TB_PROJECT_CREATEEXPT;
+    global $PORTAL_GENESIS;
     
     if (!isset($ajax_args["formfields"])) {
 	SPITAJAX_ERROR(-1, "Missing formfields");
@@ -148,6 +149,7 @@ function Do_Reserve()
     # make sure it is allowed.
     #
     $args = "-t " . escapeshellarg($formfields["type"]) . " ".
+          "-p $PORTAL_GENESIS " .
           (isset($idx) ? "-u $idx " : "") .
           (isset($start) ? "-s $start " : "") .
           " -e $end $pid " . $formfields["count"];
@@ -497,7 +499,7 @@ function Do_GetReservation()
 }
 
 #
-# Ask for reservation system info, for a specific aggregate
+# Ask for reservation system info, for a specific portal.
 #
 function Do_ReservationInfo()
 {
@@ -510,7 +512,7 @@ function Do_ReservationInfo()
 
     $retval = SUEXEC($this_user->uid(), "nobody",
                      "webmanage_reservations ".
-                     "   -t $webtask_id systeminfo -p '$PORTAL_GENESIS'",
+                     "   -t $webtask_id prediction -p '$PORTAL_GENESIS'",
                      SUEXEC_ACTION_CONTINUE);
     if ($retval) {
         $webtask->Delete();

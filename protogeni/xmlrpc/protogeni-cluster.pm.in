@@ -55,6 +55,7 @@ $GENI_METHODS = {
     "Reservations"         => \&GeniCluster::Reservations,
     "DeleteReservation"    => \&GeniCluster::DeleteReservation,
     "ReservationSystemInfo"=> \&GeniCluster::ReservationSystemInfo,
+    "ReservationPrediction"=> \&GeniCluster::ReservationPrediction,
 };
 
 1;

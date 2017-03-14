@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2009-2016 University of Utah and the Flux Group.
+# Copyright (c) 2009-2017 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -653,6 +653,8 @@ else {
 	        if (exists($tmp->{'os'}));
 	    $vnstate->{'private'}->{'rootpartition'} = $tmp->{'rootpartition'}
 	        if (exists($tmp->{'rootpartition'}));
+	    $vnstate->{'private'}->{'ishvm'} = $tmp->{'ishvm'}
+	        if (exists($tmp->{'ishvm'}));
 	}
     }
 }
@@ -665,6 +667,8 @@ $vnstate->{'os'} = $vnstate->{'private'}->{'os'}
     if (exists($vnstate->{'private'}->{'os'}));
 $vnstate->{'rootpartition'} = $vnstate->{'private'}->{'rootpartition'}
     if (exists($vnstate->{'private'}->{'rootpartition'}));
+$vnstate->{'ishvm'} = $vnstate->{'private'}->{'ishvm'}
+    if (exists($vnstate->{'private'}->{'ishvm'}));
 
 # Store the state to disk.
 if (StoreState()) {

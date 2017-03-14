@@ -111,7 +111,9 @@ $(function ()
 	var projcategories = MakeProfileCategories(profilelist);
 
 	// Fire this off right away.
-	LoadReservationInfo();
+	if (window.REGISTERED) {
+	    LoadReservationInfo();
+	}
 
 	var html = mainTemplate({
 	    formfields:         decodejson('#form-json'),
@@ -1843,7 +1845,7 @@ $(function ()
 		console.info("Could not get reservation info: " + json.value);
 		return;
 	    }
-	    console.info(json.value);
+	    console.info("resinfo", json.value);
 	    resinfo = json.value;
 
 	    ShowClusterReservations();

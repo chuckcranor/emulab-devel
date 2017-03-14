@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2005-2014, 2016 University of Utah and the Flux Group.
+# Copyright (c) 2005-2014, 2016, 2017 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -473,7 +473,29 @@ sub Counts($)
 	($free) = $query_result->fetchrow_array();
     }
     return {"total" => $total, "free" => $free};
-}    
+}
+
+#
+# Utility function to look up a global vtype and return the list.
+#
+sub GlobalVtypeTypes($$)
+{
+    my ($class, $vtype) = @_;
+    my @result = ();
+
+    my $query_result =
+	DBQueryWarn("select types from global_vtypes where vtype='$vtype'");
+    return ()
+	if (!defined($query_result) || !$query_result->numrows);
+
+    my ($typestring) = $query_result->fetchrow_array();
+    foreach my $t (split(/\s+/, $typestring)) {
+	my $type = NodeType->Lookup($t);
+	push(@result, $type)
+	    if (defined($type));
+    }
+    return @result;
+}
 
 # _Always_ make sure that this 1 is at the end of the file...
 

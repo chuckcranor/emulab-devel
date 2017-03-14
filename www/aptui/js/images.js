@@ -21,6 +21,13 @@ $(function ()
 	});
 	$('#main-body').html(html);
 
+	// Format dates with moment before display.
+	$('.format-date').each(function() {
+	    var date = $.trim($(this).html());
+	    if (date != "") {
+		$(this).html(moment($(this).html()).format("lll"));
+	    }
+	});
 	// This activates the popover subsystem.
 	$('[data-toggle="popover"]').popover({
 	    placement: 'auto',
@@ -71,8 +78,8 @@ $(function ()
 		    filter_liveSearch : true,
 		},
 		headers: {
-		    3: {sorter: false},
 		    4: {sorter: false},
+		    5: {sorter: false},
 		},
 	    });
 	
@@ -104,8 +111,8 @@ $(function ()
 	var filters = $.tablesorter.getFilters($('#images-table'));
 	// The "any" filter needs a value or everything disappears.
 	// If there is a term in the search box, it will have a value.
-	if (filters[6] === undefined) {
-	    filters[6] = "";
+	if (filters[7] === undefined) {
+	    filters[7] = "";
 	}
 	if ($('#my-images').is(":checked")) {
 	    tmp.push("creator");
@@ -126,11 +133,11 @@ $(function ()
 	}
 	if (tmp.length) {
 	    // regex search, plain | does not work.
-	    filters[5] = "/" + tmp.join("|") + "/";
+	    filters[6] = "/" + tmp.join("|") + "/";
 	}
 	else {
 	    // Hmm, an empty string will get everything.
-	    filters[5] = "WHY";
+	    filters[6] = "WHY";
 	}
 	console.info("SetFilters", filters);
 	$.tablesorter.setFilters($('#images-table'), filters, true);

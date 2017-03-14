@@ -228,5 +228,28 @@ sub LookupForPortal($$)
     return @result;
 }
 
+#
+# Lookup using the short auth name (emulab.net).
+#
+sub LookupByDomain($$)
+{
+    my ($class, $domain) = @_;
+    my @result = ();
+
+    if ($domain !~ /^[-\w\.]+$/) {
+	return undef;
+    }
+    my $query_result =
+	DBQueryWarn("select urn from apt_aggregates ".
+		    "where urn like 'urn:publicid:IDN+${domain}+%'");
+    return undef
+	if (!$query_result);
+    return undef
+	if (!$query_result->numrows);
+
+    my ($aggregate_urn) = $query_result->fetchrow_array();
+    return Lookup($class, $aggregate_urn);
+}
+
 # _Always_ make sure that this 1 is at the end of the file...
 1;

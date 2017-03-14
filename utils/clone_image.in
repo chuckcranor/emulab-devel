@@ -86,7 +86,6 @@ my $NEWIMAGEEZ   = "$TB/bin/newimageid_ez";
 my $DOPROVENANCE = @IMAGEPROVENANCE@;
 my $DOIMAGEDIRS  = @IMAGEDIRECTORIES@;
 my $doprovenance = $DOPROVENANCE;
-my $doimagedirs  = $DOIMAGEDIRS;
 
 #
 # Untaint the path
@@ -250,15 +249,6 @@ if ($DOPROVENANCE) {
     }
 }
 
-# See if enabled. 
-if ($DOIMAGEDIRS) {
-    # But allow feature override.
-    if (EmulabFeatures->Lookup("ImageDirectories")) {
-	$doimagedirs =
-	    EmulabFeatures->FeatureEnabled("ImageDirectories", undef, $group);
-    }
-}
-
 #
 # The simple case is that the descriptor already exists. So it is just
 # a simple snapshot to the image file. 
@@ -371,16 +361,16 @@ if (defined($image)) {
 	    # officially "released". We *can* use this version of the image
 	    # by explicitly using its version number, before it is released. 
 	    #
-	    if ($image->path() =~ /^$TB/) {
-		my $path = $PROJROOT . "/" . $image->pid() . "/images/" .
-		    basename($image->path());
-		# Watch for directory in original path, since basename
-		# drops he trailing slash.
-		if ($image->path() =~ /^\/$/) {
-		    $path .= "/";
+	    if ($image->IsSystemImage()) {
+		my $path;
+		if ($image->IsDirPath()) {
+		    $path = $image->SaveDir();
+		}
+		else {
+		    $path = $image->SaveDir() . basename($image->path());
 		}
 		if ($image->Update({"path" => $path})) {
-		    $image->DeleteVersion();
+		    $image->PurgeVersion();
 		    fatal("Could not update path!");
 		}
 	    }
@@ -427,7 +417,7 @@ if (defined($image)) {
     
     my $output = emutil::ExecQuiet("$CREATEIMAGE $opts $imagename $node_id");
     if ($?) {
-	$image->DeleteVersion()
+	$image->PurgeVersion()
 	    if ($needdelete);
 	print STDERR $output;
 	fatal("Failed to create image");
@@ -476,7 +466,7 @@ if (Image->LookupByName($imagename) && !$this_user->IsAdmin()) {
 my $path = ($experiment->pid() eq $experiment->gid() || $global ?
 	    "$PROJROOT/$pid/images/" :
 	    "$GROUPROOT/$pid/$gid/images/");
-if ($doimagedirs) {
+if ($DOIMAGEDIRS) {
     $path .= "${imagename}/";
 }
 else {

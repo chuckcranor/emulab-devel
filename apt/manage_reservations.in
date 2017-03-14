@@ -39,6 +39,7 @@ sub usage()
     print("Usage: manage_reservations [-a <urn>] delete pid idx\n");
     print("Usage: manage_reservations [-a <urn>] approve idx\n");
     print("Usage: manage_reservations [-a <urn>] systeminfo\n");
+    print("Usage: manage_reservations [-a <urn>] prediction\n");
     exit(-1);
 }
 my $optlist     = "dt:a:";
@@ -93,6 +94,7 @@ sub DoList();
 sub DoDelete();
 sub DoApprove();
 sub DoSystemInfo();
+sub DoPrediction();
 sub readfile($);
 
 #
@@ -153,6 +155,9 @@ elsif ($action eq "approve") {
 }
 elsif ($action eq "systeminfo") {
     DoSystemInfo();
+}
+elsif ($action eq "prediction") {
+    DoPrediction();
 }
 else {
     usage();
@@ -272,8 +277,11 @@ sub DoReserve()
 	APT_Geni::PortalRPC($authority, $context, "Reserve", \%rpcargs);
     if (GeniResponse::IsError($response)) {
 	#
-	# All errors are fatal.
+	# Watch for a refused error, we want to tell the user that.
 	#
+	if ($response->code() == GENIRESPONSE_REFUSED) {
+	    UserError($response->output());
+	}
 	fatal($response->output());
     }
     print Dumper($response);
@@ -403,9 +411,10 @@ sub DoList()
     foreach my $details (values(%$list)) {
 	my $userhrn  = GeniHRN->new($details->{'user'});
 	my $geniuser = GeniUser->Lookup($details->{'user'}, 1);
-	if (defined(($geniuser))) {
+	if (defined($geniuser) && $geniuser->IsLocal()) {
+	    print Dumper($geniuser);
 	    $details->{'uid'}     = $geniuser->uid();
-	    $details->{'uid_idx'} = $geniuser->uid_idx();
+	    $details->{'uid_idx'} = $geniuser->idx();
 	}
 	else {
 	    $details->{'uid'}     = $userhrn->id();
@@ -441,6 +450,8 @@ sub DoList()
 
 #
 # Delete a reservation.
+#
+# This is not doing proper permission checks or credentials. Need to fix.
 #
 sub DoDelete()
 {
@@ -608,6 +619,162 @@ sub DoSystemInfo()
 	# kill things cleanly later.
 	#
 	$errmsg = "Internal error get reservation info";
+	goto bad;
+    }
+    #
+    # Check the exit codes, create return structure for the web interface.
+    #
+    my $blob = {};
+    
+    foreach my $agg (@agglist) {
+	my $code  = shift(@return_codes);
+	my $auth  = $agg->{'authority'};
+	my $wtask = $agg->{'webtask'};
+
+	$wtask->Refresh();
+
+	if ($code) {
+	    $errmsg  = "$auth: " . $wtask->output();
+	    goto bad;
+	}
+	$blob->{$auth->urn()} = $wtask->value();
+    }
+    if (defined($webtask)) {
+	$webtask->value($blob);
+	$webtask->Exited(0);
+    }
+    else {
+	print Dumper($blob);
+    }
+    foreach my $temptask (@webtasks) {
+	$temptask->Delete();
+    }
+    exit(0);
+
+  bad:
+    foreach my $temptask (@webtasks) {
+	$temptask->Delete();
+    }
+    fatal($errmsg);
+}
+
+#
+# Get the prediction data.
+#
+sub DoPrediction()
+{
+    my $optlist = "p:";
+    my $portal;
+    my $errmsg;
+    my @aggregates = ($authority);
+    my @webtasks   = ();
+    my @projlist   = ();
+
+    my %options = ();
+    if (! getopts($optlist, \%options)) {
+	usage();
+    }
+    if (defined($options{"p"})) {
+	$portal = $options{"p"}
+    }
+    # Argument is a list of projects, else we generate one for user.
+    if (@ARGV) {
+	foreach my $pid (@ARGV) {
+	    my $project = Project->Lookup($pid);
+	    if (!defined($project)) {
+		fatal("No such project: $pid");
+	    }
+	    push(@projlist, $project->urn());
+	}
+    }
+    else {
+	my @plist;
+	if ($this_user->ProjectMembershipList(\@plist)) {
+	    fatal("Could not get project membership list");
+	}
+	foreach my $project (@plist) {
+	    if ($project->AccessCheck($this_user, TB_PROJECT_CREATEEXPT())) {
+		push(@projlist, $project->urn());
+	    }
+	}
+	if (!@projlist) {
+	    fatal("No projects to create experiments in");
+	}
+    }
+
+    #
+    # Portal argument says to ignore aggregate argument, and contact
+    # all aggregates listed for the portal. 
+    #
+    if (defined($portal)) {
+	@aggregates = ();
+	
+	my @list = APT_Aggregate->LookupForPortal($portal);
+	foreach my $aggregate (@list) {
+	    my $authority = APT_Geni::GetAuthority($aggregate->urn());
+	    if (!defined($authority)) {
+		$errmsg = "Cannot lookup authority for $aggregate";
+		goto bad;
+	    }
+	    push(@aggregates, $authority);
+	}
+    }
+
+    my $coderef = sub {
+	my ($blob) = @_;
+	my $authority = $blob->{"authority"};
+	my $webtask   = $blob->{"webtask"};
+	
+	# PortalRPC will use the root context in this case, which is
+	# essentially saying the caller is an admin. But thats okay
+	# for this call, it is just informational.
+	my $response =
+	    APT_Geni::PortalRPC($authority, undef,
+				"ReservationPrediction",
+				{"projlist" => \@projlist});
+	
+	if (GeniResponse::IsError($response)) {
+	    #
+	    # All errors are fatal.
+	    #
+	    if (defined($webtask)) {
+		$webtask->output($response->output());
+		$webtask->Exited(-1);
+	    }
+	    else {
+		print STDERR "$authority: " . $response->output() . "\n";
+	    }
+	    return -1;
+	}
+	if (defined($webtask)) {
+	    $webtask->value($response->value());
+	    $webtask->Exited(0);
+	}
+	return 0;
+    };
+    #
+    # Multiple aggregates, we use parrun. We need a webtask for each
+    # authority to communicate the results back to the parent, who
+    # then combines them all.
+    #
+    my @return_codes = ();
+    my @agglist = ();
+
+    foreach my $auth (@aggregates) {
+	my $temptask = WebTask->CreateAnonymous();
+	# For delete below.
+	push(@webtasks, $temptask);
+	push(@agglist, {"authority" => $auth,
+			"webtask"   => $temptask});
+    }
+    if (ParRun({"maxwaittime" => 60,
+		"maxchildren" => scalar(@agglist)},
+	    \@return_codes, $coderef, @agglist)) {
+	#
+	# The parent caught a signal. Leave things intact so that we can
+	# kill things cleanly later.
+	#
+	$errmsg = "Internal error get reservation prediction info";
 	goto bad;
     }
     #

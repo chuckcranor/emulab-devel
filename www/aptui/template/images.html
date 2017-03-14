@@ -77,6 +77,7 @@
 		<th>Name</th>
 		<th>Creator</th>
 		<th>Project</th>
+		<th>Created</th>
 		<th class="sorter-false">Description</th>
 		<th class="sorter-false">URN</th>
 		<th class="hidden-column">Filters</th>
@@ -85,7 +86,7 @@
 	    <tbody>
 	      <% var creator_re = /(creator|project)/; %>
 	      <% var project_re = /project/; %>
-	      <% _.each(images, function(value, imageid) { %>
+	      <% _.each(images, function(value, index) { %>
 		<tr>
 		  <% if (isadmin) { %>
 		    <td><a href="<%- value.url %>"><%= value.imagename %></a></td>
@@ -104,6 +105,7 @@
 		  <% } else { %>
 		     <td><%= value.pid %></td>
                   <% } %>
+		  <td class="format-date"><%- value.created %></td>
 		  <td><%- value.description %></td>
 		  <td align="center">
 		    <a href="#" 

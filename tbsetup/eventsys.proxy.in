@@ -1,7 +1,7 @@
 #!/usr/bin/perl -w
 
 #
-# Copyright (c) 2000-2011 University of Utah and the Flux Group.
+# Copyright (c) 2000-2017 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -178,6 +178,13 @@ if ($action eq "stop" || $action eq "replay") {
 		die("*** $0:\n".
 		    "Failed to stop event system for $pid/$eid! - $! $epid\n");
 	    }
+
+	    # Wait a bit and see if the process still exists. Warn if so.
+	    sleep(2);
+	    if (kill(0, $epid) || ! $!{ESRCH}) {
+		print STDERR
+		    "WARNING: event scheduler (pid $epid) did not die!\n";
+	    }
 	}
     }
     
@@ -285,7 +292,9 @@ sub handler ($) {
     
     $SIG{TERM} = 'IGNORE';
     
-    print "Caught a TERM; killing the scheduler and agent\n";
+    my $spid = defined($schedpid) ? $schedpid : "";
+    my $apid = defined($agentpid) ? $agentpid : "";
+    print "Caught a TERM; killing the scheduler ($spid) and agent ($apid)\n";
     
     kill('TERM', $schedpid)
 	if (defined($schedpid));

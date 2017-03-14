@@ -38,10 +38,11 @@ sub usage()
 	  "       -r     Rename the disk image file(s) instead (default)\n".
 	  "       -n     Impotent mode, show what would be done.\n".
 	  "       -f     Force deletion of system image\n".
+	  "       -V     Delete only the version\n".
 	  "       -F     Force deletion of global system image\n");
     exit(-1);
 }
-my $optlist     = "dFprnf";
+my $optlist     = "dFprnfV";
 my $debug       = 0;
 my $purge       = 0;
 my $rename      = 1;
@@ -49,6 +50,7 @@ my $force       = 0;
 my $FORCE       = 0;
 my $impotent    = 0;
 my $needunlock  = 0;
+my $versonly    = 0;
 
 #
 # Configure variables
@@ -57,6 +59,7 @@ my $TB             = "@prefix@";
 my $PROJROOT       = "@PROJROOT_DIR@";
 my $TBOPS          = "@TBOPSEMAIL@";
 my $friskiller     = "$TB/sbin/frisbeehelper";
+my $PGENISUPPORT   = @PROTOGENI_SUPPORT@;
 my $WITHPROVENANCE = @IMAGEPROVENANCE@;
 my $doprovenance   = 0;
 
@@ -88,7 +91,13 @@ use EmulabFeatures;
 use libEmulab;
 use libtestbed;
 use User;
-use Image;
+use OSImage;
+if ($PGENISUPPORT) {
+    use vars qw($GENI_DBNAME);
+    $GENI_DBNAME = "geni-cm";
+    require GeniHRN;
+    require GeniUser;
+}
 
 # Protos
 sub fatal($);
@@ -114,6 +123,9 @@ if (defined($options{"r"})) {
 if (defined($options{"n"})) {
     $impotent = 1;
 }
+if (defined($options{"V"})) {
+    $versonly = 1;
+}
 if (defined($options{"F"})) {
     $FORCE = 1;
 }
@@ -123,7 +135,7 @@ if (defined($options{"f"})) {
 usage()
     if (@ARGV != 1);
 usage()
-    if ($purge && $rename);
+    if (! ($purge || $rename));
 
 my $imageid = shift(@ARGV);
 
@@ -134,7 +146,7 @@ my $this_user = User->ThisUser();
 if (! defined($this_user)) {
     fatal("You ($UID) do not exist!");
 }
-my $image = Image->Lookup($imageid);
+my $image = OSImage->Lookup($imageid);
 if (!defined($image)) {
     fatal("Image does not exist in the DB!");
 }
@@ -159,6 +171,36 @@ if (!$impotent) {
 $imageid      = $image->imageid();
 my $imagename = $image->imagename();
 my $imagepid  = $image->pid();
+my $imagevers = $image->version();
+
+# Sanity check; cannot delete a deleted version.
+if ($versonly && defined($image->deleted())) {
+    fatal("Image version is already deleted");
+}
+
+#
+# We want to send email to the creator. Also, watch for an image created
+# on the Geni path; the creator urn tells us who the creator is, rather
+# then who is calling the script. When PROTOGENI_LOCALUSER=0 there is no
+# local creator, but when set there is a local shadow user we can use.
+#
+my $notifyuser = $image->GetCreator();
+if (!defined($notifyuser)) {
+    $notifyuser = $this_user;
+}
+if (defined($image->creator_urn())) {
+    my $geniuser = GeniUser->Lookup($image->creator_urn(), 1);
+    if (defined($geniuser) && $geniuser->IsLocal()) {
+	$notifyuser = $geniuser->emulab_user();
+    }
+    else {
+	# This is okay, it is just for email below.
+	$notifyuser = $geniuser;
+    }
+}
+if ($debug) {
+    print STDERR "Will send email to $notifyuser\n";
+}
 
 #
 # Need root to delete the image file later.
@@ -169,9 +211,11 @@ $EUID = $UID;
 # Be sure to kill off running frisbee. If a node is trying to load that
 # image, well tough. 
 #
-system("$friskiller -k $imageid");
-if ($?) {
-    fatal("Could not kill running frisbee for $imageid!");
+if (!$impotent) {
+    system("$friskiller -k $imageid");
+    if ($?) {
+	fatal("Could not kill running frisbee for $imageid!");
+    }
 }
 
 #
@@ -198,17 +242,29 @@ if ($purge || $rename) {
     
     #
     # When doing image provenance, we have to deal with all versions
-    # of the image. 
+    # of the image. This will not return deleted versions.
     #
     my @images = ();
     if ($image->AllVersions(\@images)) {
 	fatal("Could not get list of image (versions)");
     }
+    #
+    # When deleting just a single version, if this is the last or only
+    # version, then turn off version only. Makes no sense to have a
+    # descriptor with no non-deleted versions.
+    #
+    if ($versonly && scalar(@images) == 1) {
+	$versonly = 0;
+    }
+    if ($versonly) {
+	@images = ($image);
+    }
 
     #
     # If the path is a directory, we can just do a rename on it.
+    # But not if deleting just a single image version.
     #
-    if ($isdirpath) {
+    if ($isdirpath && !$versonly) {
 	my $dirname = $image->path();
 	
 	if ($purge) {
@@ -278,13 +334,17 @@ if ($purge || $rename) {
 	    @torename = ();
 	}
 	# Throw away the slot if it never came ready or released.
-	if (!($imageversion->ready() && $imageversion->released())) {
+	# Only if the highest numbered version, no holes please.
+	if ($imageversion->IsNewest() &&
+	    !($imageversion->ready() && $imageversion->released())) {
 	    if ($impotent) {
 		my $vers = $imageversion->version();
-		print "Would kill version $vers that never came ready\n";
-		next;
+		print "Would kill version $vers DB state since it was ".
+		    "not ready/released\n";
 	    }
-	    $imageversion->DeleteVersion();
+	    else {
+		$imageversion->PurgeVersion();
+	    }
 	}
 
 	$EUID = 0;
@@ -305,7 +365,10 @@ if ($purge || $rename) {
 	$EUID = $UID;
 	
 	#
-	# Skip this part if we did a directory rename above.
+	# Skip renames for directory based images. 
+	# Note that when deleting a single version in an image directory,
+	# we do not want to do a rename. That would be confusing if some
+	# versions were deleted and then the entire image deleted later.
 	#
 	next
 	    if ($isdirpath);
@@ -320,8 +383,11 @@ if ($purge || $rename) {
 	    my $dirname = dirname($imageversion->path()) .
 		"/" . $image->imagename() . "," . $image->imageid();
 
-	    if (! -e $dirname && !$impotent) {
-		if (! mkdir("$dirname", 0775)) {
+	    if (! -e $dirname) {
+		if ($impotent) {
+		    print "Would mkdir($dirname)\n";
+		}
+		elsif (! mkdir("$dirname", 0775)) {
 		    fatal("Could not mkdir $dirname");
 		}
 	    }
@@ -353,18 +419,36 @@ exit(0)
 #
 # If using the image tracker, have to notify the IMS.
 #
-if (GetSiteVar("protogeni/use_imagetracker")) {
-    $image->SchedIMSDeletion() == 0
-	or fatal("Could not schedule IMS deletion");
+if (!$versonly) {
+    # Do this before delete().
+    if (GetSiteVar("protogeni/use_imagetracker")) {
+	$image->SchedIMSDeletion(1) == 0
+	    or fatal("Could not schedule IMS deletion");
+    }
+    if ($image->Delete() != 0) {
+	fatal("Could not delete image!");
+    }
+    $notifyuser->SendEmail("delete_image: Image has been deleted",
+			   "Image $imagepid,$imagename ($imageid) has ".
+			   "been deleted by $this_user\n");
 }
-if ($image->Delete() != 0) {
-    fatal("Could not delete image!");
+else {
+    # Do this before delete().
+    if (GetSiteVar("protogeni/use_imagetracker")) {
+	$image->SchedIMSDeletion(0) == 0
+	    or fatal("Could not schedule IMS deletion");
+    }
+    if ($image->DeleteVersion() != 0) {
+	fatal("Could not delete image version!");
+    }
+    # I know, we are unlocking something we just deleted. Its okay, relax.
+    $image->Unlock();
+    $notifyuser->SendEmail("delete_image: Image Version has been deleted",
+			   "Version $imagevers of image $imagepid,$imagename".
+			   "($imageid)\nhas been deleted by $this_user\n");
 }
-$this_user->SendEmail("delete_image: Image has been deleted",
-		      "Image $imagepid,$imagename ($imageid) has ".
-		      "been deleted by $this_user\n");
 exit(0);
-    
+
 sub fatal($)
 {
     my ($mesg) = @_;

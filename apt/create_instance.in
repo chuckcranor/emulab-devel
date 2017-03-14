@@ -32,6 +32,7 @@ use English;
 use Getopt::Long;
 use XML::Simple;
 use File::Temp qw(tempfile :mktemp tmpnam :POSIX);
+use Date::Parse;
 use Data::Dumper;
 use Cwd qw(realpath);
 
@@ -637,6 +638,13 @@ if ($localuser) {
 	if (GetSiteVar("protogeni/use_imagetracker") &&	
 	    EmulabFeatures->FeatureEnabled("APT_UseImageTracker",
 					   $emulab_user, $project));
+
+    # Hack for Kobus' class, generalize someday.
+    if ($pid eq "CS4480-2017") {
+	my $termination = str2time("2017-05-02");
+	# convert to hours till then
+	$duration = int(($termination - time()) / 3600);
+    }
 }
 elsif (!$localuser) {
     if (defined($sshkey)) {    #
@@ -1306,6 +1314,22 @@ sub CreateSliver($)
 	$aggobj->SetStatus("failed");
 	print STDERR "CreateSliver $urn: No manifest returned\n";
 	return -1;
+    }
+    #
+    # This needs to be done differently; passing an extra credential
+    # and setting the valid_until in the rspec. 
+    #
+    if ($duration > $maxduration) {
+	print "Forcing correct slice expiration\n";
+	$response = $aggobj->Extend($slice->ExpirationGMT(), $this_user);
+	if (!defined($response) ||
+	    $response->code() != GENIRESPONSE_SUCCESS) {
+	    $aggobj->SetStatus("failed");
+	    $webtask->output("Renew failed on $urn");
+	    $webtask->Exited(-1);
+	    print STDERR "Renew failed on $urn\n";
+	    return -1;
+	}
     }
     $aggobj->SetStatus("provisioned");
     $aggobj->SetManifest($manifest);

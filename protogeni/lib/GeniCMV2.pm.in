@@ -113,6 +113,7 @@ my $SHAREVLAN      = "$TB/sbin/sharevlan";
 my $PANIC          = "$TB/sbin/panic";
 my $LINKTEST       = "$TB/sbin/linktest_control";
 my $XMLLINT	   = "/usr/local/bin/xmllint";
+my $IMAGEINFO      = "$TB/sbin/imageinfo";
 my $PRERENDER      = "$TB/libexec/vis/prerender";
 my $IMPORTER       = "$TB/sbin/image_import";
 my $POSTIMAGEDATA  = "$TB/sbin/protogeni/postimagedata";
@@ -1755,8 +1756,14 @@ sub AddNodes($)
     #  {"node45" : {"diskimage" : "urn...",
     #               "startup"   : "/bin/echo",
     #               "tarballs"  : ["tarball1", "tarball2", ...],
-    #               "lans"      : ["lan1", "lan2", ...]
+    #               "lans"      : ["lan1", "lan2", ...],
+    #               "hardware_type" : "type",
     #               "node"      : "pc189"}}
+    #
+    # "tarballs" may also be a list of ["tarball","installpath"] tuples.
+    # "lans" may also be a a list of hashes, where each hash looks like
+    # {'name':'lan-1','address':'10.0.0.1','netmask':'255.0.0.0','type':'ipv4'}
+    # or similar.
     #
     if (ref($nodelist) ne "HASH") {
 	return GeniResponse->MalformedArgsResponse("nodes is not a hash");
@@ -1835,10 +1842,19 @@ sub AddNodes($)
 						       "is not a list");
 	}
 	foreach my $lan (@{ $blob->{'lans'} }) {
-	    if (!exists($ifacestoaddtolans{$lan})) {
-		$ifacestoaddtolans{$lan} = [];
+	    if (ref($lan) eq 'HASH') {
+		my $lanname = $lan->{'name'};
+		if (!exists($ifacestoaddtolans{$lanname})) {
+		    $ifacestoaddtolans{$lanname} = [];
+		}
+		push(@{ $ifacestoaddtolans{$lanname} }, "$nodeid:$lanname");
 	    }
-	    push(@{ $ifacestoaddtolans{$lan} }, "$nodeid:$lan");
+	    else {
+		if (!exists($ifacestoaddtolans{$lan})) {
+		    $ifacestoaddtolans{$lan} = [];
+		}
+		push(@{ $ifacestoaddtolans{$lan} }, "$nodeid:$lan");
+	    }
 	}
     }
     # But make sure all these lans exist.
@@ -1886,6 +1902,10 @@ sub AddNodes($)
 	    $xml .= "    <disk_image name='$urn'/>\n";
 	}
 	$xml .= "  </sliver_type>\n";
+	if (exists($blob->{'hardware_type'})) {
+	    my $hwtype = $blob->{'hardware_type'};
+	    $xml .= "  <hardware_type name='$hwtype'/>\n";
+	}
 	if (exists($blob->{'tarballs'}) || exists($blob->{'startup'})) {
 	    $xml .= "  <services>\n";
 
@@ -1895,19 +1915,66 @@ sub AddNodes($)
 							   "is not a list");
 	    }
 	    foreach my $tarball (@{ $blob->{'tarballs'} }) {
-		$xml .= "      <install url='$tarball' install_path='/' />\n";
+		if (ref($tarball) eq "ARRAY") {
+		    if (@$tarball == 2) {
+			$xml .= "      <install url='".@{$tarball}[0]."'".
+			    " install_path='".@{$tarball}[1]."' />\n";
+		    }
+		    else {
+			my $resp = "tarballs (for $nodeid) malformed; tarballs".
+			    " is a list of tarballs, or a list of [ tarball,".
+			    " install-path ] tuples!";
+			return GeniResponse->MalformedArgsResponse($resp);
+		    }
+		}
+		else {
+		    $xml .= "      <install url='$tarball' install_path='/' />\n";
+		}
 	    }
 	    if (exists($blob->{'startup'})) {
 		my $command = $blob->{'startup'};
 		
-		$xml .= "      <execute shell='/bin/bash' ".
-		    "command='$command' />\n";
+		if (ref($command) eq "ARRAY") {
+		    if (@$command == 2) {
+			$xml .= "      <execute shell='".@{$command}[1]."'".
+			    " command='".@{$command}[0]."' />\n";
+		    }
+		    else {
+			my $resp = "startup commands (for $nodeid) malformed;".
+			    " startup commands is a list of startup commands,".
+			    " or a list of [ command, shell ] tuples!";
+			return GeniResponse->MalformedArgsResponse($resp);
+		    }
+		}
+		else {
+		    $xml .= "      <execute shell='/bin/bash' ".
+			"command='$command' />\n";
+		}
 	    }
 	    $xml .= "  </services>\n";
 	}
 	if (exists($blob->{'lans'})) {
 	    foreach my $lan (@{ $blob->{'lans'} }) {
-		$xml .= "    <interface client_id='$nodeid:$lan' />\n";
+		if (ref($lan) eq 'HASH') {
+		    my $lanname = $lan->{'name'};
+		    $xml .= "    <interface client_id='$nodeid:$lanname'";
+		    if (exists($lan->{'address'})) {
+			$xml .= " address='" . $lan->{'address'} . "'";
+		    }
+		    if (exists($lan->{'netmask'})) {
+			$xml .= " netmask='" . $lan->{'netmask'} . "'";
+		    }
+		    if (exists($lan->{'type'})) {
+			$xml .= " type='" . $lan->{'type'} . "'";
+		    }
+		    else {
+			$xml .= " type='ipv4'";
+		    }
+		    $xml .= " />\n";
+		}
+		else {
+		    $xml .= "    <interface client_id='$nodeid:$lan' />\n";
+		}
 	    }
 	}
 	$xml .= "</node>";
@@ -3020,6 +3087,7 @@ sub CreateImage($)
     my $credentials  = $argref->{'credentials'};
     my $imagename    = $argref->{'imagename'};
     my $sliver_urn   = $argref->{'sliver_urn'};
+    my $no_versions  = 0;
     my $wholedisk    = 0;
     my $update_prepare = 0;
     my ($bsname,$blockstore);
@@ -3039,6 +3107,8 @@ sub CreateImage($)
     if (! ($imagename =~ /^[-\w\.\+]*$/)) {
 	return GeniResponse->MalformedArgsResponse("Improper name argument");
     }
+    $no_versions = 1
+	if (exists($argref->{'no_versions'}) && $argref->{'no_versions'});
     $wholedisk = 1
 	if (exists($argref->{'wholedisk'}) && $argref->{'wholedisk'});
     $update_prepare = 1
@@ -3490,9 +3560,10 @@ sub DeleteImage($)
     my ($argref) = @_;
     my $image_urn    = $argref->{'image_urn'};
     my $credentials  = $argref->{'credentials'};
+    my $impotent     = $argref->{'impotent'};
     my $overide_urn  = (exists($argref->{'creator_urn'}) ?
 			$argref->{'creator_urn'} : undef);
-    my ($imagename,$imagepid);
+    my ($imagename,$imagepid,$imagevers);
 
     require OSImage;
     
@@ -3516,25 +3587,21 @@ sub DeleteImage($)
     return $authority
 	if (GeniResponse::IsResponse($authority));
 
-    my ($auth,undef,$id) = GeniHRN::Parse($image_urn);
-    return GeniResponse->MalformedArgsResponse("Malformed URN")
-	if (!defined($id));
+    my ($auth, $ospid, $os, $vers) = GeniHRN::ParseImage($image_urn);
+    return GeniResponse->MalformedArgsResponse("Malformed URN: $image_urn")
+	if (!defined($os));
     
-    if ($id =~ m{(.*)//(.*)}) {
-	$imagepid  = $1;
-	$imagename = $2;
-    }
-    else {
-	return GeniResponse->MalformedArgsResponse("Could not parse $id");
-    }
+    $imagepid  = $ospid;
+    $imagename = $os;
+    $imagevers = $vers;
 
     #
     # Make sure we can get the image descriptor.
     #
-    my $image = OSImage->Lookup($imagepid, $imagename);
+    my $image = OSImage->Lookup($imagepid, $imagename, $imagevers);
     if (!defined($image)) {
 	return GeniResponse->Create(GENIRESPONSE_SEARCHFAILED, undef,
-				    "No such image");
+				    "No such image: $image_urn");
     }
     my $imageid     = $image->imageid();
     my $creator_urn = $image->creator_urn();
@@ -3565,7 +3632,18 @@ sub DeleteImage($)
 		    "Not your image; please specify original creator urn")
 	    if (!defined($overide_urn) || $overide_urn ne $creator_urn);
     }
-    my $output = GeniUtil::ExecQuiet("$DELETEIMAGE -p $imageid"); 
+
+    if (!defined(GeniCM::FlipToUser($image, $user))) {
+	return GeniResponse->Create(GENIRESPONSE_ERROR, undef,
+				    "FlipToUser failed");
+    }
+    
+    # Delete only the version if directed to.
+    my $opt = (defined($imagevers) ? "-V" : "");
+    $opt   .= (defined($impotent) && $impotent ? " -n" : "");
+    $opt   .= " $imageid";
+    $opt   .= (defined($imagevers) ? ":$imagevers" : "");
+    my $output = GeniUtil::ExecQuiet("$DELETEIMAGE -p $opt");
     print STDERR $output;
     if ($?) {
 	print STDERR $output;
@@ -3816,6 +3894,7 @@ sub ListImages($)
     my ($argref) = @_;
     my $user_urn     = $argref->{'user_urn'};
     my $credentials  = $argref->{'credentials'};
+    my @images       = ();
     require OSImage;
     
     if (! defined($credentials)) {
@@ -3850,22 +3929,60 @@ sub ListImages($)
 	return GeniResponse->Create(GENIRESPONSE_FORBIDDEN, undef,
 				    "No permission to list images")
 	    if ($userauth ne $thisauth && !$isadmin);
+
+	@images = OSImage->ListForURN($user_urn);
+	return GeniResponse->Create(GENIRESPONSE_SUCCESS, [])
+	    if (!@images);
     }
     else {
 	$user_urn = $user->urn();
+	@images = OSImage->ListForURN($user_urn);
+	if (!@images) {
+	    $user_urn = $credential->owner_urn();
+	    @images = OSImage->ListForURN($user_urn);
+	    return GeniResponse->Create(GENIRESPONSE_SUCCESS, [])
+		if (!@images);
+	}
     }
-    my @images = OSImage->ListForURN($user_urn);
-    return GeniResponse->Create(GENIRESPONSE_SUCCESS, [])
-	if (!@images);
-
     my @result = ();
     foreach my $image (@images) {
+	# Do not include imported images in this list, user cannot delete them.
+	# Need to think about this.
+	next
+	    if (!$image->IsLocal());
+	
 	my $image_urn = GeniHRN::Generate($OURDOMAIN, "image",
 				  $image->pid() . "//" . $image->imagename());
 	my $image_url = "$TBBASE/image_metadata.php?uuid=" . $image->uuid();
+
+	my $blob = {"urn"     => $image_urn . ":" . $image->version(),
+		    "url"     => $image_url,
+		    "created" => emutil::TBDateStringGMT($image->created()),
+		    "updated" => emutil::TBDateStringGMT($image->updated()),
+	};
 	
-	push(@result, {"urn" => $image_urn,
-		       "url" => $image_url});
+	#
+	# Get the file size on disk.
+	#
+	if ($image->size()) {
+	    $blob->{"filesize"} = $image->size() / (1024 * 1024) . "MB";
+	}
+	else {
+	    my $iname = $image->versname();
+	    my $isize = `$IMAGEINFO -s -U m $iname`;
+	    if (!$?) {
+		chomp($isize);
+		$blob->{"filesize"} = "${isize}MB";
+	    }
+	}
+	#
+	# Add the project URN, that the caller can map to a local project.
+	#
+	my $project = $image->GetProject();
+	if (defined($project)) {
+	    $blob->{'project_urn'} = $project->nonlocalurn();
+	}
+	push(@result, $blob);
     }
     print STDERR "Image for $user_urn:\n";
     print STDERR Dumper(\@result);

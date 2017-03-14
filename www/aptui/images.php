@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2016 University of Utah and the Flux Group.
+# Copyright (c) 2000-2017 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -151,6 +151,7 @@ while ($row = mysql_fetch_array($query_result)) {
         $blob["imageid"]     = $imageid;
         $blob["description"] = $row["description"];
         $blob["imagename"]   = $row["imagename"];
+        $blob["created"]     = DateStringGMT($row["created"]);
         $blob["pid"]         = $row["pid"];
         $blob["pid_idx"]     = $row["pid_idx"];
         $blob["global"]      = $row["global"];
@@ -162,7 +163,7 @@ while ($row = mysql_fetch_array($query_result)) {
                              CreateURL("showimageid",
                                        URLARG_IMAGEID, $imageid);
 
-        $images[$imageid] = $blob;
+        $images[] = $blob;
 }
 echo "<script type='text/plain' id='images-json'>\n";
 echo htmlentities(json_encode($images)) . "\n";

@@ -74,6 +74,7 @@ my $GENIUSER      = "geniuser";
 
 # Cache of instances to avoid regenerating them.
 my %instances  = ();
+BEGIN { use emutil; emutil::AddCache(\%instances); }
 my $debug      = 0;
 
 # Debugging
@@ -330,8 +331,10 @@ sub Stringify($)
     my ($self) = @_;
     
     my $uuid  = $self->uuid();
+    my $pid   = $self->pid();
+    my $name  = $self->name();
 
-    return "[APT_Instance: $uuid]";
+    return "[APT_Instance: $pid,$name]";
 }
 
 sub LookupBySlice($$)
@@ -1547,6 +1550,9 @@ sub UpdateWebStatus($$)
 	$current = {};
     }
 
+#    print Dumper($hash);
+#    print Dumper($current);
+
     #
     # This will need to change; we can get updates from polling or
     # from the event stream. The events are processed out of band from
@@ -1583,6 +1589,7 @@ sub UpdateWebStatus($$)
 	    $current->{$node_id} = $details;
 	}
     }
+#    print Dumper($current);
     $self->webtask()->sliverstatus($current);
     DBQueryWarn("unlock tables");
     return $current;
@@ -1629,7 +1636,7 @@ sub UpdateFrisbeeStatus($$)
     }
     $self->webtask()->sliverstatus($current);
     DBQueryWarn("unlock tables");
-    print STDERR Dumper($current);
+#    print STDERR Dumper($current);
     return $current;
 }
 
@@ -1649,6 +1656,9 @@ sub Terminate($)
     return undef
 	if (! (defined($geniuser) && defined($authority) &&
 	       defined($slice) && defined($context)));
+
+    # Bump default timeout, this can take a while for a response
+    Genixmlrpc->SetTimeout(900);
 
     # We might change this below.
     my $cmurl = $authority->url();
@@ -2672,8 +2682,12 @@ sub WaitForSliver($)
 	}
 	elsif ($repblob->{'status'} eq "failed") {
 	    $failed = 1;
+	    my $msg = $repblob->{'error'}
+	        if (defined($repblob->{'error'}) && $repblob->{'error'} ne "");
 	    print STDERR "*** $urn failed\n";
-	    $webtask->output("Experiment setup on $urn failed");
+	    print STDERR "    " .  $repblob->{'error'} . "\n" if ($msg);
+	    $webtask->output("Experiment setup on $urn failed" .
+			     ($msg ? ": $msg" : "."));
 	    last;
 	}
 	elsif ($aggobj->instance()->IsCanceled()) {
@@ -2686,7 +2700,11 @@ sub WaitForSliver($)
     }
     if ($failed || !$ready) {
 	$aggobj->SetStatus("failed");
-	if (!$ready) {
+	if ($failed) {
+	    # Output set above.
+	    $webtask->Exited(GENIRESPONSE_ERROR);
+	}
+	elsif (!$ready) {
 	    # XXX Need better handling for timeout.
 	    print STDERR "*** $urn timed out.\n";
 	    $webtask->output("Experiment setup on $urn timed out");

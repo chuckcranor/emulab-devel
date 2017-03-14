@@ -63,7 +63,7 @@ sub usage()
 	  "       -U      Do not modify updater_uid in DB\n".
 	  "       -H hash Use the provided hash rather than recalculating\n".
 	  "       -V str  Comma separated list of fields to validate/update\n".
-	  "               fields: 'hash', 'range', 'size', 'all', 'sig'; default is 'all'\n".
+	  "               fields: 'hash', 'range', 'size', 'perm', 'all', 'sig'; default is 'all'\n".
 	  "               NOTE: 'sig' is special as it is not a DB field and\n".
 	  "               thus is not included in the 'all' option.\n".
 	  "       -D      Validate/update the deleted status of image versions.\n".
@@ -92,6 +92,8 @@ my $userperm;
 my $newhash;
 my $accessfs   = $UID ? 0 : 1;
 my %imagedir   = ();
+my %piddirperms   = ();
+my %imagedirperms = ();
 
 my $warnonfixable = 0;
 
@@ -102,10 +104,14 @@ my $TB		= "@prefix@";
 my $SHA1	= "/sbin/sha1";
 my $IMAGEINFO	= "$TB/sbin/imageinfo";
 my $PROJROOT    = "@PROJROOT_DIR@";
+my $FSNODE      = "@FSNODE@";
 
 # XXX note: bin not sbin, /usr/testbed/sbin/imagehash is something 
 # entirely different!
 my $IMAGEHASH   = "$TB/bin/imagehash";
+
+# for efficient computation of hashes, we ssh to the FS node
+my $SSH		= "$TB/bin/sshtb -n -l root -host $FSNODE";
 
 # Protos
 sub checkdeadimages($);
@@ -119,6 +125,7 @@ sub removesigfile($$);
 sub havefullimage($);
 sub havedeltaimage($);
 sub fatal($);
+sub hashit($);
 
 #
 # Untaint the path
@@ -436,7 +443,7 @@ sub getallversions($)
 
     my $headvers = $image->version();
     my @iversions;
-    $image->AllVersions(\@iversions);
+    $image->AllVersions(\@iversions, 1);
 
     # Get the canonical name, sans version, for reporting.
     my $iname = $image->pid() . "/" . $image->imagename();
@@ -490,6 +497,7 @@ sub getallversions($)
     my $vers = 0;
     my $gotfull = 0;
     my $gotundeleted = 0;
+    my $gotdeleted = 0;
     my @nimages = ();
     @iversions = reverse @iversions;
     foreach my $imobj (@iversions) {
@@ -507,6 +515,10 @@ sub getallversions($)
 	$ready = $imobj->ready();
 	$released = $imobj->released();
 	my $deleted = ($imobj->deleted() ? 1 : 0);
+
+	if ($deleted) {
+	    $gotdeleted++;
+	}
 
 	#
 	# Head version should be:
@@ -581,6 +593,27 @@ sub getallversions($)
 	push @nimages, $fqname;
 	$vers++;
     }
+
+    #
+    # If all versions are deleted we can delete the entire image.
+    #
+    if ($dodeleted && $gotdeleted == int(@iversions)) {
+	if ($update) {
+	    print "$iname: all versions deleted, image can be deleted"
+		if (!$quiet);
+	    if ($image->Delete(0) == 0) {
+		@nimages = ();
+		print " [FIXED]\n"
+		    if (!$quiet);
+	    } else {
+		print " [FAILED]\n"
+		    if (!$quiet);
+	    }
+	} else {
+	    print STDERR "$iname: WARNING: all versions are deleted\n";
+	}
+    }
+    
     return @nimages;
 }
 
@@ -623,7 +656,12 @@ sub doimage($)
 
     print STDERR "Checking image '$pidimage' ...\n"
 	if ($debug);
-    my $image = OSImage->Lookup($pidimage);
+
+    # XXX OSImage->Lookup blows up on old multi-partition images
+    my $image = Image->Lookup($pidimage);
+    if ($image && $image->ezid()) {
+	$image = OSImage->Lookup($pidimage);
+    }
     if (!defined($image)) {
 	print STDERR "$pidimage: no such image\n";
 	return 1;
@@ -683,7 +721,7 @@ sub doimage($)
 	    $dpath = $image->DeltaImageFile();
 	}
 	# XXX $image->hash() returns a ref to the internal 'HASH' hash.
-	$hash = $image->field('hash');
+	$hash = $image->hash();
 	$dhash = $image->deltahash();
     } else {
 	$isdir = 0;
@@ -709,7 +747,7 @@ sub doimage($)
 	else {
 	    if ($image->HaveFullImage()) {
 		$path = $image->FullImageFile();
-		$hash = $image->field('hash');
+		$hash = $image->hash();
 	    } elsif ($image->HaveDeltaImage()) {
 		$dpath = $image->DeltaImageFile();
 		$dhash = $image->deltahash();
@@ -723,7 +761,7 @@ sub doimage($)
 	    #
 	    elsif ($accessfs && -e $image->FullImagePath()) {
 		$path = $image->FullImageFile();
-		$hash = $image->field('hash');
+		$hash = $image->hash();
 	    }
 	}
     }
@@ -815,7 +853,8 @@ sub doimage($)
     #
     # Here are the possibilities:
     #
-    # 1. Database image_versions.deleted in null:
+    # 0. If a path target exists but is zero length, remove it
+    # 1. Database image_versions.deleted is null:
     #    A. If one or both of the path targets exist, all is well
     #    B. Otherwise, version should be marked as deleted
     # 2. Database image_versions.deleted is not null:
@@ -836,6 +875,45 @@ sub doimage($)
 	#
 	my $epath = ($path && -e $path) ? 1 : 0;
 	my $edpath = ($dpath && -e $dpath) ? 1 : 0;
+
+	if ($epath) {
+	    my $fsize = stat($path)->size;
+	    if ($fsize == 0) {
+		print "$pidimage: zero-length full image file"
+		    if (!$quiet);
+		if ($update) {
+		    if (unlink($path)) {
+			$epath = 0;
+			print " [FIXED]"
+			    if (!$quiet);
+		    } else {
+			print " [ could not unlink $path ]"
+			    if (!$quiet);
+		    }
+		}
+		print "\n"
+		    if (!$quiet);
+	    }
+	}
+	if ($edpath) {
+	    my $fsize = stat($dpath)->size;
+	    if ($fsize == 0) {
+		print "$pidimage: zero-length delta image file"
+		    if (!$quiet);
+		if ($update) {
+		    if (unlink($dpath)) {
+			$edpath = 0;
+			print " [FIXED]"
+			    if (!$quiet);
+		    } else {
+			print " [ could not unlink $dpath ]"
+			    if (!$quiet);
+		    }
+		}
+		print "\n"
+		    if (!$quiet);
+	    }
+	}
 
 	if ($deleted) {
 	    if (!$epath && !$edpath) {
@@ -905,6 +983,93 @@ sub doimage($)
     }
 
     #
+    # Check image directory permissions.
+    #
+    # The 'images' directory for a project should be 0775, owned by the
+    # image creator and in the group of the project.
+    #
+    # The 'images' directory for a subgroup in a project should be 0775,
+    # owned by the image creator and in the group of the particular project
+    # subgroup.
+    #
+    # In the IMAGEDIRECTORIES world, the individual image subdirectories
+    # should be 0775, owned by the image creator and in the group of the
+    # containing directory.
+    #
+    # XXX right now, I only check the directory permissions and not the
+    # user/groups. Too lazy.
+    #
+    if (($validate{"all"} || $validate{"perm"}) &&
+	$accessfs && ($path || $dpath)) {
+	my $ipid = $image->pid();
+	my $igid = $image->gid();
+
+	my $idir;
+	if ($ipid eq $igid) {
+	    $idir = "/proj/$ipid/images/";
+	} else {
+	    $idir = "/groups/$ipid/$igid/images/";
+	}
+
+	# Just check the project/group main image dir once
+	my $pidgid = "$ipid/$igid";
+	if (!exists($piddirperms{$pidgid})) {
+	    $piddirperms{$pidgid} = 1;
+
+	    if (! -d $idir) {
+		print STDERR "$pidimage: mode: image dir '$idir' does not exist?!\n";
+	    } else {
+		my $mode = (stat($idir)->mode & 0777);
+		if ($mode != 0770) {
+		    my $mstr = sprintf "0%o", $mode;
+		    print("$pidimage: mode: '$idir' mode $mstr != 0770\n")
+			if (!$update || !$quiet);
+		    if ($update) {
+			print("$pidimage: mode: ")
+			    if (!$quiet);
+			if (chmod(0770, $idir)) {
+			    print "[FIXED]\n"
+				if (!$quiet);
+			} else {
+			    print "[FAILED]\n"
+				if (!$quiet);
+			}
+		    }
+		}
+	    }
+	}
+
+	# Check image sub directory
+	if ($image->IsDirPath()) {
+	    $idir = $image->path();
+	    if (!exists($imagedirperms{$idir})) {
+		$imagedirperms{$idir} = 1;
+		if (! -d $idir) {
+		    print STDERR "$pidimage: mode: image subdir '$idir' does not exist?!\n";
+		} else {
+		    my $mode = (stat($idir)->mode & 0777);
+		    if ($mode != 0775) {
+			my $mstr = sprintf "0%o", $mode;
+			print("$pidimage: mode: '$idir' mode $mstr != 0775\n")
+			    if (!$update || !$quiet);
+			if ($update) {
+			    print("$pidimage: mode: ")
+				if (!$quiet);
+			    if (chmod(0775, $idir)) {
+				print "[FIXED]\n"
+				    if (!$quiet);
+			    } else {
+				print "[FAILED]\n"
+				    if (!$quiet);
+			    }
+			}
+		    }
+		}
+	    }
+	}
+    }
+
+    #
     # The image files have to exist.
     #
     if (!$path && !$dpath) {
@@ -970,7 +1135,7 @@ sub doimage($)
 	if ($path) {
 	    print "$pidimage: fixing hash file\n";
 	    if ($hash eq "") {
-		$hash = `$SHA1 $path`;
+		$hash = hashit($path);
 		if ($?) {
 		    print("$pidimage: hash: could not generate SHA1 hash of '$path'\n");
 		    return 1;
@@ -996,7 +1161,7 @@ sub doimage($)
 	if ($dpath) {
 	    print "$pidimage: fixing delta hash file\n";
 	    if ($dhash eq "") {
-		$dhash = `$SHA1 $dpath`;
+		$dhash = hashit($dpath);
 		if ($?) {
 		    print("$pidimage: hash: could not generate SHA1 hash of '$path'\n");
 		    return 1;
@@ -1148,7 +1313,7 @@ sub doimage($)
 	my $filehash = $newhash;
 	if ($path) {
 	    if (!defined($filehash)) {
-		$filehash = `$SHA1 $path`;
+		$filehash = hashit($path);
 		if ($?) {
 		    print("$pidimage: hash: could not generate SHA1 hash of '$path'\n");
 		    $filehash = "";
@@ -1198,7 +1363,7 @@ sub doimage($)
 
 	if ($dpath) {
 	    if (!defined($filehash)) {
-		$filehash = `$SHA1 $dpath`;
+		$filehash = hashit($dpath);
 		if ($?) {
 		    print("$pidimage: hash: could not generate SHA1 hash of '$dpath'\n");
 		    $filehash = "";
@@ -1517,6 +1682,24 @@ sub doimage($)
 sub partoffset($$)
 {
     my ($part,$mbroff) = @_;
+}
+
+#
+# Compute the SHA1 of the indicated file.
+# To optimize, if it is an NFS file, ssh over to the server and do
+# the computation rather than blasting the control network.
+#
+sub hashit($)
+{
+    my ($file) = @_;
+    my $hash;
+
+    if ($UID == 0 && $file =~ /^\/(proj|groups)/) {
+	$hash = `$SSH $SHA1 $file`;
+    } else {
+	$hash = `$SHA1 $file`;
+    }
+    return $? ? undef : $hash;
 }
 
 # Return 0 if action is successful

@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2016 University of Utah and the Flux Group.
+# Copyright (c) 2016, 2017 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -207,7 +207,7 @@ sub doimage($)
     # Returned list is ordered highest to lowest version.
     #
     my @iversions;
-    $image->AllVersions(\@iversions);
+    $image->AllVersions(\@iversions, 1);
 
     # Get the canonical name, sans version, for reporting.
     my $iname = $image->pid() . "/" . $image->imagename();

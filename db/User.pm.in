@@ -29,7 +29,6 @@ use vars qw(@ISA);
 @ISA    = "Exporter";
 
 use emdb;
-use emutil;
 use EmulabConstants;
 use libtestbed;
 use Brand;
@@ -99,6 +98,7 @@ sub escapeshellarg($);
 
 # Cache of instances to avoid regenerating them.
 my %users      = ();
+BEGIN { use emutil; emutil::AddCache(\%users); }
 my $debug      = 0;
 
 # Little helper and debug function.

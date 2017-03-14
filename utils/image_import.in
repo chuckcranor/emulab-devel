@@ -884,9 +884,10 @@ sub FetchMetadata($)
 				VarAttr => 'name',
 				ContentKey => '-content',
 				SuppressEmpty => undef); };
-    fatal($@)
-	if ($@);
-
+    if ($@) {
+	print STDERR $xml . "\n";
+	fatal($@);
+    }
     if ($debug) {
 	print STDERR Dumper($xmlparse);
     }

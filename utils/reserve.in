@@ -407,7 +407,8 @@ if ($clear || $clear_idx) {
 
 # For now, auto-approve reservation requests up to 64 node-hours.
 # Later we'll probably want this threshold to vary based on the node type,
-# how far into the future the reservation starts, the phase of the moon...
+# how far into the future the reservation starts, existing approved
+# reservations for the same project, the phase of the moon...
 # who knows.
 if( $count * ( $endtime - $starttime ) / 3600 <= 0x40 ) {
     $approve = 1;
@@ -472,6 +473,9 @@ while( 1 ) {
 	}
     }
     exit( $approve ? 0 : 2 ) if( $impotent );
+    # FIXME if $modify_idx is set, the old reservation was approved,
+    # and $approve is false, then things get ugly.  e-mail the
+    # admins and leave the database untouched???
     next if( !defined( Reservation->BeginTransaction( $version ) ) );
     $res->Book( $modify_idx );
     Reservation->EndTransaction();

@@ -761,6 +761,25 @@ sub Register($)
 					$self->cert());
 }
 
+#
+# Send email. 
+#
+sub SendEmail($$$;$)
+{
+    my ($self, $subject, $body, $from) = @_;
+    require libtestbed;
+
+    $from = $TBOPS
+	if (!defined($from));
+
+    my $user_email = $self->email();
+    my $user_name  = $self->name();
+
+    libtestbed::SENDMAIL("$user_name <$user_email>",
+			 $subject, $body, $from, "Bcc: $TBAUDIT");
+    return 0;
+}
+
 ############################################################################
 #
 # Wrapper for local users.
@@ -812,6 +831,7 @@ sub Create($$)
 
 sub emulab_user()       { return $_[0]->{'USER'}; }
 sub idx($)		{ return $_[0]->{'USER'}->uid_idx(); }
+sub uid_idx($)		{ return $_[0]->{'USER'}->uid_idx(); }
 sub uid($)		{ return $_[0]->{'USER'}->uid(); }
 sub uuid                { return $_[0]->{'USER'}->uuid(); }
 sub created($)		{ return $_[0]->{'USER'}->created(); }

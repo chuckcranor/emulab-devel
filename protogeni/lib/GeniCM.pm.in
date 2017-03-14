@@ -1308,10 +1308,35 @@ sub GetTicketAuxAux($$$$$$$$$$$)
 			$pctype   = undef;
 		    }
 		    elsif ($virtualization_subtype eq "firewall") {
+			# 
+			# A sitevar controls whether we actually can do it.
+			#
+			my $cnet_firewalls = 0;
+			if (!GetSiteVar('general/cnet_firewalls',
+					\$cnet_firewalls)){
+			    # Cannot get the value, say no.
+			    $cnet_firewalls = 0;
+			}
+			if (!$cnet_firewalls) {
+			    $response
+				= GeniResponse->Create(GENIRESPONSE_BADARGS,
+						       undef,
+				       "Firewalls are not supported here");
+			    goto bad;
+			}
 			$isfirewall = 1;
-			$osname     = "FW-IPFW2";
-			$pctype     = "pc";
-			goto raw;
+			# Corresponds to iptables-vlan, see below.
+			$osname     = "FW-IPTABLES";
+			# Default firewall type is a global vtype if it exists.
+			if (scalar(NodeType->GlobalVtypeTypes("pcfw"))) {
+			    $pctype = "pcfw";
+			}
+			else {
+			    $pctype = "pc";
+			}
+			# Lets force to exclusive node just in case.
+			GeniXML::SetExclusive($ref, 1);
+			$exclusive = 1;
 		    }
 		    else {
 			$response
@@ -1494,11 +1519,11 @@ sub GetTicketAuxAux($$$$$$$$$$$)
 	# The slot does not like to be NULL.
 	$osname = ""
 	    if (!defined($osname));
-	
+
 	# Need some kind of default.
 	$pctype = "pc"
 	    if (!defined($pctype));
-	
+
 	my $nodeblob = {"vname"   => $node_nickname,
 			"type"    => $pctype,
 			"osname"  => $osname,
@@ -1522,10 +1547,9 @@ sub GetTicketAuxAux($$$$$$$$$$$)
 		$response = GeniResponse->Create(GENIRESPONSE_ERROR);
 		goto bad;
 	    }
-	    $nodeblob->{'cmd_line'} = '/kernel.fw';
 	    if (!defined($virtexperiment->NewTableRow("virt_firewalls",
 						  {"fwname" => $node_nickname,
-						   "type"   => "ipfw2-vlan",
+						   "type"   => "iptables-vlan",
 						   "style"  => "basic"}))) {
 		$response = GeniResponse->Create(GENIRESPONSE_ERROR, undef,
 				     "Error creating firewall definition");
@@ -6991,20 +7015,27 @@ sub GeniExperiment($;$)
 #
 sub FlipToUser($$)
 {
-    my ($slice, $user) = @_;
+    my ($object, $user) = @_;
+    my ($project,$group,$creator, $experiment, $image);
     my $debug = 1;
 
-    my $experiment = $slice->GetExperiment();
-    # No experiment, no reason to flip.
-    return 0
-	if (!defined($experiment));
-    my $project = $experiment->GetProject();
+    if (ref($object) eq "GeniSlice") {
+	$experiment = $object->GetExperiment();
+	# No experiment, no reason to flip.
+	return 0
+	    if (!defined($experiment));
+	$project = $experiment->GetProject();
+	$group   = $experiment->GetGroup();
+	$creator = $experiment->GetCreator();
+    }
+    elsif (ref($object) eq "OSImage" || ref($object) eq "Image") {
+	$image   = $object;
+	$project = $object->GetProject();
+	$group   = $object->GetGroup();
+	$creator = $object->GetCreator();	
+    }
     return undef
-	if (!defined($project));
-    my $group   = $experiment->GetGroup();
-    my $creator = $experiment->GetCreator();
-    return undef
-	if (!defined($creator));
+	if (! (defined($project) && defined($group) && defined($creator)));
     $creator = GeniUser::LocalUser->Create($creator);
 
     #
@@ -7036,9 +7067,17 @@ sub FlipToUser($$)
     # this will happen if a credential is delegated or if the
     # creator binds a user to a slice. 
     #
-    if (!$experiment->AccessCheck($user->emulab_user(),
-				  $Experiment::EXPT_ACCESS_MODIFY)) {
-	$user = $creator;
+    if (defined($experiment)) {
+	if (!$experiment->AccessCheck($user->emulab_user(),
+				      $Experiment::EXPT_ACCESS_MODIFY)) {
+	    $user = $creator;
+	}
+    }
+    else {
+	if (!$image->AccessCheck($user->emulab_user(),
+				 TB_IMAGEID_MODIFYINFO())) {
+	    $user = $creator;
+	}
     }
   flip:
     return undef

@@ -2,7 +2,7 @@ $(function ()
 {
     'use strict';
 
-    var template_list   = ["reserve-request", "reservation-list",
+    var template_list   = ["reserve-request", "reserve-faq", "reservation-list",
 			   "oops-modal", "waitwait-modal"];
     var templates       = APT_OPTIONS.fetchTemplateList(template_list);    
     var mainString      = templates["reserve-request"];
@@ -58,6 +58,18 @@ $(function ()
 	});
 	html = aptforms.FormatFormFieldsHorizontal(html);
 	$('#main-body').html(html);
+	$('.faq-contents').html(templates["reserve-faq"]);
+
+	// Handler for the FAQ link.
+	$('#reservation-faq-button').click(function (event) {
+	    event.preventDefault();
+	    sup.HideModal('#reservation-help-modal',
+			  function () {
+			      sup.ShowModal('#reservation-faq-modal');
+			  });
+	});
+	// Set the manual link since the FAQ is not a template.
+	$('#reservation-manual').attr("href", window.MANUAL);
 
 	// This activates the popover subsystem.
 	$('[data-toggle="popover"]').popover({
@@ -288,6 +300,10 @@ $(function ()
 		if (json.code != 2) {
 		    sup.SpitOops("oops", json.value);		    
 		}
+		aptforms.GenerateFormErrors('#reserve-request-form',
+					    json.value);		
+		// Make sure we still warn about an unsaved form.
+		aptforms.MarkFormUnsaved();
 		return;
 	    }
 	    // User can submit.
@@ -378,7 +394,7 @@ $(function ()
 		.val(end.format("MM/DD/YYYY"));
 	    $('#reserve-request-form [name=end_hour]')
 		.val(end.format("H"));
-	    console.log(start, end);
+	    //console.log(start, end);
 
 	    // Set the hour selectors properly in the datepicker object.
 	    $("#reserve-request-form #start_day")
@@ -389,6 +405,17 @@ $(function ()
 	    if (!details.approved) {
 		$('#unapproved-warning').removeClass("hidden");
 	    }
+	    // Local user gets a link.
+	    if (_.has(details, 'creator_idx')) {
+		$('#reserve-requestor').html(
+		    "<a target=_blank href='user-dashboard.php?user=" +
+			details.creator_idx + "'>" +
+			details.creator_uid + "</a>");
+	    }
+	    else {
+		$('#reserve-requestor').html(details.creator_uid);
+	    }
+	    
 	    /*
 	     * If this is an admin looking at an unapproved reservation,
 	     * show the approve button
