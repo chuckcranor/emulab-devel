@@ -334,13 +334,17 @@ if ($purge || $rename) {
 	    @torename = ();
 	}
 	# Throw away the slot if it never came ready or released.
-	if (!($imageversion->ready() && $imageversion->released())) {
+	# Only if the highest numbered version, no holes please.
+	if ($imageversion->IsNewest() &&
+	    !($imageversion->ready() && $imageversion->released())) {
 	    if ($impotent) {
 		my $vers = $imageversion->version();
-		print "Would kill version $vers that never came ready\n";
-		next;
+		print "Would kill version $vers DB state since it was ".
+		    "not ready/released\n";
 	    }
-	    $imageversion->PurgeVersion();
+	    else {
+		$imageversion->PurgeVersion();
+	    }
 	}
 
 	$EUID = 0;

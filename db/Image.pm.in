@@ -53,6 +53,8 @@ my $OURDOMAIN     = "@OURDOMAIN@";
 my $PGENISUPPORT  = @PROTOGENI_SUPPORT@;
 my $DOPROVENANCE  = @IMAGEPROVENANCE@;
 my $TBWWW         = "@TBWWW@";
+my $PROJROOT      = "@PROJROOT_DIR@";
+my $GROUPROOT     = "@GROUPSROOT_DIR@";
 
 # Cache of instances to avoid regenerating them.
 my %images    = ();
@@ -2609,6 +2611,9 @@ sub SchedIMSDeletion($$)
 #
 # Is the image the newest version of the image.
 #
+# This needs to include deleted images, we only care about max version
+# number right now. 
+#
 sub IsNewest($)
 {
     my ($self)  = @_;
@@ -2850,19 +2855,50 @@ sub HaveDeltaImage($)
     my ($self) = @_;
     return $self->deltasize() ? 1 : 0;
 }
+sub IsSystemImage($)
+{
+    my ($self) = @_;
+
+    # Yuck.
+    return ($self->path() =~ /^\/usr\/testbed\// ? 1 : 0);
+}
+#
+# When images are stored in sub directories.
+#
 sub CreateImageDir($)
 {
     my ($self) = @_;
     
     return 0
-	if (!$self->IsDirPath() || -e $self->path());
+	if (!$self->IsDirPath());
 
-    if (!mkdir($self->path(), 0775)) {
-	print STDERR "Could not mkdir " . $self->path() . ": $!\n";
+    return -1
+	if ($self->CreateDirectory($self->path()));
+
+    #
+    # For system images that are written to $TB, we still need a place
+    # to write new (unreleased) images in /proj. 
+    #
+    if ($self->IsSystemImage()) {
+	return -1
+	    if ($self->CreateDirectory($self->SaveDir()));
+    }
+    return 0;
+}
+
+sub CreateDirectory($$)
+{
+    my ($self, $directory) = @_;
+
+    return 0
+	if (-e $self->path());
+    
+    if (!mkdir($directory, 0775)) {
+	print STDERR "Could not mkdir $directory: $!\n";
 	return -1;
     }
-    if (!chmod(0775, $self->path())) {
-	print STDERR "Could not chown " . $self->path() . ": $!\n";
+    if (!chmod(0775, $directory)) {
+	print STDERR "Could not chmod $directory: $!\n";
 	return -1;
     }
     
@@ -2882,13 +2918,35 @@ sub CreateImageDir($)
 	my $uid = $leader->unix_uid();
 	my $gid = $group->unix_gid();
 
-        if (! chown($uid, $gid, $self->path())) {
-	    print STDERR "Could not chown($uid,$gid) " .
-		$self->path()  . ": $!\n";
+        if (! chown($uid, $gid, $directory)) {
+	    print STDERR "Could not chown($uid,$gid) $directory: $!\n";
 	    return -1;
 	}
     }
     return 0;
+}
+
+#
+# Where we write the new files. 
+# I think cause we do not trust the path in the descriptor since the
+# user can set it. This is probably the crux; we should not let the
+# user set the path.
+#
+sub SaveDir($)
+{
+    my ($self) = @_;
+
+    my $savedir =
+	($self->pid() eq $self->gid() ||
+	 $self->global() || $self->IsSystemImage() ? 
+	 $PROJROOT . "/" . $self->pid() . "/images/" :
+	 $GROUPROOT . "/" . $self->pid() . "/" . $self->gid() . "/images/");
+    
+    # Add in the directory.
+    $savedir .= basename($self->path()) . "/"
+	if ($self->IsDirPath());
+
+    return $savedir;
 }
 
 # _Always_ make sure that this 1 is at the end of the file...

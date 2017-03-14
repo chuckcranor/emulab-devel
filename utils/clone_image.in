@@ -371,13 +371,13 @@ if (defined($image)) {
 	    # officially "released". We *can* use this version of the image
 	    # by explicitly using its version number, before it is released. 
 	    #
-	    if ($image->path() =~ /^$TB/) {
-		my $path = $PROJROOT . "/" . $image->pid() . "/images/" .
-		    basename($image->path());
-		# Watch for directory in original path, since basename
-		# drops he trailing slash.
+	    if ($image->IsSystemImage()) {
+		my $path;
 		if ($image->IsDirPath()) {
-		    $path .= "/";
+		    $path = $image->SaveDir();
+		}
+		else {
+		    $path = $image->SaveDir() . basename($image->path());
 		}
 		if ($image->Update({"path" => $path})) {
 		    $image->PurgeVersion();

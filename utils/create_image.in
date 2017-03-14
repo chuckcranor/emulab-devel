@@ -681,14 +681,7 @@ my $filename  = $image->TempImageFile();
 my $isglobal  = $image->global();
 my $usepath   = 0;
 my $isdataset = $image->isdataset();
-my $hackprefix= ($image->pid() eq $image->gid() || $isglobal ? 
-		 $PROJROOT . "/" . $image->pid() . "/images/" :
-		 $GROUPROOT . "/" .
-		    $image->pid() . "/" . $image->gid() . "/images/");
-if ($image->IsDirPath()) {
-    # Add in the directory.
-    $hackprefix .= basename($image->path()) . "/";
-}
+my $prefixdir = $image->SaveDir();
 
 #
 # If we are creating a signature file for this image, get the
@@ -702,15 +695,15 @@ if ($signature) {
 #
 # Redirect pathname for global images. See equiv code in clone_image.
 #
-if ($isglobal && ($filename =~ /^$TB/)) {
-    $filename = $hackprefix . basename($filename);
+if ($isglobal && $image->IsSystemImage()) {
+    $filename = $prefixdir . basename($filename);
     print "*** WARNING: Writing global descriptor to $filename instead!\n";
 
     #
     # Ditto for the signature file
     #
-    if ($dstsigfile && ($dstsigfile =~ /^$TB/)) {
-	$dstsigfile = $hackprefix . basename($dstsigfile);
+    if ($signature) {
+	$dstsigfile = $prefixdir . basename($dstsigfile);
     }
 
     #
@@ -831,9 +824,9 @@ chmod(0664, $filename) or
 # it to somewhere where frisbee can access it (in case NFS is being used).
 # Note that we wait to do this until after we are sure the imagedir exists.
 #
-if ($srcsigfile && ($srcsigfile =~ /^$TB/)) {
+if ($srcsigfile && $srcimage->IsSystemImage()) {
     my $osrcsigfile = $srcsigfile;
-    $srcsigfile = $hackprefix . basename($srcsigfile);
+    $srcsigfile = $prefixdir . basename($srcsigfile);
     if (system("cp -fp $osrcsigfile $srcsigfile")) {
 	fatal("Could not copy source signature file ".
 	      "$osrcsigfile to $srcsigfile");
@@ -1403,16 +1396,16 @@ if ($delta && $deltapct > 0 && defined($logfile)) {
 # the case that usepath=1 (target is in /usr/testbed); we do not want
 # to rename them to the target (will not work anyway), they have to
 # stay in /proj. More succintly, we always move the new files to the
-# hackprefix location.
+# prefix location.
 #
-my $hfilename = $hackprefix .
+my $hfilename = $prefixdir .
     basename(($delta ? $image->DeltaImageFile() : $image->FullImageFile()));
 
 if (system("/bin/mv -f $filename $hfilename")) {
     fatal("Could not move new image file into place");
 }
 if ($dstsigfile &&
-    system("/bin/mv -f $dstsigfile $hackprefix" .
+    system("/bin/mv -f $dstsigfile $prefixdir" .
 	   basename(($delta ?
 		     $image->FullImageSigFile() :
 		     $image->FullImageSigFile())))) {

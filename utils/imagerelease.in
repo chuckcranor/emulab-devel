@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2014-2016 University of Utah and the Flux Group.
+# Copyright (c) 2014-2017 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -174,7 +174,7 @@ if ($image->version()) {
 else {
     $version0 = $image;
 }
-if ($version0->path() =~ /^\/usr\/testbed/) {
+if ($version0->IsSystemImage()) {
     my $vers0src = "$PROJROOT/" . $image->pid() . "/images/";
     if ($version0->IsDirPath()) {
 	# Add in the directory.

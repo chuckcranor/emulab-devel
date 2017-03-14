@@ -569,6 +569,12 @@ sub DeleteVersion($)
 
     return $self->image()->DeleteVersion();
 }
+sub PurgeVersion($)
+{
+    my ($self) = @_;
+
+    return $self->image()->PurgeVersion();
+}
 
 #
 # Load the project object for an image
@@ -1159,6 +1165,18 @@ sub CreateImageDir($)
     my ($self) = @_;
 
     return $self->image()->CreateImageDir();
+}
+sub SaveDir($)
+{
+    my ($self) = @_;
+
+    return $self->image()->SaveDir();
+}
+sub IsSystemImage($)
+{
+    my ($self) = @_;
+
+    return $self->image()->IsSystemImage();
 }
 
 ################################################################################
