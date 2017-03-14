@@ -45,13 +45,10 @@ $(function ()
     var monitor       = null;
     var types         = null;
     var resinfo       = null;
-    var reswindow     = 24; // Will search for reservations 24 hours from now
-    var resload       = 0.75; // Percent of resources unavailable considered large
     var mainTemplate  = _.template(instantiateString);
 
     function initialize()
     {
-    	
     // Get context for constraints
 	var contextUrl = 'https://www.emulab.net/protogeni/jacks-context/cloudlab-utah.json';
 	$.get(contextUrl).then(contextReady, contextFail);
@@ -145,13 +142,7 @@ $(function ()
 	// Check if the browser has cookies stating what they previoiusly had minimized.
         CookieCollapse('#profile_name > span', 'pp_collpased');
         _.defer(function () {
-	    //monitor = JSON.parse(_.unescape($('script#amstatus-json').html()));
-	    monitor = {"urn:publicid:IDN+leelab.testbed.emulab.net+authority+cm": {
-	    	health: 100,
-	    	rawPCsAvailable: 75,
-	    	rawPCsTotal: 100,
-	    	status: "SUCCESS"
-	    }}
+	    monitor = JSON.parse(_.unescape($('script#amstatus-json').html()));
 	    CreateClusterStatus();
         });
 	$('#waitwait_div').html(waitwaitString);
@@ -229,7 +220,7 @@ $(function ()
 	    console.log('profile-pid change');
 	    UpdateGroupSelector();
 	    UpdateImageConstraints();
-	    ShowClusterReservations()
+	    ShowClusterReservations();
 	    return true;
 	});
 	$('#profile_copy_button').click(function (event) {
@@ -894,7 +885,6 @@ $(function ()
 	if (monitor == null || $.isEmptyObject(monitor)) {
 	    return;
 	}
-	console.log(monitor);
 
 	$('#finalize_options .cluster-group').each(function() {
 	    if ($(this).hasClass("pickered")) {
@@ -950,12 +940,12 @@ $(function ()
 	    $('#'+which+' .cluster_picker_status .dropdown-menu').find('.enabled.federated').sort(SortClusterStatus).insertAfter($('#'+which+' .cluster_picker_status .dropdown-menu .federatedDivider'));
 
 	    var pickerStatus = $('#'+which+' .cluster_picker_status .dropdown-menu .enabled a');
-	    //if (pickerStatus.length == 2) {
-		//pickerStatus[1].click();
-	    //}
-	    //else {
+	    if (pickerStatus.length == 2) {
+		pickerStatus[1].click();
+	    }
+	    else {
 		pickerStatus[0].click();
-	    //}
+	    }
 	});	  
 	
 	$('[data-toggle="tooltip"]').tooltip();
@@ -1855,8 +1845,6 @@ $(function ()
 	    }
 	    console.info(json.value);
 	    resinfo = json.value;
-
-	    console.info(resinfo);
 
 	    ShowClusterReservations();
 	};
