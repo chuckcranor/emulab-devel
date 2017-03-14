@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2016 University of Utah and the Flux Group.
+# Copyright (c) 2000-2017 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -349,6 +349,17 @@ function Do_VerifySpeaksfor()
             }
         }
     }
+    #
+    # Check for a frozen login. 
+    #
+    if ($this_user->weblogin_frozen()) {
+        SPITAJAX_ERROR(1, "Your account has been frozen. Please ".
+                       "contact $TBMAILADDR to have your ".
+                       "account restored.");
+        session_destroy();
+        return;
+    }
+    
     list ($loginhash, $logincrc) =
 	DOLOGIN_MAGIC($this_user->uid(), $this_user->uid_idx(), null, 0, 1);
     if (! ($loginhash && $logincrc)) {
