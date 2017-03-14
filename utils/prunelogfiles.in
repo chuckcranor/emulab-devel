@@ -1,0 +1,104 @@
+#!/usr/bin/perl -w
+#
+# Copyright (c) 2003-2017 University of Utah and the Flux Group.
+# 
+# {{{EMULAB-LICENSE
+# 
+# This file is part of the Emulab network testbed software.
+# 
+# This file is free software: you can redistribute it and/or modify it
+# under the terms of the GNU Affero General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or (at
+# your option) any later version.
+# 
+# This file is distributed in the hope that it will be useful, but WITHOUT
+# ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
+# FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Affero General Public
+# License for more details.
+# 
+# You should have received a copy of the GNU Affero General Public License
+# along with this file.  If not, see <http://www.gnu.org/licenses/>.
+# 
+# }}}
+#
+use strict;
+use English;
+use Getopt::Std;
+use Date::Parse;
+
+#
+# Clear logfile/metadata for SliverStatus() calls.
+#
+sub usage()
+{
+    print STDERR "Usage: prunelogfiles\n";
+    exit(-10);
+}
+my $optlist  = "dn";
+my $impotent = 0;
+my $debug    = 0;
+
+# Protos
+sub fatal($);
+
+#
+# Configure variables
+#
+my $TB		 = "@prefix@";
+
+#
+# Testbed Support libraries
+#
+use lib "@prefix@/lib";
+use emdb;
+use Logfile;
+
+#
+# Turn off line buffering on output
+#
+$| = 1;
+
+#
+# Untaint the path
+# 
+$ENV{'PATH'} = "/bin:/sbin:/usr/bin:";
+
+#
+# Parse command arguments. Once we return from getopts, all that should be
+# left are the required arguments.
+#
+my %options = ();
+if (! getopts($optlist, \%options)) {
+    usage();
+}
+if (defined($options{"d"})) {
+    $debug = 1;
+}
+if (defined($options{"n"})) {
+    $impotent = 1;
+}
+
+#
+# Grab the list of all SliverStatus calls and kill them.
+#
+my $query_result =
+    DBQueryFatal("select m.logidx,l.logid from logfile_metadata as m ".
+		 "left join logfiles as l on m.logidx=l.logidx ".
+		 "where metakey='Method' and metaval='SliverStatus' and ".
+		 "      l.filename is null");
+while (my ($logidx,$logid) = $query_result->fetchrow_array()) {
+    my $logfile = Logfile->Lookup($logid);
+    next
+	if (!defined($logfile));
+    $logfile->Delete();
+}
+exit(0);
+
+sub fatal($)
+{
+    my ($mesg) = $_[0];
+
+    die("*** $0:\n".
+	"    $mesg\n");
+}
+
