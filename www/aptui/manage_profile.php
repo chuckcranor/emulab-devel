@@ -756,11 +756,6 @@ else {
     $profile = Profile::LookupByName($project, $formfields["profile_name"]);
 }
 
-# Done with this, unless doing a snapshot (needed for imaging status).
-if (!isset($snapuuid)) {
-    $webtask->Delete();
-}
-
 if ($profile) {
     $uuid = $profile->uuid();
 }
