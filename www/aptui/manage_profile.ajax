@@ -63,7 +63,7 @@ function Do_CloneStatus()
     }
     $instance = Instance::Lookup($webtask->TaskValue("cloning_instance"));
     if (!$instance) {
-	SPITAJAX_ERROR(1, "The cloned experiment is no where");
+	SPITAJAX_ERROR(1, "The cloned experiment is not here anymore");
 	return 1;
     }
     $instance_webtask = $instance->WebTask();
@@ -218,10 +218,10 @@ function Do_DeleteProfile()
     $profile = Profile::Lookup($profile->profileid());
     if (!$profile) {
 	#
-	# Go back to myprofiles page instead. Happens when last version
+	# Go back to profiles page instead. Happens when last version
 	# is deleted. 
 	#
-	SPITAJAX_RESPONSE("myprofiles.php");
+	SPITAJAX_RESPONSE("user-dashboard.php#profiles");
 	return;
     }
     $uuid = $profile->uuid();
