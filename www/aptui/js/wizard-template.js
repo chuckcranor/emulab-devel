@@ -52,24 +52,83 @@ window.wt = (function() {
 	}
 
 	function StatusClickEvent(html, that) {
-		    html.find('.dropdown-toggle .value').html($(that).attr('value'));   
-		    
-		    if ($(that).find('.picker_stats').length) {
-		    	if (!html.find('.dropdown-toggle > .picker_stats').length) {
-		    		html.find('.dropdown-toggle').append('<div class="picker_stats"></div>');
-		    	}
-		    	else {
-		    		html.find('.dropdown-toggle > .picker_stats').html('');
-		    	}
+	    html.find('.dropdown-toggle .value').html($(that).attr('value'));   
+	    
+	    if ($(that).find('.picker_stats').length) {
+		if (!html.find('.dropdown-toggle > .picker_stats').length) {
+		    html.find('.dropdown-toggle').append('<div class="picker_stats"></div>');
+		}
+		else {
+		    html.find('.dropdown-toggle > .picker_stats').html('');
+		}
 
-		    	html.find('.dropdown-toggle > .picker_stats').append($(that).find('.picker_stats').html());
+		html.find('.dropdown-toggle > .picker_stats').append($(that).find('.picker_stats').html());
+	    }
+	    else {
+		html.find('.dropdown-toggle > .picker_stats').html('');
+	    }
+
+	    if ($(that).find('.warning_icon').length) {
+	    	if (!html.find('.dropdown-toggle > .warning_icon').length) {
+		    html.find('.dropdown-toggle').append('<div class="warning_icon"></div>');
+		}
+		else {
+		    html.find('.dropdown-toggle > .warning_icon').html('');
+		}
+
+		html.find('.dropdown-toggle > .warning_icon').append($(that).find('.warning_icon').html());
+		if ($(that).find('.warning_icon').hasClass('warn')) {
+		    html.find('.dropdown-toggle > .warning_icon').removeClass('confirm');
+		    html.find('.dropdown-toggle > .warning_icon').addClass('warn');
+		}
+		else {
+		    html.find('.dropdown-toggle > .warning_icon').removeClass('warn');
+		    html.find('.dropdown-toggle > .warning_icon').addClass('confirm');
+		}
+	    }
+	    else {
+		html.find('.dropdown-toggle > .warning_icon').html('');
+	    }
+
+	    html.find('.selected').removeClass('selected');
+	    $(that).parent().addClass('selected');
+
+	    if ($(that).parent().attr('data-res-start')) {
+ 		var months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+		var start = new Date(parseInt($(that).parent().attr('data-res-start')) * 1000);
+		var startHours = start.getHours() < 10 ? '0' + start.getHours() : '' + start.getHours();
+		var startMinutes = start.getMinutes() < 10 ? '0' + start.getMinutes() : '' + start.getMinutes();
+
+		if ($(that).parent().attr('data-res-end')) {
+	    	    $('#reservation_confirmation').addClass('hidden');
+		    var end = new Date(parseInt($(that).parent().attr('data-res-end')) * 1000);
+
+		    var endHours = end.getHours() < 10 ? '0' + end.getHours() : '' + end.getHours();
+		    var endMinutes = end.getMinutes() < 10 ? '0' + end.getMinutes() : '' + end.getMinutes();
+
+		    $('#reservation_warning .reservation_start').html(startHours + ':' + startMinutes + ', ' + months[start.getMonth()] + ' ' + start.getDate());
+		    $('#reservation_warning .reservation_end').html(endHours + ':' + endMinutes + ', ' + months[end.getMonth()] + ' ' + end.getDate());
+		    $('#reservation_warning').removeClass('hidden');
+		} 
+		else {
+		    $('#reservation_warning').addClass('hidden');
+
+		    if ($(that).parent().attr('data-now') == 'true') {
+		    	$('#reservation_future').addClass('hidden');
+
+			$('#reservation_confirmation .reservation_start').html(startHours + ':' + startMinutes + ', ' + months[start.getMonth()] + ' ' + start.getDate());
+			$('#reservation_confirmation').removeClass('hidden');
 		    }
 		    else {
-		    	html.find('.dropdown-toggle > .picker_stats').html('');
+			$('#reservation_confirmation').addClass('hidden');
+
+			$('#reservation_future .reservation_start').html(startHours + ':' + startMinutes + ', ' + months[start.getMonth()] + ' ' + start.getDate());
+			$('#reservation_future').removeClass('hidden');
 		    }
 
-		    html.find('.selected').removeClass('selected');
-		    $(that).parent().addClass('selected');
+		}
+	    }
+	    $('[data-toggle="tooltip"]').tooltip();
 	}
 
 	function CalculateRating(data, type) {
@@ -170,6 +229,40 @@ window.wt = (function() {
 							+'</div></div>';
 	}
 
+	function ReservationWarningHTML() {
+		return '<div class="reservation_tooltip no_reservation">'
+			   +'<div class="warning_icon warn" '
+				+'data-toggle="tooltip" '
+				+'data-placement="right" '
+				+'title="An upcoming reservation may impact the '
+				+'availability of resources on this cluster.">'
+			   +'<span class="glyphicon glyphicon-warning-sign '
+					+'pull-right"></span>'
+			+'</div></div>'
+	}
+
+	function HasReservationHTML() {
+		return '<div class="reservation_tooltip has_reservation">'
+			   +'<div class="warning_icon confirm" '
+				+'data-toggle="tooltip" '
+				+'data-placement="right" '
+				+'title="You have an active reservation on this cluster.">'
+			   +'<span class="glyphicon glyphicon-calendar '
+					+'pull-right"></span>'
+			+'</div></div>'
+	}
+
+	function FutureReservationHTML() {
+		return '<div class="reservation_tooltip future_reservation">'
+			   +'<div class="warning_icon warn" '
+				+'data-toggle="tooltip" '
+				+'data-placement="right" '
+				+'title="You have an upcoming reservation on this cluster.">'
+			   +'<span class="glyphicon glyphicon-calendar '
+					+'pull-right"></span>'
+			+'</div></div>'
+	}
+
 	return {
 		ClusterStatusHTML: ClusterStatusHTML,
 		StatusClickEvent: StatusClickEvent,
@@ -177,7 +270,10 @@ window.wt = (function() {
 		InactiveRating: InactiveRating,
 		AssignStatusClass: AssignStatusClass,
 		AssignInactiveClass: AssignInactiveClass,
-		StatsLineHTML: StatsLineHTML
+		StatsLineHTML: StatsLineHTML,
+		ReservationWarningHTML: ReservationWarningHTML,
+		HasReservationHTML: HasReservationHTML,
+		FutureReservationHTML: FutureReservationHTML
 	};
 }
 )();

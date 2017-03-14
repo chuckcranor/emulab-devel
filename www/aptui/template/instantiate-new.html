@@ -353,6 +353,15 @@
 		    <div id='aggregate_selector'>
 		      <!-- The JS code fills this in -->
 		      <div id='cluster_selector' class='hidden'></div>
+		      <div id='reservation_warning' class='hidden col-sm-12'>
+			<label id='reservation_text' class='alert-warning col-sm-8 col-sm-offset-2'>There is an upcoming reservation on this cluster that may impact your ability to reserve or extend resources. This reservation is from <span class='reservation_start'>start</span> until <span class='reservation_end'>end</span>.</label> 
+		      </div>
+		      <div id='reservation_confirmation' class='hidden col-sm-12'>
+			<label id='reservation_text' class='alert-success col-sm-8 col-sm-offset-2'>You have a reservation on this cluster that began at <span class='reservation_start'>start</span>.</label> 
+		      </div>
+		      <div id='reservation_future' class='hidden col-sm-12'>
+			<label id='reservation_text' class='alert-warning col-sm-8 col-sm-offset-2'>You have a reservation on this cluster beginning at <span class='reservation_start'>start</span>.</label> 
+		      </div>
 		    </div>
 		  <% } %>
 		  <% if (1) { %>

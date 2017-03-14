@@ -365,6 +365,13 @@ left: -999em;
 	z-index: 2;
 }
 
+.cluster_picker_status .dropdown-toggle .warning_icon {
+	position: absolute;
+	right: 60px;
+	top: 6px;
+	z-index: 2;
+}
+
 .cluster_picker_status .text-healthy {
 	color: #8ab800;
 }
@@ -477,6 +484,41 @@ left: -999em;
 	max-width: 400px;
 }
 
+.cluster_picker_status .reservation_tooltip {
+	position: absolute;
+	top: 3px;
+	right: 35px;
+}
+
+.cluster_picker_status .warning_icon {
+	font-size: 18px;
+}
+
+.cluster_picker_status .warning_icon.confirm {
+	color: #449d44;
+}
+
+.cluster_picker_status .warning_icon.warn {
+	color: #d58512;
+}
+
+.cluster_picker_status .no_reservation .tooltip.right .tooltip-inner {
+	background-color: #d58512;
+}
+
+.cluster_picker_status .no_reservation .tooltip.right .tooltip-arrow {
+	border-right-color: #d58512;
+	border-left-color: #d58512;
+}
+
+.cluster_picker_status .reservation_tooltip .warning_icon {
+	height: 20px;
+}
+
+.cluster_picker_status .reservation_tooltip .tooltip .tooltip-inner {
+	width: 200px;
+}
+
 .cluster_picker_status .federatedDivider {
 	overflow: visible;
 	margin: 24px 0 0;
@@ -487,4 +529,10 @@ left: -999em;
 	position: absolute;
 	top: -20px;
 	left: 10px;
+}
+
+#reservation_text {
+	padding-top: 5px;
+	padding-bottom: 5px;
+	margin-bottom: 10px;
 }
