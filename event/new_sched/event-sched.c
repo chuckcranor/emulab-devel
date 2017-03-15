@@ -118,9 +118,10 @@ static event_handle_t handle;
 
 static void sigpass(int sig)
 {
+	char tbuf[32];
 	time_t ts = time(NULL);
 	info("event-sched[%d]: received signal %d at %s",
-	     getpid(), sig, ctime(&ts));
+	     getpid(), sig, ctime_r(&ts, tbuf));
 
 	if (emcd_pid != -1)
 		kill(emcd_pid, sig);
