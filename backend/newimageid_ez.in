@@ -558,7 +558,7 @@ my $path;
 my $spath = "/usr/testbed/images/";
 my $ipid  = $newimageid_args{"pid"};
 my $igid  = (exists($newimageid_args{"gid"}) &&
-	     $newimageid_args{"gid"} ne "") ? $newimageid_args{"gid"} : "";
+	     $newimageid_args{"gid"} ne "") ? $newimageid_args{"gid"} : $ipid;
 
 if ($ipid eq $igid || $global) {
     $path  = "$TBPROJ_DIR/$ipid/images/";
