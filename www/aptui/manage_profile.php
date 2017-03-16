@@ -213,7 +213,7 @@ function SPITFORM($formfields, $errors)
     AddLibrary("js/gitrepo.js");
     SPITREQUIRE("js/manage_profile.js");
 
-    AddTemplateList(array('manage-profile', 'waitwait-modal', 'renderer-modal', 'showtopo-modal', 'oops-modal', 'rspectextview-modal', 'guest-instantiate', 'publish-modal', 'instantiate-modal', 'share-modal', 'gitrepo-picker', 'profile-list-modal', 'confirm-delete-profile'));
+    AddTemplateList(array('manage-profile', 'waitwait-modal', 'renderer-modal', 'showtopo-modal', 'oops-modal', 'rspectextview-modal', 'guest-instantiate', 'publish-modal', 'share-modal', 'gitrepo-picker', 'profile-list-modal', 'confirm-delete-profile'));
     SPITFOOTER();
 }
 

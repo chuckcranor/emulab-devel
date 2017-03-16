@@ -112,7 +112,6 @@ $(function () {
         if ($('#amlist-json').length > 0)
         {
           var amlist = JSON.parse(_.unescape($('#amlist-json')[0].textContent));
-	  console.log('amlist', amlist);
           _.each(context.canvasOptions.aggregates, function (value, index) {
 	    if (amlist[value.id] === undefined)
 	    {
@@ -120,7 +119,6 @@ $(function () {
 	    }
           });
 	}
-      console.log('context', context);
         contextFetched = true;
         _.each(waitingInstances, function (f) {
 	  f();

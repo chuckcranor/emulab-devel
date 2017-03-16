@@ -194,7 +194,7 @@ window.APT_OPTIONS.updatePage = function (data) {
 }
 
 window.APT_OPTIONS.postTutorial = function (data) {
-  console.log('PostTutorial: ', data);
+  //console.log('PostTutorial: ', data);
   //console.log('parent: ', window.parent.location.hostname, window.parent.location.port, window.parent.location.protocol);
   window.parent.postMessage(data, 'http://tutorial.cloudlab.us:5000');
   try {
