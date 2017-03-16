@@ -59,7 +59,7 @@ $optargs = OptionalPageArguments("create",      PAGEARG_STRING,
 function SPITFORM($formfields, $errors)
 {
     global $this_user, $projlist, $action, $profile, $DEFAULT_AGGREGATE;
-    global $notifyupdate, $notifyclone, $copyuuid, $snapuuid, $am_array;
+    global $notifyupdate, $notifyclone, $copyuuid, $snapuuid;
     global $ISCLOUD, $fromexp;
     global $version_array, $WITHPUBLISHING;
     $viewing    = 0;
@@ -131,24 +131,6 @@ function SPITFORM($formfields, $errors)
     echo htmlentities(json_encode($errors));
     echo "</script>\n";
 
-    $amlist = array();
-    $amdefault = "";
-    if ($viewing && ($ISCLOUD || ISADMIN() || STUDLY())) {
-        while (list($index, $aggregate) = each($am_array)) {
-            $urn = $aggregate->urn();
-            $am  = $aggregate->name();
-	    $amlist[] = $am;
-	}
-	$amdefault = $DEFAULT_AGGREGATE;
-	# Temporary override until constraint system in place.
-	if ($profile->BestAggregate()) {
-	    $amdefault = $profile->BestAggregate();
-	}
-    }
-    echo "<script type='text/plain' id='amlist-json'>\n";
-    echo htmlentities(json_encode($amlist));
-    echo "</script>\n";
-
     # Pass project list through. Need to convert to list without groups.
     # When editing, pass through a single value. The template treats a
     # a single value as a read-only field.
@@ -178,7 +160,7 @@ function SPITFORM($formfields, $errors)
     # For progress bubbles in the imaging modal.
     echo "<link rel='stylesheet' href='css/progress.css'>\n";
     echo "<link rel='stylesheet' href='css/codemirror.css'>\n";
-
+    SpitAggregateStatus();
     echo "<script type='text/javascript'>\n";
     echo "    window.VIEWING  = $viewing;\n";
     echo "    window.VERSION_UUID = $version_uuid;\n";
@@ -201,7 +183,6 @@ function SPITFORM($formfields, $errors)
     echo "    window.CLONING  = $cloning;\n";
     echo "    window.ACTIVITY = $activity;\n";
     echo "    window.TITLE    = '$title';\n";
-    echo "    window.AMDEFAULT= '$amdefault';\n";
     echo "    window.BUTTONLABEL = '$button_label';\n";
     echo "    window.ISPPPROFILE = $ispp;\n";
     echo "    window.WITHPUBLISHING = $WITHPUBLISHING;\n";
@@ -235,8 +216,6 @@ function SPITFORM($formfields, $errors)
     AddTemplateList(array('manage-profile', 'waitwait-modal', 'renderer-modal', 'showtopo-modal', 'oops-modal', 'rspectextview-modal', 'guest-instantiate', 'publish-modal', 'instantiate-modal', 'share-modal', 'gitrepo-picker', 'profile-list-modal', 'confirm-delete-profile'));
     SPITFOOTER();
 }
-
-$am_array = Instance::DefaultAggregateList();
 
 #
 # See what projects the user can do this in.
