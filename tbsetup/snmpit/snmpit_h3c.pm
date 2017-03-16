@@ -2349,7 +2349,7 @@ my %h3c_cmdOIDs =
 sub readifIndex($) {
     my $self = shift;
     my ($t_off, $maxport, $name, $ifindex, $iidoid, $port, $mod) = (0,0);
-    my ($leadmod, $modport, $submod);
+    my ($leadmod, $modport, $submod, $boport);
     my ($ge, $fe, $he) = ("GigabitEthernet", "FortyGigE", "HundredGigE");
     my $te = "Ten-$ge";
     $self->debug($self->{NAME} . "::readifIndex:\n", 2);
@@ -2374,14 +2374,15 @@ sub readifIndex($) {
 	$self->{IFDESCR}{$ifindex} = $iidoid;
 	$maxport = $ifindex if ($ifindex > $maxport);
 	next unless
-	    ($iidoid =~ /^($ge|$te|$fe|$he)(\d+)\/(\d+)\/(\d+)$/);
-	($mod, $submod, $port) = ($2,$3,$4);
-	# HORRIBLE hack for submodules > 0
-	if ($submod > 0) {
-	    $port = $ifindex;
-	}
+	    ($iidoid =~ /^($ge|$te|$fe|$he)(\d+)\/(\d+)\/(\d+)(:(\d+))?$/);
+	($mod, $submod, $port, $boport) = ($2,$3,$4,$6);
 	$leadmod = $mod unless defined($leadmod);
 	$mod++ if ($leadmod eq '0');
+	# HORRIBLE hack for submodules > 0 and breakout ports.
+	if ($submod > 0 || defined($boport)) {
+	    $mod = 0;
+	    $port = $ifindex;
+	}
 	$modport = "$mod.$port";
 	$self->{IFINDEX}{$modport} = $ifindex;
 	$self->{IFINDEX}{$ifindex} = $modport;
