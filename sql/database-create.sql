@@ -416,6 +416,7 @@ CREATE TABLE `apt_profile_versions` (
   `repourl` tinytext,
   `reponame` varchar(40) default NULL,
   `repohash` varchar(64) default NULL,
+  `repokey` varchar(64) default NULL,
   `rspec` mediumtext,
   `script` mediumtext,
   `paramdefs` mediumtext,
