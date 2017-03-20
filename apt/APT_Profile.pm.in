@@ -291,6 +291,26 @@ sub Lookup($$;$$)
     }
     return undef;
 }
+#
+# Lookup by repo key.
+#
+sub LookupByRepoKey($$)
+{
+    my ($class, $token) = @_;
+
+    return undef
+	if ($token !~ /^\w+$/);
+
+    my $query_result =
+	DBQueryWarn("select uuid from apt_profile_versions ".
+		    "where repokey='$token'");
+
+    return undef
+	if (!defined($query_result) || !$query_result->numrows);
+
+    my ($uuid) = $query_result->fetchrow_array();
+    return Lookup($class, $uuid);
+}
 
 AUTOLOAD {
     my $self  = $_[0];
@@ -423,6 +443,7 @@ sub Create($$$$$$)
     #
     $cquery .= "name=$name,profileid='$profileid'";
     $cquery .= ",pid='$pid',pid_idx='$pid_idx'";
+    $cquery .= ",gid='$gid',gid_idx='$gid_idx'";
 
     # And the versions table.
     $vquery  = $cquery;
@@ -445,6 +466,7 @@ sub Create($$$$$$)
 	$vquery .= ",repourl="  . DBQuoteSpecial($argref->{'repourl'});
 	$vquery .= ",reponame=" . DBQuoteSpecial($argref->{'reponame'});
 	$vquery .= ",repohash=" . DBQuoteSpecial($argref->{'repohash'});
+	$vquery .= ",repokey="  . DBQuoteSpecial($argref->{'repokey'});
     }
 
     # Back to the main table.
@@ -512,11 +534,13 @@ sub NewVersion($$)
     goto bad
 	if (! DBQueryWarn("insert into apt_profile_versions ".
 			  "  (name,profileid,version,pid,pid_idx, ".
+			  "   gid,gid_idx, ".
 			  "   creator,creator_idx,updater,updater_idx, ".
 			  "   created,uuid, ".
 			  "   parent_profileid,parent_version,rspec, ".
 			  "   script,paramdefs,reponame,repourl) ".
 			  "select name,profileid,'$newvers',pid,pid_idx, ".
+			  "  gid,gid_idx, ".
 			  "  creator,creator_idx,'$uid','$uid_idx',".
 			  "  now(),uuid(),'$profileid', ".
 			  "  '$version',rspec,script,paramdefs, ".

@@ -42,6 +42,7 @@ WEB_BIN_SCRIPTS = webmanage_profile webmanage_instance webmanage_dataset \
                   webcreate_instance webrungenilib webns2rspec webns2genilib \
 		  webrspec2genilib webmanage_reservations webmanage_gitrepo \
                   webmanage_images
+APACHEHOOKS     = apt_gitrepo.hook
 WEB_SBIN_SCRIPTS= webportal_xmlrpc
 LIBEXEC_SCRIPTS	= $(WEB_BIN_SCRIPTS) $(WEB_SBIN_SCRIPTS)
 USERLIBEXEC     = rungenilib.proxy genilib-jail genilib-iocage gitrepo.proxy
@@ -49,14 +50,14 @@ USERLIBEXEC     = rungenilib.proxy genilib-jail genilib-iocage gitrepo.proxy
 # These scripts installed setuid, with sudo. 
 SETUID_BIN_SCRIPTS   = rungenilib manage_gitrepo
 SETUID_SBIN_SCRIPTS  = 
-SETUID_SUEXEC_SCRIPTS= 
+SETUID_SUEXEC_SCRIPTS= apt_gitrepo.hook
 
 #
 # Force dependencies on the scripts so that they will be rerun through
 # configure if the .in file is changed.
 # 
 all:	$(BIN_SCRIPTS) $(SBIN_SCRIPTS) $(LIBEXEC_SCRIPTS) $(SUBDIRS) \
-	$(LIB_SCRIPTS) $(USERLIBEXEC) all-subdirs
+	$(LIB_SCRIPTS) $(USERLIBEXEC) $(APACHEHOOKS) all-subdirs
 
 subboss: 
 
@@ -66,7 +67,9 @@ install: $(addprefix $(INSTALL_BINDIR)/, $(BIN_SCRIPTS)) \
 	$(addprefix $(INSTALL_SBINDIR)/, $(SBIN_SCRIPTS)) \
 	$(addprefix $(INSTALL_LIBDIR)/, $(LIB_SCRIPTS)) \
 	$(addprefix $(INSTALL_LIBEXECDIR)/, $(LIBEXEC_SCRIPTS)) \
+	$(addprefix $(INSTALL_LIBEXECDIR)/, $(APACHEHOOKS)) \
 	$(addprefix $(INSTALL_DIR)/opsdir/libexec/, $(USERLIBEXEC)) \
+	$(addprefix $(INSTALL_DIR)/apt/, $(APACHEHOOKS)) \
 	$(INSTALL_ETCDIR)/cloudlab-fedonly.json \
 	$(INSTALL_ETCDIR)/cloudlab-nofed.json
 
@@ -105,5 +108,11 @@ $(INSTALL_DIR)/opsdir/libexec/%: %
 	@echo "Installing $<"
 	-mkdir -p $(INSTALL_DIR)/opsdir/libexec
 	$(INSTALL) $< $@
+
+$(INSTALL_DIR)/apt/%: %
+	@echo "Installing $@"
+	-mkdir -p $(INSTALL_DIR)/apt
+	-rm -f $(INSTALL_DIR)/apt/$<
+	ln $(INSTALL_LIBEXECDIR)/$< $(INSTALL_DIR)/apt/$<
 
 .PHONY:	$(SUBDIRS) install

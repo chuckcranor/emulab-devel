@@ -91,6 +91,7 @@ $(function ()
 	    fields["profile_repourl"] != "") {
 	    fromrepo = 1;
 	    repohash = fields["profile_repohash"];
+	    setTimeout(function f() { CheckRepoChange() }, 10000);
 	}
 
         // If this is an existing profile, stash the name/project
@@ -1429,6 +1430,30 @@ $(function ()
 			  console.info("unbinding handler");
 			  $('#confirm-force-delete').off("click");
 		      });
+    }
+
+    /*
+     * Timer to ask for the current repository hash value to determine
+     * if it has changed. We tell the user to reload the page. 
+     */
+    function CheckRepoChange()
+    {
+	var callback = function(json) {
+	    //console.info("CheckRepoChange", json);
+	    
+	    if (json.code == 0 && repohash != json.value) {
+		// Mark as HEAD in the page.
+		repohash = json.value;
+		// Reset the list of tags and branches whenever we
+		// successfully update our clone.
+		SetupRepo();
+	    }
+	    setTimeout(function f() { CheckRepoChange() }, 10000);
+	};
+	var xmlthing = sup.CallServerMethod(ajaxurl,
+					    "manage_profile", "GetRepoHash",
+					    {"uuid"   : version_uuid});
+	xmlthing.done(callback);
     }
 
     $(document).ready(initialize);

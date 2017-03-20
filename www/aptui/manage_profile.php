@@ -392,6 +392,9 @@ if (! isset($create)) {
 		$defaults["profile_repourl"]  = $profile->repourl();
                 # Need this so JS code knows when HEAD changes.
 		$defaults["profile_repohash"]  = $profile->repohash();
+		$defaults["profile_repopushurl"]
+                    = "https://www.emulab.net:51369/githook/" .
+                    $profile->repokey();
 	    }
 	    $defaults["profile_creator"]     = $profile->creator();
 	    $defaults["profile_updater"]     = $profile->updater();
@@ -695,13 +698,13 @@ else {
 #
 $webtask    = WebTask::CreateAnonymous();
 $webtask_id = $webtask->task_id();
-$command    = "webmanage_profile ";
+$command    = "webmanage_profile -t $webtask_id ";
 
 if ($action == "edit") {
-    $command .= " update -t $webtask_id " . $profile->uuid();
+    $command .= " update " . $profile->uuid();
 }
 else {
-    $command .= " create -t $webtask_id ";
+    $command .= " create ";
     if (isset($copyuuid)) {
         $command .= "-c " . escapeshellarg($copyuuid);
     }
@@ -713,6 +716,9 @@ $command .= " $xmlname";
 
 $retval = SUEXEC($this_user->uid(), $project->unix_gid(), $command,
 		 SUEXEC_ACTION_IGNORE);
+
+SUEXECERROR(SUEXEC_ACTION_CONTINUE);
+
 if ($retval) {
     if ($retval < 0) {
 	$errors["error"] = "Internal Error; please try again later.";
@@ -735,7 +741,7 @@ if ($retval) {
     }
     $webtask->Delete();
 }
-unlink($xmlname);
+#unlink($xmlname);
 if (count($errors)) {
     SPITFORM($formfields, $errors);
     return;
