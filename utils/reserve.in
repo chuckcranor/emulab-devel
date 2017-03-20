@@ -253,8 +253,8 @@ else {
 	$pid = $oldres->pid();
 	$type = $oldres->type();
 	$count = $oldres->nodes() unless( defined( $count ) );
-	$starttime = $oldres->start() unless( defined( $starttime ) );
-	$endtime = $oldres->end() unless( defined( $endtime ) );
+	$starttime = $oldres->start() unless( defined( $options{"s"} ) );
+	$endtime = $oldres->end() unless( defined( $options{"e"} ) );
     } else {
 	usage() if( @ARGV < 2 || !defined( $type ) );
 	
