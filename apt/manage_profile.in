@@ -308,7 +308,8 @@ sub CreateProfile()
     if (defined($script) && $script ne "") {
 	my $paramdefs = HandleScript($script);
 
-	$new_args{"paramdefs"} = $paramdefs if ($paramdefs ne "");
+	$new_args{"paramdefs"} =
+	    $paramdefs if (defined($paramdefs) && $paramdefs ne "");
     }
     #
     # Are we going to snapshot a node in an experiment? If so we
@@ -901,6 +902,30 @@ sub UpdateProfileFromRepo()
     
     return 0;
 }
+
+#
+# For a Parameterized Profile, need to generate and store the form
+# data. Only python scripts of course. Does not return on error.
+#
+sub HandleScript($)
+{
+    my ($script) = @_;
+
+    return undef
+	if ($script !~ /^import/m);
+
+    my ($fh, $filename) = tempfile();
+    fatal("Could not open temporary file for script")
+	if (!defined($fh));
+    print $fh $script;
+    my $paramdefs = `$RUNGENILIB -p $filename`;
+    fatal("$RUNGENILIB failed")
+	if ($?);
+    chomp($paramdefs);
+    
+    return $paramdefs;
+}
+
 exit(0);
 
 sub fatal($)
