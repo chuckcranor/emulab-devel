@@ -975,57 +975,63 @@ $(function ()
 		var target = $(this).find('a');
 		var cluster = $(this).attr('urn');
 
-		_.each(resinfo[cluster]['reservations'], function(types, resproj) {
-		    if (project == resproj) {
-			hasReservation = true;
-			click = true;
-			// Get nearest time
-			_.each(types, function(time) {
-			    if (start == null || start > time) {
-				start = time;
+		if (_.has(resinfo, cluster) && resinfo[cluster] != null) {
+		    if (_.has(resinfo[cluster], 'reservations') && resinfo[cluster]['reservations'] != null) {
+			_.each(resinfo[cluster]['reservations'], function(types, resproj) {
+			    if (project == resproj) {
+				hasReservation = true;
+				click = true;
+				// Get nearest time
+				_.each(types, function(time) {
+				    if (start == null || start > time) {
+					start = time;
+				    }
+				});
 			    }
 			});
 		    }
-		});
 
-		if (!hasReservation) {
-		    _.each(resinfo[cluster]['pressure'], function(reslist) {
-			if (_.has(reslist, project)) {
-			    if (start == null || start > reslist[project][0]) {
-				start = reslist[project][0];
-				end = reslist[project][1];
-			    }
+		    if (_.has(resinfo[cluster], 'pressure') && resinfo[cluster]['pressure'] != null) {
+			if (!hasReservation) {
+			    _.each(resinfo[cluster]['pressure'], function(reslist) {
+				if (_.has(reslist, project)) {
+				    if (start == null || start > reslist[project][0]) {
+					start = reslist[project][0];
+					end = reslist[project][1];
+				    }
+				}
+			    });
 			}
-		    });
-		}
-
-		if (start != null) {
-		    $(this).attr('data-res-start', start);
-		    if (end != null) {
-		    	$(this).removeAttr('data-now');
-
-			$(this).attr('data-res-end', end);
-			target.append(wt.ReservationWarningHTML());
 		    }
-		    else {
-			$(this).removeAttr('data-res-end');
-			var now = new Date();
-			var startTime = new Date(parseInt(start)*1000);
 
-			if (startTime < now) {
-			    $(this).attr('data-now', 'true');
-			    target.append(wt.HasReservationHTML());
+		    if (start != null) {
+			$(this).attr('data-res-start', start);
+			if (end != null) {
+		    	    $(this).removeAttr('data-now');
+
+			    $(this).attr('data-res-end', end);
+			    target.append(wt.ReservationWarningHTML());
 			}
 			else {
-			    $(this).attr('data-now', 'false');
-			    target.append(wt.FutureReservationHTML());
+			    $(this).removeAttr('data-res-end');
+			    var now = new Date();
+			    var startTime = new Date(parseInt(start)*1000);
+
+			    if (startTime < now) {
+				$(this).attr('data-now', 'true');
+				target.append(wt.HasReservationHTML());
+			    }
+			    else {
+				$(this).attr('data-now', 'false');
+				target.append(wt.FutureReservationHTML());
+			    }
 			}
+			$('.reservation_tooltip > div').tooltip();
 		    }
-		    $('.reservation_tooltip > div').tooltip();
-		}
-		else {
-		    $(this).removeAttr('data-res-start');
-		    $(this).removeAttr('data-res-end');
+		    else {
+			$(this).removeAttr('data-res-start');
+			$(this).removeAttr('data-res-end');
+		    }
 		}
 	    });
 
