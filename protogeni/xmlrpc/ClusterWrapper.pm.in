@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2008-2016 University of Utah and the Flux Group.
+# Copyright (c) 2008-2017 University of Utah and the Flux Group.
 # 
 # {{{GENIPUBLIC-LICENSE
 # 
@@ -75,7 +75,7 @@ my $TBLOGS           = "@TBLOGSEMAIL@";
 my $TBBASE           = "@TBBASE@";
 my $OURDOMAIN	     = "@OURDOMAIN@";
 my $GENIGROUP        = "GeniSlices";
-my $PGERRORS	     = "stoller\@flux.utah.edu";
+my $PGERRORS	     = "protogeni-errors\@flux.utah.edu";
 # We preload the CA certs at startup.
 my $GENICERTS        = "$TB/etc/genicacerts";
 
@@ -446,6 +446,8 @@ sub Start($$)
 	$method eq "Provision"       ||
 	$method eq "Allocate"        ||
 	$method eq "Update"          ||
+	$method eq "Reserve"         ||
+	$method eq "ApproveReservation" ||
 	$method eq "DeleteSlice") {
 	$debug = 2;
 	$nostorelogs = 0;

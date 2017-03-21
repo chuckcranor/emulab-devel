@@ -277,6 +277,11 @@ sub get_ptabtype($)
 	return "unknown";
     }
 
+    # newer sfdisk recognizes GPT
+    if ($pinfo =~ /Disklabel type: gpt/) {
+	return "GPT";
+    }
+
     # if sfdisk detects a GPT, go with it
     if ($pinfo =~ /WARNING: GPT \(GUID Partition Table\) detected/) {
 	return "GPT";

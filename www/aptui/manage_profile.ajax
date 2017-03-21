@@ -164,8 +164,8 @@ function Do_DeleteProfile()
 	return;
     }
     $retval = SUEXEC($this_uid, $profile->pid(),
-		     "webmanage_profile delete -t " . $webtask->task_id() . 
-                     " -- $opt " . $profile->uuid(),
+		     "webmanage_profile -t " . $webtask->task_id() . " " .
+                     "delete $opt " . $profile->uuid(),
 		     SUEXEC_ACTION_IGNORE);
 
     if ($retval != 0) {
@@ -265,8 +265,8 @@ function Do_PublishProfile()
 	return;
     }
     $retval = SUEXEC($this_uid, $profile->pid(),
-		     "webmanage_profile publish -t " . $webtask->task_id() . 
-                     " " . $profile->uuid(),
+		     "webmanage_profile -t " . $webtask->task_id() . " " .
+                     "publish " . $profile->uuid(),
 		     SUEXEC_ACTION_IGNORE);
     if ($retval != 0) {
         $webtask->Refresh();
@@ -966,8 +966,8 @@ function UpdateMaster($profile, $script, $rspec)
     chmod($fname, 0666);
     
     $retval = SUEXEC($this_uid, $profile->pid(),
-		     "webmanage_profile update -t " . $webtask->task_id() .
-                     " " . $profile->uuid() . " $fname",
+		     "webmanage_profile -t " . $webtask->task_id() . " " .
+                     "update " . $profile->uuid() . " $fname",
 		     SUEXEC_ACTION_IGNORE);
     $webtask->Refresh();
     
@@ -1212,6 +1212,37 @@ function Do_GetCommitInfo()
     }
     $webtask->Delete();
     SPITAJAX_RESPONSE($webtask->TaskValue("commitinfo"));
+}
+
+#
+# Get the repo hash
+#
+function Do_GetRepoHash()
+{
+    global $this_user;
+    global $ajax_args;
+
+    $this_idx = $this_user->uid_idx();
+    $this_uid = $this_user->uid();
+
+    if (!isset($ajax_args["uuid"])) {
+	SPITAJAX_ERROR(1, "Missing profile uuid");
+	return;
+    }
+    $profile = Profile::Lookup($ajax_args["uuid"]);
+    if (!$profile) {
+	SPITAJAX_ERROR(1, "Unknown profile uuid");
+	return;
+    }
+    if (!$profile->repourl()) {
+	SPITAJAX_ERROR(1, "Not a repo-based profile");
+	return;
+    }
+    if ($this_idx != $profile->creator_idx() && !ISADMIN()) {
+	SPITAJAX_ERROR(1, "Not enough permission");
+	return;
+    }
+    SPITAJAX_RESPONSE($profile->repohash());
 }
 
 # Local Variables:

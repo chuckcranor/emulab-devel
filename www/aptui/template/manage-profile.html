@@ -151,6 +151,21 @@
 	      <td>Est. Size:</td>
 	      <td class="commit-size"></td>
 	    </tr>
+	    <tr style="white-space: nowrap;">
+	      <td>Push URL:</td>
+	      <td style="white-space: nowrap;">
+		<input readonly type="text" class="form-control input-sm"
+		       onClick="this.select();"
+		       style="display: inline;
+			      padding-left: 3px; padding-right: 3px;
+			      padding-bottom: 0px; padding-top: 0px;"
+		       value="<%- formfields.profile_repopushurl %>">
+		<a href='#' class='btn btn-xs'
+		   style="padding: 0px"
+		   data-toggle='modal'
+		   data-target="#webhook-help-modal">
+		  <span class='glyphicon glyphicon-question-sign'
+			style='margin-bottom: 4px;'></span></a></td>
 	    <% if (isadmin) { %>
 	      <tr>
 		<td>RepoName:</td>
@@ -362,7 +377,11 @@
 		       data-content='Fetch from your repository, updating
 				     your profile to reflect the current HEAD
 				     of your master branch. Branches and tags
-				     are updated as well (see below).'>
+				     are updated as well (see below). You
+				     can also set up a <em>push webhook</em>
+				     to automate updates, see the <b>Push
+				     URL</b> help info in the Repository panel 
+				     on your left.'>
 		      <span class='glyphicon glyphicon-question-sign'
 			    style='margin-bottom: 4px;'></span>
 		    </a>
@@ -835,6 +854,75 @@
       </div>
     </div>
   </div>
+  <% if (fromrepo) { %>
+    <!-- web hook help -->
+    <div id='webhook-help-modal' class='modal fade'>
+      <div class='modal-dialog'>
+	<div class='modal-content'>
+	  <div class='modal-body'>
+            <button type='button' class='close' data-dismiss='modal'
+                    aria-hidden='true'>&times;</button>
+	    <div class='clearfix'></div>
+	    <p>
+	      The <em>push URL</em> is an example of a
+	      <a href="https://developer.github.com/webhooks/" target="_blank">
+		<em>webhook</em></a> supported by public 
+	      <a href="https://git-scm.com/" target="_blank">Git</a>
+	      repositories like
+	      <a href="github.com" target="_blank">github.com</a>,
+	      as well as those based
+	      on <a href="https://www.gitlab.com/" target="_blank">GitLab</a>.
+	    </p>
+	    <p>
+	      Specifically, a <em>push</em> webhook is used to notify
+	      a third party that a new commit has been created, either
+	      by a push or by executing a commit via the repository
+	      web interface. With <%- window.APTTILE %>, when we receive the
+	      notification from your repository, we will fetch from
+	      your repository, updating your profile to reflect the
+	      current HEAD of your master branch. Branches and tags
+	      are updated as well. When complete, we will send you an email
+	      confirmation so you know that your profile has been updated.
+	    </p>
+	    <p>
+	      Setting up a webhook is relatively straightfoward:
+	      <ul>
+		<li><b>github.com</b>: Go to your repository and 
+		  click on the <b>Settings</b> option
+		  in the upper right, then click on <b>Webhooks</b>, then
+		  click on the <b>Add Webhook</b> menu option. Paste your
+		  push URL into the <b>Payload URL</b> form field, leave
+		  everything else as is, and click on the <b>Add Webhook</b>
+		  button at the bottom of the form.
+		</li>
+		<li><b>gitlab</b>: Go to your repository and click on the
+		  <span class='glyphicon glyphicon-cog'
+			style='margin-bottom: 4px;'></span> in the upper
+		  right, then click on the <b>Integrations</b> menu option.
+		  Paste your push URL into the <b>URL</b> form field, leave
+		  everything else as is, and click on the <b>Add Webhook</b>
+		  button at the bottom of the form.
+		</li>
+		<li><b>bitbucket.org</b>: Go to your repository and click on the
+		  <span class='glyphicon glyphicon-cog'
+			style='margin-bottom: 4px;'></span> in the lower
+		  left, then click on the <b>Webhooks</b> menu option, then
+		  click on the <b>Add Webhook</b> button. Give your new
+		  webhook a <b>Title</b> and 
+		  paste your push URL into the <b>URL</b> form field, leave
+		  everything else as is, and click on the <b>Save</b>
+		  button at the bottom of the form.
+		</li>
+	      </ul>
+	    </p>
+	    <p>
+	      
+	    </p>
+	  </div>
+	</div>
+      </div>
+    </div>
+  <% } %>
   <!-- Docstring help -->
   <div id='docstring-help-modal' class='modal fade'
        data-keyboard='false' data-backdrop='static'>

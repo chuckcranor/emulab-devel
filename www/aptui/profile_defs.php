@@ -132,6 +132,7 @@ class Profile
     function repourl()	    { return $this->field('repourl'); }
     function reponame()	    { return $this->field('reponame'); }
     function repohash()	    { return $this->field('repohash'); }
+    function repokey()	    { return $this->field('repokey'); }
     function webtask_id()   { return $this->field('webtask_id'); }
     function profile_disabled()    { return $this->field('profile_disabled'); }
     function parent_profileid()    { return $this->field('parent_profileid'); }

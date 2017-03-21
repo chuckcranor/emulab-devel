@@ -155,7 +155,7 @@ CREATE TABLE `geni_tickets` (
 
 DROP TABLE IF EXISTS `geni_credentials`;
 CREATE TABLE `geni_credentials` (
-  `idx` mediumint(8) unsigned NOT NULL default '0',
+  `idx` int(10) unsigned NOT NULL default '0',
   `uuid` varchar(40) NOT NULL default '',
   `owner_uuid` varchar(40) NOT NULL default '',
   `this_uuid` varchar(40) NOT NULL default '',
@@ -241,7 +241,7 @@ CREATE TABLE `geni_resources` (
   `expires` datetime default NULL,
   `updated` datetime default NULL,
   `slice_idx` mediumint(8) unsigned NOT NULL default '0',
-  `credential_idx` mediumint(8) unsigned NOT NULL default '0',
+  `credential_idx` int(10) unsigned NOT NULL default '0',
   `manifest_idx` mediumint(8) unsigned NOT NULL default '0',
   `ticket_idx` mediumint(8) unsigned NOT NULL default '0',
   `newticket_idx` mediumint(8) unsigned NOT NULL default '0',

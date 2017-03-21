@@ -130,6 +130,8 @@ $routing = array("myprofiles" =>
                                                      "Do_GetBranchList",
 						 "GetCommitInfo" =>
                                                      "Do_GetCommitInfo",
+						 "GetRepoHash" =>
+                                                     "Do_GetRepoHash",
 						 "GetCommitList" =>
                                                      "Do_GetCommitList")),
 		 "status" =>

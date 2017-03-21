@@ -1899,6 +1899,9 @@ sub vnodePreConfig($$$$$){
 	    }
 	}
 	if (-e "$vnoderoot/etc/emulab/genvmtype") {
+	    if (-e "$vnoderoot/etc/emulab/outer_bossnode") {
+		$vninfo->{'elabinelab'} = 1;
+	    }
 	    print STDERR "vnodePreConfig: $vnode_id root already localized\n";
 	    goto done;
 	}
@@ -1917,6 +1920,7 @@ sub vnodePreConfig($$$$$){
     # the custom elabinelab setup.
     #
     if (-e "$vnoderoot/etc/emulab/outer_bossnode") {
+	$vninfo->{'elabinelab'} = 1;
 	print STDERR
 	    "vnodePreConfig: WARNING: $vnode_id appears to be a configured ".
 	    "elabinelab server; skipping localizations\n";
@@ -2750,7 +2754,12 @@ sub vnodeBoot($$$$)
 	my $countdown = 20;
 	if ($vninfo->{'ishvm'}) {
 	    # XXX allow longer for emulated BIOS and boot loaders
-	    $countdown += 10;
+	    # XXX elabinelab server VMs will take even longer
+	    if (exists($vninfo->{'elabinelab'})) {
+		$countdown += 40;
+	    } else {
+		$countdown += 10;
+	    }
 	}
 	while ($countdown > 0) {
 	    TBDebugTimeStamp("Pinging $ip for up to five seconds ...");

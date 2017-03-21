@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2000-2016 University of Utah and the Flux Group.
+# Copyright (c) 2000-2017 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -404,9 +404,14 @@ if (exists($newimageid_args{"nodetype"}) &&
 # we get a list of just the nodes that are currently in the testbed, not
 # just in the node_types table.  Limit by class if given.
 #
+# If we are using architectures, and the image has an architecture, then
+# we will switch back to the non-allpc path since we have enough info to
+# make a better decision. 
+#
 my $types_querystring;
 if ($allpc) {
-    $types_querystring = "select nt.type,nt.class from node_types as nt ".
+    $types_querystring =
+	"select nt.type,nt.class,nt.architecture from node_types as nt ".
 	"left join node_type_attributes as a on a.type=nt.type ".
 	"where a.attrkey='imageable' and a.attrvalue!='0' ";
 
@@ -540,50 +545,61 @@ if (exists($newimageid_args{"def_parentosid"})) {
 }
 
 #
-# The path must not contain illegal chars and it must be more than
-# the original /proj/$pid we gave the user. We allow admins to specify
-# a path outside of /proj though.
-# 
-if (!exists($newimageid_args{"path"}) ||
-    $newimageid_args{"path"} eq "") {
-    UserError("Path: Missing Field");
+# We no longer allow users to set the path (via the web interface), so
+# do not worry if it is not set, lets just set the path. In fact, we
+# are going to ignore all he places that pass in a path, that code is
+# duplicated in way too many places. The code below mirrors code in
+# clone_image, but we can throw that away and all the other places.
+#
+# If its an admin, we allow the path to be set to /usr/testbed/images.
+# We throw that away and set it the way we want it in /usr/testbed/images.
+#
+my $path;
+my $spath = "/usr/testbed/images/";
+my $ipid  = $newimageid_args{"pid"};
+my $igid  = (exists($newimageid_args{"gid"}) &&
+	     $newimageid_args{"gid"} ne "") ? $newimageid_args{"gid"} : $ipid;
+
+if ($ipid eq $igid || $global) {
+    $path  = "$TBPROJ_DIR/$ipid/images/";
 }
-elsif (! $isadmin) {
-    my $pdef = "";
-    
-    if (!($shared || $global) &&
-	exists($newimageid_args{"gid"}) &&
-	$newimageid_args{"gid"} ne "" &&
-	$newimageid_args{"gid"} ne $newimageid_args{"pid"}) {
-	$pdef = "$TBGROUP_DIR/" .
-	    $newimageid_args{"pid"} . "/" . $newimageid_args{"gid"} . "/";
+else {
+    $path = "$TBGROUP_DIR/$ipid/$igid/images/";
+}
+if ($DOIMAGEDIRS) {
+    $path  .= "${imagename}/";
+    $spath .= "${imagename}/";
+}
+else {
+    $path  .= "${imagename}.ndz";
+    $spath .= "${imagename}.ndz";
+}
+if ($isadmin) {
+    #
+    # Admins can provide a path, but this is probably a bad idea too.
+    # Ignore it unless /usr/testbed/images.
+    #
+    if (exists($newimageid_args{"path"}) &&
+	$newimageid_args{"path"} =~ /^\/usr\/testbed\/images/) {
+	$newimageid_args{"path"} = $spath;
     }
     else {
-	$pdef = "$TBPROJ_DIR/" . $newimageid_args{"pid"} . "/images/";
-    }
-
-    if (index($newimageid_args{"path"}, $pdef) < 0) {
-	UserError("Path: Invalid Path");
+	$newimageid_args{"path"} = $path;
     }
 }
-#
-# Image path from the web interface does not respect the
-# IMAGEDIRECTORIES feature or config variable. We fix it up here.
-#
-if ($newimageid_args{"path"} =~ /\/$/ &&
-    (! $DOIMAGEDIRS ||
-     ! ($isadmin ||
-	EmulabFeatures->FeatureEnabled("ImageDirectories",
-				       $this_user, $group)))) {
-    $newimageid_args{"path"} =~ s/\/$/.ndz/;
+else {
+    $newimageid_args{"path"} = $path;
 }
 if ($newimageid_args{"path"} =~ /\/$/) {
     if (-e $newimageid_args{"path"} && ! -d $newimageid_args{"path"}) {
 	UserError("Path: invalid path, it should be a directory");	
     }
 }
-elsif (-d $newimageid_args{"path"} =~ /\/$/) {
+elsif (-d $newimageid_args{"path"}) {
     UserError("Path: invalid path, its a directory");
+}
+if (1 || $debug) {
+    print "Setting path to " . $newimageid_args{"path"} . "\n";
 }
 
 #
@@ -655,7 +671,7 @@ my $node_types_selected = 0;
 #
 # If we have architectures defined in the node_types table, and we got
 # an architecture in the xml file for the image, we use those. Otherwise
-# fall back to the old method.
+# fall back to the old method. 
 #
 if (keys(%mtypes_arch) &&
     (exists($newimageid_args{"architecture"}) && 

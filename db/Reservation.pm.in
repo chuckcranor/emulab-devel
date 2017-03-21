@@ -156,7 +156,8 @@ sub Lookup($$;$$$$)
     
 	$query_result = DBQueryWarn( "SELECT *, UNIX_TIMESTAMP(start) AS s, " .
 				     "UNIX_TIMESTAMP(end) AS e, " .
-				     "UNIX_TIMESTAMP(created) AS c " .
+				     "UNIX_TIMESTAMP(created) AS c, " .
+				     "UNIX_TIMESTAMP(approved) AS a " .
 				     "FROM future_reservations " .
 				     "WHERE pid_idx='$pid_idx' AND " .
 				     "nodes='$nodes' AND " .
@@ -172,7 +173,8 @@ sub Lookup($$;$$$$)
 
 	$query_result = DBQueryWarn( "SELECT *, UNIX_TIMESTAMP(start) AS s, " .
 				     "UNIX_TIMESTAMP(end) AS e, " .
-				     "UNIX_TIMESTAMP(created) AS c " .
+				     "UNIX_TIMESTAMP(created) AS c, " .
+				     "UNIX_TIMESTAMP(approved) AS a " .
 				     "FROM future_reservations " .
 				     "WHERE idx='$idx'" );
 
@@ -196,7 +198,7 @@ sub Lookup($$;$$$$)
     $self->{'UID_IDX'}     = $record->{'uid_idx'};
     $self->{'NOTES'}       = $record->{'notes'};
     $self->{'ADMIN_NOTES'} = $record->{'admin_notes'};
-    $self->{'APPROVED'}    = $record->{'approved'};
+    $self->{'APPROVED'}    = $record->{'a'};
     $self->{'APPROVER'}    = $record->{'approver'};
 	
     bless($self, $class);
