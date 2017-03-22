@@ -371,17 +371,18 @@ echo "
       <ul class='dropdown-menu'>
 	<li><a href='instantiate.php'>Start Experiment</a></li>
 	<li><a href='manage_profile.php'>Create Experiment Profile</a></li>
-	<li><a href='user-dashboard.php#experiments'>
+       <li><a href='reserve.php'>Reserve Nodes</a></li>
+	";
+echo " <li class='divider'></li>
+        <li><a href='user-dashboard.php#experiments'>
 	    My Experiments</a></li>
 	<li><a href='user-dashboard.php#profiles'>
             My Profiles</a></li>
-	<li><a href='activity.php?user=$login_uid&min=$then'>
+        <li><a href='list-reservations.php'>
+            My Reservations</a></li>
+        <li><a href='activity.php?user=$login_uid&min=$then'>
                             My History</a></li>
-	";
-echo " <li class='divider'></li>
-       <li><a href='reserve.php'>Reserve Nodes</a></li>
-       <li><a href='list-reservations.php'>
-         List Reservations</a></li>";
+";
       echo "
     </ul>
     </li>
@@ -429,16 +430,14 @@ echo " <li class='divider'></li>
                             All Experiments</a></li>
 		                 <li><a href='myprofiles.php?all=1'>
                             All Profiles</a></li>
+                                 <li><a href='list-reservations.php'>
+                            All Reservations</a></li>
 				              <li><a href='list-datasets.php?all=1'>
                             All Datasets</a></li>
 					                   <li><a href='images.php?all=1'>
                             All Images</a></li>
 							                <li><a href='lists.php'>
                             Users/Projects</a></li>
-									             <li><a href='list-reservations.php'>
-                            List Reservations</a></li>
-										                  <li><a href='reserve.php'>
-                            Create Reservation</a></li>
 												               <li><a href='edit-news.php'>
 														   Add a news item</a></li>";
 													                  echo " </ul>
