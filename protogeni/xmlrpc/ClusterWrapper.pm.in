@@ -96,7 +96,7 @@ use Group;
 use Logfile;
 
 # Need a command line option.
-my $debug      = 0;
+my $DEBUG      = 0;
 my $nostorelogs= 0;
 my $noanything = 0;
 # Flag for XMLERROR.
@@ -211,7 +211,8 @@ sub Start($$)
     #
     GeniUtil::FlipToGeniUser();
 
-    # Make sure all our globals are reset for each request. 
+    # Make sure all our globals are reset for each request.
+    my $debug     = $DEBUG;
     $GENIURN      = undef;
     $ROOTCA       = undef;
     $logging      = 0;
