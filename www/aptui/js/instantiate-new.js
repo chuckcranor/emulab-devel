@@ -222,6 +222,7 @@ $(function ()
 	    console.log('profile-pid change');
 	    UpdateGroupSelector();
 	    UpdateImageConstraints();
+	    ShowClusterReservations();
 	    return true;
 	});
 	$('#profile_copy_button').click(function (event) {
@@ -913,7 +914,7 @@ $(function ()
 	    $('#'+which+' .form-control').after(html);
 	    $('#'+which+' select.form-control').addClass('hidden');
 
-	    html.find('.dropdown-menu a').on('click', function() {    
+	    html.find('.dropdown-menu a').on('click', function() {   
 		wt.StatusClickEvent(html, this);
 		$('#'+which+' .form-control').val($('#'+which+' .cluster_picker_status .value').html()); 
 	    });
@@ -931,28 +932,15 @@ $(function ()
 		    rating = wt.InactiveRating();
 		    classes = wt.AssignInactiveClass();
 		}
-		target.parent().attr('data-health', rating[0]).attr('data-rating', rating[1]);
+		target.parent().attr('data-health', rating[0]).attr('data-rating', rating[1]).attr('urn', key);
 		    
 		target.addClass(classes[0]).addClass(classes[1]);
 
 		target.append(wt.StatsLineHTML(classes, rating[2]));
 	    });
 
-	    var sort = function (a, b) {
-		var aHealth = Math.ceil((+a.dataset.health)/50);
-		var bHealth = Math.ceil((+b.dataset.health)/50);
-
-		if (aHealth > bHealth) {
-		    return -1;
-		}
-		else if (aHealth < bHealth) {
-		    return 1;
-		}
-		return +b.dataset.rating - +a.dataset.rating;
-	    };
-
-	    $('#'+which+' .cluster_picker_status .dropdown-menu').find('.enabled.native').sort(sort).prependTo($('#'+which+' .cluster_picker_status .dropdown-menu'));
-	    $('#'+which+' .cluster_picker_status .dropdown-menu').find('.enabled.federated').sort(sort).insertAfter($('#'+which+' .cluster_picker_status .dropdown-menu .federatedDivider'));
+	    $('#'+which+' .cluster_picker_status .dropdown-menu').find('.enabled.native').sort(SortClusterStatus).prependTo($('#'+which+' .cluster_picker_status .dropdown-menu'));
+	    $('#'+which+' .cluster_picker_status .dropdown-menu').find('.enabled.federated').sort(SortClusterStatus).insertAfter($('#'+which+' .cluster_picker_status .dropdown-menu .federatedDivider'));
 
 	    var pickerStatus = $('#'+which+' .cluster_picker_status .dropdown-menu .enabled a');
 	    if (pickerStatus.length == 2) {
@@ -961,9 +949,132 @@ $(function ()
 	    else {
 		pickerStatus[0].click();
 	    }
-	});
+	});	  
 	
 	$('[data-toggle="tooltip"]').tooltip();
+
+	ShowClusterReservations();
+    }
+
+    function ShowClusterReservations() {
+	if (resinfo == null || $.isEmptyObject(resinfo)) {
+	    return
+	}
+
+	var project = $('#profile_pid').val();
+
+	$('#reservation_confirmation').addClass('hidden');
+	$('#reservation_warning').addClass('hidden');
+	$('#reservation_future').addClass('hidden');
+
+	$('#finalize_options .cluster-group').each(function() {
+	    var click = false;
+
+	    $(this).find('.dropdown-menu > .enabled:not(.hidden)').each(function() {
+		$(this).find('.reservation_tooltip').remove();
+
+		var start = null;
+		var end = null;
+		var hasReservation = false;
+
+		var target = $(this).find('a');
+		var cluster = $(this).attr('urn');
+
+		if (_.has(resinfo, cluster) && resinfo[cluster] != null) {
+		    if (_.has(resinfo[cluster], 'reservations') && resinfo[cluster]['reservations'] != null) {
+			_.each(resinfo[cluster]['reservations'], function(types, resproj) {
+			    if (project == resproj) {
+				hasReservation = true;
+				click = true;
+				// Get nearest time
+				_.each(types, function(time) {
+				    if (start == null || start > time) {
+					start = time;
+				    }
+				});
+			    }
+			});
+		    }
+
+		    if (_.has(resinfo[cluster], 'pressure') && resinfo[cluster]['pressure'] != null) {
+			if (!hasReservation) {
+				console.log('here');
+			    _.each(resinfo[cluster]['pressure'], function(reslist) {
+				if (_.has(reslist, project)) {
+				    if (start == null || start > reslist[project][0][0]) {
+					start = reslist[project][0][0];
+					end = reslist[project][0][1];
+				    }
+				}
+			    });
+			}
+		    }
+
+		    if (start != null) {
+			$(this).attr('data-res-start', start);
+			if (end != null) {
+		    	    $(this).removeAttr('data-now');
+
+			    $(this).attr('data-res-end', end);
+			    target.append(wt.ReservationWarningHTML());
+			}
+			else {
+			    $(this).removeAttr('data-res-end');
+			    var now = new Date();
+			    var startTime = new Date(parseInt(start)*1000);
+
+			    if (startTime < now) {
+				$(this).attr('data-now', 'true');
+				target.append(wt.HasReservationHTML());
+			    }
+			    else {
+				$(this).attr('data-now', 'false');
+				target.append(wt.FutureReservationHTML());
+			    }
+			}
+			$('.reservation_tooltip > div').tooltip();
+		    }
+		    else {
+			$(this).removeAttr('data-res-start');
+			$(this).removeAttr('data-res-end');
+		    }
+		}
+	    });
+
+	    var which = $(this).parent().attr('id');
+
+	    $('#'+which+' .cluster_picker_status .dropdown-menu').find('.enabled.native').sort(SortClusterStatus).prependTo($('#'+which+' .cluster_picker_status .dropdown-menu'));
+	    $('#'+which+' .cluster_picker_status .dropdown-menu').find('.enabled.federated').sort(SortClusterStatus).insertAfter($('#'+which+' .cluster_picker_status .dropdown-menu .federatedDivider'));
+
+	    var pickerStatus = $('#'+which+' .cluster_picker_status .dropdown-menu .enabled a');
+	    if (click) {
+		pickerStatus[1].click();
+	    }
+	    else {
+		$('#'+which+' .cluster_picker_status .dropdown-menu .selected a').click();
+	    }
+	});
+    }
+
+    function SortClusterStatus(a, b) {
+	if ((a.dataset.now && !b.dataset.now) || (a.dataset.now == 'true' && b.dataset.now == 'false')) {
+	    return -1;
+	}
+
+	if ((b.dataset.now && !a.dataset.now) || (b.dataset.now == 'true' && a.dataset.now == 'false')) {
+	    return 1;
+	}
+
+	var aHealth = Math.ceil((+a.dataset.health)/50);
+	var bHealth = Math.ceil((+b.dataset.health)/50);
+
+	if (aHealth > bHealth) {
+	    return -1;
+	}
+	else if (aHealth < bHealth) {
+	    return 1;
+	}
+	return +b.dataset.rating - +a.dataset.rating;
     }
 
     function SwitchJacks(which) {
@@ -1748,6 +1859,8 @@ $(function ()
 	    }
 	    console.info("resinfo", json.value);
 	    resinfo = json.value;
+	    
+	    ShowClusterReservations();
 	};
 	var $xmlthing =
 	    sup.CallServerMethod(null, "reserve", "ReservationInfo", null);
