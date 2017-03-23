@@ -749,6 +749,7 @@ sub DoPrediction()
 	if (defined($webtask)) {
 	    $webtask->value($response->value());
 	    $webtask->Exited(0);
+	    $webtask->Store();
 	}
 	return 0;
     };
