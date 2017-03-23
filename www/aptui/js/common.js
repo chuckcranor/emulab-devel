@@ -182,13 +182,38 @@ window.APT_OPTIONS.fetchTemplateList = function (nameList) {
 };
 
 window.APT_OPTIONS.startPage = function () {
-  if (window.parent) {
-    window.parent.postMessage({ url: window.location.href}, '*')
-  }
+  window.APT_OPTIONS.postTutorial({ url: window.location.href });
 }
 
 window.APT_OPTIONS.endPage = function () {
-  if (window.parent) {
-    window.parent.postMessage({ url: "None"}, '*')
-  }
+  window.APT_OPTIONS.postTutorial({ url: "None" });
 }
+
+window.APT_OPTIONS.updatePage = function (data) {
+  window.APT_OPTIONS.postTutorial({ url: window.location.href, update: data });
+}
+
+window.APT_OPTIONS.postTutorial = function (data) {
+  //console.log('PostTutorial: ', data);
+  //console.log('parent: ', window.parent.location.hostname, window.parent.location.port, window.parent.location.protocol);
+  window.parent.postMessage(data, 'http://tutorial.cloudlab.us:5000');
+  try {
+    if (window.parent) {
+      if (window.parent.location.hostname === 'tutorial.cloudlab.us' &&
+	  window.parent.location.port === '5000' &&
+	  window.parent.location.protocol === 'http')
+      {
+	console.log('sending');
+	window.parent.postMessage(data, 'http://tutorial.cloudlab.us:5000');
+      }
+      else if (window.parent.location.hostname === 'tutorial.cloudlab.us' &&
+	       window.parent.location.port === '' &&
+	       window.parent.location.protocol === 'http')
+      {
+	window.parent.postMessage(data, 'http://tutorial.clou7dlab.us');
+      }
+    }
+  }
+  catch (e) {}
+}
+

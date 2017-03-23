@@ -112,6 +112,7 @@ if ($PGENISUPPORT) {
     require GeniHRN;
     $cmurn = &GeniHRN::Generate($OURDOMAIN, "authority", "cm");
 }
+my $allow_firewall = TBGetSiteVar("general/cnet_firewalls");
 
 $opstate = <<'OPSTATE';
 <rspec_opstate xmlns="http://www.geni.net/resources/rspec/ext/opstate/1"
@@ -1117,6 +1118,8 @@ my $free_condition = "(b.node_id is null and ".
 if (defined($pid)) {
     $free_condition = "($free_condition and ".
 	"(np.reserved_pid is null or np.reserved_pid='$pid'))";
+} else {
+    $free_condition = "($free_condition and np.reserved_pid is null)";
 }
 
 # if the user has specified an exempt pid/eid, 
@@ -1392,6 +1395,9 @@ foreach $node (@nodenames) {
 	push @types, "delay-${type}:$delay_capacity";
 	push @types, "bridge:100";
 	push @types, "bridge-${type}:100";
+    }
+    if (defined($allow_firewall) && $allow_firewall) {
+	push @types, "firewall:1";
     }
 
     #

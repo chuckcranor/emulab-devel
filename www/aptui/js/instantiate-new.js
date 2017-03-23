@@ -522,8 +522,9 @@ $(function ()
 
     // Step is done changing.
     function StepChanged(step, event, currentIndex, priorIndex) {
+        APT_OPTIONS.updatePage({ 'instantiate-step': currentIndex });
 	var cIndex = currentIndex;
-	if (currentIndex == 1) {
+        if (currentIndex == 1) {
 	    // If the profile isn't parameterized, skip the second step
 	    if (!ispprofile) {
 		if (priorIndex < currentIndex) {

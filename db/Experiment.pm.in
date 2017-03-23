@@ -5457,6 +5457,7 @@ sub AllocatePublicAddrPools($)
     my $pid = $self->pid();
     my $eid = $self->eid();
     my %old_addrs;
+    my %new_addrs;
     my %pools= ();
     my $db_result;
     
@@ -5540,8 +5541,39 @@ sub AllocatePublicAddrPools($)
 	}
     }
 	
+    $db_result = DBQueryWarn( "SELECT IP,pool_id FROM virt_node_public_addr " .
+			      "WHERE pid='$pid' AND eid='$eid'" );
+    while( my ($addr,$pool) = $db_result->fetchrow_array() ) {
+	$new_addrs{$addr} = $pool;
+    }
+
     DBQueryFatal( "UNLOCK TABLES" );
 
+    # Record any changes made in addr_pool_history
+    my $uid = $self->swapper();
+    my $uid_idx = $self->swapper_idx();
+    my $exptidx = $self->idx();
+    
+    while( my ($addr,$pool) = each( %old_addrs ) ) {
+	if( !exists( $new_addrs{$addr} ) || $new_addrs{$addr} ne $pool ) {
+	    DBQueryWarn( "INSERT INTO addr_pool_history SET " .
+			 "pool_id='$pool', op='free', uid='$uid', " .
+			 "uid_idx='$uid_idx', exptidx='$exptidx', " .
+			 "stamp=UNIX_TIMESTAMP(), addr='$addr', " .
+			 "version='ipv4'" );
+	}
+    }
+    
+    while( my ($addr,$pool) = each( %new_addrs ) ) {
+	if( !exists( $old_addrs{$addr} ) || $old_addrs{$addr} ne $pool ) {
+	    DBQueryWarn( "INSERT INTO addr_pool_history SET " .
+			 "pool_id='$pool', op='alloc', uid='$uid', " .
+			 "uid_idx='$uid_idx', exptidx='$exptidx', " .
+			 "stamp=UNIX_TIMESTAMP(), addr='$addr', " .
+			 "version='ipv4'" );
+	}
+    }
+    
     return 0;
 }
 
@@ -5553,6 +5585,20 @@ sub ReleasePublicAddrPools($)
     my ($self) = @_;
     my $pid = $self->pid();
     my $eid = $self->eid();
+    my $uid = $self->swapper();
+    my $uid_idx = $self->swapper_idx();
+    my $exptidx = $self->idx();
+    my $db_result;
+
+    $db_result = DBQueryWarn( "SELECT IP,pool_id FROM virt_node_public_addr " .
+			      "WHERE pid='$pid' AND eid='$eid'" );
+    while( my ($addr,$pool) = $db_result->fetchrow_array() ) {
+	DBQueryWarn( "INSERT INTO addr_pool_history SET " .
+		     "pool_id='$pool', op='free', uid='$uid', " .
+		     "uid_idx='$uid_idx', exptidx='$exptidx', " .
+		     "stamp=UNIX_TIMESTAMP(), addr='$addr', " .
+		     "version='ipv4'" );
+    }
     
     DBQueryWarn( "UPDATE virt_node_public_addr SET pool_id=NULL, " .
 		 "pid=NULL, eid=NULL WHERE pid='$pid' AND " .

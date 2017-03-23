@@ -54,12 +54,12 @@ sub usage()
     print STDERR "       reserve [-u] -l\n";
     print STDERR "   -h   This message\n";
     print STDERR "   -u   Interpret/display all times in UTC\n";
-    print STDERR "   -c   Clear existing reservation for project (by id)\n";
+    print STDERR "   -c   Clear existing reservation (by id)\n";
     print STDERR "   -C   Clear existing reservation for project (by date)\n";
     print STDERR "   -f   Force reservation into schedule, even if " .
 	"overcommitted\n";
     print STDERR "   -n   Check feasibility only; don't actually reserve\n";
-    print STDERR "   -U   Mark reservation as being created by uid\n";
+    print STDERR "   -U   Mark reservation as being created by uid (admin-only)\n";
     print STDERR "   -t   Node type\n";
     print STDERR "   -i   Show existing reservation for project\n";
     print STDERR "   -l   List all existing reservations\n";
@@ -92,6 +92,7 @@ my $pid;
 my $count;
 my $project;
 my $webtask;
+my $admin;
 my $target_user;
 
 sub fatal($)
@@ -132,6 +133,19 @@ $| = 1;
 $ENV{'PATH'} = "/bin:/sbin:/usr/bin:";
 
 #
+# Verify user.
+#
+my $this_user;
+if ($UID) {
+    $this_user = User->ThisUser();
+    if (! defined($this_user)) {
+	fatal("You ($UID) do not exist!");
+    }
+    $admin = $this_user->IsAdmin();
+}
+$target_user = $this_user;
+
+#
 # Parse command arguments. Once we return from getopts, all that should be
 # left are the required arguments.
 #
@@ -165,6 +179,7 @@ if (defined($options{d})) {
     $debug = 1;
 }
 if (defined($options{f})) {
+    fatal( "-f option requires administrator privileges" ) unless( $admin );
     $force = 1;
 }
 if (defined($options{n})) {
@@ -180,6 +195,7 @@ if (defined($options{i})) {
     $info = 1;
 }
 if (defined($options{l})) {
+    fatal( "-l option requires administrator privileges" ) unless( $admin );
     $list = 1;
 }
 if (defined($options{T})) {
@@ -211,9 +227,11 @@ if (defined($options{"N"})) {
     $notes = readfile( $options{"N"} );
 }
 if (defined($options{"A"})) {
+    fatal( "-A option requires administrator privileges" ) unless( $admin );
     $adminnotes = readfile( $options{"A"} );
 }
 if (defined($options{"U"})) {
+    fatal( "-U option requires administrator privileges" ) unless( $admin );
     $target_user = User->Lookup($options{"U"});
     fatal("No such user")
 	if (!defined($target_user));
@@ -225,6 +243,7 @@ if (defined($options{S})) {
     }
 }
 if (defined($options{'a'})) {
+    fatal( "-a option requires administrator privileges" ) unless( $admin );
     $approve = 1;
 }
 if (defined($options{'p'})) {
@@ -313,7 +332,15 @@ if ($list) {
 }
 
 my $pid_idx;
-if( !defined( $clear_idx ) ) {
+if( defined( $clear_idx ) ) {
+    my $res = Reservation->Lookup( $clear_idx );
+    fatal( "could not find existing reservation" ) unless( defined( $res ) );
+    $pid_idx = $res->pid_idx();
+    $project = Project->Lookup( $pid_idx );
+    if (!defined($project)) {
+	fatal("No such project $pid\n");
+    }
+} else {
     if ($pid =~ /^(.*):(.*)$/) {
 	require GeniHRN;
 
@@ -333,6 +360,11 @@ if( !defined( $clear_idx ) ) {
 	}
     }
     $pid_idx = $project->pid_idx();
+}
+
+if( !$admin ) {
+    fatal( "You are not a project member" )
+	unless( $project->LookupUser( $this_user ) );
 }
 
 #
@@ -367,21 +399,6 @@ if ($info) {
     exit(0);
 }
     
-#
-# Verify user, must be admin or root.
-#
-my $this_user;
-if ($UID) {
-    $this_user = User->ThisUser();
-    if (! defined($this_user)) {
-	fatal("You ($UID) do not exist!");
-    }
-    if (!$this_user->IsAdmin()) {
-	fatal("You are not a testbed administrator!");
-    }
-}
-$target_user = $this_user if (!defined($target_user));
-
 #
 # Clear and exit.
 #

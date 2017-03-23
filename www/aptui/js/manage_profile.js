@@ -2,7 +2,7 @@ $(function ()
 {
     'use strict';
 
-    var templates = APT_OPTIONS.fetchTemplateList(['manage-profile', 'waitwait-modal', 'renderer-modal', 'showtopo-modal', 'oops-modal', 'rspectextview-modal', 'guest-instantiate', 'publish-modal', 'instantiate-modal', 'share-modal', 'gitrepo-picker','profile-list-modal','confirm-delete-profile']);
+    var templates = APT_OPTIONS.fetchTemplateList(['manage-profile', 'waitwait-modal', 'renderer-modal', 'showtopo-modal', 'oops-modal', 'rspectextview-modal', 'guest-instantiate', 'publish-modal', 'share-modal', 'gitrepo-picker','profile-list-modal','confirm-delete-profile']);
     var manageString = templates['manage-profile'];
     var waitwaitString = templates['waitwait-modal'];
     var rendererString = templates['renderer-modal'];
@@ -11,7 +11,6 @@ $(function ()
     var rspectextviewString = templates['rspectextview-modal'];
     var guestInstantiateString = templates['guest-instantiate'];
     var publishString = templates['publish-modal'];
-    var instantiateString = templates['instantiate-modal'];
     var shareString = templates['share-modal'];
     var gitrepoString = templates['gitrepo-picker'];
     var plistString = templates['profile-list-modal'];
@@ -43,7 +42,6 @@ $(function ()
     var rspectextTemplate = _.template(rspectextviewString);
     var oopsTemplate      = _.template(oopsString);
     var guestInstTemplate = _.template(guestInstantiateString);
-    var InstTemplate      = _.template(instantiateString);
     var shareTemplate     = _.template(shareString);
     var gitrepoTemplate   = _.template(gitrepoString);
     var plistTemplate     = _.template(plistString);
@@ -170,9 +168,6 @@ $(function ()
     	var guest_html = guestInstTemplate({});
 	$('#guest_div').html(guest_html);
 	$('#publish_div').html(publishString);
-    	var instantiate_html = InstTemplate({ amlist: amlist,
-					      amdefault: window.AMDEFAULT});
-	$('#instantiate_div').html(instantiate_html);
     	var rspectext_html = rspectextTemplate({});
 	$('#rspectext_div').html(rspectext_html);
 	$('#share_div').html(shareTemplate({formfields: fields}))
@@ -996,7 +991,6 @@ $(function ()
 	    }
 	    window.location.replace(json.value);
 	}
-	sup.HideModal("#instantiate_modal");
 
 	var blob = {"uuid" : version_uuid};
 	if (amlist.length) {

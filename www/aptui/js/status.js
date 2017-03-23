@@ -324,6 +324,17 @@ $(function ()
  	    $('#profile_status_collapse').trigger('hide.bs.collapse');
 	}
 
+        $('#instructions').on('hide.bs.collapse', function () {
+	    APT_OPTIONS.updatePage({ 'status_instructions': 'hidden' });
+	});
+        $('#instructions').on('show.bs.collapse', function () {
+	    APT_OPTIONS.updatePage({ 'status_instructions': 'shown' });
+	});
+
+        addTutorialNotifyTab('profile');
+        addTutorialNotifyTab('listview');
+        addTutorialNotifyTab('manifest');
+        addTutorialNotifyTab('Idlegraphs');
 	StartCountdownClock(window.APT_OPTIONS.sliceExpires);
 	StartStatusWatch();
 	if (window.APT_OPTIONS.oneonly) {
@@ -347,6 +358,18 @@ $(function ()
 	}
     }
 
+  function addTutorialNotifyTab(id)
+  {
+    var allTabs = $('#quicktabs_ul li');
+    allTabs.each(function () {
+      if ($(this).find('a').attr('href') === ('#' + id)) {
+	$(this).on('show.bs.tab', function () {
+	  APT_OPTIONS.updatePage({ 'status_tab': id });
+	});
+      }
+    });
+  }
+  
     //
     // The status watch is a periodic timer, but we sometimes want to
     // hold off running it for a while, and other times we want to run
@@ -408,6 +431,7 @@ $(function ()
 	var status_html = "";
     
 	if (instanceStatus != lastStatus) {
+          APT_OPTIONS.updatePage({ 'instance-status': instanceStatus });
 	    console.info(json);
 	
 	    status_html = status;

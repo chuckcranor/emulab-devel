@@ -55,6 +55,28 @@ CREATE TABLE `active_checkups` (
 ) ENGINE=MyISAM DEFAULT CHARSET=latin1;
 
 --
+-- Table structure for table `addr_pool_history`
+--
+
+DROP TABLE IF EXISTS `addr_pool_history`;
+CREATE TABLE `addr_pool_history` (
+  `history_id` int(10) unsigned NOT NULL AUTO_INCREMENT,
+  `pool_id` varchar(32) NOT NULL DEFAULT '',
+  `op` enum('alloc','free') NOT NULL DEFAULT 'alloc',
+  `uid` varchar(8) NOT NULL DEFAULT '',
+  `uid_idx` mediumint(8) unsigned NOT NULL DEFAULT '0',
+  `exptidx` int(10) unsigned DEFAULT NULL,
+  `stamp` int(10) unsigned DEFAULT NULL,
+  `addr` varchar(15) DEFAULT NULL,
+  `version` enum('ipv4','ipv6') NOT NULL DEFAULT 'ipv4',
+  PRIMARY KEY (`history_id`),
+  KEY `exptidx` (`exptidx`),
+  KEY `stamp` (`stamp`),
+  KEY `addr` (`addr`),
+  KEY `addrstamp` (`addr`,`stamp`)
+) ENGINE=MyISAM DEFAULT CHARSET=latin1;
+
+--
 -- Table structure for table `apt_aggregate_nodetypes`
 --
 

@@ -16,7 +16,7 @@ body {
   /* Pad bottom by footer height */
   padding: 0 0 2.5em;
 }
-
+/*
 .apt-left {
   float: left;
 }
@@ -24,17 +24,24 @@ body {
 .apt-right {
   float: right;
 }
-
-.navbar img {
-  display: block;
-  margin: 0 auto;
-  height: 75px;
+*/
+.navbar-brand > img {
+  position: relative;
+  top: -10px;
+  max-height: 70px;
+  padding: 0;
+  margin: 0;
 }
-
+/*
 .navbar-inner {
-  height: 75px;
+ height: 75px;
   width: 95%;
   margin: 0 auto;
+}
+*/
+
+.admin-toggle-container {
+  text-align: center;
 }
 
 .navbar .brand {
@@ -42,6 +49,11 @@ body {
   top:0;
   left:0;
   width: 100%;
+  text-align: center;
+}
+
+.navbar .brand-inner {
+  display: inline-block;
 }
 
 .navbar-nav {
@@ -51,32 +63,124 @@ body {
 .navbar-nav > li > a,
 .navbar-nav > li > p {
   color: #000000;
-  margin-top: 20px;
+}
+
+.navbar-header > .navbar-toggle {
+    border-color: #000;
+}
+
+.navbar-header > button {
+    margin-top: 12px;
+}
+
+.navbar-header > .navbar-toggle > .icon-bar {
+    background-color: #000;
 }
 
 .navbar-nav-shortcuts {
     background-color: #FAFAFA;
 }
 
-.navbar-btn.btn-xs,
-.navbar-btn {
-  margin-top: 20px;
-}
-
-.apt-navbar-btn {
-  color: #FFFFFF !important;
-}
-.apt-navbar-btn:hover {
-  background-color: #337ab7 !important;
-}
-
-.btn-quickvm-home, .btn-quickvm-home:hover {
-  color: #000000;
-  background-color: #D3D3D3;
-  border-color: #357ebd;
+.nav > li > a.btn-quickvm-home,
+.nav > li > a.btn-quickvm-home:hover,
+.nav > li > a.btn-quickvm-home:focus,
+.nav > li > a.btn-quickvm-home.dropdown-toggle,
+.nav > li > a.btn-quickvm-home.dropdown-toggle:hover,
+.nav > li > a.btn-quickvm-home.dropdown-toggle:focus,
+.nav > li > a.btn-quickvm-signup,
+.nav > li > a.btn-quickvm-signup:hover,
+.nav > li > a.btn-quickvm-signup:focus,
+.nav > li > a.btn-quickvm-signup.dropdown-toggle,
+.nav > li > a.btn-quickvm-signup.dropdown-toggle:hover,
+.nav > li > a.btn-quickvm-signup.dropdown-toggle:focus {
+  font-weight: bold;
+  color: #fafafa;
+  border-color: rgba(255, 255, 255, 0.3);
   margin-right: 10px;
   margin-bottom: 0px;
+  padding-left: 10px;
+  padding-right: 10px;
 }
+
+.nav > li > a.btn-quickvm-home,
+.nav > li > a.btn-quickvm-home:focus,
+.nav > li > a.btn-quickvm-home.dropdown-toggle,
+.nav > li > a.btn-quickvm-home.dropdown-toggle:focus {
+  background-color: rgba(0, 0, 0, 0.05);
+}
+
+.nav > li > a.btn-quickvm-home:hover,
+.nav > li > a.btn-quickvm-home:active,
+.nav > li > a.btn-quickvm-home.dropdown-toggle:hover,
+.nav > li > a.btn-quickvm-home.dropdown-toggle:active {
+  background-color: rgba(255, 255, 255, 0.1);
+}
+/*
+.nav > li > a.btn-success {
+  background-image: -webkit-linear-gradient(top, #289328 0%, #1b631b 100%);
+  background-image:      -o-linear-gradient(top, #289328 0%, #1b631b 100%);
+  background-image: -webkit-gradient(linear, left top, left bottom, from(#289328), to(#1b631b));
+  background-image:         linear-gradient(to bottom, #289328 0%, #1b631b 100%);
+  filter: progid:DXImageTransform.Microsoft.gradient(startColorstr='#ff289328', endColorstr='#ff1b631b', GradientType=0);
+  filter: progid:DXImageTransform.Microsoft.gradient(enabled = false);
+  background-repeat: repeat-x;
+  border-color: #195b19;
+}
+
+.nav > li > a.btn-success:hover,
+.nav > li > a.btn-success:focus {
+  background-color: #1b631b;
+  background-position: 0 -15px;
+}
+.nav > li > a.btn-success:active,
+.nav > li > a.btn-success.active {
+  background-color: #1b631b;
+  border-color: #195b19;
+}
+.nav > li > a.btn-success:disabled,
+.nav > li > a.btn-success[disabled] {
+  background-color: #1b631b;
+  background-image: none;
+}
+*/
+.nav > li > a.btn-success {
+  color: #fff;
+  background-color: #289328;
+  border-color: #237f23;
+}
+.nav > li > a.btn-success:hover,
+.nav > li > a.btn-success:focus,
+.nav > li > a.btn-success:active,
+.nav > li > a.btn-success.active,
+.open > .dropdown-toggle.btn-success {
+  color: #fff;
+  background-color: #1d6b1d;
+  border-color: #154f15;
+}
+.nav > li > a.btn-success:active,
+.nav > li > a.btn-success.active,
+.open > .dropdown-toggle.btn-success {
+  background-image: none;
+}
+.nav > li > a.btn-success.disabled,
+.nav > li > a.btn-success[disabled],
+fieldset[disabled] .nav > li > a.btn-success,
+.nav > li > a.btn-success.disabled:hover,
+.nav > li > a.btn-success[disabled]:hover,
+fieldset[disabled] .nav > li > a.btn-success:hover,
+.nav > li > a.btn-success.disabled:focus,
+.nav > li > a.btn-success[disabled]:focus,
+fieldset[disabled] .nav > li > a.btn-success:focus,
+.nav > li > a.btn-success.disabled:active,
+.nav > li > a.btn-success[disabled]:active,
+fieldset[disabled] .nav > li > a.btn-success:active,
+.nav > li > a.btn-success.disabled.active,
+.nav > li > a.btn-success[disabled].active,
+fieldset[disabled] .nav > li > a.btn-success.active {
+  background-color: #289328;
+  border-color: #237f23;
+}
+
 
 .navbar-right li .navbar-btn {
   margin-left: 10px;
