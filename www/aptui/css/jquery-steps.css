@@ -502,11 +502,11 @@ left: -999em;
 	color: #d58512;
 }
 
-.cluster_picker_status .no_reservation .tooltip.right .tooltip-inner {
+.cluster_picker_status .no_reservation .tooltip.right .tooltip-inner, .cluster_picker_status .future_reservation .tooltip.right .tooltip-inner {
 	background-color: #d58512;
 }
 
-.cluster_picker_status .no_reservation .tooltip.right .tooltip-arrow {
+.cluster_picker_status .no_reservation .tooltip.right .tooltip-arrow, .cluster_picker_status .future_reservation .tooltip.right .tooltip-inner {
 	border-right-color: #d58512;
 	border-left-color: #d58512;
 }

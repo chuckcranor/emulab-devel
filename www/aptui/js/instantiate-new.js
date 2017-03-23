@@ -962,6 +962,10 @@ $(function ()
 
 	var project = $('#profile_pid').val();
 
+	$('#reservation_confirmation').addClass('hidden');
+	$('#reservation_warning').addClass('hidden');
+	$('#reservation_future').addClass('hidden');
+
 	$('#finalize_options .cluster-group').each(function() {
 	    var click = false;
 
@@ -993,11 +997,12 @@ $(function ()
 
 		    if (_.has(resinfo[cluster], 'pressure') && resinfo[cluster]['pressure'] != null) {
 			if (!hasReservation) {
+				console.log('here');
 			    _.each(resinfo[cluster]['pressure'], function(reslist) {
 				if (_.has(reslist, project)) {
-				    if (start == null || start > reslist[project][0]) {
-					start = reslist[project][0];
-					end = reslist[project][1];
+				    if (start == null || start > reslist[project][0][0]) {
+					start = reslist[project][0][0];
+					end = reslist[project][0][1];
 				    }
 				}
 			    });
@@ -1853,7 +1858,7 @@ $(function ()
 	    }
 	    console.info("resinfo", json.value);
 	    resinfo = json.value;
-
+	    
 	    ShowClusterReservations();
 	};
 	var $xmlthing =
