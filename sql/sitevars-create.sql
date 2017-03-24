@@ -155,7 +155,7 @@ INSERT INTO sitevariables VALUES ('storage/ltdataset/graceperiod',NULL,'180','Ti
 INSERT INTO sitevariables VALUES ('storage/ltdataset/maxidle',NULL,'180','Max time (days) from last use before lease is marked expired (0 == unlimited)',0);
 INSERT INTO sitevariables VALUES ('general/disk_trim_interval',NULL,'0','If non-zero, minimum interval (seconds) between attempts to TRIM boot disk during disk reloading. Zero disables all TRIM activity. Node must also have non-zero bootdisk_trim attribute.',0);
 INSERT INTO sitevariables VALUES ('storage/simultaneous_ro_datasets',NULL,'0','If set, allow simultaneous read-only mounts of datasets',0);
-INSERT INTO sitevariables VALUES ('storage/local/disktypes',NULL,'Any','Types of local disks used to provision blockstores. One of: any, hdd-only, ssd-only',0);
+INSERT INTO sitevariables VALUES ('storage/local/disktypes',NULL,'Any','Types of local disks used to provision blockstores. One of: any, hdd-only, ssd-only.',0);
 INSERT INTO sitevariables VALUES ('aptlab/message',NULL,'','Message to display at the top of the APT interface',0);
 INSERT INTO sitevariables VALUES ('cloudlab/message',NULL,'','Message to display at the top of the CloudLab interface',0);
 INSERT INTO sitevariables VALUES ('aptui/autoextend_maximum',NULL,'7','Maximum number of days requested that will automaticaly be granted; zero means only admins can extend an experiment.',0);
