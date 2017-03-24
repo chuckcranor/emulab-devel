@@ -599,6 +599,8 @@ if ($method eq "CreateSliver"    ||
     $method eq "Provision"       ||
     $method eq "Allocate"        ||
     $method eq "Update"          ||
+    $method eq "AddNodes"        ||
+    $method eq "DeleteNodes"     ||
     $method eq "DeleteSlice") {
     $debug = 2;
     $nostorelogs = 0;

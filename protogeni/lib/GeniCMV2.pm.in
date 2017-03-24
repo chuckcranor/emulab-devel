@@ -1957,20 +1957,25 @@ sub AddNodes($)
 	    foreach my $lan (@{ $blob->{'lans'} }) {
 		if (ref($lan) eq 'HASH') {
 		    my $lanname = $lan->{'name'};
-		    $xml .= "    <interface client_id='$nodeid:$lanname'";
-		    if (exists($lan->{'address'})) {
-			$xml .= " address='" . $lan->{'address'} . "'";
+		    $xml .= "    <interface client_id='$nodeid:$lanname'>";
+		    if (exists($lan->{'address'}) || exists($lan->{'netmask'})
+			|| exists($lan->{'type'})) {
+			$xml .= "<ip ";
+			if (exists($lan->{'address'})) {
+			    $xml .= " address='" . $lan->{'address'} . "'";
+			}
+			if (exists($lan->{'netmask'})) {
+			    $xml .= " netmask='" . $lan->{'netmask'} . "'";
+			}
+			if (exists($lan->{'type'})) {
+			    $xml .= " type='" . $lan->{'type'} . "'";
+			}
+			else {
+			    $xml .= " type='ipv4'";
+			}
+			$xml .= " />";
 		    }
-		    if (exists($lan->{'netmask'})) {
-			$xml .= " netmask='" . $lan->{'netmask'} . "'";
-		    }
-		    if (exists($lan->{'type'})) {
-			$xml .= " type='" . $lan->{'type'} . "'";
-		    }
-		    else {
-			$xml .= " type='ipv4'";
-		    }
-		    $xml .= " />\n";
+		    $xml .= "</interface>\n";
 		}
 		else {
 		    $xml .= "    <interface client_id='$nodeid:$lan' />\n";
