@@ -571,7 +571,11 @@ sub GetRepoSource($;$)
 	$source = "profile.rspec";
     }
     else {
-	print STDERR "Could not find source code in the repository\n";
+	print STDERR "$repodir, $refspec\n";
+	print STDERR `/usr/bin/id`;
+	print STDERR `/bin/ls -la`;
+	print STDERR "Could not find source code in repository: $reponame\n";
+	
 	return undef;
     }
     #
