@@ -142,7 +142,7 @@ sub DoMaxExtension();
 sub WriteCredentials();
 sub StartMonitor();
 sub StartMonitorInternal(;$@);
-sub DoImageTrackerStuff($$$$$$);
+sub DoImageTrackerStuff($$$$$$$);
 sub DenyExtensionInternal($);
 sub ExtendInternal($$$$);
 
@@ -460,6 +460,7 @@ sub DoSnapshot()
 	#
 	if (!defined($cloneprofile)) {
 	    my $rval = DoImageTrackerStuff($aggregate, $node, $project,
+					   $imagename,
 					   \$copyback_uuid, \$copyback_urn,
 					   \$errmsg);
 	    if ($rval) {
@@ -599,6 +600,7 @@ sub DoSnapshot()
 	if (defined($copyback_uuid)) {
 	    $swebtask->copyback_uuid($copyback_uuid);
 	}
+	print "$version_urn,$version_url,$image_name\n";
     }
     else {
 	print "$image_urn,$image_url\n";
@@ -839,9 +841,9 @@ sub DoSnapshot()
     exit($errcode);
 }
 
-sub DoImageTrackerStuff($$$$$$)
+sub DoImageTrackerStuff($$$$$$$)
 {
-    my ($aggregate, $node, $project, $puuid, $purn, $perrmsg) = @_;
+    my ($aggregate, $node, $project, $newname, $puuid, $purn, $perrmsg) = @_;
     my $node_id = GeniXML::GetVirtualId($node);
     my $errmsg;
 
@@ -917,28 +919,46 @@ sub DoImageTrackerStuff($$$$$$)
     my $copyback_urn  = $image_urn;
 
     my $hrn = GeniHRN->Parse($image_urn);
-    my (undef,$ospid,$os,$vers) = $hrn->ParseImage();
+    if (!defined($hrn)) {
+	$$perrmsg = "Could not parse $image_urn\n";
+	return -1;
+    }
+    if (!$hrn->IsImage()) {
+	$$perrmsg = "$image_urn is not an image URN\n";
+	return -1;
+    }
+    my $projhrn = GeniHRN->Parse($blob->{'project_urn'});
+    if (!defined($projhrn)) {
+	$$perrmsg = "Could not parse " . $blob->{'project_urn'} . "\n";
+	return -1;
+    }
+
+    #
+    # Whenever we cross projects, we expect the cluster to create
+    # a new image. We use the URN that is returned.
+    #
+    if (lc($projhrn->subauth()) ne lc($project->pid())) {
+	# We use the URN we get back from CreateSliver().
+	return 0;
+    }
 
     #
     # What happens if the user is doing a snapshot on the cluster where
     # the image lives? The copyback (import) makes no sense in that case,
-    # but what if its the same cluster but different projects? In this case
-    # we want a standard image clone, and we use whatever URN the cluster
-    # hands back to us.
-    #
-    # Aside; should we allow snapshots (in the web ui) across projects?
+    # We can use the URN the cluster returns.
     #
     if (lc($hrn->domain()) eq lc($aggregate->domain())) {
-	my $projhrn = GeniHRN->Parse($blob->{'project_urn'});
-	if (!defined($projhrn)) {
-	    $$perrmsg = "Could not parse " . $blob->{'project_urn'} . "\n";
-	    return -1;
-	}
-	if (lc($projhrn->subauth()) eq lc($project->pid())) {
-	    # We use the URN we get back from CreateSliver().
-	    return 0;
-	}
-	# Ditto
+	return 0;
+    }
+
+    #
+    # Different cluster
+    #
+    # Is this node currently running a different image then what
+    # the new name will be? Is so, then we expect the cluster to
+    # start a new image and we use the URN it returns.
+    #
+    if ($newname ne $hrn->osname()) {
 	return 0;
     }
 
@@ -954,7 +974,8 @@ sub DoImageTrackerStuff($$$$$$)
     #
     if ($blob->{'isversioned'}) {
 	$copyback_urn = GeniHRN::GenerateImage($hrn->authority(),
-					       $ospid, $os,
+					       $hrn->ospid(),
+					       $hrn->osname(),
 					       $blob->{'maxversion'} + 1);
     }
     $$puuid = $copyback_uuid;
