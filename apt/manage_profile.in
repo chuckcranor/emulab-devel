@@ -219,9 +219,10 @@ elsif ($action eq "create") {
 #
 sub CreateProfile()
 {
-    my $optlist    = "s:c:";
+    my $optlist    = "s:c:U";
     my $snap       = 0;
     my $copy       = 0;
+    my $prepare    = 0;
     my $copyuuid;
     my $fromrepo   = 0;
     my $instance;
@@ -238,6 +239,9 @@ sub CreateProfile()
     if (defined($options{"s"})) {
 	$snap = 1;
 	$copyuuid = $options{"s"};
+	if (defined($options{"U"})) {
+	    $prepare = 1;
+	}
     }
     if (defined($options{"c"})) {
 	$copy = 1;
@@ -375,15 +379,17 @@ sub CreateProfile()
 	my $new_uuid   = $profile->uuid();
 	# We want to use the webtask associated with the new profile.
 	my $pwebtask   = $profile->webtask();
+	my $ptask_id   = $pwebtask->task_id();
 	# But the image details are stored in the instance webtask.
 	my $iwebtask   = $instance->webtask();
+	my $prepopt    = $prepare ? "-U" : "";
     
 	if ($profile->Lock()) {
 	    $profile->Delete(1);
 	    fatal("Could not lock new profile");
 	}
-	my $command = "$MANAGEINSTANCE -t " . $pwebtask->task_id() . " ".
-	    "snapshot $apt_uuid -c $new_uuid -n $node_id -i $imagename";
+	my $command = "$MANAGEINSTANCE -t $ptask_id snapshot " . 
+	    "$apt_uuid -c $new_uuid -n $node_id -i $imagename $prepopt";
 
 	if ($verbose) {
 	    print "$command\n";
