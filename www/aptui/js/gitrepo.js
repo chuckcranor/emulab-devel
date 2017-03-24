@@ -89,7 +89,7 @@ $(function () {
 	    $('#repoinfo-panel .commit-size').html(blob.size);
 	    $('#repoinfo-panel .commit-reponame').html(blob.reponame);
 	    $('#repoinfo-panel .commit-date')
-		.html(moment(blob.date).format("lll"));
+		.html(moment(blob.when).format("lll"));
 
 	    var log = blob.log;
 	    if (log.length <= 20) {
