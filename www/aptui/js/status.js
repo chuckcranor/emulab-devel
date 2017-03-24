@@ -1980,8 +1980,8 @@ $(function ()
 		$('#snapshot_update_profile_div').removeClass("hidden");
 		$('#snapshot_update_script_div').addClass("hidden");
 	    }
-	    if (isadmin || isstud) {
-		$('#snapshot_modal #nameyourimage_div').removeClass("hidden");
+	    if (isadmin) {
+	        $('#snapshot_modal #nameyourimage_div').removeClass("hidden");
 	    }
 	}
 	else {
