@@ -1218,12 +1218,18 @@ sub CreateDatasetCreds($$$$$)
 	    my $pid = $dataset->pid();
 	    my $id  = $dataset->dataset_id();
 	    my $cmd = "$MANAGEDATASET getcredential -a $manager_urn $pid/$id";
-	    my $credential = `$cmd`;
+	    my $output = emutil::ExecQuiet($cmd);
 	    if ($?) {
 		$$pmsg = "Could not generate credential for $dataset_urn";
+		if (($? >> 8) > 0) {
+		    if ($output ne "") {
+			$$pmsg = "$dataset_urn" . ": " . $output;
+		    }
+		    return 1;
+		}
 		return -1;
 	    }
-	    push(@credentials, $credential);
+	    push(@credentials, $output);
 	}
     }
     @$pref = @credentials;
