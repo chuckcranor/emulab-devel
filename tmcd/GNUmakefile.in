@@ -1,5 +1,5 @@
 #
-# Copyright (c) 2000-2014 University of Utah and the Flux Group.
+# Copyright (c) 2000-2017 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -41,11 +41,10 @@ include $(TESTBED_SRCDIR)/GNUmakerules
 CFLAGS	+= -O -g -Wall -DUDP \
 		-I${OBJDIR} -I/usr/local/include \
 		-I${TESTBED_LIBSRCDIR}/libtb -I${TESTBED_SRCDIR}/pxe \
-		-I${TESTBED_LIBSRCDIR}/tmcd \
-		-L/usr/local/lib
+		-I${TESTBED_LIBSRCDIR}/tmcd
 TMLIBS	 = ${TESTBED_LIBOBJDIR}/libtb/libtb.a
 BOOTINFO = ${OBJDIR}/pxe/bootinfo.o ${OBJDIR}/pxe/bootinfo_mysql.o
-LDFLAGS += $(LDSTATIC)
+LDFLAGS += -L/usr/local/lib $(LDSTATIC)
 
 #
 # For SSL enabled tmcd/tmcc
@@ -80,7 +79,7 @@ endif
 tmcd: tmcd.c ${TMCDLIBS} tmcd.h version.o $(BOOTINFO) $(NOTPMLIB)
 	$(CC) $(TMCDCFLAGS) $(CFLAGS) $(SSLFLAGS) -o tmcd $< \
 		version.o $(NOTPMLIB) $(BOOTINFO) \
-		$(LFLAGS) -L/usr/local/lib/mysql -lmysqlclient \
+		$(LDFLAGS) -L/usr/local/lib/mysql -lmysqlclient \
 		$(ELVINFLAGS) $(TMCDLDFLAGS) $(TMCDLIBS) $(TMLIBS) 
 
 mod_tmcd.so: libtmcd.o
@@ -92,7 +91,7 @@ newtmcd: newtmcd.c libtmcd.o ${TMCDLIBS} tmcd.h version.o \
 	$(NOTPMLIB) $(BOOTINFO)
 	$(CC) $(TMCDCFLAGS) $(CFLAGS) $(SSLFLAGS) -o tmcd $< \
 		libtmcd.o version.o $(NOTPMLIB) $(BOOTINFO) \
-		$(LFLAGS) -L/usr/local/lib/mysql -lmysqlclient  -lxml2 \
+		$(LDFLAGS) -L/usr/local/lib/mysql -lmysqlclient  -lxml2 \
 		$(ELVINFLAGS) $(TMCDLDFLAGS) $(TMCDLIBS) $(TMLIBS) 
 
 libtmcd.o: libtmcd.c ${TMCDLIBS} tmcd.h version.o $(BOOTINFO)
