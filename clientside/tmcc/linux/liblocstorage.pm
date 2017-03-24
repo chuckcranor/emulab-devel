@@ -85,6 +85,7 @@ my $SGDISK	= "/sbin/sgdisk";
 my $GDISK	= "/sbin/gdisk";
 my $PPROBE	= "/sbin/partprobe";
 my $FRISBEE     = "/usr/local/bin/frisbee";
+my $HDPARM	= "/sbin/hdparm";
 
 #
 #
@@ -235,6 +236,87 @@ sub serial_to_dev($$)
 	}
     }
     return undef;
+}
+
+#
+# Determine if a disk is "SSD" or "HDD"
+#
+sub get_disktype($)
+{
+    my ($dev) = @_;
+    my @lines;
+
+    #
+    # Assume NVMe is SSSD.
+    # Older hdparm and smartctl don't seem to handle NVMe
+    #
+    if ($dev =~ /^nvme\d+n\d+/) {
+	return "SSD";
+    }
+
+    #
+    # Try hdparm first since it is a standard utility
+    #
+    if (-x "$HDPARM") {
+	if (open(HFD, "$HDPARM -I /dev/$dev 2>/dev/null |")) {
+	    my $isssd = 0;
+
+	    while (my $line = <HFD>) {
+		chomp($line);
+		if ($line =~ /:\s+solid state device$/i) {
+		    $isssd = 1;
+		    last;
+		}
+	    }
+	    close(HFD);
+
+	    return ($isssd ? "SSD" : "HDD");
+	}
+    }
+
+    #
+    # Try using "smartctl -i"
+    #
+    if (-x "$SMARTCTL") {
+	if (open(HFD, "$SMARTCTL -i /dev/$dev 2&>1 |")) {
+	    my $isssd = -1;
+	    my $model ="";
+
+	    while (my $line = <HFD>) {
+		chomp($line);
+		if ($line =~ /^rotation rate:\s+(\S.*)/i) {
+		    if ($1 =~ /solid state device/i) {
+			$isssd = 1;
+		    } else {
+			$isssd = 0;
+		    }
+		    last;
+		}
+		# XXX if we don't find rotation rate, we will fall back on this
+		if ($line =~ /^device model:\s+(\S.*)/i) {
+		    $model = $1;
+		    next;
+		}
+	    }
+	    close(HFD);
+
+	    if ($isssd >= 0) {
+		return ($isssd ? "SSD" : "HDD");
+	    }
+	    
+	    #
+	    # XXX older versions of smartctl (e.g., in CentOS 6-ish)
+	    # don't return "Rotation Rate". This is a fall-back hack as
+	    # we know that at least Intel SSDs have SSD in the model name.
+	    #
+	    if ($model =~ /SSD/) {
+		return "SSD";
+	    }
+	}
+    }
+
+    # Assume it is a spinning disk.
+    return "HDD";
 }
 
 #
@@ -443,6 +525,7 @@ sub get_diskinfo()
 		$geominfo{$dev}{'size'} = int($size / 1024);
 		$geominfo{$dev}{'inuse'} = 0;
 		$geominfo{$dev}{'ptabtype'} = get_ptabtype($dev);
+		$geominfo{$dev}{'disktype'} = get_disktype($dev);
 	    }
 	}
     }
@@ -700,7 +783,7 @@ sub os_init_storage($)
 	} elsif ($href->{'CMD'} eq "SLICE") {
 	    $gotslice++;
 	    if ($href->{'BSID'} eq "SYSVOL" ||
-		$href->{'BSID'} eq "ONSYSVOL") {
+		$href->{'BSID'} eq "NONSYSVOL") {
 		$needavol = 1;
 	    } elsif ($href->{'BSID'} eq "ANY") {
 		$needall = 1;
@@ -823,7 +906,8 @@ sub os_show_storage($)
 	    my $inuse = sprintf("%X", $dinfo->{$dev}->{'inuse'});
 	    print STDERR "    name=$dev, type=$type, level=$lev, size=$size, inuse=$inuse";
 	    if ($type eq "DISK") {
-		print STDERR ", pttype=", $dinfo->{$dev}->{'ptabtype'};
+		print STDERR ", disktype=", $dinfo->{$dev}->{'disktype'},
+		    ", pttype=", $dinfo->{$dev}->{'ptabtype'};
 	    }
 	    elsif ($type eq "LVM") {
 		print STDERR ", active=", $dinfo->{$dev}->{'active'};
@@ -1049,16 +1133,12 @@ sub os_check_storage_slice($$)
     # local storage:
     #  if BSID==SYSVOL:
     #    see if 4th part of boot disk exists (eg: da0s4) and
-    #    is of type freebsd
+    #    is of type linux
     #  else if BSID==NONSYSVOL:
-    #    see if there is a concat volume with appropriate name
+    #    see if there is a logical volume with appropriate name
     #  else if BSID==ANY:
-    #    see if there is a concat volume with appropriate name
+    #    see if there is a logical volume with appropriate name
     #  if there is a mountpoint, see if it exists in /etc/fstab
-    #
-    # List all volumes:
-    #   gvinum lv
-    #
     #
     if ($href->{'CLASS'} eq "local") {
 	my $lv = $href->{'VOLNAME'};
@@ -1566,6 +1646,17 @@ sub os_create_storage_slice($$$)
 		my @devs = ();
 		my $dev;
 
+		#
+		# Deterimine if we should use SSDs in the construction
+		# of the volume group.
+		#
+		my $disktype = "";
+		if ($href->{'PROTO'} eq "SATA") {
+		    $disktype = "HDD";
+		} elsif ($href->{'PROTO'} eq "NVMe") {
+		    $disktype = "SSD";
+		}
+
 		if ($bsid eq "ANY") {
 		    my $pchr = "";
 		    if ($bdisk =~ /^nvme/) {
@@ -1603,14 +1694,19 @@ sub os_create_storage_slice($$$)
 			push(@devs, "/dev/$dev");
 		    }
 		    elsif (exists($ginfo->{$dev}) &&
-			$ginfo->{$dev}->{'inuse'} == 0) {
+			   $ginfo->{$dev}->{'inuse'} == 0 &&
+			   (!$disktype ||
+			    $ginfo->{$bdisk}->{'disktype'} eq $disktype)) {
 			push(@devs, "/dev/$dev");
 		    }
 		}
 	      skipp4:
+
 		foreach $dev (keys %$ginfo) {
 		    if ($ginfo->{$dev}->{'type'} eq "DISK" &&
-			$ginfo->{$dev}->{'inuse'} == 0) {
+			$ginfo->{$dev}->{'inuse'} == 0 &&
+			(!$disktype ||
+			 $ginfo->{$dev}->{'disktype'} eq $disktype)) {
 			push(@devs, "/dev/$dev");
 		    }
 		}

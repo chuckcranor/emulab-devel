@@ -289,7 +289,7 @@ typedef struct {
 static int	iptonodeid(struct in_addr, tmcdreq_t *, char*);
 static int	checkdbredirect(tmcdreq_t *);
 static int      sendstoreconf(int sock, int tcp, tmcdreq_t *reqp, char *bscmd, 
-			      char *vname, int dopersist);
+			      char *vname, int dopersist, char *localproto);
 static int      get_imagestrings(tmcdreq_t *reqp, imstrings_t *imstrings);
 
 #ifdef EVENTSYS
@@ -4482,7 +4482,7 @@ COMMAND_PROTOTYPE(dostorageconfig)
 	char		buf[MYBUFSIZE];
 	char		*bufp, *ebufp = &buf[sizeof(buf)];
 	char            *mynodeid;
-	char            *vname, *bsid, *hostid;
+	char            *vname, *bsid, *hostid, *localproto;
 	int             rv;
 	int             volsize, bsidx, cmdidx = 1;
 	int		nrows, nrows2, nattrs;
@@ -4538,7 +4538,7 @@ COMMAND_PROTOTYPE(dostorageconfig)
 		OUTPUT(buf, sizeof(buf), 
 		       "CMD=EXPORT IDX=%d VOLNAME=%s",
 		       cmdidx++, vname);
-		rv = sendstoreconf(sock, tcp, reqp, buf, vname, 0);
+		rv = sendstoreconf(sock, tcp, reqp, buf, vname, 0, NULL);
 
 		mysql_free_result(res);
 		return rv;
@@ -4633,6 +4633,39 @@ COMMAND_PROTOTYPE(dostorageconfig)
 	}
 	mysql_free_result(res);
 
+	/*
+	 * XXX short term hack
+	 *
+	 * Currently, we are not using the PROTO field for local
+	 * blockstores. So we use it to convey to the user whether
+	 * NONSYSVOL and ANY storage pools should be composed of
+	 * HDD-only, SSD-only, or all storage types. We query the
+	 * sitevar "storage/local/disktypes" for this info.
+	 *
+	 * So right now we decide in advance what types of storage
+	 * the pools should include, set the sitevar, and also
+	 * set the values of the existing DB nonsysvol/any features
+	 * to include only that storage.
+	 *
+	 * Ultimately, we could get rid of the sitevar and use the
+	 * PROTO field to select, per-blockstore, its type. But that
+	 * will require additional per node (type) assign features
+	 * differentiating the amount of each type available.
+	 */
+	localproto = NULL;
+	res = mydb_query("select value,defaultvalue from sitevariables "
+			 "where name='storage/local/disktypes'", 2);
+	if (res) {
+		if ((int)mysql_num_rows(res) > 0) {
+			row = mysql_fetch_row(res);
+			if (row[0] && row[0][0])
+				localproto = strdup(row[0]);
+			else if (row[1] && row[1][0])
+				localproto = strdup(row[1]);
+		}
+		mysql_free_result(res);
+	}
+
 	/* 
 	 * Send across local blockstore volumes (slices).  These don't
 	 * show up in the reserved table, existing entirely in the
@@ -4644,11 +4677,12 @@ COMMAND_PROTOTYPE(dostorageconfig)
 			 "where exptidx=%d and "
 			 "fixed='%s'",
 			 2, reqp->exptidx, reqp->nickname);
-	
 	if (!res) {
 		error("STORAGECONFIG: %s: DB Error getting virt_blockstore "
 		      "info.\n",
 		      mynodeid);
+		if (localproto)
+			free(localproto);
 		return 1;
 	}
 
@@ -4660,9 +4694,11 @@ COMMAND_PROTOTYPE(dostorageconfig)
 		OUTPUT(buf, sizeof(buf), 
 		       "CMD=SLICE IDX=%d VOLNAME=%s VOLSIZE=%d", 
 		       cmdidx++, vname, volsize);
-		sendstoreconf(sock, tcp, reqp, buf, vname, 0);
+		sendstoreconf(sock, tcp, reqp, buf, vname, 0, localproto);
 	}
 	mysql_free_result(res);
+	if (localproto)
+		free(localproto);
 	
 	/* 
 	 * Now to send the remote elements (a.k.a SAN disks). Figuring
@@ -4733,7 +4769,7 @@ COMMAND_PROTOTYPE(dostorageconfig)
 		OUTPUT(buf, sizeof(buf), 
 		       "CMD=ELEMENT IDX=%d HOSTID=%s VOLNAME=%s VOLSIZE=%d", 
 		       cmdidx++, hostid, vname, volsize);
-		sendstoreconf(sock, tcp, reqp, buf, vname, 1);
+		sendstoreconf(sock, tcp, reqp, buf, vname, 1, NULL);
 	}
 	mysql_free_result(res);
 	
@@ -4744,7 +4780,7 @@ COMMAND_PROTOTYPE(dostorageconfig)
 /* Helper function for "dostorageconfig" */
 static int 
 sendstoreconf(int sock, int tcp, tmcdreq_t *reqp, char *bscmd, char *vname,
-	      int dopersist)
+	      int dopersist, char *localproto)
 {
         MYSQL_RES	*res, *res2;
 	MYSQL_ROW	row, row2;
@@ -4889,6 +4925,28 @@ sendstoreconf(int sock, int tcp, tmcdreq_t *reqp, char *bscmd, char *vname,
 		bufp += OUTPUT(bufp, ebufp-bufp,
 			       "%s CLASS=%s BSID=%s",
 			       bscmd, class, placement);
+
+		/*
+		 * If there is a global local storage type, we pass that
+		 * along (see the "short term hack" comment above in
+		 * dostorageconfig).
+		 *
+		 * XXX Since the clientside has a fixed set of values it will
+		 * accept for PROTO, we map these as:
+		 *
+		 * Any       => PROTO="local"
+		 * SSD-only  => PROTO="NVMe"
+		 * HDD-only  => PROTO=<any other> (e.g., "SATA", "PATA")
+		 */
+		if (strlen(protocol) == 0 && localproto != NULL) {
+			if (strcasecmp(localproto, "any") == 0) {
+				protocol = "local";
+			} else if (strcasecmp(localproto, "ssd-only") == 0) {
+				protocol = "NVMe";
+			} else if (strcasecmp(localproto, "hdd-only") == 0) {
+				protocol = "SATA";
+			}
+		}
 
 		/* Add the protocol to the buffer, if present.*/
 		if (strlen(protocol)) {
