@@ -106,7 +106,9 @@ $routing = array("myprofiles" =>
 		 "manage_profile" =>
 			array("file"    => "manage_profile.ajax",
 			      "guest"   => false,
-			      "methods" => array("CloneStatus" =>
+			      "methods" => array("Create" =>
+						     "Do_Create",
+                                                 "CloneStatus" =>
 						     "Do_CloneStatus",
 						 "DeleteProfile" =>
 						     "Do_DeleteProfile",

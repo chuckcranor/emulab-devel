@@ -29,6 +29,362 @@ include_once("profile_defs.php");
 include_once("instance_defs.php");
 
 #
+# Create for a new profile.
+#
+function Do_Create()
+{
+    global $this_user;
+    global $ajax_args;
+    $action = "";
+    $errors = array();
+    $this_idx = $this_user->uid_idx();
+    
+    session_start();
+
+    if (!isset($ajax_args["formfields"])) {
+	SPITAJAX_ERROR(1, "Missing formfields");
+	return;
+    }
+    $formfields = $ajax_args["formfields"];
+    # Allow for form precheck only. So JS code knows it will be fast. 
+    $checkonly  = isset($ajax_args["checkonly"]) && $ajax_args["checkonly"];
+    if (isset($formfields["snapuuid"]) && $formfields["snapuuid"] != "") {
+        $snapuuid = $formfields["snapuuid"];
+    }
+    if (isset($formfields["copyuuid"]) && $formfields["copyuuid"] != "") {
+        $copyuuid = $formfields["copyuuid"];
+    }
+    if (!isset($formfields["action"]) && $formfields["action"] == "") {
+        $errors["errors"] = "Missing action";
+        goto bad;
+    }
+    $action = $formfields["action"];    
+    
+    if ($action == "edit") {
+        #
+        # We better have a profile uuid.
+        #
+        if (!isset($formfields["uuid"])) {
+            $errors["errors"] = "Missing profile uuid";
+            goto bad;
+        }
+	$profile = Profile::Lookup($formfields["uuid"]);
+	if (!$profile) {
+            $errors["errors"] = "Cannot find profile";
+            goto bad;
+	}
+	else if ($profile->locked()) {
+            $errors["errors"] = "Profile is currently locked!";
+            goto bad;
+	}
+	else if ($profile->deleted()) {
+            $errors["errors"] = "Profile has been deleted!";
+            goto bad;
+	}
+        if ($this_idx != $profile->creator_idx() && !ISADMIN()) {
+            $errors["errors"] = "Not enough permission!";
+            goto bad;
+	}
+    }
+
+    #
+    # Quick check for required fields.
+    #
+    $required = array("pid", "name");
+
+    foreach ($required as $key) {
+        if (!isset($formfields["profile_${key}"]) ||
+            strcmp($formfields["profile_${key}"], "") == 0) {
+            $errors["profile_${key}"] = "Missing Field";
+        }
+        elseif (! TBcheck_dbslot($formfields["profile_${key}"],
+                                 "apt_profiles", $key,
+                                TBDB_CHECKDBSLOT_WARN|TBDB_CHECKDBSLOT_ERROR)) {
+            $errors["profile_${key}"] = TBFieldErrorString();
+        }
+    }
+    if (isset($formfields["profile_rspec"]) &&
+	$formfields["profile_rspec"] != "") {
+        if (! TBvalid_rspec($formfields["profile_rspec"])) {
+            $errors["profile_rspec"] = TBFieldErrorString();	
+        }
+        else {
+            $rspec = $formfields["profile_rspec"];
+        }
+    }
+    else {
+        # Best place to put the error. 
+        $errors["sourcefile"] = "Missing Field";
+    }
+    # Present these errors before we call out to do anything else.
+    if (count($errors)) {
+        goto bad;
+    }
+    #
+    # Project has to exist. We need to know it for the SUEXEC call
+    # below. 
+    #
+    $project = Project::LookupByPid($formfields["profile_pid"]);
+    if (!$project) {
+        $errors["profile_pid"] = "No such project";
+    }
+    elseif (!ISADMIN() &&
+            (!$project->IsMember($this_user, $isapproved) || !$isapproved)) {
+        $errors["profile_pid"] = "Illegal project";
+    }
+    elseif (Profile::LookupByName($project, $formfields{"profile_name"})) {
+        $errors["profile_name"] = "Already in use";
+    }
+    
+    #
+    # Convert profile_who to arguments.
+    #
+    if (!isset($formfields["profile_who"]) ||
+        $formfields["profile_who"] == "") {
+        $errors["profile_who"] = "Missing value";
+    }
+    else {
+        $who = $formfields["profile_who"];
+        if (! ($who == "private" || $who == "shared" || $who == "public")) {
+            $errors["profile_who"] = "Illegal value";
+        }
+    }
+    # Sanity check repourl.
+    if ($action == "create" &&
+        isset($formfields["profile_repourl"]) &&
+        $formfields["profile_repourl"] != "") {
+        if (!TBvalid_URL($formfields["profile_repourl"])) {
+            $errors["error"] = "Invalid repository URL!";
+        }
+    }
+    # Sanity check the snapuuid argument when doing a clone.
+    if ($action == "clone") {
+        if (!isset($snapuuid) || $snapuuid == "" || !IsValidUUID($snapuuid)) {
+            $errors["error"] = "Invalid experiment specified for clone!";
+        }
+        $instance = Instance::Lookup($snapuuid);
+        if (!$instance) {
+            $errors["error"] = "No such experiment to clone!";
+        }
+        else if ($this_idx != $instance->creator_idx() && !ISADMIN()) {
+            $errors["error"] = "Not enough permission!";
+        }
+        else if (! Profile::Lookup($instance->profile_id(),
+                                   $instance->profile_version())) {
+            $errors["error"] = "Cannot load profile for instance!";
+        }
+    }
+  bad:    
+    if (count($errors)) {
+	SPITAJAX_ERROR(2, $errors);
+	return;
+    }
+    if ($checkonly) {
+	SPITAJAX_RESPONSE(0);
+	return;
+    }
+    #
+    # Pass to the backend as an XML data file.
+    #
+    # Generate a temporary file and write in the XML goo.
+    #
+    $xmlname = tempnam("/tmp", "newprofile");
+    if (! $xmlname) {
+        TBERROR("Could not create temporary filename", 0);
+        $errors["error"] = "Internal error; Could not create temp file";
+        goto bad;
+    }
+    elseif (! ($fp = fopen($xmlname, "w"))) {
+        TBERROR("Could not open temp file $xmlname", 0);
+        $errors["error"] = "Internal error; Could not open temp file";
+        unlink($xmlname);
+        goto bad;
+    }
+    else {
+        fwrite($fp, "<profile>\n");
+        fwrite($fp, "<attribute name='profile_pid'>");
+        fwrite($fp, "  <value>" . $formfields["profile_pid"] . "</value>");
+        fwrite($fp, "</attribute>\n");
+        fwrite($fp, "<attribute name='profile_name'>");
+        fwrite($fp, "  <value>" .
+               htmlspecialchars($formfields["profile_name"]) . "</value>");
+        fwrite($fp, "</attribute>\n");
+        fwrite($fp, "<attribute name='rspec'>");
+        fwrite($fp, "  <value>" . htmlspecialchars($rspec) . "</value>");
+        fwrite($fp, "</attribute>\n");
+        if (isset($formfields["profile_script"]) &&
+            $formfields["profile_script"] != "") {
+            fwrite($fp, "<attribute name='script'>");
+            fwrite($fp, "  <value>" .
+                   htmlspecialchars($formfields["profile_script"]) .
+                   "</value>");
+            fwrite($fp, "</attribute>\n");
+        }
+        if (isset($formfields["profile_repourl"]) &&
+            $formfields["profile_repourl"] != "") {
+            fwrite($fp, "<attribute name='repourl'>");
+            fwrite($fp, "  <value>" .
+                   htmlspecialchars($formfields["profile_repourl"]) .
+                   "</value>");
+            fwrite($fp, "</attribute>\n");
+        }
+        #
+        # When the profile is created we mark it listed=public if a mere
+        # user. Mere users cannot change the value later. Admin users can
+        # always set/change the value.
+        #
+        if ($action != "edit" || ISADMIN()) {
+            fwrite($fp, "<attribute name='profile_listed'><value>");
+            if (ISADMIN()) {
+                if (isset($formfields["profile_listed"]) &&
+                    $formfields["profile_listed"] == "checked") {
+                    fwrite($fp, "1");
+                }
+                else {
+                    fwrite($fp, "0");
+                }
+            }
+            elseif ($action != "edit") {
+                fwrite($fp, ($who == "public" ? "1" : "0"));
+            }
+            fwrite($fp, "</value></attribute>\n");
+        }
+        fwrite($fp, "<attribute name='profile_shared'><value>" .
+               ($who == "shared" ? 1 : 0) . "</value></attribute>\n");
+        fwrite($fp, "<attribute name='profile_public'><value>" .
+               ($who == "public" ? 1 : 0) . "</value></attribute>\n");
+        if (ISADMIN()) {
+            fwrite($fp, "<attribute name='profile_topdog'><value>");
+            if (isset($formfields["profile_topdog"]) &&
+                $formfields["profile_topdog"] == "checked") {
+                fwrite($fp, "1");
+            }
+            else {
+                fwrite($fp, "0");
+            }
+            fwrite($fp, "</value></attribute>\n");
+            fwrite($fp, "<attribute name='profile_disabled'><value>");
+            if (isset($formfields["profile_disabled"]) &&
+                $formfields["profile_disabled"] == "checked") {
+                fwrite($fp, "1");
+            }
+            else {
+                fwrite($fp, "0");
+            }
+            fwrite($fp, "</value></attribute>\n");
+            fwrite($fp, "<attribute name='profile_disable_all'><value>");
+            if (isset($formfields["profile_disable_all"]) &&
+                $formfields["profile_disable_all"] == "checked") {
+                fwrite($fp, "1");
+            }
+            else {
+                fwrite($fp, "0");
+            }
+            fwrite($fp, "</value></attribute>\n");
+            fwrite($fp, "<attribute name='profile_nodelete'><value>");
+            if (isset($formfields["profile_nodelete"]) &&
+                $formfields["profile_nodelete"] == "checked") {
+                fwrite($fp, "1");
+            }
+            else {
+                fwrite($fp, "0");
+            }
+            fwrite($fp, "</value></attribute>\n");
+            fwrite($fp, "<attribute name='profile_nodelete_all'><value>");
+            if (isset($formfields["profile_nodelete_all"]) &&
+                $formfields["profile_nodelete_all"] == "checked") {
+                fwrite($fp, "1");
+            }
+            else {
+                fwrite($fp, "0");
+            }
+            fwrite($fp, "</value></attribute>\n");
+        }
+        fwrite($fp, "</profile>\n");
+        fclose($fp);
+        chmod($xmlname, 0666);
+    }
+    #
+    # Call out to the backend.
+    #
+    $webtask    = WebTask::CreateAnonymous();
+    $webtask_id = $webtask->task_id();
+    $command    = "webmanage_profile -t $webtask_id ";
+
+    if ($action == "edit") {
+        $command .= " update " . $profile->uuid();
+    }
+    else {
+        $command .= " create ";
+        if (isset($copyuuid)) {
+            $command .= "-c " . escapeshellarg($copyuuid);
+        }
+        elseif (isset($snapuuid)) {
+            $command .= "-s " . escapeshellarg($snapuuid);
+            if (isset($formfields["update_prepare"]) &&
+                $formfields["update_prepare"]) {
+                $command .= " -U ";
+            }
+        }
+    }
+    $command .= " $xmlname";
+
+    $retval = SUEXEC($this_user->uid(), $project->unix_gid(), $command,
+                     SUEXEC_ACTION_IGNORE);
+    unlink($xmlname);
+
+    if ($retval) {
+        if ($retval < 0) {
+            SUEXECERROR(SUEXEC_ACTION_CONTINUE);
+            SPITAJAX_ERROR(-1, "Internal Error; please try again later.");
+        }
+        else {
+            $webtask->Refresh();
+            if ($webtask->TaskValue("output")) {
+                $parsed = simplexml_load_string($webtask->TaskValue("output"));
+            }
+            if (!$parsed) {
+                SUEXECERROR(SUEXEC_ACTION_CONTINUE);
+                SPITAJAX_ERROR(-1, "Internal Error; please try again later.");
+            }
+            else {
+                foreach ($parsed->error as $error) {
+                    $errors[(string)$error['name']] = (string)$error;
+                }
+                SPITAJAX_ERROR(2, $errors);
+            }
+        }
+        $webtask->Delete();
+        return;
+    }
+    #
+    # Need the index to pass back through. But when its an edit operation,
+    # we have to let the backend tell us it created a new version, since
+    # we want to return to that.
+    #
+    if ($action == "edit") {
+        $webtask->Refresh();
+        if ($webtask->TaskValue("newProfile")) {
+            $profile = Profile::Lookup($webtask->TaskValue("newProfile"));
+        }
+    }
+    else {
+        $profile = Profile::LookupByName($project, $formfields["profile_name"]);
+    }
+    if ($profile) {
+        $uuid = $profile->uuid();
+        SPITAJAX_RESPONSE("manage_profile.php?action=edit&uuid=$uuid");
+        if ($action == "edit") {
+            $_SESSION["notifyupdate"] = 1;
+        }
+    }
+    else {
+        SPITAJAX_RESPONSE("user-dashboard.php#profiles");
+    }
+    $webtask->Delete();
+}
+
+#
 # Return clone status.
 #
 function Do_CloneStatus()

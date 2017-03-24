@@ -26,6 +26,7 @@ $(function ()
     var gotscript    = 0;
     var fromrepo     = 0;
     var repohash     = null;
+    var reporefspec  = "refs/heads/master";
     var ajaxurl      = "";
     var amlist       = null;
     var modified     = false;
@@ -152,7 +153,6 @@ $(function ()
 	manage_html = aptforms.FormatFormFieldsHorizontal(manage_html,
 							  {"wide" : true});
 	$('#manage-body').html(manage_html);
-	aptforms.GenerateFormErrors('#quickvm_create_profile_form', errors);
 	
     	var waitwait_html = waitwaitTemplate({});
 	$('#waitwait_div').html(waitwait_html);
@@ -423,22 +423,32 @@ $(function ()
 	// Perform actions on the rspec before submit.
 	//
 	$('#profile_submit_button').click(function (event) {
+	    event.preventDefault();
+	    
 	    // Prevent submit if the description is empty.
 	    var description = $('#profile_description').val();
 	    if (description === "") {
-		event.preventDefault();
 		alert("Please provide a description. Its handy!");
 		return false;
 	    }
 	    // Add steps to the tour.
 	    if (SyncSteps()) {
-		event.preventDefault();
 		return false;
 	    }
-	    // Disable the Stay on Page alert above.
-	    $(window).off('beforeunload.portal');
-	    WaitWait();
-	    return true;
+	    if (window.CLONING) {
+		console.info("cloning");
+		// Need to ask if any extra accounts created.
+		sup.ShowModal('#clone-modal', function () {
+		    if ($('#clone-modal-update-prepare').is(':checked')) {
+			$('#quickvm_create_profile_form ' +
+			  '[name=update_prepare]').val("yes");
+		    }
+		    SubmitForm();
+		});
+	    }
+	    else {
+		SubmitForm();
+	    }
 	});
 
 	/*
@@ -583,6 +593,38 @@ $(function ()
 	    }
 	}
     }
+
+    /*
+     * Submit
+     */
+    function SubmitForm()
+    {
+	var submit_callback = function(json) {
+	    if (json.code) {
+		sup.SpitOops("oops", json.value);
+		return;
+	    }
+	    window.location.replace(json.value);
+	};
+	var checkonly_callback = function(json) {
+	    if (json.code) {
+		if (json.code != 2) {
+		    sup.SpitOops("oops", json.value);		    
+		}
+		return;
+	    }
+	    aptforms.SubmitForm('#quickvm_create_profile_form',
+				"manage_profile", "Create",
+				submit_callback);
+	};
+	// Disable unsaved warning.
+	modified = 0;
+	
+	aptforms.CheckForm('#quickvm_create_profile_form',
+			   "manage_profile", "Create",
+			   checkonly_callback);
+    }
+    
     // Handler for all paths to rspec change (file upload, jacks, edit).
     function changeRspec(newRspec, repoupdate_callback)
     {
@@ -1321,10 +1363,13 @@ $(function ()
     {
 	gitrepo.InitRepoPicker(version_uuid,
 			       function(which) {
+				   // So we remember what the user selected.
+				   reporefspec = which;
 				   SelectRepoTarget(which);
 			       });
-	// This updates the info panel on the left side.
-	gitrepo.GetCommitInfo(version_uuid);
+	// This updates the info panel on the left side, but we want
+	// to stay on the same refspec the user switched to. 
+	gitrepo.GetCommitInfo(version_uuid, reporefspec);
     }
 
     /*
@@ -1434,13 +1479,19 @@ $(function ()
     {
 	var callback = function(json) {
 	    //console.info("CheckRepoChange", json);
-	    
+    
 	    if (json.code == 0 && repohash != json.value) {
-		// Mark as HEAD in the page.
 		repohash = json.value;
 		// Reset the list of tags and branches whenever we
 		// successfully update our clone.
 		SetupRepo();
+		// New source code from the refspec the user is looking at.
+		gitrepo.GetRepoSource(version_uuid, reporefspec,
+				      function (source, hash) {
+					  if (source) {
+					      changeRspec(source);
+					  }
+				      });
 	    }
 	    setTimeout(function f() { CheckRepoChange() }, 10000);
 	};

@@ -204,9 +204,7 @@
 	<span id="general_error" style="color:red;"></span>
 	<form id='quickvm_create_profile_form'
               class='form-horizontal' role='form'
-	      data-format="wide"
-              enctype='multipart/form-data'
-              method='post' action='manage_profile.php'>
+	      data-format="wide">
 	  <div class='row'>
 	    <div class='col-sm-12'>
 	      <% if (general_error) { %>
@@ -225,16 +223,19 @@
 	      <% if (snapuuid) { %>
 	        <input type='hidden' name='snapuuid' value='<%= snapuuid %>'>
 	      <% } %>
+	      <% if (window.CLONING) { %>
+	        <input type='hidden' name='update_prepare' value=''>
+	      <% } %>
 	    </div>
 	  </div>
 	  <input type='hidden' id="repourl"
-		 name='formfields[profile_repourl]'
+		 name='profile_repourl'
 		 value='<%- formfields.profile_repourl %>'>
 	  <% if (viewing) { %>
 	    <input type='hidden' name='uuid' value='<%= version_uuid %>'>
-	    <input type='hidden' name='formfields[profile_name]'
+	    <input type='hidden' name='profile_name'
 		   value='<%- formfields.profile_name %>'>
-	    <input type='hidden' id="profile_pid" name='formfields[profile_pid]'
+	    <input type='hidden' id="profile_pid" name='profile_pid'
 		   value='<%- formfields.profile_pid %>'>
 	  <% } %>
 	  <% if (!viewing) { %>
@@ -254,7 +255,7 @@
 	      <div class='col-sm-3'>
 		<!-- In editing mode, pass through static values. -->
 	        <div class="form-group">
-	          <input name="formfields[profile_name]"
+	          <input name="profile_name"
 		       id='profile_name'
 		       <% if (viewing) { %>readonly<% } %>
 		       value="<%- formfields.profile_name %>"
@@ -269,13 +270,13 @@
 	      <div class='col-sm-3'>
 	        <div class="form-group">
 		  <% if (projects.length == 1) { %>
-	            <input name="formfields[profile_pid]" readonly
+	            <input name="profile_pid" readonly
 		       value="<%- formfields.profile_pid %>"
 		       class="form-control format-me"
 		       id='profile_pid'
 		       data-key="profile_pid">
 		  <% } else { %>
-		    <select name="formfields[profile_pid]"
+		    <select name="profile_pid"
 			   id='profile_pid' 
 			   class='form-control format-me'
 			   data-key="profile_pid"			
@@ -308,7 +309,7 @@
 			      profile source code.'>
 		<div class='row'>
                   <div class='col-xs-12'>
-		    <% if (!fromrepo) { %>
+		    <% if (! (fromrepo || window.CLONING)) { %>
 		      <span id="sourcefile-button-div"
 			    style='margin-right: 10px;'>
 			<input class='filestyle' type='file'
@@ -340,7 +341,7 @@
 			  style='margin-right: 10px;'
 			  id='show_xml_modal_button'>
                       XML</button>
-		    <% if (!viewing) { %>
+		    <% if (! (viewing || window.CLONING)) { %>
 		      or 
 		      <button class='btn btn-primary btn-xs'
      			      data-toggle='modal'
@@ -389,13 +390,13 @@
 		</div>
 	      </div>
 	    <% } %>
- 	    <textarea name="formfields[profile_rspec]"
+ 	    <textarea name="profile_rspec"
 		      id='profile_rspec_textarea'
                       class='form-control hidden'
                       type='textarea'
 		      data-key='profile_rspec'
 		      rows=5><%- formfields.profile_rspec %></textarea>
- 	    <textarea name="formfields[profile_script]"
+ 	    <textarea name="profile_script"
 		      id='profile_script_textarea'
                       class='form-control hidden'
                       type='textarea'
@@ -410,7 +411,7 @@
 		   data-help='Briefly describe what this profile
 			      does. Use <a href="https://github.com/adam-p/markdown-here/wiki/Markdown-Cheatsheet" target=_blank>Markdown format</a>, double click
 			      to see a rendering.'>
-		<textarea name=formfields[profile_description]
+		<textarea name=profile_description
 			  id='profile_description'
 			  rows=3
 			  class='form-control'
@@ -433,7 +434,7 @@
 		              profile after it starts.
 		              Use <a href="https://github.com/adam-p/markdown-here/wiki/Markdown-Cheatsheet" target=_blank>Markdown format</a>, double click
  		              to see a rendering.'>
-	      <textarea name=formfields[profile_instructions]
+	      <textarea name=profile_instructions
 			id='profile_instructions'
 			class='form-control'
 			rows=3
@@ -478,7 +479,7 @@
 	      <div class='col-sm-9 col-sm-offset-3'>
 		<div class='checkbox format-me' data-compact='yep'>
                   <label>
-		    <input name=formfields[profile_listed]
+		    <input name='profile_listed'
 			   <%- formfields.profile_listed %>
 			   data-key='profile_listed'
 			   id='profile_listed' value='checked'
@@ -503,7 +504,7 @@
 		  <% if (1) { %>
 		  <div class='radio'>
                     <label>
-                      <input type='radio' name='formfields[profile_who]'
+                      <input type='radio' name='profile_who'
 			     id='profile_who_public'
 		             <% if (formfields.profile_who == "public") {
 				%>checked<% } %>
@@ -519,7 +520,7 @@
 		  <% if (0) { %>
                   <div class='radio'>
                     <label>
-                      <input type='radio' name='formfields[profile_who]'
+                      <input type='radio' name='profile_who'
 			     id='profile_who_registered'
 		             <% if (formfields.profile_who == "shared") {
 				%>checked<% } %>
@@ -530,7 +531,7 @@
 		  <% } %>
                   <div class='radio'>
                     <label>
-                      <input type='radio' name='formfields[profile_who]'
+                      <input type='radio' name='profile_who'
 			     id='profile_who_private'
 		             <% if (formfields.profile_who == "private") {
 				%>checked<% } %>
@@ -548,7 +549,7 @@
 		<div class='checkbox format-me' data-key='profile_topdog'
 		     data-compact='yep'>
                   <label>
-		    <input name=formfields[profile_topdog]
+		    <input name='profile_topdog'
 			   <%- formfields.profile_topdog %>
 			   data-key='profile_topdog'
 			   id='profile_topdog' value='checked'
@@ -563,7 +564,7 @@
 		<div class='checkbox format-me' data-key='profile_disabled'
 		     data-compact='yep'>
                   <label>
-		    <input name=formfields[profile_disabled]
+		    <input name='profile_disabled'
 			   <%- formfields.profile_disabled %>
 			   data-key='profile_disabled'
 			   id='profile_disabled' value='checked'
@@ -580,7 +581,7 @@
 		    </a>
 		  </label>
                   <label>
-		    <input name=formfields[profile_disable_all]
+		    <input name='profile_disable_all'
 			   data-key='profile_disable_all'
 			   value='checked'
 			   type='checkbox'>Apply to all versions.
@@ -593,7 +594,7 @@
 		<div class='checkbox format-me' data-key='profile_nodelete'
 		     data-compact='yep'>
                   <label>
-		    <input name=formfields[profile_nodelete]
+		    <input name='profile_nodelete'
 			   <%- formfields.profile_nodelete %>
 			   data-key='profile_nodelete'
 			   id='profile_nodelete' value='checked'
@@ -612,7 +613,7 @@
 		    </a>
 		  </label>
                   <label>
-		    <input name=formfields[profile_nodelete_all]
+		    <input name='profile_nodelete_all'
 			   data-key='profile_nodelete_all'
 			   value='checked'
 			   type='checkbox'>Apply to all versions.
@@ -624,7 +625,7 @@
 
 	    <!-- The private URL -->
 	    <% if (0) { %>
-	    <input name="formfields[profile_version_url]"
+	    <input name="profile_version_url"
 		   value="<%- formfields.profile_version_url %>"
 		   id='profile_url' readonly
                    class='form-control format-me'
@@ -976,6 +977,32 @@ Instructions are optional.
                     class='btn btn-default btn-sm' 
                     data-dismiss='modal'>
 	      Close</button>
+	  </center>
+	</div>
+      </div>
+    </div>
+  </div>
+  <!-- Added accounts -->
+  <div id='clone-modal' class='modal fade'
+       data-keyboard='false' data-backdrop='static'>
+    <div class='modal-dialog'>
+      <div class='modal-content'>
+	<div class='modal-body'>
+	  <center>
+	    <b>Did you add any accounts or groups to your image?</b>
+	    <br>
+	    <input type=checkbox
+		   id='clone-modal-update-prepare' value=yes>
+	  </center>
+	  <p>
+	    Check this box if you installed any software that added new
+	    users or groups. If you are not sure, ask us first since
+	    checking this box needlessly can have negative side effects.
+	  </p>
+	  <br>
+	  <center>
+	    <button class='btn btn-success btn-sm'
+		    data-dismiss='modal' type='button'>Continue</button>
 	  </center>
 	</div>
       </div>
