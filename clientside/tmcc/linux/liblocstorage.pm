@@ -278,7 +278,7 @@ sub get_disktype($)
     # Try using "smartctl -i"
     #
     if (-x "$SMARTCTL") {
-	if (open(HFD, "$SMARTCTL -i /dev/$dev 2&>1 |")) {
+	if (open(HFD, "$SMARTCTL -i /dev/$dev 2>&1 |")) {
 	    my $isssd = -1;
 	    my $model ="";
 
