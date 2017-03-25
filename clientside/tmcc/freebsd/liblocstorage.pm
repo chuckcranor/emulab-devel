@@ -381,6 +381,67 @@ sub uuid_to_daemonpid($$)
 }
 
 #
+# Determine if a disk is "SSD" or "HDD"
+#
+sub get_disktype($)
+{
+    my ($dev) = @_;
+    my @lines;
+
+    #
+    # Assume NVMe is SSSD.
+    # Older smartctl doesn't seem to handle NVMe
+    #
+    if ($dev =~ /^nvd\d+/) {
+	return "SSD";
+    }
+
+    #
+    # Try using "smartctl -i"
+    #
+    if (-x "$SMARTCTL") {
+	if (open(HFD, "$SMARTCTL -i /dev/$dev 2>&1 |")) {
+	    my $isssd = -1;
+	    my $model ="";
+
+	    while (my $line = <HFD>) {
+		chomp($line);
+		if ($line =~ /^rotation rate:\s+(\S.*)/i) {
+		    if ($1 =~ /solid state device/i) {
+			$isssd = 1;
+		    } else {
+			$isssd = 0;
+		    }
+		    last;
+		}
+		# XXX if we don't find rotation rate, we will fall back on this
+		if ($line =~ /^device model:\s+(\S.*)/i) {
+		    $model = $1;
+		    next;
+		}
+	    }
+	    close(HFD);
+
+	    if ($isssd >= 0) {
+		return ($isssd ? "SSD" : "HDD");
+	    }
+	    
+	    #
+	    # XXX older versions of smartctl (e.g., in CentOS 6-ish)
+	    # don't return "Rotation Rate". This is a fall-back hack as
+	    # we know that at least Intel SSDs have SSD in the model name.
+	    #
+	    if ($model =~ /SSD/) {
+		return "SSD";
+	    }
+	}
+    }
+
+    # Assume it is a spinning disk.
+    return "HDD";
+}
+
+#
 # Return the name (e.g., "da0") of the boot disk, aka the "system volume".
 #
 sub get_bootdisk()
@@ -556,6 +617,7 @@ sub get_diskinfo($)
 	    $geominfo{$dev}{'size'} = int($vals[3] / 1024 / 1024);
 	    if ($vals[1] eq "DISK") {
 		$geominfo{$dev}{'inuse'} = 0;
+		$geominfo{$dev}{'disktype'} = get_disktype($dev);
 	    } else {
 		$geominfo{$dev}{'inuse'} = 1;
 	    }
@@ -575,6 +637,7 @@ sub get_diskinfo($)
 		$geominfo{$curdev}{'level'} = 0;
 		$geominfo{$curdev}{'type'} = "DISK";
 		$geominfo{$curdev}{'inuse'} = 0;
+		$geominfo{$curdev}{'disktype'} = get_disktype($curdev);
 		next;
 	    }
 	    if (/\sMediasize:\s+(\d+)\s/) {
@@ -986,7 +1049,7 @@ sub os_init_storage($)
 	#
 	else {
 	    if (is_lvm_initialized(0)) {
-		$so{'VINUM_DRIVES'} = 1;
+		$so{'LVM_DRIVES'} = 1;
 	    }
 	    if (mysystem("grep -q 'geom_vinum_load=\"YES\"' /boot/loader.conf")) {
 		if (!open(FD, ">>/boot/loader.conf")) {
@@ -1089,12 +1152,17 @@ sub os_show_storage($)
     my $dinfo = get_diskinfo($usezfs);
     if ($dinfo) {
 	print STDERR "  DISKINFO:\n";
-	foreach my $dev (keys %$dinfo) {
+	foreach my $dev (sort keys %$dinfo) {
 	    my $type = $dinfo->{$dev}->{'type'};
 	    my $lev = $dinfo->{$dev}->{'level'};
 	    my $size = $dinfo->{$dev}->{'size'};
 	    my $inuse = $dinfo->{$dev}->{'inuse'};
-	    print STDERR "    name=$dev, type=$type, level=$lev, size=$size, inuse=$inuse\n";
+	    print STDERR "    name=$dev, type=$type, level=$lev, size=$size, inuse=$inuse";
+	    if ($type eq "DISK") {
+		my $dtype = $dinfo->{$dev}->{'disktype'};
+		print STDERR ", disktype=$dtype";
+	    }
+	    print STDERR "\n";
 	}
     }
 
@@ -1816,13 +1884,29 @@ sub os_create_storage_slice($$$)
 		    }
 		}
 		else {
+		    #
+		    # Deterimine if we should use SSDs in the construction
+		    # of the zpool/gvinum.
+		    #
+		    my $disktype = "";
+		    if ($href->{'PROTO'} eq "SATA") {
+			$disktype = "HDD";
+		    } elsif ($href->{'PROTO'} eq "NVMe") {
+			$disktype = "SSD";
+		    }
+
 		    if ($bsid eq "ANY") {
-			$spacemap{$bdisk}{'pchr'} = "s";
-			$spacemap{$bdisk}{'pnum'} = 4;
+			if (!$disktype ||
+			    $dinfo->{$bdisk}->{'disktype'} eq $disktype) {
+			    $spacemap{$bdisk}{'pchr'} = "s";
+			    $spacemap{$bdisk}{'pnum'} = 4;
+			}
 		    }
 		    foreach my $dev (keys %$dinfo) {
 			if ($dinfo->{$dev}->{'type'} eq "DISK" &&
-			    $dinfo->{$dev}->{'inuse'} == 0) {
+			    $dinfo->{$dev}->{'inuse'} == 0 &&
+			    (!$disktype ||
+			     $dinfo->{$dev}->{'disktype'} eq $disktype)) {
 			    $spacemap{$dev}{'pnum'} = 0;
 			}
 		    }
@@ -2054,7 +2138,7 @@ sub os_create_storage_slice($$$)
 		    warn("*** $lv: could not create gvinum config\n");
 		    return 0;
 		}
-		if (!exists($so->{'VINUM_DRIVES'})) {
+		if (!exists($so->{'LVM_DRIVES'})) {
 		    foreach my $disk (keys %$space) {
 			my $pdev = $disk . $space->{$disk}->{'pchr'} . $space->{$disk}->{'pnum'};
 			print FD "drive emulab_$pdev device /dev/$pdev\n";
@@ -2078,7 +2162,7 @@ sub os_create_storage_slice($$$)
 		#unlink($cfile);
 
 		# vinum drives exist at this point
-		$so->{'VINUM_DRIVES'} = 1;
+		$so->{'LVM_DRIVES'} = 1;
 
 		# XXX need some delay before accessing device?
 		sleep(1);
