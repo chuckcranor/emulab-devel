@@ -254,7 +254,7 @@ $(function ()
 	    var source = $.trim($('#profile_script_textarea').val());
 	    var type   = "source";
 
-	    if (source.length > 0 && window.ACTION === 'edit' && !fromrepo) {
+	    if (0 && source.length > 0 && window.ACTION === 'edit' && !fromrepo) {
 		openEditor();
 	    } else {
 	        if (source.length === 0) {
