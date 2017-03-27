@@ -802,55 +802,17 @@
 	  <div>
 	    <hr>
 	    <p>
-	      Detailed info coming soon, but here are some of the most
-	      important points to know about <em>repository-based
-	      profiles</em>:
-	      <ul>
-		<li>Your repository must be public, and the URL
-		  should resemble
-		  <a target="_blank"
-		      href="https://github.com/lbstoller/my-profile.git">
-		    https://github.com/lbstoller/my-profile.git</a>.
-		</li>
-		<li>Your repository must contain a file called
-		  "profile.py" (a geni-lib script) <b>or</b> "profile.rspec"
-		  (an rspec). Your topology will be loaded from that
-		  file. Please place the source file in the toplevel directory
-		  (see the aforementioned example repository).
-		</li>
-		<li>
-		  When you instantiate your profile, we will clone
-		  your repository to each of your experimental nodes in
-		  the <code>/local/repository</code> directory, and set it
-		  to match whatever branch or tag you have choosen to
-		  instantiate. You will not be able to push to your
-		  repository of course, until you install the necessary
-		  credentials on your nodes.
-		</li>
-		<li>
-		  <code>Execute</code> services run <em>after</em> the
-		  nodes have cloned your repository, so you may refer to
-		  the clone (<code>/local/repository</code>) from your
-		  services.
-		</li>
-		<li>
-		  You will be able to instantiate from any branch (HEAD) or
-		  tag in the repository.
-		</li>
-		<li>
-		  If you change your repository, simply come back here,
-		  select your profile, and use the <code>Update</code> button;
-		  we will fetch from your repository and update the profile to
-		  reflect the changes. 
-		</li>
-		<li>
-		  Place anything you like in your repository, with the caveat
-		  that a giant repository (including, say, the linux source
-		  code), will take a long time to clone to each of your nodes.
-		</li>
-	      </ul>
+	      Repository based profiles are a great way to combine a
+	      git repository (for source code control) and a Cloudlab
+	      profile (for experiment control). A demonstration Git
+	      repository for you to look at it can be found at
+	      <a target="_blank"
+		 href="https://github.com/lbstoller/my-profile.git">
+		https://github.com/lbstoller/my-profile.git</a>.
+	      Please take a look at this repository for more
+	      information on how to set up your Git repository
+	      so that it can be the basis for your profile.
 	    </p>
-	  </div>
 	</div>
       </div>
     </div>
@@ -886,7 +848,7 @@
 	      confirmation so you know that your profile has been updated.
 	    </p>
 	    <p>
-	      Setting up a webhook is relatively straightfoward:
+	      Setting up a webhook is relatively straightforward:
 	      <ul>
 		<li><b>github.com</b>: Go to your repository and 
 		  click on the <b>Settings</b> option
