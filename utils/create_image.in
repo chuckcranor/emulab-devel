@@ -1355,7 +1355,7 @@ if ($result eq "timeout") {
 if ($result eq "toobig") {
     fatal("FAILED: Maximum image size ($maximagesize bytes) exceeded ... \n");
 }
-if ($result != 0) {
+if ($result ne "0") {
     fatal("FAILED: Returned error code $result generating image ... \n");
 }
 
