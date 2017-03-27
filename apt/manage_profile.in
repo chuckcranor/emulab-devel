@@ -620,7 +620,7 @@ sub ModifyProfileInternal($$$)
 	my $output = emutil::ExecQuiet("$RUNGENILIB -p $filename");
 	if ($?) {
 	    $$pmsg = $output;
-	    return -1;
+	    return $? >> 8;
 	}
 	chomp($output);
 
