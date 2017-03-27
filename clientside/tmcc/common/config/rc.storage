@@ -661,6 +661,9 @@ sub process($$$$)
 	    warn("*** Unknown storage slice bsid '".$href->{'BSID'}."'\n");
 	    return 0;
 	}
+	if (!exists($href->{'PROTO'})) {
+	    $href->{'PROTO'} = "local";
+	}
 	if (exists($href->{'DATASET'}) && $dosetup) {
 	    #
 	    # We are going to load from a dataset image via frisbee.
