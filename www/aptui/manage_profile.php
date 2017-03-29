@@ -80,6 +80,7 @@ function SPITFORM($formfields, $errors)
     $this_version = "null";
     $latest_uuid    = "null";
     $latest_version = "null";
+    $editor_readonly = "true";
 
     if ($action == "edit") {
 	$button_label = "Save";
@@ -97,6 +98,7 @@ function SPITFORM($formfields, $errors)
         $this_version = $profile->version();
 	if ($canmodify) {
 	    $title    = "Modify Profile";
+	    $editor_readonly = "false";
 	}
 	else {
 	    $title    = "View Profile";
@@ -121,7 +123,15 @@ function SPITFORM($formfields, $errors)
 
     echo "<div id='ppviewmodal_div'></div>\n";
     # Place to hang the toplevel template.
-    echo "<div id='manage-body'></div>\n";
+    echo "<div id='page-body'></div>\n";
+
+    # Place to hang the genilib-editor template.
+    echo "<div id='genilib-editor-body'></div>\n";
+
+    # These two modals live outside so that genilib-editor can
+    # use them as well.
+    echo "<div id='waitwait_div'></div>
+          <div id='oops_div'></div>";
 
     # I think this will take care of XSS prevention?
     echo "<script type='text/plain' id='form-json'>\n";
@@ -130,6 +140,11 @@ function SPITFORM($formfields, $errors)
     echo "<script type='text/plain' id='error-json'>\n";
     echo htmlentities(json_encode($errors));
     echo "</script>\n";
+
+    # Needed for genilib-editor
+    echo "<script src='https://cdn.jsdelivr.net/ace/1.2.3/noconflict/ace.js'></script>\n";
+    echo "<script src='https://cdn.jsdelivr.net/ace/1.2.3/noconflict/keybinding-vim.js'></script>\n";
+    echo "<script src='https://cdn.jsdelivr.net/ace/1.2.3/noconflict/keybinding-emacs.js'></script>\n";
 
     # Pass project list through. Need to convert to list without groups.
     # When editing, pass through a single value. The template treats a
@@ -160,6 +175,8 @@ function SPITFORM($formfields, $errors)
     # For progress bubbles in the imaging modal.
     echo "<link rel='stylesheet' href='css/progress.css'>\n";
     echo "<link rel='stylesheet' href='css/codemirror.css'>\n";
+    echo "<link rel='stylesheet' href='css/genilib-editor.css'>\n";
+
     SpitAggregateStatus();
     echo "<script type='text/javascript'>\n";
     echo "    window.VIEWING  = $viewing;\n";
@@ -196,6 +213,7 @@ function SPITFORM($formfields, $errors)
 	echo "    window.EXPUUID = '$fromexp';\n";
     }
     echo "    window.CANREPO = $canrepo;\n";
+    echo "    window.EDITOR_READONLY = $editor_readonly;\n";
     echo "</script>\n";
     echo "<script src='js/lib/jquery-ui.js'></script>\n";
     echo "<script src='js/lib/jquery.appendGrid-1.3.1.min.js'></script>\n";
@@ -210,6 +228,7 @@ function SPITFORM($formfields, $errors)
     REQUIRE_APTFORMS();
     REQUIRE_FILESTYLE();
     REQUIRE_MARKED();
+    REQUIRE_GENILIB_EDITOR();
     AddLibrary("js/gitrepo.js");
     SPITREQUIRE("js/manage_profile.js");
 

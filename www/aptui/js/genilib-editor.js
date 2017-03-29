@@ -2,12 +2,10 @@ $(function ()
 {
   'use strict';
 
-  var templates = APT_OPTIONS.fetchTemplateList(['genilib-editor', 'oops-modal', 'waitwait-modal', 'manage-profile']);
+  var templates = APT_OPTIONS.fetchTemplateList(['genilib-editor']);
   var pageString = templates['genilib-editor'];
-  var oopsString = templates['oops-modal'];
-  var waitwaitString = templates['waitwait-modal'];
-  var manageString = templates['manage-profile'];
-  
+
+  var isRendered = false;
   var editor;
   var isWaiting = false;
   var isSplit = false;
@@ -17,58 +15,105 @@ $(function ()
   var jacks = null;
   var jacksInput = null;
   var jacksOutput = null;
-  var manageTemplate = _.template(manageString);
+  var callback = null;
 
   function initialize()
   {
-    window.APT_OPTIONS.initialize(sup);
+    // The including page provides us with a top-level hook and an
+    // oops and waitwait modal to invoke.
+    $('#genilib-editor-body').hide();
+    $('#genilib-editor-body').html(pageString);
+  }
 
-    $('#page-body').html(pageString);
-    $('#oops_div').html(oopsString);
-    $('#waitwait_div').html(waitwaitString);
-    
-    editor = ace.edit('editor');
-    editor.setTheme('ace/theme/chrome');
-    editor.getSession().setMode('ace/mode/python');
-    editor.getSession().on('change', editorChanged);
-
-    removeSplit();
-
-    loadSettings();
-
-    var source = document.getElementById('source').innerHTML;
-    editor.setValue(atob(source));
-    editor.selection.clearSelection();
-    $(window).off('beforeunload.portal');
-
-    $('#waitwait-modal').modal({ backdrop: 'static', keyboard: false, show: false });
-    sup.DownloadOnClick($('#saveButton'), getSaveText, 'saved.py', saveComplete);
-    $('#loadButton').on('click', load);
-    $('#runButton').on('click', clickRun);
-    $('#settingsButton').on('click', toggleSettings);
-    $('#closeErrorButton').on('click', removeSplit);
-    $('#closeSettingsButton').on('click', removeSplit);
-    $('#closeJacksButton').on('click', removeSplit);
-    $('#settings-root select').on('change', onChangeSettings);
-    $('#createButton').on('click', clickCreate);
-    $('#closeCreateButton').on('click', removeSplit);
-    if (window.PROFILE_CANEDIT && window.PROFILE_NAME && window.PROFILE_PROJECT &&
-	window.PROFILE_VERSION_UUID && window.PROFILE_LATEST_UUID)
+  function render()
+  {
+    if (! isRendered)
     {
-      $('#updateButton').on('click', clickEdit);
-      $('#updateButton').removeClass('hidden');
+      isRendered = true;
+      editor = ace.edit('genilib-editor');
+      editor.$blockScrolling = Infinity;
+      editor.setTheme('ace/theme/chrome');
+      editor.getSession().setUseWrapMode(true);
+      editor.getSession().setMode('ace/mode/python');
+      editor.getSession().on('change', editorChanged);
+      if (window.EDITOR_READONLY)
+      {
+	editor.setReadOnly(true);
+	$('#genilib-editor-body #loadButton').hide();
+	$('#genilib-editor-body #cancelButton').hide();
+	$('#genilib-editor-body #okButton').html('Ok');
+      }
+      else
+      {
+	editor.setReadOnly(false);
+	$('#genilib-editor-body #loadButton').on('click', load);
+	$('#genilib-editor-body #cancelButton').on('click', clickCancel);
+      }
+
+      removeSplit();
+
+      loadSettings();
+
+      sup.DownloadOnClick($('#genilib-editor-body #saveButton'), getSaveText, 'saved.py', saveComplete);
+    $('#genilib-editor-body #runButton').on('click', run);
+      $('#genilib-editor-body #settingsButton').on('click', toggleSettings);
+      $('#genilib-editor-body #closeErrorButton').on('click', removeSplit);
+      $('#genilib-editor-body #closeSettingsButton').on('click', removeSplit);
+      $('#genilib-editor-body #closeJacksButton').on('click', removeSplit);
+      $('#genilib-editor-body #settings-root select').on('change', onChangeSettings);
+      $('#genilib-editor-body #okButton').on('click', clickOk);
+    }
+  }
+
+  // Hide the current page (#page-body) and show the genilib editor.
+  // 'source' is a plaintext genilib source code string
+  // 'callback' is called when the user clicks ok or cancel with either the new source (if they clicked ok in edit mode) or null (if they clicked cancel or are in readonly mode).
+  window.SHOW_GENILIB_EDITOR = function (source, newCallback)
+  {
+    callback = newCallback;
+    $('#page-body').hide();
+    $('#genilib-editor-body').show();
+    render();
+    editor.setValue(source);
+    editor.selection.clearSelection();
+  }
+
+  function clickOk()
+  {
+    if (window.EDITOR_READONLY)
+    {
+      hideEditor(null);
+    }
+    else
+    {
+      hideEditor(editor.getValue());
+    }
+  }
+
+  function clickCancel()
+  {
+    hideEditor(null);
+  }
+
+  function hideEditor(source)
+  {
+    $('#genilib-editor-body').hide();
+    $('#page-body').show();
+    if (callback)
+    {
+      callback(source);
     }
   }
 
   function removeSplit()
   {
-    $('#jacks-root').hide();
-    $('#error-root').hide();
-    $('#create-root').hide();
-    $('#settings-root').hide();
+    $('#genilib-editor-body #jacks-root').hide();
+    $('#genilib-editor-body #error-root').hide();
+    $('#genilib-editor-body #create-root').hide();
+    $('#genilib-editor-body #settings-root').hide();
     settingsShown = false;
     createShown = false;
-    $('#editor-container')
+    $('#genilib-editor-body #editor-container')
       .removeClass('col-lg-6 col-md-6')
       .addClass('col-lg-12 col-md-12');
     editor.resize();
@@ -76,7 +121,7 @@ $(function ()
 
   function addSplit()
   {
-    $('#editor-container')
+    $('#genilib-editor-body #editor-container')
       .removeClass('col-lg-12 col-md-12')
       .addClass('col-lg-6 col-md-6');
     editor.resize();
@@ -88,7 +133,6 @@ $(function ()
     {
       removeSplit();
     }
-    $(window).on('beforeunload.portal', beforeUnload);
   }
 
   function getSaveText()
@@ -105,16 +149,15 @@ $(function ()
 
   function saveComplete()
   {
-    $(window).off('beforeunload.portal');
   }
   
   function load()
   {
     if (! isWaiting)
     {
-      $('#load-input').html('<input type="file"/>');
-      $('#load-input input').on('change', function () {
-	var file = $('#load-input input')[0].files[0];
+      $('#genilib-editor-body #load-input').html('<input type="file"/>');
+      $('#genilib-editor-body #load-input input').on('change', function () {
+	var file = $('#genilib-editor-body #load-input input')[0].files[0];
 	if (file)
 	{
           var reader = new FileReader();
@@ -122,29 +165,19 @@ $(function ()
             var contents = e.target.result;
 	    editor.setValue(contents);
 	    editor.selection.clearSelection();
-	    $(window).off('beforeunload.portal');
 	    removeSplit();
-//            jacksInput.trigger('change-topology', [{ rspec: contents }]);
           };
           reader.readAsText(file);
 	}
       });
-      $('#load-input input').click();
+      $('#genilib-editor-body #load-input input').click();
     }
   }
 
-  function clickRun()
-  {
-    run('test');
-  }
-
-  var runOption = 'test';
-
-  function run(newRunOption)
+  function run()
   {
     if (! isWaiting)
     {
-      runOption = newRunOption;
       removeSplit();
       $('#waitwait-modal').modal('show');
       isWaiting = true;
@@ -165,26 +198,13 @@ $(function ()
     if (json.code == 0)
     {
       rspec = json.value;
-      if (runOption == 'create')
-      {
-	$('#create-root').show();
-	createShown = true;
-	updateCreateBody();
-      }
-      else if (runOption == 'edit')
-      {
-	$('#create-root').show();
-	createShown = true;
-	updateEditBody();
-	_.defer(function () { $('#profile_submit_button').click(); });
-      }
-      $('#jacks-root').show();
+      $('#genilib-editor-body #jacks-root').show();
       _.defer(jacksUpdate);
       addSplit();
     }
     else if (json.code == 2)
     {
-      $('#error-message').html('');
+      $('#genilib-editor-body #error-message').html('');
       var errors = json.value.split('\n');
       for (var i in errors)
       {
@@ -199,10 +219,9 @@ $(function ()
 	}
 
 	item.append('<pre>' + _.escape(errors[i]) + '</pre></div>');
-	$('#error-message').append(item);
+	$('#genilib-editor-body #error-message').append(item);
       }
-//      $('#error-message').html(_.escape(json.value));
-      $('#error-root').show();
+      $('#genilib-editor-body #error-root').show();
       addSplit();
     }
     else
@@ -218,16 +237,6 @@ $(function ()
       editor.gotoLine(line);
     });
     return button;
-  }
-
-  function clickCreate()
-  {
-    run('create');
-  }
-
-  function clickEdit()
-  {
-    run('edit');
   }
 
   function onChangeSettings()
@@ -246,10 +255,10 @@ $(function ()
     else
     {
       settingsShown = true;
-      $('#settings-root').show();
-      $('#jacks-root').hide();
-      $('#error-root').hide();
-      $('#create-root').hide();
+      $('#genilib-editor-body #settings-root').show();
+      $('#genilib-editor-body #jacks-root').hide();
+      $('#genilib-editor-body #error-root').hide();
+      $('#genilib-editor-body #create-root').hide();
       createShown = false;
       addSplit();
     }
@@ -283,7 +292,7 @@ $(function ()
   function saveSettings()
   {
     var settings = {};
-    $('#settings-root select').each(function () {
+    $('#genilib-editor-body #settings-root select').each(function () {
       settings[this.id] = $(this).val();
     });
     try
@@ -302,9 +311,9 @@ $(function ()
   {
     for (var key in settings)
     {
-      if ($('#settings-root').find('#' + key).val() !== settings[key])
+      if ($('#genilib-editor-body #settings-root').find('#' + key).val() !== settings[key])
       {
-	$('#settings-root').find('#' + key).val(settings[key]);
+	$('#genilib-editor-body #settings-root').find('#' + key).val(settings[key]);
       }
     }
     if (editor.getTheme() !== 'ace/theme/' + settings['theme'])
@@ -372,172 +381,5 @@ $(function ()
 		       [{ rspec: rspec }]);
   }
 
-  function updateCreateBody()
-  {
-    var projlist = JSON.parse(_.unescape($('#projects-json')[0].textContent));
-    var project = undefined;
-    if (projlist.length == 1)
-    {
-      project = projlist[0];
-    }
-    else if (window.PROFILE_PROJECT && _.contains(projlist, window.PROFILE_PROJECT))
-    {
-      project = window.PROFILE_PROJECT;
-    }
-    var fields = {
-      profile_script: editor.getValue(),
-      profile_rspec: rspec,
-      profile_who: 'private',
-      profile_pid: project
-    };
-    var manage_html = manageTemplate({
-      formfields: fields,
-      projects: projlist,
-      title: 'Create Profile',
-      notifyupdate: false,
-      viewing: false,
-      action: 'create',
-      button_label: 'Create',
-      candelete: false,
-      canmodify: false,
-      canpublish: false,
-      isadmin: false,
-      history: false,
-      activity: false,
-      manual: false,
-      copyuuid: null,
-      snapuuid: null,
-      general_error: '',
-      isapt: window.ISAPT,
-      disabled: true,
-      versions: [],
-      withpublishing: false,
-      genilib_editor: true,
-      canrepo: false,
-      fromrepo: false
-    });
-    manage_html = aptforms.FormatFormFieldsHorizontal(manage_html,
-						      {"wide": false });
-    $('#create-body').html(manage_html);
-    $('#profile_instructions').prop("readonly", true);
-    $('#profile_description').prop("readonly", true);
-    $('#profile_submit_button').removeAttr('disabled');
-    $('#profile_submit_button').on('click', submitCreate);
-    // This activates the popover subsystem.
-    $('[data-toggle="popover"]').popover({
-      trigger: 'hover',
-      placement: 'auto',
-      container: 'body',
-    });
-    parseRspec();
-  }
-
-  function updateEditBody()
-  {
-    var projlist = [window.PROFILE_NAME];
-    var fields = {
-      profile_name: window.PROFILE_NAME,
-      profile_pid: window.PROFILE_PROJECT,
-      profile_script: editor.getValue(),
-      profile_rspec: rspec,
-      profile_who: window.PROFILE_WHO
-    };
-    var manage_html = manageTemplate({
-      formfields: fields,
-      projects: projlist,
-      title: 'Update Profile',
-      notifyupdate: false,
-      viewing: false,
-      version_uuid: window.PROFILE_VERSION_UUID,
-      latest_uuid: window.PROFILE_LATEST_UUID,
-      action: 'edit',
-      button_label: 'Update',
-      candelete: false,
-      canmodify: false,
-      canpublish: false,
-      isadmin: false,
-      history: false,
-      activity: false,
-      manual: false,
-      copyuuid: null,
-      snapuuid: null,
-      general_error: '',
-      isapt: window.ISAPT,
-      disabled: true,
-      versions: [],
-      withpublishing: false,
-      genilib_editor: true,
-      canrepo: false,
-      fromrepo: false
-    });
-    manage_html = aptforms.FormatFormFieldsHorizontal(manage_html,
-						      {'wide': false });
-    $('#create-body').html(manage_html);
-    $('#profile_name').prop('readonly', true);
-    $('#profile_instructions').prop('readonly', true);
-    $('#profile_description').prop('readonly', true);
-    $('#profile_pid').prop('readonly', true);
-    $('.permission-checkbox').hide();
-    $('#profile_submit_button').removeAttr('disabled');
-    $('#profile_submit_button').on('click', submitEdit);
-    $('#quickvm_create_profile_form').attr('action', 'manage_profile.php?uuid=' + window.PROFILE_LATEST_UUID);
-    // This activates the popover subsystem.
-    $('[data-toggle="popover"]').popover({
-      trigger: 'hover',
-      placement: 'auto',
-      container: 'body',
-    });
-    parseRspec();
-  }
-
-  function parseRspec()
-  {
-    var xmlDoc = null;
-    try
-    {
-      xmlDoc = $.parseXML(rspec);
-    }
-    catch (err)
-    {
-      console.log('Could not parse XML', err);
-      $('#profile_description').parent().parent().parent().hide();
-      $('#profile_instructions').parent().parent().parent().hide();
-    }
-    if (xmlDoc)
-    {
-      var xml    = $(xmlDoc);
-	
-      $('#profile_description').val("");
-      $(xml).find("rspec_tour > description").each(function() {
-	var text = $(this).text();
-	$('#profile_description').val(text);
-      });
-      $('#profile_instructions').val("");
-      $(xml).find("rspec_tour > instructions").each(function() {
-	var text = $(this).text();
-	$('#profile_instructions').val(text);
-      });
-    }
-  }
-
-  function beforeUnload()
-  {
-    return 'You have unsaved changes!';
-  }
-
-  function submitEdit(event)
-  {
-    $(window).off('beforeunload.portal');
-    $('#waitwait-modal').modal('show');
-    return true;
-  }
-
-  function submitCreate(event)
-  {
-    $(window).off('beforeunload.portal');
-    $('#waitwait-modal').modal('show');
-    return true;
-  }
-  
   $(document).ready(initialize);
 });

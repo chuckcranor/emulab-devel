@@ -106,14 +106,28 @@ if ($profile->repourl() && $profile->repourl() != "") {
 # Place to hang the toplevel template.
 echo "<div id='page-body'></div>\n";
 
+# Place to hang the genilib-editor template.
+echo "<div id='genilib-editor-body'></div>\n";
+
+# These two modals live outside so that genilib-editor can
+# use them as well.
+echo "<div id='waitwait_div'></div>
+      <div id='oops_div'></div>";
+
 echo "<link rel='stylesheet'
             href='css/jquery-ui-1.10.4.custom.min.css'>\n";
 echo "<link rel='stylesheet' href='css/codemirror.css'>\n";
+echo "<link rel='stylesheet' href='css/genilib-editor.css'>\n";
 
 # I think this will take care of XSS prevention?
 echo "<script type='text/plain' id='form-json'>\n";
 echo htmlentities(json_encode($defaults)) . "\n";
 echo "</script>\n";
+
+# Needed for genilib-editor
+echo "<script src='https://cdn.jsdelivr.net/ace/1.2.3/noconflict/ace.js'></script>\n";
+echo "<script src='https://cdn.jsdelivr.net/ace/1.2.3/noconflict/keybinding-vim.js'></script>\n";
+echo "<script src='https://cdn.jsdelivr.net/ace/1.2.3/noconflict/keybinding-emacs.js'></script>\n";
 
 $am_array = Instance::DefaultAggregateList();
 $amlist   = array();
@@ -145,6 +159,7 @@ echo "    window.DISABLED     = $disabled;\n";
 echo "    window.HISTORY      = $history;\n";
 echo "    window.ISPPPROFILE  = $ispp;\n";
 echo "    window.WITHPUBLISHING = $WITHPUBLISHING;\n";
+echo "    window.EDITOR_READONLY = true;\n";
 echo "</script>\n";
 
 echo "<script src='js/lib/codemirror-min.js'></script>\n";
@@ -154,6 +169,7 @@ REQUIRE_SUP();
 REQUIRE_MOMENT();
 REQUIRE_APTFORMS();
 REQUIRE_MARKED();
+REQUIRE_GENILIB_EDITOR();
 AddLibrary("js/gitrepo.js");
 SPITREQUIRE("js/show-profile.js",
             "<script src='js/lib/jquery-ui.js'></script>\n".

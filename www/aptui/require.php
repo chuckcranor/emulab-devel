@@ -235,6 +235,16 @@ function REQUIRE_WIZARD_TEMPLATE()
   AddLibrary("js/wizard-template.js");
 }
 
+function REQUIRE_GENILIB_EDITOR()
+{
+  REQUIRE_UNDERSCORE();
+  REQUIRE_SUP();
+  REQUIRE_APTFORMS();
+  REQUIRE_JACKS();
+  AddTemplate("genilib-editor");
+  AddLibrary("js/genilib-editor.js");
+}
+
 #########################################################################################
 
 function SPITREQUIRE($main, $extras = "")

@@ -30,6 +30,7 @@ $(function ()
     var ajaxurl      = "";
     var amlist       = null;
     var modified     = false;
+    var isInEditor   = false;
     var editor       = null;
     var myCodeMirror = null;
     var isppprofile  = false;
@@ -111,7 +112,7 @@ $(function ()
 
 	// Warn user if they have not saved changes.
         $(window).on('beforeunload.portal', function() {
-	    if (! modified)
+	    if (! modified && ! isInEditor)
 		return undefined;
 	    return "You have unsaved changes!";
         });
@@ -152,7 +153,7 @@ $(function ()
 	});
 	manage_html = aptforms.FormatFormFieldsHorizontal(manage_html,
 							  {"wide" : true});
-	$('#manage-body').html(manage_html);
+	$('#page-body').html(manage_html);
 	
     	var waitwait_html = waitwaitTemplate({});
 	$('#waitwait_div').html(waitwait_html);
@@ -254,8 +255,8 @@ $(function ()
 	    var source = $.trim($('#profile_script_textarea').val());
 	    var type   = "source";
 
-	    if (0 && source.length > 0 && window.ACTION === 'edit' && !fromrepo) {
-		openEditor();
+	    if (source.length > 0 && window.ACTION === 'edit' && !fromrepo) {
+		openEditor(source);
 	    } else {
 	        if (source.length === 0) {
 		    source = $.trim($('#profile_rspec_textarea').val());
@@ -321,10 +322,6 @@ $(function ()
 	    $('#modal_profile_rspec_textarea').prop("readonly", true);
 	    $('#rspec_modal').modal({'backdrop':'static','keyboard':false});
 	    $('#rspec_modal').modal('show');
-	});
-
-        $('#edit_copy_button').click(function (event) {
-	    openEditor();
 	});
 	
         $('#rspec_modal').on('shown.bs.modal', function() {
@@ -537,7 +534,6 @@ $(function ()
 	    // We also got a geni-lib script, so show the XML button.
 	    if (gotscript) {
 	        $('#show_xml_modal_button').removeClass("hidden");
-	        //$('#edit_copy_button').removeClass("hidden");
 		$('#profile_instructions').prop("readonly", true);
 		$('#profile_description').prop("readonly", true);
 		$('.geni-lib-warning').removeClass("hidden");
@@ -601,15 +597,23 @@ $(function ()
     {
 	var submit_callback = function(json) {
 	    if (json.code) {
-		sup.SpitOops("oops", json.value);
-		return;
+	        console.log(json);
+	        if (json.code != 2) {
+		    sup.SpitOops("oops", json.value);
+		}
+	        else if (json.value.error) {
+		    sup.SpitOops("oops", json.value.error);
+	        } else {
+		    sup.SpitOops("oops", JSON.stringify(json.value));
+		}
+	        return;
 	    }
 	    window.location.replace(json.value);
 	};
 	var checkonly_callback = function(json) {
 	    if (json.code) {
 		if (json.code != 2) {
-		    sup.SpitOops("oops", json.value);		    
+		    sup.SpitOops("oops", json.value);
 		}
 		return;
 	    }
@@ -639,9 +643,11 @@ $(function ()
 	    else if (repoupdate_callback !== undefined) {
 		repoupdate_callback(false /* unmodified. */);
 	    }
-	    return;
 	}
-	NewRspecHandler(newRspec);
+        else
+        {
+	    NewRspecHandler(newRspec);
+	}
     }
 
     //
@@ -1428,9 +1434,19 @@ $(function ()
 	xmlthing.done(callback);
     }
 
-    function openEditor()
+    function openEditor(source)
     {
-      window.location.href = 'genilib-editor.php?profile=' + profile_name + '&project=' + profile_pid + '&version=' + profile_version;
+        isInEditor = true;
+        window.SHOW_GENILIB_EDITOR(source, closeEditor);
+    }
+
+    function closeEditor(source)
+    {
+        isInEditor = false;
+        if (source !== null)
+        {
+            changeRspec(source);
+        }
     }
 
     function ShowDeletionWarning(images)

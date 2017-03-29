@@ -48,7 +48,7 @@ sub usage()
 }
 my $optlist     = "dvt:m";
 my $debug       = 0;
-my $verbose     = 1;
+my $verbose     = 0;
 my $webtask;
 my $webtask_id;
 # VerifyXML sets these, need to declare early. Need to clean this up.
@@ -959,6 +959,9 @@ sub UserError($)
     my $errors = {};
 
     if (ref($ref) eq "SCALAR") {
+	$errors->{"error"} = $$ref;
+    }
+    elsif (ref($ref) eq "") {
 	$errors->{"error"} = $ref;
     }
     else {

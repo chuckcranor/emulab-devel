@@ -148,7 +148,7 @@ $(function ()
 		}
 	        if ($(this).attr("id") == "show_source_modal_button" &&
 		    isScript && !fromrepo) {
-		    openEditor();
+		    openEditor(source);
 		}
 	        else
 	        {
@@ -282,9 +282,9 @@ $(function ()
 	}
     }
 
-    function openEditor()
+    function openEditor(source)
     {
-      window.location.href = 'genilib-editor.php?profile=' + profile_name + '&project=' + profile_pid + '&version=' + profile_version;
+        window.SHOW_GENILIB_EDITOR(source);
     }
 
     function SetupRepo()
