@@ -177,6 +177,7 @@ INSERT INTO sitevariables VALUES ('reload/hwdownaction',NULL,'nothing','What to 
 INSERT INTO sitevariables VALUES ('general/architecture_priority',NULL,'x86_64,aarch64','Default mapper ordering for multi architecture testbeds.',0);
 INSERT INTO sitevariables VALUES ('general/admission_control','0','0','When set, refuse node allocation if reservation admission control fails.',0);
 INSERT INTO sitevariables VALUES ('general/cnet_firewalls','0','0','When set, control network firewalls are supported via control network vlans.',0);
+INSERT INTO sitevariables VALUES ('general/export_active',NULL,'0','Stop exporting shared user and project directories when they have been inactive for this number of days or longer (0==do not inactivate).',0);
 
 /*!40103 SET TIME_ZONE=@OLD_TIME_ZONE */;
 
