@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2010-2014 University of Utah and the Flux Group.
+# Copyright (c) 2010-2017 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -420,6 +420,8 @@ sub LocalizeLinux($)
     }
     # Boss certificate. Need emulab.pem for TPM. 
     ExecQuiet("$CP -p $ETCDIR/emulab.pem $ETCDIR/client.pem etc/emulab")
+	== 0 or goto bad;
+    ExecQuiet("$CHOWN root:wheel $ETCDIR/emulab.pem $ETCDIR/client.pem")
 	== 0 or goto bad;
     # All MFSs and images get the same ssh host keys.
     ExecQuiet("$CP -p $IMAGEKEYS_DIR/* etc/ssh")
