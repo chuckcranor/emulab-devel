@@ -322,7 +322,7 @@ sub RunMedusa($$$)
 	SENDMAIL($email,
 	 "WARNING: insecure passwords!",
 	 "$subject:\n" . $emails{$email} . "\n" . $warning,
-	 $TBLOGS);
+	 $TBOPS, "CC: $TBOPS");
     }
     if ($?) {
 	if ($? == 15) {
