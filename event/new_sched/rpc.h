@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2004, 2005 University of Utah and the Flux Group.
+ * Copyright (c) 2004-2017 University of Utah and the Flux Group.
  * 
  * {{{EMULAB-LICENSE
  * 
@@ -74,7 +74,6 @@ int RPC_grab(void);
 void RPC_drop(void);
 
 int RPC_metadata(char *pid, char *eid);
-int RPC_waitforrobots(event_handle_t handle, char *pid, char *eid);
 expt_state_t RPC_expt_state(char *pid, char *eid);
 int RPC_waitforactive(char *pid, char *eid);
 int RPC_notifystart(char *pid, char *eid, char *timeline, int set_or_clear);
@@ -97,12 +96,6 @@ extern int AddEvent(event_handle_t handle, address_tuple_t tuple,
 		    const char *exidx, const char *ftime, const char *objname,
                     const char *exargs, const char *objtype, const char *evttype,
                     const char *parent, const char *triggertype);
-
-extern int AddRobot(event_handle_t handle,
-		    struct agent *agent,
-		    double init_x,
-		    double init_y,
-		    double init_orientation);
 
 extern const char *XMLRPC_ROOT;
 #ifdef __cplusplus
