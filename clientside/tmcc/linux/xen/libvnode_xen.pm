@@ -2070,11 +2070,33 @@ sub vnodePreConfig($$$$$){
 	    if ($?);
 
 	#
-	# Put out the /boot/loader.conf header we look for in prepare
+	# Fix up loader.conf
 	#
 	if (open(LC, ">>$vnoderoot/boot/loader.conf")) {
+	    #
+	    # Put out the /boot/loader.conf header we look for in prepare
+	    # and fix the console as "sio1".
+	    #
 	    print LC "# The remaining lines were added by Emulab slicefix.\n";
 	    print LC "# DO NOT ADD ANYTHING AFTER THIS POINT AS IT WILL GET REMOVED.\n";
+	    print LC "console=\"comconsole\"\n";
+	    print LC "comconsole_speed=\"115200\"\n";
+	    print LC "comconsole_port=\"0x3F8\"\n";
+
+	    #
+	    # FreeBSD recommends this workaround for stability issues when
+	    # running under Xen. I do not know if the problem is specific to
+	    # HVM, I am just using $ishvm as it indicates a 10.x FreeBSD which
+	    # is the only version which lists this problem in the errata.
+	    #
+	    # XXX we put this out after the magic header above so that it
+	    # will get removed by prepare if we make an image.
+	    #
+	    if ($vninfo->{'ishvm'}) {
+		print LC "\n# when running in a Xen VM\n";
+		print LC "vfs.unmapped_buf_allowed=0\n";
+	    }
+
 	    close(LC);
 	}
 
@@ -2084,20 +2106,7 @@ sub vnodePreConfig($$$$$){
 	#
 	if ($vninfo->{'ishvm'}) {
 	    unlink("$vnoderoot/etc/wall_cmos_clock");
-
-	    #
-	    # FreeBSD recommends this workaround for stability issues when
-	    # running under Xen. I do not know if the problem is specific to
-	    # HVM, I am just using $ishvm as it indicates a 10.x FreeBSD which
-	    # is the only version which lists this problem in the errata.
-	    #
-	    mysystem("echo 'vfs.unmapped_buf_allowed=0' ".
-		     ">> $vnoderoot/boot/loader.conf");
 	}
-	#
-	# Make sure console is comconsole
-	#
-	mysystem("echo 'console=comconsole' >> $vnoderoot/boot/loader.conf");
     }
 
     #
