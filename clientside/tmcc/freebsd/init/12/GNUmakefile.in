@@ -15,8 +15,11 @@ include $(TESTBED_SRCDIR)/GNUmakerules
 
 CFLAGS	+= -DDEBUGSHELL -DSECURE -DLOGIN_CAP -DCOMPAT_SYSV_INIT -DTESTBED
 
-init: init.c pathnames.h
-	$(CC) $(CFLAGS) -static -o init $< -lutil -lcrypt
+init.c: pathnames.h mntopts.h
+getmntopts.c: mntopts.h
+
+init: init.c getmntopts.c
+	$(CC) $(CFLAGS) -static -o init $^ -lutil -lcrypt
 
 install:
 
