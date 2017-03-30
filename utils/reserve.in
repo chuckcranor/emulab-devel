@@ -496,13 +496,39 @@ while( 1 ) {
     next if( !defined( Reservation->BeginTransaction( $version ) ) );
     $res->Book( $modify_idx );
     Reservation->EndTransaction();
+    my $s = convert( $starttime );
+    my $e = convert( $endtime );
     if( $approve ) {
+	# The reservation is approved -- presumably it is either newly
+	# approved or edited since first approval.  E-mail the user
+	# unconditionally, since it's probably good for them to hear
+	# either way.
+	SENDMAIL( $target_user->email(), "Reservation approved",
+		  "Your reservation request for $count $type nodes,\n" .
+		  "starting at $s and ending at\n" .
+		  "$e, has been approved.\n" .
+		  "\n" .
+		  "If you do not intend to use these resources, please\n" .
+		  "cancel this reservation as soon as possible, since\n" .
+		  "the nodes are currently unavailable to other users for\n" .
+		  "the duration of your reservation.\n" .
+		  "\n" .
+		  "Please note that we make no guarantees about the\n" .
+		  "availability or suitability of these nodes for your\n" .
+		  "experiment(s).\n" .
+		  "\n" .
+		  "PLEASE NOTE: Reservations are an experimental\n" .
+		  "testbed feature under active development.  Until\n" .
+		  "further notice, you should expect reservation\n" .
+		  "system failures.  Please send reports about the\n" .
+		  "reservation system to $TBOPS.\n" .
+		  "Thank you for your assistance in debugging this\n" .
+		  "feature!\n" );
+	
 	exit( 0 );
     } else {
 	# We just booked a reservation we didn't pre-approve.  It requires
 	# admin attention to be made effective.
-	my $s = convert( $starttime );
-	my $e = convert( $endtime );
 	my $idx = $res->idx();
 
 	print STDERR "reserve: reservation is feasible but has NOT yet been approved.\n";
