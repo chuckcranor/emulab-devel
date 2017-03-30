@@ -2255,7 +2255,7 @@ sub os_remove_storage_element($$$)
 		my $inentry = 0;
 		my $copied = 0;
 		while (<OFD>) {
-		    if (/^$bsid {/) {
+		    if (/^$bsid \{/) {
 			$inentry = 1;
 			next;
 		    }
