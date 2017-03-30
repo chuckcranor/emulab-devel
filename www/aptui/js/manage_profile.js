@@ -254,9 +254,10 @@ $(function ()
 	    //
 	    var source = $.trim($('#profile_script_textarea').val());
 	    var type   = "source";
-
-	    if (source.length > 0 && window.ACTION === 'edit' && !fromrepo) {
-		openEditor(source);
+	    if (source.length > 0 &&
+		(window.ACTION === 'edit' ||
+		 window.ACTION === 'create') && !fromrepo) {
+	        openEditor(source);
 	    } else {
 	        if (source.length === 0) {
 		    source = $.trim($('#profile_rspec_textarea').val());
@@ -1436,8 +1437,16 @@ $(function ()
 
     function openEditor(source)
     {
+        var readonly = true;
+        if ((window.CANMODIFY !== 0 ||
+	     window.ACTION === 'create') &&
+	    fromrepo === 0 &&
+	    gotscript === 1)
+        {
+	    readonly = false;
+        }
         isInEditor = true;
-        window.SHOW_GENILIB_EDITOR(source, closeEditor);
+        window.SHOW_GENILIB_EDITOR(source, closeEditor, readonly);
     }
 
     function closeEditor(source)

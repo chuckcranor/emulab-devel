@@ -80,7 +80,6 @@ function SPITFORM($formfields, $errors)
     $this_version = "null";
     $latest_uuid    = "null";
     $latest_version = "null";
-    $editor_readonly = "true";
 
     if ($action == "edit") {
 	$button_label = "Save";
@@ -98,7 +97,6 @@ function SPITFORM($formfields, $errors)
         $this_version = $profile->version();
 	if ($canmodify) {
 	    $title    = "Modify Profile";
-	    $editor_readonly = "false";
 	}
 	else {
 	    $title    = "View Profile";
@@ -213,7 +211,6 @@ function SPITFORM($formfields, $errors)
 	echo "    window.EXPUUID = '$fromexp';\n";
     }
     echo "    window.CANREPO = $canrepo;\n";
-    echo "    window.EDITOR_READONLY = $editor_readonly;\n";
     echo "</script>\n";
     echo "<script src='js/lib/jquery-ui.js'></script>\n";
     echo "<script src='js/lib/jquery.appendGrid-1.3.1.min.js'></script>\n";

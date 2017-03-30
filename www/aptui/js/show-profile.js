@@ -284,7 +284,7 @@ $(function ()
 
     function openEditor(source)
     {
-        window.SHOW_GENILIB_EDITOR(source);
+        window.SHOW_GENILIB_EDITOR(source, null, true);
     }
 
     function SetupRepo()

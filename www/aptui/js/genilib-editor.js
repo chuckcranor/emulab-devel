@@ -16,6 +16,7 @@ $(function ()
   var jacksInput = null;
   var jacksOutput = null;
   var callback = null;
+  var isReadOnly = false;
 
   function initialize()
   {
@@ -36,19 +37,6 @@ $(function ()
       editor.getSession().setUseWrapMode(true);
       editor.getSession().setMode('ace/mode/python');
       editor.getSession().on('change', editorChanged);
-      if (window.EDITOR_READONLY)
-      {
-	editor.setReadOnly(true);
-	$('#genilib-editor-body #loadButton').hide();
-	$('#genilib-editor-body #cancelButton').hide();
-	$('#genilib-editor-body #okButton').html('Ok');
-      }
-      else
-      {
-	editor.setReadOnly(false);
-	$('#genilib-editor-body #loadButton').on('click', load);
-	$('#genilib-editor-body #cancelButton').on('click', clickCancel);
-      }
 
       removeSplit();
 
@@ -62,25 +50,39 @@ $(function ()
       $('#genilib-editor-body #closeJacksButton').on('click', removeSplit);
       $('#genilib-editor-body #settings-root select').on('change', onChangeSettings);
       $('#genilib-editor-body #okButton').on('click', clickOk);
+      $('#genilib-editor-body #loadButton').on('click', load);
+      $('#genilib-editor-body #cancelButton').on('click', clickCancel);
     }
   }
 
   // Hide the current page (#page-body) and show the genilib editor.
   // 'source' is a plaintext genilib source code string
   // 'callback' is called when the user clicks ok or cancel with either the new source (if they clicked ok in edit mode) or null (if they clicked cancel or are in readonly mode).
-  window.SHOW_GENILIB_EDITOR = function (source, newCallback)
+  window.SHOW_GENILIB_EDITOR = function (source, newCallback, newIsReadOnly)
   {
     callback = newCallback;
+    isReadOnly = newIsReadOnly;
     $('#page-body').hide();
     $('#genilib-editor-body').show();
     render();
     editor.setValue(source);
     editor.selection.clearSelection();
+    if (isReadOnly)
+    {
+      editor.setReadOnly(true);
+      $('#genilib-editor-body #loadButton').hide();
+      $('#genilib-editor-body #cancelButton').hide();
+      $('#genilib-editor-body #okButton').html('Ok');
+    }
+    else
+    {
+      editor.setReadOnly(false);
+    }
   }
 
   function clickOk()
   {
-    if (window.EDITOR_READONLY)
+    if (isReadOnly)
     {
       hideEditor(null);
     }
@@ -92,7 +94,10 @@ $(function ()
 
   function clickCancel()
   {
-    hideEditor(null);
+    if (! isReadOnly)
+    {
+      hideEditor(null);
+    }
   }
 
   function hideEditor(source)
@@ -153,7 +158,7 @@ $(function ()
   
   function load()
   {
-    if (! isWaiting)
+    if (! isWaiting && ! isReadOnly)
     {
       $('#genilib-editor-body #load-input').html('<input type="file"/>');
       $('#genilib-editor-body #load-input input').on('change', function () {

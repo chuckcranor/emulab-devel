@@ -1,7 +1,10 @@
 #genilib-editor-body #genilib-editor
 {
     width: 100%;
-    height: 80%;
+    height: 90%;
+    border-width: 1px;
+    border-style: solid;
+    border-color: #ccc;
 }
 
 #genilib-editor-body #jacks-root
@@ -26,11 +29,6 @@
 
 #genilib-editor-body #jacks-container
 {
-    /*
-    position: absolute;
-    top: 65px;
-    bottom: 0px;
-*/
     width: 100%;
     height: 400px;
     background-color: #fff;
