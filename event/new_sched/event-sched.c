@@ -122,6 +122,7 @@ static pthread_t mainthread;
  */
 static void sigpass(int sig)
 {
+	static int called = 0;
 	char tbuf[32];
 	time_t ts = time(NULL);
 	pthread_t th = pthread_self();
@@ -129,8 +130,8 @@ static void sigpass(int sig)
 	info("event-sched[%d]: received signal %d in thread %p at %s",
 	     getpid(), sig, th, ctime_r(&ts, tbuf));
 
-	/* haven't fired up anything yet, just exit */
-	if (mainthread == NULL)
+	/* haven't fired up anything yet or seem to be stuck, just exit */
+	if (mainthread == NULL || ++called > 100)
 		exit(0);
 
 	/* whoever we are, we should not process signals after this */
@@ -139,7 +140,7 @@ static void sigpass(int sig)
 	if (th != mainthread) {
 		info("event-sched[%d]: handled signal in wrong thread!",
 		     getpid());
-		pthread_kill(th, sig);
+		pthread_kill(mainthread, sig);
 		return;
 	}
 
