@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2009-2016 University of Utah and the Flux Group.
+# Copyright (c) 2009-2017 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -173,7 +173,8 @@ foreach my $device (keys(%diskinfo)) {
     my $spec = $diskinfo{$device}->{"spec"};
     my $dev;
     my $filename;
-    if ($spec =~ /,(sd\w+),/ || $spec =~ /,(xvd\w+),/) {
+    if ($spec =~ /,(sd\w+),/ || $spec =~ /,(hd\w+),/ ||
+	$spec =~ /,(xvd\w+),/) {
 	$dev = $1;
     }
     else {
