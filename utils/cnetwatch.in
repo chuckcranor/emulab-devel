@@ -30,6 +30,7 @@
 use English;
 use Getopt::Std;
 use Sys::Syslog;
+use IO::Handle;
 
 #
 # Arbitrary thresholds: 50Kp/s or 500Mb/s for at least 5 minutes.
@@ -102,13 +103,6 @@ sub fatal($);
 #
 $| = 1; 
 
-#
-# Check user id?
-#
-if ($UID == 0) {
-    fatal("Do not run as root, portstats will fail!");
-}
-
 my $portstats	= "$TB/bin/portstats";
 my @nodes       = ();
 my %switches	= ();
@@ -166,6 +160,16 @@ use lib "@prefix@/lib";
 use libdb;
 use libtestbed;
 
+#
+# Check user id?
+#
+if ($UID == 0) {
+    fatal("Do not run as root or portstats will fail!");
+}
+if (!TBAdmin()) {
+    fatal("Must run as admin or portstats will fail!");
+}
+
 # Go to ground.
 if (!$debug) {
     if (TBBackGround($LOGFILE)) {
@@ -180,7 +184,9 @@ openlog("cnetwatch", "pid", $TBLOG);
 if ($reportlog) {
     if ($reportlog eq "-") {
 	*RL = STDOUT;
-    } elsif (!open(RL, ">>$reportlog")) {
+    } elsif (open(RL, ">>$reportlog")) {
+	RL->autoflush(1);
+    } else {
 	print STDERR "Could not open report log '$reportlog'\n";
 	exit(1);
     }
@@ -233,7 +239,7 @@ sub diffem($$$)
 	"before=", $bref->{'tstamp'}, ", ".
 	"after=", $aref->{'tstamp'}, ", ".
 	"diff=", $dref->{'tstamp'}, "\n"
-	if (0 && $debug);
+	if ($debug && 0);
 
     foreach my $node (keys %pcs) {
 	if (!exists($aref->{$node}{'counts'})) {
@@ -298,6 +304,9 @@ sub reportevents($)
     foreach my $node (keys %pcs) {
 	# XXX don't know the interval, cannot compute
 	if ($ref->{$node}{'first'}) {
+	    next;
+	}
+	if (!exists($ref->{$node}{'counts'})) {
 	    next;
 	}
 	my $secs = $ref->{'tstamp'};
