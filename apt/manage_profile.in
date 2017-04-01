@@ -964,6 +964,9 @@ sub UserError($)
     elsif (ref($ref) eq "") {
 	$errors->{"error"} = $ref;
     }
+    elsif (ref($ref) eq "") {
+	$errors->{"error"} = $ref;
+    }
     else {
 	$errors = $ref;
     }
