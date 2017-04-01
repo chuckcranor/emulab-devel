@@ -696,7 +696,7 @@ sub Reserve($)
 	if (defined($count) && $count !~ /^\d+$/);
 
     if (defined($reason) &&
-	!TBcheck_dbslot($reason, "default", "tinytext",
+	!TBcheck_dbslot($reason, "default", "text",
 			TBDB_CHECKDBSLOT_WARN|TBDB_CHECKDBSLOT_ERROR)) {
 	return GeniResponse->MalformedArgsResponse("Invalid reason")
     }
