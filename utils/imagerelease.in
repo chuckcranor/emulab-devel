@@ -56,6 +56,7 @@ my $markready  = 0;
 my $TB		  = "@prefix@";
 my $FSNODE	  = "@FSNODE@";
 my $PROJROOT      = "@PROJROOT_DIR@";
+my $SYSIMAGEDIR   = "$TB/images";
 my $IMAGEVALIDATE = "$TB/sbin/imagevalidate";
 my $SSH		  = "/usr/bin/ssh";
 my $SCP		  = "/usr/bin/scp";
@@ -181,6 +182,11 @@ if ($version0->IsSystemImage()) {
 	$vers0src .= basename($version0->path()) . "/";
     }
     
+    my $dstdir = $SYSIMAGEDIR . "/";
+    if ($image->IsDirPath()) {
+	$dstdir .= basename($image->path()) . "/";
+    }
+    
     #
     # For version 0 of the image, create_image sticks the file out on /proj,
     # but leaves the image path set to $TB/images
@@ -188,28 +194,27 @@ if ($version0->IsSystemImage()) {
     $copyfiles{($image->version() ?
 		$image->FullImageFile() : 
 		$vers0src . basename($image->FullImageFile()))} =
-		"/usr/testbed/images/" . basename($image->FullImageFile());
+		$dstdir . basename($image->FullImageFile());
     $copyfiles{($image->version() ?
 		$image->DeltaImageFile() :
 		$vers0src . basename($image->DeltaImageFile()))} =
-		"/usr/testbed/images/" . basename($image->DeltaImageFile());
+		$dstdir . basename($image->DeltaImageFile());
     $copyfiles{($image->version() ?
 		$image->FullImageSigFile() :
 		$vers0src . basename($image->FullImageSigFile()))} =
-		"/usr/testbed/images/" . basename($image->FullImageSigFile());
+		$dstdir . basename($image->FullImageSigFile());
     $copyfiles{($image->version() ?
 		$image->DeltaImageSigFile() :
 		$vers0src . basename($image->FullImageSigFile()))} =
-		"/usr/testbed/images/" . basename($image->DeltaImageSigFile());
+		$dstdir . basename($image->DeltaImageSigFile());
     
     if ($image->version()) {
+	$updatepath = $dstdir;
 	if ($image->IsDirPath()) {
-	    $updatepath =
-		"/usr/testbed/images/" . basename($image->path()) . "/";
+	    $updatepath = $dstdir;
 	}
 	else {
-	    $updatepath = 
-		"/usr/testbed/images/" . basename($image->path());
+	    $updatepath = $SYSIMAGEDIR . "/" . basename($image->path());
 	}
     }
     foreach my $from (keys(%copyfiles)) {
