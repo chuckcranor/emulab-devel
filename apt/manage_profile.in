@@ -852,7 +852,7 @@ sub UpdateProfileFromRepo()
     if ($verbose) {
 	print $output . "\n";
     }
-    if ($output =~ /\<rspec\>/) {
+    if ($output =~ /\<rspec/) {
 	$rspec = $output;
     }
     else {
