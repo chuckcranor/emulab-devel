@@ -564,10 +564,12 @@ sub GetRepoSource($;$)
     chdir("$repodir") or
 	fatal("Could not chdir to $repodir: $!");
 
-    if (system("$GIT cat-file -e $refspec:profile.py") == 0) {
+    if (system("$GIT cat-file -e ".
+	       "$refspec:profile.py >/dev/null 2>&1") == 0) {
 	$source = "profile.py";
     }
-    elsif (system("$GIT cat-file -e $refspec:profile.rspec") == 0) {
+    elsif (system("$GIT cat-file -e ".
+		  "  $refspec:profile.rspec >/dev/null 2>&1") == 0) {
 	$source = "profile.rspec";
     }
     else {
