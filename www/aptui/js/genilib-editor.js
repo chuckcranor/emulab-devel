@@ -17,6 +17,8 @@ $(function ()
   var jacksOutput = null;
   var callback = null;
   var isReadOnly = false;
+  var isShown = false;
+  var hasChanged = false;
 
   function initialize()
   {
@@ -52,6 +54,7 @@ $(function ()
       $('#genilib-editor-body #okButton').on('click', clickOk);
       $('#genilib-editor-body #loadButton').on('click', load);
       $('#genilib-editor-body #cancelButton').on('click', clickCancel);
+      $(window).on('popstate', clickBackButton);
     }
   }
 
@@ -60,6 +63,7 @@ $(function ()
   // 'callback' is called when the user clicks ok or cancel with either the new source (if they clicked ok in edit mode) or null (if they clicked cancel or are in readonly mode).
   window.SHOW_GENILIB_EDITOR = function (source, newCallback, newIsReadOnly)
   {
+    isShown = true;
     callback = newCallback;
     isReadOnly = newIsReadOnly;
     $('#page-body').hide();
@@ -67,17 +71,27 @@ $(function ()
     render();
     editor.setValue(source);
     editor.selection.clearSelection();
+    hasChanged = false;
     if (isReadOnly)
     {
       editor.setReadOnly(true);
       $('#genilib-editor-body #loadButton').hide();
       $('#genilib-editor-body #cancelButton').hide();
-      $('#genilib-editor-body #okButton').html('Ok');
+      $('#genilib-editor-body #okButton').html('Close');
     }
     else
     {
       editor.setReadOnly(false);
+      $('#genilib-editor-body #loadButton').show();
+      $('#genilib-editor-body #cancelButton').show();
+      $('#genilib-editor-body #okButton').html('Accept');
     }
+    window.history.pushState(null, "");
+  }
+
+  window.GENILIB_EDITOR_CHANGED = function ()
+  {
+    return hasChanged;
   }
 
   function clickOk()
@@ -102,11 +116,35 @@ $(function ()
 
   function hideEditor(source)
   {
+    isShown = false;
+    hasChanged = false;
     $('#genilib-editor-body').hide();
     $('#page-body').show();
     if (callback)
     {
       callback(source);
+    }
+  }
+
+  function clickBackButton()
+  {
+    if (isShown)
+    {
+      var shouldLeave = ! hasChanged;
+      if (! shouldLeave)
+      {
+	shouldLeave = confirm("You have unsaved changes!");
+      }
+      if (shouldLeave)
+      {
+	hideEditor(null);
+      }
+      else
+      {
+	event.preventDefault();
+	event.stopPropagation();
+	window.history.pushState(null, "");
+      }
     }
   }
 
@@ -134,6 +172,7 @@ $(function ()
 
   function editorChanged()
   {
+    hasChanged = true;
     if (createShown)
     {
       removeSplit();

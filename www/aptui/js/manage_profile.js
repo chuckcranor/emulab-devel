@@ -30,7 +30,6 @@ $(function ()
     var ajaxurl      = "";
     var amlist       = null;
     var modified     = false;
-    var isInEditor   = false;
     var editor       = null;
     var myCodeMirror = null;
     var isppprofile  = false;
@@ -112,7 +111,7 @@ $(function ()
 
 	// Warn user if they have not saved changes.
         $(window).on('beforeunload.portal', function() {
-	    if (! modified && ! isInEditor)
+	    if (! modified && ! window.GENILIB_EDITOR_CHANGED())
 		return undefined;
 	    return "You have unsaved changes!";
         });
@@ -909,6 +908,14 @@ $(function ()
 	    SyncSteps();
 	    if (!fromrepo)
 		ProfileModified();
+	    if ((!viewing || canmodify) &&
+		!fromrepo && !gotscript) {
+	        $('#edit_topo_modal_button').html('Edit Topology');
+	    }
+	    else
+	    {
+	        $('#edit_topo_modal_button').html('View Topology');
+	    }
 	    if (gotscript) {
 		$('#profile_instructions').prop("readonly", true);
 		$('#profile_description').prop("readonly", true);
@@ -1445,13 +1452,11 @@ $(function ()
         {
 	    readonly = false;
         }
-        isInEditor = true;
         window.SHOW_GENILIB_EDITOR(source, closeEditor, readonly);
     }
 
     function closeEditor(source)
     {
-        isInEditor = false;
         if (source !== null)
         {
             changeRspec(source);

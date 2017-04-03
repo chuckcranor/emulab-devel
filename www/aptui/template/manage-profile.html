@@ -302,7 +302,7 @@
 	    <% if (! genilib_editor) { %>
 	    <div class="form-group">
 	      <div class='format-me'
-		   data-key='profile_rspec' data-label='Your rspec'
+		   data-key='profile_rspec' data-label='Your script'
 		   data-help='You can supply either an
 			      <a href="<%- manual %>/advanced-topics.html">
 			      rspec or a geni-lib script</a> for your
@@ -316,26 +316,27 @@
 			       name='sourcefile' id='sourcefile' 
 			       data-classButton='btn btn-primary btn-xs'
 			       data-input='false'
-			       data-buttonText='Choose file'>
+			       data-buttonText='Upload File'>
 		      </span>
 		    <% } %>
 		    <button class='btn btn-primary btn-xs'
 			  type='button'
 			  style='margin-right: 10px;'
 			  id='edit_topo_modal_button'>
+		      <% if ((!viewing || canmodify) && !fromrepo) { %>Edit <% } else { %>View <% } %>
                       Topology</button>
 		    <button class='btn btn-primary btn-xs'
 			  type='button'
 			  style='margin-right: 10px;'
 			  id='show_source_modal_button'>
-		      <% if (viewing && canmodify && !fromrepo) { %>Edit <% } %>
+		      <% if ((!viewing || canmodify) && !fromrepo) { %>Edit <% } else { %>View <% } %>
 		      Source
 		    </button>
 		    <button class='btn btn-primary btn-xs hidden'
 			  type='button'
 			  style='margin-right: 10px;'
 			  id='show_xml_modal_button'>
-                      XML</button>
+                      View XML</button>
 		    <% if (! (viewing || window.CLONING)) { %>
 		      or 
 		      <button class='btn btn-primary btn-xs'
