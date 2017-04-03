@@ -597,16 +597,16 @@ $(function ()
     {
 	var submit_callback = function(json) {
 	    if (json.code) {
-	        console.log(json);
-	        if (json.code != 2) {
+		if (json.code == 2) {
+		    aptforms.GenerateFormErrors('#quickvm_create_profile_form',
+						json.value);		
+		    // Make sure we still warn about an unsaved form.
+		    aptforms.MarkFormUnsaved();		    
+		}
+		else {
 		    sup.SpitOops("oops", json.value);
 		}
-	        else if (json.value.error) {
-		    sup.SpitOops("oops", json.value.error);
-	        } else {
-		    sup.SpitOops("oops", JSON.stringify(json.value));
-		}
-	        return;
+		return;
 	    }
 	    window.location.replace(json.value);
 	};
