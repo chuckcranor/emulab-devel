@@ -1277,7 +1277,7 @@ function Do_UpdateRepository()
     # If the source is an rspec, update the profile now.
     #
     if (! preg_match("/^import/m", $blob["source"])) {
-        if (UpdateMaster($profile, null, $source)) {
+        if (UpdateMaster($profile, null, $blob["source"])) {
             return;
         }
     }
