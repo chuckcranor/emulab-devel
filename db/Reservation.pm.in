@@ -518,7 +518,7 @@ sub LookupAll($$;$)
 				"UNIX_TIMESTAMP( e.expt_swapped ) + " .
 				"e.autoswap_timeout * 60, e.autoswap, " .
 				"nr.pid, UNIX_TIMESTAMP( s.expires ), " .
-				"s.lockdown FROM nodes AS n " .
+				"s.lockdown, n.reserved_pid FROM nodes AS n " .
 				"LEFT OUTER JOIN " .
 				"reserved AS r ON n.node_id=r.node_id " .
 				"LEFT OUTER JOIN experiments AS e ON " .
@@ -545,7 +545,7 @@ sub LookupAll($$;$)
     my $query_result = DBQueryWarn( $query );
     
     while( my($count, $pid, $eid, $uid, $end, $autoswap, $next_reserve,
-	      $slice_expire, $slice_lockdown ) =
+	      $slice_expire, $slice_lockdown, $reserved_pid ) =
 	   $query_result->fetchrow_array() ) {
 	my $endtime;
 	
@@ -568,6 +568,12 @@ sub LookupAll($$;$)
 	    $endtime = undef;
 	}
 
+	# If reserved_pid is set, assume the node is assigned to the
+	# project forever.
+	if( defined( $reserved_pid ) ) {
+	    $endtime = undef;
+	}
+
 	# Consider nodes in reloading to be available.  One important
 	# reason for doing so is that if a project has a current reservation
 	# and swaps one experiment out and a replacement in, then during
@@ -581,7 +587,7 @@ sub LookupAll($$;$)
 	    my $res = CreateExisting( $class, $pid, $eid, $uid, $endtime,
 				      $type, $count );
 	    push( @reservations, $res );
-	} else {
+	} elsif( !defined( $reserved_pid ) ) {
 	    # Physical nodes with no reservations whatsoever... treat
 	    # them as free since the beginning of time.
 	    my $res = CreateCommon( $class, undef, undef, undef, 0, undef,
