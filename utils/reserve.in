@@ -449,6 +449,10 @@ if( defined( $modify_idx ) ) {
     $res->SetStart( $starttime );
     $res->SetEnd( $endtime );
     $res->SetNodes( $count );
+    # The user who originally requested the reservation is not necessarily
+    # the same one who's modifying it now.
+    $uid = $res->uid();
+    $uid_idx = $res->uid();
 } else {
     $res = Reservation->Create( $pid, $uid, $starttime, $endtime, $type,
 				$count );
@@ -503,7 +507,8 @@ while( 1 ) {
 	# approved or edited since first approval.  E-mail the user
 	# unconditionally, since it's probably good for them to hear
 	# either way.
-	SENDMAIL( $target_user->email(), "Reservation approved",
+	my $user = User->Lookup( $uid );
+	SENDMAIL( $user->email(), "Reservation approved",
 		  "Your reservation request for $count $type nodes,\n" .
 		  "starting at $s and ending at\n" .
 		  "$e, has been approved.\n" .
