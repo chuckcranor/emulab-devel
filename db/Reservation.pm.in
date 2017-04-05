@@ -528,20 +528,20 @@ sub LookupAll($$;$)
 				"`geni-cm`.geni_slices AS s ON " .
 				"e.eid_uuid=s.uuid " .
 				"WHERE n.type='$type' GROUP BY " .
-				"e.pid, e.eid" :
+				"e.pid, e.eid, n.reserved_pid" :
 				"SELECT COUNT(*), e.pid, e.eid, " .
 				"e.expt_swap_uid, " .
 				"UNIX_TIMESTAMP( e.expt_swapped ) + " .
 				"e.autoswap_timeout * 60, e.autoswap, " .
 				"nr.pid, NULL, " .
-				"NULL FROM nodes AS n " .
+				"NULL, n.reserved_pid FROM nodes AS n " .
 				"LEFT OUTER JOIN " .
 				"reserved AS r ON n.node_id=r.node_id " .
 				"LEFT OUTER JOIN experiments AS e ON " .
 				"r.pid=e.pid AND r.eid=e.eid LEFT " .
 				"OUTER JOIN next_reserve AS nr ON " .
 				"n.node_id=nr.node_id WHERE n.type='$type' " .
-				"GROUP BY e.pid, e.eid";
+				"GROUP BY e.pid, e.eid, n.reserved_pid";
     my $query_result = DBQueryWarn( $query );
     
     while( my($count, $pid, $eid, $uid, $end, $autoswap, $next_reserve,
