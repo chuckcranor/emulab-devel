@@ -528,7 +528,7 @@ sub LookupAll($$;$)
 				"`geni-cm`.geni_slices AS s ON " .
 				"e.eid_uuid=s.uuid " .
 				"WHERE n.type='$type' GROUP BY " .
-				"e.pid, e.eid, n.reserved_pid" :
+				"e.pid, e.eid, n.reserved_pid, nr.pid" :
 				"SELECT COUNT(*), e.pid, e.eid, " .
 				"e.expt_swap_uid, " .
 				"UNIX_TIMESTAMP( e.expt_swapped ) + " .
@@ -541,7 +541,7 @@ sub LookupAll($$;$)
 				"r.pid=e.pid AND r.eid=e.eid LEFT " .
 				"OUTER JOIN next_reserve AS nr ON " .
 				"n.node_id=nr.node_id WHERE n.type='$type' " .
-				"GROUP BY e.pid, e.eid, n.reserved_pid";
+				"GROUP BY e.pid, e.eid, n.reserved_pid, nr.pid";
     my $query_result = DBQueryWarn( $query );
     
     while( my($count, $pid, $eid, $uid, $end, $autoswap, $next_reserve,
