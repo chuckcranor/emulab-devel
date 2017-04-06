@@ -147,7 +147,7 @@ if { ${::GLOBALS::elabinelab_singlenet} == 0 } {
     }
 }
 
-set xenos XEN44-64-STD
+set xenos XEN46-64-STD
 if {[info exists ::TBCOMPAT::elabinelab_nodeos("xenhost")]} {
     namespace eval TBCOMPAT {
 	set xenos $elabinelab_nodeos("xenhost")
