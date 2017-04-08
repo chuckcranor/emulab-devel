@@ -126,6 +126,7 @@ my $IMAGEZIP    = "/usr/local/bin/imagezip";
 my $IMAGEUNZIP  = "/usr/local/bin/imageunzip";
 my $IMAGEDUMP   = "/usr/local/bin/imagedump";
 my $XM          = "/usr/sbin/xm";
+my $FSCK	= "/sbin/e2fsck";
 my $FSCKUFS	= "/sbin/fsck.ufs";
 my $debug  = 0;
 my $lockdebug = 0;
@@ -1885,6 +1886,10 @@ sub vnodePreConfig($$$$$){
     # So we first mount RO and see if we have already been customized.
     #
     if ($vninfo->{'os'} eq "FreeBSD") {
+	if (-x "$FSCKUFS") {
+	    mysystem2("$FSCKUFS -p $dev");
+	}
+	
 	my $utype = "44bsd";
 	mysystem2("mount -t ufs -o ro,ufstype=$utype $dev $vnoderoot ".
 		  ">/dev/null 2>&1");
@@ -1893,8 +1898,7 @@ sub vnodePreConfig($$$$$){
 	    $utype = "ufs2";
 	    mysystem2("mount -t ufs -o ro,ufstype=$utype $dev $vnoderoot");
 	    # still failed, try fsck.ufs if it exists
-	    if ($? && -x "$FSCKUFS") {
-		mysystem("$FSCKUFS -y $dev");
+	    if ($?) {
 		mysystem("mount -t ufs -o ro,ufstype=$utype $dev $vnoderoot");
 	    }
 	}
@@ -1911,6 +1915,10 @@ sub vnodePreConfig($$$$$){
 	mysystem("mount -t ufs -o ufstype=$utype $dev $vnoderoot");
     }
     else {
+	if (-x "$FSCK") {
+	    mysystem2("$FSCK -p $dev");
+	}
+
 	mysystem("mount $dev $vnoderoot");
     }
 
