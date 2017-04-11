@@ -413,7 +413,12 @@ sub doboot()
 	if (REMOTE()) {
 	    $eventserver = TB_EVENTSERVER();
 	}
-	$clusteringoptions = "-c $eventserver";
+	$clusteringoptions = "-c $eventserver -F $PUBSUBEXPR";
+
+	open(CONF, "> $PUBSUBEXPR") or
+	    fatal("Error opening $PUBSUBEXPR for writing");
+	print CONF "(SCHEDULER == 0)\n";
+	close(CONF);
     }
     elsif (!(REMOTE() && !REMOTEDED()) && !GENVNODE()) {  
 	#
