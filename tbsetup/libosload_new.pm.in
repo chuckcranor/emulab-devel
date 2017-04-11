@@ -116,8 +116,8 @@ sub New($$$;@)
 
     bless($self, $class);
 
-    # We need this guy right away!
-    # $self->debug($DEFAULT_DEBUG_LEVEL);
+    # We need this guy right away, else we get errors about no debug slot.
+    $self->debug(0);
 
     return $self;
 }
