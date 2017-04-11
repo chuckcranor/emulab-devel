@@ -908,7 +908,7 @@ $(function ()
 	    SyncSteps();
 	    if (!fromrepo)
 		ProfileModified();
-	    if ((!viewing || canmodify) &&
+	    if ((!window.VIEWING || window.CANMODIFY) &&
 		!fromrepo && !gotscript) {
 	        $('#edit_topo_modal_button').html('Edit Topology');
 	    }
