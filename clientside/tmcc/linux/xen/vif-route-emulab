@@ -23,6 +23,12 @@
 dir=$(dirname "$0")
 . "${dir}/vif-common.sh"
 
+# XXX hack for FreeBSD (HVM?)
+if [ "${type_if}" = "tap" ] ; then
+    echo "Skipping tap device ${dev} ..."
+    exit 0
+fi
+
 main_ip=$(dom0_ip)
 # Do not use the main ip, as that confuses arp. So does 172.16.0.2.
 bogus_ip="172.16.0.3"
