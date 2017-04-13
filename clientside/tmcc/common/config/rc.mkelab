@@ -941,6 +941,7 @@ sub SetupFsNode()
 	$sshdpid = `cat /var/run/sshd.pid`;
 	chomp($sshdpid);
     }
+    system("cp -p /boot/loader.conf /boot/loader.conf.bak");
 
     #
     # Run the prepare script to clear out the current accounts and such.
@@ -969,12 +970,14 @@ sub SetupFsNode()
 
     #
     # XXX did I mention what an a**hole prepare can be?
-    # Put back the sshd pid file that it removed so that that
-    # the install scripts can HUP sshd.
+    # Put back the sshd pid file that it removed so that that the install
+    # scripts can HUP sshd. Also put back the /boot/loader.conf that it
+    # unceremoniously overwrote.
     #
     if ($sshdpid) {
 	mysystem("echo '$sshdpid' > /var/run/sshd.pid");
     }
+    system("cp -p /boot/loader.conf.bak /boot/loader.conf");
 
     #
     # Remove the outer testbed startup script.
@@ -1180,7 +1183,7 @@ sub SetupFsNode()
     #
     # Remove some cruft from /etc/syslog.conf
     #
-    mysystem("cat /etc/syslog.conf | grep -v '\@users' > /tmp/syslog.conf");
+    mysystem("cat /etc/syslog.conf | grep -v '\@users' | sed -e 's/;local5.none//' > /tmp/syslog.conf");
     mysystem("cp -pf /etc/syslog.conf /etc/syslog.conf.old ; ".
 	     "cp /tmp/syslog.conf /etc/syslog.conf");
 
@@ -1329,7 +1332,7 @@ sub SetupOpsNode($)
 	    if (!$fsdev) {
 		SetupFatal("Could not find space for ZFS zpool.");
 	    }
-	    if (system("$ZPOOLCMD create -m none $ZFSPOOL /dev/$fsdev")) {
+	    if (system("$ZPOOLCMD create -f -m none $ZFSPOOL /dev/$fsdev")) {
 		SetupFatal("Could not create ZFS zpool on /dev/$fsdev.");
 	    }
 	}
@@ -1491,6 +1494,7 @@ sub SetupOpsNode($)
 	$sshdpid = `cat /var/run/sshd.pid`;
 	chomp($sshdpid);
     }
+    system("cp -p /boot/loader.conf /boot/loader.conf.bak");
 
     #
     # Run the prepare script to clear out the current accounts and such.
@@ -1519,12 +1523,14 @@ sub SetupOpsNode($)
 
     #
     # XXX did I mention what an a**hole prepare can be?
-    # Put back the sshd pid file that it removed so that that
-    # the install scripts can HUP sshd.
+    # Put back the sshd pid file that it removed so that that the install
+    # scripts can HUP sshd. Also put back the /boot/loader.conf that it
+    # unceremoniously overwrote.
     #
     if ($sshdpid) {
 	mysystem("echo '$sshdpid' > /var/run/sshd.pid");
     }
+    system("cp -p /boot/loader.conf.bak /boot/loader.conf");
 
     #
     # XXX me again: prepare also hides our local blockstores;
@@ -1849,7 +1855,7 @@ sub SetupOpsNode($)
     #
     # Remove some cruft from /etc/syslog.conf
     #
-    mysystem("cat /etc/syslog.conf | grep -v '\@users' > /tmp/syslog.conf");
+    mysystem("cat /etc/syslog.conf | grep -v '\@users' | sed -e 's/;local5.none//' > /tmp/syslog.conf");
     mysystem("cp -pf /etc/syslog.conf /etc/syslog.conf.old ; ".
 	     "cp /tmp/syslog.conf /etc/syslog.conf");
 
@@ -2186,6 +2192,7 @@ sub SetupBossNode($)
 	$sshdpid = `cat /var/run/sshd.pid`;
 	chomp($sshdpid);
     }
+    system("cp -p /boot/loader.conf /boot/loader.conf.bak");
 
     #
     # Run the prepare script to clear out the current accounts and such.
@@ -2214,12 +2221,14 @@ sub SetupBossNode($)
 
     #
     # XXX did I mention what an a**hole prepare can be?
-    # Put back the sshd pid file that it removed so that that
-    # the install scripts can HUP sshd.
+    # Put back the sshd pid file that it removed so that that the install
+    # scripts can HUP sshd. Also put back the /boot/loader.conf that it
+    # unceremoniously overwrote.
     #
     if ($sshdpid) {
 	mysystem("echo '$sshdpid' > /var/run/sshd.pid");
     }
+    system("cp -p /boot/loader.conf.bak /boot/loader.conf");
 
     #
     # Remove the outer testbed startup script.
@@ -2552,7 +2561,7 @@ sub SetupBossNode($)
     #
     # Remove some cruft from /etc/syslog.conf
     #
-    mysystem("cat /etc/syslog.conf | grep -v '\@users' > /tmp/syslog.conf");
+    mysystem("cat /etc/syslog.conf | grep -v '\@users' | sed -e 's/;local5.none//' > /tmp/syslog.conf");
     mysystem("cp -pf /etc/syslog.conf /etc/syslog.conf.old ; ".
 	     "cp /tmp/syslog.conf /etc/syslog.conf");
 
