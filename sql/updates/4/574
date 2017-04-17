@@ -6,7 +6,7 @@ sub DoUpdate($$$)
     my ($dbhandle, $dbname, $version) = @_;
 
     if (!DBSlotExists("apt_profile_versions", "portal_converted")) {
-        DBQueryFatal("alter table apt_profile_versions " .
+        DBQueryFatal("alter table apt_profile_versions add " .
 		     " `portal_converted` tinyint(1) NOT NULL default '0' ".
 		     "   after repokey");
     }
