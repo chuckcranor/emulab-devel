@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2007-2016 University of Utah and the Flux Group.
+# Copyright (c) 2007-2017 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -485,6 +485,31 @@ sub GenUserCredential($)
 	if (!defined($credential));
 
     return ($credential, $speaksfor);
+}
+
+#
+# Create a user at a cluster via the Cluster RPC Server. The point
+# of this is so that the admin user we are operating as exists at
+# the cluster when we make the admin level call via using the root
+# certificate. Not the best approach, but best I could think of.
+#
+sub CreatePortalUser($$)
+{
+    my ($authority, $geniuser) =  @_;
+    my $context = APT_Geni::GeniContext();
+
+    my ($credential,$speaksfor) =
+	APT_Geni::GenUserCredential($geniuser);
+    return -1
+	if (!defined($credential));
+
+    my $credentials = [$credential->asString()];
+    if (defined($speaksfor)) {
+	$credentials = [@$credentials, $speaksfor->asString()];
+    }
+    my $args = {"credentials" => $credentials};
+    my $response = PortalRPC($authority, $context, "CreateUser", $args);
+    return $response->code();
 }
 
 #

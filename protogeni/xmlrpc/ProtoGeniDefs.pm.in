@@ -239,6 +239,7 @@ ProtoGeniDefs::AddModule("cluster",
 	      "DEFVERSION" => "1.0",
 	      "METHODS"    => {"1.0" => {
 		  "GetVersion"           => \&GeniCluster::GetVersion,
+		  "CreateUser"           => \&GeniCluster::CreateUser,
 		  "InUse"                => \&GeniCluster::InUse,
 		  "PreReservations"      => \&GeniCluster::PreReservations,
 		  "SliceUtilizationData" => \&GeniCluster::SliceUtilizationData,

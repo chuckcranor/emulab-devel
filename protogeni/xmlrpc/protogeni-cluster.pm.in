@@ -44,6 +44,7 @@ use GeniCluster;
 
 $GENI_METHODS = {
     "GetVersion"           => \&GeniCluster::GetVersion,
+    "CreateUser"           => \&GeniCluster::CreateUser,
     "InUse"                => \&GeniCluster::InUse,
     "PreReservations"      => \&GeniCluster::PreReservations,
     "SliceUtilizationData" => \&GeniCluster::SliceUtilizationData,
@@ -52,6 +53,7 @@ $GENI_METHODS = {
     "SliceCheckReservation"=> \&GeniCluster::SliceCheckReservation,
     "SliceMaxExtension"    => \&GeniCluster::SliceMaxExtension,
     "Reserve"              => \&GeniCluster::Reserve,
+    "ApproveReservation"   => \&GeniCluster::ApproveReservation,
     "Reservations"         => \&GeniCluster::Reservations,
     "DeleteReservation"    => \&GeniCluster::DeleteReservation,
     "ReservationSystemInfo"=> \&GeniCluster::ReservationSystemInfo,
