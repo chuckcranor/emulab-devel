@@ -35,7 +35,7 @@ use vars qw(@ISA @EXPORT);
 
 @ISA = "Exporter";
 @EXPORT = qw(Parse ParseFile GetXmlVersion IsVersion0 FindNodes FindNodesNS
-FindFirst FindElement FindAttr GetNodeByVirtualId GetLinkByVirtualId
+FindFirst FindFirstNS FindElement FindAttr GetNodeByVirtualId GetLinkByVirtualId
 IsLanNode IsLocalNode IsTunnel GetExpires GetBandwidth GetIp GetVnodeId
 GetNodeId GetVirtualId GetInterfaceId GetInterfaceNodeId GetSliverId
 GetManagerId GetColocate GetSubnodeOf GetStartupCommand GetTarball
@@ -248,6 +248,13 @@ sub FindFirst($$)
 {
     my ($path, $node) = @_;
     return FindNodes($path, $node)->pop();
+}
+
+# Returns the first Node which matches a given XPath.
+sub FindFirstNS($$$)
+{
+    my ($path, $node, $ns) = @_;
+    return FindNodesNS($path, $node, $ns)->pop();
 }
 
 # Returns the first Element which matches a given XPath.
