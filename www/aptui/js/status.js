@@ -37,7 +37,8 @@ $(function ()
     var lastStatus        = "";
     var paniced           = 0;
     var lockout           = 0;
-    var lockdown          = 0;
+    var admin_lockdown    = 0;
+    var user_lockdown     = 0;
     var lockdown_code     = "";
     var consolenodes      = {};
     var showlinktest      = false;
@@ -62,8 +63,9 @@ $(function ()
 	profile_uuid = window.APT_OPTIONS.profileUUID;
 	paniced      = window.APT_OPTIONS.paniced;
 	lockout      = window.APT_OPTIONS.lockout;
-	lockdown     = window.APT_OPTIONS.lockdown;
+	user_lockdown= window.APT_OPTIONS.user_lockdown;
 	lockdown_code= uuid.substr(2, 5);
+	admin_lockdown = window.APT_OPTIONS.admin_lockdown;
 	instanceStatus = window.APT_OPTIONS.instanceStatus;
 	hidelinktest   = window.APT_OPTIONS.hidelinktest;
 	var errorURL = window.HELPFORUM;
@@ -95,7 +97,8 @@ $(function ()
 	    project:            window.APT_OPTIONS.project,
 	    group:              window.APT_OPTIONS.group,
 	    lockout:            lockout,
-	    lockdown:           lockdown,
+	    admin_lockdown:     admin_lockdown,
+	    user_lockdown:      user_lockdown,
 	    lockdown_code:      lockdown_code,
 	    // The status panel starts out collapsed.
 	    status_panel_show:  (instanceStatus == "ready" ? false : true),
@@ -255,7 +258,7 @@ $(function ()
 	    event.preventDefault();
 	    sup.HideModal('#terminate_modal');
 
-	    if (lockdown) {
+	    if (user_lockdown) {
 		if (lockdown_code != $('#terminate_lockdown_code').val()) {
 		    sup.SpitOops("oops", "Refusing to terminate; wrong code");
 		    return;
@@ -294,8 +297,11 @@ $(function ()
 	    DoLockout($(this).is(":checked"));
 	});	
 	// lockdown change event handler.
-	$('#lockdown_checkbox').change(function() {
-	    DoLockdown($(this).is(":checked"));
+	$('#user_lockdown_checkbox').change(function() {
+	    DoLockdown("user", $(this).is(":checked"));
+	});	
+	$('#admin_lockdown_checkbox').change(function() {
+	    DoLockdown("admin", $(this).is(":checked"));
 	});	
 	// Quarantine change event handler.
 	$('#quarantine_checkbox').change(function() {
@@ -631,8 +637,13 @@ $(function ()
     }
     function ButtonState(button, enable)
     {
-	if (button == "terminate")
+	if (button == "terminate") {
 	    button = "#terminate_button";
+	    // When admin lockdown is set, we never enable this button.
+	    if (admin_lockdown) {
+		enable = 0;
+	    }	    
+	}
 	else if (button == "extend")
 	    button = "#extend_button";
 	else if (button == "refresh")
@@ -793,15 +804,16 @@ $(function ()
     //
     // Request lockout set/clear.
     //
-    function DoLockout(lockout)
+    function DoLockout(enable)
     {
-	lockout = (lockout ? 1 : 0);
+	enable = (enable ? 1 : 0);
 	
 	var callback = function(json) {
 	    if (json.code) {
 		alert("Failed to change lockout: " + json.value);
 		return;
 	    }
+	    lockout = enable;
 	}
 	var xmlthing = sup.CallServerMethod(ajaxurl, "status", "Lockout",
 					     {"uuid" : uuid,
@@ -812,9 +824,9 @@ $(function ()
     //
     // Request lockdown set/clear.
     //
-    function DoLockdown(lockdown)
+    function DoLockdown(which, lockdown)
     {
-	lockdown = (lockdown ? 1 : 0);
+	var action = (lockdown ? "set" : "clear");
 	
 	var callback = function(json) {
 	    sup.HideModal("#waitwait-modal");
@@ -822,11 +834,24 @@ $(function ()
 		alert("Failed to change lockdown: " + json.value);
 		return;
 	    }
+	    if (which == "user") {
+		user_lockdown = lockdown;
+	    }
+	    else if (which == "admin") {
+		admin_lockdown = lockdown;
+		if (lockdown) {
+		    DisableButton("terminate");
+		}
+		else {
+		    EnableButton("terminate");
+		}
+	    }
 	}
 	sup.ShowModal("#waitwait-modal");
 	var xmlthing = sup.CallServerMethod(ajaxurl, "status", "Lockdown",
-					     {"uuid" : uuid,
-					      "lockdown" : lockdown});
+					    {"uuid"   : uuid,
+					     "which"  : which,
+					     "action" : action});
 	xmlthing.done(callback);
     }
 
@@ -844,6 +869,7 @@ $(function ()
 			     "Failed to change Quarantine mode: " + json.value);
 		return;
 	    }
+	    paniced = mode;
 	}
 	sup.ShowModal('#waitwait-modal');
 	var xmlthing = sup.CallServerMethod(ajaxurl, "status", "Quarantine",

@@ -1732,7 +1732,7 @@ sub ExtendInternal($$$$)
     }
     # Lockdown.
     if ($lockdown) {
-	if (DoLockdownInternal("set", "admin")) {
+	if (DoLockdownInternal("set", "user")) {
 	    SENDMAIL($TBOPS,
 		     "Failed to lock down APT Instance",
 		     "Failed to lock down $instance\n".
@@ -2195,7 +2195,7 @@ sub DoExtendOld()
     }
     # Lockdown.
     if ($lockdown) {
-	if (DoLockdownInternal("set", "admin")) {
+	if (DoLockdownInternal("set", "user")) {
 	    SENDMAIL($TBOPS,
 		     "Failed to lock down APT Instance",
 		     "Failed to lock down $instance\n".
@@ -3082,7 +3082,7 @@ sub DoPanic()
 	fatal("Experiment is busy, cannot lock it. Please try again later");
     }
     #
-    # And tell the backend clusters to lockdown the slice.
+    # And tell the backend clusters to Panic the slice.
     #
     my $coderef = sub {
 	my ($sliver) = @_;
@@ -3114,7 +3114,7 @@ sub DoPanic()
     if (ParRun({"maxwaittime" => 99999,
 		"maxchildren" => scalar(@agglist)},
 	       \@return_codes, $coderef, @agglist)) {
-	$emsg = "Internal error calling Lockdown()";
+	$emsg = "Internal error calling Panic()";
 	goto bad;
     }
     #
@@ -3233,7 +3233,7 @@ sub DoLinktest()
     if (ParRun({"maxwaittime" => 99999,
 		"maxchildren" => scalar(@agglist)},
 	       \@return_codes, $coderef, @agglist)) {
-	$errmsg = "Internal error calling Lockdown()";
+	$errmsg = "Internal error calling LinkTest()";
 	goto bad;
     }
     #
@@ -3778,6 +3778,11 @@ sub DoSchedTerminate()
 	print STDERR "$errmsg\n";
 	exit($errcode);
     }
+    if ($instance->admin_lockdown()) {
+	$errmsg  = "Must clear the admin lockdown first.";
+	$errcode = -1;
+	goto bad;
+    }
     if (defined($reason) &&
 	!TBcheck_dbslot($reason, "default", "fulltext",
 			 TBDB_CHECKDBSLOT_WARN|TBDB_CHECKDBSLOT_ERROR)) {
@@ -3814,8 +3819,8 @@ sub DoSchedTerminate()
 	$slice->SetExpiration(time() + ($days * 3600 * 24));
     }
     # Now we can clear this.
-    if ($instance->admin_lockdown()) {
-	if (DoLockdownInternal("clear", "all")) {
+    if ($instance->user_lockdown()) {
+	if (DoLockdownInternal("clear", "user")) {
 	    SENDMAIL($TBOPS,
 		     "Failed to clear lock down on APT Instance",
 		     "Failed to clear lock down $instance\n".

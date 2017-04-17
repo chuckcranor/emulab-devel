@@ -197,11 +197,18 @@ function Do_TerminateInstance()
     $webtask = WebTask::CreateAnonymous();
     $webtask_id = $webtask->task_id();
 
-    if ($instance->admin_lockdown() || $instance->user_lockdown()) {
+    if ($instance->admin_lockdown()) {
+        SPITAJAX_ERROR(1, "This experiment has been locked down by an ".
+                       "administrator. The lock must be cleared before ".
+                       "it can terminated.");
+        return;
+
+    }
+    if ($instance->user_lockdown()) {
         if (! (isset($this_user) &&
                ($instance->creator() == $this_user->uid() || ISADMIN()))) {
             SPITAJAX_ERROR(1, "Not enough permission to terminate; ".
-                           "experiment is locked down");
+                           "experiment is locked down.");
             return;
         }
         $override = substr($uuid, 2, 5);
@@ -214,7 +221,7 @@ function Do_TerminateInstance()
         }
         $retval = SUEXEC($this_user->uid(), "nobody",
                          "webmanage_instance -t $webtask_id -- ".
-                         "  lockdown $uuid clear all",
+                         "  lockdown $uuid clear user",
                          SUEXEC_ACTION_CONTINUE);
         if ($retval) {
             $webtask->Refresh();
@@ -446,6 +453,13 @@ function Do_DenyOrMoreinfo($action)
     if (!ISADMIN()) {
 	SPITAJAX_ERROR(1, "You do not have permission to do this.");
 	goto bad;
+    }
+    if ($instance->admin_lockdown()) {
+        SPITAJAX_ERROR(1, "This experiment has been locked down by an ".
+                       "administrator. The lock must be cleared before ".
+                       "it can terminated.");
+        return;
+
     }
     if (isset($ajax_args["reason"]) && $ajax_args["reason"] != "") {
         $reason = $ajax_args["reason"];
@@ -1403,9 +1417,27 @@ function Do_Lockdown()
 	SPITAJAX_ERROR(1, "Missing profile uuid");
 	return;
     }
-    if (!isset($ajax_args["lockdown"])) {
-	SPITAJAX_ERROR(1, "Missing lockdown value");
+    if (!isset($ajax_args["action"])) {
+	SPITAJAX_ERROR(1, "Missing action");
 	return;
+    }
+    $action = $ajax_args["action"];
+    if ($action != "set" && $action != "clear") {
+	SPITAJAX_ERROR(1, "Bad action");
+	return;
+    }
+    if (!isset($ajax_args["which"])) {
+	SPITAJAX_ERROR(1, "Missing which");
+	return;
+    }
+    $which = $ajax_args["which"];
+    if ($which != "user" && $which != "admin") {
+	SPITAJAX_ERROR(1, "Bad which");
+	return;
+    }
+    if ($which == "admin" && !ISADMIN()) {
+	SPITAJAX_ERROR(1, "Not enough permission.");
+        return;
     }
     $uuid = $ajax_args["uuid"];
     $instance = Instance::Lookup($uuid);
@@ -1413,7 +1445,11 @@ function Do_Lockdown()
 	SPITAJAX_ERROR(1, "Unknown instance uuid");
 	return;
     }
-    $action = ($ajax_args["lockdown"] ? "set" : "clear");
+    if ($which == "user" &&
+        !($this_idx == $instance->creator_idx() || ISADMIN())) {
+	SPITAJAX_ERROR(1, "Not enough permission.");
+        return;
+    }
 
     #
     # Call out to the backend.
@@ -1421,7 +1457,7 @@ function Do_Lockdown()
     $webtask = WebTask::CreateAnonymous();
     $retval = SUEXEC("nobody", "nobody",
 		     "webmanage_instance -t " . $webtask->task_id() .
-                     "  lockdown $uuid $action admin ",
+                     "  lockdown $uuid $action $which ",
 		     SUEXEC_ACTION_IGNORE);
     $webtask->Refresh();
 
@@ -1661,8 +1697,10 @@ function Do_ExpInfo()
         $blob["profile_name"] = "unknown";
         $blob["profile_uuid"] = null;
     }
-    $blob["lockdown"]     = $instance->admin_lockdown() ? true : false;
-    $blob["lockout"]      = $instance->extension_lockout() ? true : false;
+    $blob["user_lockdown"]   = $instance->user_lockdown() ? true : false;
+    $blob["admin_lockdown"]  = $instance->admin_lockdown() ? true : false;
+    $blob["paniced"]         = $instance->paniced() ? true : false;
+    $blob["lockout"]         = $instance->extension_lockout() ? true : false;
     SPITAJAX_RESPONSE($blob);
 }
 

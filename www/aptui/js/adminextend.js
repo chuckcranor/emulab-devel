@@ -148,16 +148,18 @@ $(function ()
 			     function (json) {
 				 console.info(json);
 				 if (json.code == 0) {
-				     var html = firstrowTemplate({"expinfo": json.value,
-							  "uuid"    : window.UUID,
-							  "uid"     : window.CREATOR,
-							  "pid"     : window.PID});
+				     var html = firstrowTemplate(
+					 {"expinfo" : json.value,
+					  "uuid"    : window.UUID,
+					  "uid"     : window.CREATOR,
+					  "pid"     : window.PID}
+				     );
 				     $("#firstrow").html(html);
 				     $('.format-date').each(function() {
 					 var date = $.trim($(this).html());
 					 if (date != "") {
 					     $(this).html(moment($(this).html())
-							  .format("MMM D h:mm A"));
+						  .format("MMM D h:mm A"));
 					 }
 				     });
 				     // lockout change event handler.
@@ -165,14 +167,26 @@ $(function ()
 					 DoLockout($(this).is(":checked"));
 				     });	
 				     // lockdown change event handler.
-				     $('#lockdown-checkbox').change(function() {
-					 DoLockdown($(this).is(":checked"));
+				     $('#user-lockdown-checkbox')
+					 .change(function() {
+					     DoLockdown("user",
+							$(this).is(":checked"));
+				     });
+				     $('#admin-lockdown-checkbox')
+					 .change(function() {
+					     DoLockdown("admin",
+							$(this).is(":checked"));
 				     });
 				     // This activates the popover subsystem.
 				     $('[data-toggle="popover"]').popover({
 					 trigger: 'hover',
 					 placement: 'auto',
 				     });
+				     // No termination.
+				     if (json.value.admin_lockdown) {
+					 $('#terminate-button')
+					     .attr("disabled", "disabled");
+				     }
 				     // Update the Max Extension
 				     DoMaxExtension();
 				 }
@@ -245,9 +259,9 @@ $(function ()
     //
     // Request lockdown set/clear.
     //
-    function DoLockdown(lockdown)
+    function DoLockdown(which, lockdown)
     {
-	lockdown = (lockdown ? 1 : 0);
+	var action = (lockdown ? "set" : "clear");
 	
 	var callback = function(json) {
 	    sup.HideModal("#waitwait-modal");
@@ -255,11 +269,20 @@ $(function ()
 		alert("Failed to change lockdown: " + json.value);
 		return;
 	    }
+	    if (which == "admin") {
+		if (lockdown) {
+		    $('#terminate-button').attr("disabled", "disabled");
+		}
+		else {
+		    $('#terminate-button').removeAttr("disabled");
+		}
+	    }
 	}
 	sup.ShowModal("#waitwait-modal");
 	var xmlthing = sup.CallServerMethod(null, "status", "Lockdown",
-					     {"uuid" : window.UUID,
-					      "lockdown" : lockdown});
+					    {"uuid"   : window.UUID,
+					     "which"  : which,
+					     "action" : action});
 	xmlthing.done(callback);
     }
 
@@ -274,7 +297,7 @@ $(function ()
 		return;
 	    }
 	    $('#max-extension').html(moment(json.value)
-				     .format("LLL"));
+				     .format("MMM D, YYYY h:mm A"));
 
 	    /*
 	     * Look to see if the number of days requested is going to be
