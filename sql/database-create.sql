@@ -439,6 +439,7 @@ CREATE TABLE `apt_profile_versions` (
   `reponame` varchar(40) default NULL,
   `repohash` varchar(64) default NULL,
   `repokey` varchar(64) default NULL,
+  `portal_converted` tinyint(1) NOT NULL default '0',
   `rspec` mediumtext,
   `script` mediumtext,
   `paramdefs` mediumtext,
