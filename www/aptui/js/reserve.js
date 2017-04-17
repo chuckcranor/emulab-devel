@@ -336,7 +336,18 @@ $(function ()
 		sup.SpitOops("oops", json.value);
 		return;
 	    }
-	    window.location.replace("list-reservations.php");
+	    /*
+	     * If the reservation is pending, lets stay on this page.
+	     */
+	    if (json.value == 3) {
+		$('#unapproved-warning').removeClass("hidden");
+		// Back to edit/approve
+		ToggleSubmit(false, "check");
+		$('#reserve-approve-button').removeAttr("disabled");
+	    }
+	    else {
+		window.location.replace("list-reservations.php");
+	    }
 	};
 	aptforms.SubmitForm('#reserve-request-form', "reserve",
 			    "Reserve", reserve_callback,
@@ -402,7 +413,10 @@ $(function ()
 	    $("#reserve-request-form #end_day")
 		.datepicker("setDate", end.format("MM/DD/YYYY"));
 
-	    if (!details.approved) {
+	    if (details.approved) {
+		$('#unapproved-warning').addClass("hidden");
+	    }
+	    else {
 		$('#unapproved-warning').removeClass("hidden");
 	    }
 	    // Local user gets a link.

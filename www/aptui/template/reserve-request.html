@@ -15,20 +15,30 @@
       <div class='panel-heading'>
         <h3 class='panel-title'>
 	  <% if (editing) { %>Modify <% } %>Reservation Request
-	  <a hrexsf='#' class='btn btn-xs'
+	  <a href='#' class='btn btn-xs'
 	     data-toggle='modal'
 	     data-target="#reservation-help-modal">
 	    <span style='margin-bottom: 4px; margin-left: 0px;'
 		  class='glyphicon glyphicon-question-sign'></span></a>
-	  <% if (editing) { %>
-	    <span class="hidden pull-right text-danger small"
-		  id="unapproved-warning">
-	      <span class="text-danger">This reservation is unapproved!</span>
-	    </span>
-	  <% } %>
 	</h3>
       </div>
-      <div class='panel-body'>
+      <div class='panel-body' style="padding-top: 0px;">
+	<% if (editing) { %>
+	  <center>
+	    <span class="hidden text-danger small"
+		  id="unapproved-warning">
+	      <span class="text-danger">This reservation is unapproved!</span>
+	      <a href='#' class='btn btn-xs'
+		 style="padding-left: 0px; margin-top: -3px; border-top: 0px;"
+		 data-toggle='popover'
+		 data-html='true'
+		 data-content='This reservation needs to be approved
+			       by an administrator.'>
+		<span class='glyphicon glyphicon-question-sign'></span>
+	      </a>	      
+	    </span>
+	  </center>
+	<% } %>
 	<div style="margin-bottom: 10px;">
 	  <center><span id="general_error" style="color:red;"></span></center>
 	</div>
