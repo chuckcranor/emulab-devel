@@ -2837,6 +2837,7 @@ sub GetTicketAuxAux($$$$$$$$$$$)
 	my $precheck;
 	my $inprecheck   = 0;
 	my $insummary    = 0;
+	my $isassignerror= 0;
 	my $errorcode = GENIRESPONSE_NO_MAPPING;
 	
 	unlink($tmpfile);
@@ -2852,6 +2853,17 @@ sub GetTicketAuxAux($$$$$$$$$$$)
 	#
 	while ($output =~ /^(.*)$/gm) {
 	    my $line = $1 . "\n";
+
+	    # Did we actually run assign?
+	    if ($line =~ /^Assign exited with/) {
+		$isassignerror = 1;
+	    }
+	    if ($line =~
+		/^\s*\*\*\*\s* Resource reservation violation:/) {
+		$logstuff  = $line;
+		$errorcode = GENIRESPONSE_INSUFFICIENT_NODES();
+		last;
+	    }
 
 	    #
 	    # The assign_wrapper2 script wraps assign, and basically
@@ -2911,6 +2923,8 @@ sub GetTicketAuxAux($$$$$$$$$$$)
 		    #
 		    # *** 2 nodes of type pc requested, but only 1 available \
 		    #          nodes of type pc found
+		    # *** 2 nodes of type pc requested, but you are only
+		    #          allowed to use 1
 		    # *** No available physical nodes of type c8220 found 
 		    #
 		    if (($line =~
@@ -2936,6 +2950,12 @@ sub GetTicketAuxAux($$$$$$$$$$$)
 		}
 		elsif ($line =~ /unassigned:\s*[1-9]/) {
 		    $errorstr  = "Not enough nodes with fast enough interfaces";
+		    $errorcode = GENIRESPONSE_INSUFFICIENT_NODES();
+		}
+		elsif ($line =~ /max_types:\s*[1-9]/) {
+		    $errorstr  = "Not enough nodes because of policy ".
+			"restrictions, or existing resource reservations to ".
+			"other projects";
 		    $errorcode = GENIRESPONSE_INSUFFICIENT_NODES();
 		}
 	    }
@@ -2971,14 +2991,20 @@ sub GetTicketAuxAux($$$$$$$$$$$)
 	# Lets dump the error log too, so it ends up in the email.
 	# Have to figure out a better approach for this.
 	#
-	if (-e "assign.log") {
+	if ($isassignerror && -e "assign.log") {
 	    print STDERR "----------------------------------------------\n";
 	    print STDERR "------------- Assign Error Log ---------------\n";
 	    my $log = `cat assign.log`;
 	    print STDERR $log . "\n";
 	    print STDERR "----------------------------------------------\n";
 	}
-
+	if (-e "resinfo.log" && -s "resinfo.log") {
+	    print STDERR "----------------------------------------------\n";
+	    print STDERR "------------- Reservation Log ----------------\n";
+	    my $log = `cat resinfo.log`;
+	    print STDERR $log . "\n";
+	    print STDERR "----------------------------------------------\n";
+	}
 	# Dump the output to STDERR for debugging.
 	print STDERR "----------------------------------------------\n";
 	print STDERR "---------------- Mapper Log ------------------\n";
