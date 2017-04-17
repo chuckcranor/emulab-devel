@@ -785,15 +785,19 @@ $osidquery2 .= ")";
 #
 my $defaultosidquery =
     "select distinct o.osid,t.type,o.osname,o.pid,ov.OS,".
-    "ov.version,ov.description,ov.protogeni_export,ov.osfeatures,iv.metadata_url,i.imagename,i.pid ".
+    "   ov.version,ov.description,ov.protogeni_export,ov.osfeatures,".
+    "   iv.metadata_url,i.imagename,i.pid, ".
+    "   a.imagename as aliasname,a.imageid as aliasid ".
     "   from os_info as o ".
     "left join os_info_versions as ov on ".
     "     ov.osid=o.osid and ov.vers=o.version ".
     "left join images as i on o.osid = i.imageid ".
     "left join image_versions as iv on ".
     "     iv.imageid=i.imageid and iv.version=i.version ".
+    "left join image_aliases as a on a.target_imageid=i.imageid ".
     "left join node_type_attributes as t ".
-    "on (o.osid=t.attrvalue) where t.attrkey='default_osid'";
+    "on (o.osid=t.attrvalue) ".
+    "where t.attrkey='default_osid'";
 
 #
 # For subOS support (i.e., vnode OSes running atop vhost OSes), we have to
@@ -873,6 +877,7 @@ processOs($result);
 $result = DBQueryFatal($osidquery2);
 processOs($result);
 
+# We want this to be last since it will possibly alter results of previous.
 $result = DBQueryFatal($defaultosidquery);
 processOs($result);
 
@@ -880,7 +885,8 @@ sub processOs
 {
     my $result = shift(@_);
     while (my ($osid,$type,$osname,$ospid,$osos, $osversion,
-	       $osdescription,$geni,$osfeatures,$remote_url,$imagename,$imagepid) = $result->fetchrow()) {
+	       $osdescription,$geni,$osfeatures,$remote_url,$imagename,
+	       $imagepid,$aliasname,$aliasid) = $result->fetchrow()) {
 	if ($osname eq "OPENVZ-STD") {
 	    $openvzid = $osid;
 	}
@@ -897,8 +903,15 @@ sub processOs
 			if (!defined($image));
 		    $osid_url{$osid} = $image->LocalURL();
 		}
-		push(@{ $typemap{$type}->{'OSLIST'} }, $osid);
-		$osid_name{$osid} = $osname;
+		push(@{ $typemap{$type}->{'OSLIST'} }, $osid)
+		    if (!grep {$_ == $osid} @{ $typemap{$type}->{'OSLIST'} });
+		
+		if ($genimode && defined($aliasname)) {
+		    $osid_name{$osid} = $aliasname;
+		}
+		else {
+		    $osid_name{$osid} = $osname;
+		}
 		$osid_pid{$osid} = $ospid;
 		$osid_os{$osid} = $osos;
 		$osid_version{$osid} = $osversion;
