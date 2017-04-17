@@ -1042,32 +1042,36 @@ function DOLOGIN_MAGIC($uid, $uid_idx, $email = null,
     # every time the user logs in of course, and since exports_setup is 
     # using one week as its threshold, we can use that as the limit.
     #
-    if ($WITHZFS && $ZFS_NOEXPORT) {
+    $exports_active = TBGetSiteVar("general/export_active");
+    
+    if ($WITHZFS && $ZFS_NOEXPORT && $exports_active) {
+        $limit = (($exports_active * 24) - 12) * 3600;
+        
         $query_result =
-	    DBQueryFatal("select UNIX_TIMESTAMP(weblogin_last),weblogin_last ".
+	    DBQueryFatal("select UNIX_TIMESTAMP(last_activity),last_activity ".
 			 "  from users as u ".
 			 "left join user_stats as s on s.uid_idx=u.uid_idx ".
 			 "where u.uid_idx='$uid_idx' and ".
                          "      u.nonlocal_id is null");
-	if (mysql_num_rows($query_result)) {
-		$lastrow      = mysql_fetch_row($query_result);
-		$lastlogin    = $lastrow[0];
-		$lastloginstr = $lastrow[1];
-	
-		if (time() - $lastlogin > (24 * 3600 * 6)) {
-			# Update weblogin_last first so exports_setup
-			# will do something.
-			DBQueryFatal("update user_stats set ".
-				     " weblogin_last=now() ".
-				     "where uid_idx='$uid_idx'");
 
+        # Update last_activity first so exports_setup will do something
+        # and to mark activity to keep the mount active.
+        DBQueryFatal("update user_stats set last_activity=now() ".
+                     "where uid_idx='$uid_idx'");
+        
+	if (mysql_num_rows($query_result)) {
+		$lastrow       = mysql_fetch_row($query_result);
+		$lastactive    = $lastrow[0];
+		$lastactivestr = $lastrow[1];
+	
+		if (time() - $lastactive > $limit) {
 			$rv = SUEXEC("nobody", "nobody", "webexports_setup",
 				     SUEXEC_ACTION_IGNORE);
 
 			# failed, reset the timestamp
 			if ($rv) {
 				DBQueryFatal("update user_stats set ".
-					     " weblogin_last='$lastloginstr' ".
+					     " last_activity='$lastactivestr' ".
 					     "where uid_idx='$uid_idx'");
 				SUEXECERROR(SUEXEC_ACTION_DIE);
 				return;
