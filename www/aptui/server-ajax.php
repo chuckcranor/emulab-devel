@@ -122,6 +122,8 @@ $routing = array("myprofiles" =>
 						     "Do_BindParameters",
 						 "ConvertClassic" =>
                                                      "Do_ConvertClassic",
+						 "ConvertRspec" =>
+                                                     "Do_ConvertRspec",
 						 "UpdateRepository" =>
                                                      "Do_UpdateRepository",
 						 "GetRepository" =>

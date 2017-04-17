@@ -187,6 +187,7 @@ my %xmlfields =
      "rspec"		   => ["rspec",		$SLOT_REQUIRED|$SLOT_UPDATE],
      "script"		   => ["script",	$SLOT_OPTIONAL|$SLOT_UPDATE],
      "repourl"		   => ["repourl",	$SLOT_OPTIONAL],
+     "portal_converted"	   => ["portal_converted", $SLOT_OPTIONAL|$SLOT_UPDATE],
 );
 
 if ($action eq "update") {
@@ -660,12 +661,14 @@ sub ModifyProfileInternal($$$)
 		$webtask->newProfile($profile->uuid())
 		    if (defined($webtask));
 	    }
-	    foreach my $key ("rspec", "script", "paramdefs", "repohash") {
+	    foreach my $key ("rspec", "script", "paramdefs",
+			     "repohash", "portal_converted") {
 		$profile->UpdateVersion({$key => $update_args{$key}})
 		    if (exists($update_args{$key}));
 	    }
 	}
-	foreach my $key ("rspec", "script", "paramdefs", "repohash") {
+	foreach my $key ("rspec", "script", "paramdefs",
+			 "repohash", "portal_converted") {
 	    delete($update_args{$key})
 		if (exists($update_args{$key}));
 	}
@@ -780,7 +783,6 @@ sub VerifyXML($$)
 	    $modifiers{$dbslot} = $value;
 	    next;
 	}
-	
 	# Now check that the value is legal.
 	if (! TBcheck_dbslot($value, "apt_profiles",
 			     $dbslot, TBDB_CHECKDBSLOT_ERROR)) {

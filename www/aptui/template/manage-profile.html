@@ -1,6 +1,7 @@
 <style>
-.popover {
-    max-width: none;
+ .popover {
+     max-width: none !important;
+ }
 }
 </style>
 <div class='row'>
@@ -155,7 +156,7 @@
 	      <td>Push URL:</td>
 	      <td style="white-space: nowrap;">
 		<input readonly type="text" class="form-control input-sm"
-		       onClick="this.select();"
+		       id="push-url"
 		       style="display: inline;
 			      padding-left: 3px; padding-right: 3px;
 			      padding-bottom: 0px; padding-top: 0px;"
@@ -225,6 +226,12 @@
 	      <% } %>
 	      <% if (window.CLONING) { %>
 	        <input type='hidden' name='update_prepare' value=''>
+	      <% } %>
+	      <% if (_.has(formfields, "portal_converted")) { %>
+		<input type='hidden' name='portal_converted'
+		       value='<%= formfields.portal_converted %>'>
+	      <% } else { %>
+		<input type='hidden' name='portal_converted' value="no">
 	      <% } %>
 	    </div>
 	  </div>
@@ -337,6 +344,22 @@
 			  style='margin-right: 10px;'
 			  id='show_xml_modal_button'>
                       View XML</button>
+ 		    <% if ((viewing && canmodify && (isadmin || isstud)) &&
+		           !fromrepo && !gotscript) { %>
+		      <span id="profile_convert_button"
+			    data-toggle='popover'
+			    data-delay='{"hide":500, "show":250}'
+			    data-html='true'
+			    data-content="Convert your profile to a geni-lib
+					  script. Click for more info.">
+			<button class='btn btn-primary btn-xs' 
+				style='margin-right: 10px;'
+     				data-toggle='modal'
+				data-target='#profile-convert-modal'
+				type='button' name='delete'>Convert to geni-lib
+			</button>
+		      </span>
+		    <% } %>
 		    <% if (! (viewing || window.CLONING)) { %>
 		      or 
 		      <button class='btn btn-primary btn-xs'
@@ -386,12 +409,14 @@
 		</div>
 	      </div>
 	    <% } %>
+	    <!-- Be careful not to add whitespace here -->
  	    <textarea name="profile_rspec"
 		      id='profile_rspec_textarea'
                       class='form-control hidden'
                       type='textarea'
 		      data-key='profile_rspec'
 		      rows=5><%- formfields.profile_rspec %></textarea>
+	    <!-- Be careful not to add whitespace here -->
  	    <textarea name="profile_script"
 		      id='profile_script_textarea'
                       class='form-control hidden'
@@ -430,19 +455,19 @@
 		              profile after it starts.
 		              Use <a href="https://github.com/adam-p/markdown-here/wiki/Markdown-Cheatsheet" target=_blank>Markdown format</a>, double click
  		              to see a rendering.'>
-	      <textarea name=profile_instructions
-			id='profile_instructions'
-			class='form-control'
-			rows=3
-			type='textarea'></textarea>
-	      <div class="geni-lib-warning hidden"><small class="pull-right">
-		Instructions set by geni-lib script
-		<a href='#' class='btn btn-xs'
-		   data-toggle='modal'
-		   data-target="#docstring-help-modal">
-		  <span style='margin-bottom: 4px; margin-left: 0px;'
-			class='glyphicon glyphicon-question-sign'></span></a>
-	      </small></div>
+		<textarea name=profile_instructions
+			  id='profile_instructions'
+			  class='form-control'
+			  rows=3
+			  type='textarea'></textarea>
+		<div class="geni-lib-warning hidden"><small class="pull-right">
+		  Instructions set by geni-lib script
+		  <a href='#' class='btn btn-xs'
+		     data-toggle='modal'
+		     data-target="#docstring-help-modal">
+		    <span style='margin-bottom: 4px; margin-left: 0px;'
+			  class='glyphicon glyphicon-question-sign'></span></a>
+		</small></div>
 	      </div>
 	    </div>
 
@@ -453,11 +478,11 @@
 		<div class="panel" style='margin-bottom: 10px; border: 0px;'>
 		  <div class="panel-heading"
 		       style='border: 0px; padding: 5px; margin: 0px;'>
-		      <a data-toggle="collapse"
-			 id='profile_steps_link'
-			 href="#profile_steps_collapse">
-			Show/Edit Tour
-		      </a>
+		    <a data-toggle="collapse"
+		       id='profile_steps_link'
+		       href="#profile_steps_collapse">
+		      Show/Edit Tour
+		    </a>
 		  </div>
 		  <div id="profile_steps_collapse"
 		       class="panel-collapse collapse">
@@ -471,20 +496,20 @@
 
 	    <!-- Public listing checkbox -->
 	    <% if (isadmin) { %>
-	    <div class='row'>
-	      <div class='col-sm-9 col-sm-offset-3'>
-		<div class='checkbox format-me' data-compact='yep'>
-                  <label>
-		    <input name='profile_listed'
-			   <%- formfields.profile_listed %>
-			   data-key='profile_listed'
-			   id='profile_listed' value='checked'
-			   type='checkbox'>List on the home page for
-		    anyone to view.
-		  </label>
+	      <div class='row'>
+		<div class='col-sm-9 col-sm-offset-3'>
+		  <div class='checkbox format-me' data-compact='yep'>
+                    <label>
+		      <input name='profile_listed'
+			     <%- formfields.profile_listed %>
+			     data-key='profile_listed'
+			     id='profile_listed' value='checked'
+			     type='checkbox'>List on the home page for
+		      anyone to view.
+		    </label>
+		  </div>
 		</div>
 	      </div>
-	    </div>
 	    <% } %>
 
 	    <!-- Permission checkboxes. -->
@@ -498,39 +523,39 @@
 	      <div class='col-sm-8 col-sm-offset-4'>
 		<div class='format-me' data-key='profile_who'>
 		  <% if (1) { %>
-		  <div class='radio'>
-                    <label>
-                      <input type='radio' name='profile_who'
-			     id='profile_who_public'
-		             <% if (formfields.profile_who == "public") {
-				%>checked<% } %>
-			     value='public'>
-		      <% if (isapt) { %>
-                      <em>Anyone</em> on the internet
-		      <% } else { %>
-                      <em>Anyone</em>
-		      <% } %>
-    	            </label>
-                  </div>
+		    <div class='radio'>
+                      <label>
+			<input type='radio' name='profile_who'
+			       id='profile_who_public'
+		               <% if (formfields.profile_who == "public") {
+			       %>checked<% } %>
+			       value='public'>
+			<% if (isapt) { %>
+			  <em>Anyone</em> on the internet
+			<% } else { %>
+			  <em>Anyone</em>
+			<% } %>
+    	              </label>
+                    </div>
 		  <% } %>
 		  <% if (0) { %>
-                  <div class='radio'>
-                    <label>
-                      <input type='radio' name='profile_who'
-			     id='profile_who_registered'
-		             <% if (formfields.profile_who == "shared") {
-				%>checked<% } %>
-			     value='shared'>
-                      Only registered users of the website
-    	            </label>
-                  </div>
+                    <div class='radio'>
+                      <label>
+			<input type='radio' name='profile_who'
+			       id='profile_who_registered'
+		               <% if (formfields.profile_who == "shared") {
+			       %>checked<% } %>
+			       value='shared'>
+			Only registered users of the website
+    	              </label>
+                    </div>
 		  <% } %>
                   <div class='radio'>
                     <label>
                       <input type='radio' name='profile_who'
 			     id='profile_who_private'
 		             <% if (formfields.profile_who == "private") {
-				%>checked<% } %>
+			     %>checked<% } %>
 			     value='private'>
                       Only members of your project
     	            </label>
@@ -540,96 +565,96 @@
             </div>
 
 	    <% if (isadmin) { %>
-	    <div class='row'>
-	      <div class='col-sm-9 col-sm-offset-3'>
-		<div class='checkbox format-me' data-key='profile_topdog'
-		     data-compact='yep'>
-                  <label>
-		    <input name='profile_topdog'
-			   <%- formfields.profile_topdog %>
-			   data-key='profile_topdog'
-			   id='profile_topdog' value='checked'
-			   type='checkbox'>Put this profile at the top of
-		    the list.
-		  </label>
+	      <div class='row'>
+		<div class='col-sm-9 col-sm-offset-3'>
+		  <div class='checkbox format-me' data-key='profile_topdog'
+		       data-compact='yep'>
+                    <label>
+		      <input name='profile_topdog'
+			     <%- formfields.profile_topdog %>
+			     data-key='profile_topdog'
+			     id='profile_topdog' value='checked'
+			     type='checkbox'>Put this profile at the top of
+		      the list.
+		    </label>
+		  </div>
 		</div>
 	      </div>
-	    </div>
-	    <div class='row'>
-	      <div class='col-sm-9 col-sm-offset-3'>
-		<div class='checkbox format-me' data-key='profile_disabled'
-		     data-compact='yep'>
-                  <label>
-		    <input name='profile_disabled'
-			   <%- formfields.profile_disabled %>
-			   data-key='profile_disabled'
-			   id='profile_disabled' value='checked'
-			   type='checkbox'>Disable profile.
-		    <a href='#' class='btn btn-xs'
-		       style="padding-left: 0px"
-		       data-toggle='popover'
-		       data-html='true'
-		       data-delay='{"hide":500}'
-		       data-content="Disable profile so that it cannot be
-				     instantiated.">
-		      <span class='glyphicon glyphicon-question-sign'
-			    style='margin-bottom: 4px;'></span>
-		    </a>
-		  </label>
-                  <label>
-		    <input name='profile_disable_all'
-			   data-key='profile_disable_all'
-			   value='checked'
-			   type='checkbox'>Apply to all versions.
-		  </label>
+	      <div class='row'>
+		<div class='col-sm-9 col-sm-offset-3'>
+		  <div class='checkbox format-me' data-key='profile_disabled'
+		       data-compact='yep'>
+                    <label>
+		      <input name='profile_disabled'
+			     <%- formfields.profile_disabled %>
+			     data-key='profile_disabled'
+			     id='profile_disabled' value='checked'
+			     type='checkbox'>Disable profile.
+		      <a href='#' class='btn btn-xs'
+			 style="padding-left: 0px"
+			 data-toggle='popover'
+			 data-html='true'
+			 data-delay='{"hide":500}'
+			 data-content="Disable profile so that it cannot be
+				       instantiated.">
+			<span class='glyphicon glyphicon-question-sign'
+			      style='margin-bottom: 4px;'></span>
+		      </a>
+		    </label>
+                    <label>
+		      <input name='profile_disable_all'
+			     data-key='profile_disable_all'
+			     value='checked'
+			     type='checkbox'>Apply to all versions.
+		    </label>
+		  </div>
 		</div>
 	      </div>
-	    </div>
-	    <div class='row'>
-	      <div class='col-sm-9 col-sm-offset-3'>
-		<div class='checkbox format-me' data-key='profile_nodelete'
-		     data-compact='yep'>
-                  <label>
-		    <input name='profile_nodelete'
-			   <%- formfields.profile_nodelete %>
-			   data-key='profile_nodelete'
-			   id='profile_nodelete' value='checked'
-			   type='checkbox'>Lockdown profile.
-		    <a href='#' class='btn btn-xs'
-		       style="padding-left: 0px"
-		       data-toggle='popover'
-		       data-html='true'
-		       data-delay='{"hide":500}'
-		       data-content="Lockdown profile so that it cannot be
-				     deleted. This implies that images
-				     associated with this profile may not be
-				     deleted either.">
-		      <span class='glyphicon glyphicon-question-sign'
-			    style='margin-bottom: 4px;'></span>
-		    </a>
-		  </label>
-                  <label>
-		    <input name='profile_nodelete_all'
-			   data-key='profile_nodelete_all'
-			   value='checked'
-			   type='checkbox'>Apply to all versions.
-		  </label>
+	      <div class='row'>
+		<div class='col-sm-9 col-sm-offset-3'>
+		  <div class='checkbox format-me' data-key='profile_nodelete'
+		       data-compact='yep'>
+                    <label>
+		      <input name='profile_nodelete'
+			     <%- formfields.profile_nodelete %>
+			     data-key='profile_nodelete'
+			     id='profile_nodelete' value='checked'
+			     type='checkbox'>Lockdown profile.
+		      <a href='#' class='btn btn-xs'
+			 style="padding-left: 0px"
+			 data-toggle='popover'
+			 data-html='true'
+			 data-delay='{"hide":500}'
+			 data-content="Lockdown profile so that it cannot be
+				       deleted. This implies that images
+				       associated with this profile may not be
+				       deleted either.">
+			<span class='glyphicon glyphicon-question-sign'
+			      style='margin-bottom: 4px;'></span>
+		      </a>
+		    </label>
+                    <label>
+		      <input name='profile_nodelete_all'
+			     data-key='profile_nodelete_all'
+			     value='checked'
+			     type='checkbox'>Apply to all versions.
+		    </label>
+		  </div>
 		</div>
 	      </div>
-	    </div>
 	    <% } %>
 
 	    <!-- The private URL -->
 	    <% if (0) { %>
-	    <input name="profile_version_url"
-		   value="<%- formfields.profile_version_url %>"
-		   id='profile_url' readonly
-                   class='form-control format-me'
-		   data-key='profile_url'
-		   data-label='Shared URL'
-		   data-help='Anyone with this URL can instantiate
-		                 this <b>version</b> of your profile'
-                   type='text'>
+	      <input name="profile_version_url"
+		     value="<%- formfields.profile_version_url %>"
+		     id='profile_url' readonly
+                     class='form-control format-me'
+		     data-key='profile_url'
+		     data-label='Shared URL'
+		     data-help='Anyone with this URL can instantiate
+		                this <b>version</b> of your profile'
+                     type='text'>
 	    <% } %>
 	  </fieldset>
 	  
@@ -638,12 +663,12 @@
 	  <div class='form-group'>
             <div class='col-sm-offset-2 col-sm-10'>
 	      <% if (!viewing || canmodify) { %>
-              <button class='btn btn-primary btn-xs pull-right' disabled
-                      id='profile_submit_button'
-                      style='margin-right: 10px;'
-                      type='submit' name='create'>
-		<%- button_label %>	
-	      </button>
+		<button class='btn btn-primary btn-xs pull-right' disabled
+			id='profile_submit_button'
+			style='margin-right: 10px;'
+			type='submit' name='create'>
+		  <%- button_label %>	
+		</button>
 	      <% } %>
 	      <% if (viewing) { %>
 		<% if (!disabled) { %>
@@ -658,9 +683,9 @@
 			  data-delay='{"hide":1500, "show":250}'
 			  data-html='true'
 			  data-content="When you instantiate as a guest, you get
-			       to see exactly how another user will
-			       experience your profile. This allows you to
-			       better debug your profile for other users">
+					to see exactly how another user will
+					experience your profile. This allows you to
+					better debug your profile for other users">
 		      <button class='btn btn-success btn-xs' disabled
 			      id='guest_instantiate_button'
 			      style='margin-right: 10px;'
@@ -679,11 +704,11 @@
 		     data-delay='{"hide":1500, "show":250}'
 		     data-html='true'
 		     data-content="When you <em>copy</em> (instead of
-                    clone), you are creating a new profile that
-		    uses the same source code and metadata (description,
-		    instructions) as the original profile, but without
-		    creating a new disk image. Instead, the new profile uses
-		    whatever images the original profile uses."> 
+				   clone), you are creating a new profile that
+				   uses the same source code and metadata (description,
+				   instructions) as the original profile, but without
+				   creating a new disk image. Instead, the new profile uses
+				   whatever images the original profile uses."> 
                     Copy
 		  </a>
 		  <span class='pull-left'
@@ -716,7 +741,8 @@
 			data-delay='{"hide":1500, "show":250}'
 			data-html='true'
 			data-content="Publishing is like creating
-			      a <em>checkpoint</em>. Click for more info.">
+				      a <em>checkpoint</em>. Click for more
+				      info.">
 		    <button class='btn btn-success btn-xs' disabled
 			    id='profile_publish_button'
 			    style='margin-right: 10px;'
@@ -754,6 +780,146 @@
             <button class='btn btn-primary btn-sm'
 		    id='reuse_tour_button'
 		    type='button'>Reuse Tour</button>
+	  </center>
+	</div>
+      </div>
+    </div>
+  </div>
+  <!-- Convert to geni-lib -->
+  <div id='profile-convert-modal' class='modal fade' data-keyboard='false'>
+    <div class='modal-dialog'>
+      <div class='modal-content'>
+	<div class='modal-header text-center'>
+	  <big>Convert your profile to a geni-lib script</big>
+	</div>
+	<div class='modal-body'>
+	  <p>
+	    <a href="http://docs.cloudlab.us/geni-lib/index.html"
+	       target="_blank">geni-lib</a>
+	    is a tool that allows users to generate RSpec
+	    files from Python code. CloudLab offers the ability to use
+	    geni-lib scripts as the definition of a profile, rather
+	    then the more primitive RSpec format. When you <em>convert
+	    a profile to geni-lib</em>, the current rspec is auto
+	    converted to the equivalent geni-lib python code. After you
+	    <b>Save</b> the converted profile, subsequent changes to
+	    the profile source are made to the geni-lib python code
+	    instead of the XML (the XML is now read-only).
+	    Much more information about profiles
+	    and geni-lib scripts can be found in the
+	    <a href="<%- manual %>/geni-lib.html">manual</a>.
+	  </p>
+	  <p>
+	    Click on the <b>Confirm</b> button to proceed. You will be
+	    given a chance to view the new geni-lib python code. If
+	    you are happy with it, then be sure to <b>Save</b>
+	    the converted profile.
+	  </p>
+          <center>
+            <button class='btn btn-success btn-sm'
+		    id='profile-convert-confirm'
+		    style='margin-right: 10px;'
+		    type='button' name='confirm'>Confirm
+	    </button>
+            <button class='btn btn-default btn-sm'
+		    data-dismiss='modal'
+                    type='button'>Cancel
+	    </button>
+	  </center>
+	</div>
+      </div>
+    </div>
+  </div>
+  <!-- Converted to geni-lib -->
+  <div id='profile-converted-modal' class='modal fade' data-keyboard='false'>
+    <div class='modal-dialog'>
+      <div class='modal-content'>
+	<div class='modal-header text-center'>
+	  <big>
+	    Your rspec has been sucessfully converted to a geni-lib script!
+	  </big>
+	</div>
+	<div class='modal-body'>
+	  <p>
+	    Be sure to <b>Save</b> your profile if
+	    are happy with the new geni-lib defintion.
+	  </p>
+          <center>
+            <button class='btn btn-success btn-sm'
+		    id='profile-converted-viewscript'
+		    style='margin-right: 10px;'
+		    type='button' name='confirm'>View Script
+	    </button>
+            <button class='btn btn-default btn-sm'
+		    data-dismiss='modal'
+                    type='button'>Close
+	    </button>
+	  </center>
+	</div>
+      </div>
+    </div>
+  </div>
+  <!-- Failed to convert to geni-lib -->
+  <div id='profile-convert-failed-modal' class='modal fade'
+       data-keyboard='false'>
+    <div class='modal-dialog'>
+      <div class='modal-content'>
+	<div class='modal-header text-center'>
+	  <big class="text-danger">
+	    Oops, we could not convert your rspec to geni-lib. 
+	  </big>
+	</div>
+	<div class='modal-body'>
+	  <p>
+	    The following error was reported. Typically it is a minor issue
+	    that is easily dealt with by making a small change to your rspec.
+	    If the error below does not make sense, then send us an email
+	    message, including the error and the profile name. We will help
+	    you fix it up.
+	  </p>
+	  <pre><code id="profile-conversion-failure-message"></code></pre>
+	  <br>
+          <center>
+            <button class='btn btn-default btn-sm'
+		    data-dismiss='modal'
+                    type='button'>Close
+	    </button>
+	  </center>
+	</div>
+      </div>
+    </div>
+  </div>
+  <!-- Warn about editing a portal converted geni-lib script -->
+  <div id='edit-genilib-warning-modal' class='modal'
+       data-keyboard='false'>
+    <div class='modal-dialog'>
+      <div class='modal-content'>
+	<div class='modal-header text-center'>
+	  <big class="text-danger">
+	    Warning!
+	  </big>
+	</div>
+	<div class='modal-body'>
+	  <p>
+	    By editing the geni-lib script directly, you will no longer be
+	    able to use Jacks to visually modify your topology. Click
+	    <b>Continue</b> if this is okay.
+	  </p>
+	  <p>
+	    If you want to keep
+	    using the visual topology editor, click <b>Cancel</b> and then
+	    click on <b>Edit Topology</b> to make changes.
+	  </p>
+          <center>
+            <button class='btn btn-success btn-sm'
+		    id='edit-genilib-continue'
+		    style='margin-right: 10px;'
+		    type='button'>Continue
+	    </button>
+            <button class='btn btn-default btn-sm'
+		    data-dismiss='modal'
+                    type='button'>Cancel
+	    </button>
 	  </center>
 	</div>
       </div>

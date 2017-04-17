@@ -220,6 +220,12 @@ function Do_Create()
                    htmlspecialchars($formfields["profile_script"]) .
                    "</value>");
             fwrite($fp, "</attribute>\n");
+            if (isset($formfields["portal_converted"]) &&
+                $formfields["portal_converted"] == "yes") {
+                fwrite($fp, "<attribute name='portal_converted'>");
+                fwrite($fp, "  <value>1</value>");
+                fwrite($fp, "</attribute>\n");
+            }
         }
         if (isset($formfields["profile_repourl"]) &&
             $formfields["profile_repourl"] != "") {
@@ -1136,6 +1142,55 @@ function Do_ConvertClassic()
 	SPITAJAX_RESPONSE(array("script"  => $script));
     }
     unlink($outfname);
+}
+
+#
+# Convert rspec to geni-lib script.
+#
+function Do_ConvertRspec()
+{
+    global $this_user, $suexec_output;
+    global $ajax_args;
+    
+    $this_idx = $this_user->uid_idx();
+    $this_uid = $this_user->uid();
+
+    if (!isset($ajax_args["rspec"])) {
+	SPITAJAX_ERROR(1, "Missing rspec");
+	return;
+    }
+    $infname  = tempnam("/tmp", "convertin");
+    $outfname = tempnam("/tmp", "convertout");
+    $rspecfname = tempnam("/tmp", "convertoutrspec");
+    
+    $fp = fopen($infname, "w");
+    fwrite($fp, $ajax_args["rspec"]);
+    fclose($fp);
+    chmod($infname, 0666);
+    chmod($outfname, 0666);
+    chmod($rspecfname, 0666);
+
+    #
+    # Invoke the backend.
+    #
+    $retval = SUEXEC($this_uid, "nobody",
+                     "webrspec2genilib -r -s $rspecfname -o $outfname $infname",
+		     SUEXEC_ACTION_IGNORE);
+    
+    if ($retval != 0) {
+        #
+        # All errors go to the user for now.
+        #
+        SPITAJAX_ERROR($retval, $suexec_output);
+    }
+    else {
+	$script = file_get_contents($outfname);
+	SPITAJAX_RESPONSE(array("script"  => $script,
+                                "rspec"   => file_get_contents($rspecfname)));
+    }
+    unlink($infname);
+    unlink($outfname);
+    unlink($rspecfname);
 }
 
 #

@@ -468,6 +468,11 @@ sub Create($$$$$$)
 	$vquery .= ",repohash=" . DBQuoteSpecial($argref->{'repohash'});
 	$vquery .= ",repokey="  . DBQuoteSpecial($argref->{'repokey'});
     }
+    if (exists($argref->{'portal_converted'}) &&
+	$argref->{'portal_converted'} ne "") {
+	$vquery .= ",portal_converted="  .
+	    DBQuoteSpecial($argref->{'portal_converted'});
+    }
 
     # Back to the main table.
     $cquery .= ",uuid='$puuid'";

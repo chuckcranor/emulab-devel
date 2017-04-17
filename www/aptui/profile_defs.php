@@ -138,6 +138,7 @@ class Profile
     function parent_profileid()    { return $this->field('parent_profileid'); }
     function parent_version()      { return $this->field('parent_version'); }
     function profile_nodelete()    { return $this->field('profile_nodelete'); }
+    function portal_converted()    { return $this->field('portal_converted'); }
 
     # Private means only in the same project.
     function IsPrivate() {

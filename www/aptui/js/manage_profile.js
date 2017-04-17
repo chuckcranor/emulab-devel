@@ -35,7 +35,8 @@ $(function ()
     var isppprofile  = false;
     var isadmin      = 0; 
     var multisite    = 0; 
-    var APT_NS = "http://www.protogeni.net/resources/rspec/ext/apt-tour/1";
+    var APT_NS    = "http://www.protogeni.net/resources/rspec/ext/apt-tour/1";
+    var EMULAB_NS = "http://www.protogeni.net/resources/rspec/ext/emulab/1";
     var manageTemplate    = _.template(manageString);
     var waitwaitTemplate  = _.template(waitwaitString);
     var rendererTemplate  = _.template(rendererString);
@@ -47,6 +48,7 @@ $(function ()
     var gitrepoTemplate   = _.template(gitrepoString);
     var plistTemplate     = _.template(plistString);
     var stepsInitialized  = false;
+    var portal_converted  = false;
 
     var pythonRe = /^import/m;
     var tclRe    = /^source tb_compat/m;
@@ -84,6 +86,10 @@ $(function ()
 	// Ditto a script.
 	if (_.has(fields, "profile_script") && fields["profile_script"] != "") {
 	    gotscript = 1;
+	    if (_.has(fields, "portal_converted") &&
+		fields["portal_converted"] == "yes") {
+		portal_converted = 1;
+	    }
 	}
 	// Ditto a repourl
 	if (_.has(fields, "profile_repourl") &&
@@ -124,6 +130,7 @@ $(function ()
 	    notifyupdate:	window.UPDATED,
 	    viewing:		window.VIEWING,
 	    gotrspec:		gotrspec,
+	    gotscript:		gotscript,
 	    action:		window.ACTION,
 	    button_label:       window.BUTTONLABEL,
 	    version_uuid:	window.VERSION_UUID,
@@ -134,6 +141,7 @@ $(function ()
 	    canmodify:		window.CANMODIFY,
 	    canpublish:		window.CANPUBLISH,
 	    isadmin:		window.ISADMIN,
+	    isstud:		window.ISSTUD,
 	    history:		window.HISTORY,
 	    activity:		window.ACTIVITY,
 	    manual:             window.MANUAL,
@@ -158,9 +166,6 @@ $(function ()
 	$('#waitwait_div').html(waitwait_html);
     	var showtopo_html = showtopoTemplate({});
         $('#showtopomodal_div').html(showtopo_html);
-        var isViewer = gotscript;
-	editor = new JacksEditor($('#editmodal_div'),
-				 isViewer, false, false, false, !multisite);
     	var renderer_html = rendererTemplate({});
 	$('#renderer_div').html(renderer_html);
     	var oops_html = oopsTemplate({});
@@ -199,6 +204,44 @@ $(function ()
 	    placement: 'auto',
 	    container: 'body',
 	});
+	// But the repo push URL is handled differently.
+	var urlstring = 
+	    "<div style='width 100%'> "+
+	    "  <input readonly type=text id='push-url-input' " +
+	    "       style='display:inline; width: 93%; padding: 2px;' " +
+	    "       class='form-control input-sm' "+
+	    "       value='" + fields.profile_repopushurl + "'>" +
+	    "  <a href='#' class='btn btn-xs' id='push-url-copy' " +
+	    "     style='padding: 0px'>" +
+	    "    <span class='glyphicon glyphicon-copy'></span></a></div>";
+	
+	$('#push-url').click(function (e) {
+	    console.info("push-url click");
+	    if ($('#push-url-input').length == 0) {
+		$('#push-url').popover({
+		    html:     true,
+		    content:  urlstring,
+		    trigger:  'manual',
+		    placement:'auto',
+		    container:'body',
+		});
+		$('#push-url').popover('show');
+		$('#push-url-copy').click(function (e) {
+		    e.preventDefault();
+		    $('#push-url-input').select();
+		    document.execCommand("copy");
+		    $('#push-url').popover('destroy');
+		});
+		$('#push-url-input').click(function (e) {
+		    e.preventDefault();
+		    $('#push-url').popover('destroy');
+		});
+	    }
+	    else {
+		$('#push-url').popover('destroy');
+	    }
+	});
+	
 	// Format dates with moment before display.
 	$('.format-date').each(function() {
 	    var date = $.trim($(this).html());
@@ -243,7 +286,17 @@ $(function ()
 
 	$('#edit_topo_modal_button').click(function (event) {
 	    event.preventDefault();
-	    editor.show($('#profile_rspec_textarea').val(), changeRspec);
+	    editor.show($('#profile_rspec_textarea').val(),
+			function (newrspec) {
+			    // Only for a new profile or profile converted
+			    if (!fromrepo && portal_converted) {
+				ConvertToGenilib(newrspec);
+			    }
+			    else {
+				// Plain old rspec. SAD!
+				changeRspec(newrspec);
+			    }
+			});
 	});
 	// The Show Source button.
 	$('#show_source_modal_button').click(function (event) {
@@ -251,7 +304,7 @@ $(function ()
 	    // The "source" is either the script or the XML if there
 	    // is no script.
 	    //
-	    var source = $.trim($('#profile_script_textarea').val());
+	    var source = $('#profile_script_textarea').val();
 	    var type   = "source";
 	    if (source.length > 0 &&
 		(window.ACTION === 'edit' ||
@@ -259,7 +312,7 @@ $(function ()
 	        openEditor(source);
 	    } else {
 	        if (source.length === 0) {
-		    source = $.trim($('#profile_rspec_textarea').val());
+		    source = $('#profile_rspec_textarea').val();
 		  type = "rspec";
 		}
 	        if (profile_uuid) {
@@ -415,6 +468,14 @@ $(function ()
 	    event.preventDefault();
 	    HandleGitRepoUpdate();
 	});
+	// Convert rspec profile to geni-lib
+	$('#profile-convert-confirm').click(function (event) {
+	    event.preventDefault();
+	    sup.HideModal('#profile-convert-modal',
+			  function () {
+			      ConvertToGenilib();
+			  });
+	});
 
 	//
 	// Perform actions on the rspec before submit.
@@ -547,6 +608,8 @@ $(function ()
 	    $('#profile_instructions').prop("disabled", true);
 	    $('#profile_description').prop("disabled", true);
 	}
+	CreateJacksEditor();
+	
 	//
 	// Show/Hide the Update Successful animation.
 	//
@@ -638,7 +701,30 @@ $(function ()
 	    // the server to be "run", which returns XML.
 	    //
 	    if (newRspec != $('#profile_script_textarea').val()) {
-		checkScript(newRspec, repoupdate_callback);
+		console.info("geni-lib code has changed");
+		if (portal_converted) {
+		    /*
+		     * User might not want to proceed down this path,
+		     * will not be able to use Jacks. 
+		     */
+		    $('#edit-genilib-continue').click(function(event) {
+			sup.HideModal('#edit-genilib-warning-modal',
+				      function () {
+					  MarkPortalConverted(false);
+					  CreateJacksEditor();
+					  checkScript(newRspec,
+						      repoupdate_callback);
+				      });
+		    });
+		    sup.ShowModal('#edit-genilib-warning-modal',
+				  function () {
+				      $('#edit-genilib-continue').off("click");
+				  });
+		    return;
+		}
+		else {
+		    checkScript(newRspec, repoupdate_callback);
+		}
 	    }
 	    else if (repoupdate_callback !== undefined) {
 		repoupdate_callback(false /* unmodified. */);
@@ -919,6 +1005,7 @@ $(function ()
 	    if (gotscript) {
 		$('#profile_instructions').prop("readonly", true);
 		$('#profile_description').prop("readonly", true);
+		$('.geni-lib-warning').removeClass("hidden");
 	    }
 	    else {
 		// Allow editing the boxes now that we have an rspec.
@@ -988,6 +1075,7 @@ $(function ()
 	    var text = $(this).text();
 	    $('#profile_instructions').val(text);
 	});
+	
 	//
 	// First time we see the XML, grab step data out of it. But after
 	// that the steps table is authoritative, and so we sync the table
@@ -1245,13 +1333,13 @@ $(function ()
 	    if (json.value.rspec != "") {
 		gotscript = 1;
 		NewRspecHandler(json.value.rspec);
+		if (repoupdate_callback !== undefined) {
+		    repoupdate_callback(true /* modified */);
+		}
 		// Force this; the script is obviously different, but the
 		// the XML might be exactly same. Still want to save it.
 		if (!fromrepo || window.ACTION == "create") {
 		    ProfileModified();
-		}
-		if (repoupdate_callback !== undefined) {
-		    repoupdate_callback(true /* modified */);
 		}
 		// Show the XML source button.
 		$('#show_xml_modal_button').removeClass("hidden");
@@ -1272,7 +1360,7 @@ $(function ()
 	    // Pass along uuid as a flag to update repo.
 	    args["repoupdate"] = version_uuid;
 	}
-	WaitWait("We are converting your geni-lib script to an rspec");
+	WaitWait("We are converting your geni-lib script to XML");
 	var xmlthing = sup.CallServerMethod(ajaxurl,
 					    "manage_profile",
 					    "CheckScript", args);
@@ -1459,8 +1547,67 @@ $(function ()
     {
         if (source !== null)
         {
-            changeRspec(source);
+	    changeRspec(source);
         }
+    }
+
+    function ConvertToGenilib(rspec)
+    {
+	var converting = false;
+	
+	// Coming out of Jacks, otherwise a conversion.
+	if (rspec !== undefined) {
+	    changeRspec(rspec);
+	}
+	else {
+	    rspec = $.trim($('#profile_rspec_textarea').val());
+	    converting = true;
+	}
+	
+	/*
+	 * Convert rspec to geni-lib
+	 */
+	var callback = function(json) {
+	    sup.HideWaitWait();
+	    console.info(json.value);
+	    if (json.code) {
+		$('#profile-conversion-failure-message').html(json.value);
+		sup.ShowModal('#profile-convert-failed-modal');
+		return;
+	    }
+	    gotscript = 1;
+	    $('#profile_script_textarea').val(json.value.script);
+	    NewRspecHandler(json.value.rspec);
+	    ProfileModified();
+	    // Show the XML source button.
+	    $('#show_xml_modal_button').removeClass("hidden");
+	    // A conversion, throw up post conversion modal
+	    if (converting) {
+		MarkPortalConverted(true);
+		// Hide the conversion button.
+		$('#profile_convert_button').addClass("hidden");
+		// Bind function to switch to the editor.
+		$('#profile-converted-viewscript').click(function(event) {
+		    sup.HideModal('#profile-converted-modal',
+				  function () {
+				      openEditor(json.value.script);
+				  });
+		});
+		sup.ShowModal('#profile-converted-modal');
+	    }
+	};
+	if (converting) {
+	    WaitWait("Please wait while we convert your rspec to geni-lib");
+	}
+	else {
+	    WaitWait();
+	}
+	var xmlthing = sup.CallServerMethod(ajaxurl,
+					    "manage_profile",
+					    "ConvertRspec",
+					    {"rspec" : rspec});
+	xmlthing.done(callback);
+
     }
 
     function ShowDeletionWarning(images)
@@ -1529,6 +1676,24 @@ $(function ()
 					    "manage_profile", "GetRepoHash",
 					    {"uuid"   : version_uuid});
 	xmlthing.done(callback);
+    }
+
+    function CreateJacksEditor()
+    {
+        var isViewer = gotscript && !portal_converted;
+	if (editor) {
+	    $('#editmodal_div').empty();
+	}
+	editor = new JacksEditor($('#editmodal_div'),
+				 isViewer, false, false, false, !multisite);
+    }
+
+    function MarkPortalConverted(converted)
+    {
+	portal_converted = converted;
+	// Mark the form as containing a converted script.
+	$('#quickvm_create_profile_form ' +
+	  '[name=portal_converted]').val(converted ? "yes" : "no");
     }
 
     $(document).ready(initialize);
