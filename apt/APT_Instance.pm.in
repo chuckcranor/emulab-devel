@@ -994,6 +994,9 @@ sub UpdateImageStatus($$)
     if (!defined($webtask)) {
 	goto done;
     }
+    # This could be really stale, must refresh.
+    $webtask->Refresh();
+    
     #
     # This will need to change; we can get updates from polling or
     # from the event stream. The events are processed out of band from
