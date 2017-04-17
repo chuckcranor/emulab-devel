@@ -7198,6 +7198,7 @@ sub CheckTicket($$)
 sub AddKeys($$$)
 {
     my ($slice, $owner, $keys) = @_;
+    my $errmsg = "Malformed keys argument; not an array";
 
     goto bad
 	if (! (ref($keys) && ref($keys) eq "ARRAY"));
@@ -7209,18 +7210,24 @@ sub AddKeys($$$)
     }
 
     my $keychecker = sub {
-	my ($arg) = @_;
+	my ($arg, $perrmsg) = @_;
 
-	return -1
-	    if (! (ref($arg) && ref($arg) eq "HASH"));
+	if (! (ref($arg) && ref($arg) eq "HASH")) {
+	    $$perrmsg = "Malformed key argument, not a hash";
+	    return -1;
+	}
 
 	my $key  = $arg->{'key'};
 	my $type = $arg->{'type'};
 
-	return -1
-	    if (! (defined($arg) && defined($arg) &&
-		   $key ne "" && $type ne ""));
-	
+	if (! (defined($key) && $key ne "")) {
+	    $$perrmsg = "Missing key in hash";
+	    return -1;
+	}
+	if (! (defined($type) && $type ne "")) {
+	    $$perrmsg = "Missing type in hash";
+	    return -1;
+	}
 	return 0;
     };
 
@@ -7233,28 +7240,42 @@ sub AddKeys($$$)
     #
     if (exists($keys->[0]->{'urn'}) || exists($keys->[0]->{'login'})) {
 	foreach my $ref (@{ $keys }) {
-	    goto bad
-		if (ref($ref) ne "HASH");
-	    goto bad
-		if (! (exists($ref->{'urn'}) || exists($ref->{'login'})));
-
-	    my @keylist = ();
-	    
-	    foreach my $keyref (@{ $ref->{'keys'} }) {
-		goto bad
-		    if (&$keychecker($keyref) != 0);
-
-		push(@keylist, $keyref->{'key'});
+	    if (ref($ref) ne "HASH") {
+		$errmsg = "Not a hash";
+		goto bad;
 	    }
+	    if (! (exists($ref->{'urn'}) || exists($ref->{'login'}))) {
+		$errmsg = "Key hash missing urn or login";
+		goto bad;
+	    }
+	    my @keylist = ();
 	    my $urn;
 	    my $uid;
 	    my $name;
 	    my $email;
 
-	    $urn = $ref->{'urn'} if (exists($ref->{'urn'}));
+	    if (exists($ref->{'urn'})) {
+		$urn = $ref->{'urn'};
+		if (!GeniHRN::IsValid($urn)) {
+		    $errmsg = "Not a valid urn: '$urn'";
+		    goto bad;
+		}
+		$urn = GeniHRN->new($urn);
+		goto error
+		    if (!defined($urn));
+		if (! (defined($urn->type()) && $urn->IsUser() &&
+		       defined($urn->id()) && $urn->id() ne "")) {
+		    $errmsg = "Not a valid user urn: '$urn'";
+		    goto bad;
+		}
+	    }
+	    else {
+		$errmsg = "Missing urn in key argument";
+		goto bad;
+	    }
 	    # Allow user to override urn token.
 	    $uid = $ref->{'login'} if (exists($ref->{'login'}));
-	    
+ 
 	    # The slice owner is easy.
 	    if (defined($urn) && $urn eq $owner->urn()) {
 		$name  = $owner->name();
@@ -7269,11 +7290,7 @@ sub AddKeys($$$)
 		# might not even be a valid uid for Emulab. 
 		#
 		if (!defined($uid)) {
-		    my (undef,$type,$id) = GeniHRN::Parse($urn);
-		    if (!defined($id) || $type ne "user") {
-			goto bad;
-		    }
-		    $uid = $id;
+		    $uid = $urn->id();
 		}
 		$name = $uid;
 		$email = "root\@localhost";
@@ -7282,10 +7299,17 @@ sub AddKeys($$$)
 		my $digest = sha1_hex($uid);
 		$digest = substr($digest, 0, 7);
 		$uid = lc("u${digest}");
-		if (GeniUser->ValidUserID($uid)) {
+		if (! GeniUser->ValidUserID($uid)) {
 		    print STDERR "Cannot form a uid for $name\n";
 		    goto bad;
 		}
+	    }
+	    foreach my $keyref (@{ $ref->{'keys'} }) {
+		if (&$keychecker($keyref, \$errmsg) != 0) {
+		    $errmsg = "Bad key argument for '$urn': $errmsg";
+		    goto bad;
+		}
+		push(@keylist, $keyref->{'key'});
 	    }
 	    $slice_experiment->BindNonLocalUser(\@keylist,
 						$uid, $urn,
@@ -7298,7 +7322,7 @@ sub AddKeys($$$)
 	
 	foreach my $keyref (@{ $keys }) {
 	    goto bad
-		if (&$keychecker($keyref) != 0);
+		if (&$keychecker($keyref, \$errmsg) != 0);
 
 	    push(@keylist, $keyref->{'key'});
 	}
@@ -7311,7 +7335,7 @@ sub AddKeys($$$)
     }
     return 0;
   bad:
-    return GeniResponse->Create(GENIRESPONSE_BADARGS, undef, "Malformed keys");
+    return GeniResponse->Create(GENIRESPONSE_BADARGS, undef, $errmsg);
   error:
     return GeniResponse->Create(GENIRESPONSE_ERROR, undef, "Internal Error");
 }
