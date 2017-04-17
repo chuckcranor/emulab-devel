@@ -1151,20 +1151,25 @@ sub LoadVirtNodes($)
 	$nodetype = NodeType->LookupAny($type);
 	if (!defined($nodetype)) {
 	    my $vtype = $self->virttypeisvtype($type);
-	    if (!defined($vtype)) {
-		warn("Improper type $type for node $vnode!\n");
-		return -1;
-	    }
-	    #
-	    # For now, just pick the first member type.
-	    #
-	    my @memberlist = split(" ", $vtype->members());
-	    my $vtypename  = $memberlist[0];
-
-	    $nodetype = NodeType->LookupAny($vtypename);
-	    if (!defined($nodetype)) {
-		warn("Improper type $vtypename in vtypes for node $vnode!\n");
+	    if (defined($vtype)) {
+		# For now, just pick the first member type.
+		my @memberlist = split(" ", $vtype->members());
+		my $vtypename = $memberlist[0];
+		$nodetype = NodeType->Lookup($vtypename);
+		if (!defined($nodetype)) {
+		    warn("Improper type $vtypename in vtype $type ".
+			 "for node $vnode!\n");
 		    return -1;
+		}
+	    }
+	    else {
+		my @memberlist = NodeType->GlobalVtypeTypes($type);
+		if (!@memberlist) {
+		    warn("Improper type $type for node $vnode!\n");
+		    return -1;
+		}
+		# For now, just pick the first member type.
+		$nodetype = $memberlist[0];
 	    }
 	    $isvtyped = 1;
 	}
@@ -5886,7 +5891,14 @@ sub AllocVirtNodes($)
 	    
 	    if ($virtnode->_isdynamic()) {
 		# Always use the base type ... node type system sucks.
-		my $basetype = $virtnode->_typeinfo()->type();
+		my $basetype;
+
+		if ($virtnode->_typeinfo()->IsAuxType()) {
+		    $basetype = $virtnode->_typeinfo()->BaseType()->type();
+		}
+		else {
+		    $basetype = $virtnode->_typeinfo()->type();
+		}
 
 		#
 		# We might be expecting to allocate a shared vnode on
