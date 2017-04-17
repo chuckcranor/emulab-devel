@@ -1657,7 +1657,7 @@ sub GenerateStatusBlob($)
 	"client_id"     => $nickname,
 	"state"         => $state,
 	"status"        => $status,
-	# We do not put this unless its for SliverStatus. Too big.
+	# We do not put this in unless its for SliverStatus. Too big.
 	"error"         => "",
 	"rawstate"      => $node->eventstate(),
 	"nodestatus"    => $nodestatus,
