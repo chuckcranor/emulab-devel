@@ -1,6 +1,6 @@
 #!/bin/sh
 #
-# Copyright (c) 2000-2015 University of Utah and the Flux Group.
+# Copyright (c) 2000-2017 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -160,6 +160,18 @@ fi
 # NOTE: we change "sio" to "sio1" and "vga" to "vid" for convenience later
 #
 CONSOLE=${SLICEFIX_CONSOLE:-'unknown'}
+
+# If CONSOLE has optional ",speed" parse it off and use that, ow 115200.
+case $CONSOLE in
+*,*)
+    SPEED=${CONSOLE##*,}
+    CONSOLE=${CONSOLE%%,*}
+    ;;
+*)
+    SPEED=115200
+    ;;
+esac
+
 case $CONSOLE in
 sio)
     CONSOLE=sio1
@@ -195,6 +207,23 @@ if [ $CONSOLE = "unknown" ]; then
 fi
 # XXX reset SLICEFIX_CONSOLE for the benefit of linux_slicefix
 SLICEFIX_CONSOLE=$CONSOLE
+
+# Console ISA port
+PORT=
+case $CONSOLE in
+sio1)
+    PORT="0x3F8"
+    ;;
+sio2)
+    PORT="0x2F8"
+    ;;
+sio3)
+    PORT="0x3E8"
+    ;;
+sio4)
+    PORT="0x2E8"
+    ;;
+esac
 
 # DOM0MEM is optional
 DOM0MEM=$SLICEFIX_DOM0MEM
@@ -238,6 +267,21 @@ getloadervar() {
     _last=`grep "^${_var}=" $_flist 2>/dev/null | tail -1`
     _val=`echo ${_last#*=} | sed -e 's/^"//' -e 's/"$//'`
     echo $_val
+}
+
+#
+# Make sshd more secure by default: no password based login.
+#
+dofixsshd() {
+    echo "  updating /etc/ssh/sshd_config"
+    cat <<EOF8 >>/mnt/etc/ssh/sshd_config
+
+# Emulab config
+Protocol 2
+PasswordAuthentication no
+ChallengeResponseAuthentication no
+PermitRootLogin without-password
+EOF8
 }
 
 dofreebsd() {
@@ -331,6 +375,7 @@ dofreebsd() {
 	changerootkeys=0
 	changezone=0
 	changentp=0
+	changesshd=0
 
 	fixit=0
 
@@ -546,6 +591,12 @@ dofreebsd() {
 
 	fi
 
+	if [ -r /mnt/etc/ssh/sshd_config ] && \
+	       ! grep -q '^# Emulab config' /mnt/etc/ssh/sshd_config; then
+	    changesshd=1
+	    fixit=1
+	fi
+
 	if [ $fixit -eq 0 ]; then
 		echo "  no changes necessary"
 		umount $rootdev
@@ -687,25 +738,21 @@ EOF0
 	    sio1)
 		cname="comconsole"
 		unit=0
-		port=0x3F8
 		irq=4
 		;;
 	    sio2)
 		cname="comconsole"
 		unit=1
-		port=0x2F8
 		irq=3
 		;;
 	    sio3)
 		cname="comconsole"
 		unit=2
-		port=0x3E8
 		irq=5
 		;;
 	    sio4)
 		cname="comconsole"
 		unit=3
-		port=0x2E8
 		irq=9
 		;;
 	    esac
@@ -735,21 +782,18 @@ EOF1
 		    fi
 		fi
 
-		# XXX should be passed in
-		speed=115200
-
 		# only change things if there were hints found
 		if [ $drv != "none" ]; then
 		    # put in the new info
 		    cat <<EOF2 >>/mnt/boot/loader.conf
-comconsole_port="$port"
-comconsole_speed="$speed"
+comconsole_port="$PORT"
+comconsole_speed="$SPEED"
 hint.$drv.0.flags="0x0"
 hint.$drv.1.flags="0x0"
 hint.$drv.2.flags="0x0"
 hint.$drv.3.flags="0x0"
 hint.$drv.$unit.at="isa"
-hint.$drv.$unit.port="$port"
+hint.$drv.$unit.port="$PORT"
 hint.$drv.$unit.irq="$irq"
 hint.$drv.$unit.flags="0x10"
 hint.$drv.$unit.disabled="0"
@@ -855,6 +899,10 @@ EOF1
 		umount $rootdev
 		return 1
 	    }
+	fi
+
+	if [ $changesshd -eq 1 ]; then
+	    dofixsshd
 	fi
 
 	# actually run any postconfig scripts if we're supposed to:

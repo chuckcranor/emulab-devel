@@ -1132,6 +1132,30 @@ sub fix_grub_console
 	return;
 }
 
+sub fix_sshd_config
+{
+	my ($imageroot) = @_;
+	my $cfile = "$imageroot/etc/ssh/sshd_config";
+
+	if (! -r $cfile ||
+	    !system("grep -q '^# Emulab config' $cfile 2>/dev/null")) {
+	    return;
+	}
+
+	print STDERR "Adding security options to SSHD config\n";
+	open FILE, ">>$cfile" || die "Couldn't open $cfile: $!\n";
+
+	print FILE "\n# Emulab config\n";
+	print FILE "Protocol 2\n";
+	print FILE "PasswordAuthentication no\n";
+	print FILE "ChallengeResponseAuthentication no\n";
+	print FILE "PermitRootLogin without-password\n";
+
+	close FILE;
+
+	return;
+}
+
 #
 # Localize the image. We only do this if the MFS we are running in
 # has the necessary files.
@@ -1453,6 +1477,7 @@ sub main
 
 	update_random_seed($imageroot);
 	localize($imageroot);
+	fix_sshd_config($imageroot);
 	hardwire_boss_node($imageroot);
 
 	# Run any postconfig scripts

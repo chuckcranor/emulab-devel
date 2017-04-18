@@ -254,6 +254,21 @@ getloadervar() {
     echo $_val
 }
 
+#
+# Make sshd more secure by default: no password based login.
+#
+dofixsshd() {
+    echo "  updating /etc/ssh/sshd_config"
+    cat <<EOF8 >>/mnt/etc/ssh/sshd_config
+
+# Emulab config
+Protocol 2
+PasswordAuthentication no
+ChallengeResponseAuthentication no
+PermitRootLogin without-password
+EOF8
+}
+
 dofreebsd() {
 	#
 	# ARGH!  FreeBSD 5, which primarily uses UFS2, internally converts
@@ -326,6 +341,7 @@ dofreebsd() {
 	changerootkeys=0
 	changezone=0
 	changentp=0
+	changesshd=0
 
 	fixit=0
 
@@ -539,6 +555,12 @@ dofreebsd() {
 		fi
 	    fi
 
+	fi
+
+	if [ -r /mnt/etc/ssh/sshd_config ] && \
+	       ! grep -q '^# Emulab config' /mnt/etc/ssh/sshd_config; then
+	    changesshd=1
+	    fixit=1
 	fi
 
 	if [ $fixit -eq 0 ]; then
@@ -830,6 +852,10 @@ EOF1
 		umount $rootdev
 		return 1
 	    }
+	fi
+
+	if [ $changesshd -eq 1 ]; then
+	    dofixsshd
 	fi
 
 	# actually run any postconfig scripts if we're supposed to:
@@ -1388,6 +1414,14 @@ EOF7
 	if [ -f /mnt/var/lib/random-seed -a -c /dev/urandom ]; then
 	    echo "  updating /var/lib/random-seed"
 	    dd if=/dev/urandom of=/mnt/var/lib/random-seed bs=512 count=1 >/dev/null 2>&1
+	fi
+
+	#
+	# Fixup sshd config
+	#
+	if [ -r /mnt/etc/ssh/sshd_config ] && \
+	       ! grep -q '^# Emulab config' /mnt/etc/ssh/sshd_config; then
+	    dofixsshd
 	fi
 
 	#
