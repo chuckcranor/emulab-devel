@@ -99,6 +99,7 @@ $PAGEHEADER_FUNCTION = function($thinheader = 0, $ignore1 = NULL,
     if (($login_user = CheckLogin($status)) != null) {
 	$login_status = $status;
 	$login_uid    = $login_user->uid();
+        $ga_userid    = $login_user->ga_userid();
     }
     if ($login_user && !($login_status & CHECKLOGIN_WEBONLY)) {
         $showmenus = 1;
@@ -140,10 +141,14 @@ $PAGEHEADER_FUNCTION = function($thinheader = 0, $ignore1 = NULL,
     
     if ($TBMAINSITE && !$embedded && file_exists("../google-analytics.php")) {
 	readfile("../google-analytics.php");
-	echo "<script type='text/javascript'>
-                ga('create', '$GOOGLEUA', 'auto');
-                ga('send', 'pageview');
-              </script>";
+	echo "<script type='text/javascript'>\n";
+        echo "  ga('create', '$GOOGLEUA', 'auto');\n";
+        if ($login_user) {
+            echo "  ga('set', 'userId', '$ga_userid');\n";
+        }
+        echo "  ga('send', 'pageview');\n";
+        echo "  window.GOOGLEUA  = '$GOOGLEUA';\n";
+        echo "</script>";
     }
 
     echo "

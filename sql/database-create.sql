@@ -5156,6 +5156,7 @@ CREATE TABLE `users` (
   `initial_passphrase` varchar(128) default NULL,
   `genesis` enum('emulab','aptlab','cloudlab','phantomnet') NOT NULL default 'emulab',
   `portal` enum('emulab','aptlab','cloudlab','phantomnet') default NULL,
+  `ga_userid` varchar(32) default NULL,
   PRIMARY KEY  (`uid_idx`),
   KEY `unix_uid` (`unix_uid`),
   KEY `status` (`status`),

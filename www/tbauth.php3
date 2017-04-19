@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2016 University of Utah and the Flux Group.
+# Copyright (c) 2000-2017 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -419,7 +419,12 @@ function LoginStatus() {
 	$CHECKLOGIN_STATUS = CHECKLOGIN_NOTLOGGEDIN;
 	return $CHECKLOGIN_STATUS;
     }
-
+    $ga_userid = $CHECKLOGIN_USER->ga_userid();
+    if (!$ga_userid) {
+        $ga_userid = substr(GENHASH(), 0, 32);
+        $CHECKLOGIN_USER->SetGaUserid($ga_userid);
+    }
+    
     #
     # Now add in the modifiers.
     #
@@ -884,6 +889,7 @@ function DOLOGIN($token, $password, $adminmode = 0, $nopassword = 0) {
 	$usr_name    = $user->name();
 	$uid_idx     = $user->uid_idx();
 	$usr_email   = $user->email();
+        $ga_userid   = $user->ga_userid();
 
 	# Check for frozen accounts. We do not update the IP record when
 	# an account is frozen.
@@ -918,6 +924,10 @@ function DOLOGIN($token, $password, $adminmode = 0, $nopassword = 0) {
 	#
 	# Pass!
 	#
+        if (!$ga_userid) {
+            $ga_userid = substr(GENHASH(), 0, 32);
+            $user->SetGaUserid($ga_userid);
+        }
         
         # But inactive users need special handling.
 	if ($user->status() == TBDB_USERSTATUS_INACTIVE) {

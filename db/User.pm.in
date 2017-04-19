@@ -225,6 +225,7 @@ sub nonlocal_type($)	{ return field($_[0], "nonlocal_type"); }
 sub IsLocal($)		{ return (defined($_[0]->nonlocal_id()) ? 0 : 1); };
 sub IsNonLocal($)	{ return (defined($_[0]->nonlocal_id()) ? 1 : 0); };
 sub portal($)		{ return field($_[0], "portal"); }
+sub ga_userid($)	{ return field($_[0], "ga_userid"); }
 sub Brand($)		{ return $_[0]->{'BRAND'}; }
 sub isAPT($)	        { return $_[0]->Brand()->isAPT() ? 1 : 0; }
 sub isCloud($)	        { return $_[0]->Brand()->isCloud() ? 1 : 0; }
@@ -614,6 +615,9 @@ sub Create($$$$)
     # And a verification key.
     my $verify_key = TBGenSecretKey();
 
+    # Google Analytics user id.
+    my $ga_userid = substr(TBGenSecretKey(), 0, 32);
+
     if (! $nouuid) {
 	# And a UUID (universally unique identifier).
 	$uuid = NewUUID();
@@ -637,6 +641,7 @@ sub Create($$$$)
     push(@insert_data, "verify_key='$verify_key'");
     push(@insert_data, "uid_idx='$uid_idx'");
     push(@insert_data, "uid='$uid'");
+    push(@insert_data, "ga_userid='$ga_userid'");
 
     if ($archived) {
 	#

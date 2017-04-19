@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2006-2016 University of Utah and the Flux Group.
+# Copyright (c) 2006-2017 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -347,6 +347,7 @@ class User
     function mailman_password() { return $this->field("mailman_password"); }
     function nonlocal_id()	{ return $this->field("nonlocal_id"); }
     function portal()	     { return $this->field("portal"); }
+    function ga_userid()     { return $this->field("ga_userid"); }
     function isAPT()	     { return ($this->portal() &&
                                        $this->portal() == "aptlab" ? 1 : 0); }
     function isCloud()	     { return ($this->portal() &&
@@ -1198,6 +1199,14 @@ class User
 			       ($expired_notokay ? "and expires > now()" : ""));
 					   
 	return mysql_num_rows($query_result);
+    }
+    function SetGaUserid($id) {
+	$idx = $this->uid_idx();
+
+	DBQueryFatal("update users set ga_userid='$id' ".
+		     "where uid_idx='$idx'");
+	$this->user["ga_userid"] = $id;
+	return 0;
     }
 
     #
