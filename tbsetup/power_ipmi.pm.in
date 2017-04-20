@@ -52,7 +52,7 @@ my $MS_NODEBRIDGEID = 0x7;
 my $MS_CARTBASEADDR = 0x82;
 my $MS_CARTBRIDGEID = 0x0;
 
-sub new($$$;$) {
+sub new($$$;$$) {
 
     # The next two lines are some voodoo taken from perltoot(1)
     my $proto = shift;
@@ -61,9 +61,13 @@ sub new($$$;$) {
     my $devicetype = shift;
     my $devicename = shift;
     my $debug = shift;
+    my $withsdr = shift;
 
     if (!defined($debug)) {
         $debug = 0;
+    }
+    if (!defined($withsdr)) {
+	$withsdr = 0;
     }
 
     if ($debug) {
@@ -73,6 +77,7 @@ sub new($$$;$) {
     my $self = {};
 
     $self->{DEBUG} = $debug;
+    $self->{WITHSDR} = $withsdr;
 
     $self->{DEVICETYPE} = $devicetype;
     $self->{DEVICENAME} = $devicename;
@@ -130,13 +135,17 @@ sub power($$@) {
     my $self = shift;
     my $op = shift;
     my @outlets = @_;
+    my %status = ();
 
     my $errors = 0;
-    my ($retval, $output);
+    my $force = 0;
 
     if    ($op eq "on")  { $op = "power on";    }
     elsif ($op eq "off") { $op = "power off";   }
     elsif ($op =~ /cyc/) {
+	if ($op eq "forcecycle") {
+	    $force = 1;
+	}
 	if ($self->{DEVICETYPE} eq "ipmi-ms") {
 	    $op = "power cycle";
 	} else {
@@ -144,7 +153,7 @@ sub power($$@) {
 	}
     }
 
-    ($errors, $output) = $self->_execipmicmd($op, @outlets);
+    $errors = $self->_execipmicmd($op, \@outlets, \%status, $force);
     if ($errors) {
         print STDERR $self->{DEVICENAME}, ": command '$op' failed for some/all outlets: @outlets\n";
     }
@@ -152,50 +161,68 @@ sub power($$@) {
     return $errors;
 }
 
-# XXX: This isn't actually hooked in, and won't work for the moonshot
-#      as it is.
-sub status($$$) {
+sub status($$@) {
     my $self = shift;
-    my $type = shift;
-    my $statusp = shift; # pointer to an associative (hashed) array (i.o.w. passed by reference)
-    my %status;          # local associative array which we'll pass back through $statusp
+    my $statusp = shift;
+    my @outlets = @_;
+    my %status;
 
     my $errors = 0;
     my ($retval, $output);
 
-    # XXX: No support for the moonshot right now.
-    if ($type eq "ipmi-ms") {
-	return 0;
-    }
-
     # Get power status (i.e. whether system is on/off)
-    ($retval,$output) = $self->_execipmicmd("power status");
+    $retval = $self->_execipmicmd("power status", \@outlets, \%status, 0);
     if ( $retval != 0 ) {
         $errors++;
         print STDERR $self->{DEVICENAME}, ": could not get power status from device\n";
     }
-    else { $status{'outlet1'} = $output; print("Power status is: $output\n") if $self->{DEBUG}; } # there's only 1 "outlet" on an IPMI card
-
 
     # Get Sensor Data Repository (sdr) entries and readings
-    ($retval,$output) = $self->_execipmicmd("sdr");
-    if ( $retval != 0 ) {
-        $errors++;
-        print STDERR $self->{DEVICENAME}, ": could not get sensor data from device\n";
-    }
-    else { $status{'sdr'} = $output; print("SDR data is:\n$output\n") if $self->{DEBUG}; }
+    # XXX needs work
+    if ($self->{WITHSDR}) {
+	my %lstatus = ();
 
+	$retval = $self->_execipmicmd("sdr", \@outlets, \%lstatus, 0);
+	if ( $retval != 0 ) {
+	    $errors++;
+	    print STDERR $self->{DEVICENAME}, ": could not get sensor data from device\n";
+	}
+	else {
+	    foreach my $outlet (@outlets) {
+		my $oname = "outlet" . $outlet;
+
+		$output = "UNKNOWN";
+		if (exists($lstatus{$oname})) {
+		    $output = $lstatus{$oname};
+		}
+		print("SDR data is:\n$output\n") if $self->{DEBUG};
+		$status{'sdr'} = $output;
+	    }
+	}
+    }
 
     if ($statusp) { %$statusp = %status; } # update passed-by-reference array
     return $errors;
 }
 
-sub _execipmicmd($$@) { # _ indicates that this is a private method (Perl convention)
-    my ($self, $op, @outlets) = @_;
+#
+# The returned status is expected to be:
+#
+#    $status{'outletN'} = <status string from command> (e.g., "on", "off")
+#
+# where N is the outlet number.
+#
+sub _execipmicmd($$$$$) {
+    my ($self, $op, $outletsp, $statusp, $force) = @_;
     my $exitval = 0;
-    my $output = "";
     my @results = ();
 
+    if (!defined($outletsp)) {
+	return 0;
+    }
+    
+    my $isstatus = ($op eq "power status") ? 1 : 0;
+    
     my $coderef = sub {
 	my $outlet = shift;
 	my $output = "";
@@ -214,35 +241,65 @@ sub _execipmicmd($$@) { # _ indicates that this is a private method (Perl conven
 	    $cmd = "$self->{IPMICMD} $op";
 	}
 
+      again:
 	print STDERR "**** Executing $cmd\n"
 	    if ($self->{DEBUG});
-	$output = `$cmd 2>&1`;             # get output of the $cmd, e.g. many lines of sensor readings or "Chassis power is on"
-	chomp ( $output );                 # remove the \n at the end, if any
+	$output = `$cmd 2>&1`;
+	chomp ( $output );
 
 	print STDERR "impitool output:\n$output\n"
 	    if ($self->{DEBUG});
 
 	if ($?) {
+	    # XXX special case handling of node powered off
+	    if ($output =~ /not supported in present state/) {
+		if ($force) {
+		    print "*** Cycle failed, trying power on instead.\n"
+			if ($self->{DEBUG} > 1);
+		    $cmd =~ s/power (cycle|reset)/power on/;
+		    $force = 0;
+		    goto again;
+		}
+	    }
 	    print STDERR "*** power_ipmi: ipmitool returned non-zero: $?\n";
 	    print STDERR "ipmitool output:\n$output\n";
 	    return -1;
 	}
+
+	# for a status command we have to interpret the output
+	if ($isstatus) {
+	    if ($output =~ /power is (off|on)/i) {
+		return ($1 eq "off") ? 0 : 1;
+	    }
+	    print STDERR "*** power_ipmi: unexpected power status:\n$output\n";
+	    return -1;
+	}
+
 	return 0;
     };
 
+    my @outlets = @$outletsp;
     if (ParRun(undef, \@results, $coderef, @outlets)) {
 	print STDERR "*** power_ipmi: Internal error in ParRun()!\n";
-	return (-1,undef);
+	return -1;
     }
     #
     # Check the exit codes. 
     #
-    foreach my $result (@results) {
-	++$exitval
-	    if ($result != 0);
+    for (my $ix = 0; $ix < @outlets; $ix++) {
+	my $outlet = "outlet" . $outlets[$ix];
+	my $rv = ($results[$ix] >> 8);
+	$statusp->{$outlet} = $rv;
+	if ($isstatus) {
+	    ++$exitval
+		if ($rv < 0);
+	} else {
+	    ++$exitval
+		if ($rv != 0);
+	}
     }
 
-    return ($exitval, $output);
+    return $exitval;
 }
 
 sub _mkmsmap() {
