@@ -117,8 +117,7 @@ sub new($$)
 		    };
 		    last SWITCH;
 		};
-		print STDERR "Unknown element is rspec_tour: $name\n";
-		return -1;
+		fatal("Unknown element in rspec_tour: $name\n");
 	    };
 	}
 	return
