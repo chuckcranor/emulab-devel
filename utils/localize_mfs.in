@@ -164,6 +164,36 @@ foreach my $extension ("lzma", "bz2", "gz") {
 # Oops, do not know what to do.
 fatal("Do not know what to do with $path");
 
+sub UpdateSSHD($$)
+{
+    my ($mpoint,$sfscript) = @_;
+    my $cfile = "$mpoint/etc/ssh/sshd_config";
+
+    if (-r "$mpoint$sfscript" &&
+	system("grep -q '# Emulab config' $mpoint$sfscript 2>/dev/null")) {
+	print STDERR "*** WARNING: slicefix script does not add Emulab sshd_config security options!\n";
+	print STDERR "  Upgrade your MFS.\n";
+    }
+
+    if (! -r "$cfile" ||
+	!system("grep -q '^# Emulab config' $cfile 2>/dev/null")) {
+	return 1;
+    }
+
+    open(FD, ">>$cfile")
+	or return 0;
+    print FD "\n# Emulab config\n";
+    print FD "Protocol 2\n";
+    print FD "PasswordAuthentication no\n";
+    print FD "ChallengeResponseAuthentication no\n";
+    print FD "PermitRootLogin without-password\n";
+    close(FD);
+
+    print "Updated sshd configuration.\n";
+
+    return 1;
+}
+
 #
 # Localize a FreeBSD MFS.
 #
@@ -269,6 +299,12 @@ sub LocalizeBSD()
 	== 0 or goto bad;
     ExecQuiet("echo '$passhash' | $PW -V $mpoint/etc usermod root -H 0")
 	== 0 or goto bad;
+
+    #
+    # Update sshd security
+    #
+    UpdateSSHD($mpoint, "/etc/testbed/slicefix")
+	or goto bad;
 
     #
     # IGB cruft; See the comment in loader.conf.orig about this. 
@@ -440,6 +476,12 @@ sub LocalizeLinux($)
 	      "              -e 's,^toor:\([^:]*\),toor:$passhash,' ".
 	      "     $pfile")
 	== 0 or goto bad;
+
+    #
+    # Update sshd security
+    #
+    UpdateSSHD($mpoint, "/etc/testbed/slicefix")
+	or goto bad;
 
     #
     # Mark as "localized". This tells slicefix that it should copy all
