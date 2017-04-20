@@ -39,9 +39,10 @@ sub usage()
     print STDERR "Usage: rspec2genilib ".
 	"[-o filename] [[-r] -s rspecfile] rspec\n";
     print STDERR "Options:\n";
-    print STDERR"  -o file  : Specify output file for geni-lib\n";
-    print STDERR"  -s file  : Specify output file for post geni-lib rspec\n";
-    print STDERR"  -r       : Regression test (run geni-lib, compare rspecs)\n";
+    print STDERR "  -d       - Turn on debugging\n";
+    print STDERR "  -o file  - Specify output file for geni-lib\n";
+    print STDERR "  -s file  - Specify output file for post geni-lib rspec\n";
+    print STDERR "  -r       - Regression test (run geni-lib, compare rspecs)\n";
     exit(-1);
 }
 my $optlist    = "do:rs:";
