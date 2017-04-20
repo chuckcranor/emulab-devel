@@ -933,6 +933,12 @@ elsif (!$doprovenance) {
     } else {
 	$command .= " $ofilename";
     }
+
+    #
+    # XXX always use ssh for now to get better log info; i.e., all
+    # the log info winds up in one logfile.
+    #
+    $usessh = 1;
 }
 #
 # Otherwise, use the new script with different argument syntax.
