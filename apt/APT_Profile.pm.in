@@ -543,13 +543,14 @@ sub NewVersion($$)
 			  "   creator,creator_idx,updater,updater_idx, ".
 			  "   created,uuid, ".
 			  "   parent_profileid,parent_version,rspec, ".
-			  "   script,paramdefs,reponame,repourl) ".
+			  "   script,paramdefs,reponame,repourl, ".
+			  "   portal_converted) ".
 			  "select name,profileid,'$newvers',pid,pid_idx, ".
 			  "  gid,gid_idx, ".
 			  "  creator,creator_idx,'$uid','$uid_idx',".
 			  "  now(),uuid(),'$profileid', ".
 			  "  '$version',rspec,script,paramdefs, ".
-			  "  reponame,repourl ".
+			  "  reponame,repourl,portal_converted ".
 			  "from apt_profile_versions as v ".
 			  "where v.profileid='$profileid' and ".
 			  "      v.version='$version'"));
