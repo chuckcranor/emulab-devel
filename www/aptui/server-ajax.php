@@ -124,6 +124,8 @@ $routing = array("myprofiles" =>
                                                      "Do_ConvertClassic",
 						 "ConvertRspec" =>
                                                      "Do_ConvertRspec",
+						 "RTECheck" =>
+                                                     "Do_RTECheck",
 						 "UpdateRepository" =>
                                                      "Do_UpdateRepository",
 						 "GetRepository" =>

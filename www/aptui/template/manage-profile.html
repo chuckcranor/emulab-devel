@@ -901,9 +901,16 @@
 	</div>
 	<div class='modal-body'>
 	  <p>
-	    By editing the geni-lib script directly, you will no longer be
-	    able to use Jacks to visually modify your topology. Click
-	    <b>Continue</b> if this is okay.
+	    You made a change to the geni-lib script that will make it
+	    impossible to continue using the Jacks topology editor
+	    (see below). Typically this is the result of adding a
+	    comment or a loop construct or something else that cannot
+	    be preserved when using Jacks.
+	  </p>
+	  <p>
+	    This is okay, but all future changes must be made to the
+	    geni-lib script. Click<b> Continue</b> if this is okay with
+	    you.
 	  </p>
 	  <p>
 	    If you want to keep
@@ -921,6 +928,8 @@
                     type='button'>Cancel
 	    </button>
 	  </center>
+	  <br>
+	  <pre><code id="rtecheck-failure-message"></code></pre>
 	</div>
       </div>
     </div>

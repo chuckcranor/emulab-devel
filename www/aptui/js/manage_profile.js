@@ -156,7 +156,8 @@ $(function ()
 	    withpublishing:     window.WITHPUBLISHING,
 	    genilib_editor:     false,
 	    canrepo:            window.CANREPO,
-	    fromrepo:           fromrepo
+	    fromrepo:           fromrepo,
+	    portal_converted:   portal_converted
 	});
 	manage_html = aptforms.FormatFormFieldsHorizontal(manage_html,
 							  {"wide" : true});
@@ -609,6 +610,7 @@ $(function ()
 	    $('#profile_description').prop("disabled", true);
 	}
 	CreateJacksEditor();
+	UpdateButtons();
 	
 	//
 	// Show/Hide the Update Successful animation.
@@ -643,7 +645,7 @@ $(function ()
 		initNotifyUpdate();
 	    }
 	    else if (gotscript) {
-		if (window.CLONING) {				
+		if (window.CLONING && !portal_converted) {
 		    sup.ShowModal('#warn_pp_modal');
 		}
 	    }
@@ -707,20 +709,7 @@ $(function ()
 		     * User might not want to proceed down this path,
 		     * will not be able to use Jacks. 
 		     */
-		    $('#edit-genilib-continue').click(function(event) {
-			sup.HideModal('#edit-genilib-warning-modal',
-				      function () {
-					  MarkPortalConverted(false);
-					  CreateJacksEditor();
-					  checkScript(newRspec,
-						      repoupdate_callback);
-				      });
-		    });
-		    sup.ShowModal('#edit-genilib-warning-modal',
-				  function () {
-				      $('#edit-genilib-continue').off("click");
-				  });
-		    return;
+		    rteCheckScript(newRspec);
 		}
 		else {
 		    checkScript(newRspec, repoupdate_callback);
@@ -969,6 +958,8 @@ $(function ()
 	newrspec     = $.trim(newrspec);
 	var oldrspec = $.trim($('#profile_rspec_textarea').val());
 	if (newrspec == oldrspec) {
+	    // In case rspec does not change.
+	    UpdateButtons();
 	    return;
 	}
 	var findEncoding = RegExp('^\\s*<\\?[^?]*\\?>');
@@ -994,14 +985,7 @@ $(function ()
 	    SyncSteps();
 	    if (!fromrepo)
 		ProfileModified();
-	    if ((!window.VIEWING || window.CANMODIFY) &&
-		!fromrepo && !gotscript) {
-	        $('#edit_topo_modal_button').html('Edit Topology');
-	    }
-	    else
-	    {
-	        $('#edit_topo_modal_button').html('View Topology');
-	    }
+	    UpdateButtons();
 	    if (gotscript) {
 		$('#profile_instructions').prop("readonly", true);
 		$('#profile_description').prop("readonly", true);
@@ -1321,7 +1305,7 @@ $(function ()
 
 	var callback = function(json) {
 	    sup.HideWaitWait();
-	    //console.info(json.value);
+	    console.info(json.value);
 
 	    if (json.code) {
 		sup.SpitOops("oops",
@@ -1576,6 +1560,9 @@ $(function ()
 		return;
 	    }
 	    gotscript = 1;
+	    if (converting) {
+		MarkPortalConverted(true);
+	    }
 	    $('#profile_script_textarea').val(json.value.script);
 	    NewRspecHandler(json.value.rspec);
 	    ProfileModified();
@@ -1583,7 +1570,6 @@ $(function ()
 	    $('#show_xml_modal_button').removeClass("hidden");
 	    // A conversion, throw up post conversion modal
 	    if (converting) {
-		MarkPortalConverted(true);
 		// Hide the conversion button.
 		$('#profile_convert_button').addClass("hidden");
 		// Bind function to switch to the editor.
@@ -1694,6 +1680,68 @@ $(function ()
 	// Mark the form as containing a converted script.
 	$('#quickvm_create_profile_form ' +
 	  '[name=portal_converted]').val(converted ? "yes" : "no");
+    }
+
+    function UpdateButtons()
+    {
+	console.info(window.VIEWING, window.CANMODIFY,
+		     fromrepo, gotscript, portal_converted);
+	    
+	if ((!window.VIEWING || window.CANMODIFY) &&
+	    !fromrepo && (!gotscript || portal_converted)) {
+	    $('#edit_topo_modal_button').html('Edit Topology');
+	}
+	else {
+	    $('#edit_topo_modal_button').html('View Topology');
+	}
+    }
+
+    /*
+     * The user has edited the geni-lib script for a portal converted profile.
+     * We attempt to determine of the change will be lost if we convert the
+     * generated rspec (from the new geni-lib script) back to geni-lib. If
+     * no difference in the edited python and the machine generated python,
+     * then life is good. If not, the use has made a change that will be lost
+     * so we have to convert to normal geni-lib script; jacks will now run
+     * in read-only mode, the user can *only* edit the script.
+     */
+    function rteCheckScript(script)
+    {
+	var callback = function (json) {
+	    console.info("rteCheckScript", json);
+	    // Was having a modal problem.
+	    sup.HideWaitWait(function () {
+		// No error, we are good to go.
+		if (json.code == 0) {
+		    checkScript(script);
+		    return;
+		}
+		else if (json.code < 0) {
+		    sup.SpitOops("oops", "Internal error processing script");
+		    return;
+		}
+		// A difference we cannot deal with.
+		$('#edit-genilib-continue').click(function(event) {
+		    sup.HideModal('#edit-genilib-warning-modal',
+				  function () {
+				      MarkPortalConverted(false);
+				      CreateJacksEditor();
+				      checkScript(script);
+				  });
+		});
+		$('#rtecheck-failure-message').html(json.value);
+		sup.ShowModal('#edit-genilib-warning-modal',
+			      function () {
+				  $('#edit-genilib-continue').off("click");
+			      });
+		return;
+	    });
+	};
+	WaitWait("Please wait while we take a look at your script");
+	var xmlthing = sup.CallServerMethod(ajaxurl,
+					    "manage_profile", "RTECheck",
+					    {"script"  : script});
+	xmlthing.done(callback);
     }
 
     $(document).ready(initialize);
