@@ -718,32 +718,60 @@ sub DoSnapshot()
 	$errcode = -2;
 	goto bad;
     }
-    elsif (defined($update_profile)) {
+    #
+    # We cannot change a geni-lib script profile, so no need to do this.
+    # But we can change a portal converted profile.
+    #
+    elsif (defined($update_profile) &&
+	   (!defined($profile->script()) || $profile->portal_converted())) {
 	#
-	# If successful, we create a new version of the profile and
-	# update the rspec to reflect the new image version. Note
-	# that we expect the CM is doing image versioning, so do not
-	# bother to check if the image version is actually new.
+	# New image. Might not have changed if the cluster is not doing
+	# image versions.
 	#
-	if ($doversions) {
-	    $profile = $profile->NewVersion($this_user);
-	    if (!defined($profile)) {
-		print STDERR "Could not create new profile version\n";
-		$webtask->Exited(70)
-		    if (defined($webtask));
-		exit(1);
-	    }
-	}
 	# DoImageTrackerStuff determined that we use whatever the cluster
 	# tells us, cause it is the home of the image.
-	$copyback_urn = $version_urn
+	#
+	my $newimage = $version_urn
 	    if ($usetracker && !defined($copyback_urn));
+	# And fall back to url
+	$newimage = $version_url
+	    if (!defined($newimage));
 
-	$profile->UpdateDiskImage($node_id,
-				  (defined($copyback_urn) ?
-				   $copyback_urn : $version_url),
-				  ($update_profile eq "all" ? 1 : 0));
-	$profile->InsertImageRecords();
+	#
+	# Okay, is the rspec going to change. This is kinda annoying to
+	# figure out, so lets just run the code in impotent mode and have
+	# it tell us the number of nodes that will get updated.
+	#
+	my $changed = 
+	    $profile->UpdateDiskImage($node_id, $newimage,
+				      ($update_profile eq "all" ? 1 : 0), 1);
+
+	if ($changed > 0) {
+	    #
+	    # Create a new version of the profile and update the rspec
+	    # to reflect the new image version. 
+	    #
+	    if ($doversions) {
+		$profile = $profile->NewVersion($this_user);
+		if (!defined($profile)) {
+		    print STDERR "Could not create new profile version\n";
+		    $webtask->Exited(70)
+			if (defined($webtask));
+		    exit(1);
+		}
+	    }
+	    $profile->UpdateDiskImage($node_id, $newimage,
+				      ($update_profile eq "all" ? 1 : 0), 0);
+	    $profile->InsertImageRecords();
+	    #
+	    # For a portal converted profile, we need to regen the script.
+	    #
+	    if ($profile->portal_converted()) {
+		if ($profile->Convert2Genilib() != 0) {
+		    fatal("Could not convert rspec to geni-lib");
+		}
+	    }
+	}
     }
     $instance->SetStatus("ready");
     $aggregate->SetStatus("ready");

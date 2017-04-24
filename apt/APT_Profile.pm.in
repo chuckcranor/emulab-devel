@@ -66,6 +66,7 @@ my $TBOPS         = "@TBOPSEMAIL@";
 my $OURDOMAIN     = "@OURDOMAIN@";
 my $MYURN         = "urn:publicid:IDN+${OURDOMAIN}+authority+cm";
 my $MAINSITE      = @TBMAINSITE@;
+my $CONVERTER     = "$TB/bin/rspec2genilib";
 
 # Concat id/vers.
 sub versid($)
@@ -939,9 +940,9 @@ sub Unlock($)
 # specified node, and if $all is set, we change all nodes with the
 # same original disk image as the specified node.
 #
-sub UpdateDiskImage($$@)
+sub UpdateDiskImage($$$$$)
 {
-    my ($self, $node_id, $newimage, $all) = @_;
+    my ($self, $node_id, $newimage, $all, $impotent) = @_;
     my $rspec = GeniXML::Parse($self->rspec());
     if (! defined($rspec)) {
 	print STDERR "UpdateDiskImage: Could not parse rspec\n";
@@ -952,78 +953,88 @@ sub UpdateDiskImage($$@)
     # all with the same image.
     #
     my @nodes = ();
+    my @list  = ();
     my $node;
 
-    # First find the specified node.
+    # First find the specified node and generate list to examine.
     foreach my $ref (GeniXML::FindNodes("n:node", $rspec)->get_nodelist()) {
 	if (GeniXML::GetVirtualId($ref) eq $node_id) {
 	    $node = $ref;
-	    last;
+	    push(@list, $node);
+	}
+	elsif ($all) {
+	    push(@list, $ref);
 	}
     }
     if (!defined($node)) {
 	print STDERR "$node_id not in rspec\n";
 	return -1;
     }
-    if ($all) {
-	#
-	# Pull out the disk url/urn of the specified node.
-	#
-	my $Odiskref = GeniXML::GetDiskImage($node);
-	my $image_urn;
-	my $image_url;
-	if (defined($Odiskref)) {
-	    $image_url = GeniXML::GetText("url", $Odiskref);
-	    $image_urn = GeniXML::GetText("name", $Odiskref);
-	    if (defined($image_url) || defined($image_urn)) {
-		# Watch for url in the name, flipflop. 
-		if (defined($image_urn) && $image_urn =~ /^http/) {
-		    $image_url = $image_urn;
-		    $image_urn = undef;
-		}
-	    }
-	}
-	#
-	# Now find all nodes using the same disk urn/url and change.
-	#
-	foreach my $ref (GeniXML::FindNodes("n:node", $rspec)->get_nodelist()) {
-	    my $diskref   = GeniXML::GetDiskImage($ref);
-	    #
-	    # If the both this node and the original node did not
-	    # specify a disk image, then we update it. 
-	    #
-	    if (!defined($diskref)) {
-		push(@nodes, $ref)
-		    if (!defined($Odiskref));
-		next;
-	    }
-	    my $this_url = GeniXML::GetText("url", $diskref);
-	    my $this_urn = GeniXML::GetText("name", $diskref);
-	    next
-		if (!(defined($image_url) || defined($image_urn)));
-
+    #
+    # Pull out the disk url/urn of the specified node.
+    #
+    my $Odiskref = GeniXML::GetDiskImage($node);
+    my $image_urn;
+    my $image_url;
+    if (defined($Odiskref)) {
+	$image_url = GeniXML::GetText("url", $Odiskref);
+	$image_urn = GeniXML::GetText("name", $Odiskref);
+	if (defined($image_url) || defined($image_urn)) {
 	    # Watch for url in the name, flipflop. 
-	    if (defined($this_urn) && $this_urn =~ /^http/) {
-		$this_url = $this_urn;
-		$this_urn = undef;
-	    }
-	    if (defined($image_url)) {
-		push(@nodes, $ref)
-		    if ((defined($this_url) && $this_url eq $image_url));
-	    }
-	    else {
-		push(@nodes, $ref)
- 		    if (defined($this_urn) && $this_urn eq $image_urn);
+	    if (defined($image_urn) && $image_urn =~ /^http/) {
+		$image_url = $image_urn;
+		$image_urn = undef;
 	    }
 	}
     }
-    else {
-	@nodes = ($node);
+    #
+    # Now find all nodes using the same disk urn/url and change.
+    #
+    foreach my $ref (@list) {
+	my $diskref   = GeniXML::GetDiskImage($ref);
+	#
+	# If the both this node and the original node did not
+	# specify a disk image, then we update it. 
+	#
+	if (!defined($diskref)) {
+	    push(@nodes, $ref)
+		if (!defined($Odiskref));
+	    next;
+	}
+	my $this_url = GeniXML::GetText("url", $diskref);
+	my $this_urn = GeniXML::GetText("name", $diskref);
+	next
+	    if (!(defined($image_url) || defined($image_urn)));
+
+	# Watch for url in the name, flipflop. 
+	if (defined($this_urn) && $this_urn =~ /^http/) {
+	    $this_url = $this_urn;
+	    $this_urn = undef;
+	}
+	if (defined($image_url)) {
+	    # Watch for actually needing to change, for impotent mode.
+	    # Might not change if the cluster is not doing image
+	    # versioning.
+	    push(@nodes, $ref)
+		if (defined($this_url) && $this_url eq $image_url &&
+		    $this_url ne $newimage);
+	}
+	else {
+	    # Watch for actually needing to change, for impotent mode.
+	    # Might not change if the cluster is not doing image
+	    # versioning.
+	    push(@nodes, $ref)
+		if (defined($this_urn) && $this_urn eq $image_urn &&
+		    $this_urn ne $newimage);
+	}
     }
-    if (!@nodes) {
-	print STDERR "Could not find any nodes to update disk image\n";
-	return -1;
+    # Impotent mode, return number of nodes to be changed.
+    if ($impotent) {
+	return scalar(@nodes);
     }
+    return 0
+	if (!@nodes);
+
     foreach my $node (@nodes) {
 	GeniXML::SetDiskImage($node, $newimage);
     }
@@ -1750,6 +1761,38 @@ sub NodeClientIDs($)
 	$result{$client_id} = $client_id;
     }
     return values(%result);
+}
+
+#
+# Run a portal converted profile rspec though the converter to update
+# the geni-lib script.
+#
+sub Convert2Genilib($)
+{
+    my ($self) = @_;
+    my $profileid = $self->profileid();
+    my $version   = $self->version();
+
+    my ($in, $filename) = tempfile("/tmp/convertXXXXX", UNLINK => 1);
+    if (!defined($in)) {
+	print STDERR "Could not open temporary file for rspec\n";
+	return -1;
+    }
+    print $in $self->rspec();
+    my $output = emutil::ExecQuiet("$CONVERTER -r $filename");
+    if ($?) {
+	print STDERR $output;
+	print STDERR "*** Could not convert rspec to geni-lib\n";
+	return -1;
+    }
+    my $safe_script = DBQuoteSpecial($output);
+    return -1
+	if (! DBQueryWarn("update apt_profile_versions set ".
+			  "   script=$safe_script ".
+			  "where profileid='$profileid' and ".
+			  "      version='$version'"));
+    $self->{'DBROW'}->{'script'} = $output;
+    return 0;
 }
 
 ###################################################################

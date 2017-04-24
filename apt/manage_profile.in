@@ -434,9 +434,32 @@ sub CreateProfile()
 	    $profile->Delete(1);
 	    fatal("Did not get an image for $node_id");
 	}
-	if ($profile->UpdateDiskImage($node_id, $newimage, 0)) {
-	    $profile->Delete(1);
-	    fatal("Could not update image in rspec for $node_id; $newimage;");
+	#
+	# We cannot change a geni-lib script profile, so no need to do this.
+	# But we can change a portal converted profile (or rspec).
+	#
+	if (!defined($profile->script()) || $profile->portal_converted()) {
+	    #
+	    # See if anything is actually going to change, since the cluster
+	    # might not be doing image versioning.
+	    #
+	    my $changed = $profile->UpdateDiskImage($node_id, $newimage, 0, 1);
+	    if ($changed > 0) {
+		if ($profile->UpdateDiskImage($node_id, $newimage, 0, 0)) {
+		    $profile->Delete(1);
+		    fatal("Could not update image in rspec ".
+			  "for $node_id; $newimage;");
+		}
+		#
+		# For a portal converted profile, we need to regen the script.
+		#
+		if ($profile->portal_converted()) {
+		    if ($profile->Convert2Genilib() != 0) {
+			$profile->Delete(1);
+			fatal("Could not convert rspec to geni-lib");
+		    }
+		}
+	    }
 	}
 	# Tell web interface cloning has started.
 	$pwebtask->cloning(1);
