@@ -42,12 +42,14 @@ sub usage()
     print STDERR "  -d       - Turn on debugging\n";
     print STDERR "  -o file  - Specify output file for geni-lib\n";
     print STDERR "  -s file  - Specify output file for post geni-lib rspec\n";
-    print STDERR "  -r       - Regression test (run geni-lib, compare rspecs)\n";
+    print STDERR "  -r       - Regression test; run geni-lib, compare rspecs\n";
+    print STDERR "  -t       - Do not spit out the Tour (for regression)\n";
     exit(-1);
 }
-my $optlist    = "do:rs:";
+my $optlist    = "do:rs:t";
 my $debug      = 0;
 my $regress    = 0;
+my $notour     = 0;
 my $ofile;
 my $rfile;
 
@@ -101,6 +103,9 @@ if (! getopts($optlist, \%options)) {
 if (defined($options{"d"})) {
     $debug = 1;
 }
+if (defined($options{"t"})) {
+    $notour = 1;
+}
 if (defined($options{"o"})) {
     $ofile = $options{"o"};
 }
@@ -141,7 +146,7 @@ sub GenerateNodeStatements($)
 {
     my ($rspec) = @_;
 
-    foreach my $node (values(%{$rspec->nodes()})) {
+    foreach my $node (@{$rspec->nodelist()}) {
 	my $client_id = $node->client_id();
 	my $ntag      = $node->tag();
 	my $ntype     = $node->type();
@@ -151,11 +156,19 @@ sub GenerateNodeStatements($)
 	#
 	if ($ntype eq "emulab-xen") {
 	    $node->addStatement("$ntag = request.XenVM('$client_id')");
+
+	    #
+	    # This is the only time we need to spit this out, since
+	    # the default is False.
+	    #
+	    if (defined($node->{'exclusive'}) && $node->{'exclusive'}) {
+		$node->addTagStatement("exclusive = True");
+	    }
 	    
 	    if (defined($node->{'xen_settings'})) {
 		my $settings = $node->{'xen_settings'};
-		
-		foreach my $setting (keys(%{$settings})) {
+
+		foreach my $setting (sort(keys(%{$settings}))) {
 		    my $value = $settings->{$setting};
 		    if ($setting eq "ram") {
 			$node->addTagStatement("ram = $value");
@@ -191,7 +204,9 @@ sub GenerateNodeStatements($)
 	    #
 	    # And the pipes. Just two of them.
 	    #
-	    foreach my $p (values(%{$node->pipes()})) {
+	    foreach my $k (sort(keys(%{$node->pipes()}))) {
+		my $p = $node->pipes()->{$k};
+		
 		my $pname = ($p->{'iface_id'} eq $if0
 			     ? "pipe('$if0')" : "pipe('$if1')");
 
@@ -232,10 +247,6 @@ sub GenerateNodeStatements($)
 	#
 	# Attributes and flags.
 	#
-	if (defined($node->{'exclusive'})) {
-	    my $exclusive = ($node->{'exclusive'} ? "True" : "False");
-	    $node->addTagStatement("exclusive = $exclusive");
-	}
 	if (defined($node->{'component_id'})) {
 	    my $component_id = $node->{'component_id'};
 	    $node->addTagStatement("component_id = '$component_id'");
@@ -277,6 +288,7 @@ sub GenerateNodeStatements($)
 		/^execute$/i && do {
 		    my $shell = $service->{'shell'};
 		    my $cmd   = $service->{'cmd'};
+		    $cmd =~ s/\'/\\'/g;
 		    $node->addTagStatement(
 			"addService(pg.Execute('$shell','$cmd'))");
 		    last SWITCH;
@@ -302,7 +314,7 @@ sub GenerateNodeStatements($)
 	#
 	# Desires.
 	#
-	foreach my $desire (keys(%{ $node->{'desires'} })) {
+	foreach my $desire (sort(keys(%{ $node->{'desires'} }))) {
 	    my $weight = $node->{'desires'}->{$desire};
 	    $node->addTagStatement("Desire('$desire','$weight')");
 	}
@@ -310,9 +322,8 @@ sub GenerateNodeStatements($)
 	#
 	# Interfaces.
 	#
-	foreach my $id (sort(keys(%{$node->{'ifaces'}}))) {
-	    my $iface     = $node->{'ifaces'}->{$id};
-	    my $client_id = $iface->{'client_id'};
+	foreach my $iface (@{$node->ifacelist()}) {
+	    my $iface_id  = $iface->{'client_id'};
 	    my $itag      = $iface->{'tag'};
 	    my $ip        = $iface->{'ip'};
 	    my $mask      = $iface->{'mask'};
@@ -321,9 +332,15 @@ sub GenerateNodeStatements($)
 	    # geni-lib is going to name the interfaces as node_id:iface_id
 	    # so we have to careful to strip existing node_id from the id
 	    # in case the rspec came from a geni-lib script. But geni-lib
-	    # will not prepend the node_id if it is already in : format.
+	    # will not prepend the node_id if it is already in : format,
+	    # so if the user named it whacky:iface_id, we are going to
+	    # use that.
 	    #
-	    my $iface_id = $client_id;
+	    if ($iface_id =~ /^([^:]*):(.*)$/) {
+		if ($1 eq $client_id) {
+		    $iface_id = $2;
+		}
+	    }
 	    my $addr = ($ip && $mask ? "pg.IPv4Address('$ip','$mask')" : undef);
 
 	    #
@@ -368,7 +385,8 @@ sub GenerateNodeStatements($)
 	    if (defined($size)) {
 		$node->addStatement("${btag}.size = '$size'");
 	    }
-	    if (defined($placement)) {
+	    # Do not not spit out default.
+	    if (defined($placement) && $placement ne "any") {
 		$node->addStatement("${btag}.placement = '$placement'");
 	    }
 	    if (defined($dataset)) {
@@ -381,7 +399,7 @@ sub SpitNodeStatements($$)
 {
     my ($rspec, $where) = @_;
 
-    foreach my $node (values(%{$rspec->nodes()})) {
+    foreach my $node (@{$rspec->nodelist()}) {
 	my $client_id = $node->client_id();
 	print $where "# Node $client_id\n";
 	foreach my $statement (@{$node->statements()}) {
@@ -398,7 +416,7 @@ sub GenerateLinkStatements($)
 {
     my ($rspec) = @_;
     
-    foreach my $link (values(%{$rspec->links()})) {
+    foreach my $link (@{$rspec->linklist()}) {
 	my $client_id = $link->client_id();
 	my $ltag      = $link->tag();
 	my $ltype     = $link->type();
@@ -412,12 +430,10 @@ sub GenerateLinkStatements($)
 		    "$ltag = request.Link('$client_id', 'vlan')");
 	    }
 	    elsif ($ltype eq "egre-tunnel") {
-		$link->addStatement("$ltag = pg.L2GRE('$client_id')");
-		$link->addStatement("request.addResource($ltag)");
+		$link->addStatement("$ltag = request.L2GRE('$client_id')");
 	    }
 	    elsif ($ltype eq "gre-tunnel") {
-		$link->addStatement("$ltag = pg.L3GRE('$client_id')");
-		$link->addStatement("request.addResource($ltag)");
+		$link->addStatement("$ltag = request.L3GRE('$client_id')");
 	    }
 	    else {
 		fatal("Unknown link type $ltype for $client_id");
@@ -486,7 +502,7 @@ sub GenerateLinkStatements($)
 	#
 	# Shaping.
 	#
-	foreach my $key (keys(%{$link->properties()})) {
+	foreach my $key (sort(keys(%{$link->properties()}))) {
 	    my $property = $link->{'properties'}->{$key};
 	    my $dest     = $property->{'dest'};
 	    my $iface    = $rspec->getIface($property->source());
@@ -499,8 +515,7 @@ sub GenerateLinkStatements($)
 	    }
 	}
 
-	foreach my $id (sort(keys(%{$link->{'ifaces'}}))) {
-	    my $iface     = $link->{'ifaces'}->{$id};
+	foreach my $iface (@{$link->ifacelist()}) {
 	    my $client_id = $iface->{'client_id'};
 	    my $itag      = $iface->{'tag'};
 
@@ -515,7 +530,7 @@ sub SpitLinkStatements($$)
 {
     my ($rspec, $where) = @_;
 
-    foreach my $link (values(%{$rspec->links()})) {
+    foreach my $link (@{$rspec->linklist()}) {
 	my $client_id = $link->client_id();
 	print $where "# Link $client_id\n";
 	foreach my $statement (@{$link->statements()}) {
@@ -529,44 +544,38 @@ sub SpitTopLevelStatements($$)
 {
     my ($rspec, $where) = @_;
 
-    foreach my $name (keys(%{$rspec->toplevel_elements()})) {
-	my $val = $rspec->toplevel_elements()->{$name};
+    foreach my $attribute (@{$rspec->toplevel_elements()}) {
+	my $name = $attribute->name();
+	my $val  = $attribute->value();
 	
         SWITCH: for (lc($name)) {
 	    /^password$/i && do {
-		my $name = $val->{'name'};
-		print $where "password = emulab.Password('$name')\n";
+		print $where "password = emulab.Password('$val')\n";
 		print $where "request.addResource(password)\n";
 		last SWITCH;
 	    };
 	    /^routable_pool$/i && do {
-		foreach my $pool (values(%{$val})) {
-		    my $name  = $pool->client_id();
-		    my $count = $pool->count();
-		    my $type  = $pool->type();
-		    print $where
-			"request.AddressPool('$name', $count, '$type')\n";
-		}
+		my $pool = $val;
+		my $id    = $pool->client_id();
+		my $count = $pool->count();
+		my $type  = $pool->type();
+		print $where "request.AddressPool('$id', $count, '$type')\n";
 		last SWITCH;
 	    };
 	    /^collocate_factor$/i && do {
-		my $count = $val->{'count'};
-		print $where "request.setCollocateFactor($count)\n";
+		print $where "request.setCollocateFactor($val)\n";
 		last SWITCH;
 	    };
 	    /^packing_strategy$/i && do {
-		my $strategy = $val->{"strategy"};
-		print $where "request.setPackingStrategy('$strategy')\n";
+		print $where "request.setPackingStrategy('$val')\n";
 		last SWITCH;
 	    };
 	    /^routing_style$/i && do {
-		my $style = $val->{"style"};
-		print $where "request.setRoutingStyle('$style')\n";
+		print $where "request.setRoutingStyle('$val')\n";
 		last SWITCH;
 	    };
 	    /^delay_image$/i && do {
-		my $urn = $val->{"urn"};
-		print $where "request.setDelayImage('$urn')\n";
+		print $where "request.setDelayImage('$val')\n";
 		last SWITCH;
 	    };
 	    fatal("toplevel element $name is not supported");
@@ -676,7 +685,7 @@ if (!defined($outfd)) {
     fatal("Could not open temporary file for result rspec");
     return -1;
 }
-SpitTour($rspec, $outfd);
+SpitTour($rspec, $outfd) if (!$notour);
 SpitPreamble($outfd);
 SpitNodeStatements($rspec, $outfd);
 SpitLinkStatements($rspec, $outfd);

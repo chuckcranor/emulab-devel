@@ -76,9 +76,11 @@ sub new($$)
     }
     my $self = {
 	"nodes"	            => {},
+	"nodelist"          => [],
 	"ifaces"            => {},
 	"links"             => {},
-	"toplevel_elements" => {},
+	"linklist"          => [],
+	"toplevel_elements" => [],  # Use attributes for toplevel elements
 	"tour"              => undef,
 	"namespaces"        => \%namespaces,
 	"bscounter"         => 0,
@@ -100,6 +102,8 @@ sub new($$)
 		/^description$/i && do {
 		    my $type = GeniXML::FindAttr("type", $child);
 		    my $text = $child->textContent();
+		    # Kill terminating newline for rtecheck
+		    chomp($text);
 		    $text =~ s/\"/\\"/g;
 		    $tour->{'description'} = {
 			"text" => $text,
@@ -110,11 +114,16 @@ sub new($$)
 		/^instructions$/i && do {
 		    my $type = GeniXML::FindAttr("type", $child);
 		    my $text = $child->textContent();
-		    $text =~ s/\"/\\"/g;
-		    $tour->{'instructions'} = {
-			"text" => $text,
-			"type" => $type,
-		    };
+		    # Kill terminating newline for rtecheck
+		    chomp($text);
+		    # This happens a lot.
+		    if ($text ne "") {
+			$text =~ s/\"/\\"/g;
+			$tour->{'instructions'} = {
+			    "text" => $text,
+			    "type" => $type,
+			};
+		    }
 		    last SWITCH;
 		};
 		fatal("Unknown element in rspec_tour: $name\n");
@@ -138,18 +147,17 @@ sub new($$)
         SWITCH: for (lc($name)) {
 	    /^password$/i && do {
 		my $name = GetTextOrFail("name", $ref);
-		$self->toplevel_elements()->{"password"} = {"name" => $name};
+		APT_Rspec::Attribute->new($self, $name, {"name" => $name});
 		last SWITCH;
 	    };
 	    /^routable_pool$/i && do {
-		$self->addPool(APT_Rspec::Pool->new($ref));
+		APT_Rspec::Attribute->new($self, $name,
+					  APT_Rspec::Pool->new($ref));
 		last SWITCH;
 	    };
 	    /^collocate_factor$/i && do {
 		my $count = GetTextOrFail("count", $ref);
-		$self->toplevel_elements()->{"collocate_factor"} = {
-		    "count" => $count
-		};
+		APT_Rspec::Attribute->new($self, $name, $count);
 		last SWITCH;
 	    };
 	    /^packing_strategy$/i && do {
@@ -157,21 +165,17 @@ sub new($$)
 		if ($strategy !~ /^(pack|balance)$/) {
 		    fatal("packing_strategy: bad strategy: $strategy");
 		}
-		$self->toplevel_elements()->{"packing_strategy"} = {
-		    "strategy" => $strategy
-		};
+		APT_Rspec::Attribute->new($self, $name, $strategy);
 		last SWITCH;
 	    };
 	    /^routing_style$/i && do {
 		my $style = GetTextOrFail("style", $ref);
-		$self->toplevel_elements()->{"routing_style"} = {
-		    "style" => $style
-		};
+		APT_Rspec::Attribute->new($self, $name, $style);
 		last SWITCH;
 	    };
 	    /^delay_image$/i && do {
 		my $urn = GetTextOrFail("urn", $ref);
-		$self->toplevel_elements()->{"delay_image"} = {"urn" => $urn};
+		APT_Rspec::Attribute->new($self, $name, $urn);
 		last SWITCH;
 	    };
 	    fatal("Toplevel XML element $name is not supported");
@@ -250,9 +254,12 @@ sub new($$)
 }
 sub nodes($)			{ return $_[0]->{'nodes'}; }
 sub links($)			{ return $_[0]->{'links'}; }
+sub nodelist($)			{ return $_[0]->{'nodelist'}; }
+sub linklist($)			{ return $_[0]->{'linklist'}; }
 sub ifaces($)			{ return $_[0]->{'ifaces'}; }
 sub tour($)			{ return $_[0]->{'tour'}; }
-sub toplevel_elements($)	{ return $_[0]->{'toplevel_elements'}; }
+sub attributes($)		{ return $_[0]->{'toplevel_elements'}; }
+sub toplevel_elements($)	{ return $_[0]->attributes(); }
 
 sub description($)
 {
@@ -276,6 +283,8 @@ sub instructions($)
 sub addNode($$)
 {
     my ($self, $node) = @_;
+    # Maintain rspec ordering for RTE checks.
+    push(@{$self->nodelist()}, $node);
     $self->nodes()->{$node->client_id()} = $node;
 }
 sub getNode($$)
@@ -302,6 +311,8 @@ sub getIface($$)
 sub addLink($$)
 {
     my ($self, $link) = @_;
+    # Maintain rspec ordering for RTE checks.
+    push(@{$self->linklist()}, $link);
     $self->links()->{$link->client_id()} = $link;
 }
 sub getLink($$)
@@ -311,20 +322,6 @@ sub getLink($$)
 	if (!exists($self->{'links'}->{$client_id}));
 
     return $self->{'links'}->{$client_id};
-}
-sub addPool($$)
-{
-    my ($self, $pool) = @_;
-
-    #
-    # We can have more then one pool.
-    #
-    if (!exists($self->toplevel_elements()->{"routable_pool"})) {
-	$self->toplevel_elements()->{"routable_pool"} = {};
-    }
-    my $client_id = $pool->client_id();
-    $self->toplevel_elements()->{"routable_pool"}->{$client_id} = $pool;
-    return $pool;
 }
 
 #
@@ -514,7 +511,7 @@ sub Compare($$)
 		    if (0 && APT_Rspec::CompareHashes($key, $val1, $val2));
 		last SWITCH;
 	    };
-	    /^(bscounter|namespaces)$/i && do {
+	    /^(bscounter|namespaces|nodelist|linklist)$/i && do {
 		last SWITCH;
 	    };
 	    print STDERR "Rspec:Compare: Unknown attribute: $key\n";
@@ -525,15 +522,22 @@ sub Compare($$)
 }
 
 #
-# Compare top level elements.
+# Compare top level elements. These are lists.
 #
 sub CompareToplevelElements($$)
 {
     my ($elements1, $elements2) = @_;
 
-    foreach my $key (keys(%{$elements1})) {
-	my $val1 = $elements1->{$key};
-	my $val2 = $elements1->{$key};
+    if (scalar(@{$elements2}) != scalar(@{$elements2})) {
+	print STDERR "Rspec:CompareToplevelElements: mismatching length\n";
+	return -1;
+    }
+    for (my $index = 0; $index < scalar(@{$elements1}); $index++) {
+	my $attr1 = @{$elements1}[$index];
+	my $attr2 = @{$elements2}[$index];
+	my $key   = $attr1->name();
+	my $val1  = $attr1->value();
+	my $val2  = $attr2->value();
 
 	#
 	# Enumerate all fields to be certain this is not out of sync
@@ -549,7 +553,7 @@ sub CompareToplevelElements($$)
 	    (/^(password|collocate_factor|packing_strategy)$/i ||
 	     /^(routing_style|delay_image)$/i) && do {
 		return 1
-		    if (APT_Rspec::CompareHashes($key, $val1, $val2));
+		    if (APT_Rspec::CompareValues($key, $val1, $val2));
 		last SWITCH;
 	    };
 	    print STDERR "Rspec:CompareToplevelElements: unknown $key\n";
@@ -691,6 +695,32 @@ sub CompareLinks($$)
 }
 
 ############################################################################
+# The point of this class is provide a consistent way to describe all
+# the little attributes in elements, and maintain their order so that
+# we can generate the exact same rspec/genilib script each time.
+#
+package APT_Rspec::Attribute;
+use Carp;
+use English;
+use GeniXML;
+use GeniHRN;
+
+sub new($$$$)
+{
+    my ($class, $parent, $name, $value) = @_;
+
+    my $self = {
+	"name"       => $name,
+	"value"      => $value,
+    };
+    bless($self, $class);
+    push(@{$parent->attributes()}, $self);
+    return $self;
+}
+sub name($)		{ return $_[0]->{'name'}; }
+sub value($)		{ return $_[0]->{'value'}; }
+
+############################################################################
 package APT_Rspec::Node;
 use Carp;
 use English;
@@ -717,6 +747,7 @@ sub new($$$$$)
 	"statements"		=> [],
 	"desires"		=> {},
 	"ifaces"		=> {},
+	"ifacelist"             => [],
 	"blockstores"		=> {},
 	"pipes"			=> {},
 	"use_type_default_image"=> undef,
@@ -732,6 +763,7 @@ sub exclusive($)		{ return $_[0]->{'exclusive'}; }
 sub statements($)		{ return $_[0]->{'statements'}; }
 sub blockstores($)		{ return $_[0]->{'blockstores'}; }
 sub ifaces($)			{ return $_[0]->{'ifaces'}; }
+sub ifacelist($)		{ return $_[0]->{'ifacelist'}; }
 sub services($)			{ return $_[0]->{'services'}; }
 sub pipes($)			{ return $_[0]->{'pipes'}; }
 sub tag($)			{ return $_[0]->{'tag'}; }
@@ -758,6 +790,7 @@ sub addBridgePipe($$) {
 sub addIface($$)
 {
     my ($self, $iface) = @_;
+    push(@{$self->ifacelist()}, $iface);
     $self->ifaces()->{$iface->client_id()} = $iface;
 }
 sub addService($$)
@@ -778,6 +811,9 @@ sub addNode($$$)
     my $client_id   = GeniXML::GetVirtualId($noderef);
     my $sliver_type = GeniXML::GetVirtualizationSubtype($noderef);
     my $exclusive   = GeniXML::GetExclusive($noderef);
+    if (defined($exclusive)) {
+	$exclusive = ($exclusive ? 1 : 0);
+    }
 
     fatal("Node: missing client_id or sliver_type")
 	if (! defined($client_id));
@@ -1105,7 +1141,7 @@ sub Compare($$)
 						  $val1,$val2));
 		 last SWITCH;
 	    };
-	    /^ifaces$/i && do {
+	    /^(ifaces|ifacelist)$/i && do {
 		# Handled up above in CompareNodes.
 		last SWITCH;
 	    };
@@ -1240,6 +1276,7 @@ sub new($$$$)
 	"isbslink"		=> 0,
 	"bsnode"		=> undef,
 	"ifaces"		=> {},
+	"ifacelist"             => [],
 	"properties"            => {},
 	"component_managers"    => [],
 	"jacks_site"		=> undef,
@@ -1253,6 +1290,7 @@ sub client_id($)		{ return $_[0]->{'client_id'}; }
 sub type($)			{ return $_[0]->{'type'}; }
 sub statements($)		{ return $_[0]->{'statements'}; }
 sub ifaces($)			{ return $_[0]->{'ifaces'}; }
+sub ifacelist($)		{ return $_[0]->{'ifacelist'}; }
 sub properties($)		{ return $_[0]->{'properties'}; }
 sub tag($)			{ return $_[0]->{'tag'}; }
 sub fatal($)			{ return APT_Rspec::fatal($_[0]); }
@@ -1273,6 +1311,7 @@ sub addIface($$)
 {
     my ($self, $iface) = @_;
     my $iface_id = $iface->client_id();
+    push(@{$self->ifacelist()}, $iface);
     $self->ifaces()->{$iface_id} = $iface;
 }
 
@@ -1541,7 +1580,7 @@ sub Compare($$)
 		# See below.
 		last SWITCH;
 	    };
-	    /^ifaces$/i && do {
+	    /^(ifaces|ifacelist)$/i && do {
 		# Handled up in CompareLinks()
 		last SWITCH;
 	    };
