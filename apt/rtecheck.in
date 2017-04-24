@@ -39,11 +39,13 @@ sub usage()
     print STDERR "Usage: rtecheck [options] infile\n";
     print STDERR "Options:\n";
     print STDERR "  -d       - Turn on debugging\n";
+    print STDERR "  -g       - Print intermediate geni-lib script\n";
  
     exit(-1);
 }
-my $optlist    = "d";
+my $optlist    = "dg";
 my $debug      = 0;
+my $printgl    = 0;
 
 #
 # Configure variables
@@ -92,6 +94,9 @@ if (! getopts($optlist, \%options)) {
 if (defined($options{"d"})) {
     $debug = 1;
 }
+if (defined($options{"g"})) {
+    $printgl = 1;
+}
 usage()
     if (@ARGV != 1);
 
@@ -108,44 +113,9 @@ else {
 }
 
 #
-# Strip the file doc string, we can handle that change. 
-#
-my ($infd, $inputfile) = tempfile("/tmp/rtecheckXXXXX", UNLINK => 1);
-if (!defined($infd)) {
-    fatal("Could not open temporary file for script.");
-}
-open(PY, $file) or
-    fatal("Could not open $file: $!");
-
-#
-# Skip initial blank lines (white space is okay).
-#
-my $line;
-while (<PY>) {
-    if ($_ !~ /^\s*$/) {
-	$line = $_;
-	last;
-    }
-}
-if (!defined($line)) {
-    fatal("Empty script?");
-}
-if ($line =~ /^\s*\"\"\".*$/) {
-    # Start of module doc string. Skip to end of doc string.
-    while (<PY>) {
-	last
-	    if ($_ =~ /\"\"\"$/);
-    }
-}
-while (<PY>) {
-    print $infd $_;
-}
-close(PY);
-
-#
 # First convert to rspec.
 #
-my $rspec = emutil::ExecQuiet("$RUNGENILIB -W $inputfile");
+my $rspec = emutil::ExecQuiet("$RUNGENILIB -W $file");
 if ($?) {
     print STDERR $rspec;
     print STDERR "Could not convert geni-lib script to an rspec\n";
@@ -165,14 +135,14 @@ if (!defined($fd)) {
 }
 print $fd $rspec;
 
-my $genilib = emutil::ExecQuiet("$RSPECTOGENILIB -t $filename");
+my $genilib = emutil::ExecQuiet("$RSPECTOGENILIB $filename");
 if ($?) {
     print STDERR $genilib;
     print STDERR "Could not convert rspec back to geni-lib\n";
     # For the web interface
     exit(1);
 }
-if ($debug) {
+if ($debug || $printgl) {
     print $genilib;
 }
 unlink0($fd, $filename);
@@ -186,7 +156,7 @@ if (!defined($fd)) {
 }
 print $fd $genilib;
 
-my $output = emutil::ExecQuiet("$DIFF -E -B -b $inputfile $filename");
+my $output = emutil::ExecQuiet("$DIFF -E -B -b $file $filename");
 if ($?) {
     print STDERR $output;
     # For the web interface.
