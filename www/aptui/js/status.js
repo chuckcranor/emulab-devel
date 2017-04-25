@@ -1944,15 +1944,17 @@ $(function ()
     //
     function StartSnapshot(node_id, update_profile, update_prepare, imagename)
     {
-	sup.ShowModal('#waitwait-modal');
+	sup.ShowWaitWait("Starting image capture, " +
+			 "this can take a minute. Patience please.");
 
 	var callback = function(json) {
-	    sup.HideModal('#waitwait-modal');
+	    sup.HideWaitWait();
 	    //console.log("StartSnapshot");
 	    //console.log(json);
 	    
 	    if (json.code) {
-		sup.SpitOops("oops", "Could not start snapshot: " + json.value);
+		sup.SpitOops("oops", "Could not start snapshot:<br>" +
+			     "<pre><code>" + json.value + "</code></pre>");
 		return;
 	    }
 	    ShowProgressModal();
