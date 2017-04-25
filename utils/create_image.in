@@ -143,25 +143,6 @@ my $origin_uuid;
 my $webtask;
 
 #
-# We need an END block to make sure the web task is set.
-#
-END {
-    my $saved_exitcode = $?;
-    
-    # Watch for abnormal termination. 
-    if ($? && defined($webtask)) {
-	# Cause of the fork in run_with_ssh.
-	$webtask->Refresh();
-	if (!$webtask->HasExited()) {
-	    $webtask->status("failed");
-	    $webtask->imagesize(0);
-	    $webtask->Exited(-1);
-	}
-    }
-    $? = $saved_exitcode;
-}
-
-#
 # Configure variables
 #
 my $TB		= "@prefix@";
@@ -1802,4 +1783,23 @@ sub run_with_ssh($$)
     }
 
     return $stat;
+}
+
+#
+# We need an END block to make sure the web task is set.
+#
+END {
+    my $saved_exitcode = $?;
+    
+    # Watch for abnormal termination. 
+    if ($? && defined($webtask)) {
+	# Cause of the fork in run_with_ssh.
+	$webtask->Refresh();
+	if (!$webtask->HasExited()) {
+	    $webtask->status("failed");
+	    $webtask->imagesize(0);
+	    $webtask->Exited(-1);
+	}
+    }
+    $? = $saved_exitcode;
 }
