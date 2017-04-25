@@ -336,7 +336,7 @@ sub doboot()
     #
     # This stuff is run regardless of reservation status.
     #
-    if (-x "$RCDIR/rc.ipod" && ! WINDOWS()) {
+    if (-x "$RCDIR/rc.ipod" && ! WINDOWS() && ! INDOCKERVM()) {
 	print("Setting up Ping of Death\n");
 	# This is allowed to fail by default; ipod might not be supported.
 	if (!exists($manifest{'rc.ipod'})

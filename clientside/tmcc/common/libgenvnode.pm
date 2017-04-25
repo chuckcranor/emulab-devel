@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2008-2014 University of Utah and the Flux Group.
+# Copyright (c) 2008-2014, 2017 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -30,6 +30,7 @@ use Exporter;
               VNODE_STATUS_INIT VNODE_STATUS_STOPPING VNODE_STATUS_UNKNOWN
 	      VNODE_STATUS_MOUNTED
               VNODE_PATH
+              VNODE_POLL_ERROR VNODE_POLL_STOP VNODE_POLL_CONTINUE
               findVirtControlNet
             );
 
@@ -42,7 +43,15 @@ sub VNODE_STATUS_MOUNTED() { return "mounted"; }
 sub VNODE_STATUS_BOOTING() { return "booting"; }
 sub VNODE_STATUS_INIT()    { return "init"; }
 sub VNODE_STATUS_STOPPING(){ return "stopping"; }
+sub VNODE_STATUS_PAUSED(){ return "paused"; }
 sub VNODE_STATUS_UNKNOWN() { return "unknown"; }
+
+#
+# Valid constants that can be returned by vnodePoll.
+#
+sub VNODE_POLL_ERROR() { return -1 }
+sub VNODE_POLL_STOP() { return 1; }
+sub VNODE_POLL_CONTINUE() { return 0; }
 
 # VM path stuff
 my $VMPATH     = "$VARDIR/vminfo";

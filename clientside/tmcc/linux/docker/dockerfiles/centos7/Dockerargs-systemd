@@ -1,0 +1,1 @@
+--security-opt seccomp=unconfined --tmpfs /run --tmpfs /run/lock --stop-signal=SIGRTMIN+3 -v /sys/fs/cgroup:/sys/fs/cgroup:ro

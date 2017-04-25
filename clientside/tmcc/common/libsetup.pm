@@ -62,7 +62,7 @@ use Exporter;
 	 TMGATEDCONFIG TMSYNCSERVER TMKEYHASH TMNODEID TMNODEUUID TMEVENTKEY
 	 TMCREATOR TMSWAPPER TMFWCONFIG TMGENVNODECONFIG
 	 TMSTORAGEMAP TMDISKINFO TMEXTRAFS
-	 INXENVM INVZVM
+	 INXENVM INVZVM INDOCKERVM
        );
 
 # Must come after package declaration!
@@ -562,6 +562,7 @@ sub setFSRVTYPE($) {
 #
 sub INXENVM()	{ return ($ingenvnode && GENVNODETYPE() eq "xen"); }
 sub INVZVM()	{ return ($ingenvnode && GENVNODETYPE() eq "openvz"); }
+sub INDOCKERVM(){ return ($ingenvnode && GENVNODETYPE() eq "docker"); }
 
 #
 # Reset to a moderately clean state.

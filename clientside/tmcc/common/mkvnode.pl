@@ -84,10 +84,14 @@ use libvnode;
 
 # Helpers
 sub MyFatal($);
+sub hasLibOp($);
 sub safeLibOp($$$;@);
 sub CleanupVM();
 sub TearDownStaleVM();
 sub StoreState();
+sub ReadState();
+sub BackendVnodePoll();
+sub DefaultVnodePoll();
 
 # Locals
 my $CTRLIPFILE = "/var/emulab/boot/myip";
@@ -223,7 +227,7 @@ foreach my $type (@nodetypes) {
     }
     $libops{$type}{'init'}->();
 
-    # need to do this for each type encountered. 
+    # need to do this for each type encountered.
     TBDebugTimeStampWithDate("starting $type rootPreConfig()");
     $libops{$type}{'rootPreConfig'}->($BOSSIP);
     TBDebugTimeStampWithDate("finished $type rootPreConfig()");
@@ -758,7 +762,14 @@ if (defined(VNCONFIG('SSHDPORT')) && VNCONFIG('SSHDPORT') ne "" &&
 # it running in its new context. Still, lets protect it with a timer
 # since it might get hung up inside and we do not want to get stuck here.
 #
+my $needschildmon;
 if (!$ISXENVM) {
+    $needschildmon = 1;
+}
+else {
+    $needschildmon = 0;
+}
+if ($needschildmon) {
     my $childpid = fork();
     if ($childpid) {
 	my $timedout = 0;
@@ -791,11 +802,22 @@ if (!$ISXENVM) {
 	    print STDERR "*** ERROR: vnodeBoot failed\n";
 	    exit(1);
 	}
+	# NB: store the state, so that vnodeBoot too has writable $private!
+	if (StoreState()) {
+	    MyFatal("Could not store container state to disk");
+	}
 	exit(0);
     }
 }
 elsif (safeLibOp('vnodeBoot', 1, 1)) {
     MyFatal("$vnodeid container startup failed.");
+}
+if ($needschildmon) {
+    # NB: before continuing, read the state stored in the child above
+    # after vnodeBoot!
+    if (ReadState()) {
+	MyFatal("Could not read container state from disk after vnodeBoot");
+    }
 }
 if (safeLibOp('vnodePostConfig', 1, 1)) {
     MyFatal("vnodePostConfig failed");
@@ -819,60 +841,131 @@ mysystem("touch $RUNNING_FILE");
 $running = 1;
 
 #
+# Poll as desired by the backend.  See comments below for
+# BackendVnodePoll() and DefaultVnodePoll().
+#
+if (hasLibOp("vnodePoll")) {
+    BackendVnodePoll();
+}
+else {
+    DefaultVnodePoll();
+}
+exit(CleanupVM());
+
+#
+# Invoke the backend to poll the vnode for status changes that mkvnode
+# should/must respond to.  This means that honoring the
+# vnodesetup/mkvnode semantics is now in the hands of the backend, if it
+# wants.  For instance, the backend can choose to allow this mkvnode
+# monitor to continue waiting even if the vnode is stopped for long
+# periods of time.
+#
+# (More recently, other backends (Docker) require that we catch VM state
+# transitions more frequently than this loop allows.  Note the special
+# case in the loop where there's a 15-second special case check to see
+# if a Xen VM was reoboted from the inside, and ends up restarting
+# successfully.  To handle these kinds of special cases, it's no problem
+# to allow backends to control the loop; if we are interrupted via
+# signal, and are supposed to be cleaning = 1 or whatever, we just don't
+# call vnodePoll again (and just call vnodeState a final couple times),
+# as in the original loop.  As long as backends don't override our
+# signal handlers, we're good to follow the original semantics of
+# vnodesetup/mkvnode.  We can also modify the semantics slightly,
+# i.e. to allow the mkvnode monitor to hang around even if the vnode is
+# down (like if the user manually invokes `docker stop`).
+#
+sub BackendVnodePoll()
+{
+    while (1) {
+	my ($status,$event) = ('','');
+
+	my $ret = eval {
+	    $libops{$vmtype}{'vnodePoll'}->($vnodeid, $vmid,
+					    \%vnconfig, $vnstate->{'private'},
+					    \$status,\$event);
+	};
+	my $err = $@;
+	if ($err) {
+	    fatal("*** ERROR: vnodePoll: $err\n");
+	    return (-1,$err);
+	}
+
+	if ($ret == libgenvnode::VNODE_POLL_STOP()) {
+	    TBDebugTimeStamp("vnodePoll told us to stop polling; cleaning up!");
+	    last;
+	}
+	elsif ($ret == libgenvnode::VNODE_POLL_ERROR()) {
+	    TBDebugTimeStamp("vnodePoll errored ($err); cleaning up!".
+			     " status=$status, event=$event");
+	    last;
+	}
+	else {
+	    TBDebugTimeStamp("vnodePoll told us to continue polling;".
+			     " status=$status, event=$event");
+	}
+    }
+}
+
+#
+# The default polling implementation.
+#
 # This loop is to catch when the container stops. We used to run a sleep
 # inside and wait for it to exit, but that is not portable across the
 # backends, and the return value did not indicate how it exited. So, lets
-# just loop, asking for the status every few seconds. 
+# just loop, asking for the status every few seconds.
 #
-# XXX Turn off debugging during this loop to keep the log file from growing.
-#
-TBDebugTimeStampsOff()
-    if ($debug);
+sub DefaultVnodePoll()
+{
+    # XXX Turn off debugging during this loop to keep the log file from
+    # growing.
+    TBDebugTimeStampsOff()
+	if ($debug);
 
-while (1) {
-    sleep(5);
+    while (1) {
+	sleep(5);
     
-    #
-    # If the container exits, either it rebooted from the inside or
-    # the physical node is rebooting, or we are actively trying to kill
-    # it cause our parent (vnodesetup) told us to. In all cases, we just
-    # exit and let the parent decide what to do. 
-    #
-    my ($ret,$err) = safeLibOp('vnodeState', 0, 0);
-    if ($err) {
-	fatal("*** ERROR: vnodeState: $err\n");
-    }
-    if ($ret ne VNODE_STATUS_RUNNING()) {
-	print "Container is no longer running.\n";
-	if (!$cleaning) {
-	    #
-	    # Rebooted from inside, but not cause we told it to, so
-	    # leave intact.
-	    #
-	    # But before we fold, lets wait a moment and check again
-	    # since in XEN, the user can type reboot, which causes the
-	    # domain to disappear for a while. We do not want to be
-	    # fooled by that. Halt is another issue; if the user halts
-	    # from inside the container it is never coming back and the 
-	    # user has screwed himself. Need to restart from the frontend.
-	    #
-	    sleep(15);
-	    ($ret,$err) = safeLibOp('vnodeState', 0, 0);
-	    if ($err) {
-		fatal("*** ERROR: vnodeState: $err\n");
-	    }
-	    if ($ret eq VNODE_STATUS_RUNNING()) {
-		print "Container has restarted itself.\n";
-		next;
-	    }
-	    $leaveme = $LEAVEME_REBOOT;
+	#
+	# If the container exits, either it rebooted from the inside or
+	# the physical node is rebooting, or we are actively trying to kill
+	# it cause our parent (vnodesetup) told us to. In all cases, we just
+	# exit and let the parent decide what to do. 
+	#
+	my ($ret,$err) = safeLibOp('vnodeState', 0, 0);
+	if ($err) {
+	    fatal("*** ERROR: vnodeState: $err\n");
 	}
-	last;
+	if ($ret ne VNODE_STATUS_RUNNING()) {
+	    print "Container is no longer running.\n";
+	    if (!$cleaning) {
+		#
+		# Rebooted from inside, but not cause we told it to, so
+		# leave intact.
+		#
+		# But before we fold, lets wait a moment and check again
+		# since in XEN, the user can type reboot, which causes the
+		# domain to disappear for a while. We do not want to be
+		# fooled by that. Halt is another issue; if the user halts
+		# from inside the container it is never coming back and the 
+		# user has screwed himself. Need to restart from the frontend.
+		#
+		sleep(15);
+		($ret,$err) = safeLibOp('vnodeState', 0, 0);
+		if ($err) {
+		    fatal("*** ERROR: vnodeState: $err\n");
+		}
+		if ($ret eq VNODE_STATUS_RUNNING()) {
+		    print "Container has restarted itself.\n";
+		    next;
+		}
+		$leaveme = $LEAVEME_REBOOT;
+	    }
+	    last;
+	}
     }
+
+    TBDebugTimeStampsOn()
+	if ($debug);
 }
-TBDebugTimeStampsOn()
-    if ($debug);
-exit(CleanupVM());
 
 #
 # Teardown a container. This should not be used if the mkvnode process
@@ -1062,6 +1155,15 @@ sub MyFatal($)
 #
 # Helpers:
 #
+sub hasLibOp($) {
+    my ($op,) = @_;
+
+    return 1
+	if (exists($libops{$vmtype}{$op}) && defined($libops{$vmtype}{$op}));
+
+    return 0;
+}
+
 sub safeLibOp($$$;@) {
     my ($op,$autolog,$autoerr,@args) = @_;
 
@@ -1126,5 +1228,20 @@ sub StoreState()
 	print STDERR "$@";
 	return -1;
     }
+    return 0;
+}
+
+sub ReadState()
+{
+    # Read the state from disk.
+    print "Reading state from disk ...\n"
+	if ($debug);
+
+    my $ret = eval { $vnstate = Storable::retrieve("$VNDIR/vnode.state"); };
+    if ($@) {
+	print STDERR "$@";
+	return -1;
+    }
+
     return 0;
 }
