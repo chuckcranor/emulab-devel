@@ -400,7 +400,7 @@ echo " <li class='divider'></li>
 	<li><a href='create-dataset.php'>Create Dataset</a></li>
 	<li><a href='user-dashboard.php#datasets'>
 	    My Datasets</a></li>
-	<li><a href='images.php'>List Disk Images</a></li>
+	<li><a href='list-images.php'>My Disk Images</a></li>
       </ul>
     </li>
     ";

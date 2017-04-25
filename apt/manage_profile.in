@@ -1060,7 +1060,7 @@ sub DeleteProfile()
 
     my $profile = APT_Profile->Lookup($ARGV[0]);
     if (!defined($profile)) {
-	fatal("No such profile exists");
+	fatal("No such profile exists: " . $ARGV[0]);
     }
     if ($profile->isLocked()) {
 	$errmsg = "This profile has its nodelete flag set.";
@@ -1071,13 +1071,15 @@ sub DeleteProfile()
 	goto uerror;
     }
     # For now, mere users do not see new image deletion stuff unless
-    # feature enabled. 
+    # feature enabled.
+    if (0) {
     if (! ($this_user->admin() || $this_user->stud())) {
 	my $project = Project->Lookup($profile->pid_idx());
 	if (! EmulabFeatures->FeatureEnabled("APT_ImageDeletion",
 					     $this_user, $project)) {
 	    $keepimages = 1;
 	}
+    }
     }
 
     # If deleting the only version of a profile, then force $all.

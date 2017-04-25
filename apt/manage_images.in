@@ -497,7 +497,7 @@ sub DoDeleteImage()
 	    my $opt = ($impotent ? "-n" : "");
 
 	    my $output =
-		emutil::ExecQuiet("$MANAGEPROFILE delete -- -k $opt $uuid");
+		emutil::ExecQuiet("$MANAGEPROFILE delete -k $opt $uuid");
 	    print $output;
 	    if ($?) {
 		fatal("Could not delete version $vers");
