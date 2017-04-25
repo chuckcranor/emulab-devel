@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2016 University of Utah and the Flux Group.
+# Copyright (c) 2000-2017 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -58,7 +58,7 @@ echo "<br><br>";
 echo "<font size=+1>Be Careful!</font>\n";
 echo "</center>";
 
-SpitPageReplace($APTBASE, 2);
+SpitPageReplace("$APTBASE/user-dashboard.php?user=$target_uid", 2);
 
 #
 # Standard Testbed Footer
