@@ -565,6 +565,8 @@ sub DoSnapshot()
 	    if ($response->code() == GENIRESPONSE_BUSY ||
 		$response->code() == GENIRESPONSE_SERVER_UNAVAILABLE ||
 		$response->code() == GENIRESPONSE_FORBIDDEN);
+	$errcode = GENIRESPONSE_NOSPACE
+	    if ($response->code() == GENIRESPONSE_NOSPACE);
 	$instance->SetStatus($old_status);
 	$aggregate->SetStatus($old_status);
 	goto uerror;

@@ -27,6 +27,7 @@ use Getopt::Std;
 use POSIX qw(setsid :sys_wait_h);
 use File::Basename;
 use Cwd qw(realpath);
+use Errno qw(ENOSPC);
 
 #
 # Image Creation Tuneables.
@@ -446,12 +447,17 @@ if ($image->isdataset() && !defined($bsname)) {
 
 #
 # Before doing anything else, check for overquota ... lets not waste
-# our time. Make sure user sees the error by exiting with 1.
+# our time. Make sure user sees the error by exiting with ENOSPC. 
 #
-if (system("$checkquota -p $imagepid $user_uid") != 0) {
-    die("*** $0:\n".
-	"    You are over your disk quota on $CONTROL; ".
-	"please login there and cleanup!\n");
+my $copt = ($image->pid() eq $image->gid() ?
+	    "-p " . $image->pid() :
+	    "-g " . $image->pid() . "/" . $image->pid());
+if (system("$checkquota $copt -m 3GB $user_uid") != 0) {
+    print STDERR
+	"*** $0:\n".	
+	"    You are over your disk quota on $CONTROL, or there is less\n".
+	"    then a minimum amount (3GB) of space. Please login and cleanup!\n";
+    exit(ENOSPC);
 }
 
 #
