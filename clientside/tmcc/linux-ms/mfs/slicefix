@@ -1,6 +1,6 @@
 #!/bin/sh
 #
-# Copyright (c) 2000-2015 University of Utah and the Flux Group.
+# Copyright (c) 2000-2017 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -120,6 +120,27 @@ getloadervar() {
     echo $_val
 }
 
+#
+# Make sshd more secure by default: no password based login.
+# XXX argh! First use wins, so we have to comment out before adding ours!
+#
+dofixsshd() {
+    echo "  updating /etc/ssh/sshd_config"
+    sed -i .preemulab \
+	-e 's;^Protocol;#Protocol;' \
+	-e 's;^PasswordAuth;#PasswordAuth;' \
+	-e 's;^ChallengeResp;#ChallengeResp;' \
+	-e 's;^PermitRootLogin;#PermitRootLogin;' /mnt/etc/ssh/sshd_config
+    cat <<EOF8 >>/mnt/etc/ssh/sshd_config
+
+# Emulab config
+Protocol 2
+PasswordAuthentication no
+ChallengeResponseAuthentication no
+PermitRootLogin without-password
+EOF8
+}
+
 dolinux() {
     isroot=0
 
@@ -227,6 +248,14 @@ dolinux() {
     #
     # XXX there is only one choice of console as well
     #
+
+    #
+    # Fixup sshd config
+    #
+    if [ -r /mnt/etc/ssh/sshd_config ] && \
+	   ! grep -q '^# Emulab config' /mnt/etc/ssh/sshd_config; then
+	dofixsshd
+    fi
 
     #
     # Localize the image. We only do this if the MFS we are running in

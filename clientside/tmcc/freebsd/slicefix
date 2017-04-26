@@ -1,6 +1,6 @@
 #!/bin/sh
 #
-# Copyright (c) 2000-2016 University of Utah and the Flux Group.
+# Copyright (c) 2000-2017 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -256,9 +256,15 @@ getloadervar() {
 
 #
 # Make sshd more secure by default: no password based login.
+# XXX argh! First use wins, so we have to comment out before adding ours!
 #
 dofixsshd() {
     echo "  updating /etc/ssh/sshd_config"
+    sed -i .preemulab \
+	-e 's;^Protocol;#Protocol;' \
+	-e 's;^PasswordAuth;#PasswordAuth;' \
+	-e 's;^ChallengeResp;#ChallengeResp;' \
+	-e 's;^PermitRootLogin;#PermitRootLogin;' /mnt/etc/ssh/sshd_config
     cat <<EOF8 >>/mnt/etc/ssh/sshd_config
 
 # Emulab config
@@ -930,7 +936,7 @@ dolinux() {
 
 		# XXX assume "n1"
 		ldisk="${dtype}${dunit}n1p"
-		rootdev="/dev/${ldisk}${part}"
+		rootdev="/dev/${disk}s${part}"
 		;;
 	# SCSI
 	da[0-7])

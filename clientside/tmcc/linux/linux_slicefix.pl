@@ -1143,13 +1143,27 @@ sub fix_sshd_config
 	}
 
 	print STDERR "Adding security options to SSHD config\n";
-	open FILE, ">>$cfile" || die "Couldn't open $cfile: $!\n";
+	open FILE, "+<$cfile" ||
+	    die "Couldn't open $cfile: $!\n";
 
-	print FILE "\n# Emulab config\n";
-	print FILE "Protocol 2\n";
-	print FILE "PasswordAuthentication no\n";
-	print FILE "ChallengeResponseAuthentication no\n";
-	print FILE "PermitRootLogin without-password\n";
+	my @buffer = ();
+	while (<FILE>) {
+		s/^Protocol/#Protocol/;
+		s/^PasswordAuth/#PasswordAuth/;
+		s/^ChallengeResp/#ChallengeResp/;
+		s/^PermitRootLogin/#PermitRootLogin/;
+		push @buffer, $_;
+	}
+	push @buffer, "\n# Emulab config\n";
+	push @buffer, "Protocol 2\n";
+	push @buffer, "PasswordAuthentication no\n";
+	push @buffer, "ChallengeResponseAuthentication no\n";
+	push @buffer, "PermitRootLogin without-password\n";
+
+	seek FILE, 0, 0;
+	truncate FILE, 0;
+
+	print FILE @buffer;
 
 	close FILE;
 
