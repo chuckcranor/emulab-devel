@@ -134,20 +134,15 @@ localize_image() {
 
     # Check the time zone.
     if [ -e /etc/localtime ]; then
-	# XXX might be a symlink to /usr/share which we cannot resolve
-	if [ -L $MNT/etc/localtime ]; then
-	    rm $MNT/etc/localtime
-	    cp /dev/null $MNT/etc/localtime
-	fi
-	cmp -s /etc/localtime $MNT/etc/localtime
-	if [ $? -ne 0 ]; then
-	    echo "  updating /etc/localtime"
+	# XXX might be a symlink to /usr/share which we cannot resolve to
+	# compare, so just unconditionally replace it.
+	rm -f $MNT/etc/localtime
 
-	    cp -pf /etc/localtime $MNT/etc/localtime || {
-		echo "Failed to create /etc/localtime"
-		return 1
-	    }
-	fi
+	echo "  updating /etc/localtime"
+	cp -pf /etc/localtime $MNT/etc/localtime || {
+	    echo "Failed to create /etc/localtime"
+	    return 1
+	}
     fi
 
     # Check the NTP configuration.
