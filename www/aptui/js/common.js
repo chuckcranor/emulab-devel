@@ -106,6 +106,14 @@ window.APT_OPTIONS.initialize = function (sup)
     $('body').show();
 };
 
+window.APT_OPTIONS.gaAjaxEvent = function (route, method, code)
+{
+    if (window.GOOGLEUA === undefined) {
+	return;
+    }
+    ga('send', 'event', 'ajax', route, method, code);
+}
+
 APT_OPTIONS.CallServerMethod = function (url, route, method, args, callback)
 {
     // ignore url now.
@@ -118,7 +126,12 @@ APT_OPTIONS.CallServerMethod = function (url, route, method, args, callback)
     return $.ajax({
         // the URL for the request
         url: url,
-        success: callback,
+        success: function (json) {
+	    window.APT_OPTIONS.gaAjaxEvent(route, method, json.code);
+	    if (callback !== undefined) {
+		callback(json);
+	    }
+	},
  
         // the data to send (will be converted to a query string)
         data: {
