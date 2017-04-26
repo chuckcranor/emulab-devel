@@ -135,7 +135,7 @@ if (!defined($fd)) {
 }
 print $fd $rspec;
 
-my $genilib = emutil::ExecQuiet("$RSPECTOGENILIB $filename");
+my $genilib = emutil::ExecQuiet("$RSPECTOGENILIB -t $filename");
 if ($?) {
     print STDERR $genilib;
     print STDERR "Could not convert rspec back to geni-lib\n";

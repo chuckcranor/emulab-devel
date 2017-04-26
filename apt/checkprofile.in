@@ -36,19 +36,22 @@ sub usage()
 {
     print STDERR "Usage: checkprofile [-a | pid,name]\n";
     print STDERR "Options:\n";
-    print STDERR"  -a  : Run rspec2genilib converter on all rspec profiles\n";
-    print STDERR"  -r  : Run converted geni-lib\n";
-    print STDERR"  -c  : Compare rspecs after running geni-lib\n";
-    print STDERR"  -t  : Run RTE check on converted geni-lib script\n";
-    print STDERR"  -g  : Print the geni-lib\n";
-    print STDERR"  -x  : Only include rspecs with matching token\n";
+    print STDERR "  -a  : Run rspec2genilib converter on all rspec profiles\n";
+    print STDERR "  -r  : Run converted geni-lib\n";
+    print STDERR "  -c  : Compare rspecs after running geni-lib\n";
+    print STDERR "  -t  : Run RTE check on converted geni-lib script\n";
+    print STDERR "  -g  : Print the geni-lib\n";
+    print STDERR "  -s  : Print rspec before and after\n";
+    print STDERR "  -x  : Only include rspecs with matching token\n";
+    print STDERR "  -G  : Also test script based profiles, no RTE of course\n";
     exit(-1);
 }
-my $optlist    = "dargscx:t";
+my $optlist    = "dargscx:tG";
 my $debug      = 0;
 my $all        = 0;
 my $regress    = 0;
 my $compare    = 0;
+my $doscript   = 0;
 my $printgl    = 0;
 my $printrspec = 0;
 my $rtecheck   = 0;
@@ -67,7 +70,8 @@ my $XMLLINT    = "/usr/local/bin/xmllint";
 
 # Protos
 sub fatal($);
-sub ConvertProfile($);
+sub CheckProfile($);
+sub CheckScriptProfile($);
 
 #
 # Turn off line buffering on output
@@ -115,6 +119,9 @@ if (defined($options{"c"})) {
 if (defined($options{"g"})) {
     $printgl = 1;
 }
+if (defined($options{"G"})) {
+    $doscript = 1;
+}
 if (defined($options{"s"})) {
     $printrspec = 1;
 }
@@ -122,7 +129,7 @@ if (defined($options{"t"})) {
     $rtecheck = 1;
 }
 if (defined($options{"x"})) {
-    $clause = "and rspec like '%" . $options{"x"} . "%'";
+    $clause = "where rspec like '%" . $options{"x"} . "%'";
 }
 usage()
     if (!$all && @ARGV != 1);
@@ -134,7 +141,7 @@ if (!$all) {
     }
 }
 if (defined($profile)) {
-    exit(ConvertProfile($profile));
+    exit(CheckProfile($profile));
 }
 else {
     #
@@ -144,23 +151,39 @@ else {
 	DBQueryFatal("select p.profileid from apt_profiles as p ".
 		     "left join apt_profile_versions as v on ".
 		     "     v.profileid=p.profileid and v.version=p.version ".
-		     "where v.script is null $clause ".
+		     "$clause ".
 		     "order by p.pid,p.name");
+    my $count  = 0;
+    my $errors = 0;
     while (my ($id) = $query_result->fetchrow_array()) {
 	my $profile = APT_Profile->Lookup($id);
 	next
 	    if (!defined($profile));
+	next
+	    if (defined($profile->script()) && !$doscript);
+
 	print "Converting $profile\n";
-	ConvertProfile($profile);
+	$count++;
+	$errors++
+	    if (CheckProfile($profile));
     }
+    print "##########\n";
+    print "$count profiles, $errors failed\n";
 }
 
 #
 # Run the converter on a profile. 
 #
-sub ConvertProfile($)
+sub CheckProfile($)
 {
     my ($profile) = @_;
+
+    #
+    # We test script based profiles differently.
+    #
+    if (defined($profile->script())) {
+	return CheckScriptProfile($profile);
+    }
 
     my ($in, $filename) = tempfile("/tmp/convertXXXXX", UNLINK => 1);
     if (!defined($in)) {
@@ -171,7 +194,7 @@ sub ConvertProfile($)
     if ($printrspec) {
 	system("$XMLLINT --format $filename");
     }
-    my $output = emutil::ExecQuiet("$CONVERTER $filename");
+    my $output = emutil::ExecQuiet("$CONVERTER -t $filename");
     if ($?) {
 	#print STDERR $profile->rspec() . "\n";
 	print STDERR $output;
@@ -228,6 +251,63 @@ sub ConvertProfile($)
 	}
 	unlink0($in, $filename);
     }
+    return 0;
+
+  bad:
+    unlink0($in, $filename);
+    return -1;
+}
+
+#
+# Check a script based profile.
+#
+sub CheckScriptProfile($)
+{
+    my ($profile) = @_;
+
+    my ($in, $filename) = tempfile("/tmp/convertXXXXX", UNLINK => 1);
+    if (!defined($in)) {
+	fatal("Could not open temporary file for script");
+	    return -1;
+    }
+    print $in $profile->script();
+    
+    my $output = emutil::ExecQuiet("$RUNGENILIB $filename");
+    if ($?) {
+	print STDERR $output;
+	print STDERR "*** $RUNGENILIB failed\n";
+	goto bad;
+    }
+    if ($printgl) {
+	print $profile->script() . "\n";
+    }
+    if ($printrspec) {
+	print $output . "\n";
+    }
+    if ($regress) {
+	if ($compare) {
+	    #
+	    # Compare current rspec against newly generated rspec.
+	    #
+	    my $rspec1 = eval { APT_Rspec->new($profile->rspec()) };
+	    if ($@) {
+		print STDERR $@;
+		print STDERR "*** Could not parse profile rspec into object\n";
+		goto bad;
+	    }
+	    my $rspec2 = eval { APT_Rspec->new($output) };
+	    if ($@) {
+		print STDERR $@;
+		print STDERR "*** Could not parse output rspec into object\n";
+		goto bad;
+	    }
+	    if ($rspec1->Compare($rspec2)) {
+		print STDERR "*** rspecs comparison failed\n";
+		goto bad;
+	    }
+	}
+    }
+    unlink0($in, $filename);
     return 0;
 
   bad:

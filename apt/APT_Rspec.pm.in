@@ -102,6 +102,7 @@ sub new($$)
 		/^description$/i && do {
 		    my $type = GeniXML::FindAttr("type", $child);
 		    my $text = $child->textContent();
+		    $text =~ s/^\s+//;
 		    # Kill terminating newline for rtecheck
 		    chomp($text);
 		    $text =~ s/\"/\\"/g;
@@ -114,6 +115,7 @@ sub new($$)
 		/^instructions$/i && do {
 		    my $type = GeniXML::FindAttr("type", $child);
 		    my $text = $child->textContent();
+		    $text =~ s/^\s+//;
 		    # Kill terminating newline for rtecheck
 		    chomp($text);
 		    # This happens a lot.
@@ -126,12 +128,37 @@ sub new($$)
 		    }
 		    last SWITCH;
 		};
-		fatal("Unknown element in rspec_tour: $name\n");
+		/^steps$/i && do {
+		    my @steps = ();
+		    foreach my $stepchild ($child->nonBlankChildNodes()) {
+			my ($ns,$name) = split(":", $stepchild->nodeName);
+			$name = $ns if (!defined($name));
+			if ($name ne "step") {
+			    fatal("Unknown element in steps: $name");
+			}
+			my $type = GetTextOrFail("point_type", $stepchild);
+			my $id   = GetTextOrFail("point_id", $stepchild);
+			my $desc = FindFirst("n:description", $stepchild);
+			my $text = $desc->textContent();
+			# Kill terminating newline for rtecheck
+			chomp($text);
+			push(@steps, {
+			    "type" => $type,
+			    "id"   => $id,
+			    "description" => $text});
+		    }
+		    # We see a lot of empty steps
+		    $tour->{'steps'} = \@steps
+			if (scalar(@steps));
+		    last SWITCH;
+		};
+		fatal("Unknown element in rspec_tour: $name");
 	    };
 	}
 	return
 	    if (! (exists($tour->{"description"}) ||
-		   exists($tour->{"instructions"})));
+		   exists($tour->{"instructions"}) ||
+		   exists($tour->{"steps"})));
 	
 	$self->{'tour'} = $tour;
     };
@@ -280,6 +307,16 @@ sub instructions($)
     return $self->tour()->{'instructions'};
 }
 
+sub steps($)
+{
+    my ($self) = @_;
+
+    return undef
+	if (!defined($self->tour()) ||
+	    !exists($self->tour()->{'steps'}));
+    return $self->tour()->{'steps'};
+}
+
 sub addNode($$)
 {
     my ($self, $node) = @_;
@@ -366,7 +403,7 @@ sub CompareValues($$$)
 	if (!defined($val1));
     $val2 = "undef"
 	if (!defined($val2));
-    print STDERR "$text: $val1 != $val2\n";
+    print STDERR "$text: '$val1' != '$val2'\n";
     return 1;
 }
 
@@ -412,6 +449,10 @@ sub CompareHashes($$$)
 	elsif (ref($v1) eq "HASH") {
 	    return 1
 		if (CompareHashes("$text: $key", $v1, $v2));
+	}
+	elsif (ref($v1) eq "ARRAY") {
+	    return 1
+		if (CompareLists("$text: $key", $v1, $v2));
 	}
 	# Hmm, we assume all blessed refs are our own and have compare methods.
 	elsif (blessed($v1)) {
@@ -508,7 +549,7 @@ sub Compare($$)
 	    /^tour$/i && do {
 		# Need to deal with whitespace changes.
 		return 1
-		    if (0 && APT_Rspec::CompareHashes($key, $val1, $val2));
+		    if (APT_Rspec::CompareHashes($key, $val1, $val2));
 		last SWITCH;
 	    };
 	    /^(bscounter|namespaces|nodelist|linklist)$/i && do {
@@ -1031,7 +1072,7 @@ sub addNode($$$)
 		# Maybe we should do something comment lines.
 		last SWITCH;
 	    };
-	    /^(vnode|host)$/i && do {
+	    /^(vnode|host|location)$/i && do {
 		# Manifest crap.
 		last SWITCH;
 	    };

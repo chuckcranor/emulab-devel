@@ -43,13 +43,13 @@ sub usage()
     print STDERR "  -o file  - Specify output file for geni-lib\n";
     print STDERR "  -s file  - Specify output file for post geni-lib rspec\n";
     print STDERR "  -r       - Regression test; run geni-lib, compare rspecs\n";
-    print STDERR "  -t       - Do not spit out the Tour (for regression)\n";
+    print STDERR "  -t       - Do not add stub docstring (for regression)\n";
     exit(-1);
 }
 my $optlist    = "do:rs:t";
 my $debug      = 0;
 my $regress    = 0;
-my $notour     = 0;
+my $nodocstr   = 0;
 my $ofile;
 my $rfile;
 
@@ -104,13 +104,14 @@ if (defined($options{"d"})) {
     $debug = 1;
 }
 if (defined($options{"t"})) {
-    $notour = 1;
+    $nodocstr = 1;
 }
 if (defined($options{"o"})) {
     $ofile = $options{"o"};
 }
 if (defined($options{"r"})) {
-    $regress = 1;
+    $regress  = 1;
+    $nodocstr = 1;
     if (defined($options{"s"})) {
 	$rfile = $options{"s"};
     }
@@ -589,19 +590,51 @@ sub SpitTour($$)
     my $description  = $rspec->description();
     my $instructions = $rspec->instructions();
 
+    return
+	if ($nodocstr &&
+	    ! ((defined($description) && $description->{"text"} ne "") ||
+	       (defined($instructions) && $instructions->{"text"} ne "")));
+
     my $docstring = '"""';
 
     if (defined($description)) {
 	$docstring .= $description->{'text'};
     }
     else {
-	$docstring .= "Please give this script a description.";
+	if ($nodocstr) {
+	    $docstring .= "\n";
+	}
+	else {
+	    $docstring .= "Please give this script a description.";
+	}
     }
     if (defined($instructions)) {
-	$docstring .= "\n\n" . "Instructions:" . "\n" . $instructions->{'text'};
+	my $text = $instructions->{'text'};
+	$docstring .= "\n\n" . "Instructions:" . "\n" . $text;
     }
     $docstring .= '"""';
     print $where $docstring . "\n\n";
+}
+
+sub SpitSteps($$)
+{
+    my ($rspec, $where) = @_;
+    my $steps = $rspec->steps();
+    return
+	if (!defined($steps) || !scalar(@{$steps}));
+
+    print $where "# Create a Tour object and the steps to it\n";
+    print $where "tour = emulab.Tour()\n";
+    print $where "tour.useDocstring()\n";
+    foreach my $step (@{$steps}) {
+	my $type = $step->{"type"};
+	my $id   = $step->{"id"};
+	my $desc = $step->{"description"};
+	$desc =~ s/\"/\\"/g;
+	print $where "tour.addStep('$id', '$type', \"$desc\")\n";
+    }
+    print $where "request.addTour(tour)\n\n\n";
+    
 }
 
 sub SpitPreamble($)
@@ -685,8 +718,9 @@ if (!defined($outfd)) {
     fatal("Could not open temporary file for result rspec");
     return -1;
 }
-SpitTour($rspec, $outfd) if (!$notour);
+SpitTour($rspec, $outfd);
 SpitPreamble($outfd);
+SpitSteps($rspec, $outfd);
 SpitNodeStatements($rspec, $outfd);
 SpitLinkStatements($rspec, $outfd);
 SpitTopLevelStatements($rspec, $outfd);
