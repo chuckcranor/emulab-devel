@@ -129,6 +129,15 @@ my $lockdebug = 0;
 my $sleepdebug = 0;
 
 #
+# Set to enable vnodesetup to exit before vnode is completely up
+# (see vnodesetup::hackwaitandexit). Allows more parallelism during
+# boot-time vnode setup. Note that concurrency may still be constrained
+# by $MAXCONCURRENT (defined below) which limits how many new VMs can
+# be created at once.
+#
+my $vsrelease = "immediate";	# or "early" or "none"
+
+#
 # Should we use LVM for extra storage space?  This should remain set.
 #
 my $USE_LVM = 0;
@@ -1775,6 +1784,17 @@ sub rootPreConfigNetwork($$$$)
     TBDebugTimeStamp("  releasing global lock")
 	if ($lockdebug);
     TBScriptUnlock();
+
+    #
+    # Let vnodesetup exit early, so that bootvnodes delays minimally per
+    # vnode.  I guess we figure if we can get through this call, we've
+    # made it through the obvious failures in the overall preparatory
+    # code in mkvnode.pl.
+    #
+    if ($vsrelease eq "immediate") {
+	TBDebugTimeStamp("rootPreConfigNetwork: touching $VMS/$vnode_id/running");
+	mysystem2("touch $VMS/$vnode_id/running");
+    }
 
     return 0;
 
