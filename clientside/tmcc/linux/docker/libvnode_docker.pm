@@ -1046,14 +1046,19 @@ sub rootPreConfig($)
 	    mysystem("ip link set up $DOCKERCNET");
 	}
     }
-    elsif (!$USE_MACVLAN_CNET && ! -e "/sys/class/net/$DOCKERCNET") {
+    elsif (!$USE_MACVLAN_CNET
+	   && (! -e "/sys/class/net/$DOCKERCNET"
+	       || !defined(findBridge($cnet_iface))
+	       || findBridge($cnet_iface) ne $DOCKERCNET)) {
 	my $alias_net =
 	    inet_ntoa(inet_aton($alias_ip) & inet_aton($alias_mask));
 
-	addbr($DOCKERCNET);
-	if ($?) {
-	    fatal("failed to create $DOCKERCNET bridge!");
-	    return -1;
+	if (! -e "/sys/class/net/$DOCKERCNET") {
+	    addbr($DOCKERCNET);
+	    if ($?) {
+		fatal("failed to create $DOCKERCNET bridge!");
+		return -1;
+	    }
 	}
 
 	if (!$ISREMOTENODE) {
@@ -1102,13 +1107,30 @@ sub rootPreConfig($)
 	    }
 
 	    #
+            # NB: if this is a reboot, and $DOCKERCNET was already added
+            # to Docker, then Docker will go ahead and create the
+            # bridge.  But it doesn't add the control net NIC to it,
+            # despite the fact it was told that this NIC is what the
+            # bridge is built atop.  What fun.  Moreover, it
+            # automatically sets the primary IP of the bridge to be the
+            # virtual control net addr.  We want the primary to be the
+            # real control net.  So flush, and reapply.
+	    #
+	    mysystem2("ip addr flush dev $DOCKERCNET");
+	    sleep(1);
+
+	    #
 	    # Ok, move the configuration over:
 	    #
 	    mysystem("ip link set down $cnet_iface");
 	    mysystem("ip addr del $ipandmaskbits dev $cnet_iface");
 	    mysystem2("ip addr flush dev $cnet_iface");
+	    sleep(1);
 	    addbrif($DOCKERCNET,$cnet_iface);
-	    mysystem("ip addr replace $ipandmaskbits dev $DOCKERCNET");
+	    mysystem2("ip addr replace $ipandmaskbits dev $DOCKERCNET");
+	    if ($?) {
+		mysystem2("ip addr add $ipandmaskbits dev $DOCKERCNET");
+	    }
 	    mysystem("ip link set up $DOCKERCNET");
 	    mysystem("ip link set up $cnet_iface");
 	    if ($defrouteiface eq $cnet_iface) {
