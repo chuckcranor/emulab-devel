@@ -1067,6 +1067,11 @@ sub CleanupVM()
 	}
     }
 
+    # If we might have been polling, make sure that is cleaned up.
+    if (hasLibOp("vnodePollCleanup")) {
+	safeLibOp("vnodePollCleanup",1,0);
+    }
+
     # if not halted, try that first
     my ($ret,$err) = safeLibOp('vnodeState', 1, 0);
     if ($err) {

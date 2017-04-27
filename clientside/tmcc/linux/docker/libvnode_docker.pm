@@ -2649,12 +2649,13 @@ sub vnodePoll($$$$$$)
 	    " --data-urlencode 'filters=\{\"type\":\[\"container\"\],".
 	    "                             \"container\":\[\"${vnode_id}\"\]\}'".
 	    " -G http:/events";
-	open($private->{DOCKER_EVENT_FD},"$ccmd |");
-	if ($?) {
+	my $pid = open($private->{DOCKER_EVENT_FD},"$ccmd |");
+	if (!defined($pid) || $?) {
 	    warn("could not open docker socket for event stream for $vnode_id");
 	    delete($private->{DOCKER_EVENT_HISTORY});
 	    return -1;
 	}
+	$private->{DOCKER_EVENT_CHILD} = $pid;
 	$private->{DOCKER_EVENT_FD}->autoflush(1);
 	my $oldfh = select($private->{DOCKER_EVENT_FD});
 	$| = 1;
@@ -2677,6 +2678,8 @@ sub vnodePoll($$$$$$)
 		TBDebugTimeStamp("lost docker event stream connection;".
 				 " reconnecting...");
 		delete($private->{DOCKER_EVENT_FD});
+		kill('KILL',$private->{DOCKER_EVENT_CHILD});
+		delete($private->{DOCKER_EVENT_CHILD});
 		goto reconnect;
 	    }
 	}
@@ -2749,9 +2752,11 @@ sub vnodePollCleanup($$$$)
     my ($vnode_id, $vmid, $vnconfig, $private) = @_;
 
     if (exists($private->{DOCKER_EVENT_FD})) {
+	kill('KILL',$private->{DOCKER_EVENT_CHILD});
 	if ($private->{DOCKER_EVENT_FD}->opened()) {
 	    close($private->{DOCKER_EVENT_FD});
 	}
+	delete($private->{DOCKER_EVENT_CHILD});
 	delete($private->{DOCKER_EVENT_FD});
     }
     if (exists($private->{DOCKER_EVENT_HISTORY})) {
