@@ -896,8 +896,6 @@ sub init($)
 {
     my ($pnode_id,) = @_;
 
-    refreshNetworkDeviceMaps();
-
     if ($USE_LVM) {
 	# See what version of LVM we have. Again, some commands are different.
 	my $out = `lvm version | grep 'LVM version'`;
@@ -962,6 +960,11 @@ sub rootPreConfig($)
     TBDebugTimeStamp("Configuring root vhost context");
 
     #
+    # Ensure we have the latest bridge/iface state!
+    #
+    refreshNetworkDeviceMaps();
+
+    #
     # Make sure we actually have Docker.
     #
     ensureDockerInstalled();
@@ -984,13 +987,52 @@ sub rootPreConfig($)
 	mysystem("$MODPROBE bridge");
     }
 
-    #
-    # For now, always use macvlan for the control net.
-    #
-    my ($cnet_iface,$cnet_ip) = findControlNet();
+    my ($cnet_iface,$cnet_ip,$cnet_mask,
+	$cnet_maskbits,$cnet_net,$cnet_mac,$cnet_gw) = findControlNet();
     my ($alias_ip,$alias_mask,$vmac) = hostControlNet();
     my ($VCNET_NET,undef,$VCNET_GW,$VCNET_SLASHMASK) = findVirtControlNet();
     my $nettype = ($USE_MACVLAN_CNET) ? "macvlan" : "bridge";
+
+    #
+    # NB: in the case of !$USE_MACVLAN_CNET (i.e. using bridges for
+    # control net) and !$ISREMOTENODE, we place the real routable
+    # control net addr on the bridge and put the real control net dev in
+    # the bridge.  So we want to track the orig_cnet_iface.  Once we
+    # shuffle that dev into the bridge, we reset the
+    # /var/emulab/boot/controlif file to point to the bridge -- and thus
+    # if this gets re-run, it won't get the real control net dev as in
+    # arg to this function.  So the code that handles this case is
+    # careful to use orig_cnet_iface instead of cnet_iface!  None of the
+    # other cases care, since they don't re-write
+    # /var/emulab/boot/controlif.
+    #
+    my $orig_cnet_iface;
+    #
+    # Assume if this is not present, this is the first time running.  If
+    # so, the real control net device must have the real control net IP;
+    # not $DOCKERCNET!  So if you wipe this file out to retry, make sure
+    # to reset the real controlif with proper info from dhclient.
+    #
+    if (! -e "/var/run/emulab-controlif-orig") {
+	$orig_cnet_iface = $cnet_iface;
+	open(FD,">/var/run/emulab-controlif-orig")
+	    or fatal("could not open /var/run/emulab-controlif-orig: $!");
+	print FD "$cnet_iface";
+	close(FD);
+    }
+    else {
+	open(FD,"/var/run/emulab-controlif-orig")
+	    or fatal("could not open /var/run/emulab-controlif-orig: $!");
+	$orig_cnet_iface = <FD>;
+	chomp($orig_cnet_iface);
+	close(FD);
+    }
+
+    my $dcnexists = 0;
+    mysystem2("$DOCKER network inspect $DOCKERCNET >/dev/null 2>&1");
+    if ($? == 0) {
+	$dcnexists = 1;
+    }
 
     if ($USE_MACVLAN_CNET && ! -e "/sys/class/net/$DOCKERCNET") {
 	my $alias_net =
@@ -1047,12 +1089,16 @@ sub rootPreConfig($)
 	}
     }
     elsif (!$USE_MACVLAN_CNET
-	   && (! -e "/sys/class/net/$DOCKERCNET"
-	       || !defined(findBridge($cnet_iface))
-	       || findBridge($cnet_iface) ne $DOCKERCNET)) {
+	   && (!$dcnexists
+	       || ! -e "/sys/class/net/$DOCKERCNET"
+	       || !defined(findBridge($orig_cnet_iface))
+	       || findBridge($orig_cnet_iface) ne $DOCKERCNET)) {
 	my $alias_net =
 	    inet_ntoa(inet_aton($alias_ip) & inet_aton($alias_mask));
 
+	#
+	# If the bridge doesn't exist, add it first.
+	#
 	if (! -e "/sys/class/net/$DOCKERCNET") {
 	    addbr($DOCKERCNET);
 	    if ($?) {
@@ -1061,35 +1107,42 @@ sub rootPreConfig($)
 	    }
 	}
 
+	#
+	# The $ISREMOTENODE case is easy, because the real control net
+	# device doesn't go into the bridge, and we and Docker expect
+	# the bridge to have the fake virtual control net address.  So
+	# harmony ensues.
+	#
+	# The !$ISREMOTENODE case is very, very tricky.  The first time
+	# we boot, the docker network doesn't exist; the bridge doesn't
+	# exist; all the control net state is as dhclient left it.  The
+	# correct order there is create bridge; flush control net ip
+	# addr; move control net dev into bridge; add control net as
+	# docker network; flush bridge ip addr Docker set; set our
+	# proper public control net IP as the bridge ip addr; and add
+	# the unroutable virtual control net addr (the docker network
+	# gateway) as an alias.  NB: Docker will not accept or add the
+	# virtual control net IP as an alias; it will error, or force
+	# the IP to the virtual addr.  That is why we must fix it up
+	# after creating the Docker network.
+	#
+	# On subsequent boots, the control net already exists as a
+	# Docker network, and Docker will create the control net device
+	# before we run.  However, Docker doesn't put the real control
+	# net device into that bridge (it doesn't know that kind of
+	# thing); but it does give the bridge the virtual control IP as
+	# its primary IP.  So, we have to flush the bridge IP, and *not*
+	# remake the Docker cnet.
+	#
+	# What a pain, all because Docker cannot just leave an existing
+	# bridge alone (i.e.,
+	# https://github.com/docker/docker/issues/20758).
+	#
 	if (!$ISREMOTENODE) {
-	    #
-	    # If this node is local to an Emulab testbed, we make a
-	    # bridge, tell Docker its configuration (the host virtual
-	    # control net addr) (because Docker will take over config of
-	    # the bridge, we cannot assign the bridge the real control
-	    # net addr like normal); add a dummy device with the real
-	    # control net addr; and move the dummy device and the
-	    # control net iface into this bridge.  What a pain, all
-	    # because Docker cannot just leave an existing bridge alone
-	    # (i.e., https://github.com/docker/docker/issues/20758).
-	    #
-	    
-	    # First grab the ip/maskbits and default gateway.
-	    my $ipandmaskbits;
-	    open(IFOUTPUT,"ip -br addr show $cnet_iface |")
-		or fatal("could not obtain IP info for $cnet_iface!");
-	    while (!eof(IFOUTPUT)) {
-		my $line = <IFOUTPUT>;
-		chomp($line);
-		if ($line =~ /^.*\s+(\d+\.\d+\.\d+\.\d+\/\d+)\s+.*$/) {
-		    $ipandmaskbits = $1;
-		}
-	    }
-	    if (!$ipandmaskbits) {
-		fatal("could not get IP info for $cnet_iface!");
-	    }
-	    my $defroute;
-	    my $defrouteiface = '';
+	    my $ipandmaskbits = "$cnet_ip/$cnet_maskbits";
+
+	    # First grab the default gateway.
+	    my ($defroute,$defrouteiface);
 	    open(ROUTEOUTPUT,"ip route list |")
 		or fatal("unable to get route list via 'ip'!");
 	    while (!eof(ROUTEOUTPUT)) {
@@ -1107,41 +1160,69 @@ sub rootPreConfig($)
 	    }
 
 	    #
-            # NB: if this is a reboot, and $DOCKERCNET was already added
-            # to Docker, then Docker will go ahead and create the
-            # bridge.  But it doesn't add the control net NIC to it,
-            # despite the fact it was told that this NIC is what the
-            # bridge is built atop.  What fun.  Moreover, it
-            # automatically sets the primary IP of the bridge to be the
-            # virtual control net addr.  We want the primary to be the
-            # real control net.  So flush, and reapply.
+	    # Undo the existing control net config we obtained on boot,
+	    # and move that interface into our $DOCKERCNET bridge, IFF
+	    # it's not in the bridge already.  If it's already in the
+	    # bridge, no need to do any of this.
 	    #
-	    mysystem2("ip addr flush dev $DOCKERCNET");
-	    sleep(1);
+	    if (!defined(findBridge($orig_cnet_iface))
+		|| findBridge($orig_cnet_iface) ne $DOCKERCNET) {
+		mysystem2("ip link set down $orig_cnet_iface");
+		mysystem2("ip addr del $ipandmaskbits dev $orig_cnet_iface");
+		mysystem2("ip addr flush dev $orig_cnet_iface");
+		addbrif($DOCKERCNET,$orig_cnet_iface);
+	    }
 
 	    #
-	    # Ok, move the configuration over:
+	    # If the Docker network does not exist in Docker itself, but
+	    # it *does* exist as a device, flush its IP addr since
+	    # Docker insists on setting that itself.
 	    #
-	    mysystem("ip link set down $cnet_iface");
-	    mysystem("ip addr del $ipandmaskbits dev $cnet_iface");
-	    mysystem2("ip addr flush dev $cnet_iface");
-	    sleep(1);
-	    addbrif($DOCKERCNET,$cnet_iface);
-	    mysystem2("ip addr replace $ipandmaskbits dev $DOCKERCNET");
+	    if (!$dcnexists && -e "/sys/class/net/$DOCKERCNET") {
+		mysystem2("ip addr flush dev $DOCKERCNET");
+	    }
+
+	    #
+	    # If the docker network isn't yet built, do that now.
+	    #
+	    if (!$dcnexists) {
+		mysystem("docker network create -d bridge".
+			 " --subnet=${VCNET_NET}/${VCNET_SLASHMASK}".
+			 " --gateway=${alias_ip}".
+			 " -o com.docker.network.bridge.name=$DOCKERCNET".
+			 " $DOCKERCNET");
+		$dcnexists = 1;
+	    }
+
+	    #
+	    # Always flush the bridge's Docker-imposed addr immediately,
+	    # whether it existed or we created it.
+	    #
+	    mysystem("ip addr flush dev $DOCKERCNET");
+
+	    #
+	    # Set the $DOCKERCNET configuration to one that both we and
+	    # Docker are happy with.
+	    #
+	    mysystem2("ip addr add $ipandmaskbits dev $DOCKERCNET");
 	    if ($?) {
-		mysystem2("ip addr add $ipandmaskbits dev $DOCKERCNET");
+		mysystem("ip addr replace $ipandmaskbits dev $DOCKERCNET");
 	    }
 	    mysystem("ip link set up $DOCKERCNET");
-	    mysystem("ip link set up $cnet_iface");
-	    if ($defrouteiface eq $cnet_iface) {
-		mysystem("ip route add default via $defroute");
+	    mysystem("ip link set up $orig_cnet_iface");
+	    if ($defrouteiface eq $cnet_iface
+		|| $defrouteiface eq $orig_cnet_iface) {
+		mysystem("ip route replace default via $defroute");
 	    }
+	    mysystem("ip addr add $alias_ip/$alias_mask dev $DOCKERCNET".
+		     " label $DOCKERCNET:1");
 
+	    #
+	    # Save the bridge as the real control net iface.
+	    #
 	    open(CONTROLIF,">$BOOTDIR/controlif");
 	    print CONTROLIF "$DOCKERCNET\n";
 	    close(CONTROLIF);
-	    mysystem("ip addr add $alias_ip/$alias_mask dev $DOCKERCNET".
-		     " label $DOCKERCNET:1");
 	}
 	else {
 	    #
@@ -1154,10 +1235,9 @@ sub rootPreConfig($)
     }
 
     #
-    # Now if the Docker control net doesn't exist, create that.
+    # Now if the Docker control net still doesn't exist, create that.
     #
-    mysystem2("$DOCKER network inspect $DOCKERCNET >/dev/null 2>&1");
-    if ($?) {
+    if (!$dcnexists) {
 	if ($USE_MACVLAN_CNET) {
 	    #
 	    # Next, we create a docker macvlan network to front for the
