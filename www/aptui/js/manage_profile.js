@@ -515,12 +515,12 @@ $(function ()
 	 * the text back into the rspec since that is what actually
 	 * gets submitted; the rspec is authoritative.
 	 */
-	$('#profile_instructions').change(function() {
-	    ChangeHandlerAux("instructions");
+	$('#profile_instructions textarea').change(function() {
+	    TourModified("instructions");
 	    ProfileModified();
 	});
-	$('#profile_description').change(function() {
-	    ChangeHandlerAux("description");
+	$('#profile_description textarea').change(function() {
+	    TourModified("description");
 	    ProfileModified();
 	});
 
@@ -536,20 +536,20 @@ $(function ()
 	$('#profile_nodelete').change(function() { ProfileModified(); });
 	
 	/*
-	 * A double click handler that will render the instructions
-	 * in a modal.
+	 * A double click handler that will render the instructions or
+	 * description in a modal.
 	 */
-	$('#profile_instructions').dblclick(function() {
-	    var text = $(this).val();
-	    $('#renderer_modal_div').html(marked(text));
-	    sup.ShowModal("#renderer_modal");
-	});
-	// Ditto the description.
-	$('#profile_description').dblclick(function() {
-	    var text = $(this).val();
-	    $('#renderer_modal_div').html(marked(text));
-	    sup.ShowModal("#renderer_modal");
-	});
+	$('#profile_description textarea, #profile_instructions textarea')
+	    .dblclick(function() {
+		var text = $(this).val();
+		$('#renderer_modal_div').html(marked(text));
+		sup.ShowModal("#renderer_modal");
+	    });
+	$('#profile_description .textdiv, #profile_instructions .textdiv')
+	    .dblclick(function() {
+		$('#renderer_modal_div').html($(this).html());
+		sup.ShowModal("#renderer_modal");
+	    });
 	// Handler for guest instantiate submit button, which is in
 	// the modal.
 	$('#guest_instantiate_submit_button').click(function (event) {
@@ -587,27 +587,10 @@ $(function ()
 	
 	/*
 	 * If we were given an rspec, suck the description and instructions
-	 * out of the rspec and put them into the text boxes. But
-	 * watch for some already in the description box, it is an old
-	 * one and we want to use it if no description in the rspec.
+	 * out of the rspec and put them into the text boxes.
 	 */
-	if (gotrspec) {
+	if (window.VIEWING) {
 	    ExtractFromRspec();
-	    // We also got a geni-lib script, so show the XML button.
-	    if (gotscript) {
-	        $('#show_xml_modal_button').removeClass("hidden");
-		$('#profile_instructions').prop("readonly", true);
-		$('#profile_description').prop("readonly", true);
-		$('.geni-lib-warning').removeClass("hidden");
-	    }
-	}
-	else {
-	    /*
-	     * Not editing, so disable the text boxes until we get
-	     * an rspec via the file chooser. 
-	     */
-	    $('#profile_instructions').prop("disabled", true);
-	    $('#profile_description').prop("disabled", true);
 	}
 	CreateJacksEditor();
 	UpdateButtons();
@@ -721,6 +704,11 @@ $(function ()
 	}
         else
         {
+	    // Kill existing script since we are switching back to XML. SAD!
+	    if (gotscript) {
+		gotscript = 0;
+		$('#profile_script_textarea').val("");
+	    }
 	    NewRspecHandler(newRspec);
 	}
     }
@@ -918,12 +906,12 @@ $(function ()
 	return xml;
     }
     //
-    // Helper function for instructions/description change handler above.
-    // Take the text box contents and store back into the rspec.
+    // The description or instructions have changed in an rspec based
+    // profile, need to write the changes back into the rspec.
     //
-    function ChangeHandlerAux(which)
+    function TourModified(which)
     {
-	var text    = $('#profile_' + which).val();
+	var text    = $('#profile_' + which + ' textarea').val();
 	var rspec   = $('#profile_rspec_textarea').val();
 	if (rspec === "") {
 	    return;
@@ -957,6 +945,8 @@ $(function ()
     {
 	newrspec     = $.trim(newrspec);
 	var oldrspec = $.trim($('#profile_rspec_textarea').val());
+	gotrspec     = 1;
+	
 	if (newrspec == oldrspec) {
 	    // In case rspec does not change.
 	    UpdateButtons();
@@ -986,19 +976,6 @@ $(function ()
 	    if (!fromrepo)
 		ProfileModified();
 	    UpdateButtons();
-	    if (gotscript) {
-		$('#profile_instructions').prop("readonly", true);
-		$('#profile_description').prop("readonly", true);
-		$('.geni-lib-warning').removeClass("hidden");
-	    }
-	    else {
-		// Allow editing the boxes now that we have an rspec.
-		// This only matters on a brand new create age.
-		$('#profile_instructions').prop("readonly", false);
-		$('#profile_description').prop("readonly", false);
-		$('#profile_instructions').prop("disabled", false);
-		$('#profile_description').prop("disabled", false);
-	    }
 	};
 
 	// No old rspec, use new one.
@@ -1049,17 +1026,42 @@ $(function ()
 	//console.info(rspec);
 	//console.info(xml);
 	
-	$('#profile_description').val("");
+	$('#profile_description textarea').val("");
+	$('#profile_description .textdiv').html("");
 	$(xml).find("rspec_tour > description").each(function() {
 	    var text = $(this).text();
-	    $('#profile_description').val(text);
+	    $('#profile_description textarea').val(text);
+	    $('#profile_description .textdiv').html(marked(text));
 	});
-	$('#profile_instructions').val("");
+	$('#profile_instructions textarea').val("");
+	$('#profile_instructions .textdiv').html("");
 	$(xml).find("rspec_tour > instructions").each(function() {
 	    var text = $(this).text();
-	    $('#profile_instructions').val(text);
+	    $('#profile_instructions textarea').val(text);
+	    $('#profile_instructions .textdiv').html(marked(text));
 	});
-	
+	if (gotscript) {
+	    // We got here by a geni-lib script. No editing allowed
+	    $('#show_xml_modal_button').removeClass("hidden");
+	    $('#profile_description textarea').addClass("hidden");
+	    $('#profile_description .textarea').removeClass("hidden");
+	    $('#profile_instructions textarea').addClass("hidden");
+	    $('#profile_instructions .textarea').removeClass("hidden");
+	}
+	else {
+	    // User can edit the textareas
+	    $('#show_xml_modal_button').addClass("hidden");
+	    $('#profile_description textarea').removeClass("hidden");
+	    $('#profile_description .textarea').addClass("hidden");
+	    $('#profile_instructions textarea').removeClass("hidden");
+	    $('#profile_instructions .textarea').addClass("hidden");
+	}
+	// Creating new profile, now we can show the tour/metadata fields.
+	if (!window.VIEWING) {
+	    $('#tour-text-boxes').removeClass("hidden");
+	    $('#metadata-fields').removeClass("hidden");
+	}
+
 	//
 	// First time we see the XML, grab step data out of it. But after
 	// that the steps table is authoritative, and so we sync the table
@@ -1316,6 +1318,8 @@ $(function ()
 	    }
 	    if (json.value.rspec != "") {
 		gotscript = 1;
+		// Kill the rspec so that we always use the new one.
+		$('#profile_rspec_textarea').val("");
 		NewRspecHandler(json.value.rspec);
 		if (repoupdate_callback !== undefined) {
 		    repoupdate_callback(true /* modified */);
@@ -1685,14 +1689,22 @@ $(function ()
     function UpdateButtons()
     {
 	console.info(window.VIEWING, window.CANMODIFY,
-		     fromrepo, gotscript, portal_converted);
-	    
-	if ((!window.VIEWING || window.CANMODIFY) &&
-	    !fromrepo && (!gotscript || portal_converted)) {
-	    $('#edit_topo_modal_button').html('Edit Topology');
+		     fromrepo, gotscript, gotrspec, portal_converted);
+
+	if (! (gotscript || gotrspec)) {
+	    $('#edit_topo_modal_button').html('Create Topology');
+	    $('#show_source_modal_button').html('Edit Code');
 	}
 	else {
-	    $('#edit_topo_modal_button').html('View Topology');
+	    if ((!window.VIEWING || window.CANMODIFY) &&
+		!fromrepo && (!gotscript || portal_converted)) {
+		$('#edit_topo_modal_button').html('Edit Topology');
+		$('#show_source_modal_button').html('Edit Code');
+	    }
+	    else {
+		$('#edit_topo_modal_button').html('View Topology');
+		$('#show_source_modal_button').html('View Code');
+	    }
 	}
     }
 

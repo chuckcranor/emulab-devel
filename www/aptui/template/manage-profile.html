@@ -2,6 +2,13 @@
  .popover {
      max-width: none !important;
  }
+ .scrolly {
+     overflow-y: auto;
+     position: relative;
+     height: auto;
+     max-height: 150px;
+     min-height: 24px;
+ } 
 }
 </style>
 <div class='row'>
@@ -309,11 +316,14 @@
 	    <% if (! genilib_editor) { %>
 	    <div class="form-group">
 	      <div class='format-me'
-		   data-key='profile_rspec' data-label='Your script'
+		   data-key='profile_rspec' data-label='Source code'
+		   data-html="true"
 		   data-help='You can supply either an
 			      <a href="<%- manual %>/advanced-topics.html">
 			      rspec or a geni-lib script</a> for your
-			      profile source code.'>
+			      profile source code. <br>You can also create a
+			      topology with the topology editor, or you can
+			      use an existing git repository.'>
 		<div class='row'>
                   <div class='col-xs-12'>
 		    <% if (! (fromrepo || window.CLONING)) { %>
@@ -327,18 +337,13 @@
 		      </span>
 		    <% } %>
 		    <button class='btn btn-primary btn-xs'
-			  type='button'
-			  style='margin-right: 10px;'
-			  id='edit_topo_modal_button'>
-		      <% if ((!viewing || canmodify) && !fromrepo) { %>Edit <% } else { %>View <% } %>
-                      Topology</button>
+			    type='button'
+			    style='margin-right: 10px;'
+			    id='edit_topo_modal_button'>Topology</button>
 		    <button class='btn btn-primary btn-xs'
-			  type='button'
-			  style='margin-right: 10px;'
-			  id='show_source_modal_button'>
-		      <% if ((!viewing || canmodify) && !fromrepo) { %>Edit <% } else { %>View <% } %>
-		      Source
-		    </button>
+			    type='button'
+			    style='margin-right: 10px;'
+			    id='show_source_modal_button'>Code</button>
 		    <button class='btn btn-primary btn-xs hidden'
 			  type='button'
 			  style='margin-right: 10px;'
@@ -361,14 +366,20 @@
 		      </span>
 		    <% } %>
 		    <% if (! (viewing || window.CLONING)) { %>
-		      or 
-		      <button class='btn btn-primary btn-xs'
-     			      data-toggle='modal'
-			      data-target='#git-repo-modal'
-			      type='button'
-			      style='margin-left: 10px;'
-			      id='git-repo-button'>
-			Git Repo</button>
+		      or
+		      <span data-toggle='popover'
+			    data-delay='{"hide":500, "show":500}'
+			    data-html='true'
+			    data-content="Supply your profile source from a
+					  Git repository.
+					  Click for more info.">
+			<button class='btn btn-primary btn-xs'
+     				data-toggle='modal'
+				data-target='#git-repo-modal'
+				type='button'
+				style='margin-left: 10px;'
+				id='git-repo-button'>Git Repo</button>
+		      </span>
 		    <% } %>
 		  </div>
 		</div>
@@ -424,7 +435,8 @@
 		      data-key='profile_script'
 		      rows=5><%- formfields.profile_script %></textarea>
 	  </fieldset>
-	  <fieldset>
+	  <fieldset id="tour-text-boxes"
+		    <% if (!viewing) { %>class="hidden" <% } %> >
 	    <div class="form-group">
 	      <div class="format-me"
 		   data-key='profile_description'
@@ -432,19 +444,26 @@
 		   data-help='Briefly describe what this profile
 			      does. Use <a href="https://github.com/adam-p/markdown-here/wiki/Markdown-Cheatsheet" target=_blank>Markdown format</a>, double click
 			      to see a rendering.'>
-		<textarea name=profile_description
-			  id='profile_description'
-			  rows=3
-			  class='form-control'
-			  type='textarea'></textarea>
-		<div class="geni-lib-warning hidden"><small class="pull-right">
-		  Description set by geni-lib script
-		  <a href='#' class='btn btn-xs'
-		     data-toggle='modal'
-		     data-target="#docstring-help-modal">
-		    <span style='margin-bottom: 4px; margin-left: 0px;'
-			  class='glyphicon glyphicon-question-sign'></span></a>
-		</small></div>
+		<div id='profile_description'>
+		  <textarea class="form-control hidden"
+			    placeholder="Please provide a description for your profile, its required."
+			    rows=3 type='textarea'></textarea>
+		  <div class="textarea hidden">
+		    <div class="form-control textdiv scrolly"></div>
+		    <div class="geni-lib-warning">
+		      <small class="pull-right">
+			Description set by geni-lib script
+			<a href='#' class='btn btn-xs'
+			   data-toggle='modal'
+			   data-target="#docstring-help-modal">
+			  <span style='margin-bottom: 4px; margin-left: 0px;'
+				class='glyphicon glyphicon-question-sign'>
+			  </span>
+			</a>
+		      </small>
+		    </div>
+		  </div>
+		</div>
 	      </div>
 	    </div>
 	    <div class="form-group">
@@ -455,22 +474,30 @@
 		              profile after it starts.
 		              Use <a href="https://github.com/adam-p/markdown-here/wiki/Markdown-Cheatsheet" target=_blank>Markdown format</a>, double click
  		              to see a rendering.'>
-		<textarea name=profile_instructions
-			  id='profile_instructions'
-			  class='form-control'
-			  rows=3
-			  type='textarea'></textarea>
-		<div class="geni-lib-warning hidden"><small class="pull-right">
-		  Instructions set by geni-lib script
-		  <a href='#' class='btn btn-xs'
-		     data-toggle='modal'
-		     data-target="#docstring-help-modal">
-		    <span style='margin-bottom: 4px; margin-left: 0px;'
-			  class='glyphicon glyphicon-question-sign'></span></a>
-		</small></div>
+		<div id='profile_instructions'>
+		  <textarea class="form-control hidden" rows=3
+			    placeholder="Provide optional instructions for users of your profile."
+			    type='textarea'></textarea>
+		  <div class="textarea hidden">
+		    <div class="form-control textdiv scrolly"></div>
+		    <div class="geni-lib-warning">
+		      <small class="pull-right">
+			Instructions set by geni-lib script
+			<a href='#' class='btn btn-xs'
+			   data-toggle='modal'
+			   data-target="#docstring-help-modal">
+			  <span style='margin-bottom: 4px; margin-left: 0px;'
+				class='glyphicon glyphicon-question-sign'>
+			  </span>
+			</a>
+		      </small>
+		    </div>
+		  </div>
+		</div>
 	      </div>
 	    </div>
-
+	  </fieldset>
+	  <fieldset>
 	    <!-- Tour Table; hidden until the table is initialized
 	         from the rspec. -->
 	    <div class='row hidden' id='profile_steps_div'>
@@ -493,7 +520,10 @@
 		</div>
 	      </div>
 	    </div>
+	  </fieldset>
 
+	  <fieldset id="metadata-fields"
+		    <% if (!viewing) { %>class="hidden" <% } %> >
 	    <!-- Public listing checkbox -->
 	    <% if (isadmin) { %>
 	      <div class='row'>

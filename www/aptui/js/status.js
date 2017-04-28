@@ -168,6 +168,7 @@ $(function ()
 
 	// Setup the extend modal.
 	$('button#extend_button').click(function (event) {
+	    window.APT_OPTIONS.gaButtonEvent(event);
 	    event.preventDefault();
 	    if (isfadmin) {
 		sup.ShowModal("#extend_history_modal");
@@ -184,17 +185,20 @@ $(function ()
 	
 	// Handler for the refresh button
 	$('button#refresh_button').click(function (event) {
+	    window.APT_OPTIONS.gaButtonEvent(event);
 	    event.preventDefault();
 	    DoRefresh();
 	});
 	// Handler for the Clone button.
 	$('button#clone_button').click(function (event) {
+	    window.APT_OPTIONS.gaButtonEvent(event);
 	    event.preventDefault();
 	    window.location.replace('manage_profile.php?action=clone' +
 				    '&snapuuid=' + uuid);
 	});
 	// Handler for the reload topology button
 	$('button#reload-topology-button').click(function (event) {
+	    window.APT_OPTIONS.gaButtonEvent(event);
 	    event.preventDefault();
 	    DoReloadTopology();
 	});
@@ -207,7 +211,8 @@ $(function ()
 	//
 	var popover_timer;
 
-	$("button#clone_button").mouseenter(function(){
+	$("button#clone_button").mouseenter(function(event) {
+	    window.APT_OPTIONS.gaButtonEvent(event);
 	    popover_timer = setTimeout(function() {
 		$('button#clone_button').popover({
 		    html:     true,
@@ -217,17 +222,20 @@ $(function ()
 		    container:'body',
 		});
 		$('button#clone_button').popover('show');
-		$('#clone_popover_close').on('click', function(e) {
+		$('#clone_popover_close').on('click', function(event) {
+		    window.APT_OPTIONS.gaButtonEvent(event);
 		    $('button#clone_button').popover('hide');
 		});
 	    },1000)
 	}).mouseleave(function(){
 	    clearTimeout(popover_timer);
-	}).click(function(){
+	}).click(function(event){
 	    clearTimeout(popover_timer);
+	    window.APT_OPTIONS.gaButtonEvent(event);
 	});
 	
-	$("button#snapshot_button").mouseenter(function(){
+	$("button#snapshot_button").mouseenter(function(event) {
+	    window.APT_OPTIONS.gaButtonEvent(event);
 	    popover_timer = setTimeout(function() {
 		$('button#snapshot_button').popover({
 		    html:     true,
@@ -237,23 +245,27 @@ $(function ()
 		    container:'body',
 		});
 		$('button#snapshot_button').popover('show');
-		$('#snapshot_popover_close').on('click', function(e) {
+		$('#snapshot_popover_close').on('click', function(event) {
+		    window.APT_OPTIONS.gaButtonEvent(event);
 		    $('button#snapshot_button').popover('hide');
 		});
 		// Kill popover if user clicks through. 
-		$('button#snapshot_button').on('click', function(e) {
+		$('button#snapshot_button').on('click', function(event) {
+		    window.APT_OPTIONS.gaButtonEvent(event);
 		    $('button#snapshot_button').popover('hide');
 		});
 	    },1000)
 	}).mouseleave(function(){
 	    clearTimeout(popover_timer);
-	}).click(function(){
+	}).click(function(event){
 	    clearTimeout(popover_timer);
+	    window.APT_OPTIONS.gaButtonEvent(event);
 	    DoSnapshotNode();
 	});
 	
 	// Terminate an experiment.
 	$('button#terminate').click(function (event) {
+	    window.APT_OPTIONS.gaButtonEvent(event);
 	    var lockdown_override = "";
 	    event.preventDefault();
 	    sup.HideModal('#terminate_modal');
@@ -336,6 +348,9 @@ $(function ()
         $('#instructions').on('show.bs.collapse', function () {
 	    APT_OPTIONS.updatePage({ 'status_instructions': 'shown' });
 	});
+	$('#quicktabs_ul li a').on('shown.bs.tab', function (event) {
+	    window.APT_OPTIONS.gaTabEvent(event.target);
+	})
 
         addTutorialNotifyTab('profile');
         addTutorialNotifyTab('listview');
@@ -400,9 +415,17 @@ $(function ()
 	statusBusy = 1;
 	
 	var callback = function(json) {
-	    StatusWatchCallBack(json);
-	    if (instanceStatus == 'terminated') {
+	    // Watch for logged out, stop the loop. User will need to reload.
+	    if (json.code == 222) {
 		clearInterval(statusID);
+		alert("You are no longer logged in, please refresh to " +
+		      "continue getting page updates");
+	    }
+	    else {
+		StatusWatchCallBack(json);
+		if (instanceStatus == 'terminated') {
+		    clearInterval(statusID);
+		}
 	    }
 	    statusBusy = 0;
 	}
@@ -437,7 +460,7 @@ $(function ()
 	var status_html = "";
     
 	if (instanceStatus != lastStatus) {
-          APT_OPTIONS.updatePage({ 'instance-status': instanceStatus });
+            APT_OPTIONS.updatePage({ 'instance-status': instanceStatus });
 	    console.info(json);
 	
 	    status_html = status;
@@ -1126,6 +1149,7 @@ $(function ()
 	
 	// Throw up a confirmation modal, with handler bound to confirm.
 	$('#confirm_reload_button').bind("click.reload", function (event) {
+	    window.APT_OPTIONS.gaButtonEvent(event);
 	    sup.HideModal('#confirm_reload_modal');
 	    var callback = function(json) {
 		sup.HideModal('#waitwait-modal');
@@ -1160,7 +1184,9 @@ $(function ()
 	});
 	
 	// Throw up a confirmation modal, with handler bound to confirm.
-	$('button#deletenode_confirm').bind("click.deletenode", function (event) {
+	$('button#deletenode_confirm').bind("click.deletenode",
+					    function (event) {
+	    window.APT_OPTIONS.gaButtonEvent(event);
 	    sup.HideModal('#deletenode_modal');
 	
 	    var callback = function(json) {
@@ -1278,8 +1304,15 @@ $(function ()
 	    // Append to end of tabs
 	    $("#quicktabs_ul").append(html);
 
+	    // GA handler.
+	    $('#quicktabs_ul a[href="#' + tabname + '"]')
+		.on('shown.bs.tab', function (event) {
+		    window.APT_OPTIONS.gaTabEvent(event.target);
+		});
+
 	    // Install a click handler for the X button.
 	    $("#" + tabname + "_kill").click(function(e) {
+		window.APT_OPTIONS.gaButtonEvent(e);
 		e.preventDefault();
 		// Trigger the custom event.
 		$("#" + tabname).trigger("killssh");
@@ -1288,7 +1321,7 @@ $(function ()
 		// Remove the content div.
 		$("#" + tabname).remove();
 		// Activate the "profile" tab.
-		$('#quicktabs_ul a[href="#profile"]').tab('show');
+		$('#quicktabs_ul a[href="#topology"]').tab('show');
 	    });
 
 	    // The content div.
@@ -1367,6 +1400,7 @@ $(function ()
 	$('#context').contextmenu({
 	    target: '#' + cid, 
 	    onItem: function(context,e) {
+		window.APT_OPTIONS.gaButtonEvent(e);
 		$('#context').contextmenu('closemenu');
 		$('#context').contextmenu('destroy');
 		ActionHandler($(e.target).attr("name"), [client_id]);
@@ -1607,6 +1641,7 @@ $(function ()
 		    // Attach handler to the menu button.
 		    $('#listview-row-' + node + ' [name=shell]')
 			.click(function (e) {
+			    window.APT_OPTIONS.gaButtonEvent(e);
 			    e.preventDefault();
 			    ActionHandler("shell", [node]);
 			    return false;
@@ -1629,10 +1664,12 @@ $(function ()
 		    // Attach handler to the menu button.
 		    $('#listview-row-' + node + ' [name=console]')
 			.click(function (e) {
+			    window.APT_OPTIONS.gaButtonEvent(e);
 			    ActionHandler("console", [node]);
 			});
 		    $('#listview-row-' + node + ' [name=consolelog]')
 			.click(function (e) {
+			    window.APT_OPTIONS.gaButtonEvent(e);
 			    ActionHandler("consolelog", [node]);
 			});
 		    // Remember we have a console, for the context menu.
@@ -1651,6 +1688,7 @@ $(function ()
 		    //
 		    $('#listview-row-' + node + ' [name=snapshot]')
 			.click(function (e) {
+			    window.APT_OPTIONS.gaButtonEvent(e);
 			    ActionHandler("snapshot", [node]);
 			});
 		    //
@@ -1658,6 +1696,7 @@ $(function ()
 		    //
 		    $('#listview-row-' + node + ' [name=delete]')
 			.click(function (e) {
+			    window.APT_OPTIONS.gaButtonEvent(e);
 			    ActionHandler("delete", [node]);
 			});
 		}
@@ -1701,7 +1740,7 @@ $(function ()
 
 	    // Pass all the manifests to the viewer.
 	    $("#showtopo_container").removeClass("invisible");
-	    $('#quicktabs_ul a[href="#profile"]').tab('show');
+	    $('#quicktabs_ul a[href="#topology"]').tab('show');
 	    ShowViewer('#showtopo_statuspage', json.value);
 
 	    // Process all the manifests to create the list view.
@@ -1748,6 +1787,7 @@ $(function ()
 	    else {
 		$('#listview-action-menu li a')
 		    .click(function (e) {
+			window.APT_OPTIONS.gaButtonEvent(e);
 			var checked = [];
 
 			// Get the list of checked nodes.
@@ -2084,8 +2124,15 @@ $(function ()
 		// Append to end of tabs
 		$("#quicktabs_ul").append(html);
 
+		// GA handler.
+		$('#quicktabs_ul a[href="#' + tabname + '"]')
+		    .on('shown.bs.tab', function (event) {
+			window.APT_OPTIONS.gaTabEvent(event.target);
+		    });
+
 		// Install a kill click handler for the X button.
 		$("#" + tabname + "_kill").click(function(e) {
+		    window.APT_OPTIONS.gaButtonEvent(e);
 		    e.preventDefault();
 		    // remove the li from the ul. this=ul.li.a.button
 		    $(this).parent().parent().remove();
@@ -2395,15 +2442,21 @@ $(function ()
 	    // Append to end of tabs
 	    $("#quicktabs_ul").append(html);
 
+	    $('#quicktabs_ul a[href="#' + tabname + '"]')
+		.on('shown.bs.tab', function (event) {
+		    window.APT_OPTIONS.gaTabEvent(event.target);
+		});
+
 	    // Install a click handler for the X button.
 	    $("#" + tabname + "_kill").click(function(e) {
+		window.APT_OPTIONS.gaButtonEvent(e);
 		e.preventDefault();
 		// remove the li from the ul.
 		$(this).parent().parent().remove();
 		// Remove the content div.
 		$("#" + tabname).remove();
 		// Activate the "profile" tab.
-		$('#quicktabs_ul a[href="#profile"]').tab('show');
+		$('#quicktabs_ul a[href="#topology"]').tab('show');
 	    });
 
 	    // The content div.
@@ -2462,6 +2515,7 @@ $(function ()
 
 	// Handler for the linktest modal button
 	$('button#linktest-modal-button').click(function (event) {
+	    window.APT_OPTIONS.gaButtonEvent(event);
 	    event.preventDefault();
 	    // Make the popover go away when button clicked. 
 	    $('button#linktest-modal-button').popover('hide');
@@ -2469,11 +2523,13 @@ $(function ()
 	});
 	// And for the start button in the modal.
 	$('button#linktest-start-button').click(function (event) {
+	    window.APT_OPTIONS.gaButtonEvent(event);
 	    event.preventDefault();
 	    StartLinktest();
 	});
 	// Stop button for a running or wedged linktest.
 	$('button#linktest-stop-button').click(function (event) {
+	    window.APT_OPTIONS.gaButtonEvent(event);
 	    event.preventDefault();
 	    // Gack, we have to confirm popover hidden, or it sticks around.
 	    // Probably cause we disable the button before popover is hidden?
