@@ -32,8 +32,10 @@ RUN_DEPENDS+=	\
 	git:${PORTSDIR}/devel/git \
 	gmake:${PORTSDIR}/devel/gmake \
 	rsync:${PORTSDIR}/net/rsync \
-	smbd:${PORTSDIR}/net/samba36 \
 	sudo:${PORTSDIR}/security/sudo
+
+nope_RUN_DEPENDS+= \
+	smbd:${PORTSDIR}/net/samba36
 
 NO_BUILD=	yes
 
