@@ -40,6 +40,10 @@ $this_user = CheckLogin($check_status);
 if (isset($this_user)) {
     CheckLoginOrDie(CHECKLOGIN_NONLOCAL);
 }
+elseif (!$ISAPT && GETUID()) {
+    # User with an account, redirect to login. APT allows guest users.
+    RedirectLoginPage();
+}
 #
 # We do not set the isfadmin flag if the user has normal permission
 # to see this experiment, since that would change what the user sees.
