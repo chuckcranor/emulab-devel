@@ -111,7 +111,36 @@ window.APT_OPTIONS.gaAjaxEvent = function (route, method, code)
     if (window.GOOGLEUA === undefined) {
 	return;
     }
+    if (method == "GetInstanceStatus") {
+	return;
+    }
     ga('send', 'event', 'ajax', route, method, code);
+}
+
+window.APT_OPTIONS.gaButtonEvent = function (event)
+{
+    if (window.GOOGLEUA === undefined) {
+	return;
+    }
+    var target = event.target;
+    var type   = event.type;
+    var id     = $(target).attr('id');
+    var label  = $(target).text();
+    if (id === undefined) {
+	id = label.trim();
+    }
+    console.info("button", type, id);
+    ga('send', 'event', 'button', type, id);
+}
+
+window.APT_OPTIONS.gaTabEvent = function (target)
+{
+    if (window.GOOGLEUA === undefined) {
+	return;
+    }
+    var id = $(target).attr('href');
+    console.info("tab", id);
+    ga('send', 'event', 'tab', 'show', id);
 }
 
 APT_OPTIONS.CallServerMethod = function (url, route, method, args, callback)
