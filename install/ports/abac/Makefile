@@ -3,7 +3,8 @@
 PORTNAME=	abac
 PORTVERSION=	0.1.9
 CATEGORIES=	misc
-MASTER_SITES=	http://abac.deterlab.net/src/
+MASTER_SITES=	http://mirror.deterlab.net/share/images/abac/ \
+		http://www.emulab.net/downloads/
 
 MAINTAINER=	testbed-ops@flux.utah.edu
 COMMENT=	"Attribute-Based Access Control library, as adopted by GENI"
