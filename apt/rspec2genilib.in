@@ -44,12 +44,14 @@ sub usage()
     print STDERR "  -s file  - Specify output file for post geni-lib rspec\n";
     print STDERR "  -r       - Regression test; run geni-lib, compare rspecs\n";
     print STDERR "  -t       - Do not add stub docstring (for regression)\n";
+    print STDERR "  -p       - Permissive mode, ignore unsupported stuff\n";
     exit(-1);
 }
-my $optlist    = "do:rs:t";
+my $optlist    = "do:rs:tp";
 my $debug      = 0;
 my $regress    = 0;
 my $nodocstr   = 0;
+my $permissive = 0;
 my $ofile;
 my $rfile;
 
@@ -109,6 +111,9 @@ if (defined($options{"t"})) {
 if (defined($options{"o"})) {
     $ofile = $options{"o"};
 }
+if (defined($options{"p"})) {
+    $permissive = 1;
+}
 if (defined($options{"r"})) {
     $regress  = 1;
     $nodocstr = 1;
@@ -136,7 +141,7 @@ if ($?) {
     print STDERR $xmlerrors;
     fatal("rspec is not well formed");    
 }
-my $rspec = APT_Rspec->new($rspecfile);
+my $rspec = APT_Rspec->new($rspecfile, $permissive);
 fatal("Could not create rspec object")
     if (!defined($rspec));
 
@@ -267,6 +272,10 @@ sub GenerateNodeStatements($)
 	    my $name = $node->{'disk_image'};
 	    $node->addTagStatement("disk_image = '$name'");
 	}
+	if (defined($node->{'adb_target'})) {
+	    my $target_id = $node->{'adb_target'};
+	    $node->addTagStatement("adb_target = '$target_id'");
+	}
 	if (defined($node->{'jacks_site'})) {
 	    my $site = $node->{'jacks_site'};
 	    $node->addTagStatement("Site('$site')");
@@ -378,6 +387,7 @@ sub GenerateNodeStatements($)
 	    my $readonly  = $blockstore->{'readonly'};
 	    my $size      = $blockstore->{'size'};
 	    my $placement = $blockstore->{'placement'};
+	    my $rwclone   = $blockstore->{'rwclone'};
 	    my $dataset   = $blockstore->{'dataset'};
 
 	    if (defined($readonly) && $readonly) {
@@ -392,6 +402,10 @@ sub GenerateNodeStatements($)
 	    }
 	    if (defined($dataset)) {
 		$node->addStatement("${btag}.dataset = '$dataset'");
+	    }
+	    # Do not not spit out default (false).
+	    if (defined($rwclone) && $rwclone) {
+		$node->addStatement("${btag}.rwclone = True");
 	    }
 	}
     }

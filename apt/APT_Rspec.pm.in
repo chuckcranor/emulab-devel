@@ -50,9 +50,9 @@ sub CompareLists($$$);
 #
 # Parse an rspec into nice perl things.
 #
-sub new($$)
+sub new($$;$)
 {
-    my ($class, $rspecfile) = @_;
+    my ($class, $rspecfile, $permissive) = @_;
     my %namespaces = ();
     my $rspec;
 
@@ -84,6 +84,7 @@ sub new($$)
 	"tour"              => undef,
 	"namespaces"        => \%namespaces,
 	"bscounter"         => 0,
+	"permissive"        => (defined($permissive) ? $permissive : 0),
     };
     bless($self, $class);
 
@@ -102,9 +103,9 @@ sub new($$)
 		/^description$/i && do {
 		    my $type = GeniXML::FindAttr("type", $child);
 		    my $text = $child->textContent();
+		    # Trim for rtecheck.
 		    $text =~ s/^\s+//;
-		    # Kill terminating newline for rtecheck
-		    chomp($text);
+		    $text =~ s/\s+$//g;
 		    $text =~ s/\"/\\"/g;
 		    $tour->{'description'} = {
 			"text" => $text,
@@ -115,9 +116,9 @@ sub new($$)
 		/^instructions$/i && do {
 		    my $type = GeniXML::FindAttr("type", $child);
 		    my $text = $child->textContent();
+		    # Trim for rtecheck.
 		    $text =~ s/^\s+//;
-		    # Kill terminating newline for rtecheck
-		    chomp($text);
+		    $text =~ s/\s+$//g;
 		    # This happens a lot.
 		    if ($text ne "") {
 			$text =~ s/\"/\\"/g;
@@ -173,8 +174,8 @@ sub new($$)
 
         SWITCH: for (lc($name)) {
 	    /^password$/i && do {
-		my $name = GetTextOrFail("name", $ref);
-		APT_Rspec::Attribute->new($self, $name, {"name" => $name});
+		my $passname = GetTextOrFail("name", $ref);
+		APT_Rspec::Attribute->new($self, $name, $passname);
 		last SWITCH;
 	    };
 	    /^routable_pool$/i && do {
@@ -244,6 +245,7 @@ sub new($$)
 	    };
 	    (/^(\w+:)?password$/i ||
 	     /^(\w+:)?routable_pool$/i ||
+	     /^(\w+:)?packing_strategy$/i ||
 	     /^(\w+:)?collocate_factor$/i ||
 	     /^(\w+:)?routing_style$/i ||
 	     /^(\w+:)?delay_image$/i) && do {
@@ -251,11 +253,13 @@ sub new($$)
 		 last SWITCH;
 	    };
 	    /^(\w+:)?data_set$/i && do {
-		fatal("data_set element is not supported");
+		fatal("data_set element is not supported")
+		    if (!$self->permissive());
 		last SWITCH;
 	    };
 	    /^(\w+:)?profile_parameters$/i && do {
-		fatal("profile_parameters element is not supported");
+		fatal("profile_parameters element is not supported")
+		    if (!$self->permissive());
 		last SWITCH;
 	    };
 	    /^#(comment|text)$/i && do {
@@ -287,6 +291,7 @@ sub ifaces($)			{ return $_[0]->{'ifaces'}; }
 sub tour($)			{ return $_[0]->{'tour'}; }
 sub attributes($)		{ return $_[0]->{'toplevel_elements'}; }
 sub toplevel_elements($)	{ return $_[0]->attributes(); }
+sub permissive($)		{ return $_[0]->{'permissive'}; }
 
 sub description($)
 {
@@ -476,7 +481,7 @@ sub CompareLists($$$)
     my @l1 = @{$l1};
     my @l2 = @{$l2};
 
-    #print "CompareLists: $text\n";
+    #print STDERR "CompareLists: $text\n";
 
     if (scalar(@l1) != scalar(@l2)) {
 	print STDERR "$text: rspec one has a different count then rspec two\n";
@@ -552,7 +557,7 @@ sub Compare($$)
 		    if (APT_Rspec::CompareHashes($key, $val1, $val2));
 		last SWITCH;
 	    };
-	    /^(bscounter|namespaces|nodelist|linklist)$/i && do {
+	    /^(bscounter|namespaces|nodelist|linklist|permissive)$/i && do {
 		last SWITCH;
 	    };
 	    print STDERR "Rspec:Compare: Unknown attribute: $key\n";
@@ -772,6 +777,16 @@ sub new($$$$$)
 {
     my ($class, $rspec, $client_id, $type, $exclusive) = @_;
 
+    #
+    # Make up a tag (variable for the script) that makes some kind of sense.
+    #
+    my $tag = $client_id;
+    # Replace dashes with underscores.
+    $tag =~ s/\-/\_/g;
+    if ($tag !~ /^node/i) {
+	$tag = "node_${tag}";
+    }
+
     my $self = {
 	"client_id"		=> $client_id,
 	"type"			=> $type,
@@ -793,7 +808,7 @@ sub new($$$$$)
 	"pipes"			=> {},
 	"use_type_default_image"=> undef,
 	"routable_control_ip"   => undef,
-	"tag"			=> "node" . scalar(keys(%{$rspec->nodes()})),
+	"tag"			=> $tag,
     };
     bless($self, $class);
     return $self;
@@ -907,6 +922,10 @@ sub addNode($$$)
 	    };
 	    /^component_manager_id$/i && do {
 		$node->{'component_manager_id'} = $val;
+		last SWITCH;
+	    };
+	    /^(\w+:)?routable_control_ip$/i && $rspec->permissive() && do {
+		# Ignore, it would not work anyway.
 		last SWITCH;
 	    };
 	    fatal("Unknown attribute for node $client_id: $key,$val");
@@ -1092,6 +1111,11 @@ sub addNode($$$)
 		$node->{"hardware_type"} = $hardware;
 		last SWITCH;
 	    };
+	    /^adb_target$/i && do {
+		my $hardware = GetTextOrFail("target_id", $child);
+		$node->{"adb_target"} = $hardware;
+		last SWITCH;
+	    };
 	    /^site$/i && do {
 		my $site = GetTextOrFail("id", $child);
 		$node->{"jacks_site"} = $site;
@@ -1176,6 +1200,7 @@ sub Compare($$)
 	    };
 	    (/^(component_id|component_manager_id|disk_image)$/i ||
 	     /^(hardware_type|jacks_site|xen_ptype|instantiate_on)$/i ||
+	     /^(adb_target)$/i ||
 	     /^(use_type_default_image|routable_control_ip)$/i) && do {
 		 return 1
 		     if (APT_Rspec::CompareValues("Node: $client_id: $key",
@@ -1299,6 +1324,16 @@ sub new($$$$)
 {
     my ($class, $rspec, $client_id, $type) = @_;
 
+    #
+    # Make up a tag (variable for the script) that makes some kind of sense.
+    #
+    my $tag = $client_id;
+    # Replace dashes with underscores.
+    $tag =~ s/\-/\_/g;
+    if ($tag !~ /^link/i) {
+	$tag = "link_${tag}";
+    }
+    
     my $self = {
 	"client_id"		=> $client_id,
 	"type"			=> $type,
@@ -1322,7 +1357,7 @@ sub new($$$$)
 	"component_managers"    => [],
 	"jacks_site"		=> undef,
 	"statements"		=> [],
-	"tag"			=> "link" . scalar(keys(%{$rspec->links()})),
+	"tag"			=> $tag,
     };
     bless($self, $class);
     return $self;
@@ -1929,6 +1964,7 @@ sub Compare($$)
 package APT_Rspec::Service;
 use Carp;
 use English;
+use Data::Dumper;
 use HTML::Entities;
 use GeniXML;
 
@@ -2037,6 +2073,7 @@ sub new($$$$)
 	"readonly"  => undef,
 	"dataset"   => undef,
 	"placement" => undef,
+	"rwclone"   => undef,
 	"tag"       => $tag,
     };
 
@@ -2070,6 +2107,10 @@ sub new($$$$)
 	    };
 	    /^size$/i && do {
 		$self->{'size'} = $val;
+		last SWITCH;
+	    };
+	    /^rwclone$/i && do {
+		$self->{'rwclone'} = (lc($val) eq "true" ? 1 : 0);
 		last SWITCH;
 	    };
 	    fatal("Unknown attribute for blockstore $bsname: $key,$val");
