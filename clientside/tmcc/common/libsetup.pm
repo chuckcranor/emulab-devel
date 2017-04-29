@@ -3242,7 +3242,7 @@ sub getgenvnodeconfig($)
 sub genvnodesetup($;$$)
 {
     my ($vid) = @_;
-    my $issharedhost = SHAREDHOST();
+    my $issharedhost = (SHAREDHOST() || STORAGEHOST());
 
     #
     # Set global vnodeid for tmcc commands.
@@ -3312,10 +3312,8 @@ sub genvnodesetup($;$$)
     }
 
     #
-    # Tell libtmcc to get the full config for the jail. At the moment
-    # we do not use SFS inside jails, so okay to do this now (usually
-    # have to call initsfs() first). The full config will be copied
-    # to the proper location inside the jail by mkjail.
+    # Tell libtmcc to get the full config for the jail. The full config
+    # will be copied to the proper location inside the jail by mkjail.
     #
     tmccclrconfig()
 	if ($issharedhost);
