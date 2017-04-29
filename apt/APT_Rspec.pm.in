@@ -105,8 +105,9 @@ sub new($$;$)
 		    my $text = $child->textContent();
 		    # Trim for rtecheck.
 		    $text =~ s/^\s+//;
-		    $text =~ s/\s+$//g;
+		    $text =~ s/\s+$//s;
 		    $text =~ s/\"/\\"/g;
+		    $text =~ s/\t/\\t/g;
 		    $tour->{'description'} = {
 			"text" => $text,
 			"type" => $type,
@@ -118,10 +119,11 @@ sub new($$;$)
 		    my $text = $child->textContent();
 		    # Trim for rtecheck.
 		    $text =~ s/^\s+//;
-		    $text =~ s/\s+$//g;
+		    $text =~ s/\s+$//s;
 		    # This happens a lot.
 		    if ($text ne "") {
 			$text =~ s/\"/\\"/g;
+			$text =~ s/\t/\\t/g;
 			$tour->{'instructions'} = {
 			    "text" => $text,
 			    "type" => $type,
@@ -724,7 +726,7 @@ sub CompareLinks($$)
 		    $iface_id = $altid;
 		}
 		else {
-		    print STDERR "$altid\n";
+		    #print STDERR "$altid\n";
 		    print STDERR "iface $iface_id in link $client_id ".
 			"in rspec one but not rspec two\n";
 		    return 1;
@@ -781,8 +783,10 @@ sub new($$$$$)
     # Make up a tag (variable for the script) that makes some kind of sense.
     #
     my $tag = $client_id;
-    # Replace dashes with underscores.
+    # Replace dashes/spaces/dots with underscores.
     $tag =~ s/\-/\_/g;
+    $tag =~ s/\ /\_/g;
+    $tag =~ s/\./\_/g;
     if ($tag !~ /^node/i) {
 	$tag = "node_${tag}";
     }
@@ -1328,8 +1332,10 @@ sub new($$$$)
     # Make up a tag (variable for the script) that makes some kind of sense.
     #
     my $tag = $client_id;
-    # Replace dashes with underscores.
+    # Replace dashes/spaces/dots with underscores.
     $tag =~ s/\-/\_/g;
+    $tag =~ s/\ /\_/g;
+    $tag =~ s/\./\_/g;
     if ($tag !~ /^link/i) {
 	$tag = "link_${tag}";
     }
