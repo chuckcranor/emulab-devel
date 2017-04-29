@@ -38,6 +38,13 @@ $(function ()
         // Change hash for page-reload
         $('a[data-toggle="tab"]').on('show.bs.tab', function (e) {
             window.location.hash = e.target.hash;
+
+	    // GA reporting
+	    var ganame = e.target.hash;
+	    if (ganame == "") {
+		ganame = "#experiments";
+	    }
+	    window.APT_OPTIONS.gaTabEvent("show", ganame);
         });
 	// Set the correct tab when a user uses their back/forward button
         $(window).on('hashchange', function (e) {

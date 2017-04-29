@@ -212,7 +212,6 @@ $(function ()
 	var popover_timer;
 
 	$("button#clone_button").mouseenter(function(event) {
-	    window.APT_OPTIONS.gaButtonEvent(event);
 	    popover_timer = setTimeout(function() {
 		$('button#clone_button').popover({
 		    html:     true,
@@ -223,7 +222,6 @@ $(function ()
 		});
 		$('button#clone_button').popover('show');
 		$('#clone_popover_close').on('click', function(event) {
-		    window.APT_OPTIONS.gaButtonEvent(event);
 		    $('button#clone_button').popover('hide');
 		});
 	    },1000)
@@ -231,11 +229,9 @@ $(function ()
 	    clearTimeout(popover_timer);
 	}).click(function(event){
 	    clearTimeout(popover_timer);
-	    window.APT_OPTIONS.gaButtonEvent(event);
 	});
 	
 	$("button#snapshot_button").mouseenter(function(event) {
-	    window.APT_OPTIONS.gaButtonEvent(event);
 	    popover_timer = setTimeout(function() {
 		$('button#snapshot_button').popover({
 		    html:     true,
@@ -246,7 +242,6 @@ $(function ()
 		});
 		$('button#snapshot_button').popover('show');
 		$('#snapshot_popover_close').on('click', function(event) {
-		    window.APT_OPTIONS.gaButtonEvent(event);
 		    $('button#snapshot_button').popover('hide');
 		});
 		// Kill popover if user clicks through. 
@@ -259,7 +254,6 @@ $(function ()
 	    clearTimeout(popover_timer);
 	}).click(function(event){
 	    clearTimeout(popover_timer);
-	    window.APT_OPTIONS.gaButtonEvent(event);
 	    DoSnapshotNode();
 	});
 	
@@ -349,9 +343,9 @@ $(function ()
 	    APT_OPTIONS.updatePage({ 'status_instructions': 'shown' });
 	});
 	$('#quicktabs_ul li a').on('shown.bs.tab', function (event) {
-	    window.APT_OPTIONS.gaTabEvent(event.target);
-	})
-
+	    window.APT_OPTIONS.gaTabEvent("show",
+					  $(event.target).attr('href'));
+	});
         addTutorialNotifyTab('profile');
         addTutorialNotifyTab('listview');
         addTutorialNotifyTab('manifest');
@@ -1290,7 +1284,7 @@ $(function ()
 	// we need to know the dimensions of the tab.
 	//
 	var tabname = client_id + "_" + sshtabcounter++ + "_tab";
-	console.info(tabname);
+	//console.info(tabname);
 	
 	if (! $("#" + tabname).length) {
 	    // The tab.
@@ -1305,14 +1299,16 @@ $(function ()
 	    $("#quicktabs_ul").append(html);
 
 	    // GA handler.
+	    var ganame = "ssh_" + client_id;
 	    $('#quicktabs_ul a[href="#' + tabname + '"]')
 		.on('shown.bs.tab', function (event) {
-		    window.APT_OPTIONS.gaTabEvent(event.target);
+		    window.APT_OPTIONS.gaTabEvent("show", ganame);
 		});
+	    window.APT_OPTIONS.gaTabEvent("create", ganame);
 
 	    // Install a click handler for the X button.
 	    $("#" + tabname + "_kill").click(function(e) {
-		window.APT_OPTIONS.gaButtonEvent(e);
+		window.APT_OPTIONS.gaTabEvent("kill", ganame);
 		e.preventDefault();
 		// Trigger the custom event.
 		$("#" + tabname).trigger("killssh");
@@ -2125,14 +2121,16 @@ $(function ()
 		$("#quicktabs_ul").append(html);
 
 		// GA handler.
+		var ganame = "console_" + client_id;
 		$('#quicktabs_ul a[href="#' + tabname + '"]')
 		    .on('shown.bs.tab', function (event) {
-			window.APT_OPTIONS.gaTabEvent(event.target);
+			window.APT_OPTIONS.gaTabEvent("show", ganame);
 		    });
+		window.APT_OPTIONS.gaTabEvent("create", ganame);
 
 		// Install a kill click handler for the X button.
 		$("#" + tabname + "_kill").click(function(e) {
-		    window.APT_OPTIONS.gaButtonEvent(e);
+		    window.APT_OPTIONS.gaTabEvent("kill", ganame);
 		    e.preventDefault();
 		    // remove the li from the ul. this=ul.li.a.button
 		    $(this).parent().parent().remove();
@@ -2442,14 +2440,17 @@ $(function ()
 	    // Append to end of tabs
 	    $("#quicktabs_ul").append(html);
 
+	    // GA Handler
+	    var ganame = "linktest_" + site;
 	    $('#quicktabs_ul a[href="#' + tabname + '"]')
 		.on('shown.bs.tab', function (event) {
-		    window.APT_OPTIONS.gaTabEvent(event.target);
+		    window.APT_OPTIONS.gaTabEvent("show", ganame);
 		});
+	    window.APT_OPTIONS.gaTabEvent("create", ganame);
 
 	    // Install a click handler for the X button.
 	    $("#" + tabname + "_kill").click(function(e) {
-		window.APT_OPTIONS.gaButtonEvent(e);
+		window.APT_OPTIONS.gaTabEvent("kill", ganame);
 		e.preventDefault();
 		// remove the li from the ul.
 		$(this).parent().parent().remove();

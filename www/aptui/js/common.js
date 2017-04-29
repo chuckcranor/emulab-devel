@@ -111,7 +111,8 @@ window.APT_OPTIONS.gaAjaxEvent = function (route, method, code)
     if (window.GOOGLEUA === undefined) {
 	return;
     }
-    if (method == "GetInstanceStatus") {
+    // Do not report on these long polling calls, swamps the data.
+    if (method == "GetInstanceStatus" || method == "SnapshotStatus") {
 	return;
     }
     ga('send', 'event', 'ajax', route, method, code);
@@ -129,18 +130,17 @@ window.APT_OPTIONS.gaButtonEvent = function (event)
     if (id === undefined) {
 	id = label.trim();
     }
-    console.info("button", type, id);
+    //console.info("button", type, id);
     ga('send', 'event', 'button', type, id);
 }
 
-window.APT_OPTIONS.gaTabEvent = function (target)
+window.APT_OPTIONS.gaTabEvent = function (action, id)
 {
     if (window.GOOGLEUA === undefined) {
 	return;
     }
-    var id = $(target).attr('href');
-    console.info("tab", id);
-    ga('send', 'event', 'tab', 'show', id);
+    //console.info("tab", action, id);
+    ga('send', 'event', 'tab', action, id);
 }
 
 APT_OPTIONS.CallServerMethod = function (url, route, method, args, callback)
