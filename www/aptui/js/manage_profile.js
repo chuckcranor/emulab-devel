@@ -485,9 +485,9 @@ $(function ()
 	    event.preventDefault();
 	    
 	    // Prevent submit if the description is empty.
-	    var description = $('#profile_description').val();
+	    var description = $('#profile_description .textdiv').html();
 	    if (description === "") {
-		alert("Please provide a description. Its handy!");
+		alert("Please provide a description. Its required!");
 		return false;
 	    }
 	    // Add steps to the tour.
@@ -589,7 +589,7 @@ $(function ()
 	 * If we were given an rspec, suck the description and instructions
 	 * out of the rspec and put them into the text boxes.
 	 */
-	if (window.VIEWING) {
+	if (gotrspec) {
 	    ExtractFromRspec();
 	}
 	CreateJacksEditor();
