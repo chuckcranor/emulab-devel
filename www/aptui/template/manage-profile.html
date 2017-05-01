@@ -349,8 +349,7 @@
 			  style='margin-right: 10px;'
 			  id='show_xml_modal_button'>
                       View XML</button>
- 		    <% if ((viewing && canmodify && (isadmin || isstud)) &&
-		           !fromrepo && !gotscript) { %>
+ 		    <% if ((viewing && canmodify) && !fromrepo && !gotscript){ %>
 		      <span id="profile_convert_button"
 			    data-toggle='popover'
 			    data-delay='{"hide":500, "show":250}'
