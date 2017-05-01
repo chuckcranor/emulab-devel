@@ -393,8 +393,7 @@ $(function ()
 	    $('#reserve-request-form [name=cluster]').val(details.cluster);
 	    $('#reserve-request-form [name=cluster_id]').val(details.cluster_id);
 	    $('#reserve-request-form [name=type]').val(details.type);
-	    $('#reserve-request-form [name=reason]')
-		.val(_.escape(details.notes));
+	    $('#reserve-request-form [name=reason]').val(details.notes);
 	    var start = moment(details.start);
 	    var end = moment(details.end);	
 	    $('#reserve-request-form [name=start_day]')
