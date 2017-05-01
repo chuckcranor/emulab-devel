@@ -198,21 +198,40 @@ $(function ()
 	    event.preventDefault();
 	    resetForm($('#quickvm_form'));
 	});
-	$('button#profile').click(function (event) {
+	$('button#change-profile').click(function (event) {
 	    event.preventDefault();
+	    PickerEvent("show");
 	    $('#quickvm_topomodal').modal('show');
+	});
+	$('button#showtopo_cancel').click(function (event) {
+	    event.preventDefault();
+	    PickerEvent("hide");
+	    $('#quickvm_topomodal').modal('hide');
 	});
 	$('li.profile-item').click(function (event) {
 	    event.preventDefault();
+	    PickerEvent("switch", $(event.target));
 	    ShowProfileSelection(event.target);
 	});
 	$('button#showtopo_select').click(function (event) {
 	    event.preventDefault();
-	    ChangeProfileSelection($('#quickvm_topomodal .selected'));
-	    selected_uuid = $('#quickvm_topomodal .selected').attr('value');
+	    var selected = $('#quickvm_topomodal .selected');
+	    PickerEvent("select", selected);
+	    ChangeProfileSelection(selected);
+	    selected_uuid = selected.attr('value');
 	    console.log(selected_uuid);
 	    $('#quickvm_topomodal').modal('hide');
 	    $('.steps .error').removeClass('error');
+	});
+	/*
+	 * Handler for scroll inside the picker. We want to send the
+	 * event when the user stops scrolling.
+	 */
+	$('#profile_name').scroll(function (event) {
+	    clearTimeout($.data(this, 'scrollTimer'));
+	    $.data(this, 'scrollTimer', setTimeout(function() {
+		PickerEvent("scroll", $('#profile_name').scrollTop());
+	    }, 750));	    
 	});
 	/*
 	 * Need to update image constraints when the project selector
@@ -232,6 +251,7 @@ $(function ()
 			     "a profile.");
 		return;
 	    }
+	    window.APT_OPTIONS.gaButtonEvent(event);
 	    var url = "manage_profile.php?action=copy&uuid=" + selected_uuid;
 	    window.location.replace(url);
 	    return false;
@@ -244,6 +264,7 @@ $(function ()
 			     "profile details.");
 		return;
 	    }
+	    window.APT_OPTIONS.gaButtonEvent(event);
 	    var url = "show-profile.php?uuid=" + selected_uuid;
 	    window.location.replace(url);
 	    return false;
@@ -270,7 +291,8 @@ $(function ()
 	});
 
 	// Profile picker search box.
-	var profile_picker_timeout = null;
+	var profile_picker_timeout  = null;
+	var profile_picker_searched = false;
 	
 	$("#profile_picker_search").on("keyup", function (event) {
 	    var options   = $('#profile_name');
@@ -291,18 +313,23 @@ $(function ()
 			});
 		    options.children("ul").children("li").hide();
 		    matches.show();
-
+		    
 		    if (userInput == '') {
 			$('#title_recently_used').removeClass('hidden');
 			$('#recently_used').removeClass('hidden');
 			$('#title_favorites').removeClass('hidden');
 			$('#favorites').removeClass('hidden');
+			profile_picker_searched = false;
 		    }
 		    else {
 			$('#title_recently_used').addClass('hidden');
 			$('#recently_used').addClass('hidden');
 			$('#title_favorites').addClass('hidden');
 			$('#favorites').addClass('hidden');
+			if (profile_picker_searched == false) {
+			    PickerEvent("search");
+			}
+			profile_picker_searched = true;
 		    }
 		}, 500);
 
@@ -314,6 +341,7 @@ $(function ()
 			return (!$(this).parent().hasClass('hidden') && $(this).css('display') == 'block');
 		    });
 		if (matches && matches.length == 1) {
+		    PickerEvent("select", $(matched[0]));
 		    ShowProfileSelection(matches[0]);
 		}
 	    }
@@ -1867,5 +1895,22 @@ $(function ()
 	$xmlthing.done(callback);
     }
 
+    // Google Analytics.
+    function PickerEvent(action, selected)
+    {
+	if (window.GOOGLEUA === undefined) {
+	    return;
+	}
+	var id = "default";
+	if (action == "scroll") {
+	    id = selected.toString();
+	}
+	else if (selected !== undefined) {
+	    var info = profilelist[selected.attr('value')];
+	    var id   = info.pid + "," + info.name;
+	}
+	console.info("picker event", action, id);
+	ga('send', 'event', 'picker', action, id);
+    }
     $(document).ready(initialize);
 });

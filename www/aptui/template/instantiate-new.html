@@ -180,7 +180,7 @@
 		      <% } %>
 		      <!-- Profile selection box -->
 		      <% if (showpicker) { %>
-			<button id='profile'
+			<button id='change-profile'
 				class='btn btn-primary btn-sm pull-right' 
 				type='button' name='profile_button'>
 			  Change Profile
@@ -622,7 +622,8 @@
 		  class='btn btn-primary btn-sm'
 		  type='submit' name='select'>
 	    Select Profile</button>
-	  <button type='button' class='btn btn-default btn-sm' 
+	  <button type='button' class='btn btn-default btn-sm'
+		  id='showtopo_cancel'		  
 		  data-dismiss='modal' aria-hidden='true'>
 	    Cancel</button>
 	</div>

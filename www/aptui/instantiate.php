@@ -294,6 +294,7 @@ while (list ($uuid, $title) = each ($profile_array)) {
         $tmp_array[$uuid] =
             array("name"     => $tmp->name(),
                   "project"  => $tmp->pid(),
+                  "pid"      => $tmp->pid(), # JS messes with project.
                   "creator"  => $tmp->creator(),
                   "favorite" => $tmp->isFavorite($this_user),
                   "lastused" => $lastused,
