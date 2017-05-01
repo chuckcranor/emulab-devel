@@ -25,6 +25,7 @@ chdir("..");
 include("defs.php3");
 chdir("apt");
 include("quickvm_sup.php");
+$page_title = "My Account";
 
 #
 # Get current user.
