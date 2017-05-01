@@ -1283,7 +1283,7 @@ $(function ()
 	// Need to create the tab before we can create the topo, since
 	// we need to know the dimensions of the tab.
 	//
-	var tabname = client_id + "_" + sshtabcounter++ + "_tab";
+	var tabname = client_id + "_" + ++sshtabcounter + "_tab";
 	//console.info(tabname);
 	
 	if (! $("#" + tabname).length) {
@@ -1299,7 +1299,7 @@ $(function ()
 	    $("#quicktabs_ul").append(html);
 
 	    // GA handler.
-	    var ganame = "ssh_" + client_id;
+	    var ganame = "ssh_" + sshtabcounter;
 	    $('#quicktabs_ul a[href="#' + tabname + '"]')
 		.on('shown.bs.tab', function (event) {
 		    window.APT_OPTIONS.gaTabEvent("show", ganame);
@@ -2086,6 +2086,8 @@ $(function ()
     // the ssh tab with a panel in it, and then call StartSSH above
     // to get things going.
     //
+    var constabcounter = 0;
+    
     function NewConsoleTab(client_id)
     {
 	sup.ShowModal('#waitwait-modal');
@@ -2121,7 +2123,7 @@ $(function ()
 		$("#quicktabs_ul").append(html);
 
 		// GA handler.
-		var ganame = "console_" + client_id;
+		var ganame = "console_" + ++constabcounter;
 		$('#quicktabs_ul a[href="#' + tabname + '"]')
 		    .on('shown.bs.tab', function (event) {
 			window.APT_OPTIONS.gaTabEvent("show", ganame);
@@ -2418,6 +2420,8 @@ $(function ()
     // Create a new tab to show linktest results. Cause of multisite, there
     // can be more then one. 
     //
+    var linktesttabcounter = 0;
+    
     function NewLinktestTab(name, results, url)
     {
 	// Replace spaces with underscore. Silly. 
@@ -2441,7 +2445,7 @@ $(function ()
 	    $("#quicktabs_ul").append(html);
 
 	    // GA Handler
-	    var ganame = "linktest_" + site;
+	    var ganame = "linktest_" + ++linktesttabcounter;
 	    $('#quicktabs_ul a[href="#' + tabname + '"]')
 		.on('shown.bs.tab', function (event) {
 		    window.APT_OPTIONS.gaTabEvent("show", ganame);
