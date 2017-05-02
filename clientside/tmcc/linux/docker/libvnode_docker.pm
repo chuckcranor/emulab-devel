@@ -138,6 +138,19 @@ my $sleepdebug = 0;
 my $vsrelease = "immediate";	# or "early" or "none"
 
 #
+# If Docker is not already installed, which one should we use?  If it's
+# not installed, we default to the community edition.  This is a
+# runtime-checked param, so we'll use whatever is installed by default,
+# not necessarily what is specified here.
+#
+# You really don't want to use docker.io <= 1.12, because it will take
+# too many liberties with the control net bridge.  For instance, if you
+# attempt a `systemctl restart docker.service`, you may be SOL and no
+# longer on the control net!  docker-ce has patches against this rolled
+# in already.
+#
+my $USE_DOCKER_CE = 1;
+#
 # Should we use LVM for extra storage space?  This should remain set.
 #
 my $USE_LVM = 0;
@@ -530,22 +543,89 @@ sub refreshNetworkDeviceMaps()
 # the first time in init.)
 sub ensureDockerInstalled()
 {
-    if (aptNotInstalled("docker.io")) {
-	if (aptGetInstall("docker.io")) {
-	    die("Failed to install docker.io; aborting!\n");
-	}
-
-	mysystem2("service docker restart");
-
-	# Remap, cause Docker creates some ifaces.
-	refreshNetworkDeviceMaps();
+    if (!aptNotInstalled("docker.io")) {
+	TBDebugTimeStamp("docker.io installed; using that");
+	$USE_DOCKER_CE = 0;
+    }
+    elsif (!aptNotInstalled("docker-ce")) {
+	TBDebugTimeStamp("docker-ce installed; using that");
+	$USE_DOCKER_CE = 1;
     }
 
-    #
-    # Check which docker this is.
-    #
-    if (-e "/usr/share/docker.io/EMULAB.md") {
-	$ISOURDOCKER = 1;
+    if (!$USE_DOCKER_CE) {
+	TBDebugTimeStamp("Ensuring docker.io installed...");
+	if (aptNotInstalled("docker.io")) {
+	    TBDebugTimeStamp("Installing docker.io...");
+	    if (aptGetInstall("docker.io")) {
+		die("Failed to install docker.io; aborting!\n");
+	    }
+
+	    mysystem2("service docker restart");
+
+	    # Remap, cause Docker creates some ifaces.
+	    refreshNetworkDeviceMaps();
+	}
+
+	#
+	# Check which docker this is.
+	#
+	if (-e "/usr/share/docker.io/EMULAB.md") {
+	    $ISOURDOCKER = 1;
+	}
+    }
+    else {
+	TBDebugTimeStamp("Ensuring docker-ce installed...");
+	# Ensure the Docker CE repo is configured.
+	system("grep -q docker.com /etc/apt/sources.list /etc/apt/sources.list.d");
+	if ($?) {
+	    TBDebugTimeStamp("Installing docker-ce Apt repos...");
+	    aptGetEnsureInstalled("apt-transport-https","ca-certificates",
+				  "curl","software-properties-common");
+	    mysystem("curl -fsSL https://download.docker.com/linux/ubuntu/gpg".
+		     " | sudo apt-key add -");
+	    my $release = `lsb_release -cs`;
+	    chomp($release);
+	    my $arch = `uname -m`;
+	    chomp($arch);
+	    if ($arch eq 'x86_64' || $arch eq 'amd64') {
+		$arch = "amd64";
+	    }
+	    elsif ($arch eq 'armhf') {
+		;
+	    }
+	    else {
+		fatal("currently docker CE is only available on amd64/armhf!");
+	    }
+	    mysystem("add-apt-repository".
+		     " \"deb [arch=$arch] https://download.docker.com/linux/ubuntu $release stable\"");
+	    aptGetUpdate();
+	}
+
+	if (aptNotInstalled("docker-ce")) {
+	    TBDebugTimeStamp("Installing docker-ce...");
+	    if (aptGetInstall("docker-ce")) {
+		warn("Failed to install docker-ce; retrying in 8 seconds!\n");
+		sleep(8);
+		system("systemctl restart docker.service");
+		sleep(2);
+		system("apt-get install -y docker-ce");
+		if ($?) {
+		    fatal("Failed to install docker-ce; aborting!\n");
+		}
+	    }
+
+	    mysystem2("service docker restart");
+
+	    # Remap, cause Docker creates some ifaces.
+	    refreshNetworkDeviceMaps();
+	}
+
+	#
+	# Check which docker this is.
+	#
+	if (-e "/usr/share/docker-ce/EMULAB.md") {
+	    $ISOURDOCKER = 1;
+	}
     }
 
     #if (aptNotInstalled("systemd-container")
