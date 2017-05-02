@@ -2028,6 +2028,7 @@ sub vnodeCreate($$$$)
     my $imagemetadata;
     my $lvname;
     my $rc;
+    my $err = undef;
 
     my $vmid;
     if ($vnode_id =~ /^[-\w]+\-(\d+)$/) {
@@ -2207,7 +2208,7 @@ sub vnodeCreate($$$$)
 	$DOMAINNAME = $1;
     }
     else {
-        warn("Could not parse domain name!");
+        $err = "Could not parse domain name!";
 	goto bad;
     }
     my ($pid, $eid, $vname) = check_nickname();
@@ -2248,7 +2249,7 @@ sub vnodeCreate($$$$)
     mysystem2("$DOCKER create $createargs $newcreateargs".
 	      " $newimagename $newcmd");
     if ($?) {
-	warn("failed to docker create the container!");
+	$err = "failed to docker create the container!";
 	goto bad;
     }
 
@@ -2262,7 +2263,7 @@ sub vnodeCreate($$$$)
 
   bad:
     removeMounts($vnode_id);
-    return undef;
+    fatal($err);
 }
 
 sub vnodePreConfig($$$$$){
