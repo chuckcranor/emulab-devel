@@ -3041,8 +3041,10 @@ sub vnodeDestroy($$$$)
 	    my @ifaces = findBridgeIfaces($brname);
 	    if (@ifaces == 0) {
 		TBDebugTimeStamp("removing unused $brname");
-		mysystem2("$IFCONFIG $brname down");
-		delbr($brname);
+		if (-e "/sys/class/net/$brname") {
+		    mysystem2("$IFCONFIG $brname down");
+		    delbr($brname);
+		}
 		if (!$?) {
 		    delete($private->{'physbridges'}->{$brname});
 		    delete($private->{'physbridgeifaces'}->{$brname});
@@ -3074,8 +3076,10 @@ sub vnodeDestroy($$$$)
 		    }
 
 		    TBDebugTimeStamp("removing unused $brname");
-		    mysystem2("$IFCONFIG $brname down");
-		    delbr($brname);
+		    if (-e "/sys/class/net/$brname") {
+			mysystem2("$IFCONFIG $brname down");
+			delbr($brname);
+		    }
 		    if (!$?) {
 			delete($private->{'physbridges'}->{$brname});
 			delete($private->{'physbridgeifaces'}->{$brname});
