@@ -292,6 +292,7 @@ my $DOCKERCNET = "_dockercnet";
 #
 my $EMULABSRC = "$EXTRAFS/emulab-devel";
 my $PUBSUBSRC = "$EXTRAFS/pubsub";
+my $RUNITSRC = "$EXTRAFS/runit";
 my $CONTEXTDIR = "$EXTRAFS/contexts";
 my $DOCKERFILES = "/etc/emulab/docker/dockerfiles";
 
@@ -1482,6 +1483,10 @@ sub rootPreConfig($)
     if (! -d $PUBSUBSRC) {
 	mysystem("git clone https://gitlab.flux.utah.edu/emulab/pubsub".
 		 " $PUBSUBSRC");
+    }
+    if (! -d $RUNITSRC) {
+	mysystem("git clone https://gitlab.flux.utah.edu/emulab/runit".
+		 " $RUNITSRC");
     }
 
     # We're done; mark it.
@@ -3639,9 +3644,11 @@ sub setupImage($$$$$$$)
 			  " -v $adir:/artifacts:rw".
 			  " -v $EMULABSRC:/emulab:ro".
 			  " -v $PUBSUBSRC:/pubsub:ro".
+			  " -v $RUNITSRC:/runit:ro".
 			  " -e DESTDIR=/artifacts".
 			  " -e EMULABSRC=/emulab".
 			  " -e PUBSUBSRC=/pubsub".
+			  " -e RUNITSRC=/runit".
 			  " -e CONTEXT=/etc/emulab/CONTEXT".
 			  " $image /bin/sh -c 'cd \$CONTEXT && $ascript'");
 		if ($?) {

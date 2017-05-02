@@ -1,7 +1,9 @@
 #!/bin/sh
 
 #
-# Install and configure runit, including our ssh/syslog unit files.
+# Install and configure runit, including our ssh/syslog unit files.  We
+# have a custom version of runit that was built in runit-artifacts.sh,
+# so install that one.
 #
 
 set -x
@@ -12,8 +14,9 @@ export DEBIAN_FRONTEND=noninteractive
 #export LANG=en_US.UTF-8
 #export LC_CTYPE=en_US.UTF-8
 
-apt-get install -y --no-install-suggests --no-install-recommends \
-	runit
+dpkg -i /tmp/runit_*.deb
+apt-get install -y --no-install-suggests --no-install-recommends -f
+
 #language-pack-en
 
 ## See https://github.com/dotcloud/docker/issues/1024

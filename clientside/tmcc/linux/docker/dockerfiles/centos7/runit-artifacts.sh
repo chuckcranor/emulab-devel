@@ -12,14 +12,19 @@ fi
 
 [ ! -f /tmp/yum-updated ] && yum makecache && touch /tmp/yum-updated
 
-yum -y install rpmdevtools git glibc-static which gcc make
-yum -y install gcc make
+yum -y install rpmdevtools glibc-static which gcc make
 cd /tmp
-git clone https://github.com/imeyer/runit-rpm runit-rpm
-cd runit-rpm
-./build.sh
+if [ -z "$RUNITSRC" ]; then
+    yum -y install git
+    git clone https://gitlab.flux.utah.edu/emulab/runit runit
+else
+    mkdir -p runit
+    cp -pR $RUNITSRC/* runit
+fi
+cd runit
+./redhat/build.sh
 cp -p ~/rpmbuild/RPMS/*/*.rpm $DESTDIR/
 cd /tmp
-rm -rf runit-rpm ~/rpmbuild
+rm -rf runit ~/rpmbuild
 
 exit 0
