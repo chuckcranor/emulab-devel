@@ -77,8 +77,25 @@ $(function ()
 	    projlist = decodejson('#projects-json');
 	}
 	profilelist = decodejson('#profiles-json');
-
 	var profileToArray = _.pairs(profilelist);
+
+	/*
+	 * Sort the entire list by recently used if a registered user,
+	 * else just the use count.
+	 */
+	if (registered) {
+	    profileToArray = _.sortBy(profileToArray, function (value) {
+		return value[1].lastused;
+	    });
+	}
+	else {
+	    profileToArray = _.sortBy(profileToArray, function (value) {
+		return value[1].usecount;
+	    });
+	}
+	// Note that sortBy orders by ascending, so reverse.
+	profileToArray = profileToArray.reverse();
+	
 	var recentlist = _.filter(profileToArray, function(value) {
 	    return value[1]['usecount'] > 0;
 	});
@@ -88,14 +105,8 @@ $(function ()
 	    neverUsed = 1;
 	    recentlist = profileToArray;
 	}
-
-	// Note that sortBy orders by ascending, so the most recent
-	// are at the end of the array.
-	recentlist = _.sortBy(recentlist, function(obj) {
-	    return obj[1].lastused;
-	});
-	recentlist = _.last(recentlist, recentcount);
-
+	recentlist = _.first(recentlist, recentcount);
+	
 	_.each(recentlist, function(obj, key) {
 	    if (window.ISPNET) {
 		if (_.contains(psysprojlist, obj[1].project)) {
@@ -108,7 +119,7 @@ $(function ()
 		}
 	    }
 	});
-	var projcategories = MakeProfileCategories(profilelist);
+	var projcategories = MakeProfileCategories(profileToArray);
 
 	// Fire this off right away.
 	if (window.REGISTERED) {
@@ -427,7 +438,10 @@ $(function ()
 
       // This section should probably be rethought as it's not very clean. 
       // Didn't have time to refactor for initial release.
-      _.each(profilelist, function(obj, key) {
+      _.each(profiles, function(obj, key) {
+	  key = obj[0];
+	  obj = obj[1];
+	  
 	    var isSystem = (window.ISPNET && _.contains(psysprojlist, obj.project)) || (!window.ISPNET &&_.contains(sysprojlist, obj.project))
 	    if (obj.favorite == 1) {
 	      if (isSystem	) {

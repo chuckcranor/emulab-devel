@@ -977,4 +977,54 @@ function SpitAggregateStatus() {
     echo "</script>\n";
 }
 
+#
+# Find usage info for user for the epoch, rather then looking up per
+# profile. Much faster.
+#
+function UserUsageInfo($user) {
+    $user_idx    = $user->idx();
+    $results     = array();
+
+    $query_result =
+        DBQueryFatal("select profile_id,count(profile_id), ".
+                     "       max(UNIX_TIMESTAMP(created)) ".
+                     "  from apt_instances ".
+                     " where creator_idx='$user_idx' ".
+                     " group by profile_id");
+
+    while ($row = mysql_fetch_array($query_result)) {
+        $profile_id = $row[0];
+        $count      = $row[1];
+        $lastused   = $row[2];
+
+        $results[$profile_id] = array("count"    => $count,
+                                      "lastused" => $lastused);
+    }
+    $query_result =
+        DBQueryFatal("select profile_id,count(profile_id), ".
+                     "       max(UNIX_TIMESTAMP(created)) ".
+                     "  from apt_instance_history ".
+                     " where creator_idx='$user_idx' ".
+                     " group by profile_id");
+
+    while ($row = mysql_fetch_array($query_result)) {
+        $profile_id = $row[0];
+        $count      = $row[1];
+        $lastused   = $row[2];
+
+        if (!array_key_exists($profile_id, $results)) {
+            $results[$profile_id] = array("count"    => $count,
+                                          "lastused" => $lastused);
+        }
+        else {
+            $result = $results[$profile_id];
+            $result["count"] += $count;
+            if ($lastused > $result["lastused"]) {
+                $result["lastused"] = $lastused;
+            }
+        }
+    }
+    return $results;
+}
+
 ?>

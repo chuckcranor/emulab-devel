@@ -511,7 +511,7 @@
 		  <span class='category_collapsable expanded'></span>
 		</span>
 		<ul class='list-category' id='recently_used'>
-		<% for (var i = recent.length-1; i >= 0; i--) { 
+		<% for (var i = 0; i < recent.length; i++) { 
 		  var key = recent[i][0]; var value = recent[i][1]; %>
 		  <li class='list-group-item profile-item clearfix'
 		      value='<%- key %>' name='<%- value.name %>'><%- value.name %>

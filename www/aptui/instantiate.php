@@ -281,16 +281,40 @@ else {
 #
 # Rebuild the array with extra info for the profile picker.
 #
+if (isset($this_user)) {
+    $usageinfo = UserUsageInfo($this_user);
+}
 $tmp_array = array();
-
 while (list ($uuid, $title) = each ($profile_array)) {
     $tmp = Profile::Lookup($uuid);
     if ($tmp) {
-        list ($lastused, $count) = $tmp->UsageInfo($this_user);
-        if ($lastused == 0) {
-            list ($unused, $count) = $tmp->UsageInfo(null);
+        if (1) {
+            # If profile never used, no need to ask if user has used it.
+            if (!$tmp->usecount()) {
+                $count = $lastused = 0;
+            }
+            elseif (isset($this_user)) {
+                $profileid = $tmp->profileid();
+                if (array_key_exists($profileid, $usageinfo)) {
+                    $count    = $usageinfo[$profileid]["count"];
+                    $lastused = $usageinfo[$profileid]["lastused"];
+                }
+                else {
+                    # Use global count instead.
+                    $count    = $tmp->usecount();
+                    $lastused = 0;
+                }
+            }
+            else {
+                # Guest user; just use the global usage count.
+                $count    = $tmp->usecount();
+                $lastused = 0;
+            }
         }
-        
+        else {
+            $lastused = time();
+            $count = 0;
+        }
         $tmp_array[$uuid] =
             array("name"     => $tmp->name(),
                   "project"  => $tmp->pid(),
@@ -301,29 +325,7 @@ while (list ($uuid, $title) = each ($profile_array)) {
                   "usecount" => $count);
     }
 }
-
-#
-# Now we want to order the list.
-#
-if ($this_user) {
-    uasort($tmp_array, function($a, $b) {
-        if ($a["lastused"] == $b["lastused"]) {
-            return 0;
-        }
-        return ($a["lastused"] > $b["lastused"]) ? -1 : 1;
-    });
-}
-else {
-    uasort($tmp_array, function($a, $b) {
-        if ($a["usecount"] == $b["usecount"]) {
-            return 0;
-        }
-        return ($a["usecount"] > $b["usecount"]) ? -1 : 1;
-    });
-}
 $profile_array = $tmp_array;
-
-#TBERROR(print_r($profile_array, true), 0);
 
 function SPITFORM($formfields, $newuser, $errors)
 {

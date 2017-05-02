@@ -471,6 +471,8 @@ CREATE TABLE `apt_profiles` (
   `nodelete` tinyint(1) NOT NULL default '0',
   `locked` datetime default NULL,
   `locker_pid` int(11) default '0',
+  `lastused` datetime default NULL,
+  `usecount` int(11) default '0',
   PRIMARY KEY (`profileid`),
   UNIQUE KEY `pidname` (`pid_idx`,`name`,`version`)
 ) ENGINE=MyISAM DEFAULT CHARSET=latin1;

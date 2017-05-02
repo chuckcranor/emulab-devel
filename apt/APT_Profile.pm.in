@@ -1695,7 +1695,21 @@ sub Publish($)
     
     $self->{'DBROW'}->{'published'} = time();
     return 0;
+}
 
+#
+# Set the lastused datetime and usecount for the Picker.
+#
+sub BumpLastUsed($)
+{
+    my ($self) = @_;
+    my $profileid = $self->profileid();
+
+    return -1
+	if (! DBQueryWarn("update apt_profiles set ".
+			  "  lastused=now(),usecount=usecount+1 ".
+			  "where profileid='$profileid'"));
+    return 0;
 }
 
 #
