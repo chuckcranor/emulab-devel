@@ -210,13 +210,14 @@ $(function ()
 	});
 	$('li.profile-item').click(function (event) {
 	    event.preventDefault();
-	    PickerEvent("switch", $(event.target));
+	    PickerEvent("switch", $(event.target),
+			$('#profile_name').scrollTop());
 	    ShowProfileSelection(event.target);
 	});
 	$('button#showtopo_select').click(function (event) {
 	    event.preventDefault();
 	    var selected = $('#quickvm_topomodal .selected');
-	    PickerEvent("select", selected);
+	    PickerEvent("select", selected, $('#profile_name').scrollTop());
 	    ChangeProfileSelection(selected);
 	    selected_uuid = selected.attr('value');
 	    console.log(selected_uuid);
@@ -341,7 +342,8 @@ $(function ()
 			return (!$(this).parent().hasClass('hidden') && $(this).css('display') == 'block');
 		    });
 		if (matches && matches.length == 1) {
-		    PickerEvent("select", $(matched[0]));
+		    PickerEvent("select", $(matched[0]),
+				$('#profile_name').scrollTop());
 		    ShowProfileSelection(matches[0]);
 		}
 	    }
@@ -1896,21 +1898,29 @@ $(function ()
     }
 
     // Google Analytics.
-    function PickerEvent(action, selected)
+    function PickerEvent(action, selected, value)
     {
 	if (window.GOOGLEUA === undefined) {
 	    return;
 	}
 	var id = "default";
+	if (value === undefined) {
+	    value = 0;
+	}
 	if (action == "scroll") {
 	    id = selected.toString();
+	    value = selected;
 	}
 	else if (selected !== undefined) {
 	    var info = profilelist[selected.attr('value')];
-	    var id   = info.pid + "," + info.name;
+	    if (info === undefined) {
+		// Not sure why this happens
+		return;
+	    }
+	    id = info.pid + "," + info.name;
 	}
-	console.info("picker event", action, id);
-	ga('send', 'event', 'picker', action, id);
+	console.info("picker event", action, id, value);
+	ga('send', 'event', 'picker', action, id, value);
     }
     $(document).ready(initialize);
 });
