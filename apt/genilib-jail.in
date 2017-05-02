@@ -150,7 +150,7 @@ END {
 		if (mysystem("jail -qr $jailtag")) {
 		    print STDERR "*** could not stop jail $jailtag\n";
 		}
-		if ($limits) {
+		if ($limits && $haverctl) {
 		    limit_jail($jailtag, 0);
 		}
 		msg("Stopping done");
