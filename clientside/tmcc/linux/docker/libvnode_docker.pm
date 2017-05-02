@@ -153,7 +153,14 @@ my $USE_DOCKER_CE = 1;
 #
 # Should we use LVM for extra storage space?  This should remain set.
 #
-my $USE_LVM = 0;
+my $USE_LVM = 1;
+#
+# Should we use the Docker devicemapper direct-lvm storage backend?
+# This should remain set, so that it is used for shared hosts.  User
+# should be able to change to the default AUFS backend on dedicated
+# hosts.
+#
+my $USE_DOCKER_LVM = 1;
 #
 # Default NFS mounts to read-only for now so that nothing in the
 # container can blow them away accidentally!
@@ -282,7 +289,7 @@ my $EXTRAFS = "/vms";
 my $INFOFS = "/vminfo";
 
 # Docker LVM volume group name. Accessible outside this file.
-$VGNAME = "docker-vg";
+$VGNAME = "docker";
 # So we can ask this from outside;
 sub VGNAME()  { return $VGNAME; }
     
@@ -333,13 +340,13 @@ my $EVPROXY_PORT = 16505;
 # Local functions
 sub findRoot();
 sub copyRoot($$);
-sub createAuxDisk($$);
 sub replace_hacks($);
 sub disk_hacks($);
 sub hostMemory();
 sub hostResources();
 sub hostIP($);
 sub fixupMac($);
+sub lvmVGSize($);
 sub checkForInterrupt();
 sub genhostspairlist($$);
 sub addMounts($$);
@@ -763,9 +770,9 @@ sub setupLVM()
     }
 
     #
-    # Make sure pieces are at least 5 GiB.
+    # Make sure pieces are at least 32 GiB.
     #
-    my $minpsize = 5 * 1024;
+    my $minpsize = 32 * 1024;
     my %devs = libvnode::findSpareDisks($minpsize, $LVM_AVOIDSSD);
 
     # if ignoring SSDs but came up with nothing, we have to use them!
@@ -907,16 +914,6 @@ sub setupLVM()
 	    print STDERR "WARNING: physical disk space below the desired ".
 		" minimum value ($size < $DOCKER_MIN_VGSIZE), expect trouble.\n";
 	}
-
-	#
-	# Create an image pool for golden images.
-	# If this fails, we just don't use thin volumes!
-	#
-	if ($USE_THIN_LVM && createThinPool($blockdevstr)) {
-	    print STDERR "WARNING: could not create a thin pool, ".
-		"disabling golden image support\n";
-	    $USE_THIN_LVM = 0;
-	}
     }
     $STRIPE_COUNT = computeStripeSize($VGNAME);
     
@@ -1056,6 +1053,9 @@ sub rootPreConfig($)
     aptGetEnsureInstalled("lvm2","thin-provisioning-tools",
 			  "bridge-utils","iproute2","vlan");
 
+    #
+    # Setup our control net device if not already up.
+    #
     if ($USE_MACVLAN_CNET || $USE_MACVLAN) {
 	#
 	# If we build dummy shortbridge nets atop either a physical
@@ -1451,17 +1451,187 @@ sub rootPreConfig($)
     # Ensure that LVM is loaded in the kernel and ready.
     #
     if ($USE_LVM) {
+	# There are several reasons we might need a Docker restart in
+	# this LVM setup bit; they will be noted along the way, and we
+	# will restart if necessary.
+	my $needdockerrestart = 0;
+
+	#
+	# Sets up our PVs and VG ($VGNAME).
+	#
 	setupLVM();
 
-	print "Creating scratch FS ...\n";
-	if (createExtraFS($EXTRAFS, $VGNAME, "25G")) {
-	    TBScriptUnlock();
-	    return -1;
+	#
+	# Figure out how big various volumes should be.
+	#
+	# If we are using the aufs storage backend for Docker, we want
+	# most of our space in $EXTRAFS (since /var/lib/docker gets
+	# symlinked there, our heaviest space usage may be there); in
+	# that case, we save a ~10%VG buffer of free space.  Wild guess.
+	#
+	# If we are instead using the devicemapper direct-lvm backend,
+	# we need both $EXTRAFS and $INFOFS, but we also need a beefy
+	# thinpool for Docker.  In this case, we use max(5GB,3%VG) LV
+	# for $INFOFS; use min(32GB,15%remainingVG) for the $EXTRAFS;
+	# then we provision the thin pool with 90% of the remaining
+	# space (i.e., 0.90*(totalVG - sizeof($EXTRAFS) -
+	# sizeof($INFOFS))).  This results in at least some spare space
+	# in case some heavy usage happens, for autoextension of the
+	# thinpool.  And we could even consider garbage-collecting
+	# context build dirs in $EXTRAFS and downsizing that so that the
+	# thin pool can grow more, for instance on a shared host, if
+	# necessary.
+	#
+	my ($extrasize,$infosize,$thinpoolsize) = (0,0,0);
+	my $vgsize = lvmVGSize($VGNAME);
+	my $remaining = $vgsize;
+
+	if (!$USE_DOCKER_LVM) {
+	    # We will only create $EXTRAFS and $INFOFS.
+	    if (0.03 * $remaining < 5) {
+		$infosize = 0.03 * $remaining;
+	    }
+	    else {
+		$infosize = 5;
+	    }
+	    $remaining -= $infosize;
+	    $extrasize = 0.90 * $remaining;
+	    $remaining -= $extrasize;
 	}
-	print "Creating container info FS ...\n";
-	if (createExtraFS($INFOFS, $VGNAME, "3G")) {
-	    TBScriptUnlock();
-	    return -1;
+	else {
+	    # We will create $EXTRAFS and $INFOFS, as well as the Docker
+	    # thin pool.
+	    if (0.03 * $remaining < 5) {
+		$infosize = 0.03 * $remaining;
+	    }
+	    else {
+		$infosize = 5;
+	    }
+	    $remaining -= $infosize;
+	    if (0.15 * $remaining < 32) {
+		$extrasize = 0.15 * $remaining;
+	    }
+	    else {
+		$extrasize = 32;
+	    }
+	    $remaining -= $extrasize;
+	    $thinpoolsize = 0.90 * $remaining;
+	    $remaining -= $thinpoolsize;
+	}
+
+	my $tmplvname;
+	if ($INFOFS =~ /\/(.*)$/) {
+	    $tmplvname = $1;
+	}
+	if (!libvnode::lvExists($VGNAME,$tmplvname)) {
+	    print "Creating container info FS ...\n";
+	    if (createExtraFS($INFOFS, $VGNAME, "${infosize}G")) {
+		TBScriptUnlock();
+		return -1;
+	    }
+	}
+	if ($EXTRAFS =~ /\/(.*)$/) {
+	    $tmplvname = $1;
+	}
+	if (!libvnode::lvExists($VGNAME,$tmplvname)) {
+	    print "Creating scratch FS ...\n";
+	    my $already = 0;
+	    if (-d $EXTRAFS) {
+		$already = 1;
+		mysystem("mv $EXTRAFS ${EXTRAFS}.bak");
+	    }
+	    if (createExtraFS($EXTRAFS, $VGNAME, "${extrasize}G")) {
+		TBScriptUnlock();
+		return -1;
+	    }
+	    if ($already) {
+		my @files = glob("${EXTRAFS}.bak/*");
+		foreach my $file (@files) {
+		    my $base = basename($file);
+		    mysystem("/bin/mv $file $EXTRAFS")
+			if (! -e "$EXTRAFS/$base");
+		}
+		mysystem("/bin/rm -rf ${EXTRAFS}.bak");
+	    }
+	}
+	if ($USE_DOCKER_LVM && !libvnode::lvExists($VGNAME,"thinpool")) {
+	    print "Creating Docker Thin Pool...\n";
+	    #
+	    # Docker wants a thinpool and a metadata pool.  Size of the
+	    # metadata pool cannot exceed 16GB.  So we create that as
+	    # min(16,0.01*$thinpoolsize).
+	    #
+	    my ($tps,$tpms) = (0,0);
+	    if (0.01 * $thinpoolsize < 16) {
+		$tpms = 0.01 * $thinpoolsize;
+	    }
+	    else {
+		$tpms = 16;
+	    }
+	    $tps = $thinpoolsize - $tpms;
+	    # XXX: --wipesignatures y ?
+	    mysystem("lvcreate -n thinpool $VGNAME -L $tps");
+	    mysystem("lvcreate -n thinpoolmeta $VGNAME -L $tpms");
+	    mysystem("lvconvert -y --zero n -c 512K".
+		     " --thinpool $VGNAME/thinpool".
+		     " --poolmetadata $VGNAME/thinpoolmeta");
+	    mkdir("/etc/lvm/profile");
+	    open(FD,">/etc/lvm/profile/$VGNAME-thinpool.profile")
+		or fatal("could not open /etc/lvm/profile/$VGNAME-thinpool.profile: $@");
+	    print FD "activation {\n".
+		"  thin_pool_autoextend_threshold=90\n".
+		"  thin_pool_autoextend_percent=10\n".
+		"}\n";
+	    close(FD);
+	    mysystem("lvchange --metadataprofile $VGNAME-thinpool".
+		     " $VGNAME/thinpool");
+	    mysystem("lvs -o+seg_monitor");
+
+	    #
+	    # Setup the Docker devicemapper direct-lvm storage backend.
+	    # { "storage-driver": "devicemapper",
+	    #   "storage-opts": [
+	    #     "dm.thinpooldev=/dev/mapper/docker-thinpool",
+	    #     "dm.use_deferred_removal=true",
+	    #     "dm.use_deferred_deletion=true" ] }
+	    #
+	    my $origjsontext = '';
+	    my $json = {};
+	    if (-e "/etc/docker/daemon.json") {
+		open(FD,"/etc/docker/daemon.json")
+		    or die("could not open /etc/docker/daemon.json: $!");
+		my @lines = <FD>;
+		close(FD);
+		$origjsontext = join("",@lines);
+		$json = decode_json($origjsontext);
+	    }
+
+	    # If it exists, just delete it; we only want valid stuff in here.
+	    if (defined($json->{"storage-driver"})) {
+		delete($json->{"storage-driver"});
+	    }
+	    if (defined($json->{"storage-opts"})) {
+		delete($json->{"storage-opts"});
+	    }
+
+	    # Write our config.
+	    # Don't restart docker; that happens at the end of $USE_LVM.
+	    $needdockerrestart = 1;
+	    $json->{"storage-driver"} = "devicemapper";
+	    $json->{"storage-opts"} = [
+		"dm.thinpooldev=/dev/mapper/${VGNAME}-thinpool",
+		"dm.use_deferred_removal=true",
+		"dm.use_deferred_deletion=true"
+		];
+
+	    TBDebugTimeStamp("Updating /etc/docker/daemon.json");
+
+	    my $newjsontext = encode_json($json);
+
+	    open(FD,">/etc/docker/daemon.json")
+		or die("could not write /etc/docker/daemon.json: $!");
+	    print FD $newjsontext;
+	    close(FD);
 	}
 	if (! -l $VMS) {
 	    #
@@ -1478,7 +1648,10 @@ sub rootPreConfig($)
 	    mysystem("/bin/ln -s $INFOFS $VMS");
 	}
 	if (! -l '/var/lib/docker') {
+	    # Make sure Docker is stopped before we do this, if it
+	    # wasn't stopped above already!
 	    mysystem2("systemctl stop docker.service");
+	    $needdockerrestart = 1;
 	    if ($?) {
 		warn("could not stop docker service before moving".
 		     " /var/lib/docker to LVM; aborting!");
@@ -1499,23 +1672,33 @@ sub rootPreConfig($)
 	    my @files = glob("/var/lib/docker/*");
 	    foreach my $file (@files) {
 		my $base = basename($file);
-		mysystem("/bin/mv $file $INFOFS")
+		mysystem("/bin/mv $file $EXTRAFS/var.lib.docker")
 		    if (! -e "$EXTRAFS/var.lib.docker/$base");
 	    }
 	    mysystem("/bin/rm -rf /var/lib/docker");
 	    mysystem("/bin/ln -s $EXTRAFS/var.lib.docker /var/lib/docker");
+	}
 
-	    mysystem2("systemctl start docker.service");
+	if ($needdockerrestart) {
+	    mysystem2("systemctl restart docker.service");
 	    if ($?) {
-		warn("could not start docker service after moving".
-		     " /var/lib/docker to LVM; aborting!");
+		warn("could not restart docker service after LVM setup; aborting!");
 		TBScriptUnlock();
 		return -1;
 	    }
 	}
+
+	#
+	# Check the $DOCKERCNET again after LVM setup... if the move of
+	# /var/lib/docker fails, all Docker state (including
+	# $DOCKERCNET) will appear to have vanished!
+	#
+	mysystem("$DOCKER network inspect $DOCKERCNET");
     }
     else {
 	mkdir($VMS);
+	mkdir($INFOFS);
+	mkdir($EXTRAFS);
     }
 
     #
@@ -5018,19 +5201,6 @@ sub RemovePostBootIptablesRules($$$$)
 }
 
 #
-# Create an extra, empty disk volume. 
-#
-sub createAuxDisk($$)
-{
-    my ($lv,$size) = @_;
-
-    if (lvmCreateVolume($lv, $size, ALLOC_PREFERNOPOOL())) {
-	return -1;
-    }
-    return 0;
-}
-
-#
 # Return MB of memory used by dom0
 # Give it at least 256MB of memory.
 #
@@ -5207,23 +5377,6 @@ sub createThinPool($)
     return 0;
 }
 
-sub doingThinLVM()
-{
-    # globally disabled
-    if (!$USE_THIN_LVM) {
-	return 0;
-    }
-
-    # see if pool exists
-    if (!lvmFindVolume($POOL_NAME)) {
-	print STDERR "WARNING: no thin pool found, ".
-	    "disabling golden image support\n";
-	$USE_THIN_LVM = 0;
-	return 0;
-    }
-    return 1;
-}
-
 #
 # Return size of volume group in (decimal, aka disk-manufactuer) GB.
 #
@@ -5243,127 +5396,6 @@ sub lvmVGSize($)
 	return $size;
     }
     die "libvnode_docker: cannot parse LVM volume group size";
-}
-
-sub lvmCreateVolume($$$)
-{
-    my ($name,$size,$flag) = @_;
-
-    #
-    # XXX not everything benefits from being created in our thinpool.
-    # In particular, volumes that won't be cloned will suffer a
-    # first-access penalty as blocks are allocated on demand rather
-    # than being pre-allocated as they are outside. There is also the
-    # issue that volumes in the pool may unexpectedly run out of space
-    # since the capacity can be over-subscribed.
-    #
-    # Unfortunately, our pool creates a division of space and we
-    # can run out of space either inside or outside, so we want to
-    # maintain some flexibility to create volumes either inside or
-    # out depending on availability of space.
-    #
-again:
-    if ($flag == ALLOC_INPOOL() || $flag == ALLOC_PREFERINPOOL) {
-	if (!mysystem2("lvcreate -V $size -n $name ".
-		       "--thinpool $VGNAME/$POOL_NAME")) {
-	    return 0;
-	}
-	if ($flag == ALLOC_INPOOL()) {
-	    goto fail;
-	}
-	# otherwise fall through to try non-pool creation
-	$flag = ALLOC_NOPOOL();
-    }
-    if ($flag == ALLOC_NOPOOL() || $flag == ALLOC_PREFERNOPOOL) {
-	if (!mysystem2("lvcreate -L $size -n $name -i${STRIPE_COUNT} ".
-		       "$VGNAME")) {
-	    return 0;
-	}
-	if ($flag == ALLOC_NOPOOL()) {
-	    goto fail;
-	}
-	# otherwise try again in the pool
-	$flag = ALLOC_INPOOL();
-	goto again;
-    }
-
-fail:
-    print STDERR "createLV: could not create $size LV $name\n";
-    return -1;
-}
-
-sub lvmDestroyVolume($$)
-{
-    my ($name,$force) = @_;
-    my $path = lvmVolumePath($name);
-
-    # get rid of partition devices
-    if ($force) {
-	RunWithLock("kpartx", "kpartx -dv $path");
-    }
-
-    # and the volume itself
-    if (!mysystem2("lvremove -f $VGNAME/$name")) {
-	return 0;
-    }
-
-    #
-    # XXX Could not delete volume. Sometimes this is because there is a
-    # left-over partition device. Not sure why kpartx doesn't catch it,
-    # but we try to clean it up manually.
-    #
-    if ($force) {
-	my $tryagain = 0;
-	my $dmname = "$VGNAME/$name";
-	$dmname =~ s#-#--#g;
-	$dmname =~ s#/#-#;
-	foreach my $part (1..4) {
-	    my $dev = "${dmname}p$part";
-	    if (-e "/dev/mapper/$dev" && !mysystem2("dmsetup remove $dev")) {
-		print STDERR "WARNING: removed leftover partdev '$dev'\n";
-		$tryagain = 1;
-	    }
-	}
-	if ($tryagain && !mysystem2("lvremove -f $VGNAME/$name")) {
-	    return 0;
-	}
-    }
-
-    # just could not pull it off
-    return -1;
-}
-
-sub lvmVolumePath($)
-{
-    my ($name) = @_;
-    return "/dev/$VGNAME/$name";
-}
-
-sub lvmFindVolume($)
-{
-    my ($lvm)  = @_;
-    my $lvpath = lvmVolumePath($lvm);
-    my $exists = `lvs --noheadings -o origin $lvpath > /dev/null 2>&1`;
-    return 0
-	if ($?);
-
-    return 1;
-}
-
-#
-# Return the LVM that the indicated one is a snapshot of, or a null
-# string if none.
-#
-sub lvmFindOrigin($)
-{
-    my ($lv) = @_;
-
-    foreach (`lvs --noheadings -o name,origin $VGNAME`) {
-	if (/^\s*${lv}\s+(\S+)\s*$/) {
-	    return $1;	
-	}
-    }
-    return "";
 }
 
 #

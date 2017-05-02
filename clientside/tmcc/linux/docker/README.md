@@ -333,6 +333,28 @@ only somewhat namespaced, and docker (via runc) doesn't yet provide each
 container with its own cgroup namespace.
 
 
+LVM and Docker Storage Backends
+-------------------------------
+We support infrastructure LVM via USE_LVM; for now it is always set.
+Our VG is "docker".
+
+For Docker storage, we support both the default aufs driver and the
+devicemapper (with thin provisioning) driver.  We use LVM in both cases,
+and in both cases we place /var/lib/docker into one of our LVs, and
+symlink it back.
+
+In the aufs case, we only create two LVs; one (/vminfo) to host minor
+stuff from /var/emulab/vms; and another (/vms) to host all kinds of
+stuff, including /var/lib/docker, and our image building context dir.
+/vms is approximately 90% of the docker VG; /vminfo is 5GB or 3%VG.
+
+In the devicemapper/thin-provisioned case, /vminfo is the same; /vms
+still hosts /var/lib/docker and context build dirs -- but hosts no
+container FS data.  So we create a thinpool (in our VG) for that, and
+tell Docker to use it.  /vminfo is min(5GB,3%VG); /vms is
+min(32GB,15%remainingVG); thinpool is 90%remainingVG.
+
+
 Mountpoints and Block Storage
 -----------------------------
 

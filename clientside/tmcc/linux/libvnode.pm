@@ -31,7 +31,8 @@ use Exporter;
 	      existsBridge findBridge findBridgeIfaces
               existsMacvlanParent findMacvlanParent findMacvlanIfaces
               downloadImage getKernelVersion createExtraFS
-              forwardPort removePortForward lvSize DoIPtables DoIPtablesNoFail
+              forwardPort removePortForward lvSize lvExists
+              DoIPtables DoIPtablesNoFail
               restartDHCP computeStripeSize
             );
 
@@ -862,6 +863,21 @@ sub createExtraFS($$$)
 	    == 0 or return -1;
     }
     return 0;
+}
+
+#
+# Check if the LV exists.
+#
+sub lvExists($$)
+{
+    my ($vgname,$lvname) = @_;
+
+    my $lvpath = "/dev/$vgname/$lvname";
+    my $exists = `lvs --noheadings -o origin $lvpath > /dev/null 2>&1`;
+    if ($?) {
+	return 0;
+    }
+    return 1;
 }
 
 #
