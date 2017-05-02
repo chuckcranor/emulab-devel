@@ -3800,6 +3800,7 @@ sub setupImage($$$$$$$)
 	}
     }
     if ($initcmd eq '') {
+	chdir($cwd);
 	warn("could not assemble init command; bug!");
 	goto badimage;
     }
