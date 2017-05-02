@@ -2777,12 +2777,18 @@ sub vnodePoll($$$$$$)
 	    " --data-urlencode 'filters=\{\"type\":\[\"container\"\],".
 	    "                             \"container\":\[\"${vnode_id}\"\]\}'".
 	    " -G http:/events";
-	my $pid = open($private->{DOCKER_EVENT_FD},"$ccmd |");
-	if (!defined($pid) || $?) {
-	    warn("could not open docker socket for event stream for $vnode_id");
-	    delete($private->{DOCKER_EVENT_HISTORY});
-	    return -1;
+	pipe($private->{DOCKER_EVENT_FD},WRITER)
+	    or fatal("popen docker event stream $vnode_id: $@");
+	my $pid = fork();
+	if (!$pid) {
+	    close(STDIN);
+	    open(STDOUT,"<&WRITER");
+	    close($private->{DOCKER_EVENT_FD});
+	    exec($ccmd);
+	    exit(-1);
 	}
+	# Parent continues.
+	close(WRITER);
 	$private->{DOCKER_EVENT_CHILD} = $pid;
 	$private->{DOCKER_EVENT_FD}->autoflush(1);
 	my $oldfh = select($private->{DOCKER_EVENT_FD});
