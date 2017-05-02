@@ -85,7 +85,9 @@ use libvnode;
 # Helpers
 sub MyFatal($);
 sub hasLibOp($);
-sub safeLibOp($$$;@);
+sub safeLibOp($$$$;@);
+sub blockOurSignals($);
+sub unblockOurSignals($);
 sub CleanupVM();
 sub TearDownStaleVM();
 sub StoreState();
@@ -267,7 +269,7 @@ if ($showstate) {
     # So the lib op works.
     $vnstate = $tmp;
 
-    ($ret,$err) = safeLibOp('vnodeState', 1, 0);
+    ($ret,$err) = safeLibOp('vnodeState', 1, 0, 1);
     if ($err) {
 	fatal("Failed to get status for existing container: $err");
     }
@@ -551,7 +553,7 @@ if (-e "$VNDIR/vnode.info") {
 		$vnstate->{'private'} = $tmp->{'private'};
 	    }
 	}
-	($ret,$err) = safeLibOp('vnodeState', 1, 0);
+	($ret,$err) = safeLibOp('vnodeState', 1, 0, 1);
 	if ($err) {
 	    fatal("Failed to get status for existing container: $err");
 	}
@@ -630,7 +632,14 @@ if (! -e "$VNDIR/vnode.info") {
     #
     $vmtype = GENVNODETYPE();
 
-    ($ret,$err) = safeLibOp('vnodeCreate',0,0);
+    #
+    # Manually block signals for vnodeCreate, because we are vulnerable
+    # to a race after we successfully create a vnode, until we have
+    # written the vnode.info, $vnodeid files, and our state.
+    #
+    my $sigset;
+    blockOurSignals(\$sigset);
+    ($ret,$err) = safeLibOp('vnodeCreate',0,0,1);
     if ($err) {
 	MyFatal("vnodeCreate failed: $err");
     }
@@ -641,6 +650,14 @@ if (! -e "$VNDIR/vnode.info") {
 
     # bootvnodes wants this to be here...
     mysystem("mkdir -p /var/emulab/jails/$vnodeid");
+
+    # Store the state to disk.
+    if (StoreState()) {
+	MyFatal("Could not store container state to disk");
+    }
+
+    # Ok, now safe to unblock our signals; we're consistent.
+    unblockOurSignals($sigset);
 }
 else {
     #
@@ -718,12 +735,12 @@ sub callback($)
 }
 
 # OP: preconfig
-if (safeLibOp('vnodePreConfig', 1, 1, \&callback)) {
+if (safeLibOp('vnodePreConfig', 1, 1, 1, \&callback)) {
     MyFatal("vnodePreConfig failed");
 }
 
 # OP: control net preconfig
-if (safeLibOp('vnodePreConfigControlNetwork',1,1,
+if (safeLibOp('vnodePreConfigControlNetwork',1,1,1,
 	      VNCONFIG('CTRLIP'),
 	      VNCONFIG('CTRLMASK'),$cnet_mac,
 	      $ext_ctrlip,$vname,$longdomain,$DOMAINNAME,$BOSSIP)) {
@@ -731,13 +748,13 @@ if (safeLibOp('vnodePreConfigControlNetwork',1,1,
 }
 
 # OP: exp net preconfig
-if (safeLibOp('vnodePreConfigExpNetwork', 1, 1)) {
+if (safeLibOp('vnodePreConfigExpNetwork', 1, 1, 1)) {
     MyFatal("vnodePreConfigExpNetwork failed");
 }
-if (safeLibOp('vnodeConfigResources', 1, 1)) {
+if (safeLibOp('vnodeConfigResources', 1, 1, 1)) {
     MyFatal("vnodeConfigResources failed");
 }
-if (safeLibOp('vnodeConfigDevices', 1, 1)) {
+if (safeLibOp('vnodeConfigDevices', 1, 1, 1)) {
     MyFatal("vnodeConfigDevices failed");
 }
 
@@ -809,7 +826,7 @@ if ($needschildmon) {
 	exit(0);
     }
 }
-elsif (safeLibOp('vnodeBoot', 1, 1)) {
+elsif (safeLibOp('vnodeBoot', 1, 1, 1)) {
     MyFatal("$vnodeid container startup failed.");
 }
 if ($needschildmon) {
@@ -819,7 +836,7 @@ if ($needschildmon) {
 	MyFatal("Could not read container state from disk after vnodeBoot");
     }
 }
-if (safeLibOp('vnodePostConfig', 1, 1)) {
+if (safeLibOp('vnodePostConfig', 1, 1, 1)) {
     MyFatal("vnodePostConfig failed");
 }
 # XXX: need to do this for each type encountered!
@@ -930,7 +947,7 @@ sub DefaultVnodePoll()
 	# it cause our parent (vnodesetup) told us to. In all cases, we just
 	# exit and let the parent decide what to do. 
 	#
-	my ($ret,$err) = safeLibOp('vnodeState', 0, 0);
+	my ($ret,$err) = safeLibOp('vnodeState', 0, 0, 1);
 	if ($err) {
 	    fatal("*** ERROR: vnodeState: $err\n");
 	}
@@ -949,7 +966,7 @@ sub DefaultVnodePoll()
 		# user has screwed himself. Need to restart from the frontend.
 		#
 		sleep(15);
-		($ret,$err) = safeLibOp('vnodeState', 0, 0);
+		($ret,$err) = safeLibOp('vnodeState', 0, 0, 1);
 		if ($err) {
 		    fatal("*** ERROR: vnodeState: $err\n");
 		}
@@ -1069,11 +1086,11 @@ sub CleanupVM()
 
     # If we might have been polling, make sure that is cleaned up.
     if (hasLibOp("vnodePollCleanup")) {
-	safeLibOp("vnodePollCleanup",1,0);
+	safeLibOp("vnodePollCleanup",1,0,1);
     }
 
     # if not halted, try that first
-    my ($ret,$err) = safeLibOp('vnodeState', 1, 0);
+    my ($ret,$err) = safeLibOp('vnodeState', 1, 0, 1);
     if ($err) {
 	print STDERR "*** ERROR: vnodeState: ".
 	    "failed to cleanup $vnodeid: $err\n";
@@ -1081,7 +1098,7 @@ sub CleanupVM()
     }
     if ($ret eq VNODE_STATUS_RUNNING()) {
 	print STDERR "cleanup: $vnodeid not stopped, trying to halt it.\n";
-	($ret,$err) = safeLibOp('vnodeHalt', 1, 1);
+	($ret,$err) = safeLibOp('vnodeHalt', 1, 1, 1);
 	if ($err) {
 	    print STDERR "*** ERROR: vnodeHalt: ".
 		"failed to halt $vnodeid: $err\n";
@@ -1090,7 +1107,7 @@ sub CleanupVM()
     }
     elsif ($ret eq VNODE_STATUS_MOUNTED()) {
 	print STDERR "cleanup: $vnodeid is mounted, trying to unmount it.\n";
-	($ret,$err) = safeLibOp('vnodeUnmount', 1, 1);
+	($ret,$err) = safeLibOp('vnodeUnmount', 1, 1, 1);
 	if ($err) {
 	    print STDERR "*** ERROR: vnodeUnmount: ".
 		"failed to unmount $vnodeid: $err\n";
@@ -1111,7 +1128,7 @@ sub CleanupVM()
 	    # down the transient state, but we do not handle that yet.
 	    # Not hard to add though.
 	    #
-	    ($ret,$err) = safeLibOp('vnodeTearDown', 1, 1);
+	    ($ret,$err) = safeLibOp('vnodeTearDown', 1, 1, 1);
 	    # Always store in case some progress was made. 
 	    StoreState();
 	    if ($err) {
@@ -1123,7 +1140,7 @@ sub CleanupVM()
     }
 
     # now destroy
-    ($ret,$err) = safeLibOp('vnodeDestroy', 1, 1);
+    ($ret,$err) = safeLibOp('vnodeDestroy', 1, 1, 1);
     if ($err) {
 	print STDERR "*** ERROR: failed to destroy $vnodeid: $err\n";
 	return -1;
@@ -1169,8 +1186,32 @@ sub hasLibOp($) {
     return 0;
 }
 
-sub safeLibOp($$$;@) {
-    my ($op,$autolog,$autoerr,@args) = @_;
+sub blockOurSignals($) {
+    my ($old_sigset_ref,) = @_;
+
+    my $new_sigset = POSIX::SigSet->new(SIGHUP, SIGINT, SIGUSR1, SIGUSR2);
+    $$old_sigset_ref = POSIX::SigSet->new;
+    if (! defined(sigprocmask(SIG_BLOCK, $new_sigset, $$old_sigset_ref))) {
+	print STDERR "sigprocmask (BLOCK) failed!\n";
+	return -1;
+    }
+
+    return 0;
+}
+
+sub unblockOurSignals($) {
+    my ($old_sigset,) = @_;
+
+    if (! defined(sigprocmask(SIG_SETMASK, $old_sigset))) {
+	print STDERR "sigprocmask (UNBLOCK) failed!\n";
+	return -1;
+    }
+
+    return 0;
+}
+
+sub safeLibOp($$$$;@) {
+    my ($op,$autolog,$autoerr,$blocksigs,@args) = @_;
 
     my $sargs = '';
     if (@args > 0) {
@@ -1179,24 +1220,23 @@ sub safeLibOp($$$;@) {
     TBDebugTimeStampWithDate("starting $vmtype $op($sargs)")
 	if ($debug);
 
-    #
-    # Block signals that could kill us in the middle of a library call.
-    # Might be better to do this down in the library, but this is an
-    # easier place to do it. This ensure that if we have to tear down
-    # in the middle of setting up, the state is consistent. 
-    #
-    my $new_sigset = POSIX::SigSet->new(SIGHUP, SIGINT, SIGUSR1, SIGUSR2);
-    my $old_sigset = POSIX::SigSet->new;
-    if (! defined(sigprocmask(SIG_BLOCK, $new_sigset, $old_sigset))) {
-	print STDERR "sigprocmask (BLOCK) failed!\n";
+    my $old_sigset;
+    if ($blocksigs) {
+	#
+	# Block signals that could kill us in the middle of a library call.
+	# Might be better to do this down in the library, but this is an
+	# easier place to do it. This ensure that if we have to tear down
+	# in the middle of setting up, the state is consistent. 
+	#
+	blockOurSignals(\$old_sigset);
     }
     my $ret = eval {
 	$libops{$vmtype}{$op}->($vnodeid, $vmid,
 				\%vnconfig, $vnstate->{'private'}, @args);
     };
     my $err = $@;
-    if (! defined(sigprocmask(SIG_SETMASK, $old_sigset))) {
-	print STDERR "sigprocmask (UNBLOCK) failed!\n";
+    if ($blocksigs) {
+	unblockOurSignals($old_sigset);
     }
     if ($err) {
 	if ($autolog) {
