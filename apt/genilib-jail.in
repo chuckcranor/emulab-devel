@@ -301,7 +301,7 @@ $jailuuid = $1;
 #
 if ($limits) {
     my $enabled = `sysctl -in kern.racct.enable 2>/dev/null`;
-    if ($? || !$enabled) {
+    if ($? || $enabled == 0) {
 	$haverctl = 0;
     } else {
 	$haverctl = 1;
