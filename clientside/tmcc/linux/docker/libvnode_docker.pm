@@ -2331,8 +2331,12 @@ sub vnodeCreate($$$$)
 	fatal("CreateVnodeLock()");
     }
 
-    # XXX: just use a default Docker image for now.
-    $imagename = $image{'name'};
+    if (exists($attributes->{'DOCKER_EXTIMAGE'})) {
+	$imagename = $attributes->{'DOCKER_EXTIMAGE'};
+    }
+    else {
+	$imagename = $image{'name'};
+    }
 
     my ($newimagename,$newcreateargs,$newcmd);
     $rc = setupImage($vnode_id,$vnconfig,$private,$imagename,
@@ -2429,14 +2433,22 @@ sub vnodeCreate($$$$)
     # We allow the server to tell us how many VCPUs to allocate to the
     # guest. 
     #
-    if (exists($attributes->{'VM_VCPUS'}) && $attributes->{'VM_VCPUS'} > 1) {
+    if (exists($attributes->{'DOCKER_VCPUS'})
+	&& $attributes->{'DOCKER_VCPUS'} > 1) {
+	$createargs .= " -c " . $attributes->{'DOCKER_VCPUS'};
+    }
+    elsif (exists($attributes->{'VM_VCPUS'}) && $attributes->{'VM_VCPUS'} > 1) {
 	$createargs .= " -c " . $attributes->{'VM_VCPUS'};
     }
 
     #
     # Give the vnode some memory. The server usually tells us how much. 
     #
-    if (exists($attributes->{'VM_MEMSIZE'})) {
+    if (exists($attributes->{'DOCKER_MEMSIZE'})) {
+	# Better be MB.
+	$createargs .= " --memory=" . $attributes->{'DOCKER_MEMSIZE'} . "m";
+    }
+    elsif (exists($attributes->{'VM_MEMSIZE'})) {
 	# Better be MB.
 	$createargs .= " --memory=" . $attributes->{'VM_MEMSIZE'} . "m";
     }
