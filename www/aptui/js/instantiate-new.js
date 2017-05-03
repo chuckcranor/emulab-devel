@@ -1055,6 +1055,7 @@ $(function ()
 		    }
 
 		    if (start != null) {
+			$(this).attr('data-res-pid', project);
 			$(this).attr('data-res-start', start);
 			if (end != null) {
 		    	    $(this).removeAttr('data-now');
@@ -1069,16 +1070,17 @@ $(function ()
 
 			    if (startTime < now) {
 				$(this).attr('data-now', 'true');
-				target.append(wt.HasReservationHTML());
+				target.append(wt.HasReservationHTML(project));
 			    }
 			    else {
 				$(this).attr('data-now', 'false');
-				target.append(wt.FutureReservationHTML());
+				target.append(wt.FutureReservationHTML(project));
 			    }
 			}
 			$('.reservation_tooltip > div').tooltip();
 		    }
 		    else {
+			$(this).removeAttr('data-res-pid');
 			$(this).removeAttr('data-res-start');
 			$(this).removeAttr('data-res-end');
 		    }
