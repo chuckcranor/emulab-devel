@@ -77,7 +77,7 @@ $(function ()
     function LoadUsage()
     {
 	var callback = function(json) {
-	    console.info(json);
+	    console.info("LoadUsage", json);
 
 	    if (json.code) {
 		console.info(json.value);
@@ -85,7 +85,11 @@ $(function ()
 	    }
 	    var blob = json.value;
 	    var html = "";
-
+	    if (1 || !(blob.pnodes || blob.weekpnodes ||
+		  blob.monthpnodes || blob.rank)) {
+		$('#usage_nousage').removeClass("hidden");
+		return;
+	    }
 	    if (blob.pnodes) {
 		html = "<tr><td>Current Usage:</td><td>" +
 		    blob.pnodes + " Node" + (blob.pnodes > 1 ? "s, " : ", ") +
