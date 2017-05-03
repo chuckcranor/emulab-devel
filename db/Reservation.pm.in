@@ -954,6 +954,77 @@ sub OutstandingReservation($$;$) {
     return $earliest;
 }
 
+# Return a list of (pid, nodetype, reserved, used) hashes
+# for any currently active reservations belonging to a
+# listed project where usedcount < reservedcount.
+sub CurrentReservations($$) {
+    my ($class, $projlist) = @_;
+    my @answer = ();
+    
+    foreach ( @$projlist ) {
+	# reject illegal PIDs
+	return undef unless /^[-\w]+$/;
+    }
+    
+    my $query_result = DBQueryFatal( "SELECT DISTINCT(type) FROM " .
+				     "future_reservations WHERE pid IN ('" .
+				     join( "','", @$projlist ) . "')" );
+
+    while( my($type) = $query_result->fetchrow_array() ) {
+	my $reservations = LookupAll( $class, $type );
+
+	my @forecast = ();
+    
+	IsFeasible( $class, $reservations, undef, undef, undef, undef,
+		    \@forecast );
+
+	foreach my $f ( @forecast ) {
+	    foreach my $pid ( keys ( %{$f->{'reserved'}} ) ) {
+		if( grep( $_ eq $pid, @$projlist ) &&
+		    ( !exists( $f->{'used'}->{$pid} ) ||
+		      $f->{'used'}->{$pid} < $f->{'reserved'}->{$pid} ) ) {
+		    last if( $f->{'t'} > time );
+
+		    push( @answer, { 'pid' => $pid, 'nodetype' => $type,
+				     'reserved' => $f->{'reserved'}->{$pid},
+				     'used' => $f->{'used'}->{$pid} } );
+		}
+	    }
+	}
+    }
+
+    return @answer;
+}
+
+# Return a list of (pid, nodetype, nodecount, starttime, endtime) hashes
+# for any reservations belonging to a listed project starting within the
+# next 24 hours.
+sub UpcomingReservations($$) {
+    my ($class, $projlist) = @_;
+    my @answer = ();
+    
+    foreach ( @$projlist ) {
+	# reject illegal PIDs
+	return undef unless /^[-\w]+$/;
+    }
+
+    my $query_result = DBQueryFatal( "SELECT pid, type AS nodetype, " .
+				     "nodes AS nodecount, " .
+				     "UNIX_TIMESTAMP(start) AS starttime, " .
+				     "UNIX_TIMESTAMP(end) AS endtime FROM " .
+				     "future_reservations WHERE " .
+				     "start > NOW() AND " .
+				     "start <= ADDDATE( NOW(), 1 ) AND " .
+				     "pid IN ('" .
+				     join( "','", @$projlist ) . "')" );
+
+    while( my $record = $query_result->fetchrow_hashref() ) {
+	push( @answer, $record );
+    }
+
+    return @answer;
+}
+
 sub ExptTypes($) {
     my ($exptidx) = @_;
     
