@@ -85,7 +85,7 @@ $(function ()
 	    }
 	    var blob = json.value;
 	    var html = "";
-	    if (1 || !(blob.pnodes || blob.weekpnodes ||
+	    if (!(blob.pnodes || blob.weekpnodes ||
 		  blob.monthpnodes || blob.rank)) {
 		$('#usage_nousage').removeClass("hidden");
 		return;
