@@ -1618,7 +1618,7 @@ $(function ()
 		    "          Site " + siteid  + " Cluster:</a>" +
 		    "    </label> " +
 		    "    <div class='col-sm-6'>" +
-		    "      <select name=\"sites[" + siteid + "]\"" +
+		    "      <select id='site"+sitenum+"_selector' name=\"sites[" + siteid + "]\"" +
 		    "              class='form-control select_where'>" +
 		    "        <option value=''>Please Select</option>" +
 		    options +
