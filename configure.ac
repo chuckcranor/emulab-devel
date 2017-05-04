@@ -1378,7 +1378,7 @@ outfiles="$outfiles Makeconf GNUmakefile \
 	utils/mkblob utils/rmblob utils/ctrladdr utils/tcppd \
 	utils/mktestbedtest utils/pxelinux_makeconf \
 	utils/addvpubaddr utils/attend utils/atten utils/addrfdevice \
-	utils/addrfpath utils/reserve \
+	utils/addrfpath utils/reserve utils/predict utils/notify-reservations \
 	www/GNUmakefile www/defs.php3 www/dbdefs.php3 www/xmlrpc.php3 \
 	www/xmlrpcpipe.php3 \
 	www/swish.conf www/websearch \
