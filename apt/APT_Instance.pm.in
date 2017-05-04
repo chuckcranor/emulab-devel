@@ -405,8 +405,6 @@ sub Delete($)
 	    or return -1;
     }
     $self->webtask()->Delete();
-    DBQueryWarn("delete from apt_instance_extension_info where uuid='$uuid'") or
-	return -1;
     DBQueryWarn("delete from apt_instances where uuid='$uuid'") or
 	return -1;
 
