@@ -1306,11 +1306,62 @@ sub os_samefs($$)
     return ($d1dev && $d2dev && $d1dev == $d2dev) ? 1 : 0;
 }
 
+#
+# Some environments do not give us a valid / mount (like Docker); thus,
+# df -l does not work.  Thus we must rely on /proc/mounts to tell us if
+# a dir is local or not.  Well, ok, /proc/mounts is hard (and potential
+# bind mount chains would make it harder).  So instead, we assume that /
+# is local, (well, we check to ensure it is not NFS in /proc/mounts),
+# and use os_samefs above to ensure that $dir is on the same device as
+# /.  If that is true, that is good enough to call it a local dir.
+#
+# We are *very* careful in this function.  If df -l / actually returns
+# something, we bail out, since if df -l returns a local fs in that
+# case, this function should not be used!
+#
+sub os_islocaldir_alt($)
+{
+    my ($dir,) = @_;
+
+    my %mounttypes = ();
+    my %mountdevs = ();
+    open(FD,"/proc/mounts");
+    if ($?) {
+	warn "*** alt_os_is_localdir: could not open /proc/mounts; aborting!\n";
+	return -1;
+    }
+    my @lines = <FD>;
+    close(FD);
+    foreach my $line (@lines) {
+	chomp($line);
+	if ($line =~ /^([^\s]+)\s+([^\s]+)\s+([^\s]+)\s+.*$/) {
+	    $mounttypes{$2} = $3;
+	    $mountdevs{$2} = $1;
+	}
+    }
+
+    if (exists($mounttypes{"/"}) && $mounttypes{"/"} =~ /nfs/i) {
+	warn "*** os_islocaldir_alt: / appears to be NFS; not safe to use this!";
+	return -1;
+    }
+
+    return os_samefs("/",$dir);
+}
+
 # Return non-zero if given directory is on a "local" filesystem
 sub os_islocaldir($)
 {
     my ($dir) = @_;
     my $rv = 0;
+
+    if (INDOCKERVM()) {
+	$rv = os_islocaldir_alt($dir);
+	return $rv
+	    if ($rv >= 0);
+	# Otherwise ($rv == -1), we fall back to the old way, which will
+	# not fail us (might be wrong, but it will be a false positive,
+	# so we won't remove a remote dir or anything).
+    }
 
     my @dfoutput = `$DF -l $dir 2>/dev/null`;
     if (grep(!/^filesystem/i, @dfoutput) > 0) {
