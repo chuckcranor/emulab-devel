@@ -677,15 +677,18 @@ sub ensureDockerInstalled()
 
     # Check to ensure we're doing the right thing w.r.t. iptables:
     my $iptval = ($ISOURDOCKER) ? JSON::PP::true : JSON::PP::false;
+    my $ichanged = 0;
     if (!defined($json) || !exists($json->{"iptables"})
 	|| $json->{'iptables'} != $iptval) {
 	$json->{'iptables'} = $iptval;
 	$changed = 1;
+	$ichanged = 1;
     }
     if (!defined($json) || !exists($json->{"ip-masq"})
 	|| $json->{'ip-masq'} != $iptval) {
 	$json->{'ip-masq'} = $iptval;
 	$changed = 1;
+	$ichanged = 1;
     }
 
     if ($changed) {
@@ -697,7 +700,25 @@ sub ensureDockerInstalled()
 	    or die("could not write /etc/docker/daemon.json: $!");
 	print FD $newjsontext;
 	close(FD);
-	mysystem2("service docker restart");
+
+	mysystem2("service docker stop");
+
+	if ($ichanged && !$ISOURDOCKER) {
+	    #
+	    # Make sure all the Docker stuff is undone, if this is not
+	    # our Docker.
+	    #
+	    mysystem("$IPTABLES -P FORWARD ACCEPT");
+	    mysystem("$IPTABLES -F INPUT");
+	    mysystem("$IPTABLES -F OUTPUT");
+	    mysystem("$IPTABLES -F FORWARD");
+	    mysystem("$IPTABLES -F DOCKER");
+	    mysystem2("$IPTABLES -X DOCKER");
+	    mysystem("$IPTABLES -F DOCKER-ISOLATION");
+	    mysystem2("$IPTABLES -X DOCKER-ISOLATION");
+	}
+
+	mysystem2("service docker start");
 
 	# Remap, cause Docker creates some ifaces.
 	refreshNetworkDeviceMaps();
@@ -1358,7 +1379,6 @@ sub rootPreConfig($)
     mysystem("$IPTABLES -F EMULAB-ISOLATION");
     mysystem("$IPTABLES -A EMULAB-ISOLATION -j RETURN");
     mysystem("$IPTABLES -I FORWARD -j EMULAB-ISOLATION");
-    mysystem("$IPTABLES -P FORWARD ACCEPT");
 
     #
     # Also, Docker handles MASQUERADING for us by default.  We don't
