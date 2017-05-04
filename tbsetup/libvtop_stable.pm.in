@@ -4985,7 +4985,7 @@ sub ReadTextSolution($$)
 
 		my $mapped0 = $self->solution_v2p()->{ $vmem0node };
 		
-		if( $mapped0 eq $nodeB ) {
+		if( defined($mapped0) && $mapped0 eq $nodeB ) {
 		    # It isn't.  Flip the order of the nodes to avoid
 		    # horrible confusion later.
 		    my ($nodeT, $portT);
