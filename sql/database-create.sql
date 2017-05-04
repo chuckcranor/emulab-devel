@@ -2083,6 +2083,7 @@ CREATE TABLE `future_reservations` (
   `created` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
   `approved` datetime DEFAULT NULL,
   `approver` varchar(8) DEFAULT NULL,
+  `notified` datetime DEFAULT NULL,
   PRIMARY KEY (`idx`)
 ) ENGINE=MyISAM DEFAULT CHARSET=latin1;
 
