@@ -1358,7 +1358,7 @@ sub rootPreConfig($)
     mysystem("$IPTABLES -F EMULAB-ISOLATION");
     mysystem("$IPTABLES -A EMULAB-ISOLATION -j RETURN");
     mysystem("$IPTABLES -I FORWARD -j EMULAB-ISOLATION");
-    mysystemd("$IPTABLES -P FORWARD ACCEPT");
+    mysystem("$IPTABLES -P FORWARD ACCEPT");
 
     #
     # Also, Docker handles MASQUERADING for us by default.  We don't
