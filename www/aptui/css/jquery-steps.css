@@ -317,70 +317,73 @@ left: -999em;
 	}
 }
 
-.cluster_picker_status button {
+.picker button {
 	padding-left: 16px;
 }
 
-.cluster_picker_status .btn {
+.picker .btn {
     cursor: default;
     background-color: #FFF;
     border-radius: 4px;
     text-align: left;
 }
 
-.cluster_picker_status .caret {
+.picker .caret {
     position: absolute;
     right: 16px;
     top: 15px;
 }
 
-.cluster_picker_status .btn-default:hover, .cluster_picker_status .btn-default:focus, .cluster_picker_status .btn-default:active, .cluster_picker_status .btn-default.active, .cluster_picker_status .open .dropdown-toggle.btn-default {
+.picker .btn-default:hover, .picker .btn-default:focus, .picker .btn-default:active, .picker .btn-default.active, .picker .open .dropdown-toggle.btn-default {
     background-color: #FFF;    
 }
 
-.cluster_picker_status
-
-.cluster_picker_status .btn-group.open .dropdown-toggle {
+.picker .btn-group.open .dropdown-toggle {
     box-shadow: 0 1px 1px rgba(0, 0, 0, 0.075) inset, 0 0 8px rgba(102, 175, 233, 0.6)
 }
 
-.cluster_picker_status.btn-group {width: 100%}
-.cluster_picker_status .dropdown-menu {width: 100%;}
+.picker.btn-group {width: 100%}
+.picker .dropdown-menu {width: 100%;}
 
 
-.cluster_picker_status li {
+.picker li {
 	position: relative;
 }
 
-.cluster_picker_status .tooltip_div {
+.picker .dropdown_icon, .picker .icon_position_1 {
     position: absolute;
     right: 10px;
     top: 3px;
 }
 
-.cluster_picker_status .dropdown-toggle .picker_stats {
-	position: absolute;
-	right: 35px;
-	top: 6px;
-	z-index: 2;
+.picker .icon_position_2 {
+    position: absolute;
+    top: 3px;
+    right: 35px;
 }
 
-.cluster_picker_status .dropdown-toggle .warning_icon {
-	position: absolute;
-	right: 60px;
-	top: 6px;
-	z-index: 2;
+.picker .dropdown-toggle .icon_position_1 {
+    right: 35px;
+    top: 6px;
+    z-index: 2;
 }
 
-.cluster_picker_status .text-healthy {
+.picker .dropdown-toggle .icon_position_2 {
+    right: 60px;
+    top: 6px;
+    z-index: 2;
+}
+
+
+.picker .text-healthy {
 	color: #8ab800;
 }
 
-.cluster_picker_status .text-unhealthy {
+.picker .text-unhealthy {
 	color: #FF6600;
 }
 
-.cluster_picker_status .circle {
+.picker .circle {
 	display: block;
 	border-radius: 50%;
 	border: 5px solid;
@@ -389,142 +392,145 @@ left: -999em;
 	position: relative;
 }
 
-.cluster_picker_status .resource_healthy .circle {
+.picker .resource_healthy .circle {
 	background-color: #449d44;
 }
 
-.cluster_picker_status .resource_unhealthy .circle {
+.picker .resource_unhealthy .circle {
 	background-color: #ec971f;
 }
 
-.cluster_picker_status .resource_down .circle {
+.picker .resource_down .circle {
 	background-color: #c9302c;
 }
 
-.cluster_picker_status .resource_inactive .circle {
+.picker .resource_inactive .circle {
     background-color: #ddd;
 }
 
-.cluster_picker_status .status_healthy .circle {
+.picker .status_healthy .circle {
 	border-color: #398439;
 }
 
-.cluster_picker_status .status_unhealthy .circle {
+.picker .status_unhealthy .circle {
 	border-color: #d58512;
 }
 
-.cluster_picker_status .status_down .circle {
+.picker .status_down .circle {
 	border-color: #ac2925;
 	background-color: #c9302c;
 }
 
-.cluster_picker_status .status_inactive .circle {
+.picker .status_inactive .circle {
     border-color: #999;
 }
 
-.cluster_picker_status .resource_healthy .tooltip.right .tooltip-inner, .cluster_picker_status .status_healthy .tooltip.left .tooltip-inner {
+.picker .resource_healthy .tooltip.right .tooltip-inner, .picker .status_healthy .tooltip.left .tooltip-inner {
 	background-color: #398439;
 }
 
-.cluster_picker_status .resource_healthy .tooltip.right .tooltip-arrow, .cluster_picker_status .status_healthy .tooltip.left .tooltip-arrow {
+.picker .resource_healthy .tooltip.right .tooltip-arrow, .picker .status_healthy .tooltip.left .tooltip-arrow {
 	border-right-color: #398439;
 	border-left-color: #398439;
 }
 
-.cluster_picker_status .resource_unhealthy .tooltip.right .tooltip-inner, .cluster_picker_status .status_unhealthy .tooltip.left .tooltip-inner {
+.picker .resource_unhealthy .tooltip.right .tooltip-inner, .picker .status_unhealthy .tooltip.left .tooltip-inner {
 	background-color: #d58512;
 }
 
-.cluster_picker_status .resource_unhealthy .tooltip.right .tooltip-arrow, .cluster_picker_status .status_unhealthy .tooltip.left .tooltip-arrow {
+.picker .resource_unhealthy .tooltip.right .tooltip-arrow, .picker .status_unhealthy .tooltip.left .tooltip-arrow {
 	border-right-color: #d58512;
 	border-left-color: #d58512;
 }
 
-.cluster_picker_status .resource_down .tooltip.right .tooltip-inner, .cluster_picker_status .status_down .tooltip.left .tooltip-inner {
+.picker .resource_down .tooltip.right .tooltip-inner, .picker .status_down .tooltip.left .tooltip-inner {
 	background-color: #ac2925;
 }
 
-.cluster_picker_status .resource_down .tooltip.right .tooltip-arrow, .cluster_picker_status .status_down .tooltip.left .tooltip-arrow {
+.picker .resource_down .tooltip.right .tooltip-arrow, .picker .status_down .tooltip.left .tooltip-arrow {
 	border-right-color: #ac2925;
 	border-left-color: #ac2925;
 }
 
-.cluster_picker_status .resource_down .tooltip.right .tooltip-inner, .cluster_picker_status .status_down .tooltip.left .tooltip-inner {
+.picker .resource_down .tooltip.right .tooltip-inner, .picker .status_down .tooltip.left .tooltip-inner {
     background-color: #ac2925;
 }
 
-.cluster_picker_status .resource_down .tooltip.right .tooltip-arrow, .cluster_picker_status .status_down .tooltip.left .tooltip-arrow {
+.picker .resource_down .tooltip.right .tooltip-arrow, .picker .status_down .tooltip.left .tooltip-arrow {
     border-right-color: #ac2925;
     border-left-color: #ac2925;
 }
 
-.cluster_picker_status .resource_inactive .tooltip.right .tooltip-inner, .cluster_picker_status .status_inactive .tooltip.left .tooltip-inner {
+.picker .resource_inactive .tooltip.right .tooltip-inner, .picker .status_inactive .tooltip.left .tooltip-inner {
     background-color: #999;
 }
 
-.cluster_picker_status .resource_inactive .tooltip.right .tooltip-arrow, .cluster_picker_status .status_inactive .tooltip.left .tooltip-arrow {
+.picker .resource_inactive .tooltip.right .tooltip-arrow, .picker .status_inactive .tooltip.left .tooltip-arrow {
     border-right-color: #999;
     border-left-color: #999;
 }
 
-.cluster_picker_status .selected {
+.picker .selected {
 	background-color: #f5f5f5;
 }
 
-.cluster_picker_status .dropdown-menu:hover .selected {
+.picker .dropdown-menu:hover .selected {
 	background-color: #FFF;
 }
 
-.cluster_picker_status .tooltip .tooltip-inner div {
+.picker .tooltip .tooltip-inner div {
 	text-align: left;
 	white-space: nowrap;
 }
 
-.cluster_picker_status .tooltip .tooltip-inner {
+.picker .tooltip .tooltip-inner {
 	max-width: 400px;
 }
 
-.cluster_picker_status .reservation_tooltip {
-	position: absolute;
-	top: 3px;
-	right: 35px;
-}
-
-.cluster_picker_status .warning_icon {
+.picker .warning_icon {
 	font-size: 18px;
 }
 
-.cluster_picker_status .warning_icon.confirm {
+.picker .warning_icon.confirm {
 	color: #449d44;
 }
 
-.cluster_picker_status .warning_icon.warn {
+.picker .warning_icon.warn {
 	color: #d58512;
 }
 
-.cluster_picker_status .no_reservation .tooltip.right .tooltip-inner, .cluster_picker_status .future_reservation .tooltip.right .tooltip-inner {
+.picker .no_reservation .tooltip.right .tooltip-inner, .picker .future_reservation .tooltip.right .tooltip-inner {
 	background-color: #d58512;
 }
 
-.cluster_picker_status .no_reservation .tooltip.right .tooltip-arrow, .cluster_picker_status .future_reservation .tooltip.right .tooltip-inner {
+.picker .no_reservation .tooltip.right .tooltip-arrow, .picker .future_reservation .tooltip.right .tooltip-inner {
 	border-right-color: #d58512;
 	border-left-color: #d58512;
 }
 
-.cluster_picker_status .reservation_tooltip .warning_icon {
+.picker .has_reservation .tooltip.right .tooltip-inner, .picker .has_reservation .tooltip.left .tooltip-inner {
+	background-color: #398439;
+}
+
+.picker .has_reservation .tooltip.right .tooltip-arrow, .picker .has_reservation .tooltip.left .tooltip-arrow {
+	border-right-color: #398439;
+	border-left-color: #398439;
+}
+
+.picker .reservation_tooltip .warning_icon {
 	height: 20px;
 }
 
-.cluster_picker_status .reservation_tooltip .tooltip .tooltip-inner {
+.picker .reservation_tooltip .tooltip .tooltip-inner {
 	width: 200px;
 }
 
-.cluster_picker_status .federatedDivider {
+.picker .dropdown-menu .divider.withText {
 	overflow: visible;
 	margin: 24px 0 0;
 }
 
-.cluster_picker_status .federatedDivider > div {
+.picker .dropdown-menu .divider.withText > div {
 	color: #aaa;
 	position: absolute;
 	top: -20px;

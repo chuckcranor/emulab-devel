@@ -1,97 +1,49 @@
 $(function () {
 window.wt = (function() {
-
-	function ClusterStatusHTML(options, fedlist) {
-		var html = $('<div class="cluster_picker_status btn-group">'
-					    +'<button type="button" class="form-control btn btn-default dropdown-toggle" data-toggle="dropdown">'
-					    	+'<span class="value"></span>'
-							+'<span class="caret"></span>'
-					    +'</button>'
-					    +'<ul class="dropdown-menu" role="menu">'
-					    	+'<li role="separator" class="divider federatedDivider"><div>Federated Clusters<div></li>'
-					    	+'<li role="separator" class="divider disabledDivider"></li>'
-					    +'</ul>'
-					+'</div>');
-
-		var dropdown = html.find('.dropdown-menu .disabledDivider');
-		var federated = html.find('.dropdown-menu .federatedDivider');
-		var disabled = 0;
-		var fed = 0;
-		$(options).each(function() {
-			if ($(this).prop('disabled')) {
-				dropdown.after('<li class="disabled"><a data-toggle="tooltip" data-placement="right" data-html="true" title="<div>This testbed is incompatible with the selected profile</div>" href="#" value="'+$(this).attr('value')+'">'+$(this).attr('value')+'</a></li>')
-				disabled++;
-			}
-			else {
-				if (_.contains(fedlist, $(this).attr('value'))) {
-					federated.after('<li class="enabled federated"><a href="#" value="'+$(this).attr('value')+'">'+$(this).attr('value')+'</a></li>');
-					fed++;
-				}
-				else {
-					var optvalue = $(this).attr('value');
-					var opthidden = "";
-					// Look for Please Select option
-					if (optvalue == "") {
-					    optvalue = $(this).text();
-					    opthidden = ' hidden';
-					}
-					federated.before('<li class="enabled native'+opthidden+'"><a href="#" value="'+optvalue+'">'+optvalue+'</a></li>');
-				}
-			}
-		});
-
-		if (!disabled) {
-			html.find('.disabledDivider').remove();
-		}
-
-		if (!fed) {
-			html.find('.federatedDivider').remove();
-		}
-
-		return html;
-	}
-
-	function StatusClickEvent(html, that) {
-	    html.find('.dropdown-toggle .value').html($(that).attr('value'));   
+	function StatusClickEvent(container, that, target) {
+	    if ($(container).find('.dropdown-toggle > .value').html() == "") {
+		var value = $(that).html();
+		$(container).find('.dropdown-toggle > .value').html(value);
+	    }
 	    
 	    if ($(that).find('.picker_stats').length) {
-		if (!html.find('.dropdown-toggle > .picker_stats').length) {
-		    html.find('.dropdown-toggle').append('<div class="picker_stats"></div>');
+		if (!$(container).find('.dropdown-toggle > .picker_stats').length) {
+		    $(container).find('.dropdown-toggle').append('<div class="'+$(that).find('.picker_stats').attr('class')+'"></div>');
 		}
 		else {
-		    html.find('.dropdown-toggle > .picker_stats').html('');
+		    $(container).find('.dropdown-toggle > .picker_stats').html('');
 		}
 
-		html.find('.dropdown-toggle > .picker_stats').append($(that).find('.picker_stats').html());
+		$(container).find('.dropdown-toggle > .picker_stats').append($(that).find('.picker_stats').html());
 	    }
 	    else {
-		html.find('.dropdown-toggle > .picker_stats').html('');
+		$(container).find('.dropdown-toggle > .picker_stats').html('');
 	    }
 
 	    if ($(that).find('.warning_icon').length) {
-	    	if (!html.find('.dropdown-toggle > .warning_icon').length) {
-		    html.find('.dropdown-toggle').append('<div class="warning_icon"></div>');
+		    console.log('callback');   
+		    console.log(that);
+		if (!$(container).find('.dropdown-toggle > .warning_icon').length) {
+		    $(container).find('.dropdown-toggle').append('<div class="'+$(that).find('.warning_icon').attr('class')+'"></div>');
 		}
 		else {
-		    html.find('.dropdown-toggle > .warning_icon').html('');
+		    $(container).find('.dropdown-toggle > .warning_icon').html('');
 		}
 
-		html.find('.dropdown-toggle > .warning_icon').append($(that).find('.warning_icon').html());
+		$(container).find('.dropdown-toggle > .warning_icon').append($(that).find('.warning_icon').html());
 		if ($(that).find('.warning_icon').hasClass('warn')) {
-		    html.find('.dropdown-toggle > .warning_icon').removeClass('confirm');
-		    html.find('.dropdown-toggle > .warning_icon').addClass('warn');
+		    $(container).find('.dropdown-toggle > .warning_icon').removeClass('confirm');
+		    $(container).find('.dropdown-toggle > .warning_icon').addClass('warn');
 		}
 		else {
-		    html.find('.dropdown-toggle > .warning_icon').removeClass('warn');
-		    html.find('.dropdown-toggle > .warning_icon').addClass('confirm');
+		    $(container).find('.dropdown-toggle > .warning_icon').removeClass('warn');
+		    $(container).find('.dropdown-toggle > .warning_icon').addClass('confirm');
 		}
 	    }
 	    else {
-		html.find('.dropdown-toggle > .warning_icon').html('');
+		$(container).find('.dropdown-toggle > .warning_icon').html('');
 	    }
 
-	    html.find('.selected').removeClass('selected');
-	    $(that).parent().addClass('selected');
 
 	    if ($(that).parent().attr('data-res-start')) {
  		var months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
@@ -100,7 +52,7 @@ window.wt = (function() {
 		var startMinutes = start.getMinutes() < 10 ? '0' + start.getMinutes() : '' + start.getMinutes();
 
 		if ($(that).parent().attr('data-res-end')) {
-	    	    $('#reservation_confirmation').addClass('hidden');
+		    $('#reservation_confirmation').addClass('hidden');
 		    var end = new Date(parseInt($(that).parent().attr('data-res-end')) * 1000);
 
 		    var endHours = end.getHours() < 10 ? '0' + end.getHours() : '' + end.getHours();
@@ -129,6 +81,33 @@ window.wt = (function() {
 		}
 	    }
 	    $('[data-toggle="tooltip"]').tooltip();
+	}
+
+	function ResClickEvent(container, that, target) {
+		console.log(that);
+	    if ($(that).find('.warning_icon').length) {
+		if (!$(container).find('.dropdown-toggle > .warning_icon').length) {
+		    $(container).find('.dropdown-toggle').append('<div class="'+$(that).find('.warning_icon').attr('class')+'"></div>');
+		}
+		else {
+		    $(container).find('.dropdown-toggle > .warning_icon').html('');
+		}
+
+		$(container).find('.dropdown-toggle > .warning_icon').append($(that).find('.warning_icon').html());
+		if ($(that).find('.warning_icon').hasClass('warn')) {
+		    $(container).find('.dropdown-toggle > .warning_icon').removeClass('confirm');
+		    $(container).find('.dropdown-toggle > .warning_icon').addClass('warn');
+		}
+		else {
+		    $(container).find('.dropdown-toggle > .warning_icon').removeClass('warn');
+		    $(container).find('.dropdown-toggle > .warning_icon').addClass('confirm');
+		}
+	    }
+	    else {
+		$(container).find('.dropdown-toggle > .warning_icon').html('');
+	    }
+
+	    $(target).trigger('change');
 	}
 
 	function CalculateRating(data, type) {
@@ -224,48 +203,48 @@ window.wt = (function() {
 			}
 			title1 += '"';
 		}
-		return '<div class="tooltip_div"'+title1+'><div class="picker_stats" data-toggle="tooltip" data-placement="left" data-html="true" title="'+title[0]+'">'
+		return '<div class="tooltip_div"'+title1+'><div class="picker_stats icon_position_1" data-toggle="tooltip" data-placement="left" data-html="true" title="'+title[0]+'">'
 							+'<span class="picker_status '+classes[0]+' '+classes[1]+'"><span class="circle"></span></span>'
 							+'</div></div>';
 	}
 
-	function ReservationWarningHTML() {
+	function ReservationWarningHTML(type, position) {
 		return '<div class="reservation_tooltip no_reservation">'
-			   +'<div class="warning_icon warn" '
+			   +'<div class="warning_icon warn icon_position_'+position+'" '
 				+'data-toggle="tooltip" '
 				+'data-placement="right" '
 				+'title="An upcoming reservation may impact the '
-				+'availability of resources on this cluster.">'
+				+'availability of resources on this '+type+'.">'
 			   +'<span class="glyphicon glyphicon-warning-sign '
 					+'pull-right"></span>'
 			+'</div></div>'
 	}
 
-	function HasReservationHTML() {
+	function HasReservationHTML(type, position) {
 		return '<div class="reservation_tooltip has_reservation">'
-			   +'<div class="warning_icon confirm" '
+			   +'<div class="warning_icon confirm icon_position_'+position+'" '
 				+'data-toggle="tooltip" '
 				+'data-placement="right" '
-				+'title="You have an active reservation on this cluster.">'
+				+'title="You have an active reservation on this '+type+'.">'
 			   +'<span class="glyphicon glyphicon-calendar '
 					+'pull-right"></span>'
 			+'</div></div>'
 	}
 
-	function FutureReservationHTML() {
+	function FutureReservationHTML(type, position) {
 		return '<div class="reservation_tooltip future_reservation">'
-			   +'<div class="warning_icon warn" '
+			   +'<div class="warning_icon warn icon_position_'+position+'" '
 				+'data-toggle="tooltip" '
 				+'data-placement="right" '
-				+'title="You have an upcoming reservation on this cluster.">'
+				+'title="You have an upcoming reservation on this '+type+'.">'
 			   +'<span class="glyphicon glyphicon-calendar '
 					+'pull-right"></span>'
 			+'</div></div>'
 	}
 
 	return {
-		ClusterStatusHTML: ClusterStatusHTML,
 		StatusClickEvent: StatusClickEvent,
+		ResClickEvent: ResClickEvent,
 		CalculateRating: CalculateRating,
 		InactiveRating: InactiveRating,
 		AssignStatusClass: AssignStatusClass,

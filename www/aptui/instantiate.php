@@ -431,6 +431,7 @@ function SPITFORM($formfields, $newuser, $errors)
     REQUIRE_PPWIZARDSTART();
     REQUIRE_JACKS_EDITOR();
     REQUIRE_WIZARD_TEMPLATE();
+    REQUIRE_PICKER();
     REQUIRE_FORMHELPERS();
     REQUIRE_FILESTYLE();
     REQUIRE_MARKED();
@@ -526,7 +527,7 @@ if (!isset($create)) {
     SPITFORM($defaults, false, array());
     echo "<div style='display: none'><div id='jacks-dummy'></div></div>\n";
 
-    AddTemplateList(array("instantiate", "instantiate-new", "aboutapt", "aboutcloudlab", "aboutpnet", "waitwait-modal", "rspectextview-modal"));
+    AddTemplateList(array("instantiate", "instantiate-new", "aboutapt", "aboutcloudlab", "aboutpnet", "waitwait-modal", "rspectextview-modal", "picker-template"));
     SPITFOOTER();
     return;
 }
