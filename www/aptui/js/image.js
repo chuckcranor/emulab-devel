@@ -31,7 +31,8 @@ window.ShowImagingModal = (function()
 			imaging_modal_active = false;
 			$('#imaging-modal').off('hidden.bs.modal');
 		    }
-		    sup.SpitOops("oops", "Server says: " + json.value);
+		    sup.SpitOops("oops", "Server says: <br><pre><code>" +
+				 json.value + "</code></pre>");
 		    completion_callback(1);
 		    return;
 		}

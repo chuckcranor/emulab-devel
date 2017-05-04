@@ -46,20 +46,19 @@ window.wt = (function() {
 
 
 	    if ($(that).parent().attr('data-res-start')) {
- 		var months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
-		var start = new Date(parseInt($(that).parent().attr('data-res-start')) * 1000);
-		var startHours = start.getHours() < 10 ? '0' + start.getHours() : '' + start.getHours();
-		var startMinutes = start.getMinutes() < 10 ? '0' + start.getMinutes() : '' + start.getMinutes();
+		var project = $(that).parent().attr('data-res-pid');
+		var start = new Date(parseInt($(that).parent()
+					      .attr('data-res-start')) * 1000);
 
 		if ($(that).parent().attr('data-res-end')) {
-		    $('#reservation_confirmation').addClass('hidden');
-		    var end = new Date(parseInt($(that).parent().attr('data-res-end')) * 1000);
+	    	    $('#reservation_confirmation').addClass('hidden');
+		    var end = new Date(parseInt($(that).parent()
+						.attr('data-res-end')) * 1000);
 
-		    var endHours = end.getHours() < 10 ? '0' + end.getHours() : '' + end.getHours();
-		    var endMinutes = end.getMinutes() < 10 ? '0' + end.getMinutes() : '' + end.getMinutes();
-
-		    $('#reservation_warning .reservation_start').html(startHours + ':' + startMinutes + ', ' + months[start.getMonth()] + ' ' + start.getDate());
-		    $('#reservation_warning .reservation_end').html(endHours + ':' + endMinutes + ', ' + months[end.getMonth()] + ' ' + end.getDate());
+		    $('#reservation_warning .reservation_start')
+			.html(moment(start).format('lll'));
+		    $('#reservation_warning .reservation_end')
+			.html(moment(end).format('lll'));
 		    $('#reservation_warning').removeClass('hidden');
 		} 
 		else {
@@ -68,13 +67,19 @@ window.wt = (function() {
 		    if ($(that).parent().attr('data-now') == 'true') {
 		    	$('#reservation_future').addClass('hidden');
 
-			$('#reservation_confirmation .reservation_start').html(startHours + ':' + startMinutes + ', ' + months[start.getMonth()] + ' ' + start.getDate());
+			$('#reservation_confirmation .reservation_start')
+			    .html(moment(start).format('lll'));
+			$('#reservation_confirmation .reservation_project')
+			    .html(project);
 			$('#reservation_confirmation').removeClass('hidden');
 		    }
 		    else {
 			$('#reservation_confirmation').addClass('hidden');
 
-			$('#reservation_future .reservation_start').html(startHours + ':' + startMinutes + ', ' + months[start.getMonth()] + ' ' + start.getDate());
+			$('#reservation_future .reservation_start')
+			    .html(moment(start).format('lll'));
+			$('#reservation_future .reservation_project')
+			    .html(project);
 			$('#reservation_future').removeClass('hidden');
 		    }
 
@@ -220,23 +225,31 @@ window.wt = (function() {
 			+'</div></div>'
 	}
 
-	function HasReservationHTML(type, position) {
+	function HasReservationHTML(project, type, position) {
+		var title = 'Your project ' + project + ' has an active cluster reservation.';
+		if (type == 'cluster') {
+			title = 'Your project ' + project + 'has an active reservation on this cluster.';
+		}
 		return '<div class="reservation_tooltip has_reservation">'
 			   +'<div class="warning_icon confirm icon_position_'+position+'" '
 				+'data-toggle="tooltip" '
 				+'data-placement="right" '
-				+'title="You have an active reservation on this '+type+'.">'
+				+'title="'+title+'">'
 			   +'<span class="glyphicon glyphicon-calendar '
 					+'pull-right"></span>'
 			+'</div></div>'
 	}
 
-	function FutureReservationHTML(type, position) {
+	function FutureReservationHTML(project, type, position) {
+		var title = 'Your project ' + project + ' has an upcoming cluster reservation.';
+		if (type == 'cluster') {
+			title = 'Your project ' + project + 'has an upcoming reservation on this cluster.';
+		}
 		return '<div class="reservation_tooltip future_reservation">'
 			   +'<div class="warning_icon warn icon_position_'+position+'" '
 				+'data-toggle="tooltip" '
 				+'data-placement="right" '
-				+'title="You have an upcoming reservation on this '+type+'.">'
+				+'title="'+title+'">'
 			   +'<span class="glyphicon glyphicon-calendar '
 					+'pull-right"></span>'
 			+'</div></div>'

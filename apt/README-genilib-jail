@@ -53,6 +53,12 @@ EOF
 
    iocage set template=yes py-cage-new
 
+6. Make it the default
+
+   We create the tag py-cage by hand and point it to the correct iocage:
+
+   mv /iocage/tags/py-cage /iocage/tags/py-cage-old
+   cp -R /iocage/tags/py-cage-new /iocage/tags/py-cage
 
 B. Updating your iocage:
 

@@ -69,7 +69,7 @@ use Time::Local;
 use Compress::Zlib;
 use File::Temp qw(tempfile);
 use MIME::Base64;
-use Errno;
+use Errno qw(:POSIX);
 use List::Util qw(shuffle);
 
 # Configure variables
@@ -3412,7 +3412,14 @@ sub CreateImage($)
     print STDERR $output;
     if ($?) {
 	$slice->UnLock();
-	$response = GeniResponse->Create(GENIRESPONSE_ERROR, undef, $output);
+	if ($? >> 8 == ENOSPC) {
+	    $response = GeniResponse->Create(GENIRESPONSE_NOSPACE,
+					     undef, $output);
+	}
+	else {
+	    $response = GeniResponse->Create(GENIRESPONSE_ERROR,
+					     undef, $output);
+	}
 	goto bad;
     }
     #

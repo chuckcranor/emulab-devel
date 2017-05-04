@@ -106,6 +106,43 @@ window.APT_OPTIONS.initialize = function (sup)
     $('body').show();
 };
 
+window.APT_OPTIONS.gaAjaxEvent = function (route, method, code)
+{
+    if (window.GOOGLEUA === undefined) {
+	return;
+    }
+    // Do not report on these long polling calls, swamps the data.
+    if (method == "GetInstanceStatus" || method == "SnapshotStatus") {
+	return;
+    }
+    ga('send', 'event', 'ajax', route, method, code);
+}
+
+window.APT_OPTIONS.gaButtonEvent = function (event)
+{
+    if (window.GOOGLEUA === undefined) {
+	return;
+    }
+    var target = event.target;
+    var type   = event.type;
+    var id     = $(target).attr('id');
+    var label  = $(target).text();
+    if (id === undefined) {
+	id = label.trim();
+    }
+    //console.info("button", type, id);
+    ga('send', 'event', 'button', type, id);
+}
+
+window.APT_OPTIONS.gaTabEvent = function (action, id)
+{
+    if (window.GOOGLEUA === undefined) {
+	return;
+    }
+    //console.info("tab", action, id);
+    ga('send', 'event', 'tab', action, id);
+}
+
 APT_OPTIONS.CallServerMethod = function (url, route, method, args, callback)
 {
     // ignore url now.
@@ -118,7 +155,12 @@ APT_OPTIONS.CallServerMethod = function (url, route, method, args, callback)
     return $.ajax({
         // the URL for the request
         url: url,
-        success: callback,
+        success: function (json) {
+	    window.APT_OPTIONS.gaAjaxEvent(route, method, json.code);
+	    if (callback !== undefined) {
+		callback(json);
+	    }
+	},
  
         // the data to send (will be converted to a query string)
         data: {

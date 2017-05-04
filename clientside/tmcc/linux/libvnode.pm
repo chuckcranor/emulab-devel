@@ -26,11 +26,13 @@
 package libvnode;
 use Exporter;
 @ISA    = "Exporter";
-@EXPORT = qw( makeIfaceMaps makeBridgeMaps
-	      findControlNet existsIface findIface findMac
+@EXPORT = qw( makeIfaceMaps makeBridgeMaps makeMacvlanMaps
+	      findControlNet existsIface findIface findMac getIfaceInfo
 	      existsBridge findBridge findBridgeIfaces
+              existsMacvlanParent findMacvlanParent findMacvlanIfaces
               downloadImage getKernelVersion createExtraFS
-              forwardPort removePortForward lvSize DoIPtables DoIPtablesNoFail
+              forwardPort removePortForward lvSize lvExists
+              DoIPtables DoIPtablesNoFail
               restartDHCP computeStripeSize
             );
 
@@ -435,6 +437,7 @@ my %ip2if = ();
 my %ip2mask = ();
 my %ip2net = ();
 my %ip2maskbits = ();
+my %if2info = ();
 
 #
 # Grab iface, mac, IP info from /sys and /sbin/ip.
@@ -448,6 +451,7 @@ sub makeIfaceMaps()
     %ip2net = ();
     %ip2mask = ();
     %ip2maskbits = ();
+    %if2info = ();
 
     my $devdir = '/sys/class/net';
     opendir(SD,$devdir) 
@@ -477,6 +481,7 @@ sub makeIfaceMaps()
 	$mac = lc($mac);
 	$if2mac{$iface} = $mac;
 	$mac2if{$mac} = $iface;
+	$if2info{$iface} = { 'mac' => $mac, 'iface' => $iface };
 
 	# also find ip, ugh
 	my $pip = `ip addr show dev $iface | grep 'inet '`;
@@ -501,6 +506,11 @@ sub makeIfaceMaps()
 	    $ip2net{$ip} = join('.',@network);
 	    $ip2mask{$ip} = join('.',@netmask);
 	    $ip2maskbits{$ip} = $bits;
+
+	    $if2info{$iface}->{'ip'} = $ip;
+	    $if2info{$iface}->{'network'} = $ip2net{$ip};
+	    $if2info{$iface}->{'mask'} = $ip2mask{$ip};
+	    $if2info{$iface}->{'maskbits'} = $ip2maskbits{$ip};
 	}
     }
 
@@ -560,6 +570,19 @@ sub findIface($) {
         if (exists($mac2if{$mac}));
 
     return undef;
+}
+
+#
+# Returns a dict of iface, mac[, ip, network, mask, maskbits], if the
+# supplied iface exists.  The IPv4 info is only included if it exists.
+#
+sub getIfaceInfo($) {
+    my $iface = shift;
+
+    return undef
+	if (!exists($if2info{$iface}));
+
+    return $if2info{$iface};
 }
 
 sub findMac($) {
@@ -630,6 +653,63 @@ sub findBridgeIfaces($) {
 
     return @{$bridges{$bname}}
         if (exists($bridges{$bname}));
+
+    return undef;
+}
+
+my %macvlans = ();
+my %if2mv = ();
+
+sub makeMacvlanMaps() {
+    # clean out anything...
+    %macvlans = ();
+    %if2mv = ();
+
+    my @lines = `ip link show type macvlan`;
+    foreach my $line (@lines) {
+	if ($line =~ /^\d+:\s+([^\@]+)\@([^:]+):/) {
+	    if (!exists($macvlans{$2})) {
+		$macvlans{$2} = [];
+	    }
+	    push(@{$macvlans{$2}},$1);
+	}
+    }
+
+    if ($debug > 1) {
+	print STDERR "makeMacvlanMaps:\n";
+	print STDERR "macvlans:\n";
+	print STDERR Dumper(%macvlans) . "\n";
+	print STDERR "if2mv:\n";
+	print STDERR Dumper(%if2mv) . "\n";
+	print STDERR "\n";
+    }
+
+    return 0;
+}
+
+sub existsMacvlanParent($) {
+    my $parent = shift;
+
+    return 1
+        if (exists($macvlans{$parent}));
+
+    return 0;
+}
+
+sub findMacvlanParent($) {
+    my $iface = shift;
+
+    return $if2mv{$iface}
+        if (exists($if2mv{$iface}));
+
+    return undef;
+}
+
+sub findMacvlanIfaces($) {
+    my $parent = shift;
+
+    return @{$macvlans{$parent}}
+        if (exists($macvlans{$parent}));
 
     return undef;
 }
@@ -783,6 +863,21 @@ sub createExtraFS($$$)
 	    == 0 or return -1;
     }
     return 0;
+}
+
+#
+# Check if the LV exists.
+#
+sub lvExists($$)
+{
+    my ($vgname,$lvname) = @_;
+
+    my $lvpath = "/dev/$vgname/$lvname";
+    my $exists = `lvs --noheadings -o origin $lvpath > /dev/null 2>&1`;
+    if ($?) {
+	return 0;
+    }
+    return 1;
 }
 
 #

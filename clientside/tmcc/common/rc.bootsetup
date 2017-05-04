@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2004-2014, 2016 University of Utah and the Flux Group.
+# Copyright (c) 2004-2017 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -336,7 +336,7 @@ sub doboot()
     #
     # This stuff is run regardless of reservation status.
     #
-    if (-x "$RCDIR/rc.ipod" && ! WINDOWS()) {
+    if (-x "$RCDIR/rc.ipod" && ! WINDOWS() && ! INDOCKERVM()) {
 	print("Setting up Ping of Death\n");
 	# This is allowed to fail by default; ipod might not be supported.
 	if (!exists($manifest{'rc.ipod'})
@@ -413,12 +413,19 @@ sub doboot()
 	if (REMOTE()) {
 	    $eventserver = TB_EVENTSERVER();
 	}
-	$clusteringoptions = "-c $eventserver";
+	$clusteringoptions = "-c $eventserver -F $PUBSUBEXPR";
+
+	open(CONF, "> $PUBSUBEXPR") or
+	    fatal("Error opening $PUBSUBEXPR for writing");
+	print CONF "(SCHEDULER == 0)\n";
+	close(CONF);
     }
     elsif (!(REMOTE() && !REMOTEDED()) && !GENVNODE()) {  
 	#
 	# We run pubsubd in clustering mode, asking for just notifications
-	# for the current experiment.
+	# for the current experiment. Note that we explicitly exclude those
+	# intended for the event scheduler running on ops. In theory, they
+	# should not cause problems, but they are confusing at best.
 	#
 	my $eventserver = "event-server";
 	if (REMOTE()) {
@@ -428,7 +435,7 @@ sub doboot()
 
 	open(CONF, "> $PUBSUBEXPR") or
 	    fatal("Error opening $PUBSUBEXPR for writing");
-	print CONF "(EXPT == \"$pid/$eid\")\n";
+	print CONF "(EXPT == \"$pid/$eid\") && SCHEDULER == 0\n";
 	close(CONF);
     }
     if (defined($clusteringoptions)) {

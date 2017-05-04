@@ -4487,7 +4487,7 @@ done
 # based on which variables are defined.
 
 # Win7 Pro x86
-if test -n ${WINDOWS_KEY_7PRO_X86}; then
+if test -n "${WINDOWS_KEY_7PRO_X86}"; then
    WIN7_IMNAME="Windows 7 PROFESSIONAL"
    sed -e "s/@WIN7_IMNAME@/$WIN7_IMNAME/" < $srcdir/tmcc/cygwinseven/unattend-x86.xml.in.tmpl > $srcdir/tmcc/cygwinseven/unattend-7pro-x86.xml.in
    winfiles="$winfiles tmcc/cygwinseven/unattend-7pro-x86.xml"

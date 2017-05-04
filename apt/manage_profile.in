@@ -187,6 +187,7 @@ my %xmlfields =
      "rspec"		   => ["rspec",		$SLOT_REQUIRED|$SLOT_UPDATE],
      "script"		   => ["script",	$SLOT_OPTIONAL|$SLOT_UPDATE],
      "repourl"		   => ["repourl",	$SLOT_OPTIONAL],
+     "portal_converted"	   => ["portal_converted", $SLOT_OPTIONAL|$SLOT_UPDATE],
 );
 
 if ($action eq "update") {
@@ -433,9 +434,32 @@ sub CreateProfile()
 	    $profile->Delete(1);
 	    fatal("Did not get an image for $node_id");
 	}
-	if ($profile->UpdateDiskImage($node_id, $newimage, 0)) {
-	    $profile->Delete(1);
-	    fatal("Could not update image in rspec for $node_id; $newimage;");
+	#
+	# We cannot change a geni-lib script profile, so no need to do this.
+	# But we can change a portal converted profile (or rspec).
+	#
+	if (!defined($profile->script()) || $profile->portal_converted()) {
+	    #
+	    # See if anything is actually going to change, since the cluster
+	    # might not be doing image versioning.
+	    #
+	    my $changed = $profile->UpdateDiskImage($node_id, $newimage, 0, 1);
+	    if ($changed > 0) {
+		if ($profile->UpdateDiskImage($node_id, $newimage, 0, 0)) {
+		    $profile->Delete(1);
+		    fatal("Could not update image in rspec ".
+			  "for $node_id; $newimage;");
+		}
+		#
+		# For a portal converted profile, we need to regen the script.
+		#
+		if ($profile->portal_converted()) {
+		    if ($profile->Convert2Genilib() != 0) {
+			$profile->Delete(1);
+			fatal("Could not convert rspec to geni-lib");
+		    }
+		}
+	    }
 	}
 	# Tell web interface cloning has started.
 	$pwebtask->cloning(1);
@@ -660,12 +684,14 @@ sub ModifyProfileInternal($$$)
 		$webtask->newProfile($profile->uuid())
 		    if (defined($webtask));
 	    }
-	    foreach my $key ("rspec", "script", "paramdefs", "repohash") {
+	    foreach my $key ("rspec", "script", "paramdefs",
+			     "repohash", "portal_converted") {
 		$profile->UpdateVersion({$key => $update_args{$key}})
 		    if (exists($update_args{$key}));
 	    }
 	}
-	foreach my $key ("rspec", "script", "paramdefs", "repohash") {
+	foreach my $key ("rspec", "script", "paramdefs",
+			 "repohash", "portal_converted") {
 	    delete($update_args{$key})
 		if (exists($update_args{$key}));
 	}
@@ -780,7 +806,6 @@ sub VerifyXML($$)
 	    $modifiers{$dbslot} = $value;
 	    next;
 	}
-	
 	# Now check that the value is legal.
 	if (! TBcheck_dbslot($value, "apt_profiles",
 			     $dbslot, TBDB_CHECKDBSLOT_ERROR)) {
@@ -1035,7 +1060,7 @@ sub DeleteProfile()
 
     my $profile = APT_Profile->Lookup($ARGV[0]);
     if (!defined($profile)) {
-	fatal("No such profile exists");
+	fatal("No such profile exists: " . $ARGV[0]);
     }
     if ($profile->isLocked()) {
 	$errmsg = "This profile has its nodelete flag set.";
@@ -1046,13 +1071,15 @@ sub DeleteProfile()
 	goto uerror;
     }
     # For now, mere users do not see new image deletion stuff unless
-    # feature enabled. 
+    # feature enabled.
+    if (0) {
     if (! ($this_user->admin() || $this_user->stud())) {
 	my $project = Project->Lookup($profile->pid_idx());
 	if (! EmulabFeatures->FeatureEnabled("APT_ImageDeletion",
 					     $this_user, $project)) {
 	    $keepimages = 1;
 	}
+    }
     }
 
     # If deleting the only version of a profile, then force $all.

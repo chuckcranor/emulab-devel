@@ -220,6 +220,13 @@ function Do_Create()
                    htmlspecialchars($formfields["profile_script"]) .
                    "</value>");
             fwrite($fp, "</attribute>\n");
+            if (isset($formfields["portal_converted"]) &&
+                $formfields["portal_converted"] != "") {
+                $pcon = ($formfields["portal_converted"] == "yes" ? 1 : 0);
+                fwrite($fp, "<attribute name='portal_converted'>");
+                fwrite($fp, "  <value>$pcon</value>");
+                fwrite($fp, "</attribute>\n");
+            }
         }
         if (isset($formfields["profile_repourl"]) &&
             $formfields["profile_repourl"] != "") {
@@ -1139,6 +1146,100 @@ function Do_ConvertClassic()
 }
 
 #
+# Convert rspec to geni-lib script.
+#
+function Do_ConvertRspec()
+{
+    global $this_user, $suexec_output;
+    global $ajax_args;
+    
+    $this_idx = $this_user->uid_idx();
+    $this_uid = $this_user->uid();
+
+    if (!isset($ajax_args["rspec"])) {
+	SPITAJAX_ERROR(1, "Missing rspec");
+	return;
+    }
+    $infname  = tempnam("/tmp", "convertin");
+    $outfname = tempnam("/tmp", "convertout");
+    $rspecfname = tempnam("/tmp", "convertoutrspec");
+    
+    $fp = fopen($infname, "w");
+    fwrite($fp, $ajax_args["rspec"]);
+    fclose($fp);
+    chmod($infname, 0666);
+    chmod($outfname, 0666);
+    chmod($rspecfname, 0666);
+
+    #
+    # Invoke the backend.
+    #
+    $retval = SUEXEC($this_uid, "nobody",
+                     "webrspec2genilib -r -s $rspecfname -o $outfname $infname",
+		     SUEXEC_ACTION_IGNORE);
+    
+    if ($retval != 0) {
+        #
+        # All errors go to the user for now.
+        #
+        SPITAJAX_ERROR($retval, $suexec_output);
+    }
+    else {
+	$script = file_get_contents($outfname);
+	SPITAJAX_RESPONSE(array("script"  => $script,
+                                "rspec"   => file_get_contents($rspecfname)));
+    }
+    unlink($infname);
+    unlink($outfname);
+    unlink($rspecfname);
+}
+
+#
+# Do an RTE check to see if the user changed a portal converted profile
+# in such a way that we cannot convert back from the rspec exactly.
+#
+function Do_RTECheck()
+{
+    global $this_user, $suexec_output;
+    global $ajax_args;
+    
+    $this_idx = $this_user->uid_idx();
+    $this_uid = $this_user->uid();
+
+    if (!isset($ajax_args["script"])) {
+	SPITAJAX_ERROR(1, "Missing script");
+	return;
+    }
+    $infname  = tempnam("/tmp", "rtecheckin");
+    
+    $fp = fopen($infname, "w");
+    fwrite($fp, $ajax_args["script"]);
+    fclose($fp);
+    chmod($infname, 0666);
+
+    #
+    # Invoke the backend.
+    #
+    $retval = SUEXEC($this_uid, "nobody", "webrtecheck $infname",
+		     SUEXEC_ACTION_IGNORE);
+    
+    if ($retval != 0) {
+        if ($retval < 0) {
+	    SUEXECERROR(SUEXEC_ACTION_CONTINUE);
+            SPITAJAX_ERROR(-1, $suexec_output);
+        }
+        else {
+	    SUEXECERROR(SUEXEC_ACTION_CONTINUE);
+            SPITAJAX_ERROR(1, $suexec_output);
+        }
+        unlink($infname);
+        return;
+    }
+    unlink($infname);
+    SPITAJAX_RESPONSE(0);
+}
+
+#
 # Clone a repository and send back the script or rspec.
 #
 function Do_GetRepository()
@@ -1327,6 +1428,8 @@ function UpdateMaster($profile, $script, $rspec)
                      "update " . $profile->uuid() . " $fname",
 		     SUEXEC_ACTION_IGNORE);
     $webtask->Refresh();
+
+    SUEXECERROR(SUEXEC_ACTION_CONTINUE);
     
     if ($retval != 0) {
         if ($retval < 0) {

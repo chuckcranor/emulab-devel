@@ -226,7 +226,7 @@ if ( $doplab && !($killit || $haltit) && -e "/vsys/enter_admin.in" ) {
 libsetup_setvnodeid($vnodeid);
 # Tell tmcc library too, although thats already been done with previous call.
 configtmcc("subnode", $vnodeid);
-if (SHAREDHOST()) {
+if (SHAREDHOST() || STORAGEHOST()) {
     # Nodes come and go ...
     configtmcc("nocache", 1);
 }
@@ -955,7 +955,8 @@ sub hackwaitandexit($)
     elsif ($fakevnode) {
 	$goofy = CONFDIR() . "/evproxy.pid";
     }
-    elsif ($dojail && (-e "/vz" || -e "/etc/xen")) {
+    elsif ($dojail && (-e "/vz" || -e "/etc/xen" ||
+		       -e "/etc/emulab/docker" || $isfreenas)) {
 	$goofy = CONFDIR() . "/running";
     }
     else {

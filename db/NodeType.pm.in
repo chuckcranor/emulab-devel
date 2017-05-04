@@ -90,6 +90,7 @@ sub LookupRow($$$)
     $self->{"DBROW"} = $row;
     $self->{"CLASS"} = ($type eq $row->{"class"} ? $type : undef);
     $self->{"ATTRS"} = undef;
+    $self->{"ISAUX"} = 0;
 
     bless($self, $class);
 
@@ -103,6 +104,7 @@ sub field($$)  { return ((! ref($_[0])) ? -1 : $_[0]->{'DBROW'}->{$_[1]}); }
 # Do not use the embedded type field, cause of auxtypes.
 sub type($)           { return $_[0]->{'TYPE'}; }
 sub class($)          { return field($_[0], 'class'); }
+sub IsAuxType($)      { return $_[0]->{'ISAUX'}; }
 sub architecture($)   { return field($_[0], 'architecture'); }
 sub isvirtnode($)     { return field($_[0], 'isvirtnode'); }
 sub isjailed($)       { return field($_[0], 'isjailed'); }
@@ -156,16 +158,8 @@ sub LookupAny($$)
 	return $obj;
     }
 
-    $query_result =
-	DBQueryWarn("select type from node_types_auxtypes ".
-		    "where auxtype='$type' limit 1");
-    return undef
-	if (!$query_result);
-    if ($query_result->numrows) {
-	my ($ntype) = $query_result->fetchrow_array();
-	return NodeType->Lookup($ntype);
-    }
-    return undef;
+    # Try for an auxtype.
+    return NodeType->LookupAuxType($type);
 }
 
 #
@@ -220,6 +214,56 @@ sub LookupArchitectureTypes($$)
     return @alltypes;
 }
 
+#
+# Lookup an auxtype.
+#
+sub LookupAuxType($$)
+{
+    my ($class, $auxtype)  = @_;
+    
+    my $query_result =
+	DBQueryWarn("select nt.type from node_types_auxtypes as at ".
+		    "left join node_types as nt on nt.type=at.type ".
+		    "where at.auxtype='$auxtype'");
+    
+    return undef
+	if (!$query_result || !$query_result->numrows);
+
+    my ($type) = $query_result->fetchrow_array();
+    my $typeinfo = Lookup($class, $type);
+
+    # Something went wrong?
+    return undef
+	if (!defined($typeinfo));
+
+    #
+    # Generate a new type entry, but named by the auxtype instead.
+    # Underlying data is shared; might need to change that.
+    #
+    my $newtype         = {};
+    $newtype->{"TYPE"}  = $auxtype;
+    $newtype->{"DBROW"} = $typeinfo->{"DBROW"};
+    $newtype->{"ATTRS"} = $typeinfo->{"ATTRS"};
+    $newtype->{"ISAUX"} = 1;
+    $newtype->{"BASE"}  = $typeinfo;
+    bless($newtype, $class);
+
+    # Add to cache.
+    $nodetypes{$auxtype} = $newtype;
+    return $newtype;
+}
+sub BaseType($)
+{
+    my ($self) = @_;
+    
+    return undef
+	if (!$self->IsAuxType());
+    return $self->{'BASE'};
+}
+
+#
+# Return list of all auxtypes.
+#
 sub AuxTypes($)
 {
     my ($class)  = @_;
@@ -234,26 +278,13 @@ sub AuxTypes($)
 	if (!$query_result || !$query_result->numrows);
 
     while (my ($auxtype, $type) = $query_result->fetchrow_array()) {
-	my $typeinfo = Lookup($class, $type);
+	my $typeinfo = LookupAuxType($class, $auxtype);
 
 	# Something went wrong?
 	return undef
 	    if (!defined($typeinfo));
-
-	#
-	# Generate a new type entry, but named by the auxtype instead.
-	# Underlying data is shared; might need to change that.
-	#
-	my $newtype         = {};
-	$newtype->{"TYPE"}  = $auxtype;
-	$newtype->{"DBROW"} = $typeinfo->{"DBROW"};
-	$newtype->{"ATTRS"} = $typeinfo->{"ATTRS"};
-	bless($newtype, $class);
-
-	# Add to cache.
-	$nodetypes{$auxtype} = $newtype;
 	
-	push(@auxtypes, $newtype);
+	push(@auxtypes, $typeinfo);
     }
     return @auxtypes;
 }

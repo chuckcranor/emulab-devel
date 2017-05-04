@@ -134,10 +134,13 @@ class Profile
     function repohash()	    { return $this->field('repohash'); }
     function repokey()	    { return $this->field('repokey'); }
     function webtask_id()   { return $this->field('webtask_id'); }
+    function lastused()     { return $this->field('lastused'); }
+    function usecount()     { return $this->field('usecount'); }
     function profile_disabled()    { return $this->field('profile_disabled'); }
     function parent_profileid()    { return $this->field('parent_profileid'); }
     function parent_version()      { return $this->field('parent_version'); }
     function profile_nodelete()    { return $this->field('profile_nodelete'); }
+    function portal_converted()    { return $this->field('portal_converted'); }
 
     # Private means only in the same project.
     function IsPrivate() {

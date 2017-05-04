@@ -44,7 +44,7 @@ use Exporter;
 	 getstorageconfig getstoragediskinfo getimagesize
          getrcmanifest fetchrcmanifestblobs runbootscript runhooks 
          build_fake_macs getenvvars getpnetnodeattrs
-         sortedlistallfilesindir sortedreadallfilesindir
+         sortedlistallfilesindir sortedreadallfilesindir genhostslistfromtopo
 
 	 TBDebugTimeStamp TBDebugTimeStampWithDate
 	 TBDebugTimeStampsOn TBDebugTimeStampsOff
@@ -62,7 +62,7 @@ use Exporter;
 	 TMGATEDCONFIG TMSYNCSERVER TMKEYHASH TMNODEID TMNODEUUID TMEVENTKEY
 	 TMCREATOR TMSWAPPER TMFWCONFIG TMGENVNODECONFIG
 	 TMSTORAGEMAP TMDISKINFO TMEXTRAFS
-	 INXENVM INVZVM
+	 INXENVM INVZVM INDOCKERVM
        );
 
 # Must come after package declaration!
@@ -562,6 +562,7 @@ sub setFSRVTYPE($) {
 #
 sub INXENVM()	{ return ($ingenvnode && GENVNODETYPE() eq "xen"); }
 sub INVZVM()	{ return ($ingenvnode && GENVNODETYPE() eq "openvz"); }
+sub INDOCKERVM(){ return ($ingenvnode && GENVNODETYPE() eq "docker"); }
 
 #
 # Reset to a moderately clean state.
@@ -1761,6 +1762,109 @@ sub genhostsfile($@)
 	return 1;
     }
 
+    return 0;
+}
+
+#
+# Generate hosts list (as if it came from tmcd) locally if we have a topo file.
+# You want to run the above genhostsfile on the result array of this, as
+# rc.hostnames does.
+#
+sub genhostslistfromtopo($$)
+{
+    my ($mapfile,$rptr)	= @_;
+    my @results = ();
+    my $topomap;
+    my ($pid, $eid, $vname) = check_nickname();
+    my %nodes = ();
+    my %lans  = ();;
+
+    if (gettopomap(\$topomap)) {
+	return -1;
+    }
+
+    # Special case of experiment with no lans; no hostfile stuff needed.
+    if (! scalar(@{ $topomap->{"lans"} })) {
+	@$rptr = ();
+	return 0;
+    }
+
+    # The nodes section tells us the name of each node, and all its links.
+    foreach my $noderef (@{ $topomap->{"nodes"} }) {
+	my $vname  = $noderef->{"vname"};
+	my $links  = $noderef->{"links"};
+	my $count  = 0;
+
+	next
+	    if (!defined($links));
+
+	$nodes{$vname} = [];
+
+	# Links is a string of "$lan1:$ip1 $lan2:$ip2 ..."
+	foreach my $link (split(" ", $links)) {
+	    my ($lan,$ip) = split(":", $link);
+
+	    push(@{ $nodes{$vname} }, "$count:$ip");
+	    $lans{"$vname:$count"} = $lan;
+	    $count++;
+	}
+    }
+
+    #
+    # Construct input for external program. 
+    #
+    if (! open(MAP, ">$mapfile")) {
+	warn("*** WARNING: Could not create $mapfile!\n");
+	@$rptr  = ();
+	return -1;
+    }
+
+    #
+    # First spit out virt_nodes
+    #
+    print MAP scalar(keys(%nodes)) . "\n";
+
+    foreach my $node (keys(%nodes)) {
+	my @members = @{ $nodes{$node} };
+
+	print MAP "$node,";
+	print MAP join(" ", @members);
+	print MAP "\n";
+    }
+    #
+    # Then spit out virt_lans.
+    # 
+    print MAP scalar(keys(%lans)) . "\n";
+
+    foreach my $member (keys(%lans)) {
+	my $lan = $lans{$member};
+
+	print MAP "$lan,$member\n";
+    }
+    close(MAP);
+
+    #
+    # Now run the dijkstra program on the input. 
+    # 
+    if (!open(GENH, "cat $mapfile | $BINDIR/genhostsfile $vname |")) {
+	warn("*** WARNING: Could not invoke genhostsfile on mapfile!\n");
+	@$rptr  = ();
+	return -1;
+    }
+    while (<GENH>) {
+	push(@results, $_);
+    }
+    if (! close(GENH)) {
+	if ($?) {
+	    warn("*** WARNING: genhostsfile exited with status $?!\n");
+	}
+	else {
+	    warn("*** WARNING: Error closing genhostsfile pipe: $!\n");
+	}
+	@$rptr  = ();
+	return -1;
+    }
+    @$rptr = @results;
     return 0;
 }
 
@@ -3138,7 +3242,7 @@ sub getgenvnodeconfig($)
 sub genvnodesetup($;$$)
 {
     my ($vid) = @_;
-    my $issharedhost = SHAREDHOST();
+    my $issharedhost = (SHAREDHOST() || STORAGEHOST());
 
     #
     # Set global vnodeid for tmcc commands.
@@ -3208,10 +3312,8 @@ sub genvnodesetup($;$$)
     }
 
     #
-    # Tell libtmcc to get the full config for the jail. At the moment
-    # we do not use SFS inside jails, so okay to do this now (usually
-    # have to call initsfs() first). The full config will be copied
-    # to the proper location inside the jail by mkjail.
+    # Tell libtmcc to get the full config for the jail. The full config
+    # will be copied to the proper location inside the jail by mkjail.
     #
     tmccclrconfig()
 	if ($issharedhost);

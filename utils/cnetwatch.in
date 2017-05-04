@@ -231,8 +231,10 @@ sub diffem($$$)
     my ($bref, $aref, $dref) = @_;
 
     if (!exists($bref->{'tstamp'}) || !exists($aref->{'tstamp'})) {
+	$dref->{'start'} = time() - $interval;
 	$dref->{'tstamp'} = $interval;
     } else {
+	$dref->{'start'} = $bref->{'tstamp'};
 	$dref->{'tstamp'} = $aref->{'tstamp'} - $bref->{'tstamp'};
     }
     print STDERR "interval: ".
@@ -301,7 +303,7 @@ sub reportevents($)
     my ($ref) = @_;
 
     my $warned = 0;
-    foreach my $node (keys %pcs) {
+    foreach my $node (sort keys %pcs) {
 	# XXX don't know the interval, cannot compute
 	if ($ref->{$node}{'first'}) {
 	    next;
@@ -338,14 +340,17 @@ sub reportevents($)
 		    if (@mailbody == 0) {
 			my $mbps = int($MAX_BPS / 1000000);
 			push(@mailbody,
-			     "Thresholds: $MAX_PPS pkts/sec, $mbps Mbits/sec");
+			     "Thresholds: $MAX_PPS pkts/sec, $mbps Mbits/sec\n");
 			push(@mailbody,
-			     sprintf("%10s %8s %14s %14s",
-				     "Node", "Interval", "Pkts/sec", "Mb/sec"));
+			     sprintf("%10s %14s %14s %s",
+				     "Node", "Pkts/sec", "Mb/sec", "When"));
 		    }
+		    my $stamp = POSIX::strftime("20%y-%m-%d %H:%M:%S",
+						localtime($ref->{'start'}));
 		    push(@mailbody,
-			 sprintf("%10s %8d %14d %14d",
-				 $node, $secs, $pps, int($bps/1000000)));
+			 sprintf("%10s %14d %14d %s for %d sec",
+				 $node, $pps, int($bps/1000000),
+				 $stamp, $secs));
 		}
 	    }
 	    $rates{$node}{'pkts'} = 0; 

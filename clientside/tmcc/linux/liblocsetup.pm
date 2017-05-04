@@ -75,6 +75,7 @@ sub GENVNODE()     { return libsetup::GENVNODE(); }
 sub GENVNODETYPE() { return libsetup::GENVNODETYPE(); }
 sub INXENVM()   { return libsetup::INXENVM(); }
 sub INVZVM()    { return libsetup::INVZVM(); }
+sub INDOCKERVM()    { return libsetup::INDOCKERVM(); }
 
 #
 # Various programs and things specific to Linux and that we want to export.

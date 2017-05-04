@@ -56,7 +56,7 @@ function Do_Reserve()
     $formfields = $ajax_args["formfields"];
     $errors     = array();
 
-    error_log(print_r($formfields, TRUE));
+    #error_log(print_r($formfields, TRUE));
 
     #
     # All fields required,

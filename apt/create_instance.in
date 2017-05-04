@@ -927,6 +927,8 @@ foreach my $aggregate_urn (@aggregate_urns) {
 
 # To keep stuff happy until multisite support finished.
 $instance->Update({'aggregate_urn' => $aggregate_urns[0]});
+# Officially used now. Even if it fails later.
+$profile->BumpLastUsed();
 
 print STDERR "\n";
 print STDERR "User:    $user_urn\n";

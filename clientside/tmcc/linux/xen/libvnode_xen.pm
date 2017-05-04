@@ -126,6 +126,7 @@ my $IMAGEZIP    = "/usr/local/bin/imagezip";
 my $IMAGEUNZIP  = "/usr/local/bin/imageunzip";
 my $IMAGEDUMP   = "/usr/local/bin/imagedump";
 my $XM          = "/usr/sbin/xm";
+my $FSCK	= "/sbin/e2fsck";
 my $FSCKUFS	= "/sbin/fsck.ufs";
 my $debug  = 0;
 my $lockdebug = 0;
@@ -361,7 +362,7 @@ sub createExpNetworkScript($$$$$$$$);
 sub createTunnelScript($$$$$);
 sub createExpBridges($$$);
 sub destroyExpBridges($$);
-sub domainStatus($);
+sub domainStatus($;$);
 sub domainExists($);
 sub addConfig($$$);
 sub createXenConfig($$);
@@ -1885,6 +1886,10 @@ sub vnodePreConfig($$$$$){
     # So we first mount RO and see if we have already been customized.
     #
     if ($vninfo->{'os'} eq "FreeBSD") {
+	if (-x "$FSCKUFS") {
+	    mysystem2("$FSCKUFS -p $dev");
+	}
+	
 	my $utype = "44bsd";
 	mysystem2("mount -t ufs -o ro,ufstype=$utype $dev $vnoderoot ".
 		  ">/dev/null 2>&1");
@@ -1893,8 +1898,7 @@ sub vnodePreConfig($$$$$){
 	    $utype = "ufs2";
 	    mysystem2("mount -t ufs -o ro,ufstype=$utype $dev $vnoderoot");
 	    # still failed, try fsck.ufs if it exists
-	    if ($? && -x "$FSCKUFS") {
-		mysystem("$FSCKUFS -y $dev");
+	    if ($?) {
 		mysystem("mount -t ufs -o ro,ufstype=$utype $dev $vnoderoot");
 	    }
 	}
@@ -1911,6 +1915,10 @@ sub vnodePreConfig($$$$$){
 	mysystem("mount -t ufs -o ufstype=$utype $dev $vnoderoot");
     }
     else {
+	if (-x "$FSCK") {
+	    mysystem2("$FSCK -p $dev");
+	}
+
 	mysystem("mount $dev $vnoderoot");
     }
 
@@ -1923,8 +1931,8 @@ sub vnodePreConfig($$$$$){
 	$vninfo->{'elabinelab'} = 1;
 	print STDERR
 	    "vnodePreConfig: WARNING: $vnode_id appears to be a configured ".
-	    "elabinelab server; skipping localizations\n";
-	goto done;
+	    "elabinelab server; skipping most localizations\n";
+	goto almostdone;
     }
 
     # XXX We need to get rid of this or get it from tmcd!
@@ -2070,37 +2078,6 @@ sub vnodePreConfig($$$$$){
 	    if ($?);
 
 	#
-	# Fix up loader.conf
-	#
-	if (open(LC, ">>$vnoderoot/boot/loader.conf")) {
-	    #
-	    # Put out the /boot/loader.conf header we look for in prepare
-	    # and fix the console as "sio1".
-	    #
-	    print LC "# The remaining lines were added by Emulab slicefix.\n";
-	    print LC "# DO NOT ADD ANYTHING AFTER THIS POINT AS IT WILL GET REMOVED.\n";
-	    print LC "console=\"comconsole\"\n";
-	    print LC "comconsole_speed=\"115200\"\n";
-	    print LC "comconsole_port=\"0x3F8\"\n";
-
-	    #
-	    # FreeBSD recommends this workaround for stability issues when
-	    # running under Xen. I do not know if the problem is specific to
-	    # HVM, I am just using $ishvm as it indicates a 10.x FreeBSD which
-	    # is the only version which lists this problem in the errata.
-	    #
-	    # XXX we put this out after the magic header above so that it
-	    # will get removed by prepare if we make an image.
-	    #
-	    if ($vninfo->{'ishvm'}) {
-		print LC "\n# when running in a Xen VM\n";
-		print LC "vfs.unmapped_buf_allowed=0\n";
-	    }
-
-	    close(LC);
-	}
-
-	#
 	# In HVM the emulated RTC is UTC.
 	# Make sure FreeBSD knows that.
 	#
@@ -2144,6 +2121,40 @@ sub vnodePreConfig($$$$$){
 	if ($?);
     
     $retval = &$callback($vnoderoot);
+
+  almostdone:
+    if ($vninfo->{'os'} eq "FreeBSD") {
+	#
+	# Fix up loader.conf
+	#
+	if (open(LC, ">>$vnoderoot/boot/loader.conf")) {
+	    #
+	    # Put out the /boot/loader.conf header we look for in prepare
+	    # and fix the console as "sio1".
+	    #
+	    print LC "# The remaining lines were added by Emulab slicefix.\n";
+	    print LC "# DO NOT ADD ANYTHING AFTER THIS POINT AS IT WILL GET REMOVED.\n";
+	    print LC "console=\"comconsole\"\n";
+	    print LC "comconsole_speed=\"115200\"\n";
+	    print LC "comconsole_port=\"0x3F8\"\n";
+
+	    #
+	    # FreeBSD recommends this workaround for stability issues when
+	    # running under Xen. I do not know if the problem is specific to
+	    # HVM, I am just using $ishvm as it indicates a 10.x FreeBSD which
+	    # is the only version which lists this problem in the errata.
+	    #
+	    # XXX we put this out after the magic header above so that it
+	    # will get removed by prepare if we make an image.
+	    #
+	    if ($vninfo->{'ishvm'}) {
+		print LC "\n# when running in a Xen VM\n";
+		print LC "vfs.unmapped_buf_allowed=0\n";
+	    }
+
+	    close(LC);
+	}
+    }
   done:
     mysystem("umount $dev");
     # XXX let vnodesetup exit early
@@ -3070,10 +3081,22 @@ sub vnodeDestroy($$$$)
 sub vnodeHalt($$$$)
 {
     my ($vnode_id, $vmid, $vnconfig, $private) = @_;
+    my $ishvm = $private->{'ishvm'};
+    my $domID;
 
     if ($vnode_id =~ m/(.*)/) {
         $vnode_id = $1;
     }
+
+    #
+    # XXX For HVMs, we collect the domain ID so we can see if there is a
+    # lingering qemu after shutdown. With Xen 4.6 at least, qemu is started
+    # with the "-no-shutdown" option so it will not exit.
+    #
+    if ($ishvm) {
+	my $stat = domainStatus($vnode_id, \$domID);
+    }
+
     #
     # This runs async so use -w to wait until actually destroyed!
     # The problem is that sometimes the container will not die
@@ -3105,6 +3128,19 @@ sub vnodeHalt($$$$)
 		$status = RunWithLock("xmtool", "$XM destroy $vnode_id");
 		fatal("Could not destroy $vnode_id")
 		    if ($status);
+	    }
+	}
+	#
+	# XXX check for left over qemu and kill it.
+	#
+	elsif ($domID) {
+	    if (!domainGone($domID, 3)) {
+		print STDERR "$vnode_id: HVM (domID $domID): killing orphaned qemu process\n";
+		if (mysystem2("pkill -f 'qemu.* -xen-domid $domID '")) {
+		    print STDERR "Could not kill orphaned qemu\n";
+		} else {
+		    sleep(2);
+		}
 	    }
 	}
     }
@@ -4956,20 +4992,48 @@ sub destroyExpBridges($$)
     return 0;
 }
 
-sub domainStatus($)
+#
+# Return the XM/XL status string for the domain.
+# If $id is all digits it is the Xen domain ID, otherwise it is a name.
+#
+sub domainStatus($;$)
 {
-    my ($id) = @_;
+    my ($id,$domidref) = @_;
 
     if ($XM =~ /xl/) {
-	my $status = `$XM list $id | tail -n 1 | awk '{print \$5}'`;
-	if (!$? && $status =~ /([\w-]+)/) {
-	    return $1;
+	my $kix = 0;
+	if ($id =~ /^\d+$/) {
+	    $kix = 1;
+	}
+
+	if (open(XM,"$XM list $id|")) {
+	    while (<XM>) {
+		my @fields = split /\s+/;
+		if (@fields >= 5) {
+		    if ($fields[$kix] eq $id && $fields[4] =~ /^([\w-]+)$/) {
+			my $stat = $1;
+
+			if (defined($domidref) && $fields[1] =~ /^(\d+)$/) {
+			    $$domidref = $1;
+			}
+			close(XM);
+			return $stat;
+		    }
+		}
+	    }
+	    close(XM);
 	}
     }
     else {
 	my $status = `$XM list --long $id 2>/dev/null`;
 	if (!$? && $status =~ /\(state ([\w-]+)\)/) {
-	    return $1;
+	    my $stat = $1;
+
+	    # XXX don't have any "xm" images to figure out how to do it!
+	    if (defined($domidref)) {
+		$$domidref = undef;
+	    }
+	    return $stat;
 	}
     }
     return "";

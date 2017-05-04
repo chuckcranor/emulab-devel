@@ -591,9 +591,12 @@ sub DBLIMIT_NSFILESIZE()	{ (2**24 - 1); }
 # all the vnodes to allocate from that range. We tell the user this
 # range so this they can set up their programs to operate in that range.
 #
-sub TBDB_LOWVPORT()		{ 30000; }
+# XXX this should be obsolete, dating from the days of FreeBSD jail-based
+# vnodes. But we continue to maintain the pretense for now.
+#
+sub TBDB_LOWVPORT()		{ 25000; }
 sub TBDB_MAXVPORT()		{ 60000; }
-sub TBDB_PORTRANGE()		{ 256;   }
+sub TBDB_PORTRANGE()		{ 32;   }
 
 #
 # STATS constants.

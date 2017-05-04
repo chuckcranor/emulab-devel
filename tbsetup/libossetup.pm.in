@@ -1623,7 +1623,7 @@ sub AddNode($$)
 	if (EmulabFeatures->FeatureEnabled("NewOsload",$self->user(),
 					   $self->group(),
 					   $self->experiment())) {
-	    ($parent->loadobj())->debug($self->debug());
+	    ($parent->loadobj())->debug($parent->debug());	    
 
 	    # add a few more things for feature checks down the line:
 	    $reload_args{user} = $self->user();

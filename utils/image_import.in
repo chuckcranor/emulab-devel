@@ -80,6 +80,7 @@ my $WGET	= "/usr/local/bin/wget";
 my $NEWIMAGE_EZ = "$TB/bin/newimageid_ez";
 my $IMAGEDUMP   = "$TB/bin/imagedump";
 my $SHA1	= "/sbin/sha1";
+my $DD		= "/bin/dd";
 my $SAVEUID	= $UID;
 my $IMAGEVALIDATE = "$TB/sbin/imagevalidate";
 my $DELETEIMAGE   = "$TB/sbin/delete_image";
@@ -864,6 +865,7 @@ sub FetchMetadata($)
     my $xml  = "";
     my $opts = ($debug ? "" : "-q");
     my $cmd  = "$WGET $opts --no-check-certificate -O - $safe_url ";
+    $cmd .= "| $DD bs=1 count=5k ";
 
     if ($debug) {
 	print "$cmd\n";

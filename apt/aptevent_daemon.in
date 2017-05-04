@@ -196,6 +196,9 @@ sub callback($$$)
 	goto done;
     }
   done:
+    # This HAS TO BE DONE, to break a circular dependency that causes
+    # the daemon to grow and grow till it consumes boss.
+    $instance->Purge();
     emutil::FlushCaches();
     GeniUtil::FlushCaches();
 }

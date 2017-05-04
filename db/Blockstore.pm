@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2012-2016 University of Utah and the Flux Group.
+# Copyright (c) 2012-2017 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -586,7 +586,7 @@ sub ConvertToMebi($)
     # Default to bytes
     my $unit   = "B";
     
-    if ($size =~ /^(\d+)(\w+)$/) {
+    if ($size =~ /^([\.\d]+)(\w+)$/) {
 	$size = $1;
 	$unit = $2;
     }

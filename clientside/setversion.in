@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2000-2012 University of Utah and the Flux Group.
+# Copyright (c) 2000-2012, 2017 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -30,8 +30,12 @@ use POSIX qw(strftime);
 #
 # Configure variables
 #
+my $DESTDIR   = "";
+if (exists($ENV{"DESTDIR"})) {
+    $DESTDIR = $ENV{"DESTDIR"};
+}
 my $SRCDIR    = "@top_srcdir@";
-my $ETCEMULAB = "/etc/emulab";
+my $ETCEMULAB = "$DESTDIR/etc/emulab";
 my $VERSION   = "$ETCEMULAB/version";
 my $GITTHING  = "tools/git/current_branch_head";
 

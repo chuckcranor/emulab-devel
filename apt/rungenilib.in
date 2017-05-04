@@ -1,7 +1,7 @@
 #!/usr/bin/perl -wT
 
 #
-# Copyright (c) 2000-2016 University of Utah and the Flux Group.
+# Copyright (c) 2000-2017 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -33,16 +33,18 @@ use POSIX ":sys_wait_h";
 use File::stat;
 
 #
-# Parse an ns file. Since the parser runs arbitrary NS file for the user,
-# this cannot be safely done on boss without jumping through huge hoops
-# to secure tcl and the DB. Yuck! So, instead of running the parser on boss,
-# we run it over on ops. This first version operates like this:
-#
-# NB: This script is setuid.
+# Convert (run) a geni-lib script to generate the rspec or param block.
 #
 sub usage()
 {
-    print STDOUT "Usage: rungenilib [options] infile\n";
+    print STDERR "Usage: rungenilib [options] infile\n";
+    print STDERR "Options:\n";
+    print STDERR "  -d       - Turn on debugging\n";
+    print STDERR "  -o file  - Output file for rspec instead of stdout\n";
+    print STDERR "  -p       - Generate parameter block info instead\n";
+    print STDERR "  -P file  - Generate and write parameter block to file\n";
+    print STDERR "  -b file  - Run script using the parameter defs in file\n";
+    print STDERR "  -W       - Python warnings are fatal.\n";
  
     exit(-1);
 }

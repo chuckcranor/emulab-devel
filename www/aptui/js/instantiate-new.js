@@ -77,8 +77,25 @@ $(function ()
 	    projlist = decodejson('#projects-json');
 	}
 	profilelist = decodejson('#profiles-json');
-
 	var profileToArray = _.pairs(profilelist);
+
+	/*
+	 * Sort the entire list by recently used if a registered user,
+	 * else just the use count.
+	 */
+	if (registered) {
+	    profileToArray = _.sortBy(profileToArray, function (value) {
+		return value[1].lastused;
+	    });
+	}
+	else {
+	    profileToArray = _.sortBy(profileToArray, function (value) {
+		return value[1].usecount;
+	    });
+	}
+	// Note that sortBy orders by ascending, so reverse.
+	profileToArray = profileToArray.reverse();
+	
 	var recentlist = _.filter(profileToArray, function(value) {
 	    return value[1]['usecount'] > 0;
 	});
@@ -88,14 +105,8 @@ $(function ()
 	    neverUsed = 1;
 	    recentlist = profileToArray;
 	}
-
-	// Note that sortBy orders by ascending, so the most recent
-	// are at the end of the array.
-	recentlist = _.sortBy(recentlist, function(obj) {
-	    return obj[1].lastused;
-	});
-	recentlist = _.last(recentlist, recentcount);
-
+	recentlist = _.first(recentlist, recentcount);
+	
 	_.each(recentlist, function(obj, key) {
 	    if (window.ISPNET) {
 		if (_.contains(psysprojlist, obj[1].project)) {
@@ -108,7 +119,7 @@ $(function ()
 		}
 	    }
 	});
-	var projcategories = MakeProfileCategories(profilelist);
+	var projcategories = MakeProfileCategories(profileToArray);
 
 	// Fire this off right away.
 	if (window.REGISTERED) {
@@ -198,21 +209,41 @@ $(function ()
 	    event.preventDefault();
 	    resetForm($('#quickvm_form'));
 	});
-	$('button#profile').click(function (event) {
+	$('button#change-profile').click(function (event) {
 	    event.preventDefault();
+	    PickerEvent("show");
 	    $('#quickvm_topomodal').modal('show');
+	});
+	$('button#showtopo_cancel').click(function (event) {
+	    event.preventDefault();
+	    PickerEvent("hide");
+	    $('#quickvm_topomodal').modal('hide');
 	});
 	$('li.profile-item').click(function (event) {
 	    event.preventDefault();
+	    PickerEvent("switch", $(event.target),
+			$('#profile_name').scrollTop());
 	    ShowProfileSelection(event.target);
 	});
 	$('button#showtopo_select').click(function (event) {
 	    event.preventDefault();
-	    ChangeProfileSelection($('#quickvm_topomodal .selected'));
-	    selected_uuid = $('#quickvm_topomodal .selected').attr('value');
+	    var selected = $('#quickvm_topomodal .selected');
+	    PickerEvent("select", selected, $('#profile_name').scrollTop());
+	    ChangeProfileSelection(selected);
+	    selected_uuid = selected.attr('value');
 	    console.log(selected_uuid);
 	    $('#quickvm_topomodal').modal('hide');
 	    $('.steps .error').removeClass('error');
+	});
+	/*
+	 * Handler for scroll inside the picker. We want to send the
+	 * event when the user stops scrolling.
+	 */
+	$('#profile_name').scroll(function (event) {
+	    clearTimeout($.data(this, 'scrollTimer'));
+	    $.data(this, 'scrollTimer', setTimeout(function() {
+		PickerEvent("scroll", $('#profile_name').scrollTop());
+	    }, 750));	    
 	});
 	/*
 	 * Need to update image constraints when the project selector
@@ -232,6 +263,7 @@ $(function ()
 			     "a profile.");
 		return;
 	    }
+	    window.APT_OPTIONS.gaButtonEvent(event);
 	    var url = "manage_profile.php?action=copy&uuid=" + selected_uuid;
 	    window.location.replace(url);
 	    return false;
@@ -244,6 +276,7 @@ $(function ()
 			     "profile details.");
 		return;
 	    }
+	    window.APT_OPTIONS.gaButtonEvent(event);
 	    var url = "show-profile.php?uuid=" + selected_uuid;
 	    window.location.replace(url);
 	    return false;
@@ -270,7 +303,8 @@ $(function ()
 	});
 
 	// Profile picker search box.
-	var profile_picker_timeout = null;
+	var profile_picker_timeout  = null;
+	var profile_picker_searched = false;
 	
 	$("#profile_picker_search").on("keyup", function (event) {
 	    var options   = $('#profile_name');
@@ -291,18 +325,23 @@ $(function ()
 			});
 		    options.children("ul").children("li").hide();
 		    matches.show();
-
+		    
 		    if (userInput == '') {
 			$('#title_recently_used').removeClass('hidden');
 			$('#recently_used').removeClass('hidden');
 			$('#title_favorites').removeClass('hidden');
 			$('#favorites').removeClass('hidden');
+			profile_picker_searched = false;
 		    }
 		    else {
 			$('#title_recently_used').addClass('hidden');
 			$('#recently_used').addClass('hidden');
 			$('#title_favorites').addClass('hidden');
 			$('#favorites').addClass('hidden');
+			if (profile_picker_searched == false) {
+			    PickerEvent("search");
+			}
+			profile_picker_searched = true;
 		    }
 		}, 500);
 
@@ -314,6 +353,8 @@ $(function ()
 			return (!$(this).parent().hasClass('hidden') && $(this).css('display') == 'block');
 		    });
 		if (matches && matches.length == 1) {
+		    PickerEvent("select", $(matched[0]),
+				$('#profile_name').scrollTop());
 		    ShowProfileSelection(matches[0]);
 		}
 	    }
@@ -397,7 +438,10 @@ $(function ()
 
       // This section should probably be rethought as it's not very clean. 
       // Didn't have time to refactor for initial release.
-      _.each(profilelist, function(obj, key) {
+      _.each(profiles, function(obj, key) {
+	  key = obj[0];
+	  obj = obj[1];
+	  
 	    var isSystem = (window.ISPNET && _.contains(psysprojlist, obj.project)) || (!window.ISPNET &&_.contains(sysprojlist, obj.project))
 	    if (obj.favorite == 1) {
 	      if (isSystem	) {
@@ -1062,6 +1106,7 @@ $(function ()
 		    }
 
 		    if (start != null) {
+			$(this).attr('data-res-pid', project);
 			$(this).attr('data-res-start', start);
 			if (end != null) {
 			    $(this).removeAttr('data-now');
@@ -1076,16 +1121,17 @@ $(function ()
 
 			    if (startTime < now) {
 				$(this).attr('data-now', 'true');
-				target.append(wt.HasReservationHTML('cluster', 2));
+				target.append(wt.HasReservationHTML(project, 'cluster', 2));
 			    }
 			    else {
 				$(this).attr('data-now', 'false');
-				target.append(wt.FutureReservationHTML('cluster', 2));
+				target.append(wt.FutureReservationHTML(project, 'cluster', 2));
 			    }
 			}
 			$('.reservation_tooltip > div').tooltip();
 		    }
 		    else {
+			$(this).removeAttr('data-res-pid');
 			$(this).removeAttr('data-res-start');
 			$(this).removeAttr('data-res-end');
 		    }
@@ -1109,8 +1155,8 @@ $(function ()
 	    picker.MakePicker('#profile_pid', wt.ResClickEvent, projectReservations);
 
 	    // Add icons
-	    $('#profile_pid_picker .dropdown-menu .hasReservation a').append(wt.HasReservationHTML('project', 1))
-	    $('#profile_pid_picker .dropdown-menu .futureReservation a').append(wt.FutureReservationHTML('project', 1))
+	    $('#profile_pid_picker .dropdown-menu .hasReservation a').append(wt.HasReservationHTML(project, 'project', 1))
+	    $('#profile_pid_picker .dropdown-menu .futureReservation a').append(wt.FutureReservationHTML(project, 'project', 1))
 
 	    $('#profile_pid_picker .dropdown-menu > li').sort(SortProfileList).prependTo($('#profile_pid_picker .dropdown-menu'));
 
@@ -1940,5 +1986,30 @@ $(function ()
 	$xmlthing.done(callback);
     }
 
+    // Google Analytics.
+    function PickerEvent(action, selected, value)
+    {
+	if (window.GOOGLEUA === undefined) {
+	    return;
+	}
+	var id = "default";
+	if (value === undefined) {
+	    value = 0;
+	}
+	if (action == "scroll") {
+	    id = selected.toString();
+	    value = selected;
+	}
+	else if (selected !== undefined) {
+	    var info = profilelist[selected.attr('value')];
+	    if (info === undefined) {
+		// Not sure why this happens
+		return;
+	    }
+	    id = info.pid + "," + info.name;
+	}
+	console.info("picker event", action, id, value);
+	ga('send', 'event', 'picker', action, id, value);
+    }
     $(document).ready(initialize);
 });

@@ -122,6 +122,10 @@ $routing = array("myprofiles" =>
 						     "Do_BindParameters",
 						 "ConvertClassic" =>
                                                      "Do_ConvertClassic",
+						 "ConvertRspec" =>
+                                                     "Do_ConvertRspec",
+						 "RTECheck" =>
+                                                     "Do_RTECheck",
 						 "UpdateRepository" =>
                                                      "Do_UpdateRepository",
 						 "GetRepository" =>
@@ -394,6 +398,7 @@ $this_user = CheckLogin($check_status);
 function CheckLoginForAjax($route)
 {
     global $this_user, $check_status;
+    global $ISAPT;
     $guestokay = false;
     $unapprovedokay = false;
     $notloggedinokay = false;
@@ -407,47 +412,47 @@ function CheckLoginForAjax($route)
     if (array_key_exists("notloggedinokay", $route)) {
         $notloggedinokay = $route["notloggedinokay"];
     }
-
     # Known user, but timed out.
     if ($check_status & CHECKLOGIN_TIMEDOUT) {
-	SPITAJAX_ERROR(2, "Your login has timed out");
-	exit(2);
+	SPITAJAX_ERROR(222, "Your login has timed out");
+	exit(1);
     }
     # Logged in user always okay.
     if (isset($this_user)) {
 	if ($check_status & CHECKLOGIN_MAYBEVALID) {
-	    SPITAJAX_ERROR(2, "Your login cannot be verified. Cookie problem?");
-	    exit(2);
+	    SPITAJAX_ERROR(222, "Your login cannot be verified. ".
+                           "Cookie problem?");
+	    exit(1);
 	}
         # Known user, but not frozen.
         if ($check_status & CHECKLOGIN_FROZEN) {
-            SPITAJAX_ERROR(2, "Your account has been frozen");
-            exit(2);
+            SPITAJAX_ERROR(222, "Your account has been frozen");
+            exit(1);
         }
         if (! $unapprovedokay) {
             # Known user, but not approved.
             if ($check_status & CHECKLOGIN_UNAPPROVED) {
-	        SPITAJAX_ERROR(2, "Your account has not been approved yet");
-                exit(2);
+	        SPITAJAX_ERROR(222, "Your account has not been approved yet");
+                exit(1);
             }
             # Known user, but not active.
             if (! ($check_status & CHECKLOGIN_ACTIVE)) {
-                SPITAJAX_ERROR(2, "Your account is no longer active");
-                exit(2);
+                SPITAJAX_ERROR(222, "Your account is no longer active");
+                exit(1);
             }
         }
         # Kludge, still thinking about it. If a geni user has no project
         # permissions at their SA, then we mark the acount as WEBONLY, and
         # deny access to anything that is not marked as guest okay. 
 	if ($check_status & CHECKLOGIN_WEBONLY && !$guestokay) {
-	    SPITAJAX_ERROR(2, "Your account is not allowed to do this");
-	    exit(2);
+	    SPITAJAX_ERROR(222, "Your account is not allowed to do this");
+	    exit(1);
         }
 	return;
     }
     if (!($guestokay || $notloggedinokay)) {
-	SPITAJAX_ERROR(2, "You are not logged in");	
-	exit(2);
+	SPITAJAX_ERROR(222, "You are not logged in");	
+	exit(1);
     }
 }
 

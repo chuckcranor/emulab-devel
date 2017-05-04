@@ -105,6 +105,7 @@ install client-install: destdircheck basefbsd-install
 	$(INSTALL) -m 644 $(SRCDIR)/libfreenas.pm $(NBINDIR)/
 	$(INSTALL) -m 644 $(SRCDIR)/libvnode_blockstore.pm $(NBINDIR)/
 	echo "Installing legacy perl symlink..."
+	mkdir -p $(DESTDIR)/usr/bin
 	ln -sf /usr/local/bin/perl5 $(DESTDIR)/usr/bin/perl
 
 subboss-install simple-install:

@@ -38,6 +38,13 @@ $(function ()
         // Change hash for page-reload
         $('a[data-toggle="tab"]').on('show.bs.tab', function (e) {
             window.location.hash = e.target.hash;
+
+	    // GA reporting
+	    var ganame = e.target.hash;
+	    if (ganame == "") {
+		ganame = "#experiments";
+	    }
+	    window.APT_OPTIONS.gaTabEvent("show", ganame);
         });
 	// Set the correct tab when a user uses their back/forward button
         $(window).on('hashchange', function (e) {
@@ -70,7 +77,7 @@ $(function ()
     function LoadUsage()
     {
 	var callback = function(json) {
-	    console.info(json);
+	    console.info("LoadUsage", json);
 
 	    if (json.code) {
 		console.info(json.value);
@@ -78,7 +85,11 @@ $(function ()
 	    }
 	    var blob = json.value;
 	    var html = "";
-
+	    if (!(blob.pnodes || blob.weekpnodes ||
+		  blob.monthpnodes || blob.rank)) {
+		$('#usage_nousage').removeClass("hidden");
+		return;
+	    }
 	    if (blob.pnodes) {
 		html = "<tr><td>Current Usage:</td><td>" +
 		    blob.pnodes + " Node" + (blob.pnodes > 1 ? "s, " : ", ") +

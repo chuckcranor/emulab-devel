@@ -1,5 +1,5 @@
 #
-# Copyright (c) 2000-2012, 2015, 2016 University of Utah and the Flux Group.
+# Copyright (c) 2000-2012, 2015, 2016, 2017 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -126,7 +126,7 @@ systemd-install: dir-install
 	$(INSTALL) -m 644 $(SRCDIR)/ifup-wait-emulab-cnet.service \
 		 $(SYSETCDIR)/systemd/system/ifup-wait-emulab-cnet.service
 	$(INSTALL) -m 644 $(SRCDIR)/ifup-wait-emulab-cnet.service \
-		 /etc/emulab/ifup-wait-emulab-cnet.service
+		 $(ETCDIR)/ifup-wait-emulab-cnet.service
 	rm -f $(SYSETCDIR)/systemd/system/network-online.target.wants/ifup-wait-all-auto.service
 	ln -sf ../ifup-wait-emulab-cnet.service \
 		$(SYSETCDIR)/systemd/system/network-online.target.wants/ifup-wait-emulab-cnet.service

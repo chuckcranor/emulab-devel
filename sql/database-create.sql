@@ -439,6 +439,7 @@ CREATE TABLE `apt_profile_versions` (
   `reponame` varchar(40) default NULL,
   `repohash` varchar(64) default NULL,
   `repokey` varchar(64) default NULL,
+  `portal_converted` tinyint(1) NOT NULL default '0',
   `rspec` mediumtext,
   `script` mediumtext,
   `paramdefs` mediumtext,
@@ -470,6 +471,8 @@ CREATE TABLE `apt_profiles` (
   `nodelete` tinyint(1) NOT NULL default '0',
   `locked` datetime default NULL,
   `locker_pid` int(11) default '0',
+  `lastused` datetime default NULL,
+  `usecount` int(11) default '0',
   PRIMARY KEY (`profileid`),
   UNIQUE KEY `pidname` (`pid_idx`,`name`,`version`)
 ) ENGINE=MyISAM DEFAULT CHARSET=latin1;
@@ -2080,6 +2083,7 @@ CREATE TABLE `future_reservations` (
   `created` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
   `approved` datetime DEFAULT NULL,
   `approver` varchar(8) DEFAULT NULL,
+  `notified` datetime DEFAULT NULL,
   PRIMARY KEY (`idx`)
 ) ENGINE=MyISAM DEFAULT CHARSET=latin1;
 
@@ -5155,6 +5159,7 @@ CREATE TABLE `users` (
   `initial_passphrase` varchar(128) default NULL,
   `genesis` enum('emulab','aptlab','cloudlab','phantomnet') NOT NULL default 'emulab',
   `portal` enum('emulab','aptlab','cloudlab','phantomnet') default NULL,
+  `ga_userid` varchar(32) default NULL,
   PRIMARY KEY  (`uid_idx`),
   KEY `unix_uid` (`unix_uid`),
   KEY `status` (`status`),

@@ -138,7 +138,7 @@ static void sigpass(int sig)
 	pthread_sigmask(SIG_BLOCK, &threadmask, NULL);
 
 	if (th != mainthread) {
-		info("event-sched[%d]: handled signal in wrong thread!",
+		info("event-sched[%d]: wrong thread, forwarding...\n",
 		     getpid());
 		pthread_kill(mainthread, sig);
 		return;
@@ -610,6 +610,42 @@ sched_event_prepare(event_handle_t handle, sched_event_t *se)
 	
 	return retval;
 }
+
+#if 0
+/*
+ * This handles the fact that pubsub will not deliver a notification
+ * back to the sender. So we call and queue it directly.
+ */
+int
+notify_local(event_handle_t handle, event_notification_t notification)
+{
+	struct timeval tv;
+	gettimeofday(&tv, NULL);
+
+	/* Add the attribute that signifies its a scheduler operation. */
+	if (!event_notification_put_int32(handle, notification,
+					  "SCHEDULER", 1)) {
+		error("could not add scheduler attribute to notification %p\n",
+		      notification);
+		return 0;
+	}
+
+	/* Add the time this event should be fired. */
+	if (!event_notification_put_int32(handle, notification, "time_sec",
+					  tv.tv_sec) ||
+	    !event_notification_put_int32(handle, notification, "time_usec",
+					  tv.tv_usec)) {
+		error("could not add time attribute to notification %p\n",
+		      notification);
+		return 0;
+	}
+
+	/* Call subscription callback directly. */
+	enqueue(handle, notification, NULL);
+
+	return 1;
+}
+#endif
 
 /* Enqueue event notifications as they arrive. */
 static void
@@ -1409,6 +1445,18 @@ info("Automatically scheduling the beginning and end of time\n");
 			 EA_Event, TBDB_EVENTTYPE_START,
 			 EA_Name, ns_sequence_agent.name,
 			 EA_TAG_DONE);
+#if 0
+		notification = event_notification_create(
+			 handle,
+			 EA_Experiment, pideid,
+			 EA_Type, TBDB_OBJECTTYPE_SEQUENCE,
+			 EA_Event, TBDB_EVENTTYPE_START,
+			 EA_Name, ns_sequence_agent.name,
+			 EA_TAG_DONE);
+		if (!notify_local(handle, notification))
+			error("could not send time start to localhost\n");
+		event_notification_free(handle, notification);
+#endif
 	}
 // XXX
 // info("Returning from get_static_events()\n");	

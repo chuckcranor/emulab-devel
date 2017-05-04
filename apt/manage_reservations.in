@@ -249,14 +249,17 @@ sub DoReserve()
     $rpcargs{"reason"}= $reason if (defined($reason));
     $rpcargs{"update"}= $update if (defined($update));
     
-    $context = APT_Geni::GeniContext();
     if ($this_user->IsAdmin()) {
 	#
 	# We do not have a very good notion of cross site admin.
+	# So first we make sure that the user exists at the cluster
+	# and then we make an "admin" call as the root authority.
 	#
-	($credential,$speaksfor) =
-	    APT_Geni::GenUserCredential($geniuser);
+	if (APT_Geni::CreatePortalUser($authority, $geniuser)) {
+	    fatal("Could not create admin user at remote cluster");
+	}
 	$rpcargs{"project_urn"} = $project->urn()->asString();
+	$rpcargs{"user_urn"} = $geniuser->urn()->asString();
     }
     else {
 	if (!$project->AccessCheck($this_user, TB_PROJECT_CREATEEXPT())) {
@@ -264,15 +267,16 @@ sub DoReserve()
 	}
 	($credential,$speaksfor) =
 	    APT_Geni::GenProjectCredential($project, $geniuser);
+
+	fatal("Could not generate credentials")
+	    if (!defined($credential));
+	my $credentials = [$credential->asString()];
+	if (defined($speaksfor)) {
+	    $credentials = [@$credentials, $speaksfor->asString()];
+	}
+	$rpcargs{"credentials"} = $credentials;
+	$context = APT_Geni::GeniContext();
     }
-    fatal("Could not generate credentials")
-	if (!defined($credential));
-    my $credentials = [$credential->asString()];
-    if (defined($speaksfor)) {
-	$credentials = [@$credentials, $speaksfor->asString()];
-    }
-    $rpcargs{"credentials"} = $credentials;
-    
     my $response =
 	APT_Geni::PortalRPC($authority, $context, "Reserve", \%rpcargs);
     if (GeniResponse::IsError($response)) {
@@ -330,7 +334,7 @@ sub DoList()
     my $anon    = 0;
     my $idx;
     my $project;
-    my $user = $this_user;
+    my $user;
     my %rpcargs = ();
     my $context;
     
@@ -361,7 +365,7 @@ sub DoList()
 	    fatal("No such project");
 	}
 	if (!$this_user->IsAdmin() &&
-	    !$project->AccessCheck($user, TB_PROJECT_CREATEEXPT())) {
+	    !$project->AccessCheck($this_user, TB_PROJECT_CREATEEXPT())) {
 	    fatal("No permission to access reservation list for $project")
 	}
     }
@@ -435,8 +439,25 @@ sub DoList()
     # Strip out unwanted results if we asked as an admin for a specific
     # user or project.
     #
-    if ($this_user->IsAdmin()) {
+    if ($this_user->IsAdmin() && (defined($project) || defined($user))) {
+	my $tmp = {};
+	
+	foreach my $key (keys(%$list)) {
+	    my $details = $list->{$key};
 
+	    if (defined($project)) {
+		next
+		    if (!defined($details->{'pid_idx'}) ||
+			$details->{'pid_idx'} != $project->pid_idx());
+	    }
+	    else {
+		next
+		    if (!defined($details->{'uid_idx'}) ||
+			$details->{'uid_idx'} != $user->uid_idx());
+	    }
+	    $tmp->{$key} = $details;
+	}
+	$list = $tmp;
     }
     if (defined($webtask)) {
 	$webtask->value($list);

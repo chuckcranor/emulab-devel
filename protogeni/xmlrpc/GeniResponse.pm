@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2008-2016 University of Utah and the Flux Group.
+# Copyright (c) 2008-2017 University of Utah and the Flux Group.
 # 
 # {{{GENIPUBLIC-LICENSE
 # 
@@ -50,6 +50,7 @@ use vars qw(@ISA @EXPORT);
 	      GENIRESPONSE_INSUFFICIENT_NODES GENIRESPONSE_SERVER_UNAVAILABLE
               GENIRESPONSE_INSUFFICIENT_MEMORY GENIRESPONSE_NO_MAPPING
 	      GENIRESPONSE_STITCHER_ERROR
+	      GENIRESPONSE_NOSPACE
 	      XMLRPC_PARSE_ERROR XMLRPC_SERVER_ERROR XMLRPC_APPLICATION_ERROR
 	      XMLRPC_SYSTEM_ERROR XMLRPC_TRANSPORT_ERROR);
 
@@ -77,6 +78,7 @@ sub GENIRESPONSE_BUSY()           {14; }
 sub GENIRESPONSE_EXPIRED()        {15; }
 sub GENIRESPONSE_INPROGRESS()     {16; }
 sub GENIRESPONSE_ALREADYEXISTS()  {17; }
+sub GENIRESPONSE_NOSPACE()        {23; }
 sub GENIRESPONSE_VLAN_UNAVAILABLE(){24; }
 sub GENIRESPONSE_INSUFFICIENT_BANDWIDTH()  {25; }
 sub GENIRESPONSE_INSUFFICIENT_NODES()      {26; }
@@ -114,7 +116,7 @@ my @GENIRESPONSE_STRINGS =
      "Error 20",
      "Error 21",
      "Error 22",
-     "Error 23",
+     "Not Enough Space",
      "Vlan Unavailable",
      "Insufficient Bandwidth",
      "Insufficient Nodes",

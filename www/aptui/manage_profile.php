@@ -71,6 +71,7 @@ function SPITFORM($formfields, $errors)
     $activity   = 0;
     $ispp       = 0;
     $isadmin    = (ISADMIN() ? 1 : 0);
+    $isstud     = (STUDLY() ? 1 : 0);
     $canrepo    = (ISADMIN() || STUDLY() ? 1 : 0);
     $multisite  = 1;
     $cloning    = 0;
@@ -193,6 +194,7 @@ function SPITFORM($formfields, $errors)
     echo "    window.CANPUBLISH= $canpublish;\n";
     echo "    window.DISABLED= $disabled;\n";
     echo "    window.ISADMIN  = $isadmin;\n";
+    echo "    window.ISSTUD  = $isstud;\n";
     echo "    window.MULTISITE  = $multisite;\n";
     echo "    window.HISTORY  = $history;\n";
     echo "    window.CLONING  = $cloning;\n";
@@ -368,6 +370,8 @@ if (! isset($create)) {
 	    if ($profile->script() && $profile->script() != "") {
 		$defaults["profile_script"] = $profile->script();
 	    }
+            $defaults["portal_converted"]
+                = ($profile->portal_converted() == 1 ? "yes" : "no");
             # Default the project if in only one project.
 	    if (count($projlist) == 1) {
 		list($project) = each($projlist);
@@ -383,6 +387,8 @@ if (! isset($create)) {
 	    if ($profile->script() && $profile->script() != "") {
 		$defaults["profile_script"] = $profile->script();
 	    }
+            $defaults["portal_converted"]
+                = ($profile->portal_converted() == 1 ? "yes" : "no");
 	    if ($profile->repourl() && $profile->repourl() != "") {
 		$defaults["profile_repourl"]  = $profile->repourl();
                 # Need this so JS code knows when HEAD changes.

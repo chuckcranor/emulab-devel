@@ -55,10 +55,16 @@ pre {
 		class='form-control'
 		rows=5></textarea>
       <div style="margin-top: 10px;">
-	<button class='btn btn-primary btn-sm'
-		style='margin-right: 20px;'
-		data-toggle='modal' data-target='#confirm-terminate-modal'
-		type='button' name='terminate'>Terminate</button>
+	<span data-toggle='popover'
+	     data-delay='{"hide":500, "show":500}'
+	     data-content='Schedule termination for the future (in days)
+			   or right away (leave days zero).'>
+	  <button class='btn btn-primary btn-sm'
+		  style='margin-right: 20px;'
+		  id="terminate-button"
+		  data-toggle='modal' data-target='#confirm-terminate-modal'
+		  type='button' name='terminate'>Schedule Termination</button>
+	</span>
 	<button class='btn btn-danger btn-sm'
 		style='margin-right: 20px;'
 		id='deny-extension'

@@ -108,6 +108,7 @@ sub CheckPermission($)
 	       $OURDOMAIN eq "utah.cloudlab.us" ||
 	       $OURDOMAIN eq "wisc.cloudlab.us" ||
 	       $OURDOMAIN eq "clemson.cloudlab.us" ||
+	       $OURDOMAIN eq "utahddc.geniracks.net" ||
 	       $OURDOMAIN eq "lab.onelab.eu"));
 
     return 0;
@@ -125,6 +126,46 @@ sub GetVersion()
 	if (GeniResponse::IsError($hasperm));
 	    
     return GeniResponse->Create(GENIRESPONSE_SUCCESS, $API_VERSION);
+}
+
+#
+# Create user/authority from a credential. We need to do this to support
+# admin level operations that require that the target user ans authority
+# already exist for the purposes of bookkeeping. But they cannot be
+# created during the admin level operation since the creds/certs will not
+# be what we expect. I do not much like this, but no brighter ideas at
+# this time.
+#
+# So, the caller will make this call just to get the local user/authority
+# into the database, and then issue the actual call as the root authority.
+# And only admins at the permitted sites (CheckPermission() above) can do
+# that.
+#
+sub CreateUser($)
+{
+    my ($argref)  = @_;
+    
+    my $hasperm = CheckPermission(0);
+    return $hasperm
+	if (GeniResponse::IsError($hasperm));
+	    
+    if (!exists($argref->{'credentials'})) {
+	return GeniResponse->MalformedArgsResponse("Missing credentials")
+    }
+    my $credentials = $argref->{'credentials'};	
+    
+    my ($credential,$speaksfor) = GeniStd::CheckCredentials($credentials);
+    return $credential
+	if (GeniResponse::IsResponse($credential));
+
+    return GeniResponse->MalformedArgsResponse("Not a user credential")
+	if ($credential->target_urn()->type() ne "user");
+    
+    my $geniuser = GeniCM::CreateUserFromCertificate($credential);
+    return $geniuser
+	if (GeniResponse::IsResponse($geniuser));
+
+    return GeniResponse->Create(GENIRESPONSE_SUCCESS);
 }
 
 #
@@ -602,6 +643,8 @@ sub Reserve($)
     my ($argref)  = @_;
     my %blob      = ();
     my $reserror;
+    my $asadmin   = 0;
+    my ($geniuser, $project);
 
     my $hasperm = CheckPermission(0);
     return $hasperm
@@ -616,34 +659,43 @@ sub Reserve($)
     # Otherwise we get a project credential issued to a user in that
     # project.
     #
-    if (!exists($argref->{'credentials'})) {
-	return GeniResponse->MalformedArgsResponse("Missing credentials")
+    if (exists($argref->{'credentials'})) {
+	($geniuser, $project) =
+	    Credential2UserProject($argref->{'credentials'});
+
+	return $geniuser
+	    if (GeniResponse::IsResponse($geniuser));
+	return GeniResponse->MalformedArgsResponse("Not a local user")
+	    if (!$geniuser->IsLocal());
     }
-    my ($geniuser, $project) =
-	Credential2UserProject($argref->{'credentials'});
+    else {
+	#
+	# Must be the root authority.
+	#
+	$hasperm = CheckPermission(1);
+	return $hasperm
+	    if (GeniResponse::IsError($hasperm));
 
-    return $geniuser
-	if (GeniResponse::IsResponse($geniuser));
-    return GeniResponse->MalformedArgsResponse("Not a local user")
-	if (!$geniuser->IsLocal());
-
-    #
-    # No project, we need to have a project urn.
-    #
-    if (!defined($project)) {
+	return GeniResponse->MalformedArgsResponse("Missing user URN")
+	    if (!exists($argref->{'user_urn'}));
 	return GeniResponse->MalformedArgsResponse("Missing project URN")
 	    if (!exists($argref->{'project_urn'}));
+	return GeniResponse->MalformedArgsResponse("Invalid user URN")
+	    if (!GeniHRN::IsValid($argref->{'user_urn'}));
 	return GeniResponse->MalformedArgsResponse("Invalid project URN")
 	    if (!GeniHRN::IsValid($argref->{'project_urn'}));
-	my $hrn = GeniHRN->new($argref->{'project_urn'});
-	return GeniResponse->MalformedArgsResponse("Mismatching project URN")
-	    if ($hrn->domain() ne
-		$geniuser->emulab_user()->nonlocalurn()->domain());
+	
+	# User should already exist; the caller used CreateUser() above first.
+	$geniuser = GeniUser->Lookup($argref->{'user_urn'}, 1);
+	return GeniResponse->MalformedArgsResponse("No such user")
+	    if (!defined($geniuser));
 
-	my $group = GeniUtil::GetHoldingProject($hrn,undef,1);
+	my $group = GeniUtil::GetHoldingProject($argref->{'project_urn'},
+						undef, 1);
 	return $group
 	    if (GeniResponse::IsResponse($group));
 	$project = $group->GetProject();
+	$asadmin = 1;
     }
     my $pid = $project->pid();
     my $uid = $geniuser->emulab_user()->uid();
@@ -696,7 +748,7 @@ sub Reserve($)
 	if (defined($count) && $count !~ /^\d+$/);
 
     if (defined($reason) &&
-	!TBcheck_dbslot($reason, "default", "text",
+	!TBcheck_dbslot($reason, "default", "fulltext",
 			TBDB_CHECKDBSLOT_WARN|TBDB_CHECKDBSLOT_ERROR)) {
 	return GeniResponse->MalformedArgsResponse("Invalid reason")
     }
@@ -736,7 +788,7 @@ sub Reserve($)
 	return GeniResponse->Create(GENIRESPONSE_FORBIDDEN)
 	    if ($reservation->pid() ne $project->pid());
 
-	my $type = $reservation->type();
+	$type = $reservation->type();
     }
 
     #
@@ -769,7 +821,8 @@ sub Reserve($)
 	(defined($start) ? "-s $start " : "") .
 	(defined($end) ? "-e $end " : "") .
 	(defined($update) && defined($count) ? "-S $count " : "") .
-	"-U $uid " . (!defined($update) ? "$pid $count" : "");
+	($asadmin ? "-U $uid " : "") . 
+	(!defined($update) ? "$pid $count" : "");
 
     # Write the reason to a tempfile to pass in. This will auto unlink.
     my $fp;
@@ -779,9 +832,17 @@ sub Reserve($)
 	$args = "-N $fp $args";
 	chmod(0755, "$fp");
     }
+    my $command = ($asadmin ? "$WAP " : "") . "$TB/sbin/reserve -p $args";
+    print STDERR "$command\n";
 
-    GeniUtil::FlipToElabMan();
-    my $output = GeniUtil::ExecQuiet("$WAP $TB/sbin/reserve -p $args");
+    if ($asadmin) {
+	GeniUtil::FlipToElabMan();
+    }
+    else {
+	# We know this is a local user.
+	$geniuser->FlipTo($project->GetProjectGroup());
+    }
+    my $output = GeniUtil::ExecQuiet($command);
     
     if ($? && $? >> 8 != 2) {
 	GeniUtil::FlipToGeniUser();
@@ -824,15 +885,18 @@ sub Reservations($)
     }
 
     #
-    # If the root authority is asking, then no perm checks are necessary.
-    # and we send back the entire list. Otherwise return only those
-    # reservations granted by the credential, which should be a project
-    # credential or a user (self) credential.
+    # If the root authority is asking, then we require a root certificate
+    # like all the other restricted calls in this library. We send back
+    # the entire list.
+    #
+    # Otherwise return only those reservations granted by the credential,
+    # which should be a project credential or a user (self) credential.
     #
     if (!exists($argref->{'credentials'})) {
-	my $hrn = GeniHRN->new($ENV{"GENIURN"});
-	return GeniResponse->Create(GENIRESPONSE_FORBIDDEN)
-	    if (! ($hrn->IsAuthority() && $hrn->IsRoot()));
+	# Root authority check.
+	$hasperm = CheckPermission(1);
+	return $hasperm
+	    if (GeniResponse::IsError($hasperm));
 	
 	$query_result =
 	    DBQueryWarn("select *,UNIX_TIMESTAMP(start) as start, ".
@@ -952,7 +1016,11 @@ sub DeleteReservation($)
     my ($argref)  = @_;
     my $project;
 
-    my $hasperm = CheckPermission(0);
+    #
+    # The Portal decides the user has permission and then uses "admin" mode
+    # to do the deletion.
+    #
+    my $hasperm = CheckPermission(1);
     return $hasperm
 	if (GeniResponse::IsError($hasperm));
 
@@ -1032,9 +1100,9 @@ sub ReservationPrediction($)
 {
     my ($argref)  = @_;
 
-    #my $hasperm = CheckPermission(1);
-    #return $hasperm
-    #   if (GeniResponse::IsError($hasperm));
+    my $hasperm = CheckPermission(1);
+    return $hasperm
+       if (GeniResponse::IsError($hasperm));
 
     return GeniResponse->MalformedArgsResponse("Missing project list")
 	if (!(exists($argref->{"projlist"}) && defined($argref->{"projlist"})));

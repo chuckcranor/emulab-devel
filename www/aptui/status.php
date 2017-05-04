@@ -40,6 +40,10 @@ $this_user = CheckLogin($check_status);
 if (isset($this_user)) {
     CheckLoginOrDie(CHECKLOGIN_NONLOCAL);
 }
+elseif (!$ISAPT && GETUID()) {
+    # User with an account, redirect to login. APT allows guest users.
+    RedirectLoginPage();
+}
 #
 # We do not set the isfadmin flag if the user has normal permission
 # to see this experiment, since that would change what the user sees.
@@ -170,8 +174,8 @@ $registered      = (isset($this_user) ? "true" : "false");
 $snapping        = 0;
 $oneonly         = (isset($oneonly) && $oneonly ? 1 : 0);
 $isadmin         = (ISADMIN() ? 1 : 0);
-$lockdown        = ($instance->admin_lockdown() ||
-                    $instance->user_lockdown() ? 1 : 0);
+$user_lockdown   = ($instance->user_lockdown() ? 1 : 0);
+$admin_lockdown  = ($instance->admin_lockdown() ? 1 : 0);
 $extension_reason= ($instance->extension_reason() ?
                     CleanString($instance->extension_reason()) : "");
 $extension_denied_reason= ($instance->extension_denied_reason() ?
@@ -250,7 +254,8 @@ echo "  window.APT_OPTIONS.oneonly = $oneonly;\n";
 echo "  window.APT_OPTIONS.dossh = $dossh;\n";
 echo "  window.APT_OPTIONS.ispprofile = $ispprofile;\n";
 echo "  window.APT_OPTIONS.publicURL = $public_url;\n";
-echo "  window.APT_OPTIONS.lockdown = $lockdown;\n";
+echo "  window.APT_OPTIONS.user_lockdown = $user_lockdown;\n";
+echo "  window.APT_OPTIONS.admin_lockdown = $admin_lockdown;\n";
 echo "  window.APT_OPTIONS.lockout = $lockout;\n";
 echo "  window.APT_OPTIONS.isopenstack = $isopenstack;\n";
 echo "  window.APT_OPTIONS.paniced = $paniced;\n";

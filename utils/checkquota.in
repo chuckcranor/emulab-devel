@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2000-2014 University of Utah and the Flux Group.
+# Copyright (c) 2000-2017 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -34,12 +34,14 @@ use Getopt::Std;
 #
 sub usage()
 {
-    print STDOUT "Usage: checkquota [-d] [-p pid] <user>\n";
+    print STDOUT "Usage: checkquota [-d] [-p pid | -g gid] [-m mebi] <user>\n";
     exit(-1);
 }
-my $optlist  = "dp:";
+my $optlist  = "dp:m:g:";
 my $debug    = 0;
-my $pid;
+my $minmebi;
+my $project;
+my $group;
 
 #
 # Configure variables
@@ -73,7 +75,7 @@ $ENV{'PATH'} = "$TB/bin:$TB/sbin:/bin:/usr/bin:/sbin:/usr/sbin";
 delete @ENV{'IFS', 'CDPATH', 'ENV', 'BASH_ENV'};
 
 exit(0)
-    if ($TESTMODE || $FSLIST eq "");
+    if ($FSLIST eq "" && !$WITHZFS);
 
 if ($EUID != 0) {
     # We don't want to run this script unless its the real version.
@@ -87,7 +89,10 @@ if ($EUID != 0) {
 use lib "@prefix@/lib";
 use libdb;
 use libtestbed;
+use Group;
 use Project;
+# For mebi conversion.
+use Blockstore;
 
 #
 # Parse command arguments. Once we return from getopts, all that should
@@ -101,7 +106,27 @@ if (defined($options{"d"})) {
     $debug = 1;
 }
 if (defined($options{"p"})) {
-    $pid = $options{"p"};
+    $project = Project->Lookup($options{"p"});
+    if (!defined($project)) {
+	die("No such project");
+    }
+}
+elsif (defined($options{"g"})) {
+    $group = Group->Lookup($options{"g"});
+    if (!defined($group)) {
+	die("No such group");
+    }
+    # Watch for main group.
+    if ($group->IsProjectGroup()) {
+	$project = $group->GetProject();
+	$group   = undef;
+    }
+}
+if (defined($options{"m"})) {
+    $minmebi = Blockstore::ConvertToMebi($options{"m"});
+    if ($minmebi < 0) {
+	die("Invalid format for -m option");
+    }
 }
 if (@ARGV != 1) {
     usage();
@@ -117,17 +142,7 @@ if ($user =~ /^([-\w]+)$/) {
 else {
     die("Bad data in argument: $user");
 }
-#
-# Optional pid check to, as for ZFS.
-#
-if (defined($pid)) {
-    my $project = Project->Lookup($pid);
-    if (!defined($project)) {
-	fatal("No such project");
-    }
-    $pid = $project->pid();
-}
-   
+
 #
 # Convert to a uid since fs node may not have our user names
 #
@@ -140,8 +155,14 @@ $UID = 0;
 
 if ($WITHZFS) {
     my $fsarg = "$ZFS_ROOT/users/$user";
-    if (defined($pid)) {
-	$fsarg .= " $ZFS_ROOT/proj/$pid $ZFS_ROOT/groups/$pid ";
+    if (defined($group)) {
+	my $pid = $group->pid();
+	$fsarg .= " $ZFS_ROOT/groups/$pid ";
+	$fsarg .= " $ZFS_ROOT/proj/$pid ";
+    }
+    elsif (defined($project)) {
+	my $pid = $project->pid();
+	$fsarg .= " $ZFS_ROOT/proj/$pid ";
     }
     my $cmd = "$SSHTB -host $FS $ZFS get -H -o name,value available $fsarg";
     if ($debug) {
@@ -154,12 +175,53 @@ if ($WITHZFS) {
 	if ($debug) {
 	    print $_;
 	}
-	if ($_ =~ /^([\w\/]*)\s+([\d\.]*)(\w)/) {
+	if ($_ =~ /^([-\w\/]*)\s+([\d\.]*)(\w)/) {
+	    my $path = $1;
+	    
 	    if (! ($3 eq "M" || $3 eq "G" || $3 eq "T" ||
 		   ($3 eq "K" && $2 >= 1024) ||
 		   ($3 eq "B" && $2 < 1024*1024))) {
 		print STDOUT "*** Disk Quota exceeded on $1\n";
 		$overquota++;
+	    }
+	    elsif (defined($minmebi)) {
+		my $current = Blockstore::ConvertToMebi("${2}${3}B");
+		if ($current < 0) {
+		    print STDERR $_;
+		    print STDERR "Could not convert current to mebi\n";
+		    $overquota++;
+		    next;
+		}
+		my $test = 0;
+		
+		#
+		# Makes no sense to require the same amount of space
+		# across all filesystems when doing a per-project check.
+		#
+		if (defined($group)) {
+		    my $pid = $group->pid();
+		    next
+			if ($path !~ /^$ZFS_ROOT\/groups\//);
+		    $test = 1;
+		}
+		elsif (defined($project)) {
+		    my $pid = $project->pid();
+		    next
+			if ($path !~ /^$ZFS_ROOT\/proj\//);
+		    $test = 1;
+		}
+		else {
+		    next
+			if ($path !~ /^$ZFS_ROOT\/users\//);
+		    $test = 1;
+		}
+		if ($test && $debug) {
+		    print STDOUT "Testing $path for min space: $current\n";
+		}
+		if ($test && $current < $minmebi) {
+		    print STDOUT "*** Not enough space on $1\n";
+		    $overquota++;
+		}
 	    }
 	}
 	else {

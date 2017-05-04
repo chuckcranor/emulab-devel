@@ -27,6 +27,7 @@ use Getopt::Std;
 use POSIX qw(setsid :sys_wait_h);
 use File::Basename;
 use Cwd qw(realpath);
+use Errno qw(ENOSPC);
 
 #
 # Image Creation Tuneables.
@@ -141,25 +142,6 @@ my $update_prepare = 0;
 my $bsname;
 my $origin_uuid;
 my $webtask;
-
-#
-# We need an END block to make sure the web task is set.
-#
-END {
-    my $saved_exitcode = $?;
-    
-    # Watch for abnormal termination. 
-    if ($? && defined($webtask)) {
-	# Cause of the fork in run_with_ssh.
-	$webtask->Refresh();
-	if (!$webtask->HasExited()) {
-	    $webtask->status("failed");
-	    $webtask->imagesize(0);
-	    $webtask->Exited(-1);
-	}
-    }
-    $? = $saved_exitcode;
-}
 
 #
 # Configure variables
@@ -465,12 +447,17 @@ if ($image->isdataset() && !defined($bsname)) {
 
 #
 # Before doing anything else, check for overquota ... lets not waste
-# our time. Make sure user sees the error by exiting with 1.
+# our time. Make sure user sees the error by exiting with ENOSPC. 
 #
-if (system("$checkquota -p $imagepid $user_uid") != 0) {
-    die("*** $0:\n".
-	"    You are over your disk quota on $CONTROL; ".
-	"please login there and cleanup!\n");
+my $copt = ($image->pid() eq $image->gid() ?
+	    "-p " . $image->pid() :
+	    "-g " . $image->pid() . "/" . $image->pid());
+if (system("$checkquota $copt -m 3GB $user_uid") != 0) {
+    print STDERR
+	"*** $0:\n".	
+	"    You are over your disk quota on $CONTROL, or there is less\n".
+	"    then a minimum amount (3GB) of space. Please login and cleanup!\n";
+    exit(ENOSPC);
 }
 
 #
@@ -933,6 +920,12 @@ elsif (!$doprovenance) {
     } else {
 	$command .= " $ofilename";
     }
+
+    #
+    # XXX always use ssh for now to get better log info; i.e., all
+    # the log info winds up in one logfile.
+    #
+    $usessh = 1;
 }
 #
 # Otherwise, use the new script with different argument syntax.
@@ -1750,9 +1743,9 @@ sub run_with_ssh($$)
 	}
 	if ($stat & 127) {
 	    # died with a signal, return the signal
-	    exit($stat & 127);
+	    POSIX::_exit($stat & 127);
 	}
-	exit($stat >> 8);
+	POSIX::_exit($stat >> 8);
     }
 
     #
@@ -1796,4 +1789,23 @@ sub run_with_ssh($$)
     }
 
     return $stat;
+}
+
+#
+# We need an END block to make sure the web task is set.
+#
+END {
+    my $saved_exitcode = $?;
+    
+    # Watch for abnormal termination. 
+    if ($? && defined($webtask)) {
+	# Cause of the fork in run_with_ssh.
+	$webtask->Refresh();
+	if (!$webtask->HasExited()) {
+	    $webtask->status("failed");
+	    $webtask->imagesize(0);
+	    $webtask->Exited(-1);
+	}
+    }
+    $? = $saved_exitcode;
 }

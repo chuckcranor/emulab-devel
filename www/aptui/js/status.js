@@ -37,7 +37,8 @@ $(function ()
     var lastStatus        = "";
     var paniced           = 0;
     var lockout           = 0;
-    var lockdown          = 0;
+    var admin_lockdown    = 0;
+    var user_lockdown     = 0;
     var lockdown_code     = "";
     var consolenodes      = {};
     var showlinktest      = false;
@@ -62,8 +63,9 @@ $(function ()
 	profile_uuid = window.APT_OPTIONS.profileUUID;
 	paniced      = window.APT_OPTIONS.paniced;
 	lockout      = window.APT_OPTIONS.lockout;
-	lockdown     = window.APT_OPTIONS.lockdown;
+	user_lockdown= window.APT_OPTIONS.user_lockdown;
 	lockdown_code= uuid.substr(2, 5);
+	admin_lockdown = window.APT_OPTIONS.admin_lockdown;
 	instanceStatus = window.APT_OPTIONS.instanceStatus;
 	hidelinktest   = window.APT_OPTIONS.hidelinktest;
 	var errorURL = window.HELPFORUM;
@@ -95,7 +97,8 @@ $(function ()
 	    project:            window.APT_OPTIONS.project,
 	    group:              window.APT_OPTIONS.group,
 	    lockout:            lockout,
-	    lockdown:           lockdown,
+	    admin_lockdown:     admin_lockdown,
+	    user_lockdown:      user_lockdown,
 	    lockdown_code:      lockdown_code,
 	    // The status panel starts out collapsed.
 	    status_panel_show:  (instanceStatus == "ready" ? false : true),
@@ -165,6 +168,7 @@ $(function ()
 
 	// Setup the extend modal.
 	$('button#extend_button').click(function (event) {
+	    window.APT_OPTIONS.gaButtonEvent(event);
 	    event.preventDefault();
 	    if (isfadmin) {
 		sup.ShowModal("#extend_history_modal");
@@ -181,17 +185,20 @@ $(function ()
 	
 	// Handler for the refresh button
 	$('button#refresh_button').click(function (event) {
+	    window.APT_OPTIONS.gaButtonEvent(event);
 	    event.preventDefault();
 	    DoRefresh();
 	});
 	// Handler for the Clone button.
 	$('button#clone_button').click(function (event) {
+	    window.APT_OPTIONS.gaButtonEvent(event);
 	    event.preventDefault();
 	    window.location.replace('manage_profile.php?action=clone' +
 				    '&snapuuid=' + uuid);
 	});
 	// Handler for the reload topology button
 	$('button#reload-topology-button').click(function (event) {
+	    window.APT_OPTIONS.gaButtonEvent(event);
 	    event.preventDefault();
 	    DoReloadTopology();
 	});
@@ -204,7 +211,7 @@ $(function ()
 	//
 	var popover_timer;
 
-	$("button#clone_button").mouseenter(function(){
+	$("button#clone_button").mouseenter(function(event) {
 	    popover_timer = setTimeout(function() {
 		$('button#clone_button').popover({
 		    html:     true,
@@ -214,17 +221,17 @@ $(function ()
 		    container:'body',
 		});
 		$('button#clone_button').popover('show');
-		$('#clone_popover_close').on('click', function(e) {
+		$('#clone_popover_close').on('click', function(event) {
 		    $('button#clone_button').popover('hide');
 		});
 	    },1000)
 	}).mouseleave(function(){
 	    clearTimeout(popover_timer);
-	}).click(function(){
+	}).click(function(event){
 	    clearTimeout(popover_timer);
 	});
 	
-	$("button#snapshot_button").mouseenter(function(){
+	$("button#snapshot_button").mouseenter(function(event) {
 	    popover_timer = setTimeout(function() {
 		$('button#snapshot_button').popover({
 		    html:     true,
@@ -234,28 +241,30 @@ $(function ()
 		    container:'body',
 		});
 		$('button#snapshot_button').popover('show');
-		$('#snapshot_popover_close').on('click', function(e) {
+		$('#snapshot_popover_close').on('click', function(event) {
 		    $('button#snapshot_button').popover('hide');
 		});
 		// Kill popover if user clicks through. 
-		$('button#snapshot_button').on('click', function(e) {
+		$('button#snapshot_button').on('click', function(event) {
+		    window.APT_OPTIONS.gaButtonEvent(event);
 		    $('button#snapshot_button').popover('hide');
 		});
 	    },1000)
 	}).mouseleave(function(){
 	    clearTimeout(popover_timer);
-	}).click(function(){
+	}).click(function(event){
 	    clearTimeout(popover_timer);
 	    DoSnapshotNode();
 	});
 	
 	// Terminate an experiment.
 	$('button#terminate').click(function (event) {
+	    window.APT_OPTIONS.gaButtonEvent(event);
 	    var lockdown_override = "";
 	    event.preventDefault();
 	    sup.HideModal('#terminate_modal');
 
-	    if (lockdown) {
+	    if (user_lockdown) {
 		if (lockdown_code != $('#terminate_lockdown_code').val()) {
 		    sup.SpitOops("oops", "Refusing to terminate; wrong code");
 		    return;
@@ -294,8 +303,11 @@ $(function ()
 	    DoLockout($(this).is(":checked"));
 	});	
 	// lockdown change event handler.
-	$('#lockdown_checkbox').change(function() {
-	    DoLockdown($(this).is(":checked"));
+	$('#user_lockdown_checkbox').change(function() {
+	    DoLockdown("user", $(this).is(":checked"));
+	});	
+	$('#admin_lockdown_checkbox').change(function() {
+	    DoLockdown("admin", $(this).is(":checked"));
 	});	
 	// Quarantine change event handler.
 	$('#quarantine_checkbox').change(function() {
@@ -330,7 +342,10 @@ $(function ()
         $('#instructions').on('show.bs.collapse', function () {
 	    APT_OPTIONS.updatePage({ 'status_instructions': 'shown' });
 	});
-
+	$('#quicktabs_ul li a').on('shown.bs.tab', function (event) {
+	    window.APT_OPTIONS.gaTabEvent("show",
+					  $(event.target).attr('href'));
+	});
         addTutorialNotifyTab('profile');
         addTutorialNotifyTab('listview');
         addTutorialNotifyTab('manifest');
@@ -394,9 +409,17 @@ $(function ()
 	statusBusy = 1;
 	
 	var callback = function(json) {
-	    StatusWatchCallBack(json);
-	    if (instanceStatus == 'terminated') {
+	    // Watch for logged out, stop the loop. User will need to reload.
+	    if (json.code == 222) {
 		clearInterval(statusID);
+		alert("You are no longer logged in, please refresh to " +
+		      "continue getting page updates");
+	    }
+	    else {
+		StatusWatchCallBack(json);
+		if (instanceStatus == 'terminated') {
+		    clearInterval(statusID);
+		}
 	    }
 	    statusBusy = 0;
 	}
@@ -431,7 +454,7 @@ $(function ()
 	var status_html = "";
     
 	if (instanceStatus != lastStatus) {
-          APT_OPTIONS.updatePage({ 'instance-status': instanceStatus });
+            APT_OPTIONS.updatePage({ 'instance-status': instanceStatus });
 	    console.info(json);
 	
 	    status_html = status;
@@ -631,8 +654,13 @@ $(function ()
     }
     function ButtonState(button, enable)
     {
-	if (button == "terminate")
+	if (button == "terminate") {
 	    button = "#terminate_button";
+	    // When admin lockdown is set, we never enable this button.
+	    if (admin_lockdown) {
+		enable = 0;
+	    }	    
+	}
 	else if (button == "extend")
 	    button = "#extend_button";
 	else if (button == "refresh")
@@ -793,15 +821,16 @@ $(function ()
     //
     // Request lockout set/clear.
     //
-    function DoLockout(lockout)
+    function DoLockout(enable)
     {
-	lockout = (lockout ? 1 : 0);
+	enable = (enable ? 1 : 0);
 	
 	var callback = function(json) {
 	    if (json.code) {
 		alert("Failed to change lockout: " + json.value);
 		return;
 	    }
+	    lockout = enable;
 	}
 	var xmlthing = sup.CallServerMethod(ajaxurl, "status", "Lockout",
 					     {"uuid" : uuid,
@@ -812,9 +841,9 @@ $(function ()
     //
     // Request lockdown set/clear.
     //
-    function DoLockdown(lockdown)
+    function DoLockdown(which, lockdown)
     {
-	lockdown = (lockdown ? 1 : 0);
+	var action = (lockdown ? "set" : "clear");
 	
 	var callback = function(json) {
 	    sup.HideModal("#waitwait-modal");
@@ -822,11 +851,24 @@ $(function ()
 		alert("Failed to change lockdown: " + json.value);
 		return;
 	    }
+	    if (which == "user") {
+		user_lockdown = lockdown;
+	    }
+	    else if (which == "admin") {
+		admin_lockdown = lockdown;
+		if (lockdown) {
+		    DisableButton("terminate");
+		}
+		else {
+		    EnableButton("terminate");
+		}
+	    }
 	}
 	sup.ShowModal("#waitwait-modal");
 	var xmlthing = sup.CallServerMethod(ajaxurl, "status", "Lockdown",
-					     {"uuid" : uuid,
-					      "lockdown" : lockdown});
+					    {"uuid"   : uuid,
+					     "which"  : which,
+					     "action" : action});
 	xmlthing.done(callback);
     }
 
@@ -844,6 +886,7 @@ $(function ()
 			     "Failed to change Quarantine mode: " + json.value);
 		return;
 	    }
+	    paniced = mode;
 	}
 	sup.ShowModal('#waitwait-modal');
 	var xmlthing = sup.CallServerMethod(ajaxurl, "status", "Quarantine",
@@ -1100,6 +1143,7 @@ $(function ()
 	
 	// Throw up a confirmation modal, with handler bound to confirm.
 	$('#confirm_reload_button').bind("click.reload", function (event) {
+	    window.APT_OPTIONS.gaButtonEvent(event);
 	    sup.HideModal('#confirm_reload_modal');
 	    var callback = function(json) {
 		sup.HideModal('#waitwait-modal');
@@ -1134,7 +1178,9 @@ $(function ()
 	});
 	
 	// Throw up a confirmation modal, with handler bound to confirm.
-	$('button#deletenode_confirm').bind("click.deletenode", function (event) {
+	$('button#deletenode_confirm').bind("click.deletenode",
+					    function (event) {
+	    window.APT_OPTIONS.gaButtonEvent(event);
 	    sup.HideModal('#deletenode_modal');
 	
 	    var callback = function(json) {
@@ -1237,8 +1283,8 @@ $(function ()
 	// Need to create the tab before we can create the topo, since
 	// we need to know the dimensions of the tab.
 	//
-	var tabname = client_id + "_" + sshtabcounter++ + "_tab";
-	console.info(tabname);
+	var tabname = client_id + "_" + ++sshtabcounter + "_tab";
+	//console.info(tabname);
 	
 	if (! $("#" + tabname).length) {
 	    // The tab.
@@ -1252,8 +1298,17 @@ $(function ()
 	    // Append to end of tabs
 	    $("#quicktabs_ul").append(html);
 
+	    // GA handler.
+	    var ganame = "ssh_" + sshtabcounter;
+	    $('#quicktabs_ul a[href="#' + tabname + '"]')
+		.on('shown.bs.tab', function (event) {
+		    window.APT_OPTIONS.gaTabEvent("show", ganame);
+		});
+	    window.APT_OPTIONS.gaTabEvent("create", ganame);
+
 	    // Install a click handler for the X button.
 	    $("#" + tabname + "_kill").click(function(e) {
+		window.APT_OPTIONS.gaTabEvent("kill", ganame);
 		e.preventDefault();
 		// Trigger the custom event.
 		$("#" + tabname).trigger("killssh");
@@ -1262,7 +1317,7 @@ $(function ()
 		// Remove the content div.
 		$("#" + tabname).remove();
 		// Activate the "profile" tab.
-		$('#quicktabs_ul a[href="#profile"]').tab('show');
+		$('#quicktabs_ul a[href="#topology"]').tab('show');
 	    });
 
 	    // The content div.
@@ -1341,6 +1396,7 @@ $(function ()
 	$('#context').contextmenu({
 	    target: '#' + cid, 
 	    onItem: function(context,e) {
+		window.APT_OPTIONS.gaButtonEvent(e);
 		$('#context').contextmenu('closemenu');
 		$('#context').contextmenu('destroy');
 		ActionHandler($(e.target).attr("name"), [client_id]);
@@ -1581,6 +1637,7 @@ $(function ()
 		    // Attach handler to the menu button.
 		    $('#listview-row-' + node + ' [name=shell]')
 			.click(function (e) {
+			    window.APT_OPTIONS.gaButtonEvent(e);
 			    e.preventDefault();
 			    ActionHandler("shell", [node]);
 			    return false;
@@ -1603,10 +1660,12 @@ $(function ()
 		    // Attach handler to the menu button.
 		    $('#listview-row-' + node + ' [name=console]')
 			.click(function (e) {
+			    window.APT_OPTIONS.gaButtonEvent(e);
 			    ActionHandler("console", [node]);
 			});
 		    $('#listview-row-' + node + ' [name=consolelog]')
 			.click(function (e) {
+			    window.APT_OPTIONS.gaButtonEvent(e);
 			    ActionHandler("consolelog", [node]);
 			});
 		    // Remember we have a console, for the context menu.
@@ -1625,6 +1684,7 @@ $(function ()
 		    //
 		    $('#listview-row-' + node + ' [name=snapshot]')
 			.click(function (e) {
+			    window.APT_OPTIONS.gaButtonEvent(e);
 			    ActionHandler("snapshot", [node]);
 			});
 		    //
@@ -1632,6 +1692,7 @@ $(function ()
 		    //
 		    $('#listview-row-' + node + ' [name=delete]')
 			.click(function (e) {
+			    window.APT_OPTIONS.gaButtonEvent(e);
 			    ActionHandler("delete", [node]);
 			});
 		}
@@ -1675,7 +1736,7 @@ $(function ()
 
 	    // Pass all the manifests to the viewer.
 	    $("#showtopo_container").removeClass("invisible");
-	    $('#quicktabs_ul a[href="#profile"]').tab('show');
+	    $('#quicktabs_ul a[href="#topology"]').tab('show');
 	    ShowViewer('#showtopo_statuspage', json.value);
 
 	    // Process all the manifests to create the list view.
@@ -1722,6 +1783,7 @@ $(function ()
 	    else {
 		$('#listview-action-menu li a')
 		    .click(function (e) {
+			window.APT_OPTIONS.gaButtonEvent(e);
 			var checked = [];
 
 			// Get the list of checked nodes.
@@ -1918,15 +1980,17 @@ $(function ()
     //
     function StartSnapshot(node_id, update_profile, update_prepare, imagename)
     {
-	sup.ShowModal('#waitwait-modal');
+	sup.ShowWaitWait("Starting image capture, " +
+			 "this can take a minute. Patience please.");
 
 	var callback = function(json) {
-	    sup.HideModal('#waitwait-modal');
+	    sup.HideWaitWait();
 	    //console.log("StartSnapshot");
 	    //console.log(json);
 	    
 	    if (json.code) {
-		sup.SpitOops("oops", "Could not start snapshot: " + json.value);
+		sup.SpitOops("oops", "Could not start snapshot:<br>" +
+			     "<pre><code>" + json.value + "</code></pre>");
 		return;
 	    }
 	    ShowProgressModal();
@@ -2022,6 +2086,8 @@ $(function ()
     // the ssh tab with a panel in it, and then call StartSSH above
     // to get things going.
     //
+    var constabcounter = 0;
+    
     function NewConsoleTab(client_id)
     {
 	sup.ShowModal('#waitwait-modal');
@@ -2056,8 +2122,17 @@ $(function ()
 		// Append to end of tabs
 		$("#quicktabs_ul").append(html);
 
+		// GA handler.
+		var ganame = "console_" + ++constabcounter;
+		$('#quicktabs_ul a[href="#' + tabname + '"]')
+		    .on('shown.bs.tab', function (event) {
+			window.APT_OPTIONS.gaTabEvent("show", ganame);
+		    });
+		window.APT_OPTIONS.gaTabEvent("create", ganame);
+
 		// Install a kill click handler for the X button.
 		$("#" + tabname + "_kill").click(function(e) {
+		    window.APT_OPTIONS.gaTabEvent("kill", ganame);
 		    e.preventDefault();
 		    // remove the li from the ul. this=ul.li.a.button
 		    $(this).parent().parent().remove();
@@ -2345,6 +2420,8 @@ $(function ()
     // Create a new tab to show linktest results. Cause of multisite, there
     // can be more then one. 
     //
+    var linktesttabcounter = 0;
+    
     function NewLinktestTab(name, results, url)
     {
 	// Replace spaces with underscore. Silly. 
@@ -2367,15 +2444,24 @@ $(function ()
 	    // Append to end of tabs
 	    $("#quicktabs_ul").append(html);
 
+	    // GA Handler
+	    var ganame = "linktest_" + ++linktesttabcounter;
+	    $('#quicktabs_ul a[href="#' + tabname + '"]')
+		.on('shown.bs.tab', function (event) {
+		    window.APT_OPTIONS.gaTabEvent("show", ganame);
+		});
+	    window.APT_OPTIONS.gaTabEvent("create", ganame);
+
 	    // Install a click handler for the X button.
 	    $("#" + tabname + "_kill").click(function(e) {
+		window.APT_OPTIONS.gaTabEvent("kill", ganame);
 		e.preventDefault();
 		// remove the li from the ul.
 		$(this).parent().parent().remove();
 		// Remove the content div.
 		$("#" + tabname).remove();
 		// Activate the "profile" tab.
-		$('#quicktabs_ul a[href="#profile"]').tab('show');
+		$('#quicktabs_ul a[href="#topology"]').tab('show');
 	    });
 
 	    // The content div.
@@ -2434,6 +2520,7 @@ $(function ()
 
 	// Handler for the linktest modal button
 	$('button#linktest-modal-button').click(function (event) {
+	    window.APT_OPTIONS.gaButtonEvent(event);
 	    event.preventDefault();
 	    // Make the popover go away when button clicked. 
 	    $('button#linktest-modal-button').popover('hide');
@@ -2441,11 +2528,13 @@ $(function ()
 	});
 	// And for the start button in the modal.
 	$('button#linktest-start-button').click(function (event) {
+	    window.APT_OPTIONS.gaButtonEvent(event);
 	    event.preventDefault();
 	    StartLinktest();
 	});
 	// Stop button for a running or wedged linktest.
 	$('button#linktest-stop-button').click(function (event) {
+	    window.APT_OPTIONS.gaButtonEvent(event);
 	    event.preventDefault();
 	    // Gack, we have to confirm popover hidden, or it sticks around.
 	    // Probably cause we disable the button before popover is hidden?

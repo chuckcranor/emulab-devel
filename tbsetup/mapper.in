@@ -24,6 +24,7 @@
 use strict;
 use English;
 use Getopt::Std;
+use Data::Dumper;
 use POSIX qw(setsid ceil);
 use POSIX ":sys_wait_h";
 
@@ -117,6 +118,7 @@ my $PTOPGEN     = "$TB/libexec/ptopgen";
 my $PTOPGEN_NEW = "$TB/libexec/ptopgen_new";
 my $VTOPGEN     = "$TB/bin/vtopgen";
 my $NFREE       = "$TB/bin/nfree";
+my $PREDICT     = "$TB/sbin/predict";
 my $XERCES	= "@HAVE_XERCES@";
 
 #
@@ -124,6 +126,7 @@ my $XERCES	= "@HAVE_XERCES@";
 #
 use lib "@prefix@/lib";
 use libdb;
+use emutil;
 use libtestbed;
 use libtblog;
 use libvtop;
@@ -142,6 +145,7 @@ sub FinalizeRegression($);
 sub AssignLoop();
 sub MapperWrapper(;$);
 sub PrintSolution();
+sub DumpReservationInfo($$);
 
 # un-taint path
 $ENV{'PATH'} = '/bin:/usr/bin:/usr/local/bin';
@@ -668,7 +672,8 @@ sub RunAssign($$)
 	$vtopfile .= ".xml";
     }
     my $assignexitcode = 0;
-    my $assignlog = "assign.log";
+    my $assignlog  = "assign.log";
+    my $resinfolog = "resinfo.log";
 
     #
     # Now generate a vtop file and dump it to a file.
@@ -733,14 +738,39 @@ sub RunAssign($$)
 
     # Bound the results to avoid future reservation conflicts.
     Reservation->FlushAll();
-    my $reservation_bounds = Reservation->MaxSwapInMap( $experiment );
-    foreach my $type ( keys( %$reservation_bounds ) ) {
-	if( exists( $admission_control{ $type } ) ) {
-	    if( $reservation_bounds->{ $type } < $admission_control{ $type } ) {
-		$admission_control{ $type } = $reservation_bounds->{ $type };
+    my $reservation_bounds = Reservation->MaxSwapInMap($experiment);
+    # Dump to file.
+    DumpReservationInfo($resinfolog, $reservation_bounds);
+    foreach my $type (keys(%$reservation_bounds)) {
+	if (exists($admission_control{$type})) {
+	    if ($reservation_bounds->{$type} < $admission_control{$type}) {
+		$admission_control{$type} = $reservation_bounds->{$type};
 	    }
-	} else {
-	    $admission_control{ $type } = $reservation_bounds->{ $type };
+	}
+	else {
+	    $admission_control{$type} = $reservation_bounds->{$type};
+	}
+	#
+	# Look to see if topology specifies nodes with this specific
+	# type. If so, we can tell right away that the user is asking for
+	# more then is available.
+	#
+	# This only works for nodes with hard types. Auxtypes and vtypes
+	# will still need to go through assign. Might be able to handle
+	# auxtypes though.
+	#
+	if (exists($vtop->types()->{$type})) {
+	    my $bound  = $reservation_bounds->{$type};
+	    my $wanted = $vtop->types()->{$type};
+
+	    if ($wanted > $bound) {
+		print "*** Resource reservation violation: ".
+		    "$wanted nodes of type $type requested, but only $bound ".
+		    "avaiable because of existing resource reservations ".
+		    "to other projects.\n";
+		# Unretriable error
+		return -1;
+	    }
 	}
     }
     
@@ -912,11 +942,13 @@ sub RunAssign($$)
     #
     system("/bin/cp -fp $assignlog ${prefix}.assign");
     system("/bin/cp -fp $assignlog ${pid}-${eid}.assign") if ($debug);
+    system("/bin/cp -fp $resinfolog ${prefix}-${resinfolog}");
 
     if ($assignexitcode) {
 	print "Assign exited with $assignexitcode\n" if ($debug);
 	
 	system("/bin/cat $assignlog");
+	
 	#
 	# assign returns two positive error codes (that we care about).
 	# The distinction between them is somewhat murky. An exitval of
@@ -1152,4 +1184,26 @@ sub chat($)
     if (! $quiet) {
 	print $_[0];
     }
+}
+
+sub DumpReservationInfo($$)
+{
+    my ($file, $bounds) = @_;
+
+    if (!open(RES, ">$file")) {
+	print STDERR "Could not open $file for writing: $!\n";
+	return;
+    }
+    if (! scalar(keys(%$bounds))) {
+	close(RES);
+	return;
+    }
+    foreach my $type (keys(%$bounds)) {
+	my $bound  = $bounds->{$type};
+	print RES "Running predict for $type:$bound\n";
+	my $output = emutil::ExecQuiet("$PREDICT $type");
+	print RES $output;
+	print RES "--------\n";
+    }
+    close(RES);
 }

@@ -2837,6 +2837,7 @@ sub GetTicketAuxAux($$$$$$$$$$$)
 	my $precheck;
 	my $inprecheck   = 0;
 	my $insummary    = 0;
+	my $isassignerror= 0;
 	my $errorcode = GENIRESPONSE_NO_MAPPING;
 	
 	unlink($tmpfile);
@@ -2852,6 +2853,17 @@ sub GetTicketAuxAux($$$$$$$$$$$)
 	#
 	while ($output =~ /^(.*)$/gm) {
 	    my $line = $1 . "\n";
+
+	    # Did we actually run assign?
+	    if ($line =~ /^Assign exited with/) {
+		$isassignerror = 1;
+	    }
+	    if ($line =~
+		/^\s*\*\*\*\s* Resource reservation violation:/) {
+		$logstuff  = $line;
+		$errorcode = GENIRESPONSE_INSUFFICIENT_NODES();
+		last;
+	    }
 
 	    #
 	    # The assign_wrapper2 script wraps assign, and basically
@@ -2911,6 +2923,8 @@ sub GetTicketAuxAux($$$$$$$$$$$)
 		    #
 		    # *** 2 nodes of type pc requested, but only 1 available \
 		    #          nodes of type pc found
+		    # *** 2 nodes of type pc requested, but you are only
+		    #          allowed to use 1
 		    # *** No available physical nodes of type c8220 found 
 		    #
 		    if (($line =~
@@ -2936,6 +2950,12 @@ sub GetTicketAuxAux($$$$$$$$$$$)
 		}
 		elsif ($line =~ /unassigned:\s*[1-9]/) {
 		    $errorstr  = "Not enough nodes with fast enough interfaces";
+		    $errorcode = GENIRESPONSE_INSUFFICIENT_NODES();
+		}
+		elsif ($line =~ /max_types:\s*[1-9]/) {
+		    $errorstr  = "Not enough nodes because of policy ".
+			"restrictions, or existing resource reservations to ".
+			"other projects";
 		    $errorcode = GENIRESPONSE_INSUFFICIENT_NODES();
 		}
 	    }
@@ -2971,14 +2991,20 @@ sub GetTicketAuxAux($$$$$$$$$$$)
 	# Lets dump the error log too, so it ends up in the email.
 	# Have to figure out a better approach for this.
 	#
-	if (-e "assign.log") {
+	if ($isassignerror && -e "assign.log") {
 	    print STDERR "----------------------------------------------\n";
 	    print STDERR "------------- Assign Error Log ---------------\n";
 	    my $log = `cat assign.log`;
 	    print STDERR $log . "\n";
 	    print STDERR "----------------------------------------------\n";
 	}
-
+	if (-e "resinfo.log" && -s "resinfo.log") {
+	    print STDERR "----------------------------------------------\n";
+	    print STDERR "------------- Reservation Log ----------------\n";
+	    my $log = `cat resinfo.log`;
+	    print STDERR $log . "\n";
+	    print STDERR "----------------------------------------------\n";
+	}
 	# Dump the output to STDERR for debugging.
 	print STDERR "----------------------------------------------\n";
 	print STDERR "---------------- Mapper Log ------------------\n";
@@ -7198,6 +7224,7 @@ sub CheckTicket($$)
 sub AddKeys($$$)
 {
     my ($slice, $owner, $keys) = @_;
+    my $errmsg = "Malformed keys argument; not an array";
 
     goto bad
 	if (! (ref($keys) && ref($keys) eq "ARRAY"));
@@ -7209,18 +7236,24 @@ sub AddKeys($$$)
     }
 
     my $keychecker = sub {
-	my ($arg) = @_;
+	my ($arg, $perrmsg) = @_;
 
-	return -1
-	    if (! (ref($arg) && ref($arg) eq "HASH"));
+	if (! (ref($arg) && ref($arg) eq "HASH")) {
+	    $$perrmsg = "Malformed key argument, not a hash";
+	    return -1;
+	}
 
 	my $key  = $arg->{'key'};
 	my $type = $arg->{'type'};
 
-	return -1
-	    if (! (defined($arg) && defined($arg) &&
-		   $key ne "" && $type ne ""));
-	
+	if (! (defined($key) && $key ne "")) {
+	    $$perrmsg = "Missing key in hash";
+	    return -1;
+	}
+	if (! (defined($type) && $type ne "")) {
+	    $$perrmsg = "Missing type in hash";
+	    return -1;
+	}
 	return 0;
     };
 
@@ -7233,28 +7266,42 @@ sub AddKeys($$$)
     #
     if (exists($keys->[0]->{'urn'}) || exists($keys->[0]->{'login'})) {
 	foreach my $ref (@{ $keys }) {
-	    goto bad
-		if (ref($ref) ne "HASH");
-	    goto bad
-		if (! (exists($ref->{'urn'}) || exists($ref->{'login'})));
-
-	    my @keylist = ();
-	    
-	    foreach my $keyref (@{ $ref->{'keys'} }) {
-		goto bad
-		    if (&$keychecker($keyref) != 0);
-
-		push(@keylist, $keyref->{'key'});
+	    if (ref($ref) ne "HASH") {
+		$errmsg = "Not a hash";
+		goto bad;
 	    }
+	    if (! (exists($ref->{'urn'}) || exists($ref->{'login'}))) {
+		$errmsg = "Key hash missing urn or login";
+		goto bad;
+	    }
+	    my @keylist = ();
 	    my $urn;
 	    my $uid;
 	    my $name;
 	    my $email;
 
-	    $urn = $ref->{'urn'} if (exists($ref->{'urn'}));
+	    if (exists($ref->{'urn'})) {
+		$urn = $ref->{'urn'};
+		if (!GeniHRN::IsValid($urn)) {
+		    $errmsg = "Not a valid urn: '$urn'";
+		    goto bad;
+		}
+		$urn = GeniHRN->new($urn);
+		goto error
+		    if (!defined($urn));
+		if (! (defined($urn->type()) && $urn->IsUser() &&
+		       defined($urn->id()) && $urn->id() ne "")) {
+		    $errmsg = "Not a valid user urn: '$urn'";
+		    goto bad;
+		}
+	    }
+	    else {
+		$errmsg = "Missing urn in key argument";
+		goto bad;
+	    }
 	    # Allow user to override urn token.
 	    $uid = $ref->{'login'} if (exists($ref->{'login'}));
-	    
+ 
 	    # The slice owner is easy.
 	    if (defined($urn) && $urn eq $owner->urn()) {
 		$name  = $owner->name();
@@ -7269,11 +7316,7 @@ sub AddKeys($$$)
 		# might not even be a valid uid for Emulab. 
 		#
 		if (!defined($uid)) {
-		    my (undef,$type,$id) = GeniHRN::Parse($urn);
-		    if (!defined($id) || $type ne "user") {
-			goto bad;
-		    }
-		    $uid = $id;
+		    $uid = $urn->id();
 		}
 		$name = $uid;
 		$email = "root\@localhost";
@@ -7282,10 +7325,17 @@ sub AddKeys($$$)
 		my $digest = sha1_hex($uid);
 		$digest = substr($digest, 0, 7);
 		$uid = lc("u${digest}");
-		if (GeniUser->ValidUserID($uid)) {
+		if (! GeniUser->ValidUserID($uid)) {
 		    print STDERR "Cannot form a uid for $name\n";
 		    goto bad;
 		}
+	    }
+	    foreach my $keyref (@{ $ref->{'keys'} }) {
+		if (&$keychecker($keyref, \$errmsg) != 0) {
+		    $errmsg = "Bad key argument for '$urn': $errmsg";
+		    goto bad;
+		}
+		push(@keylist, $keyref->{'key'});
 	    }
 	    $slice_experiment->BindNonLocalUser(\@keylist,
 						$uid, $urn,
@@ -7298,7 +7348,7 @@ sub AddKeys($$$)
 	
 	foreach my $keyref (@{ $keys }) {
 	    goto bad
-		if (&$keychecker($keyref) != 0);
+		if (&$keychecker($keyref, \$errmsg) != 0);
 
 	    push(@keylist, $keyref->{'key'});
 	}
@@ -7311,7 +7361,7 @@ sub AddKeys($$$)
     }
     return 0;
   bad:
-    return GeniResponse->Create(GENIRESPONSE_BADARGS, undef, "Malformed keys");
+    return GeniResponse->Create(GENIRESPONSE_BADARGS, undef, $errmsg);
   error:
     return GeniResponse->Create(GENIRESPONSE_ERROR, undef, "Internal Error");
 }

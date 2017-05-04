@@ -1,7 +1,7 @@
 #!/usr/bin/perl -w
 
 #
-# Copyright (c) 2015-2016 University of Utah and the Flux Group.
+# Copyright (c) 2015-2017 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -75,13 +75,15 @@ sub usage()
 	"  -o outfile   File in which to place script results.\n".
 	"  -n jailname  Name of jail; default is 'py-cage-<pid>'.\n".
 	"  -d           Turn on debugging.\n".
-	"  -C           Just create the jail; use 'jexec' to run commands.\n".
+	"  -C           Just create the jail; use 'jexec' to run commands\n".
+	"               (use -N too or it will die after CMD_TIMEOUT seconds).\n".
 	"  -R           Remove an existing (left-over) jail; must specify a name (-n)\n".
+	"  -N           Do not apply any resource limits.\n".
 	"  -B base      Which base to use (see /iocage/tags); default: 'py-cage'.\n";
  
     exit(-1);
 }
-my $optlist = "du:p:o:n:CRB:";
+my $optlist = "du:p:o:n:CRB:N";
 my $basename = "py-cage";
 my $jailname = "py-cage-$$";
 my $user = "nobody";
@@ -90,11 +92,14 @@ my $gid;
 my $pfile;
 my $ofile;
 my $ifile;
+my $limits = 1;
+my $haverctl = 0;
 
 # action: 1: create, 2: destroy, 4: run script
 my $action = 4;
 
 sub start_jail($$);
+sub limit_jail($$);
 sub run_jail($$$$);
 sub msg(@);
 sub mysystem($);
@@ -145,6 +150,9 @@ END {
 		if (mysystem("jail -qr $jailtag")) {
 		    print STDERR "*** could not stop jail $jailtag\n";
 		}
+		if ($limits && $haverctl) {
+		    limit_jail($jailtag, 0);
+		}
 		msg("Stopping done");
 		$jailstate = 1;
 	    }
@@ -185,6 +193,9 @@ if (defined($options{"C"})) {
 }
 if (defined($options{"R"})) {
     $action = 2;
+}
+if (defined($options{"N"})) {
+    $limits = 0;
 }
 if (defined($options{"d"})) {
     $debug = 1;
@@ -286,6 +297,18 @@ if (!$path || $path !~ /(\w{8}-\w{4}-\w{4}-\w{4}-\w{12})$/) {
 $jailuuid = $1;
 
 #
+# See if we have RCTL based limits
+#
+if ($limits) {
+    my $enabled = `sysctl -in kern.racct.enable 2>/dev/null`;
+    if ($? || $enabled == 0) {
+	$haverctl = 0;
+    } else {
+	$haverctl = 1;
+    }
+}
+
+#
 # Removing an existing jail, just set the jailstate and exit.
 #
 if ($action == 2) {
@@ -383,6 +406,14 @@ if ($action != 1) {
     delete $ENV{'DISPLAY'};
     delete @ENV{'SUDO_UID', 'SUDO_GID', 'SUDO_USER', 'SUDO_COMMAND'};
     delete @ENV{'SSH_AUTH_SOCK', 'SSH_CLIENT', 'SSH_CONNECTION', 'SSH_TTY'};
+}
+
+#
+# Set rctl resource limits
+#
+if ($limits && $haverctl && limit_jail($jailtag, 1)) {
+    print STDERR "WARNING: could not set rctl limits on geni-lib jail $jailtag\n";
+    $haverctl = 0;
 }
 
 #
@@ -497,6 +528,7 @@ sub start_jail($$)
     $args .= "ip4=disable ip6=disable ";
 
     # execution params
+    my $timo = (($limits && !$haverctl) ? $CMD_TIMEOUT : 0);
     $args .= "exec.prestart=/usr/bin/true exec.poststart=/usr/bin/true ";
     $args .= "exec.prestop=/usr/bin/true exec.poststop=/usr/bin/true ";
     $args .= "exec.start='/bin/sh /etc/rc' exec.stop='/bin/sh /etc/rc.shutdown' ";
@@ -506,6 +538,46 @@ sub start_jail($$)
     $args .= "allow.dying persist";
 
     return mysystem("jail -qc $args >/dev/null 2>&1");
+}
+
+#
+# Set/clear kernel resource limits on a running jail.
+# Note that the kernel has to enable RACCT by setting kern.racct.enable=1 in
+# /boot/loader.conf.
+#
+# XXX right now we just limit the total run time to CMD_TIMEOUT seconds.
+# Other things we might consider:
+#
+#    :cputime:sigkill=600/jail	# max of 600 total CPU seconds for all processes
+#    :memoryuse:deny=1G/jail	# prevent use of >1GB RAM for all processes
+#    :pcpu:deny=10/jail		# prevent use of >10% of one CPU for all processes
+#
+# Can also limit processes, open files, and more.
+#
+sub limit_jail($$)
+{
+    my ($name,$setem) = @_;
+    
+    if (!$setem) {
+	if (mysystem("rctl -r jail:$name")) {
+	    return 1;
+	}
+	return 0;
+    }
+    
+    my @rules = ();
+    my $timo = $CMD_TIMEOUT;
+    push @rules, "jail:$name:wallclock:sigterm=$timo/jail";
+    $timo += 10;
+    push @rules, "jail:$name:wallclock:sigkill=$timo/jail";
+
+    foreach my $rule (@rules) {
+	if (mysystem("rctl -a '$rule'")) {
+	    mysystem("rctl -r jail:$name");
+	    return 1;
+	}
+    }
+    return 0;
 }
 
 sub run_jail($$$$)
@@ -529,10 +601,11 @@ sub run_jail($$$$)
     $args .= "ip4=disable ip6=disable ";
 
     # execution params
+    my $timo = (($limits && !$haverctl) ? $CMD_TIMEOUT : 0);
     $args .= "exec.prestart=/usr/bin/true exec.poststart=/usr/bin/true ";
     $args .= "exec.prestop=/usr/bin/true exec.poststop=/usr/bin/true ";
     $args .= "exec.start='$cmdstr' exec.stop='/usr/bin/true' ";
-    $args .= "exec.clean=0 exec.timeout=$CMD_TIMEOUT stop.timeout=30 ";
+    $args .= "exec.clean=0 exec.timeout=$timo stop.timeout=30 ";
     $args .= "exec.jail_user=$user ";
 
     # other stuff

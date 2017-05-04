@@ -180,7 +180,7 @@
 		      <% } %>
 		      <!-- Profile selection box -->
 		      <% if (showpicker) { %>
-			<button id='profile'
+			<button id='change-profile'
 				class='btn btn-primary btn-sm pull-right' 
 				type='button' name='profile_button'>
 			  Change Profile
@@ -354,13 +354,13 @@
 		      <!-- The JS code fills this in -->
 		      <div id='cluster_selector' class='hidden'></div>
 		      <div id='reservation_warning' class='hidden col-sm-12'>
-			<label id='reservation_text' class='alert-warning col-sm-8 col-sm-offset-2'>There is an upcoming reservation on this cluster that may impact your ability to reserve or extend resources. This reservation is from <span class='reservation_start'>start</span> until <span class='reservation_end'>end</span>.</label> 
+			<label id='reservation_text' class='alert-warning col-sm-10 col-sm-offset-1'>There is an upcoming reservation on this cluster that may impact your ability to reserve or extend resources. This reservation is from <span class='reservation_start'>start</span> until <span class='reservation_end'>end</span>.</label> 
 		      </div>
 		      <div id='reservation_confirmation' class='hidden col-sm-12'>
-			<label id='reservation_text' class='alert-success col-sm-8 col-sm-offset-2'>You have a reservation on this cluster that began at <span class='reservation_start'>start</span>.</label> 
+			<label id='reservation_text' class='alert-success col-sm-10 col-sm-offset-1'>Your project <span class="reservation_project"></span> has a reservation on this cluster that began <span class='reservation_start'>start</span>.</label> 
 		      </div>
 		      <div id='reservation_future' class='hidden col-sm-12'>
-			<label id='reservation_text' class='alert-warning col-sm-8 col-sm-offset-2'>You have a reservation on this cluster beginning at <span class='reservation_start'>start</span>.</label> 
+			<label id='reservation_text' class='alert-warning col-sm-10 col-sm-offset-1'>Your project <span class="reservation_project"></span> has a reservation on this cluster beginning <span class='reservation_start'>start</span>.</label> 
 		      </div>
 		    </div>
 		  <% } %>
@@ -511,7 +511,7 @@
 		  <span class='category_collapsable expanded'></span>
 		</span>
 		<ul class='list-category' id='recently_used'>
-		<% for (var i = recent.length-1; i >= 0; i--) { 
+		<% for (var i = 0; i < recent.length; i++) { 
 		  var key = recent[i][0]; var value = recent[i][1]; %>
 		  <li class='list-group-item profile-item clearfix'
 		      value='<%- key %>' name='<%- value.name %>'><%- value.name %>
@@ -622,7 +622,8 @@
 		  class='btn btn-primary btn-sm'
 		  type='submit' name='select'>
 	    Select Profile</button>
-	  <button type='button' class='btn btn-default btn-sm' 
+	  <button type='button' class='btn btn-default btn-sm'
+		  id='showtopo_cancel'		  
 		  data-dismiss='modal' aria-hidden='true'>
 	    Cancel</button>
 	</div>

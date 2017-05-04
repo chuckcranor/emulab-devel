@@ -1,6 +1,6 @@
 #!/bin/sh
 #
-# Copyright (c) 2000-2016 University of Utah and the Flux Group.
+# Copyright (c) 2000-2017 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -254,6 +254,27 @@ getloadervar() {
     echo $_val
 }
 
+#
+# Make sshd more secure by default: no password based login.
+# XXX argh! First use wins, so we have to comment out before adding ours!
+#
+dofixsshd() {
+    echo "  updating /etc/ssh/sshd_config"
+    sed -i .preemulab \
+	-e 's;^Protocol;#Protocol;' \
+	-e 's;^PasswordAuth;#PasswordAuth;' \
+	-e 's;^ChallengeResp;#ChallengeResp;' \
+	-e 's;^PermitRootLogin;#PermitRootLogin;' /mnt/etc/ssh/sshd_config
+    cat <<EOF8 >>/mnt/etc/ssh/sshd_config
+
+# Emulab config
+Protocol 2
+PasswordAuthentication no
+ChallengeResponseAuthentication no
+PermitRootLogin without-password
+EOF8
+}
+
 dofreebsd() {
 	#
 	# ARGH!  FreeBSD 5, which primarily uses UFS2, internally converts
@@ -326,6 +347,7 @@ dofreebsd() {
 	changerootkeys=0
 	changezone=0
 	changentp=0
+	changesshd=0
 
 	fixit=0
 
@@ -539,6 +561,12 @@ dofreebsd() {
 		fi
 	    fi
 
+	fi
+
+	if [ -r /mnt/etc/ssh/sshd_config ] && \
+	       ! grep -q '^# Emulab config' /mnt/etc/ssh/sshd_config; then
+	    changesshd=1
+	    fixit=1
 	fi
 
 	if [ $fixit -eq 0 ]; then
@@ -832,6 +860,10 @@ EOF1
 	    }
 	fi
 
+	if [ $changesshd -eq 1 ]; then
+	    dofixsshd
+	fi
+
 	# actually run any postconfig scripts if we're supposed to:
 	if [ $doosconfig -eq 1 -a -x $BINDIR/osconfig ]; then
 	    $BINDIR/osconfig -m /mnt -D $rootdev -s FreeBSD postload
@@ -904,7 +936,7 @@ dolinux() {
 
 		# XXX assume "n1"
 		ldisk="${dtype}${dunit}n1p"
-		rootdev="/dev/${ldisk}${part}"
+		rootdev="/dev/${disk}s${part}"
 		;;
 	# SCSI
 	da[0-7])
@@ -1388,6 +1420,14 @@ EOF7
 	if [ -f /mnt/var/lib/random-seed -a -c /dev/urandom ]; then
 	    echo "  updating /var/lib/random-seed"
 	    dd if=/dev/urandom of=/mnt/var/lib/random-seed bs=512 count=1 >/dev/null 2>&1
+	fi
+
+	#
+	# Fixup sshd config
+	#
+	if [ -r /mnt/etc/ssh/sshd_config ] && \
+	       ! grep -q '^# Emulab config' /mnt/etc/ssh/sshd_config; then
+	    dofixsshd
 	fi
 
 	#

@@ -196,6 +196,7 @@ my @timeline = ();
 my $free = 0;
 my %used = ();
 my %reserved = ();
+my %usedexp = ();
 
 foreach my $reservation ( @$reservations ) {
     my $start;
@@ -205,30 +206,34 @@ foreach my $reservation ( @$reservations ) {
 	# A swapped-in experiment.  Already using nodes (so no
 	# need to save a start event), and will later release real nodes.
 	my $pid = $reservation->pid();
-	my $eid = $reservation->eid();
-	my $id = $pidonly ? $pid : "$pid/$eid";
-	if( !exists( $used{ $id } ) ) {
-	    $used{ $id } = 0;
-	    $reserved{ $id } = 0;
+	my $exp = $reservation->pid() . "/" . $reservation->eid();
+	if( !exists( $usedexp{ $exp } ) ) {
+	    $usedexp{ $exp } = 0;
 	}
-	$used{ $id } += $reservation->nodes();
-	$end = { 'id' => $id,
+	if( !exists( $used{ $pid } ) ) {
+	    $used{ $pid } = 0;
+	    $reserved{ $pid } = 0;
+	}
+	$used{ $pid } += $reservation->nodes();
+	$usedexp{ $exp } += $reservation->nodes();
+	$end = { 'pid' => $pid,
+		 'exp' => $exp,
 		 't' => $reservation->end(),
 		 'used' => -$reservation->nodes(),
 		 'reserved' => 0 };
     } elsif( defined( $reservation->pid() ) ) {
 	# A reservation.  Uses then releases reserved nodes.
-	$start = { 'id' => $reservation->pid(),
+	$start = { 'pid' => $reservation->pid(),
 		   't' => $reservation->start(),
 		   'used' => 0,
 		   'reserved' => $reservation->nodes() };
-	$end = { 'id' => $reservation->pid(),
+	$end = { 'pid' => $reservation->pid(),
 		 't' => $reservation->end(),
 		 'used' => 0,
 		 'reserved' => -$reservation->nodes() };
     } else {
 	# Available resources.  Provides nodes for all time.
-	$free = $reservation->nodes();
+	$free += $reservation->nodes();
     }
 
     push( @timeline, $start ) if( defined( $start->{'t'} ) );
@@ -240,25 +245,37 @@ my @events = sort { $a->{'t'} <=> $b->{'t'} } @timeline;
 foreach my $event ( @events ) {
     last if( $event->{'t'} > $time );
 		     
-    my $id = $event->{'id'};
-    if( !exists( $used{ $id } ) ) {
-	$used{ $id } = 0;
-	$reserved{ $id } = 0;
+    my $pid = $event->{'pid'};
+    if( !exists( $used{ $pid } ) ) {
+	$used{ $pid } = 0;
+	$reserved{ $pid } = 0;
     }
 
-    my $oldsum = $used{ $id } + $reserved{ $id };
+    my $oldsum = $used{ $pid } > $reserved{ $pid } ?
+	$used{ $pid }: $reserved{ $pid };
 
-    $used{ $id } += $event->{ 'used' };
-    $reserved{ $id } += $event->{ 'reserved' };
+    $used{ $pid } += $event->{ 'used' };
+    $reserved{ $pid } += $event->{ 'reserved' };
+    if( exists( $event->{ 'exp' } ) ) {
+	$usedexp{ $event->{ 'exp' } } += $event->{ 'used' };
+    }
 
-    my $newsum = $used{ $id } + $reserved{ $id };
+    my $newsum = $used{ $pid } > $reserved{ $pid } ?
+	$used{ $pid }: $reserved{ $pid };
 
     $free += $oldsum - $newsum;
 }
 
-foreach my $used ( sort { $used{$b} <=> $used{$a} } keys( %used ) ) {
-    my $val = $used{ $used };
-    print "$used: $val\n" if( $val > 0 );
+if( $pidonly ) {
+    foreach my $used ( sort { $used{$b} <=> $used{$a} } keys( %used ) ) {
+	my $val = $used{ $used };
+	print "$used: $val\n" if( $val > 0 );
+    }
+} else {
+    foreach my $used ( sort { $usedexp{$b} <=> $usedexp{$a} } keys( %usedexp ) ) {
+	my $val = $usedexp{ $used };
+	print "$used: $val\n" if( $val > 0 );
+    }
 }
 
 foreach my $reserved ( sort { $reserved{$b} <=> $reserved{$a} }
