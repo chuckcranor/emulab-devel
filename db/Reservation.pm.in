@@ -980,9 +980,7 @@ sub CurrentReservations($$) {
 
 	foreach my $f ( @forecast ) {
 	    foreach my $pid ( keys ( %{$f->{'reserved'}} ) ) {
-		if( grep( $_ eq $pid, @$projlist ) &&
-		    ( !exists( $f->{'used'}->{$pid} ) ||
-		      $f->{'used'}->{$pid} < $f->{'reserved'}->{$pid} ) ) {
+		if( grep( $_ eq $pid, @$projlist ) ) {
 		    last if( $f->{'t'} > time );
 
 		    push( @answer, { 'pid' => $pid, 'nodetype' => $type,
