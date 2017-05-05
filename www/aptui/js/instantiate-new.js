@@ -1862,8 +1862,10 @@ $(function ()
 	}
 
 	// Moved here to deal with race condition of custer status
-	// getting built before constraints were finished running
-	$($('#profile_pid_picker .dropdown-menu a')[0]).click();
+      // getting built before constraints were finished running
+        if ($('#profile_pid').val() != $('#profile_pid_picker .dropdown-toggle .value').html()) {
+	    $($('#profile_pid_picker .dropdown-menu a')[0]).click();
+        }
 	CreateClusterStatus();
     }
 
