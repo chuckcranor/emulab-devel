@@ -47,8 +47,8 @@ my $SFSHOSTKEY  = "/etc/sfs/sfs_host_key";
 my $MOUNTINFO	= "/var/db/mounttab";
 my $ENTROPY	= "/var/db/entropy/*";
 my $LOADERCONF	= "/boot/loader.conf";
-my $PUBSUBCONF  = "/usr/local/etc/pubsub.conf";
-my $PUBSUBEXPR  = "/usr/local/etc/pubsub.expr";
+my $PUBSUBCONF  = "/usr/local/etc/pubsubd.conf";
+my $PUBSUBEXPR  = "/usr/local/etc/pubsubd.expr";
 
 #
 #
