@@ -1160,7 +1160,7 @@ $(function ()
 
 	    $('#profile_pid_picker .dropdown-menu > li').sort(SortProfileList).prependTo($('#profile_pid_picker .dropdown-menu'));
 
-	    $($('#profile_pid_picker .dropdown-menu a')[0]).click()
+	    $($('#profile_pid_picker .dropdown-menu a')[0]).click();
 	}
     }
 
@@ -1863,6 +1863,7 @@ $(function ()
 
 	// Moved here to deal with race condition of custer status
 	// getting built before constraints were finished running
+	$($('#profile_pid_picker .dropdown-menu a')[0]).click();
 	CreateClusterStatus();
     }
 

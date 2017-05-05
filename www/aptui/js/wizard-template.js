@@ -89,7 +89,6 @@ window.wt = (function() {
 	}
 
 	function ResClickEvent(container, that, target) {
-		console.log(that);
 	    if ($(that).find('.warning_icon').length) {
 		if (!$(container).find('.dropdown-toggle > .warning_icon').length) {
 		    $(container).find('.dropdown-toggle').append('<div class="'+$(that).find('.warning_icon').attr('class')+'"></div>');
