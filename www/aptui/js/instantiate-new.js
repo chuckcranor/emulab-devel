@@ -156,7 +156,7 @@ $(function ()
         CookieCollapse('#profile_name > span', 'pp_collpased');
         _.defer(function () {
 	    monitor = JSON.parse(_.unescape($('script#amstatus-json').html()));
-	    CreateClusterStatus();
+	    //CreateClusterStatus();
         });
 	$('#waitwait_div').html(waitwaitString);
         $('#waitwait-modal').modal({ backdrop: 'static', keyboard: false, show: false });
@@ -1851,7 +1851,7 @@ $(function ()
 		var nodes   = nodesBySite[siteId];
 		var sitenum = siteIdToSiteNum[siteId];
 		var domid   = '#cluster_selector #site' + sitenum + 'cluster' +
-		    '.cluster-group';
+		    ' .cluster-group';
 		if (nodes) {
 		    updateSiteConstraints(nodes, $(domid));
 		}
