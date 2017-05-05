@@ -212,12 +212,14 @@
 		  style='margin-right: 10px;'
              name='create'>Instantiate
 	  </button>
+	  <% if (!fromrepo) { %>
 	  <a class='btn btn-primary btn-xs pull-right'
              style='margin-right: 10px;'
              type='button'
 	     href='manage_profile.php?action=copy&uuid=<%= version_uuid %>'>
             Copy
 	  </a>
+	  <% } %>
 	<% } %>
 	<% if (canedit) { %>
 	  <a class='btn btn-primary btn-xs pull-right'

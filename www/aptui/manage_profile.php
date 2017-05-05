@@ -75,6 +75,7 @@ function SPITFORM($formfields, $errors)
     $canrepo    = (ISADMIN() || STUDLY() ? 1 : 0);
     $multisite  = 1;
     $cloning    = 0;
+    $copying    = 0;
     $disabled   = 0;
     $version_uuid = "null";
     $profile_uuid = "null";
@@ -111,6 +112,9 @@ function SPITFORM($formfields, $errors)
         if ($action == "copy" || $action == "clone") {
             if ($action == "clone") {
                 $cloning = 1;
+            }
+            else {
+                $copying = 1;
             }
 	    $action = "create";
         }
@@ -198,6 +202,7 @@ function SPITFORM($formfields, $errors)
     echo "    window.MULTISITE  = $multisite;\n";
     echo "    window.HISTORY  = $history;\n";
     echo "    window.CLONING  = $cloning;\n";
+    echo "    window.COPYING  = $copying;\n";
     echo "    window.ACTIVITY = $activity;\n";
     echo "    window.TITLE    = '$title';\n";
     echo "    window.BUTTONLABEL = '$button_label';\n";

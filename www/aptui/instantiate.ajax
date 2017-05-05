@@ -75,6 +75,7 @@ function Do_GetProfile()
                             'created'     => $profile->created(),
 			    'ispprofile'  => $ispp,
                             'isscript'    => ($profile->script() ? 1 : 0),
+                            'fromrepo'    => ($profile->repourl() ? 1 : 0),
 			    'amdefault'   => $amdefault));
 }
 

@@ -116,6 +116,11 @@ $(function ()
 	$('#approval_div').html(approvalString);
 	$('#linktest_div').html(linktestString);
 
+	// Not allowed to clone/copy repobased profiles.
+	if (window.APT_OPTIONS.repourl !== undefined) {
+	    $('#copy_button').addClass("hidden");
+	}
+
 	// Format dates with moment before display.
 	$('.format-date').each(function() {
 	    var date = $.trim($(this).html());
@@ -1828,7 +1833,8 @@ $(function ()
 	     * created from in order to do a snapshot.
 	     */
 	    if (nodecount == 1) {
-		if (window.APT_OPTIONS.canclone) {
+		if (window.APT_OPTIONS.canclone &&
+		    window.APT_OPTIONS.repourl === undefined) {
 		    $("#clone_button").removeClass("hidden");
 		}
 		if (window.APT_OPTIONS.cansnap) {

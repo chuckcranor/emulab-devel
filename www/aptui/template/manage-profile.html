@@ -365,19 +365,21 @@
 		      </span>
 		    <% } %>
 		    <% if (! (viewing || window.CLONING)) { %>
-		      or
-		      <span data-toggle='popover'
+		      <span id="git-repo-button-div">
+			or
+			<span data-toggle='popover'
 			    data-delay='{"hide":500, "show":500}'
 			    data-html='true'
 			    data-content="Supply your profile source from a
 					  Git repository.
 					  Click for more info.">
-			<button class='btn btn-primary btn-xs'
-     				data-toggle='modal'
-				data-target='#git-repo-modal'
-				type='button'
-				style='margin-left: 10px;'
-				id='git-repo-button'>Git Repo</button>
+			  <button class='btn btn-primary btn-xs'
+				  data-toggle='modal'
+				  data-target='#git-repo-modal'
+				  type='button'
+				  style='margin-left: 10px;'
+				  id='git-repo-button'>Git Repo</button>
+			</span>
 		      </span>
 		    <% } %>
 		  </div>
@@ -724,6 +726,7 @@
 		      </button>
 		    </span>
 		  <% } %>
+		  <% if (!fromrepo) { %>
 		  <a class='btn btn-primary btn-xs pull-left'
                      id='profile_copy_button'
                      style='margin-right: 10px;'
@@ -740,6 +743,7 @@
 				   whatever images the original profile uses."> 
                     Copy
 		  </a>
+		  <% } %>
 		  <span class='pull-left'
 			data-toggle='popover'
 			data-delay='{"hide":1500, "show":250}'

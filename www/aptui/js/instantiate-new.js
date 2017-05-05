@@ -144,6 +144,7 @@ $(function ()
 	    profilevers:        window.PROFILEVERS,     
 	    showpicker:         showpicker,
 	    cancopy:            window.CANCOPY,
+	    fromrepo:           fromrepo,
 	    clustername:        window.PORTAL_NAME,
 	    admin:		isadmin,
 	    maxduration:        window.MAXDURATION,
@@ -1353,6 +1354,14 @@ $(function ()
 	    selected_rspec   = profile_blob.rspec;
 	    selected_version = profile_blob.version;
 	    amdefault        = profile_blob.amdefault;
+
+	    // Not allowed to copy a repo based profile.
+	    if (profile_blob.fromrepo) {
+		$('#profile_copy_button').addClass("hidden");
+	    }
+	    else {
+		$('#profile_copy_button').removeClass("hidden");
+	    }
 
 	    /*
 	     * Change the project; if the user's project list includes
