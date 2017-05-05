@@ -88,6 +88,11 @@ echo "<div id='main-body'>
         <div id='spinner'>
           <center id='spinner'><img src='images/spinner.gif' /></center><br>
         </div>
+        <div id='no-images-message' class='hidden'>
+         <center>
+          You have no images (clones or snapshots) yet.
+         </center>
+        </div>
       </div>\n";
 
 # Place to hang the modals for now

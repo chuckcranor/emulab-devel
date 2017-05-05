@@ -46,8 +46,13 @@ $(function ()
 		    return;
 		}
 		var images = json.value;
-		if (images.length == 0) 
+		if (images.length == 0) {
+		    // No images, say something.
+		    if (count <= 0 && imagelist.length == 0) {
+			$('#no-images-message').removeClass("hidden");
+		    }
 		    return;
+		}
 		// Save for later
 		imagelist[name] = images;
 
