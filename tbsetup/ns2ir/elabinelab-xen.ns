@@ -41,6 +41,9 @@ tb-set-node-failure-action $myops  "nonfatal"
 if {[info exists ::TBCOMPAT::elabinelab_hardware("boss")]} {
     namespace eval TBCOMPAT {
         tb-set-hardware $myboss $elabinelab_hardware("boss")
+	if {$elabinelab_hardware("boss") == "d820-vm"} {
+	    $myboss add-desire "d820-explicit" 1.0
+	}
     }
 } else {
     tb-set-hardware $myboss $srvtype
@@ -48,6 +51,9 @@ if {[info exists ::TBCOMPAT::elabinelab_hardware("boss")]} {
 if {[info exists ::TBCOMPAT::elabinelab_hardware("ops")]} {
     namespace eval TBCOMPAT {
         tb-set-hardware $myops $elabinelab_hardware("ops")
+	if {$elabinelab_hardware("ops") == "d820-vm"} {
+	    $myops add-desire "d820-explicit" 1.0
+	}
     }
 } else {
     tb-set-hardware $myops $srvtype
