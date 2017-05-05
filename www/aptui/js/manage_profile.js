@@ -1705,6 +1705,22 @@ $(function ()
 		$('#edit_topo_modal_button').html('View Topology');
 		$('#show_source_modal_button').html('View Code');
 	    }
+	    if (fromrepo) {
+		// Hide the file upload button, user is committed
+		$('#sourcefile-button-div').addClass("hidden");
+	    }
+	    if (portal_converted) {
+		// Hide the file upload button, user is committed
+		$('#sourcefile-button-div').addClass("hidden");
+		// Ditto the git-repo button.
+		$('#git-repo-button-div').addClass("hidden");
+	    }
+	    if (window.CLONING || window.COPYING) {
+		// Hide the file upload button, user is committed
+		$('#sourcefile-button-div').addClass("hidden");
+		// Ditto the git-repo button.
+		$('#git-repo-button-div').addClass("hidden");
+	    }
 	}
     }
 
