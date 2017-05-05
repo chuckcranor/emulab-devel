@@ -235,6 +235,12 @@ function REQUIRE_WIZARD_TEMPLATE()
   AddLibrary("js/wizard-template.js");
 }
 
+function REQUIRE_PICKER()
+{
+  REQUIRE_UNDERSCORE();
+  AddLibrary("js/picker.js");
+}
+
 function REQUIRE_GENILIB_EDITOR()
 {
   REQUIRE_UNDERSCORE();

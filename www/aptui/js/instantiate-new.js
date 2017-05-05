@@ -156,7 +156,7 @@ $(function ()
         CookieCollapse('#profile_name > span', 'pp_collpased');
         _.defer(function () {
 	    monitor = JSON.parse(_.unescape($('script#amstatus-json').html()));
-	    CreateClusterStatus();
+	    //CreateClusterStatus();
         });
 	$('#waitwait_div').html(waitwaitString);
         $('#waitwait-modal').modal({ backdrop: 'static', keyboard: false, show: false });
@@ -928,7 +928,6 @@ $(function ()
     }
     
     function CreateClusterStatus() {
-	//console.log("CreateClusterStatus", monitor);
 	if (monitor == null || $.isEmptyObject(monitor)) {
 	    return;
 	}
@@ -953,16 +952,47 @@ $(function ()
 	    }
 	    var which = $(this).parent().attr('id');
 
-	    var html = wt.ClusterStatusHTML($('#'+which+' .form-control option'), window.FEDERATEDLIST);
+	    // Decide what classes each option element should have
+	    var pickerTarget = '#'+which+' .select_where';
+	    var attributes = {}
 
-	    $('#'+which+' .form-control').after(html);
-	    $('#'+which+' select.form-control').addClass('hidden');
+	    $(pickerTarget).find('option').each(function() {
+		var attrs = {}
+		var siteName = $(this).attr('value');
 
-	    html.find('.dropdown-menu a').on('click', function() {   
-		wt.StatusClickEvent(html, this);
-		$('#'+which+' .form-control').val($('#'+which+' .cluster_picker_status .value').html()); 
+		// Hide "Please Select" option
+		if (siteName == "") {
+		    attrs['class'] = 'hidden enabled';
+		}
+		else if ($(this).prop('disabled')) {
+		    attrs['class'] = 'disabled';
+		    attrs['tooltip'] = {
+			placement: 'right',
+			title: '<div>This testbed is incompatible with the selected profile</div>'
+		    }
+		}
+		else {
+		    attrs['class'] = 'enabled';
+		}
+
+		if (_.contains(window.FEDERATEDLIST, $(this).attr('value'))) {
+		    attrs['class'] += " federated";
+		}
+
+		attributes[siteName] = attrs;
 	    });
 
+	    var dividers = [{ match: 'class',
+			      key: 'federated',
+			      text: 'Federated Clusters'
+			    },
+			    { match: 'class',
+			      key: 'disabled'
+			    }];
+
+	    picker.MakePicker(pickerTarget, wt.StatusClickEvent, attributes, dividers, {class: 'cluster_picker_status'});
+
+	    // Assign health ratings and icons
 	    _.each(amlist, function(name, key) {
 		var data = monitor[key];
 		var rating, classes;
@@ -1006,6 +1036,7 @@ $(function ()
 	}
 
 	var project = $('#profile_pid').val();
+	var projectReservations = {}
 
 	$('#reservation_confirmation').addClass('hidden');
 	$('#reservation_warning').addClass('hidden');
@@ -1027,22 +1058,42 @@ $(function ()
 		if (_.has(resinfo, cluster) && resinfo[cluster] != null) {
 		    if (_.has(resinfo[cluster], 'reservations') && resinfo[cluster]['reservations'] != null) {
 			_.each(resinfo[cluster]['reservations'], function(types, resproj) {
+			    var earliest = null;
+			    // Find earliest reservation time
+			    _.each(types, function(time) {
+				if (earliest == null || earliest > time) {
+				    earliest = time;
+				}
+			    });
+			    
+			    // Current project has a reservation
+			    // Used for cluster icons
 			    if (project == resproj) {
 				hasReservation = true;
 				click = true;
-				// Get nearest time
-				_.each(types, function(time) {
-				    if (start == null || start > time) {
-					start = time;
-				    }
-				});
+				start = earliest;
+			    }
+
+			    // Icon for projects
+			    var projectClass = 'futureReservation';
+			    var priority = 1; // Used for sorting projects
+
+			    var now = new Date();
+			    var startTime = new Date(parseInt(earliest)*1000);
+			    if (startTime < now) {
+				projectClass = 'hasReservation';
+				priority = 2;
+			    }
+
+			    projectReservations[resproj] = {
+				class: projectClass,
+				attr: {'data-priority': priority}
 			    }
 			});
 		    }
 
 		    if (_.has(resinfo[cluster], 'pressure') && resinfo[cluster]['pressure'] != null) {
 			if (!hasReservation) {
-				console.log('here');
 			    _.each(resinfo[cluster]['pressure'], function(reslist) {
 				if (_.has(reslist, project)) {
 				    if (start == null || start > reslist[project][0][0]) {
@@ -1058,10 +1109,10 @@ $(function ()
 			$(this).attr('data-res-pid', project);
 			$(this).attr('data-res-start', start);
 			if (end != null) {
-		    	    $(this).removeAttr('data-now');
+			    $(this).removeAttr('data-now');
 
 			    $(this).attr('data-res-end', end);
-			    target.append(wt.ReservationWarningHTML());
+			    target.append(wt.ReservationWarningHTML('cluster', 2));
 			}
 			else {
 			    $(this).removeAttr('data-res-end');
@@ -1070,11 +1121,11 @@ $(function ()
 
 			    if (startTime < now) {
 				$(this).attr('data-now', 'true');
-				target.append(wt.HasReservationHTML(project));
+				target.append(wt.HasReservationHTML(project, 'cluster', 2));
 			    }
 			    else {
 				$(this).attr('data-now', 'false');
-				target.append(wt.FutureReservationHTML(project));
+				target.append(wt.FutureReservationHTML(project, 'cluster', 2));
 			    }
 			}
 			$('.reservation_tooltip > div').tooltip();
@@ -1100,6 +1151,17 @@ $(function ()
 		$('#'+which+' .cluster_picker_status .dropdown-menu .selected a').click();
 	    }
 	});
+	if (_.keys(projectReservations).length > 0 && $('#profile_pid_picker').length == 0) {
+	    picker.MakePicker('#profile_pid', wt.ResClickEvent, projectReservations);
+
+	    // Add icons
+	    $('#profile_pid_picker .dropdown-menu .hasReservation a').append(wt.HasReservationHTML(project, 'project', 1))
+	    $('#profile_pid_picker .dropdown-menu .futureReservation a').append(wt.FutureReservationHTML(project, 'project', 1))
+
+	    $('#profile_pid_picker .dropdown-menu > li').sort(SortProfileList).prependTo($('#profile_pid_picker .dropdown-menu'));
+
+	    $($('#profile_pid_picker .dropdown-menu a')[0]).click();
+	}
     }
 
     function SortClusterStatus(a, b) {
@@ -1121,6 +1183,14 @@ $(function ()
 	    return 1;
 	}
 	return +b.dataset.rating - +a.dataset.rating;
+    }
+
+    function SortProfileList(a, b) {
+	if ((!a.dataset.priority && b.dataset.priority) || (a.dataset.priority < b.dataset.priority)) {
+	    return 1;
+	}
+
+	return -1;
     }
 
     function SwitchJacks(which) {
@@ -1525,7 +1595,7 @@ $(function ()
 		"    </label> " +
 		"    <div class='col-sm-6'>" +
 		"      <select name='where' id='profile_where' " +
-		"              class='form-control'>" +
+		"              class='form-control select_where'>" +
 		"        <option value=''>Please Select</option>" +
 		options +
 		"      </select>" +
@@ -1548,8 +1618,8 @@ $(function ()
 		    "          Site " + siteid  + " Cluster:</a>" +
 		    "    </label> " +
 		    "    <div class='col-sm-6'>" +
-		    "      <select name=\"sites[" + siteid + "]\"" +
-		    "              class='form-control'>" +
+		    "      <select id='site"+sitenum+"_selector' name=\"sites[" + siteid + "]\"" +
+		    "              class='form-control select_where'>" +
 		    "        <option value=''>Please Select</option>" +
 		    options +
 		    "      </select>" +
@@ -1566,7 +1636,6 @@ $(function ()
 	$("#cluster_selector").html("");
 	$("#cluster_selector").html(html);
 	updateWhere();  
-	CreateClusterStatus();
 	$("#cluster_selector").removeClass("hidden");
     }
 
@@ -1782,7 +1851,7 @@ $(function ()
 		var nodes   = nodesBySite[siteId];
 		var sitenum = siteIdToSiteNum[siteId];
 		var domid   = '#cluster_selector #site' + sitenum + 'cluster' +
-		    '.cluster-group';
+		    ' .cluster-group';
 		if (nodes) {
 		    updateSiteConstraints(nodes, $(domid));
 		}
@@ -1791,6 +1860,11 @@ $(function ()
 		}
 	    })
 	}
+
+	// Moved here to deal with race condition of custer status
+	// getting built before constraints were finished running
+	$($('#profile_pid_picker .dropdown-menu a')[0]).click();
+	CreateClusterStatus();
     }
 
     function updateSiteConstraints(nodes, domNode)
