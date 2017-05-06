@@ -360,7 +360,9 @@ $routing = array("myprofiles" =>
 			      "methods" => array("ListImages" =>
                                                      "Do_ListImages",
                                                  "DeleteImage" =>
-                                                     "Do_DeleteImage")),
+                                                     "Do_DeleteImage",
+                                                 "ClassicImages" =>
+                                                     "Do_ClassicImageList")),
 		 "news" =>
 			array("file"    => "news.ajax",
 			      "guest"   => true,

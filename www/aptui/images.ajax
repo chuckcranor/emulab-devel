@@ -24,6 +24,7 @@
 chdir("..");
 include_once("webtask.php");
 chdir("apt");
+include_once("ajax-routines.ajax");
 
 # We set this in CheckPageArgs
 $target_user = null;
@@ -168,6 +169,22 @@ function Do_DeleteImage()
     }
     $webtask->Delete();
     SPITAJAX_RESPONSE(0);
+}
+
+#
+# Classic images on the local cluster.
+#
+function Do_ClassicImageList()
+{
+    global $this_user, $target_user;
+    global $ajax_args;
+    global $TB_PROJECT_CREATEEXPT, $suexec_output;
+
+    if (CheckPageArgs()) {
+        return;
+    }
+    $images = ClassicImageList($target_user);
+    SPITAJAX_RESPONSE($images);
 }
 
 # Local Variables:

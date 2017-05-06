@@ -2,10 +2,12 @@ $(function ()
 {
     'use strict';
 
-    var template_list   = ["image-list", "oops-modal", "confirm-delete-image",
+    var template_list   = ["image-list", "classic-image-list",
+			   "oops-modal", "confirm-delete-image",
 			   "waitwait-modal"];
     var templates       = APT_OPTIONS.fetchTemplateList(template_list);    
     var listTemplate    = _.template(templates["image-list"]);
+    var classicTemplate = _.template(templates["classic-image-list"]);
     var confirmTemplate = _.template(templates["confirm-delete-image"]);
     var oopsString      = templates["oops-modal"];
     var waitwaitString  = templates["waitwait-modal"];
@@ -22,6 +24,7 @@ $(function ()
 	$('#waitwait_div').html(waitwaitString);
 
 	LoadData();
+	LoadClassic();
     }
 
     /*
@@ -352,6 +355,84 @@ $(function ()
 			  $('#confirm-delete-image-modal #confirm-delete-image')
 			      .unbind("click");			  
 		      });
+    }
+
+    /*
+     * Load images from each am in the list and generate a table.
+     */
+    function LoadClassic()
+    {
+	var callback = function (json) {
+	    console.log("classic", json);
+	    if (json.code) {
+		console.info("failed to get classic list: " + json.value);
+		return;
+	    }
+	    var html = classicTemplate({
+		"images"       : json.value,
+	    });
+	    $('#classic-images-div').html(html);
+	    // Format dates with moment before display.
+	    $('#classic-images-table .format-date').each(function() {
+		var date = $.trim($(this).html());
+		if (date != "") {
+		    $(this).html(moment($(this).html()).format("ll"));
+		}
+	    });
+	    // This activates the popover subsystem.
+	    $('#classic-images-table [data-toggle="popover"]').popover({
+		placement: 'auto',
+	    });
+	    // Prevent shooting to the top of the page on clicking the popover.
+	    $('#classic-images-table [data-toggle="popover"]')
+		.click(function (event) {
+		    event.preventDefault();
+		});
+	    // This is to make the URN popover go away on click outside.
+	    $('body').on('click', function (e) {
+		$('[data-toggle="popover"]')
+		    .each(function () {
+			//the 'is' for buttons that trigger popups
+			//the 'has' for icons within a button that
+			//triggers a popup
+			if (!$(this).is(e.target) &&
+			    $(this).has(e.target).length === 0 &&
+			    $('.popover').has(e.target).length === 0) {
+			    $(this).popover('hide');
+			}
+		    });
+	    });
+	    $('#classic-images-div').removeClass("hidden");
+
+	    var table = $('#classic-images-table')
+		.tablesorter({
+		    theme : 'green',
+		    widgets: ["zebra", "filter"],
+		    
+		    widgetOptions: {
+			// include all columns in the search.
+			filter_anyMatch   : true,
+			// search from beginning
+			filter_startsWith : false,
+			// Set this option to false for case sensitive search
+			filter_ignoreCase : true,
+			// Only one search box.
+			filter_columnFilters : false,
+			// Search as typing
+			filter_liveSearch : true,
+		    },
+		    headers: {
+			3: {sorter: false},
+			4: {sorter: false},
+		    },
+		});
+	    $.tablesorter.filter.bindSearch(table, $('#classic-images-search'));
+	}
+	var args = {"uid" : window.TARGET_USER};
+	
+	var xmlthing = sup.CallServerMethod(null, "images",
+					    "ClassicImages", args);
+	xmlthing.done(callback);
     }
     
     // Helper.

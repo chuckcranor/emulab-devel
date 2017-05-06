@@ -459,6 +459,63 @@ function ClassicDatasetList($which, $target)
     return $results;
 }
 
+#
+# Classic images. For now, just one list. Maybe this will be per
+# user/project/group in the future.
+#
+function ClassicImageList($target)
+{
+    global $urn_mapping, $TBBASE, $ISEMULAB, $TBMAINSITE, $OURDOMAIN;
+    global $this_user;
+
+    $target_idx = $target->uid_idx();
+    $results    = array();
+
+    $query =
+           "select distinct iv.*,ov.* from images as i ".
+           "left join image_versions as iv on ".
+           "          iv.imageid=i.imageid and iv.version=i.version ".
+           "left join os_info_versions as ov on ".
+           "          i.imageid=ov.osid and ov.vers=i.version ".
+           "left join osidtoimageid as map on map.osid=i.imageid ".
+           "where (iv.ezid = 1 and iv.isdataset=0) and ".
+           "      iv.creator_urn is null and ".
+           "      iv.creator_idx='$target_idx' ".
+           "order by i.imagename";
+
+    $query_result = DBQueryFatal($query);
+
+    $domain = $OURDOMAIN;
+    if ($TBMAINSITE) {
+        $domain = "emulab.net";
+    }
+
+    while ($row = mysql_fetch_array($query_result)) {
+	$imageid = $row["imageid"];
+        $name    = $row["imagename"];
+        $pid     = $row["pid"];
+        $urn     = "urn:publicid:IDN+${domain}+image+${pid}//${name}";
+        $blob    = array();
+
+        $blob["imageid"]     = $imageid;
+        $blob["description"] = $row["description"];
+        $blob["imagename"]   = $row["imagename"];
+        $blob["created"]     = DateStringGMT($row["created"]);
+        $blob["pid"]         = $row["pid"];
+        $blob["pid_idx"]     = $row["pid_idx"];
+        $blob["global"]      = $row["global"];
+        $blob["creator"]     = $row["creator"];
+        $blob["creator_idx"] = $row["creator_idx"];
+        $blob["urn"]         = $urn;
+        $blob["filter"]      = implode(",", $filters);
+	$blob["url"]         = $TBBASE . "/" .
+                             CreateURL("showimageid",
+                                       URLARG_IMAGEID, $imageid);
+        $results[] = $blob;
+    }
+    return $results;
+}
+
 # Local Variables:
 # mode:php
 # End:

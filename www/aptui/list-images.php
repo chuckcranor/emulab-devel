@@ -93,6 +93,7 @@ echo "<div id='main-body'>
           You have no images (clones or snapshots) yet.
          </center>
         </div>
+        <div id='classic-images-div' class='hidden'></div>
       </div>\n";
 
 # Place to hang the modals for now
@@ -107,7 +108,8 @@ echo "</script>\n";
 REQUIRE_UNDERSCORE();
 REQUIRE_SUP();
 REQUIRE_MOMENT();
-AddTemplateList(array("image-list", "confirm-delete-image",
+AddTemplateList(array("image-list", "classic-image-list",
+                      "confirm-delete-image",
                       "oops-modal", "waitwait-modal"));
 SPITREQUIRE("js/list-images.js",
         "<script src='js/lib/jquery.tablesorter.min.js'></script>\n".
