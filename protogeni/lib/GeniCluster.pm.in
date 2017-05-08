@@ -1116,6 +1116,7 @@ sub ReservationPrediction($)
     # clearly no reservations for it.
     #
     my @projlist = ();
+    my %projlist = ();
     foreach my $projurn (@{$projlist}) {
 	my $project;
 	my $hrn = GeniHRN->new($projurn);
@@ -1133,14 +1134,17 @@ sub ReservationPrediction($)
 	    $project = Project->LookupNonLocal($purn);
 	}
 	next
-	    if (!defined($project)); 
+	    if (!defined($project));
 
+	$projlist{$project->pid()} = $hrn;
 	push(@projlist, $project->pid());
     }
     my $pressure    = {};
     my $outstanding = {};
     my $freecounts  = {};
     my $forecast    = {};
+    my $current     = {};
+    my $upcoming    = {};
 
     my @types = Reservation->ReservableTypes();
     foreach my $type (@types) {
@@ -1158,10 +1162,14 @@ sub ReservationPrediction($)
 		if (!@pairs);
 	    #print STDERR "P: $pid,$type,@pairs\n";
 
-	    $pressure->{$type}->{$pid} = \@pairs;
+	    my $hrn  = $projlist{$pid};
+	    my $epid = $hrn->project();
+	    $pressure->{$type}->{$epid} = \@pairs;
 	}
     }
     foreach my $pid (@projlist) {
+	my $hrn  = $projlist{$pid};
+	my $epid = $hrn->project();
 	foreach my $type (Reservation->ReservableTypes())  {
 	    my $type = $type->type();
 	    my $stamp = Reservation->OutstandingReservation([$pid],[$type]);
@@ -1169,15 +1177,38 @@ sub ReservationPrediction($)
 		if (!$stamp);
 	    #print STDERR "O: $pid,$type,$stamp\n";
 
-	    $outstanding->{$pid}->{$type} = $stamp;
+	    $outstanding->{$epid}->{$type} = $stamp;
 	}
+    }
+    my @current  = Reservation->CurrentReservations(\@projlist);
+    for my $ref (@current) {
+	my $pid  = $ref->{'pid'};
+	my $hrn  = $projlist{$pid};
+	my $epid = $hrn->project();
+	if (!exists($current->{$epid})) {
+	    $current->{$epid} = [];
+	}
+	push(@{$current->{$epid}}, $ref)
+    }
+    my @upcoming = Reservation->UpcomingReservations(\@projlist);
+    for my $ref (@upcoming) {
+	my $pid  = $ref->{'pid'};
+	my $hrn  = $projlist{$pid};
+	my $epid = $hrn->project();
+	if (!exists($upcoming->{$epid})) {
+	    $upcoming->{$epid} = [];
+	}
+	push(@{$upcoming->{$epid}}, $ref)
     }
     my $blob = {
 	"freecounts"   => $freecounts,
 	"forecast"     => $forecast,
 	"pressure"     => $pressure,
 	"reservations" => $outstanding,
+	"upcoming"     => $upcoming,
+	"current"      => $current,
     };
+    #print STDERR Dumper($blob);
     return GeniResponse->Create(GENIRESPONSE_SUCCESS, $blob);
 }
 
