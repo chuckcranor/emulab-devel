@@ -13,7 +13,7 @@ $(function ()
     var waitwaitString  = templates["waitwait-modal"];
     var amlist = null;
     // Results for each AM so we can get it later. 
-    var imagelist       = []; 
+    var imagelist       = {}; 
     
     function initialize()
     {
@@ -51,7 +51,8 @@ $(function ()
 		var images = json.value;
 		if (images.length == 0) {
 		    // No images, say something.
-		    if (count <= 0 && imagelist.length == 0) {
+		    console.info("foo", count, imagelist);
+		    if (count <= 0 && Object.keys(imagelist) == 0) {
 			$('#no-images-message').removeClass("hidden");
 		    }
 		    return;
