@@ -174,6 +174,15 @@ foreach my $n (@node_names) {
 }
 TBDebugTimeStamp("nalloc checked all node permissions");
 
+# Save a list of nodes already pre-reserved to the project: requests
+# for them can be ignored for admission control purposes.
+my @trivial_nodes = ();
+my $query_result = DBQueryFatal( "SELECT node_id FROM nodes WHERE " .
+				 "reserved_pid='$pid'" );
+while( my($node_id) = $query_result->fetchrow_array() ) {
+    push( @trivial_nodes, $node_id );
+}
+
 my $endtime = Reservation->ExpectedEnd( $experiment );
 
 # Argh, MySQL locking rules are horrendous!  These locks are required by
@@ -243,7 +252,8 @@ if ($debug) {
 my %types = ();
 my %unavail_types = ();
 foreach my $node (@nodes) {
-    $types{ $node->type() } = 1;
+    $types{ $node->type() } = 1
+	unless( grep( $_ eq $node->node_id(), @trivial_nodes ) );
 }
 foreach my $type ( keys( %types ) ) {
     my $reservations = Reservation->LookupAll( $type );
@@ -260,7 +270,8 @@ foreach my $type ( keys( %types ) ) {
     my $reservations = Reservation->LookupAll( $type );
     my $count = 0;
     foreach my $node (@nodes) {
-	$count++ if( $node->type() eq $type );
+	$count++ if( $node->type() eq $type &&
+		     !grep( $_ eq $node->node_id(), @trivial_nodes ) );
     }
     
     my $res = Reservation->CreateImmediate( $pid, $eid,
