@@ -967,15 +967,12 @@ sub CurrentReservations($$) {
     }
 
     my $query_result = DBQueryFatal(
-	"SELECT q.*, COUNT(*) AS used FROM (" .
-	    "SELECT pid, type, SUM( nodes ) AS reserved FROM " .
-	    "future_reservations WHERE start <= NOW() AND end > NOW() AND " .
-	    "pid IN ('" .
-	    join( "','", @$projlist ) .
-	    "') GROUP BY pid, type) AS q ".
-	"LEFT OUTER JOIN reserved AS r ON q.pid=r.pid " .
-	"INNER JOIN nodes AS n ON r.node_id=n.node_id WHERE " .
-	"n.type=q.type GROUP BY q.pid, q.type" );
+	"SELECT r.pid, r.type, SUM( r.nodes ), " .
+	    "(SELECT COUNT(*) FROM reserved AS res, nodes AS n WHERE " .
+	    "res.pid=r.pid AND res.node_id=n.node_id AND n.type=r.type) " .
+	"FROM future_reservations AS r WHERE r.pid IN ('" .
+	join( "','", @$projlist ) .
+	"') AND r.approved IS NOT NULL GROUP BY r.pid, r.type" );
 
     while( my($pid, $type, $reserved, $used) =
 	   $query_result->fetchrow_array() ) {
@@ -1003,6 +1000,7 @@ sub UpcomingReservations($$) {
 				     "UNIX_TIMESTAMP(start) AS starttime, " .
 				     "UNIX_TIMESTAMP(end) AS endtime FROM " .
 				     "future_reservations WHERE " .
+				     "approved IS NOT NULL AND " .
 				     "start > NOW() AND " .
 				     "start <= ADDDATE( NOW(), 1 ) AND " .
 				     "pid IN ('" .
