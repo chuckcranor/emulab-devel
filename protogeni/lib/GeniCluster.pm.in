@@ -1107,8 +1107,7 @@ sub ReservationPrediction($)
     return GeniResponse->MalformedArgsResponse("Missing project list")
 	if (!(exists($argref->{"projlist"}) && defined($argref->{"projlist"})));
     
-    my $projlist = $argref->{"projlist"};
-    if (ref($projlist) ne "ARRAY") {
+    if (ref($argref->{"projlist"}) ne "ARRAY") {
 	return GeniResponse->MalformedArgsResponse("Malformed project list")
     }
     #
@@ -1117,7 +1116,7 @@ sub ReservationPrediction($)
     #
     my @projlist = ();
     my %projlist = ();
-    foreach my $projurn (@{$projlist}) {
+    foreach my $projurn (@{$argref->{"projlist"}}) {
 	my $project;
 	my $hrn = GeniHRN->new($projurn);
 	next
