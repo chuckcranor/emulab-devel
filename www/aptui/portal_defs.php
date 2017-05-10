@@ -48,7 +48,7 @@ $WITHPUBLISHING = 0;
 #
 # Other Portal globals. 
 #
-$PORTAL_MANUAL          = "https://wiki.emulab.net/wikidocs/wiki";
+$PORTAL_MANUAL          = "https://docs.emulab.net";
 $PORTAL_HELPFORUM       = "emulab-users";
 $PORTAL_PASSWORD_HELP   = "Emulab Username or Email";
 $PORTAL_NSFNUMBER       = "CNS-58502134";
