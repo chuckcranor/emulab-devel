@@ -411,9 +411,8 @@ function SPITFORM($formfields, $newuser, $errors)
     echo "    window.ISADMIN    = $isadmin;\n";
     $multisite = (isset($this_user) ? 1 : 0);
     echo "    window.MULTISITE  = $multisite;\n";
-    $doconstraints = (isset($this_user) &&
-                      (ISADMINISTRATOR() || STUDLY()) ? 1 : 0);
-    echo "    window.DOCONSTRAINTS = 1;\n";
+    $doconstraints = $TBMAINSITE;
+    echo "    window.DOCONSTRAINTS = $doconstraints;\n";
     echo "    window.SKIPFIRSTSTEP = " . ($skipfirststep ? "true" : "false") . ";\n";
     echo "    window.PORTAL_NAME = '$PORTAL_NAME';\n";
     echo "    window.USERNAME = '" . $formfields["username"] . "';\n";
