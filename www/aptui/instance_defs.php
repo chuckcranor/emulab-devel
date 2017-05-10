@@ -932,7 +932,30 @@ class ExtensionInfo
 
 # $amlist, $fedlist, and $status are all output arrays
 function CalculateAggregateStatus(&$amlist, &$fedlist, &$status) {
+    global $TBMAINSITE, $DEFAULT_AGGREGATE_URN, $CHECKLOGIN_USER;
     $am_array = Instance::DefaultAggregateList();
+
+    #
+    # If not the Cloudlab Portal then we get local status only.
+    #
+    if (!$TBMAINSITE) {
+        $aggregate = $am_array[$DEFAULT_AGGREGATE_URN];
+        $urn = $aggregate->urn();
+        $am  = $aggregate->name();
+        $amlist[$urn] = $am;
+
+        $freevms = $vmcount = 0;
+        TBVMCounts($vmcount, $freevms);
+
+        $status[$urn] = array(
+            "rawPCsAvailable"  => TBFreePCs($CHECKLOGIN_USER),
+            "rawPCsTotal"      => TBTotalPCs(),
+            "VMsAvailable"     => $freevms,
+            "VMsTotal"         => $vmcount,
+            "health"           => 100,
+            "status"           => "SUCCESS");
+        return;
+    }
     while (list($ignore, $aggregate) = each($am_array)) {
         $urn = $aggregate->urn();
         $am  = $aggregate->name();

@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2016 University of Utah and the Flux Group.
+# Copyright (c) 2000-2017 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -464,6 +464,67 @@ function TBFreePCs($target = null)
         $total += $count;
     }
     return $total;
+}
+
+#
+# Number of PCs. 
+#
+function TBTotalPCs()
+{
+    $total      = 0;
+    
+    $query_result =
+	DBQueryFatal("select a.type,count(a.node_id) from nodes as a ".
+		     "left join node_types as nt on a.type=nt.type ".
+                     "left join node_type_attributes as attr on ".
+                     "     attr.type=a.type and ".
+                     "     attr.attrkey='noshowfreenodes' ".
+		     "where a.role='testnode' and ".
+                     "      attr.attrvalue is null and ".
+		     "      nt.class = 'pc' ".
+		     "group by a.type");
+    
+    if (mysql_num_rows($query_result) == 0) {
+	return 0;
+    }
+    while ($row = mysql_fetch_row($query_result)) {
+        $type  = $row[0];
+        $count = $row[1];
+        $total += $count;
+    }
+    return $total;
+}
+
+#
+# Number of total/free shared VMs. 
+#
+function TBVMCounts(&$total, &$free)
+{
+    $query_result =
+	DBQueryFatal("select n.node_id,aux.count,r.erole from nodes as n ".
+                     "left join reserved as r on r.node_id=n.node_id ".
+		     "left join node_auxtypes as aux on ".
+                     "     aux.node_id=n.node_id and aux.type='pcvm' ".
+                     "where r.erole='sharedhost'");
+
+    if (mysql_num_rows($query_result) == 0) {
+        $total = 0;
+        $free  = 0;
+    }
+    while ($row = mysql_fetch_row($query_result)) {
+        $node_id = $row[0];
+        $count  = $row[1];
+        if (isset($count)) {
+            $total += $count;
+            $used_result =
+                DBQueryFatal("select count(node_id) from nodes ".
+                             "where phys_nodeid='$node_id'");
+            $urow = mysql_fetch_row($used_result);
+            $ucount = $urow[0];
+            $free += $count - $ucount;
+        }
+    }
+    return;
 }
 
 #
