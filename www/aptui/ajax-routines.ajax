@@ -104,7 +104,7 @@ function ClassicExperimentList($which, $target, $state = "active")
         $blob["swapped"]      = $swapped;
         $blob["created"]      = $created;
         $blob["state"]        = $experiment->state();
-        $blob["description"]  = CleanString($experiment->description());
+        $blob["description"]  = $experiment->description();
         $results["$pid:$eid"] = $blob;
     }
     return $results;
