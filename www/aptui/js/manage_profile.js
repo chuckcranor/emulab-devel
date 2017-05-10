@@ -933,6 +933,8 @@ $(function ()
 	var str = s.serializeToString(xml[0]);
 	//console.log(str);
 	$('#profile_rspec_textarea').val(str);
+	// Copy to the hidden area.
+	$('#profile_' + which + ' .textdiv').html(marked(text));
     }
 
     /*
