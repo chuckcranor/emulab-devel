@@ -552,7 +552,7 @@ $PAGEFOOTER_FUNCTION = function($ignored = NULL) {
                    href='#nsf_supported_modal'
 	           data-target='#nsf_supported_modal'>Supported by NSF</a>\n";
         }
-        echo "&copy; 2016
+        echo "&copy; 2017
               <a href='http://www.utah.edu' target='_blank'>
                  The University of Utah</a>
             </div>
