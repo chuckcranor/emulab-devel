@@ -275,7 +275,7 @@ else {
 	$starttime = $oldres->start() unless( defined( $options{"s"} ) );
 	$endtime = $oldres->end() unless( defined( $options{"e"} ) );
     } else {
-	usage() if( @ARGV < 2 || !defined( $type ) );
+	usage() if( @ARGV != 2 || !defined( $type ) );
 	
 	$pid     = shift(@ARGV);
 	$count   = shift(@ARGV);
