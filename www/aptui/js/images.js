@@ -37,7 +37,11 @@ $(function ()
 	    delay: {"hide" : 500, "show" : 150},
 	    placement: 'auto',
 	});
-
+	// Prevent shooting to the top of the page on clicking the popover.
+	$('#images-table [data-toggle="popover"]')
+	    .click(function (event) {
+		event.preventDefault();
+	    });
 	$('body').on('click', function (e) {
 	    $('[data-toggle="popover"]').each(function () {
 		//the 'is' for buttons that trigger popups
