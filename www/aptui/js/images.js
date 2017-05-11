@@ -101,7 +101,7 @@ $(function ()
 	    search_timeout =
 		window.setTimeout(function() {
 		    var filters = $.tablesorter.getFilters($('#images-table'));
-		    filters[6] = userInput;
+		    filters[7] = userInput;
 		    console.info("Search", filters);
 		    $.tablesorter.setFilters($('#images-table'), filters, true);
 		}, 500);
