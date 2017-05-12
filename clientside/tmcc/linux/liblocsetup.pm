@@ -294,10 +294,6 @@ sub os_account_cleanup($)
 	my ($real,$master) = @$pairRef;
 
 	foreach my $ent (keys(%{$lineHash{$real}})) {
-	    # skip root and toor!
-	    next
-		if ($ent eq 'root' || $ent eq 'toor');
-
 	    # push new entities into master
 	    if (!defined($lineHash{$master}->{$ent})) {
 		# append new "line"
