@@ -339,7 +339,7 @@ function SPITHEADER($thinheader = 0,
 
 function SPITNAV($hiddenxs, $navbar_status, $navbar_right, $login_uid)
 {
-   global $PORTAL_MANUAL, $APTLOGO, $login_status, $login_user, $TBMAINSITE, $THISHOMEBASE;
+    global $PORTAL_MANUAL, $APTLOGO, $login_status, $login_user, $TBMAINSITE, $THISHOMEBASE, $ISEMULAB, $ISPNET;
    $hiddenxs = "";
 echo "
 
@@ -400,8 +400,11 @@ echo " <li class='divider'></li>
 	<li><a href='create-dataset.php'>Create Dataset</a></li>
 	<li><a href='user-dashboard.php#datasets'>
 	    My Datasets</a></li>
-	<li><a href='list-images.php'>My Disk Images</a></li>
-      </ul>
+	<li><a href='list-images.php'>My Disk Images</a></li>";
+      if ($ISEMULAB || $ISPNET) {
+          echo "<li><a href='images.php'>Other Disk Images</a></li>";
+      }
+      echo "</ul>
     </li>
     ";
     }

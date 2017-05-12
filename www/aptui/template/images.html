@@ -13,15 +13,17 @@
     <div class='panel panel-default'>
       <div class='panel-body' id="images-div">
 	<div>
-	  <label class="checkbox-inline">
-	    <input type="checkbox" id="my-images" checked>
-	    <span data-toggle='tooltip'
-		  data-container="body"
-		  data-trigger="hover"
-		  title='Images you have created'>
-	      My Images
-	    </span>
-	  </label>
+	  <% if (all) { %>
+	    <label class="checkbox-inline">
+	      <input type="checkbox" id="my-images" checked>
+	      <span data-toggle='tooltip'
+		    data-container="body"
+		    data-trigger="hover"
+		    title='Images you have created'>
+		My Images
+	      </span>
+	    </label>
+	  <% } %>
 	  <label class="checkbox-inline">
 	    <input type="checkbox" id="project-images" checked>
 	    <span data-toggle='tooltip'
@@ -40,16 +42,16 @@
 	      System Images
 	    </span>
 	  </label>
-	  <label class="checkbox-inline">
-	    <input type="checkbox" id="public-images" checked>
-	    <span data-toggle='tooltip'
-		  data-container="body"
-		  data-trigger="hover"
-		  title='Public images created by anyone'>
-	      Public Images
-	    </span>
-	  </label>
 	  <% if (all) { %>
+	    <label class="checkbox-inline">
+	      <input type="checkbox" id="public-images">
+	      <span data-toggle='tooltip'
+		    data-container="body"
+		    data-trigger="hover"
+		    title='Public images created by anyone'>
+		Public Images
+	      </span>
+	    </label>
 	    <label class="checkbox-inline">
 	      <input type="checkbox" id="admin-images">
 	      <span data-toggle='tooltip'
@@ -141,11 +143,19 @@
       <div class='modal-body'>
 	<p>
 	  The images shown on this page are the ones you can use in
-	  your profiles. These include images created by you, system
-	  images created by adminstrators, images created other users
-	  in projects you belong to, and lastly, images that have been
-	  created by users in other projects, that have been marked
-	  public and available for anyone to use.
+	  your profiles.
+	  <% if (all) { %>
+	    These include images created by you, system
+	    images created by adminstrators, images created other users
+	    in projects you belong to, and lastly, images that have been
+	    created by users in other projects, that have been marked
+	    public and available for anyone to use.
+	  <% } else { %>
+	    These include system images created by adminstrators, and
+	    images created other users in projects you belong to. You can
+	    list images created by <b>you</b>, by clicking on the <b>Storage</b>
+	    menu above and selecting <b>My Disk Images</b>.
+	  <% } %>
 	</p>
 	<p>
 	  To use an image listed on this page, click on the link icon in the

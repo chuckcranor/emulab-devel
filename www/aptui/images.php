@@ -130,22 +130,38 @@ while ($row = mysql_fetch_array($query_result)) {
         # the user has access to the image. Creator, project, public.
         #
         $filters = array();
-        if ($row["creator_idx"] == $target_user->uid_idx()) {
+        if ($all && $row["creator_idx"] == $target_user->uid_idx()) {
             $filters[] = "creator";
         }
         if (array_key_exists($pid, $projlist)) {
             $filters[] = "project";
         }
-        if ($pid == "emulab-ops") {
-            $filters[] = "system";
+        if ($all) {
+            if ($pid == "emulab-ops") {
+                $filters[] = "system";
+            }
+            if ($row["global"] != "0") {
+                $filters[] = "public";
+            }
         }
-        if ($row["global"] != "0") {
-            $filters[] = "public";
+        else {
+            if ($pid == "emulab-ops" && $row["global"] != "0") {
+                $filters[] = "system";
+            }
+            # If not in any filters and global, skip. 
+            if (!count($filters) && $row["global"] != "0") {
+                continue;
+            }
         }
         # If none of the filters match, then mark as admin so we can show
         # those under a separate checkbox.
         if (!count($filters)) {
-            $filters[] = "admin";
+            if ($all) {
+                $filters[] = "admin";
+            }
+            else {
+                continue;
+            }
         }
         
         $blob["imageid"]     = $imageid;
