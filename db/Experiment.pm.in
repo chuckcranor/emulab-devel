@@ -5535,8 +5535,8 @@ sub AllocatePublicAddrPools($)
 		}
 
 		DBQueryFatal( "UNLOCK TABLES" );
-
-		return -1;
+		# Return allocation failure to the user.
+		return 1;
 	    }
 	}
     }
