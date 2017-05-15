@@ -644,8 +644,14 @@ sub SpitSteps($$)
 	my $type = $step->{"type"};
 	my $id   = $step->{"id"};
 	my $desc = $step->{"description"};
+	my $dtype = $step->{"description_type"};
 	$desc =~ s/\"/\\"/g;
-	print $where "tour.addStep('$id', '$type', \"$desc\")\n";
+	print $where "tour.addStep(emulab.Tour.Step('$id', ".
+	    "\"$desc\", '$type'";
+	if (defined($dtype)) {
+	    print $where ", '$dtype'";
+	}
+	print $where "))\n";
     }
     print $where "request.addTour(tour)\n\n\n";
     

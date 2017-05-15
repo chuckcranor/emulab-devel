@@ -139,16 +139,18 @@ sub new($$;$)
 			if ($name ne "step") {
 			    fatal("Unknown element in steps: $name");
 			}
-			my $type = GetTextOrFail("point_type", $stepchild);
-			my $id   = GetTextOrFail("point_id", $stepchild);
-			my $desc = FindFirst("n:description", $stepchild);
-			my $text = $desc->textContent();
+			my $type  = GetTextOrFail("point_type", $stepchild);
+			my $id    = GetTextOrFail("point_id", $stepchild);
+			my $desc  = FindFirst("n:description", $stepchild);
+			my $dtype = GetText("type", $desc);
+			my $text  = $desc->textContent();
 			# Kill terminating newline for rtecheck
 			chomp($text);
 			push(@steps, {
 			    "type" => $type,
 			    "id"   => $id,
-			    "description" => $text});
+			    "description" => $text,
+			    "description_type" => $dtype});
 		    }
 		    # We see a lot of empty steps
 		    $tour->{'steps'} = \@steps
