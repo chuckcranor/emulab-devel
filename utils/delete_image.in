@@ -298,7 +298,8 @@ if ($purge || $rename) {
 		}
 		# Hmm, need an update all versions method.
 		foreach my $imageversion (@images) {
-		    $imageversion->Update({"path" => $newname});
+		    # Need trailing slash!
+		    $imageversion->Update({"path" => $newname . "/"});
 		}
 	    }
 	}
