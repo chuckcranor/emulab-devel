@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2008-2013 University of Utah and the Flux Group.
+# Copyright (c) 2008-2017 University of Utah and the Flux Group.
 # 
 # {{{GENIPUBLIC-LICENSE
 # 
@@ -1217,7 +1217,7 @@ sub PostCRL($)
 		 "$cert");
 	return GeniResponse->Create(GENIRESPONSE_ERROR);
     }
-    SENDMAIL($TBOPS, "Stored a new CRL",
+    SENDMAIL($TBAUDIT, "Stored a new CRL",
 	     "Storeed a new CRL for $caller_authority\n".
 	     "$cert");
     return GeniResponse->Create(GENIRESPONSE_SUCCESS);
