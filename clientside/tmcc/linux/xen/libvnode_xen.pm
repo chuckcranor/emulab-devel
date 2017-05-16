@@ -172,12 +172,16 @@ my $MAXIMAGEWAIT = 1800;
 #	    Monitors the pty exported by xenconsoled. Note that the
 #	    specific pty can change when a domain reboots; capture
 #	    deals with this.
+#	-T: Put out a timestamp if there has been no previous output
+#	    for at least 10 seconds.
+#	-L: In conjunction with -T, the timestamp message includes how
+#	    long it has been since the last output.
 #	-R: Retry interval of 2 seconds. When capture is disconnected
 #	    from the pty (due to domain reboot/shutdowns), this is how
 #	    long we wait between attempts to reconnect.
 #
 my $CAPTURE     = "/usr/local/sbin/capture-nossl";
-my $CAPTUREOPTS	= "-i -C -R 2000";
+my $CAPTUREOPTS	= "-i -C -L -T 10 -R 2000";
 
 #
 # Create a thin pool with the name $POOL_NAME using not more
