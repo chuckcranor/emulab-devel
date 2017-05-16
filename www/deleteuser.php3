@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2012 University of Utah and the Flux Group.
+# Copyright (c) 2000-2017 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -132,7 +132,7 @@ else {
 #
 $experimentlist =
     $target_user->ExperimentList(1, ((isset($target_project)) ?
-				     $target_project->DefaultGroup() : null));
+				     $target_project : null));
 
 if (count($experimentlist)) {
     echo "<center><h3>

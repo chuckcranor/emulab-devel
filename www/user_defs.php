@@ -1435,16 +1435,22 @@ class User
     #
     # Return list of experiments for a user, or just a count.
     #
-    function ExperimentList($listify = 1, $group = null) {
+    function ExperimentList($listify = 1, $target = null) {
 	$uid_idx = $this->uid_idx();
 	$gclause = "";
 
 	# within optional group only.
-	if ($group) {
-	    $pid     = $group->pid();
-	    $gid     = $group->gid();
-	    $gclause = "and pid='$pid' and gid='$gid'";
-	}
+        if ($target) {
+            if (get_class($target) == "Group") {
+                $pid     = $target->pid();
+                $gid     = $target->gid();
+                $gclause = "and pid='$pid' and gid='$gid'";
+            }
+            else {
+                $pid     = $target->pid();
+                $gclause = "and pid='$pid'";
+            }
+        }
 
 	$query_result =
 	    DBQueryFatal("select idx from experiments ".
