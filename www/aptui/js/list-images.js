@@ -411,8 +411,6 @@ $(function ()
 		    widgets: ["zebra", "filter"],
 		    
 		    widgetOptions: {
-			// include all columns in the search.
-			filter_anyMatch   : true,
 			// search from beginning
 			filter_startsWith : false,
 			// Set this option to false for case sensitive search

@@ -11,6 +11,7 @@ $(function ()
 
 	// Image data
 	var images = JSON.parse(_.unescape($('#images-json')[0].textContent));
+	console.info("images", images);
 
 	// Generate the main template.
 	var html = mainTemplate({
@@ -70,8 +71,6 @@ $(function ()
 		widgetOptions: {
 		    // include child row content while filtering, if true
 		    filter_childRows  : true,
-		    // include all columns in the search.
-		    filter_anyMatch   : true,
 		    // search from beginning
 		    filter_startsWith : false,
 		    // Set this option to false for case sensitive search

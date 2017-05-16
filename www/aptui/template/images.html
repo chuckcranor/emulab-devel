@@ -69,7 +69,8 @@
 	    </span></a>
 	</div>
 	<div>
-	  <input class='form-control search' type='search' data-column='all'
+	  <input class='form-control search' type='search'
+		 data-column='0,1,2,4'
 		 id='images-search' placeholder='Search'>
 	</div>
 	<div class="table-responsive">
@@ -90,7 +91,7 @@
 	      <% var project_re = /project/; %>
 	      <% _.each(images, function(value, index) { %>
 		<tr>
-		  <% if (isadmin) { %>
+		  <% if (isadmin && _.has(value, "url")) { %>
 		    <td><a href="<%- value.url %>"><%= value.imagename %></a></td>
 		  <% } else { %>
 		    <td><%= value.imagename %></td>

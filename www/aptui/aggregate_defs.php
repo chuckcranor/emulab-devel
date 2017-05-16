@@ -131,6 +131,24 @@ class Aggregate
 
         return Aggregate::Lookup($urn);
     }
+    #
+    # Lookup using the short auth name (emulab.net).
+    #
+    function LookupByDomain($domain) {
+        if (! preg_match("/^[-\w\.]+$/", $domain)) {
+            return null;
+        }
+        $query_result =
+            DBQueryWarn("select urn from apt_aggregates ".
+                        "where urn like 'urn:publicid:IDN+${domain}+%'");
+	if (!$query_result || !mysql_num_rows($query_result)) {
+            return null;
+        }
+	$row = mysql_fetch_array($query_result);
+	$urn = $row['urn'];
+
+        return Aggregate::Lookup($urn);
+    }
 
     #
     # Generate the free nodes URL from the web url.
