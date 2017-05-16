@@ -10,7 +10,9 @@
 	  <th>Creator</th>
 	  <th>Created</th>
 	  <th>Destroyed</th>
-	  <th>Logs</th>
+	  <% if (window.ISADMIN) { %>
+	    <th>Logs</th>
+	  <% } %>
 	</tr>
       </thead>
       <tbody>
@@ -28,8 +30,10 @@
 	  <% } else { %>
 	    <td><%- instance.destroyed %></td>
 	  <% } %>
-	  <td><a href='<%- instance.public_url %>' target="_blank">
-	    <span class="glyphicon glyphicon-link"></span></a></td>
+	  <% if (window.ISADMIN) { %>
+	    <td><a href='<%- instance.public_url %>' target="_blank">
+	      <span class="glyphicon glyphicon-link"></span></a></td>
+	  <% } %>
 	</tr>
 	<% }); %>
       </tbody>

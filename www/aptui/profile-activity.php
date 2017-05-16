@@ -122,7 +122,9 @@ foreach (array($query1_result, $query2_result) as $query_result) {
 	$instance["creator"]     = $creator;
 	$instance["created"]     = $created;
 	$instance["destroyed"]   = $destroyed;
-	$instance["public_url"]  = $public_url;
+        if (ISADMIN()) {
+            $instance["public_url"]  = $public_url;
+        }
 	$instances[] = $instance;
     }
 }
@@ -132,6 +134,7 @@ echo "<div id='activity-body'></div>\n";
 
 echo "<script type='text/javascript'>\n";
 echo "    window.AJAXURL  = 'server-ajax.php';\n";
+echo "    window.ISADMIN  = " . ISADMIN() . ";\n";
 echo "</script>\n";
 echo "<script type='text/plain' id='instances-json'>\n";
 echo json_encode($instances);
