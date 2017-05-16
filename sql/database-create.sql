@@ -4350,6 +4350,7 @@ CREATE TABLE `projects` (
   `manager_urn` varchar(128) default NULL,
   `genesis` enum('emulab','aptlab','cloudlab','phantomnet') NOT NULL default 'emulab',
   `portal` enum('emulab','aptlab','cloudlab','phantomnet') default NULL,
+  `experiment_accounts` enum('none','swapper') default NULL,
   PRIMARY KEY  (`pid_idx`),
   UNIQUE KEY `pid` (`pid`),
   KEY `unix_gid` (`unix_gid`),

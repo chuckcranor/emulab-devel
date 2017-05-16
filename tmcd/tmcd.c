@@ -2661,6 +2661,7 @@ COMMAND_PROTOTYPE(doaccounts)
 	int		nrows, gidint;
 	int		tbadmin, didwidearea = 0, nodetypeprojects = 0;
 	int		didnonlocal = 0;
+	int             swapper_only = 0;
 
 	if (! tcp) {
 		error("ACCOUNTS: %s: Cannot give account info out over UDP!\n",
@@ -2713,6 +2714,25 @@ COMMAND_PROTOTYPE(doaccounts)
 	if (res) {
 		if ((int)mysql_num_rows(res) != 0) {
 			nodetypeprojects = 1;
+		}
+		mysql_free_result(res);
+	}
+
+	/*
+	 * See if a per-project restriction on the accounts that are
+	 * created.
+	 */
+	res = mydb_query("select experiment_accounts from projects "
+			 "where pid='%s' and experiment_accounts is not null",
+			 1, reqp->pid);
+	if (res) {
+		if ((int)mysql_num_rows(res) != 0) {
+			row = mysql_fetch_row(res);
+			if (row[0]) {
+				if (strcmp(row[0], "swapper") == 0) {
+					swapper_only = 1;
+				}
+			}
 		}
 		mysql_free_result(res);
 	}
@@ -2974,7 +2994,7 @@ COMMAND_PROTOTYPE(doaccounts)
 		char *passwdfield = (!reqp->islocal && reqp->isdedicatedwa) ? 
 			"'*'" : "u.usr_pswd";
 		strcpy(adminclause, "");
-#ifdef ISOLATEADMINS
+#ifdef ISOaLATEADMINS
 		sprintf(adminclause, "and u.admin=%d", reqp->swapper_isadmin);
 #endif
 		/*
@@ -3240,6 +3260,14 @@ COMMAND_PROTOTYPE(doaccounts)
 		if (reqp->genisliver_idx && reqp->isnonlocal_pid &&
 		    !didnonlocal && !isleader)
 			goto skipkeys;
+
+		/*
+		 * Watch for a swapper only project flag.
+		 */
+		if (swapper_only && !isleader &&
+		    strcmp(reqp->swapper, row[0])) {
+			goto skipkeys;
+		}
 		
 		if (gidint == -1) {
 			gidint = auxgids[--gcount];
