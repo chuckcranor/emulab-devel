@@ -44,6 +44,7 @@ $(function ()
     var ppchanged     = false;
     var monitor       = null;
     var types         = null;
+    var hardware      = null;
     var resinfo       = null;
     var mainTemplate  = _.template(instantiateString);
 
@@ -251,7 +252,7 @@ $(function ()
 	 * is changed.
 	 */
 	$('#profile_pid').change(function (event) {
-	    console.log('profile-pid change');
+	    //console.log('profile-pid change');
 	    UpdateGroupSelector();
 	    UpdateImageConstraints();
 	    ShowClusterReservations();
@@ -1038,103 +1039,161 @@ $(function ()
 
 	var project = $('#profile_pid').val();
 	var projectReservations = {}
+	var requested = 0;
+	var inuse = 0;
 
 	$('#reservation_confirmation').addClass('hidden');
 	$('#reservation_warning').addClass('hidden');
 	$('#reservation_future').addClass('hidden');
 
 	$('#finalize_options .cluster-group').each(function() {
-	    var click = false;
+	    var click  = false;
+	    var siteid = $(this).find("> label").attr("name");
 
 	    $(this).find('.dropdown-menu > .enabled:not(.hidden)').each(function() {
 		$(this).find('.reservation_tooltip').remove();
 
 		var start = null;
 		var end = null;
+		var earliest = null;
 		var hasReservation = false;
+		var currentReservations = false;
 
 		var target = $(this).find('a');
 		var cluster = $(this).attr('urn');
 
 		if (_.has(resinfo, cluster) && resinfo[cluster] != null) {
-		    if (_.has(resinfo[cluster], 'reservations') && resinfo[cluster]['reservations'] != null) {
-			_.each(resinfo[cluster]['reservations'], function(types, resproj) {
-			    var earliest = null;
-			    // Find earliest reservation time
-			    _.each(types, function(time) {
-				if (earliest == null || earliest > time) {
-				    earliest = time;
-				}
-			    });
+		    /*
+		     * Upcoming is lower priority so do first.
+		     */
+		    if (_.has(resinfo[cluster], 'upcoming') &&
+			resinfo[cluster]['upcoming'] != null) {
+			_.each(resinfo[cluster]['upcoming'],
+			       function(thelist, resproj) {
+				   _.each(thelist, 
+					  function(obj) {
+			    console.info("upcoming", obj.starttime,
+					 resproj, project);
 			    
-			    // Current project has a reservation
+			    // Current project has a future reservation
 			    // Used for cluster icons
 			    if (project == resproj) {
 				hasReservation = true;
 				click = true;
-				start = earliest;
-			    }
 
-			    // Icon for projects
-			    var projectClass = 'futureReservation';
-			    var priority = 1; // Used for sorting projects
-
-			    var now = new Date();
-			    var startTime = new Date(parseInt(earliest)*1000);
-			    if (startTime < now) {
-				projectClass = 'hasReservation';
-				priority = 2;
-			    }
-
-			    projectReservations[resproj] = {
-				class: projectClass,
-				attr: {'data-priority': priority}
-			    }
-			});
-		    }
-
-		    if (_.has(resinfo[cluster], 'pressure') && resinfo[cluster]['pressure'] != null) {
-			if (!hasReservation) {
-			    _.each(resinfo[cluster]['pressure'], function(reslist) {
-				if (_.has(reslist, project)) {
-				    if (start == null || start > reslist[project][0][0]) {
-					start = reslist[project][0][0];
-					end = reslist[project][0][1];
-				    }
+				// Find earliest starting reservation time
+				if (earliest == null ||
+				    earliest > obj.starttime) {
+				    earliest = obj.starttime;
 				}
-			    });
-			}
+			    }
+			    // Do not override a current entry (from above).
+			    if (!_.has(projectReservations, resproj)) {
+				projectReservations[resproj] = {
+				    // Icon for projects
+				    class: "futureReservation",
+				    // Used for sorting projects
+				    attr: {'data-priority': 2}
+				}
+			    }
+			 });
+		      });
 		    }
 
-		    if (start != null) {
+		    if (_.has(resinfo[cluster], 'current') &&
+			resinfo[cluster]['current'] != null) {
+			_.each(resinfo[cluster]['current'],
+			       function(thelist, resproj) {
+				   _.each(thelist, 
+					  function(obj) {
+			    var req  = obj.reserved;
+			    var used = obj.used;
+			    var type = obj.nodetype;
+				   
+			    console.info("current", req, used, type,
+					 resproj, project);
+			    
+			    // Current project has a current reservation
+			    // Used for cluster icons
+			    if (project == resproj) {
+				hasReservation = true;
+				click = true;
+				// All nodes for current project reservations.
+				requested += parseInt(req);
+				inuse += parseInt(used);
+				currentReservations = true;
+			    }
+			    projectReservations[resproj] = {
+				// Icon for projects
+				class: "hasReservation",
+				// Used for sorting projects
+				attr: {'data-priority': 1}
+			    }
+			  });
+		       });
+		    }
+		    // These are reservations that could interfere with
+		    // the user getting nodes. 
+		    if (!hasReservation && 
+			_.has(resinfo[cluster], 'pressure') &&
+			resinfo[cluster]['pressure'] != null) {
+			_.each(resinfo[cluster]['pressure'],
+			       function(reslist, type) {
+				   //console.info("P1", reslist,
+				   //             type, hardware, siteid);
+				   if (_.has(hardware, siteid) &&
+				       _.has(hardware[siteid], type) &&
+				       _.has(reslist, project)) {
+				       //console.info("P", siteid,
+				       //              type, project);
+				       if (start == null ||
+					   start > reslist[project][0][0]) {
+					   start = reslist[project][0][0];
+					   end = reslist[project][0][1];
+				       }
+				   }
+			       });
+		    }
+
+		    if (hasReservation || start != null) {
+			//console.info("res", project, start, end, earliest,
+			//	     requested, inuse);
 			$(this).attr('data-res-pid', project);
-			$(this).attr('data-res-start', start);
-			if (end != null) {
-			    $(this).removeAttr('data-now');
-
-			    $(this).attr('data-res-end', end);
-			    target.append(wt.ReservationWarningHTML('cluster', 2));
-			}
-			else {
+			$(this).attr('data-res-requested', requested);
+			$(this).attr('data-res-used', inuse);
+			if (hasReservation) {
 			    $(this).removeAttr('data-res-end');
-			    var now = new Date();
-			    var startTime = new Date(parseInt(start)*1000);
-
-			    if (startTime < now) {
+			    $(this).removeAttr('data-res-upcoming');
+			    
+			    if (currentReservations) {
 				$(this).attr('data-now', 'true');
 				target.append(wt.HasReservationHTML(project, 'cluster', 2));
 			    }
 			    else {
+				$(this).attr('data-res-upcoming', earliest);
 				$(this).attr('data-now', 'false');
 				target.append(wt.FutureReservationHTML(project, 'cluster', 2));
+			    }
+			}
+			else if (start) {
+			    $(this).attr('data-res-start', start);
+			    if (end != null) {
+				$(this).removeAttr('data-now');
+
+				$(this).attr('data-res-end', end);
+				target.append(wt.ReservationWarningHTML('cluster', 2));
 			    }
 			}
 			$('.reservation_tooltip > div').tooltip();
 		    }
 		    else {
+			$(this).removeAttr('data-now');
 			$(this).removeAttr('data-res-pid');
 			$(this).removeAttr('data-res-start');
 			$(this).removeAttr('data-res-end');
+			$(this).removeAttr('data-res-requested');
+			$(this).removeAttr('data-res-used');
+			$(this).removeAttr('data-res-upcoming');
 		    }
 		}
 	    });
@@ -1146,6 +1205,7 @@ $(function ()
 
 	    var pickerStatus = $('#'+which+' .cluster_picker_status .dropdown-menu .enabled a');
 	    if (click) {
+		console.info("pickerStatus", pickerStatus);
 		pickerStatus[1].click();
 	    }
 	    else {
@@ -1595,11 +1655,18 @@ $(function ()
 
 	// If multisite is disabled for the user, or no sites or 1 site.
 	if (!multisite || Object.keys(sites).length <= 1) {
+	    var siteid;
+	    if (Object.keys(sites).length == 0) {
+		siteid = "Site 1";
+	    }
+	    else {
+		siteid = _.values(sites)[0]
+	    }
 	    html = 
 		"<div id='nosite_selector' " +
 		"     class='form-horizontal experiment_option'>" +
 		"  <div class='form-group cluster-group'>" +
-		"    <label class='col-sm-4 control-label' name='" + _.values(sites)[0] + "' " +
+		"    <label class='col-sm-4 control-label' name='" + siteid + "' " +
 		"           style='text-align: right;'>Cluster:</a>" +
 		"    </label> " +
 		"    <div class='col-sm-6'>" +
@@ -1713,9 +1780,12 @@ $(function ()
 
     function onFoundTypes(t) 
     {
+	//console.info("onFoundTypes", t);
 	types = {};
+	hardware = {};
 	_.each(t, function(item) {
 	    types[item.name] = item.types;
+	    hardware[item.name] = item.hardware;
 	});
     }
 

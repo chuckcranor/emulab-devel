@@ -45,16 +45,18 @@ window.wt = (function() {
 	    }
 
 
-	    if ($(that).parent().attr('data-res-start')) {
+	    if ($(that).parent().attr('data-res-pid')) {
 		var project = $(that).parent().attr('data-res-pid');
-		var start = new Date(parseInt($(that).parent()
-					      .attr('data-res-start')) * 1000);
+		var requested = $(that).parent().attr('data-res-requested');
+		var used = $(that).parent().attr('data-res-used');
 
-		if ($(that).parent().attr('data-res-end')) {
-	    	    $('#reservation_confirmation').addClass('hidden');
+		if ($(that).parent().attr('data-res-start')) {
+		    var start = new Date(parseInt($(that).parent()
+					      .attr('data-res-start')) * 1000);
 		    var end = new Date(parseInt($(that).parent()
 						.attr('data-res-end')) * 1000);
 
+	    	    $('#reservation_confirmation').addClass('hidden');
 		    $('#reservation_warning .reservation_start')
 			.html(moment(start).format('lll'));
 		    $('#reservation_warning .reservation_end')
@@ -67,15 +69,20 @@ window.wt = (function() {
 		    if ($(that).parent().attr('data-now') == 'true') {
 		    	$('#reservation_future').addClass('hidden');
 
-			$('#reservation_confirmation .reservation_start')
-			    .html(moment(start).format('lll'));
+			$('#reservation_confirmation .reservation_requested')
+			    .html(requested);
+			$('#reservation_confirmation .reservation_used')
+			    .html(used);
 			$('#reservation_confirmation .reservation_project')
 			    .html(project);
 			$('#reservation_confirmation').removeClass('hidden');
 		    }
 		    else {
-			$('#reservation_confirmation').addClass('hidden');
+			var start = new Date(parseInt($(that).parent()
+				      .attr('data-res-upcoming')) * 1000);
 
+			$('#reservation_confirmation').addClass('hidden');
+			
 			$('#reservation_future .reservation_start')
 			    .html(moment(start).format('lll'));
 			$('#reservation_future .reservation_project')
@@ -225,9 +232,9 @@ window.wt = (function() {
 	}
 
 	function HasReservationHTML(project, type, position) {
-		var title = 'Your project ' + project + ' has an active cluster reservation.';
+		var title = 'Project ' + project + ' has an active cluster reservation.';
 		if (type == 'cluster') {
-			title = 'Your project ' + project + 'has an active reservation on this cluster.';
+			title = 'Project ' + project + ' has an active reservation on this cluster.';
 		}
 		return '<div class="reservation_tooltip has_reservation">'
 			   +'<div class="warning_icon confirm icon_position_'+position+'" '
@@ -240,9 +247,9 @@ window.wt = (function() {
 	}
 
 	function FutureReservationHTML(project, type, position) {
-		var title = 'Your project ' + project + ' has an upcoming cluster reservation.';
+		var title = 'Project ' + project + ' has an upcoming cluster reservation.';
 		if (type == 'cluster') {
-			title = 'Your project ' + project + 'has an upcoming reservation on this cluster.';
+			title = 'Project ' + project + ' has an upcoming reservation on this cluster.';
 		}
 		return '<div class="reservation_tooltip future_reservation">'
 			   +'<div class="warning_icon warn icon_position_'+position+'" '
