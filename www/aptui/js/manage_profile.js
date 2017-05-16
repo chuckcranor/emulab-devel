@@ -1485,10 +1485,10 @@ $(function ()
     function ConvertFromExperiment()
     {
 	var callback = function(json) {
-	    sup.HideWaitWait();
 	    console.info(json.value);
 
 	    if (json.code) {
+		sup.HideWaitWait();
 		sup.SpitOops("oops",
 			     "<pre><code>" +
 			     $('<div/>').text(json.value).html() +
@@ -1496,13 +1496,10 @@ $(function ()
 		return;
 	    }
 	    sup.ClearDownloadOnClick($('#rspec_modal_download_button'));
-	    $('#rspec_modal_download_button').addClass("hidden");
-	    $('#rspec_modal_editbuttons').removeClass("hidden");
-	    $('#rspec_modal_viewbuttons').addClass("hidden");
-	    $('#modal_profile_rspec_textarea').prop("readonly", false);	    
-	    $('#modal_profile_rspec_textarea').val(json.value.script);
-	    $('#rspec_modal').modal({'backdrop':'static','keyboard':false});
-	    $('#rspec_modal').modal('show');
+	    // Need to force Jacks into viewermode.
+	    gotscript = 1;
+	    CreateJacksEditor();
+	    sup.HideWaitWait(function () { changeRspec(json.value.script); });
 	}
 	/*
 	 * Send along the project if one is selected; only makes sense
@@ -1698,26 +1695,42 @@ $(function ()
 	    $('#show_source_modal_button').html('Edit Code');
 	}
 	else {
-	    if ((!window.VIEWING || window.CANMODIFY) &&
-		!fromrepo && (!gotscript || portal_converted)) {
-		$('#edit_topo_modal_button').html('Edit Topology');
-		$('#show_source_modal_button').html('Edit Code');
-	    }
-	    else {
-		$('#edit_topo_modal_button').html('View Topology');
-		$('#show_source_modal_button').html('View Code');
+	    var caneditcode = (!window.VIEWING || window.CANMODIFY ? 1 : 0);
+	    var canedittopo = caneditcode;
+
+	    // In general, scripts can be edited, subject to changes below.
+	    if (gotscript) {
+		caneditcode = 1;
+		canedittopo = 0;
 	    }
 	    if (fromrepo) {
+		caneditcode = 0;
+		canedittopo = 0;
 		// Hide the file upload button, user is committed
 		$('#sourcefile-button-div').addClass("hidden");
 	    }
 	    if (portal_converted) {
+		caneditcode = 1;
+		canedittopo = 1;
 		// Hide the file upload button, user is committed
 		$('#sourcefile-button-div').addClass("hidden");
 		// Ditto the git-repo button.
 		$('#git-repo-button-div').addClass("hidden");
 	    }
-	    if (window.CLONING || window.COPYING) {
+	    if (canedittopo) {
+		$('#edit_topo_modal_button').html('Edit Topology');
+	    }
+	    else {
+		$('#edit_topo_modal_button').html('View Topology');
+	    }
+	    if (caneditcode) {
+		$('#show_source_modal_button').html('Edit Code');
+	    }
+	    else {
+		$('#show_source_modal_button').html('View Code');
+	    }
+	    if (window.CLONING || window.COPYING ||
+		window.EXPUUID !== undefined) {
 		// Hide the file upload button, user is committed
 		$('#sourcefile-button-div').addClass("hidden");
 		// Ditto the git-repo button.
