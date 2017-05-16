@@ -814,6 +814,7 @@ sub new($$$$$)
 	"pipes"			=> {},
 	"use_type_default_image"=> undef,
 	"routable_control_ip"   => undef,
+	"failure_action"        => undef,
 	"tag"			=> $tag,
     };
     bless($self, $class);
@@ -1136,6 +1137,11 @@ sub addNode($$$)
 		$node->{"routable_control_ip"} = 1;
 		last SWITCH;
 	    };
+	    /^failure_action$/i && do {
+		my $action = GetTextOrFail("action", $child);
+		$node->{"failure_action"} = $action;
+		last SWITCH;
+	    };
 	    /^services$/i && do {
 		&$process_Services($child);
 		last SWITCH;
@@ -1206,7 +1212,7 @@ sub Compare($$)
 	    };
 	    (/^(component_id|component_manager_id|disk_image)$/i ||
 	     /^(hardware_type|jacks_site|xen_ptype|instantiate_on)$/i ||
-	     /^(adb_target)$/i ||
+	     /^(adb_target|failure_action)$/i ||
 	     /^(use_type_default_image|routable_control_ip)$/i) && do {
 		 return 1
 		     if (APT_Rspec::CompareValues("Node: $client_id: $key",

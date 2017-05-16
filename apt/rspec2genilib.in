@@ -280,6 +280,10 @@ sub GenerateNodeStatements($)
 	    my $site = $node->{'jacks_site'};
 	    $node->addTagStatement("Site('$site')");
 	}
+	if (defined($node->{'failure_action'})) {
+	    my $action = $node->{'failure_action'};
+	    $node->addTagStatement("setFailureAction('$action')");
+	}
 
 	#
 	# Services.
