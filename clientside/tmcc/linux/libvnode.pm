@@ -846,7 +846,8 @@ sub createExtraFS($$$)
     my $lvpath = "/dev/$vgname/$lvname";
     my $exists = `lvs --noheadings -o origin $lvpath > /dev/null 2>&1`;
     if ($?) {
-	system("lvcreate -n $lvname -L $size $vgname") == 0
+	my $ns = computeStripeSize($vgname);
+	system("lvcreate -n $lvname -L $size -i$ns $vgname") == 0
 	    or return -1;
 
 	system("mke2fs -j -q $lvpath") == 0
