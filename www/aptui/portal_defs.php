@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2006-2016 University of Utah and the Flux Group.
+# Copyright (c) 2006-2017 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -39,7 +39,7 @@ $ISAPT		= 0;
 $ISCLOUD        = 0;
 $ISPNET         = 0;
 $ISVSERVER      = 0;
-$GOOGLEUA       = 'UA-45161989-1';
+$GOOGLEUA       = 'UA-42844769-6';
 # See tbauth.php3
 $CHANGEPSWD_PAGE= "changepswd.php";
 $MAXGUESTINSTANCES = 10;
