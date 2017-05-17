@@ -465,6 +465,7 @@ if (! isset($create)) {
                               "this classic emulab experiment");
             }
 	    $defaults["profile_pid"] = $experiment->pid();
+	    $defaults["profile_name"] = $experiment->eid();
         }
     }
     SPITFORM($defaults, $errors);
