@@ -62,6 +62,12 @@ if ($this_user) {
     elseif (Profile::UserHasProfiles($this_user)) {
 	header("Location: $APTBASE/user-dashboard.php#profiles");
     }
+    elseif ($ISEMULAB && $this_user->PCsInUse()) {
+	header("Location: $APTBASE/user-dashboard.php");
+    }
+    elseif ($ISEMULAB && $this_user->ExperimentList(0)) {
+	header("Location: $APTBASE/user-dashboard.php#profiles");
+    }
     else {
 	header("Location: $APTBASE/instantiate.php");
     }
