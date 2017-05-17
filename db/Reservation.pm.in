@@ -954,9 +954,8 @@ sub OutstandingReservation($$;$) {
     return $earliest;
 }
 
-# Return a list of (pid, nodetype, reserved, used) hashes
-# for any currently active reservations belonging to a
-# listed project where usedcount < reservedcount.
+# Return a list of (pid, nodetype, reserved, used) hashes for any currently
+# active reservations belonging to a listed project.
 sub CurrentReservations($$) {
     my ($class, $projlist) = @_;
     my @answer = ();
