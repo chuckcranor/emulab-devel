@@ -223,6 +223,10 @@ $(function ()
 	});
 	$('li.profile-item').click(function (event) {
 	    event.preventDefault();
+	    // Ignore clicks over the project. Probably a better way to do this.
+	    if (! $(event.target).is("li")) {
+		return;
+	    }
 	    PickerEvent("switch", $(event.target),
 			$('#profile_name').scrollTop());
 	    ShowProfileSelection(event.target);
