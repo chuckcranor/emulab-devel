@@ -1496,10 +1496,11 @@ $(function ()
 		return;
 	    }
 	    sup.ClearDownloadOnClick($('#rspec_modal_download_button'));
-	    // Need to force Jacks into viewermode.
-	    gotscript = 1;
-	    CreateJacksEditor();
-	    sup.HideWaitWait(function () { changeRspec(json.value.script); });
+	    sup.HideWaitWait(function () {
+		changeRspec(json.value.script);
+		// Do this after so we do not do an RTE check up above.
+		MarkPortalConverted(true);
+	    });
 	}
 	/*
 	 * Send along the project if one is selected; only makes sense
@@ -1706,15 +1707,11 @@ $(function ()
 	    if (fromrepo) {
 		caneditcode = 0;
 		canedittopo = 0;
-		// Hide the file upload button, user is committed
-		$('#sourcefile-button-div').addClass("hidden");
 	    }
 	    if (portal_converted) {
 		caneditcode = 1;
 		canedittopo = 1;
-		// Hide the file upload button, user is committed
-		$('#sourcefile-button-div').addClass("hidden");
-		// Ditto the git-repo button.
+		// Hide the git-repo button.
 		$('#git-repo-button-div').addClass("hidden");
 	    }
 	    if (canedittopo) {
@@ -1725,6 +1722,9 @@ $(function ()
 	    }
 	    if (caneditcode) {
 		$('#show_source_modal_button').html('Edit Code');
+		// Hide the file upload button, user is committed, and
+		// there is an upload button in the code editor.
+		$('#sourcefile-button-div').addClass("hidden");
 	    }
 	    else {
 		$('#show_source_modal_button').html('View Code');

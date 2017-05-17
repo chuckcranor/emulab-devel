@@ -113,9 +113,33 @@ else {
 }
 
 #
+# Exclusion for NS converted files which have the original NS file as
+# a comment at the end of the file. Lets find that and strip it out of
+# the comparison. If the user uses the topology editor we are going to
+# lose the comment block anyway, but thats okay.
+#
+my ($copyfd, $copyname) = tempfile("/tmp/rtecheckXXXXX", UNLINK => 1);
+if (!defined($copyfd)) {
+    fatal("Could not open temporary file for geni-lib");
+}
+open(IN, $file) or
+    fatal("Could not open $file for reading: $!");
+while (<IN>) {
+    if ($_ =~ /^\# Here is the original NS file/) {
+	while (<IN>) {
+	    next
+		if ($_ =~ /^\#$/);
+	}
+	next;
+    }
+    print $copyfd $_;
+}
+close(IN);
+
+#
 # First convert to rspec.
 #
-my $rspec = emutil::ExecQuiet("$RUNGENILIB -W $file");
+my $rspec = emutil::ExecQuiet("$RUNGENILIB -W $copyname");
 if ($?) {
     print STDERR $rspec;
     print STDERR "Could not convert geni-lib script to an rspec\n";
@@ -156,7 +180,7 @@ if (!defined($fd)) {
 }
 print $fd $genilib;
 
-my $output = emutil::ExecQuiet("$DIFF -E -B -b $file $filename");
+my $output = emutil::ExecQuiet("$DIFF -I '^\#\$' -E -B -b $copyname $filename");
 if ($?) {
     print STDERR $output;
     # For the web interface.
