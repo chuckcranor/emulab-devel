@@ -409,7 +409,7 @@ function SPITFORM($formfields, $newuser, $errors)
     echo "    window.CANCOPY = $cancopy;\n";
     $isadmin = (isset($this_user) && ISADMIN() ? 1 : 0);
     echo "    window.ISADMIN    = $isadmin;\n";
-    $multisite = (isset($this_user) ? 1 : 0);
+    $multisite = (isset($this_user) && $ISCLOUD ? 1 : 0);
     echo "    window.MULTISITE  = $multisite;\n";
     $doconstraints = $TBMAINSITE;
     echo "    window.DOCONSTRAINTS = $doconstraints;\n";

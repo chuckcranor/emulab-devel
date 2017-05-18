@@ -73,7 +73,7 @@ function SPITFORM($formfields, $errors)
     $isadmin    = (ISADMIN() ? 1 : 0);
     $isstud     = (STUDLY() ? 1 : 0);
     $canrepo    = (ISADMIN() || STUDLY() ? 1 : 0);
-    $multisite  = 1;
+    $multisite  = ($ISCLOUD ? 1 : 0);
     $cloning    = 0;
     $copying    = 0;
     $disabled   = 0;
