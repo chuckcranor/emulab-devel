@@ -766,7 +766,7 @@ sub RunAssign($$)
 	    if ($wanted > $bound) {
 		print "*** Resource reservation violation: ".
 		    "$wanted nodes of type $type requested, but only $bound ".
-		    "avaiable because of existing resource reservations ".
+		    "available because of existing resource reservations ".
 		    "to other projects.\n";
 		# Unretriable error
 		return -1;
