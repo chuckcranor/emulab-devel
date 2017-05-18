@@ -1,6 +1,6 @@
 #!/usr/local/bin/python
 #
-# Copyright (c) 2005-2016 University of Utah and the Flux Group.
+# Copyright (c) 2005-2017 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -29,6 +29,7 @@ import traceback
 import string
 import socket
 import re
+import math
 import HTMLParser
 
 # Configure stuff.
@@ -295,7 +296,15 @@ for child in tree.getroot():
             bs = node.Blockstore(vname, "/mnt")
             pass
         blockstores[vname] = bs
-        bs.size = str(size) + "MiB"
+
+        if row.find("size") is not None:
+            size = int(row.find("size").text)
+            if size:
+                # Ug, Geni wants this in GB.
+                size = int(math.ceil(size * 0.001048576))
+                bs.size = str(size) + "GB"
+                pass
+            pass
         pass
     pass
 
