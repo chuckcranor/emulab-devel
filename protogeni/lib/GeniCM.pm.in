@@ -7733,7 +7733,7 @@ sub HandleBlockstore($$$$$$$@)
     my $placement = GeniXML::GetText("placement", $blockref);
     my $btype     = "";
     my $fixed     = $nodename;
-    my $size      = 0;
+    my $size      = undef;
 
     if (!defined($class) || !($class eq "local" || $class eq "remote")) {
 	$message = "Illegal blockstore class";
@@ -7779,17 +7779,13 @@ sub HandleBlockstore($$$$$$$@)
 	$placement = "ANY";
     }
     #
-    # If ephemeral, size must be given. Else we get it below from the lease,
-    # or we get it from the image if its an image backed blockstore.
+    # If ephemeral, size is optional, means give me everything.
+    # Else we get it below from the lease, or we get it from the image
+    # if its an image backed blockstore.
     #
     if ($class eq "local") {
 	if (!defined($dataset_id)) {
 	    $size = GeniXML::GetText("size", $blockref);
-	
-	    if (!defined($size)) {
-		$message = "Missing blockstore size for $bsname";
-		goto bad;
-	    }
 	}
 	else {
 	    my ($image, $dataset_urn);
@@ -7933,10 +7929,12 @@ sub HandleBlockstore($$$$$$$@)
 			 $image->lba_low() + 1) /
 			(1024 / $image->lba_size())) . "KB";
 	}
-	$size = Blockstore::ConvertToMebi($size);
-	if ($size < 0) {
-	    $message = "Illegal blockstore size for $bsname";
-	    goto bad;
+	if (defined($size)) {
+	    $size = Blockstore::ConvertToMebi($size);
+	    if ($size < 0) {
+		$message = "Illegal blockstore size for $bsname";
+		goto bad;
+	    }
 	}
     }
     push(@attributes, ["mountpoint", $mount, 0])
@@ -8081,37 +8079,41 @@ sub HandleBlockstore($$$$$$$@)
 	my $attrvalue;
 	my $row;
 
-	if (0) {
-	    $attrkey   = "XEN_EXTRAFS";
-	    $attrvalue = ceil($size / 1024);
-
-	    $row = $virtexperiment->Find("virt_node_attributes",
-					 $nodename, $attrkey);
-	}
-	else {
-	    $attrkey   = "XEN_EXTRADISKS";
-	    $attrvalue = "$bsname:" . ceil($size / 1024) . "GB";
-
-	    $row = $virtexperiment->Find("virt_node_attributes",
-					 $nodename, $attrkey);
-	    if (defined($row)) {
-		$attrvalue  = $row->attrvalue() . "," . $attrvalue;
+	#
+	# Size is optional on physical hosts, but we cannot do that on
+	# XEN VMs.
+	#
+	my $virtualization_subtype = GeniXML::GetVirtualizationSubtype($noderef);
+	if (defined($virtualization_subtype) &&
+	    $virtualization_subtype eq "emulab-xen") {
+	    if (!defined($size)) {	    
+		$message = "Missing blockstore size for $bsname";
+		goto bad;
 	    }
+	    else {
+		$attrkey   = "XEN_EXTRADISKS";
+		$attrvalue = "$bsname:" . ceil($size / 1024) . "GB";
+
+		$row = $virtexperiment->Find("virt_node_attributes",
+					     $nodename, $attrkey);
+		if (defined($row)) {
+		    $attrvalue  = $row->attrvalue() . "," . $attrvalue;
+		}
+	    }
+	    if (defined($row)) {
+		$row->Delete($VirtExperiment::STORE_FLAGS_DEBUG);
+	    }
+	    $virtexperiment->NewTableRow("virt_node_attributes",
+					 {"vname"     => $nodename,
+					  "attrkey"   => $attrkey,
+					  "attrvalue" => $attrvalue});
 	}
-	if (defined($row)) {
-	    $row->Delete($VirtExperiment::STORE_FLAGS_DEBUG);
-	}
-	$virtexperiment->NewTableRow("virt_node_attributes",
-				     {"vname"     => $nodename,
-				      "attrkey"   => $attrkey,
-				      "attrvalue" => $attrvalue});
     }
     $virtexperiment->NewTableRow("virt_blockstores",
 				 {"vname"     => $bsname,
 				  "type"      => $btype,
-				  "size"      => $size,
-				  "fixed"     => $fixed,
-				 });
+				  "size"      => defined($size) ? $size : 0,
+				  "fixed"     => $fixed});
     foreach my $aref (@attributes) {
 	my ($aname, $value, $isdesire) = @{$aref};
 	$virtexperiment->NewTableRow("virt_blockstore_attributes",
