@@ -1163,7 +1163,7 @@ function Do_ReloadTopology()
 function Do_RebootOrReload($which)
 {
     global $this_user, $instance, $suexec_output;
-    global $ajax_args;
+    global $ajax_args, $TBDB_TRUST_GROUPROOT;
 
     if (StatusSetupAjax(0)) {
 	return;
@@ -1181,7 +1181,8 @@ function Do_RebootOrReload($which)
     #
     if ($instance->admin_lockdown() || $instance->user_lockdown()) {
         if ($this_idx != $instance->creator_idx() && !ISADMIN() &&
-            !$instance->Project()->IsLeader($this_user)) {
+            $instance->Project()->UserTrust($this_user) <
+            $TBDB_TRUST_GROUPROOT) {
             SPITAJAX_ERROR(1, "Not enough permission, ".
                            "experiment is locked down");
             return;
