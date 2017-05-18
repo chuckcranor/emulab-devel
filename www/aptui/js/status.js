@@ -1840,6 +1840,12 @@ $(function ()
 		if (window.APT_OPTIONS.cansnap) {
 		    $("#snapshot_button").removeClass("hidden");
 		}
+		// Not allowed to delete the last node.
+		var nodename = Object.keys(hostportList)[0];
+		$('#listview-row-' + nodename + ' [name=delete]')
+		    .parent().addClass('disabled');
+		$(contextMenus[nodename])
+		    .find("li[id=delete]").addClass("disabled");
 	    }
 
 	    // Bind a function to start up ssh for one node topologies.
