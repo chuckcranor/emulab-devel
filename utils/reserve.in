@@ -45,9 +45,9 @@ use WebTask;
 
 sub usage()
 {
-    print STDERR "Usage: reserve [-C] [-f] [-n] -t type [-s start] [-e end]\n" .
+    print STDERR "Usage: reserve [-C] [-f] [-n] [-q] -t type [-s start] [-e end]\n" .
 	"            [-u] [-U uid] [-N file] [-A file] [-a|-p] pid count\n";
-    print STDERR "       reserve -c idx\n";
+    print STDERR "       reserve [-D file] -c idx\n";
     print STDERR "       reserve [-f] [-n] [-s start] [-e end] [-u]\n" .
 	"            [-U uid] [-N file] [-A file] [-S size] [-a] -m idx \n";
     print STDERR "       reserve [-u] -i pid\n";
@@ -59,6 +59,7 @@ sub usage()
     print STDERR "   -f   Force reservation into schedule, even if " .
 	"overcommitted\n";
     print STDERR "   -n   Check feasibility only; don't actually reserve\n";
+    print STDERR "   -q   Quiet operation; don't e-mail user\n";
     print STDERR "   -U   Mark reservation as being created by uid (admin-only)\n";
     print STDERR "   -t   Node type\n";
     print STDERR "   -i   Show existing reservation for project\n";
@@ -69,10 +70,13 @@ sub usage()
     print STDERR "   -p   Create pending reservation (do not auto-approve)\n";
     print STDERR "   -m   Modify existing reservation\n";
     print STDERR "   -S   Specify new size of modified reservation\n";
+    print STDERR "   -A   Supply file containing admin-only notes about reservation\n";
+    print STDERR "   -N   Supply file containing user notes justifying reservation\n";
+    print STDERR "   -D   Supply file containing reason why reservation was denied\n";
     exit( -1 );
 }
 
-my $optlist    = "ac:de:fhilm:nps:t:uA:CN:S:U:T:";
+my $optlist    = "ac:de:fhilm:npqs:t:uA:CD:N:S:U:T:";
 my $debug      = 0;
 my $info       = 0;
 my $list       = 0;
@@ -80,11 +84,13 @@ my $clear      = 0;
 my $clear_idx  = undef;
 my $force      = 0;
 my $impotent   = 0;
+my $quiet      = 0;
 my $modify_idx = undef;
 my $starttime  = time; # default to starting immediately
 my $endtime    = time + 24 * 60 * 60; # default to ending tomorrow
 my $notes      = undef;
 my $adminnotes = undef;
+my $denynotes  = undef;
 my $approve    = 0;
 my $pending    = 0;
 my $type;
@@ -185,6 +191,9 @@ if (defined($options{f})) {
 if (defined($options{n})) {
     $impotent = 1;
 }
+if (defined($options{q})) {
+    $quiet = 1;
+}
 if (defined($options{t})) {
     $type = $options{t};
     unless( $type =~ /^[-\w]+$/ ) {
@@ -229,6 +238,9 @@ if (defined($options{"N"})) {
 if (defined($options{"A"})) {
     fatal( "-A option requires administrator privileges" ) unless( $admin );
     $adminnotes = readfile( $options{"A"} );
+}
+if (defined($options{"D"})) {
+    $denynotes = readfile( $options{"D"} );
 }
 if (defined($options{"U"})) {
     fatal( "-U option requires administrator privileges" ) unless( $admin );
@@ -419,6 +431,19 @@ if ($clear || $clear_idx) {
     
     $res->Cancel();
     
+    my $user = User->Lookup( $res->uid() );
+    my $count = $res->nodes();
+    my $type = $res->type();
+    my $s = convert( $res->start() );
+    my $e = convert( $res->end() );
+    SENDMAIL( $user->email(), "Reservation CANCELLED",
+	      "Your reservation request for $count $type nodes,\n" .
+	      "starting at $s and ending at\n" .
+	      "$e, has been CANCELLED.\n" .
+	      ( defined( $denynotes ) ?
+		"The reason for cancellation is:\n" .
+		$denynotes . "\n" : "" ) ) unless( $quiet );
+	
     exit( 0 );
 }
 
@@ -528,7 +553,7 @@ while( 1 ) {
 		  "system failures.  Please send reports about the\n" .
 		  "reservation system to $TBOPS.\n" .
 		  "Thank you for your assistance in debugging this\n" .
-		  "feature!\n" );
+		  "feature!\n" ) unless( $quiet );
 	
 	exit( 0 );
     } else {
@@ -547,7 +572,7 @@ while( 1 ) {
 		  "\n" .
 		  "You can approve the request by invoking:\n" .
 		  "    reserve -a -m $idx\n" .
-		  "on boss.\n" );
+		  "on boss.\n" ) unless( $quiet );
 	
 	exit( 2 );
     }
