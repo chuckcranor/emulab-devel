@@ -75,9 +75,6 @@ $| = 1;
 if ($UID != 0) {
     fatal("Must be root to run this script\n");
 }
-if (! $MAINSITE) {
-    exit(0);
-}
 
 #
 # Check args early so we get the right DB.
@@ -129,9 +126,19 @@ if (!$impotent) {
 }
 
 #
-# Capture all events from the local pubsubd.
+# At the Mothership (Cloudlab Portal) we get events from the SSL
+# enabled version of pubsubd, which is getting events from all of the
+# clusters including the local cluster. 
 #
-my $localhandle = event_register("elvin://localhost:$PSDPORT", 0);
+# Otherwise, we listen on the regular event server since that is where
+# the events first go anyway. It is only clusters that are part of
+# Cloudlab that are forwarding to to the Mothership. 
+#
+my $url = "elvin://localhost";
+if ($MAINSITE) {
+    $url .= ":$PSDPORT";
+}
+my $localhandle = event_register($url, 0);
 if (!$localhandle) {
     fatal("Unable to register with event system");
 }
@@ -163,6 +170,11 @@ sub callback($$$)
     my $slice     = event_notification_get_string($handle, $note, "slice");
     my $type      = event_notification_get_string($handle, $note, "type");
     my $details   = event_notification_get_string($handle, $note, "details");
+
+    # Ignore extraneous events. They happen when listening to the local
+    # cluster pubsubd.
+    return
+	if (! (defined($site) && defined($slice)));
 
     #
     # Not sure why this is happening, but sometime the slice urn has
