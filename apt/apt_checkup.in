@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2008-2016 University of Utah and the Flux Group.
+# Copyright (c) 2008-2017 University of Utah and the Flux Group.
 # 
 # {{{GENIPUBLIC-LICENSE
 # 
@@ -131,73 +131,6 @@ $SIG{HUP} = \&handler
     if (! ($debug || $oneshot));
 
 #
-# We call this function on each instance.
-#
-sub CheckInstanceStatus($)
-{
-    my ($uuid) = @_;
-    my $instance = APT_Instance->Lookup($uuid);
-    if (!defined($instance)) {
-	print STDERR "$instance no longer exists\n";
-	return 0;
-    }
-    $instance->Flush();
-    
-    my $slice = $instance->GetGeniSlice();
-    if (!defined($slice)) {
-	print STDERR "No slice for instance $uuid\n";
-	return 0;
-    }
-    $slice->Flush();
-    
-    # Do not bother if the slice is locked, try again next interval.
-    if (defined($slice->locked())) {
-	print STDERR "Slice is locked for instance $uuid\n";
-	return 0;
-    }
-    print STDERR "Checking instance " . $instance->name() . "\n"
-	if ($debug);
-    
-    # Use debug option to keep it from going into the background.
-    my $output = emutil::ExecQuiet("$SUDO -u $PROTOUSER ".
-				   "$MANAGEINSTANCE -d refresh $uuid");
-    # We do not care about failure here.
-    if ($?) {
-	print STDERR "Failure for instance " . $instance->name() . ":\n" .
-	    $output . "\n";
-    }
-    print STDERR "Done checking instance " . $instance->name() . "\n"
-	if ($debug);
-    return 0;
-}
-
-#
-# Check status for all instances.
-#
-sub CheckAllInstances()
-{
-    my @return_codes = ();
-    my @instances    = ();
-    
-    my $query_result =
-	DBQueryWarn("select uuid from apt_instances " .
-		    "where status='ready' and ".
-		    "      (UNIX_TIMESTAMP(now()) - ".
-		    "       UNIX_TIMESTAMP(created) > 300)");
-    return
-	if (!$query_result || !$query_result->numrows);
-
-    while (my ($uuid) = $query_result->fetchrow_array()) {
-	push(@instances, $uuid);
-    }
-    if (ParRun({"maxwaittime" => 1000,
-		"maxchildren" => 10},
-	    \@return_codes, \&CheckInstanceStatus, @instances)) {
-	return;
-    }
-}
-
-#
 # Loop, asking for status for every instance.
 #
 while (1) {
@@ -207,8 +140,6 @@ while (1) {
     }
     print "Running at ".
 	POSIX::strftime("20%y-%m-%d %H:%M:%S", localtime()) . "\n";
-
-    CheckAllInstances();
 
     exit(0)
 	if ($oneshot);
