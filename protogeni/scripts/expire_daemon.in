@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2008-2016 University of Utah and the Flux Group.
+# Copyright (c) 2008-2017 University of Utah and the Flux Group.
 # 
 # {{{GENIPUBLIC-LICENSE
 # 
@@ -62,6 +62,7 @@ my $TBAUTOMAIL    = "@TBAUTOMAILEMAIL@";
 my $PGENIDOMAIN   = "@PROTOGENI_DOMAIN@";
 my $OURDOMAIN     = "@OURDOMAIN@";
 my $PGENISUPPORT  = @PROTOGENI_SUPPORT@;
+my $CLUSTER_PORTAL= "@CLUSTER_PORTAL@";
 my $LOGFILE       = "$TB/log/expire_daemon.log";
 my $IDLETIMES	  = "$TB/sbin/idletimes";
 my $EMULAB_PEMFILE = "$TB/etc/genicm.pem";
@@ -1270,6 +1271,92 @@ sub CheckIdle()
 }
 
 #
+# Notify the "portal" of the status of all slivers. Might be the local
+# portal or the Cloudlab portal. Or both since a cluster might be part
+# of Cloudlab, but allowing use of the local portal UI.
+#
+my %notify_timestamps = ();
+
+sub NotifyPortal()
+{
+    my %slices     = ();
+    my %aggregates = ();
+    my $count      = 0;
+    my $max        = 15;  # 15 at a time.
+    my $interval   = 600; # 10 minutes;
+    
+    my $query_result =
+	GeniDB::DBQueryWarn("select idx from geni_aggregates ".
+			    "where type='Aggregate'");
+    
+    while (my ($idx) = $query_result->fetchrow_array()) {
+	my $aggregate = GeniAggregate->Lookup($idx);
+
+	if (!defined($aggregate)) {
+	    # aggregate is gone, lets not worry.
+	    next;
+	}
+	my $slice = $aggregate->GetSlice();
+	if (!defined($slice)) {
+	    # slice is gone, lets not worry.
+	    $aggregate->Flush();
+	    next;
+	}
+	$slices{$slice->uuid()} = $slice;
+	$aggregates{$slice->uuid()} = $aggregate;
+    }
+    foreach my $slice (values(%slices)) {
+	my $aggregate = $aggregates{$slice->uuid()};
+	
+	if ($slice->Lock() != 0) {
+	    print STDERR "NotifyPortal: Could not lock slice $slice.\n";
+	    goto skip;
+	}
+	#
+	# Send events every 10 minutes for a slice, but do not want to
+	# do all of them at exactly the same time, so lets spread things
+	# out a bit.
+	#
+	if (!exists($notify_timestamps{$slice->uuid()})) {
+	    $notify_timestamps{$slice->uuid()} = time();
+	}
+	my $last = $notify_timestamps{$slice->uuid()};
+	if (time() - $last < $interval) {
+	    if ($debug) {
+		print STDERR "NotifyPortal: Skipping $slice this time\n";
+	    }
+	    $slice->UnLock();
+	    goto skip;
+	}
+	
+	#
+	# If this causes anything to change, events will get sent.
+	#
+	if ($debug) {
+	    print STDERR "NotifyPortal: $slice\n";
+	}
+	$aggregate->SendAllStatusEvents();
+	$slice->UnLock();
+	$count++;
+	$notify_timestamps{$slice->uuid()} = time();
+	# Lets not flood too fast.
+	sleep(1);
+      skip:
+	$slice->Flush();
+	$aggregate->Flush();
+	# Only this many per minute.
+	last
+	    if ($count >= $max);
+    }
+    my %tmp = ();
+    # Watch for slices that are gone so that this array does not get big.
+    foreach my $uuid (keys(%notify_timestamps)) {
+	$tmp{$uuid} = $notify_timestamps{$uuid} if (exists($slices{$uuid}));
+    }
+    %notify_timestamps = %tmp;
+}
+
+#
 # Deal with image tracker stuff. 
 #
 sub HandleImageTracking()
@@ -1454,6 +1541,7 @@ while (1) {
 	ReportOrphanedCerts();
 	$reportcounter = 0;
     }
+    NotifyPortal();
     HandleImageTracking();
 
     # Be certain stale info is gone.

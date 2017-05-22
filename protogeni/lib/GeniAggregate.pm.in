@@ -671,6 +671,32 @@ sub SendStatusEvent($)
 }
 
 #
+# Send status events for all nodes in an aggregate and the aggregate itself.
+#
+sub SendAllStatusEvents($)
+{
+    my ($self) = @_;
+    $self->SendStatusEvent();
+
+    my @slivers = ();
+    if ($self->SliverList(\@slivers) != 0) {
+	print STDERR "Could not get sliver list for $self\n";
+	return -1;
+    }
+    #
+    # It would be nice to send one big event, but events have a fixed
+    # max size and we would blow right by it.
+    #
+    foreach my $sliver (@slivers) {
+	next
+	    if (ref($sliver) ne "GeniSliver::Node");
+
+	$sliver->SendStatusEvent();
+    }
+    return 0;
+}
+
+#
 # And the ErrorLog. These are intended to be short ...
 #
 sub SetErrorLog($$)
