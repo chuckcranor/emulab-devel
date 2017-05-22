@@ -1676,6 +1676,14 @@ $(function ()
 	}
 	editor = new JacksEditor($('#editmodal_div'),
 				 isViewer, false, false, false, !multisite);
+	if (isViewer) {
+	    $('#edit_container .edit_buttons.readwrite').addClass("hidden");
+	    $('#edit_container .edit_buttons.readonly').removeClass("hidden");
+	}
+	else {
+	    $('#edit_container .edit_buttons.readwrite').removeClass("hidden");
+	    $('#edit_container .edit_buttons.readonly').addClass("hidden");
+	}
     }
 
     function MarkPortalConverted(converted)
