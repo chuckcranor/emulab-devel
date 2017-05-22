@@ -771,9 +771,20 @@ sub GetTicketAuxAux($$$$$$$$$$$)
     #
     # Allow user to control the multiplex factor. Note that ptopgen
     # will not allow the mfactor to be more then what we set as the
-    # max for the node, but in general we set it low here.
+    # max for the node, but in general we set it low here. Also note
+    # that to support Emulab Classic NS file conversion, zero means to
+    # not change it.
     #
-    $virtexperiment->multiplex_factor(GeniXML::MultiplexFactor($rspec) || 10);
+    my $mfactor = GeniXML::MultiplexFactor($rspec);
+    if (defined($mfactor)) {
+	if ($mfactor != 0) {
+	    $virtexperiment->multiplex_factor($mfactor);
+	}
+    }
+    else {
+	# Odd geni default dating back to the beginning of time.
+	$virtexperiment->multiplex_factor(10);
+    }
     #
     # The packing strategy is sorta independent; the user can specify either
     # pack or balance (load balance).
