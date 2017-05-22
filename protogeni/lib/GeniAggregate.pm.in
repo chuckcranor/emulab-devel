@@ -301,6 +301,7 @@ sub speaksfor_uuid($)	{ return field($_[0], "speaksfor_uuid"); }
 sub speaksfor_urn($)	{ return field($_[0], "speaksfor_urn"); }
 sub status($)		{ return field($_[0], "status"); }
 sub state($)		{ return field($_[0], "state"); }
+sub status_state_timestamp($) { return field($_[0], "status_state_timestamp"); }
 sub boot_failure($)     { return field($_[0], "boot_failure"); }
 sub ErrorLog($)		{ return field($_[0], "errorlog"); }
 sub cert($)		{ return GetCertificate($_[0])->cert(); }
@@ -659,7 +660,8 @@ sub SendStatusEvent($)
     my $blob = {
 	"state"   => $self->state(),
 	"status"  => $self->status(),
-	"utc"     => time(),
+	# Fall back to current time if no timestamp yet.
+	"utc"     => $self->status_state_timestamp() || time(),
     };
     GeniEvent->SendEvent({"type"    => "SLICESTATUS",
 			  "slice"   => $slice->urn(),

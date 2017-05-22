@@ -312,6 +312,7 @@ sub aggregate_uuid($)	{ return field($_[0], "aggregate_uuid"); }
 sub rspec_string($)     { return field($_[0], "rspec_string"); }
 sub status($)		{ return field($_[0], "status"); }
 sub state($)		{ return field($_[0], "state"); }
+sub status_state_timestamp($) { return field($_[0], "status_state_timestamp"); }
 sub ErrorLog($)		{ return field($_[0], "errorlog"); }
 sub cert($)		{ return GetCertificate($_[0])->cert(); }
 sub rspec($)            { return $_[0]->{'RSPEC'}; }
@@ -1647,17 +1648,35 @@ sub GenerateStatusBlob($)
     my $state         = $self->state();
     my $status        = $self->status();
     my $nickname      = $self->nickname() || "";
+    # Fall back to current time if no timestamp yet.
+    my $utc           = $self->status_state_timestamp() || time();
 
     my $node = Node->LookupSync($resource_id);
     if (!defined($node)) {
 	print STDERR "Could not map node $resource_id to its object\n";
 	return undef;
     }
-    my ($nodestatus) = $node->GetStatus() || "unknown";
+    my ($nodestatus,$nodestatus_timestamp) = $node->GetStatus();
+    if (!defined($nodestatus)) {
+	$nodestatus = "unknown";
+	$nodestatus_timestamp = 0;
+    }
+    my $rawstate = $node->eventstate();
+    my $rawstate_timestamp = $node->state_timestamp();
 
     # New is the same as stopped. Separate state is handy.
     $state = "stopped"
 	if ($state eq "new");
+
+    #
+    # So we have a bunch of timestamps for various bits of state.
+    # Not much atomicity, but I think we are okay. Use the most
+    # recent timestamp, else current time.
+    #
+    $utc = $nodestatus_timestamp
+	if ($nodestatus_timestamp > $utc);
+    $utc = $rawstate_timestamp
+	if ($rawstate_timestamp > $utc);
 
     my $blob = {
 	"component_urn" => $resource_id,
@@ -1666,9 +1685,9 @@ sub GenerateStatusBlob($)
 	"status"        => $status,
 	# We do not put this in unless its for SliverStatus. Too big.
 	"error"         => "",
-	"rawstate"      => $node->eventstate(),
+	"rawstate"      => $rawstate,
 	"nodestatus"    => $nodestatus,
-	"utc"           => time(),
+	"utc"           => $utc,
     };
 
     #
