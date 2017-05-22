@@ -194,6 +194,16 @@ for child in tree.getroot():
         ifacecounts[vname] = ifacecounts[vname] + 1
         pass
     #
+    # These are not supported, warn early.
+    #
+    if child.tag == "event_groups":
+        row = child.find("row")
+        group_name = row.find("group_name").text
+        if group_name != "__all_programs":
+            Fatal("Unsupported use of event groups")
+            pass
+        pass
+    #
     # Find the program agents before we try to process the event list.
     # The event list is how we tell the difference between a startcmd
     # and other program agents. 
@@ -604,11 +614,14 @@ for child in tree.getroot():
     #
     if child.tag == "eventlist":
         row = child.find("row")
-        time  = row.find("time").text
         otype = row.find("objecttype").text
         etype = row.find("eventtype").text
         vnode = row.find("vnode").text
         vname = row.find("vname").text
+        if row.find("time") == None:
+            Fatal("No start time provided for program object " + vname)
+            pass
+        time  = row.find("time").text
         if otype == "4":
             if etype != "1" and etype != "20":
                 Fatal("Unsupported program object event for " + vname)
