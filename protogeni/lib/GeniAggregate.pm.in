@@ -268,7 +268,8 @@ sub Create($$$$$$)
     push(@insert_data, "slice_uuid='$slice_uuid'");
     push(@insert_data, "type='$aggregate_type'");
     # Start out new aggregates, as new.
-    push(@insert_data, "state='new'");
+    push(@insert_data, "state='new'," .
+	 "status_state_timestamp=unix_timestamp(now())");
 
     # Insert into DB.
     if (!DBQueryWarn("insert into geni_aggregates set " .
@@ -610,7 +611,8 @@ sub SetStateStatus($$$)
 
     my $query_result =
 	DBQueryWarn("update geni_aggregates set ".
-		    "  status='$status',state='$state' ".
+		    "  status='$status',state='$state', ".
+		    "  status_state_timestamp=unix_timestamp(now()) ".
 		    "where idx='$idx' and ".
 		    "      (status!='$status' or state!='$state')");
     return -1

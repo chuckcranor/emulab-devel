@@ -262,7 +262,8 @@ sub Create($$$$$$$$)
     push(@insert_data, "creator_uuid='$owner_uuid'");
     push(@insert_data, "slice_uuid='$slice_uuid'");
     # Start out new slivers, as new.
-    push(@insert_data, "state='new'");
+    push(@insert_data, "state='new',".
+	 "status_state_timestamp=unix_timestamp(now())");
 
     if (defined($rspec)) {
 	my $rspec_string = GeniXML::Serialize($rspec);
@@ -513,7 +514,8 @@ sub SetStatus($$)
     
     return -1
 	if (!DBQueryWarn("update geni_slivers set ".
-			 "  status='$status' ".
+			 "  status='$status', ".
+			 "  status_state_timestamp=unix_timestamp(now()) ".
 			 "where idx='$idx'"));
     
     $self->{'SLIVER'}->{'status'} = $status;
@@ -534,7 +536,8 @@ sub SetState($$)
     
     return -1
 	if (!DBQueryWarn("update geni_slivers set ".
-			 "  state='$state' ".
+			 "  state='$state', ".
+			 "  status_state_timestamp=unix_timestamp(now()) ".
 			 "where idx='$idx'"));
     
     $self->{'SLIVER'}->{'state'} = $state;
@@ -1539,7 +1542,9 @@ sub SetStatus($$)
     # out an event indicating a change.
     #
     my $query_result =
-	DBQueryWarn("update geni_slivers set status='$status' ".
+	DBQueryWarn("update geni_slivers set ".
+		    "  status='$status',".
+		    "  status_state_timestamp=unix_timestamp(now()) ".
 		    "where idx='$idx' and status!='$status'");
     return -1
 	if (!$query_result);
@@ -1566,7 +1571,9 @@ sub SetState($$)
     # lets avoid the extra noise.
     #
     my $query_result =
-	DBQueryWarn("update geni_slivers set state='$state' ".
+	DBQueryWarn("update geni_slivers set ".
+		    "  state='$state',".
+		    "  status_state_timestamp=unix_timestamp(now()) ".
 		    "where idx='$idx' and state!='$state'");
     return -1
 	if (!$query_result);
