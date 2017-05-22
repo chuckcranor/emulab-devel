@@ -2573,6 +2573,7 @@ sub CreateVnodes($$$)
 			"priority" => $vpriority,
 		        "op_mode" => $opmode,
 			"eventstate" => $eventstate,
+			"state_timestamp" => time(),
 			"allocstate" => $allocstate,
 			"def_boot_osid" => $osid,
 			"def_boot_osid_vers" => $osid_vers,
