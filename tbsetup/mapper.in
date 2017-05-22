@@ -557,7 +557,7 @@ sub AssignLoop()
 	}
 	# Hack for Kirk.
 	if (!($impotent || $regression) &&
-	    ($pid eq "CCNC2017Tutorial" || $project->IsNonLocal())) {
+	    ($pid eq "CloudLab" || $project->IsNonLocal())) {
 	    while (1) {
 		if (libEmulab::EmulabCountLock("mapperlock", 3) == 0) {
 		    $seriallock = 1;
