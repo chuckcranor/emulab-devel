@@ -1,0 +1,26 @@
+#
+# Add some timestamps,
+#
+use strict;
+use GeniDB;
+
+sub DoUpdate($$$)
+{
+    my ($dbhandle, $dbname, $version) = @_;
+
+    DBSetDefault($dbhandle);
+
+    DBQueryFatal("alter table geni_aggregates add ".
+		 " `status_state_timestamp` int(10) unsigned default NULL ".
+		 "    after state");
+    
+    DBQueryFatal("alter table geni_slivers add ".
+		 " `status_state_timestamp` int(10) unsigned default NULL ".
+		 "    after state");
+    return 0;
+}
+1;
+
+# Local Variables:
+# mode:perl
+# End:
