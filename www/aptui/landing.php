@@ -69,7 +69,7 @@ if ($this_user) {
 	header("Location: $APTBASE/user-dashboard.php#profiles");
     }
     else {
-	header("Location: $APTBASE/instantiate.php");
+	header("Location: $APTBASE/user-dashboard.php#profiles");
     }
     return;
 }

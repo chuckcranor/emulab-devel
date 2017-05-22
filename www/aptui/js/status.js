@@ -285,11 +285,7 @@ $(function ()
 		    sup.SpitOops("oops", "Failed to terminate: " + json.value);
 		    return;
 		}
-		// This is considered the home page, for now.
-		var url = 'instantiate.php?default=' + profile_uuid;
-		if (window.APT_OPTIONS.REFSPEC !== undefined) {
-		    url += "&refspec=" + window.APT_OPTIONS.REFSPEC;
-		}
+		var url = 'landing.php';
 		window.location.replace(url);
 	    }
 	    sup.ShowModal("#waitwait-modal");
