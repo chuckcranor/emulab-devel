@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2012 University of Utah and the Flux Group.
+# Copyright (c) 2000-2017 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -596,6 +596,14 @@ if ($thumb && !$idle) {
 	    TBERROR("Could not map $pid/$eid to its object", 1);
 	}
 	$stale = $experiment->IdleStale();
+
+        #
+        # No longer show Geni experiments here, going to be bad news for
+        # mere users.
+        #
+        if ($nonlocal_id && !$isadmin) {
+            continue;
+        }
 
 	if ($state == "active" && isset($sidx)) {
 	    if (! ($user = User::Lookup($sidx))) {

@@ -217,6 +217,12 @@ for child in tree.getroot():
         cmd   = row.find("command").text
         directory = row.find("dir").text
         #
+        # Watch for old use of ops program agents, not supported.
+        #
+        if vnode == "ops":
+            Fatal("Unsupported use of program agents on ops")
+            pass
+        #
         # Strip out the startcmd stuff, we want just the command.
         #
         foo = re.match(r"^\((.*) ; /usr/local/etc/emulab.*\)", cmd);
