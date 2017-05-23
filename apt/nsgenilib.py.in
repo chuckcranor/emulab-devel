@@ -626,7 +626,7 @@ for child in tree.getroot():
             if etype != "1" and etype != "20":
                 Fatal("Unsupported program object event for " + vname)
                 pass
-            if time != "0":
+            if time != "0" and time != "0.0":
                 Fatal("Unsupported program object event time!=0 for " + vname)
                 pass
             programs[vname]["onexpstart"] = True
