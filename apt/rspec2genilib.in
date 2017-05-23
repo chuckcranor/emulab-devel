@@ -318,9 +318,12 @@ sub GenerateNodeStatements($)
 		    else {
 			$directory = "None";
 		    }
+		    if ($command !~ /^\'.*\'$/ && $command !~ /^\".*\"$/) {
+			$command = "'$command'"; 
+		    }
 		    $node->addTagStatement(
 			"addService(emulab.ProgramAgent('$vname', ".
-			"'$command', $directory, $onexpstart))");
+			"$command, $directory, $onexpstart))");
 		    last SWITCH;
 		};
 	    }
