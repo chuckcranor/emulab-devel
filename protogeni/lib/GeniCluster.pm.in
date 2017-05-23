@@ -1014,6 +1014,7 @@ sub ApproveReservation($)
 sub DeleteReservation($)
 {
     my ($argref)  = @_;
+    my $args = "";
     my $project;
 
     #
@@ -1058,10 +1059,29 @@ sub DeleteReservation($)
 
     return GeniResponse->Create(GENIRESPONSE_FORBIDDEN)
 	if ($reservation->pid() ne $project->pid());
-    
-    $reservation->Cancel() == 0
-	or GeniResponse->Create(GENIRESPONSE_ERROR);
-    
+
+    # Write the reason to a tempfile to pass in. This will auto unlink.
+    my $fp;
+    if (exists($argref->{"reason"}) && $argref->{"reason"} ne "") {
+	my $reason = $argref->{"reason"};
+	
+	if (!TBcheck_dbslot($reason, "default", "fulltext",
+			    TBDB_CHECKDBSLOT_WARN|TBDB_CHECKDBSLOT_ERROR)) {
+	    return GeniResponse->MalformedArgsResponse("Invalid reason")
+	}
+	$fp = File::Temp->new();
+	print $fp $reason;
+	$args = "-D $fp";
+	chmod(0755, "$fp");
+    }
+    GeniUtil::FlipToElabMan();
+    my $output = GeniUtil::ExecQuiet("$WAP $TB/sbin/reserve -c $idx $args");
+    if ($?) {
+	GeniUtil::FlipToGeniUser();
+	print STDERR "$output\n";
+	return GeniResponse->Create(GENIRESPONSE_REFUSED, undef, $output);
+    }
+    GeniUtil::FlipToGeniUser();
     return GeniResponse->Create(GENIRESPONSE_SUCCESS);
 }
 

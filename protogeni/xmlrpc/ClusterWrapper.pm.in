@@ -449,6 +449,7 @@ sub Start($$)
 	$method eq "Update"          ||
 	$method eq "Reserve"         ||
 	$method eq "ApproveReservation" ||
+	$method eq "DeleteReservation" ||
 	$method eq "DeleteSlice") {
 	$debug = 2;
 	$nostorelogs = 0;

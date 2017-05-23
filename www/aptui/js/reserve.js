@@ -39,6 +39,10 @@ $(function ()
 	 */
 	if (editing) {
 	    PopulateReservation();
+	    $('#reserve-delete-button').click(function (e) {
+		e.preventDefault();
+		Delete();
+	    });
 	}
     }
 
@@ -440,6 +444,8 @@ $(function ()
 		    Approve();
 		});
 	    }
+	    // Need this in Delete().
+	    window.PID = details.pid;
 	};
 	sup.ShowWaitWait();
 	var xmlthing = sup.CallServerMethod(null, "reserve",
@@ -447,6 +453,44 @@ $(function ()
 					    {"cluster" : window.CLUSTER,
 					     "idx"     : window.IDX});
 	xmlthing.done(callback);
+    }
+
+    /*
+     * Delete a reservation
+     */
+    function Delete()
+    {
+	var callback = function(json) {
+	    sup.HideWaitWait();
+	    if (json.code) {
+		sup.SpitOops("oops", json.value);
+		return;
+	    }
+	    window.location.replace("list-reservations.php");
+	};
+
+	// Bind the confirm button in the modal. Do the deletion.
+	$('#delete-reservation-modal #confirm-delete').click(function () {
+	    sup.HideModal('#delete-reservation-modal', function () {
+		var reason  = $('#delete-reason').val();
+		sup.ShowModal('#waitwait-modal');
+		var xmlthing = sup.CallServerMethod(null, "reserve",
+						    "Delete",
+						    {"cluster" : window.CLUSTER,
+						     "idx"     : window.IDX,
+						     "pid"     : window.PID,
+						     "reason"  : reason});
+		xmlthing.done(callback);
+	    });
+	});
+	
+	// Handler so we know the user closed the modal. We need to
+	// clear the confirm button handler.
+	$('#delete-reservation-modal').on('hidden.bs.modal', function (e) {
+	    $('#delete-reservation-modal #confirm-delete').unbind("click");
+	    $('#delete-reservation-modal').off('hidden.bs.modal');
+	})
+	sup.ShowModal("#delete-reservation-modal");
     }
 
     function HandleClusterChange(selected_cluster)

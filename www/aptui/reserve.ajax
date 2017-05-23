@@ -286,14 +286,37 @@ function Do_Delete()
 	return;
 
     }
+    #
+    # Admins can add an optional cause when denying a reservation.
+    #
+    $opt = "";
+    if (ISADMIN()) {
+        if (isset($ajax_args["reason"])) {
+            $reason  = $ajax_args["reason"];
+
+            if (!TBvalid_fulltext($reason)) {
+                SPITAJAX_ERROR(-1, "Illegal characters in reason");
+                return;
+            }
+            $reasonfile = tempnam("/tmp", "reason");
+
+            $fp = fopen($reasonfile, "w");
+            fwrite($fp, $reason);
+            fclose($fp);
+            chmod($reasonfile, 0666);
+            $opt = "-N $reasonfile";
+        }
+    }
     $this_uid = $this_user->uid();
     $pid = $project->pid();
     $urn = $aggregate->urn();
 
     $retval = SUEXEC($this_uid, $pid,
-                     "webmanage_reservations -a '$urn' delete $pid $idx",
+                     "webmanage_reservations -a '$urn' delete $opt $pid $idx",
                      SUEXEC_ACTION_CONTINUE);
-    
+    if (isset($reasonfile)) {
+        unlink($reasonfile);
+    }
     if ($retval) {
         SPITAJAX_ERROR(-1, $suexec_output);
 	return;

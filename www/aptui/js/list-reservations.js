@@ -14,7 +14,7 @@ $(function ()
     function initialize()
     {
 	window.APT_OPTIONS.initialize(sup);
-	amlist = decodejson('#amlist-json');
+	amlist  = decodejson('#amlist-json');
 
 	$('#oops_div').html(oopsString);	
 	$('#waitwait_div').html(waitwaitString);
@@ -63,6 +63,7 @@ $(function ()
 		    "showproject"  : true,
 		    "showuser"     : true,
 		    "name"         : name,
+		    "isadmin"      : window.ISADMIN,
 		});
 		html =
 		    "<div class='row' id='" + name + "'>" +
@@ -89,6 +90,18 @@ $(function ()
 		$('#' + name + ' .delete-button').click(function() {
 		    DeleteReservation($(this).closest('tr'));
 		    return false;
+		});
+		if (window.ISADMIN) {
+		    // Bind a deny handler.
+		    $('#' + name + ' .deny-button').click(function() {
+			DenyReservation($(this).closest('tr'));
+			return false;
+		    });
+		}
+		// This activates the tooltip subsystem.
+		$('[data-toggle="tooltip"]').tooltip({
+		    delay: {"hide" : 250, "show" : 250},
+		    placement: 'auto',
 		});
 	    }
 	    var xmlthing = sup.CallServerMethod(null, "reserve",
@@ -137,6 +150,50 @@ $(function ()
 	    $('#confirm_modal').off('hidden.bs.modal');
 	})
 	sup.ShowModal("#confirm_modal");
+    }
+    
+    /*
+     * Deny a reservation with cause. When complete, delete the table row.
+     */
+    function DenyReservation(row) {
+	// This is what we are deleting.
+	var idx = $(row).attr('data-idx');
+	var pid = $(row).attr('data-pid');
+	var cluster = $(row).attr('data-cluster');
+	var table   = $(row).closest("table");
+	
+	// Callback for the delete request.
+	var callback = function (json) {
+	    sup.HideModal('#waitwait-modal');
+	    console.log("deny", json);
+	    if (json.code) {
+		sup.SpitOops("oops", json.value);
+		return;
+	    }
+	    $(row).remove();
+	    table.trigger('update');
+	};
+	// Bind the confirm button in the modal. Do the deletion.
+	$('#deny-modal #confirm-deny').click(function () {
+	    sup.HideModal('#deny-modal', function () {
+		var reason  = $('#deny-reason').val();
+		sup.ShowModal('#waitwait-modal');
+		var xmlthing = sup.CallServerMethod(null, "reserve",
+						    "Delete",
+						    {"idx" : idx,
+						     "pid" : pid,
+						     "cluster" : cluster,
+						     "reason"  : reason});
+		xmlthing.done(callback);
+	    });
+	});
+	// Handler so we know the user closed the modal. We need to
+	// clear the confirm button handler.
+	$('#deny-modal').on('hidden.bs.modal', function (e) {
+	    $('#deny-modal #confirm-deny').unbind("click");
+	    $('#deny-modal').off('hidden.bs.modal');
+	})
+	sup.ShowModal("#deny-modal");
     }
     
     // Helper.

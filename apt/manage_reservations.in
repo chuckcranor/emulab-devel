@@ -476,6 +476,20 @@ sub DoList()
 #
 sub DoDelete()
 {
+    #
+    # We allow for admins to pass a reason (deny with cause).
+    #
+    my $optlist = "N:";
+    my $reason;
+    
+    my %options = ();
+    if (! getopts($optlist, \%options)) {
+	usage();
+    }
+    if (defined($options{"N"})) {
+	$reason = readfile($options{"N"});
+	chomp($reason);
+    }
     usage()
 	if (@ARGV != 2);
     my $pid = shift(@ARGV);
@@ -493,10 +507,14 @@ sub DoDelete()
 	!$project->AccessCheck($this_user, TB_PROJECT_CREATEEXPT())) {
 	fatal("No permission to access reservation list for $project")
     }
+    my $blob = { "idx" => $idx,
+		 "project" => $project->urn()->asString()
+    };
+    if ($this_user->IsAdmin() && defined($reason) && $reason ne "") {
+	$blob->{'reason'} = $reason;
+    }
     my $response =
-	APT_Geni::PortalRPC($authority, undef, "DeleteReservation",
-			    {"idx" => $idx,
-			     "project" => $project->urn()->asString()});
+	APT_Geni::PortalRPC($authority, undef, "DeleteReservation", $blob);
     if (GeniResponse::IsError($response)) {
 	#
 	# All errors are fatal.

@@ -34,6 +34,7 @@ $page_title = "List Reservations";
 RedirectSecure();
 $this_user = CheckLoginOrRedirect();
 $this_uid  = $this_user->uid();
+$isadmin   = (ISADMIN() ? 1 : 0);
 
 #
 # Verify page arguments. Cluster is a domain that we turn into a URN.
@@ -86,6 +87,10 @@ echo "<div id='main-body'>
 echo "<div id='oops_div'></div>
       <div id='waitwait_div'></div>
       <div id='confirm_div'></div>\n";
+
+echo "<script type='text/javascript'>\n";
+echo "   window.ISADMIN  = $isadmin;\n";
+echo "</script>\n";
 
 REQUIRE_UNDERSCORE();
 REQUIRE_SUP();

@@ -149,7 +149,7 @@ REQUIRE_SUP();
 REQUIRE_MOMENT();
 REQUIRE_APTFORMS();
 AddTemplateList(array("reserve-request", "reserve-faq", "reservation-list",
-                      "oops-modal", "waitwait-modal"));
+                      "oops-modal", "waitwait-modal", "confirm-modal"));
 SPITREQUIRE("js/reserve.js",
             "<script src='js/lib/jquery.tablesorter.min.js'></script>\n".
             "<script src='js/lib/jquery.tablesorter.widgets.min.js'></script>".
