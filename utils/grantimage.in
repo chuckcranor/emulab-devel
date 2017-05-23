@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2003-2016 University of Utah and the Flux Group.
+# Copyright (c) 2003-2017 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -80,7 +80,9 @@ if ($UID == 0) {
 #
 # Configure variables
 #
-my $TB		 = "@prefix@";
+my $TB            = "@prefix@";
+my $PGENISUPPORT  = @PROTOGENI_SUPPORT@;
+my $POSTIMAGEDATA = "$TB/sbin/protogeni/postimagedata";
 
 #
 # Testbed Support libraries
@@ -94,6 +96,7 @@ use Project;
 use Group;
 use User;
 use OSImage;
+use libEmulab;
 
 #
 # Turn off line buffering on output
@@ -275,6 +278,16 @@ else {
     if ($protogeni) {
 	$image->Update({"protogeni_export" => '1'}, $allvers) == 0
 	    or fatal("Could not update protogeni flag");
+    }
+}
+
+if ($PGENISUPPORT &&
+    GetSiteVar("protogeni/use_imagetracker")) {
+    my $imageid = $image->imageid();
+    print "Posting image $imageid to the image server ...\n";
+    system("$POSTIMAGEDATA $imageid");
+    if ($?) {
+	print STDERR "Could not post alias to the image server\n";
     }
 }
 exit(0);
