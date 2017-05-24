@@ -580,7 +580,8 @@ sub LookupAll($$;$)
 	# the transition period, sufficient nodes must be considered available
 	# for assignment to that project.
 	if( defined( $pid ) && ( $pid ne "emulab-ops" ||
-				 $eid ne "reloading" ) ) {
+				 ( $eid ne "reloading" &&
+				   $eid ne "reloadpending" ) ) ) {
 	    # Handle the case where an experiment is swapped in.  The
 	    # nodes aren't free right now, but at some time in the
 	    # future they could become so.
