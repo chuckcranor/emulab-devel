@@ -969,15 +969,22 @@ sub CurrentReservations($$) {
     my $query_result = DBQueryFatal(
 	"SELECT r.pid, r.type, SUM( r.nodes ), " .
 	    "(SELECT COUNT(*) FROM reserved AS res, nodes AS n WHERE " .
-	    "res.pid=r.pid AND res.node_id=n.node_id AND n.type=r.type) " .
+	    "res.pid=r.pid AND res.node_id=n.node_id AND n.type=r.type)," .
+	    "(SELECT COUNT(*) FROM nodes AS n LEFT OUTER JOIN reserved " .
+	    "AS res ON n.node_id=res.node_id WHERE n.type=r.type AND " .
+	    "res.pid IS NULL)," .
+	    "(SELECT COUNT(*) FROM nodes AS n, reserved AS res " .
+	    "WHERE n.node_id=res.node_id AND res.pid='emulab-ops' AND " .
+	    "res.eid IN ('reloading', 'reloadpending')) " .
 	"FROM future_reservations AS r WHERE r.pid IN ('" .
 	join( "','", @$projlist ) .
 	"') AND r.approved IS NOT NULL GROUP BY r.pid, r.type" );
 
-    while( my($pid, $type, $reserved, $used) =
+    while( my($pid, $type, $reserved, $used, $ready, $reloading) =
 	   $query_result->fetchrow_array() ) {
 	push( @answer, { 'pid' => $pid, 'nodetype' => $type,
-			 'reserved' => $reserved, 'used' => $used } );
+			 'reserved' => $reserved, 'used' => $used,
+			 'ready' => $ready, 'reloading' => $reloading } );
     }
     
     return @answer;
