@@ -83,7 +83,7 @@ if (!$instance) {
     SPITFOOTER();
     flush();
     sleep(3);
-    PAGEREPLACE("instantiate.php");
+    PAGEREPLACE("landing.php");
     return;
 }
 $creator = GeniUser::Lookup("sa", $instance->creator_uuid());
