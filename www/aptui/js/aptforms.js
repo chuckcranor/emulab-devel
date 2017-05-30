@@ -119,7 +119,8 @@ $(function () {
 	}
 
 	/*
-	 * Add errors to form
+	 * Add errors to form. Watch for errors that are not associated
+	 * with a visible form field, convert to a general error below.
 	 */
 	function GenerateFormErrors(form, errors) {
 	    $(form).find(".format-me").each(function () {
@@ -136,14 +137,18 @@ $(function () {
 			    '</label>';
 			    
 			$(this).parent().append(html);
+			delete errors[key];
 		    }
 		}
 	    });
+	    if (!errors || Object.keys(errors).length == 0) {
+		return;
+	    }
 	    /*
 	     * Deal with a "general" error. Some of the forms have a specific
 	     * spot for this.
 	     */
-	    if (errors && _.has(errors, "error")) {
+	    if (_.has(errors, "error")) {
 		if ($('#general_error').length) {
 		    $('#general_error').html(_.escape(errors["error"]));
 		}
@@ -151,6 +156,19 @@ $(function () {
 		    console.info("General error: " + errors["error"]);
 		    alert(errors["error"]);
 		}
+	    }
+	    else {
+		var field = Object.keys(errors)[0];
+		var error = errors[field];
+		
+		if ($('#general_error').length) {
+		    $('#general_error').html(_.escape(field + ": " + error));
+		}
+		else {
+		    console.info("Form error: " + errors["error"]);
+		    alert(errors["error"]);
+		}
+		
 	    }
 	}
 
