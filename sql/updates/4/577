@@ -1,6 +1,8 @@
 use strict;
 use libdb;
-if ($PGENISUPPORT) {
+use EmulabConstants;
+
+if (PROTOGENI_SUPPORT()) {
     require APT_Profile;
 }
 
