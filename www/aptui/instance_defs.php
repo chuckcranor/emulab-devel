@@ -856,6 +856,34 @@ class InstanceSliver
         }
         return $result;
     }
+
+    #
+    # Grab the list of sliver status rows. Turn this into a class at some point.
+    #
+    function StatusArray() {
+        $result = array();
+        $uuid   = $this->uuid();
+        $urn    = $this->aggregate_urn();
+
+        $query_result =
+            DBQueryFatal("select * from apt_instance_sliver_status ".
+                         "where uuid='$uuid' and aggregate_urn='$urn'");
+
+	while ($row = mysql_fetch_array($query_result)) {
+            error_log(print_r($row, TRUE));
+            
+            if ($row["sliver_data"]) {
+                $row["sliver_details"] = json_decode($row["sliver_data"], true);
+                
+                if ($row["frisbee_data"]) {
+                    $frisbeestatus = json_decode($row["frisbee_data"], true);
+                    $row["sliver_details"]["frisbeestatus"] = $frisbeestatus;
+                }
+            }
+            $result[] = $row;
+        }
+        return $result;
+    }
 }
 
 class ExtensionInfo

@@ -459,14 +459,11 @@ function Do_CloneStatus()
     if (isset($taskdata["aggregate_urn"]) && isset($taskdata["client_id"])) {
         $sliver = InstanceSliver::Lookup($instance, $taskdata["aggregate_urn"]);
         if ($sliver) {
-            $slwebtask = WebTask::Lookup($sliver->webtask_id());
-            $sliverstatus = $slwebtask->TaskValue("sliverstatus");
-            if ($sliverstatus) {
-                foreach ($sliverstatus as $node_id => $node_status) {
-                    if ($node_id == $taskdata["client_id"]) {
-                        $blob["node_status"] = $node_status["rawstate"];
-                        break;
-                    }
+            foreach ($sliver->StatusArray() as $status) {
+                if (isset($status["sliver_data"]) &&
+                    $status["client_id"] == $taskdata["client_id"]) {
+                    $blob["node_status"] = $status["sliver_details"]["rawstate"];
+                    break;
                 }
             }
         }

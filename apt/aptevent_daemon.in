@@ -45,6 +45,7 @@ my $optlist   = "dnsv";
 my $debug     = 0;
 my $impotent  = 0;
 my $verbose   = 0;
+my $count     = 0;
 
 #
 # Configure variables
@@ -62,9 +63,10 @@ $ENV{'PATH'} = '/bin:/usr/bin:/usr/local/bin:/usr/site/bin';
 delete @ENV{'IFS', 'CDPATH', 'ENV', 'BASH_ENV'};
 
 # Protos
-sub HandleSliverStatus($$$);
+sub HandleSliverStatus($$$$);
+sub HandleSliceStatus($$$);
 sub HandleImageStatus($$$);
-sub HandleFrisbeeStatus($$$);
+sub HandleFrisbeeStatus($$$$);
 sub fatal($);
 	  
 #
@@ -166,15 +168,16 @@ sub callback($$$)
 
     my $time      = time();
     my $site      = event_notification_get_site($handle, $note);
-    my $urn       = event_notification_get_string($handle, $note, "urn");
     my $slice     = event_notification_get_string($handle, $note, "slice");
-    my $type      = event_notification_get_string($handle, $note, "type");
-    my $details   = event_notification_get_string($handle, $note, "details");
 
     # Ignore extraneous events. They happen when listening to the local
     # cluster pubsubd.
     return
 	if (! (defined($site) && defined($slice)));
+
+    my $urn       = event_notification_get_string($handle, $note, "urn");
+    my $type      = event_notification_get_string($handle, $note, "type");
+    my $details   = event_notification_get_string($handle, $note, "details");
 
     #
     # Not sure why this is happening, but sometime the slice urn has
@@ -187,16 +190,25 @@ sub callback($$$)
     # Debugging.
     return
 	if (0 && $slice !~ /stoller/);
+    $count++;
     
     if ($debug || $verbose) {
-	print "Event: $time $site $type $urn $slice $details\n";
+	print "Event: $count $time $site $type $urn $slice $details\n";
     }
     my $instance = APT_Instance->LookupBySlice($slice);
     return
 	if (!defined($instance));
 
+    if (0) {
+	goto done;
+    }
+
     if ($type eq "SLIVERSTATUS") {
-	HandleSliverStatus($site, $instance, $details);
+	HandleSliverStatus($site, $urn, $instance, $details);
+	goto done;
+    }
+    elsif ($type eq "SLICESTATUS") {
+	HandleSliceStatus($site, $instance, $details);
 	goto done;
     }
     elsif ($type eq "IMAGESTATUS") {
@@ -204,7 +216,7 @@ sub callback($$$)
 	goto done;
     }
     elsif ($type eq "FRISBEESTATUS") {
-	HandleFrisbeeStatus($site, $instance, $details);
+	HandleFrisbeeStatus($site, $urn, $instance, $details);
 	goto done;
     }
   done:
@@ -218,9 +230,11 @@ sub callback($$$)
 #
 # Handle an Sliverstatus event.
 #
-sub HandleSliverStatus($$$)
+sub HandleSliverStatus($$$$)
 {
-    my ($site, $instance, $details) = @_;
+    my ($site, $sliver_urn, $instance, $json) = @_;
+
+    print "HandleSliverStatus: $site, $sliver_urn, $instance\n";
 
     if (exists($instance->AggregateHash()->{$site})) {
 	my $sliver = $instance->AggregateHash()->{$site};
@@ -229,14 +243,42 @@ sub HandleSliverStatus($$$)
 	}
 	else {
 	    if ($debug || $verbose) {
-		print "Updating sliver status for sliver from $details\n";
+		print "Updating sliver status for sliver from $json\n";
 	    }
-	    $details = eval { decode_json($details) };
+	    my $hash = eval { decode_json($json) };
 	    if ($@) {
-		print STDERR "Could not decode json data: $details\n";
+		print STDERR "Could not decode json data: $json\n";
 		return;
 	    }
-	    $sliver->UpdateWebStatus({$site => $details});
+	    $sliver->UpdateSliverStatus($sliver_urn, $hash, $json);
+	}
+    }
+}
+
+#
+# Handle an Slice status event.
+#
+sub HandleSliceStatus($$$)
+{
+    my ($site, $instance, $json) = @_;
+
+    print "HandleSliceStatus: $site, $instance\n";
+
+    if (exists($instance->AggregateHash()->{$site})) {
+	my $sliver = $instance->AggregateHash()->{$site};
+	if ($impotent) {
+	    print "Would update slice status for $sliver from details\n";
+	}
+	else {
+	    if ($debug || $verbose) {
+		print "Updating slice status for sliver from $json\n";
+	    }
+	    my $hash = eval { decode_json($json) };
+	    if ($@) {
+		print STDERR "Could not decode json data: $json\n";
+		return;
+	    }
+	    $sliver->UpdateSliceStatus($hash, $json);
 	}
     }
 }
@@ -246,7 +288,7 @@ sub HandleSliverStatus($$$)
 #
 sub HandleImageStatus($$$)
 {
-    my ($site, $instance, $details) = @_;
+    my ($site, $instance, $json) = @_;
 
     if (exists($instance->AggregateHash()->{$site})) {
 	if ($impotent) {
@@ -254,14 +296,14 @@ sub HandleImageStatus($$$)
 	}
 	else {
 	    if ($debug || $verbose) {
-		print "Updating image status for instance from $details\n";
+		print "Updating image status for instance from $json\n";
 	    }
-	    $details = eval { decode_json($details) };
+	    my $hash = eval { decode_json($json) };
 	    if ($@) {
-		print STDERR "Could not decode json data: $details\n";
+		print STDERR "Could not decode json data: $json\n";
 		return;
 	    }
-	    $instance->UpdateImageStatus($details);
+	    $instance->UpdateImageStatusNew($hash, $json);
 	}
     }
 }
@@ -269,25 +311,25 @@ sub HandleImageStatus($$$)
 #
 # Handle an FRISBEESTATUS event.
 #
-sub HandleFrisbeeStatus($$$)
+sub HandleFrisbeeStatus($$$$)
 {
-    my ($site, $instance, $details) = @_;
+    my ($site, $sliver_urn, $instance, $json) = @_;
 
     if (exists($instance->AggregateHash()->{$site})) {
 	my $sliver = $instance->AggregateHash()->{$site};
-	if (0 && $impotent) {
+	if ($impotent) {
 	    print "Would update frisbee status for $sliver from details\n";
 	}
 	else {
 	    if ($debug || $verbose) {
-		print "Updating frisbee status for sliver from $details\n";
+		print "Updating frisbee status for sliver from $json\n";
 	    }
-	    $details = eval { decode_json($details) };
+	    my $hash = eval { decode_json($json) };
 	    if ($@) {
-		print STDERR "Could not decode json data: $details\n";
+		print STDERR "Could not decode json data: $json\n";
 		return;
 	    }
-	    $sliver->UpdateFrisbeeStatus({$site => $details});
+	    $sliver->UpdateFrisbeeStatusNew($sliver_urn, $hash, $json);
 	}
     }
 }
@@ -316,7 +358,7 @@ while (1)
 	$gotone = 0;
 	event_poll($localhandle);
     }
-    event_poll_blocking($localhandle, 1000);
+    event_poll_blocking($localhandle, 100);
 }
 
 exit(0);

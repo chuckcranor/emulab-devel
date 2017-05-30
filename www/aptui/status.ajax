@@ -121,14 +121,15 @@ function Do_GetInstanceStatus()
             $havemanifests = 0;
         }
         else {
-            if ($sliver->webtask_id() &&
-                $webtask = WebTask::Lookup($sliver->webtask_id())) {
-                $sliverstatus = $webtask->TaskValue("sliverstatus");
-                if ($sliverstatus) {
-                    $blob["sliverstatus"][$sliver->aggregate_urn()] =
-                        $sliverstatus;
+            $statusblob  = array();
+
+            foreach ($sliver->StatusArray() as $status) {
+                if (isset($status["sliver_data"])) {
+                    $statusblob[$status["client_id"]]
+                        = $status["sliver_details"];
                 }
             }
+            $blob["sliverstatus"][$sliver->aggregate_urn()] = $statusblob;
         }
         if ($sliver->public_url()) {
             $blob["sliverurls"][] = array("name" => $sliver->aggregate_name(),
@@ -1053,14 +1054,11 @@ function Do_SnapshotStatus()
     if (isset($taskdata["aggregate_urn"]) && isset($taskdata["client_id"])) {
         $sliver = InstanceSliver::Lookup($instance, $taskdata["aggregate_urn"]);
         if ($sliver) {
-            $slwebtask = WebTask::Lookup($sliver->webtask_id());
-            $sliverstatus = $slwebtask->TaskValue("sliverstatus");
-            if ($sliverstatus) {
-                foreach ($sliverstatus as $node_id => $node_status) {
-                    if ($node_id == $taskdata["client_id"]) {
-                        $blob["node_status"] = $node_status["rawstate"];
-                        break;
-                    }
+            foreach ($sliver->StatusArray() as $status) {
+                if (isset($status["sliver_data"]) &&
+                    $status["client_id"] == $taskdata["client_id"]) {
+                    $blob["node_status"] = $status["sliver_details"]["rawstate"];
+                    break;
                 }
             }
         }

@@ -29,6 +29,7 @@ use English;
 use Data::Dumper;
 use Date::Parse;
 use POSIX qw(tmpnam);
+use JSON;
 use Exporter;
 use vars qw(@ISA @EXPORT $AUTOLOAD
 	    $RECORDHISTORY_TERMINATED $RECORDHISTORY_EXPIRED
@@ -135,6 +136,7 @@ sub Lookup($$)
     $self->{'BRAND'}      = Brand->Create($self->{'INSTANCE'}->{'servername'});
     $self->{'HASH'}       = {};
     $self->{'AGGREGATES'} = {};
+    $self->{'WEBTASK'}    = undef;
     bless($self, $class);
 
     #
@@ -150,27 +152,6 @@ sub Lookup($$)
 			   APT_Instance::Aggregate->GenTemp($self)};
     }
     $self->{'AGGREGATES'} = $aggregates;
-
-    #
-    # Grab the webtask. Backwards compat mode, see if there is one associated
-    # with the object, use that. Otherwise create a new one.
-    #
-    my $webtask;
-    
-    if (defined($self->webtask_id())) {
-	$webtask = WebTask->Lookup($self->webtask_id());
-    }
-    if (!defined($webtask)) {
-	$webtask = WebTask->LookupByObject($self->uuid());
-	if (!defined($webtask)) {
-	    $webtask = WebTask->Create();
-	    return undef
-		if (!defined($webtask));
-	}
-	$self->Update({"webtask_id" => $webtask->task_id()}) == 0
-	    or return undef;
-    }
-    $self->{'WEBTASK'} = $webtask;
     
     # Add to cache. 
     $instances{$self->uuid()} = $self;
@@ -204,9 +185,37 @@ sub Brand($)	{ return $_[0]->{'BRAND'}; }
 sub isAPT($)	{ return $_[0]->Brand()->isAPT() ? 1 : 0; }
 sub isCloud($)	{ return $_[0]->Brand()->isCloud() ? 1 : 0; }
 sub isPNet($)	{ return $_[0]->Brand()->isPNet() ? 1 : 0; }
-sub webtask($)  { return $_[0]->{'WEBTASK'}; }
 sub AggregateList($) { return values(%{ $_[0]->{'AGGREGATES'} }); }
 sub AggregateHash($) { return $_[0]->{'AGGREGATES'}; }
+
+#
+# Grab the webtask. Backwards compat mode, see if there is one associated
+# with the object, use that. Otherwise create a new one.
+#
+sub webtask($)
+{
+    my ($self) = @_;
+    my $webtask;
+
+    return $self->{'WEBTASK'}
+        if (defined($self->{'WEBTASK'}));
+
+    if (defined($self->webtask_id())) {
+	$webtask = WebTask->Lookup($self->webtask_id());
+    }
+    if (!defined($webtask)) {
+	$webtask = WebTask->LookupByObject($self->uuid());
+	if (!defined($webtask)) {
+	    $webtask = WebTask->Create();
+	    return undef
+		if (!defined($webtask));
+	}
+	$self->Update({"webtask_id" => $webtask->task_id()}) == 0
+	    or return undef;
+    }
+    $self->{'WEBTASK'} = $webtask;
+    return $webtask;
+}
 
 # Break circular reference someplace to avoid exit errors.
 sub DESTROY {
@@ -368,7 +377,8 @@ sub LookupBySlice($$)
 	if (!$query_result || !$query_result->numrows);
 
     my ($uuid) = $query_result->fetchrow_array();
-    return APT_Instance->Lookup($uuid);
+    my $foo = APT_Instance->Lookup($uuid);
+    return $foo;
 }
 
 #
@@ -1213,6 +1223,7 @@ use WebTask;
 use libtestbed;
 use Carp;
 use POSIX qw(tmpnam);
+use JSON;
 use English;
 use GeniResponse;
 use Genixmlrpc;
@@ -1244,6 +1255,8 @@ sub Lookup($$$)
     $self->{'DBROW'}    = $query_result->fetchrow_hashref();
     $self->{'HASH'}     = {};
     $self->{'INSTANCE'} = $instance;
+    $self->{'WEBTASK'}  = undef;
+    $self->{'STATUS'}   = undef;
     bless($self, $class);
 
     # Handy;
@@ -1251,13 +1264,6 @@ sub Lookup($$$)
 
     # Kludge
     $self->{'ISAL2S'}   = ($self->aggregate_urn() =~ /al2s/ ? 1 : 0);
-
-    my $webtask = WebTask->Lookup($self->webtask_id());
-    return $self
-	if (!defined($webtask));
-    $self->{'WEBTASK'} = $webtask;
-    $webtask->AutoStore(1);
-    
     return $self;
 }
 
@@ -1283,10 +1289,74 @@ AUTOLOAD {
     carp("No such slot '$name' field in class $type");
     return undef;
 }
-sub webtask($)	        { return $_[0]->{'WEBTASK'}; }
 sub instance($)	        { return $_[0]->{'INSTANCE'}; }
 sub domain($)		{ return $_[0]->{'AGGURN'}->domain(); }
 sub isAL2S($)           { return $_[0]->{'ISAL2S'}; }
+
+#
+# Grab the webtask.
+#
+sub webtask($)
+{
+    my ($self) = @_;
+
+    return $self->{'WEBTASK'}
+        if (defined($self->{'WEBTASK'}));
+
+    my $webtask = WebTask->Lookup($self->webtask_id());
+    return undef
+	if (!defined($webtask));
+    $self->{'WEBTASK'} = $webtask;
+    $webtask->AutoStore(1);
+    return $webtask;
+}
+
+#
+# Get sliver status rows. Turn into a class at some point.
+#
+sub SliverStatus($)
+{
+    my ($self) = @_;
+    my $result        = {};
+    my $uuid          = $self->uuid();
+    my $aggregate_urn = $self->aggregate_urn();
+
+    my $query_result = 
+	DBQueryWarn("select * from apt_instance_sliver_status ".
+		    "where uuid='$uuid' and aggregate_urn='$aggregate_urn'");
+    return $result
+	if (!$query_result);
+
+    while (my $row = $query_result->fetchrow_hashref()) {
+	my $json = $row->{"sliver_data"};
+	my $hash = eval { decode_json($json) };
+	if ($@) {
+	    print STDERR "Could not decode json data: $json\n";
+	    next;
+	}
+	$row->{"sliver_data"} = $hash;
+	$result->{$row->{"client_id"}} = $row;
+    }
+    return $result;
+}
+
+#
+# Delete sliver status for a node.
+#
+sub DeleteSliverStatus($$)
+{
+    my ($self, $client_id) = @_;
+    my $uuid          = $self->uuid();
+    my $aggregate_urn = $self->aggregate_urn();
+    my $safe_clientid = DBQuoteSpecial($client_id);
+
+    DBQueryWarn("delete from apt_instance_sliver_status ".
+		"where uuid='$uuid' and aggregate_urn='$aggregate_urn' and ".
+		"      client_id=$safe_clientid")
+	or return -1;
+
+    return 0;
+}
 
 # Backwards compat for a while
 sub GenTemp($$)
@@ -1407,6 +1477,14 @@ sub Delete($)
     return 0
 	if ($self->{'FAKE'});
     
+    DBQueryWarn("delete from apt_instance_slice_status ".
+		"where uuid='$uuid' and aggregate_urn='$urn'")
+	or return -1;
+
+    DBQueryWarn("delete from apt_instance_sliver_status ".
+		"where uuid='$uuid' and aggregate_urn='$urn'")
+	or return -1;
+
     DBQueryWarn("delete from apt_instance_aggregates ".
 		"where uuid='$uuid' and aggregate_urn='$urn'")
 	or return -1;
@@ -1434,7 +1512,7 @@ sub Refresh($)
     $self->{'DBROW'} = $query_result->fetchrow_hashref();
 
     return -1
-	if ($self->webtask()->Refresh());
+	if (defined($self->{'WEBTASK'}) && $self->webtask()->Refresh());
 
     return 0;
 }
@@ -1639,6 +1717,207 @@ sub UpdateFrisbeeStatus($$)
     DBQueryWarn("unlock tables");
 #    print STDERR Dumper($current);
     return $current;
+}
+
+#
+# Update the slice status for the instance.
+#
+sub UpdateSliceStatus($$$)
+{
+    my ($self, $hash, $json) = @_;
+
+    my $uuid = $self->uuid();
+    my $aggregate_urn = $self->aggregate_urn();
+    my $timestamp     = $hash->{'utc'};
+    my $safe_stamp    = DBQuoteSpecial($timestamp);
+    my $safe_json;
+
+    if (defined($json)) {
+	$safe_json = DBQuoteSpecial($json);
+    }
+    else {
+	$json = eval { encode_json($hash); };
+	if ($@) {
+	    print STDERR "Could not json encode sliver data\n";
+	    return -1;
+	}
+	$safe_json = DBQuoteSpecial($json);
+    }
+    DBQueryWarn("lock tables apt_instance_slice_status write")
+	or return -1;
+
+    my $query_result =
+	DBQueryWarn("select timestamp from apt_instance_slice_status ".
+		    "where uuid='$uuid' and aggregate_urn='$aggregate_urn' ");
+    goto bad
+	if (!$query_result);
+
+    if (! $query_result->numrows) {
+	my $name       = $self->name();
+
+	DBQueryWarn("insert into apt_instance_slice_status set ".
+		    "  uuid='$uuid', name='$name', ".
+		    "  aggregate_urn='$aggregate_urn', ".
+		    "  timestamp=$safe_stamp, modified=now(), ".
+		    "  slice_data=$safe_json")
+	    or goto bad;
+    }
+    else {
+	my $ref    = $query_result->fetchrow_hashref();
+	my $clause = "";
+	
+	if ($timestamp >= $ref->{'timestamp'}) {
+	    DBQueryWarn("update apt_instance_slice_status set modified=now(), ".
+			"  timestamp=$safe_stamp,slice_data=$safe_json ".
+			"where uuid='$uuid' and ".
+			"      aggregate_urn='$aggregate_urn'")
+		or goto bad;
+	}
+    }
+    DBQueryWarn("unlock tables");
+    return 0;
+    
+  bad:
+    DBQueryWarn("unlock tables");
+    return -1;
+}
+
+#
+# Update the sliverstatus for the instance.
+#
+sub UpdateSliverStatus($$$)
+{
+    my ($self, $urn, $hash, $json) = @_;
+
+    my $uuid = $self->uuid();
+    my $aggregate_urn = $self->aggregate_urn();
+    my $sliver_urn    = DBQuoteSpecial($urn);
+    my $timestamp     = $hash->{'utc'};
+    my $safe_stamp    = DBQuoteSpecial($timestamp);
+    my $safe_json;
+
+    if (defined($json)) {
+	$safe_json = DBQuoteSpecial($json);
+    }
+    else {
+	$json = eval { encode_json($hash); };
+	if ($@) {
+	    print STDERR "Could not json encode sliver data\n";
+	    return -1;
+	}
+	$safe_json = DBQuoteSpecial($json);
+    }
+    DBQueryWarn("lock tables apt_instance_sliver_status write")
+	or return -1;
+
+    my $query_result =
+	DBQueryWarn("select timestamp from apt_instance_sliver_status ".
+		    "where uuid='$uuid' and aggregate_urn='$aggregate_urn' and ".
+		    "      sliver_urn=$sliver_urn");
+    goto bad
+	if (!$query_result);
+
+    if (! $query_result->numrows) {
+	my $name       = $self->name();
+	my $client_id  = DBQuoteSpecial($hash->{'client_id'});
+	my $node_id    = DBQuoteSpecial($hash->{'component_urn'});
+
+	DBQueryWarn("insert into apt_instance_sliver_status set ".
+		    "  uuid='$uuid', name='$name', ".
+		    "  aggregate_urn='$aggregate_urn', ".
+		    "  resource_id=$node_id, client_id=$client_id, ".
+		    "  sliver_urn=$sliver_urn, ".
+		    "  timestamp=$safe_stamp, modified=now(), ".
+		    "  sliver_data=$safe_json")
+	    or goto bad;
+    }
+    else {
+	my $ref    = $query_result->fetchrow_hashref();
+	my $clause = "";
+	
+	if ($timestamp >= $ref->{'timestamp'}) {
+	    #
+	    # Keep frisbeestatus for reloading, but we want to clear
+	    # it otherwise.
+	    #
+	    if (exists($hash->{"rawstate"}) &&
+		! ($hash->{"rawstate"} eq TBDB_NODESTATE_RELOADING() ||
+		   $hash->{"rawstate"} eq TBDB_NODESTATE_TBSETUP())) {
+		$clause = ",frisbee_data=NULL";
+	    }
+	    DBQueryWarn("update apt_instance_sliver_status set modified=now(), ".
+			"  timestamp=$safe_stamp,sliver_data=$safe_json ".
+			"  $clause ".
+			"where uuid='$uuid' and ".
+			"      aggregate_urn='$aggregate_urn' and ".
+			"      sliver_urn=$sliver_urn")
+		or goto bad;
+	}
+    }
+    DBQueryWarn("unlock tables");
+    return 0;
+    
+  bad:
+    DBQueryWarn("unlock tables");
+    return -1;
+}
+
+#
+# Update the frisbee status for the instance. 
+#
+sub UpdateFrisbeeStatusNew($$$)
+{
+    my ($self, $urn, $hash, $json) = @_;
+
+    my $uuid = $self->uuid();
+    my $aggregate_urn = $self->aggregate_urn();
+    my $sliver_urn    = DBQuoteSpecial($urn);
+    my $safe_json     = DBQuoteSpecial($json);
+
+    DBQueryWarn("lock tables apt_instance_sliver_status write")
+	or return -1;
+
+    my $query_result =
+	DBQueryWarn("select uuid from apt_instance_sliver_status ".
+		    "where uuid='$uuid' and aggregate_urn='$aggregate_urn' and ".
+		    "      sliver_urn=$sliver_urn");
+    goto bad
+	if (!$query_result);
+
+    # Ignore if no existing sliver status,
+    if (! $query_result->numrows) {
+	DBQueryWarn("unlock tables");
+	return 0;
+    }
+    DBQueryWarn("update apt_instance_sliver_status set modified=now(), ".
+		"  frisbee_data=$safe_json ".
+		"where uuid='$uuid' and ".
+		"      aggregate_urn='$aggregate_urn' and ".
+		"      sliver_urn=$sliver_urn")
+	or goto bad;
+
+    DBQueryWarn("unlock tables");
+    return 0;
+    
+  bad:
+    DBQueryWarn("unlock tables");
+    return -1;
+}
+
+#
+# A variant for updating above from the results of a SliverStatus() API call.
+#
+sub UpdateSliverStatusAll($$)
+{
+    my ($self, $blob) = @_;
+
+    foreach my $urn (keys(%{$blob})) {
+	my $details = $blob->{$urn};
+
+	# Update sliver status, but no json from here,
+	$self->UpdateSliverStatus($urn, $details, undef);
+    }
+    return 0;
 }
 
 #
@@ -2616,7 +2895,7 @@ sub WaitForSliver($)
 	# cares about. We get this on each loop, update so the web
 	# interface can show changes.
 	#
-	my $statusblob = $aggobj->UpdateWebStatus($repblob->{'details'});
+	my $statusblob = {};
 
 	#print STDERR Dumper($statusblob);
 	
@@ -2624,6 +2903,11 @@ sub WaitForSliver($)
 	foreach my $urn (keys(%{$repblob->{'details'}})) {
 	    my $details = $repblob->{'details'}->{$urn};
 	    my $node_id = $details->{'client_id'};
+
+	    # Update sliver status, but no json from here,
+	    $aggobj->UpdateSliverStatus($urn, $details, undef);
+	    # For next loop.
+	    $statusblob->{$node_id} = $details;
 
 	    #
 	    # Look at the last blob. If we changed, view that as progress.

@@ -1063,15 +1063,15 @@ foreach my $aggobj (@aggregate_list) {
 	    if (defined($aggobj->public_url()));
     }
     else {
-	my $statusblob = $aggobj->webtask()->sliverstatus();
+	my $sliverstatus = $aggobj->SliverStatus();
 
-	print Dumper($statusblob);
+	print Dumper($sliverstatus);
 
-	foreach my $details (values(%{ $statusblob })) {
+	foreach my $status (values(%{ $sliverstatus })) {
 	    # Startup command is still running.
 	    $startuprunning++
-		if (exists($details->{'execute_state'}) &&
-		    $details->{'execute_state'} ne "exited");
+		if (exists($status->{"sliver_data"}->{'execute_state'}) &&
+		    $status->{"sliver_data"}->{'execute_state'} ne "exited");
 	}
     }
     if (defined($aggobj->public_url())) {

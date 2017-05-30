@@ -296,6 +296,41 @@ CREATE TABLE `apt_instance_history` (
   KEY `profile_id` (`profile_id`)
 ) ENGINE=MyISAM DEFAULT CHARSET=latin1;
 
+
+--
+-- Table structure for table `apt_instance_slice_status`
+--
+
+DROP TABLE IF EXISTS `apt_instance_slice_status`;
+CREATE TABLE `apt_instance_slice_status` (
+  `uuid` varchar(40) NOT NULL default '',
+  `name` varchar(16) default NULL,
+  `aggregate_urn` varchar(128) NOT NULL default '',
+  `timestamp` int(10) unsigned NOT NULL default '0',
+  `modified` datetime NOT NULL default '0000-00-00 00:00:00',
+  `slice_data` mediumtext,
+  PRIMARY KEY (`uuid`,`aggregate_urn`)
+) ENGINE=MyISAM DEFAULT CHARSET=latin1;
+
+--
+-- Table structure for table `apt_instance_sliver_status`
+--
+
+DROP TABLE IF EXISTS `apt_instance_sliver_status`;
+CREATE TABLE `apt_instance_sliver_status` (
+  `uuid` varchar(40) NOT NULL default '',
+  `name` varchar(16) default NULL,
+  `aggregate_urn` varchar(128) NOT NULL default '',
+  `sliver_urn` varchar(128) NOT NULL default '',
+  `resource_id` varchar(32) NOT NULL default '',
+  `client_id` varchar(32) NOT NULL default '',
+  `timestamp` int(10) unsigned NOT NULL default '0',
+  `modified` datetime NOT NULL default '0000-00-00 00:00:00',
+  `sliver_data` mediumtext,
+  `frisbee_data` mediumtext,
+  PRIMARY KEY (`uuid`,`aggregate_urn`,`sliver_urn`)
+) ENGINE=MyISAM DEFAULT CHARSET=latin1;
+
 --
 -- Table structure for table `apt_instances`
 --

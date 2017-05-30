@@ -655,7 +655,7 @@ sub DoSnapshot()
 
 	my $blob = $response->value();
 	# This is the per-aggregate status, we always set this for web UI.
-	$aggregate->UpdateWebStatus($blob->{'details'});
+	$aggregate->UpdateSliverStatusAll($blob->{'details'});
 	
 	if ($blob->{'status'} eq "failed") {
 	    $failed = 1;
@@ -2256,6 +2256,8 @@ sub DoRefresh()
 	print STDERR "No slice for instance\n";
 	goto killit;
     }
+    # Shorten default timeout
+    Genixmlrpc->SetTimeout(30);
     
     #
     # Lock the slice in case it is doing something else, like taking
@@ -2298,9 +2300,9 @@ sub DoRefresh()
 	    $sliver->SetStatus("failed");
 	}
 	# This is the per-aggregate status, we always set this for web UI.
-	my $statusblob = $sliver->UpdateWebStatus($blob->{'details'});
+	$sliver->UpdateSliverStatusAll($blob->{'details'});
 	if ($debug) {
-	    print STDERR Dumper($statusblob);
+	    print STDERR Dumper($blob->{'details'});
 	}
 	return 0;
       bad:
@@ -2445,16 +2447,6 @@ sub DoRebootOrReload($)
 	    goto bad;
 	}
       gone:
-	# Tell the web interface something is different. Real status will
-	# come later when the monitor starts up. 
-	if ($webtask->sliverstatus()) {
-	    my $blob = $webtask->sliverstatus();
-	    foreach my $urn (@urns) {
-		my $node_id = $node_ids{$urn};
-		$blob->{$node_id}->{'status'} = "changing";
-	    }
-	    $webtask->sliverstatus($blob);
-	}
 	return 0;
       bad:
 	print STDERR "$errmsg\n";
@@ -2559,7 +2551,7 @@ sub DoManifests()
 	    goto bad;
 	}
 	$sliver->SetManifest($manifest);
-	$sliver->UpdateWebStatus($response->value()->{'details'});
+	$sliver->UpdateSliverStatusAll($response->value()->{'details'});
 	return 0;
       bad:
 	return 1;
@@ -2645,7 +2637,7 @@ sub DoDeleteNodes()
 	    }
 	}
     }
-    
+
     #
     # Lock the slice in case it is doing something else, like taking
     # a disk image.
@@ -2654,6 +2646,12 @@ sub DoDeleteNodes()
 	$errmsg = "Experiment is busy, cannot lock it. Please try again later";
 	goto bad;
     }
+    if (!@aggregates) {
+	$errmsg  = "Could not find any nodes to delete!";
+	$errcode = 1;
+	goto bad;
+    }
+    
     my $coderef = sub {
 	my ($sliver) = @_;
 	my $webtask  = $sliver->webtask();
@@ -2685,15 +2683,10 @@ sub DoDeleteNodes()
 	my $manifest = $response->value();
 	$sliver->SetManifest($manifest);
 	
-	# Delete the nodes from the status blob. 
-	if ($webtask->sliverstatus()) {
-	    my $blob = $webtask->sliverstatus();
-	    foreach my $node_id (@nodes) {
-		delete($blob->{$node_id});
-	    }
-	    $webtask->sliverstatus($blob);
+	# Delete sliver status rows.
+	foreach my $node_id (@nodes) {
+	    $sliver->DeleteSliverStatus($node_id);
 	}
-	$sliver->SetStatus("provisioned");
 	return 0;
       bad:
 	$sliver->SetStatus("ready");
@@ -2890,15 +2883,15 @@ sub StartMonitorInternal(;$@)
     
 	my $blob = $response->value();
 	# This is the per-aggregate status, we always set this for web UI.
-	my $statusblob = $sliver->UpdateWebStatus($blob->{'details'});
+	$sliver->UpdateSliverStatusAll($blob->{'details'});
 	if ($debug) {
-	    print STDERR Dumper($statusblob);
+	    print STDERR Dumper($blob->{'details'});
 	}
 	# Look for nodes still executing
 	my $executing = 0;
 	if ($waitforstartup) {
-	    foreach my $node_id (keys(%{$statusblob})) {
-		my $details = $statusblob->{'node_id'};
+	    foreach my $urn (keys(%{$blob->{'details'}})) {
+		my $details = $blob->{'details'}->{$urn};
 		
 		$executing++
 		    if (exists($details->{'execute_state'}) &&
@@ -3127,15 +3120,6 @@ sub DoPanic()
 	    print STDERR "Could not panic sliver: ".
 		$response->output() . "\n";
 	    return -1;
-	}
-	# Tell the web interface something is different. Real status will
-	# come later when the monitor starts up. 
-	if ($webtask->sliverstatus()) {
-	    my $blob = $webtask->sliverstatus();
-	    foreach my $node_id (keys(%{ $blob })) {
-		$blob->{$node_id}->{'status'} = "changing";
-	    }
-	    $webtask->sliverstatus($blob);
 	}
 	return 0;
     };
