@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2006-2016 University of Utah and the Flux Group.
+# Copyright (c) 2006-2017 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -127,6 +127,7 @@ class Lease
     function state()	     { return $this->field("state"); }
     function locked()	     { return $this->field("locked"); }
     function locker_pid()    { return $this->field("locker_pid"); }
+    function updated()       { return null; }
 
     function attribute($key) {
 	if (array_key_exists($key, $this->attributes)) {
