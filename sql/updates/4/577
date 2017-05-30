@@ -1,6 +1,8 @@
 use strict;
 use libdb;
-use APT_Profile;
+if ($PGENISUPPORT) {
+    require APT_Profile;
+}
 
 sub DoUpdate($$$)
 {
@@ -14,6 +16,7 @@ sub DoUpdate($$$)
         DBQueryFatal("alter table apt_profiles add " .
 		     " `usecount` int(11) default '0'");
     }
+    # There will not be any profiles if PGENISUPPORT is disabled.
     my $query_result =
 	DBQueryFatal("select profileid from apt_profiles");
 
