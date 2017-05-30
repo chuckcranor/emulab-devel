@@ -70,7 +70,8 @@ LIBEXEC_SCRIPTS	= spewleds webcopy spewsource webcvsweb xlogin webviewvc \
                   $(WEB_BIN_SCRIPTS) $(WEB_SBIN_SCRIPTS)
 
 CTRLSBIN_SCRIPTS= opsdb_control.proxy daemon_wrapper ec2import.proxy \
-		 ec2import-image.pl GrubConf.rb export-template-remote.rb
+		 ec2import-image.pl GrubConf.rb export-template-remote.rb \
+		 setzfsquotas
 
 SBSBIN_SCRIPTS=   daemon_wrapper subboss_cacheclean
 

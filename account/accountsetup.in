@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2010-2016 University of Utah and the Flux Group.
+# Copyright (c) 2010-2017 University of Utah and the Flux Group.
 # 
 # {{{GENIPUBLIC-LICENSE
 # 
@@ -75,6 +75,9 @@ my $ZFS_ROOT          = "@ZFS_ROOT@";
 my $ZFS_QUOTA_USER    = "@ZFS_QUOTA_USER@";
 my $ZFS_QUOTA_PROJECT = "@ZFS_QUOTA_PROJECT@";
 my $ZFS_QUOTA_GROUP   = "@ZFS_QUOTA_GROUP@";
+my $ZFS_QUOTA_USER_X  = "@ZFS_QUOTA_USER_X@";
+my $ZFS_QUOTA_PROJECT_X = "@ZFS_QUOTA_PROJECT_X@";
+my $ZFS_QUOTA_GROUP_X = "@ZFS_QUOTA_GROUP_X@";
 my $PW		      = "/usr/sbin/pw";
 my $USERADD	      = "/usr/sbin/pw useradd";
 my $USERDEL	      = "/usr/sbin/pw userdel";
@@ -832,12 +835,22 @@ sub MakeDir($$)
 	$path = "${ZFS_ROOT}${fs}/$dir";
 
 	# XXX quotas
+	my ($refquota,$mult);
 	if ($fs eq $USERROOT) {
-	    $cmdarg = "-o quota=$ZFS_QUOTA_USER";
+	    $refquota = $ZFS_QUOTA_USER;
+	    $mult = $ZFS_QUOTA_USER_X;
 	} elsif ($fs eq $PROJROOT) {
-	    $cmdarg = "-o quota=$ZFS_QUOTA_PROJECT";
+	    $refquota = $ZFS_QUOTA_PROJECT;
+	    $mult = $ZFS_QUOTA_PROJECT_X;
 	} elsif ($fs eq $GROUPROOT) {
-	    $cmdarg = "-o quota=$ZFS_QUOTA_GROUP";
+	    $refquota = $ZFS_QUOTA_GROUP;
+	    $mult = $ZFS_QUOTA_GROUP_X;
+	}
+	if (defined($refquota) && $refquota =~ /^(\d+(?:\.\d+)?)([MGT]?)$/) {
+	    my ($num,$unit) = ($1,$2);
+	    $unit = "" if (!defined($unit));
+	    $num = sprintf "%.1f", $num * $mult;
+	    $cmdarg = "-o refquota=$refquota -o quota=$num$unit";
 	} else {
 	    $cmdarg = "";
 	}
