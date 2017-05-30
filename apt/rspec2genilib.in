@@ -339,10 +339,11 @@ sub GenerateNodeStatements($)
 	# Interfaces.
 	#
 	foreach my $iface (@{$node->ifacelist()}) {
-	    my $iface_id  = $iface->{'client_id'};
-	    my $itag      = $iface->{'tag'};
-	    my $ip        = $iface->{'ip'};
-	    my $mask      = $iface->{'mask'};
+	    my $iface_id     = $iface->{'client_id'};
+	    my $itag         = $iface->{'tag'};
+	    my $ip           = $iface->{'ip'};
+	    my $mask         = $iface->{'mask'};
+	    my $component_id = $iface->{'component_id'};
 
 	    #
 	    # geni-lib is going to name the interfaces as node_id:iface_id
@@ -375,6 +376,10 @@ sub GenerateNodeStatements($)
 	    else {
 		$node->addStatement("$itag = ${ntag}.addInterface('$iface_id'" .
 				    (defined($addr) ? ", $addr" : "") . ")");
+		if (defined($component_id)) {
+		    $node->addStatement("${itag}.component_id = ".
+					"'$component_id'");
+		}
 	    }
 	}
 	foreach my $id (sort(keys(%{$node->{'blockstores'}}))) {

@@ -1053,11 +1053,13 @@ sub addNode($$$)
 	#
 	# Interfaces are simple.
 	#
-	my $client_id = GetTextOrFail("client_id", $ref);
-	my $ip        = GeniXML::GetIp($ref, $ref->parentNode);
-	my $mask      = GeniXML::GetMask($ref, $ref->parentNode);
+	my $client_id    = GetTextOrFail("client_id", $ref);
+	my $ip           = GeniXML::GetIp($ref, $ref->parentNode);
+	my $mask         = GeniXML::GetMask($ref, $ref->parentNode);
+	my $component_id = GeniXML::GetNodeId($ref);
 
-	APT_Rspec::Iface->new($rspec, $node, $client_id, $ip, $mask);
+	APT_Rspec::Iface->new($rspec, $node,
+			      $client_id, $ip, $mask, $component_id);
     };
 
     #
@@ -1251,17 +1253,18 @@ use English;
 use GeniXML;
 use GeniHRN;
 
-sub new($$$$$$)
+sub new($$$$$$$)
 {
-    my ($class, $rspec, $node, $client_id, $ip, $mask) = @_;
+    my ($class, $rspec, $node, $client_id, $ip, $mask, $component_id) = @_;
 
     my $self = {
-	"client_id"  => $client_id,
-	"node_id"    => $node->client_id(),
-	"ip"         => $ip,
-	"mask"       => $mask,
-	"statements" => [],
-	"tag"        => "iface" . scalar(keys(%{$rspec->ifaces()})),
+	"client_id"    => $client_id,
+	"node_id"      => $node->client_id(),
+	"ip"           => $ip,
+	"mask"         => $mask,
+	"component_id" => $component_id,
+	"statements"   => [],
+	"tag"          => "iface" . scalar(keys(%{$rspec->ifaces()})),
     };
     bless($self, $class);
     $rspec->addIface($self);
@@ -1272,6 +1275,7 @@ sub client_id($)		{ return $_[0]->{'client_id'}; }
 sub node_id($)			{ return $_[0]->{'node_id'}; }
 sub ip($)			{ return $_[0]->{'ip'}; }
 sub mask($)			{ return $_[0]->{'mask'}; }
+sub component_id($)		{ return $_[0]->{'component_id'}; }
 sub statements($)		{ return $_[0]->{'statements'}; }
 sub tag($)			{ return $_[0]->{'tag'}; }
 
@@ -1309,7 +1313,7 @@ sub Compare($$)
 		# cause of the alternate naming issue (node:id).
 		last SWITCH;
 	    };
-	    /^(node_id|ip|mask)$/i && do {
+	    /^(node_id|ip|mask|component_id)$/i && do {
 		return 1
 		    if (APT_Rspec::CompareValues("Iface: $client_id: $key",
 						 $val1,$val2));
