@@ -308,6 +308,9 @@ AC_SUBST(ZFS_ROOT)
 AC_SUBST(ZFS_QUOTA_USER)
 AC_SUBST(ZFS_QUOTA_PROJECT)
 AC_SUBST(ZFS_QUOTA_GROUP)
+AC_SUBST(ZFS_QUOTA_USER_X)
+AC_SUBST(ZFS_QUOTA_PROJECT_X)
+AC_SUBST(ZFS_QUOTA_GROUP_X)
 AC_SUBST(ZFS_NOEXPORT)
 AC_SUBST(INCREMENTAL_MOUNTD)
 AC_SUBST(WITHAMD)
@@ -478,6 +481,9 @@ ZFS_ROOT=z
 ZFS_QUOTA_USER="1G"
 ZFS_QUOTA_PROJECT="100G"
 ZFS_QUOTA_GROUP="10G"
+ZFS_QUOTA_USER_X="1.0"
+ZFS_QUOTA_PROJECT_X="1.0"
+ZFS_QUOTA_GROUP_X="1.0"
 ZFS_NOEXPORT=0
 INCREMENTAL_MOUNTD=0
 WITHAMD=0
@@ -1379,6 +1385,7 @@ outfiles="$outfiles Makeconf GNUmakefile \
 	utils/mktestbedtest utils/pxelinux_makeconf \
 	utils/addvpubaddr utils/attend utils/atten utils/addrfdevice \
 	utils/addrfpath utils/reserve utils/predict utils/notify-reservations \
+	utils/setzfsquotas \
 	www/GNUmakefile www/defs.php3 www/dbdefs.php3 www/xmlrpc.php3 \
 	www/xmlrpcpipe.php3 \
 	www/swish.conf www/websearch \
