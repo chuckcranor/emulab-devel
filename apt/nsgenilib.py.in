@@ -88,6 +88,7 @@ except etree.XMLSyntaxError:
 #
 nodes       = {}
 lans        = {}
+lansets     = {}
 ifaces      = {}
 blockstores = {}
 lanifaces   = {}
@@ -115,6 +116,8 @@ for child in tree.getroot():
             if ntype != "pcvm":
                 node.xen_ptype = ntype;
                 pass
+            # Start out exclusive; might change below.
+            node.exclusive = True
         elif ntype == "blockstore":
             node = IG.RemoteBlockstore(vname, "/mnt", "eth0")
             node.exclusive = True
@@ -268,6 +271,7 @@ for child in tree.getroot():
             lan = RSpec.LAN(vname)
             pass
         lans[vname] = lan;
+        lansets[vname] = {}
         rspec.addResource(lan)
         pass
     if child.tag == "virt_bridges":
@@ -348,13 +352,15 @@ for child in tree.getroot():
             pass
         if key == "dataset":
             #XXX
-            val = val.replace("/", ":");
-            bs.dataset = "urn:publicid:IDN+" + OURDOMAIN + "+dataset+" + val
+            tokens = val.split("/");
+            bs.dataset = "urn:publicid:IDN+" + OURDOMAIN + ":" + tokens[0]
+            bs.dataset = bs.dataset + "+dataset+" + tokens[1]
             pass
         if key == "leasename":
             #XXX
-            val = val.replace("/", ":");
-            bs.dataset = "urn:publicid:IDN+" + OURDOMAIN + "+dataset+" + val
+            tokens = val.split("/");
+            bs.dataset = "urn:publicid:IDN+" + OURDOMAIN + ":" + tokens[0]
+            bs.dataset = bs.dataset + "+dataset+" + tokens[1]
             pass
         if key == "mountpoint":
             bs.mount = val;
@@ -424,7 +430,10 @@ for child in tree.getroot():
         if row.find("mustdelay") != None:
             mustdelay = int(row.find("mustdelay").text)
             if mustdelay:
-                lan.setForceShaping()
+                if not lansets[vname].has_key("mustdelay"):
+                    lan.setForceShaping()
+                    pass
+                lansets[vname]["mustdelay"] = True
                 pass
             pass
         if row.find("protocol") != None:
