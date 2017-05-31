@@ -1,7 +1,7 @@
 #!/usr/bin/perl -wT
 
 #
-# Copyright (c) 2000-2016 University of Utah and the Flux Group.
+# Copyright (c) 2000-2017 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -731,10 +731,14 @@ sub GenDefsFile($)
 			 " left join os_info_versions as ov3 on ".
 			 "      ov3.osid=oi3.osid and ov3.vers=oi3.version ".
 			 " where ov.def_parentosid is not NULL" . 
-			 " group by oi.osname");
+			 " group by oi.osname,oi.pid");
 		     
 	while (my ($pid,$osname,$def_parentosid,$parent_osids) = 
 	       $query_result->fetchrow_array()) {
+	    if (!defined($def_parentosid)) {
+		print STDERR "No def_parentosid for $pid,$osname\n";
+		next;
+	    }
 	    my $parentlist = "\"$def_parentosid\"";
 	    if (defined($parent_osids) && $parent_osids ne '') {
 		$parentlist .= " \"$parent_osids\"";

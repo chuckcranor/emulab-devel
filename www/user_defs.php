@@ -1281,12 +1281,12 @@ class User
             DBQueryFatal("(select pid,max(UNIX_TIMESTAMP(s.last_activity)) ".
                          "   as last from experiment_stats as s ".
                          " where s.creator_idx='$uid_idx' and pid_idx!=0 ".
-                         " group by s.pid_idx order by last desc) ".
+                         " group by s.pid,s.pid_idx order by last desc) ".
                          "union ".
                          "(select pid,max(UNIX_TIMESTAMP(created)) as last ".
                          " from apt_instances ".
                          " where creator_idx='$uid_idx' and pid is not null ".
-                         " group by pid_idx order by last desc)");
+                         " group by pid,pid_idx order by last desc)");
         
 	$ordered = array();
 	while ($row = mysql_fetch_array($query_result)) {
