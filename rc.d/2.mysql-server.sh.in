@@ -60,6 +60,12 @@ if [ $major -eq 5 ]; then
 	if [ $minor -gt 4 ]; then
 	    opts="$opts --secure-file-priv="
 	fi
+	# so we can start using innodb tables, maybe with compression.
+	if [ $minor -gt 5 ]; then
+	    opts="$opts --innodb_file_per_table=1 --innodb_file_format=Barracuda"
+	    # Backwards compatibility.
+	    opts="$opts --lower_case_table_names=0 --log_output=file"
+	fi
 else
 	safeprog=/usr/local/bin/safe_mysqld
 fi
