@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2000-2015 University of Utah and the Flux Group.
+# Copyright (c) 2000-2017 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -561,7 +561,7 @@ if (!exists($newimageid_args{"mbr_version"}) && defined($node_id)) {
     # to version 1.
     #
     my $query_result =
-	DBQueryFatal("select mbr_version from partitions as p, images as i ".
+	DBQueryFatal("select mbr_version from `partitions` as p, images as i ".
 		     " where p.imageid=i.imageid and p.node_id='$node_id' ".
 		     " group by mbr_version");
     if ($query_result && $query_result->numrows == 1) {

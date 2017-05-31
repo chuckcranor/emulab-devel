@@ -245,8 +245,8 @@ sub PreSetupReload($$)
     # otherwise set the force-load flag ourselves!
     #
     if (!$self->nodeflag($nodeobject,'force')) {
-	my $qres = DBQueryWarn("select * from partitions".
-			       " where node_id='$node_id' and partition=$newpart");
+	my $qres = DBQueryWarn("select * from `partitions`".
+			       " where node_id='$node_id' and `partition`=$newpart");
 	if (!$qres->numrows()) {
 	    tbinfo "$self PreSetupReload($node_id): forcing reload; nothing in partitions table for this node\n";
 	    $self->nodeflag($nodeobject,'force',1);

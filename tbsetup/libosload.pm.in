@@ -368,7 +368,7 @@ sub osload ($$) {
 	if (!$prepare) {
 	    my $dbresult =
 		DBQueryWarn("select p.*,v.mbr_version ".
-			    " from partitions as p,image_versions as v ".
+			    " from `partitions` as p,image_versions as v ".
 			    " where p.imageid=v.imageid and ".
 			    "       p.imageid_version=v.version and ".
 			    "       v.deleted is null ".
@@ -537,16 +537,16 @@ sub osload ($$) {
 		my $imvers = $href->{'imageid_version'};
 		my $impid = $href->{'imagepid'};
 		$dbresult =
-		    DBQueryWarn("replace into partitions ".
-				"(node_id,partition,osid,imageid,imagepid,".
+		    DBQueryWarn("replace into `partitions` ".
+				"(node_id,`partition`,osid,imageid,imagepid,".
 				" osid_vers,imageid_version) ".
 				"values ".
 				"('$node','$i','$osid','$imid','$impid',".
 				" '$osvers','$imvers')");
 	    } else {
 		$dbresult =
-		    DBQueryWarn("delete from partitions ".
-				"where node_id='$node' and partition='$i'");
+		    DBQueryWarn("delete from `partitions` ".
+				"where node_id='$node' and `partition`='$i'");
 	    }
 	    if (!$dbresult) {
 		tberror "$node: Could not update partitions table";
@@ -1486,13 +1486,13 @@ sub osload_setupswapinfo($$;@)
     # set to an MFS at other times.
     #
     my $query_result = DBQueryWarn(
-	"select r.node_id,r.vname,r.pid,r.eid,r.erole,n.osid,p.partition,".
+	"select r.node_id,r.vname,r.pid,r.eid,r.erole,n.osid,p.`partition`,".
 	"       p.imageid,p.imageid_version,p.imagepid,i.imagename,".
 	"       iv.loadpart,e.savedisk ".
 	"from reserved as r ".
 	"left join nodes as n on n.node_id=r.node_id ".
 	"left join node_types as nt on nt.type=n.type ".
-	"left join partitions as p on p.node_id=n.node_id and ".
+	"left join `partitions` as p on p.node_id=n.node_id and ".
 	"          p.osid=n.def_boot_osid ".
         "left join images as i on i.imageid=p.imageid and ".
 	"          i.version=p.imageid_version ".

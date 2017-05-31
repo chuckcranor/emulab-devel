@@ -1496,13 +1496,13 @@ sub osload_setupswapinfo($$$;@)
     # set to an MFS at other times.
     #
     my $query_result = DBQueryWarn(
-	"select r.node_id,r.vname,r.pid,r.eid,r.erole,n.osid,p.partition,".
+	"select r.node_id,r.vname,r.pid,r.eid,r.erole,n.osid,p.`partition`,".
 	"       p.imageid,p.imageid_version,p.imagepid,i.imagename,".
 	"       iv.loadpart,e.savedisk ".
 	"from reserved as r ".
 	"left join nodes as n on n.node_id=r.node_id ".
 	"left join node_types as nt on nt.type=n.type ".
-	"left join partitions as p on p.node_id=n.node_id and ".
+	"left join `partitions` as p on p.node_id=n.node_id and ".
 	"          p.osid=n.def_boot_osid ".
         "left join images as i on i.imageid=p.imageid and ".
 	"          i.version=p.imageid_version ".
@@ -2066,8 +2066,8 @@ sub SaveNodeDiskInfo($$)
     # Save the old ones off first!
     #
     my $dbres;
-    $dbres = DBQueryFatal("select node_id,partition,osid,imageid,imagepid" . 
-			  " from partitions where node_id='$node_id'");
+    $dbres = DBQueryFatal("select node_id,`partition`,osid,imageid,imagepid" . 
+			  " from `partitions` where node_id='$node_id'");
     if (defined($dbres) && $dbres->numrows()) {
 	my @rows = ();
 	while (my $rowref = $dbres->fetchrow_hashref()) {
@@ -2099,14 +2099,14 @@ sub RestoreNodeDiskInfo($$)
 
     my $partref = $self->nodeinfo($nodeobject,'old_partitions');
     if (defined($partref) && @$partref) {
-	DBQueryFatal("delete from partitions where node_id='$node_id'");
+	DBQueryFatal("delete from `partitions` where node_id='$node_id'");
 
 	foreach my $rowref (@$partref) {
 	    my ($part,$osid,$imageid,$imagepid) = 
 		( $rowref->{'partition'},$rowref->{'osid'},
 		  $rowref->{'imageid'},$rowref->{'imagepid'} );
-	    DBQueryFatal("insert into partitions " . 
-			 " (node_id,partition,osid,imageid,imagepid)" . 
+	    DBQueryFatal("insert into `partitions` " . 
+			 " (node_id,`partition`,osid,imageid,imagepid)" . 
 			 " values" . 
 			 " ('$node_id','$part','$osid','$imageid','$imagepid')");
 	}
@@ -2161,7 +2161,7 @@ sub UpdatePartitions($$)
     if (!$prepare) {
 	my $dbresult =
 	    DBQueryWarn("select p.*,v.mbr_version ".
-			" from partitions as p,image_versions as v ".
+			" from `partitions` as p,image_versions as v ".
 			" where p.imageid=v.imageid and ".
 			"       p.imageid_version=v.version and ".
 			"       v.deleted is null ".
@@ -2283,16 +2283,16 @@ sub UpdatePartitions($$)
 	    my $imvers = $href->{'imageid_version'};
 	    my $impid = $href->{'imagepid'};
 	    $dbresult =
-		DBQueryWarn("replace into partitions ".
-			    "(node_id,partition,osid,imageid,imagepid,".
+		DBQueryWarn("replace into `partitions` ".
+			    "(node_id,`partition`,osid,imageid,imagepid,".
 			    " osid_vers,imageid_version) ".
 			    "values ".
 			    "('$node_id','$i','$osid','$imid','$impid',".
 			    " '$osvers','$imvers')");
 	} else {
 	    $dbresult =
-		DBQueryWarn("delete from partitions ".
-			    "where node_id='$node_id' and partition='$i'");
+		DBQueryWarn("delete from `partitions` ".
+			    "where node_id='$node_id' and `partition`='$i'");
 	}
 	if (!$dbresult) {
 	    tberror "$node_id: Could not update partitions table";

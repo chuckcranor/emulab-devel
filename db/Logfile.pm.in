@@ -400,7 +400,7 @@ sub Store($)
     }
     unlink($filename);
     DBQueryWarn("update logfiles set ".
-		"  stored=1,compressed=1,filename=$newname ".
+		"  `stored`=1,compressed=1,filename=$newname ".
 		"where logid='$logid'")
 	or return -1;
 

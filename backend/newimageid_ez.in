@@ -650,7 +650,7 @@ if (!$isdataset &&
     #
     my $query_result =
 	DBQueryFatal("select mbr_version from ".
-		     " partitions as p,image_versions as i ".
+		     " `partitions` as p,image_versions as i ".
 		     " where p.imageid=i.imageid ".
 		     " and p.imageid_version=i.version ".
 		     " and p.node_id='$node_id' group by mbr_version");

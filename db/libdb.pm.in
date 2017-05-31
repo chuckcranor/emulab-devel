@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2000-2014, 2016 University of Utah and the Flux Group.
+# Copyright (c) 2000-2017 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -558,8 +558,8 @@ sub TBPxelinuxConfig($;$)
 	$action = "pxefail";
 
 	my $query_result =
-	    DBQueryWarn("SELECT v.path,v.mfs,p.partition FROM nodes AS n ".
-			"  LEFT JOIN partitions AS p ON ".
+	    DBQueryWarn("SELECT v.path,v.mfs,p.`partition` FROM nodes AS n ".
+			"  LEFT JOIN `partitions` AS p ON ".
 			"    n.node_id=p.node_id AND ".
 			"    n.${field}=p.osid ".
 			"  LEFT JOIN os_info AS i ON ".
@@ -794,7 +794,7 @@ sub TBOSCountInstances ($;@)
 	$nodelist = "0";
     }
 
-    my $query_result = DBQueryFatal("select distinct p.node_id from partitions " .
+    my $query_result = DBQueryFatal("select distinct p.node_id from `partitions` " .
 	"as p left join reserved as r on p.node_id = r.node_id " .
 	"where osid='$osid' and !($nodelist) and r.pid != '$TBOPSPID'");
     my $current_count = $query_result->num_rows();

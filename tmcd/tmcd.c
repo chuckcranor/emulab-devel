@@ -5959,7 +5959,7 @@ COMMAND_PROTOTYPE(doloadinfo)
 	res = mydb_query("select iv.loadpart,ov.OS,mustwipe,iv.mbr_version,"
 			 "   iv.access_key,"
 			 "   i.imageid,prepare,i.imagename,p.pid,g.gid,iv.path,"
-			 "   ov.version,pa.partition,iv.size,"
+			 "   ov.version,pa.`partition`,iv.size,"
 			 "   iv.lba_low,iv.lba_high,iv.lba_size,iv.relocatable,"
 			 "   UNIX_TIMESTAMP(iv.updated),r.imageid_version "
 			 "from current_reloads as r "
@@ -5973,7 +5973,7 @@ COMMAND_PROTOTYPE(doloadinfo)
 			 "     ov.vers=iv.default_vers "
 			 "left join projects as p on i.pid_idx=p.pid_idx "
 			 "left join groups as g on i.gid_idx=g.gid_idx "
-			 "left join partitions as pa on "
+			 "left join `partitions` as pa on "
 			 "     pa.node_id=r.node_id and "
 			 "     pa.osid=iv.default_osid and loadpart=0 "
 			 "where r.node_id='%s' order by r.idx",
@@ -8675,7 +8675,7 @@ int get_imagestrings(tmcdreq_t *reqp, imstrings_t *imstrings)
 	/* We want data on the default OS set for this node. */
 	res = mydb_query("select p.pid,g.gid,iv.imagename,iv.version "
 			 "  from nodes as n "
-			 "left join partitions as pa on "
+			 "left join `partitions` as pa on "
 			 "     pa.node_id=n.node_id and "
 			 "     pa.osid=n.def_boot_osid "
 			 "left join image_versions as iv on "
