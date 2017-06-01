@@ -294,7 +294,7 @@ class MyServer(SSL.ForkingSSLServer, SimpleXMLRPCDispatcher):
     # Get the group list for the user.
     #
     def getusergroups(self, uid_idx):
-        res = DBQueryFatal("select distinct g.pid,g.unix_gid "
+        res = DBQueryFatal("select distinct g.pid,g.unix_gid,date_approved "
                            "  from group_membership as m "
                            "left join groups as g on "
                            "  g.pid_idx=m.pid_idx and g.gid_idx=m.gid_idx "
