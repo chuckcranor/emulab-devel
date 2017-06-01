@@ -3049,38 +3049,6 @@ class experiment:
             result.append((agent[0], agent[1], nodeid, ipaddr, agent[3]))
             pass
 
-        res = DBQuery("select n.phys_nodeid,i.IP from reserved as r "
-                      "left join nodes as n on n.node_id=r.node_id "
-                      "left join node_types as nt on nt.type=n.type "
-                      "left join interfaces as i on i.node_id=n.phys_nodeid "
-                      "  and i.role='ctrl' "
-                      "where r.pid=%s and r.eid=%s and nt.isvirtnode=1 and "
-                      "      (n.type='pcplab' or r.sharing_mode is not null) "
-		      "      and i.IP is not null "
-                      "group by n.phys_nodeid",
-                      (argdict["proj"], argdict["exp"]))
-
-        if len(res) > 0:
-            for plab in res:
-                result.append(("__%s_proxy" % plab[0],
-                               " ",
-                               plab[0],
-                               plab[1],
-                               "EVPROXY"))
-                pass
-
-            result.append(("__plab_setup",
-                           "*",
-                           "",
-                           "",
-                           "TIMELINE"))
-            result.append(("__plab_teardown",
-                           "*",
-                           "",
-                           "",
-                           "TIMELINE"))
-            pass
-        
         return EmulabResponse(RESPONSE_SUCCESS, value=result)
     
     #
@@ -3169,74 +3137,6 @@ class experiment:
         for event in res:
             result.append((str(event[0]), str(event[1]), event[2],
                            event[3], event[4], event[5], event[6], event[7]));
-            pass
-        
-        res = DBQuery("select n.phys_nodeid,i.IP from reserved as r "
-                      "left join nodes as n on n.node_id=r.node_id "
-                      "left join node_types as nt on nt.type=n.type "
-                      "left join interfaces as i on i.node_id=n.phys_nodeid "
-                      "  and i.role='ctrl' "
-                      "where r.pid=%s and r.eid=%s and nt.isvirtnode=1 and "
-                      "      (n.type='pcplab' or r.sharing_mode is not null) "
-		      "      and i.IP is not null "
-                      "group by n.phys_nodeid",
-                      (argdict["proj"], argdict["exp"]))
-
-        if len(res) > 0:
-            count = 0
-            for plab in res:
-                result.append((str(count),
-                               "0.0",
-                               "__%s_proxy" % plab[0],
-                               "EVPROXY",
-                               "UPDATE",
-                               "",
-                               "__plab_setup",
-                               ""))
-                result.append((str(count),
-                               "0.0",
-                               "__%s_proxy" % plab[0],
-                               "EVPROXY",
-                               "CLEAR",
-                               "",
-                               "__plab_teardown",
-                               ""))
-                count += 1
-                pass
-
-            result.append((str(count),
-                           "4.0",
-                           "ns", # XXX
-                           "SIMULATOR",
-                           "LOG",
-                           "Plab setup delay",
-                           "__plab_setup",
-                           ""))
-            result.append((str(count),
-                           "0.0",
-                           "__plab_setup",
-                           "TIMELINE",
-                           "RUN",
-                           "",
-                           "__ns_sequence",
-                           ""))
-            
-            result.append((str(count),
-                           "2.0",
-                           "ns", # XXX
-                           "SIMULATOR",
-                           "LOG",
-                           "Plab teardown delay",
-                           "__plab_teardown",
-                           ""))
-            result.append((str(count),
-                           "0.0",
-                           "__plab_teardown",
-                           "TIMELINE",
-                           "RUN",
-                           "",
-                           "__ns_teardown",
-                           ""))
             pass
 
         return EmulabResponse(RESPONSE_SUCCESS, value=result)
