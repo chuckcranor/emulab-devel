@@ -1,6 +1,6 @@
 #! /usr/bin/env python
 #
-# Copyright (c) 2004-2016 University of Utah and the Flux Group.
+# Copyright (c) 2004-2017 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -1945,15 +1945,13 @@ class experiment:
                 "(unix_timestamp(now()) - unix_timestamp( "
                 "greatest(na.last_tty_act,na.last_net_act,na.last_cpu_act,"
                 "na.last_ext_act))),ni.load_1min,ni.load_5min,ni.load_15min,"
-                "n.phys_nodeid,r.erole,GROUP_CONCAT(DISTINCT nx.type) as atype"
+                "n.phys_nodeid,r.erole"
                 "  from reserved as r "
                 "left join nodes as n on r.node_id=n.node_id "
                 "left join node_status as ns on ns.node_id=n.node_id "
                 "left join node_activity as na on na.node_id=n.node_id "
                 "left join node_idlestats as ni on ni.node_id=n.node_id "
-		"left join node_auxtypes as nx on nx.node_id=n.phys_nodeid "
                 "where r.pid=%s and r.eid=%s "
-		"group by r.node_id "
                 "order by r.vname",
                 (argdict["proj"], argdict["exp"]))
             osmappings = {}
@@ -1963,9 +1961,6 @@ class experiment:
                 tmp["name"] = res[0]
                 tmp["node"] = res[1]
                 tmp["type"] = res[2]
-		if tmp["type"] == "pcplab":
-		    tmp["auxtype"] = res[12]
-		    pass
                 tmp["pnode"] = res[10]
                 if not osmappings.has_key(res[3]):
                     osres = DBQuery(
@@ -3510,18 +3505,18 @@ class node:
             pass
 
         res = DBQueryFatal(
-            "SELECT a.node_id,a.type,b.node_id is null or "
-            "  (b.pid=%s and b.eid=%s), "
-            "  (a.eventstate='ISUP' or "
-            "   a.eventstate='PXEWAIT' or "
-            "   a.eventstate='POWEROFF'),wn.site,nfcpu.weight, "
-            "  GROUP_CONCAT(DISTINCT aux.type),wn.hostname, "
+            "SELECT a.node_id,a.type, "
+            "  b.node_id is null or (b.pid=%s and b.eid=%s), "
+            "  a.eventstate in ('ISUP','PXEWAIT','POWEROFF'), "
+            "  wn.site, "
+            "  nfcpu.weight, "
+            "  '' as old_auxtype, "
+            "  wn.hostname, "
             "  a.reserved_pid is null or a.reserved_pid in "
-            "   (" + pid_clause_list + ") "
+            "    (" + pid_clause_list + ") "
             "FROM nodes AS a "
             "left join reserved as b on a.node_id=b.node_id "
             "left join node_types as nt on a.type=nt.type "
-            "left join node_auxtypes as aux on aux.node_id=a.node_id "
             "left join nodetypeXpid_permissions as p on a.type=p.type "
             "left join widearea_nodeinfo as wn on wn.node_id=a.phys_nodeid "
             "left join node_features as nfcpu on (nfcpu.node_id=a.phys_nodeid "
