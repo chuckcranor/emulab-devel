@@ -1,7 +1,7 @@
 #!/usr/bin/perl -w
 
 #
-# Copyright (c) 2000-2013 University of Utah and the Flux Group.
+# Copyright (c) 2000-2017 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -259,7 +259,7 @@ EOT
 	}
 	if (!$found) {
 	    Debug("Not idle: $pid/$eid\n");
-	    DBQueryFatal("update experiments set swap_requests='' ".
+	    DBQueryFatal("update experiments set swap_requests='0' ".
 			 "where pid='$pid' and eid='$eid'")
 		if (! $i);
 	} else {

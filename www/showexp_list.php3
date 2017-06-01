@@ -621,7 +621,7 @@ if ($thumb && !$idle) {
 	
 	if ($swapreqs && !$isidle) {
 	    $swapreqs = "";
-	    mysql_query("update experiments set swap_requests='' ".
+	    mysql_query("update experiments set swap_requests='0' ".
 			"where pid='$pid' and eid='$eid'");
 	}
 
@@ -631,7 +631,7 @@ if ($thumb && !$idle) {
 	    $lastswapreq=$row["lastreq"];
 	    if ($lastswapreq > $idletime) {
 		# My last request was from _before_ it was idle this time
-		mysql_query("update experiments set swap_requests='' ".
+		mysql_query("update experiments set swap_requests='0' ".
 			    "where pid='$pid' and eid='$eid'");
 		$swapreq=0;
 	    }

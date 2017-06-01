@@ -779,7 +779,7 @@ sub doSwapout($) {
 	# Since this is an actual swapout, 
 	# reset our count of swap out nag emails sent.
 	#
-	DBQueryWarn("update experiments set swap_requests='', ".
+	DBQueryWarn("update experiments set swap_requests='0', ".
 		    "   sim_reswap_count='0' ".
 		    "where eid='$eid' and pid='$pid'");
     } else {
