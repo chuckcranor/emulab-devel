@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2016 University of Utah and the Flux Group.
+# Copyright (c) 2000-2017 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -81,7 +81,7 @@ else {
 }
 
 $query =
-    "select distinct iv.* from images as i ".
+    "select distinct iv.*,i.imagename from images as i ".
     "left join image_versions as iv on ".
     "          iv.imageid=i.imageid and iv.version=i.version ".
     "left join os_info_versions as ov on ".
