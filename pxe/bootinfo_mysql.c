@@ -192,7 +192,7 @@ query_bootinfo_db(struct in_addr ipaddr, char *node_id, int version,
 				 "left outer join "
 				 "  (select type,attrvalue from node_type_attributes "
 				 "     where attrkey='nobootinfo' and attrvalue='1' "
-				 "     group by type) as nobootinfo_types "
+				 "     group by type,attrvalue) as nobootinfo_types "
 				 "  on n.type=nobootinfo_types.type "
 				 "where n.node_id='%s' "
 				 "  and nobootinfo_types.attrvalue is NULL",
@@ -239,7 +239,7 @@ query_bootinfo_db(struct in_addr ipaddr, char *node_id, int version,
 				 "left outer join "
 				 "  (select type,attrvalue from node_type_attributes "
 				 "     where attrkey='nobootinfo' and attrvalue='1' "
-				 "     group by type) as nobootinfo_types "
+				 "     group by type,attrvalue) as nobootinfo_types "
 				 "  on n.type=nobootinfo_types.type "
 				 "where i.IP='%s' "
 				 "  and nobootinfo_types.attrvalue is NULL",
@@ -319,7 +319,8 @@ query_bootinfo_db(struct in_addr ipaddr, char *node_id, int version,
 					"(SELECT type,attrvalue FROM "
 				 "         node_type_attributes WHERE "
 				 "           attrkey='nobootinfo' AND "
-				 "           attrvalue='1' GROUP BY type) "
+				 "           attrvalue='1' "
+				 "          GROUP BY type,attrvalue) "
 				 	"AS nobootinfo_types ON "
 				 "         n.type=nobootinfo_types.type "
 				 "WHERE n.node_id IN "
