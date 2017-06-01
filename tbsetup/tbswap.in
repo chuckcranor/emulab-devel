@@ -1319,7 +1319,7 @@ sub doSwapin($) {
     # If there are any Plab dslice nodes in the experiment, create the
     # dslice now
     #
-    if ($type > MODIFY_RECOVER) {
+    if (0 && $type > MODIFY_RECOVER) {
 	# Are there any Plab nodes?  First get a list of node types in the exp;
 	# if any are types hosted by any of the PLCs we know about, create
 	# all slices necessary for the experiment in a single plabslice call.
@@ -1331,7 +1331,7 @@ sub doSwapin($) {
 			 "    on nt.type = ppi.node_type".
 			 " where r.pid='$pid' and r.eid='$eid'".
 			 "    and ppi.node_type is not NULL".
-			 " group by nt.type");
+			 " group by nt.type,ppi.plc_name");
 
 	if ($db_result->numrows) {
 	    my $info_str = "";
