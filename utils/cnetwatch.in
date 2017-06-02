@@ -26,7 +26,38 @@
 # Periodically check traffic rates of nodes on the control net.
 # Whine if "excessive".
 #
-
+# TODO:
+#  - Use sitevars for the thresholds and intervals.
+#
+#    cnetwatch/check_interval interval at which to perform checks,
+#        should be at least 5 seconds, zero means don't run
+#    cnetwatch/pps_threshold  packet rate at which to alarm,
+#        zero means don't check
+#    cnetwatch/bps_threshold  bit rate at which to alarm,
+#        zero means don't check
+#    cnetwatch/rate_period    time period over which to calculate rates,
+#        if less than interval, set to interval
+#    cnetwatch/mail_interval  interval at which to send email reports of problems,
+#        zero means don't send email
+#    cnetwatch/mail_max       maximum number of emails to send,
+#        zero means no limit
+#
+#    Maybe node_type/node attributes as well for thresholds since some node
+#    types or nodes may have fatter cnets than others.
+#
+#  - if the email period (e.g., 10 minutes) encompasses multiple report
+#    periods (e.g., 5 minutes), try to combine contiguous over-limit reports
+#    into a single email line. For example:
+#
+#       Node       Pkts/sec         Mb/sec When
+#    dbox3:0          55389            324 2017-05-09 10:33:40 for 325 sec
+#    dbox3:0          55640            324 2017-05-09 10:39:05 for 323 sec
+#
+#    could become:
+#
+#       Node       Pkts/sec         Mb/sec When
+#    dbox3:0          55389            324 2017-05-09 10:33:40 for 648 sec
+#
 use English;
 use Getopt::Std;
 use Sys::Syslog;
