@@ -215,7 +215,7 @@ else {
                      "g.uid_idx is not null) ";
     }
     $query =
-           "select distinct iv.*,ov.* from images as i ".
+           "select distinct i.imagename,iv.*,ov.* from images as i ".
            "left join image_versions as iv on ".
            "          iv.imageid=i.imageid and iv.version=i.version ".
            "left join os_info_versions as ov on ".
