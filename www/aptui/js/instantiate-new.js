@@ -1913,6 +1913,10 @@ $(function ()
 
     function updateWhere()
     {
+	// Temporary
+	if (!window.MAINSITE) {
+	    return;
+	}
 	//console.info("updateWhere");
 	
 	if (jacks.input && constraints && selected_rspec)
