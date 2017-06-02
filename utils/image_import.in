@@ -356,8 +356,15 @@ if ($newhash =~/^(.*)$/) {
 # but users are users ... 
 #
 if (!$update) {
-    my $safe_url = DBQuoteSpecial($url);
-    my $query_result = DBQueryWarn("select GET_LOCK($safe_url, 120)");
+    # New mysal 5.7 limit of 64 chars on locks. Use the uuid.
+    my $lockname;
+    if ($url =~ /uuid=([-\w]+)$/) {
+	$lockname = $1;
+    }
+    else {
+	fatal("Bad URL, cannot find the uuid in it");
+    }
+    my $query_result = DBQueryWarn("select GET_LOCK('$lockname', 120)");
     if (!$query_result ||
 	!$query_result->numrows) {
 	fatal("Could not get the SQL lock for a long time!");
@@ -366,7 +373,7 @@ if (!$update) {
     if (!defined($image)) {
 	$image = CreateImage($url, $xmlparse, $user, $group, $imagename);
     }
-    DBQueryWarn("select RELEASE_LOCK($safe_url)");
+    DBQueryWarn("select RELEASE_LOCK('$lockname')");
 }
 exit(0)
     if ($verify);
