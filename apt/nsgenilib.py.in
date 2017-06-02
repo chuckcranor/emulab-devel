@@ -147,7 +147,11 @@ for child in tree.getroot():
                     vport,ip = token.split(":")
                     # Bridges create interfaces internally, we want to use those.
                     if role == "bridge":
-                        iface = node.interface("eth" + vport)
+                        if vport == "0":
+                            iface = node.iface0
+                        else:
+                            iface = node.iface1
+                            pass
                     elif ntype == "blockstore":
                         iface = node.interface
                     else:
@@ -490,6 +494,8 @@ for lanname,lifaces in lanifaces.iteritems():
         loss1       = float(member1.find("lossrate").text)
         rloss1      = float(member1.find("rlossrate").text)
 
+        #print member0_key,bw0,delay0,loss0,member1_key,bw1,delay1,loss1
+
         #
         # The virt lans for bridges is done differently. 
         #
@@ -498,7 +504,10 @@ for lanname,lifaces in lanifaces.iteritems():
             bport  = bridged[lanname]["vport"]
             bridge = nodes[bname]
             memb   = bname + ":" + bport
-            pipe   = bridge.pipe("eth" + bport)
+            if bport == "0":
+                pipe   = bridge.pipe0
+            else:
+                pipe   = bridge.pipe1
 
             #print bname,bport,memb,str(pipe),member0_key,member1_key
 
