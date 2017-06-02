@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2012 University of Utah and the Flux Group.
+# Copyright (c) 2000-2017 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -371,7 +371,8 @@ $query_result =
 		 "   if(r.pid is not null,r.pid,rp.pid) as pid, ".
 	         "   if(r.pid is not null,r.eid,rp.eid) as eid, ".
 		 "   nt.class, ".
-	 	 "   if(r.pid is not null,r.vname,rp.vname) as vname ".
+	 	 "   if(r.pid is not null,r.vname,rp.vname) as vname, ".
+                 "   n.priority ".
 		 "$additionalVariables ".
 		 "from nodes as n ".
 		 "left join node_types as nt on n.type=nt.type ".
@@ -380,7 +381,7 @@ $query_result =
 		 "left join reserved as rp on n.phys_nodeid=rp.node_id ".
 		 "$additionalLeftJoin ".
 		 "where $role $clause ".
-		 "ORDER BY priority");
+		 "ORDER BY n.priority");
 
 if (mysql_num_rows($query_result) == 0) {
     echo "<center>Oops, no nodes to show you!</center>";
