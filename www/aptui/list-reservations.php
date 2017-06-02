@@ -65,6 +65,10 @@ else {
         $amlist[$aggregate->nickname()] = $aggregate->urn();
     }
 }
+if (!count($amlist)) {
+    SPITUSERERROR("No clusters support reservations.");
+    exit();
+}
 echo "<script type='text/plain' id='amlist-json'>\n";
 echo htmlentities(json_encode($amlist));
 echo "</script>\n";

@@ -105,6 +105,10 @@ elseif (isset($debug) && $debug) {
 else {
     $ams = Aggregate::SupportsReservations();
 }
+if (!count($ams)) {
+    SPITUSERERROR("No clusters support reservations.");
+    exit();
+}
 $amlist  = array();
 while (list($index, $aggregate) = each($ams)) {
     $urn = $aggregate->urn();
