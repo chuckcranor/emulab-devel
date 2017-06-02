@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2008-2016 University of Utah and the Flux Group.
+# Copyright (c) 2008-2017 University of Utah and the Flux Group.
 # 
 # {{{GENIPUBLIC-LICENSE
 # 
@@ -1231,6 +1231,12 @@ sub StoreCRL($$$)
 	return -1;
     }
     $expires =~ s/^nextupdate=//i;
+    my $converted = str2time($expires);
+    if (!$converted) {
+	print STDERR "Could not parse expiration: '$expires'\n";
+	return -1;
+    }
+    $converted  = $converted - (3600 * 24);
     my $issuer = `$OPENSSL crl -noout -issuer -in $filename`;
     chomp($issuer);
     if (! (defined($issuer) && ($issuer =~ /^issuer/i))) {
@@ -1239,10 +1245,8 @@ sub StoreCRL($$$)
     }
     $issuer =~ s/^issuer=//i;
     my $safe_cert    = DBQuoteSpecial($string);
-    my $safe_expires = DBQuoteSpecial($expires);
     my $safe_issuer  = DBQuoteSpecial($issuer);
-    my $dateconvert  = "DATE_SUB(STR_TO_DATE($safe_expires, ".
-	"'%b %e %T %Y'), INTERVAL 1 DAY)";
+    my $dateconvert  = "FROM_UNIXTIME($converted)";
 
     DBQueryWarn("replace into geni_crls set ".
 		"  uuid='$uuid', created=now(), expires=$dateconvert, ".

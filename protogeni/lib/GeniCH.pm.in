@@ -1078,6 +1078,7 @@ sub PostHistoryRecord($)
 	    return GeniResponse->Create(GENIRESPONSE_BADARGS, undef,
 					"Could not parse $slot: $date");
 	}
+	$record->{$slot} = $parsed_date;
 	push(@insert_data, "$slot=FROM_UNIXTIME($parsed_date)");
     }
     # Only toplevel aggregates
@@ -1133,9 +1134,9 @@ sub PostHistoryRecord($)
 	#
 	if (defined($record->{'destroyed'})) {
 	    if (!defined($row->{'destroyed'})) {
-		my $destroyed = DBQuoteSpecial($record->{'destroyed'});
+		my $destroyed = $record->{'destroyed'};
 		DBQueryWarn("update aggregate_history set ".
-			    "  destroyed=$destroyed ".
+			    "  destroyed=FROM_UNIXTIME($destroyed) ".
 			    "where idx='$aggregate_idx'");
 	    }
 	}
@@ -1145,12 +1146,12 @@ sub PostHistoryRecord($)
     # Optional Manifest. 
     #
     if (exists($record->{'manifest'})) {
-	my $created = DBQuoteSpecial($record->{'created'});
+	my $created = $record->{'created'};
 	my $manifest_result = 
 	    DBQueryWarn("select idx from manifest_history ".
 			"where aggregate_uuid=$aggregate_uuid and ".
 			"      aggregate_urn=$aggregate_urn and ".
-			"      created=$created");
+			"      created=FROM_UNIXTIME($created)");
 	return GeniResponse->Create(GENIRESPONSE_ERROR)
 	    if (!defined($manifest_result));
 
@@ -1161,7 +1162,8 @@ sub PostHistoryRecord($)
 		DBQueryWarn("insert into manifest_history set idx=NULL, " .
 			    " aggregate_uuid=$aggregate_uuid, " .
 			    " aggregate_urn=$aggregate_urn, " .
-			    " created=$created, manifest=$safe_manifest")
+			    " created=FROM_UNIXTIME($created), ".
+			    " manifest=$safe_manifest")
 		    or return GeniResponse->Create(GENIRESPONSE_ERROR);
 	    }
 	}
