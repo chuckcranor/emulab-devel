@@ -57,7 +57,8 @@ $instances = array();
 $query1_result =
     DBQueryFatal("select 1 as active, ".
                  "   i.uuid,i.profile_version,i.created,'' as destroyed, ".
-		 "   i.creator,p.uuid as profile_uuid,u.email,ia.public_url, ".
+		 "   i.creator,p.uuid as profile_uuid,u.email,".
+                 "   ANY_VALUE(ia.public_url), ".
                  "   i.slice_uuid ".
 		 "  from apt_instances as i ".
                  "left join apt_instance_aggregates as ia ".
@@ -72,7 +73,8 @@ $query1_result =
 $query2_result =
     DBQueryFatal("select 0 as active, ".
                  "    h.uuid,h.profile_version,h.created,h.destroyed, ".
-		 "    h.creator,p.uuid as profile_uuid,u.email,ia.public_url, ".
+		 "    h.creator,p.uuid as profile_uuid,u.email, ".
+                 "    ANY_VALUE(ia.public_url), ".
                  "    h.slice_uuid ".
 		 "  from apt_instance_history as h ".
                  "left join apt_instance_aggregate_history as ia ".
