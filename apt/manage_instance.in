@@ -2833,7 +2833,7 @@ sub StartMonitorInternal(;$@)
 	    return $PID;
 	}
     }
-    $instance->Update({"monitor_pid" => '$PID'});
+    $instance->Update({"monitor_pid" => $PID});
 
     #
     # We just did the operation, no need to ask so soon, and we
