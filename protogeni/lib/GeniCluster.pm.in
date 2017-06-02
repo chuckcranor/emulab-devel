@@ -101,6 +101,13 @@ sub CheckPermission($)
 	if (defined($rootonly) && $rootonly &&
 	    ! ($hrn->IsAuthority() && $hrn->IsRoot()));
 
+    #
+    # Allow the local cluster to talk to itself via this interface.
+    # Otherwise must be one of the known Cloudlab clusters.
+    #
+    return 0
+	if ($hrn->authority() eq $OURDOMAIN);
+
     return GeniResponse->Create(GENIRESPONSE_FORBIDDEN, undef,
 			"Only Cloudlab clusters permit this interface")
 	if (! ($OURDOMAIN eq "emulab.net" ||
