@@ -498,7 +498,7 @@ sub setConcurrency($)
 	if ($cpus > 0 && $disks > 0 && $ram > 0) {
 	    if ($ram < 1024 || (!SHAREDHOST() && $hasswapped)) {
 		$MAXCONCURRENT = 1;
-	    } elsif ($cpus <= 2 || $disks == 1 || $ram <= 2048) {
+	    } elsif ($cpus <= 2 || $disks <= 2 || $ram <= 2048) {
 		$MAXCONCURRENT = 3;
 	    } else {
 		$MAXCONCURRENT = 5;
@@ -2775,12 +2775,17 @@ sub vnodeBoot($$$$)
 	# by increasing the countdown to match the original ~60 seconds
 	# before giving up.
 	#
-	my $countdown = 20;
+	# XXX 60 seconds is not enough in many situations (e.g., if an
+	# fsck of the root FS is needed) and timing out, tearing down, and
+	# restarting the VM fails more than it works. So we would rather
+	# wait longer for the initial startup. Try 180 seconds for now.
+	#
+	my $countdown = 60;
 	if ($vninfo->{'ishvm'}) {
 	    # XXX allow longer for emulated BIOS and boot loaders
 	    # XXX elabinelab server VMs will take even longer
 	    if (exists($vninfo->{'elabinelab'})) {
-		$countdown += 40;
+		$countdown += 20;
 	    } else {
 		$countdown += 10;
 	    }
