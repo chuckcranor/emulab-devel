@@ -8,18 +8,37 @@ use installvars;
 sub Install($$$)
 {
     my ($server, $isupdate, $impotent) = @_;
+    my $newmysql = 0;
 
     # Replace if this script does an update for ip/domain.
     return 0
 	if ($isupdate);
 
     Phase "database", "Setting up database", sub {
+	# Find out what version is installed
+	Phase "version", "Determine mysqld version", sub {
+	    PhaseFail("Mysql not installed")
+		if (! -x "$MYSQLADMIN");
+	    my $v = `$MYSQLADMIN -V`;
+	    if ($v =~ /Distrib (\d+)\.(\d+)\.(\d+)/) {
+		($vmaj,$vmin,$vrel) = ($1,$2,$3);
+		if ($vmaj > 5 ||
+		    ($vmaj == 5 && $vmin > 7) ||
+		    ($vmaj == 5 && $vmin == 7 && $vrel >= 6)) {
+		    $newmysql = 1;
+		}
+	    }
+	};
 	Phase "initialize", "Initializing mysql", sub {
 	    PhaseSkip("mysqld already initialzed")
 		if (-d "$MYSQLDBDIR/mysql");
 
-	    ExecQuietFatal("$MYSQLINSTALL --ldata=${MYSQLDBDIR} --basedir=/usr/local");
-	    ExecQuietFatal("$CHOWN -R mysql:mysql $MYSQLDBDIR");
+	    if ($newmysql) {
+		ExecQuietFatal("$MYSQLD --initialize-insecure --user=mysql --datadir=${MYSQLDBDIR} --basedir=/usr/local");
+	    } else {
+		ExecQuietFatal("$MYSQLINSTALL --ldata=${MYSQLDBDIR} --basedir=/usr/local");
+		ExecQuietFatal("$CHOWN -R mysql:mysql $MYSQLDBDIR");
+	    }
 	};
 	Phase "mysql", "Starting mysqld", sub {
 	    if (!ExecQuiet("$MYSQLADMIN ping")) {
