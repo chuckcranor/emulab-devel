@@ -14,7 +14,7 @@ my $GENDEV        = "$TOP_SRCDIR/install/descriptors-gendev.xml";
 my @MBRS          = ("emulab-mbr.dd", "emulab-mbr2.dd", "emulab-mbr3.dd");
 
 my $LINUXSTDIMAGE = "UBUNTU14-64-STD";
-my $FBSDSTDIMAGE  = "FBSD102-64-STD";
+my $FBSDSTDIMAGE  = "FBSD103-64-STD";
 my $DEFAULTIMAGE  = $LINUXSTDIMAGE;
 
 #
@@ -23,13 +23,12 @@ my $DEFAULTIMAGE  = $LINUXSTDIMAGE;
 my %STDIMAGES     = (
     "UBUNTU14-64-STD"  => "https://www.emulab.net/image_metadata.php?uuid=0a29c738-32b3-11e4-b30a-001143e453fe",
     "CENTOS7-64-STD"   => "https://www.emulab.net/image_metadata.php?uuid=6fa68fd6-9163-11e6-ac8c-90e2ba22fee4",
-    "FBSD102-64-STD"   => "https://www.emulab.net/image_metadata.php?uuid=57e6bf53-4376-11e5-bf03-38eaa71273fa",
+    "FBSD103-64-STD"   => "https://www.emulab.net/image_metadata.php?uuid=f3866e90-2464-11e6-bdf0-d1afad303f71",
     "XEN46-64-STD"     => "https://www.emulab.net/image_metadata.php?uuid=61799d52-4dff-11e6-ac8a-90e2ba22fee4",
 );
 
 my %NEWIMAGES     = (
-    "UBUNTU16-64-STD"  => "https://www.emulab.net/image_metadata.php?uuid=7683ca8e-5e37-11e6-ac8a-90e2ba22fee4",
-    "FBSD103-64-STD"   => "https://www.emulab.net/image_metadata.php?uuid=f3866e90-2464-11e6-bdf0-d1afad303f71",
+    "UBUNTU16-64-STD"  => "https://www.emulab.net/image_metadata.php?uuid=7683ca8e-5e37-11e6-ac8a-90e2ba22fee4"
 );
 
 #
