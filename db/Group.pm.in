@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2005-2016 University of Utah and the Flux Group.
+# Copyright (c) 2005-2017 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -1168,8 +1168,7 @@ sub LeaderMailList($)
 		     "left join group_membership as gm on ".
 		     "     gm.uid_idx=u.uid_idx ".
 		     "where gid_idx='$gid_idx' and ".
-		     "      (trust='$projroot' or trust='$grouproot') ".
-		     "order by trust DESC, usr_name");
+		     "      (trust='$projroot' or trust='$grouproot')");
 
     while (my ($name,$uid,$email) = $query_result->fetchrow_array()) {
 	$mailstr .= ", "
