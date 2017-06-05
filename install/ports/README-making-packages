@@ -6,6 +6,9 @@ As of FreeBSD 10, I started using the quarterly ports release at the time
 of the OS release and then update the packages quarterly. E.g., 10.2 shipped
 with 2015Q3 and I have updated through 2016Q2.
 
+*** SKIP TO SECTION 10 ("10. Updating the Emulab package repo") BELOW
+    FOR FAST 10.3 REPO UPDATING INSTRUCTIONS.
+
 0a. Make sure the ports tree in /share/freebsd/X.Y/ports has the current
    Emulab ports. They are all in the "misc" subdir. If they are out of
    date, update them and remake the ports.tar.gz tarball.
@@ -94,13 +97,14 @@ with 2015Q3 and I have updated through 2016Q2.
    # for 10.2
    DEFAULT_VERSIONS=perl5=5.20 python=2.7 php=5.6 mysql=5.5 apache=2.2 tcltk=8.6
 
-   # as of 2016Q3 ports, add:
+   # for 10.3
+   DEFAULT_VERSIONS=perl5=5.24 python=2.7 php=5.6 mysql=5.7 apache=2.2 tcltk=8.6
    DEFAULT_VERSIONS+=ssl=base
 
 5. Set non-standard options on some ports.
 
     * Perl. For perl 5.20 make sure that THREADS is defined. It should be,
-      but it can cause a lot of grief if not. To be safe go into lang/perl5.20
+      but it can cause a lot of grief if not. To be safe go into lang/perl5.24
       and do "make config" and make sure THREADS is checked.
     * Boost. We use the boost-all package which includes docs. I generally
       prefer not to drag around the docs, so I go into devel/boost-all, do
@@ -371,7 +375,7 @@ d. When packages are installed on boss/ops/etc., we need to make sure to use
        PC
        PL
 
-10. Updating the Emulab package repo (10.2 specific).
+10. Updating the Emulab package repo (10.3 specific).
 
    [ This is a condensed version of the steps above. ]
    
@@ -386,80 +390,97 @@ d. When packages are installed on boss/ops/etc., we need to make sure to use
    couple of mysterious updates of things that didn't change, but I
    can live with that...
 
-   a. Make sure the ports tree in /share/freebsd/10.2/ports on ops
+   a. Make sure the ports tree in /share/freebsd/10.3/ports on ops
       is up to date. [ Note that there is not actually an svn repo branch
       called "quarterly" so you have to make sure you are tracking the
       current quarter. ]
 
-      cd /share/freebsd/10.2/ports
+      cd /share/freebsd/10.3/ports
       sudo svn update
 
-   b. Swapin the emulab-ops/package-builder experiment.
-      Make sure the blockstores are used:
+   b. Make sure the Emulab ports are up to date.
 
-      sudo rmdir /usr/src /usr/ports /usr/obj
-      sudo ln -s ../local/src /usr/src
-      sudo ln -s ../local/ports /usr/ports
-      sudo ln -s ../local/obj /usr/obj
+      cd /share/freebsd/10.3/ports/misc
+      diff -r ~mike/testbed-clean/install/ports .
+      <update anything that is out of sync>
 
-      Note that we leave /tmp as the tmpdir since the MBR3 based root FS
-      has plenty of room.
+   c. Swapin a FreeBSD 10.3 node (emulab-ops/freebsd103-64). This will
+      give you a d430 which is the best thing to use.
 
-   c. Extract the sources:
+   d. Mount the ports and source trees.
 
-      cd /local
-      sudo tar xzf /share/freebsd/10.2/src.tar.gz
-      sudo tar xzf /share/freebsd/10.2/ports-2016Q1.tar.gz
-
-   c. Cleanse the port environment:
+      cd /usr
+      sudo mount -o ro fs:/share/freebsd/10.3/ports /usr/ports
+      sudo mount -o ro fs:/share/freebsd/10.3/src /usr/src
+      
+   e. Cleanse the port environment:
 
       sudo tcsh
       setenv ASSUME_ALWAYS_YES true
       pkg delete -af
       rm -rf /usr/local/*
       rm -rf /var/db/ports/*
-      pkg bootstrap
-      pkg install pkgconf
+      rm -rf /usr/obj/ports/usr/ports/*
 
-   d. Make sure port options are correctly set (as of 10.2, steps 5a, 5g
-      above):
+   f. Make sure the package tool is installed. To avoid occasional issues
+      with certs, I have found the easiest thing to do is:
+
+      cd /share/freebsd/10.3/packages-64
+      pkg add pkg-*
+      pkg add ca_root*
+
+   g. Make sure port options are correctly set:
 
       - in devel/boost-all, "make config" and deselect:
           DOCS
       - in editors/emacs, "make config" and deselect:
-          DBUS, GCONF, GIF, GSETTINGS, M17N, MAGICK, OTF, PNG, SCROLLBARS,
-          SOUND, SVG, TIFF, XFT, XIM, XPM, GTK2
+          DBUS
+	  GIF, MAGICK, PNG, SVG, TIFF, XPM,
+          GCONF, GSETTINGS, M17N, OTF, SCROLLBARS, XFT, XIM,
+	  OSS,
+	  GTK2
         and select:
 	  XAW
       - in graphics/cairo, "make config" and deselect OPENGL.
       - in www/apache22, "make config" and select: SUEXEC, PROXY, PROXY_HTTP
 
-   e. Build em all and create packages:
+   h. Build em all:
 
        setenv PACKAGES /usr/obj/ports/packages
        rm -f $PACKAGES/All/*
-       foreach d (boss ops fs protogeni tipserv extras)
-           (cd /usr/ports/misc/emulab-$d ; make clean all install)
-	   (cd /usr/ports/misc/emulab-$d ; make clean)
+       setenv myFLAGS DISABLE_VULNERABILITIES=1
+       foreach d (boss ops fs protogeni genilib tipserv extras)
+           (cd /usr/ports/misc/emulab-$d ; make $myFLAGS clean all install)
+	   (cd /usr/ports/misc/emulab-$d ; make $myFLAGS clean)
        end
+
+   i. Check for vulnerabilities. If any are revealed, you can either try
+      to update /share/freebsd/10.3/ports with a newer version of the port
+      (e.g., from /share/freebsd/current/ports) or just live with the
+      vulnerability for now.
+
+       pkg audit -F
+
+   j. Create the packages:
+
        pkg create -a -o $PACKAGES/All/
 
-   f. Save packages and update tarball and repo. On boss:
+   k. Save packages and update tarball and repo. On boss:
 
-      cd /share/freebsd/10.2
+      cd /share/freebsd/10.3
       mkdir packages
       scp pcXXX:/usr/obj/ports/packages/All/\* packages/
       sudo chown -R root:wheel packages
 
       set www=/usr/testbed/www
-      set tball="FreeBSD-10.2-packages-64-`date +%Y%m%d`.tar.gz"
+      set tball="FreeBSD-10.3-packages-64-`date +%Y%m%d`.tar.gz"
 
       sudo tar czf $tball packages
       sudo cp $tball $www/downloads/
-      sudo ln -sf $tball $www/downloads/FreeBSD-10.2-packages-64.tar.gz
-      sudo mv $www/FreeBSD/10.2/{packages,Opackages}
-      sudo cp -rp packages $www/FreeBSD/10.2/
-      sudo pkg repo $www/FreeBSD/10.2/packages
+      sudo ln -sf $tball $www/downloads/FreeBSD-10.3-packages-64.tar.gz
+      sudo mv $www/FreeBSD/10.3/{packages,Opackages}
+      sudo cp -rp packages $www/FreeBSD/10.3/
+      sudo pkg repo $www/FreeBSD/10.3/packages
 
       sudo mv packages-64 packages-64.bak
       sudo mv packages packages-64
