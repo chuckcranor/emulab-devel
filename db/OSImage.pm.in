@@ -1179,6 +1179,31 @@ sub IsSystemImage($)
     return $self->image()->IsSystemImage();
 }
 
+sub Deprecate($;$$)
+{
+    my ($self,$message,$iserror) = @_;
+
+    return $self->image()->Deprecate($message, $iserror);
+}
+sub IsDeprecated($$;$$)
+{
+    my ($self,$val,$message,$iserror) = @_;
+
+    return $self->image()->IsDeprecated($val, $message, $iserror);
+}
+sub DeprecatedMessage($;$)
+{
+    my ($self, $experiment) = @_;
+
+    return $self->image()->DeprecatedMessage($experiment);
+}
+sub SendDeprecatedMail($$;$)
+{
+    my ($self, $user, $experiment) = @_;
+
+    return $self->image()->SendDeprecatedMail($user, $experiment);
+}
+
 ################################################################################
 # This is the stuff from OSinfo.pm
 ################################################################################

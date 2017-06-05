@@ -6549,5 +6549,53 @@ sub AddProfileParameter($$$)
     return 0;
 }
 
+#
+# Check for deprecated images.
+#
+sub CheckForDeprecatedImages($$$)
+{
+    my ($self, $user, $sendmail) = @_;
+    my $pid = $self->pid();
+    my $eid = $self->eid();
+    my %needwarning = ();
+    require OSImage;
+    
+    my $deprecated_result =
+	DBQueryFatal("select vname,osname from virt_nodes ".
+		     "where pid='$pid' and eid='$eid' and ".
+		     "      osname is not null and osname!=''");
+    while (my ($vname,$osname) = $deprecated_result->fetchrow_array()) {
+	my $image = OSImage->Lookup($osname);
+	if (!defined($image)) {
+	    $image = OSImage->LookupByName($osname);
+	    if (!defined($image)) {
+		# Lets not worry, we will catch is later.
+		next;
+	    }
+	}
+	my $deprecated = 0;
+	my $iserror    = 0;
+	if ($image->IsDeprecated(\$deprecated, undef, \$iserror)) {
+	    tberror("Could not get deprecation info for $image\n");
+	    return -1;
+	}
+	next
+	    if (!$deprecated);
+
+	if ($iserror && !$user->IsAdmin()) {
+	    tberror($image->DeprecatedMessage() . "\n");
+	    return 1;
+	}
+	$needwarning{$image->imageid()} = $image;
+    }
+    foreach my $image (values(%needwarning)) {
+	print STDERR "*** WARNING: " . $image->DeprecatedMessage() . "\n";
+	if ($sendmail) {
+	    $image->SendDeprecatedMail($user, $self);
+	}
+    }
+    return 0;
+}
+
 # _Always_ make sure that this 1 is at the end of the file...
 1;

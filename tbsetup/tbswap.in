@@ -980,6 +980,12 @@ sub doSwapin($) {
     # Just the physnodes ...
     my @deleted_pnodes = ();
 
+    if ($type == REAL) {
+	if ($experiment->CheckForDeprecatedImages($this_user, 1)) {
+	    return 1;
+	}
+    }
+
     # Special IP assignment. Must do before mapper runs and moves
     # IPs from virt_lans to interfaces table.
     if ($experiment->SetupNetworkFabrics()) {
@@ -1075,7 +1081,7 @@ sub doSwapin($) {
 
 	    tberror "Failed ($exitcode) to map to reality.";
 
-	    # Wrapper sets this bit when recovery is possible.
+	    # Wrapper sets this bit when recoveryppxu is possible.
 	    if ($exitcode & 64) {
 		# We can recover. 
 		tbreport(SEV_SECONDARY, 'assign_wrapper_failed', $exitcode);

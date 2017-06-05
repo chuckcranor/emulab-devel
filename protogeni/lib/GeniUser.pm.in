@@ -844,6 +844,7 @@ sub BumpActivity($)     { return $_[0]->{'USER'}->BumpActivity(); }
 sub DefaultProject($)   { return $_[0]->{'USER'}->DefaultProject(); }
 sub FlipTo($$)          { return $_[0]->{'USER'}->FlipTo($_[1]); }
 sub UpdateExports($)    { return $_[0]->{'USER'}->UpdateExports(); }
+sub SendEmail($$$;$)    { return $_[0]->{'USER'}->SendEmail($_[1],$_[2],$_[3]); }
 
 # Need to construct this since not in User structure.
 sub hrn($)		{ return "${PGENIDOMAIN}." . $_[0]->uid(); }

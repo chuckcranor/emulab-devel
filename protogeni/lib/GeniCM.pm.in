@@ -2759,6 +2759,9 @@ sub GetTicketAuxAux($$$$$$$$$$$)
 	    goto bad;
 	}
     }
+    $response = CheckForDeprecatedImages($slice_experiment, $user);
+    goto bad
+	if (GeniResponse::IsResponse($response));
 
     # Must chdir to the work directory for the mapper.
     if (! chdir($slice_experiment->WorkDir())) {
@@ -8282,6 +8285,54 @@ sub AddInternalNodeToRspec($$$)
 	GeniXML::SetText("vnode", $vmref, $vnode->node_id());
     }
     return $newnode;
+}
+
+#
+# 
+#
+sub CheckForDeprecatedImages($$)
+{
+    my ($experiment, $user) = @_;
+    my $pid = $experiment->pid();
+    my $eid = $experiment->eid();
+    my %needwarning = ();
+    require OSImage;
+    
+    my $deprecated_result =
+	emdb::DBQueryFatal("select vname,osname from virt_nodes ".
+			   "where pid='$pid' and eid='$eid' and ".
+			   "      osname is not null and osname!=''");
+    while (my ($vname,$osname) = $deprecated_result->fetchrow_array()) {
+	my $image = OSImage->Lookup($osname);
+	if (!defined($image)) {
+	    $image = OSImage->LookupByName($osname);
+	    if (!defined($image)) {
+		# Lets not worry, we will catch is later.
+		next;
+	    }
+	}
+	my $deprecated = 0;
+	my $iserror    = 0;
+	if ($image->IsDeprecated(\$deprecated, undef, \$iserror)) {
+	    print STDERR "Could not get deprecation info for $image\n";
+	    return GeniResponse->Create(GENIRESPONSE_ERROR, undef,
+				"Could not get deprecation info for $image");
+	}
+	next
+	    if (!$deprecated);
+
+	if ($iserror) {
+	    print STDERR "*** " . $image->DeprecatedMessage() . "\n";
+	    return GeniResponse->Create(GENIRESPONSE_BADARGS, undef,
+					$image->DeprecatedMessage());
+	}
+	$needwarning{$image->imageid()} = $image;
+    }
+    foreach my $image (values(%needwarning)) {
+	print STDERR "*** WARNING: " . $image->DeprecatedMessage() . "\n";
+	$image->SendDeprecatedMail($user);
+    }
+    return 0;
 }
 
 # _Always_ make sure that this 1 is at the end of the file...

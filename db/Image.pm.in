@@ -2760,6 +2760,86 @@ sub SetCredential($$)
 }
 
 #
+# Deprecate an image.
+#
+sub Deprecate($;$$)
+{
+    my ($self, $message, $iserror) = @_;
+    my $imageid = $self->imageid();
+    if (defined($iserror)) {
+	$iserror = ($iserror ? 1 : 0);
+    }
+    my $query = "update image_versions set deprecated=now()";
+    $query .=   ",deprecated_iserror='$iserror'" if (defined($iserror));
+    if (defined($message)) {
+	if ($message ne "") {
+	    $query .= ",deprecated_message=" . DBQuoteSpecial($message);
+	}
+	else {
+	    $query .= ",deprecated_message=NULL";
+	}
+    }
+    DBQueryWarn("$query where imageid='$imageid'")
+	or return -1;
+
+    return 0;
+}
+sub IsDeprecated($$;$$)
+{
+    my ($self, $pval, $pmessage, $piserror) = @_;
+    my $imageid = $self->imageid();
+    my $version = $self->version();
+
+    my $query_result =
+	DBQueryWarn("select deprecated,deprecated_message,deprecated_iserror ".
+		    "  from image_versions ".
+		    "where imageid='$imageid' and version='$version'");
+    return -1
+	if (! ($query_result && $query_result->numrows));
+
+    my ($deprecated, $message, $iserror) = $query_result->fetchrow_array();
+    $$pval     = $deprecated;
+    $$pmessage = $message if (defined($pmessage));
+    $$piserror = $iserror if (defined($piserror));
+    return 0;
+}
+
+sub DeprecatedMessage($;$)
+{
+    my ($self, $experiment) = @_;
+    my $message = $self->deprecated_message();
+    my $iserror = $self->deprecated_iserror();
+    my $name    = $self->pid() . "/" . $self->imagename();
+    my $result;
+
+    if ($iserror) {
+	$result = "Image $name is deprecated and no longer available to use".
+	    (defined($message) && $message ne "" ? ": ${message}" : "") .
+	    ". " . "Please choose a different image!";
+    }
+    else {
+	$result = "Image $name is deprecated and no longer available to use".
+	    (defined($message) && $message ne "" ? ": ${message}" : "") .
+	    ". " . "You can continue to use this image for now but you should ".
+	    "choose a different one before this image is deleted!";
+    }
+    if (defined($experiment)) {
+	my $pid = $experiment->pid();
+	my $eid = $experiment->eid();
+
+	$result = "Experiment $pid/$eid: $result";
+    }
+    return $result;
+}
+sub SendDeprecatedMail($$;$)
+{
+    my ($self, $user, $experiment) = @_;
+    my $message = $self->DeprecatedMessage($experiment);
+    $user->SendEmail("Deprecated Image Warning", $message);
+    return 0;
+}
+
+#
 # Path and Directory stuff.
 #
 # Images are stored as directories now. Inside the directory are base

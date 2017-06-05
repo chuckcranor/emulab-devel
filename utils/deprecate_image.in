@@ -1,0 +1,133 @@
+#!/usr/bin/perl -w
+#
+# Copyright (c) 2000-2017 University of Utah and the Flux Group.
+# 
+# {{{EMULAB-LICENSE
+# 
+# This file is part of the Emulab network testbed software.
+# 
+# This file is free software: you can redistribute it and/or modify it
+# under the terms of the GNU Affero General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or (at
+# your option) any later version.
+# 
+# This file is distributed in the hope that it will be useful, but WITHOUT
+# ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
+# FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Affero General Public
+# License for more details.
+# 
+# You should have received a copy of the GNU Affero General Public License
+# along with this file.  If not, see <http://www.gnu.org/licenses/>.
+# 
+# }}}
+#
+use English;
+use strict;
+use Getopt::Std;
+use File::Basename;
+use Data::Dumper;
+
+#
+# Delete an image (descriptor) 
+#
+sub usage()
+{
+    print("Usage: deprecate_image [-e|-w] <image> [warning message to users]\n".
+	  "Options:\n".
+	  "       -e     Use of image is an error; default is warning\n".
+	  "       -w     Use of image is a warning\n");
+    exit(-1);
+}
+my $optlist     = "ewd";
+my $debug       = 0;
+my $doerror     = 0;
+my $dowarning   = 0;
+my $deprecated  = 0;
+my $iserror     = 0;
+my $message;
+
+#
+# Configure variables
+#
+my $TB             = "@prefix@";
+
+#
+# Untaint the path
+#
+$ENV{'PATH'} = "$TB/bin:$TB/sbin:/bin:/usr/bin:/usr/bin:/usr/sbin";
+delete @ENV{'IFS', 'CDPATH', 'ENV', 'BASH_ENV'};
+
+#
+# Turn off line buffering on output
+#
+$| = 1;
+
+#
+# Load the Testbed support stuff.
+#
+use lib "@prefix@/lib";
+use User;
+use OSImage;
+
+# Protos
+sub fatal($);
+
+#
+# Parse command arguments. Once we return from getopts, all that should be
+# left are the required arguments.
+#
+my %options = ();
+if (! getopts($optlist, \%options)) {
+    usage();
+}
+if (defined($options{"d"})) {
+    $debug = 1;
+}
+if (defined($options{"e"})) {
+    $doerror = 1;
+}
+if (defined($options{"w"})) {
+    $dowarning = 1;
+}
+usage()
+    if (@ARGV < 1 || @ARGV > 2);
+usage()
+    if ($doerror && $dowarning);
+
+#
+# Map invoking user to object. 
+#
+my $this_user = User->ThisUser();
+if (! defined($this_user)) {
+    fatal("You ($UID) do not exist!");
+}
+my $image = OSImage->Lookup($ARGV[0]);
+if (!defined($image)) {
+    fatal("Image does not exist in the DB!");
+}
+if ($this_user->IsAdmin()) {
+    fatal("Only admins can deprecate an image");
+}
+if ($image->IsDeprecated(\$deprecated, \$message, \$iserror)) {
+    fatal("Could not get current deprecation info for image");
+}
+if ($doerror) {
+    $iserror = 1;
+}
+elsif ($dowarning) {
+    $iserror = 0;
+}
+if (@ARGV > 1) {
+    $message = $ARGV[1];
+}
+$image->Deprecate($message, $iserror) == 0 or
+    fatal("Could not set deprecation info for image");
+exit(0);
+
+sub fatal($)
+{
+    my ($mesg) = @_;
+
+    die("*** $0:\n".
+	"    $mesg\n");
+}

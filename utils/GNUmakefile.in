@@ -57,7 +57,8 @@ SBIN_SCRIPTS	= vlandiff vlansync withadminprivs export_tables cvsupd.pl \
 		  node_exclude managetaint shutdown-shared imagerelease \
 		  runsonxen pxelinux_makeconf attend atten \
 		  addrfdevice addrfpath reserve announce createimagealias \
-		  predict test-reserve prunelogfiles notify-reservations
+		  predict test-reserve prunelogfiles notify-reservations \
+		  deprecate_image
 
 WEB_SBIN_SCRIPTS= webnewnode webdeletenode webspewconlog webarchive_list \
                   webwanodecheckin webspewimage webdumpdescriptor webemulabfeature \
