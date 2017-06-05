@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2008-2016 University of Utah and the Flux Group.
+# Copyright (c) 2008-2017 University of Utah and the Flux Group.
 # 
 # {{{GENIPUBLIC-LICENSE
 # 
@@ -30,6 +30,7 @@
 use strict;
 use English;
 use Getopt::Std;
+use vars qw($GENI_DBNAME);
 
 #
 # Initialize an emulab to act as a protogeni emulab. Add optional -c
@@ -83,6 +84,8 @@ my $CMCERT	  = "$TB/etc/genicm.pem";
 my $CHCERT	  = "$TB/etc/genich.pem";
 my $SESCERT	  = "$TB/etc/genises.pem";
 my $RPCCERT	  = "$TB/etc/genirpc.pem";
+my $CRL		  = "$TB/ssl/crl.pem";
+my $CRLBUNDLE	  = "$TB/etc/genicrl.bundle";
 my $SUDO	  = "/usr/local/bin/sudo";
 my $MYSQL         = "/usr/local/bin/mysql";
 my $MYSQLADMIN    = "/usr/local/bin/mysqladmin";
@@ -92,7 +95,9 @@ my $PKG_INFO      = "/usr/sbin/pkg_info";
 my $FETCH	  = "/usr/bin/fetch";
 my $OPENSSL       = "/usr/bin/openssl";
 my $FIXROOTCERT   = "$TB/sbin/fixrootcert";
+my $MYSAURN       = "urn:publicid:IDN+@OURDOMAIN@+authority+sa";
 my $APACHEPREFIX  = ("@APACHE_VERSION@" == "22" ? "apache22" : "apache");
+my $APACHE_START  = "@APACHE_START_COMMAND@";
 
 # un-taint path
 $ENV{'PATH'} = '/bin:/usr/bin:/usr/local/bin:/usr/site/bin';
@@ -284,10 +289,12 @@ Phase "bundles", "Installing SSL bundles", sub {
 	ExecQuietFatal("$CP $TB/etc/emulab.pem $TB/etc/genica.bundle");
 	ExecQuietFatal("$CHMOD 0644 $TB/etc/genica.bundle");
     };
-    Phase "genicrl", "Installing genicrl.bundle", sub {
-	DoneIfExists("$TB/etc/genicrl.bundle");
-	ExecQuietFatal("$TOUCH $TB/etc/genicrl.bundle");
-	ExecQuietFatal("$CHMOD 0644 $TB/etc/genicrl.bundle");
+    Phase "genicrl", "Creating initial CRL", sub {
+	ExecQuietFatal("$GENCRL -f");
+    };
+    Phase "crl", "Installing genicrl.bundle", sub {
+	ExecQuietFatal("$CP -f $CRL $CRLBUNDLE");
+	ExecQuietFatal("$CHMOD 0644 $CRLBUNDLE");
     };
 };
 if ($asch) {
@@ -511,6 +518,10 @@ else {
 	AppendToFileFatal($CRONTAB,
 			  "10  4  *  *  *  root  $GENCRLBUNDLE");
     };
+    # Restart to pick up initial CRL created above.
+    Phase "apcahe", "Restarting Apache", sub {
+	ExecQuietFatal("$APACHE_START restart");
+    };
 }
 
 if (!$asch && !$noregister) {
@@ -526,6 +537,11 @@ if (!$asch && !$noregister) {
 	
 	ExecQuietFatal("$REGISTERCERTS");
     };
+}
+if ($asch) {
+    #
+    # Run cacontrol -i.
+    #
 }
 exit(0);
 
