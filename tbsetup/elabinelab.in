@@ -1019,12 +1019,12 @@ sub DumpDBGoo()
     # interfaces in the inner emulab. Use a temp table again.
     #
     DBQueryWarn("create temporary table temp_interfaces ".
-		"select t.* from reserved as r ".
-		"left join interfaces as t on t.node_id=r.node_id ".
-		"left join virt_nodes as v on v.vname=r.vname and ".
-		"     v.pid=r.pid and v.eid=r.eid ".
-		"where r.pid='$pid' and r.eid='$eid' and ".
-		"      v.inner_elab_role in ('node','ops','fs','ops+fs')")
+		"select t.* ".
+		"from reserved as r, interfaces as t, virt_nodes as v where ".
+		"  t.node_id=r.node_id and ".
+		"  v.vname=r.vname and v.pid=r.pid and v.eid=r.eid and ".
+		"  r.pid='$pid' and r.eid='$eid' and ".
+		"  v.inner_elab_role in ('node','ops','fs','ops+fs')")
 	or die("*** $0:\n".
 	       "    Could not create temporary table temp_interfaces\n");
 
@@ -1072,13 +1072,13 @@ sub DumpDBGoo()
 
     # And the wires table. Strip out the control wires; not needed.
     DBQueryWarn("create temporary table temp_wires ".
-		"select t.* from reserved as r ".
-		"left join virt_nodes as v on v.vname=r.vname and ".
-		"     v.pid=r.pid and v.eid=r.eid ".
-		"left join wires as t on t.node_id1=r.node_id ".
-		($elabinelab_singlenet == 0 ? " and t.type='Node' " : " ") .
-		"where r.pid='$pid' and r.eid='$eid' and ".
-		"      v.inner_elab_role in ('node','ops','fs','ops+fs') ")
+		"select t.* ".
+		"from reserved as r, virt_nodes as v, wires as t where ".
+		"  v.vname=r.vname and v.pid=r.pid and v.eid=r.eid and ".
+		"  t.node_id1=r.node_id and ".
+		   ($elabinelab_singlenet ? "" : "t.type='Node' and ") .
+		"  r.pid='$pid' and r.eid='$eid' and ".
+		"  v.inner_elab_role in ('node','ops','fs','ops+fs')")
 	or die("*** $0:\n".
 	       "    Could not create temporary table temp_wires\n");
 
