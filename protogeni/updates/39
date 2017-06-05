@@ -10,13 +10,16 @@ sub DoUpdate($$$)
 
     DBSetDefault($dbhandle);
 
-    DBQueryFatal("alter table geni_aggregates add ".
-		 " `status_state_timestamp` int(10) unsigned default NULL ".
-		 "    after state");
-    
-    DBQueryFatal("alter table geni_slivers add ".
-		 " `status_state_timestamp` int(10) unsigned default NULL ".
-		 "    after state");
+    if (! DBSlotExists("geni_aggregates", "status_state_timestamp")) {
+	DBQueryFatal("alter table geni_aggregates add ".
+		     " `status_state_timestamp` int(10) unsigned default NULL ".
+		     "    after state");
+    }
+    if (! DBSlotExists("geni_slivers", "status_state_timestamp")) {
+	DBQueryFatal("alter table geni_slivers add ".
+		     " `status_state_timestamp` int(10) unsigned default NULL ".
+		     "    after state");
+    }
     return 0;
 }
 1;
