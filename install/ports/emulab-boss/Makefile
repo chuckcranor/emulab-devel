@@ -89,6 +89,7 @@ RUN_DEPENDS+=	\
 	curl:${PORTSDIR}/ftp/curl \
 	git:${PORTSDIR}/devel/git \
 	gmake:${PORTSDIR}/devel/gmake \
+	hg:${PORTSDIR}/devel/mercurial \
 	kmetis:${PORTSDIR}/math/metis4 \
 	libtool:${PORTSDIR}/devel/libtool \
 	neato:${PORTSDIR}/graphics/graphviz \
