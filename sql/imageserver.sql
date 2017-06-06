@@ -70,6 +70,9 @@ CREATE TABLE `image_versions` (
   `types_known_working` text default NULL,
   `types_known_notworking` text default NULL,
   `types_unknown` text default NULL,
+  `deprecated` datetime default NULL,
+  `deprecated_iserror` tinyint(1) NOT NULL default '0',
+  `deprecated_message` mediumtext,
   PRIMARY KEY (`urn`,`version`),
   UNIQUE KEY `version_uuid` (`version_uuid`)
 ) ENGINE=MyISAM DEFAULT CHARSET=latin1;

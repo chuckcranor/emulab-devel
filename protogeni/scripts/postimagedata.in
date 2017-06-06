@@ -358,6 +358,17 @@ sub PostImageInfo($)
 		"image_permissions" => [],
     };
     #
+    # Send along deprecated info.
+    #
+    if (defined($image->deprecated())) {
+	$blob->{'deprecated'} = TBDateStringGMT(str2time($image->deprecated()));
+	$blob->{'deprecated_iserror'} = $image->deprecated_iserror();
+	if (defined($image->deprecated_message()) &&
+	    $image->deprecated_message() ne "") {
+	    $blob->{'deprecated_message'} = $image->deprecated_message();
+	}
+    }
+    #
     # If this is a nonlocal image, send the origin along so that the
     # image server knows we are a copy.
     #

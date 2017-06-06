@@ -321,6 +321,26 @@ sub VerifyBlob($)
     }
     return GeniResponse->MalformedArgsResponse("Illegal created")
 	if (!defined(str2time($blob->{'created'})));
+    # Another date, optional
+    if (exists($blob->{'deprecated'})) {
+	if (ref($blob->{'deprecated'}) eq 'Frontier::RPC2::DateTime::ISO8601') {
+	    $blob->{'deprecated'} = $blob->{'deprecated'}->value;
+	}
+	return GeniResponse->MalformedArgsResponse("Illegal deprecated date")
+	    if (!defined(str2time($blob->{'deprecated'})));
+
+	return GeniResponse->MalformedArgsResponse("Malformed: ".
+						   "deprecated_iserror")
+	    if (exists($blob->{"deprecated_iserror"}) &&
+		$blob->{"deprecated_iserror"} !~ /^\d+$/);
+	return GeniResponse->MalformedArgsResponse("Malformed: ".
+						   "deprecated_message")
+	    if (exists($blob->{"deprecated_message"}) &&
+		!TBcheck_dbslot($blob->{'deprecated_message'},
+				"default", 'tinytext',
+				TBDB_CHECKDBSLOT_WARN|
+				TBDB_CHECKDBSLOT_ERROR));
+    }
     return GeniResponse->MalformedArgsResponse("Illegal arch")
 	if (!$blob->{'isdataset'} &&
 	    $blob->{'arch'} !~ /^(i386|x86_64|aarch64)$/);
@@ -428,6 +448,7 @@ sub UpdateImage($$)
     my ($imagedata, $blob) = @_;
     my $image_uuid   = $blob->{'image_uuid'};
     my $version_uuid = $blob->{'version_uuid'};
+    my $deprecated_clause = "";
     
     # Verify uuid consistency.
     if ($imagedata->{'image_uuid'} ne $image_uuid) {
@@ -456,6 +477,24 @@ sub UpdateImage($$)
     my $created = timelocal(strptime($blob->{'created'}));
 
     #
+    # Watch for a deprecated image.
+    #
+    if (exists($blob->{'deprecated'})) {
+	my $deprecated = timelocal(strptime($blob->{'deprecated'}));
+	$deprecated_clause = ",deprecated=FROM_UNIXTIME($deprecated) ";
+	
+	if (exists($blob->{'deprecated_iserror'})) {
+	    my $iserror = ($blob->{'deprecated_iserror'} ? 1 : 0);
+	    $deprecated_clause .= ",deprecated_iserror='$iserror' ";
+	}
+	if (exists($blob->{'deprecated_message'}) &&
+	    $blob->{'deprecated_message'} ne "") {
+	    my $message = DBQuoteSpecial($blob->{'deprecated_message'});
+	    $deprecated_clause .= ",deprecated_message=${message} ";
+	}
+    }
+
+    #
     # Process the image permissions first.
     #
     if (exists($blob->{'image_permissions'})) {
@@ -482,6 +521,7 @@ sub UpdateImage($$)
 			 "  created=FROM_UNIXTIME($created), ".
 			 join(",", map("$_=" . DBQuoteSpecial($sets{$_}),
 				       keys(%sets))) . " " .
+			 "$deprecated_clause ".
 			 "where version_uuid='$version_uuid'")) {
 	return GeniResponse->Create(GENIRESPONSE_ERROR);
     }
@@ -774,6 +814,14 @@ sub GetImageInfo($)
 	    }
 	    my $row = $query_result->fetchrow_hashref();
 	    $blob->{'maxversion'} = $row->{"version"};
+	}
+	if (defined($row->{'deprecated'})) {
+	    $blob->{'deprecated'} =
+		TBDateStringGMT(str2time($row->{'deprecated'}));
+	    $blob->{'deprecated_iserror'} = $row->{'deprecated_iserror'};
+	    if (defined($row->{'deprecated_message'})) {
+		$blob->{'deprecated_message'} = $row->{'deprecated_message'};
+	    }
 	}
 	return $blob;
     };

@@ -50,6 +50,8 @@ my $message;
 # Configure variables
 #
 my $TB             = "@prefix@";
+my $PGENISUPPORT   = @PROTOGENI_SUPPORT@;
+my $POSTIMAGEDATA  = "$TB/sbin/protogeni/postimagedata";
 
 #
 # Untaint the path
@@ -68,6 +70,7 @@ $| = 1;
 use lib "@prefix@/lib";
 use User;
 use OSImage;
+use libEmulab;
 
 # Protos
 sub fatal($);
@@ -122,6 +125,16 @@ if (@ARGV > 1) {
 }
 $image->Deprecate($message, $iserror) == 0 or
     fatal("Could not set deprecation info for image");
+
+if ($PGENISUPPORT &&
+    GetSiteVar("protogeni/use_imagetracker")) {
+    my $imageid = $image->imageid();
+    print "Posting image $imageid to the image server ...\n";
+    system("$POSTIMAGEDATA $imageid");
+    if ($?) {
+	print STDERR "Could not post alias to the image server\n";
+    }
+}
 exit(0);
 
 sub fatal($)
