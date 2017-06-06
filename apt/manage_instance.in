@@ -1571,7 +1571,11 @@ sub DoExtend()
 	"action"   => "request",
 	"wanted"   => $wanted,
 	"granted"  => $granted,
-	"admin"    => $this_user->IsAdmin() ? 1 : 0};
+	"admin"    => $this_user->IsAdmin() ? 1 : 0,
+    };
+    if ($needapproval) {
+	$extensionargs->{"needapproval"} = 1;
+    }
     if (defined($message)) {
 	$extensionargs->{"message"} = $message;
     }
