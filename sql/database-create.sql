@@ -223,6 +223,7 @@ CREATE TABLE `apt_instance_extension_info` (
   `action` enum('request','deny','info') NOT NULL default 'request',
   `wanted` smallint(5) unsigned NOT NULL default '0',
   `granted` smallint(5) unsigned default NULL,
+  `needapproval` tinyint(1) NOT NULL default '0',
   `admin` tinyint(1) NOT NULL default '0',
   `reason` mediumtext,
   `message` mediumtext,
