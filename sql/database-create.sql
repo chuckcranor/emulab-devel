@@ -362,6 +362,7 @@ CREATE TABLE `apt_instances` (
   `paniced_timestamp` datetime default NULL,
   `admin_lockdown` tinyint(1) NOT NULL default '0',
   `user_lockdown` tinyint(1) NOT NULL default '0',
+  `admin_notes` mediumtext,
   `extension_code` varchar(32) default NULL,
   `extension_reason` mediumtext,
   `extension_history` mediumtext,
