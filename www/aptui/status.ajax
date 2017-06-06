@@ -455,7 +455,7 @@ function Do_DenyOrMoreinfo($action)
 	SPITAJAX_ERROR(1, "You do not have permission to do this.");
 	goto bad;
     }
-    if ($instance->admin_lockdown()) {
+    if ($action == "terminate" && $instance->admin_lockdown()) {
         SPITAJAX_ERROR(1, "This experiment has been locked down by an ".
                        "administrator. The lock must be cleared before ".
                        "it can terminated.");
