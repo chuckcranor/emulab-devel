@@ -359,14 +359,16 @@ $(function ()
     {
 	var modified = 0;
 	
-	// Panel starts out collapsed and read only. When it is expanded,
-	// change the button to edit.
+	// Panel starts out collapsed.
 	$('#adminnotes-collapse').on('show.bs.collapse', function () {
 	    $('#adminnotes-row .toggle').html('Hide');
-	    
 	});
 	$('#adminnotes-collapse').on('hide.bs.collapse', function () {
-	    $('#adminnotes-row .toggle').html('View');
+	    var label = "View";
+	    if ($("#adminnotes-collapse textarea").val() == "") {
+		label = "Add";
+	    }
+	    $('#adminnotes-row .toggle').html(label);
 	});
 	$("#adminnotes-collapse textarea")
 	    .on("change input paste keyup", function() {

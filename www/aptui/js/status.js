@@ -105,6 +105,7 @@ $(function ()
 	    repourl:		window.APT_OPTIONS.repourl,
 	    reporef:		window.APT_OPTIONS.reporef,
 	    repohash:		window.APT_OPTIONS.repohash,
+	    hasnotes:          	window.APT_OPTIONS.hasnotes,
 	};
 	var status_html   = statusTemplate(template_args);
 	$('#status-body').html(status_html);

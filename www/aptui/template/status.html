@@ -276,6 +276,14 @@ pre {
 		<span <% if (paniced) { %>class="text-danger"<% } %> >
 		  Quarantined</span></label>
 	    </div>
+	    <div class='pull-left
+			<% if (!hasnotes) { %>hidden<% } %>'
+		 data-toggle='popover'
+		 data-delay='{"hide":500, "show":500}'
+		 data-content="This experiment has admin notes">
+	      <a target="_blank"
+		 href='adminextend.php?uuid=<%= uuid %>'>Admin Notes</a>
+	    </div>
 	  <% } %>
 	</div>
       </div>

@@ -130,7 +130,9 @@
 	  <a class='btn btn-primary btn-xs pull-right toggle'
 	     href="#adminnotes-collapse"
 	     data-toggle="collapse"
-	     type='button'>View</a>
+	     type='button'>
+	    <% if (expinfo.admin_notes == "") { %>Add<% } else { %>View<% } %>
+	  </a>
 	  <a class='btn btn-danger btn-xs pull-right hidden' hidden
 	     style="margin-right: 10px;"
 	     id="adminnotes-save-button"
@@ -141,7 +143,7 @@
 	     class="panel-collapse collapse">
 	  <div class='panel-body'>
 	    <textarea style="width: 100%;" rows="3"
-		      placeholder="Click Edit to add/change admin notes"
+		      placeholder="Put admin notes here and click Save"
 	    ><%= expinfo.admin_notes %></textarea>
 	  </div>
 	</div>

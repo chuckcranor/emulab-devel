@@ -280,6 +280,8 @@ if (isset($maxextend) && $maxextend != "") {
 else {
     echo "  window.APT_OPTIONS.MAXEXTEND = null;\n";
 }
+echo "  window.APT_OPTIONS.hasnotes = " .
+    ($instance->admin_notes() && $instance->admin_notes() != "" ? 1 : 0) . ";\n";
 if ($instance->repourl()) {
     echo "  window.APT_OPTIONS.repourl = '" . $instance->repourl() . "';\n";
     if ($instance->reporef()) {
