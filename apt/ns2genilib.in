@@ -1,7 +1,7 @@
 #!/usr/bin/perl -w
 
 #
-# Copyright (c) 2000-2016 University of Utah and the Flux Group.
+# Copyright (c) 2000-2017 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -137,15 +137,15 @@ else {
 
 my $this_user = User->ThisUser();
 if (! defined($this_user)) {
-    Fatal("You ($UID) do not exist!");
+    fatal("You ($UID) do not exist!");
 }
 if (defined($pid)) {
     my $project = Project->Lookup($pid);
     if (!defined($project)) {
-	Fatal("No such project");
+	fatal("No such project");
     }
     if (! ($this_user->IsAdmin() || defined($project->LookupUser($this_user)))) {
-	Fatal("No a member of project $pid");
+	fatal("Not a member of project $pid");
     }
 }
 
@@ -247,7 +247,9 @@ if ($debug) {
 # The next thing is to feed the IR output of the NS parser into
 # our geni-lib converter which produces the rspec. 
 #
-open ERR, "$NSGENILIB $irfile 2>&1 > $xmlfile |";
+my $opts = ($anonmode ? "" : "-p $pid");
+
+open ERR, "$NSGENILIB $opts $irfile 2>&1 > $xmlfile |";
 
 $errs = "";
 while (<ERR>) {

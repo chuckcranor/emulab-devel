@@ -36,6 +36,12 @@ import HTMLParser
 TB        = "@prefix@";
 OURDOMAIN = "@OURDOMAIN@";
 
+TBPATH = os.path.join(TB, "lib")
+if TBPATH not in sys.path:
+    sys.path.append(TBPATH)
+    pass
+import libdb
+
 # Testbed specific stuff
 if False:
     sys.path.append(TB + "/opsdir/lib/geni-lib")
@@ -70,11 +76,34 @@ def Usage():
     sys.exit(-1);
     pass
 
+#
+# Helper function to find find osname.
+#
+def LookupImage(osname):
+    res = libdb.DBQueryFatal(
+            "select i.imagename from images as i "
+            "where i.pid=%s and i.imagename=%s",
+            (PID, osname))
+
+    if len(res) == 0:
+        return "emulab-ops" + "//" + osname
+
+    return PID + "//" + osname
+    pass
+
 if len(sys.argv) < 2:
     Usage();
     pass
 
-NSfile = sys.argv[1];
+#
+# Check for PID flag.
+# 
+if len(sys.argv) > 2 and sys.argv[1] == "-p":
+    PID = sys.argv[2]
+    NSfile = sys.argv[3]
+else:
+    PID = None
+    NSfile = sys.argv[1]
 
 try:
     tree = etree.parse(NSfile);
@@ -133,10 +162,14 @@ for child in tree.getroot():
             if element.tag == "osname" and element.text:
                 #
                 # Convert NS project/osname to rspec project//osname.
-                # But if no project, add emulab-ops (clearly wrong).
+                #
                 osname = element.text
                 if osname.find("/") < 0:
-                    osname = "emulab-ops//" + osname
+                    if PID == None:
+                        osname = "emulab-ops//" + osname
+                    else:
+                        osname = LookupImage(osname);
+                        pass
                 elif osname.find("//") < 0:
                     osname = osname.replace("/", "//");
                     pass
