@@ -189,6 +189,8 @@ $routing = array("myprofiles" =>
                                                      "Do_Lockdown",
 						 "Quarantine" =>
 						     "Do_Quarantine",
+						 "SaveAdminNotes" =>
+						     "Do_SaveAdminNotes",
 						 "LinktestControl" =>
 						     "Do_Linktest",
 						 "OpenstackStats" =>

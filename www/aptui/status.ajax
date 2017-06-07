@@ -1477,6 +1477,36 @@ function Do_Lockdown()
 }
 
 #
+# Save new admin notes.
+#
+function Do_SaveAdminNotes()
+{
+    global $this_user, $instance;
+    global $ajax_args;
+
+    if (StatusSetupAjax(0)) {
+	return;
+    }
+    if (!isset($this_user) || !ISADMIN()) {
+	SPITAJAX_ERROR(1, "Not enough permission.");
+	return;
+    }
+    if (!isset($ajax_args["notes"])) {
+	SPITAJAX_ERROR(1, "Missing notes");
+	return;
+    }
+    $notes = $ajax_args["notes"];
+    if ($notes != "") {
+        if (!TBvalid_fulltext($reason)) {
+	    SPITAJAX_ERROR(1, "Illegal characters in nodes");
+            return;
+        }
+    }
+    $instance->SetAdminNotes($notes);
+    SPITAJAX_RESPONSE("Success");
+}
+
+#
 # Handle Quarantine request/clear.
 #
 function Do_Quarantine()
@@ -1700,6 +1730,12 @@ function Do_ExpInfo()
     $blob["admin_lockdown"]  = $instance->admin_lockdown() ? true : false;
     $blob["paniced"]         = $instance->paniced() ? true : false;
     $blob["lockout"]         = $instance->extension_lockout() ? true : false;
+    if (ISADMIN() && $instance->admin_notes()) {
+        $blob["admin_notes"] = $instance->admin_notes();
+    }
+    else {
+        $blob["admin_notes"] = "";
+    }
     SPITAJAX_RESPONSE($blob);
 }
 

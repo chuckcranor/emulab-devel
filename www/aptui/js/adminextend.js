@@ -189,6 +189,7 @@ $(function ()
 				     }
 				     // Update the Max Extension
 				     DoMaxExtension();
+				     SetupAdminNotes();
 				 }
 			     });
     }
@@ -349,7 +350,55 @@ $(function ()
     	var xmlthing = sup.CallServerMethod(null, "status", "OpenstackStats",
 					    {"uuid" : window.UUID});
 	xmlthing.done(callback);
+    }
 
+    //
+    // Setup the admin notes panel for editing
+    //
+    function SetupAdminNotes()
+    {
+	var modified = 0;
+	
+	// Panel starts out collapsed and read only. When it is expanded,
+	// change the button to edit.
+	$('#adminnotes-collapse').on('show.bs.collapse', function () {
+	    $('#adminnotes-row .toggle').html('Hide');
+	    
+	});
+	$('#adminnotes-collapse').on('hide.bs.collapse', function () {
+	    $('#adminnotes-row .toggle').html('View');
+	});
+	$("#adminnotes-collapse textarea")
+	    .on("change input paste keyup", function() {
+		modified = 1;
+		$('#adminnotes-save-button').removeClass('hidden');
+	    });
+	$('#adminnotes-save-button').click(function (event) {
+	    event.preventDefault();
+	    if (modified) {
+		SaveAdminNotes(function () {
+		    modified = 0;
+		    $('#adminnotes-save-button').addClass('hidden');
+		});
+	    }
+	});
+    }
+    function SaveAdminNotes(done)
+    {
+	var notes = $("#adminnotes-collapse textarea").val();
+	
+	var callback = function(json) {
+	    if (json.code) {
+		sup.SpitOops("oops", "Failed to save admin notes: " +
+			     json.value);
+		return;
+	    }
+	    done();
+	};
+    	var xmlthing = sup.CallServerMethod(null, "status", "SaveAdminNotes",
+					    {"uuid"  : window.UUID,
+					     "notes" : notes});
+	xmlthing.done(callback);
     }
 
     // Helper.
@@ -358,5 +407,4 @@ $(function ()
     }
 
     initialize();
-//    $(document).ready(initialize);
 });

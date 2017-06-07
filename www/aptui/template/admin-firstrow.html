@@ -1,3 +1,4 @@
+<div class="row">
     <div class='col-sm-7 col-sm-offset-1'>
       <div class='panel panel-default'>
 	<div class="panel-heading text-center">
@@ -37,6 +38,7 @@
 		<td>Max Ext:</td>
 		<td id="max-extension">...</td>
 		<td></td>
+	      </tr>
 	    </tbody>
 	  </table>
 	</div>
@@ -119,3 +121,32 @@
 	</div>
       </div>
     </div>
+</div>
+<div class="row">
+  <div class="row" id="adminnotes-row">
+    <div class='col-sm-8 col-sm-offset-2' id="adminnotes-div">
+      <div class='panel panel-default'>
+	<div class="panel-heading clearfix">
+	  <a class='btn btn-primary btn-xs pull-right toggle'
+	     href="#adminnotes-collapse"
+	     data-toggle="collapse"
+	     type='button'>View</a>
+	  <a class='btn btn-danger btn-xs pull-right hidden' hidden
+	     style="margin-right: 10px;"
+	     id="adminnotes-save-button"
+	     type='button'>Save</a>
+	  <span class="adminnotes-title">Admin Notes</span>
+	</div>
+	<div id="adminnotes-collapse"
+	     class="panel-collapse collapse">
+	  <div class='panel-body'>
+	    <textarea style="width: 100%;" rows="3"
+		      placeholder="Click Edit to add/change admin notes"
+	    ><%= expinfo.admin_notes %></textarea>
+	  </div>
+	</div>
+      </div>
+    </div>
+  </div>
+</div>
+

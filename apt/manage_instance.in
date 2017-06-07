@@ -1773,6 +1773,14 @@ sub ExtendInternal($$$$$)
 		     $instance->webURL() . "\n",
 		     $TBOPS);
 	}
+	# Do not overwrite ...
+	if (!defined($instance->admin_notes()) ||
+	    $instance->admin_notes() eq "") {
+	    $instance->Update({"admin_notes" =>
+				   "This instance is in user lockdown because ".
+				   "of an admin granted extension longer then ".
+				   "10 days."});
+	}
     }
     return 0;
 

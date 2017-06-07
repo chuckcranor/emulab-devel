@@ -135,6 +135,7 @@ class Instance
     function repourl()	    { return $this->field('repourl'); }
     function reporef()	    { return $this->field('reporef'); }
     function repohash()	    { return $this->field('repohash'); }
+    function admin_notes()  { return $this->field('admin_notes'); }
     function isopenstack()  { return $this->field('isopenstack'); }
     function openstack_utilization() {
         return $this->field('openstack_utilization');
@@ -433,6 +434,16 @@ class Instance
 
         DBQueryWarn("update apt_instances set ".
                     "  extension_reason='$safe_reason' ".
+                    "where uuid='$uuid'");
+    }
+
+    function SetAdminNotes($notes)
+    {
+	$uuid = $this->uuid();
+        $safe_notes = mysql_escape_string($notes);
+
+        DBQueryWarn("update apt_instances set ".
+                    "  admin_notes='$safe_notes' ".
                     "where uuid='$uuid'");
     }
 
