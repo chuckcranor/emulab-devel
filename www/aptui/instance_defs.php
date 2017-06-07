@@ -870,8 +870,6 @@ class InstanceSliver
                          "where uuid='$uuid' and aggregate_urn='$urn'");
 
 	while ($row = mysql_fetch_array($query_result)) {
-            error_log(print_r($row, TRUE));
-            
             if ($row["sliver_data"]) {
                 $row["sliver_details"] = json_decode($row["sliver_data"], true);
                 
