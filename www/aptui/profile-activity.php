@@ -58,7 +58,7 @@ $query1_result =
     DBQueryFatal("select 1 as active, ".
                  "   i.uuid,i.profile_version,i.created,'' as destroyed, ".
 		 "   i.creator,p.uuid as profile_uuid,u.email,".
-                 "   ANY_VALUE(ia.public_url), ".
+                 "   GROUP_CONCAT(ia.public_url) as public_urls, ".
                  "   i.slice_uuid ".
 		 "  from apt_instances as i ".
                  "left join apt_instance_aggregates as ia ".
@@ -74,7 +74,7 @@ $query2_result =
     DBQueryFatal("select 0 as active, ".
                  "    h.uuid,h.profile_version,h.created,h.destroyed, ".
 		 "    h.creator,p.uuid as profile_uuid,u.email, ".
-                 "    ANY_VALUE(ia.public_url), ".
+                 "    GROUP_CONCAT(ia.public_url) as public_urls, ".
                  "    h.slice_uuid ".
 		 "  from apt_instance_history as h ".
                  "left join apt_instance_aggregate_history as ia ".
@@ -103,7 +103,7 @@ foreach (array($query1_result, $query2_result) as $query_result) {
 	$destroyed = $row["destroyed"];
 	$creator   = $row["creator"];
 	$email     = $row["email"];
-        $public_url= $row["public_url"];
+        $public_urls= $row["public_urls"];
         $slice_uuid= $row["slice_uuid"];
 	# If a guest user, use email instead.
 	if (isset($email)) {
@@ -112,10 +112,15 @@ foreach (array($query1_result, $query2_result) as $query_result) {
         #
         # If the slice is gone, the public url needs to be replaced.
         #
-        if ($destroyed != "" && preg_match("/publicid=\w*/", $public_url)) {
-            $public_url = "https://" . parse_url($public_url, PHP_URL_HOST) .
-                        "/showslicelogs.php?slice_uuid=" . $slice_uuid;
+        $tmp = array();
+        foreach (preg_split("/,/", $public_urls) as $url) {
+            if ($destroyed != "" && preg_match("/publicid=\w*/", $url)) {
+                $url = "https://" . parse_url($url, PHP_URL_HOST) .
+                     "/showslicelogs.php?slice_uuid=" . $slice_uuid;
+            }
+            $tmp[] = $url;
         }
+        $public_urls = implode(",", $tmp);
 	$instance = array();
         $instance["active"]      = intval($active);
 	$instance["uuid"]        = $uuid;
@@ -125,7 +130,7 @@ foreach (array($query1_result, $query2_result) as $query_result) {
 	$instance["created"]     = $created;
 	$instance["destroyed"]   = $destroyed;
         if (ISADMIN()) {
-            $instance["public_url"]  = $public_url;
+            $instance["public_urls"]  = $public_urls;
         }
 	$instances[] = $instance;
     }

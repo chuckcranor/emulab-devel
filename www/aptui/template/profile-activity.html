@@ -31,11 +31,15 @@
 	    <td><%- instance.destroyed %></td>
 	  <% } %>
 	  <% if (window.ISADMIN) { %>
-	    <td><a href='<%- instance.public_url %>' target="_blank">
-	      <span class="glyphicon glyphicon-link"></span></a></td>
+	    <td>
+	      <% _.each(instance.public_urls.split(","), function(url) { %>
+		<a href='<%- url %>' target="_blank">
+		  <span class="glyphicon glyphicon-link"></span></a>
+	      <% }); %>
+	    </td>
 	  <% } %>
 	</tr>
-	<% }); %>
+	  <% }); %>
       </tbody>
     </table>
   </div>
