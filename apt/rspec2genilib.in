@@ -448,7 +448,7 @@ sub GenerateLinkStatements($)
 	my $ltype     = $link->type();
 
 	if (defined($ltype)) {
-	    if (0 && $ltype eq "lan") {
+	    if ($ltype eq "lan") {
 		$link->addStatement("$ltag = request.LAN('$client_id')");
 	    }
 	    elsif ($ltype eq "vlan" || $ltype eq "lan") {
