@@ -213,7 +213,7 @@ for child in tree.getroot():
                     routertype = "static"
                     pass
                 pass
-            elif (element.tag in ["loadlist", "cmd_line"] and
+            elif (element.tag in ["loadlist", "cmd_line", "startupcmd"] and
                   element.text and element.text != ""):
                 Fatal("Unsupported attribute on node " +
                       vname + ": " + element.tag + " - " + element.text)
