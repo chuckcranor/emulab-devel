@@ -1205,6 +1205,14 @@ sub HasForceShapingSetting($)
     return scalar(@foo);
 }
 
+sub HasNoBandwidthShapingSetting($)
+{
+    my ($link) = @_;
+    my @foo = FindNodesNS("n:force_nobwshaping", $link,
+			  $EMULAB_NS)->get_nodelist();
+    return scalar(@foo);
+}
+
 sub HasTrivialSetting($)
 {
     my ($link) = @_;

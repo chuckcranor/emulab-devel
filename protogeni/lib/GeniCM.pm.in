@@ -2283,12 +2283,16 @@ sub GetTicketAuxAux($$$$$$$$$$$)
 	#
 	my $besteffort = 0;
 	my $forcedelay = 0;
+	my $nobwshaping= 0;
 	
 	if (GeniXML::HasBestEffortSetting($linkref)) {
 	    $besteffort = 1;
 	}
 	if (GeniXML::HasForceShapingSetting($linkref)) {
 	    $forcedelay = 1;
+	}
+	if (GeniXML::HasNoBandwidthShapingSetting($linkref)) {
+	    $nobwshaping = 1;
 	}
 	# Ditto for new direct link option.
 	my $nointerswitch = GeniXML::NoInterSwitch($linkref);
@@ -2608,7 +2612,8 @@ sub GetTicketAuxAux($$$$$$$$$$$)
 	    }
 	    elsif (GeniXML::GetLinkProperties($linkref)) {
 		my @properties = GeniXML::GetLinkProperties($linkref);
-		$uselinkdelay = 1;
+		$uselinkdelay = 1
+		    if (!$nobwshaping);
 		
 		#
 		# Links (two nodes) and Lans (more then two nodes) are very
@@ -2685,6 +2690,7 @@ sub GetTicketAuxAux($$$$$$$$$$$)
 		$rlatency   = 0.0;
 		$lossrate   = 0.0;
 		$rlossrate  = 0.0;
+		$nobwshaping= 1;
 	    }
 	    
 	    my $virtlan =
@@ -2695,7 +2701,7 @@ sub GetTicketAuxAux($$$$$$$$$$$)
 					  "vindex"	=> $vindex,
 					  "trivial_ok"  => $trivial_ok,
 					  "emulated"    => $emulated,
-					  "nobwshaping" => $besteffort,
+					  "nobwshaping" => $nobwshaping,
 					  "nointerswitch" => $nointerswitch,
 					  "ip"          => $ip,
 					  "delay"       => $latency,

@@ -1361,6 +1361,7 @@ sub new($$$$)
 	"best_effort"		=> undef,
 	"shared_vlan"		=> undef,
 	"force_shaping"		=> undef,
+	"force_nobwshaping"	=> undef,
 	"trivial_ok"		=> undef,
 	"vlan_tagging"		=> undef,
 	"link_multiplexing"	=> undef,
@@ -1585,6 +1586,10 @@ sub addLink($$$)
 		$link->{'force_shaping'} = 1;
 		last SWITCH;
 	    };
+	    /^force_nobwshaping$/i && do {
+		$link->{'force_nobwshaping'} = 1;
+		last SWITCH;
+	    };
 	    /^trivial_ok$/i && do {
 		$link->{'trivial_ok'} = 1;
 		last SWITCH;
@@ -1658,7 +1663,7 @@ sub Compare($$)
 	     /^(best_effort|shared_vlan|force_shaping|trivial_ok)$/i ||
 	     /^(vlan_tagging|link_multiplexing|interswitch)$/i ||
 	     /^(vlan_tagging|link_multiplexing|interswitch)$/i ||
-	     /^(nomac_learning|jacks_site)$/i) && do {
+	     /^(nomac_learning|jacks_site|force_nobwshaping)$/i) && do {
 		 return 1
 		     if (APT_Rspec::CompareValues("Link: $client_id: $key",
 						  $val1, $val2));

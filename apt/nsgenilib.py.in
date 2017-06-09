@@ -461,7 +461,10 @@ for child in tree.getroot():
         if row.find("nobwshaping") != None:
             nobwshaping = int(row.find("nobwshaping").text)
             if nobwshaping:
-                lan.best_effort = True
+                if not lansets[vname].has_key("nobwshaping"):
+                    lan.setNoBandwidthShaping()
+                    pass
+                lansets[vname]["nobwshaping"] = True
                 pass
             pass
         if row.find("mustdelay") != None:

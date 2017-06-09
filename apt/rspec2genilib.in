@@ -495,6 +495,9 @@ sub GenerateLinkStatements($)
 	if (defined($link->{'force_shaping'})) {
 	    $link->addTagStatement("setForceShaping()");
 	}
+	if (defined($link->{'force_nobwshaping'})) {
+	    $link->addTagStatement("setNoBandwidthShaping()");
+	}
 	if (defined($link->{'trivial_ok'})) {
 	    $link->addTagStatement("trivial_ok = True");
 	}
