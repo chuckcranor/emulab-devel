@@ -17,7 +17,8 @@ sub InstallUpdate($$)
     # If something should run in the pre-install phase.
     #
     if ($phase eq "pre") {
-	;
+	# do this explicitly so that "gmake update-testbed-noinstall" works
+	ExecQuietFatal("$GMAKE -C $TOP_OBJDIR/utils $TBROOT/opsdir/sbin/setzfsquotas");
     }
     
     #
