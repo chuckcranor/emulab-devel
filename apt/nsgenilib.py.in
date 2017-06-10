@@ -495,6 +495,8 @@ for child in tree.getroot():
 
 for lanname,lifaces in lanifaces.iteritems():
     skip = 0
+    nobwshaping = 1;
+    
     #
     # Yuck, the parser spits out a min bw for blockstore links/lans.
     # But we want to kill that and let the best effort setting take care of it.
@@ -567,6 +569,17 @@ for lanname,lifaces in lanifaces.iteritems():
 	rloss       = 1-(1-rloss0)*(1-loss1)
 	rbw         = min(rbw0,bw1)
 
+        #
+        # If the user has simply requested a standard 1G or 10G link,
+        # then force BW shaping off so that the CM will do a normal
+        # assignment. 
+        #
+        if (delay != 0 or loss != 0 or rdelay != 0 or rloss != 0 or
+            ((bw != 1000000 and bw != 10000000) or
+             (rbw != 1000000 and rbw != 10000000))):
+            lan.setNoBandwidthShaping();
+            pass
+
         # geni-lib puts shaping params on both ifaces and links.
         iface0.bandwidth = bw
         iface0.latency   = delay
@@ -598,10 +611,24 @@ for lanname,lifaces in lanifaces.iteritems():
                 Fatal("asymmetric shaping not supported on lan " + lanname);
                 pass
 
+            #
+            # If the user has simply requested a standard 1G or 10G link,
+            # then force BW shaping off so that the CM will do a normal
+            # assignment.
+            #
+            if (delay != 0 or loss != 0 or
+                ((bw != 1000000 and bw != 10000000) or
+                 (rbw != 1000000 and rbw != 10000000))):
+                nobwshaping = 0;
+                pass
+
             # geni-lib puts shaping params on both ifaces and links.
             iface.bandwidth = bw
             iface.latency   = delay
             iface.plr       = loss
+            pass
+        if nobwshaping:
+            lan.setNoBandwidthShaping();
             pass
         pass
     pass
