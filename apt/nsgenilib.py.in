@@ -577,7 +577,7 @@ for lanname,lifaces in lanifaces.iteritems():
         if (delay != 0 or loss != 0 or rdelay != 0 or rloss != 0 or
             ((bw != 1000000 and bw != 10000000) or
              (rbw != 1000000 and rbw != 10000000))):
-            lan.setNoBandwidthShaping();
+            nobwshaping = 0;
             pass
 
         # geni-lib puts shaping params on both ifaces and links.
@@ -587,6 +587,9 @@ for lanname,lifaces in lanifaces.iteritems():
         iface1.bandwidth = rbw
         iface1.latency   = rdelay
         iface1.plr       = rloss
+        if nobwshaping:
+            lan.setNoBandwidthShaping();
+            pass
     else:
         #
         # A symmetrically shaped lan is the most common and easiest to deal
