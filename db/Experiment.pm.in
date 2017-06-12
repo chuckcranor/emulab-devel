@@ -2421,14 +2421,16 @@ sub PostSwap($$$$)
 	if ($which eq $EXPT_SWAPOUT) {
 	    $query_result =
 		DBQueryWarn("select r.pnodes,r.vnodes,r.uid_idx, ".
-			    "  r.swapout_time - r.swapin_time ".
+			    "  r.swapout_time - r.swapin_time, ".
+			    "  r.swapin_time ".
 			    " from experiment_resources as r ".
 			    "where r.idx='$rsrcidx'");
 	}
 	else {
 	    $query_result =
 		DBQueryWarn("select r.pnodes,r.vnodes,r.uid_idx, ".
-			    "  r.swapmod_time - r.swapin_time ".
+			    "  r.swapmod_time - r.swapin_time, ".
+			    "  r.swapmod_time ".
 			    " from experiment_resources as r ".
 			    "where r.idx='$lastrsrc'");
 	}
@@ -2436,11 +2438,14 @@ sub PostSwap($$$$)
 	    if (!$query_result);
 	
 	if ($query_result->numrows) {
-	    ($pnodes,$vnodes,$prev_uid_idx,$duration) =
+	    ($pnodes,$vnodes,$prev_uid_idx,$duration,$timein) =
 		$query_result->fetchrow_array;
 	    # Might happen if swapin stats got losts.
 	    $duration = 0
 		if (! defined($duration) || $duration < 0);
+	    # Ditto. This happens on the geni path, need to fix it.
+	    $duration = 0
+		if ($timein == 0);
 
 	    $prev_swapper = User->Lookup($prev_uid_idx);
 	    $prev_swapper = $swapper
