@@ -2390,6 +2390,7 @@ sub PostSwap($$$$)
     my $pnodes       = 0;
     my $vnodes       = 0;
     my $duration     = 0;
+    my $timein       = 0;
     my $prev_uid_idx = 0;
     my $prev_swapper = $swapper;
     my $query_result;
