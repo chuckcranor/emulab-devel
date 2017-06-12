@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2008, 2014 University of Utah and the Flux Group.
+# Copyright (c) 2008, 2014, 2017 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -33,12 +33,13 @@ sub usage() {
 	"Use the -d option to see debugging output instead of emailing it.\n";
     exit(-1);
 }
-my $optlist  = "vdib";
+my $optlist  = "vdibt";
 my $debug    = 0;
 my $verbose  = 1;
 my $impotent = 0;
 my $backup   = 0;
-my $ESTATS   = "experiment_stats";
+my $testrun  = 0;
+my $ESTATS   = "experiment_stats_backup";
 my $TSTATS   = "testbed_stats";
 my $RESOURCES= "experiment_resources_backup";
 my $USTATS   = "user_stats_backup";
@@ -46,6 +47,7 @@ my $GSTATS   = "group_stats_backup";
 my $PSTATS   = "project_stats_backup";
 my %group_stats = ();
 my %user_stats  = ();
+my %experiment_stats  = ();
 
 #
 # Simple sanity check. When we think we can fixup a swapin/swapout time,
@@ -107,16 +109,25 @@ if (defined($options{"v"})) {
 if (defined($options{"i"})) {
     $impotent++;
 }
+if (defined($options{"t"})) {
+    $testrun++;
+}
 if (defined($options{"b"})) {
     $backup++;
 }
 
-if ($backup) {
+if ($backup || $testrun) {
     DBQueryFatal("create table if not exists experiment_resources_backup ".
 		 "like experiment_resources");
     DBQueryFatal("delete from experiment_resources_backup");
     DBQueryFatal("insert into experiment_resources_backup ".
 		 "select * from experiment_resources");
+
+    DBQueryFatal("create table if not exists experiment_stats_backup ".
+		 "like experiment_stats");
+    DBQueryFatal("delete from experiment_stats_backup");
+    DBQueryFatal("insert into experiment_stats_backup ".
+		 "select * from experiment_stats");
 
     DBQueryFatal("create table if not exists user_stats_backup ".
 		 "like user_stats");
@@ -137,11 +148,6 @@ if ($backup) {
 		 "select * from project_stats");
 }
 
-#
-# Form a temp name.
-#
-my $logname = TBMakeLogname("checkstats");
-
 sub MyDBQ($)
 {
     my ($query) = @_;
@@ -155,6 +161,7 @@ sub MyDBQ($)
 }
 
 if ($impotent) {
+    $ESTATS   = "experiment_stats";
     $RESOURCES= "experiment_resources";
     $USTATS   = "user_stats";
     $GSTATS   = "group_stats";
@@ -463,6 +470,15 @@ sub Regenerate()
     print "Checking user/group stats tables for inconsistencies ... \n";
     
     my $query_result =
+	DBQueryFatal("select * from $ESTATS");
+    while (my $row = $query_result->fetchrow_hashref()) {
+	my $exptidx = $row->{'exptidx'};
+	
+	$experiment_stats{"$exptidx"} = {'swapin_duration' => 0,
+					 'oldstats' => $row};
+    }
+    
+    $query_result =
 	DBQueryFatal("select * from $USTATS");
     while (my $row = $query_result->fetchrow_hashref()) {
 	my $uid_idx = $row->{'uid_idx'};
@@ -555,6 +571,10 @@ sub Regenerate()
 		if ($verbose);
 	    next;
 	}
+	if (exists($experiment_stats{$exptidx})) {
+	    my $record = $experiment_stats{"$exptidx"};
+	    $record->{'swapin_duration'} += $swapseconds;
+	}
 
 	if (defined($uid_idx) && $uid_idx) {
 	    my $record = $user_stats{"$uid_idx"};
@@ -579,6 +599,22 @@ sub Regenerate()
 	    $record->{'allexpt_pnode_duration'} += ($pnodes * $swapseconds);
 	}
     }
+    foreach my $exptidx (keys(%experiment_stats)) {
+	my $record = $experiment_stats{"$exptidx"};
+	my $pid    = $record->{"oldstats"}->{'pid'};
+	my $eid    = $record->{"oldstats"}->{'eid'};
+
+	print "experiment: $pid/$eid/$exptidx: ".
+	    "duration: " . $record->{'swapin_duration'} . "\n"
+	    if ($verbose > 2);
+
+	# Warn of any changes.
+	if (CheckStatConsistency($record) != 0) {
+	    print "experiment $pid/$eid/$exptidx: Mismatch in stats records\n";
+	    FixStat("experiment_stats", $record);
+	}
+    }
+    
     foreach my $uid_idx (keys(%user_stats)) {
 	my $record = $user_stats{"$uid_idx"};
 
@@ -679,6 +715,9 @@ sub FixStat($$)
     }
     elsif ($which eq "project_stats") {
 	$query .= "$PSTATS set $sets where pid_idx=". $oldstats->{'pid_idx'};
+    }
+    elsif ($which eq "experiment_stats") {
+	$query .= "$ESTATS set $sets where exptidx=". $oldstats->{'exptidx'};
     }
     
     MyDBQ($query);
