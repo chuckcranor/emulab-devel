@@ -33,11 +33,12 @@ sub usage() {
 	"Use the -d option to see debugging output instead of emailing it.\n";
     exit(-1);
 }
-my $optlist  = "vdibt";
+my $optlist  = "vdibtr";
 my $debug    = 0;
 my $verbose  = 1;
 my $impotent = 0;
-my $backup   = 0;
+my $backup   = 1;
+my $restore  = 0;
 my $testrun  = 0;
 my $ESTATS   = "experiment_stats_backup";
 my $TSTATS   = "testbed_stats";
@@ -45,6 +46,7 @@ my $RESOURCES= "experiment_resources_backup";
 my $USTATS   = "user_stats_backup";
 my $GSTATS   = "group_stats_backup";
 my $PSTATS   = "project_stats_backup";
+my %project_stats = ();
 my %group_stats = ();
 my %user_stats  = ();
 my %experiment_stats  = ();
@@ -114,6 +116,9 @@ if (defined($options{"t"})) {
 }
 if (defined($options{"b"})) {
     $backup++;
+}
+if (defined($options{"r"})) {
+    $restore++;
 }
 
 if ($backup || $testrun) {
@@ -459,6 +464,22 @@ while (my $row = $query_result->fetchrow_hashref()) {
 }
 
 Regenerate();
+
+if ($restore) {
+    DBQueryFatal("rename table ".
+		 "   experiment_stats to experiment_stats_save, ".
+		 "   experiment_resources to experiment_resources_save, ".
+		 "   project_stats to project_stats_save, ".
+		 "   group_stats to group_stats_save, ".
+		 "   user_stats to user_stats_save");
+    
+    DBQueryFatal("rename table ".
+		 "   experiment_stats_backup to experiment_stats, ".
+		 "   experiment_resources_backup to experiment_resources, ".
+		 "   project_stats_backup to project_stats, ".
+		 "   group_stats_backup to group_stats, ".
+		 "   user_stats_backup to user_stats");
+}
 exit(0);
 
 #
@@ -507,7 +528,8 @@ sub Regenerate()
     $query_result =
 	DBQueryFatal("select s.exptidx,s.gid_idx,u.uid_idx,r.pnodes,r.vnodes,".
 		     "   swapin_time,swapout_time,swapmod_time,byswapmod, ".
-		     "   e.state,r.idx,r.lastidx,byswapin ".
+		     "   e.state,r.idx,r.lastidx,byswapin, ".
+		     "   s.pid_idx,s.pid,s.gid,s.eid ".
 		     " from $RESOURCES as r ".
 		     "left join $ESTATS as s on ".
 		     "     r.exptidx=s.exptidx ".
@@ -518,7 +540,11 @@ sub Regenerate()
 
     while (my $row = $query_result->fetchrow_hashref()) {
 	my $exptidx      = $row->{"exptidx"};
+	my $pid_idx      = $row->{"pid_idx"};
 	my $gid_idx      = $row->{"gid_idx"};
+	my $pid          = $row->{"pid"};
+	my $gid          = $row->{"gid"};
+	my $eid          = $row->{"eid"};
 	my $uid_idx      = $row->{"uid_idx"};
 	my $pnodes       = $row->{"pnodes"};
 	my $vnodes       = $row->{"vnodes"};
@@ -535,8 +561,12 @@ sub Regenerate()
 	my $end          = 0;
 
 	# Skip if no resources we care about.
-	next
-	    if (! ($pnodes || $vnodes));
+	if (! ($pnodes || $vnodes)) {
+	    print "$exptidx: skipping resource record $rsrcidx; ".
+		"no pnodes or vnodes\n"
+		if ($verbose);
+	    next;
+	}
 
 	#
 	# If no swapin for the record skip it, but not supposed to happen.
@@ -597,14 +627,25 @@ sub Regenerate()
 	    $record->{'allexpt_pnodes'} += $pnodes;
 	    $record->{'allexpt_vnode_duration'} += ($vnodes * $swapseconds);
 	    $record->{'allexpt_pnode_duration'} += ($pnodes * $swapseconds);
+
+	    if ($pid_idx != $gid_idx) {
+		my $record = $group_stats{"$pid_idx"};
+
+		$record->{'allexpt_duration'} += $swapseconds;
+		$record->{'allexpt_vnodes'} += $vnodes;
+		$record->{'allexpt_pnodes'} += $pnodes;
+		$record->{'allexpt_vnode_duration'} += ($vnodes * $swapseconds);
+		$record->{'allexpt_pnode_duration'} += ($pnodes * $swapseconds);
+	    }
 	}
     }
     foreach my $exptidx (keys(%experiment_stats)) {
 	my $record = $experiment_stats{"$exptidx"};
 	my $pid    = $record->{"oldstats"}->{'pid'};
+	my $gid    = $record->{"oldstats"}->{'gid'};
 	my $eid    = $record->{"oldstats"}->{'eid'};
 
-	print "experiment: $pid/$eid/$exptidx: ".
+	print "experiment: $pid/$gid/$eid/$exptidx: ".
 	    "duration: " . $record->{'swapin_duration'} . "\n"
 	    if ($verbose > 2);
 
@@ -617,12 +658,9 @@ sub Regenerate()
     
     foreach my $uid_idx (keys(%user_stats)) {
 	my $record = $user_stats{"$uid_idx"};
+	my $uid    = $record->{'oldstats'}->{'uid'};
 
-	# Lets not change anything if no records in the system.
-	next
-	    if (! $record->{'allexpt_duration'});
-
-	print "user: $uid_idx: ".
+	print "user: $uid/$uid_idx: ".
 	    "duration: " . $record->{'allexpt_duration'} . ", ".
 	    "pnodes: "   . $record->{'allexpt_pnodes'}   . ", ".
 	    "vnodes: "   . $record->{'allexpt_vnodes'}   . ", ".
@@ -639,12 +677,10 @@ sub Regenerate()
     foreach my $gid_idx (keys(%group_stats)) {
 	my $record   = $group_stats{"$gid_idx"};
 	my $oldstats = $record->{'oldstats'};
+	my $pid      = $oldstats->{'pid'};
+	my $gid      = $oldstats->{'gid'};
 
-	# Lets not change anything if no records in the system.
-	next
-	    if (! $record->{'allexpt_duration'});
-
-	print "group: $gid_idx: ".
+	print "group: $pid/$gid/$gid_idx: ".
 	    "duration: " . $record->{'allexpt_duration'} . ", ".
 	    "pnodes: "   . $record->{'allexpt_pnodes'}   . ", ".
 	    "vnodes: "   . $record->{'allexpt_vnodes'}   . ", ".
