@@ -31,6 +31,28 @@ sub Install($$$)
 		}
 	    }
 	};
+	#
+	# Keep the memory usage down:
+	#
+	#   innodb_buffer_pool_size: 1G -> 128M
+	#   innodb_data_file_path: 128M -> 16M
+	#   innodb_temp_data_file_path: 128M -> 48M
+	#   performance_schema: ON -> OFF
+	#
+	# XXX will need to revisit this when we start using innodb tables.
+	#
+	Phase "config", "Tweak my.cnf", sub {
+	    PhaseSkip("unneeded")
+		if (!$newmysql);
+	    DoneIfDoesntExist($MYSQL_CNF);
+	    AppendToFileFatal($MYSQL_CNF,
+			"[mysqld]",
+			"innodb_buffer_pool_size    = 128M",
+			"innodb_data_file_path      = ibdata1:16M:autoextend",
+			"innodb_temp_data_file_path = ibtmp1:48M:autoextend",
+			"performance_schema         = OFF"
+	    );
+	};
 	Phase "initialize", "Initializing mysql", sub {
 	    PhaseSkip("mysqld already initialzed")
 		if (-d "$MYSQLDBDIR/mysql");

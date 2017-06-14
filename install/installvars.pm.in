@@ -328,6 +328,7 @@ $MYSQLDUMP		= "/usr/local/bin/mysqldump";
 $MYSQLINSTALL		= "/usr/local/bin/mysql_install_db";
 $MYSQLDBDIR		= "/var/db/mysql";
 $MYSQL_LOGDIR		= "$LOGDIR/mysql";
+$MYSQL_CNF		= "/usr/local/etc/mysql/my.cnf";
 
 $PROTOUSER		= "elabman";
 $CHECKUPUSER		= "elabckup";
