@@ -2011,7 +2011,7 @@ sub vnodePreConfig($$$$$){
 		      "  $vnoderoot/etc/inittab");
 	}
 	if (-f "$vnoderoot/etc/init/ttyS0.conf") {
-	    mysystem2("sed -i.bak -e 's/ttyS0/hvc0/' ".
+	    mysystem2("sed -i.bak -e 's/ttyS./hvc0/' ".
 		      "  $vnoderoot/etc/init/ttyS0.conf");
 	}
 	#
@@ -4110,7 +4110,7 @@ sub disk_hacks($)
     }
 
     if (-f "$path/etc/init/ttyS0.conf") {
-	    system("sed -i.bak -e 's/ttyS0/hvc0/' $path/etc/init/ttyS0.conf");
+	    system("sed -i.bak -e 's/ttyS./hvc0/' $path/etc/init/ttyS0.conf");
     }
 
     if (-e "$BINDIR/tmcc-nossl.bin") {
