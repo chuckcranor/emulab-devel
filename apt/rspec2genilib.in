@@ -213,8 +213,7 @@ sub GenerateNodeStatements($)
 	    foreach my $k (sort(keys(%{$node->pipes()}))) {
 		my $p = $node->pipes()->{$k};
 		
-		my $pname = ($p->{'iface_id'} eq $if0
-			     ? "pipe('$if0')" : "pipe('$if1')");
+		my $pname = ($p->{'iface_id'} eq $if0 ? "pipe0" : "pipe1");
 
 		$node->addTagStatement("${pname}.bandwidth = ". $p->capacity())
 		    if (defined($p->capacity()));
@@ -365,7 +364,12 @@ sub GenerateNodeStatements($)
 	    # the internally created interface, not add another one.
 	    #
 	    if ($ntype eq "delay") {
-		$node->addStatement("$itag = ${ntag}.interface('$iface_id')");
+		my ($iface0, $iface1) = values(%{$node->{'ifaces'}});
+		my (undef,$if0) = split(":", $iface0->{'client_id'});
+		my (undef,$if1) = split(":", $iface1->{'client_id'});
+		my $iname = ($iface_id eq $if0 ? "iface0" : "iface1");
+		
+		$node->addStatement("$itag = ${ntag}.${iname}");
 		if ($addr) {
 		    $node->addStatement("${itag}.addAddress($addr)");
 		}

@@ -1827,7 +1827,7 @@ sub new($$$)
     my $source   = GetText("source", $ref);
     my $capacity = GetText("capacity", $ref);
     my $latency  = GetText("latency", $ref);
-    my $lossrate = GetText("packet_loss", $ref);
+    my $lossrate = GetText("lossrate", $ref);
 
     # Geni-lib will always add the node to the iface_id.
     my ($tmp,$iface_id) = split(":", $source);
