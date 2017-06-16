@@ -442,6 +442,11 @@ sub SliceUtilizationData($)
 	if (defined($counts)) {
 	    $typelist{$typeinfo->type()}->{"total"} = $counts->{"total"};
 	    $typelist{$typeinfo->type()}->{"free"}  = $counts->{"free"};
+
+	    my $reserve_free = Reservation->FreeCount($type);
+	    if ($reserve_free) {
+		$typelist{$typeinfo->type()}->{"reserve_free"} = $reserve_free;
+	    }
 	}
     }
     my $results = {"api_version"  => $API_VERSION,
@@ -477,7 +482,7 @@ sub SliceIdleData($)
     my $pid  = $experiment->pid();
     my $eid  = $experiment->eid();
     my $swapped = str2time($experiment->swapin_last());
-    my $limit   = time() - (3600 * 24 * 3);
+    my $limit   = time() - (3600 * 24 * 6);
     if ($limit < $swapped) {
 	$limit = $swapped;
     }

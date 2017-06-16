@@ -10,7 +10,15 @@
 		<th>Type</th>
 		<th>Cluster</th>
 		<th>Used</th>
-		<th>Free</th>
+		<th>Free
+		  <a href='#' class='btn btn-xs'
+		         data-toggle='tooltip'
+			 data-container="body"
+			 title='Reservation system prediction in parens'
+			 data-trigger="hover"><span
+                             class='glyphicon glyphicon-question-sign'
+			     style='margin-bottom: 4px;'></a></span>
+		</th>
 		<th>Total</th>
 	      </tr>
 	    </thead>
@@ -21,7 +29,14 @@
 		    <td><%- type %></td>
 		    <td><%- name %></td>
 		    <td><%- info.count %></td>
-		    <td><%- info.free %></td>
+		    <td>
+		      <%- info.free %>
+		      <% if (_.has(info, "reserve_free")) { %>
+			(<%- info.reserve_free %>)
+		      <% } else { %>
+			(n/a)
+		      <% } %>
+		    </td>
 		    <td><%- info.total %></td>
 		  </tr>
 		<% }); %>
