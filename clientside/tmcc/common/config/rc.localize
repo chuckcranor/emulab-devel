@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2004-2012 University of Utah and the Flux Group.
+# Copyright (c) 2004-2017 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -134,13 +134,13 @@ sub doboot()
     }
 
     #
-    # Write new pubkeys to root authkeys file. As a safety mechanism, back
-    # up old authkeys to authkeys2 file, which is also used by openssh sshd. 
+    # Ensure that the given keys are in root's authorized_keys file,
+    # put them there if not.
     #
     if (@pubkeys) {
 	my $authdir   = (WINDOWS() ? "/sshkeys/root" : "/root/.ssh");
 	my $authkeys  = $authdir . "/authorized_keys";
-	my $authkeys2 = $authkeys . "2";
+	my $authkeysold = $authkeys . ".old";
 	my $authkeysnew = $authkeys . ".new";
 	my $oldumask  = umask(022);
 
@@ -159,29 +159,75 @@ sub doboot()
 		    or fatal("Failed to chmod $authdir");
 	    }
 
-	    if (-e "$authkeys") {
-		system("cp -pf $authkeys $authkeys2") == 0
+	    if (-e $authkeys && ! -e $authkeysold) {
+		system("cp -pf $authkeys $authkeysold") == 0
 		    or fatal("Could not backup root ssh authorized_keys file");
 	    }
 	}
 
-	if (!open(AUTHKEYS, "> $authkeysnew")) {
+	#
+	# Hash for tracking our keys
+	#
+	my %keyhash = ();
+	foreach my $key (@pubkeys) {
+	    $keyhash{$key} = 0;
+	}
+
+	#
+	# Read the old keys, taking note of our keys that are already there.
+	# It is okay for there to be no existing file, we will just make a
+	# new one with Emulab keys.
+	#
+	my @lines = ();
+	if (open(OKEYS, "<$authkeys")) {
+	    while (my $key = <OKEYS>) {
+		chomp $key;
+		if ($key && $key !~ /^\s*#/ && exists($keyhash{$key})) {
+		    $keyhash{$key} = 1;
+		}
+		push @lines, $key;
+	    }
+	    close(OKEYS);
+	}
+
+	#
+	# Add any of our keys that are not already there
+	#
+	my $added = 0;
+	foreach my $key (@pubkeys) {
+	    if (!$keyhash{$key}) {
+		push @lines, $key;
+		$added++;
+	    }
+	}
+
+	#
+	# All the keys are there, nothing to do
+	#
+	if (!$added) {
+	    umask($oldumask);
+	    return 0;
+	}
+
+	#
+	# Otherwise write a new file with missing keys added
+	#
+	if (!open(NKEYS, ">$authkeysnew")) {
 	    warning("Could not open $authkeysnew: $!");
 	    umask($oldumask);
 	    return -1;
 	}
 	umask($oldumask);
-	print AUTHKEYS "#\n";
-	print AUTHKEYS "# DO NOT EDIT! This file auto generated at bootup.\n";
-	print AUTHKEYS "#\n";
     
-	foreach my $key (@pubkeys) {
-	    print AUTHKEYS "$key\n";
+	print NKEYS "# Updated by Emulab on " . scalar(localtime()) . "\n";
+	foreach my $line (@lines) {
+	    next
+		if ($line =~ /^# Updated by Emulab on/);
+	    print NKEYS "$line\n";
 	}
-	close(AUTHKEYS);
+	close(NKEYS);
 
-	if (system("cmp -s $authkeysnew $authkeys") &&
-	    system("mv -f $authkeysnew $authkeys")) {
+	if (system("mv -f $authkeysnew $authkeys")) {
 	    warning("Could not mv $authkeysnew to $authkeys");
 	}
 	return 0;

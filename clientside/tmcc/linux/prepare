@@ -53,6 +53,7 @@ my $ANACRON     = "/usr/sbin/anacron";
 my $GRUBDEF	= "/etc/default/grub";
 my $PUBSUBCONF  = "/usr/local/etc/pubsubd.conf";
 my $PUBSUBEXPR  = "/usr/local/etc/pubsubd.expr";
+my $ROOTSSHDIR	= "/root/.ssh";
 
 #
 # Dead wood in $BINDIR
@@ -349,6 +350,21 @@ if (-f "/$HISTORY") {
 if (-f "/root/$HISTORY") {
     unlink("/root/$HISTORY") or
         die("Could not unlink /root/$HISTORY: $!");
+}
+
+#
+# Remove /root/.ssh and then regenerate a clean version with only an
+# approved authorized_keys file.
+#
+print "Cleaning root's .ssh directory ...\n";
+if (system("rm -rf $ROOTSSHDIR.bak") ||
+    system("mv $ROOTSSHDIR $ROOTSSHDIR.bak")) {
+    die("Could not move $ROOTSSHDIR to $ROOTSSHDIR.bak");
+}
+if (! -x "$BINDIR/rc/rc.localize" || system("$BINDIR/rc/rc.localize boot")) {
+    system("rm -rf $ROOTSSHDIR");
+    system("mv $ROOTSSHDIR.bak $ROOTSSHDIR");
+    die("Could not clean root .ssh directory");
 }
 
 print "Cleaning mail spool files ...\n";

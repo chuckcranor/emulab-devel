@@ -99,26 +99,17 @@ localize_image() {
 
     # Check the host keys.
     changehostkeys=0
-    if [ -e /etc/ssh/ssh_host_key ]; then
-	cmp -s /etc/ssh/ssh_host_key $MNT/etc/ssh/ssh_host_key
-	if [ $? -ne 0 ]; then
-	    changehostkeys=1
+    for k in "" dsa_ ecdsa_ ed25519_ rsa_; do
+	if [ -e /etc/ssh/ssh_host_${k}key ]; then
+	    cmp -s /etc/ssh/ssh_host_${k}key $MNT/etc/ssh/ssh_host_${k}key
+	    if [ $? -ne 0 ]; then
+		changehostkeys=1
+	    fi
 	fi
-    fi
-    if [ -e /etc/ssh/ssh_host_rsa_key ]; then
-	cmp -s /etc/ssh/ssh_host_rsa_key $MNT/etc/ssh/ssh_host_rsa_key
-	if [ $? -ne 0 ]; then
-	    changehostkeys=1
-	fi
-    fi
-    if [ -e /etc/ssh/ssh_host_dsa_key ]; then
-	cmp -s /etc/ssh/ssh_host_dsa_key $MNT/etc/ssh/ssh_host_dsa_key
-	if [ $? -ne 0 ]; then
-	    changehostkeys=1
-	fi
-    fi
+    done
+
     if [ $changehostkeys -eq 1 ]; then
-	echo "  updating /etc/ssh/hostkeys"
+	echo "  updating /etc/ssh host keys"
 	
 	if [ ! -d $MNT/etc/ssh ]; then
 	    mkdir -m 755 $MNT/etc/ssh || {
@@ -127,7 +118,7 @@ localize_image() {
 	    }
 	fi
 	cp -pf /etc/ssh/ssh_host_* $MNT/etc/ssh/ || {
-	    echo "Failed to create /etc/ssh/hostkeys"
+	    echo "Failed to update /etc/ssh host keys"
 	    return 1
 	}
     fi

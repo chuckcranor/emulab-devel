@@ -49,6 +49,7 @@ my $ENTROPY	= "/var/db/entropy/*";
 my $LOADERCONF	= "/boot/loader.conf";
 my $PUBSUBCONF  = "/usr/local/etc/pubsubd.conf";
 my $PUBSUBEXPR  = "/usr/local/etc/pubsubd.expr";
+my $ROOTSSHDIR	= "/root/.ssh";
 
 #
 #
@@ -243,6 +244,21 @@ if (-f $HISTORY) {
     unlink($HISTORY) or
         die("Could not unlink $HISTORY: $!");
     system("rm -f /root/.saves-*");
+}
+
+#
+# Remove /root/.ssh and then regenerate a clean version with only an
+# approved authorized_keys file.
+#
+print "Cleaning root's .ssh directory ...\n";
+if (system("rm -rf $ROOTSSHDIR.bak") ||
+    system("mv $ROOTSSHDIR $ROOTSSHDIR.bak")) {
+    die("Could not move $ROOTSSHDIR to $ROOTSSHDIR.bak");
+}
+if (! -x "$BINDIR/rc/rc.localize" || system("$BINDIR/rc/rc.localize boot")) {
+    system("rm -rf $ROOTSSHDIR");
+    system("mv $ROOTSSHDIR.bak $ROOTSSHDIR");
+    die("Could not clean root .ssh directory");
 }
 
 print "Cleaning mail spool files ...\n";

@@ -270,18 +270,165 @@ getloadervar() {
 }
 
 #
+# Make sure /root/.ssh contains only an authorized_keys file with the boot
+# root pubkey.
+#
+# Called with arg=1 if you just want to see if anything is wrong (returns
+# non-zero if so), 0 to fix.
+#
+dofixauthkeys() {
+    _test=$1
+
+    if [ $_test -ne 0 ]; then
+	if [ ! -d /mnt/root/.ssh ]; then
+	    return 1
+	fi
+	if [ -x /usr/bin/stat ]; then
+	    _stat=`/usr/bin/stat -f '%u,%g,%p' /mnt/root/.ssh`
+	    if [ "$_stat" != "0,0,40700" ]; then
+		return 1
+	    fi
+	fi
+	if [ ! -e /mnt/root/.ssh/authorized_keys ]; then
+	    return 1
+	fi
+	if [ -e /mnt/root/.ssh/authorized_keys2 ]; then
+	    return 1
+	fi
+    fi
+
+    #
+    # If we are a localized MFS, we just need to use the authorized_keys2
+    # file from the MFS. Otherwise we get the key(s) from tmcd and put
+    # them into the MFS authorized_keys2 file.
+    #
+    if ! islocalized; then
+	rm -f /root/.ssh/authorized_keys2
+	_key=`$BINDIR/tmcc localization | grep 'ROOTPUBKEY=' | head -1 | \
+	      sed -e "s/^ROOTPUBKEY='//" | sed -e "s/'$//"`
+	if [ $? -ne 0 -o -z "$_key" ]; then
+	    echo "WARNING: no boss pubkey returned!"
+	else
+	    echo "$_key" > /root/.ssh/authorized_keys2
+	fi
+    fi
+
+    if [ $_test -ne 0 ]; then
+	cmp -s /root/.ssh/authorized_keys2 /mnt/root/.ssh/authorized_keys
+	if [ $? -ne 0 ]; then
+	    return 1
+	fi
+    else
+	echo "  updating /root/.ssh"
+
+	# make sure /root/.ssh exists and has proper permissions
+	mkdir -p /mnt/root/.ssh
+	chown root:0 /mnt/root/.ssh
+	chmod 700 /mnt/root/.ssh
+	rm -f /mnt/root/.ssh/authorized_keys2
+
+	#
+	# XXX no proper pubkey, just leave the current file intact.
+	# XXX maybe we should just nuke it instead?
+	#
+	if [ ! -r /root/.ssh/authorized_keys2 ]; then
+	    return 0
+	fi
+
+	# create authkeys file with just root key(s)
+	rm -f /mnt/root/.ssh/authorized_keys 
+	cp /root/.ssh/authorized_keys2 /mnt/root/.ssh/authorized_keys
+	chmod 644 /mnt/root/.ssh/authorized_keys
+    fi
+
+    return 0
+}
+
+#
 # Make sshd more secure by default: no password based login.
+# We will fix if there are multiple settings of the same variable,
+# if it is set incorrectly, or it is not set at all.
+#
+# Called with arg=1 if you just want to see if anything is wrong (returns
+# non-zero if so), 0 to fix.
 #
 dofixsshd() {
-    echo "  updating /etc/ssh/sshd_config"
-    cat <<EOF8 >>/mnt/etc/ssh/sshd_config
+    _test=$1
 
+    if [ $_test -ne 0 ]; then
+	# sshd_config doesn't exist, call it okay
+	if [ ! -f /mnt/etc/ssh/sshd_config ]; then
+	    echo "WARNING: no sshd_config found!"
+	    return 0
+	fi
+
+	# find all uncommented instances of variables we care about
+	OIFS="$IFS"
+	IFS='
+'
+	_fix=0
+	_valP=
+	_valPA=
+	_valCRA=
+	_valPRL=
+	for _opt in `grep -E '^(Protocol|PasswordAuthentication|ChallengeResponseAuthentication|PermitRootLogin) ' /mnt/etc/ssh/sshd_config`; do
+	    _k=${_opt%% *}
+	    _v=${_opt#* }
+	    case $_k in
+	    Protocol)
+		if [ -n "$_valP" -o "$_v" != "2" ]; then
+		    _fix=1
+		fi
+		_valP=$_v
+		;;
+	    PasswordAuthentication)
+		if [ -n "$_valPA" -o "$_v" != "no" ]; then
+		    _fix=1
+		fi
+		_valPA=$_v
+		;;
+	    ChallengeResponseAuthentication)
+		if [ -n "$_valCRA" -o "$_v" != "no" ]; then
+		    _fix=1
+		fi
+		_valCRA=$_v
+		;;
+	    PermitRootLogin)
+		if [ -n "$_valPRL" -o "$_v" != "without-password" ]; then
+		    _fix=1
+		fi
+		_valPRL=$_v
+		;;
+	    esac
+	done
+	IFS=$OIFS
+	# a var had wrong value or more than one setting, fix
+	if [ $_fix -ne 0 ]; then
+	    return 1
+	fi
+	# a var was not explicitly set, fix
+	if [ -z "$_valP" -o -z "$_valPA" -o -z "$_valCRA" -o -z "$_valPRL" ]; then
+	    return 1
+	fi
+    else
+	echo "  updating /etc/ssh/sshd_config"
+
+	sed -i .preemulab \
+	    -e '/^Protocol /d' \
+	    -e '/^PasswordAuthentication /d' \
+	    -e '/^ChallengeResponseAuthentication /d' \
+	    -e '/^PermitRootLogin /d' \
+	    -e '/^# Emulab/d' /mnt/etc/ssh/sshd_config
+	cat <<EOF8 >>/mnt/etc/ssh/sshd_config
 # Emulab config
 Protocol 2
 PasswordAuthentication no
 ChallengeResponseAuthentication no
 PermitRootLogin without-password
 EOF8
+    fi
+
+    return 0
 }
 
 dofreebsd() {
@@ -539,37 +686,17 @@ dofreebsd() {
 		fi
 	    fi
 
-	    # Check the root keys.
-	    if [ -e /root/.ssh/authorized_keys2 ]; then
-		cmp -s /root/.ssh/authorized_keys2 /mnt/root/.ssh/authorized_keys
-		if [ $? -ne 0 ]; then
-		    changerootkeys=1
-		    fixit=1
-		fi
-	    fi
+	    # Root keys are handled by dofixauthkeys() below
 	
 	    # Check the host keys.
-	    if [ -e /etc/ssh/ssh_host_key ]; then
-		cmp -s /etc/ssh/ssh_host_key /mnt/etc/ssh/ssh_host_key
-		if [ $? -ne 0 ]; then
-		    changehostkeys=1
-		    fixit=1
+	    for k in "" dsa_ ecdsa_ ed25519_ rsa_; do
+		if [ -e /etc/ssh/ssh_host_${k}key ]; then
+		    cmp -s /etc/ssh/ssh_host_${k}key /mnt/etc/ssh/ssh_host_${k}key
+		    if [ $? -ne 0 ]; then
+			changehostkeys=1
+		    fi
 		fi
-	    fi
-	    if [ -e /etc/ssh/ssh_host_rsa_key ]; then
-		cmp -s /etc/ssh/ssh_host_rsa_key /mnt/etc/ssh/ssh_host_rsa_key
-		if [ $? -ne 0 ]; then
-		    changehostkeys=1
-		    fixit=1
-		fi
-	    fi
-	    if [ -e /etc/ssh/ssh_host_dsa_key ]; then
-		cmp -s /etc/ssh/ssh_host_dsa_key /mnt/etc/ssh/ssh_host_dsa_key
-		if [ $? -ne 0 ]; then
-		    changehostkeys=1
-		    fixit=1
-		fi
-	    fi
+	    done
 
 	    # Check the time zone.
 	    if [ -e /etc/localtime ]; then
@@ -591,9 +718,15 @@ dofreebsd() {
 
 	fi
 
-	if [ -r /mnt/etc/ssh/sshd_config ] && \
-	       ! grep -q '^# Emulab config' /mnt/etc/ssh/sshd_config; then
+	# See if we need to update sshd_config
+	if ! dofixsshd 1; then
 	    changesshd=1
+	    fixit=1
+	fi
+
+	# See if we need to update root's .ssh directory
+	if ! dofixauthkeys 1; then
+	    changeauth=1
 	    fixit=1
 	fi
 
@@ -837,29 +970,7 @@ EOF1
 	    }
 	fi
 
-	# Copy in new root keys
-	if [ $changerootkeys -eq 1 ]; then
-	    echo "  updating /root/.ssh/authorized_keys"
-
-	    if [ ! -d /mnt/root/.ssh ]; then
-		mkdir -m 700 /mnt/root/.ssh || {
-	            echo "Failed to mkdir /root/.ssh"
-		    umount $rootdev
-		    return 1
-		}
-	    fi
-	    # copy to both authorized_keys and _keys2
-	    cp -p /root/.ssh/authorized_keys2 /mnt/root/.ssh/authorized_keys || {
-	        echo "Failed to create /root/.ssh/authorized_keys"
-		umount $rootdev
-		return 1
-	    }
-	    cp -p /root/.ssh/authorized_keys2 /mnt/root/.ssh/ || {
-	        echo "Failed to create /root/.ssh/authorized_keys2"
-		umount $rootdev
-		return 1
-	    }
-	fi
+	# Copy in new root keys handled by dofixauthkeys() below
 
 	# Copy in new host keys
 	if [ $changehostkeys -eq 1 ]; then
@@ -902,7 +1013,11 @@ EOF1
 	fi
 
 	if [ $changesshd -eq 1 ]; then
-	    dofixsshd
+	    dofixsshd 0
+	fi
+
+	if [ $changeauth -eq 1 ]; then
+	    dofixauthkeys 0
 	fi
 
 	# actually run any postconfig scripts if we're supposed to:

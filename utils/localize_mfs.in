@@ -274,11 +274,20 @@ sub LocalizeBSD()
     }
     if ($ELABINELAB &&
 	# Combine with outer boss root user ssh keys.
-	ExecQuiet("$CAT $AUTHKEYS > $mpoint/root/.ssh/authorized_keys2")) {
+	ExecQuiet("grep -v '^#' $AUTHKEYS > $mpoint/root/.ssh/authorized_keys2")) {
 	goto bad;
     }
-    # And add the current boss root user ssh keys.
-    if (ExecQuiet("$CAT /root/.ssh/*.pub >> $mpoint/root/.ssh/authorized_keys2") ||
+    # And add the current boss root user ssh keys (prefer only RSA key).
+    my $keyfile;
+    if (-r "/root/.ssh/id_rsa.pub") {
+	$keyfile = "/root/.ssh/id_rsa.pub";
+    } elsif (-r "/root/.ssh/id_dsa.pub") {
+	$keyfile = "/root/.ssh/id_dsa.pub";
+    } else {
+	# XXX backward compat
+	$keyfile = "/root/.ssh/*.pub";
+    }
+    if (ExecQuiet("$CAT $keyfile >> $mpoint/root/.ssh/authorized_keys2") ||
 	ExecQuiet("$CHMOD 600 $mpoint/root/.ssh/authorized_keys2")) {
 	goto bad;
     }
