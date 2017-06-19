@@ -207,6 +207,12 @@ $(function ()
 
 	    var html = summaryTemplate({"utilization" : json.value});
 	    $("#thirdrow").html(html);
+
+	    // This activates the tooltip subsystem.
+	    $('[data-toggle="tooltip"]').tooltip({
+		delay: {"hide" : 500, "show" : 150},
+		placement: 'auto',
+	    });
 	};
 	var xmlthing = sup.CallServerMethod(null, "status", "Utilization",
 					    {"uuid"   : window.UUID});

@@ -47,8 +47,6 @@ window.wt = (function() {
 
 	    if ($(that).parent().attr('data-res-pid')) {
 		var project = $(that).parent().attr('data-res-pid');
-		var requested = $(that).parent().attr('data-res-requested');
-		var used = $(that).parent().attr('data-res-used');
 
 		if ($(that).parent().attr('data-res-start')) {
 		    var start = new Date(parseInt($(that).parent()
@@ -67,15 +65,32 @@ window.wt = (function() {
 		    $('#reservation_warning').addClass('hidden');
 
 		    if ($(that).parent().attr('data-now') == 'true') {
+			var requested =
+			    $(that).parent().attr('data-res-requested');
+			var used =
+			    $(that).parent().attr('data-res-used');
+			var ready =
+			    $(that).parent().attr('data-res-ready');
+			var reloading =
+			    $(that).parent().attr('data-res-reloading');
+
+			$(this).attr('data-res-pid', project);
+			
 		    	$('#reservation_future').addClass('hidden');
 
-			$('#reservation_confirmation .reservation_requested')
-			    .html(requested);
-			$('#reservation_confirmation .reservation_used')
-			    .html(used);
-			$('#reservation_confirmation .reservation_project')
-			    .html(project);
-			$('#reservation_confirmation').removeClass('hidden');
+			var warning =
+			    CurrentReservationWarning(project,
+						      parseInt(requested),
+						      parseInt(used),
+						      parseInt(ready),
+						      parseInt(reloading));
+
+			if (warning) {
+			    $('#reservation_confirmation #reservation_text')
+				.html(warning);
+			    $('#reservation_confirmation')
+				.removeClass('hidden');
+			}
 		    }
 		    else {
 			var start = new Date(parseInt($(that).parent()
@@ -259,6 +274,47 @@ window.wt = (function() {
 			   +'<span class="glyphicon glyphicon-calendar '
 					+'pull-right"></span>'
 			+'</div></div>'
+	}
+
+        function CurrentReservationWarning(project, requested, 
+					   used, ready, reloading)
+        {
+	    var html = "Project " + project + " " +
+		"has reservations on this cluster for " + requested + " " +
+		"nodes. ";
+	    if (used >= requested) {
+		html = html +
+		    "Currently the project has all of the nodes " +
+		    "in the reservation.";
+	    }
+	    else if (used + ready >= requested) {
+		html = html +
+		    "The project is currently using " + used + " " +
+		    "nodes, " + (requested - used) + " " +
+		    "nodes are immediately available.";
+	    }
+	    else if (used + ready + reloading >= requested) {
+		html = html +
+		    "The project is currently using " + used + " " +
+		    "nodes, " + ready + " nodes " +
+		    "are immediately available, " +
+		    (requested - (used + ready)) + " nodes will be available " +
+		    "very soon.";
+	    }
+	    else {
+		html = html +
+		    "The project is currently using " + used + " nodes";
+		if (ready) {
+		    html = html +
+			", " + ready + " are immediately available";
+		}
+		if (reloading) {
+		    html = html +
+			", " + reloading + " will be available very soon";
+		}
+		html = html + ".";
+	    }
+	    return html;
 	}
 
 	return {

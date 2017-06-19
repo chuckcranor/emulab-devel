@@ -1045,6 +1045,8 @@ $(function ()
 	var projectReservations = {}
 	var requested = 0;
 	var inuse = 0;
+	var ready = 0;
+	var reloading = 0;
 
 	$('#reservation_confirmation').addClass('hidden');
 	$('#reservation_warning').addClass('hidden');
@@ -1110,12 +1112,12 @@ $(function ()
 			       function(thelist, resproj) {
 				   _.each(thelist, 
 					  function(obj) {
-			    var req  = obj.reserved;
-			    var used = obj.used;
-			    var type = obj.nodetype;
-				   
-			    console.info("current", req, used, type,
-					 resproj, project);
+			    var req        = obj.reserved;
+			    var used       = obj.used;
+			    var type       = obj.nodetype;
+
+			    console.info("current", req, used, obj.ready,
+					 obj.reloading, type, resproj, project);
 			    
 			    // Current project has a current reservation
 			    // Used for cluster icons
@@ -1125,6 +1127,8 @@ $(function ()
 				// All nodes for current project reservations.
 				requested += parseInt(req);
 				inuse += parseInt(used);
+				ready += parseInt(obj.ready);
+				reloading += parseInt(obj.reloading);
 				currentReservations = true;
 			    }
 			    projectReservations[resproj] = {
@@ -1160,11 +1164,15 @@ $(function ()
 		    }
 
 		    if (hasReservation || start != null) {
-			//console.info("res", project, start, end, earliest,
-			//	     requested, inuse);
+			if (0) {
+			    console.info("res", project, start, end, earliest,
+					 requested, inuse, ready, reloading);
+			}
 			$(this).attr('data-res-pid', project);
 			$(this).attr('data-res-requested', requested);
 			$(this).attr('data-res-used', inuse);
+			$(this).attr('data-res-ready', ready);
+			$(this).attr('data-res-reloading', reloading);
 			if (hasReservation) {
 			    $(this).removeAttr('data-res-end');
 			    $(this).removeAttr('data-res-upcoming');
@@ -1197,6 +1205,8 @@ $(function ()
 			$(this).removeAttr('data-res-end');
 			$(this).removeAttr('data-res-requested');
 			$(this).removeAttr('data-res-used');
+			$(this).removeAttr('data-res-ready');
+			$(this).removeAttr('data-res-reloading');
 			$(this).removeAttr('data-res-upcoming');
 		    }
 		}
