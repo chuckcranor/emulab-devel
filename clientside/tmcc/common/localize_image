@@ -85,13 +85,9 @@ localize_image() {
 		    return 1
 		}
 	    fi
-	    # copy to both authorized_keys and _keys2
+	    # copy to authorized_keys
 	    cp -pf /root/.ssh/authorized_keys2 $MNT/root/.ssh/authorized_keys || {
 		echo "Failed to create /root/.ssh/authorized_keys"
-		return 1
-	    }
-	    cp -pf /root/.ssh/authorized_keys2 $MNT/root/.ssh/ || {
-		echo "Failed to create /root/.ssh/authorized_keys2"
 		return 1
 	    }
 	fi

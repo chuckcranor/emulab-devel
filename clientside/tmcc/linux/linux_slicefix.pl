@@ -1137,21 +1137,17 @@ sub fix_sshd_config
 	my ($imageroot) = @_;
 	my $cfile = "$imageroot/etc/ssh/sshd_config";
 
-	if (! -r $cfile ||
-	    !system("grep -q '^# Emulab config' $cfile 2>/dev/null")) {
-	    return;
-	}
-
 	print STDERR "Adding security options to SSHD config\n";
 	open FILE, "+<$cfile" ||
 	    die "Couldn't open $cfile: $!\n";
 
 	my @buffer = ();
 	while (<FILE>) {
-		s/^Protocol/#Protocol/;
-		s/^PasswordAuth/#PasswordAuth/;
-		s/^ChallengeResp/#ChallengeResp/;
-		s/^PermitRootLogin/#PermitRootLogin/;
+		s/^Protocol .*//;
+		s/^PasswordAuthentication .*//;
+		s/^ChallengeResponseAuthentication .*//;
+		s/^PermitRootLogin .*//;
+		s/^# Emulab.*//;
 		push @buffer, $_;
 	}
 	push @buffer, "\n# Emulab config\n";
@@ -1223,15 +1219,10 @@ sub localize
 		    return;
 		}
 	    }
-	    # copy to both authorized_keys and _keys2
+	    # copy authorized_keys
 	    system("cp -pf /root/.ssh/authorized_keys2 $imageroot/root/.ssh/authorized_keys");
 	    if ($?) {
 		print STDERR "Failed to create /root/.ssh/authorized_keys\n";
-		return;
-	    }
-	    system("cp -pf /root/.ssh/authorized_keys2 $imageroot/root/.ssh/");
-	    if ($?) {
-		print STDERR "Failed to create /root/.ssh/authorized_keys2\n";
 		return;
 	    }
 	}
@@ -1239,26 +1230,16 @@ sub localize
 
     # Check the host keys.
     my $changehostkeys = 0;
-    if (-e "/etc/ssh/ssh_host_key") {
-	system("cmp -s /etc/ssh/ssh_host_key $imageroot/etc/ssh/ssh_host_key >/dev/null 2>&1");
-	if ($?) {
-	    $changehostkeys = 1;
-	}
-    }
-    if (-e "/etc/ssh/ssh_host_rsa_key") {
-	system("cmp -s /etc/ssh/ssh_host_rsa_key $imageroot/etc/ssh/ssh_host_rsa_key >/dev/null 2>&1");
-	if ($?) {
-	    $changehostkeys = 1;
-	}
-    }
-    if (-e "/etc/ssh/ssh_host_dsa_key") {
-	system("cmp -s /etc/ssh/ssh_host_dsa_key $imageroot/etc/ssh/ssh_host_dsa_key >/dev/null 2>&1");
-	if ($?) {
-	    $changehostkeys = 1;
+    foreach my $kt ("", "dsa_", "ecdsa_", "ed25519_", "rsa_") {
+	if (-e "/etc/ssh/ssh_host_${kt}key") {
+	    system("cmp -s /etc/ssh/ssh_host_${kt}key $imageroot/etc/ssh/ssh_host_${kt}key >/dev/null 2>&1");
+	    if ($?) {
+		$changehostkeys = 1;
+	    }
 	}
     }
     if ($changehostkeys) {
-	print "Updating /etc/ssh/hostkeys\n";
+	print "Updating /etc/ssh host keys\n";
 
 	if (! -d "$imageroot/etc/ssh") {
 	    if (!mkdir("$imageroot/etc/ssh", 0755)) {
