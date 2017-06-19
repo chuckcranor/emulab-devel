@@ -2994,7 +2994,7 @@ COMMAND_PROTOTYPE(doaccounts)
 		char *passwdfield = (!reqp->islocal && reqp->isdedicatedwa) ? 
 			"'*'" : "u.usr_pswd";
 		strcpy(adminclause, "");
-#ifdef ISOaLATEADMINS
+#ifdef ISOLATEADMINS
 		sprintf(adminclause, "and u.admin=%d", reqp->swapper_isadmin);
 #endif
 		/*
@@ -10442,8 +10442,31 @@ COMMAND_PROTOTYPE(dolocalize)
 	char		buf[MYBUFSIZE];
 	char		*bufp = buf, *ebufp = &buf[sizeof(buf)];
 	int		nrows;
+	FILE		*fp = NULL;
+	char		*okey = NULL;
 
 	*bufp = 0;
+
+#ifdef ELABINELAB
+	/*
+	 * Include outer boss root key.
+	 * We get it from /etc/emulab/outer_bossrootkey.pub which was
+	 * created by rc.mkelab when the bossnode was setup.
+	 */
+	if ((fp = fopen("/etc/emulab/outer_bossrootkey.pub", "r")) != NULL) {
+		char *cp;
+
+		while ((fgets(buf, sizeof(buf), fp)) != NULL) {
+			if (buf[0] != '#') {
+				if ((cp = rindex(buf, '\n')) != NULL)
+					*cp = '\0';
+				okey = strdup(buf);
+				break;
+			}
+		}
+		fclose(fp);
+	}
+#endif
 
 	/*
 	 * XXX sitevar fetching should be a library function.
@@ -10464,6 +10487,19 @@ COMMAND_PROTOTYPE(dolocalize)
 	if (row[1]) {
 	    bufp += OUTPUT(bufp, ebufp - bufp, "ROOTPUBKEY='%s'\n", row[1]);
 	}
+
+	/*
+	 * Put the "other" key out after the main boss key, just in case we
+	 * have software that only looks at the first key.
+	 */
+	if (okey) {
+		if (row[1] == NULL || strcmp(okey, row[1])) {
+			bufp += OUTPUT(bufp, ebufp - bufp,
+				       "ROOTPUBKEY='%s'\n", okey);
+		}
+		free(okey);
+	}
+
 	mysql_free_result(res);
 	client_writeback(sock, buf, strlen(buf), tcp);
 	return 0;

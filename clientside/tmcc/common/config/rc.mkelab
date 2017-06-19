@@ -2133,6 +2133,14 @@ sub SetupBossNode($)
     chomp($outer_ip);
     
     #
+    # Save off outer boss root pubkey so we can put it in node's
+    # /root/.ssh/authorized_keys along with the inner boss pubkey.
+    #
+    if (-e "/root/.ssh/authorized_keys") {
+	mysystem("grep -v '^#' /root/.ssh/authorized_keys > $ETCDIR/outer_bossrootkey.pub");
+    }
+
+    #
     # We also need the hardwired config for the inner control network.
     # Major kludge; should get it from tmcd data.
     #
