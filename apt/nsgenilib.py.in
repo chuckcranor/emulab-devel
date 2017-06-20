@@ -124,7 +124,26 @@ lanifaces   = {}
 ifacecounts = {}
 bridged     = {}
 programs    = {}
+firewall    = None
 
+#
+# Need to know which node is the experiment firewall.
+#
+for child in tree.getroot():
+    if child.tag == "virt_firewalls":
+        row = child.find("row")
+        fwname = row.find("fwname").text
+        style  = row.find("style").text
+        if firewall:
+            Fatal("Only one experiment firewall allowed");
+            pass
+        firewall = rspec.ExperimentFirewall(fwname, style);
+        pass
+    pass
+
+#
+# Now process nodes and a few other things.
+#
 for child in tree.getroot():
     if child.tag == "virt_nodes":
         row = child.find("row")
@@ -149,6 +168,10 @@ for child in tree.getroot():
             node.exclusive = True
         elif ntype == "blockstore":
             node = IG.RemoteBlockstore(vname, "/mnt", "eth0")
+            node.exclusive = True
+        elif firewall and firewall.client_id == vname:
+            # We created the firewall above.
+            node = firewall;
             node.exclusive = True
         else:
             node = RSpec.RawPC(vname)
@@ -220,7 +243,9 @@ for child in tree.getroot():
                 pass
             pass
         nodes[vname] = node
-        rspec.addResource(node)
+        if not (firewall and firewall.client_id == vname):
+            rspec.addResource(node)
+            pass
         pass
     #
     # We need to know how many members, so we can create a geni-lib Link or LAN.
@@ -684,8 +709,9 @@ for child in tree.getroot():
             pass
         #
         # A bunch of things we do not support yet.
+        # We ignore security_level for now, it gets set for an explicit firewall.
         #
-        for tag in ["jail_osname", "security_level"]:
+        for tag in ["jail_osname"]:
             if row.find(tag) != None:
                 Fatal("Unsupported use of " + tag)
                 pass
@@ -754,6 +780,23 @@ for child in tree.getroot():
         raw.attrib["attrvalue"] = val
         nodes[vname].addRawElement(raw)
         pass
+    if child.tag == "firewall_rules":
+        #
+        # Note that we are ignoring the security level. Not really sure if it
+        # makes any sense these days. The CM will set it if needed.
+        #
+        row = child.find("row")
+        fwname = row.find("fwname").text
+        fwrule = row.find("rule").text
+        ruleno = row.find("ruleno").text
+        if not fwname in nodes:
+            Fatal("No such firwall node " + fwname);
+            pass
+        if not firewall:
+            Fatal("Firewall rule for nonexistent firewall " + fwname);
+            pass
+        firewall.addRule(fwrule);
+        pass
     if child.tag == "virt_trafgens":
         Fatal("Trafgens are not supported anymore")
         pass
@@ -763,7 +806,6 @@ for child in tree.getroot():
     if child.tag in ["virt_lan_settings",
                      "virt_lan_member_settings", "virt_routes",
                      "virt_node_disks",
-                     "virt_firewalls", "firewall_rules",
                      "virt_tiptunnels", "elabinelab_attributes",
                      "virt_paths", "experiment_blobs", "virt_blobs",
                      "virt_client_service_ctl", "virt_client_service_hooks",

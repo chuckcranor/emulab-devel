@@ -1557,17 +1557,37 @@ sub GetTicketAuxAux($$$$$$$$$$$)
 	    $nodeblob->{'role'} = "bridge";
 	}
 	elsif ($isfirewall) {
+	    my $config = GeniXML::GetExperimentFirewallSettings($ref);
+	    if (!defined($config)) {
+		$response = GeniResponse->Create(GENIRESPONSE_BADARGS, undef,
+						 "Missing firewall configuration");
+		goto bad;
+	    }
 	    if ($slice->SetFirewallFlag(1) != 0) {
 		$response = GeniResponse->Create(GENIRESPONSE_ERROR);
 		goto bad;
 	    }
+	    # This is default for all firewalled experiments. 
+	    $virtexperiment->security_level(TBDB_SECLEVEL_ZAPDISK());
+	    
 	    if (!defined($virtexperiment->NewTableRow("virt_firewalls",
-						  {"fwname" => $node_nickname,
-						   "type"   => "iptables-vlan",
-						   "style"  => "basic"}))) {
+					      {"fwname" => $node_nickname,
+					       "type"   => "iptables-vlan",
+					       "style"  => $config->{'style'}}))) {
 		$response = GeniResponse->Create(GENIRESPONSE_ERROR, undef,
 				     "Error creating firewall definition");
 		goto bad;
+	    }
+	    my $ruleno = 100;
+	    foreach my $rule (@{ $config->{'rules'} }) {
+		if (!defined($virtexperiment->NewTableRow("firewall_rules",
+					      {"fwname" => $node_nickname,
+					       "ruleno" => $ruleno++,
+					       "rule"   => $rule}))) {
+		    $response = GeniResponse->Create(GENIRESPONSE_ERROR, undef,
+				     "Error creating firewall rule");
+		    goto bad;
+		}
 	    }
 	}
 	# Program agents.

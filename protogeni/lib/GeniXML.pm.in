@@ -1116,6 +1116,35 @@ sub GetElabInElabSettings($)
     return $result;
 }
 
+#
+# Experiment firewalls are different then node firewalls
+#
+sub GetExperimentFirewallSettings($)
+{
+    my ($node) = @_;
+    my $style  = "basic";
+    my @rules  = ();
+
+    my $type = FindFirst("n:sliver_type", $node);
+    return undef
+	if (!defined($type));
+    
+    my $settings = FindNodesNS("n:firewall_config", $type, $EMULAB_NS)->pop();
+    return undef
+	if (!defined($settings));
+    
+    my $tmp = GetText("style", $settings);
+    $style = $tmp
+	if (defined($tmp));
+
+    foreach my $ruleref (FindNodesNS("n:rule", $settings,
+				     $EMULAB_NS)->get_nodelist()) {
+	my $rule = $ruleref->textContent();
+	push(@rules, $rule);
+    }
+    return { "style" => $style, "rules" => \@rules };
+}
+
 sub HasFirewallSettings($)
 {
     my ($node) = @_;

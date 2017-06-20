@@ -223,6 +223,16 @@ sub GenerateNodeStatements($)
 		    if (defined($p->lossrate()));
 	    }
 	}
+	elsif ($ntype eq "firewall") {
+	    my $fwstyle = $node->firewall_style();
+	    
+	    $node->addStatement(
+		"$ntag = request.ExperimentFirewall('$client_id','$fwstyle')");
+
+	    foreach my $fwrule (@{$node->firewall_rules()}) {
+		$node->addTagStatement("addRule('$fwrule')");
+	    }
+	}
 	elsif ($ntype eq "emulab-blockstore") {
 	    # attributes.
 	    my $bstore = $node->{'blockstores'}->{$client_id};

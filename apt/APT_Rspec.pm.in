@@ -816,6 +816,9 @@ sub new($$$$$)
 	"routable_control_ip"   => undef,
 	"failure_action"        => undef,
 	"tag"			=> $tag,
+	"isexptfirewall"        => 0,
+	"firewall_style"        => undef,
+	"firewall_rules"        => [],
     };
     bless($self, $class);
     return $self;
@@ -829,6 +832,8 @@ sub ifaces($)			{ return $_[0]->{'ifaces'}; }
 sub ifacelist($)		{ return $_[0]->{'ifacelist'}; }
 sub services($)			{ return $_[0]->{'services'}; }
 sub pipes($)			{ return $_[0]->{'pipes'}; }
+sub firewall_style($)		{ return $_[0]->{'firewall_style'}; }
+sub firewall_rules($)		{ return $_[0]->{'firewall_rules'}; }
 sub tag($)			{ return $_[0]->{'tag'}; }
 sub fatal($)			{ return APT_Rspec::fatal($_[0]); }
 sub GetTextOrFail($$)		{ return APT_Rspec::GetTextOrFail(@_); }
@@ -905,6 +910,25 @@ sub addNode($$$)
 	foreach my $pipe (@pipes) {
 	    my $delaypipe = APT_Rspec::DelayPipe->new($node, $pipe);
 	    $node->addBridgePipe($delaypipe);
+	}
+    }
+
+    if ($sliver_type eq "firewall") {
+	#
+	# We need the firewall section from sliver_type
+	#
+	my $config = GeniXML::GetExperimentFirewallSettings($noderef);
+	if (!$config) {
+	    fatal("No configuration for firewall node");
+	}
+	$node->{'isexptfirewall'} = 1;
+	$node->{'firewall_style'} = $config->{'style'};
+
+	foreach my $rule (@{$config->{'rules'}}) {
+	    # Trim for rtecheck.
+	    $rule =~ s/^\s+//;
+	    $rule =~ s/\s+$//s;
+	    push(@{ $node->{'firewall_rules'}}, $rule);
 	}
     }
 
@@ -1039,7 +1063,7 @@ sub addNode($$$)
 		    $node->{"xen_settings"} = $settings;
 		    last SWITCH;
 		};
-		/^sliver_type_shaping$/i && do {
+		/^(sliver_type_shaping|firewall_config)$/i && do {
 		    # We handled this above. 
 		    last SWITCH;
 		};
@@ -1215,6 +1239,7 @@ sub Compare($$)
 	    (/^(component_id|component_manager_id|disk_image)$/i ||
 	     /^(hardware_type|jacks_site|xen_ptype|instantiate_on)$/i ||
 	     /^(adb_target|failure_action)$/i ||
+	     /^(isexptfirewall|firewall_style)$/i ||
 	     /^(use_type_default_image|routable_control_ip)$/i) && do {
 		 return 1
 		     if (APT_Rspec::CompareValues("Node: $client_id: $key",
@@ -1236,7 +1261,7 @@ sub Compare($$)
 		    if (APT_Rspec::CompareLists("service", $val1, $val2));
 		last SWITCH;
 	    };
-	    /^(tag|statements)$/i && do {
+	    /^(tag|statements|firewall_rules)$/i && do {
 		last SWITCH;
 	    };
 	    print STDERR "Node:Compare: Unknown attribute: $key\n";
