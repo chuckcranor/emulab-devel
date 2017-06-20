@@ -210,6 +210,8 @@ RunMedusa("$VNCOPTS -n 5901 $MEDUSAOPTS", 500,
 	  "Insecure VNC password on port 5901");
 RunMedusa("$VNCOPTS -n 5902 $MEDUSAOPTS", 500,
 	  "Insecure VNC password on port 5902");
+
+unlink($HOSTFILE);
 exit(0);
 
 #
@@ -339,5 +341,3 @@ sub RunMedusa($$$)
     }
     return 0;
 }
-unlink($HOSTFILE);
-exit(0);
