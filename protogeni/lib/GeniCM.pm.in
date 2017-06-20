@@ -1336,8 +1336,11 @@ sub GetTicketAuxAux($$$$$$$$$$$)
 			    goto bad;
 			}
 			$isfirewall = 1;
-			# Corresponds to iptables-vlan, see below.
-			$osname     = "FW-IPTABLES";
+			# Corresponds to iptables-vlan, see below. But we
+			# allow override. 
+			$osname = "UBUNTU16-64-STD"
+			    if (!defined($osname));
+			
 			# Default firewall type is a global vtype if it exists.
 			if (scalar(NodeType->GlobalVtypeTypes("pcfw"))) {
 			    $pctype = "pcfw";
