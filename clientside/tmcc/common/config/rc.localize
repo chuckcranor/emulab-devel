@@ -158,11 +158,6 @@ sub doboot()
 		system("chmod 700 $authdir") == 0
 		    or fatal("Failed to chmod $authdir");
 	    }
-
-	    if (-e $authkeys && ! -e $authkeysold) {
-		system("cp -pf $authkeys $authkeysold") == 0
-		    or fatal("Could not backup root ssh authorized_keys file");
-	    }
 	}
 
 	#
@@ -222,11 +217,14 @@ sub doboot()
 	print NKEYS "# Updated by Emulab on " . scalar(localtime()) . "\n";
 	foreach my $line (@lines) {
 	    next
-		if ($line =~ /^# Updated by Emulab on/);
+		if ($line =~ /^\# Updated by Emulab on/);
 	    print NKEYS "$line\n";
 	}
 	close(NKEYS);
 
+	if (! -e $authkeysold && system("cp -pf $authkeys $authkeysold")) {
+	    warning("Could not backup $authkeys");
+	}
 	if (system("mv -f $authkeysnew $authkeys")) {
 	    warning("Could not mv $authkeysnew to $authkeys");
 	}
