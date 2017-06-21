@@ -1,4 +1,4 @@
-#!/usr/bin/perl -wT
+#!/usr/bin/perl -w
 #
 # Copyright (c) 2008-2017 University of Utah and the Flux Group.
 # 
@@ -59,7 +59,7 @@ use Data::Dumper;
 use Date::Parse;
 use POSIX qw(strftime);
 use Time::Local;
-use File::Temp qw(tempfile);
+use File::Temp qw(tempfile tmpnam);
 use Project;
 use NodeType;
 use Node;
@@ -488,8 +488,15 @@ sub SliceIdleData($)
     }
     $limit = emutil::TBDateStringLocal($limit);
 
+    # For debugging
+    my $debugfile = tmpnam();
+    my $command   = "$WAP $IDLESTATS -s -R -B -S '$limit' ".
+	"-e $pid,$eid 2>$debugfile";
+
     GeniUtil::FlipToElabMan();
-    if (! open(IDLE, "$WAP $IDLESTATS -s -R -B -S '$limit' -e $pid,$eid |")) {
+    if (! open(IDLE, "$command |")) {
+	print STDERR "$command\n";
+	unlink($debugfile);
 	return GeniResponse->Create(GENIRESPONSE_ERROR, undef,
 				    "Could not start idlestats")
     }
@@ -498,11 +505,23 @@ sub SliceIdleData($)
 	$output .= $_;
     }
     if (! close(IDLE)) {
+	if (-s $debugfile) {
+	    print STDERR "$command\n";
+	    my $stuff = `/bin/cat $debugfile`;
+	    print STDERR $stuff;
+	}
+	unlink($debugfile);
 	return GeniResponse->Create(GENIRESPONSE_ERROR, undef,
 				    ($! ? "Pipe error running idlestats: $!" :
 				     "idlestats exited with $?") .
 				    "\n" . $output);
     }
+    if (-s $debugfile) {
+	print STDERR "$command\n";
+	my $stuff = `/bin/cat $debugfile`;
+	print STDERR $stuff;
+    }
+    unlink($debugfile);
     #
     # We get a giant json encoded string back.
     #
