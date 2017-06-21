@@ -90,6 +90,7 @@ my $NTPCONF	= "$ETCDIR/image_ntp.conf";
 
 # Protos
 sub fatal($);
+sub RootPubkeyList();
 sub LocalizeBSD();
 sub LocalizeLinux($);
 sub ExecQuiet($);
@@ -164,6 +165,56 @@ foreach my $extension ("lzma", "bz2", "gz") {
 # Oops, do not know what to do.
 fatal("Do not know what to do with $path");
 
+#
+# Figure out what root pubkey(s) to use. Originally, we just copied over
+# *.pub, but that gets a whole lot of weird crap on the mothership. So now
+# we try to be more selective:
+#
+# To keep up with the cool kids, we want to use an Ed25519 key
+# (id_ed25519.pub) if possible.
+#
+# However since ed25519 is not supported by older sshds, we better have
+# an RSA alternative (id_rsa.pub) as well.
+#
+# But that key may be really old and less than 2048 bits, so we may have
+# a bigger one as well (id_rsa_new.pub, note: requires changing the default
+# ssh_config on your boss since this is not a default key file name to try).
+#
+# We really don't want to use a DSA key (id_dsa.pub) anymore unless there
+# is no alternative.
+#
+# Finally, if we are an Elabinelab setup, include the outer boss root key.
+#
+sub RootPubkeyList()
+{
+    my $keyfiles = "";
+
+    if (-r "/root/.ssh/id_ed25519.pub") {
+	$keyfiles .= "/root/.ssh/id_ed25519.pub ";
+    }
+
+    if (-r "/root/.ssh/id_rsa.pub") {
+	$keyfiles .= "/root/.ssh/id_rsa.pub ";
+	if (-r "/root/.ssh/id_rsa_new.pub") {
+	    $keyfiles .= "/root/.ssh/id_rsa_new.pub ";
+	}
+    }
+
+    if ($keyfiles eq "" && -r "/root/.ssh/id_dsa.pub") {
+	$keyfiles .= "/root/.ssh/id_dsa.pub ";
+    }
+
+    if ($ELABINELAB && -r "/etc/emulab/outer_bossrootkey.pub") {
+	$keyfiles .= "/etc/emulab/outer_bossrootkey.pub ";
+    }
+
+    if ($keyfiles) {
+	print "Installing root authorized keys: $keyfiles.\n";
+    }
+
+    return $keyfiles;
+}
+
 sub UpdateSSHD($$)
 {
     my ($mpoint,$sfscript) = @_;
@@ -180,6 +231,13 @@ sub UpdateSSHD($$)
 	return 1;
     }
 
+    ExecQuiet("$SED -e '/^Protocol /d' ".
+	      "-e '/^PasswordAuthentication /d' ".
+	      "-e '/^ChallengeResponseAuthentication /d' ".
+	      "-e '/^PermitRootLogin /d' ".
+	      "-e '/^# Emulab/d' $cfile") == 0
+	or return 0;
+
     open(FD, ">>$cfile")
 	or return 0;
     print FD "\n# Emulab config\n";
@@ -189,7 +247,7 @@ sub UpdateSSHD($$)
     print FD "PermitRootLogin without-password\n";
     close(FD);
 
-    print "Updated sshd configuration.\n";
+    print "Updating sshd configuration.\n";
 
     return 1;
 }
@@ -272,25 +330,31 @@ sub LocalizeBSD()
 	ExecQuiet("$MKDIR -m 700 $mpoint/root/.ssh")) {
 	goto bad;
     }
-    if ($ELABINELAB &&
-	# Combine with outer boss root user ssh keys.
-	ExecQuiet("grep -v '^#' $AUTHKEYS > $mpoint/root/.ssh/authorized_keys2")) {
+
+    # Configure root authorized_keys file
+    my $keyfiles = RootPubkeyList();
+    if (!$keyfiles) {
+	print STDERR "No suitable boss root key found!\n";
 	goto bad;
     }
-    # And add the current boss root user ssh keys (prefer only RSA key).
-    my $keyfile;
-    if (-r "/root/.ssh/id_rsa.pub") {
-	$keyfile = "/root/.ssh/id_rsa.pub";
-    } elsif (-r "/root/.ssh/id_dsa.pub") {
-	$keyfile = "/root/.ssh/id_dsa.pub";
-    } else {
-	# XXX backward compat
-	$keyfile = "/root/.ssh/*.pub";
+    if (ExecQuiet("$CAT $keyfiles > $mpoint/root/.ssh/authorized_keys")) {
+	goto bad;
     }
-    if (ExecQuiet("$CAT $keyfile >> $mpoint/root/.ssh/authorized_keys2") ||
+    #
+    # Copy to authorized_keys2 which is what is installed on nodes
+    #
+    # XXX in theory this could be different than what the MFS itself allows,
+    # but we don't do that.
+    #
+    # XXX we use authorized_keys2 for this purpose for some long lost reason;
+    # we have to keep using it for backward compat (i.e., we are localizing
+    # an old MFS).
+    #
+    if (ExecQuiet("$CP $mpoint/root/.ssh/authorized_keys $mpoint/root/.ssh/authorized_keys2") ||
 	ExecQuiet("$CHMOD 600 $mpoint/root/.ssh/authorized_keys2")) {
 	goto bad;
     }
+
     # Boss certificate. Need emulab.pem for TPM. 
     ExecQuiet("$CP -p $ETCDIR/emulab.pem $ETCDIR/client.pem $mpoint/etc/emulab")
 	== 0 or goto bad;
@@ -453,16 +517,17 @@ sub LocalizeLinux($)
 	ExecQuiet("$MKDIR -m 700 root/.ssh")) {
 	goto bad;
     }
-    if ($ELABINELAB &&
-	# Combine with outer boss root user ssh keys.
-	ExecQuiet("$CAT $AUTHKEYS > root/.ssh/authorized_keys")) {
+
+    # Configure root authorized_keys file
+    my $keyfiles = RootPubkeyList();
+    if (!$keyfiles) {
+	print STDERR "No suitable boss root key found!\n";
 	goto bad;
     }
-    # And add the current boss root user ssh keys.
-    if (ExecQuiet("$CAT /root/.ssh/*.pub >> root/.ssh/authorized_keys") ||
-	ExecQuiet("$CHMOD 600 root/.ssh/authorized_keys")) {
+    if (ExecQuiet("$CAT $keyfiles > root/.ssh/authorized_keys")) {
 	goto bad;
     }
+
     # Boss certificate. Need emulab.pem for TPM. 
     ExecQuiet("$CP -p $ETCDIR/emulab.pem $ETCDIR/client.pem etc/emulab")
 	== 0 or goto bad;
