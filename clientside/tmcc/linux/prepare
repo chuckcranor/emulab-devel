@@ -366,6 +366,7 @@ if (! -x "$BINDIR/rc/rc.localize" || system("$BINDIR/rc/rc.localize boot")) {
     system("mv $ROOTSSHDIR.bak $ROOTSSHDIR");
     die("Could not clean root .ssh directory");
 }
+system("rm -rf $ROOTSSHDIR.bak");
 
 print "Cleaning mail spool files ...\n";
 system("rm -rf $MAILDIR/*");

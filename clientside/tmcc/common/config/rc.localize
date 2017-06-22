@@ -222,7 +222,8 @@ sub doboot()
 	}
 	close(NKEYS);
 
-	if (! -e $authkeysold && system("cp -pf $authkeys $authkeysold")) {
+	if (-e $authkeys && ! -e $authkeysold &&
+	    system("cp -pf $authkeys $authkeysold")) {
 	    warning("Could not backup $authkeys");
 	}
 	if (system("mv -f $authkeysnew $authkeys")) {
