@@ -929,8 +929,13 @@ class ExtensionInfo
     function wanted()       { return $this->field('wanted'); }
     function granted()      { return $this->field('granted'); }
     function admin()        { return $this->field('admin'); }
+    function needapproval() { return $this->field('needapproval'); }
     function reason()       { return $this->field('reason'); }
     function message()      { return $this->field('message'); }
+    function autoapproved() { return $this->field('autoapproved'); }
+    function autoapproved_reason() {
+        return $this->field('autoapproved_reason');
+    }
 
     # Hmm, how does one cause an error in a php constructor?
     function IsValid() {

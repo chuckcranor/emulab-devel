@@ -30,6 +30,7 @@ use CGI;
 use POSIX ":sys_wait_h";
 use POSIX qw(setsid strftime ceil floor);
 use Date::Parse;
+use JSON;
 
 #
 # Back-end script to manage APT profiles.
@@ -137,6 +138,8 @@ sub DoUtilization();
 sub DoIdleData();
 sub DoOpenstack();
 sub DoCheckReservation();
+sub DoCheckAutoApprove();
+sub CheckAutoApprove($$);
 sub CheckReservationInternal($$$);
 sub DoMaxExtension();
 sub WriteCredentials();
@@ -145,6 +148,7 @@ sub StartMonitorInternal(;$@);
 sub DoImageTrackerStuff($$$$$$$);
 sub DenyExtensionInternal($);
 sub ExtendInternal($$$$$);
+sub CallAggregateMethod($$@);
 
 #
 # Parse command arguments. Once we return from getopts, all that should be
@@ -268,6 +272,9 @@ elsif ($action eq "checkreservation") {
 }
 elsif ($action eq "maxextension") {
     DoMaxExtension()
+}
+elsif ($action eq "checkautoapprove") {
+    DoCheckAutoApprove()
 }
 else {
     usage();
@@ -442,7 +449,7 @@ sub DoSnapshot()
 	    if (defined($node_id));
     }
     
-    #
+   #
     # Instruct the remote cluster to copy the image back to its origin,
     # but we need to ask the IMS for uuid of the image that is running,
     # so we can tell the cluster, which then tells the origin cluster.
@@ -1307,6 +1314,7 @@ sub DoExtend()
     my $granted       = 0;
     my $needapproval  = 0;
     my $inhours       = 0;
+    my $autoapprove_info;
     my $message;
     my $reason;
     my $errmsg;
@@ -1480,6 +1488,15 @@ sub DoExtend()
 		$granted = 0;
 	    }
 	    if ($wanted > $granted) {
+		if (checkautoapprove($wanted, \$autoapprove_info) == 0) {
+		    if ($autoapprove_info->{'approve'}) {
+			# Informational for now.
+			if (0) {
+			    $granted = $wanted;
+			    goto grant;
+			}
+		    }
+		}
 		$needapproval = 1;
 		$message = "because it was started more then ".
 		    "$autoextend_maxage days ago";
@@ -1502,6 +1519,15 @@ sub DoExtend()
 	# management committee."
 	#
 	elsif ($wanted > $autoextend_maximum) {
+	    if (CheckAutoApprove($wanted, \$autoapprove_info) == 0) {
+		if ($autoapprove_info->{'approve'}) {
+		    # Informational for now.
+		    if (0) {
+			$granted = $wanted;
+			goto grant;
+		    }
+		}
+	    }
 	    $needapproval = 1;
 	    $message = "because it was for longer then $autoextend_maximum days";
 	    #
@@ -1539,6 +1565,7 @@ sub DoExtend()
     #
     # Do the extension.
     #
+  grant:
     if ($granted) {
 	my $seconds = $granted * 3600;
 	$seconds *= 24 if (!$inhours);
@@ -1590,6 +1617,16 @@ sub DoExtend()
 	# A guest user, only the creator can request an extension.
     	$extensionargs->{"uid"}     = $instance->creator();
 	$extensionargs->{"uid_idx"} = $instance->creator_idx();
+    }
+    if (defined($autoapprove_info)) {
+    	$extensionargs->{"autoapproved"} = $autoapprove_info->{'approve'};
+    	$extensionargs->{"autoapproved_reason"} = $autoapprove_info->{'reason'};
+	if (defined($autoapprove_info->{'metrics'})) {
+	    my $metrics = eval { encode_json($autoapprove_info->{'metrics'}); };
+	    if (!$@) {
+		$extensionargs->{"autoapproved_metrics"} = $metrics;
+	    }
+	}
     }
     my $extensioninfo =
 	APT_Instance::ExtensionInfo->Create($instance, $extensionargs);
@@ -3482,8 +3519,9 @@ sub DoUpdateKeys()
 # 
 sub DoUtilization()
 {
+    my $utilization;
     my $errmsg;
-    my $errcode = 1;
+    my @aggregates = ();
     
     #
     # Get the nodeid to client id mapping
@@ -3504,72 +3542,31 @@ sub DoUtilization()
 	    $client_ids{$obj->aggregate_urn()}->{$node_id} = $client_id;
 	}
     }
-
-    #
-    # And tell the backend clusters to do the update.
-    #
-    my $coderef = sub {
-	my ($sliver) = @_;
-	my $webtask  = $sliver->webtask();
-
-	my $response = $sliver->Utilization();
-	if (!defined($response)) {
-	    print STDERR "RPC Error calling utilization on $sliver\n";
-	    return -1;
-	}
-	if ($response->code() != GENIRESPONSE_SUCCESS) {
-	    print STDERR "Could not get utilization for sliver: ".
-		$response->output() . "\n";
-	    $webtask->output($response->output());
-	    $webtask->Exited($response->code());
-	    return $response->code();
-	}
-	$webtask->results($response->value());
-	return 0;
-    };
-    my @return_codes = ();
-    my @agglist      = ();
     #
     # Cull out any aggregates with no nodes.
     #
-    foreach my $agg ($instance->AggregateList()) {
-	push(@agglist, $agg)
-	    if ($agg->physnode_count() || $agg->virtnode_count());
+    foreach my $aggregate ($instance->AggregateList()) {
+	push(@aggregates, $aggregate)
+	    if ($aggregate->physnode_count() || $aggregate->virtnode_count());
     }
-    
-    if (ParRun({"maxwaittime" => 99999,
-		"maxchildren" => scalar(@agglist)},
-	       \@return_codes, $coderef, @agglist)) {
-	$errmsg = "Internal error calling Utilization()";
+    my $errcode = CallAggregateMethod("Utilization",\$utilization,@aggregates);
+    if ($errcode) {
+	$errmsg = $utilization;
 	goto bad;
     }
-    #
-    # Check the exit codes. 
-    #
-    foreach my $agg (@agglist) {
-	my $code = shift(@return_codes);
-	$agg->webtask()->Refresh();
-	if ($code) {
-	    $errmsg = "Could not get utilization from some slivers";
-	    if ($agg->webtask()->output()) {
-		$errmsg .= ": " . $agg->webtask()->output();
-		$errcode = $agg->webtask()->exitcode();
-	    }
-	    goto bad;
-	}
+    foreach my $aggregate (@aggregates) {
+	my $blob = shift(@{$utilization});
 	#
 	# Annotate the result with some extra info for the web UI.
 	#
-	my $blob = $agg->webtask()->results();
 	foreach my $node_id (keys(%{ $blob->{'details'}->{'nodes'} })) {
 	    $blob->{'details'}->{'nodes'}->{$node_id}->{"client_id"} =
-		$client_ids{$agg->aggregate_urn()}->{$node_id};
+		$client_ids{$aggregate->aggregate_urn()}->{$node_id};
 	}
 	if ($debug) {
-	    print Dumper($agg->webtask()->results());
+	    print Dumper($blob);
 	}
-	$agg->webtask()->results($blob);
-	$agg->webtask()->Store();
+	$aggregate->webtask()->results($blob);
     }
     exit(0);
   bad:
@@ -3669,67 +3666,29 @@ sub DoOpenstack()
 # 
 sub DoIdleData()
 {
+    my $idledata;
     my $errmsg;
-    my $errcode = 1;
+    my @aggregates = ();
     
-    #
-    # And ask the backend clusters for the data.
-    #
-    my $coderef = sub {
-	my ($sliver) = @_;
-	my $webtask  = $sliver->webtask();
-
-	my $response = $sliver->IdleData();
-	if (!defined($response)) {
-	    print STDERR "RPC Error calling idledata on $sliver\n";
-	    return -1;
-	}
-	if ($response->code() != GENIRESPONSE_SUCCESS) {
-	    print STDERR "Could not get idledata for sliver: ".
-		$response->output() . "\n";
-	    $webtask->output($response->output());
-	    $webtask->Exited($response->code());
-	    return $response->code();
-	}
-	if ($debug) {
-	    print Dumper($response->value());
-	}
-	$webtask->idledata($response->value());
-	return 0;
-    };
-    my @return_codes = ();
-    my @agglist      = ();
     #
     # Cull out any aggregates with no nodes.
     #
-    foreach my $agg ($instance->AggregateList()) {
-	push(@agglist, $agg)
-	    if ($agg->physnode_count() || $agg->virtnode_count());
+    foreach my $aggregate ($instance->AggregateList()) {
+	push(@aggregates, $aggregate)
+	    if ($aggregate->physnode_count() || $aggregate->virtnode_count());
     }
-    
-    if (ParRun({"maxwaittime" => 99999,
-		"maxchildren" => scalar(@agglist)},
-	       \@return_codes, $coderef, @agglist)) {
-	$errmsg = "Internal error calling IdleData()";
+    my $errcode = CallAggregateMethod("IdleData", \$idledata, @aggregates);
+    if ($errcode) {
+	$errmsg = $idledata;
 	goto bad;
     }
-    #
-    # Check the exit codes. 
-    #
-    foreach my $agg (@agglist) {
-	my $code = shift(@return_codes);
-	$agg->webtask()->Refresh();
-	if ($code) {
-	    $errmsg = "Could not get idledata from some slivers";
-	    if ($agg->webtask()->output()) {
-		$errmsg .= ": " . $agg->webtask()->output();
-		$errcode = $code;
-	    }
-	    goto bad;
-	}
+    # We get back json strings, we pass that through to the web interface.
+    foreach my $aggregate (@aggregates) {
+	my $json = shift(@{$idledata});
 	if ($debug) {
-	    print Dumper($agg->webtask()->idledata());
+	    print $json . "\n";
 	}
+	$aggregate->webtask()->idledata($json);
     }
     exit(0);
   bad:
@@ -3739,6 +3698,284 @@ sub DoIdleData()
 	$webtask->Exited($errcode);
     }
     exit($errcode);
+}
+
+#
+# Use the idledata to determine if an experiment can be extended without
+# admin intervention.
+#
+sub DoCheckAutoApprove()
+{
+    my $errmsg;
+    my $errcode = 1;
+    my $results;
+
+    usage()
+	if (!@ARGV);
+    my $days = shift(@ARGV);
+
+    $errcode = CheckAutoApprove($days, \$results);
+    if ($errcode) {
+	goto bad;
+    }
+    print Dumper($results);
+    exit($results->{'approve'});
+
+  bad:
+    print STDERR $errmsg . "\n" if (defined($errmsg));
+    if (defined($webtask)) {
+	$webtask->output($errmsg) if (defined($errmsg));
+	$webtask->Exited($errcode);
+    }
+    exit($errcode);
+}
+
+sub CheckAutoApprove($$)
+{
+    my ($days, $pref) = @_;
+    my $errmsg;
+    my $errcode = 1;
+    my $utilization;
+    my $idledata;
+    my $loaddata      = {};
+    my $slice         = $instance->GetGeniSlice();
+    my $expires_time  = str2time($slice->expires());
+    my $autoapprove_minloadavg = 0.25;
+    my $autoapprove_minsamples = 12 * 18;
+    my $autoapprove_ratio = 0.66;
+    my $autoapprove_minfree = 0.1;
+
+    #
+    # We do not do auto extensions if more then 1000 physical node hours
+    # in the request.
+    #
+    if ($days * 24 * $instance->physnode_count() > 1000) {
+	my $rval = {
+	    "reason"  => "greater then 1000 node hours requested",
+	    "metrics" => undef,
+	    "approve" => 0,
+	};
+	$$pref = $rval;
+	return 0;
+    }
+    # Only shared VMs, people can have them forever.
+    if (!$instance->physnode_count()) {
+	my $rval = {
+	    "reason"  => "extension auto approved because no physical nodes",
+	    "metrics" => undef,
+	    "approve" => 1,
+	};
+	$$pref = $rval;
+	return 0;
+    }
+    
+    #
+    # We do not do auto extensions if more then 1500 physical node hours
+    # between current time and time at end of extension. This number needs
+    # calibration.
+    #
+    my $diff = ($expires_time + ($days * 3600 * 24)) - time();
+    if ($diff < 0) {
+	$errmsg = "Time is in the past. Hmm.\n";
+	$errcode= -1;
+	goto bad;
+    }
+    if ((($diff / 3600.0) / $instance->physnode_count()) > 1500) {
+	my $rval = {
+	    "reason"  => "granting extension would exceed 1500 node hours",
+	    "metrics" => undef,
+	    "approve" => 0,
+	};
+	$$pref = $rval;
+	return 0;
+    }
+    
+    #
+    # We ask the clusters for utilization data which includes freecounts.
+    # Cull out any aggregates with no nodes.
+    #
+    my @aggregates = ();
+
+    foreach my $agg ($instance->AggregateList()) {
+	push(@aggregates, $agg)
+	    if ($agg->physnode_count() || $agg->virtnode_count());
+    }
+    $errcode = CallAggregateMethod("Utilization", \$utilization, @aggregates);
+    if ($errcode) {
+	$errmsg = $utilization;
+	goto bad;
+    }
+    foreach my $blob (@{$utilization}) {
+	foreach my $type (keys(%{ $blob->{'typeinfo'} })) {
+	    my ($free,$total);
+	    my $typeinfo = $blob->{'typeinfo'}->{$type};
+	    if (exists($typeinfo->{'reserve_free'})) {
+		$free = $typeinfo->{'reserve_free'};
+	    }
+	    else {
+		$free = $typeinfo->{'free'};
+	    }
+	    $total = $typeinfo->{'total'};
+	    # Skip if no data.
+	    next
+		if (!$total);
+	    
+	    if ($free / $total < $autoapprove_minfree) {
+		my $rval = {
+		    "reason"  => "Less then " . $autoapprove_minfree * 100 .
+			"% of node type $type are free",
+		    "metrics" => $typeinfo,
+		    "approve" => 0,
+		};
+		$$pref = $rval;
+		return 0;
+	    }
+	}
+    }
+    #
+    # We need to know which nodes are physical, we do not worry about
+    # the VMs; we want shared nodes to be used, and busy VMs should be
+    # reflected in the load on the physical machines.
+    #
+    my $nodes = $instance->GetNodeDetails();
+    if (!defined($nodes)) {
+	$errmsg = "Could not get node details for instance\n";
+	$errcode= -1;
+	goto bad;
+    }
+    #
+    # Ask the clusters for the idle stats. 
+    #
+    $errcode = CallAggregateMethod("IdleData", \$idledata, @aggregates);
+    if ($errcode) {
+	$errmsg = $idledata;
+	goto bad;
+    }
+    # We consider load average data only.
+    foreach my $aggregate (@aggregates) {
+	my $urn  = $aggregate->aggregate_urn();
+	my $json = shift(@{$idledata});
+	my $list = eval { decode_json($json); };
+	if ($@) {
+	    print STDERR "Could not decode json data\n";
+	    next;
+	}
+	$loaddata->{$urn} = {};
+
+	foreach my $ref (@{ $list }) {
+	    my $node_id = $ref->{"node_id"};
+	    
+	    # Skip virtual nodes.
+	    next
+		if (!exists($nodes->{$urn}->{$node_id}) ||
+		    $nodes->{$urn}->{$node_id}->{'isvirtnode'});
+
+	    if (!exists($ref->{"main"}) ||
+		ref($ref->{"main"}) ne "HASH" || 
+		!exists($ref->{"main"}->{"AVG"})) {
+		print STDERR "No data for $node_id\n";
+		$loaddata->{$urn}->{$node_id} = undef;
+		next;
+	    }
+
+	    #
+	    # Look at the last 24 hour 5 minute load average samples on
+	    # each node and count the number of samples greater the
+	    # threshold.
+	    #
+	    my @samples = @{ $ref->{"main"}->{"AVG"} };
+	    # Skip first one, its the labels.
+	    shift(@samples);
+
+	    my $now       = time();
+	    my $timelimit = $now - (24 * 3600);	 # Last 24 hours.
+	    my $total     = 0;
+	    my $count     = 0;
+
+	    # Oldest at the beginning of the list
+	    while (@samples) {
+		my $sample = pop(@samples);
+		my ($stamp, undef, $load5) = @{$sample};
+		last
+		    if ($stamp < $timelimit);
+		$total++;
+		# We can get null samples (no data).
+		next
+		    if (!defined($load5));
+
+		$count++ if ($load5 >= $autoapprove_minloadavg);
+	    }
+	    $loaddata->{$urn}->{$node_id} = {
+		'samples' => $total,
+		'busy'    => $count,
+	    };
+	}
+    }
+    #
+    # Need at least 18 hours of samples on every node and 66% of them
+    # have to be above the threshold.
+    #
+    my $message;
+    foreach my $urn (keys(%{$nodes})) {
+	foreach my $node_id (keys(%{ $nodes->{$urn} })) {
+	    my $details = $nodes->{$urn}->{$node_id};
+	    
+	    next
+		if ($details->{'isvirtnode'});
+	    
+	    # No data for a node is an error.
+	    if (!defined($loaddata->{$urn}->{$node_id})) {
+		$message = "No node data for some nodes";
+		last;
+	    }
+	    my $samples = $loaddata->{$urn}->{$node_id}->{'samples'};
+	    my $count   = $loaddata->{$urn}->{$node_id}->{'busy'};
+	    # Must have 18 hours of samples.
+	    if ($samples < $autoapprove_minsamples) {
+		$message = "Not enough 5 minute samples for some nodes. ".
+		    "(less then $autoapprove_minsamples)";
+		last;
+	    }
+	    # 2/3 of samples greater then the threshold.
+	    if ($count / $samples < $autoapprove_ratio) {
+		$message = "Some nodes not busy enough in last day. ".
+		    "(less then $autoapprove_ratio of ".
+		    "$autoapprove_minsamples samples > ".
+		    "$autoapprove_minloadavg load average)";
+		last;
+	    }
+	}
+	last
+	    if (defined($message));
+    }
+    if (defined($message)) {
+	my $rval = {
+	    "reason"  => $message,
+	    "metrics" => $loaddata,
+	    "approve" => 0,
+	};
+	$$pref = $rval;
+	return 0;
+    }
+    $$pref = {
+	"reason"  => "extension auto approved",
+	"metrics" => $loaddata,
+	"approve" => 1,
+    };
+    return 0;
+    
+  bad:
+    print STDERR $errmsg . "\n" if (defined($errmsg));
+    #
+    # We want to return this so that it goes into the record, otherwise
+    # we will be confused as to why the auto approval has no data.
+    #
+    $$pref = {
+	"reason"  => $errmsg,
+	"metrics" => undef,
+	"approve" => 0,
+    };
+    return $errcode;
 }
 
 #
@@ -3965,5 +4202,89 @@ sub escapeshellarg($)
 
     $str =~ s/[^[:alnum:]]/\\$&/g;
     return $str;
+}
+
+sub CallAggregateMethod($$@)
+{
+    my ($method, $prval, @aggregates) = @_;
+    
+    #
+    # And tell the backend clusters to do it.
+    #
+    my $coderef = sub {
+	my ($sliver, $method, $pref) = @{ $_[0] };
+	    
+	my $webtask = $sliver->webtask();
+	my ($errmsg,$errcode);
+
+	my $response = $sliver->$method();
+	if (!defined($response)) {
+	    $errmsg  = "RPC Error calling $method on $sliver";
+	    $errcode = -1;
+	    goto bad;
+	}
+	if ($response->code() != GENIRESPONSE_SUCCESS) {
+	    $errmsg = "Could not call $method for $sliver: " .
+		$response->output();
+	    $errcode = $response->code();
+	    goto bad;
+	}
+	if (defined($pref)) {
+	    $$pref = $response->value();
+	}
+	else {
+	    $webtask->results($response->value());
+	}
+	return 0;
+      bad:
+	print STDERR $errmsg . "\n" if ($debug);
+	$webtask->output($errmsg);
+	$webtask->Exited($errcode);
+	return -1;
+    };
+    #
+    # Most of the time its just one aggregate, lets not use ParRun.
+    #
+    if (@aggregates == 1) {
+	my $aggregate = $aggregates[0];
+	my $result;
+
+	my $errcode = &$coderef([$aggregate, $method, \$result]);
+	if ($errcode) {
+	    $$prval = $aggregate->webtask()->output();
+	    return $errcode;
+	}
+	$$prval = [$result];
+	return 0;
+    }
+    my @return_codes  = ();
+    my @return_values = ();
+    my @tmp = map { [$_, $method] } @aggregates;
+	    
+    if (ParRun({"maxwaittime" => 99999,
+		"maxchildren" => scalar(@aggregates)},
+	       \@return_codes, $coderef, @tmp)) {
+	$$prval = "Internal error calling $method on $instance";
+	return -1;
+    }
+    
+    #
+    # Check the exit codes. 
+    #
+    foreach my $agg (@aggregates) {
+	my $code = shift(@return_codes);
+	$agg->webtask()->Refresh();
+	if ($code) {
+	    my $errmsg = "Could not call $method on some slivers";
+	    if ($agg->webtask()->output()) {
+		$errmsg .= ": " . $agg->webtask()->output();
+	    }
+	    $$prval = $errmsg;
+	    return $code;
+	}
+	push(@return_values, $webtask->results());
+    }
+    $$prval = \@return_values;
+    return 0;
 }
 

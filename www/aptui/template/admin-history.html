@@ -5,6 +5,7 @@
 	  <th>Action</th>
 	  <th>Wanted</th>
 	  <th>Granted</th>
+	  <th>AutoApproved</th>
 	</tr>
       </thead>
       <tbody>
@@ -18,13 +19,29 @@
 	    <% if (extension.action == "request") { %>
 	      <td><%- extension.wanted %></td>
 	      <td><%- extension.granted %></td>
+	      <td>
+		<% if (extension.autoapproved == "1") { %>
+		  Yes
+		<% } else if (extension.autoapproved_reason) { %>
+		  <span style="text-decoration: underline;"
+			data-toggle='popover'
+			data-delay='{"hide":100, "show":250}'
+			data-content='<%- extension.autoapproved_reason %>'
+			data-html='true'>Denied</span>
+		<% } %>
+		<% if (extension.autoapproved_metrics) { %>
+		  (<a href='#'
+		      data-idx="<%- extension.idx %>"
+		      class="autoapprove-metrics">metrics</a>)
+		<% } %>
+	      </td>
 	    <% } else { %>
 	      <td>n/a</td>
 	      <td>n/a</td>
 	    <% } %>
 	  </tr>
 	  <tr>
-	    <td colspan="3"><pre class="history-reason"><%- extension.reason %></pre>
+	    <td colspan="4"><pre class="history-reason"><%- extension.reason %></pre>
 	    </td>
 	  </tr>
 	<% }); %>

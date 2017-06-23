@@ -69,6 +69,16 @@ $(function ()
 	    $("#extension-reason-row pre").text($('#extension-reason').text());
 	    $("#extension-reason-row").removeClass("hidden");
 	}
+	// This activates the popover subsystem.
+	$('#history-panel-content [data-toggle="popover"]').popover({
+	    trigger: 'hover',
+	    placement: 'auto',
+	});
+	// Extension metrics handler, to show in modal
+	$('#history-panel-content .autoapprove-metrics').click(function (e) {
+	    e.preventDefault();
+	    ShowMetricsModal(this);
+	});
 	
 	// Default number of days.
 	if (window.DAYS) {
@@ -407,6 +417,17 @@ $(function ()
 					    {"uuid"  : window.UUID,
 					     "notes" : notes});
 	xmlthing.done(callback);
+    }
+    function ShowMetricsModal(target)
+    {
+	var idx = $(target).data("idx");
+	var str = extensions[idx].autoapproved_metrics;
+	str.replace(/\\"/g, '"');
+	var obj = JSON.parse(str);
+	str = JSON.stringify(obj, null, 2); 
+	console.info(str);
+	$('#metrics-content').text(str);
+	sup.ShowModal('#metrics-modal');
     }
 
     // Helper.
