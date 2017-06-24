@@ -1179,6 +1179,36 @@ Instructions are optional.
       </div>
     </div>
   </div>
+  <div id='confirm-update-systemimage-modal' class='modal fade'
+       data-keyboard='false' data-backdrop='static'>
+    <div class='modal-dialog'>
+      <div class='modal-content'>
+	<div class='modal-body'>
+          <button type='button' class='close' data-dismiss='modal'
+                  aria-hidden='true'>&times;</button>
+          <center>
+	    <h4>You are about to create or update a System Image!</h4>
+	  </center>
+	  <p>
+	    Taking this disk snapshot might result in creating a new
+	    system image or updating an existing system image. Are you
+	    sure you want to do this?
+	  </p>
+	  <p>
+	  <em>Reminder:</em> You will need to run imagerelease on the
+	  cluster (command line).
+	  </p>
+	  <center>
+            <button type='button' style='margin-right: 20px;'
+                    class='btn btn-primary btn-sm'
+		    id='cancel-update-systemimage'>Cancel</button>
+            <button class='btn btn-danger btn-sm'
+		    id='confirm-update-systemimage'>Confirm</button>
+	  </center>
+	</div>
+      </div>
+    </div>
+  </div>
   <!-- place to hang the modals for now -->
   <div id='showtopomodal_div'></div>
   <div id='editmodal_div'></div>

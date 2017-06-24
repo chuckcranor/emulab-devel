@@ -37,6 +37,7 @@ $(function ()
     var multisite    = 0; 
     var APT_NS    = "http://www.protogeni.net/resources/rspec/ext/apt-tour/1";
     var EMULAB_NS = "http://www.protogeni.net/resources/rspec/ext/emulab/1";
+    var EMULAB_OPS        = "emulab-ops";
     var manageTemplate    = _.template(manageString);
     var waitwaitTemplate  = _.template(waitwaitString);
     var rendererTemplate  = _.template(rendererString);
@@ -495,15 +496,43 @@ $(function ()
 		return false;
 	    }
 	    if (window.CLONING) {
-		console.info("cloning");
-		// Need to ask if any extra accounts created.
-		sup.ShowModal('#clone-modal', function () {
-		    if ($('#clone-modal-update-prepare').is(':checked')) {
-			$('#quickvm_create_profile_form ' +
-			  '[name=update_prepare]').val("yes");
-		    }
-		    SubmitForm();
-		});
+		/*
+		 * If cloning into the system project, need to warn the user
+		 * about potentially messing with a system image.
+		 */
+		var pid;
+		if (projlist.length == 1) {
+		    pid = $('$profile_pid').val();
+		}
+		else {
+		    pid = $('#profile_pid option:selected').val();
+		}
+		if (pid == EMULAB_OPS) {
+		    $('#cancel-update-systemimage').click(function() {
+			sup.HideModal('#confirm-update-systemimage-modal');
+		    });
+		    $('#confirm-update-systemimage').click(function() {
+			sup.HideModal('#confirm-update-systemimage-modal');
+			SubmitForm();
+		    });
+		    sup.ShowModal('#confirm-update-systemimage-modal',
+				  function() {
+				      $('#cancel-update-systemimage')
+					  .off("click");
+				      $('#confirm-update-systemimage')
+					  .off("click");
+				  });
+		}
+		else {
+		    // Need to ask if any extra accounts created.
+		    sup.ShowModal('#clone-modal', function () {
+			if ($('#clone-modal-update-prepare').is(':checked')) {
+			    $('#quickvm_create_profile_form ' +
+			      '[name=update_prepare]').val("yes");
+			}
+			SubmitForm();
+		    });
+		}
 	    }
 	    else {
 		SubmitForm();

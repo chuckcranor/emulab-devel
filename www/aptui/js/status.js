@@ -41,10 +41,12 @@ $(function ()
     var user_lockdown     = 0;
     var lockdown_code     = "";
     var consolenodes      = {};
+    var diskimages        = {};
     var showlinktest      = false;
     var hidelinktest      = false;
     var extensions        = null;
     var changingtopo      = false;
+    var EMULAB_OPS        = "emulab-ops";
     var EMULAB_NS = "http://www.protogeni.net/resources/rspec/ext/emulab/1";
 
     function initialize()
@@ -1707,6 +1709,19 @@ $(function ()
 		}
 
 		/*
+		 * Find the disk image (if any) for the node and store it.
+		 */
+		if (stype.length) {
+		    var dimage  = $(stype).find("disk_image");
+		    if (dimage.length) {
+			var name = $(dimage).attr("name");
+			if (name) {
+			    diskimages[node] = name;
+			}
+		    }
+		}
+
+		/*
 		 * Make a copy of the master context menu and init.
 		 */
 		var clone = $("#context-menu").clone();
@@ -1985,40 +2000,6 @@ $(function ()
     }
 
     //
-    // Request to start a snapshot. This assumes a single node of course.
-    //
-    function StartSnapshot(node_id, update_profile, update_prepare, imagename)
-    {
-	sup.ShowWaitWait("Starting image capture, " +
-			 "this can take a minute. Patience please.");
-
-	var callback = function(json) {
-	    sup.HideWaitWait();
-	    //console.log("StartSnapshot");
-	    //console.log(json);
-	    
-	    if (json.code) {
-		sup.SpitOops("oops", "Could not start snapshot:<br>" +
-			     "<pre><code>" + json.value + "</code></pre>");
-		return;
-	    }
-	    ShowProgressModal();
-	}
-	var args = {"uuid" : uuid,
-		    "update_profile" : update_profile,
-		    "update_prepare" : update_prepare};
-	if (node_id !== undefined) {
-	    args["node_id"] = node_id;
-	}
-	if (imagename && imagename != "") {
-	    args["imagename"] = imagename;
-	}
-	var xmlthing =
-	    sup.CallServerMethod(ajaxurl, "status", "SnapShot", args);
-	xmlthing.done(callback);
-    }
-
-    //
     // This is for snapshot of a single node profile, or a specific
     // node in a multi-node profile.
     //
@@ -2030,21 +2011,44 @@ $(function ()
 	    return;
 	}
 	
-	// Default to update unless checkbox says otherwise.
-	var update_profile = 1;
-	var update_prepare = 0;
-	var imagename      = null;
-
 	// Default to unchecked any time we show the modal.
 	$('#snapshot_update_prepare').prop("checked", false);
 	
 	//
-	// Snapshot specific node from the context menu. We give the
-	// the user some extra options in confirm modal.
+	// Watch for the case that we would create a new version of a
+	// system image.  Warn the user of this.
 	//
+	if (window.APT_OPTIONS.project == EMULAB_OPS) {
+	    $('#cancel-update-systemimage').click(function() {
+		sup.HideModal('#confirm-update-systemimage-modal');
+	    });
+	    $('#confirm-update-systemimage').click(function() {
+		sup.HideModal('#confirm-update-systemimage-modal');
+		var args = {"uuid"           : uuid,
+			    "update_profile" : 0,
+			    "update_prepare" : 0};
+		if (node_id) {
+		    args["node_id"] = node_id;
+		}
+		StartSnapshot(args);
+	    });
+	    sup.ShowModal('#confirm-update-systemimage-modal',
+			  function() {
+			      $('#cancel-update-systemimage')
+				  .off("click");
+			      $('#confirm-update-systemimage')
+				  .off("click");
+			  });
+	    return;
+	}
+	DoSnapshotNodeAux(node_id);
+    }
+    function DoSnapshotNodeAux(node_id)
+    {
 	if (node_id) {
 	    // Default to checked any time we show the modal.
 	    $('#snapshot_update_profile').prop("checked", true);
+	    
 	    if (ispprofile) {
 		$('#snapshot_update_profile_div').addClass("hidden");
 		$('#snapshot_update_script_div').removeClass("hidden");
@@ -2069,18 +2073,24 @@ $(function ()
 	$('button#snapshot_confirm').bind("click.snapshot", function (event) {
 	    event.preventDefault();
 	    $('button#snapshot_confirm').unbind("click.snapshot");
-	    if (node_id) {
-		update_profile = 
-		    $('#snapshot_update_profile').is(':checked') ? 1 : 0;
+
+	    var args = {"uuid" : uuid,
+			"update_profile" : 1,
+			"update_prepare" : 0};
+	    if (node_id !== undefined) {
+		args["node_id"] = node_id;
+	    }	    
+	    if (node_id && !$('#snapshot_update_profile').is(':checked')) {
+		args["update_profile"] = 0;
 	    }
 	    if ($('#snapshot_update_prepare').is(':checked')) {
-		update_prepare = 1;
+		args["update_prepare"] = 1;
 	    }
 	    if ($('#snapshot_modal #nameyourimage_name').val() != "") {
-		imagename = $('#snapshot_modal #nameyourimage_name').val();
+		args["imagename"] =
+		    $('#snapshot_modal #nameyourimage_name').val();
 	    }
-	    sup.HideModal('#snapshot_modal');
-	    StartSnapshot(node_id, update_profile, update_prepare, imagename);
+	    StartSnapshot(args);
 	});
 
 	// Handler for hide modal to unbind the click handler.
@@ -2088,6 +2098,30 @@ $(function ()
 	    $(this).unbind(event);
 	    $('button#snapshot_confirm').unbind("click.snapshot");
 	});
+    }
+    function StartSnapshot(args)
+    {
+	console.info("sta", args);
+	
+	sup.HideModal('#snapshot_modal');
+	sup.ShowWaitWait("Starting image capture, " +
+			 "this can take a minute. Patience please.");
+
+	var callback = function(json) {
+	    sup.HideWaitWait();
+	    //console.log("StartSnapshot");
+	    //console.log(json);
+	    
+	    if (json.code) {
+		sup.SpitOops("oops", "Could not start snapshot:<br>" +
+			     "<pre><code>" + json.value + "</code></pre>");
+		return;
+	    }
+	    ShowProgressModal();
+	}
+	var xmlthing =
+	    sup.CallServerMethod(ajaxurl, "status", "SnapShot", args);
+	xmlthing.done(callback);
     }
 
     //
