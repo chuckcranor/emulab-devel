@@ -68,7 +68,7 @@ if (isset($cluster)) {
 }
 else {
     # List of clusters.
-    $ams     = Aggregate::SupportsReservations();
+    $ams     = Aggregate::DefaultAggregateList();
     $amlist  = array();
     while (list($index, $aggregate) = each($ams)) {
         $amlist[$aggregate->nickname()] = $aggregate->urn();
