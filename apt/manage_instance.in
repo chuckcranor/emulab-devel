@@ -1488,7 +1488,7 @@ sub DoExtend()
 		$granted = 0;
 	    }
 	    if ($wanted > $granted) {
-		if (checkautoapprove($wanted, \$autoapprove_info) == 0) {
+		if (CheckAutoApprove($wanted, \$autoapprove_info) == 0) {
 		    if ($autoapprove_info->{'approve'}) {
 			# Informational for now.
 			if (0) {
