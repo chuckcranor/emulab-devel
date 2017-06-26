@@ -31,10 +31,17 @@ use Data::Dumper;
 #
 sub usage()
 {
-    print("Usage: localize_mfs [-d] [-c vga|sio|sio2|sio3|sio4|null] <path>\n");
+    print("Usage: localize_mfs [-d] [-c console] [-F version] <path>\n");
+    print("  -d          Turn on debugging.\n");
+    print("  -c console  Set the MFS console device to one of:\n");
+    print("              'vga', 'sio', 'sio2', 'sio3', 'sio4', 'null'\n");
+    print("              NOTE: not needed with newer MFS setups\n");
+    print("  -F version  Set kernel version used in a FreeBSD MFS:\n");
+    print("              One of: '8', '9', or '10'\n");
+    print("              Only applies to FreeBSD MFSes (duh!)\n");
     exit(-1);
 }
-my $optlist = "dc:i";
+my $optlist = "dc:F:i";
 my $debug   = 0;
 my $igbcruft= 0;
 
@@ -46,6 +53,7 @@ my $ETCDIR	= "$TB/etc";
 my $ELABINELAB  = @ELABINELAB@;
 my $MFSCONSOLE  = "@NODECONSOLE@";
 my $OURTIMEZONE = "@OURTIMEZONE@";
+my $FBSDKERNEL  = 8;
 
 # Need these below.
 my $FBSD_MAJOR;
@@ -111,6 +119,15 @@ if (defined($options{"i"})) {
 }
 if (defined($options{"c"})) {
     $MFSCONSOLE = $options{"c"};
+    if ($MFSCONSOLE !~ /^(vga|sio|sio2|sio3|sio4|null)$/) {
+	fatal("Invalid console type '$MFSCONSOLE'");
+    }
+}
+if (defined($options{"F"})) {
+    $FBSDKERNEL = $options{"F"};
+    if ($FBSDKERNEL !~ /^(8|9|10)$/) {
+	fatal("Invalid FreeBSD kernel version '$FBSDKERNEL'");
+    }
 }
 usage() 
     if (@ARGV != 1);
@@ -302,6 +319,22 @@ sub LocalizeBSD()
     }
 
     #
+    # Get the correct kernel version
+    # XXX note that the 8.x kernel is usually the default "kernel",
+    # we move it to "kernel8" for consistency with the other kernels.
+    #
+    if (-e "kernel" && ! -e "kernel8") {
+	ExecQuiet("mv kernel kernel8") == 0
+	    or fatal("Could not move kernel to kernel8");
+    }
+    if (-e "kernel${FBSDKERNEL}") {
+	ExecQuiet("cp -fp kernel${FBSDKERNEL} kernel") == 0
+	    or fatal("Could not copy FreeBSD ${FBSDKERNEL}.x kernel");
+    } else {
+	fatal("No FreeBSD ${FBSDKERNEL}.x kernel");
+    }
+    
+    #
     # Work on a copy.
     #
     ExecQuiet("$CP -pf $mfsroot ${mfsroot}.new") == 0
@@ -381,8 +414,9 @@ sub LocalizeBSD()
 
     #
     # IGB cruft; See the comment in loader.conf.orig about this. 
+    # No longer needed as of FreeBSD 10.
     #
-    if ($igbcruft) {
+    if ($igbcruft && $FBSDKERNEL < 10) {
 	ExecQuiet("$SED -i -e 's,^#kern\.ipc\.nmb,kern.ipc.nmb,' " .
 		  "     loader.conf.orig") == 0 or goto bad;
     }
