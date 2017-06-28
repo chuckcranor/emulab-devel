@@ -1,0 +1,181 @@
+<?php
+#
+# Copyright (c) 2000-2017 University of Utah and the Flux Group.
+# 
+# {{{EMULAB-LICENSE
+# 
+# This file is part of the Emulab network testbed software.
+# 
+# This file is free software: you can redistribute it and/or modify it
+# under the terms of the GNU Affero General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or (at
+# your option) any later version.
+# 
+# This file is distributed in the hope that it will be useful, but WITHOUT
+# ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
+# FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Affero General Public
+# License for more details.
+# 
+# You should have received a copy of the GNU Affero General Public License
+# along with this file.  If not, see <http://www.gnu.org/licenses/>.
+# 
+# }}}
+#
+chdir("..");
+chdir("apt");
+include_once("profile_defs.php");
+include_once("instance_defs.php");
+include_once("ajax-routines.ajax");
+
+#
+# Need to check the permission, since we allow admins to mess with
+# other accounts.
+#
+function CheckPageArgs()
+{
+    global $this_user;
+    global $ajax_args;
+
+    if (!(ISADMIN() || ISFOREIGN_ADMIN())) {
+	SPITAJAX_ERROR(-1, "Not enough permission");
+	return -1;
+    }
+    return 0;
+}
+
+function Do_ExperimentList()
+{
+    global $this_user, $urn_mapping;
+    global $ajax_args;
+    $results = array();
+
+    if (CheckPageArgs()) {
+        return;
+    }
+
+    $query_result = 
+        DBQueryFatal("select a.*,s.expires,s.hrn,u.email,users.usr_name, ".
+                     " (UNIX_TIMESTAMP(now()) > ".
+                     "  UNIX_TIMESTAMP(s.expires)) as expired, ".
+                     "  truncate(a.physnode_count * ".
+                     "   ((UNIX_TIMESTAMP(now()) - ".
+                     "     UNIX_TIMESTAMP(a.created)) / 3600.0),2) as phours, ".
+                     " IFNULL(aggs.count,0) as aggrows, ".
+                     " agg.aggregate_urn as aggrow_urn ".
+                     "  from apt_instances as a ".
+                     "left join (".
+                     "    select uuid, COUNT(*) AS count ".
+                     "    from apt_instance_aggregates group by uuid) AS aggs ".
+                     "  on aggs.uuid=a.uuid ".
+                     "left join apt_instance_aggregates as agg ".
+                     "     on agg.uuid=a.uuid ".
+                     "left join geni.geni_slices as s on ".
+                     "     s.uuid=a.slice_uuid ".
+                     "left join geni.geni_users as u on u.uuid=a.creator_uuid ".
+                     "left join users on users.uid_idx=a.creator_idx");
+
+    while ($row = mysql_fetch_array($query_result)) {
+        $profile_id   = $row["profile_id"];
+        $version      = $row["profile_version"];
+        $uuid         = $row["uuid"];
+        $name         = $row["name"];
+        $status       = $row["status"];
+        $canceled     = $row["canceled"];
+        $created      = DateStringGMT($row["created"]);
+        $expires      = DateStringGMT($row["expires"]);
+        $creator_idx  = $row["creator_idx"];
+        $profile_name = "$profile_id:$version";
+        $creator_uid  = $row["creator"];
+        $pid          = $row["pid"];
+        $pcount       = $row["physnode_count"];
+        $vcount       = $row["virtnode_count"];
+        $user_lockdown= $row["user_lockdown"];
+        $admin_lockdown= $row["admin_lockdown"];
+        $lockdown     = ($user_lockdown || $admin_lockdown ? 1 : 0);
+        $phours       = $row["phours"];
+        $email        = $row["email"];
+        $extending    = $row["extension_requested"];
+        $blob         = array();
+
+        # If a guest user, use email instead.
+        if (isset($email)) {
+            $blob["creator"] = $email;
+        }
+        else {
+            $blob["creator"] =
+                "<a href='user-dashboard.php?user=$creator_uid'>".
+                "$creator_uid</a>";
+        }
+        if ($row["expired"]) {
+            $status = "expired";
+        }
+        elseif ($canceled) {
+            $status = "canceled";
+        }
+        $blob["status"] = $status;
+        
+        $profile = Profile::Lookup($profile_id, $version);
+        if ($profile) {
+            $blob["profile_name"] = $profile->name();
+            $blob["profile_uuid"] = $profile->uuid();
+        }
+        else {
+            $blob["profile_name"] = $profile_name;
+        }
+        
+        #
+        # If arows non-zero, then we use that for aggregate_urn,
+        # and if its more then 1, we need to consume the extras rows
+        # to get the rest of the aggregate urns.
+        #
+        if ($row["aggrows"] > 0) {
+            $cluster = $urn_mapping[$row["aggrow_urn"]];
+
+            for ($i = 1; $i < $row["aggrows"]; $i++) {
+                $row = mysql_fetch_array($query_result);
+                $cluster .= "," . $urn_mapping[$row["aggrow_urn"]];
+            }
+        }
+        else {
+            $cluster = $urn_mapping[$row["aggregate_urn"]];
+        }
+        $blob["name"]     = "<a href='adminextend.php?uuid=$uuid'>$name</a>";
+        $blob["project"]  = "<a href='show-project.php?project=$pid'>$pid</a>";
+        $blob["cluster"]        = $cluster;
+        $blob["pcount"]         = $pcount;
+        $blob["phours"]         = $phours;
+        $blob["vcount"]         = $vcount;
+        $blob["created"]        = $created;
+        $blob["expires"]        = $expires;
+        $blob["user_lockdown"]  = ($user_lockdown ? 1 : 0);
+        $blob["admin_lockdown"] = ($admin_lockdown ? 1 : 0);
+        $blob["lockdown"]       = $lockdown;
+        $blob["extension_requested"] = $extending;
+
+        #
+        # For admins, we includes a filters field.
+        #
+        $filters = array();
+        if ($lockdown) {
+            $filters[] = "locked";
+        }
+        if ($status == "expired") {
+            $filters[] = "expired";
+        }
+        if ($extending) {
+            $filters[] = "extending";
+        }
+        if (time() - strtotime($created) > (45 * 24 * 3600)) {
+            $filters[] = "old";
+        }
+        $blob["filter"] = implode(",", $filters);
+        
+        $results["$pid:$name"] = $blob;
+    }
+    SPITAJAX_RESPONSE($results);    
+}
+
+# Local Variables:
+# mode:php
+# End:
+?>

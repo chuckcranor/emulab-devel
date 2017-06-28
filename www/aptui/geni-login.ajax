@@ -394,7 +394,7 @@ function Do_VerifySpeaksfor()
     else {
         $blob["url"]   = ($this_user->webonly() ||
                           !Instance::UserHasInstances($this_user)
-                          ? "instantiate.php" : "myexperiments.php");
+                          ? "instantiate.php" : "landing.php");
     }
     session_destroy();
     SPITAJAX_RESPONSE($blob);

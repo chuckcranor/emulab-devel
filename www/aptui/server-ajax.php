@@ -376,6 +376,24 @@ $routing = array("myprofiles" =>
 						      "Do_DeleteNews",
 						 "getnews" =>
 						      "Do_GetNews")),
+		 "experiments" =>
+			array("file"    => "experiments.ajax",
+			      "guest"   => false,
+			      "methods" => array("ExperimentList" =>
+                                                     "Do_ExperimentList")),
+		 "approve-projects" =>
+			array("file"    => "approve-projects.ajax",
+			      "guest"   => false,
+			      "methods" => array("ProjectList" =>
+                                                     "Do_ProjectList",
+                                                 "SaveDescription" =>
+                                                     "Do_SaveDescription",
+                                                 "MoreInfo" =>
+                                                     "Do_MoreInfo",
+                                                 "Deny" =>
+                                                     "Do_Deny",
+                                                 "Approve" =>
+                                                     "Do_Approve")),
 );
 
 #

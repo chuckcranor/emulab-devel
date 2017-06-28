@@ -423,36 +423,37 @@ echo " <li class='divider'></li>
 	           }
 	           echo "     </a></li>\n";
 	       }
-		    echo "  <li><a href='dashboard.php'>DashBoard</a></li>";
-		    echo "  <li><a href='cluster-status.php'>Cluster Status</a></li>";
-		    $then = time() - (30 * 3600 * 24);
-		               echo "  <li><a href='activity.php?min=$then'>
+               echo "  <li><a href='dashboard.php'>DashBoard</a></li>";
+               echo "  <li><a href='cluster-status.php'>Cluster Status</a></li>";
+               $then = time() - (30 * 3600 * 24);
+               echo "  <li><a href='activity.php?min=$then'>
                             History Data</a></li>
 		               <li><a href='sumstats.php?min=$then'>Summary Stats</a></li>
-		    <li><a href='ranking.php'>User/Proj Ranking</a></li>";
-		               echo "<li><a href='myexperiments.php?extend=1'>
-                        Extension Requests</a></li>";
-		               echo "<li><a href='myexperiments.php?all=1'>
+		      <li><a href='ranking.php'>User/Proj Ranking</a></li>";
+		               echo "<li><a href='experiments.php#extending'>
+                            Extension Requests</a></li>";
+		               echo "<li><a href='experiments.php#all'>
                             All Experiments</a></li>
 		                 <li><a href='myprofiles.php?all=1'>
                             All Profiles</a></li>
                                  <li><a href='list-reservations.php'>
                             All Reservations</a></li>
-				              <li><a href='list-datasets.php?all=1'>
+ 		                 <li><a href='list-datasets.php?all=1'>
                             All Datasets</a></li>
-					                   <li><a href='images.php?all=1'>
+                                 <li><a href='images.php?all=1'>
                             All Images</a></li>
-							                <li><a href='lists.php'>
+                                 <li><a href='lists.php'>
                             Users/Projects</a></li>
-												               <li><a href='edit-news.php'>
-														   Add a news item</a></li>";
-													                  echo " </ul>
-    </li>\n";
+                                 <li><a href='edit-news.php'>
+                            Users/Projects</a></li>
+                                 <li><a href='approve-projects.php'>
+                            Approve new projects</a></li>";
+                               echo " </ul>
+        </li>\n";
     }
-    
-    }
-echo "</ul>";
-echo "  <ul class='nav navbar-nav navbar-right apt-right'>
+   }
+   echo "</ul>";
+   echo "  <ul class='nav navbar-nav navbar-right apt-right'>
     $navbar_status
     $navbar_right
     <li class='apt-left'>

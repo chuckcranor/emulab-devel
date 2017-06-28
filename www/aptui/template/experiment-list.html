@@ -1,3 +1,10 @@
+<style type="text/css">
+ .nowrap {  white-space: nowrap; }
+
+ .hidden-column {
+     display: none;
+ }
+</style>
 <div>
   <table class='tablesorter' id='experiments_table'>
     <thead>
@@ -17,6 +24,7 @@
 	<th>VMs</th>
 	<th>Created</th>
 	<th>Expires</th>
+	<th class="hidden-column">Filters</th>
       </tr>
     </thead>
     <tbody>
@@ -40,10 +48,22 @@
 	  <td><%- value.pcount %></td>
 	  <td><%- value.phours %></td>
 	  <td><%- value.vcount %></td>
-	  <td class="format-date"><%- value.created %></td>
-	  <td class="format-date"
-	      <% if (value.lockdown) { %>style='color: red;'<% } %>>
-	    <%- value.expires %>
+	  <td class="format-date nowrap">
+	    <%- value.created %></td>
+	  <td class="format-date nowrap"
+	      <% if (value.lockdown) { %>
+		<% if (_.has(value, "user_lockdown") && value.user_lockdown){ %>
+   	              style='color: blue;'
+		<% } else { %>
+		      style='color: red;'
+		<% } %>
+	      <% } %>
+	  ><%- value.expires %>
+	  </td>
+	  <td class="hidden-column">
+	    <% if (_.has(value, "filter")) { %>
+	      <%- value.filter %>
+	    <% } %>
 	  </td>
 	</tr>
       <% }); %>
