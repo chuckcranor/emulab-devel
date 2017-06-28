@@ -3642,9 +3642,12 @@ sub DeleteImage($)
     # accidental removal of images not belonging to current user.
     # Note that not all images have the creator_urn set (yet).
     #
-    if (defined($creator_urn) &&
-	!($creator_urn eq $user->urn() ||
-	  $creator_urn eq $ENV{'REALGENIURN'})) {
+    if (!((defined($creator_urn) &&
+	   !($creator_urn eq $user->urn() ||
+	     $creator_urn eq $ENV{'REALGENIURN'})) ||
+	  ($user->IsLocal() &&
+	   $image->AccessCheck($user->emulab_user(),
+			       EmulabConstants::TB_IMAGEID_DESTROY())))) {
 	return GeniResponse->Create(GENIRESPONSE_FORBIDDEN, undef,
 		    "Not your image; please specify original creator urn")
 	    if (!defined($overide_urn) || $overide_urn ne $creator_urn);
@@ -3658,6 +3661,10 @@ sub DeleteImage($)
     # Delete only the version if directed to.
     my $opt = (defined($imagevers) ? "-V" : "");
     $opt   .= (defined($impotent) && $impotent ? " -n" : "");
+    $opt   .= " -F"
+	if (($user->IsLocal() && $user->emulab_user()->admin() &&
+	     $image->AccessCheck($user->emulab_user(),
+				 EmulabConstants::TB_IMAGEID_DESTROY())));
     $opt   .= " $imageid";
     $opt   .= (defined($imagevers) ? ":$imagevers" : "");
     my $output = GeniUtil::ExecQuiet("$DELETEIMAGE -p $opt");
