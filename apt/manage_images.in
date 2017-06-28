@@ -42,9 +42,6 @@ my $debug       = 0;
 my $webtask_id;
 my $webtask;
 
-# For development.
-my $usemydevtree = 0;
-
 #
 # Configure variables
 #
@@ -53,6 +50,10 @@ my $TBOPS         = "@TBOPSEMAIL@";
 my $OURDOMAIN     = "@OURDOMAIN@";
 my $MYURN         = "urn:publicid:IDN+${OURDOMAIN}+authority+cm";
 my $MANAGEPROFILE = "$TB/bin/manage_profile";
+my $MAINSITE      = @TBMAINSITE@;
+
+# For development.
+my $usemydevtree = ($MAINSITE ? 0 : 0);
 
 #
 # Untaint the path
@@ -323,7 +324,8 @@ sub DoListImages()
 	#
 	# And for each version of the image.
 	#
-	foreach my $image (@versions) {
+	while (@versions) {
+	    my $image = shift(@versions);
 	    my $urn = $image->{'urn'};
 	    my @using = ();
 	    $image->{'using'} = [];
@@ -334,11 +336,21 @@ sub DoListImages()
 		if (APT_Profile::ImageInfo::FindProfilesUsing($urn, \@using));
 
 	    #
-	    # No references *currently* means we can delete the image. 
+	    # No references *currently* means we can delete the image.
 	    #
 	    if (!@using) {
-		$image->{'candelete'} = 1;
-		$ref->{'inactive'}++;
+		#
+		# Unless the naked image is being used, and this is the
+		# highest numbered image.
+		#
+		if (@nakedusing && !@versions) {
+		    $ref->{'candelete'} = 0;
+		    $image->{'using'} = $ref->{'using'};
+		}
+		else {
+		    $image->{'candelete'} = 1;
+		    $ref->{'inactive'}++;
+		}
 		next;
 	    }
 	    # Reset candelete to no for entire image. See above.
@@ -493,14 +505,14 @@ sub DoDeleteImage()
 	    my $vers = $version->version();
 	    my $uuid = $version->uuid();
 	    
-	    print "Deleting version $vers\n";
+	    print "Deleting version $uuid:$vers\n";
 	    my $opt = ($impotent ? "-n" : "");
 
 	    my $output =
 		emutil::ExecQuiet("$MANAGEPROFILE delete -k $opt $uuid");
 	    print $output;
 	    if ($?) {
-		fatal("Could not delete version $vers");
+		fatal("Could not delete version $uuid:$vers");
 	    }
 	}
     }
