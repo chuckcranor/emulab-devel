@@ -507,7 +507,6 @@ function ClassicImageList($target)
         $blob["creator"]     = $row["creator"];
         $blob["creator_idx"] = $row["creator_idx"];
         $blob["urn"]         = $urn;
-        $blob["filter"]      = implode(",", $filters);
 	$blob["url"]         = $TBBASE . "/" .
                              CreateURL("showimageid",
                                        URLARG_IMAGEID, $imageid);
