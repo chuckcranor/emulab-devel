@@ -444,10 +444,10 @@ echo " <li class='divider'></li>
                             All Images</a></li>
                                  <li><a href='lists.php'>
                             Users/Projects</a></li>
-                                 <li><a href='edit-news.php'>
-                            Users/Projects</a></li>
                                  <li><a href='approve-projects.php'>
-                            Approve new projects</a></li>";
+                            Approve new projects</a></li>
+                                 <li><a href='edit-news.php'>
+                            Add a news item</a></li>";
                                echo " </ul>
         </li>\n";
     }
