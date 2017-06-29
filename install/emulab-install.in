@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2010-2016 University of Utah and the Flux Group.
+# Copyright (c) 2010-2017 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -254,7 +254,8 @@ elsif ($server eq "boss") {
 	      'boss/updatesitevars', 'boss/logdirs',
 	      'boss/mfs', 'boss/images', 'boss/xen',
 	      'boss/experiments',
-	      'boss/protogeni', 'boss/firewall', 'boss/servers'
+	      'boss/protogeni', 'boss/firewall', 'boss/servers',
+	      'boss/shellinabox'
 	     );
 }
 elsif ($server eq "fs") {
@@ -270,7 +271,8 @@ elsif ($server eq "ops") {
 	      'exports', 'automount', 'nfsmounts',
 	      'ops/crontab', 'sudoers', 'samba', 'ops/ssh', 'capture',
 	      'ops/rcfiles', 'apache', 'ops/database',
-	      'ops/cvsd', 'ops/flyspray', 'ops/twiki', 'ops/firewall'
+	      'ops/cvsd', 'ops/flyspray', 'ops/twiki', 'ops/firewall',
+	      'ops/shellinabox'
 	     );
 }
 
