@@ -853,6 +853,23 @@ SSLRequire ( %{SSL_CLIENT_S_DN_OU} ne "sslxmlrpc" )
 
 ScriptAlias /protogeni/xmlrpc @prefix@/protogeni/xmlrpc/protogeni-wrapper.pl
 
+<IfDefine PGENI_FCGID>
+LoadModule fcgid_module libexec/apache22/mod_fcgid.so
+FcgidBusyTimeout	   1000
+FcgidIOTimeout		   1000
+FcgidMaxProcessesPerClass  25
+
+<LocationMatch "/protogeni/xmlrpc/(root|cluster)/*">
+    FcgidWrapper @prefix@/protogeni/xmlrpc/cluster-wrapper.pl
+    SetHandler fcgid-script
+    Options +ExecCGI
+    SSLRequireSSL
+    SSLOptions +StdEnvVars +ExportCertData
+    Order deny,allow
+    allow from all
+</LocationMatch>
+</IfDefine>
+
 <Directory "@prefix@/www/protogeni">
 	SSLRequireSSL
 	Order deny,allow
