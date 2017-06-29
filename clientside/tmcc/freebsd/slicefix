@@ -979,7 +979,12 @@ EOF1
 	    $BINDIR/osconfig -m /mnt -D $rootdev -s FreeBSD postload
 	fi
 
-	umount $rootdev
+	umount $rootdev || {
+	    echo "WARNING: unmount of FS failed, beware corruption"
+	    sync
+	    sleep 2
+	    umount $rootdev
+	}
 
 	# XXX need to fixup FS, see big comment above
 	if [ "x$vers" != "x4" -a -n "$OLDBSD" ]; then
@@ -1083,6 +1088,25 @@ dolinux() {
 	    rootdev=/dev/${disk}s${part}
 	fi
 
+	needfsck=0
+
+	#
+	# XXX FreeBSD 9.x had a buggy implementation of support for the
+	# Linux dir_index feature that could cause filesystem corruption.
+	# If we are a FreeBSD 9.x kernel and that feature is enabled,
+	# we turn off the feature, make our changes, reenable the feature
+	# and then run e2fsck to re-index the directories.
+	#
+	vers=`uname -v | sed -e 's/FreeBSD \([0-9][0-9]*\).*/\1/'`
+	GOTDI=""
+	if [ -x /usr/local/sbin/dumpe2fs -a "x$vers" = "x9" ]; then
+	    GOTDI=`dumpe2fs -h $rootdev 2>/dev/null | grep '^Filesystem features:.*dir_index'`
+	    if [ -n "$GOTDI" ]; then
+		tune2fs -O '^dir_index' $rootdev
+		needfsck=1
+	    fi
+	fi
+
 	#
 	# See if there is a valid filesystem UUID to use in fstab and grub.
 	#
@@ -1171,7 +1195,6 @@ dolinux() {
 	# If there's a GRUB config file, update all root=X kernel params.
 	# Also fix up console parameters.
 	#
-	needfsck=0
 	fgconf=""
 	for d in grub2 grub; do
 	    for f in grub.conf grub.cfg menu.lst; do
@@ -1565,16 +1588,39 @@ EOF7
 		-D $rootdev -s Linux postload
 	fi
 
-	umount $rootdev
+	umount $rootdev || {
+	    echo "WARNING: unmount of FS failed, beware corruption"
+	    sync
+	    sleep 2
+	    umount $rootdev
+	}
 
 	#
-	# XXX woeful hack. On an SELinux-enabled filesystem, grub.conf
+	# There are a couple of conditions under which we might need to fsck:
+	#
+	# XXX woeful hack I: on an SELinux-enabled filesystem, grub.conf
 	# might have an SELinux context and the BSD extfs implmentation
 	# doesn't know how to deal with extended attributes and leaves
 	# the FS in an inconsistent state. So if we changed grub.conf,
 	# we must fsck the filesystem to clean up.
 	#
-	if [ $needfsck -ne 0 -a -e /mnt/etc/selinux/config ]; then
+	# XXX woeful hack II: on a FreeBSD 9.x MFS and an EXT filesystem
+	# with the dir_index feature set ($GOTDI != ""), we had to disable
+	# that feature above to avoid filesystem corruption. We need to
+	# re-enable that feature and clean up the filesystem.
+	#
+	if [ $needfsck -ne 0 ]; then
+	    if [ -n "$GOTDI" ]; then
+		tune2fs -O dir_index $rootdev || {
+		    echo "WARNING: could not reenable dir_index"
+		    needfsck=0
+		}
+	    elif [ ! -e /mnt/etc/selinux/config ]; then
+		needfsck=0
+	    fi
+	fi
+
+	if [ $needfsck -ne 0 ]; then
 	    echo -n "  ensuring FS is consistent..."
 	    e2fsck -yf $rootdev >/dev/null 2>&1
 	    if [ $? -ne 0 ]; then
