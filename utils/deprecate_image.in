@@ -108,7 +108,7 @@ my $image = OSImage->Lookup($ARGV[0]);
 if (!defined($image)) {
     fatal("Image does not exist in the DB!");
 }
-if ($this_user->IsAdmin()) {
+if (!$this_user->IsAdmin()) {
     fatal("Only admins can deprecate an image");
 }
 if ($image->IsDeprecated(\$deprecated, \$message, \$iserror)) {
