@@ -146,7 +146,7 @@ RUN_DEPENDS+=	\
 # apache related ports
 RUN_DEPENDS+=	\
 	${LOCALBASE}/libexec/apache22/mod_ssl.so:${PORTSDIR}/${APACHE_PORT} \
-	${LOCALBASE}/libexec/apache22/mod_fastcgi.so:${PORTSDIR}/www/mod_fastcgi
+	${LOCALBASE}/libexec/apache22/mod_fcgid.so:${PORTSDIR}/www/mod_fcgid
 
 # Port versions of current or former "core" utilties
 RUN_DEPENDS+=	\
