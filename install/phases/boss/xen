@@ -55,9 +55,13 @@ sub Install($$$)
 	PhaseFail("Could not look up XEN-STD osid")
 	    if (!defined($osinfo));
 
-	my $nextosinfo = OSinfo->LookupByName($XENIMAGE);
+	my $parentosinfo = OSinfo->LookupByName($XENIMAGE);
 	PhaseFail("Could not look up $XENIMAGE osid")
-	    if (!defined($nextosinfo));
+	    if (!defined($parentosinfo));
+
+	my $nextosinfo = OSinfo->LookupByName($images[0]);
+	PhaseFail("Could not look up " . $images[0] . " osid")
+	    if (!defined($parentosinfo));
 
 	my $diskload_osinfo = OSinfo->LookupByName("FRISBEE-MFS-PCVM");
 	PhaseFail("Could not look up FRISBEE-MFS-PCVM osid")
@@ -74,9 +78,9 @@ sub Install($$$)
 	Phase "xenosid", "Updating the XEN-STD osid", sub {
 	    $osinfo->SetNextOS($nextosinfo) == 0
 		or PhaseFail("Could not set the nextosid for XEN-STD");
-	    $osinfo->SetParentOS($nextosinfo) == 0
+	    $osinfo->SetParentOS($parentosinfo) == 0
 		or PhaseFail("Could not set the parent osid for XEN-STD");
-	    $osinfo->SetRunsOnParent($nextosinfo) == 0
+	    $osinfo->SetRunsOnParent($parentosinfo) == 0
 		or PhaseFail("Could not add os_submap entry for XEN-STD");
 	};
 
@@ -100,9 +104,9 @@ sub Install($$$)
 		    $image->SetRunsOnNodeType("pcvm") == 0
 			or PhaseFail("Could not set $imagename to run on pcvm");
 		    # This must be first. 
-		    $osinfo->SetParentOS($nextosinfo) == 0
+		    $osinfo->SetParentOS($parentosinfo) == 0
 			or PhaseFail("Could not set $imagename parent os");
-		    $osinfo->SetRunsOnParent($nextosinfo) == 0
+		    $osinfo->SetRunsOnParent($parentsinfo) == 0
 			or PhaseFail("Could not set $imagename to run on parent");
 		};
 	    }
