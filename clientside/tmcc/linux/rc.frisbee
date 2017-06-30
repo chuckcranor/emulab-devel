@@ -731,12 +731,13 @@ rm -f /tmp/loadinfo.out /tmp/secureloadinfo.out
 # some reason.
 #
 if [ $reboot -eq 1 ]; then
-    $BINDIR/tmcc state RELOADDONEV2
     echo "Waiting for server to reboot us ..."
+    sleep 1
+    $BINDIR/tmcc state RELOADDONEV2
     if [ $IS_REMOTE -eq 1 ]; then
 	sleep 30
     else
-	sleep 240
+	sleep 300
     fi
     echo "No response from server, rebooting myself ..."
     /sbin/reboot

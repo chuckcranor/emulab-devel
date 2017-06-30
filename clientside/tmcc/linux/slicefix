@@ -413,7 +413,7 @@ dofixsshd() {
     else
 	echo "  updating /etc/ssh/sshd_config"
 
-	sed -i .preemulab \
+	sed -i \
 	    -e '/^Protocol /d' \
 	    -e '/^PasswordAuthentication /d' \
 	    -e '/^ChallengeResponseAuthentication /d' \
