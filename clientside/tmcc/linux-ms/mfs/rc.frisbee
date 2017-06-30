@@ -241,7 +241,7 @@ loadone() {
     IMAGEID=`getvar IMAGEID "$_LOADINFO"`
     KEEPALIVE=`getvar KEEPALIVE "$_LOADINFO" 0`
     OSVERSION=`getvar OSVERSION "$_LOADINFO" 0`
-    HEARTBEAT=`getvar HEARTBEAT "$_LOADINFO" -1`
+    HEARTBEAT=`getvar HEARTBEAT "$_LOADINFO" 0`
 
     #
     # One of ADDR or IMAGEID must be set.
@@ -398,9 +398,9 @@ loadone() {
     fi
 
     #
-    # 
+    # Current semantics:
     # HEARTBEAT==0: no heartbeat
-    # ow: send report at specified interval (<= one hour)
+    # ow: enable heartbeat, but let server dictate (-H 0)
     #
     HB=""
     case "$HEARTBEAT" in
@@ -408,12 +408,8 @@ loadone() {
 	    echo "Ignoring bogus HEARTBEAT value \"$HEARTBEAT\""
 	    ;;
 	*)
-	    if [ $HEARTBEAT -le 0 -o $HEARTBEAT -gt 3600 ]; then
-		if [ $HEARTBEAT -ne 0 ]; then
-		    echo "Ignoring bad HEARTBEAT value \"$HEARTBEAT\""
-		fi
-	    else
-		HB="-H $HEARTBEAT"
+	    if [ $HEARTBEAT -gt 0 ]; then
+		HB="-H 0"
 	    fi
 	    ;;
     esac
@@ -576,15 +572,18 @@ fi
 
 $BINDIR/tmcc state RELOADING
 
+#
 # HACK ALERT: If we're reloading we need to zap the superblocks and
 # MBRs of any other disks in the system.  This is to prevent Linux from
 # finding an old filesystem with the same label or UUID and mounting
 # that instead of the right one.  We skip the disks that are mounted
 # and the disk we're going to write to.
+#
 # DOUBLE HACK ALERT: Changed this to zap all disks to avoid having
 # to figure out what the other disks are when loading multiple images.
 # Since a new MBR will be laid down anyway there is no harm in doing
 # this as long as we are sure we are in the reloading experiment.
+#
 case $STATUS in
 *ALLOCATED=emulab-ops/reloading*)
     disks=`find_disks`
@@ -699,10 +698,9 @@ fi
 # some reason.
 #
 if [ $reboot -eq 1 ]; then
-    # XXX let serial output drain
+    echo "`date`: Waiting for server to reboot us ..."
     sleep 2
     $BINDIR/tmcc state RELOADDONEV2
-    echo "`date`: Waiting for server to reboot us ..."
     sleep 30
     echo "`date`: No response from server, rebooting myself ..."
     reboot
