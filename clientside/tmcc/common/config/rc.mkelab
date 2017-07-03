@@ -941,6 +941,7 @@ sub SetupFsNode()
 	$sshdpid = `cat /var/run/sshd.pid`;
 	chomp($sshdpid);
     }
+    system("cp -rp /root/.ssh /root/.ssh.backup");
     system("cp -p /boot/loader.conf /boot/loader.conf.bak");
 
     #
@@ -953,7 +954,7 @@ sub SetupFsNode()
     #
     # XXX prepare is a destructive beast.  It will take out the ld hints
     # file so ld.so won't have a search path.  Repair that now if it is gone
-    # since ops-install will want to start apps that need libraries from
+    # since fs-install will want to start apps that need libraries from
     # /usr/local/lib.
     #
     if (! -r "/var/run/ld-elf.so.hints") {
@@ -972,11 +973,14 @@ sub SetupFsNode()
     # XXX did I mention what an a**hole prepare can be?
     # Put back the sshd pid file that it removed so that that the install
     # scripts can HUP sshd. Also put back the /boot/loader.conf that it
-    # unceremoniously overwrote.
+    # unceremoniously overwrote. Not to mention root's .ssh dir which it
+    # pissed all over.
     #
     if ($sshdpid) {
 	mysystem("echo '$sshdpid' > /var/run/sshd.pid");
     }
+    system("mv /root/.ssh /root/.ssh.old.$$");
+    system("mv /root/.ssh.backup /root/.ssh");
     system("cp -p /boot/loader.conf.bak /boot/loader.conf");
 
     #
@@ -1494,6 +1498,7 @@ sub SetupOpsNode($)
 	$sshdpid = `cat /var/run/sshd.pid`;
 	chomp($sshdpid);
     }
+    system("cp -rp /root/.ssh /root/.ssh.backup");
     system("cp -p /boot/loader.conf /boot/loader.conf.bak");
 
     #
@@ -1506,7 +1511,7 @@ sub SetupOpsNode($)
     #
     # XXX prepare is a destructive beast.  It will take out the ld hints
     # file so ld.so won't have a search path.  Repair that now if it is gone
-    # since fs-install will want to start apps that need libraries from
+    # since ops-install will want to start apps that need libraries from
     # /usr/local/lib.
     #
     if (! -r "/var/run/ld-elf.so.hints") {
@@ -1525,11 +1530,14 @@ sub SetupOpsNode($)
     # XXX did I mention what an a**hole prepare can be?
     # Put back the sshd pid file that it removed so that that the install
     # scripts can HUP sshd. Also put back the /boot/loader.conf that it
-    # unceremoniously overwrote.
+    # unceremoniously overwrote. Not to mention root's .ssh dir which it
+    # pissed all over.
     #
     if ($sshdpid) {
 	mysystem("echo '$sshdpid' > /var/run/sshd.pid");
     }
+    system("mv /root/.ssh /root/.ssh.old.$$");
+    system("mv /root/.ssh.backup /root/.ssh");
     system("cp -p /boot/loader.conf.bak /boot/loader.conf");
 
     #
@@ -2200,11 +2208,12 @@ sub SetupBossNode($)
 	$sshdpid = `cat /var/run/sshd.pid`;
 	chomp($sshdpid);
     }
+    system("cp -rp /root/.ssh /root/.ssh.backup");
     system("cp -p /boot/loader.conf /boot/loader.conf.bak");
 
     #
     # Run the prepare script to clear out the current accounts and such.
-    # From this point on will need to log in as root,
+    # From this point on will need to log in as root.
     #
     print "Clearing out existing accounts and such\n";
     mysystem("$BINDIR/prepare -N");
@@ -2231,11 +2240,14 @@ sub SetupBossNode($)
     # XXX did I mention what an a**hole prepare can be?
     # Put back the sshd pid file that it removed so that that the install
     # scripts can HUP sshd. Also put back the /boot/loader.conf that it
-    # unceremoniously overwrote.
+    # unceremoniously overwrote. Not to mention root's .ssh dir which it
+    # pissed all over.
     #
     if ($sshdpid) {
 	mysystem("echo '$sshdpid' > /var/run/sshd.pid");
     }
+    system("mv /root/.ssh /root/.ssh.old.$$");
+    system("mv /root/.ssh.backup /root/.ssh");
     system("cp -p /boot/loader.conf.bak /boot/loader.conf");
 
     #
