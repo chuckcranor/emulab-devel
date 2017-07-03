@@ -661,6 +661,7 @@ dofreebsd() {
 		    cmp -s /etc/ssh/ssh_host_${k}key /mnt/etc/ssh/ssh_host_${k}key
 		    if [ $? -ne 0 ]; then
 			changehostkeys=1
+			fixit=1
 		    fi
 		fi
 	    done
@@ -1088,6 +1089,18 @@ dolinux() {
 	    rootdev=/dev/${disk}s${part}
 	fi
 
+	#
+	# XXX Ugh, we seem to be facing any number of FS issues. Now we
+	# are seeing cases where the image is not captured cleanly.
+	# In an attempt to compensate for this, we do a precautionary
+	# fsck here out of an abundance of caution.
+	#
+	echo "  running precautionary fsck on $rootdev"
+	e2fsck -p $rootdev >/dev/null 2>&1
+	if [ $? -ne 0 ]; then
+	    echo "WARNING: loaded image had filesystem problems (exit $?)."
+	fi
+	
 	needfsck=0
 
 	#
@@ -1102,6 +1115,7 @@ dolinux() {
 	if [ -x /usr/local/sbin/dumpe2fs -a "x$vers" = "x9" ]; then
 	    GOTDI=`dumpe2fs -h $rootdev 2>/dev/null | grep '^Filesystem features:.*dir_index'`
 	    if [ -n "$GOTDI" ]; then
+		echo "  temporarily disabling EXT dir_index"
 		tune2fs -O '^dir_index' $rootdev
 		needfsck=1
 	    fi
@@ -1611,8 +1625,9 @@ EOF7
 	#
 	if [ $needfsck -ne 0 ]; then
 	    if [ -n "$GOTDI" ]; then
+		echo "  reeabling EXT dir_index"
 		tune2fs -O dir_index $rootdev || {
-		    echo "WARNING: could not reenable dir_index"
+		    echo "WARNING: could not reenable EXT dir_index"
 		    needfsck=0
 		}
 	    elif [ ! -e /mnt/etc/selinux/config ]; then
