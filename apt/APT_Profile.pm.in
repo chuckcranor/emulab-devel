@@ -1887,7 +1887,7 @@ sub FindProfilesUsing($$)
     }
 
     my $query_result =
-	DBQueryWarn("select distinct profileid,version ".
+	DBQueryWarn("select distinct profileid,version,name ".
 		    "   from apt_profile_images ".
 		    "where image=$safe_urn ".
 		    "order by name,version");
@@ -1945,6 +1945,12 @@ AUTOLOAD {
     }
     carp("No such slot '$name' field in class $type");
     return undef;
+}
+
+sub DESTROY {
+    my $self = shift;
+
+    $self->{'DBROW'} = undef;
 }
 
 # _Always_ make sure that this 1 is at the end of the file...
