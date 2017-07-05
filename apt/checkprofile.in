@@ -44,10 +44,12 @@ sub usage()
     print STDERR "  -s  : Print rspec before and after\n";
     print STDERR "  -x  : Only include rspecs with matching token\n";
     print STDERR "  -G  : Also test script based profiles, no RTE of course\n";
-    print STDERR "  -p  : Permissive mode, ignore unsupported stuff\n";
+    print STDERR "  -X  : ONLY script based profiles\n";
+    print STDERR "  -p  : Permissive mode, ignore some unsupported stuff\n";
+    print STDERR "  -v  : Verbose errors\n";
     exit(-1);
 }
-my $optlist    = "dargscx:tGXp";
+my $optlist    = "dargscx:tGXpv";
 my $debug      = 0;
 my $all        = 0;
 my $regress    = 0;
@@ -58,6 +60,7 @@ my $printgl    = 0;
 my $printrspec = 0;
 my $rtecheck   = 0;
 my $permissive = 0;
+my $verbose    = 0;
 my $clause     = "";
 my $profile;
 
@@ -134,6 +137,9 @@ if (defined($options{"s"})) {
 if (defined($options{"t"})) {
     $rtecheck = 1;
 }
+if (defined($options{"v"})) {
+    $verbose = 1;
+}
 if (defined($options{"x"})) {
     $clause = "where rspec like '%" . $options{"x"} . "%'";
 }
@@ -169,7 +175,7 @@ else {
 	next
 	    if (!defined($profile));
 	next
-	    if (defined($profile->script()) && !$doscript);
+	    if (defined($profile->script()) && !($doscript || $norspec));
 	next
 	    if (!defined($profile->script()) && $norspec);
 
@@ -231,33 +237,40 @@ sub CheckProfile($)
 	$output = emutil::ExecQuiet("$RUNGENILIB $filename");
 	if ($?) {
 	    print STDERR $output;
-	    print STDERR "*** $RUNGENILIB failed\n";
+	    print STDERR "*** $RUNGENILIB failed for $profile\n";
 	    goto bad;
 	}
 	if ($printrspec) {
 	    print $output;
 	}
 	if ($compare) {
-	    my $rspec1 = eval { APT_Rspec->new($profile->rspec(),$permissive) };
+	    my $rspec1 = eval { APT_Rspec->new($profile->rspec(),
+					       $permissive, $verbose) };
 	    if ($@) {
+		print STDERR "*** " if ($@ !~ /^\*\*\* /);
 		print STDERR $@;
-		print STDERR "*** Could not parse profile rspec into object\n";
+		print STDERR "*** Could not parse $profile input ".
+		    "rspec into object\n";
 		goto bad;
 	    }
-	    my $rspec2 = eval { APT_Rspec->new($output, $permissive) };
+	    my $rspec2 = eval { APT_Rspec->new($output,
+					       $permissive, $verbose) };
 	    if ($@) {
+		print STDERR "*** " if ($@ !~ /^\*\*\* /);
 		print STDERR $@;
-		print STDERR "*** Could not parse output rspec into object\n";
+		print STDERR "*** Could not parse $profile output ".
+		    "rspec into object\n";
 		goto bad;
 	    }
 	    if ($rspec1->Compare($rspec2)) {
-		print STDERR "*** rspecs comparison failed\n";
+		print STDERR "*** rspec comparison failed for $profile\n";
 		goto bad;
 	    }
 	}
 	if ($rtecheck) {
 	    system("$RTECHECK $filename");
 	    if ($?) {
+		print STDERR "*** rtecheck failed for $profile\n";
 		goto bad;
 	    }
 	}
@@ -302,20 +315,26 @@ sub CheckScriptProfile($)
 	    #
 	    # Compare current rspec against newly generated rspec.
 	    #
-	    my $rspec1 = eval { APT_Rspec->new($profile->rspec(), $permissive)};
+	    my $rspec1 = eval { APT_Rspec->new($profile->rspec(),
+					       $permissive, $verbose)};
 	    if ($@) {
+		print STDERR "*** " if ($@ !~ /^\*\*\* /);
 		print STDERR $@;
-		print STDERR "*** Could not parse profile rspec into object\n";
+		print STDERR "*** Could not parse $profile input ".
+		    "rspec into object\n";
 		goto bad;
 	    }
-	    my $rspec2 = eval { APT_Rspec->new($output, $permissive) };
+	    my $rspec2 = eval { APT_Rspec->new($output,
+					       $permissive, $verbose) };
 	    if ($@) {
+		print STDERR "*** " if ($@ !~ /^\*\*\* /);
 		print STDERR $@;
-		print STDERR "*** Could not parse output rspec into object\n";
+		print STDERR "*** Could not parse $profile output ".
+		    "rspec into object\n";
 		goto bad;
 	    }
 	    if ($rspec1->Compare($rspec2)) {
-		print STDERR "*** rspecs comparison failed\n";
+		print STDERR "*** rspec comparison failed for $profile\n";
 		goto bad;
 	    }
 	}
