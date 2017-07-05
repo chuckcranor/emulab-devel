@@ -2161,6 +2161,12 @@ sub vnodePreConfig($$$$$){
     }
   done:
     mysystem("umount $dev");
+
+    # XXX tmp
+    if ($vninfo->{'os'} eq "FreeBSD" && -x "$FSCKUFS") {
+	mysystem2("$FSCKUFS -yf $dev");
+    }
+
     # XXX let vnodesetup exit early
     if ($vsrelease eq "early" && $retval == 0) {
 	TBDebugTimeStamp("vnodePreConfig: touching $VMS/$vnode_id/running");
@@ -5294,7 +5300,7 @@ sub createThinPool($)
     }
 
     # Try to make it
-    if (mysystem2("lvcreate -i$num -L ${poolsize}g ".
+    if (mysystem2("lvcreate -Zy -i$num -L ${poolsize}g ".
 		  "--type thin-pool --thinpool $POOL_NAME $VGNAME")) {
 	print STDERR "createThinPool: could not create ${poolsize}g ".
 	    "thin pool\n";
@@ -5372,7 +5378,7 @@ again:
 	$flag = ALLOC_NOPOOL();
     }
     if ($flag == ALLOC_NOPOOL() || $flag == ALLOC_PREFERNOPOOL) {
-	if (!mysystem2("lvcreate -L $size -n $name -i${STRIPE_COUNT} ".
+	if (!mysystem2("lvcreate -Zy -L $size -n $name -i${STRIPE_COUNT} ".
 		       "$VGNAME")) {
 	    return 0;
 	}
