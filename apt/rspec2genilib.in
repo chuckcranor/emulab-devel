@@ -45,13 +45,15 @@ sub usage()
     print STDERR "  -r       - Regression test; run geni-lib, compare rspecs\n";
     print STDERR "  -t       - Do not add stub docstring (for regression)\n";
     print STDERR "  -p       - Permissive mode, ignore unsupported stuff\n";
+    print STDERR "  -v       - Verbose mode, print extra errors\n";
     exit(-1);
 }
-my $optlist    = "do:rs:tp";
+my $optlist    = "do:rs:tpv";
 my $debug      = 0;
 my $regress    = 0;
 my $nodocstr   = 0;
 my $permissive = 0;
+my $verbose    = 0;
 my $ofile;
 my $rfile;
 
@@ -114,6 +116,9 @@ if (defined($options{"o"})) {
 if (defined($options{"p"})) {
     $permissive = 1;
 }
+if (defined($options{"v"})) {
+    $verbose = 1;
+}
 if (defined($options{"r"})) {
     $regress  = 1;
     $nodocstr = 1;
@@ -141,7 +146,7 @@ if ($?) {
     print STDERR $xmlerrors;
     fatal("rspec is not well formed");    
 }
-my $rspec = APT_Rspec->new($rspecfile, $permissive);
+my $rspec = APT_Rspec->new($rspecfile, $permissive, $verbose);
 fatal("Could not create rspec object")
     if (!defined($rspec));
 
@@ -160,7 +165,7 @@ sub GenerateNodeStatements($)
 	#
 	# Create the nodes.
 	#
-	if ($ntype eq "emulab-xen") {
+	if ($ntype eq "emulab-xen" || $ntype eq "default-vm") {
 	    $node->addStatement("$ntag = request.XenVM('$client_id')");
 
 	    #
@@ -249,11 +254,25 @@ sub GenerateNodeStatements($)
 	    # interface, so that makes it easier.
 	    #
 	    my ($iface) = values(%{$node->{'ifaces'}});
-	    my ($tmp,$if) = split(":", $iface->{'client_id'});
-	    $if = $tmp if (!defined($if));
+	    my $iface_id = $iface->{'client_id'};
+
+	    #
+	    # geni-lib is going to name the interfaces as node_id:iface_id
+	    # so we have to careful to strip existing node_id from the id
+	    # in case the rspec came from a geni-lib script. But geni-lib
+	    # will not prepend the node_id if it is already in : format,
+	    # so if the user named it whacky:iface_id, we are going to
+	    # use that.
+	    #
+	    if ($iface_id =~ /^([^:]*):(.*)$/) {
+		if ($1 eq $client_id) {
+		    $iface_id = $2;
+		}
+	    }
 
 	    $node->addStatement(
-		"$ntag = request.RemoteBlockstore('$client_id',$mount,'$if')");
+		"$ntag = request.RemoteBlockstore('$client_id', ".
+		"$mount, '$iface_id')");
 	}
 	else {
 	    $node->addStatement("$ntag = request.RawPC('$client_id')");
