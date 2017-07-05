@@ -353,20 +353,26 @@ if (-f "/root/$HISTORY") {
 }
 
 #
-# Remove /root/.ssh and then regenerate a clean version with only an
-# approved authorized_keys file.
+# Remove /root/.ssh and then regenerate an empty directory.
+# We don't want any Utah specific keys tainting the images.
 #
 print "Cleaning root's .ssh directory ...\n";
-if (system("rm -rf $ROOTSSHDIR.bak") ||
-    system("mv $ROOTSSHDIR $ROOTSSHDIR.bak")) {
-    die("Could not move $ROOTSSHDIR to $ROOTSSHDIR.bak");
-}
-if (! -x "$BINDIR/rc/rc.localize" || system("$BINDIR/rc/rc.localize boot")) {
-    system("rm -rf $ROOTSSHDIR");
-    system("mv $ROOTSSHDIR.bak $ROOTSSHDIR");
+if (system("rm -rf $ROOTSSHDIR") ||
+    system("mkdir -p -m 700 $ROOTSSHDIR") ||
+    system("chown root:root $ROOTSSHDIR")) {
     die("Could not clean root .ssh directory");
 }
-system("rm -rf $ROOTSSHDIR.bak");
+
+#
+# XXX unlike the root .ssh directory above, the proper host keys will
+# not be restored when the node reboots following taking the image.
+# Thus the node will wind up with new unique host keys after reboot and
+# will likely sow confusion for anyone ssh'ing in after that. Arguably,
+# the host keys should be configured on every boot like the root
+# authorized_keys file is (in rc.localize).
+#
+#print "Removing SSH host keys ...\n";
+#system("rm -rf /etc/ssh/ssh_host_*key /etc/ssh/ssh_host_*key.pub");
 
 print "Cleaning mail spool files ...\n";
 system("rm -rf $MAILDIR/*");
