@@ -43,6 +43,9 @@ use GeniHRN;
 my $TB		  = "@prefix@";
 my $OURDOMAIN     = "@OURDOMAIN@";
 
+# This is a global instead of class.
+my $verbose       = 0;
+
 # Protos;
 sub CompareHashes($$$);
 sub CompareLists($$$);
@@ -50,9 +53,9 @@ sub CompareLists($$$);
 #
 # Parse an rspec into nice perl things.
 #
-sub new($$;$)
+sub new($$;$$)
 {
-    my ($class, $rspecfile, $permissive) = @_;
+    my ($class, $rspecfile, $permissive, $verbose_mode) = @_;
     my %namespaces = ();
     my $rspec;
 
@@ -87,6 +90,10 @@ sub new($$;$)
 	"permissive"        => (defined($permissive) ? $permissive : 0),
     };
     bless($self, $class);
+
+    if (defined($verbose_mode) && $verbose_mode) {
+	$verbose = 1;
+    }
 
     #
     # Process the Tour.
@@ -155,6 +162,10 @@ sub new($$;$)
 		    # We see a lot of empty steps
 		    $tour->{'steps'} = \@steps
 			if (scalar(@steps));
+		    last SWITCH;
+		};
+		/^#(comment|text)$/i && do {
+		    # Maybe we should do something comment lines.
 		    last SWITCH;
 		};
 		fatal("Unknown element in rspec_tour: $name");
@@ -412,7 +423,7 @@ sub CompareValues($$$)
 	if (!defined($val1));
     $val2 = "undef"
 	if (!defined($val2));
-    print STDERR "$text: '$val1' != '$val2'\n";
+    print STDERR "*** $text: '$val1' != '$val2'\n";
     return 1;
 }
 
@@ -437,18 +448,26 @@ sub CompareHashes($$$)
 	else {
 	    $msg = "rspec one has a different count then rspec two";
 	}
-	print STDERR "${text}: $msg\n";
+	if ($verbose) {
+	    print STDERR Dumper($h1);
+	    print STDERR Dumper($h2);
+	}
+	print STDERR "*** ${text}: $msg\n";
 	return 1;
     }
     foreach my $key (sort(keys(%$h1))) {
 	if (!exists($h2->{$key})) {
-	    print STDERR "$text: $key in rspec one but not rspec two\n";
+	    if ($verbose) {
+		print STDERR Dumper($h1);
+		print STDERR Dumper($h2);
+	    }
+	    print STDERR "*** $text: $key in rspec one but not rspec two\n";
 	    return 1;
 	}
 	my $v1 = $h1->{$key};
 	my $v2 = $h2->{$key};
 	if (ref($v1) ne ref($v2)) {
-	    print STDERR "$text: key $key typeof mismatch\n";
+	    print STDERR "*** $text: key $key typeof mismatch\n";
 	    return 1;
 	}
 	if (ref($v1) eq "") {
@@ -469,7 +488,7 @@ sub CompareHashes($$$)
 		if ($v1->Compare($v2));
 	}
 	else {
-	    print STDERR "$text: do not know how to compare $key\n";
+	    print STDERR "*** $text: do not know how to compare $key\n";
 	    return 1;
 	}
     }
@@ -488,7 +507,12 @@ sub CompareLists($$$)
     #print STDERR "CompareLists: $text\n";
 
     if (scalar(@l1) != scalar(@l2)) {
-	print STDERR "$text: rspec one has a different count then rspec two\n";
+	if ($verbose) {
+	    print STDERR Dumper($l1);
+	    print STDERR Dumper($l2);
+	}
+	print STDERR "*** $text: ".
+	    "rspec one has a different count then rspec two\n";
 	return 1;
     }
     while (@l1) {
@@ -496,7 +520,7 @@ sub CompareLists($$$)
 	my $v2 = pop(@l2);
 
 	if (ref($v1) ne ref($v2)) {
-	    print STDERR "$text: typeof mismatch\n";
+	    print STDERR "*** $text: typeof mismatch\n";
 	    return 1;
 	}
 	if (ref($v1) eq "") {
@@ -513,7 +537,7 @@ sub CompareLists($$$)
 		if ($v1->Compare($v2));
 	}
 	else {
-	    print STDERR "$text: do not know how to compare.\n";
+	    print STDERR "*** $text: do not know how to compare.\n";
 	    return 1;
 	}
     }
@@ -561,10 +585,13 @@ sub Compare($$)
 		    if (APT_Rspec::CompareHashes($key, $val1, $val2));
 		last SWITCH;
 	    };
-	    /^(bscounter|namespaces|nodelist|linklist|permissive)$/i && do {
+	    /^(bscounter|namespaces|nodelist|linklist)$/i && do {
 		last SWITCH;
 	    };
-	    print STDERR "Rspec:Compare: Unknown attribute: $key\n";
+	    /^(permissive|verbose)$/i && do {
+		last SWITCH;
+	    };
+	    print STDERR "*** Rspec:Compare: Unknown attribute: $key\n";
 	    return 1;
 	}
     }
@@ -579,7 +606,7 @@ sub CompareToplevelElements($$)
     my ($elements1, $elements2) = @_;
 
     if (scalar(@{$elements2}) != scalar(@{$elements2})) {
-	print STDERR "Rspec:CompareToplevelElements: mismatching length\n";
+	print STDERR "*** Rspec:CompareToplevelElements: mismatching length\n";
 	return -1;
     }
     for (my $index = 0; $index < scalar(@{$elements1}); $index++) {
@@ -606,7 +633,7 @@ sub CompareToplevelElements($$)
 		    if (APT_Rspec::CompareValues($key, $val1, $val2));
 		last SWITCH;
 	    };
-	    print STDERR "Rspec:CompareToplevelElements: unknown $key\n";
+	    print STDERR "*** Rspec:CompareToplevelElements: unknown $key\n";
 	    return -1;
 	}
     }
@@ -621,13 +648,13 @@ sub CompareNodes($$)
     my ($l1, $l2) = @_;
 
     if (scalar(values(%{$l1})) != scalar(values(%{$l2}))) {
-	print STDERR "different number of nodes\n";
+	print STDERR "*** different number of nodes\n";
 	return 1;
     }
 
     foreach my $client_id (sort(keys(%$l1))) {
 	if (!exists($l2->{$client_id})) {
-	    print STDERR "Node $client_id in rspec one but not rspec two\n";
+	    print STDERR "*** Node $client_id in rspec one but not rspec two\n";
 	    return 1;
 	}
 	my $node1 = $l1->{$client_id};
@@ -640,7 +667,7 @@ sub CompareNodes($$)
 	my $ifs2  = $node2->ifaces();
 	
 	if (scalar(values(%{$ifs1})) != scalar(values(%{$ifs2}))) {
-	    print STDERR "different number of ifaces on Node $client_id\n";
+	    print STDERR "*** different number of ifaces on Node $client_id\n";
 	    return 1;
 	}
 	foreach my $iface_id (sort(keys(%$ifs1))) {
@@ -662,7 +689,7 @@ sub CompareNodes($$)
 		    $iface_id = $altid;
 		}
 		else {
-		    print STDERR "iface $iface_id on node $client_id ".
+		    print STDERR "*** iface $iface_id on node $client_id ".
 			"in rspec one but not rspec two\n";
 		    return 1;
 		}
@@ -685,13 +712,13 @@ sub CompareLinks($$)
     my ($l1, $l2) = @_;
 
     if (scalar(values(%{$l1})) != scalar(values(%{$l2}))) {
-	print STDERR "different number of links\n";
+	print STDERR "*** different number of links\n";
 	return 1;
     }
 
     foreach my $client_id (sort(keys(%$l1))) {
 	if (!exists($l2->{$client_id})) {
-	    print STDERR "Link $client_id in rspec one but not rspec two\n";
+	    print STDERR "*** Link $client_id in rspec one but not rspec two\n";
 	    return 1;
 	}
 	my $link1 = $l1->{$client_id};
@@ -705,7 +732,7 @@ sub CompareLinks($$)
 	my $ifs2  = $link2->ifaces();
 	
 	if (scalar(values(%{$ifs1})) != scalar(values(%{$ifs2}))) {
-	    print STDERR "different number of ifaces on link $client_id\n";
+	    print STDERR "*** different number of ifaces on link $client_id\n";
 	    return 1;
 	}
 	foreach my $iface_id (sort(keys(%$ifs1))) {
@@ -729,7 +756,7 @@ sub CompareLinks($$)
 		}
 		else {
 		    #print STDERR "$altid\n";
-		    print STDERR "iface $iface_id in link $client_id ".
+		    print STDERR "*** iface $iface_id in link $client_id ".
 			"in rspec one but not rspec two\n";
 		    return 1;
 		}
@@ -834,6 +861,7 @@ sub services($)			{ return $_[0]->{'services'}; }
 sub pipes($)			{ return $_[0]->{'pipes'}; }
 sub firewall_style($)		{ return $_[0]->{'firewall_style'}; }
 sub firewall_rules($)		{ return $_[0]->{'firewall_rules'}; }
+sub slivertype($)		{ return $_[0]->{'type'}; }
 sub tag($)			{ return $_[0]->{'tag'}; }
 sub fatal($)			{ return APT_Rspec::fatal($_[0]); }
 sub GetTextOrFail($$)		{ return APT_Rspec::GetTextOrFail(@_); }
@@ -879,9 +907,6 @@ sub addNode($$$)
     my $client_id   = GeniXML::GetVirtualId($noderef);
     my $sliver_type = GeniXML::GetVirtualizationSubtype($noderef);
     my $exclusive   = GeniXML::GetExclusive($noderef);
-    if (defined($exclusive)) {
-	$exclusive = ($exclusive ? 1 : 0);
-    }
 
     fatal("Node: missing client_id or sliver_type")
 	if (! defined($client_id));
@@ -891,6 +916,13 @@ sub addNode($$$)
 	if ($rspec->getNode($client_id));
     
     $sliver_type = "raw" if (!defined($sliver_type));
+
+    if (defined($exclusive)) {
+	$exclusive = ($exclusive ? 1 : 0);
+	if ($sliver_type =~ /^(raw-pc|raw)$/) {
+	    $exclusive = undef;
+	}
+    }
     
     my $node = APT_Rspec::Node->new($rspec,
 				    $client_id, $sliver_type, $exclusive);
@@ -1059,7 +1091,10 @@ sub addNode($$$)
 		/^xen$/i && do {
 		    my $settings = GeniXML::GetXenSettings($ref->parentNode);
 		    fatal("Failed to get xen settings")
-			if (!defined($settings));		    
+			if (!defined($settings));
+		    if ($node->slivertype() ne "emulab-xen" && $verbose) {
+			print STDERR "*** $client_id is not a XEN node\n";
+		    }
 		    $node->{"xen_settings"} = $settings;
 		    last SWITCH;
 		};
@@ -1082,6 +1117,9 @@ sub addNode($$$)
 	my $mask         = GeniXML::GetMask($ref, $ref->parentNode);
 	my $component_id = GeniXML::GetNodeId($ref);
 
+	if ($rspec->getIface($client_id)) {
+	    fatal("Duplicate iface $client_id on node " . $node->client_id());
+	}
 	APT_Rspec::Iface->new($rspec, $node,
 			      $client_id, $ip, $mask, $component_id);
     };
@@ -1228,8 +1266,15 @@ sub Compare($$)
 	    };
 	    /^type$/i && do {
 		# Fix up; raw == raw-pc.
-		$val1 = "raw-pc" if (defined($val1) && "$val1" eq "raw");
-		$val2 = "raw-pc" if (defined($val2) && "$val2" eq "raw");
+		$val1 = "raw-pc"
+		    if (defined($val1) && "$val1" eq "raw");
+		$val2 = "raw-pc"
+		    if (defined($val2) && "$val2" eq "raw");
+		# Fix up; default-vm == emulab-xen.
+		$val1 = "emulab-xen"
+		    if (defined($val1) && "$val1" eq "default-vm");
+		$val2 = "emulab-xen"
+		    if (defined($val2) && "$val2" eq "default-vm");
 		
 		return 1
 		    if (APT_Rspec::CompareValues("Node: $client_id: $key",
@@ -1264,7 +1309,7 @@ sub Compare($$)
 	    /^(tag|statements|firewall_rules)$/i && do {
 		last SWITCH;
 	    };
-	    print STDERR "Node:Compare: Unknown attribute: $key\n";
+	    print STDERR "*** Node:Compare: Unknown attribute: $key\n";
 	    return 1;
 	}
     }
@@ -1347,7 +1392,7 @@ sub Compare($$)
 	    /^(tag|statements)$/i && do {
 		last SWITCH;
 	    };
-	    print STDERR "Iface:Compare: Unknown attribute: $key\n";
+	    print STDERR "*** Iface:Compare: Unknown attribute: $key\n";
 	    return 1;
 	}
     }
@@ -1469,6 +1514,10 @@ sub addLink($$$)
 	    };
 	    /^protocol$/i && do {
 		$link->{'protocol'} = $val;
+		last SWITCH;
+	    };
+	    /^vlantag$/i && do {
+		$link->{'vlantag'} = $val;
 		last SWITCH;
 	    };
 	    /^sliver_id$/i && do {
@@ -1725,7 +1774,7 @@ sub Compare($$)
 	    /^(tag|statements|isbslink)$/i && do {
 		last SWITCH;
 	    };
-	    print STDERR "Link:Compare: Unknown attribute: $key\n";
+	    print STDERR "*** Link:Compare: Unknown attribute: $key\n";
 	    return 1;
 	}
     }
@@ -1779,14 +1828,15 @@ sub CompareProperties($$)
     if (scalar(values(%{$plist1})) != scalar(values(%{$plist2}))) {
 	my $c1 = scalar(values(%{$plist1}));
 	my $c2 = scalar(values(%{$plist2}));
-	print STDERR "Property count mismatch in link $client_id: $c1!=$c2\n";
+	print STDERR "*** Property count mismatch in link ".
+	    "$client_id: $c1!=$c2\n";
 	return 1;
     }
     foreach my $key (sort(keys(%$plist1))) {
 	my $prop1 = $plist1->{$key};
 
 	if (!exists($plist2->{$key})) {
-	    print STDERR "property $key in link $client_id ".
+	    print STDERR "*** property $key in link $client_id ".
 		"in rspec one but not rspec two\n";
 	    return 1;
 	}
@@ -1995,8 +2045,8 @@ sub Compare($$)
 		next;
 	    }
 	    else {
-		print STDERR "$altid\n";
-		print STDERR "property $id in link $link_id ".
+		#print STDERR "$altid\n";
+		print STDERR "*** property $id in link $link_id ".
 		    "in rspec one but not rspec two\n";
 		return 1;
 	    }
