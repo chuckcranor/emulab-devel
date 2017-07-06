@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2000-2016 University of Utah and the Flux Group.
+# Copyright (c) 2000-2017 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -336,10 +336,6 @@ if ((exists($editimageid_args{"description"}) ?
      $editimageid_args{"description"} eq "" :
      $image->description() eq "")) {
     UserError("Description: Missing Field");
-}
-if (exists($editimageid_args{"description"})) {
-    $editimageid_args{"description"} = 
-	escapeshellarg($editimageid_args{"description"});
 }
 
 #
