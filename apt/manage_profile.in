@@ -214,6 +214,9 @@ elsif ($action eq "listimages") {
 elsif ($action eq "create") {
     exit(CreateProfile());
 }
+else {
+    usage();
+}
 
 #
 # Create/Update a profile. 
