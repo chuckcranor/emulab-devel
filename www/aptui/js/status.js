@@ -1213,10 +1213,16 @@ $(function ()
 	sup.ShowModal('#deletenode_modal');
     }
 	
-    //
-    // Fire up the backend of the ssh tab.
-    //
-    function StartSSH(id, authobject)
+    /*
+     * Fire up the backend of the ssh tab.
+     *
+     * If the local ops node is using a self-signed certificate (typical)
+     * then the ajax call below will fail. But the protocol does not need
+     * to tell is anything specific, so we will just assume that it is the
+     * reason and try to get the user to accept a certificate from the ops
+     * node.
+     */
+    function StartSSH(tabname, authobject)
     {
 	var jsonauth = $.parseJSON(authobject);
 	
@@ -1232,7 +1238,7 @@ $(function ()
 	    var iwidth = "100%";
             var iheight = 400;
 
-            $('#' + id).html('<iframe id="' + id + '_iframe" ' +
+            $('#' + tabname).html('<iframe id="' + tabname + '_iframe" ' +
 			     'width=' + iwidth + ' ' +
                              'height=' + iheight + ' ' +
                              'src=\'' + url + '\'>');
@@ -1240,7 +1246,7 @@ $(function ()
 	    //
 	    // Setup a custom event handler so we can kill the connection.
 	    //
-	    $('#' + id).on("killssh",
+	    $('#' + tabname).on("killssh",
 			   { "url": jsonauth.baseurl + ':' + port + '/quit' +
 			     '?session=' + session },
 			   function(e) {
@@ -1251,6 +1257,16 @@ $(function ()
 			       });
 			   });
 	}
+	var callback_error = function(stuff) {
+	    console.info("SSH failure", stuff);
+	    var url = jsonauth.baseurl + '/accept_cert.html';
+	    // Trigger the kill button to get rid of the dead tab.
+	    $("#" + tabname + "_kill").click();
+	    // Set the link in the modal.
+	    $('#accept-certificate').attr("href", url);
+	    sup.ShowModal('#ssh-failed-modal');
+	};
+	
 	var xmlthing = $.ajax({
 	    // the URL for the request
 	    url: jsonauth.baseurl + '/d77e8041d1ad',
@@ -1268,6 +1284,7 @@ $(function ()
 	    dataType : 'text',
 	});
 	xmlthing.done(callback);
+	xmlthing.fail(callback_error);
     }
 
     //

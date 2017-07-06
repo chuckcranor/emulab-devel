@@ -894,6 +894,39 @@ pre {
       </div>
     </div>
   </div>
+  <div id='ssh-failed-modal' class='modal fade'>
+    <div class='modal-dialog'>
+      <div class='modal-content'>
+	<div class='modal-header'>
+          <center><h4>SSH Failure!</h3></center>
+	</div>
+	<div class='modal-body'>
+	  There was an error trying to set up your SSH shell.
+	  Typically this is because the local server is using a self
+	  signed certificate and your browser is unhappy about it. The
+	  easiest thing to do is click on the link below, accept the
+	  certificate (however your browser does that), and then try
+	  again. 
+	  <br>
+	  <div>
+	    <center>
+	      Click to 
+	      <a href="" target="_blank" id="accept-certificate">
+		accept certificate</a>
+	    </center>
+	  </div>
+	  <br>
+	  <div>
+	    <center>
+              <button class='btn btn-primary btn-sm'
+		      data-dismiss='modal'>
+		Dismiss</button>
+	    </center>
+	  </div>
+	</div>
+      </div>
+    </div>
+  </div>
   <div id='waitwait_div'></div>
   <div id='terminate_div'></div>
   <div id='oops_div'></div>
