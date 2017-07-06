@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2016 University of Utah and the Flux Group.
+# Copyright (c) 2000-2017 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -26,7 +26,7 @@ include("defs.php3");
 chdir("apt");
 include("quickvm_sup.php");
 # Must be after quickvm_sup.php since it changes the auth domain.
-$page_title = "Ranking";
+$page_title = "User/Project List";
 
 #
 # Get current user.
