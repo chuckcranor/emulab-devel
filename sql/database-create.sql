@@ -3630,6 +3630,7 @@ CREATE TABLE `nonlocal_user_accounts` (
   `unix_uid` smallint(5) unsigned NOT NULL auto_increment,
   `created` datetime default NULL,
   `updated` datetime default NULL,
+  `privs` enum('user','local_root') default 'local_root',
   `urn` tinytext,
   `name` tinytext,
   `email` tinytext,
