@@ -61,6 +61,9 @@ $| = 1;
 use lib "@prefix@/lib";
 use libdb;
 use libtestbed;
+use OSImage;
+use Node;
+use NodeType;
 
 # Defined in libdb ...
 my $TBOPSPID    = TBOPSPID();
@@ -340,6 +343,68 @@ if (1) {
     # XXX dhcpd is not running yet so don't need this.
     #
     #mysystem("$TB/sbin/dhcpd_makeconf -ir");
+}
+
+if (1) {
+    #
+    # Need to fix up imported images; there was no type table at the
+    # time of import, so we could not use architecture or type slots
+    # when creating the new image descriptors. Lets just get the list
+    # of images and the list of pc types, and do them all.
+    #
+    my @alltypes = NodeType->AllTypes();
+    
+    my $query_result =
+	DBQueryFatal("select imageid from images where pid='$TBOPSPID'");
+    while (my ($imageid) = $query_result->fetchrow_array()) {
+	my $image = OSImage->Lookup($imageid);
+	if (!defined($image)) {
+	    print STDERR "Could not lookup imageid $imageid\n";
+	    next;
+	}
+	foreach my $type (@alltypes) {
+	    next
+		if ($type->class() ne "pc" || $type->type() eq "pc");
+
+	    # See if we have any actual nodes of this type.
+	    my @nodes = Node->LookupByType($type->type());
+	    next
+		if (!@nodes);
+
+	    $image->SetRunsOnNodeType($type->type());
+	}
+    }
+    #
+    # We also have to set the default image/os for real types, since
+    # the stuff in the table we imported from the outer Emulab refers
+    # to image IDs that are not valid in this inner Emulab. So just
+    # pick whatever UBUNTU image we happen to have.
+    #
+    $query_result =
+	DBQueryFatal("select imageid from images ".
+		     "where imagename like 'UBUNTU%' and pid='$TBOPSPID'");
+    if (!$query_result->numrows) {
+	die("*** $0:\n".
+	    "    Could not find a suitable UBUNTU image");
+    }
+    my ($imageid) = $query_result->fetchrow_array();
+    my $image = OSImage->Lookup($imageid);
+    if (! defined($image)) {
+	die("*** $0:\n".
+	    "    Could not lookup image $imageid");
+    }
+    foreach my $type (@alltypes) {
+	next
+	    if ($type->class() ne "pc" || $type->type() eq "pc");
+
+	# See if we have any actual nodes of this type.
+	my @nodes = Node->LookupByType($type->type());
+	next
+	    if (!@nodes);
+
+	$type->SetAttribute("default_imageid", $image->imageid());
+	$type->SetAttribute("default_osid", $image->imageid());
+    }
 }
 
 #

@@ -80,10 +80,7 @@ rm -f /var/run/frisbeed-*.pid
 args="-C emulab -i @BOSSNODE_IP@"
 # to allow broadcast, uncomment the following line
 #args="$args -x ucast,mcast,bcast"
-# if an inner elab, use outer boss as our parent
-if [ "@ELABINELAB@" = "1" -a -n "@OUTERBOSS_NODENAME@" ]; then
-    args="$args -S @OUTERBOSS_NODENAME@"
-fi
+
 # see if we need to be an IGMP querier
 if [ "@NEEDMCQUERIER@" = "1" ]; then
     args="$args -Q 30"
