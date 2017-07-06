@@ -61,7 +61,7 @@ sub Install($$$)
 
 	my $nextosinfo = OSinfo->LookupByName($images[0]);
 	PhaseFail("Could not look up " . $images[0] . " osid")
-	    if (!defined($parentosinfo));
+	    if (!defined($nextosinfo));
 
 	my $diskload_osinfo = OSinfo->LookupByName("FRISBEE-MFS-PCVM");
 	PhaseFail("Could not look up FRISBEE-MFS-PCVM osid")
@@ -106,7 +106,7 @@ sub Install($$$)
 		    # This must be first. 
 		    $osinfo->SetParentOS($parentosinfo) == 0
 			or PhaseFail("Could not set $imagename parent os");
-		    $osinfo->SetRunsOnParent($parentsinfo) == 0
+		    $osinfo->SetRunsOnParent($parentosinfo) == 0
 			or PhaseFail("Could not set $imagename to run on parent");
 		};
 	    }
