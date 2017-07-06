@@ -493,3 +493,9 @@ DISABLE_NSE=1
 # Sometimes the main page is down in a directory on WWWHOST
 # No trailing '/'!
 #WWW=www.example.emulab.net/emulab-www
+
+# Image directories
+IMAGEDIRECTORIES=1
+
+# Fancy new browser in the console support
+BROWSER_CONSOLE_ENABLE=1
