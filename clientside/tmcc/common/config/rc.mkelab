@@ -229,6 +229,7 @@ my %emulabconfig = (
     "CONFIG_GENIRACK"   => 0,
     "CONFIG_ZFS"	=> 0,
     "CONFIG_AUTOFS"	=> 0,
+    "CONFIG_PORTAL"	=> 0,
 
     # Default protogeni package if LOAD_PROTOGENI is enabled.
     "PGENI_PKG"		=> "emulab-protogeni-1.0",
@@ -3133,6 +3134,13 @@ sub CreateDefsFile($)
 	print OUTDEFS "PROTOGENI_DOMAIN=\"$protogeni_domain\"\n";
 	print OUTDEFS "FANCYBANNER=1\n";
 	print OUTDEFS "ISOLATEADMINS=0\n";
+
+	if ($emulabconfig{"CONFIG_PORTAL"} && !$config_genirack) {
+	    print OUTDEFS "PORTAL_ENABLE=1\n";
+	    print OUTDEFS "PROTOGENI_ISCLEARINGHOUSE=1\n";
+	    print OUTDEFS "PROTOGENI_LOCALUSER=1\n";
+	    print OUTDEFS "PROTOGENI_WEBSITE=${bossnode_hostname}.${ourdomain}\n";
+	}
     }
     if ($emulabconfig{"CONFIG_FIREWALL_BOSS"}) {
 	print OUTDEFS "FIREWALL_BOSS=1\n";
