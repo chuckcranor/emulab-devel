@@ -33,7 +33,6 @@ sub Install($$$)
 		mkdir("$SOURCEDIR", 0770) or
 		    PhaseFail("Unable to make $SOURCEDIR : $!");
 	    }
-	    ExecQuietFatal("$CHOWN elabman $SOURCEDIR");
 	    PhaseSkip("shellinabox already unpacked")
 		if (-e "$SOURCEDIR/shellinabox");
 	    ExecQuietFatal("$TAR zxf $localtarfile -C $SOURCEDIR"); 
@@ -43,7 +42,6 @@ sub Install($$$)
 		mkdir("$BUILDDIR", 0770) or
 		    PhaseFail("Unable to make $BUILDDIR : $!");
 	    }
-	    ExecQuietFatal("$CHOWN elabman $BUILDDIR");
 	    ExecQuietFatal("cd $BUILDDIR ; $SOURCEDIR/shell*/configure ");
 	};
 	Phase "building", "Building shellinabox", sub {
