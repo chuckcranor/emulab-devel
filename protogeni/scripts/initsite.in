@@ -75,6 +75,7 @@ my $GENCRL        = "$TB/sbin/protogeni/gencrl";
 my $GENCRLBUNDLE  = "$TB/sbin/protogeni/gencrlbundle";
 my $INITCERTS	  = "$TB/sbin/protogeni/initcerts";
 my $REGISTERCERTS = "$TB/sbin/protogeni/reregister";
+my $CACONTROL     = "$TB/sbin/protogeni/cacontrol";
 my $MKSYSCERT	  = "$TB/sbin/mksyscert";
 my $MKUSERCERT	  = "$TB/sbin/mkusercert";
 my $BATCHEXP      = "$TB/bin/batchexp";
@@ -337,9 +338,12 @@ Phase "apache", "Updating apache config", sub {
     ExecQuietFatal("$GMAKE -C @top_builddir@/apache pgeni-install");
 };
 Phase "rcconf", "Updating $RCCONF", sub {
+    my $flags = "-DSSL -DPGENI";
+    $flags .= " -DPGENI_FCGID" if ($PORTAL_ENABLE);
+    
     DoneIfEdited($RCCONF);
     AppendToFileFatal($RCCONF,
-		      "${APACHEPREFIX}_flags=\"-DSSL -DPGENI\"",
+		      "${APACHEPREFIX}_flags=\"$flags\"",
 		      "${APACHEPREFIX}_profiles=\"www geni\"",
 		      "${APACHEPREFIX}_geni_configfile=\"$HTTPD_GENI_CONF\"",
 		      "${APACHEPREFIX}_geni_enable=\"YES\"");
@@ -509,18 +513,35 @@ if (!$asch) {
     };
 }
 else {
+    # Restart to pick up initial CRL created above.
+    Phase "apcahe", "Restarting Apache", sub {
+	ExecQuietFatal("$APACHE_START restart");
+    };
+    
     #
-    # But on the clearinghouse, we have to generate the CRL bundle for 
-    # downloading by remote sites.
+    # Need to initialize CAs in the geni-ch DB with our own, so we can
+    # talk to the CH from ourself.
     #
+    Phase "cacontrol", "Running cacontrol", sub {
+	ExecQuietFatal("$CACONTROL -i");
+    };
+
+    #
+    # Now we can post our initial CRL to our CH database. Yes, we could
+    # just do insert into the DB, but if this fails we might as bail now. 
+    #
+    Phase "postcrl", "Posting initial CRL", sub {
+	ExecQuietFatal("$POSTCRL -f");
+    };
+    
+    #
+    # On clearinghouse, we have to generate the CRL bundle for downloading
+    # by remote sites each night.
+    # 
     Phase "crontab", "Updating $CRONTAB", sub {
 	DoneIfEdited($CRONTAB);
 	AppendToFileFatal($CRONTAB,
 			  "10  4  *  *  *  root  $GENCRLBUNDLE");
-    };
-    # Restart to pick up initial CRL created above.
-    Phase "apcahe", "Restarting Apache", sub {
-	ExecQuietFatal("$APACHE_START restart");
     };
 }
 
@@ -537,11 +558,6 @@ if (!$asch && !$noregister) {
 	
 	ExecQuietFatal("$REGISTERCERTS");
     };
-}
-if ($asch) {
-    #
-    # Run cacontrol -i.
-    #
 }
 exit(0);
 
