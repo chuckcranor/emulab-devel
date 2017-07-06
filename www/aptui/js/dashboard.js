@@ -18,7 +18,7 @@ $(function ()
     function DashboardLoop()
     {
 	var callback = function(json) {
-	    console.log(json);
+	    //console.log(json);
 	    if (json.code) {
 		console.log("Could not get dashboard data: " + json.value);
 		return;
@@ -69,7 +69,7 @@ $(function ()
 		}
 	    });
 	    UpdateTimes();
-	    UpdateClusterSummary();
+	    UpdateClusterSummary(json.value.typecounts);
 	}
 	var xmlthing = sup.CallServerMethod(null, "dashboard",
 					    "GetStats", null);
@@ -90,7 +90,7 @@ $(function ()
     /*
      * Grab the JSON files and reduce it down.
      */
-    function UpdateClusterSummary()
+    function UpdateClusterSummary(typecounts)
     {
 	var UpdateTable = function() {
 	    var html = "";
@@ -104,10 +104,35 @@ $(function ()
 		    "<td>" + site.total + "</td>" +
 		    "</tr>";
 	    });
-	    console.info(html);
+	    //console.info(html);
 	    $('#cluster-status-tbody').html(html);
 	};
-	
+
+	if (!window.MAINSITE) {
+	    $.each(typecounts, function(site, types) {
+		var stats = {"total" : 0,
+			     "inuse" : 0,
+			     "ratio" : 0,
+			     "types" : {}};
+	    
+		$.each(types, function(type, data) {
+		    var inuse = data.count - data.free;
+		    var total = data.count - 0;
+		
+		    stats.types[data.type] =
+			{"total" : total,
+			 "inuse" : inuse,
+			 "ratio" : Math.round((inuse / total) * 100)}; 
+						  
+		    stats.total += total;
+		    stats.inuse += inuse;
+		    stats.ratio = Math.round((stats.inuse / stats.total) * 100);
+		});
+		clusterStats[site] = stats;
+	    });
+	    UpdateTable();
+	    return;
+	}
 	for (var index = 0; index < clusterFiles.length; index++) {
 	    var jqxhr = $.getJSON(clusterFiles[index], function(blob) {
 		$.each(blob.children, function(idx, site) {

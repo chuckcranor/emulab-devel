@@ -368,6 +368,31 @@ function Do_GetStats()
     }
     $dashboard["lockdown"] = $lockdown;
 
+    #
+    # Grab the node type counts for all clusters
+    #
+    $typecounts = array();
+    
+    $query_result =
+        DBQueryFatal("select nickname,type,count,free ".
+                     "   from apt_aggregate_nodetypes as t ".
+                     "left join apt_aggregates as a on a.urn=t.urn");
+    
+    while ($row = mysql_fetch_array($query_result)) {
+        $site = $row["nickname"];
+        $type = $row["type"];
+        
+        $blob = array("site"  => $site,
+                      "type"  => $type,
+                      "count" => $row["count"],
+                      "free"  => $row["free"]);
+        if (!array_key_exists($site, $typecounts)) {
+            $typecounts[$site] = array();
+        }
+        $typecounts[$site][$type] = $blob;
+    }
+    $dashboard["typecounts"] = $typecounts;
+
     SPITAJAX_RESPONSE($dashboard);
 }
 
