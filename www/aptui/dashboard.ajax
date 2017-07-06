@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2016 University of Utah and the Flux Group.
+# Copyright (c) 2000-2017 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -146,7 +146,7 @@ function Do_GetStats()
     $query_result =
         DBQueryFatal("select creator,creator_idx,count(creator) as ecount, ".
                      "   sum(physnode_count) as pcount ".
-                     "from apt_instances group by creator ".
+                     "from apt_instances group by creator,creator_idx ".
                      "order by pcount desc limit 10");
     while ($row = mysql_fetch_array($query_result)) {
         $creator     = $row["creator"];
