@@ -143,6 +143,12 @@ sub Install($$$)
 		my $pname = GetPackage("py27-Flask", $packagedir);
 		AddPackage($pname, $packagedir);
 	    };
+	    Phase "mod_fcgid", "Looking for mod_fcgid and installing", sub {
+		DoneIfPackageInstalled("mod_fcgid");
+		ExecQuietFatal("pkg install mod_fcgid");
+		ExecQuietFatal("chown nobody:nobody /var/run/fcgidsock");
+		ExecQuietFatal("chmod 770 /var/run/fcgidsock");
+	    };
 	}
     };
 
