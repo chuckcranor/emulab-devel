@@ -1158,7 +1158,7 @@ sub DumpDBGoo()
 	       "    Could not dump table reserved\n");
 
     # Copy tiplines table for all nodes so web form gives us a console icon!
-    DBQueryWarn("select t.tipname,t.node_id,'',t.disabled,0,0,NULL ".
+    DBQueryWarn("select t.tipname,t.node_id,'',t.disabled,0,0,NULL,NULL,0,0 ".
 		"from reserved as r ".
 		"left join virt_nodes as v on v.vname=r.vname and ".
 		"     v.pid=r.pid and v.eid=r.eid ".
