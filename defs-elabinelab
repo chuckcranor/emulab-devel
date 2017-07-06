@@ -117,3 +117,9 @@ AMD_ROOT=/.amd_mnt/ops
 NODECONSOLE=changeme
 # Which version of the MFS.
 MFSVERSION=changeme
+
+# Image directories
+IMAGEDIRECTORIES=1
+
+# Fancy new browser in the console support
+BROWSER_CONSOLE_ENABLE=1
