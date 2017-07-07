@@ -260,6 +260,10 @@ class Instance
     function Project() {
         return Project::Lookup($this->pid_idx());
     }
+    # Group of instance.
+    function Group() {
+        return Group::Lookup($this->gid_idx());
+    }
     
     #
     # Class function to create a new Instance

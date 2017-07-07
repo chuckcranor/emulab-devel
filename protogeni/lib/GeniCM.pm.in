@@ -7322,6 +7322,7 @@ sub AddKeys($$$)
 	    my $uid;
 	    my $name;
 	    my $email;
+	    my $privs = "local_root";
 
 	    if (exists($ref->{'urn'})) {
 		$urn = $ref->{'urn'};
@@ -7344,6 +7345,10 @@ sub AddKeys($$$)
 	    }
 	    # Allow user to override urn token.
 	    $uid = $ref->{'login'} if (exists($ref->{'login'}));
+	    # Optional specification of privs.
+	    if (exists($ref->{'privs'}) && $ref->{'privs'} eq "user") {
+		$privs = "user";
+	    }
  
 	    # The slice owner is easy.
 	    if (defined($urn) && $urn eq $owner->urn()) {
@@ -7382,7 +7387,7 @@ sub AddKeys($$$)
 	    }
 	    $slice_experiment->BindNonLocalUser(\@keylist,
 						$uid, $urn,
-						$name, $email)
+						$name, $email, $privs)
 		== 0 or goto error;
 	}
     }

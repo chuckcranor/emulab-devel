@@ -708,6 +708,14 @@ sub GetProject($)
     return Project->Lookup($self->pid_idx());
 }
 
+sub GetGroup($)
+{
+    my ($self) = @_;
+    require Group;
+    
+    return Group->Lookup($self->gid_idx());
+}
+
 #
 # Warn creator that the experiment is going to expire. This is hooked
 # in from the sa_daemon, so we can send a message that is less geni like
@@ -980,6 +988,9 @@ sub GetSSHKeys($$;$)
     my $project  = $self->GetProject();
     return -1
 	if (!defined($project));
+    my $group = $self->GetGroup();
+    return -1
+	if (!defined($group));
 
     if ($geniuser->GetKeyBundle(\@keys, 1) < 0 || !@keys) {
 	print STDERR "No ssh keys for $geniuser\n";
@@ -991,6 +1002,8 @@ sub GetSSHKeys($$;$)
     #
     $rval = [{'urn'   => $geniuser->urn(),
 	      'login' => $geniuser->uid(),
+	      # Creator clearly has root privs!
+	      'privs' => 'root',
 	      'keys'  => [ @keys ]
 	     }];
 
@@ -1018,6 +1031,20 @@ sub GetSSHKeys($$;$)
 		    if (!defined($guser));
 
 		#
+		# Watch for local Emulab users with user privs.
+		# Only Emulab based CMs will do anything with this,
+		# but that is all we talk to.
+		#
+		my $privs = "root";
+
+		if ($guser->IsLocal()) {
+		    my $trust = $group->Trust($guser->emulab_user());
+		    if (! TBMinTrust($trust, PROJMEMBERTRUST_LOCALROOT())) {
+			$privs = "user";
+		    }
+		}
+
+		#
 		# So, users coming in from the trusted signer have their keys
 		# at their home portal. We download those keys whenever they
 		# log in, and cache them in their local stub account, but they
@@ -1034,6 +1061,7 @@ sub GetSSHKeys($$;$)
 		}
 		push(@{$rval}, {'urn'   => $guser->urn(),
 				'login' => $guser->uid(),
+				'privs' => $privs,
 				'keys'  => [ @keys ]
 		               });
 	    }

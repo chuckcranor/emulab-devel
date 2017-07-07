@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2016 University of Utah and the Flux Group.
+# Copyright (c) 2000-2017 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -139,7 +139,7 @@ function Do_ClassicDatasetList()
 function Do_ProjectList()
 {
     global $this_user, $target_user;
-    global $TB_PROJECT_CREATEEXPT;
+    global $TB_PROJECT_READINFO, $newTrustMap;
 
     if (CheckPageArgs()) {
         return;
@@ -147,7 +147,7 @@ function Do_ProjectList()
     $target_idx  = $target_user->uid_idx();
     $target_uuid = $target_user->uuid();
     $results     = array();
-    $projlist    = $target_user->ProjectAccessList($TB_PROJECT_CREATEEXPT);
+    $projlist    = $target_user->ProjectAccessList($TB_PROJECT_READINFO);
 
     #
     # Cull out the nonlocal projects, we do not want to show those
@@ -163,6 +163,8 @@ function Do_ProjectList()
             $blob["leader"]      = $leader->uid();
             $blob["leader_name"] = $leader->name();
             $blob["leader_idx"]  = $leader->idx();
+            $membership = $proj->MemberShipInfo($this_user);
+            $blob["trust"] = $newTrustMap[$membership["trust"]];
 
             #
             # User membership in subgroups
@@ -181,7 +183,8 @@ function Do_ProjectList()
                     $glob["leader"]       = $leader->uid();
                     $glob["leader_idx"]   = $leader->idx();
                     $glob["leader_name"]  = $leader->name();
-
+                    $membership = $group->MemberShipInfo($this_user);
+                    $glob["trust"] = $newTrustMap[$membership["trust"]];
                     $blob["subgroups"][] = $glob;
                 }
             }

@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2008-2016 University of Utah and the Flux Group.
+# Copyright (c) 2008-2017 University of Utah and the Flux Group.
 # 
 # {{{GENIPUBLIC-LICENSE
 # 
@@ -393,8 +393,12 @@ sub CreateSliver()
 		chomp($key);
 		push(@user_keys, {'type' => 'ssh', 'key' => $key});
 	    }
-	    push(@{$sliver_keys}, {'urn'  => $user_urn,
-				   'keys' => \@user_keys});
+	    my $blob = {'urn'  => $user_urn,
+			'keys' => \@user_keys};
+	    if (exists($user->{'privs'})) {
+		$blob->{'privs'} = $user->{'privs'};
+	    }
+	    push(@{$sliver_keys}, $blob);
 	}
     }
     # Invoke CreateSliver
@@ -1104,8 +1108,12 @@ sub Provision
 		chomp($key);
 		push(@user_keys, {'type' => 'ssh', 'key' => $key});
 	    }
-	    push(@{$sliver_keys}, {'urn'  => $user_urn,
-				   'keys' => \@user_keys});
+	    my $blob = {'urn'  => $user_urn,
+			'keys' => \@user_keys};
+	    if (exists($user->{'privs'})) {
+		$blob->{'privs'} = $user->{'privs'};
+	    }
+	    push(@{$sliver_keys}, $blob);
 	}
     }
 

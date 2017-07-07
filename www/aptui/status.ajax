@@ -847,7 +847,7 @@ function needAdminApproval($wanted, $granted, $reason, $message)
 function Do_ConsoleURL()
 {
     global $instance, $creator, $this_user, $suexec_output;
-    global $ajax_args;
+    global $ajax_args, $TBDB_TRUST_LOCALROOT;
 
     if (StatusSetupAjax(0)) {
 	return;
@@ -876,10 +876,19 @@ function Do_ConsoleURL()
     $webtask->Refresh();
 
     if ($retval == 0) {
+        #
+        # If the user has 'user' privs in the current project/group
+        # then we do not return the root password. They can still look
+        # at the console though.
+        #
+        $group = $instance->Group();
+        $trust = $group->UserTrust($this_user);
+        
         $taskdata = $webtask->TaskData();
         $blob = array();
         $blob["url"] = $taskdata["url"];
-        if (isset($taskdata["password"])) {
+        if (isset($taskdata["password"]) &&
+            TBMinTrust($trust, $TBDB_TRUST_LOCALROOT)) {
             $blob["password"] = $taskdata["password"];
         }
         if (isset($taskdata["logurl"])) {

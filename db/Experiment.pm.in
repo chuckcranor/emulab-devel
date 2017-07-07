@@ -4777,9 +4777,9 @@ sub UnBindNonLocalUsers($)
 #
 # Bind nonlocal user to experiment (slice, in Geni).
 #
-sub BindNonLocalUser($$$$$$)
+sub BindNonLocalUser($$$$$$;$)
 {
-    my ($self, $keys, $uid, $urn, $name, $email) = @_;
+    my ($self, $keys, $uid, $urn, $name, $email, $privs) = @_;
 
     return -1
 	if (! ref($self));
@@ -4824,6 +4824,10 @@ sub BindNonLocalUser($$$$$$)
 	push(@insert_data, "name=$safe_name");
 	push(@insert_data, "email=$safe_email");
 	push(@insert_data, "uid_uuid=uuid()");
+	if (defined($privs)) {
+	    my $safe_privs = DBQuoteSpecial($privs);
+	    push(@insert_data, "privs=$safe_privs");
+	}
 
 	# Insert into DB.
 	my $insert_result =

@@ -4,6 +4,7 @@
       <tr>
 	<th>Project</th>
 	<th>Group</th>
+	<th>Trust</th>
 	<th>Leader</th>
 	<th>Description</th>
       </tr>
@@ -14,6 +15,7 @@
 	  <td><a href='show-project.php?project=<%- value.pid %>'>
 	    <%= value.pid %></a></td>
 	  <td><%= value.pid %></td>
+	  <td><%= value.trust %></td>
 	  <td style='white-space: nowrap;'>
 	    <a href='user-dashboard.php?user=<%- value.leader_idx %>'>
 	      <%- value.leader_name %></a></td>	  
@@ -26,6 +28,7 @@
 		<%= value.pid %></a></td>
 	      <td><a href='show-group.php?group=<%- group.gid_idx %>'>
 		<%= group.gid %></a></td>
+	      <td><%= group.trust %></td>
 	      <td style='white-space: nowrap;'>
 		<a href='user-dashboard.php?user=<%- group.leader_idx %>'>
 		  <%- group.leader_name %></a></td>	  
