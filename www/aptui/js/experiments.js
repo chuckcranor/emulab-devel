@@ -159,7 +159,12 @@ $(function ()
 	SetFilters(table);
 
 	// Initial sort.
-	table.find('th:eq(0)').trigger('sort');	
+	if (hash === "#extending") {
+	    table.find('th:eq(10)').trigger('sort');
+	}
+	else {
+	    table.find('th:eq(0)').trigger('sort');
+	}
     }
 
     function SetFilters(table)
