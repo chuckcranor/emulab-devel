@@ -25,7 +25,7 @@ use English;
 use strict;
 use Getopt::Std;
 use XML::Simple;
-use File::Temp qw(tempfile :POSIX );
+use File::Temp qw(tempfile :mktemp :POSIX);
 use Data::Dumper;
 use CGI;
 use POSIX ":sys_wait_h";
@@ -638,7 +638,7 @@ sub ModifyProfileInternal($$$)
 	# For a Parameterized Profile, need to generate and store the form
 	# data. Only python scripts of course.
 	#
-	my ($fh, $filename) = tempfile();
+	my ($fh, $filename) = tempfile(UNLINK => 1);
 	if (!defined($fh)) {
 	    $$pmsg = "Could not open temporary file for script";
 	    return -1;
@@ -890,7 +890,7 @@ sub UpdateProfileFromRepo()
     # Convert the script. If it fails we are not going to change the profile.
     #
     if (defined($script)) {
-	my ($fh, $filename) = tempfile();
+	my ($fh, $filename) = tempfile(UNLINK => 1);
 	if (!defined($fh)) {
 	    $profile->Unlock();
 	    fatal("Could not open temporary file for script");
@@ -948,7 +948,7 @@ sub HandleScript($)
     return undef
 	if ($script !~ /^import/m);
 
-    my ($fh, $filename) = tempfile();
+    my ($fh, $filename) = tempfile(UNLINK => 1);
     fatal("Could not open temporary file for script")
 	if (!defined($fh));
     print $fh $script;
