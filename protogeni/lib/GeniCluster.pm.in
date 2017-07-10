@@ -218,7 +218,7 @@ sub InUse()
 	       $swappable,$slice_lockdown,$swapin_time) =
 	   $query_result->fetchrow_array()) {
 	my $maxttl;
-	
+
 	#
 	# Try and compute a time the node will be released. This is a guess
 	# at best, lots of things can change as soon as we calculate it.
@@ -250,6 +250,18 @@ sub InUse()
 	else {
 	    $ttl = "";
 	}
+	#
+	# Return urn of the reserved pid so it can be mapped to the
+	# local project at the caller, if possible.
+	#
+	my $reserved_urn = "";
+	
+	if (defined($reserved_pid) && $reserved_pid != "") {
+	    my $project = Project->Lookup($reserved_pid);
+	    if (defined($project) ) {
+		$reserved_urn = $project->nonlocalurn();
+	    }
+	}
 	push(@blob, {"node_id"      => $node_id,
 		     "type"         => $type,
 		     "pid"          => $pid || "",
@@ -259,9 +271,26 @@ sub InUse()
 		     "maxttl"       => $maxttl || "",
 		     "slice_urn"    => $slice_urn || "",
 		     "slice_uuid"   => $slice_uuid || "",
-		     "reserved_pid" => $reserved_pid || ""});
+		     "reserved_pid" => $reserved_pid || "",
+		     "reserved_urn" => $reserved_urn});
+    }
+    #
+    # Reservation system info that affects the free counts.
+    # We let the caller figure out how to use the info.
+    #
+    my %typeinfo = ();
+    
+    my @types = Reservation->ReservableTypes();
+    foreach my $type (@types) {
+	my $type = $type->type();
+
+	my $fblob = {"type"      => $type,
+		     "freecount" => Reservation->FreeCount($type)};
+	
+	$typeinfo{$type} = $fblob;
     }
     my $results = {"api_version"  => $API_VERSION,
+		   "typeinfo"     => \%typeinfo,
 		   "details"      => \@blob};
 		  
     return GeniResponse->Create(GENIRESPONSE_SUCCESS, $results);
