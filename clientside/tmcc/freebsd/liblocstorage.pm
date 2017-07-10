@@ -238,14 +238,16 @@ sub find_serial($)
 sub init_serial_map()
 {
     my %snmap = ();
+    my $compatnames = 1;
 
     my @lines = `ls /dev/ad* /dev/da* /dev/mfid* /dev/mfisyspd* /dev/nvd* 2>&1`;
+  again:
     foreach (@lines) {
 	# XXX just use the /dev/ad? traditional names for now
-	if (m#^/dev/ada\d+$#) {
+	if ($compatnames && m#^/dev/ada\d+$#) {
 	    next;
 	}
-	if (m#^/dev/((?:da|ad|mfid|mfisyspd|nvd)\d+)$#) {
+	if (m#^/dev/((?:da|ad|ada|mfid|mfisyspd|nvd)\d+)$#) {
 	    my $dev = $1;
 	    $sn = find_serial($dev);
 	    if ($sn) {
@@ -255,6 +257,11 @@ sub init_serial_map()
 		$snmap{$dev} = $dev;
 	    }
 	}
+    }
+
+    if ($compatnames && keys(%snmap) == 0) {
+	$compatnames = 0;
+	goto again;
     }
 
     return \%snmap;
