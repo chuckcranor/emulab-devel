@@ -88,7 +88,7 @@ elseif ($_SERVER["SERVER_NAME"] == "www.cloudlab.us") {
     $PORTAL_MANUAL       = "http://docs.cloudlab.us";
     $PORTAL_HELPFORUM    = "cloudlab-users";
     $PORTAL_PASSWORD_HELP= "CloudLab.us or Emulab.net Username";
-    $PORTAL_NSFNUMBER    = "CNS-1302688";
+    $PORTAL_NSFNUMBER    = "1419199";
     $DEFAULT_AGGREGATE   = "Utah Cloudlab";
     $PORTAL_GENESIS      = "cloudlab";
     $PORTAL_NAME         = "CloudLab";
