@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2006-2016 University of Utah and the Flux Group.
+# Copyright (c) 2006-2017 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -56,7 +56,7 @@ if ($_SERVER["SERVER_NAME"] == "www.aptlab.net") {
     $PORTAL_MANUAL         = "http://docs.aptlab.net";
     $PORTAL_HELPFORUM      = "apt-users";
     $PORTAL_PASSWORD_HELP  = "Aptlab.net or Emulab.net Username";
-    $PORTAL_NSFNUMBER      = "CNS-1338155";
+    $PORTAL_NSFNUMBER      = "1338155";
     $DEFAULT_AGGREGATE     = "Utah APT";
     $DEFAULT_AGGREGATE_URN = "urn:publicid:IDN+apt.emulab.net+authority+cm";
     $PORTAL_GENESIS        = "aptlab";
@@ -119,7 +119,7 @@ elseif ($ISALTDOMAIN && $_SERVER["SERVER_NAME"] == "www.phantomnet.org") {
     $PORTAL_MANUAL         = "http://docs.phantomnet.org";
     $PORTAL_HELPFORUM      = "phantomnet-users";
     $PORTAL_PASSWORD_HELP  = "PhantomNet.org or Emulab.net Username";
-    $PORTAL_NSFNUMBER      = "CNS-1305384";
+    $PORTAL_NSFNUMBER      = "1305384";
     $DEFAULT_AGGREGATE     = "Emulab";
     $DEFAULT_AGGREGATE_URN = "urn:publicid:IDN+emulab.net+authority+cm";
     $PORTAL_GENESIS        = "phantomnet";
