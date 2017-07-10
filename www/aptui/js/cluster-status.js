@@ -14,11 +14,12 @@ $(function ()
     function initialize()
     {
 	window.APT_OPTIONS.initialize(sup);
-	isadmin = window.ISADMIN;
+	isadmin = window.ISADMIN || window.ISFADMIN;
 	amlist = JSON.parse(_.unescape($('#agglist-json')[0].textContent));
 	
 	var html = mainTemplate({
-	    amlist: amlist,
+	    "amlist"  : amlist,
+	    "isadmin" : isadmin,
 	});
 	$('#page-body').html(html);
 
@@ -36,7 +37,7 @@ $(function ()
     {
 	_.each(amlist, function(urn, name) {
 	    var callback = function(json) {
-		//console.log(json);
+		console.log(json);
 		if (json.code) {
 		    console.log("Could not get cluster data: " + json.value);
 		    return;
@@ -44,57 +45,88 @@ $(function ()
 		var inuse = json.value.inuse;
 		var html = "";
 
-		inuse.forEach(function(value, index) {
+		_.each(inuse, function(value, name) {
 		    var type = "";
 		    if (_.has(value, "type")) {
 			type = value.type;
 		    }
-		    var expires = "";
-		    if (_.has(value, "ttl")) {
-			var ttl = value.ttl;
-			if (ttl != "") {
-			    expires = moment().add(ttl, 'seconds').fromNow();
-			}
-		    }
-		    var allowed = "";
-		    if (_.has(value, "maxttl")) {
-			var maxttl = value.maxttl;
-			if (maxttl != "") {
-			    allowed = moment().add(maxttl, 'seconds').fromNow();
-			}
-		    }
-		    var uid = "";
-		    if (_.has(value, "uid")) {
-			uid = value.uid;
-		    }
-		    var eid = value.eid;
-		    if (_.has(value, "instance_uuid")) {
-			var uuid = value.instance_uuid;
-			eid = "<a href='status.php?uuid=" + uuid +
-			    "' target=_blank>" + value.instance_name + "</a>";
-		    }
 		    html = html + "<tr>" +
 			"<td>" + value.node_id + "</td>" +
-			"<td>" + type + "</td>" +
-			"<td>" + value.pid + "</td>" +
-			"<td>" + eid + "</td>" +
-			"<td>" + uid + "</td>" +
-			"<td>" + expires + "</td>" +
-			"<td>" + allowed + "</td>" +
-			"<td>" + value.reserved_pid + "</td>" + "</tr>";
+			"<td>" + type + "</td>";
+
+		    if (isadmin) {
+			var expires = "";
+			if (_.has(value, "ttl")) {
+			    var ttl = value.ttl;
+			    if (ttl != "") {
+				expires = moment()
+				    .add(ttl, 'seconds').fromNow();
+			    }
+			}
+			var allowed = "";
+			if (_.has(value, "maxttl")) {
+			    var maxttl = value.maxttl;
+			    if (maxttl != "") {
+				allowed = moment()
+				    .add(maxttl, 'seconds').fromNow();
+			    }
+			}
+			var uid = "";
+			if (_.has(value, "uid")) {
+			    uid = value.uid;
+			}
+			var eid = "";
+			if (_.has(value, "eid")) {
+			    eid = value.eid;
+			    if (_.has(value, "instance_uuid")) {
+				var uuid = value.instance_uuid;
+				eid = "<a href='status.php?uuid=" + uuid +
+				    "' target=_blank>" +
+				    value.instance_name + "</a>";
+			    }
+			}
+			html = html +
+			    "<td>" + value.pid + "</td>" +
+			    "<td>" + eid + "</td>" +
+			    "<td>" + uid + "</td>" +
+			    "<td>" + expires + "</td>" +
+			    "<td>" + allowed + "</td>" +
+			    "<td>" + value.reserved_pid + "</td>";
+		    }
+		    else {
+			if (value.available) {
+			    html = html + "<td>Yes</td>";
+			}
+			else {
+			    html = html + "<td>No</td>";
+			}
+		    }
+		    html = html + "</tr>";		    
 		});
 		$('#' + name + '-tbody').html(html);
-		InitTable(name);
 
 		// These are the totals.
-		html = countsTemplate({"totals" : json.value.totals});
+		html = countsTemplate({"totals" : json.value.totals,
+				       "isadmin": isadmin});
 		$('#counts-panel-' + name).html(html);
+		// This activates the tooltip subsystem.
+		$('#counts-panel-' + name + ' ' +
+		  '[data-toggle="tooltip"]').tooltip({
+		      delay: {"hide" : 500, "show" : 150},
+		      placement: 'auto',
+		  });
+
+		// We reference the totals table in InitTable();
+		InitTable(name);
 	    }
 	    var xmlthing = sup.CallServerMethod(null, "cluster-status",
 						"GetStatus",
 						{"cluster" : urn});
 	    xmlthing.done(callback);
 	});
+	if (!isadmin) {
+	    return;
+	}
 	_.each(amlist, function(urn, name) {
 	    var callback = function(json) {
 		console.log(json);
@@ -195,13 +227,16 @@ $(function ()
 	// Allows using filter_liveSearch or delayed search &
 	// pressing escape to cancel the search
 	$.tablesorter.filter.bindSearch(table, $(searchname));
-	$.tablesorter.filter.bindSearch(table, $('#inuse-search-all'));
-	$(tablename).removeClass("hidden");
+	if (window.ISCLOUD) {
+	    $.tablesorter.filter.bindSearch(table, $('#inuse-search-all'));
+	}
 
 	/*
 	 * This is the expand/collapse button for an individual table.
 	 */
-	$('#inuse-collapse-button-' + name).click(function () {
+	$('#inuse-collapse-button-' + name).click(function (event) {
+	    event.preventDefault();
+	    
 	    if ($(panelname).data("status") == "minimized") {
 		$(panelname).removeClass("inuse-panel");
 		$('#counts-panel-' + name).removeClass("counts-panel");
@@ -217,6 +252,20 @@ $(function ()
 		$(this).addClass("glyphicon-chevron-right");
 	    }
 	})
+	// Only one, expand immediately.
+	if (Object.keys(amlist).length == 1) {
+	    $('#inuse-collapse-button-' + name).click();
+	}
+	$(tablename).removeClass("hidden");
+
+	// Bind type column in the counts table to initiating search
+	$('#counts-panel-' + name + ' .counts-type').click(function(event) {
+	    event.preventDefault();
+	    $(tablename +
+	      ' input.tablesorter-filter.form-control[data-column="1"]')
+		.val($(event.target).text());
+	    table.trigger('search', false);	    
+	});
     }
     
     $(document).ready(initialize);

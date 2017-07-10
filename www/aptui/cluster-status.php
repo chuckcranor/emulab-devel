@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2016 University of Utah and the Flux Group.
+# Copyright (c) 2000-2017 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -38,16 +38,13 @@ $this_user = CheckLoginOrRedirect();
 $isadmin   = (ISADMIN() ? 1 : 0);
 $isfadmin  = (ISFOREIGN_ADMIN() ? 1 : 0);
 
-if (! (ISADMIN() || ISFOREIGN_ADMIN())) {
-    SPITUSERERROR("You do not have permission to view this page!");
-}
 SPITHEADER(1);
 
 #
 # The apt_aggregates table should tell us what clusters, but for
 # now it is always the local cluster
 #
-if ($TBMAINSITE && !$ISEMULAB) {
+if ($TBMAINSITE && $ISCLOUD) {
     $aggregates =
         array("Emulab"    => "urn:publicid:IDN+emulab.net+authority+cm",
               "APT"       => "urn:publicid:IDN+apt.emulab.net+authority+cm",

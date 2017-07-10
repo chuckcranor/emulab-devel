@@ -377,7 +377,8 @@ echo "
 	<li><a href='instantiate.php'>Start Experiment</a></li>
 	<li><a href='manage_profile.php'>Create Experiment Profile</a></li>
        <li><a href='reserve.php'>Reserve Nodes</a></li>
-	";
+       <li><a href='cluster-status.php'>Cluster Status</a></li>
+        ";
 echo " <li class='divider'></li>
         <li><a href='user-dashboard.php#experiments'>
 	    My Experiments</a></li>
