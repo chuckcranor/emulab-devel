@@ -198,7 +198,7 @@ sub Install($$$)
 	#
 	my $opt = ($PROTOGENI_GENIRACK ? "-i" : "");
 	if ($kernelvers) {
-	    $opt += " -F $kernelvers";
+	    $opt .= " -F $kernelvers";
 	}
 	
 	Phase "localize", "Localizing the MFSes", sub {
