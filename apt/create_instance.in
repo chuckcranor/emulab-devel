@@ -1411,8 +1411,9 @@ sub RunStitcher()
 	my @tmp = map { $_->{'key'} } @{$user->{'keys'}};
 	
 	push(@{$users},
-	     {"urn"  => $user->{'urn'},
-	      "keys" => [ @tmp ] });
+	     {"urn"   => $user->{'urn'},
+	      "privs" => $user->{'privs'},
+	      "keys"  => [ @tmp ] });
     }
 
     #
