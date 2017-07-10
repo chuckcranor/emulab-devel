@@ -26,6 +26,8 @@ $(function ()
     // oops and waitwait modal to invoke.
     $('#genilib-editor-body').hide();
     $('#genilib-editor-body').html(pageString);
+    $('#genilib-editor-body .genilib-documentation')
+	  .attr("href", window.MANUAL + "/geni-lib.html");
   }
 
   function render()

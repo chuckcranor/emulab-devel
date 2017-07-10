@@ -603,7 +603,7 @@ $(function ()
 	    // https://gitlab.flux.utah.edu/emulab/emulab-devel/issues/71
 	    if ($('#pp_form #hwinfo').length == 0) {
 		$('#pp_form input[data-key=osNodeType]').parent().append(''+
-		    '<a href="http://docs.cloudlab.us/hardware.html" style="'+
+		    '<a href="' + window.MANUAL + '/hardware.html" style="'+
 			'position:absolute;'+
 			'right:21px;'+
 			'top: 8.5px;'+
