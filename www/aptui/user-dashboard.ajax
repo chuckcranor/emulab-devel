@@ -147,15 +147,14 @@ function Do_ProjectList()
     $target_idx  = $target_user->uid_idx();
     $target_uuid = $target_user->uuid();
     $results     = array();
-    $projlist    = $target_user->ProjectAccessList($TB_PROJECT_READINFO);
+    $projlist    = $target_user->ProjectMembershipList();
 
     #
     # Cull out the nonlocal projects, we do not want to show those
     # since they are just the holding projects.
     #
-    while (list($pid) = each($projlist)) {
-        $proj = Project::Lookup($pid);
-        if ($proj && !$proj->IsNonLocal()) {
+    foreach ($projlist as $proj) {
+        if (!$proj->IsNonLocal()) {
             $blob = array();
             $blob["pid"] = $proj->pid();
             $blob["description"] = $proj->name();
@@ -163,7 +162,7 @@ function Do_ProjectList()
             $blob["leader"]      = $leader->uid();
             $blob["leader_name"] = $leader->name();
             $blob["leader_idx"]  = $leader->idx();
-            $membership = $proj->MemberShipInfo($this_user);
+            $membership = $proj->MemberShipInfo($target_user);
             $blob["trust"] = $newTrustMap[$membership["trust"]];
 
             #
@@ -183,12 +182,12 @@ function Do_ProjectList()
                     $glob["leader"]       = $leader->uid();
                     $glob["leader_idx"]   = $leader->idx();
                     $glob["leader_name"]  = $leader->name();
-                    $membership = $group->MemberShipInfo($this_user);
+                    $membership = $group->MemberShipInfo($target_user);
                     $glob["trust"] = $newTrustMap[$membership["trust"]];
                     $blob["subgroups"][] = $glob;
                 }
             }
-            $results[$pid] = $blob;
+            $results[$proj->pid()] = $blob;
         }
     }
 
