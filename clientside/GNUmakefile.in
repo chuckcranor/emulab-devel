@@ -109,9 +109,10 @@ client-mkdirs:
 	-mkdir -p $(DESTDIR)$(CLIENT_MANDIR)
 
 frisbee-mfs-mkdirs:
+	-mkdir -p $(DESTDIR)/etc/rc.d
 	-mkdir -p $(DESTDIR)/etc/emulab
 	-mkdir -p $(DESTDIR)/etc/testbed
-	-mkdir -p $(DESTDIR)/usr/local/etc/emulab
+	-mkdir -p $(DESTDIR)/usr/local/etc
 
 freenas-os-check:
 	@if [ "$(SYSTEM)" != "FreeBSD" -o "$(ARCH)" != "amd64" -o \
