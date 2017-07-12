@@ -150,6 +150,11 @@ sub nodereboot($$)
     copy_hash %ENV, $old_env;
     tblog_sub_process("reboot", @nodes);
 
+    # Reset our few globals.
+    $debug    = 0;
+    $silent   = 0;
+    %children = ();
+    
     $debug = $args->{'debug'}
         if (exists($args->{'debug'}));
     $silent = $args->{'silent'}

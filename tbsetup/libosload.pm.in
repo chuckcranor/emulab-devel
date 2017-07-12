@@ -92,6 +92,10 @@ sub osload ($$) {
     my $swapinfo    = 0;
     my %nodeflags   = ();
 
+    # Reset
+    $debug          = 0;
+    %children       = ();
+
     # Locals
     my %retries	    = ();
     my $failures    = 0;

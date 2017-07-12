@@ -103,6 +103,7 @@ sub New($$$;@)
     $self->{'NODEFLAGS'}  = {};
     $self->{'NODEINFO'}   = {};
     $self->{'OSMAP'}      = {};
+    $self->{'DONE'}       = {};
     $self->{'FAILED'}     = {};
     $self->{'FAILCOUNT'}  = 0;
     $self->{'TYPECACHE'}  = {};
@@ -131,6 +132,7 @@ sub DESTROY {
 }
 sub nodelist($)		{ return $_[0]->{'NODES'}; }
 sub failedlist($)	{ return $_[0]->{'FAILED'}; }
+sub donelist($)		{ return $_[0]->{'DONE'}; }
 sub user($)		{ return $_[0]->{'USER'}; }
 sub experiment($)	{ return $_[0]->{'EXPT'}; }
 sub incrfailcount($)    { $_[0]->{'FAILCOUNT'}++ }
@@ -940,7 +942,7 @@ sub osload($$$) {
 		    tberror("$self ($node): Could not set up reload. Skipping.");
 		    $result->{$node} = -1;
 		    $self->incrfailcount();
-		    $typeobject->ReloadDone($nodeobject);
+		    $typeobject->ReloadFailed($nodeobject);
 		    next;
 		}
 
@@ -948,7 +950,7 @@ sub osload($$$) {
 		    tberror("$self ($node): direct reload failed. Skipping.");
 		    $result->{$node} = -1;
 		    $self->incrfailcount();
-		    $typeobject->ReloadDone($nodeobject);
+		    $typeobject->ReloadFailed($nodeobject);
 		    next;
 		}
 
@@ -961,7 +963,7 @@ sub osload($$$) {
 		tberror ({sublevel => -1}, 
 			 "$self: $node failed to boot too many times. Skipping!");
 		$result->{$node} = -1;
-		$typeobject->ReloadDone($nodeobject);
+		$typeobject->ReloadFailed($nodeobject);
 		$self->incrfailcount();
 	    }
 	}
@@ -1027,7 +1029,7 @@ sub AddNode($$$$)
 # Wait for a reload to finish by watching its state
 sub WaitTillReloadDone($$$$$@)
 {
-    my ($self, $startwait, $waitmode,
+    my ($self, $ignored, $waitmode,
 	$eventnodes, $evhandle, @nodes) = @_;
     my %done	= ();
     my $count   = @nodes;
@@ -1054,6 +1056,13 @@ sub WaitTillReloadDone($$$$$@)
     foreach my $node (@nodes) {
 	my $nodeobject = $self->node($node);
 	my $typeobject = $self->typeobject($nodeobject);
+	#
+	# We change the starttime for vnodes on pnodes. 
+	# A record when a pnode finished reloading so we can start vnode 
+	# waiting from that time.
+	#
+	$nodeobject->_waitstart(time());
+	$nodeobject->_waitend(0);
 	my $maxwait;
 
 	#
@@ -1117,6 +1126,24 @@ sub WaitTillReloadDone($$$$$@)
 		my $nodeobject = $self->node($node);
 		my $typeobject = $self->typeobject($nodeobject);
 		my $maxwait = $self->nodeinfo($nodeobject,'maxwait');
+		my $startwait = $nodeobject->_waitstart();
+
+		if ($nodeobject->isvirtnode() && !$nodeobject->OnSharedNode()) {
+		    my $pnode = $nodeobject->GetPhysHost();
+		    my $pnode_id = $pnode->node_id;
+
+		    if (exists($self->{'NODES'}->{$pnode_id})) {
+			if (exists($self->donelist()->{$pnode_id}) ||
+			    exists($self->failedlist()->{$pnode_id})) {
+			    # We can wait if parent is done.
+			    $startwait = $pnode->_waitend();
+			}
+			else {
+			    # No point in waiting yet.
+			    next;
+			}
+		    }
+		}
 
 		#
 		# If we did a direct reload via typeobject->Reload(), we 
@@ -1129,7 +1156,7 @@ sub WaitTillReloadDone($$$$$@)
 		# below.
 		#
 		my ($typewaitstatus,$typeretval,@typeoutput) = 
-		    $typeobject->WaitForNode($nodeobject);
+		    $typeobject->WaitForNode($nodeobject, @failed);
 		$self->dprint(2,"$typeobject->WaitForNode($node) -> $typewaitstatus");
 		if ($typewaitstatus > 0) {
 		    --$count;
@@ -1312,7 +1339,7 @@ sub WaitTillReloadDone($$$$$@)
     }
 
     if ($waitmode > 1) {
-	$startwait = time;
+	my $startwait = time;
 	foreach my $node (@nodes) {
 	    print STDERR
 		"$self ($node): waiting for node to finish booting\n";
@@ -2381,9 +2408,9 @@ sub SetupReload($$)
 }
 
 # This cannot block!
-sub WaitForNode($$)
+sub WaitForNode($$@)
 {
-    my ($self,$nodeobject) = @_;
+    my ($self,$nodeobject,@failed) = @_;
     my $node_id = $nodeobject->node_id();
 
     my $retval = 0;
@@ -2429,6 +2456,15 @@ sub Reload()
 sub ReloadDone($$)
 {
     my ($self,$nodeobject) = @_;
+    $self->parent()->donelist()->{$nodeobject->node_id()} = $nodeobject;
+    $nodeobject->_waitend(time());
+    return $self->RemoveNode($nodeobject);
+}
+
+sub ReloadFailed($$)
+{
+    my ($self,$nodeobject) = @_;
+    $self->parent()->failedlist()->{$nodeobject->node_id()} = $nodeobject;
     return $self->RemoveNode($nodeobject);
 }
 
@@ -2705,6 +2741,44 @@ sub ComputeMaxLoadWaitTime($$)
     }
 
     return $maxwait;
+}
+
+sub WaitForNode($$@)
+{
+    my ($self,$nodeobject,@failed) = @_;
+    my $node_id  = $nodeobject->node_id();
+    my $pnode    = $nodeobject->GetPhysHost($nodeobject);
+    my $pnode_id = $pnode->node_id();
+
+    $self->dprint(1,"WaitForNode($node_id) -> asking for status");
+
+    #
+    # When virtnode is on a shared node, use default waiting.
+    # Ditto if we did not specify that the physhost get reloaded.
+    #
+    if ($nodeobject->OnSharedNode() ||
+	!exists($self->parent()->{'NODES'}->{$pnode_id})) {
+	return $self->SUPER::WaitForNode($nodeobject);
+    }
+    
+    #
+    # Look at the pnode. If done reloading, then we can start waiting
+    # for it. Might want to change this to wait for the node to actually
+    # boot to ISUP.
+    #
+    # If it failed, then we force this node to fail too. Not ideal, since
+    # since we might retry the physical host but not the VM. Need to think
+    # about this.
+    #
+    if (exists($self->parent()->donelist()->{$pnode->node_id})) {
+	$self->dprint(0,"WaitForNode($node_id): $pnode_id has reloaded");
+	return (-1,);
+    }
+    if (grep {$_ eq $pnode->node_id()} @failed ||
+	exists($self->parent()->failedlist()->{$pnode->node_id})) {
+	$self->dprint(0,"WaitForNode($node_id): $pnode_id has failed reload");
+	return (1,-1);
+    }
 }
 
 package libosload_pcvm;
