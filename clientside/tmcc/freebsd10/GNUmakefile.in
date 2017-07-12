@@ -162,6 +162,7 @@ frisbee-mfs-install: destdircheck
 	(cd ../freebsd5; $(MAKE) all frisbee-mfs-install)
 	rm -f $(SYSETCDIR)/testbed/dhclient
 	rm -rf $(SYSETCDIR)/rc.conf.d
+	rm -f $(SYSETCDIR)/rc.local
 	rm -f $(LETCDIR)/dhclient*
 	$(INSTALL) -m 755 $(SRCDIR)/dhclient-exit-hooks \
 			$(SYSETCDIR)/dhclient-exit-hooks
@@ -169,7 +170,7 @@ frisbee-mfs-install: destdircheck
 	ln -s /etc/dhclient-exit-hooks $(LETCDIR)/
 	ln -s /etc/dhclient.conf $(LETCDIR)/
 	$(INSTALL) -m 644 $(SRCDIR)/frisbee/rc.conf $(SYSETCDIR)/rc.conf
-	rm -f $(SYSETCDIR)/rc.local
+	$(INSTALL) -m 555 ./netif-emulab $(SYSETCDIR)/rc.d/netif-emulab
 	$(INSTALL) -m 555 $(SRCDIR)/frisbee/rc.frisbee $(SYSETCDIR)/rc.d/frisbee
 	@if [ -r $(SRCDIR)/master.passwd ]; then \
 	    $(INSTALL) -m 600 $(SRCDIR)/master.passwd $(SYSETCDIR); \
@@ -183,12 +184,14 @@ mfs-install:
 	(cd ../freebsd5; $(MAKE) all mfs-install)
 	rm -f $(SYSETCDIR)/testbed/dhclient
 	rm -rf $(SYSETCDIR)/rc.conf.d
+	rm -f $(SYSETCDIR)/rc.local
 	rm -f $(LETCDIR)/dhclient*
 	$(INSTALL) -m 755 $(SRCDIR)/dhclient-exit-hooks \
 			$(SYSETCDIR)/dhclient-exit-hooks
 	ln -s /etc/dhclient-enter-hooks $(LETCDIR)/
 	ln -s /etc/dhclient-exit-hooks $(LETCDIR)/
 	ln -s /etc/dhclient.conf $(LETCDIR)/
+	$(INSTALL) -m 555 ./netif-emulab $(SYSETCDIR)/rc.d/netif-emulab
 	@if [ -r $(SRCDIR)/master.passwd ]; then \
 	    $(INSTALL) -m 600 $(SRCDIR)/master.passwd $(SYSETCDIR); \
 	    pwd_mkdb -p -d $(SYSETCDIR) $(SYSETCDIR)/master.passwd; \
