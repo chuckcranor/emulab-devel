@@ -82,7 +82,7 @@ mfsoscheck:
 mfs:		mfsoscheck mfs-subdirs
 mfs-install:	destdircheck mfs client-mkdirs mfs-install-subdirs
 frisbee-mfs:	mfsoscheck frisbee-mfs-subdirs
-frisbee-mfs-install:	destdircheck frisbee-mfs client-mkdirs frisbee-mfs-install-subdirs
+frisbee-mfs-install:	destdircheck frisbee-mfs frisbee-mfs-mkdirs frisbee-mfs-install-subdirs
 newnode-mfs:	mfsoscheck newnode-mfs-subdirs
 newnode-mfs-install:	destdircheck newnode-mfs client-mkdirs newnode-mfs-install-subdirs
 
@@ -107,6 +107,11 @@ client-tarball: tarball-check
 client-mkdirs:
 	-mkdir -p $(DESTDIR)$(CLIENT_BINDIR)
 	-mkdir -p $(DESTDIR)$(CLIENT_MANDIR)
+
+frisbee-mfs-mkdirs:
+	-mkdir -p $(DESTDIR)/etc/emulab
+	-mkdir -p $(DESTDIR)/etc/testbed
+	-mkdir -p $(DESTDIR)/usr/local/etc/emulab
 
 freenas-os-check:
 	@if [ "$(SYSTEM)" != "FreeBSD" -o "$(ARCH)" != "amd64" -o \
