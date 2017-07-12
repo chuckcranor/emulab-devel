@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2008-2016 University of Utah and the Flux Group.
+# Copyright (c) 2008-2017 University of Utah and the Flux Group.
 # 
 # {{{GENIPUBLIC-LICENSE
 # 
@@ -42,10 +42,11 @@ sub usage()
 	"[-c credfile] -o outfile imageid\n";
     exit(1);
 }
-my $optlist  = "ndvc:u:o:";
+my $optlist  = "ndvc:u:o:D";
 my $impotent = 0;
 my $debug    = 0;
 my $verbose  = 0;
+my $devtree  = 0;
 my $credfile;
 my $outfile;
 my $outfp;
@@ -109,6 +110,9 @@ if (defined($options{"n"})) {
 }
 if (defined($options{"d"})) {
     $debug = 1;
+}
+if (defined($options{"D"})) {
+    $devtree = 1;
 }
 if (defined($options{"v"})) {
     $verbose = 1;
@@ -183,7 +187,7 @@ my $authority = GeniAuthority->CreateFromRegistry("cm", $signer->urn());
 fatal("Could not lookup authority: " . $signer->urn())
     if (!defined($authority));
 my $cmurl = $authority->url();
-$cmurl =~ s/protogeni/protogeni\/stoller/;
+$cmurl =~ s/protogeni/protogeni\/stoller/ if ($devtree);
 
 #
 # Suck over some bits.

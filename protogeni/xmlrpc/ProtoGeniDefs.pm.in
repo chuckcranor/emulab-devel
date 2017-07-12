@@ -90,6 +90,34 @@ AddModule("root",
 	      }},
 	  });
 
+package ProtoGeniDefs::ProtogeniCH;
+
+use lib '@prefix@/lib';
+use GeniCH;
+
+ProtoGeniDefs::AddModule("ch",
+	  {
+	      "PEMFILE"    => "@prefix@/etc/genich.pem",
+	      "DBNAME"     => "geni-ch",
+	      "DEFVERSION" => "1",
+	      "INITMODULE" => \&GeniCH::InitModule,
+	      "METHODS"    => {"1" => {
+		  "GetVersion"            => \&GeniCH::GetVersion,
+		  "GetCredential"         => \&GeniCH::GetCredential,
+		  "Resolve"               => \&GeniCH::Resolve,
+		  "Register"              => \&GeniCH::Register,
+		  "Remove"                => \&GeniCH::Remove,
+		  "ListComponents"        => \&GeniCH::ListComponents,
+		  "PostCRL"               => \&GeniCH::PostCRL,
+		  "Shutdown"              => \&GeniCH::Shutdown,
+		  "List"                  => \&GeniCH::List,
+		  "WhoAmI"		  => \&GeniCH::WhoAmI,
+		  "PostHistoryRecord"	  => \&GeniCH::PostHistoryRecord,
+		  "ReadHistoryRecords"    => \&GeniCH::ReadHistoryRecords,
+		  "ListActiveSlivers"     => \&GeniCH::ListActiveSlivers,
+	      }},
+	  });
+
 package ProtoGeniDefs::ProtogeniSA;
 
 use lib '@prefix@/lib';
@@ -161,6 +189,7 @@ $V2_METHODS = {
     "DescribeDataset"   => \&GeniCMV2::DescribeDataset,
     "ModifyDataset"     => \&GeniCMV2::ModifyDataset,
     "GetDatasetCredential" => \&GeniCMV2::GetDatasetCredential,
+    "SecureImageDownload"  => \&GeniCMV2::SecureImageDownload,
     "Lockdown"          => \&GeniCMV2::Lockdown,
     "TriggerImageUpdate"=> \&GeniCMV2::TriggerImageUpdate,
     "AddNodes"          => \&GeniCMV2::AddNodes,

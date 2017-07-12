@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2008-2016 University of Utah and the Flux Group.
+# Copyright (c) 2008-2017 University of Utah and the Flux Group.
 # 
 # {{{GENIPUBLIC-LICENSE
 # 
@@ -70,6 +70,30 @@ ClusterWrapper::Initialize();
 #
 my $FCGI_Handle = FCGI::Request();
 
+#
+# If we abort logging and want to send stream data back to apache.
+# See  GeniCMV2::SecureImageDownload();
+#
+my $logaborted = 0;
+
+#
+# This is a whacky kludge. 
+#
+my $GENI_ISCLRHOUSE;
+
+#
+# Set process title
+#
+if (exists($ENV{'MODULE'})) {
+    my $module = $ENV{'MODULE'};
+    if ($module =~ /^(\w+)$/) {
+	$0 = $0 . " $1";
+    }
+}
+
+#
+# Loop until dead, what is dead will never die. 
+#
 while ($FCGI_Handle->Accept() >= 0) {
     my $request = undef;
     read(STDIN, $request, $ENV{CONTENT_LENGTH});
@@ -81,6 +105,8 @@ while ($FCGI_Handle->Accept() >= 0) {
     $ENV{'PATH'} = '/bin:/usr/bin:/usr/local/bin';
     delete @ENV{'IFS', 'CDPATH', 'ENV', 'BASH_ENV'};
 
+    $logaborted = 0;
+
     #
     # We need to "detach" cause mod_fcgid has a bad "tie" implementation,
     # and so most calls to open fail. detaching is fine, we have the request,
@@ -89,6 +115,12 @@ while ($FCGI_Handle->Accept() >= 0) {
     #
     $FCGI_Handle->Detach();
     my $response = ClusterWrapper->Start($request);
+
+    # If we aborted (attached) earlier and sent stream data,
+    # nothing more to do.
+    next
+	if ($logaborted);
+	
     $FCGI_Handle->Attach();
     if ($response) {
 	print "Content-Type: text/xml \n\n" . $response;
@@ -112,4 +144,8 @@ sub AddLogfileMetaDataFromSlice($) {
 sub AddLogfileMetaDataFromSpeaksFor($) {
     return ClusterWrapper::AddLogfileMetaDataFromSpeaksFor($_[0]);
 }
-
+sub AbortLogging() {
+    $logaborted = 1;
+    $FCGI_Handle->Attach();
+    return ClusterWrapper::AbortLogging();
+}

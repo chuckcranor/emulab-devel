@@ -102,6 +102,7 @@ my $noanything = 0;
 # Flag for XMLERROR.
 my $logging    = 0;
 my $logforked  = 0;
+my $logaborted = 0;
 my $iserror    = 0;
 my $rpcerror   = 0;
 my $parent     = 1;
@@ -116,8 +117,18 @@ my $GENIURN	     = undef;
 # Root CA of $GENIURN
 my $ROOTCA	     = undef;
 
+sub AppendDebug($)
+{
+    my ($stuff) = @_;
+
+    if (open(FOO, ">> /tmp/lbs.txt")) {
+	print FOO $stuff . "\n";
+	close(FOO);
+    }
+}
+
 #
-# We do not allow any of our code to call exit, since that would kill
+# We do not want the top level process to exit, since that would kill
 # the fcgid daemon and apache does not like that. Instead, we "throw"
 # back to the eval by calling die() since we have a DIE handler setup
 # below to make sure we get a stack backtrace.
@@ -125,6 +136,12 @@ my $ROOTCA	     = undef;
 BEGIN {
     sub myexit(;$)
     {
+	# Children are allowed to call exit. But not the parent.
+	if (!$parent) {
+	    #AppendDebug("$$ called exit from:\n" . Carp::longmess());
+	    CORE::exit(0);
+	}
+	#AppendDebug("$$ needs to die from:\n" . Carp::longmess());
 	die("called exit\n");
     }
     *CORE::GLOBAL::exit = \&myexit;
@@ -223,6 +240,7 @@ sub Start($$)
     $logfile      = undef;
     $logfilename  = undef;
     $logforked    = 0;
+    $logaborted   = 0;
     $parent       = 1;
     @metadata     = ();
     my $response  = undef;
@@ -488,6 +506,13 @@ sub Start($$)
     push(@metadata, ["Version", $VERSION]) if (defined($VERSION));
     push(@metadata, ["StartTime", TBTimeStamp()]);
     push(@metadata, ["Project", $PROJECT]) if (defined($PROJECT));
+    push(@metadata, ["Fcgid", "Yes"]);
+
+    #
+    # Create the Logfile now, since we might call WrapperFork(), and so 
+    # it can viewed on the web interface as a spew. 
+    #
+    $logfile = CreateLogFile($logfilename);
 
     #
     # We want to catch warnings, specifically uninitialized variables,
@@ -497,6 +522,9 @@ sub Start($$)
 	my $message = shift;
 	if ($message =~ /uninitialized value/) {
 	    die($message);
+	}
+	elsif ($message =~ /Statement unlikely to be reached at/) {
+	    cluck($message);
 	}
 	else {
 	    cluck($message);
@@ -596,7 +624,7 @@ sub Start($$)
 	# We throw it away unless its an rpc error. 
 	$nostorelogs = 1;
     }
-    elsif (-s $logfilename || $iserror) {
+    elsif ((-s $logfilename || $iserror) && !$logaborted) {
 	#
 	# On output or error send email.
 	#
@@ -612,21 +640,15 @@ sub Start($$)
 	$nostorelogs = 0;
     }
 
-    #
-    # If the parent, we create the Logfile, but do not store it yet,
-    # that will happen later. We want to create it so it can viewed on
-    # the web interface as a spew.
-    #
-    if ($parent) {
+    if ($parent && !$logaborted) {
 	#
-	# Well, we create the logfile only if want a logfile.
+	# If we decided we do not need the logfile, we will kill it
+	# later when the last child exits.
 	#
 	if (!$nostorelogs) {
-	    $logfile   = CreateLogFile($logfilename);
 	    my $logurn = GeniHRN::Generate("@OURDOMAIN@", "log",
 					   $logfile->logid());
 	    if (!$rpcerror) {
-		
 		$result->{'protogeni_error_log'} = $logurn;
 		$result->{'protogeni_error_url'} = $logfile->URL();
 	    }
@@ -648,16 +670,28 @@ sub Start($$)
 	    }
 	}
     }
-    if (!$logforked) {
-	#
-	# This is the last child exiting, now we can deal with the log.
-	#
-	if (defined($logfile)) {
+    #
+    # This is the last child exiting, now we can deal with the log.
+    #
+    if (!$logforked && defined($logfile)) {
+	if ($nostorelogs || $logaborted) {
+	    # Delete file below.
+	    $logfile->Delete(0);
+	}
+	else {
 	    $logfile->SetMetadata(\@metadata, 1);
-	    $logfile->Store();
+	    if ($logaborted) {
+		$logfile->Close();
+	    }
+	    else {
+		$logfile->Store();
+	    }
 	}
     }
-    LogAbort();
+    #AppendDebug("$$ $method, $parent, $logforked, $logfile");
+
+    LogAbort()
+	if (!$logaborted);
     
     # Last child exited, delete the file.
     if (!$logforked) {
@@ -688,7 +722,7 @@ sub CreateLogFile($)
 	print STDERR "Could not lookup group $GENIGROUP";
 	return undef;
     }
-    my $logfile = Logfile->Create($group);
+    my $logfile = Logfile->Create($group, $fname);
     if (!defined($logfile)) {
 	print STDERR "Could not create new logfile";
 	return undef;
@@ -707,7 +741,7 @@ sub CreateLogFile($)
 sub WrapperFork()
 {
     # This tells libaudit to make sure the parent sends it email first.
-    AuditPrefork();
+    #AuditPrefork();
     
     my $mypid = fork();
     if ($mypid) {
@@ -759,6 +793,12 @@ sub AddLogfileMetaDataFromSpeaksFor($)
     AddLogfileMetaData("speakfor_uuid",  $speaksfor->target_uuid());
     AddLogfileMetaData("speaking_urn",   $speaksfor->owner_urn());
     AddLogfileMetaData("speaking_uuid",  $speaksfor->owner_uuid());
+}
+# See GeniCMV2::SecureImageDownload();
+sub AbortLogging()
+{
+    LogEnd(0);
+    $logaborted = 1;
 }
 
 #

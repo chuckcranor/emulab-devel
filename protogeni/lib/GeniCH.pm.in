@@ -66,6 +66,8 @@ my $SLICESHUTDOWN  = "$TB/sbin/protogeni/shutdownslice";
 
 my $API_VERSION = 1;
 
+sub InitModule($) { $main::GENI_ISCLRHOUSE = 1; }
+
 #
 # This is for Flack. 
 #

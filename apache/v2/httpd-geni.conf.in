@@ -857,7 +857,9 @@ ScriptAlias /protogeni/xmlrpc @prefix@/protogeni/xmlrpc/protogeni-wrapper.pl
 LoadModule fcgid_module libexec/apache22/mod_fcgid.so
 FcgidBusyTimeout	   1000
 FcgidIOTimeout		   1000
-FcgidMaxProcessesPerClass  25
+FcgidMaxRequestLen         524288
+FcgidMaxRequestsPerProcess 100
+FcgidMaxProcessesPerClass  50
 
 <LocationMatch "/protogeni/xmlrpc/(root|cluster)/*">
     FcgidWrapper @prefix@/protogeni/xmlrpc/cluster-wrapper.pl
