@@ -322,14 +322,24 @@ sub LocalizeBSD()
     # Get the correct kernel version
     # XXX note that the 8.x kernel is usually the default "kernel",
     # we move it to "kernel8" for consistency with the other kernels.
+    # XXX except in the latest 10.x MFS in which there is only a kernel10.
     #
     if (-e "kernel" && ! -e "kernel8") {
 	ExecQuiet("mv kernel kernel8") == 0
 	    or fatal("Could not move kernel to kernel8");
     }
-    if (-e "kernel${FBSDKERNEL}") {
+    if (-s "kernel${FBSDKERNEL}") {
+	print "Using FreeBSD $FBSDKERNEL kernel.\n";
 	ExecQuiet("cp -fp kernel${FBSDKERNEL} kernel") == 0
 	    or fatal("Could not copy FreeBSD ${FBSDKERNEL}.x kernel");
+    } elsif ($FBSDKERNEL != 10 && -e "kernel10") {
+	$FBSDKERNEL = 10;
+	print "FreeBSD 10 MFS, using FreeBSD 10 kernel.\n";
+	ExecQuiet("cp -fp kernel${FBSDKERNEL} kernel") == 0
+	    or fatal("Could not copy FreeBSD ${FBSDKERNEL}.x kernel");
+	# XXX create empty kernel8 and kernel9 files so we won't use those
+	ExecQuiet("cp /dev/null kernel8");
+	ExecQuiet("cp /dev/null kernel9");
     } else {
 	fatal("No FreeBSD ${FBSDKERNEL}.x kernel");
     }
