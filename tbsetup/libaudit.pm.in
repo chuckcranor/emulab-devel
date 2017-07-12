@@ -57,6 +57,7 @@ my $USERNAME    = "Unknown";
 my $GCOS        = "Unknown";
 my @SAVEARGV	= @ARGV;
 my $SAVEPID	= $PID;
+my $PREFORKFILE = "/var/tmp/auditfork_$PID";
 my $SAVE_STDOUT = 0;
 my $SAVE_STDERR = 0;
 
@@ -148,6 +149,15 @@ sub AuditStart($;$$)
 	return;
     }
 
+    # Reset to default for rentry in log running script.
+    $logfile    = undef;
+    $prefork    = undef;
+    $logonly    = 0;
+    $logtblogs  = 0;
+    $savelog    = 0;
+    $fancy      = 0;
+    $forked     = 0;
+
     # Logging instead of "auditing" ...
     if (defined($options)) {
 	if ($options & LIBAUDIT_NODELETE()) {
@@ -186,6 +196,9 @@ sub AuditStart($;$$)
 	$ENV{'TBAUDITON'} = "$SCRIPTNAME:$USERNAME";
 	return;
     }
+    # Clear this in case left behind, as for long running process.
+    unlink($PREFORKFILE)
+	if (-e $PREFORKFILE);
 
     if (!defined($logname)) {
 	$logfile = TBMakeLogname("$SCRIPTNAME");
@@ -354,9 +367,12 @@ sub AuditAbort()
 	    undef($logfile);
 	}
 	delete @ENV{'TBAUDITLOG', 'TBAUDITON'};
-
-	system("/usr/bin/touch $prefork")
-	    if (defined($prefork));
+	
+	if (defined($prefork)) {
+	    my $oldmask = umask(0000);
+	    system("/usr/bin/touch $prefork");
+	    umask($oldmask);
+	}
     }
     return 0;
 }
@@ -372,7 +388,7 @@ sub AuditPrefork()
     return 0
 	if (!$auditing);
 
-    $prefork = "/var/tmp/auditfork_$PID";
+    $prefork = $PREFORKFILE;
 }
 
 #
