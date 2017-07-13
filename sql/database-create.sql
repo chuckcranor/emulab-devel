@@ -1421,6 +1421,22 @@ CREATE TABLE `experiment_inputs` (
 ) ENGINE=MyISAM DEFAULT CHARSET=latin1;
 
 --
+-- Table structure for table `experiment_keys`
+--
+
+DROP TABLE IF EXISTS `experiment_keys`;
+CREATE TABLE `experiment_keys` (
+  `pid` varchar(48) NOT NULL default '',
+  `eid` varchar(32) NOT NULL default '',
+  `exptidx` int(11) NOT NULL default '0',
+  `rsa_privkey` text,
+  `rsa_pubkey` text,
+  `ssh_pubkey` text,
+  PRIMARY KEY  (`exptidx`),
+  UNIQUE KEY `pideid` (`pid`,`eid`)
+) ENGINE=MyISAM DEFAULT CHARSET=latin1;
+
+--
 -- Table structure for table `experiment_pmapping`
 --
 

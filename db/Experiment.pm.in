@@ -40,6 +40,7 @@ use Logfile;
 use English;
 use Data::Dumper;
 use File::Basename;
+use File::Temp;
 use overload ('""' => 'Stringify');
 use libtblog_simple;
 
@@ -53,7 +54,7 @@ use vars qw($EXPT_PRELOAD $EXPT_START $EXPT_SWAPIN $EXPT_SWAPUPDATE
 	    @EXPORT_OK
 	    $TB $BOSSNODE $CONTROL $TBOPS $PROJROOT $STAMPS $TBBASE  
 	    $TEVC $DBCONTROL $RSYNC $MKEXPDIR $TBPRERUN $TBSWAP   
-	    $TBREPORT $TBEND $DU $MD5
+	    $TBREPORT $TBEND $DU $MD5 $OPENSSL $SSHKEYGEN
 	    $EXPT_ACCESS_READINFO $EXPT_ACCESS_MODIFY $EXPT_ACCESS_DESTROY
 	    $EXPT_ACCESS_UPDATE $EXPT_ACCESS_MIN $EXPT_ACCESS_MAX);
 	  
@@ -76,6 +77,8 @@ $TBEND       = "$TB/bin/tbend";
 $DU          = "/usr/bin/du";
 $MD5         = "/sbin/md5";
 $RSYNC       = "/usr/local/bin/rsync";
+$OPENSSL     = "/usr/bin/openssl";
+$SSHKEYGEN   = "/usr/bin/ssh-keygen";
 
 # To avoid writting out all the methods.
 AUTOLOAD {
@@ -845,6 +848,9 @@ sub Delete($;$)
 	$logfile->Delete();
     }
     libArchive::TBDeleteExperimentArchive($pid, $eid);
+
+    DBQueryWarn("DELETE from experiment_keys ".
+		"WHERE eid='$eid' and pid='$pid'");
 
     DBQueryWarn("DELETE from experiments ".
 		"WHERE eid='$eid' and pid='$pid'");
@@ -6608,6 +6614,76 @@ sub CheckForDeprecatedImages($$$)
 	    $image->SendDeprecatedMail($user, $self);
 	}
     }
+    return 0;
+}
+
+#
+# Create rsa/ssh keys for experiment.
+#
+sub GenerateKeys($)
+{
+    my ($self) = @_;
+    my $rsa_privkey = "";
+    my $rsa_pubkey;
+    my $ssh_pubkey;
+    my $errmsg;
+
+    #
+    # Generate unencrypted RSA key. 
+    #
+    if (!open(RSA, "$OPENSSL genrsa 4096 2>/dev/null | ")) {
+	print STDERR "*** Could not start genrsa for RSA key\n";
+	return -1;
+    }
+    while (<RSA>) {
+	$rsa_privkey .= $_;
+    }
+    if (!close(RSA)) {
+	print STDERR "*** Could not generate RSA key\n";
+	return -1;
+    }
+    #
+    # Extract public key from it.
+    #
+    $rsa_pubkey =
+	emutil::PipeCommand("$OPENSSL rsa -pubout 2>/dev/null",
+			    $rsa_privkey, \$errmsg);
+    if (!defined($rsa_pubkey) || $rsa_pubkey eq "") {
+	print STDERR "*** Could not extract public RSA key\n";
+	if (defined($errmsg)) {
+	    print STDERR $errmsg;
+	}
+	return -1;
+    }
+    #
+    # Extract SSH public key from it. Does not accept the privkey on stdin. SAD!
+    #
+    my $fp = File::Temp->new();
+    if (!$fp) {
+	print STDERR "*** Could not create temp file for RSA key\n";
+	return -1;
+    }
+    print $fp $rsa_privkey;
+    if (!open(GEN, "$SSHKEYGEN -y -f $fp |")) {
+	print STDERR "*** Could not start ssh-keygen for RSA key\n";
+	return -1;
+    }
+    while (<GEN>) {
+	$ssh_pubkey .= $_;
+    }
+    if (!close(GEN)) {
+	print STDERR "*** Could not extract SSH pub key from RSA key\n";
+	return -1;
+    }
+    my $pid = $self->pid();
+    my $eid = $self->eid();
+    my $idx = $self->idx();
+    DBQueryWarn("replace into experiment_keys set ".
+		"  pid='$pid', eid='$eid', exptidx='$idx', ".
+		"  rsa_privkey=" . DBQuoteSpecial($rsa_privkey) . ", ".
+		"  rsa_pubkey="  . DBQuoteSpecial($rsa_pubkey) . ", ".
+		"  ssh_pubkey="  . DBQuoteSpecial($ssh_pubkey))
+	or return -1;
     return 0;
 }
 
