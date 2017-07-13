@@ -256,7 +256,7 @@ sub InUse()
 	#
 	my $reserved_urn = "";
 	
-	if (defined($reserved_pid) && $reserved_pid != "") {
+	if (defined($reserved_pid) && $reserved_pid ne "") {
 	    my $project = Project->Lookup($reserved_pid);
 	    if (defined($project) ) {
 		$reserved_urn = $project->nonlocalurn();
