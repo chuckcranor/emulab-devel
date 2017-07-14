@@ -284,6 +284,12 @@ window.ShowIdleGraphs = (function ()
 	    var callback = function(json) {
 		if (json.code) {
 		    console.info("Failed to get idledata: " + json.value);
+		    if (showWait) {
+			sup.HideWaitWait(function () {
+			    sup.SpitOops("oops",
+					 "Could not idledata: " + json.value);
+			});
+		    }
 		    return;
 		}
 		_.each(json.value, function(data, name) {
