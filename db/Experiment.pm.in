@@ -6675,6 +6675,7 @@ sub GenerateKeys($)
 	print STDERR "*** Could not extract SSH pub key from RSA key\n";
 	return -1;
     }
+    chomp($ssh_pubkey);
     my $pid = $self->pid();
     my $eid = $self->eid();
     my $idx = $self->idx();
