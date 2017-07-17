@@ -7,7 +7,6 @@ use installvars;
 use emdb;
 use EmulabConstants;
 
-my $PORTAL_ENABLE   = 1;
 my $MYURN           = "urn:publicid:IDN+${OURDOMAIN}+authority+cm";
 my $GENILIB_REPO    = "https://bitbucket.org/emulab/geni-lib";
 my $GENILIB_SRCDIR  = "$TOP_SRCDIR/../geni-lib";
