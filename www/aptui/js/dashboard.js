@@ -133,6 +133,10 @@ $(function ()
 	    UpdateTable();
 	    return;
 	}
+	/*
+	 * The only reason for using these json files is cause we encode
+	 * what node types we care about in the Cloudlab Portal.
+	 */
 	for (var index = 0; index < clusterFiles.length; index++) {
 	    var jqxhr = $.getJSON(clusterFiles[index], function(blob) {
 		$.each(blob.children, function(idx, site) {
