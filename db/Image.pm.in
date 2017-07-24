@@ -364,7 +364,7 @@ sub LookupByURL($$)
     my ($pid,$imagename);
 
     return undef
-	if (! ($url =~ /^(ftp|http|https):/));
+	if (! ($url =~ /^(ftp|http|https|file):/));
 
     my $safe_url = DBQuoteSpecial($url);
 

@@ -358,7 +358,10 @@ if ($newhash =~/^(.*)$/) {
 if (!$update) {
     # New mysal 5.7 limit of 64 chars on locks. Use the uuid.
     my $lockname;
-    if ($url =~ /uuid=([-\w]+)$/) {
+    if (length($url) < 64) {
+	$lockname = $1;
+    }
+    elsif ($url =~ /uuid=([-\w]+)$/) {
 	$lockname = $1;
     }
     else {
@@ -839,6 +842,18 @@ sub FetchImageFile($$$)
 	}
 	$UID = $SAVEUID;
     }
+    elsif ($url =~ /^file:\/\/(.*)/) {
+	system("/bin/cp -fp '$1' $localfile");
+	if ($?) {
+	    print STDERR "Could not copy $1 to $localfile\n";
+	    return -1;
+	}
+	system("$SHA1 $localfile > ${localfile}.sha1");
+	if ($?) {
+	    print STDERR "Could not generate sha1 hash of $localfile\n";
+	    return -1;
+	}
+    }
     else {
 	print "Downloading $url ...\n";
 	
@@ -867,23 +882,34 @@ sub FetchImageFile($$$)
 sub FetchMetadata($)
 {
     my ($url) = @_;
-    $url .= "&clientversion=" . $METADATA_CLIENTVERSION;
-    my $safe_url = User::escapeshellarg($url);
     my $xml  = "";
-    my $opts = ($debug ? "" : "-q");
-    my $cmd  = "$WGET $opts --no-check-certificate -O - $safe_url ";
-    $cmd .= "| $DD bs=1 count=5k ";
 
-    if ($debug) {
-	print "$cmd\n";
+    if ($url =~ /^file:\/\/(.*)/) {
+	open(META, $1) or
+	    fatal("Could not open $1: $!");
+	while (<META>) {
+	    $xml .= $_;
+	}
+	close(META);
     }
-    open(META, "$cmd |") or
-	fatal("Could not fetch metadata from $url");
-    while (<META>) {
-	$xml .= $_;
+    else {
+	$url .= "&clientversion=" . $METADATA_CLIENTVERSION;
+	my $safe_url = User::escapeshellarg($url);
+	my $opts = ($debug ? "" : "-q");
+	my $cmd  = "$WGET $opts --no-check-certificate -O - $safe_url ";
+	$cmd .= "| $DD bs=1 count=5k ";
+
+	if ($debug) {
+	    print "$cmd\n";
+	}
+	open(META, "$cmd |") or
+	    fatal("Could not fetch metadata from $url");
+	while (<META>) {
+	    $xml .= $_;
+	}
+	close(META)
+	    or fatal("Could not read metadata from $url");
     }
-    close(META)
-	or fatal("Could not read metadata from $url");
 
     if ($xml eq "") {
 	fatal("Failed to get metadata from $url");
