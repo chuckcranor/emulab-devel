@@ -58,7 +58,6 @@ my $ELABINELAB     = @ELABINELAB@;
 my $THISHOMEBASE   = "@THISHOMEBASE@";
 my $TESTMODE       = @TESTMODE@;
 my $DISABLE_EVENTS = "@DISABLE_EVENT_SCHED@";
-my $piper          = "$TBROOT/sbin/locpiper";
 my $mapper         = "$TBROOT/bin/mapper";
 my $wrapper        = "$TBROOT/libexec/assign_wrapper";
 my $SNMPIT	   = "$TBROOT/bin/snmpit";
@@ -522,19 +521,6 @@ sub doSwapout($) {
 			     error => ['eventsys_stop_failed']},
 			    "Failed to stop the event system.");
 		    $swapout_errors = 1;
-		}
-
-		#
-		# Stop the location piper.
-		#
-		if (0 && -x $piper) {
-		    print "Stopping the location piper\n";
-		    if (system("$piper -k $pid $eid")) {
-			tberror({type => 'secondary', severity => SEV_SECONDARY,
-				 error => ['piper_stop_failed']},
-				"Failed to stop location piper.");
-			$swapout_errors = 1;
-		    }
 		}
 	    }
 	}
@@ -1683,18 +1669,6 @@ sub doSwapin($) {
     # event system previously, so starting it again will fail!
     # 
     if (! ($DISABLE_EVENTS || $elabinelab)) {
-	#
-	# For the robot testbed, start the location piper *before* the event
-	# system.
-	#
-	if (0 && -x $piper && ($type != MODIFY && $type != MODIFY_RECOVER)) {
-	    print "Starting the location piper.\n";
-	    if (system("$piper $pid $eid")) {
-		tberror "Failed to start the location piper.";
-		return 1;
-	    }
-	}
-
 	if (($update_Eventsys_restart || 
 	    ($type != MODIFY && $type != MODIFY_RECOVER))) {
 	    print "Starting the event system.\n";
