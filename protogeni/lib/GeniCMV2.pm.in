@@ -3094,6 +3094,8 @@ sub CreateImage($)
     my $sliver_urn   = $argref->{'sliver_urn'};
     my $no_versions  = 0;
     my $wholedisk    = 0;
+    my $nosnapshot   = 0;
+    my $mustnotexist = 0;
     my $update_prepare = 0;
     my ($bsname,$blockstore);
     my $copyback_uuid;
@@ -3118,6 +3120,10 @@ sub CreateImage($)
 	if (exists($argref->{'wholedisk'}) && $argref->{'wholedisk'});
     $update_prepare = 1
 	if (exists($argref->{'update_prepare'}) && $argref->{'update_prepare'});
+    $nosnapshot = 1
+	if (exists($argref->{'nosnapshot'}) && $argref->{'nosnapshot'});
+    $mustnotexist = 1
+	if (exists($argref->{'mustnotexist'}) && $argref->{'mustnotexist'});
     # Optional blockstore name.
     if (exists($argref->{'bsname'})) {
 	$bsname = $argref->{'bsname'};
@@ -3232,6 +3238,10 @@ sub CreateImage($)
     # See if it already exists and check ownership permission.
     my $image = OSImage->Lookup($experiment->pid(), $imagename);
     if (defined($image)) {
+	if ($mustnotexist) {
+	    return GeniResponse->Create(GENIRESPONSE_ALREADYEXISTS, undef,
+					"Image name already in use");
+	}
 	if (!((defined($image->creator_urn()) &&
 	       ($image->creator_urn() eq $user->urn() ||
 		$image->creator_urn() eq $ENV{'REALGENIURN'})) ||
@@ -3378,6 +3388,12 @@ sub CreateImage($)
 	$image->uuid();
     # This goes back to the caller.
     my $retval = [$image_urn, $image_url, $version_urn, $version_url];
+
+    # We just create the descriptor and return info.
+    if ($nosnapshot) {
+	$slice->UnLock();
+	return GeniResponse->Create(GENIRESPONSE_SUCCESS, $retval);
+    }
 
     #
     # Create a web task for this. We pass the id to create image so
