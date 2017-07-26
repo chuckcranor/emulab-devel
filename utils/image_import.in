@@ -897,7 +897,7 @@ sub FetchMetadata($)
 	my $safe_url = User::escapeshellarg($url);
 	my $opts = ($debug ? "" : "-q");
 	my $cmd  = "$WGET $opts --no-check-certificate -O - $safe_url ";
-	$cmd .= "| $DD bs=1 count=5k ";
+	$cmd .= "| $DD 2>/dev/null bs=1 count=5k ";
 
 	if ($debug) {
 	    print "$cmd\n";
