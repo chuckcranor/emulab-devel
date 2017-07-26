@@ -525,8 +525,10 @@ CREATE TABLE `apt_profiles` (
 DROP TABLE IF EXISTS `apt_announcements`;
 CREATE TABLE `apt_announcements` (
   `idx` int(10) unsigned NOT NULL auto_increment,
+  `uuid` varchar(40) NOT NULL,
   `created` datetime default NULL,
   `uid_idx` int(10) default NULL,
+  `pid_idx` int(10) default NULL,
   `genesis` varchar(64) NOT NULL default 'emulab',
   `portal` varchar(64) NOT NULL default 'emulab',
   `retired` tinyint(1) NOT NULL default '0',
