@@ -373,15 +373,15 @@ sub reportevents($)
 			push(@mailbody,
 			     "Thresholds: $MAX_PPS pkts/sec, $mbps Mbits/sec\n");
 			push(@mailbody,
-			     sprintf("%10s %14s %14s %s",
-				     "Node", "Pkts/sec", "Mb/sec", "When"));
+			     sprintf("%10s %20s %8s %8s %s",
+				     "Node", "Expt", "Pkts/sec", "Mb/sec", "When"));
 		    }
 		    my $stamp = POSIX::strftime("20%y-%m-%d %H:%M:%S",
 						localtime($ref->{'start'}));
 		    push(@mailbody,
-			 sprintf("%10s %14d %14d %s for %d sec",
-				 $node, $pps, int($bps/1000000),
-				 $stamp, $secs));
+			 sprintf("%10s %20s %8d %8d %s for %d sec",
+				 $node, $pcs{$node}{'exp'}, $pps,
+				 int($bps/1000000), $stamp, $secs));
 		}
 	    }
 	    $rates{$node}{'pkts'} = 0; 
