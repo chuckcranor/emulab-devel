@@ -942,6 +942,8 @@ REPLACE INTO table_regex VALUES ('virt_nodes','sharing_mode','text','regex','^[-
 REPLACE INTO table_regex VALUES ('virt_nodes','osname','text','regex','^((([-\\w]+\\/{0,1})[-\\w\\.+]+(:\\d+){0,1})|((http|https|ftp)\\:\\/\\/[-\\w\\.\\/\\@\\:\\~\\?\\=\\&]*))$',2,128,NULL);
 REPLACE INTO table_regex VALUES ('virt_nodes','parent_osname','text','redirect','virt_nodes:osname',2,128,NULL);
 REPLACE INTO table_regex VALUES ('virt_nodes','nfsmounts','text','redirect','experiments:nfsmounts',0,0,NULL);
+REPLACE INTO table_regex VALUES ('virt_nodes','rootkey_private','int','redirect','default:boolean',0,0,NULL);
+REPLACE INTO table_regex VALUES ('virt_nodes','rootkey_public','int','redirect','default:boolean',0,0,NULL);
 REPLACE INTO table_regex VALUES ('virt_programs','pid','text','redirect','projects:pid',0,0,NULL);
 REPLACE INTO table_regex VALUES ('virt_programs','eid','text','redirect','experiments:eid',0,0,NULL);
 REPLACE INTO table_regex VALUES ('virt_programs','vnode','text','redirect','virt_nodes:vname',0,0,NULL);

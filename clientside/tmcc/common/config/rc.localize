@@ -111,6 +111,7 @@ sub doboot()
 {
     my @tmccresults;
     my @pubkeys     = ();
+    my %keyfiles    = ();
 
     print STDOUT "Checking Testbed localization configuration ... \n";
 
@@ -124,22 +125,57 @@ sub doboot()
     #
     # Go through and see what we got. For now, we expect just ssh keys
     # 
+    my $curkey = "";
     foreach my $str (@tmccresults) {
-	if ($str =~ /^ROOTPUBKEY='(.*)'$/) {
-	    push(@pubkeys, $1);
+	if (!$curkey) {
+	    if ($str =~ /^ROOTPUBKEY='(.*)'$/) {
+		push(@pubkeys, $1);
+		next;
+	    }
+	    if ($str =~ /^ROOTKEY='(.*)' KEYFILE='(.*)' ENCRYPTED='(.*)'/) {
+		$keyfiles{$2}{'key'} = $1;
+		$keyfiles{$2}{'encrypted'} = ($3 eq "no") ? 0 : 1;
+		next;
+	    }
+
+	    # XXX keys can also have embedded newlines
+	    if ($str =~ /^ROOTKEY='(.*)$/) {
+		$curkey = "$1\n";
+		next;
+	    }
+	} else {
+	    if ($str =~ /^' KEYFILE='(.*)' ENCRYPTED='(.*)'/) {
+		$keyfiles{$1}{'key'} = $curkey;
+		$keyfiles{$1}{'encrypted'} = ($2 eq "no") ? 0 : 1;
+		$curkey = "";
+		next;
+	    }
+	    if ($str !~ /^(ROOTPUBKEY|ROOTKEY)=/) {
+		$curkey .= "$str";
+		next;
+	    }
 	}
-	else {
-	    warning("Bad localization line: $str");
-	}
+
+	warning("Bad localization line: $str");
+	$curkey = "";
+    }
+
+    my %secured = ();
+    my $keydir = (WINDOWS() ? "/sshkeys/root" : "/root/.ssh");
+    if (securekeydir($keydir)) {
+	warning("Could not secure key directory '$keydir', ".
+		"will not store decrypted keys");
+	$secured{$keydir} = 0;
+    } else {
+	$secured{$keydir} = 1;
     }
 
     #
-    # Ensure that the given keys are in root's authorized_keys file,
+    # Ensure that the given pubkeys are in root's authorized_keys file,
     # put them there if not.
     #
     if (@pubkeys) {
-	my $authdir   = (WINDOWS() ? "/sshkeys/root" : "/root/.ssh");
-	my $authkeys  = $authdir . "/authorized_keys";
+	my $authkeys  = $keydir . "/authorized_keys";
 	my $authkeysold = $authkeys . ".old";
 	my $authkeysnew = $authkeys . ".new";
 	my $oldumask  = umask(022);
@@ -151,13 +187,6 @@ sub doboot()
 	#
 	if (STORAGEHOST()) {
 	    $authkeysnew = "/tmp/authorized_keys.new";
-	} else {
-	    if (! -e $authdir) {
-		system("mkdir -p $authdir") == 0
-		    or fatal("Could not create $authdir");
-		system("chmod 700 $authdir") == 0
-		    or fatal("Failed to chmod $authdir");
-	    }
 	}
 
 	#
@@ -177,7 +206,7 @@ sub doboot()
 	if (open(OKEYS, "<$authkeys")) {
 	    while (my $key = <OKEYS>) {
 		chomp $key;
-		if ($key && $key !~ /^\s*#/ && exists($keyhash{$key})) {
+		if ($key && $key !~ /^\s*\#/ && exists($keyhash{$key})) {
 		    $keyhash{$key} = 1;
 		}
 		push @lines, $key;
@@ -201,7 +230,7 @@ sub doboot()
 	#
 	if (!$added) {
 	    umask($oldumask);
-	    return 0;
+	    goto sshdone;
 	}
 
 	#
@@ -229,8 +258,97 @@ sub doboot()
 	if (system("mv -f $authkeysnew $authkeys")) {
 	    warning("Could not mv $authkeysnew to $authkeys");
 	}
+    }
+
+  sshdone:
+    # XXX don't know what this means for windows
+    if (WINDOWS()) {
 	return 0;
     }
+
+    #
+    # Create standalone key files
+    #
+    foreach my $k (keys %keyfiles) {
+	my $file = "/root/$k";
+
+	($keydir = $file) =~ s#^(.*)/[^/]+$#$1#;
+	if (!exists($secured{$keydir})) {
+	    if (securekeydir($keydir)) {
+		warning("Could not secure key directory '$keydir', ".
+			"will not store decrypted keys");
+		$secured{$keydir} = 0;
+	    } else {
+		$secured{$keydir} = 1;
+	    }
+	}
+
+	if ($keyfiles{$k}{'encrypted'}) {
+	    if (!$secured{$keydir}) {
+		warning("will not decrypt key for '$file', skipped");
+		next;
+	    }
+	    # XXX decrypt key
+	    warning("cannot decrypt keys yet, key for '$file' skipped");
+	    next;
+	}
+	if (-e "$file" && unlink("$file") != 1) {
+	    warning("could not unlink old $file, key skipped");
+	    next;
+	}
+	if (!open(FD, ">$file") ||
+	    !chown(0, 0, $file) || !chmod(0600, $file)) {
+	    close(FD);
+	    unlink($file);
+	    warning("could not open $file, key skipped");
+	    next;
+	}
+	print FD $keyfiles{$k}{'key'};
+	close(FD);
+    }
+
+    return 0;
+}
+
+sub securekeydir($)
+{
+    my ($keydir) = @_;
+    my $oldumask = umask(022);
+
+    # XXX root FS is RO, nothing we can do; but nothing they can do either!
+    if (STORAGEHOST()) {
+	return 0;
+    }
+
+    if (! -e $keydir || -l $keydir || ! -d $keydir) {
+	unlink($keydir);
+	if (system("mkdir -p $keydir")) {
+	    warning("could not create $keydir");
+	    return -1;
+	}
+    }
+
+    #
+    # Be super paranoid. Even though keys won't work if the permissions
+    # and ownership are wrong, we could still wind up exposing keys.
+    #
+    my (undef,undef,$mode,undef,$uid,$gid) = stat($keydir);
+    if (($mode & 0777) != 0700) {
+	if (chmod(0700, $keydir) != 1) {
+	    warning("could not chmod $keydir to 0700, ".
+		    "private key not downloaded");
+	    return -1;
+	}
+    }
+    if ($uid != 0 || $gid != 0) {
+	if (chown(0, 0, $keydir) != 1) {
+	    warning("could not chown $keydir to 0:0, ".
+		    "private key not downloaded");
+	    return -1;
+	}
+    }
+
+    return 0;
 }
 
 #

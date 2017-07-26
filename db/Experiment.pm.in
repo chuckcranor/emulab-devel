@@ -6688,5 +6688,45 @@ sub GenerateKeys($)
     return 0;
 }
 
+#
+# Return the per-experiment private key.
+#
+sub GetPrivkey($)
+{
+    my ($self) = @_;
+    my $key = "";
+
+    # Must be a real reference. 
+    return -1
+	if (! ref($self));
+
+    my $idx = $self->idx();
+    my $result = DBQueryWarn("select rsa_privkey from experiment_keys ".
+			     "where exptidx='$idx'");
+    if ($result && $result->numrows) {
+	($key) = $result->fetchrow_array();
+    }
+
+    return $key;
+}
+
+#
+# For all nodes in the experiment, determine which should receive
+# per-experiment root private/public keys based on what the user wants
+# and modified by Emulab policy (as encoded in Node::InitKeyDist).
+#
+sub InitKeyDist($)
+{
+    my ($self) = @_;
+
+    my @nodelist = $self->NodeList();
+    foreach my $node (@nodelist) {
+	$node->InitKeyDist($self);
+    }
+
+    return 0;
+}
+
+
 # _Always_ make sure that this 1 is at the end of the file...
 1;

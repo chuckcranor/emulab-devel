@@ -4543,6 +4543,8 @@ CREATE TABLE `reserved` (
   `external_resource_key` tinytext,
   `tmcd_redirect` tinytext,
   `sharing_mode` varchar(32) default NULL,
+  `rootkey_private` tinyint(1) NOT NULL default '0',
+  `rootkey_public` tinyint(1) NOT NULL default '0',
   PRIMARY KEY  (`node_id`),
   UNIQUE KEY `vname` (`pid`,`eid`,`vname`),
   UNIQUE KEY `vname2` (`exptidx`,`vname`),
@@ -5754,6 +5756,8 @@ CREATE TABLE `virt_nodes` (
   `firewall_style` tinytext,
   `firewall_log` tinytext,
   `nfsmounts` enum('emulabdefault','genidefault','all','none') default NULL,  
+  `rootkey_private` tinyint(1) NOT NULL default '0',
+  `rootkey_public` tinyint(1) NOT NULL default '0',
   PRIMARY KEY  (`exptidx`,`vname`),
   UNIQUE KEY `pideid` (`pid`,`eid`,`vname`),
   KEY `pid` (`pid`,`eid`,`vname`)

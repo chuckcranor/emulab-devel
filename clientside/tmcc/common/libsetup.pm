@@ -84,7 +84,7 @@ use librc;
 # IMPORTANT NOTE: if you change the version here, you must also change it
 # in clientside/lib/tmcd/tmcd.h!
 #
-sub TMCD_VERSION()	{ 41; };
+sub TMCD_VERSION()	{ 42; };
 libtmcc::configtmcc("version", TMCD_VERSION());
 
 # Control tmcc timeout.

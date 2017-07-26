@@ -46,4 +46,4 @@
  * it in clientside/tmcc/common/libsetup.pm!
  */
 #define DEFAULT_VERSION		2
-#define CURRENT_VERSION		41
+#define CURRENT_VERSION		42

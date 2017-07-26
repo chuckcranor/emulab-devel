@@ -54,6 +54,7 @@ my $GRUBDEF	= "/etc/default/grub";
 my $PUBSUBCONF  = "/usr/local/etc/pubsubd.conf";
 my $PUBSUBEXPR  = "/usr/local/etc/pubsubd.expr";
 my $ROOTSSHDIR	= "/root/.ssh";
+my $ROOTSSLDIR	= "/root/.ssl";
 
 #
 # Dead wood in $BINDIR
@@ -353,14 +354,19 @@ if (-f "/root/$HISTORY") {
 }
 
 #
-# Remove /root/.ssh and then regenerate an empty directory.
+# Remove /root/.ssh and .ssl and then regenerate empty directories.
 # We don't want any Utah specific keys tainting the images.
 #
-print "Cleaning root's .ssh directory ...\n";
+print "Cleaning root's .ssh/ssl directories ...\n";
 if (system("rm -rf $ROOTSSHDIR") ||
     system("mkdir -p -m 700 $ROOTSSHDIR") ||
     system("chown root:root $ROOTSSHDIR")) {
     die("Could not clean root .ssh directory");
+}
+if (system("rm -rf $ROOTSSLDIR") ||
+    system("mkdir -p -m 700 $ROOTSSLDIR") ||
+    system("chown root:root $ROOTSSLDIR")) {
+    die("Could not clean root .ssl directory");
 }
 
 #

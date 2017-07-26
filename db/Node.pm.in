@@ -1347,6 +1347,121 @@ sub OnSharedNode($) {
 }
 
 #
+# This function takes the user-provided values for root key distribution
+# from virt_nodes and adjusts them according to system restrictions, putting
+# the result into the reserved table. The Get/Set accessor functions below
+# use the values from reserved.
+#
+# The current restrictions are that we do *not* distribute a root pubkey
+# to tainted nodes (as it opens a path to root on a node where no one should
+# be root) or any keys to firewall nodes, virtnode hosts, delay nodes,
+# subbosses, storagehosts, etc. which are not really part of the user
+# topology.
+#
+sub InitKeyDist($;$)
+{
+    my ($self,$experiment) = @_;
+    my ($priv,$pub);
+
+    return -1
+	if (!ref($self) || !$self->IsReserved());
+
+    if (!$experiment) {
+	$experiment = $self->Reservation();
+	return -1
+	    if (!$experiment);
+    }
+    
+    # XXX only PC class nodes for now, since we have to ssh to it
+    if ($self->class ne "pc") {
+	$priv = $pub = 0;
+	goto done;
+    }
+
+    my $node_id = $self->node_id();
+
+    # Get user-supplied values from virt_nodes
+    my $result =
+	DBQueryWarn("select v.rootkey_private,v.rootkey_public ".
+		    " from virt_nodes as v, reserved as r ".
+		    " where v.exptidx=r.exptidx and v.vname=r.vname ".
+		    "  and r.node_id='$node_id'");
+
+    if ($result && $result->numrows > 0) {
+	($priv, $pub) = $result->fetchrow_array();
+	my $fwnode;
+	
+	# tainted node: no pub key
+	if ($self->IsTainted()) {
+	    $pub = 0;
+	}
+
+	# special hosts: no keys at all
+	elsif ($self->erole() ne TBDB_RSRVROLE_NODE()) {
+	    $priv = $pub = 0;
+	}
+
+	# firewall node for an experiment: no keys at all
+	elsif ($experiment->IsFirewalled(\$fwnode) && $fwnode eq $node_id) {
+	    $priv = $pub = 0;
+	}
+    }
+
+  done:
+    return $self->SetKeyDist($priv, $pub);
+}
+
+sub GetKeyDist($$$)
+{
+    my ($self,$privref,$pubref) = @_;
+    
+    return -1
+	if (!ref($self));
+    return -1
+	if (! $self->IsReserved());
+
+    if ($privref) {
+	$$privref = ($self->{"RSRV"}->{'rootkey_private'} ? 1 : 0);
+    }
+    if ($pubref) {
+	$$pubref = ($self->{"RSRV"}->{'rootkey_public'} ? 1 : 0);
+    }
+
+    return 0;
+}
+
+sub SetKeyDist($$$)
+{
+    my ($self,$privval,$pubval) = @_;
+    
+    return -1
+	if (!ref($self));
+    return -1
+	if (! $self->IsReserved());
+
+    my $clause = "";
+    if (defined($privval)) {
+	$privval = 1
+	    if ($privval != 0);
+	$clause = "rootkey_private=$privval";
+    }
+    if (defined($pubval)) {
+	$pubval = 1
+	    if ($pubval != 0);
+	$clause .= ","
+	    if ($clause);
+	$clause .= "rootkey_public=$pubval";
+    }
+    if ($clause) {
+	my $node_id = $self->node_id();
+	DBQueryWarn("update reserved set $clause where node_id='$node_id'")
+	    or return -1;
+	$self->FlushReserved();
+    }
+    return 0;
+}
+
+#
 # Load all attributes from the node_attributes table, 
 #
 sub LoadNodeAttributes($)
@@ -4092,13 +4207,21 @@ sub SetTaintStates($@) {
     my ($self, @taint_states) = @_;
     require libTaintStates;
 
-    return libTaintStates::SetTaintStates($self, @taint_states);
+    my $rv = libTaintStates::SetTaintStates($self, @taint_states);
+    if (!$rv && libTaintStates::IsTainted($self)) {
+	$self->SetKeyDist(undef, 0);
+    }
+    return $rv;
 }
 sub AddTaintState($$) {
     my ($self, $taint) = @_;
     require libTaintStates;
 
-    return libTaintStates::AddTaintState($self, $taint);
+    my $rv = libTaintStates::AddTaintState($self, $taint);
+    if (!$rv && libTaintStates::IsTainted($self)) {
+	$self->SetKeyDist(undef, 0);
+    }
+    return $rv;
 }
 sub RemoveTaintState($;$) {
     my ($self, $taint) = @_;
@@ -4110,7 +4233,11 @@ sub InheritTaintStates($$) {
     my ($self, $osimage) = @_;
     require libTaintStates;
 
-    return libTaintStates::InheritTaintStates($self, $osimage);
+    my $rv = libTaintStates::InheritTaintStates($self, $osimage);
+    if (!$rv && libTaintStates::IsTainted($self)) {
+	$self->SetKeyDist(undef, 0);
+    }
+    return $rv;
 }
 
 

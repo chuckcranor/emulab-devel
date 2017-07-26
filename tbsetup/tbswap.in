@@ -63,6 +63,7 @@ my $wrapper        = "$TBROOT/libexec/assign_wrapper";
 my $SNMPIT	   = "$TBROOT/bin/snmpit";
 my $RFLINKS	   = "$TBROOT/bin/rflinks";
 my $IMAGESETUP     = "$TBROOT/sbin/image_setup";
+my $PUSHROOTKEY	   = "$TBROOT/sbin/pushrootkey";
 my $portstats	   = "$TBROOT/bin/portstats";
 my $TCPP           = "$TBROOT/sbin/tcpp";
 my $NFSTRACESUPPORT= @NFSTRACESUPPORT@;
@@ -1385,6 +1386,13 @@ sub doSwapin($) {
     }
     TBDebugTimeStamp("named finished");
 
+    #
+    # Determine the distribution of per-experiment root private/public keys
+    # to the experiment nodes.
+    #
+    print "Determining root keypair distribution.\n";
+    $experiment->InitKeyDist();
+
     if ($NFSTRACESUPPORT) {
 	print "Cleaning NFS traces.\n";
 	TBDebugTimeStamp("nfstrace gc started");
@@ -1659,6 +1667,18 @@ sub doSwapin($) {
 	    return 1;
 	}
 	TBDebugTimeStamp("snmpit finished");
+    }
+
+    #
+    # Before we fire off any async activity, push out any experiment
+    # specific root private key.
+    #
+    my $privkey = $experiment->GetPrivkey();
+    if (-x $PUSHROOTKEY && $privkey) {
+	print "Pushing per-experiment root private key.\n";
+	if (system("$PUSHROOTKEY -e $pid/$eid")) {
+	    tbwarn "Could not push private key, this may cause problems!";
+	}
     }
 
     #

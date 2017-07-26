@@ -94,6 +94,7 @@ RUN_DEPENDS+=	\
 	libtool:${PORTSDIR}/devel/libtool \
 	neato:${PORTSDIR}/graphics/graphviz \
 	otclsh:${PORTSDIR}/misc/otcl \
+	pssh:${PORTSDIR}/security/pssh \
 	rpm:${PORTSDIR}/archivers/rpm4 \
 	rrdtool:${PORTSDIR}/databases/rrdtool \
 	rsync:${PORTSDIR}/net/rsync \

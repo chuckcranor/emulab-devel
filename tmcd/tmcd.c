@@ -174,6 +174,12 @@ CHECKMASK(char *arg)
 #define HAS_ALL_TAINTS(tset, tcheck) ((tset & tcheck) == tcheck)
 #define HAS_TAINT(tset, tcheck) HAS_ALL_TAINTS(tset, tcheck)
 
+/* Per-experiment root keypair support */
+#define TB_ROOTKEYS_NONE	0
+#define TB_ROOTKEYS_PRIVATE	1
+#define TB_ROOTKEYS_PUBLIC	2
+#define TB_ROOTKEYS_BOTH	3
+
 typedef struct {
 	char pid[TBDB_FLEN_PID];
 	char gid[TBDB_FLEN_GID];
@@ -259,8 +265,9 @@ typedef struct {
         int		genisliver_idx;
         int		geniflags;
 	int		isnonlocal_pid;
+	unsigned short  taintstates;
+	unsigned short  experiment_keys;
 	char            nfsmounts[TBDB_FLEN_TINYTEXT];
-	unsigned int    taintstates;
 	char		nodeid[TBDB_FLEN_NODEID];
 	char		vnodeid[TBDB_FLEN_NODEID];
 	char		pnodeid[TBDB_FLEN_NODEID]; /* XXX */
@@ -7611,7 +7618,8 @@ iptonodeid(struct in_addr ipaddr, tmcdreq_t *reqp, char* nodekey)
 				 " n.nonfsmounts,e.nonfsmounts AS enonfs, "
 				 " r.erole, n.taint_states, "
 				 " n.nfsmounts,e.nfsmounts AS enfsmounts, "
-				 " p.nonlocal_id,NULL "
+				 " p.nonlocal_id,NULL, "
+				 " r.rootkey_private,r.rootkey_public "
 				 "FROM nodes AS n "
 				 "LEFT JOIN reserved AS r ON "
 				 "  r.node_id=n.node_id "
@@ -7642,7 +7650,7 @@ iptonodeid(struct in_addr ipaddr, tmcdreq_t *reqp, char* nodekey)
 				 "     (SELECT node_id FROM widearea_nodeinfo "
 				 "      WHERE privkey='%s') "
 				 "  AND notmcdinfo_types.attrvalue IS NULL",
-				 43, nodekey);
+				 45, nodekey);
 	}
 	else if (reqp->isvnode) {
 		char	clause[BUFSIZ];
@@ -7681,7 +7689,8 @@ iptonodeid(struct in_addr ipaddr, tmcdreq_t *reqp, char* nodekey)
 				 " nv.nonfsmounts,e.nonfsmounts AS enonfs, "
 				 " r.erole, nv.taint_states, "
 				 " nv.nfsmounts,e.nfsmounts AS enfsmounts, "
-				 " p.nonlocal_id,va.attrvalue "
+				 " p.nonlocal_id,va.attrvalue, "
+				 " r.rootkey_private,r.rootkey_public "
 				 "from nodes as nv "
 				 "left join nodes as np on "
 				 " np.node_id=nv.phys_nodeid "
@@ -7708,7 +7717,7 @@ iptonodeid(struct in_addr ipaddr, tmcdreq_t *reqp, char* nodekey)
 				 " va.vname=r.vname and "
 				 " va.attrkey='routable_control_ip' "
 				 "where nv.node_id='%s' and (%s)",
-				 43, reqp->vnodeid, clause);
+				 45, reqp->vnodeid, clause);
 	}
 	else {
 		char	clause[BUFSIZ];
@@ -7740,7 +7749,8 @@ iptonodeid(struct in_addr ipaddr, tmcdreq_t *reqp, char* nodekey)
 				 " n.nonfsmounts,e.nonfsmounts AS enonfs, "
 				 " r.erole, n.taint_states, "
 				 " n.nfsmounts,e.nfsmounts AS enfsmounts, "
-				 " p.nonlocal_id,NULL "
+				 " p.nonlocal_id,NULL, "
+				 " r.rootkey_private,r.rootkey_public "
 				 "from interfaces as i "
 				 "left join nodes as n on n.node_id=i.node_id "
 				 "left join reserved as r on "
@@ -7770,7 +7780,7 @@ iptonodeid(struct in_addr ipaddr, tmcdreq_t *reqp, char* nodekey)
 				 "  on n.type=dedicated_wa_types.type "
 				 "where (%s) "
 				 "  and notmcdinfo_types.attrvalue is NULL",
-				 43, clause);
+				 45, clause);
 	}
 
 	if (!res) {
@@ -7942,6 +7952,13 @@ iptonodeid(struct in_addr ipaddr, tmcdreq_t *reqp, char* nodekey)
 		reqp->isroutable_vnode = 1;
 	else
 		reqp->isroutable_vnode = 0;
+
+	/* Which per-experiment root keys should be propogated if any */
+	reqp->experiment_keys = TB_ROOTKEYS_NONE;
+	if (row[43] && atoi(row[43]) > 0)
+		reqp->experiment_keys |= TB_ROOTKEYS_PRIVATE;
+	if (row[44] && atoi(row[44]) > 0)
+		reqp->experiment_keys |= TB_ROOTKEYS_PUBLIC;
 
 	/* If a vnode, copy into the nodeid. Eventually split this properly */
 	strcpy(reqp->pnodeid, reqp->nodeid);
@@ -10439,13 +10456,10 @@ COMMAND_PROTOTYPE(dolocalize)
 {
 	MYSQL_RES	*res;
 	MYSQL_ROW	row;
-	char		buf[MYBUFSIZE];
-	char		*bufp = buf, *ebufp = &buf[sizeof(buf)];
+	char		buf[2*MYBUFSIZE]; /* strlen(privkey) > 2048 */
 	int		nrows;
 	FILE		*fp = NULL;
 	char		*okey = NULL;
-
-	*bufp = 0;
 
 #ifdef ELABINELAB
 	/*
@@ -10485,7 +10499,8 @@ COMMAND_PROTOTYPE(dolocalize)
 
 	row = mysql_fetch_row(res);
 	if (row[1]) {
-	    bufp += OUTPUT(bufp, ebufp - bufp, "ROOTPUBKEY='%s'\n", row[1]);
+		OUTPUT(buf, sizeof(buf), "ROOTPUBKEY='%s'\n", row[1]);
+		client_writeback(sock, buf, strlen(buf), tcp);
 	}
 
 	/*
@@ -10494,14 +10509,71 @@ COMMAND_PROTOTYPE(dolocalize)
 	 */
 	if (okey) {
 		if (row[1] == NULL || strcmp(okey, row[1])) {
-			bufp += OUTPUT(bufp, ebufp - bufp,
-				       "ROOTPUBKEY='%s'\n", okey);
+			OUTPUT(buf, sizeof(buf), "ROOTPUBKEY='%s'\n", okey);
+			client_writeback(sock, buf, strlen(buf), tcp);
 		}
 		free(okey);
 	}
-
 	mysql_free_result(res);
-	client_writeback(sock, buf, strlen(buf), tcp);
+
+	/*
+	 * See if there is a per-experiment root public key that should
+	 * be included.
+	 */
+	if ((reqp->experiment_keys & TB_ROOTKEYS_PUBLIC) != 0) {
+		res = mydb_query("select ssh_pubkey from experiment_keys "
+				 "where exptidx='%d'", 1, reqp->exptidx);
+		if (res && (nrows = (int)mysql_num_rows(res)) > 0) {
+			row = mysql_fetch_row(res);
+			if (row[0] && row[0][0]) {
+				OUTPUT(buf, sizeof(buf),
+				       "ROOTPUBKEY='%s'\n", row[0]);
+				client_writeback(sock, buf, strlen(buf), tcp);
+			}
+		}
+		if (res)
+			mysql_free_result(res);
+	}
+
+	/*
+	 * Pass back the public key half of the keypair.
+	 * The version check is to avoid warnings from the client about
+	 * bad localization lines. Mighty big of us don't ya think?
+	 *
+	 * XXX note that this pubkey is different than the SSH pubkey above.
+	 *
+	 * XXX note that we don't actually pass back the private key here!
+	 * Once we start encrypting the private key with a per-node key
+	 * planted at imaging time, then we can pass it back.
+	 */
+	if (vers > 41 && (reqp->experiment_keys & TB_ROOTKEYS_PRIVATE) != 0) {
+		res = mydb_query("select rsa_pubkey,ssh_pubkey from "
+				 "experiment_keys where exptidx='%d'",
+				 2, reqp->exptidx);
+		if (res && (nrows = (int)mysql_num_rows(res)) > 0) {
+			row = mysql_fetch_row(res);
+			if (row[0] && row[0][0]) {
+				OUTPUT(buf, sizeof(buf),
+				       "ROOTKEY='%s' "
+				       "KEYFILE='.ssl/%s.pub' "
+				       "ENCRYPTED='no'\n",
+				       row[0], reqp->nodeid);
+				client_writeback(sock, buf, strlen(buf), tcp);
+			}
+			/* For completeness drop the ssh key in its own file */
+			if (row[1] && row[1][0]) {
+				OUTPUT(buf, sizeof(buf),
+				       "ROOTKEY='%s' "
+				       "KEYFILE='.ssh/id_rsa.pub' "
+				       "ENCRYPTED='no'\n",
+				       row[1]);
+				client_writeback(sock, buf, strlen(buf), tcp);
+			}
+		}
+		if (res)
+			mysql_free_result(res);
+	}
+
 	return 0;
 }
 
