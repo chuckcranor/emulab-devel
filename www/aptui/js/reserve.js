@@ -342,8 +342,12 @@ $(function ()
 	    }
 	    /*
 	     * If the reservation is pending, lets stay on this page.
+	     * Oops: we do not have the reservation index so we are not
+	     * in edit mode, and so changing the reservation will actually
+	     * create new one. Fix at some point. In the meantime, just
+	     * reload the list page.
 	     */
-	    if (json.value == 3) {
+	    if (0 && json.value == 3) {
 		$('#unapproved-warning').removeClass("hidden");
 		// Back to edit/approve
 		ToggleSubmit(false, "check");
