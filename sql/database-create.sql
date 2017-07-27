@@ -531,12 +531,15 @@ CREATE TABLE `apt_announcements` (
   `pid_idx` int(10) default NULL,
   `genesis` varchar(64) NOT NULL default 'emulab',
   `portal` varchar(64) NOT NULL default 'emulab',
+  `priority` tinyint(1) NOT NULL default '3',
   `retired` tinyint(1) NOT NULL default '0',
   `max_seen` int(8) NOT NULL default '20',
   `text` mediumtext,
   `style` varchar(64) NOT NULL default 'alert-info',
   `link_label` tinytext,
   `link_url` tinytext,
+  `display_start` datetime default NULL,
+  `display_end` datetime default NULL,
   PRIMARY KEY (`idx`)
 ) ENGINE=MyISAM DEFAULT CHARSET=latin1;
 
