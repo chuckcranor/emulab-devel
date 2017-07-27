@@ -523,14 +523,14 @@ sub AddUser()
     system("$ADDMMUSER $user")
 	if ($MAILMANSUPPORT);
     
+    # Generate the SSL cert for the user.
+    system("$MKUSERCERT $user");
+
     if ($isnonlocal) {
 	$EUID = 0;
 	goto skipstuff;
     }
     
-    # Generate the SSL cert for the user.
-    system("$MKUSERCERT $user");
-
     #
     # If the user requested an initial encrypted SSL certificate, create
     # that too. Need to delete the initial_passphrase slot though, so that
