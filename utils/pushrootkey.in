@@ -38,12 +38,14 @@ sub usage()
 	  "-d         Turn on debugging\n".
 	  "-n         Impotent mode\n".
 	  "-e         Push key to all nodes in given experiment\n".
+	  "-G         Generate keypair in DB if it doesn't already exist\n".
 	  "node ...   Nodes push key to (must all be in same experiment)\n");
     exit(-1);
 }
-my $optlist    = "dne:";
+my $optlist    = "dne:G";
 my $debug      = 0;
 my $impotent   = 0;
+my $genkeys    = 0;
 my $exptstr;
 
 #
@@ -92,12 +94,19 @@ if (defined($options{"n"})) {
 if (defined($options{"e"})) {
     $exptstr = $options{"e"};
 }
+if (defined($options{"G"})) {
+    $genkeys = 1;
+}
 if (@ARGV == 0 && !$exptstr) {
     print STDERR "Must specify either an experiment or a list of nodes\n";
     usage();
 }
 if (@ARGV > 0 && $exptstr) {
     print STDERR "Cannot specify both an experiment and nodes\n";
+    usage();
+}
+if ($genkeys && !$exptstr) {
+    print STDERR "Can only use -G with -e\n";
     usage();
 }
 
@@ -127,6 +136,17 @@ if ($exptstr) {
 	    next;
 	}
 	push(@nodes, $node);
+    }
+}
+
+#
+# Generate the keys if needed
+#
+if ($genkeys) {
+    my $key = $expt->GetPrivkey();
+    if (!$key) {
+	print STDERR "Generating root keypair for $exptstr ...\n";
+	$expt->GenerateKeys();
     }
 }
 
