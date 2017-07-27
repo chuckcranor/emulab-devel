@@ -1373,7 +1373,7 @@ sub InitKeyDist($;$)
     }
     
     # XXX only PC class nodes for now, since we have to ssh to it
-    if ($self->class ne "pc") {
+    if ($self->class ne "pc" && $self->class ne "pcvm") {
 	$priv = $pub = 0;
 	goto done;
     }
