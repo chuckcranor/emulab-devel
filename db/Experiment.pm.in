@@ -6719,7 +6719,7 @@ sub InitKeyDist($)
 {
     my ($self) = @_;
 
-    my @nodelist = $self->NodeList();
+    my @nodelist = $self->NodeList(0, 1);
     foreach my $node (@nodelist) {
 	$node->InitKeyDist($self);
     }
