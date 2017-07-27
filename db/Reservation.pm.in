@@ -93,6 +93,7 @@ sub CreateCommon($$$$$$$$)
     $self->{'ADMIN_NOTES'} = undef;
     $self->{'APPROVED'}    = undef;
     $self->{'APPROVER'}    = undef;
+    $self->{'UUID'}        = undef;
 	
     bless($self, $class);
     
@@ -200,6 +201,7 @@ sub Lookup($$;$$$$)
     $self->{'ADMIN_NOTES'} = $record->{'admin_notes'};
     $self->{'APPROVED'}    = $record->{'a'};
     $self->{'APPROVER'}    = $record->{'approver'};
+    $self->{'UUID'}        = $record->{'uuid'};
 	
     bless($self, $class);
     
@@ -221,6 +223,7 @@ sub notes($)       { return $_[0]->{"NOTES"}; }
 sub admin_notes($) { return $_[0]->{"ADMIN_NOTES"}; }
 sub approved($)    { return $_[0]->{"APPROVED"}; }
 sub approver($)    { return $_[0]->{"APPROVER"}; }
+sub uuid($)        { return $_[0]->{"UUID"}; }
 
 sub Stringify($)
 {
@@ -375,6 +378,7 @@ sub Book($;$)
 		     "end=FROM_UNIXTIME($end), " .
 		     "uid='$uid', " .
 		     "uid_idx='$uid_idx' " .
+		     ( defined($idx) ? "" : ", uuid=uuid()" ) .
 		     ( defined( $notes ) ? ", notes=$notes" : "" ) .
 		     ( defined( $admin_notes ) ?
 		       ", admin_notes=$admin_notes" : "" ) .
