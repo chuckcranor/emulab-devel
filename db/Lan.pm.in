@@ -2217,7 +2217,7 @@ sub Dump($)
 		  "(" . $self->{'LINK'}->vname() . ") " : "");
     my $string = "ProtoLan: $vname $type,$link";
 
-    foreach my $key (keys(%{ $self->{"ATTRS"} })) {
+    foreach my $key (sort(keys(%{ $self->{"ATTRS"} }))) {
 	my $pattr = $self->{"ATTRS"}->{$key};
 	my $val   = $pattr->{'attrvalue'};
 
@@ -2225,7 +2225,7 @@ sub Dump($)
     }
     $string .= ", ";
 
-    foreach my $key (keys(%{ $self->{"MEMBERS"} })) {
+    foreach my $key (sort(keys(%{ $self->{"MEMBERS"} }))) {
 	my $member = $self->{"MEMBERS"}->{$key};
 	my $nodeid = $member->{'node'}->node_id();
 	my $iface  = $member->{'iface'};
@@ -2233,7 +2233,7 @@ sub Dump($)
 	$string .= "$nodeid:$iface, ";
     }
 
-    foreach my $key (keys(%{ $self->{"IFACES"} })) {
+    foreach my $key (sort(keys(%{ $self->{"IFACES"} }))) {
 	my $interface = $self->{"IFACES"}->{$key};
 	my $nodeid = $interface->{'node'}->node_id();
 	my $vnode  = $interface->{'vnode'};
