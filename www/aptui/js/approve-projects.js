@@ -246,7 +246,8 @@ $(function ()
 	sup.HideModal("#deny-modal");
 	var message = $('#deny-body').val();
 	var deleteuser = ($('#deny-delete-user').is(":checked") ? 1 : 0);
-	console.info("Deny", pid, message, deleteuser);
+	var silent = ($('#deny-silent').is(":checked") ? 1 : 0);
+	console.info("Deny", pid, message, deleteuser, silent);
 
 	var callback = function(json) {
 	    sup.HideWaitWait();
@@ -265,7 +266,8 @@ $(function ()
 					    "Deny",
 					    {"pid"        : pid,
 					     "message"    : message,
-					     "deleteuser" : deleteuser});
+					     "deleteuser" : deleteuser,
+					     "silent"     : silent});
 	xmlthing.done(callback);
     }
     

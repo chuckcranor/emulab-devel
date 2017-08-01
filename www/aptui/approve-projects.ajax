@@ -273,7 +273,10 @@ function Do_Deny()
     }
     $message = $ajax_args["message"];
     $deleteuser = ($ajax_args["deleteuser"] == 1 ? 1 : 0);
-
+    $silent = 0;
+    if (isset($ajax_args["silent"]) && $ajax_args["silent"] == 1) {
+        $silent = 1;
+    }
     if (! ($leader = $project->GetLeader())) {
         TBERROR("Error getting leader for $pid", 0);
         SPITAJAX_ERROR(-1, "Internal error getting project leader");
@@ -333,17 +336,18 @@ function Do_Deny()
                        "see the email sent to your testbed-ops list");
         return;
     }
-    # This works cause we still have the project object in memory.
-    SendProjAdminMail
-        ($project, "ADMIN", "$headname '$headuid' <$headuid_email>",
-         "Project application '$pid' has been denied!",
-         "This message is to notify you that your project application\n".
-         "for $pid has been denied.\n".
-         ($message == "" ? "" :
-          "----------------------------------------------------------------\n".
-          "\n".
-          $message . "\n"));
-    
+    if (!$silent) {
+        # This works cause we still have the project object in memory.
+        SendProjAdminMail
+            ($project, "ADMIN", "$headname '$headuid' <$headuid_email>",
+             "Project application '$pid' has been denied!",
+             "This message is to notify you that your project application\n".
+             "for $pid has been denied.\n".
+             ($message == "" ? "" :
+              "----------------------------------------------------------------\n".
+              "\n".
+              $message . "\n"));
+    }
     SPITAJAX_RESPONSE(0);
 }
 
