@@ -3147,8 +3147,9 @@ sub vnodeHalt($$$$)
 	}
 	#
 	# XXX check for left over qemu and kill it.
+	# XXX we should probably do this all the time.
 	#
-	elsif ($domID) {
+	if ($domID && ($stat == 0 || $stat == 15)) {
 	    if (!domainGone($domID, 3)) {
 		print STDERR "$vnode_id: HVM (domID $domID): killing orphaned qemu process\n";
 		if (mysystem2("pkill -f 'qemu.* -xen-domid $domID '")) {
