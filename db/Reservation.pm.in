@@ -522,34 +522,49 @@ sub LookupAll($$;$)
 				"UNIX_TIMESTAMP( e.expt_swapped ) + " .
 				"e.autoswap_timeout * 60, e.autoswap, " .
 				"nr.pid, UNIX_TIMESTAMP( s.expires ), " .
-				"s.lockdown, n.reserved_pid FROM nodes AS n " .
+				"s.lockdown, n.reserved_pid, " .
+				"UNIX_TIMESTAMP( pr.end ) " .
+				"FROM nodes AS n " .
 				"LEFT OUTER JOIN " .
 				"reserved AS r ON n.node_id=r.node_id " .
 				"LEFT OUTER JOIN experiments AS e ON " .
 				"r.pid=e.pid AND r.eid=e.eid LEFT " .
 				"OUTER JOIN next_reserve AS nr ON " .
 				"n.node_id=nr.node_id LEFT OUTER JOIN " .
+				"project_reservations AS pr ON " .
+				"n.reserved_pid=pr.pid AND " .
+				"n.reservation_name=pr.name " .
+				"LEFT OUTER JOIN" .
 				"`geni-cm`.geni_slices AS s ON " .
 				"e.eid_uuid=s.uuid " .
 				"WHERE n.type='$type' GROUP BY " .
-				"e.pid, e.eid, n.reserved_pid, nr.pid" :
+				"e.pid, e.eid, n.reserved_pid, nr.pid, " .
+				"UNIX_TIMESTAMP( pr.end )" :
 				"SELECT COUNT(*), e.pid, e.eid, " .
 				"e.expt_swap_uid, " .
 				"UNIX_TIMESTAMP( e.expt_swapped ) + " .
 				"e.autoswap_timeout * 60, e.autoswap, " .
 				"nr.pid, NULL, " .
-				"NULL, n.reserved_pid FROM nodes AS n " .
+				"NULL, n.reserved_pid, " .
+				"UNIX_TIMESTAMP( pr.end ) " .
+				"FROM nodes AS n " .
 				"LEFT OUTER JOIN " .
 				"reserved AS r ON n.node_id=r.node_id " .
 				"LEFT OUTER JOIN experiments AS e ON " .
 				"r.pid=e.pid AND r.eid=e.eid LEFT " .
 				"OUTER JOIN next_reserve AS nr ON " .
-				"n.node_id=nr.node_id WHERE n.type='$type' " .
-				"GROUP BY e.pid, e.eid, n.reserved_pid, nr.pid";
+				"n.node_id=nr.node_id " .
+				"LEFT OUTER JOIN " .
+				"project_reservations AS pr ON " .
+				"n.reserved_pid=pr.pid AND " .
+				"n.reservation_name=pr.name " .
+				"WHERE n.type='$type' " .
+				"GROUP BY e.pid, e.eid, n.reserved_pid, " .
+				"nr.pid, UNIX_TIMESTAMP( pr.end )";
     my $query_result = DBQueryWarn( $query );
     
     while( my($count, $pid, $eid, $uid, $end, $autoswap, $next_reserve,
-	      $slice_expire, $slice_lockdown, $reserved_pid ) =
+	      $slice_expire, $slice_lockdown, $reserved_pid, $pr_end ) =
 	   $query_result->fetchrow_array() ) {
 	my $endtime;
 	
@@ -573,9 +588,12 @@ sub LookupAll($$;$)
 	}
 
 	# If reserved_pid is set, assume the node is assigned to the
-	# project forever.
-	if( defined( $reserved_pid ) ) {
-	    $endtime = undef;
+	# project forever, unless there's an end time in a corresponding
+	# project_reservations entry.
+	if( defined( $reserved_pid ) &&
+	    ( !defined( $pr_end ) || !defined( $endtime ) ||
+	      $pr_end > $endtime ) ) {
+	    $endtime = $pr_end;
 	}
 
 	# Consider nodes in reloading to be available.  One important
@@ -598,6 +616,14 @@ sub LookupAll($$;$)
 	    my $res = CreateCommon( $class, undef, undef, undef, 0, undef,
 				    $type, $count );
 	    push( @reservations, $res );
+	} elsif( defined( $endtime ) ) {
+	    # The nodes have a reserved_pid, but there's a known	    
+	    # end time (the current experiment end, or the
+	    # project_reservations end, whichever is later)... mark
+	    # them as available after that.
+	    my $res = CreateCommon( $class, $pid, $eid, $uid, 0, $endtime,
+				    $type, $count );
+	    push( @reservations, $res );	    
 	}
     }
     
