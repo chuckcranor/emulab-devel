@@ -471,6 +471,14 @@ my $uid_idx = $target_user->uid_idx();
 my $res;
 if( defined( $modify_idx ) ) {
     $res = Reservation->Lookup( $modify_idx );
+    if( !$admin && $res->approved() && ( $starttime < $res->start ||
+					 $endtime > $res->end ||
+					 $count > $res->nodes ) ) {
+	print STDERR "This reservation has already been approved; you\n";
+	print STDERR "may no longer expand it.\n";
+	    
+	exit( 1 );
+    }
     $res->SetStart( $starttime );
     $res->SetEnd( $endtime );
     $res->SetNodes( $count );
