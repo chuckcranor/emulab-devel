@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c)-2016 University of Utah and the Flux Group.
+# Copyright (c) 2016-2017 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -33,7 +33,8 @@ sub usage()
 {
     print STDERR "Usage: announce -a <-p portal> [-c] [-s alert_style] [-b button_label] [-u action_url] [-m max_seen_count] <announcement_text>\n";
     print STDERR "       announce -l [active|retired|all]\n";
-    print STDERR "       announce -r idx [-c]\n";
+    print STDERR "       announce -r idx|uuid [-c]\n";
+    print STDERR "       announce -R idx|uuid\n";
     print STDERR "       announce -i idx\n";
     print STDERR "       announce -h\n";
     print STDERR "   -h   This message\n";
@@ -46,14 +47,19 @@ sub usage()
     print STDERR "   -m   The maximum number of times that this announcement will appear to a user. Every page view (even those in a single session) counts. A value of '0' indicates that the announcement should keep appearing indefinitely until dismissed by the user or an action is taken. Defaults to 20.\n";
     print STDERR "   -l   List global announcements. Defaults to listing active announcements.\n";
     print STDERR "   -r   Retire announcement with the given idx. A retired announcement will no longer be displayed to users.\n";
+    print STDERR "   -R   Purge announcement from DB with the given idx or uuid.\n";
     print STDERR "   -i   Info about a particular announcement.\n";
     print STDERR "   -c   Compatibility mode. When adding in compatibility mode, the sitevar is changed, thus setting the legacy Emulab announcement. When removing in compatibility mode, the sitevar is cleared.\n";
+    print STDERR "   -U   In add mode, specify a specific target user.\n";
     exit(-1);
 }
-my $optlist  = "hacp:s:b:u:m:lr:i:";
+my $optlist  = "haA:cp:s:b:u:m:lrR:i:U:t:I:S:E:";
 my $add_mode = 0;
+my $update_mode = 0;
+my $update_target;
 my $list_mode = 0;
 my $retire_mode = 0;
+my $purge_mode = 0;
 my $info_mode = 0;
 my $portal = undef;
 my $style = "alert-info";
@@ -63,6 +69,11 @@ my $max_seen = 20;
 my $retire_idx = undef;
 my $info_idx = undef;
 my $text = undef;
+my $target_user = undef;
+my $uuid = undef;
+my $display_start = undef;
+my $display_end = undef;
+my $priority = undef;
 my $list_type = "active";
 my $compatibility = 0;
 
@@ -82,6 +93,7 @@ my $TBOPS        = "@TBOPSEMAIL@";
 #
 use lib "@prefix@/lib";
 use emdb;
+use emutil;
 use libtestbed;
 use libdb;
 use User;
@@ -110,12 +122,20 @@ if (defined($options{"h"})) {
 if (defined($options{"a"})) {
     $add_mode = 1;
 }
+if (defined($options{"A"})) {
+    $update_mode = 1;
+    $update_target = $options{"A"};
+}
 if (defined($options{"l"})) {
     $list_mode = 1;
 }
 if (defined($options{"r"})) {
     $retire_mode = 1;
     $retire_idx = $options{"r"};
+}
+if (defined($options{"R"})) {
+    $purge_mode = 1;
+    $retire_idx = $options{"R"};
 }
 if (defined($options{"i"})) {
     $info_mode = 1;
@@ -133,9 +153,48 @@ if (defined($options{"b"})) {
 if (defined($options{"u"})) {
     $url = $options{"u"};
 }
+if (defined($options{"t"})) {
+    $uuid = $options{"t"};
+    if ($uuid !~ /^[-\w]*$/) {
+	print STDERR "Invalid uuid\n";
+	exit(1);
+    }
+}
 if (defined($options{"m"})) {
     $max_seen = $options{"m"};
 }
+if (defined($options{"U"})) {
+    $target_user = User->Lookup($options{"U"});
+    if (!defined($target_user)) {
+	print STDERR "No such user!\n";
+	exit(-1);
+    }
+}
+if (defined($options{"S"})) {
+    $display_start = $options{"S"};
+    if ($display_start !~ /^\d+$/) {
+	$display_start = str2time($display_start);
+	if (!defined($display_start)) {
+	    fatal("Could not parse -S option.");
+	}
+    }
+}
+if (defined($options{"E"})) {
+    $display_end = $options{"E"};
+    if ($display_end !~ /^\d+$/) {
+	$display_end = str2time($display_end);
+	if (!defined($display_end)) {
+	    fatal("Could not parse -E option.");
+	}
+    }
+}
+if (defined($options{"I"})) {
+    $priority = $options{"I"};
+    if ($priority !~ /^\d+$/) {
+	fatal("Could not parse -I option.");
+    }
+}
+
 if (defined($options{"c"})) {
     $compatibility = 1;
 }
@@ -153,16 +212,17 @@ if ($add_mode)
     }
 }
 
-if ($add_mode + $list_mode + $retire_mode + $info_mode != 1) {
-    print STDERR "No mode selected. Must use one of -a, -r, -l, or -i\n\n";
+if ($add_mode + $update_mode + $list_mode +
+    $retire_mode + $purge_mode + $info_mode != 1) {
+    print STDERR "No mode selected. Must use one of -a, -A, -r, -R, -l, or -i\n\n";
     usage();
 }
 
-if ($add_mode) {
+if ($add_mode || $update_mode) {
     $text = join(' ', @ARGV);
 }
 
-if (! $list_mode && ! $add_mode && scalar(@ARGV) > 0) {
+if (! $list_mode && ! $add_mode && ! $purge_mode && scalar(@ARGV) > 0) {
     usage();
 }
 
@@ -184,11 +244,57 @@ if ($add_mode) {
 	$query .= ", link_label=" . DBQuoteSpecial($button);
 	$query .= ", link_url=" . DBQuoteSpecial($url);
     }
+    if (defined($target_user)) {
+	$query .= ", uid_idx='" . $target_user->uid_idx() . "'";
+    }
+    if (defined($uuid)) {
+	$query .= ", uuid='$uuid'";
+    }
+    else {
+	$query .= ", uuid=uuid()";
+    }
+    if (defined($display_start)) {
+	$query .= ", display_start=FROM_UNIXTIME($display_start)";
+    }
+    if (defined($display_end)) {
+	$query .= ", display_end=FROM_UNIXTIME($display_end)";
+    }
+    if (defined($priority)) {
+	$query .= ", priority='$priority'";
+    }
+    
     DBQueryFatal($query);
     if ($compatibility)
     {
 	TBSetSiteVar("web/banner", $text);
     }
+} elsif ($update_mode) {
+    #
+    # Update existing announcement.
+    #
+    my $query = "update apt_announcements set ";
+    $query .= ", text=" . DBQuoteSpecial($text);
+    if (defined($button) && defined($url)) {
+	$query .= ", link_label=" . DBQuoteSpecial($button);
+	$query .= ", link_url=" . DBQuoteSpecial($url);
+    }
+    if (defined($display_start)) {
+	$query .= ", display_start=FROM_UNIXTIME($display_start)";
+    }
+    if (defined($display_end)) {
+	$query .= ", display_end=FROM_UNIXTIME($display_end)";
+    }
+    $query .= " ";
+    if (ValidUUID($update_target)) {
+	$query .= "where uuid='$update_target'";
+    }
+    elsif ($update_target =~ /^\d+$/) {
+	$query .= "where idx='$update_target'";
+    }
+    else {
+	fatal("Invalid argument for -A mode, must be uuid or idx");
+    }
+    DBQueryFatal($query);
 } elsif ($list_mode) {
     #
     # List announcements
@@ -211,6 +317,16 @@ if ($add_mode) {
 	my $portalpad = sprintf("%-10s", $portal);
 	print "$idx\t$portalpad $textbit\n"
     }
+} elsif ($purge_mode) {
+    #
+    # Purge an announcement
+    #
+    my $clause = (ValidUUID($retire_idx) ?
+		  "a.uuid='$retire_idx'" : "a.idx='$retire_idx'");
+    DBQueryFatal("delete a, i ".
+		 "from apt_announcements as a ".
+		 "join apt_announcement_info as i on a.idx = i.aid ".
+		 "where $clause");
 } elsif ($retire_mode) {
     #
     # Retire an announcement

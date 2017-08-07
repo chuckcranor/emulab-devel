@@ -218,24 +218,19 @@ $PAGEHEADER_FUNCTION = function($thinheader = 0, $ignore1 = NULL,
     # the buttons when a logged in user shrinks the window the window down,
     # and turn them on inside the action menu.
     $hiddenxs = ($showmenus ? "hidden-xs" : "");
-    
+
     SPITNAV($hiddenxs, $navbar_status, $navbar_right, $login_uid);
 
     # Put announcements, if any, right below the header.
     if (!$cleanmode && $login_user && $login_user->IsActive() &&
         !($login_status & CHECKLOGIN_WEBONLY)) {
+        # Always create empty div for announcements, for ajax update.
+        echo "<div id='portal-announcement-div'>\n";
         $announcements = GET_ANNOUNCEMENTS($login_user);
         for ($i = 0; $i < count($announcements); $i++) {
-          $current = $announcements[$i];
-          echo "<div class='alert ".$current['style']." alert-dismissible'
-                     role='alert' style='margin-top: -10px; margin-left: 40px; margin-right: 40px;'>";
-          echo "  <button onclick='window.APT_OPTIONS.announceDismiss(" . $current['aid'] . ")' type='button' class='close' data-dismiss='alert' aria-label='Close'><span aria-hidden='true'>&times;</span></button>";
-          echo "  <span>" . $current["text"] . "</span>";
-          if ($current["url"]) {
-	    echo "  <a href='" . $current["url"] . "' class='btn btn-default' onclick='window.APT_OPTIONS.announceClick(" . $current["aid"] . ")' target='_blank'>" . $current["label"] . "</a>";
-          }
-          echo "  </div>";
+            echo $announcements[$i];
         }
+        echo "</div>";
     }
     if (NOLOGINS()) {
         $message = TBGetSiteVar("web/message");
@@ -491,39 +486,69 @@ echo "
 
 }
 
-function GET_ANNOUNCEMENTS($user)
+function GET_ANNOUNCEMENTS($user, $update = true)
 {
   global $PORTAL_GENESIS;
   $uid = $user->uid();
   $uid_idx = $user->uid_idx();
-  $dblink = DBConnect("tbdb");
+  $result = array();
+
   # Add an apt_announcement_info entry for any announcements which don't have one
   $query_result = DBQueryWarn('select a.idx from apt_announcements as a left join apt_announcement_info as i on a.idx=i.aid and ((a.uid_idx is NULL and i.uid_idx="'.$uid_idx.'") or (a.uid_idx is not NULL and a.uid_idx=i.uid_idx)) where a.portal="'.$PORTAL_GENESIS.'" and a.retired=0 and i.uid_idx is NULL and (a.uid_idx is NULL or a.uid_idx="'.$uid_idx.'")');
   while ($row = mysql_fetch_array($query_result, MYSQL_NUM)) {
       DBQueryWarn('insert into apt_announcement_info set aid="'.$row[0].'", uid_idx="'.$uid_idx.'",seen_count=0');
   }
 
-  $query_result = DBQueryWarn('select a.idx, a.text, a.link_label, a.link_url, i.seen_count, a.style '.
-                               'from apt_announcements as a '.
-			       'left join apt_announcement_info as i on a.idx=i.aid '.
-			       'where (a.uid_idx is NULL or a.uid_idx="'.$uid_idx.'") and '.
-			       'a.retired = 0 and a.portal="'.$PORTAL_GENESIS.'" and '. 
-			       'i.uid_idx="'.$uid_idx.'" and '.
-			       'i.dismissed = 0 and i.clicked = 0 and '.
-              		       '(a.max_seen = 0 or i.seen_count < a.max_seen)', $dblink);
-  $result = array();
-  while ($row = mysql_fetch_array($query_result, MYSQL_NUM)) {
-    $item = array('text' => $row[1],
-                  'style' => $row[5],
-                  'label' => $row[2],
-                  'aid' => $row[0],
-                  'url' => $row[3]);
-    if ($row[3]) {
-      $item['url'] = preg_replace('/\{uid_idx\}/', $uid_idx, $item['url']);
-      $item['url'] = preg_replace('/\{uid\}/', $uid, $item['url']);
-    }
-    array_push($result, $item);
-    DBQueryWarn('update apt_announcement_info set seen_count='.($row[4]+1).' where aid="'.$row[0].'" and uid_idx="'.$uid_idx.'"');
+  $query_result =
+      DBQueryWarn('select a.idx, a.text, a.link_label, a.link_url, '.
+                 '    i.seen_count, a.style, a.priority '.
+                  'from apt_announcements as a '.
+                  'left join apt_announcement_info as i on a.idx=i.aid '.
+                  'where (a.uid_idx is NULL or a.uid_idx="'.$uid_idx.'") and '.
+                  '      a.retired = 0 and a.portal="'.$PORTAL_GENESIS.'" and '.
+                  '      i.uid_idx="'.$uid_idx.'" and '.
+                  '      i.dismissed = 0 and i.clicked = 0 and '.
+                  '      (a.max_seen = 0 or i.seen_count < a.max_seen) and '.
+                  '      (a.display_start is null or now() > a.display_start) and '.
+                  '      (a.display_end is null or now() < a.display_end) '.
+                  'order by a.priority asc');
+
+  while ($row = mysql_fetch_array($query_result)) {
+      $text   = $row["text"];
+      $style  = $row["style"];
+      $label  = $row["link_label"];
+      $url    = $row["link_url"];
+      $aid    = $row["idx"];
+      $count  = $row["seen_count"];
+
+      if ($update) {
+          $count = $count + 1;
+          DBQueryWarn("update apt_announcement_info set ".
+                      "  seen_count='$count' ".
+                      "where aid='$aid' and uid_idx='$uid_idx'");
+      }
+      $html =
+          "<div class='alert $style alert-dismissible' ".
+          "     role='alert' style='margin-top: -10px; margin-bottom: 12px; ".
+          "     margin-left: 40px; margin-right: 40px; ".
+          "     padding-top: 10px; padding-bottom: 10px;'>\n";
+      $html .=
+          "  <button onclick='window.APT_OPTIONS.announceDismiss($aid)' " .
+          "     type='button' class='close' ".
+          "     data-dismiss='alert' aria-label='Close'>".
+          "    <span aria-hidden='true'>&times;</span></button>".
+          "      <span>$text</span>";
+
+      if ($url) {
+          $url = preg_replace('/\{uid_idx\}/', $uid_idx, $url);
+          $url = preg_replace('/\{uid\}/', $uid, $url);
+
+          $html .=
+              "  <a href='$url' class='btn btn-xs btn-default' target='_blank' ".
+              "    onclick='window.APT_OPTIONS.announceClick($aid)'>$label</a>";
+      }
+      $html .= "\n</div>\n";
+      $result[] = $html;
   }
   return $result;
 }

@@ -57,6 +57,22 @@ function Do_Click()
   }
 }
 
+#
+# Return current announcements, use same html as quickvm_sup.php does.
+#
+function Do_Announcements()
+{
+    global $this_user, $ajax_args;
+    $results = array();
+
+    $announcements = GET_ANNOUNCEMENTS($this_user, false);
+    if (!count($announcements)) {
+        SPITAJAX_RESPONSE($results);
+        return;
+    }
+    SPITAJAX_RESPONSE($announcements);
+}
+
 # Local Variables:
 # mode:php
 # End:

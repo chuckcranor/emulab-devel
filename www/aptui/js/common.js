@@ -101,6 +101,11 @@ window.APT_OPTIONS.initialize = function (sup)
 	    return false;
 	});
     }
+    /*
+     * Setup a timer to ask for announcements.
+     */
+    setTimeout(function f() { window.APT_OPTIONS.Announcements() }, 10000);
+    
     window.APT_OPTIONS.startPage();
     $(window).on('beforeunload.common', APT_OPTIONS.endPage);
     $('body').show();
@@ -257,5 +262,35 @@ window.APT_OPTIONS.postTutorial = function (data) {
     }
   }
   catch (e) {}
+}
+
+window.APT_OPTIONS.Announcements = function () {
+    var callback = function(json) {
+	if (json.code) {
+	    console.info("announcements", json);
+	    return;
+	}
+	var newhtml = "";
+	
+	if (json.value.length) {
+	    console.info("announcements", json);
+	    _.each(json.value, function(html) {
+		newhtml += html;
+	    });
+	}
+	else {
+	    // Clear current announcements; dismissed in another tab.
+	    newhtml = "";
+	}
+	$('#portal-announcement-div').html(newhtml);
+	setTimeout(function f() { window.APT_OPTIONS.Announcements() }, 10000);
+    }
+
+    var xmlthing =
+	APT_OPTIONS.CallServerMethod('', 'announcement', 'Announcements', null);
+    // We want the callback all the time. 
+    xmlthing.done(callback).fail(function () {
+	setTimeout(function f() { window.APT_OPTIONS.Announcements() }, 90000);
+    });
 }
 
