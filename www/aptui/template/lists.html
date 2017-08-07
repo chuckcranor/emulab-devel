@@ -25,8 +25,20 @@
 	      <div class="tab-content">
 		<div role="tabpanel" class="tab-pane active" id="users">
 		  <div class="table-responsive">
-		    <input class='form-control search' type='search' data-column='all'
+		    <input class='form-control search' type='search'
+			   data-column='all'
 			   id='users_search' placeholder='Search'>
+		    <div class="text-center">
+		      <small>
+			There are <span class="match-count"></span> matching users.
+			<span class='glyphicon glyphicon-question-sign'
+			      data-toggle='tooltip'
+			      data-container="body"
+			      data-trigger="hover"
+			      title='Active users are either logged in or have
+				     an experiment running'></span>
+		      </small>
+		    </div>
 		    <table class='tablesorter' id='users_table'>
 		      <thead>
 			<tr>
@@ -54,6 +66,19 @@
 		  <div class="table-responsive">
 		    <input class='form-control search' type='search' data-column='all'
 			   id='projects_search' placeholder='Search'>
+		    <div class="text-center">
+		      <small>
+			There are <span class="match-count"></span>
+			matching projects.
+			<span class='glyphicon glyphicon-question-sign'
+			      data-toggle='tooltip'
+			      data-container="body"
+			      data-trigger="hover"
+			      title='Active projects are currently running an
+				     an experiment, or have in the last
+				     two months'></span>
+		      </small>
+		    </div>
 		    <table class='tablesorter' id='projects_table'>
 		      <thead>
 			<tr>
@@ -84,6 +109,11 @@
 		  <div class="table-responsive">
 		    <input class='form-control search' type='search' 
 			   id='search_users_search' placeholder='Search'>
+		    <div class="text-center">
+		      <small>
+			There are <span class="match-count">0</span> matching users.
+		      </small>
+		    </div>
 		    <table class='tablesorter'
 			   id='search_users_table'>
 		      <thead>
@@ -102,6 +132,12 @@
 		  <div class="table-responsive">
 		    <input class='form-control search' type='search' 
 			   id='search_projects_search' placeholder='Search'>
+		    <div class="text-center">
+		      <small>
+			There are <span class="match-count">0</span>
+			matching projects.
+		      </small>
+		    </div>
 		    <table class='tablesorter'
 			   id='search_projects_table'>
 		      <thead>

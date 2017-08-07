@@ -17,6 +17,11 @@ $(function ()
 	    "projects"  : projlist,
 	});
 	$('#main-body').html(html);
+	// This activates the tooltip subsystem.
+	$('[data-toggle="tooltip"]').tooltip({
+	    delay: {"hide" : 500, "show" : 150},
+	    placement: 'auto',
+	});
 	InitTable("users");
 	InitTable("projects");
 
@@ -27,6 +32,7 @@ $(function ()
 		// initialize zebra
 		widgets: ["zebra"],
 	    });
+	
 	$('#search_projects_table')
 	    .tablesorter({
 		theme : 'green',
@@ -108,6 +114,11 @@ $(function ()
 	// Allows using filter_liveSearch or delayed search &
 	// pressing escape to cancel the search
 	$.tablesorter.filter.bindSearch(table, $(searchname));
+
+	// Update the count of matches
+	table.bind('filterEnd', function(e, filter) {
+	    $('#' + name + ' .match-count').text(filter.filteredRows);
+	});
     }
 
     function UpdateUserSearch(text)
@@ -131,6 +142,7 @@ $(function ()
 	    }
 	    $('#search_users_table tbody').html(html);
 	    $('#search_users_table').trigger("update", [false]);
+	    $('#search-users .match-count').text(json.value.length);
 	};
 	var xmlthing = sup.CallServerMethod(null,
 					    "lists", "SearchUsers",
@@ -160,6 +172,7 @@ $(function ()
 	    }
 	    $('#search_projects_table tbody').html(html);
 	    $('#search_projects_table').trigger("update", [false]);
+	    $('#search-projects .match-count').text(json.value.length);
 	};
 	var xmlthing = sup.CallServerMethod(null,
 					    "lists", "SearchProjects",
