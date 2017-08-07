@@ -36,8 +36,8 @@ use Date::Parse;
 sub usage()
 {
     print("Usage: manage_reservations [-a <urn>] list [-u uid | -p pid]\n");
-    print("Usage: manage_reservations [-a <urn>] delete pid idx\n");
-    print("Usage: manage_reservations [-a <urn>] approve idx\n");
+    print("Usage: manage_reservations [-a <urn>] delete pid uuid\n");
+    print("Usage: manage_reservations [-a <urn>] approve -p portal uuid\n");
     print("Usage: manage_reservations [-a <urn>] systeminfo\n");
     print("Usage: manage_reservations [-a <urn>] prediction\n");
     exit(-1);
@@ -54,6 +54,7 @@ my $authority;
 my $TB		= "@prefix@";
 my $TBOPS       = "@TBOPSEMAIL@";
 my $OURDOMAIN	= "@OURDOMAIN@";
+my $ANNOUNCE    = "$TB/sbin/announce";
 my $MYURN	= "urn:publicid:IDN+${OURDOMAIN}+authority+cm";
 
 #
@@ -96,6 +97,8 @@ sub DoApprove();
 sub DoSystemInfo();
 sub DoPrediction();
 sub readfile($);
+sub AddAnnouncement($$$$$$);
+sub DeleteAnnouncement($);
 
 #
 # Parse command arguments. Once we return from getopts, all that should be
@@ -134,6 +137,11 @@ else {
 if (!defined($authority)) {
     fatal("Could not look up authority");
 }
+my $aggregate = APT_Aggregate->Lookup($authority->urn());
+if (!defined($aggregate)) {
+    fatal("Could not lookup aggregate");
+}
+
 # For credentials.
 my $this_user = User->ThisUser();
 if (! defined($this_user)) {
@@ -296,9 +304,28 @@ sub DoReserve()
     # approval code indicates if the request is feasible and will be
     # immediately approved.
     #
-    if ($response->value()) {
-	# approved right away
-	exit(0);
+    my $approved;
+    my $uuid;
+    my $idx;
+
+    if (ref($response->value()) eq "HASH") {
+	my $blob  = $response->value();
+	$approved = $blob->{'approved'};
+	$uuid     = $blob->{'uuid'} if (exists($blob->{'uuid'}));
+	$idx      = $blob->{'idx'} if (exists($blob->{'idx'}));
+	if (defined($idx) && $idx !~ /^\d*$/) {
+	    fatal("Bad format for index from cluster");
+	}
+	if (defined($uuid) && !ValidUUID($uuid)) {
+	    fatal("Bad format for uuid from cluster");
+	}
+    }
+    else {
+	# Backwards compat.
+	$approved = $response->value();
+    }
+    if ($checkonly) {
+	exit($approved ? 0 : 2);
     }
     #
     # Needs to be approved, exit with special status.
@@ -307,7 +334,7 @@ sub DoReserve()
     # since the email was generated to the tbops but not the portal
     # email lists.
     #
-    if (!$checkonly) {
+    if (!$approved) {
 	my $this_uid   = $this_user->uid();
 	my $this_email = $this_user->email();
 	my $url        = $brand->wwwBase() . "/list-reservations.php";
@@ -318,8 +345,18 @@ sub DoReserve()
 	  "\n\n".
 	  "See: $url", $this_email);
     }
-    
-    exit(2);
+    elsif (defined($uuid)) {
+	#
+	# Schedule an announcement for the user.
+	#
+	AddAnnouncement($portal, $brand, $uuid, $count, $type, $start);
+    }
+    if (defined($webtask)) {
+	$webtask->approved($approved);
+	$webtask->idx($idx) if (defined($idx));
+	$webtask->uuid($uuid) if (defined($uuid));
+    }
+    exit($approved ? 0 : 2);
 }
 
 #
@@ -332,7 +369,7 @@ sub DoList()
     #
     my $optlist = "u:p:Ai:";
     my $anon    = 0;
-    my $idx;
+    my $uuid;
     my $project;
     my $user;
     my %rpcargs = ();
@@ -346,7 +383,7 @@ sub DoList()
 	$anon = 1;
     }
     if (defined($options{"i"})) {
-	$idx = $options{"i"};
+	$uuid = $options{"i"};
     }
     if (defined($options{"u"})) {
 	$user = User->Lookup($options{"u"});
@@ -396,8 +433,8 @@ sub DoList()
 	$rpcargs{"credentials"} = $credentials;
 	$context = APT_Geni::GeniContext();
     }
-    if (defined($idx)) {
-	$rpcargs{"idx"} = $idx;
+    if (defined($uuid)) {
+	$rpcargs{"uuid"} = $uuid;
     }
     my $response =
 	APT_Geni::PortalRPC($authority, $context, "Reservations", (\%rpcargs));
@@ -492,12 +529,12 @@ sub DoDelete()
     }
     usage()
 	if (@ARGV != 2);
-    my $pid = shift(@ARGV);
-    my $idx = shift(@ARGV);
+    my $pid  = shift(@ARGV);
+    my $uuid = shift(@ARGV);
     
     # Check this since Reservation->Lookup() does not validate.
-    fatal("Invalid index")
-	if ($idx !~ /^\d+$/);
+    fatal("Invalid uuid")
+	if (!ValidUUID($uuid));
 
     my $project = Project->Lookup($pid);
     fatal("No such project")
@@ -507,7 +544,7 @@ sub DoDelete()
 	!$project->AccessCheck($this_user, TB_PROJECT_CREATEEXPT())) {
 	fatal("No permission to access reservation list for $project")
     }
-    my $blob = { "idx" => $idx,
+    my $blob = { "uuid" => $uuid,
 		 "project" => $project->urn()->asString()
     };
     if ($this_user->IsAdmin() && defined($reason) && $reason ne "") {
@@ -521,6 +558,7 @@ sub DoDelete()
 	#
 	fatal($response->output());
     }
+    DeleteAnnouncement($uuid);
     if (defined($webtask)) {
 	$webtask->Exited(0);
     }
@@ -535,13 +573,28 @@ sub DoDelete()
 #
 sub DoApprove()
 {
+    my $optlist = "p:";
+    my $portal;
+
+    my %options = ();
+    if (! getopts($optlist, \%options)) {
+	usage();
+    }
+    if (defined($options{"p"})) {
+	$portal = $options{"p"}
+    }
     usage()
-	if (@ARGV != 1);
-    my $idx = shift(@ARGV);
+	if (@ARGV != 1 || !defined($portal));
+    my $uuid = shift(@ARGV);
     
     # Check this since Reservation->Lookup() does not validate.
-    fatal("Invalid index")
-	if ($idx !~ /^\d+$/);
+    fatal("Invalid uuid")
+	if (!ValidUUID($uuid));
+
+    my $brand = Brand->Create($portal);
+    if (!defined($brand)) {
+	fatal("Bad branding");
+    }
 
     if (!$this_user->IsAdmin()) {
 	fatal("No permission to approve reservations")
@@ -550,13 +603,20 @@ sub DoApprove()
     # essentially saying the caller is an admin.
     my $response =
 	APT_Geni::PortalRPC($authority, undef, "ApproveReservation",
-			    {"idx" => $idx});
+			    {"uuid" => $uuid});
     if (GeniResponse::IsError($response)) {
 	#
 	# All errors are fatal.
 	#
 	fatal($response->output());
     }
+    #
+    # Schedule an announcement for the user.
+    #
+    my $blob = $response->value();
+    AddAnnouncement($portal, $brand, $uuid,
+		    $blob->{'nodes'}, $blob->{'type'}, $blob->{'start'});
+    
     if (defined($webtask)) {
 	$webtask->Exited(0);
     }
@@ -595,10 +655,10 @@ sub DoSystemInfo()
 	@aggregates = ();
 	
 	my @list = APT_Aggregate->LookupForPortal($portal);
-	foreach my $aggregate (@list) {
-	    my $authority = APT_Geni::GetAuthority($aggregate->urn());
+	foreach my $agg (@list) {
+	    my $authority = APT_Geni::GetAuthority($agg->urn());
 	    if (!defined($authority)) {
-		$errmsg = "Cannot lookup authority for $aggregate";
+		$errmsg = "Cannot lookup authority for $agg";
 		goto bad;
 	    }
 	    push(@aggregates, $authority);
@@ -749,10 +809,10 @@ sub DoPrediction()
 	@aggregates = ();
 	
 	my @list = APT_Aggregate->LookupForPortal($portal);
-	foreach my $aggregate (@list) {
-	    my $authority = APT_Geni::GetAuthority($aggregate->urn());
+	foreach my $agg (@list) {
+	    my $authority = APT_Geni::GetAuthority($agg->urn());
 	    if (!defined($authority)) {
-		$errmsg = "Cannot lookup authority for $aggregate";
+		$errmsg = "Cannot lookup authority for $agg";
 		goto bad;
 	    }
 	    push(@aggregates, $authority);
@@ -889,4 +949,58 @@ sub readfile($) {
     close(FILE);
     return $contents;
 }
+
+#
+# Add or Edit a reservation announcement.
+#
+sub AddAnnouncement($$$$$$)
+{
+    my ($portal, $brand, $uuid, $nodes, $type, $start) = @_;
+    my $this_uid = $this_user->uid();
+    my $nickname = $aggregate->nickname();
+    my $name     = $aggregate->name();
+    my $url      = $brand->wwwBase() .
+	"/reserve.php?edit=1&uuid=${uuid}&cluster=${nickname}";
+    my $text = "You have a reservation at $name for $nodes $type ".
+	"node(s) starting soon.";
+    my $command;
+    my $dateopt = "";
+
+    #
+    # If the reservation is more then 24 hours out, schedule an announcement
+    # for 24 hours ahead. 
+    #
+    if (defined($start)) {
+	if ($start !~ /^\d+$/) {
+	    $start = str2time($start);
+	}
+	if ($start - time() > (3600 * 24)) {
+	    $dateopt = "-S " . ($start - (3600 * 23));
+	}
+	$dateopt = "-S " . (time() + 30);
+    }
+
+    # This is awkward, the announcement stuff should be a library some day.
+    my $query_result =
+	emdb::DBQueryWarn("select idx from apt_announcements where uuid='$uuid'");
+    return
+	if (!$query_result);
+    # Update mode.
+    if ($query_result->numrows) {
+	$command = "$ANNOUNCE -A $uuid -b 'View Reservation' ".
+	    "-u '$url' $dateopt '$text'";
+    }
+    else {
+	$command = "$ANNOUNCE -a -p $portal -U $this_uid -I 1 ".
+	    "-b 'View Reservation' -u '$url' -t $uuid $dateopt '$text'";
+    }
+    system($command);
+}
+sub DeleteAnnouncement($)
+{
+    my ($uuid) = @_;
+
+    system("$ANNOUNCE -R $uuid");    
+}
+
 

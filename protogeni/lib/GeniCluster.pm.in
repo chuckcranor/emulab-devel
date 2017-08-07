@@ -704,6 +704,7 @@ sub Reserve($)
     my %blob      = ();
     my $reserror;
     my $asadmin   = 0;
+    my $reservation;
     my ($geniuser, $project);
 
     my $hasperm = CheckPermission(0);
@@ -763,7 +764,8 @@ sub Reserve($)
     # Different rules for update.
     my $update = (exists($argref->{"update"}) ? $argref->{"update"} : undef);
     return GeniResponse->MalformedArgsResponse("Invalid update index")
-	if (defined($update) && $update !~ /^\d+$/);
+	if (defined($update) &&
+	    !($update =~ /^\d+$/ || ValidUUID($update)));
     
     #
     # Required arguments when not an update.
@@ -841,7 +843,7 @@ sub Reserve($)
     }
 
     if (defined($update)) {
-	my $reservation = Reservation->Lookup($update);
+	$reservation = Reservation->Lookup($update);
 	return GeniResponse->SearchFailedResponse("No such reservation")
 	    if (!defined($reservation));
 
@@ -875,7 +877,7 @@ sub Reserve($)
 	if (!defined($webtask));
 
     my $args = ($check ? "-n " : "") .
-	(defined($update) ? "-m $update " : "") .
+	(defined($update) ? "-m " . $reservation->idx() . " " : "") .
 	"-T " . $webtask->task_id() . " ".
 	(!defined($update) ? "-t $type " : "") .
 	(defined($start) ? "-s $start " : "") .
@@ -918,8 +920,31 @@ sub Reserve($)
     }
     my $approved = ($? >> 8 == 2 ? 0 : 1);
     GeniUtil::FlipToGeniUser();
+    if ($check) {
+	$webtask->Delete();
+	my $blob = {
+	    "approved" => $approved,
+	};
+	return GeniResponse->Create(GENIRESPONSE_SUCCESS, $blob);
+    }
+    if (!$update) {
+	$webtask->Refresh();
+	my $idx = $webtask->reservation();
+	$reservation = Reservation->Lookup($idx);
+	if (!defined($reservation)) {
+	    $webtask->Delete();
+	    return GeniResponse->Create(GENIRESPONSE_ERROR, undef,
+					"Could not find reservation after create");
+	}
+    }
     $webtask->Delete();
-    return GeniResponse->Create(GENIRESPONSE_SUCCESS, $approved);
+    my $blob = {
+	"idx"      => $reservation->idx(),
+	"uuid"     => $reservation->uuid(),
+	"approved" => $approved,
+    };
+    print STDERR Dumper($blob);
+    return GeniResponse->Create(GENIRESPONSE_SUCCESS, $blob);
 }
 
 #
@@ -931,17 +956,21 @@ sub Reservations($)
     my %results   = ();
     my $reserror;
     my $query_result;
-    my $idx;
+    my $target;
 
     my $hasperm = CheckPermission(0);
     return $hasperm
 	if (GeniResponse::IsError($hasperm));
 
     if (exists($argref->{'idx'})) {
-	$idx = $argref->{'idx'};
-
 	return GeniResponse->MalformedArgsResponse("Invalid idx")
-	    if ($idx !~ /^\d+$/);
+	    if ($argref->{'idx'} !~ /^\d+$/);
+	$target = "idx='" . $argref->{'idx'} . "'";
+    }
+    elsif (exists($argref->{'uuid'})) {
+	return GeniResponse->MalformedArgsResponse("Invalid uuid")
+	    if (!ValidUUID($argref->{'uuid'}));
+	$target = "uuid='" . $argref->{'uuid'} . "'";
     }
 
     #
@@ -963,7 +992,7 @@ sub Reservations($)
 			"   UNIX_TIMESTAMP(end) as end, ".
 			"   UNIX_TIMESTAMP(created) as created ".
 			"  from future_reservations ".
-			(defined($idx) ? "where idx='$idx' " : "") .
+			(defined($target) ? "where $target " : "") .
 			"order BY start");
     }
     else {
@@ -981,7 +1010,7 @@ sub Reservations($)
 			    "   UNIX_TIMESTAMP(created) as created ".
 			    "  from future_reservations ".
 			    "where pid='$pid' ".
-			    (defined($idx) ? "and idx='$idx'" : ""));
+			    (defined($target) ? "and $target" : ""));
 	}
 	else {
 	    my $uid = $geniuser->uid();
@@ -997,13 +1026,14 @@ sub Reservations($)
 	if (!$query_result);
 
     return GeniResponse->Create(GENIRESPONSE_SEARCHFAILED)
-	if (defined($idx) && !$query_result->numrows);
+	if (defined($target) && !$query_result->numrows);
 
     while (my $row = $query_result->fetchrow_hashref()) {
 	my $blob = {};
    	my $idx  = $row->{'idx'};
 	my $pid  = $row->{'pid'};
 	my $uid  = $row->{'uid'};
+	my $uuid = $row->{'uuid'};
 	
 	my $project = Project->Lookup($pid);
 	if (!defined($project)) {
@@ -1016,12 +1046,12 @@ sub Reservations($)
 	    next;
 	}
 	$blob->{"idx"}         = $idx;
+	$blob->{"uuid"}        = $uuid;
 	$blob->{"project"}     = $project->nonlocalurn();
 	$blob->{"user"}        = $user->nonlocalurn();
 	$blob->{"nodes"}       = $row->{'nodes'};
 	$blob->{"type"}        = $row->{'type'};
 	$blob->{"created"}     = TBDateStringGMT($row->{'created'});
-	$blob->{"start"}       = TBDateStringGMT($row->{'start'});
 	$blob->{"start"}       = TBDateStringGMT($row->{'start'});
 	$blob->{"end"}         = TBDateStringGMT($row->{'end'});
 	$blob->{"notes"}       = $row->{'notes'} || "";
@@ -1040,21 +1070,29 @@ sub Reservations($)
 sub ApproveReservation($)
 {
     my ($argref)  = @_;
+    my $target;
 
     my $hasperm = CheckPermission(1);
     return $hasperm
 	if (GeniResponse::IsError($hasperm));
 
-    return GeniResponse->MalformedArgsResponse("Missing reservation ID")
-	if (! (exists($argref->{"idx"}) && $argref->{"idx"} ne ""));
-
-    my $idx = $argref->{"idx"};
-    return GeniResponse->MalformedArgsResponse("Illegal reservation ID")
-	if ($idx !~ /^\d+$/);
-
-    my $reservation = Reservation->Lookup($idx);
+    if (exists($argref->{'idx'})) {
+	return GeniResponse->MalformedArgsResponse("Illegal reservation idx")
+	    if ($argref->{'idx'} !~ /^\d+$/);
+	$target = $argref->{'idx'};
+    }
+    elsif (exists($argref->{'uuid'})) {
+	return GeniResponse->MalformedArgsResponse("Illegal reservation uuid")
+	    if (!ValidUUID($argref->{'uuid'}));
+	$target = $argref->{'uuid'};
+    }
+    else {
+	return GeniResponse->MalformedArgsResponse("Missing reservation ID");
+    }
+    my $reservation = Reservation->Lookup($target);
     return GeniResponse->Create(GENIRESPONSE_SEARCHFAILED)
 	if (!defined($reservation));
+    my $idx = $reservation->idx();
 
     GeniUtil::FlipToElabMan();
     my $output = GeniUtil::ExecQuiet("$WAP $TB/sbin/reserve -a -m $idx");
@@ -1064,8 +1102,20 @@ sub ApproveReservation($)
 	print STDERR "$output\n";
 	return GeniResponse->Create(GENIRESPONSE_REFUSED, undef, $output);
     }
+    #
+    # Return current details of the reservation.
+    #
+    my $blob = {};
+    $blob->{"idx"}         = $reservation->idx();
+    $blob->{"uuid"}        = $reservation->uuid();
+    $blob->{"nodes"}       = $reservation->nodes();
+    $blob->{"type"}        = $reservation->type();
+    $blob->{"created"}     = TBDateStringGMT($reservation->created());
+    $blob->{"start"}       = TBDateStringGMT($reservation->start());
+    $blob->{"end"}         = TBDateStringGMT($reservation->end());
+    
     GeniUtil::FlipToGeniUser();
-    return GeniResponse->Create(GENIRESPONSE_SUCCESS);
+    return GeniResponse->Create(GENIRESPONSE_SUCCESS, $blob);
 }
 
 #
@@ -1076,6 +1126,7 @@ sub DeleteReservation($)
     my ($argref)  = @_;
     my $args = "";
     my $project;
+    my $target;
 
     #
     # The Portal decides the user has permission and then uses "admin" mode
@@ -1085,13 +1136,19 @@ sub DeleteReservation($)
     return $hasperm
 	if (GeniResponse::IsError($hasperm));
 
-    return GeniResponse->MalformedArgsResponse("Missing reservation ID")
-	if (! (exists($argref->{"idx"}) && $argref->{"idx"} ne ""));
-
-    my $idx = $argref->{"idx"};
-    return GeniResponse->MalformedArgsResponse("Illegal reservation ID")
-	if ($idx !~ /^\d+$/);
-
+    if (exists($argref->{'idx'})) {
+	return GeniResponse->MalformedArgsResponse("Illegal reservation idx")
+	    if ($argref->{'idx'} !~ /^\d+$/);
+	$target = $argref->{'idx'};
+    }
+    elsif (exists($argref->{'uuid'})) {
+	return GeniResponse->MalformedArgsResponse("Illegal reservation uuid")
+	    if (!ValidUUID($argref->{'uuid'}));
+	$target = $argref->{'uuid'};
+    }
+    else {
+	return GeniResponse->MalformedArgsResponse("Missing reservation ID");
+    }
     return GeniResponse->MalformedArgsResponse("Missing project")
 	if (! (exists($argref->{"project"}) && $argref->{"project"} ne ""));
 
@@ -1113,9 +1170,10 @@ sub DeleteReservation($)
     return GeniResponse->MalformedArgsResponse("No such project")
 	if (!$project);
 
-    my $reservation = Reservation->Lookup($idx);
+    my $reservation = Reservation->Lookup($target);
     return GeniResponse->Create(GENIRESPONSE_SEARCHFAILED)
 	if (!defined($reservation));
+    my $idx = $reservation->idx();
 
     return GeniResponse->Create(GENIRESPONSE_FORBIDDEN)
 	if ($reservation->pid() ne $project->pid());

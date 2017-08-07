@@ -1,24 +1,24 @@
 <?php
 #
 # Copyright (c) 2000-2017 University of Utah and the Flux Group.
-# 
+#
 # {{{EMULAB-LICENSE
-# 
+#
 # This file is part of the Emulab network testbed software.
-# 
+#
 # This file is free software: you can redistribute it and/or modify it
 # under the terms of the GNU Affero General Public License as published by
 # the Free Software Foundation, either version 3 of the License, or (at
 # your option) any later version.
-# 
+#
 # This file is distributed in the hope that it will be useful, but WITHOUT
 # ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
 # FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Affero General Public
 # License for more details.
-# 
+#
 # You should have received a copy of the GNU Affero General Public License
 # along with this file.  If not, see <http://www.gnu.org/licenses/>.
-# 
+#
 # }}}
 #
 chdir("..");
@@ -48,7 +48,7 @@ function Do_Reserve()
     global $ajax_args;
     global $suexec_output, $TB_PROJECT_CREATEEXPT;
     global $PORTAL_GENESIS;
-    
+
     if (!isset($ajax_args["formfields"])) {
 	SPITAJAX_ERROR(-1, "Missing formfields");
 	return -1;
@@ -69,12 +69,12 @@ function Do_Reserve()
 	}
     }
     #
-    # Update mode; we get the idx of the current reservation.
+    # Update mode; we get the uuid of the current reservation.
     #
-    if (isset($formfields["idx"])) {
-        $idx = $formfields["idx"];
-        if (!TBvalid_integer($idx)) {
-            $errors["error"] = "Bad index for reservation update";
+    if (isset($formfields["uuid"])) {
+        $uuid = $formfields["uuid"];
+        if (!IsValidUUID($uuid)) {
+            $errors["error"] = "Bad uuid for reservation update";
         }
     }
     # Admins do not need a reason.
@@ -99,7 +99,7 @@ function Do_Reserve()
         if (!$start) {
             $errors["start"] = "Cannot parse date";
         }
-        elseif ($start < time() && !isset($idx)) {
+        elseif ($start < time() && !isset($uuid)) {
             # In update mode, just let it through.
             $errors["start"] = "In the past";
         }
@@ -150,12 +150,12 @@ function Do_Reserve()
     #
     $args = "-t " . escapeshellarg($formfields["type"]) . " ".
           "-p $PORTAL_GENESIS " .
-          (isset($idx) ? "-u $idx " : "") .
+          (isset($uuid) ? "-u $uuid " : "") .
           (isset($start) ? "-s $start " : "") .
           " -e $end $pid " . $formfields["count"];
 
     #
-    # Do a precheck. 
+    # Do a precheck.
     #
     $retval = SUEXEC($this_uid, $pid,
                      "webmanage_reservations -t " . $webtask->task_id() . " ".
@@ -169,7 +169,7 @@ function Do_Reserve()
         #
         # Positive value means the reservation is not possible. Treat
         # as a form error for the caller.
-        # Otherwise internal error. 
+        # Otherwise internal error.
         #
         if ($retval < 0) {
             SPITAJAX_ERROR(-1, $suexec_output);
@@ -184,7 +184,9 @@ function Do_Reserve()
     }
     # Return if that is all the caller wanted,
     if (isset($ajax_args["validate"]) && $ajax_args["validate"]) {
-        SPITAJAX_RESPONSE($retval == 2 ? 3 : 0);
+        # Positive retval means will need approval.
+        $result = array("approved" => ($retval ? 0 : 1));
+        SPITAJAX_RESPONSE($result);
         $webtask->Delete();
         return;
     }
@@ -194,7 +196,7 @@ function Do_Reserve()
     $webtask->Reset();
 
     #
-    # But if we have a reason, send it along now. 
+    # But if we have a reason, send it along now.
     #
     if (isset($formfields["reason"]) && $formfields["reason"] != "") {
         $reasonfile = tempnam("/tmp", "reason");
@@ -209,7 +211,7 @@ function Do_Reserve()
                      "webmanage_reservations -t " . $webtask->task_id() . " ".
                      "-a $urn reserve $args", SUEXEC_ACTION_IGNORE);
     $webtask->Refresh();
-    
+
     #
     # Exit code "2" indicates OK, but will need approval.
     #
@@ -217,7 +219,7 @@ function Do_Reserve()
         #
         # Positive value means the reservation is not possible. Treat
         # as a form error for the caller.
-        # Otherwise internal error. 
+        # Otherwise internal error.
         #
         if ($retval < 0) {
             SPITAJAX_ERROR(-1, $suexec_output);
@@ -236,8 +238,17 @@ function Do_Reserve()
     if (isset($reasonfile)) {
         unlink($reasonfile);
     }
+    # Positive retval means will need approval.
+    $result = array("approved" => ($retval ? 0 : 1));
+    # We can form a url if we get the uuid
+    if ($webtask->TaskValue("uuid")) {
+        $uuid = $webtask->TaskValue("uuid");
+        $nickname = $aggregate->nickname();
+        $url = "reserve.php?edit=1&cluster=${nickname}&uuid=${uuid}";
+        $result["url"] = $url;
+    }
     $webtask->Delete();
-    SPITAJAX_RESPONSE($retval == 2 ? 3 : 0);
+    SPITAJAX_RESPONSE($result);
 }
 
 #
@@ -248,14 +259,14 @@ function Do_Delete()
     global $this_user;
     global $ajax_args;
     global $TB_PROJECT_CREATEEXPT, $suexec_output;
-    
-    if (!isset($ajax_args["idx"])) {
-	SPITAJAX_ERROR(-1, "Missing idx");
+
+    if (!isset($ajax_args["uuid"])) {
+	SPITAJAX_ERROR(-1, "Missing uuid");
 	return -1;
     }
-    $idx = $ajax_args["idx"];
-    if (!TBvalid_integer($idx)) {
-        SPITAJAX_ERROR(-1, "Invalid index");
+    $uuid = $ajax_args["uuid"];
+    if (!IsValidUUID($uuid)) {
+        SPITAJAX_ERROR(-1, "Invalid uuid");
 	return;
     }
     if (!isset($ajax_args["cluster"])) {
@@ -312,7 +323,7 @@ function Do_Delete()
     $urn = $aggregate->urn();
 
     $retval = SUEXEC($this_uid, $pid,
-                     "webmanage_reservations -a '$urn' delete $opt $pid $idx",
+                     "webmanage_reservations -a '$urn' delete $opt $pid $uuid",
                      SUEXEC_ACTION_CONTINUE);
     if (isset($reasonfile)) {
         unlink($reasonfile);
@@ -331,15 +342,15 @@ function Do_Approve()
 {
     global $this_user;
     global $ajax_args;
-    global $TB_PROJECT_CREATEEXPT, $suexec_output;
-    
-    if (!isset($ajax_args["idx"])) {
-	SPITAJAX_ERROR(-1, "Missing idx");
+    global $TB_PROJECT_CREATEEXPT, $suexec_output, $PORTAL_GENESIS;
+
+    if (!isset($ajax_args["uuid"])) {
+	SPITAJAX_ERROR(-1, "Missing uuid");
 	return -1;
     }
-    $idx = $ajax_args["idx"];
-    if (!TBvalid_integer($idx)) {
-        SPITAJAX_ERROR(-1, "Invalid index");
+    $uuid = $ajax_args["uuid"];
+    if (!IsValidUUID($uuid)) {
+        SPITAJAX_ERROR(-1, "Invalid uuid");
 	return;
     }
     if (!isset($ajax_args["cluster"])) {
@@ -363,9 +374,10 @@ function Do_Approve()
     $urn = $aggregate->urn();
 
     $retval = SUEXEC($this_uid, "nobody",
-                     "webmanage_reservations -a '$urn' approve $idx",
+                     "webmanage_reservations -a '$urn' ".
+                     "   approve -p $PORTAL_GENESIS $uuid",
                      SUEXEC_ACTION_CONTINUE);
-    
+
     if ($retval) {
         SPITAJAX_ERROR(-1, $suexec_output);
 	return;
@@ -414,12 +426,12 @@ function Do_ListReservations()
 	return;
     }
     $webtask->Refresh();
-    
+
     $rlist = array();
     foreach ($webtask->TaskValue("value") as $details) {
         $blob = array();
-        $idx  = $details['idx'];
-        $blob["idx"]         = $idx;
+        $uuid = $details['uuid'];
+        $blob["uuid"] = $uuid;
         #
         # Prune out stuff in anonymous mode since the backend is going
         # ask for all of the reservations with the -A option.
@@ -438,10 +450,11 @@ function Do_ListReservations()
         }
         $blob["count"]       = $details['nodes'];
         $blob["type"]        = $details['type'];
+        $blob["created"]     = $details['created'];
         $blob["start"]       = $details['start'];
         $blob["end"]         = $details['end'];
         $blob["cluster"]     = $aggregate->nickname();
-        $rlist[$idx] = $blob;
+        $rlist[$uuid] = $blob;
     }
     $webtask->Delete();
     SPITAJAX_RESPONSE($rlist);
@@ -456,13 +469,13 @@ function Do_GetReservation()
     global $ajax_args;
     global $TB_PROJECT_CREATEEXPT, $suexec_output;
 
-    if (!isset($ajax_args["idx"])) {
-	SPITAJAX_ERROR(-1, "Missing idx");
+    if (!isset($ajax_args["uuid"])) {
+	SPITAJAX_ERROR(-1, "Missing uuid");
 	return -1;
     }
-    $idx = $ajax_args["idx"];
-    if (!TBvalid_integer($idx)) {
-        SPITAJAX_ERROR(-1, "Invalid index");
+    $uuid = $ajax_args["uuid"];
+    if (!IsValidUUID($uuid)) {
+        SPITAJAX_ERROR(-1, "Invalid uuid");
 	return;
     }
     if (!isset($ajax_args["cluster"])) {
@@ -485,7 +498,7 @@ function Do_GetReservation()
 
     $retval = SUEXEC($this_uid, "nobody",
                      "webmanage_reservations -a '$urn' ".
-                     "   -t $webtask_id list -i $idx",
+                     "   -t $webtask_id list -i $uuid",
                      SUEXEC_ACTION_CONTINUE);
     if ($retval) {
         $webtask->Delete();
@@ -497,9 +510,10 @@ function Do_GetReservation()
     $value   = $webtask->TaskValue("value");
     $details = current($value);
     $blob = array();
-    $idx  = $details['idx'];
-    $blob["idx"]         = $idx;
+    $uuid = $details['uuid'];
+    $blob["uuid"]        = $uuid;
     $blob["pid"]         = $details['pid'];
+    $blob["uuid"]        = $details['uuid'];
     $blob["pid_idx"]     = $details['pid_idx'];
     $blob["creator_uid"] = $details['uid'];
     $blob["creator_idx"] = $details['uid_idx'];

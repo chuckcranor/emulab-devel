@@ -299,6 +299,7 @@ $(function ()
     function ValidateReservation()
     {
 	var callback = function(json) {
+	    console.info(json);
 	    // Three indicates success but needs admin approval.
 	    if (json.code) {
 		if (json.code != 2) {
@@ -314,7 +315,7 @@ $(function ()
 	    ToggleSubmit(true, "submit");
 	    // Make sure we still warn about an unsaved form.
 	    aptforms.MarkFormUnsaved();
-	    if (json.value == 3) {
+	    if (json.value.approved == 0) {
 		$('#confirm-reservation .needs-approval')
 		    .removeClass("hidden");
 	    }
@@ -336,22 +337,13 @@ $(function ()
     function Reserve()
     {
 	var reserve_callback = function(json) {
+	    console.info(json);
 	    if (json.code) {
 		sup.SpitOops("oops", json.value);
 		return;
 	    }
-	    /*
-	     * If the reservation is pending, lets stay on this page.
-	     * Oops: we do not have the reservation index so we are not
-	     * in edit mode, and so changing the reservation will actually
-	     * create new one. Fix at some point. In the meantime, just
-	     * reload the list page.
-	     */
-	    if (0 && json.value == 3) {
-		$('#unapproved-warning').removeClass("hidden");
-		// Back to edit/approve
-		ToggleSubmit(false, "check");
-		$('#reserve-approve-button').removeAttr("disabled");
+	    if (!json.value.approved && _.has(json.value, "url")) {
+		window.location.replace(json.value.url);
 	    }
 	    else {
 		window.location.replace("list-reservations.php");
@@ -380,7 +372,7 @@ $(function ()
 	var xmlthing = sup.CallServerMethod(null, "reserve",
 					    "Approve",
 					    {"cluster" : window.CLUSTER,
-					     "idx"     : window.IDX});
+					     "uuid"    : window.UUID});
 	xmlthing.done(callback);
     }
 
@@ -395,7 +387,7 @@ $(function ()
 	    }
 	    // Messy.
 	    var details = json.value;
-	    $('#reserve-request-form [name=idx]').val(details.idx);
+	    $('#reserve-request-form [name=uuid]').val(details.uuid);
 	    $('#reserve-request-form [name=pid]').val(details.pid);
 	    $('#reserve-request-form [name=count]').val(details.count);
 	    $('#reserve-request-form [name=cluster]').val(details.cluster);
@@ -455,7 +447,7 @@ $(function ()
 	var xmlthing = sup.CallServerMethod(null, "reserve",
 					    "GetReservation",
 					    {"cluster" : window.CLUSTER,
-					     "idx"     : window.IDX});
+					     "uuid"    : window.UUID});
 	xmlthing.done(callback);
     }
 
@@ -481,7 +473,7 @@ $(function ()
 		var xmlthing = sup.CallServerMethod(null, "reserve",
 						    "Delete",
 						    {"cluster" : window.CLUSTER,
-						     "idx"     : window.IDX,
+						     "uuid"    : window.UUID,
 						     "pid"     : window.PID,
 						     "reason"  : reason});
 		xmlthing.done(callback);

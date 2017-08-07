@@ -116,8 +116,8 @@ $(function ()
      */
     function DeleteReservation(row) {
 	// This is what we are deleting.
-	var idx = $(row).attr('data-idx');
-	var pid = $(row).attr('data-pid');
+	var uuid = $(row).attr('data-uuid');
+	var pid  = $(row).attr('data-pid');
 	var cluster = $(row).attr('data-cluster');
 	var table   = $(row).closest("table");
 	
@@ -138,8 +138,8 @@ $(function ()
 	    sup.ShowModal('#waitwait-modal');
 	    var xmlthing = sup.CallServerMethod(null, "reserve",
 						"Delete",
-						{"idx" : idx,
-						 "pid" : pid,
+						{"uuid"    : uuid,
+						 "pid"     : pid,
 						 "cluster" : cluster});
 	    xmlthing.done(callback);
 	});
@@ -157,8 +157,8 @@ $(function ()
      */
     function DenyReservation(row) {
 	// This is what we are deleting.
-	var idx = $(row).attr('data-idx');
-	var pid = $(row).attr('data-pid');
+	var uuid = $(row).attr('data-uuid');
+	var pid  = $(row).attr('data-pid');
 	var cluster = $(row).attr('data-cluster');
 	var table   = $(row).closest("table");
 	
@@ -180,8 +180,8 @@ $(function ()
 		sup.ShowModal('#waitwait-modal');
 		var xmlthing = sup.CallServerMethod(null, "reserve",
 						    "Delete",
-						    {"idx" : idx,
-						     "pid" : pid,
+						    {"uuid"    : uuid,
+						     "pid"     : pid,
 						     "cluster" : cluster,
 						     "reason"  : reason});
 		xmlthing.done(callback);

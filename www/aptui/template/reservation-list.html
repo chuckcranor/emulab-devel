@@ -31,27 +31,28 @@
       <table class='tablesorter' id='reservations-table-<%- name %>'>
 	<thead>
 	  <tr>
-	    <% if (showidx) { %><th>IDX</th><% } %>
+	    <% if (showidx) { %><th class="sorter-false">&nbsp</th><% } %>
 	    <% if (showuser) { %><th>Creator</th><% } %>
 	    <% if (showproject) { %><th>Project</th><% } %>
 	    <th>Type</th>
 	    <th>Count</th>
+	    <th>Created</th>
 	    <th>Starts</th>
 	    <th>Ends</th>
 	    <th>Status</th>
 	  </tr>
 	</thead>
 	<tbody>
-	  <% _.each(reservations, function(value, idx) { %>
-	    <tr <% if (showidx) { %> data-idx="<%- value.idx %>"
+	  <% _.each(reservations, function(value, uuid) { %>
+	    <tr <% if (showidx) { %> data-uuid="<%- value.uuid %>"
 				     data-pid="<%- value.pid %>"
 				     data-cluster="<%- value.cluster %>"<% } %>>
 	      <% if (showidx) { %>
-		<td><%- value.idx %>
-		  <% if (isadmin) { %>
-		    <a href="#" class="deny-button">
-		      <span class='glyphicon glyphicon-thumbs-down pull-right'
-			    style='color: red; margin-left: 3px;
+		<td>
+		<% if (isadmin) { %>
+		  <a href="#" class="deny-button">
+		      <span class='glyphicon glyphicon-thumbs-down pull-left'
+			    style='color: red; margin-right: 5px;
 				   margin-bottom: 4px;'
 			    data-toggle='tooltip'
 			    data-container="body"
@@ -60,17 +61,17 @@
 		    </a>
 		  <% } %>
 		  <a href="#" class="delete-button">
-		    <span class='glyphicon glyphicon-remove pull-right'
-			  style='color: red; margin-left: 3px;
+		    <span class='glyphicon glyphicon-remove pull-left'
+			  style='color: red; margin-right: 5px;
 				 margin-bottom: 4px;'
 			  data-toggle='tooltip'
 			  data-container="body"
 			  data-trigger="hover"
 			  title='Delete reservation'></span>
 		  </a>
-		  <a href="reserve.php?edit=1&cluster=<%- value.cluster %>&idx=<%- value.idx %>"
+		  <a href="reserve.php?edit=1&cluster=<%- value.cluster %>&uuid=<%- value.uuid %>"
 		     class="edit-button">
-		    <span class='glyphicon glyphicon-pencil pull-right'
+		    <span class='glyphicon glyphicon-pencil pull-left'
 			  style='color: red; margin-bottom: 4px;'
 			  data-toggle='tooltip'
 			  data-container="body"
@@ -101,6 +102,7 @@
 	      <% } %>
 	      <td><%- value.type %></td>
 	      <td><%- value.count %></td>
+	      <td class="format-date"><%- value.created %></td>
 	      <td class="format-date"><%- value.start %></td>
 	      <td class="format-date"><%- value.end %></td>
 	      <% if (value.approved) { %>

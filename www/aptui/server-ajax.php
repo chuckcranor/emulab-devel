@@ -338,7 +338,9 @@ $routing = array("myprofiles" =>
                               "methods" => array("Dismiss" =>
                                                      "Do_Dismiss",
                                                  "Click" =>
-                                                     "Do_Click")),
+                                                     "Do_Click",
+                                                 "Announcements" =>
+                                                     "Do_Announcements")),
 		 "reserve" =>
 			array("file"    => "reserve.ajax",
 			      "guest"   => false,
