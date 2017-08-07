@@ -169,15 +169,24 @@ sub Lookup($$;$$$$)
 	return undef
 	    if (!$query_result || !$query_result->numrows);
     } else {
-	# Look up by ID.
-	my $idx = $_[ 1 ];
-
+	# Look up by ID or UUID
+	my $token = $_[ 1 ];
+	my $clause;
+	if ($token =~ /^\d*$/) {
+	    $clause = "idx='$token'";
+	}
+	elsif (ValidUUID($token)) {
+	    $clause = "uuid='$token'";
+	}
+	else {
+	    return undef;
+	}
 	$query_result = DBQueryWarn( "SELECT *, UNIX_TIMESTAMP(start) AS s, " .
 				     "UNIX_TIMESTAMP(end) AS e, " .
 				     "UNIX_TIMESTAMP(created) AS c, " .
 				     "UNIX_TIMESTAMP(approved) AS a " .
 				     "FROM future_reservations " .
-				     "WHERE idx='$idx'" );
+				     "WHERE $clause" );
 
 	return undef
 	    if (!$query_result || !$query_result->numrows);
