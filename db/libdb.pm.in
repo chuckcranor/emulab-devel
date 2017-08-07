@@ -2665,11 +2665,6 @@ sub AddPerExperimentSwitchStack($$$$$@) {
     DBQueryFatal($query);
 
     foreach my $switch (@switches) {
-	my $is_primary = 0;
-	if ($switch eq $leader) {
-	    $is_primary = 1;
-	}
-
 	# for each switch, if the caller didn't supply snmp_community, then
 	# check node_type_attributes to see if there is a fixed community we
 	# must use -- i.e., if we can't reconfig this switch with a generated
@@ -2686,8 +2681,9 @@ sub AddPerExperimentSwitchStack($$$$$@) {
 	    }
 	}
 
-	DBQueryFatal("replace into switch_stacks (node_id,stack_id,is_primary,snmp_community)" . 
-		     " values ('$switch','$stack_id',$is_primary,'$scomm')");
+	DBQueryFatal("replace into switch_stacks ".
+		     "  (node_id,stack_id,is_primary,snmp_community)" . 
+		     " values ('$switch','$stack_id','1','$scomm')");
     }
 
     return 0;
