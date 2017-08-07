@@ -1326,6 +1326,9 @@ use vars qw($AUTOLOAD);
 use overload ('""' => 'Stringify');
 sub devurl($) { return APT_Instance::devurl($_[0]); }
 
+my $OURDOMAIN = "@OURDOMAIN@";
+my $MYURN     = "urn:publicid:IDN+$OURDOMAIN+authority+cm";
+
 #
 # Lookup and create a class instance to return.
 #
@@ -1630,6 +1633,16 @@ sub Update($$)
 	if (! DBQueryWarn($query));
 
     return Refresh($self);
+}
+
+#
+# Is the sliver on the local cluster.
+#
+sub OnLocalCluster($)
+{
+    my ($self) = @_;
+
+    return $self->aggregate_urn() eq $MYURN ? 1 : 0;
 }
 
 sub SetStatus($$)
@@ -2516,10 +2529,10 @@ sub ConsoleURL($$)
 #
 # Create an Image,
 #
-sub CreateImage($$$$;$$$)
+sub CreateImage($$$$;$$$$$)
 {
     my ($self, $sliver_urn, $imagename, $update_prepare,
-	$copyback_uuid, $bsname) = @_;
+	$copyback_uuid, $bsname, $nosnapshot, $mustnotexist) = @_;
     my $authority = $self->GetGeniAuthority();
     my $geniuser  = $self->instance()->GetGeniUser();
     my $slice     = $self->instance()->GetGeniSlice();
@@ -2552,6 +2565,10 @@ sub CreateImage($$$$;$$$)
 	if ($update_prepare);
     $args->{'copyback_uuid'} = $copyback_uuid
 	if (defined($copyback_uuid));
+    $args->{'nosnapshot'} = 1
+	if ($nosnapshot);
+    $args->{'mustnotexist'} = 1
+	if ($mustnotexist);
 
     my $cmurl = $authority->url();
     $cmurl = devurl($cmurl) if ($usemydevtree);
