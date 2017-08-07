@@ -18,6 +18,7 @@ $(function ()
     var profile_pid = '';
     var profile_version = '';
     var version_uuid = null;
+    var gotrspec     = 0;
     var gotscript    = 0;
     var fromrepo     = 0;
     var ajaxurl      = "";
@@ -41,6 +42,9 @@ $(function ()
 	var fields = JSON.parse(_.unescape($('#form-json')[0].textContent));
 	amlist     = JSON.parse(_.unescape($('#amlist-json')[0].textContent));
 
+	if (_.has(fields, "profile_rspec") && fields["profile_rspec"] != "") {
+	    gotrspec = 1;
+	}
 	if (_.has(fields, "profile_script") && fields["profile_script"] != "") {
 	    gotscript = 1;
 	}
@@ -70,7 +74,9 @@ $(function ()
 	    canedit:            window.CANEDIT,
 	    disabled:           window.DISABLED,
 	    withpublishing:     window.WITHPUBLISHING,
-	    fromrepo:           fromrepo
+	    fromrepo:           fromrepo,
+	    gotrspec:           gotrspec,
+	    gotscript:          gotscript,
 	});
 	show_html = aptforms.FormatFormFieldsHorizontal(show_html,
 							{"wide" : true});
