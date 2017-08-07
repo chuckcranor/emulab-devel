@@ -529,7 +529,7 @@ blockquote #selected_profile_description {
 
 .popover
 {
-    min-width: 350px !important;
+    min-width: 400px !important;
 }
 
 /* Update for better cross browser compat */
