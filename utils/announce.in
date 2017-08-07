@@ -222,7 +222,8 @@ if ($add_mode || $update_mode) {
     $text = join(' ', @ARGV);
 }
 
-if (! $list_mode && ! $add_mode && ! $purge_mode && scalar(@ARGV) > 0) {
+if (! $list_mode && ! $add_mode && ! $update_mode &&
+    ! $purge_mode && scalar(@ARGV) > 0) {
     usage();
 }
 
@@ -273,7 +274,7 @@ if ($add_mode) {
     # Update existing announcement.
     #
     my $query = "update apt_announcements set ";
-    $query .= ", text=" . DBQuoteSpecial($text);
+    $query .= "text=" . DBQuoteSpecial($text);
     if (defined($button) && defined($url)) {
 	$query .= ", link_label=" . DBQuoteSpecial($button);
 	$query .= ", link_url=" . DBQuoteSpecial($url);
