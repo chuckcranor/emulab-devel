@@ -57,8 +57,8 @@ my $TBOPS       = "@TBOPSEMAIL@";
 # XXX
 my $PSCP	= "/usr/local/bin/pscp";
 my $PSCPOPTS	= "-O BatchMode=yes -O StrictHostKeyChecking=no -O UserKnownHostsFile=/dev/null";
-my $PARALLEL	= 8;
-my $TIMEOUT	= 2;
+my $PARALLEL	= 20;
+my $TIMEOUT	= 20;
 
 # un-taint path
 $ENV{'PATH'} = '/bin:/usr/bin:/usr/local/bin:/usr/site/bin';
@@ -198,7 +198,7 @@ if (@nodeids > 0 && defined($expt)) {
 	print FD "$key";
 	close(FD);
 
-	my $opts = "$PSCPOPTS -t $TIMEOUT";
+	my $opts = "$PSCPOPTS -t $TIMEOUT -p $PARALLEL";
 	if ($debug) {
 	    my $dir = "/tmp/" . $expt->idx();
 	    mkdir("$dir.o", 0700);
