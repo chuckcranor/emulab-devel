@@ -237,7 +237,7 @@ function Do_GetStatus()
         }
         else {
             $available = 1;
-            if ($details->eid != "") {
+            if ($details->pid != "") {
                 $available = 0;
             }
             elseif ($details->reserved_pid != "" || $reserved_project) {
@@ -263,17 +263,12 @@ function Do_GetStatus()
             if ($available &&
                 $details->pid == "" && $details->reserved_pid != "") {
                 $typecounts[$type]["free"] += 1;
-                # Reservation system ignores prereserved nodes.
+                # Reservation system treats prereserved as not free.
                 $typecounts[$type]["free_reserved"] += 1;
             }
         }
         $nodeinfo[] = $info;
     }
-    #
-    # If the reservation system says that the number of free nodes is
-    # different then what we calculated, put that in parens. 
-    #
-    
     $blob = array();
     $blob["totals"] = $typecounts;
     $blob["inuse"]  = $nodeinfo;
