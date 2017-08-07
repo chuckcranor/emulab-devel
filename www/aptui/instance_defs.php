@@ -48,7 +48,7 @@ $geni_response_codes =
           "Error 20",
           "Error 21",
           "Error 22",
-          "Error 23",
+          "No space left on device or over quota",
           "Vlan Unavailable",
           "Insufficient Bandwidth",
           "Insufficient Nodes",
@@ -59,6 +59,8 @@ define("GENIRESPONSE_BADARGS",   	       1);
 define("GENIRESPONSE_REFUSED",                 7);
 define("GENIRESPONSE_TIMEDOUT",                8);
 define("GENIRESPONSE_SEARCHFAILED",            12);
+define("GENIRESPONSE_ALREADYEXISTS",           17);
+define("GENIRESPONSE_NOSPACE",                 23);
 define("GENIRESPONSE_VLAN_UNAVAILABLE",        24);
 define("GENIRESPONSE_INSUFFICIENT_BANDWIDTH",  25);
 define("GENIRESPONSE_INSUFFICIENT_NODES",      26);
