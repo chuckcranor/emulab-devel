@@ -770,6 +770,8 @@ getdrivenames() {
 	    list="0 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15"
 	    for i in $list
 	    do
+		[[ ! -L /dev/ad${i} ]] &&  [[ -c /dev/ad${i} ]] && drivelist+="/dev/ad${i} "
+		[[ -c /dev/ada${i} ]] && drivelist+="/dev/ada${i} "
 		[[ -c /dev/ad${i} ]] && drivelist+="/dev/ad${i} " 
 		[[ -c /dev/da${i} ]] && drivelist+="/dev/da${i} " 
 		[[ -c /dev/ar${i} ]] && drivelist+="/dev/ar${i} " 
