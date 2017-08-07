@@ -990,7 +990,7 @@ sub AddAnnouncement($$$$$$)
 	    "-u '$url' $dateopt '$text'";
     }
     else {
-	$command = "$ANNOUNCE -a -p $portal -U $this_uid -I 1 ".
+	$command = "$ANNOUNCE -a -p $portal -U $this_uid -I 4 ".
 	    "-b 'View Reservation' -u '$url' -t $uuid $dateopt '$text'";
     }
     system($command);
