@@ -435,7 +435,8 @@ sub Create($$$$$$)
     }
     
     my $profileid = TBGetUniqueIndex("next_profile", undef, 1);
-    my $rspec     = DBQuoteSpecial($argref->{'rspec'});
+    my $rspec     = DBQuoteSpecial($argref->{'rspec'})
+	if (exists($argref->{'rspec'}));
     my $cquery    = "";
     my $vquery    = "";
 
@@ -450,7 +451,7 @@ sub Create($$$$$$)
     $vquery  = $cquery;
     $vquery .= ",uuid='$vuuid',created=now()";
     $vquery .= ",creator='$uid',creator_idx='$uid_idx'";
-    $vquery .= ",rspec=$rspec";
+    $vquery .= ",rspec=$rspec" if (defined($rspec));
 
     # Set derived from pointer.
     if (defined($parent)) {
@@ -1634,6 +1635,9 @@ sub InsertImageRecords($$)
     my ($self, $perrmsg) = @_;
     my $profileid = $self->profileid();
     my $version   = $self->version();
+
+    return 0
+	if ($self->rspec() eq "");
     
     my $rspec = GeniXML::Parse($self->rspec());
     if (! defined($rspec)) {
