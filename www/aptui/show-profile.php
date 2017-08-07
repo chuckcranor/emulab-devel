@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2016 University of Utah and the Flux Group.
+# Copyright (c) 2000-2017 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -87,7 +87,6 @@ $disabled     = ($profile->isDisabled() ? 1 : 0);
 
 $defaults = array();
 $defaults["profile_name"]        = $profile->name();
-$defaults["profile_rspec"]       = $profile->rspec();
 $defaults["profile_version"]     = $profile->version();
 $defaults["profile_creator"]     = $profile->creator();
 $defaults["profile_updater"]     = $profile->updater();
@@ -96,6 +95,9 @@ $defaults["profile_created"]     = DateStringGMT($profile->created());
 $defaults["profile_published"]   = DateStringGMT($profile->published());
 $defaults["profile_version_url"] = $profile->URL();
 $defaults["profile_profile_url"] = $profile->ProfileURL();
+if ($profile->rspec() && $profile->rspec() != "") {
+    $defaults["profile_rspec"] = $profile->rspec();
+}
 if ($profile->script() && $profile->script() != "") {
     $defaults["profile_script"] = $profile->script();
 }

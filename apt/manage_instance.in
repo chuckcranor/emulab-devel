@@ -297,11 +297,15 @@ sub DoSnapshot()
     my $update_profile;
     my $copyback_uuid;
     my $copyback_urn;
+    my $swebtask;
+    my $nosnapshot     = 0;
+    my $mustnotexist   = 0;
     my $update_prepare = 0;
     my $doversions = 0;
     my $usetracker = 0;
+    my $operation = "image-only"; # Default to just snapshot.
 
-    my $optlist = "n:i:u:Uc:";
+    my $optlist = "n:i:u:Uc:O:Ss";
     my %options = ();
     if (! getopts($optlist, \%options)) {
 	usage();
@@ -323,6 +327,23 @@ sub DoSnapshot()
     }
     if (defined($options{"U"})) {
 	$update_prepare = 1;
+    }
+    if (defined($options{"s"})) {
+	$nosnapshot = 1;
+    }
+    if (defined($options{"S"})) {
+	$nosnapshot = 1;
+	$mustnotexist = 1;
+    }
+    if (defined($options{"O"})) {
+	$operation = $options{"O"};
+	if ($operation !~
+	    /^(update-profile|copy-profile|new-profile|image-only)$/) {
+	    usage();
+	}
+	if ($operation eq "update-profile") {
+	    $update_profile = "node";
+	}
     }
     if (defined($cloneprofile) && defined($update_profile)) {
 	fatal("Not allowed to update profile when cloning a profile");
@@ -444,12 +465,12 @@ sub DoSnapshot()
     #
     if (! TBcheck_dbslot($imagename, "images",
 			 "imagename", TBDB_CHECKDBSLOT_ERROR)) {
-	$imagename = $profile->profileid();
-	$imagename .= "." . $node_id
-	    if (defined($node_id));
+	$errmsg  = "Invalid imagename: " . TBFieldErrorString() . "\n";
+	$errcode = 1;
+	goto uerror;
     }
     
-   #
+    #
     # Instruct the remote cluster to copy the image back to its origin,
     # but we need to ask the IMS for uuid of the image that is running,
     # so we can tell the cluster, which then tells the origin cluster.
@@ -535,23 +556,27 @@ sub DoSnapshot()
     }
     $needunlock = 1;
 
-    #
-    # Grab the webtask, but only after we have it locked, since we are
-    # going to modify it. This is a different webtask then the one we
-    # got on the command line. The command line webtask is for reporting
-    # he results of the command, while the instance webtask is used to
-    # report ongoing status of the imaging operation (to the web UI).
-    #
-    my $swebtask = $instance->webtask();
-    # We reuse this so clear it.
-    $swebtask->Reset();
-    $swebtask->AutoStore(1);
-    # This is convenience for the web server.
-    $swebtask->aggregate_urn($aggregate->aggregate_urn());
-    $swebtask->client_id($node_id);
-    
-    $instance->SetStatus("imaging");
-    $aggregate->SetStatus("imaging");
+    if (!$nosnapshot) {
+	#
+	# Grab the webtask, but only after we have it locked, since we are
+	# going to modify it. This is a different webtask then the one we
+	# got on the command line. The command line webtask is for reporting
+	# he results of the command, while the instance webtask is used to
+	# report ongoing status of the imaging operation (to the web UI).
+	#
+	$swebtask = $instance->webtask();
+	# We reuse this so clear it.
+	$swebtask->Reset();
+	$swebtask->AutoStore(1);
+	# These are for the web server (imaging status).
+	$swebtask->aggregate_urn($aggregate->aggregate_urn());
+	$swebtask->client_id($node_id);
+	$swebtask->operation($operation) if (defined($operation));
+	$swebtask->imagename($imagename);
+	
+	$instance->SetStatus("imaging");
+	$aggregate->SetStatus("imaging");
+    }
 
     #
     # This returns pretty fast, and then the imaging takes place in
@@ -559,11 +584,14 @@ sub DoSnapshot()
     #
     my $response =
 	$aggregate->CreateImage($sliver_urn, $imagename,
-				$update_prepare, $copyback_uuid);
+				$update_prepare, $copyback_uuid,
+				undef, $nosnapshot, $mustnotexist);
     if (!defined($response)) {
 	$errmsg = "Internal error creating image";
-	$instance->SetStatus($old_status);
-	$aggregate->SetStatus($old_status);
+	if (!$nosnapshot) {
+	    $instance->SetStatus($old_status);
+	    $aggregate->SetStatus($old_status);
+	}
 	goto uerror;
     }
     if ($response->code() != GENIRESPONSE_SUCCESS) {
@@ -572,36 +600,59 @@ sub DoSnapshot()
 	    if ($response->code() == GENIRESPONSE_BUSY ||
 		$response->code() == GENIRESPONSE_SERVER_UNAVAILABLE ||
 		$response->code() == GENIRESPONSE_FORBIDDEN);
+	# Important to tell web interface about these.
 	$errcode = GENIRESPONSE_NOSPACE
 	    if ($response->code() == GENIRESPONSE_NOSPACE);
-	$instance->SetStatus($old_status);
-	$aggregate->SetStatus($old_status);
+	$errcode = GENIRESPONSE_ALREADYEXISTS
+	    if ($response->code() == GENIRESPONSE_ALREADYEXISTS);
+	if (!$nosnapshot) {
+	    $instance->SetStatus($old_status);
+	    $aggregate->SetStatus($old_status);
+	}
 	goto uerror;
     }
     my ($image_urn, $image_url,
 	$version_urn, $version_url) = @{ $response->value() };
-    if (!defined($version_urn)) {
+    #
+    # For version zero, kill the version number.
+    #
+    if (!defined($version_urn) || $version_urn =~ /:0$/) {
 	$version_urn = $image_urn;
 	$version_url = $image_url
+    }
+    my $image_name;
+
+    # When using the image server we use URNs. 
+    if ($usetracker) {
+	# DoImageTrackerStuff determined that we use whatever the cluster
+	# tells us, cause it is the home of the image.
+	if (!defined($copyback_urn)) {
+	    $image_name = $version_urn;
+	}
+	else {
+	    $image_name = $copyback_urn;
+	}
+    }
+    elsif ($aggregate->OnLocalCluster()) {
+	$image_name = $version_urn;
+    }
+    else {
+	$image_name = $version_url;
+    }
+    
+    if ($nosnapshot) {
+	if (defined($webtask)) {
+	    $webtask->image_urn($version_urn);
+	    $webtask->image_url($version_url);
+	    $webtask->image_name($image_name);
+	}
+	print "$version_urn,$version_url,$image_name\n";
+	$slice->UnLock();
+	exit(0);
     }
     if (defined($swebtask)) {
 	$swebtask->image_urn($version_urn);
 	$swebtask->image_url($version_url);
-	my $image_name;
-
-	if ($usetracker) {
-	    # DoImageTrackerStuff determined that we use whatever the cluster
-	    # tells us, cause it is the home of the image.
-	    if (!defined($copyback_urn)) {
-		$image_name = $version_urn;
-	    }
-	    else {
-		$image_name = $copyback_urn;
-	    }
-	}
-	else {
-	    $image_name = $version_url;
-	}
 	$swebtask->image_name($image_name);
 
 	# We tell the web interface that the image has to be copied
@@ -609,11 +660,8 @@ sub DoSnapshot()
 	if (defined($copyback_uuid)) {
 	    $swebtask->copyback_uuid($copyback_uuid);
 	}
-	print "$version_urn,$version_url,$image_name\n";
     }
-    else {
-	print "$image_urn,$image_url\n";
-    }
+    print "$version_urn,$version_url,$image_name\n";
 
     #
     # Exit and leave child to poll.

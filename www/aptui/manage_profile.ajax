@@ -47,9 +47,13 @@ function Do_Create()
     }
     $formfields = $ajax_args["formfields"];
     # Allow for form precheck only. So JS code knows it will be fast. 
-    $checkonly  = isset($ajax_args["checkonly"]) && $ajax_args["checkonly"];
+    $checkonly  = (isset($ajax_args["checkonly"]) &&
+                   $ajax_args["checkonly"] == 1 ? 1 : 0);
     if (isset($formfields["snapuuid"]) && $formfields["snapuuid"] != "") {
         $snapuuid = $formfields["snapuuid"];
+    }
+    if (isset($formfields["snapnode_id"]) && $formfields["snapnode_id"] != "") {
+        $snapnode_id = $formfields["snapnode_id"];
     }
     if (isset($formfields["copyuuid"]) && $formfields["copyuuid"] != "") {
         $copyuuid = $formfields["copyuuid"];
@@ -103,19 +107,43 @@ function Do_Create()
             $errors["profile_${key}"] = TBFieldErrorString();
         }
     }
-    if (isset($formfields["profile_rspec"]) &&
-	$formfields["profile_rspec"] != "") {
-        if (! TBvalid_rspec($formfields["profile_rspec"])) {
-            $errors["profile_rspec"] = TBFieldErrorString();	
+    if (isset($formfields["copy-profile"]) &&
+        $formfields["copy-profile"] != "") {
+        // We get here via image creation on the status page.
+	$profile = Profile::Lookup($formfields["copy-profile"]);
+	if (!$profile) {
+            $errors["errors"] = "Cannot find source profile";
+            goto bad;
+	}
+        $rspec = $profile->rspec();
+        if ($profile->script() && $profile->script() != "") {
+            $script = $profile->script();
         }
-        else {
-            $rspec = $formfields["profile_rspec"];
+        if ($profile->portal_converted()) {
+            $portal_converted = 1;
         }
     }
     else {
-        # Best place to put the error. 
-        $errors["sourcefile"] = "Missing Field";
+        if (isset($formfields["profile_rspec"]) &&
+            $formfields["profile_rspec"] != "") {
+            if (! TBvalid_rspec($formfields["profile_rspec"])) {
+                $errors["profile_rspec"] = TBFieldErrorString();	
+            }
+            else {
+                $rspec = $formfields["profile_rspec"];
+            }
+        }
+        if (isset($formfields["profile_script"]) &&
+            $formfields["profile_script"] != "") {
+            $script = $formfields["profile_script"];
+        }
+        if (isset($formfields["portal_converted"]) &&
+            $formfields["portal_converted"] != "") {
+            $portal_converted = ($formfields["portal_converted"] == "yes"
+                                 ? 1 : 0);
+        }
     }
+
     # Present these errors before we call out to do anything else.
     if (count($errors)) {
         goto bad;
@@ -174,6 +202,9 @@ function Do_Create()
                                    $instance->profile_version())) {
             $errors["error"] = "Cannot load profile for instance!";
         }
+        else if (isset($snapnode_id) && !TBvalid_vnode_id($snapnode_id)) {
+            $errors["error"] = "Invalid node_id for snapshot!";
+        }
     }
   bad:    
     if (count($errors)) {
@@ -210,19 +241,18 @@ function Do_Create()
         fwrite($fp, "  <value>" .
                htmlspecialchars($formfields["profile_name"]) . "</value>");
         fwrite($fp, "</attribute>\n");
-        fwrite($fp, "<attribute name='rspec'>");
-        fwrite($fp, "  <value>" . htmlspecialchars($rspec) . "</value>");
-        fwrite($fp, "</attribute>\n");
-        if (isset($formfields["profile_script"]) &&
-            $formfields["profile_script"] != "") {
+        if (isset($rspec)) {
+            fwrite($fp, "<attribute name='rspec'>");
+            fwrite($fp, "  <value>" . htmlspecialchars($rspec) . "</value>");
+            fwrite($fp, "</attribute>\n");
+        }
+        if (isset($script)) {
             fwrite($fp, "<attribute name='script'>");
             fwrite($fp, "  <value>" .
-                   htmlspecialchars($formfields["profile_script"]) .
-                   "</value>");
+                   htmlspecialchars($script) . "</value>");
             fwrite($fp, "</attribute>\n");
-            if (isset($formfields["portal_converted"]) &&
-                $formfields["portal_converted"] != "") {
-                $pcon = ($formfields["portal_converted"] == "yes" ? 1 : 0);
+            if (isset($portal_converted)) {
+                $pcon = ($portal_converted ? 1 : 0);
                 fwrite($fp, "<attribute name='portal_converted'>");
                 fwrite($fp, "  <value>$pcon</value>");
                 fwrite($fp, "</attribute>\n");
@@ -332,6 +362,9 @@ function Do_Create()
             if (isset($formfields["update_prepare"]) &&
                 $formfields["update_prepare"]) {
                 $command .= " -U ";
+            }
+            if (isset($snapnode_id)) {
+                $command .= " -n " . escapeshellarg($snapnode_id);
             }
         }
     }

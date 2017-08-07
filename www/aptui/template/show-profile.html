@@ -207,11 +207,13 @@
 	  </fieldset>
 	</form>
 	<% if (!disabled) { %>
-	  <button class='btn btn-primary btn-xs pull-right'
-             id='profile_instantiate_button'
-		  style='margin-right: 10px;'
-             name='create'>Instantiate
-	  </button>
+	  <% if (gotrspec) { %>
+	    <button class='btn btn-primary btn-xs pull-right'
+		    id='profile_instantiate_button'
+		    style='margin-right: 10px;'
+		    name='create'>Instantiate
+	    </button>
+	  <% } %>
 	  <% if (!fromrepo) { %>
 	  <a class='btn btn-primary btn-xs pull-right'
              style='margin-right: 10px;'

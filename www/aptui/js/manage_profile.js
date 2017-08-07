@@ -148,6 +148,7 @@ $(function ()
 	    manual:             window.MANUAL,
 	    copyuuid:		(window.COPYUUID || null),
 	    snapuuid:		(window.SNAPUUID || null),
+	    snapnode_id:	(window.SNAPNODE_ID || null),
 	    general_error:      (errors.error || ''),
 	    isapt:              window.ISAPT,
 	    disabled:           window.DISABLED,
@@ -1088,10 +1089,8 @@ $(function ()
 	    $('#profile_instructions .textarea').addClass("hidden");
 	}
 	// Creating new profile, now we can show the tour/metadata fields.
-	if (!window.VIEWING) {
-	    $('#tour-text-boxes').removeClass("hidden");
-	    $('#metadata-fields').removeClass("hidden");
-	}
+	$('#tour-text-boxes').removeClass("hidden");
+	$('#metadata-fields').removeClass("hidden");
 
 	//
 	// First time we see the XML, grab step data out of it. But after
@@ -1184,8 +1183,10 @@ $(function ()
 			     }
 			     else {
 				 EnableButtons();
+				 DisableButton("profile_submit_button");
 			     }
-			 });
+			 },
+	                 true);
     }
 
     //

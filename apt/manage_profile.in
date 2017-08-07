@@ -184,7 +184,7 @@ my %xmlfields =
 			                          $SLOT_UPDATE|$SLOT_ADMINONLY],
      "profile_nodelete_all"=> ["nodelete_all",	$SLOT_OPTIONAL|$SLOT_MODIFIER,
 			                          $SLOT_UPDATE|$SLOT_ADMINONLY],
-     "rspec"		   => ["rspec",		$SLOT_REQUIRED|$SLOT_UPDATE],
+     "rspec"		   => ["rspec",		$SLOT_OPTIONAL|$SLOT_UPDATE],
      "script"		   => ["script",	$SLOT_OPTIONAL|$SLOT_UPDATE],
      "repourl"		   => ["repourl",	$SLOT_OPTIONAL],
      "portal_converted"	   => ["portal_converted", $SLOT_OPTIONAL|$SLOT_UPDATE],
@@ -223,7 +223,7 @@ else {
 #
 sub CreateProfile()
 {
-    my $optlist    = "s:c:U";
+    my $optlist    = "s:c:Un:";
     my $snap       = 0;
     my $copy       = 0;
     my $prepare    = 0;
@@ -245,6 +245,9 @@ sub CreateProfile()
 	$copyuuid = $options{"s"};
 	if (defined($options{"U"})) {
 	    $prepare = 1;
+	}
+	if (defined($options{"n"})) {
+	    $node_id = $options{"n"};
 	}
     }
     if (defined($options{"c"})) {
@@ -321,7 +324,7 @@ sub CreateProfile()
     }
     #
     # Are we going to snapshot a node in an experiment? If so we
-    # sanity check to make sure there is just one node. 
+    # sanity check to make sure that node is in the experiment.
     #
     if ($snap) {
 	$instance = APT_Instance->Lookup($copyuuid);
@@ -331,24 +334,31 @@ sub CreateProfile()
 	if ($instance->status() ne "ready") {
 	    UserError("Instance must be in the ready state for cloning");
 	}
-	if ($instance->AggregateList() != 1) {
-	    UserError("Must be only one aggregate to snapshot");
+	foreach my $agg ($instance->AggregateList()) {
+	    my $manifest = GeniXML::Parse($agg->manifest());
+	    if (! defined($manifest)) {
+		fatal("Could not parse manifest");
+	    }
+	    foreach my $ref (GeniXML::FindNodes("n:node",
+						$manifest)->get_nodelist()) {
+		my $client_id   = GeniXML::GetVirtualId($ref);
+		my $manager_urn = GetManagerId($ref);
+		my $urn         = GeniXML::GetSliverId($ref);
+
+		# No sliver urn or a different aggregate.
+		next
+		    if (! (defined($urn) &&
+			   defined($manager_urn) &&
+			   $manager_urn eq $agg->aggregate_urn()));
+
+		if ($node_id eq $client_id) {
+		    $aggregate = $agg;
+		    last;
+		}
+	    }
 	}
-	($aggregate) = $instance->AggregateList();
-	my $manifest = GeniXML::Parse($aggregate->manifest());
-	if (! defined($manifest)) {
-	    fatal("Could not parse manifest");
-	}
-	my @nodes = GeniXML::FindNodes("n:node", $manifest)->get_nodelist();
-	if (@nodes != 1) {
-	    UserError("Too many nodes (> 1) to snapshot");
-	}
-	my $sliver_urn = GeniXML::GetSliverId($nodes[0]);
-	my $manager_urn= GeniXML::GetManagerId($nodes[0]);
-	$node_id       = GeniXML::GetVirtualId($nodes[0]);
-	if (! (defined($sliver_urn) &&
-	       $manager_urn eq $aggregate->aggregate_urn())) {
-	    UserError("$node_id is not at " . $aggregate->aggregate_urn());
+	if (!defined($aggregate)) {
+	    UserError("$node_id is not in any of the manifests!");
 	}
 	$parent_profile = $instance->Profile();
     }
@@ -430,6 +440,9 @@ sub CreateProfile()
 					   $this_user, $project)) {
 	    $newimage = $iwebtask->image_urn();
 	}
+	elsif ($aggregate->OnLocalCluster()) {
+	    $newimage = $iwebtask->image_urn();
+	}
 	else {
 	    $newimage = $iwebtask->image_url();
 	}
@@ -441,7 +454,8 @@ sub CreateProfile()
 	# We cannot change a geni-lib script profile, so no need to do this.
 	# But we can change a portal converted profile (or rspec).
 	#
-	if (!defined($profile->script()) || $profile->portal_converted()) {
+	if (defined($profile->rspec()) &&
+	    (!defined($profile->script()) || $profile->portal_converted())) {
 	    #
 	    # See if anything is actually going to change, since the cluster
 	    # might not be doing image versioning.
@@ -529,6 +543,31 @@ sub CreateProfile()
 	# figure out what to tell the user.
 	$pwebtask->cloning(0);
 	$profile->Unlock();
+
+	#
+	# Send email to user when this is a new profile with no rspec, to let
+	# them know they can now fill in a topology.
+	#
+	# URL to profile page.
+	# URN of new image. 
+	#
+	my $profile_name = $profile->name();
+	my $profile_pid  = $profile->pid();
+	my $creator = User->Lookup($profile->creator_idx());
+	my $url = $project->Brand()->wwwBase() .
+	    "/manage_profile.php?action=edit&uuid=$new_uuid";
+	my $message =
+	    "Your disk image for profile '$profile_name' is now ready for use.\n".
+	    "The URN for your new disk image is:\n\n".
+	    "\t" . $newimage . "\n\n".
+	    "The URL for your profile is:\n\n".
+	    "\t" . $url . "\n\n".
+	    "Click on the link above to edit your new profile.\n";
+	
+	$project->SendEmail($creator->email(),
+			    "Disk image for profile '$profile_name' is ready",
+			    $message,
+			    $project->Brand()->OpsEmailAddress());
     }
     else {
 	$profile->InsertImageRecords();

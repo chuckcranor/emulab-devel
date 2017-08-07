@@ -234,6 +234,10 @@
 	      <% } %>
 	      <% if (snapuuid) { %>
 	        <input type='hidden' name='snapuuid' value='<%= snapuuid %>'>
+		<% if (snapnode_id) { %>
+	          <input type='hidden'
+			 name='snapnode_id' value='<%= snapnode_id %>'>
+		<% } %>
 	      <% } %>
 	      <% if (window.CLONING) { %>
 	        <input type='hidden' name='update_prepare' value=''>
@@ -353,7 +357,7 @@
 			  style='margin-right: 10px;'
 			  id='show_xml_modal_button'>
                       View XML</button>
- 		    <% if ((viewing && canmodify) && !fromrepo && !gotscript){ %>
+ 		    <% if ((viewing && canmodify) && gotrspec && !fromrepo && !gotscript){ %>
 		      <span id="profile_convert_button"
 			    data-toggle='popover'
 			    data-delay='{"hide":500, "show":250}'
@@ -441,7 +445,7 @@
 		      rows=5><%- formfields.profile_script %></textarea>
 	  </fieldset>
 	  <fieldset id="tour-text-boxes"
-		    <% if (!viewing) { %>class="hidden" <% } %> >
+		    <% if (!viewing || !gotrspec) { %>class="hidden" <% } %> >
 	    <div class="form-group">
 	      <div class="format-me"
 		   data-key='profile_description'
@@ -528,7 +532,7 @@
 	  </fieldset>
 
 	  <fieldset id="metadata-fields"
-		    <% if (!viewing) { %>class="hidden" <% } %> >
+		    <% if (!viewing || !gotrspec) { %>class="hidden" <% } %> >
 	    <!-- Public listing checkbox -->
 	    <% if (isadmin) { %>
 	      <div class='row'>
@@ -706,7 +710,7 @@
 		</button>
 	      <% } %>
 	      <% if (viewing) { %>
-		<% if (!disabled) { %>
+		<% if (!disabled && gotrspec) { %>
 		  <a class='btn btn-primary btn-xs pull-right' disabled
                      id='profile_instantiate_button'
                      style='margin-right: 10px;'

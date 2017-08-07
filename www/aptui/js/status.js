@@ -2,15 +2,13 @@ $(function ()
 {
     'use strict';
 
-    var templates = APT_OPTIONS.fetchTemplateList(['status', 'waitwait-modal', 'oops-modal', 'register-modal', 'terminate-modal', 'clone-help', 'snapshot-help', 'oneonly-modal', 'approval-modal', 'linktest-modal', 'linktest-md']);
+    var templates = APT_OPTIONS.fetchTemplateList(['status', 'waitwait-modal', 'oops-modal', 'register-modal', 'terminate-modal', 'oneonly-modal', 'approval-modal', 'linktest-modal', 'linktest-md']);
 
     var statusString = templates['status'];
     var waitwaitString = templates['waitwait-modal'];
     var oopsString = templates['oops-modal'];
     var registerString = templates['register-modal'];
     var terminateString = templates['terminate-modal'];
-    var cloneHelpString = templates['clone-help'];
-    var snapshotHelpString = templates['snapshot-help'];
     var oneonlyString = templates['oneonly-modal'];
     var approvalString = templates['approval-modal'];
     var linktestString = templates['linktest-modal'];
@@ -23,7 +21,7 @@ $(function ()
     var isfadmin    = 0;
     var isguest     = 0;
     var isstud      = 0;
-    var ispprofile  = 0;
+    var isscript  = 0;
     var dossh       = 1;
     var profile_uuid= null;
     var extend      = null;
@@ -45,6 +43,7 @@ $(function ()
     var showlinktest      = false;
     var hidelinktest      = false;
     var extensions        = null;
+    var projlist          = null;
     var changingtopo      = false;
     var EMULAB_OPS        = "emulab-ops";
     var EMULAB_NS = "http://www.protogeni.net/resources/rspec/ext/emulab/1";
@@ -61,7 +60,7 @@ $(function ()
 	isguest = (window.APT_OPTIONS.registered ? false : true);
 	dossh   = window.APT_OPTIONS.dossh;
 	extend  = window.APT_OPTIONS.extend || null;
-	ispprofile = window.APT_OPTIONS.ispprofile;
+	isscript = window.APT_OPTIONS.isscript;
 	profile_uuid = window.APT_OPTIONS.profileUUID;
 	paniced      = window.APT_OPTIONS.paniced;
 	lockout      = window.APT_OPTIONS.lockout;
@@ -75,6 +74,10 @@ $(function ()
 	if ($('#extensions-json').length) {
 	    extensions = decodejson('#extensions-json');
 	    console.info(extensions);
+	}
+	if ($('#projects-json').length) {
+	    projlist = decodejson('#projects-json');
+	    console.info(projlist);
 	}
 
 	// Generate the templates.
@@ -119,7 +122,7 @@ $(function ()
 	$('#approval_div').html(approvalString);
 	$('#linktest_div').html(linktestString);
 
-	// Not allowed to clone/copy repobased profiles.
+	// Not allowed to copy repobased profiles.
 	if (window.APT_OPTIONS.repourl !== undefined) {
 	    $('#copy_button').addClass("hidden");
 	}
@@ -197,13 +200,6 @@ $(function ()
 	    event.preventDefault();
 	    DoRefresh();
 	});
-	// Handler for the Clone button.
-	$('button#clone_button').click(function (event) {
-	    window.APT_OPTIONS.gaButtonEvent(event);
-	    event.preventDefault();
-	    window.location.replace('manage_profile.php?action=clone' +
-				    '&snapuuid=' + uuid);
-	});
 	// Handler for the reload topology button
 	$('button#reload-topology-button').click(function (event) {
 	    window.APT_OPTIONS.gaButtonEvent(event);
@@ -211,60 +207,6 @@ $(function ()
 	    DoReloadTopology();
 	});
 
-	//
-	// Attach a hover popover to explain what Clone means. We need
-	// the hover action delayed by our own code, since we want to
-	// use a manual trigger to close the popover, or else the user
-	// will not have enough time to read the content. 
-	//
-	var popover_timer;
-
-	$("button#clone_button").mouseenter(function(event) {
-	    popover_timer = setTimeout(function() {
-		$('button#clone_button').popover({
-		    html:     true,
-		    content:  cloneHelpString,
-		    trigger:  'manual',
-		    placement:'left',
-		    container:'body',
-		});
-		$('button#clone_button').popover('show');
-		$('#clone_popover_close').on('click', function(event) {
-		    $('button#clone_button').popover('hide');
-		});
-	    },1000)
-	}).mouseleave(function(){
-	    clearTimeout(popover_timer);
-	}).click(function(event){
-	    clearTimeout(popover_timer);
-	});
-	
-	$("button#snapshot_button").mouseenter(function(event) {
-	    popover_timer = setTimeout(function() {
-		$('button#snapshot_button').popover({
-		    html:     true,
-		    content:  snapshotHelpString,
-		    trigger:  'manual',
-		    placement:'left',
-		    container:'body',
-		});
-		$('button#snapshot_button').popover('show');
-		$('#snapshot_popover_close').on('click', function(event) {
-		    $('button#snapshot_button').popover('hide');
-		});
-		// Kill popover if user clicks through. 
-		$('button#snapshot_button').on('click', function(event) {
-		    window.APT_OPTIONS.gaButtonEvent(event);
-		    $('button#snapshot_button').popover('hide');
-		});
-	    },1000)
-	}).mouseleave(function(){
-	    clearTimeout(popover_timer);
-	}).click(function(event){
-	    clearTimeout(popover_timer);
-	    DoSnapshotNode();
-	});
-	
 	// Terminate an experiment.
 	$('button#terminate').click(function (event) {
 	    window.APT_OPTIONS.gaButtonEvent(event);
@@ -673,7 +615,7 @@ $(function ()
 	    button = "#reload-topology-button";
 	else if (button == "clone" && nodecount == 1)
 	    button = "#clone_button";
-	else if (button == "snapshot" && nodecount == 1)
+	else if (button == "snapshot")
 	    button = "#snapshot_button";
 	else if (button == "start-linktest")
 	    button = "#linktest-modal-button";
@@ -1377,7 +1319,11 @@ $(function ()
 	xmlthing.done(callback);
     }
 
+    // SSH info.
     var hostportList = {};
+
+    // Map client_id to node_id
+    var clientid2nodeid = {};
 
     // Remember passwords to show user later. 
     var nodePasswords = {};
@@ -1497,9 +1443,6 @@ $(function ()
 	else if (action == "reload") {
 	    DoReload(clientList);
 	}
-	else if (action == "snapshot") {
-	    DoSnapshotNode(clientList[0]);
-	}
     }
 
     // For autostarting ssh on single node experiments.
@@ -1530,7 +1473,6 @@ $(function ()
 	"    <li><a href='#' name='shell'>Shell</a></li> " +
 	"    <li><a href='#' name='console'>Console</a></li> " +
 	"    <li><a href='#' name='consolelog'>Console Log</a></li> " +
-	"    <li><a href='#' name='snapshot'>Snapshot</a></li> " +
 	"    <li><a href='#' name='delete'>Delete Node</a></li> " +
 	"  </ul>" +
 	"  </div>" +
@@ -1626,6 +1568,7 @@ $(function ()
 			.html($(vnode).attr("name"));
 		    $('#listview-row-' + node + " [name=type]")
 			.html($(vnode).attr("hardware_type"));
+		    clientid2nodeid[node] = $(vnode).attr("name");
 		}
 		// Convenience.
 		$('#listview-row-' + node + " [name=select]").attr("id", node);
@@ -1701,15 +1644,7 @@ $(function ()
 		}
 		if (!isvhost && !isfw) {
 		    //
-		    // And a handler for the snapshot action.
-		    //
-		    $('#listview-row-' + node + ' [name=snapshot]')
-			.click(function (e) {
-			    window.APT_OPTIONS.gaButtonEvent(e);
-			    ActionHandler("snapshot", [node]);
-			});
-		    //
-		    // Ditto the delete button,
+		    // Delete button handler
 		    //
 		    $('#listview-row-' + node + ' [name=delete]')
 			.click(function (e) {
@@ -1718,9 +1653,6 @@ $(function ()
 			});
 		}
 		else {
-		    // Need to do this on the context menu too, but painful.
-		    $('#listview-row-' + node + ' [name=snapshot]')
-			.parent().addClass('disabled');		    
 		    $('#listview-row-' + node + ' [name=delete]')
 			.parent().addClass('disabled');		    
 		}
@@ -1756,7 +1688,6 @@ $(function ()
 		}
 		// If a vhost, then grey out options.
 		if (isvhost || isfw) {
-		    $(clone).find("li[id=snapshot]").addClass("disabled");
 		    $(clone).find("li[id=delete]").addClass("disabled");
 		}
 		contextMenus[node] = clone;
@@ -1856,19 +1787,10 @@ $(function ()
 		SetupLinktest(instanceStatus);
 	    }
 
-	    /*
-	     * If a single node, show the clone button and maybe the
-	     * the snapshot; the user must own the profile it was
-	     * created from in order to do a snapshot.
-	     */
+	    // Setup the snapshot modal.
+	    SetupSnapshotModal();
+
 	    if (nodecount == 1) {
-		if (window.APT_OPTIONS.canclone &&
-		    window.APT_OPTIONS.repourl === undefined) {
-		    $("#clone_button").removeClass("hidden");
-		}
-		if (window.APT_OPTIONS.cansnap) {
-		    $("#snapshot_button").removeClass("hidden");
-		}
 		// Not allowed to delete the last node.
 		var nodename = Object.keys(hostportList)[0];
 		$('#listview-row-' + nodename + ' [name=delete]')
@@ -2013,20 +1935,211 @@ $(function ()
 			     else {
 				 EnableButtons();
 			     }
-			 });
+			 },
+	                 false);
     }
 
-    //
-    // This is for snapshot of a single node profile, or a specific
-    // node in a multi-node profile.
-    //
-    function DoSnapshotNode(node_id)
+    function SetupSnapshotModal()
+    {
+	var snapshot_help_timer;
+	var clone_help_timer;
+
+	$("button#snapshot_button").click(function(event) {
+	    $('button#snapshot_button').popover('hide');
+	    DoSnapshotNode();
+	});
+	
+	$('#snapshot-help-button').click(function (event) {	
+	    event.preventDefault();
+	    clearTimeout(snapshot_help_timer);	    
+	    $('#snapshot-help-button').popover({
+		html:     true,
+		content:  $('#snapshot-help-div').html(),
+		trigger:  'manual',
+		placement:'auto',
+		container:'body',
+	    });
+	    $('#snapshot-help-button').popover('show');
+	    $('.snapshot-popover-close').on('click', function(event) {
+		event.preventDefault();
+		$('#snapshot-help-button').popover('destroy');
+	    });
+	}).mouseenter(function (event) {
+	    snapshot_help_timer = setTimeout(function() {
+		$('#snapshot-help-button').trigger("click");
+	    },1000)
+	}).mouseleave(function(){
+	    clearTimeout(snapshot_help_timer);
+	});
+	
+	$('.clone-help-button').mouseenter(function (event) {
+	    clone_help_timer = setTimeout(function() {
+		$(event.target).trigger("click");
+	    },1000)
+	}).mouseleave(function(){
+	    clearTimeout(clone_help_timer);
+	}).click(function (event) {
+	    event.preventDefault();
+	    clearTimeout(clone_help_timer);
+	    var target = $('#clone-help-popover-div');
+	    target.popover({
+		html:     true,
+		content:  $('#clone-help-div').html(),
+		trigger:  'manual',
+		placement:'auto',
+		container:'body',
+	    });
+	    target.popover('show');
+	    $('.clone-popover-close').on('click', function(event) {
+		event.preventDefault();
+		target.popover('destroy');
+	    });
+	});
+	
+	/*
+	 * We now show the single imaging button all the time. The workflow
+	 * we present later depends on canclone/cansnap. But not allowed
+	 * to clone a repo based profile.
+	 */
+	if ((window.APT_OPTIONS.canclone &&
+	     window.APT_OPTIONS.repourl === undefined) ||
+	    window.APT_OPTIONS.cansnap) {
+	    $("#snapshot_button").removeClass("hidden");
+
+	    /*
+	     * Create an options list for the dropdown.
+	     */
+	    var html = "";
+		    
+	    _.each(clientid2nodeid, function (node_id, client_id) {
+		html = html +
+		    "<option value='" + client_id + "'>" +
+		    client_id + " (" + node_id + ")" +
+		    "</option>";
+	    });
+	    $('#snapshot_modal .choose-node select').append(html);
+
+	    if (nodecount == 1) {
+		// One node, stick that into the first sentence.
+		var nodename = Object.keys(hostportList)[0];
+		$('#snapshot_modal .one-node .node_id')
+		    .html(nodename + " (" + clientid2nodeid[nodename] + ")");
+		$('#snapshot_modal .one-node.text-info').removeClass("hidden");
+		// And select it in the options for later, but stays hidden.
+		$('#snapshot_modal .choose-node select').val(nodename);
+	    }
+	    else {
+		$('#snapshot_modal .choose-node').removeClass("hidden");
+	    }
+
+	    // Project list for copy/new profile.
+	    if (projlist && projlist.length) {
+		var html = "";
+
+		_.each(projlist, function(name) {
+		    html = html +
+			"<option value='" + name + "'>" + name + "</option>";
+		});
+		$('#snapshot_modal .choose-project-div select').append(html);
+		if (projlist.length == 1) {
+		    // No need to show it, just select the project for later.
+		    $('#snapshot_modal .choose-project-div select')
+			.val(projlist[0]);
+		}
+	    }
+
+	    $('#snapshot_modal input[type=radio]').on('change', function() {
+		switch($(this).val()) {
+		case 'update-profile':
+		    $('#snapshot-name-div').addClass("hidden");
+		    $('#snapshot_modal .choose-project-div').addClass("hidden");
+		    break;
+		case 'copy-profile':
+		case 'new-profile':
+		    $('#snapshot-name-div .new-profile').removeClass("hidden");
+		    $('#snapshot-name-div .image-only').addClass("hidden");
+		    $('#snapshot-name-div').removeClass("hidden");
+		    if (0 && projlist.length > 1) {
+			$('#snapshot_modal .choose-project-div')
+			    .removeClass("hidden");
+		    }
+		    break;
+		case 'image-only':
+		    $('#snapshot-name-div .new-profile').addClass("hidden");
+		    $('#snapshot-name-div .image-only').removeClass("hidden");
+		    $('#snapshot-name-div').removeClass("hidden");
+		    $('#snapshot_modal .choose-project-div').addClass("hidden");
+		    break;
+		}
+	    });
+
+	    /*
+	     * Not allowed to clone/snap repo based profiles, which means
+	     * no choice at all, so hide everything except what name to
+	     * use for the image. 
+	     */
+	    if (window.APT_OPTIONS.repourl !== undefined) {
+		$('#update-profile').closest(".radio").addClass("hidden");
+		$('#copy-profile').closest(".radio").addClass("hidden");
+		$('#new-profile').closest(".radio").addClass("hidden");
+		$('#image-only').prop("checked", true);
+		$('#image-only').trigger("change");
+		$('#image-only').closest(".radio").addClass("hidden");
+		$('#snapshot-radio-title').addClass("hidden");
+	    }
+	    else if (!window.APT_OPTIONS.cansnap) {
+		$('#update-profile').closest(".radio").remove();
+		$('#copy-profile').prop("checked", true);
+		$('#copy-profile').trigger("change");
+	    }
+
+	    /*
+	     * If the user decides to create an image only, then lets try
+	     * to guide them to reasonable choice for the name to use. 
+	     */
+	    if (nodecount == 1) {
+		/*
+		 * If allowed to snapshot, then use the current profile name.
+		 * Otherwise might as well let them choose the name.
+		 */
+		if (window.APT_OPTIONS.cansnap) {
+		    $('#snapshot-name-div .image-only input')
+			.val(window.APT_OPTIONS.profileName);
+		    $('#snapshot-name-div .snapshot-name-warning')
+			.removeClass("hidden");
+		}
+	    }
+	    else {
+		/*
+		 * Lets append the name of the choosen node to the profile name.
+		 */
+		$('#snapshot_modal .choose-node select')
+		    .on("change", function (event) {
+			var node = $(this).val();
+			var name = window.APT_OPTIONS.profileName + "." + node;
+			$('#snapshot-name-div .image-only input').val(name);
+			$('#snapshot-name-div .snapshot-name-warning')
+			    .removeClass("hidden");
+		    });
+	    }
+	}
+    }	
+
+    /*
+     * New version of disk image creation.
+     */
+    function DoSnapshotNode()
     {
 	// Do not allow snapshot if the experiment is not in the ready state.
 	if (lastStatus != "ready") {
 	    alert("Experiment is not ready yet, snapshot not allowed");
 	    return;
 	}
+	// Clear previous errors'
+	$('#snapshot_modal .choose-node-error').addClass("hidden");
+	$('#snapshot_modal .name-error').addClass("hidden");
+	$('#snapshot_modal .inuse-error').addClass("hidden");
+	$('#snapshot_modal .project-error').addClass("hidden");
 	
 	// Default to unchecked any time we show the modal.
 	$('#snapshot_update_prepare').prop("checked", false);
@@ -2041,13 +2154,8 @@ $(function ()
 	    });
 	    $('#confirm-update-systemimage').click(function() {
 		sup.HideModal('#confirm-update-systemimage-modal');
-		var args = {"uuid"           : uuid,
-			    "update_profile" : 0,
-			    "update_prepare" : 0};
-		if (node_id) {
-		    args["node_id"] = node_id;
-		}
-		StartSnapshot(args);
+		$('#snapshot_update_prepare_div').addClass("hidden");
+		DoSnapshotNodeAux();
 	    });
 	    sup.ShowModal('#confirm-update-systemimage-modal',
 			  function() {
@@ -2058,76 +2166,88 @@ $(function ()
 			  });
 	    return;
 	}
-	DoSnapshotNodeAux(node_id);
+	DoSnapshotNodeAux();
     }
-    function DoSnapshotNodeAux(node_id)
+    function DoSnapshotNodeAux()
     {
-	if (node_id) {
-	    // Default to checked any time we show the modal.
-	    $('#snapshot_update_profile').prop("checked", true);
-	    
-	    if (ispprofile) {
-		$('#snapshot_update_profile_div').addClass("hidden");
-		$('#snapshot_update_script_div').removeClass("hidden");
-	    }
-	    else {
-		$('#snapshot_update_profile_div').removeClass("hidden");
-		$('#snapshot_update_script_div').addClass("hidden");
-	    }
-	    if (isadmin) {
-	        $('#snapshot_modal #nameyourimage_div').removeClass("hidden");
-	    }
-	}
-	else {
-	    $('#snapshot_update_profile_div').addClass("hidden");
-	    if (ispprofile) {
-		$('#snapshot_update_script_div').removeClass("hidden");
-	    }
-	}
+	var node_id;
 	sup.ShowModal('#snapshot_modal');
 
 	// Handler for the Snapshot confirm button.
 	$('button#snapshot_confirm').bind("click.snapshot", function (event) {
 	    event.preventDefault();
-	    $('button#snapshot_confirm').unbind("click.snapshot");
+	    // Make sure node is selected (one node, it is forced selection).
+	    node_id = $('#snapshot_modal .choose-node select ' +
+			'option:selected').val();
+	    if (node_id === undefined || node_id === '') {
+		$('#snapshot_modal .choose-node-error').removeClass("hidden");
+		return;
+	    }
+	    $('#snapshot_modal .choose-node-error').addClass("hidden");
 
+	    // What does the user want to do?
+	    var operation = $('#snapshot_modal input[type=radio]:checked').val();
+	    if (operation == 'copy-profile-no' ||
+		operation == 'new-profile-no') {
+		var action = operation == 'copy-profile' ? "clone" : "create";
+		window.location.replace('manage_profile.php?action=' + action +
+					'&snapuuid=' + uuid +
+					'&snapnode_id=' + node_id);
+	    }
 	    var args = {"uuid" : uuid,
-			"update_profile" : 1,
+			"node_id" : node_id,
+			"operation" : operation,
 			"update_prepare" : 0};
-	    if (node_id !== undefined) {
-		args["node_id"] = node_id;
-	    }	    
-	    if (node_id && !$('#snapshot_update_profile').is(':checked')) {
-		args["update_profile"] = 0;
+	    // Make sure we got an image/profile name.
+	    if (operation == 'image-only') {
+		var name = $('#snapshot-name-div .image-only input').val();
+		if (name == "") {
+		    $('#snapshot-name-div .name-error').removeClass("hidden");
+		    return;
+		}
+		args["imagename"] = name;
+	    }
+	    else if (operation == "copy-profile" ||
+		     operation == "new-profile") {
+		var name = $('#snapshot-name-div .new-profile input').val();
+		if (name == "") {
+		    $('#snapshot-name-div .name-error').removeClass("hidden");
+		    return;
+		}
+		args["profilename"] = name;
 	    }
 	    if ($('#snapshot_update_prepare').is(':checked')) {
 		args["update_prepare"] = 1;
 	    }
-	    if ($('#snapshot_modal #nameyourimage_name').val() != "") {
-		args["imagename"] =
-		    $('#snapshot_modal #nameyourimage_name').val();
+	    $('button#snapshot_confirm').unbind("click.snapshot");
+	    if (operation == "copy-profile" || operation == "new-profile") {
+		NewProfile(args);
 	    }
-	    StartSnapshot(args);
+	    else {
+		StartSnapshot(args);
+	    }
 	});
 
 	// Handler for hide modal to unbind the click handler.
 	$('#snapshot_modal').on('hidden.bs.modal', function (event) {
 	    $(this).unbind(event);
 	    $('button#snapshot_confirm').unbind("click.snapshot");
+	    // Kill any popovers still showing.
+	    $('#snapshot-help-button').popover('destroy');
+	    $('#clone-help-popover-div').popover('destroy');
 	});
     }
+    
     function StartSnapshot(args)
     {
-	console.info("sta", args);
-	
 	sup.HideModal('#snapshot_modal');
 	sup.ShowWaitWait("Starting image capture, " +
 			 "this can take a minute. Patience please.");
 
 	var callback = function(json) {
 	    sup.HideWaitWait();
-	    //console.log("StartSnapshot");
-	    //console.log(json);
+	    console.log("StartSnapshot");
+	    console.log(json);
 	    
 	    if (json.code) {
 		sup.SpitOops("oops", "Could not start snapshot:<br>" +
@@ -2139,6 +2259,116 @@ $(function ()
 	var xmlthing =
 	    sup.CallServerMethod(ajaxurl, "status", "SnapShot", args);
 	xmlthing.done(callback);
+    }
+
+    /*
+     *
+     */
+    function NewProfile(args)
+    {
+	var createArgs = {
+	    "formfields" : {"action"       : "clone",
+			    "profile_pid"  : window.APT_OPTIONS.project,
+			    "profile_name" : args["profilename"],
+			    "profile_who"  : "public",
+			    "snapuuid"     : window.APT_OPTIONS.uuid,
+			    "snapnode_id"  : args.node_id,
+			   },
+	    "checkonly"  : 1,
+	};
+	if (args["operation"] == "copy-profile") {
+	    createArgs["formfields"]["copy-profile"] =
+		window.APT_OPTIONS.profileUUID;
+	}
+	/*
+	 * Callback after creating new profile with snapshot operation.
+	 */
+	var createprofile_callback = function(json) {
+	    console.log("create profile", json);
+	    
+	    if (json.code) {
+		sup.HideWaitWait(function() {
+		    sup.SpitOops("oops", "Error creating new profile. Please" +
+				 "see the javascript console");
+		});
+		return;
+	    }
+	    window.location.replace(json.value);
+	}
+	 
+	/*
+	 * Callback after asking the cluster to create the image descriptor.
+	 * Now we can go ahead and create the profile and start the imaging
+	 * process.
+	 */
+	var checkimage_callback = function(json) {
+	    console.log("create image", json);
+	    
+	    if (json.code) {
+		sup.HideWaitWait(function() {
+		    if (json.code == 17) {
+			sup.SpitOops("oops",
+				     "There is already an image with the " +
+				     "same name as your profile; using this " +
+				     "name would overwrite the existing image "+
+				     "which is probably not what you want. " +
+				     "If you really want to use this name, " +
+				     "please <a href='list-images.php'>" +
+				     "delete the existing image first</a>.");
+			return;
+		    }
+		    sup.SpitOops("oops",
+				 "Error creating new image: " + json.value);
+		});
+		return;
+	    }
+	    createArgs.checkonly = 0;
+	    var xmlthing =
+		sup.CallServerMethod(ajaxurl, "manage_profile",
+				     "Create", createArgs);
+	    xmlthing.done(createprofile_callback);
+	}
+
+	/*
+	 * Callback after asking if the profile name is free and valid.
+	 */
+	var checkprofile_callback = function(json) {
+	    console.log("check profile", json);
+	    
+	    if (json.code) {
+		if (typeof(json.value) === 'object') {
+		    if (_.has(json.value, "profile_name")) {
+			$('#snapshot_modal .inuse-error')
+			    .html(json.value.profile_name);
+			$('#snapshot_modal .inuse-error')
+			    .removeClass("hidden");
+			return;
+		    }
+		    sup.SpitOops("oops", JSON.stringify(json.value));
+		    return;
+		}
+		sup.SpitOops("oops", "Error creating new profile, please " +
+			     "see the javascript console");
+		return;
+	    }
+	    /*
+	     * Now create the descriptor but do not image yet. 
+	     */
+	    args["nosnapshot"] = 1;
+	    args["imagename"]  = args["profilename"];
+	    sup.HideModal('#snapshot_modal', function () {
+		sup.ShowWaitWait("Please wait while we create your profile " +
+				 "and start the imaging process. " +
+				 "Patience please!");
+		var xmlthing =
+		    sup.CallServerMethod(ajaxurl, "status", "SnapShot", args);
+		xmlthing.done(checkimage_callback);
+	    });
+	}
+	var xmlthing =
+	    sup.CallServerMethod(ajaxurl, "manage_profile",
+				 "Create", createArgs);
+	xmlthing.done(checkprofile_callback);
     }
 
     //

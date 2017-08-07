@@ -939,6 +939,19 @@ function Do_Snapshot()
 	SPITAJAX_ERROR(1, "Experiment is currently busy");
 	return;
     }
+    if (!isset($ajax_args["operation"]) || $ajax_args["operation"] == "") {
+        SPITAJAX_ERROR(-1, "Must supply operation!");
+        return;
+    }
+    $operation = $ajax_args["operation"];
+    if (! ($operation == "update-profile" ||
+           $operation == "copy-profile" ||
+           $operation == "new-profile" ||
+           $operation == "image-only")) {
+        SPITAJAX_ERROR(-1, "Invalid operation!");
+        return;
+    }
+           
     #
     # The profile also has to belong to the user, since it is
     # going to be modified to use the new image.
@@ -961,21 +974,13 @@ function Do_Snapshot()
             return;
         }
         $optargs .= " -n $node_id ";
-
-        if (isset($ajax_args["update_profile"]) &&
-            $ajax_args["update_profile"]) {
-            $optargs .= " -u all ";
-        }
-    }
-    else {
-        #
-        # Single node profile snapshot, we always update the profile.
-        #
-        $optargs .= " -u node ";
-    }
+    } 
     if (isset($ajax_args["update_prepare"]) &&
         $ajax_args["update_prepare"]) {
         $optargs .= " -U ";
+    }
+    if (isset($ajax_args["nosnapshot"]) && $ajax_args["nosnapshot"]) {
+        $optargs .= " -S ";
     }
     if (isset($ajax_args["imagename"]) && $ajax_args["imagename"] != "") {
         if (!TBvalid_imagename($ajax_args["imagename"])) {
@@ -984,7 +989,8 @@ function Do_Snapshot()
         }
         $optargs .= " -i " . escapeshellarg($ajax_args["imagename"]);
     }
-    
+    $optargs .= " -O $operation ";
+
     #
     # Call out to the backend.
     #
@@ -1002,7 +1008,7 @@ function Do_Snapshot()
 	    SUEXECERROR(SUEXEC_ACTION_CONTINUE);
 	}
         else {
-            SPITAJAX_ERROR(1, $webtask->TaskValue("output"));
+            SPITAJAX_ERROR($retval, $webtask->TaskValue("output"));
         }
         $webtask->Delete();
 	return;

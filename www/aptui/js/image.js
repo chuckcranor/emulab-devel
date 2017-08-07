@@ -160,7 +160,7 @@ window.ShowImagingModal = (function()
 	    $xmlthing.done(callback);
 	}
 
-        return function(s_callback, c_callback)
+        return function(s_callback, c_callback, nokeyboard)
 	{
 	    status_callback = s_callback;
 	    completion_callback = c_callback;
@@ -175,7 +175,8 @@ window.ShowImagingModal = (function()
 		console.log(json);
 		
     		var imaging_html = imagingTemplate({
-		    needcopy : _.has(json.value, "copyback_uuid")});
+		    "needcopy"   : _.has(json.value, "copyback_uuid"),
+		    "nokeyboard" : nokeyboard});
 		$('#imaging_div').html(imaging_html);
 		
 		imaging_modal_display = true;	    

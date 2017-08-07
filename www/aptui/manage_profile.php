@@ -47,9 +47,10 @@ $this_idx  = $this_user->uid_idx();
 $optargs = OptionalPageArguments("create",      PAGEARG_STRING,
 				 "action",      PAGEARG_STRING,
 				 "uuid",        PAGEARG_STRING,
-                                 "fromexp",      PAGEARG_STRING,
+                                 "fromexp",     PAGEARG_STRING,
 				 "copyuuid",    PAGEARG_STRING,
 				 "snapuuid",    PAGEARG_STRING,
+				 "snapnode_id", PAGEARG_NODEID,
 				 "finished",    PAGEARG_BOOLEAN,
 				 "formfields",  PAGEARG_ARRAY);
 
@@ -59,7 +60,7 @@ $optargs = OptionalPageArguments("create",      PAGEARG_STRING,
 function SPITFORM($formfields, $errors)
 {
     global $this_user, $projlist, $action, $profile, $DEFAULT_AGGREGATE;
-    global $notifyupdate, $notifyclone, $copyuuid, $snapuuid;
+    global $notifyupdate, $notifyclone, $copyuuid, $snapuuid, $snapnode_id;
     global $ISCLOUD, $fromexp;
     global $version_array, $WITHPUBLISHING;
     $viewing    = 0;
@@ -213,6 +214,9 @@ function SPITFORM($formfields, $errors)
     }
     elseif (isset($snapuuid)) {
 	echo "    window.SNAPUUID = '$snapuuid';\n";
+        if (isset($snapnode_id)) {
+            echo "    window.SNAPNODE_ID = '$snapnode_id';\n";
+        }
     }
     if (isset($fromexp)) {
 	echo "    window.EXPUUID = '$fromexp';\n";
@@ -334,29 +338,35 @@ if (! isset($create)) {
     if (! isset($action) || $action == "") {
 	$action = "create";
     }
-    
+
     if (! (isset($projlist) && count($projlist))) {
-	$errors["error"] =
-	    "You do not appear to be a member of any projects in which ".
-	    "you have permission to create new profiles";
+	SPITUSERERROR("You do not appear to be a member of any projects in ".
+                      "which you have permission to create new profiles");
+    }
+    if (isset($snapuuid)) {
+        if (!IsValidUUID($snapuuid)) {
+            SPITUSERERROR("Not a valid UUID for clone");
+        }
+        else {
+            $instance = Instance::Lookup($snapuuid);
+            if (!$instance) {
+                SPITUSERERROR("No such instance to clone!");
+            }
+            else if ($this_idx != $instance->creator_idx() && !ISADMIN()) {
+                SPITUSERERROR("Not enough permission!");
+            }
+            else if ($instance->status() != "ready") {
+                SPITUSERERROR("Instance is busy, cannot clone it. " .
+                              "Please try again later.");
+            }
+        }
     }
     if ($action == "edit" || $action == "clone" || $action == "copy") {
 	if ($action == "clone" || $action == "copy") {
 	    if ($action == "clone") {
-		if (! (isset($snapuuid) && IsValidUUID($snapuuid))) {
-		    $errors["error"] = "No experiment specified for clone!";
+		if (! isset($instance)) {
+		    SPITUSERERROR("No experiment specified for clone!");
 		}
-		$instance = Instance::Lookup($snapuuid);
-		if (!$instance) {
-		    SPITUSERERROR("No such instance to clone!");
-		}
-		else if ($this_idx != $instance->creator_idx() && !ISADMIN()) {
-		    SPITUSERERROR("Not enough permission!");
-		}
-                else if ($instance->status() != "ready") {
-		    SPITUSERERROR("Instance is busy, cannot clone it. " .
-                                  "Please try again later.");
-                }
 		$profile = Profile::Lookup($instance->profile_id(),
 					   $instance->profile_version());
 		if (!$profile) {
@@ -370,25 +380,37 @@ if (! isset($create)) {
                 # Pass this along through the new create page.
                 $copyuuid = $profile->uuid();
             }
-	    $defaults["profile_rspec"]  = $profile->rspec();
 	    $defaults["profile_who"]   = "private";
+	    if ($profile->rspec() && $profile->rspec() != "") {
+                $defaults["profile_rspec"]  = $profile->rspec();
+            }
 	    if ($profile->script() && $profile->script() != "") {
 		$defaults["profile_script"] = $profile->script();
 	    }
             $defaults["portal_converted"]
                 = ($profile->portal_converted() == 1 ? "yes" : "no");
+            
             # Default the project if in only one project.
 	    if (count($projlist) == 1) {
 		list($project) = each($projlist);
 		reset($projlist);
 		$defaults["profile_pid"] = $project;
 	    }
+            elseif (array_key_exists($profile->pid(), $projlist)) {
+                #
+                # Default to same project as the original, *if* the user
+                # is a member of that project. Convenient.
+                #
+		$defaults["profile_pid"] = $profile->pid();
+            }
 	}
 	else {
 	    $defaults["profile_pid"]         = $profile->pid();
 	    $defaults["profile_name"]        = $profile->name();
 	    $defaults["profile_version"]     = $profile->version();
-	    $defaults["profile_rspec"]       = $profile->rspec();
+	    if ($profile->rspec() && $profile->rspec() != "") {
+                $defaults["profile_rspec"] = $profile->rspec();
+            }
 	    if ($profile->script() && $profile->script() != "") {
 		$defaults["profile_script"] = $profile->script();
 	    }
@@ -449,6 +471,14 @@ if (! isset($create)) {
 	    reset($projlist);
 	    $defaults["profile_pid"] = $project;
 	}
+        elseif (isset($instance) &&
+                array_key_exists($instance->pid(), $projlist)) {
+            #
+            # Default to same project as the original, *if* the user
+            # is a member of that project. Convenient.
+            #
+            $defaults["profile_pid"] = $instance->pid();
+        }
 	$defaults["profile_who"]   = "private";
 
         #

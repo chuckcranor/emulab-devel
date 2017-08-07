@@ -191,20 +191,22 @@ pre {
  		  Stop Linktest</button>
 	      </span>
 	    <button class='btn btn-xs btn-primary hidden' disabled
-		    id='clone_button' type=button>
-              Clone</button>
-	    <button class='btn btn-xs btn-primary hidden' disabled
-		    id='snapshot_button' type=button>
-              Snapshot</button>
+		    id='snapshot_button' type=button
+		    data-toggle='popover'
+	            data-delay='{"hide":1000, "show":500}'
+		    data-html='true'
+		    data-content="Create a disk image from one of your nodes.
+				  Click for more info."> 
+              Create Disk Image</button>
 	    <% if (profileUUID && profileUUID != "") { %>
 	    <a class='btn btn-xs btn-primary'
 		    href='manage_profile.php?action=copy&uuid=<%= profileUUID %>'
 		    id='copy_button' type=button
 		    data-toggle='popover'
-	            data-delay='{"hide":1500, "show":500}'
+	            data-delay='{"hide":1000, "show":500}'
 		    data-html='true'
-		    data-content="When you <em>copy</em> (instead of
-		    clone), you are creating a new profile that
+		    data-content="When you <em>copy</em> a profile,
+	            you are creating a new profile that
 		    uses the same source code and metadata (description,
 		    instructions) as the original profile, but without
 		    creating a new disk image. Instead, the new profile uses
@@ -628,6 +630,160 @@ pre {
     <div class='modal-dialog'>
       <div class='modal-content'>
 	<div class='modal-header'>
+          <h3 class="text-center" style="margin: 0;">
+	    Create a Disk Image</h3>
+	</div>
+	<div class='modal-body'>
+	  <div class="fhide step1" data-step="1">
+	    <center>
+	      You are about to create a disk image from the contents of
+	      the primary partition on
+	      <span class="one-node text-info hidden">
+		<span class="node_id"></span>.
+	      </span>
+	      <span class="choose-node hidden">
+		<select>
+		  <option value=''>Please Select a Node</option>
+		</select>
+	      </span>
+	      <div class="text-danger hidden choose-node-error">
+		Please select a node!
+	      </div>
+	    </center>
+	    <div style="text-align: center;">
+	      <br>
+	      <div id='snapshot_update_prepare_div'
+		   style="display: inline-block; width: 80%;">
+		<b>Did you add any accounts or groups to your node?</b>
+		<br>
+		<center>
+		  <input type=checkbox
+			 id='snapshot_update_prepare' value=yes>
+		</center>
+		<div style="text-align: left;">
+		  Check this box if you installed any software that added new
+		  users or groups. If you are not sure, ask us first since
+		  checking this box needlessly can have negative side effects.
+		</div>
+	      </div>
+	    </div>
+	  </div>
+	  <div class="fhide step2" data-step="2">
+	    <br>
+	    <div style="text-align: center;">
+	      <div id="snapshot-radio-title">
+		<b>What would you like to do with this image?</b>
+		<br>
+	      </div>
+	      <div id="clone-help-popover-div"></div>
+	      <div style="display: inline-block; text-align: left">
+		<div class="radio">
+		  <label>
+		    <input type="radio" name="whattodo"
+			   id="update-profile" value="update-profile" checked>
+		    Update the current profile to use it.
+		    <a href='#' class='btn btn-xs' id='snapshot-help-button'>
+		      <span class='glyphicon glyphicon-question-sign'
+			    style='margin-bottom: 4px;'></span>
+		    </a>
+		  </label>
+		</div>
+		<div class="radio">
+		  <label>
+		    <input type="radio" name="whattodo"
+			   id="copy-profile" value="copy-profile">
+		    Make a copy of the current profile, updated to use the new
+		    image. 
+		    <a href='#' class='btn btn-xs clone-help-button'>
+		      <span class='glyphicon glyphicon-question-sign'
+			    style='margin-bottom: 4px;'></span>
+		    </a>
+		  </label>
+		</div>
+		<div class="radio">
+		  <label>
+		    <input type="radio" name="whattodo"
+			   id="new-profile" value="new-profile">
+		    Create a brand new (empty) profile.
+		    <a href='#' class='btn btn-xs clone-help-button'>
+		      <span class='glyphicon glyphicon-question-sign'
+			    style='margin-bottom: 4px;'></span>
+		    </a>
+		  </label>
+		</div>
+		<div class="radio">
+		  <label>
+		    <input type="radio" name="whattodo"
+			   id="image-only" value="image-only">
+		    Just create a disk image, I will decide what to do with it
+		    later.
+		  </label>
+		</div>
+	      </div>
+	    </div>
+	    <div id='snapshot-name-div' class='hidden'>
+	      <center class="image-only hidden">
+		<b>Please tell us what name to use for your new image</b>
+		<br>
+		<input class="image-name"
+		       placeholder="alphanumeric please" type="text">
+	      </center>
+	      <center class="new-profile hidden">
+		<b>Please tell us what name to use for your new profile</b>
+		<br>
+		<input class="profile-name"
+		       placeholder="alphanumeric please" type="text">
+	      </center>
+	      <div class="text-danger hidden name-error"
+		   style="text-align: center;">
+		Please provide a name!
+	      </div>
+	      <div class="text-danger hidden inuse-error"
+		   style="text-align: center;">
+		Name Error!
+	      </div>
+	    </div>
+	    <div class='choose-project-div hidden'>
+	      <center>
+		<b>Please tell us what project to use for your new profile</b>
+		<br>
+		<select>
+		  <option value=''>Please Select a Project</option>
+		</select>
+	      </center>
+	      <div class="text-danger hidden project-error"
+		   style="text-align: center;">
+		Please select a project!
+	      </div>
+	    </div>
+	  </div>
+	</div>
+	<div class="pull-right" style="margin-bottom: 10px;">
+          <button style='margin-right: 10px;'
+                  class='btn btn-danger btn-sm' 
+                  data-dismiss='modal' aria-hidden='true'>
+	    Cancel</button>
+          <button class='btn btn-success btn-sm'; type='button'
+		  style='margin-right: 15px;'
+		  id='snapshot_confirm'>
+	    Continue</button>
+	</div>
+	<br>
+	<div class="modal-footer-steps hidden">
+	  <button type="button" class="btn btn-default js-btn-step pull-left"
+		  data-orientation="cancel" data-dismiss="modal"></button>
+	  <button type="button" class="btn btn-warning js-btn-step"
+		  data-orientation="previous"></button>
+	  <button type="button" class="btn btn-success js-btn-step"
+		  data-orientation="next"></button>
+	</div>
+      </div>
+    </div>
+  </div>
+  <div id='snapshot_modal_old' class='modal fade'>
+    <div class='modal-dialog'>
+      <div class='modal-content'>
+	<div class='modal-header'>
           <center><h3>Confirm to Snapshot</h3>
 	</div>
 	<div class='modal-body'>
@@ -740,7 +896,6 @@ pre {
 	<li id="consolelog"><a name="consolelog">Console Log</a></li>
 	<li id="reboot"><a name="reboot">Reboot</a></li>
 	<li id="reload"><a name="reload">Reload</a></li>
-	<li id="snapshot"><a name="snapshot">Snapshot</a></li>
 	<li id="delete"><a name="delete">Delete Node</a></li>
       </ul>
   </div>
@@ -888,7 +1043,7 @@ pre {
                     class='btn btn-primary btn-sm'
 		    id='cancel-update-systemimage'>Cancel</button>
             <button class='btn btn-danger btn-sm'
-		    id='confirm-update-systemimage'>Confirm</button>
+		    id='confirm-update-systemimage'>Continue</button>
 	  </center>
 	</div>
       </div>
@@ -927,6 +1082,67 @@ pre {
       </div>
     </div>
   </div>
+  <div class="hidden" id="clone-help-div">
+  <!-- This is the Clone help box -->
+  <div id="clone-help-panel" class="panel panel-info">
+    <div class="panel-body">
+      <button type='button' class='close clone-popover-close'>
+        &times;</button>
+      <br>
+      <p>
+	You can quickly convert a running experiment into
+	a <em>new</em> profile, capturing the disk contents of your
+	node and saving it away for later use by experiments based on
+	the new profile.
+      </p>
+      <p>
+	You can also create a new disk image, but start with an empty
+	(blank profile), and use the new image for the nodes in whatever
+	topology you create.
+      </p>
+      <p>
+	The node in your experiment will be shutdown, and a disk image
+	of the <b>primary</b> partition captured. You will be able to
+	track the progress of the image capture as it proceeds. 
+      </p>
+      <p>
+	<em>The contents of your home directory is <b>NOT</b> saved</em>. You
+	should install your software and data files in standard locations like
+	<tt>/usr/local</tt> or <tt>/opt</tt>. The reason for this is so
+	that dependencies on specific user home directories do not
+	become embedded in your images.
+      </p>
+    </div>
+  </div>
+  </div>
+  <div class="hidden" id="snapshot-help-div">
+    <div class="panel panel-info">
+      <div class="panel-body">
+      <button type='button' class='close snapshot-popover-close'>
+        &times;</button>
+      <br>
+      <p>
+	Create a disk image, saving it away for future experiments
+	based on the same profile. This is a complete disk copy of the
+	<b>primary</b> partition on your node, everything is saved.
+	The next user to instantiate this profile will use this new
+	disk image.
+      </p>
+      <p>
+	After you click to confirm, the node in your experiment will
+	be shutdown, and a disk image captured. You will be able to
+	track the progress of the image capture as it proceeds.
+      </p>
+      <p>
+	<em>The contents of your home directory is <b>NOT</b> saved</em>. You
+	should install your software and data files in standard locations like
+	<tt>/usr/local</tt> or <tt>/opt</tt>. The reason for this is so
+	that dependencies on specific user home directories do not
+	become embedded in your images.
+      </p>
+      </div>
+    </div>
+  </div>    
   <div id='waitwait_div'></div>
   <div id='terminate_div'></div>
   <div id='oops_div'></div>

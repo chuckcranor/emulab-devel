@@ -140,7 +140,7 @@ if ($profile = Profile::Lookup($instance->profile_id(),
 		       ISADMIN() ? 1 : 0);
     $public_url     = ($instance->public_url() ?
 		       "'" . $instance->public_url() . "'" : "null");
-    $ispprofile     = $profile->isParameterized() ? 1 : 0;
+    $isscript       = ($profile->script() && $profile->script() != "" ? 1 : 0);
 }
 else {
     $profile_name   = "";
@@ -149,7 +149,7 @@ else {
     $cansnap        = 0;
     $canclone       = 0;
     $public_url     = "null";
-    $ispprofile     = 0;
+    $isscript      = 0;
 
 }
 if ($slice) {
@@ -252,7 +252,7 @@ echo "  window.APT_OPTIONS.snapping = $snapping;\n";
 echo "  window.APT_OPTIONS.hidelinktest = false;\n";
 echo "  window.APT_OPTIONS.oneonly = $oneonly;\n";
 echo "  window.APT_OPTIONS.dossh = $dossh;\n";
-echo "  window.APT_OPTIONS.ispprofile = $ispprofile;\n";
+echo "  window.APT_OPTIONS.isscript = $isscript;\n";
 echo "  window.APT_OPTIONS.publicURL = $public_url;\n";
 echo "  window.APT_OPTIONS.user_lockdown = $user_lockdown;\n";
 echo "  window.APT_OPTIONS.admin_lockdown = $admin_lockdown;\n";
@@ -307,7 +307,8 @@ REQUIRE_EXTEND();
 REQUIRE_IDLEGRAPHS();
 REQUIRE_OPENSTACKGRAPHS();
 REQUIRE_CONTEXTMENU();
-SPITREQUIRE("js/status.js");
+SPITREQUIRE("js/status.js",
+            "<script src='js/lib/jquery-bootstrap-modal-steps.js'></script>\n");
 
 echo "<link rel='stylesheet'
             href='css/jquery-ui-1.10.4.custom.min.css'>\n";
@@ -328,7 +329,19 @@ if ($extension_denied_reason != "") {
    echo "<pre class='hidden' id='extension_denied_reason'>$extension_denied_reason</pre>\n";
 }
 
-AddTemplateList(array("status", "waitwait-modal", "oops-modal", "register-modal", "terminate-modal", "clone-help", "snapshot-help", "oneonly-modal", "approval-modal", "linktest-modal"));
+# This is for Clone.
+if (isset($this_user)) {
+    $projlist = $this_user->ProjectAccessList($TB_PROJECT_CREATEEXPT);
+    $plist = array();
+    while (list($project) = each($projlist)) {
+        $plist[] = $project;
+    }
+    echo "<script type='text/plain' id='projects-json'>\n";
+    echo htmlentities(json_encode($plist));
+    echo "</script>\n";
+}
+
+AddTemplateList(array("status", "waitwait-modal", "oops-modal", "register-modal", "terminate-modal", "oneonly-modal", "approval-modal", "linktest-modal"));
 AddTemplateKey("linktest-md", "template/linktest.md");
 SPITFOOTER();
 ?>
