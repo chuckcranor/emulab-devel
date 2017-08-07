@@ -977,7 +977,6 @@ sub AddAnnouncement($$$$$$)
 	if ($start - time() > (3600 * 24)) {
 	    $dateopt = "-S " . ($start - (3600 * 23));
 	}
-	$dateopt = "-S " . (time() + 30);
     }
 
     # This is awkward, the announcement stuff should be a library some day.
