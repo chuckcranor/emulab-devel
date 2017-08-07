@@ -596,7 +596,7 @@ sub DBLIMIT_NSFILESIZE()	{ (2**24 - 1); }
 #
 sub TBDB_LOWVPORT()		{ 25000; }
 sub TBDB_MAXVPORT()		{ 60000; }
-sub TBDB_PORTRANGE()		{ 32;   }
+sub TBDB_PORTRANGE()		{ 200;   }
 
 #
 # STATS constants.
