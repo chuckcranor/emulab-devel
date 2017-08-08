@@ -666,6 +666,23 @@ pre {
 		  checking this box needlessly can have negative side effects.
 		</div>
 	      </div>
+	      <div id='snapshot-wholedisk-div' class="hidden"
+		   style="display: inline-block; width: 80%;">
+		<br>
+		<b>Whole disk image?</b>
+		<br>
+		<center>
+		  <input type=checkbox
+			 id='snapshot-wholedisk' value=yes>
+		</center>
+		<div style="text-align: left;">
+		  Check this box if you need to capture more then just the primary
+		  partition of your disk. For example, you created a file system on
+		  parition two, and want to include that in your new disk image. 
+		  <b><em>Do not check this box if you do not need to do this or 
+		  do not know what this means!</em></b>
+		</div>
+	      </div>
 	    </div>
 	  </div>
 	  <div class="fhide step2" data-step="2">
@@ -826,11 +843,11 @@ pre {
 	    checking this box needlessly can have negative side effects. 
 	    <br>
 	  </div>
-	  <div id='wholedisk_div' class='hidden'>
+	  <div id='snapshot-wholedisk-div' class='hidden'>
 	    <br>
 	    <center>
 	      Whole disk image?<br>
-	      <input type=checkbox id=wholedisk value=yes>
+	      <input type=checkbox id='snapshot-wholedisk' value=yes>
 	    </center>
 	    Check this box if you need to capture the entire disk; you only
 	    need to do this if you put data into one of the unused

@@ -185,10 +185,11 @@ $freenodes_url   = Aggregate::Lookup($instance->aggregate_urn())->FreeNodesURL()
 $lockout         = $instance->extension_lockout();
 $isopenstack     = $instance->isopenstack();
 $paniced         = $instance->paniced();
-$project         = $instance->pid();
-$group           = $instance->gid();
+$pid             = $instance->pid();
+$gid             = $instance->gid();
 $extensions      = ExtensionInfo::LookupForInstance($instance);
 $isstud          = (isset($this_user) && $this_user->stud() ? 1 : 0);
+$wholedisk       = FeatureEnabled("WholeDiskImage", $creator, $instance->Group());
 
 #
 # We give ssh to the creator (real user or guest user).
@@ -248,6 +249,7 @@ echo "  window.APT_OPTIONS.isfadmin = $isfadmin;\n";
 echo "  window.APT_OPTIONS.isstud = $isstud;\n";
 echo "  window.APT_OPTIONS.cansnap = $cansnap;\n";
 echo "  window.APT_OPTIONS.canclone = $canclone;\n";
+echo "  window.APT_OPTIONS.wholedisk = $wholedisk;\n";
 echo "  window.APT_OPTIONS.snapping = $snapping;\n";
 echo "  window.APT_OPTIONS.hidelinktest = false;\n";
 echo "  window.APT_OPTIONS.oneonly = $oneonly;\n";
@@ -259,8 +261,8 @@ echo "  window.APT_OPTIONS.admin_lockdown = $admin_lockdown;\n";
 echo "  window.APT_OPTIONS.lockout = $lockout;\n";
 echo "  window.APT_OPTIONS.isopenstack = $isopenstack;\n";
 echo "  window.APT_OPTIONS.paniced = $paniced;\n";
-echo "  window.APT_OPTIONS.project = '$project';\n";
-echo "  window.APT_OPTIONS.group = '$group';\n";
+echo "  window.APT_OPTIONS.project = '$pid';\n";
+echo "  window.APT_OPTIONS.group = '$gid';\n";
 echo "  window.APT_OPTIONS.extension_requested = " .
     $instance->extension_requested() . ";\n";
 echo "  window.APT_OPTIONS.extension_denied = $extension_denied;\n";

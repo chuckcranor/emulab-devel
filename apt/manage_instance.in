@@ -300,12 +300,13 @@ sub DoSnapshot()
     my $swebtask;
     my $nosnapshot     = 0;
     my $mustnotexist   = 0;
+    my $wholedisk      = 0;
     my $update_prepare = 0;
     my $doversions = 0;
     my $usetracker = 0;
     my $operation = "image-only"; # Default to just snapshot.
 
-    my $optlist = "n:i:u:Uc:O:Ss";
+    my $optlist = "n:i:u:Uc:O:Sse";
     my %options = ();
     if (! getopts($optlist, \%options)) {
 	usage();
@@ -330,6 +331,11 @@ sub DoSnapshot()
     }
     if (defined($options{"s"})) {
 	$nosnapshot = 1;
+    }
+    if (defined($options{"e"})) {
+	$wholedisk = 1;
+	# Must be a brand new image for wholedisk. 
+	$mustnotexist = 1;
     }
     if (defined($options{"S"})) {
 	$nosnapshot = 1;
@@ -585,7 +591,7 @@ sub DoSnapshot()
     my $response =
 	$aggregate->CreateImage($sliver_urn, $imagename,
 				$update_prepare, $copyback_uuid,
-				undef, $nosnapshot, $mustnotexist);
+				undef, $nosnapshot, $mustnotexist, $wholedisk);
     if (!defined($response)) {
 	$errmsg = "Internal error creating image";
 	if (!$nosnapshot) {

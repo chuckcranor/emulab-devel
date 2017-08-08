@@ -21,7 +21,8 @@ $(function ()
     var isfadmin    = 0;
     var isguest     = 0;
     var isstud      = 0;
-    var isscript  = 0;
+    var wholedisk   = 0;
+    var isscript    = 0;
     var dossh       = 1;
     var profile_uuid= null;
     var extend      = null;
@@ -58,6 +59,7 @@ $(function ()
 	isfadmin= window.APT_OPTIONS.isfadmin;
 	isstud  = window.APT_OPTIONS.isstud;
 	isguest = (window.APT_OPTIONS.registered ? false : true);
+	wholedisk = window.APT_OPTIONS.wholedisk;
 	dossh   = window.APT_OPTIONS.dossh;
 	extend  = window.APT_OPTIONS.extend || null;
 	isscript = window.APT_OPTIONS.isscript;
@@ -2052,6 +2054,7 @@ $(function ()
 		switch($(this).val()) {
 		case 'update-profile':
 		    $('#snapshot-name-div').addClass("hidden");
+		    $('#snapshot-wholedisk-div').addClass("hidden");
 		    $('#snapshot_modal .choose-project-div').addClass("hidden");
 		    break;
 		case 'copy-profile':
@@ -2059,6 +2062,9 @@ $(function ()
 		    $('#snapshot-name-div .new-profile').removeClass("hidden");
 		    $('#snapshot-name-div .image-only').addClass("hidden");
 		    $('#snapshot-name-div').removeClass("hidden");
+		    if (wholedisk) {
+			$('#snapshot-wholedisk-div').removeClass("hidden");
+		    }
 		    if (0 && projlist.length > 1) {
 			$('#snapshot_modal .choose-project-div')
 			    .removeClass("hidden");
@@ -2068,6 +2074,9 @@ $(function ()
 		    $('#snapshot-name-div .new-profile').addClass("hidden");
 		    $('#snapshot-name-div .image-only').removeClass("hidden");
 		    $('#snapshot-name-div').removeClass("hidden");
+		    if (wholedisk) {
+			$('#snapshot-wholedisk-div').removeClass("hidden");
+		    }
 		    $('#snapshot_modal .choose-project-div').addClass("hidden");
 		    break;
 		}
@@ -2142,7 +2151,8 @@ $(function ()
 	$('#snapshot_modal .project-error').addClass("hidden");
 	
 	// Default to unchecked any time we show the modal.
-	$('#snapshot_update_prepare').prop("checked", false);
+	//$('#snapshot_update_prepare').prop("checked", false);
+	//$('#snapshot-wholedisk').prop("checked", false);
 	
 	//
 	// Watch for the case that we would create a new version of a
@@ -2219,6 +2229,12 @@ $(function ()
 	    if ($('#snapshot_update_prepare').is(':checked')) {
 		args["update_prepare"] = 1;
 	    }
+	    if (wholedisk &&
+		$('#snapshot-wholedisk').is(':checked') &&
+		(operation == "copy-profile" ||
+		 operation == "new-profile" || operation == "image-only")) {
+		args["wholedisk"] = 1;
+	    }
 	    $('button#snapshot_confirm').unbind("click.snapshot");
 	    if (operation == "copy-profile" || operation == "new-profile") {
 		NewProfile(args);
@@ -2250,6 +2266,17 @@ $(function ()
 	    console.log(json);
 	    
 	    if (json.code) {
+		if (json.code == 17 && _.has(args, "wholedisk")) {
+		    sup.SpitOops("oops",
+				 "There is already an image with the " +
+				 "the name you requested. When using the " +
+				 "<em>wholedisk</em> option, you must create " +
+				 "a brand new image. " +
+				 "If you really want to use this name, " +
+				 "please <a href='list-images.php'>" +
+				 "delete the existing image first</a>.");
+		    return;
+		}
 		sup.SpitOops("oops", "Could not start snapshot:<br>" +
 			     "<pre><code>" + json.value + "</code></pre>");
 		return;

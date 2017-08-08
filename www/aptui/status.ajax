@@ -979,6 +979,9 @@ function Do_Snapshot()
         $ajax_args["update_prepare"]) {
         $optargs .= " -U ";
     }
+    if (isset($ajax_args["wholedisk"]) && $ajax_args["wholedisk"]) {
+        $optargs .= " -e ";
+    }
     if (isset($ajax_args["nosnapshot"]) && $ajax_args["nosnapshot"]) {
         $optargs .= " -S ";
     }

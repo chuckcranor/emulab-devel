@@ -223,10 +223,11 @@ else {
 #
 sub CreateProfile()
 {
-    my $optlist    = "s:c:Un:";
+    my $optlist    = "s:c:Un:e";
     my $snap       = 0;
     my $copy       = 0;
     my $prepare    = 0;
+    my $wholedisk  = 0;
     my $copyuuid;
     my $fromrepo   = 0;
     my $instance;
@@ -245,6 +246,9 @@ sub CreateProfile()
 	$copyuuid = $options{"s"};
 	if (defined($options{"U"})) {
 	    $prepare = 1;
+	}
+	if (defined($options{"e"})) {
+	    $wholedisk = 1;
 	}
 	if (defined($options{"n"})) {
 	    $node_id = $options{"n"};
@@ -396,7 +400,8 @@ sub CreateProfile()
 	my $ptask_id   = $pwebtask->task_id();
 	# But the image details are stored in the instance webtask.
 	my $iwebtask   = $instance->webtask();
-	my $prepopt    = $prepare ? "-U" : "";
+	my $prepopt    = $prepare ? "-U " : "";
+	$prepopt      .= $wholedisk ? "-e " : "";
     
 	if ($profile->Lock()) {
 	    $profile->Delete(1);
