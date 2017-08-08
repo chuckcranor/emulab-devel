@@ -523,27 +523,6 @@ function ADDPUBKEY($cmdandargs) {
 }
 
 #
-# Check an emulab feature, calling out to the perl code.
-#
-function FeatureEnabled($feature, $user, $group)
-{
-    $command = "webemulabfeature check $feature ";
-    if ($user) {
-        $command .= "-u " . $user->uid() . " ";
-    }
-    if ($group) {
-        $command .= "-g " . $group->pid() . "," . $group->gid();
-    }
-    $retval = SUEXEC("nobody", "nobody", $command,
-                     SUEXEC_ACTION_IGNORE);
-    if ($retval < 0) {
-        SUEXECERROR(SUEXEC_ACTION_CONTINUE);
-        return 0;
-    }
-    return $retval;
-}
-
-#
 # Verify a URL.
 #
 function CHECKURL($url, &$error) {

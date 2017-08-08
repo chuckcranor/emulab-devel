@@ -866,6 +866,59 @@ class Logfile
     function gid_idx()       { return $this->field("gid_idx"); }
 }
 
+function FeatureEnabled($feature, $user, $group, $experiment = null)
+{
+    #
+    # See if feature is globally disabled or enabled.
+    #
+    $query_result =
+        DBQueryFatal("select * from emulab_features where feature='$feature'");
+
+    if (!mysql_num_rows($query_result)) {
+        return 0;
+    }
+    $frow = mysql_fetch_array($query_result);
+    if ($frow["disabled"]) {
+        return 0;
+    }
+    if ($frow["enabled"]) {
+        return 1;
+    }
+    $enabled = 0;
+
+    if ($user) {
+        $uid_idx = $user->idx();
+	
+	$query_result =
+	    DBQueryFatal("select * from user_features ".
+                         "where feature='$feature' and uid_idx='$uid_idx'");
+
+	$enabled += mysql_num_rows($query_result);
+    }
+    if ($group) {
+	$pid_idx = $group->pid_idx();
+	$gid_idx = $group->gid_idx();
+	
+	$query_result =
+	    DBQueryFatal("select * from group_features ".
+                         "where feature='$feature' and ".
+                         "      pid_idx='$pid_idx' and gid_idx='$gid_idx'");
+        
+	$enabled += mysql_num_rows($query_result);
+    }
+    if ($experiment) {
+	$exptidx = $experiment->idx();
+	
+	$query_result =
+	    DBQueryWarn("select * from experiment_features ".
+			"where feature='$feature' and ".
+			"      exptidx='$exptidx'");
+
+	$enabled += mysql_num_rows($query_result);
+    }
+    return $enabled;
+}
+
 #
 # Do we have a storage pool?
 #
