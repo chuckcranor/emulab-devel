@@ -1280,14 +1280,21 @@ sub Stringify($)
 #
 # Activate a (logical) wire by setting the type. Default to "Node".
 #
-sub Activate($;$)
+sub Activate($$)
 {
-    my ($self, $type) = @_;
+    my ($self, $vlan) = @_;
     my $node_id1 = $self->node_id1();
     my $card1    = $self->card1();
     my $port1    = $self->port1();
-    $type = "Node" if (!defined($type));
+    my $type     = "Node";
 
+    #
+    # Unless it is supposed to be a trunk
+    #
+    if ($vlan->GetRole() eq "trunk") {
+	$type = "Trunk";
+    }
+    
     return -1
 	if (!DBQueryWarn("update wires set type='$type' ".
 			 "where node_id1='$node_id1' and ".
@@ -1429,65 +1436,63 @@ sub Create($$$$$$)
     }
     
     #
-    # Create interfaces, but not for things that are marked as
-    # switches since we do not put interfaces for switches into
-    # the interfaces table.
+    # Create logical interfaces
     #
-    if (!$pnodeA->isswitch()) {
-	#
-	# Create a logical interface. Note we have to force a hash copy.
-	#
-	my %argref = %{ $interfaceA->{'DBROW'} };
-	my $argref = \%argref;
-
-	# Update the card and iface.
-	# XXX Need a better way to allocate the card numbers.
-	$argref->{'card'}    = $interfaceA->card() + 200;
-	$argref->{'iface'}   = "eth" . $argref->{'card'};
-	$argref->{'logical'} = 1;
-	$argref->{'uuid'}    = undef;
-
-	if (!$impotent) {
-	    $interfaceA = Interface->Create($pnodeA, $argref);
-	    return undef
-		if (!defined($interfaceA));
-	}
-	else {
-	    # Fake things up.
-	    $interfaceA = Interface->MakeFake($pnodeA, $argref);
-	}
+    # Must create a real copy, especially for MakeFake();
+    my $argref = {};
+    foreach my $key (keys(%{ $interfaceA->{'DBROW'} })) {
+	$argref->{$key} = $interfaceA->{'DBROW'}->{$key};
     }
-    if (!$pnodeB->isswitch()) {
-	#
-	# Create a logical interface. Note we have to force a hash copy.
-	#
-	my %argref = %{ $interfaceB->{'DBROW'} };
-	my $argref = \%argref;
+    # Update the card and iface.
+    # XXX Need a better way to allocate the card numbers.
+    $argref->{'card'}    = $interfaceA->card() + 200;
+    $argref->{'iface'}   = sprintf("eth%d%03d",
+				   $argref->{'card'}, $argref->{'port'});
+    $argref->{'logical'} = 1;
+    $argref->{'uuid'}    = undef;
 
-	# Update the card and iface.
-	# XXX Need a better way to allocate the card numbers.
-	$argref->{'card'}    = $interfaceB->card() + 200;
-	$argref->{'iface'}   = "eth" . $argref->{'card'};
-	$argref->{'logical'} = 1;
-	$argref->{'uuid'}    = undef;
-
-	if (!$impotent) {
-	    $interfaceB = Interface->Create($pnodeB, $argref);
-	    return undef
-		if (!defined($interfaceB));
-	}
-	else {
-	    # Fake things up.
-	    $interfaceB = Interface->MakeFake($pnodeB, $argref);
-	}
+    if (!$impotent) {
+	$interfaceA = Interface->Create($pnodeA, $argref);
+	return undef
+	    if (!defined($interfaceA));
     }
+    else {
+	# Fake things up.
+	$interfaceA = Interface->MakeFake($pnodeA, $argref);
+    }
+
+    # Must create a real copy, especially for MakeFake();
+    $argref = {};
+    foreach my $key (keys(%{ $interfaceB->{'DBROW'} })) {
+	$argref->{$key} = $interfaceB->{'DBROW'}->{$key};
+    }
+    # Update the card and iface.
+    # XXX Need a better way to allocate the card numbers.
+    $argref->{'card'}    = $interfaceB->card() + 200;
+    $argref->{'iface'}   = sprintf("eth%d%03d",
+				   $argref->{'card'}, $argref->{'port'});
+    $argref->{'logical'} = 1;
+    $argref->{'uuid'}    = undef;
+
+    if (!$impotent) {
+	$interfaceB = Interface->Create($pnodeB, $argref);
+	return undef
+	    if (!defined($interfaceB));
+    }
+    else {
+	# Fake things up.
+	$interfaceB = Interface->MakeFake($pnodeB, $argref);
+    }
+
     #
     # For consistency and because we still have an implicit assumption
-    # the switch is node_id2 in the wires table. 
+    # the node is node_id1 in the wires table. 
     #
     my ($interface1,$interface2) = ($interfaceA, $interfaceB);
+    my ($pnode1,$pnode2) = ($pnodeA, $pnodeB);
     if ($pnodeA->isswitch() && !$pnodeB->isswitch()) {
 	($interface1,$interface2) = ($interfaceB, $interfaceA);
+	($pnode1,$pnode2) = ($pnodeB, $pnodeA);
     }
     # Create a wires table entry, ordered properly.
     if (!$impotent) {
@@ -1504,7 +1509,7 @@ sub Create($$$$$$)
 	# reflect that. Use the 'Unused' type to indicate it is not
 	# active.
 	#
-	if (!DBQueryWarn("replace into wires set".
+	if (!DBQueryWarn("insert into wires set".
 			 "  type='Unused', logical=1, " .
 			 "  node_id1='$node_id1',card1=$card1,port1=$port1, " .
 			 "  node_id2='$node_id2',card2=$card2,port2=$port2")) {
@@ -1519,6 +1524,10 @@ sub Create($$$$$$)
     $self->{"interfaceB"} = $interfaceB;
     $self->{"interface1"} = $interface1;
     $self->{"interface2"} = $interface2;
+    $self->{"pnodeA"}     = $pnodeA;
+    $self->{"pnodeB"}     = $pnodeB;
+    $self->{"pnode1"}     = $pnode1;
+    $self->{"pnode2"}     = $pnode2;
 
     bless($self, $class);
     return $self;
@@ -1532,6 +1541,13 @@ sub ifaceB($)          { return $_[0]->interfaceB()->iface(); }
 # Wires table ordering.
 sub interface1($)      { return $_[0]->{'interface1'}; }
 sub interface2($)      { return $_[0]->{'interface2'}; }
+sub iface1($)          { return $_[0]->interface1()->iface(); }
+sub iface2($)          { return $_[0]->interface2()->iface(); }
+# Convience
+sub pnodeA($)          { return $_[0]->{'pnodeA'}; }
+sub pnodeB($)          { return $_[0]->{'pnodeB'}; }
+sub pnode1($)          { return $_[0]->{'pnode1'}; }
+sub pnode2($)          { return $_[0]->{'pnode2'}; }
 
 #
 # The wires table is indexed by node_id1,card1,port1 ... return

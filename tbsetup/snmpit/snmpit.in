@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2000-2016 University of Utah and the Flux Group.
+# Copyright (c) 2000-2017 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LGPL
 # 
@@ -2171,7 +2171,7 @@ sub CreateOneVlan($$$@)
 		$errors++;
 	    }
 	    else {
-		if ($wire->Activate() != 0) {
+		if ($wire->Activate($vlan) != 0) {
 		    print STDERR "Could not activate $wire for $vlan\n";
 		    $errors++;
 		}

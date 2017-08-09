@@ -24,7 +24,7 @@
 # or merely parse tokens from string and vice-verse must
 # use the converters provided in this class.
 #
-# Copyright (c) 2011-2013 University of Utah and the Flux Group.
+# Copyright (c) 2011-2013, 2017 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -579,7 +579,6 @@ sub LookupByTriple($$;$$)
 	# XXX: Other cases are unhandled for now...
 	return undef;
     }
-    
     $inst->{"WIRES_ROW"} = $rowref;
 
     $query_result = 
@@ -657,7 +656,7 @@ sub LookupByWireType($$)
 	
 	my $result = DBQueryFatal("SELECT node_id1, card1, port1, " .
 		"node_id2, card2, port2 FROM wires ".
-                "WHERE type='$wt' and logical=0");
+                "WHERE type='$wt'");
 
 	if ($result) {
 		while (my @row = $result->fetchrow()) {
@@ -679,7 +678,6 @@ sub LookupByWireType($$)
 sub field($$)  { return (((! ref($_[0])) || ($_[0]->{'HAS_FIELDS'} == 0)) ? 
     -1 : $_[0]->{'INTERFACES_ROW'}->{$_[1]}); }
 sub node_id($) { return field($_[0], 'node_id'); }
-sub card($)    { return field($_[0], 'card'); }
 sub port($)    { return field($_[0], 'port'); }
 sub iface($)   { return field($_[0], 'iface'); }
 sub mac($)     { return field($_[0], 'mac'); }
@@ -690,6 +688,7 @@ sub mask($)    { return field($_[0], 'mask'); }
 sub uuid($)    { return field($_[0], 'uuid'); }
 sub trunk($)   { return field($_[0], 'trunk'); }
 sub trunk_mode($) { return field($_[0], 'trunk_mode'); }
+sub logical($) { return field($_[0], 'logical'); }
 # These two come from the "interface_state" table, which gives the
 # current view vs. the "mandated" (mapped) state from the interfaces table.
 sub tagged($)  { return field($_[0], 'tagged'); }
@@ -704,6 +703,20 @@ sub is_trunk_port($)  { return $_[0]->wire_type() eq TBDB_WIRETYPE_TRUNK(); }
 sub is_forced($) { return $_[0]->{"FORCED"};}
 sub has_fields($) { return $_[0]->{"HAS_FIELDS"};}
 sub raw_string($) { return $_[0]->{"RAW_STRING"};}
+
+#
+# When logical, convert the card back from logical number.
+#
+sub card($)
+{
+    my ($self) = shift;
+    my $card   = field($self, 'card');
+
+    if ($self->logical()) {
+	$card = $card - 200;
+    }
+    return $card;
+}
 
 sub switch_node_id($)
 {
@@ -825,12 +838,17 @@ sub other_end_card($)
 	    return $self->raw_string();
 	}
     }
+    my $card;
 
     if ($self->node_id() eq $self->{'WIRES_ROW'}->{'node_id1'}) {
-	return $self->{'WIRES_ROW'}->{'card2'}; 
+	$card = $self->{'WIRES_ROW'}->{'card2'}; 
     } else {
-	return $self->{'WIRES_ROW'}->{'card1'};
+	$card = $self->{'WIRES_ROW'}->{'card1'};
     }
+    if ($self->logical()) {
+	$card = $card - 200;
+    }
+    return $card;
 }
 
 #
