@@ -979,6 +979,7 @@ else {
 	    $rval == GENIRESPONSE_INSUFFICIENT_NODES ||
 	    $rval == GENIRESPONSE_INSUFFICIENT_MEMORY ||
 	    $rval == GENIRESPONSE_INSUFFICIENT_BANDWIDTH ||
+	    $rval == GENIRESPONSE_NOSPACE ||
 	    $rval == GENIRESPONSE_NO_MAPPING) {
 	    AuditAbort()
 		if (!$debug);

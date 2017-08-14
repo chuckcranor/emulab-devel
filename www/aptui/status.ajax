@@ -168,6 +168,15 @@ function Do_GetInstanceStatus()
             $blob["reason"]  = "Your topology source contains invalid ".
                 "values.\n\n";
         }
+        elseif ($webtask->exitcode() == GENIRESPONSE_NOSPACE) {
+            #
+            # Over Quota.
+            #
+            $blob["reason"]  = "You are over your disk quota at the target ".
+                "cluster, probably because of too many saved disk images. ".
+                "Please click on the 'Storage->My Disk Images' above and delete ".
+                "images you no longer need.";
+        }
         elseif ($webtask->exitcode() == GENIRESPONSE_STITCHER_ERROR) {
             #
             # This is GENIRESPONSE_STITCHER_ERROR which is a catch all.

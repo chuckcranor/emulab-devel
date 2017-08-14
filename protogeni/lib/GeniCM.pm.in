@@ -7061,6 +7061,10 @@ sub GeniExperiment($;$)
     GeniUtil::FlipToGeniUser();
 
     if ($saved_exitcode) {
+	if ($saved_exitcode >> 8 == ENOSPC) {
+	    return GeniResponse->Create(GENIRESPONSE_NOSPACE, undef,
+					"Over disk quota, please clean up");
+	}
 	return GeniResponse->Create(GENIRESPONSE_ERROR, undef,
 				    "Error creating container experiment");
     }
