@@ -46,9 +46,15 @@ INSERT IGNORE INTO `interface_capabilities` VALUES ('generic_10G','ethernet_defs
 INSERT IGNORE INTO `interface_types` VALUES ('generic_40G',40000000,1,'Generic 40GB','Generic 40GB',1,'RJ45');
 INSERT IGNORE INTO `interface_capabilities` VALUES ('generic_40G','protocols','ethernet');
 INSERT IGNORE INTO `interface_capabilities` VALUES ('generic_40G','ethernet_defspeed','40000000');
+INSERT IGNORE INTO `interface_types` VALUES ('generic_25G',25000000,1,'Generic 25GB','Generic 25GB',1,'RJ45');
+INSERT IGNORE INTO `interface_capabilities` VALUES ('generic_25G','protocols','ethernet');
+INSERT IGNORE INTO `interface_capabilities` VALUES ('generic_25G','ethernet_defspeed','25000000');
 INSERT IGNORE INTO `interface_types` VALUES ('generic_100G',100000000,1,'Generic 100GB','Generic 100GB',1,'RJ45');
 INSERT IGNORE INTO `interface_capabilities` VALUES ('generic_100G','protocols','ethernet');
 INSERT IGNORE INTO `interface_capabilities` VALUES ('generic_100G','ethernet_defspeed','100000000');
+INSERT IGNORE INTO `interface_types` VALUES ('generic_56G',56000000,1,'Generic 56GB','Generic 56GB',1,'RJ45');
+INSERT IGNORE INTO `interface_capabilities` VALUES ('generic_56G','protocols','ethernet');
+INSERT IGNORE INTO `interface_capabilities` VALUES ('generic_56G','ethernet_defspeed','56000000');
 
 -- We use these types for the ilo/drac management interfaces.
 INSERT INTO `interface_types` VALUES ('ilo2',0,1,'HP','HP iLO 2',1,'RJ45');

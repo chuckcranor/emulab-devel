@@ -2688,6 +2688,7 @@ CREATE TABLE `interfaces` (
   `trunk_mode` enum('equal','dual') NOT NULL default 'equal',
   `uuid` varchar(40) NOT NULL default '',
   `logical` tinyint(1) unsigned NOT NULL default '0',
+  `autocreated` tinyint(1) unsigned NOT NULL default '0',
   PRIMARY KEY  (`node_id`,`card`,`port`),
   KEY `mac` (`mac`),
   KEY `IP` (`IP`),
