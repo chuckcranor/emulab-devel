@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2008-2016 University of Utah and the Flux Group.
+# Copyright (c) 2008-2017 University of Utah and the Flux Group.
 # 
 # {{{GENIPUBLIC-LICENSE
 # 
@@ -248,6 +248,10 @@ sub MapToLocalImage($$)
 	$localblobcache{$urn} = $blob;
     }
     my $url = $blob->{'metadata_url'};
+    if (!defined($url)) {
+	print STDERR "No metadata url in info returned from image server.\n";
+	return undef;
+    }
 
     #print STDERR Dumper($blob);
 
