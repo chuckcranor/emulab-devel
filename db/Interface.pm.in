@@ -128,13 +128,7 @@ sub LookupAll($$$)
 	    #
 	    # Grab the wires table entry.
 	    #
-	    my $wires_result =
-		DBQueryWarn("select * from wires ".
-			    "where node_id1='$nodeid' and ".
-			    "      card1='$card' and port1='$port'");
-	    if ($wires_result && $wires_result->numrows) {
-		$interface->{'WIRES'} = $wires_result->fetchrow_hashref();
-	    }
+	    $interface->{'WIRE'} = Interface::Wire->Lookup($interface);	    
 
 	    #
 	    # And the interface_state table.
@@ -182,16 +176,27 @@ sub current_speed($) { return field($_[0], 'current_speed'); }
 sub mask($)    { return field($_[0], 'mask'); }
 sub uuid($)    { return field($_[0], 'uuid'); }
 # Wires table
-sub wiredup($)     { return (exists($_[0]->{'WIRES'}) ? 1 : 0); }
-sub wire_type($)   { return $_[0]->{'WIRES'}->{'type'}; }
-sub switch_id($)   { return $_[0]->{'WIRES'}->{'node_id2'}; }
-sub switch_card($) { return $_[0]->{'WIRES'}->{'card2'}; }
-sub switch_port($) { return $_[0]->{'WIRES'}->{'port2'}; }
+sub wire($)    { return $_[0]->{'WIRE'}; }
+sub wiredup($) { return (defined($_[0]->{'WIRE'}) ? 1 : 0); }
+sub wirefield($$) {
+    my ($self, $slot) = @_;
+    if (!$self->wiredup()) {
+	warn "*** $self is not wired up, but asked for wire $slot!\n";
+	return undef;
+    }
+    return $self->wire()->field($slot);
+}
+sub wire_type($)   { return $_[0]->wirefield('type'); }
+sub wire_iface($)  { return $_[0]->wirefield('iface2'); }
+sub switch_id($)   { return $_[0]->wirefield('node_id2'); }
+sub switch_card($) { return $_[0]->wirefield('card2'); }
+sub switch_port($) { return $_[0]->wirefield('port2'); }
 sub wire_unused($) { return $_[0]->wire_type() eq "Unused" ? 1 : 0; }
 # Interface State table
-sub enabled($)     { return $_[0]->{'STATE'}->{'enabled'}; }
-sub tagged($)      { return $_[0]->{'STATE'}->{'tagged'}; }
-sub remaining_bandwidth { return $_[0]->{'STATE'}->{'remaining_bandwidth'}; }
+sub state($)       { return $_[0]->{'STATE'}; }
+sub enabled($)     { return $_[0]->state()->{'enabled'}; }
+sub tagged($)      { return $_[0]->state()->{'tagged'}; }
+sub remaining_bandwidth { return $_[0]->state()->{'remaining_bandwidth'}; }
 
 sub IsExperimental($)
 {
@@ -242,6 +247,7 @@ sub Lookup($$$;$)
 	if (!$query_result->numrows);
 
     my $iface_row = $query_result->fetchrow_hashref();
+    my $state_row;
 
     #
     # And the interface_state table.
@@ -250,32 +256,46 @@ sub Lookup($$$;$)
 	DBQueryWarn("select * from interface_state ".
 		    "where node_id='$nodeid' and ".
 		    "      card='$card' and port='$port'");
-
-    if (!$query_result) {
-	print STDERR "*** Missing interface_state for $nodeid:$card:$port\n";
-	return undef;
-    }
-    # If a management interface, the lack of an interface_state
-    # record is not a big deal, so let it slide.
     return undef
-	if (!$query_result->numrows &&
-	    $iface_row->{'role'} ne TBDB_IFACEROLE_MANAGEMENT());
+	if (!$query_result);
 
-    my $state_row = $query_result->fetchrow_hashref();
-
+    #
+    # If a management interface or a switch, the lack of an interface_state
+    # record is not a big deal, so let it slide. If it is a real node, then
+    # create it. 
+    #
+    if (!$query_result->numrows) {
+	require Node;
+	my $node = Node->Lookup($nodeid);
+	if (! ($iface_row->{'role'} eq TBDB_IFACEROLE_MANAGEMENT() ||
+	       (defined($node) && $node->role() ne "testnode"))) {
+	    print STDERR "*** Inserting missing interface_state ".
+		"for $nodeid:$card:$port\n";
+	    my $iface = $iface_row->{'iface'};
+	    DBQueryWarn("insert into interface_state set ".
+			"  node_id='$nodeid',card='$card',".
+			"  port='$port',iface='$iface'")
+		or return undef;
+	    $query_result =
+		DBQueryWarn("select * from interface_state ".
+			    "where node_id='$nodeid' and ".
+			    "      card='$card' and port='$port'");
+	    return undef
+		if (!$query_result || !$query_result->numrows);
+	    
+	    $state_row = $query_result->fetchrow_hashref();
+	}
+    }
+    else {
+	$state_row = $query_result->fetchrow_hashref();
+    }
     my $interface = LookupRow($class, $iface_row, $state_row);
 
     #
-    # Grab the wires table entry.
+    # Grab the wires table entry. It is okay for this to not exist, although
+    # that is a little unusual since interfaces are usually the node side.
     #
-    $query_result =
-	DBQueryWarn("select * from wires ".
-		    "where node_id1='$nodeid' and ".
-		    "      card1='$card' and port1='$port'");
-    if ($query_result && $query_result->numrows) {
-	$interface->{'WIRES'} = $query_result->fetchrow_hashref();
-    }
-
+    $interface->{'WIRE'} = Interface::Wire->Lookup($interface);
     return $interface;
 }
 
@@ -330,7 +350,8 @@ sub Refresh($)
 
     my $query_result =
 	DBQueryWarn("select * from interfaces ".
-		    "where node_id='$nodeid' and iface='$iface'");
+		    "where node_id='$nodeid' and card='$card' and ".
+		    "      port='$port'");
     return undef
 	if (!$query_result || !$query_result->numrows);
 
@@ -339,15 +360,16 @@ sub Refresh($)
     #
     # And the interface_state table.
     #
-    $query_result =
-	DBQueryWarn("select * from interface_state ".
-		    "where node_id='$nodeid' and ".
-		    "      card='$card' and port='$port'");
-    return undef
-	if (!$query_result || !$query_result->numrows);
-
-    $self->{'STATE'} = $query_result->fetchrow_hashref();
-    
+    if (defined($self->{'STATE'})) {
+	$query_result =
+	    DBQueryWarn("select * from interface_state ".
+			"where node_id='$nodeid' and ".
+			"      card='$card' and port='$port'");
+	return undef
+	    if (!$query_result || !$query_result->numrows);
+	
+	$self->{'STATE'} = $query_result->fetchrow_hashref();
+    }
     return 0;
 }
 
@@ -382,13 +404,17 @@ sub Create($$$)
     my $iface      = $argref->{'iface'};
     my $logical    = $argref->{'logical'};
     my $trunk      = $argref->{'trunk'};
+    my $auto       = $argref->{'autocreated'};
 
     if (!defined($wire_type)) {
 	if ($ifrole eq TBDB_IFACEROLE_MANAGEMENT()) {
 	    $wire_type = "Management";
 	}
-	if ($ifrole eq TBDB_IFACEROLE_EXPERIMENT()) {
+	elsif ($ifrole eq TBDB_IFACEROLE_EXPERIMENT()) {
 	    $wire_type = "Node";
+	}
+	elsif ($ifrole eq TBDB_IFACEROLE_CONTROL()) {
+	    $wire_type = "Control";
 	}
     }
     $iface = "eth$card"    
@@ -405,6 +431,8 @@ sub Create($$$)
 	if (!defined($max_speed));
     $logical = 0
 	if (!defined($logical));
+    $auto = 0
+	if (!defined($auto));
     $trunk = 0
 	if (!defined($trunk));
     if (!defined($uuid)) {
@@ -475,7 +503,7 @@ sub Create($$$)
     if (!DBQueryWarn("insert into interfaces set ".
 		"  node_id='$node_id', logical='$logical', " .
 		"  card=$card, port=$port, role='$ifrole', ".
-		"  mac='$MAC', IP='$IP', " .
+		"  mac='$MAC', IP='$IP', autocreated='$auto', " .
 		(defined($mask) ? "mask='$mask', " : "") .
 		($trunk ? "trunk='1', " : "") .
 		"  interface_type='$iftype', iface='$iface', " .
@@ -1150,20 +1178,24 @@ sub Lookup($$)
 	    DBQueryWarn("select * from wires ".
 			"where external_interface='$interface'");
     } else {
+	my ($node_id1,$card1,$port1);
+	
 	if (!ref($interface)) {
 	    # Allow "nodeid:card:port" argument.
 	    if ($interface =~ /^([-\w]*):(\w+):(\w+)$/) {
-		$interface = Interface->Lookup($1, $2, $3);
-		return undef
-		    if (!defined($interface));
+		$node_id1 = $1;
+		$card1    = $2;
+		$port1    = $3;
 	    }
 	    else {
 		return undef;
 	    }
 	}
-	my $node_id1 = $interface->node_id();
-	my $card1    = $interface->card();
-	my $port1    = $interface->port();
+	else {
+	    $node_id1 = $interface->node_id();
+	    $card1    = $interface->card();
+	    $port1    = $interface->port();
+	}
 	$query_result =
 	    DBQueryWarn("select * from wires ".
 			"where node_id1='$node_id1' and ".
@@ -1185,6 +1217,8 @@ sub card1($)           { return $_[0]->field('card1'); }
 sub card2($)           { return $_[0]->field('card2'); }
 sub port1($)           { return $_[0]->field('port1'); }
 sub port2($)           { return $_[0]->field('port2'); }
+sub iface1($)          { return $_[0]->field('iface1'); }
+sub iface2($)          { return $_[0]->field('iface2'); }
 sub type($)            { return $_[0]->field('type'); }
 sub logical($)         { return $_[0]->field('logical'); }
 sub trunkid($)         { return $_[0]->field('trunkid'); }
@@ -1214,7 +1248,8 @@ sub LookupAny($$$$)
 }
 
 #
-# Delete a logical wire and its interfaces.
+# Delete a logical wire and its interfaces. For safety, refuse to delete
+# a real wire via this interface.
 #
 sub Delete($)
 {
@@ -1275,6 +1310,39 @@ sub Stringify($)
     my $type    = ($self->logical() ? "LogicalWire" : "Wire");
 
     return "[$type: $node1:$card1:$port1/$node2:$card2:$port2]";
+}
+
+sub Update($$)
+{
+    my ($self, $argref) = @_;
+
+    my $node_id1 = $self->node_id1();
+    my $card1    = $self->card1();
+    my $port1    = $self->port1();
+    my @sets    = ();
+
+    foreach my $key (keys(%{$argref})) {
+	my $val = $argref->{$key};
+
+	# Treat NULL special.
+	push (@sets, "${key}=" . ($val eq "NULL" ?
+				  "NULL" : DBQuoteSpecial($val)));
+    }
+    my $query = "update wires set " . join(",", @sets) .
+	" where node_id1='$node_id1' and card1='$card1' and port1='$port1'";
+
+    return -1
+	if (! DBQueryWarn($query));
+
+    my $query_result =
+	DBQueryWarn("select * from wires ".
+		    "where node_id1='$node_id1' and ".
+		    "      card1='$card1' and port1='$port1'");
+    return -1
+	if (!$query_result || !$query_result->numrows);
+
+    $self->{'DBROW'} = $query_result->fetchrow_hashref();
+    return 0;
 }
 
 #
@@ -1502,6 +1570,8 @@ sub Create($$$$$$)
 	my $port1    = $interface1->port();
 	my $card2    = $interface2->card();
 	my $port2    = $interface2->port();
+	my $iface1   = $interface2->iface1();
+	my $iface2   = $interface2->iface2();
 
 	#
 	# The wire is not active yet. When snmpit tuns and actually
@@ -1512,7 +1582,9 @@ sub Create($$$$$$)
 	if (!DBQueryWarn("insert into wires set".
 			 "  type='Unused', logical=1, " .
 			 "  node_id1='$node_id1',card1=$card1,port1=$port1, " .
-			 "  node_id2='$node_id2',card2=$card2,port2=$port2")) {
+			 "  iface1='$iface1', ".
+			 "  node_id2='$node_id2',card2=$card2,port2=$port2, ".
+			 "  iface2='$iface2'")) {
 	    return undef;
 	}
     }
