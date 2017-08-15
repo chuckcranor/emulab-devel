@@ -79,6 +79,7 @@ use File::Temp qw(tempfile tmpnam);
 use MIME::Base64;
 use Digest::SHA1 qw(sha1_hex);
 use POSIX ":sys_wait_h";
+use Errno qw(:POSIX);
 
 # Configure variables
 my $TB		   = "@prefix@";
