@@ -56,6 +56,7 @@ use vars qw(@ISA @EXPORT);
 
 use libdb;
 use EmulabConstants;
+use Interface;
 use English;
 use Data::Dumper;
 use overload ('""' => 'Stringify');
@@ -402,17 +403,8 @@ sub LookupByStringForced($$)
 	$irowref->{'node_id'} = $nodeid;
 	$irowref->{'card'} = $card;
 	$irowref->{'port'} = $port;
-	$irowref->{'mac'} = "";
-	$irowref->{'IP'} = "";
-	$irowref->{'role'} = "";
-	$irowref->{'interface_type'} = "";
-	$irowref->{'mask'} = "";
-	$irowref->{'uuid'} = "";
-	$irowref->{'trunk'} = 0;
 	$irowref->{'trunk_mode'} = "equal";
-	$irowref->{'tagged'} = 0;
-	$irowref->{'enabled'} = 1;
-	$inst->{"INTERFACES_ROW"} = $irowref;
+	$inst->{"INTERFACES_ROW"} = Interface->MakeFake($nodeid, $irowref);
 
 	# XXX: Incomplete, but if the port isn't in the wires table,
 	# what are we to do?  We know nothing about the other end.
@@ -420,7 +412,7 @@ sub LookupByStringForced($$)
 	$wrowref->{'node_id1'} = $nodeid;
 	$wrowref->{'card1'} = $card;
 	$wrowref->{'port1'} = $port;
-	$inst->{"WIRES_ROW"} = $wrowref;
+	$inst->{"WIRES_ROW"} = Interface::Wire->MakeFake($wrowref);
     }
     else {
 	$inst->{"RAW_STRING"} = $str;
@@ -462,16 +454,8 @@ sub LookupByIface($$;$)
 	return $allports{$striface};
     }
 
-    # all fields
-    my $query_result = 
-	DBQueryWarn("select i.*,ist.tagged,ist.enabled from interfaces as i".
-		    " left join interface_state as ist".
-		    "  on i.node_id=ist.node_id and i.iface=ist.iface".
-		    " where i.node_id='$nodeid' and i.iface='$iface'");
-    return undef
-	if (!$query_result);
-    
-    if (!$query_result->numrows) {
+    my $interface = Interface->LookupByIface($nodeid, $iface);
+    if (!defined($interface)) {
 	my ($n, $c, $p) = fake_IfaceString2TripleTokens($class, $striface);
 	if (defined($p)) {
 	    return LookupByTriple($class, $n, $c, $p);
@@ -479,41 +463,32 @@ sub LookupByIface($$;$)
 	    return undef;
 	}
     }
-
-    my $rowref = $query_result->fetchrow_hashref();
-
-    my $card  = $rowref->{'card'};
-    my $port  = $rowref->{'port'};
-    my $logical  = $rowref->{'logical'};
+    my $card = $interface->card();
+    my $port = $interface->port();
+    my $wire = Interface::Wire->LookupAny($nodeid, $card, $port);
+    return undef
+	if (!defined($wire));
 
     my $inst = {};
-    $inst->{"INTERFACES_ROW"} = $rowref;
+    $inst->{"INTERFACES_ROW"} = $interface;
+    $inst->{"WIRES_ROW"} = $wire;
 
-    # wire mapping
-    $query_result =
-	DBQueryWarn("select * from wires ".
-		    "where (node_id1='$nodeid' AND card1='$card' AND port1='$port' and logical='$logical') OR (node_id2='$nodeid' AND card2='$card' AND port2='$port' and logical='$logical')");
-    return undef
-	if (!$query_result or !$query_result->numrows);
-
-    $rowref = $query_result->fetchrow_hashref();
-    if ($rowref->{'type'} eq TBDB_WIRETYPE_NODE() ||
-	$rowref->{'type'} eq TBDB_WIRETYPE_CONTROL()) {
-	if ($rowref->{'node_id1'} eq $nodeid) {
+    if ($wire->type() eq TBDB_WIRETYPE_NODE() ||
+	$wire->type() eq TBDB_WIRETYPE_CONTROL()) {
+	if ($wire->node_id1() eq $nodeid) {
 	    $inst->{"WIRE_END"} = $WIRE_END_NODE;
 	} else {
 	    $inst->{"WIRE_END"} = $WIRE_END_SWITCH;
 	}
-    } elsif ($rowref->{'type'} eq TBDB_WIRETYPE_TRUNK()) {
+    } elsif ($wire->type() eq TBDB_WIRETYPE_TRUNK()) {
 	$inst->{"WIRE_END"} = $WIRE_END_SWITCH;
-    } elsif ($rowref->{'node_id2'} eq $nodeid) {
+    } elsif ($wire->node_id2() eq $nodeid) {
 	$inst->{"WIRE_END"} = $WIRE_END_SWITCH;	
     } else {
 	# XXX: Other cases are unhandled for now...
 	return undef;
     }
 
-    $inst->{"WIRES_ROW"} = $rowref;
     $inst->{"FORCED"} = 0;
     $inst->{"HAS_FIELDS"} = 1;
 
@@ -553,71 +528,49 @@ sub LookupByTriple($$;$$)
     my $inst = {};
 
     # wire mapping:
-    my $query_result =
-	DBQueryWarn("select * from wires ".
-		    "where (node_id1='$nodeid' AND card1='$card' AND port1='$port') OR (node_id2='$nodeid' AND card2='$card' AND port2='$port')");
+    my $wire = Interface::Wire->LookupAny($nodeid, $card, $port);
     return undef
-	if (!$query_result or !$query_result->numrows);
-
-    my $rowref = $query_result->fetchrow_hashref();
-    if ($rowref->{'type'} eq TBDB_WIRETYPE_NODE() ||
-	$rowref->{'type'} eq TBDB_WIRETYPE_CONTROL()) {
+	if (!defined($wire));
+    
+    if ($wire->type() eq TBDB_WIRETYPE_NODE() ||
+	$wire->type() eq TBDB_WIRETYPE_CONTROL()) {
 	# Emulab is consistent about using the node_id1, etc. fields for the
 	# endpoint for the above wire types.  If it were not, we would need
 	# to consult the 'nodes' table to see what role the node has.
-	if ($rowref->{'node_id1'} eq $nodeid) {
+	if ($wire->node_id1() eq $nodeid) {
 	    $inst->{"WIRE_END"} = $WIRE_END_NODE;
 	} else {
 	    $inst->{"WIRE_END"} = $WIRE_END_SWITCH;
 	}
-    } elsif ($rowref->{'type'} eq TBDB_WIRETYPE_TRUNK()) {
+    } elsif ($wire->type() eq TBDB_WIRETYPE_TRUNK()) {
 	$inst->{"WIRE_END"} = $WIRE_END_SWITCH;
-    } elsif ($rowref->{'node_id2'} eq $nodeid) {
+    } elsif ($wire->node_id2() eq $nodeid) {
 	# This is a failsafe case for wire types that are 'exotic'.
 	$inst->{"WIRE_END"} = $WIRE_END_SWITCH;	
     } else {
 	# XXX: Other cases are unhandled for now...
 	return undef;
     }
-    $inst->{"WIRES_ROW"} = $rowref;
+    $inst->{"WIRES_ROW"} = $wire;
 
-    $query_result = 
-	DBQueryWarn("select i.*,ist.tagged,ist.enabled from interfaces as i".
-		    " left join interface_state as ist".
-		    "  on i.node_id=ist.node_id and i.card=ist.card".
-		    "   and i.port = ist.port".
-		    " where i.node_id='$nodeid' and i.card='$card'".
-		    "  and i.port='$port'");
-    return undef
-	if (!$query_result);
+    my $interface = Interface->Lookup($nodeid, $card, $port);
 
     # Note: The code will almost always fall into this conditional
     # block for switch ports because we typically do not have entries
     # for them in the 'interfaces' table.
-    if (!$query_result->numrows) {
-	$rowref = {};
+    if (!defined($interface)) {
+	my $rowref = {};
 	my $iface = fake_CardPort2Iface($card, $port);
 	$rowref->{'iface'} = $iface;
 	$rowref->{'node_id'} = $nodeid;
 	$rowref->{'card'} = $card;
 	$rowref->{'port'} = $port;
-	$rowref->{'mac'} = "";
-	$rowref->{'IP'} = "";
-	$rowref->{'role'} = "";
-	$rowref->{'interface_type'} = "";
-	$rowref->{'mask'} = "";
-	$rowref->{'uuid'} = "";
-	$rowref->{'trunk'} = 0;
 	$rowref->{'trunk_mode'} = "equal";
-	$rowref->{'tagged'} = 0;
-	$rowref->{'enabled'} = 1;
-    } else {
-	$rowref = $query_result->fetchrow_hashref();
-    }
+	$interface = Interface->MakeFake($nodeid, $rowref);
+    } 
+    my $iface = $interface->iface();
 
-    my $iface = $rowref->{'iface'};
-
-    $inst->{"INTERFACES_ROW"} = $rowref;
+    $inst->{"INTERFACES_ROW"} = $interface;
     $inst->{"FORCED"} = 0;
     $inst->{"HAS_FIELDS"} = 1;
 
@@ -675,15 +628,21 @@ sub LookupByWireType($$)
 	return @ports;
 }
 
-sub field($$)  { return (((! ref($_[0])) || ($_[0]->{'HAS_FIELDS'} == 0)) ? 
-    -1 : $_[0]->{'INTERFACES_ROW'}->{$_[1]}); }
+sub field($$)  {
+    my ($self, $slot) = @_;
+
+    return -1
+	if ((! ref($_[0])) || ($_[0]->{'HAS_FIELDS'} == 0));
+
+    return $self->{'INTERFACES_ROW'}->$slot();
+}
 sub node_id($) { return field($_[0], 'node_id'); }
 sub port($)    { return field($_[0], 'port'); }
 sub iface($)   { return field($_[0], 'iface'); }
 sub mac($)     { return field($_[0], 'mac'); }
 sub IP($)      { return field($_[0], 'IP'); }
 sub role($)    { return field($_[0], 'role'); }
-sub interface_type($)    { return field($_[0], 'interface_type'); }
+sub interface_type($)    { return field($_[0], 'type'); }
 sub mask($)    { return field($_[0], 'mask'); }
 sub uuid($)    { return field($_[0], 'uuid'); }
 sub trunk($)   { return field($_[0], 'trunk'); }
@@ -697,7 +656,7 @@ sub enabled($) { return field($_[0], 'enabled'); }
 sub wire_end($) { return $_[0]->{'WIRE_END'}; }
 sub is_switch_side($) { return $_[0]->wire_end() eq $WIRE_END_SWITCH; }
 
-sub wire_type($)   { return $_[0]->{'WIRES_ROW'}->{'type'}; }
+sub wire_type($)   { return $_[0]->{'WIRES_ROW'}->type(); }
 sub is_trunk_port($)  { return $_[0]->wire_type() eq TBDB_WIRETYPE_TRUNK(); }
 
 sub is_forced($) { return $_[0]->{"FORCED"};}
@@ -817,10 +776,10 @@ sub other_end_node_id($)
 	}
     }
 
-    if ($self->node_id() eq $self->{'WIRES_ROW'}->{'node_id1'}) {
-	return $self->{'WIRES_ROW'}->{'node_id2'}; 
+    if ($self->node_id() eq $self->{'WIRES_ROW'}->node_id1()) {
+	return $self->{'WIRES_ROW'}->node_id2(); 
     } else {
-	return $self->{'WIRES_ROW'}->{'node_id1'};
+	return $self->{'WIRES_ROW'}->node_id1();
     }
 }
 
@@ -840,10 +799,10 @@ sub other_end_card($)
     }
     my $card;
 
-    if ($self->node_id() eq $self->{'WIRES_ROW'}->{'node_id1'}) {
-	$card = $self->{'WIRES_ROW'}->{'card2'}; 
+    if ($self->node_id() eq $self->{'WIRES_ROW'}->node_id1()) {
+	$card = $self->{'WIRES_ROW'}->card2(); 
     } else {
-	$card = $self->{'WIRES_ROW'}->{'card1'};
+	$card = $self->{'WIRES_ROW'}->card1();
     }
     if ($self->logical()) {
 	$card = $card - 200;
@@ -866,10 +825,10 @@ sub other_end_port($)
 	}
     }
 
-    if ($self->node_id() eq $self->{'WIRES_ROW'}->{'node_id1'}) {
-	return $self->{'WIRES_ROW'}->{'port2'}; 
+    if ($self->node_id() eq $self->{'WIRES_ROW'}->node_id1()) {
+	return $self->{'WIRES_ROW'}->port2(); 
     } else {
-	return $self->{'WIRES_ROW'}->{'port1'};
+	return $self->{'WIRES_ROW'}->port1();
     }
 }
 
@@ -888,16 +847,16 @@ sub other_end_iface($)
 	}
     }
 
-    if ($self->node_id() eq $self->{'WIRES_ROW'}->{'node_id1'}) {
+    if ($self->node_id() eq $self->{'WIRES_ROW'}->node_id1()) {
 	return Port->LookupByTriple(
-	    $self->{'WIRES_ROW'}->{'node_id2'},
-	    $self->{'WIRES_ROW'}->{'card2'},
-	    $self->{'WIRES_ROW'}->{'port2'})->iface(); 
+	    $self->{'WIRES_ROW'}->node_id2(),
+	    $self->{'WIRES_ROW'}->card2(),
+	    $self->{'WIRES_ROW'}->port2())->iface(); 
     } else {
 	return Port->LookupByTriple(
-	    $self->{'WIRES_ROW'}->{'node_id1'},
-	    $self->{'WIRES_ROW'}->{'card1'},
-	    $self->{'WIRES_ROW'}->{'port1'})->iface(); 
+	    $self->{'WIRES_ROW'}->node_id1(),
+	    $self->{'WIRES_ROW'}->card1(),
+	    $self->{'WIRES_ROW'}->port1())->iface(); 
     }
 }
 
