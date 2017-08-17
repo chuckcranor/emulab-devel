@@ -2678,7 +2678,7 @@ CREATE TABLE `interfaces` (
   `interface_type` varchar(30) default NULL,
   `iface` text NOT NULL,
   `role` enum('ctrl','expt','jail','fake','other','gw','outer_ctrl','mngmnt') default NULL,
-  `current_speed` enum('0','10','100','1000','4000','10000','40000','100000') NOT NULL default '0',
+  `current_speed` enum('0','10','100','1000','4000','10000','25000','40000','56000','100000') NOT NULL default '0',
   `duplex` enum('full','half') NOT NULL default 'full',
   `noportcontrol` tinyint(1) NOT NULL default '0',
   `rtabid` smallint(5) unsigned NOT NULL default '0',
