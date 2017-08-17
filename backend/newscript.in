@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2011-2016 University of Utah and the Flux Group.
+# Copyright (c) 2011-2017 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -73,6 +73,7 @@ use libtestbed;
 use User;
 use Project;
 use EmulabFeatures;
+use Interface;
 
 # Protos
 sub fatal($);
@@ -586,17 +587,29 @@ sub CommitWire
     my $result = ResolveRow($id);
     while (my ($skip, $cable, $len, $type, $node_id1, $card1, $port1,
 	       $node_id2, $card2, $port2) = $result->fetchrow()) {
-	my $query = "INSERT wires SET ".
-	    "len='$len', type='$type', node_id1='$node_id1', ".
-	    "card1='$card1', port1='$port1', node_id2='$node_id2', ".
-	    "card2='$card2', port2='$port2'";
-	if (defined($cable)) {
-	    $query .= ", cable='$cable'";
+	my $interface1 = Interface->Lookup($node_id1, $card1, $port1);
+	if (!defined($interface1)) {
+	    $errors{"command"} = "Cannot lookup interface1";
+	    return;
 	}
+	my $interface2 = Interface->Lookup($node_id2, $card2, $port2);
+	if (!defined($interface2)) {
+	    $errors{"command"} = "Cannot lookup interface2";
+	    return;
+	}
+	my $wireargs = {};
+	$wireargs->{"cable"}  = $cable if (defined($cable));
+	$wireargs->{"length"} = $len if (defined($len));
 	if ($fake) {
-	    print $query."\n";
-	} else {
-	    DBQueryFatal($query);
+	    print "wire: $interface1, $interface2\n";
+	}
+	else {
+	    my $wire = Interface::Wire->Create($interface1, $interface2,
+					       $type, $wireargs);
+	    if (!defined($wire)) {
+		$errors{"command"} = "Could not create wire.";
+		return;
+	    }
 	}
     }
     RemoveRow($id);
