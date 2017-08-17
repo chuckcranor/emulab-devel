@@ -5018,6 +5018,16 @@ class elabinelab:
         if (verifyerror):
             return verifyerror
         
+        dbres = DBQueryFatal("select elabinelab_singlenet from experiments "
+                             "where pid=%s and eid=%s",
+                             (self.pid,self.eid,))
+
+        if len(dbres) == 0:
+            return EmulabResponse(RESPONSE_ERROR,
+                                  output="No such experiment!")
+
+        singlenet = int(dbres[0][0]);
+        
         #
         # Okay, lets grab what we need. This code is going to return the
         # equiv of what the switchmac script does, but with a few minor
@@ -5048,14 +5058,16 @@ class elabinelab:
             #
             role = res[3]
             IP   = res[7]
-            
-            if role == "ctrl":
-                role = "outer_ctrl"
+
+            if not singlenet:
+                if role == "ctrl":
+                    role = "outer_ctrl"
+                    pass
+                elif role == "expt" and IP != "":
+                    role = "ctrl"
+                    pass
                 pass
-            elif role == "expt" and IP != "":
-                role = "ctrl"
-                pass
-            elif role != "expt":
+            elif role != "expt" and role != "ctrl":
                 continue
             
             tmp["mac"]         = res[1]
