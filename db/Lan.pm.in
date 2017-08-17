@@ -995,6 +995,42 @@ sub FindMember($$$)
 }
 
 #
+# Find lans by membership.
+#
+sub FindLansByMember($$$)
+{
+    my ($class, $node, $iface_id) = @_;
+    my @result = ();
+
+    if (!ref($node)) {
+	$node = Node->Lookup($node);
+	return ()
+	    if (!defined($node));
+    }
+    my $node_id = $node->node_id();
+
+    my $query_result =
+	DBQueryWarn("select lma1.lanid from lan_member_attributes as lma1, " .
+		    "   lan_member_attributes as lma2 ".
+		    "where lma1.lanid = lma2.lanid and ".
+		    "      lma1.memberid=lma2.memberid and ".
+		    "      lma1.attrkey='node_id' and " .
+		    "      lma1.attrvalue='$node_id' and " .
+		    "      lma2.attrkey='iface' and " .
+		    "      lma2.attrvalue='$iface_id'");
+	
+    return ()
+	if (!$query_result || !$query_result->numrows);
+
+    while (my ($lanid) = $query_result->fetchrow_array()) {
+	my $lan = Lan->Lookup($lanid);
+	push(@result, $lan)
+	    if (defined($lan));
+    }
+    return @result;
+}
+
+#
 # Remove a member from a lan.
 #
 sub DelMember($$)
