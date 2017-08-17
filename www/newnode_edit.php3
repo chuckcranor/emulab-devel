@@ -1,6 +1,6 @@
 <?PHP
 #
-# Copyright (c) 2003-2016 University of Utah and the Flux Group.
+# Copyright (c) 2003-2017 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -87,11 +87,21 @@ foreach ($_GET as $key => $value) {
     	$switch_port = addslashes($_GET["iface${card}_switch_port"]);
     	$cable       = addslashes($_GET["iface${card}_cable"]);
     	$len         = addslashes($_GET["iface${card}_len"]);
-    	DBQueryFatal("UPDATE new_interfaces SET mac='$mac', " .
-	    "interface_type='$type', switch_id='$switch_id', " .
-	    "switch_card='$switch_card', switch_port='$switch_port', " .
-	    "cable='$cable', len='$len' " .
-	    "WHERE new_node_id=$id AND card='$card'");
+        $query = "UPDATE new_interfaces SET mac='$mac', " .
+	    "interface_type='$type', switch_id='$switch_id' ";
+        if ($switch_card != '') {
+            $query .= ",switch_card='$switch_card'";
+        }
+        if ($switch_port != '') {
+            $query .= ",switch_port='$switch_port'";
+        }
+        if ($cable != '') {
+            $query .= ",cable='$cable'";
+        }
+        if ($len != '') {
+            $query .= ",len='$len' ";
+        }
+        DBQueryFatal("$query WHERE new_node_id=$id AND card='$card'");
     }
 }
 
