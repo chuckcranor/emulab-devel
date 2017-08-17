@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2003-2016 University of Utah and the Flux Group.
+# Copyright (c) 2003-2017 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -150,7 +150,7 @@ my $ifaceargs = {
 print "Creating interface with arguments:\n";
 print Dumper($ifaceargs);
 if (!$impotent) {
-    Interface->Create($node1, $ifaceargs)
+    ($interface1 = Interface->Create($node1, $ifaceargs))
 	or $force or fatal("Could not create interface entry");
 }
 
@@ -166,14 +166,17 @@ $ifaceargs = {
 print "Creating interface with arguments:\n";
 print Dumper($ifaceargs);
 if (!$impotent) {
-    Interface->Create($node2, $ifaceargs)
+    ($interface2 = Interface->Create($node2, $ifaceargs))
 	or $force or fatal("Could not create interface entry");
 }
 
-DBQueryWarn( "INSERT INTO wires SET external_wire='$path', type='Node', " .
-	     "node_id1='$node_id1', card1=$card1, port1=1, " .
-	     "node_id2='$node_id2', card2=$card2, port2=1" );	     
-
+my $wireargs = {
+    "external_wire"=> $path,
+};
+if (!$impotent) {
+    Interface::Wire->Create($interface1, $interface2, 'Node', $wireargs)
+	or fatal("Could not create wire!");
+}
 exit(0);
 
 sub fatal($)
