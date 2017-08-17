@@ -36,7 +36,7 @@ SBIN_SCRIPTS	= avail inuse showgraph if2port backup webcontrol node_status \
 		  idletimes idlemail setsitevar audit changeuid changepid \
 		  elabinelab_bossinit update_permissions mysqld_watchdog \
 		  dumperrorlog changeleader checkstats changecreator \
-		  dbupdate geni_control subboss_sync showvlans
+		  dbupdate geni_control subboss_sync showvlans updatewires
 
 WEB_SBIN_SCRIPTS= webnodelog webnewwanode webidlemail webchangeuid \
 		  webchangeleader
@@ -67,7 +67,7 @@ SETUID_LIBX_SCRIPTS  =
 #
 ifeq ($(STANDALONE_CLEARINGHOUSE),0)
 TARGETS	= $(BIN_SCRIPTS) $(SBIN_SCRIPTS) $(LIBEXEC_SCRIPTS) $(LIB_SCRIPTS) \
-	$(USERSBINS) $(USERLIBS) schemacheck dbfillcheck updatewires
+	$(USERSBINS) $(USERLIBS) schemacheck dbfillcheck
 else
 TARGETS = emdb.pm emutil.pm emdbi.pm
 SETUID_SBIN_SCRIPTS =
