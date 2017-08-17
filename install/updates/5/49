@@ -1,0 +1,34 @@
+#
+# Change to wires table; add iface1 and iface2. We now require both sides
+# of wires to have associated interfaces. Run updatewires script to get
+# everything set up.
+#
+use strict;
+use libinstall;
+use installvars;
+
+sub InstallUpdate($$)
+{
+    my ($version, $phase) = @_;
+
+    #
+    # If something should run in the pre-install phase.
+    #
+    if ($phase eq "pre") {
+    }
+    
+    #
+    # If something should run in the post-install phase.
+    #
+    if ($phase eq "post") {
+	Phase "updatewires", "Updating wires and interfaces", sub {
+	    ExecQuietFatal("$TBROOT/sbin/updatewires");
+	};
+    }
+    return 0;
+}
+1;
+
+# Local Variables:
+# mode:perl
+# End:
