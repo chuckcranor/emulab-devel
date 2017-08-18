@@ -2685,33 +2685,11 @@ sub FindMember($$$)
 }
 
 #
-# Add a member in snmpit port form (node:card).
-#
-sub AddPort_OLD($$)
-{
-    my ($self, $port) = @_;
-    my ($node_id, $card) = split(":", $port);
-
-    my $interface = Interface->Lookup($node_id, $card, 1);
-    return undef
-	if (!defined($interface));
-
-    my $member = $self->FindMember($node_id, $interface->iface());
-    return $member
-	if (defined($member));
-				   
-    return $self->GetLan()->AddMember($node_id, $interface->iface());
-}
-
-#
 # Use Port class
 #
 sub AddPort($$)
 {
     my ($self, $port) = @_;
-    if (!ref($port)) {
-	    return $self->AddPort_OLD($port);
-    }
 
     my $member = $self->FindMember($port->node_id(), $port->iface());
     return $member
@@ -2721,33 +2699,11 @@ sub AddPort($$)
 }
 
 #
-# Delete a member in snmpit port form (node:card).
-#
-sub DelPort_OLD($$)
-{
-    my ($self, $port) = @_;
-    my ($node_id, $card) = split(":", $port);
-
-    my $interface = Interface->Lookup($node_id, $card, 1);
-    return -1
-	if (!defined($interface));
-
-    my $member = $self->FindMember($node_id, $interface->iface());
-    return 0
-	if (!defined($member));
-				   
-    return $self->DelMember($member);
-}
-
-#
 # Delete a member, use Port class
 #
 sub DelPort($$)
 {
     my ($self, $port) = @_;
-    if (!ref($port)) {
-	    return $self->DelPort_OLD($port);
-    }
     my $member = $self->FindMember($port->node_id(), $port->iface());
     return 0
 	if (!defined($member));
@@ -3636,33 +3592,6 @@ sub FindTableEntryByLanid($$)
     return $query_result->fetchrow_hashref();
 }
 
-sub FindVlanByPort_OLD($$$) 
-{
-    my ($class, $experiment, $port) = @_;
-    my ($node_id, $card) = split(":", $port);
-    my $clause = "";
-
-    my $interface = Interface->Lookup($node_id, $card, 1);
-    return undef
-	if (!defined($interface));
-    my $iface = $interface->iface();
-    if (defined($experiment)) {
-	my $exptidx = $experiment->idx();
-	$clause = "exptidx='$exptidx' and";
-    }
-
-    my $query_result =
-	DBQueryWarn("select id from vlans  ".
-		    "where $clause members like '%${node_id}:${iface}%'");
-
-    return undef
-	if (!$query_result || !$query_result->numrows);
-
-    my ($lanid) = $query_result->fetchrow_array();
-
-    return VLan->Lookup($lanid);
-}
-
 #
 # Refactored with Port class
 #
@@ -3671,10 +3600,6 @@ sub FindVlanByPort($$$)
     my ($class, $experiment, $port) = @_;
     my $clause = "";
     
-    if (!ref($port)) {
-	    return $class->FindVlanByPort_OLD($experiment, $port);
-    }
- 
     my $ifacestr = $port->toIfaceString();
     if (defined($experiment)) {
 	my $exptidx = $experiment->idx();
