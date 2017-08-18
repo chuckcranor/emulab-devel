@@ -1102,6 +1102,21 @@ sub ApproveReservation($)
 	print STDERR "$output\n";
 	return GeniResponse->Create(GENIRESPONSE_REFUSED, undef, $output);
     }
+    my $pid = $reservation->pid();
+    my $project = Project->Lookup($pid);
+    if (!defined($project)) {
+	print STDERR "ApproveReservation: No such project $pid\n";
+	return GeniResponse->Create(GENIRESPONSE_ERROR, undef,
+				    "Could not lookup project");
+    }
+    my $uid = $reservation->uid();
+    my $user = User->Lookup($uid);
+    if (!defined($user)) {
+	print STDERR "ApproveReservation: No such user $uid\n";
+	return GeniResponse->Create(GENIRESPONSE_ERROR, undef,
+				    "Could not lookup project");
+    }
+    
     #
     # Return current details of the reservation.
     #
@@ -1110,6 +1125,8 @@ sub ApproveReservation($)
     $blob->{"uuid"}        = $reservation->uuid();
     $blob->{"nodes"}       = $reservation->nodes();
     $blob->{"type"}        = $reservation->type();
+    $blob->{"project"}     = $project->nonlocalurn();
+    $blob->{"user"}        = $user->nonlocalurn();
     $blob->{"created"}     = TBDateStringGMT($reservation->created());
     $blob->{"start"}       = TBDateStringGMT($reservation->start());
     $blob->{"end"}         = TBDateStringGMT($reservation->end());

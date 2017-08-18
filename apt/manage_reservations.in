@@ -97,7 +97,7 @@ sub DoApprove();
 sub DoSystemInfo();
 sub DoPrediction();
 sub readfile($);
-sub AddAnnouncement($$$$$$);
+sub AddAnnouncement($$$$$$$);
 sub DeleteAnnouncement($);
 
 #
@@ -349,7 +349,7 @@ sub DoReserve()
 	#
 	# Schedule an announcement for the user.
 	#
-	AddAnnouncement($portal, $brand, $uuid, $count, $type, $start);
+	AddAnnouncement($portal, $brand, $uuid, $this_user, $count, $type, $start);
     }
     if (defined($webtask)) {
 	$webtask->approved($approved);
@@ -614,9 +614,13 @@ sub DoApprove()
     # Schedule an announcement for the user.
     #
     my $blob = $response->value();
-    AddAnnouncement($portal, $brand, $uuid,
-		    $blob->{'nodes'}, $blob->{'type'}, $blob->{'start'});
-    
+    if (exists($blob->{'user'})) {
+	my $geniuser = GeniUser->Lookup($blob->{'user'}, 1);
+	if (defined($geniuser) && $geniuser->IsLocal()) {
+	    AddAnnouncement($portal, $brand, $uuid, $geniuser->emulab_user(),
+			    $blob->{'nodes'}, $blob->{'type'}, $blob->{'start'});
+	}
+    }
     if (defined($webtask)) {
 	$webtask->Exited(0);
     }
@@ -953,10 +957,10 @@ sub readfile($) {
 #
 # Add or Edit a reservation announcement.
 #
-sub AddAnnouncement($$$$$$)
+sub AddAnnouncement($$$$$$$)
 {
-    my ($portal, $brand, $uuid, $nodes, $type, $start) = @_;
-    my $this_uid = $this_user->uid();
+    my ($portal, $brand, $uuid, $user, $nodes, $type, $start) = @_;
+    my $this_uid = $user->uid();
     my $nickname = $aggregate->nickname();
     my $name     = $aggregate->name();
     my $url      = $brand->wwwBase() .
