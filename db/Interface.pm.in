@@ -1692,8 +1692,8 @@ sub Create($$$$$$)
 	my $port1    = $interface1->port();
 	my $card2    = $interface2->card();
 	my $port2    = $interface2->port();
-	my $iface1   = $interface2->iface1();
-	my $iface2   = $interface2->iface2();
+	my $iface1   = $interface1->iface();
+	my $iface2   = $interface2->iface();
 
 	#
 	# The wire is not active yet. When snmpit tuns and actually
