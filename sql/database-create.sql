@@ -5688,8 +5688,6 @@ CREATE TABLE `virt_node_public_addr` (
   `IP` varchar(15) NOT NULL default '',
   `mask` varchar(15) default NULL,
   `node_id` varchar(32) default NULL,
-  `card` tinyint(3) unsigned default '0',
-  `port` smallint(5) unsigned default '0',
   `pool_id` varchar(32) default NULL,
   `pid` varchar(48) default NULL,
   `eid` varchar(32) default NULL,

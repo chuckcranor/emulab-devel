@@ -2628,7 +2628,7 @@ sub CreateVnodes($$$)
 		( $jailip, $jailmask ) = $query_result->fetchrow_array();
 
 		DBQueryFatal( "UPDATE virt_node_public_addr SET " .
-			      "node_id='$vnodeid', card='0', port='1' " .
+			      "node_id='$vnodeid' " .
 			      "WHERE IP='$jailip'" )
 		    if (!$impotent);
 	    } else {
@@ -2856,7 +2856,7 @@ sub CreateVnodes($$$)
 	}
 	foreach my $vnodeid (@created) {
 	    DBQueryWarn("update virt_node_public_addr set ".
-			"  node_id=NULL,card='0',port='0' ".
+			"  node_id=NULL ".
 			"where node_id='$vnodeid'");
 	    DBQueryWarn("delete from reserved where node_id='$vnodeid'");
 	    DBQueryWarn("delete from nodes where node_id='$vnodeid'");
@@ -2892,7 +2892,7 @@ sub DeleteVnodes(@)
 	    $interface->Delete();
 	}
 	DBQueryWarn("update virt_node_public_addr set ".
-		    "  node_id=NULL,card='0',port='0' ".
+		    "  node_id=NULL ".
 		    "where node_id='$vnodeid'");
 	
 	DBQueryWarn("delete from node_bootlogs where node_id='$vnodeid'");
@@ -3793,7 +3793,7 @@ sub GetJailIP($;$)
     my $node_id = $self->node_id();
     my $query_result =
 	DBQueryWarn( "SELECT IP, mask FROM virt_node_public_addr WHERE " .
-		     "node_id='$node_id' AND card='0' AND port='1'" );
+		     "node_id='$node_id'" );
 
     if( $query_result && $query_result->numrows ) {
 	# we've assigned a public address to this one
