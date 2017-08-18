@@ -65,7 +65,7 @@ use vars qw(@ISA @EXPORT);
 	 TBExptIsElabInElab TBExptIsPlabInElab
 	 TBExptPlabInElabPLC TBExptPlabInElabNodes
 	 TBBatchUnLockExp TBExptIsBatchExp
-	 TBExptFirewall TBNodeFirewall TBExptFirewallAndPort
+	 TBExptFirewall TBNodeFirewall TBExptFirewallAndIface
 	 TBSetExptFirewallVlan TBClearExptFirewallVlan
 	 TBNodeConsoleTail TBExptGetSwapoutAction TBExptGetSwapState
 	 TBNodeSubNodes
@@ -2196,27 +2196,26 @@ sub TBExptFirewall ($$;$$$$) {
 }
 
 #
-# Get the firewall node name and port number for an experiment;
+# Get the firewall node name and iface for an experiment;
 # e.g., for use in an snmpit call.
 # Return 1 if successful, 0 on error.
 #
-sub TBExptFirewallAndPort($$$$) {
-    my ($pid, $eid, $fwnodep, $fwportp) = @_;
+sub TBExptFirewallAndIface($$$$) {
+    my ($pid, $eid, $fwnodep, $fwifacep) = @_;
     my $fwnode;
+    require Interface;
 
     if (!TBExptFirewall($pid, $eid, \$fwnode)) {
 	return 0;
     }
 
-    my $query_result = 
-	DBQueryWarn("select card1 from wires ".
-		    "where node_id1='$fwnode' AND type='Control'");
-    if (!$query_result || !$query_result->numrows) {
+    my $interface = Interface->LookupControl($fwnode);
+    if (!defined($interface)) {
+	print STDERR "*** Could not lookup control interface for $fwnode\n";
 	return 0;
     }
-
     $$fwnodep = $fwnode;
-    ($$fwportp) = $query_result->fetchrow_array();
+    ($$fwifacep) = $interface->iface();
 
     return 1;
 }
