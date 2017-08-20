@@ -574,6 +574,10 @@ sub Delete($;$)
 			 "where node_id='$node_id' and card='$card' and ".
 			 "      port='$port'"));
     return -1
+	if (!DBQueryWarn("delete from port_counters ".
+			 "where node_id='$node_id' and card='$card' and ".
+			 "      port='$port'"));
+    return -1
 	if (!DBQueryWarn("delete from interfaces ".
 			 "where logical=$logical and ".
 			 "      node_id='$node_id' and card='$card' and ".
