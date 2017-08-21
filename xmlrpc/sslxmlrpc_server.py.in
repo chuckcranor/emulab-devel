@@ -69,9 +69,9 @@ ca_cert         = "@prefix@/etc/emulab.pem"
 # Set a timeout for the SSL_accept phase of the client session setup.
 # This allows us to not block the main thread indefinitely if a non-SSL
 # or malicious client connects to us and says nothing.
-SSL_CLIENT_ACCEPT_TIMEOUT = 2
+SSL_CLIENT_ACCEPT_TIMEOUT = 3
 # Set a timeout that is used for the client socket *after* SSL accept.
-SSL_CLIENT_REQUEST_TIMEOUT = 30
+SSL_CLIENT_REQUEST_TIMEOUT = -1.0
 
 #
 # By default, run a wrapper class that includes all off the modules.
