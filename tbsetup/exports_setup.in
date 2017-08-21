@@ -23,6 +23,7 @@
 #
 use English;
 use Getopt::Std;
+use Sys::Syslog;
 
 #
 # Create an /etc/exports.tail file based on current reserved table and project
@@ -55,6 +56,7 @@ my $incremental= 0;
 
 sub fsinit();
 sub fsof($);
+sub logit($);
 
 #
 # Configure variables
@@ -79,6 +81,7 @@ my $ZFS_NOEXPORT= @ZFS_NOEXPORT@;
 my $WITHAMD     = @WITHAMD@;
 my $INC_MOUNTD  = @INCREMENTAL_MOUNTD@;
 my $NOVNODENFS	= @NOVIRTNFSMOUNTS@;
+my $TBLOG	= "@TBLOGFACIL@";
 
 # XXX for TESTMODE: output to stdout
 my $TOSTDOUT	= 0;
@@ -178,25 +181,28 @@ if (defined($options{"w"})) {
     $waittildone = 1;
 }
 if (defined($options{"i"})) {
-    if ($INC_MOUNTD) {
-	$incremental = 1;
-    } else {
-	print "WARNING: incremental updates not supported, ignoring option\n";
-    }
+    $incremental = 1;
 }
 usage()
     if (@ARGV);
 
+# Setup syslog early to record warnings
+openlog("exports_setup", "pid", $TBLOG);
+
+if ($incremental && !$INC_MOUNTD) {
+    logit("WARNING: incremental updates not supported, ignoring option");
+    $incremental = 0;
+}
 if ($bosslistonly) {
     if (!$WITHZFS || $WITHAMD) {
 	print STDERR "-B only makes sense with ZFS and not AMD\n";
 	exit(1);
     }
 } elsif ($ZFS_NOEXPORT && !$waittildone) {
-    print "WARNING: forcing wait mode\n";
+    logit("WARNING: forcing wait mode");
     $waittildone = 1;
     if ($INC_MOUNTD) {
-	print "WARNING: forcing incremental updates\n";
+	logit("WARNING: forcing incremental updates");
 	$incremental = 1;
     }
 }
@@ -367,8 +373,8 @@ while ($row = $nodes_result->fetchrow_hashref) {
     # may end up with a bad line in exports
     if ((!defined($node_id)) || (!defined($pid)) || (!defined($eid)) ||
         (!defined($gid)) || (!defined($admin)) || (!defined($ip))) {
-        print "WARNING: exports_setup: Skipping database row with undefined values\n";
-	print "         $node_id\n" if defined($node_id);
+        logit("WARNING: skipping database row with undefined values".
+	      defined($node_id) ? " ($node_id)" : "");
 	next;
     }
 
@@ -470,7 +476,7 @@ while ($row = $nodes_result->fetchrow_hashref) {
 	foreach my $dir ( @dirlist ) {
 	    my $fs = fsof($dir);
 	    if (!$fs) {
-		print "WARNING: no filesystem for '$dir', ignored\n";
+		logit("WARNING: no filesystem for '$dir', ignored");
 		next;
 	    }
 
@@ -566,7 +572,7 @@ if ($ZFS_NOEXPORT) {
     foreach my $dir (sort(keys(%bossexports))) {
 	my $fs = fsof($dir);
 	if (!$fs) {
-	    print "WARNING: no filesystem for '$dir', ignored\n";
+	    logit("WARNING: no filesystem for '$dir', ignored");
 	    next;
 	}
 
@@ -682,23 +688,21 @@ if (!$TESTMODE) {
       }
   }
   else {
-      TBDebugTimeStampsOn();
-
       my $arg = ($incremental ? "-i" : "");
 
       # First do the NFS exports
-      TBDebugTimeStamp("Invoking exports_setup.proxy...");
+      logit("Invoking exports_setup.proxy...");
       system("$SSH $PROG $arg < $exportstail") == 0 or
 	  fatal("Failed: $SSH $PROG < $exportstail: $?");
-      TBDebugTimeStamp("exports_setup.proxy done");
+      logit("exports_setup.proxy done");
       unlink("$exportstail");
 
       # Next the SMB shares
       if ($WINSUPPORT) {
-	  TBDebugTimeStamp("Invoking exports_setup.proxy (samba)...");
+	  logit("Invoking exports_setup.proxy (samba)...");
 	  system("$SSH $PROG -S < $smbconftail") == 0 or
 	      fatal("Failed: $SSH $PROG < $smbconftail: $?");
-	  TBDebugTimeStamp("exports_setup.proxy (samba) done");
+	  logit("exports_setup.proxy (samba) done");
 	  unlink("$smbconftail");
       }
 
@@ -709,7 +713,7 @@ if (!$TESTMODE) {
       #
       if ($waittildone) {
 	  my $testdir = "/proj/" . TBOPSPID();
-	  TBDebugTimeStamp("Waiting for mountd to finish...");
+	  logit("Waiting for mountd to finish...");
 	  my $tries = 10;
 	  while ($tries-- > 0) {
 	      if (system("/bin/ls $testdir >/dev/null 2>&1")) {
@@ -718,7 +722,7 @@ if (!$TESTMODE) {
 	      }
 	      last;
 	  }
-	  TBDebugTimeStamp("Wait done");
+	  logit("Wait done");
       }
 
       #
@@ -789,6 +793,18 @@ sub fsof($) {
 	    return $mount;
 	}
     }
-    print "WARNING: exports_setup: could not find FS for $path\n";
+    logit("WARNING: could not find FS for $path");
     return "";
+}
+
+sub logit($)
+{
+    my ($message) = @_;
+    syslog("info", $message);
+    print "$message\n"
+	if ($debug);
+}
+
+END {
+    closelog();
 }
