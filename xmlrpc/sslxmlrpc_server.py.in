@@ -48,6 +48,7 @@ try:
     from M2Crypto import SSL
     from M2Crypto.SSL import SSLError
     from M2Crypto.SSL import Checker
+    from M2Crypto.SSL import SSLTimeoutError
 except ImportError, e:
     sys.stderr.write("error: The py-m2crypto port is not installed\n")
     sys.exit(1)
@@ -186,30 +187,34 @@ class MyConnection(SSL.Connection):
         address bound to the other end of the SSL connection.
         """
         sock, addr = self.socket.accept()
-        # Use our subclass, not the default SSL.connection
-        ssl = MyConnection(self.ctx, sock)
-        # Set non-blocking so that the M2Crypto openssl wrapper glue
-        # will honor the _timeout we're about to set; but only if the
-        # timeout is not None.
-        if SSL_CLIENT_ACCEPT_TIMEOUT is not None:
-            sock.setblocking(False)
-        # Set a timeout that gets used in the below call of ssl.accept_ssl()
-        ssl._timeout = SSL_CLIENT_ACCEPT_TIMEOUT
-        ssl.addr = addr
-        ssl.setup_ssl()
-        ssl.set_accept_state()
-        ssl.accept_ssl()
-        check = getattr(self, 'postConnectionCheck',
-                        self.serverPostConnectionCheck)
-        if check is not None:
-            if not check(ssl.get_peer_cert(), ssl.addr[0]):
-                raise Checker.SSLVerificationError(
-                    'post connection check failed')
-        # Make the socket blocking again.
-        sock.setblocking(True)
-        # ... and undo our timeout.
-        ssl._timeout = SSL_CLIENT_REQUEST_TIMEOUT
-        return ssl, addr
+        try:
+            # Use our subclass, not the default SSL.connection
+            ssl = MyConnection(self.ctx, sock)
+            # Set non-blocking so that the M2Crypto openssl wrapper glue
+            # will honor the _timeout we're about to set; but only if the
+            # timeout is not None.
+            if SSL_CLIENT_ACCEPT_TIMEOUT is not None:
+                sock.setblocking(False)
+            # Set a timeout that gets used in the below call of ssl.accept_ssl()
+            ssl._timeout = SSL_CLIENT_ACCEPT_TIMEOUT
+            ssl.addr = addr
+            ssl.setup_ssl()
+            ssl.set_accept_state()
+            ssl.accept_ssl()
+            check = getattr(self, 'postConnectionCheck',
+                            self.serverPostConnectionCheck)
+            if check is not None:
+                if not check(ssl.get_peer_cert(), ssl.addr[0]):
+                    raise Checker.SSLVerificationError(
+                        'post connection check failed')
+            # Make the socket blocking again.
+            sock.setblocking(True)
+            # ... and undo our timeout.
+            ssl._timeout = SSL_CLIENT_REQUEST_TIMEOUT
+            return ssl, addr
+        except Exception, exc:
+            exc.__setattr__('client_address',addr)
+            raise
 
 #
 # A simple server based on the forking version SSLServer. We fork cause
@@ -256,12 +261,12 @@ class MyServer(SSL.ForkingSSLServer, SimpleXMLRPCDispatcher):
     #
     # @param msg The message to log.
     #
-    def logit(self, msg):
+    def logit(self, msg, facility=syslog.LOG_INFO):
         if debug:
             print msg
             pass
         else:
-            syslog.syslog(syslog.LOG_INFO, msg);
+            syslog.syslog(facility, msg);
             pass
         return
 
@@ -276,11 +281,11 @@ class MyServer(SSL.ForkingSSLServer, SimpleXMLRPCDispatcher):
     def set_path(self, path, client_address):
         if not self.emulabserver:
             if path not in ALLOWED_PATHS:
-                self.logit("Disallowed path: %s" % path)
+                self.logit("Disallowed path: %s" % path,facility=syslog.LOG_ERR)
                 raise Exception("Path not allowed: %s" % path)
             path = os.path.join(path, "lib")
             if not os.access(path, os.X_OK):
-                self.logit("Path not accessible by user: %s" % path)
+                self.logit("Path not accessible by user: %s" % path,facility=syslog.LOG_ERR)
                 raise Exception("Permission denied: %s" % path)
 
             if path not in sys.path:
@@ -396,11 +401,11 @@ class MyServer(SSL.ForkingSSLServer, SimpleXMLRPCDispatcher):
         (self.uid,self.uid_idx,self.unix_uid) = self.getuserid(self.uuid)
         
         if self.unix_uid == 0:
-            self.logit('No such user: "%s"' % self.uuid)
+            self.logit('No such user: "%s"' % self.uuid,facility=syslog.LOG_ERR)
             raise Exception('No such user: "%s"' % self.uuid)
         
         if self.unix_uid == -1:
-            self.logit('User "%s,%d" is not active' % (self.uid,self.uid_idx))
+            self.logit('User "%s,%d" is not active' % (self.uid,self.uid_idx),facility=syslog.LOG_ERR)
             raise Exception('User "%s,%d" is not active' %
                             (self.uid,self.uid_idx))
 
@@ -417,7 +422,7 @@ class MyServer(SSL.ForkingSSLServer, SimpleXMLRPCDispatcher):
         
         self.getusergroups(self.uid_idx);
         if len(self.glist) == 0:
-            self.logit('No groups for user: "%s,%d"' % (self.uid,self.uid_idx))
+            self.logit('No groups for user: "%s,%d"' % (self.uid,self.uid_idx),facility=syslog.LOG_ERR)
             raise Exception('No groups for user: "%s,%d"' %
                             (self.uid,self.uid_idx))
 
@@ -432,7 +437,7 @@ class MyServer(SSL.ForkingSSLServer, SimpleXMLRPCDispatcher):
         serial = request.get_peer_cert().get_serial_number()
         
         if self.checkcert(self.uid_idx, serial) == 0:
-            self.logit('No such cert with serial "%s"' % serial)
+            self.logit('No such cert with serial "%s"' % serial,facility=syslog.LOG_ERR)
             raise Exception('No such cert with serial "%s"' % serial)
 
         #
@@ -490,16 +495,16 @@ class MyServer(SSL.ForkingSSLServer, SimpleXMLRPCDispatcher):
             elif argdict.has_key("proj"):
                 project = argdict["proj"]
             else:
-                self.logit('Too many groups and no project given as an arg')
+                self.logit('Too many groups and no project given as an arg',facility=syslog.LOG_ERR)
                 pass
             
             if project:
                 if self.plist.has_key(project):
                     self.glist = self.plist[project]
-                    self.logit("Setting groups from project %s" % project)
+                    self.logit("Setting groups from project %s" % project,facility=syslog.LOG_ERR)
                 else:
                     self.logit('Too many groups but not a member of "%s"' %
-                               project)
+                               project,facility=syslog.LOG_ERR)
                     pass
                 pass
             pass
@@ -515,7 +520,7 @@ class MyServer(SSL.ForkingSSLServer, SimpleXMLRPCDispatcher):
             os.environ["LOGNAME"] = self.uid;
             pass
         except:
-            self.logit(traceback.format_exc())
+            self.logit(traceback.format_exc(),facility=syslog.LOG_ERR)
             os._exit(1)
             pass
         pass
@@ -574,7 +579,7 @@ class MyServer(SSL.ForkingSSLServer, SimpleXMLRPCDispatcher):
                 sys.path.remove(TBPATH)
                 self.finish_request(request, client_address)
                 self.close_request(request)
-                self.logit("request finished");
+                self.logit("request from %s finished" % (client_address[0]));
                 os._exit(0)
             except:
                 try:
@@ -584,6 +589,22 @@ class MyServer(SSL.ForkingSSLServer, SimpleXMLRPCDispatcher):
 
     def verify_request(self, request, client_address):
         return True
+
+    def handle_error(self, request, client_address):
+        caddr = "UNKNOWN"
+        if client_address is None:
+            (ext,exv,extb) = sys.exc_info()
+            if exv is not None and hasattr(exv,'client_address'):
+                caddr = exv.client_address[0]
+        if client_address is not None:
+            caddr = client_address[0]
+
+        if exv is not None and isinstance(exv,SSLTimeoutError):
+            self.logit("SSLTimeoutError from %s" % (str(caddr)))
+        else:
+            self.logit(
+                "error from %s: %s" % (str(caddr),traceback.format_exc()),
+                facility=syslog.LOG_ERR)
 
     pass
 
