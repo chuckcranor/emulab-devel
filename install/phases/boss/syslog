@@ -7,6 +7,7 @@ use installvars;
 
 my @LOGFILES = ("$LOGDIR/bootinfo.log", "$LOGDIR/tmcd.log",
     "$LOGDIR/capture.log", "$LOGDIR/dhcpd.log", "$LOGDIR/capserver.log",
+    "$LOGDIR/exports_setup.log",
     "$LOGDIR/frisbeed.log", "$LOGDIR/frisuploadd.log", "$LOGDIR/mfrisbeed.log",
     "$LOGDIR/proxydhcpd.log", "$LOGDIR/stated.log", "$LOGDIR/stated-mail.log",
     "$LOGDIR/named.log",
@@ -98,6 +99,7 @@ sub Install($$$)
 			"!proxydhcpd","*.*\t\t\t\t\t\t$LOGDIR/proxydhcpd.log",
 			"!tftpd",     "*.*\t\t\t\t\t\t$LOGDIR/tftpd.log",
 			"!capserver", "*.*\t\t\t\t\t\t$LOGDIR/capserver.log",
+			"!exports_setup", "*.*\t\t\t\t\t\t$LOGDIR/exports_setup.log",
 			"!frisbeed",  "*.*\t\t\t\t\t\t$LOGDIR/frisbeed.log",
 			"!frisuploadd","*.*\t\t\t\t\t\t$LOGDIR/frisuploadd.log",
 			"!mfrisbeed", "*.*\t\t\t\t\t\t$LOGDIR/mfrisbeed.log",
@@ -173,6 +175,7 @@ sub Install($$$)
 		"$LOGDIR/dhcpd.log              640  7     200  *     Z",
 		"$LOGDIR/bootinfo.log           640  7     200  *     Z",
 		"$LOGDIR/capserver.log          640  5     200  *     Z",
+		"$LOGDIR/exports_setup.log      640  5     1000 *     Z",
 		"$LOGDIR/pubsubd.log            640  5     1000 *     Z",
 		"$LOGDIR/suexec.log             640  3     200  *     Z",
 		"$LOGDIR/genlastlog.log         640  3     200  *     Z",
