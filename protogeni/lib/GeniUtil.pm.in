@@ -72,7 +72,6 @@ my $WAP                = "$TB/sbin/withadminprivs";
 my $NEWGROUP           = "$TB/bin/newgroup";
 my $NEWPROJECT         = "$TB/sbin/newproj";
 my $MAKEPROJECT        = "$TB/sbin/mkproj";
-my $EXPORTSSETUP       = "$TB/sbin/exports_setup";
 my $MODGROUPS          = "$TB/sbin/modgroups";
 my $CREATEGENIUSER     = "$TB/sbin/protogeni/creategeniuser";
 
