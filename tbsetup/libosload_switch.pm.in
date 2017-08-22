@@ -1379,9 +1379,7 @@ sub generateConfig($$) {
 		}
 		my $card  = $interface->card();
 		my $port  = $interface->port();
-		my @alpha = ("","A","B","C","D","E","F","G","H","I",
-			     "J","K","L","M","N","O");
-		my $portname = $alpha[$card] . $port;
+		my $portname = _translatePort($card, $port);
 		
 		#
 		# A trunk has to be in at least one vlan in tagged mode, for
@@ -1412,6 +1410,9 @@ sub generateConfig($$) {
 	push @cnetlines, "vlan 999";
 	push @cnetlines, "  name \"EmulabControlPort\"";
 	push @cnetlines, "  untagged $cnetport";
+	# Prevent the upstream control switch from becoming STP root.
+	# Kirk firgured this out for me!
+	push @cnetlines, "  spanning-tree $cnetport bpdu-filter";
 	if (defined($cnetip) && $cnetip ne '') {
 	    push @cnetlines, "  ip address ${cnetip} ${cnetmask}";
 	    push @cnetlines, "exit";
