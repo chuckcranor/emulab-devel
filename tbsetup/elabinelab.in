@@ -1024,13 +1024,12 @@ sub DumpDBGoo()
 	# But we need to take out the wires that are being used as the
 	# inner control network, or at least mark them as Control.
 	$query_result =
-	    DBQueryWarn("select node_id,card,port from temp_interfaces ".
+	    DBQueryWarn("select node_id,iface from temp_interfaces ".
 			"where role='" . TBDB_IFACEROLE_CONTROL() . "' ");
 
-	while (my ($node_id,$card,$port) = $query_result->fetchrow_array()) {
+	while (my ($node_id,$iface) = $query_result->fetchrow_array()) {
 	    DBQueryWarn("update temp_wires set type='Control' ".
-			"where node_id1='$node_id' and card1=$card and ".
-			"      port1=$port");
+			"where node_id1='$node_id' iface1='$iface1'");
 	}
     }
     # Okay, now add the "trunk" wires in without any alteration.
