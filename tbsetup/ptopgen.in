@@ -392,15 +392,15 @@ my %interfaceips = ();
 
 # Read interfaces
 my $result =
-    DBQueryFatal("SELECT node_id,card,port,iface,interface_type,role,IP" .
+    DBQueryFatal("SELECT node_id,iface,interface_type,role,IP" .
 		 " from interfaces where logical=0 " .
 		 ($genimode ne $NO_GENI ? "and role!='gw'" : ""));
 		 
-while (($node,$card,$port,$iface,$type,$role,$ip) = $result->fetchrow_array) {
+while (my ($node,$iface,$type,$role,$ip) = $result->fetchrow_array) {
     push @{ $nodetointerface{"$node"} }, $iface;
-    $interfacemap{"$node:$card:$port"} = $iface;
+    $interfacemap{"$node:$iface"} = $iface;
     if ((defined $type) && ($type ne "")) {
-	$interfacetypes{"$node:$card:$port"} = $type;
+	$interfacetypes{"$node:$iface"} = $type;
     }
     if ((defined $role) && ($role ne "")) {
 	$interfaceroles{"$node:$iface"} = $role;
@@ -467,8 +467,7 @@ my %contact_ifaces;
 my %stitch_points;
 my %external_speeds;
 
-$result = DBQueryFatal("select w.node_id1, w.card1, w.port1, i1.iface, ".
-		       "w.node_id2, w.card2, w.port2, i2.iface, ".
+$result = DBQueryFatal("select w.node_id1, w.iface1, w.node_id2, w.iface2, ".
 		       "w.external_interface, w.external_wire, ".
 		       "e.node_id, e.vlans, ".
 		       "e.external_manager, e.network_id, e.external_interface, ".
@@ -476,10 +475,12 @@ $result = DBQueryFatal("select w.node_id1, w.card1, w.port1, i1.iface, ".
 		       "from wires as w ".
 		       "left join external_networks as e ".
 		       "on w.node_id1=e.node_id or w.node_id2=e.node_id ".
-		       "left join interfaces as i1 on w.node_id1=i1.node_id and w.card1=i1.card and w.port1=i1.port ".
-		       "left join interfaces as i2 on w.node_id2=i2.node_id and w.card2=i2.card and w.port2=i2.port ".
+		       "left join interfaces as i1 on w.node_id1=i1.node_id and ".
+		       "     w.iface1=i1.iface ".
+		       "left join interfaces as i2 on w.node_id2=i2.node_id and ".
+		       "     w.iface2=i2.iface ".
 		       "where e.node_id is not null");
-while (my ($cnode, $ccard, $cport, $ciface, $enode, $ecard, $eport, $eiface,
+while (my ($cnode, $ciface, $enode, $eiface,
 	   $external_iface_urn, $external_link_urn, $external, $vlanList,
 	   $external_manager_urn,
 	   $external_network_id, $external_network_iface_urn,
@@ -498,17 +499,15 @@ while (my ($cnode, $ccard, $cport, $ciface, $enode, $ecard, $eport, $eiface,
     if ($external eq $cnode) {
 	my $temp;
 	$temp = $cnode; $cnode = $enode; $enode = $temp;
-	$temp = $ccard; $ccard = $ecard; $ecard = $temp;
-	$temp = $cport; $cport = $eport; $eport = $temp;
 	$temp = $ciface; $ciface = $eiface; $eiface = $temp;
     }
     $stitch_points{"$cnode:$enode"} = 1;
     $enode = $external_network_id;
     if (! defined($eiface)) {
-	$eiface = "$ecard.$eport";
+	die("No iface for $enode\n");	
     }
     if (! defined($ciface)) {
-	$ciface = "$ccard.$cport";
+	die("No iface for $cnode\n");	
     }
     my $ciface_urn;
     if (defined($subport)) {
@@ -2065,26 +2064,14 @@ while (($type,$capkey,$capval) = $result->fetchrow_array) {
 }
 
 # Read interface switches
-$result = DBQueryFatal("SELECT node_id1, iface, node_id2 FROM wires AS w " .
-	"LEFT JOIN interfaces as i ON w.node_id1=i.node_id AND w.card1=i.card ".
+$result = DBQueryFatal("SELECT node_id1, i.iface, node_id2 FROM wires AS w " .
+	"LEFT JOIN interfaces as i ON w.node_id1=i.node_id AND w.iface1=i.iface ".
 	"where w.logical=0");
 
 while (($node,$iface,$switch) = $result->fetchrow_array) {
     if ($node && $iface) {
 	$interfaceswitches{"$node:$iface"} = $switch;
     }
-}
-
-# Read interface cards and ports
-$result = DBQueryFatal("SELECT node_id, iface, card, port, IP ".
-		       "FROM interfaces where logical=0");
-
-while (($node,$iface,$card,$port,$IP) = $result->fetchrow_array) {
-    next
-	if ($prune && $is_reserved{$node} && !$sharing_mode{$node} && 
-	    (!defined($IP) || $IP eq ""));
-
-    $interfacecardports{"$node:$iface"} = [$card,$port];
 }
 
 # Read interface_state
@@ -2134,15 +2121,14 @@ if (defined($experiment)) {
     }
 }
 
-$result = DBQueryFatal("SELECT node_id1,card1,port1,node_id2,card2,port2" .
+$result = DBQueryFatal("SELECT node_id1,iface1,node_id2,iface2" .
 		       " from wires where logical=0 and ".
 		       "   (type='Trunk' or ".
 		       ($usecontrol ? "type='Control'" : "type='Node'") . ") ".
 		       ($regression ?
 			"order by node_id1,iface1,node_id2,iface2" : ""));
 
-while (($node1,$card1,$port1,$node2,$card2,$port2) = 
-       $result->fetchrow_array) {
+while (($node1,$iface1,$node2,$iface2) = $result->fetchrow_array) {
     if ((defined($nodes{$node1}) || defined($switches{$node1})) && 
 	(defined($nodes{$node2}) || defined($switches{$node2})) &&
 	! defined($component_name)) {
@@ -2165,10 +2151,10 @@ while (($node1,$card1,$port1,$node2,$card2,$port2) =
 	if ($node2obj->isswitch())
 	{
 	    $switchobj = $node2obj;
-	    $leaf_iface_type = get_iface_type($node1,$card1,$port1);
+	    $leaf_iface_type = get_iface_type($node1,$iface1);
 	} elsif ($node1obj->isswitch()) {
 	    $switchobj = $node1obj;
-	    $leaf_iface_type = get_iface_type($node2,$card2,$port2);
+	    $leaf_iface_type = get_iface_type($node2,$iface2);
 	} else {
 	    $switchobj = undef;
 	}
@@ -2183,8 +2169,8 @@ while (($node1,$card1,$port1,$node2,$card2,$port2) =
 	my $basetype;
 
 	if (!defined($switchobj)) {
-	    if( $interfacetypes{ "$node1:$card1:$port1" } eq "P2PLTE" ||
-		$interfacetypes{ "$node2:$card2:$port2" } eq "P2PLTE" ) {
+	    if( $interfacetypes{ "$node1:$iface1" } eq "P2PLTE" ||
+		$interfacetypes{ "$node2:$iface2" } eq "P2PLTE" ) {
 		$basetype = "P2PLTE";
 	    } else {
 		$basetype = "ethernet";
@@ -2195,10 +2181,8 @@ while (($node1,$card1,$port1,$node2,$card2,$port2) =
 	       !defined($basetype) || $basetype eq "") {
 	    fatal("No forwarding_protocols set for $switchobj (type)");
 	}
-	$iface1 = get_iface($node1,$card1,$port1);
-	$iface2 = get_iface($node2,$card2,$port2);
-	$iface1bw = get_ifacebw($node1,$card1,$port1,$basetype);
-	$iface2bw = get_ifacebw($node2,$card2,$port2,$basetype);
+	$iface1bw = get_ifacebw($node1,$iface1,$basetype);
+	$iface2bw = get_ifacebw($node2,$iface2,$basetype);
 
         my @types = ($basetype);
 
@@ -2210,11 +2194,11 @@ while (($node1,$card1,$port1,$node2,$card2,$port2) =
 	#
 	if (!$node1obj->isswitch()) {
 	    next
-		if (! exists($interfacecardports{"$node1:$iface1"}));
+		if (! exists($interfacemap{"$node1:$iface1"}));
 	}
 	if (!$node2obj->isswitch()) {
 	    next
-		if (! exists($interfacecardports{"$node2:$iface2"}));
+		if (! exists($interfacemap{"$node2:$iface2"}));
 	}
 
 	#
@@ -2285,9 +2269,8 @@ while (($node1,$card1,$port1,$node2,$card2,$port2) =
 		}
 	    }
 
-            if ($interfacetypes{"$node1:$card1:$port1"}) {
-                push @types, "$basetype-" .
-                    $interfacetypes{"$node1:$card1:$port1"};
+            if ($interfacetypes{"$node1:$iface1"}) {
+                push @types, "$basetype-" . $interfacetypes{"$node1:$iface1"};
             }
             push @types, "$basetype-$bw";
 
@@ -2348,8 +2331,7 @@ if ($TRACK_INTERSWITCH_BANDWIDTH) {
 	    my $nodeid = $node->node_id();
 	    
 	    my $switch = get_ifaceswitch($nodeid,$iface);
-	    my ($card, $port) = get_ifacecardport($nodeid,$iface);
-	    my $bw = get_ifacebw($nodeid,$card,$port,"ethernet");
+	    my $bw = get_ifacebw($nodeid,$iface,"ethernet");
 	    $switches{$switch} += $bw;
 	}
 
@@ -2408,7 +2390,7 @@ if (! defined($component_name)) {
   @keys = sort(@keys) if ($regression);
 
   foreach my $interface (@keys) {
-      my ($node,$card,$port) = split(":", $interface);
+      my ($node,$iface) = split(":", $interface);
       
       next
 	  if (!defined($nodes{$node}));;
@@ -2419,7 +2401,6 @@ if (! defined($component_name)) {
 	  if (!defined($interfaceprotocols{$type}));
       
       my @protos  = @{ $interfaceprotocols{$type} };
-      my $iface   = get_iface($node,$card,$port);
 
       #
       # Get the intersection of the protocols supported by this interface, and
@@ -2443,7 +2424,7 @@ if (! defined($component_name)) {
       #
       my $max_bw = 0;
       foreach my $proto (@intersection) {
-	  my $ifacebw = get_ifacebw($node,$card,$port,$proto);
+	  my $ifacebw = get_ifacebw($node,$iface,$proto);
 	  if ($ifacebw > $max_bw) {
 	      $max_bw = $ifacebw;
 	  }
@@ -2464,39 +2445,20 @@ print_footer();
 exit(0);
 
 # Print out links
-sub get_iface {
-    my ($node,$card,$port) = @_;
-    if (defined($interfacemap{"$node:$card:$port"})) {
-	if ($interfacemap{"$node:$card:$port"} eq "") {
-	    return "(null)";
-	} else {
-	    return $interfacemap{"$node:$card:$port"};
-	}
-    } else {
-	# shark hack
-	if ($node =~ /^sh/) {
-	    return "eth0";
-	} else {
-	    return "(null)";
-	}
-	# end shark hack 
-    }
-};
-
 # Find the bandwidth for an interface, when using the given protocol (which
 # most of the time is ethernet).
 sub get_ifacebw {
-    my ($node,$card,$port,$protocol) = @_;
-    if (defined($interfacetypes{"$node:$card:$port"})) {
-	my $bw = $interfacespeeds{$interfacetypes{"$node:$card:$port"}}{$protocol};
+    my ($node,$iface,$protocol) = @_;
+    if (defined($interfacetypes{"$node:$iface"})) {
+	my $bw = $interfacespeeds{$interfacetypes{"$node:$iface"}}{$protocol};
 	return $bw if defined( $bw );
     }
     return $default_switchport_speed;
 }
 
 sub get_iface_type {
-    my ($node,$card,$port) = @_;
-    return $interfacetypes{"$node:$card:$port"};
+    my ($node,$iface) = @_;
+    return $interfacetypes{"$node:$iface"};
 }
 
 sub get_iface_auxspeeds {
@@ -2514,15 +2476,6 @@ sub get_ifaceswitch {
 	return $interfaceswitches{"$node:$iface"};
     } else {
 	return undef;
-    }
-}
-
-sub get_ifacecardport {
-    my ($node,$iface) = @_;
-    if (defined($interfacecardports{"$node:$iface"})) {
-	return @{$interfacecardports{"$node:$iface"}};
-    } else {
-	return ();
     }
 }
 
