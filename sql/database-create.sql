@@ -4207,6 +4207,7 @@ CREATE TABLE `port_counters` (
   `node_id` char(32) NOT NULL default '',
   `card` tinyint(3) unsigned NOT NULL default '0',
   `port` smallint(5) unsigned NOT NULL default '0',
+  `iface` text NOT NULL,
   `ifInOctets` int(10) unsigned NOT NULL default '0',
   `ifInUcastPkts` int(10) unsigned NOT NULL default '0',
   `ifInNUcastPkts` int(10) unsigned NOT NULL default '0',

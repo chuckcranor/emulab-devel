@@ -46,6 +46,7 @@ my $ELABINELAB = @ELABINELAB@;
 use lib '@prefix@/lib';
 use libdb;
 use libtblog;
+use Interface;
 use Port;
 
 # Optional alternate version of libraries.
@@ -65,6 +66,7 @@ Usage: $0 [-h] <-p | <pid> <eid> > [vname ...] [vname:port ...]
 -z    Zero out counts for selected counters, after printing
 -q    Quiet: do not actually print counts - useful with -z
 -r    csv output, no headers, comma separated.
+-i    Output in node:iface format instead of node:card (obsolete).
 -l    no sorting.
 -c    Print absolute, rather than relative, counts
 -p    The machines given are physical, not virtual, node IDs.
@@ -93,7 +95,7 @@ END
 #
 my %opt = ();
 Getopt::Long::Configure("no_ignore_case");
-GetOptions(\%opt,'h','a','e','p','b','z','q','c','s','C','r','l','H');
+GetOptions(\%opt,'h','a','e','p','b','z','q','c','s','C','r','l','H','i');
 
 if ($opt{h}) {
     exit &usage;
@@ -220,7 +222,7 @@ if ($opt{s}) {
         die("Only root or TB admins can use -s.");
     }
 } elsif ($opt{p}) {
-    my @nodes = map { /^([^:]+)(:(\d+))?$/; $1; } @passedPorts;
+    my @nodes = map { /^([^:]+)(:(\w+))?$/; $1; } @passedPorts;
     if (!TBNodeAccessCheck($UID,TB_NODEACCESS_READINFO,@nodes)) {
 	die "You do not have permission to view one or more of @nodes\n";
     }
@@ -252,7 +254,7 @@ if ($opt{s}) {
         elsif ($port =~ /^[^:]+:\d+\.\d+$/) {
 	    push @ports, convertPortFromString($port);
         }
-        elsif ($port =~ /^[^:]+:\w+$/) {
+        elsif ($port =~ /^[^:]+:[\/\w]+$/) {
 	    push @ports, convertPortFromString($port);
 	}
 	else {
@@ -268,18 +270,24 @@ if ($opt{s}) {
 elsif ($opt{p}) {
     #
     # If they gave a node:port form, use just that port. Otherwise, try to find
-    # all the node's ports
+    # all the node's ports. Also allow node:iface.
     #
     foreach my $port (@passedPorts) {
-	$port =~ /^([^:]+)(:(\d+))?$/;
-	my ($hostname,$portnumber) = ($1,$3);
-	if (defined $portnumber) {
+	$port =~ /^([^:]+)(:(\w+))?$/;
+	my ($hostname,$portiface) = ($1,$3);
+	if (defined $portiface) {
 	    push @ports, convertPortFromString($port);
 	} else  {
-	    my $interfaces = DBQueryFatal("select card, port from interfaces " .
-		"where node_id = '$hostname'");
-	    while (my ($card, $iport) = $interfaces->fetchrow()) {
-		push @ports, convertPortFromString("$port:$card.$iport");
+	    my @interfaces;
+	    if (Interface->LookupAll($hostname, \@interfaces)) {
+		print STDERR "*** No interfaces for $hostname\n";
+		next;
+	    }
+	    foreach my $interface (@interfaces) {
+		my $port = Port->LookupByIface($interface->node_id(),
+					       $interface->iface());
+		push(@ports, $port)
+		    if (defined($port));
 	    }
 	}
     }
@@ -300,16 +308,16 @@ elsif ($opt{p}) {
 	# Handle a set of passed-in ports
 	#
 	foreach my $port (@passedPorts) {
-	    $port =~ /^([^:]+)(:(\d+))?$/;
-	    my ($hostname,$portnumber) = ($1,$3);
+	    $port =~ /^([^:]+)(:(\w+))?$/;
+	    my ($hostname,$portiface) = ($1,$3);
 	    my $nodeid;
 	    if (!VnameToNodeid($pid,$eid,$hostname,\$nodeid)) {
 		die "There is no node $hostname in $pid/$eid\n";
 	    }
 
-	    if (defined($portnumber)) {
+	    if (defined($portiface)) {
 		# They gave us a specific interface
-		push @ports, convertPortFromString("$nodeid:$portnumber");
+		push @ports, convertPortFromString("$nodeid:$portiface");
 	    } else {
 		# We need to find all experimental ports for this node
 		push @ports, grep(($nodeid eq $_->node_id()),@experimentPorts);
@@ -335,7 +343,7 @@ my %portMap = mapPortsToDevices(@ports);
 my %stats   = ();
 my @nports = ();
 
-DEVICE: foreach my $name (keys %portMap) {
+foreach my $name (keys %portMap) {
     my @ports = @{$portMap{$name}};
     my %oidwarned = ();
 
@@ -393,7 +401,8 @@ DEVICE: foreach my $name (keys %portMap) {
 
 	# 'default' case
 	warn "WARNING: Unknown switch type ($type) for $name, skipping some ports\n";
-        last DEVICE;
+	goto skip;
+        
     }
     my @results = $device->getFields(\@ports,\@oids);
 
@@ -409,12 +418,10 @@ DEVICE: foreach my $name (keys %portMap) {
 	if (!$switchport) {
 	    warn "WARNING: No switch port found for ".$port->toString()."\n";
 	} else {
-	    my ($switch_id,$switch_card,$switch_port) =
-		($switchport->node_id(), $switchport->card(),
-		 $switchport->port());
+	    my ($switch_id,$switch_iface) =
+		($switchport->node_id(), $switchport->iface());
 	    my $dbresult = DBQueryFatal("select * from port_counters where ".
-	    		"node_id='$switch_id' and card=$switch_card and ".
-			"port=$switch_port");
+	    		"node_id='$switch_id' and iface='$switch_iface'");
 
 	    #
 	    # Make sure returned values are integers.  If not, warn (just
@@ -481,10 +488,9 @@ DEVICE: foreach my $name (keys %portMap) {
 
 		if ($dbresult->num_rows()) {
 		    $query .= " where node_id='$switch_id' and " .
-			    "card=$switch_card and port=$switch_port";
+			    "iface='$switch_iface'";
 		} else {
-		    $query .= ", node_id='$switch_id', card=$switch_card, " .
-			    "port=$switch_port ";
+		    $query .= ", node_id='$switch_id', iface='$switch_iface' ";
 		}
 
 		DBQueryFatal($query);
@@ -496,19 +502,28 @@ DEVICE: foreach my $name (keys %portMap) {
 	    # Try to translate the port name to the node's vname
 	    #
 	    if ($port->node_id() && $port->card()) {
-	        my $portnum = $port->card();
 		my ($junk, $vname);
 		NodeidToExp($port->node_id(),\$junk,\$junk,\$vname);
-		$port = "$vname:$portnum";
+		if ($opt{i}) {
+		    my $portiface = $port->iface();
+		    $port = "$vname:$portiface";
+		}
+		else {
+		    my $portnum = $port->card();
+		    $port = "$vname:$portnum";
+		}
 	    }
 	}
 
 	#
 	# Save for printing.
 	#
-	$stats{(Port->isPort($port)?$port->toString():$port)} = $result;
+	$stats{(Port->isPort($port) ?
+		($opt{i} ? $port->toIfaceString() : $port->toString())
+		: $port)} = $result;
 	push @nports, $port;
     }
+ skip:
 }
 @ports = @nports;
 
@@ -520,7 +535,8 @@ if ($opt{q}) {
 }
 
 # Convert the port list back to strings. Easier.
-@ports = map { Port->isPort($_) ? $_->toString() : $_ } @ports;
+@ports = map { Port->isPort($_) ?
+    ($opt{i} ? $_->toIfaceString() : $_->toString()) : $_ } @ports;
 
 # Sorted?
 if (! $opt{l}) {
