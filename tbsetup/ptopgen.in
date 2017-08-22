@@ -79,13 +79,14 @@ sub usage()
 	  "       -l specifies the location of the type limit file\n" .
           "       -1 Print an rspec containing only the node component-name\n" .
 	  "       -z Randomize node output order\n" .
+	  "       -R Regression mode; force static ordering for easy diff\n" .
 	  "       -G Omit 10G node-switch links\n" .
 	  "       -Z Force old ptopgen\n" .
 	  "       -f This is generating an advertisement rather than an internal file\n");
         exit(-1);
 }
 
-my $optlist = "s:e:m:vp:rSan:c:uxg:h1:l:zZCbfG";
+my $optlist = "s:e:m:vp:rSan:c:uxg:h1:l:zZCbfGR";
 my $is_advertisement = 0;
 my $mfactor;
 my $virtstuff = 0;
@@ -94,6 +95,7 @@ my $simstuff  = 0;
 my $allnodes  = 0;
 my $mnetcores = 0;
 my $mnetedges = 0;
+my $regression= 0;
 my $prune     = 0;
 my $do_xml    = 0;
 my $genimode  = $NO_GENI;
@@ -278,6 +280,9 @@ if (defined($options{"r"})) {
 }
 if (defined($options{"S"})) {
     $simstuff = 1;
+}
+if (defined($options{"R"})) {
+    $regression = 1;
 }
 if (defined($options{"p"})) {
     $pid = $options{"p"};
@@ -1331,9 +1336,11 @@ while (my ($node_id1, $node_id2) = $result->fetchrow()) {
 }
 
 @nodenames = keys(%nodes);
-if ($randomize)
-{
+if ($randomize) {
     @nodenames = shuffle(@nodenames);
+}
+elsif ($regression) {
+    @nodenames = sort(@nodenames);
 }
 
 #
@@ -1754,7 +1761,9 @@ if ($useblockstore) {
 			   "on b.bsidx=t.bsidx ".
 			   "left join blockstores as b2 ".
 			   "on t.aggidx=b2.bsidx ".
-			   "where s.ready=1");
+			   "where s.ready=1 ".
+			   ($regression ?
+			    "order by b.node_id,b.bs_id,b.lease_idx" : ""));
     #
     # Pass 1: associate leases with pools
     #
@@ -1780,7 +1789,11 @@ if ($useblockstore) {
 	my $type = BlockstoreType->Lookup($typeName);
 	if (defined($type)) {
 	    my @features = ();
-	    foreach my $attr (values %{$type->GetAttributes()}) {
+	    my %attributes = %{ $type->GetAttributes() };
+	    my @keys = keys(%attributes);
+	    @keys = sort(@keys) if ($regression);
+	    foreach my $key (@keys) {
+		my $attr = $attributes{$key};
 		if (exists($attr->{'isfeature'}) && $attr->{'isfeature'}) {
 		    my $attrkey = $attr->{'key'};
 		    my $attrval = $attr->{'value'};
@@ -1811,7 +1824,7 @@ if ($useblockstore) {
 	    # that this pool supports clones of the indicated lease.
 	    #
 	    elsif (exists($bspools{"$nodeId/$bsId"})) {
-		foreach my $lidx (@{$bspools{"$nodeId/$bsId"}}) {
+		foreach my $lidx (sort(@{$bspools{"$nodeId/$bsId"}})) {
 		    push(@features, "bs-clone-$lidx:0.5");
 		}
 	    }
@@ -2003,7 +2016,7 @@ if ($widearea && ! defined($component_name)) {
 }
 
 if ($genimode ne $NO_GENI) {
-    foreach $key (keys %interfaceroles) {
+    foreach $key (sort(keys(%interfaceroles))) {
 	if (is_public_interface($key)) {
 	    if ($key =~ /^([^:]+):([^:]+)$/) {
 		my $node = $1;
@@ -2124,7 +2137,9 @@ if (defined($experiment)) {
 $result = DBQueryFatal("SELECT node_id1,card1,port1,node_id2,card2,port2" .
 		       " from wires where logical=0 and ".
 		       "   (type='Trunk' or ".
-		       ($usecontrol ? "type='Control'" : "type='Node'") . ")");
+		       ($usecontrol ? "type='Control'" : "type='Node'") . ") ".
+		       ($regression ?
+			"order by node_id1,iface1,node_id2,iface2" : ""));
 
 while (($node1,$card1,$port1,$node2,$card2,$port2) = 
        $result->fetchrow_array) {
@@ -2367,7 +2382,7 @@ if ($TRACK_INTERSWITCH_BANDWIDTH) {
 if (! defined($component_name)) {
   # TODO: Figure out how to actually add interconnect interfaces rather than
   #       just having them be (null).
-  foreach $interconnect (keys(%interconnects)) {
+  foreach $interconnect (sort(keys(%interconnects))) {
       ($src,$dst) = split(":",$interconnect);
       my $speed = $interconnects{$interconnect};
       # This is really dumb - BigInts like to print out with a leading '+',
@@ -2389,8 +2404,10 @@ my @wireless_protos = ("80211", "80211a", "80211b", "80211g", "flex900",
 my @fake_switch_types = map("*$_:*", @wireless_protos);
 if (! defined($component_name)) {
   $air_printed = 0;
+  my @keys = keys(%interfacetypes);
+  @keys = sort(@keys) if ($regression);
 
-  foreach my $interface (keys(%interfacetypes)) {
+  foreach my $interface (@keys) {
       my ($node,$card,$port) = split(":", $interface);
       
       next
@@ -2413,7 +2430,7 @@ if (! defined($component_name)) {
 	  $union{$proto}++ && $intersection{$proto}++;
       }
       
-      my @intersection = keys %intersection;
+      my @intersection = sort(keys(%intersection));
 
       #
       # Skip this interface if it speaks no wireless protocols
@@ -2863,7 +2880,11 @@ sub print_osids
 		print "name=\"" . $urn . "\" ";
 		print "os=\"" . $osid_os{$os} . "\" ";
 		if (exists($osid_url{$os})) {
-		    print "url=\"" . $osid_url{$os} . "\" ";
+		    my $url = $osid_url{$os};
+		    if ($regression) {
+			$url =~ s/\/dev\/[^\/]+//;
+		    }
+		    print "url=\"" . $url . "\" ";
 		}
 		print "version=\"" . $osid_version{$os} . "\" ";
 		print "description=\"" . $osid_description{$os} . "\" ";
