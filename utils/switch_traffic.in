@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2008-2014, 2016 University of Utah and the Flux Group.
+# Copyright (c) 2008-2017 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -226,12 +226,16 @@ foreach my $node (@interconnects) {
     foreach my $iface (@interfaces) {
 	next
 	    if ($iface->current_speed() == 0);
+
+	next
+	    if (!$iface->wiredup() || $iface->wire_type() eq "Unused");
 		
 	# To be consistent use a Port object since getTrunks() does too.
 	my $port = Port->LookupByIface($node->node_id, $iface->iface());
 	if (!defined($port)) {
 	    fatal("Could not get Port for $iface");
 	}
+	
 	$connects{$node->node_id()}->{$port->switch_node_id()} = $port;
     }
 }
@@ -274,8 +278,7 @@ sub Gather($)
 	    my @ports = @{ $trunks{$sw1}->{$sw2} };
 
 	    foreach my $port (@ports) {
-		$portstr .= " ${sw1}:" .
-		    $port->switch_card() . "." . $port->switch_port();
+		$portstr .= " ${sw1}:" . $port->switch_iface();
 	    }
 	}
     }
@@ -286,23 +289,23 @@ sub Gather($)
     foreach my $id (keys(%connects)) {
 	foreach my $switch (keys(%{ $connects{$id} })) {
 	    my $port = $connects{$id}->{$switch};
-	    my $str  = " ${switch}:" .
-		$port->switch_card() . "." . $port->switch_port();
+	    my $str  = " ${switch}:" . $port->switch_iface();
 	    $portstr .= $str;
 	}
     }
     if ($debug) {
 	print $portstr . "\n";
     }
-    open(PS, "$PORTSTATS -r -s -c $portstr 2>&1 |") or
+    open(PS, "$PORTSTATS -i -r -s -c $portstr 2>&1 |") or
 	fatal("Could not get portstats");
     while (<PS>) {
-	if ($_ !~ /^[-\w]+:\d/) {
+	if ($_ !~ /^[-\w]+:\w+/) {
 	    print $_
 		if ($debug);
 	    next;
 	}
 	chomp($_);
+	
 	my ($swport, @counts) = split(",", $_);
 	if (@counts != 6) {
 	    print STDERR "*** $swport: invalid portstats!?\n"; 
@@ -314,7 +317,7 @@ sub Gather($)
 	#
 	my ($switch,$port);
 	
-	if ($swport =~ /^(.*):(\d+\.\d+)$/) {
+	if ($swport =~ /^(.*):([\/\.\w]+)$/) {
 	    $switch = $1;
 	    $port   = $2;
 	}
@@ -348,8 +351,8 @@ sub Aggregate($$)
 	    my %sum = ();
 
 	    foreach my $swport (@ports) {
-		my (undef,$port) = split(":", $swport);
-		my $counts = $results->{$sw1}->{"$port"};
+		my $iface = $swport->switch_iface();
+		my $counts = $results->{$sw1}->{$iface};
 
 		foreach my $key (keys(%{$counts})) {
 		    if (!exists($sum{$key})) {
@@ -375,7 +378,7 @@ sub Aggregate($$)
 	    # These ports objects refer to the node side, not the switch side,
 	    # so we have to explicity get the switch side in index the array.
 	    #
-	    my $port = $swport->switch_card() . "." . $swport->switch_port();
+	    my $port = $swport->switch_iface();
 	    my $counts = $results->{$switch}->{"$port"};
 	    
 	    $aggref->{$switch}->{$id} = $counts;

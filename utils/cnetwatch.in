@@ -494,14 +494,14 @@ sub getnodeinfo($)
 	if ($debug && 0);
 
     $query_result =
-	DBQueryWarn("select r.pid,r.eid,node_id1,eventstate,card1,port1,node_id2".
+	DBQueryWarn("select r.pid,r.eid,node_id1,eventstate,iface1,node_id2".
 		    " from wires as w,nodes as n".
 		    " left join reserved as r on n.node_id=r.node_id".
 		    " where w.node_id1=n.node_id".
 		    "  $sclause".
 		    "  and w.type='Control'".
 		    "  and n.role='testnode' $nclause".
-		    " order by node_id2,card2,port2");
+		    " order by node_id2,iface1");
     if (! $query_result || $query_result->numrows == 0) {
 	print STDERR "Node(s) not found.\n";
 	exit(0);
@@ -515,24 +515,16 @@ sub getnodeinfo($)
     while (my %row = $query_result->fetchhash()) {
 	my $switch = $row{'node_id2'};
 	my $pc = $row{'node_id1'};
-	my $pceth = $row{'card1'};
-	my $pcport = $row{'port1'};
+	my $pciface = $row{'iface1'};
 	my $exp;
 	if (defined($row{'pid'})) {
 	    $exp = $row{'pid'} . "/" . $row{'eid'};
 	} else {
 	    $exp = "<NONE>";
 	}
-
+	# portstats now accepts node:iface, and spits out in that format (-i).
 	#
-	# XXX ugh, portstats only takes node:card and not node:card.port,
-	# so if the port is anything other than 1 (e.g., an allocable switch)
-	# we cannot look it up.
-	#
-	next
-	    if ($pcport != 1);
-
-	my $cnet = "$pc:$pceth";
+	my $cnet = "$pc:$pciface";
 
 	push(@{$switches{$switch}}, $cnet);
 	$newpcs{$cnet}{'exp'} = $exp;
@@ -585,7 +577,7 @@ sub gather($)
 
     foreach my $switch (keys %switches) {
 	my $slist = join(' ', @{$switches{$switch}});
-	if (!open(PS, "$portstats -H -r -l -c -p $slist 2>&1 |")) {
+	if (!open(PS, "$portstats -i -H -r -l -c -p $slist 2>&1 |")) {
 	    print STDERR "*** $switch: portstats failed, ignored\n";
 	    next;
 	}
@@ -593,7 +585,7 @@ sub gather($)
 	    chomp;
 	    # XXX ignore warnings from snmpit
 	    next if ($_ =~ /^WARNING:/);
-	    next if ($_ !~ /^[-\w]+:\d/);
+	    next if ($_ !~ /^[-\w]+:\w*/);
 	    my ($node, @counts) = split ',';
 	    if (@counts != 8) {
 		print STDERR "*** $node: invalid portstats!?\n"; 
@@ -601,13 +593,8 @@ sub gather($)
 	    }
 
 	    #
-	    # XXX portstats returns nodes in the format: pcXXX:N.N,
-	    # even though it won't accept that format on the command line!
+	    # XXX portstats returns nodes in the format: pcXXX:ethN
 	    #
-	    if ($node =~ /^(.*:\d+)\.\d$/) {
-		$node = $1;
-	    }
-
 	    if (!exists($pcs{$node})) {
 		print STDERR "*** $node: no stats returned!?\n"; 
 		next;

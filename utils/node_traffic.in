@@ -1,4 +1,4 @@
-#!/usr/bin/perl -wT
+#!/usr/bin/perl -w
 #
 # Copyright (c) 2008-2017 University of Utah and the Flux Group.
 # 
@@ -62,8 +62,7 @@ my $controlnet = 1;
 #
 # Configure variables
 #
-#my $TB = "@prefix@";
-my $TB = "/usr/testbed";
+my $TB = "@prefix@";
 
 #
 # Testbed Support libraries
@@ -171,23 +170,23 @@ print STDERR "Switches: ", join(" ", @switches), "\n"
 
 if ($doall == 2) {
     $query_result =
-	DBQueryWarn("select r.pid,r.eid,node_id1,eventstate,card1,port1,node_id2".
+	DBQueryWarn("select r.pid,r.eid,node_id1,eventstate,iface1,node_id2".
 		    " from wires as w,nodes as n".
 		    " left join reserved as r on n.node_id=r.node_id".
 		    " where w.node_id1=n.node_id".
 		    "  $sclause".
 		    "  and w.type='Control'".
 		    "  and n.role='testnode' $nclause".
-		    " order by node_id2,card2,port2");
+		    " order by node_id2,iface1");
 } else {
     $query_result =
-	DBQueryWarn("select r.pid,r.eid,node_id1,eventstate,card1,port1,node_id2".
+	DBQueryWarn("select r.pid,r.eid,node_id1,eventstate,iface1,node_id2".
 		    " from wires as w,nodes as n,reserved as r".
 		    " where w.node_id1=n.node_id and w.node_id1=r.node_id".
 		    "  $sclause".
 		    "  and w.type='Control'".
 		    "  and n.role='testnode' $nclause".
-		    " order by node_id2,card2,port2");
+		    " order by node_id2,iface1");
 }
 if (! $query_result || $query_result->numrows == 0) {
     print STDERR "Node(s) not found.\n";
@@ -200,8 +199,7 @@ print STDERR "Nodes: "
 while (my %row = $query_result->fetchhash()) {
     my $switch = $row{'node_id2'};
     my $pc = $row{'node_id1'};
-    my $pceth = $row{'card1'};
-    my $pcport = $row{'port1'};
+    my $pciface = $row{'iface1'};
     my $exp;
     if (defined($row{'pid'})) {
 	$exp = $row{'pid'} . "/" . $row{'eid'};
@@ -209,15 +207,7 @@ while (my %row = $query_result->fetchhash()) {
 	$exp = "<NONE>";
     }
 
-    #
-    # XXX ugh, portstats only takes node:card and not node:card.port,
-    # so if the port is anything other than 1 (e.g., an allocable switch)
-    # we cannot look it up.
-    #
-    next
-	if ($pcport != 1);
-
-    my $cnet = "$pc:$pceth";
+    my $cnet = "$pc:$pciface";
 
     push(@{$switches{$switch}}, $cnet);
     $pcs{$cnet}{'exp'} = $exp;
@@ -375,13 +365,13 @@ sub gather($$)
     foreach my $switch (keys %switches) {
 	my $slist = join(' ', @{$switches{$switch}});
 	my $arg = $byexpt ? "" : "-c";
-	open(PS, "$portstats $arg -r -l -p $slist 2>&1 |") or
+	open(PS, "$portstats -i $arg -r -l -p $slist 2>&1 |") or
 	    die "Could not get portstats\n";
 	while (<PS>) {
 	    chomp;
 	    # XXX ignore warnings from snmpit
 	    next if ($_ =~ /^WARNING:/);
-	    next if ($_ !~ /^[-\w]+:\d/);
+	    next if ($_ !~ /^[-\w]+:\w+/);
 	    my ($node, @counts) = split ',';
 	    if (@counts != 6) {
 		print STDERR "*** $node: invalid portstats!?\n"; 
@@ -389,13 +379,8 @@ sub gather($$)
 	    }
 
 	    #
-	    # XXX portstats returns nodes in the format: pcXXX:N.N,
-	    # even though it won't accept that format on the command line!
+	    # XXX portstats returns nodes in the format: pcXXX:ethN
 	    #
-	    if ($node =~ /^(.*:\d+)\.\d$/) {
-		$node = $1;
-	    }
-
 	    if (!exists($pcref->{$node})) {
 		print STDERR "*** $node: no stats returned!?\n"; 
 		next;
