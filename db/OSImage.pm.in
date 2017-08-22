@@ -153,6 +153,7 @@ sub Lookup($$;$$)
 sub image($)		{ return $_[0]->{'IMAGE'}; }
 sub osinfo($)		{ return $_[0]->{'OSINFO'}; }
 sub temphash($)		{ return $_[0]->{'HASH'}; }
+sub isImage($)          { return defined($_[0]->image()) ? 1 : 0; }
 sub isImageAlias($)	{ return 0; }
 
 # Break circular references to avoid exit errors.
@@ -1527,6 +1528,7 @@ sub gid($)	    { return $_[0]->{'ALIAS'}->{'gid'}; }
 sub gid_idx($)	    { return $_[0]->{'ALIAS'}->{'gid_idx'}; }
 sub uuid($)	    { return $_[0]->{'ALIAS'}->{'uuid'}; }
 sub imagelist($)    { return values(%{ $_[0]->{'IMAGES'} }); }
+sub isImage($)      { return 0; }
 sub isImageAlias($) { return 1; }
 sub IsGeneric($)    { return 0; }
 sub mfs($)          { return 0; }
