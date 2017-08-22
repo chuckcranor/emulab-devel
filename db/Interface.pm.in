@@ -811,6 +811,25 @@ sub Stringify($)
 }
 
 #
+# Dump for debugging.
+#
+sub Dump($)
+{
+    my ($self) = @_;
+
+    print "Node:      " . $self->node_id() . "\n";
+    print "Iface:     " . $self->iface() . "\n";
+    print "Card:      " . $self->card() . "\n";
+    print "Port:      " . $self->port() . "\n";
+    print "Type:      " . $self->type() . "\n";
+    print "Role:      " . $self->role() . "\n";
+    print "Trunk:     " . $self->trunk() . "\n";
+    print "IP:        " . $self->IP() . "\n";
+    print "MAC:       " . $self->mac() . "\n";
+    return 0;
+}
+
+#
 # Temporary cruft for geni widearea switches.
 #
 sub LookUpWideAreaSwitch($$)
@@ -1245,6 +1264,8 @@ sub port2($)           { return $_[0]->field('port2'); }
 sub iface1($)          { return $_[0]->field('iface1'); }
 sub iface2($)          { return $_[0]->field('iface2'); }
 sub type($)            { return $_[0]->field('type'); }
+sub cable($)           { return $_[0]->field('cable'); }
+sub len($)             { return $_[0]->field('len'); }
 sub logical($)         { return $_[0]->field('logical'); }
 sub trunkid($)         { return $_[0]->field('trunkid'); }
 sub IsActive($)        { return ($_[0]->type() eq "Unused" ? 0 : 1); }
@@ -1426,6 +1447,29 @@ sub Stringify($)
     my $type    = ($self->logical() ? "LogicalWire" : "Wire");
 
     return "[$type: $node1:$card1:$port1/$node2:$card2:$port2]";
+}
+
+#
+# Dump for debugging.
+#
+sub Dump($)
+{
+    my ($self) = @_;
+
+    print "Node1:      " . $self->node_id1() . "\n";
+    print "Iface1:     " . $self->iface1() . "\n";
+    print "Card1:      " . $self->card1() . "\n";
+    print "Port1:      " . $self->port1() . "\n";
+    print "Node2:      " . $self->node_id2() . "\n";
+    print "Iface2:     " . $self->iface2() . "\n";
+    print "Card2:      " . $self->card2() . "\n";
+    print "Port2:      " . $self->port2() . "\n";
+    print "Type:       " . $self->type() . "\n";
+    if ($self->cable()) {
+	print "Cable:      " . $self->cable() . "\n";
+	print "Length:     " . $self->len() . "\n";
+    }
+    return 0;
 }
 
 sub Update($$)
