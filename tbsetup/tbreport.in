@@ -1,7 +1,7 @@
 #!/usr/bin/perl -w
 
 #
-# Copyright (c) 2000-2012 University of Utah and the Flux Group.
+# Copyright (c) 2000-2017 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -430,7 +430,7 @@ if ($showlinks) {
 			 "left join interfaces as i on r.node_id=i.node_id ".
 			 "     and i.ip=v.ip ".
 			 "left join wires as w on i.node_id=w.node_id1 ".
-			 "     and i.card=w.card1 and i.port=w.port1 ".
+			 "     and i.iface=w.iface1 ".
 			 "where v.pid='$pid' and v.eid='$eid' and ".
 			 "      i.ip is not NULL and i.ip!='' ".
 			 "order by v.vname,v.member");
@@ -811,7 +811,7 @@ if ($showdelays && $state eq EXPTSTATE_ACTIVE) {
 		     "left join interfaces as i on i.node_id=d.node_id and ".
 		     "     (i.iface=d.iface0 or i.iface=d.iface1) ".
  		     "left join wires as w on w.node_id1=i.node_id ".
-		     "     and i.card=w.card1 and i.port=w.port1 ".
+		     "     and i.iface=w.iface1 ".
 		     "where d.pid='$pid' and d.eid='$eid' ".
 		     "order by d.vname,d.vnode0");
 
