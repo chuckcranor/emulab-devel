@@ -825,7 +825,7 @@ sub Dump($)
     print "Type:      " . $self->type() . "\n";
     print "Role:      " . $self->role() . "\n";
     print "Trunk:     " . $self->trunk() . "\n";
-    print "IP:        " . $self->IP() . "\n";
+    print "IP:        " . ($self->IP() || "") . "\n";
     print "MAC:       " . $self->mac() . "\n";
     return 0;
 }
