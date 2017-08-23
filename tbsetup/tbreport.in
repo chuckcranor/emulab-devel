@@ -751,8 +751,8 @@ if ($showlinks) {
 
 	    foreach my $link (sort keys %links) {
 		my ($node1, $node2) = @{$links{$link}};
-		my ($virt1,$pname1,$card1) = @$node1;
-		my ($virt2,$pname2,$card2) = @$node2;
+		my ($virt1,$pname1) = @$node1;
+		my ($virt2,$pname2) = @$node2;
 
 		my ($wname1, $wname2);
 		if (!TBWideareaNodeID($pname1,\$wname1)) {
