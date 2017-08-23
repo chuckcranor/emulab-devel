@@ -422,6 +422,8 @@ sub report($)
 
     my @list = ();
     foreach my $node (keys %pcs) {
+	next if (!exists($ref->{$node}{'counts'}));
+
 	my @counts = @{$ref->{$node}{'counts'}};
 
 	my $oct = 0;
@@ -501,7 +503,7 @@ sub getnodeinfo($)
 		    "  $sclause".
 		    "  and w.type='Control'".
 		    "  and n.role='testnode' $nclause".
-		    " order by node_id2,iface1");
+		    " order by node_id1");
     if (! $query_result || $query_result->numrows == 0) {
 	print STDERR "Node(s) not found.\n";
 	exit(0);
@@ -585,7 +587,7 @@ sub gather($)
 	    chomp;
 	    # XXX ignore warnings from snmpit
 	    next if ($_ =~ /^WARNING:/);
-	    next if ($_ !~ /^[-\w]+:\w*/);
+	    next if ($_ !~ /^[-\w]+:[^,]+,/);
 	    my ($node, @counts) = split ',';
 	    if (@counts != 8) {
 		print STDERR "*** $node: invalid portstats!?\n"; 
