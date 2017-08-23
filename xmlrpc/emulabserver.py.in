@@ -4987,11 +4987,11 @@ class elabinelab:
                              "left join interfaces as i on "
                              "   i.node_id=r.node_id "
                              "left join wires as s on s.node_id1=i.node_id "
-                             "   and s.card1=i.card "
+                             "   and s.iface1=i.iface "
                              "where r.pid=%s and r.eid=%s "
                              "   and r.inner_elab_role='node' "
 			     "   and s.node_id2!='' "
-                             "order by r.node_id,iface",
+                             "order by r.node_id,i.iface",
                              (self.pid,self.eid,))
         
         result = {}
@@ -5066,66 +5066,12 @@ class elabinelab:
         if len(dbres) == 0:
             return EmulabResponse(RESPONSE_ERROR,
                                   output="Cannot map MAC to nodeid")
+        #
+        # This is all the inner boss cares about now.
+        # 
         nodeid = dbres[0][0]
-        
-        #
-        # Okay, lets grab what we need. This code is going to return the
-        # equiv of what the switchmac script does, but with a few minor
-        # changes.
-        #
-        dbres = DBQueryFatal("select r.node_id,i.mac,i.iface,i.role,i.IP, "
-                             "  i.card,i.interface_type, "
-                             "  s.node_id2,s.card2,s.port2, "
-                             "  n.type " 
-                             "from reserved as r "
-                             "left join nodes as n on n.node_id=r.node_id "
-                             "left join interfaces as i on "
-                             "   i.node_id=r.node_id "
-                             "left join wires as s on s.node_id1=i.node_id "
-                             "   and s.card1=i.card "
-                             "where r.node_id=%s "
-			     "   and s.node_id2!='' "
-                             "order by r.node_id,iface",
-                             (nodeid,))
-        
         result = {}
         result["nodeid"] = nodeid
-        result["type"]   = ""
-        interfaces       = {}
-        
-        for res in dbres:
-            tmp = {}
-
-            #
-            # The current control network becomes the outer control network.
-            # The experimental network with an IP assigned becomes the
-            # inner control network.
-            #
-            role  = res[3]
-            IP    = res[4]
-            ntype = res[10]
-            
-            if role == "ctrl":
-                role = "outer_ctrl"
-                pass
-            elif role == "expt" and IP != "":
-                role = "ctrl"
-                pass
-            result["type"] = ntype
-            
-            tmp["mac"]         = res[1]
-            tmp["iface"]       = res[2]
-            tmp["role"]        = role
-            tmp["IP"]          = IP
-            tmp["card"]        = res[5]
-            tmp["type"]        = res[6]
-            tmp["switch_id"]   = res[7]
-            tmp["switch_card"] = res[8]
-            tmp["switch_port"] = res[9]
-            interfaces[res[1]] = tmp
-            pass
-        
-        result["interfaces"] = interfaces
         
         return EmulabResponse(RESPONSE_SUCCESS, result, output=str(result))
     pass
