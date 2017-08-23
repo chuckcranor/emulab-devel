@@ -1317,7 +1317,6 @@ outfiles="$outfiles Makeconf GNUmakefile \
 	tbsetup/wanlinkinfo tbsetup/wanassign \
 	tbsetup/swapexp	tbsetup/endexp tbsetup/elabinelab \
 	tbsetup/eventsys.proxy \
-	tbsetup/snmpit.proxy \
 	tbsetup/ns2ir/GNUmakefile \
 	tbsetup/ns2ir/parse.tcl tbsetup/ns2ir/tb_compat.tcl \
 	tbsetup/ns2ir/parse-ns tbsetup/ns2ir/parse.proxy \
