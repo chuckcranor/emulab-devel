@@ -4850,58 +4850,6 @@ class elabinelab:
         
         return node_instance.console(version, argdict);
     
-    def vlansv2(self, version, argdict):
-        if version != self.VERSION:
-            return EmulabResponse(RESPONSE_BADVERSION,
-                                  output="Client version mismatch!")
-
-        try:
-            checknologins()
-            pass
-        except NoLoginsError, e:
-            return EmulabResponse(RESPONSE_REFUSED, output=str(e))
-
-        argerror = CheckRequiredArgs(argdict, ("xmldoc",))
-        if (argerror):
-            return argerror
-
-        verifyerror = self.verifystuff();
-        if (verifyerror):
-            return verifyerror
-
-        #
-        # We get an xmldoc as the argument, which we give to the proxy
-        # to decode on its own. Easier then trying to decode a bunch
-        # of stuff to pass on the commandline.
-        #
-        (xmlfp, xmlfilename) = writensfile(argdict["xmldoc"]);
-        if not xmlfilename:
-            return EmulabResponse(RESPONSE_SERVERERROR, output="Server Error")
-
-        #
-        # Create a temporary file for the output.
-        #
-        (outfp, outfilename) = writensfile("");
-        if not outfilename:
-            return EmulabResponse(RESPONSE_SERVERERROR, output="Server Error")
-
-        argstr  = "-o " + outfilename + " ";
-        argstr += "-p " + self.pid + " -e " + self.eid + " " + xmlfilename;
-
-        (exitval,output) = runcommand(TBDIR + "/sbin/snmpit.proxyv2 " + argstr)
-        if exitval:
-            return EmulabResponse(RESPONSE_ERROR, exitval >> 8, output=output)
-
-        #
-        # Results are in the outfile.
-        #
-        stuff = ""
-        for l in outfp:
-            stuff += l
-            pass
-        
-        return EmulabResponse(RESPONSE_SUCCESS, value=stuff, output=output)
-
     def vlansv3(self, version, argdict):
         if version != self.VERSION:
             return EmulabResponse(RESPONSE_BADVERSION,
