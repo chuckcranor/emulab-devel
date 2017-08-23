@@ -47,7 +47,7 @@ SBIN_SCRIPTS	= vlandiff vlansync withadminprivs export_tables cvsupd.pl \
 		  dumpdescriptor subboss_tftpboot_sync testbed-control \
 		  archive-expinfo grantfeature emulabfeature addblob readblob \
 		  prereserve grantimage getimages localize_mfs \
-		  management_iface sharevlan check-shared-bw \
+		  addmanagementiface sharevlan check-shared-bw \
 		  addspecialdevice addspecialiface addvpubaddr ctrladdr \
 		  imagehash clone_image imageinfo imagevalidate image_import \
 		  image_import-new imagetodir imagecompress \
