@@ -35,9 +35,11 @@ sub usage()
     print STDERR "Usage: addinterface [-b speed | -t ifacetype] [-m mac] ".
 	"[-r role] portinfo node_id [iface_id]\n";
     print STDERR "Usage: addinterface -r <node_id> <iface_id>\n";
+    print STDERR "Usage: addinterface -i <node_id> <iface_id>\n";
     print STDERR "Options:\n";
     print STDERR " -v        - Turn on debugging\n";
     print STDERR " -n        - Impotent mode\n";
+    print STDERR " -i        - Display management interface from DB.\n";
     print STDERR " -r        - Delete interface\n";
     print STDERR " -f        - (with -r) force deletion, even if iface used\n";
     print STDERR " -e role   - Optional interface role, default to 'other'\n";
@@ -50,10 +52,11 @@ sub usage()
 	
     exit(-1);
 }
-my $optlist   = "b:t:nvfm:re:";
+my $optlist   = "b:t:nvfm:re:i";
 my $verbose   = 0;
 my $impotent  = 0;
 my $remove    = 0;
+my $info      = 0;
 my $force     = 0;
 my $speed;
 my $type;
@@ -64,6 +67,7 @@ my ($card,$port);
 # Protos
 sub fatal($);
 sub RemoveInterface($$);
+sub ShowInterface($$);
 
 #
 # Configure variables
@@ -113,6 +117,11 @@ if (defined($options{'r'})) {
     usage()
 	if (@ARGV != 2);
 }
+if (defined($options{'i'})) {
+    $info = 1;
+    usage()
+	if (@ARGV != 2);
+}
 if (defined($options{'f'})) {
     $force = 1;
 }
@@ -157,6 +166,9 @@ if (!$this_user->IsAdmin()) {
 }
 if ($remove) {
     exit(RemoveInterface($ARGV[0], $ARGV[1]));
+}
+elsif ($info) {
+    exit(ShowInterface($ARGV[0], $ARGV[1]));
 }
 
 usage()
@@ -280,6 +292,35 @@ sub RemoveInterface($$)
 	# Flag indicates it is okay to delete real interface. Safety measure.
 	$interface->Delete(1) == 0
 	    or fatal("Could not delete $interface");
+    }
+    return 0;
+}
+
+#
+# Show interface.
+#
+sub ShowInterface($$)
+{
+    my ($nodeid, $iface) = @_;
+
+    my $interface = Interface->LookupByIface($nodeid, $iface);
+    fatal("No such interface")
+	if (!defined($interface));
+    print "Iface1:\n";
+    $interface->Dump();
+    print "\n";
+
+    if ($interface->wiredup()) {
+	my $wire = $interface->wire();
+	my $switch_interface = Interface->LookupByIface($wire->node_id2(),
+							$wire->iface2());
+	if (defined($switch_interface)) {
+	    print "Iface2:\n";
+	    $switch_interface->Dump();
+	    print "\n";
+	}
+	print "Wire:\n";
+	$wire->Dump();
     }
     return 0;
 }
