@@ -2072,13 +2072,15 @@ COMMAND_PROTOTYPE(doifconfig)
 	/*
 	 * Find all the interfaces.
 	 */
-	res = mydb_query("select i.card,i.IP,i.MAC,i.current_speed,"
+	res = mydb_query("select w.card1,i.IP,i.MAC,i.current_speed,"
 			 "       i.duplex,i.IPaliases,i.iface,i.role,i.mask,"
 			 "       i.rtabid,i.interface_type,vl.vname "
 			 "  from interfaces as i "
 			 "left join virt_lans as vl on "
 			 "  vl.pid='%s' and vl.eid='%s' and "
 			 "  vl.vnode='%s' and vl.ip=i.IP "
+			 "left join wires as w on "
+			 "  w.node_id1=i.node_id and w.iface1=i.iface "
 			 "where i.node_id='%s' and %s",
 			 12, reqp->pid, reqp->eid, reqp->nickname,
 			 reqp->issubnode ? reqp->nodeid : reqp->pnodeid,
@@ -8860,7 +8862,7 @@ COMMAND_PROTOTYPE(doixpconfig)
 			 "left join interfaces as i1 on i1.node_id=n.node_id "
 			 "     and i1.role='ctrl' "
 			 "left join interfaces as i2 on i2.node_id='%s' "
-			 "     and i2.card=i1.card "
+			 "     and i2.iface=i1.iface "
 			 "where n.node_id='%s'",
 			 5, reqp->pnodeid, reqp->nodeid);
 
@@ -12644,11 +12646,11 @@ COMMAND_PROTOTYPE(dohwinfo)
 	 *  - Infiniband (guid != NULL) interfaces. We need support on
 	 *    the client side before we start sending those over.
 	 */
-	res = mydb_query("select mac from interfaces where "
+	res = mydb_query("select mac,iface from interfaces where "
 			 " mac not like '000000%%' and "
 			 " role!='mngmnt' and guid is NULL and "
-			 " node_id='%s' order by card",
-			 1, reqp->nodeid);
+			 " node_id='%s' order by iface",
+			 2, reqp->nodeid);
 	if (!res) {
 		error("dohwinfo: %s: DB Error getting NET attributes!\n",
 		      reqp->nodeid);
