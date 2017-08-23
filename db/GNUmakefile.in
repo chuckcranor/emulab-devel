@@ -32,13 +32,13 @@ SUBBOSS_SBIN_SCRIPTS	= subboss_dhcpd_makeconf
 BIN_SCRIPTS	= nalloc nfree nodeip readycount
 SBIN_SCRIPTS	= avail inuse showgraph if2port backup webcontrol node_status \
                   genelists genelists.proxy dhcpd_makeconf nodelog unixgroups \
-		  dbcheck interswitch dbboot grabron stategraph newwanode \
+		  dbcheck interswitch dbboot grabron stategraph \
 		  idletimes idlemail setsitevar audit changeuid changepid \
 		  elabinelab_bossinit update_permissions mysqld_watchdog \
 		  dumperrorlog changeleader checkstats changecreator \
 		  dbupdate geni_control subboss_sync showvlans updatewires
 
-WEB_SBIN_SCRIPTS= webnodelog webnewwanode webidlemail webchangeuid \
+WEB_SBIN_SCRIPTS= webnodelog webidlemail webchangeuid \
 		  webchangeleader
 WEB_BIN_SCRIPTS = webnfree
 LIBEXEC_SCRIPTS = $(WEB_BIN_SCRIPTS) $(WEB_SBIN_SCRIPTS) xmlconvert
