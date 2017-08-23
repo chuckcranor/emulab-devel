@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2014-2016 University of Utah and the Flux Group.
+# Copyright (c) 2014-2017 University of Utah and the Flux Group.
 # 
 # {{{GENIPUBLIC-LICENSE
 # 
@@ -497,10 +497,8 @@ while (1) {
 			$pquery_result = emdbi::DBQueryWarnN(
 			    $tbdb, "SELECT external_interface FROM " .
 			    "wires AS w, interfaces AS i WHERE " .
-			    "( ( w.node_id1='$nodeid' AND w.card1=i.card " .
-			    "AND w.port1=i.port ) OR " .
-			    "( w.node_id2='$nodeid' AND w.card2=i.card " .
-			    "AND w.port2=i.port ) ) AND " .
+			    "( ( w.node_id1='$nodeid' AND w.iface1=i.iface) " .
+			    "  ( w.node_id2='$nodeid' AND w.iface2=i.iface)) " .
 			    "i.node_id='$nodeid' AND i.iface='$iface'" );
 
 			if( $pquery_result && $pquery_result->numrows ) {
