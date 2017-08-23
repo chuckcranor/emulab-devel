@@ -750,11 +750,11 @@ sub filterPlannedVlans(@) {
 sub setPortEnabled($$) { 
     my ($port, $enabled) = @_;
 
-    my ($node, $card) = ($port->node_id(), $port->card());
+    my ($node, $iface) = ($port->node_id(), $port->iface());
     $enabled = ($enabled ? 1 : 0);
 
     DBQueryFatal("update interface_state set enabled=$enabled ".
-		 "where node_id='$node' and card='$card'");
+		 "where node_id='$node' and iface='$iface'");
     
     return 0;
 }
@@ -763,22 +763,22 @@ sub setPortEnabled($$) {
 sub setPortTagged($$) { 
     my ($port, $tagged) = @_;
 
-    my ($node, $card) = ($port->node_id(), $port->card());
+    my ($node, $iface) = ($port->node_id(), $port->iface());
     $tagged = ($tagged ? 1 : 0);
 
     DBQueryFatal("update interface_state set tagged=$tagged ".
-		 "where node_id='$node' and card='$card'");
+		 "where node_id='$node' and iface='$iface'");
 }
 
 # Ditto for trunked.
 sub IsPortTagged($) { 
     my ($port) = @_;
 
-    my ($node, $card) = ($port->node_id(), $port->card());
+    my ($node, $iface) = ($port->node_id(), $port->iface());
 
     my $query_result =
 	DBQueryFatal("select tagged from interface_state ".
-		     "where node_id='$node' and card='$card' and tagged!=0");
+		     "where node_id='$node' and iface='$iface' and tagged!=0");
     
     return $query_result->numrows();
 }
@@ -938,9 +938,8 @@ sub getInterfaceSettings ($) {
 	return ();
     }
     
-    my $node = $interface->node_id();
-    my $card = $interface->card();
-    my $port = $interface->port();
+    my $node  = $interface->node_id();
+    my $iface = $interface->iface();
 
     my $result =
 	DBQueryFatal("SELECT i.current_speed,i.duplex,".
@@ -949,7 +948,7 @@ sub getInterfaceSettings ($) {
 		     "left join interface_capabilities as ic on ".
 		     "     ic.type=i.interface_type and ".
 		     "     capkey='noportcontrol' ".
-		     "WHERE i.node_id='$node' and i.card=$card ".
+		     "WHERE i.node_id='$node' and i.iface='$iface' ".
 		     "and i.port=$port");
 
     # Sanity check - make sure the interface exists
