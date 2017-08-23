@@ -2072,15 +2072,13 @@ COMMAND_PROTOTYPE(doifconfig)
 	/*
 	 * Find all the interfaces.
 	 */
-	res = mydb_query("select w.card1,i.IP,i.MAC,i.current_speed,"
+	res = mydb_query("select 0,i.IP,i.MAC,i.current_speed,"
 			 "       i.duplex,i.IPaliases,i.iface,i.role,i.mask,"
 			 "       i.rtabid,i.interface_type,vl.vname "
 			 "  from interfaces as i "
 			 "left join virt_lans as vl on "
 			 "  vl.pid='%s' and vl.eid='%s' and "
 			 "  vl.vnode='%s' and vl.ip=i.IP "
-			 "left join wires as w on "
-			 "  w.node_id1=i.node_id and w.iface1=i.iface "
 			 "where i.node_id='%s' and %s",
 			 12, reqp->pid, reqp->eid, reqp->nickname,
 			 reqp->issubnode ? reqp->nodeid : reqp->pnodeid,
@@ -2101,7 +2099,6 @@ COMMAND_PROTOTYPE(doifconfig)
 	while (nrows) {
 		row = mysql_fetch_row(res);
 		if (row[1] && row[1][0]) {
-			int  card    = atoi(row[0]);
 			char *iface  = row[6];
 			char *role   = row[7];
 			char *type   = row[10];
@@ -2136,10 +2133,7 @@ COMMAND_PROTOTYPE(doifconfig)
 			 * We now use the MAC to determine the interface, but
 			 * older images still want that tag at the front.
 			 */
-			if (vers < 10)
-				bufp += OUTPUT(bufp, ebufp - bufp,
-					       "INTERFACE=%d ", card);
-			else if (vers <= 15)
+			if (vers <= 15)
 				bufp += OUTPUT(bufp, ebufp - bufp,
 					       "IFACETYPE=eth ");
 			else
