@@ -948,8 +948,7 @@ sub getInterfaceSettings ($) {
 		     "left join interface_capabilities as ic on ".
 		     "     ic.type=i.interface_type and ".
 		     "     capkey='noportcontrol' ".
-		     "WHERE i.node_id='$node' and i.iface='$iface' ".
-		     "and i.port=$port");
+		     "WHERE i.node_id='$node' and i.iface='$iface' ");
 
     # Sanity check - make sure the interface exists
     if ($result->numrows() != 1) {
