@@ -507,7 +507,7 @@ sub LookupByIface($$;$)
 sub LookupByTriple($$;$$)
 {
     my ($class, $nodeid, $card, $port) = @_;
-
+    my $interface;
     my $strtriple;
 
     if (!defined($card)) {
@@ -553,7 +553,15 @@ sub LookupByTriple($$;$$)
     }
     $inst->{"WIRES_ROW"} = $wire;
 
-    my $interface = Interface->Lookup($nodeid, $card, $port);
+    #
+    # Lookup the interface for the correct side of the wire.
+    #
+    if ($wire->node_id2() eq $nodeid) {
+	$interface = Interface->LookupByIface($nodeid, $wire->iface2());
+    }
+    else {
+	$interface = Interface->LookupByIface($nodeid, $wire->iface1());
+    }
 
     # Note: The code will almost always fall into this conditional
     # block for switch ports because we typically do not have entries
