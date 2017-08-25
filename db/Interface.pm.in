@@ -438,28 +438,11 @@ sub Create($$$)
     my $uuid       = $argref->{'uuid'};
     my $max_speed  = $argref->{'max_speed'};
     my $duplex     = $argref->{'duplex'};
-    my $switch_id  = $argref->{'switch_id'};
-    my $switch_card= $argref->{'switch_card'};
-    my $switch_port= $argref->{'switch_port'};
-    my $wire_type  = $argref->{'wire_type'};
-    my $cable      = $argref->{'cable'};
-    my $length     = $argref->{'length'};
     my $iface      = $argref->{'iface'};
     my $logical    = $argref->{'logical'};
     my $trunk      = $argref->{'trunk'};
     my $auto       = $argref->{'autocreated'};
 
-    if (!defined($wire_type)) {
-	if ($ifrole eq TBDB_IFACEROLE_MANAGEMENT()) {
-	    $wire_type = "Management";
-	}
-	elsif ($ifrole eq TBDB_IFACEROLE_EXPERIMENT()) {
-	    $wire_type = "Node";
-	}
-	elsif ($ifrole eq TBDB_IFACEROLE_CONTROL()) {
-	    $wire_type = "Control";
-	}
-    }
     $iface = "eth$card"    
 	if (!defined($iface));
     $port = 1
@@ -699,6 +682,14 @@ sub LookupByIface($$$)
     # If no interfaces entry, this is bad.
     #
     if (!$query_result->numrows) {
+	#
+	# See if there is a wire and it is a Trunk link; we can ignore those
+	# for now since it was not possible to autocreate the entries.
+	#
+	my $wire = Interface::Wire->LookupAnyByIface($nodeid, $iface);
+	if (defined($wire) && $wire->type() eq "Trunk") {
+	    return undef;
+	}
 	cluck("*** No interface entry for Interface->Lookup($nodeid,$iface)");
 	return undef;
     }
