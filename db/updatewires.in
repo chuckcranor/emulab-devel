@@ -101,7 +101,8 @@ while (my ($node_id,$card,$port) = $query_result->fetchrow_array()) {
     $ifaces{"$node_id:$card:$port"} = $interface;
 
     my $node = Node->Lookup($node_id);
-    if (!exists($ifaces{"$node_id:$card:$port"}) && $node->role() eq "testnode") {
+    if (!exists($wires{"$node_id:$card:$port"}) &&
+	$node->role() eq "testnode") {
 	print STDERR "No wires row for $interface\n";
     }
 }
@@ -149,7 +150,7 @@ foreach my $interface (values(%ifaces)) {
     #
     if (defined($interface->state())) {
 	if ($interface->state()->{'iface'} eq "") {
-	    print STDERR "No iface set for $interface interface_state\n";
+	    print STDERR "No iface set for $interface in interface_state\n";
 	    if ($impotent) {
 		print STDERR "--> Would set it to $iface\n";
 	    }
@@ -165,6 +166,22 @@ foreach my $interface (values(%ifaces)) {
 	elsif ($interface->state()->{'iface'} ne $interface->iface()) {
 	    fatal("interface_state iface mismatch for ".
 		  "$interface (" . $interface->state()->{'iface'} . ")");
+	}
+    }
+    else {
+	#
+	# Must be an interface_state for every interface. 
+	#
+	if ($impotent) {
+	    print STDERR "Would create missing interface_state for ".
+		"$nodeid:$iface\n";
+	}
+	else {
+	    print STDERR "Creating missing interface_state for ".
+		"$nodeid:$iface\n";
+	    DBQueryFatal("insert into interface_state set ".
+			 "  node_id='$nodeid',card='$card',".
+			 "  port='$port',iface='$iface'");
 	}
     }
     my $ifacename = $interface->node_id() . ":" . $interface->iface();
