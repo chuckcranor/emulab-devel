@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2000-2016 University of Utah and the Flux Group.
+# Copyright (c) 2000-2017 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -510,6 +510,7 @@ sub os_modpasswd($$)
 	return -1;
     }
     if ($login eq "root" &&
+	!system("grep -q toor /etc/passwd") &&
 	system("$CHPASS '$pswd' toor") != 0) {
 	warn "*** WARNING: $CHPASS $login error.\n";
 	return -1;
