@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2011 University of Utah and the Flux Group.
+# Copyright (c) 2011-2017 University of Utah and the Flux Group.
 # 
 # {{{GENIPUBLIC-LICENSE
 # 
@@ -27,7 +27,7 @@
 # 
 # }}}
 #
-#use English;
+use English;
 use Getopt::Std;
 use XML::LibXML;
 use XML::LibXML::XPathContext;
@@ -82,7 +82,10 @@ sub addSchema($$)
     if (! exists($ns2file{$ns})) {
 	my $schema;
 	eval {
+	    local $SIG{ALRM} = sub { die("Timed out\n"); };
+	    alarm 5;
 	    $schema = XML::LibXML::Schema->new(location => $file);
+	    alarm 0;
 	};
 	if ($@) {
 	    die("Failed to load schema for namespace $ns from location $file\n: $@");
