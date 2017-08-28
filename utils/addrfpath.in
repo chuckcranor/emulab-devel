@@ -139,7 +139,6 @@ fatal( "Node already has an interface named $iface_id2" )
 # Add the interfaces.
 #
 my $ifaceargs = {
-    "card"        => $card1,
     "iface"       => $iface_id1,
     "role"        => TBDB_IFACEROLE_EXPERIMENT(),
     "type"        => "P2PLTE",
@@ -155,7 +154,6 @@ if (!$impotent) {
 }
 
 $ifaceargs = {
-    "card"        => $card2,
     "iface"       => $iface_id2,
     "role"        => TBDB_IFACEROLE_EXPERIMENT(),
     "type"        => "P2PLTE",
@@ -171,7 +169,11 @@ if (!$impotent) {
 }
 
 my $wireargs = {
-    "external_wire"=> $path,
+    "card1"         => $card1,
+    "port1"         => 1,
+    "card2"         => $card2,
+    "port2"         => 1,
+    "external_wire" => $path,
 };
 if (!$impotent) {
     Interface::Wire->Create($interface1, $interface2, 'Node', $wireargs)

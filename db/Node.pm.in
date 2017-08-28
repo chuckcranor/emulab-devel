@@ -2785,8 +2785,6 @@ sub CreateVnodes($$$)
 	if ($isjailed && !$isremote) {
 	    my $ifaceargs = {
 		"node_id"   => $vnodeid,
-		"card"      => 0,
-		"port"      => 1,
 		"iface"     => "eth0",
 		"role"      => TBDB_IFACEROLE_CONTROL(),
 		"MAC"       => "genfake",

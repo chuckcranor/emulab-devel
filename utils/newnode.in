@@ -519,8 +519,6 @@ NODE: foreach my $node_id (@node_ids) {
 	}
 	my $ifaceargs = {
 	    "node_id"     => $node_id,
-	    "card"        => $card,
-	    "port"	  => $port,
 	    "mac"         => $MAC,
 	    "IP"          => $iface_IP,
 	    "type"        => $iface_type,
@@ -555,8 +553,6 @@ NODE: foreach my $node_id (@node_ids) {
 	    }
 	    $ifaceargs = {
 		"node_id"     => $switch_id,
-		"card"        => $switch_card,
-		"port"	      => $switch_port,
 		"type"        => $itype->type(),
 		"iface"       => $switch_card . "/" . $switch_port,
 		"max_speed"   => $max_speed / 1000,
@@ -570,7 +566,12 @@ NODE: foreach my $node_id (@node_ids) {
 	    }
 	}
 	if (! $useScriptFeature) {
-	    my $wireargs = {};
+	    my $wireargs = {
+		"card1"       => $card,
+		"port1"       => $port,
+		"card2"       => $switch_card,
+		"port2"	      => $switch_port,
+	    };
 	    $wireargs->{"cable"}  = $cable if (defined($cable));
 	    $wireargs->{"length"} = $len if (defined($len));
 

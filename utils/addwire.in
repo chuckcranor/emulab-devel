@@ -32,7 +32,7 @@ use Data::Dumper;
 sub usage()
 {
     print STDERR "Usage: addwire [-t type] [-c id [-l len]] ".
-      "node1:iface1 node2:iface2\n";
+      "node1:iface1 portinfo1 node2:iface2 portinfo2\n";
     print STDERR "Usage: addwire -r node1:iface1 node2:iface2\n";
     print STDERR "Options:\n";
     print STDERR " -v        - Turn on debugging\n";
@@ -42,6 +42,7 @@ sub usage()
     print STDERR " -c cable  - Cable ID\n";
     print STDERR " -l len    - Cable length\n";
     print STDERR " -t type   - Wire type (defaults to Unused)\n";
+    print STDERR " portinfo  - card,port (for now, might change later)\n";
 	
     exit(-1);
 }
@@ -53,11 +54,11 @@ my $force     = 0;
 my $type      = "other";
 my $cable;
 my $cablelen;
-my ($node_id1,$iface_id1,$node_id2,$iface_id2);
+my ($node_id1,$iface_id1,$card1,$port1,$node_id2,$iface_id2,$card2,$port2);
 
 # Protos
 sub fatal($);
-sub RemoveWire($);
+sub RemoveWire($$);
 
 #
 # Configure variables
@@ -136,8 +137,11 @@ if (! defined($this_user)) {
 if (!$this_user->IsAdmin()) {
     fatal("You are not a testbed administrator!");
 }
+if ($remove) {
+    exit(RemoveWire($ARGV[0],$ARGV[1]));
+}
 usage()
-    if (@ARGV != 2);
+    if (@ARGV != 4);
 
 if ($ARGV[0] =~ /^([-\w]+):(.+)$/) {
     $node_id1  = $1;
@@ -146,20 +150,26 @@ if ($ARGV[0] =~ /^([-\w]+):(.+)$/) {
 else {
     fatal("Invalid argument for interface: " . $ARGV[0]);
 }
-if ($ARGV[1] =~ /^([-\w]+):(.+)$/) {
+if ($ARGV[1] =~ /^(\d+),(\d+)$/) {
+    $card1 = $1;
+    $port1 = $2;
+}
+else {
+    fatal("Invalid argument for portinfo: " . $ARGV[1]);
+}
+if ($ARGV[2] =~ /^([-\w]+):(.+)$/) {
     $node_id2  = $1;
     $iface_id2 = $2;
 }
 else {
-    fatal("Invalid argument for interface: " . $ARGV[1]);
+    fatal("Invalid argument for interface: " . $ARGV[2]);
 }
-if ($remove) {
-    my $wire = Interface::Wire->LookupAnyByIfaces($node_id1, $iface_id1,
-						  $node_id2, $iface_id2);
-    if (!defined($wire)) {
-	fatal("No such wire");
-    }
-    exit(RemoveWire($wire));
+if ($ARGV[3] =~ /^(\d+),(\d+)$/) {
+    $card2 = $1;
+    $port2 = $2;
+}
+else {
+    fatal("Invalid argument for portinfo: " . $ARGV[3]);
 }
 
 #
@@ -202,6 +212,10 @@ if (defined($wire)) {
 # Create the wire.
 #
 my $wireargs = {
+    "card1"  => $card1,
+    "port1"  => $port1,
+    "card2"  => $card2,
+    "port2"  => $port2,
 };
 $wireargs->{"cable"}  = $cable if (defined($cable));
 $wireargs->{"length"} = $cablelen if (defined($cablelen));
@@ -232,11 +246,32 @@ sub fatal($)
 #
 # Remove a wire.
 #
-sub RemoveWire($)
+sub RemoveWire($$)
 {
-    my ($wire) = @_;
+    my ($arg1, $arg2) = @_;
 
-    my $interface = Interface->LookupByIface($wire->node_id1(), $wire->iface1());
+    if ($arg1 =~ /^([-\w]+):(.+)$/) {
+	$node_id1  = $1;
+	$iface_id1 = $2;
+    }
+    else {
+	fatal("Invalid argument for interface: " . $arg1);
+    }
+    if ($arg2 =~ /^([-\w]+):(.+)$/) {
+	$node_id2  = $1;
+	$iface_id2 = $2;
+    }
+    else {
+	fatal("Invalid argument for interface: " . $arg2);
+    }
+    my $wire = Interface::Wire->LookupAnyByIfaces($node_id1, $iface_id1,
+						  $node_id2, $iface_id2);
+    if (!defined($wire)) {
+	fatal("No such wire");
+    }
+
+    my $interface = Interface->LookupByIface($wire->node_id1(),
+					     $wire->iface1());
     if (defined($interface)) {
 	if (Lan->FindLansByMember($interface->node_id(), $interface->iface())) {
 	    if ($force) {
@@ -249,7 +284,8 @@ sub RemoveWire($)
 	    }
 	}
     }
-    $interface = Interface->LookupByIface($wire->node_id2(), $wire->iface2());
+    $interface = Interface->LookupByIface($wire->node_id2(),
+					  $wire->iface2());
     if (defined($interface)) {
 	if (Lan->FindLansByMember($interface->node_id(), $interface->iface())) {
 	    if ($force) {

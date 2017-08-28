@@ -262,31 +262,21 @@ if (defined($wire)) {
 #
 # Add the interfaces.
 #
-my $type;
-my $max_speed;
-if( $speed eq "100Mb" ) {
-    $type = "generic";
-    $max_speed = "100";
-} elsif( $speed eq "10Gb" ) {
-    $type = "generic_10G";
-    $max_speed = "10000";
-} elsif( $speed eq "40Gb" ) {
-    $type = "generic_40G";
-    $max_speed = "40000";
-} elsif( $speed eq "100Gb" ) {
-    $type = "generic_100G";
-    $max_speed = "100000";
-} else { # default is 1G for backward compatibility
-    $type = "generic_1G";
-    $max_speed = "1000";
+my $type = Interface::Type->GenericType($speed);
+if (!defined($type)) {
+    # default is 1G for backward compatibility
+    $type = Interface::Type->Lookup("generic_1G");
+    if (!defined($type)) {
+	fatal("Could not find a generic type for $speed");
+    }
 }
 my $ifaceargs1 = {
     "card"        => $switchcard,
     "port"        => $switchport,
     "iface"       => $switchcard . "/" . $switchport,
     "role"        => TBDB_IFACEROLE_OTHER(),
-    "type"        => $type,
-    "max_speed"   => $max_speed,
+    "type"        => $type->type(),
+    "max_speed"   => $type->max_speed(),
     "mac"         => "000000000000",
 };
 print "Creating switch interface with arguments:\n";
@@ -300,8 +290,8 @@ my $ifaceargs2 = {
     "card"        => $nodecard,
     "iface"       => $iface_id,
     "role"        => TBDB_IFACEROLE_EXPERIMENT(),
-    "type"        => $type,
-    "max_speed"   => $max_speed,
+    "type"        => $type->type(),
+    "max_speed"   => $type->max_speed(),
     "trunk"       => ($node->IsReserved() &&
 		      $node->erole() eq "sharedhost" ? 1 : 0),
     "mac"         => "000000000000",
@@ -313,6 +303,12 @@ if (!$impotent) {
 	or fatal("Could not create interface entry");
 }
 if (!$impotent) {
+    my $wireargs = {
+	"card1"  => $switchcard,
+	"port1"  => $switchport,
+	"card2"  => $nodecard,
+	"port2"  => 1,
+    };
     print "Creating wire for $interface1,$interface2:\n";
     $wire = Interface::Wire->Create($interface1, $interface2, 'Node', {})
 	or fatal("Could not create wire");

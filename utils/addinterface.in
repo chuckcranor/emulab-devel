@@ -33,7 +33,7 @@ use Data::Dumper;
 sub usage()
 {
     print STDERR "Usage: addinterface [-b speed | -t ifacetype] [-m mac] ".
-	"[-r role] portinfo node_id [iface_id]\n";
+	"[-r role] node_id iface_id\n";
     print STDERR "Usage: addinterface -r <node_id> <iface_id>\n";
     print STDERR "Usage: addinterface -i <node_id> <iface_id>\n";
     print STDERR "Options:\n";
@@ -46,10 +46,7 @@ sub usage()
     print STDERR " -m mac    - Optional MAC address. 0123456789AB format.\n";
     print STDERR " -b speed  - Interface speed; 100Mb,1Gb,10Gb,40Gb,100Gb\n";
     print STDERR " -t type   - Interface type instead of generic based on speed\n";
-    print STDERR " portinfo  - card,port (for now, might change later)\n";
-    print STDERR " iface_id  - eth0, eth1, 1/69, 1/6/9. If you do not specify,\n";
-    print STDERR "             one will be constructed for you (ethXX).\n";
-	
+    print STDERR " iface_id  - eth0, eth1, 1/69, 1.6:1, Po4.5/9:1, etc.\n";
     exit(-1);
 }
 my $optlist   = "b:t:nvfm:re:i";
@@ -172,59 +169,25 @@ elsif ($info) {
 }
 
 usage()
-    if (@ARGV < 2 || !defined($type));
+    if (@ARGV != 2 || !defined($type));
 
-my $portinfo  = $ARGV[0];
-my $node_id   = $ARGV[1];
-my $iface_id  = $ARGV[2] if (@ARGV == 3);
+my $node_id   = $ARGV[0];
+my $iface_id  = $ARGV[1];
 
 # Sanity check node/portinfo.
 my $node = Node->Lookup($node_id);
 if (!defined($node)) {
     fatal("No such node $node_id");
 }
-if ($portinfo =~ /^(\d+),(\d+)$/) {
-    $card = $1;
-    $port = $2;
-}
-else {
-    fatal("Invalid portinfo; must be in card,port format");
-}
-my $interface = Interface->Lookup($node_id, $card, $port);
+my $interface = Interface->LookupByIface($node_id, $iface_id);
 if (defined($interface)) {
-    fatal("Interface already exists for $card,$port");
-}
-if (defined($iface_id)) {
-    $interface = Interface->LookupByIface($node_id, $iface_id);
-    if (defined($interface)) {
-	fatal("Interface already exists for $iface_id");
-    }
-}
-else {
-    if ($node->role() eq "testnode") {
-	if ($node->isswitch()) {
-	    $iface_id = sprintf("eth%02d%02d", $card, $port);
-	}
-	else {
-	    $iface_id = "eth${card}";
-	}
-    }
-    else {
-	$iface_id = "${card}/${port}";
-    }
-    print "Will use iface: $iface_id\n";
-    $interface = Interface->LookupByIface($node_id, $iface_id);
-    if (defined($interface)) {
-	fatal("Interface already exists for generated $iface_id");
-    }
+    fatal("Interface already exists for $iface_id");
 }
 #
 # Create the interface.
 #
 my $ifaceargs = {
     "node_id"     => $node_id,
-    "card"        => $card,
-    "port"	  => $port,
     "iface"       => $iface_id,
     "role"        => $role,
     "type"        => $type->type(),

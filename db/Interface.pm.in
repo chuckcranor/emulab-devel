@@ -251,6 +251,9 @@ sub port($)
     }
     return $self->{'PORT'};
 }
+# These are for the updatewires script.
+sub card_saved($) { return field($_[0], 'card_saved'); }
+sub port_saved($) { return field($_[0], 'port_saved'); }
 # Wires table
 sub wire($)    { return $_[0]->{'WIRE'}; }
 sub wiredup($) { return (defined($_[0]->{'WIRE'}) ? 1 : 0); }
@@ -425,14 +428,16 @@ sub Create($$$)
 	    "longer supported!\n";
 	return undef;
     }
+    if (exists($argref->{'card'})) {
+	print STDERR "*** Interface->Create(): ignoring card/port, these ".
+	    "are now set with the wire.\n";
+    }
 
     my $node_id = $node->node_id();
 
     my $MAC        = $argref->{'MAC'} || $argref->{'mac'};
     my $IP         = $argref->{'IP'};
     my $mask       = $argref->{'mask'};
-    my $card       = $argref->{'card'};
-    my $port       = $argref->{'port'};
     my $iftype     = $argref->{'type'} || $argref->{'interface_type'};
     my $ifrole     = $argref->{'role'};
     my $uuid       = $argref->{'uuid'};
@@ -443,10 +448,6 @@ sub Create($$$)
     my $trunk      = $argref->{'trunk'};
     my $auto       = $argref->{'autocreated'};
 
-    $iface = "eth$card"    
-	if (!defined($iface));
-    $port = 1
-	if (!defined($port));
     $IP = ""
 	if (!defined($IP));
     $mask = ""
@@ -468,12 +469,18 @@ sub Create($$$)
 	    return undef;
 	}
     }
-    if (! (defined($card) && defined($ifrole) && defined($MAC) &&
-	   defined($IP) && defined($port) && 
+    if (! (defined($ifrole) && defined($MAC) && defined($IP) && 
 	   defined($iftype) && defined($iface) && defined($max_speed) &&
 	   defined($duplex) && defined($uuid))) {
 	print STDERR "Interface::Create: Missing fields in arguments:\n";
 	print STDERR Dumper($argref);
+	return undef;
+    }
+
+    # Lets make keep the special characters to a reasonable set.
+    # Mike says no commas please.
+    if ($iface !~ /^[-\w\/\.:]+$/) {
+	print STDERR "Interface::Create: illegal characters in iface:\n";
 	return undef;
     }
 
@@ -493,11 +500,10 @@ sub Create($$$)
     #
     my $query_result =
 	DBQueryWarn("select node_id from interfaces ".
-		    "where node_id='$node_id' and ".
-		    "      card='$card' and port='$port'");
+		    "where node_id='$node_id' and iface='$iface'");
     if ($query_result->numrows) {
 	DBQueryWarn("unlock tables");
-	return Interface->Lookup($node_id, $card, $port);
+	return Interface->Lookup($node_id, $iface);
     }
 
     #
@@ -528,7 +534,7 @@ sub Create($$$)
     
     if (!DBQueryWarn("insert into interfaces set ".
 		"  node_id='$node_id', logical='$logical', " .
-		"  card=$card, port=$port, role='$ifrole', ".
+		"  role='$ifrole', ".
 		"  mac='$MAC', IP='$IP', autocreated='$auto', " .
 		(defined($mask) ? "mask='$mask', " : "") .
 		($trunk ? "trunk='1', " : "") .
@@ -542,7 +548,7 @@ sub Create($$$)
     if (!DBQueryWarn("insert into interface_state set ".
 		     "  node_id='$node_id', " .
 		     ($trunk ? "remaining_bandwidth='$max_speed', " : "") .
-		     "  card=$card, port=$port, iface='$iface'")) {
+		     "  iface='$iface'")) {
 	DBQueryWarn("delete from interfaces ".
 		    "where node_id='$node_id' and iface='$iface' ");
 	DBQueryWarn("unlock tables");
@@ -570,7 +576,7 @@ sub Delete($;$)
 
     return -1
 	if (!DBQueryWarn("delete from interface_state ".
-			 "where node_id='$node_id' iface='$iface'"));
+			 "where node_id='$node_id' and iface='$iface'"));
     return -1
 	if (!DBQueryWarn("delete from port_counters ".
 			 "where node_id='$node_id' and iface='$iface'"));
@@ -659,6 +665,7 @@ sub MakeFake($$$)
 sub LookupByIface($$$)
 {
     my ($class, $nodeid, $iface) = @_;
+    my $interface = {};
     my $state_row;
 
     $nodeid = $nodeid->node_id()
@@ -699,10 +706,14 @@ sub LookupByIface($$$)
     # Remove card,port in the results in preparation for removal
     # from the table.
     #
-    delete($rowref->{'card'})
-	if (exists($rowref->{'card'}));
-    delete($rowref->{'port'})
-	if (exists($rowref->{'port'}));
+    if (exists($rowref->{'card'})) {	
+	$rowref->{'card_saved'} = $rowref->{'card'};
+	delete($rowref->{'card'})
+    }
+    if (exists($rowref->{'port'})) {
+	$rowref->{'port_saved'} = $rowref->{'port'};
+	delete($rowref->{'port'})
+    }
 
     #
     # And the interface_state table.
@@ -742,7 +753,6 @@ sub LookupByIface($$$)
     # Does not have to exist.
     my $wire = Interface::Wire->LookupAnyByIface($nodeid, $iface);
     
-    my $interface = {};
     $interface->{"DBROW"} = $rowref;
     $interface->{'STATE'} = $state_row;
     $interface->{'WIRE'}  = undef;
@@ -1326,7 +1336,7 @@ sub Lookup($$)
 	    DBQueryWarn("select * from wires ".
 			"where external_interface='$interface'");
     } else {
-	my ($node_id1,$card1,$port1);
+	my ($node_id1,$card1,$port1,$iface1);
 	
 	if (!ref($interface)) {
 	    # Allow "nodeid:card:port" argument.
@@ -1334,6 +1344,11 @@ sub Lookup($$)
 		$node_id1 = $1;
 		$card1    = $2;
 		$port1    = $3;
+
+		$query_result =
+		    DBQueryWarn("select * from wires ".
+				"where node_id1='$node_id1' and ".
+				"      card1='$card1' and port1='$port1'");
 	    }
 	    else {
 		return undef;
@@ -1341,13 +1356,13 @@ sub Lookup($$)
 	}
 	else {
 	    $node_id1 = $interface->node_id();
-	    $card1    = $interface->card();
-	    $port1    = $interface->port();
+	    $iface1   = $interface->iface();
+
+	    $query_result =
+		DBQueryWarn("select * from wires ".
+			    "where node_id1='$node_id1' and ".
+			    "      iface1='$iface1'");
 	}
-	$query_result =
-	    DBQueryWarn("select * from wires ".
-			"where node_id1='$node_id1' and ".
-			"      card1='$card1' and port1='$port1'");
     }
 
     return undef
@@ -1382,13 +1397,18 @@ sub Create($$$$$)
     my ($self, $interface1, $interface2, $type, $argref) = @_;
 
     my $node_id1  = $interface1->node_id();
-    my $card1     = $interface1->card();
-    my $port1     = $interface1->port();
     my $iface1    = $interface1->iface();
     my $node_id2  = $interface2->node_id();
-    my $card2     = $interface2->card();
-    my $port2     = $interface2->port();
     my $iface2    = $interface2->iface();
+    my $card1     = $argref->{'card1'};
+    my $port1     = $argref->{'port1'};
+    my $card2     = $argref->{'card2'};
+    my $port2     = $argref->{'port2'};
+    if (! (defined($card1) && defined($port1) &&
+	   defined($card2) && defined($port2))) {
+	print STDERR "*** Interface::Wire->Create(): missing arguments\n";
+	return undef;
+    }
 
     my $command = "insert into wires set".
 	"  type='$type', " .
@@ -1409,7 +1429,7 @@ sub Create($$$$$)
     DBQueryWarn($command) or
 	return undef;
 
-    return Interface::Wire->Lookup($interface1);
+    return Interface::Wire->LookupByIface($node_id1, $iface1);
 }
 
 #
@@ -1443,6 +1463,9 @@ sub LookupAny($$$;$)
 {
     my ($class, $nodeid, $card, $port) = @_;
 
+    $nodeid = $nodeid->node_id()
+	if (ref($nodeid));
+
     my $query_result =
 	DBQueryWarn("select * from wires ".
 		    "where (node_id1='$nodeid' and ".
@@ -1462,6 +1485,9 @@ sub LookupAnyByIface($$$)
 {
     my ($class, $nodeid, $iface) = @_;
 
+    $nodeid = $nodeid->node_id()
+	if (ref($nodeid));
+
     my $query_result =
 	DBQueryWarn("select * from wires ".
 		    "where (node_id1='$nodeid' and iface1='$iface') or ".
@@ -1479,6 +1505,9 @@ sub LookupByIface($$$)
 {
     my ($class, $nodeid, $iface) = @_;
 
+    $nodeid = $nodeid->node_id()
+	if (ref($nodeid));
+
     my $query_result =
 	DBQueryWarn("select * from wires ".
 		    "where (node_id1='$nodeid' and iface1='$iface')");
@@ -1495,6 +1524,11 @@ sub LookupByIface($$$)
 sub LookupAnyByIfaces($$$$$)
 {
     my ($class, $nodeid1, $iface1, $nodeid2, $iface2) = @_;
+
+    $nodeid1 = $nodeid1->node_id()
+	if (ref($nodeid1));
+    $nodeid2 = $nodeid2->node_id()
+	if (ref($nodeid2));
 
     my $query_result =
 	DBQueryWarn("select * from wires ".
@@ -1684,8 +1718,8 @@ sub ExperimentLogicalWires($$$)
     my $query_result =
 	DBQueryWarn("select r.node_id,w.card1,w.port1 from reserved as r ".
 		    "left join interfaces as i on i.node_id=r.node_id ".
-		    "left join wires as w on w.node_id1=r.node_id and ".
-		    "     w.card1=i.card and w.port1=i.port ".
+		    "left join wires as w on w.node_id1=i.node_id and ".
+		    "     w.iface1=i.iface ".
 		    "where i.logical=1 and r.exptidx='$exptidx' and ".
 		    "      card1 is not null");
     return -1

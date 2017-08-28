@@ -237,6 +237,14 @@ if (defined($switchinfo)) {
     if (!defined($switch)) {
 	fatal("Could not lookup switch in the database");
     }
+    my $switchiface = $switchcard . "/" . $switchport;
+
+    # Lets check consistency.
+    my $tmp  = Interface->LookupByIface($switch, $switchiface);
+    my $wire = Interface::Wire->LookupAnyByIface($switch, $switchiface);
+    if (defined($tmp) && defined($wire)) {
+	fatal("Switch Interface already exists and is wired up: $wire");
+    }
 }
 
 my $isipmi = ($type =~ /^ipmi/ ? 1 : 0);
@@ -267,7 +275,7 @@ if (defined($interface)) {
     fatal("Inconsistent ip in $interface")
 	if ($interface->IP() ne $IP);
     
-    if (defined($switchinfo)) {
+    if (defined($switchinfo) && $interface->wiredup()) {
 	fatal("Inconsistent switch_id in $interface")
 	    if ($interface->switch_id() ne $switchid);
 	fatal("Inconsistent switch_port in $interface")
@@ -278,8 +286,6 @@ if (defined($interface)) {
 }
 else {
     my $ifaceargs = {
-	"card"      => 99,	# XXX Bogus.
-	"port"      => 1,
 	"iface"     => $type,
 	"role"      => TBDB_IFACEROLE_MANAGEMENT(),
 	"MAC"       => $mac,
@@ -292,21 +298,28 @@ else {
     }
     if (defined($switchinfo)) {
 	my $switchiface = $switchcard . "/" . $switchport;
-	
-	$ifaceargs = {
-	    "card"        => $switchcard,
-	    "port"        => $switchport,
-	    "iface"       => $switchiface,
-	    "role"        => TBDB_IFACEROLE_OTHER(),
-	    "type"        => "generic",
-	    "trunk"       => 0,
-	    "mac"         => "000000000000",
-	};
-	my $switch_interface = Interface->Create($switch, $ifaceargs);
-	if (!defined($interface)) {
-	    fatal("Could not create switch interface entry");
+	my $switch_interface;
+
+	# Lets not create it again.
+	$switch_interface = Interface->LookupByIface($switch, $switchiface);
+	if (!defined($switch_interface)) {
+	    $ifaceargs = {
+		"iface"       => $switchiface,
+		"role"        => TBDB_IFACEROLE_OTHER(),
+		"type"        => "generic",
+		"trunk"       => 0,
+		"mac"         => "000000000000",
+	    };
+	    $switch_interface = Interface->Create($switch, $ifaceargs);
+	    if (!defined($switch_interface)) {
+		fatal("Could not create switch interface entry");
+	    }
 	}
 	my $wireargs = {
+	    "card1"  => 99,	# XXX Bogus.
+	    "port1"  => 1,
+	    "card2"  => $switchcard,
+	    "port2"  => $switchport,
 	};
 	$wireargs->{"cable"}  = $cable if (defined($cable));
 	$wireargs->{"length"} = $cablelen if (defined($cablelen));
