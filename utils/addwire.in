@@ -34,10 +34,12 @@ sub usage()
     print STDERR "Usage: addwire [-t type] [-c id [-l len]] ".
       "node1:iface1 portinfo1 node2:iface2 portinfo2\n";
     print STDERR "Usage: addwire -r node1:iface1 node2:iface2\n";
+    print STDERR "Usage: addwire -i node1:iface1 node2:iface2\n";
     print STDERR "Options:\n";
     print STDERR " -v        - Turn on debugging\n";
     print STDERR " -n        - Impotent mode\n";
     print STDERR " -r        - Delete wire\n";
+    print STDERR " -i        - Show info about wire from DB\n";
     print STDERR " -f        - (with -r) force deletion, even if iface exists\n";
     print STDERR " -c cable  - Cable ID\n";
     print STDERR " -l len    - Cable length\n";
@@ -46,10 +48,11 @@ sub usage()
 	
     exit(-1);
 }
-my $optlist   = "t:nvfrc:l:";
+my $optlist   = "t:nvfrc:l:i";
 my $verbose   = 0;
 my $impotent  = 0;
 my $remove    = 0;
+my $info      = 0;
 my $force     = 0;
 my $type      = "other";
 my $cable;
@@ -59,6 +62,7 @@ my ($node_id1,$iface_id1,$card1,$port1,$node_id2,$iface_id2,$card2,$port2);
 # Protos
 sub fatal($);
 sub RemoveWire($$);
+sub ShowWire($$);
 
 #
 # Configure variables
@@ -109,6 +113,11 @@ if (defined($options{'r'})) {
     usage()
 	if (@ARGV != 2);
 }
+if (defined($options{'i'})) {
+    $info = 1;
+    usage()
+	if (@ARGV != 2);
+}
 if (defined($options{'f'})) {
     $force = 1;
 }
@@ -139,6 +148,9 @@ if (!$this_user->IsAdmin()) {
 }
 if ($remove) {
     exit(RemoveWire($ARGV[0],$ARGV[1]));
+}
+elsif ($info) {
+    exit(ShowWire($ARGV[0],$ARGV[1]));
 }
 usage()
     if (@ARGV != 4);
@@ -308,4 +320,44 @@ sub RemoveWire($$)
     return 0;
 }
 
+#
+# Display a wire.
+#
+sub ShowWire($$)
+{
+    my ($arg1, $arg2) = @_;
+
+    if ($arg1 =~ /^([-\w]+):(.+)$/) {
+	$node_id1  = $1;
+	$iface_id1 = $2;
+    }
+    else {
+	fatal("Invalid argument for interface: " . $arg1);
+    }
+    if ($arg2 =~ /^([-\w]+):(.+)$/) {
+	$node_id2  = $1;
+	$iface_id2 = $2;
+    }
+    else {
+	fatal("Invalid argument for interface: " . $arg2);
+    }
+    my $wire = Interface::Wire->LookupAnyByIfaces($node_id1, $iface_id1,
+						  $node_id2, $iface_id2);
+    if (!defined($wire)) {
+	fatal("No such wire");
+    }
+    $wire->Dump();
+    my ($interface1,$interface2) = $wire->Interfaces();
+    if (defined($interface1)) {
+	print "\n";
+	print "Interface1:\n";
+	$interface1->Dump();
+    }
+    if (defined($interface2)) {
+	print "\n";
+	print "Interface2:\n";
+	$interface2->Dump();
+    }
+    return 0;
+}
 
