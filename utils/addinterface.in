@@ -39,7 +39,7 @@ sub usage()
     print STDERR "Options:\n";
     print STDERR " -v        - Turn on debugging\n";
     print STDERR " -n        - Impotent mode\n";
-    print STDERR " -i        - Display management interface from DB.\n";
+    print STDERR " -i        - Display interface info from DB.\n";
     print STDERR " -r        - Delete interface\n";
     print STDERR " -f        - (with -r) force deletion, even if iface used\n";
     print STDERR " -e role   - Optional interface role, default to 'other'\n";
@@ -63,8 +63,8 @@ my ($card,$port);
 
 # Protos
 sub fatal($);
-sub RemoveInterface($$);
-sub ShowInterface($$);
+sub RemoveInterface(@);
+sub ShowInterface(@);
 
 #
 # Configure variables
@@ -82,6 +82,7 @@ use User;
 use Node;
 use NodeType;
 use Interface;
+use Lan;
 
 #
 # Turn off line buffering on output
@@ -111,13 +112,9 @@ if (defined($options{'n'})) {
 }
 if (defined($options{'r'})) {
     $remove = 1;
-    usage()
-	if (@ARGV != 2);
 }
 if (defined($options{'i'})) {
     $info = 1;
-    usage()
-	if (@ARGV != 2);
 }
 if (defined($options{'f'})) {
     $force = 1;
@@ -162,10 +159,10 @@ if (!$this_user->IsAdmin()) {
     fatal("You are not a testbed administrator!");
 }
 if ($remove) {
-    exit(RemoveInterface($ARGV[0], $ARGV[1]));
+    exit(RemoveInterface(@ARGV));
 }
 elsif ($info) {
-    exit(ShowInterface($ARGV[0], $ARGV[1]));
+    exit(ShowInterface(@ARGV));
 }
 
 usage()
@@ -220,11 +217,20 @@ sub fatal($)
 #
 # Remove an interface. 
 #
-sub RemoveInterface($$)
+sub RemoveInterface(@)
 {
-    my ($node_id, $iface_id) = @_;
+    my ($nodeid, $iface) = @_;
 
-    my $interface = Interface->LookupByIface($node_id, $iface_id);
+    if (!defined($iface)) {
+	if ($nodeid =~ /^([^:]+):([-\w\/\/:]+)$/) {
+	    $nodeid = $1;
+	    $iface  = $2;
+	}
+	else {
+	    usage();
+	}
+    }
+    my $interface = Interface->LookupByIface($nodeid, $iface);
     if (!defined($interface)) {
 	fatal("No such interface to delete");
     }
@@ -232,21 +238,13 @@ sub RemoveInterface($$)
     #
     # See if in use. 
     #
-    my $query_result =
-	DBQueryFatal("select lma1.lanid from lan_member_attributes as lma1, " .
-		     "lan_member_attributes as lma2 where " .
-		     "lma1.lanid = lma2.lanid and lma1.memberid=lma2.memberid " .
-		     "and lma1.attrkey='node_id' and " .
-		     "lma1.attrvalue='$node_id' and " .
-		     "lma2.attrkey='iface' and " .
-		     "lma2.attrvalue='$iface_id'");
-    if ($query_result->numrows > 0) {
+    if (Lan->FindLansByMember($nodeid, $iface)) {
 	if ($force) {
-	    print "$node_id:$iface_id appears to be in use; " .
+	    print "$nodeid:$iface appears to be in use; " .
 		"continuing anyway...\n";
 	}
 	else {
-	    print "warning: $node_id:$iface_id appears to be in use; " .
+	    print "warning: $nodeid:$iface appears to be in use; " .
 		"entering impotent mode (use -f to force removal)\n";
 	    $impotent = 1;
 	}
@@ -262,10 +260,19 @@ sub RemoveInterface($$)
 #
 # Show interface.
 #
-sub ShowInterface($$)
+sub ShowInterface(@)
 {
     my ($nodeid, $iface) = @_;
 
+    if (!defined($iface)) {
+	if ($nodeid =~ /^([^:]+):([-\w\/\/:]+)$/) {
+	    $nodeid = $1;
+	    $iface  = $2;
+	}
+	else {
+	    usage();
+	}
+    }
     my $interface = Interface->LookupByIface($nodeid, $iface);
     fatal("No such interface")
 	if (!defined($interface));
