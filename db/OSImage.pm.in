@@ -1229,7 +1229,8 @@ sub MapToImage($$)
 	$type = $nodetype;
     }
     return $self
-	if ($self->architecture() && $type->architecture());
+	if ($self->isImage() &&
+	    $self->architecture() && $type->architecture());
     
     # This returns an OSimage.
     return $self->osinfo()->MapToImage($type);

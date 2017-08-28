@@ -421,8 +421,12 @@ sub SetOS($$)
     if ($node->isvirtnode() && $osimage->def_parentosid()) {
 	#
 	# But, if the subos is static (like OPENVZ-STD), there is
-	# no reload, cause it is already on the parent image. Lets use 
-	# the fact that no image link exists, to distinguish this case.
+	# no reload, cause it is already on the parent image. But this
+	# is currently difficult to determine, which is something that
+	# needs to be fixed.
+	#
+	# So instead, just watch for an image we can map to, and if
+	# nothing is returned, just move on. 
 	#
 	$imageable = 1
 	    if (defined($osimage->MapToImage($node->type())));
