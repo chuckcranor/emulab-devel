@@ -134,7 +134,7 @@ foreach my $lan (@lans) {
 	next;
     }
 
-    my $wire = Interface::Wire->LookupAnyByIface($interface);
+    my $wire = Interface::Wire->LookupAnyByIface( $node_id, $iface );
 
     if( !defined( $wire ) ) {
 	tbwarn( "rflinks: couldn't find RF wire for $pid/$eid " .
