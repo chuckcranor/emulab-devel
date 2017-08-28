@@ -38,8 +38,29 @@ my $impotent  = 0;
 # Configure variables
 my $TB		= "@prefix@";
 
+#
+# We want to force this to run from the build tree to avoid any
+# problems with the install tree not being in a consistent state.
+#
+BEGIN
+{
+    if (-e "../Makeconf") {
+	my $srcdir = "@top_srcdir@";
+	my $objdir = `/bin/pwd`;
+	chomp($objdir);
+	# Prior to first install or running from object dir.
+	unshift(@INC, "$objdir/../db");
+	if ($srcdir =~ /^\//) {
+	    unshift(@INC, "$srcdir/install");
+	    unshift(@INC, "$srcdir/tbsetup");
+	} else {
+	    unshift(@INC, "$objdir/$srcdir/install");
+	    unshift(@INC, "$objdir/$srcdir/tbsetup");
+	}
+	unshift(@INC, "$objdir/../tbsetup");
+    }
+}
 # Load the Testbed support stuff.
-use lib "@prefix@/lib";
 use emdb;
 use Interface;
 use Node;
@@ -91,9 +112,9 @@ while (my ($node_id1,$card1,$port1) = $query_result->fetchrow_array()) {
 }
 
 $query_result =
-    DBQueryFatal("select node_id,card,port from interfaces");
-while (my ($node_id,$card,$port) = $query_result->fetchrow_array()) {
-    my $interface = Interface->Lookup($node_id, $card, $port);
+    DBQueryFatal("select node_id,iface,card,port from interfaces");
+while (my ($node_id,$iface,$card,$port) = $query_result->fetchrow_array()) {
+    my $interface = Interface->LookupByIface($node_id, $iface);
     if (!defined($interface)) {
 	print STDERR "No interface object for $node_id:$card:$port\n";
 	next;
@@ -101,8 +122,22 @@ while (my ($node_id,$card,$port) = $query_result->fetchrow_array()) {
     $ifaces{"$node_id:$card:$port"} = $interface;
 
     my $node = Node->Lookup($node_id);
-    if (!exists($wires{"$node_id:$card:$port"}) &&
+    if ($impotent &&
+	!exists($wires{"$node_id:$card:$port"}) &&
 	$node->role() eq "testnode") {
+	#
+	# See if its the other side of existing wire.
+	#
+	my $tmp = Interface::Wire->LookupAnyByIface($node_id, $iface);
+	if (defined($tmp)) {
+	    my $n = $tmp->node_id1();
+	    my $c = $tmp->card1();
+	    my $p = $tmp->port1();
+
+	    if (exists($wires{"$n:$c:$p"})) {
+		next;
+	    }
+	}
 	print STDERR "No wires row for $interface\n";
     }
 }
@@ -115,8 +150,8 @@ my %ifacenames = ();
 
 foreach my $interface (values(%ifaces)) {
     my $node_id = $interface->node_id();
-    my $card    = $interface->card();
-    my $port    = $interface->port();
+    my $card    = $interface->card_saved();
+    my $port    = $interface->port_saved();
     my $iface   = $interface->iface();
     
     if (!defined($interface->iface()) || $interface->iface() eq "") {
@@ -174,13 +209,13 @@ foreach my $interface (values(%ifaces)) {
 	#
 	if ($impotent) {
 	    print STDERR "Would create missing interface_state for ".
-		"$nodeid:$iface\n";
+		"$node_id:$iface\n";
 	}
 	else {
 	    print STDERR "Creating missing interface_state for ".
-		"$nodeid:$iface\n";
+		"$node_id:$iface\n";
 	    DBQueryFatal("insert into interface_state set ".
-			 "  node_id='$nodeid',card='$card',".
+			 "  node_id='$node_id',card='$card',".
 			 "  port='$port',iface='$iface'");
 	}
     }

@@ -1,7 +1,9 @@
 #
 # Change to wires table; add iface1 and iface2. We now require both sides
 # of wires to have associated interfaces. Run updatewires script to get
-# everything set up.
+# everything set up. This runs as a pre install, and from the object tree,
+# so that the subsequent sql updates in script 51 can safely rename the
+# columns that the updatewires script uses.
 #
 use strict;
 use libinstall;
@@ -15,15 +17,15 @@ sub InstallUpdate($$)
     # If something should run in the pre-install phase.
     #
     if ($phase eq "pre") {
+	Phase "updatewires", "Updating wires and interfaces", sub {
+	    ExecQuietFatal("cd $TOP_OBJDIR/db; perl updatewires");
+	};
     }
     
     #
     # If something should run in the post-install phase.
     #
     if ($phase eq "post") {
-	Phase "updatewires", "Updating wires and interfaces", sub {
-	    ExecQuietFatal("$TBROOT/sbin/updatewires");
-	};
     }
     return 0;
 }
