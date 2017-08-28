@@ -727,8 +727,20 @@ sub GetTicketAuxAux($$$$$$$$$$$)
     # Mark the expires slot in the experiment, for admission control
     # during the mapper run. 
     #
-    if ($slice_experiment->SetExpiration(defined($expires) ? $expires :
-					 $slice->expires())) {
+    # Convert to a localtime.
+    #
+    if (defined($expires)) {
+	$expires = eval { timegm(strptime($expires)); };
+	if ($@ || !defined($expires)) {
+	    $response = GeniResponse->Create(GENIRESPONSE_BADARGS, undef,
+					     "Could not parse expiration");
+	    goto bad;
+	}
+    }
+    else {
+	$expires = $slice->expires();
+    }
+    if ($slice_experiment->SetExpiration($expires)) {
 	$response = GeniResponse->Create(GENIRESPONSE_ERROR, undef,
 					 "set experiment expiration");
 	print STDERR "Could not set experiment expiration\n";
