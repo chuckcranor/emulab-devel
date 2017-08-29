@@ -687,7 +687,8 @@ sub LookupByIface($$$)
 	if (defined($wire) && $wire->type() eq "Trunk") {
 	    return undef;
 	}
-	cluck("*** No interface entry for Interface->Lookup($nodeid,$iface)");
+	cluck("*** No interface entry for ".
+	      "Interface->LookupByIface($nodeid,$iface)");
 	return undef;
     }
     my $rowref = $query_result->fetchrow_hashref();
