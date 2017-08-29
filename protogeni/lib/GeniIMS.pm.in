@@ -955,7 +955,6 @@ sub DeleteImageInfo($)
     my $cred   = $argref->{'credential'};
     my $urn    = $argref->{'urn'};
     my $uuid   = $argref->{'uuid'};
-    my $query_result;
 
     if (! defined($cred)) {
 	return GeniResponse->MalformedArgsResponse("Where's the credential?");
