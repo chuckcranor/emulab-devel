@@ -116,8 +116,8 @@ frisbee-mfs-mkdirs:
 
 freenas-os-check:
 	@if [ "$(SYSTEM)" != "FreeBSD" -o "$(ARCH)" != "amd64" -o \
-	      \( "$(REL)" != "10.3" -a "$(REL)" != "9.3" -a "$(REL)" != "8.3" \) ]; then \
-	    echo "Must run on FreeBSD 8.3 or 9.3 or 10.3 amd64"; \
+	      \( "$(REL)" != "11.1" -a "$(REL)" != "10.3" -a "$(REL)" != "9.3" \) ]; then \
+	    echo "Must run on FreeBSD 9.3 or 10.3 or 11.1 amd64"; \
 	    false; \
 	fi
 
