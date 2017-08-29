@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2013 University of Utah and the Flux Group.
+# Copyright (c) 2013-2017 University of Utah and the Flux Group.
 # 
 # {{{GENIPUBLIC-LICENSE
 # 
@@ -255,8 +255,7 @@ sub addStitchPoint($@)
     my $edgewire = Interface::Wire->Lookup($edgeurn);
     my $network;
     my $edgenodeid;
-    my $edgecard;
-    my $edgeport;
+    my $edgeiface;
 
     #
     # The external network may contain the edge URN directly.
@@ -268,8 +267,7 @@ sub addStitchPoint($@)
 	my @networkIfs = ();
 	Interface->LookupAll($edgenodeid, \@networkIfs);
 	if (scalar(@networkIfs) == 1) {
-	    $edgecard = $networkIfs[0]->card();
-	    $edgeport = $networkIfs[0]->port();
+	    $edgeiface = $networkIfs[0]->iface();
 	} else {
 	    $self->{'error'} =
 		GeniResponse->Create(GENIRESPONSE_ERROR, undef,
@@ -284,16 +282,14 @@ sub addStitchPoint($@)
     #
     if (! defined($network) && defined($edgewire)) {
 	$edgenodeid = $edgewire->node_id1();
-	$edgecard = $edgewire->card1();
-	$edgeport = $edgewire->port1();
+	$edgeiface = $edgewire->iface1();
 	$network = ExternalNetwork->Lookup($edgenodeid);
     }
     
     # The external network may be attached to node_id2
     if (! defined($network) && defined($edgewire)) {
 	$edgenodeid = $edgewire->node_id2();
-	$edgecard = $edgewire->card2();
-	$edgeport = $edgewire->port2();
+	$edgeiface = $edgewire->iface2();
 	$network = ExternalNetwork->Lookup($edgenodeid);
     }
     if (!defined($network)) {
@@ -307,20 +303,19 @@ sub addStitchPoint($@)
     #
     # The edge interface must exist.
     #
-    my $edgeiface = Interface->Lookup($edgenodeid, $edgecard,
-				      $edgeport);
-    if (!defined($edgeiface)) {
+    my $iface = Interface->LookupByIface($edgenodeid, $edgeiface);
+    if (!defined($iface)) {
 	$self->{'error'} =
 	    GeniResponse->Create(GENIRESPONSE_ERROR, undef,
 				 "$lanname: unknown iface for ".
-				 "$edgenodeid:$edgecard.$edgeport");
+				 "$edgenodeid:$edgeiface");
 	return;
     }
     my $stitch = {};
     $stitch->{'internal_hop'} = $internal;
     $stitch->{'external_hop'} = $external;
     $stitch->{'network'} = $network;
-    $stitch->{'edgeiface'} = $edgeiface;
+    $stitch->{'edgeiface'} = $iface;
     push(@{ $self->{'points'} }, $stitch);
 }
 
