@@ -31,13 +31,27 @@ include $(OBJDIR)/Makeconf
 
 SYSTEM         := $(patsubst CYGWIN%,CYGWIN,$(shell uname -s))
 
+ISBROKEN = 0
+ifeq ($(SYSTEM),FreeBSD)
+FBSDREL = $(shell uname -r)
+ifneq ($(findstring 11.,$(FBSDREL)),)
+ISBROKEN = 1
+endif
+ifneq ($(findstring 12.,$(FBSDREL)),)
+ISBROKEN = 1
+endif
+endif
+ifeq ($(host_cpu),arm)
+ISBROKEN = 1
+endif
+
 ifeq ($(SYSTEM),CYGWIN)
 # Compile single-threaded on Windows.  Otherwise, the client iperf often hangs
 # after the first phase of a two-way bandwidth test.
 CONFIG_ARGS     = --disable-threads
 endif
 
-ifeq ($(host_cpu),arm)
+ifeq ($(ISBROKEN),1)
 TARGETS =
 ITARGETS =
 else
@@ -46,6 +60,11 @@ ITARGETS = iperf-install
 endif
 
 all: $(TARGETS)
+
+vars:
+	@echo "SYSTEM=$(SYSTEM)"
+	@echo "ISBROKEN=$(ISBROKEN)"
+	@echo "TARGETS=$(TARGETS)"
 
 include $(TESTBED_SRCDIR)/GNUmakerules
 
