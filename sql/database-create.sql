@@ -2635,14 +2635,13 @@ CREATE TABLE `interface_settings` (
 DROP TABLE IF EXISTS `interface_state`;
 CREATE TABLE `interface_state` (
   `node_id` varchar(32) NOT NULL default '',
-  `card` tinyint(3) unsigned NOT NULL default '0',
-  `port` smallint(5) unsigned NOT NULL default '0',
+  `card_saved` tinyint(3) unsigned NOT NULL default '0',
+  `port_saved` smallint(5) unsigned NOT NULL default '0',
   `iface` varchar(32) NOT NULL,
   `enabled` tinyint(1) default '1',
   `tagged` tinyint(1) default '0',
   `remaining_bandwidth` int(11) NOT NULL default '0',
-  PRIMARY KEY  (`node_id`,`card`,`port`),
-  KEY `nodeiface` (`node_id`,`iface`)
+  PRIMARY KEY  (`node_id`,`iface`)
 ) ENGINE=MyISAM DEFAULT CHARSET=latin1;
 
 --
@@ -2668,8 +2667,8 @@ CREATE TABLE `interface_types` (
 DROP TABLE IF EXISTS `interfaces`;
 CREATE TABLE `interfaces` (
   `node_id` varchar(32) NOT NULL default '',
-  `card` tinyint(3) unsigned NOT NULL default '0',
-  `port` smallint(5) unsigned NOT NULL default '0',
+  `card_saved` tinyint(3) unsigned NOT NULL default '0',
+  `port_saved` smallint(5) unsigned NOT NULL default '0',
   `mac` varchar(12) NOT NULL default '000000000000',
   `guid` varchar(16) default NULL,
   `IP` varchar(15) default NULL,
@@ -2689,7 +2688,7 @@ CREATE TABLE `interfaces` (
   `uuid` varchar(40) NOT NULL default '',
   `logical` tinyint(1) unsigned NOT NULL default '0',
   `autocreated` tinyint(1) unsigned NOT NULL default '0',
-  PRIMARY KEY  (`node_id`,`card`,`port`),
+  PRIMARY KEY  (`node_id`,`iface`(128)),
   KEY `mac` (`mac`),
   KEY `IP` (`IP`),
   KEY `uuid` (`uuid`),
