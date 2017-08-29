@@ -52,16 +52,6 @@ BEGIN { use emutil;
 # Manual
 my $debug = 0;
 
-# Little helper and debug function.
-sub mysystem($)
-{
-    my ($command) = @_;
-
-    print STDERR "Running '$command'\n"
-	if ($debug);
-    return system($command);
-}
-
 #
 # Lookup interfaces for a node and create a list of class instances to return.
 # When using this interface we assume that this is the node side and
@@ -503,7 +493,7 @@ sub Create($$$)
 		    "where node_id='$node_id' and iface='$iface'");
     if ($query_result->numrows) {
 	DBQueryWarn("unlock tables");
-	return Interface->Lookup($node_id, $iface);
+	return Interface->LookupByIface($node_id, $iface);
     }
 
     #
