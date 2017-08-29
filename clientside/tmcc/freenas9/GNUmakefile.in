@@ -83,6 +83,7 @@ install client-install: destdircheck basefbsd-install
 	rm -f $(ORCDIR)/rc.slothd $(ORCDIR)/rc.freebsd $(ORCDIR)/rc.injail
 	rm -f $(ORCDIR)/rc.progagent $(ORCDIR)/rc.ipod $(ORCDIR)/rc.simulator
 	rm -f $(ORCDIR)/rc.linkagent $(ORCDIR)/rc.topomap
+	rm -f $(ORCDIR)/rc.syncserver
 	rm -f $(OBINDIR)/checknode $(OBINDIR)/checkutils.sh
 	rm -f $(OBINDIR)/diskcheck $(OBINDIR)/hbis.sh $(OBINDIR)/cpucheck
 	rm -f $(OBINDIR)/healthd.conf $(OBINDIR)/ixpboot $(OBINDIR)/memcheck
