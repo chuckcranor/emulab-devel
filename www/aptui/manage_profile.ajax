@@ -1459,8 +1459,6 @@ function UpdateMaster($profile, $script, $rspec)
 		     SUEXEC_ACTION_IGNORE);
     $webtask->Refresh();
 
-    SUEXECERROR(SUEXEC_ACTION_CONTINUE);
-    
     if ($retval != 0) {
         if ($retval < 0) {
             $error = $webtask->TaskValue("output");
