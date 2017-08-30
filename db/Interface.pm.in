@@ -679,16 +679,10 @@ sub LookupByIface($$$)
     # If no interfaces entry, this is bad.
     #
     if (!$query_result->numrows) {
-	#
-	# See if there is a wire and it is a Trunk link; we can ignore those
-	# for now since it was not possible to autocreate the entries.
-	#
-	my $wire = Interface::Wire->LookupAnyByIface($nodeid, $iface);
-	if (defined($wire) && $wire->type() eq "Trunk") {
-	    return undef;
+	if ($debug) {
+	    cluck("*** No interface entry for ".
+		  "Interface->LookupByIface($nodeid,$iface)");
 	}
-	cluck("*** No interface entry for ".
-	      "Interface->LookupByIface($nodeid,$iface)");
 	return undef;
     }
     my $rowref = $query_result->fetchrow_hashref();
