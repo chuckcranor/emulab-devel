@@ -971,7 +971,8 @@ function Do_Snapshot()
 	SPITAJAX_ERROR(1, "Cannot lookup profile for instance");
 	return;
     }
-    if ($this_idx != $profile->creator_idx() && !ISADMIN()) {
+    if ($operation == "update-profile" &&
+        ($this_idx != $profile->creator_idx() && !ISADMIN())) {
 	SPITAJAX_ERROR(1, "Not your profile to change. Clone first!");
 	return;
     }
