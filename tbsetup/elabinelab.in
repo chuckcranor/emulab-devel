@@ -1029,7 +1029,7 @@ sub DumpDBGoo()
 
 	while (my ($node_id,$iface) = $query_result->fetchrow_array()) {
 	    DBQueryWarn("update temp_wires set type='Control' ".
-			"where node_id1='$node_id' iface1='$iface1'");
+			"where node_id1='$node_id' iface1='$iface'");
 	}
     }
     # Okay, now add the "trunk" wires in without any alteration.
