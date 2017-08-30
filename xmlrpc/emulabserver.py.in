@@ -5058,7 +5058,7 @@ class elabinelab:
         #
         # First map the mac to a node by looking in the interfaces table.
         #
-        dbres = DBQueryFatal("select node_id from interfaces "
+        dbres = DBQueryFatal("select node_id,role,IP from interfaces "
                              "where mac=%s",
                              (argdict["mac"],))
         
@@ -5066,13 +5066,45 @@ class elabinelab:
         if len(dbres) == 0:
             return EmulabResponse(RESPONSE_ERROR,
                                   output="Cannot map MAC to nodeid")
-        #
-        # This is all the inner boss cares about now.
-        # 
+
         nodeid = dbres[0][0]
+
+        dbres = DBQueryFatal("select i.mac,i.role,i.IP "
+                             "    from interfaces as i "
+                             "where node_id=%s ",
+                             (nodeid,))
+        
         result = {}
         result["nodeid"] = nodeid
+        result["type"]   = ""
+        interfaces       = {}
         
+        for res in dbres:
+            tmp = {}
+
+            #
+            # The current control network becomes the outer control network.
+            # The experimental network with an IP assigned becomes the
+            # inner control network.
+            #
+            imac  = res[0]
+            role  = res[1]
+            IP    = res[2]
+            
+            if role == "ctrl":
+                role = "outer_ctrl"
+                pass
+            elif role == "expt" and IP != "":
+                role = "ctrl"
+                pass
+            
+            tmp["role"]        = role
+            tmp["IP"]          = IP
+            interfaces[imac] = tmp
+            pass
+        
+        result["interfaces"] = interfaces
+         
         return EmulabResponse(RESPONSE_SUCCESS, result, output=str(result))
     pass
 
