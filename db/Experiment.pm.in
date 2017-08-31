@@ -2294,7 +2294,7 @@ sub SwapFail($$$$;$)
 	# This is pointless.
 	DBQueryWarn("update experiment_stats set ".
 		    "  swap_errors=swap_errors+1, ".
-		    "  swap_exitcode=$ecode, ".
+		    "  swap_exitcode='$ecode', ".
 		    "  last_error=$session ".
 		    "where exptidx=$exptidx");
     }
@@ -2604,6 +2604,9 @@ sub GatherSwapStats($$$;$$)
 	if (!defined($flags));
     $ecode = 0
 	if (!defined($ecode));
+    # Perl/mysql sillyness. 
+    $ecode = -1
+	if ($ecode == 255);
 
     #
     # If this is a start time marker, then just record the time in a global
@@ -2638,7 +2641,7 @@ sub GatherSwapStats($$$;$$)
 		"(idx, uid, uid_idx, start_time, end_time, exptidx, rsrcidx, ".
 		" action, exitcode, log_session) ".
 		"values (0, '$uid', '$uid_idx',  $starttime, now(), ".
-		"        $exptidx, $rsrcidx, '$mode', $ecode, $session)")
+		"        $exptidx, $rsrcidx, '$mode', '$ecode', $session)")
 	or return -1;
 
     return 0;

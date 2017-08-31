@@ -339,6 +339,11 @@ sub Exited($$)
     my ($self, $exitcode) = @_;
     my $task_id      = $self->task_id();
 
+    # Perl/mysql sillyness.
+    if ($exitcode == 255) {
+	$exitcode = -1;
+    }
+
     DBQueryWarn("update web_tasks set process_id=0, ".
 		"  exited=now(), exitcode='$exitcode' ".
 		"where task_id='$task_id'")
