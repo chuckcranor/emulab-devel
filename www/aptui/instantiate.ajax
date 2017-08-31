@@ -178,6 +178,7 @@ function Do_GetImageInfo()
     foreach ($ajax_args["images"] as $urn) {
         $types = array();
         $virts = array();
+        $deprecated = 0;
         
         if (Instance::ValidURN($urn)) {
             # This // vs : thing is a pain.
@@ -339,6 +340,14 @@ function Do_GetImageInfo()
 	    }
             $virts[$row["virtualizaton"]] = $row["virtualizaton"];
             $description = $row["description"];
+            #
+            # I suppose an alias can point to a deprecated image.
+            #
+            if ($row["deprecated"]) {
+                $deprecated  = $row["deprecated"];
+                $deprecated_iserror = $row["deprecated_iserror"];
+                $deprecated_message = $row["deprecated_message"];
+            }
         }
         if (count($types)) {
             if (isset($types["pcvm"])) {
@@ -357,8 +366,17 @@ function Do_GetImageInfo()
                       array("images"   => array($urn),
                             "hardware" => array($typelist)));
 
-            $images[] = array("id"   => $urn,
-                              "name" => $description);
+            $im = array("id"   => $urn,
+                        "name" => $description,
+                        "deprecated" => false);
+            if ($deprecated) {
+                $im["deprecated"] = $deprecated;
+                $im["deprecated_iserror"] = ($deprecated_iserror ? true:false);
+                $im["deprecated_message"] = $deprecated_message;
+            }
+            else {
+            }
+            $images[] = $im;
         }
     }
     $result = array(array("constraints" => $constraints,
