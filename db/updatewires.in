@@ -112,13 +112,15 @@ while (my ($node_id1,$card1,$port1) = $query_result->fetchrow_array()) {
 }
 
 $query_result =
-    DBQueryFatal("select node_id,iface,card,port from interfaces");
-while (my ($node_id,$iface,$card,$port) = $query_result->fetchrow_array()) {
+    DBQueryFatal("select node_id,iface from interfaces");
+while (my ($node_id,$iface) = $query_result->fetchrow_array()) {
     my $interface = Interface->LookupByIface($node_id, $iface);
     if (!defined($interface)) {
-	print STDERR "No interface object for $node_id:$card:$port\n";
+	print STDERR "No interface object for $node_id:$iface\n";
 	next;
     }
+    my $card = $interface->card_saved();
+    my $port = $interface->port_saved();
     $ifaces{"$node_id:$card:$port"} = $interface;
 
     my $node = Node->Lookup($node_id);
@@ -165,7 +167,7 @@ foreach my $interface (values(%ifaces)) {
 	else {
 	    $update_state = 1
 		if (defined($interface->state()));
-	    $iface = sprintf("eth%02d%02d", $interface->card(), $interface->port());
+	    $iface = sprintf("eth%02d%02d", $card, $port);
 	}
 	print STDERR "No iface set for $interface\n";
 	if ($impotent) {
@@ -215,8 +217,8 @@ foreach my $interface (values(%ifaces)) {
 	    print STDERR "Creating missing interface_state for ".
 		"$node_id:$iface\n";
 	    DBQueryFatal("insert into interface_state set ".
-			 "  node_id='$node_id',card='$card',".
-			 "  port='$port',iface='$iface'");
+			 "  node_id='$node_id',card_saved='$card',".
+			 "  port_saved='$port',iface='$iface'");
 	}
     }
     my $ifacename = $interface->node_id() . ":" . $interface->iface();
