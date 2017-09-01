@@ -178,6 +178,7 @@ INSERT INTO sitevariables VALUES ('general/architecture_priority',NULL,'x86_64,a
 INSERT INTO sitevariables VALUES ('general/admission_control','0','0','When set, refuse node allocation if reservation admission control fails.',0);
 INSERT INTO sitevariables VALUES ('general/cnet_firewalls','0','0','When set, control network firewalls are supported via control network vlans.',0);
 INSERT INTO sitevariables VALUES ('general/export_active',NULL,'0','Stop exporting shared user and project directories when they have been inactive for this number of days or longer (0==do not inactivate).',0);
+INSERT INTO sitevariables VALUES ('general/root_keypair',NULL,'-1','Default distribution of per-experiment root keypairs (-1==disable root keypair mechanism, 0==do not distribute to any nodes, 1==distribute to all nodes).',0);
 
 /*!40103 SET TIME_ZONE=@OLD_TIME_ZONE */;
 

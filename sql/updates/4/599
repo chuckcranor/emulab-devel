@@ -1,0 +1,26 @@
+#
+# Add sitevariable that controls default distribution of root keypairs.
+#
+use strict;
+use libdb;
+
+sub DoUpdate($$$)
+{
+    my ($dbhandle, $dbname, $version) = @_;
+    
+    DBQueryFatal("INSERT INTO `sitevariables` VALUES ".
+		 "('general/root_keypair',NULL,'-1',".
+		 "'Default distribution of per-experiment root keypairs ".
+		 "(-1==disable root keypair mechanism, ".
+		 "0==do not distribute to any nodes, ".
+		 "1==distribute to all nodes).',0)")
+	if (!TBSiteVarExists("general/root_keypair"));
+    return 0;
+}
+
+1;
+
+# Local Variables:
+# mode:perl
+# End:
+
