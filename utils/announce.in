@@ -53,7 +53,7 @@ sub usage()
     print STDERR "   -U   In add mode, specify a specific target user.\n";
     exit(-1);
 }
-my $optlist  = "haA:cp:s:b:u:m:lrR:i:U:t:I:S:E:";
+my $optlist  = "haA:cp:s:b:u:m:lr:R:i:U:t:I:S:E:";
 my $add_mode = 0;
 my $update_mode = 0;
 my $update_target;
