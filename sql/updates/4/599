@@ -1,5 +1,6 @@
 #
-# Add sitevariable that controls default distribution of root keypairs.
+# Awesome, our table_regex checks for integer types never allowed
+# negative numbers!
 #
 use strict;
 use libdb;
@@ -8,13 +9,16 @@ sub DoUpdate($$$)
 {
     my ($dbhandle, $dbname, $version) = @_;
     
-    DBQueryFatal("INSERT INTO `sitevariables` VALUES ".
-		 "('general/root_keypair',NULL,'-1',".
-		 "'Default distribution of per-experiment root keypairs ".
-		 "(-1==disable root keypair mechanism, ".
-		 "0==do not distribute to any nodes, ".
-		 "1==distribute to all nodes).',0)")
-	if (!TBSiteVarExists("general/root_keypair"));
+    DBQueryFatal("UPDATE table_regex ".
+		 "SET `check`='^[-+]?[\\\\d]+\$' ".
+		 "WHERE table_name='default' AND column_name='tinyint'");
+    DBQueryFatal("UPDATE table_regex ".
+		 "SET `check`='^[-+]?[\\\\d]+\$' ".
+		 "WHERE table_name='default' AND column_name='int'");
+    DBQueryFatal("UPDATE table_regex ".
+		 "SET `check`='^[-+]?[\\\\d]+\$' ".
+		 "WHERE table_name='default' AND column_name='bigint'");
+
     return 0;
 }
 
