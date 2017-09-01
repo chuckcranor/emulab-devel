@@ -1336,6 +1336,43 @@ sub SetSites($$$$$$)
 	$$pneedstitcher = 1
 	    if (keys(%linksites) > 1);
     }
+    foreach my $ref (GeniXML::FindNodesNS("n:routable_pool", $rspec,
+					$GeniXML::EMULAB_NS)->get_nodelist()) {
+	my $client_id   = GetVirtualId($ref);
+	my $manager_urn = GetManagerId($ref);	
+	my $site_id     = GeniXML::GetJacksSiteId($ref);
+
+	# Already bound in the rspec.
+	if (defined($manager_urn)) {
+	    if (!GeniHRN::IsValid($manager_urn)) {
+		$$perrmsg = "$client_id has an invalid manager URN";
+		return 1;
+	    }
+	}
+	# Or there is a site tag, and a site mapping for it.
+	elsif (defined($site_id)) {
+	    if (defined($sitemap)) {
+		my $site_mid = "site:" . $site_id;
+
+		if (!exists($sitemap->{$site_mid})) {
+		    $$perrmsg =
+			"No site mapping for node $client_id ($site_id)";
+		    return -1;
+		}
+		$manager_urn = $sitemap->{$site_mid};
+	    }
+	    else {
+		$manager_urn = $default_aggregate_urn;
+	    }
+	    if (!GeniHRN::IsValid($manager_urn)) {
+		$$perrmsg = "$site_id has an invalid manager URN";
+		return 1;
+	    }
+	    GeniXML::SetManagerId($ref, $manager_urn);
+	    GeniXML::SetJacksSiteManagerId($ref, $manager_urn);
+	}
+    }
+    
     $$prspecstr = GeniXML::Serialize($rspec);
     @$paggregate_urns = keys(%aggregates);
     return 0;
