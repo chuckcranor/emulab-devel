@@ -142,7 +142,7 @@ if ($exptstr) {
 #
 # Generate the keys if needed
 #
-if ($genkeys) {
+if ($exptstr && $genkeys) {
     my $key = $expt->GetPrivkey();
     if (!$key) {
 	print STDERR "Generating root keypair for $exptstr ...\n";
@@ -171,7 +171,9 @@ foreach my $node (@nodes) {
     my $privkey;
     $node->GetKeyDist(\$privkey, undef);
     if (!$privkey) {
-	warning("$nodeid: not authorized for private key, ignored");
+	if (!$exptstr) {
+	    warning("$nodeid: not authorized for private key, ignored");
+	}
 	next;
     }
 
