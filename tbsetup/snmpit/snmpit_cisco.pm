@@ -2,7 +2,7 @@
 # vim: set et ts=4 sw=4:
 
 #
-# Copyright (c) 2000-2012 University of Utah and the Flux Group.
+# Copyright (c) 2000-2017 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LGPL
 # 
@@ -74,14 +74,6 @@ my %cmdOIDs =
 #   Cisco switches (eg. 5.42)
 # nodeport: node:port pair, referring to the node that the switch port is
 #   connected to (eg. "pc42:1")
-#
-# See the function convertPortFormat below for conversions between these
-# formats
-#
-my $PORT_FORMAT_IFINDEX  = 1;
-my $PORT_FORMAT_MODPORT  = 2;
-my $PORT_FORMAT_NODEPORT = 3;
-my $PORT_FORMAT_PORT     = 4;
 
 # 
 # used by vlanTrunkUtil()
@@ -437,6 +429,11 @@ sub convertPortFormat($$@) {
     }
 
     if ($input == $PORT_FORMAT_IFINDEX) {
+	if ($output == $PORT_FORMAT_PORTINDEX) {
+	    my @mps = map $self->{IFDESCR}{$_}, @ports;
+	    $self->debug("Converting ifindex to ifDescr\n",3);
+	    return @mps;
+	}
         my @mps = map $self->{IFINDEX}{$_}, @ports;
         if ($output == $PORT_FORMAT_MODPORT) {
             $self->debug("Converting ifindex to modport\n",2);
@@ -456,6 +453,11 @@ sub convertPortFormat($$@) {
             $self->debug("Converting modport to ifindex\n",2);
             return map $self->{IFINDEX}{$_}, @ports;
         } 
+	if ($output == $PORT_FORMAT_PORTINDEX) {
+	    $self->debug("Converting modport to ifDescr\n",3);
+	    my @ifs = map $self->{IFINDEX}{$_}, @ports;
+	    return map $self->{IFDESCR}{$_}, @ifs;
+	} 
 
         my @pos = map Port->LookupByStringForced($self->{NAME}.":".$_), @ports;
 
@@ -2074,15 +2076,23 @@ sub readifIndex($) {
 
         foreach my $rowref (@$rows) {
             my ($name,$modport,$ifindex) = @$rowref;
+	    my $ifd = $modport;
+	    $ifd =~ s/\./\//g;
+
+	    $self->debug("portIfIndex: $name, $modport, $ifindex, $ifd\n", 2);
 
             $self->{IFINDEX}{$modport} = $ifindex;
             $self->{IFINDEX}{$ifindex} = $modport;
+	    $self->{IFDESCR}{$ifindex} = $ifd;
+	    $self->{IFDESCR}{$ifd}     = $ifindex;
         }
     } elsif ($self->{OSTYPE} eq "IOS" || $self->{OSTYPE} eq 'NX-OS') {
         my ($rows) = snmpitBulkwalkFatal($self->{SESS},["ifDescr"]);
 
         foreach my $rowref (@$rows) {
             my ($name,$iid,$descr) = @$rowref;
+	    $self->debug("ifdesc: $name, $iid, $descr\n", 2);
+	    
             if ($descr =~ /(\D*)(\d+)\/(\d+)(\/(\d+))?$/) {
 		my $hassubmod = defined($4) ? 1 : 0;
                 my $type = $1;
@@ -2117,6 +2127,8 @@ sub readifIndex($) {
 
                 $self->{IFINDEX}{$modport} = $ifindex;
                 $self->{IFINDEX}{$ifindex} = $modport;
+		$self->{IFDESCR}{$ifindex} = $descr;
+		$self->{IFDESCR}{$descr}   = $ifindex;
 
                 $self->debug("IFINDEX: $modport,$ifindex\n", 2);
             }

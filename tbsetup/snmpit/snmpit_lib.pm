@@ -30,6 +30,16 @@ package snmpit_lib;
 
 use Exporter;
 @ISA = ("Exporter");
+use vars qw($PORT_FORMAT_IFINDEX $PORT_FORMAT_MODPORT
+            $PORT_FORMAT_NODEPORT $PORT_FORMAT_PORT $PORT_FORMAT_PORTINDEX);
+
+# For convertPortFormat in the device libraries.
+$PORT_FORMAT_IFINDEX  = 1;
+$PORT_FORMAT_MODPORT  = 2;
+$PORT_FORMAT_NODEPORT = 3;
+$PORT_FORMAT_PORT     = 4;
+$PORT_FORMAT_PORTINDEX= 5;
+
 @EXPORT = qw( macport portnum portiface Dev vlanmemb vlanid
 		getTestSwitches getControlSwitches getSwitchesInStack
                 getSwitchesInStacks
@@ -56,6 +66,8 @@ use Exporter;
                 mapVlansToSwitches mapStaleVlansToSwitches
 		getTrunksForVlan getExperimentTrunksForVlan
 		setSwitchTrunkPath mapPortsToSwitches findAndDumpLan
+		$PORT_FORMAT_IFINDEX $PORT_FORMAT_MODPORT
+                $PORT_FORMAT_NODEPORT $PORT_FORMAT_PORT $PORT_FORMAT_PORTINDEX
 );
 
 use English;

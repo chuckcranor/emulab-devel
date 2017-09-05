@@ -1,7 +1,7 @@
 #!/usr/bin/perl -w
 
 #
-# Copyright (c) 2000-2013 University of Utah and the Flux Group.
+# Copyright (c) 2000-2013, 2017 University of Utah and the Flux Group.
 # Copyright (c) 2004-2010 Regents, University of California.
 # 
 # {{{EMULAB-LGPL
@@ -100,10 +100,6 @@ my $ofListenerVarNameMarker = '35.1.1.4';
 # See the function convertPortFormat below for conversions between these
 # formats
 #
-my $PORT_FORMAT_IFINDEX  = 1;
-my $PORT_FORMAT_MODPORT  = 2;
-my $PORT_FORMAT_NODEPORT = 3;
-my $PORT_FORMAT_PORT = 4;
 
 #
 # Creates a new object.
@@ -168,6 +164,7 @@ sub new($$$;$) {
     # set up hashes for internal use
     #
     $self->{IFINDEX} = {};
+    $self->{IFDESCR} = {};
     $self->{TRUNKINDEX} = {};
     $self->{TRUNKS} = {};
 
@@ -573,6 +570,12 @@ sub convertPortFormat($$@) {
     }
 
     if ($input == $PORT_FORMAT_IFINDEX) {
+	if ($output == $PORT_FORMAT_PORTINDEX) {
+	    my @mps = map $self->{IFDESCR}{$_}, @ports;
+	    $self->debug("Converting ifindex to ifDescr\n",3);
+	    @results = @mps;
+	    goto done;
+	}
     	my @mps = map $self->{IFINDEX}{$_}, @ports;
 	if ($output == $PORT_FORMAT_MODPORT) {
 	    $self->debug("Converting ifindex to modport\n",3);
@@ -602,6 +605,12 @@ sub convertPortFormat($$@) {
 	if ($output == $PORT_FORMAT_IFINDEX) {
 	    $self->debug("Converting modport to ifindex\n",3);
 	    @results = map $self->{IFINDEX}{$_}, @ports;
+	    goto done;
+	} 
+	if ($output == $PORT_FORMAT_PORTINDEX) {
+	    $self->debug("Converting modport to ifDescr\n",3);
+	    my @ifs = map $self->{IFINDEX}{$_}, @ports;
+	    @results = map $self->{IFDESCR}{$_}, @ifs;
 	    goto done;
 	} 
 	
@@ -678,6 +687,7 @@ sub convertPortFormat($$@) {
     }
     return @results;
 }
+
 # 
 # Check to see if the given 802.1Q VLAN tag exists on the switch
 #
@@ -1925,10 +1935,18 @@ sub readifIndex($) {
     my $self = shift;
     my ($maxport, $maxtrunk, $name, $ifindex, $iidoid, $port, $mod, $j) = (0,0);
     $self->debug($self->{NAME} . "::readifIndex:\n", 2);
+    my %ifdescr = ();
+
+    my ($rows) = snmpitBulkwalkFatal($self->{SESS}, ["ifDescr"]);
+    foreach my $rowref (@$rows) {
+	my ($name,$ifindex,$descr) = @$rowref;
+	$self->debug("ifDescr: $name, $ifindex, $descr\n", 2);
+	$ifdescr{"$ifindex"} = $descr;
+    }
 
     my $bladesize = $blade_sizes{$self->{HPTYPE}};
 
-    my ($rows) = snmpitBulkwalkFatal($self->{SESS}, ["hpSwitchPortTrunkGroup"]);
+    ($rows) = snmpitBulkwalkFatal($self->{SESS}, ["hpSwitchPortTrunkGroup"]);
     my $t_off = $self->{TRUNKOFFSET} = 288;
 
     foreach my $rowref (@$rows) {
@@ -1940,6 +1958,7 @@ sub readifIndex($) {
 	if ($iidoid > $maxtrunk) { $maxtrunk = $iidoid;}
     }
     while (($ifindex, $iidoid) = each %{$self->{TRUNKINDEX}}) {
+	my $ifd = "unknown";
 	if (defined($bladesize)) {
 	    $j = $ifindex - 1;
 	    $port = 1 + ($j % $bladesize);
@@ -1948,11 +1967,19 @@ sub readifIndex($) {
 	    { $mod = 1; $port = $ifindex; }
 	my $modport = "$mod.$port";
 	my $portindex = $iidoid ? ($t_off + $iidoid) : $ifindex ;
+	my $ifdesc = (exists($ifdescr{"$ifindex"}) ?
+		      $ifdescr{"$ifindex"} : "unknown");
 	$self->{IFINDEX}{$modport} = $portindex;
 	$self->{IFINDEX}{$ifindex} = $modport;
-	$self->debug("$ifindex, $modport\n", 2);
+	if (exists($ifdescr{"$ifindex"})) {
+	    $ifd = $ifdescr{"$ifindex"};
+	    $self->{IFDESCR}{$ifindex} = $ifd;
+	    $self->{IFDESCR}{$ifd} = $ifindex;
+	}
+	$self->debug("$ifindex, $modport, $ifd\n", 2);
     }
     foreach $j (keys %{$self->{TRUNKS}}) {
+	my $ifd = "unknown";
 	$ifindex = $j + $t_off;
 	if (my $lref = $self->{TRUNKS}{$j}) {
 	    $port = $self->{IFINDEX}{@$lref[0]}; #actually modport
@@ -1960,7 +1987,12 @@ sub readifIndex($) {
 	$self->{IFINDEX}{$ifindex} = $port;
 	$self->{IFINDEX}{$port} = $ifindex;
 	$self->{TRUNKINDEX}{$ifindex} = 0; # simplifies convertPortIndex
-	$self->debug("$ifindex, $port\n", 2);
+	if (exists($ifdescr{"$ifindex"})) {
+	    $ifd = $ifdescr{"$ifindex"};
+	    $self->{IFDESCR}{$ifindex} = $ifd;
+	    $self->{IFDESCR}{$ifd} = $ifindex;
+	}
+	$self->debug("$ifindex, $port, $ifd\n", 2);
     }
     $self->{MAXPORT} = $maxport;
     $self->{MAXTRUNK} = $maxtrunk;

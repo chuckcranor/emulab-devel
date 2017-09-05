@@ -1,5 +1,5 @@
 #
-# Copyright (c) 2000-2013, 2016 University of Utah and the Flux Group.
+# Copyright (c) 2000-2017 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -32,7 +32,7 @@ include $(OBJDIR)/Makeconf
 
 SUBDIRS		= 
 
-BIN_STUFF	= snmpit portstats
+BIN_STUFF	= snmpit portstats convertifaces
 LIB_STUFF       = snmpit_intel.pm \
                   snmpit_cisco.pm snmpit_lib.pm \
 		  snmpit_cisco_stack.pm snmpit_intel_stack.pm \

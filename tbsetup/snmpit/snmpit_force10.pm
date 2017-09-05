@@ -1,7 +1,7 @@
 #!/usr/bin/perl -w
 
 #
-# Copyright (c) 2013,2014 University of Utah and the Flux Group.
+# Copyright (c) 2013-2017 University of Utah and the Flux Group.
 # Copyright (c) 2006-2014 Universiteit Gent/iMinds, Belgium.
 # Copyright (c) 2004-2006 Regents, University of California.
 # 
@@ -133,12 +133,6 @@ my $OID_AGGPLIST = ".1.3.6.1.4.1.6027.3.2.1.1.1.1.6";
 # nodeport: node:port pair, referring to the node that the switch port is
 # 	        connected to (eg. "pc42:1")
 #
-# See the function convertPortFormat below for conversions between these
-# formats
-#
-my $PORT_FORMAT_IFINDEX  = 1;
-my $PORT_FORMAT_MODPORT  = 2;
-my $PORT_FORMAT_PORT     = 3;
 
 # OpenFlow constants
 my $MAX_OF_ID = 8;
@@ -541,7 +535,11 @@ sub convertPortFormat($$@) {
     }
 
     if ($input == $PORT_FORMAT_IFINDEX) {
-	if ($output == $PORT_FORMAT_MODPORT) {
+	if ($output == $PORT_FORMAT_PORTINDEX) {
+	    $self->debug("Converting ifindex to ifDescr\n",3);
+	    return map $self->{PORTINDEX}{$_}, @ports;
+	}
+	elsif ($output == $PORT_FORMAT_MODPORT) {
 	    $self->debug("Converting ifindex to modport\n",2);
 	    return map $self->{IFINDEX}{$_}, @ports;
 	} elsif ($output == $PORT_FORMAT_PORT) {
@@ -555,7 +553,13 @@ sub convertPortFormat($$@) {
 	if ($output == $PORT_FORMAT_IFINDEX) {
 	    $self->debug("Converting modport to ifindex\n",2);
 	    return map $self->{IFINDEX}{$_}, @ports;
-	} elsif ($output == $PORT_FORMAT_PORT) {
+	}
+	elsif ($output == $PORT_FORMAT_PORTINDEX) {
+	    $self->debug("Converting modport to ifDescr\n",3);
+	    my @ifs = map $self->{IFINDEX}{$_}, @ports;
+	    return map $self->{PORTINDEX}{$_}, @ifs;
+	}
+	elsif ($output == $PORT_FORMAT_PORT) {
 	    $self->debug("Converting modport to Port\n",2);
 	    return map {Port->LookupByStringForced(
 			    Port->Tokens2TripleString(
