@@ -1352,6 +1352,12 @@ sub OnSharedNode($) {
 # the result into the reserved table. The Get/Set accessor functions below
 # use the values from reserved.
 #
+# If the user-provided value is -1, then we use the system default value
+# from the sitevar general/root_keypair (0 == don't distribute either key
+# to any nodes, 1 == distribute both keys to all nodes). If the sitevar
+# is set to -1 then the mechanism is disabled and we do not distribute
+# any keys to anyone.
+#
 # The current restrictions are that we do *not* distribute a root pubkey
 # to tainted nodes (as it opens a path to root on a node where no one should
 # be root) or any keys to firewall nodes, virtnode hosts, delay nodes,
@@ -1372,6 +1378,13 @@ sub InitKeyDist($;$)
 	    if (!$experiment);
     }
     
+    # If the system default is "disabled", no key distribution
+    my $sysdef;
+    if (!TBGetSiteVar("general/root_keypair", \$sysdef) || $sysdef == -1) {
+	$priv = $pub = 0;
+	goto done;
+    }
+
     # XXX only PC class nodes for now, since we have to ssh to it
     if ($self->class ne "pc" && $self->class ne "pcvm") {
 	$priv = $pub = 0;
@@ -1391,6 +1404,10 @@ sub InitKeyDist($;$)
 	($priv, $pub) = $result->fetchrow_array();
 	my $fwnode;
 	
+	# start with default if user didn't specify
+	$priv = $sysdef if ($priv == -1);
+	$pub = $sysdef if ($pub == -1);
+
 	# tainted node: no pub key
 	if ($self->IsTainted()) {
 	    $pub = 0;

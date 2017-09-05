@@ -161,8 +161,8 @@ Node instproc init {s} {
     array set fw_rules {}
 
     # Distribution of per-experiment root keypair
-    $self set rootkey_private 0
-    $self set rootkey_public 0
+    $self set rootkey_private -1
+    $self set rootkey_public -1
 }
 
 Bridge instproc init {s} {
