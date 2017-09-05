@@ -1444,7 +1444,7 @@ sub MakeFake($$)
 #
 # Find me a wire from either side using nodeid,card,port.
 #
-sub LookupAny($$$;$)
+sub LookupAny($$$$)
 {
     my ($class, $nodeid, $card, $port) = @_;
 
