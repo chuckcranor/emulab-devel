@@ -1352,21 +1352,23 @@ sub OnSharedNode($) {
 # the result into the reserved table. The Get/Set accessor functions below
 # use the values from reserved.
 #
-# If the user-provided value is -1, then we use the system default value
-# from the sitevar general/root_keypair (0 == don't distribute either key
-# to any nodes, 1 == distribute both keys to all nodes). If the sitevar
-# is set to -1 then the mechanism is disabled and we do not distribute
-# any keys to anyone.
+# If the user-provided value is -1 for any nodes/keys, then we use the given
+# default value if provided or sitevar general/root_keypair (0 == don't
+# distribute either key to any nodes, 1 == distribute both keys to all nodes)
+# otherwise. However, if the default value is -1 then the mechanism is
+# disabled entirely and we do not distribute any keys to anyone regardless
+# of what the user says.
 #
-# The current restrictions are that we do *not* distribute a root pubkey
-# to tainted nodes (as it opens a path to root on a node where no one should
-# be root) or any keys to firewall nodes, virtnode hosts, delay nodes,
+# The current "policy" restrictions are that we do *not* distribute a root
+# pubkey to tainted nodes (as it opens a path to root on a node where no one
+# should be root) or any keys to firewall nodes, virtnode hosts, delay nodes,
 # subbosses, storagehosts, etc. which are not really part of the user
-# topology.
+# topology. We also do not distribute to non "PC" nodes as they might not
+# support ssh anyway.
 #
-sub InitKeyDist($;$)
+sub InitKeyDist($;$$)
 {
-    my ($self,$experiment) = @_;
+    my ($self,$experiment,$def) = @_;
     my ($priv,$pub);
 
     return -1
@@ -1378,9 +1380,15 @@ sub InitKeyDist($;$)
 	    if (!$experiment);
     }
     
+    # If no default is specified, use the system default
+    if (!defined($def)) {
+	if (!TBGetSiteVar("general/root_keypair", \$def)) {
+	    $def = -1;
+	}
+    }
+
     # If the system default is "disabled", no key distribution
-    my $sysdef;
-    if (!TBGetSiteVar("general/root_keypair", \$sysdef) || $sysdef == -1) {
+    if ($def == -1) {
 	$priv = $pub = 0;
 	goto done;
     }
@@ -1405,8 +1413,8 @@ sub InitKeyDist($;$)
 	my $fwnode;
 	
 	# start with default if user didn't specify
-	$priv = $sysdef if ($priv == -1);
-	$pub = $sysdef if ($pub == -1);
+	$priv = $def if ($priv == -1);
+	$pub = $def if ($pub == -1);
 
 	# tainted node: no pub key
 	if ($self->IsTainted()) {

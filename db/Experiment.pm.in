@@ -6719,13 +6719,46 @@ sub GetPrivkey($)
 # per-experiment root private/public keys based on what the user wants
 # and modified by Emulab policy (as encoded in Node::InitKeyDist).
 #
+# Here we enforce one bit of experiment-specific policy:
+#
+# If the user has set *any* key distribution manually within an experiment,
+# we default all other unspecified nodes/keys to 0. The assumption here is
+# that if the user specifies anything at all, they probably have a specific
+# setup in mind and we don't want the resulting behavior to be different
+# depending on the system default.
+#
 sub InitKeyDist($)
 {
     my ($self) = @_;
+    my $idx = $self->idx();
+
+    #
+    # Determine a default for all unspecified node key distributions:
+    # - if the system default is "disabled", no key distribution is done
+    # - if the user has specified any explicit values, the default is off
+    # - otherwise use the on/off system default.
+    #
+    my $sysdef = -1;
+    if (TBGetSiteVar("general/root_keypair", \$sysdef) && $sysdef != -1) {
+	my $result =
+	    DBQueryWarn("select v.rootkey_private,v.rootkey_public ".
+			" from virt_nodes as v, reserved as r ".
+			" where v.exptidx=r.exptidx and v.vname=r.vname ".
+			"  and v.exptidx=$idx");
+
+	if ($result && $result->numrows > 0) {
+	    while (my ($priv,$pub) = $result->fetchrow_array()) {
+		if ($priv != -1 || $pub != -1) {
+		    $sysdef = 0;
+		    last;
+		}
+	    }
+	}
+    }
 
     my @nodelist = $self->NodeList(0, 1);
     foreach my $node (@nodelist) {
-	$node->InitKeyDist($self);
+	$node->InitKeyDist($self, $sysdef);
     }
 
     return 0;
