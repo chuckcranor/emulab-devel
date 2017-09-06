@@ -164,12 +164,22 @@ pre {
 	      col-xs-12 col-xs-offset-0'>
     <div class='panel panel-default hidden' id="loadavg-panel-div">
       <div class="panel-heading">
-	<h5>
-	  <a data-toggle="collapse" id="loadavg-toggle"
-	     href="#loadavg-collapse"><span>Load Average Graph</span>
-	    <span class="glyphicon glyphicon-chevron-right pull-right"></span>
-	  </a>
-	</h5>
+	<a data-toggle="collapse" id="loadavg-toggle"
+	   href="#loadavg-collapse">
+	  <span class="glyphicon glyphicon-chevron-right pull-right"></span>
+	</a>
+	<div class="maxavg-toggles pull-right"
+	     style="margin-right: 10px;">
+	  <label class="radio-inline">
+	    <input type="radio" name="loadav-radio"
+		   checked="checked" value="max"> Max
+	  </label>
+	  <label class="radio-inline">
+	    <input type="radio" name="loadav-radio"
+		   value="avg"> Avg
+	  </label>
+	</div>
+	<h5><span>Load Average Graph</span></h5>
       </div>
       <div id="loadavg-collapse"
 	   class="panel-collapse collapse">
@@ -177,22 +187,6 @@ pre {
 	  <!-- The col setting gives us a "relative" position div -->
 	  <div class='col-xs-12 col-xs-offset-0'
 	       style="padding:0px;">
-	    <!--
-	    So now we can use an "absolute" position to put
-	    the radio button in the upper left of the graph
-	    where it will not overwrite anything.
-	    -->
-	    <div class="hidden toggles"
-		 style='position:absolute;left:5px;top:0px'>
-	      <label class="radio-inline">
-		<input type="radio" name="loadav-radio"
-		       checked="checked" value="max"> Max
-	      </label>
-	      <label class="radio-inline">
-		<input type="radio" name="loadav-radio"
-		       value="avg"> Avg
-	      </label>
-	    </div>
 	    <div id="loadavg-chart"
 		 class='fixedsize-panel with-3d-shadow with-transitions'>
 	      <svg></svg>
@@ -208,13 +202,39 @@ pre {
 	      col-xs-12 col-xs-offset-0'>
     <div class='panel panel-default hidden' id="ctrl-traffic-panel-div">
       <div class="panel-heading">
-	<h5>
-	  <a data-toggle="collapse" class="traffic-toggle"
-	     id="ctrl-traffic-toggle" 
-	     href="#ctrl-traffic-collapse"><span>Control Traffic Graph</span>
-	    <span class="glyphicon glyphicon-chevron-right pull-right"></span>
-	  </a>
-	</h5>
+	<a data-toggle="collapse" class="traffic-toggle"
+	   id="ctrl-traffic-toggle" 
+	   href="#ctrl-traffic-collapse">
+	  <span class="glyphicon glyphicon-chevron-right pull-right"></span>
+	</a>
+	<div class="maxavg-toggles pull-right"
+	     style="margin-right: 10px;">
+	  <label class="radio-inline">
+	    <input type="radio" name="ctrl-radio"
+		   checked="checked" value="max"> Max
+	  </label>
+	  <label class="radio-inline">
+	    <input type="radio" name="ctrl-radio"
+		   value="avg"> Avg
+	  </label>
+	</div>
+	<div class="txrx-toggles pull-right"
+	     style="margin-right: 15px;">
+	  <label class="radio-inline">
+	    <input type="radio" name="ctrl-radio-txrx"
+		   value="rx"> RX
+	  </label>
+	  <label class="radio-inline">
+	    <input type="radio" name="ctrl-radio-txrx"
+		   value="tx"> TX
+	  </label>
+	  <label class="radio-inline">
+	    <input type="radio" name="ctrl-radio-txrx"
+		   checked="checked"
+		   value="sum"> Sum
+	  </label>
+	</div>
+	<h5><span>Control Traffic Graph</span></h5>
       </div>
       <div id="ctrl-traffic-collapse"
 	   class="panel-collapse collapse traffic-collapse">
@@ -222,21 +242,6 @@ pre {
 	  <!-- The col setting gives us a "relative" position div -->
 	  <div class='col-xs-12 col-xs-offset-0'
 	       style="padding:0px;">
-	    <!-- So now we can use an "absolute" position to put
-	    the radio button in the upper left of the graph
-	    where it will not overwrite anything.
-	    -->
-	    <div class="hidden toggles"
-		 style='position:absolute;left:5px;top:0px'>
-	      <label class="radio-inline">
-		<input type="radio" name="ctrl-radio"
-		       checked="checked" value="max"> Max
-	      </label>
-	      <label class="radio-inline">
-		<input type="radio" name="ctrl-radio"
-		       value="avg"> Avg
-	      </label>
-	    </div>
 	    <div id="ctrl-traffic-chart"
 		 class='fixedsize-panel with-3d-shadow with-transitions'>
 	      <svg></svg>
@@ -252,12 +257,36 @@ pre {
 	      col-xs-12 col-xs-offset-0'>
     <div class='panel panel-default hidden' id="expt-traffic-panel-div">
       <div class="panel-heading">
-	<h5>
-	  <a data-toggle="collapse" id="expt-traffic-toggle"
-	     href="#expt-traffic-collapse"><span>Experiment Traffic Graph</span>
-	    <span class="glyphicon glyphicon-chevron-right pull-right"></span>
-	  </a>
-	</h5>
+	<a data-toggle="collapse" id="expt-traffic-toggle"
+	   href="#expt-traffic-collapse">
+	  <span class="glyphicon glyphicon-chevron-right pull-right"></span>
+	</a>
+	<div class="maxavg-toggles pull-right"
+	     style="margin-right: 10px;">
+	  <label class="radio-inline">
+	    <input type="radio" name="expt-radio"
+		   checked="checked" value="max"> Max</label>
+	    <label class="radio-inline">
+	      <input type="radio" name="expt-radio"
+		     value="avg"> Avg</label>
+	</div>
+	<div class="txrx-toggles pull-right"
+	     style="margin-right: 15px;">
+	  <label class="radio-inline">
+	    <input type="radio" name="expt-radio-txrx"
+		   value="rx"> RX
+	  </label>
+	  <label class="radio-inline">
+	    <input type="radio" name="expt-radio-txrx"
+		   value="tx"> TX
+	  </label>
+	  <label class="radio-inline">
+	    <input type="radio" name="expt-radio-txrx"
+		   checked="checked"
+		   value="sum"> Sum
+	  </label>
+	</div>
+	<h5><span>Experiment Traffic Graph</span></h5>
       </div>
       <div id="expt-traffic-collapse"
 	   class="panel-collapse collapse">
@@ -265,19 +294,6 @@ pre {
 	  <!-- The col setting gives us a "relative" position div -->
 	  <div class='col-xs-12 col-xs-offset-0'
 	       style="padding:0px;">
-	    <!-- So now we can use an "absolute" position to put
-	    the radio button in the upper left of the graph
-	    where it will not overwrite anything.
-	    -->
-	    <div class="hidden toggles"
-		 style='position:absolute;left:5px;top:0px'>
-	      <label class="radio-inline">
-		<input type="radio" name="ctrl-radio"
-		       checked="checked" value="max"> Max</label>
-		<label class="radio-inline">
-		  <input type="radio" name="ctrl-radio"
-			 value="avg"> Avg</label>
-	    </div>
 	    <div id="expt-traffic-chart"
 		 class='fixedsize-panel with-3d-shadow with-transitions'>
 	      <svg></svg>
