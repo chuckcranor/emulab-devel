@@ -136,6 +136,54 @@ function Do_Instantiate()
     return;
 }
 
+function ImagesWhere($where, $dblink)
+{
+    $result = array();
+    $query_result = DBQueryFatal(
+      "select i.urn, v.description, v.version from ".
+      "image_versions as v left join images as i on ".
+      "v.urn=i.urn ".$where,
+    $dblink);
+    while ($row = mysql_fetch_array($query_result)) {
+      array_push($result, array(
+          'urn' => $row[0],
+          'description' => $row[1],
+          'version' => $row[2]));
+    }
+    return $result;
+}
+
+function Do_GetImageList()
+{
+    global $this_user;
+    global $ajax_args;
+    $dblink = DBConnect("ims");
+    $systemProject = 'emulab-ops';
+    $myImages = array();
+    $projectImages = array();
+    $systemImages = array();
+    $publicImages = array();
+    if ($this_user && $this_user->webonly()) {
+        # Only public images
+	$publicImages = ImagesWhere("where v.visibility='public' and i.project_urn not like '%$systemProject+authority+sa'", $dblink);
+	$systemImages = ImagesWhere("where i.project_urn like '%$systemProject+authority+sa'", $dblink);
+    } else if ($this_user) {
+	$user_urn = addslashes($this_user->urn());
+	# Public images that weren't created by the user
+	$publicImages = ImagesWhere("where v.visibility='public' and i.project_urn not like '%$systemProject+authority+sa' and v.creator_urn != '$user_urn'", $dblink);
+	# System images that weren't created by the user
+	$systemImages = ImagesWhere("where v.visibility='public' and i.project_urn like '%$systemProject+authority+sa' and v.creator_urn != '$user_urn'", $dblink);
+        # All images for user
+	$myImages = ImagesWhere("where v.creator_urn='$user_urn'", $dblink);
+    }
+    $result = array(array("my-images" => $myImages,
+                          "project" => $projectImages,
+			  "system" => $systemImages,
+			  "public" => $publicImages));
+    
+    SPITAJAX_RESPONSE($result);
+}
+
 #
 # Return constraint info for a set of images.
 #

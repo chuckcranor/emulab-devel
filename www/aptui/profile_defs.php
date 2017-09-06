@@ -744,6 +744,36 @@ class Profile
 		}
 		$form .= "</select>";
 	    }
+	    elseif ($type == "image") {
+	        $form .=
+		    "<div class='format-me' ".
+		    "data-key='$name' ".
+		    "data-label='$prompt' ".
+		    "data-type='$type' ".
+		    "$data_help_string $advanced_attr >".
+
+		    "<div class='input-group'>".
+
+		    "<input id='image-display' ".
+		    "type='text' readonly ".
+		    "class='form-control' ".
+		    "value='<% var label = formfields.${name}; var sp = label.split('+'); var image_display; if (sp.length >= 4){ if (sp[3].substr(0, 12) == 'emulab-ops//') { image_display = sp[3].substr(12) } else { image_display = sp[3] } } else { image_display = formfields.${name} } %><%- image_display %>' >".
+
+
+		    "<span class='input-group-btn'><button class='btn btn-success' id='image-select' ".
+		    "style='height: 34px' ".
+		    "type='button' ".
+		    "$data_help_string $advanced_attr ".
+		    "><span class='glyphicon glyphicon-pencil'></span></button></span> ".
+
+		    "</div>".
+		    
+		    "<input id='image-value' ".
+		    "name='$name' type='hidden' ".
+		    "value='<%- formfields.${name} %>' >".
+
+		    "</div>";
+	    }
 	    else {
 		$form .=
 		    "<input name='$name' ".

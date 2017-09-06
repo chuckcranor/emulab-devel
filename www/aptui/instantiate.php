@@ -427,7 +427,9 @@ function SPITFORM($formfields, $newuser, $errors)
     }
     echo "</script>\n";
     echo "<script src='js/lib/jquery-2.0.3.min.js'></script>\n";
-
+    echo "<script src='https://www.emulab.net/protogeni/jacksmod/stable/jacksmod.js'></script>";
+    echo "<script src='https://www.emulab.net/protogeni/jacksmod/stable/imagepicker.js'></script>";
+    
     REQUIRE_UNDERSCORE();
     REQUIRE_SUP();
     REQUIRE_PPWIZARDSTART();

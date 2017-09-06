@@ -6,10 +6,11 @@ $(function () {
     {
 	'use strict';
 
-        var templates = APT_OPTIONS.fetchTemplateList(['ppform-wizard', 'ppform-wizard-body', 'choose-am']);
+        var templates = APT_OPTIONS.fetchTemplateList(['ppform-wizard', 'ppform-wizard-body', 'choose-am', 'image-picker-modal']);
         var ppmodalString = templates['ppform-wizard'];
         var ppbodyString = templates['ppform-wizard-body'];
         var chooserString = templates['choose-am'];
+        var imagePickerString = templates['image-picker-modal'];
 	var bodyTemplate  = null;
 	var chooseTemplate= null;
 	var editor        = null;
@@ -21,7 +22,8 @@ $(function () {
 	var multisite     = 0;
 	var RSPEC	  = null;
 	var configuredone_callback = null;
-	var warningsfatal = 1;
+        var warningsfatal = 1;
+        var imagePicker = null;
 
 	//
 	// Moved into a separate function since we want to regen the form
@@ -32,9 +34,9 @@ $(function () {
 	    var html = bodyTemplate({
 		formfields:		formfields,
 	    });
-	
-	    html = formatter(html, errors).html();
-	    $('#ppmodal-body').html(html);
+
+	    $('#ppmodal-body').empty();
+	    formatter(html, errors, $('#ppmodal-body'));
 	    if (!registered) {
 		$('#pp_form :input').attr('readonly', true);
 		// This is the only way to disable selects
@@ -43,7 +45,10 @@ $(function () {
 		$('#pp_form :button').attr('disabled', false);
 		$('#pp_form :button').attr('readonly', false);
 	    }
-	    
+	    imagePicker = new jacksmod.ImagePicker();
+	    $('#image-picker-body').html(imagePickerString);
+	    $('#imagepicker-modal .modal-body > div').append(imagePicker.el);
+	  
 	    //
 	    // Handle submit button.
 	    //
@@ -93,9 +98,10 @@ $(function () {
 	}
 
 	// Formatter for the form. This did not work out nicely at all!
-	function formatter(fieldString, errors)
-	{
+	function formatter(fieldString, errors, parent)
+	  {
 	    var root   = $(fieldString);
+	    parent.append(root);
 	    var list   = root.find('.format-me');
 	    var form   = root.find('#pp_form');
 	    var hasHelp = false;
@@ -239,6 +245,12 @@ $(function () {
 					oldV = $(item).val();
 					$(item).attr('value',v);
 				    }
+				    else if (item.dataset['type'] && item.dataset['type'] == 'image')
+				    {
+				        oldV = $(item).find('input#image-value').val();
+				      $(item).find('input#image-value').val(v);
+				      $(item).find('input#image-display').val(imageDisplay(v));
+				    }
 				    else if ($(item).prop('tagName') == 'INPUT'
 					     && $(item).attr('type') == 'checkbox') {
 					oldV = $(item).val();
@@ -367,7 +379,12 @@ $(function () {
 		    }
 		    var innerdiv = $("<div class='col-sm-" +
 				     colsize + "'></div>");
-		    innerdiv.html($(item).clone());
+		    var clone = $(item).clone();
+		    if (item.dataset['type'] && item.dataset['type'] == 'image')
+		    {
+		        initImagePicker(clone);
+		    }
+		    innerdiv.html(clone);
 
 		    // Handle the easy type-checked errors from the PHP/ajax call.
 		    if (errors && _.has(errors, key)) {
@@ -753,6 +770,101 @@ $(function () {
 	  }
 	}
 
+      var globalImages = [
+	{
+	  urn: 'urn:publicid:IDN+emulab.net+image+emulab-ops//UBUNTU16-64-STD',
+	  version: '',
+	  description: 'Ubuntu 16.04 standard image'
+	},
+	{
+	  urn: 'urn:publicid:IDN+emulab.net+image+emulab-ops//UBUNTU14-64-STD',
+	  version: '',
+	  description: 'Ubuntu 14.04 standard image'
+	},
+	{
+	  urn: 'urn:publicid:IDN+emulab.net+image+emulab-ops//CENTOS66-64-STD',
+	  version: '',
+	  description: 'CentOS 6.6 standard image'
+	},
+	{
+	  urn: 'urn:publicid:IDN+emulab.net+image+emulab-ops//CENTOS71-64-STD',
+	  version: '',
+	  description: 'CentOS 7.1 standard image'
+	},
+      	{
+	  urn: 'urn:publicid:IDN+emulab.net+image+emulab-ops//FBSD103-64-STD',
+	  version: '',
+	  description: 'FreeBSD 10.3 standard image'
+	},
+      ];
+      var userImages = [
+	{
+	  urn: 'urn:publicid:IDN+emulab.net+image+testbed//JONS_COOL_IMAGE',
+	  version: '45ac6de',
+	  description: 'This image is super cool because it was created in an awesome fashion. You should totally pick this image, dood.'
+	},
+	{
+	  urn: 'urn:publicid:IDN+emulab.net+image+testbed//JONS_BAD_HAIR_DAY_IMAGE',
+	  version: 'deadbe4f',
+	  description: 'You don\'t want this image, man. It was created under a bad moon in the middle of a total solar eclipse and is cursed for all time.'
+	},
+      ];
+      
+        function initImagePicker(dom) {
+	  dom.find('button#image-select').click(function (event) {
+	    var callback = function(json) {
+	      $('#waitwait-modal').modal('hide');
+	      console.log('imagepicker', json);
+
+	      if (json.code == 0) {
+		sup.ShowModal('#imagepicker-modal');
+		imagePicker.pick(dom.find('input#image-value').val(), json.value[0]);
+	      } else {
+		sup.SpitOops('oops', json.value);
+	      }
+	    }
+	    $('#waitwait-modal').modal('show');
+	    var xmlthing = sup.CallServerMethod(null, "instantiate", "GetImageList");
+	    xmlthing.done(callback);
+
+	    
+	    var closeFunction = function () {
+	      imagePicker.off('selected');
+	      imagePicker.off('closed');
+	      sup.HideModal('#imagepicker-modal');
+	    };
+	    imagePicker.on('selected', function (item) {
+	      dom.find('input#image-value').val(item);
+	      dom.find('input#image-display').val(imageDisplay(item));
+	      closeFunction();
+	    });
+	    imagePicker.on('closed', closeFunction);
+	    $('#imagepicker-modal .modal-header button.close').on('click', closeFunction);	    
+	    event.preventDefault();
+	  });
+        }
+
+      function imageDisplay(v) {
+	var sp = v.split('+');
+	var display;
+	if (sp.length >= 4)
+	{
+	  if (sp[3].substr(0, 12) == 'emulab-ops//')
+	  {
+	    display = sp[3].substr(12);
+	  }
+	  else
+	  {
+	    display = sp[3];
+	  }
+	}
+	else
+	{
+	  display = v;
+	}
+	return display;
+      }
+      
 	return {
 		HandleSubmit: HandleSubmit,
 		StartPP: StartPP,

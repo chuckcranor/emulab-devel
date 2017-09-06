@@ -359,6 +359,16 @@ class User
     # Not via the Portal interface.
     function isClassic()     { return ($this->portal() ? 0 : 1); }
 
+    function urn() {
+      global $OURDOMAIN;
+      if ($this->IsNonLocal()) {
+          return $this->nonlocal_id();
+      } else {
+          return 'urn:publicid:IDN+' .
+	      $OURDOMAIN . '+user+' . $this->uid();
+      }
+    }
+
     function IsNonLocal() {
 	return ($this->field("nonlocal_id") ? 1 : 0);
     }

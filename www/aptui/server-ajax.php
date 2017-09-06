@@ -97,6 +97,8 @@ $routing = array("myprofiles" =>
 						     "Do_Instantiate",
 						 "GetParameters" =>
                                                      "Do_GetParameters",
+						     "GetImageList" =>
+						     "Do_GetImageList",
 						 "GetImageInfo" =>
 						     "Do_GetImageInfo",
 						 "MarkFavorite" =>
