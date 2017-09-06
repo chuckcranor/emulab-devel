@@ -751,6 +751,28 @@ sub GetStartupCommand($)
     return $result;
 }
 
+#
+# Get root ssh key directive. Returns a list (pub,priv) booleans.
+#
+sub GetRootKey($)
+{
+    my ($node) = @_;
+    my $keyref = GeniXML::FindNodesNS("n:rootkey", $node,
+				      $EMULAB_NS)->pop();
+    return (undef,undef)
+	if (!defined($keyref));
+    
+    my $priv = GetText("private", $keyref);
+    if (defined($priv)) {
+	$priv = (lc("$priv") eq "true" ? 1 : 0);
+    }
+    my $pub  = GetText("public", $keyref);
+    if (defined($pub)) {
+	$pub = (lc("$pub") eq "true" ? 1 : 0);
+    }
+    return ($pub,$priv);
+}
+
 sub GetTarball($)
 {
     my ($node) = @_;

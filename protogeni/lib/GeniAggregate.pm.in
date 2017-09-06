@@ -94,6 +94,7 @@ my $ARPLOCKDOWN    = "$TB/sbin/arplockdown";
 my $TARFILES_SETUP = "$TB/bin/tarfiles_setup";
 my $ELAB_SETUP     = "$TB/sbin/elabinelab";
 my $TBADB          = "$TB/bin/tbadb";
+my $PUSHROOTKEY	   = "$TB/sbin/pushrootkey";
 
 # Cache of instances to avoid regenerating them.
 my %aggregates     = ();
@@ -1770,6 +1771,23 @@ sub Action($$$;$)
     return -1
 	if ($self->WaitForNodes(\@failed, $osload_object, \@reload_children,
 				@waitpnodes, @waitvnodes));
+
+
+    #
+    # Before we fire off any async activity, push out any experiment
+    # specific root private key.
+    #
+    if ($action eq "start") {
+	my $privkey = $experiment->GetPrivkey();
+	if ($privkey) {
+	    print STDERR "Pushing per-experiment root private key.\n";
+	    system("$PUSHROOTKEY -e $pid/$eid");
+	    if ($?) {
+		print STDERR "*** Could not push private key, ".
+		    "this may cause problems!\n";
+	    }
+	}
+    }
     
     # Waiting is done. 
     if ($experiment->elab_in_elab()) {
@@ -1792,7 +1810,7 @@ sub Action($$$;$)
     elsif (($action eq "start" || $action eq "restart") &&
 	   ($flags & $ACTION_FLAGS_NOEVENTSTART) == 0) {
 	$self->ComputeState();
-	
+
 	if ($self->status() eq "ready") {
 	    #
 	    # Start the event scheduler. Note that the experiment is already
