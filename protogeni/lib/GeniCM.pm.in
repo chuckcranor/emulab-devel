@@ -7950,6 +7950,9 @@ sub HandleBlockstore($$$$$$$@)
 		    $message = "Unknown dataset: $dataset_id";
 		    goto bad;
 		}
+		if (GeniResponse::IsError($image)) {
+		    return $image;
+		}
 	    }
 	    else {
 		$message = "Invalid name/url for dataset";
