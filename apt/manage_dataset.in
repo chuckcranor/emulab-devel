@@ -262,7 +262,8 @@ sub DoCreate()
 	    $size = $1;
 	}
 	elsif ($options{"s"} =~ /^(\d+)(\w+)$/) {
-	    $size = Blockstore::ConvertToMebi($options{"s"});
+	    # Converter wants upper case.
+	    $size = Blockstore::ConvertToMebi(uc($options{"s"}));
 	    if ($size < 0) {
 		fatal("Could not parse size.");
 	    }
