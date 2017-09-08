@@ -73,6 +73,8 @@ my $USERNODE_IP = "@USERNODE_IP@";
 my $OURDOMAIN   = "@OURDOMAIN@";
 my $CONTROL_NETMASK = "@CONTROL_NETMASK@";
 my $CONTROL_ROUTER_IP = "@CONTROL_ROUTER_IP@";
+my $PROTOUSER = "elabman";
+my $PROTOPROJ = "emulab-ops";
 
 #
 # Constants
@@ -372,6 +374,79 @@ sub SetupReconfigure($$)
     return 0;
 }
 
+sub TempFlipToUser($$$;$)
+{
+    my ($savehashref, $user, $group, $default_gid) = @_;
+    my $glist;
+    my %stash = ();
+
+    return -1
+        if (!defined($savehashref));
+
+    $stash{'uid'} = $UID;
+    $stash{'euid'} = $EUID;
+    $stash{'gid'} = $GID;
+    $stash{'egid'} = $EGID;
+    $stash{'ENV_USER'} = $ENV{'USER'};
+    $stash{'ENV_GID'} = $ENV{'GID'};
+    $stash{'ENV_LOGNAME'} = $ENV{'LOGNAME'};
+    $stash{'ENV_HOME'} = $ENV{'HOME'};
+
+    my $unix_uid = getpwnam("$user");
+    if (!defined($unix_uid)) {
+        print STDERR "*** TempFlipToUser: No such user $user\n";
+        return -1;
+    }
+    my $unix_gid = getgrnam("$group");
+    if (!defined($unix_gid)) {
+        print STDERR "*** TempFlipToUser: No such group $group\n";
+        return -1;
+    }
+
+    if (defined($default_gid) && $default_gid != $unix_gid) {
+        $glist = "$default_gid $default_gid $unix_gid";
+    }
+    else {
+        $default_gid = $unix_gid;
+        $glist = "$unix_gid $unix_gid";
+    }
+
+    $GID            = $default_gid;
+    $EGID           = $glist;
+    $EUID = $UID    = $unix_uid;
+    $ENV{'USER'}    = $user;
+    $ENV{'GID'}     = $default_gid;
+    $ENV{'LOGNAME'} = $user;
+    $ENV{'HOME'}    = "/home/$user";
+
+    if (defined($savehashref)) {
+        %$savehashref = %stash;
+    }
+
+    return 0;
+}
+
+sub FlipBackFromTempUser($)
+{
+    my ($savehashref,) = @_;
+
+    return -1
+	if (!defined($savehashref));
+
+    $EUID   = 0;
+    $GID    = $savehashref->{'gid'};
+    $EGID   = $savehashref->{'egid'};
+    $UID    = $savehashref->{'uid'};
+    $EUID   = $savehashref->{'euid'};
+
+    $ENV{'USER'} = $savehashref->{'ENV_USER'};
+    $ENV{'GID'} = $savehashref->{'ENV_GID'};
+    $ENV{'LOGNAME'} = $savehashref->{'ENV_LOGNAME'};
+    $ENV{'HOME'} = $savehashref->{'ENV_HOME'};
+
+    return 0;
+}
+
 sub _doTiptunnel($$;$)
 {
     my ($self,$nodeobject,$tipref) = @_;
@@ -394,8 +469,30 @@ sub _doTiptunnel($$;$)
 
     $self->dprint(0,"_doTipTunnel($node_id): opening console connection");
 
+    #
+    # Allow real root to successfully invoke tiptunnel (as happens from
+    # the reload_daemon).
+    #
+    my %current_user_context = ();
+    my $flipped = 0;
+    if ($UID == 0) {
+	$flipped = 1;
+	fatal("failed to drop privileges from root to elabman for tiptunnel")
+	    if (TempFlipToUser(\%current_user_context,$PROTOUSER,$PROTOPROJ));
+	tbinfo "$self _doTiptunnel: dropped privs from root to elabman for tiptunnel ($UID/$EUID)\n"
+	    if ($self->debug());
+    }
+
+    # Open the tiptunnel.
     my ($chin,$chout,$cherr);
     my $tippid = open3($chout,$chin,$cherr,"$TIPCMD " . $node_id);
+
+    # Flip back if we were previously real root.
+    if ($flipped) {
+	FlipBackFromTempUser(\%current_user_context);
+	tbinfo "$self _doTiptunnel: restored privs after tiptunnel ($UID/$EUID)\n"
+	    if ($self->debug());
+    }
 
     #
     # Install a signal handler so we can catch PIPEs without dying.
@@ -1017,7 +1114,29 @@ sub setSpeed($$$) {
 	return 1;
     }
 
+    #
+    # Allow real root to successfully invoke tiptunnel (as happens from
+    # the reload_daemon).
+    #
+    my %current_user_context = ();
+    my $flipped = 0;
+    if ($UID == 0) {
+	$flipped = 1;
+	fatal("failed to drop privileges from root to elabman for tiptunnel")
+	    if (TempFlipToUser(\%current_user_context,$PROTOUSER,$PROTOPROJ));
+	tbinfo "$self setSpeed: dropped privs from root to elabman for tiptunnel ($UID/$EUID)\n"
+	    if ($self->debug());
+    }
+
     my $retval = system("$TIPCMD -s $speed $nodeid");
+
+    # Flip back if we were previously real root.
+    if ($flipped) {
+	FlipBackFromTempUser(\%current_user_context);
+	tbinfo "$self setSpeed: restored privs after tiptunnel ($UID/$EUID)\n"
+	    if ($self->debug());
+    }
+
     #
     # if system throws us an error, we need to catch it!
     #
