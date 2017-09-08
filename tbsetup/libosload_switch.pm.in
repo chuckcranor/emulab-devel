@@ -1379,7 +1379,7 @@ sub generateConfig($$) {
 		}
 		my $card  = $interface->card();
 		my $port  = $interface->port();
-		my $portname = _translatePort($card, $port);
+		my $portname = $self->_translatePort($card, $port);
 		
 		#
 		# A trunk has to be in at least one vlan in tagged mode, for
