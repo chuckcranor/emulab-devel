@@ -743,7 +743,7 @@ sub doSwapout($) {
 	# swapmod.
 	#
 	print "Removing logical wires.\n";
-	if (Interface::Wire->DeleteLogicalWires($experiment)) {
+	if (Interface::LogicalWire->DeleteLogicalWires($experiment)) {
 	    tberror("Could not delete logical wires and interfaces\n");
 	    return 1;
 	}
