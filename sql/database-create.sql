@@ -4204,8 +4204,8 @@ CREATE TABLE `plab_slices` (
 DROP TABLE IF EXISTS `port_counters`;
 CREATE TABLE `port_counters` (
   `node_id` char(32) NOT NULL default '',
-  `card` tinyint(3) unsigned NOT NULL default '0',
-  `port` smallint(5) unsigned NOT NULL default '0',
+  `card_saved` tinyint(3) unsigned NOT NULL default '0',
+  `port_saved` smallint(5) unsigned NOT NULL default '0',
   `iface` text NOT NULL,
   `ifInOctets` int(10) unsigned NOT NULL default '0',
   `ifInUcastPkts` int(10) unsigned NOT NULL default '0',
@@ -4219,7 +4219,7 @@ CREATE TABLE `port_counters` (
   `ifOutDiscards` int(10) unsigned NOT NULL default '0',
   `ifOutErrors` int(10) unsigned NOT NULL default '0',
   `ifOutQLen` int(10) unsigned NOT NULL default '0',
-  PRIMARY KEY  (`node_id`,`card`,`port`)
+  PRIMARY KEY  (`node_id`,`iface`(128))
 ) ENGINE=MyISAM DEFAULT CHARSET=latin1;
 
 --
