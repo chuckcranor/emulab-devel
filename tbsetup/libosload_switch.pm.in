@@ -1529,9 +1529,6 @@ sub generateConfig($$) {
 	push @cnetlines, "vlan 999";
 	push @cnetlines, "  name \"EmulabControlPort\"";
 	push @cnetlines, "  untagged $cnetport";
-	# Prevent the upstream control switch from becoming STP root.
-	# Kirk firgured this out for me!
-	push @cnetlines, "  spanning-tree $cnetport bpdu-filter";
 	if (defined($cnetip) && $cnetip ne '') {
 	    push @cnetlines, "  ip address ${cnetip} ${cnetmask}";
 	    push @cnetlines, "exit";
@@ -1559,6 +1556,9 @@ sub generateConfig($$) {
 	else {
 	    push @cnetlines, "exit";
 	}
+	# Prevent the upstream control switch from becoming STP root.
+	# Kirk firgured this out for me!
+	push @cnetlines, "  spanning-tree $cnetport bpdu-filter";
     }
 
     my $community = "private";
