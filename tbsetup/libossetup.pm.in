@@ -974,10 +974,16 @@ sub NewType($$)
     # Not loaded?
     if ($@) {
 	#print STDERR "module load failed: " . $@ . "\n";
-	eval "require libossetup_" . $type;
+	eval "require libossetup_${type}";
+	if ($@) {
+	    if ($@ !~ /Can't locate libossetup_/) {
+		print STDERR "$self NewType($type): module load failed: " . $@;
+	    }
+	    return undef;
+	}
 	$newtype  = eval { $packname->New($self); };
 	if ($@) {
-#	    print STDERR "$self NewType($type): module load failed: " . $@ . "\n"
+#	    print STDERR "$self NewType($type): New() failed: " . $@ . "\n"
 #		if ($self->debug());
 	    return undef;
 	}

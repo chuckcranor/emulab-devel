@@ -292,9 +292,15 @@ sub NewType($$)
     if ($@) {
 	$self->dprint(2,"NewType($type): simple module load failed: " . $@);
 	eval "require libosload_${type}";
+	if ($@) {
+	    if ($@ !~ /Can't locate libosload_/) {
+		print STDERR "$self NewType($type): module load failed: " . $@;
+	    }
+	    return undef;
+	}
 	$newtype  = eval { $packname->New($self); };
 	if ($@) {
-	    $self->dprint(1,"$self NewType($type): module load failed: " . $@);
+	    $self->dprint(1,"$self NewType($type): New() failed: " . $@);
 	    return undef;
 	}
     }
