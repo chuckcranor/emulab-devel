@@ -657,6 +657,7 @@ sub LookupByIface($$$)
     my ($class, $nodeid, $iface) = @_;
     my $interface = {};
     my $state_row;
+    my $wire;
 
     $nodeid = $nodeid->node_id()
 	if (ref($nodeid));
@@ -735,13 +736,18 @@ sub LookupByIface($$$)
 	delete($state_row->{'port'})
 	    if (exists($state_row->{'port'}));
     }
-    # Does not have to exist.
-    my $wire = Interface::Wire->LookupAnyByIface($nodeid, $iface);
-    
     $interface->{"DBROW"} = $rowref;
     $interface->{'STATE'} = $state_row;
     $interface->{'WIRE'}  = undef;
     bless($interface, $class);
+
+    # Does not have to exist.
+    if ($interface->logical()) {
+	$wire = Interface::LogicalWire->Lookup($nodeid, $iface);
+    }
+    else {
+	$wire = Interface::Wire->LookupAnyByIface($nodeid, $iface);
+    }
     
     # Cache by card,port and by iface
     $all_interfaces{"$nodeid:$iface"} = $interface;
@@ -1642,6 +1648,329 @@ sub Update($$)
     return 0;
 }
 
+##############################################################################
+#
+# A wrapper class for a "logical wire". This is a wire that exists
+# cause it was created with a layer 1 switch. 
+#
+package Interface::LogicalWire;
+use libdb;
+use Node;
+use libtestbed;
+use English;
+use overload ('""' => 'Stringify');
+
+#
+# Lookup a logical wire.
+#
+sub Lookup($$$)
+{
+    my ($class, $nodeid, $iface) = @_;
+
+    my $query_result =
+	DBQueryWarn("select * from logical_wires ".
+		    "where (node_id1='$nodeid' and iface1='$iface') or ".
+		    "      (node_id2='$nodeid' and iface2='$iface')");
+
+    return undef
+	if (!$query_result || !$query_result->numrows);
+
+    my $wire = {};
+    $wire->{"DBROW"}  = $query_result->fetchrow_hashref();
+    bless($wire, $class);
+
+    #
+    # Grab the physical wires.
+    #
+    my $node_id1   = $wire->node_id1();
+    my $node_id2   = $wire->node_id2();
+    my $physiface1 = $wire->physiface1();
+    my $physiface2 = $wire->physiface2();
+    
+    my $pwire1 = Interface::Wire->LookupAnyByIface($node_id1, $physiface1);
+    if (!defined($pwire1)) {
+	print STDERR "*** No physical wire for $node_id1:$physiface1\n";
+	return undef;
+    }
+    my $pwire2 = Interface::Wire->LookupAnyByIface($node_id2, $physiface2);
+    if (!defined($pwire2)) {
+	print STDERR "*** No physical wire for $node_id2:$physiface2\n";
+	return undef;
+    }
+    #
+    # Now we can get the card,port for each side, and so it looks like
+    # a real wire to the callers (say, Port.pm).
+    #
+    my ($card1,$port1,$card2,$port2);
+    if ($pwire1->node_id1() eq $node_id1 && $pwire1->iface1() eq $physiface1) {
+	$card1 = $pwire1->card1();
+	$port1 = $pwire1->port1();
+    }
+    else {
+	$card1 = $pwire1->card2();
+	$port1 = $pwire1->port2();
+    }
+    if ($pwire2->node_id1() eq $node_id2 && $pwire2->iface1() eq $physiface2) {
+	$card2 = $pwire2->card1();
+	$port2 = $pwire2->port1();
+    }
+    else {
+	$card2 = $pwire2->card2();
+	$port2 = $pwire2->port2();
+    }
+    $wire->{"CARD1"} = $card1;
+    $wire->{"PORT1"} = $port1;
+    $wire->{"CARD2"} = $card2;
+    $wire->{"PORT2"} = $port2;
+    
+    return $wire;
+}
+sub field($$)	       { return $_[0]->{'DBROW'}->{$_[1]}; }
+sub node_id1($)        { return $_[0]->field('node_id1'); }
+sub node_id2($)        { return $_[0]->field('node_id2'); }
+sub iface1($)          { return $_[0]->field('iface1'); }
+sub iface2($)          { return $_[0]->field('iface2'); }
+sub physiface1($)      { return $_[0]->field('physiface1'); }
+sub physiface2($)      { return $_[0]->field('physiface2'); }
+sub type($)            { return $_[0]->field('type'); }
+sub IsActive($)        { return ($_[0]->type() eq "Unused" ? 0 : 1); }
+sub card1($)           { return $_[0]->{'CARD1'}; }
+sub port1($)           { return $_[0]->{'PORT1'}; }
+sub card2($)           { return $_[0]->{'CARD2'}; }
+sub port2($)           { return $_[0]->{'PORT2'}; }
+
+#
+# For snmpit.
+#
+sub LookupByWireID($$)
+{
+    my ($class, $wireid) = @_;
+    my ($nodeid,$iface) = split(":", $wireid);
+
+    return Lookup($class, $nodeid, $iface);
+}
+#
+# For Port.pm
+#
+sub LookupByPhysIface($$)
+{
+    my ($self, $nodeid, $physiface) = @_;
+
+    my $query_result =
+	DBQueryWarn("select node_id1,iface1 from logical_wires ".
+		    "where (node_id1='$nodeid' and ".
+		    "       physiface1='$physiface') or ".
+		    "      (node_id2='$nodeid' and ".
+		    "       physiface2='$physiface')");
+
+    return undef
+	if (!$query_result || !$query_result->numrows);
+
+    my ($node_id1,$iface1) = $query_result->fetchrow_array();
+
+    return Interface::LogicalWire->Lookup($node_id1, $iface1);
+}
+
+#
+# Create a pair of logical interfaces that will later be wired together
+# at layer 1 with logical wire. Called from the mapper only.
+#
+sub Create($$$$$$)
+{
+    my ($class, $impotent, $nodeA, $portA, $nodeB, $portB) = @_;
+
+    my $pnodeA = Node->Lookup($nodeA);
+    if (!defined($pnodeA)) {
+	print STDERR "Could not lookup '$nodeA'\n";
+	return undef;
+    }
+    my $pnodeB = Node->Lookup($nodeB);
+    if (!defined($pnodeB)) {
+	print STDERR "Could not lookup '$nodeB'\n";
+	return undef;
+    }
+
+    #
+    # For consistency and because we still have an implicit assumption
+    # the node is node_id1 in the wires table and the switch is node_id2.
+    #
+    if ($pnodeA->isswitch() && !$pnodeB->isswitch()) {
+	($nodeA,$nodeB)   = ($nodeB,$nodeA);
+	($portA,$portB)   = ($portB,$portA);
+	($pnodeA,$pnodeB) = ($pnodeB,$pnodeA);
+    }
+    
+    my $interfaceA = Interface->LookupByIface($pnodeA, $portA);
+    if (!defined($interfaceA)) {
+	print STDERR "Could not lookup '$pnodeA:$portA'\n";
+	return undef;
+    }
+    if (!$interfaceA->wiredup()) {
+	print STDERR "No wire for $interfaceA\n";
+	return undef;
+    }
+    my $interfaceB = Interface->LookupByIface($pnodeB, $portB);
+    if (!defined($interfaceB)) {
+	print STDERR "Could not lookup '$pnodeB:$portB'\n";
+	return undef;
+    }
+    if (!$interfaceB->wiredup()) {
+	print STDERR "No wire for $interfaceB\n";
+	return undef;
+    }
+    my $wireA = $interfaceA->wire();
+    my $wireB = $interfaceB->wire();
+    
+    #
+    # Create logical interfaces
+    #
+    # Must create a real copy, especially for MakeFake();
+    my $argref = {};
+    foreach my $key (keys(%{ $interfaceA->{'DBROW'} })) {
+	$argref->{$key} = $interfaceA->{'DBROW'}->{$key};
+    }
+    if ($impotent) {
+	# Need these for Fake interfaces.
+	$argref->{'card'} = $wireA->card1();
+	$argref->{'port'} = $wireA->port1();
+    }
+    $argref->{'iface'}   = sprintf("log%d%03d",$wireA->card1(),$wireA->port1());
+    $argref->{'logical'} = 1;
+    $argref->{'uuid'}    = undef;
+
+    if (!$impotent) {
+	$interfaceA = Interface->Create($pnodeA, $argref);
+	return undef
+	    if (!defined($interfaceA));
+    }
+    else {
+	# Fake things up.
+	$interfaceA = Interface->MakeFake($pnodeA, $argref);
+    }
+
+    # Must create a real copy, especially for MakeFake();
+    $argref = {};
+    foreach my $key (keys(%{ $interfaceB->{'DBROW'} })) {
+	$argref->{$key} = $interfaceB->{'DBROW'}->{$key};
+    }
+    if ($impotent) {
+	# Need these for Fake interfaces.
+	$argref->{'card'} = $wireB->card1();
+	$argref->{'port'} = $wireB->port1();
+    }
+    $argref->{'iface'}   = sprintf("log%d%03d",$wireB->card1(),$wireB->port1());
+    $argref->{'logical'} = 1;
+    $argref->{'uuid'}    = undef;
+
+    if (!$impotent) {
+	$interfaceB = Interface->Create($pnodeB, $argref);
+	return undef
+	    if (!defined($interfaceB));
+    }
+    else {
+	# Fake things up.
+	$interfaceB = Interface->MakeFake($pnodeB, $argref);
+    }
+
+    # Create a logical wires table entry.
+    if (!$impotent) {
+	my $node_id1   = $nodeA;
+	my $node_id2   = $nodeB;
+	my $iface1     = $interfaceA->iface();
+	my $iface2     = $interfaceB->iface();
+	my $physiface1 = $wireA->iface1();
+	my $physiface2 = $wireB->iface1();
+
+	#
+	# The wire is not active yet. When snmpit runs and actually
+	# wires things up at layer 1, it will update this wire to
+	# reflect that. Use the 'Unused' type to indicate it is not
+	# active.
+	#
+	if (!DBQueryWarn("insert into logical_wires set".
+			 "  type='Unused', " .
+			 "  node_id1='$node_id1',iface1='$iface1', ".
+			 "  physiface1='$physiface1', ".
+			 "  node_id2='$node_id2',iface2='$iface2', ".
+			 "  physiface2='$physiface2'")) {
+	    return undef;
+	}
+	return Lookup($class, $node_id1, $iface1);
+    }
+    my $dbrow = {};
+    $dbrow->{"node_id1"}   = $nodeA;
+    $dbrow->{"node_id2"}   = $nodeB;
+    $dbrow->{"iface1"}     = $interfaceA->iface();
+    $dbrow->{"iface2"}     = $interfaceB->iface();
+    $dbrow->{"physiface1"} = $wireA->iface1();
+    $dbrow->{"physiface2"} = $wireB->iface1();
+    my $self = {};
+    $self->{'DBROW'} = $dbrow;
+
+    bless($self, $class);
+    return $self;
+}
+
+#
+# The wires table is indexed by node_id1,iface1 ... return
+# something that allows us to find that wires table entry.
+#
+sub WireID($)
+{
+    my ($self) = @_;
+
+    my $node_id1   = $self->node_id1();
+    my $iface1     = $self->iface1();
+    my $node_id2   = $self->node_id2();
+    my $iface2     = $self->iface2();
+
+    return "$node_id1:$iface1";
+}
+
+#
+# Stringify for output. 
+#
+sub Stringify($)
+{
+    my ($self) = @_;
+
+    my $node_id1  = $self->node_id1();
+    my $node_id2  = $self->node_id2();
+    my $iface1    = $self->iface1();
+    my $iface2    = $self->iface2();
+
+    return "[LogicalWire: $node_id1:$iface1/$node_id2:$iface2]";
+}
+
+#
+# Return both interfaces for a logical wire.
+#
+sub Interfaces($)
+{
+    my ($self) = @_;
+
+    return (Interface->LookupByIface($self->node_id1(), $self->iface1()),
+	    Interface->LookupByIface($self->node_id2(), $self->iface2()));
+}
+
+#
+# Delete logical wire.
+#
+sub Delete($)
+{
+    my ($self) = @_;
+    my $node_id1 = $self->node_id1();
+    my $iface1   = $self->iface1();
+    my $node_id2 = $self->node_id2();
+    my $iface2   = $self->iface2();
+    
+    return -1
+	if (!DBQueryWarn("delete from logical_wires ".
+			 "where node_id1='$node_id1' and iface1='$iface1' ".
+			 "  and node_id2='$node_id2' and iface2='$iface2'"));
+    return 0;
+}
+
 #
 # Activate a (logical) wire by setting the type. Default to "Node".
 #
@@ -1649,8 +1978,9 @@ sub Activate($$)
 {
     my ($self, $vlan) = @_;
     my $node_id1 = $self->node_id1();
-    my $card1    = $self->card1();
-    my $port1    = $self->port1();
+    my $iface1   = $self->iface1();
+    my $node_id2 = $self->node_id2();
+    my $iface2   = $self->iface2();
     my $type     = "Node";
 
     #
@@ -1661,9 +1991,9 @@ sub Activate($$)
     }
     
     return -1
-	if (!DBQueryWarn("update wires set type='$type' ".
-			 "where node_id1='$node_id1' and ".
-			 "      card1=$card1 and port1=$port1"));
+	if (!DBQueryWarn("update logical_wires set type='$type' ".
+			 "where node_id1='$node_id1' and iface1='$iface1' ".
+			 "  and node_id2='$node_id2' and iface2='$iface2'"));
 
     return 0;
 }
@@ -1672,13 +2002,14 @@ sub DeActivate($)
 {
     my ($self) = @_;
     my $node_id1 = $self->node_id1();
-    my $card1    = $self->card1();
-    my $port1    = $self->port1();
+    my $iface1   = $self->iface1();
+    my $node_id2 = $self->node_id2();
+    my $iface2   = $self->iface2();
 
     return -1
-	if (!DBQueryWarn("update wires set type='Unused' ".
-			 "where node_id1='$node_id1' and ".
-			 "      card1=$card1 and port1=$port1"));
+	if (!DBQueryWarn("update logical_wires set type='Unused' ".
+			 "where node_id1='$node_id1' and iface1='$iface1' ".
+			 "  and node_id2='$node_id2' and iface2='$iface2'"));
 
     return 0;
 }
@@ -1696,27 +2027,24 @@ sub ExperimentLogicalWires($$$)
     my $exptidx = $experiment->idx();
     my @result  = ();
 
-    # Note that a wire between two pc interfaces will cause this
-    # query to return two results, one of which is bogus, since
-    # the wires table is unique on node_id1,card1,port1. Need to
-    # check for this in the where clause.
     my $query_result =
-	DBQueryWarn("select r.node_id,w.card1,w.port1 from reserved as r ".
-		    "left join interfaces as i on i.node_id=r.node_id ".
-		    "left join wires as w on w.node_id1=i.node_id and ".
-		    "     w.iface1=i.iface ".
-		    "where i.logical=1 and r.exptidx='$exptidx' and ".
-		    "      card1 is not null");
+	DBQueryWarn("select distinct node_id1,iface1,node_id2,iface2 ".
+		    "  from logical_wires as w ".
+		    "left join reserved as r on ".
+		    "     w.node_id1=r.node_id or w.node_id2=r.node_id ".
+		    "where r.exptidx='$exptidx'");
     return -1
 	if (!$query_result);
 
-    while (my ($nodeid,$card,$port) = $query_result->fetchrow_array()) {
-	my $wire = Interface::Wire->Lookup("$nodeid:$card:$port");
-	if (!defined($wire)) {
-	    print STDERR "Could not lookup wire: $nodeid:$card:$port\n";
+    while (my ($node1,$iface1,$node2,$iface2) =
+	   $query_result->fetchrow_array()) {
+	my $logwire = Interface::LogicalWire->Lookup($node1,$iface1);
+	if (!defined($logwire)) {
+	    print STDERR "*** Could not lookup logical wire: ".
+		"$node1:$iface1:$node2:$iface2\n";
 	    return -1;
 	}
-	push(@result, $wire);
+	push(@result, $logwire);
     }
     @$plist = @result;
     return 0;
@@ -1735,7 +2063,7 @@ sub DeleteLogicalWires($$)
 	if (! ref($experiment));
     
     return -1
-	if (Interface::Wire->ExperimentLogicalWires($experiment, \@wires));
+	if (ExperimentLogicalWires(undef, $experiment, \@wires));
     return 0
 	if (!@wires);
 
@@ -1756,212 +2084,12 @@ sub DeleteLogicalWires($$)
 	    $interface2->Delete() == 0
 		or return -1;
 	}
-	if ($wire->Delete(0)) {
+	if ($wire->Delete()) {
 	    print STDERR "$wire could not be deleted!\n";
 	    $errors++;
 	}
     }
     return $errors;
-}
-
-##############################################################################
-#
-# A wrapper class for a "logical wire". This is a wire that exists
-# cause it was created with a layer 1 switch. Basically the same as
-# wire above, but this class is handy for the mapper and for display.
-# Not really intended to be used outside the mapper. Use the class above.
-#
-package Interface::LogicalWire;
-use libdb;
-use Node;
-use libtestbed;
-use English;
-use overload ('""' => 'Stringify');
-
-#
-# Create a pair of logical interfaces that will later be wired together
-# at layer 1. 
-#
-sub Create($$$$$$)
-{
-    my ($class, $impotent, $nodeA, $portA, $nodeB, $portB) = @_;
-
-    #
-    # See if one is the switch; the switch is node_id2 in the wires table.
-    #
-    my $pnodeA = Node->Lookup($nodeA);
-    if (!defined($pnodeA)) {
-	print STDERR "Could not lookup '$nodeA'\n";
-	return undef;
-    }
-    my $pnodeB = Node->Lookup($nodeB);
-    if (!defined($pnodeB)) {
-	print STDERR "Could not lookup '$nodeB'\n";
-	return undef;
-    }
-    my $interfaceA = Interface->LookupByIface($pnodeA, $portA);
-    if (!defined($interfaceA)) {
-	print STDERR "Could not lookup '$pnodeA:$portA'\n";
-	return undef;
-    }
-    my $interfaceB = Interface->LookupByIface($pnodeB, $portB);
-    if (!defined($interfaceB)) {
-	print STDERR "Could not lookup '$pnodeB:$portB'\n";
-	return undef;
-    }
-    
-    #
-    # Create logical interfaces
-    #
-    # Must create a real copy, especially for MakeFake();
-    my $argref = {};
-    foreach my $key (keys(%{ $interfaceA->{'DBROW'} })) {
-	$argref->{$key} = $interfaceA->{'DBROW'}->{$key};
-    }
-    # Update the card and iface.
-    # XXX Need a better way to allocate the card numbers.
-    $argref->{'card'}    = $interfaceA->card() + 200;
-    $argref->{'port'}    = $interfaceA->port();
-    $argref->{'iface'}   = sprintf("eth%d%03d",
-				   $argref->{'card'}, $argref->{'port'});
-    $argref->{'logical'} = 1;
-    $argref->{'uuid'}    = undef;
-
-    if (!$impotent) {
-	$interfaceA = Interface->Create($pnodeA, $argref);
-	return undef
-	    if (!defined($interfaceA));
-    }
-    else {
-	# Fake things up.
-	$interfaceA = Interface->MakeFake($pnodeA, $argref);
-    }
-
-    # Must create a real copy, especially for MakeFake();
-    $argref = {};
-    foreach my $key (keys(%{ $interfaceB->{'DBROW'} })) {
-	$argref->{$key} = $interfaceB->{'DBROW'}->{$key};
-    }
-    # Update the card and iface.
-    # XXX Need a better way to allocate the card numbers.
-    $argref->{'card'}    = $interfaceB->card() + 200;
-    $argref->{'port'}    = $interfaceB->port();
-    $argref->{'iface'}   = sprintf("eth%d%03d",
-				   $argref->{'card'}, $argref->{'port'});
-    $argref->{'logical'} = 1;
-    $argref->{'uuid'}    = undef;
-
-    if (!$impotent) {
-	$interfaceB = Interface->Create($pnodeB, $argref);
-	return undef
-	    if (!defined($interfaceB));
-    }
-    else {
-	# Fake things up.
-	$interfaceB = Interface->MakeFake($pnodeB, $argref);
-    }
-
-    #
-    # For consistency and because we still have an implicit assumption
-    # the node is node_id1 in the wires table. 
-    #
-    my ($interface1,$interface2) = ($interfaceA, $interfaceB);
-    my ($pnode1,$pnode2) = ($pnodeA, $pnodeB);
-    if ($pnodeA->isswitch() && !$pnodeB->isswitch()) {
-	($interface1,$interface2) = ($interfaceB, $interfaceA);
-	($pnode1,$pnode2) = ($pnodeB, $pnodeA);
-    }
-    # Create a wires table entry, ordered properly.
-    if (!$impotent) {
-	my $node_id1 = $interface1->node_id();
-	my $node_id2 = $interface2->node_id();
-	my $card1    = $interface1->card();
-	my $port1    = $interface1->port();
-	my $card2    = $interface2->card();
-	my $port2    = $interface2->port();
-	my $iface1   = $interface1->iface();
-	my $iface2   = $interface2->iface();
-
-	#
-	# The wire is not active yet. When snmpit tuns and actually
-	# wires things up at layer 1, it will update this wire to
-	# reflect that. Use the 'Unused' type to indicate it is not
-	# active.
-	#
-	if (!DBQueryWarn("insert into wires set".
-			 "  type='Unused', logical=1, " .
-			 "  node_id1='$node_id1',card1=$card1,port1=$port1, " .
-			 "  iface1='$iface1', ".
-			 "  node_id2='$node_id2',card2=$card2,port2=$port2, ".
-			 "  iface2='$iface2'")) {
-	    return undef;
-	}
-    }
-    my $self = {};
-    #
-    # Do not reorder here; the caller will just be confused.
-    #
-    $self->{"interfaceA"} = $interfaceA;
-    $self->{"interfaceB"} = $interfaceB;
-    $self->{"interface1"} = $interface1;
-    $self->{"interface2"} = $interface2;
-    $self->{"pnodeA"}     = $pnodeA;
-    $self->{"pnodeB"}     = $pnodeB;
-    $self->{"pnode1"}     = $pnode1;
-    $self->{"pnode2"}     = $pnode2;
-
-    bless($self, $class);
-    return $self;
-}
-sub interfaceA($)      { return $_[0]->{'interfaceA'}; }
-sub interfaceB($)      { return $_[0]->{'interfaceB'}; }
-sub nodeA($)           { return $_[0]->interfaceA()->node_id(); }
-sub nodeB($)           { return $_[0]->interfaceB()->node_id(); }
-sub ifaceA($)          { return $_[0]->interfaceA()->iface(); }
-sub ifaceB($)          { return $_[0]->interfaceB()->iface(); }
-# Wires table ordering.
-sub interface1($)      { return $_[0]->{'interface1'}; }
-sub interface2($)      { return $_[0]->{'interface2'}; }
-sub iface1($)          { return $_[0]->interface1()->iface(); }
-sub iface2($)          { return $_[0]->interface2()->iface(); }
-# Convience
-sub pnodeA($)          { return $_[0]->{'pnodeA'}; }
-sub pnodeB($)          { return $_[0]->{'pnodeB'}; }
-sub pnode1($)          { return $_[0]->{'pnode1'}; }
-sub pnode2($)          { return $_[0]->{'pnode2'}; }
-
-#
-# The wires table is indexed by node_id1,card1,port1 ... return
-# something that allows us to find that wires table entry.
-#
-sub WireID($)
-{
-    my ($self) = @_;
-
-    my $interface1 = $self->interface1();
-    my $node_id1   = $interface1->node_id();
-    my $card1      = $interface1->card();
-    my $port1      = $interface1->port();
-
-    return "$node_id1:$card1:$port1";
-}
-
-#
-# Stringify for output. 
-#
-sub Stringify($)
-{
-    my ($self) = @_;
-
-    my $interfaceA = $self->interfaceA();
-    my $interfaceB = $self->interfaceB();
-    
-    my $nodeA   = $self->nodeA();
-    my $nodeB   = $self->nodeB();
-    my $ifaceA  = $self->ifaceA();
-    my $ifaceB  = $self->ifaceB();
-
-    return "[LogicalWire: $nodeA:$ifaceA/$nodeB:$ifaceB]";
 }
 
 ##############################################################################

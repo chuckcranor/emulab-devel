@@ -2165,9 +2165,9 @@ sub CreateOneVlan($$$@)
 	my $wireid;
 	
 	if ($vlan->GetAttribute("logicalwireid", \$wireid) == 0) {
-	    my $wire = Interface::Wire->Lookup($wireid);
+	    my $wire = Interface::LogicalWire->LookupByWireID($wireid);
 	    if (!defined($wire)) {
-		print STDERR "Could not logical wire for $vlan ($wireid)\n";
+		print STDERR "Could not get logical wire for $vlan ($wireid)\n";
 		$errors++;
 	    }
 	    else {
@@ -2262,9 +2262,9 @@ sub doReset($@) {
 	    if (! $vlan->type() eq "wire");
 	
 	if ($vlan->GetAttribute("logicalwireid", \$wireid) == 0) {
-	    my $wire = Interface::Wire->Lookup($wireid);
+	    my $wire = Interface::LogicalWire->LookupByWireID($wireid);
 	    if (!defined($wire)) {
-		print STDERR "Could not logical wire for $vlan ($wireid)\n";
+		print STDERR "Could not get logical wire for $vlan ($wireid)\n";
 		return -1;
 	    }
 	    # need the interfaces.

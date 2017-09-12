@@ -58,6 +58,7 @@ use libdb;
 use EmulabConstants;
 use Interface;
 use English;
+use Node;
 use Data::Dumper;
 use overload ('""' => 'Stringify');
 
@@ -465,7 +466,15 @@ sub LookupByIface($$;$)
     }
     my $card = $interface->card();
     my $port = $interface->port();
-    my $wire = Interface::Wire->LookupAny($nodeid, $card, $port);
+    my $wire;
+
+    if ($interface->logical()) {
+	# This looks at both sides of wire. 
+	$wire = Interface::LogicalWire->Lookup($nodeid, $iface);
+    }
+    else {
+	$wire = Interface::Wire->LookupAny($nodeid, $card, $port);
+    }
     return undef
 	if (!defined($wire));
 
@@ -527,10 +536,29 @@ sub LookupByTriple($$;$$)
 
     my $inst = {};
 
-    # wire mapping:
-    my $wire = Interface::Wire->LookupAny($nodeid, $card, $port);
+    #
+    # When looking up triple (say, from a snmpit device module) we are given
+    # the switch side of a wire. But if the node is a testnode and isswitch,
+    # we really want a logical wire. It would be better if we knew this is
+    # what we want for sure.
+    #
+    my $node = Node->Lookup($nodeid);
+    return undef
+	if (!defined($node));
+
+    # There *will* be a physical wire.
+    my $wire = Interface::Wire->LookupAny($nodeid, $card, $port);    
     return undef
 	if (!defined($wire));
+
+    #
+    # Now see if we really want the logical wire.
+    #
+    if ($node->role() eq $NODEROLE_TESTNODE && $node->isswitch()) {
+	my $logwire =
+	    Interface::LogicalWire->LookupByPhysIface($nodeid,
+						      $wire->physiface1());
+    }
     
     if ($wire->type() eq TBDB_WIRETYPE_NODE() ||
 	$wire->type() eq TBDB_WIRETYPE_CONTROL()) {
@@ -612,28 +640,29 @@ sub LookupByTriples($@)
 #
 sub LookupByWireType($$)
 {
-	my ($c, $wt) = @_;
-	my @ports = ();
+    my ($c, $wt) = @_;
+    my @ports = ();
 	
-	my $result = DBQueryFatal("SELECT node_id1, card1, port1, " .
-		"node_id2, card2, port2 FROM wires ".
-                "WHERE type='$wt'");
+    my $result =
+	DBQueryFatal("(SELECT node_id1,iface1,node_id2,iface2 ".
+		     "  FROM wires ".
+		     " WHERE type='$wt') ".
+		     "union ".
+		     " (SELECT node_id1,iface1,node_id2,iface2 ".
+		     "  FROM logical_wires ".
+		     " WHERE type='$wt') ");
 
-	if ($result) {
-		while (my @row = $result->fetchrow()) {
-			my ($node_id1, $card1, $port1, $node_id2, $card2, $port2)  = @row;
-			my $p1 = Port->LookupByTriple($node_id1, $card1, $port1);
-			if (defined($p1)) {
-				push @ports, $p1;
-			}
-			my $p2 = Port->LookupByTriple($node_id2, $card2, $port2);
-			if (defined($p2)) {
-				push @ports, $p2;
-			}
-		}
+    while (my ($node_id1, $iface1, $node_id2, $iface2) = $result->fetchrow()) {
+	my $p1 = Port->LookupByIface($node_id1, $iface1);
+	if (defined($p1)) {
+	    push @ports, $p1;
 	}
-	
-	return @ports;
+	my $p2 = Port->LookupByIface($node_id2, $iface2);
+	if (defined($p2)) {
+	    push @ports, $p2;
+	}
+    }
+    return @ports;
 }
 
 sub field($$)  {
@@ -679,9 +708,6 @@ sub card($)
     my ($self) = shift;
     my $card   = field($self, 'card');
 
-    if ($self->logical()) {
-	$card = $card - 200;
-    }
     return $card;
 }
 
@@ -811,9 +837,6 @@ sub other_end_card($)
 	$card = $self->{'WIRES_ROW'}->card2(); 
     } else {
 	$card = $self->{'WIRES_ROW'}->card1();
-    }
-    if ($self->logical()) {
-	$card = $card - 200;
     }
     return $card;
 }

@@ -6716,8 +6716,8 @@ sub InterpLinksAux($)
 
 		    $self->printdb("$virtlan; $firstwire, $lastwire\n");
 
-		    $portA = $firstwire->ifaceA();
-		    $portB = $lastwire->ifaceB();
+		    $portA = $firstwire->iface1();
+		    $portB = $lastwire->iface1();
 		}
 		if ($virtlan->usevirtiface()) {
 		    my $protovlan;
@@ -8724,8 +8724,8 @@ sub UploadVlans($)
 	
 	foreach my $link (@links) {
 	    my $logicalwire = $link->_logicalwire();
-	    my $pnodeA      = $logicalwire->pnodeA();
-	    my $pnodeB      = $logicalwire->pnodeB();
+	    my $pnodeA      = Node->Lookup($logicalwire->node_id1());
+	    my $pnodeB      = Node->Lookup($logicalwire->node_id2());
 	    if ($pnodeA->isswitch() && $pnodeB->isswitch()) {
 		push(@switchpath, $pnodeA->node_id() .":". $pnodeB->node_id());
 	    }
