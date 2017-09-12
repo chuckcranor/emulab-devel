@@ -61,7 +61,7 @@ use vars qw($NODEROLE_TESTNODE $MFS_INITIAL $STATE_INITIAL
 $NODEROLE_TESTNODE	= 'testnode';
 
 # Why, why, why?
-@EXPORT_OK = qw($NODEROLE_TESTNODE);
+@EXPORT = qw($NODEROLE_TESTNODE);
 
 # Cache of instances to avoid regenerating them.
 %nodes = ();
