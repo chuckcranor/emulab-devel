@@ -80,15 +80,17 @@ sub usage()
     print STDERR "   -d         Run in debug (foreground) mode\n";
     print STDERR "   -l logfile Also log periodic counts for all nodes\n";
     print STDERR "   -I	num     Report every <num> seconds\n";
-    print STDERR "   -M         Send email about incidents in addition to logging,\n";
+    print STDERR "   -M         Send email about incidents in addition to logging\n";
+    print STDERR "   -1         Run data collection once and report absolute values to STDOUT (debugging option)\n";
 }
 
-my $optlist = "adhl:I:M";
+my $optlist = "adhl:I:M1";
 my $doall = 0;
 my $debug = 0;
 my $interval = 60;
 my $reportlog = "";
 my $sendmail = 0;
+my $runonce = 0;
 
 #
 # Configure variables
@@ -157,7 +159,7 @@ if (defined($options{'h'})) {
     exit(0);
 }
 if (defined($options{'d'})) {
-    $debug++;
+    $debug = 1;
 }
 if (defined($options{"a"})) {
     $doall = 1;
@@ -181,10 +183,19 @@ if (defined($options{'I'})) {
 if (defined($options{"M"})) {
     $sendmail = 1;
 }
+if (defined($options{"1"})) {
+    $runonce = 1;
+    $debug = 2;
+    $reportlog = "-";
+}
 @nodes = @ARGV;
 
 # Set this to turn off tblog in libraries.
 $ENV{'TBLOG_OFF'} = "yep";
+
+# "Inline" the withadminprivs command.
+# Note that caller must be admin in DB too for TBAdmin() check to pass.
+$ENV{'WITH_TB_ADMIN_PRIVS'} = 1;
 
 # Load the Testbed support stuff.
 use lib "@prefix@/lib";
@@ -198,7 +209,7 @@ if ($UID == 0) {
     fatal("Do not run as root or portstats will fail!");
 }
 if (!TBAdmin()) {
-    fatal("Must run as admin or portstats will fail!");
+    fatal("Must run as an admin user or portstats will fail!");
 }
 
 # Go to ground.
@@ -233,6 +244,10 @@ getnodeinfo(0);
 my %before = ();
 if (!gather(\%before)) {
     die("Could not get initial portstats\n");
+}
+if ($runonce) {
+    report(\%before);
+    exit(0);
 }
 
 while (1) {
@@ -579,11 +594,15 @@ sub gather($)
 
     foreach my $switch (keys %switches) {
 	my $slist = join(' ', @{$switches{$switch}});
+	print STDERR "Invoking '$portstats -i -H -r -l -c -p $slist':\n"
+	    if ($debug > 1);
 	if (!open(PS, "$portstats -i -H -r -l -c -p $slist 2>&1 |")) {
 	    print STDERR "*** $switch: portstats failed, ignored\n";
 	    next;
 	}
 	while (<PS>) {
+	    print STDERR "  $_"
+		if ($debug > 1);
 	    chomp;
 	    # XXX ignore warnings from snmpit
 	    next if ($_ =~ /^WARNING:/);
