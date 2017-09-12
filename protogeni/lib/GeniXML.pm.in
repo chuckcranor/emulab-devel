@@ -773,6 +773,20 @@ sub GetRootKey($)
     return ($pub,$priv);
 }
 
+#
+# Are keys disabled at top level.
+#
+sub DisableRootKey($)
+{
+    my ($rspec) = @_;
+    my $keyref = GeniXML::FindNodesNS("n:disablerootkey", $rspec,
+				      $EMULAB_NS)->pop();
+    return 0
+	if (!defined($keyref));
+
+    return 1;
+}
+
 sub GetTarball($)
 {
     my ($node) = @_;

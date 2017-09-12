@@ -805,6 +805,11 @@ sub GetTicketAuxAux($$$$$$$$$$$)
     my $packing_option = GeniXML::PackingStrategy($rspec);
 
     #
+    # Global root keys disable.
+    #
+    my $disablerootkeys = GeniXML::DisableRootKey($rspec);
+
+    #
     # User can turn off routing.
     #
     my $routertype = GeniXML::RoutingStyle($rspec);
@@ -1604,18 +1609,25 @@ sub GetTicketAuxAux($$$$$$$$$$$)
 	    }
 	}
 	# Root keys.
-	my ($pubkey,$privkey) = GeniXML::GetRootKey($ref);
-	if (defined($pubkey)) {
-	    $nodeblob->{"rootkey_public"} = $pubkey;
+	if ($disablerootkeys) {
+	    # Top level override;
+	    $nodeblob->{"rootkey_public"}  = 0;
+	    $nodeblob->{"rootkey_private"} = 0;
 	}
 	else {
-	    $nodeblob->{"rootkey_public"} = -1;	# means did not specify.
-	}
-	if (defined($privkey)) {
-	    $nodeblob->{"rootkey_private"} = $privkey;
-	}
-	else {
-	    $nodeblob->{"rootkey_private"} = -1; # means did not specify.
+	    my ($pubkey,$privkey) = GeniXML::GetRootKey($ref);
+	    if (defined($pubkey)) {
+		$nodeblob->{"rootkey_public"} = $pubkey;
+	    }
+	    else {
+		$nodeblob->{"rootkey_public"} = -1;	# means did not specify.
+	    }
+	    if (defined($privkey)) {
+		$nodeblob->{"rootkey_private"} = $privkey;
+	    }
+	    else {
+		$nodeblob->{"rootkey_private"} = -1; # means did not specify.
+	    }
 	}
 	
 	# Program agents.
