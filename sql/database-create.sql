@@ -2977,6 +2977,23 @@ CREATE TABLE `logfile_metadata` (
 ) ENGINE=MyISAM DEFAULT CHARSET=latin1;
 
 --
+-- Table structure for table `logical_wires`
+--
+
+DROP TABLE IF EXISTS `logical_wires`;
+CREATE TABLE `logical_wires` (
+  `type` enum('Node','Trunk','Unused') NOT NULL default 'Unused',
+  `node_id1` char(32) NOT NULL default '',
+  `iface1` char(128) NOT NULL default '',
+  `physiface1` char(128) NOT NULL default '',
+  `node_id2` char(32) NOT NULL default '',
+  `iface2` char(128) NOT NULL default '',
+  `physiface2` char(128) NOT NULL default '',
+  PRIMARY KEY  (`node_id1`,`iface1`,`node_id2`,`iface2`),
+  UNIQUE KEY `physiface`  (`node_id1`,`physiface1`,`node_id2`,`physiface2`)
+) ENGINE=MyISAM DEFAULT CHARSET=latin1;
+
+--
 -- Table structure for table `login`
 --
 
