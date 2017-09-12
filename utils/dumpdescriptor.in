@@ -55,6 +55,7 @@ my $TBBASE	= "@TBBASE@";
 my $PGENISUPPORT= @PROTOGENI_SUPPORT@;
 my $OURDOMAIN   = "@OURDOMAIN@";
 my $WITHPROVENANCE= @IMAGEPROVENANCE@;
+my $MAINSITE    = @TBMAINSITE@;
 
 #
 # When fetching the metadata, we now tell the server what client
@@ -84,6 +85,7 @@ use User;
 use Project;
 use Image;
 use OSinfo;
+use NodeType;
 use EmulabFeatures;
 $EmulabFeatures::verbose = 0;
 
@@ -239,6 +241,21 @@ sub DumpImage($)
 	    # Send the architecture if it is set here.
 	    if ($image->architecture()) {
 		$xmlfields{'architecture'} = $image->architecture();
+	    }
+	    else {
+		#
+		# Temporary patch for importing images into the Cloudlab
+		# Utah, which is the only multi-architecture cluster. If
+		# we do not give it an architecture, then it will assign
+		# all types to the image, and that definitely wrong. So
+		# lets just assume that if the cluster does not have any
+		# m400 node types, its an x86 image. And if the importing
+		# cluster is not using architectures, this will be ignored
+		# anyway.
+		#
+		if ($MAINSITE || !defined(NodeType->Lookup("m400"))) {
+		    $xmlfields{'architecture'} = "x86_64";
+		}
 	    }
 	    
 	    #
