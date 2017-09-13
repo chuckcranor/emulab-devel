@@ -1065,7 +1065,7 @@ sub Reservations($)
 		$current{"$pid:$type"} = $count;
 	    }
 	}
-	if ($row->{'start'} > time()) {
+	if (time() > $row->{'start'}) {
 	    $using = $current{"$pid:$type"};
 	    if ($using >= $row->{'nodes'}) {
 		$using = $row->{'nodes'};
