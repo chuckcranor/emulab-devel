@@ -5964,7 +5964,8 @@ COMMAND_PROTOTYPE(doloadinfo)
 			 "   i.imageid,prepare,i.imagename,p.pid,g.gid,iv.path,"
 			 "   ov.version,pa.`partition`,iv.size,"
 			 "   iv.lba_low,iv.lba_high,iv.lba_size,iv.relocatable,"
-			 "   UNIX_TIMESTAMP(iv.updated),r.imageid_version "
+			 "   UNIX_TIMESTAMP(iv.updated),r.imageid_version,"
+			 "   iv.format "
 			 "from current_reloads as r "
 			 "left join images as i on i.imageid=r.image_id "
 			 "left join image_versions as iv on "
@@ -5980,7 +5981,7 @@ COMMAND_PROTOTYPE(doloadinfo)
 			 "     pa.node_id=r.node_id and "
 			 "     pa.osid=iv.default_osid and loadpart=0 "
 			 "where r.node_id='%s' order by r.idx",
-			 20, reqp->nodeid);
+			 21, reqp->nodeid);
 
 	if (!res) {
 		error("doloadinfo: %s: DB Error getting loading address!\n",
@@ -6313,6 +6314,17 @@ COMMAND_PROTOTYPE(doloadinfo)
 				}
 			}
 		}
+
+		/* If this is a Docker vnode, hand back the path too. */
+		if (reqp->isvnode && row[20] && row[20][0]
+		    && strcmp("docker",row[20]) == 0) {
+			if (row[10])
+				bufp += OUTPUT(bufp,ebufp - bufp,
+					       " PATH=%s",row[10]);
+			else
+				bufp += OUTPUT(bufp,ebufp - bufp," PATH=");
+		}
+
 		/* Tack on the newline, finally */
 		bufp += OUTPUT(bufp, ebufp - bufp, "\n");
 
