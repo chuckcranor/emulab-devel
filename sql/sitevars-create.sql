@@ -179,6 +179,12 @@ INSERT INTO sitevariables VALUES ('general/admission_control','0','0','When set,
 INSERT INTO sitevariables VALUES ('general/cnet_firewalls','0','0','When set, control network firewalls are supported via control network vlans.',0);
 INSERT INTO sitevariables VALUES ('general/export_active',NULL,'0','Stop exporting shared user and project directories when they have been inactive for this number of days or longer (0==do not inactivate).',0);
 INSERT INTO sitevariables VALUES ('general/root_keypair',NULL,'-1','Default distribution of per-experiment root keypairs (-1==disable root keypair mechanism, 0==do not distribute to any nodes, 1==distribute to all nodes).',0);
+INSERT INTO sitevariables VALUES ('cnetwatch/check_interval',NULL,'600','Interval in seconds at which to collect info (should be at least 10 seconds, 0 means do not run cnetwatch)',0);
+INSERT INTO sitevariables VALUES ('cnetwatch/alert_interval',NULL,'600','Interval in seconds over which to calculate packet/bit rates and to log alerts (should be an integer multiple of check_interval)',0);
+INSERT INTO sitevariables VALUES ('cnetwatch/pps_threshold',NULL,'50000','Packet rate in packets/sec in excess of which to log an alert (0 means do not generate packet rate alerts)',0);
+INSERT INTO sitevariables VALUES ('cnetwatch/bps_threshold',NULL,'500000000','Data rate in bits/sec in excess of which to log an alert (0 means do not generate data rate alerts)',0);
+INSERT INTO sitevariables VALUES ('cnetwatch/mail_interval',NULL,'600','Interval in seconds at which to send email for all alerts logged during the interval (0 means do not send alert email)',0);
+INSERT INTO sitevariables VALUES ('cnetwatch/mail_max',NULL,'1000','Maximum number of alert emails to send; after this alerts are only logged (0 means no limit to the emails)',0);
 
 /*!40103 SET TIME_ZONE=@OLD_TIME_ZONE */;
 

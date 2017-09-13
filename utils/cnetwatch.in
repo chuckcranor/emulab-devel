@@ -27,23 +27,8 @@
 # Whine if "excessive".
 #
 # TODO:
-#  - Use sitevars for the thresholds and intervals.
-#
-#    cnetwatch/check_interval interval at which to perform checks,
-#        should be at least 5 seconds, zero means don't run
-#    cnetwatch/pps_threshold  packet rate at which to alarm,
-#        zero means don't check
-#    cnetwatch/bps_threshold  bit rate at which to alarm,
-#        zero means don't check
-#    cnetwatch/rate_period    time period over which to calculate rates,
-#        if less than interval, set to interval
-#    cnetwatch/mail_interval  interval at which to send email reports of problems,
-#        zero means don't send email
-#    cnetwatch/mail_max       maximum number of emails to send,
-#        zero means no limit
-#
-#    Maybe node_type/node attributes as well for thresholds since some node
-#    types or nodes may have fatter cnets than others.
+#  - Maybe add node_type/node attributes as well as sitevars for thresholds
+#    since some node types or nodes may have fatter cnets than others.
 #
 #  - if the email period (e.g., 10 minutes) encompasses multiple report
 #    periods (e.g., 5 minutes), try to combine contiguous over-limit reports
@@ -64,30 +49,34 @@ use Sys::Syslog;
 use IO::Handle;
 
 #
-# Arbitrary thresholds: 50Kp/s or 500Mb/s for at least 5 minutes.
+# Arbitrary thresholds: 50Kp/s or 500Mb/s for the given alert interval.
+# These can be overridden by sitevariables below.
 #
 my $MAX_PPS =     50000;
 my $MAX_BPS = 500000000;
-my $MIN_SEC =       300;
 
 sub usage()
 {
-    print STDERR "Usage: cnetwatch [-ahd] [-l logfile] [-I interval] [node ...]\n";
+    print STDERR "Usage: cnetwatch [-ahdM1] [-I interval] [-A interval] [-l logfile] [node ...]\n";
     print STDERR "\nMonitor control net usage and report on abnormally high ";
     print STDERR "traffic volumes.\n";
     print STDERR "   -h         This message\n";
     print STDERR "   -a         Monitor all nodes\n";
+    print STDERR "   -I	seconds Interval at which to gather stats\n";
+    print STDERR "   -A	seconds Interval over which rates are calculated and alerts sent\n";
+    print STDERR "              (must be a multiple of the gather interval)\n";
+    print STDERR "   -M         Send email about alerts in addition to logging via syslog\n";
     print STDERR "   -d         Run in debug (foreground) mode\n";
-    print STDERR "   -l logfile Also log periodic counts for all nodes\n";
-    print STDERR "   -I	num     Report every <num> seconds\n";
-    print STDERR "   -M         Send email about incidents in addition to logging\n";
-    print STDERR "   -1         Run data collection once and report absolute values to STDOUT (debugging option)\n";
+    print STDERR "   -l logfile Log file to record a summary of packet/byte\n";
+    print STDERR "              counts for all nodes at every gather interval\n";
+    print STDERR "   -1         Run data gathering once and print summary report to STDOUT (for debugging gathering)\n";
 }
 
-my $optlist = "adhl:I:M1";
+my $optlist = "adhl:I:A:M1";
 my $doall = 0;
 my $debug = 0;
 my $interval = 60;
+my $alertinterval = (5 * 60);
 my $reportlog = "";
 my $sendmail = 0;
 my $runonce = 0;
@@ -107,15 +96,14 @@ my $LOGFILE     = "$TB/log/cnetwatch.log";
 # XXX should be $TBOPS
 my $MAILTO	= "mike\@flux.utah.edu";
 # Do not send mail more often than this (0 == any time)
-my $MAILIV	= (10 * 60);
+my $MAIL_IV	= (10 * 60);
 # Do not send more than this many total messages (0 == no limit)
-my $MAILMAX	= 1000;
+my $MAIL_MAX	= 1000;
 
 # XXX testing
 if (0) {
-    $MIN_SEC = 60;
-    $MAILIV = 60;
-    $MAILMAX = 10;
+    $MAIL_IV = 60;
+    $MAIL_MAX = 10;
 }
 
 # un-taint path
@@ -147,8 +135,101 @@ my $maillast = 0;
 my $mailsent = 0;
 my @mailbody = ();
 
+# Set this to turn off tblog in libraries.
+$ENV{'TBLOG_OFF'} = "yep";
+
+# "Inline" the withadminprivs command.
+# Note that caller must be admin in DB too for TBAdmin() check to pass.
+$ENV{'WITH_TB_ADMIN_PRIVS'} = 1;
+
+# Load the Testbed support stuff.
+use lib "@prefix@/lib";
+use libdb;
+use libtestbed;
+
 #
-# Check args early so we get the right DB.
+# Read sitevars to establish defaults:
+#
+# cnetwatch/check_interval
+#   Interval at which to collect info.
+#   Zero means don't run cnetwatch (exit immediately).
+#   
+# cnetwatch/alert_interval
+#   Interval over which to calculate packet/bit rates and to log alerts.
+#   Should be an integer multiple of the check_interval.
+#
+# cnetwatch/pps_threshold
+#   Packet rate (packets/sec) in excess of which to log an alert.
+#   Zero means don't generate packet rate alerts.
+#
+# cnetwatch/bps_threshold
+#   Data rate (bits/sec) in excess of which to log an alert.
+#   Zero means don't generate data rate alerts.
+#
+# cnetwatch/mail_interval
+#   Interval at which to send email for all alerts logged during the interval.
+#   Zero means don't ever send email.
+#
+# cnetwatch/mail_max
+#   Maximum number of alert emails to send; after this alerts are only logged.
+#   Zero means no limit to the emails.
+#
+my $tmp;
+my $svar = "cnetwatch/check_interval";
+if (TBGetSiteVar($svar, \$tmp)) {
+    if ($tmp == 0 || $tmp >= 10) {
+	$interval = $tmp;
+    } else {
+	print STDERR "WARNING: invalid value for $svar sitevar, ignored.\n";
+    }
+}
+$svar = "cnetwatch/alert_interval";
+if (TBGetSiteVar($svar, \$tmp)) {
+    if ($tmp >= 0) {
+	$alertinterval = $tmp;
+    } else {
+	print STDERR "WARNING: invalid value for $svar sitevar, ignored.\n";
+    }
+}
+$svar = "cnetwatch/pps_threshold";
+if (TBGetSiteVar($svar, \$tmp)) {
+    if ($tmp >= 0) {
+	$MAX_PPS = $tmp;
+    } else {
+	print STDERR "WARNING: invalid value for $svar sitevar, ignored.\n";
+    }
+
+}
+$svar = "cnetwatch/bps_threshold";
+if (TBGetSiteVar($svar, \$tmp)) {
+    if ($tmp >= 0) {
+	$MAX_BPS = $tmp;
+    } else {
+	print STDERR "WARNING: invalid value for $svar sitevar, ignored.\n";
+    }
+
+}
+$svar = "cnetwatch/mail_interval";
+if (TBGetSiteVar($svar, \$tmp)) {
+    if ($tmp >= 0) {
+	$MAIL_IV = $tmp;
+    } else {
+	print STDERR "WARNING: invalid value for $svar sitevar, ignored.\n";
+    }
+
+}
+$svar = "cnetwatch/mail_max";
+if (TBGetSiteVar($svar, \$tmp)) {
+    if ($tmp >= 0) {
+	$MAIL_MAX = $tmp;
+    } else {
+	print STDERR "WARNING: invalid value for $svar sitevar, ignored.\n";
+    }
+
+}
+
+#
+# Process command line options. Some will override sitevars.
 #
 my %options = ();
 if (! getopts($optlist, \%options)) {
@@ -170,8 +251,8 @@ if (defined($options{"l"})) {
 if (defined($options{'I'})) {
     if ($options{'I'} =~ /^(\d+)$/) {
 	$interval = $1;
-	if ($interval && $interval < 5) {
-	    print STDERR "Interval must be zero or at least 5 seconds.\n";
+	if ($interval && $interval < 10) {
+	    print STDERR "Interval must be zero or at least 10 seconds.\n";
 	    usage();
 	    exit(1);
 	}
@@ -180,30 +261,46 @@ if (defined($options{'I'})) {
 	usage();
     }
 }
+if (defined($options{'A'})) {
+    if ($options{'A'} =~ /^(\d+)$/) {
+	$alertinterval = $1;
+    } else {
+	print STDERR "Alert interval must be a number.\n";
+	usage();
+    }
+}
 if (defined($options{"M"})) {
     $sendmail = 1;
 }
 if (defined($options{"1"})) {
     $runonce = 1;
+    $interval = 1;
     $debug = 2;
     $reportlog = "-";
 }
 @nodes = @ARGV;
 
-# Set this to turn off tblog in libraries.
-$ENV{'TBLOG_OFF'} = "yep";
-
-# "Inline" the withadminprivs command.
-# Note that caller must be admin in DB too for TBAdmin() check to pass.
-$ENV{'WITH_TB_ADMIN_PRIVS'} = 1;
-
-# Load the Testbed support stuff.
-use lib "@prefix@/lib";
-use libdb;
-use libtestbed;
+#
+# Sanity checks.
+#
+if ($interval == 0) {
+    print STDERR "WARNING: cnetwatch disabled by command line or sitevar\n";
+    exit(0);
+}
+if ($alertinterval < $interval) {
+    $alertinterval = $interval;
+}
+if ($MAIL_IV == 0) {
+    if ($sendmail) {
+	print STDERR "WARNING: -M option overrides sitevar mail disable\n";
+	$MAIL_IV = $alertinterval;
+    }
+} elsif ($MAIL_IV < $alertinterval) {
+    $MAIL_IV = $alertinterval;
+}
 
 #
-# Check user id?
+# Check user id.
 #
 if ($UID == 0) {
     fatal("Do not run as root or portstats will fail!");
@@ -234,10 +331,10 @@ if ($reportlog) {
     }
 }
 
-if ($interval >= $MIN_SEC) {
+if ($interval >= $alertinterval) {
     $rateivs = 1;
 } else {
-    $rateivs = int($MIN_SEC / $interval + 0.5);
+    $rateivs = int($alertinterval / $interval + 0.5);
 }
 
 getnodeinfo(0);
@@ -291,7 +388,7 @@ sub diffem($$$)
 
     foreach my $node (keys %pcs) {
 	if (!exists($aref->{$node}{'counts'})) {
-	    logit("*** $node: got no portstats, not an admin?");
+	    logit("*** $node: got no portstats, ignored");
 	    next;
 	}
 
@@ -380,21 +477,29 @@ sub reportevents($)
 	    }
 	    $pps = int($pps / $sec);
 	    $bps = int($bps * 8 / $sec);
-	    if ($pps > $MAX_PPS || $bps > $MAX_BPS) {
+	    if (($MAX_PPS && $pps > $MAX_PPS) ||
+		($MAX_BPS && $bps > $MAX_BPS)) {
 		logit("$node: WARNING: pkts/sec=$pps, bits/sec=$bps over $sec seconds");
 		if ($sendmail) {
 		    if (@mailbody == 0) {
-			my $mbps = int($MAX_BPS / 1000000);
+			my $pth = $bth = "no limit on";
+			if ($MAX_PPS) {
+			    $pth = "$MAX_PPS";
+			}
+			if ($MAX_BPS) {
+			    my $mbps = int($MAX_BPS / 1000000);
+			    $bth = "$mbps";
+			}
 			push(@mailbody,
-			     "Thresholds: $MAX_PPS pkts/sec, $mbps Mbits/sec\n");
+			     "Thresholds: $pth pkts/sec, $bth Mbits/sec\n");
 			push(@mailbody,
-			     sprintf("%10s %20s %8s %8s %s",
-				     "Node", "Expt", "Pkts/sec", "Mb/sec", "When"));
+			     sprintf("%20s %30s %8s %8s %s",
+				     "Node:port", "Expt", "Pkts/sec", "Mb/sec", "When"));
 		    }
 		    my $stamp = POSIX::strftime("20%y-%m-%d %H:%M:%S",
 						localtime($ref->{'start'}));
 		    push(@mailbody,
-			 sprintf("%10s %20s %8d %8d %s for %d sec",
+			 sprintf("%20s %30s %8d %8d %s for %d sec",
 				 $node, $pcs{$node}{'exp'}, $pps,
 				 int($bps/1000000), $stamp, $secs));
 		}
@@ -410,8 +515,8 @@ sub reportevents($)
 	    $rates{$node}{'elapsed'} = $secs;
 	}
     }
-    if ($sendmail && (time() - $maillast) > $MAILIV && @mailbody > 0) {
-	if ($MAILMAX > 0 && ++$mailsent > $MAILMAX) {
+    if ($sendmail && (time() - $maillast) > $MAIL_IV && @mailbody > 0) {
+	if ($MAIL_MAX > 0 && ++$mailsent > $MAIL_MAX) {
 	    $sendmail = 0;
 
 	    my $msg = "*** WARNING: max mail messages exceeded!";
@@ -467,14 +572,14 @@ sub report($)
     my $now = time();
     my $dstr = POSIX::strftime("%+", localtime());
     print RL "========== $dstr: timestamp is $now\n";
-    printf RL "%12s %25s %12s %12s %12s %14s\n",
+    printf RL "%20s %30s %12s %12s %12s %14s\n",
         "Node", "Experiment", "Tot Pkts", "Unicast", "Multicast", "Tot Bytes";
     foreach my $node (@list) {
 	my $name = $pcs{$node}{'name'};
 	my $exp = $pcs{$node}{'exp'};
 	my $tot = $ref->{$node}{'totals'};
 
-	printf RL "%12s %25s %12d %12d %12d %14d\n",
+	printf RL "%20s %30s %12d %12d %12d %14d\n",
 	    $name, $exp, $tot->[3], $tot->[1], $tot->[2], $tot->[0];
     }
 }
@@ -622,7 +727,9 @@ sub gather($)
 	    }
 	    $resref->{$node}{'counts'} = \@counts;
 	}
-	close(PS);
+	if (!close(PS)) {
+	    print STDERR "*** $switch: portstats failed on close?\n";
+	}
     }
     $resref->{'tstamp'} = time();
 
