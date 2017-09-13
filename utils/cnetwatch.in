@@ -93,8 +93,7 @@ my $LOGFILE     = "$TB/log/cnetwatch.log";
 # E-mail config
 #
 
-# XXX should be $TBOPS
-my $MAILTO	= "mike\@flux.utah.edu";
+my $MAILTO	= $TBOPS;
 # Do not send mail more often than this (0 == any time)
 my $MAIL_IV	= (10 * 60);
 # Do not send more than this many total messages (0 == no limit)
@@ -335,6 +334,16 @@ if ($interval >= $alertinterval) {
     $rateivs = 1;
 } else {
     $rateivs = int($alertinterval / $interval + 0.5);
+}
+
+logit("cnetwatch starting:");
+logit("  check=${interval}s, alert=${alertinterval}s, ".
+      "pps=$MAX_PPS, bps=$MAX_BPS");
+if ($sendmail) {
+    logit("  mail=${MAIL_IV}s, mailmax=$MAIL_MAX messages");
+}
+if ($reportlog) {
+    logit("  reportlog=$reportlog");
 }
 
 getnodeinfo(0);
@@ -699,21 +708,31 @@ sub gather($)
 
     foreach my $switch (keys %switches) {
 	my $slist = join(' ', @{$switches{$switch}});
-	print STDERR "Invoking '$portstats -i -H -r -l -c -p $slist':\n"
+	print STDERR "$switch: invoking '$portstats -i -H -r -l -c -p $slist':\n"
 	    if ($debug > 1);
 	if (!open(PS, "$portstats -i -H -r -l -c -p $slist 2>&1 |")) {
-	    print STDERR "*** $switch: portstats failed, ignored\n";
+	    print STDERR "*** $switch: portstats failed on open, ignored\n";
 	    next;
 	}
+	my $erroutput = "";
 	while (<PS>) {
 	    print STDERR "  $_"
 		if ($debug > 1);
 	    chomp;
-	    # XXX ignore warnings from snmpit
-	    next if ($_ =~ /^WARNING:/);
-	    next if ($_ !~ /^[-\w]+:[^,]+,/);
+
+	    # XXX ignore warnings from snmpit and other unrecognized lines
+	    if ($_ =~ /^WARNING:/) {
+		$erroutput .= "  $_\n";
+		next;
+	    }
+	    if ($_ !~ /^[-\w]+:[^,]+,/) {
+		$erroutput .= "  $_\n";
+		next;
+	    }
+
 	    my ($node, @counts) = split ',';
 	    if (@counts != 8) {
+		$erroutput .= "  $_\n";
 		print STDERR "*** $node: invalid portstats!?\n"; 
 		next;
 	    }
@@ -728,7 +747,8 @@ sub gather($)
 	    $resref->{$node}{'counts'} = \@counts;
 	}
 	if (!close(PS)) {
-	    print STDERR "*** $switch: portstats failed on close?\n";
+	    print STDERR "*** $switch: portstats failed on close, output:\n";
+	    print STDERR $erroutput;
 	}
     }
     $resref->{'tstamp'} = time();
