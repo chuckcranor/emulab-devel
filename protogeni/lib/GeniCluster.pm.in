@@ -1028,12 +1028,18 @@ sub Reservations($)
     return GeniResponse->Create(GENIRESPONSE_SEARCHFAILED)
 	if (defined($target) && !$query_result->numrows);
 
+    # Current reservations by pid,type so we can tell the caller
+    # how many are actually reserved now.
+    my %current = ();
+
     while (my $row = $query_result->fetchrow_hashref()) {
 	my $blob = {};
    	my $idx  = $row->{'idx'};
 	my $pid  = $row->{'pid'};
 	my $uid  = $row->{'uid'};
 	my $uuid = $row->{'uuid'};
+	my $type = $row->{'type'};
+	my $using = 0;
 	
 	my $project = Project->Lookup($pid);
 	if (!defined($project)) {
@@ -1045,12 +1051,35 @@ sub Reservations($)
 	    print STDERR "Reservations: No such user $uid\n";
 	    next;
 	}
+	if (!exists($current{"$pid:$type"})) {
+	    $current{"$pid:$type"} = 0;
+	    
+	    my $result =
+		DBQueryWarn("select count(n.type) from reserved as r ".
+			    "left join nodes as n on n.node_id=r.node_id ".
+			    "where pid='$pid' and type='$type' ".
+			    "group by type");
+	    if ($result && $result->numrows) {
+		my ($count) = $result->fetchrow_array();
+		
+		$current{"$pid:$type"} = $count;
+	    }
+	}
+	if ($row->{'start'} > time()) {
+	    $using = $current{"$pid:$type"};
+	    if ($using >= $row->{'nodes'}) {
+		$using = $row->{'nodes'};
+		$current{"$pid:$type"} -= $using;
+	    }
+	}
+	
 	$blob->{"idx"}         = $idx;
 	$blob->{"uuid"}        = $uuid;
 	$blob->{"project"}     = $project->nonlocalurn();
 	$blob->{"user"}        = $user->nonlocalurn();
 	$blob->{"nodes"}       = $row->{'nodes'};
-	$blob->{"type"}        = $row->{'type'};
+	$blob->{"type"}        = $type;
+	$blob->{"using"}       = $using;
 	$blob->{"created"}     = TBDateStringGMT($row->{'created'});
 	$blob->{"start"}       = TBDateStringGMT($row->{'start'});
 	$blob->{"end"}         = TBDateStringGMT($row->{'end'});
