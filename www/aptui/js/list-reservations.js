@@ -62,6 +62,7 @@ $(function ()
 		    "showidx"      : true,
 		    "showproject"  : true,
 		    "showuser"     : true,
+		    "showusing"    : true,
 		    "name"         : name,
 		    "isadmin"      : window.ISADMIN,
 		});

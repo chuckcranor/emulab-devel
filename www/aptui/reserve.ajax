@@ -441,6 +441,9 @@ function Do_ListReservations()
             $blob["pid_idx"]     = $details['pid_idx'];
             $blob["creator_uid"] = $details['uid'];
             $blob["creator_idx"] = $details['uid_idx'];
+            if (isset($details["using"])) {
+                $blob["using"]   = $details['using'];
+            }
         }
         if (isset($details['approved']) && $details['approved'] != "") {
             $blob["approved"] = $details["approved"];

@@ -261,6 +261,7 @@ $(function ()
 		    "showidx"      : false,
 		    "showproject"  : false,
 		    "showuser"     : false,
+		    "showusing"    : false,
 		    "name"         : details.name,
 		});
 		html =

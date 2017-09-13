@@ -36,6 +36,9 @@
 	    <% if (showproject) { %><th>Project</th><% } %>
 	    <th>Type</th>
 	    <th>Count</th>
+	    <% if (showusing) { %>	  
+	      <th class="sorter-false">Using</td>
+	    <% } %>
 	    <th>Created</th>
 	    <th>Starts</th>
 	    <th>Ends</th>
@@ -102,6 +105,9 @@
 	      <% } %>
 	      <td><%- value.type %></td>
 	      <td><%- value.count %></td>
+	      <% if (showusing) { %>	  
+		<td><%- value.using %></td>
+	      <% } %>
 	      <td class="format-date"><%- value.created %></td>
 	      <td class="format-date"><%- value.start %></td>
 	      <td class="format-date"><%- value.end %></td>
