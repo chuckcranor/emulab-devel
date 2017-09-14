@@ -47,6 +47,7 @@ my $debug       = 0;
 my $webtask_id;
 my $webtask;
 my $authority;
+my $aggregate;
 
 #
 # Configure variables
@@ -129,17 +130,22 @@ my $action = shift(@ARGV);
 # Default to local cluster
 #
 if (defined($options{"a"})) {
-    $authority = APT_Geni::GetAuthority($options{"a"});
+    if (GeniHRN::IsValid($options{"a"})) {
+	$aggregate = APT_Aggregate->Lookup($options{"a"});
+    }
+    else {
+	$aggregate = APT_Aggregate->LookupByNickname($options{"a"});
+    }
 }
 else {
-    $authority = APT_Geni::GetAuthority($MYURN);
+    $aggregate = APT_Aggregate->Lookup($MYURN);
 }
-if (!defined($authority)) {
-    fatal("Could not look up authority");
-}
-my $aggregate = APT_Aggregate->Lookup($authority->urn());
 if (!defined($aggregate)) {
     fatal("Could not lookup aggregate");
+}
+$authority = APT_Geni::GetAuthority($aggregate->urn());
+if (!defined($authority)) {
+    fatal("Could not look up authority");
 }
 
 # For credentials.
@@ -453,7 +459,7 @@ sub DoList()
 	my $userhrn  = GeniHRN->new($details->{'user'});
 	my $geniuser = GeniUser->Lookup($details->{'user'}, 1);
 	if (defined($geniuser) && $geniuser->IsLocal()) {
-	    print Dumper($geniuser);
+	    #print Dumper($geniuser);
 	    $details->{'uid'}     = $geniuser->uid();
 	    $details->{'uid_idx'} = $geniuser->idx();
 	}
