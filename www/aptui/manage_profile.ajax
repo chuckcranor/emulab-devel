@@ -1259,7 +1259,7 @@ function Do_RTECheck()
             SPITAJAX_ERROR(-1, $suexec_output);
         }
         else {
-	    SUEXECERROR(SUEXEC_ACTION_CONTINUE);
+	    #SUEXECERROR(SUEXEC_ACTION_CONTINUE);
             SPITAJAX_ERROR(1, $suexec_output);
         }
         unlink($infname);
