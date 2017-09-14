@@ -46,6 +46,7 @@ $(function ()
     var types         = null;
     var hardware      = null;
     var resinfo       = null;
+    var deprecatedList = [];
     var mainTemplate  = _.template(instantiateString);
 
     function initialize()
@@ -1697,6 +1698,7 @@ $(function ()
 		"    </div>" +
 		"<div class='col-sm-4'></div>" +
 		"<div class='col-sm-6 alert alert-danger' id='where-nowhere' style='display: none; margin-top: 5px; margin-bottom: 5px'>This profile <b>will not work on any clusters</b>. Please check your profile or parameters for errors. If you are sure they are correct, you can report the problem to support@cloudlab.us and make sure to link to the problematic profile.</div>" +
+		"<div class='col-sm-6 alert alert-warning' id='where-deprecated' style='display: none; margin-top: 5px; margin-bottom: 5px'></div>" +
 		"  </div>" +
 		"</div>";
 	}
@@ -1721,7 +1723,8 @@ $(function ()
 		    "    </div>" +
 		    "<div class='col-sm-4'></div>" +
 		    "<div class='col-sm-6 alert alert-danger' id='where-nowhere' style='display: none; margin-top: 5px; margin-bottom: 5px'>This site <b>will not work on any clusters</b>. All clusters are unselectable.</div>" +
-		    "  </div>" +
+		    "<div class='col-sm-6 alert alert-warning' id='where-deprecated' style='display: none; margin-top: 5px; margin-bottom: 5px'></div>" +
+	            "  </div>" +
 		    "</div>";
 		sitenum++;
 	    });
@@ -1826,6 +1829,7 @@ $(function ()
 	    // is not what actually comes back. Copy before print.
 	    var mycopy = $.extend(true, {}, json.value);
 	    //console.log('json', mycopy);
+	    updateDeprecated(json.value[0].images)
 	    constraints = new JACKS_LOADER.Constraints(context);
 	    constraints.addPossibles({ images: foundImages });
 	    allowWithSites(json.value[0].images, json.value[0].constraints);
@@ -1846,6 +1850,17 @@ $(function ()
 	return true;
     }
 
+  function updateDeprecated(images)
+  {
+    deprecatedList = [];
+    _.each(images, function (image) {
+      if (image.deprecated)
+      {
+	deprecatedList.push(image);
+      }
+    });
+  }
+  
   function allowWithSites(newImages, newConstraints)
   {
     console.log('newImages', newImages);
@@ -2003,6 +2018,24 @@ $(function ()
       {
 	domNode.find('#where-warning').hide();
 	domNode.find('#where-nowhere').hide();
+      }
+      if (deprecatedList.length === 0)
+      {
+	domNode.find('#where-deprecated').hide();
+      }
+      else
+      {
+	var current = domNode.find('#where-deprecated');
+	current.html('');
+	_.each(deprecatedList, function (item) {
+	  var errorMessage = '';
+	  if (item.deprecated_iserror)
+	  {
+	    errorMessage = ': Using this image will cause your experiment to fail.';
+	  }
+	  current.append('<p>Image ' + sup.ImageDisplay(item.id) + ' is deprecated:' + item.deprecated_message + errorMessage + '</p>');
+	});
+	current.show();
       }
       domNode.find('select').children().each(function () {
 	var value = $(this).attr('value');

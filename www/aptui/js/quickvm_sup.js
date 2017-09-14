@@ -312,6 +312,30 @@ function VerifySpeaksfor(speaksfor, signature)
     $xmlthing.done(callback);
 }
 
+  // Input is an image urn.
+  // Returns a pretty image name.
+  function ImageDisplay(v)
+  {
+    var sp = v.split('+');
+    var display;
+    if (sp.length >= 4)
+    {
+      if (sp[3].substr(0, 12) == 'emulab-ops//')
+      {
+	display = sp[3].substr(12);
+      }
+      else
+      {
+	display = sp[3];
+      }
+    }
+    else
+    {
+      display = v;
+    }
+    return display;
+  }
+
 // Exports from this module for use elsewhere
 return {
     ShowModal: ShowModal,
@@ -325,6 +349,7 @@ return {
     SpitOops: SpitOops,
     StartGeniLogin: StartGeniLogin,
     InitGeniLogin: InitGeniLogin,
+    ImageDisplay: ImageDisplay,
 };
 })();
 });
