@@ -877,7 +877,7 @@ sub DoPrediction()
 	push(@agglist, {"authority" => $auth,
 			"webtask"   => $temptask});
     }
-    if (ParRun({"maxwaittime" => 60,
+    if (ParRun({"maxwaittime" => 30,
 		"maxchildren" => scalar(@agglist)},
 	    \@return_codes, $coderef, @agglist)) {
 	#
@@ -900,6 +900,16 @@ sub DoPrediction()
 	$wtask->Refresh();
 
 	if ($code) {
+	    #
+	    # If this timed out, lets not return a fatal error since
+	    # this info is informational and does not prevent the web
+	    # server from operating normally.
+	    #
+	    if ($code == 15) {
+		$blob->{$auth->urn()} = "Timed out getting reservation ".
+		    "system information";
+		next;
+	    }
 	    $errmsg  = "$auth: " . $wtask->output();
 	    goto bad;
 	}

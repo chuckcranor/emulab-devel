@@ -1069,6 +1069,11 @@ $(function ()
 		var cluster = $(this).attr('urn');
 
 		if (_.has(resinfo, cluster) && resinfo[cluster] != null) {
+		    if (typeof(resinfo[cluster]) == "string") {
+			console.info("Timed out getting reservation system " +
+				     "info for cluster " + cluster);
+			return;
+		    }
 		    /*
 		     * Upcoming is lower priority so do first.
 		     */
