@@ -420,7 +420,10 @@ sub diffem($$$)
 	my $bcs = $bref->{$node}{'counts'};
 	my $acs = $aref->{$node}{'counts'};
 	foreach my $i (0..7) {
-	    if ($acs->[$i] < $bcs->[$i]) {
+	    if (!defined($acs->[$i]) || !defined($bcs->[$i])) {
+		logit("$node: WARNING: undefined counter value ($i)");
+		$counts[$i] = 0;
+	    } elsif ($acs->[$i] < $bcs->[$i]) {
 		print STDERR "$node: counter wrap: ".
 		    "b=", $bcs->[$i], ", ".
 		    "a=", $acs->[$i], "!\n"
