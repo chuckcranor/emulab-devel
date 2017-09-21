@@ -1302,7 +1302,8 @@ sub WaitTillReloadDone($$$$$@)
 	      okay:
 		if (int($waittime / 60) > $minutes) {
 		    $minutes = int($waittime / 60);
-		    print STDERR "$self ($node): still waiting; ".
+		    print STDERR "$self ($node): still waiting in ".
+			$eventstate . "; " .
 			"it has been $minutes minute(s). ";
 
 		    my $frisbeestatus =
