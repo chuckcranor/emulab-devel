@@ -665,8 +665,17 @@ $(function () {
 	    // Convert form data into formfields array, like all our
 	    // form handler pages expect.
 	    var fields = $('#pp_form').serializeArray();
+	    console.info("fields", fields);
 	    $.each(fields, function(i, field) {
 		formfields[field.name] = field.value;
+	    });
+	    // Add back any unchecked inputs with "" values, since
+	    // serializeArray() does not include un"successful" elements
+	    // (see https://api.jquery.com/serializeArray/ and
+	    // https://www.w3.org/TR/html401/interact/forms.html#h-17.13.2)
+	    var input_fields = $('#pp_form').closest('form').find("input:checkbox:not(:checked)");
+	    $.each(input_fields,function(i,field) {
+		formfields[field.name] = "";
 	    });
 	    // This clears any errors before new submit. Needs more thought.
 	    GenerateModalBody(formfields, null);
