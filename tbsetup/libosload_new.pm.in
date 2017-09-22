@@ -2006,14 +2006,22 @@ sub SetBootOS($$)
     my @images = @{$self->GetImages($nodeobject)};
     #
     # When loading multiple images, use the osimage from the
-    # last image. We no longer do multi-os images.
+    # last image
     #
     my $image = $images[-1];
+    my $imageid = $image->imageid();
 
-    print "$self SetBootOS($node_id): changing default OS to $image\n";
+    my $defosid = $image->default_osid();
+    my $osimage = OSImage->Lookup($defosid);
+    if (!defined($osimage)) {
+	tberror("$self SetBootOS($node_id): could not map OSID $defosid to its object!");
+	return -1;
+    }
+
+    print "$self SetBootOS($node_id): changing default OS to $osimage\n";
     if (!$TESTMODE) {
 	if ($nodeobject->OSSelect($image,"def_boot_osid",$self->debug())) {
-	    tberror "$self SetBootOS($node_id): os_select $image failed!";
+	    tberror "$self SetBootOS($node_id): os_select $defosid failed!";
 	    return -1;
 	}
     }
@@ -2027,7 +2035,7 @@ sub SetBootOS($$)
 	$ocmdline = $nodeobject->def_boot_cmd_line();
 	$ocmdline = ""
 	    if (!defined($ocmdline));
-	$image->OSBootCmd("delay", \$ncmdline);
+	$osimage->OSBootCmd("delay", \$ncmdline);
 	$ncmdline = ""
 	    if (!defined($ncmdline));
 	if ($ocmdline ne $ncmdline) {
