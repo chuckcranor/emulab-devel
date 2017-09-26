@@ -764,10 +764,13 @@ sub RunAssign($$)
 	    my $wanted = $vtop->types()->{$type};
 
 	    if ($wanted > $bound) {
-		print "*** Resource reservation violation: ".
-		    "$wanted nodes of type $type requested, but only $bound ".
-		    "available because of existing resource reservations ".
-		    "to other projects.\n";
+		tberror({type => 'primary', cause => 'temp',
+			 severity => SEV_ERROR,
+			 error => ['admission_control_failure']},
+		"*** Resource reservation violation: ".
+		"$wanted nodes of type $type requested, but only $bound ".
+		"available because of existing resource reservations ".
+		"to other projects.\n");
 		# Unretriable error
 		return -1;
 	    }
