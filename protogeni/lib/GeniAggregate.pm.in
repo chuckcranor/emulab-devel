@@ -1075,6 +1075,7 @@ sub Action($$$;$)
     my %vnodes   = ();
     my %poweron  = ();
     my %reloads  = ();
+    my %reloaded_nodes = ();
     my %vnodekills = ();
     my %imageinfo  = ();
     my @waitvnodes = ();
@@ -1138,6 +1139,20 @@ sub Action($$$;$)
 	    $msg .= "Could not map $sliver to a node";
 	    goto bad;
 	}
+	#
+	# If we already setup this phys node as a side-effect of setting
+	# up a virtnode, don't try to handle it again.  For a dedicated
+	# node, setting up two reloads would result in sending the same
+	# node twice to osload, which is a bug osload didn't previously
+	# catch.  This condition is down in the isvirtnode()
+	# conditional, and skips a previously-handled vhost, but we need
+	# to skip it just in case the vhost is explicitly a sliver in
+	# the rspec.
+	#
+	next
+	    if (exists($poweron{$node->node_id()}) ||
+		exists($reboots{$node->node_id()}) ||
+		exists($reloaded_nodes{$node->node_id()}));
 	my $reservation = $node->Reservation();
 	if (!defined($reservation)) {
 	    $msg .= "$node no longer belongs to $self";
@@ -1220,6 +1235,7 @@ sub Action($$$;$)
 			    $reloads{$image->versid()} = [ ];
 			} 
 			push(@{ $reloads{$image->versid()} }, $vnode);
+			$reloaded_nodes{$vnode->node_id()} = $vnode;
 			$imageinfo{$vnode->node_id()} = [$osinfo, $image];
 			$vnode->_reloaded(1);
 			$vnode->_image($image);
@@ -1285,7 +1301,7 @@ sub Action($$$;$)
 		next
 		    if (exists($poweron{$physnodeid}) ||
 			exists($reboots{$physnodeid}) ||
-			exists($reloads{$physnodeid}));
+			exists($reloaded_nodes{$physnodeid}));
 		#
 		# We continue below, but now looking at the physical node
 		# that the vnode is running one. 
@@ -1363,6 +1379,7 @@ sub Action($$$;$)
 			$reloads{$image->versid()} = [ ];
 		    }
 		    push(@{ $reloads{$image->versid()} }, $node);
+		    $reloaded_nodes{$node->node_id()} = $node;
 		}
 		$node->_reloaded(1);
 		$node->_image($image);
@@ -1928,6 +1945,7 @@ sub WaitForNodes($$$$@)
 
     # We are now a monitor.
     $slice->SetMonitorPid($PID);
+    print STDERR "Monitor PID $PID\n";
 
     #
     # This is essentially what libossetup (os_setup) does. I want to
@@ -2296,6 +2314,7 @@ sub WaitForNodes($$$$@)
 	$experiment->SetCancelFlag(0);
     }
     $slice->UnLockTables();
+    print STDERR "WaitNodes finished (monitor PID $PID done).\n";
     
     return 0;
 }
