@@ -445,13 +445,25 @@ sub osload($$$) {
     #
     # Although the object can support multiple osloads in flight at once,
     # don't allow multiple reloads per node in different osload invocations!
+    # Also, remove duplicate nodes from the list and warn on them!
     #
+    my %seen = ();
+    my @tmpnodes = ();
     foreach my $node (@nodes) {
 	if (exists($self->{NODES}->{$node})) {
 	    tberror "$self is already loading $node!\n";
 	    return -1;
 	}
+	if (!exists($seen{$node})) {
+	    $seen{$node} = 1;
+	    push(@tmpnodes, $node);
+	}
+	else {
+	    tbwarn("$self osload: Duplicate node '$node' in nodelist;".
+		   " ignoring!\n");
+	}
     }
+    @nodes = @tmpnodes;
 
     # override our defaults
     foreach my $flag (keys(%$args)) {
