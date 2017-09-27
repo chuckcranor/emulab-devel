@@ -38,12 +38,12 @@ use Data::Dumper;
 # 
 sub usage()
 {
-    print "Usage: postimagedata [-f] [-n] [-d] [-a] all [datasets] | [imageid ...]\n";
+    print "Usage: postimagedata [-u] [-n] [-d] [-a] all [datasets] | [imageid ...]\n";
     exit(1);
 }
-my $optlist  = "fndva";
+my $optlist  = "undva";
 my $impotent = 0;
-my $force    = 0;
+my $update   = 0;
 my $debug    = 0;
 my $verbose  = 0;
 my $errors   = 0;
@@ -115,8 +115,8 @@ my %options = ();
 if (! getopts($optlist, \%options)) {
     usage();
 }
-if (defined($options{"f"})) {
-    $force = 1;
+if (defined($options{"u"})) {
+    $update = 1;
 }
 if (defined($options{"a"})) {
     $allvers = 1;
@@ -197,9 +197,9 @@ if (@ARGV) {
     }
 }
 else {
-    # Force allows updating all images previously reported
+    # Update allows updating all images previously reported
     my $ims_reported_clause =
-	($force ? "1 or" : "ims_reported is null or");
+	($update ? "ims_reported is not null or" : "ims_reported is null or");
 
     my $which_clause = ($datasets ? "isdataset=1" : "(ezid=1 or isdataset=1)");
     
@@ -227,6 +227,10 @@ else {
 	if (!defined($image)) {
 	    print STDERR "Could not lookup image: $imageid,$version\n";
 	    $errors++;
+	    next;
+	}
+	if (0) {
+	    print "$image\n";
 	    next;
 	}
 	if (PostImageInfo($image)) {

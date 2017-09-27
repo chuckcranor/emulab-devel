@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2000-2016 University of Utah and the Flux Group.
+# Copyright (c) 2000-2017 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -378,7 +378,12 @@ if (exists($editnodetype_args{"class"})) {
 if (exists($editnodetype_args{"architecture"})) {
     my $architecture = $editnodetype_args{"architecture"};
     
-    push(@nodetype_data, "architecture='$architecture'");
+    if ($architecture eq "") {
+	push(@nodetype_data, "architecture=NULL");
+    }
+    else {
+	push(@nodetype_data, "architecture='$architecture'");
+    }
 }
 
 # The rest of them all have names starting with "is" at present.

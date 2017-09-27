@@ -76,7 +76,9 @@ use IO::Select;
 use File::Basename;
 use File::Path;
 use File::Copy;
-use File::Temp;
+use File::Temp qw(tempdir);
+use MIME::Base64 qw(encode_base64url encode_base64);
+use URI::Escape;
 use POSIX;
 use JSON::PP;
 
@@ -355,8 +357,8 @@ sub bindNetNS($$);
 sub moveNetDeviceToNetNS($$$);
 sub moveNetDeviceFromNetNS($$$);
 sub unbindNetNS($$);
-sub setupImage($$$$$$$);
-sub pullImage($$;$);
+sub setupImage($$$$$$$$$);
+sub pullImage($$$$;$);
 sub analyzeImage($$);
 sub AllocateIFBs($$$);
 sub ReleaseIFBs($$);
@@ -423,8 +425,11 @@ sub ImageLockName($)
 {
     my ($imagename) = @_;
 
-    return "dockerimage." .
+    my $ln = "dockerimage." .
 	(defined($imagename) ? $imagename : $defaultImage{'name'});
+    $ln =~ tr/\//-/;
+
+    return $ln;
 }
 
 sub ImageLVName($)
@@ -2305,9 +2310,9 @@ sub vnodeCreate($$$$)
     my ($vnode_id, undef, $vnconfig, $private) = @_;
     my $attributes = $vnconfig->{'attributes'};
     my $imagename = $vnconfig->{'image'};
+    my $inreload = defined($imagename) ? 1 : 0;
     my $raref = $vnconfig->{'reloadinfo'};
     my $vninfo = $private;
-    my %image = %defaultImage;
     my %mounts = ();
     my $imagemetadata;
     my $lvname;
@@ -2325,6 +2330,50 @@ sub vnodeCreate($$$$)
 
     my ($host_iface,$host_ip,$host_mask,$host_maskbits,$host_net,
 	$host_mac,$host_gw) = findControlNet();
+
+    if (defined($raref)) {
+	$raref = $raref->[0];
+	$inreload = 1;
+    }
+
+    #
+    # Figure out where/what we're pulling, and a username/password if
+    # necessary.
+    #
+    my ($user,$pass);
+    if ((!$imagename || $imagename =~ /^emulab-ops-emulab-ops-DOCKER-EXT/)
+	&& exists($attributes->{'DOCKER_EXTIMAGE'})) {
+	$imagename = $attributes->{'DOCKER_EXTIMAGE'};
+	if (exists($attributes->{'DOCKER_EXTUSER'})) {
+	    $user = $attributes->{'DOCKER_EXTUSER'};
+	}
+	if (exists($attributes->{'DOCKER_EXTPASS'})) {
+	    $pass = $attributes->{'DOCKER_EXTPASS'};
+	}
+    }
+    elsif ($inreload) {
+	# For local reloads, username is physical host shortname;
+	# password is the eventkey.
+	open(FD,"$BOOTDIR/nodeid")
+	    or die("open($BOOTDIR/nodeid): $!");
+	$user = <FD>;
+	chomp($user);
+	close(FD);
+	open(FD,"$BOOTDIR/eventkey")
+	    or die("open($BOOTDIR/eventkey): $!");
+	$pass = <FD>;
+	chomp($pass);
+	close(FD);
+
+	print "raref:" . Dumper($raref) . "\n";
+	if (!exists($raref->{"PATH"}) || !$raref->{"PATH"}) {
+	    fatal("reload specified, but not external image, and no image PATH!");
+	}
+	$imagename = $raref->{"PATH"};
+    }
+    else {
+	$imagename = $defaultImage{'name'};
+    }
 
     #
     # XXX future optimization possibility.
@@ -2351,18 +2400,30 @@ sub vnodeCreate($$$$)
 	fatal("CreateVnodeLock()");
     }
 
-    if (exists($attributes->{'DOCKER_EXTIMAGE'})) {
-	$imagename = $attributes->{'DOCKER_EXTIMAGE'};
-    }
-    else {
-	$imagename = $image{'name'};
+    if ($inreload) {
+	# No real difference for us here; RELOADING has a longer timeout too.
+	libutil::setState("RELOADSETUP");
+	libutil::setState("RELOADING");
     }
 
     my ($newimagename,$newcreateargs,$newcmd);
-    $rc = setupImage($vnode_id,$vnconfig,$private,$imagename,
+    $rc = setupImage($vnode_id,$vnconfig,$private,$imagename,$user,$pass,
 		     \$newimagename,\$newcreateargs,\$newcmd);
     if ($rc) {
+	libutil::setState("RELOADFAILED");
 	fatal("Failed to setup $imagename for $vnode_id; aborting!");
+    }
+
+    if ($inreload) {
+	libutil::setState("RELOADDONE");
+	# XXX why do we need to wait for this to take effect?
+	TBDebugTimeStamp("waiting 4 sec after asserting RELOADDONE...");
+	sleep(4);
+
+	#
+	# Finish off the state transitions as necessary.
+	#
+	libutil::setState("SHUTDOWN");
     }
 
     CreateVnodeUnlock();
@@ -2865,7 +2926,7 @@ sub vnodeConfigDevices($$$$)
     return 0;
 }
 
-sub vnodeState($$$$)
+sub vnodeState($;$$$)
 {
     my ($vnode_id, $vmid, $vnconfig, $private) = @_;
 
@@ -3549,9 +3610,9 @@ sub DOCKER_INIT_RUNIT() { return "runit"; }
 sub DOCKER_PULLPOLICY_LATEST() { return "latest"; }
 sub DOCKER_PULLPOLICY_CACHED() { return "cached"; }
 
-sub pullImage($$;$)
+sub pullImage($$$$;$)
 {
-    my ($image,$policy,$newref) = @_;
+    my ($image,$user,$pass,$policy,$newref) = @_;
 
     if (!defined($policy) || $policy eq '' || SHAREDHOST()) {
 	$policy = DOCKER_PULLPOLICY_LATEST();
@@ -3579,8 +3640,66 @@ sub pullImage($$;$)
     TBDebugTimeStamp("  got image lock $imagelockname for $image")
 	if ($lockdebug);
 
-    my $output = `docker pull $image`;
-    my $rc = $? >> 8;
+    #
+    # Try one more time to inspect, and release the lock if we have it.
+    #
+    if ($policy eq DOCKER_PULLPOLICY_CACHED()) {
+	mysystem2("docker inspect $image");
+	if ($? == 0) {
+	    TBDebugTimeStamp("  releasing image lock")
+		if ($lockdebug);
+	    TBScriptUnlock();
+	    return 0;
+	}
+    }
+
+    #
+    # Also, because we might need to authenticate, use the Docker API to
+    # pull the image instead of trying to lock the Docker config file in
+    # case we have separate creds for the same registry, or use a
+    # separate config file (the former of which is not preferable, the
+    # latter of which I couldn't make work).
+    #
+    # XXX: This also means the base64-encoded creds will show up in the
+    # process list, so fix that later.
+    #
+    my $authhdrstr = "";
+    if (defined($user) && $user ne "") {
+	# Default to the default registry if the image doesn't have a
+	# host:port part.
+	my $registry = "registry-1.docker.io";
+	if ($image =~ /^([a-zA-Z0-9-\.]+)(:\d+)?\/.*$/) {
+	    $registry = "$1$2";
+	}
+	my $auth = encode_base64url('{"username":"'.$user.'","password":"'.$pass.'"}'."");
+	chomp($auth);
+	$auth =~ tr/\r\n//;
+	$authhdrstr = "-H 'X-Registry-Auth: $auth'";
+    }
+    my $output = "";
+    my $uimage = uri_escape($image);
+    my $ccmd = "$CURL --unix-socket /var/run/docker.sock".
+	" -H 'Content-Type: application/json' $authhdrstr".
+	" -X POST 'http:/images/create?fromImage=$uimage'";
+    my $retries = 10;
+    my $ret = 1;
+    while ($ret && $retries > 0) {
+	$output = `$ccmd`;
+	$ret = $?;
+	if ($ret == 0) {
+	    TBDebugTimeStamp("pull $image succeeded ($ccmd)");
+	    last;
+	}
+	my $ustr = "";
+	if (defined($user)) {
+	    $ustr = " as user $user";
+	}
+	TBDebugTimeStamp("pull $image failed$ustr;" .
+			 " sleeping and retrying...");
+	sleep(8);
+	$retries -= 1;
+    }
+    my $rc = $ret >> 8;
     if ($rc) {
 	TBDebugTimeStamp("failed to pull image $image!");
     }
@@ -3595,9 +3714,9 @@ sub pullImage($$;$)
     return $rc;
 }
 
-sub setupImage($$$$$$$)
+sub setupImage($$$$$$$$$)
 {
-    my ($vnode_id,$vnconfig,$private,$image,
+    my ($vnode_id,$vnconfig,$private,$image,$username,$password,
 	$newimageref,$newcreateargsref,$newcmdref) = @_;
     my $rc;
     my $cwd;
@@ -3653,7 +3772,7 @@ sub setupImage($$$$$$$)
 	$pullpolicy = DOCKER_PULLPOLICY_CACHED();
     }
     my $havenewbase = 0;
-    if (pullImage($image,$pullpolicy,\$havenewbase)) {
+    if (pullImage($image,$username,$password,$pullpolicy,\$havenewbase)) {
 	warn("failed to pull Docker image $image");
 	return -1;
     }

@@ -1063,7 +1063,7 @@ sub LocalVersionURL($)
 {
     my ($self) = @_;
     
-    return $self->image()->LocalURL();
+    return $self->image()->LocalVersionURL();
 }
 
 sub HasCredential($)

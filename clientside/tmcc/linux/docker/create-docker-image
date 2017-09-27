@@ -1,0 +1,195 @@
+#!/usr/bin/perl -w
+#
+# Copyright (c) 2017 University of Utah and the Flux Group.
+# 
+# {{{EMULAB-LICENSE
+# 
+# This file is part of the Emulab network testbed software.
+# 
+# This file is free software: you can redistribute it and/or modify it
+# under the terms of the GNU Affero General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or (at
+# your option) any later version.
+# 
+# This file is distributed in the hope that it will be useful, but WITHOUT
+# ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
+# FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Affero General Public
+# License for more details.
+# 
+# You should have received a copy of the GNU Affero General Public License
+# along with this file.  If not, see <http://www.gnu.org/licenses/>.
+# 
+# }}}
+#
+use English;
+use Getopt::Std;
+use strict;
+
+# Drag in path stuff so we can find emulab stuff.
+BEGIN { require "/etc/emulab/paths.pm"; import emulabpaths; }
+
+my $VNODESETUP	= "$BINDIR/vnodesetup";
+
+#
+# Client-side to create a disk image. Caller must be root!
+# This is the Docker-specific version. 
+#
+sub usage()
+{
+    print STDOUT "" .
+	"Usage: create-docker-image -R <registry> -r <repository> -t <tag>" .
+	" <vnodeid>\n";
+    exit(-1);
+}
+my $optlist   = "R:r:t:u:p:";
+my $filename;
+
+if ($UID != 0) {
+    print STDERR "Must be root!\n";
+}
+
+#
+# Turn off line buffering on output
+#
+$| = 1;
+
+# Need this for predicates.
+use libsetup;
+use libvnode_docker;
+use libgenvnode;
+#use libvnode;
+use libutil;
+
+#
+# No configure vars.
+#
+my $vnodeid;
+my ($registry,$repo,$tag,$user,$pass);
+
+#
+# Parse command arguments. Once we return from getopts, all that should be
+# left are the required arguments.
+#
+my %options = ();
+if (! getopts($optlist, \%options)) {
+    usage();
+}
+if (defined($options{"R"})) {
+   $registry = $options{"R"};
+}
+else {
+    die("No registry (-R) supplied!");
+}
+if (defined($options{"r"})) {
+    $repo = $options{"r"};
+}
+else {
+    die("No repository (-r) supplied!");
+}
+if (defined($options{"t"})) {
+    $tag = $options{"t"};
+}
+else {
+    die("No tag (-t) supplied!");
+}
+if (defined($options{"u"})) {
+    $user = $options{"u"};
+}
+else {
+    die("No user (-u) supplied!");
+}
+if (defined($options{"p"})) {
+    $pass = $options{"p"};
+}
+else {
+    die("No pass (-p) supplied!");
+}
+$vnodeid = shift(@ARGV);
+if (!defined($vnodeid) || $vnodeid eq '') {
+    print STDERR "ERROR: no vnodeid specified!\n";
+    usage();
+}
+
+#
+# First, try to login to the registry with user/pass:
+#
+my $i = 10;
+while ($i > 0) {
+    system("docker login -p '$pass' -u '$user' $registry");
+    last
+	if ($? == 0);
+    print STDERR "ERROR: failed to login to registry $registry; sleeping and trying again...\n";
+    sleep(4);
+    $i -= 1;
+}
+
+#
+# Check container status. If it is running, we need to stop it.  We
+# don't run prepare on the way down; we run it as an ONBUILD instruction
+# in the docker commit process.
+#
+my ($initstatus,$status);
+$initstatus = $status = libvnode_docker::vnodeState($vnodeid);
+if ($status eq VNODE_STATUS_UNKNOWN()) {
+    print STDERR "ERROR: docker container $vnodeid does not seem to exist!\n";
+    system("docker logout $registry");
+    exit(1);
+}
+
+#
+# Try to stop the container.
+#
+$i = 10;
+while ($i > 0 && $status ne VNODE_STATUS_STOPPED()) {
+    system("docker stop $vnodeid");
+    $i -=1;
+    $status = libvnode_docker::vnodeState($vnodeid);
+}
+if ($status ne VNODE_STATUS_STOPPED()) {
+    print STDERR "ERROR: failed to stop docker container $vnodeid; aborting!\n";
+    system("docker logout $registry");
+    exit(1);
+}
+
+#
+# (Locally) commit the image.
+#
+my $fullimagename = "$registry/$repo:$tag";
+system("docker commit $vnodeid $fullimagename");
+if ($?) {
+    print STDERR "ERROR: failed to commit image $fullimagename for container $vnodeid; aborting!\n";
+    system("docker logout $registry");
+    exit(1);
+}
+
+if ($initstatus ne VNODE_STATUS_STOPPED()) {
+    system("docker start $vnodeid");
+    if ($?) {
+	print STDERR "WARNING: error restarting container $vnodeid; ignoring!\n";
+    }
+}
+else {
+    print STDERR "WARNING: not restarting previously stopped container $vnodeid\n";
+}
+
+# Push the image and logout.
+$i = 10;
+my $success = 0;
+while ($i > 0) {
+    system("docker push $fullimagename");
+    if ($? == 0) {
+	$success = 1;
+	last;
+    }
+    print STDERR "ERROR: failed to push $fullimagename; sleeping and trying again...\n";
+    sleep(4);
+    $i -= 1;
+}
+
+system("docker logout $registry");
+
+if (!$success) {
+    exit(1);
+}
+
+exit(0);

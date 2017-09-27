@@ -1246,7 +1246,18 @@ sub MaxSwapIn($$$) {
 	$reservation->SetNodes( $reservation->nodes() - $overflow );
     }
 
-    return $reservation->nodes() > 0 ? $reservation->nodes() : 0;
+    my $avail = $reservation->nodes() > 0 ? $reservation->nodes() : 0;
+
+    # Now consider nodes prereserved to the project but currently unused.
+    my $query_result = DBQueryFatal( "SELECT COUNT(*) FROM nodes AS n " .
+				     "LEFT OUTER JOIN reserved AS r " .
+				     "ON n.node_id=r.node_id " .
+				     "WHERE r.pid IS NULL AND n.type='" .
+				     $type . "' AND n.reserved_pid='" .
+				     $experiment->pid() . "'" );
+    my ($extra) = $query_result->fetchrow_array();
+    
+    return $avail + $extra;
 }
 
 #

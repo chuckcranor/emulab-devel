@@ -472,6 +472,7 @@ sub UpdateImage($$)
 	"visibility" => $blob->{'visibility'},
 	"virtualizaton" => $blob->{'virtualizaton'},
 	"osfeatures" => $blob->{'osfeatures'},
+	"metadata_url" => $blob->{'metadata_url'},
 	"types_known_working" => join(",", sort(keys(%types_known_working))),
 	);
     my $created = timelocal(strptime($blob->{'created'}));

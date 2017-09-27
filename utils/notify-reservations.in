@@ -87,6 +87,7 @@ my $query_result = DBQueryFatal( "SELECT r.idx, r.pid, r.nodes, r.type, " .
 				 "r.end, u.usr_email FROM " .
 				 "future_reservations AS r, users AS u " .
 				 "WHERE r.uid_idx=u.uid_idx AND " .
+				 "r.approved IS NOT NULL AND " .
 				 "(r.notified IS NULL OR " .
 				 "r.notified < r.start) AND " .
 				 "r.start <= NOW()" );
@@ -122,11 +123,12 @@ while( my ($idx, $pid, $count, $type, $end, $email) =
 }
 
 $query_result = DBQueryFatal( "SELECT r.idx, r.pid, r.nodes, r.type, " .
-				 "r.start, r.end, u.usr_email FROM " .
-				 "future_reservations AS r, users AS u " .
-				 "WHERE r.uid_idx=u.uid_idx AND " .
-				 "r.notified IS NULL AND " .
-				 "r.start <= ADDDATE( NOW(), 1 )" );
+			      "r.start, r.end, u.usr_email FROM " .
+			      "future_reservations AS r, users AS u " .
+			      "WHERE r.uid_idx=u.uid_idx AND " .
+			      "r.approved IS NOT NULL AND " .
+			      "r.notified IS NULL AND " .
+			      "r.start <= ADDDATE( NOW(), 1 )" );
 
 while( my ($idx, $pid, $count, $type, $start, $end, $email) =
        $query_result->fetchrow_array() ) {
