@@ -145,6 +145,9 @@ if (defined($options{"n"})) {
 }
 if (defined($options{"Q"})) {
     $quotaval = parsenumstr($options{"Q"});
+    foreach my $fs (keys %fsquotas) {
+	$fsquotas{$fs} = $quotaval;
+    }
 }
 if (defined($options{'F'})) {
     if ($options{'F'} =~ /^(\d+(\.\d+)?)$/) {
@@ -153,6 +156,9 @@ if (defined($options{'F'})) {
 	    print STDERR "*** Factor must be at least 1\n";
 	    usage();
 	    exit(1);
+	}
+	foreach my $fs (keys %fsmults) {
+	    $fsmults{$fs} = $factor;
 	}
     } else {
 	print STDERR "*** Factor must be a number.\n";
@@ -327,17 +333,13 @@ sub getquotas($)
 	} else {
 	    $root = "unknown";
 	}
-	if (defined($quotaval)) {
-	    $tgtrefq = $quotaval;
-	} elsif (exists($fsquotas{$root})) {
+	if (exists($fsquotas{$root})) {
 	    $tgtrefq = $fsquotas{$root};
 	} else {
 	    print STDERR "*** $fs: unknown root FS '$root'\n";
 	    return undef;
 	}
-	if (defined($factor)) {
-	    $tgtmult = $factor;
-	} elsif (exists($fsmults{$root})) {
+	if (exists($fsmults{$root})) {
 	    $tgtmult = $fsmults{$root};
 	} else {
 	    print STDERR "*** $fs: unknown root FS '$root'\n";
