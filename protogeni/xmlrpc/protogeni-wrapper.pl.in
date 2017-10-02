@@ -407,7 +407,14 @@ if (!defined($group)) {
     die("*** $0:\n".
 	"    Could not resolve lookup group $GENIGROUP\n");
 }
-$logfile = Logfile->Create($group);
+my $logfilename = TBMakeLogname("pgwrapper");
+# So tbops people can read the files ...
+if (!chmod(0664, $logfilename)) {
+    unlink($logfilename);
+    die("*** $0:\n".
+	"    Could not chmod $logfilename\n");
+}
+$logfile = Logfile->Create($group, $logfilename);
 if (!defined($logfile)) {
     die("*** $0:\n".
 	"    Could not create a new logfile\n");
