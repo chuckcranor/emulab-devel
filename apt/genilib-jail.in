@@ -532,7 +532,7 @@ sub start_jail($$)
     $args .= "exec.prestart=/usr/bin/true exec.poststart=/usr/bin/true ";
     $args .= "exec.prestop=/usr/bin/true exec.poststop=/usr/bin/true ";
     $args .= "exec.start='/bin/sh /etc/rc' exec.stop='/bin/sh /etc/rc.shutdown' ";
-    $args .= "exec.clean=0 exec.timeout=$CMD_TIMEOUT stop.timeout=30 ";
+    $args .= "exec.clean=0 exec.timeout=$timo stop.timeout=30 ";
 
     # other stuff
     $args .= "allow.dying persist";
@@ -545,15 +545,6 @@ sub start_jail($$)
 # Note that the kernel has to enable RACCT by setting kern.racct.enable=1 in
 # /boot/loader.conf.
 #
-# XXX right now we just limit the total run time to CMD_TIMEOUT seconds.
-# Other things we might consider:
-#
-#    :cputime:sigkill=600/jail	# max of 600 total CPU seconds for all processes
-#    :memoryuse:deny=1G/jail	# prevent use of >1GB RAM for all processes
-#    :pcpu:deny=10/jail		# prevent use of >10% of one CPU for all processes
-#
-# Can also limit processes, open files, and more.
-#
 sub limit_jail($$)
 {
     my ($name,$setem) = @_;
@@ -565,8 +556,30 @@ sub limit_jail($$)
 	return 0;
     }
     
+    #
+    # XXX buncha hard wired checks here.
+    # * no more than 100 processes in the jail
+    # * no more than 200 threads in the jail
+    # * no more than 200 open files in the jail
+    # * no more than 1GB of VM
+    #
     my @rules = ();
+    if (1) {
+	# XXX apparently cannot log til after fork is successful,
+	#     so log one before actually failing
+	push @rules, "jail:$name:maxproc:log=99/jail";
+	push @rules, "jail:$name:maxproc:deny=100/jail";
+	push @rules, "jail:$name:nthr:log=200/jail";
+	push @rules, "jail:$name:nthr:deny=200/jail";
+	push @rules, "jail:$name:openfiles:log=200/jail";
+	push @rules, "jail:$name:openfiles:deny=200/jail";
+	push @rules, "jail:$name:vmemoryuse:log=1g/jail";
+	push @rules, "jail:$name:vmemoryuse:deny=1g/jail";
+    }
+
+    # Don't leave lingering jails
     my $timo = $CMD_TIMEOUT;
+    push @rules, "jail:$name:wallclock:log=$timo/jail";
     push @rules, "jail:$name:wallclock:sigterm=$timo/jail";
     $timo += 10;
     push @rules, "jail:$name:wallclock:sigkill=$timo/jail";
