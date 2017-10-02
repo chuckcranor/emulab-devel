@@ -570,7 +570,7 @@ if ($call->{'type'} ne 'call') {
 }
 my $method = $call->{'method_name'};
 if (!defined($GENI_METHODS->{$method})) {
-    XMLError(XMLRPC_APPLICATION_ERROR() + 3, "no such method $method\n");
+    XMLError(XMLRPC_NO_SUCH_METHOD(), "no such method $method\n");
 }
 # Debugging overrides, to avoid email blasting.
 # Too much output.

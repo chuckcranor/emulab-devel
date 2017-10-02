@@ -426,8 +426,7 @@ sub Start($$)
     }
     my $method = $call->{'method_name'};
     if (!defined($METHODS->{$method})) {
-	return XMLError(XMLRPC_APPLICATION_ERROR() + 3,
-			"no such method $method\n");
+	return XMLError(XMLRPC_NO_SUCH_METHOD(), "no such method $method\n");
     }
     #
     # Debugging overrides. There should be upcalls from the routines,
