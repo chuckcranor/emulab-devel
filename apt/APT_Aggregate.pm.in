@@ -251,5 +251,24 @@ sub LookupByDomain($$)
     return Lookup($class, $aggregate_urn);
 }
 
+sub LookupByNickname($$)
+{
+    my ($class, $nickname) = @_;
+
+    if ($nickname !~ /^[-\w]+$/) {
+	return undef;
+    }
+    my $query_result =
+	DBQueryWarn("select urn from apt_aggregates ".
+		    "where nickname='$nickname'");
+    return undef
+	if (!$query_result);
+    return undef
+	if (!$query_result->numrows);
+
+    my ($aggregate_urn) = $query_result->fetchrow_array();
+    return Lookup($class, $aggregate_urn);
+}
+
 # _Always_ make sure that this 1 is at the end of the file...
 1;
