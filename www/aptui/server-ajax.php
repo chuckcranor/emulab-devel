@@ -384,7 +384,9 @@ $routing = array("myprofiles" =>
 			array("file"    => "experiments.ajax",
 			      "guest"   => false,
 			      "methods" => array("ExperimentList" =>
-                                                     "Do_ExperimentList")),
+                                                     "Do_ExperimentList",
+                                                 "ExperimentErrors" =>
+                                                     "Do_ExperimentErrors")),
 		 "approve-projects" =>
 			array("file"    => "approve-projects.ajax",
 			      "guest"   => false,

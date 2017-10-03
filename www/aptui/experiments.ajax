@@ -175,6 +175,106 @@ function Do_ExperimentList()
     SPITAJAX_RESPONSE($results);    
 }
 
+function Do_ExperimentErrors()
+{
+    global $this_user, $urn_mapping, $geni_response_codes;
+    global $ajax_args;
+    $clause  = "";
+    $results = array();
+
+    if (CheckPageArgs()) {
+        return;
+    }
+    if (isset($ajax_args["stamp"]) && TBvalid_integer($ajax_args["stamp"])) {
+        $stamp = $ajax_args["stamp"];
+        $clause = "where UNIX_TIMESTAMP(f.created) <= $stamp";
+    }
+    $query_result =
+        DBQueryFatal("select f.name,exitcode,f.created,f.public_url,f.uuid,".
+                     "  IF(i.uuid,1,0) as active,f.exitmessage, ".
+                     "  p.uuid as profile_uuid,p.name as profile_name, ".
+                     "  IF(i.uuid,i.aggregate_urn,h.aggregate_urn) ".
+                     "    as aggregate_urn, ".
+                     "  f.slice_uuid,f.logfileid,f.creator ".
+                     "from apt_instance_failures as f ".
+                     "left join apt_instances as i on ".
+                     "     i.uuid=f.uuid ".
+                     "left join apt_instance_history as h on ".
+                     "     h.uuid=f.uuid ".
+                     "left join apt_profiles as p on ".
+                     "     p.profileid=f.profile_id ".
+                     $clause . " " .
+                     "order by f.created desc limit 25");
+
+    while ($row = mysql_fetch_array($query_result)) {
+        $name       = $row["name"];
+        $exitcode   = $row["exitcode"];
+        $url        = $row["public_url"];
+        $logfileid  = $row["logfileid"];
+        $active     = $row["active"] ? 1 : 0;
+        $uuid       = $row["uuid"];
+        $created    = DateStringGMT($row["created"]);
+        $creator    = $row["creator"];
+        $message    = $row["exitmessage"];
+        $reason     = $exitcode;
+        $slice_uuid = $row["slice_uuid"];
+        $profile_uuid = $row["profile_uuid"];
+        $profile_name = $row["profile_name"];
+        $aggregate_urn= $row["aggregate_urn"];
+        $cluster      = "N/A";
+
+        if ($exitcode >= 0 && $exitcode <= count($geni_response_codes)) {
+            $reason = $geni_response_codes[$exitcode];
+        }
+        elseif ($exitcode == GENIRESPONSE_STITCHER_ERROR) {
+            $reason = "Stitcher Failed";
+        }
+        if ($aggregate_urn && $aggregate_urn != "") {
+            $cluster = $urn_mapping[$aggregate_urn];
+        }
+        #
+        # Ick. If the url is for the showslicepub link, we have a problem;
+        # the link is good only while the slice is alive. After that, we have
+        # to use a private url (which is okay, cause only admins are going
+        # to see it and be able to use it).
+        #
+        if (ISFOREIGN_ADMIN()) {
+            $url = null;
+        }
+        elseif (!$url) {
+            #
+            # If there is a log file, show that instead.
+            #
+            if ($logfileid) {
+                $url = $TBBASE . "/" .
+                    CreateURL("spewlogfile", "logfile", $logfileid);
+            }
+        }
+        elseif (preg_match("/^(https:.*)\/showslicepub/", $url, $matches)) {
+            if (ISADMIN()) {
+                $url = $matches[1] . "/showslicelogs.php?slice_uuid=".
+                    $slice_uuid;
+            }
+            else {
+                $url = null;
+            }
+        }
+        $results[$uuid] = array("name"     => $name,
+                                "uuid"     => $uuid,
+                                "exitcode" => $exitcode,
+                                "active"   => $active,
+                                "created"  => $created,
+                                "creator"  => $creator,
+                                "reason"   => $reason,
+                                "message"  => $message,
+                                "url"      => $url,
+                                "cluster"  => $cluster,
+                                "profile_uuid" => $profile_uuid,
+                                "profile_name" => $profile_name);
+    }
+    SPITAJAX_RESPONSE($results);    
+}
+
 # Local Variables:
 # mode:php
 # End:
