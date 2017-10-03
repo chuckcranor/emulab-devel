@@ -127,7 +127,7 @@ CREATE TABLE `apt_aggregates` (
   `weburl` tinytext,
   `has_datasets` tinyint(1) NOT NULL default '0',
   `reservations` tinyint(1) NOT NULL default '0',
-  `portals` set('emulab','aptlab','cloudlab','phantomnet') default NULL,
+  `portals` set('emulab','aptlab','cloudlab','phantomnet','powder') default NULL,
   `jsondata` text,
   PRIMARY KEY  (`urn`)
 ) ENGINE=MyISAM DEFAULT CHARSET=latin1;
@@ -407,7 +407,7 @@ CREATE TABLE `apt_news` (
   `created` datetime default NULL,
   `author` varchar(32) default NULL,
   `author_idx` mediumint(8) unsigned NOT NULL default '0',
-  `portals` set('emulab','aptlab','cloudlab','phantomnet') default NULL,
+  `portals` set('emulab','aptlab','cloudlab','phantomnet','powder') default NULL,
   `body` text,
   PRIMARY KEY  (`idx`)
 ) ENGINE=MyISAM DEFAULT CHARSET=latin1;
@@ -3008,7 +3008,7 @@ CREATE TABLE `login` (
   `timeout` varchar(10) NOT NULL default '',
   `adminon` tinyint(1) NOT NULL default '0',
   `opskey` varchar(64) NOT NULL,
-  `portal` enum('emulab','aptlab','cloudlab','phantomnet') NOT NULL default 'emulab',
+  `portal` enum('emulab','aptlab','cloudlab','phantomnet','powder') NOT NULL default 'emulab',
   PRIMARY KEY  (`uid_idx`,`hashkey`),
   UNIQUE KEY `hashhash` (`uid_idx`,`hashhash`),
   UNIQUE KEY `uidkey` (`uid`,`hashkey`)
@@ -4434,8 +4434,7 @@ CREATE TABLE `projects` (
   `nonlocal_id` varchar(128) default NULL,
   `nonlocal_type` tinytext,
   `manager_urn` varchar(128) default NULL,
-  `genesis` enum('emulab','aptlab','cloudlab','phantomnet') NOT NULL default 'emulab',
-  `portal` enum('emulab','aptlab','cloudlab','phantomnet') default NULL,
+  `portal` enum('emulab','aptlab','cloudlab','phantomnet','powder') default NULL,
   `experiment_accounts` enum('none','swapper') default NULL,
   PRIMARY KEY  (`pid_idx`),
   UNIQUE KEY `pid` (`pid`),
@@ -5246,8 +5245,7 @@ CREATE TABLE `users` (
   `default_project` mediumint(8) unsigned default NULL,
   `nocollabtools` tinyint(1) default '0',
   `initial_passphrase` varchar(128) default NULL,
-  `genesis` enum('emulab','aptlab','cloudlab','phantomnet') NOT NULL default 'emulab',
-  `portal` enum('emulab','aptlab','cloudlab','phantomnet') default NULL,
+  `portal` enum('emulab','aptlab','cloudlab','phantomnet','powder') default NULL,
   `ga_userid` varchar(32) default NULL,
   PRIMARY KEY  (`uid_idx`),
   KEY `unix_uid` (`unix_uid`),
