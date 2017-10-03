@@ -2958,7 +2958,9 @@ CREATE TABLE `logfiles` (
   `compressed` tinyint(1) NOT NULL default '0',
   `stored` tinyint(1) NOT NULL default '0',
   PRIMARY KEY  (`logid`),
-  KEY `logidx` (`logidx`)
+  KEY `logidx` (`logidx`),
+  KEY `filename` (`filename`(128)),
+  KEY `isopen` (`isopen`)
 ) ENGINE=MyISAM DEFAULT CHARSET=latin1;
 
 --
