@@ -369,6 +369,9 @@ $(function ()
 		console.info("failed to get classic list: " + json.value);
 		return;
 	    }
+	    if (json.value.length == 0) {
+		return;
+	    }
 	    var html = classicTemplate({
 		"images"       : json.value,
 	    });
