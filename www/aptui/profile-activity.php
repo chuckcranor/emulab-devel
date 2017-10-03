@@ -59,8 +59,10 @@ $query1_result =
                  "   i.uuid,i.profile_version,i.created,'' as destroyed, ".
 		 "   i.creator,p.uuid as profile_uuid,u.email,".
                  "   GROUP_CONCAT(ia.public_url) as public_urls, ".
-                 "   i.slice_uuid ".
+                 "   i.slice_uuid,f.exitmessage,f.exitcode ".
 		 "  from apt_instances as i ".
+                 "left join apt_instance_failures as f ".
+                 "     on f.uuid=i.uuid ".
                  "left join apt_instance_aggregates as ia ".
                  "     on ia.uuid=i.uuid ".
 		 "left join apt_profile_versions as p on ".
@@ -75,8 +77,10 @@ $query2_result =
                  "    h.uuid,h.profile_version,h.created,h.destroyed, ".
 		 "    h.creator,p.uuid as profile_uuid,u.email, ".
                  "    GROUP_CONCAT(ia.public_url) as public_urls, ".
-                 "    h.slice_uuid ".
+                 "    h.slice_uuid,f.exitmessage,f.exitcode ".
 		 "  from apt_instance_history as h ".
+                 "left join apt_instance_failures as f ".
+                 "     on f.uuid=h.uuid ".
                  "left join apt_instance_aggregate_history as ia ".
                  "     on ia.uuid=h.uuid ".
 		 "left join apt_profile_versions as p on ".
@@ -103,6 +107,8 @@ foreach (array($query1_result, $query2_result) as $query_result) {
 	$destroyed = $row["destroyed"];
 	$creator   = $row["creator"];
 	$email     = $row["email"];
+        $exitmessage= $row["exitmessage"];
+        $exitcode   = $row["exitcode"];
         $public_urls= $row["public_urls"];
         $slice_uuid= $row["slice_uuid"];
 	# If a guest user, use email instead.
@@ -132,6 +138,20 @@ foreach (array($query1_result, $query2_result) as $query_result) {
         if (ISADMIN()) {
             $instance["public_urls"]  = $public_urls;
         }
+        if (isset($exitcode)) {
+            $instance["iserror"]       = 1;
+
+            if ($exitcode >= 0 && $exitcode <= count($geni_response_codes)) {
+                $instance["error_reason"] = $geni_response_codes[$exitcode];
+            }
+            elseif ($exitcode == GENIRESPONSE_STITCHER_ERROR) {
+                $instance["error_reason"] = "Stitcher Failed";
+            }
+            else {
+                $instance["error_reason"]  = $exitcode;
+            }
+            $instance["error_message"] = $exitmessage;
+        }
 	$instances[] = $instance;
     }
 }
@@ -144,7 +164,8 @@ echo "    window.AJAXURL  = 'server-ajax.php';\n";
 echo "    window.ISADMIN  = " . ISADMIN() . ";\n";
 echo "</script>\n";
 echo "<script type='text/plain' id='instances-json'>\n";
-echo json_encode($instances);
+echo json_encode($instances,
+                 JSON_HEX_APOS|JSON_HEX_QUOT|JSON_HEX_TAG|JSON_HEX_AMP);
 echo "</script>\n";
 echo "<script src='js/lib/jquery-2.0.3.min.js'></script>\n";
 

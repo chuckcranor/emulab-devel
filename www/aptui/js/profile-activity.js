@@ -15,6 +15,11 @@ $(function ()
 	    JSON.parse(_.unescape($('#instances-json')[0].textContent));
 	var activity_html = profileTemplate({instances: instances});
 	$('#activity-body').html(activity_html);
+
+	$('[data-toggle="popover"]').popover({
+	    trigger: 'hover',
+	    placement: 'auto',
+	});
     }
     $(document).ready(initialize);
 });

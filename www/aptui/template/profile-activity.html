@@ -10,6 +10,7 @@
 	  <th>Creator</th>
 	  <th>Created</th>
 	  <th>Destroyed</th>
+	  <th>Error</th>
 	  <% if (window.ISADMIN) { %>
 	    <th>Logs</th>
 	  <% } %>
@@ -30,6 +31,21 @@
 	  <% } else { %>
 	    <td><%- instance.destroyed %></td>
 	  <% } %>
+	  <td class="text-danger">
+	    <% if (_.has(instance, "iserror")) { %>
+	      <% if (_.has(instance, "error_message")) { %>
+		<span style="text-decoration: underline;"
+		      data-toggle='popover'
+		      data-delay='{"hide":100, "show":500}'
+		      data-html='true'
+		      data-uuid="<%- instance.uuid %>"
+		      data-content="<code style='white-space: pre-wrap'><%- instance.error_message %></code>"
+		><%- instance.error_reason %></span>
+	      <% } else { %>
+		<%- instance.error_reason %>
+	      <% } %>
+	    <% } %>
+	  </td>
 	  <% if (window.ISADMIN) { %>
 	    <td>
 	      <% _.each(instance.public_urls.split(","), function(url) { %>
@@ -39,7 +55,7 @@
 	    </td>
 	  <% } %>
 	</tr>
-	  <% }); %>
+	<% }); %>
       </tbody>
     </table>
   </div>
