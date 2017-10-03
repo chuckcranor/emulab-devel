@@ -217,7 +217,7 @@ sub Generate($$$)
     # AllowUnassigned and RFC 3491 Nameprep validation to interpret IRIs,
     # but quite frankly I think I've done more than enough RFC chasing already.
     $authority =~ tr/A-Z/a-z/;
-    return undef if $authority !~ /^[0-9A-Za-z][-.0-9A-Za-z]*(?::[-.0-9A-Za-z]+)+$/;
+    return undef if $authority !~ /^[0-9A-Za-z][-.0-9A-Za-z]*(?::[-.0-9A-Za-z]+)*$/;
     return undef if $type !~ /^[-.0-9A-Z_a-z~]+$/;
     return undef if $id !~ m{^[-\t\n\r !#$%'()*+,./0-9:;=?\@A-Z_a-z]+$};
 
