@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2016 University of Utah and the Flux Group.
+# Copyright (c) 2000-2017 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -138,7 +138,8 @@ if (count($extensions)) {
         $foo[$extension->idx()] = $extension->info;
     }
     echo "<script type='text/plain' id='extensions-json'>\n";
-    echo json_encode($foo, JSON_HEX_APOS|JSON_HEX_QUOT|JSON_HEX_TAG|JSON_HEX_TAG);
+    echo json_encode($foo,
+                     JSON_HEX_APOS|JSON_HEX_QUOT|JSON_HEX_TAG|JSON_HEX_AMP);
     echo "</script>\n";
 }
 
