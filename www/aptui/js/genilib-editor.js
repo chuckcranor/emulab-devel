@@ -88,6 +88,8 @@ $(function ()
       $('#genilib-editor-body #cancelButton').show();
       $('#genilib-editor-body #okButton').html('Accept');
     }
+    $('#genilib-editor').focus();
+    editor.focus();
     window.history.pushState(null, "");
   }
 
