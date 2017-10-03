@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2016 University of Utah and the Flux Group.
+# Copyright (c) 2000-2017 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -219,6 +219,11 @@ function TBvalid_pid($token) {
 #
 function TBvalid_newpid($token) {
     return TBcheck_dbslot($token, "projects", "newpid",
+			  TBDB_CHECKDBSLOT_WARN|TBDB_CHECKDBSLOT_ERROR);
+}
+# Ditto groups table wrt underscores.
+function TBvalid_newgid($token) {
+    return TBcheck_dbslot($token, "groups", "newgid",
 			  TBDB_CHECKDBSLOT_WARN|TBDB_CHECKDBSLOT_ERROR);
 }
 function TBvalid_gid($token) {

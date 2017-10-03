@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2012 University of Utah and the Flux Group.
+# Copyright (c) 2000-2017 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -212,6 +212,10 @@ if (isset($formfields["project"]) &&
 }
 if (isset($formfields["group_id"]) && $formfields["group_id"] != "") {
     $args["group_id"]	= $formfields["group_id"];
+    # Check here, easier.
+    if (! TBvalid_newgid($formfields["group_id"])) {
+        $errors["group_id"] = $DBFieldErrstr;
+    }
 }
 if (isset($formfields["group_description"]) && 
     $formfields["group_description"] != "") {

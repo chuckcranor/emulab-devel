@@ -135,7 +135,8 @@ function Do_CreateGroup()
         }
     }
     # Group Name.
-    if (!TBvalid_gid($formfields["group_id"])) {
+    # XXX Ack, gids are just like pids; no underscore. 
+    if (!TBvalid_newgid($formfields["group_id"])) {
 	$errors["group_id"] = $DBFieldErrstr;
     }
     else {

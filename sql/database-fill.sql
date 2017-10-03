@@ -778,6 +778,7 @@ REPLACE INTO table_regex VALUES ('experiments','sync_server','text','redirect','
 REPLACE INTO table_regex VALUES ('groups','project','text','redirect','projects:pid',0,0,NULL);
 REPLACE INTO table_regex VALUES ('groups','pid_idx','text','redirect','projects:pid_idx',0,0,NULL);
 REPLACE INTO table_regex VALUES ('groups','gid','text','regex','^[a-zA-Z][-\\w]+$',2,32,NULL);
+REPLACE INTO table_regex VALUES ('groups','newgid','text','regex','^[a-zA-Z][-a-zA-Z0-9]+$',2,32,NULL);
 REPLACE INTO table_regex VALUES ('groups','gid_idx','text','regex','^[\\d]+$',1,12,NULL);
 REPLACE INTO table_regex VALUES ('groups','group_id','text','redirect','groups:gid',2,32,NULL);
 REPLACE INTO table_regex VALUES ('groups','group_leader','text','redirect','users:uid',2,8,NULL);
