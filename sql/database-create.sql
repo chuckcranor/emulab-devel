@@ -5186,6 +5186,30 @@ CREATE TABLE `user_stats` (
 ) ENGINE=MyISAM DEFAULT CHARSET=latin1;
 
 --
+-- Table structure for table `user_token_passwords`
+--
+
+DROP TABLE IF EXISTS `user_token_passwords`;
+CREATE TABLE `user_token_passwords` (
+  `idx` int(10) unsigned NOT NULL AUTO_INCREMENT,
+  `uid_idx` mediumint(8) unsigned NOT NULL DEFAULT '0',
+  `uid` varchar(8) NOT NULL DEFAULT '',
+  `subsystem` varchar(64) NOT NULL,
+  `scope_type` tinytext,
+  `scope_value` tinytext,
+  `username` varchar(64) NOT NULL,
+  `plaintext` varchar(64) NOT NULL DEFAULT '',
+  `hash` varchar(64) NOT NULL,
+  `issued` datetime NOT NULL,
+  `expiration` datetime DEFAULT NULL,
+  `token_lifetime` int(10) unsigned NOT NULL,
+  `token_onetime` tinyint(1) NOT NULL DEFAULT '0',
+  `system` tinyint(1) NOT NULL DEFAULT '0',
+  PRIMARY KEY (`idx`),
+  UNIQUE KEY `user_token` (`subsystem`,`username`,`plaintext`)
+) ENGINE=MyISAM DEFAULT CHARSET=latin1;
+
+--
 -- Table structure for table `users`
 --
 
