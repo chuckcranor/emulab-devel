@@ -186,6 +186,7 @@ sub Brand($)	{ return $_[0]->{'BRAND'}; }
 sub isAPT($)	{ return $_[0]->Brand()->isAPT() ? 1 : 0; }
 sub isCloud($)	{ return $_[0]->Brand()->isCloud() ? 1 : 0; }
 sub isPNet($)	{ return $_[0]->Brand()->isPNet() ? 1 : 0; }
+sub isPowder($)	{ return $_[0]->Brand()->isPowder() ? 1 : 0; }
 sub AggregateList($) { return values(%{ $_[0]->{'AGGREGATES'} }); }
 sub AggregateHash($) { return $_[0]->{'AGGREGATES'}; }
 

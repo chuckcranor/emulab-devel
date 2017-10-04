@@ -580,7 +580,9 @@ sub CreateProfile()
     my $portalLogs =
 	($project->isAPT() ? "aptnet-logs\@flux.utah.edu" :
 	 $project->isCloud() ? "cloudlab-logs\@flux.utah.edu" : 
-	 $project->isPNet() ? "phantomnet-logs\@flux.utah.edu" : $TBLOGS);
+	 $project->isPNet() ? "phantomnet-logs\@flux.utah.edu" :
+	 $project->isPowder() ? "powder-logs\@flux.utah.edu" :
+	 $TBLOGS);
 
     $project->SendEmail($portalLogs, "New Profile Created",
 			"Name:     ". $profile->versname() . "\n".

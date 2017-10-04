@@ -38,6 +38,7 @@ $ISEMULAB       = 1;
 $ISAPT		= 0;
 $ISCLOUD        = 0;
 $ISPNET         = 0;
+$ISPOWDER       = 0;
 $ISVSERVER      = 0;
 $GOOGLEUA       = 'UA-42844769-6';
 # See tbauth.php3

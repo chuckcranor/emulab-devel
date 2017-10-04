@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2006-2016 University of Utah and the Flux Group.
+# Copyright (c) 2006-2017 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -727,7 +727,8 @@ class Group
 	$url            = $project->wwwBase();
 	
 	if ($project->isEmulab() ||
-            $project->isAPT() || $project->isCloud() || $project->isPNet()) {
+            $project->isAPT() || $project->isCloud() ||
+            $project->isPNet() || $project->isPowder()) {
 	    $url .= "/approveuser.php?uid=$joining_uid&pid=$pid";
             $message =
                 "$usr_name is trying to join your group $gid ".

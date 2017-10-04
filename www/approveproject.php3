@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2014 University of Utah and the Flux Group.
+# Copyright (c) 2000-2017 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -134,6 +134,9 @@ elseif ($this_project->isCloud()) {
 }
 elseif ($this_project->isPNet()) {
     $APPROVAL_MAIL = "phantomnet-approval@phantomnet.org";
+}
+elseif ($this_project->isPowder()) {
+    $APPROVAL_MAIL = "powder-approval@powderwireless.net";
 }
 
 #

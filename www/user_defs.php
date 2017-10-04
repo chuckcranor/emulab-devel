@@ -353,7 +353,9 @@ class User
     function isCloud()	     { return ($this->portal() &&
                                        $this->portal() == "cloudlab" ? 1 : 0); }
     function isPNet()	     { return ($this->portal() &&
-                                       $this->portal() == "phantomnet" ? 1 : 0);}
+                                       $this->portal() == "phantomnet" ? 1 :0);}
+    function isPowder()	     { return ($this->portal() &&
+                                       $this->portal() == "powder" ? 1 : 0);}
     function isEmulab()	     { return ($this->portal() &&
                                        $this->portal() == "emulab" ? 1 : 0); }
     # Not via the Portal interface.
@@ -390,7 +392,8 @@ class User
             ($this->isAPT() ? "aptlab-approval@aptlab.net" :
              ($this->isCloud() ? "cloudlab-approval@cloudlab.us" :
               ($this->isPNet() ? "phantomnet-approval@phantomnet.org" :
-               $TBMAIL_APPROVAL)));
+               ($this->isPNet() ? "powder-approval@powderwireless.net" :
+                $TBMAIL_APPROVAL))));
     }
 
     #

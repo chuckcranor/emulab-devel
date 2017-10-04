@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2016 University of Utah and the Flux Group.
+# Copyright (c) 2000-2017 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -104,7 +104,7 @@ function SPITFORM($uid, $referrer, $error)
 {
     global $PORTAL_PASSWORD_HELP;
     global $TBDB_UIDLEN, $TBBASE, $refer;
-    global $ISAPT, $ISCLOUD, $ISPNET, $showguestlogin;
+    global $ISAPT, $ISCLOUD, $ISPNET, $ISPOWDER, $showguestlogin;
     global $adminmode, $cleanmode;
 
     header("Last-Modified: " . gmdate("D, d M Y H:i:s") . " GMT");
@@ -187,7 +187,7 @@ function SPITFORM($uid, $referrer, $error)
              <div class='form-group'>
                <div class='col-sm-offset-2 col-sm-10'>
 <?php
-    if ($ISCLOUD || $ISPNET) {
+    if ($ISCLOUD || $ISPNET || $ISPOWDER) {
 	?>
                  <button class='btn btn-info btn-sm pull-left'
 		    type='button'
@@ -226,7 +226,7 @@ function SPITFORM($uid, $referrer, $error)
         </div>
         </div>\n";
 
-    if ($ISCLOUD || $ISPNET) {
+    if ($ISCLOUD || $ISPNET || $ISPOWDER) {
 	echo "<script
                 src='https://www.emulab.net/protogeni/speaks-for/geni-auth.js'>
               </script>\n";

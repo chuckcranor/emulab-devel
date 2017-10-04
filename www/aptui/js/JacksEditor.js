@@ -90,12 +90,13 @@ $(function () {
     {
         context = localContext;
     }
-    else if (window.ISPNET)
+    else if (window.ISPNET || window.ISPOWDER)
     {
 	contextUrl = 'https://www.emulab.net/protogeni/jacks-context/phantomnet.json';
     }
 
-    if (window.ISCLOUD || window.ISPNET || (window.ISEMULAB && window.MAINSITE))
+    if (window.ISCLOUD || window.ISPNET || window.ISPOWDER ||
+	(window.ISEMULAB && window.MAINSITE))
     {
 	$('#edit_topo_modal_button').prop('disabled', true);
 	$.get(contextUrl).then(contextReady, contextFail);

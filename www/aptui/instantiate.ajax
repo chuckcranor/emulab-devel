@@ -638,7 +638,7 @@ function CheckStep2()
 {
     global $this_user;
     global $ajax_args;
-    global $ISAPT, $ISPNET, $ISCLOUD, $ISEMULAB;
+    global $ISAPT, $ISPNET, $ISCLOUD, $ISEMULAB, $ISPOWDER;
     global $TB_PROJECT_CREATEEXPT;
     global $maxduration;
 
@@ -695,7 +695,7 @@ function CheckStep2()
                 }
             }
         }
-        elseif ($ISAPT || $ISPNET || $ISEMULAB) {
+        elseif ($ISAPT || $ISPNET || $ISEMULAB || $ISPOWDER) {
             # No choice
             ;
         }
@@ -876,8 +876,8 @@ function Do_Submit()
 {
     global $this_user;
     global $ajax_args;
-    global $PORTAL_GENESIS;
-    global $TBAUTHDOMAIN, $ISAPT, $ISPNET, $ISEMULAB, $DEFAULT_AGGREGATE_URN;
+    global $PORTAL_GENESIS, $DEFAULT_AGGREGATE_URN;
+    global $TBAUTHDOMAIN, $ISAPT, $ISPNET, $ISEMULAB, $ISPOWDER;
 
     if (!isset($ajax_args["formfields"])) {
 	SPITAJAX_ERROR(1, "Missing formfields");
@@ -956,7 +956,7 @@ function Do_Submit()
                 }
             }
         }
-        elseif ($ISAPT || $ISPNET || $ISEMULAB) {
+        elseif ($ISAPT || $ISPNET || $ISEMULAB | $ISPOWDER) {
             $aggregate_urn = $DEFAULT_AGGREGATE_URN;
         }
         elseif (isset($formfields["where"])) {

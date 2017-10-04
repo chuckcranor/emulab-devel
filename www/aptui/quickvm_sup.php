@@ -50,8 +50,8 @@ if (isset($_SERVER['SERVER_NAME'])) {
 # Redefine this so APT errors are styled properly. Called by PAGEERROR();.
 #
 $PAGEERROR_HANDLER = function($msg, $status_code = 0) {
-    global $drewheader, $ISCLOUD, $ISPNET, $ISEMULAB, $ISAPT, $PORTAL_HELPFORUM;
-    global $spatrequired, $TBMAINSITE;
+    global $drewheader, $ISCLOUD, $ISPNET, $ISEMULAB, $ISAPT, $ISPOWDER;
+    global $spatrequired, $TBMAINSITE, $PORTAL_HELPFORUM;
 
     if (! $drewheader) {
 	SPITHEADER();
@@ -62,6 +62,7 @@ $PAGEERROR_HANDLER = function($msg, $status_code = 0) {
     echo "    window.ISEMULAB  = " . ($ISEMULAB ? "1" : "0") . ";\n";
     echo "    window.ISCLOUD   = " . ($ISCLOUD  ? "1" : "0") . ";\n";
     echo "    window.ISPNET    = " . ($ISPNET   ? "1" : "0") . ";\n";
+    echo "    window.ISPOWDER  = " . ($ISPOWDER ? "1" : "0") . ";\n";
     echo "    window.ISAPT     = " . ($ISAPT    ? "1" : "0") . ";\n";
     echo "    window.MAINSITE  = " . ($TBMAINSITE ? "1" : "0") . ";\n";
     echo "    window.HELPFORUM = " .
@@ -80,7 +81,8 @@ $PAGEHEADER_FUNCTION = function($thinheader = 0, $ignore1 = NULL,
 {
     global $PORTAL_MANUAL, $PORTAL_HELPFORUM;
     global $TBMAINSITE, $APTTITLE, $FAVICON, $APTLOGO, $APTSTYLE, $ISAPT;
-    global $GOOGLEUA, $ISCLOUD, $ISPNET, $ISEMULAB, $TBBASE, $ISEMULAB;
+    global $GOOGLEUA, $ISCLOUD, $TBBASE;
+    global $ISPNET, $ISPOWDER, $ISEMULAB;
     global $login_user, $login_status, $SUPPORT;
     global $disable_accounts, $page_title, $drewheader, $embedded;
     $cleanmode = (isset($_COOKIE['cleanmode']) &&
@@ -129,6 +131,7 @@ $PAGEHEADER_FUNCTION = function($thinheader = 0, $ignore1 = NULL,
     echo "    window.ISEMULAB = " . ($ISEMULAB ? "1" : "0") . ";\n";
     echo "    window.ISCLOUD  = " . ($ISCLOUD  ? "1" : "0") . ";\n";
     echo "    window.ISPNET   = " . ($ISPNET   ? "1" : "0") . ";\n";
+    echo "    window.ISPOWDER = " . ($ISPOWDER ? "1" : "0") . ";\n";
     echo "    window.ISAPT    = " . ($ISAPT    ? "1" : "0") . ";\n";
     echo "    window.MAINSITE = " . ($TBMAINSITE ? "1" : "0") . ";\n";
     echo "    window.MANUAL   = '$PORTAL_MANUAL';\n";
@@ -165,7 +168,7 @@ $PAGEHEADER_FUNCTION = function($thinheader = 0, $ignore1 = NULL,
     $navbar_status = "";
     $navbar_right  = "";
     $aptmargin = "";
-    if (!$ISCLOUD && !$ISPNET && !$ISEMULAB)
+    if (!$ISCLOUD && !$ISPNET && !$ISEMULAB || $ISPOWDER)
     {
         $aptmargin = "margin-top: 7px;";
     }
@@ -334,8 +337,9 @@ function SPITHEADER($thinheader = 0,
 
 function SPITNAV($hiddenxs, $navbar_status, $navbar_right, $login_uid)
 {
-    global $PORTAL_MANUAL, $APTLOGO, $login_status, $login_user, $TBMAINSITE, $THISHOMEBASE, $ISEMULAB, $ISPNET;
-   $hiddenxs = "";
+    global $PORTAL_MANUAL, $APTLOGO, $login_status, $login_user, $TBMAINSITE;
+    global $THISHOMEBASE, $ISEMULAB, $ISPNET, $ISPOWDER;
+    $hiddenxs = "";
 echo "
 
 <div class='navbar portal-navbar' role='navigation'>
@@ -678,7 +682,7 @@ function SpitVerifyModal($id, $label)
 function SpitLoginModal($id)
 {
     global $PORTAL_PASSWORD_HELP;
-    global $APTTITLE, $ISCLOUD, $ISPNET;
+    global $APTTITLE, $ISCLOUD, $ISPNET, $ISPOWDER;
     $referrer = CleanString($_SERVER['REQUEST_URI']);
 ?>
     <!-- This is the login modal -->

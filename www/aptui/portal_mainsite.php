@@ -125,4 +125,36 @@ elseif ($ISALTDOMAIN && $_SERVER["SERVER_NAME"] == "www.phantomnet.org") {
     $PORTAL_GENESIS        = "phantomnet";
     $PORTAL_NAME           = "PhantomNet";
 }
+elseif ($_SERVER["SERVER_NAME"] == "www.powderwireless.net") {
+    $ISVSERVER    = 1;
+    $TBAUTHDOMAIN = ".powderwireless.net";
+    $COOKDIEDOMAIN= "www.powderwireless.net";
+    $APTHOST      = "www.powderwireless.net";
+    $WWWHOST      = "www.powderwireless.net";
+    $APTBASE      = "https://www.powderwireless.net";
+    $APTMAIL      = "Powder Wireless Operations <powder-ops@powderwireless.net>";
+    $SUPPORT      = "powder-ops@powderwireless.net";
+    $APTTITLE     = "Powder";
+    $FAVICON      = "powder.ico";
+    $APTLOGO      = "powderlogo.png";
+    $APTSTYLE     = "powder.css";
+    $ISEMULAB     = 0;
+    $ISPOWDER     = 1;
+    #$GOOGLEUA     = 'UA-42844769-2';
+    $TBMAILTAG    = "powderwireless.net";
+    $EXTENSIONS   = "portal-extensions@powderwireless.net";
+    $TBAUTHTIMEOUT= (24 * 3600 * 14);
+    # For devel trees
+    if (preg_match("/\/([\w\/]+)$/", $WWW, $matches)) {
+	$APTBASE .= "/" . $matches[1];
+    }
+    $PORTAL_MANUAL         = "http://docs.powderwireless.net";
+    $PORTAL_HELPFORUM      = "powder-users";
+    $PORTAL_PASSWORD_HELP  = "powderwireless.net or emulab.net Username";
+    $PORTAL_NSFNUMBER      = "??????";
+    $DEFAULT_AGGREGATE     = "Emulab";
+    $DEFAULT_AGGREGATE_URN = "urn:publicid:IDN+emulab.net+authority+cm";
+    $PORTAL_GENESIS        = "powder";
+    $PORTAL_NAME           = "Powder";
+}
 ?>
