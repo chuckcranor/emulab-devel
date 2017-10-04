@@ -442,6 +442,8 @@ echo " <li class='divider'></li>
                             All Datasets</a></li>
                                  <li><a href='images.php?all=1'>
                             All Images</a></li>
+                                 <li><a href='instance-errors.php'>
+                            Experiment Errors</a></li>
                                  <li><a href='lists.php'>
                             Users/Projects</a></li>
                                  <li><a href='approve-projects.php'>
