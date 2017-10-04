@@ -64,7 +64,7 @@ CREATE TABLE `image_versions` (
   `mbr_version` varchar(50) NOT NULL default '1',
   `arch` enum ('i386','x86_64','aarch64') NOT NULL default 'x86_64',
   `visibility` enum ('project','public') NOT NULL default 'public',
-  `virtualizaton` enum ('raw-pc','emulab-xen') NOT NULL default 'raw-pc',
+  `virtualizaton` enum ('raw-pc','emulab-xen','emulab-docker') NOT NULL default 'raw-pc',
   `osfeatures` text default NULL,
   `metadata_url` tinytext,
   `types_known_working` text default NULL,
