@@ -177,7 +177,9 @@ if (!defined($instance)) {
     $instance = APT_Instance->LookupBySlice($uuid);
 }
 if (!defined($instance)) {
-    fatal("No such instance $uuid");
+    # Lets not make this a fatal error; when coming from the web interface,
+    # we do not need to send email. 
+    UserError("No such instance $uuid");
 }
 #
 # Grab the webtask object.
@@ -1139,10 +1141,21 @@ sub DoConsole()
 	}
 	exit($response->code());
     }
+    if ($response->code() == GENIRESPONSE_FORBIDDEN) {
+	print STDERR "Server says access to $node_id console is forbidden\n";
+	if (defined($webtask)) {
+	    $webtask->output("Sorry, access to $node_id console is forbidden");
+	    $webtask->Exited($response->code());
+	}
+	exit($response->code());
+    }
     if ($response->code() != GENIRESPONSE_SUCCESS) {
-	$response = $sliver->ConsoleURL($sliver_urn);
-	if (!defined($response)) {
-	    fatal("RPC Error calling ConsoleURL");
+	# Fallback to old RPC method.
+	if ($response->code() == XMLRPC_NO_SUCH_METHOD) {
+	    $response = $sliver->ConsoleURL($sliver_urn);
+	    if (!defined($response)) {
+		fatal("RPC Error calling ConsoleURL");
+	    }
 	}
 	if ($response->code() != GENIRESPONSE_SUCCESS) {
 	    if ($response->value()) {
@@ -2429,7 +2442,8 @@ sub DoRefresh()
 	goto bad;
     }
     #
-    # Check the exit codes. 
+    # Check the exit codes. If a failed instance is now all ready,
+    # we mark the instance as not ready.
     #
     foreach my $agg (@agglist) {
 	my $code = shift(@return_codes);
@@ -3583,27 +3597,32 @@ sub DoUtilization()
     # Get the nodeid to client id mapping
     #
     my %client_ids = ();
-    foreach my $obj ($instance->AggregateList()) {
-	my $manifest = GeniXML::Parse($obj->manifest());
+    foreach my $aggregate ($instance->AggregateList()) {
+	#
+	# Skip aggregates with no nodes.
+	#
+	next
+	    if (! ($aggregate->physnode_count() ||
+		   $aggregate->virtnode_count()));
+	# Or no manifest.
+	next
+	    if (!defined($aggregate->manifest()) ||
+		$aggregate->manifest() eq "");
+	
+	my $manifest = GeniXML::Parse($aggregate->manifest());
 	if (! defined($manifest)) {
 	    fatal("Could not parse manifest");
 	}
-	$client_ids{$obj->aggregate_urn()} = {};
+	push(@aggregates, $aggregate);	
+	$client_ids{$aggregate->aggregate_urn()} = {};
 	
 	my @nodes = GeniXML::FindNodes("n:node", $manifest)->get_nodelist();
 	foreach my $node (@nodes) {
 	    my $client_id = GeniXML::GetVirtualId($node);
 	    my $node_id   = GeniXML::GetVnodeId($node);
 
-	    $client_ids{$obj->aggregate_urn()}->{$node_id} = $client_id;
+	    $client_ids{$aggregate->aggregate_urn()}->{$node_id} = $client_id;
 	}
-    }
-    #
-    # Cull out any aggregates with no nodes.
-    #
-    foreach my $aggregate ($instance->AggregateList()) {
-	push(@aggregates, $aggregate)
-	    if ($aggregate->physnode_count() || $aggregate->virtnode_count());
     }
     my $errcode = CallAggregateMethod("Utilization",\$utilization,@aggregates);
     if ($errcode) {
