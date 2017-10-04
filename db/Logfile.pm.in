@@ -54,18 +54,45 @@ sub Lookup($$)
 {
     my ($class, $logid) = @_;
     my $logfile;
+    my $query_result;
 
     #
     # Argument must be alphanumeric.
     #
-    if ($logid =~ /^([\w]*)$/) {
+    if ($logid =~ /^([\d]*)$/) {
+	$query_result =
+	    DBQueryWarn("select logid from logfiles where logidx='$logid'");
+
+	return undef
+	    if (!$query_result || !$query_result->numrows);
+
+	if ($query_result->numrows > 1) {
+	    print STDERR "*** More then one entry for $logid\n";
+	    return undef;
+	}
+	($logid) = $query_result->fetchrow_array();
+    }
+    elsif ($logid =~ /^([\w]*)$/) {
 	$logid = $1;
+    }
+    elsif ($logid =~ /^\/[\w\/\.]*$/) {
+	$query_result =
+	    DBQueryWarn("select logid from logfiles where filename='$logid'");
+
+	return undef
+	    if (!$query_result || !$query_result->numrows);
+
+	if ($query_result->numrows > 1) {
+	    print STDERR "*** More then one entry for $logid\n";
+	    return undef;
+	}
+	($logid) = $query_result->fetchrow_array();
     }
     else {
 	return undef;
     }
 
-    my $query_result =
+    $query_result =
 	DBQueryWarn("select * from logfiles where logid='$logid'");
 
     return undef
@@ -305,6 +332,21 @@ sub Close($)
 }
 
 #
+# Clean up a logfile.
+#
+sub Clean($)
+{
+    my ($self) = @_;
+
+    my $logid = $self->logid();
+    DBQueryWarn("update logfiles set isopen=0,filename=NULL ".
+		"where logid='$logid'")
+	or return -1;
+    
+    return $self->Refresh();
+}
+
+#
 # Is file empty?
 #
 sub Empty($)
@@ -504,6 +546,28 @@ sub ReadFile($$)
     }
     $$pbuf = $buf;
     return $cc;
+}
+
+#
+# Lock and unlock the tables we use.
+#
+sub LockTables($)
+{
+    my ($class) = @_;
+
+    DBQueryWarn("lock tables logfiles write, logfile_metadata write")
+	or return -1;
+    
+    return 0;
+}
+sub UnlockTables($)
+{
+    my ($class) = @_;
+
+    DBQueryWarn("unlock tables")
+	or return -1;
+    
+    return 0;
 }
 
 # _Always_ make sure that this 1 is at the end of the file...
