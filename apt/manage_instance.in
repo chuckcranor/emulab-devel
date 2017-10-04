@@ -882,11 +882,13 @@ sub DoSnapshot()
 	if (defined($webtask));
     $slice->UnLock();
     
-    if (defined($logfile) && -s $logfile) {
-	SENDMAIL($TBOPS,
-		 "Instance Snapshot Complete",
-		 "Finished taking snapshot of $instance.\n",
-		 $TBOPS, undef, $logfile);
+    if (defined($logfile)) {
+	if (-s $logfile) {
+	    SENDMAIL($TBOPS,
+		     "Instance Snapshot Complete",
+		     "Finished taking snapshot of $instance.\n",
+		     $TBOPS, undef, $logfile);
+	}
 	unlink($logfile);
     }
     if (!$sliver_ready) {
