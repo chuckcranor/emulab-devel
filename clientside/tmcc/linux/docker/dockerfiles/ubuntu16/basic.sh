@@ -5,7 +5,7 @@ set -x
 export DEBIAN_FRONTEND=noninteractive
 
 apt-get install -y --no-install-suggests --no-install-recommends \
-    openssh-server rsyslog logrotate iproute2 iputils-ping net-tools
+    openssh-server rsyslog logrotate iproute2 iputils-ping net-tools sudo
 
 ## Permissions on these should be the same as the host, so preserve them.
 #cp -p /tmp/src/ssh-host-keys/ssh_host* /etc/ssh/
