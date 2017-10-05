@@ -2952,9 +2952,6 @@ sub CreateImageDir($)
     return 0
 	if (!$self->IsDirPath());
 
-    return -1
-	if ($self->CreateDirectory($self->path()));
-
     #
     # For system images that are written to $TB, we still need a place
     # to write new (unreleased) images in /proj. 
@@ -2962,6 +2959,10 @@ sub CreateImageDir($)
     if ($self->IsSystemImage()) {
 	return -1
 	    if ($self->CreateDirectory($self->SaveDir()));
+    }
+    else {
+	return -1
+	    if ($self->CreateDirectory($self->path()));
     }
     return 0;
 }
