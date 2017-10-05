@@ -469,7 +469,10 @@ docker-install:	dir-install
 	$(INSTALL) -m 755 $(SRCDIR)/../common/bootvnodes $(BINDIR)/
 	$(INSTALL) -m 755 $(SRCDIR)/libvnode.pm $(BINDIR)/
 	$(INSTALL) -m 755 $(SRCDIR)/docker/libvnode_docker.pm $(BINDIR)/
+	$(INSTALL) -m 755 $(SRCDIR)/docker/dockerclient.pm $(BINDIR)/
+	$(INSTALL) -m 755 $(SRCDIR)/docker/dockerclient-cli $(BINDIR)/
 	$(INSTALL) -m 755 $(SRCDIR)/docker/create-docker-image $(LBINDIR)/
+	$(INSTALL) -m 755 $(SRCDIR)/docker/emulabize-image $(LBINDIR)/
 	$(INSTALL) -m 755 $(SRCDIR)/vnodectl $(BINDIR)/
 	echo "docker" > $(ETCDIR)/genvmtype
 	$(INSTALL) -m 755 -o root -g $(DIRGROUP) -d $(ETCDIR)/docker
@@ -483,3 +486,4 @@ docker-install:	dir-install
 #	$(INSTALL) -m 755 $(SRCDIR)/docker/analyze-image.sh $(ETCDIR)/docker/
 
 docker-guest-install:
+	$(INSTALL) -m 755 $(SRCDIR)/docker/prepare $(BINDIR)/prepare

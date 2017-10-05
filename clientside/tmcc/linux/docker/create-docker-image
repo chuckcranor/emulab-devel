@@ -37,11 +37,11 @@ my $VNODESETUP	= "$BINDIR/vnodesetup";
 sub usage()
 {
     print STDOUT "" .
-	"Usage: create-docker-image -R <registry> -r <repository> -t <tag>" .
+	"Usage: create-docker-image [-d <level>] [-c] -R <registry> -r <repository> -t <tag>" .
 	" <vnodeid>\n";
     exit(-1);
 }
-my $optlist   = "R:r:t:u:p:";
+my $optlist   = "cd:R:r:t:u:p:";
 my $filename;
 
 if ($UID != 0) {
@@ -59,12 +59,15 @@ use libvnode_docker;
 use libgenvnode;
 #use libvnode;
 use libutil;
+use dockerclient;
 
 #
 # No configure vars.
 #
 my $vnodeid;
 my ($registry,$repo,$tag,$user,$pass);
+my $usecli = 0;
+my $debug = 0;
 
 #
 # Parse command arguments. Once we return from getopts, all that should be
@@ -104,18 +107,36 @@ if (defined($options{"p"})) {
 else {
     die("No pass (-p) supplied!");
 }
+if (defined($options{"c"})) {
+    $usecli = 1;
+}
+if (defined($options{"d"})) {
+    $debug = $options{"d"};
+}
 $vnodeid = shift(@ARGV);
 if (!defined($vnodeid) || $vnodeid eq '') {
     print STDERR "ERROR: no vnodeid specified!\n";
     usage();
 }
 
+my $client;
+if (!$usecli) {
+    $client = dockerclient->new();
+    $client->debug($debug);
+}
+
 #
-# First, try to login to the registry with user/pass:
+# First, try to login to the registry with user/pass.
 #
 my $i = 10;
 while ($i > 0) {
-    system("docker login -p '$pass' -u '$user' $registry");
+    if ($usecli) {
+	system("docker login -p '$pass' -u '$user' $registry");
+    }
+    else {
+	my ($code) = $client->registry_auth($registry,$user,$pass);
+	$? = $code;
+    }
     last
 	if ($? == 0);
     print STDERR "ERROR: failed to login to registry $registry; sleeping and trying again...\n";
@@ -132,7 +153,8 @@ my ($initstatus,$status);
 $initstatus = $status = libvnode_docker::vnodeState($vnodeid);
 if ($status eq VNODE_STATUS_UNKNOWN()) {
     print STDERR "ERROR: docker container $vnodeid does not seem to exist!\n";
-    system("docker logout $registry");
+    system("docker logout $registry")
+	if ($usecli);
     exit(1);
 }
 
@@ -141,13 +163,19 @@ if ($status eq VNODE_STATUS_UNKNOWN()) {
 #
 $i = 10;
 while ($i > 0 && $status ne VNODE_STATUS_STOPPED()) {
-    system("docker stop $vnodeid");
+    if ($usecli) {
+	system("docker stop $vnodeid");
+    }
+    else {
+	$client->container_stop($vnodeid);
+    }
     $i -=1;
     $status = libvnode_docker::vnodeState($vnodeid);
 }
 if ($status ne VNODE_STATUS_STOPPED()) {
     print STDERR "ERROR: failed to stop docker container $vnodeid; aborting!\n";
-    system("docker logout $registry");
+    system("docker logout $registry")
+	if ($usecli);
     exit(1);
 }
 
@@ -155,15 +183,29 @@ if ($status ne VNODE_STATUS_STOPPED()) {
 # (Locally) commit the image.
 #
 my $fullimagename = "$registry/$repo:$tag";
-system("docker commit $vnodeid $fullimagename");
+if ($usecli) {
+    system("docker commit $vnodeid $fullimagename");
+}
+else {
+    my ($code,$content,$resp) = $client->container_commit(
+	$vnodeid,$fullimagename,$user,$pass);
+    $? = $code;
+}
 if ($?) {
     print STDERR "ERROR: failed to commit image $fullimagename for container $vnodeid; aborting!\n";
-    system("docker logout $registry");
+    system("docker logout $registry")
+	if ($usecli);
     exit(1);
 }
 
 if ($initstatus ne VNODE_STATUS_STOPPED()) {
-    system("docker start $vnodeid");
+    if ($usecli) {
+	system("docker start $vnodeid");
+    }
+    else {
+	my ($code,$content,$resp) = $client->container_start($vnodeid);
+	$? = code;
+    }
     if ($?) {
 	print STDERR "WARNING: error restarting container $vnodeid; ignoring!\n";
     }
@@ -176,7 +218,13 @@ else {
 $i = 10;
 my $success = 0;
 while ($i > 0) {
-    system("docker push $fullimagename");
+    if ($usecli) {
+	system("docker push $fullimagename");
+    }
+    else {
+	my ($code,$content,$resp) = $client->image_push($fullimagename);
+	$? = $code;
+    }
     if ($? == 0) {
 	$success = 1;
 	last;
@@ -186,7 +234,8 @@ while ($i > 0) {
     $i -= 1;
 }
 
-system("docker logout $registry");
+system("docker logout $registry")
+    if ($usecli);
 
 if (!$success) {
     exit(1);

@@ -1,4 +1,4 @@
-#!/usr/bin/perl -wT
+#!/usr/bin/perl -T
 #
 # Copyright (c) 2008-2017 University of Utah and the Flux Group.
 # 
@@ -68,6 +68,7 @@ use vars qw($VGNAME);
 
 
 use strict;
+use warnings;
 use English;
 use Data::Dumper;
 use Socket;
@@ -77,10 +78,9 @@ use File::Basename;
 use File::Path;
 use File::Copy;
 use File::Temp qw(tempdir);
-use MIME::Base64 qw(encode_base64url encode_base64);
-use URI::Escape;
 use POSIX;
 use JSON::PP;
+use Digest::SHA qw(sha1_hex);
 
 # Pull in libvnode
 BEGIN { require "/etc/emulab/paths.pm"; import emulabpaths; }
@@ -127,6 +127,7 @@ my $IMAGEDUMP   = "/usr/local/bin/imagedump";
 ## Runtime configuration options.
 ##
 my $debug  = 0;
+my $apidebug = 5;
 my $lockdebug = 0;
 my $sleepdebug = 0;
 
@@ -359,6 +360,7 @@ sub moveNetDeviceFromNetNS($$$);
 sub unbindNetNS($$);
 sub setupImage($$$$$$$$$);
 sub pullImage($$$$;$);
+sub emulabizeImage($;$$$$$$$);
 sub analyzeImage($$);
 sub AllocateIFBs($$$);
 sub ReleaseIFBs($$);
@@ -371,7 +373,24 @@ sub RunProxies($$);
 sub KillProxies($$);
 sub InsertPostBootIptablesRules($$$$);
 sub RemovePostBootIptablesRules($$$$);
-	       
+
+#
+# A single client object per load of this file is safe.
+#
+my $_CLIENT;
+
+sub getClient()
+{
+    return $_CLIENT
+	if (defined($_CLIENT));
+    # Load late, because this requires a bunch of deps we might have
+    # installed in ensurePerlDeps().
+    require dockerclient;
+    $_CLIENT = dockerclient->new();
+    $_CLIENT->debug($apidebug);
+    return $_CLIENT;
+}
+
 #
 # Historic concurrency value. Should get overwritten in setConcurrency.
 #
@@ -416,8 +435,9 @@ sub setDebug($)
     $lockdebug = 1;
     if ($debug > 1) {
 	$sleepdebug = 1;
+	$apidebug = 5;
     }
-    print "libvnode_docker: debug=$debug\n"
+    print "libvnode_docker: debug=$debug, apidebug=$apidebug\n"
 	if ($debug);
 }
 
@@ -548,6 +568,28 @@ sub refreshNetworkDeviceMaps()
     }
     else {
 	makeMacvlanMaps();
+    }
+}
+
+sub ensurePerlDeps()
+{
+    if (aptNotInstalled("libwww-perl")) {
+	aptGetInstall("libwww-perl");
+    }
+    if (aptNotInstalled("liburi-perl")) {
+	aptGetInstall("liburi-perl");
+    }
+    if (aptNotInstalled("libhash-merge-perl")) {
+	aptGetInstall("libhash-merge-perl");
+    }
+    if (aptNotInstalled("libmime-base64-urlsafe-perl")) {
+	aptGetInstall("libmime-base64-urlsafe-perl");
+    }
+    eval {
+	use LWP::Protocol::http::SocketUnixAlt;
+    };
+    if ($@) {
+	mysystem("cpan -i LWP::Protocol::http::SocketUnixAlt");
     }
 }
 
@@ -750,33 +792,23 @@ sub getBridgeInterfaces($)
     return @retval;
 }
 
-sub getDockerNetId($)
-{
-    my ($netname,) = @_;
-
-    my @output = `$DOCKER network inspect -f '{{.Id}}' $netname`;
-    if ($?) {
-	return undef;
-    }
-
-    chomp($output[0]);
-    return $output[0];
-}
-
 sub getDockerNetMemberIds($)
 {
     my ($netname,) = @_;
 
-    my @output = `$DOCKER network inspect -f '{{range \$c,\$cd := .Containers}}{{\$c}}{{end}}' $netname`;
-    if ($?) {
+    my ($code,$content,$resp) = getClient()->network_inspect($netname);
+    if ($code) {
 	return undef;
+    }
+    if (!exists($content->{"Containers"})) {
+	return ();
     }
 
     my @retval = ();
-    foreach my $id (@output) {
-	if ($id =~ /^([a-fA-F0-9]+)/) {
-	    push(@retval,$1);
-	}
+    foreach my $cid (keys(%{$content->{"Containers"}})) {
+	next
+	    if (!exists($content->{"Containers"}{$cid}{"Name"}));
+	push(@retval,$cid);
     }
     return @retval;
 }
@@ -1034,6 +1066,7 @@ sub init($)
 sub rootPreConfig($)
 {
     my $bossip = shift;
+    my ($code,$content,$resp);
 
     #
     # Haven't been called yet, grab the lock and double check that someone
@@ -1072,6 +1105,11 @@ sub rootPreConfig($)
     # Make sure we actually have Docker.
     #
     ensureDockerInstalled();
+
+    #
+    # Make sure we have all our Perl deps.
+    #
+    ensurePerlDeps();
 
     #
     # Make sure we have a bunch of other common tools.
@@ -1136,8 +1174,9 @@ sub rootPreConfig($)
     }
 
     my $dcnexists = 0;
-    mysystem2("$DOCKER network inspect $DOCKERCNET >/dev/null 2>&1");
-    if ($? == 0) {
+    TBDebugTimeStamp("checking for docker network $DOCKERCNET...");
+    ($code,$content,$resp) = getClient()->network_inspect($DOCKERCNET);
+    if ($code == 0) {
 	$dcnexists = 1;
     }
 
@@ -1293,11 +1332,14 @@ sub rootPreConfig($)
 	    # If the docker network isn't yet built, do that now.
 	    #
 	    if (!$dcnexists) {
-		mysystem("docker network create -d bridge".
-			 " --subnet=${VCNET_NET}/${VCNET_SLASHMASK}".
-			 " --gateway=${alias_ip}".
-			 " -o com.docker.network.bridge.name=$DOCKERCNET".
-			 " $DOCKERCNET");
+		TBDebugTimeStamp("creating bridged docker network $DOCKERCNET");
+		($code,$content) = getClient()->network_create_bridge(
+		    $DOCKERCNET,"${VCNET_NET}/${VCNET_SLASHMASK}",$alias_ip,
+		    $DOCKERCNET);
+		if ($code) {
+		    fatal("failed to create bridged Docker $DOCKERCNET control net:".
+			  " $content");
+		}
 		$dcnexists = 1;
 	    }
 
@@ -1350,17 +1392,24 @@ sub rootPreConfig($)
 	    # Next, we create a docker macvlan network to front for the
 	    # virt control net.
 	    #
-	    mysystem("docker network create -d macvlan".
-		     " --subnet=${VCNET_NET}/${VCNET_SLASHMASK}".
-		     " --gateway=${alias_ip} -o parent=${cnet_iface}".
-		     " $DOCKERCNET");
+	    TBDebugTimeStamp("creating macvlan docker network $DOCKERCNET");
+	    ($code,$content) = getClient()->network_create_macvlan(
+		$DOCKERCNET,"${VCNET_NET}/${VCNET_SLASHMASK}",$alias_ip,
+		$cnet_iface);
+	    if ($code) {
+		fatal("failed to create bridged Docker $DOCKERCNET control net:".
+		      " $content");
+	    }
 	}
 	else {
-	    mysystem("docker network create -d bridge".
-		     " --subnet=${VCNET_NET}/${VCNET_SLASHMASK}".
-		     " --gateway=${alias_ip}".
-		     " -o com.docker.network.bridge.name=$DOCKERCNET".
-		     " $DOCKERCNET");
+	    TBDebugTimeStamp("creating bridged docker network $DOCKERCNET");
+	    ($code,$content) = getClient()->network_create_bridge(
+		$DOCKERCNET,"${VCNET_NET}/${VCNET_SLASHMASK}",$alias_ip,
+		$DOCKERCNET);
+	    if ($code) {
+		fatal("failed to create bridged Docker $DOCKERCNET control net:".
+		      " $content");
+	    }
 	}
     }
 
@@ -1719,7 +1768,12 @@ sub rootPreConfig($)
 	# /var/lib/docker fails, all Docker state (including
 	# $DOCKERCNET) will appear to have vanished!
 	#
-	mysystem("$DOCKER network inspect $DOCKERCNET");
+	TBDebugTimeStamp("checking docker network $DOCKERCNET after LVM move");
+	($code,$content,$resp) = getClient()->network_inspect($DOCKERCNET);
+	if ($code) {
+	    fatal("$DOCKERCNET still does not appear as a Docker network;".
+		  " something must have gone wrong in LVM setup!\n");
+	}
     }
     else {
 	mkdir($VMS);
@@ -1797,6 +1851,7 @@ sub rootPreConfig($)
 sub rootPreConfigNetwork($$$$)
 {
     my ($vnode_id, undef, $vnconfig, $private) = @_;
+    my ($code,$content,$resp);
 
     TBDebugTimeStamp("rootPreConfigNetwork: grabbing global lock".
 		     " $GLOBAL_CONF_LOCK")
@@ -2075,13 +2130,14 @@ sub rootPreConfigNetwork($$$$)
 	    #
 	    # Now that the bridge exists, make the Docker network atop it.
 	    #
-	    mysystem2("$DOCKER network inspect $k >/dev/null 2>&1");
-	    if ($?) {
-		mysystem2("$DOCKER network create -d bridge".
-			  " --subnet=${cidr} --gateway=${gw}".
-			  " -o com.docker.network.bridge.name=$k $k");
+	    TBDebugTimeStamp("checking existence of docker network $k");
+	    ($code,$content,$resp) = getClient()->network_inspect($k);
+	    if ($code) {
+		TBDebugTimeStamp("creating docker network $k");
+		($code,$content,$resp) = getClient()->network_create_bridge(
+		    $k,$cidr,$gw,$k);
 		goto bad
-		    if ($?);
+		    if ($code);
 	    }
 	    $private->{'dockernets'}->{$k} = $k;
 	}
@@ -2110,15 +2166,16 @@ sub rootPreConfigNetwork($$$$)
 	    #
 	    # Make the docker network if necessary.
 	    #
-	    mysystem2("$DOCKER network inspect $k >/dev/null 2>&1");
-	    if ($?) {
+	    TBDebugTimeStamp("checking existence of docker network $k");
+	    ($code,$content,$resp) = getClient()->network_inspect($k);
+	    if ($code) {
 		# Now that the dummy device exists, make the Docker
 		# network atop it.
-		mysystem2("$DOCKER network create -d macvlan".
-			  " --subnet=${cidr} --gateway=${gw}".
-			  " -o parent=$basedev $k");
+		TBDebugTimeStamp("creating docker network $k");
+		($code,$content,$resp) = getClient()->network_create_macvlan(
+		    $k,$cidr,$gw,$basedev);
 		goto bad
-		    if ($?);
+		    if ($code);
 	    }
 	    $private->{'dockernets'}->{$k} = $k;
 	}
@@ -2203,9 +2260,10 @@ sub rootPreConfigNetwork($$$$)
 	foreach my $name (keys(%{ $private->{'dockernets'} })) {
 	    my @members = getDockerNetMemberIds($name);
 	    if (@members == 0) {
-		mysystem2("$DOCKER network rm $name");
+		TBDebugTimeStamp("removing docker network $name");
+		($code,) = getClient()->network_delete($name);
 		delete($private->{'dockernets'}->{$name})
-		    if (!$?);
+		    if (!$code);
 	    }
 	}
     }
@@ -2318,6 +2376,7 @@ sub vnodeCreate($$$$)
     my $lvname;
     my $rc;
     my $err = undef;
+    my ($code,$content,$resp);
 
     my $vmid;
     if ($vnode_id =~ /^[-\w]+\-(\d+)$/) {
@@ -2439,23 +2498,25 @@ sub vnodeCreate($$$$)
     # (NB: see note below about why we have to put the container on the
     # network right away!)
     #
-    my $createargs = " --name=${vnode_id} --tty=true";
+    my %args = ( "Tty" => JSON::PP::true,"Image" => $newimagename );
+
     my @hostspairs = ();
-    if (genhostspairlist($vnode_id,\@hostspairs) == 0) {
-	foreach my $pair (@hostspairs) {
-	    $createargs .= " --add-host=$pair";
-	}
+    genhostspairlist($vnode_id,\@hostspairs);
+    if (@hostspairs) {
+	$args{"HostConfig"}{"ExtraHosts"} = \@hostspairs;
     }
 
     #
     # Add NFS mounts.
     #
+    my @binds = ();
     foreach my $path (values(%mounts)) {
-	$createargs .= " -v ${path}:${path}";
+	my $bind = "${path}:${path}";
 	if ($NFS_MOUNTS_READONLY) {
-	    $createargs .= ":ro";
+	    $bind .= ":ro";
 	}
     }
+    $args{"HostConfig"}{"Binds"} = \@binds;
 
     #
     # Add some Emulab-specific mount points that contain information:
@@ -2471,7 +2532,7 @@ sub vnodeCreate($$$$)
     # Populate the tmcc info.
     mysystem2("rsync -a /var/emulab/boot/tmcc.$vnode_id/".
 	      " $mntdir/var.emulab/boot/tmcc/");
-    $createargs .= " -v $mntdir/var.emulab:/var/emulab:rw";
+    push(@{$args{"HostConfig"}{"Binds"}},"$mntdir/var.emulab:/var/emulab:rw");
 
     #
     # Let the inside clientside know it is a GENVNODE().  NB: we do this
@@ -2482,7 +2543,8 @@ sub vnodeCreate($$$$)
 	or fatal("could not open $mntdir/vmname: $!");
     print FD $vnode_id;
     close(FD);
-    $createargs .= " -v $mntdir/vmname:/var/emulab/boot/vmname:ro";
+    push(@{$args{"HostConfig"}{"Binds"}},
+	 "$mntdir/vmname:/var/emulab/boot/vmname:ro");
 
     #
     # Tell the inside clientside which event server to use.  NB: we do
@@ -2500,38 +2562,54 @@ sub vnodeCreate($$$$)
 	or fatal("could not write $mntdir/localevserver: $!");
     print FD "$evip";
     close(FD);
-    $createargs .= " -v $mntdir/localevserver:/var/emulab/boot/localevserver:ro";
+    push(@{$args{"HostConfig"}{"Binds"}},
+	 "$mntdir/localevserver:/var/emulab/boot/localevserver:ro");
 
     # Ugh, have to mount the certs into the container.  We can't just
     # mount over /etc/emulab entirely (well, we could, but it would not
     # be safe; the clientside allows the user to persistently update
     # stuff in that dir, so we don't want a mount over top what's in the
     # image, even if it's writeable).
-    $createargs .= " -v /etc/emulab/client.pem:/etc/emulab/client.pem:ro";
-    $createargs .= " -v /etc/emulab/emulab.pem:/etc/emulab/emulab.pem:ro";
+    push(@{$args{"HostConfig"}{"Binds"}},
+	 "/etc/emulab/client.pem:/etc/emulab/client.pem:ro");
+    push(@{$args{"HostConfig"}{"Binds"}},
+	 "/etc/emulab/emulab.pem:/etc/emulab/emulab.pem:ro");
 
     #
     # We allow the server to tell us how many VCPUs to allocate to the
     # guest. 
     #
+    my $cpus = 0;
     if (exists($attributes->{'DOCKER_VCPUS'})
 	&& $attributes->{'DOCKER_VCPUS'} > 1) {
-	$createargs .= " -c " . $attributes->{'DOCKER_VCPUS'};
+	$cpus = $attributes->{'DOCKER_VCPUS'};
     }
     elsif (exists($attributes->{'VM_VCPUS'}) && $attributes->{'VM_VCPUS'} > 1) {
-	$createargs .= " -c " . $attributes->{'VM_VCPUS'};
+	$cpus = $attributes->{'VM_VCPUS'};
+    }
+    if ($cpus > 0) {
+	#
+	# Docker on non-windows doesn't really support the notion of a
+	# whole VCPU (unless you pin specific CPUs to a container, which
+	# we don't want to do, cause it's more bookkeeping).  So we
+	# emulate that with a combination of cpu period and cpu quota.
+	#
+	$args{"HostConfig"}{"CpuPeriod"} = 100000;
+	$args{"HostConfig"}{"CpuShares"} = 100000 * $cpus;
     }
 
     #
     # Give the vnode some memory. The server usually tells us how much. 
     #
     if (exists($attributes->{'DOCKER_MEMSIZE'})) {
-	# Better be MB.
-	$createargs .= " --memory=" . $attributes->{'DOCKER_MEMSIZE'} . "m";
+	# Better be MB.  Docker wants bytes.
+	$args{"HostConfig"}{"Memory"} = \
+	    $attributes->{'DOCKER_MEMSIZE'} * 1024 * 1024;
     }
     elsif (exists($attributes->{'VM_MEMSIZE'})) {
-	# Better be MB.
-	$createargs .= " --memory=" . $attributes->{'VM_MEMSIZE'} . "m";
+	# Better be MB.  Docker wants bytes.
+	$args{"HostConfig"}{"Memory"} = \
+	    $attributes->{'VM_MEMSIZE'} * 1024 * 1024;
     }
 
     #
@@ -2573,8 +2651,12 @@ sub vnodeCreate($$$$)
     my $shortdomain = `cat /var/emulab/boot/mydomain`;
     chomp($shortdomain);
 
-    $createargs .= " --net=$DOCKERCNET --mac-address=$fmac --ip=$ctrlip";
-    $createargs .= " --hostname=$vname.$longdomain";
+    my %cnetconfig = (
+	"IPAMConfig" => { "IPv4Address" => $ctrlip},
+	"MacAddress" => $fmac
+    );
+    $args{"NetworkingConfig"}{"EndpointsConfig"}{$DOCKERCNET} = \%cnetconfig;
+    $args{"Hostname"} = "$vname.$longdomain";
     #
     # NB XXX: apparently --dns-search *does* work, but not --dns, when
     # you are using user-defined networks, or something.  Anyway, Docker
@@ -2582,31 +2664,62 @@ sub vnodeCreate($$$$)
     # --dns is specified, so until that changes, I just mount the host's
     # resolv.conf into place.  Kill me now...
     #
-    $createargs .= " --dns-search=$shortdomain --dns=$BOSSIP";
-    $createargs .= " -v /etc/resolv.conf:/etc/resolv.conf:ro";
+    $args{"HostConfig"}{"DnsSearch"} = [ $shortdomain ];
+    $args{"HostConfig"}{"Dns"} = [ $BOSSIP ];
+    push(@{$args{"HostConfig"}{"Binds"}},
+	 "/etc/resolv.conf:/etc/resolv.conf:ro");
     #
     # Tell the clientside in the VM what kind of machine it is.
     #
-    $createargs .= " -v /etc/emulab/genvmtype:/etc/emulab/genvmtype:ro";
+    push(@{$args{"HostConfig"}{"Binds"}},
+	 "/etc/emulab/genvmtype:/etc/emulab/genvmtype:ro");
 
     #
     # XXX: safe on shared hosts?  Oh well, we have to have them.
     #
-    $createargs .= " --cap-add NET_ADMIN --cap-add NET_BIND_SERVICE".
-	" --cap-add NET_RAW";
+    $args{"HostConfig"}{"CapAdd"} = [ "NET_ADMIN","NET_BIND_SERVICE","NET_RAW" ];
 
-    $createargs .= " --cgroup-parent=$vnode_id";
+    $args{"HostConfig"}{"CgroupParent"} = $vnode_id;
 
     # XXX: need to actually check to see if image has entrypoint/cmd,
     # and maybe emulate that stuff with a wrapper script.
 
     #
+    # Finally, add in any of the extra args from setupImage, by merging
+    # in the JSONish hashes into our config args.  They cannot override
+    # the values we've already set (due to Hash::Merge's default policy
+    # of left-precedence).
+    #
+    if (defined($newcreateargs)) {
+	require Hash::Merge;
+	if ($debug) {
+	    print STDERR "DEBUG: pre-merge args = ".Dumper(%args)."\n";
+	    print STDERR "DEBUG: pre-merge newcreateargs = ".Dumper(%$newcreateargs)."\n";
+	}
+	%args = %{Hash::Merge::merge(\%args,$newcreateargs)};
+	if ($debug) {
+	    print STDERR "DEBUG: merged createargs = ".Dumper(%args)."\n";
+	}
+    }
+    if (defined($newcmd)) {
+	require Hash::Merge;
+	%args = %{Hash::Merge::merge(\%args,$newcmd)};
+	if ($debug) {
+	    print STDERR "DEBUG: merged createcmd = ".Dumper(%args)."\n";
+	}
+    }
+
+    if ($debug) {
+	print STDERR "container_create($vnode_id) args:\n".Dumper(%args)."\n";
+    }
+
+    #
     # Go ahead and create.
     #
-    mysystem2("$DOCKER create $createargs $newcreateargs".
-	      " $newimagename $newcmd");
-    if ($?) {
-	$err = "failed to docker create the container!";
+    TBDebugTimeStamp("creating docker container $vnode_id");
+    ($code,$content,$resp) = getClient()->container_create($vnode_id,\%args);
+    if ($code) {
+	$err = "failed to create the container: $content";
 	goto bad;
     }
 
@@ -2891,19 +3004,13 @@ sub vnodePreConfigExpNetwork($$$$)
 	# not support fixing a MAC address via 'docker network connect
 	# ...'.)  Anyway, first we must find the docker network ID.
 	#
-	my $netid = getDockerNetId($ifc->{BRIDGE});
-    
-	my $ccmd = "$CURL --unix-socket /var/run/docker.sock".
-	    " -H \"Content-Type: application/json\"".
-	    " -d '{\"Container\": \"${vnode_id}\",".
-	    "      \"EndpointConfig\":".
-	    "         {\"IPAMConfig\":{\"IPv4Address\":\"$ip\",".
-	    "          \"IPPrefixLen\":$maskbits,\"Gateway\":\"\"},".
-	    "          \"MacAddress\":\"$fmac\"}}'".
-	    " -X POST http:/networks/${netid}/connect";
-	mysystem2($ccmd);
-	if ($?) {
-	    fatal("Could not connect $vnode_id to $DOCKERCNET; aborting!");
+	TBDebugTimeStamp("connecting docker container $vnode_id to".
+			 " network ".$ifc->{BRIDGE});
+	my ($code,$content,$resp) = getClient()->network_connect_container(
+	    $ifc->{BRIDGE},$vnode_id,$ip,$maskbits,$fmac);
+	if ($code) {
+	    fatal("Could not connect $vnode_id to $DOCKERCNET".
+		  " ($code,$content); aborting!");
 	}
     }
 
@@ -2933,14 +3040,14 @@ sub vnodeState($;$$$)
     my $err = 0;
     my $out = VNODE_STATUS_UNKNOWN();
 
-    my $output = `$DOCKER inspect $vnode_id`;
-    if ($?) {
-	$err = $?;
-	print STDERR "vnodeState: could not inspect container $vnode_id!";
-	return ($err, $out);
+    TBDebugTimeStamp("getting state info for docker container $vnode_id");
+    my ($code,$content) = getClient()->container_inspect($vnode_id);
+    if ($code) {
+	print STDERR "vnodeState: could not inspect container: $content ($code)!";
+	return ($code, $out);
     }
 
-    my $json = decode_json($output);
+    my $json = $content;
     my $jstate = $json->[0]->{'State'};
 
     if ($jstate->{"Running"} == JSON::PP::true) {
@@ -3019,10 +3126,9 @@ sub vnodeBoot($$$$)
     RunProxies($vnode_id,$vmid);
 
     TBDebugTimeStamp("Starting vnode $vnode_id...");
-    my $status = RunWithLock("docker", "docker start $vnode_id");
-
-    if ($status) {
-	print STDERR "$DOCKER start $vnode_id failed: $status\n";
+    my ($code,$content) = getClient()->container_start($vnode_id);
+    if ($code) {
+	print STDERR "container_start $vnode_id failed: $content ($code)\n";
 	return -1;
     }
 
@@ -3125,23 +3231,31 @@ sub vnodePoll($$$$$$)
     my ($vnode_id, $vmid, $vnconfig, $private, $statusref, $eventref) = @_;
 
   reconnect:
-    TBDebugTimeStamp("connecting to docker event stream for $vnode_id");
     if (!exists($private->{DOCKER_EVENT_FD})
 	|| !defined($private->{DOCKER_EVENT_FD})
 	|| !$private->{DOCKER_EVENT_FD}->opened()) {
+	TBDebugTimeStamp("connecting to docker event stream for $vnode_id");
 	my $ccmd = "$CURL -sN --unix-socket /var/run/docker.sock".
 	    " -H \"Content-Type: application/json\"".
 	    " --data-urlencode 'filters=\{\"type\":\[\"container\"\],".
 	    "                             \"container\":\[\"${vnode_id}\"\]\}'".
-	    " -G http:/events";
+	    ' -G http:/events?filters={"type":["container"],"container":["'.$vnode_id.'"]}';
 	pipe($private->{DOCKER_EVENT_FD},WRITER)
 	    or fatal("popen docker event stream $vnode_id: $@");
 	my $pid = fork();
 	if (!$pid) {
 	    close(STDIN);
-	    open(STDOUT,"<&WRITER");
+	    open(STDOUT,">&WRITER");
 	    close($private->{DOCKER_EVENT_FD});
-	    exec($ccmd);
+	    if (0) {
+		exec($ccmd);
+	    }
+	    else {
+		# This just prints JSON events to STDOUT by default,
+		# which is exactly what we want.
+		getClient()->monitor_events(
+		    {"type"=>["container"],"container"=>["$vnode_id"]});
+	    }
 	    exit(-1);
 	}
 	# Parent continues.
@@ -3271,9 +3385,11 @@ sub vnodeReboot($$$$)
 {
     my ($vnode_id, $vmid, $vnconfig, $private) = @_;
 
-    system("$DOCKER restart $vnode_id");
-    if ($?) {
-	return $? >> 8;
+    TBDebugTimeStamp("restarting vnode $vnode_id...");
+    my ($code,$content) = getClient()->container_restart($vnode_id);
+    if ($code) {
+	warn("container_restart($vnode_id) failed: $content ($code)\n");
+	return $code;
     }
 
     return vnodeBootHook($vnode_id, $vmid, $vnconfig, $private);
@@ -3283,18 +3399,33 @@ sub vnodeHalt($$$$)
 {
     my ($vnode_id, $vmid, $vnconfig, $private) = @_;
 
-    mysystem2("$DOCKER stop $vnode_id");
+    TBDebugTimeStamp("Stopping vnode $vnode_id...");
+    my ($code,$content) = getClient()->container_stop($vnode_id);
+    if ($code) {
+	warn("container_stop($vnode_id) failed: $content ($code)\n");
+	return $code;
+    }
 
-    return $? >> 8;
+    return 0;
 }
 
 sub vnodeExec($$$$$)
 {
     my ($vnode_id, $vmid, $vnconfig, $private, $command) = @_;
 
-    mysystem2("docker exec -t $vnode_id $command");
+    TBDebugTimeStamp("Running command '$command' inside vnode $vnode_id...");
+    my ($code,$content) = getClient()->container_exec($vnode_id,$command);
+    if ($code) {
+	warn("container_exec($vnode_id) failed: $content ($code)\n");
+	return $code;
+    }
 
-    return $? >> 8;
+    if (wantarray) {
+	return ($code,$content);
+    }
+    else {
+	return $code;
+    }
 }
 
 #
@@ -3349,7 +3480,11 @@ sub vnodeDestroy($$$$)
     return -1
 	if (vnodeTearDown($vnode_id, $vmid, $vnconfig, $private));
 
-    RunWithLock("docker", "$DOCKER rm $vnode_id");
+    TBDebugTimeStamp("Removing vnode $vnode_id docker container...");
+    my ($code,$content) = getClient()->container_delete($vnode_id);
+    if ($code) {
+	print STDERR "container_delete $vnode_id failed: $content ($code)\n";
+    }
 
     #
     # Remove mounts.
@@ -3390,9 +3525,10 @@ sub vnodeDestroy($$$$)
 	foreach my $name (keys(%{ $private->{'dockernets'} })) {
 	    my @members = getDockerNetMemberIds($name);
 	    if (@members == 0) {
-		mysystem2("$DOCKER network rm $name");
+		TBDebugTimeStamp("Deleting empty docker network $name...");
+		($code) = getClient()->network_delete($name);
 		delete($private->{'dockernets'}->{$name})
-		    if (!$?);
+		    if (!$code);
 	    }
 	}
     }
@@ -3508,14 +3644,21 @@ sub analyzeImage($$)
     my ($image,$rethash) = @_;
     my $output;
     my @outlines;
+    my ($code,$json,$resp,$retval);
 
-    $output = `docker inspect $image`;
-    if ($?) {
-	warn("docker inspect $image failed -- attempting to continue anyway!");
+    TBDebugTimeStamp("analyzing image $image...");
+
+    TBDebugTimeStamp("inspecting image $image...");
+    ($code,$json) = getClient()->image_inspect($image);
+    if ($code) {
+	warn("inspect $image failed -- attempting to continue anyway!");
     }
     else {
-	my $json = decode_json($output);
-	my $jstate = $json->[0]->{'Config'};
+	my $jstate;
+	if (ref($json) eq 'ARRAY') {
+	    $jstate = $json->[0];
+	}
+	$jstate = $jstate->{'Config'};
 
 	if (exists($jstate->{'Cmd'})) {
 	    $rethash->{DOCKER_CMD} = $jstate->{'Cmd'};
@@ -3540,11 +3683,22 @@ sub analyzeImage($$)
 	}
     }
 
-    $output = `docker run --rm -v /etc/emulab/docker/container-utils:/tmp/docker:ro $image /tmp/docker/analyze.sh`;
-    if ($?) {
-	return $? >> 8;
+    TBDebugTimeStamp("running analysis script for image $image...");
+    my $args = {
+	'HostConfig' => {
+	    'Binds' => [ "/etc/emulab/docker/container-utils:/tmp/docker:ro" ]
+	}
+    };
+    my $tmpname = "analyzer-".int(rand(POSIX::INT_MAX));
+    our $buf = '';
+    ($code,$json,$resp,$retval) = getClient->container_run(
+	$tmpname,$image,['/tmp/docker/analyze.sh'],1,$args,
+	sub { $buf .= $_[0]; });
+    if ($code) {
+	warn("failed to run analysis script container $tmpname for $image");
+	return $code;
     }
-    @outlines = split("\n",$output);
+    @outlines = split("\n",$buf);
     for my $res (@outlines) {
 	if ($res =~ /^[a-zA-Z0-9_]*=[^=]*$/) {
 	    chomp($res);
@@ -3613,15 +3767,28 @@ sub DOCKER_PULLPOLICY_CACHED() { return "cached"; }
 sub pullImage($$$$;$)
 {
     my ($image,$user,$pass,$policy,$newref) = @_;
+    my ($code,$content);
 
-    if (!defined($policy) || $policy eq '' || SHAREDHOST()) {
-	$policy = DOCKER_PULLPOLICY_LATEST();
+    if (SHAREDHOST()) {
+	if (defined($policy) && $policy ne DOCKER_PULLPOLICY_LATEST()) {
+	    warn("forcing pull policy for image $image on sharedhost to".
+		 " latest, instead of cached!\n");
+	    $policy = DOCKER_PULLPOLICY_LATEST();
+	}
+	elsif (!defined($policy) || $policy eq '') {
+	    $policy = DOCKER_PULLPOLICY_LATEST();
+	}
+    }
+    elsif (!defined($policy) || $policy eq '') {
+	$policy = DOCKER_PULLPOLICY_CACHED();
     }
 
     if ($policy eq DOCKER_PULLPOLICY_CACHED()) {
-	mysystem2("docker inspect $image");
-	return 0
-	    if ($? == 0);
+	TBDebugTimeStamp("inspecting image $image...");
+	($code,$content) = getClient()->image_inspect($image);
+	if (!$code) {
+	    return 0;
+	}
     }
 
     #
@@ -3644,8 +3811,9 @@ sub pullImage($$$$;$)
     # Try one more time to inspect, and release the lock if we have it.
     #
     if ($policy eq DOCKER_PULLPOLICY_CACHED()) {
-	mysystem2("docker inspect $image");
-	if ($? == 0) {
+	TBDebugTimeStamp("inspecting image $image...");
+	($code,$content) = getClient()->image_inspect($image);
+	if (!$code) {
 	    TBDebugTimeStamp("  releasing image lock")
 		if ($lockdebug);
 	    TBScriptUnlock();
@@ -3653,73 +3821,52 @@ sub pullImage($$$$;$)
 	}
     }
 
-    #
-    # Also, because we might need to authenticate, use the Docker API to
-    # pull the image instead of trying to lock the Docker config file in
-    # case we have separate creds for the same registry, or use a
-    # separate config file (the former of which is not preferable, the
-    # latter of which I couldn't make work).
-    #
-    # XXX: This also means the base64-encoded creds will show up in the
-    # process list, so fix that later.
-    #
-    my $authhdrstr = "";
-    if (defined($user) && $user ne "") {
-	# Default to the default registry if the image doesn't have a
-	# host:port part.
-	my $registry = "registry-1.docker.io";
-	if ($image =~ /^([a-zA-Z0-9-\.]+)(:\d+)?\/.*$/) {
-	    $registry = "$1$2";
-	}
-	my $auth = encode_base64url('{"username":"'.$user.'","password":"'.$pass.'"}'."");
-	chomp($auth);
-	$auth =~ tr/\r\n//;
-	$authhdrstr = "-H 'X-Registry-Auth: $auth'";
-    }
     my $output = "";
-    my $uimage = uri_escape($image);
-    my $ccmd = "$CURL --unix-socket /var/run/docker.sock".
-	" -H 'Content-Type: application/json' $authhdrstr".
-	" -X POST 'http:/images/create?fromImage=$uimage'";
     my $retries = 10;
     my $ret = 1;
     while ($ret && $retries > 0) {
-	$output = `$ccmd`;
-	$ret = $?;
-	if ($ret == 0) {
-	    TBDebugTimeStamp("pull $image succeeded ($ccmd)");
+	TBDebugTimeStamp("pulling image $image...");
+	($code,$content) = getClient()->image_pull($image,$user,$pass);
+	if ($code == 0) {
+	    TBDebugTimeStamp("pull $image succeeded");
 	    last;
 	}
 	my $ustr = "";
 	if (defined($user)) {
 	    $ustr = " as user $user";
 	}
-	TBDebugTimeStamp("pull $image failed$ustr;" .
+	TBDebugTimeStamp("pull $image failed$ustr ($code, $content);" .
 			 " sleeping and retrying...");
 	sleep(8);
 	$retries -= 1;
     }
-    my $rc = $ret >> 8;
-    if ($rc) {
+    if ($code) {
 	TBDebugTimeStamp("failed to pull image $image!");
     }
-    if (defined($newref) && $output =~ /downloaded newer image/i) {
-	$$newref = 1;
+    if ($code == 0 && defined($newref) && ref($content) eq 'ARRAY') {
+	for my $cc (@$content) {
+	    next 
+		if (!exists($cc->{'status'}));
+	    if ($cc->{'status'} =~ /downloaded newer image/i) {
+		$$newref = 1;
+		last;
+	    }
+	}
     }
 
     TBDebugTimeStamp("  releasing image lock")
 	if ($lockdebug);
     TBScriptUnlock();
 
-    return $rc;
+    return $code;
 }
 
-sub setupImage($$$$$$$$$)
+sub emulabizeImage($;$$$$$$$)
 {
-    my ($vnode_id,$vnconfig,$private,$image,$username,$password,
-	$newimageref,$newcreateargsref,$newcmdref) = @_;
+    my ($image,$newimageref,$emulabization,$update,
+	$pullpolicy,$username,$password,$iattrsref) = @_;
     my $rc;
-    my $cwd;
+    my ($code,$content);
 
     #
     # We take a lock for the pull of the base image; and for
@@ -3731,6 +3878,556 @@ sub setupImage($$$$$$$$$)
     # image, then make it!
     #
 
+    if (!defined($emulabization)) {
+	$emulabization = DOCKER_EMULABIZE_DEFAULT();
+    }
+
+    #
+    # If we're supposed to pull a new image, do it.
+    #
+    my $havenewbase = 0;
+    if (pullImage($image,$username,$password,$pullpolicy,\$havenewbase)) {
+	warn("failed to pull base Docker image $image");
+	return -1;
+    }
+
+    #
+    # Analyze the image to see what we'll need to do it, if anything.
+    #
+    my %iattrs = ();
+    $rc = analyzeImage($image,\%iattrs);
+    if ($rc) {
+	warn("analysis of image $image failed; continuing as best we can!");
+    }
+    my ($dist,$tag,$mintag) =
+	($iattrs{'DIST'},$iattrs{'TAG'},$iattrs{'MINTAG'});
+    TBDebugTimeStamp("analyzed $image, attrs:\n".Dumper(%iattrs));
+    if (defined($iattrsref)) {
+	$$iattrsref = \%iattrs;
+    }
+
+    my $curzation = $iattrs{'EMULABIZATION'};
+    if (!defined($curzation) || $curzation eq '') {
+	$curzation = DOCKER_EMULABIZE_NONE();
+    }
+
+    #
+    # Do we need to Emulabize?
+    #
+    my $newzation = DOCKER_EMULABIZE_NONE();
+    my @levels = ();
+    if ($emulabization eq '' || $emulabization eq DOCKER_EMULABIZE_NONE()) {
+	# Nothing to do.
+	$emulabization = DOCKER_EMULABIZE_NONE();
+    }
+    elsif ($emulabization eq DOCKER_EMULABIZE_BASIC()
+	   && ($update || $curzation eq DOCKER_EMULABIZE_NONE())) {
+	#
+	# Need to come up to basic.
+	#
+	$newzation = DOCKER_EMULABIZE_BASIC();
+	@levels = (DOCKER_EMULABIZE_BASIC());
+    }
+    elsif ($emulabization eq DOCKER_EMULABIZE_CORE()
+	   && ($update
+	       || $curzation eq DOCKER_EMULABIZE_NONE()
+	       || $curzation eq DOCKER_EMULABIZE_BASIC())) {
+	#
+	# Need to come up to core.
+	#
+	$newzation = DOCKER_EMULABIZE_CORE();
+	@levels = (DOCKER_EMULABIZE_BASIC(),DOCKER_EMULABIZE_CORE());
+    }
+    elsif ($emulabization eq DOCKER_EMULABIZE_BUILDENV()
+	   && ($update
+	       || $curzation eq DOCKER_EMULABIZE_NONE()
+	       || $curzation eq DOCKER_EMULABIZE_BASIC()
+	       || $curzation eq DOCKER_EMULABIZE_CORE())) {
+	#
+	# Need to come up to buildenv.
+	#
+	$newzation = DOCKER_EMULABIZE_BUILDENV();
+	@levels = (DOCKER_EMULABIZE_BASIC(),DOCKER_EMULABIZE_BUILDENV());
+    }
+    elsif ($emulabization eq DOCKER_EMULABIZE_FULL()
+	   && ($update
+	       || $curzation eq DOCKER_EMULABIZE_NONE()
+	       || $curzation eq DOCKER_EMULABIZE_BASIC()
+	       || $curzation eq DOCKER_EMULABIZE_CORE()
+	       || $curzation eq DOCKER_EMULABIZE_BUILDENV())) {
+	#
+	# Need to come up to full.
+	#
+	$newzation = DOCKER_EMULABIZE_FULL();
+	@levels = (DOCKER_EMULABIZE_BASIC(),DOCKER_EMULABIZE_BUILDENV(),
+		   DOCKER_EMULABIZE_FULL());
+    }
+    else {
+	# Nothing to do; just use existing base image.
+	$emulabization = DOCKER_EMULABIZE_NONE();
+    }
+
+    if ($newzation eq DOCKER_EMULABIZE_NONE()) {
+	if ($debug) {
+	    print STDERR "DEBUG: image $image already emulabized".
+		" ('$curzation'), not updating\n";
+	}
+	return 0;
+    }
+
+    #
+    # Figure out the new image name and the context dir.  Let the caller
+    # supply one in the $newimageref parameter, too.
+    #
+    my $newimage;
+    my $newimagecdirname;
+    if (!defined($newimageref) || !defined($$newimageref)
+	|| $$newimageref eq '') {
+	#
+	# We are going to make a new image; give it a name.  For now, just
+	# give it the current name:tag as the new name, then :, then
+	# level.  We will retag it later with the real image name if
+	# they want to save it.
+	#
+	# XXX: Later, for shared nodes, need to ensure we can't be
+	# tricked into using a private image fro the wrong experiment!
+	#
+	$newimage = $image;
+	$newimage =~ tr/:/-/;
+	$newimagecdirname = $newimage;
+	$newimage .= ":emulab-$newzation";
+	$newimagecdirname .= "--emulab-$newzation";
+    }
+    else {
+	$newimage = $$newimageref;
+	$newimagecdirname = "$newimage--emulab-$newzation";
+	$newimagecdirname =~ tr/:/-/;
+    }
+
+    #
+    # We have to lock here, to avoid races.
+    #
+    my $imagelockname = ImageLockName($newimage);
+    TBDebugTimeStamp("grabbing image lock $imagelockname writeable")
+	if ($lockdebug);
+    if (TBScriptLock($imagelockname,
+		     TBSCRIPTLOCK_INTERRUPTIBLE(),
+		     $MAXIMAGEWAIT) != TBSCRIPTLOCK_OKAY()) {
+	fatal("Could not get $imagelockname lock for $newimage!");
+    }
+    TBDebugTimeStamp("  got image lock $imagelockname for $newimage")
+	if ($lockdebug);
+
+    #
+    # Check to see if the image already exists, and if we need to
+    # (re)build it.  If there's a new base, and we always want the
+    # latest, we have to rebuild.  Else, if this image has the
+    # Emulab code, and wants the latest, and is out of date
+    # w.r.t. the cached source tree, we rebuild it too.
+    #
+    my $build = 0;
+    TBDebugTimeStamp("inspecting image $newimage...");
+    ($code,$content) = getClient()->image_inspect($newimage);
+    if ($code) {
+	TBDebugTimeStamp("$newimage does not exist; building!");
+	$build = 1;
+    }
+    elsif ($pullpolicy eq DOCKER_PULLPOLICY_LATEST() && $havenewbase) {
+	TBDebugTimeStamp("building new version of $newimage".
+			 " because the base image was updated!");
+	$build = 1;
+    }
+    elsif ($newzation ne DOCKER_EMULABIZE_NONE()
+	   && $newzation ne DOCKER_EMULABIZE_BASIC()
+	   && $pullpolicy eq DOCKER_PULLPOLICY_LATEST()) {
+	my $installedvers = $iattrs{'EMULABVERSION'};
+	my $currentvers = `cat $EMULABSRC/.git/refs/heads/master`;
+	chomp($currentvers);
+	if ($installedvers ne $currentvers) {
+	    TBDebugTimeStamp("building new version of $newimage".
+			     " because the Emulab src repo was updated".
+			     " ($installedvers -> $currentvers)!");
+	    $build = 1;
+	}
+    }
+
+    if ($build) {
+	if ($dist eq '' && $tag eq '' && $mintag eq '') {
+	    warn("cannot emulabize image with unknown distro!");
+	    goto badimage;
+	}
+	if (!(($mintag ne '' && -d "$DOCKERFILES/$mintag")
+	      || ($tag ne '' && -d "$DOCKERFILES/$tag")
+	      || ($tag ne '' && -d "$DOCKERFILES/$tag"))) {
+	    warn("cannot emulabize image with unsupported auto-analyzed".
+		 " tags $dist/$tag/$mintag!");
+	    goto badimage;
+	}
+
+	#
+	# Ok, finally, start the build.  Find all the Dockerfile
+	# frags and shell scripts, and generate a Dockerfile and a
+	# context directory.  If that dir exists already, remove it.
+	# Build any artifacts first.
+	#
+	# To find the fragments, we go from most specific to least
+	# (i.e., mintag -> tag -> dist).
+	#
+	# NB: we always copy the $mintag,$tag,$dist,common subdirs
+	# of /etc/emulab/docker/dockerfiles into the context for the
+	# image, because we want a script in say ubuntu16 to be able
+	# to reference something in the common/ subdir.
+	#
+	my @copydirs = ();
+	foreach my $td ('common',$dist,$tag,$mintag) {
+	    push(@copydirs,$td)
+		if (-d "$DOCKERFILES/$td");
+	}
+	my @dfiles = ();
+	my @runscripts = ();
+	my @artifactscripts = ();
+
+	my $cwd = getcwd();
+	chdir($DOCKERFILES);
+	for my $l ('prepare',@levels) {
+	    for my $t ($mintag,$tag,$dist) {
+		my $found = 0;
+		if (-f "$t/Dockerfile-$l") {
+		    push(@dfiles,"$t/Dockerfile-$l");
+		    $found = 1;
+		}
+		if (-f "$t/$l.sh") {
+		    push(@runscripts,"$t/$l.sh");
+		    $found = 1;
+		}
+		if ($found) {
+		    if (-f "$t/$l-artifacts.sh") {
+			push(@artifactscripts,"$t/$l-artifacts.sh");
+		    }
+		    #
+		    # Ok, we found instructions for this level, so
+		    # skip to the next level.
+		    #
+		    next;
+		}
+	    }
+	}
+	#
+	# Now look for init-related goo.  We install all inits that
+	# we know about that apply to this mintag/tag/dist/common.
+	#
+	for my $init ('runit','systemd','upstart','init') {
+	    for my $t ($mintag,$tag,$dist) {
+		my $found = 0;
+		if (-f "$t/Dockerfile-$init") {
+		    push(@dfiles,"$t/Dockerfile-$init");
+		    $found = 1;
+		}
+		if (-f "$t/$init.sh") {
+		    push(@runscripts,"$t/$init.sh");
+		    $found = 1;
+		}
+		if ($found) {
+		    if (-f "$t/$init-artifacts.sh") {
+			push(@artifactscripts,"$t/$init-artifacts.sh");
+		    }
+		    #
+		    # Ok, we found instructions for this level, so
+		    # skip to the next level.
+		    #
+		    next;
+		}
+	    }
+	}
+	for my $l ('cleanup') {
+	    for my $t ($mintag,$tag,$dist) {
+		my $found = 0;
+		if (-f "$t/$l.sh") {
+		    push(@runscripts,"$t/$l.sh");
+		    #
+		    # Ok, we found instructions for this level, so
+		    # skip to the next level.
+		    #
+		    next;
+		}
+	    }
+	}
+	chdir($cwd);
+
+	#
+	# Ok, we create a context dir that has two things.  First,
+	# it has an artifacts subdir.  Dockerfile fragments are
+	# responsible to copy stuff from artifacts into place.  The
+	# fs/ subdir is intended to be a root filesystem fragment.
+	# Anything in it is automatically copied to the image
+	# rootfs.  The fs/ subdir is populated from $DOCKERFILES as
+	# follows.  First, each mintag/tag/dist/common subdir in
+	# DOCKERFILES is copied into fs/etc/emulab/CONTEXT --
+	# excluding any fs subdir in the mintag/tag/dist/common
+	# subdirs.  Those fs subdirs are copied into the primary fs
+	# subdir, *in reverse order* (so that the most specific can
+	# overwrite the least specific).  This is the best way to
+	# minimize layers -- i.e., to have a single COPY
+	# instruction, and a single RUN instruction, for two layers
+	# total.  Ugh!
+	#
+	my $cdir = "$CONTEXTDIR/$newimagecdirname";
+	my $adir = "$cdir/artifacts";
+	my $hdir = "$cdir/fs";
+	mkdir($cdir);
+	mkdir($adir);
+	mkdir($hdir);
+	mkdir("$hdir/etc");
+	mkdir("$hdir/etc/ssh");
+	mkdir("$hdir/etc/emulab");
+	mkdir("$hdir/etc/emulab/CONTEXT");
+	mysystem2("rsync -a /etc/ssh/ssh_host* $hdir/etc/ssh/");
+	mysystem2("rsync -a /etc/emulab/*.pem $hdir/etc/emulab/");
+	for my $dir (@copydirs) {
+	    mysystem2("rsync -a --exclude=$DOCKERFILES/$dir/fs".
+		      " $DOCKERFILES/$dir $hdir/etc/emulab/CONTEXT/");
+	    if (-d "$DOCKERFILES/$dir/fs") {
+		mysystem2("rsync -a $DOCKERFILES/$dir/fs/ $hdir/");
+	    }
+	}
+
+	#
+	# Before we start setting up the new image Dockerfile, run
+	# all the artifact build scripts.
+	#
+	foreach my $ascript (@artifactscripts) {
+	    my %args = ( 'Tty' => JSON::PP::true);
+	    $args{'HostConfig'}{'Binds'} = [
+		"$hdir/etc/emulab/CONTEXT:/etc/emulab/CONTEXT:ro",
+		"$adir:/artifacts:rw",
+		"$EMULABSRC:/emulab:ro",
+		"$PUBSUBSRC:/pubsub:ro",
+		"$RUNITSRC:/runit:ro"
+		];
+	    $args{'Env'} = [
+		"DESTDIR=/artifacts","EMULABSRC=/emulab","PUBSUBSRC=/pubsub",
+		"RUNITSRC=/runit","CONTEXT=/etc/emulab/CONTEXT"
+		];
+	    $args{'Image'} = $image;
+	    $args{'Cmd'} = ["/bin/sh","-c","cd \$CONTEXT && $ascript"];
+	    my $tmpname = "artifact-".sha1_hex($image . rand(POSIX::INT_MAX));
+	    TBDebugTimeStamp("creating artifact container $tmpname for".
+			     " artifact script $ascript...");
+	    ($code,$content) = getClient()->container_create(
+		$tmpname,\%args);
+	    if ($code) {
+		warn("failed to create image analysis container $tmpname".
+		     " for image $image: $content ($code); aborting\n");
+		goto badimage;
+	    }
+	    TBDebugTimeStamp("starting artifact container $tmpname");
+	    ($code,$content) = getClient()->container_start($tmpname);
+	    if ($code) {
+		warn("failed to start artifact container $tmpname".
+		     " for image $image: $content ($code); aborting\n");
+		goto badimage;
+	    }
+	    open(our $fd,">$cdir-$tmpname.log");
+	    sub log_printer {
+		my ($data,$foo,$resp) = @_;
+		print $data;
+		if (defined($fd)) {
+		    print $fd $data;
+		}
+	    }
+	    # Purely for real-time logging purposes.
+	    TBDebugTimeStamp("attaching to artifact container $tmpname;".
+			     " stdout/stderr from container will follow...");
+	    getClient()->container_attach($tmpname,1,1,0,1,1,1,\&log_printer);
+	    close($fd);
+	    TBDebugTimeStamp("waiting for artifact container $tmpname to stop");
+	    ($code,$content) = getClient()->container_wait($tmpname);
+	    print STDERR "DEBUG: $content " . ref($content) . "\n";
+	    if ($code) {
+		warn("failed to wait for artifact container $tmpname".
+		     " for image $image: $content ($code); aborting\n");
+		goto badimage;
+	    }
+	    elsif (ref($content) eq 'ARRAY') {
+		foreach my $blurb (@$content) {
+		    if (ref($blurb) eq 'HASH'
+			&& exists($blurb->{'StatusCode'})
+			&& $blurb->{'StatusCode'}) {
+			warn("image artifact container $tmpname,image $image".
+			     " exited non-zero (".$blurb->{'StatusCode'}.");".
+			     " aborting\n");
+			goto badimage;
+		    }
+		}
+	    }
+	    elsif (ref($content) eq 'HASH'
+		   && exists($content->{'StatusCode'})
+		   && $content->{'StatusCode'}) {
+		warn("image artifact container $tmpname,image $image".
+		     " exited non-zero (".$content->{'StatusCode'}.");".
+		     " aborting\n");
+		goto badimage;
+	    }
+
+	    TBDebugTimeStamp("removing artifact container $tmpname");
+	    ($code,$content) = getClient()->container_delete($tmpname);
+	    if ($code) {
+		warn("failed to delete artifact script container".
+		     " $tmpname,image $image: $content ($code);".
+		     " ignoring!\n");
+	    }
+	}
+
+	my $dockerfile = "$cdir/Dockerfile";
+	open(DFD,">$dockerfile")
+	    or fatal("could not open $dockerfile!");
+
+	#
+	# First, we are descended FROM the base image.
+	#
+	print DFD "FROM $image\n\n";
+
+	#
+	# Then, if this is emulabization core or full, add an
+	# ONBUILD instruction that runs our prepare script.  And we
+	# *always* save off new versions of the master passwd files.
+	#
+	if ($emulabization eq DOCKER_EMULABIZE_CORE()
+	    || $emulabization eq DOCKER_EMULABIZE_FULL()) {
+	    print DFD "ONBUILD RUN /usr/local/etc/emulab/prepare -M\n\n";
+	}
+
+	#
+	# Second, copy in all the Dockerfile fragments.
+	#
+	$cwd = getcwd();
+	chdir($DOCKERFILES);
+	foreach my $f (@dfiles) {
+	    open(FD,"$f")
+		or fatal("could not open $f to copy into $dockerfile");
+	    my @lines = <FD>;
+	    close(FD);
+	    print DFD join("",@lines)."\n\n";
+	}
+	chdir($cwd);
+
+	#
+	# Next create COPY and RUN commands.
+	#
+	print DFD "COPY fs/ /\n";
+	my $runcmd = "";
+	foreach my $ruc (@runscripts) {
+	    my $dn = dirname($ruc);
+	    my $bn = basename($ruc);
+	    if ($runcmd ne '') {
+		$runcmd .= " && ";
+	    }
+	    #$runcmd .= "cd /tmp/$dn && ./$bn && cd /tmp";
+	    $runcmd .= "cd /etc/emulab/CONTEXT && $ruc";
+	}
+	if ($runcmd ne '') {
+	    $runcmd .= " && ";
+	}
+	$runcmd .= "mkdir -p /etc/emulab".
+	    " && echo $newzation > /etc/emulab/emulabization-type";
+	#
+	# If we are updating the Emulabization *or* if we are
+	# Emulabizing for the first time, *always* overwrite the
+	# Emulab master passwd files with the image's real files.
+	# This ensures that the client-install only temporarily
+	# overwrites the Emulab master passwd files; *and* ensures
+	# we always use the image's files.  We cannot trust the
+	# Emulab per-distro/per-version passwd files from git, since
+	# they may not match what's installed; this is not our
+	# image.
+	#
+	if ($update
+	    || $curzation eq '' || $curzation eq DOCKER_EMULABIZE_NONE()) {
+	    $runcmd .= " && cp -pv /etc/passwd /etc/group /etc/shadow /etc/gshadow /etc/emulab";
+	}
+	print DFD "RUN /bin/sh -c '$runcmd'\n\n";
+	close(DFD);
+
+	# We could just send the bytes to the daemon (tar -C $cdir -c . |),
+	# but we want to store the file on disk for provenance.
+	my $tarfile = "$cdir-context-" . time() . ".tar";
+	mysystem2("tar -cf $tarfile -C $cdir .");
+	if ($?) {
+	    warn("failed to build tar archive of context dir $cdir;".
+		 " aborting!\n");
+	    goto badimage;
+	}
+	TBDebugTimeStamp("building new image $newimage");
+	my $buf = '';
+	open(our $fd,">$cdir-build.log");
+	our $bytes = 0;
+	sub json_log_printer {
+	    my ($data,$foo,$resp) = @_;
+	    if ($resp->header("content-type") eq 'application/json') {
+		eval {
+		    $data = decode_json($data);
+		};
+		if ($@) {
+		    warn("build log_printer: $! $@ ($data)\n");
+		}
+	    }
+	    print $data;
+	    print $fd $data;
+	    $bytes += length($data);
+	}
+	($code,$content) = getClient()->image_build_from_tar_file(
+	    $tarfile,$newimage,undef,undef,\&json_log_printer);
+	close($fd);
+	if ($code) {
+	    warn("failed to build $newimage from $image: $content ($code)!");
+	    goto badimage;
+	}
+	if ($bytes == 0) {
+	    open(FD,">$cdir-build.log");
+	    if (defined($content) && ref($content) eq 'ARRAY'
+		&& defined($content->[0]) && ref($content->[0]) eq 'HASH'
+		&& defined($content->[0]->{'stream'})) {
+		foreach my $bit (@$content) {
+		    next
+			if (!defined($bit->{'stream'}));
+		    print FD $bit->{'stream'};
+		}
+	    }
+	    elsif (defined(ref($content)) && ref($content) ne '') {
+		print FD Dumper($content);
+	    }
+	    else {
+		print FD $content;
+	    }
+	    close(FD);
+	}
+    }
+
+    #
+    # Unlock the emulabized image.
+    #
+    TBScriptUnlock();
+    if (defined($newimageref)) {
+	$$newimageref = $newimage;
+    }
+    if (defined($iattrsref)) {
+	$$iattrsref = \%iattrs;
+    }
+    return 0;
+
+  badimage:
+    TBScriptUnlock();
+    return -1;
+}
+
+sub setupImage($$$$$$$$$)
+{
+    my ($vnode_id,$vnconfig,$private,$image,$username,$password,
+	$newimageref,$newcreateargsref,$newcmdref) = @_;
+    my $rc;
+    my $cwd;
+    my ($code,$content);
+
     TBDebugTimeStamp("setting up image $image for $vnode_id...");
 
     #
@@ -3738,6 +4435,7 @@ sub setupImage($$$$$$$$$)
     # We default to "basic" emulabization.
     #
     my $emulabization;
+    my $update = 0;
     if (!exists($vnconfig->{'attributes'}->{DOCKER_EMULABIZATION})) {
 	$emulabization = $vnconfig->{'attributes'}->{DOCKER_EMULABIZATION} =
 	    DOCKER_EMULABIZE_DEFAULT();
@@ -3755,6 +4453,9 @@ sub setupImage($$$$$$$$$)
 	    return -1;
 	}
     }
+    if (exists($vnconfig->{'attributes'}->{DOCKER_EMULABIZATION_UPDATE})) {
+	$update = $vnconfig->{'attributes'}->{DOCKER_EMULABIZATION_UPDATE};
+    }
 
     #
     # Pull the image, according to the policy.  Force the pull policy to
@@ -3771,380 +4472,22 @@ sub setupImage($$$$$$$$$)
     if (!defined($pullpolicy)) {
 	$pullpolicy = DOCKER_PULLPOLICY_CACHED();
     }
-    my $havenewbase = 0;
-    if (pullImage($image,$username,$password,$pullpolicy,\$havenewbase)) {
-	warn("failed to pull Docker image $image");
-	return -1;
-    }
 
     # Save off a read-only version of this, for convenience.
     my %vnattrs = %{$vnconfig->{'attributes'}};
 
-    #
-    # Analyze the image to see what we'll need to do it, if anything.
-    #
-    my %iattrs = ();
-    $rc = analyzeImage($image,\%iattrs);
+    my $newimage;
+    my $iattrs;
+    $rc = emulabizeImage($image,\$newimage,$emulabization,$update,
+			 $pullpolicy,$username,$password,\$iattrs);
     if ($rc) {
-	warn("analysis of image $image failed; continuing as best we can!");
+	warn("failed to emulabize image $image; aborting!\n");
+	return $rc;
     }
+    #print "DEBUG: setupImage iattrs = ".Dumper($iattrs)."\n";
+    #print "DEBUG: setupImage ".$iattrs->{'DIST'}.",".$iattrs->{'TAG'}.",".$iattrs->{'MINTAG'}."\n";
     my ($dist,$tag,$mintag) =
-	($iattrs{'DIST'},$iattrs{'TAG'},$iattrs{'MINTAG'});
-    TBDebugTimeStamp("analyzed $image, attrs:\n".Dumper(%iattrs));
-
-    my $curzation = $iattrs{'EMULABIZATION'};
-    if (!defined($curzation) || $curzation eq '') {
-	$curzation = DOCKER_EMULABIZE_NONE();
-    }
-
-    #
-    # Do we need to Emulabize?
-    #
-    my $newzation = DOCKER_EMULABIZE_NONE();
-    my $newimage = $image;
-    my $newimagecdirname;
-    my $cmd;
-    my @levels = ();
-    if ($emulabization eq '' || $emulabization eq DOCKER_EMULABIZE_NONE()) {
-	# Nothing to do.
-	$emulabization = DOCKER_EMULABIZE_NONE();
-    }
-    elsif ($emulabization eq DOCKER_EMULABIZE_BASIC()
-	   && $curzation eq DOCKER_EMULABIZE_NONE()) {
-	#
-	# Need to come up to basic.
-	#
-	$newzation = DOCKER_EMULABIZE_BASIC();
-	@levels = (DOCKER_EMULABIZE_BASIC());
-    }
-    elsif ($emulabization eq DOCKER_EMULABIZE_CORE()
-	   && ($curzation eq DOCKER_EMULABIZE_NONE()
-	       || $curzation eq DOCKER_EMULABIZE_BASIC())) {
-	#
-	# Need to come up to core.
-	#
-	$newzation = DOCKER_EMULABIZE_CORE();
-	@levels = (DOCKER_EMULABIZE_BASIC(),DOCKER_EMULABIZE_CORE());
-    }
-    elsif ($emulabization eq DOCKER_EMULABIZE_BUILDENV()
-	   && ($curzation eq DOCKER_EMULABIZE_NONE()
-	       || $curzation eq DOCKER_EMULABIZE_BASIC()
-	       || $curzation eq DOCKER_EMULABIZE_CORE())) {
-	#
-	# Need to come up to buildenv.
-	#
-	$newzation = DOCKER_EMULABIZE_BUILDENV();
-	@levels = (DOCKER_EMULABIZE_BASIC(),DOCKER_EMULABIZE_BUILDENV());
-    }
-    elsif ($emulabization eq DOCKER_EMULABIZE_FULL()
-	   && ($curzation eq DOCKER_EMULABIZE_NONE()
-	       || $curzation eq DOCKER_EMULABIZE_BASIC()
-	       || $curzation eq DOCKER_EMULABIZE_CORE()
-	       || $curzation eq DOCKER_EMULABIZE_BUILDENV())) {
-	#
-	# Need to come up to full.
-	#
-	$newzation = DOCKER_EMULABIZE_FULL();
-	@levels = (DOCKER_EMULABIZE_BASIC(),DOCKER_EMULABIZE_BUILDENV(),
-		   DOCKER_EMULABIZE_FULL());
-    }
-    else {
-	# Nothing to do; just use existing base image.
-	$emulabization = DOCKER_EMULABIZE_NONE();
-    }
-
-    #
-    # NB: we might not build a new image even if it is out of date, if
-    # the desired emulabization level is the same as the current one.
-    # This needs to be specified via a force-update flag!  XXX add that.
-    #
-    if ($newzation ne DOCKER_EMULABIZE_NONE()) {
-	#
-	# We are going to make a new image; give it a name.  For now,
-	# just give it the current name:tag as the new name, then :,
-	# then level.  We will retag it later with the real image name
-	# if they want to save it.
-	#
-	# XXX: Later, for shared nodes, need to ensure we can't be
-	# tricked into using a private image fro the wrong experiment!
-	#
-	$newimage = $image;
-	$newimage =~ tr/:/-/;
-	my $newimagecdirname = $newimage;
-	$newimage .= ":emulab-$newzation";
-	$newimagecdirname .= "--emulab-$newzation";
-
-	#
-	# We have to lock here, to avoid races.
-	#
-	my $imagelockname = ImageLockName($newimage);
-	TBDebugTimeStamp("grabbing image lock $imagelockname writeable")
-	    if ($lockdebug);
-	if (TBScriptLock($imagelockname,
-			 TBSCRIPTLOCK_INTERRUPTIBLE(),
-			 $MAXIMAGEWAIT) != TBSCRIPTLOCK_OKAY()) {
-	    fatal("Could not get $imagelockname lock for $newimage!");
-	}
-	TBDebugTimeStamp("  got image lock $imagelockname for $newimage")
-	    if ($lockdebug);
-
-	#
-	# Check to see if the image already exists, and if we need to
-	# (re)build it.  If there's a new base, and we always want the
-	# latest, we have to rebuild.  Else, if this image has the
-	# Emulab code, and wants the latest, and is out of date
-	# w.r.t. the cached source tree, we rebuild it too.
-	#
-	my $build = 0;
-	mysystem2("docker inspect $newimage");
-	if ($?) {
-	    TBDebugTimeStamp("$newimage does not exist; building!");
-	    $build = 1;
-	}
-	elsif ($pullpolicy eq DOCKER_PULLPOLICY_LATEST() && $havenewbase) {
-	    TBDebugTimeStamp("building new version of $newimage".
-			     " because the base image was updated!");
-	    $build = 1;
-	}
-	elsif ($newzation ne DOCKER_EMULABIZE_NONE()
-	       && $newzation ne DOCKER_EMULABIZE_BASIC()
-	       && $pullpolicy eq DOCKER_PULLPOLICY_LATEST()) {
-	    my $installedvers = $iattrs{'EMULABVERSION'};
-	    my $currentvers = `cat $EMULABSRC/.git/refs/heads/master`;
-	    chomp($currentvers);
-	    if ($installedvers ne $currentvers) {
-		TBDebugTimeStamp("building new version of $newimage".
-				 " because the Emulab src repo was updated".
-				 " ($installedvers -> $currentvers)!");
-		$build = 1;
-	    }
-	}
-
-	if ($build) {
-	    if ($dist eq '' && $tag eq '' && $mintag eq '') {
-		warn("cannot emulabize image with unknown distro!");
-		goto badimage;
-	    }
-	    if (!(($mintag ne '' && -d "$DOCKERFILES/$mintag")
-		  || ($tag ne '' && -d "$DOCKERFILES/$tag")
-		  || ($tag ne '' && -d "$DOCKERFILES/$tag"))) {
-		warn("cannot emulabize image with unsupported auto-analyzed".
-		     " tags $dist/$tag/$mintag!");
-		goto badimage;
-	    }
-
-	    #
-	    # Ok, finally, start the build.  Find all the Dockerfile
-	    # frags and shell scripts, and generate a Dockerfile and a
-	    # context directory.  If that dir exists already, remove it.
-	    # Build any artifacts first.
-	    #
-	    # To find the fragments, we go from most specific to least
-	    # (i.e., mintag -> tag -> dist).
-	    #
-	    # NB: we always copy the $mintag,$tag,$dist,common subdirs
-	    # of /etc/emulab/docker/dockerfiles into the context for the
-	    # image, because we want a script in say ubuntu16 to be able
-	    # to reference something in the common/ subdir.
-	    #
-	    my @copydirs = ();
-	    foreach my $td ('common',$dist,$tag,$mintag) {
-		push(@copydirs,$td)
-		    if (-d "$DOCKERFILES/$td");
-	    }
-	    my @dfiles = ();
-	    my @runscripts = ();
-	    my @artifactscripts = ();
-
-	    $cwd = getcwd();
-	    chdir($DOCKERFILES);
-	    for my $l ('prepare',@levels) {
-		for my $t ($mintag,$tag,$dist) {
-		    my $found = 0;
-		    if (-f "$t/Dockerfile-$l") {
-			push(@dfiles,"$t/Dockerfile-$l");
-			$found = 1;
-		    }
-		    if (-f "$t/$l.sh") {
-			push(@runscripts,"$t/$l.sh");
-			$found = 1;
-		    }
-		    if ($found) {
-			if (-f "$t/$l-artifacts.sh") {
-			    push(@artifactscripts,"$t/$l-artifacts.sh");
-			}
-			#
-			# Ok, we found instructions for this level, so
-			# skip to the next level.
-			#
-			next;
-		    }
-		}
-	    }
-	    #
-	    # Now look for init-related goo.  We install all inits that
-	    # we know about that apply to this mintag/tag/dist/common.
-	    #
-	    for my $init ('runit','systemd','upstart','init') {
-		for my $t ($mintag,$tag,$dist) {
-		    my $found = 0;
-		    if (-f "$t/Dockerfile-$init") {
-			push(@dfiles,"$t/Dockerfile-$init");
-			$found = 1;
-		    }
-		    if (-f "$t/$init.sh") {
-			push(@runscripts,"$t/$init.sh");
-			$found = 1;
-		    }
-		    if ($found) {
-			if (-f "$t/$init-artifacts.sh") {
-			    push(@artifactscripts,"$t/$init-artifacts.sh");
-			}
-			#
-			# Ok, we found instructions for this level, so
-			# skip to the next level.
-			#
-			next;
-		    }
-		}
-	    }
-	    for my $l ('cleanup') {
-		for my $t ($mintag,$tag,$dist) {
-		    my $found = 0;
-		    if (-f "$t/$l.sh") {
-			push(@runscripts,"$t/$l.sh");
-			#
-			# Ok, we found instructions for this level, so
-			# skip to the next level.
-			#
-			next;
-		    }
-		}
-	    }
-	    chdir($cwd);
-
-	    #
-	    # Ok, we create a context dir that has two things.  First,
-	    # it has an artifacts subdir.  Dockerfile fragments are
-	    # responsible to copy stuff from artifacts into place.  The
-	    # fs/ subdir is intended to be a root filesystem fragment.
-	    # Anything in it is automatically copied to the image
-	    # rootfs.  The fs/ subdir is populated from $DOCKERFILES as
-	    # follows.  First, each mintag/tag/dist/common subdir in
-	    # DOCKERFILES is copied into fs/etc/emulab/CONTEXT --
-	    # excluding any fs subdir in the mintag/tag/dist/common
-	    # subdirs.  Those fs subdirs are copied into the primary fs
-	    # subdir, *in reverse order* (so that the most specific can
-	    # overwrite the least specific).  This is the best way to
-	    # minimize layers -- i.e., to have a single COPY
-	    # instruction, and a single RUN instruction, for two layers
-	    # total.  Ugh!
-	    #
-	    my $cdir = "$CONTEXTDIR/$newimagecdirname";
-	    my $adir = "$cdir/artifacts";
-	    my $hdir = "$cdir/fs";
-	    mkdir($cdir);
-	    mkdir($adir);
-	    mkdir($hdir);
-	    mkdir("$hdir/etc");
-	    mkdir("$hdir/etc/ssh");
-	    mkdir("$hdir/etc/emulab");
-	    mkdir("$hdir/etc/emulab/CONTEXT");
-	    mysystem2("rsync -a /etc/ssh/ssh_host* $hdir/etc/ssh/");
-	    mysystem2("rsync -a /etc/emulab/*.pem $hdir/etc/emulab/");
-	    for my $dir (@copydirs) {
-		mysystem2("rsync -a --exclude=$DOCKERFILES/$dir/fs".
-			  " $DOCKERFILES/$dir $hdir/etc/emulab/CONTEXT/");
-		if (-d "$DOCKERFILES/$dir/fs") {
-		    mysystem2("rsync -a $DOCKERFILES/$dir/fs/ $hdir/");
-		}
-	    }
-
-	    #
-	    # Before we start setting up the new image Dockerfile, run
-	    # all the artifact build scripts.
-	    #
-	    foreach my $ascript (@artifactscripts) {
-		mysystem2("docker run --rm -t ".
-			  " -v $hdir/etc/emulab/CONTEXT:/etc/emulab/CONTEXT:ro".
-			  " -v $adir:/artifacts:rw".
-			  " -v $EMULABSRC:/emulab:ro".
-			  " -v $PUBSUBSRC:/pubsub:ro".
-			  " -v $RUNITSRC:/runit:ro".
-			  " -e DESTDIR=/artifacts".
-			  " -e EMULABSRC=/emulab".
-			  " -e PUBSUBSRC=/pubsub".
-			  " -e RUNITSRC=/runit".
-			  " -e CONTEXT=/etc/emulab/CONTEXT".
-			  " $image /bin/sh -c 'cd \$CONTEXT && $ascript'");
-		if ($?) {
-		    warn("$DOCKERFILES/$ascript failed in image $image with ".
-			 ($? >> 8)."; aborting\n");
-		    goto badimage;
-		}
-	    }
-	    
-	    my $dockerfile = "$cdir/Dockerfile";
-	    open(DFD,">$dockerfile")
-		or fatal("could not open $dockerfile!");
-
-	    #
-	    # First, we are descended FROM the base image.
-	    #
-	    print DFD "FROM $image\n\n";
-	    
-	    #
-	    # Second, copy in all the Dockerfile fragments.
-	    #
-	    $cwd = getcwd();
-	    chdir($DOCKERFILES);
-	    foreach my $f (@dfiles) {
-		open(FD,"$f")
-		    or fatal("could not open $f to copy into $dockerfile");
-		my @lines = <FD>;
-		close(FD);
-		print DFD join("",@lines)."\n\n";
-	    }
-	    chdir($cwd);
-
-	    #
-	    # Next create COPY and RUN commands.
-	    #
-	    print DFD "COPY fs/ /\n";
-	    my $runcmd = "";
-	    foreach my $ruc (@runscripts) {
-		my $dn = dirname($ruc);
-		my $bn = basename($ruc);
-		if ($runcmd ne '') {
-		    $runcmd .= " && ";
-		}
-		#$runcmd .= "cd /tmp/$dn && ./$bn && cd /tmp";
-		$runcmd .= "cd /etc/emulab/CONTEXT && $ruc";
-	    }
-	    if ($runcmd ne '') {
-		$runcmd .= " && ";
-	    }
-	    $runcmd .= "mkdir -p /etc/emulab".
-		" && echo $newzation > /etc/emulab/emulabization-type";
-	    print DFD "RUN /bin/sh -c '$runcmd'\n\n";
-	    close(DFD);
-
-	    $cwd = getcwd();
-	    chdir($cdir);
-	    mysystem2("docker build -t $newimage .");
-	    if ($?) {
-		chdir($cwd);
-		warn("failed to build $newimage from $image!");
-		goto badimage;
-	    }
-	    chdir($cwd);
-	}
-
-	#
-	# Unlock the emulabized image.
-	#
-	TBScriptUnlock();
-    }
+	($iattrs->{'DIST'},$iattrs->{'TAG'},$iattrs->{'MINTAG'});
 
     #
     # Ok.  Now figure out any changes to the 'docker create ...' command
@@ -4166,9 +4509,9 @@ sub setupImage($$$$$$$$$)
     if (((!exists($vnattrs{DOCKER_INIT}) && 0)
 	 || (exists($vnattrs{DOCKER_INIT})
 	     && $vnattrs{DOCKER_INIT} eq DOCKER_INIT_INSTALLED()))
-	&& exists($iattrs{INITPROG})
-	&& $iattrs{INITPROG} ne '') {
-	$init = $iattrs{INITPROG};
+	&& exists($iattrs->{INITPROG})
+	&& $iattrs->{INITPROG} ne '') {
+	$init = $iattrs->{INITPROG};
     }
     elsif (exists($vnattrs{DOCKER_INIT})
 	   && $vnattrs{DOCKER_INIT} eq DOCKER_INIT_RUNIT()) {
@@ -4185,42 +4528,65 @@ sub setupImage($$$$$$$$$)
     #
     # Now look for init-related docker create args and cmd.  At this
     # point, we know which init we are going to run, so we look only for
-    # that one.
+    # that one.  NB: each file must be a JSON dict of args to the
+    # /containers/create Docker Engine API call.
     #
-    my $initargs = '';
-    my $initcmd = '';
+    my %initargs = ();
+    my %initcmd = ();
     $cwd = getcwd();
     chdir($DOCKERFILES);
+    TBDebugTimeStamp("entering dir $DOCKERFILES");
     for my $t ($mintag,$tag,$dist) {
+	next
+	    if (!defined($t));
+
 	my $found = 0;
+	TBDebugTimeStamp("looking for $t/Dockercmd-$init");
 	if (-f "$t/Dockercmd-$init") {
+	    TBDebugTimeStamp("found $t/Dockercmd-$init");
 	    open(FD,"$t/Dockercmd-$init")
 		or fatal("could not open $t/Dockercmd-$init");
 	    my @lines = <FD>;
 	    close(FD);
-	    foreach my $line (@lines) {
-		next
-		    if ($line =~ /^\s*#/);
-		chomp($line);
-		$initcmd .= " $line";
+	    my $jref;
+	    eval {
+		$jref = decode_json(join('',@lines));
+		require Hash::Merge;
+		%initcmd = %{Hash::Merge::merge(\%initcmd,$jref)};
+		if ($debug) {
+		    print STDERR "DEBUG: merged initcmd = ".Dumper(%initcmd)."\n";
+		}
+	    };
+	    if ($@) {
+		print STDERR "ERROR: invalid JSON in $t/Dockercmd-$init: $@\n";
+		goto badimage;
 	    }
 	    $found = 1;
 	}
+	TBDebugTimeStamp("looking for $t/Dockerargs-$init");
 	if (-f "$t/Dockerargs-$init") {
+	    TBDebugTimeStamp("found $t/Dockerargs-$init");
 	    open(FD,"$t/Dockerargs-$init")
 		or fatal("could not open $t/Dockerargs-$init");
 	    my @lines = <FD>;
 	    close(FD);
-	    foreach my $line (@lines) {
-		next
-		    if ($line =~ /^\s*#/);
-		chomp($line);
-		$initargs .= " $line";
+	    my $jref;
+	    eval {
+		$jref = decode_json(join('',@lines));
+		require Hash::Merge;
+		%initargs = %{Hash::Merge::merge(\%initargs,$jref)};
+		if ($debug) {
+		    print STDERR "DEBUG: merged initargs = ".Dumper(%initargs)."\n";
+		}
+	    };
+	    if ($@) {
+		print STDERR "ERROR: invalid JSON in $t/Dockerargs-$init: $@\n";
+		goto badimage;
 	    }
 	    $found = 1;
 	}
     }
-    if ($initcmd eq '') {
+    if (keys(%initcmd) == 0) {
 	chdir($cwd);
 	warn("could not assemble init command; bug!");
 	goto badimage;
@@ -4228,13 +4594,12 @@ sub setupImage($$$$$$$$$)
     chdir($cwd);
 
     $$newimageref = $newimage;
-    $$newcreateargsref = $initargs;
-    $$newcmdref = $initcmd;
+    $$newcreateargsref = \%initargs;
+    $$newcmdref = \%initcmd;
 
     return 0;
 
   badimage:
-    TBScriptUnlock();
     return -1;
 }
 
@@ -4253,13 +4618,17 @@ sub setupImage($$$$$$$$$)
 sub bindNetNS($$)
 {
     my ($vnode_id,$private) = @_;
+    my ($code,$content);
+    my $cpid;
 
     # First get the container pid:
-    my $cpid = `docker inspect -f '{{.State.Pid}}' $vnode_id`;
-    if ($?) {
-	warn("could not find init pid of container $vnode_id; aborting!\n");
+    ($code,$content) = getClient()->container_state($vnode_id);
+    if ($code) {
+	warn("could not find init pid of container $vnode_id; aborting".
+	     " ($content ($code))\n");
 	return -1;
     }
+    $cpid = $content->{"Pid"};
     chomp($cpid);
 
     # Check to see if a stale mount exists for this container;
@@ -4285,11 +4654,13 @@ sub bindNetNS($$)
     # Grab the container pid; we need a pid to find the file
     # representing the netns (which in docker/libcontainer world is only
     # /proc/<PID>/ns/net):
-    $cpid = `docker inspect -f '{{.State.Pid}}' $vnode_id`;
-    if ($?) {
-	warn("could not find init pid of container $vnode_id; aborting!\n");
+    ($code,$content) = getClient()->container_state($vnode_id);
+    if ($code) {
+	warn("could not find init pid of container $vnode_id; aborting".
+	     " ($content ($code))\n");
 	return -1;
     }
+    $cpid = $content->{"Pid"};
     chomp($cpid);
 
     # Now do the bind mount:

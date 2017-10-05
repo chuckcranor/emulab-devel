@@ -1,1 +1,3 @@
-/sbin/init-systemd.sh
+{
+    "Cmd": [ "/sbin/init-systemd.sh" ]
+}

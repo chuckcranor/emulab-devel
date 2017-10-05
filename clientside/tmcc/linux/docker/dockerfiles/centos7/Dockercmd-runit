@@ -1,1 +1,3 @@
-/sbin/init-runit.sh
+{
+    "Cmd": [ "/sbin/init-runit.sh" ]
+}
