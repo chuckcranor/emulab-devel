@@ -1966,12 +1966,12 @@ sub rootPreConfigNetwork($$$$)
 	    # Temporary, to get existing devices after upgrade.
 	    #mysystem2("$ETHTOOL -K $vdev tso off gso off");
 
+	    $physdev =  $vdev;
+	    $brname  = $prefix . $vdev;
+
 	    # We save this so we can garbage-collect it in vnodeDestroy.
 	    # But we don't remove it here if there's a failure.
 	    $private->{'vlandevs'}->{$brname} = $vdev;
-
-	    $physdev =  $vdev;
-	    $brname  = $prefix . $vdev;
 	    $brs{$brname}{ENCAP} = 1;
 	    $brs{$brname}{SHORT} = 0;
 	    $brs{$brname}{PHYSDEV} = $vdev;
