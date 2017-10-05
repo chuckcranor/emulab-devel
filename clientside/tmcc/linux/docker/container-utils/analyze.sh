@@ -260,6 +260,7 @@ if [ -f /etc/emulab/version ]; then
     EMULABIZATION=`cat /etc/emulab/version`
 fi
 
+echo "# Result variables:"
 echo "TAG=$tag"
 echo "MINTAG=$mintag"
 echo "DIST=$dist"
