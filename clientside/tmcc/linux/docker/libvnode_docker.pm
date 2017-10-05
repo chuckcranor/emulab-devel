@@ -1645,8 +1645,8 @@ sub rootPreConfig($)
 	    }
 	    $tps = $thinpoolsize - $tpms;
 	    # XXX: --wipesignatures y ?
-	    mysystem("lvcreate -n thinpool $VGNAME -L $tps");
-	    mysystem("lvcreate -n thinpoolmeta $VGNAME -L $tpms");
+	    mysystem("lvcreate -n thinpool $VGNAME -L ${tps}G");
+	    mysystem("lvcreate -n thinpoolmeta $VGNAME -L ${tpms}G");
 	    mysystem("lvconvert -y --zero n -c 512K".
 		     " --thinpool $VGNAME/thinpool".
 		     " --poolmetadata $VGNAME/thinpoolmeta");
