@@ -160,7 +160,7 @@ sub _handle_response($$) {
 		$content = $content->{"message"};
 	    }
 	}
-	$self->dprint(5,"response decoded content = ".Dumper($content)."\n");
+	$self->dprint(6,"response decoded content = ".Dumper($content)."\n");
     }
     if ($success) {
 	return (0,$content,$resp);
@@ -669,9 +669,13 @@ sub image_pull($$;$$) {
 	    $registry = "$1$2";
 	}
 	my $auth = encode_base64url(
-	    '{"username":"'.$user.'","password":"'.$pass.'"}'."");
+	    '{"serveraddress":"$registry","username":"'.$user.'","password":"'.$pass.'"}'."");
 	chomp($auth);
 	$auth =~ tr/\r\n//;
+	my $pc = (3 - (length($auth) % 3));
+	if ($pc) {
+	    $auth .= '=' x $pc;
+	}
 	$headers->header('X-Registry-Auth' => $auth);
     }
     my $uimage = uri_escape($image);
@@ -681,14 +685,15 @@ sub image_pull($$;$$) {
 
 $METHODS{'image_push'} = {
     'required' => ['image'],
-    'optional' => ['user','pass'],
+    'optional' => ['tag','user','pass'],
     'help' => "Push the given image",
     'phelp' => { 'id' => "The full image name or id",
+		 'tag' => "The image tag to push",
 		 'user' => "The username to authenticate to the registry",
 		 'pass' => "The password to authenticate to the registry" }
 };
-sub image_push($$;$$) {
-    my ($self,$image,$user,$pass) = @_;
+sub image_push($$;$$$$) {
+    my ($self,$image,$tag,$user,$pass,$callback) = @_;
 
     my $headers = HTTP::Headers->new();
     if (defined($user) && $user ne "") {
@@ -699,14 +704,22 @@ sub image_push($$;$$) {
 	    $registry = "$1$2";
 	}
 	my $auth = encode_base64url(
-	    '{"username":"'.$user.'","password":"'.$pass.'"}'."");
+	    '{"serveraddress":"$registry","username":"'.$user.'","password":"'.$pass.'"}'."");
 	chomp($auth);
 	$auth =~ tr/\r\n//;
+	my $pc = (3 - (length($auth) % 3));
+	if ($pc) {
+	    $auth .= '=' x $pc;
+	}
 	$headers->header('X-Registry-Auth' => $auth);
     }
     my $uimage = uri_escape($image);
+    my $uri = "/images/$uimage/push";
+    if (defined($tag) and $tag ne '') {
+	$uri .= "?tag=$tag";
+    }
 
-    return $self->_post("/images/$uimage/push",$headers);
+    return $self->_post($uri,$headers,undef,$callback);
 }
 
 $METHODS{'image_build_from_tar_bytes'} = {

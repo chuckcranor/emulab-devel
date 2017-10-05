@@ -1,4 +1,4 @@
-#!/usr/bin/perl -w
+#!/usr/bin/perl
 #
 # Copyright (c) 2017 University of Utah and the Flux Group.
 # 
@@ -24,6 +24,7 @@
 use English;
 use Getopt::Std;
 use strict;
+use warnings;
 
 # Drag in path stuff so we can find emulab stuff.
 BEGIN { require "/etc/emulab/paths.pm"; import emulabpaths; }
@@ -60,6 +61,7 @@ use libgenvnode;
 #use libvnode;
 use libutil;
 use dockerclient;
+use JSON::PP;
 
 #
 # No configure vars.
@@ -123,6 +125,9 @@ my $client;
 if (!$usecli) {
     $client = dockerclient->new();
     $client->debug($debug);
+}
+if ($debug) {
+    TBDebugTimeStampsOn();
 }
 
 #
@@ -188,7 +193,7 @@ if ($usecli) {
 }
 else {
     my ($code,$content,$resp) = $client->container_commit(
-	$vnodeid,$fullimagename,$user,$pass);
+	$vnodeid,"$registry/$repo",$tag);
     $? = $code;
 }
 if ($?) {
@@ -204,7 +209,7 @@ if ($initstatus ne VNODE_STATUS_STOPPED()) {
     }
     else {
 	my ($code,$content,$resp) = $client->container_start($vnodeid);
-	$? = code;
+	$? = $code;
     }
     if ($?) {
 	print STDERR "WARNING: error restarting container $vnodeid; ignoring!\n";
@@ -222,7 +227,26 @@ while ($i > 0) {
 	system("docker push $fullimagename");
     }
     else {
-	my ($code,$content,$resp) = $client->image_push($fullimagename);
+	my ($code,$content,$resp) = $client->image_push(
+	    $fullimagename,undef,$user,$pass,
+	    sub {
+		eval {
+		    my $json = decode_json($_[0]);
+		    if (exists($json->{"id"})) {
+			print $json->{"id"}.": ".$json->{"status"};
+			if (exists($json->{"progress"})) {
+			    print " ".$json->{"progress"};
+			}
+			print "\n";
+		    }
+		    elsif (exists($json->{"status"})) {
+			print $json->{"status"}."\n";
+		    }
+		};
+		if ($@) {
+		    print $_[0];
+		}
+	    });
 	$? = $code;
     }
     if ($? == 0) {
