@@ -309,8 +309,7 @@ REQUIRE_EXTEND();
 REQUIRE_IDLEGRAPHS();
 REQUIRE_OPENSTACKGRAPHS();
 REQUIRE_CONTEXTMENU();
-SPITREQUIRE("js/status.js",
-            "<script src='js/lib/jquery-bootstrap-modal-steps.js'></script>\n");
+SPITREQUIRE("js/status.js");
 
 echo "<link rel='stylesheet'
             href='css/jquery-ui-1.10.4.custom.min.css'>\n";
