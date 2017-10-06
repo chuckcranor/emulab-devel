@@ -2959,6 +2959,14 @@ sub CreateImageDir($)
     if ($self->IsSystemImage()) {
 	return -1
 	    if ($self->CreateDirectory($self->SaveDir()));
+
+	# If we are not setuid, this will just fail. 
+	my $SAVEUID = $EUID;
+	$EUID = 0;
+	my $rval = $self->CreateDirectory($self->path());
+	$EUID = $SAVEUID;
+	return -1
+	    if ($rval);
     }
     else {
 	return -1
