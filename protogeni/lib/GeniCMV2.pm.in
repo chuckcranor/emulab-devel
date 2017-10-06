@@ -75,6 +75,7 @@ use List::Util qw(shuffle);
 # Configure variables
 my $TB		   = "@prefix@";
 my $TBOPS          = "@TBOPSEMAIL@";
+my $TBLOGS         = "@TBLOGSEMAIL@";
 my $TBAPPROVAL     = "@TBAPPROVALEMAIL@";
 my $TBAUDIT   	   = "@TBAUDITEMAIL@";
 my $BOSSNODE       = "@BOSSNODE@";
@@ -3559,7 +3560,7 @@ sub CreateImage($)
 			     "-----------------------------------------\n".
 			     "$output\n",
 			     $user->email(),
-			     "Bcc: $TBOPS");
+			     "Bcc: $TBLOGS");
     }
     return 0;
   bad:
