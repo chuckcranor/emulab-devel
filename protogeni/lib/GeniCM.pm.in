@@ -4711,6 +4711,8 @@ sub SliverWorkAux($$$$$$$$)
 	    my $iface_name = $ifacemap{$node_id}->{$iface_id};
 	    if (!defined($iface_name)) {
 		$message = "Inconsistent ifacemap; $node_id,$iface_id";
+		$response = GeniResponse->Create(GENIRESPONSE_BADARGS,
+						 undef, $message);
 		goto bad;
 	    }
 	    if (GeniHRN::IsValid($iface_name)) {
