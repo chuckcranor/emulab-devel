@@ -43,6 +43,7 @@ use libdb;
 use libtestbed;
 use Experiment;
 use EmulabFeatures;
+use EmulabConstants;
 use English;
 use Getopt::Std;
 use Sys::Syslog;
@@ -513,6 +514,12 @@ sub SendMessage {
 	if (EmulabFeatures->FeatureEnabled("ExternalNodeManagement",
 					   undef, undef, $experiment)) {
 	    Notify("NOT sending idle notification to externally managed ".
+		   "experiment $pid/$eid.\n");
+	    return;
+	}
+	# Do not bother with emulab-ops ...
+	if ($pid eq TBOPSPID()) {
+	    Notify("NOT sending idle notification to system ".
 		   "experiment $pid/$eid.\n");
 	    return;
 	}
