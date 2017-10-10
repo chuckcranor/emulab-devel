@@ -409,6 +409,7 @@ sub Refresh($)
 sub Create($$$)
 {
     my ($class, $node, $argref) = @_;
+    my ($card,$port);
 
     return undef
 	if (! (ref($node) && ref($argref)));
@@ -419,8 +420,14 @@ sub Create($$$)
 	return undef;
     }
     if (exists($argref->{'card'})) {
-	print STDERR "*** Interface->Create(): ignoring card/port, these ".
-	    "are now set with the wire.\n";
+	if (!DBSlotExists("interfaces", "card")) {
+	    print STDERR "*** Interface->Create(): ignoring card/port, these ".
+		"are now set with the wire.\n";
+	}
+	else {
+	    $card = $argref->{'card'};
+	    $port = $argref->{'port'};
+	}
     }
 
     my $node_id = $node->node_id();
@@ -525,6 +532,7 @@ sub Create($$$)
     if (!DBQueryWarn("insert into interfaces set ".
 		"  node_id='$node_id', logical='$logical', " .
 		"  role='$ifrole', ".
+	        (defined($card) ? "  card=$card, port=$port, " : "") .
 		"  mac='$MAC', IP='$IP', autocreated='$auto', " .
 		(defined($mask) ? "mask='$mask', " : "") .
 		($trunk ? "trunk='1', " : "") .
@@ -537,6 +545,7 @@ sub Create($$$)
 
     if (!DBQueryWarn("insert into interface_state set ".
 		     "  node_id='$node_id', " .
+		     (defined($card) ? "  card=$card, port=$port, " : "") .
 		     ($trunk ? "remaining_bandwidth='$max_speed', " : "") .
 		     "  iface='$iface'")) {
 	DBQueryWarn("delete from interfaces ".
