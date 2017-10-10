@@ -186,7 +186,11 @@ $(function ()
 					 .change(function() {
 					     DoLockdown("admin",
 							$(this).is(":checked"));
-				     });
+					 });
+				     $('#quarantine-checkbox')
+					 .change(function() {
+					     DoQuarantine($(this).is(":checked"));
+					 });
 				     // This activates the popover subsystem.
 				     $('[data-toggle="popover"]').popover({
 					 trigger: 'hover',
@@ -281,11 +285,25 @@ $(function ()
 	var action = (lockdown ? "set" : "clear");
 	
 	var callback = function(json) {
-	    sup.HideModal("#waitwait-modal");
 	    if (json.code) {
-		alert("Failed to change lockdown: " + json.value);
+		sup.HideModal("#waitwait-modal", function () {
+		    sup.SpitOops("oops",
+				 "Lockdown failed: " + json.value);
+
+		    if (lockdown) {
+			// Flip the checkbox back.
+			$('#' + which + '-lockdown-checkbox')
+			    .prop("checked", false);
+		    }
+		    else {
+			// Flip the checkbox back.
+			$('#' + which + '-lockdown-checkbox')
+			    .prop("checked", true);
+		    }
+		});
 		return;
 	    }
+	    sup.HideModal("#waitwait-modal");
 	    if (which == "admin") {
 		if (lockdown) {
 		    $('#terminate-button').attr("disabled", "disabled");
@@ -300,6 +318,41 @@ $(function ()
 					    {"uuid"   : window.UUID,
 					     "which"  : which,
 					     "action" : action});
+	xmlthing.done(callback);
+    }
+
+    //
+    // Request panic mode set/clear.
+    //
+    function DoQuarantine(mode)
+    {
+	mode = (mode ? 1 : 0);
+	
+	var callback = function(json) {
+	    if (json.code) {
+		sup.HideModal('#waitwait-modal', function () {
+		    sup.SpitOops("oops",
+				 "Failed to change Quarantine mode: " +
+				 json.value);
+		    if (mode) {
+			// Flip the checkbox back.
+			$('#quarantine-checkbox')
+			    .prop("checked", false);
+		    }
+		    else {
+			// Flip the checkbox back.
+			$('#quarantine-checkbox')
+			    .prop("checked", true);
+		    }
+		});
+		return;
+	    }
+	    sup.HideModal('#waitwait-modal');
+	}
+	sup.ShowModal('#waitwait-modal');
+	var xmlthing = sup.CallServerMethod(ajaxurl, "status", "Quarantine",
+					     {"uuid" : uuid,
+					      "quarantine" : mode});
 	xmlthing.done(callback);
     }
 

@@ -3179,6 +3179,8 @@ sub DoLockdownInternal($$)
 
 sub DoLockdown()
 {
+    my $errmsg;
+    
     usage()
 	if (@ARGV != 2);
     
@@ -3195,7 +3197,8 @@ sub DoLockdown()
 	fatal("No slice for instance");
     }
     if ($slice->Lock()) {
-	fatal("Experiment is busy, cannot lock it. Please try again later");
+	$errmsg = "Experiment is busy, cannot lock it. Please try again later";
+	goto bad;
     }
     if (DoLockdownInternal($setclr, $which)) {
 	$slice->UnLock();
@@ -3203,11 +3206,21 @@ sub DoLockdown()
     }
     $slice->UnLock();
     exit(0);
+    
+  bad:
+    $slice->UnLock();
+    print STDERR $errmsg . "\n";
+    if (defined($webtask)) {
+	$webtask->output($errmsg);
+	$webtask->Exited(1);
+    }
+    exit(1);
 }
 
 sub DoPanic()
 {
-    my $emsg;
+    my $errmsg;
+    my $errcode = -1;
     
     usage()
 	if (@ARGV != 1);
@@ -3221,7 +3234,9 @@ sub DoPanic()
 	fatal("No slice for instance");
     }
     if ($slice->Lock()) {
-	fatal("Experiment is busy, cannot lock it. Please try again later");
+	$errmsg = "Experiment is busy, cannot lock it. Please try again later";
+	$errcode = 1;
+	goto bad;
     }
     #
     # And tell the backend clusters to Panic the slice.
@@ -3247,7 +3262,7 @@ sub DoPanic()
     if (ParRun({"maxwaittime" => 99999,
 		"maxchildren" => scalar(@agglist)},
 	       \@return_codes, $coderef, @agglist)) {
-	$emsg = "Internal error calling Panic()";
+	$errmsg = "Internal error calling Panic()";
 	goto bad;
     }
     #
@@ -3255,20 +3270,26 @@ sub DoPanic()
     #
     foreach my $code (@return_codes) {
 	if ($code) {
-	    print STDERR "Some slivers could not be paniced";
+	    $errmsg = "Some slivers could not be paniced";
 	    goto bad;
 	}
     }
     if ($instance->SetPanic(($setclr eq "clear" ? 1 : 0))) {
-	$emsg  = "Could not update instance panic flag";
+	$errmsg  = "Could not update instance panic flag";
 	goto bad;
     }
     StartMonitorInternal();
     $slice->UnLock();
     exit(0);
+
   bad:
     $slice->UnLock();
-    exit(-1);
+    print STDERR $errmsg . "\n";
+    if (defined($webtask)) {
+	$webtask->output($errmsg);
+	$webtask->Exited($errcode);
+    }
+    exit($errcode);
 }
 
 #
