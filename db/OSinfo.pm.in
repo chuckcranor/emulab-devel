@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2007-2016 University of Utah and the Flux Group.
+# Copyright (c) 2007-2017 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -60,7 +60,8 @@ my %FEATURES	= ( "ping"	 => 1,
 		    "mlinks"	 => 0,
 		    "linktest"	 => 1,
 		    "linkdelays" => 0,
-		    "suboses"  => 0 );
+		    "xen-host"   => 0,
+		    "suboses"    => 0 );
 
 # Valid OS names. Mirrored in the web interface. The value is a user-okay flag.
 my %OSLIST	= ( "Linux"	 => 1,
