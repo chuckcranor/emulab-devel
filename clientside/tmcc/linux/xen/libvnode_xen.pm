@@ -346,11 +346,7 @@ my %xeninfo = ();
 
 # Local functions
 sub findRoot();
-sub copyRoot($$);
-sub createRootDisk($);
 sub createAuxDisk($$);
-sub replace_hacks($);
-sub disk_hacks($);
 sub configFile($);
 sub domain0Memory();
 sub totalMemory();
@@ -1132,60 +1128,12 @@ sub vnodeCreate($$$$)
 
     #
     # No image specified, use a default based on the dom0 OS.
+    # XXX this option no longer works, you must specify an OSID.
     #
     if (!defined($imagename)) {
-	$lvname = $image{'name'};
-	
-	#
-	# Setup the default image now.
-	# XXX right now this is a hack where we just copy the dom0
-	# filesystem and clone (snapshot) that.
-	#
-	$imagename = $defaultImage{'name'};
-	print STDERR "xen_vnodeCreate: ".
-	    "no image specified, using default ('$imagename')\n";
-
-	# Okay to fail if image does not exist yet.
-	LoadImageMetadata($imagename, \$imagemetadata);
-
-	$lvname = ImageLVName($imagename);
-	if (!lvmFindVolume($lvname) && !defined($imagemetadata)) {
-	    
-	    #
-	    # Need an exclusive lock for this.
-	    #
-	    TBDebugTimeStamp("  releasing image lock")
-		if ($lockdebug);
-	    TBScriptUnlock();	    
-	    TBDebugTimeStamp("grabbing image lock $imagelockname exclusive")
-		if ($lockdebug);
-	    if (TBScriptLock($imagelockname, TBSCRIPTLOCK_INTERRUPTIBLE(),
-			     $MAXIMAGEWAIT) != TBSCRIPTLOCK_OKAY()) {
-		fatal("Could not get $imagelockname write lock!");
-	    }
-	    TBDebugTimeStamp("  got image lock")
-		if ($lockdebug);
-	    # And now check again in case someone else snuck in.
-	    if (!lvmFindVolume($lvname) && createRootDisk($imagename)) {
-		TBScriptUnlock();
-		fatal("xen_vnodeCreate: ".
-		      "cannot find create root disk for default image");
-	    }
-	    # And back to a shared lock.
-	    TBDebugTimeStamp("  releasing image lock")
-		if ($lockdebug);
-	    TBScriptUnlock();
-	    TBDebugTimeStamp("grabbing image lock $imagelockname shared")
-		if ($lockdebug);
-	    if (TBScriptLock($imagelockname,
-			     TBSCRIPTLOCK_INTERRUPTIBLE()|
-			     TBSCRIPTLOCK_SHAREDLOCK(), $MAXIMAGEWAIT)
-		!= TBSCRIPTLOCK_OKAY()) {
-		fatal("Could not get $imagelockname lock back ".
-		      "after a long time!");
-	    }
-	    $imagemetadata = undef;
-	}
+	fatal("xen_vnodeCreate: ".
+	      "no longer support default image for vnodes, ".
+	      "must specify an OSID");
     }
     elsif (!defined($raref)) {
 	#
@@ -2643,7 +2591,7 @@ sub vnodeConfigResources($$$$){
 	$memory = $attributes->{'VM_MEMSIZE'};
     }
     else  {
-	$memory = 128;
+	$memory = 256;
     }
     addConfig($private, "memory = $memory", 1);
     return 0;
@@ -3213,100 +3161,6 @@ sub findRoot()
 	return $dev;
     }
     die "libvnode_xen: cannot determine root filesystem";
-}
-
-sub copyRoot($$)
-{
-    my ($from, $to) = @_;
-    my $disk_path = "/mnt/xen/disk";
-    my $root_path = "/mnt/xen/root";
-    print "Mount root\n";
-    mkpath(['/mnt/xen/root']);
-    mkpath(['/mnt/xen/disk']);
-    # This is a nice way to avoid traversing NFS filesystems. 
-    mysystem("mount $from $root_path");
-    mysystem("mount -o async $to $disk_path");
-    mkpath([map{"$disk_path/$_"} qw(proc sys home tmp)]);
-    print "Copying files\n";
-    system("nice cp -a $root_path/* $disk_path");
-
-    # hacks to make things work!
-    disk_hacks($disk_path);
-
-    mysystem("umount $root_path");
-    mysystem("umount $disk_path");
-}
-
-#
-# Create the root "disk" (logical volume)
-# XXX this is a temp hack til all vnode creations have an explicit image.
-#
-sub createRootDisk($)
-{
-    my ($lv) = @_;
-    my $lvname = ImageLVName($lv);
-    my $full_path = lvmVolumePath($lvname);
-    my $mountpoint= "/mnt/$lv";
-
-    #
-    # We only want to do this once. Lets wrap in an eval since
-    # there are so many ways this will die.
-    #
-    eval {
-	if (lvmCreateVolume("rootdisk", "${XEN_LDSIZE}k",
-			    ALLOC_PREFERNOPOOL())) {
-	    exit(1);
-	}
-	my $vndisk = lvmVolumePath("rootdisk");
-	
-	#
-	# Put an MBR in so that it is exactly the correct size.
-	#
-	my $sectors = $XEN_LDSIZE * 2;
-	mysystem("echo '0,$sectors,L' | sfdisk --force -u S $vndisk -N0");
-
-	# Need the device special file.
-	RunWithLock("kpartx", "kpartx -av $vndisk");
-
-	my $dev = "$VGNAME/rootdisk1";
-	$dev =~ s/\-/\-\-/g;
-	$dev =~ s/\//\-/g;
-	$dev = "/dev/mapper/$dev";
-
-	mysystem("mke2fs -j -q $dev");
-	
-	copyRoot(findRoot(), $dev);
-
-	#
-	# Now imagezip it for space/time efficiency later.
-	#
-	mysystem("nice $IMAGEZIP -o -l -s 1 $dev $EXTRAFS/rootdisk.ndz");
-
-	#
-	# Now kill off the lvm and create one for the compressed version.
-	# Need to know the number of CHUNKS for later.
-	#
-	if (lvmDestroyVolume("rootdisk", 1)) {
-	    fatal("Could not remove rootdisk");
-	}
-
-	my (undef,undef,undef,undef,undef,undef,undef,$lvsize) =
-	    stat("$EXTRAFS/rootdisk.ndz");
-
-	my $chunks = $lvsize / (1024 * 1024);
-	$defaultImage{'IMAGECHUNKS'} = $chunks;
-	$defaultImage{'LVSIZE'}      = $XEN_LDSIZE;
-
-	# Mark as being inside an FS.
-	$defaultImage{'FROMFILE'} = "$EXTRAFS/rootdisk.ndz";
-
-	# This was modified, so save out for next time. 
-	StoreImageMetadata($lv, \%defaultImage)
-    };
-    if ($@) {
-	fatal("$@");
-    }
-    return 0;
 }
 
 #
@@ -4046,84 +3900,6 @@ sub downloadOneImage($$$)
   bad:
     TBScriptUnlock();
     return -1;
-}
-
-sub replace_hack($)
-{
-    my ($q) = @_;
-    if ($q =~ m/(.*)/){
-        return $1;
-    }
-    return "";
-}
-
-sub disk_hacks($)
-{
-    my ($path) = @_;
-    # erase cache from LABEL to devices
-    my @files = <$path/etc/blkid/*>;
-    unlink map{&replace_hack($_)} (grep{m/(.*blkid.*)/} @files);
-
-    rmtree(["$path/var/emulab/boot/tmcc"]);
-
-    # Run prepare inside to clean up.
-    system("/usr/sbin/chroot $path /usr/local/etc/emulab/prepare -N");
-
-    # Fix of grub to boot non-xen env.
-    system("sed -i.bak -e 's/default=.*/default=0/' $path/boot/grub/grub.cfg");
-
-    # don't try to recursively boot vnodes!
-    unlink("$path/usr/local/etc/emulab/bootvnodes");
-
-    # don't set up the xen bridge on guests
-    system("sed -i.bak -e '/xenbridge-setup/d' $path/etc/network/interfaces");
-
-    # don't start dhcpd in the VM
-    unlink("$path/etc/dhcpd.conf");
-    unlink("$path/etc/dhcp/dhcpd.conf");
-
-    # No xen daemons
-    unlink("$path/etc/init.d/xend");
-    unlink("$path/etc/init.d/xendomains");
-
-    # Remove mtab just in case
-    unlink("$path/etc/mtab");
-
-    # Remove dhcp client state
-    unlink("$path/var/lib/dhcp/dhclient.leases");
-
-    # Clear out the cached control net interface name
-    unlink("$path/var/run/cnet");
-
-    # Get rid of pam nonsense.
-    system("sed -i.bak -e 's/UsePAM yes/UsePAM no/'".
-	   "   $path/etc/ssh/sshd_config");
-
-    # remove swap partitions from fstab
-    system("sed -i.bak -e '/swap/d' $path/etc/fstab");
-
-    # remove scratch partitions from fstab
-    system("sed -i.bak -e '/scratch/d' $path/etc/fstab");
-    system("sed -i.bak -e '${EXTRAFS}/d' $path/etc/fstab");
-    system("sed -i.bak -e '${METAFS}/d' $path/etc/fstab");
-    system("sed -i.bak -e '${INFOFS}/d' $path/etc/fstab");
-
-    # fixup fstab: change UUID=blah to LABEL=/
-    system("sed -i.bak -e 's/UUID=[0-9a-f-]*/LABEL=\\//' $path/etc/fstab");
-
-    # enable the correct device for console
-    if (-f "$path/etc/inittab") {
-	    system("sed -i.bak -e 's/xvc0/console/' $path/etc/inittab");
-    }
-
-    if (-f "$path/etc/init/ttyS0.conf") {
-	    system("sed -i.bak -e 's/ttyS./hvc0/' $path/etc/init/ttyS0.conf");
-    }
-
-    if (-e "$BINDIR/tmcc-nossl.bin") {
-	system("/bin/cp -f $BINDIR/tmcc-nossl.bin $path/$BINDIR/tmcc.bin");
-    }
-    system("/bin/rm -rf $path/var/emulab/vms");
 }
 
 sub configFile($)
