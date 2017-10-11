@@ -1213,6 +1213,20 @@ class User
 					   
 	return mysql_num_rows($query_result);
     }
+    #
+    # Generate an encrypted certificate using existing passphrase or
+    # randomized one.
+    #
+    function GenEncryptedCert() {
+        $project = $this->FirstApprovedProject();
+        $pid = (isset($project) ? $project->pid() : "nobody");
+        $uid = $this->uid();
+        
+        SUEXEC($uid, $pid,
+               "webmkusercert -r -P -G $uid",
+               SUEXEC_ACTION_CONTINUE);
+    }
+    
     function SetGaUserid($id) {
 	$idx = $this->uid_idx();
 

@@ -330,6 +330,15 @@ if ($login_status == $STATUS_LOGINFAIL) {
     SPITFORM($uid, $referrer, "failed");
     return;
 }
+#
+# Watch for a classic user logging in but without an encrypted certificate.
+# We really want to generate one so stuff does not break.
+#
+if ($CHECKLOGIN_USER->IsActive() && $CHECKLOGIN_USER->isClassic() &&
+    !$CHECKLOGIN_USER->HasEncryptedCert(1)) {
+    $CHECKLOGIN_USER->GenEncryptedCert();
+}
+
 if ($ajax_request) {
     SPITAJAX_RESPONSE("login sucessful");
     exit();
