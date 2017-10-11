@@ -1309,7 +1309,7 @@ dolinux() {
 	    # fix up any terminal_{input,output} lines (for grub2).
 	    #
 	    # For sio[1-3], add:
-	    #   serial --unit=N --speed=S
+	    #   serial --unit=N --port=P --speed=S
 	    #   terminal --dumb --timeout=0 serial console # grub1
 	    #   terminal_input serial			   # grub2
 	    #   terminal_output serial			   # grub2
@@ -1378,12 +1378,8 @@ dolinux() {
 	    sio*)
 		u=`expr ${CONSOLE#sio} - 1`
 		s=$SPEED
+		pstr="--port=$PORT"
 
-		# XXX we only put in the --port=NNN option if this is grub2
-		if grep -q '^terminal_input' $tgconf 2>/dev/null; then
-		    pstr="--port=$PORT"
-		fi
-		
 		# put back the "serial" line
 		sstr="serial --unit=$u $pstr --speed=$s"
 		if ! grep -q -- "^$sstr" $tgconf 2>/dev/null; then
