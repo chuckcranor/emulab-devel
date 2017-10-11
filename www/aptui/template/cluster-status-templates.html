@@ -45,7 +45,7 @@
 	  <td><%- value.free %>
 	    <% if (_.has(value, "free_reserved") &&
 	           value.free > value.free_reserved) {%>
-	      (<%- value.free_reserved %>)
+	      (<%- Math.round(Number(value.free_reserved)) %>)
             <% } %>
 	  </td>
 	</tr>
