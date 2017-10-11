@@ -364,6 +364,14 @@ sub GenerateNodeStatements($)
 	}
 	
 	#
+	# Node Attributes.
+	#
+	foreach my $key (sort(keys(%{ $node->attributes() }))) {
+	    my $value = $node->attributes()->{$key};
+	    $node->addTagStatement("Attribute('$key','$value')");
+	}
+	
+	#
 	# Interfaces.
 	#
 	foreach my $iface (@{$node->ifacelist()}) {

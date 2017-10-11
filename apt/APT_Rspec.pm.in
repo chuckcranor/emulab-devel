@@ -835,6 +835,7 @@ sub new($$$$$)
 	"services"		=> [],
 	"statements"		=> [],
 	"desires"		=> {},
+	"attributes"		=> {},
 	"ifaces"		=> {},
 	"ifacelist"             => [],
 	"blockstores"		=> {},
@@ -858,6 +859,8 @@ sub blockstores($)		{ return $_[0]->{'blockstores'}; }
 sub ifaces($)			{ return $_[0]->{'ifaces'}; }
 sub ifacelist($)		{ return $_[0]->{'ifacelist'}; }
 sub services($)			{ return $_[0]->{'services'}; }
+sub desires($)			{ return $_[0]->{'services'}; }
+sub attributes($)		{ return $_[0]->{'attributes'}; }
 sub pipes($)			{ return $_[0]->{'pipes'}; }
 sub firewall_style($)		{ return $_[0]->{'firewall_style'}; }
 sub firewall_rules($)		{ return $_[0]->{'firewall_rules'}; }
@@ -1220,6 +1223,12 @@ sub addNode($$$)
 		$node->{"desires"}->{$desire} = $weight;
 		last SWITCH;
 	    };
+	    /^node_attribute$/i && do {
+		my $key   = GetTextOrFail("key", $child);
+		my $value = GetTextOrFail("value", $child);
+		$node->{"attributes"}->{$key} = $value;
+		last SWITCH;
+	    };
 	    /^moonshot_chassis$/i && do {
 		# Convert to a desire
 		my $chassis = GetTextOrFail("chassis", $child);
@@ -1295,7 +1304,7 @@ sub Compare($$)
 		# Handled up above in CompareNodes.
 		last SWITCH;
 	    };
-	    /^(xen_settings|desires|pipes|blockstores)$/i && do {
+	    /^(xen_settings|desires|pipes|blockstores|attributes)$/i && do {
 		return 1
 		    if (APT_Rspec::CompareHashes("Node: $client_id: $key",
 						 $val1, $val2));

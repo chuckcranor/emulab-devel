@@ -774,11 +774,31 @@ for child in tree.getroot():
         vname  = row.find("vname").text
         key    = row.find("attrkey").text
         val    = row.find("attrvalue").text
-        raw    = etree.Element("{%s}node_attribute" %
-                               (RSpec.Namespaces.EMULAB.name))
-        raw.attrib["attrkey"]   = key
-        raw.attrib["attrvalue"] = val
-        nodes[vname].addRawElement(raw)
+        node   = nodes[vname]
+
+        #
+        # Many node attributes, we have to translate some, the rest
+        # are passed through.
+        #
+        if key == "routable_control_ip":
+            if val.lower() == "true":
+                node.routable_control_ip = True
+                pass
+        elif ((key == "MEMORY_SIZE" or key == "XEN_MEMSIZE") and
+              node.type == "emulab-xen"):
+            node.ram = int(val) / 1024
+        elif ((key == "XEN_CORES" or key == "VM_CPUS") and
+              node.type == "emulab-xen"):
+            node.cores = int(val)
+        elif key == "XEN_EXTRAFS" and node.type == "emulab-xen":
+            node.disk = int(val)
+        else:
+            raw = etree.Element("{%s}node_attribute" %
+                                (RSpec.Namespaces.EMULAB.name))
+            raw.attrib["key"]   = key
+            raw.attrib["value"] = val
+            node.addRawElement(raw)
+            pass
         pass
     if child.tag == "firewall_rules":
         #
