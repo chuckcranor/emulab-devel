@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2000-2016 University of Utah and the Flux Group.
+# Copyright (c) 2000-2017 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -43,7 +43,7 @@ sub usage()
     print("Usage: mkusercert [-d] [-o] [-r] [-g] [-p password] <user>\n");
     exit(-1);
 }
-my $optlist  = "dp:ogrc:CP";
+my $optlist  = "dp:ogrc:CPG";
 my $debug    = 0;
 my $output   = 0;
 my $password = "";
@@ -191,7 +191,15 @@ if (defined($options{"p"}) || defined($options{"P"})) {
 	$password = $options{"p"};
     }
     elsif ($target_user->SSLPassPhrase(1, \$password)) {
-	fatal("No stored passphrase for -P option");
+	if (defined($options{"G"})) {
+	    $password = substr(TBGenSecretKey(), 0, 12);
+	    if (!defined($password) || $password eq "") {
+		fatal("Could not generate a random passphrase for -P -G");
+	    }
+	}
+	else {
+	    fatal("No stored passphrase for -P option");
+	}
     }
 
     #
@@ -209,6 +217,7 @@ if (defined($options{"p"}) || defined($options{"P"})) {
     $sh_password = "$sh_password";
 }
 
+# This option is for changing the passphrase on existing key.
 # Might need the target user (-C options).
 if (defined($options{"c"}) || defined($options{"C"})) {
     if (defined($options{"c"})) {
