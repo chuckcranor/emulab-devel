@@ -1193,6 +1193,62 @@ sub MaxSliceExtension($$$;$) {
     }
 }
 
+#
+# Attempt to lock down an existing slice.
+#
+# Reservation->Lockdown( $slice, $error, $impotent, $force )
+#
+# $slice must be a reference to a GeniSlice object.
+# $error (if defined) is a reference to a scalar; if defined and lockdown is
+# not possible, a reason will be given here.
+# $impotent (if defined and true) will attempt a hypothetical lockdown and
+# return success or failure, but make no actual change to any state.
+# $force (if defined and true) will turn on lockdown even if it violates
+# admission control constraints.
+sub Lockdown($$;$$$) {
+
+    my ($class, $slice, $error, $impotent, $force) = @_;
+
+    # It's always a successful no-op if already locked down.
+    return 0 if( $slice->lockdown() );
+
+    my $exptidx = $slice->exptidx();
+    my $expt = Experiment->Lookup( $exptidx );
+	
+    my @types = ExptTypes( $exptidx );
+    
+    while( 1 ) {
+	my $version = GetVersion( $class );
+	foreach my $type ( @types ) {
+	    my $reservations = LookupAll( $class, $type );
+	    foreach my $res ( @$reservations ) {
+		if( defined( $res->pid() ) && defined( $res->eid() ) &&
+		    $res->pid() eq $expt->pid() &&
+		    $res->eid() eq $expt->eid() ) {
+		    $res->{'END'} = undef; # lockdowns last forever
+		    last;
+		}
+	    }
+	    if( !$force && !IsFeasible( $class, $reservations, $error ) ) {
+		return -1;
+	    }
+	}
+	return 0
+	    if( $impotent );
+	next if( !defined( BeginTransaction( $class, $version ) ) );
+
+	my $result = $slice->SetLockdown( 0 );
+
+	if( $result < 0 && ref( $error ) ) {
+	    $$error = "Couldn't update slice lockdown";
+	}
+	
+	EndTransaction( $class );
+	
+	return $result;
+    }    
+}
+
 sub ExpectedEnd($$) {
     
     my ($class, $experiment) = @_;
