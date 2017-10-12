@@ -48,10 +48,16 @@ try:
     from M2Crypto import SSL
     from M2Crypto.SSL import SSLError
     from M2Crypto.SSL import Checker
-    from M2Crypto.SSL import SSLTimeoutError
 except ImportError, e:
     sys.stderr.write("error: The py-m2crypto port is not installed\n")
     sys.exit(1)
+    pass
+try:
+    from M2Crypto.SSL import SSLTimeoutError
+    have_ssl_timeout_error = True
+except:
+    sys.stderr.write("warning: old m2crypto, cannot warn about ssl timeouts")
+    have_ssl_timeout_error = False
     pass
 
 # When debugging, runs in foreground printing to stdout instead of syslog
@@ -599,7 +605,8 @@ class MyServer(SSL.ForkingSSLServer, SimpleXMLRPCDispatcher):
         if client_address is not None:
             caddr = client_address[0]
 
-        if exv is not None and isinstance(exv,SSLTimeoutError):
+        if exv is not None \
+          and have_ssl_timeout_error and isinstance(exv,SSLTimeoutError):
             self.logit("SSLTimeoutError from %s" % (str(caddr)))
         else:
             self.logit(
