@@ -61,6 +61,7 @@ use GeniImage;
 use libtestbed;
 use emutil;
 use EmulabConstants;
+use EmulabFeatures;
 use libEmulab;
 use Lan;
 use User;
@@ -7124,6 +7125,23 @@ sub GeniExperiment($;$)
 			      (defined($creator) ? $creator->urn() : undef),
 			      "protogeni");
     $slice->SetExperiment($experiment);
+
+    #
+    # Check for feature to back off and let something else manage the
+    # nodes in the experiment.  Unconditionally mark the experiment since
+    # this feature is most likely to come from the swapper or project.
+    # Need to do this before nalloc is called by the mapper.
+    #
+    if (EmulabFeatures->FeatureEnabled("ExternalNodeManagement",
+				       $creator,
+				       $experiment->GetGroup(),
+				       $experiment)) {
+	print STDERR "ExternalNodeManagement feature is set".
+	    " for $slice, $experiment";
+	EmulabFeatures->Lookup("ExternalNodeManagement")->
+	    Enable($experiment);
+    }
+
     return $experiment;
 }
 

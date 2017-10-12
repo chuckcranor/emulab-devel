@@ -1541,6 +1541,22 @@ sub Action($$$;$)
     my $eid = $experiment->eid();
 
     #
+    # External node management means that someone else is going to be
+    # answering DHCP after nodes reboot. For nodes in PXEWAIT, we need
+    # to make sure they are really rebooted and not just told to check
+    # in with bootinfo again.
+    #
+    # Note that in this path, raw nodes are always rebooted in realmode
+    # via $NODEREBOOT below, but I leave this in here and force them to
+    # reboot anyway, just so that the feature doesn't get lost accidentally.
+    #
+    my $externalNodeManagement = 0;
+    if (EmulabFeatures->FeatureEnabled("ExternalNodeManagement",
+				       undef, undef, $experiment)) {
+	$externalNodeManagement = 1;
+    }
+
+    #
     # Look for a firewall that needs to be setup first.
     #
     my %firewallinfo = (
@@ -1797,6 +1813,14 @@ sub Action($$$;$)
 		#
 	    }
 	    push(@waitpnodes, $node);
+
+	    #
+	    # If this is an externally-managed experiment, force the
+	    # node to do a real reboot to pick up a new DHCP response.
+	    #
+	    if ($externalNodeManagement) {
+		$reboots{$node->node_id} = $node;
+	    }
 	    
 	    #
 	    # If the node is not imageable, then there is not much to
@@ -1834,13 +1858,20 @@ sub Action($$$;$)
 		print STDERR "  Mapping $osinfo on $node to $tmp\n";
 		$osinfo = $tmp;
 	    }
-	    #
-	    # Make sure this OSID is actually loaded on the machine.
-	    #
-	    my $isloaded = $node->IsOSLoaded($osinfo);
-	    if ($isloaded < 0) {
-		$msg .= "Error determining if $osinfo is loaded on $node";
-		goto bad;
+	    my $isloaded;
+	    if ($osinfo->mfs()) {
+		$isloaded = 1;
+		$reload = 0;
+	    }
+	    else {
+		#
+		# Make sure this OSID is actually loaded on the machine.
+		#
+		$isloaded = $node->IsOSLoaded($osinfo);
+		if ($isloaded < 0) {
+		    $msg .= "Error determining if $osinfo is loaded on $node";
+		    goto bad;
+		}
 	    }
 	    if (!$isloaded || $reload) {
 		print STDERR "  Setting up a reload for $node\n";
@@ -2241,10 +2272,19 @@ sub Action($$$;$)
 	# Mark them as being rebooted. See below.
 	map { $_->_rebooted(1) } values(%reboots);
 
+	my $cmdbits = "";
+	#
+	# If this is an externally-managed experiment, force the
+	# node to do a real reboot to pick up a new DHCP response.
+	#
+	if ($externalNodeManagement) {
+	    $cmdbits = " -b ";
+	}
+
 	#
 	# Should waiting be an option?
 	#
-	system("$NODEREBOOT @node_ids");
+	system("$NODEREBOOT $cmdbits @node_ids");
 	if ($?) {
 	    $msg .= "Failed to reboot @node_ids";
 	    goto bad;
@@ -2269,9 +2309,20 @@ sub Action($$$;$)
     #
     # Worked? Set the new state. Needs more thought ...
     #
+    # (Also handle externally-managed node forced state transition,
+    # since we won't be notified via the normal reboot path.)
+    #
     foreach my $sliver (@slivers) {
-	$sliver->SetState("started")
-	    if (ref($sliver) eq "GeniSliver::Node");
+	if (ref($sliver) eq "GeniSliver::Node") {
+	    $sliver->SetState("started");
+
+	    # XXX: Poke at stated to move along nodes that are going to be
+	    # externally managed.  This feels kind of kludgy.
+	    if ($externalNodeManagement) {
+		my $emnode = Node->Lookup($sliver->resource_id());
+		$emnode->SetEventState(TBDB_NODESTATE_BOOTING());
+	    }
+	}
     }
     my @failed   = ();
     return -1
