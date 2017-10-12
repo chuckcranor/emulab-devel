@@ -56,6 +56,7 @@ use GeniXML;
 use emutil;
 use EmulabConstants;
 use EmulabFeatures;
+use User;
 use Node;
 use Logfile;
 use libtestbed;
@@ -84,6 +85,7 @@ my $EVENTSYS	   = "$TB/bin/eventsys_control";
 my $VNODESETUP     = "$TB/sbin/vnode_setup";
 my $POWER          = "$TB/bin/power";
 my $OSLOAD         = "$TB/bin/os_load";
+my $OSSETUP        = "$TB/libexec/os_setup";
 my $SNMPIT         = "$TB/bin/snmpit";
 my $NAMEDSETUP     = "$TB/sbin/named_setup";
 my $EXPORTS_SETUP  = "$TB/sbin/exports_setup";
@@ -996,10 +998,32 @@ sub ProcessManifest($$)
     return 0;
 }
 
+#
+# Temp. 
+#
+sub UseOsSetup($)
+{
+    my ($self) = @_;
+    
+    my $experiment = Experiment->Lookup($self->slice_uuid());
+    return 0
+	if (!defined($experiment));
+    my $group = $experiment->GetGroup();
+    return 0
+	if (!defined($group));
+    my $user = User->ThisUser();
+    
+    return EmulabFeatures->FeatureEnabled("GeniOsSetup",
+					  $user, $group, undef);
+}
+
 sub Start($$;$)
 {
     my ($self, $version, $flags) = @_;
 
+    if ($self->UseOsSetup()) {
+	return $self->ActionStart($version, $flags);
+    }
     return $self->Action($version, "start", $flags);
 }
 
@@ -1007,6 +1031,9 @@ sub Restart($$;$)
 {
     my ($self, $version, $flags) = @_;
 
+    if ($self->UseOsSetup()) {
+	return $self->ActionRestart($version, $flags);
+    }
     return $self->Action($version, "restart", $flags);
 }
 
@@ -1014,7 +1041,469 @@ sub Reload($$;$)
 {
     my ($self, $version, $flags) = @_;
 
+    if ($self->UseOsSetup()) {
+	return $self->ActionReload($version, $flags);
+    }
     return $self->Action($version, "reload", $flags);
+}
+
+#
+# New version of start that ises libossetup.
+#
+sub ActionStart($$;$)
+{
+    my ($self, $version, $flags) = @_;
+    $self->ClearBootFailure();
+    my $msg = "Internal Error: ";
+    $flags      = 0 if (!defined($flags));
+    require Lan;
+    require OSImage;
+    require libossetup;
+
+    # Clear last error.
+    $self->SetErrorLog("");    
+
+    my $experiment = Experiment->Lookup($self->slice_uuid());
+    if (!defined($experiment)) {
+	$msg .= "Could not map $self to its experiment";
+	goto bad;
+    }
+    my $pid = $experiment->pid();
+    my $eid = $experiment->eid();
+    my $expstate = $experiment->state();
+
+    my $group = $experiment->GetGroup();
+    if (!defined($group)) {
+	$msg = "Could not map $self to its experiment group";
+	goto bad;
+    }
+    my $slice = $self->GetSlice();
+    if (!defined($slice)) {
+	$msg = "Could not map $self to its slice";
+	goto bad;
+    }
+    my $creator = $self->GetCreator();
+    if (!defined($creator)) {
+	$msg = "Could not map $self to its creator";
+	goto bad;
+    }
+    
+    my @slivers = ();
+    if ($self->SliverList(\@slivers) != 0) {
+	$msg .= "Could not get sliver list for $self";
+	goto bad;
+    }
+    my %nodes    = ();
+    my @restarts = ();
+    my @failed   = ();
+    my $sliver;
+
+    foreach $sliver (@slivers) {
+	if (ref($sliver) ne "GeniSliver::Node") {
+	    next
+		if ($sliver->state() eq "started");
+
+	    $sliver->Start($version) == 0
+		or return -1;
+	    next;
+	}
+	#
+	# Since this is an aggregate, some slivers may already be
+	# in the started state. We skip those.
+	#
+	next
+	    if ($sliver->state() eq "started");
+
+	#
+	# If the sliver is stopped, then we do not want to run it through
+	# os_setup, we already did that when the sliver was first added.
+	# Instead we want to bring it back via Restart (which handles this
+	# case).
+	#
+	if ($sliver->state() eq "stopped") {
+	    push(@restarts, $sliver);
+	    next;
+	}
+	
+	my $node = Node->Lookup($sliver->resource_id());
+	if (!defined($node)) {
+	    $msg .= "Could not map $sliver to a node";
+	    goto bad;
+	}
+	my $reservation = $node->Reservation();
+	if (!defined($reservation)) {
+	    $msg .= "$node no longer belongs to $self";
+	    goto bad;
+	}
+	if (!$reservation->SameExperiment($experiment)) {
+	    $msg .= "$node is not reserved to $self";
+	    goto bad;
+	}
+	$nodes{$node->node_id()} = $node;
+
+	# Want to make sure we see fresh logs (and do not store the same log).
+	$node->ClearBootLog();
+
+	# Back pointer, see below.
+	$node->_sliver($sliver);
+
+	# Add pnodes for exclusive virtual nodes that are not explicitly
+	# part of the rspec. 
+	if ($node->isvirtnode() && !$node->OnSharedNode()) {
+	    my $physnodeid = $node->phys_nodeid();
+	    if (!exists($nodes{$physnodeid})) {	    
+		my $pnode = Node->Lookup($physnodeid);
+		if (!defined($pnode)) {
+		    $msg .= "Could not lookup $physnodeid";
+		    goto bad;
+		}
+		# There is no sliver (might change later if in the rspec).
+		$pnode->_sliver(undef);
+
+		# Add to os_setup list.
+		$nodes{$pnode->node_id()} = $pnode;
+
+		$pnode->ClearBootLog();
+	    }
+	}
+    }
+    # See "bad" label below.
+    $sliver = undef;
+
+    #
+    # Download the images. If this fails, we have wasted our time,
+    # but we want to do this after we have forked off from the parent
+    # and we have returned to the client (rpc).
+    #
+    # All imported images are globally available, so makes no sense to
+    # put them into the project of the slice. In fact, if someone else
+    # in another project tried to use the same image, the update will
+    # fail when PROTOGENI_LOCALUSER=1 since it was imported by another
+    # real user, and the current user will not have write permission
+    # on it.
+    #
+    my $output = 
+	GeniUtil::ExecuteQuietAsGeniUser("$IMAGE_SETUP ".
+					 "-d -g -p GeniSlices $pid,$eid");
+    print STDERR $output;
+    if ($?) {
+	$msg = "Could not setup images";
+	goto bad;
+    }
+
+    # The nodes will not boot locally unless there is a DNS record,
+    # but we also need it before we can issue the reloads.
+    if (system("$NAMEDSETUP")) {
+	$msg .= "$NAMEDSETUP failed\n";
+	goto bad;
+    }
+
+    if ($version >= 2) {
+	#
+	# Dump the manifest into the experiment directory.
+	#
+	my $userdir       = $experiment->UserDir();
+	my $manifest_file = "$userdir/tbdata/geni_manifest";
+	my $manifest      = $self->GetManifest(1);
+	if ($manifest && open(MAN, ">$manifest_file")) {
+	    print MAN $manifest;
+	    close(MAN);
+	}
+
+	#
+	# Now we need a mapping of node_id to sliver_urn.
+	#
+	my $mapping_file = "$userdir/tbdata/geni_mapping";
+	if (open(MAP, ">$mapping_file")) {
+	    foreach my $sliver (@slivers) {
+		next
+		    if (ref($sliver) ne "GeniSliver::Node");
+
+		print MAP $sliver->resource_id();
+		print MAP " ";
+		print MAP $sliver->sliver_urn();
+		print MAP "\n";
+	    }
+	    close(MAP);
+	}
+	
+	if (system("$GENELISTS -c")) {
+	    $msg .= "$GENELISTS failed\n";
+	    goto bad;
+	}
+	if (system("$GENTOPOFILE $pid $eid")) {
+	    $msg .= "$GENTOPOFILE failed\n";
+	    goto bad;
+	}
+	if (system("$EXPORTS_SETUP")) {
+	    $msg .= "$EXPORTS_SETUP failed\n";
+	    goto bad;
+	}
+	if (system("$ARPLOCKDOWN ")) {
+	    $msg .= "$ARPLOCKDOWN failed\n";
+	    goto bad;
+	}
+	# The nodes will not boot locally unless there is a DNS record.
+	if (system("$NAMEDSETUP")) {
+	    $msg .= "$NAMEDSETUP failed\n";
+	    goto bad;
+	}
+	if ($flags & $ACTION_FLAGS_SYNCVLANS) {
+	    if (Lan->CompareVlansWithSwitches2($experiment)) {
+		$msg .= "CompareVlansWithSwitches2 failed!\n";
+		goto bad;
+	    }
+	    system("$SNMPIT -X $pid $eid");
+	    if ($?) {
+		$msg .= "Failed to synchronize vlans";
+		goto bad;
+	    }
+	}
+	else {
+	    my @diff = ();
+	    my @same = ();
+	    
+	    if (Lan->CompareVlansWithSwitches($experiment, \@diff, \@same)) {
+		print STDERR "CompareVlansWithSwitches failed!\n";
+		goto bad;
+	    }
+	    if (@diff) {
+		system("$SNMPIT -f ". join(" ", map("-o $_", @diff)));
+		if ($?) {
+		    $msg .= "Failed to remove obsolete VLANs.";
+		    goto bad;
+		}
+	    }
+	    system("$SNMPIT -t $pid $eid");
+	    if ($?) {
+		$msg .= "Failed to setup vlans";
+		goto bad;
+	    }
+	}
+	if ($experiment->SetupPortLans()) {
+	    $msg .= "Failed to setup shared vlan ports";
+	    goto bad;
+	}
+	if ($experiment->SyncPortLans()) {
+	    $msg .= "Failed to add ports to shared vlans";
+	    goto bad;
+	}
+    }
+    $sliver = undef;
+
+    #
+    # So we are going to fork and let os_setup proceed.
+    #
+    my $childpid = main::WrapperFork();
+    if ($childpid) {
+	return 0;
+    }
+    #
+    # os_setup requires the expstate to be set appropriately, which we
+    # generally do not do on the geni path. 
+    #
+    $experiment->SetState(EXPTSTATE_ACTIVATING());
+    
+    my @nodes = keys(%nodes);
+    print STDERR "Calling os_setup @nodes\n";
+    my $rval = system("$OSSETUP $pid $eid @nodes");
+    print STDERR "os_setup exited with status $rval\n";
+    $experiment->SetState($expstate);
+
+    #
+    # See what nodes succeeded or failed. 
+    #
+    foreach my $node_id (keys(%nodes)) {
+	my $node = $nodes{$node_id};
+	$node->Refresh();
+
+	# os_setup will make failed nodes
+	if ($node->allocstate() eq TBDB_ALLOCSTATE_DOWN()) {
+	    push(@failed, $node);
+	    $node->_sliver()->SetState("failed")
+		if (defined($node->_sliver()));
+	}
+	else {
+	    $node->_sliver()->SetState("started")
+		if (defined($node->_sliver()));
+	}
+	if (grep {$_ eq $node->eventstate()}
+	    (TBDB_NODESTATE_TBFAILED, TBDB_NODESTATE_RELOADFAILED,
+	     TBDB_NODESTATE_ISUP)) {
+	    my $bootlog;
+	    if ($node->GetBootLog(\$bootlog) == 0 && $bootlog ne "") {
+		my $logfile = Logfile->CreateFromString($group, $bootlog);
+		if (defined($logfile)) {
+		    $logfile->SetMetadata([["bootlog"   , $node->node_id()],
+					   ["Method",     "reboot $node_id"],
+					   ["slice_idx" , $slice->idx()],
+					   ["slice_urn" , $slice->urn()],
+					   ["slice_uuid", $slice->uuid()]], 1);
+                     # Anon users can view the log if they know the secret id. 
+		    $logfile->SetPublic(1);
+		    $logfile->Store();
+		    $node->_bootlog($logfile);
+		}
+	    }
+	}
+    }
+    #
+    # Notify.
+    #
+    if (@failed) {
+	my $name   = $creator->name();
+	my $email  = $creator->email();
+	my $count  = scalar(@failed);
+	my $urn    = $slice->urn();
+	my $logs   = "";
+
+	foreach my $node (@failed) {
+	    next
+		if (!defined($node->_bootlog()));
+
+	    $logs .= sprintf("%-15s : %s\n",
+			     $node->node_id(), $node->_bootlog()->URL());
+	}
+
+	SENDMAIL("$name <$email>", "$count nodes failed to boot",
+		 "Nodes:\n".
+		 "  " . join(" ", @failed) . "\n".
+		 "in $urn failed.\n\n" .
+		 "$logs\n\n",
+		 $TBOPS, "Cc: $TBOPS");
+    }
+    if ($rval) {
+	$msg .= "$OSSETUP failed\n";
+	goto bad;
+    }
+
+    #
+    # Before we fire off any async activity, push out any experiment
+    # specific root private key.
+    #
+    my $privkey = $experiment->GetPrivkey();
+    if ($privkey) {
+	print STDERR "Pushing per-experiment root private key.\n";
+	system("$PUSHROOTKEY -e $pid/$eid");
+	if ($?) {
+	    print STDERR "*** Could not push private key, ".
+		"this may cause problems!\n";
+	}
+    }
+    
+    # Waiting is done. 
+    if ($experiment->elab_in_elab()) {
+	#
+	# We cannot use ComputeState since it knows about elabinelab,
+	# we need to know that all the nodes are ISUP, so we used the
+	# @failed list returned from WaitForNodes().n
+	#
+	if (@failed) {
+	    print STDERR
+		"Some nodes did not boot, not doing elabinelab setup\n";
+	    return -1;
+	}
+	print STDERR "Setting up elabinelab. This could take a while!\n";
+	if (system("$ELAB_SETUP $pid $eid")) {
+	    print STDERR "Failed to setup elabinelab!\n";
+	    return -1;
+	}
+    }
+    elsif (($flags & $ACTION_FLAGS_NOEVENTSTART) == 0) {
+	$self->ComputeState();
+
+	if ($self->status() eq "ready") {
+	    #
+	    # Start the event scheduler. Note that the experiment is already
+	    # in the ACTIVE state, so the scheduler is going to fire off the
+	    # timeline automatically. 
+	    #
+	    system("$EVENTSYS start $pid,$eid");
+	    if ($?) {
+		$msg .= "Failed to (re)start the event system";
+		if ($TB ne "/usr/testbed") {
+		    # Not sure why this is failing.
+		    print STDERR "$msg\n";
+		}
+		else {
+		    goto bad;
+		}
+	    }
+	}
+    }
+    return 0;
+
+  bad:
+    $self->SetBootFailure();
+    if (defined($msg)) {
+	$self->SetErrorLog($msg);
+	print STDERR "$msg\n";
+    }
+    # Mark the offending sliver as failed.
+    if (defined($sliver)) {
+	$sliver->SetStatus("failed");
+	$sliver->SetErrorLog($msg)
+	    if (defined($msg));
+    }
+    return -1;
+}
+
+#
+# Reload all slivers. 
+#
+sub ActionReload($$;$)
+{
+    my ($self, $version, $flags) = @_;
+    my @reload = ();
+
+    my @slivers = ();
+    if ($self->SliverList(\@slivers) != 0) {
+	$self->SetErrorLog("Could not get sliver list for $self");
+	return -1;
+    }
+    foreach my $sliver (@slivers) {
+	next
+	    if (ref($sliver) ne "GeniSliver::Node" &&
+		ref($sliver) ne "GeniSliver::Vhost");
+	
+	push(@reload, $sliver);
+    }
+
+    #
+    # Since this was an aggregate level reload, we have already forked
+    # from the parent. Hand it off to BatchAction() to take care of the
+    # rest, reload is simple so just pass it all the slivers. 
+    #
+    return $self->BatchAction("reload", @reload);
+}
+
+#
+# Restart all slivers that need to be restarted.
+#
+sub ActionRestart($$;$)
+{
+    my ($self, $version, $flags) = @_;
+    my @restart = ();
+
+    my @slivers = ();
+    if ($self->SliverList(\@slivers) != 0) {
+	$self->SetErrorLog("Could not get sliver list for $self");
+	return -1;
+    }
+    foreach my $sliver (@slivers) {
+	next
+	    if (ref($sliver) ne "GeniSliver::Node" &&
+		ref($sliver) ne "GeniSliver::Vhost");
+	
+	push(@restart, $sliver);
+    }
+
+    #
+    # Since this was an aggregate level reload, we have already forked
+    # from the parent. Hand it off to BatchAction() to take care of the
+    # rest, reload is simple so just pass it all the slivers. 
+    #
+    return $self->BatchAction("restart", @restart);
 }
 
 #
@@ -2530,7 +3019,7 @@ sub BatchAction($$@)
 	    # We reload current image only.
 	    #
 	    if ($reload) {
-		$reloads{$node_id} = $sliver;
+		$reloads{$node_id} = $node;
 	    }
 	    if ($node->isvirtnode()) {
 		$vnodes{$node_id} = $node;
