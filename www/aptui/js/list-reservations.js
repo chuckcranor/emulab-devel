@@ -63,6 +63,7 @@ $(function ()
 		    "showproject"  : true,
 		    "showuser"     : true,
 		    "showusing"    : true,
+		    "anonymous"    : false,
 		    "name"         : name,
 		    "isadmin"      : window.ISADMIN,
 		});

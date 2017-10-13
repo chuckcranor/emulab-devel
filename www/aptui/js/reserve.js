@@ -262,6 +262,7 @@ $(function ()
 		    "showproject"  : false,
 		    "showuser"     : false,
 		    "showusing"    : false,
+		    "anonymous"    : true,
 		    "name"         : details.name,
 		});
 		html =
@@ -285,6 +286,10 @@ $(function ()
 			// initialize zebra
 			widgets: ["zebra"],
 		    });
+		// This activates the tooltip subsystem.
+		$('[data-toggle="tooltip"]').tooltip({
+		    placement: 'auto',
+		});
  	    }
 	    var xmlthing = sup.CallServerMethod(null, "reserve",
 						"ListReservations",

@@ -24,7 +24,17 @@
   <div class='panel panel-default'>
     <div class="panel-heading panel-heading-list">
       <h5>
-	<center><%- name %> Reservations</center>
+	<center><%- name %> Reservations
+	  <% if (anonymous) { %>
+	    <span class='glyphicon glyphicon-question-sign text-primary'
+		  style='margin-bottom: 4px;'
+		  data-toggle='tooltip'
+		  data-container="body"
+		  data-trigger="hover"
+		  title='All reservations (including yours and other users).'>
+	    </span>
+	  <% } %>
+	</center>
       </h5>
     </div>
     <div class='panel-body panel-body-dashboard'>
