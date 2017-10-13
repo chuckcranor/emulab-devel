@@ -2660,7 +2660,7 @@ COMMAND_PROTOTYPE(doaccounts)
 {
 	MYSQL_RES	*res;
 	MYSQL_ROW	row;
-	char		buf[MYBUFSIZE], leader[TBDB_FLEN_UID];
+	char		buf[2*MYBUFSIZE], leader[TBDB_FLEN_UID];
 	int		nrows, gidint;
 	int		tbadmin, didwidearea = 0, nodetypeprojects = 0;
 	int		didnonlocal = 0;
@@ -3127,10 +3127,11 @@ COMMAND_PROTOTYPE(doaccounts)
 		MYSQL_RES	*pubkeys_res;
 		MYSQL_RES	*sfskeys_res;
 		int		pubkeys_nrows, sfskeys_nrows, i, root = 0;
-		int		auxgids[128], gcount = 0, isleader;
-		char		glist[BUFSIZ];
+		int		auxgids[1024], gcount = 0, isleader;
+		char		glist[sizeof(buf)-512];
 		char		*bufp = buf, *ebufp = &buf[sizeof(buf)];
 		char		*pswd, *wpswd, wpswd_buf[9];
+		int		maxgcount = sizeof(auxgids) / sizeof(int) - 1;
 
 		gidint     = -1;
 		tbadmin    = root = atoi(row[8]);
@@ -3170,6 +3171,13 @@ COMMAND_PROTOTYPE(doaccounts)
 				 */
 				for (k = 0; k < gcount; k++) {
 				    if (auxgids[k] == newgid)
+					goto skipit;
+				}
+				if (gcount > maxgcount) {
+					if (gcount == maxgcount+1)
+						error("Too many groups for user %s! "
+						      "Only passing %d.\n",
+						      row[0], maxgcount);
 					goto skipit;
 				}
 				auxgids[gcount++] = newgid;
@@ -3276,11 +3284,24 @@ COMMAND_PROTOTYPE(doaccounts)
 			gidint = auxgids[--gcount];
 		}
 		glist[0] = '\0';
-		for (i = 0; i < gcount; i++) {
-			sprintf(&glist[strlen(glist)], "%d", auxgids[i]);
+		if (gcount > 0) {
+			int tlen;
+			size_t sz;
 
-			if (i < gcount-1)
-				strcat(glist, ",");
+			sprintf(&glist[0], "%d", auxgids[0]);
+			tlen = strlen(glist);
+			for (i = 1; i < gcount && tlen < sizeof(glist); i++) {
+				sz = sizeof(glist) - tlen;
+				if (snprintf(&glist[tlen], sz, ",%d",
+					     auxgids[i]) >= sz) {
+					error("Too many groups for user %s! "
+					      "Only passing %d of %d.\n",
+					      row[0], i, gcount);
+					glist[tlen] = '\0';
+					break;
+				}
+				tlen = strlen(glist);
+			}
 		}
 
 		if (vers < 4) {
@@ -10466,10 +10487,10 @@ COMMAND_PROTOTYPE(dolocalize)
 	MYSQL_ROW	row;
 	char		buf[2*MYBUFSIZE]; /* strlen(privkey) > 2048 */
 	int		nrows;
-	FILE		*fp = NULL;
 	char		*okey = NULL;
-
 #ifdef ELABINELAB
+	FILE		*fp = NULL;
+
 	/*
 	 * Include outer boss root key.
 	 * We get it from /etc/emulab/outer_bossrootkey.pub which was
