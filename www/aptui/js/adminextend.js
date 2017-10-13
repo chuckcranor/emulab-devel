@@ -16,6 +16,7 @@ $(function ()
     var firstrowTemplate   = null;
     var secondrowTemplate  = null;
     var extensionsTemplate = null;
+    var GENIRESPONSE_REFUSED = 7;
 
     function initialize()
     {
@@ -280,16 +281,17 @@ $(function ()
     //
     // Request lockdown set/clear.
     //
-    function DoLockdown(which, lockdown)
+    function DoLockdown(which, lockdown, force)
     {
 	var action = (lockdown ? "set" : "clear");
+	// Optional arg.
+	if (force === undefined) {
+	    force = 0;
+	}
 	
 	var callback = function(json) {
 	    if (json.code) {
 		sup.HideModal("#waitwait-modal", function () {
-		    sup.SpitOops("oops",
-				 "Lockdown failed: " + json.value);
-
 		    if (lockdown) {
 			// Flip the checkbox back.
 			$('#' + which + '-lockdown-checkbox')
@@ -300,6 +302,25 @@ $(function ()
 			$('#' + which + '-lockdown-checkbox')
 			    .prop("checked", true);
 		    }
+		    if (json.code != GENIRESPONSE_REFUSED) {
+			sup.SpitOops("oops",
+				     "Lockdown failed: " + json.value);
+			return;
+		    }
+		    // Refused.
+		    $('#force-lockdown').click(function (event) {
+			sup.HideModal('#lockdown-refused', function() {
+			    // Flip the checkbox again
+			    $('#' + which + '-lockdown-checkbox')
+				.prop("checked", true);
+			    // Again with force.
+			    DoLockdown(which, lockdown, 1);
+			});
+		    });
+		    $('#lockdown-refused pre').text(json.value);
+		    sup.ShowModal('#lockdown-refused', function () {
+			$('#force-lockdown').off("click");
+		    });
 		});
 		return;
 	    }
@@ -317,7 +338,8 @@ $(function ()
 	var xmlthing = sup.CallServerMethod(null, "status", "Lockdown",
 					    {"uuid"   : window.UUID,
 					     "which"  : which,
-					     "action" : action});
+					     "action" : action,
+					     "force"  : force});
 	xmlthing.done(callback);
     }
 

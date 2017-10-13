@@ -48,6 +48,8 @@ $(function ()
     var changingtopo      = false;
     var EMULAB_OPS        = "emulab-ops";
     var EMULAB_NS = "http://www.protogeni.net/resources/rspec/ext/emulab/1";
+    var GENIRESPONSE_REFUSED = 7;
+    var GENIRESPONSE_INSUFFICIENT_NODES = 26;
 
     function initialize()
     {
@@ -789,16 +791,50 @@ $(function ()
     //
     // Request lockdown set/clear.
     //
-    function DoLockdown(which, lockdown)
+    function DoLockdown(which, lockdown, force)
     {
 	var action = (lockdown ? "set" : "clear");
+	// Optional arg.
+	if (force === undefined) {
+	    force = 0;
+	}
 	
 	var callback = function(json) {
-	    sup.HideModal("#waitwait-modal");
 	    if (json.code) {
-		alert("Failed to change lockdown: " + json.value);
+		sup.HideModal("#waitwait-modal", function () {
+		    if (lockdown) {
+			// Flip the checkbox back.
+			$('#' + which + '_lockdown_checkbox')
+			    .prop("checked", false);
+		    }
+		    else {
+			// Flip the checkbox back.
+			$('#' + which + '_lockdown_checkbox')
+			    .prop("checked", true);
+		    }
+		    if (json.code != GENIRESPONSE_REFUSED) {
+			sup.SpitOops("oops",
+				     "Lockdown failed: " + json.value);
+			return;
+		    }
+		    // Refused.
+		    $('#force-lockdown').click(function (event) {
+			sup.HideModal('#lockdown-refused', function() {
+			    // Flip the checkbox again
+			    $('#' + which + '_lockdown_checkbox')
+				.prop("checked", true);
+			    // Again with force.
+			    DoLockdown(which, lockdown, 1);
+			});
+		    });
+		    $('#lockdown-refused pre').text(json.value);
+		    sup.ShowModal('#lockdown-refused', function () {
+			$('#force-lockdown').off("click");
+		    });
+		});
 		return;
 	    }
+	    sup.HideModal("#waitwait-modal");
 	    if (which == "user") {
 		user_lockdown = lockdown;
 	    }
@@ -816,7 +852,8 @@ $(function ()
 	var xmlthing = sup.CallServerMethod(ajaxurl, "status", "Lockdown",
 					    {"uuid"   : uuid,
 					     "which"  : which,
-					     "action" : action});
+					     "action" : action,
+					     "force"  : force});
 	xmlthing.done(callback);
     }
 

@@ -556,29 +556,23 @@ sub SetLogFile($$)
 #
 sub SetLockdown($$$)
 {
-    my ($self,$which,$clear) = @_;
+    my ($self,$admin,$user) = @_;
 
     # Must be a real reference. 
     return -1
 	if (! ref($self));
 
     my $uuid = $self->uuid();
-    if ($which eq "admin") {
-	$which = "admin_lockdown";
-    }
-    elsif ($which eq "user") {
-	$which = "user_lockdown";
-    }
-    else {
-	return -1;
-    }
-    my $value = ($clear ? 0 : 1);
+    $admin = ($admin ? 1 : 0);
+    $user  = ($user ? 1 : 0);
 
-    DBQueryWarn("update apt_instances set ${which}=${value} ".
+    DBQueryWarn("update apt_instances set ".
+		" admin_lockdown='$admin',user_lockdown='$user' ".
 		"where uuid='$uuid'") or
 	return -1;
 
-    $self->{'INSTANCE'}->{$which} = $value;
+    $self->{'INSTANCE'}->{"admin_lockdown"} = $admin;
+    $self->{'INSTANCE'}->{"user_lockdown"}  = $user;
     return 0;
 }
 
@@ -2649,9 +2643,9 @@ sub SliverAction($$$;@)
 #
 # Lockdown
 #
-sub Lockdown($$)
+sub Lockdown($$$)
 {
-    my ($self, $clear) = @_;
+    my ($self, $clear, $force) = @_;
     my $authority = $self->GetGeniAuthority();
     my $slice     = $self->instance()->GetGeniSlice();
     my $context   = APT_Geni::GeniContext();
@@ -2670,6 +2664,8 @@ sub Lockdown($$)
     };
     $args->{"clear"} = 1
 	if ($clear);
+    $args->{"force"} = 1
+	if ($force);
     my $cmurl = $authority->url();
     $cmurl = devurl($cmurl) if ($usemydevtree);
 

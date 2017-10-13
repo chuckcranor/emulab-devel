@@ -1780,10 +1780,13 @@ sub ExtendInternal($$$$$)
     # Save in case of error.
     my $oldexpires = $slice->expires();
 
-    # Lockdown on admin extensions longer then XX days. 
-    if (defined($this_user) && $this_user->IsAdmin() && !$nolockdown && 
-	($seconds / (24 * 60 * 60)) > 10) {
-	$lockdown = 1
+    # Lockdown on admin extensions longer then XX days.
+    # No longer doing this.
+    if (0) {
+	if (defined($this_user) && $this_user->IsAdmin() && !$nolockdown && 
+	    ($seconds / (24 * 60 * 60)) > 10) {
+	    $lockdown = 1
+	}
     }
     # Need to update slice before creating new credential. 
     if ($slice->IsExpired()) {
@@ -1872,7 +1875,7 @@ sub ExtendInternal($$$$$)
     }
     # Lockdown.
     if ($lockdown) {
-	if (DoLockdownInternal("set", "user")) {
+	if (DoLockdownInternal("set", "user", 0, undef)) {
 	    SENDMAIL($TBOPS,
 		     "Failed to lock down APT Instance",
 		     "Failed to lock down $instance\n".
@@ -2343,7 +2346,7 @@ sub DoExtendOld()
     }
     # Lockdown.
     if ($lockdown) {
-	if (DoLockdownInternal("set", "user")) {
+	if (DoLockdownInternal("set", "user", 0, undef)) {
 	    SENDMAIL($TBOPS,
 		     "Failed to lock down APT Instance",
 		     "Failed to lock down $instance\n".
@@ -3092,40 +3095,35 @@ sub StartMonitorInternal(;$@)
 #
 # Experiment lockdown.
 #
-sub DoLockdownInternal($$)
+sub DoLockdownInternal($$$$)
 {
-    my ($setclr,$which) = @_;
+    my ($setclr,$which,$force, $perrmsg) = @_;
 
     my $slice = $instance->GetGeniSlice();
     if (!defined($slice)) {
 	fatal("No slice for instance");
     }
+    my $admin_lockdown = $instance->admin_lockdown();
+    my $user_lockdown  = $instance->user_lockdown();
+
     if ($which eq "all") {
-	if ($instance->SetLockdown("user", ($setclr eq "clear" ? 1 : 0))) {
-	    print STDERR "Could not update instance lockdown\n";
-	    return -1
-	}
-	$which = "admin"
+	$admin_lockdown = $user_lockdown = ($setclr eq "clear" ? 0 : 1);
     }
-    if ($instance->SetLockdown($which, ($setclr eq "clear" ? 1 : 0))) {
-	print STDERR "Could not update instance lockdown\n";
-	return -1
+    elsif ($which eq "admin") {
+	$admin_lockdown = ($setclr eq "clear" ? 0 : 1);
     }
-    my $clear = ($instance->admin_lockdown() ||
-		 $instance->user_lockdown() ? 0 : 1);
+    elsif ($which eq "user") {
+	$user_lockdown = ($setclr eq "clear" ? 0 : 1);
+    }
+    my $clear = ($admin_lockdown || $user_lockdown ? 0 : 1);
     
-    #
-    # Have to set/clear the lockdown on the local slice.
-    #
-    if ($slice->SetLockdown($clear)) {
-	print STDERR "Could not update slice lockdown\n";
-	return -1
-    }
     #
     # And tell the backend clusters to lockdown the slice.
     #
     my $coderef = sub {
 	my ($sliver) = @_;
+	my $webtask  = $sliver->webtask();
+	my ($errcode, $errmsg);
 
 	#
 	# We cannot do lockdown at AL2S. More generally, it only works at
@@ -3145,17 +3143,29 @@ sub DoLockdownInternal($$)
 				"CC: " . $project->OpsEmailAddress());
 	    return 0;
 	}
-	my $response = $sliver->Lockdown($clear);
+	my $response = $sliver->Lockdown($clear, $force);
 	if (!defined($response)) {
-	    print STDERR "RPC Error calling Lockdown\n";
-	    return -1;
+	    $errmsg  = "RPC Error calling Lockdown";
+	    $errcode = -1;
+	    goto bad;
+	}
+	# Watch for a refusal from the reservation system on lockdown.
+	if ($response->code() == GENIRESPONSE_REFUSED && !$clear) {
+	    $errmsg  = $response->output();
+	    $errcode = $response->code();
+	    goto bad;
 	}
 	if ($response->code() != GENIRESPONSE_SUCCESS) {
-	    print STDERR "Could not lockdown sliver: ".
-		$response->output() . "\n";
-	    return -1;
+	    $errmsg = "Sliver lockdown failed: " . $response->output();
+	    $errcode = $response->code();
+	    goto bad;
 	}
 	return 0;
+      bad:
+	print STDERR $errmsg . "\n" if ($debug);
+	$webtask->output($errmsg);
+	$webtask->Exited($errcode);
+	return $errcode;
     };
     my @return_codes = ();
     my @agglist =      $instance->AggregateList();
@@ -3168,11 +3178,35 @@ sub DoLockdownInternal($$)
     #
     # Check the exit codes. 
     #
-    foreach my $code (@return_codes) {
+    foreach my $aggobj (@agglist) {
+	my $code = shift(@return_codes);
+	my $errmsg;
+
+	# Updated in a forked child, must refresh. 
+	$aggobj->webtask()->Refresh();
+	
 	if ($code) {
-	    print STDERR "Some slivers could not be locked down.\n";
-	    return -1;
+	    if ($aggobj->webtask()->output()) {
+		$errmsg = $aggobj->webtask()->output();
+	    }
+	    else {
+		$errmsg = "Some slivers could not be locked down.";
+	    }
+	    $$perrmsg = $errmsg if (defined($perrmsg));
+	    return $aggobj->webtask()->exitcode();
 	}
+    }
+
+    #
+    # Change local state only if operation succeeds.
+    #
+    if ($slice->SetLockdown($clear)) {
+	print STDERR "Could not update slice lockdown\n";
+	return -1
+    }
+    if ($instance->SetLockdown($admin_lockdown, $user_lockdown)) {
+	print STDERR "Could not update instance lockdown flags\n";
+	return -1
     }
     return 0;
 }
@@ -3180,10 +3214,19 @@ sub DoLockdownInternal($$)
 sub DoLockdown()
 {
     my $errmsg;
+    my $errcode = -1;
+    my $force   = 0;
     
+    my $optlist = "f";
+    my %options = ();
+    if (! getopts($optlist, \%options)) {
+	usage();
+    }
+    if (defined($options{"f"})) {
+	$force = 1;
+    }
     usage()
 	if (@ARGV != 2);
-    
     my $setclr = shift(@ARGV);
     my $which  = shift(@ARGV);
 
@@ -3198,11 +3241,14 @@ sub DoLockdown()
     }
     if ($slice->Lock()) {
 	$errmsg = "Experiment is busy, cannot lock it. Please try again later";
+	$errcode = 1;
 	goto bad;
     }
-    if (DoLockdownInternal($setclr, $which)) {
-	$slice->UnLock();
-	fatal("Could not lockdown instance!");
+    $errcode = DoLockdownInternal($setclr, $which, $force, \$errmsg);
+    if ($errcode) {
+	$errmsg = "Failed to lockdown instance: $errcode"
+	    if (!defined($errmsg));
+	goto bad;
     }
     $slice->UnLock();
     exit(0);
@@ -3212,9 +3258,9 @@ sub DoLockdown()
     print STDERR $errmsg . "\n";
     if (defined($webtask)) {
 	$webtask->output($errmsg);
-	$webtask->Exited(1);
+	$webtask->Exited($errcode);
     }
-    exit(1);
+    exit($errcode);
 }
 
 sub DoPanic()
@@ -4186,7 +4232,7 @@ sub DoSchedTerminate()
     }
     # Now we can clear this.
     if ($instance->user_lockdown()) {
-	if (DoLockdownInternal("clear", "user")) {
+	if (DoLockdownInternal("clear", "user", 0, undef)) {
 	    SENDMAIL($TBOPS,
 		     "Failed to clear lock down on APT Instance",
 		     "Failed to clear lock down $instance\n".

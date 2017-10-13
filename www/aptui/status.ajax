@@ -1433,6 +1433,7 @@ function Do_Lockdown()
 {
     global $this_user;
     global $ajax_args;
+    $force = "";
 
     if (!isset($this_user) || !ISADMIN()) {
 	SPITAJAX_ERROR(1, "Not enough permission.");
@@ -1466,6 +1467,9 @@ function Do_Lockdown()
 	SPITAJAX_ERROR(1, "Not enough permission.");
         return;
     }
+    if (isset($ajax_args["force"]) && $ajax_args["force"] == 1) {
+        $force = "-f";
+    }
     $uuid = $ajax_args["uuid"];
     $instance = Instance::Lookup($uuid);
     if (!$instance) {
@@ -1484,7 +1488,7 @@ function Do_Lockdown()
     $webtask = WebTask::CreateAnonymous();
     $retval = SUEXEC("nobody", "nobody",
 		     "webmanage_instance -t " . $webtask->task_id() .
-                     "  lockdown $uuid $action $which ",
+                     "  lockdown $uuid $force $action $which ",
 		     SUEXEC_ACTION_IGNORE);
     $webtask->Refresh();
 
@@ -1495,7 +1499,7 @@ function Do_Lockdown()
 	    SUEXECERROR(SUEXEC_ACTION_CONTINUE);
 	}
         else {
-            SPITAJAX_ERROR(1, $webtask->TaskValue("output"));
+            SPITAJAX_ERROR($webtask->exitcode(), $webtask->TaskValue("output"));
         }
         $webtask->Delete();
 	return;

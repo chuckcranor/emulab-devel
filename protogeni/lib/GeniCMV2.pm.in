@@ -5225,6 +5225,8 @@ sub Lockdown($)
     my $slice_urn    = $argref->{'slice_urn'};
     my $clear        = $argref->{'clear'};
     my $credentials  = $argref->{'credentials'};
+    my $force        = $argref->{'force'};
+    require Reservation;
     
     if (! (defined($credentials) && defined($slice_urn))) {
 	return GeniResponse->MalformedArgsResponse("Missing arguments");
@@ -5252,6 +5254,12 @@ sub Lockdown($)
 	return GeniResponse->Create(GENIRESPONSE_FORBIDDEN(), undef,
 				    "Credential does not match the URN");
     }
+    my $experiment = $slice->GetExperiment();
+    if (!defined($experiment)) {
+	return GeniResponse->Create(GENIRESPONSE_ERROR, undef,
+				    "No local experiment for slice");
+    }
+
     #
     # Only the SA for the slice can do this.
     #
@@ -5262,11 +5270,42 @@ sub Lockdown($)
 			    "Not enough permission to set/clr lockdown");
     }
     main::AddLogfileMetaDataFromSlice($slice);
-
-    if ($slice->SetLockdown(defined($clear) && $clear ? 1 : 0)) {
-	return GeniResponse->Create(GENIRESPONSE_ERROR);
+    if (defined($clear) && $clear) {
+	if ($slice->SetLockdown(1)) {
+	    return GeniResponse->Create(GENIRESPONSE_ERROR);
+	}
+	return GeniResponse->Create(GENIRESPONSE_SUCCESS);
     }
-    return GeniResponse->Create(GENIRESPONSE_SUCCESS);
+    
+    #
+    # Ask Reservation system if locking down this experiment will
+    # throw the Reservation system into chaos.
+    #
+    my $error = "unknown error";
+    
+    my $rval = Reservation->Lockdown($slice, \$error, 1, 0);
+    if (!$rval) {
+	return GeniResponse->Create(GENIRESPONSE_SUCCESS);
+    }
+    if (defined($force) && $force) {
+	#
+	# Override the Reservation system, chaos ensues. 
+	#
+	if (Reservation->Lockdown($slice, \$error, 0, 1)) {
+	    print STDERR "Unable to force lockdown: $error\n";
+	    return GeniResponse->Create(GENIRESPONSE_ERROR, undef,
+					"Unable to force lockdown: $error");
+	}
+	libtestbed::SENDMAIL($TBOPS, "Slice lockdown forced!",
+			     "$slice_urn has been forcibly locked down,\n".
+			     "throwing the reservation system into chaos.\n\n".
+			     "Slice: $slice\n".
+			     "Experiment: $experiment\n",
+			     $TBOPS);
+	
+	return GeniResponse->Create(GENIRESPONSE_SUCCESS);
+    }
+    return GeniResponse->Create(GENIRESPONSE_REFUSED, undef, $error);
 }
 
 #

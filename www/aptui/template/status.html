@@ -1177,6 +1177,33 @@ pre {
       </div>
     </div>
   </div>    
+  <div id='lockdown-refused' class='modal fade'>
+    <div class='modal-dialog'>
+      <div class='modal-content'>
+	<div class="modal-header text-center">
+	  <h4>Lockdown Refused</h4>
+	</div>
+	<div class='modal-body'>
+	  <p>
+	    The lockdown request has been refused by one of the backend
+	    clusters because it would throw the reservation system into chaos:
+	  </p>
+	  <div>
+	    <pre></pre>
+	  </div>
+	  If you want to force this lockdown, click below.
+	  <center>
+            <button type='button' style='margin-right: 20px;'
+		    data-dismiss='modal'
+                    class='btn btn-primary btn-sm'
+		    id='cancel-lockdown'>Cancel</button>
+            <button class='btn btn-danger btn-sm'
+		    id='force-lockdown'>Lockdown</button>
+	  </center>
+	</div>
+      </div>
+    </div>
+  </div>
   <div id='waitwait_div'></div>
   <div id='terminate_div'></div>
   <div id='oops_div'></div>
