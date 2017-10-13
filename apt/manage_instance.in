@@ -3370,7 +3370,14 @@ sub DoLinktest()
     # a disk image.
     #
     if ($slice->Lock()) {
-	fatal("Slice is busy, cannot lock it");
+	$errcode = GENIRESPONSE_BUSY;
+	$errmsg  ="Experiment is busy, cannot lock it. Try again later.";
+	if (defined($webtask)) {
+	    $webtask->output($errmsg);
+	    $webtask->Exited($errcode);
+	}
+	print STDERR "$errmsg\n";
+	exit($errcode);
     }
     # Check after lock to prevent concurrent startup. 
     if ($action eq "start") {
