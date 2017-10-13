@@ -314,7 +314,20 @@ sub GetVersion($)
 	return $version;
     }
 
-    return undef;
+    # Nothing in the reservation_version table.  The db update scripts
+    # populated it, but I forgot to add the version when doing a db init
+    # from scratch.  Rather than fix it there, it's better to cope with
+    # the situation right here, because this will work no matter what
+    # convoluted history the db has been through.
+    DBQueryFatal( "LOCK TABLES reservation_version WRITE" );
+    # Check existence again, with locking this time, to avoid race.
+    $query_result = DBQueryFatal( "SELECT * FROM reservation_version" );    
+    unless( ($version) = $query_result->fetchrow_array() ) {
+	DBQueryFatal( "INSERT INTO reservation_version SET version=0" );
+    }
+    DBQueryFatal( "UNLOCK TABLES" );
+    
+    return 0;
 }
 
 # Attempt to commit database changes.  GetVersion() must have been called
