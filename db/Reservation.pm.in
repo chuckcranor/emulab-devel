@@ -840,22 +840,23 @@ sub FreeCount($$;$) {
     return $answer;
 }
 
-#
 # Generate a time series of counts of nodes of a given type.
 #
 # The result is a list of (t, unavailable, held, free) tuples, where:
 #
-# * 't' is the timestamp at which the state changes to the corresponding
-# values.
+# * 't' is the timestamp at which the state in the remainder of the
+# tuple becomes valid.
 #
 # * 'unavailable' is a count of nodes unavailable for allocation, either
 # because they're already in use (including both those in use
 # by experiments in the projects specified and those used by others),
 # or because they're required for reservations to other projects.
 #
-# * 'held' is a count of nodes reserved to the project(s) queried, and
-# so could potentially be used by the user asking, but generally not by
-# others.  Not merely "could", but "SHOULD"!
+# * 'held' is a count of nodes reserved to the project(s) queried, but
+# NOT yet allocated to any experiment.  They could potentially be used by the
+# user asking, but not to those outside the proper projects.  Since these
+# resources are currently idle, the user (or one of their project partners)
+# should try to use them ASAP!
 #
 # * 'free' is the number of nodes not allocated and not needed
 # for reservations; available for general use subject to other constraints.
