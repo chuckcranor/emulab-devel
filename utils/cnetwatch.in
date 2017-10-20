@@ -628,9 +628,11 @@ sub getnodeinfo($)
 	if ($debug && 0);
 
     $query_result =
-	DBQueryWarn("select r.pid,r.eid,node_id1,eventstate,iface1,node_id2".
+	DBQueryWarn("select r.pid,r.eid,node_id1,eventstate,iface1,node_id2,attrvalue".
 		    " from wires as w,nodes as n".
 		    " left join reserved as r on n.node_id=r.node_id".
+		    " left join node_attributes as a on".
+		    "  n.node_id=a.node_id and attrkey='cnetwatch_disable'".
 		    " where w.node_id1=n.node_id".
 		    "  $sclause".
 		    "  and w.type='Control'".
@@ -650,6 +652,14 @@ sub getnodeinfo($)
 	my $switch = $row{'node_id2'};
 	my $pc = $row{'node_id1'};
 	my $pciface = $row{'iface1'};
+	my $disable = $row{'attrvalue'};
+
+	# XXX if cnetwatch is disabled for the node, just skip it.
+	if ($disable) {
+	    print STDERR "*** $pc administratively ignored!\n" if ($debug);
+	    next;
+	}
+
 	my $exp;
 	if (defined($row{'pid'})) {
 	    $exp = $row{'pid'} . "/" . $row{'eid'};
