@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2016 University of Utah and the Flux Group.
+# Copyright (c) 2000-2017 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -97,7 +97,7 @@ function SpitRankList($target, $days)
                      "   as c ".
                      "$join ".
                      "group by $which ".
-                     "order by phours desc");
+                     "order by phours desc limit 250");
     $results = array();
 
     while ($row = mysql_fetch_array($query_result)) {
@@ -116,6 +116,40 @@ function SpitRankList($target, $days)
 }
 SpitRankList("user", $days);
 SpitRankList("project", $days);
+
+#
+# Most popular profiles.
+#
+$profiles = array();
+$rank = 1;
+
+$query_result =
+    DBQueryFatal("select p.uuid,p.name,count(h.profile_id) as count,p.pid, ".
+                 "   v.pid,v.name ".
+                 "   from apt_instance_history as h ".
+                 "left join apt_profiles as p on ".
+                 "   p.profileid=h.profile_id ".
+                 "left join apt_profile_versions as v on ".
+                 "   v.profileid=h.profile_id and ".
+                 "   v.version=h.profile_version ".
+                 "where h.created>DATE_SUB(now(),INTERVAL $days DAY) ".
+                 "group by profile_id order by count desc limit 100");
+
+while ($row = mysql_fetch_array($query_result)) {
+    $name       = $row["name"];
+    $count      = $row["count"];
+    $uuid       = $row["uuid"];
+    $pid        = $row["pid"];
+
+    $profiles[$rank] = array("name"  => $name,
+                             "uuid"  => $uuid,
+                             "pid"   => $pid,
+                             "rank"  => $rank++,
+                             "count" => $count);
+}
+echo "<script type='text/plain' id='profile-json'>\n";
+echo json_encode($profiles);
+echo "</script>\n";
 
 REQUIRE_UNDERSCORE();
 REQUIRE_SUP();

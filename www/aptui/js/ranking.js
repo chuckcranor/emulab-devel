@@ -9,16 +9,19 @@ $(function ()
 	window.APT_OPTIONS.initialize(sup);
 	var userlist = decodejson('#user-json');
 	var projlist = decodejson('#project-json');
+	var proflist = decodejson('#profile-json');
 	
 	// Generate the main template.
 	var html = mainTemplate({
 	    "users"     : userlist,
 	    "projects"  : projlist,
+	    "profiles"  : proflist,
 	    "days"      : window.DAYS,
 	});
 	$('#main-body').html(html);
 	InitTable("users");
 	InitTable("projects");
+	InitTable("profiles");
 
         // Javascript to enable link to tab
         var hash = document.location.hash;

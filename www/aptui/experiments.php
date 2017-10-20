@@ -39,6 +39,7 @@ $isfadmin  = (ISFOREIGN_ADMIN() ? 1 : 0);
 if (! (ISADMIN() || ISFOREIGN_ADMIN())) {
     SPITUSERERROR("You do not have permission to view this page");
 }
+$optargs = OptionalPageArguments("sortby", PAGEARG_STRING);
 SPITHEADER(1);
 
 echo "<link rel='stylesheet'
@@ -50,6 +51,9 @@ echo "<div id='page-body'></div>\n";
 echo "<script type='text/javascript'>\n";
 echo "    window.ISADMIN    = $isadmin;\n";
 echo "    window.ISFADMIN   = $isfadmin;\n";
+if (isset($sortby) && $sortby != "") {
+    echo "    window.SORTYBY   = '$sortby';\n";
+}
 echo "</script>\n";
 
 echo "<script src='js/lib/jquery-2.0.3.min.js'></script>\n";

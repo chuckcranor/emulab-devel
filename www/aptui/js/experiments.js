@@ -159,7 +159,10 @@ $(function ()
 	SetFilters(table);
 
 	// Initial sort.
-	if (hash === "#extending") {
+	if (window.SORTYBY !== undefined && window.SORTYBY == "created") {
+	    table.find('th:eq(9)').trigger('sort');
+	}
+	else if (hash === "#extending") {
 	    table.find('th:eq(10)').trigger('sort');
 	}
 	else {
