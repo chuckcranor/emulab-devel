@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2000-2010 University of Utah and the Flux Group.
+ * Copyright (c) 2000-2017 University of Utah and the Flux Group.
  *
  * {{{EMULAB-LICENSE
  *
@@ -588,7 +588,7 @@ int type_precheck(int round) {
     }
 
     if (ok) {
-      cout << "Type precheck passed." << endl;
+      cout << "Type precheck succeeded" << endl;
       return 1;
     } else {
       cout << "*** Type precheck failed!" << endl;
@@ -1319,7 +1319,12 @@ int main(int argc,char **argv) {
 #endif
 
   if (violated != 0) {
-      exit(EXIT_RETRYABLE);
+      if (vinfo.max_types) {
+	  exit(EXIT_UNRETRYABLE);
+      }
+      else {
+	  exit(EXIT_RETRYABLE);
+      }
   } else {
       exit(EXIT_SUCCESS);
   }
