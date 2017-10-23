@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2010-2016 University of Utah and the Flux Group.
+# Copyright (c) 2010-2017 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -48,6 +48,8 @@ my $TBOPS        = "@TBOPSEMAIL@";
 my $SETSITEVAR   = "$TB/sbin/setsitevar";
 my $STARTUP      = "/usr/local/etc/rc.d/3.testbed.sh";
 my $MFRISBEED    = "/usr/local/etc/rc.d/3.mfrisbeed.sh";
+my $PGENISUPPORT = @PROTOGENI_SUPPORT@;
+my $APACHE_START = "@APACHE_START_COMMAND@";
 
 # Protos
 sub Fatal($);
@@ -124,6 +126,12 @@ sub Restart()
     system("$SETSITEVAR general/testbed_shutdown -");
     if ($?) {
 	Fatal("Could not clear general/testbed_shutdown");
+    }
+    if ($PGENISUPPORT &&
+	!system("grep -q FCGID /etc/rc.conf")) {
+	if (system("$APACHE_START graceful geni")) {
+	    Fatal("Could not restart apache geni server; swapping is disabled");
+	}
     }
     if ($noenable) {
 	print "Leaving the web interface disabled as directed.\n";
