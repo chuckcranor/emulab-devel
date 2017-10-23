@@ -33,7 +33,7 @@ $(function ()
 	
 	_.each(amlist, function(urn, name) {
 	    var callback = function(json) {
-		console.log(json);
+		console.log("LoadData", json);
 		
 		// Kill the spinner.
 		amcount--;
@@ -45,7 +45,7 @@ $(function ()
 				name + ": " + json.value);
 		    return;
 		}
-		var reservations = json.value;
+		var reservations = json.value.reservations;
 		rescount += reservations.length;
 		
 		if (reservations.length == 0) {

@@ -426,9 +426,10 @@ function Do_ListReservations()
 	return;
     }
     $webtask->Refresh();
-
-    $rlist = array();
-    foreach ($webtask->TaskValue("value") as $details) {
+    $resinfo = $webtask->TaskValue("value");
+    $rlist   = array();
+    
+    foreach ($resinfo["reservations"] as $details) {
         $blob = array();
         $uuid = $details['uuid'];
         $blob["uuid"] = $uuid;
@@ -459,8 +460,9 @@ function Do_ListReservations()
         $blob["cluster"]     = $aggregate->nickname();
         $rlist[$uuid] = $blob;
     }
+    $resinfo["reservations"] = $rlist;
     $webtask->Delete();
-    SPITAJAX_RESPONSE($rlist);
+    SPITAJAX_RESPONSE($resinfo);
 }
 
 #
@@ -509,8 +511,8 @@ function Do_GetReservation()
 	return;
     }
     $webtask->Refresh();
-
-    $value   = $webtask->TaskValue("value");
+    $resinfo = $webtask->TaskValue("value");
+    $value   = $resinfo["reservations"];
     $details = current($value);
     $blob = array();
     $uuid = $details['uuid'];
@@ -546,13 +548,31 @@ function Do_ReservationInfo()
     global $this_user;
     global $ajax_args;
     global $PORTAL_GENESIS;
+    $aggregate = null;
+    $sopts = "";
+    $popts = "-p '$PORTAL_GENESIS'";
+
+    if (isset($ajax_args["cluster"])) {
+        if (!preg_match("/^[-\w]+$/", $ajax_args["cluster"])) {
+            SPITAJAX_ERROR(-1, "Invalid cluster name");
+            return;
+        }
+        $aggregate = Aggregate::LookupByNickname($ajax_args["cluster"]);
+        if (!$aggregate) {
+            SPITAJAX_ERROR(-1, "No such cluster");
+            return;
+        }
+        $urn = $aggregate->urn();
+        $sopts = "-a '$urn'";
+        $popts = "";
+    }
 
     $webtask = WebTask::CreateAnonymous();
     $webtask_id = $webtask->task_id();
 
     $retval = SUEXEC($this_user->uid(), "nobody",
-                     "webmanage_reservations ".
-                     "   -t $webtask_id prediction -p '$PORTAL_GENESIS'",
+                     "webmanage_reservations $sopts ".
+                     "   -t $webtask_id prediction $popts ",
                      SUEXEC_ACTION_CONTINUE);
     if ($retval) {
         $webtask->Delete();
@@ -561,6 +581,10 @@ function Do_ReservationInfo()
     }
     $webtask->Refresh();
     $blob = $webtask->TaskValue("value");
+    # If requesting for a single cluster, return just that.
+    if (isset($aggregate)) {
+        $blob = $blob[$aggregate->urn()];
+    }
     $webtask->Delete();
     SPITAJAX_RESPONSE($blob);
 }

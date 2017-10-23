@@ -1,0 +1,60 @@
+<style>
+ .panel-heading-list {
+     padding: 2px;
+ }
+.panel-body-dashboard {
+    padding: 2px;
+}
+.resgraph {
+    margin: 0px;
+    padding: 0px;
+    width: 100%;
+    height: 100%;
+}
+svg {
+    display: block;
+} 
+</style>
+<div>
+  <% _.each(amlist, function(details, urn) { %>
+    <div class='row hidden' id='<%- details.nickname %>'>
+      <div class='col-xs-12 col-xs-offset-0 reservation-details'>
+	<div class='panel panel-default hidden timeseries-graph-panel'>
+	  <div class="panel-heading panel-heading-list">
+	    <center>
+	      <h5>
+		<% if (showcontrols) { %>
+		  <a href="#" class="resgraph-fullscreen">
+		    <span style="margin-right: 10px;"
+			  class='glyphicon
+				 glyphicon-fullscreen pull-right'></span>
+		  </a>
+		<% } %>
+		<%- details.nickname %> Availability
+		<% if (showcontrols) { %>
+		  <a href='#' class='btn btn-xs resgraph-help-button'
+		     data-toggle='tooltip'
+		     data-container="body"
+		     data-trigger="hover"
+		     title='Click for more info'>
+		    <span class='glyphicon glyphicon-question-sign text-primary'
+			  style='margin-bottom: 4px;'></span>
+		  </a>
+		<% } %>
+	      </h5>
+	    </center>
+	  </div>
+	  <div class='panel-body panel-body-dashboard'>
+	    <!-- The col setting gives us a "relative" position div -->
+	    <div class='col-xs-12 col-xs-offset-0'
+		 style="padding:0px;">
+	      <div class='resgraph-size timeseries-graph resgraph'>
+		<svg class="resgraph"></svg>
+	      </div>
+	    </div>
+	  </div>
+	</div>
+      </div>
+    </div>
+  <% }) %>
+</div>

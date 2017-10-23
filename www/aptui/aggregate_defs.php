@@ -189,7 +189,8 @@ class Aggregate
         $query_result =
             DBQueryFatal("select urn from apt_aggregates ".
                          "where disabled=0 and reservations=1 and ".
-                         "      FIND_IN_SET('$PORTAL_GENESIS', portals)");
+                         "      FIND_IN_SET('$PORTAL_GENESIS', portals)".
+                         "order by isfederate,name");
         
 	while ($row = mysql_fetch_array($query_result)) {
 	    $urn = $row["urn"];

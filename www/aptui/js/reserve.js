@@ -2,17 +2,17 @@ $(function ()
 {
     'use strict';
 
-    var template_list   = ["reserve-request", "reserve-faq", "reservation-list",
-			   "oops-modal", "waitwait-modal"];
+    var template_list   = ["reserve-request", "reserve-faq",
+			   "reservation-graph", "oops-modal", "waitwait-modal"];
     var templates       = APT_OPTIONS.fetchTemplateList(template_list);    
-    var mainString      = templates["reserve-request"];
     var oopsString      = templates["oops-modal"];
     var waitwaitString  = templates["waitwait-modal"];
-    var mainTemplate    = _.template(mainString);
-    var listTemplate    = _.template(templates["reservation-list"]);
+    var mainTemplate    = _.template(templates["reserve-request"]);
+    var graphTemplate   = _.template(templates["reservation-graph"]);
     var fields       = null;
     var projlist     = null;
     var amlist       = null;
+    var amorder      = [];
     var isadmin      = false;
     var editing      = false;
     var buttonstate  = "check";
@@ -44,6 +44,7 @@ $(function ()
 		Delete();
 	    });
 	}
+	LoadReservations();
     }
 
     //
@@ -63,7 +64,16 @@ $(function ()
 	html = aptforms.FormatFormFieldsHorizontal(html);
 	$('#main-body').html(html);
 	$('.faq-contents').html(templates["reserve-faq"]);
+	// Graph list.
+	$('#reservation-lists .reservation-div')
+	    .html(graphTemplate({"amlist": amlist, "showcontrols" : true}));
 
+	// Handler for the Help button
+	$('#reservation-help-button').click(function (event) {
+	    event.preventDefault();
+	    sup.ShowModal('#reservation-help-modal');
+	});
+	
 	// Handler for the FAQ link.
 	$('#reservation-faq-button').click(function (event) {
 	    event.preventDefault();
@@ -75,11 +85,22 @@ $(function ()
 	// Set the manual link since the FAQ is not a template.
 	$('#reservation-manual').attr("href", window.MANUAL);
 
+	// Handler for the Reservation Graph Help button
+	$('.resgraph-help-button').click(function (event) {
+	    event.preventDefault();
+	    sup.ShowModal('#resgraph-help-modal');
+	});
+
 	// This activates the popover subsystem.
 	$('[data-toggle="popover"]').popover({
 	    trigger: 'hover',
 	    container: 'body'
 	});
+	// This activates the tooltip subsystem.
+	$('[data-toggle="tooltip"]').tooltip({
+	    placement: 'auto'
+	});
+	
 	// Handler for cluster change to show the type list.
 	$('#reserve-request-form #cluster').change(function (event) {
 	    $("#reserve-request-form #cluster option:selected").
@@ -132,7 +153,6 @@ $(function ()
 	aptforms.EnableUnsavedWarning('#reserve-request-form',
 				      modified_callback);
 
-	LoadReservations();
     }
     
     /*
@@ -230,16 +250,59 @@ $(function ()
 			   "Validate", checkonly_callback);
     }
 
-   /*
-    * Load anonymized reservations from each am in the list and generate tables.
-    */
+    // Call back from the graphs to change the dates on a blank form
+    function SetDates(when)
+    {
+	//console.info("dates", when);
+	// Bump to next hour. Will be confusing at midnight.
+	when.setHours(when.getHours() + 1);
+
+	if (! editing) {
+	    $("#reserve-request-form #start_day").datepicker("setDate", when);
+	    //$("#reserve-request-form #end_day").datepicker("setDate", when);
+	    $("#reserve-request-form [name=start_hour]").val(when.getHours());
+	    //$("#reserve-request-form [name=end_hour]").val(when.getHours());
+	    aptforms.MarkFormUnsaved();
+	}
+    }
+    // Set the cluster after clicking on a graph.
+    function SetCluster(nickname, urn)
+    {
+	$('#reserve-request-form [name=cluster] option[value="' + urn + '"]')
+	    .prop("selected", "selected");
+
+	if ($('#reservation-lists :first-child').attr("id") != nickname) {
+	    $('#' + nickname).fadeOut("fast", function () {
+		if ($(window).scrollTop()) {
+		    $('html, body').animate({scrollTop: '0px'},
+					    500, "swing",
+					    function () {
+						$('#reservation-lists')
+						    .prepend($('#' + nickname));
+						$('#' + nickname)
+						    .fadeIn("fast");
+					    });
+		}
+		else {
+		    $('#reservation-lists').prepend($('#' + nickname));
+		    $('#' + nickname).fadeIn("fast");
+		}
+	    });
+	}
+	aptforms.MarkFormUnsaved();
+    }
+
+    /*
+     * Load anonymized reservations from each am in the list and
+     * generate tables.
+     */
     function LoadReservations()
     {
 	var count = Object.keys(amlist).length;
-	
+
 	_.each(amlist, function(details, urn) {
  	    var callback = function(json) {
-		//console.log(json);
+		console.log("LoadReservations", json);
 		
 		// Kill the spinner.
 		count--;
@@ -251,48 +314,40 @@ $(function ()
 				details.name + ": " + json.value);
 		    return;
 		}
-		var reservations = json.value;
-		if (reservations.length == 0) 
-		    return;
+		$('#reservation-lists #' + details.nickname)
+		    .removeClass("hidden");
 
-		// Generate the main template.
-		var html = listTemplate({
-		    "reservations" : reservations,
-		    "showidx"      : false,
-		    "showproject"  : false,
-		    "showuser"     : false,
-		    "showusing"    : false,
-		    "anonymous"    : true,
-		    "name"         : details.name,
-		});
-		html =
-		    "<div class='row' id='" + details.nickname + "'>" +
-		    " <div class='col-xs-12 col-xs-offset-0'>" + html +
-		    " </div>" +
-		    "</div>";
+		// When clicking on a graph, make it the current cluster.
+		if (!editing) {
+		    $('#' + details.nickname + ' .panel-body')
+			.click(function (event) {
+			    SetCluster(details.nickname, urn);
+			});
+		}
 
-		$('#reservation-lists').prepend(html);
+		ShowResGraph({"forecast"  : json.value.forecast,
+			      "selector"  : details.nickname +
+			                    " .timeseries-graph-panel",
+			      "click_callback" : SetDates});
 
-		// Format dates with moment before display.
-		$('#' + details.nickname + ' .format-date').each(function() {
-		    var date = $.trim($(this).html());
-		    if (date != "") {
-			$(this).html(moment($(this).html()).format("lll"));
-		    }
-		});
-		$('#' + details.nickname + ' .tablesorter')
-		    .tablesorter({
-			theme : 'green',
-			// initialize zebra
-			widgets: ["zebra"],
+		$('#' + details.nickname + ' .resgraph-fullscreen')
+		    .click(function (event) {
+			event.preventDefault();
+			// Panel title in the modal.
+			$('#resgraph-modal .cluster-name')
+			    .html(details.nickname);
+			$('#resgraph-modal').on('shown.bs.modal', function() {
+			    ShowResGraph({"forecast"  : json.value.forecast,
+					  "selector"  : "resgraph-modal",
+					  "click_callback" : SetDates});
+			});
+			sup.ShowModal('#resgraph-modal', function () {
+			    $('#resgraph-modal').off('shown.bs.modal');
+			});
 		    });
-		// This activates the tooltip subsystem.
-		$('[data-toggle="tooltip"]').tooltip({
-		    placement: 'auto',
-		});
  	    }
 	    var xmlthing = sup.CallServerMethod(null, "reserve",
-						"ListReservations",
+						"ReservationInfo",
 						{"cluster" : details.nickname,
 						 "anonymous" : 1});
 	    xmlthing.done(callback);
@@ -385,7 +440,7 @@ $(function ()
     function PopulateReservation()
     {
 	var callback = function(json) {
-	    console.log(json);
+	    console.log("PopulateReservation", json);
 	    sup.HideWaitWait();
 	    if (json.code) {
 		sup.SpitOops("oops", json.value);
@@ -502,6 +557,7 @@ $(function ()
 	 */
 	var options  = "";
 	var typelist = amlist[selected_cluster].typeinfo;
+	var nickname = amlist[selected_cluster].nickname;
 
 	_.each(typelist, function(details, type) {
 	    var count = details.count;
@@ -512,6 +568,13 @@ $(function ()
 	});
 	$("#reserve-request-form #type")	
 	    .html("<option value=''>Please Select</option>" + options);
+
+	if ($('#reservation-lists :first-child').attr("id") != nickname) {
+	    $('#' + nickname).fadeOut("fast", function () {
+		$('#reservation-lists').prepend($('#' + nickname));
+		$('#' + nickname).fadeIn("fast");
+	    });
+	}
     }
 
     // Toggle the button between check and submit.
