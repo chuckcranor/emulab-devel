@@ -711,6 +711,9 @@ my $slice_id    = (defined($userslice_id) ? $userslice_id :
 my $slice_auth  = ($pid eq $gid ? $pid : "${pid}:${gid}");
 my $slice_urn   = GeniHRN::Generate("${OURDOMAIN}:${slice_auth}",
 				    "slice", $slice_id);
+if (!defined($slice_urn)) {
+    fatal("Could not generate a valid slice urn!");
+}
 my $slice_hrn   = "${PGENIDOMAIN}.${pid}.${slice_id}";
 my $SERVER_NAME = (exists($ENV{"SERVER_NAME"}) ? $ENV{"SERVER_NAME"} : "");
 
