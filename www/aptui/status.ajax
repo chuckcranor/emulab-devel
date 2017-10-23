@@ -143,8 +143,8 @@ function Do_GetInstanceStatus()
     $webtask = $instance->WebTask();
     if ($webtask && $webtask->exited()) {
         if ($webtask->exitcode() == GENIRESPONSE_INSUFFICIENT_NODES) {
-            $blob["reason"]  = "Not enough free nodes, please try again later.";
-            $blob["reason"] .= "\n\n";
+            # All the info in the results from the cluster.
+            $blob["reason"]  = "";
         }
         elseif ($webtask->exitcode() == GENIRESPONSE_INSUFFICIENT_BANDWIDTH) {
             $blob["reason"]  = "Not enough available bandwidth for a link.\n\n";

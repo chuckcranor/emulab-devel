@@ -2962,6 +2962,8 @@ sub GetTicketAuxAux($$$$$$$$$$$)
 	    if (!defined($precheck) && $line =~ /precheck:$/) {
 		$inprecheck = 1;
 		$precheck   = "";
+		# Eat the line.
+		next;
 	    }
 	    elsif ($line =~ /Summary:$/) {
 		$insummary = 1;
@@ -2991,13 +2993,13 @@ sub GetTicketAuxAux($$$$$$$$$$$)
 		$insolution   = 0;
 		$inprecheck   = 0;
 	    }
-	    if ($inprecheck &&
-		$line !~ /^Node/ && $line !~ /^Type/ && $line !~ /^Policy/) {
-		
+	    if ($inprecheck) {
 		if ($line =~ /^\*\*\*[\s\w]*precheck failed/) {
 		    $errorstr  = "Precheck failure";
 		}
-		elsif ($line =~ /^Annealing/) {
+		elsif ($line =~ /^Annealing/ ||
+		       $line =~ /precheck succeeded/ ||
+		       $line =~ /precheck failed/) {
 		    $inprecheck = 0;
 		}
 		else {
@@ -3037,10 +3039,13 @@ sub GetTicketAuxAux($$$$$$$$$$$)
 		    $errorcode = GENIRESPONSE_INSUFFICIENT_NODES();
 		}
 		elsif ($line =~ /max_types:\s*[1-9]/) {
-		    $errorstr  = "Not enough nodes because of policy ".
+		    # Make this the log and call it quits.
+		    $logstuff  = "Not enough nodes because of policy ".
 			"restrictions, or existing resource reservations to ".
 			"other projects";
+		    $errorstr  = $logstuff;
 		    $errorcode = GENIRESPONSE_INSUFFICIENT_NODES();
+		    last;
 		}
 	    }
 	    elsif ($insolution) {
@@ -3060,8 +3065,11 @@ sub GetTicketAuxAux($$$$$$$$$$$)
 	#
 	$logstuff .= $precheck
 	    if (defined($precheck));
+	# Showing the solution is confusing when the error is not
+	# enough nodes.
 	$logstuff .= $solution
-	    if (defined($solution));
+	    if (defined($solution) &&
+		$errorcode != GENIRESPONSE_INSUFFICIENT_NODES());
 	
 	# Dump the vtop.
 	if (-e "$pid-$eid.vtop") {
