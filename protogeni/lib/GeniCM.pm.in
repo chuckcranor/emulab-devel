@@ -3040,7 +3040,7 @@ sub GetTicketAuxAux($$$$$$$$$$$)
 		}
 		elsif ($line =~ /max_types:\s*[1-9]/) {
 		    # Make this the log and call it quits.
-		    $logstuff  = "Not enough nodes because of policy ".
+		    $logstuff  = "Not enough free nodes because of policy ".
 			"restrictions, or existing resource reservations to ".
 			"other projects";
 		    $errorstr  = $logstuff;
