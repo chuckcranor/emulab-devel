@@ -289,6 +289,7 @@ $(function ()
 		}
 	    });
 	}
+	HandleClusterChange(urn);
 	aptforms.MarkFormUnsaved();
     }
 
