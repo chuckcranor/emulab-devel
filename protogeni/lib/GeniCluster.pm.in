@@ -1333,8 +1333,8 @@ sub ReservationPrediction($)
     foreach my $type (@types) {
 	my $type = $type->type();
 	
-	$freecounts->{$type} = Reservation->FreeCount($type);
-	$forecast->{$type}   = [ Reservation->Forecast($type) ];
+	$freecounts->{$type} = Reservation->FreeCount($type, \@projlist);
+	$forecast->{$type}   = [ Reservation->Forecast($type, \@projlist) ];
     }
     foreach my $type (Reservation->ReservableTypes())  {
 	my $type = $type->type();
