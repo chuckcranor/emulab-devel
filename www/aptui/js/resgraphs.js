@@ -44,19 +44,28 @@ window.ShowResGraph = (function ()
 		array.push($.extend({}, array[0]));
 		array[1].t = parseInt(array[1].t) + (1 * 3600 * 24);
 	    }
-
-	    /*
-	     * Hmm, Gary says there can be duplicate entries for the same
-	     * time stamp, and we want the last one. So have to splice those
-	     * out before we process. Yuck.
-	     */
-	    if (array.length > 1) {
+	    else if (array.length > 1) {
+		/*
+		 * Hmm, Gary says there can be duplicate entries for the same
+		 * time stamp, and we want the last one. So have to splice those
+		 * out before we process. Yuck.
+		 */
 		var temp = [];
 		for (var i = 0; i < array.length - 1; i++) {
 		    var data     = array[i];
 		    var nextdata = array[i + 1];
 		    
 		    if (data.t == nextdata.t) {
+			//console.info("toss1", type, data, nextdata);
+			continue;
+		    }
+		    /*
+		     * Oh, turns out two consecutive timestamps can have
+		     * the same free/held values. Cull those out too.
+		     */
+		    if (data.free == nextdata.free &&
+			data.held == nextdata.held) {
+			//console.info("toss2", type, data, nextdata);
 			continue;
 		    }
 		    temp.push(data);
