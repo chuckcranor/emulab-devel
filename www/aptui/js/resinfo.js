@@ -12,13 +12,15 @@ $(function ()
     var totalsTemplate  = _.template(templates["resinfo-totals"]);
     var amlist          = null;
     var isadmin         = false;
-    
+    var skiptypes       = null;
+
     function initialize()
     {
 	window.APT_OPTIONS.initialize(sup);
 
 	isadmin  = window.ISADMIN;
 	amlist   = JSON.parse(_.unescape($('#amlist-json')[0].textContent));
+	skiptypes= JSON.parse(_.unescape($('#skiptypes-json')[0].textContent));
 
 	GeneratePageBody();
 
@@ -95,6 +97,7 @@ $(function ()
 		ShowResGraph({"forecast"       : json.value.forecast,
 			      "selector"       : graphid,
 			      "foralloc"       : true,
+			      "skiptypes"      : skiptypes,
 			      "click_callback" : null});
 
 		/*
@@ -106,18 +109,20 @@ $(function ()
 
 		// Each node type
 		for (var type in forecast) {
+		    // Skip types we do not want to show.
+		    if (_.has(skiptypes, type)) {
+			continue;
+		    }
 		    // This is an array of objects.
 		    var array = forecast[type];
 		    var data  = array[0];
 		    var free  = parseInt(data.free) + parseInt(data.held);
 
-		    if (free) {
-			html +=
-			    "<tr>" +
-			    " <td>" + type + "</td>" +
-			    " <td>" + free + "</td>" +
-			    "</tr>";
-		    }
+		    html +=
+			"<tr>" +
+			" <td>" + type + "</td>" +
+			" <td>" + free + "</td>" +
+			"</tr>";
 		}
 		$('#' + countid + ' tbody').html(html);
 		$('#' + countid + ' table').removeClass("hidden");

@@ -94,6 +94,10 @@ echo "<script type='text/javascript'>\n";
 echo "   window.ISADMIN  = $isadmin;\n";
 echo "</script>\n";
 
+echo "<script type='text/plain' id='skiptypes-json'>\n";
+echo htmlentities(json_encode(Instance::NodeTypePruneList()));
+echo "</script>\n";
+
 REQUIRE_UNDERSCORE();
 REQUIRE_SUP();
 REQUIRE_MOMENT();

@@ -778,6 +778,28 @@ class Instance
           return $row[0];
       }
     }
+
+    #
+    # Return a list of types not to show user.
+    #
+    function NodeTypePruneList() {
+        global $ISEMULAB, $ISCLOUD, $ISAPT, $ISPNET, $ISPOWDER;
+        
+        $skiptypes = array("dboxvm"    => true,
+                           "pcivy"     => true,
+                           "pc2830qx2" => true,
+                           "pc2400hp"  => true,
+                           "d2100"     => true,
+                           "pc2400w"   => true);
+                   
+        if ($ISEMULAB || $ISCLOUD || $ISAPT) {
+            $skiptypes["sdr"]      = true;
+            $skiptypes["nuc5300"]  = true;
+            $skiptypes["enodeb"]   = true;
+            $skiptypes["nuc6260"]  = true;
+        }
+        return $skiptypes;
+    }
 }
 
 class InstanceSliver

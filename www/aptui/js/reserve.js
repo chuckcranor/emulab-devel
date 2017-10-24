@@ -13,6 +13,7 @@ $(function ()
     var projlist     = null;
     var amlist       = null;
     var amorder      = [];
+    var skiptypes    = null;
     var isadmin      = false;
     var editing      = false;
     var buttonstate  = "check";
@@ -26,6 +27,7 @@ $(function ()
 	fields   = JSON.parse(_.unescape($('#form-json')[0].textContent));
 	projlist = JSON.parse(_.unescape($('#projects-json')[0].textContent));
 	amlist   = JSON.parse(_.unescape($('#amlist-json')[0].textContent));
+	skiptypes= JSON.parse(_.unescape($('#skiptypes-json')[0].textContent));
 
 	GeneratePageBody(fields);
 
@@ -334,6 +336,7 @@ $(function ()
 
 		ShowResGraph({"forecast"  : json.value.forecast,
 			      "selector"  : id,
+			      "skiptypes"      : skiptypes,
 			      "click_callback" : SetDates});
 
 		$('#' + id + ' .resgraph-fullscreen')
@@ -342,9 +345,13 @@ $(function ()
 			// Panel title in the modal.
 			$('#resgraph-modal .cluster-name')
 			    .html(details.nickname);
+			// Clear the existing graph first.
+			$('#resgraph-modal svg').html("");
+			// Modal needs to show before we can draw the graph.
 			$('#resgraph-modal').on('shown.bs.modal', function() {
 			    ShowResGraph({"forecast"  : json.value.forecast,
 					  "selector"  : "resgraph-modal",
+					  "skiptypes"      : skiptypes,
 					  "click_callback" : SetDates});
 			});
 			sup.ShowModal('#resgraph-modal', function () {

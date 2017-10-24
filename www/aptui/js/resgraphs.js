@@ -10,11 +10,15 @@ window.ShowResGraph = (function ()
 	var forecast = args.forecast;
 	// For the availablity page instead of reserve page.
 	var foralloc = args.foralloc;
+	var skiptypes= args.skiptypes;
 	var index    = 0;
 	var datums   = [];
 
 	if (foralloc === undefined) {
 	    foralloc = false;
+	}
+	if (skiptypes === undefined) {
+	    skiptypes = null;
 	}
 
 	/*
@@ -27,6 +31,9 @@ window.ShowResGraph = (function ()
 
 	// Each node type
 	for (var type in forecast) {
+	    if (skiptypes && _.has(skiptypes, type)) {
+		continue;
+	    }
 	    // This is an array of objects.
 	    var array = forecast[type];
 	
@@ -38,9 +45,15 @@ window.ShowResGraph = (function ()
 		if (free == 0) {
 		    continue;
 		}
-		// Need two points to make a line. Gove the second point
-		// just a day, we do not want to push the right side of
-		// the graph out too much, we want decent scaling.
+		/*
+		 * Need two points to make a line. Gove the second point
+		 * just a day, we do not want to push the right side of
+		 * the graph out too much, we want decent scaling.
+		 *
+		 * XXX Do not mess with the original array, we want the
+		 * original data for popping up the graph in a modal.
+		 */
+		array = array.slice();
 		array.push($.extend({}, array[0]));
 		array[1].t = parseInt(array[1].t) + (1 * 3600 * 24);
 	    }

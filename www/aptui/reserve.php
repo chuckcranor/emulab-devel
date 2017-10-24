@@ -124,6 +124,10 @@ echo "<script type='text/plain' id='amlist-json'>\n";
 echo htmlentities(json_encode($amlist));
 echo "</script>\n";
 
+echo "<script type='text/plain' id='skiptypes-json'>\n";
+echo htmlentities(json_encode(Instance::NodeTypePruneList()));
+echo "</script>\n";
+
 $defaults = array();
 $defaults["pid"]   = '';
 # Default project.
