@@ -300,16 +300,44 @@ pre {
        col-xs-12 col-xs-offset-0'>
     <div class="panel panel-danger">
       <div class="panel-heading">
-        <center><h4>Error Message</h4></center>
+        <center><h4 class="panel-title">Error Message</h4></center>
       </div>
       <div class="panel-body">
 	<code style="white-space: pre-wrap" id="error_panel_text"></code>
       </div>
       <div class="panel-footer">
-	Not sure what the error message means or how to proceed? Join the
+	<div class="resource-error">
+	  <b>More info about resource errors (not enough nodes):</b>
+	  <ul>
+	    <li> To see how many nodes are available right now, or
+	      when nodes will be available in the future, check out
+	      the <a href="resinfo.php" target="_blank">cluster status</a>
+	      page.
+	    </li>
+	    <li> Try asking for a smaller number of nodes, or nodes of a
+	      different type.
+	      <% if (window.ISCLOUD) { %>
+		Or try using a different cluster.
+	      <% } %>
+	    </li>
+	    <li> Try setting the initial experiment duration to a
+	      shorter amount of time. You will find this option in the
+	      <em>Advanced Options</em> section of the
+	      <a href="instantiate" target="_blank">Start Experiment</a>
+	      page.
+	    </li>
+	    <li> Still cannot get enough nodes right away? Try making a
+	      <a href="reserve.php" target="_blank">reservation</a>
+	      for the future.
+	    </li>
+	  </ul>
+	</div>
+	Not sure how to proceed or have further questions about this
+	error? Join the
         <a href='<%= errorURL %>'>users group</a> and ask a question. Be
         sure to include the error message in your question, and the name
 	of your profile and experiment: '<%= profileName %>/<%= name %>'.
+	</div>
       </div>
     </div>
   </div>
