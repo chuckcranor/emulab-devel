@@ -978,7 +978,7 @@ sub UpdateProfileFromRepo()
 	"as the result of a push webhook.",
 	$project->Brand()->OpsEmailAddress(),
 	# Temporary.
-	"BCC: " . $project->Brand()->OpsEmailAddress());
+	"BCC: " . $project->Brand()->LogsEmailAddress());
     
     return 0;
 }
