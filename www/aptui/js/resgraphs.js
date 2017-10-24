@@ -38,9 +38,11 @@ window.ShowResGraph = (function ()
 		if (free == 0) {
 		    continue;
 		}
-		// Need two points to make a line.
+		// Need two points to make a line. Gove the second point
+		// just a day, we do not want to push the right side of
+		// the graph out too much, we want decent scaling.
 		array.push($.extend({}, array[0]));
-		array[1].t = parseInt(array[1].t) + (30 * 3600 * 24);
+		array[1].t = parseInt(array[1].t) + (1 * 3600 * 24);
 	    }
 
 	    /*
