@@ -44,7 +44,11 @@ $(function ()
 		Delete();
 	    });
 	}
-	LoadReservations();
+	// Give this a slight delay so that the spinners appear.
+	// Not really sure why they do not.
+	setTimeout(function () {
+	    LoadReservations();
+	}, 100);	
     }
 
     //
@@ -64,9 +68,15 @@ $(function ()
 	html = aptforms.FormatFormFieldsHorizontal(html);
 	$('#main-body').html(html);
 	$('.faq-contents').html(templates["reserve-faq"]);
-	// Graph list.
-	$('#reservation-lists .reservation-div')
-	    .html(graphTemplate({"amlist": amlist, "showcontrols" : true}));
+	// Graph list(s).
+	html = "";
+	_.each(amlist, function(details, urn) {
+	    html += graphTemplate({"details"        : details,
+				   "urn"            : urn,
+				   "showhelp"       : true,
+				   "showfullscreen" : true});
+	});
+	$('#reservation-lists .reservation-div').html(html);
 
 	// Handler for the Help button
 	$('#reservation-help-button').click(function (event) {
@@ -268,24 +278,26 @@ $(function ()
     // Set the cluster after clicking on a graph.
     function SetCluster(nickname, urn)
     {
+	var id = "resgraph-" + nickname;
+	
 	$('#reserve-request-form [name=cluster] option[value="' + urn + '"]')
 	    .prop("selected", "selected");
 
-	if ($('#reservation-lists :first-child').attr("id") != nickname) {
-	    $('#' + nickname).fadeOut("fast", function () {
+	if ($('#reservation-lists :first-child').attr("id") != id) {
+	    $('#' + id).fadeOut("fast", function () {
 		if ($(window).scrollTop()) {
 		    $('html, body').animate({scrollTop: '0px'},
 					    500, "swing",
 					    function () {
 						$('#reservation-lists')
-						    .prepend($('#' + nickname));
-						$('#' + nickname)
+						    .prepend($('#' + id));
+						$('#' + id)
 						    .fadeIn("fast");
 					    });
 		}
 		else {
-		    $('#reservation-lists').prepend($('#' + nickname));
-		    $('#' + nickname).fadeIn("fast");
+		    $('#reservation-lists').prepend($('#' + id));
+		    $('#' + id).fadeIn("fast");
 		}
 	    });
 	}
@@ -299,39 +311,32 @@ $(function ()
      */
     function LoadReservations()
     {
-	var count = Object.keys(amlist).length;
-
 	_.each(amlist, function(details, urn) {
  	    var callback = function(json) {
 		console.log("LoadReservations", json);
+		var id = "resgraph-" + details.nickname;
 		
 		// Kill the spinner.
-		count--;
-		if (count <= 0) {
-		    $('#spinner').addClass("hidden");
-		}
+		$('#' + id + ' .resgraph-spinner').addClass("hidden");
+
 		if (json.code) {
 		    console.log("Could not get reservation data for " +
 				details.name + ": " + json.value);
 		    return;
 		}
-		$('#reservation-lists #' + details.nickname)
-		    .removeClass("hidden");
-
 		// When clicking on a graph, make it the current cluster.
 		if (!editing) {
-		    $('#' + details.nickname + ' .panel-body')
+		    $('#' + id + ' .panel-body')
 			.click(function (event) {
 			    SetCluster(details.nickname, urn);
 			});
 		}
 
 		ShowResGraph({"forecast"  : json.value.forecast,
-			      "selector"  : details.nickname +
-			                    " .timeseries-graph-panel",
+			      "selector"  : id,
 			      "click_callback" : SetDates});
 
-		$('#' + details.nickname + ' .resgraph-fullscreen')
+		$('#' + id + ' .resgraph-fullscreen')
 		    .click(function (event) {
 			event.preventDefault();
 			// Panel title in the modal.
@@ -559,6 +564,7 @@ $(function ()
 	var options  = "";
 	var typelist = amlist[selected_cluster].typeinfo;
 	var nickname = amlist[selected_cluster].nickname;
+	var id       = "resgraph-" + nickname;
 
 	_.each(typelist, function(details, type) {
 	    var count = details.count;
@@ -570,10 +576,10 @@ $(function ()
 	$("#reserve-request-form #type")	
 	    .html("<option value=''>Please Select</option>" + options);
 
-	if ($('#reservation-lists :first-child').attr("id") != nickname) {
-	    $('#' + nickname).fadeOut("fast", function () {
-		$('#reservation-lists').prepend($('#' + nickname));
-		$('#' + nickname).fadeIn("fast");
+	if ($('#reservation-lists :first-child').attr("id") != id) {
+	    $('#' + id).fadeOut("fast", function () {
+		$('#reservation-lists').prepend($('#' + id));
+		$('#' + id).fadeIn("fast");
 	    });
 	}
     }

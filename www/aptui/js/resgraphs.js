@@ -6,9 +6,16 @@ window.ShowResGraph = (function ()
 {
     'use strict';
  
-    function ProcessData(forecast) {
-	var index  = 0;
-	var datums = [];
+    function ProcessData(args) {
+	var forecast = args.forecast;
+	// For the availablity page instead of reserve page.
+	var foralloc = args.foralloc;
+	var index    = 0;
+	var datums   = [];
+
+	if (foralloc === undefined) {
+	    foralloc = false;
+	}
 
 	/*
 	 * For the interactive tooltip to work, every has data set has to
@@ -24,9 +31,14 @@ window.ShowResGraph = (function ()
 	    var array = forecast[type];
 	
 	    if (array.length == 1) {
-		if (parseInt(array[0].free) == 0) {
+		var free = parseInt(array[0].free);
+		if (foralloc) {
+		    free += parseInt(array[0].held);
+		}
+		if (free == 0) {
 		    continue;
 		}
+		// Need two points to make a line.
 		array.push($.extend({}, array[0]));
 		array[1].t = parseInt(array[1].t) + (30 * 3600 * 24);
 	    }
@@ -58,6 +70,9 @@ window.ShowResGraph = (function ()
 		var data  = array[i];
 		var stamp = data.t;
 		var free  = parseInt(data.free);
+		if (foralloc) {
+		    free += parseInt(data.held);
+		}
 
 		if (! _.has(stamps, stamp)) {
 		    stamps[stamp] = {};
@@ -72,7 +87,9 @@ window.ShowResGraph = (function ()
 		if (i > 0) {
 		    var lastfree  = parseInt(array[i - 1].free);
 		    var prevstamp = stamp - 1;
-
+		    if (foralloc) {
+			lastfree += parseInt(array[i - 1].held);
+		    }
 		    if (! _.has(stamps, prevstamp)) {
 			stamps[prevstamp] = {};
 		    }
@@ -115,6 +132,7 @@ window.ShowResGraph = (function ()
 		}
 	    }
 	}
+	
 	// The first array element now has all the types we want to graph.
 	var types = Object.keys(array[0].counts);
 
@@ -136,6 +154,12 @@ window.ShowResGraph = (function ()
 		}
 	    }
 	}
+	// For graph clarity, add an extra point at the end to give
+	// little space on the right hand side.
+	array.push($.extend({}, array[array.length - 1]));
+	array[array.length - 1].stamp =
+	    parseInt(array[array.length - 1].stamp) + (3600 * 24);
+	
 	//console.info(array);
 
 	/*
@@ -167,7 +191,6 @@ window.ShowResGraph = (function ()
 
     function CreateGraph(datums, selector, click_callback) {
 	var id = '#' + selector;
-	$(id).removeClass("hidden");
 	$(id + ' svg').html("");
 
 	window.nv.addGraph(function() {
@@ -216,7 +239,7 @@ window.ShowResGraph = (function ()
     return function(args) {
 	console.info("ShowResGraph", args);
 	
-	var datums = ProcessData(args.forecast);
+	var datums = ProcessData(args);
 	if (datums == null) {
 	    return;
 	}

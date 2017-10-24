@@ -2,13 +2,14 @@ $(function ()
 {
     'use strict';
 
-    var template_list   = ["resinfo", "reservation-graph",
+    var template_list   = ["resinfo", "resinfo-totals", "reservation-graph",
 			   "oops-modal", "waitwait-modal"];
     var templates       = APT_OPTIONS.fetchTemplateList(template_list);    
     var oopsString      = templates["oops-modal"];
     var waitwaitString  = templates["waitwait-modal"];
     var mainTemplate    = _.template(templates["resinfo"]);
     var graphTemplate   = _.template(templates["reservation-graph"]);
+    var totalsTemplate  = _.template(templates["resinfo-totals"]);
     var amlist          = null;
     var isadmin         = false;
     
@@ -25,7 +26,11 @@ $(function ()
 	$('#oops_div').html(oopsString);	
 	$('#waitwait_div').html(waitwaitString);
 
-	LoadReservations();
+	// Give this a slight delay so that the spinners appear.
+	// Not really sure why they do not.
+	setTimeout(function () {
+	    LoadReservations();
+	}, 100);	
     }
 
     //
@@ -37,9 +42,23 @@ $(function ()
 	    isadmin:		isadmin,
 	});
 	$('#main-body').html(html);
-	// Graph list.
-	$('#reservation-lists')
-	    .html(graphTemplate({"amlist": amlist, "showcontrols" : false}));
+	// Per clusters rows filled in with templates.
+	_.each(amlist, function(details, urn) {
+	    $('#' + details.nickname + " .counts-panel")
+		.html(totalsTemplate({"details"      : details,
+				      "urn"          : urn}));
+	    
+	    $('#' + details.nickname + " .resgraph-panel")
+		.html(graphTemplate({"details"        : details,
+				     "urn"            : urn,
+				     "showhelp"       : true,
+				     "showfullscreen" : false}));
+	});
+	// Handler for the Reservation Graph Help button
+	$('.resgraph-help-button').click(function (event) {
+	    event.preventDefault();
+	    sup.ShowModal('#resgraph-help-modal');
+	});
 
 	// This activates the popover subsystem.
 	$('[data-toggle="popover"]').popover({
@@ -53,34 +72,55 @@ $(function ()
     }
     
     /*
-     * Load anonymized reservations from each am in the list and
-     * generate tables.
+     * Load reservation info from each am in the list and generate
+     * graphs and tables.
      */
     function LoadReservations()
     {
-	var count = Object.keys(amlist).length;
-
 	_.each(amlist, function(details, urn) {
  	    var callback = function(json) {
 		console.log("LoadReservations", json);
+		var graphid = 'resgraph-' + details.nickname;
+		var countid = details.nickname + " .counts-panel";
 		
-		// Kill the spinner.
-		count--;
-		if (count <= 0) {
-		    $('#spinner').addClass("hidden");
-		}
+		// Kill the spinners
+		$('#' + details.nickname + ' .resgraph-spinner')
+		    .addClass("hidden");
+
 		if (json.code) {
 		    console.log("Could not get reservation data for " +
 				details.name + ": " + json.value);
 		    return;
 		}
-		$('#reservation-lists #' + details.nickname)
-		    .removeClass("hidden");
-
-		ShowResGraph({"forecast"  : json.value.forecast,
-			      "selector"  : details.nickname +
-			                    " .timeseries-graph-panel",
+		ShowResGraph({"forecast"       : json.value.forecast,
+			      "selector"       : graphid,
+			      "foralloc"       : true,
 			      "click_callback" : null});
+
+		/*
+		 * Fill in the counts panel. The first tuple in the forecast
+		 * for each type is the immediately available node count.
+		 */
+		var forecast = json.value.forecast;
+		var html     = "";
+
+		// Each node type
+		for (var type in forecast) {
+		    // This is an array of objects.
+		    var array = forecast[type];
+		    var data  = array[0];
+		    var free  = parseInt(data.free) + parseInt(data.held);
+
+		    if (free) {
+			html +=
+			    "<tr>" +
+			    " <td>" + type + "</td>" +
+			    " <td>" + free + "</td>" +
+			    "</tr>";
+		    }
+		}
+		$('#' + countid + ' tbody').html(html);
+		$('#' + countid + ' table').removeClass("hidden");
 	    };
 	    var xmlthing = sup.CallServerMethod(null, "reserve",
 						"ReservationInfo",

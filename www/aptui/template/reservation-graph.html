@@ -1,10 +1,7 @@
 <style>
- .panel-heading-list {
+ .panel-body {
      padding: 2px;
  }
-.panel-body-dashboard {
-    padding: 2px;
-}
 .resgraph {
     margin: 0px;
     padding: 0px;
@@ -16,14 +13,13 @@ svg {
 } 
 </style>
 <div>
-  <% _.each(amlist, function(details, urn) { %>
-    <div class='row hidden' id='<%- details.nickname %>'>
+    <div id='resgraph-<%- details.nickname %>'>
       <div class='col-xs-12 col-xs-offset-0 reservation-details'>
-	<div class='panel panel-default hidden timeseries-graph-panel'>
-	  <div class="panel-heading panel-heading-list">
+	<div class='panel panel-default'>
+	  <div class="panel-heading">
 	    <center>
-	      <h5>
-		<% if (showcontrols) { %>
+	      <h3 class="panel-title">
+		<% if (showfullscreen) { %>
 		  <a href="#" class="resgraph-fullscreen">
 		    <span style="margin-right: 10px;"
 			  class='glyphicon
@@ -31,24 +27,28 @@ svg {
 		  </a>
 		<% } %>
 		<%- details.nickname %> Availability
-		<% if (showcontrols) { %>
+		<% if (showhelp) { %>
 		  <a href='#' class='btn btn-xs resgraph-help-button'
 		     data-toggle='tooltip'
 		     data-container="body"
 		     data-trigger="hover"
+		     style='padding-left: 0px;'
 		     title='Click for more info'>
 		    <span class='glyphicon glyphicon-question-sign text-primary'
-			  style='margin-bottom: 4px;'></span>
-		  </a>
+			  style='margin-bottom: 4px;'></span></a>
 		<% } %>
-	      </h5>
+	      </h3>
 	    </center>
 	  </div>
-	  <div class='panel-body panel-body-dashboard'>
+	  <div class='panel-body'>
 	    <!-- The col setting gives us a "relative" position div -->
 	    <div class='col-xs-12 col-xs-offset-0'
 		 style="padding:0px;">
-	      <div class='resgraph-size timeseries-graph resgraph'>
+	      <div class='resgraph-size resgraph'>
+		<div class='resgraph-spinner'>
+		  <center>
+		    <img src='images/spinner.gif' /></center>
+		</div>
 		<svg class="resgraph"></svg>
 	      </div>
 	    </div>
@@ -56,5 +56,4 @@ svg {
 	</div>
       </div>
     </div>
-  <% }) %>
 </div>
