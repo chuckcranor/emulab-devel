@@ -230,6 +230,29 @@ my $NEW_LVM = 0;
 # could take to pull a large Docker image.  This is a wild guess, obviously.
 #
 my $MAXIMAGEWAIT = 1800;
+
+#
+# Serial console handling. We fire up a capture per active vnode.
+# We use a fine assortment of capture options:
+#
+#	-i: standalone mode, don't try to contact capserver directly
+#	-l: (added later) set directory where log, ACL, and pid files are kept.
+#	-C: use a circular buffer to capture activity while no user
+#	    is connected. This gets dumped to the user when they connect.
+#	-T: Put out a timestamp if there has been no previous output
+#	    for at least 10 seconds.
+#	-L: In conjunction with -T, the timestamp message includes how
+#	    long it has been since the last output.
+#	-R: Retry interval of 1 second. When capture is disconnected
+#	    from the pty (due to container reboot/shutdowns), this is how
+#	    long we wait between attempts to reconnect.
+#       -y: When capture disconnects from the pty, we retry forever to reopen.
+#       -A: tell capture not to prepend '/dev' to the device path we supply.
+#
+my $CAPTURE     = "/usr/local/sbin/capture-nossl";
+my $CAPTUREOPTS	= "-i -C -L -T 10 -R 1000 -y -1 -A";
+my $C2P = "/usr/local/etc/emulab/container2pty.py";
+
 #
 # Create a thin pool with the name $POOL_NAME using not more
 # than $POOL_FRAC of any disk.
@@ -373,6 +396,8 @@ sub RunProxies($$);
 sub KillProxies($$);
 sub InsertPostBootIptablesRules($$$$);
 sub RemovePostBootIptablesRules($$$$);
+sub captureRunning($);
+sub captureStart($$);
 
 #
 # A single client object per load of this file is safe.
@@ -384,7 +409,7 @@ sub getClient()
     return $_CLIENT
 	if (defined($_CLIENT));
     # Load late, because this requires a bunch of deps we might have
-    # installed in ensurePerlDeps().
+    # installed in ensureDeps().
     require dockerclient;
     $_CLIENT = dockerclient->new();
     $_CLIENT->debug($apidebug);
@@ -571,7 +596,7 @@ sub refreshNetworkDeviceMaps()
     }
 }
 
-sub ensurePerlDeps()
+sub ensureDeps()
 {
     if (aptNotInstalled("libwww-perl")) {
 	aptGetInstall("libwww-perl");
@@ -590,6 +615,9 @@ sub ensurePerlDeps()
     };
     if ($@) {
 	mysystem("cpan -i LWP::Protocol::http::SocketUnixAlt");
+    }
+    if (aptNotInstalled("python-docker")) {
+	aptGetInstall("python-docker");
     }
 }
 
@@ -1109,7 +1137,7 @@ sub rootPreConfig($)
     #
     # Make sure we have all our Perl deps.
     #
-    ensurePerlDeps();
+    ensureDeps();
 
     #
     # Make sure we have a bunch of other common tools.
@@ -2712,6 +2740,19 @@ sub vnodeCreate($$$$)
     if ($debug) {
 	print STDERR "container_create($vnode_id) args:\n".Dumper(%args)."\n";
     }
+    
+    #
+    # Kill off a capture that might be running for this container.
+    #
+    if (-x "$CAPTURE") {
+	my $rpid = captureRunning($vnode_id);
+	if ($rpid) {
+	    print STDERR "WARNING: capture already running ($rpid)!?".
+		" Killing...\n";
+	    kill("TERM", $rpid);
+	    sleep(1);
+	}
+    }
 
     #
     # Go ahead and create.
@@ -3077,6 +3118,33 @@ sub vnodeBootHook($$$$)
 {
     my ($vnode_id, $vmid, $vnconfig, $private) = @_;
     my $vninfo = $private;
+
+    #
+    # Start up our Docker-to-pty script for this container; the capture
+    # will attach to it.  We always fire this off here; it cannot
+    # survive when the container reboots or shuts down.
+    #
+    my $PTYLINKFILE = "$VMDIR/$vnode_id/vnode.pty";
+    TBDebugTimeStamp("vnodeBootHook: starting container2pty;".
+		     " symlink $PTYLINKFILE");
+    mysystem("$C2P $vnode_id $PTYLINKFILE &");
+    # Wait 5 seconds to ensure $PTYLINKFILE appears...
+    my $tries = 10;
+    while (! -e $PTYLINKFILE && $tries > 0) {
+	sleep(1);
+	$tries -= 1;
+	TBDebugTimeStamp("vnodeBootHook: waiting for $PTYLINKFILE...");
+    }
+
+    #
+    # Start a capture if there isn't one running.
+    #
+    if (-x "$CAPTURE") {
+	my $rpid = captureRunning($vnode_id);
+	if ($rpid == 0) {
+	    captureStart($vnode_id,$PTYLINKFILE);
+	}
+    }
 
     #
     # This function is not yet part of the libvnode API, but our
@@ -3499,6 +3567,52 @@ sub vnodeDestroy($$$$)
 	&& @{$private->{'preboot_iptables_rules'}}) {
 	DoIPtables(@{$private->{'preboot_iptables_rules'}});
 	delete($private->{'preboot_iptables_rules'});
+    }
+
+    #
+    # Shutdown the capture now that it is gone. We leave the log around
+    # til next time this vnode comes back.
+    #
+    if (-x "$CAPTURE") {
+	my $LOGPATH = "$VMDIR/$vnode_id";
+	my $pidfile = "$LOGPATH/$vnode_id.pid";
+	my $pid = 0;
+
+	if (-r "$pidfile" && open(PID, "<$pidfile")) {
+	    my $pid = <PID>;
+	    close(PID);
+	    chomp($pid);
+	    if ($pid =~ /^(\d+)$/ && $1 > 1) {
+		$pid = $1;
+	    } else {
+		print STDERR "WARNING: bogus pid in capture pidfile ($pid)\n";
+		$pid = 0;
+	    }
+	}
+
+	# XXX sanity: make sure pidfile matches reality
+	my $rpid = captureRunning($vnode_id);
+	if ($rpid == 0) {
+	    print STDERR "WARNING: capture not running";
+	    if ($pid > 0) {
+		print STDERR ", should have been pid $pid";
+		$pid = 0;
+	    }
+	    print STDERR "\n";
+	} elsif ($pid != $rpid) {
+	    if ($pid == 0) {
+		print STDERR "WARNING: no recorded capture pid, ".
+		    "but found process ($rpid)\n";
+	    } else {
+		print STDERR "WARNING: recorded capture pid ($pid) ".
+		    "does not match actual pid ($rpid)\n";
+	    }
+	    $pid = $rpid;
+	}
+
+	if ($pid > 0) {
+	    kill("TERM", $pid);
+	}
     }
 
     # Kill the chains.
@@ -5825,6 +5939,82 @@ sub hostControlNet()
 	}
     }
     die("hostControlNet: could not create control net virtual IP");
+}
+
+
+#
+# If there is a capture running for the indicated vnode, return the pid.
+# Otherwise return 0.
+#
+# Note: we do not use the pidfile here! This is all about sanity checking.
+#
+sub captureRunning($)
+{
+    my ($vnode_id) = @_;
+    my $LOGPATH = "$VMDIR/$vnode_id";
+
+    my $rpid = `pgrep -f '^$CAPTURE .*-l $LOGPATH $vnode_id'`;
+    if ($? == 0) {
+	chomp($rpid);
+	if ($rpid =~ /^(\d+)$/) {
+	    return $1;
+	}
+    }
+
+    return 0;
+}
+
+sub captureStart($$)
+{
+    my ($vnode_id,$ptyfile) = @_;
+    my $LOGPATH = "$VMDIR/$vnode_id";
+    my $acl = "$LOGPATH/$vnode_id.acl";
+    my $logfile = "$LOGPATH/$vnode_id.log";
+    my $pidfile = "$LOGPATH/$vnode_id.pid";
+
+    # unlink ACL file so that we know when capture has started
+    unlink($acl)
+	if (-e $acl);
+
+    # remove old log file before start
+    unlink($logfile)
+	if (-e $logfile);
+
+    # and old pid file
+    unlink($pidfile)
+	if (-e $pidfile);
+
+    TBDebugTimeStamp("captureStart: starting capture on pty symlink $ptyfile");
+
+    # XXX see start of file for meaning of the options
+    mysystem2("$CAPTURE $CAPTUREOPTS -l $LOGPATH $vnode_id $ptyfile");
+
+    #
+    # We need to report the ACL info to capserver via tmcc. But do not
+    # hang, use timeout. Also need to wait for the acl file, since
+    # capture is running in the background. 
+    #
+    if (! $?) {
+	for (my $i = 0; $i < 10; $i++) {
+	    last
+		if (-e $acl && -s $acl);
+	    print "waiting 1 sec for capture ACL file...\n" if ($sleepdebug);
+	    sleep(1);
+	}
+	if (! (-e $acl && -s $acl)) {
+	    print STDERR "WARNING: $acl does not exist after 10 seconds; ".
+		"capture may not have started correctly.\n";
+	}
+	else {
+	    if (mysystem2("$BINDIR/tmcc.bin -n $vnode_id -t 5 ".
+			  "   -f $acl tiplineinfo")) {
+		print STDERR "WARNING: could not report tiplineinfo; ".
+		    "remote console connections may not work.\n";
+	    }
+	}
+    } else {
+	print STDERR "WARNING: capture not started!\n";
+    }
 }
 
 # convert 123456 into 12:34:56
