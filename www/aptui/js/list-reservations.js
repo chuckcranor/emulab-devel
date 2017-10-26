@@ -99,6 +99,15 @@ $(function ()
 			DenyReservation($(this).closest('tr'));
 			return false;
 		    });
+		    // Bind info and warning handler.
+		    $('#' + name + ' .info-button').click(function() {
+			ReservationInfoOrWarning("info", $(this).closest('tr'));
+			return false;
+		    });
+		    $('#' + name + ' .warn-button').click(function() {
+			ReservationInfoOrWarning("warn", $(this).closest('tr'));
+			return false;
+		    });
 		}
 		// This activates the tooltip subsystem.
 		$('[data-toggle="tooltip"]').tooltip({
@@ -196,6 +205,59 @@ $(function ()
 	    $('#deny-modal').off('hidden.bs.modal');
 	})
 	sup.ShowModal("#deny-modal");
+    }
+    
+    /*
+     * Ask for info about reservation (usage, lack of usage, etc).
+     */
+    function ReservationInfoOrWarning(which, row) {
+	// This is what we are deleting.
+	var uuid    = $(row).attr('data-uuid');
+	var pid     = $(row).attr('data-pid');
+	var uid_idx = $(row).attr('data-creator_idx');
+	var cluster = $(row).attr('data-cluster');
+	var table   = $(row).closest("table");
+	var warning = (which == "warn" ? 1 : 0);
+	var modal   = (warning ? "#warn-modal" : "#info-modal");
+	var method  = (warning ? "WarnUser" : "RequestInfo");
+	
+	var callback = function (json) {
+	    sup.HideModal('#waitwait-modal');
+	    console.log("info/warn", json);
+	    if (json.code) {
+		sup.SpitOops("oops", json.value);
+		return;
+	    }
+	};
+	// Bind the confirm button in the modal. 
+	$(modal + ' .confirm-button').click(function () {
+	    var message = $(modal + ' .user-message').val();
+	    if (!warning && message.trim().length == 0) {
+		$(modal + ' .nomessage-error').removeClass("hidden");
+		return;
+	    }
+	    sup.HideModal(modal, function () {
+		sup.ShowModal('#waitwait-modal');
+		var xmlthing = sup.CallServerMethod(null, "reserve", method,
+						    {"uuid"    : uuid,
+						     "pid"     : pid,
+						     "uid_idx" : uid_idx,
+						     "cluster" : cluster,
+						     "message" : message});
+		xmlthing.done(callback);
+	    });
+	});
+	// Handler so we know the user closed the modal. We need to
+	// clear the confirm button handler.
+	$(modal).on('hidden.bs.modal', function (e) {
+	    $(modal + ' .nomessage-error').unbind("click");
+	    $(modal).off('hidden.bs.modal');
+	})
+	// Hide error
+	if (!warning) {
+	    $(modal + ' .nomessage-error').addClass("hidden");
+	}
+	sup.ShowModal(modal);
     }
     
     // Helper.

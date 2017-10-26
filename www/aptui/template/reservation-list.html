@@ -70,7 +70,11 @@
 	  <% _.each(reservations, function(value, uuid) { %>
 	    <tr <% if (showidx) { %> data-uuid="<%- value.uuid %>"
 				     data-pid="<%- value.pid %>"
-				     data-cluster="<%- value.cluster %>"<% } %>>
+				     data-cluster="<%- value.cluster %>"
+				     <% if (value.creator_idx) { %>
+				     data-creator_idx="<%- value.creator_idx %>"
+				     <% } %>				     
+	        <% } %>>
 	      <% if (showidx) { %>
 		<td>
 		<% if (isadmin) { %>
@@ -96,12 +100,33 @@
 		  <a href="reserve.php?edit=1&cluster=<%- value.cluster %>&uuid=<%- value.uuid %>"
 		     class="edit-button">
 		    <span class='glyphicon glyphicon-pencil pull-left'
-			  style='color: red; margin-bottom: 4px;'
+			  style='color: red; margin-right: 5px;
+				 margin-bottom: 4px;'
 			  data-toggle='tooltip'
 			  data-container="body"
 			  data-trigger="hover"
 			  title='Edit reservation details'></span>
 		  </a>
+		  <% if (value.creator_idx) { %>
+		    <a href="#" class="info-button">
+		      <span class='glyphicon glyphicon-info-sign pull-left'
+			    style='color: red; margin-bottom: 4px;
+				   margin-right: 5px;'
+			    data-toggle='tooltip'
+			    data-container="body"
+			    data-trigger="hover"
+			    title='Send a message to user'></span>
+		    </a>
+		    <a href="#" class="warn-button">
+		      <span class='glyphicon glyphicon-warning-sign pull-left'
+			    style='color: red; margin-bottom: 4px;
+				   margin-right: 0px;'
+			    data-toggle='tooltip'
+			    data-container="body"
+			    data-trigger="hover"
+			    title='Warn user about unused reservaton'></span>
+		    </a>
+		<% } %>
 		</td>
 	      <% } %>	    
 	      <% if (showuser) { %>
@@ -164,6 +189,44 @@
 	  <br>
           <button class='btn btn-danger btn-sm'
 		  id='confirm-deny'>Confirm</a>
+	</center>
+      </div>
+    </div>
+  </div>
+</div>
+<div id='info-modal' class='modal fade'>
+  <div class='modal-dialog'>
+    <div class='modal-content'>
+      <div class='modal-body'>
+        <button type='button' class='close' data-dismiss='modal'
+                aria-hidden='true'>&times;</button>
+        <center><h4>Confirm to Send Message</h4>
+	  <span class="hidden nomessage-error text-danger">Give me Text!</span>
+	  <div>
+	    <textarea class='form-control user-message'
+		      rows=5></textarea>
+	  </div>
+	  <br>
+          <button class='btn btn-danger btn-sm confirm-button'>Confirm</button>
+	</center>
+      </div>
+    </div>
+  </div>
+</div>
+<div id='warn-modal' class='modal fade'>
+  <div class='modal-dialog'>
+    <div class='modal-content'>
+      <div class='modal-body'>
+        <button type='button' class='close' data-dismiss='modal'
+                aria-hidden='true'>&times;</button>
+        <center><h4>Confirm to Send Warning Message</h4>
+	  Additional text to send with warning (no text is okay):</span>
+	  <div>
+	    <textarea class='form-control user-message'
+		      rows=5></textarea>
+	  </div>
+	  <br>
+          <button class='btn btn-danger btn-sm confirm-button'>Confirm</button>
 	</center>
       </div>
     </div>

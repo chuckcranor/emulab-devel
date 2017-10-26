@@ -336,6 +336,102 @@ function Do_Delete()
 }
 
 #
+# Request info.
+#
+function Do_InfoOrWarn($warning = false)
+{
+    global $this_user;
+    global $ajax_args;
+    global $TB_PROJECT_CREATEEXPT, $suexec_output, $APTBASE, $APTMAIL;
+
+    if (!isset($ajax_args["uuid"])) {
+	SPITAJAX_ERROR(-1, "Missing uuid");
+	return -1;
+    }
+    $uuid = $ajax_args["uuid"];
+    if (!IsValidUUID($uuid)) {
+        SPITAJAX_ERROR(-1, "Invalid uuid");
+	return;
+    }
+    if (!isset($ajax_args["cluster"])) {
+	SPITAJAX_ERROR(-1, "Missing cluster");
+	return;
+    }
+    if (!preg_match("/^[-\w]+$/", $ajax_args["cluster"])) {
+        SPITAJAX_ERROR(-1, "Invalid cluster name");
+        return;
+    }
+    $nickname  = $ajax_args["cluster"];
+    $aggregate = Aggregate::LookupByNickname($nickname);
+    if (!$aggregate) {
+        SPITAJAX_ERROR(-1, "No such cluster");
+        return;
+    }
+    if (!isset($ajax_args["pid"])) {
+	SPITAJAX_ERROR(-1, "Missing project");
+	return;
+    }
+    $project = Project::Lookup($ajax_args["pid"]);
+    if (!$project) {
+	SPITAJAX_ERROR(-1, "No such project");
+	return;
+    }
+    if (!isset($ajax_args["uid_idx"])) {
+	SPITAJAX_ERROR(-1, "Missing uid idx");
+	return;
+    }
+    $user = User::Lookup($ajax_args["uid_idx"]);
+    if (!$user) {
+	SPITAJAX_ERROR(-1, "No such user");
+	return;
+    }
+    if (!warning &&
+        (!isset($ajax_args["message"]) || $ajax_args["message"] == "")) {
+	SPITAJAX_ERROR(-1, "Missing message");
+	return;
+    }
+    if (!ISADMIN()) {
+	SPITAJAX_ERROR(-1, "Only administrators can ask for info or warn");
+	return;
+
+    }
+    $url = "${APTBASE}/reserve.php?edit=1&cluster=$nickname&uuid=$uuid\n";
+    
+    if ($warning) {
+        $subject = "Unused Reservation Warning";
+        $message = "Your reservation in project $pid is currently either\n".
+            "underused or unused. Tying up resources in this manner means\n".
+            "other users may not be able to get their work done. If your\n".
+            "reservation is still underused in 24 hours, the reservation\n".
+            "will be deleted.\n\n";
+
+        if (isset($ajax_args["message"]) && $ajax_args["message"] != "") {
+            $message .= $ajax_args["message"] . "\n";
+        }
+        $message .= "$url\n";
+    }
+    else {
+        $subject = "Reservation Info Request";
+        $message = $ajax_args["message"] . "\n\n";
+        $message .= "$url\n";
+    }
+    TBMAIL($user->email(), $subject, $message,
+           "From: $APTMAIL\n".
+           "CC: $APTMAIL");
+
+    sleep(1);
+    SPITAJAX_RESPONSE(1);
+}
+function Do_WarnUser()
+{
+    Do_InfoOrWarn(true);
+}
+function Do_RequestInfo()
+{
+    Do_InfoOrWarn(false);
+}
+
+#
 # Approve a reservation.
 #
 function Do_Approve()

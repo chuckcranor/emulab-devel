@@ -356,8 +356,10 @@ $routing = array("myprofiles" =>
                                                      "Do_GetReservation",
                                                  "Approve" =>
                                                      "Do_Approve",
-                                                 "Delete" =>
-                                                     "Do_Delete",
+                                                 "WarnUser" =>
+                                                     "Do_WarnUser",
+                                                 "RequestInfo" =>
+                                                     "Do_RequestInfo",
                                                  "ReservationInfo" =>
                                                      "Do_ReservationInfo")),
 		 "images" =>
