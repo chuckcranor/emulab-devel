@@ -471,9 +471,15 @@ docker-install:	dir-install
 	$(INSTALL) -m 755 $(SRCDIR)/docker/libvnode_docker.pm $(BINDIR)/
 	$(INSTALL) -m 755 $(SRCDIR)/docker/dockerclient.pm $(BINDIR)/
 	$(INSTALL) -m 755 $(SRCDIR)/docker/dockerclient-cli $(BINDIR)/
+	$(INSTALL) -m 755 $(SRCDIR)/docker/container2pty.py $(BINDIR)/
 	$(INSTALL) -m 755 $(SRCDIR)/docker/create-docker-image $(LBINDIR)/
 	$(INSTALL) -m 755 $(SRCDIR)/docker/emulabize-image $(LBINDIR)/
 	$(INSTALL) -m 755 $(SRCDIR)/vnodectl $(BINDIR)/
+	# Note that we install this, but do not enable it.  It is dynamically
+	# started and stopped as needed by libvnode_docker.pm .
+	$(INSTALL) -m 644 -o root -g $(DIRGROUP) \
+		$(SRCDIR)/docker/sshd-docker-exec.service \
+		$(SYSETCDIR)/systemd/system
 	echo "docker" > $(ETCDIR)/genvmtype
 	$(INSTALL) -m 755 -o root -g $(DIRGROUP) -d $(ETCDIR)/docker
 	$(INSTALL) -m 755 -o root -g $(DIRGROUP) -d $(ETCDIR)/docker/scripts

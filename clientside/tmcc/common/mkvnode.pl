@@ -106,6 +106,7 @@ my $rebooting  = 0;
 my $reload     = 0;
 my ($vmid,$vmtype,$ret,$err);
 my $ISXENVM    = (GENVNODETYPE() eq "xen" ? 1 : 0);
+my $ISDOCKERVM = (GENVNODETYPE() eq "docker" ? 1 : 0);
 
 # Flags for leaveme.
 my $LEAVEME_REBOOT = 0x1;
@@ -760,8 +761,11 @@ if (safeLibOp('vnodeConfigDevices', 1, 1, 1)) {
 
 #
 # Route to inner ssh, but not if the IP is routable, no need to.
+# We don't do this in this wrapper for Docker, because Docker handles it
+# differently.
 #
 if (defined(VNCONFIG('SSHDPORT')) && VNCONFIG('SSHDPORT') ne "" &&
+    !$ISDOCKERVM &&
     !isRoutable(VNCONFIG('CTRLIP'))) {
     my $ref = {};
     $ref->{'ext_ip'}   = $ext_ctrlip;

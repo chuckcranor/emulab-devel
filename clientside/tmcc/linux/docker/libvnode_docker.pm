@@ -294,6 +294,11 @@ sub ALLOC_PREFERINPOOL	{ return 3; }
 # Locks.
 my $GLOBAL_CONF_LOCK = "emulabdockerconf";
 my $GLOBAL_MOUNT_LOCK = "emulabmounts";
+my $SSHD_EXEC_LOCK = "sshdockerexec";
+
+my $DOCKER_EXEC_SSHD_CONFIGFILE = "/etc/ssh/sshd_config-docker-exec";
+my $DOCKER_EXEC_SSHD_CONFIGFILE_HEAD = "/etc/ssh/sshd_config-docker-exec.head";
+my $DOCKER_EXEC_SSHD_CONFIGDIR = "/etc/ssh/docker-exec.conf.d";
 
 # Config done file.
 my $READYFILE = "/var/run/emulab.docker.ready";
@@ -362,6 +367,64 @@ my $ISREMOTENODE = REMOTEDED();
 my $TMCD_PORT	 = 7777;
 my $SLOTHD_PORT  = 8509;
 my $EVPROXY_PORT = 16505;
+
+##
+## Docker constants.
+##
+#
+# The options as far as what to install in an image to support its use
+# in Emulab.
+#
+#   none: we do not alter the image at all!
+#   basic: install only sshd and syslogd, and whatever init the user wants
+#   core: basic + install a custom-build of the clientside, using a buildenv of
+#     the image, but only installing the DESTDIR clientside binaries/fs stuff;
+#     also install a whole bunch of packages the clientside stuff needs.
+#   buildenv: basic + full + install all build tools for clientside, and
+#     install the clientside.
+#   full: buildenv + packages to make the image identical to a normal Emulab
+#     disk image.
+#
+sub DOCKER_EMULABIZE_NONE() { return "none"; }
+sub DOCKER_EMULABIZE_BASIC() { return "basic"; }
+sub DOCKER_EMULABIZE_CORE() { return "core"; }
+sub DOCKER_EMULABIZE_BUILDENV() { return "buildenv"; }
+sub DOCKER_EMULABIZE_FULL() { return "full"; }
+#
+# Most of the Linux images that users will use will be generic images
+# whose startup command is sh or bash.  We need something that (at
+# minimum) runs infinitely, reaps processes like init, and allows remote
+# logins via ssh, syslogs, etc.  Users are free to specify no
+# emulabization to cover the cases where the image runs a bona fide
+# daemon or pre-configured init.  But we cannot help them with those
+# cases automatically.
+#
+#sub DOCKER_EMULABIZE_DEFAULT() { return DOCKER_EMULABIZE_BASIC(); }
+sub DOCKER_EMULABIZE_DEFAULT() { return DOCKER_EMULABIZE_NONE(); }
+
+#
+# On modern (ie.e. 2016) Linux images, systemd is already installed (on
+# Ubuntu/Debian, and Fedora/CentOS).  We really want to let people use
+# it if it's there, instead of falling back to runit (which we install
+# during Emulabization).  However, the problem is that we cannot use
+# systemd as the init on shared nodes -- systemd requires at least
+# read-only access to /sys/fs/cgroup, and docker as of 1.26 does not
+# virtualize the cgroup mount (although it's in kernels >= 4.4) -- even
+# if Docker did, it might not work; I don't know what systemd wants out
+# of /sys/fs/cgroup.
+#
+# Thus, we must default to runit so that users have images that work on
+# both shared and dedicated container hosts.  Ugh!
+#
+sub DOCKER_INIT_INSTALLED() { return "installed"; }
+sub DOCKER_INIT_RUNIT() { return "runit"; }
+
+#
+# Either we always pull the reference image when setting up a new
+# container, or we only pull the first time.  Simple.
+#
+sub DOCKER_PULLPOLICY_LATEST() { return "latest"; }
+sub DOCKER_PULLPOLICY_CACHED() { return "cached"; }
 
 # Local functions
 sub findRoot();
@@ -802,6 +865,123 @@ sub ensureDockerInstalled()
     return 0;
 }
 
+sub setupDockerExecSSH() {
+    #
+    # We need to read the default sshd config; comment out any Port or
+    # ListenAddress lines; and write it out to the head config file.
+    # Note, we blow away the head file when first configuring the phost
+    # to support docker.
+    #
+    my @newlines = ();
+    open(FD,"/etc/ssh/sshd_config");
+    my @lines = <FD>;
+    close(FD);
+    foreach my $line (@lines) {
+	if ($line =~ /^\s*(Port|ListenAddress)/) {
+	    $line = "#$line";
+	}
+	push(@newlines,$line);
+    }
+    open(FD,">$DOCKER_EXEC_SSHD_CONFIGFILE_HEAD");
+    print FD @newlines;
+    close(FD);
+
+    #
+    # Then make the dir where we put the per-vhost sshd config bits.
+    #
+    mysystem("mkdir -p $DOCKER_EXEC_SSHD_CONFIGDIR");
+
+    return 0;
+}
+
+sub rebuildAndReloadDockerExecSSH() {
+    my $retval;
+
+    TBDebugTimeStamp("rebuildAndReloadDockerExecSSH: grabbing sshd lock".
+		     " $SSHD_EXEC_LOCK")
+	if ($lockdebug);
+    my $locked = TBScriptLock($SSHD_EXEC_LOCK,TBSCRIPTLOCK_GLOBALWAIT(), 900);
+    if ($locked != TBSCRIPTLOCK_OKAY()) {
+	return 0
+	    if ($locked == TBSCRIPTLOCK_IGNORE());
+	print STDERR "Could not get the $SSHD_EXEC_LOCK lock".
+	    " after a long time!\n";
+	return -1;
+    }
+
+    #
+    # Our private Docker Exec sshd listens on the private VM ports and
+    # when a user authenticates, we use the ForceCommand directive in a
+    # Match block to gateway them into the container that is supposed to
+    # be reachable via ssh on that port.  However, only Match blocks may
+    # follow other Match blocks -- in particular, a Port directive (to
+    # listen on) must precede the Match blocks.  Thus, for each
+    # container, we create one file in the configdir like
+    # 0.$vnode_id.port with the Port line, and another like
+    # 1.$vnode_id.match with the match and command directives).
+    #
+    # Thus, we need an rcsorted order of files in $DOCKER_EXEC_SSHD_CONFIGDIR.
+    #
+    my @pmlines = ();
+    if (sortedreadallfilesindir($DOCKER_EXEC_SSHD_CONFIGDIR,\@pmlines)) {
+	$retval = -1;
+	goto out;
+    }
+
+    open(FD,"$DOCKER_EXEC_SSHD_CONFIGFILE_HEAD");
+    my @hlines = <FD>;
+    close(FD);
+
+    open(FD,">$DOCKER_EXEC_SSHD_CONFIGFILE");
+    print FD "".join('',@hlines)."\n".join('',@pmlines)."\n";
+    close(FD);
+
+    #
+    # But, if there were no port/match lines, *stop* the service instead of
+    # restarting -- because it would probably try to start on port 22, which
+    # of course will just fail it.
+    #
+    if (@pmlines == 0) {
+	TBDebugTimeStamp("No more ports/commands in sshd_config-docker-exec;".
+			 " stopping service!");
+	mysystem2("systemctl stop sshd-docker-exec.service");
+    }
+    else {
+	TBDebugTimeStamp("Restarting sshd-docker-exec.service for changes to".
+			 " sshd_config-docker-exec");
+	mysystem2("systemctl restart sshd-docker-exec.service");
+    }
+    $retval = 0;
+
+  out:
+    TBScriptUnlock();
+    return $retval;
+}
+
+sub addContainerToDockerExecSSH($$$) {
+    my ($vnode_id,$port,$shell)  = @_;
+
+    open(FD,">$DOCKER_EXEC_SSHD_CONFIGDIR/0.${vnode_id}.port");
+    print FD "Port $port\n";
+    close(FD);
+
+    open(FD,">$DOCKER_EXEC_SSHD_CONFIGDIR/1.${vnode_id}.match");
+    print FD "Match LocalPort=$port\n";
+    print FD "ForceCommand /usr/bin/sudo /usr/bin/docker exec -it $vnode_id $shell\n";
+    close(FD);
+
+    return rebuildAndReloadDockerExecSSH();
+}
+
+sub removeContainerFromDockerExecSSH($) {
+    my ($vnode_id,) = @_;
+
+    unlink("$DOCKER_EXEC_SSHD_CONFIGDIR/0.${vnode_id}.port");
+    unlink("$DOCKER_EXEC_SSHD_CONFIGDIR/0.${vnode_id}.match");
+
+    return rebuildAndReloadDockerExecSSH();
+}
+
 sub getBridgeInterfaces($)
 {
     my ($brname,) = @_;
@@ -1144,6 +1324,11 @@ sub rootPreConfig($)
     #
     aptGetEnsureInstalled("lvm2","thin-provisioning-tools",
 			  "bridge-utils","iproute2","vlan");
+
+    #
+    # Set up the docker exec sshd service.
+    #
+    setupDockerExecSSH();
 
     #
     # Setup our control net device if not already up.
@@ -2922,15 +3107,40 @@ sub vnodePreConfigControlNetwork($$$$$$$$$$$$)
     # later!
     my @grules = ();
 
-    # Override the common/mkvnode.pl ssh portfw.  We want the alt sshd
-    # port for this vnode to redirect from the public host to port 22 on
-    # the inside, not to the alt port on the inside, like mkvnode.pl
-    # assumes.  Ugh.
-    if (exists($vnconfig->{'config'}->{'SSHDPORT'}) && !isRoutable($ip)) {
-	push(@grules,
-	     "-t nat -A PREROUTING -j DNAT -p tcp ".
-	     "--dport $vnconfig->{config}->{SSHDPORT} -d $host_ip ".
-	     "--to-destination $ip:22");
+    #
+    # Finally, either allow direct ssh into the container (if it was
+    # emulabized OR if user specifically requested direct ssh), or add
+    # this port to our alternate sshd-docker-exec service (if not
+    # emulabized or user requested ssh-attach).
+    #
+    if (exists($vnconfig->{'config'}->{'SSHDPORT'})) {
+	my $attributes = $vnconfig->{'attributes'};
+	my $emulabization = $attributes->{DOCKER_EMULABIZATION};
+	my $ssh_style = $attributes->{DOCKER_SSH_STYLE};
+	my $exec_shell = $attributes->{DOCKER_EXEC_SHELL} || "/bin/sh";
+	
+	if (($emulabization ne DOCKER_EMULABIZE_NONE()
+	     && (!defined($ssh_style) || $ssh_style eq ''
+		 || $ssh_style eq 'direct'))
+	    || (defined($ssh_style) && $ssh_style eq 'direct')) {
+	    if (!isRoutable($ip)) {
+		# Override the common/mkvnode.pl ssh portfw.  We want the
+		# alt sshd port for this vnode to redirect from the public
+		# host to port 22 on the inside, not to the alt port on the
+		# inside, like mkvnode.pl assumes.  Ugh.
+		push(@grules,
+		     "-t nat -A PREROUTING -j DNAT -p tcp ".
+		     "--dport $vnconfig->{config}->{SSHDPORT} -d $host_ip ".
+		     "--to-destination $ip:22");
+	    }
+	    $private->{'ssh_style'} = 'direct';
+	}
+	else {
+	    # Setup our docker exec via ssh.
+	    addContainerToDockerExecSSH(
+		$vnode_id,$vnconfig->{config}->{SSHDPORT},$exec_shell);
+	    $private->{'ssh_style'} = 'exec';
+	}
     }
     
     # Reroute tmcd calls to the proxy on the physical host
@@ -3570,6 +3780,15 @@ sub vnodeDestroy($$$$)
     }
 
     #
+    # If user wanted 'exec' ssh_style, remove this vnode from the
+    # private sshd.
+    #
+    if (exists($private->{'ssh_style'}) && $private->{'ssh_style'} eq 'exec') {
+	delete($private->{'ssh_style'});
+	removeContainerFromDockerExecSSH($vnode_id);
+    }
+
+    #
     # Shutdown the capture now that it is gone. We leave the log around
     # til next time this vnode comes back.
     #
@@ -3822,61 +4041,6 @@ sub analyzeImage($$)
     }
     return 0;
 }
-
-#
-# The options as far as what to install in an image to support its use
-# in Emulab.
-#
-#   none: we do not alter the image at all!
-#   basic: install only sshd and syslogd, and whatever init the user wants
-#   core: basic + install a custom-build of the clientside, using a buildenv of
-#     the image, but only installing the DESTDIR clientside binaries/fs stuff;
-#     also install a whole bunch of packages the clientside stuff needs.
-#   buildenv: basic + full + install all build tools for clientside, and
-#     install the clientside.
-#   full: buildenv + packages to make the image identical to a normal Emulab
-#     disk image.
-#
-sub DOCKER_EMULABIZE_NONE() { return "none"; }
-sub DOCKER_EMULABIZE_BASIC() { return "basic"; }
-sub DOCKER_EMULABIZE_CORE() { return "core"; }
-sub DOCKER_EMULABIZE_BUILDENV() { return "buildenv"; }
-sub DOCKER_EMULABIZE_FULL() { return "full"; }
-#
-# Most of the Linux images that users will use will be generic images
-# whose startup command is sh or bash.  We need something that (at
-# minimum) runs infinitely, reaps processes like init, and allows remote
-# logins via ssh, syslogs, etc.  Users are free to specify no
-# emulabization to cover the cases where the image runs a bona fide
-# daemon or pre-configured init.  But we cannot help them with those
-# cases automatically.
-#
-#sub DOCKER_EMULABIZE_DEFAULT() { return DOCKER_EMULABIZE_BASIC(); }
-sub DOCKER_EMULABIZE_DEFAULT() { return DOCKER_EMULABIZE_CORE(); }
-
-#
-# On modern (ie.e. 2016) Linux images, systemd is already installed (on
-# Ubuntu/Debian, and Fedora/CentOS).  We really want to let people use
-# it if it's there, instead of falling back to runit (which we install
-# during Emulabization).  However, the problem is that we cannot use
-# systemd as the init on shared nodes -- systemd requires at least
-# read-only access to /sys/fs/cgroup, and docker as of 1.26 does not
-# virtualize the cgroup mount (although it's in kernels >= 4.4) -- even
-# if Docker did, it might not work; I don't know what systemd wants out
-# of /sys/fs/cgroup.
-#
-# Thus, we must default to runit so that users have images that work on
-# both shared and dedicated container hosts.  Ugh!
-#
-sub DOCKER_INIT_INSTALLED() { return "installed"; }
-sub DOCKER_INIT_RUNIT() { return "runit"; }
-
-#
-# Either we always pull the reference image when setting up a new
-# container, or we only pull the first time.  Simple.
-#
-sub DOCKER_PULLPOLICY_LATEST() { return "latest"; }
-sub DOCKER_PULLPOLICY_CACHED() { return "cached"; }
 
 sub pullImage($$$$;$)
 {
@@ -4567,6 +4731,11 @@ sub setupImage($$$$$$$$$)
 	    return -1;
 	}
     }
+    # Save this off for later reference.
+    if ($emulabization eq '') {
+	$emulabization = DOCKER_EMULABIZE_NONE;
+    }
+    $vnconfig->{'attributes'}->{DOCKER_EMULABIZATION} = $emulabization;
     if (exists($vnconfig->{'attributes'}->{DOCKER_EMULABIZATION_UPDATE})) {
 	$update = $vnconfig->{'attributes'}->{DOCKER_EMULABIZATION_UPDATE};
     }
