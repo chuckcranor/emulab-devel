@@ -152,14 +152,21 @@
 	      <td><%- value.type %></td>
 	      <td><%- value.count %></td>
 	      <% if (showusing) { %>
-		<% if (value.approved && new Date().getTime() > new Date(value.start).getTime() && value.using < value.count) { %>
+		<% if (new Date().getTime() > new Date(value.start).getTime() && value.using < value.count) { %>
 		  <td><span class="text-danger"><%- value.using %></span></td>
 		<% } else { %>
 		  <td><%- value.using %></td>
 		<% } %>
 	      <% } %>
 	      <td class="format-date"><%- value.created %></td>
-	      <td class="format-date"><%- value.start %></td>
+	      <td>
+		<% if (new Date().getTime() > new Date(value.start).getTime()) { %>
+		  <span class="format-date"
+			style="color: green;"><%- value.start %></span>
+		<% } else { %>
+		  <span class="format-date"><%- value.start %></span>
+		<% } %>
+	      </td>
 	      <td class="format-date"><%- value.end %></td>
 	      <% if (value.approved) { %>
 		<td>Approved</td>
