@@ -152,7 +152,7 @@
 	      <td><%- value.type %></td>
 	      <td><%- value.count %></td>
 	      <% if (showusing) { %>
-		<% if (new Date().getTime() > new Date(value.start).getTime() && value.using < value.count) { %>
+		<% if (value.approved && new Date().getTime() > new Date(value.start).getTime() && value.using < value.count) { %>
 		  <td><span class="text-danger"><%- value.using %></span></td>
 		<% } else { %>
 		  <td><%- value.using %></td>
