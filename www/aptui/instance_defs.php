@@ -786,6 +786,7 @@ class Instance
         global $ISEMULAB, $ISCLOUD, $ISAPT, $ISPNET, $ISPOWDER;
         
         $skiptypes = array("dboxvm"    => true,
+                           "d430k"     => true,
                            "pcivy"     => true,
                            "pc2830qx2" => true,
                            "pc2400hp"  => true,
