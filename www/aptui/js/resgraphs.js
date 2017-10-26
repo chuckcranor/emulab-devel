@@ -178,13 +178,34 @@ window.ShowResGraph = (function ()
 		}
 	    }
 	}
-	// For graph clarity, add an extra point at the end to give
-	// little space on the right hand side.
-	array.push($.extend({}, array[array.length - 1]));
-	array[array.length - 1].stamp =
-	    parseInt(array[array.length - 1].stamp) + (3600 * 24);
-	
-	//console.info(array);
+
+	/*
+	 * Okay, another adjustment. Make sure there is at least one point
+	 * on each day.
+	 */
+	var temp = [];
+	for (var i = 0; i < array.length; i++) {
+	    var counts    = array[i].counts;
+	    var stamp     = parseInt(array[i].stamp);
+	    
+	    temp.push(array[i]);
+
+	    if (i < array.length - 1) {
+		var nextstamp = parseInt(array[i + 1].stamp);
+
+		if (nextstamp - stamp > (3600 * 48)) {
+		    while (stamp + (3600 * 24) < nextstamp) {
+			stamp += (3600 * 24);
+
+			var data = $.extend({}, array[i]);
+			data.stamp = stamp;
+			temp.push(data);
+		    }
+		}
+	    }
+	}
+	array = temp;
+	console.info(array);
 
 	/*
 	 * Finally, create the series data for NVD3.
@@ -218,15 +239,30 @@ window.ShowResGraph = (function ()
 	$(id + ' svg').html("");
 
 	window.nv.addGraph(function() {
-	    var chart  = window.nv.models.lineChart();
-	    var ylabel = "Free Nodes";
+	    var chart  = window.nv.models.lineWithFocusChart();
 
+	    /*
+	     * We need the min,max of the time stamps for the brush. We can use
+	     * just one of the nodes.
+	     */ 
+	    var minTime = d3.min(datums[0].values,
+				 function (d) { return d.x; });
+	    var maxTime = d3.max(datums[0].values,
+				 function (d) { return d.x; });
+	    // Adjust the brush to the first day.
+	    if (maxTime - minTime > (3600 * 24 * 7 * 1000)) {
+		maxTime = minTime + (3600 * 24 * 7 * 1000);
+	    }
+	    chart.brushExtent([minTime,maxTime]);
+
+	    chart.x2Axis.tickFormat(function(d) {
+		return d3.time.format('%m/%d')(new Date(d))
+            });	    
 	    chart.margin({"left":25,"right":15,"top":20,"bottom":20});
-
+	    
 	    chart.xAxis.tickFormat(function(d) {
 		return d3.time.format('%m/%d')(new Date(d))
             });	    
-	    //chart.yAxis.axisLabel(ylabel);
 
 	    var intformater = d3.format(',.0f');
 	    var formatter = function (d) {
