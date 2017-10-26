@@ -376,6 +376,7 @@ function Do_InfoOrWarn($warning = false)
 	SPITAJAX_ERROR(-1, "No such project");
 	return;
     }
+    $pid = $project->pid();
     if (!isset($ajax_args["uid_idx"])) {
 	SPITAJAX_ERROR(-1, "Missing uid idx");
 	return;

@@ -250,7 +250,7 @@ $(function ()
 	// Handler so we know the user closed the modal. We need to
 	// clear the confirm button handler.
 	$(modal).on('hidden.bs.modal', function (e) {
-	    $(modal + ' .nomessage-error').unbind("click");
+	    $(modal + ' .confirm-button').unbind("click");
 	    $(modal).off('hidden.bs.modal');
 	})
 	// Hide error
