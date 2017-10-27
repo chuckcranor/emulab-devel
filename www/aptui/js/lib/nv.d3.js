@@ -7089,14 +7089,27 @@ nv.models.lineChart = function() {
                     if (typeof point === 'undefined') return;
                     if (typeof pointXLocation === 'undefined') pointXLocation = chart.xScale()(chart.x()(point,pointIndex));
                     var yPos = chart.yScale()(chart.y()(point,pointIndex));
+                    var pointYValue = chart.y()(point, pointIndex);
+		    
                     allData.push({
                         point: point,
                         pointIndex: pointIndex,
                         pos: [pointXLocation, yPos],
                         seriesIndex: series.seriesIndex,
-                        series: series
+                        series: series,
+			pointYValue: pointYValue
                     });
                 });
+
+                var yValue = chart.yScale().invert(e.mouseY);
+                var domainExtent = Math.abs(chart.yScale().domain()[0] -
+					    chart.yScale().domain()[1]);
+                var threshold = 0.03 * domainExtent;
+                var selected = nv.nearestValueIndex(allData.map(function(d){
+		    return d.pointYValue;}),yValue,threshold);
+		console.info(yValue,domainExtent, threshold, selected);
+                if (selected !== null)
+                    allData[selected].selected = true;
 
                 lines.dispatch.elementClick(allData);
             });
