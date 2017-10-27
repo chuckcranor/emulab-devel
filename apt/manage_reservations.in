@@ -801,10 +801,11 @@ sub DoPrediction()
 	if ($this_user->ProjectMembershipList(\@plist)) {
 	    fatal("Could not get project membership list");
 	}
+	# Do not need CREATE experiment permission, just membership.
+	# This solves the problem of users having "user" privs in the
+	# project, but local_root in a subgroup.
 	foreach my $project (@plist) {
-	    if ($project->AccessCheck($this_user, TB_PROJECT_CREATEEXPT())) {
-		push(@projlist, $project->urn());
-	    }
+	    push(@projlist, $project->urn());
 	}
 	if (!@projlist) {
 	    fatal("No projects to create experiments in");
