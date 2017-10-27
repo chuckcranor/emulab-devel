@@ -1031,7 +1031,6 @@ sub setupLVM()
     mysystem2("$MODPROBE dm-snapshot");
     if ($?) {
 	print STDERR "ERROR: could not load snaphot module!\n";
-	TBScriptUnlock();
 	return -1;
     }
 
@@ -1167,7 +1166,6 @@ sub setupLVM()
 	}
 	if (@blockdevs == 0) {
 	    print STDERR "ERROR: findSpareDisks found no disks for LVM!\n";
-	    TBScriptUnlock();
 	    return -1;
 	}
 		    
