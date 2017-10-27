@@ -245,6 +245,17 @@ $PAGEHEADER_FUNCTION = function($thinheader = 0, $ignore1 = NULL,
           </div>";
     }
 
+    #
+    # Watch for a classic user switching over from the classic interface,
+    # but already logged in, and without an encrypted certificate.
+    # We really want to generate one so stuff does not break.
+    #
+    if ($login_user && !ISADMIN() &&
+        $login_user->IsActive() && $login_user->isClassic() &&
+        !$login_user->HasEncryptedCert(1)) {
+        $login_user->GenEncryptedCert();
+    }
+
     if ($login_user && !$cleanmode) {
         $pending = $login_user->PendingMembership();
 
