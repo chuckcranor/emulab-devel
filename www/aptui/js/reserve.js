@@ -78,7 +78,7 @@ $(function ()
 				   "showhelp"       : true,
 				   "showfullscreen" : true});
 	});
-	$('#reservation-lists .reservation-div').html(html);
+	$('#reservation-lists').html(html);
 
 	// Handler for the Help button
 	$('#reservation-help-button').click(function (event) {
@@ -262,29 +262,38 @@ $(function ()
 			   "Validate", checkonly_callback);
     }
 
+    
+
     // Call back from the graphs to change the dates on a blank form
-    function SetDates(when)
+    function GraphClick(when, type)
     {
-	//console.info("dates", when);
+	//console.info("graphclick", when, type);
 	// Bump to next hour. Will be confusing at midnight.
 	when.setHours(when.getHours() + 1);
 
 	if (! editing) {
 	    $("#reserve-request-form #start_day").datepicker("setDate", when);
-	    //$("#reserve-request-form #end_day").datepicker("setDate", when);
 	    $("#reserve-request-form [name=start_hour]").val(when.getHours());
-	    //$("#reserve-request-form [name=end_hour]").val(when.getHours());
+	    if (type !== undefined) {
+		if ($('#reserve-request-form ' +
+		      '[name=type] option:selected').val() != type) {
+		    $('#reserve-request-form ' +
+		      '[name=type] option:selected').removeAttr('selected');
+		    $('#reserve-request-form [name=type] ' + 
+		      'option[value="' + type + '"]')
+			.prop("selected", "selected");
+		}
+	    }
+	    $('#reserve-request-form [name=count]').focus();
 	    aptforms.MarkFormUnsaved();
 	}
     }
     // Set the cluster after clicking on a graph.
     function SetCluster(nickname, urn)
     {
+	//console.info("SetCluster", nickname);
 	var id = "resgraph-" + nickname;
 	
-	$('#reserve-request-form [name=cluster] option[value="' + urn + '"]')
-	    .prop("selected", "selected");
-
 	if ($('#reservation-lists :first-child').attr("id") != id) {
 	    $('#' + id).fadeOut("fast", function () {
 		if ($(window).scrollTop()) {
@@ -303,8 +312,16 @@ $(function ()
 		}
 	    });
 	}
-	HandleClusterChange(urn);
-	aptforms.MarkFormUnsaved();
+	if ($('#reserve-request-form ' +
+	      '[name=cluster] option:selected').val() != urn) {
+	    $('#reserve-request-form ' +
+	      '[name=cluster] option:selected').removeAttr('selected');
+	    $('#reserve-request-form ' +
+	      '[name=cluster] option[value="' + urn + '"]')
+		.prop("selected", "selected");
+	    HandleClusterChange(urn);
+	    aptforms.MarkFormUnsaved();
+	}
     }
 
     /*
@@ -326,18 +343,16 @@ $(function ()
 				details.name + ": " + json.value);
 		    return;
 		}
-		// When clicking on a graph, make it the current cluster.
-		if (!editing) {
-		    $('#' + id + ' .panel-body')
-			.click(function (event) {
-			    SetCluster(details.nickname, urn);
-			});
-		}
 
 		ShowResGraph({"forecast"  : json.value.forecast,
 			      "selector"  : id,
 			      "skiptypes"      : skiptypes,
-			      "click_callback" : SetDates});
+			      "click_callback" : function(when, type) {
+				  if (!editing) {
+				      SetCluster(details.nickname, urn);
+				  }
+				  GraphClick(when, type);
+			      }});
 
 		$('#' + id + ' .resgraph-fullscreen')
 		    .click(function (event) {
@@ -352,7 +367,7 @@ $(function ()
 			    ShowResGraph({"forecast"  : json.value.forecast,
 					  "selector"  : "resgraph-modal",
 					  "skiptypes"      : skiptypes,
-					  "click_callback" : SetDates});
+					  "click_callback" : GraphClick});
 			});
 			sup.ShowModal('#resgraph-modal', function () {
 			    $('#resgraph-modal').off('shown.bs.modal');

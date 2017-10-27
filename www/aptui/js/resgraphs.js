@@ -288,8 +288,15 @@ window.ShowResGraph = (function ()
 	     */
 	    if (click_callback) {
 		chart.lines.dispatch.on("elementClick", function(e) {
-		    console.info(e);
-		    click_callback(new Date(e[0].point.x));
+		    //console.info(e);
+		    var type = undefined;
+		    // Find the "selected" type (if click near enough).
+		    for (var i = 0; i < e.length; i++) {
+			if (e[i].selected) {
+			    type = e[i].series.key;
+			}
+		    }
+		    click_callback(new Date(e[0].point.x), type);
 		});
 	    }
 	    window.nv.utils.windowResize(chart.update);
