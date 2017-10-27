@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2004-2010 University of Utah and the Flux Group.
+# Copyright (c) 2004-2010, 2016 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -116,6 +116,51 @@ SWITCH: for ($action) {
 exit(0);
 
 #
+# We allow users to override interface configuration -- and if they do, and
+# tell us about it by writing a file in either $DYNRUNDIR or $STATICRUNDIR
+# named interface-done-$mac , we will not attempt to configure it, and will
+# assume they have done it!  If they are nice to us and write
+#   $iface $ipaddr $mac
+# into the file, we will parse that and put it into the @ifacemap and %mac2iface
+# structures in doboot().
+#
+sub isifacedone($$)
+{
+    my ($ifconfig,$lineref) = @_;
+
+    my @macs = ();
+    if (exists($ifconfig->{MAC})) {
+	push @macs, lc($ifconfig->{MAC});
+	push @macs, uc($ifconfig->{MAC});
+    }
+    if (exists($ifconfig->{VMAC})) {
+	push @macs, lc($ifconfig->{VMAC});
+	push @macs, uc($ifconfig->{VMAC});
+    }
+    if (@macs == 0) {
+	return 0;
+    }
+
+    my @dirs = ("$DYNRUNDIR","STATICRUNDIR");
+    foreach my $dir (@dirs) {
+	foreach my $mac (@macs) {
+	    if ( -f "$dir/interface-done-$mac" ) {
+		my $FH;
+		if (!open($FH,"$dir/interface-done-$mac")) {
+		    next;
+		}
+		$$lineref = <$FH>;
+		chomp($$lineref);
+		close($FH);
+		return 1;
+	    }
+	}
+    }
+
+    return 0;
+}
+
+#
 # Boot Action. We create a script to enable/disable interfaces, and then
 # execute it. We use a shell script so that it is easy to see exactly what
 # we did and so users can piddle around themselves. 
@@ -140,6 +185,24 @@ sub doboot()
 
     my %oscookie = ();
     foreach my $ifconfig (@ifacelist) {
+	#
+	# Check to see if something else has already configured this
+	# interface.
+	#
+	my $doneline = "";
+	if (isifacedone($ifconfig,\$doneline)) {
+	    if ($doneline) {
+		my ($done_iface,$done_inet,$done_mac) = split(/ /,$doneline);
+		# Trivially parsable map for users, which associate an IP
+		# with a local interface. 
+		push(@ifacemap, "$doneline");
+		if ($done_iface && $done_mac) {
+		    $mac2iface{$done_mac} = $done_iface;
+		}
+	    }
+	    next;
+	}
+
 	if (! $ifconfig->{ISVIRT}) {
 	    my $inet     = $ifconfig->{IPADDR};
 	    my $type     = $ifconfig->{TYPE};

@@ -1,7 +1,7 @@
 #!/usr/bin/perl -wT
 
 #
-# Copyright (c) 2000-2016 University of Utah and the Flux Group.
+# Copyright (c) 2000-2017 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -33,20 +33,22 @@ use POSIX ":sys_wait_h";
 use File::stat;
 
 #
-# Parse an ns file. Since the parser runs arbitrary NS file for the user,
-# this cannot be safely done on boss without jumping through huge hoops
-# to secure tcl and the DB. Yuck! So, instead of running the parser on boss,
-# we run it over on ops. This first version operates like this:
-#
-# NB: This script is setuid.
+# Convert (run) a geni-lib script to generate the rspec or param block.
 #
 sub usage()
 {
-    print STDOUT "Usage: rungenilib [options] infile\n";
+    print STDERR "Usage: rungenilib [options] infile\n";
+    print STDERR "Options:\n";
+    print STDERR "  -d       - Turn on debugging\n";
+    print STDERR "  -o file  - Output file for rspec instead of stdout\n";
+    print STDERR "  -p       - Generate parameter block info instead\n";
+    print STDERR "  -P file  - Generate and write parameter block to file\n";
+    print STDERR "  -b file  - Run script using the parameter defs in file\n";
+    print STDERR "  -W       - Python warnings are fatal.\n";
  
     exit(-1);
 }
-my $optlist    = "do:pb:W";
+my $optlist    = "do:pP:b:W";
 my $debug      = 0;
 my $getparams  = 0;
 my $paramfile;
@@ -59,6 +61,8 @@ my $warningsfatal = 0;
 my $TB       = "@prefix@";
 my $TBOPS    = "@TBOPSEMAIL@";
 my $CONTROL  = "@USERNODE@";
+my $MAINSITE = @TBMAINSITE@;
+my $TAR      = "/usr/bin/tar";
 
 # Locals
 my $SAVEUID  = $UID;
@@ -111,6 +115,17 @@ if (defined($options{"d"})) {
 }
 if (defined($options{"p"})) {
     $getparams = 1;
+}
+if (defined($options{"P"})) {
+    $getparams = 1;
+    $paramfile = $options{"P"};
+    # Must taint check!
+    if ($paramfile =~ /^([-\w\/\.]+)$/) {
+	$paramfile = $1;
+    }
+    else {
+	die("Bad data in argument: $paramfile.");
+    }
 }
 if (defined($options{"W"})) {
     $warningsfatal = 1;
@@ -166,7 +181,8 @@ $EUID = $UID;
 # are any define_parameter calls. If so, run the script to get the
 # JSON block.
 #
-if ($getparams && system("egrep -q -s 'defineParameter' $file")) {
+if ($getparams && !$paramfile &&
+    system("egrep -q -s 'defineParameter' $file")) {
     # No parameters, return empty block.
     if (defined($ofile)) {
 	system("echo '' > $ofile");
@@ -191,7 +207,9 @@ system("touch $outfile") == 0 or
 my $cmdargs = "$TB/libexec/rungenilib.proxy";
 
 # lets try out the python jail
-$cmdargs .= " -J";
+if ($MAINSITE) {
+    $cmdargs .= " -J";
+}
 
 $cmdargs .= " -u " . $this_user->uid();
 $cmdargs .= ($getparams ? " -p " : "");
@@ -201,7 +219,7 @@ $cmdargs .= ($warningsfatal ? " -W " : "");
 # We want to send over both files via STDIN, so combine them, and pass
 # the first file size with the -b option
 #
-if ($paramfile) {
+if ($paramfile && !$getparams) {
     system("cat $paramfile > $infile") == 0
 	or fatal("Could not copy $paramfile to $infile");
 
@@ -273,9 +291,45 @@ if ($exit_status) {
     }
     unlink($outfile);
     unlink($infile);
+
     # We want to pass along the exit status, since it indicates an internal
     # vs script error.
     exit($exit_status >> 8);
+}
+#
+# When getting the params, we get back a tar file. First file has the
+# paramdefs and the other is the rspec. Break them apart.
+#
+if ($getparams) {
+    my $files  = `$TAR tf $outfile`;
+    my ($p,$r) = split(/\n/, $files);
+    # Taint check.
+    if ($p =~ /^([-\w\/\.]+)$/) {
+	$p = $1;
+    }
+    else {
+	fatal("Bad data in argument: $p.");
+    }
+    if ($r =~ /^([-\w\/\.]+)$/) {
+	$r = $1;
+    }
+    else {
+	fatal("Bad data in argument: $r.");
+    }
+    my $tfile = tmpnam();
+
+    # Suck out params.
+    system("$TAR -xOf $outfile $p > $tfile");
+    if ($paramfile) {
+	system("cat $tfile > $paramfile");
+	system("$TAR -xOf $outfile $r > $tfile");
+	system("/bin/mv $tfile $outfile");
+	# We also write out the rspec below.
+    }
+    else {
+	# Caller wants only the paramfile.
+	system("/bin/mv $tfile $outfile");
+    }
 }
 if (defined($ofile)) {
     system("cat $outfile > $ofile");

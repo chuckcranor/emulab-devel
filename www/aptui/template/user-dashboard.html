@@ -52,6 +52,9 @@
 		  <a href="#profiles" role="tab" data-toggle="tab">
 		    Profiles</a></li>
 		<li role="presentation">
+		  <a href="#datasets" role="tab" data-toggle="tab">
+		    Datasets</a></li>
+		<li role="presentation">
 		  <a href="#membership" role="tab" data-toggle="tab">
 		    Membership</a></li>
 		<li role="presentation">
@@ -70,15 +73,23 @@
 		       href="#" role="button">
 		      Admin Menu<span class="caret"></span></a>
 		    <ul class="dropdown-menu">
+		      <li><a href="activity.php?user=<%= target_user %>">
+			Experiment History</a></li>
 		      <li><a href="ssh-keys.php?user=<%= target_user %>">
 			Manage SSH Keys</a></li>
 		      <li><a href="myaccount.php?user=<%= target_user %>">
 			Manage Account</a></li>
+		      <li><a href="changepswd.php?user=<%= target_user %>">
+			Change Password</a></li>
 		      <li><a href="list-datasets.php?user=<%= target_user %>">
 			List Datasets</a></li>
+		      <li><a href="list-images.php?user=<%= target_user %>">
+			List Images</a></li>
                       <li class='divider'></li>
 		      <li><a role="button" id="sendtestmessage">
 			Send Test Message</a></li>
+		      <li><a href="suuser.php?user=<%= target_user %>">
+			<span class="text-danger">SU as User</span></a></li>
 		      <li role="presentation">
 			<a href='<%- emulablink %>'>
 			  Emulab User Page</a></li>
@@ -101,29 +112,47 @@
 		    </div>
 		    <div class="hidden" id="experiments_noexperiments">
 		      <br>
-		      No experiments to show you. Maybe you want to
-		      <b><a href='instantiate.php'>start one?</a></b>
+		      You do not have any active experiments. Click 
+		      <b><a href='instantiate.php'>here</a></b> to create one.
 		    </div>
 		  </div>
 		  <br>
+		  <div id="project_experiments_content"></div>
 		  <div id="classic_experiments_content"></div>
 		</div>
 		<div role="tabpanel" class="tab-pane" id="profiles">
 		  <div id="profiles_content">
 	      	    <div class="hidden" id="profiles_noprofiles">
 		      <br>
-		      No profiles to show you. Maybe you want to
-		      <b><a href='manage_profile.php'>create one?</a></b>
+		      You have not created any experiment profiles. You can either <b><a href='instantiate.php'>instantiate</a></b> an experiment with an existing profile or
+		      <b><a href='manage_profile.php'>create a new profile</a></b>.
 		    </div>
 		  </div>
 		  <br>
 		  <div id="classic_profiles_content"></div>
+		</div>
+		<div role="tabpanel" class="tab-pane" id="datasets">
+		  <div id="datasets_content">
+	      	    <div class="hidden" id="datasets_nodatasets">
+		      <br>
+		      You do not have any datasets. Click 
+		      <b><a href='create-dataset.php'>here</a></b> to create one.
+		    </div>
+		  </div>
+		  <div id="classic_datasets_content" class="hidden">
+		    <center><h4>Classic Datasets</h4></center>
+		    <div id="classic_datasets_content_div"></div>
+		  </div>
 		</div>
 		<div role="tabpanel" class="tab-pane" id="membership">
 		  <div id="membership_content"></div>
 		</div>
 		<div role="tabpanel" class="tab-pane" id="usage">
 		  <div id="usage_content">
+	      	    <div class="hidden" id="usage_nousage">
+		      <br>
+		      You do not have any usage data yet. Time to get busy!
+		    </div>
 		    <table class='table table-condensed table-bordered'
 			   id='usage_table'>
 		      <tbody></tbody>
@@ -170,3 +199,4 @@
 </div>
 <div id='waitwait_div'></div>
 <div id='oops_div'></div>
+<div id='conversion_help_div'></div>

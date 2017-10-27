@@ -1,10 +1,9 @@
-require(window.APT_OPTIONS.configObject,
-	['underscore', 'js/quickvm_sup', 'js/aptforms',
-	 'js/lib/text!template/invite.html'],
-function (_, sup, aptforms, inviteString)
+$(function ()
 {
     'use strict';
-    var inviteTemplate    = _.template(inviteString);
+
+    var templates = APT_OPTIONS.fetchTemplateList(['invite']);
+    var inviteTemplate    = _.template(templates['invite']);
 
     function initialize()
     {

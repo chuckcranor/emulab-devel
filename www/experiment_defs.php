@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2006-2016 University of Utah and the Flux Group.
+# Copyright (c) 2006-2017 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -354,6 +354,7 @@ class Experiment
     function paniced()          { return $this->field('paniced'); }
     function panic_date()       { return $this->field('panic_date'); }
     function geniflags()        { return $this->field('geniflags'); }
+    function nonlocal_id()      { return $this->field('nonlocal_id'); }
     function virtnode_count()   { return $this->field('virtnode_count'); }
 
     #
@@ -1080,14 +1081,16 @@ class Experiment
                   </tr>\n";
 	    }
 
-	    $lockflip = ($lockdown ? 0 : 1);
-	    $lockval  = ($lockdown ? "Yes" : "No");
-	    echo "<tr>
+            if (ISADMIN()) {
+                $lockflip = ($lockdown ? 0 : 1);
+                $lockval  = ($lockdown ? "Yes" : "No");
+                echo "<tr>
                    <td>Locked Down:</td>
                    <td>$lockval (<a href='toggle.php?pid=$pid&eid=$eid".
-		"&type=lockdown&value=$lockflip'>Toggle</a>)
+		       "&type=lockdown&value=$lockflip'>Toggle</a>)
                    </td>
-              </tr>\n";
+                  </tr>\n";
+            }
 
 	    if (ISADMIN() || STUDLY() || OPSGUY()) {
 		$thisflip = ($skipvlans ? 0 : 1);
@@ -1613,6 +1616,14 @@ function ShowExperimentList_internal($templates_only,
 	    if (! ($experiment = Experiment::LookupByPidEid($pid, $eid))) {
 		TBERROR("Could not map $pid/$eid to its object", 1);
 	    }
+            #
+            # No long show Geni experiments here, going to be bad news for
+            # mere users.
+            #
+            if ($experiment->geniflags() && !ISADMIN()) {
+                continue;
+            }
+            
 	    $idlehours = $experiment->IdleTime();
 	    $stale     = $experiment->IdleStale();
 	    

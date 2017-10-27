@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2008-2015 University of Utah and the Flux Group.
+# Copyright (c) 2008-2017 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -26,11 +26,13 @@
 package libvnode;
 use Exporter;
 @ISA    = "Exporter";
-@EXPORT = qw( makeIfaceMaps makeBridgeMaps
-	      findControlNet existsIface findIface findMac
+@EXPORT = qw( makeIfaceMaps makeBridgeMaps makeMacvlanMaps
+	      findControlNet existsIface findIface findMac getIfaceInfo
 	      existsBridge findBridge findBridgeIfaces
+              existsMacvlanParent findMacvlanParent findMacvlanIfaces
               downloadImage getKernelVersion createExtraFS
-              forwardPort removePortForward lvSize DoIPtables DoIPtablesNoFail
+              forwardPort removePortForward lvSize lvExists
+              DoIPtables DoIPtablesNoFail
               restartDHCP computeStripeSize
             );
 
@@ -177,16 +179,22 @@ sub isSSD($)
     my ($dev) = @_;
     my $isssd = 0;
 
-    if (-e "/dev/$dev" && -x "/sbin/hdparm" &&
-	open(HFD, "/sbin/hdparm -I /dev/$dev 2>/dev/null |")) {
-	while (my $line = <HFD>) {
-	    chomp($line);
-	    if ($line =~ /:\s+solid state device$/i) {
-		$isssd = 1;
-		last;
-	    }
+    if (-e "/dev/$dev") {
+	# hdparm doesn't seem to handle NVMe
+	if ($dev =~ /^nvme\d+n\d+/) {
+	    $isssd = 1;
 	}
-	close(HFD);
+	elsif (-x "/sbin/hdparm" &&
+	    open(HFD, "/sbin/hdparm -I /dev/$dev 2>/dev/null |")) {
+	    while (my $line = <HFD>) {
+		chomp($line);
+		if ($line =~ /:\s+solid state device$/i) {
+		    $isssd = 1;
+		    last;
+		}
+	    }
+	    close(HFD);
+	}
     }
 
     return $isssd;
@@ -221,6 +229,15 @@ sub findSpareDisks($;$) {
     # convert minsize to 1K blocks
     $minsize *= 1024;
 
+    # XXX figure out what command to give to sfdisk
+    my $sfcmd = "--print-id";
+    my $out = `sfdisk -v`;
+    if (defined($out) && $out =~ /2\.(\d+)(\.\d+)$/) {
+	if (int($1) >= 26) {
+	    $sfcmd = "--part-type";
+	}
+    }
+    
     open (MFD,"/proc/mounts") 
 	or die "open(/proc/mounts): $!";
     while (my $line = <MFD>) {
@@ -269,10 +286,12 @@ sub findSpareDisks($;$) {
 	#
 	# XXX weed out special cases:
 	#    SCSI CDROM (srN),
+	#    RAM disks (ramN),
 	#    device mapper files (dm-N),
 	#    LVM PVs
 	#
 	if ($devpart =~ /^sr\d+$/ ||
+	    $devpart =~ /^ram\d+$/ ||
 	    $devpart =~ /^dm-\d+$/ ||
 	    exists($pvs{$devpart})) {
 	    next;
@@ -283,13 +302,22 @@ sub findSpareDisks($;$) {
 	# device otherwise it is a disk device. But that got screwed up by,
 	# e.g., the cciss device where "c0d0" is a disk while "c0d0p1" is a
 	# partition. The new fallible heuristic is: if it ends in a digit
-	# but is of the form cNdN then it is a disk!
+	# but is of the form cNdN then it is a disk! And now there is
+	# "nvme0n1" and "nvme0n1p1" to consider!
 	#
 	if ($devpart =~ /^(\S+)(\d+)$/) {
 	    my ($dev,$part) = ($1,$2);
 
 	    # cNdN(pN) format
 	    if ($devpart =~ /(.*c\d+d\d+)(p\d+)?$/) {
+		if (!defined($2)) {
+		    goto isdisk;
+		}
+		$dev = $1;
+	    }
+
+	    # nvmeNnN(pN) format
+	    elsif ($devpart =~ /(.*nvme\d+n\d+)(p\d+)?$/) {
 		if (!defined($2)) {
 		    goto isdisk;
 		}
@@ -342,10 +370,11 @@ sub findSpareDisks($;$) {
 		}
 
 		# one final check: partition id
-		my $output = `sfdisk --print-id /dev/$dev $part 2>/dev/null`;
+		my $output = `sfdisk $sfcmd /dev/$dev $part 2>/dev/null`;
 		chomp($output);
+		$output =~ s/^\s+//;
 		if ($?) {
-		    print STDERR "WARNING: findSpareDisks: error running 'sfdisk --print-id /dev/$dev $part': $! ... ignoring /dev/$devpart\n";
+		    print STDERR "WARNING: findSpareDisks: error running 'sfdisk $sfcmd /dev/$dev $part': $! ... ignoring /dev/$devpart\n";
 		}
 		elsif ($output eq "0" && $size >= $minsize) {
 		    $retval{$dev}{$part}{"size"} = $BLKSIZE * $size;
@@ -359,20 +388,21 @@ isdisk:
 	    next
 		if ($skipssds && isSSD($devpart));
 
-	    if (!defined($mounts{"/dev/$devpart"}) &&
-		!defined($ftents{"/dev/$devpart"}) &&
+	    if (!exists($mounts{"/dev/$devpart"}) &&
+		!exists($ftents{"/dev/$devpart"}) &&
 		$size >= $minsize) {
 		$retval{$devpart}{"size"} = $BLKSIZE * $size;
 		$retval{$devpart}{"path"} = "/dev/$devpart";
 	    }
 	}
     }
+    close(PFD);
+
     foreach my $d (keys(%retval)) {
 	if (scalar(keys(%{$retval{$d}})) == 0) {
 	    delete $retval{$d};
 	}
     }
-    close(PFD);
 
     return %retval;
 }
@@ -407,6 +437,7 @@ my %ip2if = ();
 my %ip2mask = ();
 my %ip2net = ();
 my %ip2maskbits = ();
+my %if2info = ();
 
 #
 # Grab iface, mac, IP info from /sys and /sbin/ip.
@@ -420,6 +451,7 @@ sub makeIfaceMaps()
     %ip2net = ();
     %ip2mask = ();
     %ip2maskbits = ();
+    %if2info = ();
 
     my $devdir = '/sys/class/net';
     opendir(SD,$devdir) 
@@ -449,6 +481,7 @@ sub makeIfaceMaps()
 	$mac = lc($mac);
 	$if2mac{$iface} = $mac;
 	$mac2if{$mac} = $iface;
+	$if2info{$iface} = { 'mac' => $mac, 'iface' => $iface };
 
 	# also find ip, ugh
 	my $pip = `ip addr show dev $iface | grep 'inet '`;
@@ -473,6 +506,11 @@ sub makeIfaceMaps()
 	    $ip2net{$ip} = join('.',@network);
 	    $ip2mask{$ip} = join('.',@netmask);
 	    $ip2maskbits{$ip} = $bits;
+
+	    $if2info{$iface}->{'ip'} = $ip;
+	    $if2info{$iface}->{'network'} = $ip2net{$ip};
+	    $if2info{$iface}->{'mask'} = $ip2mask{$ip};
+	    $if2info{$iface}->{'maskbits'} = $ip2maskbits{$ip};
 	}
     }
 
@@ -532,6 +570,19 @@ sub findIface($) {
         if (exists($mac2if{$mac}));
 
     return undef;
+}
+
+#
+# Returns a dict of iface, mac[, ip, network, mask, maskbits], if the
+# supplied iface exists.  The IPv4 info is only included if it exists.
+#
+sub getIfaceInfo($) {
+    my $iface = shift;
+
+    return undef
+	if (!exists($if2info{$iface}));
+
+    return $if2info{$iface};
 }
 
 sub findMac($) {
@@ -606,6 +657,63 @@ sub findBridgeIfaces($) {
     return undef;
 }
 
+my %macvlans = ();
+my %if2mv = ();
+
+sub makeMacvlanMaps() {
+    # clean out anything...
+    %macvlans = ();
+    %if2mv = ();
+
+    my @lines = `ip link show type macvlan`;
+    foreach my $line (@lines) {
+	if ($line =~ /^\d+:\s+([^\@]+)\@([^:]+):/) {
+	    if (!exists($macvlans{$2})) {
+		$macvlans{$2} = [];
+	    }
+	    push(@{$macvlans{$2}},$1);
+	}
+    }
+
+    if ($debug > 1) {
+	print STDERR "makeMacvlanMaps:\n";
+	print STDERR "macvlans:\n";
+	print STDERR Dumper(%macvlans) . "\n";
+	print STDERR "if2mv:\n";
+	print STDERR Dumper(%if2mv) . "\n";
+	print STDERR "\n";
+    }
+
+    return 0;
+}
+
+sub existsMacvlanParent($) {
+    my $parent = shift;
+
+    return 1
+        if (exists($macvlans{$parent}));
+
+    return 0;
+}
+
+sub findMacvlanParent($) {
+    my $iface = shift;
+
+    return $if2mv{$iface}
+        if (exists($if2mv{$iface}));
+
+    return undef;
+}
+
+sub findMacvlanIfaces($) {
+    my $parent = shift;
+
+    return @{$macvlans{$parent}}
+        if (exists($macvlans{$parent}));
+
+    return undef;
+}
+
 #
 # Since (some) vnodes are imageable now, we provide an image fetch
 # mechanism.  Caller provides an imagepath for frisbee, and a hash of
@@ -646,8 +754,11 @@ sub downloadImage($$$$) {
 	    $todiskopt = "-N";
 	}
 	if ($server && $imageid) {
-	    $command = "$FRISBEE -f -M 64 $proxyopt $todiskopt ".
-		"         -S $server -B 30 -F $imageid $imagepath";
+	    # Allow the server to enable heartbeat reports in the client
+	    my $heartbeat = "-H 0";
+
+	    $command = "$FRISBEE -f -M 64 $proxyopt $heartbeat $todiskopt ".
+		"-S $server -B 30 -F $imageid $imagepath";
 	}
 	else {
 	    print STDERR "Could not parse frisbee loadinfo\n";
@@ -735,7 +846,8 @@ sub createExtraFS($$$)
     my $lvpath = "/dev/$vgname/$lvname";
     my $exists = `lvs --noheadings -o origin $lvpath > /dev/null 2>&1`;
     if ($?) {
-	system("lvcreate -n $lvname -L $size $vgname") == 0
+	my $ns = computeStripeSize($vgname);
+	system("lvcreate -n $lvname -L $size -i$ns $vgname") == 0
 	    or return -1;
 
 	system("mke2fs -j -q $lvpath") == 0
@@ -752,6 +864,21 @@ sub createExtraFS($$$)
 	    == 0 or return -1;
     }
     return 0;
+}
+
+#
+# Check if the LV exists.
+#
+sub lvExists($$)
+{
+    my ($vgname,$lvname) = @_;
+
+    my $lvpath = "/dev/$vgname/$lvname";
+    my $exists = `lvs --noheadings -o origin $lvpath > /dev/null 2>&1`;
+    if ($?) {
+	return 0;
+    }
+    return 1;
 }
 
 #
@@ -784,9 +911,14 @@ sub restartDHCP()
         if (mysystem2("/sbin/initctl restart $dhcpd_service") != 0) {
             mysystem2("/sbin/initctl start $dhcpd_service");
         }
-    } else {
-        #sysvinit
+    } elsif (-x '/bin/systemctl') {
+	# systemd
+	mysystem2("/bin/systemctl restart $dhcpd_service.service");
+    } elsif (-x '/etc/init.d/$dhcpd_service') {
+        # sysvinit
         mysystem2("/etc/init.d/$dhcpd_service restart");
+    } else {
+	print STDERR "restartDHCP: could not restart dhcpd!\n";
     }
 }
 

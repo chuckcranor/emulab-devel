@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2008-2014 University of Utah and the Flux Group.
+# Copyright (c) 2008-2014, 2016 University of Utah and the Flux Group.
 # 
 # {{{GENIPUBLIC-LICENSE
 # 
@@ -362,7 +362,7 @@ sub CreateSlice($$)
         my ($server_auth, $server_type, $server_authname) = GeniHRN::Parse( $ENV{'MYURN'} );
         return GeniResponse->Create(GENIRESPONSE_SERVERERROR, undef, 'internal error: got invalid server urn "' . $ENV{'MYURN'} . '"') unless defined( $server_authname );
         my $subauth_urn = GeniHRN::Generate($server_auth . ':' . $project_name, $server_type, $server_authname);
-        my $authority = GeniAuthority->Lookup($subauth_urn);
+        $authority = GeniAuthority->Lookup($subauth_urn);
         if (!defined($authority)) {
             print STDERR "Could not find authority '" . $subauth_urn . "' (MYURN=$ENV{'MYURN'})\n";
             return GeniResponse->Create(GENIRESPONSE_ERROR);

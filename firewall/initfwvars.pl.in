@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2005-2014 University of Utah and the Flux Group.
+# Copyright (c) 2005-2017 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -49,6 +49,7 @@ my $USERNODE_IP        = "@USERNODE_IP@";
 my $FSNODE_IP          = "@FSNODE_IP@";
 my $FRISBEE_MCASTADDR  = "@FRISEBEEMCASTADDR@";
 my $FRISBEE_MCASTPORT  = "@FRISEBEEMCASTPORT@";
+my $FRISBEE_MCNUMPORT  = "@FRISEBEENUMPORTS@";
 #
 # Sorry these are hardwired; boss/ops addresses on the virtual control
 # network, on non-segmented networks like the IG racks.
@@ -95,6 +96,10 @@ sub getcidrnet($)
 my $str;
 my $res;
 my $subbosses = 0;
+
+if (@ARGV > 0 && $ARGV[0] eq "-n") {
+    $doit = 0;
+}
 
 #
 # Create EMULAB_BOSSES variable.
@@ -218,19 +223,19 @@ DBQueryFatal($str)
 # so here.
 # XXX assumptions III (as of 11/11).  Frisbee master server running on
 # subboss can open up the port range even wider, by default starting at 1025.
+# XXX assumptions IV (as of 5/15).  Frisbee master server now constrains
+# server/client to a configurable range.
+# XXX assumptions V (as of 2/17).  Subbosses use the same port range as boss.
 #
 my @mcaddr = split /\./, $FRISBEE_MCASTADDR, 4;
 $FRISBEE_MCASTADDR = $mcaddr[0] . ".0.0.0/8";
-if ($bstr ne "boss") {
-    $FRISBEE_MCASTPORT = 1025
-	if ($FRISBEE_MCASTPORT > 1025);
-}
-$FRISBEE_MCASTPORT = $FRISBEE_MCASTPORT . "-65535";
-
 # XXX hack for subbosses
 if ($subbosses > 0 && $mcaddr[0] != 239) {
     $FRISBEE_MCASTADDR .= ",239.0.0.0/8";
 }
+my $loport = ($FRISBEE_MCASTPORT == 0) ? 1025 : $FRISBEE_MCASTPORT;
+my $hiport = ($FRISBEE_MCNUMPORT == 0) ? 65535 : $loport + $FRISBEE_MCNUMPORT - 1;
+$FRISBEE_MCASTPORT = "$loport-$hiport";
 
 $str = "replace into default_firewall_vars values ('EMULAB_MCADDR', '$FRISBEE_MCASTADDR')";
 print "$str\n"

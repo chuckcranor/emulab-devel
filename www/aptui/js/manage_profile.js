@@ -1,30 +1,32 @@
-require(window.APT_OPTIONS.configObject,
-	['underscore', 'js/quickvm_sup', 'filesize', 'js/JacksEditor',
-	 'js/image', 'moment', 'js/aptforms',
-	 'js/lib/text!template/manage-profile.html',
-	 'js/lib/text!template/waitwait-modal.html',
-	 'js/lib/text!template/renderer-modal.html',
-	 'js/lib/text!template/showtopo-modal.html',
-	 'js/lib/text!template/oops-modal.html',
-	 'js/lib/text!template/rspectextview-modal.html',
-	 'js/lib/text!template/guest-instantiate.html',
-	 'js/lib/text!template/publish-modal.html',
-	 'js/lib/text!template/instantiate-modal.html',
-	 'js/lib/text!template/share-modal.html',
-	 // jQuery modules
-	 'filestyle','marked'],
-function (_, sup, filesize, JacksEditor, ShowImagingModal, moment, aptforms,
-	  manageString, waitwaitString, 
-	  rendererString, showtopoString, oopsString, rspectextviewString,
-	  guestInstantiateString, publishString, instantiateString,
-	  shareString)
+$(function ()
 {
     'use strict';
+
+    var templates = APT_OPTIONS.fetchTemplateList(['manage-profile', 'waitwait-modal', 'renderer-modal', 'showtopo-modal', 'oops-modal', 'rspectextview-modal', 'guest-instantiate', 'publish-modal', 'share-modal', 'gitrepo-picker','profile-list-modal','confirm-delete-profile']);
+    var manageString = templates['manage-profile'];
+    var waitwaitString = templates['waitwait-modal'];
+    var rendererString = templates['renderer-modal'];
+    var showtopoString = templates['showtopo-modal'];
+    var oopsString = templates['oops-modal'];
+    var rspectextviewString = templates['rspectextview-modal'];
+    var guestInstantiateString = templates['guest-instantiate'];
+    var publishString = templates['publish-modal'];
+    var shareString = templates['share-modal'];
+    var gitrepoString = templates['gitrepo-picker'];
+    var plistString = templates['profile-list-modal'];
+    var deleteString = templates['confirm-delete-profile'];
+
     var profile_uuid = null;
+    var profile_name = '';
+    var profile_pid = '';
+    var profile_version = '';
     var version_uuid = null;
     var snapping     = 0;
     var gotrspec     = 0;
     var gotscript    = 0;
+    var fromrepo     = 0;
+    var repohash     = null;
+    var reporefspec  = "refs/heads/master";
     var ajaxurl      = "";
     var amlist       = null;
     var modified     = false;
@@ -33,7 +35,9 @@ function (_, sup, filesize, JacksEditor, ShowImagingModal, moment, aptforms,
     var isppprofile  = false;
     var isadmin      = 0; 
     var multisite    = 0; 
-    var APT_NS = "http://www.protogeni.net/resources/rspec/ext/apt-tour/1";
+    var APT_NS    = "http://www.protogeni.net/resources/rspec/ext/apt-tour/1";
+    var EMULAB_NS = "http://www.protogeni.net/resources/rspec/ext/emulab/1";
+    var EMULAB_OPS        = "emulab-ops";
     var manageTemplate    = _.template(manageString);
     var waitwaitTemplate  = _.template(waitwaitString);
     var rendererTemplate  = _.template(rendererString);
@@ -41,9 +45,11 @@ function (_, sup, filesize, JacksEditor, ShowImagingModal, moment, aptforms,
     var rspectextTemplate = _.template(rspectextviewString);
     var oopsTemplate      = _.template(oopsString);
     var guestInstTemplate = _.template(guestInstantiateString);
-    var InstTemplate      = _.template(instantiateString);
     var shareTemplate     = _.template(shareString);
+    var gitrepoTemplate   = _.template(gitrepoString);
+    var plistTemplate     = _.template(plistString);
     var stepsInitialized  = false;
+    var portal_converted  = false;
 
     var pythonRe = /^import/m;
     var tclRe    = /^source tb_compat/m;
@@ -63,9 +69,14 @@ function (_, sup, filesize, JacksEditor, ShowImagingModal, moment, aptforms,
 	var errors   = JSON.parse(_.unescape($('#error-json')[0].textContent));
 	var projlist = JSON.parse(_.unescape($('#projects-json')[0].textContent));
 	var versions = null;
+	var sorted_versions = null;
 	if (window.VIEWING) {
 	    versions =
 		JSON.parse(_.unescape($('#versions-json')[0].textContent));
+
+	    sorted_versions = _.sortBy(versions, function(profile) {
+		return versions.length - profile.version;
+	    });
 	}
 	amlist = JSON.parse(_.unescape($('#amlist-json')[0].textContent));
 
@@ -76,7 +87,29 @@ function (_, sup, filesize, JacksEditor, ShowImagingModal, moment, aptforms,
 	// Ditto a script.
 	if (_.has(fields, "profile_script") && fields["profile_script"] != "") {
 	    gotscript = 1;
+	    if (_.has(fields, "portal_converted") &&
+		fields["portal_converted"] == "yes") {
+		portal_converted = 1;
+	    }
 	}
+	// Ditto a repourl
+	if (_.has(fields, "profile_repourl") &&
+	    fields["profile_repourl"] != "") {
+	    fromrepo = 1;
+	    repohash = fields["profile_repohash"];
+	    setTimeout(function f() { CheckRepoChange() }, 10000);
+	}
+
+        // If this is an existing profile, stash the name/project
+        if (_.has(fields, "profile_name")) {
+	    profile_name = fields['profile_name'];
+        }
+        if (_.has(fields, "profile_pid")) {
+	    profile_pid = fields['profile_pid'];
+        }
+        if (_.has(fields, "profile_version")) {
+	    profile_version = fields['profile_version'];
+        }
 	
 	// no place to show rspec errors, so convert to general error.
 	if (_.has(errors, "rspec")) {
@@ -84,11 +117,11 @@ function (_, sup, filesize, JacksEditor, ShowImagingModal, moment, aptforms,
 	}
 
 	// Warn user if they have not saved changes.
-	window.onbeforeunload = function() {
-	    if (! modified)
-		return null;
+        $(window).on('beforeunload.portal', function() {
+	    if (! modified && ! window.GENILIB_EDITOR_CHANGED())
+		return undefined;
 	    return "You have unsaved changes!";
-	}
+        });
 
 	// Generate the templates.
 	var manage_html   = manageTemplate({
@@ -98,6 +131,7 @@ function (_, sup, filesize, JacksEditor, ShowImagingModal, moment, aptforms,
 	    notifyupdate:	window.UPDATED,
 	    viewing:		window.VIEWING,
 	    gotrspec:		gotrspec,
+	    gotscript:		gotscript,
 	    action:		window.ACTION,
 	    button_label:       window.BUTTONLABEL,
 	    version_uuid:	window.VERSION_UUID,
@@ -108,29 +142,33 @@ function (_, sup, filesize, JacksEditor, ShowImagingModal, moment, aptforms,
 	    canmodify:		window.CANMODIFY,
 	    canpublish:		window.CANPUBLISH,
 	    isadmin:		window.ISADMIN,
+	    isstud:		window.ISSTUD,
 	    history:		window.HISTORY,
 	    activity:		window.ACTIVITY,
 	    manual:             window.MANUAL,
 	    copyuuid:		(window.COPYUUID || null),
 	    snapuuid:		(window.SNAPUUID || null),
+	    snapnode_id:	(window.SNAPNODE_ID || null),
 	    general_error:      (errors.error || ''),
 	    isapt:              window.ISAPT,
 	    disabled:           window.DISABLED,
+	    nodelete:           window.NODELETE,
 	    versions:	        versions,
+	    sorted_versions:    sorted_versions,
 	    withpublishing:     window.WITHPUBLISHING,
+	    genilib_editor:     false,
+	    canrepo:            window.CANREPO,
+	    fromrepo:           fromrepo,
+	    portal_converted:   portal_converted
 	});
 	manage_html = aptforms.FormatFormFieldsHorizontal(manage_html,
 							  {"wide" : true});
-	$('#manage-body').html(manage_html);
-	aptforms.GenerateFormErrors('#quickvm_create_profile_form', errors);
+	$('#page-body').html(manage_html);
 	
     	var waitwait_html = waitwaitTemplate({});
 	$('#waitwait_div').html(waitwait_html);
     	var showtopo_html = showtopoTemplate({});
         $('#showtopomodal_div').html(showtopo_html);
-        var isViewer = gotscript;
-	editor = new JacksEditor($('#editmodal_div'),
-				 isViewer, false, false, false, !multisite);
     	var renderer_html = rendererTemplate({});
 	$('#renderer_div').html(renderer_html);
     	var oops_html = oopsTemplate({});
@@ -138,12 +176,19 @@ function (_, sup, filesize, JacksEditor, ShowImagingModal, moment, aptforms,
     	var guest_html = guestInstTemplate({});
 	$('#guest_div').html(guest_html);
 	$('#publish_div').html(publishString);
-    	var instantiate_html = InstTemplate({ amlist: amlist,
-					      amdefault: window.AMDEFAULT});
-	$('#instantiate_div').html(instantiate_html);
     	var rspectext_html = rspectextTemplate({});
 	$('#rspectext_div').html(rspectext_html);
 	$('#share_div').html(shareTemplate({formfields: fields}))
+	$('#confirm_delete_div').html(deleteString);
+	// Extra warning in the confirm delete modal.
+	if (window.THIS_VERSION == window.LATEST_VERSION) {
+	    $('#confirm-delete-profile-warning').removeClass("hidden");
+	}
+
+	// Fireoff repo stuff now.
+	if (fromrepo) {
+	    SetupRepo();
+	}
 	
 	//
 	// Fix for filestyle problem; not a real class I guess, it
@@ -162,6 +207,44 @@ function (_, sup, filesize, JacksEditor, ShowImagingModal, moment, aptforms,
 	    placement: 'auto',
 	    container: 'body',
 	});
+	// But the repo push URL is handled differently.
+	var urlstring = 
+	    "<div style='width 100%'> "+
+	    "  <input readonly type=text id='push-url-input' " +
+	    "       style='display:inline; width: 93%; padding: 2px;' " +
+	    "       class='form-control input-sm' "+
+	    "       value='" + fields.profile_repopushurl + "'>" +
+	    "  <a href='#' class='btn btn-xs' id='push-url-copy' " +
+	    "     style='padding: 0px'>" +
+	    "    <span class='glyphicon glyphicon-copy'></span></a></div>";
+	
+	$('#push-url').click(function (e) {
+	    console.info("push-url click");
+	    if ($('#push-url-input').length == 0) {
+		$('#push-url').popover({
+		    html:     true,
+		    content:  urlstring,
+		    trigger:  'manual',
+		    placement:'auto',
+		    container:'body',
+		});
+		$('#push-url').popover('show');
+		$('#push-url-copy').click(function (e) {
+		    e.preventDefault();
+		    $('#push-url-input').select();
+		    document.execCommand("copy");
+		    $('#push-url').popover('destroy');
+		});
+		$('#push-url-input').click(function (e) {
+		    e.preventDefault();
+		    $('#push-url').popover('destroy');
+		});
+	    }
+	    else {
+		$('#push-url').popover('destroy');
+	    }
+	});
+	
 	// Format dates with moment before display.
 	$('.format-date').each(function() {
 	    var date = $.trim($(this).html());
@@ -204,24 +287,19 @@ function (_, sup, filesize, JacksEditor, ShowImagingModal, moment, aptforms,
 	    reader.readAsText(this.files[0]);
 	});
 
-	// Handler for all paths to rspec change (file upload, jacks, edit).
-	function changeRspec(newRspec)
-	{
-	    if (pythonRe.test(newRspec) || tclRe.test(newRspec)) {
-		//
-		// A geni-lib script. We are going to pass the script to
-		// the server to be "run", which returns XML.
-		//
-		if (newRspec != $('#profile_script_textarea').val()) {
-		    checkScript(newRspec);
-		}
-		return;
-	    }
-	    NewRspecHandler(newRspec);
-	}
 	$('#edit_topo_modal_button').click(function (event) {
 	    event.preventDefault();
-	    editor.show($('#profile_rspec_textarea').val(), changeRspec);
+	    editor.show($('#profile_rspec_textarea').val(),
+			function (newrspec) {
+			    // Only for a new profile or profile converted
+			    if (!fromrepo && portal_converted) {
+				ConvertToGenilib(newrspec);
+			    }
+			    else {
+				// Plain old rspec. SAD!
+				changeRspec(newrspec);
+			    }
+			});
 	});
 	// The Show Source button.
 	$('#show_source_modal_button').click(function (event) {
@@ -229,29 +307,47 @@ function (_, sup, filesize, JacksEditor, ShowImagingModal, moment, aptforms,
 	    // The "source" is either the script or the XML if there
 	    // is no script.
 	    //
-	    var source = $.trim($('#profile_script_textarea').val());
+	    var source = $('#profile_script_textarea').val();
 	    var type   = "source";
-	    
-	    if (!source.length) {
-		source = $.trim($('#profile_rspec_textarea').val());
-		type = "rspec";
+	    if (source.length > 0 &&
+		(window.ACTION === 'edit' ||
+		 window.ACTION === 'create') && !fromrepo) {
+	        openEditor(source);
+	    } else {
+	        if (source.length === 0) {
+		    source = $('#profile_rspec_textarea').val();
+		  type = "rspec";
+		}
+	        if (profile_uuid) {
+	            sup.DownloadOnClick($('#rspec_modal_download_button'),
+				        function () { return source; },
+				        'profile.xml');
+/*		    $('#rspec_modal_download_button')
+		        .attr("href",
+			      "show-profile.php?uuid=" + profile_uuid +
+			      "&" + type + "=true");*/
+	        }
+	        else {
+	            sup.ClearDownloadOnClick($('#rspec_modal_download_button'));
+//		    $('#rspec_modal_download_button').addClass("hidden");
+	        }
+		if (!fromrepo) {
+	            $('#rspec_modal_upload_span').removeClass("hidden");
+	            $('#rspec_modal_editbuttons').removeClass("hidden");
+	            $('#rspec_modal_viewbuttons').addClass("hidden");
+	            $('#modal_profile_rspec_textarea').prop("readonly", false);
+		}
+		else {
+		    // No editing repo-based profiles
+	            $('#rspec_modal_upload_span').addClass("hidden");
+	            $('#rspec_modal_editbuttons').addClass("hidden");
+	            $('#rspec_modal_viewbuttons').removeClass("hidden");
+	            $('#modal_profile_rspec_textarea').prop("readonly", true);
+		}
+	        $('#modal_profile_rspec_textarea').val(source);
+	        $('#rspec_modal').modal({'backdrop':'static','keyboard':false});
+	        $('#rspec_modal').modal('show');
 	    }
-	    if (profile_uuid) {
-		$('#rspec_modal_download_button')
-		    .attr("href",
-			  "show-profile.php?uuid=" + profile_uuid +
-			  "&" + type + "=true");
-	    }
-	    else {
-		$('#rspec_modal_download_button').addClass("hidden");
-	    }	    
-	    $('#rspec_modal_upload_span').removeClass("hidden");
-	    $('#rspec_modal_editbuttons').removeClass("hidden");
-	    $('#rspec_modal_viewbuttons').addClass("hidden");
-	    $('#modal_profile_rspec_textarea').prop("readonly", false);	    
-	    $('#modal_profile_rspec_textarea').val(source);
-	    $('#rspec_modal').modal({'backdrop':'static','keyboard':false});
-	    $('#rspec_modal').modal('show');
 	});
 	// The Show XML button.
 	$('#show_xml_modal_button').click(function (event) {
@@ -263,12 +359,16 @@ function (_, sup, filesize, JacksEditor, ShowImagingModal, moment, aptforms,
 	    var source = $.trim($('#profile_rspec_textarea').val());
 
 	    if (profile_uuid) {
-		$('#rspec_modal_download_button')
+	        sup.DownloadOnClick($('#rspec_modal_download_button'),
+				    function () { return source; },
+				    'profile.xml');
+/*		$('#rspec_modal_download_button')
 		    .attr("href",
 			  "show-profile.php?uuid=" + profile_uuid +
-			  "&rspec=true");
+			  "&rspec=true");*/
 	    }
 	    else {
+	        sup.ClearDownloadOnClick($('#rspec_modal_download_button'));
 		$('#rspec_modal_download_button').addClass("hidden");
 	    }	    
 	    $('#rspec_modal_upload_span').addClass("hidden");
@@ -283,7 +383,7 @@ function (_, sup, filesize, JacksEditor, ShowImagingModal, moment, aptforms,
         $('#rspec_modal').on('shown.bs.modal', function() {
 	    var source   = $('#modal_profile_rspec_textarea').val();
 	    var mode     = "text/xml";
-	    var readonly = window.CLONING ||
+	    var readonly = window.CLONING || fromrepo ||
 		$('#modal_profile_rspec_textarea').prop("readonly");
 
 	    // Need to determine the mode.
@@ -301,7 +401,7 @@ function (_, sup, filesize, JacksEditor, ShowImagingModal, moment, aptforms,
 		$('#modal_profile_rspec_div').prepend(elt);
 	    }, {
 		value: source,
-                lineNumbers: false,
+                lineNumbers: true,
 		smartIndent: true,
 		autofocus: true,
                 mode: mode,
@@ -356,31 +456,88 @@ function (_, sup, filesize, JacksEditor, ShowImagingModal, moment, aptforms,
 	})
 	
 	// Confirm Delete profile.
-	$('#delete-confirm').click(function (event) {
+	$('#confirm-delete-button').click(function (event) {
 	    event.preventDefault();
 	    DeleteProfile();
+	});
+
+	// Git repo URL modal.
+	$('#git-repo-confirm').click(function (event) {
+	    event.preventDefault();
+	    HandleGitRepoChange();
+	});
+	// Git repo update button
+	$('#git-repo-update-button').click(function (event) {
+	    event.preventDefault();
+	    HandleGitRepoUpdate();
+	});
+	// Convert rspec profile to geni-lib
+	$('#profile-convert-confirm').click(function (event) {
+	    event.preventDefault();
+	    sup.HideModal('#profile-convert-modal',
+			  function () {
+			      ConvertToGenilib();
+			  });
 	});
 
 	//
 	// Perform actions on the rspec before submit.
 	//
 	$('#profile_submit_button').click(function (event) {
+	    event.preventDefault();
+	    
 	    // Prevent submit if the description is empty.
-	    var description = $('#profile_description').val();
+	    var description = $('#profile_description .textdiv').html();
 	    if (description === "") {
-		event.preventDefault();
-		alert("Please provide a description. Its handy!");
+		alert("Please provide a description. Its required!");
 		return false;
 	    }
 	    // Add steps to the tour.
 	    if (SyncSteps()) {
-		event.preventDefault();
 		return false;
 	    }
-	    // Disable the Stay on Page alert above.
-	    window.onbeforeunload = null;
-	    WaitWait();
-	    return true;
+	    if (window.CLONING) {
+		/*
+		 * If cloning into the system project, need to warn the user
+		 * about potentially messing with a system image.
+		 */
+		var pid;
+		if (projlist.length == 1) {
+		    pid = $('$profile_pid').val();
+		}
+		else {
+		    pid = $('#profile_pid option:selected').val();
+		}
+		if (pid == EMULAB_OPS) {
+		    $('#cancel-update-systemimage').click(function() {
+			sup.HideModal('#confirm-update-systemimage-modal');
+		    });
+		    $('#confirm-update-systemimage').click(function() {
+			sup.HideModal('#confirm-update-systemimage-modal');
+			SubmitForm();
+		    });
+		    sup.ShowModal('#confirm-update-systemimage-modal',
+				  function() {
+				      $('#cancel-update-systemimage')
+					  .off("click");
+				      $('#confirm-update-systemimage')
+					  .off("click");
+				  });
+		}
+		else {
+		    // Need to ask if any extra accounts created.
+		    sup.ShowModal('#clone-modal', function () {
+			if ($('#clone-modal-update-prepare').is(':checked')) {
+			    $('#quickvm_create_profile_form ' +
+			      '[name=update_prepare]').val("yes");
+			}
+			SubmitForm();
+		    });
+		}
+	    }
+	    else {
+		SubmitForm();
+	    }
 	});
 
 	/*
@@ -388,12 +545,12 @@ function (_, sup, filesize, JacksEditor, ShowImagingModal, moment, aptforms,
 	 * the text back into the rspec since that is what actually
 	 * gets submitted; the rspec is authoritative.
 	 */
-	$('#profile_instructions').change(function() {
-	    ChangeHandlerAux("instructions");
+	$('#profile_instructions textarea').change(function() {
+	    TourModified("instructions");
 	    ProfileModified();
 	});
-	$('#profile_description').change(function() {
-	    ChangeHandlerAux("description");
+	$('#profile_description textarea').change(function() {
+	    TourModified("description");
 	    ProfileModified();
 	});
 
@@ -406,24 +563,23 @@ function (_, sup, filesize, JacksEditor, ShowImagingModal, moment, aptforms,
 	$('#profile_who_private').change(function() { ProfileModified(); });
 	$('#profile_topdog').change(function() { ProfileModified(); });
 	$('#profile_disabled').change(function() { ProfileModified(); });
+	$('#profile_nodelete').change(function() { ProfileModified(); });
 	
 	/*
-	 * A double click handler that will render the instructions
-	 * in a modal.
+	 * A double click handler that will render the instructions or
+	 * description in a modal.
 	 */
-	$('#profile_instructions').dblclick(function() {
-	    var text = $(this).val();
-	    var marked = require("marked");
-	    $('#renderer_modal_div').html(marked(text));
-	    sup.ShowModal("#renderer_modal");
-	});
-	// Ditto the description.
-	$('#profile_description').dblclick(function() {
-	    var text = $(this).val();
-	    var marked = require("marked");
-	    $('#renderer_modal_div').html(marked(text));
-	    sup.ShowModal("#renderer_modal");
-	});
+	$('#profile_description textarea, #profile_instructions textarea')
+	    .dblclick(function() {
+		var text = $(this).val();
+		$('#renderer_modal_div').html(marked(text));
+		sup.ShowModal("#renderer_modal");
+	    });
+	$('#profile_description .textdiv, #profile_instructions .textdiv')
+	    .dblclick(function() {
+		$('#renderer_modal_div').html($(this).html());
+		sup.ShowModal("#renderer_modal");
+	    });
 	// Handler for guest instantiate submit button, which is in
 	// the modal.
 	$('#guest_instantiate_submit_button').click(function (event) {
@@ -456,32 +612,19 @@ function (_, sup, filesize, JacksEditor, ShowImagingModal, moment, aptforms,
 	 */
 	$('#profile_instantiate_button').click(function (event) {
 	    window.location.replace("instantiate.php?profile=" +
-				    version_uuid);
+				    version_uuid + "&from=manage-profile");
 	});
 	
 	/*
 	 * If we were given an rspec, suck the description and instructions
-	 * out of the rspec and put them into the text boxes. But
-	 * watch for some already in the description box, it is an old
-	 * one and we want to use it if no description in the rspec.
+	 * out of the rspec and put them into the text boxes.
 	 */
 	if (gotrspec) {
 	    ExtractFromRspec();
-	    // We also got a geni-lib script, so show the XML button.
-	    if (gotscript) {
-		$('#show_xml_modal_button').removeClass("hidden");
-		$('#profile_instructions').prop("readonly", true);
-		$('#profile_description').prop("readonly", true);
-	    }
 	}
-	else {
-	    /*
-	     * Not editing, so disable the text boxes until we get
-	     * an rspec via the file chooser. 
-	     */
-	    $('#profile_instructions').prop("disabled", true);
-	    $('#profile_description').prop("disabled", true);
-	}
+	CreateJacksEditor();
+	UpdateButtons();
+	
 	//
 	// Show/Hide the Update Successful animation.
 	//
@@ -515,13 +658,88 @@ function (_, sup, filesize, JacksEditor, ShowImagingModal, moment, aptforms,
 		initNotifyUpdate();
 	    }
 	    else if (gotscript) {
-		if (window.CLONING) {				
+		if (window.CLONING && !portal_converted) {
 		    sup.ShowModal('#warn_pp_modal');
 		}
 	    }
 	    else if (_.has(window, "EXPUUID")) {
 		ConvertFromExperiment();
 	    }
+	}
+    }
+
+    /*
+     * Submit
+     */
+    function SubmitForm()
+    {
+	var submit_callback = function(json) {
+	    if (json.code) {
+		if (json.code == 2) {
+		    aptforms.GenerateFormErrors('#quickvm_create_profile_form',
+						json.value);		
+		    // Make sure we still warn about an unsaved form.
+		    aptforms.MarkFormUnsaved();		    
+		}
+		else {
+		    sup.SpitOops("oops", json.value);
+		}
+		return;
+	    }
+	    window.location.replace(json.value);
+	};
+	var checkonly_callback = function(json) {
+	    if (json.code) {
+		if (json.code != 2) {
+		    sup.SpitOops("oops", json.value);
+		}
+		return;
+	    }
+	    aptforms.SubmitForm('#quickvm_create_profile_form',
+				"manage_profile", "Create",
+				submit_callback);
+	};
+	// Disable unsaved warning.
+	modified = 0;
+	
+	aptforms.CheckForm('#quickvm_create_profile_form',
+			   "manage_profile", "Create",
+			   checkonly_callback);
+    }
+    
+    // Handler for all paths to rspec change (file upload, jacks, edit).
+    function changeRspec(newRspec, repoupdate_callback)
+    {
+	if (pythonRe.test(newRspec) || tclRe.test(newRspec)) {
+	    //
+	    // A geni-lib script. We are going to pass the script to
+	    // the server to be "run", which returns XML.
+	    //
+	    if (newRspec != $('#profile_script_textarea').val()) {
+		console.info("geni-lib code has changed");
+		if (portal_converted) {
+		    /*
+		     * User might not want to proceed down this path,
+		     * will not be able to use Jacks. 
+		     */
+		    rteCheckScript(newRspec);
+		}
+		else {
+		    checkScript(newRspec, repoupdate_callback);
+		}
+	    }
+	    else if (repoupdate_callback !== undefined) {
+		repoupdate_callback(false /* unmodified. */);
+	    }
+	}
+        else
+        {
+	    // Kill existing script since we are switching back to XML. SAD!
+	    if (gotscript) {
+		gotscript = 0;
+		$('#profile_script_textarea').val("");
+	    }
+	    NewRspecHandler(newRspec);
 	}
     }
 
@@ -718,12 +936,12 @@ function (_, sup, filesize, JacksEditor, ShowImagingModal, moment, aptforms,
 	return xml;
     }
     //
-    // Helper function for instructions/description change handler above.
-    // Take the text box contents and store back into the rspec.
+    // The description or instructions have changed in an rspec based
+    // profile, need to write the changes back into the rspec.
     //
-    function ChangeHandlerAux(which)
+    function TourModified(which)
     {
-	var text    = $('#profile_' + which).val();
+	var text    = $('#profile_' + which + ' textarea').val();
 	var rspec   = $('#profile_rspec_textarea').val();
 	if (rspec === "") {
 	    return;
@@ -745,6 +963,8 @@ function (_, sup, filesize, JacksEditor, ShowImagingModal, moment, aptforms,
 	var str = s.serializeToString(xml[0]);
 	//console.log(str);
 	$('#profile_rspec_textarea').val(str);
+	// Copy to the hidden area.
+	$('#profile_' + which + ' .textdiv').html(marked(text));
     }
 
     /*
@@ -757,7 +977,11 @@ function (_, sup, filesize, JacksEditor, ShowImagingModal, moment, aptforms,
     {
 	newrspec     = $.trim(newrspec);
 	var oldrspec = $.trim($('#profile_rspec_textarea').val());
+	gotrspec     = 1;
+	
 	if (newrspec == oldrspec) {
+	    // In case rspec does not change.
+	    UpdateButtons();
 	    return;
 	}
 	var findEncoding = RegExp('^\\s*<\\?[^?]*\\?>');
@@ -781,19 +1005,9 @@ function (_, sup, filesize, JacksEditor, ShowImagingModal, moment, aptforms,
 	    $('#profile_rspec_textarea').val(newrspec);
 	    ExtractFromRspec();
 	    SyncSteps();
-	    ProfileModified();
-	    if (gotscript) {
-		$('#profile_instructions').prop("readonly", true);
-		$('#profile_description').prop("readonly", true);
-	    }
-	    else {
-		// Allow editing the boxes now that we have an rspec.
-		// This only matters on a brand new create age.
-		$('#profile_instructions').prop("readonly", false);
-		$('#profile_description').prop("readonly", false);
-		$('#profile_instructions').prop("disabled", false);
-		$('#profile_description').prop("disabled", false);
-	    }
+	    if (!fromrepo)
+		ProfileModified();
+	    UpdateButtons();
 	};
 
 	// No old rspec, use new one.
@@ -841,19 +1055,43 @@ function (_, sup, filesize, JacksEditor, ShowImagingModal, moment, aptforms,
 	if (xmlDoc == null)
 	    return;
 	var xml    = $(xmlDoc);
-	console.info(rspec);
-	console.info(xml);
+	//console.info(rspec);
+	//console.info(xml);
 	
-	$('#profile_description').val("");
+	$('#profile_description textarea').val("");
+	$('#profile_description .textdiv').html("");
 	$(xml).find("rspec_tour > description").each(function() {
 	    var text = $(this).text();
-	    $('#profile_description').val(text);
+	    $('#profile_description textarea').val(text);
+	    $('#profile_description .textdiv').html(marked(text));
 	});
-	$('#profile_instructions').val("");
+	$('#profile_instructions textarea').val("");
+	$('#profile_instructions .textdiv').html("");
 	$(xml).find("rspec_tour > instructions").each(function() {
 	    var text = $(this).text();
-	    $('#profile_instructions').val(text);
+	    $('#profile_instructions textarea').val(text);
+	    $('#profile_instructions .textdiv').html(marked(text));
 	});
+	if (gotscript) {
+	    // We got here by a geni-lib script. No editing allowed
+	    $('#show_xml_modal_button').removeClass("hidden");
+	    $('#profile_description textarea').addClass("hidden");
+	    $('#profile_description .textarea').removeClass("hidden");
+	    $('#profile_instructions textarea').addClass("hidden");
+	    $('#profile_instructions .textarea').removeClass("hidden");
+	}
+	else {
+	    // User can edit the textareas
+	    $('#show_xml_modal_button').addClass("hidden");
+	    $('#profile_description textarea').removeClass("hidden");
+	    $('#profile_description .textarea').addClass("hidden");
+	    $('#profile_instructions textarea').removeClass("hidden");
+	    $('#profile_instructions .textarea').addClass("hidden");
+	}
+	// Creating new profile, now we can show the tour/metadata fields.
+	$('#tour-text-boxes').removeClass("hidden");
+	$('#metadata-fields').removeClass("hidden");
+
 	//
 	// First time we see the XML, grab step data out of it. But after
 	// that the steps table is authoritative, and so we sync the table
@@ -891,7 +1129,7 @@ function (_, sup, filesize, JacksEditor, ShowImagingModal, moment, aptforms,
 	    window.location.replace(url);
 	}
 	sup.HideModal("#guest_instantiate_modal");
-	sup.ShowModal("#waitwait-modal");
+	WaitWait();
 	var xmlthing = sup.CallServerMethod(ajaxurl,
 					    "manage_profile",
 					    "InstantiateAsGuest",
@@ -913,13 +1151,12 @@ function (_, sup, filesize, JacksEditor, ShowImagingModal, moment, aptforms,
 	    }
 	    window.location.replace(json.value);
 	}
-	sup.HideModal("#instantiate_modal");
 
 	var blob = {"uuid" : version_uuid};
 	if (amlist.length) {
 	    blob.where = $('#instantiate_where').val();
 	}
-	sup.ShowModal("#waitwait-modal");
+	WaitWait();
 	var xmlthing = sup.CallServerMethod(ajaxurl,
 					    "instantiate",
 					    "Instantiate", blob);
@@ -931,7 +1168,8 @@ function (_, sup, filesize, JacksEditor, ShowImagingModal, moment, aptforms,
     //
     function ShowProgressModal()
     {
-	ShowImagingModal(function()
+        ShowImagingModal(
+		         function()
 			 {
 			     return sup.CallServerMethod(ajaxurl,
 							 "manage_profile",
@@ -945,16 +1183,18 @@ function (_, sup, filesize, JacksEditor, ShowImagingModal, moment, aptforms,
 			     }
 			     else {
 				 EnableButtons();
+				 DisableButton("profile_submit_button");
 			     }
-			 });
+			 },
+	                 true);
     }
 
     //
     // Show the waitwait modal.
     //
-    function WaitWait()
+    function WaitWait(message)
     {
-	sup.ShowModal('#waitwait-modal');
+	sup.ShowWaitWait(message);
     }
 
     //
@@ -1003,27 +1243,49 @@ function (_, sup, filesize, JacksEditor, ShowImagingModal, moment, aptforms,
     //
     // Delete profile.
     //
-    function DeleteProfile()
+    function DeleteProfile(force, keepimages)
     {
 	var delete_all = $('#delete-all-versions').is(':checked') ? 1 : 0;
-	
+
 	var callback = function(json) {
-	    sup.HideModal("#waitwait-modal");
-	    //console.info(json.value);
+	    sup.HideWaitWait();
+	    console.info(json.value);
 
 	    if (json.code) {
+		if (json.code == 2) {
+		    ShowDeletionWarning(json.value);
+		    return;
+		}
 		sup.SpitOops("oops", json.value);
 		return;
 	    }
 	    window.location.replace(json.value);
 	}
-	sup.HideModal('#delete_modal');
-	sup.ShowModal("#waitwait-modal");
-	var xmlthing = sup.CallServerMethod(ajaxurl,
-					    "manage_profile",
-					    "DeleteProfile",
-					    {"uuid"   : version_uuid,
-					     "all"    : delete_all});
+	var args = {
+	    "uuid"   : version_uuid,
+	    "all"    : delete_all,
+	};
+	if (force) {
+	    args["force"] = 1;
+	    if (keepimages) {
+		args["keepimages"] = 1;
+	    }
+	}
+	console.info("DeleteProfile", args);
+	
+	var xmlthing = sup.CallServerMethod(null, "manage_profile",
+					    "DeleteProfile", args);
+
+	// Came from ShowDeletionWarning() if force is set.
+	if (!force) {
+	    sup.HideModal('#confirm-delete-profile-modal');
+	}
+	if (force && !keepimages) {
+	    WaitWait("Deleting images takes a minute; patience please");
+	}
+	else {
+	    WaitWait();
+	}
 	xmlthing.done(callback);
     }
 
@@ -1047,7 +1309,7 @@ function (_, sup, filesize, JacksEditor, ShowImagingModal, moment, aptforms,
 	    $('#profile_published').html(json.value.published);
 	}
 	sup.HideModal('#publish_modal');
-	sup.ShowModal("#waitwait-modal");
+	WaitWait();
 	var xmlthing = sup.CallServerMethod(ajaxurl,
 					    "manage_profile",
 					    "PublishProfile",
@@ -1070,54 +1332,11 @@ function (_, sup, filesize, JacksEditor, ShowImagingModal, moment, aptforms,
     //
     // Pass a geni-lib script to the server to run (convert to XML).
     //
-    function checkScript(script)
+    function checkScript(script, repoupdate_callback)
     {
 	// Save for later.
 	$('#profile_script_textarea').val(script);
 
-	var callback = function(json) {
-	    sup.HideWaitWait();
-	    //console.info(json.value);
-
-	    if (json.code) {
-		sup.SpitOops("oops",
-			     "<pre><code>" +
-			     $('<div/>').text(json.value).html() +
-			     "</code></pre>");
-		return;
-	    }
-	    if (json.value.rspec != "") {
-		gotscript = 1;
-		NewRspecHandler(json.value.rspec);
-		// Force this; the script is obviously different, but the
-		// the XML might be exactly same. Still want to save it. 
-		ProfileModified();
-		// Show the XML source button.
-		$('#show_xml_modal_button').removeClass("hidden");
-	    }
-	}
-	/*
-	 * Send along the project if one is selected; only makes sense
-	 * for NS files, which need to do project based checks on a few
-	 * things (images and blockstores being the most important).
-	 * If this is a modification to an existing profile, we still
-	 * have the project name in the same variable.
-	 */
-	sup.ShowWaitWait("We are converting your geni-lib script to an rspec");
-	var xmlthing = sup.CallServerMethod(ajaxurl,
-					    "manage_profile",
-					    "CheckScript",
-					    {"script"   : script,
-					     "pid"      : $('#profile_pid').val()});
-	xmlthing.done(callback);
-    }
-
-    /*
-     * Convert from an NS file. The server will do the conversion and spit
-     * back a genilib script.
-     */
-    function ConvertFromExperiment()
-    {
 	var callback = function(json) {
 	    sup.HideWaitWait();
 	    console.info(json.value);
@@ -1129,13 +1348,22 @@ function (_, sup, filesize, JacksEditor, ShowImagingModal, moment, aptforms,
 			     "</code></pre>");
 		return;
 	    }
-	    $('#rspec_modal_download_button').addClass("hidden");
-	    $('#rspec_modal_editbuttons').removeClass("hidden");
-	    $('#rspec_modal_viewbuttons').addClass("hidden");
-	    $('#modal_profile_rspec_textarea').prop("readonly", false);	    
-	    $('#modal_profile_rspec_textarea').val(json.value.script);
-	    $('#rspec_modal').modal({'backdrop':'static','keyboard':false});
-	    $('#rspec_modal').modal('show');
+	    if (json.value.rspec != "") {
+		gotscript = 1;
+		// Kill the rspec so that we always use the new one.
+		$('#profile_rspec_textarea').val("");
+		NewRspecHandler(json.value.rspec);
+		if (repoupdate_callback !== undefined) {
+		    repoupdate_callback(true /* modified */);
+		}
+		// Force this; the script is obviously different, but the
+		// the XML might be exactly same. Still want to save it.
+		if (!fromrepo || window.ACTION == "create") {
+		    ProfileModified();
+		}
+		// Show the XML source button.
+		$('#show_xml_modal_button').removeClass("hidden");
+	    }
 	}
 	/*
 	 * Send along the project if one is selected; only makes sense
@@ -1144,7 +1372,174 @@ function (_, sup, filesize, JacksEditor, ShowImagingModal, moment, aptforms,
 	 * If this is a modification to an existing profile, we still
 	 * have the project name in the same variable.
 	 */
-	sup.ShowWaitWait("We are converting your NS file to geni-lib");
+	var args = {
+	    "script"   : script,
+	    "pid"      : $('#profile_pid').val(),
+	};
+	if (repoupdate_callback !== undefined) {
+	    // Pass along uuid as a flag to update repo.
+	    args["repoupdate"] = version_uuid;
+	}
+	WaitWait("We are converting your geni-lib script to XML");
+	var xmlthing = sup.CallServerMethod(ajaxurl,
+					    "manage_profile",
+					    "CheckScript", args);
+	xmlthing.done(callback);
+    }
+
+    /*
+     * User is requesting to create a profile from a git repo.
+     * Try to clone that repo and get the script/rspec out of it.
+     */
+    function HandleGitRepoChange()
+    {
+	var repourl = $('#git-repo-url').val();
+	// Do nothing until we have something.
+	if (repourl == "") {
+	    return;
+	}
+	if (repourl.substring(0,8) != "https://") {
+	    $('#git-repo-modal [for=git-repo-url]').removeClass("hidden");
+	    $('#git-repo-modal .form-group').addClass("has-error");
+	    $('#git-repo-modal [for=git-repo-url]')
+		.text("URL must start with https://");
+	    return;
+	}
+	// Clear errors
+	$('#git-repo-modal [for=git-repo-url]').addClass("hidden");
+	$('#git-repo-modal .form-group').removeClass("has-error");
+	sup.HideModal('#git-repo-modal');
+	
+	var callback = function(json) {
+	    console.info("HandleGitRepoChange", json);
+
+	    if (json.code) {
+		sup.HideWaitWait();
+		sup.SpitOops("oops", json.value);
+		return;
+	    }
+	    fromrepo = 1;
+	    // Lets not show this anymore.
+	    $('#sourcefile-button-div').addClass("hidden");
+	    // Add the url to the form.
+	    $('#quickvm_create_profile_form #repourl').val(repourl);
+	    sup.HideWaitWait(function() {
+		changeRspec(json.value.script);
+	    });
+	}
+	WaitWait("We are attempting to clone your repository. " +
+		 "Patience please.");
+	var xmlthing = sup.CallServerMethod(ajaxurl,
+					    "manage_profile",
+					    "GetRepository",
+					    {repourl : repourl});
+					    
+	xmlthing.done(callback);
+    }
+
+    /*
+     * Update from origin repository, possibly getting a new script or rspec
+     * cause HEAD changed at the origin.
+     */
+    function HandleGitRepoUpdate()
+    {
+	var callback = function(blob) {
+	    console.info("HandleGitRepoUpdate", blob);
+	    if (blob) {
+		/*
+		 * If the source was an rspec, we updated the profile
+		 * to match the current repo right away. But to make things
+		 * nicer for script based profiles, we wait until the
+		 * script is converted to an rspec. Cause of workflow, we
+		 * end up doing this later so that the user sees a short
+		 * delay when hitting the update button for a script based
+		 * profile. 
+		 */
+		if (!pythonRe.test(blob.source)) {
+		    NewRspecHandler(blob.source);
+		    // Mark as HEAD in the page.
+		    repohash = blob.hash;
+		    // Reset the list of tags and branches whenever we
+		    // successfully update our clone.
+		    SetupRepo();
+		    return;
+		}
+		/*
+		 * Else we wait till the script converted, the call back is
+		 * invoked after CheckScript() finishes. The server side
+		 * has done the profile update, so we can finish things up.
+		 */
+		changeRspec(blob.source, function(modified) {
+		    // Mark as HEAD in the page.
+		    repohash = blob.hash;
+		    // Reset the list of tags and branches whenever we
+		    // successfully update our clone.
+		    SetupRepo();
+		});
+	    }
+	};
+	gitrepo.UpdateRepo(version_uuid, callback);
+    }
+
+    function SetupRepo()
+    {
+	gitrepo.InitRepoPicker(version_uuid,
+			       function(which) {
+				   // So we remember what the user selected.
+				   reporefspec = which;
+				   SelectRepoTarget(which);
+			       });
+	// This updates the info panel on the left side, but we want
+	// to stay on the same refspec the user switched to. 
+	gitrepo.GetCommitInfo(version_uuid, reporefspec);
+    }
+
+    /*
+     * User has clicked on a branch/tag. We need to get that branch/tag
+     * source code and update the page.
+     */
+    function SelectRepoTarget(which)
+    {
+	var callback = function (source, hash) {
+	    if (source) {
+		changeRspec(source);
+	    }
+	};
+	gitrepo.GetRepoSource(version_uuid, which, callback);
+    }
+
+    /*
+     * Convert from an NS file. The server will do the conversion and spit
+     * back a genilib script.
+     */
+    function ConvertFromExperiment()
+    {
+	var callback = function(json) {
+	    console.info(json.value);
+
+	    if (json.code) {
+		sup.HideWaitWait();
+		sup.SpitOops("oops",
+			     "<pre><code>" +
+			     $('<div/>').text(json.value).html() +
+			     "</code></pre>");
+		return;
+	    }
+	    sup.ClearDownloadOnClick($('#rspec_modal_download_button'));
+	    sup.HideWaitWait(function () {
+		changeRspec(json.value.script);
+		// Do this after so we do not do an RTE check up above.
+		MarkPortalConverted(true);
+	    });
+	}
+	/*
+	 * Send along the project if one is selected; only makes sense
+	 * for NS files, which need to do project based checks on a few
+	 * things (images and blockstores being the most important).
+	 * If this is a modification to an existing profile, we still
+	 * have the project name in the same variable.
+	 */
+	WaitWait("We are converting your NS file to geni-lib");
 	var xmlthing = sup.CallServerMethod(ajaxurl,
 					    "manage_profile",
 					    "ConvertClassic",
@@ -1152,6 +1547,283 @@ function (_, sup, filesize, JacksEditor, ShowImagingModal, moment, aptforms,
 					     "pid"    : $('#profile_pid').val()});
 	xmlthing.done(callback);
     }
+
+    function openEditor(source)
+    {
+        var readonly = true;
+        if ((window.CANMODIFY !== 0 ||
+	     window.ACTION === 'create') &&
+	    fromrepo === 0 &&
+	    gotscript === 1)
+        {
+	    readonly = false;
+        }
+        window.SHOW_GENILIB_EDITOR(source, closeEditor, readonly);
+    }
+
+    function closeEditor(source)
+    {
+        if (source !== null)
+        {
+	    changeRspec(source);
+        }
+    }
+
+    function ConvertToGenilib(rspec)
+    {
+	var converting = false;
 	
+	// Coming out of Jacks, otherwise a conversion.
+	if (rspec !== undefined) {
+	    changeRspec(rspec);
+	}
+	else {
+	    rspec = $.trim($('#profile_rspec_textarea').val());
+	    converting = true;
+	}
+	
+	/*
+	 * Convert rspec to geni-lib
+	 */
+	var callback = function(json) {
+	    sup.HideWaitWait();
+	    console.info(json.value);
+	    if (json.code) {
+		$('#profile-conversion-failure-message').html(json.value);
+		sup.ShowModal('#profile-convert-failed-modal');
+		return;
+	    }
+	    gotscript = 1;
+	    if (converting) {
+		MarkPortalConverted(true);
+	    }
+	    $('#profile_script_textarea').val(json.value.script);
+	    NewRspecHandler(json.value.rspec);
+	    ProfileModified();
+	    // Show the XML source button.
+	    $('#show_xml_modal_button').removeClass("hidden");
+	    // A conversion, throw up post conversion modal
+	    if (converting) {
+		// Hide the conversion button.
+		$('#profile_convert_button').addClass("hidden");
+		// Bind function to switch to the editor.
+		$('#profile-converted-viewscript').click(function(event) {
+		    sup.HideModal('#profile-converted-modal',
+				  function () {
+				      openEditor(json.value.script);
+				  });
+		});
+		sup.ShowModal('#profile-converted-modal');
+	    }
+	};
+	if (converting) {
+	    WaitWait("Please wait while we convert your rspec to geni-lib");
+	}
+	else {
+	    WaitWait();
+	}
+	var xmlthing = sup.CallServerMethod(ajaxurl,
+					    "manage_profile",
+					    "ConvertRspec",
+					    {"rspec" : rspec});
+	xmlthing.done(callback);
+
+    }
+
+    function ShowDeletionWarning(images)
+    {
+	/*
+	 * See if we have any profiles to warn about. If only images, then
+	 * the warning is different.
+	 */
+	var noprofiles = 1;
+	_.each(images, function(profiles, imagename) {
+	    _.each(profiles, function(value, name) {
+		noprofiles = 0;
+	    });
+	});
+	
+	var html = plistTemplate({
+	    "images"     : images,
+	    "noprofiles" : noprofiles,
+	});
+	$('#profile_list_modal_div').html(html);
+	
+	/*
+	 * Bind a handler for the force delete button.
+	 */
+	$('#confirm-force-delete').click(function (event) {
+	    event.preventDefault();
+	    // Keep images option.
+	    var keepimages = $('#keep-profile-images').is(':checked') ? 1 : 0;
+
+	    sup.HideModal('#profile-list-modal',
+			  function () { DeleteProfile(true, keepimages); });
+	})
+	sup.ShowModal('#profile-list-modal',
+		      // Delete handler no matter how it hides.
+		      function () {
+			  console.info("unbinding handler");
+			  $('#confirm-force-delete').off("click");
+		      });
+    }
+
+    /*
+     * Timer to ask for the current repository hash value to determine
+     * if it has changed. We tell the user to reload the page. 
+     */
+    function CheckRepoChange()
+    {
+	var callback = function(json) {
+	    //console.info("CheckRepoChange", json);
+    
+	    if (json.code == 0 && repohash != json.value) {
+		repohash = json.value;
+		// Reset the list of tags and branches whenever we
+		// successfully update our clone.
+		SetupRepo();
+		// New source code from the refspec the user is looking at.
+		gitrepo.GetRepoSource(version_uuid, reporefspec,
+				      function (source, hash) {
+					  if (source) {
+					      changeRspec(source);
+					  }
+				      });
+	    }
+	    setTimeout(function f() { CheckRepoChange() }, 10000);
+	};
+	var xmlthing = sup.CallServerMethod(ajaxurl,
+					    "manage_profile", "GetRepoHash",
+					    {"uuid"   : version_uuid});
+	xmlthing.done(callback);
+    }
+
+    function CreateJacksEditor()
+    {
+        var isViewer = gotscript && !portal_converted;
+	if (editor) {
+	    $('#editmodal_div').empty();
+	}
+	editor = new JacksEditor($('#editmodal_div'),
+				 isViewer, false, false, false, !multisite);
+	if (isViewer) {
+	    $('#edit_container .edit_buttons.readwrite').addClass("hidden");
+	    $('#edit_container .edit_buttons.readonly').removeClass("hidden");
+	}
+	else {
+	    $('#edit_container .edit_buttons.readwrite').removeClass("hidden");
+	    $('#edit_container .edit_buttons.readonly').addClass("hidden");
+	}
+    }
+
+    function MarkPortalConverted(converted)
+    {
+	portal_converted = converted;
+	// Mark the form as containing a converted script.
+	$('#quickvm_create_profile_form ' +
+	  '[name=portal_converted]').val(converted ? "yes" : "no");
+    }
+
+    function UpdateButtons()
+    {
+	console.info(window.VIEWING, window.CANMODIFY,
+		     fromrepo, gotscript, gotrspec, portal_converted);
+
+	if (! (gotscript || gotrspec)) {
+	    $('#edit_topo_modal_button').html('Create Topology');
+	    $('#show_source_modal_button').html('Edit Code');
+	}
+	else {
+	    var caneditcode = (!window.VIEWING || window.CANMODIFY ? 1 : 0);
+	    var canedittopo = caneditcode;
+
+	    // In general, scripts can be edited, subject to changes below.
+	    if (gotscript) {
+		caneditcode = 1;
+		canedittopo = 0;
+	    }
+	    if (fromrepo) {
+		caneditcode = 0;
+		canedittopo = 0;
+	    }
+	    if (portal_converted) {
+		caneditcode = 1;
+		canedittopo = 1;
+		// Hide the git-repo button.
+		$('#git-repo-button-div').addClass("hidden");
+	    }
+	    if (canedittopo) {
+		$('#edit_topo_modal_button').html('Edit Topology');
+	    }
+	    else {
+		$('#edit_topo_modal_button').html('View Topology');
+	    }
+	    if (caneditcode) {
+		$('#show_source_modal_button').html('Edit Code');
+		// Hide the file upload button, user is committed, and
+		// there is an upload button in the code editor.
+		$('#sourcefile-button-div').addClass("hidden");
+	    }
+	    else {
+		$('#show_source_modal_button').html('View Code');
+	    }
+	    if (window.CLONING || window.COPYING ||
+		window.EXPUUID !== undefined) {
+		// Hide the file upload button, user is committed
+		$('#sourcefile-button-div').addClass("hidden");
+		// Ditto the git-repo button.
+		$('#git-repo-button-div').addClass("hidden");
+	    }
+	}
+    }
+
+    /*
+     * The user has edited the geni-lib script for a portal converted profile.
+     * We attempt to determine of the change will be lost if we convert the
+     * generated rspec (from the new geni-lib script) back to geni-lib. If
+     * no difference in the edited python and the machine generated python,
+     * then life is good. If not, the use has made a change that will be lost
+     * so we have to convert to normal geni-lib script; jacks will now run
+     * in read-only mode, the user can *only* edit the script.
+     */
+    function rteCheckScript(script)
+    {
+	var callback = function (json) {
+	    console.info("rteCheckScript", json);
+	    // Was having a modal problem.
+	    sup.HideWaitWait(function () {
+		// No error, we are good to go.
+		if (json.code == 0) {
+		    checkScript(script);
+		    return;
+		}
+		else if (json.code < 0) {
+		    sup.SpitOops("oops", "Internal error processing script");
+		    return;
+		}
+		// A difference we cannot deal with.
+		$('#edit-genilib-continue').click(function(event) {
+		    sup.HideModal('#edit-genilib-warning-modal',
+				  function () {
+				      MarkPortalConverted(false);
+				      CreateJacksEditor();
+				      checkScript(script);
+				  });
+		});
+		$('#rtecheck-failure-message').html(json.value);
+		sup.ShowModal('#edit-genilib-warning-modal',
+			      function () {
+				  $('#edit-genilib-continue').off("click");
+			      });
+		return;
+	    });
+	};
+	WaitWait("Please wait while we take a look at your script");
+	var xmlthing = sup.CallServerMethod(ajaxurl,
+					    "manage_profile", "RTECheck",
+					    {"script"  : script});
+	xmlthing.done(callback);
+    }
+
     $(document).ready(initialize);
 });

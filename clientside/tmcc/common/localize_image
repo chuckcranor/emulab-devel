@@ -1,6 +1,6 @@
 #!/bin/sh
 #
-# Copyright (c) 2000-2014 University of Utah and the Flux Group.
+# Copyright (c) 2000-2017 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -57,7 +57,7 @@ localize_image() {
 	cmp -s $ETCDIR/emulab.pem $MNT/etc/emulab/emulab.pem
 	if [ $? -ne 0 ]; then
 	    echo "  updating $MNT/etc/emulab/emulab.pem"
-	    cp -p $ETCDIR/emulab.pem $MNT/etc/emulab/ || {
+	    cp -pf $ETCDIR/emulab.pem $MNT/etc/emulab/ || {
 		echo "Failed to create $ETCDIR/emulab.pem"
 		return 1
 	    }
@@ -67,7 +67,7 @@ localize_image() {
 	cmp -s $ETCDIR/client.pem $MNT/etc/emulab/client.pem
 	if [ $? -ne 0 ]; then
 	    echo "  updating $MNT/etc/emulab/client.pem"
-	    cp -p $ETCDIR/client.pem $MNT/etc/emulab/ || {
+	    cp -pf $ETCDIR/client.pem $MNT/etc/emulab/ || {
 		echo "Failed to create $ETCDIR/client.pem"
 		return 1
 	    }
@@ -85,13 +85,9 @@ localize_image() {
 		    return 1
 		}
 	    fi
-	    # copy to both authorized_keys and _keys2
-	    cp -p /root/.ssh/authorized_keys2 $MNT/root/.ssh/authorized_keys || {
+	    # copy to authorized_keys
+	    cp -pf /root/.ssh/authorized_keys2 $MNT/root/.ssh/authorized_keys || {
 		echo "Failed to create /root/.ssh/authorized_keys"
-		return 1
-	    }
-	    cp -p /root/.ssh/authorized_keys2 $MNT/root/.ssh/ || {
-		echo "Failed to create /root/.ssh/authorized_keys2"
 		return 1
 	    }
 	fi
@@ -99,26 +95,17 @@ localize_image() {
 
     # Check the host keys.
     changehostkeys=0
-    if [ -e /etc/ssh/ssh_host_key ]; then
-	cmp -s /etc/ssh/ssh_host_key $MNT/etc/ssh/ssh_host_key
-	if [ $? -ne 0 ]; then
-	    changehostkeys=1
+    for k in "" dsa_ ecdsa_ ed25519_ rsa_; do
+	if [ -e /etc/ssh/ssh_host_${k}key ]; then
+	    cmp -s /etc/ssh/ssh_host_${k}key $MNT/etc/ssh/ssh_host_${k}key
+	    if [ $? -ne 0 ]; then
+		changehostkeys=1
+	    fi
 	fi
-    fi
-    if [ -e /etc/ssh/ssh_host_rsa_key ]; then
-	cmp -s /etc/ssh/ssh_host_rsa_key $MNT/etc/ssh/ssh_host_rsa_key
-	if [ $? -ne 0 ]; then
-	    changehostkeys=1
-	fi
-    fi
-    if [ -e /etc/ssh/ssh_host_dsa_key ]; then
-	cmp -s /etc/ssh/ssh_host_dsa_key $MNT/etc/ssh/ssh_host_dsa_key
-	if [ $? -ne 0 ]; then
-	    changehostkeys=1
-	fi
-    fi
+    done
+
     if [ $changehostkeys -eq 1 ]; then
-	echo "  updating /etc/ssh/hostkeys"
+	echo "  updating /etc/ssh host keys"
 	
 	if [ ! -d $MNT/etc/ssh ]; then
 	    mkdir -m 755 $MNT/etc/ssh || {
@@ -126,35 +113,37 @@ localize_image() {
 		return 1
 	    }
 	fi
-	cp -p /etc/ssh/ssh_host_* $MNT/etc/ssh/ || {
-	    echo "Failed to create /etc/ssh/hostkeys"
+	cp -pf /etc/ssh/ssh_host_* $MNT/etc/ssh/ || {
+	    echo "Failed to update /etc/ssh host keys"
 	    return 1
 	}
     fi
 
     # Check the time zone.
     if [ -e /etc/localtime ]; then
-	cmp -s /etc/localtime $MNT/etc/localtime
-	if [ $? -ne 0 ]; then
-	    echo "  updating /etc/localtime"
+	# XXX might be a symlink to /usr/share which we cannot resolve to
+	# compare, so just unconditionally replace it.
+	rm -f $MNT/etc/localtime
 
-	    cp -p /etc/localtime $MNT/etc/localtime || {
-		echo "Failed to create /etc/localtime"
-		return 1
-	    }
-	fi
+	echo "  updating /etc/localtime"
+	cp -pf /etc/localtime $MNT/etc/localtime || {
+	    echo "Failed to create /etc/localtime"
+	    return 1
+	}
     fi
 
     # Check the NTP configuration.
     if [ -e /etc/ntp.conf ]; then
-	cmp -s /etc/ntp.conf $MNT/etc/ntp.conf
-	if [ $? -ne 0 ]; then
-	    echo "  updating /etc/ntp.conf"
+	echo "  updating /etc/ntp.conf"
 
-	    cp -p /etc/ntp.conf $MNT/etc/ntp.conf || {
-		echo "Failed to create /etc/ntp.conf"
-		return 1
-	    }
+	cp -pf /etc/ntp.conf $MNT/etc/ntp.conf || {
+	    echo "Failed to create /etc/ntp.conf"
+	    return 1
+	}
+
+	# XXX cannot put drift in /etc/ntp.drift on Linux
+	if [ -d "$MNT/var/lib/ntp" ]; then
+	    sed -i '' -e 's;/etc/ntp.drift;/var/lib/ntp/ntp.drift;' $MNT/etc/ntp.conf
 	fi
     fi
 

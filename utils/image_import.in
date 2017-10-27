@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2010-2016 University of Utah and the Flux Group.
+# Copyright (c) 2010-2017 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -50,7 +50,7 @@ sub usage()
     print(" -c      - With -r update ndz file using the updates table\n");
     exit(-1);
 }
-my $optlist = "dvu:p:gi:Irsc";
+my $optlist = "dvu:p:gi:IrscR";
 my $debug   = 0;
 my $verify  = 0;
 my $getimage= 0;
@@ -63,6 +63,7 @@ my $group;
 my $image;
 my $imagename;
 my $copyback_urn;
+my $copyback_credential;
 
 #
 # Configure variables
@@ -79,10 +80,12 @@ my $WGET	= "/usr/local/bin/wget";
 my $NEWIMAGE_EZ = "$TB/bin/newimageid_ez";
 my $IMAGEDUMP   = "$TB/bin/imagedump";
 my $SHA1	= "/sbin/sha1";
+my $DD		= "/bin/dd";
 my $SAVEUID	= $UID;
 my $IMAGEVALIDATE = "$TB/sbin/imagevalidate";
 my $DELETEIMAGE   = "$TB/sbin/delete_image";
 my $POSTIMAGEINFO = "$TB/sbin/protogeni/postimagedata";
+my $SECUREIMAGEGET= "$TB/sbin/protogeni/secureimageget";
 my $WITHPROVENANCE= @IMAGEPROVENANCE@;
 my $DOIMAGEDIRS   = @IMAGEDIRECTORIES@;
 my $PGENISUPPORT  = @PROTOGENI_SUPPORT@;
@@ -126,8 +129,7 @@ use libtestbed;
 use User;
 use Project;
 use Group;
-use Image;
-use OSinfo;
+use OSImage;
 
 # Locals;
 my $url;
@@ -137,7 +139,7 @@ sub fatal($);
 sub FetchMetadata($);
 sub CreateImage($$$$$);
 sub DownLoadImage($$$$);
-sub FetchImageFile($$);
+sub FetchImageFile($$$);
 sub FetchSigFile($);
 
 #
@@ -178,6 +180,9 @@ if (defined($options{"r"})) {
 if (defined($options{"R"})) {
     $update = 1;
     $force  = 1;
+    if (defined($options{"c"})) {
+	$copyback = 1;
+    }
 }
 if (defined($options{"u"})) {
     $user = User->Lookup($options{"u"});
@@ -212,7 +217,7 @@ if ($update) {
     usage()
 	if (!@ARGV);
 
-    $image = Image->Lookup(shift(@ARGV));
+    $image = OSImage->Lookup(shift(@ARGV));
     if (!defined($image)) {
 	fatal("Image descriptor does not exist");
     }
@@ -247,6 +252,17 @@ if ($update) {
 	$updater_uid  = $row->{'updater'};
 	$updater_idx  = $row->{'updater_idx'};
 	$copyback_urn = $row->{'updater_urn'};
+	if ($row->{'credential_string'} ne "") {
+	    require GeniCredential;
+	    
+	    $copyback_credential =
+		GeniCredential->CreateFromSigned($row->{'credential_string'});
+	    if (!defined($copyback_credential)) {
+		print STDERR "Image credential is not valid\n";
+		$image->Unlock();
+		exit(-1);
+	    }
+	}
 
 	#
 	# Also want the user doing the import to be the user who actually
@@ -340,17 +356,27 @@ if ($newhash =~/^(.*)$/) {
 # but users are users ... 
 #
 if (!$update) {
-    my $safe_url = DBQuoteSpecial($url);
-    my $query_result = DBQueryWarn("select GET_LOCK($safe_url, 120)");
+    # New mysal 5.7 limit of 64 chars on locks. Use the uuid.
+    my $lockname;
+    if (length($url) < 64) {
+	$lockname = $1;
+    }
+    elsif ($url =~ /uuid=([-\w]+)$/) {
+	$lockname = $1;
+    }
+    else {
+	fatal("Bad URL, cannot find the uuid in it");
+    }
+    my $query_result = DBQueryWarn("select GET_LOCK('$lockname', 120)");
     if (!$query_result ||
 	!$query_result->numrows) {
 	fatal("Could not get the SQL lock for a long time!");
     }
-    $image = Image->LookupByURL($url);
+    $image = OSImage->LookupByURL($url);
     if (!defined($image)) {
 	$image = CreateImage($url, $xmlparse, $user, $group, $imagename);
     }
-    DBQueryWarn("select RELEASE_LOCK($safe_url)");
+    DBQueryWarn("select RELEASE_LOCK('$lockname')");
 }
 exit(0)
     if ($verify);
@@ -413,7 +439,7 @@ if ($update && $newhash ne $image->hash()) {
 	}
     }
     # Update these in the descriptor.
-    my @slots = ("imagefile_url");
+    my @slots = ("imagefile_url", "origin_name");
     foreach my $key (@slots) {
 	next
 	    if (!exists($xmlparse->{'attribute'}->{$key}));
@@ -435,6 +461,11 @@ if ($getimage) {
     # Run as root to access /proj
     $EUID = $UID = 0;
     if (! -e $image->FullImageFile() || $newhash ne $image->hash() || $force) {
+	# Make sure the path directory exists.
+	if ($image->CreateImageDir()) {
+	    $image->Unlock();
+	    exit(1);
+	}
 	$EUID = $UID = $SAVEUID;
 
 	if (DownLoadImage($image, $newhash, $user, $group)) {
@@ -552,7 +583,7 @@ sub CreateImage($$$$$)
 	# This can be set later via the web interface. 
 	#
 	my $posid  = $xmlparse->{'attribute'}->{"def_parentosid"}->{'value'};
-	my $parent = Image->Lookup($posid);
+	my $parent = OSImage->Lookup($posid);
 	if (defined($parent)) {
 	    $xmlparse->{'attribute'}->{"mtype_pcvm"} = {};
 	    $xmlparse->{'attribute'}->{"mtype_pcvm"}->{'value'} = 1;
@@ -585,14 +616,14 @@ sub CreateImage($$$$$)
 	$xmlparse->{'attribute'}->{"imagename"}->{'value'} = 
 	    substr(TBGenSecretKey(), 0, 12);
     }
-    elsif (Image->Lookup($group->pid(),
+    elsif (OSImage->Lookup($group->pid(),
 			 $xmlparse->{'attribute'}->{"imagename"}->{'value'})) {
 	my $index = 1;
 	my $imagename;
 	do {
 	    $imagename = $xmlparse->{'attribute'}->{"imagename"}->{'value'};
 	    $imagename .= "_" . $index++;
-	} while ($index < 100 && Image->Lookup($group->pid(), $imagename));
+	} while ($index < 100 && OSImage->Lookup($group->pid(), $imagename));
 	if ($index >= 100) {
 	    fatal("Could not generate a unique image name");
 	}
@@ -653,7 +684,7 @@ sub CreateImage($$$$$)
 	fatal("Could not create new image from xml");
     }
 
-    my $image = Image->LookupByURL($url);
+    my $image = OSImage->LookupByURL($url);
     if (!defined($image)) {
 	fatal("Could not lookup new image for $url");
     }
@@ -671,10 +702,9 @@ sub CreateImage($$$$$)
 sub DownLoadImage($$$$)
 {
     my ($image, $newhash, $user, $group) = @_;
-    my $image_url = uri_unescape($image->imagefile_url());
     my $localfile = $image->FullImageFile() . ".new";
 
-    if (FetchImageFile($image_url, $localfile)) {
+    if (FetchImageFile($image, "", $localfile)) {
 	return -1;
     }
 
@@ -746,18 +776,48 @@ sub DownLoadImage($$$$)
 #
 # Fetch a file.
 #
-sub FetchImageFile($$)
+sub FetchImageFile($$$)
 {
-    my ($url, $localfile) = @_;
+    my ($image, $urlarg, $localfile) = @_;
+    my $url       = uri_unescape($image->imagefile_url()) . $urlarg;
     my $safe_url  = User::escapeshellarg($url);
     my $user_uid  = $user->uid();
-    
+
+    #
+    # If we have a credential, we use the secure image download path,
+    # which at the moment only runs on boss. And only for datasets.
+    #
+    if (defined($copyback_credential) || $image->HasCredential()) {
+	my $credarg = "";
+	
+	if ($copyback_credential) {
+	    # This will auto delete.
+	    my $credfile = $copyback_credential->WriteToFile();
+	    $credarg = "-c " . $credfile;
+	}
+	# We need to operate as the user since we are not calling
+	# over to ops.
+	$user->FlipTo($image->GetProject()->unix_gid());
+	
+	my $cmdargs = "$SECUREIMAGEGET $credarg -o $localfile ".
+	    $image->versname();
+
+	system($cmdargs);
+	return -1
+	    if ($?);
+
+	system("$SHA1 $localfile > ${localfile}.sha1");
+	if ($?) {
+	    print STDERR "Could not generate sha1 hash of $localfile\n";
+	    return -1;
+	}
+    }
     #
     # Build up a new command line to do the fetch on ops
     # But no reason to do this if an admin, which is important
     # when the image is going into /usr/testbed/images.
     #
-    if (!$user->IsAdmin()) {
+    elsif (!$user->IsAdmin()) {
 	my $cmdargs = "$TB/bin/fetchtar.proxy -h -u $user_uid";
 	my $glist = `/usr/bin/id -G $user_uid`;
 	if ($glist =~ /^([\d ]*)$/) {
@@ -781,6 +841,18 @@ sub FetchImageFile($$)
 	    return -1;
 	}
 	$UID = $SAVEUID;
+    }
+    elsif ($url =~ /^file:\/\/(.*)/) {
+	system("/bin/cp -fp '$1' $localfile");
+	if ($?) {
+	    print STDERR "Could not copy $1 to $localfile\n";
+	    return -1;
+	}
+	system("$SHA1 $localfile > ${localfile}.sha1");
+	if ($?) {
+	    print STDERR "Could not generate sha1 hash of $localfile\n";
+	    return -1;
+	}
     }
     else {
 	print "Downloading $url ...\n";
@@ -810,22 +882,34 @@ sub FetchImageFile($$)
 sub FetchMetadata($)
 {
     my ($url) = @_;
-    $url .= "&clientversion=" . $METADATA_CLIENTVERSION;
-    my $safe_url = User::escapeshellarg($url);
     my $xml  = "";
-    my $opts = ($debug ? "" : "-q");
-    my $cmd  = "$WGET $opts --no-check-certificate -O - $safe_url ";
 
-    if ($debug) {
-	print "$cmd\n";
+    if ($url =~ /^file:\/\/(.*)/) {
+	open(META, $1) or
+	    fatal("Could not open $1: $!");
+	while (<META>) {
+	    $xml .= $_;
+	}
+	close(META);
     }
-    open(META, "$cmd |") or
-	fatal("Could not fetch metadata from $url");
-    while (<META>) {
-	$xml .= $_;
+    else {
+	$url .= "&clientversion=" . $METADATA_CLIENTVERSION;
+	my $safe_url = User::escapeshellarg($url);
+	my $opts = ($debug ? "" : "-q");
+	my $cmd  = "$WGET $opts --no-check-certificate -O - $safe_url ";
+	$cmd .= "| $DD 2>/dev/null bs=1 count=5k ";
+
+	if ($debug) {
+	    print "$cmd\n";
+	}
+	open(META, "$cmd |") or
+	    fatal("Could not fetch metadata from $url");
+	while (<META>) {
+	    $xml .= $_;
+	}
+	close(META)
+	    or fatal("Could not read metadata from $url");
     }
-    close(META)
-	or fatal("Could not read metadata from $url");
 
     if ($xml eq "") {
 	fatal("Failed to get metadata from $url");
@@ -835,9 +919,10 @@ sub FetchMetadata($)
 				VarAttr => 'name',
 				ContentKey => '-content',
 				SuppressEmpty => undef); };
-    fatal($@)
-	if ($@);
-
+    if ($@) {
+	print STDERR $xml . "\n";
+	fatal($@);
+    }
     if ($debug) {
 	print STDERR Dumper($xmlparse);
     }
@@ -854,11 +939,10 @@ sub FetchMetadata($)
 sub FetchSigFile($)
 {
     my ($image) = @_;
-    my $image_url  = uri_unescape($image->imagefile_url()) . "&sigfile=1";
     my $localfile  = $image->FullImageSigFile() . ".new";
     my $sigfile    = $image->FullImageSigFile();
     
-    if (! FetchImageFile($image_url, $localfile)) {
+    if (! FetchImageFile($image, "&sigfile=1", $localfile)) {
 	system("/bin/mv -f $localfile $sigfile");
 	# Do not need this.
 	unlink("${localfile}.sha1")

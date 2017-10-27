@@ -19,8 +19,9 @@ if [ $CLUSTER_PORTAL == "" ]; then
     exit 0
 fi
 
+wrapper=$TBROOT/sbin/daemon_wrapper
 forwarder=/usr/local/libexec/pubsub_forward
-pidfile=/var/run/pubsub_forward.pid
+pidfile=/var/run/pubsub_forward_wrapper.pid
 certfile=$TBROOT/etc/emulab.pem
 keyfile=$TBROOT/etc/emulab.key
 remoteport=@CLUSTER_PUBSUBD_PORT@
@@ -29,8 +30,8 @@ args="-s $CLUSTER_PORTAL -p $remoteport -K $keyfile -C $certfile -S"
 case "$1" in
     start|faststart|quietstart|onestart|forcestart)
 	if [ -x $forwarder ]; then
-	    $forwarder -e $pidfile $args
-	    echo -n "igforwarder";
+	    $wrapper -n pubsub_forward $forwarder -f $args
+	    echo -n " igforwarder wrapper";
 	fi
 	;;
     stop|faststop|quietstop|onestop|forcestop)

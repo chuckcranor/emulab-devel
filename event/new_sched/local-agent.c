@@ -34,6 +34,7 @@
 #include <assert.h>
 #include <errno.h>
 #include <string.h>
+#include <signal.h>
 
 #include "local-agent.h"
 
@@ -121,13 +122,29 @@ int local_agent_queue(local_agent_t la, sched_event_t *se)
 		lnAddTail(&la->la_queue, &lae->lae_link);
 		if (la->la_flags & LAF_LOOPING) {
 			// thread is already running, nothing to do...
-		}
-		else if ((retval = pthread_create(&pt,
+		} else {
+			sigset_t mask, omask;
+			
+			/*
+			 * XXX we don't want any of these threads to
+			 * handle our termination signals, so block
+			 * them temporarily so that new thread will
+			 * have them blocked.
+			 */
+			sigemptyset(&mask);
+			sigaddset(&mask, SIGTERM);
+			sigaddset(&mask, SIGINT);
+			sigaddset(&mask, SIGQUIT);
+			sigaddset(&mask, SIGHUP);
+			pthread_sigmask(SIG_BLOCK, &mask, &omask);
+			if ((retval = pthread_create(&pt,
 						  NULL,
 						  la->la_looper,
 						  la)) == 0) {
-			la->la_flags |= LAF_LOOPING;
-			pthread_detach(pt);
+				la->la_flags |= LAF_LOOPING;
+				pthread_detach(pt);
+			}
+			pthread_sigmask(SIG_SETMASK, &omask, NULL);
 		}
 
 		if (pthread_mutex_unlock(&la->la_mutex) != 0)

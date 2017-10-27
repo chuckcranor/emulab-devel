@@ -1,8 +1,8 @@
 //
 // Slothd graphs
 //
-define(['underscore', 'js/quickvm_sup', 'moment'],
-    function(_, sup, moment)
+$(function () {
+window.ShowOpenstackGraphs = (function()
     {
 	'use strict';
 	var uuid       = null;
@@ -15,8 +15,6 @@ define(['underscore', 'js/quickvm_sup', 'moment'],
 	var counter    = {
 	    "network.create" : 0,
 	    "network.delete" : 0,
-	    "port.create"    : 0,
-	    "port.delete"    : 0,
 	    "router.create"  : 0,
 	    "router.delete"  : 0,
 	    "subnet.create"  : 0,
@@ -531,4 +529,5 @@ define(['underscore', 'js/quickvm_sup', 'moment'],
 	    LoadOpenstackData();
 	}
     }
-);
+)();
+});

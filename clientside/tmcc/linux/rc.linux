@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2007 University of Utah and the Flux Group.
+# Copyright (c) 2007, 2016 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -27,7 +27,8 @@ use Getopt::Std;
 # Drag in path stuff so we can find emulab stuff.
 BEGIN { require "/etc/emulab/paths.pm"; import emulabpaths; }
 
-if (-e "$BINDIR/fixup-fstab-swaps") {
+# Only do this on non-systemd systems.
+if (-e "$BINDIR/fixup-fstab-swaps" && ! -e "$ETCDIR/uses-systemd") {
     exec("$BINDIR/fixup-fstab-swaps");
 }
 

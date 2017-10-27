@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2004-2014 University of Utah and the Flux Group.
+# Copyright (c) 2004-2016 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -32,13 +32,13 @@ sub usage()
 }
 my $optlist    = "d";
 my $debug      = 0;
-my $paused     = 0;
 
 #
 # Configure variables.
 #
 my $TB	       = "@prefix@";
 my $TBOPS      = "@TBOPSEMAIL@";
+my $MAINSITE   = @TBMAINSITE@;
 my $LOGFILE    = "$TB/log/event_watchdog.log";
 
 # Turn off line buffering on output
@@ -60,7 +60,8 @@ use libEmulab;
 use event;
 
 # Protos
-sub TryEvents();
+sub Watcher($;$);
+sub TryEvents($;$);
 sub notify($);
 sub fatal($);
 
@@ -74,18 +75,29 @@ if (defined($options{"d"})) {
 usage()
     if (@ARGV);
 
-if (CheckDaemonRunning("event_watchdog")) {
-    fatal("Not starting another event_watchdog daemon!");
-}
-# Go to ground.
 if (! $debug) {
+    if (CheckDaemonRunning("event_watchdog")) {
+	fatal("Not starting another event_watchdog daemon!");
+    }
+    # Go to ground.
     if (TBBackGround($LOGFILE)) {
 	exit(0);
     }
+    if (MarkDaemonRunning("event_watchdog")) {
+	fatal("Could not mark event_watchdog as running!");
+    }
 }
-if (MarkDaemonRunning("event_watchdog")) {
-    fatal("Could not mark event_watchdog as running!");
+
+#
+# Setup a signal handler to kill children and exit.
+#
+sub handler()
+{
+    print "Caught a TERM. Killing children and exiting\n";
+    Cleanup();
+    exit(0);
 }
+$SIG{TERM} = \&handler;
 
 #
 # Delay at startup to allow ops time to boot. Hopefully this
@@ -94,24 +106,81 @@ if (MarkDaemonRunning("event_watchdog")) {
 sleep(60)
     if (!$debug);
 
-# Loop forever ...
+my ($opswatcher,$bosswatcher,$psdwatcher,$deadpid);
+
 while (1) {
-    if (TryEvents() < 0) {
-	if (!$paused) {
-	    notify("Event server is offline at ".
-		   POSIX::strftime("20%y-%m-%d %H:%M:%S", localtime()) . ".\n");
+    #
+    # We look for up to three different pubsubd daemons. One on ops, the
+    # main one on boss, and the SSL alternate on boss (MAINSITE only).
+    #
+    if (!defined($opswatcher)) {
+	$opswatcher  = Watcher("event-server");
+	if (!defined($opswatcher)) {
+	    fatal("Could not start event watcher for event-server");
 	}
-	$paused = 1;
     }
-    else {
-	if ($paused) {
-	    notify("Event server is back online at ".
-		   POSIX::strftime("20%y-%m-%d %H:%M:%S", localtime()) .
-		   ". Phew!\n");
+    if (!defined($bosswatcher)) {
+	$bosswatcher = Watcher("localhost");
+	if (!defined($bosswatcher)) {
+	    fatal("Could not start event watcher for localhost");
 	}
-	$paused = 0;
     }
-    sleep(60);
+    if ($MAINSITE) {
+	if (!defined($psdwatcher)) {
+	    $psdwatcher = Watcher("localhost", 16507);
+	    if (!defined($psdwatcher)) {
+		fatal("Could not start event watcher for localhost:16507");
+	    }
+	}
+    }
+    my $deadpid = wait();
+    print "wait() returned $deadpid ($?)\n";
+    if ($deadpid == $opswatcher) {
+	$opswatcher = undef;
+    }
+    elsif ($deadpid == $bosswatcher) {
+	$bosswatcher = undef;
+    }
+    elsif ($MAINSITE && $deadpid == $psdwatcher) {
+	$psdwatcher = undef;
+    }
+}
+
+sub Watcher($;$) {
+    my ($server, $port) = @_;
+    my $paused = 0;
+    my $where  = "$server";
+    $where .= ":$port" if (defined($port));
+
+    my $child_pid = fork();
+    if ($child_pid) {
+	sleep(1);
+	return ($child_pid < 0 ? undef : $child_pid);
+    }
+    $SIG{TERM} = 'DEFAULT';
+    
+    print "Starting event watchdog on $where. PID=$PID\n";
+
+    # Loop forever ...
+    while (1) {
+	if (TryEvents($server,$port) < 0) {
+	    if (!$paused) {
+		notify("Event server $where is offline at ".
+		       POSIX::strftime("20%y-%m-%d %H:%M:%S",
+				       localtime()) . ".\n");
+	    }
+	    $paused = 1;
+	}
+	else {
+	    if ($paused) {
+		notify("Event server $where is back online at ".
+		       POSIX::strftime("20%y-%m-%d %H:%M:%S", localtime()) .
+		       ". Phew!\n");
+	    }
+	    $paused = 0;
+	}
+	sleep(60);
+    }
 }
 
 #
@@ -120,9 +189,11 @@ while (1) {
 # Returns: 0 if everything is fine.
 #          1 if timed out or otherwise unresponsive.
 #
-sub TryEvents()
+sub TryEvents($;$)
 {
-    my $URL      = "elvin://event-server";
+    my ($server,$port) = @_;
+    my $URL      = "elvin://$server";
+    $URL .= ":$port" if (defined($port));
     my $rval     = 0;
 
     print "Trying to connect to the event server at $URL\n"
@@ -157,7 +228,7 @@ sub TryEvents()
 	else {
 	    $rval = 0;
 	}
-	print "Attempt is returning $rval\n"
+	print "$URL is returning $rval\n"
 	    if ($debug);
 	
 	return $rval;
@@ -165,7 +236,7 @@ sub TryEvents()
     else {
 	my $handle = event_register($URL,0);
 	if (!$handle) {
-	    print STDERR "Unable to register with event system!\n"
+	    print STDERR "Unable to register with event system ar $URL!\n"
 		if ($debug);
 	    exit(1);
 	}
@@ -188,6 +259,21 @@ sub notify($)
 	     $TBOPS);
 }
 
+sub Cleanup()
+{
+    if (defined($opswatcher)) {
+	kill('TERM', $opswatcher);
+    }
+    if (defined($bosswatcher)) {
+	kill('TERM', $bosswatcher);
+    }
+    if (defined($psdwatcher)) {
+	kill('TERM', $psdwatcher);
+    }
+    MarkDaemonStopped("event_watchdog")
+	if (!$debug);
+}
+
 sub fatal($)
 {
     my ($msg) = @_;
@@ -200,7 +286,8 @@ sub fatal($)
 	     $msg,
 	     $TBOPS);
 
-    MarkDaemonStopped("event_watchdog");
+    Cleanup();
+
     die("*** $0:\n".
 	"    $msg\n");
 }

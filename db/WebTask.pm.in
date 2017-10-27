@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2013-2015 University of Utah and the Flux Group.
+# Copyright (c) 2013-2017 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -133,7 +133,7 @@ sub Create($$;$)
 
     $task_id = TBGenSecretKey()
 	if (!defined($task_id));
-    # XXX
+    # Anonymous webtask.
     $object_uuid = $task_id
 	if (!defined($object_uuid));
 
@@ -142,6 +142,22 @@ sub Create($$;$)
 	or return undef;
 
     return WebTask->Lookup($task_id);
+}
+
+#
+# Create an anonymous web task (not associated with an object). This
+# is useful when using a webtask to create a new object via a backend
+# script.
+#
+sub CreateAnonymous()
+{
+    # We want task_id=object_uuid
+    return WebTask->Create(undef, TBGenSecretKey());
+}
+sub IsAnonymous($)
+{
+    my ($self)  = @_;
+    return ($self->task_id() eq $self->object_uuid() ? 1 : 0);
 }
 
 sub Delete($)
@@ -153,6 +169,19 @@ sub Delete($)
 	or return -1;
 
     return 0;
+}
+
+sub Reset($)
+{
+    my ($self)  = @_;
+    my $task_id = $self->task_id();
+
+    DBQueryWarn("update web_tasks set ".
+		" exited=null,process_id=0,exitcode=0,task_data=''".
+		"where task_id='$task_id'")
+	or return -1;
+
+    return $self->Refresh();
 }
 
 sub DeleteByObject($$)
@@ -310,7 +339,11 @@ sub Exited($$)
     my ($self, $exitcode) = @_;
     my $task_id      = $self->task_id();
 
-    $self->Store();
+    # Perl/mysql sillyness.
+    if ($exitcode == 255) {
+	$exitcode = -1;
+    }
+
     DBQueryWarn("update web_tasks set process_id=0, ".
 		"  exited=now(), exitcode='$exitcode' ".
 		"where task_id='$task_id'")

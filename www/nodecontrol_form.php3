@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2014 University of Utah and the Flux Group.
+# Copyright (c) 2000-2017 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -90,7 +90,7 @@ if ($isadmin) {
 		     "   o.vers as overs, " .
 		     "   p.osid as posid, p.osid_vers as pvers ".
 		     " from os_info_versions as o ".
-		     "left join partitions as p on o.osid=p.osid ".
+		     "left join `partitions` as p on o.osid=p.osid ".
 		     "where p.node_id='$node_id' or ".
 		     "(o.path!='' and o.path is not NULL) ".
 		     "order by p.node_id desc,o.pid,o.osname");
@@ -104,7 +104,7 @@ else {
 		     "   p.osid as posid, p.osid_vers as pvers ".
 		     "from os_info_versions as o ".
 		     "left join group_membership as m on m.pid=o.pid ".
-		     "left join partitions as p on o.osid=p.osid ".
+		     "left join `partitions` as p on o.osid=p.osid ".
 		     "where p.node_id='$node_id' or ".
 		     "  ((m.uid_idx='$uid_idx' or o.shared=1) and ".
 		     "   (o.path!='' and o.path is not NULL)) ".

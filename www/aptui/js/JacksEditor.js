@@ -1,14 +1,17 @@
-define(['underscore', 'js/lib/text!template/edit-modal.html', 'js/lib/text!template/edit-inline.html'],
-function (_, editModalString, editInlineString)
+$(function () {
+  window.JacksEditor = (function ()
 {
     'use strict';
 
-    var context = {
+    var templates = APT_OPTIONS.fetchTemplateList(['edit-modal', 'edit-inline']);
+    var editModalString = templates['edit-modal'];
+    var editInlineString = templates['edit-inline'];
+    var aptContext = {
 	canvasOptions: {
 	    "defaults": [
 		{
 		    "name": "Add VM",
-		    "image": "urn:publicid:IDN+utahddc.geniracks.net+image+emulab-ops:UBUNTU12-64-STD",
+		    "image": "urn:publicid:IDN+utahddc.geniracks.net+image+emulab-ops:UBUNTU14-64-STD",
 		    "type": "emulab-xen"
 		}
 	    ],
@@ -20,8 +23,8 @@ function (_, editModalString, editInlineString)
 			},
 */
 		{
-		    "id": "urn:publicid:IDN+utahddc.geniracks.net+image+emulab-ops:UBUNTU12-64-STD",
-		    "name": "Ubuntu 12.04 LTS 64-bit"
+		    "id": "urn:publicid:IDN+utahddc.geniracks.net+image+emulab-ops:UBUNTU14-64-STD",
+		    "name": "Ubuntu 14.04 LTS 64-bit"
 		}/*,
 			{
 			    "id": "urn:publicid:IDN+utahddc.geniracks.net+image+emulab-ops:UBUNTU14-64-STD",
@@ -37,20 +40,63 @@ function (_, editModalString, editInlineString)
 	}
     };
 
+    var localContext = {
+	canvasOptions: {
+	    "defaults": [
+		{
+		    "name": "Xen VM",
+		    "image": "urn:publicid:IDN+utahddc.geniracks.net+image+emulab-ops:UBUNTU14-64-STD",
+		    "type": "emulab-xen"
+		},
+		{
+		    "name": "Bare Metal PC",
+		    "image": "urn:publicid:IDN+utahddc.geniracks.net+image+emulab-ops:UBUNTU14-64-STD",
+		    "type": "raw-pc"
+		}
+	    ],
+	    "images": [
+		{
+		    "id": "urn:publicid:IDN+utahddc.geniracks.net+image+emulab-ops:UBUNTU14-64-STD",
+		    "name": "Ubuntu 14.04 LTS 64-bit"
+		}
+	    ],
+	    "types": [
+		{
+		    "id": "emulab-xen",
+		    "name": "Xen VM"
+		},
+		{
+		    "id": "raw-pc",
+		    "name": "Bare Metal PC"
+		}
+	    ]
+	}
+    };
+
     var waitingInstances = [];
     var contextFetched = false;
 
     var contextUrl = "";
-    if (window.ISCLOUD || window.ISEMULAB)
+    var context = aptContext;
+    if (window.ISCLOUD)
     {
-	contextUrl = 'https://www.emulab.net/protogeni/jacks-context/cloudlab-utah.json';
+        contextUrl = 'https://www.emulab.net/protogeni/jacks-context/cloudlab-utah.json';
     }
-    else if (window.ISPNET)
+    else if (window.ISEMULAB && window.MAINSITE)
+    {
+	contextUrl = 'https://www.emulab.net/protogeni/jacks-context/emulab.json';
+    }
+    else if (window.ISEMULAB && ! window.MAINSITE)
+    {
+        context = localContext;
+    }
+    else if (window.ISPNET || window.ISPOWDER)
     {
 	contextUrl = 'https://www.emulab.net/protogeni/jacks-context/phantomnet.json';
     }
 
-    if (window.ISCLOUD || window.ISPNET)
+    if (window.ISCLOUD || window.ISPNET || window.ISPOWDER ||
+	(window.ISEMULAB && window.MAINSITE))
     {
 	$('#edit_topo_modal_button').prop('disabled', true);
 	$.get(contextUrl).then(contextReady, contextFail);
@@ -63,7 +109,17 @@ function (_, editModalString, editInlineString)
     function contextReady(data)
     {
 	$('#edit_topo_modal_button').prop('disabled', false);
-	context = data;
+        context = data;
+        if ($('#amlist-json').length > 0)
+        {
+          var amlist = JSON.parse(_.unescape($('#amlist-json')[0].textContent));
+          _.each(context.canvasOptions.aggregates, function (value, index) {
+	    if (amlist[value.id] === undefined)
+	    {
+	      value.hidden = true;
+	    }
+          });
+	}
         contextFetched = true;
         _.each(waitingInstances, function (f) {
 	  f();
@@ -272,4 +328,5 @@ function (_, editModalString, editInlineString)
     }
 
     return JacksEditor;
+})();
 });

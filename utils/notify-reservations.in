@@ -1,0 +1,164 @@
+#!/usr/bin/perl -w
+#
+# Copyright (c) 2017 University of Utah and the Flux Group.
+# 
+# {{{EMULAB-LICENSE
+# 
+# This file is part of the Emulab network testbed software.
+# 
+# This file is free software: you can redistribute it and/or modify it
+# under the terms of the GNU Affero General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or (at
+# your option) any later version.
+# 
+# This file is distributed in the hope that it will be useful, but WITHOUT
+# ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
+# FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Affero General Public
+# License for more details.
+# 
+# You should have received a copy of the GNU Affero General Public License
+# along with this file.  If not, see <http://www.gnu.org/licenses/>.
+# 
+# }}}
+#
+use strict;
+use English;
+use Getopt::Std;
+
+#
+# Send e-mail about upcoming reservations.
+#
+sub usage()
+{
+    print STDERR "Usage: notify-reservations [-d] [-n]\n";
+    exit( 1 );
+}
+
+my $optlist  = "dn";
+my $debug    = 0;
+my $impotent = 0;
+
+#
+# Configure variables
+#
+my $SITE  = "@THISHOMEBASE@";
+my $TBOPS = "@TBOPSEMAIL@";
+
+#
+# Testbed Support libraries
+#
+use lib "@prefix@/lib";
+use emdb;
+use libtestbed;
+use emutil;
+
+#
+# Turn off line buffering on output
+#
+$| = 1;
+
+#
+# Untaint the path
+# 
+$ENV{'PATH'} = "/bin:/sbin:/usr/bin:";
+
+#
+# Parse command arguments. Once we return from getopts, all that should be
+# left are the required arguments.
+#
+my %options = ();
+if (! getopts($optlist, \%options)) {
+    usage();
+}
+if (defined($options{"d"})) {
+    $debug = 1;
+}
+if (defined($options{"n"})) {
+    $impotent = 1;
+}
+usage()
+    if (@ARGV);
+
+# Check for current reservations BEFORE the 24 hour warning... that way,
+# if the 24 hour one hasn't been sent for some reason (e.g., boss was
+# down for a long time or they scheduled a reservation starting almost
+# immediately), then we'll nag them only once.
+my $query_result = DBQueryFatal( "SELECT r.idx, r.pid, r.nodes, r.type, " .
+				 "r.end, u.usr_email FROM " .
+				 "future_reservations AS r, users AS u " .
+				 "WHERE r.uid_idx=u.uid_idx AND " .
+				 "r.approved IS NOT NULL AND " .
+				 "(r.notified IS NULL OR " .
+				 "r.notified < r.start) AND " .
+				 "r.start <= NOW()" );
+
+while( my ($idx, $pid, $count, $type, $end, $email) =
+       $query_result->fetchrow_array() ) {
+    print STDERR "Reservation $idx for project $pid, $count x $type " .
+	"now-$end <$email> (now active!)\n" if( $debug );
+    
+    next if( $impotent );
+    SENDMAIL( $email, "Reservation at $SITE is active",
+	      "You have a current reservation at $SITE, with project\n" .
+	      "$pid.  $count $type nodes are now set aside for your\n" .
+	      "project, until $end.\n" .
+	      "\n" .
+	      "If you do not intend to use these resources, please\n" .
+	      "cancel this reservation as soon as possible, since\n" .
+	      "the nodes are now unavailable to other users for\n" .
+	      "the duration of your reservation.\n" .
+	      "\n" .
+	      "Please note that we make no guarantees about the\n" .
+	      "availability or suitability of these nodes for your\n" .
+	      "experiment(s).\n" .
+	      "\n" .
+	      "PLEASE NOTE: Reservations are an experimental\n" .
+	      "testbed feature under active development.  Until\n" .
+	      "further notice, you should expect reservation\n" .
+	      "system failures.  Please send reports about the\n" .
+	      "reservation system to $TBOPS.\n" .
+	      "Thank you for your assistance in debugging this\n" .
+	      "feature!\n" );
+    DBQueryFatal( "UPDATE future_reservations SET notified=NOW() WHERE idx=$idx" );
+}
+
+$query_result = DBQueryFatal( "SELECT r.idx, r.pid, r.nodes, r.type, " .
+			      "r.start, r.end, u.usr_email FROM " .
+			      "future_reservations AS r, users AS u " .
+			      "WHERE r.uid_idx=u.uid_idx AND " .
+			      "r.approved IS NOT NULL AND " .
+			      "r.notified IS NULL AND " .
+			      "r.start <= ADDDATE( NOW(), 1 )" );
+
+while( my ($idx, $pid, $count, $type, $start, $end, $email) =
+       $query_result->fetchrow_array() ) {
+    print STDERR "Reservation $idx for project $pid, $count x $type from " .
+	"$start-$end <$email>\n" if( $debug );
+    
+    next if( $impotent );
+    SENDMAIL( $email, "Upcoming $SITE reservation",
+	      "You have a reservation scheduled at $SITE, with project\n" .
+	      "$pid.  $count $type nodes will be set aside for your\n" .
+	      "project, starting at $start and ending at\n" .
+	      "$end.\n" .
+	      "\n" .
+	      "If you do not intend to use these resources, please\n" .
+	      "cancel this reservation as soon as possible, since\n" .
+	      "the nodes will be unavailable to other users for\n" .
+	      "the duration of your reservation.\n" .
+	      "\n" .
+	      "Please note that we make no guarantees about the\n" .
+	      "availability or suitability of these nodes for your\n" .
+	      "experiment(s).\n" .
+	      "\n" .
+	      "PLEASE NOTE: Reservations are an experimental\n" .
+	      "testbed feature under active development.  Until\n" .
+	      "further notice, you should expect reservation\n" .
+	      "system failures.  Please send reports about the\n" .
+	      "reservation system to $TBOPS.\n" .
+	      "Thank you for your assistance in debugging this\n" .
+	      "feature!\n" );
+    DBQueryFatal( "UPDATE future_reservations SET notified=NOW() WHERE idx=$idx" );
+}
+
+exit( 0 );

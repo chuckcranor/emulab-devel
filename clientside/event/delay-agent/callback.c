@@ -694,7 +694,7 @@ void set_link_params(int l_index, int blackhole, int p_which)
 
 	// Bandwidth by itself.
 	sprintf(cmd, "tc class change dev %s classid %d:1 htb "
-		"rate %d %s ceil %d %s",
+		"rate %d%s ceil %d%s",
 		iface, pipeno, (int) p_params->bw, p_params->bwspec,
 		(int) p_params->bw, p_params->bwspec);
 	
@@ -707,7 +707,7 @@ void set_link_params(int l_index, int blackhole, int p_which)
 	sprintf(cmd, "tc qdisc change "
 		"dev %s handle %d netem drop %.2f delay %dms",
 		iface, pipeno + 10,
-		p_params->plr * 100, p_params->delay);
+		(blackhole ? 100.0 : p_params->plr * 100), p_params->delay);
 	
 	if (debug)
 		info("%s\n", cmd);
@@ -734,7 +734,9 @@ void set_link_params(int l_index, int blackhole, int p_which)
 		// Now loss and delay. loss is in percent.
 		sprintf(cmd, "tc qdisc change "
 			"dev %s handle 3 netem drop %.2f delay %dms",
-		iface, p_params->plr * 100, p_params->delay);
+			iface,
+			(blackhole ? 100.0 : p_params->plr * 100),
+			p_params->delay);
 	
 		if (debug)
 			info("%s\n", cmd);

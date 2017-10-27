@@ -83,7 +83,7 @@ static void status_callback(pubsub_handle_t *handle,
 
 static void schedule_updateevent();
 
-static int do_remote_register(char *server);
+static int do_remote_register(char const *server);
 
 
 int
@@ -91,7 +91,7 @@ main(int argc, char **argv)
 {
 	address_tuple_t		tuple;
 	char			*progname;
-	char			*server = NULL;
+	char const		*server = NULL;
 	char			*port = NULL, *lport = NULL;
 	char			*myeid = NULL;
 	char			*pnodeid = NULL;
@@ -288,7 +288,7 @@ main(int argc, char **argv)
 }
 
 
-int do_remote_register(char *server) {
+int do_remote_register(char const *server) {
         address_tuple_t		tuple;
 	char			buf[BUFSIZ];
 
@@ -309,7 +309,7 @@ int do_remote_register(char *server) {
         /* Setup a status callback to watch the remote connection. */
         if (pubsub_set_status_callback(bosshandle->server,
 				       status_callback,
-				       server, &bosshandle->status) != 0) {
+				       const_cast<char *>(server), &bosshandle->status) != 0) {
           error("Could not register status callback!");
         }
 

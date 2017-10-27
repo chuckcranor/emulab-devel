@@ -130,8 +130,8 @@ function SPITFORM($formfields, $errors)
     echo "    window.BUTTONLABEL = '$button_label';\n";
     echo "</script>\n";
 
-    SPITREQUIRE("create-dataset",
-                "<script src='js/lib/jquery-ui.js'></script>");
+    SPITREQUIRE_DATASET();
+    AddTemplateList(array("create-dataset", "dataset-help", "oops-modal", "waitwait-modal"));
     SPITFOOTER();
 }
 

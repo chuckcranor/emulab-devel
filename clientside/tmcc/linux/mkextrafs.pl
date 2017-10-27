@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2000-2015 University of Utah and the Flux Group.
+# Copyright (c) 2000-2016 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -35,10 +35,10 @@ sub mysystem($);
 
 sub usage()
 {
-    print("Usage: mkextrafs.pl [-fq] [-s slice] [-lM] [-v <vglist>] [-m <lvlist>] [-z <lvsize>] [-r disk] <mountpoint>\n");
+    print("Usage: mkextrafs.pl [-fq] [-s slice] [-lM] [-P] [-v <vglist>] [-m <lvlist>] [-z <lvsize>] [-r disk] <mountpoint>\n");
     exit(-1);
 }
-my  $optlist = "fqls:v:Mm:z:r:";
+my  $optlist = "fqls:v:Mm:Pz:r:";
 
 #
 # Yep, hardwired for now.  Should be options or queried via TMCC.
@@ -55,6 +55,16 @@ my $lvm        = 0;
 my @vglist     = ();
 my @lvlist     = ();
 my $lmonster   = 0;
+
+my $forcepartprobe = 0;
+
+my $GPTUNUSED    = "00000000-0000-0000-0000-000000000000";
+my $GPTLINUXDATA = "0FC63DAF-8483-4772-8E79-3D69D8477DE4";
+my $GPTLINUXLVM  = "E6D6D379-F507-44C2-A23C-238F2A3DF928";
+
+# Does the partitioned device have a 'p' before the partition number?
+# We try to detect that, rather than hardcoding specific formats.
+my $NEEDSPFORMAT = 0;
 
 #
 # Turn off line buffering on output
@@ -109,6 +119,9 @@ if (defined($options{"M"})) {
 	    "    only specify a single volume group and logical volume!\n");
     }
 }
+if (defined($options{"P"})) {
+    $forcepartprobe = 1;
+}
 if (scalar(@vglist) == 0) {
     @vglist = ('emulab',);
 }
@@ -148,16 +161,44 @@ if (!$lvm || ($lvm && $lmonster)) {
 if (defined($diskopt)) {
     $disk = $diskopt;
     $disk =~ s/^\/dev\///;
+    if ($disk =~ /^nvme\dn\d+$/) {
+	$NEEDSPFORMAT = 1;
+    }
 }
 else {
     my $rootdev = `df | egrep '/\$' | grep -v rootfs`;
     if ($rootdev =~ /^\/dev\/([a-z]+)\d+\s+/) {
 	$disk = $1;
+	print "disk = $disk\n";
+    }
+    elsif ($rootdev =~ /^\/dev\/(nvme\dn\d+)p\d+\s+/) {
+	$disk = $1;
+	$NEEDSPFORMAT = 1;
+	print "nvme disk = $disk\n";
+    }
+    else {
+	my $rpartdev = `blkid -L /`;
+	chomp($rpartdev);
+	if ($? == 0 && $rpartdev =~ /^\/dev\/(.*)$/) {
+	    my $bpath = `readlink -f /sys/class/block/$1`;
+	    chomp($bpath);
+	    if ($? == 0) {
+		if ($bpath =~ /.+\/([^\/]+)\/([^\/]+)$/) {
+		    $disk = "$1";
+		    if ($disk =~ /^nvme\dn\d+$/) {
+			$NEEDSPFORMAT = 1;
+		    }
+		}
+	    }
+	}
     }
 }
 
 my $diskdev    = "/dev/${disk}";
 my $fsdevice   = "${diskdev}${slice}";
+if ($NEEDSPFORMAT) {
+    $fsdevice = "${diskdev}p${slice}";
+}
 
 #
 # For LVM, just exit if the physical volume already exists
@@ -205,35 +246,57 @@ if ($mounted =~ /^$fsdevice on (\S*)/) {
 # Used to use "sfdisk -V" but that seems to have quirks.
 #
 if (system("parted -s $diskdev print >/dev/null 2>&1")) {
+    if ($slice != 1) {
+	die("*** $0:\n".
+	    "    Disk $diskdev is unpartitioned, and you did not supply '-s 1' as arguments!\n");
+    }
     system("parted -s $diskdev mklabel msdos");
     if ($?) {
 	die("*** $0:\n".
 	    "    Could not write dos label to $diskdev!\n");
     }
-    # Grab size (in blocks); DOS cannot handle our huge disks.
-    my $disksize = `sfdisk -s $diskdev`;
+    # Grab size (in sectors); DOS cannot handle our huge disks.
+    # sfdisk can no longer handle units; must use sectors.
+    my $disksize = `fdisk -l $diskdev | sed -n -r -e "s/^.* ([0-9]+) sectors.*\$/\\1/p"`;
     if ($?) {
 	die("*** $0:\n".
 	    "    Could not get size of $diskdev!\n");
     }
     chomp($disksize);
-    if ($disksize > (1024 * 1024 * 1024)) {
-	$disksize = (1024 * 1024 * 1024);
-	print "Disk really big! cutting back to $disksize blocks.\n";
-    }
-    system("echo '0,$disksize' | sfdisk --force $diskdev -N$slice -u B");
+    # Must start at a sector offset; and sfdisk no longer tolerates -N <X>
+    # if partition X is undefined.
+    system("echo '2048,$disksize' | sfdisk --force $diskdev");
     if ($?) {
 	die("*** $0:\n".
 	    "    Could not initialize primary partition on $diskdev!\n");
     }
 }
 
-my $stype = `sfdisk $diskdev -c $slice`;
-if ($stype ne "") {
-    chomp($stype);
-    $stype = hex($stype);
+my $ISGPT = 0;
+my $pttype = `sfdisk $diskdev -d | awk ' /label:/ { print \$2 }'`;
+if ($? == 0) {
+    chomp($pttype);
+    if (defined($pttype) && $pttype eq 'gpt') {
+	$ISGPT = 1;
+    }
 }
-else {
+
+my $stype = `sfdisk $diskdev -c $slice 2>/dev/null`;
+if ($? == 0 && $stype ne "") {
+    chomp($stype);
+    if ($stype =~ /^\s*([\da-fA-F]+)$/) {
+	# This is an MBR id.
+	$stype = "$1";
+    } elsif ($stype =~ /^\s*([\da-fA-F-]+)$/) {
+	# This is a GPT GUID; note the diff in the regexp (has `-`).
+	$stype = "$1";
+    } else {
+	$stype = "-1";
+    }
+} else {
+    $stype = "-1";
+}
+if ($stype eq "-1") {
     die("*** $0:\n".
 	"    Could not parse slice $slice fdisk entry!\n");
 }
@@ -242,13 +305,26 @@ else {
 # Fail if not forcing and the partition type is non-zero.
 #
 if (!$forceit) {
-    if ($stype != 0) {
+    if (($ISGPT && $stype ne $GPTUNUSED) || (!$ISGPT && $stype ne "0")) {
 	die("*** $0:\n".
 	    "    non-zero partition type ($stype) for ${disk}${slice}, ".
 	    "use -f to override\n");
     }
-} elsif ($stype && $stype != 131) {
+} elsif ($stype && $ISGPT && $stype ne $GPTLINUXDATA) {
+    warn("*** $0: WARNING: changing partition type from $stype to $GPTLINUXDATA\n");
+} elsif ($stype && !$ISGPT && $stype ne "83") {
     warn("*** $0: WARNING: changing partition type from $stype to 131\n");
+}
+
+#
+# If this was a GPT partition with the UNUSED type, we have to set it to
+# something so that the kernel will place it in /dev; we cannot wait.
+#
+if ($ISGPT && $stype eq $GPTUNUSED) {
+    mysystem("sfdisk -c /dev/$disk $slice $GPTLINUXDATA");
+    if ($forcepartprobe) {
+	mysystem("partprobe /dev/$disk");
+    }
 }
 
 #
@@ -346,11 +422,20 @@ if ($lvm) {
 # Would it seek out and destroy other BSD partitions?  Don't know.
 # I cannot find the source for sfdisk.
 #
-if (!$lvm && $stype != 131) {
+# But, for GPT disks, we just go ahead and use sfdisk; let it wipe what
+# it may.  We did that above, because the kernel ignores unused GPT
+# partitions.
+#
+if (!$lvm && !$ISGPT && $stype ne "83") {
     die("*** $0:\n".
 	"    No $DOSTYPE program, cannot set type of DOS partition\n")
 	if (! -e "$DOSTYPE");
     mysystem("$DOSTYPE -f /dev/$disk $slice 131");
+    if ($forcepartprobe) {
+	# We might need a partprobe; if the partition type was previously
+	# 0, some kernels will actually not have created /dev/$disk .
+	mysystem("partprobe /dev/$disk");
+    }
 }
 
 #

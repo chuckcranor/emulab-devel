@@ -1,5 +1,5 @@
 #
-# Copyright (c) 2005-2014 University of Utah and the Flux Group.
+# Copyright (c) 2005-2017 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -157,12 +157,17 @@ iptables -A INSIDE -d EMULAB_SERVERS -j ACCEPT # CLOSED,ELABINELAB+SAMENET
 # Otherwise, nodes inside/outside of the firewall cannot talk to each other. 
 #
 iptables -A INSIDE -d EMULAB_CNET,EMULAB_VCNET -j DROP # CLOSED,ELABINELAB
-iptables -A OUTSIDE -d EMULAB_CNET,EMULAB_VCNET -j DROP # CLOSED,ELABINELAB
+iptables -A OUTSIDE -s EMULAB_CNET,EMULAB_VCNET -j DROP # CLOSED,ELABINELAB
 
+#
 # DNS to NS (for firewalled nodes)
 # Note: elabinelab myops/myfs use myboss for NS
-iptables -A INSIDE -p udp -d EMULAB_NS --dport 53 -m conntrack --ctstate NEW -j ACCEPT # BASIC,CLOSED
-iptables -A INSIDE -p udp -s myboss -d EMULAB_NS --dport 53 -m conntrack --ctstate NEW -j ACCEPT # ELABINELAB
+#
+# N.B. the specification of a rule number here! This allows us a gap into
+# which user specified rules fall.
+#
+iptables -A INSIDE -p udp -d EMULAB_NS --dport 53 -m conntrack --ctstate NEW -j ACCEPT # 60020: BASIC,CLOSED
+iptables -A INSIDE -p udp -s myboss -d EMULAB_NS --dport 53 -m conntrack --ctstate NEW -j ACCEPT # 60020: ELABINELAB
 
 # ssh from boss (for reboot, etc.) and others if appropriate
 iptables -A OUTSIDE -p tcp --dport 22 --syn -m conntrack --ctstate NEW -j ACCEPT # BASIC
@@ -245,6 +250,7 @@ iptables -A INSIDE -p tcp -s myboss -d EMULAB_BOSSES --dport 64494 --syn -m conn
 #
 # Frisbee multicast with boss
 #  * nodes mcast everything to boss (joins, leaves and requests): 60046
+#  * except for reports, which are unicast to boss: 60046
 #  * boss mcasts blocks to same mcaddr/port: 60047
 #  * boss unicasts join replies to same port: 60048
 #  * node and switch need to IGMP: 60049
@@ -264,7 +270,7 @@ iptables -A INSIDE -p tcp -s myboss -d EMULAB_BOSSES --dport 64494 --syn -m conn
 # from 60047).
 #
 
-iptables -A INSIDE -p udp -d EMULAB_MCADDR --dport EMULAB_MCPORT -j ACCEPT # BASIC,CLOSED
+iptables -A INSIDE -p udp -d EMULAB_MCADDR,EMULAB_BOSSES --dport EMULAB_MCPORT -j ACCEPT # BASIC,CLOSED
 iptables -A OUTSIDE -p udp -s EMULAB_BOSSES --sport EMULAB_MCPORT -d EMULAB_MCADDR --dport EMULAB_MCPORT -j ACCEPT # BASIC,CLOSED,ELABINELAB
 iptables -A OUTSIDE -p udp -s EMULAB_BOSSES --sport EMULAB_MCPORT --dport EMULAB_MCPORT -m conntrack --ctstate NEW -j ACCEPT # BASIC,CLOSED
 iptables -A INSIDE -p udp -s myboss -d EMULAB_MCADDR --dport EMULAB_MCPORT -j ACCEPT # ELABINELAB

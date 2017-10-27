@@ -30,7 +30,7 @@ else
     
 fi
 
-logopt="--binlog-format=MIXED --log-long-format --log=@prefix@/log/mysql/base --log-bin=@prefix@/log/mysql/update --log-slow-queries=@prefix@/log/mysql/slowqueries"
+logopt="--log-long-format --log=@prefix@/log/mysql/base --log-bin=@prefix@/log/mysql/update --log-slow-queries=@prefix@/log/mysql/slowqueries"
 
 if [ $major -eq 5 ]; then
 	safeprog=/usr/local/bin/mysqld_safe
@@ -53,8 +53,20 @@ if [ $major -eq 5 ]; then
 		opts="$opts --join_buffer_size=256K --thread_cache_size=4"
 		opts="$opts --tmp_table_size=32M --max_heap_table_size=32M"
 		opts="$opts --max_connections=500"
-		opts="$opts -O max_allowed_packet=16M"
+		opts="$opts --max_allowed_packet=16M"
 	    fi
+	fi
+	# so that we can dump tables
+	if [ $minor -gt 4 ]; then
+	    opts="$opts --secure-file-priv="
+	fi
+	# so we can start using innodb tables, maybe with compression.
+	if [ $minor -gt 5 ]; then
+	    opts="$opts --innodb_file_per_table=1 --innodb_file_format=Barracuda"
+	    # Backwards compatibility.
+	    opts="$opts --lower_case_table_names=0 --log_output=file"
+	    # Strict mode is coming, but we can't handle it.
+	    opts="$opts --sql_mode=ONLY_FULL_GROUP_BY,STRICT_TRANS_TABLES,NO_ZERO_IN_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_AUTO_CREATE_USER,NO_ENGINE_SUBSTITUTION"
 	fi
 else
 	safeprog=/usr/local/bin/safe_mysqld

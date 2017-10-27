@@ -1,5 +1,5 @@
 #
-# Copyright (c) 2000-2015 University of Utah and the Flux Group.
+# Copyright (c) 2000-2017 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -83,10 +83,18 @@ install client-install: destdircheck basefbsd-install
 	rm -f $(ORCDIR)/rc.slothd $(ORCDIR)/rc.freebsd $(ORCDIR)/rc.injail
 	rm -f $(ORCDIR)/rc.progagent $(ORCDIR)/rc.ipod $(ORCDIR)/rc.simulator
 	rm -f $(ORCDIR)/rc.linkagent $(ORCDIR)/rc.topomap
+	rm -f $(ORCDIR)/rc.syncserver
 	rm -f $(OBINDIR)/checknode $(OBINDIR)/checkutils.sh
 	rm -f $(OBINDIR)/diskcheck $(OBINDIR)/hbis.sh $(OBINDIR)/cpucheck
 	rm -f $(OBINDIR)/healthd.conf $(OBINDIR)/ixpboot $(OBINDIR)/memcheck
 	rm -f $(OBINDIR)/niccheck $(OBINDIR)/tdd $(OBINDIR)/timecheck
+	rm -f $(OBINDIR)/link-agent $(OBINDIR)/linktest* $(OBINDIR)/ltevent
+	rm -f $(OBINDIR)/program-agent $(OBINDIR)/run_linktest.pl
+	rm -f $(OBINDIR)/slothd $(OBINDIR)/tevc $(OBINDIR)/trafgen
+	rm -f $(OBINDIR)/bsagent $(OBINDIR)/delay-agent $(OBINDIR)/dijkstra
+	rm -f $(OBINDIR)/elab_linktest.pl $(OBINDIR)/emulab-*
+	rm -f $(OBINDIR)/evproxy* $(OBINDIR)/genhostsfile
+	rm -f $(OBINDIR)/growdisk $(OBINDIR)/pcapper
 	mv $(OBINDIR) $(DESTDIR)/local/emulab
 	mv $(OVARDIR) $(NVARDIR)
 	ln -sf /data/emulab $(DESTDIR)/conf/base/var/emulab
@@ -104,6 +112,9 @@ install client-install: destdircheck basefbsd-install
 	$(INSTALL) -m 755 $(SRCDIR)/freenas-config $(NBINDIR)/
 	$(INSTALL) -m 644 $(SRCDIR)/libfreenas.pm $(NBINDIR)/
 	$(INSTALL) -m 644 $(SRCDIR)/libvnode_blockstore.pm $(NBINDIR)/
+	echo "Installing legacy perl symlink..."
+	mkdir -p $(DESTDIR)/usr/bin
+	ln -sf /usr/local/bin/perl5 $(DESTDIR)/usr/bin/perl
 
 subboss-install simple-install:
 frisbee-mfs-install mfs-install:

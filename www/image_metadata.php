@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2003-2015 University of Utah and the Flux Group.
+# Copyright (c) 2003-2016 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -53,8 +53,12 @@ if (! isset($image)) {
 if ($image->noexport()) {
     SPITERROR(403, "This image is marked as export restricted");
 }
-if (!$image->isglobal()) {
+# We need the dataset metadata, but spew *does* deny it if not global.
+if (!$image->isglobal() && !$image->isdataset()) {
     SPITERROR(403, "No permission to access image");
+}
+if (!$image->released()) {
+    SPITERROR(403, "Not allowed to access unreleased images");
 }
 
 # Pass imageid:version to backend script if its a specific version request.

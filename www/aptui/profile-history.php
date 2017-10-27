@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2015 University of Utah and the Flux Group.
+# Copyright (c) 2000-2016 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -72,7 +72,7 @@ while ($row = mysql_fetch_array($query_result)) {
     $pid     = $row["pid"];
     $created = $row["created"];
     $published = $row["published"];
-    $creator = $row["creator"];
+    $creator = ($version == 0 ? $row["creator"] : $row["updater"]);
     $rspec   = $row["rspec"];
     $desc    = '';
 
@@ -109,8 +109,11 @@ echo "<script type='text/plain' id='profiles-json'>\n";
 echo json_encode($profiles);
 echo "</script>\n";
 echo "<script src='js/lib/jquery-2.0.3.min.js'></script>\n";
-echo "<script src='js/lib/bootstrap.js'></script>\n";
-echo "<script src='js/lib/require.js' data-main='js/profile-history'></script>\n";
 
+REQUIRE_UNDERSCORE();
+REQUIRE_SUP();
+SPITREQUIRE("js/profile-history.js");
+
+AddTemplate("profile-history");
 SPITFOOTER();
 ?>

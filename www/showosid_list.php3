@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2014 University of Utah and the Flux Group.
+# Copyright (c) 2000-2017 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -57,7 +57,7 @@ if (isset($creator)) {
 #
 if ($isadmin) {
     $query_result =
-	DBQueryFatal("SELECT distinct v.* FROM os_info as o ".
+	DBQueryFatal("SELECT distinct v.*,o.osname FROM os_info as o ".
 		     "left join os_info_versions as v on ".
 		     "     v.osid=o.osid and v.vers=o.version ".
 		     "where 1 $extraclause ".
@@ -67,7 +67,7 @@ else {
     $uid_idx = $this_user->uid_idx();
 
     $query_result =
-	DBQueryFatal("select distinct v.* from os_info as o ".
+	DBQueryFatal("select distinct v.*,o.osname from os_info as o ".
 		     "left join os_info_versions as v on ".
 		     "     v.osid=o.osid and v.vers=o.version ".
 		     "left join image_permissions as p1 on ".

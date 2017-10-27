@@ -6,12 +6,12 @@ use libinstall;
 use installvars;
 use NodeType;
 use OSinfo;
-use Image;
+use OSImage;
 use EmulabConstants;
 
 my $DESCRIPTORS   = "$TOP_SRCDIR/install/descriptors-xen.xml";
 # See the images phase file if you change this.
-my $XENIMAGE      = "XEN44-64-STD";
+my $XENIMAGE      = "XEN46-64-STD";
 
 sub Install($$$)
 {
@@ -27,6 +27,11 @@ sub Install($$$)
     my @images = ("UBUNTU14-64-STD", "CENTOS71-64-STD", "FBSD102-64-STD");
 
     Phase "xen", "Adding XEN Support", sub {
+	Phase "sitevar", "Setting default_xen_parentosid sitevar", sub {
+	    ExecQuietFatal("$PREFIX/sbin/setsitevar ".
+		   "general/default_xen_parentosid emulab-ops,$XENIMAGE");
+	};
+	
 	#
 	# Load up the initial descriptors. 
 	# Load up the images from boss.
@@ -50,8 +55,12 @@ sub Install($$$)
 	PhaseFail("Could not look up XEN-STD osid")
 	    if (!defined($osinfo));
 
-	my $nextosinfo = OSinfo->LookupByName($XENIMAGE);
+	my $parentosinfo = OSinfo->LookupByName($XENIMAGE);
 	PhaseFail("Could not look up $XENIMAGE osid")
+	    if (!defined($parentosinfo));
+
+	my $nextosinfo = OSinfo->LookupByName($images[0]);
+	PhaseFail("Could not look up " . $images[0] . " osid")
 	    if (!defined($nextosinfo));
 
 	my $diskload_osinfo = OSinfo->LookupByName("FRISBEE-MFS-PCVM");
@@ -59,6 +68,9 @@ sub Install($$$)
 	    if (!defined($diskload_osinfo));
 
 	Phase "pcvm", "Updating the PCVM node type", sub {
+	    $pcvm->SetAttribute("default_osid", $osinfo->osid()) == 0
+		or PhaseFail("Could not update the pcvm node type");
+	    
 	    $pcvm->SetAttribute("diskloadmfs_osid",
 				$diskload_osinfo->osid()) == 0
 		or PhaseFail("Could not update the pcvm node type");
@@ -66,9 +78,9 @@ sub Install($$$)
 	Phase "xenosid", "Updating the XEN-STD osid", sub {
 	    $osinfo->SetNextOS($nextosinfo) == 0
 		or PhaseFail("Could not set the nextosid for XEN-STD");
-	    $osinfo->SetParentOS($nextosinfo) == 0
+	    $osinfo->SetParentOS($parentosinfo) == 0
 		or PhaseFail("Could not set the parent osid for XEN-STD");
-	    $osinfo->SetRunsOnParent($nextosinfo) == 0
+	    $osinfo->SetRunsOnParent($parentosinfo) == 0
 		or PhaseFail("Could not add os_submap entry for XEN-STD");
 	};
 
@@ -80,7 +92,7 @@ sub Install($$$)
 	Phase "guests", "Updating images to run as a xen guest", sub {
 	    foreach my $imagename (@images) {
 		Phase "$imagename", "Updating $imagename", sub {
-		    my $image = Image->Lookup(TBOPSPID(), $imagename);
+		    my $image = OSImage->Lookup(TBOPSPID(), $imagename);
 		    
 		    PhaseSkip("does not exist")
 			if (!defined($image));
@@ -92,9 +104,9 @@ sub Install($$$)
 		    $image->SetRunsOnNodeType("pcvm") == 0
 			or PhaseFail("Could not set $imagename to run on pcvm");
 		    # This must be first. 
-		    $osinfo->SetParentOS($nextosinfo) == 0
+		    $osinfo->SetParentOS($parentosinfo) == 0
 			or PhaseFail("Could not set $imagename parent os");
-		    $osinfo->SetRunsOnParent($nextosinfo) == 0
+		    $osinfo->SetRunsOnParent($parentosinfo) == 0
 			or PhaseFail("Could not set $imagename to run on parent");
 		};
 	    }

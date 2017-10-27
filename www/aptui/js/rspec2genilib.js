@@ -1,12 +1,11 @@
-require(window.APT_OPTIONS.configObject,
-	['underscore', 'js/quickvm_sup',
-	 'js/lib/text!template/rspec2genilib.html',
-	 'js/lib/text!template/waitwait-modal.html',
-	 'js/lib/text!template/oops-modal.html', "filestyle"
-	],
-function (_, sup, mainString, waitString, oopsString)
+$(function ()
 {
     'use strict';
+
+    var templates = APT_OPTIONS.fetchTemplateList(['rspec2genilib', 'waitwait-modal', 'oops-modal']);
+    var mainString = templates['rspec2genilib'];
+    var waitString = templates['waitwait-modal'];
+    var oopsString = templates['oops-modal'];
     var mainTemplate    = _.template(mainString);
     
     function initialize()

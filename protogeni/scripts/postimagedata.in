@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2008-2015 University of Utah and the Flux Group.
+# Copyright (c) 2008-2017 University of Utah and the Flux Group.
 # 
 # {{{GENIPUBLIC-LICENSE
 # 
@@ -38,16 +38,17 @@ use Data::Dumper;
 # 
 sub usage()
 {
-    print "Usage: postimagedata [-f] [-n] [-d] [-a] all | [imageid ...]\n";
+    print "Usage: postimagedata [-u] [-n] [-d] [-a] all [datasets] | [imageid ...]\n";
     exit(1);
 }
-my $optlist  = "fndva";
+my $optlist  = "undva";
 my $impotent = 0;
-my $force    = 0;
+my $update   = 0;
 my $debug    = 0;
 my $verbose  = 0;
 my $errors   = 0;
 my $allvers  = 0;
+my $datasets = 0;
 
 #
 # Configure variables
@@ -71,6 +72,7 @@ delete @ENV{'IFS', 'CDPATH', 'ENV', 'BASH_ENV'};
 sub fatal($);
 sub GetServerCredential();
 sub PostImageInfo($);
+sub PostImageAlias($);
 
 #
 # Turn off line buffering on output
@@ -88,10 +90,9 @@ use GeniHRN;
 use Genixmlrpc;
 use GeniRegistry;
 use libEmulab;
-use Image;
+use OSImage;
 use User;
 use Group;
-use OSinfo;
 use emdb qw();
 use EmulabFeatures;
 use GeniImage;
@@ -114,8 +115,8 @@ my %options = ();
 if (! getopts($optlist, \%options)) {
     usage();
 }
-if (defined($options{"f"})) {
-    $force = 1;
+if (defined($options{"u"})) {
+    $update = 1;
 }
 if (defined($options{"a"})) {
     $allvers = 1;
@@ -131,13 +132,16 @@ if (defined($options{"v"})) {
 }
 usage()
     if (!@ARGV);
-# Avoid mistakes, force caller to say they want all images posted.
 if ($ARGV[0] eq "all") {
     shift(@ARGV);
+    if (@ARGV && $ARGV[0] eq "datasets") {
+	shift(@ARGV);
+	$datasets = 1;
+    }
     usage() if
 	(@ARGV);
-    print "Posting for all local images, hope that is okay!\n";
-    sleep(2);
+    print "Posting for all local ". ($datasets ? "datasets" : "images") .
+	", hope that is okay!\n";
 }
 
 # Connect to the proper DB.
@@ -161,37 +165,50 @@ Genixmlrpc->SetTimeout(15);
 
 if (@ARGV) {
     foreach my $imageid (@ARGV) {
-	my $image = Image->Lookup($imageid);
+	my $image = OSImage->Lookup($imageid);
 	if (!defined($image)) {
 	    print STDERR "Could not lookup image: $imageid\n";
 	    $errors++;
 	    next;
 	}
-	# We post all versions with -a
-	my @allversions = ($image);
-	if ($allvers && $image->AllVersions(\@allversions)) {
-	    print STDERR "Could not lookup all versions for image: $imageid\n";
-	    $errors++;
-	    next;
-	}
-	foreach my $tmp (@allversions) {
-	    if (PostImageInfo($tmp)) {
+	if ($image->isImageAlias()) {
+	    if (PostImageAlias($image)) {
 		$errors++;
+	    }
+	}
+	else {
+	    # We post all versions with -a
+	    my @allversions = ($image);
+	    if ($allvers && $image->AllVersions(\@allversions)) {
+		print STDERR
+		    "Could not lookup all versions for image: $imageid\n";
+		$errors++;
+		next;
+	    }
+	    foreach my $tmp (@allversions) {
+		next
+		    if (defined($tmp->deleted()));
+		    
+		if (PostImageInfo($tmp)) {
+		    $errors++;
+		}
 	    }
 	}
     }
 }
 else {
-    # Force allows updating all images previously reported
+    # Update allows updating all images previously reported
     my $ims_reported_clause =
-	($force ? "1 or" : "ims_reported is null or");
+	($update ? "ims_reported is not null or" : "ims_reported is null or");
+
+    my $which_clause = ($datasets ? "isdataset=1" : "(ezid=1 or isdataset=1)");
     
     # List of all images that have not been reported to the IMS.
     my $query_result =
 	emdb::DBQueryFatal("select v.imageid,v.version from ".
 			   "  image_versions as v ".
 			   "left join images as i on i.imageid=v.imageid ".
-			   "where ezid=1 and isdataset=0 and ".
+			   "where $which_clause and ".
 			   "      i.imageid is not null and ".
 			   "      v.ready=1 and v.released=1 and ".
 			   "      ims_noreport=0 and ".
@@ -206,10 +223,14 @@ else {
 			   "order by v.imageid,v.version");
 
     while (my ($imageid,$version) = $query_result->fetchrow_array()) {
-	my $image = Image->Lookup($imageid,$version);
+	my $image = OSImage->Lookup($imageid,$version);
 	if (!defined($image)) {
 	    print STDERR "Could not lookup image: $imageid,$version\n";
 	    $errors++;
+	    next;
+	}
+	if (0) {
+	    print "$image\n";
 	    next;
 	}
 	if (PostImageInfo($image)) {
@@ -222,13 +243,13 @@ exit($errors);
 sub PostImageInfo($)
 {
     my ($image) = @_;
+    my $osfeatures = "";
+    
     my $imageid = $image->imageid();
     my $version = $image->version();
-    my $osinfo  = OSinfo->Lookup($imageid,$version);
-    if (!defined($osinfo)) {
-	print STDERR "Could not lookup osinfo: $imageid,$version\n";
-	# Just skip, something is very wrong.
-	return 0;
+
+    if (!$image->isdataset()) {
+	$osfeatures = $image->osfeatures();
     }
     my $project = $image->GetProject();
     if (!defined($project)) {
@@ -251,28 +272,26 @@ sub PostImageInfo($)
     if (!defined($perms_result)) {
 	return -1;
     }
-    #
-    # Grab the current type list.
-    #
-    my $types_result =
-	emdb::DBQueryWarn("select distinct type from osidtoimageid ".
-			  "where imageid='$imageid'");
-    if (!defined($types_result)) {
-	return -1;
-    }
+
     # Does not return if error.
     my $credential = GetServerCredential();
     
-    my $arch  = "x86_64";
-    my $virtualizaton = "raw-pc";
+    # This stuff is not needed for datasets.
+    my $arch  = "";
+    my $virtualization = "";
     my @types = ();
-    while (my ($type) = $types_result->fetchrow_array()) {
-	push(@types, $type);
-	if ($type eq "m400") {
-	    $arch = "aarch64";
-	}
-	if ($type eq "pcvm") {
-	    my $virtualizaton = "emulab-xen";
+    if (!$image->isdataset()) {
+	$arch  = "x86_64";
+	$virtualization = "raw-pc";
+	foreach my $nodetype ($image->TypeList()) {
+	    my $type = $nodetype->type();
+	    push(@types, $type);
+	    if ($type eq "m400") {
+		$arch = "aarch64";
+	    }
+	    if ($type eq "pcvm") {
+		my $virtualization = "emulab-xen";
+	    }
 	}
     }
     my $visibility  = ($image->global() ? "public" : "project");
@@ -280,8 +299,7 @@ sub PostImageInfo($)
     if (!defined($creator_urn)) {
 	$creator_urn = GeniHRN::Generate($OURDOMAIN, "user", $image->creator());
     }
-    my $image_urn = GeniHRN::Generate($OURDOMAIN, "image",
-			      $image->pid() . "//" . $image->imagename());
+    my $image_urn = $image->urn();
 
     #
     # We want a project URN.
@@ -312,7 +330,7 @@ sub PostImageInfo($)
 	return 0;
     }
     my $isversioned = 
-	($WITHPROVENANCE &&
+	($WITHPROVENANCE && 
 	 EmulabFeatures->FeatureEnabled("ImageProvenance",
 					undef, $group) ? 1 : 0);
 
@@ -335,14 +353,25 @@ sub PostImageInfo($)
 		"lba_high"       => $image->lba_high() . ".0",
 		"lba_size"       => $image->lba_size(),
 		"mbr_version"    => $image->mbr_version(),
-		"osfeatures"     => $osinfo->osfeatures(),
+		"osfeatures"     => $osfeatures,
 		"arch"           => $arch,
 		"visibility"     => $visibility,
-		"virtualizaton"  => $virtualizaton,
+		"virtualizaton"  => $virtualization,
 		"metadata_url"   => $image->LocalVersionURL(),
 		"types_known_working" => join(",", @types),
 		"image_permissions" => [],
     };
+    #
+    # Send along deprecated info.
+    #
+    if (defined($image->deprecated())) {
+	$blob->{'deprecated'} = TBDateStringGMT(str2time($image->deprecated()));
+	$blob->{'deprecated_iserror'} = $image->deprecated_iserror();
+	if (defined($image->deprecated_message()) &&
+	    $image->deprecated_message() ne "") {
+	    $blob->{'deprecated_message'} = $image->deprecated_message();
+	}
+    }
     #
     # If this is a nonlocal image, send the origin along so that the
     # image server knows we are a copy.
@@ -383,18 +412,13 @@ sub PostImageInfo($)
 	    my $proj = $group->GetProject();
 	    if ($proj->IsNonLocal()) {
 		#
-		# If we are doing real projects, then the nonlocal_id is in the
-		# proper subauth format. 
+		# If we are doing real projects, then the nonlocal_id should
+		# be in the proper format, but because of backwards compat
+		# issue, lets generate it anyway.
 		#
-		if ($PGENILOCALUSER) {
-		    $urn = $proj->nonlocal_id();
-		}
-		else {
-		    my ($domain, undef, $id) =
-			GeniHRN::Parse($proj->nonlocal_id());
-		    $urn = GeniHRN::Generate($domain . ":" . $proj->pid(),
-					     "authority", $id);
-		}
+		my $hrn = GeniHRN->new($proj->nonlocal_id());
+		$urn = GeniHRN::Generate($hrn->domain() . ":" . $proj->pid(),
+					     "authority", $hrn->id());
 	    }
 	    else {
 		$urn = GeniHRN::Generate($OURDOMAIN . ":" . $proj->pid(),
@@ -444,6 +468,76 @@ sub PostImageInfo($)
     }
     # Mark as reported.
     $image->MarkIMSReported();
+    return 0;
+}
+
+sub PostImageAlias($)
+{
+    my ($image) = @_;
+    my @target_urns = ();
+
+    # Does not return if error.
+    my $credential = GetServerCredential();
+
+    foreach my $tmp ($image->imagelist()) {
+	my $target_urn;
+	if ($tmp->IsLocal()) {
+	    $target_urn = $tmp->urn();
+	}
+	else {
+	    #
+	    # Need to provide the URN it is known by. Need a better way
+	    # to get this. 
+	    #
+	    my $authurn = GeniHRN->new($tmp->origin_urn());
+	    my ($ospid,$os,undef,$vers) =
+		($tmp->origin_name() =~ m{([^/]+)/([^:]+)(:(\d+))?});
+	    $target_urn = GeniHRN::Generate($authurn->authority(), "image",
+					    "${ospid}//${os}");
+	}
+	push(@target_urns, $target_urn);
+    }
+    my $blob = {"client_version" => $CLIENTVERS,
+		"isimagealias"   => 1,
+		"urn"		 => $image->urn(),
+		"uuid"           => $image->uuid(),
+		"target_urns"    => \@target_urns,
+
+    };
+    print Dumper($blob)
+	if ($debug);
+    if ($impotent) {
+	print "Would push $image\n";
+	return 0;
+    }
+
+    if ($verbose) {
+	print "Pushing $image\n";
+    }
+    #
+    # Push the blob to the image server.
+    #
+    my $response =
+	Genixmlrpc::CallMethod(IMSURL(), undef, "PostImageInfo",
+			       {"credential" => $credential->asString(),
+				"imageinfo"  => $blob});
+    if (!defined($response) || $response->code()) {
+	my $msg = "PostImageInfo failed for $image:";
+	
+	if (!defined($response)) {
+	    # Bail, we will try again later.
+	    print STDERR "$msg RPC error\n";
+	    return -1;
+	}
+	elsif (defined($response->output())) {
+	    print STDERR "$msg " . $response->output() . "\n";
+	    return -1;
+	}
+	else {
+	    print STDERR "$msg " . $response->code() . "\n";
+	    return -1;
+	}
+    }
     return 0;
 }
 

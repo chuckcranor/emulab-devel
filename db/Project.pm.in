@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2005-2016 University of Utah and the Flux Group.
+# Copyright (c) 2005-2017 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -33,6 +33,7 @@ use vars qw(@ISA @EXPORT);
 use libdb;
 use libtestbed;
 use Brand;
+use libEmulab;
 use User;
 use Group;
 use English;
@@ -49,9 +50,15 @@ my $TBAPPROVAL  = "@TBAPPROVALEMAIL@";
 my $TBAUDIT	= "@TBAUDITEMAIL@";
 my $TBBASE      = "@TBBASE@";
 my $TBWWW       = "@TBWWW@";
+my $OURDOMAIN   = "@OURDOMAIN@";
+my $PGENISUPPORT= @PROTOGENI_SUPPORT@;
 my $WIKISUPPORT = @WIKISUPPORT@;
+my $WITHZFS     = @WITHZFS@;
+my $WITHAMD     = @WITHAMD@;
+my $ZFS_NOEXPORT= @ZFS_NOEXPORT@;
 my $MAILMANSUPPORT = @MAILMANSUPPORT@;
 my $ADDPROJADMINLIST = "$TB/sbin/addprojadminlist";
+my $EXPORTS_SETUP    = "$TB/sbin/exports_setup";
 
 # Cache of instances to avoid regenerating them.
 my %projects   = ();
@@ -153,6 +160,7 @@ sub Brand($)		{ return $_[0]->{'BRAND'}; }
 sub isAPT($)	        { return $_[0]->Brand()->isAPT() ? 1 : 0; }
 sub isCloud($)	        { return $_[0]->Brand()->isCloud() ? 1 : 0; }
 sub isPNet($)	        { return $_[0]->Brand()->isPNet() ? 1 : 0; }
+sub isPowder($)	        { return $_[0]->Brand()->isPowder() ? 1 : 0; }
 sub isEmulab($)         { return $_[0]->Brand()->isEmulab() ? 1 : 0; }
 
 # These come from the group not the project.
@@ -587,6 +595,35 @@ sub GetProjectGroup($)
 }
 
 #
+# Generate a URN.
+#
+sub urn($)
+{
+    my ($self) = @_;
+    my $pid  = $self->pid();
+
+    return undef
+	if (!$PGENISUPPORT);
+    require GeniHRN;
+
+    my $domain = "${OURDOMAIN}:${pid}";
+    return GeniHRN->new(GeniHRN::Generate($domain, "project", $pid));
+}
+sub nonlocalurn($)
+{
+    my ($self) = @_;
+    
+    return undef
+	if (!$PGENISUPPORT);
+    require GeniHRN;
+
+    if ($self->IsNonLocal()) {
+	return GeniHRN->new($self->nonlocal_id());
+    }
+    return $self->urn();
+}
+
+#
 # Return membership for user in the default group
 #
 sub LookupUser($$)
@@ -802,6 +839,48 @@ sub UpdateStats($$$$$)
 }
 
 #
+# Return last activity as a unix timestamp.
+#
+sub GetActivity($)
+{
+    my ($self) = @_;
+    my $stamp;
+
+    # Must be a real reference. 
+    return undef
+	if (! ref($self));
+
+    my $pid_idx = $self->pid_idx();
+    my $query_result =
+	DBQueryWarn("select UNIX_TIMESTAMP(last_activity) from project_stats ".
+		    "where pid_idx='$pid_idx'");
+    if ($query_result->numrows) {
+	($stamp) = $query_result->fetchrow_array();
+    }
+
+    return $stamp;
+}
+
+sub SetActivity($$)
+{
+    my ($self,$stamp) = @_;
+	
+    # Must be a real reference. 
+    return -1
+	if (! ref($self));
+
+    if ($stamp !~ /^\d+$/ || $stamp < 0 || $stamp > time()) {
+	return -1;
+    }
+
+    my $pid_idx = $self->pid_idx();
+    DBQueryWarn("update project_stats set last_activity=FROM_UNIXTIME($stamp)".
+		" where pid_idx='$pid_idx'");
+
+    return 0;
+}
+
+#
 # Bump last activity
 #
 sub BumpActivity($)
@@ -860,6 +939,58 @@ sub PeerExports($$)
     my ($self, $pref) = @_;
 
     return $self->{'GROUP'}->PeerExports($pref);
+}
+
+#
+# Do an exports setup if needed (ZFS). See exports_setup, when ZFS is on
+# we do not export all projects, only recently active ones. 
+#
+sub UpdateExports($)
+{
+    my ($self) = @_;
+    my $pid_idx = $self->pid_idx();
+
+    return 0
+	if (! ($WITHZFS && ($ZFS_NOEXPORT || !$WITHAMD)));
+    my $exports_limit = GetSiteVar("general/export_active");
+    return 0
+	if (!$exports_limit);
+
+    my $query_result =
+	DBQueryWarn("select UNIX_TIMESTAMP(last_activity) from project_stats ".
+		    "where pid_idx='$pid_idx'");
+    # Hmm.
+    return 0
+	if (!$query_result->numrows);
+
+    my ($lastactivity) = $query_result->fetchrow_array();
+
+    # Update last_activity first so exports_setup will do something
+    # and to mark the project as active, to keep the mount active.
+    DBQueryWarn("update project_stats set last_activity=now() ".
+		"where pid_idx='$pid_idx'")
+	or return -1;
+
+    if (!defined($lastactivity) ||
+	time() - $lastactivity > ((($exports_limit * 24) - 12) * 3600)) {
+	if ($ZFS_NOEXPORT) {
+	    mysystem($EXPORTS_SETUP);
+	}
+	elsif (!$WITHAMD) {
+	    mysystem($EXPORTS_SETUP . " -B");
+	}
+
+	# failed, reset the timestamp
+	if ($?) {
+	    my $set = (defined($lastactivity) ?
+		       "FROM_UNIXTIME($lastactivity)" : "null");
+	    
+	    DBQueryWarn("update project_stats set last_activity=$set ".
+			"where pid_idx='$pid_idx'");
+	    return -1;
+	}
+    }
+    return 0;
 }
 
 # _Always_ make sure that this 1 is at the end of the file...

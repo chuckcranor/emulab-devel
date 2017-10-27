@@ -1,6 +1,6 @@
-#!/usr/bin/perl -wT
+#!/usr/bin/perl -w
 #
-# Copyright (c) 2000-2015 University of Utah and the Flux Group.
+# Copyright (c) 2000-2017 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -55,7 +55,8 @@ my $clean   = 0;
 my $TB		= "@prefix@";
 my $DBNAME	= "@TBDBNAME@";
 my $TBOPS       = "@TBOPSEMAIL@";
-
+my $MAINSITE    = @TBMAINSITE@;
+my $PGENISUPPORT= @PROTOGENI_SUPPORT@;
 my $BACKUPDIR	= "$TB/backup";
 my $LOGDIR	= "$TB/log/mysql";
 my $HOTCOPY     = "/usr/local/bin/mysqlhotcopy";
@@ -69,6 +70,7 @@ my $SLOW	= "slowqueries";
 my $BACK	= "tbdb";
 my $BACKUPDAYS  = "30";
 my $extension;
+my @updatefiles = ();
 my $dohotcopy   = 0;
 my $dbname      = "mysql";
 my $dbuser      = "root";
@@ -206,8 +208,18 @@ open(IDX, "< $LOGDIR/update.index") or
     fatal("Could not open $LOGDIR/update.index: $!");
 
 while (<IDX>) {
-    if ($_ =~ /^.*\.([0-9]*)$/) {
+    my $file = $_;
+    chomp($file);
+    
+    if ($file =~ /^.*\.([0-9]*)$/) {
 	$extension = $1;
+    }
+    #
+    # Watch for uncompressed update files, we now get more then one
+    # per day on super busy clusters. 
+    #
+    if (-e $file) {
+	push(@updatefiles, $file);
     }
 }
 close(IDX);
@@ -230,13 +242,11 @@ if ($dohotcopy) {
 
 my $backname  = "$BACK.$extension";
 my $basename  = "$BASE.$extension";
-my $updname   = "$UPD.$extension";
 my $slowname  = "$SLOW.$extension";
 
 print "Backup file name: $backname\n"
     if (!$opsmode);
 print "Base file name:   $basename\n";
-print "Update file name: $updname\n";
 print "Slow file name:   $slowname\n";
 
 #
@@ -280,8 +290,14 @@ else {
     #
     # Do a mysqldump. This will reset the log files.
     #
+    my @DBNAMES = ($DBNAME);
+    push(@DBNAMES, "ims")
+	if ($MAINSITE);
+    push(@DBNAMES, ("geni", "geni-cm", "geni-ch"))
+	if ($PGENISUPPORT);
+    
     if (system("$MYSQLDUMP --create-options ".
-	       "--flush-logs --lock-tables $DBNAME > $backname")) {
+	       "--flush-logs --lock-tables --databases @DBNAMES > $backname")) {
 	fatal("mysqldump failed!");
     }
 
@@ -301,12 +317,14 @@ if (-e "$basename" && system("nice gzip $basename")) {
     fatal("gzip $basename failed!");
 }
 
-if (-e "$updname" && system("nice gzip $updname")) {
-    fatal("gzip $updname failed!");
-}
-
 if (-e "$slowname" && system("nice gzip $slowname")) {
     fatal("gzip $slowname failed!");
+}
+
+foreach my $updname (@updatefiles) {
+    if (-e "$updname" && system("nice gzip $updname")) {
+	fatal("gzip $updname failed!");
+    }
 }
 
 # Do this now that the backup is complete.

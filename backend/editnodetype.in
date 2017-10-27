@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2000-2014 University of Utah and the Flux Group.
+# Copyright (c) 2000-2017 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -68,7 +68,6 @@ use libdb;
 use libtestbed;
 use User;
 use Project;
-use OSinfo;
 
 # Protos
 sub fatal($);
@@ -161,6 +160,8 @@ my %xmlfields =
 
      # Class may only be changed while making a new class. 
      "class"		=> ["class",		$SLOT_OPTIONAL],
+     
+     "architecture"	=> ["architecture",	$SLOT_OPTIONAL],
 
      # Fixed attributes.
      "isvirtnode"	=> ["isvirtnode",	$SLOT_OPTIONAL],
@@ -371,6 +372,17 @@ if (exists($editnodetype_args{"class"})) {
 	# It's okay to specify it to be the same as it was before.
 	UserError("NodeType: Can't change class ($class) of existing node.")
 	    if ($class ne $newclass);
+    }
+}
+
+if (exists($editnodetype_args{"architecture"})) {
+    my $architecture = $editnodetype_args{"architecture"};
+    
+    if ($architecture eq "") {
+	push(@nodetype_data, "architecture=NULL");
+    }
+    else {
+	push(@nodetype_data, "architecture='$architecture'");
     }
 }
 

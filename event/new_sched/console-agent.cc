@@ -221,7 +221,7 @@ static void *console_agent_looper(void *arg)
 		
 		if (!event_notification_get_eventtype(
 			handle, en, evtype, sizeof(evtype))) {
-			error("couldn't get event type from notification %p\n",
+		    error("couldn't get event type from notification %p\n",
 			      en);
 		}
 		else {
@@ -235,7 +235,7 @@ static void *console_agent_looper(void *arg)
 							 sizeof(argsbuf));
 			event_notification_get_int32(handle,
 						     en,
-						     "TOKEN",
+						     const_cast<char *>("TOKEN"),
 						     &token);
 			argsbuf[sizeof(argsbuf) - 1] = '\0';
 

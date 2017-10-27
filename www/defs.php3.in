@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2016 University of Utah and the Flux Group.
+# Copyright (c) 2000-2017 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -53,6 +53,7 @@ $PROTOGENI      = @PROTOGENI_SUPPORT@;
 $GENIRACK       = @PROTOGENI_GENIRACK@;
 $PROTOGENI_GENIWEBLOGIN = @PROTOGENI_GENIWEBLOGIN@;
 $ISCLRHOUSE     = @PROTOGENI_ISCLEARINGHOUSE@;
+$PROTOGENI_LOCALUSER = @PROTOGENI_LOCALUSER@;
 $EXP_VIS        = @EXP_VIS_SUPPORT@;
 $ISOLATEADMINS  = @ISOLATEADMINS@;
 $CONTROL_NETWORK= "@CONTROL_NETWORK@";
@@ -259,12 +260,14 @@ function SendProjAdminMail($project, $from, $to,
 	($project->isAPT() ? "aptlab-approval@aptlab.net" :
 	 ($project->isCloud() ? "cloudlab-approval@cloudlab.us" :
 	  ($project->isPNet() ? "phantomnet-approval@phantomnet.org" :
-	   $TBMAIL_APPROVAL)));
+           ($project->isPowder() ? "powder-approval@powderwireless.net" :
+            $TBMAIL_APPROVAL))));
     $TBMAILTAG =
 	($project->isAPT() ? "aptlab.net" :
 	 ($project->isCloud() ? "cloudlab.us" : 
 	  ($project->isPNet() ? "phantomnet.org" :
-	   $TBMAILTAG)));
+           ($project->isPowder() ? "powderwireless.net" :
+            $TBMAILTAG))));
     if ($headers) {
         $headers .= "\n";
     }
@@ -519,27 +522,6 @@ function ADDPUBKEY($cmdandargs) {
 
     return SUEXEC("nobody", "nobody", "webaddpubkey $cmdandargs",
 		  SUEXEC_ACTION_CONTINUE);
-}
-
-#
-# Check an emulab feature, calling out to the perl code.
-#
-function FeatureEnabled($feature, $user, $group)
-{
-    $command = "webemulabfeature check $feature ";
-    if ($user) {
-        $command .= "-u " . $user->uid() . " ";
-    }
-    if ($group) {
-        $command .= "-g " . $group->pid() . "," . $group->gid();
-    }
-    $retval = SUEXEC("nobody", "nobody", $command,
-                     SUEXEC_ACTION_IGNORE);
-    if ($retval < 0) {
-        SUEXECERROR(SUEXEC_ACTION_CONTINUE);
-        return 0;
-    }
-    return $retval;
 }
 
 #

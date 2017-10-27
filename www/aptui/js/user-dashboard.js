@@ -1,19 +1,18 @@
-require(window.APT_OPTIONS.configObject,
-	['underscore', 'js/quickvm_sup', 'moment',
-	 'js/lib/text!template/user-dashboard.html',
-	 'js/lib/text!template/experiment-list.html',
-	 'js/lib/text!template/profile-list.html',
-	 'js/lib/text!template/project-list.html',
-	 'js/lib/text!template/user-profile.html',
-	 'js/lib/text!template/oops-modal.html',
-	 'js/lib/text!template/waitwait-modal.html',
-	 'js/lib/text!template/classic-explist.html',
-	],
-function (_, sup, moment, mainString,
-	  experimentString, profileListString, projectString,
-	  profileString, oopsString, waitwaitString, classicString)
+$(function ()
 {
     'use strict';
+
+    var templates = APT_OPTIONS.fetchTemplateList(['user-dashboard', 'experiment-list', 'profile-list', 'project-list', 'dataset-list', 'user-profile', 'oops-modal', 'waitwait-modal', 'classic-explist','conversion-help-modal']);
+    var mainString = templates['user-dashboard'];
+    var experimentString = templates['experiment-list'];
+    var profileListString = templates['profile-list'];
+    var projectString = templates['project-list'];
+    var datasetString = templates['dataset-list'];
+    var profileString = templates['user-profile'];
+    var oopsString = templates['oops-modal'];
+    var waitwaitString = templates['waitwait-modal'];
+    var classicString = templates['classic-explist'];
+    var converterHelpTemplate = _.template(templates['conversion-help-modal']);
     var mainTemplate = _.template(mainString);
 
     function initialize()
@@ -29,6 +28,7 @@ function (_, sup, moment, mainString,
 	$('#main-body').html(html);
 	$('#oops_div').html(oopsString);
 	$('#waitwait_div').html(waitwaitString);
+	$('#conversion_help_div').html(converterHelpTemplate({}));
 
         // Javascript to enable link to tab
         var hash = document.location.hash;
@@ -38,6 +38,13 @@ function (_, sup, moment, mainString,
         // Change hash for page-reload
         $('a[data-toggle="tab"]').on('show.bs.tab', function (e) {
             window.location.hash = e.target.hash;
+
+	    // GA reporting
+	    var ganame = e.target.hash;
+	    if (ganame == "") {
+		ganame = "#experiments";
+	    }
+	    window.APT_OPTIONS.gaTabEvent("show", ganame);
         });
 	// Set the correct tab when a user uses their back/forward button
         $(window).on('hashchange', function (e) {
@@ -56,6 +63,8 @@ function (_, sup, moment, mainString,
 	LoadClassicProfiles();
 	LoadProjectsTab();
 	LoadProfileTab();
+	LoadDatasetTab();
+	LoadClassicDatasets();
 
 	/*
 	 * Handlers for inline operations.
@@ -68,7 +77,7 @@ function (_, sup, moment, mainString,
     function LoadUsage()
     {
 	var callback = function(json) {
-	    console.info(json);
+	    console.info("LoadUsage", json);
 
 	    if (json.code) {
 		console.info(json.value);
@@ -76,7 +85,11 @@ function (_, sup, moment, mainString,
 	    }
 	    var blob = json.value;
 	    var html = "";
-
+	    if (!(blob.pnodes || blob.weekpnodes ||
+		  blob.monthpnodes || blob.rank)) {
+		$('#usage_nousage').removeClass("hidden");
+		return;
+	    }
 	    if (blob.pnodes) {
 		html = "<tr><td>Current Usage:</td><td>" +
 		    blob.pnodes + " Node" + (blob.pnodes > 1 ? "s, " : ", ") +
@@ -111,36 +124,56 @@ function (_, sup, moment, mainString,
 
     function LoadExperimentTab()
     {
+	var template = _.template(experimentString);
+	
 	var callback = function(json) {
-	    console.info(json);
+	    console.info("experiments", json);
 
 	    if (json.code) {
 		console.info(json.value);
 		return;
 	    }
-	    if (json.value.length == 0) {
+	    if (json.value.user_experiments.length == 0) {
 		$('#experiments_loading').addClass("hidden");
 		$('#experiments_noexperiments').removeClass("hidden");
-		return;
 	    }
-	    var template = _.template(experimentString);
-
-	    $('#experiments_content')
-		.html(template({"experiments" : json.value,
-				"showCreator" : false,
-				"showProject" : true}));
-	    
+	    else {
+		$('#experiments_content')
+		    .html(template({"experiments" : json.value.user_experiments,
+				    "showCreator" : false,
+				    "showProject" : true}));
+	    }
+	    if (json.value.project_experiments.length != 0) {
+		$('#project_experiments_content')
+		    .html("<div><h4 class='text-center'>" +
+			  "Experiments in my Projects</h4>" +
+			  template({"experiments" :
+				        json.value.project_experiments,
+				    "showCreator" : true,
+				    "showProject" : true}) +
+			  "</div>");
+	    }
 	    // Format dates with moment before display.
-	    $('#experiments_table .format-date').each(function() {
+	    $('#experiments_content .format-date, ' +
+	      '#project_experiments_content .format-date')
+		.each(function() {
 		var date = $.trim($(this).html());
 		if (date != "") {
 		    $(this).html(moment($(this).html()).format("ll"));
 		}
 	    });
-	    var table = $('#experiments_table')
-		.tablesorter({
-		    theme : 'green',
-		});
+	    if (json.value.user_experiments.length != 0) {
+		$('#experiments_content #experiments_table')
+		    .tablesorter({
+			theme : 'green',
+		    });
+	    }
+	    if (json.value.project_experiments.length != 0) {
+		$('#project_experiments_content #experiments_table')
+		    .tablesorter({
+			theme : 'green',
+		    });
+	    }
 	}
 	var xmlthing = sup.CallServerMethod(null,
 					    "user-dashboard", "ExperimentList",
@@ -157,6 +190,8 @@ function (_, sup, moment, mainString,
 		console.info(json.value);
 		return;
 	    }
+	    if (json.value.length == 0)
+		return;
 	    var template = _.template(classicString);
 
 	    $('#classic_experiments_content')
@@ -209,6 +244,11 @@ function (_, sup, moment, mainString,
 		if (date != "") {
 		    $(this).html(moment($(this).html()).format("ll"));
 		}
+	    });
+	    // This activates the tooltip subsystem.
+	    $('[data-toggle="tooltip"]').tooltip({
+		delay: {"hide" : 500, "show" : 500},
+		placement: 'auto',
 	    });
 	    // Display the topo.
 	    $('.showtopo_modal_button').click(function (event) {
@@ -371,6 +411,83 @@ function (_, sup, moment, mainString,
 	var xmlthing = sup.CallServerMethod(null,
 					    "user-dashboard", "AccountDetails",
 					    {"uid" : window.TARGET_USER});
+	xmlthing.done(callback);
+    }
+
+    function LoadDatasetTab()
+    {
+	var callback = function(json) {
+	    console.info("datasets", json);
+
+	    if (json.code) {
+		console.info(json.value);
+		return;
+	    }
+	    if (json.value.length == 0) {
+		$('#datasets_nodatasets').removeClass("hidden");
+		return;
+	    }
+	    var template = _.template(datasetString);
+
+	    $('#datasets_content')
+		.html(template({"datasets"    : json.value,
+				"showuser"    : false,
+				"showproject" : true}));
+	    
+	    // Format dates with moment before display.
+	    $('#datasets_content .tablesorter .format-date').each(function(){
+		var date = $.trim($(this).html());
+		if (date != "") {
+		    $(this).html(moment($(this).html()).format("ll"));
+		}
+	    });
+	    var table = $('#datasets_content .tablesorter')
+		.tablesorter({
+		    theme : 'green',
+		});
+	}
+	var xmlthing =
+	    sup.CallServerMethod(null,
+				 "user-dashboard", "DatasetList",
+				 {"uid" : window.TARGET_USER});
+	xmlthing.done(callback);
+    }
+
+    function LoadClassicDatasets()
+    {
+	var callback = function(json) {
+	    console.info("classic datasets", json);
+
+	    if (json.code) {
+		console.info(json.value);
+		return;
+	    }
+	    if (json.value.length == 0) {
+		return
+	    }
+	    $('#classic_datasets_content').removeClass("hidden");
+	    var template = _.template(datasetString);
+
+	    $('#classic_datasets_content_div')
+		.html(template({"datasets"    : json.value,
+				"showuser"    : false,
+				"showproject" : true}));
+	    
+	    $('#classic_datasets_content .format-date').each(function() {
+		var date = $.trim($(this).html());
+		if (date != "") {
+		    $(this).html(moment($(this).html()).format("ll"));
+		}
+	    });
+	    var table = $('#classic_datasets_content .tablesorter')
+		.tablesorter({
+		    theme : 'green',
+		});
+	};
+	var xmlthing =
+	    sup.CallServerMethod(null,
+				 "user-dashboard", "ClassicDatasetList",
+				 {"uid" : window.TARGET_USER});
 	xmlthing.done(callback);
     }
 

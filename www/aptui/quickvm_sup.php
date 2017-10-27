@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2016 University of Utah and the Flux Group.
+# Copyright (c) 2000-2017 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -23,6 +23,7 @@
 #
 include_once("portal_defs.php");
 include_once("instance_defs.php");
+include_once("require.php");
 
 #
 # Global flag to disable accounts. We do this on some pages which
@@ -40,9 +41,6 @@ if (isset($_REQUEST["embedded"]) && $_REQUEST["embedded"]) {
     $embedded = 1;
 }
 
-# Flag to signal that a requires was spit. For errors.
-$spatrequired = 0;
-
 # For backend scripts to know how they were invoked.
 if (isset($_SERVER['SERVER_NAME'])) { 
     putenv("SERVER_NAME=" . $_SERVER['SERVER_NAME']);
@@ -52,8 +50,8 @@ if (isset($_SERVER['SERVER_NAME'])) {
 # Redefine this so APT errors are styled properly. Called by PAGEERROR();.
 #
 $PAGEERROR_HANDLER = function($msg, $status_code = 0) {
-    global $drewheader, $ISCLOUD, $ISPNET, $ISEMULAB, $ISAPT, $PORTAL_HELPFORUM;
-    global $spatrequired;
+    global $drewheader, $ISCLOUD, $ISPNET, $ISEMULAB, $ISAPT, $ISPOWDER;
+    global $spatrequired, $TBMAINSITE, $PORTAL_HELPFORUM;
 
     if (! $drewheader) {
 	SPITHEADER();
@@ -64,15 +62,15 @@ $PAGEERROR_HANDLER = function($msg, $status_code = 0) {
     echo "    window.ISEMULAB  = " . ($ISEMULAB ? "1" : "0") . ";\n";
     echo "    window.ISCLOUD   = " . ($ISCLOUD  ? "1" : "0") . ";\n";
     echo "    window.ISPNET    = " . ($ISPNET   ? "1" : "0") . ";\n";
+    echo "    window.ISPOWDER  = " . ($ISPOWDER ? "1" : "0") . ";\n";
     echo "    window.ISAPT     = " . ($ISAPT    ? "1" : "0") . ";\n";
+    echo "    window.MAINSITE  = " . ($TBMAINSITE ? "1" : "0") . ";\n";
     echo "    window.HELPFORUM = " .
         "'https://groups.google.com/d/forum/${PORTAL_HELPFORUM}';\n";
     echo "</script>\n";
     if (!$spatrequired) {
 	echo "<script src='js/lib/jquery-2.0.3.min.js'></script>\n";
-	echo "<script src='js/lib/bootstrap.js'></script>\n";
-	echo "<script src='js/lib/require.js' data-main='js/null.js'>
-                 </script>\n";
+	SPITNULLREQUIRE();
     }
     SPITFOOTER();
     die("");
@@ -81,11 +79,14 @@ $PAGEERROR_HANDLER = function($msg, $status_code = 0) {
 $PAGEHEADER_FUNCTION = function($thinheader = 0, $ignore1 = NULL,
 				 $ignore2 = NULL, $ignore3 = NULL)
 {
-    global $PORTAL_MANUAL, $PORTAL_MOTD_SITEVAR, $PORTAL_HELPFORUM;
+    global $PORTAL_MANUAL, $PORTAL_HELPFORUM;
     global $TBMAINSITE, $APTTITLE, $FAVICON, $APTLOGO, $APTSTYLE, $ISAPT;
-    global $GOOGLEUA, $ISCLOUD, $ISPNET, $ISEMULAB, $TBBASE, $ISEMULAB;
-    global $login_user, $login_status;
+    global $GOOGLEUA, $ISCLOUD, $TBBASE;
+    global $ISPNET, $ISPOWDER, $ISEMULAB;
+    global $login_user, $login_status, $SUPPORT;
     global $disable_accounts, $page_title, $drewheader, $embedded;
+    $cleanmode = (isset($_COOKIE['cleanmode']) &&
+                  $_COOKIE['cleanmode'] == 1 ? 1 : 0);
     $showmenus = 0;
     $title = $APTTITLE;
     if (isset($page_title)) {
@@ -100,10 +101,15 @@ $PAGEHEADER_FUNCTION = function($thinheader = 0, $ignore1 = NULL,
     if (($login_user = CheckLogin($status)) != null) {
 	$login_status = $status;
 	$login_uid    = $login_user->uid();
+        $ga_userid    = $login_user->ga_userid();
     }
     if ($login_user && !($login_status & CHECKLOGIN_WEBONLY)) {
         $showmenus = 1;
     }
+
+    header("Expires: Mon, 26 Jul 1997 05:00:00 GMT");
+    header("Cache-Control: no-cache, must-revalidate");
+    header("Pragma: no-cache");
 
     echo "<html>
       <head>
@@ -125,19 +131,27 @@ $PAGEHEADER_FUNCTION = function($thinheader = 0, $ignore1 = NULL,
     echo "    window.ISEMULAB = " . ($ISEMULAB ? "1" : "0") . ";\n";
     echo "    window.ISCLOUD  = " . ($ISCLOUD  ? "1" : "0") . ";\n";
     echo "    window.ISPNET   = " . ($ISPNET   ? "1" : "0") . ";\n";
+    echo "    window.ISPOWDER = " . ($ISPOWDER ? "1" : "0") . ";\n";
     echo "    window.ISAPT    = " . ($ISAPT    ? "1" : "0") . ";\n";
+    echo "    window.MAINSITE = " . ($TBMAINSITE ? "1" : "0") . ";\n";
     echo "    window.MANUAL   = '$PORTAL_MANUAL';\n";
     echo "    window.HELPFORUM = " .
         "'https://groups.google.com/d/forum/${PORTAL_HELPFORUM}';\n";
     echo "    window.EMBEDDED = $embedded;\n";
+    echo "    window.SUPPORT  = '$SUPPORT';\n";
+    echo "    window.APTTILE  = '$APTTITLE';\n";
     echo "</script>\n";
     
     if ($TBMAINSITE && !$embedded && file_exists("../google-analytics.php")) {
 	readfile("../google-analytics.php");
-	echo "<script type='text/javascript'>
-                ga('create', '$GOOGLEUA', 'auto');
-                ga('send', 'pageview');
-              </script>";
+	echo "<script type='text/javascript'>\n";
+        echo "  ga('create', '$GOOGLEUA', 'auto');\n";
+        if ($login_user) {
+            echo "  ga('set', 'userId', '$ga_userid');\n";
+        }
+        echo "  ga('send', 'pageview');\n";
+        echo "  window.GOOGLEUA  = '$GOOGLEUA';\n";
+        echo "</script>";
     }
 
     echo "
@@ -153,21 +167,25 @@ $PAGEHEADER_FUNCTION = function($thinheader = 0, $ignore1 = NULL,
     # 
     $navbar_status = "";
     $navbar_right  = "";
+    $aptmargin = "";
+    if (!$ISCLOUD && !$ISPNET && !$ISEMULAB || $ISPOWDER)
+    {
+        $aptmargin = "margin-top: 7px;";
+    }
 
     if (!$disable_accounts) {
-        if ($login_user && ISADMINISTRATOR()) {
-	    # Extra top margin to align with the rest of the buttons.
+        if ($login_user && ISADMINISTRATOR() && !$cleanmode) {
             $navbar_status .= 
-                "<li class='apt-left' style='margin-top:7px'>\n";
+                "<li class='apt-left admin-toggle-container'>\n";
             
 	    if (ISADMIN()) {
 		$url = CreateURL("toggle", $login_user,
 				 "type", "adminon", "value", 0);
 
                 $navbar_status .=
-                    "<a href='/$url'>
+                    "<a href='/$url' class='admin-toggle'>
                           <img src='images/redball.gif'
-                               style='height: 10px;'
+                               style='height: 10px; $aptmargin'
                                border='0' alt='Admin On'></a>\n";
 	    }
 	    else {
@@ -175,38 +193,27 @@ $PAGEHEADER_FUNCTION = function($thinheader = 0, $ignore1 = NULL,
 				 "type", "adminon", "value", 1);
 
                 $navbar_status .=
-                    "<a href='/$url'>
+                    "<a href='/$url' class='admin-toggle'>
                           <img src='images/greenball.gif'
-                               style='height: 10px;'
+                               style='height: 10px; $aptmargin'
                                border='0' alt='Admin Off'></a>\n";
 	    }
             $navbar_status .= "</li>\n";
 	}
-        # Extra top margin to align with the rest of the buttons.
-	$navbar_status .=
-            "<li id='loginstatus' class='apt-left' style='margin-top:7px'>".
-	       ($login_user ? "<p class='navbar-text'>".
-                 "$login_uid logged in</p>" : "") . "</li>\n";
-
 	if (!NOLOGINS()) {
 	    if (!$login_user) {
                 $navbar_right .=
                     "<li id='signupitem' class='apt-left'>" .
-                    "  <a class='btn btn-primary navbar-btn apt-navbar-btn'
+                    "  <a class='btn btn-success navbar-btn apt-navbar-btn'
                                 id='signupbutton'
                                 href='signup.php'>Sign Up</a></li>\n";
 		if ($page_title != "Login") {
                     $navbar_right .=
                         "<li id='loginitem' class='apt-left'>" .
-                        "  <a class='btn btn-primary navbar-btn apt-navbar-btn'
+                        "  <a class='btn btn-quickvm-home navbar-btn apt-navbar-btn'
                                     id='loginbutton'>Login</a></li>\n";
 		}
-	    }
-	    else {
-                $navbar_right .=
-                    "<li class='apt-left hidden-xs'>" .
-                    "  <a class='btn btn-primary navbar-btn apt-navbar-btn'
-                                href='logout.php'>Logout</a></li>\n";
+		REQUIRE_GENI_AUTH();
 	    }
 	}
     }
@@ -214,133 +221,31 @@ $PAGEHEADER_FUNCTION = function($thinheader = 0, $ignore1 = NULL,
     # the buttons when a logged in user shrinks the window the window down,
     # and turn them on inside the action menu.
     $hiddenxs = ($showmenus ? "hidden-xs" : "");
-    
-    echo "
-         <div class='navbar navbar-static-top' style='margin-bottom: 10px'
-              role='navigation'>
-            <div class='navbar-inner'>
-             <div class='brand'>
-                 <img src='images/$APTLOGO'/>
-             </div>
-             <ul class='nav navbar-nav navbar-right apt-right'>
-              $navbar_status
-              $navbar_right
-             </ul>
-             <ul class='nav navbar-nav navbar-left apt-left'>
-                <li class='apt-left $hiddenxs'>
-                    <a class='btn btn-quickvm-home navbar-btn'
-                       href='landing.php'>Home</a></li>\n";
-    echo "      <li class='apt-left $hiddenxs'>".
-        "           <a class='btn btn-quickvm-home navbar-btn' ".
-        "              href='$PORTAL_MANUAL' target='_blank'> ".
-        ($ISEMULAB ? "Wiki" : "Manual") . "</a></li>\n";
 
-    if ($login_user && !($login_status & CHECKLOGIN_WEBONLY)) {
-	echo "  <li id='quickvm_actions_menu' class='dropdown apt-left'> ".
-	         "<a href='#'
-                    class='dropdown-toggle btn btn-quickvm-home navbar-btn'
-                       data-toggle='dropdown'>
-                    Actions <b class='caret'></b></a>
-                  <ul class='dropdown-menu'>
-                   <li class='visible-xs navbar-nav-shortcuts'>
-                       <a href='landing.php'>Home</a></li>
-                   <li class='visible-xs navbar-nav-shortcuts'>
-                       <a href='$PORTAL_MANUAL' target='_blank'> ".
-                      ($ISEMULAB || $ISPNET ? "Wiki" : "Manual") . "</a></li>
-                   <li class='visible-xs navbar-nav-shortcuts'>
-                       <a href='logout.php'>Logout</a></li>";
-        if ($login_user->IsActive()) {
-            echo " <li><a href='user-dashboard.php#profiles'>
-                         My Profiles</a></li>
-                   <li><a href='user-dashboard.php#experiments'>
-                         My Experiments</a></li>
-                   <li><a href='manage_profile.php'>Create Profile</a></li>
-                   <li><a href='instantiate.php'>Start Experiment</a></li>
-                   <li class='divider'></li>
-                   <li><a href='getcreds.php'>Download Credentials</a></li>
-                   <li><a href='ssh-keys.php'>Manage SSH Keys</a></li>";
-        }
-        echo "     <li><a href='myaccount.php'>Manage Account</a></li>
-                   <li><a href='signup.php'>Start/Join Project</a></li>";
-        if ($login_user->IsActive()) {
-            echo " <li class='divider'></li>
-	           <li><a href='list-datasets.php'>List Datasets</a></li>
-	           <li><a href='create-dataset.php'>Create Dataset</a></li>";
-            echo "      <li class='divider'></li>\n";
-            $then = time() - (90 * 3600 * 24);
-            echo "      <li><a href='activity.php?user=$login_uid&min=$then'>
-                            My History</a></li>\n";
-        }
-        echo "    </ul>
-                </li>\n";
-        if ($login_user->IsActive() && (ISADMIN() || ISFOREIGN_ADMIN())) {
-           echo "<li id='quickvm_actions_menu' class='dropdown apt-left'>
-	            <a href='#'
-                        class='dropdown-toggle btn btn-quickvm-home navbar-btn'
-                        data-toggle='dropdown'>
-                    Admin <b class='caret'></b></a>
-                  <ul class='dropdown-menu'>\n";
-           echo "  <li><a href='dashboard.php'>DashBoard</a></li>";
-           echo "  <li><a href='cluster-status.php'>Cluster Status</a></li>";
-           $then = time() - (30 * 3600 * 24);
-           echo "  <li><a href='activity.php?min=$then'>
-                            History Data</a></li>
-	           <li><a href='sumstats.php?min=$then'>Summary Stats</a></li>
-	           <li><a href='ranking.php'>User/Proj Ranking</a></li>";
-           echo "<li><a href='myexperiments.php?extend=1'>
-                            Extension Requests</a></li>";
-           echo "<li><a href='myexperiments.php?all=1'>
-                            All Experiments</a></li>
-	             <li><a href='myprofiles.php?all=1'>
-                            All Profiles</a></li>
-	             <li><a href='list-datasets.php?all=1'>
-                            All Datasets</a></li>
-	             <li><a href='lists.php'>
-                            Users/Projects</a></li>";
-           
-           echo " </ul>
-                </li>\n";
-        }
-    }
-    echo "   </ul>
-          </div>
-         </div>\n";
+    SPITNAV($hiddenxs, $navbar_status, $navbar_right, $login_uid);
 
     # Put announcements, if any, right below the header.
-    if ($login_user && $login_user->IsActive() &&
+    if (!$cleanmode && $login_user && $login_user->IsActive() &&
         !($login_status & CHECKLOGIN_WEBONLY)) {
+        # Always create empty div for announcements, for ajax update.
+        echo "<div id='portal-announcement-div'>\n";
         $announcements = GET_ANNOUNCEMENTS($login_user);
         for ($i = 0; $i < count($announcements); $i++) {
-          $current = $announcements[$i];
-          echo "<div class='alert ".$current['style']." alert-dismissible'
-                     role='alert' style='margin-top: -10px; margin-left: 40px; margin-right: 40px;'>";
-          echo "  <button onclick='window.APT_OPTIONS.announceDismiss(" . $current['aid'] . ")' type='button' class='close' data-dismiss='alert' aria-label='Close'><span aria-hidden='true'>&times;</span></button>";
-          echo "  <span>" . $current["text"] . "</span>";
-          if ($current["url"]) {
-	    echo "  <a href='" . $current["url"] . "' class='btn btn-default' onclick='window.APT_OPTIONS.announceClick(" . $current["aid"] . ")' target='_blank'>" . $current["label"] . "</a>";
-          }
-          echo "  </div>";
+            echo $announcements[$i];
         }
+        echo "</div>";
     }
     if (NOLOGINS()) {
         $message = TBGetSiteVar("web/message");
     }
-    else {
-        #
-        # Put the special message, if any, right below the header. Note that
-        # the  negative margin is to put it flush below the navbar without
-        # having to permanently remove the bottom margin on the navbar
-        #
-        $message = TBGetSiteVar($PORTAL_MOTD_SITEVAR);
-    }
-    if ($message && $message != "") {
+    if ($message && $message != "" && !$cleanmode) {
         echo "<div class='alert alert-warning alert-dismissible'
                  role='alert' style='margin-top: -10px; padding: 5px;'>
                 <center>$message</center>
           </div>";
     }
 
-    if ($login_user) {
+    if ($login_user && !$cleanmode) {
         $pending = $login_user->PendingMembership();
 
         if (count($pending)) {
@@ -430,80 +335,267 @@ function SPITHEADER($thinheader = 0,
     $PAGEHEADER_FUNCTION($thinheader, $ignore1, $ignore2, $ignore3);
 }
 
-function GET_ANNOUNCEMENTS($user)
+function SPITNAV($hiddenxs, $navbar_status, $navbar_right, $login_uid)
+{
+    global $PORTAL_MANUAL, $APTLOGO, $login_status, $login_user, $TBMAINSITE;
+    global $THISHOMEBASE, $ISEMULAB, $ISPNET, $ISPOWDER;
+    $hiddenxs = "";
+echo "
+
+<div class='navbar portal-navbar' role='navigation'>
+   <div class='navbar-header'>
+      <button type='button' class='navbar-toggle collapsed' data-toggle='collapse' data-target='#main-navbar-collapse' aria-expanded='false'>
+        <span class='sr-only'>Toggle navigation</span>
+        <span class='icon-bar'></span>
+        <span class='icon-bar'></span>
+        <span class='icon-bar'></span>
+      </button>
+      <a class='navbar-brand' href='landing.php'><img src='images/$APTLOGO'/></a>";
+echo "
+    </div>
+
+<div class='collapse navbar-collapse navbar-inner' id='main-navbar-collapse'>";
+echo "  <ul class='nav navbar-nav navbar-left apt-left'>";
+    if (! $TBMAINSITE) {
+    #if (1) {
+      echo "<li class='local-name apt-left apt-nav-item'>" . $THISHOMEBASE . "</li>";
+    }
+
+   if ($login_user && !($login_status & CHECKLOGIN_WEBONLY)) {
+
+    if ($login_user->IsActive()) {
+      $then = time() - (90 * 3600 * 24);
+    
+echo "
+    <li id='quickvm_actions_menu' class='dropdown apt-left apt-nav-item $hiddenxs'> 
+      <a href='#'
+	 class='dropdown-toggle btn btn-quickvm-home navbar-btn'
+	 data-toggle='dropdown'>
+	Experiments <b class='caret'></b></a>
+      <ul class='dropdown-menu'>
+	<li><a href='instantiate.php'>Start Experiment</a></li>
+	<li><a href='manage_profile.php'>Create Experiment Profile</a></li>
+       <li><a href='reserve.php'>Reserve Nodes</a></li>
+       <li><a href='resinfo.php'>Cluster Status</a></li>
+        ";
+echo " <li class='divider'></li>
+        <li><a href='user-dashboard.php#experiments'>
+	    My Experiments</a></li>
+	<li><a href='user-dashboard.php#profiles'>
+            My Profiles</a></li>
+        <li><a href='list-reservations.php'>
+            My Reservations</a></li>
+        <li><a href='activity.php?user=$login_uid&min=$then'>
+                            My History</a></li>
+";
+      echo "
+    </ul>
+    </li>
+    <li id='quickvm_actions_menu' class='dropdown apt-left apt-nav-item $hiddenxs'> 
+      <a href='#'
+	 class='dropdown-toggle btn btn-quickvm-home navbar-btn'
+	 data-toggle='dropdown'>
+	Storage <b class='caret'></b></a>
+      <ul class='dropdown-menu'>
+	<li><a href='create-dataset.php'>Create Dataset</a></li>
+	<li><a href='user-dashboard.php#datasets'>
+	    My Datasets</a></li>
+	<li><a href='list-images.php'>My Disk Images</a></li>
+        <li><a href='images.php'>Other Disk Images</a></li>
+      </ul>
+    </li>
+    ";
+    }
+
+    if ($login_user->IsActive() && (ISADMIN() || ISFOREIGN_ADMIN())) {
+               echo "<li id='quickvm_actions_menu' class='dropdown apt-left apt-nav-item'>
+                  <a href='#'
+                        class='dropdown-toggle btn btn-quickvm-home navbar-btn'
+                        data-toggle='dropdown'>
+                    Admin <b class='caret'></b></a>
+                  <ul class='dropdown-menu'>\n";
+ 	       if (ISADMIN() && HaveNews()) {
+	           echo "  <li><a href='news.php'>News ";
+	           if (NewNews()) {
+	               echo "<span class='glyphicon glyphicon-asterisk ".
+		            "             text-success' ".
+		            "      style='margin-bottom: 4px;'></span> ";
+	           }
+	           echo "     </a></li>\n";
+	       }
+               echo "  <li><a href='dashboard.php'>DashBoard</a></li>";
+               echo "  <li><a href='cluster-status.php'>Cluster Status</a></li>";
+               $then = time() - (14 * 3600 * 24);
+               echo "  <li><a href='activity.php?min=$then'>
+                            History Data</a></li>
+		               <li><a href='sumstats.php?min=$then'>Summary Stats</a></li>
+		      <li><a href='ranking.php'>User/Proj Ranking</a></li>";
+		               echo "<li><a href='experiments.php#extending'>
+                            Extension Requests</a></li>";
+		               echo "<li><a href='experiments.php#all'>
+                            All Experiments</a></li>
+		                 <li><a href='myprofiles.php?all=1'>
+                            All Profiles</a></li>
+                                 <li><a href='list-reservations.php'>
+                            All Reservations</a></li>
+ 		                 <li><a href='list-datasets.php?all=1'>
+                            All Datasets</a></li>
+                                 <li><a href='images.php?all=1'>
+                            All Images</a></li>
+                                 <li><a href='instance-errors.php'>
+                            Experiment Errors</a></li>
+                                 <li><a href='lists.php'>
+                            Users/Projects</a></li>
+                                 <li><a href='approve-projects.php'>
+                            Approve new projects</a></li>
+                                 <li><a href='edit-news.php'>
+                            Add a news item</a></li>";
+                               echo " </ul>
+        </li>\n";
+    }
+   }
+   echo "</ul>";
+   echo "  <ul class='nav navbar-nav navbar-right apt-right'>
+    $navbar_status
+    $navbar_right
+    <li class='apt-left'>
+      <a class='btn btn-quickvm-home navbar-btn' href='$PORTAL_MANUAL' target='_blank'>Docs</a>
+    </li>
+";
+    if ($login_user && ! ($login_status & CHECKLOGIN_WEBONLY)) {
+echo "
+    <li id='quickvm_actions_menu' class='dropdown apt-left apt-nav-item'> 
+      <a href='#'
+	 class='dropdown-toggle btn btn-quickvm-home navbar-btn'
+	 data-toggle='dropdown'>
+	$login_uid <b class='caret'></b></a>
+      <ul class='dropdown-menu'>
+	<li><a href='myaccount.php'>Manage Account</a></li>
+	<li><a href='signup.php'>Start/Join Project</a></li>
+	<li><a href='changepswd.php'>Change Password</a></li>
+	";
+	if ($login_user->isActive()) {
+echo "
+        <li><a href='getcreds.php'>Download Credentials</a></li>
+	<li><a href='ssh-keys.php'>Manage SSH Keys</a></li>
+        <li class='divider'></li>
+	<li><a href='logout.php'>Logout</a></li>
+";
+	}
+    }
+
+echo "
+      </ul>
+    </li>
+  </ul>";
+  echo "</div></div>";
+
+}
+
+function GET_ANNOUNCEMENTS($user, $update = true)
 {
   global $PORTAL_GENESIS;
   $uid = $user->uid();
   $uid_idx = $user->uid_idx();
-  $dblink = DBConnect("tbdb");
+  $result = array();
+
   # Add an apt_announcement_info entry for any announcements which don't have one
   $query_result = DBQueryWarn('select a.idx from apt_announcements as a left join apt_announcement_info as i on a.idx=i.aid and ((a.uid_idx is NULL and i.uid_idx="'.$uid_idx.'") or (a.uid_idx is not NULL and a.uid_idx=i.uid_idx)) where a.portal="'.$PORTAL_GENESIS.'" and a.retired=0 and i.uid_idx is NULL and (a.uid_idx is NULL or a.uid_idx="'.$uid_idx.'")');
   while ($row = mysql_fetch_array($query_result, MYSQL_NUM)) {
       DBQueryWarn('insert into apt_announcement_info set aid="'.$row[0].'", uid_idx="'.$uid_idx.'",seen_count=0');
   }
 
-  $query_result = DBQueryWarn('select a.idx, a.text, a.link_label, a.link_url, i.seen_count, a.style '.
-                               'from apt_announcements as a '.
-			       'left join apt_announcement_info as i on a.idx=i.aid '.
-			       'where (a.uid_idx is NULL or a.uid_idx="'.$uid_idx.'") and '.
-			       'a.retired = 0 and a.portal="'.$PORTAL_GENESIS.'" and '. 
-			       'i.uid_idx="'.$uid_idx.'" and '.
-			       'i.dismissed = 0 and i.clicked = 0 and '.
-              		       '(a.max_seen = 0 or i.seen_count < a.max_seen)', $dblink);
-  $result = array();
-  while ($row = mysql_fetch_array($query_result, MYSQL_NUM)) {
-    $item = array('text' => $row[1],
-                  'style' => $row[5],
-                  'label' => $row[2],
-                  'aid' => $row[0],
-                  'url' => $row[3]);
-    if ($row[3]) {
-      $item['url'] = preg_replace('/\{uid_idx\}/', $uid_idx, $item['url']);
-      $item['url'] = preg_replace('/\{uid\}/', $uid, $item['url']);
-    }
-    array_push($result, $item);
-    DBQueryWarn('update apt_announcement_info set seen_count='.($row[4]+1).' where aid="'.$row[0].'" and uid_idx="'.$uid_idx.'"');
+  $query_result =
+      DBQueryWarn('select a.idx, a.text, a.link_label, a.link_url, '.
+                 '    i.seen_count, a.style, a.priority '.
+                  'from apt_announcements as a '.
+                  'left join apt_announcement_info as i on a.idx=i.aid '.
+                  'where (a.uid_idx is NULL or a.uid_idx="'.$uid_idx.'") and '.
+                  '      a.retired = 0 and a.portal="'.$PORTAL_GENESIS.'" and '.
+                  '      i.uid_idx="'.$uid_idx.'" and '.
+                  '      i.dismissed = 0 and i.clicked = 0 and '.
+                  '      (a.max_seen = 0 or i.seen_count < a.max_seen) and '.
+                  '      (a.display_start is null or now() > a.display_start) and '.
+                  '      (a.display_end is null or now() < a.display_end) '.
+                  'order by a.priority asc');
+
+  while ($row = mysql_fetch_array($query_result)) {
+      $text   = $row["text"];
+      $style  = $row["style"];
+      $label  = $row["link_label"];
+      $url    = $row["link_url"];
+      $aid    = $row["idx"];
+      $count  = $row["seen_count"];
+
+      if ($update) {
+          $count = $count + 1;
+          DBQueryWarn("update apt_announcement_info set ".
+                      "  seen_count='$count' ".
+                      "where aid='$aid' and uid_idx='$uid_idx'");
+      }
+      $html =
+          "<div class='alert $style alert-dismissible' ".
+          "     role='alert' style='margin-top: -10px; margin-bottom: 12px; ".
+          "     margin-left: 40px; margin-right: 40px; ".
+          "     padding-top: 10px; padding-bottom: 10px;'>\n";
+      $html .=
+          "  <button onclick='window.APT_OPTIONS.announceDismiss($aid)' " .
+          "     type='button' class='close' ".
+          "     data-dismiss='alert' aria-label='Close'>".
+          "    <span aria-hidden='true'>&times;</span></button>".
+          "      <span>$text</span>";
+
+      if ($url) {
+          $url = preg_replace('/\{uid_idx\}/', $uid_idx, $url);
+          $url = preg_replace('/\{uid\}/', $uid, $url);
+
+          $html .=
+              "  <a href='$url' class='btn btn-xs btn-default' target='_blank' ".
+              "    onclick='window.APT_OPTIONS.announceClick($aid)'>$label</a>";
+      }
+      $html .= "\n</div>\n";
+      $result[] = $html;
   }
   return $result;
 }
 
 $PAGEFOOTER_FUNCTION = function($ignored = NULL) {
-    global $PORTAL_HELPFORUM, $PORTAL_NSFNUMBER, $embedded;
+    global $PORTAL_HELPFORUM, $PORTAL_NSFNUMBER, $embedded, $PORTAL_TEMPLATES;
 
     echo "</div>
       </div>\n";
-    if ($embedded) {
-	return;
+    if (!$embedded) {
+        if ($PORTAL_NSFNUMBER) {
+            SpitNSFModal();
+        }
+        echo "
+          <!--- Footer -->
+          <div>
+           <div id='footer'>
+            <div class='pull-left'>
+              <a href='http://www.emulab.net' target='_blank'>
+                 Powered by
+                 <img src='images/emulab-whiteout.png' id='elabpower'></a>
+            </div>
+            <span>Question or comment? Join the
+               <a href='https://groups.google.com/forum/#!forum/${PORTAL_HELPFORUM}'
+                  target='_blank'>Help Forum</a></span>
+               <div class='pull-right'>\n";
+        if ($PORTAL_NSFNUMBER) {
+            echo " <a data-toggle='modal' style='margin-right: 10px;'
+                   href='#nsf_supported_modal'
+	           data-target='#nsf_supported_modal'>Supported by NSF</a>\n";
+        }
+        echo "&copy; 2017
+              <a href='http://www.utah.edu' target='_blank'>
+                 The University of Utah</a>
+            </div>
+           </div>
+          </div>
+          <!-- Placed at the end of the document so the pages load faster -->\n";
     }
-    if ($PORTAL_NSFNUMBER) {
-        SpitNSFModal();
-    }
-    echo "
-      <!--- Footer -->
-      <div>
-       <div id='footer'>
-        <div class='pull-left'>
-          <a href='http://www.emulab.net' target='_blank'>
-             Powered by
-             <img src='images/emulab-whiteout.png' id='elabpower'></a>
-        </div>
-	<span>Question or comment? Join the
-           <a href='https://groups.google.com/forum/#!forum/${PORTAL_HELPFORUM}'
-              target='_blank'>Help Forum</a></span>
-           <div class='pull-right'>\n";
-    if ($PORTAL_NSFNUMBER) {
-        echo " <a data-toggle='modal' style='margin-right: 10px;'
-              href='#nsf_supported_modal'
-	      data-target='#nsf_supported_modal'>Supported by NSF</a>\n";
-    }
-    echo "&copy; 2015
-          <a href='http://www.utah.edu' target='_blank'>
-             The University of Utah</a>
-        </div>
-       </div>
-      </div>
-      <!-- Placed at the end of the document so the pages load faster -->
-     </body></html>\n";
+    EchoTemplateList($PORTAL_TEMPLATES);
+    echo "</body></html>\n";
 };
 
 function SPITFOOTER($ignored = null)
@@ -537,21 +629,6 @@ function SPITAJAX_ERROR($code, $msg)
 	'value' => $msg
 	);
     echo json_encode($results);
-}
-
-function SPITREQUIRE($main, $extras = "")
-{
-    global $spatrequired;
-    
-    echo $extras;
-    echo "<script src='js/lib/bootstrap.js'></script>\n";
-    echo "<script src='js/lib/require.js' data-main='js/$main'></script>\n";
-    $spatrequired = 1;
-}
-
-function SPITNULLREQUIRE()
-{
-    SPITREQUIRE("main");
 }
 
 #
@@ -607,7 +684,7 @@ function SpitVerifyModal($id, $label)
 function SpitLoginModal($id)
 {
     global $PORTAL_PASSWORD_HELP;
-    global $APTTITLE, $ISCLOUD, $ISPNET;
+    global $APTTITLE, $ISCLOUD, $ISPNET, $ISPOWDER;
     $referrer = CleanString($_SERVER['REQUEST_URI']);
 ?>
     <!-- This is the login modal -->
@@ -748,6 +825,15 @@ function SpitNSFModal()
          </div>\n";
 }
 
+function SpitPageReplace($newpage, $when = 0) {
+    $when = $when * 1000;
+    
+    echo "<script type='text/javascript' language='javascript'>\n";
+    echo "setTimeout(function f() { ";
+    echo "   window.location.replace('$newpage'); }, $when)\n";
+    echo "</script>\n";
+}
+
 #
 # Generate an authentication object to pass to the browser that
 # is passed to the web server on boss. This is used to grant
@@ -859,6 +945,25 @@ function CheckLoginOrRedirect($modifier = 0)
     }
     CheckLoginConditions($check_status & ~($modifier|CHECKLOGIN_NONLOCAL));
     return $this_user;
+}
+
+#
+# See if there is recent news and news of any kind.
+#
+function HaveNews()
+{
+    $query_result = DBQueryFatal("select idx from apt_news limit 1");
+    return mysql_num_rows($query_result);
+}
+function NewNews()
+{
+    # Within the last week.
+    $query_result = 
+	DBQueryFatal("select idx from apt_news ".
+                     "where (UNIX_TIMESTAMP(now()) - ".
+                     "       UNIX_TIMESTAMP(created)) < (24 * 3600 * 7) ".
+                     "limit 1");
+    return mysql_num_rows($query_result);
 }
 
 ?>

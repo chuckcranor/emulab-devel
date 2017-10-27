@@ -53,12 +53,19 @@ my $TBLOG = "@TBLOGFACIL@";
 my $LOGFILE = "$TB/log/stated.log";
 my $MAILFILE = "$TB/log/stated-mail.log";
 
+#
+# XXX if bootinfo is not sending the BOOTING event, then dhcpd is sending them
+# and we have to watch out for spurrious BOOTING events caused by a node
+# making runtime dhcp calls (e.g., it is running dhclient).
+#
+my $BIEVENTS = @BOOTINFO_EVENTS@;
+
 $| = 1;
 
 use event;
 use libdb;
 use Node;
-use OSinfo;
+use OSImage;
 use libtestbed;
 use TimeoutQueue;
 use Getopt::Std;
@@ -703,6 +710,17 @@ sub stateTransition($$) {
 	       "to $newstate\n");
 	
 	#
+	# XXX hack ignore spurious BOOTING transitions caused by dhcp
+	#
+	if (!$BIEVENTS &&
+	    $mode eq TBDB_NODEOPMODE_NORMALv2 &&
+	    $oldstate eq TBDB_NODESTATE_ISUP &&
+	    $newstate eq TBDB_NODESTATE_BOOTING) {
+	    notify("$node: Ignored spurious BOOTING transition\n");
+	    return;
+	}
+
+	#
 	# Machines in the secure boot path are not allowed to jump
 	# willy-nilly into unknown states.
 	#
@@ -1017,9 +1035,9 @@ sub stateTransition($$) {
             };
 	    /^RELOADOLDMFS$/ && do {
 		my $frisbee_osid = TBNodeDiskloadOSID($node);
-		my $osinfo = OSinfo->Lookup($frisbee_osid);
-		my $frisbee_name = (defined($osinfo) ?
-				    $osinfo->osame() : $frisbee_osid);
+		my $osimage = OSImage->Lookup($frisbee_osid);
+		my $frisbee_name = (defined($osimage) ?
+				    $osimage->osname() : $frisbee_osid);
 		my $msg = 
 		    ("Attempted to load multiple images on $node using an old Frisbee MFS.\n".
 		     "To make this work please update the $frisbee_name MFS image.\n");
@@ -1270,12 +1288,36 @@ sub handleCtrlEvent($$) {
 			       "Giving up until it boots sucessfully.\n");
 			$nodes{$node}{noretry} = 1;
 		    } else {
+			#
 			# XXX Temporary!  For now notify instead of
 			# really rebooting, until the timeout/retry
 			# stuff is gone from os_setup and os_load
-			notify("Node $node has timed out in state ".
-			       "$mode/$state - REBOOT requested\n");
-			#handleCommand($node,$TBREBOOT,$timedout,1);
+			#
+			# XXX "temporary" is going on 13 years now and the
+			# lack of reboot does cause us grief. In particular,
+			# the case of NORMALv2/BOOTING, we can wind up here
+			# if a PXEWAKEUP at swap in is unsuccessful. We have
+			# seen this when IPMI SOL issues have caused the
+			# console and OS to hang up in the post-wakeup boot
+			# process or if the PXEWAKEUP is lost. Since there is
+			# only the overarching swapin timeout at this point,
+			# and that is typically quite large, we'll risk a
+			# bad timeout interaction.
+			#
+			# XXX recent changes have allowed us to better
+			# differentiate PXEBOOTING (PXE ROM making a DHCP
+			# request) from BOOTING (OS making a DHCP request)
+			# so we can detect nodes stuck booting the OS.
+			# We include those here in the "really reboot"
+			# catagory.
+			#
+			if ("$mode/$state" eq "NORMALv2/BOOTING" ||
+			    $state eq "PXEBOOTING") {
+			    handleCommand($node,$TBREBOOT,$timedout,1);
+			} else {
+			    notify("Node $node has timed out in state ".
+				   "$mode/$state - REBOOT requested\n");
+			}
 		    }
 		    last; };
 		/^$TBTIMEOUTNOTIFY/ && do {

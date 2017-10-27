@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2016 University of Utah and the Flux Group.
+# Copyright (c) 2000-2017 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -77,6 +77,7 @@ define("TBDB_USERSTATUS_UNVERIFIED",	"unverified");
 define("TBDB_USERSTATUS_FROZEN",	"frozen");
 define("TBDB_USERSTATUS_ARCHIVED",	"archived");
 define("TBDB_USERSTATUS_NONLOCAL",	"nonlocal");
+define("TBDB_USERSTATUS_INACTIVE",	"inactive");
 
 #
 # Type of new account.
@@ -106,6 +107,18 @@ define("TBDB_TRUSTSTRING_USER",		"user");
 define("TBDB_TRUSTSTRING_LOCALROOT",	"local_root");
 define("TBDB_TRUSTSTRING_GROUPROOT",	"group_root");
 define("TBDB_TRUSTSTRING_PROJROOT",	"project_root");
+
+#
+# Map to new names in the UI, the old ones are nonsensical.
+#
+$newTrustMap = array("none"         => "none",
+                     "user"         => "user",
+                     "local_root"   => "root",
+                     "group_root"   => "manager",
+                     "project_root" => "leader",
+                     "root"         => "local_root",
+                     "manager"      => "group_root",
+                     "leader"       => "project_root");
 
 #
 # These are the permission types. Different operations for the varying
@@ -454,6 +467,67 @@ function TBFreePCs($target = null)
 }
 
 #
+# Number of PCs. 
+#
+function TBTotalPCs()
+{
+    $total      = 0;
+    
+    $query_result =
+	DBQueryFatal("select a.type,count(a.node_id) from nodes as a ".
+		     "left join node_types as nt on a.type=nt.type ".
+                     "left join node_type_attributes as attr on ".
+                     "     attr.type=a.type and ".
+                     "     attr.attrkey='noshowfreenodes' ".
+		     "where a.role='testnode' and ".
+                     "      attr.attrvalue is null and ".
+		     "      nt.class = 'pc' ".
+		     "group by a.type");
+    
+    if (mysql_num_rows($query_result) == 0) {
+	return 0;
+    }
+    while ($row = mysql_fetch_row($query_result)) {
+        $type  = $row[0];
+        $count = $row[1];
+        $total += $count;
+    }
+    return $total;
+}
+
+#
+# Number of total/free shared VMs. 
+#
+function TBVMCounts(&$total, &$free)
+{
+    $query_result =
+	DBQueryFatal("select n.node_id,aux.count,r.erole from nodes as n ".
+                     "left join reserved as r on r.node_id=n.node_id ".
+		     "left join node_auxtypes as aux on ".
+                     "     aux.node_id=n.node_id and aux.type='pcvm' ".
+                     "where r.erole='sharedhost'");
+
+    if (mysql_num_rows($query_result) == 0) {
+        $total = 0;
+        $free  = 0;
+    }
+    while ($row = mysql_fetch_row($query_result)) {
+        $node_id = $row[0];
+        $count  = $row[1];
+        if (isset($count)) {
+            $total += $count;
+            $used_result =
+                DBQueryFatal("select count(node_id) from nodes ".
+                             "where phys_nodeid='$node_id'");
+            $urow = mysql_fetch_row($used_result);
+            $ucount = $urow[0];
+            $free += $count - $ucount;
+        }
+    }
+    return;
+}
+
+#
 # Number of logged in users
 #
 function TBLoggedIn()
@@ -790,6 +864,59 @@ class Logfile
     function isopen()        { return $this->field("isopen"); }
     function uid_idx()       { return $this->field("uid_idx"); }
     function gid_idx()       { return $this->field("gid_idx"); }
+}
+
+function FeatureEnabled($feature, $user, $group, $experiment = null)
+{
+    #
+    # See if feature is globally disabled or enabled.
+    #
+    $query_result =
+        DBQueryFatal("select * from emulab_features where feature='$feature'");
+
+    if (!mysql_num_rows($query_result)) {
+        return 0;
+    }
+    $frow = mysql_fetch_array($query_result);
+    if ($frow["disabled"]) {
+        return 0;
+    }
+    if ($frow["enabled"]) {
+        return 1;
+    }
+    $enabled = 0;
+
+    if ($user) {
+        $uid_idx = $user->idx();
+	
+	$query_result =
+	    DBQueryFatal("select * from user_features ".
+                         "where feature='$feature' and uid_idx='$uid_idx'");
+
+	$enabled += mysql_num_rows($query_result);
+    }
+    if ($group) {
+	$pid_idx = $group->pid_idx();
+	$gid_idx = $group->gid_idx();
+	
+	$query_result =
+	    DBQueryFatal("select * from group_features ".
+                         "where feature='$feature' and ".
+                         "      pid_idx='$pid_idx' and gid_idx='$gid_idx'");
+        
+	$enabled += mysql_num_rows($query_result);
+    }
+    if ($experiment) {
+	$exptidx = $experiment->idx();
+	
+	$query_result =
+	    DBQueryWarn("select * from experiment_features ".
+			"where feature='$feature' and ".
+			"      exptidx='$exptidx'");
+
+	$enabled += mysql_num_rows($query_result);
+    }
+    return $enabled;
 }
 
 #

@@ -222,9 +222,9 @@ main(int argc, char **argv)
 	return 0;
 }
 
+#if 0
 static char	notify_debug_string[2*BUFSIZ];
 
-#if 0
 static int
 pubsub_notify_traverse_debug(void *arg, char *name,
 			     pubsub_type_t type, pubsub_value_t value,

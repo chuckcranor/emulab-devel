@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2005-2016 University of Utah and the Flux Group.
+# Copyright (c) 2005-2017 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -945,7 +945,8 @@ sub SendJoinEmail($$)
 	"ZIP/Postal Code: $usr_zip\n".
 	"Country:         $usr_country\n";
 
-    if ($project->isAPT() || $project->isCloud() || $project->isPNet()) {
+    if ($project->isAPT() || $project->isCloud() ||
+	$project->isPNet() || $project->isPowder()) {
 	my $url = $project->wwwBase() . "/approveuser.php?uid=$uid&pid=$pid";
 	    
 	$message .=
@@ -1009,7 +1010,8 @@ sub SendApprovalEmail($$$)
 	"as a member of ";
     my $subject = "Membership Approved in '$pid/$gid'";
 
-    if ($project->isAPT() || $project->isCloud() || $project->isPNet()) {
+    if ($project->isAPT() || $project->isCloud() ||
+	$project->isPNet() || $project->isPowder()) {
 	my $helpurl  = $project->Brand()->UsersGroupURL();
 	
 	$message .= "project $pid.\n\n";
@@ -1168,8 +1170,7 @@ sub LeaderMailList($)
 		     "left join group_membership as gm on ".
 		     "     gm.uid_idx=u.uid_idx ".
 		     "where gid_idx='$gid_idx' and ".
-		     "      (trust='$projroot' or trust='$grouproot') ".
-		     "order by trust DESC, usr_name");
+		     "      (trust='$projroot' or trust='$grouproot')");
 
     while (my ($name,$uid,$email) = $query_result->fetchrow_array()) {
 	$mailstr .= ", "

@@ -51,11 +51,6 @@ NOSHAREDFS=0
 NFSRACY=0
 
 #
-# IQN prefix for iSCSI blockstores
-#
-BS_IQN_PREFIX=iqn.2000-10.net.emulab
-
-#
 # Define a port range for frisbee use. You may want to do this if you
 # have a firewall between boss and the nodes to limit the size of the
 # "hole" required.
@@ -187,13 +182,20 @@ BROWSER_CONSOLE_ENABLE=1
 IMAGEPROVENANCE=1
 IMAGEDELTAS=1
 
+# Image directories
+IMAGEDIRECTORIES=1
+
 # Per-user/project ZFS.
 WITHZFS=1
 ZFS_ROOT=z
+ZFS_NOEXPORT=1
 ZFS_QUOTA_USER="1G"
 ZFS_QUOTA_PROJECT="100G"
 ZFS_QUOTA_GROUP="5G"
-ZFS_NOEXPORT=1
+# Allow room for backup snapshots
+ZFS_QUOTA_USER_X="2.0"
+ZFS_QUOTA_PROJECT_X="2.0"
+ZFS_QUOTA_GROUP_X="2.0"
 
 # XXX autofs still has some problems, stick with AMD for now
 # WITHZFS only: use AMD instead of autofs for /proj, /users mounts on boss
@@ -206,5 +208,12 @@ INCREMENTAL_MOUNTD=1
 # Blockstores
 BS_IQN_PREFIX=iqn.2000-10.net.emulab
 
+## Use boss as IGMP querier on the mothership
+## XXX this does not seem to be helping
+#NEEDMCQUERIER=1
+
 # Programmable RF attenuator (for PhantomNet).
 ATTENUATOR=patten1
+
+# Do not send events from bootinfo, we do it from dhcpd instead.
+BOOTINFO_EVENTS=0

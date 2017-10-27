@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2007-2016 University of Utah and the Flux Group.
+# Copyright (c) 2007-2017 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -37,31 +37,108 @@ use vars qw(@ISA @EXPORT $AUTOLOAD);
 use EmulabConstants;
 use emdb;
 use libtestbed;
+use GeniHRN;
 use GeniCertificate;
 use GeniCredential;
+use GeniAuthority;
+use GeniResponse;
 
 # Configure variables
 my $TB		  = "@prefix@";
 my $MAINSITE      = @TBMAINSITE@;
 my $TBOPS         = "@TBOPSEMAIL@";
+my $OURDOMAIN     = "@OURDOMAIN@";
+my $PGENIDOMAIN   = "@PROTOGENI_DOMAIN@";
 my $SACERT	  = "$TB/etc/genisa.pem";
 my $EMCERT	  = "$TB/etc/emulab.pem";
 my $EMKEY	  = "$TB/etc/emulab.key";
 
-# Cache credentials so we do not keep regenerating down inside the
-# libraries that make the XMLRPC calls.
-my %credcache = ();
+# Caches so we do not keep regenerating down inside the libraries that
+# make the XMLRPC calls.
+my %credcache  = ();
+my %certcache  = ();
+my %speakcache = ();
 
 # Use real abac credentials (which means we can do speaks-for at ALS2).
 my $USEABACCREDS  = 0;
+
+# Debugging;
+my $usemydevtree  = 0;
+
+#
+# Check credential/certificate status early, looking for expired certs.
+#
+sub VerifyCredentials($$)
+{
+    my ($geniuser, $perrmsg) = @_;
+    my $urn = $geniuser->urn();
+    my $code = -1;
+    my $errmsg;
+    
+    #
+    # If a local user account, but a nonlocal id, then we should
+    # have a speaksfor credential stored, as well as a certificate
+    # for the user.
+    #
+    if ($geniuser->IsLocal() && $geniuser->emulab_user()->IsNonLocal()) {
+	#
+	# If we already have these cached, they are okay.
+	#
+	return 0
+	    if (exists($speakcache{$urn}));
+	    
+	my ($speaksfor_string, $certificate_string) =
+	    $geniuser->emulab_user()->GetStoredCredential();
+	
+	if (! (defined($speaksfor_string) &&
+	       defined($certificate_string))) {
+	    $errmsg = "No stored speaksfor/certificate";
+	    goto bad;
+	}
+	my $speaksfor = GeniCredential->CreateFromSigned($speaksfor_string, 1);
+	if (!defined($speaksfor)) {
+	    $errmsg = "Could not create speaksfor credential from string";
+	    goto bad;
+	}
+	my $certificate = GeniCertificate->LoadFromString($certificate_string);
+	if (!defined($certificate)) {
+	    $errmsg = "Could not load certificate from string";
+	    goto bad;
+	}
+	if ($certificate->IsExpired()) {
+	    $errmsg = "User certificate has expired";
+	    $code   = 1;
+	    goto bad;
+	}
+	if ($speaksfor->IsExpired()) {
+	    $errmsg = "User speaksfor credential has expired";
+	    $code   = 1;
+	    goto bad;
+	}
+	$speakcache{$urn} = $speaksfor;
+	$certcache{$urn}  = $certificate;
+    }
+    else {
+	# No need to cache this, GeniUser already does.
+	if ($geniuser->GetCertificate()->IsExpired()) {
+	    $errmsg = "User certificate has expired";
+	    $code   = 1;
+	    goto bad;
+	}
+    }
+    return 0;
+  bad:
+    $$perrmsg = $errmsg;
+    return $code;
+}
 
 #
 # Generate the credentials we need. 
 #
 sub GenCredentials($$;$$)
 {
-    my ($target, $geniuser, $privs, $allowexpiredspeaksfor) = @_;
-    my ($speaksfor, $credential, $oldexpires);
+    my ($target, $geniuser, $privs, $allowexpired) = @_;
+    my ($speaksfor, $credential, $certificate, $oldexpires);
     # If the caller does not want a speaksfor, do not generate.
     my $wantspeaksfor = wantarray;
 
@@ -87,11 +164,17 @@ sub GenCredentials($$;$$)
 	    if (exists($credcache{$cachetag}));
     }
     #
-    # Check cache.
+    # Check caches. We save a lot of time by not regenerating all this
+    # stuff every time in a long running poll!
     #
     if (exists($credcache{$cachetag})) {
-	($credential,$speaksfor) = @{ $credcache{$cachetag} };
-	goto cached;
+	$credential = $credcache{$cachetag};
+    }
+    if (exists($speakcache{$geniuser->urn()})) {
+	$speaksfor = $speakcache{$geniuser->urn()};
+    }
+    if (exists($certcache{$geniuser->urn()})) {
+	$certificate = $certcache{$geniuser->urn()};
     }
 
     #
@@ -100,31 +183,49 @@ sub GenCredentials($$;$$)
     # for the user.
     #
     if ($geniuser->IsLocal() && $geniuser->emulab_user()->IsNonLocal()) {
-	my ($speaksfor_string, $certificate_string) =
-	    $geniuser->emulab_user()->GetStoredCredential();
-	if (! (defined($speaksfor_string) &&
-	       defined($certificate_string))) {
-	    print STDERR "No stored speaksfor/certificate for $geniuser\n";
-	    goto bad;
-	}
-	if ($wantspeaksfor) {
+	if (! (defined($certificate) && defined($speaksfor))) {
+	    my ($speaksfor_string, $certificate_string) =
+		$geniuser->emulab_user()->GetStoredCredential();
+	    if (! (defined($speaksfor_string) &&
+		   defined($certificate_string))) {
+		print STDERR "No stored speaksfor/certificate for $geniuser\n";
+		goto bad;
+	    }
 	    $speaksfor = GeniCredential->CreateFromSigned($speaksfor_string, 1);
 	    if (!defined($speaksfor)) {
 		print STDERR "Could not create speaksfor credential\n";
 		goto bad;
 	    }
+	    $certificate = GeniCertificate->LoadFromString($certificate_string);
+	    if (!defined($certificate)) {
+		print STDERR "Could not load certificate from string\n";
+		goto bad;
+	    }
+	    $speakcache{$geniuser->urn()} = $speaksfor;
+	    $certcache{$geniuser->urn()}  = $certificate;
 	}
 	#
-	# Ick, if the speaks for credential has expired, we cannot
-	# operate as the user. We have no choice but to throw away
-	# these credentials and generate a new one issued to the local
-	# SA instead of the user and not bother with a speaksfor.
+	# We need to generate an SA credential if either the speaksfor or
+	# the user certificate is expired, and the caller is allowing the
+	# use of an SA credential instead (as for terminate, etc). 
 	#
-	if ($speaksfor->IsExpired()) {
+	my $gensacert = 0;
+
+	if ($certificate->IsExpired()) {
+	    print STDERR "certificate for $geniuser has expired\n";
+	    goto bad
+		if (!$allowexpired);
+	    
+	    $gensacert = 1;
+	}
+	if ($wantspeaksfor && $speaksfor->IsExpired()) {
 	    print STDERR "speaksfor credential for $geniuser has expired\n";
 	    goto bad
-		if (!$allowexpiredspeaksfor);
+		if (!$allowexpired);
 
+	    $gensacert = 1;
+	}
+	if ($gensacert) {
 	    # Be careful not to return this.
 	    $speaksfor = undef;
 	    
@@ -134,15 +235,12 @@ sub GenCredentials($$;$$)
 		print STDERR "-> Could not generate SA credential!\n";
 		goto bad;
 	    }
+	    # Would it make sense to put this in the cache?
 	    goto cached;
 	}
-	my $certificate =
-	    GeniCertificate->LoadFromString($certificate_string);
-	if (!defined($certificate)) {
-	    print STDERR "Could not load certificate from string\n";
-	    goto bad;
+	else {
+	    $credential = GeniCredential->Create($target, $certificate);
 	}
-	$credential = GeniCredential->Create($target, $certificate);
     }
     else {
 	if ($wantspeaksfor) {
@@ -178,6 +276,7 @@ sub GenCredentials($$;$$)
 		    goto bad;
 		}
 	    }
+	    $speakcache{$geniuser->urn()} = $speaksfor;
 	}
 	$credential = GeniCredential->Create($target, $geniuser);
     }
@@ -197,9 +296,7 @@ sub GenCredentials($$;$$)
 	print STDERR "Could not sign $target credential\n";
 	goto bad;
     }
-    if ($wantspeaksfor) {
-	$credcache{$cachetag} = [$credential, $speaksfor];
-    }
+    $credcache{$cachetag} = $credential;
   cached:
     $target->SetExpiration($oldexpires)
 	if (defined($oldexpires));
@@ -347,6 +444,104 @@ sub GenABACCredential($$)
     $cred->SetTargetCert($geniuser->GetCertificate());
     $cred->SetOwnerCert($speaker->GetCertificate());
     return $cred;
+}
+
+#
+# Generate a project credential for a user. 
+#
+sub GenProjectCredential($$)
+{
+    my ($project, $geniuser) = @_;
+    my $pid    = $project->pid();
+    my $urn    = $project->urn();
+    my $error;
+
+    my $certificate =
+	GeniCertificate->Create({'urn'  => $urn,
+				 'hrn'  => "${PGENIDOMAIN}.project.${pid}",
+				 'email'=> $TBOPS,
+				 "nostore" => 1,
+				}, \$error);
+    if (!defined($certificate)) {
+	print STDERR "Could not create new certificate for $urn\n";
+	return undef;
+    }
+    my ($credential, $speaksfor) = GenCredentials($certificate, $geniuser);
+    return undef
+	if (!defined($credential));
+
+    return ($credential, $speaksfor);
+}
+
+#
+# Generate a user (self) credential for a user.
+#
+sub GenUserCredential($)
+{
+    my ($geniuser) = @_;
+
+    my ($credential, $speaksfor) = GenCredentials($geniuser, $geniuser);
+    return undef
+	if (!defined($credential));
+
+    return ($credential, $speaksfor);
+}
+
+#
+# Create a user at a cluster via the Cluster RPC Server. The point
+# of this is so that the admin user we are operating as exists at
+# the cluster when we make the admin level call via using the root
+# certificate. Not the best approach, but best I could think of.
+#
+sub CreatePortalUser($$)
+{
+    my ($authority, $geniuser) =  @_;
+    my $context = APT_Geni::GeniContext();
+
+    my ($credential,$speaksfor) =
+	APT_Geni::GenUserCredential($geniuser);
+    return -1
+	if (!defined($credential));
+
+    my $credentials = [$credential->asString()];
+    if (defined($speaksfor)) {
+	$credentials = [@$credentials, $speaksfor->asString()];
+    }
+    my $args = {"credentials" => $credentials};
+    my $response = PortalRPC($authority, $context, "CreateUser", $args);
+    return $response->code();
+}
+
+#
+# RPC to the Cluster RPC server.
+#
+sub PortalRPC($$$@)
+{
+    my ($authority, $context, $method, @args) = @_;
+    my $cmurl = $authority->url();
+    $cmurl =~ s/\/cm$/\/cluster/;
+    if ($usemydevtree) {
+	$cmurl =~ s/protogeni/protogeni\/stoller/;
+    }
+
+    #
+    # We use the root context to talk to the Cluster RPC server
+    #
+    if (!defined($context)) {
+	$context = RootContext();
+	if (!defined($context)) {
+	    return GeniResponse->Create(GENIRESPONSE_RPCERROR(), undef,
+					"Could not get root context for RPC");
+	}
+    }
+    my $response = Genixmlrpc::CallMethod($cmurl, $context, $method, @args);
+    if ($response->code() != GENIRESPONSE_SUCCESS()) {
+	if (!defined($response->output())) {
+	    $response->output("Operation failed, returned " .
+			      $response->code());
+	}
+    }
+    return $response;
 }
 
 # _Always_ make sure that this 1 is at the end of the file...

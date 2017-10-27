@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2016 University of Utah and the Flux Group.
+# Copyright (c) 2000-2017 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -70,10 +70,17 @@ $extensions = ExtensionInfo::LookupForInstance($instance);
 $days = "null";
 
 if ($instance->extension_requested()) {
-    $extension = $extensions[0];
-    if ($extension->action() == "request" &&
-        $extension->granted() < $extension->wanted()) {
-        $days = $extension->wanted() - $extension->granted();
+    #
+    # Find the last extension request, we might have sent an info
+    # request out.
+    #
+    foreach ($extensions as $extension) {
+        if ($extension->action() == "request") {
+            if ($extension->granted() < $extension->wanted()) {
+                $days = $extension->wanted() - $extension->granted();
+            }
+            break;
+        }
     }
 }
 $pid = $instance->pid();
@@ -105,7 +112,12 @@ echo "<link rel='stylesheet'
 # Place to hang the toplevel template.
 echo "<div id='main-body'></div>\n";
 
-SPITREQUIRE("adminextend",
+REQUIRE_UNDERSCORE();
+REQUIRE_SUP();
+REQUIRE_MOMENT();
+REQUIRE_IDLEGRAPHS();
+
+SPITREQUIRE("js/adminextend.js",
             "<script src='js/lib/d3.v3.js'></script>".
             "<script src='js/lib/nv.d3.js'></script>".
             "<script src='js/lib/jquery.tablesorter.min.js'></script>".
@@ -121,12 +133,16 @@ if ($instance->extension_reason() && $instance->extension_reason() != "") {
 
 if (count($extensions)) {
     $foo = array();
+    reset($extensions);
     foreach ($extensions as $extension) {
         $foo[$extension->idx()] = $extension->info;
     }
     echo "<script type='text/plain' id='extensions-json'>\n";
-    echo json_encode($foo, JSON_HEX_APOS|JSON_HEX_QUOT|JSON_HEX_TAG|JSON_HEX_TAG);
+    echo json_encode($foo,
+                     JSON_HEX_APOS|JSON_HEX_QUOT|JSON_HEX_TAG|JSON_HEX_AMP);
     echo "</script>\n";
 }
+
+AddTemplateList(array("adminextend", "oops-modal", "waitwait-modal", "admin-history", "admin-firstrow", "admin-secondrow", "admin-utilization", "admin-summary"));
 SPITFOOTER();
 ?>

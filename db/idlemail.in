@@ -1,7 +1,7 @@
 #!/usr/bin/perl -w
 
 #
-# Copyright (c) 2000-2013 University of Utah and the Flux Group.
+# Copyright (c) 2000-2017 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -43,6 +43,7 @@ use libdb;
 use libtestbed;
 use Experiment;
 use EmulabFeatures;
+use EmulabConstants;
 use English;
 use Getopt::Std;
 use Sys::Syslog;
@@ -259,7 +260,7 @@ EOT
 	}
 	if (!$found) {
 	    Debug("Not idle: $pid/$eid\n");
-	    DBQueryFatal("update experiments set swap_requests='' ".
+	    DBQueryFatal("update experiments set swap_requests='0' ".
 			 "where pid='$pid' and eid='$eid'")
 		if (! $i);
 	} else {
@@ -513,6 +514,12 @@ sub SendMessage {
 	if (EmulabFeatures->FeatureEnabled("ExternalNodeManagement",
 					   undef, undef, $experiment)) {
 	    Notify("NOT sending idle notification to externally managed ".
+		   "experiment $pid/$eid.\n");
+	    return;
+	}
+	# Do not bother with emulab-ops ...
+	if ($pid eq TBOPSPID()) {
+	    Notify("NOT sending idle notification to system ".
 		   "experiment $pid/$eid.\n");
 	    return;
 	}

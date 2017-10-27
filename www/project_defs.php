@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2006-2016 University of Utah and the Flux Group.
+# Copyright (c) 2006-2017 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -170,7 +170,9 @@ class Project
     function isCloud()	     { return ($this->portal() &&
                                        $this->portal() == "cloudlab" ? 1 : 0); }
     function isPNet()	     { return ($this->portal() &&
-                                       $this->portal() == "phantomnet" ? 1 : 0);}
+                                       $this->portal() == "phantomnet" ? 1 :0);}
+    function isPowder()	     { return ($this->portal() &&
+                                       $this->portal() == "powder" ? 1 : 0);}
     function isEmulab()	     { return ($this->portal() &&
                                        $this->portal() == "emulab" ? 1 : 0); }
     # Not via the Portal interface.
@@ -186,7 +188,8 @@ class Project
 	return ($this->isAPT() ? "https://www.aptlab.net" :
 		($this->isCloud() ? "https://www.cloudlab.us" : 
 		 ($this->isPNet() ? "https://www.phantomnet.org" :
-		  $TBBASE)));
+                  ($this->isPowder() ? $TBBASE :
+                   $TBBASE))));
     }
     function ApprovalEmailAddress() {
 	global $TBMAILADDR_APPROVAL;
@@ -194,7 +197,8 @@ class Project
 	return ($this->isAPT() ? "aptlab-approval@aptlab.net" :
 		($this->isCloud() ? "cloudlab-approval@cloudlab.us" :
 		 ($this->isPNet() ? "phantomnet-approval@phantomnet.org" :
-		  $TBMAILADDR_APPROVAL)));
+                  ($this->isPowder() ? "powder-approval@powderwireless.net" :
+                   $TBMAILADDR_APPROVAL))));
     }
     function EmailTag() {
 	global $THISHOMEBASE;
@@ -202,7 +206,8 @@ class Project
 	return ($this->isAPT() ? "aptlab.net" :
 		($this->isCloud() ? "cloudlab.us" : 
 		 ($this->isPNet() ? "phantomnet.org" :
-		  $THISHOMEBASE)));
+                  ($this->isPowder() ? "powderwireless.net" :
+                   $THISHOMEBASE))));
     }
 
     function unix_gid() {
@@ -480,6 +485,14 @@ class Project
 	    TBERROR("Could not find user object for $head_idx", 1);
 	}
 	return $leader;
+    }
+    # Boolean test.
+    function IsLeader($user) {
+        $leader = $this->GetLeader();
+        if ($user->SameUser($leader)) {
+            return 1;
+        }
+        return 0;
     }
 
     #

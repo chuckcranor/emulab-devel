@@ -134,12 +134,19 @@ sub SendEvent($$)
     #
     # We fill in the tuple stuff ourself instead.
     #
+    # These options allow encoding of GeniHRN objects via TO_JSON method.
+    #
+    my $json = JSON->new;
+    $json = $json->allow_nonref(1);
+    $json = $json->allow_blessed(1);
+    $json = $json->convert_blessed(1);
+
     foreach my $key (keys(%{ $hash })) {
 	my $val = $hash->{$key};
 	if (ref($val)) {
-	    $val = eval { encode_json($val); };
+	    $val = eval { $json->encode($val); };
 	    if ($@) {
-		print STDERR "Could not json encode event data:\n";
+		print STDERR "Could not json encode event data: $@\n";
 		print STDERR Dumper($hash->{$key});
 		next;
 	    }

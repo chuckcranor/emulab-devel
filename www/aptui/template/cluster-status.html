@@ -36,19 +36,31 @@
         padding: 0 !important;
 }
 </style>
-<div class='row' style="margin-bottom: 5px">
-  <div class='col-sm-8 col-sm-offset-3'>
-    <input class='form-control search'
-	   type='search' data-column='all'
-	   id='inuse-search-all' placeholder='Global Search'>
+<% if (window.ISCLOUD) { %>
+  <div class='row' style="margin-bottom: 5px">
+    <div
+	<% if (isadmin) { %>
+	    class='col-sm-8 col-sm-offset-3'
+	<% } else { %>
+            class='col-sm-5 col-sm-offset-5'
+	<% } %> >
+      <input class='form-control search'
+	     type='search' data-column='all'
+	     id='inuse-search-all' placeholder='Global Search'>
+    </div>
   </div>
-</div>
+<% } %>
 <% _.each(amlist, function(urn, name) { %>
   <div class='row'>
-    <div class='col-sm-3'>
+    <div
+	<% if (isadmin) { %>
+           class='col-sm-3'
+	<% } else { %>
+	   class='col-sm-3 col-sm-offset-2'
+	<% } %> >
       <div class='panel panel-default'>
 	<div class="panel-heading">
-	  <h5><center>Totals <%- name %></center></h5>
+	  <h5><center><%- name %> Totals</center></h5>
 	</div>
 	<div class='panel-body panel-body-dashboard'>
 	  <div class="counts-panel" id='counts-panel-<%- name %>'>
@@ -57,11 +69,16 @@
 	</div>
       </div>
     </div>
-    <div class='col-sm-9'>
+    <div
+	<% if (isadmin) { %>
+        class='col-sm-9'
+	<% } else { %>
+	class='col-sm-5'
+	<% } %> >
       <div class='panel panel-default'>
 	<div class="panel-heading" id='inuse-click-<%- name %>'>
 	  <h5>
-	    <center>InUse <%- name %>
+	    <center><%- name %> Nodes
 	      <a href="#inuse-panel-<%- name %>"">
 		<span id="inuse-collapse-button-<%- name %>"
 		    class="glyphicon glyphicon-chevron-right pull-right"></span>
@@ -90,12 +107,16 @@
 		<tr>
 		  <th>Node</th>
 		  <th>Type</th>
-		  <th>Pid</th>
-		  <th>Eid</th>
-		  <th>User</th>
-		  <th class="sorter-sugar">Expires</th>
-		  <th class="sorter-sugar">Allowed</th>
-		  <th>PreRes</th>
+		  <% if (isadmin) { %>
+		    <th>Pid</th>
+		    <th>Eid</th>
+		    <th>User</th>
+		    <th class="sorter-sugar" data-filter="false">Expires</th>
+		    <th class="sorter-sugar" data-filter="false">Allowed</th>
+		    <th>PreRes</th>
+		  <% } else { %>
+		    <th data-filter="false">Free?</th>
+		  <% } %>
 		</tr>
 	      </thead>
 	      <tbody id='<%- name %>-tbody'>
@@ -106,6 +127,7 @@
       </div>
     </div>
   </div>
+  <% if (isadmin) { %>
   <div class='row hidden' id="prereserve-row-<%- name %>">
     <div class='col-sm-9 col-sm-offset-3'>
       <div class='panel panel-default'>
@@ -129,4 +151,5 @@
       </div>
     </div>
   </div>
+  <% } %>
 <% }); %>

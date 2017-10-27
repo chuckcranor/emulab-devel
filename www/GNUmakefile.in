@@ -266,6 +266,7 @@ endif
 	$(INSTALL_CVSWEBCGI)
 	$(INSTALL_OPSCVSWEBCONF)
 	$(INSTALL_OPSCVSWEBCGI)
+	cd $(OBJDIR) && gmake install-setbuildinfo
 
 apt-install: 	$(addprefix $(INSTALL_WWWDIR)/apt/, $(ALLAPTUI)) \
 	$(addprefix $(INSTALL_WWWDIR)/apt/js/, $(ALLAPTJS)) \

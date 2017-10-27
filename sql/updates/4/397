@@ -106,12 +106,12 @@ sub DoUpdate($$$)
 		     "   AFTER parent_osid");
     }
     if (!DBSlotExists("partitions", "osid_vers")) {
-	DBQueryFatal("ALTER TABLE partitions ADD ".
+	DBQueryFatal("ALTER TABLE `partitions` ADD ".
 		     " `osid_vers` int(8) unsigned default NULL ".
 		     "   AFTER osid");
     }
     if (!DBSlotExists("partitions", "imageid_version")) {
-	DBQueryFatal("ALTER TABLE partitions ADD ".
+	DBQueryFatal("ALTER TABLE `partitions` ADD ".
 		     " `imageid_version` int(8) unsigned default NULL ".
 		     "   AFTER imageid");
     }

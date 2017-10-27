@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2003-2015 University of Utah and the Flux Group.
+# Copyright (c) 2003-2016 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -77,7 +77,7 @@ use libtestbed;
 use libdb;
 use libtblog;
 use Experiment;
-use Image;
+use OSImage;
 use User;
 use Project;
 
@@ -165,7 +165,7 @@ while (my ($vname, $osname) = $result->fetchrow()) {
 	    tbdie("No dataset if for blockstore on $vname\n");
 	}
 	my $dataset = $blockstore->{'attributes'}->{'dataset'};
-	my $image   = Image->Lookup($dataset);
+	my $image   = OSImage->Lookup($dataset);
 	if (!defined($image)) {
 	    tbdie("Could not lookup image for $dataset");
 	}
@@ -186,7 +186,7 @@ foreach my $url (@urllist) {
     # verify the information and create the descriptor. Later we will
     # fetch the image file, or refetch if it is stale.
     #
-    my $image = Image->LookupByURL($url);
+    my $image = OSImage->LookupByURL($url);
     if (defined($image)) {
 	#
 	# LookupByURL might return a local image, which of course
@@ -234,7 +234,7 @@ foreach my $url (@urllist) {
 	if ($verify);
 
     if (!defined($image)) {
-	$image = Image->LookupByURL($url);
+	$image = OSImage->LookupByURL($url);
 	if (!defined($image)) {
 	    tbdie("Could not look up image object for $url\n");
 	}

@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2010-2016 University of Utah and the Flux Group.
+# Copyright (c) 2010-2017 University of Utah and the Flux Group.
 # 
 # {{{GENIPUBLIC-LICENSE
 # 
@@ -42,6 +42,8 @@ sub usage()
     print "Usage: accountsetup adduser ...\n";
     print "       accountsetup deluser ...\n";
     print "       accountsetup moduser ...\n";
+    print "       accountsetup setgroups ...\n";
+    print "       accountsetup chpass ...\n";
     print "       accountsetup addproject ...\n";
     print "       accountsetup addgroup ...\n";
     print "       accountsetup delproject ...\n";
@@ -49,6 +51,8 @@ sub usage()
     print "       accountsetup checkdotfiles ...\n";
     print "       accountsetup createsshkey ...\n";
     print "       accountsetup dropfile ...\n";
+    print "       accountsetup deactivateuser ...\n";
+    print "       accountsetup reactivateuser ...\n";
     exit(1);
 }
 my $optlist    = "dnf";
@@ -71,6 +75,10 @@ my $ZFS_ROOT          = "@ZFS_ROOT@";
 my $ZFS_QUOTA_USER    = "@ZFS_QUOTA_USER@";
 my $ZFS_QUOTA_PROJECT = "@ZFS_QUOTA_PROJECT@";
 my $ZFS_QUOTA_GROUP   = "@ZFS_QUOTA_GROUP@";
+my $ZFS_QUOTA_USER_X  = "@ZFS_QUOTA_USER_X@";
+my $ZFS_QUOTA_PROJECT_X = "@ZFS_QUOTA_PROJECT_X@";
+my $ZFS_QUOTA_GROUP_X = "@ZFS_QUOTA_GROUP_X@";
+my $PW		      = "/usr/sbin/pw";
 my $USERADD	      = "/usr/sbin/pw useradd";
 my $USERDEL	      = "/usr/sbin/pw userdel";
 my $USERMOD	      = "/usr/sbin/pw usermod";
@@ -80,6 +88,7 @@ my $CHPASS	      = "/usr/bin/chpass";
 my $CHOWN	      = "/usr/sbin/chown";
 my $CHMOD	      = "/bin/chmod";
 my $MKDIR	      = "/bin/mkdir";
+my $NOLOGIN	      = "/sbin/nologin";
 my $MV		      = "/bin/mv";
 my $ZFS		      = "/sbin/zfs";
 my $KEYGEN	      = "/usr/bin/ssh-keygen";
@@ -120,7 +129,9 @@ my @GDIRLIST = ("exp", "images", "logs", "tarfiles", "rpms", "tiplogs");
 #
 sub AddUser();
 sub DeleteUser();
+sub SetGroups();
 sub ModifyUser();
+sub ChangePassword();
 sub AddProject();
 sub AddGroup();
 sub DelProject();
@@ -128,11 +139,15 @@ sub DelGroup();
 sub DropFile();
 sub CheckDotFiles();
 sub CreateSSHKey();
+sub ReactivateUser();
+sub DeactivateUser();
 sub fatal($);
+sub SetDotGroup($$);
 sub ZFSexists($);
 sub MakeDir($$);
 sub WhackDir($$);
 sub mysystem($);
+sub runBusyLoop($);
 
 #
 # Check args.
@@ -171,6 +186,14 @@ SWITCH: for ($cmd) {
 	ModifyUser();
 	last SWITCH;
     };
+    /^setgroups$/ && do {
+	SetGroups();
+	last SWITCH;
+    };
+    /^chpass$/ && do {
+	ChangePassword();
+	last SWITCH;
+    };
     /^addproject$/ && do {
 	AddProject();
 	last SWITCH;
@@ -199,6 +222,14 @@ SWITCH: for ($cmd) {
 	CreateSSHKey();
 	last SWITCH;
     };
+    /^deactivateuser$/ && do {
+	DeactivateUser();
+	last SWITCH;
+    };
+    /^reactivateuser$/ && do {
+	ReactivateUser();
+	last SWITCH;
+    };
     # Default
     usage();
 }
@@ -219,7 +250,6 @@ sub AddUser()
     my $hdir  = shift(@ARGV);
     my $gid   = shift(@ARGV);
     my $shell = shift(@ARGV);
-    my $hash  = (@ARGV ? shift(@ARGV) : undef);
 
     if (! -d "$hdir") {
 	# XXX we only handle homedirs of the form /users/$user here...
@@ -229,8 +259,8 @@ sub AddUser()
     }
 
     if (mysystem("egrep -q -s '^${user}:' /etc/passwd") &&
-	mysystem("$USERADD $user -u $uid -c \"$name\" ".
-	       "-k $SKEL -h - -d $hdir -g $gid -s $shell")) {
+	runBusyLoop("$USERADD $user -u $uid -c \"$name\" ".
+		    "-k $SKEL -h - -d $hdir -g $gid -s $shell")) {
 	if (($? >> 8) != $USEREXISTS) {
 	    fatal("$USERADD: could not add account");
 	}
@@ -270,13 +300,6 @@ sub AddUser()
 	chmod(0700, "$hdir/$dir")
 	    or fatal("Could not chmod '$hdir/$dir' to 0700: $!");
     }
-    #
-    # Finally, set any initial password hash
-    #
-    if (defined($hash) &&
-	mysystem("$CHPASS -p '$hash' $user")) {
-	fatal("Could not initialize password");
-    }
     return 0;
 }
 
@@ -295,7 +318,7 @@ sub DeleteUser()
     # Note that this does NOT remove the user's homedir.
     # We remove/rename it below...
     #
-    if (mysystem("$USERDEL $user")) {
+    if (runBusyLoop("$USERDEL $user")) {
 	if (($? >> 8) != $NOSUCHUSER) {
 	    fatal("Could not remove user $user");
 	}
@@ -311,13 +334,32 @@ sub DeleteUser()
 }
 
 #
-# Usage: username group1 [ group2 ... groupN ]
-# XXX this is specific to what is required by setgroups.
+# Usage: moduser username shell full_name
 #
 sub ModifyUser()
 {
-    if (@ARGV < 2) {
+    if (@ARGV != 3) {
 	fatal("moduser: Wrong number of arguments");
+    }
+    
+    my $user  = shift(@ARGV);
+    my $shell = shift(@ARGV);
+    my $name  = shift(@ARGV);
+
+    if (runBusyLoop("$USERMOD $user -c \"$name\" -s $shell")) {
+	fatal("$USERMOD: could not modify account");
+    }
+    return 0;
+}
+
+#
+# Usage: username group1 [ group2 ... groupN ]
+# XXX this is specific to what is required by setgroups.
+#
+sub SetGroups()
+{
+    if (@ARGV < 2) {
+	fatal("setgroups: Wrong number of arguments");
     }
     my $user  = shift(@ARGV);
     my $pgroup  = shift(@ARGV);
@@ -325,30 +367,84 @@ sub ModifyUser()
     if (@ARGV > 0) {
 	$grouplist = "-G '" . join(',', @ARGV) . "'";
     }
-
-    if (mysystem("$USERMOD $user -g $pgroup $grouplist")) {
+    if (runBusyLoop("$USERMOD $user -g $pgroup $grouplist")) {
 	fatal("Could not modify user $user to add groups!\n");
     }
+    SetDotGroup($user, $pgroup);
+    return 0;
+}
 
-    #
-    # Make sure the users dot files and other critical files/dirs
-    # are in the correct group. I looked at the source code to
-    # chown, and it does not do anything to files that are already
-    # set correctly. Thank you chown.
-    #
-    my @dots = (".login", ".profile", ".cshrc", ".ssl", ".ssh");
-    my $homedir = USERROOT() . "/$user";
+sub ChangePassword()
+{
+    if (@ARGV != 2) {
+	fatal("chpass: Wrong number of arguments");
+    }
+    my $user  = shift(@ARGV);
+    my $hash  = shift(@ARGV);
 
-    mysystem("$CHOWN $user:$pgroup $homedir") == 0
-	or fatal("Could not chown home dir to $user:$pgroup");
+    if (runBusyLoop("$CHPASS -p '$hash' $user")) {
+	fatal("Could not change password");
+    }
+    return 0;
+}
 
-    foreach my $dot (@dots) {
-	if (-e "$homedir/$dot") {
-	    mysystem("$CHOWN -R $user:$pgroup $homedir/$dot") == 0
-		or fatal("Could not chown $homedir/$dot to $user:$pgroup");
+#
+# Usage: deactivate username
+#
+sub DeactivateUser()
+{
+    if (@ARGV != 1) {
+	fatal("deactivateuser: Wrong number of arguments");
+    }
+    my $user = shift(@ARGV);
+
+    if ($WITHZFS) {
+	my $zfsdir = $ZFS_ROOT . USERROOT() . "/$user";
+	if (ZFSexists($zfsdir) &&
+	    mysystem("$ZFS set mountpoint=none $zfsdir")) {
+	    fatal("Could not set ZFS dir $zfsdir to mountpoint=none");
 	}
     }
+    if (runBusyLoop("$USERMOD $user -d /var/empty -s $NOLOGIN")) {
+	fatal("Could not set shell to $NOLOGIN");
+    }
+    return 0;
+}
 
+#
+# Usage: reactivate username
+#
+# The shell is changed via ModifyUser (we do not know the correct
+# shell here), this is just for ZFS.
+#
+sub ReactivateUser()
+{
+    if (@ARGV != 1) {
+	fatal("reactivateuser: Wrong number of arguments");
+    }
+    my $user = shift(@ARGV);
+    my $hdir = USERROOT() . "/$user";
+
+    if ($WITHZFS) {
+	my $zfsdir = $ZFS_ROOT . USERROOT() . "/$user";
+	if (ZFSexists($zfsdir) &&
+	    mysystem("$ZFS set mountpoint=$hdir $zfsdir")) {
+	    fatal("Could not set ZFS dir $zfsdir to mountpoint=$hdir");
+	}
+    }
+    if (runBusyLoop("$USERMOD $user -d $hdir")) {
+	fatal("Could not set home directory back to $hdir");
+    }
+    #
+    # Make dot files are in the right group, since while the user was
+    # inactive, we skipped doing that cause the home dir was unmounted
+    # (ZFS). Need the current default group for that.
+    #
+    my (undef,undef,undef,$gid) = getpwnam($user);
+    if (!defined($gid)) {
+	fatal("Could not get gid for $user");
+    }
+    SetDotGroup($user,$gid);
     return 0;
 }
 
@@ -369,7 +465,7 @@ sub AddProject()
     if (mysystem("egrep -q -s '^${unix_name}:' /etc/group")) {
 	print "Adding group $unix_name ...\n";
 
-	if (mysystem("$GROUPADD $unix_name -g $unix_gid")) {
+	if (runBusyLoop("$GROUPADD $unix_name -g $unix_gid")) {
 	    fatal("Could not add group $unix_name ($unix_gid)!\n");
 	}
     }
@@ -455,7 +551,7 @@ sub AddGroup()
     if (mysystem("egrep -q -s '^${unix_name}:' /etc/group")) {
 	print "Adding group $unix_name ...\n";
 
-	if (mysystem("$GROUPADD $unix_name -g $unix_gid")) {
+	if (runBusyLoop("$GROUPADD $unix_name -g $unix_gid")) {
 	    fatal("Could not add group $unix_name ($unix_gid)!\n");
 	}
     }
@@ -511,7 +607,7 @@ sub DelProject()
     if (mysystem("egrep -q -s '^${unix_name}:' /etc/group") == 0) {
 	print "Deleting project $unix_name ...\n";
 
-	if (mysystem("$GROUPDEL $unix_name")) {
+	if (runBusyLoop("$GROUPDEL $unix_name")) {
 	    fatal("Could not delete group $unix_name!\n");
 	}
     }
@@ -542,7 +638,7 @@ sub DelGroup()
     if (mysystem("egrep -q -s '^${unix_name}:' /etc/group") == 0) {
 	print "Deleting group $unix_name ...\n";
 
-	if (mysystem("$GROUPDEL $unix_name")) {
+	if (runBusyLoop("$GROUPDEL $unix_name")) {
 	    fatal("Could not delete group $unix_name!\n");
 	}
     }
@@ -688,6 +784,36 @@ sub CreateSSHKey()
 }
 
 #
+# Make sure the users dot files and other critical files/dirs
+# are in the correct group. I looked at the source code to
+# chown, and it does not do anything to files that are already
+# set correctly. Thank you chown.
+#
+sub SetDotGroup($$)
+{
+    my ($user, $gid) = @_;
+
+    my @dots = (".login", ".profile", ".cshrc", ".ssl", ".ssh");
+    my $homedir = USERROOT() . "/$user";
+
+    if (! -e $homedir) {
+	print STDERR "$homedir does not exist, skipping dots chown\n";
+	return 0;
+    }
+    print "Changing dot files group for $user to $gid\n";
+    
+    mysystem("$CHOWN $user:$gid $homedir") == 0
+	or fatal("Could not chown home dir to $user:$gid");
+
+    foreach my $dot (@dots) {
+	if (-e "$homedir/$dot") {
+	    mysystem("$CHOWN -R $user:$gid $homedir/$dot") == 0
+		or fatal("Could not chown $homedir/$dot to $user:$gid");
+	}
+    }
+}
+
+#
 # Check for ZFS existence.
 #
 sub ZFSexists($)
@@ -709,12 +835,22 @@ sub MakeDir($$)
 	$path = "${ZFS_ROOT}${fs}/$dir";
 
 	# XXX quotas
+	my ($refquota,$mult);
 	if ($fs eq $USERROOT) {
-	    $cmdarg = "-o quota=$ZFS_QUOTA_USER";
+	    $refquota = $ZFS_QUOTA_USER;
+	    $mult = $ZFS_QUOTA_USER_X;
 	} elsif ($fs eq $PROJROOT) {
-	    $cmdarg = "-o quota=$ZFS_QUOTA_PROJECT";
+	    $refquota = $ZFS_QUOTA_PROJECT;
+	    $mult = $ZFS_QUOTA_PROJECT_X;
 	} elsif ($fs eq $GROUPROOT) {
-	    $cmdarg = "-o quota=$ZFS_QUOTA_GROUP";
+	    $refquota = $ZFS_QUOTA_GROUP;
+	    $mult = $ZFS_QUOTA_GROUP_X;
+	}
+	if (defined($refquota) && $refquota =~ /^(\d+(?:\.\d+)?)([MGT]?)$/) {
+	    my ($num,$unit) = ($1,$2);
+	    $unit = "" if (!defined($unit));
+	    $num = sprintf "%.1f", $num * $mult;
+	    $cmdarg = "-o refquota=$refquota -o quota=$num$unit";
 	} else {
 	    $cmdarg = "";
 	}
@@ -820,7 +956,15 @@ sub WhackDir($$)
 	# Since we reuse uid/gids let's make the dir root/0700
 	$path = "$fs/$dir$suffix";
 	if (!chown(0, 0, $path) || !chmod(0700, $path)) {
-	    print STDERR "WARNING: could not chown/chmod '$path'!\n";
+	    print STDERR "WARNING: could not chown/chmod '$path': $!\n";
+	}
+	#
+	# And then unmount, we do not need it around. The empty subdir
+	# will still be there, so we have some clue ... maybe we should
+	# drop a file into the empty dir?
+	#
+	if ($zfsfs && mysystem("$ZFS set mountpoint=none $npath")) {
+	    print STDERR "Could not set ZFS dir $npath to mountpoint=none\n";
 	}
     }
     #
@@ -880,6 +1024,72 @@ sub mysystem($)
 	close(FD);
     }
     return system($cmd);
+}
+
+#
+# Run pw/chpass, checking for a locked passwd/group file. The pw routines
+# exit with non specific error code 1 for everything, so there is no way
+# to tell that its a busy file except by looking at the error message. Then
+# wait for a bit and try again. Silly.
+#
+sub runBusyLoop($)
+{
+    my $command   = shift;
+    my $maxtries  = 10;
+    my $stime     = time();
+
+    print STDERR "accountsetup: '$command'\n";
+
+    if (open(FD, ">>/usr/testbed/log/accountsetup.log")) {
+	my $tstamp = POSIX::strftime("%b %e %H:%M:%S", localtime($stime));
+	print FD "$tstamp: $command\n";
+	close(FD);
+    }
+
+    while ($maxtries--) {
+	my $output    = "";
+    
+	#
+	# This open implicitly forks a child, which goes on to execute the
+	# command. The parent is going to sit in this loop and capture the
+	# output of the child. We do this so that we have better control
+	# over the descriptors.
+	#
+	my $pid = open(PIPE, "-|");
+	if (!defined($pid)) {
+	    print STDERR "runBusyLoop; popen failed!\n";
+	    return -1;
+	}
+	if ($pid) {
+	    while (<PIPE>) {
+		$output .= $_;
+	    }
+	    close(PIPE);
+	    print $output;
+	    if (!$?) {
+		if ($command =~ /^$PW .*/) {
+		    if (open(FD, ">>/usr/testbed/log/accountsetup.log")) {
+			my $etime = time();
+			my $tstamp = POSIX::strftime("%b %e %H:%M:%S",
+						     localtime($etime));
+			$etime -= $stime;
+			print FD "$tstamp: $PW done in $etime seconds\n";
+			close(FD);
+		    }
+		}
+		return 0
+	    }
+	    if ($output =~ /(group|db) file is busy/m) {
+		print "runBusyLoop; waiting a few seconds before trying again\n";
+		sleep(3);
+	    }
+	}
+	else {
+	    open(STDERR, ">&STDOUT");
+	    exec($command);
+	}
+    }
+    return -1;
 }
 
 sub fatal($) {

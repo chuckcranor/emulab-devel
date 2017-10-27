@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2015 University of Utah and the Flux Group.
+# Copyright (c) 2000-2016 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -27,15 +27,35 @@ chdir("apt");
 include("quickvm_sup.php");
 $page_title = "Cluster Graphs";
 
+#
+# The Emulab portal does not use the fancy statsus stuff, we fall
+# back to the simple bar graphs
+#
+if ($PORTAL_GENESIS == "emulab") {
+    $usefancy = 0;
+              }
+else {
+    $usefancy = 1;
+}
+
 SPITHEADER(1);
 echo "<script type='text/javascript' src='js/lib/d3.v3.js'></script>";
 echo "<script type='text/javascript' src='js/lib/d3.tip.v0.6.3.js'></script>";
 echo "<script type='text/javascript'>\n";
 echo "   window.JACKS_LOADER = { params: { source: 'devel' } };\n";
+echo "   window.MAINSITE = $TBMAINSITE;\n";
+echo "   window.USEFANCY = $usefancy;\n";
 echo "</script>\n";
 
 # Place to hang the toplevel template.
 echo "<div id='cluster-graphs'></div>\n";
 
-SPITREQUIRE("cluster-graphs");
+REQUIRE_SUP();
+REQUIRE_UNDERSCORE();
+REQUIRE_BILEVEL();
+REQUIRE_LIQUIDFILLGAUGE();
+SPITREQUIRE("js/cluster-graphs.js");
+
+AddTemplate("cluster-graphs");
+SPITFOOTER();
 ?>

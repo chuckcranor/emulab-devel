@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2000-2011 University of Utah and the Flux Group.
+# Copyright (c) 2000-2017 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -854,6 +854,7 @@ sub List($)
 sub Trunk($)
 {
     my ($args)  = @_;
+    my $interface;
 
     if (! (exists($args->{'mode'}) && exists($args->{'vlans'}) &&
 	   exists($args->{'port'}))) {
@@ -867,7 +868,7 @@ sub Trunk($)
     if (! ($mode eq "-T" || $mode eq "-E" || $mode eq "-U")) {
 	fatal("Trunk: Improper mode '$mode'");
     }
-    if (! ($port =~ /^[\-\w]+\:[\-\w]+$/)) {
+    if (! ($port =~ /^[-\w]+:[-\w\/\.]+$/)) {
 	fatal("Trunk: Illegal port '$port'");
     }
     # Not doing stacks yet.
@@ -881,27 +882,38 @@ sub Trunk($)
     }
     my $debugopt = ($debug ? "-v $dlevel" : "");
 
-    $port =~ /^(.+):(.+)/;
-    my ($node, $card) = ($1,$2);
+    $port =~ /^([-\w]+):([-\w\/\.]+)/;
+    my ($nodeid, $iface) = ($1,$2);
 
-    my $query_result =
-	DBQueryFatal("select iface from interfaces ".
-		     "where node_id='$node' and card='$card'");
-    if ($query_result->numrows != 1) {
-	fatal("Cannot determine iface from $port in $pid/$eid");
+    my $node = Node->Lookup($nodeid);
+    if (!defined($node)) {
+	fatal("Trunk: No such node $nodeid");
     }
-    my ($iface) = ($query_result->fetchrow())[0];
-
-    $query_result =
-	DBQueryFatal("select node_id from reserved where node_id='$node' ".
-		     "and pid='$pid' and eid='$eid'");
-    if ($query_result->numrows != 1) {
+    my $reservation = $node->Reservation();
+    if (! (defined($reservation) && $reservation->SameExperiment($experiment))) {
 	fatal("Trunk: $node not allocated to $pid/$eid");
     }
+    
+    #
+    # Older code sends a card, newer code sends an iface.
+    # Eventually flush this backwards compat code. 
+    #
+    if ($iface =~ /\d+/) {
+	$interface = Interface->Lookup($nodeid, $iface, 1);
+    }
+    else {
+	$interface = Interface->LookupByIface($nodeid, $iface);
+    }
+    if (!defined($interface)) {
+	fatal("Trunk: No such interface $iface on $nodeid");
+    }
+    # In case we got a card.
+    $iface = $interface->iface();
+
     MapVlans(@vlanids);
     if ($mode eq "-U") {
 	if ($class eq "Experimental") {
-	    $query_result =
+	    my $query_result =
 		DBQueryFatal("select iface from vinterfaces " .
 			     "where node_id='$node' and type='vlan' and ".
 			     "      iface='$iface'");
@@ -924,17 +936,16 @@ sub Trunk($)
 	# and clean up the database
 	#
 	if ($class eq "Experimental") {
-	    $query_result =
-		DBQueryFatal("update interfaces set trunk=0 " .
-			     "where node_id='$node' and iface='$iface'");
+	    $interface->Update({"trunk" => 0}) == 0 or
+		fatal("Trunk: Could not set trunk=0 for $interface");
 	}
 	return 0;
     }
     if (($mode eq "-E") || ($mode eq "-T")) {
 	# First, update the status of the port in the database
 	if ($class eq "Experimental") {
-	    DBQueryFatal("update interfaces set trunk=1 " .
-			 "where node_id='$node' and iface='$iface'");
+	    $interface->Update({"trunk" => 1}) == 0 or
+		fatal("Trunk: Could not set trunk=1 for $interface");
 	}
 	#
 	# Okay, ask snmpit to trunk these vlans. 
@@ -975,20 +986,31 @@ sub PortControl($)
     # to the elabinelab.
     #
     foreach my $port (@ports) {
-	if (! ($port =~ /^[\-\w]+\:[\-\w]+$/)) {
+	my $interface;
+	
+	if (! ($port =~ /^[-\w]+:[-\w\/\.]+$/)) {
 	    fatal("PortControl: Illegal port '$port'");
 	}
 
-	$port =~ /^(.+):(.+)/;
-	my ($nodeid, $card) = ($1,$2);
+	$port =~ /^([-\w]+):([-\w\/\.]+)/;
+	my ($nodeid, $iface) = ($1,$2);
 
 	my $node = Node->Lookup($nodeid);
 	if (!defined($node)) {
 	    fatal("PortControl: No such node $nodeid");
 	}
-	my $interface = Interface->Lookup($nodeid, $card, 1);
+	#
+	# Older code sends a card, newer code sends an iface.
+	# Eventually flush this backwards compat code. 
+	#
+	if ($iface =~ /\d+/) {
+	    $interface = Interface->Lookup($nodeid, $iface, 1);
+	}
+	else {
+	    $interface = Interface->LookupByIface($nodeid, $iface);
+	}
 	if (!defined($interface)) {
-	    fatal("PortControl: No such interface $card on $nodeid");
+	    fatal("PortControl: No such interface $iface on $nodeid");
 	}
 	my $reservation = $node->Reservation();
 	if (!defined($reservation) ||

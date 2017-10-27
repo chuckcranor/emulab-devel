@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2015 University of Utah and the Flux Group.
+# Copyright (c) 2000-2016 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -73,6 +73,10 @@ if (isset($target_user)) {
 elseif (isset($target_project)) {
     $target_idx   = $target_project->pid_idx();
     $whereclause = "where h.pid_idx='$target_idx'";
+}
+# Lets default to last three months if neither min or max provided
+if (! (isset($min) || isset($max))) {
+    $min = time() - (90 * 3600 * 24);
 }
 if (isset($min) || isset($max)) {
     if ($whereclause != "") {
@@ -197,8 +201,13 @@ echo "<script src='js/lib/jQRangeSlider/jQRuler.js'></script>\n";
 echo "<script src='js/lib/jquery.tablesorter.min.js'></script>\n";
 echo "<script src='js/lib/jquery.tablesorter.widgets.min.js'></script>\n";
 echo "<script src='js/lib/jquery.tablesorter.widget-math.js'></script>\n";
-echo "<script src='js/lib/bootstrap.js'></script>\n";
-echo "<script src='js/lib/require.js' data-main='js/activity'></script>\n";
+
+REQUIRE_UNDERSCORE();
+REQUIRE_SUP();
+REQUIRE_MOMENT();
+SPITREQUIRE("js/activity.js");
+
+AddTemplate("activity");
 
 SPITFOOTER();
 ?>

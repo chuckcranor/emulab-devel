@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2008-2011 University of Utah and the Flux Group.
+# Copyright (c) 2008-2011, 2016 University of Utah and the Flux Group.
 # 
 # {{{GENIPUBLIC-LICENSE
 # 
@@ -38,12 +38,13 @@ use Getopt::Std;
 # 
 sub usage()
 {
-    print "Usage: addauthority [-c] [-a] [-n] <certfile> <type> [url]\n";
+    print "Usage: addauthority [-c | -a | -s] [-n] <certfile> <type> [url]\n";
     exit(1);
 }
-my $optlist    = "acnf";
+my $optlist    = "acnfs";
 my $asch       = 0;
 my $asam       = 0;
+my $assa       = 0;
 my $disable    = 0;
 my $force      = 0;
 
@@ -63,6 +64,9 @@ if (defined($options{"c"})) {
 if (defined($options{"a"})) {
     $asam = 1;
 }
+if (defined($options{"s"})) {
+    $assa = 1;
+}
 if (defined($options{"f"})) {
     $force = 1;
 }
@@ -79,6 +83,9 @@ if ($asch) {
 }
 elsif ($asam) {
     $GENI_DBNAME = "geni-cm";
+}
+elsif ($assa) {
+    $GENI_DBNAME = "geni";
 }
 
 # Now we can load the libraries after setting the proper DB.

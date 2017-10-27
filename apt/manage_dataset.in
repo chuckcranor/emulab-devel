@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2000-2016 University of Utah and the Flux Group.
+# Copyright (c) 2000-2017 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -40,6 +40,7 @@ sub usage()
     print STDERR "Usage: manage_dataset [options --] modify ...\n";
     print STDERR "Usage: manage_dataset [options --] extend ...\n";
     print STDERR "Usage: manage_dataset [options --] snapshot ...\n";
+    print STDERR "Usage: manage_dataset [options --] getcredential ...\n";
     exit(-1);
 }
 my $optlist     = "dt:";
@@ -54,6 +55,7 @@ my $geniuser;
 #
 my $TB		= "@prefix@";
 my $TBOPS       = "@TBOPSEMAIL@";
+my $SACERT      = "$TB/etc/genisa.pem";
 
 #
 # Untaint the path
@@ -74,6 +76,7 @@ use libtestbed;
 use EmulabConstants;
 use emdb;
 use emutil;
+use libEmulab;
 use User;
 use Project;
 use APT_Dataset;
@@ -83,19 +86,25 @@ use Blockstore;
 use GeniResponse;
 use GeniXML;
 use GeniUser;
+use GeniAuthority;
+use GeniCertificate;
+use GeniCredential;
+use GeniImage;
 
 # Protos
 sub fatal($);
-sub uerror($);
+sub uerror($;$);
 sub DoCreate();
 sub DoDelete();
 sub DoRefresh();
 sub DoRefreshInternal($$);
+sub DoGetCredential();
 sub DoModify();
 sub DoExtend();
 sub DoSnapshot();
 sub DoSnapShotInternal($$$$$);
-sub PollDatasetStatus($$);
+sub PollDatasetStatus($$$);
+sub DoImageTrackerStuff($$$$$);
 
 #
 # Parse command arguments. Once we return from getopts, all that should be
@@ -111,9 +120,9 @@ if (defined($options{"d"})) {
 }
 if (defined($options{"t"})) {
     $webtask_id = $options{"t"};
-    $webtask = WebTask->LookupOrCreate(undef, $webtask_id);
+    $webtask = WebTask->Lookup($webtask_id);
     if (!defined($webtask)) {
-	fatal("Could not create webtask object");
+	fatal("Could not get webtask object");
     }
     $webtask->AutoStore(1);
 }
@@ -151,6 +160,9 @@ elsif ($action eq "extend") {
 }
 elsif ($action eq "snapshot") {
     exit(DoSnapshot());
+}
+elsif ($action eq "getcredential") {
+    exit(DoGetCredential());
 }
 else {
     usage();
@@ -250,7 +262,8 @@ sub DoCreate()
 	    $size = $1;
 	}
 	elsif ($options{"s"} =~ /^(\d+)(\w+)$/) {
-	    $size = Blockstore::ConvertToMebi($options{"s"});
+	    # Converter wants upper case.
+	    $size = Blockstore::ConvertToMebi(uc($options{"s"}));
 	    if ($size < 0) {
 		fatal("Could not parse size.");
 	    }
@@ -297,10 +310,19 @@ sub DoCreate()
 	fatal("Dataset already exists!");
     }
 
+    # Check for expired certs and speaksfor.
+    if (my $retval = APT_Geni::VerifyCredentials($geniuser, \$errmsg)) {
+	if ($retval) {
+	    ($retval < 0 ? fatal($errmsg) : uerror($errmsg));
+	}
+    }
+
     my $blob = {
 	"dataset_id"     => $name,
 	"pid"            => $project->pid(),
 	"pid_idx"        => $project->pid_idx,
+	"gid"            => $project->pid(),
+	"gid_idx"        => $project->pid_idx,
 	"creator_uid"    => $this_user->uid(),
 	"creator_idx"    => $this_user->uid_idx(),
 	"aggregate_urn"  => $aggregate_urn,
@@ -316,9 +338,22 @@ sub DoCreate()
     $blob->{"write_access"} = $write_access
 	if (defined($write_access));
 
+    #
+    # Always create a webtask for tracking image or allocation status.
+    # This is an internal webtask, not the one used on the command line.
+    #
+    my $dwebtask = WebTask->Create();
+    if (!defined($dwebtask)) {
+	$errmsg = "Could not create webtask object";
+	goto failed;
+    }
+    $dwebtask->AutoStore(1);
+    $blob->{"webtask_id"} = $dwebtask->task_id();
+
     my $dataset = APT_Dataset->Create($blob);
     if (!defined($dataset)) {
-	fatal("Internal error creating dataset object");
+	$dwebtask->Delete();
+	fatal("Error creating dataset object");
     }
     
     # new dataset is returned locked. If we have instance, try to lock
@@ -328,17 +363,6 @@ sub DoCreate()
 	    $errmsg = "Instance is busy, cannot snapshot data";
 	    goto failed;
 	}
-    }
-    #
-    # For IM datasets always create a webtask for tracking imaging status.
-    #
-    if ($type eq "imdataset") {
-	$webtask = WebTask->Create($dataset->uuid());
-	if (!defined($webtask)) {
-	    $errmsg = "Could not create webtask object";
-	    goto failed;
-	}
-	$webtask->AutoStore(1);
     }
     #
     # Ask the aggregate to create the dataset. 
@@ -377,8 +401,7 @@ sub DoCreate()
     # Handoff to snapshot if an imdataset.
     #
     if ($type eq "imdataset" &&
-	DoSnapShotInternal($dataset, $aggregate,
-			   $bsname, $nodeid, \$errmsg)) {
+	DoSnapShotInternal($dataset, $aggregate, $bsname, $nodeid, \$errmsg)) {
 	$response = $dataset->DeleteDataset();
 	if ($response->code() == GENIRESPONSE_SUCCESS ||
 	    $response->code() == GENIRESPONSE_SEARCHFAILED) {
@@ -391,7 +414,7 @@ sub DoCreate()
 	# This will set the webtask, see below.
 	fatal($errmsg);
     }
-    if (PollDatasetStatus($dataset, \$errmsg)) {
+    if (PollDatasetStatus($dataset, $aggregate, \$errmsg)) {
 	# Exit and let child poll
 	exit(0);
     }
@@ -466,16 +489,16 @@ sub DoRefresh()
     if ($dataset->Lock()) {
 	uerror("dataset is busy, cannot lock it");
     }
-    if (DoRefreshInternal($dataset, \$errmsg)) {
-	goto failed;
-    }
+    my $errcode = DoRefreshInternal($dataset, \$errmsg);
+    goto failed
+	if ($errcode);
     $dataset->Unlock();
     return 0;
 
   failed:
     $dataset->Unlock();
     # This will set the webtask, see below.
-    fatal($errmsg);
+    ($errcode < 0 ? fatal($errmsg) : uerror($errmsg, $errcode));
 }
 
 sub DoRefreshInternal($$)
@@ -490,6 +513,7 @@ sub DoRefreshInternal($$)
     if ($response->code() != GENIRESPONSE_SUCCESS) {
 	if ($response->code() == GENIRESPONSE_SEARCHFAILED) {
 	    $$pmesg = "Dataset no longer exists at the remote cluster\n";
+	    return GENIRESPONSE_SEARCHFAILED;
 	}
 	else {
 	    $$pmesg = "DescribeDataset failed: ". $response->output() . "\n";
@@ -497,32 +521,32 @@ sub DoRefreshInternal($$)
 	return -1;
     }
     my $blob = $response->value();
-    print STDERR Dumper($blob);
+    print Dumper($blob);
     
     $dataset->Update({"last_used" => TBDateStringLocal($blob->{"lastused"}),
 		      "expires"   => TBDateStringLocal($blob->{"expires"})});
+    $dataset->Update({"updated"   => TBDateStringLocal($blob->{"updated"})})
+	if ($blob->{"updated"});
 
     if ($blob->{"busy"}) {
 	$dataset->Update({"state" => "busy"});
 	if ($dataset->type() eq "imdataset") {
-	    if (defined($webtask)) {
-		$webtask->image_size($blob->{'image_size'}) 	
-		    if (exists($blob->{'image_size'}));
-		$webtask->image_status($blob->{'image_status'})
-		    if (exists($blob->{'image_status'}));
-	    }
+	    $dataset->webtask()->image_size($blob->{'image_size'}) 	
+		if (exists($blob->{'image_size'}));
+	    $dataset->webtask()->image_status($blob->{'image_status'})
+		if (exists($blob->{'image_status'}));
+	    $dataset->webtask()->Store();
 	}
     }
     else {
 	$dataset->Update({"state" => $blob->{"state"}});
 	if ($dataset->type() eq "imdataset") {
 	    $dataset->Update({"size" => $blob->{"size"}});
-	    if (defined($webtask)) {
-		$webtask->image_size($blob->{'image_size'}) 	
-		    if (exists($blob->{'image_size'}));
-		$webtask->image_status($blob->{'image_status'})
-		    if (exists($blob->{'image_status'}));
-	    }
+	    $dataset->webtask()->image_size($blob->{'image_size'}) 	
+		if (exists($blob->{'image_size'}));
+	    $dataset->webtask()->image_status($blob->{'image_status'})
+		if (exists($blob->{'image_status'}));
+	    $dataset->webtask()->Store();
 	}
     }
     return 0;
@@ -658,6 +682,7 @@ sub DoExtend()
 sub DoSnapshot()
 {
     my $errmsg;
+    my ($copyback_uuid, $sha1hash);
     
     my $usage = sub {
 	print STDERR "Usage: manage_dataset snapshot ".
@@ -690,6 +715,12 @@ sub DoSnapshot()
     if (!defined($aggregate)) {
 	fatal("Could not find aggregate for $nodeid");
     }
+    if (GetSiteVar("protogeni/use_imagetracker")) {
+	if (DoImageTrackerStuff($dataset, $aggregate,
+				\$copyback_uuid,\$sha1hash,\$errmsg)) {
+	    fatal("Could not get info from image tracker");
+	}
+    }
     if ($dataset->Lock()) {
 	uerror("dataset is busy, cannot lock it");
     }
@@ -697,29 +728,28 @@ sub DoSnapshot()
 	$dataset->Unlock();
 	uerror("instance is busy, cannot lock it");
     }
-    #
-    # Always create a webtask for tracking imaging status. Must be
-    # associated with the object.
-    #
-    if (defined($webtask)) {
-	if ($webtask->object_uuid() ne $dataset->uuid()) {
-	    $errmsg = "Webtask not associated with dataset!";
-	    goto failed;
-	}
+    # Clear the webtask, starting a new snapshot.
+    $dataset->webtask()->Reset();
+    # These three are convenience for the web server to give feedback.
+    $dataset->webtask()->aggregate_urn($aggregate->aggregate_urn());
+    $dataset->webtask()->client_id($nodeid);
+    $dataset->webtask()->instance($instance->uuid());
+    
+    if (defined($copyback_uuid)) {
+	# Tell the imaging modal.
+	$dataset->webtask()->copyback_uuid($copyback_uuid);
+	# For polling below.
+	$dataset->_copyback_uuid($copyback_uuid);
+	$dataset->_sha1hash("$sha1hash");
+	$dataset->_copying(0);
     }
-    else {
-	$webtask = WebTask->LookupOrCreate($dataset->uuid());
-	if (!defined($webtask)) {
-	    $errmsg = "Could not create webtask object!";
-	    goto failed;
-	}
-	$webtask->AutoStore(1);
-    }
+    $dataset->webtask()->Store();
+    $dataset->webtask()->AutoStore(1);
     
     if (DoSnapShotInternal($dataset, $aggregate, $bsname, $nodeid, \$errmsg)) {
 	goto failed;
     }
-    if (PollDatasetStatus($dataset, \$errmsg)) {
+    if (PollDatasetStatus($dataset, $aggregate, \$errmsg)) {
 	# Exit and let child poll
 	exit(0);
     }
@@ -775,13 +805,23 @@ sub DoSnapShotInternal($$$$$)
 	goto failed;
     }
     my $response = $aggregate->CreateImage($sliver_urn,
-					   $dataset->dataset_id(),
-					   0, undef, $bsname);
+					   $dataset->dataset_id(), 0,
+					   $dataset->_copyback_uuid(),
+					   $bsname, 0, 0, 0);
     if ($response->code() != GENIRESPONSE_SUCCESS) {
 	$errmsg = "SnapshotDataset failed: ". $response->output() . "\n";
 	goto failed;
     }
     $dataset->Update({"state" => "busy"});
+    #
+    # If we are taking the snapshot at a different cluster, we have
+    # to poll that cluster via ImageInfo() instead of DescribeDataset().
+    # We need the image urn to do that in the polling loop.
+    #
+    if ($aggregate->aggregate_urn() ne $dataset->aggregate_urn()) {
+	my ($image_urn) = @{ $response->value() };	
+	$dataset->_image_urn($image_urn);
+    }
     return 0;
 
   failed:
@@ -792,9 +832,9 @@ sub DoSnapShotInternal($$$$$)
 #
 # Poll for snapshot status.
 #
-sub PollDatasetStatus($$)
+sub PollDatasetStatus($$$)
 {
-    my ($dataset, $perrmsg) = @_;
+    my ($dataset, $aggregate, $perrmsg) = @_;
     my $project = $dataset->GetProject();
     my $dname   = $dataset->dataset_id();
     my $logfile;
@@ -814,35 +854,232 @@ sub PollDatasetStatus($$)
 	# Let parent exit;
 	sleep(2);
     }
-    $webtask->SetProcessID($PID)
-	if (defined($webtask));
+    $dataset->webtask()->SetProcessID($PID);
 
+    print "State: " . $dataset->state() . "\n";
+    if (defined($dataset->_copyback_uuid())) {
+	my $copyback_uuid = $dataset->_copyback_uuid();
+	my $sha1hash = $dataset->_sha1hash();
+	print "hash: $sha1hash, copyback_uuid: $copyback_uuid\n";
+    }
     my $seconds  = 1200;
-    my $interval = 5;
+    my $interval = 10;
     
     while ($seconds > 0) {
 	$seconds -= $interval;
-	if (DoRefreshInternal($dataset, $perrmsg)) {
-	    print STDERR $$perrmsg;
-	    sleep($interval);
-	    next;
+	if (!defined($aggregate) ||
+	    $aggregate->aggregate_urn() eq $dataset->aggregate_urn()) {
+	    if (DoRefreshInternal($dataset, $perrmsg)) {
+		print STDERR $$perrmsg;
+		sleep($interval);
+		next;
+	    }
+	}
+	else {
+	    if (PollImageStatus($dataset, $aggregate, $perrmsg)) {
+		print STDERR $$perrmsg;
+		sleep($interval);
+		next;
+	    }
 	}
 	if ($dataset->state() eq "valid") {
 	    $project->SendEmail($this_user->email(),
 			"Your dataset is now ready to use",
 			"Dataset '$dname' is now ready to use.\n",
 				$project->LogsEmailAddress(), undef, $logfile);
-	    $webtask->Exited(0)
-		if (defined($webtask));
+	    $dataset->webtask()->Exited(0);
 	    last;
 	}
 	sleep($interval);
     }
-    $webtask->Exited(-1)
-	if (defined($webtask) && $seconds <= 0);
+    $dataset->webtask()->Exited(-1)
+	if ($seconds <= 0);
+    return 0;
+}
+
+#
+# GetCredential
+#
+sub DoGetCredential()
+{
+    my $errmsg  = "Could not get credential for dataset";
+    my ($authority, $certificate, $credential);
     
-    unlink($logfile)
-	if (defined($logfile));
+    my $optlist = "a:f";
+    my %options = ();
+    if (! getopts($optlist, \%options)) {
+	usage();
+    }
+    if (defined($options{"a"})) {
+	my $urn = GeniHRN->new($options{"a"});
+	fatal("Not a valid authority URN")
+	    if (!defined($urn));
+
+	#
+	# Load the cert to act as caller context in case we need to go
+	# to the clearinghouse.
+	#
+	$certificate = GeniCertificate->LoadFromFile($SACERT);
+	if (!defined($certificate)) {
+	    fatal("Could not load certificate from $SACERT\n");
+	}
+	Genixmlrpc->SetContext(Genixmlrpc->Context($certificate));
+	
+	$authority = GeniAuthority->CreateFromRegistry($urn->id(), $urn);
+	fatal("No such authority")
+	    if (!defined($authority));
+    }
+    if (@ARGV != 1) {
+	fatal("usage: $0 getcredential [-a authority] pid/name");
+    }
+    my $token   = shift(@ARGV);
+    my $dataset = APT_Dataset->Lookup($token);
+    if (!defined($dataset)) {
+	fatal("No such dataset");
+    }
+    if ($dataset->Lock()) {
+	uerror("dataset is busy, cannot lock it");
+    }
+    #
+    # If we have a stored unexpired credential, we can just use that.
+    #
+    if (!defined($options{"f"}) &&
+	$dataset->credential_string() && $dataset->credential_string() ne "") {
+	$credential =
+	    GeniCredential->CreateFromSigned($dataset->credential_string());
+	goto haveit
+	    if (defined($credential) && !$credential->IsExpired());
+    }
+    my $response = $dataset->GetCredential();
+    if (!defined($response)) {
+	$errmsg = "RPC Error calling GetCredential";
+	goto failed;
+    }
+    if ($response->code() != GENIRESPONSE_SUCCESS &&
+	$response->code() != GENIRESPONSE_SEARCHFAILED &&
+	$response->code() != GENIRESPONSE_BUSY) {
+	$errmsg = "GetCredential failed: ". $response->output() . "\n";
+	goto failed;
+    }
+    if ($response->code() == GENIRESPONSE_BUSY) {
+	$dataset->Unlock();
+	uerror("dataset was busy at the remote cluster, try again later");
+    }
+    if ($response->code() == GENIRESPONSE_SEARCHFAILED) {
+	$dataset->Unlock();
+	uerror("dataset could not be found at the remote cluster");
+    }
+    $credential = GeniCredential->CreateFromSigned($response->value());
+    if (!defined($credential)) {
+	$dataset->Unlock();
+	fatal("Could not parse new credential")
+    }
+    $dataset->Update({"credential_string" => $response->value()});
+  haveit:
+    if (defined($authority)) {
+	my $delegated = $credential->Delegate($authority);
+	$delegated->Sign($certificate);
+	$credential = $delegated;
+    }
+    print $credential->asString();
+    $dataset->Unlock();
+    return 0;
+
+  failed:
+    $dataset->Unlock();
+    # This will set the webtask, see below.
+    fatal($errmsg);
+}
+
+sub DoImageTrackerStuff($$$$$)
+{
+    my ($dataset, $aggregate, $puuid, $phash, $perrmsg) = @_;
+    my $remote_urn = GeniHRN->new($dataset->remote_urn());
+    my $aggregate_urn = GeniHRN->new($aggregate->aggregate_urn());
+    my $errmsg;
+
+    #
+    # If the dataset is being used on the cluster where it lives, then
+    # there is no need for any of this.
+    #
+    return 0
+	if (lc($remote_urn->domain()) eq lc($aggregate_urn->domain()));
+    
+    Genixmlrpc->SetContext(APT_Geni::GeniContext());
+    my $blob = GeniImage::GetImageData($remote_urn, \$errmsg);
+    Genixmlrpc->SetContext(undef);
+    
+    if (!defined($blob)) {
+	$$perrmsg = "Could not get info from the image server for ".
+	    "$remote_urn:\n" . $errmsg;
+	    return 1;
+    }
+
+    $$puuid = $blob->{'version_uuid'} if (defined($puuid));
+    $$phash = $blob->{'sha1hash'} if (defined($phash));
+    return 0;
+}
+
+sub PollImageStatus($$$)
+{
+    my ($dataset, $aggregate, $perrmsg) = @_;
+    my $image_urn = $dataset->_image_urn();
+    my $copyback_uuid = $dataset->_copyback_uuid();
+
+    #
+    # Once we hit the copyback phase, we have to ask the image tracker
+    # for info to figure out when the copyback is done.
+    #
+    if ($dataset->_copying()) {
+	my $sha1hash;
+	
+	if (DoImageTrackerStuff($dataset, $aggregate,
+				undef, \$sha1hash, $perrmsg)) {
+	    print STDERR $perrmsg . "\n";
+	    # Give up.
+	    $dataset->Update({"state" => "valid"});
+	    $dataset->webtask()->image_status("ready");
+	}
+	if ("$sha1hash" eq $dataset->_sha1hash()) {
+	    # Done!
+	    $dataset->Update({"state" => "valid"});
+	    $dataset->webtask()->image_status("ready");
+	}
+	return 0;
+    }
+    else {
+	print "Getting Image Info\n";
+	
+	my $response = $aggregate->ImageInfo($image_urn);
+	if ($response->code() != GENIRESPONSE_SUCCESS &&
+	    $response->code() != GENIRESPONSE_RPCERROR &&
+	    $response->code() != GENIRESPONSE_SERVER_UNAVAILABLE &&
+	    $response->code() != GENIRESPONSE_BUSY) {
+	    $$perrmsg = "Imageinfo failed: ". $response->output() . "\n";
+	    return -1;
+	}
+	return 0
+	    if ($response->code() == GENIRESPONSE_BUSY ||
+		$response->code() == GENIRESPONSE_SERVER_UNAVAILABLE ||
+		$response->code() == GENIRESPONSE_RPCERROR);
+
+	my $blob = $response->value();
+	print Dumper($response->value());
+    
+	$dataset->webtask()->image_size($blob->{'size'})
+	    if (exists($blob->{'size'}));
+	$dataset->webtask()->image_status($blob->{'status'})
+	    if (exists($blob->{'status'}));
+	if ($blob->{'status'} eq "ready") {
+	    if ($copyback_uuid) {
+		$dataset->webtask()->image_status("copying");
+		$dataset->_copying(1);
+	    }
+	    else {
+		$dataset->Update({"state" => "valid"});
+	    }
+	}
+    }
     return 0;
 }
 
@@ -859,16 +1096,17 @@ sub fatal($)
     exit(-1);
 }
 
-sub uerror($)
+sub uerror($;$)
 {
-    my ($mesg) = @_;
+    my ($mesg, $code) = @_;
+    $code = 1 if (!defined($code));
 
     if (defined($webtask)) {
 	$webtask->output($mesg);
-	$webtask->Exited(1);
+	$webtask->Exited($code);
     }
     print STDERR "$mesg\n";
-    exit(1);
+    exit($code);
 }
 
 sub escapeshellarg($)

@@ -42,7 +42,7 @@
 #include <xercesc/sax/HandlerBase.hpp>
 XERCES_CPP_NAMESPACE_USE
 
-int parse_ptop_xml(tb_pgraph &PG, tb_sgraph &SG, char *filename);
+int parse_ptop_xml(tb_pgraph &PG, tb_sgraph &SG, char const * filename);
 
 #endif // for __PARSE_PTOP_XML_H
 

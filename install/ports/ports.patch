@@ -1,15 +1,14 @@
 --- Makefile.old	2012-05-22 13:44:22.000000000 -0600
 +++ Makefile	2012-05-22 13:44:30.000000000 -0600
-@@ -563,5 +563,25 @@
+@@ -563,5 +563,24 @@
      SUBDIR += ytree
      SUBDIR += zaptel
      SUBDIR += zoneinfo
 +    SUBDIR += abac
 +    SUBDIR += emulab-boss
-+    SUBDIR += emulab-clrhouse
 +    SUBDIR += emulab-extras
 +    SUBDIR += emulab-fs
-+    SUBDIR += emulab-iperf
++    SUBDIR += emulab-genilib
 +    SUBDIR += emulab-ops
 +    SUBDIR += emulab-protogeni
 +    SUBDIR += emulab-pubsub

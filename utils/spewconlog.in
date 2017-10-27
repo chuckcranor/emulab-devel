@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2005-2015 University of Utah and the Flux Group.
+# Copyright (c) 2005-2016 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -184,13 +184,6 @@ else {
     $logname = "$logdir/${node_id}.log";
 }
 
-if ($linecount) {
-    $cmd = "tail -". $linecount
-}
-else {
-    $cmd = "cat";
-}
-
 #
 # Run an ssh command in a child process, protected by an alarm to
 # ensure that the ssh is not hung up forever if the machine is in
@@ -217,7 +210,14 @@ if ($syspid) {
 #
 # Now we want to ssh over and cat the file.
 #
+if ($linecount) {
+    $cmd = "tail -${linecount} $logname | cat -v";
+}
+else {
+    $cmd = "cat -v $logname";
+}
+
 $UID = 0;
-system("$SSH -host $tipserver $cmd $logname");
+system("$SSH -host $tipserver $cmd");
 $UID = $SAVEUID;
 exit(($? == 0 ? 0 : 1));

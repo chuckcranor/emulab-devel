@@ -5,9 +5,12 @@ use strict;
 use libinstall;
 use installvars;
 
+my ($vmaj,$vmin,$vrel) = (0, 0, 0);
+
 sub Install($$$)
 {
     my ($server, $isupdate, $impotent) = @_;
+    my $newmysql = 0;
 
     # Replace if this script does an update for ip/domain.
     return 0
@@ -17,6 +20,44 @@ sub Install($$$)
 	PhaseSkip("mysqld not supported on ops")
 	    if ($FBSD_MAJOR == 4);
 	
+	# Find out what version is installed
+	Phase "version", "Determine mysqld version", sub {
+	    PhaseFail("Mysql not installed")
+		if (! -x "$MYSQLADMIN");
+	    my $v = `$MYSQLADMIN -V`;
+	    if ($v =~ /Distrib (\d+)\.(\d+)\.(\d+)/) {
+		($vmaj,$vmin,$vrel) = ($1,$2,$3);
+		if ($vmaj > 5 ||
+		    ($vmaj == 5 && $vmin > 7) ||
+		    ($vmaj == 5 && $vmin == 7 && $vrel >= 6)) {
+		    $newmysql = 1;
+		}
+	    }
+	};
+
+	#
+	# Keep the memory usage down:
+	#
+	#   innodb_buffer_pool_size: 1G -> 128M
+	#   innodb_data_file_path: 128M -> 16M
+	#   innodb_temp_data_file_path: 128M -> 48M
+	#   performance_schema: ON -> OFF
+	#
+	# XXX will need to revisit this when we start using innodb tables.
+	#
+	Phase "config", "Tweak my.cnf", sub {
+	    PhaseSkip("unneeded")
+		if (!$newmysql);
+	    DoneIfDoesntExist($MYSQL_CNF);
+	    AppendToFileFatal($MYSQL_CNF,
+			"[mysqld]",
+			"innodb_buffer_pool_size    = 128M",
+			"innodb_data_file_path      = ibdata1:16M:autoextend",
+			"innodb_temp_data_file_path = ibtmp1:48M:autoextend",
+			"performance_schema         = OFF"
+	    );
+	};
+
 	# Get a password for the the DB.
 	Phase "password", "Asking for mysqld root password", sub {
 	    DoneIfExists("$ETCDIR/mysqld.pwd");
@@ -42,12 +83,17 @@ sub Install($$$)
 	    PhaseSkip("mysqld already initialzed")
 		if (-d "$MYSQLDBDIR/mysql");
 
-	    ExecQuietFatal("$MYSQLINSTALL --ldata=${MYSQLDBDIR} --basedir=/usr/local");
-	    ExecQuietFatal("$CHOWN -R mysql:mysql $MYSQLDBDIR");
+	    if ($newmysql) {
+		ExecQuietFatal("$MYSQLD --initialize-insecure --user=mysql --datadir=${MYSQLDBDIR} --basedir=/usr/local");
+	    } else {
+		ExecQuietFatal("$MYSQLINSTALL --ldata=${MYSQLDBDIR} --basedir=/usr/local");
+		ExecQuietFatal("$CHOWN -R mysql:mysql $MYSQLDBDIR");
+	    }
 	};
 	
 	Phase "start", "Starting mysqld", sub {
-	    my ($exitval) = ExecQuiet("$MYSQLADMIN -u mysql ping");
+	    my $user = ($newmysql ? "root" : "mysql");
+	    my ($exitval) = ExecQuiet("$MYSQLADMIN -u $user ping");
 
 	    PhaseSkip("mysqld already running")
 		if ($exitval == 0);
@@ -55,9 +101,9 @@ sub Install($$$)
 	    ExecQuietFatal("$RCDIR/1.mysql-server.sh start");
 	    # Give mysqld some time to start, then make sure it did
 	    sleep 5;
-	    if (ExecQuiet("$MYSQLADMIN -u mysql ping")) {
+	    if (ExecQuiet("$MYSQLADMIN -u $user ping")) {
 		sleep 10;
-		ExecQuietFatal("$MYSQLADMIN -u mysql ping");
+		ExecQuietFatal("$MYSQLADMIN -u $user ping");
 	    }
 	};
 
@@ -70,11 +116,19 @@ sub Install($$$)
 	    if ($exitval) {
 		PhaseSkip("Privs already initialized");
 	    }
-	    ($exitval, @rows) =
-		ExecQuietFatal("echo \"update user set ".
-			       " Password=PASSWORD($password) ".
-			       "where user='root'; flush privileges\" | ".
-			       "$MYSQL -s -u root mysql");
+	    if ($newmysql) {
+		($exitval, @rows) =
+		    ExecQuietFatal("echo \"alter user 'root'\@'localhost' ".
+				   "identified by $password; ".
+				   "flush privileges\" | ".
+				   "$MYSQL -s -u root mysql");
+	    } else {
+		($exitval, @rows) =
+		    ExecQuietFatal("echo \"update user set ".
+				   " Password=PASSWORD($password) ".
+				   "where user='root'; flush privileges\" | ".
+				   "$MYSQL -s -u root mysql");
+	    }
 	};
 
 	Phase "dbpatch", "Patching up mysql DB", sub {

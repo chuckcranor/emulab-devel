@@ -1,10 +1,8 @@
-require(window.APT_OPTIONS.configObject,
-	['underscore', 'js/quickvm_sup', 'moment',
-	 'js/lib/text!template/dashboard.html'],
-function (_, sup, moment, dashboardString)
+$(function ()
 {
     'use strict';
-    var dashboardTemplate = _.template(dashboardString);
+    var templates = APT_OPTIONS.fetchTemplateList(['dashboard']);
+    var dashboardTemplate = _.template(templates['dashboard']);
     var clusterFiles      = ["cloudlab-nofed.json", "cloudlab-fedonly.json"];
     var clusterStats      = {};
     
@@ -20,7 +18,7 @@ function (_, sup, moment, dashboardString)
     function DashboardLoop()
     {
 	var callback = function(json) {
-	    console.log(json);
+	    //console.log(json);
 	    if (json.code) {
 		console.log("Could not get dashboard data: " + json.value);
 		return;
@@ -71,7 +69,7 @@ function (_, sup, moment, dashboardString)
 		}
 	    });
 	    UpdateTimes();
-	    UpdateClusterSummary();
+	    UpdateClusterSummary(json.value.typecounts);
 	}
 	var xmlthing = sup.CallServerMethod(null, "dashboard",
 					    "GetStats", null);
@@ -92,7 +90,7 @@ function (_, sup, moment, dashboardString)
     /*
      * Grab the JSON files and reduce it down.
      */
-    function UpdateClusterSummary()
+    function UpdateClusterSummary(typecounts)
     {
 	var UpdateTable = function() {
 	    var html = "";
@@ -106,10 +104,39 @@ function (_, sup, moment, dashboardString)
 		    "<td>" + site.total + "</td>" +
 		    "</tr>";
 	    });
-	    console.info(html);
+	    //console.info(html);
 	    $('#cluster-status-tbody').html(html);
 	};
-	
+
+	if (!window.MAINSITE) {
+	    $.each(typecounts, function(site, types) {
+		var stats = {"total" : 0,
+			     "inuse" : 0,
+			     "ratio" : 0,
+			     "types" : {}};
+	    
+		$.each(types, function(type, data) {
+		    var inuse = data.count - data.free;
+		    var total = data.count - 0;
+		
+		    stats.types[data.type] =
+			{"total" : total,
+			 "inuse" : inuse,
+			 "ratio" : Math.round((inuse / total) * 100)}; 
+						  
+		    stats.total += total;
+		    stats.inuse += inuse;
+		    stats.ratio = Math.round((stats.inuse / stats.total) * 100);
+		});
+		clusterStats[site] = stats;
+	    });
+	    UpdateTable();
+	    return;
+	}
+	/*
+	 * The only reason for using these json files is cause we encode
+	 * what node types we care about in the Cloudlab Portal.
+	 */
 	for (var index = 0; index < clusterFiles.length; index++) {
 	    var jqxhr = $.getJSON(clusterFiles[index], function(blob) {
 		$.each(blob.children, function(idx, site) {

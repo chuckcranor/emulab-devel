@@ -35,6 +35,11 @@ SPITHEADER(1);
 # Place to hang the toplevel template.
 echo "<div id='main-body'></div>\n";
 
-SPITREQUIRE("rspec2genilib");
+REQUIRE_UNDERSCORE();
+REQUIRE_SUP();
+REQUIRE_FILESTYLE();
+SPITREQUIRE("js/rspec2genilib.js");
+
+AddTemplateList(array("rspec2genilib", "waitwait-modal", "oops-modal"));
 SPITFOOTER();
 ?>

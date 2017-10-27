@@ -32,6 +32,7 @@ fi
 [[ -z "${host-}" ]] && declare host       #emulab hostname
 [[ -z "${failed-}" ]] && declare failed=""  #major falure to be commicated to user
 [[ -z "${os-}" ]] && declare os=""      #[Linux|FreeBSD] for now
+[[ -z "${osrel-}" ]] && declare osrel="" #release major number
 [[ -z "${todo_exit-}" ]] && declare -a todo_exit=('echo "Exit trap"')
 [[ -z "${hwinv[hwinvidx]-}" ]] && declare -A hwinv["hwinvidx"]=""  # hwinv from tmcc
 [[ -z "${hwinvcopy[hwinvidx]-}" ]] && declare -A hwinvcopy["hwinvidx"]=""  # a copy of hwinv from tmcc
@@ -71,6 +72,13 @@ initialize () {
     if [ -z "${BINDIR-""}" ] ; then 
 	if [ -f "/etc/emulab/paths.sh" ]; then
 	    source /etc/emulab/paths.sh
+	    # XXX paths.sh resets PATH so we need to re-add any special bindir
+	    ldir=`$BINDIR/tmcc hwinfo | grep LOGDIR= | \
+                  sed -e 's/.*LOGDIR="\(.*\)".*/\1/'`
+	    bdir=$ldir/`uname -s`/bin-`uname -m`
+	    if [ -d $bdir ] ; then
+		export PATH="$PATH:$bdir"
+	    fi
 	else
 	    export BINDIR=/usr/local/etc/emulab
 	    export LOGDIR=/var/tmp
@@ -600,6 +608,7 @@ inithostname() {
 	echo "ERROR uname messed up"
 	exit 1
     fi
+    osrel=`uname -r | sed 's/^\([0-9][0-9]*\)\..*/\1/'`
     if [ -e "$BINDIR/tmcc" ] ; then
 	host=$($BINDIR/tmcc nodeid)
     else
@@ -618,6 +627,13 @@ inithostname() {
 
 findSmartctl() {
     local findit=$(which smartctl)
+    if [ "$os" == "FreeBSD" ] ; then
+	if [ "$osrel" == "9" ] ; then
+	    findit=$(which smartctl9)
+	elif [ "$osrel" == "10" ] ; then
+	    findit=$(which smartctl10)
+	fi
+    fi
     if [ -z "${findit}" ] ; then
 	if [ -x "/usr/sbin/smartctl" ]; then
 	    findit="/usr/sbin/smartctl"
@@ -754,6 +770,8 @@ getdrivenames() {
 	    list="0 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15"
 	    for i in $list
 	    do
+		[[ ! -L /dev/ad${i} ]] &&  [[ -c /dev/ad${i} ]] && drivelist+="/dev/ad${i} "
+		[[ -c /dev/ada${i} ]] && drivelist+="/dev/ada${i} "
 		[[ -c /dev/ad${i} ]] && drivelist+="/dev/ad${i} " 
 		[[ -c /dev/da${i} ]] && drivelist+="/dev/da${i} " 
 		[[ -c /dev/ar${i} ]] && drivelist+="/dev/ar${i} " 

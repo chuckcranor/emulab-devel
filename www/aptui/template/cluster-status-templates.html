@@ -5,18 +5,48 @@
       <tr>
 	<th>Type</th>
 	<th>Inuse</th>
-	<th>Pre</th>
-	<th>Free</th>
+	<% if (isadmin) { %>
+	  <th>Pre
+	    <a href='#' class='btn btn-xs'
+	       data-toggle='tooltip'
+	       data-container="body"
+	       data-trigger="hover"
+	       title='Number preserved AND free in parens'
+	       style="margin-bottom: 3px;
+	              padding-left: 0px;
+	              padding-right: 0px;">
+	      <span class='glyphicon glyphicon-question-sign'></span></a></th>
+	<% } %>
+	<th>Free
+	  <a href='#' class='btn btn-xs'
+	     data-toggle='tooltip'
+	     data-container="body"
+	     data-trigger="hover"
+	     title='If the reservation system determines that some free
+		    nodes will soon be unavailble, the adjusted number is
+		    shown in parens.'
+	     style="margin-bottom: 3px;
+	            padding-left: 0px;
+	            padding-right: 0px;">
+	    <span class='glyphicon glyphicon-question-sign'></span></a></th>
+	</th>
       </tr>
     </thead>
     <tbody>
       <%  _.each(totals, function(value, type) { %>
 	<tr>
-	  <td><%- type %></td>
+	  <td><a href="#" class="counts-type"><%- type %></a></td>
 	  <td><%- value.inuse %></td>
-	  <td><%- value.preres %></td>
-	  <td><%- value.free %>
+	  <% if (isadmin) { %>
+	    <td><%- value.preres %>
 	      <% if (value.free_preres) { %>(<%- value.free_preres %>)<% } %>
+	    </td>
+	  <% } %>
+	  <td><%- value.free %>
+	    <% if (_.has(value, "free_reserved") &&
+	           value.free > value.free_reserved) {%>
+	      (<%- Math.round(Number(value.free_reserved)) %>)
+            <% } %>
 	  </td>
 	</tr>
       <% }); %>
@@ -41,7 +71,7 @@
     </thead>
     <tbody>
       <% prereslist.forEach(function(value, index) { %>
-	<% var expando_target = cluster_name + "-" + value.pid + "-collapse"; %>
+	<% var expando_target = cluster_name + "-" + value.pid + "-" + value.name + "-collapse"; %>
 	<tr>
 	  <td>
 	    <% if (value.prereserved.length) { %>

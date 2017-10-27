@@ -42,17 +42,19 @@ sub usage()
 	  "-o   - Specify output file for linktest results.\n".
 	  "-e   - Tell linktest to send error output to stdout or -o file\n".
 	  "-m   - Send email to swapper if linktest fails.\n".
+	  "-N   - Use loghole instead of NFS shared directory\n".
 	  "-r   - Report results only, don't flag errors.\n".
 	  "-d   - Turn on debugging output.\n");
     exit(-1);
 }
-my $optlist  = "dkl:o:t:mfre";
+my $optlist  = "dkl:o:t:mfreN";
 my $debug    = 1;
 my $cancel   = 0;
 my $sendmail = 0;
 my $forcerun = 0;
 my $reportonly = 0;
 my $noerrlog = 0;
+my $nonfs    = 0;
 my $timeout;
 my $level;
 my $output;
@@ -104,6 +106,9 @@ if (defined($options{"d"})) {
 }
 if (defined($options{"m"})) {
     $sendmail = 1;
+}
+if (defined($options{"N"})) {
+    $nonfs = 1;
 }
 if (defined($options{"r"})) {
     $reportonly = 1;
@@ -234,11 +239,22 @@ elsif ($cancel) {
 
 my @hosed = ();
 $experiment->LinkTestCapable(\@hosed);
-if (@hosed > 0) {
+
+# XXX eliminate blockstore hosts
+my @nonbs = ();
+foreach my $vname (@hosed) {
+    my $node = $experiment->VnameToNode($vname);
+    if ($node && $node->type() eq "blockstore") {
+	;
+    } else {
+	push @nonbs, $vname;
+    }
+}
+if (@nonbs > 0) {
     print STDERR
 	"*** Nodes running an OSID that does not support linktest:\n";
     print STDERR
-	"***   ", join(' ', @hosed), "\n";
+	"***   ", join(' ', @nonbs), "\n";
     if (!$forcerun) {
 	die("*** $0:\n".
 	    "    Aborting linktest since not all nodes support it!\n");
@@ -357,6 +373,8 @@ push(@cmdargs, ("-o", $errlog))
     if (!$noerrlog);
 push(@cmdargs, "-r")
     if ($reportonly);
+push(@cmdargs, "-N")
+    if ($nonfs);
 
 print "Running '@cmdargs'\n"
     if ($debug > 1);

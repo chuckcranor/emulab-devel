@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2016 University of Utah and the Flux Group.
+# Copyright (c) 2000-2017 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -74,8 +74,11 @@ function Do_ExperimentList()
     if (CheckPageArgs()) {
         return;
     }
-    $results = ExperimentList("user", $target_user);
-    SPITAJAX_RESPONSE($results);
+    $blob = array("user_experiments" =>
+                     ExperimentList("user", $target_user),
+                  "project_experiments" =>
+                     ExperimentList("membership", $target_user));
+    SPITAJAX_RESPONSE($blob);
 }
 
 function Do_ClassicExperimentList()
@@ -111,10 +114,32 @@ function Do_ProfileList()
     SPITAJAX_RESPONSE($results);
 }
 
+function Do_DatasetList()
+{
+    global $this_user, $target_user;
+
+    if (CheckPageArgs()) {
+        return;
+    }
+    $results = DatasetList("user", $target_user);
+    SPITAJAX_RESPONSE($results);
+}
+
+function Do_ClassicDatasetList()
+{
+    global $this_user, $target_user;
+
+    if (CheckPageArgs()) {
+        return;
+    }
+    $results = ClassicDatasetList("user", $target_user);
+    SPITAJAX_RESPONSE($results);
+}
+
 function Do_ProjectList()
 {
     global $this_user, $target_user;
-    global $TB_PROJECT_CREATEEXPT;
+    global $TB_PROJECT_READINFO, $newTrustMap;
 
     if (CheckPageArgs()) {
         return;
@@ -122,22 +147,47 @@ function Do_ProjectList()
     $target_idx  = $target_user->uid_idx();
     $target_uuid = $target_user->uuid();
     $results     = array();
-    $projlist    = $target_user->ProjectAccessList($TB_PROJECT_CREATEEXPT);
+    $projlist    = $target_user->ProjectMembershipList();
 
     #
     # Cull out the nonlocal projects, we do not want to show those
     # since they are just the holding projects.
     #
-    while (list($pid) = each($projlist)) {
-        $proj = Project::Lookup($pid);
-        if ($proj && !$proj->IsNonLocal()) {
+    foreach ($projlist as $proj) {
+        if (!$proj->IsNonLocal()) {
             $blob = array();
             $blob["pid"] = $proj->pid();
             $blob["description"] = $proj->name();
             $leader = $proj->GetLeader();
-            $blob["leader"] = $leader->name();
+            $blob["leader"]      = $leader->uid();
+            $blob["leader_name"] = $leader->name();
+            $blob["leader_idx"]  = $leader->idx();
+            $membership = $proj->MemberShipInfo($target_user);
+            $blob["trust"] = $newTrustMap[$membership["trust"]];
+
+            #
+            # User membership in subgroups
+            #
+            $blob["subgroups"] = array();
             
-            $results[$pid] = $blob;
+            $groups = $proj->GroupList($target_user);
+            if (count($groups)) {
+                foreach ($groups as $group) {
+                    $glob = array();
+                    $leader = $group->GetLeader();
+
+                    $glob["gid"]          = $group->gid();
+                    $glob["gid_idx"]      = $group->gid_idx();
+                    $glob["description"]  = $group->description();
+                    $glob["leader"]       = $leader->uid();
+                    $glob["leader_idx"]   = $leader->idx();
+                    $glob["leader_name"]  = $leader->name();
+                    $membership = $group->MemberShipInfo($target_user);
+                    $glob["trust"] = $newTrustMap[$membership["trust"]];
+                    $blob["subgroups"][] = $glob;
+                }
+            }
+            $results[$proj->pid()] = $blob;
         }
     }
 
@@ -172,6 +222,9 @@ function Do_AccountDetails()
         $results["admin"]         = $target_user->admin() ? true : false;
         $results["foreign_admin"] = $target_user->foreign_admin() ? true:false;
         $results["web_frozen"]    = $target_user->weblogin_frozen()? true:false;
+        $results["nonlocal_id"]   = ($target_user->nonlocal_id() ?
+                                     $target_user->nonlocal_id() : "");
+        $results["last_weblogin"] = DateStringGMT(LASTWEBLOGIN($target_idx));
     }
 
     SPITAJAX_RESPONSE($results);

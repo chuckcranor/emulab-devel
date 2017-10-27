@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2016 University of Utah and the Flux Group.
+# Copyright (c) 2000-2017 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -56,3 +56,24 @@ function Do_Click()
     DBQueryWarn('update apt_announcement_info set clicked=1 where aid="'.$aid.'" and uid_idx="'.$uid_idx.'"', $dblink);
   }
 }
+
+#
+# Return current announcements, use same html as quickvm_sup.php does.
+#
+function Do_Announcements()
+{
+    global $this_user, $ajax_args;
+    $results = array();
+
+    $announcements = GET_ANNOUNCEMENTS($this_user, false);
+    if (!count($announcements)) {
+        SPITAJAX_RESPONSE($results);
+        return;
+    }
+    SPITAJAX_RESPONSE($announcements);
+}
+
+# Local Variables:
+# mode:php
+# End:
+?>

@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2000-2016 University of Utah and the Flux Group.
+# Copyright (c) 2000-2017 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -30,6 +30,7 @@ use CGI;
 use POSIX ":sys_wait_h";
 use POSIX qw(setsid strftime ceil floor);
 use Date::Parse;
+use JSON;
 
 #
 # Back-end script to manage APT profiles.
@@ -50,8 +51,11 @@ sub usage()
     print("Usage: manage_instance linktest instance [-k | level]\n");
     print("Usage: manage_instance writecreds instance directory\n");
     print("Usage: manage_instance updatekeys instance [uid] \n");
-    print("Usage: manage_instance extend instance [-m message] days [filename]\n");
+    print("Usage: manage_instance extend instance ".
+	  "[-M] [-m message | -f filename] days\n");
     print("Usage: manage_instance denyextension instance [-m message] [filename]\n");
+    print("Usage: manage_instance checkreservation instance days\n");
+    print("Usage: manage_instance maxextension instance\n");
     print("Usage: manage_instance moreinfo instance [-m message] [filename]\n");
     print("Usage: manage_instance extendold instance [-f] seconds\n");
     print("Usage: manage_instance utilization instance\n");
@@ -133,12 +137,18 @@ sub DoDeleteNodes();
 sub DoUtilization();
 sub DoIdleData();
 sub DoOpenstack();
+sub DoCheckReservation();
+sub DoCheckAutoApprove();
+sub CheckAutoApprove($$);
+sub CheckReservationInternal($$$);
+sub DoMaxExtension();
 sub WriteCredentials();
 sub StartMonitor();
 sub StartMonitorInternal(;$@);
-sub DoImageTrackerStuff($$$$$$);
+sub DoImageTrackerStuff($$$$$$$);
 sub DenyExtensionInternal($);
-sub ExtendInternal($$$$);
+sub ExtendInternal($$$$$);
+sub CallAggregateMethod($$@);
 
 #
 # Parse command arguments. Once we return from getopts, all that should be
@@ -167,8 +177,21 @@ if (!defined($instance)) {
     $instance = APT_Instance->LookupBySlice($uuid);
 }
 if (!defined($instance)) {
-    fatal("No such instance $uuid");
+    # Lets not make this a fatal error; when coming from the web interface,
+    # we do not need to send email. 
+    UserError("No such instance $uuid");
 }
+#
+# Grab the webtask object.
+#
+if (defined($webtask_id)) {
+    $webtask = WebTask->Lookup($webtask_id);
+    if (!defined($webtask)) {
+	fatal("Could not lookup/create webtask for profile");
+    }
+    $webtask->AutoStore(1);
+}
+
 if (getpwuid($UID) eq "nobody") {
     $this_user = User->ImpliedUser();
 }
@@ -246,6 +269,15 @@ elsif ($action eq "idledata") {
 elsif ($action eq "openstackstats") {
     DoOpenstack()
 }
+elsif ($action eq "checkreservation") {
+    DoCheckReservation()
+}
+elsif ($action eq "maxextension") {
+    DoMaxExtension()
+}
+elsif ($action eq "checkautoapprove") {
+    DoCheckAutoApprove()
+}
 else {
     usage();
 }
@@ -267,11 +299,16 @@ sub DoSnapshot()
     my $update_profile;
     my $copyback_uuid;
     my $copyback_urn;
+    my $swebtask;
+    my $nosnapshot     = 0;
+    my $mustnotexist   = 0;
+    my $wholedisk      = 0;
     my $update_prepare = 0;
     my $doversions = 0;
     my $usetracker = 0;
+    my $operation = "image-only"; # Default to just snapshot.
 
-    my $optlist = "n:i:u:Uc:";
+    my $optlist = "n:i:u:Uc:O:Sse";
     my %options = ();
     if (! getopts($optlist, \%options)) {
 	usage();
@@ -293,6 +330,28 @@ sub DoSnapshot()
     }
     if (defined($options{"U"})) {
 	$update_prepare = 1;
+    }
+    if (defined($options{"s"})) {
+	$nosnapshot = 1;
+    }
+    if (defined($options{"e"})) {
+	$wholedisk = 1;
+	# Must be a brand new image for wholedisk. 
+	$mustnotexist = 1;
+    }
+    if (defined($options{"S"})) {
+	$nosnapshot = 1;
+	$mustnotexist = 1;
+    }
+    if (defined($options{"O"})) {
+	$operation = $options{"O"};
+	if ($operation !~
+	    /^(update-profile|copy-profile|new-profile|image-only)$/) {
+	    usage();
+	}
+	if ($operation eq "update-profile") {
+	    $update_profile = "node";
+	}
     }
     if (defined($cloneprofile) && defined($update_profile)) {
 	fatal("Not allowed to update profile when cloning a profile");
@@ -414,9 +473,9 @@ sub DoSnapshot()
     #
     if (! TBcheck_dbslot($imagename, "images",
 			 "imagename", TBDB_CHECKDBSLOT_ERROR)) {
-	$imagename = $profile->profileid();
-	$imagename .= "." . $node_id
-	    if (defined($node_id));
+	$errmsg  = "Invalid imagename: " . TBFieldErrorString() . "\n";
+	$errcode = 1;
+	goto uerror;
     }
     
     #
@@ -437,6 +496,7 @@ sub DoSnapshot()
 	#
 	if (!defined($cloneprofile)) {
 	    my $rval = DoImageTrackerStuff($aggregate, $node, $project,
+					   $imagename,
 					   \$copyback_uuid, \$copyback_urn,
 					   \$errmsg);
 	    if ($rval) {
@@ -504,22 +564,27 @@ sub DoSnapshot()
     }
     $needunlock = 1;
 
-    #
-    # Create the webtask object, but AFTER locking the slice so we do
-    # not destroy one in use.
-    #
-    if (defined($webtask_id)) {
-	$webtask = WebTask->LookupOrCreate($instance->uuid(), $webtask_id);
-	# Convenient.
-	$webtask->AutoStore(1);
-	# This is convenience for the web server.
-	if (defined($webtask)) {
-	    $webtask->aggregate_urn($aggregate->aggregate_urn());
-	    $webtask->client_id($node_id);
-	}
+    if (!$nosnapshot) {
+	#
+	# Grab the webtask, but only after we have it locked, since we are
+	# going to modify it. This is a different webtask then the one we
+	# got on the command line. The command line webtask is for reporting
+	# he results of the command, while the instance webtask is used to
+	# report ongoing status of the imaging operation (to the web UI).
+	#
+	$swebtask = $instance->webtask();
+	# We reuse this so clear it.
+	$swebtask->Reset();
+	$swebtask->AutoStore(1);
+	# These are for the web server (imaging status).
+	$swebtask->aggregate_urn($aggregate->aggregate_urn());
+	$swebtask->client_id($node_id);
+	$swebtask->operation($operation) if (defined($operation));
+	$swebtask->imagename($imagename);
+	
+	$instance->SetStatus("imaging");
+	$aggregate->SetStatus("imaging");
     }
-    $instance->SetStatus("imaging");
-    $aggregate->SetStatus("imaging");
 
     #
     # This returns pretty fast, and then the imaging takes place in
@@ -527,11 +592,14 @@ sub DoSnapshot()
     #
     my $response =
 	$aggregate->CreateImage($sliver_urn, $imagename,
-				$update_prepare, $copyback_uuid);
+				$update_prepare, $copyback_uuid,
+				undef, $nosnapshot, $mustnotexist, $wholedisk);
     if (!defined($response)) {
 	$errmsg = "Internal error creating image";
-	$instance->SetStatus($old_status);
-	$aggregate->SetStatus($old_status);
+	if (!$nosnapshot) {
+	    $instance->SetStatus($old_status);
+	    $aggregate->SetStatus($old_status);
+	}
 	goto uerror;
     }
     if ($response->code() != GENIRESPONSE_SUCCESS) {
@@ -540,45 +608,68 @@ sub DoSnapshot()
 	    if ($response->code() == GENIRESPONSE_BUSY ||
 		$response->code() == GENIRESPONSE_SERVER_UNAVAILABLE ||
 		$response->code() == GENIRESPONSE_FORBIDDEN);
-	$instance->SetStatus($old_status);
-	$aggregate->SetStatus($old_status);
+	# Important to tell web interface about these.
+	$errcode = GENIRESPONSE_NOSPACE
+	    if ($response->code() == GENIRESPONSE_NOSPACE);
+	$errcode = GENIRESPONSE_ALREADYEXISTS
+	    if ($response->code() == GENIRESPONSE_ALREADYEXISTS);
+	if (!$nosnapshot) {
+	    $instance->SetStatus($old_status);
+	    $aggregate->SetStatus($old_status);
+	}
 	goto uerror;
     }
     my ($image_urn, $image_url,
 	$version_urn, $version_url) = @{ $response->value() };
-    if (!defined($version_urn)) {
+    #
+    # For version zero, kill the version number.
+    #
+    if (!defined($version_urn) || $version_urn =~ /:0$/) {
 	$version_urn = $image_urn;
 	$version_url = $image_url
     }
-    if (defined($webtask)) {
-	$webtask->image_urn($version_urn);
-	$webtask->image_url($version_url);
-	my $image_name;
+    my $image_name;
 
-	if ($usetracker) {
-	    # DoImageTrackerStuff determined that we use whatever the cluster
-	    # tells us, cause it is the home of the image.
-	    if (!defined($copyback_urn)) {
-		$image_name = $version_urn;
-	    }
-	    else {
-		$image_name = $copyback_urn;
-	    }
+    # When using the image server we use URNs. 
+    if ($usetracker) {
+	# DoImageTrackerStuff determined that we use whatever the cluster
+	# tells us, cause it is the home of the image.
+	if (!defined($copyback_urn)) {
+	    $image_name = $version_urn;
 	}
 	else {
-	    $image_name = $version_url;
+	    $image_name = $copyback_urn;
 	}
-	$webtask->image_name($image_name);
+    }
+    elsif ($aggregate->OnLocalCluster()) {
+	$image_name = $version_urn;
+    }
+    else {
+	$image_name = $version_url;
+    }
+    
+    if ($nosnapshot) {
+	if (defined($webtask)) {
+	    $webtask->image_urn($version_urn);
+	    $webtask->image_url($version_url);
+	    $webtask->image_name($image_name);
+	}
+	print "$version_urn,$version_url,$image_name\n";
+	$slice->UnLock();
+	exit(0);
+    }
+    if (defined($swebtask)) {
+	$swebtask->image_urn($version_urn);
+	$swebtask->image_url($version_url);
+	$swebtask->image_name($image_name);
 
 	# We tell the web interface that the image has to be copied
 	# back,
 	if (defined($copyback_uuid)) {
-	    $webtask->copyback_uuid($copyback_uuid);
+	    $swebtask->copyback_uuid($copyback_uuid);
 	}
     }
-    else {
-	print "$image_urn,$image_url\n";
-    }
+    print "$version_urn,$version_url,$image_name\n";
 
     #
     # Exit and leave child to poll.
@@ -627,7 +718,7 @@ sub DoSnapshot()
 
 	my $blob = $response->value();
 	# This is the per-aggregate status, we always set this for web UI.
-	$aggregate->UpdateWebStatus($blob->{'details'});
+	$aggregate->UpdateSliverStatusAll($blob->{'details'});
 	
 	if ($blob->{'status'} eq "failed") {
 	    $failed = 1;
@@ -655,7 +746,7 @@ sub DoSnapshot()
 		$response->code() == GENIRESPONSE_RPCERROR);
 
 	my $imageblob = $response->value();
-	if (defined($webtask)) {
+	if (defined($swebtask)) {
 	    my %blobcopy = %{ $imageblob };
 
 	    #
@@ -679,8 +770,8 @@ sub DoSnapshot()
 	}
     }
     # Cause of image status events.
-    $webtask->Refresh()
-	if (defined($webtask));
+    $swebtask->Refresh()
+	if (defined($swebtask));
     
     if ($failed) {
 	$errmsg = "Imaging failed"
@@ -692,31 +783,60 @@ sub DoSnapshot()
 	$errcode = -2;
 	goto bad;
     }
-    elsif (defined($update_profile)) {
+    #
+    # We cannot change a geni-lib script profile, so no need to do this.
+    # But we can change a portal converted profile.
+    #
+    elsif (defined($update_profile) &&
+	   (!defined($profile->script()) || $profile->portal_converted())) {
 	#
-	# If successful, we create a new version of the profile and
-	# update the rspec to reflect the new image version. Note
-	# that we expect the CM is doing image versioning, so do not
-	# bother to check if the image version is actually new.
+	# New image. Might not have changed if the cluster is not doing
+	# image versions.
 	#
-	if ($doversions) {
-	    $profile = $profile->NewVersion($this_user);
-	    if (!defined($profile)) {
-		print STDERR "Could not create new profile version\n";
-		$webtask->Exited(70)
-		    if (defined($webtask));
-		exit(1);
-	    }
-	}
 	# DoImageTrackerStuff determined that we use whatever the cluster
 	# tells us, cause it is the home of the image.
-	$copyback_urn = $version_urn
+	#
+	my $newimage = $version_urn
 	    if ($usetracker && !defined($copyback_urn));
+	# And fall back to url
+	$newimage = $version_url
+	    if (!defined($newimage));
 
-	$profile->UpdateDiskImage($node_id,
-				  (defined($copyback_urn) ?
-				   $copyback_urn : $version_url),
-				  ($update_profile eq "all" ? 1 : 0));
+	#
+	# Okay, is the rspec going to change. This is kinda annoying to
+	# figure out, so lets just run the code in impotent mode and have
+	# it tell us the number of nodes that will get updated.
+	#
+	my $changed = 
+	    $profile->UpdateDiskImage($node_id, $newimage,
+				      ($update_profile eq "all" ? 1 : 0), 1);
+
+	if ($changed > 0) {
+	    #
+	    # Create a new version of the profile and update the rspec
+	    # to reflect the new image version. 
+	    #
+	    if ($doversions) {
+		$profile = $profile->NewVersion($this_user);
+		if (!defined($profile)) {
+		    print STDERR "Could not create new profile version\n";
+		    $webtask->Exited(70)
+			if (defined($webtask));
+		    exit(1);
+		}
+	    }
+	    $profile->UpdateDiskImage($node_id, $newimage,
+				      ($update_profile eq "all" ? 1 : 0), 0);
+	    $profile->InsertImageRecords();
+	    #
+	    # For a portal converted profile, we need to regen the script.
+	    #
+	    if ($profile->portal_converted()) {
+		if ($profile->Convert2Genilib() != 0) {
+		    fatal("Could not convert rspec to geni-lib");
+		}
+	    }
+	}
     }
     $instance->SetStatus("ready");
     $aggregate->SetStatus("ready");
@@ -755,20 +875,22 @@ sub DoSnapshot()
 	    $errcode = 1;
 	    goto bad;
 	}
-	elsif (defined($webtask)) {
-	    $webtask->image_status("ready");
+	elsif (defined($swebtask)) {
+	    $swebtask->image_status("ready");
 	}
     }
-    # We garbage collect these later, so anyone waiting has a chance
-    # to see the exit status
+    $swebtask->Exited(0);
     $webtask->Exited(0)
 	if (defined($webtask));
     $slice->UnLock();
-    if (defined($logfile) && -s $logfile) {
-	SENDMAIL($TBOPS,
-		 "Instance Snapshot Complete",
-		 "Finished taking snapshot of $instance.\n",
-		 $TBOPS, undef, $logfile);
+    
+    if (defined($logfile)) {
+	if (-s $logfile) {
+	    SENDMAIL($TBOPS,
+		     "Instance Snapshot Complete",
+		     "Finished taking snapshot of $instance.\n",
+		     $TBOPS, undef, $logfile);
+	}
 	unlink($logfile);
     }
     if (!$sliver_ready) {
@@ -803,15 +925,20 @@ sub DoSnapshot()
 	$webtask->Exited($errcode);
 	$webtask->output($errmsg);
     }
+    # For display in the imaging modal.
+    if (defined($errmsg) && defined($swebtask)) {
+	$swebtask->Exited($errcode);
+	$swebtask->output($errmsg);
+    }
     $slice->UnLock()
 	if ($needunlock);
 
     exit($errcode);
 }
 
-sub DoImageTrackerStuff($$$$$$)
+sub DoImageTrackerStuff($$$$$$$)
 {
-    my ($aggregate, $node, $project, $puuid, $purn, $perrmsg) = @_;
+    my ($aggregate, $node, $project, $newname, $puuid, $purn, $perrmsg) = @_;
     my $node_id = GeniXML::GetVirtualId($node);
     my $errmsg;
 
@@ -873,39 +1000,60 @@ sub DoImageTrackerStuff($$$$$$)
 	}
     }
     #
-    # System Image? We use the URN we get back from CreateSliver().
+    # System Image? We use the URN we get back from CreateImage().
     # The cluster will be the origin for the new image.
     #
     return 0
-	if ($blob->{'issystem'});
+	if (exists($blob->{'issystem'}) && $blob->{'issystem'});
+    # Image aliases are also considered system images.
+    return 0
+	if (exists($blob->{'isimagealias'}) && $blob->{'isimagealias'});
 
     my $image_urn     = $blob->{'urn'};
     my $copyback_uuid = $blob->{'version_uuid'};
     my $copyback_urn  = $image_urn;
 
     my $hrn = GeniHRN->Parse($image_urn);
-    my (undef,$ospid,$os,$vers) = $hrn->ParseImage();
+    if (!defined($hrn)) {
+	$$perrmsg = "Could not parse $image_urn\n";
+	return -1;
+    }
+    if (!$hrn->IsImage()) {
+	$$perrmsg = "$image_urn is not an image URN\n";
+	return -1;
+    }
+    my $projhrn = GeniHRN->Parse($blob->{'project_urn'});
+    if (!defined($projhrn)) {
+	$$perrmsg = "Could not parse " . $blob->{'project_urn'} . "\n";
+	return -1;
+    }
+
+    #
+    # Whenever we cross projects, we expect the cluster to create
+    # a new image. We use the URN that is returned.
+    #
+    if (lc($projhrn->subauth()) ne lc($project->pid())) {
+	# We use the URN we get back from CreateSliver().
+	return 0;
+    }
 
     #
     # What happens if the user is doing a snapshot on the cluster where
     # the image lives? The copyback (import) makes no sense in that case,
-    # but what if its the same cluster but different projects? In this case
-    # we want a standard image clone, and we use whatever URN the cluster
-    # hands back to us.
-    #
-    # Aside; should we allow snapshots (in the web ui) across projects?
+    # We can use the URN the cluster returns.
     #
     if (lc($hrn->domain()) eq lc($aggregate->domain())) {
-	my $projhrn = GeniHRN->Parse($blob->{'project_urn'});
-	if (!defined($projhrn)) {
-	    $$perrmsg = "Could not parse " . $blob->{'project_urn'} . "\n";
-	    return -1;
-	}
-	if (lc($projhrn->subauth()) eq lc($project->pid())) {
-	    # We use the URN we get back from CreateSliver().
-	    return 0;
-	}
-	# Ditto
+	return 0;
+    }
+
+    #
+    # Different cluster
+    #
+    # Is this node currently running a different image then what
+    # the new name will be? Is so, then we expect the cluster to
+    # start a new image and we use the URN it returns.
+    #
+    if ($newname ne $hrn->osname()) {
 	return 0;
     }
 
@@ -921,7 +1069,8 @@ sub DoImageTrackerStuff($$$$$$)
     #
     if ($blob->{'isversioned'}) {
 	$copyback_urn = GeniHRN::GenerateImage($hrn->authority(),
-					       $ospid, $os,
+					       $hrn->ospid(),
+					       $hrn->osname(),
 					       $blob->{'maxversion'} + 1);
     }
     $$puuid = $copyback_uuid;
@@ -938,15 +1087,6 @@ sub DoConsole()
 	if (!@ARGV);
     my $node_id = shift(@ARGV);
 
-    if (defined($webtask_id)) {
-	$webtask = WebTask->LookupOrCreate(undef, $webtask_id);
-	if (!defined($webtask)) {
-	    fatal("Could not lookup/create webtask for $webtask_id");
-	}
-	# Convenient.
-	$webtask->AutoStore(1);
-    }
-    
     #
     # Sanity check to make sure the node is really in the rspec, since
     # we need its sliver urn to ask for the console url.
@@ -958,7 +1098,9 @@ sub DoConsole()
 	if (! defined($manifest)) {
 	    fatal("Could not parse manifest for $obj");
 	}
-	my @nodes = GeniXML::FindNodes("n:node", $manifest)->get_nodelist();
+	my @nodes = (GeniXML::FindNodes("n:node", $manifest)->get_nodelist(),
+		     GeniXML::FindNodesNS("n:vhost", $manifest,
+					  $GeniXML::EMULAB_NS)->get_nodelist());
 	foreach my $node (@nodes) {
 	    my $client_id   = GeniXML::GetVirtualId($node);
 	    my $urn         = GeniXML::GetSliverId($node);
@@ -999,10 +1141,21 @@ sub DoConsole()
 	}
 	exit($response->code());
     }
+    if ($response->code() == GENIRESPONSE_FORBIDDEN) {
+	print STDERR "Server says access to $node_id console is forbidden\n";
+	if (defined($webtask)) {
+	    $webtask->output("Sorry, access to $node_id console is forbidden");
+	    $webtask->Exited($response->code());
+	}
+	exit($response->code());
+    }
     if ($response->code() != GENIRESPONSE_SUCCESS) {
-	$response = $sliver->ConsoleURL($sliver_urn);
-	if (!defined($response)) {
-	    fatal("RPC Error calling ConsoleURL");
+	# Fallback to old RPC method.
+	if ($response->code() == XMLRPC_NO_SUCH_METHOD) {
+	    $response = $sliver->ConsoleURL($sliver_urn);
+	    if (!defined($response)) {
+		fatal("RPC Error calling ConsoleURL");
+	    }
 	}
 	if ($response->code() != GENIRESPONSE_SUCCESS) {
 	    if ($response->value()) {
@@ -1229,25 +1382,29 @@ sub DoExtend()
     my $extensions    = $instance->Brand()->ExtensionsEmailAddress();
     my $granted       = 0;
     my $needapproval  = 0;
+    my $inhours       = 0;
+    my $autoapprove_info;
     my $message;
     my $reason;
     my $errmsg;
     
     usage()
 	if (!@ARGV);
+
+    my $optlist = "m:f:h";
+    my %options = ();
+    if (! getopts($optlist, \%options)) {
+	usage();
+    }
+    usage()
+	if (!@ARGV);
     my $wanted = shift(@ARGV);
 
-    if (@ARGV == 2) {
-	my $arg = shift(@ARGV);
-	if ($arg eq "-m") {
-	    $reason = shift(@ARGV);
-	}
-	else {
-	    usage();
-	}
+    if (defined($options{"m"})) {
+	$reason = $options{"m"};
     }
-    elsif (@ARGV == 1) {
-	my $filename = shift(@ARGV);
+    elsif (defined($options{"f"})) {
+	my $filename = $options{"f"};
 	if (! -e $filename) {
 	    fatal("$filename does not exist");
 	}
@@ -1260,17 +1417,10 @@ sub DoExtend()
 	}
 	close(MSG);
     }
-    #
-    # Create the webtask object; the web interface gave us an anonymous
-    # webtask, so we can use it before lock.
-    #
-    if (defined($webtask_id)) {
-	$webtask = WebTask->Lookup($webtask_id);
-	fatal("Could not lookup webtask object")
-	    if (!defined($webtask));
-	# Convenient.
-	$webtask->AutoStore(1);
+    if (defined($options{"h"})) {
+	$inhours = 1;
     }
+
     #
     # Lock the slice in case it is doing something else, like taking
     # a disk image.
@@ -1342,9 +1492,21 @@ sub DoExtend()
     }
 
     #
+    # If extension is in hours, always grant if < 24 hours.
+    #
+    if ($inhours) {
+	if ($wanted >= 24) {
+	    $errmsg = "If you want more then 24 hours, use days instead.";
+	    goto bad;
+	}
+	$message = "Short extension granted for $wanted hours.";
+	$reason  = $message;
+	$granted = $wanted;
+    }
+    #
     # Guest users are treated differently.
     #
-    if (!defined($this_user)) {
+    elsif (!defined($this_user)) {
 	# Only extend for 24 hours. 
 	$granted = 1;
 
@@ -1395,6 +1557,15 @@ sub DoExtend()
 		$granted = 0;
 	    }
 	    if ($wanted > $granted) {
+		if (CheckAutoApprove($wanted, \$autoapprove_info) == 0) {
+		    if ($autoapprove_info->{'approve'}) {
+			# Informational for now.
+			if (0) {
+			    $granted = $wanted;
+			    goto grant;
+			}
+		    }
+		}
 		$needapproval = 1;
 		$message = "because it was started more then ".
 		    "$autoextend_maxage days ago";
@@ -1417,6 +1588,15 @@ sub DoExtend()
 	# management committee."
 	#
 	elsif ($wanted > $autoextend_maximum) {
+	    if (CheckAutoApprove($wanted, \$autoapprove_info) == 0) {
+		if ($autoapprove_info->{'approve'}) {
+		    # Informational for now.
+		    if (0) {
+			$granted = $wanted;
+			goto grant;
+		    }
+		}
+	    }
 	    $needapproval = 1;
 	    $message = "because it was for longer then $autoextend_maximum days";
 	    #
@@ -1454,9 +1634,12 @@ sub DoExtend()
     #
     # Do the extension.
     #
+  grant:
     if ($granted) {
-	if ($errcode = ExtendInternal($slice,
-				      $granted * 3600 * 24, 0, \$errmsg)) {
+	my $seconds = $granted * 3600;
+	$seconds *= 24 if (!$inhours);
+	    
+	if ($errcode = ExtendInternal($slice, $seconds, 0, 0, \$errmsg)) {
 	    goto bad;
 	}
     }
@@ -1467,6 +1650,16 @@ sub DoExtend()
     my $now     = POSIX::strftime("20%y-%m-%d %H:%M:%S %Z", localtime());
     my $before  = POSIX::strftime("20%y-%m-%d %H:%M:%S %Z",
 				  localtime($expires_time));
+
+    #
+    # XXX If in hours, change to 1. Need to come back and fix this.
+    # Make these fields in the database hours or seconds.
+    #
+    if ($inhours) {
+	$wanted  = 1;
+	$granted = 1;
+    }
+    
     #
     # New extension mechanism
     #
@@ -1474,7 +1667,11 @@ sub DoExtend()
 	"action"   => "request",
 	"wanted"   => $wanted,
 	"granted"  => $granted,
-	"admin"    => $this_user->IsAdmin() ? 1 : 0};
+	"admin"    => $this_user->IsAdmin() ? 1 : 0,
+    };
+    if ($needapproval) {
+	$extensionargs->{"needapproval"} = 1;
+    }
     if (defined($message)) {
 	$extensionargs->{"message"} = $message;
     }
@@ -1489,6 +1686,16 @@ sub DoExtend()
 	# A guest user, only the creator can request an extension.
     	$extensionargs->{"uid"}     = $instance->creator();
 	$extensionargs->{"uid_idx"} = $instance->creator_idx();
+    }
+    if (defined($autoapprove_info)) {
+    	$extensionargs->{"autoapproved"} = $autoapprove_info->{'approve'};
+    	$extensionargs->{"autoapproved_reason"} = $autoapprove_info->{'reason'};
+	if (defined($autoapprove_info->{'metrics'})) {
+	    my $metrics = eval { encode_json($autoapprove_info->{'metrics'}); };
+	    if (!$@) {
+		$extensionargs->{"autoapproved_metrics"} = $metrics;
+	    }
+	}
     }
     my $extensioninfo =
 	APT_Instance::ExtensionInfo->Create($instance, $extensionargs);
@@ -1505,7 +1712,7 @@ sub DoExtend()
 	"Before: $before\n".
 	"After $expires\n".
 	"Reason:\n".
-	$reason . "\n\n".
+	(defined($reason) ? "$reason\n\n" : "\n") .
 	"-----------------------------------------------\n";
     $instance->AddExtensionHistory($text);
 
@@ -1517,10 +1724,11 @@ sub DoExtend()
     }
     $instance->Brand()->SendEmail($creator->email(),
 		"Experiment Extension: $name",
-               ($this_user->IsAdmin() ? "$message\n\n$reason" :
+               ($this_user->IsAdmin() ?
+		"$message\n\n" . (defined($reason) ? $reason : "") :
                 "A request to extend your experiment was made and ".
                 "granted.\n".
-                "Your reason was:\n\n". $reason) .
+		(defined($reason) ? "Your reason was:\n\n${reason}" : "")) .
                "\n\n".
                "Your experiment was started on $created\n".
  	       "Your experiment will now expire at $expires\n".
@@ -1562,9 +1770,9 @@ sub DoExtend()
     }
     exit($errcode);
 }
-sub ExtendInternal($$$$)
+sub ExtendInternal($$$$$)
 {
-    my ($slice, $seconds, $force, $perrmsg) = @_;
+    my ($slice, $seconds, $force, $nolockdown, $perrmsg) = @_;
     my $lockdown = 0;
     my $errcode = -1;
     my $errmsg;
@@ -1572,10 +1780,13 @@ sub ExtendInternal($$$$)
     # Save in case of error.
     my $oldexpires = $slice->expires();
 
-    # Lockdown on admin extensions longer then XX days. 
-    if (defined($this_user) && $this_user->IsAdmin() &&
-	($seconds / (24 * 60 * 60)) > 10) {
-	$lockdown = 1
+    # Lockdown on admin extensions longer then XX days.
+    # No longer doing this.
+    if (0) {
+	if (defined($this_user) && $this_user->IsAdmin() && !$nolockdown && 
+	    ($seconds / (24 * 60 * 60)) > 10) {
+	    $lockdown = 1
+	}
     }
     # Need to update slice before creating new credential. 
     if ($slice->IsExpired()) {
@@ -1585,6 +1796,24 @@ sub ExtendInternal($$$$)
 	$slice->AddToExpiration($seconds);
     }
     my $new_expires = $slice->ExpirationGMT();
+
+    #
+    # Do a reservation check first. We do not care if it fails (yet),
+    # just keep going. We want to report results back to the web interface.
+    #
+    if (defined($webtask)) {
+	$webtask->CheckReservationResult(0);
+	$webtask->CheckReservationMessage("");
+    }
+    if (CheckReservationInternal($slice, $new_expires, \$errmsg)) {
+	if ($debug) {
+	    print "Reservation denied! $errmsg\n";
+	}
+	if (defined($webtask)) {
+	    $webtask->CheckReservationMessage($errmsg);
+	    $webtask->CheckReservationResult(1);
+	}
+    }
 
     my $coderef = sub {
 	my ($sliver) = @_;
@@ -1646,12 +1875,20 @@ sub ExtendInternal($$$$)
     }
     # Lockdown.
     if ($lockdown) {
-	if (DoLockdownInternal("set", "admin")) {
+	if (DoLockdownInternal("set", "user", 0, undef)) {
 	    SENDMAIL($TBOPS,
 		     "Failed to lock down APT Instance",
 		     "Failed to lock down $instance\n".
 		     $instance->webURL() . "\n",
 		     $TBOPS);
+	}
+	# Do not overwrite ...
+	if (!defined($instance->admin_notes()) ||
+	    $instance->admin_notes() eq "") {
+	    $instance->Update({"admin_notes" =>
+				   "This instance is in user lockdown because ".
+				   "of an admin granted extension longer then ".
+				   "10 days."});
 	}
     }
     return 0;
@@ -1661,6 +1898,227 @@ sub ExtendInternal($$$$)
     $slice->SetExpiration($oldexpires);
     $$perrmsg = $errmsg;
     return $errcode;
+}
+#
+# Check with the reservation system.
+#
+sub DoCheckReservation()
+{
+    my $slice = $instance->GetGeniSlice();
+    my $errmsg;
+
+    usage()
+	if (!@ARGV);
+    my $wanted = shift(@ARGV);
+
+    my $expiration = POSIX::strftime("20%y-%m-%d %H:%M:%S %Z",
+				     localtime(str2time($slice->expires()) +
+					       3600 * 24 * $wanted));
+
+    if ($slice->Lock()) {
+	print STDERR "Experiment is busy, cannot lock it. Try again later.\n";
+	exit(GENIRESPONSE_BUSY);
+    }
+    if (CheckReservationInternal($slice, $expiration, \$errmsg)) {
+	if ($debug) {
+	    print "Reservation denied! $errmsg\n";
+	}
+	if (defined($webtask)) {
+	    $webtask->output($errmsg);
+	    $webtask->Exited(1);
+	}
+	$slice->UnLock();
+	exit(1);
+    }
+    if ($debug) {
+	print "Reservation allowed!\n";
+    }
+    if (defined($webtask)) {
+	$webtask->Exited(0);
+    }
+    $slice->UnLock();
+    exit(0);
+}
+sub CheckReservationInternal($$$)
+{
+    my ($slice, $expiration, $perrmsg) = @_;
+    my $rescheck = "$TB/etc/rescheck.txt";
+    my $errcode = -1;
+    my $errmsg;
+
+    my $coderef = sub {
+	my ($sliver) = @_;
+	my $webtask  = $sliver->webtask();
+	my $domain   = $sliver->domain();
+	my $errmsg;
+
+	return 0
+	    if ($sliver->isAL2S());
+
+	my $response = $sliver->CheckReservation($expiration);
+	if (!defined($response)) {
+	    $errmsg = "Internal error calling CheckReservation at $domain";
+	    goto bad;
+	}
+	if ($response->code() != GENIRESPONSE_SUCCESS) {
+	    $errmsg = "Failed to check reservation at $domain: ".
+		$response->output();
+	    
+	    # This is something the user should see.
+	    if ($response->code() == GENIRESPONSE_REFUSED ||
+		$response->code() == GENIRESPONSE_SERVER_UNAVAILABLE ||
+		$response->code() == GENIRESPONSE_BUSY) {
+		$webtask->output($errmsg);
+		$webtask->Exited($response->code());
+		return 1;
+	    }
+	    goto bad;
+	}
+	return 0;
+      bad:
+	print STDERR "$errmsg\n";
+	$webtask->output($errmsg);
+	$webtask->Exited(-1);
+	return -1;
+    };
+    my @return_codes = ();
+    my @agglist =      $instance->AggregateList();
+    if (ParRun({"maxwaittime" => 99999,
+		"maxchildren" => scalar(@agglist)},
+	    \@return_codes, $coderef, @agglist)) {
+	#
+	# The parent caught a signal. Leave things intact so that we can
+	# kill things cleanly later.
+	#
+	$errmsg = "Internal error calling Extend\n";
+	goto bad;
+    }
+    #
+    # Check the exit codes. 
+    #
+    foreach my $agg (@agglist) {
+	my $code = shift(@return_codes);
+
+	if ($code) {
+	    $agg->webtask()->Refresh();
+	    $errmsg  = $agg->webtask()->output();
+	    $errcode = $agg->webtask()->exitcode();
+	    if ($errcode == GENIRESPONSE_REFUSED) {
+		system("/bin/echo 'DENIED: $slice, $expiration, $agg, $errmsg'".
+		       "  >> $rescheck");
+	    }
+	    goto bad;
+	}
+	else {
+	    system("/bin/echo 'ACCEPT: $slice, $expiration, $agg' ".
+		   " >> $rescheck");
+	}
+    }
+    return 0;
+
+  bad:
+    $$perrmsg = $errmsg;
+    return $errcode;
+}
+#
+# Ask the reservation system for the maximum date to which this experiment
+# can be extended.
+#
+sub DoMaxExtension()
+{
+    my $slice = $instance->GetGeniSlice();
+    my $errcode = -1;
+    my $errmsg;
+    my $newmax;
+
+    if ($slice->Lock()) {
+	print STDERR "Experiment is busy, cannot lock it. Try again later.\n";
+	exit(GENIRESPONSE_BUSY);
+    }
+    my $coderef = sub {
+	my ($sliver) = @_;
+	my $webtask  = $sliver->webtask();
+	my $domain   = $sliver->domain();
+	my $errmsg;
+
+	return 0
+	    if ($sliver->isAL2S());
+
+	my $response = $sliver->MaxExtension();
+	if (!defined($response)) {
+	    $errmsg = "Internal error calling MaxExtension at $domain";
+	    goto bad;
+	}
+	if ($response->code() != GENIRESPONSE_SUCCESS) {
+	    $errmsg = "Failed to get max extension at $domain: ".
+		$response->output();
+	    
+	    # This is something the user should see.
+	    if ($response->code() == GENIRESPONSE_REFUSED ||
+		$response->code() == GENIRESPONSE_SERVER_UNAVAILABLE ||
+		$response->code() == GENIRESPONSE_BUSY ||
+		$response->code() == GENIRESPONSE_SEARCHFAILED) {
+		$webtask->output($errmsg);
+		$webtask->Exited($response->code());
+		return 1;
+	    }
+	    goto bad;
+	}
+	$webtask->MaxExtension($response->value());
+	return 0;
+      bad:
+	print STDERR "$errmsg\n";
+	$webtask->output($errmsg);
+	$webtask->Exited(-1);
+	return -1;
+    };
+    my @return_codes = ();
+    my @agglist =      $instance->AggregateList();
+    if (ParRun({"maxwaittime" => 99999,
+		"maxchildren" => scalar(@agglist)},
+	    \@return_codes, $coderef, @agglist)) {
+	#
+	# The parent caught a signal. Leave things intact so that we can
+	# kill things cleanly later.
+	#
+	$errmsg = "Internal error calling MaxExtension\n";
+	goto bad;
+    }
+    #
+    # Check the exit codes. 
+    #
+    foreach my $agg (@agglist) {
+	my $code = shift(@return_codes);
+
+	$agg->webtask()->Refresh();
+	if ($code) {
+	    $errmsg  = $agg->webtask()->output();
+	    $errcode = $agg->webtask()->exitcode();
+	    goto bad;
+	}
+	my $max = str2time($agg->webtask()->MaxExtension());
+	$newmax = $max
+	    if (!defined($newmax));
+	$newmax = $max
+	    if ($max < $newmax);
+    }
+    if ($debug) {
+	print "Max extension: " . TBDateStringLocal($newmax)  . "\n";
+    }
+    if (defined($webtask)) {
+	$webtask->MaxExtension(TBDateStringGMT($newmax));
+	$webtask->Exited(0);
+    }
+    $slice->UnLock();
+    exit(0);
+  bad:
+    $slice->UnLock();
+    if (defined($webtask)) {
+	$webtask->output($errmsg);
+	$webtask->Exited($errcode);
+    }
+    exit($errcode);
+    
 }
 
 #
@@ -1888,7 +2346,7 @@ sub DoExtendOld()
     }
     # Lockdown.
     if ($lockdown) {
-	if (DoLockdownInternal("set", "admin")) {
+	if (DoLockdownInternal("set", "user", 0, undef)) {
 	    SENDMAIL($TBOPS,
 		     "Failed to lock down APT Instance",
 		     "Failed to lock down $instance\n".
@@ -1919,6 +2377,8 @@ sub DoRefresh()
 	print STDERR "No slice for instance\n";
 	goto killit;
     }
+    # Shorten default timeout
+    Genixmlrpc->SetTimeout(30);
     
     #
     # Lock the slice in case it is doing something else, like taking
@@ -1928,16 +2388,6 @@ sub DoRefresh()
 	$errmsg = "Experiment is busy, cannot lock it. Please try again later";
 	goto bad;
     }
-    #
-    # Create the webtask object, but AFTER locking the slice so we do
-    # not destroy one in use.
-    #
-    if (defined($webtask_id)) {
-	$webtask = WebTask->LookupOrCreate($instance->uuid(), $webtask_id);
-	# Convenient.
-	$webtask->AutoStore(1);
-    }
-
     my $coderef = sub {
 	my ($sliver) = @_;
 	my $webtask  = $sliver->webtask();
@@ -1962,6 +2412,8 @@ sub DoRefresh()
 	    goto bad;
 	}
 	my $blob = $response->value();
+	#print Dumper($blob);
+
 	if ($blob->{'status'} eq "ready") {
 	    $sliver->SetStatus("ready");
 	}
@@ -1969,9 +2421,9 @@ sub DoRefresh()
 	    $sliver->SetStatus("failed");
 	}
 	# This is the per-aggregate status, we always set this for web UI.
-	my $statusblob = $sliver->UpdateWebStatus($blob->{'details'});
+	$sliver->UpdateSliverStatusAll($blob->{'details'});
 	if ($debug) {
-	    print STDERR Dumper($statusblob);
+	    print STDERR Dumper($blob->{'details'});
 	}
 	return 0;
       bad:
@@ -1993,7 +2445,8 @@ sub DoRefresh()
 	goto bad;
     }
     #
-    # Check the exit codes. 
+    # Check the exit codes. If a failed instance is now all ready,
+    # we mark the instance as not ready.
     #
     foreach my $agg (@agglist) {
 	my $code = shift(@return_codes);
@@ -2048,7 +2501,9 @@ sub DoRebootOrReload($)
 	if (! defined($manifest)) {
 	    fatal("Could not parse manifest");
 	}
-	my @nodes = GeniXML::FindNodes("n:node", $manifest)->get_nodelist();
+	my @nodes = (GeniXML::FindNodes("n:node", $manifest)->get_nodelist(),
+		     GeniXML::FindNodesNS("n:vhost", $manifest,
+					  $GeniXML::EMULAB_NS)->get_nodelist());
 	foreach my $node (@nodes) {
 	    my $client_id = GeniXML::GetVirtualId($node);
 	    if (grep {$_ eq $client_id} @ARGV) {
@@ -2114,16 +2569,6 @@ sub DoRebootOrReload($)
 	    goto bad;
 	}
       gone:
-	# Tell the web interface something is different. Real status will
-	# come later when the monitor starts up. 
-	if ($webtask->sliverstatus()) {
-	    my $blob = $webtask->sliverstatus();
-	    foreach my $urn (@urns) {
-		my $node_id = $node_ids{$urn};
-		$blob->{$node_id}->{'status'} = "changing";
-	    }
-	    $webtask->sliverstatus($blob);
-	}
 	return 0;
       bad:
 	print STDERR "$errmsg\n";
@@ -2200,16 +2645,6 @@ sub DoManifests()
 	$errmsg = "Experiment is busy, cannot lock it. Please try again later";
 	goto bad;
     }
-    #
-    # Create the webtask object, but AFTER locking the slice so we do
-    # not destroy one in use.
-    #
-    if (defined($webtask_id)) {
-	$webtask = WebTask->LookupOrCreate($instance->uuid(), $webtask_id);
-	# Convenient.
-	$webtask->AutoStore(1);
-    }
-
     my $coderef = sub {
 	my ($sliver) = @_;
 	my $webtask  = $sliver->webtask();
@@ -2238,7 +2673,7 @@ sub DoManifests()
 	    goto bad;
 	}
 	$sliver->SetManifest($manifest);
-	$sliver->UpdateWebStatus($response->value()->{'details'});
+	$sliver->UpdateSliverStatusAll($response->value()->{'details'});
 	return 0;
       bad:
 	return 1;
@@ -2324,7 +2759,7 @@ sub DoDeleteNodes()
 	    }
 	}
     }
-    
+
     #
     # Lock the slice in case it is doing something else, like taking
     # a disk image.
@@ -2333,17 +2768,12 @@ sub DoDeleteNodes()
 	$errmsg = "Experiment is busy, cannot lock it. Please try again later";
 	goto bad;
     }
-
-    #
-    # Create the webtask object, but AFTER locking the slice so we do
-    # not destroy one in use.
-    #
-    if (defined($webtask_id)) {
-	$webtask = WebTask->LookupOrCreate($instance->uuid(), $webtask_id);
-	# Convenient.
-	$webtask->AutoStore(1);
+    if (!@aggregates) {
+	$errmsg  = "Could not find any nodes to delete!";
+	$errcode = 1;
+	goto bad;
     }
-
+    
     my $coderef = sub {
 	my ($sliver) = @_;
 	my $webtask  = $sliver->webtask();
@@ -2375,15 +2805,10 @@ sub DoDeleteNodes()
 	my $manifest = $response->value();
 	$sliver->SetManifest($manifest);
 	
-	# Delete the nodes from the status blob. 
-	if ($webtask->sliverstatus()) {
-	    my $blob = $webtask->sliverstatus();
-	    foreach my $node_id (@nodes) {
-		delete($blob->{$node_id});
-	    }
-	    $webtask->sliverstatus($blob);
+	# Delete sliver status rows.
+	foreach my $node_id (@nodes) {
+	    $sliver->DeleteSliverStatus($node_id);
 	}
-	$sliver->SetStatus("provisioned");
 	return 0;
       bad:
 	$sliver->SetStatus("ready");
@@ -2469,7 +2894,7 @@ sub DoDeleteNodes()
 	    else {
 		$errmsg = "WaitforSliver Failure at ".$aggobj->aggregate_urn();
 	    }
-	    $errcode = $aggobj->webtask()->output();
+	    $errcode = $aggobj->webtask()->exitcode();
 	    goto bad;
 	}
     }
@@ -2497,15 +2922,6 @@ sub StartMonitor()
     
     if (@ARGV && $ARGV[0] eq "-w") {
 	$waitforstartup = 1;
-    }
-
-    if (defined($webtask_id)) {
-	$webtask = WebTask->LookupOrCreate($instance->uuid(), $webtask_id);
-	if (!defined($webtask)) {
-	    fatal("Could not lookup/create webtask for $webtask_id");
-	}
-	# Convenient.
-	$webtask->AutoStore(1);
     }
     return StartMonitorInternal($waitforstartup);
 }
@@ -2539,7 +2955,7 @@ sub StartMonitorInternal(;$@)
 	    return $PID;
 	}
     }
-    $instance->Update({"monitor_pid" => '$PID'});
+    $instance->Update({"monitor_pid" => $PID});
 
     #
     # We just did the operation, no need to ask so soon, and we
@@ -2589,15 +3005,15 @@ sub StartMonitorInternal(;$@)
     
 	my $blob = $response->value();
 	# This is the per-aggregate status, we always set this for web UI.
-	my $statusblob = $sliver->UpdateWebStatus($blob->{'details'});
+	$sliver->UpdateSliverStatusAll($blob->{'details'});
 	if ($debug) {
-	    print STDERR Dumper($statusblob);
+	    print STDERR Dumper($blob->{'details'});
 	}
 	# Look for nodes still executing
 	my $executing = 0;
 	if ($waitforstartup) {
-	    foreach my $node_id (keys(%{$statusblob})) {
-		my $details = $statusblob->{'node_id'};
+	    foreach my $urn (keys(%{$blob->{'details'}})) {
+		my $details = $blob->{'details'}->{$urn};
 		
 		$executing++
 		    if (exists($details->{'execute_state'}) &&
@@ -2624,8 +3040,14 @@ sub StartMonitorInternal(;$@)
 	# Lock the slice in case it is doing something else, like taking
 	# a disk image. Just skip this turn.
 	#
-	goto delay
-	    if ($slice->Lock());
+	if ($slice->Lock()) {
+	    #
+	    # Lets make sure the instance still exists. It could disappear
+	    # during the sleep, which would cause the Lock() to fail. 
+	    last
+		if ($instance->Refresh());
+	    goto delay;
+	}
 
 	my $handler = sub {
 	    # This is so we can catch when Parrun gets signaled, but not
@@ -2673,40 +3095,35 @@ sub StartMonitorInternal(;$@)
 #
 # Experiment lockdown.
 #
-sub DoLockdownInternal($$)
+sub DoLockdownInternal($$$$)
 {
-    my ($setclr,$which) = @_;
+    my ($setclr,$which,$force, $perrmsg) = @_;
 
     my $slice = $instance->GetGeniSlice();
     if (!defined($slice)) {
 	fatal("No slice for instance");
     }
+    my $admin_lockdown = $instance->admin_lockdown();
+    my $user_lockdown  = $instance->user_lockdown();
+
     if ($which eq "all") {
-	if ($instance->SetLockdown("user", ($setclr eq "clear" ? 1 : 0))) {
-	    print STDERR "Could not update instance lockdown\n";
-	    return -1
-	}
-	$which = "admin"
+	$admin_lockdown = $user_lockdown = ($setclr eq "clear" ? 0 : 1);
     }
-    if ($instance->SetLockdown($which, ($setclr eq "clear" ? 1 : 0))) {
-	print STDERR "Could not update instance lockdown\n";
-	return -1
+    elsif ($which eq "admin") {
+	$admin_lockdown = ($setclr eq "clear" ? 0 : 1);
     }
-    my $clear = ($instance->admin_lockdown() ||
-		 $instance->user_lockdown() ? 0 : 1);
+    elsif ($which eq "user") {
+	$user_lockdown = ($setclr eq "clear" ? 0 : 1);
+    }
+    my $clear = ($admin_lockdown || $user_lockdown ? 0 : 1);
     
-    #
-    # Have to set/clear the lockdown on the local slice.
-    #
-    if ($slice->SetLockdown($clear)) {
-	print STDERR "Could not update slice lockdown\n";
-	return -1
-    }
     #
     # And tell the backend clusters to lockdown the slice.
     #
     my $coderef = sub {
 	my ($sliver) = @_;
+	my $webtask  = $sliver->webtask();
+	my ($errcode, $errmsg);
 
 	#
 	# We cannot do lockdown at AL2S. More generally, it only works at
@@ -2726,17 +3143,29 @@ sub DoLockdownInternal($$)
 				"CC: " . $project->OpsEmailAddress());
 	    return 0;
 	}
-	my $response = $sliver->Lockdown($clear);
+	my $response = $sliver->Lockdown($clear, $force);
 	if (!defined($response)) {
-	    print STDERR "RPC Error calling Lockdown\n";
-	    return -1;
+	    $errmsg  = "RPC Error calling Lockdown";
+	    $errcode = -1;
+	    goto bad;
+	}
+	# Watch for a refusal from the reservation system on lockdown.
+	if ($response->code() == GENIRESPONSE_REFUSED && !$clear) {
+	    $errmsg  = $response->output();
+	    $errcode = $response->code();
+	    goto bad;
 	}
 	if ($response->code() != GENIRESPONSE_SUCCESS) {
-	    print STDERR "Could not lockdown sliver: ".
-		$response->output() . "\n";
-	    return -1;
+	    $errmsg = "Sliver lockdown failed: " . $response->output();
+	    $errcode = $response->code();
+	    goto bad;
 	}
 	return 0;
+      bad:
+	print STDERR $errmsg . "\n" if ($debug);
+	$webtask->output($errmsg);
+	$webtask->Exited($errcode);
+	return $errcode;
     };
     my @return_codes = ();
     my @agglist =      $instance->AggregateList();
@@ -2749,20 +3178,55 @@ sub DoLockdownInternal($$)
     #
     # Check the exit codes. 
     #
-    foreach my $code (@return_codes) {
+    foreach my $aggobj (@agglist) {
+	my $code = shift(@return_codes);
+	my $errmsg;
+
+	# Updated in a forked child, must refresh. 
+	$aggobj->webtask()->Refresh();
+	
 	if ($code) {
-	    print STDERR "Some slivers could not be locked down.\n";
-	    return -1;
+	    if ($aggobj->webtask()->output()) {
+		$errmsg = $aggobj->webtask()->output();
+	    }
+	    else {
+		$errmsg = "Some slivers could not be locked down.";
+	    }
+	    $$perrmsg = $errmsg if (defined($perrmsg));
+	    return $aggobj->webtask()->exitcode();
 	}
+    }
+
+    #
+    # Change local state only if operation succeeds.
+    #
+    if ($slice->SetLockdown($clear)) {
+	print STDERR "Could not update slice lockdown\n";
+	return -1
+    }
+    if ($instance->SetLockdown($admin_lockdown, $user_lockdown)) {
+	print STDERR "Could not update instance lockdown flags\n";
+	return -1
     }
     return 0;
 }
 
 sub DoLockdown()
 {
+    my $errmsg;
+    my $errcode = -1;
+    my $force   = 0;
+    
+    my $optlist = "f";
+    my %options = ();
+    if (! getopts($optlist, \%options)) {
+	usage();
+    }
+    if (defined($options{"f"})) {
+	$force = 1;
+    }
     usage()
 	if (@ARGV != 2);
-    
     my $setclr = shift(@ARGV);
     my $which  = shift(@ARGV);
 
@@ -2776,19 +3240,33 @@ sub DoLockdown()
 	fatal("No slice for instance");
     }
     if ($slice->Lock()) {
-	fatal("Experiment is busy, cannot lock it. Please try again later");
+	$errmsg = "Experiment is busy, cannot lock it. Please try again later";
+	$errcode = 1;
+	goto bad;
     }
-    if (DoLockdownInternal($setclr, $which)) {
-	$slice->UnLock();
-	fatal("Could not lockdown instance!");
+    $errcode = DoLockdownInternal($setclr, $which, $force, \$errmsg);
+    if ($errcode) {
+	$errmsg = "Failed to lockdown instance: $errcode"
+	    if (!defined($errmsg));
+	goto bad;
     }
     $slice->UnLock();
     exit(0);
+    
+  bad:
+    $slice->UnLock();
+    print STDERR $errmsg . "\n";
+    if (defined($webtask)) {
+	$webtask->output($errmsg);
+	$webtask->Exited($errcode);
+    }
+    exit($errcode);
 }
 
 sub DoPanic()
 {
-    my $emsg;
+    my $errmsg;
+    my $errcode = -1;
     
     usage()
 	if (@ARGV != 1);
@@ -2802,20 +3280,12 @@ sub DoPanic()
 	fatal("No slice for instance");
     }
     if ($slice->Lock()) {
-	fatal("Experiment is busy, cannot lock it. Please try again later");
+	$errmsg = "Experiment is busy, cannot lock it. Please try again later";
+	$errcode = 1;
+	goto bad;
     }
     #
-    # Create the webtask object, but AFTER locking the slice so we do
-    # not destroy one in use.
-    #
-    if (defined($webtask_id)) {
-	$webtask = WebTask->LookupOrCreate($instance->uuid(), $webtask_id);
-	# Convenient.
-	$webtask->AutoStore(1);
-    }
-
-    #
-    # And tell the backend clusters to lockdown the slice.
+    # And tell the backend clusters to Panic the slice.
     #
     my $coderef = sub {
 	my ($sliver) = @_;
@@ -2831,15 +3301,6 @@ sub DoPanic()
 		$response->output() . "\n";
 	    return -1;
 	}
-	# Tell the web interface something is different. Real status will
-	# come later when the monitor starts up. 
-	if ($webtask->sliverstatus()) {
-	    my $blob = $webtask->sliverstatus();
-	    foreach my $node_id (keys(%{ $blob })) {
-		$blob->{$node_id}->{'status'} = "changing";
-	    }
-	    $webtask->sliverstatus($blob);
-	}
 	return 0;
     };
     my @return_codes = ();
@@ -2847,7 +3308,7 @@ sub DoPanic()
     if (ParRun({"maxwaittime" => 99999,
 		"maxchildren" => scalar(@agglist)},
 	       \@return_codes, $coderef, @agglist)) {
-	$emsg = "Internal error calling Lockdown()";
+	$errmsg = "Internal error calling Panic()";
 	goto bad;
     }
     #
@@ -2855,20 +3316,26 @@ sub DoPanic()
     #
     foreach my $code (@return_codes) {
 	if ($code) {
-	    print STDERR "Some slivers could not be paniced";
+	    $errmsg = "Some slivers could not be paniced";
 	    goto bad;
 	}
     }
     if ($instance->SetPanic(($setclr eq "clear" ? 1 : 0))) {
-	$emsg  = "Could not update instance panic flag";
+	$errmsg  = "Could not update instance panic flag";
 	goto bad;
     }
     StartMonitorInternal();
     $slice->UnLock();
     exit(0);
+
   bad:
     $slice->UnLock();
-    exit(-1);
+    print STDERR $errmsg . "\n";
+    if (defined($webtask)) {
+	$webtask->output($errmsg);
+	$webtask->Exited($errcode);
+    }
+    exit($errcode);
 }
 
 #
@@ -2903,7 +3370,14 @@ sub DoLinktest()
     # a disk image.
     #
     if ($slice->Lock()) {
-	fatal("Slice is busy, cannot lock it");
+	$errcode = GENIRESPONSE_BUSY;
+	$errmsg  ="Experiment is busy, cannot lock it. Try again later.";
+	if (defined($webtask)) {
+	    $webtask->output($errmsg);
+	    $webtask->Exited($errcode);
+	}
+	print STDERR "$errmsg\n";
+	exit($errcode);
     }
     # Check after lock to prevent concurrent startup. 
     if ($action eq "start") {
@@ -2918,16 +3392,6 @@ sub DoLinktest()
 	    fatal("Linktest is not running!");
 	}
     }
-    #
-    # Create the webtask object, but AFTER locking the slice so we do
-    # not destroy one in use.
-    #
-    if (defined($webtask_id)) {
-	$webtask = WebTask->LookupOrCreate($instance->uuid(), $webtask_id);
-	# Convenient.
-	$webtask->AutoStore(1);
-    }
-
     #
     # And tell the backend clusters to run linktest
     #
@@ -2976,7 +3440,7 @@ sub DoLinktest()
     if (ParRun({"maxwaittime" => 99999,
 		"maxchildren" => scalar(@agglist)},
 	       \@return_codes, $coderef, @agglist)) {
-	$errmsg = "Internal error calling Lockdown()";
+	$errmsg = "Internal error calling LinkTest()";
 	goto bad;
     }
     #
@@ -3131,16 +3595,6 @@ sub DoUpdateKeys()
 	fatal("Slice is busy, cannot lock it");
     }
     #
-    # Create the webtask object, but AFTER locking the slice so we do
-    # not destroy one in use.
-    #
-    if (defined($webtask_id)) {
-	$webtask = WebTask->LookupOrCreate($instance->uuid(), $webtask_id);
-	# Convenient.
-	$webtask->AutoStore(1);
-    }
-
-    #
     # And tell the backend clusters to do the update.
     #
     my $coderef = sub {
@@ -3209,106 +3663,59 @@ sub DoUpdateKeys()
 # 
 sub DoUtilization()
 {
+    my $utilization;
     my $errmsg;
-    my $errcode = 1;
+    my @aggregates = ();
     
-    #
-    # Create the webtask object; the web interface gave us an anonymous
-    # webtask, so we can use it before lock.
-    #
-    if (defined($webtask_id)) {
-	$webtask = WebTask->Lookup($webtask_id);
-	fatal("Could not lookup webtask object")
-	    if (!defined($webtask));
-	# Convenient.
-	$webtask->AutoStore(1);
-    }
-
     #
     # Get the nodeid to client id mapping
     #
     my %client_ids = ();
-    foreach my $obj ($instance->AggregateList()) {
-	my $manifest = GeniXML::Parse($obj->manifest());
+    foreach my $aggregate ($instance->AggregateList()) {
+	#
+	# Skip aggregates with no nodes.
+	#
+	next
+	    if (! ($aggregate->physnode_count() ||
+		   $aggregate->virtnode_count()));
+	# Or no manifest.
+	next
+	    if (!defined($aggregate->manifest()) ||
+		$aggregate->manifest() eq "");
+	
+	my $manifest = GeniXML::Parse($aggregate->manifest());
 	if (! defined($manifest)) {
 	    fatal("Could not parse manifest");
 	}
-	$client_ids{$obj->aggregate_urn()} = {};
+	push(@aggregates, $aggregate);	
+	$client_ids{$aggregate->aggregate_urn()} = {};
 	
 	my @nodes = GeniXML::FindNodes("n:node", $manifest)->get_nodelist();
 	foreach my $node (@nodes) {
 	    my $client_id = GeniXML::GetVirtualId($node);
 	    my $node_id   = GeniXML::GetVnodeId($node);
 
-	    $client_ids{$obj->aggregate_urn()}->{$node_id} = $client_id;
+	    $client_ids{$aggregate->aggregate_urn()}->{$node_id} = $client_id;
 	}
     }
-
-    #
-    # And tell the backend clusters to do the update.
-    #
-    my $coderef = sub {
-	my ($sliver) = @_;
-	my $webtask  = $sliver->webtask();
-
-	my $response = $sliver->Utilization();
-	if (!defined($response)) {
-	    print STDERR "RPC Error calling utilization on $sliver\n";
-	    return -1;
-	}
-	if ($response->code() != GENIRESPONSE_SUCCESS) {
-	    print STDERR "Could not get utilization for sliver: ".
-		$response->output() . "\n";
-	    $webtask->output($response->output());
-	    $webtask->Exited($response->code());
-	    return $response->code();
-	}
-	$webtask->results($response->value());
-	return 0;
-    };
-    my @return_codes = ();
-    my @agglist      = ();
-    #
-    # Cull out any aggregates with no nodes.
-    #
-    foreach my $agg ($instance->AggregateList()) {
-	push(@agglist, $agg)
-	    if ($agg->physnode_count() || $agg->virtnode_count());
-    }
-    
-    if (ParRun({"maxwaittime" => 99999,
-		"maxchildren" => scalar(@agglist)},
-	       \@return_codes, $coderef, @agglist)) {
-	$errmsg = "Internal error calling UpdateKeys()";
+    my $errcode = CallAggregateMethod("Utilization",\$utilization,@aggregates);
+    if ($errcode) {
+	$errmsg = $utilization;
 	goto bad;
     }
-    #
-    # Check the exit codes. 
-    #
-    foreach my $agg (@agglist) {
-	my $code = shift(@return_codes);
-	$agg->webtask()->Refresh();
-	if ($code) {
-	    $errmsg = "Could not get utilization from some slivers";
-	    if ($agg->webtask()->output()) {
-		$errmsg .= ": " . $agg->webtask()->output();
-		$errcode = $agg->webtask()->output();
-	    }
-	    goto bad;
-	}
+    foreach my $aggregate (@aggregates) {
+	my $blob = shift(@{$utilization});
 	#
 	# Annotate the result with some extra info for the web UI.
 	#
-	my $blob = $agg->webtask()->results();
 	foreach my $node_id (keys(%{ $blob->{'details'}->{'nodes'} })) {
 	    $blob->{'details'}->{'nodes'}->{$node_id}->{"client_id"} =
-		$client_ids{$agg->aggregate_urn()}->{$node_id};
+		$client_ids{$aggregate->aggregate_urn()}->{$node_id};
 	}
 	if ($debug) {
-	    print Dumper($agg->webtask()->results());
+	    print Dumper($blob);
 	}
-	$agg->webtask()->results($blob);
-	$agg->webtask()->Store();
+	$aggregate->webtask()->results($blob);
     }
     exit(0);
   bad:
@@ -3328,18 +3735,6 @@ sub DoOpenstack()
     my $errmsg;
     my $errcode = 1;
     
-    #
-    # Create the webtask object; the web interface gave us an anonymous
-    # webtask, so we can use it before lock.
-    #
-    if (defined($webtask_id)) {
-	$webtask = WebTask->Lookup($webtask_id);
-	fatal("Could not lookup webtask object")
-	    if (!defined($webtask));
-	# Convenient.
-	$webtask->AutoStore(1);
-    }
-
     #
     # Need to look inside the rspec to find the name of the controller node.
     #
@@ -3420,79 +3815,29 @@ sub DoOpenstack()
 # 
 sub DoIdleData()
 {
+    my $idledata;
     my $errmsg;
-    my $errcode = 1;
+    my @aggregates = ();
     
-    #
-    # Create the webtask object; the web interface gave us an anonymous
-    # webtask, so we can use it before lock.
-    #
-    if (defined($webtask_id)) {
-	$webtask = WebTask->Lookup($webtask_id);
-	fatal("Could not lookup webtask object")
-	    if (!defined($webtask));
-	# Convenient.
-	$webtask->AutoStore(1);
-    }
-
-    #
-    # And ask the backend clusters for the data.
-    #
-    my $coderef = sub {
-	my ($sliver) = @_;
-	my $webtask  = $sliver->webtask();
-
-	my $response = $sliver->IdleData();
-	if (!defined($response)) {
-	    print STDERR "RPC Error calling idledata on $sliver\n";
-	    return -1;
-	}
-	if ($response->code() != GENIRESPONSE_SUCCESS) {
-	    print STDERR "Could not get idledata for sliver: ".
-		$response->output() . "\n";
-	    $webtask->output($response->output());
-	    $webtask->Exited($response->code());
-	    return $response->code();
-	}
-	if ($debug) {
-	    print Dumper($response->value());
-	}
-	$webtask->idledata($response->value());
-	return 0;
-    };
-    my @return_codes = ();
-    my @agglist      = ();
     #
     # Cull out any aggregates with no nodes.
     #
-    foreach my $agg ($instance->AggregateList()) {
-	push(@agglist, $agg)
-	    if ($agg->physnode_count() || $agg->virtnode_count());
+    foreach my $aggregate ($instance->AggregateList()) {
+	push(@aggregates, $aggregate)
+	    if ($aggregate->physnode_count() || $aggregate->virtnode_count());
     }
-    
-    if (ParRun({"maxwaittime" => 99999,
-		"maxchildren" => scalar(@agglist)},
-	       \@return_codes, $coderef, @agglist)) {
-	$errmsg = "Internal error calling IdleData()";
+    my $errcode = CallAggregateMethod("IdleData", \$idledata, @aggregates);
+    if ($errcode) {
+	$errmsg = $idledata;
 	goto bad;
     }
-    #
-    # Check the exit codes. 
-    #
-    foreach my $agg (@agglist) {
-	my $code = shift(@return_codes);
-	$agg->webtask()->Refresh();
-	if ($code) {
-	    $errmsg = "Could not get idledata from some slivers";
-	    if ($agg->webtask()->output()) {
-		$errmsg .= ": " . $agg->webtask()->output();
-		$errcode = $code;
-	    }
-	    goto bad;
-	}
+    # We get back json strings, we pass that through to the web interface.
+    foreach my $aggregate (@aggregates) {
+	my $json = shift(@{$idledata});
 	if ($debug) {
-	    print Dumper($agg->webtask()->idledata());
+	    print $json . "\n";
 	}
+	$aggregate->webtask()->idledata($json);
     }
     exit(0);
   bad:
@@ -3502,6 +3847,284 @@ sub DoIdleData()
 	$webtask->Exited($errcode);
     }
     exit($errcode);
+}
+
+#
+# Use the idledata to determine if an experiment can be extended without
+# admin intervention.
+#
+sub DoCheckAutoApprove()
+{
+    my $errmsg;
+    my $errcode = 1;
+    my $results;
+
+    usage()
+	if (!@ARGV);
+    my $days = shift(@ARGV);
+
+    $errcode = CheckAutoApprove($days, \$results);
+    if ($errcode) {
+	goto bad;
+    }
+    print Dumper($results);
+    exit($results->{'approve'});
+
+  bad:
+    print STDERR $errmsg . "\n" if (defined($errmsg));
+    if (defined($webtask)) {
+	$webtask->output($errmsg) if (defined($errmsg));
+	$webtask->Exited($errcode);
+    }
+    exit($errcode);
+}
+
+sub CheckAutoApprove($$)
+{
+    my ($days, $pref) = @_;
+    my $errmsg;
+    my $errcode = 1;
+    my $utilization;
+    my $idledata;
+    my $loaddata      = {};
+    my $slice         = $instance->GetGeniSlice();
+    my $expires_time  = str2time($slice->expires());
+    my $autoapprove_minloadavg = 0.25;
+    my $autoapprove_minsamples = 12 * 18;
+    my $autoapprove_ratio = 0.66;
+    my $autoapprove_minfree = 0.1;
+
+    #
+    # We do not do auto extensions if more then 1000 physical node hours
+    # in the request.
+    #
+    if ($days * 24 * $instance->physnode_count() > 1000) {
+	my $rval = {
+	    "reason"  => "greater then 1000 node hours requested",
+	    "metrics" => undef,
+	    "approve" => 0,
+	};
+	$$pref = $rval;
+	return 0;
+    }
+    # Only shared VMs, people can have them forever.
+    if (!$instance->physnode_count()) {
+	my $rval = {
+	    "reason"  => "extension auto approved because no physical nodes",
+	    "metrics" => undef,
+	    "approve" => 1,
+	};
+	$$pref = $rval;
+	return 0;
+    }
+    
+    #
+    # We do not do auto extensions if more then 1500 physical node hours
+    # between current time and time at end of extension. This number needs
+    # calibration.
+    #
+    my $diff = ($expires_time + ($days * 3600 * 24)) - time();
+    if ($diff < 0) {
+	$errmsg = "Time is in the past. Hmm.\n";
+	$errcode= -1;
+	goto bad;
+    }
+    if ((($diff / 3600.0) / $instance->physnode_count()) > 1500) {
+	my $rval = {
+	    "reason"  => "granting extension would exceed 1500 node hours",
+	    "metrics" => undef,
+	    "approve" => 0,
+	};
+	$$pref = $rval;
+	return 0;
+    }
+    
+    #
+    # We ask the clusters for utilization data which includes freecounts.
+    # Cull out any aggregates with no nodes.
+    #
+    my @aggregates = ();
+
+    foreach my $agg ($instance->AggregateList()) {
+	push(@aggregates, $agg)
+	    if ($agg->physnode_count() || $agg->virtnode_count());
+    }
+    $errcode = CallAggregateMethod("Utilization", \$utilization, @aggregates);
+    if ($errcode) {
+	$errmsg = $utilization;
+	goto bad;
+    }
+    foreach my $blob (@{$utilization}) {
+	foreach my $type (keys(%{ $blob->{'typeinfo'} })) {
+	    my ($free,$total);
+	    my $typeinfo = $blob->{'typeinfo'}->{$type};
+	    if (exists($typeinfo->{'reserve_free'})) {
+		$free = $typeinfo->{'reserve_free'};
+	    }
+	    else {
+		$free = $typeinfo->{'free'};
+	    }
+	    $total = $typeinfo->{'total'};
+	    # Skip if no data.
+	    next
+		if (!$total);
+	    
+	    if ($free / $total < $autoapprove_minfree) {
+		my $rval = {
+		    "reason"  => "Less then " . $autoapprove_minfree * 100 .
+			"% of node type $type are free",
+		    "metrics" => $typeinfo,
+		    "approve" => 0,
+		};
+		$$pref = $rval;
+		return 0;
+	    }
+	}
+    }
+    #
+    # We need to know which nodes are physical, we do not worry about
+    # the VMs; we want shared nodes to be used, and busy VMs should be
+    # reflected in the load on the physical machines.
+    #
+    my $nodes = $instance->GetNodeDetails();
+    if (!defined($nodes)) {
+	$errmsg = "Could not get node details for instance\n";
+	$errcode= -1;
+	goto bad;
+    }
+    #
+    # Ask the clusters for the idle stats. 
+    #
+    $errcode = CallAggregateMethod("IdleData", \$idledata, @aggregates);
+    if ($errcode) {
+	$errmsg = $idledata;
+	goto bad;
+    }
+    # We consider load average data only.
+    foreach my $aggregate (@aggregates) {
+	my $urn  = $aggregate->aggregate_urn();
+	my $json = shift(@{$idledata});
+	my $list = eval { decode_json($json); };
+	if ($@) {
+	    print STDERR "Could not decode json data\n";
+	    next;
+	}
+	$loaddata->{$urn} = {};
+
+	foreach my $ref (@{ $list }) {
+	    my $node_id = $ref->{"node_id"};
+	    
+	    # Skip virtual nodes.
+	    next
+		if (!exists($nodes->{$urn}->{$node_id}) ||
+		    $nodes->{$urn}->{$node_id}->{'isvirtnode'});
+
+	    if (!exists($ref->{"main"}) ||
+		ref($ref->{"main"}) ne "HASH" || 
+		!exists($ref->{"main"}->{"AVG"})) {
+		print STDERR "No data for $node_id\n";
+		$loaddata->{$urn}->{$node_id} = undef;
+		next;
+	    }
+
+	    #
+	    # Look at the last 24 hour 5 minute load average samples on
+	    # each node and count the number of samples greater the
+	    # threshold.
+	    #
+	    my @samples = @{ $ref->{"main"}->{"AVG"} };
+	    # Skip first one, its the labels.
+	    shift(@samples);
+
+	    my $now       = time();
+	    my $timelimit = $now - (24 * 3600);	 # Last 24 hours.
+	    my $total     = 0;
+	    my $count     = 0;
+
+	    # Oldest at the beginning of the list
+	    while (@samples) {
+		my $sample = pop(@samples);
+		my ($stamp, undef, $load5) = @{$sample};
+		last
+		    if ($stamp < $timelimit);
+		$total++;
+		# We can get null samples (no data).
+		next
+		    if (!defined($load5));
+
+		$count++ if ($load5 >= $autoapprove_minloadavg);
+	    }
+	    $loaddata->{$urn}->{$node_id} = {
+		'samples' => $total,
+		'busy'    => $count,
+	    };
+	}
+    }
+    #
+    # Need at least 18 hours of samples on every node and 66% of them
+    # have to be above the threshold.
+    #
+    my $message;
+    foreach my $urn (keys(%{$nodes})) {
+	foreach my $node_id (keys(%{ $nodes->{$urn} })) {
+	    my $details = $nodes->{$urn}->{$node_id};
+	    
+	    next
+		if ($details->{'isvirtnode'});
+	    
+	    # No data for a node is an error.
+	    if (!defined($loaddata->{$urn}->{$node_id})) {
+		$message = "No node data for some nodes";
+		last;
+	    }
+	    my $samples = $loaddata->{$urn}->{$node_id}->{'samples'};
+	    my $count   = $loaddata->{$urn}->{$node_id}->{'busy'};
+	    # Must have 18 hours of samples.
+	    if ($samples < $autoapprove_minsamples) {
+		$message = "Not enough 5 minute samples for some nodes. ".
+		    "(less then $autoapprove_minsamples)";
+		last;
+	    }
+	    # 2/3 of samples greater then the threshold.
+	    if ($count / $samples < $autoapprove_ratio) {
+		$message = "Some nodes not busy enough in last day. ".
+		    "(less then $autoapprove_ratio of ".
+		    "$autoapprove_minsamples samples > ".
+		    "$autoapprove_minloadavg load average)";
+		last;
+	    }
+	}
+	last
+	    if (defined($message));
+    }
+    if (defined($message)) {
+	my $rval = {
+	    "reason"  => $message,
+	    "metrics" => $loaddata,
+	    "approve" => 0,
+	};
+	$$pref = $rval;
+	return 0;
+    }
+    $$pref = {
+	"reason"  => "extension auto approved",
+	"metrics" => $loaddata,
+	"approve" => 1,
+    };
+    return 0;
+    
+  bad:
+    print STDERR $errmsg . "\n" if (defined($errmsg));
+    #
+    # We want to return this so that it goes into the record, otherwise
+    # we will be confused as to why the auto approval has no data.
+    #
+    $$pref = {
+	"reason"  => $errmsg,
+	"metrics" => undef,
+	"approve" => 0,
+    };
+    return $errcode;
 }
 
 #
@@ -3554,17 +4177,6 @@ sub DoSchedTerminate()
 	close(MSG);
     }
     #
-    # Create the webtask object; the web interface gave us an anonymous
-    # webtask, so we can use it before lock.
-    #
-    if (defined($webtask_id)) {
-	$webtask = WebTask->Lookup($webtask_id);
-	fatal("Could not lookup webtask object")
-	    if (!defined($webtask));
-	# Convenient.
-	$webtask->AutoStore(1);
-    }
-    #
     # Lock the slice in case it is doing something else, like taking
     # a disk image.
     #
@@ -3577,6 +4189,11 @@ sub DoSchedTerminate()
 	}
 	print STDERR "$errmsg\n";
 	exit($errcode);
+    }
+    if ($instance->admin_lockdown()) {
+	$errmsg  = "Must clear the admin lockdown first.";
+	$errcode = -1;
+	goto bad;
     }
     if (defined($reason) &&
 	!TBcheck_dbslot($reason, "default", "fulltext",
@@ -3604,9 +4221,16 @@ sub DoSchedTerminate()
     # a legal thing to do (although our CM actually permits this).
     #
     if ($expires_time < time() + ($days * 3600 * 24)) {
-	my $seconds = (time() + ($days * 3600 * 24)) - $expires_time;
+	my $seconds;
 	
-	if ($errcode = ExtendInternal($slice, $seconds, 1, \$errmsg)) {
+	if ($slice->IsExpired()) {
+	    # ExtendInternal handles expired slices differently.
+	    $seconds = ($days * 3600 * 24);
+	}
+	else {
+	    $seconds = (time() + ($days * 3600 * 24)) - $expires_time;
+	}
+	if ($errcode = ExtendInternal($slice, $seconds, 1, 1, \$errmsg)) {
 	    goto bad;
 	}
     }
@@ -3614,8 +4238,8 @@ sub DoSchedTerminate()
 	$slice->SetExpiration(time() + ($days * 3600 * 24));
     }
     # Now we can clear this.
-    if ($instance->admin_lockdown()) {
-	if (DoLockdownInternal("clear", "all")) {
+    if ($instance->user_lockdown()) {
+	if (DoLockdownInternal("clear", "user", 0, undef)) {
 	    SENDMAIL($TBOPS,
 		     "Failed to clear lock down on APT Instance",
 		     "Failed to clear lock down $instance\n".
@@ -3631,7 +4255,7 @@ sub DoSchedTerminate()
     my $created = POSIX::strftime("20%y-%m-%d %H:%M:%S %Z",
 				  localtime(str2time($instance->created())));
     my $message = "The site administrator has scheduled this experiment\n".
-	"to terminate in $days days.";
+	($days ? "to terminate in $days days." : "for immediate termination!");
     my $subject = "Experiment Termination Warning: $name";
 
     #
@@ -3727,5 +4351,89 @@ sub escapeshellarg($)
 
     $str =~ s/[^[:alnum:]]/\\$&/g;
     return $str;
+}
+
+sub CallAggregateMethod($$@)
+{
+    my ($method, $prval, @aggregates) = @_;
+    
+    #
+    # And tell the backend clusters to do it.
+    #
+    my $coderef = sub {
+	my ($sliver, $method, $pref) = @{ $_[0] };
+	    
+	my $webtask = $sliver->webtask();
+	my ($errmsg,$errcode);
+
+	my $response = $sliver->$method();
+	if (!defined($response)) {
+	    $errmsg  = "RPC Error calling $method on $sliver";
+	    $errcode = -1;
+	    goto bad;
+	}
+	if ($response->code() != GENIRESPONSE_SUCCESS) {
+	    $errmsg = "Could not call $method for $sliver: " .
+		$response->output();
+	    $errcode = $response->code();
+	    goto bad;
+	}
+	if (defined($pref)) {
+	    $$pref = $response->value();
+	}
+	else {
+	    $webtask->results($response->value());
+	}
+	return 0;
+      bad:
+	print STDERR $errmsg . "\n" if ($debug);
+	$webtask->output($errmsg);
+	$webtask->Exited($errcode);
+	return -1;
+    };
+    #
+    # Most of the time its just one aggregate, lets not use ParRun.
+    #
+    if (@aggregates == 1) {
+	my $aggregate = $aggregates[0];
+	my $result;
+
+	my $errcode = &$coderef([$aggregate, $method, \$result]);
+	if ($errcode) {
+	    $$prval = $aggregate->webtask()->output();
+	    return $errcode;
+	}
+	$$prval = [$result];
+	return 0;
+    }
+    my @return_codes  = ();
+    my @return_values = ();
+    my @tmp = map { [$_, $method] } @aggregates;
+	    
+    if (ParRun({"maxwaittime" => 99999,
+		"maxchildren" => scalar(@aggregates)},
+	       \@return_codes, $coderef, @tmp)) {
+	$$prval = "Internal error calling $method on $instance";
+	return -1;
+    }
+    
+    #
+    # Check the exit codes. 
+    #
+    foreach my $agg (@aggregates) {
+	my $code = shift(@return_codes);
+	$agg->webtask()->Refresh();
+	if ($code) {
+	    my $errmsg = "Could not call $method on some slivers";
+	    if ($agg->webtask()->output()) {
+		$errmsg .= ": " . $agg->webtask()->output();
+	    }
+	    $$prval = $errmsg;
+	    return $code;
+	}
+	push(@return_values, $webtask->results());
+    }
+    $$prval = \@return_values;
+    return 0;
 }
 

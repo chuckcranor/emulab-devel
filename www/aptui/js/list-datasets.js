@@ -1,6 +1,4 @@
-require(window.APT_OPTIONS.configObject,
-	['js/quickvm_sup', 'moment'],
-function (sup, moment)
+$(function ()
 {
     'use strict';
     var ajaxurl = null;
@@ -38,8 +36,6 @@ function (sup, moment)
 			// Only one search box.
 			filter_columnFilters : false,
 		    },
-
-		    headers: { 1: { sorter: false}, 2: {sorter: false} }
 		});
 	    return table;
 	};

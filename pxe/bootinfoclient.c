@@ -165,7 +165,7 @@ main(int argc, char **argv)
 				warn("Writing to socket");
 				goto again;
 			}
-			fprintf(stderr, "short write (%d != %d)\n",
+			fprintf(stderr, "short write (%d != %lu)\n",
 				cc, sizeof(boot_info));
 			goto again;
 		}

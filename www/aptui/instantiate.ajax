@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2016 University of Utah and the Flux Group.
+# Copyright (c) 2000-2017 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -26,6 +26,9 @@ include_once("webtask.php");
 chdir("apt");
 include_once("profile_defs.php");
 include_once("instance_defs.php");
+
+# Need to make non-hardcoded
+$maxduration = 16;
 
 #
 # Return info about specific profile.
@@ -64,6 +67,7 @@ function Do_GetProfile()
     #
     SPITAJAX_RESPONSE(array('rspec'       => $profile->rspec(),
 			    'name'        => $profile->name(),
+                            'pid'         => $profile->pid(),
                             'version'     => $profile->version(),
                             'lastused'    => $lastused,
                             'usecount'    => $count,
@@ -71,6 +75,7 @@ function Do_GetProfile()
                             'created'     => $profile->created(),
 			    'ispprofile'  => $ispp,
                             'isscript'    => ($profile->script() ? 1 : 0),
+                            'fromrepo'    => ($profile->repourl() ? 1 : 0),
 			    'amdefault'   => $amdefault));
 }
 
@@ -102,11 +107,22 @@ function Do_GetParameters()
 	SPITAJAX_ERROR(1, "Not enough permission to instantiate profile");
 	return;
     }
-    if (!$profile->isParameterized()) {
+    #
+    # For a repo-based profile, the paramdefs will be passed in.
+    # Note that different refspecs might be parameterized, but others not.
+    #
+    if ($profile->repourl() &&
+        isset($ajax_args["paramdefs"]) && $ajax_args["paramdefs"] != "") {
+        $paramdefs = $ajax_args["paramdefs"];
+    }
+    elseif (!$profile->isParameterized()) {
 	SPITAJAX_ERROR(1, "Not a parameterized profile");
 	return;
     }
-    list ($formfrag, $defaults) = $profile->GenerateFormFragment();
+    else {
+        $paramdefs = $profile->paramdefs();
+    }
+    list ($formfrag, $defaults) = $profile->GenerateFormFragment($paramdefs);
     SPITAJAX_RESPONSE(array("formfrag" => htmlentities($formfrag),
 			    "defaults" => $defaults));
 }
@@ -118,6 +134,54 @@ function Do_Instantiate()
 {
     SPITAJAX_ERROR(1, "This interface is deprecated");
     return;
+}
+
+function ImagesWhere($where, $dblink)
+{
+    $result = array();
+    $query_result = DBQueryFatal(
+      "select i.urn, v.description, v.version from ".
+      "image_versions as v left join images as i on ".
+      "v.urn=i.urn ".$where,
+    $dblink);
+    while ($row = mysql_fetch_array($query_result)) {
+      array_push($result, array(
+          'urn' => $row[0],
+          'description' => $row[1],
+          'version' => $row[2]));
+    }
+    return $result;
+}
+
+function Do_GetImageList()
+{
+    global $this_user;
+    global $ajax_args;
+    $dblink = DBConnect("ims");
+    $systemProject = 'emulab-ops';
+    $myImages = array();
+    $projectImages = array();
+    $systemImages = array();
+    $publicImages = array();
+    if ($this_user && $this_user->webonly()) {
+        # Only public images
+	$publicImages = ImagesWhere("where v.visibility='public' and i.project_urn not like '%$systemProject+authority+sa'", $dblink);
+	$systemImages = ImagesWhere("where i.project_urn like '%$systemProject+authority+sa'", $dblink);
+    } else if ($this_user) {
+	$user_urn = addslashes($this_user->urn());
+	# Public images that weren't created by the user
+	$publicImages = ImagesWhere("where v.visibility='public' and i.project_urn not like '%$systemProject+authority+sa' and v.creator_urn != '$user_urn'", $dblink);
+	# System images that weren't created by the user
+	$systemImages = ImagesWhere("where v.visibility='public' and i.project_urn like '%$systemProject+authority+sa' and v.creator_urn != '$user_urn'", $dblink);
+        # All images for user
+	$myImages = ImagesWhere("where v.creator_urn='$user_urn'", $dblink);
+    }
+    $result = array(array("my-images" => $myImages,
+                          "project" => $projectImages,
+			  "system" => $systemImages,
+			  "public" => $publicImages));
+    
+    SPITAJAX_RESPONSE($result);
 }
 
 #
@@ -162,6 +226,7 @@ function Do_GetImageInfo()
     foreach ($ajax_args["images"] as $urn) {
         $types = array();
         $virts = array();
+        $deprecated = 0;
         
         if (Instance::ValidURN($urn)) {
             # This // vs : thing is a pain.
@@ -175,34 +240,42 @@ function Do_GetImageInfo()
             #
             $urn = preg_replace('/:\d+$/', "", $urn);
             $safe_urn = addslashes($urn);
-
-         again:
             if (is_null($version)) {
                 if ($proj == "emulab-ops") {
-                    list ($a,$b,$c) = Instance::ParseURN($urn);
-                    $safe_urn = addslashes("urn:publicid:IDN+%+image+${c}");
-                    $innerclause = "urn like '$safe_urn'";
+                    $safe_urn = addslashes("urn:publicid:IDN+%+image+${id}");
+                    $innerclause = "innerclause.urn like '$safe_urn'";
                 }
                 else {
-                    $innerclause = "urn='$safe_urn'";
+                    $innerclause = "innerclause.urn='$safe_urn'";
                 }
-                $query_result =
-                    DBQueryFatal("select i.*,v.* from image_versions as v ".
-                                 "   inner join ".
-                                 "      (select urn,max(version) as version ".
-                                 "         from image_versions ".
-                                 "       where $innerclause ".
-                                 "       group by urn) as ij ".
-                                 "   on v.urn=ij.urn and v.version=ij.version ".
-                                 "left join images as i on i.urn=v.urn",
-                                $dblink);
+                $query_result = DBQueryFatal(
+                    "(select i.*,v.* from image_versions as v ".
+                    "  inner join ".
+                    "    (select iv.urn,max(version) as version ".
+                    "       from image_aliases as innerclause ".
+                    "     left join image_versions as iv on ".
+                    "           iv.urn=innerclause.target_urn ".
+                    "     where $innerclause ".
+                    "     group by iv.urn) as ij ".
+                    "  on v.urn=ij.urn and v.version=ij.version ".
+                    " left join images as i on i.urn=v.urn) ".
+                    "union ".
+                    "(select i.*,v.* from image_versions as v ".
+                    "   inner join ".
+                    "      (select urn,max(version) as version ".
+                    "         from image_versions as innerclause ".
+                    "       where $innerclause ".
+                    "       group by urn) as ij ".
+                    "   on v.urn=ij.urn and v.version=ij.version ".
+                    " left join images as i on i.urn=v.urn)", $dblink);
             }
             else {
                 $query_result =
                     DBQueryFatal("select i.*,v.* from image_versions as v ".
-                                "left join images as i on ".
-                                "     i.image_uuid=v.image_uuid ".
-                                "where v.urn='$safe_urn' and v.version='$version'",
+                                 "left join images as i on ".
+                                 "     i.image_uuid=v.image_uuid ".
+                                 "where v.urn='$safe_urn' and ".
+                                 "      v.version='$version'",
                                 $dblink);
             }
         }
@@ -315,8 +388,19 @@ function Do_GetImageInfo()
 	    }
             $virts[$row["virtualizaton"]] = $row["virtualizaton"];
             $description = $row["description"];
+            #
+            # I suppose an alias can point to a deprecated image.
+            #
+            if ($row["deprecated"]) {
+                $deprecated  = $row["deprecated"];
+                $deprecated_iserror = $row["deprecated_iserror"];
+                $deprecated_message = $row["deprecated_message"];
+            }
         }
         if (count($types)) {
+            if (isset($types["pcvm"])) {
+                $virts["emulab-xen"] = "emulab-xen";
+            }
             # These are reversed from what they should mean!
             $typelist = implode(",", array_keys($types));
             $virtlist = implode(",", array_keys($virts));
@@ -330,8 +414,17 @@ function Do_GetImageInfo()
                       array("images"   => array($urn),
                             "hardware" => array($typelist)));
 
-            $images[] = array("id"   => $urn,
-                              "name" => $description);
+            $im = array("id"   => $urn,
+                        "name" => $description,
+                        "deprecated" => false);
+            if ($deprecated) {
+                $im["deprecated"] = $deprecated;
+                $im["deprecated_iserror"] = ($deprecated_iserror ? true:false);
+                $im["deprecated_message"] = $deprecated_message;
+            }
+            else {
+            }
+            $images[] = $im;
         }
     }
     $result = array(array("constraints" => $constraints,
@@ -545,15 +638,24 @@ function CheckStep2()
 {
     global $this_user;
     global $ajax_args;
-    global $ISAPT, $ISPNET, $ISCLOUD, $ISEMULAB;
+    global $ISAPT, $ISPNET, $ISCLOUD, $ISEMULAB, $ISPOWDER;
+    global $TB_PROJECT_CREATEEXPT;
+    global $maxduration;
 
     if (!isset($ajax_args["formfields"])) {
 	SPITAJAX_ERROR(-1, "Missing formfields");
 	return -1;
     }
     $formfields = $ajax_args["formfields"];
-    $am_array   = Instance::DefaultAggregateList();
+    $amlist     = Instance::DefaultAggregateList();
+    $am_array   = array();
     $errors     = array();
+
+    while (list($index, $aggregate) = each($amlist)) {
+        $urn  = $aggregate->urn();
+        $name = $aggregate->name();
+        $am_array[$name] = $urn;
+    }
 
     session_start();
     #
@@ -593,7 +695,7 @@ function CheckStep2()
                 }
             }
         }
-        elseif ($ISAPT || $ISPNET || $ISEMULAB) {
+        elseif ($ISAPT || $ISPNET || $ISEMULAB || $ISPOWDER) {
             # No choice
             ;
         }
@@ -609,8 +711,10 @@ function CheckStep2()
         #
         # Project has to exist.  
         #
-        $project = Project::LookupByPid($formfields["pid"]);
-        if (!$project) {
+        if (!isset($formfields["pid"])) {
+            $errors["pid"] = "Must select a project";
+        }
+        elseif (! ($project = Project::LookupByPid($formfields["pid"]))) {
             $errors["pid"] = "No such project";
         }
         # User better be a member.
@@ -618,6 +722,23 @@ function CheckStep2()
                 (!$project->IsMember($this_user, $isapproved) ||
                  !$isapproved)) {
             $errors["pid"] = "Illegal project";
+        }
+        elseif ($formfields["pid"] != $formfields["gid"]) {
+            $group = $project->LookupSubgroupByName($formfields["gid"]);
+            if (!$group) {
+                $errors["gid"] = "No such group in selected project";
+            }
+            elseif (!$group->AccessCheck($this_user, $TB_PROJECT_CREATEEXPT)) {
+                $errors["gid"] = "No permission to create experiments in ".
+                               "selected group";
+            }
+        }
+        else {
+            $group = $project->DefaultGroup();
+            if (!$group->AccessCheck($this_user, $TB_PROJECT_CREATEEXPT)) {
+                $errors["pid"] = "No permission to create experiments in ".
+                               "selected project";
+            }
         }
 
         # Experiment name is optional, we generate one later.
@@ -632,6 +753,13 @@ function CheckStep2()
                     Instance::LookupByName($project, $formfields["name"])) {
                 $errors["name"] = "Already in use by another experiment";
             }
+        }
+
+        if (!isset($formfields["duration"]) || $formfields["duration"] == "") {
+            $errors["duration"] = "Must set an experiment duration";
+        }
+        elseif (!ctype_digit($formfields["duration"]) || (((int)$formfields["duration"]) <= 0 || ((int)$formfields["duration"]) > $maxduration)) {
+            $errors["duration"] = "Must be an integer between 1 and ".$maxduration;
         }
     }
     if (count($errors)) {
@@ -651,40 +779,64 @@ function Do_RunScript()
     global $ajax_args;
     global $suexec_output, $suexec_output_array;
 
-    if (!isset($ajax_args["uuid"])) {
-	SPITAJAX_ERROR(1, "Missing profile uuid");
-	return;
-    }
-    $profile = Profile::Lookup($ajax_args["uuid"]);
-    if (!$profile) {
-	SPITAJAX_ERROR(1, "Unknown profile uuid");
-	return;
-    }
-    if (!$profile->script()) {
-	SPITAJAX_ERROR(1, "Not a geni-lib script");
-	return;
-    }
-    # Guest users do not run geni-lib; return the rspec or error.
-    if (!isset($this_user)) {
-	if ($profile->rspec() && $profile->rspec() != "") {
-	    SPITAJAX_RESPONSE($profile->rspec());
-	}
-	else {
-	    SPITAJAX_ERROR(1, "No rspec for guest user");
-	}
-    }
-    $this_idx = $this_user->uid_idx();
-    $this_uid = $this_user->uid();
+    $script = "";
+    if (isset($ajax_args["script"])) {
+        if (!isset($this_user)) {
+	    SPITAJAX_ERROR(1, "Guest users cannot run genilib scripts");
+	    return;
+        }
+        $this_idx = $this_user->uid_idx();
+        $this_uid = $this_user->uid();
+        $script = $ajax_args["script"];
+    } else {
+        if (!isset($ajax_args["uuid"])) {
+	    SPITAJAX_ERROR(1, "Missing profile uuid");
+	    return;
+        }
+        $profile = Profile::Lookup($ajax_args["uuid"]);
+        if (!$profile) {
+	    SPITAJAX_ERROR(1, "Unknown profile uuid");
+	    return;
+        }
+        if (!$profile->script()) {
+	    SPITAJAX_ERROR(1, "Not a geni-lib script");
+	    return;
+        }
+        $script = $profile->script();
+
+        # Guest users do not run geni-lib; return the rspec or error.
+        if (!isset($this_user)) {
+	    if ($profile->rspec() && $profile->rspec() != "") {
+	        SPITAJAX_RESPONSE($profile->rspec());
+	    } else {
+	        SPITAJAX_ERROR(1, "No rspec for guest user");
+	    }
+        }
+        $this_idx = $this_user->uid_idx();
+        $this_uid = $this_user->uid();
     
-    if (! ($profile->CanInstantiate($this_user) || ISADMIN())) {
-	SPITAJAX_ERROR(1, "Not enough permission to instantiate profile");
+        if (! ($profile->CanInstantiate($this_user) || ISADMIN())) {
+	    SPITAJAX_ERROR(1, "Not enough permission to instantiate profile");
+	    return;
+        }
+    }
+
+    if (preg_match("/^import/m", $script)) {
+        $command = "webrungenilib";
+    }
+    elseif (preg_match("/^source tb_compat/m", $script)) {
+        $command = "webns2rspec -a";
+    }
+    else {
+	SPITAJAX_ERROR(1, "Unknown script type");
 	return;
     }
+
     $infname   = tempnam("/tmp", "genilibin");
     $outfname  = tempnam("/tmp", "genilibout");
 
     $fp = fopen($infname, "w");
-    fwrite($fp, $profile->script());
+    fwrite($fp, $script);
     fclose($fp);
     chmod($infname, 0666);
     chmod($outfname, 0666);
@@ -693,7 +845,7 @@ function Do_RunScript()
     # Invoke the backend.
     #
     $retval = SUEXEC($this_uid, "nobody",
-		     "webrungenilib -o $outfname $infname",
+		     "$command -o $outfname $infname",
 		     SUEXEC_ACTION_IGNORE);
     
     if ($retval != 0) {
@@ -704,7 +856,7 @@ function Do_RunScript()
 	else {
             # This might be a json structure, the JS code looks for it. 
 	    $errors = file_get_contents($outfname);
-	    SPITAJAX_ERROR(1, $errors);
+	    SPITAJAX_ERROR(2, $errors);
 	}
 	unlink($infname);
 	unlink($outfname);
@@ -724,8 +876,8 @@ function Do_Submit()
 {
     global $this_user;
     global $ajax_args;
-    global $PORTAL_GENESIS;
-    global $TBAUTHDOMAIN, $ISAPT, $ISPNET, $ISEMULAB, $DEFAULT_AGGREGATE_URN;
+    global $PORTAL_GENESIS, $DEFAULT_AGGREGATE_URN;
+    global $TBAUTHDOMAIN, $ISAPT, $ISPNET, $ISEMULAB, $ISPOWDER;
 
     if (!isset($ajax_args["formfields"])) {
 	SPITAJAX_ERROR(1, "Missing formfields");
@@ -742,10 +894,17 @@ function Do_Submit()
         return;
     }
     $formfields = $ajax_args["formfields"];
-    $am_array   = Instance::DefaultAggregateList();
+    $amlist     = Instance::DefaultAggregateList();
+    $am_array   = array();
     $errors     = array();
     $args       = array("portal" => $PORTAL_GENESIS);
     $profile    = Profile::Lookup($formfields["profile"]);
+
+    while (list($index, $aggregate) = each($amlist)) {
+        $urn  = $aggregate->urn();
+        $name = $aggregate->name();
+        $am_array[$name] = $urn;
+    }
 
     #
     # SSH keys are optional for guest users; they just have to
@@ -761,8 +920,29 @@ function Do_Submit()
     # we could get an rspec.
     #
     if ($profile->isParameterized() && $this_user &&
-        isset($formfields["pp_rspec"]) && $formfields["pp_rspec"] != "") {
-        $args["rspec"] = $formfields["pp_rspec"];
+        isset($formfields["rspec"]) && $formfields["rspec"] != "") {
+        $args["rspec"] = $formfields["rspec"];
+    }
+
+    #
+    # For a repo-based profile, we might get an rspec and/or a script.
+    # Need to deal with the paramdefs block too.
+    #
+    if ($profile->repourl() && $this_user) {
+        if (isset($formfields["script"]) && $formfields["script"] != "") {
+            $args["script"] = $formfields["script"];
+        }
+        if (isset($formfields["rspec"]) && $formfields["rspec"] != "") {
+            $args["rspec"] = $formfields["rspec"];
+        }
+        # If the user is instantiating the profile version, we will not
+        # get these.
+        if (isset($formfields["reporef"]) && $formfields["reporef"] != "") {
+            $args["reporef"] = $formfields["reporef"];
+        }
+        if (isset($formfields["repohash"]) && $formfields["repohash"] != "") {
+            $args["repohash"] = $formfields["repohash"];
+        }
     }
 
     $aggregate_urn = "";
@@ -776,7 +956,7 @@ function Do_Submit()
                 }
             }
         }
-        elseif ($ISAPT || $ISPNET || $ISEMULAB) {
+        elseif ($ISAPT || $ISPNET || $ISEMULAB | $ISPOWDER) {
             $aggregate_urn = $DEFAULT_AGGREGATE_URN;
         }
         elseif (isset($formfields["where"])) {
@@ -787,6 +967,7 @@ function Do_Submit()
         }
         # Required for real users.
         $args["pid"] = $formfields["pid"];
+        $args["gid"] = $formfields["gid"];
 
         # Experiment name is optional, we generate one later.
         if (isset($formfields["name"]) && $formfields["name"] != "") {
@@ -803,6 +984,9 @@ function Do_Submit()
         if (isset($_SESSION["verified"])) {
             $args["auth_token"] = $_SESSION["auth_token"];
         }
+    }
+    if ($this_user) {
+        $args["duration"]  = $formfields["duration"];
     }
 
     if (0) {

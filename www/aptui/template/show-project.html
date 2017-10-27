@@ -39,7 +39,10 @@
 <div class='row'>
   <div class='col-sm-12'>
     <div class='panel panel-default'>
-      <div class='panel-body'>
+      <div class='panel-heading'>
+	<h4 class="text-center">Project <%- target_project %></h4>
+      </div>
+	<div class='panel-body'>
 	<div class='row'>
 	  <div class='col-sm-12'>
 	    <div>
@@ -52,8 +55,14 @@
 		  <a href="#profiles" role="tab"
 		     data-toggle="tab">Profiles</a></li>
 		<li role="presentation">
+		  <a href="#datasets" role="tab"
+		     data-toggle="tab">Datasets</a></li>
+		<li role="presentation">
 		  <a href="#members" role="tab"
 		     data-toggle="tab">Members</a></li>
+		<li role="presentation">
+		  <a href="#groups" role="tab"
+		     data-toggle="tab">Groups</a></li>
 		<li role="presentation">
 		  <a href="#usage" role="tab"
 		     data-toggle="tab">Usage</a></li>
@@ -61,9 +70,19 @@
 		  <li role="presentation">
 		    <a href="#admin" role="tab" data-toggle="tab">
 		      Admin</a></li>
-		  <li role="presentation">
-		    <a href='<%- emulablink %>'>
-		      Emulab Project Page</a></li>
+		  <li role="presentation"
+		      class="dropdown">
+		    <a class="dropdown-toggle" data-toggle="dropdown"
+		       href="#" role="button">
+		      Admin Menu<span class="caret"></span></a>
+		    <ul class="dropdown-menu">
+		      <li><a href="reserve.php?project=<%= target_project %>">
+			Create Reservation</a></li>
+		      <li role="presentation">
+			<a href='<%- emulablink %>'>
+			  Emulab Project Page</a></li>
+		    </ul>
+		  </li>
 		<% } %>
 	      </ul>
 	      <!-- Tab panes -->
@@ -94,11 +113,25 @@
 		      No profiles to show you.
 		    </div>
 		  </div>
-		  <br>
 		  <div id="classic_profiles_content"></div>
+		</div>
+		<div role="tabpanel" class="tab-pane" id="datasets">
+		  <div id="datasets_content">
+	      	    <div class="hidden" id="datasets_nodatasets">
+		      <br>
+		      No datasets to show you.
+		    </div>
+		  </div>
+		  <div id="classic_datasets_content" class="hidden">
+		    <center><h4>Classic Datasets</h4></center>
+		    <div id="classic_datasets_content_div"></div>
+		  </div>
 		</div>
 		<div role="tabpanel" class="tab-pane" id="members">
 		  <div id="members_content"></div>
+		</div>
+		<div role="tabpanel" class="tab-pane" id="groups">
+		  <div id="groups_content"></div>
 		</div>
 		<div role="tabpanel" class="tab-pane" id="usage">
 		  <div id="usage_content">
@@ -121,3 +154,6 @@
     </div>
   </div>
 </div>
+<div id='waitwait_div'></div>
+<div id='oops_div'></div>
+<div id='conversion_help_div'></div>

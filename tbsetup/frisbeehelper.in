@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2011 University of Utah and the Flux Group.
+# Copyright (c) 2011-2016 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -72,7 +72,7 @@ use libtestbed;
 use libtblog;
 use Node;
 use User;
-use Image;
+use OSImage;
 
 # Protos.
 sub Fatal($);
@@ -165,7 +165,7 @@ if ($UID) {
     $isadmin = 1;
 }
 
-$image = Image->Lookup($imagename);
+$image = OSImage->Lookup($imagename);
 if (!$image) {
     # If not an Emulab image, we must have a node context to check
     if (!$nodeid) {

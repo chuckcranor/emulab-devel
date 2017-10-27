@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2010-2011, 2013 University of Utah and the Flux Group.
+# Copyright (c) 2010-2016 University of Utah and the Flux Group.
 # 
 # {{{GENIPUBLIC-LICENSE
 # 
@@ -340,6 +340,7 @@ sub AddUser(;$)
     
     my $xmlgoo = emutil::ExecQuiet("$DUMPUSER $uid");
     if ($?) {
+	print STDERR "$xmlgoo";
 	fatal("$DUMPUSER failed");
     }
     my $args = {"xmlstring" => $xmlgoo,

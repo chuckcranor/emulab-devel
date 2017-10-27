@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2008-2016 University of Utah and the Flux Group.
+# Copyright (c) 2008-2017 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -126,8 +126,39 @@ my $IMAGEZIP    = "/usr/local/bin/imagezip";
 my $IMAGEUNZIP  = "/usr/local/bin/imageunzip";
 my $IMAGEDUMP   = "/usr/local/bin/imagedump";
 my $XM          = "/usr/sbin/xm";
+my $FSCK	= "/sbin/e2fsck";
+my $FSCKUFS	= "/sbin/fsck.ufs";
 my $debug  = 0;
 my $lockdebug = 0;
+my $sleepdebug = 0;
+
+#
+# Set to enable vnodesetup to exit before vnode is completely up
+# (see vnodesetup::hackwaitandexit). Allows more parallelism during
+# boot-time vnode setup. Note that concurrency may still be constrained
+# by $MAXCONCURRENT (defined below) which limits how many new VMs can
+# be created at once.
+#
+my $vsrelease = "immediate";	# or "early" or "none"
+
+#
+# Some commands/subsystems have evolved in incompatible ways over time,
+# these vars keep track of such things.
+#
+my $newsfdisk = 0;
+my $newlvm = 0;
+
+#
+# Image wait time.
+#
+# How long (seconds) we will wait to when trying to grab a lock on
+# an image. Should be set to the max time you think it could take frisbee
+# to download the largest (compressed) OS image you will support in a VM.
+# Also consider that there could be multiple frisbees running at once for
+# multiple images (currently limited by the vnode create lock concurrency
+# ($MAXCONCURRENT) below.
+#
+my $MAXIMAGEWAIT = 1800;
 
 #
 # Serial console handling. We fire up a capture per active vnode.
@@ -141,12 +172,16 @@ my $lockdebug = 0;
 #	    Monitors the pty exported by xenconsoled. Note that the
 #	    specific pty can change when a domain reboots; capture
 #	    deals with this.
+#	-T: Put out a timestamp if there has been no previous output
+#	    for at least 10 seconds.
+#	-L: In conjunction with -T, the timestamp message includes how
+#	    long it has been since the last output.
 #	-R: Retry interval of 2 seconds. When capture is disconnected
 #	    from the pty (due to domain reboot/shutdowns), this is how
 #	    long we wait between attempts to reconnect.
 #
 my $CAPTURE     = "/usr/local/sbin/capture-nossl";
-my $CAPTUREOPTS	= "-i -C -R 2000";
+my $CAPTUREOPTS	= "-i -C -L -T 10 -R 2000";
 
 #
 # Create a thin pool with the name $POOL_NAME using not more
@@ -273,6 +308,9 @@ my $MAXROUTETTABLE = 255;
 # Striping
 my $STRIPE_COUNT   = 1;
 
+# Setup a RAID10 underneath the LVM
+my $LVM_RAID = SHAREDHOST() ? 1 : 0;
+
 # Avoid using SSDs unless there are only SSDs
 my $LVM_AVOIDSSD = 1;
 
@@ -287,18 +325,19 @@ my $LVM_LARGEPARTPCT = 10;
 my $LVM_ONEPARTPERDISK = 1;
 
 # Use openvswitch for gre tunnels.
+# Use a custom version if present, the standard version otherwise.
 my $OVSCTL   = "/usr/local/bin/ovs-vsctl";
 my $OVSSTART = "/usr/local/share/openvswitch/scripts/ovs-ctl";
+if (! -x "$OVSCTL") {
+    $OVSCTL   = "/usr/bin/ovs-vsctl";
+    $OVSSTART = "/usr/share/openvswitch/scripts/ovs-ctl";
+}
 
 my $ISREMOTENODE = REMOTEDED();
 my $BRIDGENAME   = "xenbr0";
 my $VIFROUTING   = ((-e "$ETCDIR/xenvifrouting") ? 1 : 0);
 
 my $TMCD_PORT	 = 7777;
-
-# Number of concurrent containers set up in parallel. We bump this up
-# a bit down in doingThinLVM().
-my $MAXCONCURRENT = 3;
 
 #
 # Information about the running Xen hypervisor
@@ -307,11 +346,7 @@ my %xeninfo = ();
 
 # Local functions
 sub findRoot();
-sub copyRoot($$);
-sub createRootDisk($);
 sub createAuxDisk($$);
-sub replace_hacks($);
-sub disk_hacks($);
 sub configFile($);
 sub domain0Memory();
 sub totalMemory();
@@ -322,12 +357,12 @@ sub subDHCP($$);
 sub restartDHCP();
 sub formatDHCP($$$);
 sub fixupMac($);
-sub createControlNetworkScript($$$);
+sub createControlNetworkScript($$$$);
 sub createExpNetworkScript($$$$$$$$);
 sub createTunnelScript($$$$$);
 sub createExpBridges($$$);
 sub destroyExpBridges($$);
-sub domainStatus($);
+sub domainStatus($;$);
 sub domainExists($);
 sub addConfig($$$);
 sub createXenConfig($$);
@@ -357,6 +392,118 @@ sub getXenInfo()
     close XM;
 }
 
+#
+# Things that matter:
+#
+# - RAM in dom0.
+#   Swapping is deadly. Looks like 1024MB is NOT enough based on experience
+#   noted below. 4096MB is plenty and seems to override most of the other
+#   concerns.
+#
+# - Number of CPUs.
+#   Have not seen any appreciable difference with 32 CPUs vs. 4. Other
+#   things cause problems well before this.
+#
+# - The number of disks in the VG.
+#   LVM performance is generally unpredicable. More than one disk is
+#   good, but haven't seen much improvement with, e.g., 6 instead of 2.
+#   The killer is concurrent frisbees (write to LVM) and even more so,
+#   imageunzips (read from and write to LVM).
+#
+# - The BW from the frisbee server.
+#   Possibly an issue if nothing else stands in the way, due to subboss
+#   disk speed that tops out at about 150MB/sec. Given random I/O and
+#   multiple images, probably going to get less than 50MB/sec.
+#
+# Random proposal based on tests run on Emulab d710/d820/d430 nodes and
+# Apt c6220 nodes:
+#
+# * Change the arbitrary 164MB write buf memory to an equally arbitrary,
+#   but more aestetically pleasing, 128MB (where the hell did 164 come from?)
+#
+# * Adjust concurrency based on:
+#
+# if (dom0 physical RAM < 1GB) MAX = 1;
+# if (any swap activity) MAX = 1;
+#
+#    This captures pc3000s/other old machines and overloaded (RAM) machines.
+#
+# if (# physical CPUs <= 2) MAX = 3;
+# if (# physical spindles == 1) MAX = 3;
+# if (dom0 physical RAM <= 2GB) MAX = 3;
+#
+#    This captures d710s, Apt r320, and Cloudlab m510s. We may need to
+#    reconsider the latter since its single drive is an NVMe device.
+#    But first we have to get Xen working with them (UEFI issues)...
+#
+# MAX = 5;
+#
+#    This captures Emulab d430/d820s, Apt c6220s, and probably all
+#    Clemson and Wisconsin Cloudlab nodes.
+#
+# Random observations based on waaay too much time spent on d710s:
+#
+# Observation: d710 with 5 vnodes and all different images does not
+# boot first time with MAXCONCURRENT==5. 4 vnodes appear to be downloading
+# their disk image when the BSD domU tries to boot--qemu times out.
+# Restarting the vnode later works fine. The reason for this is that dom0
+# starts swapping due to imageunzip processes running. 164MB of write
+# buffering per imageunzip is too much for 3 imageunzips and 1GB of dom0 mem.
+# Even dropping to 128MB of write buffering is not enough. Single-threading
+# imageunzip (-n -W 1) works fine, but things go really slow. We need a
+# buffering based on the available dom0 RAM and the max number of concurrent
+# imageunzips (MAXCONCURRENT) independent of how the latter is calculated.
+#
+# Observation: qemu processes blow up huge when they first start (500MB) but
+# don't require that much afterward (20MB). So most of our d710 problems
+# stem from qemu blasting off while imageunzips are running. This happens
+# because qemu is outside of the MAXCONCURRENT lock.
+#
+# Empirically, based on a d710 with 1GB of dom0 RAM, we can pull off 3
+# imageunzips + 1 qemu with just a tad of swapping--not enough to cause
+# the qemu to timeout. Full imageunzips seem to be about 32MB + writebuf
+# memory. No swapping until the qemu starts. The number of qemus we launch
+# will be implicitly constrained by this limit as qemu startups (vnodeBoot)
+# take less time than vnodeCreate so we should not have more than MAXCONCURRENT
+# vnodes in vnodeBoot at once.
+#
+
+#
+# Historic concurrency value. Should get overwritten in setConcurrency.
+#
+my $MAXCONCURRENT = 3;
+
+#
+# Number of concurrent containers set up in parallel. See the big, long
+# navel-gazing comment just above...
+#
+sub setConcurrency($)
+{
+    my ($maxval) = @_;
+   
+    if ($maxval) {
+	$MAXCONCURRENT = 5;
+    } else {
+	my ($ram,$cpus) = domain0Resources();
+	my $disks = $STRIPE_COUNT;
+	my $hasswapped = domain0Swapping();
+
+	print STDERR "setConcurrency: cpus=$cpus, ram=$ram, disks=$disks hasswapped=$hasswapped\n"
+	    if ($debug);
+
+	if ($cpus > 0 && $disks > 0 && $ram > 0) {
+	    if ($ram < 1024 || (!SHAREDHOST() && $hasswapped)) {
+		$MAXCONCURRENT = 1;
+	    } elsif ($cpus <= 2 || $disks <= 2 || $ram <= 2048) {
+		$MAXCONCURRENT = 3;
+	    } else {
+		$MAXCONCURRENT = 5;
+	    }
+	}
+    }
+    print STDERR "Limiting to $MAXCONCURRENT concurrent vnode creations.\n";
+}
+
 sub init($)
 {
     my ($pnode_id,) = @_;
@@ -364,11 +511,34 @@ sub init($)
     makeIfaceMaps();
     makeBridgeMaps();
 
-    my $toolstack = `grep TOOLSTACK /etc/default/xen`;
+    my $toolstack;
+    if (-x "/usr/lib/xen-common/bin/xen-toolstack") {
+	$toolstack = `/usr/lib/xen-common/bin/xen-toolstack`;
+    } else {
+	$toolstack = `grep TOOLSTACK /etc/default/xen`;
+    }
     if ($toolstack =~ /xl$/) {
 	$XM = "/usr/sbin/xl";
     }
     getXenInfo();
+
+    # See which sfdisk we have. Version 2.26 removed some options we used.
+    my $out = `sfdisk -v`;
+    if (defined($out) && $out =~ /2\.(\d+)(\.\d+)$/) {
+	if (int($1) >= 26) {
+	    $newsfdisk = 1;
+	}
+    }
+
+    # See what version of LVM we have. Again, some commands are different.
+    $out = `lvm version | grep 'LVM version'`;
+    if (defined($out) && $out =~ /LVM version:\s+(\d+)\.(\d+)\.(\d+)/) {
+	if (int($1) > 2 ||
+	    (int($1) == 2 && int($2) > 2) ||
+	    (int($1) == 2 && int($2) == 2 && int($3) >= 99)) {
+	    $newlvm = 1;
+	}
+    }
 
     # Compute the strip size for new lvms.
     if (-e "/var/run/xen.ready") {
@@ -381,6 +551,10 @@ sub setDebug($)
 {
     $debug = shift;
     libvnode::setDebug($debug);
+    $lockdebug = 1;
+    if ($debug > 1) {
+	$sleepdebug = 1;
+    }
     print "libvnode_xen: debug=$debug\n"
 	if ($debug);
 }
@@ -505,6 +679,10 @@ sub rootPreConfig($)
     mysystem("$MODPROBE openvswitch");
     mysystem("$OVSSTART --delete-bridges start");
 
+    # For gre tunnels to work with iptables
+    mysystem("$MODPROBE nf_conntrack_proto_gre");
+    mysystem("$MODPROBE nf_conntrack_pptp");
+
     # For bandwidth contraints.
     mysystem("$MODPROBE ifb numifbs=$MAXIFB");
 
@@ -593,15 +771,22 @@ sub rootPreConfig($)
 	# Find available devices of sufficient size, prepare them,
 	# and incorporate them into a volume group.
 	#
+      again:
 	my $totalSize = 0;
+	my $minSize;
 	my @blockdevs = ();
 	foreach my $dev (sort keys(%devs)) {
 	    #
 	    # Whole disk is available, use it.
 	    #
 	    if (defined($devs{$dev}{"size"})) {
+		my $psize = $devs{$dev}{"size"};
+
 		push(@blockdevs, $devs{$dev}{"path"});
-		$totalSize += $devs{$dev}{"size"};
+		$totalSize += $psize;
+		if (!defined($minSize) || $psize < $minSize) {
+		    $minSize = $psize;
+		}
 		next;
 	    }
 
@@ -620,7 +805,7 @@ sub rootPreConfig($)
 		# the available space (e.g., Utah d710s), this is a bad
 		# idea.
 		#
-		if ($LVM_FULLDISKONLY) {
+		if ($LVM_FULLDISKONLY || $LVM_RAID) {
 		    print STDERR
 			"WARNING: not using partition $ppath for LVM\n";
 		    next;
@@ -659,11 +844,23 @@ sub rootPreConfig($)
 		#
 		push(@blockdevs, $ppath);
 		$totalSize += $psize;
+		if (!defined($minSize) || $psize < $minSize) {
+		    $minSize = $psize;
+		}
 	    }
 	    if ($LVM_ONEPARTPERDISK && defined($lppath)) {
 		push(@blockdevs, $lppath);
 		$totalSize += $lpsize;
+		if (!defined($minSize) || $lpsize < $minSize) {
+		    $minSize = $lpsize;
+		}
 	    }
+	}
+	if ($LVM_RAID && @blockdevs < 2) {
+	    print STDERR "WARNING: not enough disks available, ".
+		"not configuring RAID.\n";
+	    $LVM_RAID = 0;
+	    goto again;
 	}
 	if (@blockdevs == 0) {
 	    print STDERR "ERROR: findSpareDisks found no disks for LVM!\n";
@@ -672,6 +869,31 @@ sub rootPreConfig($)
 	}
 		    
 	my $blockdevstr = join(' ', sort @blockdevs);
+
+	#
+	# If we are doing a reliable LVM setup, setup an mdadm RAID10
+	# with two copies. This seems to be the least expensive form
+	# of redundancy we can get (as opposed to using RAID5 when there
+	# are three or more disks).
+	#
+	# Note that this setup is unique to mdadm and is equivalent to
+	# RAID1 with two disks, and equivalent to RAID1+0 (i.e., what is
+	# typically referred to as "RAID10") with four disks.
+	#
+	if ($LVM_RAID) {
+	    my $rdev = "/dev/md/xen";
+	    my $rargs;
+	    my $ndevs = int(@blockdevs);
+
+	    mysystem("mdadm --create --verbose $rdev ".
+		     "--level=10 --raid-devices=$ndevs $blockdevstr");
+	    sleep(1);
+	    # XXX raid5 config lists parity drive as spare til initialized
+	    mysystem("mdadm --detail --scan | sed -e 's/spares=1//' ".
+		     ">>/etc/mdadm/mdadm.conf");
+	    $blockdevstr = $rdev;
+	}
+
 	mysystem("pvcreate $blockdevstr");
 	mysystem("vgcreate $VGNAME $blockdevstr");
 
@@ -820,6 +1042,11 @@ sub rootPreConfigNetwork($$$$)
     TBDebugTimeStamp("  releasing global lock")
 	if ($lockdebug);
     TBScriptUnlock();
+    # XXX let vnodesetup exit early
+    if ($vsrelease eq "immediate") {
+	TBDebugTimeStamp("rootPreConfigNetwork: touching $VMS/$vnode_id/running");
+	mysystem2("touch $VMS/$vnode_id/running");
+    }
     return 0;
 bad:
     TBScriptUnlock();
@@ -858,6 +1085,27 @@ sub vnodeCreate($$$$)
     }
     $vninfo->{'vmid'} = $vmid;
 
+    #
+    # XXX future optimization possibility.
+    #
+    # Try to be smart about holding the vnode creation lock which is not
+    # a single lock, but rather a small set of locks intended to limit
+    # concurrency in the vnode creation process. Specifically, if we grab
+    # a create_vnode lock and then block waiting for our image lock, then
+    # we might prevent someone else (using a different image) from making 
+    # progress. So we could instead: grab a create_vnode lock, make a short
+    # attempt (5-10 seconds) to grab the image lock and, failing that, back
+    # off of the create_vnode lock, wait and then try the whole process again.
+    #
+    # The problem is that we may block again down in downloadOneImage when
+    # we try to grab the image lock exclusively. Not sure we can back all
+    # the way out easily in that case!
+    #
+    # This is also a bit of a de-optimization when we have a set of vnodes
+    # all using the same image. We just cause a bit of excess context
+    # switching in that (probably more common) case.
+    #
+
     if (CreateVnodeLock() != 0) {
 	fatal("CreateVnodeLock()");
     }
@@ -872,7 +1120,7 @@ sub vnodeCreate($$$$)
 	if ($lockdebug);
     if (TBScriptLock($imagelockname,
 		     TBSCRIPTLOCK_INTERRUPTIBLE()|TBSCRIPTLOCK_SHAREDLOCK(),
-		     1800) != TBSCRIPTLOCK_OKAY()) {
+		     $MAXIMAGEWAIT) != TBSCRIPTLOCK_OKAY()) {
 	fatal("Could not get $imagelockname lock!");
     }
     TBDebugTimeStamp("  got image lock")
@@ -880,60 +1128,12 @@ sub vnodeCreate($$$$)
 
     #
     # No image specified, use a default based on the dom0 OS.
+    # XXX this option no longer works, you must specify an OSID.
     #
     if (!defined($imagename)) {
-	$lvname = $image{'name'};
-	
-	#
-	# Setup the default image now.
-	# XXX right now this is a hack where we just copy the dom0
-	# filesystem and clone (snapshot) that.
-	#
-	$imagename = $defaultImage{'name'};
-	print STDERR "xen_vnodeCreate: ".
-	    "no image specified, using default ('$imagename')\n";
-
-	# Okay to fail if image does not exist yet.
-	LoadImageMetadata($imagename, \$imagemetadata);
-
-	$lvname = ImageLVName($imagename);
-	if (!lvmFindVolume($lvname) && !defined($imagemetadata)) {
-	    
-	    #
-	    # Need an exclusive lock for this.
-	    #
-	    TBDebugTimeStamp("  releasing image lock")
-		if ($lockdebug);
-	    TBScriptUnlock();	    
-	    TBDebugTimeStamp("grabbing image lock $imagelockname exclusive")
-		if ($lockdebug);
-	    if (TBScriptLock($imagelockname, TBSCRIPTLOCK_INTERRUPTIBLE(), 1800)
-		!= TBSCRIPTLOCK_OKAY()) {
-		fatal("Could not get $imagelockname write lock!");
-	    }
-	    TBDebugTimeStamp("  got image lock")
-		if ($lockdebug);
-	    # And now check again in case someone else snuck in.
-	    if (!lvmFindVolume($lvname) && createRootDisk($imagename)) {
-		TBScriptUnlock();
-		fatal("xen_vnodeCreate: ".
-		      "cannot find create root disk for default image");
-	    }
-	    # And back to a shared lock.
-	    TBDebugTimeStamp("  releasing image lock")
-		if ($lockdebug);
-	    TBScriptUnlock();
-	    TBDebugTimeStamp("grabbing image lock $imagelockname shared")
-		if ($lockdebug);
-	    if (TBScriptLock($imagelockname,
-			     TBSCRIPTLOCK_INTERRUPTIBLE()|
-			     TBSCRIPTLOCK_SHAREDLOCK(), 1800)
-		!= TBSCRIPTLOCK_OKAY()) {
-		fatal("Could not get $imagelockname lock back ".
-		      "after a long time!");
-	    }
-	    $imagemetadata = undef;
-	}
+	fatal("xen_vnodeCreate: ".
+	      "no longer support default image for vnodes, ".
+	      "must specify an OSID");
     }
     elsif (!defined($raref)) {
 	#
@@ -965,6 +1165,8 @@ sub vnodeCreate($$$$)
 	libutil::setState("RELOADING");
 
 	if (createImageDisk($imagename, $vnode_id, $raref, $dothinlv)) {
+	    # XXX not strictly necessary since our caller will send TBFAILED
+	    libutil::setState("RELOADFAILED");
 	    TBScriptUnlock();
 	    fatal("xen_vnodeCreate: ".
 		  "cannot create logical volume for $imagename");
@@ -1001,6 +1203,9 @@ sub vnodeCreate($$$$)
 	}
 	if ($inreload) {
 	    libutil::setState("RELOADDONE");
+	    # XXX why do we need to wait for this to take effect?
+	    print "waiting 4 sec after asserting RELOADDONE...\n"
+		if ($sleepdebug);
 	    sleep(4);
 	}
 	
@@ -1088,6 +1293,7 @@ sub vnodeCreate($$$$)
 
 	# XXX we assume that all 10.0 and above will be PVHVM
 	if ($imagemetadata->{'OSVERSION'} >= 10) {
+	    $vdiskprefix = "hd";
 	    $ishvm = 1;
 	}
     }
@@ -1166,6 +1372,7 @@ sub vnodeCreate($$$$)
     #
     # Create the snapshot LVM.
     #
+    my $mustsleep = 0;
     if (!lvmFindVolume($vnode_id)) {
 	#
 	# Need to create a new disk for the container. But lets see
@@ -1260,22 +1467,24 @@ okay:
 		#
 		if ($loadslice == 0 && !exists($imagemetadata->{'BOOTPART'})) {
 		    my @tmp;
+		    my $gotit = 0;
 
 		    #
 		    # XXX If may take a while for the state change above to
 		    # take effect and set the bootwhat info. Sleep a short
-		    # time and try. If that fails, sleep longer and try
-		    # one more time.
+		    # time and try a couple of times as necessary.
 		    #
-		    sleep(1);
-		    my $rv = getbootwhat(\@tmp);
-		    if ($rv || !scalar(@tmp) || !exists($tmp[0]->{"WHAT"})) {
-			sleep(4);
-			$rv = getbootwhat(\@tmp);
+		    foreach my $sl (1, 2, 2) { 
+			print "waiting $sl sec to make getbootwhat call...\n"
+			    if ($sleepdebug);
+			sleep($sl);
+			my $rv = getbootwhat(\@tmp);
+			if (!$rv && @tmp > 0 && exists($tmp[0]->{"WHAT"})) {
+			    $gotit = 1;
+			    last;
+			}
 		    }
-
-		    if ($rv || !scalar(@tmp) || !exists($tmp[0]->{"WHAT"}) ||
-			$tmp[0]->{"WHAT"} !~ /^\d*$/) {
+		    if (!$gotit || $tmp[0]->{"WHAT"} !~ /^\d*$/) {
 			print STDERR Dumper(\@tmp);
 			TBScriptUnlock();
 			fatal("libvnode_xen: could not get bootwhat info");
@@ -1300,8 +1509,9 @@ okay:
 	    TBScriptUnlock();
 	    fatal("libvnode_xen: could not add /dev/mapper entries");
 	}
+
 	# Hmm, some kind of kpartx race ...
-	sleep(2);
+	$mustsleep = 2;
     }
     # Need to tell slicefix where to find the root partition.
     # Naming convention is a pain.
@@ -1322,6 +1532,13 @@ okay:
     TBScriptUnlock();
     CreateVnodeUnlock();
     
+    # Sleep outside of the vnode/image locks
+    if ($mustsleep) {
+	print "waiting $mustsleep sec after kpartx call...\n"
+	    if ($sleepdebug);
+	sleep($mustsleep);
+    }
+
     #
     # Extract kernel and ramdisk.
     #
@@ -1415,7 +1632,7 @@ okay:
 	    #
 	    # Mark it as a linux swap partition. 
 	    #
-	    if (mysystem2("echo ',,S' | sfdisk $vndisk -N0")) {
+	    if (mysystem2("echo ',,S' | sfdisk --force $vndisk -N0")) {
 		fatal("libvnode_xen: could not partition swap disk");
 	    }
 	}
@@ -1482,7 +1699,8 @@ okay:
 
     if ($os eq "FreeBSD") {
 	if ($ishvm) {
-	    addConfig($vninfo, "extra = 'boot_verbose=1'", 2);
+	    # XXX newer xen tools disallow command line params with direct boot
+	    #addConfig($vninfo, "extra = 'boot_verbose=1'", 2);
 
 	    addConfig($vninfo, "builder='hvm'", 2);
 	    addConfig($vninfo, "xen_platform_pci=1", 2);
@@ -1609,20 +1827,50 @@ sub vnodePreConfig($$$$$){
 	if (RunWithLock("kpartx", "kpartx -av $rootvndisk")) {
 	    fatal("libvnode_xen: could not add /dev/mapper entries");
 	}
+	print "waiting 2 sec after kpartx call...\n"
+	    if ($sleepdebug);
+	sleep(2);
     }
 
     #
-    # We rely on the UFS module (with write support compiled in) to
-    # deal with FBSD filesystems. 
+    # XXX because of the squirrelly nature of the write-enabled UFS module
+    # in Linux, we try to avoid write mounting the FS as much as possible.
+    # So we first mount RO and see if we have already been customized.
     #
     if ($vninfo->{'os'} eq "FreeBSD") {
-	mysystem2("mount -t ufs -o ufstype=44bsd $dev $vnoderoot");
-	if ($?) {
-	    # try UFS2
-	    mysystem("mount -t ufs -o ufstype=ufs2 $dev $vnoderoot");
+	if (-x "$FSCKUFS") {
+	    mysystem2("$FSCKUFS -p $dev");
 	}
+	
+	my $utype = "44bsd";
+	mysystem2("mount -t ufs -o ro,ufstype=$utype $dev $vnoderoot ".
+		  ">/dev/null 2>&1");
+	# failed, try UFS2 instead
+	if ($?) {
+	    $utype = "ufs2";
+	    mysystem2("mount -t ufs -o ro,ufstype=$utype $dev $vnoderoot");
+	    # still failed, try fsck.ufs if it exists
+	    if ($?) {
+		mysystem("mount -t ufs -o ro,ufstype=$utype $dev $vnoderoot");
+	    }
+	}
+	if (-e "$vnoderoot/etc/emulab/genvmtype") {
+	    if (-e "$vnoderoot/etc/emulab/outer_bossnode") {
+		$vninfo->{'elabinelab'} = 1;
+	    }
+	    print STDERR "vnodePreConfig: $vnode_id root already localized\n";
+	    goto done;
+	}
+
+	# needs to be customized, remount RW
+	mysystem("umount $dev");
+	mysystem("mount -t ufs -o ufstype=$utype $dev $vnoderoot");
     }
     else {
+	if (-x "$FSCK") {
+	    mysystem2("$FSCK -p $dev");
+	}
+
 	mysystem("mount $dev $vnoderoot");
     }
 
@@ -1632,11 +1880,11 @@ sub vnodePreConfig($$$$$){
     # the custom elabinelab setup.
     #
     if (-e "$vnoderoot/etc/emulab/outer_bossnode") {
+	$vninfo->{'elabinelab'} = 1;
 	print STDERR
 	    "vnodePreConfig: WARNING: $vnode_id appears to be a configured ".
-	    "elabinelab server; skipping localizations\n";
-	mysystem("umount $dev");
-	return 0;
+	    "elabinelab server; skipping most localizations\n";
+	goto almostdone;
     }
 
     # XXX We need to get rid of this or get it from tmcd!
@@ -1646,12 +1894,21 @@ sub vnodePreConfig($$$$$){
 	    if ($?);
     }
     # Kill off old sshd ports.
-    mysystem2("sed -i.bak -e '/^# EmulabJail/,\$d' ".
-	      "   $vnoderoot/etc/ssh/sshd_config");
+    if (system("grep -q EndEmulabJail $vnoderoot/etc/ssh/sshd_config") == 0) {
+	mysystem2("sed -i.bak -e '/^# EmulabJail/,/^# EndEmulabJail/d' ".
+		  "   $vnoderoot/etc/ssh/sshd_config");
+    }
+    else {
+	mysystem2("sed -i.bak -e '/^# EmulabJail/,\$d' ".
+		  "   $vnoderoot/etc/ssh/sshd_config");
+    }
     goto bad
 	if ($?);
 
-    # Use the physical host pubsub daemon
+    #
+    # Use the physical host pubsub daemon. If the vnode has a routable IP
+    # use the physical host's routable IP, otherwise use the jail net IP.
+    #
     my (undef, $ctrlip) = findControlNet();
     if (!$ctrlip || $ctrlip !~ /^(\d+\.\d+\.\d+\.\d+)$/) {
 	if ($?) {
@@ -1660,21 +1917,25 @@ sub vnodePreConfig($$$$$){
 	    goto bad;
 	}
     }
+    #
+    # XXX directory existence check is for old MBR2 FreeBSD images
+    # where /var is a separate FS.
+    #
+    if (-d "$vnoderoot/var/emulab/boot" &&
+	! -e "$vnoderoot/var/emulab/boot/localevserver") {
+	my $evip;
+	if (isRoutable($vnconfig->{'config'}->{'CTRLIP'})) {
+	    $evip = $ctrlip;
+	}
+	else {
+	    ($evip) = domain0ControlNet();
+	}
+	mysystem2("echo '$evip' > $vnoderoot/var/emulab/boot/localevserver");
+	goto bad
+	    if ($?);
+    }
 
     if ($vninfo->{'os'} ne "FreeBSD") {
-	# Should be handled in libsetup.pm, but just in case
-	if (! -e "$vnoderoot/var/emulab/boot/localevserver" ) {
-	    my $evip;
-	    if (isRoutable($vnconfig->{'config'}->{'CTRLIP'})) {
-		$evip = $ctrlip;
-	    }
-	    else {
-		($evip) = domain0ControlNet();
-	    }
-	    mysystem2("echo '$evip' > $vnoderoot/var/emulab/boot/localevserver");
-	    goto bad
-		if ($?);
-	}
 	# XXX We need this for libsetup to know it is in a XENVM.
 	if (! -e "$vnoderoot/var/emulab/boot/vmname" ) {
 	    mysystem2("echo '$vnode_id' > $vnoderoot/var/emulab/boot/vmname");
@@ -1698,7 +1959,7 @@ sub vnodePreConfig($$$$$){
 		      "  $vnoderoot/etc/inittab");
 	}
 	if (-f "$vnoderoot/etc/init/ttyS0.conf") {
-	    mysystem2("sed -i.bak -e 's/ttyS0/hvc0/' ".
+	    mysystem2("sed -i.bak -e 's/ttyS./hvc0/' ".
 		      "  $vnoderoot/etc/init/ttyS0.conf");
 	}
 	#
@@ -1753,26 +2014,20 @@ sub vnodePreConfig($$$$$){
 	    goto bad
 		if ($?);
 	
-	my $ldisk = "da0s1";
+	my $ldisk = "da";
+	if ($vninfo->{'ishvm'}) {
+	    $ldisk = "ada";
+	}
 	if (-e "$vnoderoot/etc/dumpdates") {
-	    mysystem2("sed -i.bak -e 's;^/dev/\\(ada\\|ad\\|da\\)[0-9]s1;/dev/$ldisk;' ".
+	    mysystem2("sed -i.bak -e 's;^/dev/\\(ada\\|ad\\);/dev/$ldisk;' ".
 		      "  $vnoderoot/etc/dumpdates");
 	    goto bad
 		if ($?);
 	}
-	mysystem2("sed -i.bak -e 's;^/dev/\\(ada\\|ad\\|da\\)[0-9]s1;/dev/$ldisk;' ".
+	mysystem2("sed -i.bak -e 's;^/dev/\\(ada\\|ad\\);/dev/$ldisk;' ".
 		  "  $vnoderoot/etc/fstab");
 	goto bad
 	    if ($?);
-
-	#
-	# Put out the /boot/loader.conf header we look for in prepare
-	#
-	if (open(LC, ">>$vnoderoot/boot/loader.conf")) {
-	    print LC "# The remaining lines were added by Emulab slicefix.\n";
-	    print LC "# DO NOT ADD ANYTHING AFTER THIS POINT AS IT WILL GET REMOVED.\n";
-	    close(LC);
-	}
 
 	#
 	# In HVM the emulated RTC is UTC.
@@ -1780,20 +2035,7 @@ sub vnodePreConfig($$$$$){
 	#
 	if ($vninfo->{'ishvm'}) {
 	    unlink("$vnoderoot/etc/wall_cmos_clock");
-
-	    #
-	    # FreeBSD recommends this workaround for stability issues when
-	    # running under Xen. I do not know if the problem is specific to
-	    # HVM, I am just using $ishvm as it indicates a 10.x FreeBSD which
-	    # is the only version which lists this problem in the errata.
-	    #
-	    mysystem("echo 'vfs.unmapped_buf_allowed=0' ".
-		     ">> $vnoderoot/boot/loader.conf");
 	}
-	#
-	# Make sure console is comconsole
-	#
-	mysystem("echo 'console=comconsole' >> $vnoderoot/boot/loader.conf");
     }
 
     #
@@ -1831,8 +2073,53 @@ sub vnodePreConfig($$$$$){
 	if ($?);
     
     $retval = &$callback($vnoderoot);
+
+  almostdone:
+    if ($vninfo->{'os'} eq "FreeBSD") {
+	#
+	# Fix up loader.conf
+	#
+	if (open(LC, ">>$vnoderoot/boot/loader.conf")) {
+	    #
+	    # Put out the /boot/loader.conf header we look for in prepare
+	    # and fix the console as "sio1".
+	    #
+	    print LC "# The remaining lines were added by Emulab slicefix.\n";
+	    print LC "# DO NOT ADD ANYTHING AFTER THIS POINT AS IT WILL GET REMOVED.\n";
+	    print LC "console=\"comconsole\"\n";
+	    print LC "comconsole_speed=\"115200\"\n";
+	    print LC "comconsole_port=\"0x3F8\"\n";
+
+	    #
+	    # FreeBSD recommends this workaround for stability issues when
+	    # running under Xen. I do not know if the problem is specific to
+	    # HVM, I am just using $ishvm as it indicates a 10.x FreeBSD which
+	    # is the only version which lists this problem in the errata.
+	    #
+	    # XXX we put this out after the magic header above so that it
+	    # will get removed by prepare if we make an image.
+	    #
+	    if ($vninfo->{'ishvm'}) {
+		print LC "\n# when running in a Xen VM\n";
+		print LC "vfs.unmapped_buf_allowed=0\n";
+	    }
+
+	    close(LC);
+	}
+    }
   done:
     mysystem("umount $dev");
+
+    # XXX tmp
+    if ($vninfo->{'os'} eq "FreeBSD" && -x "$FSCKUFS") {
+	mysystem2("$FSCKUFS -yf $dev");
+    }
+
+    # XXX let vnodesetup exit early
+    if ($vsrelease eq "early" && $retval == 0) {
+	TBDebugTimeStamp("vnodePreConfig: touching $VMS/$vnode_id/running");
+	mysystem2("touch $VMS/$vnode_id/running");
+    }
     return $retval;
   bad:
     mysystem("umount $dev");
@@ -1878,7 +2165,7 @@ sub vnodePreConfigControlNetwork($$$$$$$$$$$$)
 		 'hip' => $gw,
 		 'fqdn', => $longdomain,
 		 'mac' => $fmac};
-    createControlNetworkScript($vmid, $stuff, $cscript);
+    createControlNetworkScript($vmid, $vnconfig, $stuff, $cscript);
 
     #
     # Set up the chains. We always create them, and if there is no
@@ -2011,8 +2298,14 @@ sub vnodePreConfigExpNetwork($$$$)
     # Keep track of links (and implicitly, bridges) that need to be created
     my @links = ();
 
+    # XXX for HVM we are assuming PVHVM so avoid an emulated device
+    my $viftype = "'";
+    if ($vninfo->{'ishvm'}) {
+	$viftype .= "type=vif,";
+    }
+
     # Build up a config file line for all interfaces, starting with cnet
-    my $vifstr = "vif = ['" .
+    my $vifstr = "vif = [$viftype " .
 	"mac=" . $vninfo->{'cnet'}->{'mac'} . ", " .
 	# This tells vif-bridge to use antispoofing iptable rules.
 	"ip=" . $vninfo->{'cnet'}->{'ip'} . ", " .
@@ -2121,7 +2414,7 @@ sub vnodePreConfigExpNetwork($$$$)
 	}
 
 	# add interface to config file line
-	$vifstr .= ", 'vifname=$ifname, mac=" .
+	$vifstr .= ", $viftype vifname=$ifname, mac=" .
 	    fixupMac($mac) . ", bridge=$brname";
 	if ($script ne "") {
 	    $vifstr .= ", script=$script";
@@ -2263,6 +2556,19 @@ sub vnodePreConfigExpNetwork($$$$)
 	TBScriptUnlock();
     }
 
+    #
+    # XXX grab any extra statically configured devices
+    #
+    if (-e "$VMDIR/$vnode_id/extravifs" &&
+	open(XVIF, "<$VMDIR/$vnode_id/extravifs")) {
+	while (<XVIF>) {
+	    chomp;
+	    if ($_ ne "") {
+		$vifstr .= ", $_";
+	    }
+	}
+	close(XVIF);
+    }
     # push out config file line for all interfaces
     # XXX note that we overwrite since a modify might add/sub IFs
     $vifstr .= "]";
@@ -2285,7 +2591,7 @@ sub vnodeConfigResources($$$$){
 	$memory = $attributes->{'VM_MEMSIZE'};
     }
     else  {
-	$memory = 128;
+	$memory = 256;
     }
     addConfig($private, "memory = $memory", 1);
     return 0;
@@ -2381,6 +2687,14 @@ sub vnodeBoot($$$$)
     libutil::setState("BOOTING");
 
     #
+    # XXX in the future, there may be conditions under which we need to
+    # throttle back vnode boot concurrency (e.g., HVM vnodes that require
+    # QEMU or in general to avoid overload of Emulab servers). If so,
+    # we can add a BootVnodeLock/Unlock() here mirroring the CreateVnode
+    # versions. For now though, we are just going to let them rip...
+    #
+
+    #
     # We are going to watch for a busted control network interface, which
     # happens a lot. There is a problem with the control vif not working,
     # no idea why, some kind of XEN bug. But the symptom is easy enough
@@ -2391,7 +2705,7 @@ sub vnodeBoot($$$$)
 	my $status = RunWithLock("xmtool", "nice $XM create $config");
 	if ($status) {
 	    print STDERR "$XM create failed: $status\n";
-	    return -1;
+	    last;
 	}
 
 	#
@@ -2415,7 +2729,21 @@ sub vnodeBoot($$$$)
 	# by increasing the countdown to match the original ~60 seconds
 	# before giving up.
 	#
-	my $countdown = 20;
+	# XXX 60 seconds is not enough in many situations (e.g., if an
+	# fsck of the root FS is needed) and timing out, tearing down, and
+	# restarting the VM fails more than it works. So we would rather
+	# wait longer for the initial startup. Try 180 seconds for now.
+	#
+	my $countdown = 60;
+	if ($vninfo->{'ishvm'}) {
+	    # XXX allow longer for emulated BIOS and boot loaders
+	    # XXX elabinelab server VMs will take even longer
+	    if (exists($vninfo->{'elabinelab'})) {
+		$countdown += 20;
+	    } else {
+		$countdown += 10;
+	    }
+	}
 	while ($countdown > 0) {
 	    TBDebugTimeStamp("Pinging $ip for up to five seconds ...");
 	    system("ping -q -c 1 -w 5 $ip > /dev/null 2>&1");
@@ -2632,6 +2960,23 @@ sub vnodeDestroy($$$$)
     ReleaseIFBs($vmid, $private)
 	if (exists($private->{'ifbs'}));
 
+    #
+    # XXX before we destroy disks, we need to tear down any LVM VG/PVs
+    # that were setup inside the vnode by the storage subsystem. There
+    # should only be one VG but possibly multiple PVs.
+    #
+    my $vnodevg = "emulab-$vnode_id";
+    my @vnodepvs = `pvs -o vg_name,pv_name --noheadings | grep $vnodevg`;
+    if (@vnodepvs > 0) {
+	chomp @vnodepvs;
+	mysystem2("vgremove -f $vnodevg");
+	foreach my $vnodepv (@vnodepvs) {
+	    if ($vnodepv =~ /$vnodevg\s+(\S+)$/) {
+		mysystem2("pvremove -f $1");
+	    }
+	}
+    }
+
     # Destroy the all the disks.
     foreach my $key (keys(%{ $private->{'disks'} })) {
 	my $lvname;
@@ -2699,10 +3044,22 @@ sub vnodeDestroy($$$$)
 sub vnodeHalt($$$$)
 {
     my ($vnode_id, $vmid, $vnconfig, $private) = @_;
+    my $ishvm = $private->{'ishvm'};
+    my $domID;
 
     if ($vnode_id =~ m/(.*)/) {
         $vnode_id = $1;
     }
+
+    #
+    # XXX For HVMs, we collect the domain ID so we can see if there is a
+    # lingering qemu after shutdown. With Xen 4.6 at least, qemu is started
+    # with the "-no-shutdown" option so it will not exit.
+    #
+    if ($ishvm) {
+	my $stat = domainStatus($vnode_id, \$domID);
+    }
+
     #
     # This runs async so use -w to wait until actually destroyed!
     # The problem is that sometimes the container will not die
@@ -2736,6 +3093,20 @@ sub vnodeHalt($$$$)
 		    if ($status);
 	    }
 	}
+	#
+	# XXX check for left over qemu and kill it.
+	# XXX we should probably do this all the time.
+	#
+	if ($domID && ($stat == 0 || $stat == 15)) {
+	    if (!domainGone($domID, 3)) {
+		print STDERR "$vnode_id: HVM (domID $domID): killing orphaned qemu process\n";
+		if (mysystem2("pkill -f 'qemu.* -xen-domid $domID '")) {
+		    print STDERR "Could not kill orphaned qemu\n";
+		} else {
+		    sleep(2);
+		}
+	    }
+	}
     }
     else {
 	#
@@ -2743,7 +3114,7 @@ sub vnodeHalt($$$$)
 	# Temporarily unblock and set to default so we die. 
 	#
 	local $SIG{TERM} = 'DEFAULT';
-	my $status = RunWithLock("xmtool", "$XM shutdown -w $vnode_id");
+	my $status = RunWithLock("xmtool", "$XM shutdown -F -w $vnode_id");
 	exit($status >> 8);
     }
     return 0;
@@ -2790,100 +3161,6 @@ sub findRoot()
 	return $dev;
     }
     die "libvnode_xen: cannot determine root filesystem";
-}
-
-sub copyRoot($$)
-{
-    my ($from, $to) = @_;
-    my $disk_path = "/mnt/xen/disk";
-    my $root_path = "/mnt/xen/root";
-    print "Mount root\n";
-    mkpath(['/mnt/xen/root']);
-    mkpath(['/mnt/xen/disk']);
-    # This is a nice way to avoid traversing NFS filesystems. 
-    mysystem("mount $from $root_path");
-    mysystem("mount -o async $to $disk_path");
-    mkpath([map{"$disk_path/$_"} qw(proc sys home tmp)]);
-    print "Copying files\n";
-    system("nice cp -a $root_path/* $disk_path");
-
-    # hacks to make things work!
-    disk_hacks($disk_path);
-
-    mysystem("umount $root_path");
-    mysystem("umount $disk_path");
-}
-
-#
-# Create the root "disk" (logical volume)
-# XXX this is a temp hack til all vnode creations have an explicit image.
-#
-sub createRootDisk($)
-{
-    my ($lv) = @_;
-    my $lvname = ImageLVName($lv);
-    my $full_path = lvmVolumePath($lvname);
-    my $mountpoint= "/mnt/$lv";
-
-    #
-    # We only want to do this once. Lets wrap in an eval since
-    # there are so many ways this will die.
-    #
-    eval {
-	if (lvmCreateVolume("rootdisk", "${XEN_LDSIZE}k",
-			    ALLOC_PREFERNOPOOL())) {
-	    exit(1);
-	}
-	my $vndisk = lvmVolumePath("rootdisk");
-	
-	#
-	# Put an MBR in so that it is exactly the correct size.
-	#
-	my $sectors = $XEN_LDSIZE * 2;
-	mysystem("echo '0,$sectors,L' | sfdisk --force -u S $vndisk -N0");
-
-	# Need the device special file.
-	RunWithLock("kpartx", "kpartx -av $vndisk");
-
-	my $dev = "$VGNAME/rootdisk1";
-	$dev =~ s/\-/\-\-/g;
-	$dev =~ s/\//\-/g;
-	$dev = "/dev/mapper/$dev";
-
-	mysystem("mke2fs -j -q $dev");
-	
-	copyRoot(findRoot(), $dev);
-
-	#
-	# Now imagezip it for space/time efficiency later.
-	#
-	mysystem("nice $IMAGEZIP -o -l -s 1 $dev $EXTRAFS/rootdisk.ndz");
-
-	#
-	# Now kill off the lvm and create one for the compressed version.
-	# Need to know the number of CHUNKS for later.
-	#
-	if (lvmDestroyVolume("rootdisk", 1)) {
-	    fatal("Could not remove rootdisk");
-	}
-
-	my (undef,undef,undef,undef,undef,undef,undef,$lvsize) =
-	    stat("$EXTRAFS/rootdisk.ndz");
-
-	my $chunks = $lvsize / (1024 * 1024);
-	$defaultImage{'IMAGECHUNKS'} = $chunks;
-	$defaultImage{'LVSIZE'}      = $XEN_LDSIZE;
-
-	# Mark as being inside an FS.
-	$defaultImage{'FROMFILE'} = "$EXTRAFS/rootdisk.ndz";
-
-	# This was modified, so save out for next time. 
-	StoreImageMetadata($lv, \%defaultImage)
-    };
-    if ($@) {
-	fatal("$@");
-    }
-    return 0;
 }
 
 #
@@ -3089,8 +3366,14 @@ sub CreatePrimaryDisk($$$$;$)
 
 	close(FILE);
 		    
-	if (mysystem2("cat $partfile | ".
-		      "    sfdisk --force -x -D -u S $rootvndisk")) {
+	my $sfdopts;
+	if ($newsfdisk) {
+	    $sfdopts = "--force";
+	} else {
+	    $sfdopts = "--force -x -D -u S";
+	}
+
+	if (mysystem2("cat $partfile | sfdisk $sfdopts $rootvndisk")) {
 	    print STDERR "libvnode_xen: could not partition root disk\n";
 	    goto fail;
 	}
@@ -3099,12 +3382,12 @@ sub CreatePrimaryDisk($$$$;$)
 	    my $ndzfile = $imagemetadata->{'FROMFILE'};
 	    
 	    mysystem2("time $IMAGEUNZIP -s $loadslice -f -o ".
-		      "                 -W 164 $ndzfile $rootvndisk");
+		      "                 -W 128 $ndzfile $rootvndisk");
 	}
 	else {
 	    mysystem2("nice dd if=$basedisk bs=1M count=$chunks | ".
 		      "nice $IMAGEUNZIP -s $loadslice -f -o ".
-		      "                 -W 164 - $rootvndisk");
+		      "                 -W 128 - $rootvndisk");
 	    goto fail
 		if ($?);
 
@@ -3119,7 +3402,7 @@ sub CreatePrimaryDisk($$$$;$)
 	    
 		mysystem2("nice dd if=$basedisk bs=1M count=$chunks | ".
 			  "nice $IMAGEUNZIP -s $loadslice -f -o ".
-			  "                 -W 164 - $rootvndisk");
+			  "                 -W 128 - $rootvndisk");
 
 		goto fail
 		    if ($?);
@@ -3128,7 +3411,7 @@ sub CreatePrimaryDisk($$$$;$)
     }
     else {
 	mysystem2("nice dd if=$basedisk bs=1M count=$chunks | ".
-		  "nice $IMAGEUNZIP -f -o -W 164 - $rootvndisk");
+		  "nice $IMAGEUNZIP -f -o -W 128 - $rootvndisk");
 	goto fail
 	    if ($?);
 
@@ -3142,7 +3425,7 @@ sub CreatePrimaryDisk($$$$;$)
 	    $chunks   = $delta_metadata->{'IMAGECHUNKS'};
 	    
 	    mysystem2("nice dd if=$basedisk bs=1M count=$chunks | ".
-		      "nice $IMAGEUNZIP -f -o -W 164 - $rootvndisk");
+		      "nice $IMAGEUNZIP -f -o -W 128 - $rootvndisk");
 
 	    goto fail
 		if ($?);
@@ -3252,7 +3535,13 @@ sub cloneGoldenImage($$)
 	print STDERR "$imagename: could not clone golden image!?\n";
 	return -1;
     }
-    if (mysystem2("lvchange -ay $VGNAME/$lvname")) {
+    my $opts;
+    if ($newlvm) {
+	$opts = "-kn -ay";
+    } else {
+	$opts = "-ay";
+    }
+    if (mysystem2("lvchange $opts $VGNAME/$lvname")) {
 	print STDERR "$imagename: WARNING: ".
 	    "could not activate $VGNAME/$lvname\n";
     }
@@ -3349,7 +3638,7 @@ sub createImageDisk($$$$)
 	if ($lockdebug);
     if (TBScriptLock($imagelockname,
 		     TBSCRIPTLOCK_INTERRUPTIBLE()|TBSCRIPTLOCK_SHAREDLOCK(),
-		     1800) != TBSCRIPTLOCK_OKAY()) {
+		     $MAXIMAGEWAIT) != TBSCRIPTLOCK_OKAY()) {
 	print STDERR "Could not get $imagelockname lock back!\n";
 	return -1;
     }
@@ -3385,8 +3674,8 @@ sub downloadOneImage($$$)
 
     TBDebugTimeStamp("grabbing image lock $imagelockname exclusive")
 	if ($lockdebug);
-    if (TBScriptLock($imagelockname, TBSCRIPTLOCK_INTERRUPTIBLE(), 1800)
-	!= TBSCRIPTLOCK_OKAY()) {
+    if (TBScriptLock($imagelockname, TBSCRIPTLOCK_INTERRUPTIBLE(),
+		     $MAXIMAGEWAIT) != TBSCRIPTLOCK_OKAY()) {
 	print STDERR "Could not get $imagelockname write lock!\n";
 	return -1;
     }
@@ -3613,84 +3902,6 @@ sub downloadOneImage($$$)
     return -1;
 }
 
-sub replace_hack($)
-{
-    my ($q) = @_;
-    if ($q =~ m/(.*)/){
-        return $1;
-    }
-    return "";
-}
-
-sub disk_hacks($)
-{
-    my ($path) = @_;
-    # erase cache from LABEL to devices
-    my @files = <$path/etc/blkid/*>;
-    unlink map{&replace_hack($_)} (grep{m/(.*blkid.*)/} @files);
-
-    rmtree(["$path/var/emulab/boot/tmcc"]);
-
-    # Run prepare inside to clean up.
-    system("/usr/sbin/chroot $path /usr/local/etc/emulab/prepare -N");
-
-    # Fix of grub to boot non-xen env.
-    system("sed -i.bak -e 's/default=.*/default=0/' $path/boot/grub/grub.cfg");
-
-    # don't try to recursively boot vnodes!
-    unlink("$path/usr/local/etc/emulab/bootvnodes");
-
-    # don't set up the xen bridge on guests
-    system("sed -i.bak -e '/xenbridge-setup/d' $path/etc/network/interfaces");
-
-    # don't start dhcpd in the VM
-    unlink("$path/etc/dhcpd.conf");
-    unlink("$path/etc/dhcp/dhcpd.conf");
-
-    # No xen daemons
-    unlink("$path/etc/init.d/xend");
-    unlink("$path/etc/init.d/xendomains");
-
-    # Remove mtab just in case
-    unlink("$path/etc/mtab");
-
-    # Remove dhcp client state
-    unlink("$path/var/lib/dhcp/dhclient.leases");
-
-    # Clear out the cached control net interface name
-    unlink("$path/var/run/cnet");
-
-    # Get rid of pam nonsense.
-    system("sed -i.bak -e 's/UsePAM yes/UsePAM no/'".
-	   "   $path/etc/ssh/sshd_config");
-
-    # remove swap partitions from fstab
-    system("sed -i.bak -e '/swap/d' $path/etc/fstab");
-
-    # remove scratch partitions from fstab
-    system("sed -i.bak -e '/scratch/d' $path/etc/fstab");
-    system("sed -i.bak -e '${EXTRAFS}/d' $path/etc/fstab");
-    system("sed -i.bak -e '${METAFS}/d' $path/etc/fstab");
-    system("sed -i.bak -e '${INFOFS}/d' $path/etc/fstab");
-
-    # fixup fstab: change UUID=blah to LABEL=/
-    system("sed -i.bak -e 's/UUID=[0-9a-f-]*/LABEL=\\//' $path/etc/fstab");
-
-    # enable the correct device for console
-    if (-f "$path/etc/inittab") {
-	    system("sed -i.bak -e 's/xvc0/console/' $path/etc/inittab");
-    }
-
-    if (-f "$path/etc/init/ttyS0.conf") {
-	    system("sed -i.bak -e 's/ttyS0/hvc0/' $path/etc/init/ttyS0.conf");
-    }
-
-    if (-e "$BINDIR/tmcc-nossl.bin") {
-	system("/bin/cp -f $BINDIR/tmcc-nossl.bin $path/$BINDIR/tmcc.bin");
-    }
-    system("/bin/rm -rf $path/var/emulab/vms");
-}
-
 sub configFile($)
 {
     my ($id) = @_;
@@ -3698,6 +3909,18 @@ sub configFile($)
         return "$VMDIR/$1/xm.conf";
     }
     return "";
+}
+
+#
+# Return MB of memory and cores allocated to dom0.
+#
+sub domain0Resources()
+{
+    my $res = `$XM list 0 | grep Domain-0`;
+    if ($res =~ /^Domain-0\s+\d+\s+(\d+)\s+(\d+)/) {
+	return ($1,$2);
+    }
+    die("Could not find RAM/CPUs for domain 0!");
 }
 
 #
@@ -3731,6 +3954,42 @@ sub totalMemory()
         return $mem - domain0Memory();
     }
     die("Could not find what the total physical memory on this machine is!");
+}
+
+#
+# Return non-zero if domain0 has swapped to disk.
+#
+# XXX beware all ye callers! Note that this returns non-zero if domain0 has
+# *ever* swapped, not just if it has swapped as a result of recent activity.
+# So once a node swaps that first time, for any reason, this will return
+# non-zero til the next boot.
+#
+sub domain0Swapping()
+{
+    my ($total,$free) = (0,0);
+    my @lines = `grep Swap /proc/meminfo`;
+    chomp(@lines);
+    foreach my $line (@lines) {
+	if ($line =~ /^SwapTotal:\s*(\d+)\s(\w+)/) {
+	    my $num = $1;
+	    my $type = $2;
+	    if ($type eq "kB") {
+		$num /= 1024;
+	    }
+	    $total = int($num);
+	    next;
+	}
+	if ($line =~ /^SwapFree:\s*(\d+)\s(\w+)/) {
+	    my $num = $1;
+	    my $type = $2;
+	    if ($type eq "kB") {
+		$num /= 1024;
+	    }
+	    $free = int($num);
+	    next;
+	}
+    }
+    return ($free < $total) ? 1 : 0;
 }
 
 #
@@ -3814,9 +4073,10 @@ sub captureStart($)
     #
     if (! $?) {
 	for (my $i = 0; $i < 10; $i++) {
-	    sleep(1);
 	    last
 		if (-e $acl && -s $acl);
+	    print "waiting 1 sec for capture ACL file...\n" if ($sleepdebug);
+	    sleep(1);
 	}
 	if (! (-e $acl && -s $acl)) {
 	    print STDERR "WARNING: $acl does not exist after 10 seconds; ".
@@ -4077,19 +4337,28 @@ sub fixupMac($)
 #
 # XXX can we get rid of this stub by using environment variables?
 #
-sub createControlNetworkScript($$$)
+sub createControlNetworkScript($$$$)
 {
-    my ($vmid,$data,$file) = @_;
+    my ($vmid,$vnconfig,$data,$file) = @_;
     my $host_ip = $data->{'hip'};
     my $name = $data->{'name'};
     my $ip = $data->{'ip'};
     my $mac = $data->{'mac'};
+    my $elabinelab = (exists($vnconfig->{'config'}->{'ELABINELAB'}) ?
+		      $vnconfig->{'config'}->{'ELABINELAB'} : 0);
 
     open(FILE, ">$file") or die $!;
     print FILE "#!/bin/sh\n";
-    print FILE "/bin/mv -f ${file}.debug ${file}.debug.old\n";
-    print FILE "/etc/xen/scripts/emulab-cnet.pl $vmid $host_ip $name $ip $mac ".
-	" \$* >${file}.debug 2>&1\n";
+    print FILE "if [ -e \"$file.debug.2\" ]; then ".
+	"mv -f $file.debug.2 $file.debug.3; fi\n";
+    print FILE "if [ -e \"$file.debug.1\" ]; then ".
+	"mv -f $file.debug.1 $file.debug.2; fi\n";
+    print FILE "if [ -e \"$file.debug.0\" ]; then ".
+	"mv -f $file.debug.0 $file.debug.1; fi\n";
+    print FILE "if [ -e \"$file.debug\" ]; then ".
+	"mv -f $file.debug $file.debug.0; fi\n";
+    print FILE "/etc/xen/scripts/emulab-cnet.pl ".
+	"$vmid $host_ip $name $ip $mac $elabinelab \$* >$file.debug 2>&1\n";
     print FILE "exit \$?\n";
     close(FILE);
     chmod(0555, $file);
@@ -4110,7 +4379,14 @@ sub createTunnelScript($$$$$)
 	or return -1;
     
     print FILE "#!/bin/sh\n";
-    print FILE "/bin/mv -f ${file}.debug ${file}.debug.old\n";
+    print FILE "if [ -e \"$file.debug.2\" ]; then ".
+	"mv -f $file.debug.2 $file.debug.3; fi\n";
+    print FILE "if [ -e \"$file.debug.1\" ]; then ".
+	"mv -f $file.debug.1 $file.debug.2; fi\n";
+    print FILE "if [ -e \"$file.debug.0\" ]; then ".
+	"mv -f $file.debug.0 $file.debug.1; fi\n";
+    print FILE "if [ -e \"$file.debug\" ]; then ".
+	"mv -f $file.debug $file.debug.0; fi\n";
     print FILE "/etc/xen/scripts/emulab-tun.pl ".
 	"$vmid $mac $vbr $veth \$* >${file}.debug 2>&1\n";
     print FILE "exit \$?\n";
@@ -4129,8 +4405,16 @@ sub createExpNetworkScript($$$$$$$$)
 	return -1;
     }
     print FILE "#!/bin/sh\n";
-    print FILE "/bin/mv -f ${lfile} ${lfile}.old\n";
-    print FILE "/etc/xen/scripts/emulab-enet.pl $file \$* >${lfile} 2>&1\n";
+    print FILE "if [ -e \"$lfile.2\" ]; then ".
+	"mv -f $lfile.2 $lfile.3; fi\n";
+    print FILE "if [ -e \"$lfile.1\" ]; then ".
+	"mv -f $lfile.1 $lfile.2; fi\n";
+    print FILE "if [ -e \"$lfile.0\" ]; then ".
+	"mv -f $lfile.0 $lfile.1; fi\n";
+    print FILE "if [ -e \"$lfile\" ]; then ".
+	"mv -f $lfile $lfile.0; fi\n";
+    print FILE "/etc/xen/scripts/emulab-enet.pl ".
+	"$file \$* >${lfile} 2>&1\n";
     print FILE "exit \$?\n";
     close(FILE);
     chmod(0554, $wrapper);
@@ -4500,20 +4784,48 @@ sub destroyExpBridges($$)
     return 0;
 }
 
-sub domainStatus($)
+#
+# Return the XM/XL status string for the domain.
+# If $id is all digits it is the Xen domain ID, otherwise it is a name.
+#
+sub domainStatus($;$)
 {
-    my ($id) = @_;
+    my ($id,$domidref) = @_;
 
     if ($XM =~ /xl/) {
-	my $status = `$XM list $id | tail -n 1 | awk '{print \$5}'`;
-	if (!$? && $status =~ /([\w-]+)/) {
-	    return $1;
+	my $kix = 0;
+	if ($id =~ /^\d+$/) {
+	    $kix = 1;
+	}
+
+	if (open(XM,"$XM list $id|")) {
+	    while (<XM>) {
+		my @fields = split /\s+/;
+		if (@fields >= 5) {
+		    if ($fields[$kix] eq $id && $fields[4] =~ /^([\w-]+)$/) {
+			my $stat = $1;
+
+			if (defined($domidref) && $fields[1] =~ /^(\d+)$/) {
+			    $$domidref = $1;
+			}
+			close(XM);
+			return $stat;
+		    }
+		}
+	    }
+	    close(XM);
 	}
     }
     else {
 	my $status = `$XM list --long $id 2>/dev/null`;
 	if (!$? && $status =~ /\(state ([\w-]+)\)/) {
-	    return $1;
+	    my $stat = $1;
+
+	    # XXX don't have any "xm" images to figure out how to do it!
+	    if (defined($domidref)) {
+		$$domidref = undef;
+	    }
+	    return $stat;
 	}
     }
     return "";
@@ -4765,7 +5077,7 @@ sub createThinPool($)
     }
 
     # Try to make it
-    if (mysystem2("lvcreate -i$num -L ${poolsize}g ".
+    if (mysystem2("lvcreate -Zy -i$num -L ${poolsize}g ".
 		  "--type thin-pool --thinpool $POOL_NAME $VGNAME")) {
 	print STDERR "createThinPool: could not create ${poolsize}g ".
 	    "thin pool\n";
@@ -4789,7 +5101,6 @@ sub doingThinLVM()
 	$usethin = 0;
 	return 0;
     }
-    $MAXCONCURRENT = 5;
     return 1;
 }
 
@@ -4844,7 +5155,7 @@ again:
 	$flag = ALLOC_NOPOOL();
     }
     if ($flag == ALLOC_NOPOOL() || $flag == ALLOC_PREFERNOPOOL) {
-	if (!mysystem2("lvcreate -L $size -n $name -i${STRIPE_COUNT} ".
+	if (!mysystem2("lvcreate -Zy -L $size -n $name -i${STRIPE_COUNT} ".
 		       "$VGNAME")) {
 	    return 0;
 	}
@@ -5317,7 +5628,7 @@ sub ExtractKernelFromFreeBSDImage($$$)
     return undef
 	if (! -e $mntpath && mysystem2("mkdir -p $mntpath"));
 
-    mysystem2("mount -t ufs -o ro,ufstype=44bsd $lvmpath $mntpath");
+    mysystem2("mount -t ufs -o ro,ufstype=44bsd $lvmpath $mntpath >/dev/null 2>&1");
     if ($?) {
 	# try UFS2
 	mysystem2("mount -t ufs -o ro,ufstype=ufs2 $lvmpath $mntpath");
@@ -5471,6 +5782,7 @@ sub RunWithLock($$)
     }
     mysystem2($command);
     my $status = $?;
+    print "waiting 1 sec after RunWithLock...\n" if ($sleepdebug);
     sleep(1);
 
     TBScriptUnlock($lockref);
@@ -5500,6 +5812,9 @@ my $createvnode_lockref;
 sub CreateVnodeLock()
 {
     my $tries = 1000;
+
+    # Figure out how many vnodeCreates we can support at once
+    setConcurrency(0);
 
     while ($tries) {
 	for (my $i = 0; $i < $MAXCONCURRENT; $i++) {
@@ -5542,6 +5857,9 @@ sub CreateVnodeLockAll()
     my @locks;
     my $lockref;
     
+    # Determine the maximum concurrency
+    setConcurrency(1);
+
     for (my $i = 0; $i < $MAXCONCURRENT; $i++) {
 	my $token  = "createvnode_${i}";
 	if (TBScriptLock($token, TBSCRIPTLOCK_NONBLOCKING(), 0, \$lockref) ==

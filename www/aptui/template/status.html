@@ -20,7 +20,15 @@ pre {
 	white-space: pre-wrap;
 }
 .panel-body-nopad {
-	padding: 5px;
+    padding: 5px;
+ }
+.table-condensed > thead > tr > th,
+.table-condensed > tbody > tr > th,
+.table-condensed > tfoot > tr > th,
+.table-condensed > thead > tr > td,
+.table-condensed > tbody > tr > td,
+.table-condensed > tfoot > tr > td {
+    padding: 3px;
 }
 </style>
 <div class='row'>
@@ -76,6 +84,15 @@ pre {
 		 <%- profileName %></a></td>
 	  </tr>
 	  <% } %>
+	  <% if (reporef !== undefined) { %>
+	    <tr>
+	      <td class='border-none'>RefSpec:</td>
+	      <td class='border-none'>
+		<span><%= reporef %></span>
+		(<%= repohash %>)
+	      </td>
+	    </tr>
+	  <% } %>
 	  <% if (isadmin) { %>
 	    <tr>
 	      <td class='border-none'>Creator:</td>
@@ -90,11 +107,17 @@ pre {
 	    </tr>
 	    <% if (project) { %>
 	      <tr>
-		<td class='border-none'>Project:</td>
-		<td class='border-none'>
-		  <a href="show-project.php?pid=<%- project %>">
-		    <%- project %></a>
-		</td>
+		<% if (project == group) { %>
+		  <td class='border-none'>Project:</td>
+		  <td class='border-none'>
+		    <a href="show-project.php?pid=<%- project %>">
+		      <%- project %></a></td>
+		<% } else { %>
+		  <td class='border-none'>Group:</td>
+		  <td class='border-none'>
+		    <a href="show-group.php?pid=<%- project %>&gid=<%- group %>">
+		      <%- project %>:<%- group %></a></td>
+		<% } %>
 	      </tr>
 	    <% } %>
 	  <% } %>
@@ -110,6 +133,24 @@ pre {
 		  <%- sliceExpires %></span>
 		(<span id='quickvm_countdown'></span>)
 	      </span>
+	    </td>
+	  </tr>
+	  <tr id="maximum-extension" class="hidden">
+	    <td class='border-none'>Extendable:</td>
+	    <td class='border-none'>
+	      <span id="maximum-extension-string"></span>
+	      <a href='#' class='btn btn-xs'
+		 data-toggle='popover'
+		 data-html='true'
+		 data-delay='{"hide":500}'
+		 data-content="This is the maximum extension that is
+			       <em>possible</em> because of future reservation
+			       promises for the resources you are using. It
+			       does not mean you will be granted an extension
+			       till this date.">
+		<span class='glyphicon glyphicon-question-sign'
+		      style='margin-bottom: 4px;'></span>
+	      </a>
 	    </td>
 	  </tr>
 	  </table>
@@ -139,42 +180,6 @@ pre {
 	       target='_blank'
                type='button'>Logfile</a>
 	  </div>
-	  <% if (isadmin) { %>
-	  <div class='pull-left'
-	       data-toggle='popover'
-	       data-delay='{"hide":1000, "show":500}'
-	       data-content="When checked, only administrator can extend
-			     this experiment. No free time is granted to
-			     user at all."> 
-	    <label class="checkbox-inline" style='margin-right: 10px;'>
-	      <input type="checkbox" id="lockout_checkbox"
-		     <% if (lockout) { %>checked<% } %> >Lockout</label>
-	  </div>
-	  <div class='pull-left'
-	       data-toggle='popover'
-	       data-delay='{"hide":1000, "show":500}'
-	       data-content="When checked, the experiment 
-			     cannot be terminated until the lockdown bit
-			     is cleared by an admininstrator, or if the user
-			     verifies 
-			     the lockdown code when clicking the Terminate
-			     button."> 
-	    <label class="checkbox-inline" style='margin-right: 10px;'>
-	      <input type="checkbox" id="lockdown_checkbox"
-		     <% if (lockdown) { %>checked<% } %> >Lockdown</label>
-	  </div>
-	  <div class='pull-left'
-	       data-toggle='popover'
-	       data-delay='{"hide":1000, "show":500}'
-	       data-content="When checked, the experiment is put into
-			     Quarantine (emulab panic) mode.">
-	    <label class="checkbox-inline" style='margin-right: 10px;'>
-	      <input type="checkbox" id="quarantine_checkbox"
-		     <% if (paniced) { %>checked<% } %> >
-	      <span <% if (paniced) { %>class="text-danger"<% } %> >
-		Quarantined</span></label>
-	  </div>
-	  <% } %>
 	  <div class='pull-right'>
 	    <% if (registered && !isfadmin) { %>
 	      <span>
@@ -186,20 +191,22 @@ pre {
  		  Stop Linktest</button>
 	      </span>
 	    <button class='btn btn-xs btn-primary hidden' disabled
-		    id='clone_button' type=button>
-              Clone</button>
-	    <button class='btn btn-xs btn-primary hidden' disabled
-		    id='snapshot_button' type=button>
-              Snapshot</button>
+		    id='snapshot_button' type=button
+		    data-toggle='popover'
+	            data-delay='{"hide":1000, "show":500}'
+		    data-html='true'
+		    data-content="Create a disk image from one of your nodes.
+				  Click for more info."> 
+              Create Disk Image</button>
 	    <% if (profileUUID && profileUUID != "") { %>
 	    <a class='btn btn-xs btn-primary'
 		    href='manage_profile.php?action=copy&uuid=<%= profileUUID %>'
 		    id='copy_button' type=button
 		    data-toggle='popover'
-	            data-delay='{"hide":1500, "show":500}'
+	            data-delay='{"hide":1000, "show":500}'
 		    data-html='true'
-		    data-content="When you <em>copy</em> (instead of
-		    clone), you are creating a new profile that
+		    data-content="When you <em>copy</em> a profile,
+	            you are creating a new profile that
 		    uses the same source code and metadata (description,
 		    instructions) as the original profile, but without
 		    creating a new disk image. Instead, the new profile uses
@@ -218,6 +225,68 @@ pre {
 		Terminate</button>
 	    <% } %>
 	  </div>
+	  <% if (isadmin) { %>
+	    <div class='clearfix'></div>	  
+	    <div>
+	      <div class='pull-left'
+		   data-toggle='popover'
+		   data-delay='{"hide":500, "show":500}'
+		   data-content="When checked, only administrator can extend
+				 this experiment. No free time is granted to
+				 user at all."> 
+		<label class="checkbox-inline" style='margin-right: 10px;'>
+		  <input type="checkbox" id="lockout_checkbox"
+			 <% if (lockout) { %>checked<% } %> >Lockout</label>
+	      </div>
+	    </div>
+	    <div class='pull-left'
+		 data-toggle='popover'
+		 data-delay='{"hide":500, "show":500}'
+		 data-content="When checked, the experiment 
+			       cannot be terminated by the user unless the
+			       user verifies 
+			       the lockdown code when clicking the Terminate
+			       button. This prevents accidental termination,
+			       and is automatically set whenever an experiment
+			       is extended for more then two weeks.
+			       Use the admin lockdown flag to fully prevent
+			       termination."> 
+	      <label class="checkbox-inline" style='margin-right: 10px;'>
+		<input type="checkbox" id="user_lockdown_checkbox"
+		       <% if (user_lockdown) { %>checked<% } %> >
+		User Lockdown</label>
+	    </div>
+	    <div class='pull-left'
+		 data-toggle='popover'
+		 data-delay='{"hide":500, "show":500}'
+		 data-content="When checked, the experiment 
+			       cannot be terminated by the user. Only an
+			       admin can do it.">
+	      <label class="checkbox-inline" style='margin-right: 10px;'>
+		<input type="checkbox" id="admin_lockdown_checkbox"
+		       <% if (admin_lockdown) { %>checked<% } %> >
+		Admin Lockdown</label>
+	    </div>
+	    <div class='pull-left'
+		 data-toggle='popover'
+		 data-delay='{"hide":500, "show":500}'
+		 data-content="When checked, the experiment is put into
+			       Quarantine (emulab panic) mode.">
+	      <label class="checkbox-inline" style='margin-right: 10px;'>
+		<input type="checkbox" id="quarantine_checkbox"
+		       <% if (paniced) { %>checked<% } %> >
+		<span <% if (paniced) { %>class="text-danger"<% } %> >
+		  Quarantined</span></label>
+	    </div>
+	    <div class='pull-left
+			<% if (!hasnotes) { %>hidden<% } %>'
+		 data-toggle='popover'
+		 data-delay='{"hide":500, "show":500}'
+		 data-content="This experiment has admin notes">
+	      <a target="_blank"
+		 href='adminextend.php?uuid=<%= uuid %>'>Admin Notes</a>
+	    </div>
+	  <% } %>
 	</div>
       </div>
     </div>
@@ -231,17 +300,44 @@ pre {
        col-xs-12 col-xs-offset-0'>
     <div class="panel panel-danger">
       <div class="panel-heading">
-        <center><h4>Error Message</h4></center>
+        <center><h4 class="panel-title">Error Message</h4></center>
       </div>
       <div class="panel-body">
 	<code style="white-space: pre-wrap" id="error_panel_text"></code>
       </div>
       <div class="panel-footer">
-	Not sure what the error message means or how to proceed? Join the
+	<div class="resource-error">
+	  <b>More info about resource errors (not enough nodes):</b>
+	  <ul>
+	    <li> To see how many nodes are available right now, or
+	      when nodes will be available in the future, check out
+	      the <a href="resinfo.php" target="_blank">cluster status</a>
+	      page.
+	    </li>
+	    <li> Try asking for a smaller number of nodes, or nodes of a
+	      different type.
+	      <% if (window.ISCLOUD) { %>
+		Or try using a different cluster.
+	      <% } %>
+	    </li>
+	    <li> Try setting the initial experiment duration to a
+	      shorter amount of time. You will find this option in the
+	      <em>Advanced Options</em> section of the
+	      <a href="instantiate" target="_blank">Start Experiment</a>
+	      page.
+	    </li>
+	    <li> Still cannot get enough nodes right away? Try making a
+	      <a href="reserve.php" target="_blank">reservation</a>
+	      for the future.
+	    </li>
+	  </ul>
+	</div>
+	Not sure how to proceed or have further questions about this
+	error? Join the
         <a href='<%= errorURL %>'>users group</a> and ask a question. Be
         sure to include the error message in your question, and the name
-	of your experiment (hint, its '<%= name %>') and the name of your
-	profile (hint, its '<%= profileName %>').
+	of your profile and experiment: '<%= profileName %>/<%= name %>'.
+	</div>
       </div>
     </div>
   </div>
@@ -282,7 +378,7 @@ pre {
 	<div id='quicktabs_div'>
 	  <ul id='quicktabs_ul' class='nav nav-tabs'>
 	    <li class='active'>
-              <a href='#profile' data-toggle='tab'>Topology View</a>
+              <a href='#topology' data-toggle='tab'>Topology View</a>
             </li>
 	    <li>
               <a href='#listview' data-toggle='tab'>List View</a>
@@ -311,7 +407,7 @@ pre {
             </li>
 	  </ul>
 	  <div id='quicktabs_content' class='tab-content'>
-            <div class='tab-pane active' id='profile'>
+            <div class='tab-pane active' id='topology'>
 	      <div id='showtopo_statuspage' class='jacks'></div>
               <small>Click on a node for more options. 
                 Click and drag to move things around.</small>
@@ -332,7 +428,7 @@ pre {
 			  id='linktest-modal-button' type=button>
 		    Run Linktest</button>
 		</span>
-		<% if (isadmin || isstud || isfadmin) { %>
+		<% if (1) { %>
 		  <span>
 		    <button class='btn btn-xs btn-success pull-right'
 			    disabled
@@ -397,27 +493,22 @@ pre {
 		<div class='panel panel-default hidden'
 		     id="loadavg-panel-div">
 		  <div class="panel-heading">
+		    <div class="maxavg-toggles pull-right">
+		      <label class="radio-inline">
+			<input type="radio" name="loadav-radio"
+			       checked="checked" value="max"> Max
+		      </label>
+		      <label class="radio-inline">
+			<input type="radio" name="loadav-radio"
+			       value="avg"> Avg
+		      </label>
+		    </div>
 		    <h5>Load Average Graph</h5>
 		  </div>
 		  <div class='panel-body panel-body-nopad'>
 		    <!-- The col setting gives us a "relative" position div -->
 		    <div class='col-xs-12 col-xs-offset-0'
 			 style="padding:0px;">
-		      <!-- So now we can use an "absolute" position to put
-		           the radio button in the upper left of the graph
-		           where it will not overwrite anything.
-		      -->
-		      <div class="hidden toggles"
-			   style='position:absolute;left:5px;top:0px'>
-			<label class="radio-inline">
-			  <input type="radio" name="loadav-radio"
-				 checked="checked" value="max"> Max
-			</label>
-			<label class="radio-inline">
-			  <input type="radio" name="loadav-radio"
-				 value="avg"> Avg
-			</label>
-		      </div>
 		      <div id="loadavg-chart"
 			class='fixedsize-panel with-3d-shadow with-transitions'>
 			<svg></svg>
@@ -430,27 +521,38 @@ pre {
 		<div class='panel panel-default hidden'
 		     id="ctrl-traffic-panel-div">
 		  <div class="panel-heading">
+		    <div class="maxavg-toggles pull-right">
+		      <label class="radio-inline">
+			<input type="radio" name="ctrl-radio"
+			       checked="checked" value="max"> Max
+		      </label>
+		      <label class="radio-inline">
+			<input type="radio" name="ctrl-radio"
+			       value="avg"> Avg
+		      </label>
+		    </div>
+		    <div class="txrx-toggles pull-right"
+		         style="margin-right: 15px;">
+		      <label class="radio-inline">
+			<input type="radio" name="ctrl-radio-txrx"
+			       value="rx"> RX
+		      </label>
+		      <label class="radio-inline">
+			<input type="radio" name="ctrl-radio-txrx"
+			       value="tx"> TX
+		      </label>
+		      <label class="radio-inline">
+			<input type="radio" name="ctrl-radio-txrx"
+			       checked="checked"
+			       value="sum"> Sum
+		      </label>
+		    </div>
 		    <h5>Control Traffic Graph</h5>
 		  </div>
 		  <div class='panel-body panel-body-nopad'>
 		    <!-- The col setting gives us a "relative" position div -->
 		    <div class='col-xs-12 col-xs-offset-0'
 			 style="padding:0px;">
-		      <!-- So now we can use an "absolute" position to put
-		      the radio button in the upper left of the graph
-		      where it will not overwrite anything.
-		      -->
-		      <div class="hidden toggles"
-			   style='position:absolute;left:5px;top:0px'>
-			<label class="radio-inline">
-			  <input type="radio" name="ctrl-radio"
-				 checked="checked" value="max"> Max
-			</label>
-			<label class="radio-inline">
-			  <input type="radio" name="ctrl-radio"
-				 value="avg"> Avg
-			</label>
-		      </div>
 		      <div id="ctrl-traffic-chart"
 			class='fixedsize-panel with-3d-shadow with-transitions'>
 			<svg></svg>
@@ -463,25 +565,36 @@ pre {
 		<div class='panel panel-default hidden'
 		     id="expt-traffic-panel-div">
 		  <div class="panel-heading">
+		    <div class="maxavg-toggles pull-right">
+		      <label class="radio-inline">
+			<input type="radio" name="expt-radio"
+			       checked="checked" value="max"> Max</label>
+			<label class="radio-inline">
+			  <input type="radio" name="expt-radio"
+				 value="avg"> Avg</label>
+		    </div>
+		    <div class="txrx-toggles pull-right"
+		         style="margin-right: 15px;">
+		      <label class="radio-inline">
+			<input type="radio" name="expt-radio-txrx"
+			       value="rx"> RX
+		      </label>
+		      <label class="radio-inline">
+			<input type="radio" name="expt-radio-txrx"
+			       value="tx"> TX
+		      </label>
+		      <label class="radio-inline">
+			<input type="radio" name="expt-radio-txrx"
+			       checked="checked"
+			       value="sum"> Sum
+		      </label>
+		    </div>
 		    <h5>Experiment Traffic Graph</h5>
 		  </div>
 		  <div class='panel-body panel-body-nopad'>
 		    <!-- The col setting gives us a "relative" position div -->
 		    <div class='col-xs-12 col-xs-offset-0'
 			 style="padding:0px;">
-		      <!-- So now we can use an "absolute" position to put
-		      the radio button in the upper left of the graph
-		      where it will not overwrite anything.
-		      -->
-		      <div class="hidden toggles"
-			   style='position:absolute;left:5px;top:0px'>
-			<label class="radio-inline">
-			  <input type="radio" name="ctrl-radio"
-				 checked="checked" value="max"> Max</label>
-			<label class="radio-inline">
-			  <input type="radio" name="ctrl-radio"
-				 value="avg"> Avg</label>
-		      </div>
 		      <div id="expt-traffic-chart"
 			class='fixedsize-panel with-3d-shadow with-transitions'>
 			<svg></svg>
@@ -562,6 +675,177 @@ pre {
     <div class='modal-dialog'>
       <div class='modal-content'>
 	<div class='modal-header'>
+          <h3 class="text-center" style="margin: 0;">
+	    Create a Disk Image</h3>
+	</div>
+	<div class='modal-body'>
+	  <div class="fhide step1" data-step="1">
+	    <center>
+	      You are about to create a disk image from the contents of
+	      the primary partition on
+	      <span class="one-node text-info hidden">
+		<span class="node_id"></span>.
+	      </span>
+	      <span class="choose-node hidden">
+		<select>
+		  <option value=''>Please Select a Node</option>
+		</select>
+	      </span>
+	      <div class="text-danger hidden choose-node-error">
+		Please select a node!
+	      </div>
+	    </center>
+	    <div style="text-align: center;">
+	      <br>
+	      <div id='snapshot_update_prepare_div'
+		   style="display: inline-block; width: 80%;">
+		<b>Did you add any accounts or groups to your node?</b>
+		<br>
+		<center>
+		  <input type=checkbox
+			 id='snapshot_update_prepare' value=yes>
+		</center>
+		<div style="text-align: left;">
+		  Check this box if you installed any software that added new
+		  users or groups. If you are not sure, ask us first since
+		  checking this box needlessly can have negative side effects.
+		</div>
+	      </div>
+	      <div id='snapshot-wholedisk-div' class="hidden"
+		   style="display: inline-block; width: 80%;">
+		<br>
+		<b>Whole disk image?</b>
+		<br>
+		<center>
+		  <input type=checkbox
+			 id='snapshot-wholedisk' value=yes>
+		</center>
+		<div style="text-align: left;">
+		  Check this box if you need to capture more then just the primary
+		  partition of your disk. For example, you created a file system on
+		  parition two, and want to include that in your new disk image. 
+		  <b><em>Do not check this box if you do not need to do this or 
+		  do not know what this means!</em></b>
+		</div>
+	      </div>
+	    </div>
+	  </div>
+	  <div class="fhide step2" data-step="2">
+	    <br>
+	    <div style="text-align: center;">
+	      <div id="snapshot-radio-title">
+		<b>What would you like to do with this image?</b>
+		<br>
+	      </div>
+	      <div id="clone-help-popover-div"></div>
+	      <div style="display: inline-block; text-align: left">
+		<div class="radio">
+		  <label>
+		    <input type="radio" name="whattodo"
+			   id="update-profile" value="update-profile" checked>
+		    Update the current profile to use it.
+		    <a href='#' class='btn btn-xs' id='snapshot-help-button'>
+		      <span class='glyphicon glyphicon-question-sign'
+			    style='margin-bottom: 4px;'></span>
+		    </a>
+		  </label>
+		</div>
+		<div class="radio">
+		  <label>
+		    <input type="radio" name="whattodo"
+			   id="copy-profile" value="copy-profile">
+		    Make a copy of the current profile, updated to use the new
+		    image. 
+		    <a href='#' class='btn btn-xs clone-help-button'>
+		      <span class='glyphicon glyphicon-question-sign'
+			    style='margin-bottom: 4px;'></span>
+		    </a>
+		  </label>
+		</div>
+		<div class="radio">
+		  <label>
+		    <input type="radio" name="whattodo"
+			   id="new-profile" value="new-profile">
+		    Create a brand new (empty) profile.
+		    <a href='#' class='btn btn-xs clone-help-button'>
+		      <span class='glyphicon glyphicon-question-sign'
+			    style='margin-bottom: 4px;'></span>
+		    </a>
+		  </label>
+		</div>
+		<div class="radio">
+		  <label>
+		    <input type="radio" name="whattodo"
+			   id="image-only" value="image-only">
+		    Just create a disk image, I will decide what to do with it
+		    later.
+		  </label>
+		</div>
+	      </div>
+	    </div>
+	    <div id='snapshot-name-div' class='hidden'>
+	      <center class="image-only hidden">
+		<b>Please tell us what name to use for your new image</b>
+		<br>
+		<input class="image-name"
+		       placeholder="alphanumeric please" type="text">
+	      </center>
+	      <center class="new-profile hidden">
+		<b>Please tell us what name to use for your new profile</b>
+		<br>
+		<input class="profile-name"
+		       placeholder="alphanumeric please" type="text">
+	      </center>
+	      <div class="text-danger hidden name-error"
+		   style="text-align: center;">
+		Please provide a name!
+	      </div>
+	      <div class="text-danger hidden inuse-error"
+		   style="text-align: center;">
+		Name Error!
+	      </div>
+	    </div>
+	    <div class='choose-project-div hidden'>
+	      <center>
+		<b>Please tell us what project to use for your new profile</b>
+		<br>
+		<select>
+		  <option value=''>Please Select a Project</option>
+		</select>
+	      </center>
+	      <div class="text-danger hidden project-error"
+		   style="text-align: center;">
+		Please select a project!
+	      </div>
+	    </div>
+	  </div>
+	</div>
+	<div class="pull-right" style="margin-bottom: 10px;">
+          <button style='margin-right: 10px;'
+                  class='btn btn-danger btn-sm' 
+                  data-dismiss='modal' aria-hidden='true'>
+	    Cancel</button>
+          <button class='btn btn-success btn-sm'; type='button'
+		  style='margin-right: 15px;'
+		  id='snapshot_confirm'>
+	    Continue</button>
+	</div>
+	<br>
+	<div class="modal-footer-steps hidden">
+	  <button type="button" class="btn btn-default js-btn-step pull-left"
+		  data-orientation="cancel" data-dismiss="modal"></button>
+	  <button type="button" class="btn btn-warning js-btn-step"
+		  data-orientation="previous"></button>
+	  <button type="button" class="btn btn-success js-btn-step"
+		  data-orientation="next"></button>
+	</div>
+      </div>
+    </div>
+  </div>
+  <div id='snapshot_modal_old' class='modal fade'>
+    <div class='modal-dialog'>
+      <div class='modal-content'>
+	<div class='modal-header'>
           <center><h3>Confirm to Snapshot</h3>
 	</div>
 	<div class='modal-body'>
@@ -604,16 +888,27 @@ pre {
 	    checking this box needlessly can have negative side effects. 
 	    <br>
 	  </div>
-	  <div id='wholedisk_div' class='hidden'>
+	  <div id='snapshot-wholedisk-div' class='hidden'>
 	    <br>
 	    <center>
 	      Whole disk image?<br>
-	      <input type=checkbox id=wholedisk value=yes>
+	      <input type=checkbox id='snapshot-wholedisk' value=yes>
 	    </center>
 	    Check this box if you need to capture the entire disk; you only
 	    need to do this if you put data into one of the unused
 	    partitions on the local disk. <b><em>Do not check this box if you
-		do not know what this means!</em></b>
+	      do not know what this means!</em></b>
+	  </div>
+	  <div id='nameyourimage_div' class='hidden'>
+	    <br>
+	    <center>
+	      <b>Name your image?</b><br>
+	      <input id="nameyourimage_name"
+		     placeholder="alphanumeric only" type="text">
+	    </center>
+	    Do you want to choose the name of your image yourself? We
+	    do not recommend it, but you can if you want. Alphanumeric
+	    only please.
 	  </div>
 	  <br>
 	  <center>
@@ -663,7 +958,6 @@ pre {
 	<li id="consolelog"><a name="consolelog">Console Log</a></li>
 	<li id="reboot"><a name="reboot">Reboot</a></li>
 	<li id="reload"><a name="reload">Reload</a></li>
-	<li id="snapshot"><a name="snapshot">Snapshot</a></li>
 	<li id="delete"><a name="delete">Delete Node</a></li>
       </ul>
   </div>
@@ -700,7 +994,7 @@ pre {
     <div class='modal-dialog'>
       <div class='modal-content'>
 	<div class='modal-body'>
-          <center><h3>Confirm Node Reload</h3>
+          <center><h3>Confirm Node <span id="confirm-which"></span></h3>
             <button type='button' style='margin-right: 20px;'
                     class='btn btn-primary btn-sm' 
                     data-dismiss='modal' aria-hidden='true'>
@@ -783,6 +1077,157 @@ pre {
 		Dismiss</button>
 	    </center>
 	  </div>
+	</div>
+      </div>
+    </div>
+  </div>
+  <div id='confirm-update-systemimage-modal' class='modal fade'
+       data-keyboard='false' data-backdrop='static'>
+    <div class='modal-dialog'>
+      <div class='modal-content'>
+	<div class='modal-body'>
+          <button type='button' class='close' data-dismiss='modal'
+                  aria-hidden='true'>&times;</button>
+          <center>
+	    <h4>You are about to create or update a System Image!</h4>
+	  </center>
+	  <p>
+	    Taking this disk snapshot might result in creating a new
+	    system image or updating an existing system image. Are you
+	    sure you want to do this?
+	  </p>
+	  <p>
+	  <em>Reminder:</em> You will need to run <tt>imagerelease</tt> on 
+	  the cluster (command line).
+	  </p>
+	  <center>
+            <button type='button' style='margin-right: 20px;'
+                    class='btn btn-primary btn-sm'
+		    id='cancel-update-systemimage'>Cancel</button>
+            <button class='btn btn-danger btn-sm'
+		    id='confirm-update-systemimage'>Continue</button>
+	  </center>
+	</div>
+      </div>
+    </div>
+  </div>
+  <div id='ssh-failed-modal' class='modal fade'>
+    <div class='modal-dialog'>
+      <div class='modal-content'>
+	<div class='modal-header'>
+          <center><h4>SSH Failure!</h3></center>
+	</div>
+	<div class='modal-body'>
+	  There was an error trying to set up your SSH shell.
+	  Typically this is because the local server is using a self
+	  signed certificate and your browser is unhappy about it. The
+	  easiest thing to do is click on the link below, accept the
+	  certificate (however your browser does that), and then try
+	  again. 
+	  <br>
+	  <div>
+	    <center>
+	      Click to 
+	      <a href="" target="_blank" id="accept-certificate">
+		accept certificate</a>
+	    </center>
+	  </div>
+	  <br>
+	  <div>
+	    <center>
+              <button class='btn btn-primary btn-sm'
+		      data-dismiss='modal'>
+		Dismiss</button>
+	    </center>
+	  </div>
+	</div>
+      </div>
+    </div>
+  </div>
+  <div class="hidden" id="clone-help-div">
+  <!-- This is the Clone help box -->
+  <div id="clone-help-panel" class="panel panel-info">
+    <div class="panel-body">
+      <button type='button' class='close clone-popover-close'>
+        &times;</button>
+      <br>
+      <p>
+	You can quickly convert a running experiment into
+	a <em>new</em> profile, capturing the disk contents of your
+	node and saving it away for later use by experiments based on
+	the new profile.
+      </p>
+      <p>
+	You can also create a new disk image, but start with an empty
+	(blank profile), and use the new image for the nodes in whatever
+	topology you create.
+      </p>
+      <p>
+	The node in your experiment will be shutdown, and a disk image
+	of the <b>primary</b> partition captured. You will be able to
+	track the progress of the image capture as it proceeds. 
+      </p>
+      <p>
+	<em>The contents of your home directory is <b>NOT</b> saved</em>. You
+	should install your software and data files in standard locations like
+	<tt>/usr/local</tt> or <tt>/opt</tt>. The reason for this is so
+	that dependencies on specific user home directories do not
+	become embedded in your images.
+      </p>
+    </div>
+  </div>
+  </div>
+  <div class="hidden" id="snapshot-help-div">
+    <div class="panel panel-info">
+      <div class="panel-body">
+      <button type='button' class='close snapshot-popover-close'>
+        &times;</button>
+      <br>
+      <p>
+	Create a disk image, saving it away for future experiments
+	based on the same profile. This is a complete disk copy of the
+	<b>primary</b> partition on your node, everything is saved.
+	The next user to instantiate this profile will use this new
+	disk image.
+      </p>
+      <p>
+	After you click to confirm, the node in your experiment will
+	be shutdown, and a disk image captured. You will be able to
+	track the progress of the image capture as it proceeds.
+      </p>
+      <p>
+	<em>The contents of your home directory is <b>NOT</b> saved</em>. You
+	should install your software and data files in standard locations like
+	<tt>/usr/local</tt> or <tt>/opt</tt>. The reason for this is so
+	that dependencies on specific user home directories do not
+	become embedded in your images.
+      </p>
+      </div>
+    </div>
+  </div>    
+  <div id='lockdown-refused' class='modal fade'>
+    <div class='modal-dialog'>
+      <div class='modal-content'>
+	<div class="modal-header text-center">
+	  <h4>Lockdown Refused</h4>
+	</div>
+	<div class='modal-body'>
+	  <p>
+	    The lockdown request has been refused by one of the backend
+	    clusters because it would throw the reservation system into chaos:
+	  </p>
+	  <div>
+	    <pre></pre>
+	  </div>
+	  If you want to force this lockdown, click below.
+	  <center>
+            <button type='button' style='margin-right: 20px;'
+		    data-dismiss='modal'
+                    class='btn btn-primary btn-sm'
+		    id='cancel-lockdown'>Cancel</button>
+            <button class='btn btn-danger btn-sm'
+		    id='force-lockdown'>Lockdown</button>
+	  </center>
 	</div>
       </div>
     </div>

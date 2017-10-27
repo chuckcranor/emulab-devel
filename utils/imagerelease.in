@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2014-2015 University of Utah and the Flux Group.
+# Copyright (c) 2014-2017 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -56,6 +56,7 @@ my $markready  = 0;
 my $TB		  = "@prefix@";
 my $FSNODE	  = "@FSNODE@";
 my $PROJROOT      = "@PROJROOT_DIR@";
+my $SYSIMAGEDIR   = "$TB/images";
 my $IMAGEVALIDATE = "$TB/sbin/imagevalidate";
 my $SSH		  = "/usr/bin/ssh";
 my $SCP		  = "/usr/bin/scp";
@@ -81,8 +82,7 @@ $| = 1;
 use lib "@prefix@/lib";
 use EmulabConstants;
 use User;
-use Image;
-use OSinfo;
+use OSImage;
 
 #
 # Parse command arguments. Once we return from getopts, all that should be
@@ -117,9 +117,9 @@ if ($UID) {
     $user_uid = $user->uid();
 }
 
-my $image = Image->Lookup($imageid);
+my $image = OSImage->Lookup($imageid);
 if (!defined($image)) {
-    $image = Image->LookupByName($imageid);
+    $image = OSImage->LookupByName($imageid);
 }
 if (!defined($image)) {
     fatal("No such image!");
@@ -166,7 +166,7 @@ if ($image->Lock()) {
     fatal("Image is locked, please try again later!\n");
 }
 if ($image->version()) {
-    $version0 = Image->Lookup($image->imageid(), 0);
+    $version0 = OSImage->Lookup($image->imageid(), 0);
     if (!defined($version0)) {
 	$image->Unlock();
 	fatal("Cannot lookup version zero of $image");
@@ -175,11 +175,16 @@ if ($image->version()) {
 else {
     $version0 = $image;
 }
-if ($version0->path() =~ /^\/usr\/testbed/) {
+if ($version0->IsSystemImage()) {
     my $vers0src = "$PROJROOT/" . $image->pid() . "/images/";
     if ($version0->IsDirPath()) {
 	# Add in the directory.
 	$vers0src .= basename($version0->path()) . "/";
+    }
+    
+    my $dstdir = $SYSIMAGEDIR . "/";
+    if ($image->IsDirPath()) {
+	$dstdir .= basename($image->path()) . "/";
     }
     
     #
@@ -189,28 +194,27 @@ if ($version0->path() =~ /^\/usr\/testbed/) {
     $copyfiles{($image->version() ?
 		$image->FullImageFile() : 
 		$vers0src . basename($image->FullImageFile()))} =
-		"/usr/testbed/images/" . basename($image->FullImageFile());
+		$dstdir . basename($image->FullImageFile());
     $copyfiles{($image->version() ?
 		$image->DeltaImageFile() :
 		$vers0src . basename($image->DeltaImageFile()))} =
-		"/usr/testbed/images/" . basename($image->DeltaImageFile());
+		$dstdir . basename($image->DeltaImageFile());
     $copyfiles{($image->version() ?
 		$image->FullImageSigFile() :
 		$vers0src . basename($image->FullImageSigFile()))} =
-		"/usr/testbed/images/" . basename($image->FullImageSigFile());
+		$dstdir . basename($image->FullImageSigFile());
     $copyfiles{($image->version() ?
 		$image->DeltaImageSigFile() :
 		$vers0src . basename($image->FullImageSigFile()))} =
-		"/usr/testbed/images/" . basename($image->DeltaImageSigFile());
+		$dstdir . basename($image->DeltaImageSigFile());
     
     if ($image->version()) {
+	$updatepath = $dstdir;
 	if ($image->IsDirPath()) {
-	    $updatepath =
-		"/usr/testbed/images/" . basename($image->path()) . "/";
+	    $updatepath = $dstdir;
 	}
 	else {
-	    $updatepath = 
-		"/usr/testbed/images/" . basename($image->path());
+	    $updatepath = $SYSIMAGEDIR . "/" . basename($image->path());
 	}
     }
     foreach my $from (keys(%copyfiles)) {

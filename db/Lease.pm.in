@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2012-2016 University of Utah and the Flux Group.
+# Copyright (c) 2012-2017 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -34,6 +34,8 @@ use vars qw(@ISA @EXPORT);
 use vars qw($TB $BSCONTROL);
 $TB        = "@prefix@";
 $BSCONTROL = "$TB/sbin/bscontrol";
+my $PGENISUPPORT  = @PROTOGENI_SUPPORT@;
+my $OURDOMAIN     = "@OURDOMAIN@";
 
 use libdb;
 use libtestbed;
@@ -204,6 +206,8 @@ sub lease_end($)       {return str2time($_[0]->{'DBROW'}->{'lease_end'}); }
 sub expiration($)      {return $_[0]->lease_end(); }
 sub last_used($)       {return str2time($_[0]->{'DBROW'}->{'last_used'}); }
 sub last_checked($)    {return str2time($_[0]->{'DBROW'}->{'last_checked'}); }
+sub origin_urn($)      {return $_[0]->{'DBROW'}->{'origin_urn'}; }
+sub origin_uuid($)     {return $_[0]->{'DBROW'}->{'origin_uuid'}; }
 sub state($)           {return $_[0]->{'DBROW'}->{'state'}; }
 sub statestamp($)      {return str2time($_[0]->{'DBROW'}->{'statestamp'}); }
 sub renewals($)	       {return $_[0]->{'DBROW'}->{'renewals'}; }
@@ -462,6 +466,24 @@ sub Delete($) {
     return 0
 }
 
+sub urn($)
+{
+    my ($self) = @_;
+
+    return undef
+	if (! $PGENISUPPORT);    
+
+    require GeniHRN;
+    my $pid    = $self->pid();
+    my $gid    = $self->gid();
+    my $name   = $self->lease_id();
+    my $domain = $OURDOMAIN;
+    $domain .= ":${pid}";
+    $domain .= ":${gid}" if ($pid ne $gid);
+	
+    return GeniHRN::Generate($domain, $self->type(), $name);
+}    
+
 #
 # Is the underlying blockstore resource mapped in RW currently?
 # XXX: blockstore-specific lease function.  Should be in a subclass.
@@ -477,7 +499,7 @@ sub InUseReadWrite() {
     my $resvref = $self->GetReservations();
     if ($resvref) {
 	foreach my $ref (@$resvref) {
-	    if (!$ref->IsReadOnly()) {
+	    if (!$ref->IsReadOnly() && !$ref->IsRWClone()) {
 		$rw = 1;
 		last;
 	    }
@@ -1761,6 +1783,37 @@ sub RevokeAccess($$)
     return 0;
 }
 
+# Convience functions for Geni interface.
+sub IsPermRO($)
+{
+    my ($self) = @_;
+    my $idx       = $self->idx();
+    my $perm_idx  = GLOBAL_PERM_ANON_RO_IDX();
+    my $perm_type = "global";
+
+    my $qres =
+	DBQueryWarn("select * from lease_permissions ".
+		    "where lease_idx=$idx and permission_idx='$perm_idx' and ".
+		    "      permission_type='$perm_type'");
+    return 0
+	if (!$qres || !$qres->numrows);
+    return 1;
+}
+sub IsAnonRO($)
+{
+    my ($self) = @_;
+    my $idx       = $self->idx();
+    my $perm_idx  = GLOBAL_PERM_USER_RO_IDX();
+    my $perm_type = "global";
+
+    my $qres =
+	DBQueryWarn("select * from lease_permissions ".
+		    "where lease_idx=$idx and permission_idx='$perm_idx' and ".
+		    "      permission_type='$perm_type'");
+    return 0
+	if (!$qres || !$qres->numrows);
+    return 1;
+}
 #
 # Load attributes if not already loaded.
 #
@@ -2062,6 +2115,32 @@ sub GetProject($)
 	return undef;
     }
     return $project;
+}
+
+#
+# Lookup by origin, as for portal created leases.
+#
+sub LookupByAuthorityURN($$)
+{
+    my ($class, $urn) = @_;
+
+    return undef
+	if (! $PGENISUPPORT);    
+
+    require GeniHRN;
+    return undef
+	if (!GeniHRN::IsValid($urn));
+    
+    my $safe_urn = DBQuoteSpecial($urn);
+    
+    my $query_result =
+	DBQueryWarn("select lease_idx from lease_attributes ".
+		    "where attrkey='authority_urn' and attrval=$safe_urn");
+    return undef
+	if (!$query_result || !$query_result->numrows);
+
+    my ($lease_idx) = $query_result->fetchrow_array();
+    return Lease->Lookup($lease_idx);
 }
 
 package Lease::Blockstore;

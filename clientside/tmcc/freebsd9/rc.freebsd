@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2007-2012 University of Utah and the Flux Group.
+# Copyright (c) 2007-2016 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -161,7 +161,7 @@ sub addswap($$)
 	print STDERR "*** WARNING: could not add /dev/$dev to $FSTAB, ".
 	    "swap enabled this boot only\n";
     }
-    print FD "# the following added by $script\n";
+    print FD "# the following swap devices added by $script\n";
     print FD "/dev/$dev\t\tnone\tswap\tsw\t0\t0\n";
     close(FD);
     print "Swap enabled\n";

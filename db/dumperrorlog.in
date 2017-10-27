@@ -83,7 +83,6 @@ if ($UID != 0) {
 # abort instead of waiting
 #
 my $lock_res = TBScriptLock("dumperrorlog", 1, 0);
-#exit( 0) if $lock_res == TBSCRIPTLOCK_IGNORE();
 exit(-1) if $lock_res != TBSCRIPTLOCK_OKAY();
 
 #
@@ -132,26 +131,6 @@ if (!defined($minseq)) {
 }
 
 #
-# And the last experiment index we sent over.
-#
-$query_result =
-    DBQueryFatal("select idx from emulab_indicies ".
-		 "where name='lastlog_exptidx'");
-my ($exptidx_min) = $query_result->fetchrow_array();
-if (!defined($exptidx_min)) {
-    DBQueryFatal("insert into emulab_indicies (name, idx) ".
-		 "values ('lastlog_exptidx', 0)");
-    $exptidx_min = 0;
-}
-# And the current largest one.
-$query_result =
-    DBQueryFatal("select MAX(exptidx) from experiment_stats");
-my ($exptidx_max) = $query_result->fetchrow_array();
-if (!defined($exptidx_max)) {
-    fatal("Could not get largest experiment index!");
-}
-
-#
 # Grab the index number for the NOTICE priority.
 #
 $query_result =
@@ -173,7 +152,6 @@ my $maxseq = $query_result->fetchrow_array();
 $maxseq = $minseq unless defined $maxseq;
 
 print "Copying log entries ($minseq,$maxseq]\n";
-print "Exptidx ($exptidx_min, $exptidx_max]\n";
 
 #
 # Might not be any new entries ...
@@ -219,74 +197,10 @@ if ($minseq != $maxseq) {
     }
 }
 
-#
-# Now the other tables Kevin needs
-#
-foreach my $tablename ("scripts", "priorities", "causes", "session_info",
-		       "errors", "users", "experiments",
-		       "report_error", "report_context",
-		       "report_assign_violation") {
-
-    unlink("${tempfile}.${tablename}") if -e "${tempfile}.${tablename}";
-
-    if (($tablename eq "errors" ||
-	 $tablename eq "session_info") && !$force) {
-	DBQueryFatal("select * from $tablename where session>=$minseq and session<=$maxseq ".
-		     "into outfile '${tempfile}.${tablename}' ");
-    }
-    elsif ($tablename eq "report_error" ||
-	   $tablename eq "report_context" ||
-	   $tablename eq "report_assign_violation") {
-	DBQueryFatal("select * from $tablename where seq>=$minseq and seq<=$maxseq ".
-		     "into outfile '${tempfile}.${tablename}' ");
-    }
-    elsif ($tablename eq "users") {
-	DBQueryFatal("select uid,unix_uid from $tablename ".
-		     "into outfile '${tempfile}.${tablename}' ");
-    }
-    elsif ($tablename eq "experiments") {
-	next if
-	    ($exptidx_max == $exptidx_min);
-
-	DBQueryFatal("select exptidx,pid,eid from experiment_stats ".
-		     "where exptidx >  $exptidx_min and ".
-		     "      exptidx <= $exptidx_max ".
-		     "into outfile '${tempfile}.${tablename}' ");
-    }
-    else {
-	DBQueryFatal("select * from $tablename ".
-		     "into outfile '${tempfile}.${tablename}' ");
-    }
-
-    system("echo \"load data infile '${tempfile}.${tablename}' ".
-	   "     replace into table $tablename\" | mysql $ERRORLOGDB");
-    fatal("Could not load $tablename into archive DB!")
-	if ($?);
-
-    if ($ISUTAHEMULAB) {
-	#
-	# Copy the file over to ops and load it into the DB over there.
-	#
-	system("$SCP -p ${tempfile}.${tablename} ".
-	       "     ${USERNODE}:/var/db/mysql/$ERRORLOGDB") == 0
-		   or fatal("Could not copy ${tempfile}.${tablename} to $USERNODE!");
-
-	system("$SSHTB -host $USERNODE $PROXY $tablename") == 0
-	    or fatal("Could not load $tablename entries into ops DB!");
-
-	unlink("${tempfile}.${tablename}");
-    }
-}
-
-
 # Okay, now that we have really archived them away, update the
 # seq number.
 DBQueryFatal("update emulab_indicies set idx='$maxseq' ".
 	     "where name='lastlog_seqnum'");
-
-# Okay, now that we have really sent over the experiment_stats stuff.
-DBQueryFatal("update emulab_indicies set idx='$exptidx_max' ".
-		     "where name='lastlog_exptidx'");
 
 #
 # And then age out entries.

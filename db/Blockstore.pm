@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2012-2016 University of Utah and the Flux Group.
+# Copyright (c) 2012-2017 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -586,7 +586,7 @@ sub ConvertToMebi($)
     # Default to bytes
     my $unit   = "B";
     
-    if ($size =~ /^(\d+)(\w+)$/) {
+    if ($size =~ /^([\.\d]+)(\w+)$/) {
 	$size = $1;
 	$unit = $2;
     }
@@ -643,14 +643,14 @@ sub LoadEstimate($)
 {
     my ($blockstore) = @_;
     my $bsname = $blockstore->vname();
-    require Image;
+    require OSImage;
 
     if (!exists($blockstore->{'attributes'}->{"dataset"})) {
 	print STDERR "No dataset attribute for $bsname\n";
 	return -1;
     }
     my $dataset = $blockstore->{'attributes'}->{"dataset"};
-    my $image   = Image->Lookup($dataset);
+    my $image   = OSImage->Lookup($dataset);
     if (!defined($image)) {
 	print STDERR "No image for dataset $dataset for $bsname\n";
 	return -1;
@@ -760,8 +760,16 @@ sub IsReadOnly($) {
 }
 
 #
+# Is this reservation a RW clone?
+#
+sub IsRWClone($) {
+    my ($self) = @_;
+
+    return $self->HowUsed()->{'rwclone'};
+}
+
+#
 # How is the associated blockstore used in this reservation?
-# Currently the only thing returned in the hash is the "readonly" flag.
 #
 sub HowUsed($) {
     my ($self) = @_;
@@ -769,6 +777,7 @@ sub HowUsed($) {
 
     my $rethash = {
 	'readonly' => 0,
+	'rwclone' => 0,
     };
 
     my $virtexpt = VirtExperiment->Lookup(Experiment->Lookup($self->exptidx()));
@@ -778,9 +787,15 @@ sub HowUsed($) {
     }
 
     my @attrs = ($self->vname(), "readonly");
-    my $rorow = $virtexpt->Find("virt_blockstore_attributes", @attrs);
-    if ($rorow) {
-	$rethash->{'readonly'} = int($rorow->attrvalue());
+    my $row = $virtexpt->Find("virt_blockstore_attributes", @attrs);
+    if ($row) {
+	$rethash->{'readonly'} = int($row->attrvalue());
+    }
+
+    @attrs = ($self->vname(), "rwclone");
+    $row = $virtexpt->Find("virt_blockstore_attributes", @attrs);
+    if ($row) {
+	$rethash->{'rwclone'} = int($row->attrvalue());
     }
 
     return $rethash;

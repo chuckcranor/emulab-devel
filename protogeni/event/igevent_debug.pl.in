@@ -1,6 +1,6 @@
 #!/usr/bin/perl
 #
-# Copyright (c) 2002-2004, 2016 University of Utah and the Flux Group.
+# Copyright (c) 2002-2017 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -97,6 +97,8 @@ if (event_unregister($handle) == 0) {
 
 exit(0);
 
+my $count = 0;
+
 sub callbackFunc($$$) {
 	my ($handle,$note,$data) = @_;
 
@@ -106,6 +108,7 @@ sub callbackFunc($$$) {
 	my $slice     = event_notification_get_string($handle, $note, "slice");
 	my $type      = event_notification_get_string($handle, $note, "type");
 	my $details   = event_notification_get_string($handle, $note, "details");
+	$count++;
 
-	print "Event: $time $site $type $urn $slice $details\n";
+	print "Event: $count $time $site $type $urn $slice $details\n";
 }

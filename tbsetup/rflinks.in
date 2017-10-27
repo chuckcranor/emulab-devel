@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2016 University of Utah and the Flux Group.
+# Copyright (c) 2016-2017 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LGPL
 # 
@@ -134,9 +134,7 @@ foreach my $lan (@lans) {
 	next;
     }
 
-    my $wire = Interface::Wire->LookupAny( $interface->node_id(),
-					   $interface->card(),
-					   $interface->port() );
+    my $wire = Interface::Wire->LookupAnyByIface( $node_id, $iface );
 
     if( !defined( $wire ) ) {
 	tbwarn( "rflinks: couldn't find RF wire for $pid/$eid " .
@@ -144,7 +142,7 @@ foreach my $lan (@lans) {
 	next;
     }
 
-    my $path = $wire->field( 'cable' );
+    my $path = $wire->field( 'external_wire' );
 
     if( !defined( $path ) ) {
 	tbwarn( "rflinks: RF wire for $pid/$eid $node_id:$iface has " .
@@ -158,8 +156,10 @@ foreach my $lan (@lans) {
     my $val = $remove ? 95 : 0;
     
     if( !$impotent ) {
-	if( system( "$ATTEN $path $val" ) ) {
-	    tbwarn( "rflinks: failed to modify attenuator $path" );
+	foreach my $p ( split( ",", $path ) ) {
+	    if( system( "$ATTEN $p $val" ) ) {
+		tbwarn( "rflinks: failed to modify attenuator $path" );
+	    }
 	}
     }
 }

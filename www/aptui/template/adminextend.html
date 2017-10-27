@@ -40,6 +40,11 @@ pre {
 .panel-heading {
 	padding: 5px;
 }
+.adminnotes-title {
+    display:block;
+    width: 100px;
+    margin: 0 auto;
+}
 </style>
 <div class="row" id="firstrow"></div>
 <div class="row" id="secondrow"></div>
@@ -55,10 +60,16 @@ pre {
 		class='form-control'
 		rows=5></textarea>
       <div style="margin-top: 10px;">
-	<button class='btn btn-primary btn-sm'
-		style='margin-right: 20px;'
-		id='do-terminate'
-		type='submit' name='moreinfo'>Terminate</button>
+	<span data-toggle='popover'
+	     data-delay='{"hide":500, "show":500}'
+	     data-content='Schedule termination for the future (in days)
+			   or right away (leave days zero).'>
+	  <button class='btn btn-primary btn-sm'
+		  style='margin-right: 20px;'
+		  id="terminate-button"
+		  data-toggle='modal' data-target='#confirm-terminate-modal'
+		  type='button' name='terminate'>Schedule Termination</button>
+	</span>
 	<button class='btn btn-danger btn-sm'
 		style='margin-right: 20px;'
 		id='deny-extension'
@@ -153,12 +164,22 @@ pre {
 	      col-xs-12 col-xs-offset-0'>
     <div class='panel panel-default hidden' id="loadavg-panel-div">
       <div class="panel-heading">
-	<h5>
-	  <a data-toggle="collapse" id="loadavg-toggle"
-	     href="#loadavg-collapse"><span>Load Average Graph</span>
-	    <span class="glyphicon glyphicon-chevron-right pull-right"></span>
-	  </a>
-	</h5>
+	<a data-toggle="collapse" id="loadavg-toggle"
+	   href="#loadavg-collapse">
+	  <span class="glyphicon glyphicon-chevron-right pull-right"></span>
+	</a>
+	<div class="maxavg-toggles pull-right"
+	     style="margin-right: 10px;">
+	  <label class="radio-inline">
+	    <input type="radio" name="loadav-radio"
+		   checked="checked" value="max"> Max
+	  </label>
+	  <label class="radio-inline">
+	    <input type="radio" name="loadav-radio"
+		   value="avg"> Avg
+	  </label>
+	</div>
+	<h5><span>Load Average Graph</span></h5>
       </div>
       <div id="loadavg-collapse"
 	   class="panel-collapse collapse">
@@ -166,22 +187,6 @@ pre {
 	  <!-- The col setting gives us a "relative" position div -->
 	  <div class='col-xs-12 col-xs-offset-0'
 	       style="padding:0px;">
-	    <!--
-	    So now we can use an "absolute" position to put
-	    the radio button in the upper left of the graph
-	    where it will not overwrite anything.
-	    -->
-	    <div class="hidden toggles"
-		 style='position:absolute;left:5px;top:0px'>
-	      <label class="radio-inline">
-		<input type="radio" name="loadav-radio"
-		       checked="checked" value="max"> Max
-	      </label>
-	      <label class="radio-inline">
-		<input type="radio" name="loadav-radio"
-		       value="avg"> Avg
-	      </label>
-	    </div>
 	    <div id="loadavg-chart"
 		 class='fixedsize-panel with-3d-shadow with-transitions'>
 	      <svg></svg>
@@ -197,13 +202,39 @@ pre {
 	      col-xs-12 col-xs-offset-0'>
     <div class='panel panel-default hidden' id="ctrl-traffic-panel-div">
       <div class="panel-heading">
-	<h5>
-	  <a data-toggle="collapse" class="traffic-toggle"
-	     id="ctrl-traffic-toggle" 
-	     href="#ctrl-traffic-collapse"><span>Control Traffic Graph</span>
-	    <span class="glyphicon glyphicon-chevron-right pull-right"></span>
-	  </a>
-	</h5>
+	<a data-toggle="collapse" class="traffic-toggle"
+	   id="ctrl-traffic-toggle" 
+	   href="#ctrl-traffic-collapse">
+	  <span class="glyphicon glyphicon-chevron-right pull-right"></span>
+	</a>
+	<div class="maxavg-toggles pull-right"
+	     style="margin-right: 10px;">
+	  <label class="radio-inline">
+	    <input type="radio" name="ctrl-radio"
+		   checked="checked" value="max"> Max
+	  </label>
+	  <label class="radio-inline">
+	    <input type="radio" name="ctrl-radio"
+		   value="avg"> Avg
+	  </label>
+	</div>
+	<div class="txrx-toggles pull-right"
+	     style="margin-right: 15px;">
+	  <label class="radio-inline">
+	    <input type="radio" name="ctrl-radio-txrx"
+		   value="rx"> RX
+	  </label>
+	  <label class="radio-inline">
+	    <input type="radio" name="ctrl-radio-txrx"
+		   value="tx"> TX
+	  </label>
+	  <label class="radio-inline">
+	    <input type="radio" name="ctrl-radio-txrx"
+		   checked="checked"
+		   value="sum"> Sum
+	  </label>
+	</div>
+	<h5><span>Control Traffic Graph</span></h5>
       </div>
       <div id="ctrl-traffic-collapse"
 	   class="panel-collapse collapse traffic-collapse">
@@ -211,21 +242,6 @@ pre {
 	  <!-- The col setting gives us a "relative" position div -->
 	  <div class='col-xs-12 col-xs-offset-0'
 	       style="padding:0px;">
-	    <!-- So now we can use an "absolute" position to put
-	    the radio button in the upper left of the graph
-	    where it will not overwrite anything.
-	    -->
-	    <div class="hidden toggles"
-		 style='position:absolute;left:5px;top:0px'>
-	      <label class="radio-inline">
-		<input type="radio" name="ctrl-radio"
-		       checked="checked" value="max"> Max
-	      </label>
-	      <label class="radio-inline">
-		<input type="radio" name="ctrl-radio"
-		       value="avg"> Avg
-	      </label>
-	    </div>
 	    <div id="ctrl-traffic-chart"
 		 class='fixedsize-panel with-3d-shadow with-transitions'>
 	      <svg></svg>
@@ -241,12 +257,36 @@ pre {
 	      col-xs-12 col-xs-offset-0'>
     <div class='panel panel-default hidden' id="expt-traffic-panel-div">
       <div class="panel-heading">
-	<h5>
-	  <a data-toggle="collapse" id="expt-traffic-toggle"
-	     href="#expt-traffic-collapse"><span>Experiment Traffic Graph</span>
-	    <span class="glyphicon glyphicon-chevron-right pull-right"></span>
-	  </a>
-	</h5>
+	<a data-toggle="collapse" id="expt-traffic-toggle"
+	   href="#expt-traffic-collapse">
+	  <span class="glyphicon glyphicon-chevron-right pull-right"></span>
+	</a>
+	<div class="maxavg-toggles pull-right"
+	     style="margin-right: 10px;">
+	  <label class="radio-inline">
+	    <input type="radio" name="expt-radio"
+		   checked="checked" value="max"> Max</label>
+	    <label class="radio-inline">
+	      <input type="radio" name="expt-radio"
+		     value="avg"> Avg</label>
+	</div>
+	<div class="txrx-toggles pull-right"
+	     style="margin-right: 15px;">
+	  <label class="radio-inline">
+	    <input type="radio" name="expt-radio-txrx"
+		   value="rx"> RX
+	  </label>
+	  <label class="radio-inline">
+	    <input type="radio" name="expt-radio-txrx"
+		   value="tx"> TX
+	  </label>
+	  <label class="radio-inline">
+	    <input type="radio" name="expt-radio-txrx"
+		   checked="checked"
+		   value="sum"> Sum
+	  </label>
+	</div>
+	<h5><span>Experiment Traffic Graph</span></h5>
       </div>
       <div id="expt-traffic-collapse"
 	   class="panel-collapse collapse">
@@ -254,19 +294,6 @@ pre {
 	  <!-- The col setting gives us a "relative" position div -->
 	  <div class='col-xs-12 col-xs-offset-0'
 	       style="padding:0px;">
-	    <!-- So now we can use an "absolute" position to put
-	    the radio button in the upper left of the graph
-	    where it will not overwrite anything.
-	    -->
-	    <div class="hidden toggles"
-		 style='position:absolute;left:5px;top:0px'>
-	      <label class="radio-inline">
-		<input type="radio" name="ctrl-radio"
-		       checked="checked" value="max"> Max</label>
-		<label class="radio-inline">
-		  <input type="radio" name="ctrl-radio"
-			 value="avg"> Avg</label>
-	    </div>
 	    <div id="expt-traffic-chart"
 		 class='fixedsize-panel with-3d-shadow with-transitions'>
 	      <svg></svg>
@@ -279,258 +306,96 @@ pre {
 </div>
 <div>
   <script id="history-template" type="text/template">
-    <table class="table table-condensed">
-      <thead>
-	<tr>
-	  <th>Date</th>
-	  <th>Action</th>
-	  <th>Wanted</th>
-	  <th>Granted</th>
-	</tr>
-      </thead>
-      <tbody>
-	<%  _.each(extensions, function(extension, idx) { %>
-	  <tr>
-	    <td rowspan="2" class="history-tstamp"><%- extension.tstamp %></td>
-	    <td>
-	      <% if (extension.action == "request" && extension.admin == "1") { %>
-		admin<% } else { %><%- extension.action %><% } %>
-	    </td>
-	    <% if (extension.action == "request") { %>
-	      <td><%- extension.wanted %></td>
-	      <td><%- extension.granted %></td>
-	    <% } else { %>
-	      <td>n/a</td>
-	      <td>n/a</td>
-	    <% } %>
-	  </tr>
-	  <tr>
-	    <td colspan="3"><pre class="history-reason"><%- extension.reason %></pre>
-	    </td>
-	  </tr>
-	<% }); %>
-      </tbody>
-    </table>
   </script>
 </div>
 <div>
   <script id="firstrow-template" type="text/template">
-    <div class='col-sm-8 col-sm-offset-2'>
-      <div class='panel panel-default'>
-	<div class="panel-heading text-center">
-	  Experiment info for <%= expinfo.name %>
-	</div>
-	<div class="panel-body">
-	  <table class="table table-condensed">
-	    <tbody>
-	      <tr>
-		<td>Name:</td>
-		<td><a href='status.php?uuid=<%- uuid %>'><%- expinfo.name %></a></td>
-		<td>Profile:</td>
-		<% if (expinfo.profile_uuid) { %>
-		  <td><a href='show-profile.php?uuid=<%- expinfo.profile_uuid %>'>
-		    <%- expinfo.profile_name %></a></td>
-		<% } else { %>
-		  <td><%- expinfo.profile_name %></td>
-   	        <% } %>
-	      </tr>
-	      <tr>
-		<td>Creator:</td>
-		<td><a href='user-dashboard.php?user=<%- expinfo.creator %>'>
-		  <%- expinfo.creator %></a></td>
-		<td>Project:</td>
-		<td><a href='show-project.php?project=<%- expinfo.project %>'>
-		  <%- expinfo.project %></a></td>
-	      </tr>
-	      <tr>
-		<td>Created:</td>
-		<td class="format-date"><%- expinfo.created %></td>
-		<td>Expires:</td>
-		<td class="format-date"><%- expinfo.expires %></td>
-	      </tr>
-	      <tr>
-		<td>
-		  <span data-toggle='popover'
-		   data-delay='{"hide":1000, "show":500}'
-		   data-content="When checked, only administrator can extend
-				 this experiment. No free time is granted to
-				 user at all.">Lockout:</span></td>
-		<td><input type="checkbox" id="lockout-checkbox"
-			   <% if (expinfo.lockout) { %>checked<% } %> >
-		</td>
-		<td>
-		  <span data-toggle='popover'
-		    data-delay='{"hide":1000, "show":500}'
-		    data-content="When checked, the experiment 
-				  cannot be terminated until the lockdown bit
-				  is cleared by an admininstrator, or if the 
-				  user verifies 
-				  the lockdown code when clicking the Terminate
-				  button.">Lockdown:</span></td>
-		<td><input type="checkbox" id="lockdown-checkbox"
-			   <% if (expinfo.lockdown) { %>checked<% } %> >
-		</td>
-	    </tbody>
-	  </table>
-	</div>
-      </div>
-    </div>
   </script>
 </div>
 <div>
   <script id="secondrow-template" type="text/template">
-    <div class='col-sm-6'>
-      <div class='panel panel-default'>
-	<div class="panel-heading text-center">
-	  Summary for user <%= uid %>
-	</div>
-	<div class="panel-body">
-	  <table class="table table-condensed">
-	    <tbody>
-	      <tr>
-		<td>Current Usage:</td>
-		<td><%- user.pnodes %> Node(s), <%- user.phours %> Node Hours</td>
-	      </tr>
-	      <tr>
-		<td>Prev Week:</td>
-		<td><%- user.weekpnodes %> Node(s), <%- user.weekphours %> Node Hours</td>
-	      </tr>
-	      <tr>
-		<td>Prev Month:</td>
-		<td><%- user.monthpnodes %> Node(s), <%- user.monthphours %> Node Hours</td>
-	      </tr>
-	      <% if (user.rank) { %>
-		<tr>
-		  <td><%- user.rankdays %> Day Ranking:</td>
-		  <td>#<%- user.rank %> of <%- user.ranktotal %> active users</td>
-		</tr>
-	      <% } %>
-	      <tr>
-		<td># of Experiments:</td>
-		<td><%- user.expcount %></td>
-	      </tr>
-	    </tbody>
-	  </table>
-	</div>
-      </div>
-    </div>
-    <div class='col-sm-6'>
-      <div class='panel panel-default'>
-	<div class="panel-heading text-center">
-	  Summary for project <%= pid %>
-	</div>
-	<div class="panel-body">
-	  <table class="table table-condensed">
-	    <tbody>
-	      <tr>
-		<td>Current Usage:</td>
-		<td><%- project.pnodes %> Node(s), <%- project.phours %> Node Hours</td>
-	      </tr>
-	      <tr>
-		<td>Prev Week:</td>
-		<td><%- project.weekpnodes %> Node(s),
-		  <%- project.weekphours %> Node Hours</td>
-	      </tr>
-	      <tr>
-		<td>Prev Month:</td>
-		<td><%- project.monthpnodes %> Node(s),
-		  <%- project.monthphours %> Node Hours</td>
-	      </tr>
-	      <% if (project.rank) { %>
-		<tr>
-		  <td><%- project.rankdays %> Day Ranking:</td>
-		  <td>#<%- project.rank %> of
-		    <%- project.ranktotal %> active projects</td>
-		</tr>
-	      <% } %>
-	      <tr>
-		<td># of Experiments:</td>
-		<td><%- project.expcount %></td>
-	      </tr>
-	    </tbody>
-	  </table>
-	</div>
-      </div>
-    </div>
   </script>
 </div>
 <div>
   <script id="utilization-template" type="text/template">
-    <div class='col-sm-12'>
-      <table class="tablesorter" id="utilization-table">
-	<thead>
-	  <th>Node</th>
-	  <th>Type</th>
-	  <th>Cluster</th>
-	  <th>Status</th>
-	  <th>State</th>
-	  <th>Idle</th>
-	  <th>Load (1/5/15)</th>
-	</thead>
-	<tbody>
-	  <%  _.each(utilization, function(site, name) { %>
-	    <%  _.each(site.details.nodes, function(node, nodeid) { %>
-	      <tr>
-		<td><%- nodeid %> (<%- node.client_id %>)</td>
-		<td><%- node.nodetype %></td>
-		<td><%- name %></td>
-		<td>
-		  <% if (_.has(node, 'status')) { %><%- node.status.status %>
-		  <% } else { %>n/a<% } %>
-		</td>
-		<td><%- node.eventstate %></td>
-		<td>
-		  <% if (_.has(node, 'idledata')) { %>
-		    <%- (node.idledata.idletime / 3600).toFixed(2) %>
-		  <% } else { %>n/a<% } %>
-		</td>
-		<td>
-		  <% if (_.has(node, 'rusage')) { %>
-		    <%- node.rusage.load["60"] %>/<%- node.rusage.load["300"] %>/<%- node.rusage.load["900"] %>
-		  <% } else { %>n/a<% } %>
-		</td>
-	      </tr>
-	    <% }); %>
-	  <% }); %>
-	</tbody>
-      </table>
-    </div>
   </script>
 </div>
 <div>
   <script id="summary-template" type="text/template">
-    <div class='col-sm-6 col-sm-offset-3'>
-      <div class='panel panel-default'>
-	<div class="panel-heading text-center">
-	  Node usage summary
-	</div>
-	<div class="panel-body">
-	  <table class="table table-condensed">
-	    <thead>
-	      <tr>
-		<th>Type</th>
-		<th>Cluster</th>
-		<th>Used</th>
-		<th>Free</th>
-		<th>Total</th>
-	      </tr>
-	    </thead>
-	    <tbody>
-	      <%  _.each(utilization, function(site, name) { %>
-		<%  _.each(site.typeinfo, function(info, type) { %>
-		  <tr>
-		    <td><%- type %></td>
-		    <td><%- name %></td>
-		    <td><%- info.count %></td>
-		    <td><%- info.free %></td>
-		    <td><%- info.total %></td>
-		  </tr>
-		<% }); %>
-	      <% }); %>
-	    </tbody>
-	  </table>
+  </script>
+</div>
+<!-- Confirm Terminate -->
+<div id='confirm-terminate-modal' class='modal fade'>
+  <div class='modal-dialog'>
+    <div class='modal-content'>
+      <div class='modal-body'>
+        <button type='button' class='close' data-dismiss='modal'
+                aria-hidden='true'>&times;</button>
+        <center><h3>Confirm to Terminate</h3>
+          <button class='btn btn-danger btn-sm'
+		  id='do-terminate'>Confirm</button></center>
+      </div>
+    </div>
+  </div>
+</div>
+<!-- Finished -->
+<div id='success-modal' class='modal fade'>
+  <div class='modal-dialog'>
+    <div class='modal-content'>
+      <div class='modal-body'>
+        <button type='button' class='close' data-dismiss='modal'
+                aria-hidden='true'>&times;</button>
+        <center><h3>Operation Successful</h3>
+	  <br>
+          <button class='btn btn-success btn-sm'
+		  data-dismiss='modal'>Close</button></center>
+      </div>
+    </div>
+  </div>
+</div>
+<div id='metrics-modal' class='modal fade'>
+  <div class='modal-dialog'>
+    <div class='modal-content'>
+      <div class='modal-body'>
+        <button type='button' class='close' data-dismiss='modal'
+                aria-hidden='true'>&times;</button>
+	<div class='clearfix'></div>	
+	<div class='panel panel-default'>
+	  <div class='panel-body'>
+	    <div class="scrollable-panel">
+	      <pre id="metrics-content"></pre>
+	    </div>
+	  </div>
 	</div>
       </div>
     </div>
-  </script>
+  </div>
+</div>
+<div id='lockdown-refused' class='modal fade'>
+  <div class='modal-dialog'>
+    <div class='modal-content'>
+      <div class="modal-header text-center">
+	<h4>Lockdown Refused</h4>
+      </div>
+      <div class='modal-body'>
+	<p>
+	  The lockdown request has been refused by one or more of the backend
+	  clusters because it would throw the reservation system into chaos.
+	  If you want to force this lockdown, click below.
+	</p>
+	<div>
+	  <pre></pre>
+	</div>
+	If you want to force this lockdown, click below.
+	<center>
+          <button type='button' style='margin-right: 20px;'
+		  data-dismiss='modal'
+                  class='btn btn-primary btn-sm'
+		  id='cancel-lockdown'>Cancel</button>
+          <button class='btn btn-danger btn-sm'
+		  id='force-lockdown'>Lockdown</button>
+	</center>
+      </div>
+    </div>
+  </div>
 </div>

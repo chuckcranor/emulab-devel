@@ -46,7 +46,12 @@
 		<td>Created</td>
 		<td class='format-date'><%- formfields.dataset_created %></td>
 	      </tr>
-	      <% if (formfields.dataset_type != "imdataset") { %>
+	      <% if (formfields.dataset_type == "imdataset") { %>
+		<tr>
+		  <td>Updated</td>
+		  <td class='format-date'><%- formfields.dataset_updated %></td>
+		</tr>
+	      <% } else { %>
 	      <tr>
 		<td>Expires</td>
 		<td class='format-date'><%- formfields.dataset_expires %></td>

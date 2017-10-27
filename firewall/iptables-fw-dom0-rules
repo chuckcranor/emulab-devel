@@ -171,3 +171,14 @@ iptables -P OUTPUT DROP # BASIC,CLOSED,ELABINELAB
 #iptables -A INPUT -j LOG --log-prefix "INPUT: " --log-level 5 # BASIC,CLOSED,ELABINELAB
 #iptables -A OUTPUT -j LOG --log-prefix "OUTPUT: " --log-level 5 # BASIC,CLOSED,ELABINELAB
 
+#
+# Control access to the rpcbind port.
+# XXX these were added straight to the DB by someone.
+#
+iptables -A FORWARD -s 127.0.0.1/32 -p tcp -m physdev --physdev-in eth0 -m tcp --dport 111 -j ACCEPT # BASIC,CLOSED
+iptables -A FORWARD -s EMULAB_VCNET -p tcp -m physdev --physdev-in eth0 -m tcp --dport 111 -j ACCEPT # BASIC,CLOSED
+iptables -A FORWARD -s EMULAB_VCNET -p udp -m physdev --physdev-in eth0 -m udp --dport 111 -j ACCEPT # BASIC,CLOSED
+iptables -A FORWARD -s EMULAB_CNET  -p tcp -m physdev --physdev-in eth0 -m tcp --dport 111 -j ACCEPT # BASIC,CLOSED
+iptables -A FORWARD -s EMULAB_CNET  -p udp -m physdev --physdev-in eth0 -m udp --dport 111 -j ACCEPT # BASIC,CLOSED
+iptables -A FORWARD -p tcp -m physdev --physdev-in eth0 -m tcp --dport 111 -j DROP # BASIC,CLOSED
+iptables -A FORWARD -p udp -m physdev --physdev-in eth0 -m udp --dport 111 -j DROP # BASIC,CLOSED

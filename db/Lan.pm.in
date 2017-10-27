@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2007-2016 University of Utah and the Flux Group.
+# Copyright (c) 2007-2017 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -494,7 +494,7 @@ sub CompareVlansWithSwitches($$$)
     # Grab the existing vlans from the vlans table (managed by snmpit).
     #
     my $query_result =
-	DBQueryWarn("select id,virtual,members,tag from vlans ".
+	DBQueryWarn("select id,`virtual`,members,tag from vlans ".
 		    "where exptidx='$exptidx'");
     return -1
 	if (!$query_result);
@@ -578,7 +578,7 @@ sub CompareVlansWithSwitches2($$)
     # Grab the existing vlans from the vlans table (managed by snmpit).
     #
     my $query_result =
-	DBQueryWarn("select id,virtual,members,tag from vlans ".
+	DBQueryWarn("select id,`virtual`,members,tag from vlans ".
 		    "where exptidx='$exptidx'");
     return -1
 	if (!$query_result);
@@ -992,6 +992,42 @@ sub FindMember($$$)
     my ($memberid) = $query_result->fetchrow_array();
 
     return Lan::Member->Lookup($self, $memberid);
+}
+
+#
+# Find lans by membership.
+#
+sub FindLansByMember($$$)
+{
+    my ($class, $node, $iface_id) = @_;
+    my @result = ();
+
+    if (!ref($node)) {
+	$node = Node->Lookup($node);
+	return ()
+	    if (!defined($node));
+    }
+    my $node_id = $node->node_id();
+
+    my $query_result =
+	DBQueryWarn("select lma1.lanid from lan_member_attributes as lma1, " .
+		    "   lan_member_attributes as lma2 ".
+		    "where lma1.lanid = lma2.lanid and ".
+		    "      lma1.memberid=lma2.memberid and ".
+		    "      lma1.attrkey='node_id' and " .
+		    "      lma1.attrvalue='$node_id' and " .
+		    "      lma2.attrkey='iface' and " .
+		    "      lma2.attrvalue='$iface_id'");
+	
+    return ()
+	if (!$query_result || !$query_result->numrows);
+
+    while (my ($lanid) = $query_result->fetchrow_array()) {
+	my $lan = Lan->Lookup($lanid);
+	push(@result, $lan)
+	    if (defined($lan));
+    }
+    return @result;
 }
 
 #
@@ -2217,7 +2253,7 @@ sub Dump($)
 		  "(" . $self->{'LINK'}->vname() . ") " : "");
     my $string = "ProtoLan: $vname $type,$link";
 
-    foreach my $key (keys(%{ $self->{"ATTRS"} })) {
+    foreach my $key (sort(keys(%{ $self->{"ATTRS"} }))) {
 	my $pattr = $self->{"ATTRS"}->{$key};
 	my $val   = $pattr->{'attrvalue'};
 
@@ -2225,7 +2261,7 @@ sub Dump($)
     }
     $string .= ", ";
 
-    foreach my $key (keys(%{ $self->{"MEMBERS"} })) {
+    foreach my $key (sort(keys(%{ $self->{"MEMBERS"} }))) {
 	my $member = $self->{"MEMBERS"}->{$key};
 	my $nodeid = $member->{'node'}->node_id();
 	my $iface  = $member->{'iface'};
@@ -2233,7 +2269,7 @@ sub Dump($)
 	$string .= "$nodeid:$iface, ";
     }
 
-    foreach my $key (keys(%{ $self->{"IFACES"} })) {
+    foreach my $key (sort(keys(%{ $self->{"IFACES"} }))) {
 	my $interface = $self->{"IFACES"}->{$key};
 	my $nodeid = $interface->{'node'}->node_id();
 	my $vnode  = $interface->{'vnode'};
@@ -2649,33 +2685,11 @@ sub FindMember($$$)
 }
 
 #
-# Add a member in snmpit port form (node:card).
-#
-sub AddPort_OLD($$)
-{
-    my ($self, $port) = @_;
-    my ($node_id, $card) = split(":", $port);
-
-    my $interface = Interface->Lookup($node_id, $card, 1);
-    return undef
-	if (!defined($interface));
-
-    my $member = $self->FindMember($node_id, $interface->iface());
-    return $member
-	if (defined($member));
-				   
-    return $self->GetLan()->AddMember($node_id, $interface->iface());
-}
-
-#
 # Use Port class
 #
 sub AddPort($$)
 {
     my ($self, $port) = @_;
-    if (!ref($port)) {
-	    return $self->AddPort_OLD($port);
-    }
 
     my $member = $self->FindMember($port->node_id(), $port->iface());
     return $member
@@ -2685,33 +2699,11 @@ sub AddPort($$)
 }
 
 #
-# Delete a member in snmpit port form (node:card).
-#
-sub DelPort_OLD($$)
-{
-    my ($self, $port) = @_;
-    my ($node_id, $card) = split(":", $port);
-
-    my $interface = Interface->Lookup($node_id, $card, 1);
-    return -1
-	if (!defined($interface));
-
-    my $member = $self->FindMember($node_id, $interface->iface());
-    return 0
-	if (!defined($member));
-				   
-    return $self->DelMember($member);
-}
-
-#
 # Delete a member, use Port class
 #
 sub DelPort($$)
 {
     my ($self, $port) = @_;
-    if (!ref($port)) {
-	    return $self->DelPort_OLD($port);
-    }
     my $member = $self->FindMember($port->node_id(), $port->iface());
     return 0
 	if (!defined($member));
@@ -3487,7 +3479,7 @@ sub RecordVlanInsertion($$$)
 
     DBQueryWarn("replace into vlans set ".
 		"  id='$lanid', pid='$pid', eid='$eid', exptidx='$exptidx', ".
-		"  virtual='$vname', members='$members', tag='$tag', ".
+		"  `virtual`='$vname', members='$members', tag='$tag', ".
 		"  stack='$stack', class='$vclass' $path")
 	or return -1;
 
@@ -3600,33 +3592,6 @@ sub FindTableEntryByLanid($$)
     return $query_result->fetchrow_hashref();
 }
 
-sub FindVlanByPort_OLD($$$) 
-{
-    my ($class, $experiment, $port) = @_;
-    my ($node_id, $card) = split(":", $port);
-    my $clause = "";
-
-    my $interface = Interface->Lookup($node_id, $card, 1);
-    return undef
-	if (!defined($interface));
-    my $iface = $interface->iface();
-    if (defined($experiment)) {
-	my $exptidx = $experiment->idx();
-	$clause = "exptidx='$exptidx' and";
-    }
-
-    my $query_result =
-	DBQueryWarn("select id from vlans  ".
-		    "where $clause members like '%${node_id}:${iface}%'");
-
-    return undef
-	if (!$query_result || !$query_result->numrows);
-
-    my ($lanid) = $query_result->fetchrow_array();
-
-    return VLan->Lookup($lanid);
-}
-
 #
 # Refactored with Port class
 #
@@ -3635,10 +3600,6 @@ sub FindVlanByPort($$$)
     my ($class, $experiment, $port) = @_;
     my $clause = "";
     
-    if (!ref($port)) {
-	    return $class->FindVlanByPort_OLD($experiment, $port);
-    }
- 
     my $ifacestr = $port->toIfaceString();
     if (defined($experiment)) {
 	my $exptidx = $experiment->idx();

@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2000-2015 University of Utah and the Flux Group.
+# Copyright (c) 2000-2017 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -75,6 +75,7 @@ sub GENVNODE()     { return libsetup::GENVNODE(); }
 sub GENVNODETYPE() { return libsetup::GENVNODETYPE(); }
 sub INXENVM()   { return libsetup::INXENVM(); }
 sub INVZVM()    { return libsetup::INVZVM(); }
+sub INDOCKERVM()    { return libsetup::INDOCKERVM(); }
 
 #
 # Various programs and things specific to Linux and that we want to export.
@@ -293,10 +294,6 @@ sub os_account_cleanup($)
 	my ($real,$master) = @$pairRef;
 
 	foreach my $ent (keys(%{$lineHash{$real}})) {
-	    # skip root and toor!
-	    next
-		if ($ent eq 'root' || $ent eq 'toor');
-
 	    # push new entities into master
 	    if (!defined($lineHash{$master}->{$ent})) {
 		# append new "line"
@@ -1305,11 +1302,62 @@ sub os_samefs($$)
     return ($d1dev && $d2dev && $d1dev == $d2dev) ? 1 : 0;
 }
 
+#
+# Some environments do not give us a valid / mount (like Docker); thus,
+# df -l does not work.  Thus we must rely on /proc/mounts to tell us if
+# a dir is local or not.  Well, ok, /proc/mounts is hard (and potential
+# bind mount chains would make it harder).  So instead, we assume that /
+# is local, (well, we check to ensure it is not NFS in /proc/mounts),
+# and use os_samefs above to ensure that $dir is on the same device as
+# /.  If that is true, that is good enough to call it a local dir.
+#
+# We are *very* careful in this function.  If df -l / actually returns
+# something, we bail out, since if df -l returns a local fs in that
+# case, this function should not be used!
+#
+sub os_islocaldir_alt($)
+{
+    my ($dir,) = @_;
+
+    my %mounttypes = ();
+    my %mountdevs = ();
+    open(FD,"/proc/mounts");
+    if ($?) {
+	warn "*** alt_os_is_localdir: could not open /proc/mounts; aborting!\n";
+	return -1;
+    }
+    my @lines = <FD>;
+    close(FD);
+    foreach my $line (@lines) {
+	chomp($line);
+	if ($line =~ /^([^\s]+)\s+([^\s]+)\s+([^\s]+)\s+.*$/) {
+	    $mounttypes{$2} = $3;
+	    $mountdevs{$2} = $1;
+	}
+    }
+
+    if (exists($mounttypes{"/"}) && $mounttypes{"/"} =~ /nfs/i) {
+	warn "*** os_islocaldir_alt: / appears to be NFS; not safe to use this!";
+	return -1;
+    }
+
+    return os_samefs("/",$dir);
+}
+
 # Return non-zero if given directory is on a "local" filesystem
 sub os_islocaldir($)
 {
     my ($dir) = @_;
     my $rv = 0;
+
+    if (INDOCKERVM()) {
+	$rv = os_islocaldir_alt($dir);
+	return $rv
+	    if ($rv >= 0);
+	# Otherwise ($rv == -1), we fall back to the old way, which will
+	# not fail us (might be wrong, but it will be a false positive,
+	# so we won't remove a remote dir or anything).
+    }
 
     my @dfoutput = `$DF -l $dir 2>/dev/null`;
     if (grep(!/^filesystem/i, @dfoutput) > 0) {
@@ -1424,28 +1472,70 @@ sub os_fwconfig_line($@) {
 		$upline .= "brctl addbr br0\n";
 		$upline .= "brctl stp br0 on\n";
 		$upline .= "ifconfig br0 up\n";
-		$upline .= "brctl addif br0 $pdev\n";
-		$upline .= "brctl addif br0 $vlandev\n";
-
-		$upline .= "ifconfig br0 $myip netmask $mymask\n";
-		$upline .= "ip route flush dev br0\n";
+		#
+		# This is very, very messy.  We have to save the
+		# existing routes for $pdev, but in an order that they
+		# can be restored without failing, before we move
+		# $pdev into br0.  Then the restored routes must be
+		# rewritten in terms of br0 instead of $pdev.
+		#
+		# Finally, we have to collect these routes prior to 1)
+		# assigning $pdev's IP to br0, and 2) moving $pdev
+		# into br0, and 3) prior to *deleting* any routes.
+		# All these conditions seem necessary to me.
+		#
+		# ip route show does not necessarily display routes in
+		# restoreable order.  In particular, the thing that
+		# bites is that the default route is (now, as of
+		# Ubuntu16, at least) displayed *prior to* the scope
+		# link (broadcast route) for a device).  So, we first
+		# harvest the scope link routes for $pdev (i.e., the
+		# natural ones that come into being as a side affect
+		# of assiging an IP address to a link); then we
+		# harvest all other routes associated with $pdev; then
+		# we remove all routes associated with $pdev.  Then we
+		# do the mucking about with bridge membership and
+		# transfer IP from $pdev to bridge, and finally,
+		# restore the routes we saved (modified to br0, of
+		# course).
+		#
+		$upline .= "ROUTECMDS=\$(ip route show scope link | while read line; do\n";
+		$upline .= "    echo \$line | grep 'dev $pdev' > /dev/null || continue\n";
+		$upline .= "    echo 'ip route add '`echo \$line | sed s/$pdev/br0/`\n";
+		$upline .= "done)\n";
+		$upline .= "ROUTECMDS=\"\$ROUTECMDS\\n\"\$(ip route show | while read line; do\n";
+		$upline .= "    echo \$line | grep 'dev $pdev' > /dev/null || continue\n";
+		$upline .= "    echo \$line | grep 'scope link' > /dev/null && continue\n";
+		$upline .= "    echo 'ip route add '`echo \$line | sed s/$pdev/br0/`\n";
+		$upline .= "done)\n";
 		$upline .= "ip route show | while read line; do\n";
 		$upline .= "    echo \$line | grep 'dev $pdev' > /dev/null || continue\n";
-		$upline .= "    new_route=`echo \$line | sed s/$pdev/br0/`\n";
 		$upline .= "    ip route del \$line\n";
-		$upline .= "    ip route add \$new_route\n";
 		$upline .= "done\n";
+		$upline .= "brctl addif br0 $pdev\n";
+		$upline .= "brctl addif br0 $vlandev\n";
+		$upline .= "ifconfig br0 $myip netmask $mymask\n";
+		$upline .= "ip route flush dev br0\n";
 		$upline .= "ifconfig $pdev 0.0.0.0\n";
+		$upline .= "/bin/echo -e \"\$ROUTECMDS\" | sh\n";
 
+		$downline .= "ROUTECMDS=\$(ip route show scope link | while read line; do\n";
+		$downline .= "    echo \$line | grep 'dev br0' > /dev/null || continue\n";
+		$downline .= "    echo 'ip route add '`echo \$line | sed s/br0/$pdev/`\n";
+		$downline .= "done)\n";
+		$downline .= "ROUTECMDS=\"\$ROUTECMDS\\n\"\$(ip route show | while read line; do\n";
+		$downline .= "    echo \$line | grep 'dev br0' > /dev/null || continue\n";
+		$downline .= "    echo \$line | grep 'scope link' > /dev/null && continue\n";
+		$downline .= "    echo 'ip route add '`echo \$line | sed s/br0/$pdev/`\n";
+		$downline .= "done)\n";
+		$downline .= "ip route show | while read line; do\n";
+		$downline .= "    echo \$line | grep 'dev br0' > /dev/null || continue\n";
+		$downline .= "    ip route del \$line\n";
+		$downline .= "done\n";
 		$downline .= "    ifconfig $pdev $myip netmask $mymask\n";
 		$downline .= "    ip route flush dev $pdev\n";
-		$downline .= "    ip route show | while read line; do\n";
-		$downline .= "        echo \$line | grep 'dev br0' > /dev/null || continue\n";
-		$downline .= "        new_route=`echo \$line | sed s/br0/$pdev/`\n";
-		$downline .= "        ip route del \$line\n";
-		$downline .= "        ip route add \$new_route\n";
-		$downline .= "    done\n";
 		$downline .= "    ip route flush dev br0\n";
+		$downline .= "/bin/echo -e \"\$ROUTECMDS\" | sh\n";
 		$downline .= "    ifconfig br0 down\n";
 		$downline .= "    ifconfig $vlandev down\n";
 		$downline .= "    brctl delif br0 $vlandev\n";
@@ -1508,6 +1598,9 @@ sub os_fwconfig_line($@) {
 		}
 	}
 
+	# Sort the rules by provided rule number (tmcd doesn't order them).
+	@fwrules = sort { $a->{RULENO} <=> $b->{RULENO}} @fwrules;
+
 	# XXX This is ugly.  Older version of iptables can't handle source or
 	# destination hosts or nets in the format a,b,c,d.  Newer versions of
 	# iptables automatically expand this to separate rules for each host/net,
@@ -1567,8 +1660,10 @@ sub os_fwconfig_line($@) {
 	}
 	@fwrules = @new_rules;
 
-	# For now, if a rule fails to load we want to fail open, not closed.  Otherwise
-	# it may be difficult to debug things.
+	#
+	# For now, if a rule fails to load we fail partially open.
+	# We allow all access to the FW itself but nothing inside.
+	#
 	foreach my $rulestr (@fwrules) {
 		if ($rulestr =~ /^iptables\s+/) {
 			$upline .= "    $rulestr || {\n";
@@ -1576,6 +1671,7 @@ sub os_fwconfig_line($@) {
 			$upline .= "        echo '  $rulestr'\n";
 			$upline .= "        iptables -F\n"
 			    if ($fwinfo->{TYPE} ne "iptables-dom0");
+			$upline .= "        iptables -P FORWARD DROP\n";
 			$upline .= "        iptables -P INPUT ACCEPT\n";
 			$upline .= "        iptables -P OUTPUT ACCEPT\n";
 			$upline .= "        exit 1\n";
@@ -1586,6 +1682,7 @@ sub os_fwconfig_line($@) {
 			$upline .= "        echo '  $rulestr'\n";
 			$upline .= "        ebtables -F\n"
 			    if ($fwinfo->{TYPE} ne "iptables-dom0");
+			$upline .= "        ebtables -P FORWARD DROP\n";
 			$upline .= "        ebtables -P INPUT ACCEPT\n";
 			$upline .= "        ebtables -P OUTPUT ACCEPT\n";
 			$upline .= "        exit 1\n";
@@ -2417,7 +2514,30 @@ sub os_mountextrafs($)
     my $part = "";
 
     #
-    # If the extrafs file was written, use the info from there.
+    # Parse /etc/fstab
+    #
+    my %fses = ();
+    if (open(FD, "</etc/fstab")) {
+	while (<FD>) {
+	    if (/^#/) {
+		next;
+	    }
+	    if (/^(\S+)\s+(\S+)/) {
+		$fses{$2} = $1;
+	    }
+	}
+	close(FD);
+    }
+
+    #
+    # If the desired directory name is already a mount point, just use it.
+    #
+    if (exists($fses{$dir})) {
+	return $dir;
+    }
+
+    #
+    # Otherwise, if the extrafs file was written, use the info from there.
     #
     my $extrafs = libsetup::TMEXTRAFS();
     if (-f "$extrafs" && open(FD, "<$extrafs")) {
@@ -2440,20 +2560,23 @@ sub os_mountextrafs($)
     }
 
     #
-    # XXX this is a most bogus hack right now, we look for partition 4
-    # in /etc/fstab.
+    # Finally, we look for partition 4 of the root disk and use that!
+    # XXX this is a most bogus hack.
     #
-    my $fstabline = `grep -E '(hda|sda|xvda)4' /etc/fstab`;
-    if ($fstabline =~ /^\/dev\/\S*4\s+(\S+)\s+/) {
-	$mntpt = $1;
-	return $mntpt;
+    foreach $mntpt (keys %fses) {
+	if ($fses{$mntpt} =~ /^\/dev\/(hd|sd|xvd)a4$/) {
+	    return $mntpt;
+	}
     }
+
+    print STDERR "os_mountextrafs: no suitable device found!\n";
+    return "";
 
 makeit:
     my $args = "-f";
 
     if ($part) {
-	if ($part =~ /^((?:hd|sd)[a-z])(\d+)$/) {
+	if ($part =~ /^((?:hd|sd|xvd)[a-z])(\d+)$/) {
 	    $args .= " -r $1 -s $2";
 	}
     } elsif ($disk) {

@@ -56,7 +56,7 @@ my $PGENISUPPORT   = @PROTOGENI_SUPPORT@;
 my $PORTAL_ENABLE  = @PORTAL_ENABLE@;
 my $PORTAL_PRIMARY = @PORTAL_ISPRIMARY@;
 my $MODGROUPS	   = "$TB/sbin/modgroups";
-my $DELACCT	   = "$TB/sbin/tbacct del";
+my $TBACCT	   = "$TB/sbin/tbacct";
 my $POSTCRL	   = "$TB/sbin/protogeni/postcrl";
 
 # Locals
@@ -136,6 +136,7 @@ if (! defined($target_user)) {
 }
 my $target_dbid  = $target_user->dbid();
 my $target_uid   = $target_user->uid();
+my $reactivate   = $target_user->status() eq $User::USERSTATUS_INACTIVE;
 
 # Map invoking user to object.
 my $this_user = User->ThisUser();
@@ -359,8 +360,15 @@ $target_user->Purge() == 0
 if (! $nuke) {
     $EUID = $UID;
 
-    system("$DELACCT $target_uid") == 0 or
-	fatal("$DELACCT $target_uid failed!");
+    #
+    # Before we can do anything, we have to reactivate.
+    #
+    if ($reactivate &&
+	system("$TBACCT -f reactivate $target_uid")) {
+	fatal("$TBACCT -f reactivate $target_uid failed!");
+    }
+    system("$TBACCT del $target_uid") == 0 or
+	fatal("$TBACCT del $target_uid failed!");
 
     $EUID = 0;
 }

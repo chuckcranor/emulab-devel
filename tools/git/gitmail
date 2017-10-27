@@ -270,6 +270,13 @@ my $max_patches = get_config("maxpatches",20);
 #
 my $gitweb_url = get_config("gitweburl",undef);
 
+# 
+# URL for a gitlab server for this repository. If set, links will
+# be sent for each commit pointing to the entry on gitlab
+# For example: https://gitlab.flux.utah.edu/emulab/emulab-devel
+#
+my $gitlab_url = get_config("gitlaburl",undef);
+
 #
 # If true, include clone URLs in the mail. These will be guessed from
 # the local hostname and the path
@@ -519,7 +526,7 @@ foreach my $refline (@reflines) {
     # Figure out which commits we're interested in based on reference type
     # and change type.
     #
-    if ($ref_type eq 'tag') {
+    if ($ref_type eq 'tag' || $ref_type eq 'note') {
 	if ($ct eq $CT_DELETE) {
 	    # We want to know where the tag used to point before deletion
 	    push @commits, $oldrev;
@@ -588,7 +595,7 @@ sub change_type($$$) {
         return $CT_CREATE;
     } elsif ($newrev eq $EMPTYREV) {
         return $CT_DELETE;
-    } elsif ($ref_type eq 'tag') {
+    } elsif ($ref_type eq 'tag' || $ref_type eq 'note') {
 	    return $CT_UPDATE;
     } else {
 	my $merge_base = get_merge_base($oldrev,$newrev);
@@ -624,6 +631,8 @@ sub ref_type($) {
 	    $type = 'branch';
     } elsif ($ref =~ m#^refs/tags/#) {
 	    $type = 'tag';
+    } elsif ($ref =~ m#^refs/notes/#) {
+	    $type = 'note';
     }
     return $type;
 }
@@ -948,6 +957,13 @@ sub commit_mail($$$\@$@) {
         }
 
         #
+        # Similar thing, but for gitlab
+        #
+	if (defined($gitlab_url)) {
+            my $shortrev = short_hash($rev);
+	    push @commit_text, "\n${gitlab_url}/commit/$shortrev\n";
+        }
+        #
         # Grab patches - we do this seperately so that we can put them down
         # below the commit logs. (Note: we don't print patches when a ref is
         # deleted, that doesn't make any sense.)
@@ -1143,7 +1159,11 @@ sub send_mail($$$@) {
                # -odb deliver mail in background
                # -t causes sendmail to look in the message for 'To:' 'Cc:' and
                #    'Bcc:' lines
-               open(MAIL, "| $SENDMAIL -odb -oem -f'$mailfrom' -t");
+               my $mailfrom_str = "";
+               if ($mailfrom) {
+                   $mailfrom_str = "-f$mailfrom";
+               }
+               open(MAIL, "| $SENDMAIL -odb -oem $mailfrom_str -t");
         }
 
         # If requested, set the From header

@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2004-2014 University of Utah and the Flux Group.
+# Copyright (c) 2004-2017 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -65,6 +65,8 @@ my $RCDIR	= "$BINDIR/rc";
 my $LOGFILE	= "$LOGDIR/bootsetup.debug";
 my $BOOTLOG     = "/var/log/emulab.bootlog";
 my %TMCCTIMEOUT	= (REMOTE() ? ("timeout" => 5) : ());
+my $PUBSUBCONF  = "/usr/local/etc/pubsubd.conf";
+my $PUBSUBEXPR  = "/usr/local/etc/pubsubd.expr";
 
 # Protos.
 sub doboot();
@@ -168,7 +170,7 @@ if ($action eq "boot" || $action eq "reconfig") {
 # run (or not) its hooks.
 #
 my %manifest;
-getmanifest(\%manifest);
+getrcmanifest(\%manifest);
 
 # Execute the action.
 SWITCH: for ($action) {
@@ -334,7 +336,7 @@ sub doboot()
     #
     # This stuff is run regardless of reservation status.
     #
-    if (-x "$RCDIR/rc.ipod" && ! WINDOWS()) {
+    if (-x "$RCDIR/rc.ipod" && ! WINDOWS() && ! INDOCKERVM()) {
 	print("Setting up Ping of Death\n");
 	# This is allowed to fail by default; ipod might not be supported.
 	if (!exists($manifest{'rc.ipod'})
@@ -396,45 +398,68 @@ sub doboot()
     }
 
     #
-    # Start the event proxy.
+    # Setup pubsub for clustering and restart. In general, all agents
+    # on a node talk to the local pubsubd so that the number of subscriptions
+    # on ops is limited to the number of physical nodes.
     #
-    # For SHAREDHOSTs we now use clusterd (no pubsubd or evproxy).
-    #
-    if (SHAREDHOST() || STORAGEHOST()) {
+    my $clusteringoptions;
+    
+    if (SHAREDHOST() || STORAGEHOST() || SUBBOSS()) {
+	#
+	# We run pubsubd in clustering mode, asking for all notifications
+	# since we do not know what experiments are resident on this node.
+	#
 	my $eventserver = "event-server";
 	if (REMOTE()) {
 	    $eventserver = TB_EVENTSERVER();
 	}
-	#
-	# Kill off pubsubd and start clusterd. 
-	#
-	system("killall pubsubd");
-	if (-x "/usr/local/libexec/clusterd") {
-	    print("Starting pubsub cluster daemon\n");
-	    system("/usr/local/libexec/clusterd -s $eventserver");
-	    if ($?) {
-		fatal("Error running clusterd");
-	    }
-	} else {
-	    print STDERR "WARNING: clusterd not installed, not started\n";
-	}
+	$clusteringoptions = "-c $eventserver -F $PUBSUBEXPR";
+
+	open(CONF, "> $PUBSUBEXPR") or
+	    fatal("Error opening $PUBSUBEXPR for writing");
+	print CONF "(SCHEDULER == 0)\n";
+	close(CONF);
     }
     elsif (!(REMOTE() && !REMOTEDED()) && !GENVNODE()) {  
-	my $evproxy = "$BINDIR/evproxy";
-
-	if (-x $evproxy) {
-	    my $eventserver = "event-server";
-	    if (REMOTE()) {
-		$eventserver = TB_EVENTSERVER();
-	    }
-	    print("Starting event proxy daemon\n");
-	    system("$evproxy -s $eventserver -e $pid/$eid");
-	    if ($?) {
-		fatal("Error running $evproxy");
-	    }
+	#
+	# We run pubsubd in clustering mode, asking for just notifications
+	# for the current experiment. Note that we explicitly exclude those
+	# intended for the event scheduler running on ops. In theory, they
+	# should not cause problems, but they are confusing at best.
+	#
+	my $eventserver = "event-server";
+	if (REMOTE()) {
+	    $eventserver = TB_EVENTSERVER();
 	}
-	else {
-	    print("$evproxy does not exist!\n");
+	$clusteringoptions = "-c $eventserver -F $PUBSUBEXPR";
+
+	open(CONF, "> $PUBSUBEXPR") or
+	    fatal("Error opening $PUBSUBEXPR for writing");
+	print CONF "(EXPT == \"$pid/$eid\") && SCHEDULER == 0\n";
+	close(CONF);
+    }
+    if (defined($clusteringoptions)) {
+	#
+	# We do this so that an invocation of the system startup file will
+	# see the right clustering options.
+	#
+	open(CONF, "> $PUBSUBCONF") or
+	    fatal("Error opening $PUBSUBCONF for writing");
+	print CONF "pubsubd_clustering_flags=\"$clusteringoptions\"\n";
+	close(CONF);
+
+	#
+	# Kill off pubsubd and restart in cluster mode.
+	#
+	if (-x "/usr/local/libexec/pubsubd") {
+	    system("killall pubsubd");
+	    print("Starting pubsubd in cluster mode\n");
+	    system("/usr/local/libexec/pubsubd $clusteringoptions");
+	    if ($?) {
+		fatal("Error running pubsubd");
+	    }
+	} else {
+	    print STDERR "WARNING: pubsubd not installed, not started\n";
 	}
     }
 

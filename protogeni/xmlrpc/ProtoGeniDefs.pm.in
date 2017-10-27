@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2008-2010, 2016 University of Utah and the Flux Group.
+# Copyright (c) 2008-2010, 2016, 2017 University of Utah and the Flux Group.
 # 
 # {{{GENIPUBLIC-LICENSE
 # 
@@ -90,6 +90,34 @@ AddModule("root",
 	      }},
 	  });
 
+package ProtoGeniDefs::ProtogeniCH;
+
+use lib '@prefix@/lib';
+use GeniCH;
+
+ProtoGeniDefs::AddModule("ch",
+	  {
+	      "PEMFILE"    => "@prefix@/etc/genich.pem",
+	      "DBNAME"     => "geni-ch",
+	      "DEFVERSION" => "1",
+	      "INITMODULE" => \&GeniCH::InitModule,
+	      "METHODS"    => {"1" => {
+		  "GetVersion"            => \&GeniCH::GetVersion,
+		  "GetCredential"         => \&GeniCH::GetCredential,
+		  "Resolve"               => \&GeniCH::Resolve,
+		  "Register"              => \&GeniCH::Register,
+		  "Remove"                => \&GeniCH::Remove,
+		  "ListComponents"        => \&GeniCH::ListComponents,
+		  "PostCRL"               => \&GeniCH::PostCRL,
+		  "Shutdown"              => \&GeniCH::Shutdown,
+		  "List"                  => \&GeniCH::List,
+		  "WhoAmI"		  => \&GeniCH::WhoAmI,
+		  "PostHistoryRecord"	  => \&GeniCH::PostHistoryRecord,
+		  "ReadHistoryRecords"    => \&GeniCH::ReadHistoryRecords,
+		  "ListActiveSlivers"     => \&GeniCH::ListActiveSlivers,
+	      }},
+	  });
+
 package ProtoGeniDefs::ProtogeniSA;
 
 use lib '@prefix@/lib';
@@ -160,6 +188,8 @@ $V2_METHODS = {
     "DeleteDataset"     => \&GeniCMV2::DeleteDataset,
     "DescribeDataset"   => \&GeniCMV2::DescribeDataset,
     "ModifyDataset"     => \&GeniCMV2::ModifyDataset,
+    "GetDatasetCredential" => \&GeniCMV2::GetDatasetCredential,
+    "SecureImageDownload"  => \&GeniCMV2::SecureImageDownload,
     "Lockdown"          => \&GeniCMV2::Lockdown,
     "TriggerImageUpdate"=> \&GeniCMV2::TriggerImageUpdate,
     "AddNodes"          => \&GeniCMV2::AddNodes,
@@ -238,11 +268,20 @@ ProtoGeniDefs::AddModule("cluster",
 	      "DEFVERSION" => "1.0",
 	      "METHODS"    => {"1.0" => {
 		  "GetVersion"           => \&GeniCluster::GetVersion,
+		  "CreateUser"           => \&GeniCluster::CreateUser,
 		  "InUse"                => \&GeniCluster::InUse,
 		  "PreReservations"      => \&GeniCluster::PreReservations,
 		  "SliceUtilizationData" => \&GeniCluster::SliceUtilizationData,
 		  "SliceIdleData"        => \&GeniCluster::SliceIdleData,
 		  "SliceOpenstackData"   => \&GeniCluster::SliceOpenstackData,
+		  "SliceCheckReservation"=> \&GeniCluster::SliceCheckReservation,
+		  "SliceMaxExtension"    => \&GeniCluster::SliceMaxExtension,
+		  "Reserve"              => \&GeniCluster::Reserve,
+		  "Reservations"         => \&GeniCluster::Reservations,
+		  "ApproveReservation"   => \&GeniCluster::ApproveReservation,
+		  "DeleteReservation"    => \&GeniCluster::DeleteReservation,
+		  "ReservationSystemInfo"=> \&GeniCluster::ReservationSystemInfo,
+		  "ReservationPrediction"=> \&GeniCluster::ReservationPrediction,
 	      }},
 	  });
 

@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2009-2012 University of Utah and the Flux Group.
+# Copyright (c) 2009-2017 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -126,26 +126,33 @@ close(XM);
 #
 # Localize the path to the kernel (ramdisk). Copy out if there is a target dir.
 #
-if (defined($targetdir)) {
-    if (!$infomode) {
-	system("/bin/cp -pf $path/" . $xminfo{"kernel"} .
-	       "            $targetdir/" . $xminfo{"kernel"});
+if (exists($xminfo{"kernel"})) {
+    if (defined($targetdir)) {
+	if (!$infomode) {
+	    system("/bin/cp -pf $path/" . $xminfo{"kernel"} .
+		   "            $targetdir/" . $xminfo{"kernel"});
 
+	    if (exists($xminfo{"ramdisk"})) {
+		system("/bin/cp -pf $path/" . $xminfo{"ramdisk"} .
+		       "            $targetdir/" . $xminfo{"ramdisk"});
+	    }
+	}
+	$xminfo{"kernel"} = $targetdir . "/" . $xminfo{"kernel"};
 	if (exists($xminfo{"ramdisk"})) {
-	    system("/bin/cp -pf $path/" . $xminfo{"ramdisk"} .
-		   "            $targetdir/" . $xminfo{"ramdisk"});
+	    $xminfo{"ramdisk"} = $targetdir . "/" . $xminfo{"ramdisk"};
 	}
     }
-    $xminfo{"kernel"} = $targetdir . "/" . $xminfo{"kernel"};
-    if (exists($xminfo{"ramdisk"})) {
-	$xminfo{"ramdisk"} = $targetdir . "/" . $xminfo{"ramdisk"};
+    else {
+	$xminfo{"kernel"} = $path . "/" . $xminfo{"kernel"};
+	if (exists($xminfo{"ramdisk"})) {
+	    $xminfo{"ramdisk"} = $path . "/" . $xminfo{"ramdisk"};
+	}
     }
 }
-else {
-    $xminfo{"kernel"} = $path . "/" . $xminfo{"kernel"};
-    if (exists($xminfo{"ramdisk"})) {
-	$xminfo{"ramdisk"} = $path . "/" . $xminfo{"ramdisk"};
-    }
+
+# For safety, only local
+if (exists($xminfo{"vnc"})) {
+    $xminfo{"vnclisten"} = "127.0.0.1";
 }
 
 #
@@ -154,20 +161,36 @@ else {
 my $ifacelist = eval $xminfo{'vif'};
 my @newifaces = ();
 foreach my $vif (@$ifacelist) {
-    my ($mac, $ip, $bridge) = split(',', $vif);
-    $bridge = $ip
-	if (!defined($bridge));
-    my (undef, $iface) = split('=', $bridge);
+    my ($mac, $bridge);
+    my $type = "vif";
 
-    $iface =~ s/eth/xenbr/;
-    push(@newifaces, "$mac, bridge=$iface");
+    foreach my $token (split(/\s*,\s*/, $vif)) {
+	my ($key, $val) = split('=', $token);
+
+	print "$key,$val\n";
+
+	if ($key eq "mac") {
+	    $mac = $val;
+	}
+	elsif ($key eq "bridge") {
+	    $bridge = $val;
+	    $bridge =~ s/eth/xenbr/;	    
+	}
+	elsif ($key eq "type") {
+	    $type = $val;
+	}
+    }
+    Fatal("Bad vif: $vif")
+	if (! (defined($mac) && defined($bridge) && defined($type)));
+    
+    push(@newifaces, "mac=$mac, type=$type, bridge=$bridge");
 }
 # XXX Ick!
 if ($vnodeid eq "boss" && !defined($options{"x"})) {
     for (my $i = 1; $i <= 4; $i++) {
 	my $iface = "xenbr$i";
 	my $mac   = "00:00:99:98:97:0$i";
-	push(@newifaces, "mac=$mac, bridge=$iface");
+	push(@newifaces, "mac=$mac, type=vif, bridge=$iface");
     }
 }
 $xminfo{'vif'} = "[" . join(",", map {"'$_'" } @newifaces) . "]";
@@ -206,7 +229,8 @@ foreach my $physinfo (keys(%diskinfo)) {
     my $spec = $diskinfo{$physinfo};
     my $dev;
     my $filename;
-    if ($spec =~ /,(sd\w+),/ || $spec =~ /,(xvd\w+),/) {
+    if ($spec =~ /,(sd\w+),/ || $spec =~ /,(hd\w+),/ ||
+	$spec =~ /,(xvd\w+),/) {
 	$dev = $1;
     }
     else {

@@ -1,6 +1,6 @@
 #!/bin/sh
 #
-# Copyright (c) 2000-2016 University of Utah and the Flux Group.
+# Copyright (c) 2000-2017 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -138,13 +138,22 @@ tweakmbr() {
     dd if=/etc/emulab/mbr${_NEW}.dd of=/dev/$_DSK bs=512 count=1
 }
 
+#
+# XXX Use sysctl info if available.
+# Do to the async nature of activity in booting, dmesg.boot info may be
+# interleaved. E.g., we often see:
+#    da1: 300.000MB/s transfersda0: 476940MB (976773168 512 byte sectors)
+# which means we won't see da0 as a disk using the sed RE.
+#
 find_disks() {
-    _DISKS=""
-    for d in `sed -n 's/^\([a-z]*[0-9][0-9]*\): [0-9][0-9]*MB/\1/p' /var/run/dmesg.boot`; do
-	case $d in
-	    ad*|da*|ar*|aacd*|amrd*|mfid*|mfisyspd*|nvd*) _DISKS="$_DISKS $d"
-	esac
-    done
+    _DISKS=`sysctl -n kern.disks 2>/dev/null`
+    if [ -z "$_DISKS" ]; then
+	for d in `sed -n 's/^\([a-z]*[0-9][0-9]*\): [0-9][0-9]*MB.*/\1/p' /var/run/dmesg.boot`; do
+	    case $d in
+		ad*|da*|ar*|aacd*|amrd*|mfid*|mfisyspd*|nvd*) _DISKS="$_DISKS $d"
+	    esac
+	done
+    fi
 
     echo $_DISKS
 }
@@ -213,6 +222,7 @@ loadone() {
     IMAGEID=`getvar IMAGEID "$_LOADINFO"`
     KEEPALIVE=`getvar KEEPALIVE "$_LOADINFO"`
     OSVERSION=`getvar OSVERSION "$_LOADINFO" 0`
+    HEARTBEAT=`getvar HEARTBEAT "$_LOADINFO" 0`
 
     #
     # XXX If KEEPALIVE is not explicitly set, attempt to intuit a value.
@@ -384,6 +394,23 @@ loadone() {
     fi
 
     #
+    # Current semantics:
+    # HEARTBEAT==0: no heartbeat
+    # ow: enable heartbeat, but let server dictate (-H 0)
+    #
+    HB=""
+    case "$HEARTBEAT" in
+	''|*[!0-9]*)
+	    echo "Ignoring bogus HEARTBEAT value \"$HEARTBEAT\""
+	    ;;
+	*)
+	    if [ $HEARTBEAT -gt 0 ]; then
+		HB="-H 0"
+	    fi
+	    ;;
+    esac
+
+    #
     # Make sure the write-cache is enabled on SCSI disks.  It makes a
     # huge difference.  We don't worry about data corruption in the
     # case of a crash, because we will just reload the disk again anyway
@@ -461,8 +488,9 @@ loadone() {
 	echo "`date`: Running /usr/local/bin/imageunzip -o -O -W 32 $ZFILL $imagefile /dev/${DISK}s${PART}"
 	/usr/local/bin/imageunzip -o -O -W 32 $ZFILL $imagefile /dev/${DISK}s${PART}
     else
-	echo "`date`: Running $BINDIR/frisbee -S $SERVER $MEMARGS $KA $ZFILL $SLICE $IMAGEID /dev/$DISK"
-	$BINDIR/frisbee -S $SERVER $MEMARGS $KA $ZFILL $SLICE $IMAGEID /dev/$DISK
+	_ARGS="-S $SERVER $MEMARGS $KA $HB $ZFILL $SLICE"
+	echo "`date`: Running $BINDIR/frisbee $_ARGS $IMAGEID /dev/$DISK"
+	$BINDIR/frisbee $_ARGS $IMAGEID /dev/$DISK
     fi
     fstat=$?
 
@@ -692,8 +720,32 @@ for dev in $devs; do
 done
 echo "`date`: slicefix run(s) done"
 
+#
+# Note that if growdisk succeeds, then the newly defined partition might
+# contain metadata from a previous use. We would not have picked up on this
+# earlier because the partition was not defined yet. So in our usual paranoid
+# fashion, zap that partition if and only if we are in the reloading experiment.
+#
 echo "`date`: Resizing final disk partition"
-$BINDIR/growdisk -vW /dev/$DISK
+out=`$BINDIR/growdisk -vW /dev/$DISK`
+stat=$?
+echo $out
+if [ $INRELOADING -eq 1 -a $stat -eq 0 ]; then
+    xpart=`echo $out | sed -n -e 's/.*defining partition \([0-9]\) .*/\1/p'`
+    if [ -n "$xpart" ]; then
+	echo "Zapping newly created extra partition $xpart"
+	if [ -x "$BINDIR/zapdisk" ]; then
+	    echo "Invalidating superblocks and MBR/GPT on $DISK partition $xpart"
+	    $BINDIR/zapdisk -v -p $xpart -SZ /dev/$DISK
+	else
+	    off=`echo $out | sed -n -e 's/.*start=\([0-9][0-9]*\),.*/\1/p'`
+            dd if=/dev/zero of=/dev/$DISK oseek=$off count=16 >/dev/null 2>&1
+	fi
+	if [ $? -ne 0 ]; then
+	    echo "WARNING: failed to invalidate extra partition $xpart at $off"
+	fi
+    fi
+fi
 
 #
 # If requested to reboot, do so.
@@ -711,8 +763,9 @@ $BINDIR/growdisk -vW /dev/$DISK
 # some reason.
 #
 if [ $reboot -eq 1 ]; then
-    $BINDIR/tmcc state RELOADDONEV2
     echo "`date`: Waiting for server to reboot us ..."
+    sleep 1
+    $BINDIR/tmcc state RELOADDONEV2
     if [ $isrem -eq 1 ]; then
 	sleep 30
     else

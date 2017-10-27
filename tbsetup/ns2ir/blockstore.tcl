@@ -207,7 +207,39 @@ Blockstore instproc set-readonly {roflag} {
 	set roflag 1
     }
 
+    if {$roflag &&
+	[info exists attributes(rwclone)] && $attributes(rwclone) != 0} {
+	perror "\[set-readonly] cannot set both readonly and rwclone"
+	return
+    }
     set attributes(readonly) $roflag
+    return
+}
+
+Blockstore instproc set-rwclone {flag} {
+    $self instvar attributes
+
+    if {$flag != 0} {
+	set flag 1
+    }
+
+    if {$flag &&
+	[info exists attributes(readonly)] && $attributes(readonly) != 0} {
+	perror "\[set-rwclone] cannot set both rwclone and readonly"
+	return
+    }
+    set attributes(rwclone) $flag
+    return
+}
+
+Blockstore instproc set-prereserve {flag} {
+    $self instvar attributes
+
+    if {$flag != 0} {
+	set flag 1
+    }
+
+    set attributes(prereserve) $flag
     return
 }
 
@@ -299,6 +331,30 @@ Blockstore instproc finalize {} {
     }
     set attributes(readonly) $ro
 
+    # Check RW clone status
+    set rwclone 0
+    if {[info exists attributes(rwclone)]} {
+	set rwclone $attributes(rwclone)
+	# RW clone of anon blockstore is equally dumb
+	if {$leasename == {} && $rwclone} {
+	    puts stderr "*** WARNING: marking ephemeral blockstore $self as RW-clone is useless, ignoring rwclone setting"
+	    set rwclone 0
+	}
+    }
+    set attributes(rwclone) $rwclone
+
+    # Check prereserve
+    set prereserve 0
+    if {[info exists attributes(prereserve)]} {
+	set prereserve $attributes(prereserve)
+	# Prereserve only applies to RW clones
+	if {$rwclone == 0 && $prereserve} {
+	    puts stderr "*** WARNING: space pre-reservation only applies to RW-clones, ignoring setting on $self"
+	    set prereserve 0
+	}
+    }
+    set attributes(prereserve) $prereserve
+
     # If the blockstore is associated with a lease, disallow/override certain
     # explicitly-specified values
     if {$leasename != {}} {
@@ -312,7 +368,7 @@ Blockstore instproc finalize {} {
 	    perror "Cannot explicitly set size/type/class/protocol of lease-associated blockstore $self"
 	    return -1
 	}
-	if {$ro == 0 &&
+	if {$ro == 0 && $rwclone == 0 &&
 	    [info exists dataset_readonly($leasename)] &&
 	    $dataset_readonly($leasename) != 0} {
 	    perror "Cannot RW access RO lease-associated blockstore $self"

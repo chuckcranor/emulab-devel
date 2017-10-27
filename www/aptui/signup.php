@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2016 University of Utah and the Flux Group.
+# Copyright (c) 2000-2017 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -25,6 +25,7 @@ chdir("..");
 include("defs.php3");
 chdir("apt");
 include("quickvm_sup.php");
+$page_title = "Signup";
 # Do not create anything, just do the checks.
 $debug = 0;
 # Update mode.
@@ -118,8 +119,14 @@ function SPITFORM($formfields, $showverify, $errors)
     echo "</script>\n";
 
     echo "<script src='js/lib/jquery-2.0.3.min.js'></script>\n";
-    echo "<script src='js/lib/bootstrap.js'></script>\n";
-    echo "<script src='js/lib/require.js' data-main='js/signup'></script>";
+
+    REQUIRE_UNDERSCORE();
+    REQUIRE_SUP();
+    REQUIRE_APTFORMS();
+    REQUIRE_FORMHELPERS();
+    SPITREQUIRE("js/signup.js");
+
+    AddTemplateList(array("about-account", "verify-modal", "signup-personal", "signup-project", "signup", "toomany-modal"));
     SPITFOOTER();
 }
 
@@ -147,6 +154,7 @@ if (! isset($create)) {
 
     if ($this_user && $promoting) {
         $defaults["uid"]         = $this_user->uid();
+        $defaults["fullname"]    = $this_user->name();
         $defaults["email"]       = $this_user->email();
         $defaults["city"]        = $this_user->city();
         $defaults["state"]       = $this_user->state();

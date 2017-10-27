@@ -89,7 +89,9 @@ RUN_DEPENDS+=	\
 	p5-Time-HiRes>=1.9726:${PORTSDIR}/devel/p5-Time-HiRes \
 	p5-TimeDate>=2.30:${PORTSDIR}/devel/p5-TimeDate \
 	p5-XML-Parser>=2.41:${PORTSDIR}/textproc/p5-XML-Parser \
-	p5-XML-Simple>=2.20:${PORTSDIR}/textproc/p5-XML-Simple
+	p5-XML-Simple>=2.20:${PORTSDIR}/textproc/p5-XML-Simple \
+	p5-Digest-SHA1>=2.13:${PORTSDIR}/security/p5-Digest-SHA1 \
+	p5-Digest-HMAC>=1.03:${PORTSDIR}/security/p5-Digest-HMAC
 
 # python packages
 RUN_DEPENDS+=	\

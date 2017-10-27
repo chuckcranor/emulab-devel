@@ -15,6 +15,17 @@
 /*!40101 SET @OLD_SQL_MODE=@@SQL_MODE, SQL_MODE='NO_AUTO_VALUE_ON_ZERO' */;
 /*!40111 SET @OLD_SQL_NOTES=@@SQL_NOTES, SQL_NOTES=0 */;
 
+--
+-- Table structure for table `image_permissions`
+--
+
+DROP TABLE IF EXISTS `image_aliases`;
+CREATE TABLE `image_aliases` (
+  `urn` varchar(128) default NULL,
+  `uuid` varchar(40) NOT NULL default '',
+  `target_urn` varchar(128) NOT NULL default '',
+  PRIMARY KEY  (`urn`,`target_urn`)
+) ENGINE=MyISAM DEFAULT CHARSET=latin1;
 
 --
 -- Table structure for table `image_permissions`
@@ -53,12 +64,15 @@ CREATE TABLE `image_versions` (
   `mbr_version` varchar(50) NOT NULL default '1',
   `arch` enum ('i386','x86_64','aarch64') NOT NULL default 'x86_64',
   `visibility` enum ('project','public') NOT NULL default 'public',
-  `virtualizaton` enum ('raw-pc','emulab-xen') NOT NULL default 'raw-pc',
+  `virtualizaton` enum ('raw-pc','emulab-xen','emulab-docker') NOT NULL default 'raw-pc',
   `osfeatures` text default NULL,
   `metadata_url` tinytext,
   `types_known_working` text default NULL,
   `types_known_notworking` text default NULL,
   `types_unknown` text default NULL,
+  `deprecated` datetime default NULL,
+  `deprecated_iserror` tinyint(1) NOT NULL default '0',
+  `deprecated_message` mediumtext,
   PRIMARY KEY (`urn`,`version`),
   UNIQUE KEY `version_uuid` (`version_uuid`)
 ) ENGINE=MyISAM DEFAULT CHARSET=latin1;

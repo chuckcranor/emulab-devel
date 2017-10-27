@@ -1,6 +1,6 @@
 #! /usr/bin/env python
 #
-# Copyright (c) 2004-2016 University of Utah and the Flux Group.
+# Copyright (c) 2004-2017 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -1945,15 +1945,13 @@ class experiment:
                 "(unix_timestamp(now()) - unix_timestamp( "
                 "greatest(na.last_tty_act,na.last_net_act,na.last_cpu_act,"
                 "na.last_ext_act))),ni.load_1min,ni.load_5min,ni.load_15min,"
-                "n.phys_nodeid,r.erole,GROUP_CONCAT(DISTINCT nx.type) as atype"
+                "n.phys_nodeid,r.erole"
                 "  from reserved as r "
                 "left join nodes as n on r.node_id=n.node_id "
                 "left join node_status as ns on ns.node_id=n.node_id "
                 "left join node_activity as na on na.node_id=n.node_id "
                 "left join node_idlestats as ni on ni.node_id=n.node_id "
-		"left join node_auxtypes as nx on nx.node_id=n.phys_nodeid "
                 "where r.pid=%s and r.eid=%s "
-		"group by r.node_id "
                 "order by r.vname",
                 (argdict["proj"], argdict["exp"]))
             osmappings = {}
@@ -1963,9 +1961,6 @@ class experiment:
                 tmp["name"] = res[0]
                 tmp["node"] = res[1]
                 tmp["type"] = res[2]
-		if tmp["type"] == "pcplab":
-		    tmp["auxtype"] = res[12]
-		    pass
                 tmp["pnode"] = res[10]
                 if not osmappings.has_key(res[3]):
                     osres = DBQuery(
@@ -3054,38 +3049,6 @@ class experiment:
             result.append((agent[0], agent[1], nodeid, ipaddr, agent[3]))
             pass
 
-        res = DBQuery("select n.phys_nodeid,i.IP from reserved as r "
-                      "left join nodes as n on n.node_id=r.node_id "
-                      "left join node_types as nt on nt.type=n.type "
-                      "left join interfaces as i on i.node_id=n.phys_nodeid "
-                      "  and i.role='ctrl' "
-                      "where r.pid=%s and r.eid=%s and nt.isvirtnode=1 and "
-                      "      (n.type='pcplab' or r.sharing_mode is not null) "
-		      "      and i.IP is not null "
-                      "group by n.phys_nodeid",
-                      (argdict["proj"], argdict["exp"]))
-
-        if len(res) > 0:
-            for plab in res:
-                result.append(("__%s_proxy" % plab[0],
-                               " ",
-                               plab[0],
-                               plab[1],
-                               "EVPROXY"))
-                pass
-
-            result.append(("__plab_setup",
-                           "*",
-                           "",
-                           "",
-                           "TIMELINE"))
-            result.append(("__plab_teardown",
-                           "*",
-                           "",
-                           "",
-                           "TIMELINE"))
-            pass
-        
         return EmulabResponse(RESPONSE_SUCCESS, value=result)
     
     #
@@ -3174,74 +3137,6 @@ class experiment:
         for event in res:
             result.append((str(event[0]), str(event[1]), event[2],
                            event[3], event[4], event[5], event[6], event[7]));
-            pass
-        
-        res = DBQuery("select n.phys_nodeid,i.IP from reserved as r "
-                      "left join nodes as n on n.node_id=r.node_id "
-                      "left join node_types as nt on nt.type=n.type "
-                      "left join interfaces as i on i.node_id=n.phys_nodeid "
-                      "  and i.role='ctrl' "
-                      "where r.pid=%s and r.eid=%s and nt.isvirtnode=1 and "
-                      "      (n.type='pcplab' or r.sharing_mode is not null) "
-		      "      and i.IP is not null "
-                      "group by n.phys_nodeid",
-                      (argdict["proj"], argdict["exp"]))
-
-        if len(res) > 0:
-            count = 0
-            for plab in res:
-                result.append((str(count),
-                               "0.0",
-                               "__%s_proxy" % plab[0],
-                               "EVPROXY",
-                               "UPDATE",
-                               "",
-                               "__plab_setup",
-                               ""))
-                result.append((str(count),
-                               "0.0",
-                               "__%s_proxy" % plab[0],
-                               "EVPROXY",
-                               "CLEAR",
-                               "",
-                               "__plab_teardown",
-                               ""))
-                count += 1
-                pass
-
-            result.append((str(count),
-                           "4.0",
-                           "ns", # XXX
-                           "SIMULATOR",
-                           "LOG",
-                           "Plab setup delay",
-                           "__plab_setup",
-                           ""))
-            result.append((str(count),
-                           "0.0",
-                           "__plab_setup",
-                           "TIMELINE",
-                           "RUN",
-                           "",
-                           "__ns_sequence",
-                           ""))
-            
-            result.append((str(count),
-                           "2.0",
-                           "ns", # XXX
-                           "SIMULATOR",
-                           "LOG",
-                           "Plab teardown delay",
-                           "__plab_teardown",
-                           ""))
-            result.append((str(count),
-                           "0.0",
-                           "__plab_teardown",
-                           "TIMELINE",
-                           "RUN",
-                           "",
-                           "__ns_teardown",
-                           ""))
             pass
 
         return EmulabResponse(RESPONSE_SUCCESS, value=result)
@@ -3510,18 +3405,18 @@ class node:
             pass
 
         res = DBQueryFatal(
-            "SELECT a.node_id,a.type,b.node_id is null or "
-            "  (b.pid=%s and b.eid=%s), "
-            "  (a.eventstate='ISUP' or "
-            "   a.eventstate='PXEWAIT' or "
-            "   a.eventstate='POWEROFF'),wn.site,nfcpu.weight, "
-            "  GROUP_CONCAT(DISTINCT aux.type),wn.hostname, "
+            "SELECT a.node_id,a.type, "
+            "  b.node_id is null or (b.pid=%s and b.eid=%s), "
+            "  a.eventstate in ('ISUP','PXEWAIT','POWEROFF'), "
+            "  wn.site, "
+            "  nfcpu.weight, "
+            "  '' as old_auxtype, "
+            "  wn.hostname, "
             "  a.reserved_pid is null or a.reserved_pid in "
-            "   (" + pid_clause_list + ") "
+            "    (" + pid_clause_list + ") "
             "FROM nodes AS a "
             "left join reserved as b on a.node_id=b.node_id "
             "left join node_types as nt on a.type=nt.type "
-            "left join node_auxtypes as aux on aux.node_id=a.node_id "
             "left join nodetypeXpid_permissions as p on a.type=p.type "
             "left join widearea_nodeinfo as wn on wn.node_id=a.phys_nodeid "
             "left join node_features as nfcpu on (nfcpu.node_id=a.phys_nodeid "
@@ -4955,58 +4850,6 @@ class elabinelab:
         
         return node_instance.console(version, argdict);
     
-    def vlansv2(self, version, argdict):
-        if version != self.VERSION:
-            return EmulabResponse(RESPONSE_BADVERSION,
-                                  output="Client version mismatch!")
-
-        try:
-            checknologins()
-            pass
-        except NoLoginsError, e:
-            return EmulabResponse(RESPONSE_REFUSED, output=str(e))
-
-        argerror = CheckRequiredArgs(argdict, ("xmldoc",))
-        if (argerror):
-            return argerror
-
-        verifyerror = self.verifystuff();
-        if (verifyerror):
-            return verifyerror
-
-        #
-        # We get an xmldoc as the argument, which we give to the proxy
-        # to decode on its own. Easier then trying to decode a bunch
-        # of stuff to pass on the commandline.
-        #
-        (xmlfp, xmlfilename) = writensfile(argdict["xmldoc"]);
-        if not xmlfilename:
-            return EmulabResponse(RESPONSE_SERVERERROR, output="Server Error")
-
-        #
-        # Create a temporary file for the output.
-        #
-        (outfp, outfilename) = writensfile("");
-        if not outfilename:
-            return EmulabResponse(RESPONSE_SERVERERROR, output="Server Error")
-
-        argstr  = "-o " + outfilename + " ";
-        argstr += "-p " + self.pid + " -e " + self.eid + " " + xmlfilename;
-
-        (exitval,output) = runcommand(TBDIR + "/sbin/snmpit.proxyv2 " + argstr)
-        if exitval:
-            return EmulabResponse(RESPONSE_ERROR, exitval >> 8, output=output)
-
-        #
-        # Results are in the outfile.
-        #
-        stuff = ""
-        for l in outfp:
-            stuff += l
-            pass
-        
-        return EmulabResponse(RESPONSE_SUCCESS, value=stuff, output=output)
-
     def vlansv3(self, version, argdict):
         if version != self.VERSION:
             return EmulabResponse(RESPONSE_BADVERSION,
@@ -5123,6 +4966,16 @@ class elabinelab:
         if (verifyerror):
             return verifyerror
         
+        dbres = DBQueryFatal("select elabinelab_singlenet from experiments "
+                             "where pid=%s and eid=%s",
+                             (self.pid,self.eid,))
+
+        if len(dbres) == 0:
+            return EmulabResponse(RESPONSE_ERROR,
+                                  output="No such experiment!")
+
+        singlenet = int(dbres[0][0]);
+        
         #
         # Okay, lets grab what we need. This code is going to return the
         # equiv of what the switchmac script does, but with a few minor
@@ -5134,11 +4987,11 @@ class elabinelab:
                              "left join interfaces as i on "
                              "   i.node_id=r.node_id "
                              "left join wires as s on s.node_id1=i.node_id "
-                             "   and s.card1=i.card "
+                             "   and s.iface1=i.iface "
                              "where r.pid=%s and r.eid=%s "
                              "   and r.inner_elab_role='node' "
 			     "   and s.node_id2!='' "
-                             "order by r.node_id,iface",
+                             "order by r.node_id,i.iface",
                              (self.pid,self.eid,))
         
         result = {}
@@ -5153,14 +5006,16 @@ class elabinelab:
             #
             role = res[3]
             IP   = res[7]
-            
-            if role == "ctrl":
-                role = "outer_ctrl"
+
+            if not singlenet:
+                if role == "ctrl":
+                    role = "outer_ctrl"
+                    pass
+                elif role == "expt" and IP != "":
+                    role = "ctrl"
+                    pass
                 pass
-            elif role == "expt" and IP != "":
-                role = "ctrl"
-                pass
-            elif role != "expt":
+            elif role != "expt" and role != "ctrl":
                 continue
             
             tmp["mac"]         = res[1]
@@ -5203,7 +5058,7 @@ class elabinelab:
         #
         # First map the mac to a node by looking in the interfaces table.
         #
-        dbres = DBQueryFatal("select node_id from interfaces "
+        dbres = DBQueryFatal("select node_id,role,IP from interfaces "
                              "where mac=%s",
                              (argdict["mac"],))
         
@@ -5211,26 +5066,12 @@ class elabinelab:
         if len(dbres) == 0:
             return EmulabResponse(RESPONSE_ERROR,
                                   output="Cannot map MAC to nodeid")
+
         nodeid = dbres[0][0]
-        
-        #
-        # Okay, lets grab what we need. This code is going to return the
-        # equiv of what the switchmac script does, but with a few minor
-        # changes.
-        #
-        dbres = DBQueryFatal("select r.node_id,i.mac,i.iface,i.role,i.IP, "
-                             "  i.card,i.interface_type, "
-                             "  s.node_id2,s.card2,s.port2, "
-                             "  n.type " 
-                             "from reserved as r "
-                             "left join nodes as n on n.node_id=r.node_id "
-                             "left join interfaces as i on "
-                             "   i.node_id=r.node_id "
-                             "left join wires as s on s.node_id1=i.node_id "
-                             "   and s.card1=i.card "
-                             "where r.node_id=%s "
-			     "   and s.node_id2!='' "
-                             "order by r.node_id,iface",
+
+        dbres = DBQueryFatal("select i.mac,i.role,i.IP "
+                             "    from interfaces as i "
+                             "where node_id=%s ",
                              (nodeid,))
         
         result = {}
@@ -5246,9 +5087,9 @@ class elabinelab:
             # The experimental network with an IP assigned becomes the
             # inner control network.
             #
-            role  = res[3]
-            IP    = res[4]
-            ntype = res[10]
+            imac  = res[0]
+            role  = res[1]
+            IP    = res[2]
             
             if role == "ctrl":
                 role = "outer_ctrl"
@@ -5256,22 +5097,14 @@ class elabinelab:
             elif role == "expt" and IP != "":
                 role = "ctrl"
                 pass
-            result["type"] = ntype
             
-            tmp["mac"]         = res[1]
-            tmp["iface"]       = res[2]
             tmp["role"]        = role
             tmp["IP"]          = IP
-            tmp["card"]        = res[5]
-            tmp["type"]        = res[6]
-            tmp["switch_id"]   = res[7]
-            tmp["switch_card"] = res[8]
-            tmp["switch_port"] = res[9]
-            interfaces[res[1]] = tmp
+            interfaces[imac] = tmp
             pass
         
         result["interfaces"] = interfaces
-        
+         
         return EmulabResponse(RESPONSE_SUCCESS, result, output=str(result))
     pass
 
@@ -6087,6 +5920,11 @@ class dataset:
             elif opt == "all":
                 if xbool(val):
                     argstr += " -a "
+                    pass
+                pass
+            elif opt == "verbose":
+                if xbool(val):
+                    argstr += " -l "
                     pass
                 pass
             elif opt == "proj":

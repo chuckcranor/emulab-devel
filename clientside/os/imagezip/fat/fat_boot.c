@@ -34,6 +34,9 @@
 #include <sys/cdefs.h>
 #ifndef lint
 __RCSID("$NetBSD: boot.c,v 1.11 2006/06/05 16:51:18 christos Exp ");
+#ifdef __clang__ /* Fix warning about unused variable */
+__attribute__((unused))
+#endif
 static const char rcsid[] =
   "$FreeBSD: releng/10.2/sbin/fsck_msdosfs/boot.c 241807 2012-10-21 12:01:19Z uqs $";
 #endif /* not lint */
@@ -120,8 +123,8 @@ readboot(int dosfs, struct bootblock *boot)
 		    || fsinfo[0x1ff] != 0xaa
 		    || fsinfo[0x3fc]
 		    || fsinfo[0x3fd]
-		    || fsinfo[0x3fe] != 0x55
-		    || fsinfo[0x3ff] != 0xaa) {
+		    || (fsinfo[0x3fe] && fsinfo[0x3fe] != 0x55)
+		    || (fsinfo[0x3ff] && fsinfo[0x3ff] != 0xaa)) {
 			pwarn("Invalid signature in fsinfo block\n");
 			return FSFATAL;
 		}

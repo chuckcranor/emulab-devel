@@ -1,5 +1,5 @@
 #
-# Copyright (c) 2000-2014 University of Utah and the Flux Group.
+# Copyright (c) 2000-2016 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -26,6 +26,8 @@ TESTBED_SRCDIR	= @top_srcdir@
 OBJDIR		= ..
 SUBDIR		= pxe
 EVENTSYS        = @EVENTSYS@
+# This needs a rename.
+BOOTINFO_PXEEVENTS = @BOOTINFO_EVENTS@
 
 include $(OBJDIR)/Makeconf
 
@@ -55,9 +57,9 @@ CFLAGS	+= -Wall \
 	-DCONFPATH='"$(INSTALL_ETCDIR)/"' -DTBDBNAME='"$(TBDBNAME)"' \
 	-DFALLBACK_HOST='"$(BOSSNODE)"' -DBOSSNODE='"$(BOSSNODE)"' \
 	-DDEFAULT_PATH='"/tftpboot/pxeboot.newnode"' \
-	-DLOG_TESTBED=$(LOG_TESTBED)
+	-DLOG_TESTBED=$(LOG_TESTBED) -DLIBWRAP
 
-LFLAGS	=  ${TESTBED_LIBOBJDIR}/libtb/libtb.a
+LFLAGS	= -lwrap ${TESTBED_LIBOBJDIR}/libtb/libtb.a
 
 ifeq ($(EVENTSYS),1)
 BI_DBSRC += event-support.c
@@ -66,6 +68,9 @@ BI_DBOBJ += event-support.o
 CFLAGS  += -DEVENTSYS
 LFLAGS  += $(TESTBED_LIBOBJDIR)/event/libevent.a
 LFLAGS  += -L/usr/local/lib -lpubsub -lcrypto
+ifeq ($(BOOTINFO_PXEEVENTS),1)
+CFLAGS  += -DBOOTINFO_PXEEVENTS
+endif
 endif
 
 bootinfo: main.o bootinfo.o bootinfo.h bootinfo_version.o \

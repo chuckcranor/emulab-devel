@@ -3,7 +3,12 @@
   <table class='tablesorter'>
     <thead>
       <tr>
-	<th>Name</th>
+	<th>Name
+	  <a href='#' class='btn btn-xs pull-right'
+	     data-toggle='modal' data-target='#conversion-help-modal'>
+	    <span class='glyphicon glyphicon-question-sign pull-right'></span>
+	  </a>
+	</th>
 	<% if (showCreator) { %>
 	  <th>Creator</th>
 	<% } %>
@@ -25,7 +30,11 @@
     <tbody>
       <% _.each(experiments, function(value, name) { %>
 	<tr>
-	  <td><%= value.eid %></td>
+	  <td><%= value.eid %>
+	    <a href='manage_profile.php?fromexp=<%- value.uuid %>'
+	      <span class='glyphicon glyphicon-export pull-right'></span>
+	    </a>
+	  </td>
 	  <% if (showCreator) { %>
 	    <td><%= value.creator %></td>
 	  <% } %>
@@ -49,5 +58,3 @@
   </table>
   [1] <b>PHours</b>: Number of nodes times number of hours in use.<br>
 </div>
-
-

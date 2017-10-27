@@ -41,13 +41,14 @@
 		placeholder="Project Description (details)"
 		type="textarea"><%- formfields.proj_why %></textarea>
     </div>
-    <% tbname="APT";
+    <% tbname="Emulab";
        if (window.ISCLOUD) { tbname="CloudLab"; } 
-       else if (window.ISPNET) { tbname="PhantomNet" } %>
+       else if (window.ISPNET) { tbname="PhantomNet"; }
+       else if (window.ISAPT) { tbname="PhantomNet"; } %>
     <div class='alert alert-warning alert-dismissible'
          role='alert' style='margin-top: -5px;padding: 5px'>
-      <%= tbname %> staff reviews this information, so the more details
-      you provide, the faster we can approve your project.
+      <%= tbname %> staff members review this information. The more details
+      you provide, the faster they can approve your project.
     </div>
   </div>
 </div>

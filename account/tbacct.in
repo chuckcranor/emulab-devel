@@ -1,7 +1,7 @@
 #!/usr/bin/perl -wT
 
 #
-# Copyright (c) 2000-2016 University of Utah and the Flux Group.
+# Copyright (c) 2000-2017 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -43,15 +43,16 @@ use Getopt::Std;
 sub usage()
 {
     print("Usage: tbacct [-f] [-b] [-u] [-v] ".
-	  "<add|del|mod|passwd|wpasswd|email|freeze|thaw|verify|revoke|dots> ".
+	  "<add|del|mod|passwd|wpasswd|email|freeze|thaw|verify|revoke|dots|deactivate|reactivate> ".
 	  "<user> [args]\n");
     exit(-1);
 }
-my $optlist = "fbuv";
+my $optlist = "fbuvs";
 my $force   = 0;
 my $batch   = 0;
 my $update  = 0;
 my $verified= 0;
+my $silent  = 0;
 
 #
 # Configure variables
@@ -171,6 +172,8 @@ sub UpdateWindowsPassword();
 sub UpdateUser(;$);
 sub FreezeUser();
 sub ThawUser();
+sub DeactivateUser();
+sub ReactivateUser();
 sub VerifyUser();
 sub UpdateEmail();
 sub CheckDotFiles();
@@ -209,6 +212,9 @@ if (defined($options{"u"})) {
 if (defined($options{"v"})) {
     $verified = 1;
 }
+if (defined($options{"s"})) {
+    $silent = 1;
+}
 if (@ARGV < 2) {
     usage();
 }
@@ -225,7 +231,7 @@ else {
     die("Tainted argument: $user\n");
 }
 if ($cmd =~
-    /^(add|del|mod|freeze|passwd|wpasswd|thaw|email|verify|revoke|dots)$/) {
+    /^(add|del|mod|freeze|passwd|wpasswd|thaw|email|verify|revoke|dots|deactivate|reactivate)$/) {
     $cmd = $1;
 }
 else {
@@ -265,7 +271,7 @@ else {
 #
 # This script is always audited. Mail is sent automatically upon exit.
 #
-if (AuditStart(0)) {
+if (!$silent && AuditStart(0)) {
     #
     # Parent exits normally
     #
@@ -350,6 +356,14 @@ SWITCH: for ($cmd) {
 	ThawUser();
 	last SWITCH;
     };
+    /^deactivate$/ && do {
+	DeactivateUser();
+	last SWITCH;
+    };
+    /^reactivate$/ && do {
+	ReactivateUser();
+	last SWITCH;
+    };
     /^revoke$/ && do {
 	RevokeUser();
 	last SWITCH;
@@ -369,6 +383,10 @@ SWITCH: for ($cmd) {
 # an account on.
 #
 TBNodeUpdateAccountsByUID($user);
+if ($PGENISUPPORT) {
+    require APT_Utility;
+    APT_Utility::UpdateInstancesByUser($target_user);
+}
 
 exit(0);
 
@@ -419,8 +437,8 @@ sub AddUser()
     if (system("egrep -q -s '^${user}:' /etc/passwd")) {
 	print "Adding user $user ($user_number) to local node.\n";
 
-	if (system("$USERADD $user -u $user_number -c \"$fullname\" ".
-		   "-h - -d $HOMEDIR/$user ".
+	if (runBusyLoop("$USERADD $user -u $user_number -c \"$fullname\" ".
+			"-h - -d $HOMEDIR/$user ".
 		   "-g $default_groupname -s $PBAG")) {
 	    fatal("Could not add user $user to local node.");
 	}
@@ -453,7 +471,8 @@ sub AddUser()
 	    $pswd =~ s/\*/\\\*/g;
 
 	    print "Initializing user $user password on $CONTROL.\n";
-	    if (system("$SSH -host $CONTROL $CHPASS -p '$pswd' $user")) {
+	    if (system("$SSH -host $CONTROL ".
+		       "  \"$ACCOUNTPROXY chpass $user '$pswd'\"")) {
 		fatal("Could not initialize password for $user on $CONTROL!");
 	    }
 	}
@@ -504,14 +523,14 @@ sub AddUser()
     system("$ADDMMUSER $user")
 	if ($MAILMANSUPPORT);
     
+    # Generate the SSL cert for the user.
+    system("$MKUSERCERT $user");
+
     if ($isnonlocal) {
 	$EUID = 0;
 	goto skipstuff;
     }
     
-    # Generate the SSL cert for the user.
-    system("$MKUSERCERT $user");
-
     #
     # If the user requested an initial encrypted SSL certificate, create
     # that too. Need to delete the initial_passphrase slot though, so that
@@ -595,7 +614,7 @@ sub DelUser()
 
     $UID = 0;
 
-    if (system("$USERDEL $user")) {
+    if (runBusyLoop("$USERDEL $user")) {
 	if (($? >> 8) != $NOSUCHUSER) {
 	    fatal("Could not remove user $user from local node.");
 	}
@@ -664,7 +683,7 @@ sub UpdatePassword()
     my $new_pswd  = shift(@ARGV);
 
     # Lets not do this if no changes.
-    if ($new_pswd eq $target_user->pswd()) {
+    if ($new_pswd eq $target_user->pswd() && !$force) {
 	print "Password has not changed ...\n";
 	return 0;
     }
@@ -738,9 +757,10 @@ sub UpdatePassword()
 	$UID = 0;
 	if ($CONTROL ne $BOSSNODE) {
 	    print "Updating user $user password on $CONTROL.\n";
-	    
-	    if (system("$SSH -host $CONTROL $CHPASS -p '$safe_pswd' $user")) {
-		fatal("Could not change password for user $user on $CONTROL!");
+
+	    if (system("$SSH -host $CONTROL ".
+		       "  \"$ACCOUNTPROXY chpass $user '$safe_pswd'\"")) {
+		fatal("Could not change password for $user on $CONTROL!");
 	    }
 	}
 	$UID = $SAVEUID;
@@ -862,8 +882,8 @@ sub UpdateUser(;$)
 	# If doing a modification to a frozen user, then just ignore
 	# it; the modification will happen later when the user is thawed.
 	#
-	if ($status eq USERSTATUS_FROZEN) {
-	    print "Ignoring update of frozen user $user\n";
+	if ($status eq USERSTATUS_FROZEN || $status eq USERSTATUS_INACTIVE) {
+	    print "Ignoring update of frozen/inactive user $user\n";
 	    return 0;
 	}
 	fatal("$user is not active! Cannot update the account!");
@@ -872,7 +892,7 @@ sub UpdateUser(;$)
     # Shell is different on local vs control node.
     if ($freezeopt) {
 	$locshellarg = "-s $NOLOGIN";
-	$remshellarg = "-s $NOLOGIN";
+	$remshellarg = "$NOLOGIN";
     }
     else {
 	# Admin users get a local shell.
@@ -884,16 +904,16 @@ sub UpdateUser(;$)
 	}
 	if (!defined($usr_shell) ||
 	    !exists($shellpaths{$usr_shell})) {
-	    $remshellarg = "-s " . $shellpaths{"tcsh"};
+	    $remshellarg = $shellpaths{"tcsh"};
 	}
 	else  {
-	    $remshellarg = "-s " . $shellpaths{$usr_shell};
+	    $remshellarg = $shellpaths{$usr_shell};
 	}
     }
     print "Updating user $user ($user_number) on local node.\n";
 
     $UID = 0;
-    if (system("$USERMOD $user $locshellarg -c \"$fullname\" ")) {
+    if (runBusyLoop("$USERMOD $user $locshellarg -c \"$fullname\" ")) {
 	fatal("Could not modify user $user on local node.");
     }
 
@@ -907,7 +927,7 @@ sub UpdateUser(;$)
 	print "Updating user $user ($user_number) on $CONTROL\n";
 
 	if (system("$SSH -host $CONTROL ".
-		   "'$USERMOD $user $remshellarg -c \"$fullname\"'")) {
+		   "'$ACCOUNTPROXY moduser $user $remshellarg \"$fullname\"'")){
 	    fatal("Could not modify user $user record on $CONTROL.");
 	}
     }
@@ -1061,7 +1081,7 @@ sub ThawUser()
 	AddUser() == 0
 	    or fatal("Cannot thaw $user");
 
-	system("$USERMOD -n $user -s /bin/tcsh");
+	runBusyLoop("$USERMOD -n $user -s /bin/tcsh");
     }
     else {
 	UpdateUser(0) == 0
@@ -1075,6 +1095,87 @@ sub ThawUser()
     system("$SETGROUPS $user");
     $EUID = 0;
     
+    return 0;
+}
+
+#
+# Deactivate a user.
+#
+sub DeactivateUser()
+{
+    #
+    # Only admin people can do this.
+    #
+    if (! TBAdmin($UID)) {
+	fatal("You do not have permission to deactivate user $user.");
+    }
+    #
+    # Check status.
+    #
+    if ($status ne USERSTATUS_INACTIVE) {
+	fatal("$user is still active! Cannot deactivate the account!")
+	    if (!$update);
+
+	$target_user->SetStatus(USERSTATUS_INACTIVE());
+	$status = USERSTATUS_INACTIVE();
+    }
+    #
+    # Shell goes to nologin on the CONTROL node.
+    #
+    $UID = 0;
+    if (runBusyLoop("$USERMOD $user -s $NOLOGIN")) {
+	fatal("Could not set shell to $NOLOGIN for $user on local node.");
+    }
+    if ($CONTROL ne $BOSSNODE) {
+	print "Deactivating user $user ($user_number) on $CONTROL\n";
+
+	if (system("$SSH -host $CONTROL '$ACCOUNTPROXY deactivateuser $user'")){
+	    fatal("Could not deactivate $user on $CONTROL.");
+	}
+    }
+    $UID = $SAVEUID;
+    return 0;
+}
+
+#
+# Reactivate a user.
+#
+sub ReactivateUser()
+{
+    #
+    # Only admin people can do this to another user, but we do allow a
+    # user to reactivate themselves, as from the web interface when they
+    # log in and the account has been deactivated for lack of use.
+    #
+    if (! (TBAdmin($UID) ||
+	   ($target_user->SameUser($this_user) &&
+	    $status eq USERSTATUS_ACTIVE))) {
+	fatal("You do not have permission to reactivate user $user.");
+    }
+    #
+    # Check status.
+    #
+    if ($status ne USERSTATUS_ACTIVE) {
+	fatal("$user is not active! Cannot reactivate the account!")
+	    if (! ($update || $force));
+	if ($update) {
+	    $target_user->SetStatus(USERSTATUS_ACTIVE());
+	    $status = USERSTATUS_ACTIVE();
+	}
+    }
+    $UID = 0;
+    if ($CONTROL ne $BOSSNODE) {
+	print "Reactivating user $user ($user_number) on $CONTROL\n";
+
+	if (system("$SSH -host $CONTROL '$ACCOUNTPROXY reactivateuser $user'")){
+	    fatal("Could not reactivate $user on $CONTROL.");
+	}
+    }
+    $UID = $SAVEUID;
+    # Similar to freeze/thaw for our purposes.
+    UpdateUser(0) == 0
+	or fatal("Cannot reactivate $user");
+
     return 0;
 }
 

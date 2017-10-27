@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2000-2015 University of Utah and the Flux Group.
+# Copyright (c) 2000-2017 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -77,6 +77,7 @@ use libdb;
 use libtestbed;
 use User;
 use Project;
+use OSImage;
 use Image;
 use OSinfo;
 use Node;
@@ -223,6 +224,7 @@ my %xmlfields =
      "lba_low",    	=> ["lba_low",		$SLOT_OPTIONAL],
      "lba_high",	=> ["lba_high",		$SLOT_OPTIONAL],
      "lba_size",	=> ["lba_size",		$SLOT_OPTIONAL],
+     "architecture",	=> ["architecture",	$SLOT_OPTIONAL],
 );
 
 #
@@ -402,9 +404,14 @@ if (exists($newimageid_args{"nodetype"}) &&
 # we get a list of just the nodes that are currently in the testbed, not
 # just in the node_types table.  Limit by class if given.
 #
+# If we are using architectures, and the image has an architecture, then
+# we will switch back to the non-allpc path since we have enough info to
+# make a better decision. 
+#
 my $types_querystring;
 if ($allpc) {
-    $types_querystring = "select nt.type,nt.class from node_types as nt ".
+    $types_querystring =
+	"select nt.type,nt.class,nt.architecture from node_types as nt ".
 	"left join node_type_attributes as a on a.type=nt.type ".
 	"where a.attrkey='imageable' and a.attrvalue!='0' ";
 
@@ -420,7 +427,8 @@ if ($allpc) {
     }
 }
 else {
-    $types_querystring = "select distinct n.type,nt.class from nodes as n ".
+    $types_querystring =
+	"select distinct n.type,nt.class,nt.architecture from nodes as n ".
 	"left join node_types as nt on n.type=nt.type ".
 	"left join node_type_attributes as a on a.type=n.type ".
 	"where a.attrkey='imageable' and ".
@@ -433,9 +441,11 @@ my $types_result = DBQueryFatal($types_querystring);
 
 # Save the valid types in a new array for later.
 my %mtypes_array;
+my %mtypes_arch;
 
 if ($types_result->numrows) {
-    while (my ($type,$class) = $types_result->fetchrow_array()) {
+    while (my ($type,$class,$arch) = $types_result->fetchrow_array()) {
+	$mtypes_arch{$type}  = $arch if (defined($arch));
 	$mtypes_array{$type} = $class;
 	$xmlfields{"mtype_$type"} = ["mtype", $SLOT_OPTIONAL];
     }
@@ -535,50 +545,61 @@ if (exists($newimageid_args{"def_parentosid"})) {
 }
 
 #
-# The path must not contain illegal chars and it must be more than
-# the original /proj/$pid we gave the user. We allow admins to specify
-# a path outside of /proj though.
-# 
-if (!exists($newimageid_args{"path"}) ||
-    $newimageid_args{"path"} eq "") {
-    UserError("Path: Missing Field");
+# We no longer allow users to set the path (via the web interface), so
+# do not worry if it is not set, lets just set the path. In fact, we
+# are going to ignore all he places that pass in a path, that code is
+# duplicated in way too many places. The code below mirrors code in
+# clone_image, but we can throw that away and all the other places.
+#
+# If its an admin, we allow the path to be set to /usr/testbed/images.
+# We throw that away and set it the way we want it in /usr/testbed/images.
+#
+my $path;
+my $spath = "/usr/testbed/images/";
+my $ipid  = $newimageid_args{"pid"};
+my $igid  = (exists($newimageid_args{"gid"}) &&
+	     $newimageid_args{"gid"} ne "") ? $newimageid_args{"gid"} : $ipid;
+
+if ($ipid eq $igid || $global) {
+    $path  = "$TBPROJ_DIR/$ipid/images/";
 }
-elsif (! $isadmin) {
-    my $pdef = "";
-    
-    if (!($shared || $global) &&
-	exists($newimageid_args{"gid"}) &&
-	$newimageid_args{"gid"} ne "" &&
-	$newimageid_args{"gid"} ne $newimageid_args{"pid"}) {
-	$pdef = "$TBGROUP_DIR/" .
-	    $newimageid_args{"pid"} . "/" . $newimageid_args{"gid"} . "/";
+else {
+    $path = "$TBGROUP_DIR/$ipid/$igid/images/";
+}
+if ($DOIMAGEDIRS) {
+    $path  .= "${imagename}/";
+    $spath .= "${imagename}/";
+}
+else {
+    $path  .= "${imagename}.ndz";
+    $spath .= "${imagename}.ndz";
+}
+if ($isadmin) {
+    #
+    # Admins can provide a path, but this is probably a bad idea too.
+    # Ignore it unless /usr/testbed/images.
+    #
+    if (exists($newimageid_args{"path"}) &&
+	$newimageid_args{"path"} =~ /^\/usr\/testbed\/images/) {
+	$newimageid_args{"path"} = $spath;
     }
     else {
-	$pdef = "$TBPROJ_DIR/" . $newimageid_args{"pid"} . "/images/";
-    }
-
-    if (index($newimageid_args{"path"}, $pdef) < 0) {
-	UserError("Path: Invalid Path");
+	$newimageid_args{"path"} = $path;
     }
 }
-#
-# Image path from the web interface does not respect the
-# IMAGEDIRECTORIES feature or config variable. We fix it up here.
-#
-if ($newimageid_args{"path"} =~ /\/$/ &&
-    (! $DOIMAGEDIRS ||
-     ! ($isadmin ||
-	EmulabFeatures->FeatureEnabled("ImageDirectories",
-				       $this_user, $group)))) {
-    $newimageid_args{"path"} =~ s/\/$/.ndz/;
+else {
+    $newimageid_args{"path"} = $path;
 }
 if ($newimageid_args{"path"} =~ /\/$/) {
     if (-e $newimageid_args{"path"} && ! -d $newimageid_args{"path"}) {
 	UserError("Path: invalid path, it should be a directory");	
     }
 }
-elsif (-d $newimageid_args{"path"} =~ /\/$/) {
+elsif (-d $newimageid_args{"path"}) {
     UserError("Path: invalid path, its a directory");
+}
+if (1 || $debug) {
+    print "Setting path to " . $newimageid_args{"path"} . "\n";
 }
 
 #
@@ -629,7 +650,7 @@ if (!$isdataset &&
     #
     my $query_result =
 	DBQueryFatal("select mbr_version from ".
-		     " partitions as p,image_versions as i ".
+		     " `partitions` as p,image_versions as i ".
 		     " where p.imageid=i.imageid ".
 		     " and p.imageid_version=i.version ".
 		     " and p.node_id='$node_id' group by mbr_version");
@@ -642,81 +663,67 @@ if (!$isdataset &&
 #
 # See what node types this image will work on. Must be at least one!
 #
-UserError("Node Types: Must have at least one node type")
+UserError("Node Types: Must have at least one node type defined")
     if (!$isdataset && !keys(%mtypes_array));
+
 my $node_types_selected = 0;
 
-# Check validity of mtype_* args, since the keys are dynamically generated.
-my @mtype_keys = grep(/^mtype_/, keys(%newimageid_args));
-foreach $key (@mtype_keys) {
-    my $value = $newimageid_args{$key};
-    print STDERR "mtype: '$key' -> '$value'\n"
-	if ($debug);
-
-    my $type = $key;
-    $type =~ s/^mtype_//;
-    
-    # Treat pcvm special for now.
-    if ($type eq "pcvm" ||
-	grep(/^${type}$/, keys(%mtypes_array))) {
-	$node_types_selected++
-	    if ($value eq "1");
-    }
-    else {
-	$errors{$key} = "Illegal node type."
-    }
-}
 #
-# When -a specified, add mappings for all pc types, does not matter if
-# there are nodes of that type. Skip the stub pc/pc entry though.
+# If we have architectures defined in the node_types table, and we got
+# an architecture in the xml file for the image, we use those. Otherwise
+# fall back to the old method. 
 #
-if ($allpc) {
-    foreach my $type (keys(%mtypes_array)) {
-	my $class = $mtypes_array{$type};
-	next
-	    if ($class ne "pc" || $type eq $class);
+if (keys(%mtypes_arch) &&
+    (exists($newimageid_args{"architecture"}) && 
+     $newimageid_args{"architecture"} ne "")) {
 
-	$newimageid_args{"mtype_${type}"} = "1";
-	$node_types_selected++;
-    }
-}
-
-UserError("Node Types: Must select at least one node type")
-    if ($node_types_selected == 0 && !($force || $isdataset));
-
-#
-# We perform a further check for non-admins.  When a node to snapshot
-# has been specified, we check the OSID of the appropriate partition
-# and see which node types it is appropriate for, and further restrict
-# the list as necessary.  This prevents creation of custom images based on
-# old OSes from being checked as runnable on newer HW where they do not
-# stand a chance.
-#
-if (!($isadmin || $isdataset) && defined($node) && !$node->isvirtnode()) {
-    my $query_result =
-	DBQueryFatal("select oi.type from osidtoimageid as oi ".
-		     "left join partitions as p on oi.osid=p.osid ".
-		     "where p.node_id='$node_id' and p.partition=$loadpart");
-    if ($query_result->numrows != 0) {
-	my %otypes;
-	while (my ($ntype) = $query_result->fetchrow_array()) {
-	    $otypes{$ntype} = 1;
+    foreach my $arch (split(",", $newimageid_args{"architecture"})) {
+	if (!exists($OSImage::IMAGE_ARCHITECTURES{$arch})) {
+	    UserError("Architecture: Not a valid Architecture: $arch");
 	}
-	my @invalid_node_types;
-	foreach my $ntype (@mtype_keys) {
-	    $ntype =~ s/^mtype_//;
-	    if (!exists($otypes{$ntype})) {
-	        push @invalid_node_types, $ntype;
-	    }
-        }
-	if (@invalid_node_types) {
-	    UserError("Node Types: Current image on $node_id".
-		      " cannot run on the following node types: ". 
-		      join(' ', @invalid_node_types));
-        }
-    } else {
-	UserError("Partition: No image originally loaded in partition $loadpart on $node_id; this is probably not the partition you meant to save");
     }
+}
+else {
+    # Clear this since not using Architectures
+    delete($newimageid_args{"architecture"})
+	if (exists($newimageid_args{"architecture"}));
+    
+    # Check validity of mtype_* args, since the keys are dynamically generated.
+    my @mtype_keys = grep(/^mtype_/, keys(%newimageid_args));
+    foreach $key (@mtype_keys) {
+	my $value = $newimageid_args{$key};
+	print STDERR "mtype: '$key' -> '$value'\n"
+	    if ($debug);
+
+	my $type = $key;
+	$type =~ s/^mtype_//;
+    
+	# Treat pcvm special for now.
+	if ($type eq "pcvm" ||
+	    grep(/^${type}$/, keys(%mtypes_array))) {
+	    $node_types_selected++
+		if ($value eq "1");
+	}
+	else {
+	    $errors{$key} = "Illegal node type."
+	}
+    }
+    #
+    # When -a specified, add mappings for all pc types, does not matter if
+    # there are nodes of that type. Skip the stub pc/pc entry though.
+    #
+    if ($allpc) {
+	foreach my $type (keys(%mtypes_array)) {
+	    my $class = $mtypes_array{$type};
+	    next
+		if ($class ne "pc" || $type eq $class);
+
+	    $newimageid_args{"mtype_${type}"} = "1";
+	    $node_types_selected++;
+	}
+    }
+    UserError("Node Types: Must select at least one node type")
+	if ($node_types_selected == 0 && !($force || $isdataset));
 }
 
 # XXX  Allowable OS types, OS features, and OpModes need to be
@@ -786,13 +793,6 @@ if (!$isdataset) {
 	if (defined($usrerr));
     fatal("Could not create new OSID!")
 	if (!defined($new_osinfo));
-
-    #
-    # Insert a submap entry.
-    #
-    if (defined($parentos)) {
-	$new_osinfo->SetRunsOnParent($parentos);
-    }
 
     $newimageid_args{"path"} = $ipath;
     $osid = $new_osinfo->osid();

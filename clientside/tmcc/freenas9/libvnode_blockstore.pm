@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2013-2016 University of Utah and the Flux Group.
+# Copyright (c) 2013-2017 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -605,6 +605,11 @@ sub allocSlice($$$$) {
     my $size = $sconf->{'VOLSIZE'};
 
     #
+    # By default, we will create "best effort" ephemeral volumes.
+    #
+    my $sparse = 1;
+
+    #
     # If this is a use of a persistent store, the BSID is a unique
     # volume name based on the lease ID. Look up the volume to make
     # sure it exists, but do nothing else other than stash away some
@@ -644,7 +649,7 @@ sub allocSlice($$$$) {
 
     $priv->{'pool'} = $bsid;
     $priv->{'volume'} = $vnode_id;
-    return freenasVolumeCreate($bsid, $vnode_id, $size);
+    return freenasVolumeCreate($bsid, $vnode_id, $size, $sparse);
 }
 
 # Setup device export.
@@ -706,17 +711,23 @@ sub exportSlice($$$$) {
     my $iqn = lc($1);
 
     my $isro = "false";
-    if (exists($sconf->{'PERMS'}) && $sconf->{'PERMS'} eq "RO") {
-	$isro = "true";
+    my $isclone = "false";
+    if (exists($sconf->{'PERMS'})) {
+	if ($sconf->{'PERMS'} eq "RO") {
+	    $isclone = "true";
+	    $isro = "true";
+	}
+	elsif ($sconf->{'PERMS'} eq "CLONE") {
+	    $isclone = "true";
+	}
     }
 
     #
-    # XXX hack temporary support for RO sharing of persistent blockstores.
+    # If the mapping to a persistent store is RO or CLONE, then we will
+    # create a read-only (RO) or read-write (CLONE) ephemeral clone for
+    # each such mapping.
     #
-    # If the mapping to a persistent store is RO, then we will create
-    # an ephemeral clone for each such mapping.
-    #
-    if ($volume =~ /^lease-\d+$/ && $isro eq "true") {
+    if ($volume =~ /^lease-\d+$/ && $isclone eq "true") {
 	#
 	# If no snapshot exists, create one. VolumeClone must have
 	# a snapshot to hang the clone on. If a snapshot already exists
@@ -727,19 +738,17 @@ sub exportSlice($$$$) {
 	# wind up creating multiple snapshots for the same volume.
 	# That does not matter right now, but something to watch out for.
 	#
-	my $tstamp;
 	if (!exists($priv->{'lastsnapshot'})) {
 	    # XXX this will be an error
 	    warn("*** WARNING: blockstore_exportSlice: $volname: ".
 		 "no snapshot found; created one for now");
-	    $tstamp = time();
+	    my $tstamp = time();
 	    if (freenasVolumeSnapshot($pool, $volume, $tstamp)) {
 		warn("*** ERROR: blockstore_exportSlice: $volname: ".
-		     "Could not create snapshot for RO mapping");
+		     "Could not create snapshot for RO/Clone mapping");
 		return -1;
 	    }
-	} else {
-	    $tstamp = $priv->{'lastsnapshot'};
+	    $priv->{'lastsnapshot'} = $tstamp;
 	}
 
 	#
@@ -751,10 +760,7 @@ sub exportSlice($$$$) {
 	#
 	if (freenasVolumeClone($pool, $volume, $vnode_id)) {
 	    warn("*** ERROR: blockstore_exportSlice: $volname: ".
-		 "Could not create clone for RO mapping");
-	    if ($tstamp) {
-		freenasVolumeDesnapshot($pool, $volume, $tstamp);
-	    }
+		 "Could not create clone for RO/Clone mapping");
 	    return -1;
 	}
 	$volume = $vnode_id;
@@ -886,7 +892,7 @@ sub exportSlice($$$$) {
 	return -1;
 
 	# Check requested perms.
-	if ($isro eq "false") {
+	if ($isclone eq "false") {
 	    warn("*** ERROR: blockstore_exportSlice: $volname: ".
 		 "Cannot re-export in-use dataset as RW!");
 	    return -1;
@@ -1443,7 +1449,7 @@ sub deallocSlice($$$$) {
 
 		#
 		# If we are a clone of the most recent snapshot, just Destroy
-		# which leaves the clone; otherwise Declone and attempt to
+		# which leaves the snapshot; otherwise Declone and attempt to
 		# remove the old snapshot.
 		#
 		# Note that we do not use the cached 'lastsnapshot' in our

@@ -6,7 +6,8 @@
 #
 
 PORTNAME=	tftp-hpa
-PORTVERSION=	0.48
+PORTVERSION=	5.2
+PORTREVISION=	2
 #CATEGORIES=	net
 CATEGORIES=	misc
 MASTER_SITES=	http://www.emulab.net/distributions/
@@ -20,8 +21,6 @@ PATCH_STRIP=	-p1
 
 GNU_CONFIGURE=	YES
 USE_GMAKE=	YES
-
-CONFIGURE_ARGS+=--without-tcpwrappers
 
 NO_STAGE=	yes
 

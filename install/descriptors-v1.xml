@@ -293,7 +293,7 @@
     <value>ping,ssh,isup,linktest</value>
   </attribute>
   <attribute name="version">
-    <value>4.X</value>
+    <value></value>
   </attribute>
   <attribute name="reboot_waittime">
     <value>90</value>

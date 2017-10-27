@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2000-2016 University of Utah and the Flux Group.
+ * Copyright (c) 2000-2017 University of Utah and the Flux Group.
  * 
  * {{{EMULAB-LICENSE
  * 
@@ -148,7 +148,7 @@ char	*Ttyname;
 char	*Ptyname;
 char	*Devname;
 char	*Machine;
-int	logfd = -1, runfd, devfd = -1, ptyfd = -1;
+int	logfd = -1, runfd, devfd = -1, ptyfd = -1, xsfd = -1;
 int	hwflow = 0, speed = B9600, debug = 0, runfile = 0, standalone = 0;
 int     nologfile = 0;
 int	stampinterval = -1;
@@ -164,6 +164,7 @@ char   **programargv;
 #define programmode 0
 #define xendomain 0
 #define retryinterval 0
+#define nomodpath 0
 #else
 char		  *Bossnode = BOSSNODE;
 struct sockaddr_in Bossaddr;
@@ -174,6 +175,8 @@ int		   remotemode;
 int		   programmode;
 char		  *xendomain;
 int		   retryinterval = 5000;
+int		   maxretries = 0;
+int		   nomodpath = 0;
 int		   maxfailures = 10;
 int		   failures;
 int		   upportnum = -1, upfd = -1, upfilefd = -1;
@@ -381,7 +384,7 @@ main(int argc, char **argv)
 	else
 		Progname = *argv;
 
-	while ((op = getopt(argc, argv, "rds:Hb:ip:c:T:aonu:v:PmMLCl:X:R:")) != EOF)
+	while ((op = getopt(argc, argv, "rds:Hb:ip:c:T:aonu:v:PmMLCl:X:R:y:A")) != EOF)
 		switch (op) {
 #ifdef	USESOCKETS
 #ifdef  WITHSSL
@@ -427,6 +430,12 @@ main(int argc, char **argv)
 					"NOT seconds; must be >= 100\n");
 				usage();
 			}
+			break;
+		case 'y':
+			maxretries = atoi(optarg);
+			break;
+		case 'A':
+			nomodpath = 1;
 			break;
 #endif /* USESOCKETS */
 		case 'H':
@@ -510,6 +519,8 @@ main(int argc, char **argv)
 	}
 	else if (xendomain)
 		strcpy(strbuf, xendomain);
+	else if (nomodpath)
+		strcpy(strbuf, argv[1]);
 	else
 		(void) snprintf(strbuf, sizeof(strbuf),
 				DEVNAME, DEVPATH, argv[1]);
@@ -708,6 +719,9 @@ main(int argc, char **argv)
 		 * Note that progmode only attempts a restart "maxfailures"
 		 * times before it dies. This prevents infinite retries due
 		 * to things like a bad command line argument.
+		 *
+		 * Also for progmode, we increase the retry interval
+		 * additively on each failure, resetting on success.
 		 */
 		int isrestart = -1;
 	retry:
@@ -723,8 +737,9 @@ main(int argc, char **argv)
 		else if (programmode) {
 			if (progmode(isrestart) != 0) {
 				warning("sub-program did not start;"
-					" waiting and trying again");
-				usleep(retryinterval * 1000);
+					" waiting %ds and trying again",
+					(failures * retryinterval) / 1000);
+				usleep((failures * retryinterval) * 1000);
 				goto retry;
 			}
 		}
@@ -963,7 +978,8 @@ send_to_logfile(const char *buf, int cc)
 					 "\nSTAMP{%s}\n",
 					 cts);
 			if (logfd >= 0) {
-				(void) write(logfd, stampbuf, strlen(stampbuf));
+				if (write(logfd, stampbuf, strlen(stampbuf)) < 0)
+					;
 			}
 		}
 		laststamp = now;
@@ -992,6 +1008,8 @@ capture(void)
 	sigset_t omask;
 	char buf[BUFSIZE];
 	struct timeval timeout;
+	int nretries;
+
 
 	/*
 	 * XXX for now we make both directions non-blocking.  This is a
@@ -1036,15 +1054,22 @@ capture(void)
 		FD_SET(devfd, &sfds);
 	fdcount = devfd;
 #ifdef  USESOCKETS
-	if (devfd < sockfd)
+	if (fdcount < sockfd)
 		fdcount = sockfd;
 	FD_SET(sockfd, &sfds);
 #endif	/* USESOCKETS */
 	if (ptyfd >= 0) {
-		if (devfd < ptyfd)
+		if (fdcount < ptyfd)
 			fdcount = ptyfd;
 		FD_SET(ptyfd, &sfds);
 	}
+#ifdef  USESOCKETS
+	if (xsfd >= 0) {
+		if (fdcount < xsfd)
+			fdcount = xsfd;
+		FD_SET(xsfd, &sfds);
+	}
+#endif
 
 	fdcount++;
 
@@ -1116,9 +1141,11 @@ capture(void)
 					Machine, cc);
 			if (cc <= 0) {
 #ifdef  USESOCKETS
-				if (remotemode || programmode || xendomain) {
+				if (remotemode || programmode || xendomain
+				    || maxretries) {
 					FD_CLR(devfd, &sfds);
 					close(devfd);
+					devfd = -1;
 					if (remotemode) {
 						warning("remote socket closed;"
 						" attempting to reconnect");
@@ -1129,18 +1156,54 @@ capture(void)
 					else if (programmode) {
 						warning("sub-program died;"
 						" attempting to restart");
-						while (progmode(1) != 0)
-							usleep(retryinterval
+						while (progmode(1) != 0) {
+							warning("sub-program did not restart;"
+								" waiting %ds and trying again",
+								(failures *
+								 retryinterval)
+								/ 1000);
+							usleep((failures *
+								retryinterval)
 							       * 1000);
+						}
+
 					}
-					else {
-						warning("xen console pty closed;"
-							" attempting to reopen");
+					else if (xendomain) {
+						warning("xen console %s closed;"
+							" attempting to reopen",
+							Devname);
+						if (xsfd >= 0)
+							FD_CLR(xsfd, &sfds);
 						while (xenmode(1) != 0)
 							usleep(retryinterval
 							       * 1000);
+						if (xsfd >= 0) {
+							FD_SET(xsfd, &sfds);
+							if (xsfd >= fdcount)
+								fdcount = xsfd + 1;
+						}
 					}
-					FD_SET(devfd, &sfds);
+					else {
+						warning("devfd %s closed;"
+							" attempting to reopen",
+							Devname);
+						nretries = 0;
+						while (rawmode(Devname,speed) != 0) {
+							if (maxretries > 0
+							    && nretries > maxretries) {
+								die("%s: failed to reopen (%d tries)",
+								    Devname,nretries);
+							}
+							++nretries;
+							usleep(retryinterval
+							       * 1000);
+						}
+					}
+					if (devfd >= 0) {
+						FD_SET(devfd, &sfds);
+						if (devfd >= fdcount)
+							fdcount = devfd + 1;
+					}
 					continue;
 				}
 #endif
@@ -1276,6 +1339,29 @@ capture(void)
 			send_to_device(buf, cc);
 			sigprocmask(SIG_SETMASK, &omask, NULL);
 		}
+#ifdef  USESOCKETS
+		if (xsfd >= 0 && FD_ISSET(xsfd, &fds)) {
+			if (debug > 1)
+				fprintf(stderr,
+					"%s: xenstore_watch has data\n",
+					Machine);
+			/* XXX xenmode may reopen device */
+			if (devfd >= 0)
+			    FD_CLR(devfd, &sfds);
+			FD_CLR(xsfd, &sfds);
+			while (xenmode(1) != 0)
+				usleep(retryinterval * 1000);
+			assert(devfd >= 0);
+			FD_SET(devfd, &sfds);
+			if (devfd >= fdcount)
+				fdcount = devfd + 1;
+			if (xsfd >= 0) {
+				FD_SET(xsfd, &sfds);
+				if (xsfd >= fdcount)
+					fdcount = xsfd + 1;
+			}
+		}
+#endif
 	}
 }
 #endif
@@ -1874,9 +1960,10 @@ progmode(int isrestart)
 		close(0);
 		close(1);
 		close(2);
-		(void)dup(pipefds[1]);
-		(void)dup(pipefds[1]);
-		(void)dup(pipefds[1]);
+		if (dup(pipefds[1]) != 0 ||
+		    dup(pipefds[1]) != 1 ||
+		    dup(pipefds[1]) != 2)
+			die("dup pooched it.");
 
 		/*
 		 * Close all other descriptors.
@@ -1887,7 +1974,7 @@ progmode(int isrestart)
 
 		sigprocmask(SIG_UNBLOCK, &mask, 0);
 		execvp(programargv[1], &programargv[1]);
-		exit(666);
+		exit(66);
 	}
  err:
 	if (rv) {
@@ -1901,8 +1988,18 @@ progmode(int isrestart)
 	return rv;
 }
 
+/*
+ * Xenmode support from here on out.
+ *
+ * Note that we invoke Xen command line tools here. We could use native
+ * library calls, but I don't want to have to link against Xen libraries.
+ *
+ * This is a prime example of a simple perl script written in C.
+ */
 #define XEN_XL	"/usr/sbin/xl"
 #define XEN_XSR	"/usr/sbin/xenstore-read"
+#define XEN_XSW	 "/usr/sbin/xenstore-watch"
+#define XEN_XSW2 "/usr/bin/xenstore-watch"
 
 /*
  * Capture output from a shell command.
@@ -1941,27 +2038,125 @@ backtick(char *cmd, char *outbuf, int outlen)
 	return rv;
 }
 
+static int
+findproc(char *cmd)
+{
+	char buf[128], outbuf[128];
+	int cpid = -1;
+
+	snprintf(buf, sizeof(buf), "pgrep -f '^%s'", cmd);
+	if (backtick(buf, outbuf, sizeof(outbuf)) == 0) {
+		char *pstr, *estr;
+		for (pstr = outbuf; *pstr && !isdigit(*pstr); pstr++)
+			;
+		for (estr = pstr; *estr && isdigit(*estr); estr++)
+			;
+		*estr = '\0';
+		if (*pstr != '\0')
+			cpid = atoi(pstr);
+	}
+
+	return cpid;
+}
+
+/*
+ * My oh my this is awful.
+ *
+ * We fire off a copy of xenstore-watch via popen() and watch the file
+ * descriptor in the select loop. If we see anything, we check and make
+ * sure the pty hasn't changed.
+ *
+ * Since we have to watch a path which contains a domain ID, and the domain
+ * changes whenever we reboot, we have to start a new xenstore-watch on
+ * every reboot. Even better, the old xenstore-watch does not die when
+ * the domain goes away and pclose won't kill it, so we have to figure out
+ * the pid of the popen() process and kill it ourselves. Awesome!
+ */
+static int
+xenwatch(int domid)
+{
+	static int lastdomid = 0;
+	static int lastpid = -1;
+	static FILE *xs = NULL;
+	static char *watch = XEN_XSW;
+	static int called;
+	char buf[128];
+	int flags, cc;
+
+	if (!called) {
+		struct stat sb;
+
+		if (stat(XEN_XSW, &sb) < 0)
+			watch = XEN_XSW2;
+		called++;
+	}
+	if (domid != lastdomid && xsfd >= 0) {
+		assert(fileno(xs) == xsfd);
+		if (lastpid > 0) {
+			kill(lastpid, SIGTERM);
+			lastpid = -1;
+		}
+		pclose(xs);
+		lastdomid = -1;
+		xs = NULL;
+		xsfd = -1;
+	}
+	if (xs == NULL) {
+		assert(xsfd == -1);
+		snprintf(buf, sizeof(buf),
+			 "%s /local/domain/%d/console", watch, domid);
+		xs = popen(buf, "r");
+		if (xs == NULL) {
+			warning("Could not start console watcher");
+			return -1;
+		}
+		lastdomid = domid;
+		xsfd = fileno(xs);
+		flags = fcntl(xsfd, F_GETFL);
+		if (flags != -1) {
+			flags |= O_NONBLOCK;
+			if (fcntl(xsfd, F_SETFL, flags) < 0)
+				warning("Could not set non-blocking");
+		}
+		sleep(1);
+		lastpid = findproc(buf);
+		dolog(LOG_INFO, "watching Xen dom %d (pid %d)",
+		      domid, lastpid);
+	}
+
+	/* flush whatever was readable */
+	while ((cc = fread(buf, 1, sizeof(buf), xs)) > 0)
+		if (debug) {
+			buf[cc-1] = 0;
+			fprintf(stderr, "watcher read: '%s'\n", buf);
+		}
+
+	return 0;
+}
+
 /*
  * The console line is a pty exported by xenconsoled. Look it up and open
  * it as devfd.
  *
- * Note that we invoke Xen command line tools here. We could use native
- * library calls, but I don't want to have to link against Xen libraries.
+ * Note that when using HVM, the pty device can change on when the VM is
+ * rebooted (recreated). So we set up a hacky xenstore_watch to look for
+ * changes.
  */
 int
 xenmode(int isrestart)
 {
-	struct stat sb;
 	char cmdbuf[128], outbuf[256], *cp, *pty = NULL;
 	int domid = -1;
+	static int called = 0;
 
-	/*
-	 * Make sure we have the necessary Xen tools. No point in
-	 * continually retrying if we don't!
-	 */
-	if (stat(XEN_XL, &sb) < 0 || stat(XEN_XSR, &sb) < 0)
-		die("%s or %s do not exist; not running Xen?",
-		    XEN_XL, XEN_XSR);
+	/* XXX make sure we have the necessary Xen tools */
+	if (!called) {
+		struct stat sb;
+		if (stat(XEN_XL, &sb) < 0 || stat(XEN_XSR, &sb) < 0)
+			die("%s or %s do not exist; not running Xen?",
+			    XEN_XL, XEN_XSR);
+		called++;
+	}
 
 	/* first convert name to domain id */
 	snprintf(cmdbuf, sizeof(cmdbuf),
@@ -1991,7 +2186,19 @@ xenmode(int isrestart)
 			if ((cp = index(outbuf, '\n')) != 0)
 				*cp = '\0';
 			pty = outbuf;
+		} else {
+			sleep(2);
+			if (backtick(cmdbuf, outbuf, sizeof(outbuf)) == 0) {
+				if ((cp = index(outbuf, '\n')) != 0)
+					*cp = '\0';
+				pty = outbuf;
+			} else {
+				warning("%s: HVM with no serial device!",
+					xendomain);
+			}
 		}
+		if (pty && xenwatch(domid) != 0)
+			warning("%s: could not start watcher", xendomain);
 	}
 
 	/* didn't find uart, try PV console */
@@ -2010,13 +2217,24 @@ xenmode(int isrestart)
 		return -1;
 	}
 
-	if (Devname)
+	if (Devname && strcmp(pty, Devname) != 0) {
 		free(Devname);
-	Devname = newstr(pty);
-
-	dolog(LOG_INFO, "%s (%d) using '%s'", xendomain, domid, Devname);
-	if (rawmode(Devname, speed))
-		return -1;
+		if (devfd >= 0)
+			close(devfd);
+		Devname = newstr(pty);
+		if (rawmode(Devname, speed))
+			return -1;
+		dolog(LOG_INFO,
+		      "%s (domid %d) using '%s' (%d)",
+		      xendomain, domid, Devname, devfd);
+	} else if (isrestart && Devname) {
+		/* XXX devfd may have been closed before call, must reopen */
+		if (devfd < 0 && rawmode(Devname, speed))
+			return -1;
+		dolog(LOG_INFO,
+		      "%s (domid %d) re-using '%s' (%d)",
+		      xendomain, domid, Devname, devfd);
+	}
 
 	return 0;
 }
@@ -2220,8 +2438,7 @@ clientconnect(void)
 	      upfilesize = 0;
 	      FD_SET(upfd, &sfds);
 	      if (upfd >= fdcount) {
-		fdcount = upfd;
-		fdcount += 1;
+		fdcount = upfd + 1;
 	      }
 	      sslUpload = newssl;
 	      if (fcntl(upfd, F_SETFL, O_NONBLOCK) < 0)
@@ -2304,8 +2521,7 @@ clientconnect(void)
 	      sscanf(key.key, "RELAY %d", &upportnum);
 	      FD_SET(devfd, &sfds);
 	      if (devfd >= fdcount) {
-		fdcount = devfd;
-		fdcount += 1;
+		fdcount = devfd + 1;
 	      }
 	      sslRelay = newssl;
 	      if (fcntl(devfd, F_SETFL, O_NONBLOCK) < 0)
@@ -2428,8 +2644,7 @@ clientconnect(void)
 
 	FD_SET(ptyfd, &sfds);
 	if (ptyfd >= fdcount) {
-		fdcount = ptyfd;
-		fdcount++;
+		fdcount = ptyfd + 1;
 	}
 	tipactive = 1;
 	if (docircbuf) {
@@ -2467,12 +2682,15 @@ handleupload(void)
 		drop = 1;
 		close(devfd);
 		/* XXX run uisp */
-		(void) system(buffer);
+		if (system(buffer) != 0)
+			warning("upload command failed");
 		if (rawmode(Devname, speed))
 			die("rawmode failed");
 	}
 	else {
-		(void) write(upfilefd, buffer, rc);
+		int wc;
+		if ((wc = write(upfilefd, buffer, rc)) != rc)
+			warning("upload short write");
 		upfilesize += rc;
 	}
 

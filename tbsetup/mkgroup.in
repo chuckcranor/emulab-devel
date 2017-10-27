@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2000-2015 University of Utah and the Flux Group.
+# Copyright (c) 2000-2016 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -194,7 +194,7 @@ my $groupdir  = "$GRPROOT/$pid/$gid";
 if (system("egrep -q -s '^${unix_name}:' /etc/group")) {
     print "Adding group $unix_name to local node ...\n";
 
-    if (system("$GROUPADD $unix_name -g $unix_gid")) {
+    if (runBusyLoop("$GROUPADD $unix_name -g $unix_gid")) {
 	fatal("Could not add $unix_gid ($unix_gid) to local node!\n");
     }
 }

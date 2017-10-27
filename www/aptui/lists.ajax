@@ -61,7 +61,7 @@ function Do_SearchUsers()
 	return -1;
     }
     $text = $ajax_args["text"];
-    if (!preg_match("/^\w*$/", $text)) {
+    if (!preg_match("/^[\.\@\w]*$/", $text)) {
 	SPITAJAX_ERROR(-1, "Illegal text to search for");
 	return -1;
     }
@@ -69,13 +69,15 @@ function Do_SearchUsers()
     if ($ISEMULAB) {
         $portal_test = "(portal is null or $portal_test)";
     }
+    $safe_text = addslashes("%${text}%");
+    
     $query_result =
         DBQueryFatal("select uid,usr_name,usr_affil,portal from users ".
                      "where $portal_test and ".
-                     "      (uid like '%${text}%' or ".
-                     "       usr_affil like '%${text}%' or ".
-                     "       LCASE(usr_email) like '%${text}%' or ".
-                     "       usr_name like '%${text}%') ".
+                     "      (uid like '$safe_text' or ".
+                     "       usr_affil like '$safe_text' or ".
+                     "       LCASE(usr_email) like '$safe_text' or ".
+                     "       usr_name like '$safe_text') ".
                      "order by uid");
 
     while ($row = mysql_fetch_array($query_result)) {
@@ -112,14 +114,17 @@ function Do_SearchProjects()
     if ($ISEMULAB) {
         $portal_test = "(p.portal is null or $portal_test)";
     }
+    $safe_text = addslashes("%${text}%");
     $query_result =
         DBQueryFatal("select pid,u.uid,u.usr_name,u.usr_affil,p.portal ".
                      "  from projects as p ".
                      "left join users as u on u.uid_idx=p.head_idx ".
                      "where $portal_test and ".
-                     "      (pid like '%${text}%' or ".
-                     "       u.usr_name like '%${text}%' or ".
-                     "       u.usr_affil like '%${text}%') ".
+                     "      (pid like '$safe_text' or ".
+                     "       p.name like '$safe_text' or ".
+                     "       p.why like '$safe_text' or ".
+                     "       u.usr_name like '$safe_text' or ".
+                     "       u.usr_affil like '$safe_text') ".
                      "order by pid");
 
     while ($row = mysql_fetch_array($query_result)) {

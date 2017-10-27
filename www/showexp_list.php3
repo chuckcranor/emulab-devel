@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2012 University of Utah and the Flux Group.
+# Copyright (c) 2000-2017 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -597,6 +597,14 @@ if ($thumb && !$idle) {
 	}
 	$stale = $experiment->IdleStale();
 
+        #
+        # No longer show Geni experiments here, going to be bad news for
+        # mere users.
+        #
+        if ($nonlocal_id && !$isadmin) {
+            continue;
+        }
+
 	if ($state == "active" && isset($sidx)) {
 	    if (! ($user = User::Lookup($sidx))) {
 		TBERROR("Could not lookup object for user $sidx", 1);
@@ -613,7 +621,7 @@ if ($thumb && !$idle) {
 	
 	if ($swapreqs && !$isidle) {
 	    $swapreqs = "";
-	    mysql_query("update experiments set swap_requests='' ".
+	    mysql_query("update experiments set swap_requests='0' ".
 			"where pid='$pid' and eid='$eid'");
 	}
 
@@ -623,7 +631,7 @@ if ($thumb && !$idle) {
 	    $lastswapreq=$row["lastreq"];
 	    if ($lastswapreq > $idletime) {
 		# My last request was from _before_ it was idle this time
-		mysql_query("update experiments set swap_requests='' ".
+		mysql_query("update experiments set swap_requests='0' ".
 			    "where pid='$pid' and eid='$eid'");
 		$swapreq=0;
 	    }

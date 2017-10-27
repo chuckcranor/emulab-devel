@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2000-2007 University of Utah and the Flux Group.
+ * Copyright (c) 2000-2016 University of Utah and the Flux Group.
  * 
  * {{{EMULAB-LICENSE
  * 
@@ -116,8 +116,8 @@ main(int argc, char **argv)
 
 	event_args[0] = '\0';
 	while(argc) {
-	  strncat(event_args,argv[0],sizeof(event_args));
-	  strncat(event_args," ",sizeof(event_args));
+	  strncat(event_args,argv[0],sizeof(event_args)-2);
+	  strcat(event_args," ");
 	  argv++;
 	  argc--;
 	}

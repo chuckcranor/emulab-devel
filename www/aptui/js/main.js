@@ -1,8 +1,4 @@
-require(window.APT_OPTIONS.configObject,
-	['js/quickvm_sup'
-	 // jQuery modules
-	 ],
-function (sup)
+$(function ()
 {
     'use strict';
 

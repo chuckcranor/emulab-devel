@@ -61,7 +61,6 @@ window.APT_OPTIONS.configObject = {
 
 window.APT_OPTIONS.initialize = function (sup)
 {
-    var geniauth = "https://www.emulab.net/protogeni/speaks-for/geni-auth.js";
     var embedded = window.EMBEDDED;
 
     // Eventually make this download without having to follow a link.
@@ -94,19 +93,60 @@ window.APT_OPTIONS.initialize = function (sup)
 	$('#loginbutton').click(function (event) {
 	    event.preventDefault();
 	    sup.ShowModal('#quickvm_login_modal');
-	    if (window.ISCLOUD || window.ISPNET) {
+	    if (window.ISCLOUD || window.ISPNET || window.ISPOWDER) {
 		console.info("Loading geni auth code");
 		sup.InitGeniLogin(embedded);
-		require([geniauth], function() {
-		    console.info("Geni auth code has been loaded");
-		    $('#quickvm_geni_login_button').removeAttr("disabled");
-		});
+	        $('#quickvm_geni_login_button').removeAttr("disabled");
 	    }
 	    return false;
 	});
     }
+    /*
+     * Setup a timer to ask for announcements.
+     */
+    setTimeout(function f() { window.APT_OPTIONS.Announcements() }, 10000);
+    
+    window.APT_OPTIONS.startPage();
+    $(window).on('beforeunload.common', APT_OPTIONS.endPage);
     $('body').show();
 };
+
+window.APT_OPTIONS.gaAjaxEvent = function (route, method, code)
+{
+    if (window.GOOGLEUA === undefined) {
+	return;
+    }
+    // Do not report on these long polling calls, swamps the data.
+    if (method == "GetInstanceStatus" || method == "SnapshotStatus") {
+	return;
+    }
+    ga('send', 'event', 'ajax', route, method, code);
+}
+
+window.APT_OPTIONS.gaButtonEvent = function (event)
+{
+    if (window.GOOGLEUA === undefined) {
+	return;
+    }
+    var target = event.target;
+    var type   = event.type;
+    var id     = $(target).attr('id');
+    var label  = $(target).text();
+    if (id === undefined) {
+	id = label.trim();
+    }
+    //console.info("button", type, id);
+    ga('send', 'event', 'button', type, id);
+}
+
+window.APT_OPTIONS.gaTabEvent = function (action, id)
+{
+    if (window.GOOGLEUA === undefined) {
+	return;
+    }
+    //console.info("tab", action, id);
+    ga('send', 'event', 'tab', action, id);
+}
 
 APT_OPTIONS.CallServerMethod = function (url, route, method, args, callback)
 {
@@ -120,7 +160,12 @@ APT_OPTIONS.CallServerMethod = function (url, route, method, args, callback)
     return $.ajax({
         // the URL for the request
         url: url,
-        success: callback,
+        success: function (json) {
+	    window.APT_OPTIONS.gaAjaxEvent(route, method, json.code);
+	    if (callback !== undefined) {
+		callback(json);
+	    }
+	},
  
         // the data to send (will be converted to a query string)
         data: {
@@ -161,3 +206,91 @@ window.APT_OPTIONS.nagPI = function (pid) {
 			       });
   return false;
 };
+
+window.APT_OPTIONS.fetchTemplate = function (name) {
+  var result = '';
+  var element = document.querySelector('script#' + name);
+  if (element)
+  {
+    result = atob(element.innerHTML);
+  }
+  return result;
+};
+
+window.APT_OPTIONS.fetchTemplateList = function (nameList) {
+  var result = {};
+  var i = 0;
+  for (; i < nameList.length; i += 1)
+  {
+    var name = nameList[i];
+    result[name] = window.APT_OPTIONS.fetchTemplate(name);
+  }
+  return result;
+};
+
+window.APT_OPTIONS.startPage = function () {
+  window.APT_OPTIONS.postTutorial({ url: window.location.href });
+}
+
+window.APT_OPTIONS.endPage = function () {
+  window.APT_OPTIONS.postTutorial({ url: "None" });
+}
+
+window.APT_OPTIONS.updatePage = function (data) {
+  window.APT_OPTIONS.postTutorial({ url: window.location.href, update: data });
+}
+
+window.APT_OPTIONS.postTutorial = function (data) {
+  //console.log('PostTutorial: ', data);
+  //console.log('parent: ', window.parent.location.hostname, window.parent.location.port, window.parent.location.protocol);
+  window.parent.postMessage(data, 'http://tutorial.cloudlab.us:5000');
+  try {
+    if (window.parent) {
+      if (window.parent.location.hostname === 'tutorial.cloudlab.us' &&
+	  window.parent.location.port === '5000' &&
+	  window.parent.location.protocol === 'http')
+      {
+	console.log('sending');
+	window.parent.postMessage(data, 'http://tutorial.cloudlab.us:5000');
+      }
+      else if (window.parent.location.hostname === 'tutorial.cloudlab.us' &&
+	       window.parent.location.port === '' &&
+	       window.parent.location.protocol === 'http')
+      {
+	window.parent.postMessage(data, 'http://tutorial.clou7dlab.us');
+      }
+    }
+  }
+  catch (e) {}
+}
+
+window.APT_OPTIONS.Announcements = function () {
+    var callback = function(json) {
+	if (json.code) {
+	    console.info("announcements", json);
+	    return;
+	}
+	var newhtml = "";
+	
+	if (json.value.length) {
+	    console.info("announcements", json);
+	    _.each(json.value, function(html) {
+		newhtml += html;
+	    });
+	}
+	else {
+	    // Clear current announcements; dismissed in another tab.
+	    newhtml = "";
+	}
+	$('#portal-announcement-div').html(newhtml);
+	setTimeout(function f() { window.APT_OPTIONS.Announcements() }, 10000);
+    }
+
+    var xmlthing =
+	APT_OPTIONS.CallServerMethod('', 'announcement', 'Announcements', null);
+    // We want the callback all the time. 
+    xmlthing.done(callback).fail(function () {
+	setTimeout(function f() { window.APT_OPTIONS.Announcements() }, 90000);
+    });
+}
+

@@ -89,12 +89,9 @@ unsigned int countToBlock(unsigned int count)
 int countToBlockBit(unsigned int count)
 {
     int size = 0;
-    if (count >= 0)
+    for( ; count != 0; count >>= 1)
     {
-        for( ; count != 0; count >>= 1)
-        {
-            ++size;
-        }
+        ++size;
     }
     return size;
 }

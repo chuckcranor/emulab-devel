@@ -1,6 +1,6 @@
 #!/usr/local/bin/python
 #
-# Copyright (c) 2005-2016 University of Utah and the Flux Group.
+# Copyright (c) 2005-2017 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -29,24 +29,37 @@ import traceback
 import string
 import socket
 import re
+import math
 import HTMLParser
 
 # Configure stuff.
+TB        = "@prefix@";
 OURDOMAIN = "@OURDOMAIN@";
 
+TBPATH = os.path.join(TB, "lib")
+if TBPATH not in sys.path:
+    sys.path.append(TBPATH)
+    pass
+import libdb
+
 # Testbed specific stuff
-sys.path.append("/usr/local/lib/geni-lib")
+if False:
+    sys.path.append(TB + "/opsdir/lib/geni-lib")
+else:
+    sys.path.append("/usr/local/lib/geni-lib")
 
 # Geni lib stuff.
 import geni.portal as portal
 import geni.rspec.pg as RSpec
 import geni.rspec.igext as IG
+import geni.rspec.emulab as emulab
 import geni.urn as URN
 import geni.namespaces as GNS
 
 pc = portal.Context() 
 rspec = RSpec.Request()
 tour = IG.Tour()
+routertype = None
 
 # This is how we read the NS parser output XML.
 from lxml import etree
@@ -55,16 +68,42 @@ def Fatal(message):
     print >> sys.stderr, message
     sys.exit(1)
 
+def Warn(message):
+    print >> sys.stderr, message
+
 def Usage():
     print "usage: " + sys.argv[0] + " [option...] irfile"
     sys.exit(-1);
+    pass
+
+#
+# Helper function to find find osname.
+#
+def LookupImage(osname):
+    res = libdb.DBQueryFatal(
+            "select i.imagename from images as i "
+            "where i.pid=%s and i.imagename=%s",
+            (PID, osname))
+
+    if len(res) == 0:
+        return "emulab-ops" + "//" + osname
+
+    return PID + "//" + osname
     pass
 
 if len(sys.argv) < 2:
     Usage();
     pass
 
-NSfile = sys.argv[1];
+#
+# Check for PID flag.
+# 
+if len(sys.argv) > 2 and sys.argv[1] == "-p":
+    PID = sys.argv[2]
+    NSfile = sys.argv[3]
+else:
+    PID = None
+    NSfile = sys.argv[1]
 
 try:
     tree = etree.parse(NSfile);
@@ -78,12 +117,33 @@ except etree.XMLSyntaxError:
 #
 nodes       = {}
 lans        = {}
+lansets     = {}
 ifaces      = {}
 blockstores = {}
 lanifaces   = {}
 ifacecounts = {}
 bridged     = {}
+programs    = {}
+firewall    = None
 
+#
+# Need to know which node is the experiment firewall.
+#
+for child in tree.getroot():
+    if child.tag == "virt_firewalls":
+        row = child.find("row")
+        fwname = row.find("fwname").text
+        style  = row.find("style").text
+        if firewall:
+            Fatal("Only one experiment firewall allowed");
+            pass
+        firewall = rspec.ExperimentFirewall(fwname, style);
+        pass
+    pass
+
+#
+# Now process nodes and a few other things.
+#
 for child in tree.getroot():
     if child.tag == "virt_nodes":
         row = child.find("row")
@@ -104,8 +164,14 @@ for child in tree.getroot():
             if ntype != "pcvm":
                 node.xen_ptype = ntype;
                 pass
+            # Start out exclusive; might change below.
+            node.exclusive = True
         elif ntype == "blockstore":
             node = IG.RemoteBlockstore(vname, "/mnt", "eth0")
+            node.exclusive = True
+        elif firewall and firewall.client_id == vname:
+            # We created the firewall above.
+            node = firewall;
             node.exclusive = True
         else:
             node = RSpec.RawPC(vname)
@@ -119,23 +185,29 @@ for child in tree.getroot():
             if element.tag == "osname" and element.text:
                 #
                 # Convert NS project/osname to rspec project//osname.
-                # But if no project, add emulab-ops (clearly wrong).
+                #
                 osname = element.text
                 if osname.find("/") < 0:
-                    osname = "emulab-ops//" + osname
+                    if PID == None:
+                        osname = "emulab-ops//" + osname
+                    else:
+                        osname = LookupImage(osname);
+                        pass
                 elif osname.find("//") < 0:
                     osname = osname.replace("/", "//");
                     pass
                 node.disk_image = "urn:publicid:IDN+" + OURDOMAIN + "+image+" + osname
-            elif element.tag == "fixed" and element.text != None:
-                node.component_id = URN.Node(OURDOMAIN, element.text)
             elif element.tag == "ips" and element.text != None:
                 ips = element.text.split()
                 for token in ips:
                     vport,ip = token.split(":")
                     # Bridges create interfaces internally, we want to use those.
                     if role == "bridge":
-                        iface = node.interface("eth" + vport)
+                        if vport == "0":
+                            iface = node.iface0
+                        else:
+                            iface = node.iface1
+                            pass
                     elif ntype == "blockstore":
                         iface = node.interface
                     else:
@@ -158,12 +230,22 @@ for child in tree.getroot():
                 raw.attrib["action"] = "nonfatal"
                 node.addRawElement(raw)
                 pass
-            elif element.tag in ["loadlist"]:
-                Fatal("Unsupported request on node " + vname + ": " + element.tag)
+            elif element.tag == "routertype" and element.text:
+                routertype = element.text
+                if routertype == "static-ddijk":
+                    routertype = "static"
+                    pass
+                pass
+            elif (element.tag in ["loadlist", "cmd_line", "startupcmd"] and
+                  element.text and element.text != ""):
+                Fatal("Unsupported attribute on node " +
+                      vname + ": " + element.tag + " - " + element.text)
                 pass
             pass
         nodes[vname] = node
-        rspec.addResource(node)
+        if not (firewall and firewall.client_id == vname):
+            rspec.addResource(node)
+            pass
         pass
     #
     # We need to know how many members, so we can create a geni-lib Link or LAN.
@@ -178,7 +260,65 @@ for child in tree.getroot():
             pass
         ifacecounts[vname] = ifacecounts[vname] + 1
         pass
+    #
+    # These are not supported, warn early.
+    #
+    if child.tag == "event_groups":
+        row = child.find("row")
+        group_name = row.find("group_name").text
+        if group_name != "__all_programs":
+            Fatal("Unsupported use of event groups")
+            pass
+        pass
+    #
+    # Find the program agents before we try to process the event list.
+    # The event list is how we tell the difference between a startcmd
+    # and other program agents. 
+    #
+    if child.tag == "virt_programs":
+        row = child.find("row")
+        vnode = row.find("vnode").text
+        vname = row.find("vname").text
+        cmd   = row.find("command").text
+        directory = row.find("dir").text
+        #
+        # Watch for old use of ops program agents, not supported.
+        #
+        if vnode == "ops":
+            Fatal("Unsupported use of program agents on ops")
+            pass
+        #
+        # Strip out the startcmd stuff, we want just the command.
+        #
+        foo = re.match(r"^\((.*) ; /usr/local/etc/emulab.*\)", cmd);
+        if foo:
+            parser = HTMLParser.HTMLParser()
+            cmd = parser.unescape(foo.group(1));
+            pass
+        #
+        # Watch for access to builting Emulab ENV variables, those
+        # are not supported when converting.
+        #
+        for var in ["PID", "EID", "EXPDIR", "NODE", "NODEIP",
+                    "NODECNET", "NODECNETIP"]:
+            if (re.search("\$" + var + "[^\w]", cmd, re.MULTILINE) or
+                re.search("\$" + var + "$", cmd, re.MULTILINE)):
+                Fatal("Unsupported use of environment variable $" +
+                      var + " in startup command or program agent")
+                pass
+            pass
+        programs[vname] = {"vname" : vname, "vnode" : vnode,
+                           "cmd" : cmd, "directory" : directory,
+                           # We will set this when we process the event list.
+                           "onexpstart" : False}
+        pass
     pass
+
+#
+# There is only one of these, at top level.
+#
+if routertype:
+    rspec.setRoutingStyle(routertype)
 
 #
 # Now we can create Link or LANs cause we know the iface counts. Dumb.
@@ -193,6 +333,7 @@ for child in tree.getroot():
             lan = RSpec.LAN(vname)
             pass
         lans[vname] = lan;
+        lansets[vname] = {}
         rspec.addResource(lan)
         pass
     if child.tag == "virt_bridges":
@@ -203,6 +344,18 @@ for child in tree.getroot():
         # record that these links are bridged by bridge
         bridged[vlink] = {"bridge" : vname, "vport" : vport}
         pass
+    if child.tag == "virt_nodes":
+        row = child.find("row")
+        vname = row.find("vname").text
+        for element in row:
+            if element.tag == "fixed" and element.text != None:
+                #
+                # Watch for binding to another node in the topology.
+                #
+                if element.text in nodes:
+                    nodes[vname].InstantiateOn(nodes[element.text])
+                else:
+                    nodes[vname].component_id = URN.Node(OURDOMAIN,element.text)
     pass
 
 #
@@ -227,7 +380,15 @@ for child in tree.getroot():
             bs = node.Blockstore(vname, "/mnt")
             pass
         blockstores[vname] = bs
-        bs.size = str(size) + "MiB"
+
+        if row.find("size") is not None:
+            size = int(row.find("size").text)
+            if size:
+                # Ug, Geni wants this in GB.
+                size = int(math.ceil(size * 0.001048576))
+                bs.size = str(size) + "GB"
+                pass
+            pass
         pass
     pass
 
@@ -253,13 +414,15 @@ for child in tree.getroot():
             pass
         if key == "dataset":
             #XXX
-            val = val.replace("/", ":");
-            bs.dataset = "urn:publicid:IDN+" + OURDOMAIN + "+dataset+" + val
+            tokens = val.split("/");
+            bs.dataset = "urn:publicid:IDN+" + OURDOMAIN + ":" + tokens[0]
+            bs.dataset = bs.dataset + "+dataset+" + tokens[1]
             pass
         if key == "leasename":
             #XXX
-            val = val.replace("/", ":");
-            bs.dataset = "urn:publicid:IDN+" + OURDOMAIN + "+dataset+" + val
+            tokens = val.split("/");
+            bs.dataset = "urn:publicid:IDN+" + OURDOMAIN + ":" + tokens[0]
+            bs.dataset = bs.dataset + "+dataset+" + tokens[1]
             pass
         if key == "mountpoint":
             bs.mount = val;
@@ -323,7 +486,19 @@ for child in tree.getroot():
         if row.find("nobwshaping") != None:
             nobwshaping = int(row.find("nobwshaping").text)
             if nobwshaping:
-                lan.best_effort = True
+                if not lansets[vname].has_key("nobwshaping"):
+                    lan.setNoBandwidthShaping()
+                    pass
+                lansets[vname]["nobwshaping"] = True
+                pass
+            pass
+        if row.find("mustdelay") != None:
+            mustdelay = int(row.find("mustdelay").text)
+            if mustdelay:
+                if not lansets[vname].has_key("mustdelay"):
+                    lan.setForceShaping()
+                    pass
+                lansets[vname]["mustdelay"] = True
                 pass
             pass
         if row.find("protocol") != None:
@@ -345,6 +520,8 @@ for child in tree.getroot():
 
 for lanname,lifaces in lanifaces.iteritems():
     skip = 0
+    nobwshaping = 1;
+    
     #
     # Yuck, the parser spits out a min bw for blockstore links/lans.
     # But we want to kill that and let the best effort setting take care of it.
@@ -380,6 +557,8 @@ for lanname,lifaces in lanifaces.iteritems():
         loss1       = float(member1.find("lossrate").text)
         rloss1      = float(member1.find("rlossrate").text)
 
+        #print member0_key,bw0,delay0,loss0,member1_key,bw1,delay1,loss1
+
         #
         # The virt lans for bridges is done differently. 
         #
@@ -388,7 +567,10 @@ for lanname,lifaces in lanifaces.iteritems():
             bport  = bridged[lanname]["vport"]
             bridge = nodes[bname]
             memb   = bname + ":" + bport
-            pipe   = bridge.pipe("eth" + bport)
+            if bport == "0":
+                pipe   = bridge.pipe0
+            else:
+                pipe   = bridge.pipe1
 
             #print bname,bport,memb,str(pipe),member0_key,member1_key
 
@@ -412,6 +594,17 @@ for lanname,lifaces in lanifaces.iteritems():
 	rloss       = 1-(1-rloss0)*(1-loss1)
 	rbw         = min(rbw0,bw1)
 
+        #
+        # If the user has simply requested a standard 1G or 10G link,
+        # then force BW shaping off so that the CM will do a normal
+        # assignment. 
+        #
+        if (delay != 0 or loss != 0 or rdelay != 0 or rloss != 0 or
+            ((bw != 1000000 and bw != 10000000) or
+             (rbw != 1000000 and rbw != 10000000))):
+            nobwshaping = 0;
+            pass
+
         # geni-lib puts shaping params on both ifaces and links.
         iface0.bandwidth = bw
         iface0.latency   = delay
@@ -419,6 +612,9 @@ for lanname,lifaces in lanifaces.iteritems():
         iface1.bandwidth = rbw
         iface1.latency   = rdelay
         iface1.plr       = rloss
+        if nobwshaping:
+            lan.setNoBandwidthShaping();
+            pass
     else:
         #
         # A symmetrically shaped lan is the most common and easiest to deal
@@ -443,10 +639,24 @@ for lanname,lifaces in lanifaces.iteritems():
                 Fatal("asymmetric shaping not supported on lan " + lanname);
                 pass
 
+            #
+            # If the user has simply requested a standard 1G or 10G link,
+            # then force BW shaping off so that the CM will do a normal
+            # assignment.
+            #
+            if (delay != 0 or loss != 0 or
+                ((bw != 1000000 and bw != 10000000) or
+                 (rbw != 1000000 and rbw != 10000000))):
+                nobwshaping = 0;
+                pass
+
             # geni-lib puts shaping params on both ifaces and links.
             iface.bandwidth = bw
             iface.latency   = delay
             iface.plr       = loss
+            pass
+        if nobwshaping:
+            lan.setNoBandwidthShaping();
             pass
         pass
     pass
@@ -484,10 +694,24 @@ for child in tree.getroot():
             strategy = row.find("packing_strategy").text
             rspec.setPackingStrategy(strategy)
             pass
+        if row.find("delay_osname") != None:
+            #
+            # Convert NS project/osname to rspec project//osname.
+            # But if no project, add emulab-ops (clearly wrong).
+            osname = row.find("delay_osname").text
+            if osname.find("/") < 0:
+                osname = "emulab-ops//" + osname
+            elif osname.find("//") < 0:
+                osname = osname.replace("/", "//");
+                pass
+            disk_image = "urn:publicid:IDN+" + OURDOMAIN + "+image+" + osname
+            rspec.setDelayImage(disk_image)
+            pass
         #
         # A bunch of things we do not support yet.
+        # We ignore security_level for now, it gets set for an explicit firewall.
         #
-        for tag in ["jail_osname", "delay_osname", "security_level"]:
+        for tag in ["jail_osname"]:
             if row.find(tag) != None:
                 Fatal("Unsupported use of " + tag)
                 pass
@@ -502,31 +726,28 @@ for child in tree.getroot():
             pass
         pass
     #
-    # We only do the startup command right now, since there is no
-    # event mechanism. We trigger on the time=0 to determine which ones
-    # to consider, which might get more then just the startup command,
-    # but that is fine.
+    # We only consider program agents. We want to find any that have time=0
+    # and mark the program with onexpstart=True. We spit out the program
+    # agent list below.
     #
     if child.tag == "eventlist":
         row = child.find("row")
-        time  = row.find("time").text
         otype = row.find("objecttype").text
         etype = row.find("eventtype").text
         vnode = row.find("vnode").text
         vname = row.find("vname").text
-        cmd   = row.find("arguments").text
+        if row.find("time") == None:
+            Fatal("No start time provided for program object " + vname)
+            pass
+        time  = row.find("time").text
         if otype == "4":
             if etype != "1" and etype != "20":
                 Fatal("Unsupported program object event for " + vname)
                 pass
-            if time != "0":
+            if time != "0" and time != "0.0":
                 Fatal("Unsupported program object event time!=0 for " + vname)
                 pass
-            foo = re.match(r"^COMMAND=\((.*) ; /usr/local/etc/emulab.*\)", cmd);
-            if foo:
-                parser = HTMLParser.HTMLParser()
-                cmd = parser.unescape(foo.group(1));
-                nodes[vnode].addService(RSpec.Execute("sh", cmd))
+            programs[vname]["onexpstart"] = True
         else:
             Fatal("Unsupported event type for " + vname)
             pass
@@ -553,19 +774,58 @@ for child in tree.getroot():
         vname  = row.find("vname").text
         key    = row.find("attrkey").text
         val    = row.find("attrvalue").text
-        raw    = etree.Element("{%s}node_attribute" %
-                               (RSpec.Namespaces.EMULAB.name))
-        raw.attrib["attrkey"]   = key
-        raw.attrib["attrvalue"] = val
-        nodes[vname].addRawElement(raw)
+        node   = nodes[vname]
+
+        #
+        # Many node attributes, we have to translate some, the rest
+        # are passed through.
+        #
+        if key == "routable_control_ip":
+            if val.lower() == "true":
+                node.routable_control_ip = True
+                pass
+        elif ((key == "MEMORY_SIZE" or key == "XEN_MEMSIZE") and
+              node.type == "emulab-xen"):
+            node.ram = int(val) / 1024
+        elif ((key == "XEN_CORES" or key == "VM_CPUS") and
+              node.type == "emulab-xen"):
+            node.cores = int(val)
+        elif key == "XEN_EXTRAFS" and node.type == "emulab-xen":
+            node.disk = int(val)
+        else:
+            raw = etree.Element("{%s}node_attribute" %
+                                (RSpec.Namespaces.EMULAB.name))
+            raw.attrib["key"]   = key
+            raw.attrib["value"] = val
+            node.addRawElement(raw)
+            pass
+        pass
+    if child.tag == "firewall_rules":
+        #
+        # Note that we are ignoring the security level. Not really sure if it
+        # makes any sense these days. The CM will set it if needed.
+        #
+        row = child.find("row")
+        fwname = row.find("fwname").text
+        fwrule = row.find("rule").text
+        ruleno = row.find("ruleno").text
+        if not fwname in nodes:
+            Fatal("No such firwall node " + fwname);
+            pass
+        if not firewall:
+            Fatal("Firewall rule for nonexistent firewall " + fwname);
+            pass
+        firewall.addRule(fwrule);
         pass
     if child.tag == "virt_trafgens":
         Fatal("Trafgens are not supported anymore")
         pass
+    if child.tag == "virt_user_environment":
+        Fatal("opt variables are not supported when converting to geni-lib")
+        pass
     if child.tag in ["virt_lan_settings",
                      "virt_lan_member_settings", "virt_routes",
-                     "virt_node_disks", "virt_user_environment",
-                     "virt_firewalls", "firewall_rules",
+                     "virt_node_disks",
                      "virt_tiptunnels", "elabinelab_attributes",
                      "virt_paths", "experiment_blobs", "virt_blobs",
                      "virt_client_service_ctl", "virt_client_service_hooks",
@@ -573,5 +833,17 @@ for child in tree.getroot():
         Fatal("Unsupported use of " + child.tag)
         pass
     pass
+
+#
+# Add the rest of the program agents
+#
+for vname, program in programs.iteritems():
+    cmd = program["cmd"]
+    directory = program["directory"]
+    node = program["vnode"]
+    onexpstart = program["onexpstart"]
+    nodes[node].addService(emulab.ProgramAgent(vname, cmd,
+                                                directory, onexpstart));
+    pass;
 
 pc.printRequestRSpec(rspec)

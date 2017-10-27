@@ -1,7 +1,7 @@
 #!/usr/bin/perl -w
 
 #
-# Copyright (c) 2000-2016 University of Utah and the Flux Group.
+# Copyright (c) 2000-2017 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -33,7 +33,7 @@ use libdb qw(TBGetSiteVar);
 use libadminctrl;
 use libptop;
 use EmulabFeatures;
-use Image;
+use OSImage;
 
 my @SAVEARGV = @ARGV;
 
@@ -79,13 +79,14 @@ sub usage()
 	  "       -l specifies the location of the type limit file\n" .
           "       -1 Print an rspec containing only the node component-name\n" .
 	  "       -z Randomize node output order\n" .
+	  "       -R Regression mode; force static ordering for easy diff\n" .
 	  "       -G Omit 10G node-switch links\n" .
 	  "       -Z Force old ptopgen\n" .
 	  "       -f This is generating an advertisement rather than an internal file\n");
         exit(-1);
 }
 
-my $optlist = "s:e:m:vp:rSan:c:uxg:h1:l:zZCbfG";
+my $optlist = "s:e:m:vp:rSan:c:uxg:h1:l:zZCbfGR";
 my $is_advertisement = 0;
 my $mfactor;
 my $virtstuff = 0;
@@ -94,6 +95,7 @@ my $simstuff  = 0;
 my $allnodes  = 0;
 my $mnetcores = 0;
 my $mnetedges = 0;
+my $regression= 0;
 my $prune     = 0;
 my $do_xml    = 0;
 my $genimode  = $NO_GENI;
@@ -112,6 +114,7 @@ if ($PGENISUPPORT) {
     require GeniHRN;
     $cmurn = &GeniHRN::Generate($OURDOMAIN, "authority", "cm");
 }
+my $allow_firewall = TBGetSiteVar("general/cnet_firewalls");
 
 $opstate = <<'OPSTATE';
 <rspec_opstate xmlns="http://www.geni.net/resources/rspec/ext/opstate/1"
@@ -218,6 +221,7 @@ use NodeType;
 use Lan;
 use BlockstoreType;
 use User;
+use Reservation;
 
 tblog_stop_capture('stdout');
 
@@ -276,6 +280,9 @@ if (defined($options{"r"})) {
 }
 if (defined($options{"S"})) {
     $simstuff = 1;
+}
+if (defined($options{"R"})) {
+    $regression = 1;
 }
 if (defined($options{"p"})) {
     $pid = $options{"p"};
@@ -385,15 +392,15 @@ my %interfaceips = ();
 
 # Read interfaces
 my $result =
-    DBQueryFatal("SELECT node_id,card,port,iface,interface_type,role,IP" .
+    DBQueryFatal("SELECT node_id,iface,interface_type,role,IP" .
 		 " from interfaces where logical=0 " .
 		 ($genimode ne $NO_GENI ? "and role!='gw'" : ""));
 		 
-while (($node,$card,$port,$iface,$type,$role,$ip) = $result->fetchrow_array) {
+while (my ($node,$iface,$type,$role,$ip) = $result->fetchrow_array) {
     push @{ $nodetointerface{"$node"} }, $iface;
-    $interfacemap{"$node:$card:$port"} = $iface;
+    $interfacemap{"$node:$iface"} = $iface;
     if ((defined $type) && ($type ne "")) {
-	$interfacetypes{"$node:$card:$port"} = $type;
+	$interfacetypes{"$node:$iface"} = $type;
     }
     if ((defined $role) && ($role ne "")) {
 	$interfaceroles{"$node:$iface"} = $role;
@@ -460,8 +467,7 @@ my %contact_ifaces;
 my %stitch_points;
 my %external_speeds;
 
-$result = DBQueryFatal("select w.node_id1, w.card1, w.port1, i1.iface, ".
-		       "w.node_id2, w.card2, w.port2, i2.iface, ".
+$result = DBQueryFatal("select w.node_id1, w.iface1, w.node_id2, w.iface2, ".
 		       "w.external_interface, w.external_wire, ".
 		       "e.node_id, e.vlans, ".
 		       "e.external_manager, e.network_id, e.external_interface, ".
@@ -469,10 +475,12 @@ $result = DBQueryFatal("select w.node_id1, w.card1, w.port1, i1.iface, ".
 		       "from wires as w ".
 		       "left join external_networks as e ".
 		       "on w.node_id1=e.node_id or w.node_id2=e.node_id ".
-		       "left join interfaces as i1 on w.node_id1=i1.node_id and w.card1=i1.card and w.port1=i1.port ".
-		       "left join interfaces as i2 on w.node_id2=i2.node_id and w.card2=i2.card and w.port2=i2.port ".
+		       "left join interfaces as i1 on w.node_id1=i1.node_id and ".
+		       "     w.iface1=i1.iface ".
+		       "left join interfaces as i2 on w.node_id2=i2.node_id and ".
+		       "     w.iface2=i2.iface ".
 		       "where e.node_id is not null");
-while (my ($cnode, $ccard, $cport, $ciface, $enode, $ecard, $eport, $eiface,
+while (my ($cnode, $ciface, $enode, $eiface,
 	   $external_iface_urn, $external_link_urn, $external, $vlanList,
 	   $external_manager_urn,
 	   $external_network_id, $external_network_iface_urn,
@@ -491,17 +499,15 @@ while (my ($cnode, $ccard, $cport, $ciface, $enode, $ecard, $eport, $eiface,
     if ($external eq $cnode) {
 	my $temp;
 	$temp = $cnode; $cnode = $enode; $enode = $temp;
-	$temp = $ccard; $ccard = $ecard; $ecard = $temp;
-	$temp = $cport; $cport = $eport; $eport = $temp;
 	$temp = $ciface; $ciface = $eiface; $eiface = $temp;
     }
     $stitch_points{"$cnode:$enode"} = 1;
     $enode = $external_network_id;
     if (! defined($eiface)) {
-	$eiface = "$ecard.$eport";
+	die("No iface for $enode\n");	
     }
     if (! defined($ciface)) {
-	$ciface = "$ccard.$cport";
+	die("No iface for $cnode\n");	
     }
     my $ciface_urn;
     if (defined($subport)) {
@@ -587,11 +593,12 @@ while (($node,$eventstate, $role, $uuid, $isremotenode,
 
 # Read class/type maps
 $result =
-    DBQueryFatal("select class,type,isvirtnode from node_types");
+    DBQueryFatal("select class,type,isvirtnode,architecture from node_types");
 
-while (my ($class,$type,$isvirt) = $result->fetchrow_array) {
+while (my ($class,$type,$isvirt,$architecture) = $result->fetchrow_array) {
     $map = {};
     $map->{'CLASS'}    = $class;
+    $map->{'ARCH'}     = $architecture;
     $map->{'ISVIRT'}   = $isvirt;
     my $typeinfo       = NodeType->Lookup($type);
     $map->{'DELAYCAP'} = $typeinfo->delay_capacity();
@@ -652,6 +659,21 @@ while (($node,$building) = $result->fetchrow_array) {
 $result = DBQueryFatal("select type, feature, weight from node_type_features");
 while (my ($type, $feature, $weight) = $result->fetchrow()) {
     push(@{$typemap{$type}->{'FEATURES'}}, "$feature:$weight");
+}
+
+# Augment the features table to discourage selection of node types other
+# than those the project has reserved (if any).
+if( defined( $pid ) ) {
+    my @reservations = Reservation->CurrentReservations( [ $pid ] );
+    if( @reservations ) {
+	my @types = Reservation->ReservableTypes();
+	foreach my $type (@types) {
+	    push( @{ $typemap{ $type->type() }->{ 'FEATURES' } },
+		  "unreserved_type:0.5" ) unless
+		( grep( { $_->{ 'nodetype' } eq $type->type() }
+			@reservations ) );
+	}
+    }
 }
 
 #
@@ -715,55 +737,103 @@ if (defined($pid)) {
 # We do this limiting for two reasons:
 # 1) To avoid an explosion in the number of features for nodes
 # 2) To avoid information leaks, allowing projects to see each other's images
-# 
-my $osidquery = "select distinct o.osid,oi.type,o.osname,o.pid,ov.OS,".
-    "ov.version,ov.description,ov.protogeni_export,ov.osfeatures,iv.metadata_url,i.imagename,i.pid ".
-    "  from os_info as o ".
-    "left join os_info_versions as ov on ".
-    "     ov.osid=o.osid and ov.vers=o.version ".
-    "left join osidtoimageid as oi on o.osid = oi.osid ".
-    "left join images as i on oi.imageid = i.imageid ".
+#
+my $osidquery_common = 
     "left join image_versions as iv on ".
     "     iv.imageid=i.imageid and iv.version=i.version ".
     "left join image_permissions as p1 on p1.imageid=i.imageid ".
     "left join groups as g on ".
     "     p1.permission_type='group' and p1.permission_idx=g.gid_idx ".
     "left join users as u on ".
-    "     p1.permission_type='user' and p1.permission_idx=u.uid_idx ".
-    "where iv.global = 1 ";
-if ($pid) {
-    $osidquery .= " or i.pid='$pid' ".
-	" or (g.pid is not null and g.pid='$pid')";
-}
-if ($this_user) {
-    $osidquery .= " or (u.uid is not null and u.uid='$this_user')";
-}
+    "     p1.permission_type='user' and p1.permission_idx=u.uid_idx ";
 
-my $defaultosidquery =
-    "select distinct o.osid,t.type,o.osname,o.pid,ov.OS,".
-    "ov.version,ov.description,ov.protogeni_export,ov.osfeatures,iv.metadata_url,i.imagename,i.pid ".
-    "   from os_info as o ".
+#
+# Using osidtoimageid for type mapping. 
+#
+my $osidquery1 =
+    "select distinct o.osid,oi.type,o.osname,o.pid,ov.OS,".
+    "  ov.version,ov.description,ov.protogeni_export,ov.osfeatures,".
+    "  iv.metadata_url,i.imagename,i.pid ".
+    "    from os_info as o ".
     "left join os_info_versions as ov on ".
     "     ov.osid=o.osid and ov.vers=o.version ".
     "left join osidtoimageid as oi on o.osid = oi.osid ".
     "left join images as i on oi.imageid = i.imageid ".
+    $osidquery_common .
+    "where (iv.global = 1 ";
+
+#
+# Using newer architecture fields in node_types and images. 
+#
+my $osidquery2 =
+    "select distinct o.osid,nt.type,o.osname,o.pid,ov.OS,".
+    "  ov.version,ov.description,ov.protogeni_export,ov.osfeatures,".
+    "  iv.metadata_url,i.imagename,i.pid ".
+    "    from os_info as o ".
+    "left join os_info_versions as ov on ".
+    "     ov.osid=o.osid and ov.vers=o.version ".
+    "left join images as i on o.osid = i.imageid ".
+    # The image architecture could be a short list.
+    "inner join node_types as nt on ".
+    "   FIND_IN_SET(nt.architecture,i.architecture) ".
+    # Avoid processing the same image from both queries.
+    # When architecture is being used, we delete the osidtoimageid rows.
+    "left join osidtoimageid as oi on o.osid = oi.osid ".
+    $osidquery_common .
+    "where (1 or oi.type is null) and ".
+    "      i.architecture is not null and ".
+    "      nt.architecture is not null and (iv.global = 1 ";
+
+if ($pid) {
+    $osidquery1 .= " or i.pid='$pid' ".
+	" or (g.pid is not null and g.pid='$pid')";
+    $osidquery2 .= " or i.pid='$pid' ".
+	" or (g.pid is not null and g.pid='$pid')";
+}
+if ($this_user) {
+    $osidquery1 .= " or (u.uid is not null and u.uid='$this_user')";
+    $osidquery2 .= " or (u.uid is not null and u.uid='$this_user')";
+}
+$osidquery1 .= ")";
+$osidquery2 .= ")";
+
+#
+# No need to use osidtoimageid here cause:
+# 1. We only support EZ images now (osid=imageid).
+# 2. The type is made explicit by being in the node_type_attributes table!
+#
+my $defaultosidquery =
+    "select distinct o.osid,t.type,o.osname,o.pid,ov.OS,".
+    "   ov.version,ov.description,ov.protogeni_export,ov.osfeatures,".
+    "   iv.metadata_url,i.imagename,i.pid, ".
+    "   a.imagename as aliasname,a.imageid as aliasid ".
+    "   from os_info as o ".
+    "left join os_info_versions as ov on ".
+    "     ov.osid=o.osid and ov.vers=o.version ".
+    "left join images as i on o.osid = i.imageid ".
     "left join image_versions as iv on ".
     "     iv.imageid=i.imageid and iv.version=i.version ".
+    "left join image_aliases as a on a.target_imageid=i.imageid ".
     "left join node_type_attributes as t ".
-    "on (o.osid=t.attrvalue) where t.attrkey='default_osid'";
+    "on (o.osid=t.attrvalue) ".
+    "where t.attrkey='default_osid'";
 
 #
 # For subOS support (i.e., vnode OSes running atop vhost OSes), we have to
 # check both the subosid and all the parent_osid it can run on.
 #
-my $subosidquery =
-    "select distinct o.osid,o.parent_osid from os_submap as o " .
-    "left join osidtoimageid as oi1 on o.osid = oi1.osid " .
-    "left join osidtoimageid as oi2 on o.parent_osid = oi2.osid " .
-    "left join images as i1 on oi1.imageid = i1.imageid ".
+# No need to use osidtoimageid here cause:
+# 1. We only support EZ images now (osid=imageid).
+#
+my $subosidquery1 =
+    "select distinct o.osid,o.parent_osid,ov1.def_parentosid ".
+    "   from os_submap as o " .
+    "left join images as i1 on i1.imageid = o.osid ".
     "left join image_versions as iv1 on ".
     "     iv1.imageid=i1.imageid and iv1.version=i1.version ".
-    "left join images as i2 on oi2.imageid = i2.imageid ".
+    "left join os_info_versions as ov1 on ".
+    "     ov1.osid=i1.imageid and ov1.vers=i1.version ".
+    "left join images as i2 on i2.imageid = o.parent_osid ".
     "left join image_versions as iv2 on ".
     "     iv2.imageid=i2.imageid and iv2.version=i2.version ".
     "left join image_permissions as ip1 on ip1.imageid=i1.imageid ".
@@ -778,23 +848,35 @@ my $subosidquery =
     "     ip2.permission_type='user' and ip2.permission_idx=u2.uid_idx ".
     "where (i1.imageid is null or iv1.global = 1";
 if ($pid) {
-    $subosidquery .= " or i1.pid='$pid' or g1.pid='$pid'";
+    $subosidquery1 .= " or i1.pid='$pid' or g1.pid='$pid'";
 }
 if ($this_user) {
-    $subosidquery .= " or u1.uid='$this_user'"
+    $subosidquery1 .= " or u1.uid='$this_user'"
 }
 $subosidquery .= ") and (iv2.global = 1";
 if ($pid) {
-    $subosidquery .= " or i2.pid='$pid' or g2.pid='$pid'";
+    $subosidquery1 .= " or i2.pid='$pid' or g2.pid='$pid'";
 }
 if ($this_user) {
     $subosidquery .= " or u2.uid='$this_user'"
 }
-$subosidquery .= ")";
+$subosidquery1 .= ")";
+
+my $subosidquery2 =
+    "select distinct o.osid,o.parent_osid,ov.def_parentosid ".
+    "   from os_submap as o " .
+    "left join os_info as oi on oi.osid = o.osid ".
+    "left join os_info_versions as ov on ".
+    "     ov.osid=oi.osid and ov.vers=oi.version ".
+    "left join os_info as oip on oip.osid = o.parent_osid ".
+    "left join os_info_versions as ovp on ".
+    "     ovp.osid=oip.osid and ovp.vers=oip.version ".
+    "where (ov.shared=1 and ovp.shared=1 and ov.ezid=0 and ovp.ezid=0)";
 
 our %node_type_osids;
 our %osid_node_types;
 our %osid_subosids;
+our %osid_defparent;
 our %osid_name;
 our %osid_url;
 our %osid_pid;
@@ -808,9 +890,13 @@ our %node_longitudes;
 
 our $openvzid;
 
-$result = DBQueryFatal($osidquery);
+$result = DBQueryFatal($osidquery1);
 processOs($result);
 
+$result = DBQueryFatal($osidquery2);
+processOs($result);
+
+# We want this to be last since it will possibly alter results of previous.
 $result = DBQueryFatal($defaultosidquery);
 processOs($result);
 
@@ -818,7 +904,8 @@ sub processOs
 {
     my $result = shift(@_);
     while (my ($osid,$type,$osname,$ospid,$osos, $osversion,
-	       $osdescription,$geni,$osfeatures,$remote_url,$imagename,$imagepid) = $result->fetchrow()) {
+	       $osdescription,$geni,$osfeatures,$remote_url,$imagename,
+	       $imagepid,$aliasname,$aliasid) = $result->fetchrow()) {
 	if ($osname eq "OPENVZ-STD") {
 	    $openvzid = $osid;
 	}
@@ -826,13 +913,23 @@ sub processOs
 	    my $default = $typemap{$type}->{'OSID'};
 	    if ($geni eq 1 ||
 		(defined($default) && $default eq $osid)) {
-		push(@{ $typemap{$type}->{'OSLIST'} }, $osid);
-		$osid_name{$osid} = $osname;
 		if (defined($remote_url)) {
 		    $osid_url{$osid} = $remote_url;
 		} elsif (defined($imagename) && defined($imagepid)) {
-		    $image = Image->Lookup("$imagepid,$imagename");
+		    $image = OSImage->Lookup("$imagepid,$imagename");
+		    # Just skip, does not matter.
+		    next
+			if (!defined($image));
 		    $osid_url{$osid} = $image->LocalURL();
+		}
+		push(@{ $typemap{$type}->{'OSLIST'} }, $osid)
+		    if (!grep {$_ == $osid} @{ $typemap{$type}->{'OSLIST'} });
+		
+		if ($genimode && defined($aliasname)) {
+		    $osid_name{$osid} = $aliasname;
+		}
+		else {
+		    $osid_name{$osid} = $osname;
 		}
 		$osid_pid{$osid} = $ospid;
 		$osid_os{$osid} = $osos;
@@ -841,7 +938,8 @@ sub processOs
 	    }
 	}
 	if ($node_type_osids{$type}) {
-	    push @{$node_type_osids{$type}}, $osid;
+	    push(@{$node_type_osids{$type}}, $osid)
+		if (!grep {$_ == $osid} @{$node_type_osids{$type}});
 	} else {
 	    $node_type_osids{$type} = [$osid];
 	}
@@ -849,11 +947,12 @@ sub processOs
 	    $osid_avoid_usb{$osid} = 1;
 	}
 	#
-	# We have to maintain a data structure telling us which types an OSID could
-	# be on for use below with generic OSIDs
+	# We have to maintain a data structure telling us which types an OSID
+	# could be on for use below with generic OSIDs
 	#
 	if ($osid_node_types{$osid}) {
-	    push @{$osid_node_types{$osid}}, $type;
+	    push(@{$osid_node_types{$osid}}, $type)
+		if (!grep {$_ eq $type} @{$osid_node_types{$osid}});
 	} else {
 	    $osid_node_types{$osid} = [$type];
 	}
@@ -862,12 +961,55 @@ sub processOs
 #
 # XXX Note below that for now, subosids cannot redirect to other subosids.
 #
-$result = DBQueryFatal($subosidquery);
-while (my ($subosid,$osid) = $result->fetchrow()) {
-    if ($osid_subosids{$osid}) {
-	push @{$osid_subosids{$osid}}, $subosid;
-    } else {
-	$osid_subosids{$osid} = [$subosid];
+foreach my $q ($subosidquery1, $subosidquery2) {
+    $result = DBQueryFatal($q);
+    while (my ($subosid,$osid,$defparent) = $result->fetchrow()) {
+	if ($osid_subosids{$osid}) {
+	    push @{$osid_subosids{$osid}}, $subosid;
+	} else {
+	    $osid_subosids{$osid} = [$subosid];
+	}
+	# This is default parent. See below, used for image aliases.
+	if (defined($defparent) && $defparent == $osid) {
+	    $osid_defparent{$subosid} = $defparent;
+	}
+    }
+}
+
+#
+# Find the image aliases and put in entries in node_type_osids.
+#
+my @aliases = OSImageAlias->ListAll();
+foreach my $alias (@aliases) {
+    #
+    # If the user can use the underlying images, then the alias is okay too.
+    #
+    my $allowed = 1;
+    
+    foreach my $image ($alias->imagelist()) {
+	if (! exists($osid_node_types{$image->osid()})) {
+	    $allowed = 0;
+	}
+    }
+    if ($allowed) {
+	# Add subosid mappings for the alias name.
+	foreach my $image ($alias->imagelist()) {
+	    my $defparent = $osid_defparent{$image->osid()};
+	    if (defined($defparent)) {
+		push(@{$osid_subosids{$defparent}}, $alias->osid());
+	    }
+	}
+	my @types = ();
+	foreach my $type ($alias->TypeList()) {
+	    $type = $type->type();
+	    push(@types, $type);
+
+	    if (! $node_type_osids{$type}) {
+		$node_type_osids{$type} = [];
+	    }
+	    push(@{$node_type_osids{$type}}, $alias->osid());
+	}
+	$osid_node_types{$alias->osid()} = \@types;
     }
 }
 
@@ -1008,6 +1150,8 @@ my $free_condition = "(b.node_id is null and ".
 if (defined($pid)) {
     $free_condition = "($free_condition and ".
 	"(np.reserved_pid is null or np.reserved_pid='$pid'))";
+} else {
+    $free_condition = "($free_condition and np.reserved_pid is null)";
 }
 
 # if the user has specified an exempt pid/eid, 
@@ -1191,9 +1335,11 @@ while (my ($node_id1, $node_id2) = $result->fetchrow()) {
 }
 
 @nodenames = keys(%nodes);
-if ($randomize)
-{
+if ($randomize) {
     @nodenames = shuffle(@nodenames);
+}
+elsif ($regression) {
+    @nodenames = sort(@nodenames);
 }
 
 #
@@ -1209,6 +1355,7 @@ foreach $node (@nodenames) {
     my $nodeobj = Node->Lookup($node);
     my $type  = $nodes{$node};
     my $class = $typemap{$type}->{'CLASS'};
+    my $arch = $typemap{$type}->{'ARCH'};
     my $delay_capacity = $typemap{$type}->{'DELAYCAP'};
     my $simnode_capacity = $typemap{$type}->{'SIMCAP'};
     my $cpu_speed = $typemap{$type}->{'SPEED'};
@@ -1251,6 +1398,10 @@ foreach $node (@nodenames) {
     if ($class eq "switch") {
 	$class = $type;
     }
+    # New architecture stuff
+    if (defined($arch)) {
+	push(@types, "$arch:1");
+    }
         
     # Might be equal, which assign would sum as two, not one!
     if ($type ne $class) {
@@ -1278,6 +1429,9 @@ foreach $node (@nodenames) {
 	push @types, "delay-${type}:$delay_capacity";
 	push @types, "bridge:100";
 	push @types, "bridge-${type}:100";
+    }
+    if (defined($allow_firewall) && $allow_firewall) {
+	push @types, "firewall:1";
     }
 
     #
@@ -1399,6 +1553,9 @@ foreach $node (@nodenames) {
 	    # Add in machine specific auxtypes that use the same count.
 	    #
 	    push(@types, "${type}-vm:$count");
+	    if (defined($arch)) {
+		push(@types, "${arch}-vm:$count");
+	    }
 
 	    # And a legacy type.
 	    my $legacy_type = $type;
@@ -1590,19 +1747,52 @@ foreach $node (@nodenames) {
 #
 # Print out all blockstores
 #
+# XXX we should try to narrow down the list of lease blockstores to only
+# those accessible by this user/project.
+#
 if ($useblockstore) {
     $result = DBQueryFatal("select b.node_id, b.bs_id, b.lease_idx, b.type, ".
-			   "s.remaining_capacity ".
+			   "s.remaining_capacity, b2.bs_id as pool ".
 			   "from blockstores as b ".
 			   "left join blockstore_state as s ".
 			   "on b.bsidx=s.bsidx ".
-			   "where s.ready=1");
+			   "left join blockstore_trees as t ".
+			   "on b.bsidx=t.bsidx ".
+			   "left join blockstores as b2 ".
+			   "on t.aggidx=b2.bsidx ".
+			   "where s.ready=1 ".
+			   ($regression ?
+			    "order by b.node_id,b.bs_id,b.lease_idx" : ""));
+    #
+    # Pass 1: associate leases with pools
+    #
+    my @rows = ();
+    my %bspools = ();
     while (my ($nodeId, $bsId, $leaseIdx, $typeName,
-	       $capacity) = $result->fetchrow_array) {
+	       $capacity, $pool) = $result->fetchrow_array) {
+	if ($pool) {
+	    my $key = "$nodeId/$pool";
+	    if (!exists($bspools{$key})) {
+		$bspools{$key} = [];
+	    }
+	    push(@{$bspools{$key}}, $leaseIdx);
+	}
+	push(@rows, [ $nodeId, $bsId, $leaseIdx, $typeName, $capacity ]);
+    }
+
+    #
+    # Pass 2: output the blockstores
+    #
+    foreach my $row (@rows) {
+	my ($nodeId, $bsId, $leaseIdx, $typeName, $capacity) = @$row;
 	my $type = BlockstoreType->Lookup($typeName);
 	if (defined($type)) {
 	    my @features = ();
-	    foreach my $attr (values %{$type->GetAttributes()}) {
+	    my %attributes = %{ $type->GetAttributes() };
+	    my @keys = keys(%attributes);
+	    @keys = sort(@keys) if ($regression);
+	    foreach my $key (@keys) {
+		my $attr = $attributes{$key};
 		if (exists($attr->{'isfeature'}) && $attr->{'isfeature'}) {
 		    my $attrkey = $attr->{'key'};
 		    my $attrval = $attr->{'value'};
@@ -1626,6 +1816,16 @@ if ($useblockstore) {
 	    #
 	    if ($leaseIdx > 0) {
 		push(@features, "bs-lease-$leaseIdx:1.0");
+	    }
+	    #
+	    # If it is not a lease, we need to see if it is the home
+	    # of any leases. If so we output a unique feature to say
+	    # that this pool supports clones of the indicated lease.
+	    #
+	    elsif (exists($bspools{"$nodeId/$bsId"})) {
+		foreach my $lidx (sort(@{$bspools{"$nodeId/$bsId"}})) {
+		    push(@features, "bs-clone-$lidx:0.5");
+		}
 	    }
 
 	    push(@features, "+bs-capacity:$capacity");
@@ -1815,7 +2015,7 @@ if ($widearea && ! defined($component_name)) {
 }
 
 if ($genimode ne $NO_GENI) {
-    foreach $key (keys %interfaceroles) {
+    foreach $key (sort(keys(%interfaceroles))) {
 	if (is_public_interface($key)) {
 	    if ($key =~ /^([^:]+):([^:]+)$/) {
 		my $node = $1;
@@ -1864,26 +2064,14 @@ while (($type,$capkey,$capval) = $result->fetchrow_array) {
 }
 
 # Read interface switches
-$result = DBQueryFatal("SELECT node_id1, iface, node_id2 FROM wires AS w " .
-	"LEFT JOIN interfaces as i ON w.node_id1=i.node_id AND w.card1=i.card ".
+$result = DBQueryFatal("SELECT node_id1, i.iface, node_id2 FROM wires AS w " .
+	"LEFT JOIN interfaces as i ON w.node_id1=i.node_id AND w.iface1=i.iface ".
 	"where w.logical=0");
 
 while (($node,$iface,$switch) = $result->fetchrow_array) {
     if ($node && $iface) {
 	$interfaceswitches{"$node:$iface"} = $switch;
     }
-}
-
-# Read interface cards and ports
-$result = DBQueryFatal("SELECT node_id, iface, card, port, IP ".
-		       "FROM interfaces where logical=0");
-
-while (($node,$iface,$card,$port,$IP) = $result->fetchrow_array) {
-    next
-	if ($prune && $is_reserved{$node} && !$sharing_mode{$node} && 
-	    (!defined($IP) || $IP eq ""));
-
-    $interfacecardports{"$node:$iface"} = [$card,$port];
 }
 
 # Read interface_state
@@ -1933,13 +2121,14 @@ if (defined($experiment)) {
     }
 }
 
-$result = DBQueryFatal("SELECT node_id1,card1,port1,node_id2,card2,port2" .
+$result = DBQueryFatal("SELECT node_id1,iface1,node_id2,iface2" .
 		       " from wires where logical=0 and ".
 		       "   (type='Trunk' or ".
-		       ($usecontrol ? "type='Control'" : "type='Node'") . ")");
+		       ($usecontrol ? "type='Control'" : "type='Node'") . ") ".
+		       ($regression ?
+			"order by node_id1,iface1,node_id2,iface2" : ""));
 
-while (($node1,$card1,$port1,$node2,$card2,$port2) = 
-       $result->fetchrow_array) {
+while (($node1,$iface1,$node2,$iface2) = $result->fetchrow_array) {
     if ((defined($nodes{$node1}) || defined($switches{$node1})) && 
 	(defined($nodes{$node2}) || defined($switches{$node2})) &&
 	! defined($component_name)) {
@@ -1962,10 +2151,10 @@ while (($node1,$card1,$port1,$node2,$card2,$port2) =
 	if ($node2obj->isswitch())
 	{
 	    $switchobj = $node2obj;
-	    $leaf_iface_type = get_iface_type($node1,$card1,$port1);
+	    $leaf_iface_type = get_iface_type($node1,$iface1);
 	} elsif ($node1obj->isswitch()) {
 	    $switchobj = $node1obj;
-	    $leaf_iface_type = get_iface_type($node2,$card2,$port2);
+	    $leaf_iface_type = get_iface_type($node2,$iface2);
 	} else {
 	    $switchobj = undef;
 	}
@@ -1980,8 +2169,8 @@ while (($node1,$card1,$port1,$node2,$card2,$port2) =
 	my $basetype;
 
 	if (!defined($switchobj)) {
-	    if( $interfacetypes{ "$node1:$card1:$port1" } eq "P2PLTE" ||
-		$interfacetypes{ "$node2:$card2:$port2" } eq "P2PLTE" ) {
+	    if( $interfacetypes{ "$node1:$iface1" } eq "P2PLTE" ||
+		$interfacetypes{ "$node2:$iface2" } eq "P2PLTE" ) {
 		$basetype = "P2PLTE";
 	    } else {
 		$basetype = "ethernet";
@@ -1992,10 +2181,8 @@ while (($node1,$card1,$port1,$node2,$card2,$port2) =
 	       !defined($basetype) || $basetype eq "") {
 	    fatal("No forwarding_protocols set for $switchobj (type)");
 	}
-	$iface1 = get_iface($node1,$card1,$port1);
-	$iface2 = get_iface($node2,$card2,$port2);
-	$iface1bw = get_ifacebw($node1,$card1,$port1,$basetype);
-	$iface2bw = get_ifacebw($node2,$card2,$port2,$basetype);
+	$iface1bw = get_ifacebw($node1,$iface1,$basetype);
+	$iface2bw = get_ifacebw($node2,$iface2,$basetype);
 
         my @types = ($basetype);
 
@@ -2007,11 +2194,11 @@ while (($node1,$card1,$port1,$node2,$card2,$port2) =
 	#
 	if (!$node1obj->isswitch()) {
 	    next
-		if (! exists($interfacecardports{"$node1:$iface1"}));
+		if (! exists($interfacemap{"$node1:$iface1"}));
 	}
 	if (!$node2obj->isswitch()) {
 	    next
-		if (! exists($interfacecardports{"$node2:$iface2"}));
+		if (! exists($interfacemap{"$node2:$iface2"}));
 	}
 
 	#
@@ -2082,9 +2269,8 @@ while (($node1,$card1,$port1,$node2,$card2,$port2) =
 		}
 	    }
 
-            if ($interfacetypes{"$node1:$card1:$port1"}) {
-                push @types, "$basetype-" .
-                    $interfacetypes{"$node1:$card1:$port1"};
+            if ($interfacetypes{"$node1:$iface1"}) {
+                push @types, "$basetype-" . $interfacetypes{"$node1:$iface1"};
             }
             push @types, "$basetype-$bw";
 
@@ -2145,8 +2331,7 @@ if ($TRACK_INTERSWITCH_BANDWIDTH) {
 	    my $nodeid = $node->node_id();
 	    
 	    my $switch = get_ifaceswitch($nodeid,$iface);
-	    my ($card, $port) = get_ifacecardport($nodeid,$iface);
-	    my $bw = get_ifacebw($nodeid,$card,$port,"ethernet");
+	    my $bw = get_ifacebw($nodeid,$iface,"ethernet");
 	    $switches{$switch} += $bw;
 	}
 
@@ -2179,7 +2364,7 @@ if ($TRACK_INTERSWITCH_BANDWIDTH) {
 if (! defined($component_name)) {
   # TODO: Figure out how to actually add interconnect interfaces rather than
   #       just having them be (null).
-  foreach $interconnect (keys(%interconnects)) {
+  foreach $interconnect (sort(keys(%interconnects))) {
       ($src,$dst) = split(":",$interconnect);
       my $speed = $interconnects{$interconnect};
       # This is really dumb - BigInts like to print out with a leading '+',
@@ -2201,9 +2386,11 @@ my @wireless_protos = ("80211", "80211a", "80211b", "80211g", "flex900",
 my @fake_switch_types = map("*$_:*", @wireless_protos);
 if (! defined($component_name)) {
   $air_printed = 0;
+  my @keys = keys(%interfacetypes);
+  @keys = sort(@keys) if ($regression);
 
-  foreach my $interface (keys(%interfacetypes)) {
-      my ($node,$card,$port) = split(":", $interface);
+  foreach my $interface (@keys) {
+      my ($node,$iface) = split(":", $interface);
       
       next
 	  if (!defined($nodes{$node}));;
@@ -2214,7 +2401,6 @@ if (! defined($component_name)) {
 	  if (!defined($interfaceprotocols{$type}));
       
       my @protos  = @{ $interfaceprotocols{$type} };
-      my $iface   = get_iface($node,$card,$port);
 
       #
       # Get the intersection of the protocols supported by this interface, and
@@ -2225,7 +2411,7 @@ if (! defined($component_name)) {
 	  $union{$proto}++ && $intersection{$proto}++;
       }
       
-      my @intersection = keys %intersection;
+      my @intersection = sort(keys(%intersection));
 
       #
       # Skip this interface if it speaks no wireless protocols
@@ -2238,7 +2424,7 @@ if (! defined($component_name)) {
       #
       my $max_bw = 0;
       foreach my $proto (@intersection) {
-	  my $ifacebw = get_ifacebw($node,$card,$port,$proto);
+	  my $ifacebw = get_ifacebw($node,$iface,$proto);
 	  if ($ifacebw > $max_bw) {
 	      $max_bw = $ifacebw;
 	  }
@@ -2259,39 +2445,20 @@ print_footer();
 exit(0);
 
 # Print out links
-sub get_iface {
-    my ($node,$card,$port) = @_;
-    if (defined($interfacemap{"$node:$card:$port"})) {
-	if ($interfacemap{"$node:$card:$port"} eq "") {
-	    return "(null)";
-	} else {
-	    return $interfacemap{"$node:$card:$port"};
-	}
-    } else {
-	# shark hack
-	if ($node =~ /^sh/) {
-	    return "eth0";
-	} else {
-	    return "(null)";
-	}
-	# end shark hack 
-    }
-};
-
 # Find the bandwidth for an interface, when using the given protocol (which
 # most of the time is ethernet).
 sub get_ifacebw {
-    my ($node,$card,$port,$protocol) = @_;
-    if (defined($interfacetypes{"$node:$card:$port"})) {
-	my $bw = $interfacespeeds{$interfacetypes{"$node:$card:$port"}}{$protocol};
+    my ($node,$iface,$protocol) = @_;
+    if (defined($interfacetypes{"$node:$iface"})) {
+	my $bw = $interfacespeeds{$interfacetypes{"$node:$iface"}}{$protocol};
 	return $bw if defined( $bw );
     }
     return $default_switchport_speed;
 }
 
 sub get_iface_type {
-    my ($node,$card,$port) = @_;
-    return $interfacetypes{"$node:$card:$port"};
+    my ($node,$iface) = @_;
+    return $interfacetypes{"$node:$iface"};
 }
 
 sub get_iface_auxspeeds {
@@ -2309,15 +2476,6 @@ sub get_ifaceswitch {
 	return $interfaceswitches{"$node:$iface"};
     } else {
 	return undef;
-    }
-}
-
-sub get_ifacecardport {
-    my ($node,$iface) = @_;
-    if (defined($interfacecardports{"$node:$iface"})) {
-	return @{$interfacecardports{"$node:$iface"}};
-    } else {
-	return ();
     }
 }
 
@@ -2417,6 +2575,16 @@ sub print_header {
             print "<location country='$default_country' ".
 		"longitude='$default_long' latitude='$default_lat'/>\n";
 	    print "</site_info>\n";
+	    #
+	    # Reservable types for reservation system.
+	    #
+	    my @reservable = Reservation->ReservableTypes();
+	    print "<emulab:reservable_types>";
+	    foreach my $type (@reservable) {
+		my $typename = $type->type();
+		print "<emulab:type name='$typename' />";
+	    }
+	    print "</emulab:reservable_types>\n";
 	}
     }
 }
@@ -2665,7 +2833,11 @@ sub print_osids
 		print "name=\"" . $urn . "\" ";
 		print "os=\"" . $osid_os{$os} . "\" ";
 		if (exists($osid_url{$os})) {
-		    print "url=\"" . $osid_url{$os} . "\" ";
+		    my $url = $osid_url{$os};
+		    if ($regression) {
+			$url =~ s/\/dev\/[^\/]+//;
+		    }
+		    print "url=\"" . $url . "\" ";
 		}
 		print "version=\"" . $osid_version{$os} . "\" ";
 		print "description=\"" . $osid_description{$os} . "\" ";

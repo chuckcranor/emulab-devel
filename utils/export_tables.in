@@ -1,7 +1,7 @@
 #!/usr/bin/perl -w
 
 #
-# Copyright (c) 2000-2011 University of Utah and the Flux Group.
+# Copyright (c) 2000-2017 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -40,8 +40,20 @@ if (@ARGV && $ARGV[0] eq "-i") {
 #
 my $DBNAME = '@TBDBNAME@';
 
-my $isvers5   = system("mysql -V | egrep -q -s 'Distrib 5.'") == 0;
-my $extraopts = ($isvers5 ? "--skip-opt" : "");
+my $extraopts  = "";
+my $mysqlvers = `mysql -V`;
+if ($mysqlvers =~ /Distrib (\d\.\d)/) {
+    my $vers = $1 + 0.0;
+    if ($vers >= 5.0) {
+	$extraopts .= "--skip-opt ";
+    }
+    if ($vers >= 5.7) {
+	$extraopts .= "--set-gtid-purged=off ";
+    }
+}
+else {
+    fatal("Could not determine mysql version");
+}
 my $mysqldump = "mysqldump $extraopts";
 
 #

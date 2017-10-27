@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2013-2016 University of Utah and the Flux Group.
+# Copyright (c) 2013-2017 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -70,6 +70,7 @@ my $GPART	= "/sbin/gpart";
 my $GVINUM	= "/sbin/gvinum";
 my $ZPOOL	= "/sbin/zpool";
 my $ZFS		= "/sbin/zfs";
+my $FRISBEE     = "/usr/local/bin/frisbee";
 
 my $TUNEFS	= "/sbin/tunefs";
 my $EXT_TUNEFS	= "/usr/local/sbin/tune2fs";
@@ -206,6 +207,15 @@ sub find_serial($)
     # Try using "smartctl -i" first
     #
     if (-x "$SMARTCTL") {
+	# XXX for NVMe devices we have to use a control device
+	# XXX assumes namespace 1
+	if ($dev =~ /^nvd(\d+)/) {
+	    my $nvmedev = "nvme" . $1 . "ns1";
+	    if (-e "/dev/$nvmedev") {
+		$dev = $nvmedev;
+	    }
+	}
+
 	@lines = `$SMARTCTL -i /dev/$dev 2>&1`;
 	foreach (@lines) {
 	    if (/^serial number:\s+(\S.*)/i) {
@@ -228,14 +238,16 @@ sub find_serial($)
 sub init_serial_map()
 {
     my %snmap = ();
+    my $compatnames = 1;
 
-    my @lines = `ls /dev/ad* /dev/da* /dev/mfid* /dev/mfisyspd* 2>&1`;
+    my @lines = `ls /dev/ad* /dev/da* /dev/mfid* /dev/mfisyspd* /dev/nvd* 2>&1`;
+  again:
     foreach (@lines) {
 	# XXX just use the /dev/ad? traditional names for now
-	if (m#^/dev/ada\d+$#) {
+	if ($compatnames && m#^/dev/ada\d+$#) {
 	    next;
 	}
-	if (m#^/dev/((?:da|ad|mfid|mfisyspd)\d+)$#) {
+	if (m#^/dev/((?:da|ad|ada|mfid|mfisyspd|nvd)\d+)$#) {
 	    my $dev = $1;
 	    $sn = find_serial($dev);
 	    if ($sn) {
@@ -245,6 +257,11 @@ sub init_serial_map()
 		$snmap{$dev} = $dev;
 	    }
 	}
+    }
+
+    if ($compatnames && keys(%snmap) == 0) {
+	$compatnames = 0;
+	goto again;
     }
 
     return \%snmap;
@@ -368,6 +385,67 @@ sub uuid_to_daemonpid($$)
 	}
     }
     return undef;
+}
+
+#
+# Determine if a disk is "SSD" or "HDD"
+#
+sub get_disktype($)
+{
+    my ($dev) = @_;
+    my @lines;
+
+    #
+    # Assume NVMe is SSSD.
+    # Older smartctl doesn't seem to handle NVMe
+    #
+    if ($dev =~ /^nvd\d+/) {
+	return "SSD";
+    }
+
+    #
+    # Try using "smartctl -i"
+    #
+    if (-x "$SMARTCTL") {
+	if (open(HFD, "$SMARTCTL -i /dev/$dev 2>&1 |")) {
+	    my $isssd = -1;
+	    my $model ="";
+
+	    while (my $line = <HFD>) {
+		chomp($line);
+		if ($line =~ /^rotation rate:\s+(\S.*)/i) {
+		    if ($1 =~ /solid state device/i) {
+			$isssd = 1;
+		    } else {
+			$isssd = 0;
+		    }
+		    last;
+		}
+		# XXX if we don't find rotation rate, we will fall back on this
+		if ($line =~ /^device model:\s+(\S.*)/i) {
+		    $model = $1;
+		    next;
+		}
+	    }
+	    close(HFD);
+
+	    if ($isssd >= 0) {
+		return ($isssd ? "SSD" : "HDD");
+	    }
+	    
+	    #
+	    # XXX older versions of smartctl (e.g., in CentOS 6-ish)
+	    # don't return "Rotation Rate". This is a fall-back hack as
+	    # we know that at least Intel SSDs have SSD in the model name.
+	    #
+	    if ($model =~ /SSD/) {
+		return "SSD";
+	    }
+	}
+    }
+
+    # Assume it is a spinning disk.
+    return "HDD";
 }
 
 #
@@ -546,6 +624,7 @@ sub get_diskinfo($)
 	    $geominfo{$dev}{'size'} = int($vals[3] / 1024 / 1024);
 	    if ($vals[1] eq "DISK") {
 		$geominfo{$dev}{'inuse'} = 0;
+		$geominfo{$dev}{'disktype'} = get_disktype($dev);
 	    } else {
 		$geominfo{$dev}{'inuse'} = 1;
 	    }
@@ -565,6 +644,7 @@ sub get_diskinfo($)
 		$geominfo{$curdev}{'level'} = 0;
 		$geominfo{$curdev}{'type'} = "DISK";
 		$geominfo{$curdev}{'inuse'} = 0;
+		$geominfo{$curdev}{'disktype'} = get_disktype($curdev);
 		next;
 	    }
 	    if (/\sMediasize:\s+(\d+)\s/) {
@@ -976,7 +1056,7 @@ sub os_init_storage($)
 	#
 	else {
 	    if (is_lvm_initialized(0)) {
-		$so{'VINUM_DRIVES'} = 1;
+		$so{'LVM_DRIVES'} = 1;
 	    }
 	    if (mysystem("grep -q 'geom_vinum_load=\"YES\"' /boot/loader.conf")) {
 		if (!open(FD, ">>/boot/loader.conf")) {
@@ -1079,12 +1159,17 @@ sub os_show_storage($)
     my $dinfo = get_diskinfo($usezfs);
     if ($dinfo) {
 	print STDERR "  DISKINFO:\n";
-	foreach my $dev (keys %$dinfo) {
+	foreach my $dev (sort keys %$dinfo) {
 	    my $type = $dinfo->{$dev}->{'type'};
 	    my $lev = $dinfo->{$dev}->{'level'};
 	    my $size = $dinfo->{$dev}->{'size'};
 	    my $inuse = $dinfo->{$dev}->{'inuse'};
-	    print STDERR "    name=$dev, type=$type, level=$lev, size=$size, inuse=$inuse\n";
+	    print STDERR "    name=$dev, type=$type, level=$lev, size=$size, inuse=$inuse";
+	    if ($type eq "DISK") {
+		my $dtype = $dinfo->{$dev}->{'disktype'};
+		print STDERR ", disktype=$dtype";
+	    }
+	    print STDERR "\n";
 	}
     }
 
@@ -1415,6 +1500,10 @@ sub os_check_storage_slice($$)
 		# additional sanity checks (right now fsck'ing the alleged FS)
 		# and if it passes, re-add the mount line.
 		#
+		# XXX It might also be because we have re-loaded the OS
+		# and not only the fstab line but the mountpoint might be
+		# missing. We attempt to repair this case as well.
+		#
 		$line = `grep '^/dev/$mdev\[\[:space:\]\]' /etc/fstab`;
 		if (!$line) {
 		    warn("*** $lv: mount of /dev/$mdev missing from fstab; sanity checking and re-adding\n");
@@ -1431,6 +1520,14 @@ sub os_check_storage_slice($$)
 			return -1;
 		    }
 		    undef $href->{'LVDEV'};
+
+		    # make sure the mount point exists (case of reloaded OS)
+		    if (! -d "$mpoint" &&
+			mysystem("$MKDIR -p $mpoint")) {
+			warn("*** $lv: could not create mountpoint '$mpoint'\n");
+			return -1;
+		    }
+
 		    if (!open(FD, ">>/etc/fstab")) {
 			warn("*** $lv: could not add mount to /etc/fstab\n");
 			return -1;
@@ -1539,6 +1636,31 @@ sub os_create_storage($$)
 
 	    # finally do the fsck, fixing errors if possible
 	    if (!checkfs($href, 1, $redir)) {
+		return 0;
+	    }
+	}
+	elsif (exists($href->{'DATASET'})) {
+	    #
+	    # Load with the dataset.
+	    #
+	    my $imageid    = $href->{'DATASET'};
+	    my $imagepath  = $mdev;
+	    my $server     = $href->{'SERVER'};
+
+	    # Allow the server to enable heartbeat reports in the client
+	    my $heartbeat = "-H 0";
+
+	    my $command = "$FRISBEE -f -M 128 $heartbeat ".
+		"-S $server -B 30 -F $imageid $imagepath";
+
+	    print STDERR "$command\n";
+
+	    if (mysystem($command)) {
+		warn("*** $lv: frisbee of dataset to $mdev failed!\n");
+		return 0;
+	    }
+	    $fstype = get_fstype($href, $mdev);
+	    if (!$fstype) {
 		return 0;
 	    }
 	}
@@ -1769,13 +1891,29 @@ sub os_create_storage_slice($$$)
 		    }
 		}
 		else {
+		    #
+		    # Deterimine if we should use SSDs in the construction
+		    # of the zpool/gvinum.
+		    #
+		    my $disktype = "";
+		    if ($href->{'PROTO'} eq "SATA") {
+			$disktype = "HDD";
+		    } elsif ($href->{'PROTO'} eq "NVMe") {
+			$disktype = "SSD";
+		    }
+
 		    if ($bsid eq "ANY") {
-			$spacemap{$bdisk}{'pchr'} = "s";
-			$spacemap{$bdisk}{'pnum'} = 4;
+			if (!$disktype ||
+			    $dinfo->{$bdisk}->{'disktype'} eq $disktype) {
+			    $spacemap{$bdisk}{'pchr'} = "s";
+			    $spacemap{$bdisk}{'pnum'} = 4;
+			}
 		    }
 		    foreach my $dev (keys %$dinfo) {
 			if ($dinfo->{$dev}->{'type'} eq "DISK" &&
-			    $dinfo->{$dev}->{'inuse'} == 0) {
+			    $dinfo->{$dev}->{'inuse'} == 0 &&
+			    (!$disktype ||
+			     $dinfo->{$dev}->{'disktype'} eq $disktype)) {
 			    $spacemap{$dev}{'pnum'} = 0;
 			}
 		    }
@@ -2007,7 +2145,7 @@ sub os_create_storage_slice($$$)
 		    warn("*** $lv: could not create gvinum config\n");
 		    return 0;
 		}
-		if (!exists($so->{'VINUM_DRIVES'})) {
+		if (!exists($so->{'LVM_DRIVES'})) {
 		    foreach my $disk (keys %$space) {
 			my $pdev = $disk . $space->{$disk}->{'pchr'} . $space->{$disk}->{'pnum'};
 			print FD "drive emulab_$pdev device /dev/$pdev\n";
@@ -2031,7 +2169,7 @@ sub os_create_storage_slice($$$)
 		#unlink($cfile);
 
 		# vinum drives exist at this point
-		$so->{'VINUM_DRIVES'} = 1;
+		$so->{'LVM_DRIVES'} = 1;
 
 		# XXX need some delay before accessing device?
 		sleep(1);
@@ -2124,7 +2262,7 @@ sub os_remove_storage_element($$$)
 		my $inentry = 0;
 		my $copied = 0;
 		while (<OFD>) {
-		    if (/^$bsid {/) {
+		    if (/^$bsid \{/) {
 			$inentry = 1;
 			next;
 		    }
@@ -2277,6 +2415,9 @@ sub os_remove_storage_slice($$$)
 	# care so much about full images.
 	#
 	if ($teardown == 3) {
+	    if ($bsid eq "SYSVOL") {
+		return 1;
+	    }
 	    if (get_zpool_active_datasets("emulab") == 0 &&
 		mysystem("$ZPOOL export emulab $redir")) {
 		    warn("*** $lv: could not export zpool 'emulab'\n");

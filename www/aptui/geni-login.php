@@ -47,8 +47,11 @@ echo "<div id='waitwait_div'></div>\n";
 echo "<script src='https://www.emulab.net/protogeni/speaks-for/geni-auth.js'>
       </script>\n";
 echo "<script src='js/lib/jquery-2.0.3.min.js'></script>\n";
-echo "<script src='js/lib/bootstrap.js'></script>\n";
-echo "<script src='js/lib/require.js' data-main='js/geni-login'></script>\n";
 
+REQUIRE_UNDERSCORE();
+REQUIRE_SUP();
+SPITREQUIRE("js/geni-login.js");
+
+AddTemplateList(array("geni-login", "waitwait-modal"));
 SPITFOOTER();
 ?>

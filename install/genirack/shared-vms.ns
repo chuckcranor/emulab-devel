@@ -7,19 +7,19 @@ set ns [new Simulator]
 set n1 [$ns node]
 tb-set-hardware $n1 pcvm
 tb-set-node-failure-action $n1 "nonfatal"
-tb-set-node-os $n1 XEN-STD
+tb-set-node-os $n1 UBUNTU14-64-STD
 tb-set-node-usesharednode $n1 1.0
 
 set n2 [$ns node]
 tb-set-hardware $n2 pcvm
 tb-set-node-failure-action $n2 "nonfatal"
-tb-set-node-os $n2 XEN-STD
+tb-set-node-os $n2 UBUNTU14-64-STD
 tb-set-node-usesharednode $n2 1.0
 
 set n3 [$ns node]
 tb-set-hardware $n3 pcvm
 tb-set-node-failure-action $n3 "nonfatal"
-tb-set-node-os $n3 XEN-STD
+tb-set-node-os $n3 UBUNTU14-64-STD
 tb-set-node-usesharednode $n3 1.0
 
 tb-fix-node $n1 pc1

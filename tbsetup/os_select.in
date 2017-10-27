@@ -1,7 +1,7 @@
 #!/usr/bin/perl -wT
 
 #
-# Copyright (c) 2000-2015 University of Utah and the Flux Group.
+# Copyright (c) 2000-2016 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -60,7 +60,7 @@ my $TBLOG	= "@TBLOGFACIL@";
 use lib "@prefix@/lib";
 use libdb;
 use libtestbed;
-use OSinfo;
+use OSImage;
 use Node;
 use English;
 use Getopt::Std;
@@ -92,7 +92,7 @@ my $list	= 0; # Just list the current settings.
 my $waitmode	= 0; # Send the node into PXEWAIT
 my @nodes       = ();
 my $osid;
-my $osinfo;
+my $osimage;
 
 # Set up syslog
 openlog("osselect", "pid", $TBLOG);
@@ -166,12 +166,14 @@ if ($UID && !TBAdmin($UID)) {
 # Grab the info for the OSID. 
 #
 if (defined($osid)) {
-    $osinfo = OSinfo->Lookup($osid);
+    $osimage = OSImage->Lookup($osid);
     fatal("Unknown OSID: $osid")
-	if (!defined($osinfo));
+	if (!defined($osimage));
+    fatal("Cannot os_select an image alias")
+	if ($osimage->isImageAlias());
 }
 elsif ($default) {
-    $osinfo = "<DEFAULT>";
+    $osimage = "<DEFAULT>";
 }
 
 foreach my $node (@nodes) {
@@ -184,17 +186,17 @@ foreach my $node (@nodes) {
 	my $db = $nodeobject->def_boot_osid();
 	print "$node: ";
 	if ($tb) {
-	    $info = OSinfo->Lookup($tb);
+	    $info = OSImage->Lookup($tb);
 	    print "temp=$info";
 	    print ", ";
 	}
 	if ($nb) {
-	    $info = OSinfo->Lookup($nb);
+	    $info = OSImage->Lookup($nb);
 	    print "next=$info";
 	    print ", ";
 	}
 	if ($db) {
-	    $info = OSinfo->Lookup($db);
+	    $info = OSImage->Lookup($db);
 	    print "default=$info";
 	}
 	print "\n";
@@ -202,7 +204,7 @@ foreach my $node (@nodes) {
     }
 
     if ($waitmode) {
-	if ($nodeobject->OSSelect($osinfo, undef, $debug) != 0) {
+	if ($nodeobject->OSSelect($osimage, undef, $debug) != 0) {
 	    fatal("OSSelect(): clearing all fields failed on $node");
 	}
 	next;
@@ -215,8 +217,9 @@ foreach my $node (@nodes) {
     $field = "temp_boot_osid"
 	if ($tempmode);
 
-    if ($nodeobject->OSSelect($osinfo, $field, $debug) != 0) {
-	fatal("OSSelect(): " . ($osinfo ? "$osinfo " : "") ."failed on $node");
+    if ($nodeobject->OSSelect($osimage, $field, $debug) != 0) {
+	fatal("OSSelect(): " .
+	      ($osimage ? "$osimage " : "") ."failed on $node");
     }
 }
 exit(0);

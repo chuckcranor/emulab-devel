@@ -30,6 +30,7 @@ include $(OBJDIR)/Makeconf
 
 BINS		= suexec runsuid
 SBINS		= genlastlog lastlog_daemon runmedusa
+OTHERS          = hosts.allow
 
 # These scripts installed setuid, with sudo. 
 SETUID_BIN_SCRIPTS   = 
@@ -41,7 +42,7 @@ SETUID_CTRL_LIBX_PROGS = runsuid
 # Force dependencies on the scripts so that they will be rerun through
 # configure if the .in file is changed.
 # 
-all:	$(BINS) $(SBINS)
+all:	$(BINS) $(SBINS) $(OTHERS)
 
 include $(TESTBED_SRCDIR)/GNUmakerules
 

@@ -1,5 +1,5 @@
 #
-# Copyright (c) 2000-2016 University of Utah and the Flux Group.
+# Copyright (c) 2000-2017 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -235,6 +235,8 @@ endif
 
 subboss: 
 	@$(MAKE) -C clientside subboss
+	@$(MAKE) -C tbsetup subboss
+	@$(MAKE) -C db subboss
 	@$(MAKE) -C os subboss
 ifneq ($(SYSTEM),CYGWIN_NT-5.1)
 	@$(MAKE) -C tip client
@@ -243,6 +245,7 @@ endif
 
 subboss-install: subboss
 	@$(MAKE) -C clientside subboss-install
+	@$(MAKE) -C tbsetup subboss-install
 	@$(MAKE) -C os subboss-install
 ifneq ($(SYSTEM),CYGWIN_NT-5.1)
 	@$(MAKE) -C tip client-install
@@ -289,39 +292,27 @@ mfsoscheck:
 	fi
 
 mfs: mfsoscheck
-	@$(MAKE) -C os mfs
 	@$(MAKE) -C clientside mfs
 
 mfs-nostatic: mfsoscheck
-	@NOSTATIC=1 $(MAKE) -C os mfs
 	@NOSTATIC=1 $(MAKE) -C clientside mfs
 
 mfs-install: destdircheck mfs client-mkdirs
-	@$(MAKE) -C os mfs-install
 	@$(MAKE) -C clientside mfs-install
 
 mfs-nostatic-install: destdircheck mfs-nostatic client-mkdirs
-	@$(MAKE) -C os mfs-install
 	@$(MAKE) -C clientside mfs-install
 
 frisbee-mfs: mfsoscheck
-	@$(MAKE) -C cdrom/groklilo client
-	@$(MAKE) -C os frisbee-mfs
 	@$(MAKE) -C clientside frisbee-mfs
 
 frisbee-mfs-nostatic: mfsoscheck
-	@NOSTATIC=1 $(MAKE) -C cdrom/groklilo client
-	@NOSTATIC=1 $(MAKE) -C os frisbee-mfs
 	@NOSTATIC=1 $(MAKE) -C clientside frisbee-mfs
 
 frisbee-mfs-install: destdircheck frisbee-mfs
-	@CLIENT_BINDIR=/etc/testbed $(MAKE) -e -C cdrom/groklilo client-install
-	@$(MAKE) -C os frisbee-mfs-install
 	@$(MAKE) -C clientside frisbee-mfs-install
 
 frisbee-mfs-nostatic-install: destdircheck frisbee-mfs-nostatic
-	@CLIENT_BINDIR=/etc/testbed $(MAKE) -e -C cdrom/groklilo client-install
-	@$(MAKE) -C os frisbee-mfs-install
 	@$(MAKE) -C clientside frisbee-mfs-install
 
 newnode-mfs: mfsoscheck

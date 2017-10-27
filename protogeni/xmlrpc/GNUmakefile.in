@@ -1,5 +1,5 @@
 #
-# Copyright (c) 2000-2016 University of Utah and the Flux Group.
+# Copyright (c) 2000-2017 University of Utah and the Flux Group.
 # 
 # {{{GENIPUBLIC-LICENSE
 # 
@@ -38,7 +38,7 @@ include $(OBJDIR)/Makeconf
 SETUID_BIN_SCRIPTS   = 
 SETUID_SBIN_SCRIPTS  = 
 SETUID_SUEXEC_SCRIPTS  = protogeni-wrapper.pl protogeni-console.pl \
-		cluster-wrapper.pl
+		cluster-wrapper.pl 
 
 #
 # Force dependencies on the scripts so that they will be rerun through
@@ -48,7 +48,8 @@ all:	Genixmlrpc.pm GeniResponse.pm \
 	protogeni-ch.pm protogeni-sa.pm protogeni-cm.pm protogeni-emulab.pm \
 	protogeni-ses.pm geni-am.pm geni-ma.pm geni-sa.pm \
 	protogeni-wrapper.pl protogeni-console.pl protogeni-portal.pm \
-	protogeni-ims.pm cluster-wrapper.pl ClusterWrapper.pm ProtoGeniDefs.pm
+	protogeni-ims.pm cluster-wrapper.pl ClusterWrapper.pm ProtoGeniDefs.pm \
+	protogeni-cluster.pm ch-wrapper.pl cm-wrapper.pl sa-wrapper.pl
 
 include $(TESTBED_SRCDIR)/GNUmakerules
 
@@ -61,6 +62,10 @@ install-libs: $(INSTALL_LIBDIR)/Genixmlrpc.pm \
          $(INSTALL_LIBDIR)/protogeni-ims.pm \
          $(INSTALL_LIBDIR)/protogeni-ses.pm \
          $(INSTALL_LIBDIR)/protogeni-emulab.pm \
+         $(INSTALL_LIBDIR)/protogeni-cluster.pm \
+         $(INSTALL_DIR)/protogeni/xmlrpc/ch-wrapper.pl \
+         $(INSTALL_DIR)/protogeni/xmlrpc/sa-wrapper.pl \
+         $(INSTALL_DIR)/protogeni/xmlrpc/cm-wrapper.pl \
          $(INSTALL_LIBDIR)/ClusterWrapper.pm \
          $(INSTALL_LIBDIR)/ProtoGeniDefs.pm \
          $(INSTALL_LIBDIR)/geni-am.pm \

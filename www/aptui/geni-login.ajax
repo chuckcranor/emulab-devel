@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2016 University of Utah and the Flux Group.
+# Copyright (c) 2000-2017 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -188,7 +188,7 @@ function Do_VerifySpeaksfor()
     global $ajax_args;
     global $TBDIR, $COOKDIEDOMAIN, $TBMAINSITE, $PROTOGENI_GENIWEBLOGIN;
     global $TBAUTHCOOKIE, $TBLOGINCOOKIE, $TBAUTHTIMEOUT, $TBNAMECOOKIE;
-    global $OURDOMAIN;
+    global $OURDOMAIN, $TBMAILADDR;
     $embedded = 0;
 
     if (! ($TBMAINSITE || $PROTOGENI_GENIWEBLOGIN)) {
@@ -340,8 +340,26 @@ function Do_VerifySpeaksfor()
                                            TBDB_TRUSTSTRING_LOCALROOT);
                 }
             }
+            if ($this_user->status() == TBDB_USERSTATUS_INACTIVE) {
+                SPITAJAX_ERROR(1, "Your account has gone inactive. Please ".
+                               "contact $TBMAILADDR to have your ".
+                               "account restored.");
+                session_destroy();
+                return;
+            }
         }
     }
+    #
+    # Check for a frozen login. 
+    #
+    if ($this_user->weblogin_frozen()) {
+        SPITAJAX_ERROR(1, "Your account has been frozen. Please ".
+                       "contact $TBMAILADDR to have your ".
+                       "account restored.");
+        session_destroy();
+        return;
+    }
+    
     list ($loginhash, $logincrc) =
 	DOLOGIN_MAGIC($this_user->uid(), $this_user->uid_idx(), null, 0, 1);
     if (! ($loginhash && $logincrc)) {
@@ -376,7 +394,7 @@ function Do_VerifySpeaksfor()
     else {
         $blob["url"]   = ($this_user->webonly() ||
                           !Instance::UserHasInstances($this_user)
-                          ? "instantiate.php" : "myexperiments.php");
+                          ? "instantiate.php" : "landing.php");
     }
     session_destroy();
     SPITAJAX_RESPONSE($blob);
@@ -391,10 +409,14 @@ function CreateNonLocalUser($urn, $email)
     $safe_urn = escapeshellarg($urn);
     $safe_email = escapeshellarg($email);
     
+    #
+    # The script is going to lock for concurrent creation, and return
+    # non-negative value if the user already exists.
+    #
     $retval = SUEXEC("elabman", $TBOPSPID,
 		     "webcreategeniuser -p CloudLab $safe_urn $safe_email",
 		     SUEXEC_ACTION_CONTINUE);
-    if ($retval)
+    if ($retval < 0)
 	return -1;
 
     return 0;

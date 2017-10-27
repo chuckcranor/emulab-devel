@@ -113,19 +113,19 @@ static int handles_in_use = 0;
  * the Elvin server.
  */
 event_handle_t
-event_register(char *name, int threaded)
+event_register(char const *name, int threaded)
 {
 	return event_register_withkeydata(name, threaded, NULL, 0);
 }
 
 event_handle_t
-event_register_withkeyfile(char *name, int threaded, char *keyfile) {
+event_register_withkeyfile(char const *name, int threaded, char *keyfile) {
   return event_register_withkeyfile_withretry(name,
 					      threaded, keyfile, INT_MAX);
 }
 
 event_handle_t
-event_register_withkeyfile_withretry(char *name, int threaded, 
+event_register_withkeyfile_withretry(char const *name, int threaded, 
 				     char *keyfile, int retrycount)
 {
     /* Grab the key data and stick it into the handle. */
@@ -157,7 +157,7 @@ event_register_withkeyfile_withretry(char *name, int threaded,
 }
 
 event_handle_t
-event_register_withkeydata(char *name, int threaded,
+event_register_withkeydata(char const *name, int threaded,
 			   unsigned char *keydata, int keylen){
     return event_register_withkeydata_withretry(name, threaded, keydata,
 						keylen, INT_MAX);
@@ -165,7 +165,7 @@ event_register_withkeydata(char *name, int threaded,
 }
 
 event_handle_t
-event_register_withkeydata_withretry(char *name, int threaded,
+event_register_withkeydata_withretry(char const *name, int threaded,
 			   unsigned char *keydata, int keylen,
 			   int retrycount)
 {
@@ -653,7 +653,7 @@ event_notification_alloc(event_handle_t handle, address_tuple_t tuple)
     TRACE("allocated notification %p\n", notification);
 #define EVPUT(name, field) \
 ({ \
-	char *foo = (tuple->field ? tuple->field : ADDRESSTUPLE_ALL); \
+	char const *foo = (tuple->field ? tuple->field : ADDRESSTUPLE_ALL); \
 	\
 	event_notification_put_string(handle, notification, name, foo); \
 })
@@ -750,7 +750,7 @@ event_notification_clone(event_handle_t handle,
 int
 event_notification_get_double(event_handle_t handle,
                               event_notification_t notification,
-                              char *name, double *value)
+                              char const *name, double *value)
 {
     if (!handle || !notification || !name || !value) {
         ERROR("invalid parameter\n");
@@ -778,7 +778,7 @@ event_notification_get_double(event_handle_t handle,
 int
 event_notification_get_int32(event_handle_t handle,
                              event_notification_t notification,
-                             char *name, int32_t *value)
+                             char const *name, int32_t *value)
 {
     if (!handle || !notification || !name || !value) {
         ERROR("invalid parameter\n");
@@ -806,7 +806,7 @@ event_notification_get_int32(event_handle_t handle,
 int
 event_notification_get_int64(event_handle_t handle,
                              event_notification_t notification,
-                             char *name, int64_t *value)
+                             char const *name, int64_t *value)
 {
     if (!handle || !notification || !name || !value) {
         ERROR("invalid parameter\n");
@@ -836,7 +836,7 @@ event_notification_get_int64(event_handle_t handle,
 int
 event_notification_get_opaque_length(event_handle_t handle,
 				     event_notification_t notification,
-				     char *name)
+				     char const *name)
 {
     char *v;
     int len;
@@ -859,7 +859,7 @@ event_notification_get_opaque_length(event_handle_t handle,
 int
 event_notification_get_string_length(event_handle_t handle,
 				     event_notification_t notification,
-				     char *name)
+				     char const *name)
 {
     char *v;
 
@@ -888,7 +888,7 @@ event_notification_get_string_length(event_handle_t handle,
 int
 event_notification_get_opaque(event_handle_t handle,
                               event_notification_t notification,
-                              char *name, void *buffer, int length)
+                              char const *name, void *buffer, int length)
 {
     char *v;
     int len;
@@ -927,7 +927,7 @@ event_notification_get_opaque(event_handle_t handle,
 int
 event_notification_get_string(event_handle_t handle,
                               event_notification_t notification,
-                              char *name, char *buffer, int length)
+                              char const *name, char *buffer, int length)
 {
     char *v;
 
@@ -968,7 +968,7 @@ event_notification_get_string(event_handle_t handle,
 int
 event_notification_put_double(event_handle_t handle,
                               event_notification_t notification,
-                              char *name, double value)
+                              char const *name, double value)
 {
     if (!handle || !notification || !name) {
         ERROR("invalid parameter\n");
@@ -998,7 +998,7 @@ event_notification_put_double(event_handle_t handle,
 int
 event_notification_put_int32(event_handle_t handle,
                              event_notification_t notification,
-                             char *name, int value)
+                             char const *name, int value)
 {
     if (!handle || !notification || !name) {
         ERROR("invalid parameter\n");
@@ -1029,7 +1029,7 @@ event_notification_put_int32(event_handle_t handle,
 int
 event_notification_put_int64(event_handle_t handle,
                              event_notification_t notification,
-                             char *name, int64_t value)
+                             char const *name, int64_t value)
 {
     if (!handle || !notification || !name) {
         ERROR("invalid parameter\n");
@@ -1061,7 +1061,7 @@ event_notification_put_int64(event_handle_t handle,
 int
 event_notification_put_opaque(event_handle_t handle,
                               event_notification_t notification,
-                              char *name, void *buffer, int length)
+                              char const *name, void *buffer, int length)
 {
     if (!handle || !notification || !buffer || !length) {
         ERROR("invalid parameter\n");
@@ -1093,7 +1093,7 @@ event_notification_put_opaque(event_handle_t handle,
 int
 event_notification_put_string(event_handle_t handle,
                               event_notification_t notification,
-                              char *name, char *value)
+                              char const *name, char const *value)
 {
     if (!handle || !notification || !name || !value) {
         ERROR("invalid parameter\n");
@@ -1123,7 +1123,7 @@ event_notification_put_string(event_handle_t handle,
 
 int
 event_notification_remove(event_handle_t handle,
-                          event_notification_t notification, char *name)
+                          event_notification_t notification, char const *name)
 {
     if (!handle || !notification || !name) {
         ERROR("invalid parameter\n");
@@ -1190,7 +1190,7 @@ static void subscription_callback(pubsub_handle_t *server,
  * separate (TAG==FOO || TAG==BAR) clauses.
  */
 static int
-addclause(char *tag, char *clause, char *exp, int size, int *index)
+addclause(char const *tag, char const *clause, char *exp, int size, int *index)
 {
 	int	count = 0;
 	char	*bp;
@@ -2164,7 +2164,7 @@ static char *match_quote(char *str)
 	return retval;
 }
 
-int event_arg_get(char *args, char *key, char **value_out)
+int event_arg_get(char *args, char const *key, char **value_out)
 {
 	static char *WHITESPACE = " \t";
 	
@@ -2220,7 +2220,7 @@ int event_arg_get(char *args, char *key, char **value_out)
 	return retval;
 }
 
-int event_arg_dup(char *args, char *key, char **value_out)
+int event_arg_dup(char *args, char const *key, char **value_out)
 {
 	char *value;
 	int retval;

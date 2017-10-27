@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2000-2014 University of Utah and the Flux Group.
+# Copyright (c) 2000-2016 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -526,7 +526,7 @@ foreach my $lan (keys(%virt_lans)) {
 	    }
 	}
     }
-    else {
+    elsif (@members > 1) {
 	foreach my $memb0 (@members) {
 	    my $member0 = $virt_lans{$lan}->{"MEMBERS"}->{$memb0};
 	    
@@ -926,6 +926,8 @@ if ($query_result->numrows) {
 if ($havepmap) {
     foreach my $vlan (keys(%virt_lans)) {
 	my @members = @{$virt_lans{$vlan}->{"MEMBERLIST"}};
+	next
+	    if (@members <= 1);
 	foreach my $memb0 (@members) {
 	    my $member0 = $virt_lans{$vlan}->{"MEMBERS"}->{$memb0};
 	    my $node0 = $member0->{"vnode"};

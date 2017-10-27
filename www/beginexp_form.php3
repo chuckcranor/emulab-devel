@@ -179,11 +179,11 @@ function SPITFORM($formfields, $errors)
                 An enhanced Java applet for editing topologies.
               (<b><a href='clientui-alt.php3'>ProtoGeni Version</a></b> -
                 <a href='http://$WIKINODE/trac/protogeni/wiki'>
-                  What's ProtoGeni?</a>)<br>
-              The older <b><a href='buildui/bui.php3'>NetBuild GUI</a></b>
-              can be used to graphically create topologies.<font size=-2>
-              (<a href='$TBDOCBASE/faq.php3#netbuild'>Additional 
-              information</a>)</font>.";
+                  What's ProtoGeni?</a>)";
+              #The older <b><a href='buildui/bui.php3'>NetBuild GUI</a></b>
+              #can be used to graphically create topologies.<font size=-2>
+              #(<a href='$TBDOCBASE/faq.php3#netbuild'>Additional 
+              #information</a>)</font>.";
           #echo "<br>
           #    Or, you can download the Emulab
           #    <a href='netlab/client.php3'><b>client</b></a> and graphically

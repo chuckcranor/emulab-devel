@@ -1,10 +1,10 @@
-require(window.APT_OPTIONS.configObject,
-	['js/quickvm_sup', 'moment',
-	 'js/lib/text!template/output-dropdown.html'],
-function (sup, moment, dropdownString)
+$(function ()
 {
     'use strict';
 
+    var templates = APT_OPTIONS.fetchTemplateList(['output-dropdown']);
+    var dropdownString = templates['output-dropdown'];
+  
     function initialize()
     {
 	window.APT_OPTIONS.initialize(sup);

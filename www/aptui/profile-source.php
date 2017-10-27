@@ -36,6 +36,7 @@ function SPITERROR($code, $msg)
 # No current user needed, this gets source code for public profiles.
 #
 $optargs = OptionalPageArguments("profile",   PAGEARG_STRING,
+				 "version",   PAGEARG_INTEGER,
 				 "project",   PAGEARG_PROJECT);
 
 if (!isset($profile)) {
@@ -45,7 +46,10 @@ if (IsValidUUID($profile)) {
     $profile = Profile::Lookup($profile);
 }
 elseif (isset($project)) {
-    $profile = Profile::LookupByName($project, $profile);
+    if (!isset($version)) {
+        $version = null;
+    }
+    $profile = Profile::LookupByName($project, $profile, $version);
 }
 else {
     SPITERROR(401, "Must provide a project and profile name");

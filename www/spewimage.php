@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2003-2015 University of Utah and the Flux Group.
+# Copyright (c) 2003-2016 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -91,6 +91,14 @@ $pid        = $group->pid();
 $unix_gid   = $group->unix_gid();
 $project    = $image->Project();
 $unix_pid   = $project->unix_gid();
+
+#
+# Datasets are special, they cannot be downloaded on this path
+# unless they are global.
+#
+if ($image->isdataset() && !$image->isglobal()) {
+    SPITERROR(403, "No permission to access image");
+}
 
 #
 # We want to support HEAD requests to avoid send the file.

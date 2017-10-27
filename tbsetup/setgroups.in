@@ -1,7 +1,7 @@
 #!/usr/bin/perl -wT
 
 #
-# Copyright (c) 2000-2015 University of Utah and the Flux Group.
+# Copyright (c) 2000-2016 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -241,6 +241,11 @@ foreach my $token (@userlist) {
 	print "Skipping $uid; nonlocal account!\n";
 	next;
     }
+    if ($ELABINELAB &&
+	$user->status() eq USERSTATUS_FROZEN && !getpwnam($user->uid())) {
+	print "Skipping $uid; initially frozen elabinelab account!\n";
+	next;
+    }
     # want to skip nonlocal/webonly in second loop below.
     push(@modusers, $user);
 
@@ -389,7 +394,7 @@ foreach my $token (@userlist) {
     #
     # MAKE SURE not to update anything else!
     #
-    if (system("$USERMOD $uid -g $project $groupargument")) {
+    if (runBusyLoop("$USERMOD $uid -g $project $groupargument")) {
 	fatal("Could not modify user $uid on local node.");
     }
 
@@ -398,7 +403,7 @@ foreach my $token (@userlist) {
     if ($control_node ne $BOSSNODE) {
 	$groupargument = join(' ', @groupnames);
         if (system("$SSH -host $control_node ".
-		   "$ACCOUNTPROXY moduser $uid $project $groupargument")) {
+		   "$ACCOUNTPROXY setgroups $uid $project $groupargument")) {
 	    fatal("Could not modify user $uid record on $control_node.");
 	}
     }

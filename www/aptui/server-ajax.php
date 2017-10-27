@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2016 University of Utah and the Flux Group.
+# Copyright (c) 2000-2017 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -27,6 +27,19 @@ chdir("apt");
 include("quickvm_sup.php");
 # Must be after quickvm_sup.php since it changes the auth domain.
 include_once("../session.php");
+
+#
+# We need all errors to come back to us so that we can report the error
+# to the user.
+# 
+function handle_error($message, $death)
+{
+    SPITAJAX_ERROR(-1, $message);
+    # Always exit; ignore $death.
+    exit(1);
+}
+$session_errorhandler = 'handle_error';
+$session_interactive  = 0;
 
 #
 # Poor man routing description.
@@ -84,6 +97,8 @@ $routing = array("myprofiles" =>
 						     "Do_Instantiate",
 						 "GetParameters" =>
                                                      "Do_GetParameters",
+						     "GetImageList" =>
+						     "Do_GetImageList",
 						 "GetImageInfo" =>
 						     "Do_GetImageInfo",
 						 "MarkFavorite" =>
@@ -93,7 +108,9 @@ $routing = array("myprofiles" =>
 		 "manage_profile" =>
 			array("file"    => "manage_profile.ajax",
 			      "guest"   => false,
-			      "methods" => array("CloneStatus" =>
+			      "methods" => array("Create" =>
+						     "Do_Create",
+                                                 "CloneStatus" =>
 						     "Do_CloneStatus",
 						 "DeleteProfile" =>
 						     "Do_DeleteProfile",
@@ -106,7 +123,25 @@ $routing = array("myprofiles" =>
 						 "BindParameters" =>
 						     "Do_BindParameters",
 						 "ConvertClassic" =>
-                                                     "Do_ConvertClassic")),
+                                                     "Do_ConvertClassic",
+						 "ConvertRspec" =>
+                                                     "Do_ConvertRspec",
+						 "RTECheck" =>
+                                                     "Do_RTECheck",
+						 "UpdateRepository" =>
+                                                     "Do_UpdateRepository",
+						 "GetRepository" =>
+                                                     "Do_GetRepository",
+						 "GetRepoSource" =>
+                                                     "Do_GetRepoSource",
+						 "GetBranchList" =>
+                                                     "Do_GetBranchList",
+						 "GetCommitInfo" =>
+                                                     "Do_GetCommitInfo",
+						 "GetRepoHash" =>
+                                                     "Do_GetRepoHash",
+						 "GetCommitList" =>
+                                                     "Do_GetCommitList")),
 		 "status" =>
 			array("file"    => "status.ajax",
 			      "guest"   => true,
@@ -156,12 +191,18 @@ $routing = array("myprofiles" =>
                                                      "Do_Lockdown",
 						 "Quarantine" =>
 						     "Do_Quarantine",
+						 "SaveAdminNotes" =>
+						     "Do_SaveAdminNotes",
 						 "LinktestControl" =>
 						     "Do_Linktest",
 						 "OpenstackStats" =>
 						     "Do_OpenstackStats",
+						 "MaxExtension" =>
+						     "Do_MaxExtension",
 						 "dismissExtensionDenied" =>
-						     "Do_DismissExtensionDenied")),
+						     "Do_DismissExtensionDenied",
+						 "GetHealthStatus" =>
+						    "Do_GetHealthStatus")),
 		 "approveuser" =>
 			array("file"    => "approveuser.ajax",
 			      "guest"   => false,
@@ -198,7 +239,14 @@ $routing = array("myprofiles" =>
 			      "guest"   => false,
                               "unapproved" => true,
 			      "methods" => array("update" =>
-                                                 "Do_Update")),
+                                                     "Do_Update")),
+		 "changepswd" =>
+			array("file"    => "changepswd.ajax",
+			      "guest"   => false,
+                              "unapproved" => true,
+                              "notloggedinokay" => true,
+			      "methods" => array("changepswd" =>
+                                                     "Do_ChangePassword")),
 		 "lists" =>
 			array("file"    => "lists.ajax",
 			      "guest"   => false,
@@ -215,6 +263,10 @@ $routing = array("myprofiles" =>
 						      "Do_ClassicExperimentList",
                                                  "ClassicProfileList" =>
 						      "Do_ClassicProfileList",
+                                                 "DatasetList" =>
+						      "Do_DatasetList",
+                                                 "ClassicDatasetList" =>
+						      "Do_ClassicDatasetList",
                                                  "ProjectList" =>
                                                       "Do_ProjectList",
                                                  "UsageSummary" =>
@@ -244,14 +296,39 @@ $routing = array("myprofiles" =>
 						      "Do_ClassicExperimentList",
                                                  "ClassicProfileList" =>
 						      "Do_ClassicProfileList",
+                                                 "DatasetList" =>
+						      "Do_DatasetList",
+                                                 "ClassicDatasetList" =>
+						      "Do_ClassicDatasetList",
                                                  "ProfileList" =>
                                                       "Do_ProfileList",
                                                  "MemberList" =>
                                                       "Do_MemberList",
+                                                 "GroupList" =>
+                                                      "Do_GroupList",
                                                  "UsageSummary" =>
                                                       "Do_UsageSummary",
                                                  "ProjectProfile" =>
                                                       "Do_ProjectProfile")),
+		 "groups" =>
+			array("file"    => "groups.ajax",
+			      "guest"   => false,
+			      "methods" => array("ExperimentList" =>
+						      "Do_ExperimentList",
+                                                 "ClassicExperimentList" =>
+						     "Do_ClassicExperimentList",
+                                                 "MemberList" =>
+                                                      "Do_MemberList",
+                                                 "EditMembership" =>
+                                                      "Do_EditMembership",
+                                                 "EditPrivs" =>
+                                                      "Do_EditPrivs",
+                                                 "Create" =>
+                                                      "Do_CreateGroup",
+                                                 "Delete" =>
+                                                      "Do_DeleteGroup",
+                                                 "GroupProfile" =>
+                                                      "Do_GroupProfile")),
 		 "ranking" =>
 			array("file"    => "ranking.ajax",
 			      "guest"   => false,
@@ -263,7 +340,68 @@ $routing = array("myprofiles" =>
                               "methods" => array("Dismiss" =>
                                                      "Do_Dismiss",
                                                  "Click" =>
-                                                     "Do_Click"))
+                                                     "Do_Click",
+                                                 "Announcements" =>
+                                                     "Do_Announcements")),
+		 "reserve" =>
+			array("file"    => "reserve.ajax",
+			      "guest"   => false,
+			      "methods" => array("Reserve" =>
+                                                     "Do_Reserve",
+                                                 "Validate" =>
+                                                     "Do_Validate",
+                                                 "ListReservations" =>
+                                                     "Do_ListReservations",
+                                                 "GetReservation" =>
+                                                     "Do_GetReservation",
+                                                 "Approve" =>
+                                                     "Do_Approve",
+                                                 "WarnUser" =>
+                                                     "Do_WarnUser",
+                                                 "RequestInfo" =>
+                                                     "Do_RequestInfo",
+                                                 "ReservationInfo" =>
+                                                     "Do_ReservationInfo")),
+		 "images" =>
+			array("file"    => "images.ajax",
+			      "guest"   => false,
+			      "methods" => array("ListImages" =>
+                                                     "Do_ListImages",
+                                                 "DeleteImage" =>
+                                                     "Do_DeleteImage",
+                                                 "ClassicImages" =>
+                                                     "Do_ClassicImageList")),
+		 "news" =>
+			array("file"    => "news.ajax",
+			      "guest"   => true,
+			      "methods" => array("create" =>
+						      "Do_CreateNews",
+						 "modify" =>
+						      "Do_ModifyNews",
+						 "delete" =>
+						      "Do_DeleteNews",
+						 "getnews" =>
+						      "Do_GetNews")),
+		 "experiments" =>
+			array("file"    => "experiments.ajax",
+			      "guest"   => false,
+			      "methods" => array("ExperimentList" =>
+                                                     "Do_ExperimentList",
+                                                 "ExperimentErrors" =>
+                                                     "Do_ExperimentErrors")),
+		 "approve-projects" =>
+			array("file"    => "approve-projects.ajax",
+			      "guest"   => false,
+			      "methods" => array("ProjectList" =>
+                                                     "Do_ProjectList",
+                                                 "SaveDescription" =>
+                                                     "Do_SaveDescription",
+                                                 "MoreInfo" =>
+                                                     "Do_MoreInfo",
+                                                 "Deny" =>
+                                                     "Do_Deny",
+                                                 "Approve" =>
+                                                     "Do_Approve")),
 );
 
 #
@@ -290,8 +428,10 @@ $this_user = CheckLogin($check_status);
 function CheckLoginForAjax($route)
 {
     global $this_user, $check_status;
+    global $ISAPT;
     $guestokay = false;
     $unapprovedokay = false;
+    $notloggedinokay = false;
     
     if (array_key_exists("guest", $route)) {
         $guestokay = $route["guest"];
@@ -299,47 +439,50 @@ function CheckLoginForAjax($route)
     if (array_key_exists("unapproved", $route)) {
         $unapprovedokay = $route["unapproved"];
     }
-
+    if (array_key_exists("notloggedinokay", $route)) {
+        $notloggedinokay = $route["notloggedinokay"];
+    }
     # Known user, but timed out.
     if ($check_status & CHECKLOGIN_TIMEDOUT) {
-	SPITAJAX_ERROR(2, "Your login has timed out");
-	exit(2);
+	SPITAJAX_ERROR(222, "Your login has timed out");
+	exit(1);
     }
     # Logged in user always okay.
     if (isset($this_user)) {
 	if ($check_status & CHECKLOGIN_MAYBEVALID) {
-	    SPITAJAX_ERROR(2, "Your login cannot be verified. Cookie problem?");
-	    exit(2);
+	    SPITAJAX_ERROR(222, "Your login cannot be verified. ".
+                           "Cookie problem?");
+	    exit(1);
 	}
         # Known user, but not frozen.
         if ($check_status & CHECKLOGIN_FROZEN) {
-            SPITAJAX_ERROR(2, "Your account has been frozen");
-            exit(2);
+            SPITAJAX_ERROR(222, "Your account has been frozen");
+            exit(1);
         }
         if (! $unapprovedokay) {
             # Known user, but not approved.
             if ($check_status & CHECKLOGIN_UNAPPROVED) {
-	        SPITAJAX_ERROR(2, "Your account has not been approved yet");
-                exit(2);
+	        SPITAJAX_ERROR(222, "Your account has not been approved yet");
+                exit(1);
             }
             # Known user, but not active.
             if (! ($check_status & CHECKLOGIN_ACTIVE)) {
-                SPITAJAX_ERROR(2, "Your account is no longer active");
-                exit(2);
+                SPITAJAX_ERROR(222, "Your account is no longer active");
+                exit(1);
             }
         }
         # Kludge, still thinking about it. If a geni user has no project
         # permissions at their SA, then we mark the acount as WEBONLY, and
         # deny access to anything that is not marked as guest okay. 
 	if ($check_status & CHECKLOGIN_WEBONLY && !$guestokay) {
-	    SPITAJAX_ERROR(2, "Your account is not allowed to do this");
-	    exit(2);
+	    SPITAJAX_ERROR(222, "Your account is not allowed to do this");
+	    exit(1);
         }
 	return;
     }
-    if (!$guestokay) {
-	SPITAJAX_ERROR(2, "You are not logged in");	
-	exit(2);
+    if (!($guestokay || $notloggedinokay)) {
+	SPITAJAX_ERROR(222, "You are not logged in");	
+	exit(1);
     }
 }
 

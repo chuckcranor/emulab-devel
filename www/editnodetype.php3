@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2014 University of Utah and the Flux Group.
+# Copyright (c) 2000-2016 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -257,6 +257,16 @@ function SPITFORM($node_type, $formfields, $attributes, $deletes, $errors)
     }
 
     echo "<tr>
+             <td colspan=2>Architecture:</td>
+             <td class=left>
+                 <input type=text
+                        name=\"formfields[architecture]\"
+                        value=\"" . $formfields["architecture"] . "\"
+	                size=24>
+             </td>
+          </tr>\n";
+
+    echo "<tr>
              <td colspan=2>isvirtnode:</td>
              <td class=left>
                  <input type=text
@@ -483,7 +493,9 @@ if (isset($new_type)) {
     #
     # Starting a new node type - give some reasonable defaults
     #
-    $defaults = array("class" => $node_class, "isvirtnode" => 0,
+    $defaults = array("class" => $node_class,
+                      "architecture" => "",
+                      "isvirtnode" => 0,
 		      "isremotenode" => 0, "issubnode" => 0,
 		      "isplabdslice" => 0, "isjailed" => 0, "isdynamic" => 0,
 		      "issimnode" => 0, "isgeninode" => 0, "isfednode" => 0,
@@ -660,6 +672,10 @@ if (isset($new_type) &&
     isset($formfields['class']) && $formfields['class'] != "") {
     $args["new_type"] = "1";
     $args["class"] = $formfields["class"];
+}
+
+if (isset($formfields['architecture'])) {
+    $args["architecture"] = $formfields["architecture"];
 }
 
 # isvirtnode

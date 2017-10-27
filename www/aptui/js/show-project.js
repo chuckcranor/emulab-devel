@@ -1,17 +1,19 @@
-require(window.APT_OPTIONS.configObject,
-	['underscore', 'js/quickvm_sup', 'moment',
-	 'js/lib/text!template/show-project.html',
-	 'js/lib/text!template/experiment-list.html',
-	 'js/lib/text!template/profile-list.html',
-	 'js/lib/text!template/member-list.html',
-	 'js/lib/text!template/project-profile.html',
-	 'js/lib/text!template/classic-explist.html',
-	],
-function (_, sup, moment, mainString,
-	  experimentString, profileString, memberString, detailsString,
-	  classicString)
+$(function ()
 {
     'use strict';
+
+    var templates = APT_OPTIONS.fetchTemplateList(['show-project', 'experiment-list', 'profile-list', 'member-list', 'dataset-list', 'project-profile', 'classic-explist', 'group-list', 'waitwait-modal', 'oops-modal','conversion-help-modal']);
+    var mainString = templates['show-project'];
+    var experimentString = templates['experiment-list'];
+    var profileString = templates['profile-list'];
+    var memberString = templates['member-list'];
+    var datasetString = templates['dataset-list'];
+    var detailsString = templates['project-profile'];
+    var classicString = templates['classic-explist'];
+    var groupsString = templates['group-list'];
+    var waitString = templates['waitwait-modal'];
+    var oopsString = templates['oops-modal'];
+    var converterHelpTemplate = _.template(templates['conversion-help-modal']);
     var mainTemplate    = _.template(mainString);
     
     function initialize()
@@ -25,6 +27,9 @@ function (_, sup, moment, mainString,
 	    target_project : window.TARGET_PROJECT,
 	});
 	$('#main-body').html(html);
+	$('#waitwait_div').html(waitString);
+	$('#oops_div').html(oopsString);
+	$('#conversion_help_div').html(converterHelpTemplate({}));
 
         // Javascript to enable link to tab
         var hash = document.location.hash;
@@ -50,7 +55,10 @@ function (_, sup, moment, mainString,
 	LoadProfileTab();
 	LoadClassicProfiles();
 	LoadMembersTab();
+	LoadGroupsTab();
 	LoadProjectTab();
+	LoadDatasetTab();
+	LoadClassicDatasets();
     }
 
     function LoadUsage()
@@ -144,6 +152,8 @@ function (_, sup, moment, mainString,
 		console.info(json.value);
 		return;
 	    }
+	    if (json.value.length == 0)
+		return;
 	    var template = _.template(classicString);
 
 	    $('#classic_experiments_content')
@@ -196,6 +206,11 @@ function (_, sup, moment, mainString,
 		if (date != "") {
 		    $(this).html(moment($(this).html()).format("ll"));
 		}
+	    });
+	    // This activates the tooltip subsystem.
+	    $('[data-toggle="tooltip"]').tooltip({
+		delay: {"hide" : 500, "show" : 500},
+		placement: 'auto',
 	    });
 	    // Display the topo.
 	    $('.showtopo_modal_button').click(function (event) {
@@ -289,6 +304,9 @@ function (_, sup, moment, mainString,
 	$xmlthing.done(callback);
     }
 
+    // Warn only once for page load.
+    var WarnedAboutUserPrivs = false;
+
     function LoadMembersTab()
     {
 	var callback = function(json) {
@@ -305,7 +323,10 @@ function (_, sup, moment, mainString,
 
 	    $('#members_content')
 		.html(template({"members"    : json.value,
+				"nonmembers" : {},
 				"pid"        : window.TARGET_PROJECT,
+				"gid"        : window.TARGET_PROJECT,
+				"canedit"    : window.CANAPPROVE,
 				"canapprove" : window.CANAPPROVE}));
 	    
 	    // Format dates with moment before display.
@@ -315,13 +336,152 @@ function (_, sup, moment, mainString,
 		    $(this).html(moment($(this).html()).format("ll"));
 		}
 	    });
+	    // Bind edit privs selection
+	    $('#members_table .editprivs')
+		.on('focusin', function() {
+		    // Remember trust before change.
+		    $(this).data('val', $(this).val());
+		})
+		.change(function () {
+		    if ($(this).val() == "user" && !WarnedAboutUserPrivs) {
+			sup.ShowModal('#confirm-user-privs-modal');
+			WarnedAboutUserPrivs = true;
+			var which = $(this);
+			$('#cancel-user-privs').click(function () {
+			    // Restore old trust we saved above.
+			    $(which).val($(which).data('val'));
+			});
+			$('#confirm-user-privs').click(function () {
+			    DoEditPrivs($(which).data("uid"), $(which).val());
+			});
+			return;
+		    }
+		    DoEditPrivs($(this).data("uid"), $(this).val());
+		});
+	    
 	    var table = $('#members_table')
+		.tablesorter({
+		    theme : 'green',
+		});
+
+	    // Do this after converting table.
+	    $('[data-toggle="tooltip"]').tooltip({
+		trigger: 'hover',
+		placement: 'auto',
+	    });
+	    // Do this after converting table.
+	    $('[data-toggle="popover"]').popover({
+		trigger: 'hover',
+		placement: 'auto',
+	    });
+	    
+	    // Enable the remove button when users are selected.
+	    $('#members_table .remove-checkbox').change(function () {
+		$('#remove-users-button').removeAttr("disabled");
+	    });
+	    // Handler for the remove button.
+	    $('#confirm-remove-users').click(function () {
+		sup.HideModal('#confirm-remove-users-modal');
+		DoRemoveUsers();
+	    });
+	    
+	}
+	var xmlthing = sup.CallServerMethod(null,
+					    "show-project", "MemberList",
+					    {"pid" : window.TARGET_PROJECT});
+	xmlthing.done(callback);
+    }
+
+    // Edit privs
+    function DoEditPrivs(uid, priv)
+    {
+	console.info(uid, priv);
+
+	var callback = function(json) {
+	    sup.HideWaitWait();
+
+	    // Always reload.
+	    LoadMembersTab();
+	    
+	    if (json.code) {
+		sup.SpitOops("oops", json.value);
+		return;
+	    }
+	}
+	sup.ShowWaitWait("We are modifying privs ... patience please");
+	var xmlthing =
+	    sup.CallServerMethod(null, "groups", "EditPrivs",
+				 {"user_uid" : uid,
+				  "priv"     : priv,
+                                  "pid"      : window.TARGET_PROJECT,
+                                  "gid"      : window.TARGET_PROJECT});
+	xmlthing.done(callback);
+    }
+
+    // Remove users.
+    function DoRemoveUsers()
+    {
+	// Find list of selected users.
+	var selected_users = {};
+
+	$('.remove-checkbox').each(function () {
+	    if ($(this).is(":checked")) {
+		var uid = $(this).data("uid");
+		
+		selected_users[uid] = uid;
+	    }
+	});
+	if (! Object.keys(selected_users).length) {
+	    return;
+	}
+	var callback = function(json) {
+	    sup.HideWaitWait();
+
+	    // Always reload.
+	    LoadMembersTab();
+
+	    if (json.code) {
+		sup.SpitOops("oops", json.value);
+		return;
+	    }
+	}
+	sup.ShowWaitWait("We are removing users from this project ... " +
+			 "patience please");
+	var xmlthing =
+	    sup.CallServerMethod(null, "groups", "EditMembership",
+				 {"users"  : selected_users,
+				  "action" : "remove",
+                                  "pid"    : window.TARGET_PROJECT,
+                                  "gid"    : window.TARGET_PROJECT});
+
+	xmlthing.done(callback);
+    }
+
+    function LoadGroupsTab()
+    {
+	var callback = function(json) {
+	    console.info(json);
+
+	    if (json.code) {
+		console.info(json.value);
+		return;
+	    }
+	    if (json.value.length == 0) {
+		return;
+	    }
+	    var template = _.template(groupsString);
+
+	    $('#groups_content')
+		.html(template({"groups"  : json.value,
+				"pid"     : window.TARGET_PROJECT}));
+	    
+	    var table = $('#groups_table')
 		.tablesorter({
 		    theme : 'green',
 		});
 	}
 	var xmlthing = sup.CallServerMethod(null,
-					    "show-project", "MemberList",
+					    "show-project", "GroupList",
 					    {"pid" : window.TARGET_PROJECT});
 	xmlthing.done(callback);
     }
@@ -354,6 +514,80 @@ function (_, sup, moment, mainString,
 	var xmlthing = sup.CallServerMethod(null,
 					    "show-project", "ProjectProfile",
 					    {"pid" : window.TARGET_PROJECT});
+	xmlthing.done(callback);
+    }
+
+    function LoadDatasetTab()
+    {
+	var callback = function(json) {
+	    console.info("datasets", json);
+
+	    if (json.code) {
+		console.info(json.value);
+		return;
+	    }
+	    var template = _.template(datasetString);
+
+	    $('#datasets_content')
+		.html(template({"datasets"    : json.value,
+				"showuser"    : true,
+				"showproject" : false}));
+	    
+	    // Format dates with moment before display.
+	    $('#datasets_content .tablesorter .format-date').each(function(){
+		var date = $.trim($(this).html());
+		if (date != "") {
+		    $(this).html(moment($(this).html()).format("ll"));
+		}
+	    });
+	    var table = $('#datasets_content .tablesorter')
+		.tablesorter({
+		    theme : 'green',
+		});
+	}
+	var xmlthing =
+	    sup.CallServerMethod(null,
+				 "show-project", "DatasetList",
+				 {"pid" : window.TARGET_PROJECT});
+	xmlthing.done(callback);
+    }
+
+    function LoadClassicDatasets()
+    {
+	var callback = function(json) {
+	    console.info("classic datasets", json);
+
+	    if (json.code) {
+		console.info(json.value);
+		return;
+	    }
+	    if (json.value.length == 0) {
+		return
+	    }
+	    $('#classic_datasets_content').removeClass("hidden");
+	    
+	    var template = _.template(datasetString);
+
+	    $('#classic_datasets_content_div')
+		.html(template({"datasets"    : json.value,
+				"showuser"    : true,
+				"showproject" : false}));
+	    
+	    $('#classic_datasets_content .format-date').each(function() {
+		var date = $.trim($(this).html());
+		if (date != "") {
+		    $(this).html(moment($(this).html()).format("ll"));
+		}
+	    });
+	    var table = $('#classic_datasets_content .tablesorter')
+		.tablesorter({
+		    theme : 'green',
+		});
+	};
+	var xmlthing =
+	    sup.CallServerMethod(null,
+				 "show-project", "ClassicDatasetList",
+				 {"pid" : window.TARGET_PROJECT});
 	xmlthing.done(callback);
     }
 

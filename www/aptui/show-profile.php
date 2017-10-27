@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2016 University of Utah and the Flux Group.
+# Copyright (c) 2000-2017 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -87,35 +87,58 @@ $disabled     = ($profile->isDisabled() ? 1 : 0);
 
 $defaults = array();
 $defaults["profile_name"]        = $profile->name();
-$defaults["profile_rspec"]       = $profile->rspec();
 $defaults["profile_version"]     = $profile->version();
 $defaults["profile_creator"]     = $profile->creator();
+$defaults["profile_updater"]     = $profile->updater();
 $defaults["profile_pid"]         = $profile->pid();
 $defaults["profile_created"]     = DateStringGMT($profile->created());
 $defaults["profile_published"]   = DateStringGMT($profile->published());
 $defaults["profile_version_url"] = $profile->URL();
 $defaults["profile_profile_url"] = $profile->ProfileURL();
+if ($profile->rspec() && $profile->rspec() != "") {
+    $defaults["profile_rspec"] = $profile->rspec();
+}
 if ($profile->script() && $profile->script() != "") {
     $defaults["profile_script"] = $profile->script();
+}
+if ($profile->repourl() && $profile->repourl() != "") {
+    $defaults["profile_repourl"] = $profile->repourl();
 }
 
 # Place to hang the toplevel template.
 echo "<div id='page-body'></div>\n";
 
+# Place to hang the genilib-editor template.
+echo "<div id='genilib-editor-body'></div>\n";
+
+# These two modals live outside so that genilib-editor can
+# use them as well.
+echo "<div id='waitwait_div'></div>
+      <div id='oops_div'></div>";
+
 echo "<link rel='stylesheet'
             href='css/jquery-ui-1.10.4.custom.min.css'>\n";
 echo "<link rel='stylesheet' href='css/codemirror.css'>\n";
+echo "<link rel='stylesheet' href='css/genilib-editor.css'>\n";
 
 # I think this will take care of XSS prevention?
 echo "<script type='text/plain' id='form-json'>\n";
 echo htmlentities(json_encode($defaults)) . "\n";
 echo "</script>\n";
 
+# Needed for genilib-editor
+echo "<script src='https://cdn.jsdelivr.net/ace/1.2.3/noconflict/ace.js'></script>\n";
+echo "<script src='https://cdn.jsdelivr.net/ace/1.2.3/noconflict/keybinding-vim.js'></script>\n";
+echo "<script src='https://cdn.jsdelivr.net/ace/1.2.3/noconflict/keybinding-emacs.js'></script>\n";
+
 $am_array = Instance::DefaultAggregateList();
 $amlist   = array();
 $amdefault = "";
 if (($ISCLOUD || ISADMIN() || STUDLY())) {
-    while (list($am) = each($am_array)) {
+    while (list($index, $aggregate) = each($am_array)) {
+        $urn = $aggregate->urn();
+        $am  = $aggregate->name();
+        
 	$amlist[] = $am;
     }
     $amdefault = $DEFAULT_AGGREGATE;
@@ -138,13 +161,23 @@ echo "    window.DISABLED     = $disabled;\n";
 echo "    window.HISTORY      = $history;\n";
 echo "    window.ISPPPROFILE  = $ispp;\n";
 echo "    window.WITHPUBLISHING = $WITHPUBLISHING;\n";
+echo "    window.EDITOR_READONLY = true;\n";
 echo "</script>\n";
 
 echo "<script src='js/lib/codemirror-min.js'></script>\n";
 
-SPITREQUIRE("show-profile",
+REQUIRE_UNDERSCORE();
+REQUIRE_SUP();
+REQUIRE_MOMENT();
+REQUIRE_APTFORMS();
+REQUIRE_MARKED();
+REQUIRE_GENILIB_EDITOR();
+AddLibrary("js/gitrepo.js");
+SPITREQUIRE("js/show-profile.js",
             "<script src='js/lib/jquery-ui.js'></script>\n".
             "<script src='js/lib/jquery.appendGrid-1.3.1.min.js'></script>");
+
+AddTemplateList(array("show-profile", "waitwait-modal", "renderer-modal", "showtopo-modal", "rspectextview-modal", "guest-instantiate", "instantiate-modal", "oops-modal", "share-modal", "gitrepo-picker"));
 SPITFOOTER();
 
 ?>

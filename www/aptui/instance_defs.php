@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2006-2016 University of Utah and the Flux Group.
+# Copyright (c) 2006-2017 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -48,7 +48,7 @@ $geni_response_codes =
           "Error 20",
           "Error 21",
           "Error 22",
-          "Error 23",
+          "No space left on device or over quota",
           "Vlan Unavailable",
           "Insufficient Bandwidth",
           "Insufficient Nodes",
@@ -59,6 +59,8 @@ define("GENIRESPONSE_BADARGS",   	       1);
 define("GENIRESPONSE_REFUSED",                 7);
 define("GENIRESPONSE_TIMEDOUT",                8);
 define("GENIRESPONSE_SEARCHFAILED",            12);
+define("GENIRESPONSE_ALREADYEXISTS",           17);
+define("GENIRESPONSE_NOSPACE",                 23);
 define("GENIRESPONSE_VLAN_UNAVAILABLE",        24);
 define("GENIRESPONSE_INSUFFICIENT_BANDWIDTH",  25);
 define("GENIRESPONSE_INSUFFICIENT_NODES",      26);
@@ -110,6 +112,8 @@ class Instance
     function paniced()	    { return $this->field('paniced'); }
     function pid()	    { return $this->field('pid'); }
     function pid_idx()	    { return $this->field('pid_idx'); }
+    function gid()	    { return $this->field('gid'); }
+    function gid_idx()	    { return $this->field('gid_idx'); }
     function public_url()   { return $this->field('public_url'); }
     function logfileid()    { return $this->field('logfileid'); }
     function manifest()	    { return $this->field('manifest'); }
@@ -129,6 +133,11 @@ class Instance
     function servername()   { return $this->field('servername'); }
     function aggregate_urn(){ return $this->field('aggregate_urn'); }
     function private_key()  { return $this->field('privkey'); }
+    function webtask_id()   { return $this->field('webtask_id'); }
+    function repourl()	    { return $this->field('repourl'); }
+    function reporef()	    { return $this->field('reporef'); }
+    function repohash()	    { return $this->field('repohash'); }
+    function admin_notes()  { return $this->field('admin_notes'); }
     function isopenstack()  { return $this->field('isopenstack'); }
     function openstack_utilization() {
         return $this->field('openstack_utilization');
@@ -141,6 +150,26 @@ class Instance
     }
     function IsPNet() {
 	return preg_match('/phantomnet/', $this->servername());
+    }
+    # Grab the webtask. Backwards compat mode, see if there is one associated
+    # with the object, use that. Otherwise create a new one.
+    function WebTask() {
+        if ($this->webtask_id()) {
+            return WebTask::Lookup($this->webtask_id());
+        }
+        $webtask = WebTask::LookupByObject($this->uuid());
+        if (!$webtask) {
+            $webtask = WebTask::CreateAnonymous();
+            if (!$webtask) {
+                return null;
+            }
+        }
+        $uuid = $this->uuid();
+        $webtask_id = $webtask->task_id();
+        DBQueryFatal("update apt_instances set ".
+                     "  webtask_id='$webtask_id' ".
+                     "where uuid='$uuid'");
+        return $webtask;
     }
     function aggregate_name() {
         global $urn_mapping;
@@ -228,6 +257,16 @@ class Instance
 	$this->instance = mysql_fetch_array($query_result);
 	return 0;
     }
+
+    # Project of instance.
+    function Project() {
+        return Project::Lookup($this->pid_idx());
+    }
+    # Group of instance.
+    function Group() {
+        return Group::Lookup($this->gid_idx());
+    }
+    
     #
     # Class function to create a new Instance
     #
@@ -266,11 +305,14 @@ class Instance
 	# 
 	# With a real user, run as that user. 
 	#
-	$uid = ($creator ? $creator->uid() : "nobody");
-	$pid = "nobody";
-	if ($creator && $creator->FirstApprovedProject()) {
-	    $pid = $creator->FirstApprovedProject()->pid();
-	}
+        if ($creator) {
+            $uid = $creator->uid();
+            $pid = $args["pid"];
+        }
+        else {
+            $uid = "nobody";
+            $pid = "nobody";
+        }
 	if (isset($_SERVER['REMOTE_ADDR'])) { 
 	    putenv("REMOTE_ADDR=" . $_SERVER['REMOTE_ADDR']);
 	}
@@ -398,6 +440,16 @@ class Instance
 
         DBQueryWarn("update apt_instances set ".
                     "  extension_reason='$safe_reason' ".
+                    "where uuid='$uuid'");
+    }
+
+    function SetAdminNotes($notes)
+    {
+	$uuid = $this->uuid();
+        $safe_notes = mysql_escape_string($notes);
+
+        DBQueryWarn("update apt_instances set ".
+                    "  admin_notes='$safe_notes' ".
                     "where uuid='$uuid'");
     }
 
@@ -726,6 +778,29 @@ class Instance
           return $row[0];
       }
     }
+
+    #
+    # Return a list of types not to show user.
+    #
+    function NodeTypePruneList() {
+        global $ISEMULAB, $ISCLOUD, $ISAPT, $ISPNET, $ISPOWDER;
+        
+        $skiptypes = array("dboxvm"    => true,
+                           "d430k"     => true,
+                           "pcivy"     => true,
+                           "pc2830qx2" => true,
+                           "pc2400hp"  => true,
+                           "d2100"     => true,
+                           "pc2400w"   => true);
+                   
+        if ($ISEMULAB || $ISCLOUD || $ISAPT) {
+            $skiptypes["sdr"]      = true;
+            $skiptypes["nuc5300"]  = true;
+            $skiptypes["enodeb"]   = true;
+            $skiptypes["nuc6260"]  = true;
+        }
+        return $skiptypes;
+    }
 }
 
 class InstanceSliver
@@ -821,6 +896,32 @@ class InstanceSliver
         }
         return $result;
     }
+
+    #
+    # Grab the list of sliver status rows. Turn this into a class at some point.
+    #
+    function StatusArray() {
+        $result = array();
+        $uuid   = $this->uuid();
+        $urn    = $this->aggregate_urn();
+
+        $query_result =
+            DBQueryFatal("select * from apt_instance_sliver_status ".
+                         "where uuid='$uuid' and aggregate_urn='$urn'");
+
+	while ($row = mysql_fetch_array($query_result)) {
+            if ($row["sliver_data"]) {
+                $row["sliver_details"] = json_decode($row["sliver_data"], true);
+                
+                if ($row["frisbee_data"]) {
+                    $frisbeestatus = json_decode($row["frisbee_data"], true);
+                    $row["sliver_details"]["frisbeestatus"] = $frisbeestatus;
+                }
+            }
+            $result[] = $row;
+        }
+        return $result;
+    }
 }
 
 class ExtensionInfo
@@ -857,8 +958,13 @@ class ExtensionInfo
     function wanted()       { return $this->field('wanted'); }
     function granted()      { return $this->field('granted'); }
     function admin()        { return $this->field('admin'); }
+    function needapproval() { return $this->field('needapproval'); }
     function reason()       { return $this->field('reason'); }
     function message()      { return $this->field('message'); }
+    function autoapproved() { return $this->field('autoapproved'); }
+    function autoapproved_reason() {
+        return $this->field('autoapproved_reason');
+    }
 
     # Hmm, how does one cause an error in a php constructor?
     function IsValid() {
@@ -893,6 +999,126 @@ class ExtensionInfo
         }
         return $result;
     }
+}
+
+# $amlist, $fedlist, and $status are all output arrays
+function CalculateAggregateStatus(&$amlist, &$fedlist, &$status) {
+    global $TBMAINSITE, $DEFAULT_AGGREGATE_URN, $CHECKLOGIN_USER;
+    $am_array = Instance::DefaultAggregateList();
+
+    #
+    # If not the Cloudlab Portal then we get local status only.
+    #
+    if (!$TBMAINSITE) {
+        $aggregate = $am_array[$DEFAULT_AGGREGATE_URN];
+        $urn = $aggregate->urn();
+        $am  = $aggregate->name();
+        $amlist[$urn] = $am;
+
+        $freevms = $vmcount = 0;
+        TBVMCounts($vmcount, $freevms);
+
+        $status[$urn] = array(
+            "rawPCsAvailable"  => TBFreePCs($CHECKLOGIN_USER),
+            "rawPCsTotal"      => TBTotalPCs(),
+            "VMsAvailable"     => $freevms,
+            "VMsTotal"         => $vmcount,
+            "health"           => 100,
+            "status"           => "SUCCESS");
+        return;
+    }
+    while (list($ignore, $aggregate) = each($am_array)) {
+        $urn = $aggregate->urn();
+        $am  = $aggregate->name();
+        $amlist[$urn] = $am;
+        #
+        # We need to mark federated sites for the cluster dropdown.
+        #
+        if ($aggregate->isfederate()) {
+            $fedlist[] = "'" . $aggregate->name() . "'";
+        }
+        #
+        # generate the status blob.
+        #
+        if ($aggregate->status()) {
+            $status[$urn] = array(
+                "rawPCsAvailable"  => $aggregate->pfree(),
+                "rawPCsTotal"      => $aggregate->pcount(),
+                "VMsAvailable"     => $aggregate->vfree(),
+                "VMsTotal"         => $aggregate->vcount(),
+                "health"           => ($aggregate->status() == "up" ? 100 :
+                                       ($aggregate->status() == "down" ?
+                                        0 : 50)),
+                "status"           => ($aggregate->status() != "down" ?
+                                       "SUCCESS" : "FAILED"));
+        }
+    }
+}
+
+function SpitAggregateStatus() {
+    $amlist     = array();
+    $fedlist    = array();
+    $status     = array();
+    CalculateAggregateStatus($amlist, $fedlist, $status);
+    echo "<script type='text/plain' id='amlist-json'>\n";
+    echo htmlentities(json_encode($amlist));
+    echo "</script>\n";
+    echo "<script type='text/plain' id='amstatus-json'>\n";
+    echo htmlentities(json_encode($status));
+    echo "</script>\n";
+    echo "<script type='text/javascript'>\n";
+    echo "    window.FEDERATEDLIST  = [". implode(",", $fedlist) . "];\n";
+    echo "</script>\n";
+}
+
+#
+# Find usage info for user for the epoch, rather then looking up per
+# profile. Much faster.
+#
+function UserUsageInfo($user) {
+    $user_idx    = $user->idx();
+    $results     = array();
+
+    $query_result =
+        DBQueryFatal("select profile_id,count(profile_id), ".
+                     "       max(UNIX_TIMESTAMP(created)) ".
+                     "  from apt_instances ".
+                     " where creator_idx='$user_idx' ".
+                     " group by profile_id");
+
+    while ($row = mysql_fetch_array($query_result)) {
+        $profile_id = $row[0];
+        $count      = $row[1];
+        $lastused   = $row[2];
+
+        $results[$profile_id] = array("count"    => $count,
+                                      "lastused" => $lastused);
+    }
+    $query_result =
+        DBQueryFatal("select profile_id,count(profile_id), ".
+                     "       max(UNIX_TIMESTAMP(created)) ".
+                     "  from apt_instance_history ".
+                     " where creator_idx='$user_idx' ".
+                     " group by profile_id");
+
+    while ($row = mysql_fetch_array($query_result)) {
+        $profile_id = $row[0];
+        $count      = $row[1];
+        $lastused   = $row[2];
+
+        if (!array_key_exists($profile_id, $results)) {
+            $results[$profile_id] = array("count"    => $count,
+                                          "lastused" => $lastused);
+        }
+        else {
+            $result = $results[$profile_id];
+            $result["count"] += $count;
+            if ($lastused > $result["lastused"]) {
+                $result["lastused"] = $lastused;
+            }
+        }
+    }
+    return $results;
 }
 
 ?>

@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2014 University of Utah and the Flux Group.
+# Copyright (c) 2000-2014, 2016 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -252,12 +252,25 @@ else {
 	sleep(1);
 
 	PAGEHEADER("Login", $view);
-	echo "<h3>
+	echo "<h4>
               Your account has been frozen due to earlier login attempt
               failures. You must contact $TBMAILADDR to have your account
               restored. <br> <br>
               Please do not attempt to login again; it will not work!
-              </h3>\n";
+              </h4>\n";
+	PAGEFOOTER($view);
+	die("");
+    }
+    else if ($dologin_status == DOLOGIN_STATUS_INACTIVE) {
+	# Short delay.
+	sleep(1);
+
+	PAGEHEADER("Login", $view);
+	echo "<h4>
+              Your account has gone <b>inactive</b>. Please contact $TBMAILADDR 
+              to have your account restored. <br> <br>
+              Please do not attempt to login again; it will not work!
+              </h4>\n";
 	PAGEFOOTER($view);
 	die("");
     }

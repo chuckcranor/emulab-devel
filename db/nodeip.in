@@ -1,7 +1,7 @@
 #!/usr/bin/perl -w
 
 #
-# Copyright (c) 2000-2002 University of Utah and the Flux Group.
+# Copyright (c) 2000-2017 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -39,7 +39,7 @@ if ($#ARGV < 0) {
 	print "Usage: nodeip <node|mac|if> <node|mac|if> <...>\n";
 	print "<node> is in the form pcxxx\n";
 	print "<mac> is in the form xx:xx:xx:xx:xx:xx or xxxxxxxxxxxx\n";
-	print "<if> is in the form <node[:card]>\n";
+	print "<if> is in the form <node[:iface]>\n";
 	exit(1);
 }
 
@@ -50,10 +50,10 @@ foreach my $mac ( @ARGV ) {
 	if ( $mac =~ /^(sh\d+)(-\d)?(:\d)?$/ ) {
 		my $node = $1. (defined $2 ? $2 : "-" );
 		$list[$n] .= "(node_id like '$node%')";
-	} elsif ( $mac =~ /^([a-zA-Z]+\d+):(\d+)$/ ) {
+	} elsif ( $mac =~ /^([a-zA-Z]+\d+):([-\w]*)$/ ) {
 		my $node=$1;
 		my $if=$2;
-		$list[$n] .= "(node_id='$node' and card='$if')";
+		$list[$n] .= "(node_id='$node' and iface='$if')";
 	} elsif ( $mac =~ /^([a-zA-Z]+\d+)$/ ) {
 		my $node=$1;
 		$list[$n] .= "(node_id='$node')";

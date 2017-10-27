@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2003-2016 University of Utah and the Flux Group.
+# Copyright (c) 2003-2017 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -40,7 +40,7 @@ sub usage()
     print STDERR " -f       - force, modify path for existing interfaces\n";
     print STDERR " -n       - Dry run mode\n";
     print STDERR " node_id  - ue1, ue2, etc\n";
-    print STDERR " path     - attenuator path (must be an integer)\n";
+    print STDERR " path     - attenuator path (comma-separated integers)\n";
     print STDERR " iface_id - rf0, rf1, etc (must end in an integer)\n";
     exit(-1);
 }
@@ -67,7 +67,6 @@ use emutil;
 use User;
 use Node;
 use NodeType;
-use OSinfo;
 use Interface;
 
 #
@@ -140,7 +139,6 @@ fatal( "Node already has an interface named $iface_id2" )
 # Add the interfaces.
 #
 my $ifaceargs = {
-    "card"        => $card1,
     "iface"       => $iface_id1,
     "role"        => TBDB_IFACEROLE_EXPERIMENT(),
     "type"        => "P2PLTE",
@@ -151,12 +149,11 @@ my $ifaceargs = {
 print "Creating interface with arguments:\n";
 print Dumper($ifaceargs);
 if (!$impotent) {
-    Interface->Create($node1, $ifaceargs)
+    ($interface1 = Interface->Create($node1, $ifaceargs))
 	or $force or fatal("Could not create interface entry");
 }
 
 $ifaceargs = {
-    "card"        => $card2,
     "iface"       => $iface_id2,
     "role"        => TBDB_IFACEROLE_EXPERIMENT(),
     "type"        => "P2PLTE",
@@ -167,14 +164,21 @@ $ifaceargs = {
 print "Creating interface with arguments:\n";
 print Dumper($ifaceargs);
 if (!$impotent) {
-    Interface->Create($node2, $ifaceargs)
+    ($interface2 = Interface->Create($node2, $ifaceargs))
 	or $force or fatal("Could not create interface entry");
 }
 
-DBQueryWarn( "INSERT INTO wires SET cable=$path, type='Node', " .
-	     "node_id1='$node_id1', card1=$card1, port1=1, " .
-	     "node_id2='$node_id2', card2=$card2, port2=1" );	     
-
+my $wireargs = {
+    "card1"         => $card1,
+    "port1"         => 1,
+    "card2"         => $card2,
+    "port2"         => 1,
+    "external_wire" => $path,
+};
+if (!$impotent) {
+    Interface::Wire->Create($interface1, $interface2, 'Node', $wireargs)
+	or fatal("Could not create wire!");
+}
 exit(0);
 
 sub fatal($)

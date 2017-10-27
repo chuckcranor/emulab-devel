@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2007 University of Utah and the Flux Group.
+# Copyright (c) 2000-2007, 2017 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -35,6 +35,11 @@ $isadmin   = ISADMIN();
 #
 if (! $isadmin) {
     USERERROR("You do not have admin privileges to approve projects!", 1);
+}
+
+if ($TBMAINSITE) {
+    header("Location: portal/approve-projects.php");
+    return;
 }
 
 #

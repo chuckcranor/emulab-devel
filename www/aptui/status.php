@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2016 University of Utah and the Flux Group.
+# Copyright (c) 2000-2017 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -40,6 +40,10 @@ $this_user = CheckLogin($check_status);
 if (isset($this_user)) {
     CheckLoginOrDie(CHECKLOGIN_NONLOCAL);
 }
+elseif (!$ISAPT && GETUID()) {
+    # User with an account, redirect to login. APT allows guest users.
+    RedirectLoginPage();
+}
 #
 # We do not set the isfadmin flag if the user has normal permission
 # to see this experiment, since that would change what the user sees.
@@ -50,9 +54,9 @@ $isfadmin = 0;
 #
 # Verify page arguments.
 #
-$reqargs = OptionalPageArguments("uuid",    PAGEARG_STRING,
-				 "extend",  PAGEARG_INTEGER,
-				 "oneonly", PAGEARG_BOOLEAN);
+$reqargs = OptionalPageArguments("uuid",      PAGEARG_STRING,
+                                 "maxextend", PAGEARG_INTEGER,
+				 "oneonly",   PAGEARG_BOOLEAN);
 
 if (!isset($uuid)) {
     SPITHEADER(1);
@@ -79,7 +83,7 @@ if (!$instance) {
     SPITFOOTER();
     flush();
     sleep(3);
-    PAGEREPLACE("instantiate.php");
+    PAGEREPLACE("landing.php");
     return;
 }
 $creator = GeniUser::Lookup("sa", $instance->creator_uuid());
@@ -122,8 +126,7 @@ $slice = GeniSlice::Lookup("sa", $instance->slice_uuid());
 $instance_status = $instance->status();
 $creator_uid     = $creator->uid();
 $creator_email   = $creator->email();
-if ($instance->profile_id() &&
-    $profile = Profile::Lookup($instance->profile_id(),
+if ($profile = Profile::Lookup($instance->profile_id(),
 			       $instance->profile_version())) {
     $profile_name   = $profile->name();
     $profile_uuid   = $profile->uuid();
@@ -137,7 +140,7 @@ if ($instance->profile_id() &&
 		       ISADMIN() ? 1 : 0);
     $public_url     = ($instance->public_url() ?
 		       "'" . $instance->public_url() . "'" : "null");
-    $ispprofile     = $profile->script() ? 1 : 0;
+    $isscript       = ($profile->script() && $profile->script() != "" ? 1 : 0);
 }
 else {
     $profile_name   = "";
@@ -146,7 +149,7 @@ else {
     $cansnap        = 0;
     $canclone       = 0;
     $public_url     = "null";
-    $ispprofile     = 0;
+    $isscript      = 0;
 
 }
 if ($slice) {
@@ -171,8 +174,8 @@ $registered      = (isset($this_user) ? "true" : "false");
 $snapping        = 0;
 $oneonly         = (isset($oneonly) && $oneonly ? 1 : 0);
 $isadmin         = (ISADMIN() ? 1 : 0);
-$lockdown        = ($instance->admin_lockdown() ||
-                    $instance->user_lockdown() ? 1 : 0);
+$user_lockdown   = ($instance->user_lockdown() ? 1 : 0);
+$admin_lockdown  = ($instance->admin_lockdown() ? 1 : 0);
 $extension_reason= ($instance->extension_reason() ?
                     CleanString($instance->extension_reason()) : "");
 $extension_denied_reason= ($instance->extension_denied_reason() ?
@@ -182,9 +185,11 @@ $freenodes_url   = Aggregate::Lookup($instance->aggregate_urn())->FreeNodesURL()
 $lockout         = $instance->extension_lockout();
 $isopenstack     = $instance->isopenstack();
 $paniced         = $instance->paniced();
-$project         = $instance->pid();
+$pid             = $instance->pid();
+$gid             = $instance->gid();
 $extensions      = ExtensionInfo::LookupForInstance($instance);
 $isstud          = (isset($this_user) && $this_user->stud() ? 1 : 0);
+$wholedisk       = FeatureEnabled("WholeDiskImage", $creator, $instance->Group());
 
 #
 # We give ssh to the creator (real user or guest user).
@@ -205,7 +210,7 @@ $dossh =
 # cannot show that progress. Needs more thought.
 #
 if ($instance_status == "imaging") {
-    $webtask = WebTask::LookupByObject($instance->uuid());
+    $webtask = $instance->WebTask();
     if ($webtask && ! $webtask->exited()) {
 	$snapping = 1;
     }
@@ -244,17 +249,20 @@ echo "  window.APT_OPTIONS.isfadmin = $isfadmin;\n";
 echo "  window.APT_OPTIONS.isstud = $isstud;\n";
 echo "  window.APT_OPTIONS.cansnap = $cansnap;\n";
 echo "  window.APT_OPTIONS.canclone = $canclone;\n";
+echo "  window.APT_OPTIONS.wholedisk = $wholedisk;\n";
 echo "  window.APT_OPTIONS.snapping = $snapping;\n";
 echo "  window.APT_OPTIONS.hidelinktest = false;\n";
 echo "  window.APT_OPTIONS.oneonly = $oneonly;\n";
 echo "  window.APT_OPTIONS.dossh = $dossh;\n";
-echo "  window.APT_OPTIONS.ispprofile = $ispprofile;\n";
+echo "  window.APT_OPTIONS.isscript = $isscript;\n";
 echo "  window.APT_OPTIONS.publicURL = $public_url;\n";
-echo "  window.APT_OPTIONS.lockdown = $lockdown;\n";
+echo "  window.APT_OPTIONS.user_lockdown = $user_lockdown;\n";
+echo "  window.APT_OPTIONS.admin_lockdown = $admin_lockdown;\n";
 echo "  window.APT_OPTIONS.lockout = $lockout;\n";
 echo "  window.APT_OPTIONS.isopenstack = $isopenstack;\n";
 echo "  window.APT_OPTIONS.paniced = $paniced;\n";
-echo "  window.APT_OPTIONS.project = '$project';\n";
+echo "  window.APT_OPTIONS.project = '$pid';\n";
+echo "  window.APT_OPTIONS.group = '$gid';\n";
 echo "  window.APT_OPTIONS.extension_requested = " .
     $instance->extension_requested() . ";\n";
 echo "  window.APT_OPTIONS.extension_denied = $extension_denied;\n";
@@ -267,18 +275,42 @@ echo "  window.APT_OPTIONS.physnode_hours = " .
     sprintf("%.2f;\n", $instance->physnode_count() *
             ((time() - strtotime($instance->created())) / 3600));
 echo "  window.APT_OPTIONS.freenodesurl = '$freenodes_url';\n";
-if (isset($extend) && $extend != "") {
-    echo "  window.APT_OPTIONS.extend = $extend;\n";
+if (isset($maxextend) && $maxextend != "") {
+    # Assumed to be hours.
+    echo "  window.APT_OPTIONS.MAXEXTEND = $maxextend;\n";
 }
-echo "var FOO = null;\n";
+else {
+    echo "  window.APT_OPTIONS.MAXEXTEND = null;\n";
+}
+echo "  window.APT_OPTIONS.hasnotes = " .
+    ($instance->admin_notes() && $instance->admin_notes() != "" ? 1 : 0) . ";\n";
+if ($instance->repourl()) {
+    echo "  window.APT_OPTIONS.repourl = '" . $instance->repourl() . "';\n";
+    if ($instance->reporef()) {
+        echo "  window.APT_OPTIONS.reporef = '" . $instance->reporef() . "';\n";
+        echo "  window.APT_OPTIONS.repohash = '" .
+                substr($instance->repohash(),0,8) . "';\n";
+    }
+}
 echo "</script>\n";
 echo "<script src='js/lib/d3.v3.js'></script>\n";
 echo "<script src='js/lib/nv.d3.js'></script>\n";
 echo "<script src='js/lib/jquery-2.0.3.min.js'></script>\n";
 echo "<script src='js/lib/jquery-ui.js'></script>\n";
 echo "<script src='js/lib/codemirror-min.js'></script>\n";
-echo "<script src='js/lib/bootstrap.js'></script>\n";
-echo "<script src='js/lib/require.js' data-main='js/status'></script>";
+
+REQUIRE_UNDERSCORE();
+REQUIRE_SUP();
+REQUIRE_MOMENT();
+REQUIRE_MARKED();
+REQUIRE_URITEMPLATE();
+REQUIRE_IMAGE();
+REQUIRE_EXTEND();
+REQUIRE_IDLEGRAPHS();
+REQUIRE_OPENSTACKGRAPHS();
+REQUIRE_CONTEXTMENU();
+SPITREQUIRE("js/status.js");
+
 echo "<link rel='stylesheet'
             href='css/jquery-ui-1.10.4.custom.min.css'>\n";
 # For progress bubbles in the imaging modal.
@@ -298,5 +330,19 @@ if ($extension_denied_reason != "") {
    echo "<pre class='hidden' id='extension_denied_reason'>$extension_denied_reason</pre>\n";
 }
 
+# This is for Clone.
+if (isset($this_user)) {
+    $projlist = $this_user->ProjectAccessList($TB_PROJECT_CREATEEXPT);
+    $plist = array();
+    while (list($project) = each($projlist)) {
+        $plist[] = $project;
+    }
+    echo "<script type='text/plain' id='projects-json'>\n";
+    echo htmlentities(json_encode($plist));
+    echo "</script>\n";
+}
+
+AddTemplateList(array("status", "waitwait-modal", "oops-modal", "register-modal", "terminate-modal", "oneonly-modal", "approval-modal", "linktest-modal"));
+AddTemplateKey("linktest-md", "template/linktest.md");
 SPITFOOTER();
 ?>

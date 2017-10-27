@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2007-2016 University of Utah and the Flux Group.
+# Copyright (c) 2007-2017 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -35,6 +35,7 @@ use vars qw(@ISA @EXPORT $AUTOLOAD);
 use libdb;
 use EmulabConstants;
 use libtestbed;
+use WebTask;
 use English;
 use Data::Dumper;
 use File::Basename;
@@ -52,6 +53,8 @@ my $OURDOMAIN     = "@OURDOMAIN@";
 my $PGENISUPPORT  = @PROTOGENI_SUPPORT@;
 my $DOPROVENANCE  = @IMAGEPROVENANCE@;
 my $TBWWW         = "@TBWWW@";
+my $PROJROOT      = "@PROJROOT_DIR@";
+my $GROUPROOT     = "@GROUPSROOT_DIR@";
 
 # Cache of instances to avoid regenerating them.
 my %images    = ();
@@ -75,11 +78,23 @@ sub urn($)
     my ($self) = @_;
 
     return undef
-	if (! $PGENISUPPORT);
+	if (! $PGENISUPPORT);    
 
     require GeniHRN;
-    return GeniHRN::Generate($OURDOMAIN, "image",
-			     $self->pid() . "//" . $self->imagename());
+    my $pid    = $self->pid();
+    my $gid    = $self->gid();
+    my $name   = $self->imagename();
+    my $domain = $OURDOMAIN;
+
+    if ($self->isdataset()) {
+	$domain .= ":${pid}";
+	$domain .= ":${gid}" if ($pid ne $gid);
+	
+	return GeniHRN::Generate($domain, "imdataset", $name);
+    }
+    else {
+	return GeniHRN::Generate($domain, "image", $pid . "//" . $name);
+    }
 }    
 
 # Little helper and debug function.
@@ -102,6 +117,11 @@ sub BlessRow($$)
     $self->{'HASH'}    = {};
 
     bless($self, $class);
+
+    # Grab the webtask. For images these are transient.
+    if (defined($self->webtask_id())) {
+	$self->{'WEBTASK'} = WebTask->Lookup($self->webtask_id());
+    }
     return $self;
 }
 
@@ -298,17 +318,42 @@ AUTOLOAD {
 	    return $self->{'HASH'}->{$name};
 	}
     }
+    print STDERR Dumper($self);
     carp("No such slot '$name' field in class $type");
     return undef;
 }
+sub field($$) {
+    my ($self, $name) = @_;
+    
+    if (exists($self->{'IMAGE'}->{$name})) {
+	return $self->{'IMAGE'}->{$name};
+    }
+    return undef;
+}
+sub fieldExists($$) {
+    my ($self, $name) = @_;
+
+    return 1
+	if (exists($self->{'IMAGE'}->{$name}));
+    return 0;
+}
+sub fieldSet($$$) {
+    my ($self, $name, $value) = @_;
+
+    $self->{'IMAGE'}->{$name} = $value;
+    return $value;
+}
+sub isImageAlias($)	{ return 0; }
 
 # Break circular reference someplace to avoid exit errors.
 sub DESTROY {
     my $self = shift;
 
-    $self->{'IMAGE'} = undef;
-    $self->{'HASH'}  = undef;
+    $self->{'IMAGE'}    = undef;
+    $self->{'HASH'}     = undef;
+    $self->{'WEBTASK'}  = undef;
 }
+sub webtask($)  { return $_[0]->{'WEBTASK'}; }
 
 #
 # Lookup by URL.
@@ -319,7 +364,7 @@ sub LookupByURL($$)
     my ($pid,$imagename);
 
     return undef
-	if (! ($url =~ /^(ftp|http|https):/));
+	if (! ($url =~ /^(ftp|http|https|file):/));
 
     my $safe_url = DBQuoteSpecial($url);
 
@@ -403,7 +448,7 @@ sub LookupByOriginUUID($$$)
 
     my $query_result =
 	DBQueryWarn("select imageid from image_versions ".
-		    "where pid=$safe_pid ".
+		    "where pid=$safe_pid and ".
 		    "      origin_uuid=$safe_uuid and deleted is null");
     return undef
 	if (!$query_result || !$query_result->numrows);
@@ -413,30 +458,55 @@ sub LookupByOriginUUID($$$)
 }
 
 #
-# Get a list of all running frisbee images.
-# XXX if this is actually used, it will have to be fixed; DB no longer
-# tracks running frisbee daemons.
+# Lookup by Origin URN.
 #
-sub ActiveImages($)
+sub LookupByOriginURN($$)
 {
-    my ($class) = @_;
-    my @result  = ();
+    my ($class, $urn) = @_;
+
+    return undef
+	if (! $PGENISUPPORT);    
+
+    require GeniHRN;
+    return undef
+	if (!GeniHRN::IsValid($urn));
+    
+    my $safe_urn = DBQuoteSpecial($urn);
 
     my $query_result =
-	DBQueryWarn("select imageid,imageid_version from frisbee_blobs ".
-		    "where frisbee_pid!=0");
+	DBQueryWarn("select imageid,version from image_versions ".
+		    "where origin_urn=$safe_urn and deleted is null");
     return undef
-	if (!defined($query_result));
+	if (!$query_result || !$query_result->numrows);
 
-    while (my ($imageid,$version) = $query_result->fetchrow_array()) {
-	my $image = Image->Lookup($imageid, $version);
-	if (!defined($image)) {
-	    print STDERR "*** Could not find DB object for image $imageid\n";
-	    return undef;
-	}
-	push(@result, $image);
-    }
-    return \@result;
+    my ($imageid,$version) = $query_result->fetchrow_array();
+    return Image->Lookup($imageid, $version);
+}
+
+#
+# Lookup by Authority URN. Only for datasets right now.
+#
+sub LookupByAuthorityURN($$)
+{
+    my ($class, $urn) = @_;
+
+    return undef
+	if (! $PGENISUPPORT);    
+
+    require GeniHRN;
+    return undef
+	if (!GeniHRN::IsValid($urn));
+    
+    my $safe_urn = DBQuoteSpecial($urn);
+
+    my $query_result =
+	DBQueryWarn("select distinct imageid from image_versions ".
+		    "where authority_urn=$safe_urn and deleted is null");
+    return undef
+	if (!$query_result || !$query_result->numrows);
+
+    my ($imageid) = $query_result->fetchrow_array();
+    return Image->Lookup($imageid);
 }
 
 #
@@ -486,10 +556,10 @@ sub ListAllVersions($$$)
 
     my $clause = "";
     if (defined($format) && $format =~ /^([-\w]+)$/) {
-	$clause .= "and v.format='$1'";
+	$clause .= "and v.format='$1' ";
     }
     if (defined($pid) && $pid =~ /^([-\w]+)$/) {
-	$clause .= "and v.pid='$1'";
+	$clause .= "and v.pid='$1' ";
     }
 
     my $query_result =
@@ -517,9 +587,10 @@ sub Refresh($)
 
     my $imageid = $self->imageid();
     my $version = $self->version();
-    
+
     my $query_result =
-	DBQueryWarn("select v.*,i.uuid as image_uuid,i.locked,i.locker_pid ".
+	DBQueryWarn("select i.*,v.*,i.uuid as image_uuid, ".
+		    "   i.metadata_url as image_metadata_url ".
 		    "  from image_versions as v ".
 		    "left join images as i on ".
 		    "     v.imageid=i.imageid ".
@@ -548,6 +619,8 @@ sub Create($$$$$$$$)
     my $isadmin = $creator->IsAdmin();
     my $isdataset = (exists($argref->{"isdataset"}) ?
 		     $argref->{"isdataset"} : 0);
+    my $architecture = $argref->{'architecture'}
+        if (defined($argref->{'architecture'}));
 
     # We may ignore particular partN_osid's by deleting them.
     my @arg_slots = grep(/^part[1-4]_osid$/, keys(%{$argref}));
@@ -642,15 +715,18 @@ sub Create($$$$$$$$)
     if (exists($argref->{'description'})) {
 	$desc = DBQuoteSpecial($argref->{'description'});
     }
-    
     my $bquery = "imagename='$imagename'";
     $bquery .= ",imageid='$imageid'";
     $bquery .= ",pid='$pid',pid_idx='$pid_idx'";
     $bquery .= ",gid='$gid',gid_idx='$gid_idx'";
 
+    # image_versions include all the images stuff.
     my $query = "insert into image_versions set $bquery, ".
 	join(",", map("$_='" . $argref->{$_} . "'", @arg_slots));
-    
+    # except for this.
+    $bquery .= ",architecture='$architecture'"
+	if (defined($architecture));
+
     $query .= ",creator='$uid',creator_idx='$uid_idx'";
     $query .= ",uuid='$version_uuid'";
     $query .= ",created=now()";
@@ -694,7 +770,8 @@ sub Create($$$$$$$$)
     # Create the osidtoimageid mapping.  Admins have an option to do it or not.
     my $makedefault = exists($argref->{"makedefault"}) && 
 	$argref->{"makedefault"} eq "1";
-    if (!$isdataset && (!$isadmin || $makedefault)) {
+
+    if (!$isdataset && !defined($architecture) && (!$isadmin || $makedefault)){
 	#
 	# Dig out the mtypes we want to turn on. The caller has already
 	# sanity checked them to make sure the types actually exist, and
@@ -726,7 +803,6 @@ sub Create($$$$$$$$)
 			     "        '$imageid')";
 		 ##print "$query\n";
 		 if (! DBQueryWarn($query)) {
-		     DBQueryWarn("unlock tables");
 		     tberror("Error inserting new ostoimageid mapping for ".
 			     "$pid/$imagename!");
 		     return undef;
@@ -754,11 +830,43 @@ sub NewVersion($$$$)
     my $imtablename = "image_versions"  . $tableid;
 
     #
+    # This should not happen but lets make sure.
+    #
+    # We cannot make this test cause of image deletion; we might have
+    # deleted the head version. But this code below assumes we are
+    # making a copy of the highest numbered version of the image. I think
+    # we can change this, but do not want to attempt that now. Needs more
+    # thought
+    #
+    if (0 && defined($self->deleted())) {
+	print STDERR "Not allowed to clone deleted image $self\n";
+	return undef;
+    }
+    #
+    # We should always be called with the latest version. $baseimage is
+    # what we are actually basing the new image on.
+    #
+    if (!$self->IsNewest()) {
+	print STDERR "Image::NewVersion: $self is not the head version\n";
+	return undef;
+    }
+    
+    #
+    # Grab the current type list. Do this before table locking.
+    #
+    if (!$isdataset) {
+	my @typelist = $self->TypeList();
+	$typelist = join(",", @typelist)
+	    if (@typelist);
+    }
+
+    #
     # The pid/imageid has to be unique, so lock the table for the check/insert.
     #
     DBQueryWarn("lock tables images write, image_versions write, ".
 		"            os_info write, os_info_versions write, ".
-		"            emulab_indicies write, osidtoimageid read")
+		"            emulab_indicies write, osidtoimageid read, ".
+		"            node_types read")
 	or return undef;
 
     my $query_result =
@@ -775,22 +883,6 @@ sub NewVersion($$$$)
 			"  where osid='$osid' and vers='$version'");
 	goto bad
 	    if (!$query_result);
-
-	#
-	# Grab the current type list.
-	#
-	$query_result =
-	    DBQueryWarn("select distinct type from osidtoimageid ".
-			"where imageid='$osid'");
-    
-	goto bad
-	    if (!$query_result);
-
-	my @types = ();
-	while (my ($type) = $query_result->fetchrow_array()) {
-	    push(@types, $type);
-	}
-	$typelist = join(",", @types);
 
 	#
 	# Update the type list in the image being cloned. Better to do this
@@ -876,7 +968,7 @@ sub NewVersion($$$$)
     
     if (!$isdataset) {
 	DBQueryWarn("update $ostablename set ".
-		    "  uuid=uuid(), ".
+		    "  uuid=uuid(),deleted=null, ".
 		    "  vers='$clone_vers',".
 		    "  parent_osid=$parent_imageid,".
 		    "  parent_vers=$parent_version ".
@@ -884,14 +976,14 @@ sub NewVersion($$$$)
 	    or goto bad;
     }
     DBQueryWarn("update $imtablename set ".
-		"  uuid=uuid(),ready=0,path='$path',released=0, ".
+		"  uuid=uuid(),ready=0,path='$path',released=0,deleted=null, ".
 		"  $part_vers default_vers='$clone_vers', ".
 		"  version='$clone_vers',last_used=NULL, ".
 		"  created=now(),nodetypes='$typelist', ".
 		"  parent_imageid=$parent_imageid,".
 		"  parent_version=$parent_version, ".
 		"  origin_neednotify=0,origin_needupdate=0, ".
-		"  origin_uuid=NULL,origin_name=NULL, ".
+		"  origin_uuid=NULL,origin_name=NULL,credential_string=NULL, ".
 		"  hash=null,deltahash=null,size=0,deltasize=0, ".
 		"  updater='$uid',updater_idx='$uid_idx' $updater_urn ".
 		"where imageid='$osid'")
@@ -944,6 +1036,8 @@ sub SetProvenance($$)
 # Highest number version, rather then what is deemed most recent by the
 # images table.
 #
+# We must include deleted images here.
+#
 sub LookupMostRecent($)
 {
     my ($self) = @_;
@@ -963,15 +1057,18 @@ sub LookupMostRecent($)
 #
 # Return a list of all image versions.
 #
-sub AllVersions($$)
+sub AllVersions($$;$)
 {
-    my ($self, $pref)  = @_;
+    my ($self, $pref, $deleted)  = @_;
     my @result  = ();
     my $imageid = $self->imageid();
+    $deleted = 0 if (!defined($deleted));
 
     my $query_result =
 	DBQueryWarn("select version from image_versions ".
-		    "where imageid='$imageid' order by version desc");
+		    "where imageid='$imageid' ".
+		    ($deleted ? "" : "and deleted is null ") .
+		    "order by version desc");
     return -1
 	if (!$query_result);
     
@@ -1044,9 +1141,9 @@ sub Release($)
 sub EditImageid($$$$)
 {
     my ($class, $image, $argref, $usrerr_ref) = @_;
-
     my %mods;
     my $noreport;
+    require NodeType;
 
     my $imageid = $image->imageid();
 
@@ -1055,47 +1152,55 @@ sub EditImageid($$$$)
     # (Others above already did their own updates.)
     #
     my %updates;
-    foreach my $col ("description", "path", "mbr_version", "hash", "notes") {
+    foreach my $col ("description", "path", "mbr_version", "hash",
+		     "notes") {
 	# Copy args we want so that others can't get through.
 	if (exists($argref->{$col})) {
 	    $updates{$col} = $mods{$col} = $argref->{$col};
 	}
     }
-    # See mtype_$type args below.
-
-    #
-    # Need a list of node types. We join this over the nodes table so that
-    # we get a list of just the nodes that are currently in the testbed, not
-    # just in the node_types table.
-    #
-    my $types_result =
-	DBQueryWarn("select distinct n.type from nodes as n ".
-		     "left join node_type_attributes as a on a.type=n.type ".
-		     "where a.attrkey='imageable' and ".
-		     "      a.attrvalue!='0'");
-    my @mtypes_array;
-    my @map_updates;
     my $redo_map = 0;
-    while (my ($type) = $types_result->fetchrow_array()) {
-	push(@mtypes_array, $type);
+    my @map_updates;
+    
+    if (exists($argref->{"architecture"})) {
+	# This is in the images table, so done separately.
+	$mods{"architecture"} = $argref->{"architecture"};
     }
-    #
-    # Special hack to allow pcvm type -- see SetupReload in os_setup
-    #
-    push @mtypes_array, "pcvm";
+    else {
+	# See mtype_$type args below.
 
-    foreach my $type (@mtypes_array) {
-	# Remember when we get one of the mtype_$type args.  These aren't DB
-	# columns to update, but instead control re-creating the rows in the
-	# osidtoimageid table for this imageid, below.
-	my $mtype = "mtype_$type";
-	if (exists($argref->{$mtype})) {
-	    my $value = $argref->{$mtype};
-	    ##printf "argref->{$mtype} %s\n", $value;
-	    $mods{$mtype} = $value;
-	    if ($value eq "1") {
-		push(@map_updates, $type);
-		$redo_map = 1;
+	#
+	# Need a list of node types. We join this over the nodes table so that
+	# we get a list of just the nodes that are currently in the testbed, not
+	# just in the node_types table.
+	#
+	my $types_result =
+	    DBQueryWarn("select distinct n.type from nodes as n ".
+			"left join node_type_attributes as a on a.type=n.type ".
+			"where a.attrkey='imageable' and ".
+			"      a.attrvalue!='0'");
+	my @mtypes_array;
+	while (my ($type) = $types_result->fetchrow_array()) {
+	    push(@mtypes_array, $type);
+	}
+	#
+	# Special hack to allow pcvm type -- see SetupReload in os_setup
+	#
+	push @mtypes_array, "pcvm";
+
+	foreach my $type (@mtypes_array) {
+	    # Remember when we get one of the mtype_$type args.  These aren't DB
+	    # columns to update, but instead control re-creating the rows in the
+	    # osidtoimageid table for this imageid, below.
+	    my $mtype = "mtype_$type";
+	    if (exists($argref->{$mtype})) {
+		my $value = $argref->{$mtype};
+		##printf "argref->{$mtype} %s\n", $value;
+		$mods{$mtype} = $value;
+		if ($value eq "1") {
+		    push(@map_updates, $type);
+		    $redo_map = 1;
+		}
 	    }
 	}
     }
@@ -1108,7 +1213,7 @@ sub EditImageid($$$$)
 	}
     }
 
-    if (keys %updates || $redo_map) {
+    if (keys(%mods) || $redo_map) {
 	DBQueryWarn("lock tables images write, image_versions write, ".
 		    "     images as i write, image_versions as v write, ".
 		    "     os_info write, os_info_versions write, ".
@@ -1121,6 +1226,24 @@ sub EditImageid($$$$)
 	    return undef;
 	}
     }
+    if (exists($argref->{"architecture"})) {
+	my $arch = $argref->{"architecture"};
+
+	if (!DBQueryWarn("update images set architecture='$arch' ".
+			 "where imageid='$imageid'")) {
+	    $$usrerr_ref = "DB: Error updating the images table";
+	    DBQueryWarn("unlock tables");
+	    return undef;
+	}
+	if (0 &&
+	    NodeType->LookupArchitectureTypes($arch) &&
+	    !DBQueryWarn("delete from osidtoimageid ".
+			      "where imageid='$imageid'")) {
+	    $$usrerr_ref = "DB: Error updating the osidtoimageid table";
+	    DBQueryWarn("unlock tables");
+	    return undef;
+	}
+    }    
     if ($redo_map) {
 	#
 	# Update the osidtoimageid table too.
@@ -1149,7 +1272,7 @@ sub EditImageid($$$$)
 	    }
 	}
     }
-    if (keys %updates || $redo_map) {
+    if (keys(%mods) || $redo_map) {
 	DBQueryWarn("unlock tables");
     }
 
@@ -1228,6 +1351,8 @@ sub Delete($;$)
     
     my $imageid   = $self->imageid();
     my $uuid      = $self->image_uuid();
+    # Do this before table locking.
+    my @typelist  = $self->TypeList();
 
     DBQueryWarn("lock tables images write, image_versions write, ".
 		"            os_info write, os_info_versions write, ".
@@ -1243,7 +1368,6 @@ sub Delete($;$)
     # current type list so we can recall it later. 
     #
     if (!$purge && $DOPROVENANCE && !defined($self->nodetypes())) {
-	my @typelist = $self->TypeList();
 	if (@typelist) {
 	    my $typelist = join(",", @typelist);
 	    DBQueryWarn("update image_versions set nodetypes='$typelist' ".
@@ -1264,6 +1388,8 @@ sub Delete($;$)
 	or goto bad;
     DBQueryWarn("delete from image_updates where imageid='$imageid'")
 	or goto bad;
+    $self->webtask()->Delete()
+	if (defined($self->webtask()));
     
     if ($purge || !$DOPROVENANCE) {
 	goto bad
@@ -1317,10 +1443,60 @@ sub Delete($;$)
 }
 
 #
-# Delete a version of an image. This is not to be used, except when there
-# is an error during clone, and we want to undo the creation of a new version.
+# Mark a version as deleted. Since we are allowing the head version to
+# be deleted, we might have to reset the current image/osinfo pointers.
 #
 sub DeleteVersion($)
+{
+    my ($self) = @_;
+    my $imageid   = $self->imageid();
+    my $version   = $self->version();
+
+    DBQueryWarn("lock tables images write, image_versions write, ".
+		"            os_info write, os_info_versions write")
+	or return -1;
+
+    #
+    # Find the new head version; the highest numbered version that
+    # is not deleted,
+    #
+    my $query_result =
+	DBQueryWarn("select max(version) from image_versions ".
+		    "where imageid='$imageid' and deleted is null and ".
+		    "      version!='$version'");
+    goto bad
+	if (!$query_result);
+
+    if (!$query_result->numrows) {
+	print STDERR "Image::DeleteVersion: Cannot find a new head version\n";
+	goto bad;
+    }
+    my ($head) = $query_result->fetchrow_array();
+    
+    goto bad
+	if (! (DBQueryWarn("update image_versions set deleted=now() ".
+			   "where imageid='$imageid' and version='$version'") &&
+	       DBQueryWarn("update os_info_versions set deleted=now() ".
+			   "where osid='$imageid' and vers='$version'") &&
+	       DBQueryWarn("update os_info set version='$head' ".
+			   "where osid='$imageid'") &&
+	       DBQueryWarn("update images set version='$head' ".
+			   "where imageid='$imageid'")));
+
+    DBQueryWarn("unlock tables")
+	or return -1;
+    return 0;
+
+  bad:
+    DBQueryWarn("unlock tables");
+    return -1;
+}
+
+#
+# Purge a version of an image. This is not to be used, except when there
+# is an error during clone, and we want to undo the creation of a new version.
+#
+sub PurgeVersion($)
 {
     my ($self) = @_;
 
@@ -1331,7 +1507,7 @@ sub DeleteVersion($)
 	or return -1;
 
     #
-    # We do not allow the deletion if it is not the "head" version of the
+    # We do not allow the purge if it is not the "head" version of the
     # image_versions. Maybe later.
     #
     my $query_result =
@@ -1342,7 +1518,7 @@ sub DeleteVersion($)
 
     my ($version) = $query_result->fetchrow_array();
     if ($version != $self->version()) {
-	print STDERR "Image::DeleteVersion: not the head version of $self\n";
+	print STDERR "Image::PurgeVersion: not the head version of $self\n";
 	goto bad;
     }
 
@@ -1401,6 +1577,23 @@ sub GetGroup($)
 	return undef;
     }
     return $group;
+}
+
+#
+# Load the creator object for an image
+#
+sub GetCreator($)
+{
+    my ($self) = @_;
+    require User;
+
+    my $user = User->Lookup($self->creator_idx());
+    
+    if (! defined($user)) {
+	print("*** WARNING: Could not lookup user object for $self!\n");
+	return undef;
+    }
+    return $user;
 }
 
 #
@@ -1671,6 +1864,26 @@ sub MarkUpdate($$;$)
     return 0;
 }
 
+sub MarkDeleted($;$)
+{
+    my ($self, $stamp) = @_;
+
+    my $imageid     = $self->imageid();
+    my $version     = $self->version();
+
+    if (defined($stamp)) {
+	$stamp      = "FROM_UNIXTIME($stamp)";
+    } else {
+	$stamp      = "now()";
+    }
+
+    return -1
+	if (! DBQueryWarn("update image_versions set deleted=$stamp " .
+			  "where imageid='$imageid' and version='$version'"));
+
+    return 0;
+}
+
 #
 # Mark the IMS update time in the record,
 #
@@ -1754,6 +1967,27 @@ sub ClearUploaderPath($)
     return $self->Update({"uploader_path" => ''});
 }
 
+# Webtask.
+sub SetWebTask($$)
+{
+    my ($self,$webtask) = @_;
+    my $imageid = $self->imageid();
+
+    if (defined($webtask)) {
+	my $webtask_id = $webtask->task_id();
+	
+	DBQueryWarn("update images set webtask_id='$webtask_id' " .
+		    "where imageid='$imageid'")
+	    or return -1;
+    }
+    else {
+	DBQueryWarn("update images set webtask_id=NULL " .
+		    "where imageid='$imageid'")
+	    or return -1;
+    }
+    return 0;
+}
+
 #
 # Set the sector range of an image.
 # Note that lba_size and reloc flag are left alone unless explicitly specified.
@@ -1771,6 +2005,40 @@ sub SetRange($$$;$$)
 	$argref->{'relocatable'} = $isreloc;
     }
     return $self->Update($argref);
+}
+
+#
+# Compute a rough approximation of the partition size needed for an image.
+# Return megabytes.
+#
+sub PartitionSize($)
+{
+    my ($self) = @_;
+    my $lba_size = $self->lba_size();
+    my $lba_low  = $self->lba_low();
+    my $lba_high = $self->lba_high();
+
+    return undef
+	if (!(defined($lba_size) && defined($lba_low) && defined($lba_high)));
+
+    return (($lba_high - $lba_low + 1) / (1024 / $lba_size)) / 1024;
+}
+
+#
+# Chunks, the amount of space needed to store the image, say in an LVM.
+# Return megabytes.
+#
+sub Chunks($)
+{
+    my ($self) = @_;
+    my $size   = $self->size();
+    return undef
+	if (!defined($size));
+    
+    # XXX assumes chunksize of 1MB
+    my $chunks = int((($size + 1024 * 1024 - 1) / (1024 * 1024)) + 0.5);
+
+    return $chunks;
 }
 
 #
@@ -1857,12 +2125,13 @@ sub WaitLock($$)
 }
 
 #
-# Get the type list.
+# Get the type list. 
 #
 sub TypeList($;$)
 {
     my ($self, $osinfo) = @_;
     my @result  = ();
+    my $query_result;
     require NodeType;
 
     #
@@ -1877,15 +2146,31 @@ sub TypeList($;$)
 	    }
 	}
 	return @result;
-    }
-
+    } 
     my $imageid = $self->imageid();
-    my $clause  = (defined($osinfo) ?
-		   "and osid='" . $osinfo->osid() . "'" : "");
+   
+    #
+    # If there is an architecture set in the image, we use that to
+    # find the matching types in the node_types table. This overrides
+    # anything found in the osidtoimageid.
+    #
+    if ($self->architecture()) {
+	$query_result =
+	    DBQueryWarn("select distinct node_types.type from images ".
+			# The image architecture could be a short list.
+			"inner join node_types on ".
+			"   FIND_IN_SET(node_types.architecture,".
+			"               images.architecture) ".
+			"where images.imageid='$imageid'");
+    }
+    else {
+	my $clause  = (defined($osinfo) ?
+		       "and osid='" . $osinfo->osid() . "'" : "");
 
-    my $query_result =
-	DBQueryWarn("select distinct type from osidtoimageid ".
-		    "where imageid='$imageid' $clause");
+	$query_result =
+	    DBQueryWarn("select distinct type from osidtoimageid ".
+			"where imageid='$imageid' $clause");
+    }
     return undef
 	if (!defined($query_result));
 
@@ -1894,6 +2179,17 @@ sub TypeList($;$)
 	push(@result, $typeinfo)
 	    if (defined($typeinfo));
     }
+    if ($self->architecture()) {
+	require OSinfo;
+	my $osinfo = OSinfo->Lookup($self->imageid());
+	if (defined($osinfo) && defined($osinfo->def_parentosid())) {
+	    my $pcvm = NodeType->Lookup("pcvm");
+	    if (defined($pcvm)) {
+		push(@result, $pcvm);
+	    }
+	}
+    }
+    
     return @result;
 }
 
@@ -2157,12 +2453,14 @@ sub ListForURN($$)
 	if (! GeniHRN::IsValid($urn));
 
     my $query_result =
-	DBQueryWarn("select distinct pid,imagename from image_versions ".
-		    "where creator_urn='$urn' and deleted is null");
+	DBQueryWarn("select imageid,version from image_versions ".
+		    "where creator_urn='$urn' and deleted is null and ".
+		    "      isdataset=0 ".
+		    "order by pid,imagename,version");
 
-    while (my ($pid,$imagename) = $query_result->fetchrow_array()) {
+    while (my ($imageid,$version) = $query_result->fetchrow_array()) {
 	# Want latest version.
-	my $image = Image->Lookup($pid, $imagename);
+	my $image = Image->Lookup($imageid, $version);
 	next
 	    if (!defined($image));
 
@@ -2296,11 +2594,11 @@ sub SetRunsOnNodeType($$)
 #
 # If using the image tracker, have to notify the IMS.
 #
-sub SchedIMSDeletion($)
+sub SchedIMSDeletion($$)
 {
-    my ($self) = @_;
+    my ($self,$allversions) = @_;
     my $urn  = $self->urn();
-    my $uuid = $self->image_uuid();
+    my $uuid = ($allversions ? $self->image_uuid() : $self->uuid());
 
     # The expire daemon will pick this up.
     DBQueryWarn("replace into image_deletions set ".
@@ -2313,11 +2611,13 @@ sub SchedIMSDeletion($)
 #
 # Is the image the newest version of the image.
 #
+# This needs to include deleted images, we only care about max version
+# number right now. 
+#
 sub IsNewest($)
 {
-    my ($self) = @_;
-
-    my $imageid   = $self->pid();
+    my ($self)  = @_;
+    my $imageid = $self->imageid();
     
     my $query_result =
 	DBQueryWarn("select max(version) from image_versions ".
@@ -2430,6 +2730,115 @@ sub LocalVersionURL($)
     return "$TBBASE/image_metadata.php?uuid=$uuid";
 }
 
+sub HasCredential($)
+{
+    my ($self) = @_;
+
+    return undef
+	if (! $PGENISUPPORT);
+
+    return $self->credential_string() && $self->credential_string() ne "";
+}
+sub GetCredential($)
+{
+    my ($self) = @_;
+
+    return undef
+	if (! ($PGENISUPPORT && $self->HasCredential()));
+
+    require GeniCredential;
+    return GeniCredential->CreateFromSigned($self->credential_string());
+}
+sub SetCredential($$)
+{
+    my ($self, $credstr) = @_;
+
+    return -1
+	if (! $PGENISUPPORT);
+
+    return $self->Update({"credential_string" => $credstr});
+}
+
+#
+# Deprecate an image.
+#
+sub Deprecate($;$$)
+{
+    my ($self, $message, $iserror) = @_;
+    my $imageid = $self->imageid();
+    if (defined($iserror)) {
+	$iserror = ($iserror ? 1 : 0);
+    }
+    my $query = "update image_versions set deprecated=now()";
+    $query .=   ",deprecated_iserror='$iserror'" if (defined($iserror));
+    if (defined($message)) {
+	if ($message ne "") {
+	    $query .= ",deprecated_message=" . DBQuoteSpecial($message);
+	}
+	else {
+	    $query .= ",deprecated_message=NULL";
+	}
+    }
+    DBQueryWarn("$query where imageid='$imageid'")
+	or return -1;
+
+    return 0;
+}
+sub IsDeprecated($$;$$)
+{
+    my ($self, $pval, $pmessage, $piserror) = @_;
+    my $imageid = $self->imageid();
+    my $version = $self->version();
+
+    my $query_result =
+	DBQueryWarn("select deprecated,deprecated_message,deprecated_iserror ".
+		    "  from image_versions ".
+		    "where imageid='$imageid' and version='$version'");
+    return -1
+	if (! ($query_result && $query_result->numrows));
+
+    my ($deprecated, $message, $iserror) = $query_result->fetchrow_array();
+    $$pval     = $deprecated;
+    $$pmessage = $message if (defined($pmessage));
+    $$piserror = $iserror if (defined($piserror));
+    return 0;
+}
+
+sub DeprecatedMessage($;$)
+{
+    my ($self, $experiment) = @_;
+    my $message = $self->deprecated_message();
+    my $iserror = $self->deprecated_iserror();
+    my $name    = $self->pid() . "/" . $self->imagename();
+    my $result;
+
+    if ($iserror) {
+	$result = "Image $name is deprecated and no longer available to use".
+	    (defined($message) && $message ne "" ? ": ${message}" : "") .
+	    ". " . "Please choose a different image!";
+    }
+    else {
+	$result = "Image $name is deprecated and no longer available to use".
+	    (defined($message) && $message ne "" ? ": ${message}" : "") .
+	    ". " . "You can continue to use this image for now but you should ".
+	    "choose a different one before this image is deleted!";
+    }
+    if (defined($experiment)) {
+	my $pid = $experiment->pid();
+	my $eid = $experiment->eid();
+
+	$result = "Experiment $pid/$eid: $result";
+    }
+    return $result;
+}
+sub SendDeprecatedMail($$;$)
+{
+    my ($self, $user, $experiment) = @_;
+    my $message = $self->DeprecatedMessage($experiment);
+    $user->SendEmail("Deprecated Image Warning", $message);
+    return 0;
+}
+
 #
 # Path and Directory stuff.
 #
@@ -2526,18 +2935,107 @@ sub HaveDeltaImage($)
     my ($self) = @_;
     return $self->deltasize() ? 1 : 0;
 }
+sub IsSystemImage($)
+{
+    my ($self) = @_;
+
+    # Yuck.
+    return ($self->path() =~ /^\/usr\/testbed\// ? 1 : 0);
+}
+#
+# When images are stored in sub directories.
+#
 sub CreateImageDir($)
 {
     my ($self) = @_;
     
     return 0
-	if (!$self->IsDirPath() || -e $self->path());
+	if (!$self->IsDirPath());
 
-    if (!mkdir($self->path(), 0775)) {
-	print STDERR "Could not mkdir " . $self->path() . ": $!";
-	return -1;
+    #
+    # For system images that are written to $TB, we still need a place
+    # to write new (unreleased) images in /proj. 
+    #
+    if ($self->IsSystemImage()) {
+	return -1
+	    if ($self->CreateDirectory($self->SaveDir()));
+
+	# If we are not setuid, this will just fail. 
+	my $SAVEUID = $EUID;
+	$EUID = 0;
+	my $rval = $self->CreateDirectory($self->path());
+	$EUID = $SAVEUID;
+	return -1
+	    if ($rval);
+    }
+    else {
+	return -1
+	    if ($self->CreateDirectory($self->path()));
     }
     return 0;
+}
+
+sub CreateDirectory($$)
+{
+    my ($self, $directory) = @_;
+
+    return 0
+	if (-e $self->path());
+    
+    if (!mkdir($directory, 0775)) {
+	print STDERR "Could not mkdir $directory: $!\n";
+	return -1;
+    }
+    if (!chmod(0775, $directory)) {
+	print STDERR "Could not chmod $directory: $!\n";
+	return -1;
+    }
+    
+    # If we are root and had to create the directory, then the owner
+    # and group are going to be set wrong.
+    if ($EUID == 0) {
+	my $group = $self->GetGroup();
+	if (!defined($group)) {
+	    print STDERR "Could not get group for $self\n";
+	    return -1;
+	}
+	my $leader = $group->GetLeader();
+	if (!defined($leader)) {
+	    print STDERR "Could not get leader for $group\n";
+	    return -1;
+	}
+	my $uid = $leader->unix_uid();
+	my $gid = $group->unix_gid();
+
+        if (! chown($uid, $gid, $directory)) {
+	    print STDERR "Could not chown($uid,$gid) $directory: $!\n";
+	    return -1;
+	}
+    }
+    return 0;
+}
+
+#
+# Where we write the new files. 
+# I think cause we do not trust the path in the descriptor since the
+# user can set it. This is probably the crux; we should not let the
+# user set the path.
+#
+sub SaveDir($)
+{
+    my ($self) = @_;
+
+    my $savedir =
+	($self->pid() eq $self->gid() ||
+	 $self->global() || $self->IsSystemImage() ? 
+	 $PROJROOT . "/" . $self->pid() . "/images/" :
+	 $GROUPROOT . "/" . $self->pid() . "/" . $self->gid() . "/images/");
+    
+    # Add in the directory.
+    $savedir .= basename($self->path()) . "/"
+	if ($self->IsDirPath());
+
+    return $savedir;
 }
 
 # _Always_ make sure that this 1 is at the end of the file...

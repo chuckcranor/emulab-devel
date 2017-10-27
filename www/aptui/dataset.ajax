@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2016 University of Utah and the Flux Group.
+# Copyright (c) 2000-2017 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -707,7 +707,11 @@ function Do_GetInfo()
     #
     # If we were generating an image.
     #
-    $webtask = WebTask::LookupByObject($dataset->uuid());
+    $webtask = $dataset->WebTask();
+    if (!$webtask) {
+	SPITAJAX_ERROR(-1, "Internal error getting webtask");
+	return;
+    }
     if ($webtask) {
         $taskdata = $webtask->TaskData();
         #
@@ -724,6 +728,36 @@ function Do_GetInfo()
             $blob["image_size"] = 0;
         }
         $blob["image_status"] = $taskdata["image_status"];
+        if (isset($taskdata["copyback_uuid"])) {
+            $blob["copyback_uuid"] = $taskdata["copyback_uuid"];
+        }
+
+        #
+        # Lets put the node status in too. The backend has helpfully told us
+        # the aggregate and node to track down the status.
+        #
+        if (isset($taskdata["instance"]) &&
+            isset($taskdata["aggregate_urn"]) &&
+            isset($taskdata["client_id"])) {
+            $instance = Instance::Lookup($taskdata["instance"]);
+            if (!$instance) {
+                SPITAJAX_ERROR(-1, "Instance is gone");
+                return;
+            }
+            $sliver = InstanceSliver::Lookup($instance,
+                                             $taskdata["aggregate_urn"]);
+            if (!$sliver) {
+                SPITAJAX_ERROR(-1, "Sliver is gone");
+                return;
+            }
+            foreach ($sliver->StatusArray() as $status) {
+                if (isset($status["sliver_data"]) &&
+                    $status["client_id"] == $taskdata["client_id"]) {
+                    $blob["node_status"] = $status["sliver_details"]["rawstate"];
+                    break;
+                }
+            }
+        }
     }
     SPITAJAX_RESPONSE($blob);
 }

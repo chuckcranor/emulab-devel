@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2005-2015 University of Utah and the Flux Group.
+# Copyright (c) 2005-2016 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -111,12 +111,11 @@ if (! $fp) {
     USERERROR("Spew console log failed!", 1);
 }
 
-echo "<html>
-       <head>
-        <meta http-equiv='Content-Type' content='text/html; charset=UTF-8' />
-        <title>Console log for $node_id</title>    
-       </head>
-       <body><pre>\n";
+header("Content-Type: text/plain; charset=us-ascii");
+header("X-Content-Type-Options: nosniff");
+header("Expires: Mon, 26 Jul 1997 05:00:00 GMT");
+header("Cache-Control: no-cache, must-revalidate");
+header("Pragma: no-cache");
 flush();
 while (!feof($fp)) {
     $string = fgets($fp, 1024);
@@ -125,6 +124,5 @@ while (!feof($fp)) {
 }
 pclose($fp);
 $fp = 0;
-echo "</pre></body></html>\n";
 
 ?>

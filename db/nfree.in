@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #
-# Copyright (c) 2000-2016 University of Utah and the Flux Group.
+# Copyright (c) 2000-2017 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -65,7 +65,7 @@ use libtestbed;
 use User;
 use Experiment;
 use Node;
-use OSinfo;
+use OSImage;
 use Lan;
 use EmulabFeatures;
 
@@ -191,8 +191,13 @@ if (@ARGV) {
 		die("*** $0:\n".
 		    "    Could not get virtual node list for $node\n");
 	    }
-	    push(@nodes, @virtuals)
-		if (@virtuals);
+	    # Watch for virtuals that were also on the command line, do not
+	    # want a node in this list twice.
+	    #
+	    foreach my $vnode (@virtuals) {
+		push(@nodes, $vnode)
+		    if (! grep {$_->node_id() eq $vnode->node_id()} @nodes);
+	    }
 	}
     }
 }
@@ -444,12 +449,12 @@ foreach my $node (@freed_nodes) {
     my $clean;
     if (defined($def_boot_osid)) {
 	#
-	# OSinfo lookup could fail if the OSID was removed at a bad time,
+	# OSImage lookup could fail if the OSID was removed at a bad time,
 	# so treat a failure as non-fatal and force a clean.
 	#
-	my $osinfo = OSinfo->Lookup($def_boot_osid, $def_boot_vers);
-	if (defined($osinfo)) {
-	    $clean = $osinfo->mustclean();
+	my $osimage = OSImage->Lookup($def_boot_osid, $def_boot_vers);
+	if (defined($osimage)) {
+	    $clean = $osimage->mustclean();
 	} else {
 	    $clean = 1;
 	}
@@ -468,7 +473,7 @@ foreach my $node (@freed_nodes) {
     #
     # Remember if node has a dynamic (aka, NFS) MFS
     #
-    if (OSinfo->Lookup($node->adminmfs_osid())->IsNfsMfs()) {
+    if (OSImage->Lookup($node->adminmfs_osid())->IsNfsMfs()) {
 	push(@dynmfsnodes, $node_id);
     }
 

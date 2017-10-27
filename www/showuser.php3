@@ -1,6 +1,6 @@
 <?php
 #
-# Copyright (c) 2000-2015 University of Utah and the Flux Group.
+# Copyright (c) 2000-2017 University of Utah and the Flux Group.
 # 
 # {{{EMULAB-LICENSE
 # 
@@ -289,7 +289,7 @@ $query_result =
 		 "     g2.uid_idx='" . $this_user->uid_idx() . "' ".
 		 "where g.uid_idx='$target_idx' ".
 		 ($isadmin ? "" : "and g2.uid_idx is not null ") .
-		 "group by g.pid, g.gid ".
+		 "group by g.pid, g.gid, g.trust ".
 		 "order by g.pid,gr.created");
 
 if (mysql_num_rows($query_result)) {

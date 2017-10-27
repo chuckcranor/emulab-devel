@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2005-2016 University of Utah and the Flux Group.
+ * Copyright (c) 2005-2017 University of Utah and the Flux Group.
  * 
  * {{{EMULAB-LICENSE
  * 
@@ -45,11 +45,13 @@
  * For FS superblocks and other metadata we wipe the first 4M since that
  *   is sufficient to wipe the most commonly sized LVM metadata block.
  * For boot blocks we need up to 32k for GPT.
+ * For certain HW/SW RAID standards, we may need to zap even more (up to
+ * 32MB for DDF 2.0) at the end of the disk.
  */
-#define MD_ZAPSIZE	(4*1024*1024)
+#define MD_ZAPSIZE	(32*1024*1024)
 #define MBR_ZAPSIZE	512
 #define GPT_ZAPSIZE	(32*1024)
-#define MAX_ZAPSIZE	(4*1024*1024)
+#define MAX_ZAPSIZE	(32*1024*1024)
 
 static int verbose = 0;
 static int pnum = 0;
@@ -170,6 +172,10 @@ main(int argc, char **argv)
 	}
 #endif
 	if (erase) {
+#ifdef NO_ERASE
+		fprintf(stderr, "Erase operation not implemented!\n");
+		exit(1);
+#else
 		iz_lba start;
 		iz_size size;
 		extern uint64_t getdisksize(int);
@@ -206,6 +212,7 @@ main(int argc, char **argv)
 			exit(1);
 		}
 		exit(0);
+#endif
 	}
 
 	if (!gotbb) {

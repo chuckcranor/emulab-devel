@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2000-2015 University of Utah and the Flux Group.
+ * Copyright (c) 2000-2017 University of Utah and the Flux Group.
  * 
  * {{{EMULAB-LICENSE
  * 
@@ -242,6 +242,12 @@ typedef struct {
 	char	map[MAXCHUNKSIZE/CHAR_BIT];
 } BlockMap_t;
 
+typedef struct {
+	uint32_t	chunks_in;	/* Chunk successfully received */
+	uint32_t	chunks_out;	/* Chunk successfully written */
+	uint64_t	bytes_out;	/* Bytes written to disk */
+} __attribute__((__packed__)) ClientSummary_t;
+
 /*
  * Packet defs.
  */
@@ -249,7 +255,7 @@ typedef struct {
 	struct {
 		int32_t		type;
 		int32_t		subtype;
-		int32_t 	datalen; /* Useful amount of data in packet */
+		uint32_t 	datalen; /* Useful amount of data in packet */
 		uint32_t	srcip;   /* Filled in by network level. */
 	} hdr;
 	union {
@@ -326,6 +332,54 @@ typedef struct {
 			int32_t		elapsed;
 			ClientStats_t	stats;
 		} leave2;
+
+		/*
+		 * Report progress. The request from the server tells
+		 * the client how often and what to report. The reply
+		 * from the client contains the requested info.
+		 *
+		 * On request, "who" is not used. On reply, it is the
+		 * network order IPv4 address of the client on whose
+		 * behalf we are reporting. Normally, this is just the
+		 * IP of the machine running frisbee, but when -P is
+		 * used, it is the IP we are proxying for (typically
+		 * a VM).
+		 *
+		 * On request, "when" is measured in seconds, with zero
+		 * meaning "report one time right now". On reply, "when"
+		 * contains the local timestamp for the info reported.
+		 *
+		 * On request, "what" is a flag word currently what info
+		 * to report. On reply, it is the data that is included
+		 * (which should be the same). Currently this can be one
+		 * or more of:
+		 * - a summary (chunks received, bytes written),
+		 * - stats (same as reported by leave)
+		 *
+		 * On request, "seq" is an initial sequence number to
+		 * use in reports. On reply it is the current sequence
+		 * number, which is incremented for each report. This
+		 * can be used on the server side to see if reports are
+		 * being lost. Note that the sequence number is only a
+		 * 16 bit value and will wrap eventually. Deal with it.
+		 *
+		 * Note that each client will skew the initial report
+		 * by some random amount to prevent all clients reporting
+		 * in sync.
+		 *
+		 * Requests can be multicast, replies are unicast.
+		 */
+		struct {
+			struct {
+				uint32_t clientid;
+				uint32_t who;
+				uint32_t when;
+				uint16_t what;
+				uint16_t seq;
+			} hdr;
+			ClientSummary_t	summary;
+			ClientStats_t	stats;
+		} progress;
 	} msg;
 } Packet_t;
 #define PKTTYPE_REQUEST		1
@@ -338,6 +392,11 @@ typedef struct {
 #define PKTSUBTYPE_LEAVE2	5
 #define PKTSUBTYPE_PREQUEST	6
 #define PKTSUBTYPE_JOIN2	7
+#define PKTSUBTYPE_PROGRESS	8
+
+/* types of progress reports */
+#define PKTPROGRESS_SUMMARY	1
+#define PKTPROGRESS_STATS	2
 
 #ifdef MASTER_SERVER
 #include <netinet/in.h>
@@ -362,6 +421,21 @@ typedef struct {
 	uint8_t		imageid[MS_MAXIDLEN];
 } __attribute__((__packed__)) GetRequest;
 
+/*
+ * TODO for V2 replies:
+ *  - include mtime as distinct field, not as a signature
+ *    (chances are, when we start using a different signature type, we will
+ *    still want to know the mtime; e.g., for a cached copy),
+ *  - include latest version num of image, if request is for unversioned image
+ *    (this is so that requests for "emulab-ops/foo" to a subboss can be
+ *    translated into the a request for the correct version),
+ *  - first/last sectors covered by image as well as sector size
+ *    (this would enable us to build a partition table entry on-the-fly for
+ *    the partition we are writing the image to.)
+ *  - uncompressed size of data in the image
+ *    (gives the client a metric for estimating "time remaining" when
+ *    laying down an image),
+ */
 typedef struct {
 	uint8_t		method;
 	uint8_t		isrunning;
@@ -454,7 +528,7 @@ unsigned long ClientNetID(void);
 int	PacketReceive(Packet_t *p);
 int	PacketRequest(Packet_t *p);
 void	PacketSend(Packet_t *p, int *resends);
-void	PacketReply(Packet_t *p);
+void	PacketReply(Packet_t *p, int firenforget);
 int	PacketValid(Packet_t *p, int nchunks);
 void	dump_network(void);
 #ifdef MASTER_SERVER

@@ -157,6 +157,29 @@ sub SetTimeout($$)
     return 0;
 }
 
+BEGIN {
+    require Frontier::Responder;
+    require Frontier::RPC2;
+
+    # Original version of traversal function.
+    my $rpc2_item = \&Frontier::RPC2::_item;
+
+    {
+	no warnings 'redefine';
+
+	# Redefine to handle the URN object. It would be nice if this was
+	# a builtin feature (being able to handle arbitrary classes).
+	*Frontier::RPC2::_item = sub {
+	    my ($self,$item) = @_;
+	    if (ref($item) eq "GeniHRN") {
+		# Just a string.
+		return Frontier::RPC2::_scalar($self,$item->urn());
+	    }
+	    return &$rpc2_item($self, $item);
+	};
+    }
+}
+
 #
 # Call to a non-Emulab xmlrpc server.  
 # If there was an HTTP error, the hash also contains the keys
@@ -165,6 +188,20 @@ sub SetTimeout($$)
 sub CallMethod($$$@)
 {
     my ($httpURL, $context, $method, @args) = @_;
+
+    return CallMethodInternal($httpURL, $context, undef, $method, @args);
+}
+sub CallMethodStream($$$$@)
+{
+    my ($httpURL, $context, $fp, $method, @args) = @_;
+
+
+    return CallMethodInternal($httpURL, $context, $fp, $method, @args);
+}
+sub CallMethodInternal($$$$@)
+{
+    my ($httpURL, $context, $fp, $method, @args) = @_;
+    my $xmlgoo;
     require RPC::XML;
     require RPC::XML::Parser;
     require HTTP::Request::Common;
@@ -181,6 +218,20 @@ sub CallMethod($$$@)
 	return GeniResponse->new(GENIRESPONSE_RPCERROR, -1,
 				 "Must provide an rpc context");
     }
+
+    # Callback to write the data, when streaming to a file.
+    my $callback = sub {
+	my ($data) = @_;
+	if ($data =~ /^\<\?xml/) {
+	    $xmlgoo = $data;
+	    return;
+	}
+	my $retval = syswrite($fp, $data);
+	if (!defined($retval)) {
+	    die("Error writing data to output stream");
+	}
+	print ".";
+    };
 
     my $FBSD_MAJOR = 4;
     my $FBSD_MINOR = 10;
@@ -260,16 +311,16 @@ sub CallMethod($$$@)
 	    $ENV{'HTTPS_PKCS12_PASSWORD'} = $context->password();
 	}
     }
-    my $request = new RPC::XML::request($method, @args);
+    my $encoder = Frontier::RPC2->new();
+    my $reqstr  = $encoder->encode_call($method, @args);
     if ($debug > 1) {
-	print STDERR "xml request: $httpURL:" . $request->as_string();
+	print STDERR "xml request: $httpURL:" . $reqstr;
 	print STDERR "\n";
     }
     
     #
     # Send an http post.
     #
-    my $reqstr = $request->as_string();
     my $ua = LWP::UserAgent->new();
     $ua->timeout($timeout)
 	if ($timeout > 0);
@@ -277,7 +328,9 @@ sub CallMethod($$$@)
     $hreq->content_type('text/xml');
     $hreq->content($reqstr);
     $hreq->protocol('HTTP/1.0')	if ($FBSD_MAJOR >= 8);
-    my $hresp = $ua->request($hreq);
+    my $hresp = (defined($fp) ?
+		 $ua->request($hreq, $callback, 0x20000) :
+		 $ua->request($hreq));
 
     # Do this or the next call gets messed up.
     delete($ENV{'HTTPS_CERT_FILE'});
@@ -294,12 +347,17 @@ sub CallMethod($$$@)
 	return GeniResponse->new(GENIRESPONSE_RPCERROR,
 				 $hresp->code(), $hresp->message());
     }
+    # Streamed the data okay, we are done.
+    if (defined($fp) && !defined($xmlgoo)) {
+	return GeniResponse->new(GENIRESPONSE_SUCCESS);
+    }
 
     #
     # Read back the xmlgoo from the child.
     #
-    my $xmlgoo = $hresp->content();
-
+    if (!defined($xmlgoo)) {
+	$xmlgoo = $hresp->content();
+    }
     if ($debug > 1) {
 	print STDERR "xmlgoo: " . $xmlgoo;
 	print STDERR "\n";
@@ -317,7 +375,9 @@ sub CallMethod($$$@)
     # Sigh.
     if (!ref($goo)) {
         print STDERR "Error in XMLRPC parse: $xmlgoo\n";
-        return undef;
+	$code   = GENIRESPONSE_RPCERROR();
+	$value  = undef;
+	$output = "Could not parse XMLRPC return value: $xmlgoo";
     }
     elsif ($goo->value()->is_fault() 
 	|| (ref($goo->value()) && UNIVERSAL::isa($goo->value(),"HASH") 

@@ -1,6 +1,6 @@
 #!/usr/bin/perl -wT
 #
-# Copyright (c) 2009-2016 University of Utah and the Flux Group.
+# Copyright (c) 2009-2017 University of Utah and the Flux Group.
 # 
 # {{{GENIPUBLIC-LICENSE
 # 
@@ -217,7 +217,7 @@ sub Generate($$$)
     # AllowUnassigned and RFC 3491 Nameprep validation to interpret IRIs,
     # but quite frankly I think I've done more than enough RFC chasing already.
     $authority =~ tr/A-Z/a-z/;
-    return undef if $authority !~ /^[-.0-9A-Za-z:]+$/;
+    return undef if $authority !~ /^[0-9A-Za-z][-.0-9A-Za-z]*(?::[-.0-9A-Za-z]+)*$/;
     return undef if $type !~ /^[-.0-9A-Z_a-z~]+$/;
     return undef if $id !~ m{^[-\t\n\r !#$%'()*+,./0-9:;=?\@A-Z_a-z]+$};
 
@@ -348,6 +348,7 @@ sub GenerateImage($$$$)
 sub new($$)
 {
     my ($class, $urn) = @_;
+    my ($project, $group);
 
     return $urn
 	if (ref($urn) && ref($urn) eq "GeniHRN");
@@ -362,9 +363,15 @@ sub new($$)
     $self->{'type'}       = $type;
     $self->{'id'}         = $id;
     $self->{'authority'}  = $authority;
-    my ($domain,$subauth) = split(":", $authority);
+    my ($domain,$subauth) = split(":", $authority, 2);
     $self->{'domain'}     = $domain;
     $self->{'subauth'}    = $subauth;
+    if (defined($subauth)) {
+	($project,$group) = split(":", $subauth, 2);
+    }
+    $self->{'project'}    = $project;
+    $self->{'group'}      = $group;
+    $self->{'IMAGEPARSE'} = undef;
     
     bless($self, $class);
     return $self;
@@ -376,12 +383,43 @@ sub asString($)         { return $_[0]->urn(); }
 sub authority($)	{ return field($_[0], "authority"); }
 sub domain($)		{ return field($_[0], "domain"); }
 sub subauth($)		{ return field($_[0], "subauth"); }
+sub project($)		{ return field($_[0], "project"); }
+sub group($)		{ return field($_[0], "group"); }
 sub type($)		{ return field($_[0], "type"); }
 sub id($)		{ return field($_[0], "id"); }
 sub IsAuthority()       { return $_[0]->type() =~ /^authority$/i ? 1 : 0; }
-sub IsSA($)		{ return $_[0]->id() =~ /^SA$/i ? 1 : 0; }
-sub IsCM($)		{ return $_[0]->id() =~ /^CM$/i ? 1 : 0; }
-sub IsRoot($)		{ return $_[0]->id() =~ /^root$/i ? 1 : 0; }
+sub IsSA($)		{ return ($_[0]->IsAuthority() &&
+				  $_[0]->id() =~ /^SA$/i ? 1 : 0); }
+sub IsCM($)		{ return ($_[0]->IsAuthority() &&
+				  $_[0]->id() =~ /^CM$/i ? 1 : 0); }
+sub IsRoot($)		{ return ($_[0]->IsAuthority() &&
+				  $_[0]->id() =~ /^root$/i ? 1 : 0); }
+sub IsUser($)		{ return $_[0]->type() =~ /^user$/i ? 1 : 0; }
+sub IsNode($)		{ return $_[0]->type() =~ /^node$/i ? 1 : 0; }
+
+#
+# Image accessors. If we use any of these we want to parse the urn
+# as an image, and return the subfields.
+#
+sub imagefield($$)
+{
+    my ($self, $field) = @_;
+
+    if (defined($self->{'IMAGEPARSE'})) {
+	my (undef, $ospid, $os, $vers) = $self->ParseImage();
+
+	$self->{'IMAGEPARSE'} = {
+	    "ospid"  => $ospid,
+	    "osname" => $os,
+	    "osvers" => $vers,
+	};
+    }
+    return $self->{'IMAGEPARSE'}->{$field};
+}
+sub osname($)	{ return $_[0]->imagefield("osname"); }
+sub ospid($)	{ return $_[0]->imagefield("ospid"); }
+sub osvers($)	{ return $_[0]->imagefield("osvers"); }
+sub IsImage($)  { return $_[0]->type() =~ /^image$/i ? 1 : 0; }
 
 #
 # Stringify for text context.
@@ -390,6 +428,16 @@ sub Stringify($)
 {
     my ($self) = @_;
     
+    return $self->{"urn"};
+}
+
+#
+# For JSON encode.
+#
+sub TO_JSON($)
+{
+    my ($self) = @_;
+
     return $self->{"urn"};
 }
 
