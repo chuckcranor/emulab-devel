@@ -98,12 +98,14 @@ use libvnode_docker;
 
 TBDebugTimeStampsOn();
 libvnode_docker::setDebug($debug);
+my $newization;
 my $rc = libvnode_docker::emulabizeImage(
-    $image,\$newimageref,$emulabization,$update,$pullpolicy,$user,$pass);
+    $image,\$newimageref,$emulabization,\$newization,$update,$pullpolicy,$user,$pass);
 if ($rc) {
     fatal("ERROR: failed to emulabize $image!\n");
 }
 else {
-    print "Successfully emulabized $image: new image $newimageref.\n";
+    print "Successfully emulabized $image: new image $newimageref".
+	" (new emulabization $newization).\n";
 }
 exit(0);

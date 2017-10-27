@@ -444,9 +444,9 @@ sub bindNetNS($$);
 sub moveNetDeviceToNetNS($$$);
 sub moveNetDeviceFromNetNS($$$);
 sub unbindNetNS($$);
-sub setupImage($$$$$$$$$);
+sub setupImage($$$$$$$$$$);
 sub pullImage($$$$;$);
-sub emulabizeImage($;$$$$$$$);
+sub emulabizeImage($;$$$$$$$$);
 sub analyzeImage($$);
 sub AllocateIFBs($$$);
 sub ReleaseIFBs($$);
@@ -2678,13 +2678,14 @@ sub vnodeCreate($$$$)
 	libutil::setState("RELOADING");
     }
 
-    my ($newimagename,$newcreateargs,$newcmd);
+    my ($newimagename,$newcreateargs,$newcmd,$newization);
     $rc = setupImage($vnode_id,$vnconfig,$private,$imagename,$user,$pass,
-		     \$newimagename,\$newcreateargs,\$newcmd);
+		     \$newimagename,\$newcreateargs,\$newcmd,\$newization);
     if ($rc) {
 	libutil::setState("RELOADFAILED");
 	fatal("Failed to setup $imagename for $vnode_id; aborting!");
     }
+    $private->{'emulabization'} = $newization;
 
     if ($inreload) {
 	libutil::setState("RELOADDONE");
@@ -3330,6 +3331,14 @@ sub vnodeBootHook($$$$)
     my $vninfo = $private;
 
     #
+    # If the image is not emulabized, it cannot be expected to send
+    # status, so we do it.
+    #
+    if ($private->{'emulabization'} eq DOCKER_EMULABIZE_NONE()) {
+	libutil::setState("TBSETUP");
+    }
+
+    #
     # Start up our Docker-to-pty script for this container; the capture
     # will attach to it.  We always fire this off here; it cannot
     # survive when the container reboots or shuts down.
@@ -3388,6 +3397,14 @@ sub vnodeBootHook($$$$)
     # Run the shaping scripts we built earlier.
     #
     RunShapingScripts($vnode_id,1);
+
+    #
+    # If the image is not emulabized, it cannot be expected to send
+    # status, so we do it.
+    #
+    if ($private->{'emulabization'} eq DOCKER_EMULABIZE_NONE()) {
+	libutil::setState("ISUP");
+    }
 
     return 0;
 }
@@ -4139,9 +4156,9 @@ sub pullImage($$$$;$)
     return $code;
 }
 
-sub emulabizeImage($;$$$$$$$)
+sub emulabizeImage($;$$$$$$$$)
 {
-    my ($image,$newimageref,$emulabization,$update,
+    my ($image,$newimageref,$emulabization,$newzationref,$update,
 	$pullpolicy,$username,$password,$iattrsref) = @_;
     my $rc;
     my ($code,$content);
@@ -4247,8 +4264,14 @@ sub emulabizeImage($;$$$$$$$)
 
     if ($newzation eq DOCKER_EMULABIZE_NONE()) {
 	if ($debug) {
-	    print STDERR "DEBUG: image $image already emulabized".
-		" ('$curzation'), not updating\n";
+	    print STDERR "DEBUG: image $image will not be emulabized".
+		" ($emulabization, $newzation)\n";
+	}
+	if (defined($newimageref)) {
+	    $$newimageref = $image;
+	}
+	if (defined($newzationref)) {
+	    $$newzationref = $emulabization;
 	}
 	return 0;
     }
@@ -4688,6 +4711,9 @@ sub emulabizeImage($;$$$$$$$)
     if (defined($newimageref)) {
 	$$newimageref = $newimage;
     }
+    if (defined($newzationref)) {
+	$$newzationref = $emulabization;
+    }
     if (defined($iattrsref)) {
 	$$iattrsref = \%iattrs;
     }
@@ -4698,10 +4724,10 @@ sub emulabizeImage($;$$$$$$$)
     return -1;
 }
 
-sub setupImage($$$$$$$$$)
+sub setupImage($$$$$$$$$$)
 {
     my ($vnode_id,$vnconfig,$private,$image,$username,$password,
-	$newimageref,$newcreateargsref,$newcmdref) = @_;
+	$newimageref,$newcreateargsref,$newcmdref,$newzationref) = @_;
     my $rc;
     my $cwd;
     my ($code,$content);
@@ -4761,7 +4787,7 @@ sub setupImage($$$$$$$$$)
 
     my $newimage;
     my $iattrs;
-    $rc = emulabizeImage($image,\$newimage,$emulabization,$update,
+    $rc = emulabizeImage($image,\$newimage,$emulabization,$newzationref,$update,
 			 $pullpolicy,$username,$password,\$iattrs);
     if ($rc) {
 	warn("failed to emulabize image $image; aborting!\n");
@@ -4771,6 +4797,18 @@ sub setupImage($$$$$$$$$)
     #print "DEBUG: setupImage ".$iattrs->{'DIST'}.",".$iattrs->{'TAG'}.",".$iattrs->{'MINTAG'}."\n";
     my ($dist,$tag,$mintag) =
 	($iattrs->{'DIST'},$iattrs->{'TAG'},$iattrs->{'MINTAG'});
+
+    #
+    # If we're not emulabizing, we don't mess with the cmd or
+    # entrypoint, for now.
+    #
+    if ($emulabization eq DOCKER_EMULABIZE_NONE()) {
+	$$newimageref = $newimage;
+	$$newcreateargsref = {};
+	$$newcmdref = {};
+
+	return 0;
+    }
 
     #
     # Ok.  Now figure out any changes to the 'docker create ...' command
