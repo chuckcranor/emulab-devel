@@ -3116,7 +3116,15 @@ sub vnodePreConfigControlNetwork($$$$$$$$$$$$)
 	my $attributes = $vnconfig->{'attributes'};
 	my $emulabization = $attributes->{DOCKER_EMULABIZATION};
 	my $ssh_style = $attributes->{DOCKER_SSH_STYLE};
-	my $exec_shell = $attributes->{DOCKER_EXEC_SHELL} || "/bin/sh";
+	my $exec_shell = $attributes->{DOCKER_EXEC_SHELL};
+
+	if (defined($exec_shell) && $exec_shell =~ /^[\/\w\d\-_]+$/) {
+	    $exec_shell = $1;
+	}
+	else {
+	    warn("malformed shell: $exec_shell ; defaulting to /bin/sh");
+	    $exec_shell = '/bin/sh';
+	}
 	
 	if (($emulabization ne DOCKER_EMULABIZE_NONE()
 	     && (!defined($ssh_style) || $ssh_style eq ''
