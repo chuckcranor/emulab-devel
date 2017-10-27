@@ -957,6 +957,7 @@ sub GetTicketAuxAux($$$$$$$$$$$)
     my @nodeids  = ();
     my %lannodes = ();
     my %allnodes = ();
+    my %bsnames  = ();
     # Extra nodes (like XEN vhosts).
     my %internal_nodemap  = ();
     # For stitching, keep track of external nodes and links.
@@ -7869,6 +7870,14 @@ sub HandleBlockstore($$$$$$$@)
 	if (!TBcheck_dbslot($bsname, "blockstores", "bs_id",
 			    TBDB_CHECKDBSLOT_WARN|TBDB_CHECKDBSLOT_ERROR)) {
 	    $message = "Illegal blockstore name: $bsname";
+	    goto bad;
+	}
+	#
+	# Check the tables for an existing blockstore with this name, they
+	# have to be experiment unique.
+	#
+	if ($virtexperiment->Find("virt_blockstores", $bsname)) {
+	    $message = "Already have a blockstore with name: $bsname";
 	    goto bad;
 	}
     }
